@@ -12,6 +12,7 @@ const FLAT_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2,
 const SEAM_Y = FLOOR - 0.06; // black seam bed under the plates
 const LIP = { chevron: 0.4, band: 1.6 }; // metres from the hole edge: chevron 0..0.4, non-slip band 0.4..1.6
 const RAIL_OFF = 0.55; // rail line from the hole edge
+const PAINT_WHITE = new THREE.Color(0xbfc3c9);
 
 export function buildDeck(ctx) {
   const { kit, PALETTE } = ctx;
@@ -38,7 +39,7 @@ export function buildDeck(ctx) {
 }
 
 // ---------------------------------------------------------------------------
-// Plates: 4 m glossy plates (blackGloss, mid-dark tint) with 6 cm black seams, wider section joints on
+// Plates: 4 m semi-gloss plates (hgDeck, mid-dark tint) with 6 cm black seams, wider section joints on
 // the rib lines, a darker plate band under each taxi lane and round the aperture, recessed tie-down
 // points on the aprons.
 // ---------------------------------------------------------------------------
@@ -55,7 +56,7 @@ function buildPlates(ctx, B) {
   };
   const plate = (x0, x1, z0, z1) => {
     if (x1 - x0 < 0.3 || z1 - z0 < 0.3) return;
-    B.boxMM("blackGloss", tone((x0 + x1) / 2, (z0 + z1) / 2), [x0, SEAM_Y, z0], [x1, FLOOR, z1], { faces: PY });
+    B.boxMM("hgDeck", tone((x0 + x1) / 2, (z0 + z1) / 2), [x0, SEAM_Y, z0], [x1, FLOOR, z1], { faces: PY });
   };
   for (let x = HALL.x0; x < HALL.x1 - 0.01; x += G) {
     for (let z = HALL.z0; z < HALL.z1 - 0.01; z += G) {
@@ -83,7 +84,7 @@ function buildPlates(ctx, B) {
   const tieDown = (x, z) => {
     if (pads.some((p) => Math.hypot(p.x - x, p.z - z) < p.r + 1.5)) return;
     if (Math.abs(x) < 8 && (Math.abs(z - 150) < 3 || Math.abs(z + 62) < 3)) return;
-    B.box("paintedMetal", PALETTE.impBlack, x, FLOOR + 0.004, z, 0.44, 0.008, 0.44);
+    B.box("paintedMetal", PALETTE.impBlack, x, FLOOR + 0.004, z, 0.44, 0.008, 0.44, { faces: PY });
     B.box("metal", HG.steel, x, FLOOR + 0.03, z, 0.3, 0.05, 0.06);
   };
   for (let x = -76; x <= 76; x += 8) {
@@ -155,7 +156,8 @@ function buildShaft(ctx, B) {
     [a, b] = mm(36, 36.9);
     B.boxMM(M, impMid, [a, FLOOR - 1.0, zA - 0.6], [b, FLOOR - 0.6, zB + 0.6], { texel: 0.5 });
 
-    // three parked door leaves: dark leading-edge face with a 0.6 m hazard stripe, guide blocks, edge lights
+    // three parked door leaves: dark leading-edge face, guide blocks, edge lights; only the top leaf (the
+    // one that closes last, level with the deck) carries a hazard stripe, the others a steel edge
     for (let k = 0; k < 3; k++) {
       const yc = leafY[k];
       [a, b] = mm(37.3, recessX1 - 0.6);
@@ -163,7 +165,8 @@ function buildShaft(ctx, B) {
       [a, b] = mm(37.0, 37.3);
       B.boxMM(M, impDark, [a, yc - 1.0, zA + 1], [b, yc + 1.0, zB - 1], { texel: 0.5 });
       [a, b] = mm(36.98, 37.0);
-      B.boxMM("hgHazard", 0xffffff, [a, yc - 0.3, zA + 1.2], [b, yc + 0.3, zB - 1.2], { texel: 0.5 });
+      if (k === 2) B.boxMM("hgHazard", 0xffffff, [a, yc - 0.3, zA + 1.2], [b, yc + 0.3, zB - 1.2], { texel: 0.5 });
+      else B.boxMM("metal", HG.steel, [a, yc - 0.08, zA + 1.2], [b, yc + 0.08, zB - 1.2]);
       for (let z = zA + 5; z < zB - 3; z += 8) {
         [a, b] = mm(36.8, 37.0);
         B.boxMM("metal", HG.gunmetal, [a, yc - 0.7, z - 0.45], [b, yc + 0.7, z + 0.45]);
@@ -272,7 +275,8 @@ function buildRails(ctx, B) {
 // ---------------------------------------------------------------------------
 function buildMarkings(ctx, B) {
   const { kit, PALETTE } = ctx;
-  const white = HG.white, yellow = HG.yellow;
+  // deck paint is a worn off-white: under the flood pools a pure white stencil blooms like a lamp
+  const white = PAINT_WHITE, yellow = HG.yellow;
   const ring = (x, z, r0, r1, color) => kit.add("painted", new THREE.RingGeometry(r0, r1, 72), { pos: [x, Y_MARK + 0.005, z], quat: FLAT_Q, color, uv: "scale", uvScale: [4, 1] });
   // painted stripe from SEAM_Y to Y_MARK (sits on the plates, sinks into the seams)
   const mark = (color, x0, x1, z0, z1) => B.boxMM("painted", color, [Math.min(x0, x1), FLOOR - 0.01, Math.min(z0, z1)], [Math.max(x0, x1), Y_MARK, Math.max(z0, z1)]);

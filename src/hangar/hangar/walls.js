@@ -6,7 +6,7 @@
 // control-tower window bezel + sign + tower base, the balcony with its bracket structure, fire stations,
 // and a ceiling of long dark light channels with diffuser segments + louvred flood fixtures.
 import * as THREE from "three";
-import { Batcher, PX, NX, PY, PZ, NZ, ALL, sharedBox } from "./batch.js";
+import { Batcher, PX, NX, PY, NY, PZ, NZ, ALL, sharedBox } from "./batch.js";
 import { doorOpening, FRAME_W } from "../../systems/doors/helper.js";
 import { rng } from "../../kit.js";
 import { FLOOR, CEIL, WALL_T, HALL, DOORS, DOOR_LABELS, WINDOW, BALCONY, RACK, STAIRS, LADDER_Z, CATWALK, RIB_Z, RIB_X, RIB_W, RIB_D, PANEL_W, SEAM, HG } from "./layout.js";
@@ -31,6 +31,27 @@ for (let k = 0; k < 5; k++) {
 }
 // the one darker panel row (10 % of the field): the row above the first band, all four walls
 const DARK_ROW = [12.4, 18.0];
+// baked light falloff: the hall is lit from the deck, so the panel tone darkens with height (one tint
+// per 12 m storey above 24 m; the ceiling darkest so its light channels have something to sit in)
+const HEIGHT_TINT = [
+  [48, 0.62],
+  [36, 0.74],
+  [24, 0.86],
+];
+const _tints = new Map();
+function tinted(color, k) {
+  const key = color.getHex() * 100 + Math.round(k * 100);
+  let c = _tints.get(key);
+  if (!c) {
+    c = color.clone().multiplyScalar(k);
+    _tints.set(key, c);
+  }
+  return c;
+}
+function heightTint(color, v0) {
+  for (const [v, k] of HEIGHT_TINT) if (v0 >= v) return tinted(color, k);
+  return color;
+}
 
 // rect helpers (u0,u1,v0,v1)
 function intersects(a, b) {
@@ -85,7 +106,9 @@ class Wall {
     this.ribs = ribs; // u positions of the wall ribs
     this.rand = rng(seed);
     this.backBit = plane === "x" ? (inward > 0 ? NX : PX) : inward > 0 ? NZ : PZ;
+    this.frontBit = plane === "x" ? (inward > 0 ? PX : NX) : inward > 0 ? PZ : NZ;
     this.faces = ALL & ~this.backBit;
+    this.facesHigh = this.frontBit | NY; // panels above 24 m: only the front and the underside can be seen from the deck
     this.N = plane === "x" ? new THREE.Vector3(inward, 0, 0) : new THREE.Vector3(0, 0, inward);
     this.holes = []; // exact holes {u0,u1,v0,v1,door?,mu,mv}
     this.extraCuts = []; // panels/bands keep out of these (balcony slot, tower base, hatches)
@@ -205,7 +228,7 @@ class Wall {
     if (u1 - u0 < 0.1 || v1 - v0 < 0.1) return;
     // one tone for the field; the darker tone only in its own row (a band, never a checkerboard)
     const dark = r.v0 >= DARK_ROW[0] - 0.05 && r.v1 <= DARK_ROW[1] + 0.05;
-    const color = dark ? this.P.impMid : this.P.impGrey;
+    const color = heightTint(dark ? this.P.impMid : this.P.impGrey, r.v0);
     let style = "plain";
     const plain = this.plainRects.some((p) => intersects(r, p));
     if (full && w > 1.5 && h > 2) {
@@ -217,8 +240,9 @@ class Wall {
         else if (s < 0.24) style = "seam";
         else if (s < 0.29) style = "inset";
       } else if (s < 0.05) style = "vent";
+      else if (s < 0.17) style = "seam"; // upper storeys: enough grooves + bolt heads that they are not blank sheets
     }
-    this.box("impPanel", color, u0, u1, v0, v1, P0, P1, { faces: this.faces, fit: true });
+    this.box("impPanel", color, u0, u1, v0, v1, P0, P1, { faces: r.v0 >= 24 ? this.facesHigh : this.faces, fit: true });
     const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2;
     switch (style) {
       case "vent": {
@@ -498,13 +522,17 @@ function buildCeiling(ctx, B) {
     for (const s of [-1, 1]) {
       const cx = x + s * chanOff;
       for (const t of [-1, 1]) B.boxMM("paintedMetal", PALETTE.impDark, [cx + t * chanW / 2 - 0.06, yB - chanD, HALL.z0 + 1], [cx + t * chanW / 2 + 0.06, yB, HALL.z1 - 1], { faces: ALL & ~PY, texel: 0.5 });
+      const ci = RIB_X.indexOf(x) * 2 + (s + 1) / 2; // channel index 0..11
       for (let i = 0; i < RIB_Z.length - 1; i++) {
         const z0 = RIB_Z[i] + w / 2 + 0.6, z1 = RIB_Z[i + 1] - w / 2 - 0.6;
         const seg = (z1 - z0 - 2 * 1.4) / 3;
         for (let k = 0; k < 3; k++) {
           const a = z0 + k * (seg + 1.4);
           B.boxMM("paintedMetal", PALETTE.impBlack, [cx - 0.36, yB - 0.28, a - 0.05], [cx + 0.36, yB - 0.02, a + seg + 0.05]);
-          B.boxMM("emitWhite", 0xffffff, [cx - 0.3, yB - 0.34, a], [cx + 0.3, yB - 0.28, a + seg]);
+          // one diffuser in three is dark (staggered per channel and bay) so the channels read as a
+          // rhythm of long lit runs rather than an unbroken grid of identical strips
+          const lit = (i + k + ci) % 3 !== 0;
+          B.boxMM(lit ? "emitWhite" : "paintedMetal", lit ? 0xffffff : PALETTE.impMid, [cx - 0.3, yB - 0.34, a], [cx + 0.3, yB - 0.28, a + seg], lit ? undefined : { faces: NY });
         }
       }
     }
@@ -531,7 +559,8 @@ function buildCeiling(ctx, B) {
             }
           }
           if (ax1 - ax0 < 0.5) continue;
-          B.boxMM("impPanel", craneBay ? PALETTE.impDark : PALETTE.impGrey, [ax0, yB - 0.12, az0], [ax1, yB, az1], { faces: ALL & ~PY, fit: true });
+          // 60 m up only the underside is ever seen: the 12 cm edges are dropped (the black backing in the gaps is the seam)
+          B.boxMM("impPanel", craneBay ? PALETTE.impDark : tinted(PALETTE.impGrey, 0.55), [ax0, yB - 0.12, az0], [ax1, yB, az1], { faces: NY, fit: true });
         }
       }
     }
@@ -658,7 +687,7 @@ function buildCatwalk(ctx, B) {
       if (Math.round((z - HALL.z0 - 3) / 4) % 2 === 0) housedLamp(B, "emitWhite", [s * (edgeX + 0.5), y - CAT_T - 0.16, z], [0, -1, 0], [0.5, 0.16, 0.36], { inset: 0.04 });
     }
     // rail along the inner edge
-    railRun(B, kit, [s * (edgeX + 0.05), inZ0 + 0.05], [s * (edgeX + 0.05), inZ1 - 0.05], y, { collide: false });
+    railRun(B, kit, [s * (edgeX + 0.05), inZ0 + 0.05], [s * (edgeX + 0.05), inZ1 - 0.05], y, { collide: false, foot: false, postEvery: 3 });
     // the rack ladders continue from the tier-2 platform up to the catwalk
     for (const z of LADDER_Z) ladder(B, kit, s * (HALL.x1 - P1), z, RACK.tiers[1].platformY, y, -s, { cage: true, collide: false });
   }
@@ -681,7 +710,7 @@ function buildCatwalk(ctx, B) {
       B.boxMM("paintedMetal", PALETTE.impMid, [x - 0.12, y - CAT_T - 0.32, za], [x + 0.12, y - CAT_T, zb], { texel: 0.5 });
       if (Math.round((x - HALL.x0 - 3) / 4) % 2 === 0) housedLamp(B, "emitWhite", [x, y - CAT_T - 0.16, zEdge + tw * 0.5], [0, -1, 0], [0.5, 0.16, 0.36], { inset: 0.04 });
     }
-    railRun(B, kit, [-edgeX + 0.05, zEdge + sgn * 0.05], [edgeX - 0.05, zEdge + sgn * 0.05], y, { collide: false });
+    railRun(B, kit, [-edgeX + 0.05, zEdge + sgn * 0.05], [edgeX - 0.05, zEdge + sgn * 0.05], y, { collide: false, foot: false, postEvery: 3 });
     ladder(B, kit, zIn + sgn * 0.01, lx, FLOOR, y, sgn, { cage: true, plane: "z" });
   }
 }

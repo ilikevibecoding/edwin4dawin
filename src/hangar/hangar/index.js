@@ -11,7 +11,7 @@ import { buildWalls } from "./walls.js";
 import { buildRacks } from "./racks.js";
 import { buildCrane, buildClutter } from "./machinery.js";
 
-// Light descriptors (24 with the four rack-platform points from racks.js and the crane's work light).
+// Light descriptors (26 with the four rack-platform points from racks.js and the crane's work light).
 // The harness pool is 12 points + 4 spots for the whole active set, so the few that matter carry the
 // priority: the four spots are the louvred ceiling floods over the spawn apron and the two nearest pads
 // (0.9, the first of them casts the shadows), the four red beacon points at the aperture corners (0.6),
@@ -19,17 +19,21 @@ import { buildCrane, buildClutter } from "./machinery.js";
 // bay-door pools and the shaft (all <= 0.45). Everything else in the hall is emissive fixtures.
 function addLights(ctx) {
   const L = ctx.lights;
-  const spot = (pos, target) => L.push({ type: "spot", pos, target, color: 0xf6f8ff, intensity: 1300, distance: 85, decay: 1.2, angle: 0.55, penumbra: 0.45, priority: 0.9 });
+  // tight cones (16 m / 14 m pools on the deck from 56 m up) so the pools have edges and the deck
+  // between them stays dark instead of an even wash
+  const spot = (pos, target, angle) => L.push({ type: "spot", pos, target, color: 0xf6f8ff, intensity: 700, distance: 85, decay: 1.2, angle, penumbra: 0.4, priority: 0.9 });
   for (const s of [-1, 1]) {
-    spot([s * 26, -15.5, 155], [s * 12, FLOOR, 158]);
-    spot([s * 26, -15.5, 135], [s * 22, FLOOR, 142]);
+    spot([s * 9, -15.5, 148], [s * 9, FLOOR, 146], 0.24); // spawn apron: the spawn stands in the penumbra, the stencil in the pool
+    spot([s * 22, -15.5, 140], [s * 22, FLOOR, 142], 0.22); // pads 03 / 04
   }
   for (const p of TRACTOR_POINTS) L.push({ type: "point", pos: [p[0] + Math.sign(p[0]) * 1.6, FLOOR + 3.4, p[2] + Math.sign(p[2] - 32) * 1.6], color: 0xff2a1a, intensity: 55, distance: 28, decay: 1.6, priority: 0.6 });
   // rim spill under the deck edge: lights the shaft lining and the deck lip from below (exterior view)
-  for (const z of [2, 62]) L.push({ type: "point", pos: [0, FLOOR - 2.5, z], color: 0xfff1dc, intensity: 170, distance: 52, decay: 1.4, priority: 0.45 });
+  for (const z of [2, 62]) L.push({ type: "point", pos: [0, FLOOR - 2.5, z], color: 0xffe9c8, intensity: 320, distance: 60, decay: 1.4, priority: 0.45 });
   L.push({ type: "point", pos: [0, BALCONY.y + 2.5, 167], color: 0xd6e4ff, intensity: 40, distance: 22, priority: 0.4 });
   L.push({ type: "point", pos: [0, FLOOR + 6, 164], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.4 });
   L.push({ type: "point", pos: [0, FLOOR + 6, -64], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.3 });
+  // the two bar gaps in the aperture rail: lifts the chevron, rails and bar posts where people stand
+  for (const z of [HOLE.z0 - 3.5, HOLE.z1 + 3.5]) L.push({ type: "point", pos: [0, FLOOR + 4.5, z], color: 0xf4f7ff, intensity: 60, distance: 26, decay: 1.8, priority: 0.35 });
   for (const s of [-1, 1]) {
     L.push({ type: "point", pos: [s * 74, FLOOR + 7, 15], color: 0xfff0e0, intensity: 70, distance: 32, priority: 0.3 });
     L.push({ type: "point", pos: [s * 74, FLOOR + 6, 120], color: 0xfff0e0, intensity: 70, distance: 32, priority: 0.3 });

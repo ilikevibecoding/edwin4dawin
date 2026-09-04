@@ -96,7 +96,7 @@ export function label(kit, mat, name, center, normal, width, { color = 0xffffff,
  * 1.02 m, a dark mid rail at 0.55 m and a 0.15 m kick plate, plus a 1.02 m tall blocking collider along
  * it. Uses the Batcher for everything (boxes only).
  */
-export function railRun(B, kit, from, to, y0, { tag = "rail", collide = true, kick = true, postEvery = 2.5, colors = {} } = {}) {
+export function railRun(B, kit, from, to, y0, { tag = "rail", collide = true, kick = true, foot = true, postEvery = 2.5, colors = {} } = {}) {
   const dx = to[0] - from[0], dz = to[1] - from[1];
   const L = Math.hypot(dx, dz);
   if (L < 0.2) return;
@@ -109,8 +109,8 @@ export function railRun(B, kit, from, to, y0, { tag = "rail", collide = true, ki
     const t = i / n;
     const x = from[0] + dx * t, z = from[1] + dz * t;
     B.box("paintedMetal", post, x, y0 + RAIL_H / 2, z, 0.09, RAIL_H, 0.09);
-    // foot plate
-    B.box("paintedMetal", post, x, y0 + 0.015, z, 0.22, 0.03, 0.22);
+    // foot plate (skipped on rails nobody gets near, e.g. the catwalk ring 36 m up)
+    if (foot) B.box("paintedMetal", post, x, y0 + 0.015, z, 0.22, 0.03, 0.22);
   }
   const cx = (from[0] + to[0]) / 2, cz = (from[1] + to[1]) / 2;
   const sx = alongX ? L : 0.05, sz = alongX ? 0.05 : L;

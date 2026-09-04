@@ -10,15 +10,14 @@ const ATLAS = 1024;
 const LABEL_SPEC = [
   // [name, text, cellW, cellH, options]
   ["HANGAR CONTROL", "HANGAR CONTROL", 1024, 112, { weight: 900, spacing: 0.22, bridges: false }],
-  ["MAINT ACCESS", "MAINT ACCESS", 512, 80, {}],
-  ["AUTHORISED ONLY", "AUTHORISED ONLY", 512, 80, {}],
-  ["CATWALK 3", "CATWALK 3", 512, 80, {}],
-  ["01", "01", 256, 128, {}],
-  ["02", "02", 256, 128, {}],
-  ["03", "03", 256, 128, {}],
-  ["04", "04", 256, 128, {}],
-  ["05", "05", 256, 128, {}],
-  ["06", "06", 256, 128, {}],
+  ["01", "01", 256, 96, {}],
+  ["02", "02", 256, 96, {}],
+  ["03", "03", 256, 96, {}],
+  ["04", "04", 256, 96, {}],
+  ["05", "05", 256, 96, {}],
+  ["06", "06", 256, 96, {}],
+  ["MAINT ACCESS", "MAINT ACCESS", 384, 80, {}],
+  ["AUTHORISED ONLY", "AUTHORISED ONLY", 384, 80, {}],
   ["FLIGHT DECK 4", "FLIGHT DECK 4", 512, 80, {}],
   ["KEEP CLEAR", "KEEP CLEAR", 512, 80, {}],
   ["TRACTOR EMITTER", "TRACTOR EMITTER", 512, 80, {}],
@@ -40,7 +39,7 @@ const LABEL_SPEC = [
 ];
 for (const side of ["P", "S"]) for (const tier of [1, 2]) for (let i = 1; i <= 7; i++) {
   const s = `${side}${tier}-${String(i).padStart(2, "0")}`;
-  LABEL_SPEC.push([s, s, 128, 40, {}]);
+  LABEL_SPEC.push([s, s, 96, 40, {}]);
 }
 
 export const LABELS = {};
@@ -170,6 +169,72 @@ function buildHazard(size = 256) {
 }
 
 // ---------------------------------------------------------------------------
+// Deck-plate wear: a 9 m tile of soft value noise with a few skid streaks, used twice on the plating —
+// as a faint albedo map (0.86..1.0, so the vertex tone still sets the plate colour) and as the roughness
+// map (0.5..1.0, so the sheen and the flood pools break up into streaks instead of an even mirror).
+// ---------------------------------------------------------------------------
+function buildDeckWear(size = 256) {
+  let s = 91;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const N = 16; // lattice cells per tile
+  const lattice = new Float32Array(N * N);
+  for (let i = 0; i < lattice.length; i++) lattice[i] = rnd();
+  const smooth = (t) => t * t * (3 - 2 * t);
+  const value = (u, v) => {
+    // periodic bilinear value noise on the lattice
+    const x = u * N, y = v * N;
+    const x0 = Math.floor(x), y0 = Math.floor(y);
+    const fx = smooth(x - x0), fy = smooth(y - y0);
+    const L = (i, j) => lattice[((j + N) % N) * N + ((i + N) % N)];
+    const a = L(x0, y0) * (1 - fx) + L(x0 + 1, y0) * fx;
+    const b = L(x0, y0 + 1) * (1 - fx) + L(x0 + 1, y0 + 1) * fx;
+    return a * (1 - fy) + b * fy;
+  };
+  // skid streaks: 14 short lines along the tile's v axis (the hall's z), random u, soft edges
+  const streaks = [];
+  for (let i = 0; i < 14; i++) streaks.push({ u: rnd(), v0: rnd(), len: 0.12 + rnd() * 0.3, w: 0.004 + rnd() * 0.008, k: 0.4 + rnd() * 0.6 });
+  // noise + streak fields once, then both canvases from them
+  const noise = new Float32Array(size * size), skid = new Float32Array(size * size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = x / size, v = y / size, i = y * size + x;
+      noise[i] = 0.6 * value(u, v) + 0.3 * value((u * 3) % 1, (v * 3) % 1) + 0.1 * value((u * 9) % 1, (v * 9) % 1);
+      let st = 0;
+      for (const q of streaks) {
+        const du = Math.min(Math.abs(u - q.u), 1 - Math.abs(u - q.u));
+        if (du >= q.w) continue;
+        const dv = ((v - q.v0) % 1 + 1) % 1;
+        if (dv < q.len) st = Math.max(st, q.k * (1 - du / q.w) * Math.min(1, (q.len - dv) * 8));
+      }
+      skid[i] = st;
+    }
+  }
+  const make = (fn, srgb) => {
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const g = c.getContext("2d");
+    const img = g.createImageData(size, size);
+    for (let i = 0; i < size * size; i++) {
+      const o = i * 4;
+      img.data[o] = img.data[o + 1] = img.data[o + 2] = Math.round(Math.min(1, Math.max(0, fn(noise[i], skid[i]))) * 255);
+      img.data[o + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(1 / 9, 1 / 9);
+    tex.anisotropy = 8;
+    tex.needsUpdate = true;
+    return tex;
+  };
+  return {
+    map: make((n, st) => 0.93 + 0.07 * (n - 0.5) * 2 - 0.1 * st, true),
+    roughnessMap: make((n, st) => 0.62 + 0.3 * (n - 0.5) * 2 + 0.35 * st, false),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Containment field: additive blue shimmer over the aperture, animated by uTime (set from update(dt, t)).
 // UVs are metres from the hole corner; uSize is the hole size for the rim fade.
 // ---------------------------------------------------------------------------
@@ -198,12 +263,13 @@ function buildField() {
         float scan = exp(-pow(mod(p.y - t * 14.0, uSize.y) - uSize.y * 0.5, 2.0) / 40.0);
         // rim: a visible blue glow that fades over ~6 m from the hole edge (the field "grips" the lip)
         float d = min(min(p.x, uSize.x - p.x), min(p.y, uSize.y - p.y));
-        float rim = exp(-d * 0.45);
+        float rim = exp(-d * 0.6); // soft glow over ~3 m
+        float core = exp(-d * 2.2); // bright line where the field meets the lip
         float rimFlicker = 0.85 + 0.15 * sin(t * 5.0 + d * 2.0);
         // linear-light levels: the open field stays around 0.01-0.03 (≈ 12 % opacity on screen) so the
         // stars read through it; the rim and the scan band are the bright parts
-        float k = 0.007 + 0.004 * a + 0.003 * b + 0.004 * cell + 0.012 * scan + 0.06 * rim * rimFlicker;
-        vec3 col = vec3(0.28, 0.55, 1.0) * k + vec3(0.5, 0.8, 1.0) * rim * rimFlicker * 0.035;
+        float k = 0.007 + 0.004 * a + 0.003 * b + 0.004 * cell + 0.012 * scan + 0.1 * rim * rimFlicker;
+        vec3 col = vec3(0.28, 0.55, 1.0) * k + vec3(0.55, 0.82, 1.0) * (rim * 0.06 + core * 0.3) * rimFlicker;
         gl_FragColor = vec4(col, 1.0);
       }`,
     transparent: true,
@@ -223,11 +289,16 @@ export const live = { field: null, pulse: null };
 export function makeMaterials(shared) {
   const atlas = buildAtlas();
   const hazard = buildHazard(256);
+  const wear = buildDeckWear(256);
   live.field = buildField();
   live.pulse = new THREE.MeshStandardMaterial({ color: 0x1a0606, emissive: new THREE.Color("#ff2018"), emissiveIntensity: 1.3, roughness: 0.45, metalness: 0 });
   const decalOpts = { transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
   return {
     hgHazard: new THREE.MeshStandardMaterial({ map: hazard, roughness: 0.6, metalness: 0.08, envMapIntensity: 0.5 }),
+    // deck plating: dark semi-gloss metal (vertex colour = plate tone). Rough enough that the environment
+    // reflection is a soft sheen rather than a mirror of the room lights, glossy enough that the ceiling
+    // floods pool on it.
+    hgDeck: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, map: wear.map, roughnessMap: wear.roughnessMap, roughness: 0.55, metalness: 0.7, envMapIntensity: 0.3 }),
     // painted stencils (vertex colour = paint colour); on deck plating and panels
     hgDecal: new THREE.MeshStandardMaterial({ map: atlas, roughness: 0.8, metalness: 0, vertexColors: true, envMapIntensity: 0.3, ...decalOpts }),
     // lit signage: white letters
