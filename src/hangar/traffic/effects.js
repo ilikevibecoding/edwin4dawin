@@ -30,15 +30,21 @@ export function shaftStrength(p) {
   return lo * hi;
 }
 
-/** Tractor beams and the landing-light cone share one mesh/material (see materials.js makeBeamMaterial). */
-export function makeBeams(material) {
+/**
+ * Tractor beams and the landing-light cone share one mesh/material (see materials.js makeBeamMaterial).
+ * `emitters` are the four [x,y,z] emitter positions (d4-hangar's api.tractorPoints(), else EMITTERS).
+ */
+export function makeBeams(material, emitters = EMITTERS) {
   const mesh = new THREE.Mesh(buildBeamCones(12), material);
   mesh.name = "traffic_beams";
   mesh.frustumCulled = false;
   mesh.renderOrder = 20;
   mesh.visible = false;
   const u = material.uniforms;
-  EMITTERS.forEach((e, i) => u.uEmit.value[i].set(e[0], e[1], e[2]));
+  for (let i = 0; i < 4; i++) {
+    const e = emitters[i] || EMITTERS[i];
+    u.uEmit.value[i].set(e[0], e[1], e[2]);
+  }
   const refresh = () => {
     mesh.visible = u.uOn.value > 0 || u.uLightOn.value > 0;
   };

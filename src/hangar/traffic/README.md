@@ -31,7 +31,10 @@ craft in the shaft (tractor fill) and is removed from `ctx.lights` when the beam
 
 Geometry: fighter 936 tris (span 7.70 m, wing faces at |x| 3.85, nose −Z at yaw 0; spoked octagonal
 viewport with dark glass and a lit rim, dark aft engine block with two recessed nozzles that carry no idle
-emissive), shuttle 1492 tris (21 m; plated fuselage with baked seams, glazed cockpit band, port boarding
+emissive; colours from `tieColours()` — frame 0x3a3e4b, hull 0x454a58, cells 0x08090c, dark 0x202329, i.e.
+the Imperial greys cut 50–60 % and cooled, so the fighters read as dark blue-grey machines under the rack
+floods; `trafficHull` is roughness 0.78 / metalness 0.15 / envMapIntensity 0.35 so the near-black cells do
+not pick up a grey specular sheen), shuttle 1492 tris (21 m; plated fuselage with baked seams, glazed cockpit band, port boarding
 hatch, four landing skids whose pads sit exactly `standHeight` = 2.85 m below the origin, three recessed
 nozzles with a dim radial glow), clamp 36 tris. The live triangle total is kept under 40 000 by capping
 fighter instances: `maxFighterInstances = floor((40000 − fixed) / 936)` where `fixed` is one parked
@@ -55,8 +58,9 @@ cradles (`state: "maintenance"`), one shuttle parks on the pad with its skids on
 wings parked at `fold` 0.5 (raised ~38°, clearly two wings plus the fin from any angle).
 
 Hangar facts used here: floor y −72, aperture x ∈ [−36, 36], z ∈ [−30, 94], centre (0, −85, 32);
-tractor emitters (±36, −73, −30) and (±36, −73, 94). The beams target any mover inside the shaft column
-(x/z inside the hole, y −100 … −62, fading over 6 m at both ends).
+tractor emitters (±36, −73, −30) and (±36, −73, 94) — at build the beams read `d4-hangar`'s
+`api.tractorPoints()` (first four entries) and fall back to these constants. The beams target any mover
+inside the shaft column (x/z inside the hole, y −100 … −62, fading over 6 m at both ends).
 
 ## Paths (`paths.js`)
 
@@ -85,9 +89,14 @@ approach; launches hold the slot yaw while backing out, level off at the hover, 
 
 ## Effects (`effects.js`, driven from `update`)
 
-* **Tractor beams** — while a mover is inside the shaft column, four pale-blue halo cones (with scanlines
-  travelling toward the craft and a faint pulse) plus four bright core threads converge on it from the
-  emitters; strength fades over 6 m at both ends of the column and the pooled tractor point light follows.
+* **Tractor beams** — while a mover is inside the shaft column, four pale-blue halo cones (radius 1.0 m at
+  the emitter, 2.8 m at the craft) plus four thin core threads converge on it from the emitters. The shader
+  makes them read as light, not geometry: the body is `pow(|N·V|, 1.6)` — brightest where the wall faces the
+  camera, zero at the silhouette (a 0.5 floor when viewed along the axis) — the halo dims 1.0 → 0.3 from
+  emitter to craft and fades out over its last 12 % (alpha 0.14 at the centre), the core runs in at alpha
+  0.24 × (0.6 → 1.0) and brightens ×2.5 over the last 25 % into the focus on the target; faint scanlines
+  (0.85 ± 0.15, 3.2 m period) travel toward the craft with a slow pulse. Strength fades over 6 m at both
+  ends of the column and the pooled tractor point light follows.
 * **Landing light** — the craft in the shaft (else the first hangar mover) carries an 18 m warm flickering
   cone from its chin, angled forward-down, and a flickering landing-light beacon.
 * **Engine glow** — every mover has two additive gaussian quads at its nozzle exits (`FIGHTER_ENGINES` /

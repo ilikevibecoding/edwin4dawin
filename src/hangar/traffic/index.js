@@ -201,7 +201,15 @@ export default {
     const cradleSrc = fighterBay && fighterBay.result && fighterBay.result.api && fighterBay.result.api.cradles ? fighterBay.result.api.cradles() : null;
     const cradles = Array.isArray(cradleSrc) && cradleSrc.length ? cradleSrc : FALLBACK_CRADLES;
     const extraZones = hooks.landingZones();
-    log(`${slots.length} rack slots (${rawSlots ? "d4-hangar" : "fallback"}), pad ${pad.pos}, ${cradles.length} cradles, ${extraZones.length} extra zones`);
+    // tractor emitters: the hangar's published points (its emitter housings) so the beams line up with them
+    let emitters = EMITTERS;
+    try {
+      const tp = hangar && hangar.result && hangar.result.api && hangar.result.api.tractorPoints ? hangar.result.api.tractorPoints() : null;
+      if (Array.isArray(tp) && tp.length >= 4 && tp.every((p) => Array.isArray(p) && p.length === 3)) emitters = tp.slice(0, 4).map((p) => [p[0], p[1], p[2]]);
+    } catch (e) {
+      console.warn("[traffic] d4-hangar tractorPoints() failed, using the plan's emitters:", e);
+    }
+    log(`${slots.length} rack slots (${rawSlots ? "d4-hangar" : "fallback"}), pad ${pad.pos}, ${cradles.length} cradles, ${extraZones.length} extra zones, emitters ${emitters === EMITTERS ? "plan" : "d4-hangar"}`);
 
     // ---- geometry + the six drawables
     const fighterGeo = buildFighter(PALETTE);
@@ -222,9 +230,9 @@ export default {
     shuttles.receiveShadow = true;
     shuttles.name = "traffic_shuttles";
     const foldAttr = shuttleGeo.getAttribute("aFold");
-    const beams = makeBeams(materials.trafficBeam);
+    const beams = makeBeams(materials.trafficBeam, emitters);
     const glow = makeGlow(materials.trafficGlow, 64);
-    const beacons = makeBeacons(materials.trafficBeacon, FIGHTER_CAPACITY * 3 + SHUTTLE_CAPACITY + EMITTERS.length);
+    const beacons = makeBeacons(materials.trafficBeacon, FIGHTER_CAPACITY * 3 + SHUTTLE_CAPACITY + emitters.length);
     const clamps = makeClamps(clampGeo, materials.trafficHull, slots);
     group.add(fighters, shuttles, beams.mesh, glow.mesh, beacons.points, clamps.mesh);
     const clampAmounts = new Float32Array(slots.length);
@@ -660,7 +668,7 @@ export default {
       foldAttr.needsUpdate = true;
 
       // emitter glow points + beam
-      for (const e of EMITTERS) {
+      for (const e of emitters) {
         _p.set(e[0], e[1], e[2]);
         const k = 0.25 + 2.2 * shaftStr * (0.85 + 0.15 * Math.sin(t * 5.5));
         beacons.add(_p, 0.45 * k, 0.7 * k, 1.0 * k, 0.9);

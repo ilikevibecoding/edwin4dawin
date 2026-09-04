@@ -46,6 +46,23 @@ export function craftColours(PALETTE = {}) {
   };
 }
 
+/**
+ * Fighter-only tints: the Imperial greys cut 50–60 % in linear albedo and cooled toward blue, so a TIE reads
+ * as a dark machine with lit edges even under the rack floods (impMid 0x5a5e66 → frame 0x3a3e4b, impHullDark
+ * 0x6f747c → hull 0x454a58, impBlack 0x111214 → cell 0x08090c, impDark 0x33363c → dark 0x202329). The
+ * shuttle keeps the shared craftColours (Imperial shuttle white-grey).
+ */
+export function tieColours() {
+  return {
+    hull: 0x454a58, // cockpit ball, pylon tubes, outer hub caps — a shade lighter than the frame
+    frame: 0x3a3e4b, // wing lattice, spars, hub plates, viewport bezel, pylon collar/boss, nozzle bells
+    cell: 0x08090c, // solar cells, nozzle throats — near black
+    dark: 0x202329, // engine block, cannons, sensor boxes, belly hatch, viewport tube
+    accent: 0x5c6170, // nozzle lip rings — the one lighter edge on the engine block
+    glass: 0x07090d,
+  };
+}
+
 function flipWinding(geo) {
   const attrs = Object.values(geo.attributes);
   const count = geo.attributes.position.count;
@@ -181,10 +198,11 @@ export const FIGHTER_ENGINES = { offsets: [[-0.72, -0.1], [0.72, -0.1]], exitZ: 
  * lit rim), aft engine block with two recessed nozzles (dark throats, no idle emissive — the engine glow
  * quads light them only while flying), two 1.4 m pylons with hub plates and two hexagonal solar-panel wings
  * 7.0 tall x 5.6 long x 0.25 thick with a raised frame and six radial spars. Span 7.7 m (wing faces at
- * |x| 3.85). ~920 triangles.
+ * |x| 3.85). ~920 triangles. Colours come from tieColours() (dark blue-grey, near-black cells).
  */
-export function buildFighter(PALETTE) {
-  const C = craftColours(PALETTE);
+export function buildFighter(_PALETTE) {
+  // the fighter uses the fixed dark tints of tieColours(); the palette still drives the shuttle and clamps
+  const C = tieColours();
   const b = new Builder();
   const R = 2.2;
   b.add(new THREE.SphereGeometry(R, 14, 9), { color: C.hull });
@@ -204,9 +222,9 @@ export function buildFighter(PALETTE) {
   b.box(2.5, 1.75, 1.1, { pos: [0, -0.1, 2.05], color: C.dark });
   for (const [ex, ey] of FIGHTER_ENGINES.offsets) {
     b.cyl(0.5, 0.42, 0.7, 8, "z", { pos: [ex, ey, 2.95], color: C.frame, open: true });
-    b.cyl(0.56, 0.56, 0.12, 8, "z", { pos: [ex, ey, 3.26], color: C.hullLight, open: true });
+    b.cyl(0.56, 0.56, 0.12, 8, "z", { pos: [ex, ey, 3.26], color: C.accent, open: true });
     // throat: an inward-facing cone from the exit (r 0.48) to a point 0.6 m deep — reads as a dark recess
-    b.add(innerTube(0.48, 0.04, 0.6, 8).rotateX(Math.PI / 2), { pos: [ex, ey, 3.0], color: C.panel });
+    b.add(innerTube(0.48, 0.04, 0.6, 8).rotateX(Math.PI / 2), { pos: [ex, ey, 3.0], color: C.cell });
   }
   // twin cannons under the chin (thin tip forward)
   for (const sx of [-1, 1]) b.cyl(0.15, 0.11, 1.9, 6, "z", { pos: [sx * 0.55, -1.72, -1.55], color: C.dark, open: true });
@@ -228,7 +246,7 @@ export function buildFighter(PALETTE) {
   const ring = hexShape(H, L, 1.03).shape;
   ring.holes.push(hexShape(H, L, 0.9).shape);
   for (const sx of [-1, 1]) {
-    b.add(plateYZ(outer.shape, T), { pos: [sx * (3.55 + T / 2), 0, 0], color: C.panel });
+    b.add(plateYZ(outer.shape, T), { pos: [sx * (3.55 + T / 2), 0, 0], color: C.cell });
     b.add(plateYZ(ring, 0.4), { pos: [sx * 3.65, 0, 0], color: C.frame });
     for (const [vz, vy] of outer.verts) {
       const len = Math.hypot(vz, vy) * 0.94;

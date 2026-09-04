@@ -50,13 +50,13 @@ vec3 trFold(vec3 p, bool isPoint) {
  * for the shuttle, the fold channel above. `roughness`/`metalness` tuned for dark hangar light: mostly
  * dielectric so the hull reads grey under the pool lights instead of mirroring a black environment.
  */
-export function makeCraftMaterial({ fold = false, emitScale = 1.0 } = {}) {
+export function makeCraftMaterial({ fold = false, emitScale = 1.0, roughness = 0.62, metalness = 0.28, envMapIntensity = 0.55 } = {}) {
   const mat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
-    roughness: 0.62,
-    metalness: 0.28,
-    envMapIntensity: 0.55,
+    roughness,
+    metalness,
+    envMapIntensity,
     fog: false,
   });
   mat.name = fold ? "trafficShuttle" : "trafficHull";
@@ -127,9 +127,12 @@ export function makeGlowMaterial() {
 /**
  * Tractor beams + landing light: one mesh, nine unit cones (attribute aCone: 0..3 emitter halos, 4..7
  * emitter cores, 8 the landing-light cone). The vertex shader stretches each emitter cone from its emitter
- * to the shared target (and the landing cone between uLight0/uLight1); the fragment shader adds a soft rim,
- * scanlines that travel toward the craft and a slow pulse. uOn / uLightOn scale each effect to zero when
- * idle (idle cones are clipped away in the vertex shader).
+ * to the shared target (and the landing cone between uLight0/uLight1). The fragment shader makes the cones
+ * read as light rather than geometry: the body is brightest where the wall faces the camera (the eye looks
+ * through the thickest part of the volume) and fades to nothing at the silhouette, it dims along the length
+ * from the emitter toward the craft, and only the thin core keeps a bright focus on the target. Faint
+ * scanlines travel toward the craft with a slow pulse. uOn / uLightOn scale each effect to zero when idle
+ * (idle cones are clipped away in the vertex shader).
  */
 export function makeBeamMaterial() {
   const mat = new THREE.ShaderMaterial({
@@ -140,7 +143,7 @@ export function makeBeamMaterial() {
       uTime: { value: 0 },
       // outer halo cone radii (emitter end, craft end) and the bright inner core radii
       uR0: { value: 1.0 },
-      uR1: { value: 3.6 },
+      uR1: { value: 2.8 },
       uC0: { value: 0.12 },
       uC1: { value: 0.5 },
       uColor: { value: new THREE.Color(0.46, 0.7, 1.0) },
@@ -170,6 +173,7 @@ export function makeBeamMaterial() {
       varying float vLen;
       varying float vKind;
       varying vec3 vN;
+      varying vec3 vAxis;
       varying vec3 vWorld;
       void main() {
         // kind: 0 emitter halo, 1 emitter core, 2 landing light
@@ -177,7 +181,7 @@ export function makeBeamMaterial() {
         float gate = kind > 1.5 ? uLightOn : uOn;
         if (gate <= 0.0005) {
           gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-          vAlong = 0.0; vLen = 1.0; vKind = kind; vN = vec3(0.0, 1.0, 0.0); vWorld = vec3(0.0);
+          vAlong = 0.0; vLen = 1.0; vKind = kind; vN = vec3(0.0, 1.0, 0.0); vAxis = vec3(0.0, 1.0, 0.0); vWorld = vec3(0.0);
           return;
         }
         int i = int(mod(aCone + 0.5, 4.0));
@@ -195,6 +199,7 @@ export function makeBeamMaterial() {
         vLen = L;
         vKind = kind;
         vN = normalize(radial);
+        vAxis = d;
         vWorld = w;
         gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
       }
@@ -209,30 +214,38 @@ export function makeBeamMaterial() {
       varying float vLen;
       varying float vKind;
       varying vec3 vN;
+      varying vec3 vAxis;
       varying vec3 vWorld;
       void main() {
         vec3 v = normalize(cameraPosition - vWorld);
+        // soft body: the wall is brightest where it faces the camera (the eye looks through the thickest
+        // part of the cone) and fades to nothing at the silhouette, so there is no geometric edge. Looking
+        // along the axis every wall fragment is edge-on, so a floor keeps the beam visible end-on.
         float facing = abs(dot(normalize(vN), v));
-        float rim = 1.0 - facing;
+        float axial = abs(dot(vAxis, v));
+        float soft = mix(pow(facing, 1.6), 0.5, pow(axial, 6.0));
         if (vKind > 1.5) {
           // landing light: warm translucent cone, brightest near the lamp, fading out toward the far end,
           // with the same flicker as the landing-light beacon
-          float body = 0.06 + 0.34 * pow(rim, 1.6);
           float ends = smoothstep(0.0, 0.05, vAlong) * (1.0 - 0.9 * vAlong);
           float flick = 0.86 + 0.14 * sin(uTime * 23.0) * sin(uTime * 7.3);
-          float a = uLightOn * body * ends * flick * 0.55;
+          float a = uLightOn * soft * ends * flick * 0.16;
           gl_FragColor = vec4(uLightColor * a, 1.0);
           return;
         }
-        // halo: a translucent fill that thickens toward the silhouette (front + back faces add up, so the
-        // cone reads as a hazy volume); core: solid bright thread
-        float halo = 0.12 + 0.5 * pow(rim, 1.5);
-        float body = mix(halo, 1.0, vKind);
-        float ends = smoothstep(0.0, 0.04, vAlong) * mix(1.0, 0.45, vAlong);
-        // scanlines travel toward the craft; the period (3.2 m) stays well above a pixel at view distances
-        float scan = 0.72 + 0.28 * sin((vAlong * vLen / 3.2 - uTime * 2.6) * 6.2831853);
-        float pulse = 0.9 + 0.1 * sin(uTime * 5.5);
-        float a = uOn * body * ends * scan * pulse * mix(0.3, 0.34, vKind);
+        // along the beam: bright at the emitter where the shaft is narrow, dimming toward the craft where the
+        // four halos overlap; the halo fades out over its last 12 % so its end ring never shows, while the
+        // core runs all the way in and brightens into the focus on the target
+        float start = smoothstep(0.0, 0.05, vAlong);
+        float haloAlong = mix(1.0, 0.3, vAlong) * (1.0 - smoothstep(0.88, 1.0, vAlong));
+        float focus = 1.0 + 1.5 * smoothstep(0.75, 1.0, vAlong);
+        float coreAlong = mix(0.6, 1.0, vAlong) * focus;
+        float halo = soft * haloAlong * 0.14;
+        float core = soft * coreAlong * 0.24;
+        // faint scanlines travel toward the craft (3.2 m period) with a slow pulse
+        float scan = 0.85 + 0.15 * sin((vAlong * vLen / 3.2 - uTime * 2.6) * 6.2831853);
+        float pulse = 0.92 + 0.08 * sin(uTime * 5.5);
+        float a = uOn * mix(halo, core, vKind) * start * scan * pulse;
         gl_FragColor = vec4(uColor * a, 1.0);
       }
     `,
@@ -285,7 +298,8 @@ export function makeBeaconMaterial() {
 
 export function makeTrafficMaterials(shared) {
   return {
-    trafficHull: makeCraftMaterial({ fold: false, emitScale: 1.0 }),
+    // fighters + clamps: dark tints, a little rougher and less env sheen so near-black cells stay black
+    trafficHull: makeCraftMaterial({ fold: false, emitScale: 1.0, roughness: 0.78, metalness: 0.15, envMapIntensity: 0.35 }),
     trafficShuttle: makeCraftMaterial({ fold: true, emitScale: 1.0 }),
     trafficGlow: makeGlowMaterial(),
     trafficBeam: makeBeamMaterial(),
