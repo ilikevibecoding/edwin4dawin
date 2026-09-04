@@ -90,73 +90,126 @@ function panels(hctx: CanvasRenderingContext2D, actx: CanvasRenderingContext2D, 
 }
 
 export const LIVERY = {
-  upper: '#f4f0e6',
-  lower: '#f6c236',
-  cheat: '#0f5c6e',
-  pin: '#ff6f61',
+  upper: '#f3f1ea',
+  lower: '#f6c230',
+  cheat: '#1c2d5a',
+  pin: '#d8322e',
   registration: 'N726BV',
 };
+/** cheat line edges as distances (m) below the sill line: navy band top/bottom and the red pinstripe's bottom */
+export const CHEAT_LINE = { top: 0.03, bottom: 0.10, pin: 0.125 };
 
-/** Fuselage: u = nose(0) .. tail(1), v = top(0) .. right(0.25) .. belly(0.5) .. left(0.75) .. top(1). */
-export function fuselageMaps(): PbrMaps {
+/**
+ * Where the fuselage loft puts its texture: the paint is laid out in body coordinates (station x, height y) and
+ * converted to UV through these callbacks so the livery lines stay at the intended heights.
+ */
+export interface FuselageLayout {
+  /** body length (m) covered by u 0..1 */
+  length: number;
+  uOf(x: number): number;
+  xOf(u: number): number;
+  /** v of height y at station x on the starboard side (port side is 1 - v); null when y is outside the section */
+  vOf(x: number, y: number): number | null;
+  /** v of the upper surface point at half-width z (starboard side) */
+  topV(x: number, z: number): number;
+  perimeter(x: number): number;
+  /** height of the livery's sill line (bottom of the white upper body) at station x */
+  sillY(x: number): number;
+}
+
+/**
+ * Text painted on both sides of the body so it reads left-to-right from outside. The loft's u runs nose -> tail,
+ * so the starboard side (where the nose is to the reader's right) needs a horizontal flip and the port side
+ * (v increasing upwards) a vertical flip. Glyphs are stretched by the local v/u scale ratio to stay isotropic.
+ */
+function bodyText(ctx: CanvasRenderingContext2D, lay: FuselageLayout, w: number, h: number, text: string, x: number, y: number, heightM: number, weight: string, family: string, color: string): void {
+  const pxU = w / lay.length, pxV = h / lay.perimeter(x);
+  const v = lay.vOf(x, y) ?? 0.25;
+  const fontPx = heightM / 0.72 * pxU;
+  for (const side of [1, -1]) {
+    ctx.save();
+    ctx.translate(lay.uOf(x) * w, (side > 0 ? v : 1 - v) * h);
+    ctx.scale(side > 0 ? -1 : 1, side * (pxV / pxU));
+    ctx.fillStyle = color;
+    ctx.font = `${weight} ${fontPx.toFixed(1)}px ${family}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 0, 0);
+    ctx.restore();
+  }
+}
+
+/** Fuselage: u = nose(0) .. tail(1), v = top(0) .. starboard(0.25) .. belly(0.5) .. port(0.75) .. top(1). */
+export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   const w = 2048, h = 1024;
   const rng = new Rng('fuselage-paint');
   const [ac, actx] = canvas(w, h);
   const [hc, hctx] = canvas(w, h);
   const [rc, rctx] = canvas(w, h);
   hctx.fillStyle = '#808080'; hctx.fillRect(0, 0, w, h);
-  // base: upper white, lower yellow. The cheat line sits at ~v 0.33 and 0.67 (just below the windows)
   actx.fillStyle = LIVERY.upper; actx.fillRect(0, 0, w, h);
-  const cheatV = 0.245;
-  const belly = (v0: number, v1: number) => { actx.fillStyle = LIVERY.lower; actx.fillRect(0, v0 * h, w, (v1 - v0) * h); };
-  belly(cheatV, 1 - cheatV);
-  // cheat line with pinstripe (both sides), swooping up toward the tail
-  for (const side of [0, 1]) {
-    const base = side === 0 ? cheatV : 1 - cheatV;
-    const dir = side === 0 ? -1 : 1;
-    actx.save();
-    actx.beginPath();
-    actx.moveTo(0, base * h);
-    for (let x = 0; x <= w; x += 32) {
-      const u = x / w;
-      const swoop = Math.max(0, (u - 0.55) / 0.45) ** 2 * 0.09 * dir;
-      actx.lineTo(x, (base + swoop) * h);
-    }
-    actx.lineTo(w, (base + 0.09 * dir + (side === 0 ? -0.05 : 0.05)) * h);
-    actx.lineTo(w, (base + (side === 0 ? -0.05 : 0.05)) * h);
-    actx.lineTo(0, (base + (side === 0 ? -0.045 : 0.045)) * h);
-    actx.closePath();
-    actx.fillStyle = LIVERY.cheat;
-    actx.fill();
-    actx.lineWidth = 6; actx.strokeStyle = LIVERY.pin; actx.stroke();
-    actx.restore();
+  // livery bands follow body heights: white above the sill, a navy cheat band with a red pinstripe, yellow below
+  const cols: { px: number; cheatTop: number; cheatBot: number; pinBot: number }[] = [];
+  const vLow = (x: number, y: number) => lay.vOf(x, y) ?? 0.5;
+  for (let px = 0; px <= w; px += 8) {
+    const x = lay.xOf(px / w), ys = lay.sillY(x);
+    cols.push({ px, cheatTop: vLow(x, ys - CHEAT_LINE.top), cheatBot: vLow(x, ys - CHEAT_LINE.bottom), pinBot: vLow(x, ys - CHEAT_LINE.pin) });
   }
-  // engine cowl: darker charcoal band at the nose with cooling louvres
-  actx.fillStyle = '#2e3136'; actx.fillRect(0, 0, w * 0.085, h);
+  const band = (top: (c: typeof cols[0]) => number, bot: (c: typeof cols[0]) => number, color: string, side: 1 | -1) => {
+    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+    actx.beginPath();
+    actx.moveTo(cols[0].px, V(top(cols[0])));
+    for (const c of cols) actx.lineTo(c.px, V(top(c)));
+    for (let i = cols.length - 1; i >= 0; i--) actx.lineTo(cols[i].px, V(bot(cols[i])));
+    actx.closePath();
+    actx.fillStyle = color;
+    actx.fill();
+  };
+  // yellow lower body: from the starboard pinstripe around the belly to the port pinstripe
+  band((c) => c.pinBot, (c) => 1 - c.pinBot, LIVERY.lower, 1);
+  for (const side of [1, -1] as (1 | -1)[]) {
+    band((c) => c.cheatTop, (c) => c.cheatBot, LIVERY.cheat, side);
+    band((c) => c.cheatBot, (c) => c.pinBot, LIVERY.pin, side);
+  }
+  // anti-glare panel on the cowl top ahead of the windshield (straddles the v = 0/1 seam: one strip per side)
+  const glare: [number, number][] = [];
+  for (let x = 2.32; x <= 3.7; x += 0.1) glare.push([lay.uOf(x) * w, lay.topV(x, x > 3.4 ? 0.45 - (x - 3.4) * 0.9 : 0.45) * h]);
+  actx.fillStyle = '#2a2d31';
+  for (const side of [1, -1]) {
+    const edge = side > 0 ? 0 : h;
+    actx.beginPath();
+    actx.moveTo(glare[0][0], edge);
+    for (const [px, py] of glare) actx.lineTo(px, side > 0 ? py : h - py);
+    actx.lineTo(glare[glare.length - 1][0], edge);
+    actx.closePath();
+    actx.fill();
+  }
+  // engine cowl ring: dark charcoal nose with a polished lip
+  const ringU = lay.uOf(4.22) * w;
+  actx.fillStyle = '#2e3136'; actx.fillRect(0, 0, ringU, h);
+  actx.fillStyle = '#9aa0a6'; actx.fillRect(ringU - 6, 0, 6, h);
   actx.fillStyle = '#1b1d20';
-  for (let i = 0; i < 12; i++) actx.fillRect(w * 0.052, (i / 12) * h + 6, w * 0.012, h / 12 - 12);
-  // registration on both sides of the rear fuselage
-  actx.fillStyle = LIVERY.cheat;
-  actx.font = 'bold 118px "Helvetica Neue", Arial, sans-serif';
-  actx.textAlign = 'center';
-  actx.save(); actx.translate(w * 0.72, h * 0.235); actx.fillText(LIVERY.registration, 0, 0); actx.restore();
-  actx.save(); actx.translate(w * 0.72, h * 0.81); actx.scale(-1, 1); actx.fillText(LIVERY.registration, 0, 0); actx.restore();
-  // small placard text and a sun logo on the fin area (u>0.9)
-  actx.font = 'bold 34px Arial'; actx.fillStyle = '#22333a';
-  actx.fillText('BAHÍA VISTA AIR TAXI', w * 0.62, h * 0.31);
-  actx.save(); actx.translate(w * 0.62, h * 0.705); actx.scale(-1, 1); actx.fillText('BAHÍA VISTA AIR TAXI', 0, 0); actx.restore();
+  for (let i = 0; i < 12; i++) actx.fillRect(ringU * 0.45, (i / 12) * h + 6, ringU * 0.15, h / 12 - 12);
+  // registration on the rear fuselage and the operator script under the cabin windows (both sides, readable)
+  bodyText(actx, lay, w, h, LIVERY.registration, -2.65, 0.03, 0.22, 'bold', '"Helvetica Neue", Arial, sans-serif', LIVERY.cheat);
+  bodyText(actx, lay, w, h, 'BAHÍA VISTA AIR TAXI', -0.25, 0.10, 0.085, 'bold italic', 'Georgia, "Times New Roman", serif', LIVERY.cheat);
   // panel lines / rivets
-  panels(hctx, actx, w, h, [0.085, 0.13, 0.19, 0.26, 0.33, 0.41, 0.5, 0.58, 0.66, 0.74, 0.82, 0.9], [0.12, 0.2, 0.3, 0.42, 0.5, 0.58, 0.7, 0.8, 0.88], 26);
-  // door outlines (both sides at cabin u 0.3..0.42, v around 0.2..0.35 / 0.65..0.8)
+  const stations = [3.9, 3.2, 2.32, 1.85, 0.0, -0.9, -1.6, -2.6, -3.7, -4.7].map((x) => lay.uOf(x));
+  panels(hctx, actx, w, h, stations, [0.12, 0.2, 0.3, 0.42, 0.5, 0.58, 0.7, 0.8, 0.88], 26);
+  // door outline under the door window (both sides) with a handle
   hctx.strokeStyle = '#3a3a3a'; hctx.lineWidth = 3;
   actx.strokeStyle = 'rgba(20,20,25,0.35)'; actx.lineWidth = 2;
-  for (const v0 of [0.19, 0.66]) {
-    hctx.strokeRect(w * 0.31, v0 * h, w * 0.1, 0.15 * h);
-    actx.strokeRect(w * 0.31, v0 * h, w * 0.1, 0.15 * h);
-    // handle
-    actx.fillStyle = '#8a8f94'; actx.fillRect(w * 0.395, (v0 + 0.09) * h, 22, 8);
+  const du0 = lay.uOf(1.77) * w, du1 = lay.uOf(0.95) * w;
+  for (const side of [1, -1]) {
+    const v0 = lay.vOf(1.3, 0.40) ?? 0.2, v1 = lay.vOf(1.3, -0.42) ?? 0.4;
+    const y0 = (side > 0 ? v0 : 1 - v0) * h, y1 = (side > 0 ? v1 : 1 - v1) * h;
+    const top = Math.min(y0, y1), hh = Math.abs(y1 - y0);
+    hctx.strokeRect(du0, top, du1 - du0, hh);
+    actx.strokeRect(du0, top, du1 - du0, hh);
+    const hv = lay.vOf(1.0, 0.05) ?? 0.25;
+    actx.fillStyle = '#8a8f94'; actx.fillRect(du1 - 40, (side > 0 ? hv : 1 - hv) * h - 4, 22, 8);
   }
-  // exhaust soot on the lower right side aft of the cowl, oil streaks on the belly, grime along seams
+  // exhaust soot on the lower starboard side aft of the cowl, oil streaks on the belly, grime along seams
   const soot = actx.createLinearGradient(w * 0.09, 0, w * 0.45, 0);
   soot.addColorStop(0, 'rgba(25,22,20,0.55)'); soot.addColorStop(1, 'rgba(25,22,20,0)');
   actx.fillStyle = soot; actx.fillRect(w * 0.09, h * 0.36, w * 0.36, h * 0.12);
@@ -171,7 +224,7 @@ export function fuselageMaps(): PbrMaps {
   actx.fillStyle = 'rgba(255,255,255,0.05)'; actx.fillRect(0, 0, w, h * 0.12); actx.fillRect(0, h * 0.88, w, h * 0.12);
   // roughness: clearcoat paint ~0.35, cowl 0.5, soot/grime rougher, scratches
   rctx.fillStyle = '#5a5a5a'; rctx.fillRect(0, 0, w, h);
-  rctx.fillStyle = '#7a7a7a'; rctx.fillRect(0, 0, w * 0.085, h);
+  rctx.fillStyle = '#7a7a7a'; rctx.fillRect(0, 0, ringU, h);
   rctx.fillStyle = 'rgba(160,160,160,0.6)'; rctx.fillRect(w * 0.09, h * 0.36, w * 0.3, h * 0.12);
   grime(rctx, rng, w, h, 160, 0.25, '150,150,150');
   for (let i = 0; i < 400; i++) {
@@ -183,7 +236,7 @@ export function fuselageMaps(): PbrMaps {
   return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.4), false) };
 }
 
-/** Wing (both halves share): u chordwise (0 trailing edge -> 0.5 leading edge -> 1 trailing), v spanwise. */
+/** Wing (both halves and tail share): u chordwise (0 trailing edge -> 0.5 leading edge -> 1 trailing), v spanwise. */
 export function wingMaps(): PbrMaps {
   const w = 1024, h = 1024;
   const rng = new Rng('wing-paint');
@@ -192,25 +245,27 @@ export function wingMaps(): PbrMaps {
   const [rc, rctx] = canvas(w, h);
   hctx.fillStyle = '#808080'; hctx.fillRect(0, 0, w, h);
   actx.fillStyle = LIVERY.upper; actx.fillRect(0, 0, w, h);
-  // teal wingtip band and a yellow leading-edge stripe
-  actx.fillStyle = LIVERY.cheat; actx.fillRect(0, h * 0.9, w, h * 0.1);
-  actx.fillStyle = LIVERY.pin; actx.fillRect(0, h * 0.885, w, h * 0.012);
-  actx.fillStyle = LIVERY.lower; actx.fillRect(w * 0.46, 0, w * 0.08, h);
-  // rib lines spanwise every ~0.6 m, spar line chordwise
+  // yellow wingtip with a navy band and red pinstripe, yellow leading-edge stripe
+  actx.fillStyle = LIVERY.lower; actx.fillRect(0, h * 0.905, w, h * 0.095);
+  actx.fillStyle = LIVERY.cheat; actx.fillRect(0, h * 0.885, w, h * 0.02);
+  actx.fillStyle = LIVERY.pin; actx.fillRect(0, h * 0.876, w, h * 0.009);
+  // leading-edge stripe: 10% chord over the top, 3.5% under (u 0.5 is the leading edge)
+  actx.fillStyle = LIVERY.lower; actx.fillRect(w * 0.45, 0, w * 0.0675, h);
+  // rib lines spanwise every ~0.55 m, spar and hinge lines chordwise
   const ribs: number[] = [];
-  for (let v = 0.04; v < 1; v += 0.075) ribs.push(v);
-  panels(hctx, actx, w, h, [0.2, 0.33, 0.5, 0.67, 0.8], ribs, 22);
-  // walkway / fuel cap
-  actx.fillStyle = '#2a2d31'; actx.fillRect(w * 0.25, h * 0.02, w * 0.12, h * 0.06);
-  actx.fillStyle = '#6d7277'; actx.beginPath(); actx.arc(w * 0.62, h * 0.18, 9, 0, 7); actx.fill();
+  for (let v = 0.04; v < 0.87; v += 0.075) ribs.push(v);
+  panels(hctx, actx, w, h, [0.14, 0.33, 0.5, 0.67, 0.86], ribs, 22);
+  // walkway by the root and a fuel cap on the upper surface
+  actx.fillStyle = '#2a2d31'; actx.fillRect(w * 0.30, h * 0.12, w * 0.11, h * 0.08);
+  actx.fillStyle = '#6d7277'; actx.beginPath(); actx.arc(w * 0.40, h * 0.27, 9, 0, 7); actx.fill();
   // leading-edge chipping and general grime
   for (let i = 0; i < 90; i++) {
     actx.fillStyle = `rgba(90,90,95,${rng.range(0.3, 0.7)})`;
-    actx.fillRect(w * 0.48 + rng.range(-8, 8), rng.range(0, h), rng.range(1, 3), rng.range(1, 4));
+    actx.fillRect(w * 0.5 + rng.range(-8, 8), rng.range(0, h), rng.range(1, 3), rng.range(1, 4));
   }
   grime(actx, rng, w, h, 80, 0.06);
   rctx.fillStyle = '#5a5a5a'; rctx.fillRect(0, 0, w, h);
-  rctx.fillStyle = '#909090'; rctx.fillRect(w * 0.25, h * 0.02, w * 0.12, h * 0.06);
+  rctx.fillStyle = '#909090'; rctx.fillRect(w * 0.30, h * 0.12, w * 0.11, h * 0.08);
   grime(rctx, rng, w, h, 90, 0.2, '150,150,150');
   return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.0), false) };
 }
@@ -247,10 +302,11 @@ export function floatMaps(): PbrMaps {
 /** Instrument panel texture (albedo + emissive share the same canvas). */
 export function panelTexture(): { map: THREE.CanvasTexture; emissive: THREE.CanvasTexture } {
   const w = 1024, h = 384;
+  const rng = new Rng('panel-brush');
   const [c, ctx] = canvas(w, h);
   ctx.fillStyle = '#1c1e21'; ctx.fillRect(0, 0, w, h);
   // brushed texture
-  for (let i = 0; i < 1400; i++) { ctx.strokeStyle = `rgba(255,255,255,${Math.random() * 0.03})`; ctx.beginPath(); const y = Math.random() * h; ctx.moveTo(0, y); ctx.lineTo(w, y + Math.random() * 2); ctx.stroke(); }
+  for (let i = 0; i < 1400; i++) { ctx.strokeStyle = `rgba(255,255,255,${rng.next() * 0.03})`; ctx.beginPath(); const y = rng.next() * h; ctx.moveTo(0, y); ctx.lineTo(w, y + rng.next() * 2); ctx.stroke(); }
   const gauge = (x: number, y: number, r: number, label: string, needle: number, arcColor = '#e8e8e8') => {
     ctx.fillStyle = '#0b0c0e'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = '#3d4146'; ctx.lineWidth = 4; ctx.stroke();
