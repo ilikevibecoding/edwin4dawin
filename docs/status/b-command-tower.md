@@ -135,6 +135,15 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   the manifest bounds start at z 458 like the example. If the registry checks geometry vs bounds, allow the aperture volume.
 
 ## Interface notes
+- **Wall thickness vs D's doors helper (needs A's ruling).** D's `src/systems/doors/helper.js` (branch
+  `cursor/sd-hangar-systems-c071`) assumes `WALL_T = 0.16` per room, tunnel lining 0.32 m, `FRAME_W` 0.22. B and C
+  both build 0.30 m walls inside their bounds (inner faces 0.60 m apart). With 0.16 the frame would sit 0.14 m
+  inside my wall and the lining would stop 0.14 m short of each inner face. Proposal: fix the contract at 0.30 per
+  room (matches two decks already built), or let the doors system take an optional `wallT` per room manifest
+  (default 0.16). My `doorReveal()` already lines my full 0.30 m hole edges in dark metal, so until this is settled
+  the gap reads as a dark reveal, not raw panel edges.
+- D's `LIFT_DOOR` (2.4 × 3.0) and `liftCabinBox()` (x ±2, z 522..526, y 240..243.6 for T1) match what the lobby
+  cuts and keeps free — no change needed.
 - Console/screen materials: rooms use `screenImp0..3`, `emitWhite/Blue/RedImp/Amber/Green`, `impPanel`, `impFloor`,
   `blackGloss`, `holo` from §10 plus existing `paintedMetal/metal/metalRough/darkGloss/glass/hazard/fabric/decal`.
   No `manifest.materials()` extras yet.
