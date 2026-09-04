@@ -386,7 +386,8 @@ export function buildExterior(scene) {
   const wellW = HANGAR.well.x1 - HANGAR.well.x0;
   const wellD = HANGAR.well.z1 - HANGAR.well.z0;
   // 1.5 m plate: its top (k.y + 1.5) stays below the interior hangar deck slab, so no coplanar faces
-  const plate = panelWithHoles(k.x * 2, k.z1 - k.z0, 1.5, [{ x: (HANGAR.well.x0 + HANGAR.well.x1) / 2, y: -((HANGAR.well.z0 + HANGAR.well.z1) / 2 - (k.z0 + k.z1) / 2), w: wellW, h: wellD }]);
+  // rotateX(+90°) maps the shape's local +y onto world +z, so the hole offset keeps the sign of (well - plate)
+  const plate = panelWithHoles(k.x * 2, k.z1 - k.z0, 1.5, [{ x: (HANGAR.well.x0 + HANGAR.well.x1) / 2, y: (HANGAR.well.z0 + HANGAR.well.z1) / 2 - (k.z0 + k.z1) / 2, w: wellW, h: wellD }]);
   plate.rotateX(Math.PI / 2); // lies flat, faces down
   plate.translate(0, k.y + 0.75, (k.z0 + k.z1) / 2);
   keelGeos.push(plate);
