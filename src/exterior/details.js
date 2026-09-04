@@ -6,7 +6,7 @@
 // `userData.lod` so the distance LOD keeps working (one draw call per material per chunk).
 import * as THREE from "three";
 import { rng } from "../kit.js";
-import { HULL, halfWidth, dorsalH, ventralH, skinPoint, CHUNKS, chunkIndex, CITY, TOWER } from "./dims.js";
+import { HULL, halfWidth, dorsalH, ventralH, skinPoint, CHUNKS, chunkIndex, CITY, TOWER, HANGAR, REACTOR } from "./dims.js";
 import { instancedMesh, frameItem, boxItem, mergeParts, unitPipeGeometry, grey } from "./batch.js";
 import { makeSurface } from "./hull.js";
 
@@ -32,6 +32,20 @@ function worldItem(x, y, z, sx, sy, sz, rx, ry, rz, c) {
   _s.set(sx, sy, sz);
   return { m: _m.compose(_p, _q, _s).clone(), c };
 }
+
+/** Box standing on a plateau skin (side +1 dorsal / -1 ventral) at (x, z), `lift` above the plate tops. */
+function plateauItem(side, x, z, sx, sy, sz, c, yaw = 0, lift = 1.4) {
+  const sk = skinPoint(x, z, side);
+  _p.set(sk.x, sk.y + side * (lift + sy / 2), sk.z);
+  _q.setFromEuler(_e.set(side > 0 ? 0 : Math.PI, yaw, 0));
+  _s.set(sx, sy, sz);
+  return { m: _m.compose(_p, _q, _s).clone(), c };
+}
+
+const smoothstep = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
 
 // ---------------------------------------------------------------------------
 // Detail geometry library (metres; instanced with near-uniform scale)
@@ -87,6 +101,18 @@ export function wedgeGeometry() {
   return mergeParts([g], 0.1);
 }
 
+/** Heavy turbolaser layout on the dorsal plateau (shared with superstructure.js so greebles keep clear). */
+export const HEAVY_TURRETS = { zs: [230, 330, 440, 550], offset: 40, scale: 2.0, padR: 25 };
+/** Shoulder terraces where tier 0 meets the plateau: outward extent beyond the tier wall and height. */
+export const TERRACES = [
+  { out: 13, h: 6 },
+  { out: 6.5, h: 12 },
+];
+export function heavyTurretX(z) {
+  const t0 = CITY.tiers[0];
+  return t0.hw0 + ((t0.hw1 - t0.hw0) * (z - t0.zs)) / (t0.ze - t0.zs) + HEAVY_TURRETS.offset;
+}
+
 // ---------------------------------------------------------------------------
 // Placement
 // ---------------------------------------------------------------------------
@@ -113,7 +139,8 @@ export function buildDetails(materials, hull, sup) {
       const hall = !tower && kind < 0.5 && a.l > 9;
       const gw = hall ? 3 + rand() * Math.min(4, a.w * 0.5) : 2 + rand() * Math.min(6, a.w * 0.6);
       const gd = hall ? Math.min(a.l - 2, 9 + rand() * 10) : 2 + rand() * Math.min(7, a.l * 0.6);
-      const gh = tower ? 7 + rand() * 13 : hall ? 3 + rand() * 3 : 1.5 + rand() * 3.5;
+      // towers up to ~38 m so the city roofline breaks above the next tier instead of reading as a slab
+      const gh = tower ? (rand() < 0.35 ? 22 + rand() * 16 : 9 + rand() * 12) : hall ? 3 + rand() * 3 : 1.5 + rand() * 3.5;
       const ox = (rand() - 0.5) * Math.max(0, a.w - gw - 1);
       const oz = (rand() - 0.5) * Math.max(0, a.l - gd - 1);
       const k = rand() < 0.15 ? 0.3 + rand() * 0.1 : 0.58 + rand() * 0.3;
@@ -163,27 +190,130 @@ export function buildDetails(materials, hull, sup) {
     return t0.hw0 + ((t0.hw1 - t0.hw0) * (z - t0.zs)) / (t0.ze - t0.zs);
   };
 
-  // --- pass over plate anchors: hatches, ports, greebles + streaks, conduits, crease detail
+  // --- greeble clusters: machinery groups (8–30 m), a few 20–40 m complexes with towers, and long
+  // galleries, on both plateaus; the plateau between them stays sparse so the eye gets scale from
+  // the contrast (dense knots of machinery on wide clean armour)
+  const clusters = [];
+  const turretClear = (x, z) => HEAVY_TURRETS.zs.some((tz) => Math.hypot(Math.abs(x) - heavyTurretX(tz), z - tz) < HEAVY_TURRETS.padR + 12);
+  const tryCluster = (side, kind) => {
+    const r = kind === "complex" ? 14 + rand() * 10 : kind === "gallery" ? 10 + rand() * 6 : 6 + rand() * 9;
+    for (let tries = 0; tries < 30; tries++) {
+      const z = -700 + rand() * 1430;
+      const hw = halfWidth(z) * (side > 0 ? HULL.plateauDorsal : HULL.plateauVentral) - r - 5;
+      if (hw < 6) continue;
+      let x = (rand() * 2 - 1) * hw;
+      if (side > 0) {
+        const chw = cityHW(Math.min(Math.max(z, CITY.z0), CITY.z1));
+        if (z > CITY.z0 - 30 && z < CITY.z1 + 30 && Math.abs(x) < chw + r + 8) {
+          // push it beside the city rather than rejecting: the city surroundings should be busiest
+          x = Math.sign(x || 1) * (chw + r + 8 + rand() * 20);
+          if (Math.abs(x) > hw) continue;
+        }
+        if (turretClear(x, z)) continue;
+      } else {
+        if (Math.abs(x) < HANGAR.module.x + r + 6 && z > HANGAR.module.z0 - r - 6 && z < HANGAR.module.z1 + r + 6) continue;
+        if (Math.hypot(x, z - REACTOR.z) < REACTOR.r + r + 6) continue;
+      }
+      if (clusters.some((c) => c.side === side && Math.hypot(c.x - x, c.z - z) < c.r + r + 12)) continue;
+      const c = { side, kind, x, z, r, yaw: (rand() - 0.5) * 0.5 };
+      clusters.push(c);
+      return c;
+    }
+    return null;
+  };
+  for (let i = 0; i < 12; i++) tryCluster(1, "complex");
+  for (let i = 0; i < 14; i++) tryCluster(1, "gallery");
+  for (let i = 0; i < 46; i++) tryCluster(1, "group");
+  for (let i = 0; i < 4; i++) tryCluster(-1, "complex");
+  for (let i = 0; i < 6; i++) tryCluster(-1, "gallery");
+  for (let i = 0; i < 22; i++) tryCluster(-1, "group");
+  const clusterWeight = (side, x, z) => {
+    let w = 0;
+    for (const c of clusters) {
+      if (c.side !== side) continue;
+      const d = Math.hypot(c.x - x, c.z - z);
+      if (d < c.r + 6) w += 1 - smoothstep(c.r * 0.5, c.r + 6, d);
+    }
+    return Math.min(1, w);
+  };
+  // cluster landmarks: towers (complex), long galleries with window strips (gallery), soot behind them
+  for (const c of clusters) {
+    const out = per[chunkIndex(c.z)];
+    const side = c.side;
+    if (c.kind === "complex") {
+      const n = 1 + Math.floor(rand() * 2);
+      for (let k = 0; k < n; k++) {
+        const tw = 4.5 + rand() * 4;
+        const th = 14 + rand() * 16;
+        const tx = c.x + (rand() - 0.5) * c.r;
+        const tz = c.z + (rand() - 0.5) * c.r;
+        const tone = rand() < 0.5 ? 0.3 + rand() * 0.12 : 0.5 + rand() * 0.15;
+        out.boxes.push(plateauItem(side, tx, tz, tw, th, tw * (0.8 + rand() * 0.6), grey(tone, 1.02), c.yaw));
+        out.boxes.push(plateauItem(side, tx, tz, tw * 0.6, 2.2, tw * 0.6, grey(tone * 0.8), c.yaw, 1.4 + th));
+        out.boxes.push(plateauItem(side, tx, tz, 0.5, 6, 0.5, grey(0.4), 0, 1.4 + th + 2.2));
+        for (let y = 3; y < th - 2; y += 3.4) if (rand() < 0.7) out.lights.push(plateauItem(side, tx, tz + tw * 0.4 + 0.1, tw * 0.55, 0.35, 0.2, null, c.yaw, y));
+        // soot fan trailing aft of the tower base
+        out.boxes.push(plateauItem(side, tx, tz + tw * 0.5 + 6, tw * 1.1, 0.06, 12 + rand() * 8, grey(0.42, 0.98), 0, 0.02));
+        greebles += 4;
+      }
+      // a pair of big low housings and a pipe manifold across the complex
+      for (let k = 0; k < 2; k++) {
+        const bw = 6 + rand() * 6;
+        out.boxes.push(plateauItem(side, c.x + (rand() - 0.5) * c.r * 1.2, c.z + (rand() - 0.5) * c.r * 1.2, bw, 3 + rand() * 3, 5 + rand() * 6, grey(0.36 + rand() * 0.2, 1.02), c.yaw));
+        greebles++;
+      }
+      const pl = c.r * 1.6;
+      const sk = skinPoint(c.x, c.z, side);
+      out.pipes.push(worldItem(sk.x, sk.y + side * 2.0, sk.z, 0.55, 0.55, pl, 0, c.yaw + Math.PI / 2, 0, grey(0.45)));
+      greebles++;
+    } else if (c.kind === "gallery") {
+      const gl = 18 + rand() * 22;
+      const gw = 5 + rand() * 3;
+      const gh = 3.5 + rand() * 2;
+      const tone = 0.4 + rand() * 0.2;
+      out.boxes.push(plateauItem(side, c.x, c.z, gw, gh, gl, grey(tone, 1.02), c.yaw));
+      out.boxes.push(plateauItem(side, c.x, c.z, gw * 0.35, 0.8, gl - 3, grey(tone * 0.8), c.yaw, 1.4 + gh));
+      for (const sx of [-1, 1]) {
+        let z0 = -gl / 2 + 2;
+        while (z0 < gl / 2 - 3) {
+          const run = Math.min(gl / 2 - 1 - z0, 3 + rand() * 6);
+          const cx = c.x + Math.cos(c.yaw) * sx * (gw / 2 + 0.08) + Math.sin(c.yaw) * (z0 + run / 2);
+          const cz = c.z - Math.sin(c.yaw) * sx * (gw / 2 + 0.08) + Math.cos(c.yaw) * (z0 + run / 2);
+          out.lights.push(plateauItem(side, cx, cz, 0.16, 0.35, run, null, c.yaw, 1.4 + gh * 0.55));
+          z0 += run + 1.5 + rand() * 4;
+        }
+      }
+      // end blocks and a couple of vents on the roof
+      for (const e of [-1, 1]) out.boxes.push(plateauItem(side, c.x + Math.sin(c.yaw) * e * (gl / 2 + 2), c.z + Math.cos(c.yaw) * e * (gl / 2 + 2), gw + 2, gh * 0.7, 3.5, grey(0.3, 1.04), c.yaw));
+      for (let k = 0; k < 3; k++) out.boxes.push(plateauItem(side, c.x + (rand() - 0.5) * gw * 0.5, c.z + (rand() - 0.5) * (gl - 6), 1.6, 1.2, 1.6, grey(0.2, 1.1), 0, 1.4 + gh));
+      out.boxes.push(plateauItem(side, c.x, c.z + gl / 2 + 8, gw * 0.9, 0.06, 14, grey(0.42, 0.98), 0, 0.02));
+      greebles += 8;
+    }
+  }
+
+  // --- pass over plate anchors: hatches, ports, greebles + streaks, conduits
   for (let ci = 0; ci < CHUNKS; ci++) {
     for (const a of hull.anchors[ci]) {
       const out = per[ci];
       const x = a.p.x;
       const z = a.p.z;
       const tone = a.tone;
-      // density weights
-      let dens = 0.05;
+      // density: sparse plateau, dense inside the clusters, moderate around the city / bow / stern
       const edgeDist = a.isPlateau ? Math.min(a.u, 1 - a.u) : a.u;
-      if (edgeDist < 0.07) dens += 0.3;
-      if (!a.isPlateau && a.u > 0.85) dens += 0.15; // trench lip machinery
-      if (a.side > 0 && a.isPlateau && z > CITY.z0 - 60 && z < CITY.z1 + 40 && Math.abs(x) < cityHW(Math.min(Math.max(z, CITY.z0), CITY.z1)) + 55) dens += 0.45;
-      if (z < -620) dens += 0.25;
-      if (z > 640) dens += 0.2;
-      if (a.side < 0) dens *= 0.55;
+      let dens = 0.012;
+      if (a.isPlateau) dens += 0.85 * clusterWeight(a.side, x, z);
+      if (edgeDist < 0.06) dens += 0.07;
+      if (!a.isPlateau && a.u > 0.85) dens += 0.12; // trench lip machinery
+      if (a.side > 0 && a.isPlateau && z > CITY.z0 - 40 && z < CITY.z1 + 30 && Math.abs(x) < cityHW(Math.min(Math.max(z, CITY.z0), CITY.z1)) + 40) dens += 0.3;
+      if (z < -640) dens += 0.2;
+      if (z > 660) dens += 0.15;
+      if (a.side < 0) dens *= 0.6;
       if (a.raised) dens *= 0.4;
       if (a.w < 6 || a.l < 6) dens *= 0.3;
+      if (a.isPlateau && a.side > 0 && turretClear(x, z)) dens = 0;
 
       // maintenance hatch (~4 m) with a thin lit rim
-      if (a.w >= 8 && a.l >= 8 && rand() < (a.isPlateau ? 0.07 : 0.045)) {
+      if (a.w >= 8 && a.l >= 8 && rand() < (a.isPlateau ? 0.05 : 0.035)) {
         const hw = 3.6 + rand() * 1.4;
         const hl = 2.6 + rand() * 1.0;
         const ox = (rand() - 0.5) * (a.w - hw - 2);
@@ -193,22 +323,24 @@ export function buildDetails(materials, hull, sup) {
         greebles += 2;
       }
       // recessed service port (dark, flush)
-      if (rand() < 0.035 && a.w > 6 && a.l > 6) {
+      if (rand() < 0.03 && a.w > 6 && a.l > 6) {
         const slot = rand() < 0.4;
         const pw = slot ? 1.2 : 2.2 + rand() * 1.2;
         const pl = slot ? 4 + rand() * 4 : 2.2 + rand() * 1.2;
         out.boxes.push(onPlate(a, (rand() - 0.5) * (a.w - pw - 2), 0.08, (rand() - 0.5) * (a.l - pl - 2), pw, 0.2, pl, grey(0.16, 1.1)));
         greebles++;
       }
-      // machinery greebles (+ soot streak aft of the larger ones)
-      if (rand() < dens) {
-        const tower = rand() < 0.12;
-        const gw = 1.5 + rand() * Math.min(5, a.w * 0.45);
-        const gd = 1.5 + rand() * Math.min(6, a.l * 0.45);
-        const gh = tower ? 4 + rand() * 6 : 0.8 + rand() * 2.8;
+      // machinery greebles: bigger, darker and taller than before so they read at medium range,
+      // up to two per plate inside a cluster, soot streak aft of the larger ones
+      const nG = dens > 0.6 ? 1 + (rand() < dens - 0.5 ? 1 : 0) : rand() < dens ? 1 : 0;
+      for (let g = 0; g < nG; g++) {
+        const tower = rand() < (dens > 0.5 ? 0.16 : 0.08);
+        const gw = 2 + rand() * Math.min(6, a.w * 0.5);
+        const gd = 2 + rand() * Math.min(7, a.l * 0.5);
+        const gh = tower ? 7 + rand() * 12 : 1.4 + rand() * 4.2;
         const ox = (rand() - 0.5) * Math.max(0, a.w - gw - 1.2);
         const oz = (rand() - 0.5) * Math.max(0, a.l - gd - 1.2);
-        const k = rand() < 0.2 ? 0.28 + rand() * 0.1 : 0.5 + rand() * 0.3;
+        const k = rand() < 0.3 ? 0.26 + rand() * 0.1 : 0.42 + rand() * 0.26;
         out.boxes.push(onPlate(a, ox, gh / 2 - 0.15, oz, gw, gh, gd, grey(k, 1.02)));
         greebles++;
         if (rand() < 0.5) {
@@ -216,19 +348,19 @@ export function buildDetails(materials, hull, sup) {
           out.boxes.push(onPlate(a, ox + (rand() - 0.5) * gw * 0.6, gh + 0.3, oz + (rand() - 0.5) * gd * 0.6, gw * 0.35, 0.8, gd * 0.35, grey(k * 0.8)));
           greebles++;
         }
-        if (rand() < 0.4) {
-          const sl = 5 + rand() * 9;
+        if ((gh > 3 || tower) && rand() < 0.55) {
+          const sl = 6 + rand() * 12;
           // streaks trail aft (+z); the anchor's Z axis points +z on both skins
-          out.boxes.push(onPlate(a, ox, 0.03, oz + gd / 2 + sl / 2 + 0.2, gw * 0.7, 0.06, sl, grey(tone * 0.72, 0.98)));
+          out.boxes.push(onPlate(a, ox, 0.03, oz + gd / 2 + sl / 2 + 0.2, gw * 0.8, 0.06, sl, grey(tone * 0.6, 0.98)));
           greebles++;
         }
-        if (tower && rand() < 0.6) {
-          // window strip on the tower module
-          out.lights.push(onPlate(a, ox, gh * 0.6, oz + gd / 2 + 0.05, gw * 0.55, 0.35, 0.2, null));
+        if (tower && rand() < 0.7) {
+          // window strips on the tower module
+          for (let y = 2.5; y < gh - 1.5; y += 3.2) out.lights.push(onPlate(a, ox, y, oz + gd / 2 + 0.05, gw * 0.55, 0.35, 0.2, null));
         }
       }
-      // conduit run along a plate
-      if (a.w > 10 && a.l > 12 && rand() < 0.05) {
+      // conduit run along a plate (mostly inside the clusters)
+      if (a.w > 10 && a.l > 12 && rand() < 0.02 + 0.08 * dens) {
         const r = 0.3 + rand() * 0.35;
         const ox = (rand() - 0.5) * (a.w - 3);
         const len = a.l - 1.5;
@@ -240,24 +372,31 @@ export function buildDetails(materials, hull, sup) {
     }
   }
 
-  // --- plateau crease lip (raised rail along the plateau / bevel edge) per chunk and side
+  // --- plateau crease lip: a broken, mid-grey rail along the plateau / bevel edge (segments with gaps,
+  // so it does not draw one continuous white line along the whole ship)
   for (const side of [1, -1]) {
     const sp = side > 0 ? HULL.plateauDorsal : HULL.plateauVentral;
-    const step = (HULL.sternZ - HULL.bowZ) / CHUNKS;
     for (let ci = 0; ci < CHUNKS; ci++) {
-      const z0 = HULL.bowZ + ci * step + (ci === 0 ? 30 : 0);
-      const z1 = HULL.bowZ + (ci + 1) * step;
-      for (const s of [-1, 1]) {
-        const xa = s * sp * halfWidth(z0);
-        const xb = s * sp * halfWidth(z1);
-        const ya = side * (side > 0 ? dorsalH(z0) : ventralH(z0));
-        const yb = side * (side > 0 ? dorsalH(z1) : ventralH(z1));
-        const len = Math.hypot(xb - xa, yb - ya, z1 - z0);
-        const dir = new THREE.Vector3(xb - xa, yb - ya, z1 - z0).normalize();
-        const up = new THREE.Vector3(0, side, 0);
-        const across = new THREE.Vector3().crossVectors(up, dir).normalize();
-        const c = new THREE.Vector3((xa + xb) / 2, (ya + yb) / 2, (z0 + z1) / 2).addScaledVector(up, 1.9);
-        per[ci].boxes.push(frameItem(c, across, up, dir, 1.1, 0.7, len, grey(0.78, 1.02)));
+      const step = (HULL.sternZ - HULL.bowZ) / CHUNKS;
+      let z = HULL.bowZ + ci * step + (ci === 0 ? 40 : 0);
+      const zEnd = HULL.bowZ + (ci + 1) * step;
+      while (z < zEnd - 6) {
+        const seg = Math.min(zEnd - z, 22 + rand() * 40);
+        const z0 = z;
+        const z1 = z + seg;
+        z = z1 + 5 + rand() * 12;
+        for (const s of [-1, 1]) {
+          const xa = s * sp * halfWidth(z0);
+          const xb = s * sp * halfWidth(z1);
+          const ya = side * (side > 0 ? dorsalH(z0) : ventralH(z0));
+          const yb = side * (side > 0 ? dorsalH(z1) : ventralH(z1));
+          const len = Math.hypot(xb - xa, yb - ya, z1 - z0);
+          const dir = new THREE.Vector3(xb - xa, yb - ya, z1 - z0).normalize();
+          const up = new THREE.Vector3(0, side, 0);
+          const across = new THREE.Vector3().crossVectors(up, dir).normalize();
+          const c = new THREE.Vector3((xa + xb) / 2, (ya + yb) / 2, (z0 + z1) / 2).addScaledVector(up, 1.8);
+          per[ci].boxes.push(frameItem(c, across, up, dir, 1.0, 0.6, len, grey(0.44 + rand() * 0.1, 1.02)));
+        }
       }
     }
   }
@@ -298,12 +437,34 @@ export function buildDetails(materials, hull, sup) {
     }
   }
 
-  // --- trench: machinery blocks, pipes, lit slots, struts, docking bays
+  // --- trench: machinery blocks, long galleries with window strips, pipes, lit slots, struts, docking bays
   const T = HULL.trenchHalf;
   const dockZ = [-190, 110, 430];
   for (const s of [-1, 1]) {
     const yaw = s * Math.atan(TAPER);
-    for (let z = HULL.bowZ + 60; z < HULL.sternZ - 8; z += 5 + rand() * 5) {
+    // galleries: 20–40 m long blocks along the wall, mid grey, with clustered runs of lit windows
+    for (let z = HULL.bowZ + 90; z < HULL.sternZ - 50; z += 70 + rand() * 90) {
+      const gl = 20 + rand() * 20;
+      const zc = z + gl / 2;
+      if (dockZ.some((d) => Math.abs(zc - d) < gl / 2 + 18)) continue;
+      const xw = halfWidth(zc) - HULL.trenchInset;
+      const out = per[chunkIndex(zc)];
+      const gh = 3 + rand() * 1.6;
+      const gy = -T + 2 + rand() * (2 * T - gh - 4);
+      const gd = 1.4 + rand() * 0.8;
+      out.boxes.push(worldItem(s * (xw + gd / 2), gy + gh / 2, zc, gd, gh, gl, 0, yaw, 0, grey(0.38 + rand() * 0.14, 1.02)));
+      out.boxes.push(worldItem(s * (xw + gd + 0.3), gy + gh + 0.4, zc, 0.6, 0.5, gl - 2, 0, yaw, 0, grey(0.3)));
+      let t = -gl / 2 + 1.5;
+      while (t < gl / 2 - 2) {
+        const run = Math.min(gl / 2 - 1 - t, 2 + rand() * 5);
+        const lz = zc + t + run / 2;
+        const lx = halfWidth(lz) - HULL.trenchInset + gd * 1.045 + 0.1;
+        out.lights.push(worldItem(s * lx, gy + gh * 0.5, lz, 0.16, 0.45, run, 0, yaw, 0, null));
+        t += run + 1 + rand() * 3;
+      }
+      greebles += 3;
+    }
+    for (let z = HULL.bowZ + 30; z < HULL.sternZ - 8; z += 5 + rand() * 5) {
       const xw = halfWidth(z) - HULL.trenchInset;
       const ci = chunkIndex(z);
       const out = per[ci];
@@ -315,10 +476,10 @@ export function buildDetails(materials, hull, sup) {
         const d = 1.2 + rand() * 3.6;
         const y = -T + 0.8 + rand() * (2 * T - h - 1.6);
         const len = 1.5 + rand() * 5;
-        out.boxes.push(worldItem(s * (xw + d / 2 - 0.6), y + h / 2, z + (rand() - 0.5) * 4, d, h, len, 0, yaw, 0, grey(rand() < 0.25 ? 0.25 + rand() * 0.1 : 0.48 + rand() * 0.3)));
+        out.boxes.push(worldItem(s * (xw + d / 2 - 0.6), y + h / 2, z + (rand() - 0.5) * 4, d, h, len, 0, yaw, 0, grey(rand() < 0.2 ? 0.24 + rand() * 0.08 : 0.34 + rand() * 0.22)));
         greebles++;
       }
-      if (rand() < 0.5) {
+      if (rand() < 0.55) {
         out.lights.push(worldItem(s * (xw + 0.25), -T + 1 + rand() * (2 * T - 2), z, 0.4, 0.3, 1.5 + rand() * 3, 0, yaw, 0, null));
       }
       if (rand() < 0.18) {
@@ -406,7 +567,8 @@ export function buildDetails(materials, hull, sup) {
     for (let k = 0; k < 5; k++) {
       const z = 520 + k * 44 + rand() * 10;
       const hw = halfWidth(z) * HULL.plateauDorsal;
-      const x = s * (cityHW(z) + 40 + rand() * (hw - cityHW(z) - 70));
+      const x0 = Math.max(cityHW(z) + 40, heavyTurretX(550) + HEAVY_TURRETS.padR + 14);
+      const x = s * (x0 + rand() * Math.max(4, hw - x0 - 30));
       const sk = skinPoint(x, z, 1);
       _p.set(sk.x, sk.y + 1.6, sk.z);
       _q.setFromEuler(_e.set(0, rand() < 0.5 ? 0 : Math.PI / 2, 0));
@@ -424,20 +586,21 @@ export function buildDetails(materials, hull, sup) {
     }
   }
 
-  // --- buttresses / structural supports along the tier-0 face and around the tower base
+  // --- buttresses / structural supports along the tier-0 face, standing on the upper shoulder terrace
   {
     const t0 = CITY.tiers[0];
+    const top = TERRACES[TERRACES.length - 1];
     for (const s of [-1, 1]) {
       for (let z = t0.zs + 18; z < t0.ze - 14; z += 24 + rand() * 8) {
         const hw = cityHW(z);
-        const base = dorsalH(z) + 1.6;
+        const base = dorsalH(z) + top.h + 0.2;
         const h = 7 + rand() * 5;
-        const w = 5 + rand() * 3;
+        const w = Math.min(top.out - 0.8, 4.5 + rand() * 2);
         // wedge: vertical face against the tier wall, sloping face outward
         _p.set(s * (hw + 0.2), base, z);
         _q.setFromEuler(_e.set(0, s > 0 ? 0 : Math.PI, 0));
         _s.set(w, h, 3.5 + rand() * 2);
-        global.wedges.push({ m: _m.compose(_p, _q, _s).clone(), c: grey(0.7 + rand() * 0.1) });
+        global.wedges.push({ m: _m.compose(_p, _q, _s).clone(), c: grey(0.6 + rand() * 0.1) });
       }
     }
   }

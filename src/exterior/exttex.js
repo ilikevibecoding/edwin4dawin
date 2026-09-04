@@ -139,6 +139,11 @@ export function ensureExtMaterials(materials) {
   if (materials.ext_hullWorn) return materials;
   // dim warm emitter for hatch rims / access-port lamps (the shared exteriorLight is too bright for ~4 m hatches)
   materials.ext_dimLight = new THREE.MeshStandardMaterial({ color: 0x0c0a08, emissive: new THREE.Color("#ffd39a"), emissiveIntensity: 1.1, roughness: 0.7, metalness: 0, fog: false });
+  // superstructure / bridge window panes: same warm white as exteriorLight at about half the
+  // intensity, so rows of 0.8 × 1.6 m panes read as lit rooms rather than blooming runway lights
+  materials.ext_window = materials.exteriorLight.clone();
+  materials.ext_window.emissiveIntensity = 1.4;
+  materials.ext_window.color = new THREE.Color(0x0a0c10);
   const worn = makeExtHullWorn(512, 211);
   materials.ext_hullWorn = new THREE.MeshStandardMaterial({
     map: worn.map,
