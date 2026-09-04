@@ -25,7 +25,7 @@ export function yawToward(x, z, tx, tz) {
 // coarser pitch and without the greeble panels (about half the triangles of the default grid), a plain
 // dark plate with ribs, unit stencils and a soft light band above the 3.2 m panel band in tall rooms.
 export function coarseWalls(kit, room, lib, shell, opts = {}) {
-  const { seed = 900, panelW = 2.0, styles = { panel: 0.72, vent: 0.1, conduit: 0.08, strip: 0.06, screen: 0.04 }, bandMat = "emitWhiteSoft" } = opts;
+  const { seed = 900, panelW = 2.0, styles = { panel: 0.74, vent: 0.12, conduit: 0.14 }, bandMat = "emitWhiteSoft" } = opts;
   const h = room.height;
   const y0 = shell.y0;
   const bandH = Math.min(3.2, h);

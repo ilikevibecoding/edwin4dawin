@@ -36,7 +36,7 @@ const UNIT_D = 7.0; // from the aisle face back
 const TIER_H = 2.3;
 const TOP_V = 0.3 + 2 * TIER_H + 0.12; // top plate height of a unit
 const CPL_V = TIER_H + 0.36; // coolant coupling height (tier boundary)
-const ROW_Z = [486.8, 490.8, 494.8, 498.8, 502.8];
+const ROW_Z = [486.0, 490.4, 494.8, 499.2, 503.6];
 const WEST_FACE = 50.0;
 const EAST_FACE = 58.0;
 const TRENCH = { x0: 52.8, x1: 55.2, z0: 484.6, z1: 501.4, depth: 0.75 };
@@ -59,17 +59,34 @@ function motivator(kit, f, i, glow) {
   for (let t = 0; t < 2; t++) {
     const v0 = 0.3 + t * (TIER_H + 0.12);
     const vc = v0 + TIER_H / 2;
-    f.box("paintedMetal", 0, vc, -D / 2 - 0.1, W - 0.2, TIER_H, D - 0.2, { color: PALETTE.gunmetal, texel: 1 });
+    f.box("paintedMetal", 0, vc, -D / 2 - 0.1, W - 0.2, TIER_H, D - 0.2, { color: t ? PALETTE.slate : PALETTE.gunmetal, texel: 1 });
     for (const s of [-1, 1]) f.box("metal", s * (hw - 0.1), vc, -0.1, 0.2, TIER_H, 0.2, { color: PALETTE.steel, texel: 2 });
-    f.box("satinBlack", 0, vc, -0.04, W - 0.5, TIER_H - 0.2, 0.08);
-    for (let s = 0; s < 4; s++) {
-      const v = v0 + 0.5 + s * 0.42;
-      f.box("darkGloss", 0, v, 0.002, W - 0.9, 0.16, 0.02);
-      glow.push(glowBox(f, 0, v, 0.014, W - 1.0, 0.09, 0.01));
+    // front plate: slate panel, a black louvre bay each side of a steel spine with three glow slots per
+    // bay, and a service band underneath (readout, LEDs, stencils) so each unit reads as a machine
+    f.box("paintedMetal", 0, vc, -0.1, W - 0.5, TIER_H - 0.2, 0.2, { color: PALETTE.slate, texel: 1.5 });
+    f.box("metal", 0, v0 + 1.45, 0.0, 0.3, 1.6, 0.06, { color: PALETTE.steel, texel: 2 });
+    const bayW = 0.9;
+    for (const s of [-1, 1]) {
+      const bu = s * (0.2 + bayW / 2);
+      f.box("satinBlack", bu, v0 + 1.45, 0.0, bayW + 0.1, 1.5, 0.03);
+      for (let k = 0; k < 3; k++) {
+        const v = v0 + 1.0 + k * 0.45;
+        f.box("darkGloss", bu, v, 0.016, bayW - 0.1, 0.14, 0.01);
+        glow.push(glowBox(f, bu, v, 0.024, bayW - 0.2, 0.07, 0.01));
+      }
+    }
+    if (t === 0) {
+      f.box("darkGloss", -0.62, v0 + 0.42, 0.02, 0.76, 0.4, 0.03);
+      f.box("screen6", -0.62, v0 + 0.42, 0.038, 0.68, 0.32, 0.006, { uv: "keep" });
+      f.box("leds", 0.45, v0 + 0.5, 0.01, 0.6, 0.04, 0.01, { uv: "keep" });
+      f.add("decal", new THREE.PlaneGeometry(0.42, 0.42), 1.0, v0 + 0.4, 0.005, { uv: "keep", uvRect: decalRect(5) });
+    } else {
+      f.add("decal", new THREE.PlaneGeometry(0.5, 0.5), -0.7, v0 + 0.42, 0.005, { uv: "keep", uvRect: decalRect(i % 3 ? 9 : 6) });
+      f.add("decal", new THREE.PlaneGeometry(0.6, 0.6), 0.7, v0 + 0.42, 0.005, { uv: "keep", uvRect: decalRect(2) });
     }
     for (let k = 0; k < 9; k++) {
       const n = -0.8 - k * 0.7;
-      for (const s of [-1, 1]) f.box("metal", s * (hw - 0.02), vc, n, 0.36, TIER_H - 0.5, 0.05, { color: PALETTE.slate, texel: 2 });
+      for (const s of [-1, 1]) f.box("metal", s * (hw - 0.02), vc, n, 0.36, TIER_H - 0.5, 0.05, { color: PALETTE.steel, texel: 2 });
     }
     if (t === 0) f.box("metal", 0, v0 + TIER_H + 0.06, -D / 2, W, 0.12, D, { color: PALETTE.darkMetal, texel: 2 });
   }
@@ -77,16 +94,9 @@ function motivator(kit, f, i, glow) {
   f.box("metal", 0, TOP_V + 0.05, -D / 2 - 0.1, W - 0.4, 0.1, D - 0.4, { color: PALETTE.darkMetal, texel: 2 });
   for (let k = 0; k < 11; k++) f.box("metal", 0, TOP_V + 0.32, -0.7 - k * 0.6, W - 0.8, 0.45, 0.05, { color: PALETTE.slate, texel: 2 });
   f.cylV("metal", 0, TOP_V + 0.25, -D + 0.5, 0.3, 0.3, { color: PALETTE.darkMetal, segments: 16 });
-  // readout, unit numeral and warning stencil on the front plate
-  f.box("darkGloss", -hw + 0.75, 1.5, 0.05, 0.7, 0.5, 0.03);
-  f.box("screen6", -hw + 0.75, 1.5, 0.068, 0.62, 0.42, 0.006, { uv: "keep" });
-  f.box("leds", -hw + 0.75, 1.16, 0.05, 0.5, 0.04, 0.01, { uv: "keep" });
-  f.add("decal", new THREE.PlaneGeometry(0.9, 0.9), hw - 0.8, 1.55, 0.045, { uv: "keep", uvRect: decalRect(2) });
-  f.add("decal", new THREE.PlaneGeometry(0.5, 0.5), hw - 0.8, 0.72, 0.045, { uv: "keep", uvRect: decalRect(5) });
-  f.add("decal", new THREE.PlaneGeometry(0.6, 0.6), 0, 3.9 + (i % 2) * 0.6, 0.045, { uv: "keep", uvRect: decalRect(i % 3 ? 9 : 6) });
-  // coolant risers with frosted couplings and hand valves
+  // coolant risers at the face edges with frosted couplings and hand valves
   for (const s of [-1, 1]) {
-    const u = s * (hw - 0.55);
+    const u = s * (hw - 0.3);
     f.cylV("metal", u, 2.95, 0.3, 0.1, 5.1, { color: PALETTE.steel, segments: 12 });
     framePipe(f, [[u, 5.5, 0.3], [u, 5.5, -0.5], [u, TOP_V + 0.05, -0.5]], 0.1, { color: PALETTE.steel, segments: 12 });
     f.box("metal", u, CPL_V, 0.3, 0.44, 0.5, 0.44, { color: PALETTE.darkMetal, texel: 2 });
@@ -154,7 +164,7 @@ export function build(kit, ctx, room, lib) {
   const nSec = 7;
   const secL = (T.z1 - T.z0) / nSec;
   for (let i = 0; i < nSec; i++) grateDeck(kit, T.x0, T.z0 + i * secL, T.x1, T.z0 + (i + 1) * secL, y0, { bearerStep: 1.2 });
-  for (const z of [488.0, 493.0, 498.0]) ctx.lights.warm.push(pointLight(0xffa040, 5, 7, [54, tb + 0.4, z]));
+  for (const z of [488.0, 493.0, 498.0]) ctx.lights.warm.push(pointLight(0xffa040, 12, 8, [54, tb + 0.4, z]));
 
   // ---------------------------------------------------------------- the two rows of motivator banks
   const glow = [];
@@ -222,7 +232,7 @@ export function build(kit, ctx, room, lib) {
       const a = k * ((2 * Math.PI) / 3) + 0.5;
       kit.cyl("metal", IX + Math.cos(a) * 1.5, yTop - 0.45, IZ + Math.sin(a) * 1.5, 0.015, 0.9, "y", { color: PALETTE.steel, segments: 6 });
     }
-    ctx.lights.cool.push(pointLight(0xdfe8ff, 12, 12, [IX, yTop - 1.3, IZ]));
+    ctx.lights.cool.push(pointLight(0xdfe8ff, 45, 14, [IX, yTop - 1.3, IZ]));
   }
 
   // ---------------------------------------------------------------- overhead crane rail with a parked hoist
@@ -295,8 +305,8 @@ export function build(kit, ctx, room, lib) {
     W.collider(u - 0.6, u + 0.6, 0, 2.2, 0, 0.3, "breakers");
   }
   cableTray(kit, [x0 + 0.65, 482.6], [x0 + 0.65, 505.4], yTop - 1.3, { w: 0.5, ceilY: yTop, cables: 4 });
-  for (const z of [488.5, 498.5]) ctx.lights.warm.push(pointLight(0xffb060, 20, 16, [42.5, yTop - 0.9, z]));
-  ctx.lights.cool.push(pointLight(0xcfe4ff, 9, 11, [39.8, y0 + 5.0, 494.0]));
+  for (const z of [488.5, 498.5]) ctx.lights.warm.push(pointLight(0xffb060, 75, 18, [42.5, yTop - 0.9, z]));
+  ctx.lights.cool.push(pointLight(0xcfe4ff, 30, 12, [39.8, y0 + 5.0, 494.0]));
 
   // ---------------------------------------------------------------- starboard side: power-conditioning cabinets, spare core, cart
   const E = shell.frames["+x"].frame; // u = z - z0
@@ -321,7 +331,7 @@ export function build(kit, ctx, room, lib) {
     }
   }
   wallLightBar(E, 1.0, ROW_Z[0] - 1.3 - z0, 3.4);
-  wallLightBar(E, ROW_Z[4] + 1.3 - z0, z1 - z0 - 1.0, 3.4);
+  if (z1 - z0 - 1.0 - (ROW_Z[4] + 1.3 - z0) > 0.8) wallLightBar(E, ROW_Z[4] + 1.3 - z0, z1 - z0 - 1.0, 3.4);
   E.add("decal", new THREE.PlaneGeometry(0.6, 0.6), 2.0, 2.4, 0.005, { uv: "keep", uvRect: decalRect(5) });
   cableTray(kit, [x1 - 0.7, 483.0], [x1 - 0.7, 505.2], yTop - 0.9, { w: 0.6, ceilY: yTop, cables: 5 });
   {
@@ -342,8 +352,8 @@ export function build(kit, ctx, room, lib) {
     kit.collider([sx - 1.2, y0, sz - 2.7], [sx + 1.2, y0 + 2.6, sz + 2.7], "spareCore");
     toolCart(kit, 69.3, y0, 496.6, 0.4, 2);
     toolCart(kit, 66.2, y0, 486.2, -1.2, 5);
-    cageLight(kit, ctx, 67.8, yTop, 488.0, 1.0, { intensity: 20, distance: 16 });
-    cageLight(kit, ctx, 67.8, yTop, 500.0, 1.0, { intensity: 20, distance: 16 });
+    cageLight(kit, ctx, 67.8, yTop, 488.0, 1.0, { intensity: 75, distance: 18 });
+    cageLight(kit, ctx, 67.8, yTop, 500.0, 1.0, { intensity: 75, distance: 18 });
   }
 
   // ---------------------------------------------------------------- aft wall: gauge wall (port of the door), status board and switchgear (starboard)
@@ -404,8 +414,8 @@ export function build(kit, ctx, room, lib) {
   S.add("decal", new THREE.PlaneGeometry(0.6, 0.6), 15.7, 1.75, 0.005, { uv: "keep", uvRect: decalRect(5) });
   S.add("decal", new THREE.PlaneGeometry(0.6, 0.6), 20.3, 1.75, 0.005, { uv: "keep", uvRect: decalRect(1) });
   cableTray(kit, [37.0, z0 + 0.45], [71.0, z0 + 0.45], yTop - 1.1, { w: 0.5, ceilY: yTop, cables: 4 });
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 10, 12, [44.5, y0 + 4.2, 484.0]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 10, 12, [63.5, y0 + 4.2, 484.0]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 40, 14, [44.5, y0 + 4.2, 484.0]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 40, 14, [63.5, y0 + 4.2, 484.0]));
 
   // ---------------------------------------------------------------- forward wall: coolant trunk, pump units, status board behind the island
   const N = shell.frames["+z"].frame; // u = x1 - x
@@ -415,7 +425,7 @@ export function build(kit, ctx, room, lib) {
     kit.cyl("metal", (x0 + x1) / 2, trunkY, tz, 0.8, x1 - x0 - 3.0, "x", { color: PALETTE.steel, segments: 28, texel: 0.7 });
     for (const fx of [39.5, 45.5, 51.5, 56.5, 62.5, 68.5]) flange(kit, [fx, trunkY, tz], [1, 0, 0], 0.95, { t: 0.2 });
     for (const fx of [38.5, 47.0, 54.0, 61.0, 69.5]) kit.box("paintedMetal", fx, trunkY, z1 - 0.45, 0.5, 1.9, 0.7, { color: PALETTE.gunmetal, texel: 1 });
-    for (const [i, px] of [42.0, 48.0, 60.0, 66.0].entries()) {
+    for (const [i, px] of [39.6, 42.0, 66.0, 68.4].entries()) {
       pipeRun(kit, "metal", [[px, trunkY, tz], [px, y0 + 1.5, tz], [px, y0 + 1.5, z1 - 1.6]], 0.3, { color: i % 2 ? PALETTE.orange : PALETTE.steel, segments: 14 });
       kit.box("paintedMetal", px, y0 + 0.65, z1 - 1.9, 1.8, 1.3, 1.4, { color: PALETTE.gunmetal, texel: 1.2 });
       kit.box("metal", px, y0 + 1.33, z1 - 1.9, 1.84, 0.06, 1.44, { color: PALETTE.darkMetal, texel: 2 });
@@ -444,14 +454,14 @@ export function build(kit, ctx, room, lib) {
     wallConsole(N, 9.0, 1.6, "screen4");
     wallConsole(N, 27.0, 1.6, "screen6");
     for (const [u, idx] of [[3.0, 12], [8.9, 6], [27.1, 6], [33.0, 12]]) N.add("decal", new THREE.PlaneGeometry(0.5, 0.5), u, 1.9, 0.005, { uv: "keep", uvRect: decalRect(idx) });
-    ctx.lights.warm.push(pointLight(0xffb060, 14, 15, [45, y0 + 4.8, 503.5]));
-    ctx.lights.warm.push(pointLight(0xffb060, 14, 15, [63, y0 + 4.8, 503.5]));
+    ctx.lights.warm.push(pointLight(0xffb060, 55, 16, [45, y0 + 4.8, 503.5]));
+    ctx.lights.warm.push(pointLight(0xffb060, 55, 16, [63, y0 + 4.8, 503.5]));
   }
 
   // ---------------------------------------------------------------- aisle lighting: hot amber-white
   // (the pool keeps the 14 best-scoring fixtures, so the aisle carries the room with few strong lights
   // whose reach covers the whole 24 m from the door)
-  for (const z of [486.0, 491.0, 496.0, 501.0]) ctx.lights.warm.push(pointLight(0xffc080, 30, 20, [54, yTop - 0.9, z]));
-  ctx.lights.warm.push(pointLight(0xffc080, 10, 10, [54, yTop - 0.9, 483.3]));
+  for (const z of [486.0, 491.0, 496.0, 501.0]) ctx.lights.warm.push(pointLight(0xffc080, 120, 22, [54, yTop - 0.9, z]));
+  ctx.lights.warm.push(pointLight(0xffc080, 40, 12, [54, yTop - 0.9, 483.3]));
   return shell;
 }

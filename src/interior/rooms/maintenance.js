@@ -239,14 +239,14 @@ export function build(kit, ctx, room, lib) {
     stencil(kit, 64.0, y0 + 0.009, 455.8, 0.6, 15, "up");
     // the work lights over the barrel carry the middle of the 34 m bay: strong and long-reaching so the
     // pool still picks them from the door
-    for (const x of [63.0, 67.5, 72.0]) cageLight(kit, ctx, x, yTop, bz, 2.6, { intensity: 44, distance: 24 });
-    cageLight(kit, ctx, 75.6, yTop, 461.8, 2.6, { intensity: 26, distance: 18 });
+    for (const x of [63.0, 67.5, 72.0]) cageLight(kit, ctx, x, yTop, bz, 2.6, { intensity: 150, distance: 26 });
+    cageLight(kit, ctx, 75.6, yTop, 461.8, 2.6, { intensity: 80, distance: 20 });
   }
 
   // ---------------------------------------------------------------- port wall: workbenches, tall cabinets, pegboards
   for (const [i, z] of [449.5, 454.5, 459.5, 464.5].entries()) {
     workbench(kit, yawFrame(kit, x0 + WT + 0.45 + 0.04, y0, z, Math.PI / 2), i + 2);
-    cageLight(kit, ctx, x0 + 1.3, yTop, z, 4.3, { intensity: 14, distance: 14 });
+    cageLight(kit, ctx, x0 + 1.3, yTop, z, 4.3, { intensity: 45, distance: 16 });
   }
   for (const z of [452.0, 462.0]) {
     kit.box("painted", x0 + WT + 0.3, y0 + 1.0, z, 0.6, 2.0, 0.9, { color: PALETTE.orange, uv: "keep" });
@@ -264,7 +264,7 @@ export function build(kit, ctx, room, lib) {
 
   // ---------------------------------------------------------------- starboard wall: parts racks with labelled bins, rolling ladder
   for (const [i, z] of [451.5, 454.5, 457.5, 460.5, 463.5].entries()) partsRack(yawFrame(kit, x1 - WT - 0.52, y0, z, -Math.PI / 2), i);
-  for (const z of [453.5, 460.5]) cageLight(kit, ctx, x1 - 2.2, yTop, z, 2.6, { intensity: 24, distance: 18 });
+  for (const z of [453.5, 460.5]) cageLight(kit, ctx, x1 - 2.2, yTop, z, 2.6, { intensity: 80, distance: 20 });
   {
     const lx = x1 - 2.3;
     const lz = 466.6;
@@ -318,7 +318,7 @@ export function build(kit, ctx, room, lib) {
     kit.box("metal", 57.1, y0 + 0.05, 448.8, 0.9, 0.1, 0.5, { color: PALETTE.darkMetal, texel: 2 });
     kit.box("metal", 57.1, y0 + 1.0, 449.06, 0.9, 0.04, 0.04, { color: PALETTE.gunmetal });
     kit.collider([56.6, y0, 448.5], [57.6, y0 + 1.5, 449.1], "gasCart");
-    cageLight(kit, ctx, 59.5, yTop, 447.5, 4.2, { intensity: 14, distance: 12 });
+    cageLight(kit, ctx, 59.5, yTop, 447.5, 4.2, { intensity: 45, distance: 14 });
 
     // droid recharge alcove (four bays)
     const ax0 = 64.0;
@@ -347,7 +347,7 @@ export function build(kit, ctx, room, lib) {
         kit.box("emitWhiteSoft", bx, y0 + aH - 0.012, bz, bw - 0.5, 0.02, 0.12, { uv: "keep" });
         kit.boxMM("hazard", [px + 0.1, y0 + 0.002, z0 + WT + aD], [px + bw - 0.1, y0 + 0.006, z0 + WT + aD + 0.25], { texel: 3 });
         stencil(kit, px + 0.051, y0 + 1.6, z0 + WT + aD - 0.3, 0.3, 8, "+x");
-        if (b % 2 === 0) ctx.lights.teal.push(pointLight(0x6fb4ff, 5, 6, [px + bw, y0 + 1.9, bz]));
+        if (b % 2 === 0) ctx.lights.teal.push(pointLight(0x6fb4ff, 14, 7, [px + bw, y0 + 1.9, bz]));
       }
     }
     stencil(kit, (ax0 + ax1) / 2, y0 + aH + 0.15, z0 + WT + aD + 0.02, 0.28, 4, "+z");
@@ -397,7 +397,7 @@ export function build(kit, ctx, room, lib) {
     cp.collider(-0.2, 0.2, 0, 1.4, -0.2, 0.25, "liftPost");
     stencil(kit, mx, y0 + 0.009, L.z1 + 1.3, 0.8, 10, "up");
     floorRect(kit, L.x0 - 0.5, L.z0 - 0.5, L.x1 + 0.5, L.z1 + 1.4, y0, 0.1);
-    ctx.lights.warm.push(pointLight(0xffc080, 16, 16, [mx, fy - 0.9, mz]));
+    ctx.lights.warm.push(pointLight(0xffc080, 50, 16, [mx, fy - 0.9, mz]));
   }
   const S = shell.frames["-z"].frame; // u = x - x0
   wallLightBar(S, 1.0, 62.0 - x0, 3.2);
@@ -458,7 +458,7 @@ export function build(kit, ctx, room, lib) {
     kit.box("emitWhiteSoft", (c.x0 + c.x1) / 2, y0 + c.h - 0.05, (c.z0 + c.z1) / 2, 0.16, 0.02, c.z1 - c.z0 - 1.0, { uv: "keep" });
     kit.box("satinBlack", (c.x0 + c.x1) / 2, y0 + c.h - 0.02, (c.z0 + c.z1) / 2, 0.24, 0.04, c.z1 - c.z0 - 0.9);
     kit.boxMM("hazard", [c.x0 - 0.6, y0 + 0.002, 472.5], [c.x0 - 0.2, y0 + 0.006, 474.0], { texel: 3 });
-    ctx.lights.cool.push(pointLight(0xdfe8ff, 8, 10, [(c.x0 + c.x1) / 2, y0 + c.h - 0.3, (c.z0 + c.z1) / 2]));
+    ctx.lights.cool.push(pointLight(0xdfe8ff, 28, 12, [(c.x0 + c.x1) / 2, y0 + c.h - 0.3, (c.z0 + c.z1) / 2]));
   }
   const N = shell.frames["+z"].frame; // u = x1 - x
   wallLightBar(N, x1 - 80.5, x1 - 72.5, 3.0);
@@ -498,7 +498,7 @@ export function build(kit, ctx, room, lib) {
 
   // ---------------------------------------------------------------- lights: cool fill from the ceiling corners, amber by the door
   // (a 34 x 33 m bay with a 14-light pool: four long-reach fill lights plus the caged work lights above)
-  for (const [lx, lz] of [[62.0, 451.0], [80.0, 451.0], [62.0, 469.5], [80.0, 469.5]]) ctx.lights.cool.push(pointLight(0xdfe8ff, 40, 30, [lx, yTop - 0.7, lz]));
-  ctx.lights.warm.push(pointLight(0xffc080, 18, 16, [72.5, yTop - 1.2, 470.0]));
+  for (const [lx, lz] of [[62.0, 451.0], [80.0, 451.0], [62.0, 469.5], [80.0, 469.5]]) cageLight(kit, ctx, lx, yTop, lz, 1.4, { intensity: 150, distance: 32, color: 0xdfe8ff, mat: "emitCoolSoft" });
+  ctx.lights.warm.push(pointLight(0xffc080, 60, 18, [72.5, yTop - 1.2, 470.0]));
   return shell;
 }

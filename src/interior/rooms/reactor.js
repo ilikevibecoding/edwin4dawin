@@ -166,7 +166,7 @@ export function build(kit, ctx, room, lib) {
   }
 
   // ---------------------------------------------------------------- core: plinth, collars, column, rings, struts
-  kit.add("paintedMetal", octPrism(PLINTH_A, 3.0 + PIT_DEPTH), { pos: [cx, pitY + (3.0 + PIT_DEPTH) / 2, cz], color: PALETTE.gunmetal, uv: "world", texel: 0.7 });
+  kit.add("paintedMetal", octPrism(PLINTH_A, 3.0 + PIT_DEPTH), { pos: [cx, pitY + (3.0 + PIT_DEPTH) / 2, cz], color: PALETTE.slate, uv: "world", texel: 0.7 });
   kit.add("paintedMetal", octPrism(PLINTH_A + 0.3, 0.4), { pos: [cx, y0 + 2.8, cz], color: PALETTE.darkMetal, uv: "world", texel: 0.7 });
   kit.add("emitBlueSoft", octPrism(PLINTH_A + 0.02, 0.08), { pos: [cx, y0 + 2.55, cz], uv: "keep" });
   for (let k = 0; k < 8; k++) {
@@ -187,7 +187,7 @@ export function build(kit, ctx, room, lib) {
   for (const [k, [a, b]] of COLLARS.entries()) {
     const ya = y0 + a;
     const yb = y0 + b;
-    kit.cyl("paintedMetal", cx, (ya + yb) / 2, cz, COLLAR_R, yb - ya, "y", { color: PALETTE.gunmetal, segments: 48, texel: 0.5 });
+    kit.cyl("paintedMetal", cx, (ya + yb) / 2, cz, COLLAR_R, yb - ya, "y", { color: PALETTE.slate, segments: 48, texel: 0.5 });
     kit.cyl("satinBlack", cx, (ya + yb) / 2, cz, COLLAR_R + 0.06, (yb - ya) * 0.3, "y", { segments: 48 });
     kit.add("metal", new THREE.TorusGeometry(COLLAR_R + 0.45, 0.42, 8, 48), { pos: [cx, (ya + yb) / 2, cz], rot: [Math.PI / 2, 0, 0], color: PALETTE.steel, uv: "world", texel: 1 });
     for (let i = 0; i < 16; i++) {
@@ -201,7 +201,7 @@ export function build(kit, ctx, room, lib) {
     kit.cyl("metal", cx, yb - 0.08, cz, COLLAR_R + 0.25, 0.16, "y", { color: PALETTE.darkMetal, segments: 48 });
   }
   // top socket flaring into the ceiling
-  kit.add("paintedMetal", new THREE.CylinderGeometry(COLLAR_R + 1.2, COLLAR_R + 0.2, h - GAPS[3][1], 48), { pos: [cx, y0 + (GAPS[3][1] + h) / 2, cz], color: PALETTE.gunmetal, uv: "world", texel: 0.5 });
+  kit.add("paintedMetal", new THREE.CylinderGeometry(COLLAR_R + 1.2, COLLAR_R + 0.2, h - GAPS[3][1], 48), { pos: [cx, y0 + (GAPS[3][1] + h) / 2, cz], color: PALETTE.slate, uv: "world", texel: 0.5 });
   kit.cyl("emitBlueSoft", cx, y0 + GAPS[3][1] + 0.1, cz, COLLAR_R + 0.3, 0.1, "y", { segments: 48, uv: "keep" });
   // glass sleeves + bright field rings inside every glow gap
   for (const [a, b] of GAPS) {
@@ -234,8 +234,8 @@ export function build(kit, ctx, room, lib) {
     }
     const merged = mergeGeometries(parts, false);
     const mat = ctx.materials.emitBlueSoft.clone();
-    mat.emissive = new THREE.Color("#9cc8ff");
-    mat.emissiveIntensity = 1.35;
+    mat.emissive = new THREE.Color("#78b0ff");
+    mat.emissiveIntensity = 1.25;
     const core = new THREE.Mesh(merged, mat);
     core.name = "reactorCore";
     core.castShadow = false;
@@ -244,7 +244,7 @@ export function build(kit, ctx, room, lib) {
     // falloff over a 44 x 37 x 30 m room needs a few hundred candela, not a scatter of small lights)
     const coreLights = [];
     for (const [k, [a, b]] of GAPS.entries()) {
-      const l = pointLight(0xa8d4ff, [130, 160, 150, 110][k], 70, [cx, y0 + (a + b) / 2, cz]);
+      const l = pointLight(0xa8d4ff, [260, 320, 300, 220][k], 70, [cx, y0 + (a + b) / 2, cz]);
       ctx.lights.teal.push(l);
       coreLights.push(l);
     }
@@ -278,7 +278,7 @@ export function build(kit, ctx, room, lib) {
     const ang = Math.PI / 8 + (k * Math.PI) / 4;
     beamBetween(kit, "paintedMetal", [vi[0], walkY - 0.3, vi[1]], [cx + Math.cos(ang) * (COLLAR_R + 0.1), y0 + 3.3, cz + Math.sin(ang) * (COLLAR_R + 0.1)], 0.22, 0.22, { color: PALETTE.gunmetal, texel: 1 });
     // column from the floor through the ring up to the coolant main
-    kit.box("paintedMetal", vo[0], (y0 + y0 + 9.4) / 2, vo[1], 0.42, 9.4, 0.42, { color: PALETTE.gunmetal, texel: 1 });
+    kit.box("paintedMetal", vo[0], (y0 + y0 + 9.4) / 2, vo[1], 0.42, 9.4, 0.42, { color: PALETTE.slate, texel: 1 });
     kit.box("metal", vo[0], y0 + 0.15, vo[1], 0.6, 0.3, 0.6, { color: PALETTE.darkMetal, texel: 1.5 });
     kit.box("emitAmber", vo[0], walkY + 1.6, vo[1], 0.44, 0.06, 0.44, { uv: "keep" });
     kit.collider([vo[0] - 0.3, y0, vo[1] - 0.3], [vo[0] + 0.3, walkY + 2, vo[1] + 0.3], "column");
@@ -310,7 +310,7 @@ export function build(kit, ctx, room, lib) {
     kit.box("paintedMetal", px, walkY + 2.28, pz, 0.34, 0.16, 0.34, { color: PALETTE.gunmetal, texel: 2 });
     kit.box("emitAmber", px, walkY + 2.18, pz, 0.26, 0.05, 0.26, { uv: "keep" });
     kit.collider([px - 0.2, walkY, pz - 0.2], [px + 0.2, walkY + 2.3, pz + 0.2], "lamp");
-    ctx.lights.warm.push(pointLight(0xffb060, 12, 14, [px, walkY + 1.9, pz]));
+    ctx.lights.warm.push(pointLight(0xffb060, 40, 16, [px, walkY + 1.9, pz]));
   }
 
   // ---------------------------------------------------------------- two stair runs (port and starboard)
@@ -319,7 +319,7 @@ export function build(kit, ctx, room, lib) {
     const xo = cx + s * (WALK_OUT + 1.5);
     const zb = cz + 12.75; // bottom
     const zt = cz + 3.25; // top
-    kit.stairs("paintedMetal", Math.min(xi, xo), zb, Math.max(xi, xo), zt, y0, walkY, "z", { color: PALETTE.gunmetal });
+    kit.stairs("paintedMetal", Math.min(xi, xo), zb, Math.max(xi, xo), zt, y0, walkY, "z", { color: PALETTE.slate });
     const mid = (xi + xo) / 2;
     stairRail(kit, [mid, y0, zb], [mid, walkY, zt], [s * 0.8, 0]);
     stairRail(kit, [mid, y0, zb], [mid, walkY, zt], [-s * 0.8, 0]);
@@ -355,7 +355,7 @@ export function build(kit, ctx, room, lib) {
     const wx = s < 0 ? x0 : x1;
     for (const zc of [447.0, cz, 470.5]) {
       const f = yawFrame(kit, wx, y0, zc, s < 0 ? Math.PI / 2 : -Math.PI / 2);
-      f.box("paintedMetal", 0, 3.2, 0.12, 7.2, 6.2, 0.24, { color: PALETTE.darkMetal, texel: 0.8 });
+      f.box("paintedMetal", 0, 3.2, 0.12, 7.2, 6.2, 0.24, { color: PALETTE.gunmetal, texel: 0.8 });
       f.box("paintedMetal", 0, 0.3, 1.5, 7.4, 0.6, 3.0, { color: PALETTE.gunmetal, texel: 1 });
       f.box("hazard", 0, 0.62, 1.5, 7.42, 0.1, 3.02, { texel: 3 });
       f.add("decal", new THREE.PlaneGeometry(0.9, 0.9), 0, 0.3, 3.005, { uv: "keep", uvRect: decalRect(5) });
@@ -374,7 +374,7 @@ export function build(kit, ctx, room, lib) {
       f.box("emitBlueSoft", 0, 3.2, 3.0, 0.12, 2.7, 0.1, { uv: "keep" });
       f.box("paintedMetal", 0, 6.4, 1.5, 7.4, 0.3, 3.0, { color: PALETTE.gunmetal, texel: 1 });
       f.collider(-3.75, 3.75, 0, 6.6, 0, 3.3, "capBank");
-      ctx.lights.cool.push(pointLight(0xdfe8ff, 28, 22, [wx - s * 4.5, y0 + 7.0, zc]));
+      ctx.lights.cool.push(pointLight(0xdfe8ff, 90, 24, [wx - s * 4.5, y0 + 7.0, zc]));
     }
     // wall stretches between the banks: light bars, a console, a stencil
     const f = shell.frames[s < 0 ? "-x" : "+x"].frame;
@@ -449,16 +449,16 @@ export function build(kit, ctx, room, lib) {
   // ---------------------------------------------------------------- lights beyond the core
   // the axis lights cannot reach surfaces facing away from the axis (collars, plinth, cage struts), so
   // blue-white ring lights outside the catwalk shine back at the core at three heights
-  for (const [ry, inten] of [[9.0, 70], [15.5, 60], [22.5, 55]]) {
+  for (const [ry, inten] of [[9.0, 180], [15.5, 160], [22.5, 140]]) {
     for (let k = 0; k < 4; k++) {
       const ang = Math.PI / 4 + (k * Math.PI) / 2;
-      ctx.lights.cool.push(pointLight(0xbfd8ff, inten, 34, [cx + Math.cos(ang) * 11.5, y0 + ry, cz + Math.sin(ang) * 11.5]));
+      ctx.lights.cool.push(pointLight(0xbfd8ff, inten, 36, [cx + Math.cos(ang) * 11.5, y0 + ry, cz + Math.sin(ang) * 11.5]));
     }
   }
-  ctx.lights.cool.push(pointLight(0xbfd8ff, 40, 20, [cx, y0 + 3.6, cz + PIT_A + 4.5]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 24, 18, [cx, y0 + 3.4, z1 - 3.0]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 30, 20, [cx, y0 + 4.5, z0 + 3.5]));
-  ctx.lights.teal.push(pointLight(0x6fb4ff, 7, 10, [cx, pitY + 0.8, cz + PIT_A - 0.9]));
-  ctx.lights.teal.push(pointLight(0x6fb4ff, 7, 10, [cx, pitY + 0.8, cz - PIT_A + 0.9]));
+  ctx.lights.cool.push(pointLight(0xbfd8ff, 120, 22, [cx, y0 + 3.6, cz + PIT_A + 4.5]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 80, 20, [cx, y0 + 3.4, z1 - 3.0]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 100, 22, [cx, y0 + 4.5, z0 + 3.5]));
+  ctx.lights.teal.push(pointLight(0x6fb4ff, 20, 10, [cx, pitY + 0.8, cz + PIT_A - 0.9]));
+  ctx.lights.teal.push(pointLight(0x6fb4ff, 20, 10, [cx, pitY + 0.8, cz - PIT_A + 0.9]));
   return shell;
 }
