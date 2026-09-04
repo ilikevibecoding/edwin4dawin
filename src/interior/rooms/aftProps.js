@@ -235,33 +235,39 @@ export function grateQuad(kit, geo, pos, w, len, opts = {}) {
 }
 
 // Recessed trench with pipes, a teal light channel and a grated cover the player walks on.
-// Runs along x from xa to xb, centred on cz with width w.
-export function gratedTrench(kit, xa, xb, cz, w, y0, opts = {}) {
-  const { depth = 0.5, light = "emitTeal" } = opts;
-  const len = xb - xa;
-  const xm = (xa + xb) / 2;
+// Runs along `axis` ('x' | 'z') from a to b, centred on c across, width w; the room's own floor
+// slabs must leave the trench footprint open.
+export function gratedTrench(kit, a, b, c, w, y0, opts = {}) {
+  const { depth = 0.5, light = "emitTeal", axis = "x" } = opts;
+  const X = axis === "x";
+  // world min/max from (along0, y0, across0) .. (along1, y1, across1)
+  const MM = (mat, a0, ya, c0, a1, yb, c1, o = {}) => (X ? kit.boxMM(mat, [a0, ya, c0], [a1, yb, c1], o) : kit.boxMM(mat, [c0, ya, a0], [c1, yb, a1], o));
+  const BOX = (mat, ca, cy, cc, sa, sy, sc, o = {}) => (X ? kit.box(mat, ca, cy, cc, sa, sy, sc, o) : kit.box(mat, cc, cy, ca, sc, sy, sa, o));
+  const CYL = (mat, ca, cy, cc, r, len, o = {}) => (X ? kit.cyl(mat, ca, cy, cc, r, len, "x", o) : kit.cyl(mat, cc, cy, ca, r, len, "z", o));
+  const len = b - a;
+  const m = (a + b) / 2;
   const h = w / 2;
-  kit.boxMM("metal", [xa, y0 - depth - 0.08, cz - h - 0.05], [xb, y0 - depth, cz + h + 0.05], { color: PALETTE.darkMetal, texel: 1 });
-  kit.boxMM("metal", [xa, y0 - depth, cz - h - 0.06], [xb, y0, cz - h], { color: PALETTE.gunmetal, texel: 1 });
-  kit.boxMM("metal", [xa, y0 - depth, cz + h], [xb, y0, cz + h + 0.06], { color: PALETTE.gunmetal, texel: 1 });
-  kit.boxMM("metal", [xa - 0.06, y0 - depth, cz - h - 0.06], [xa, y0, cz + h + 0.06], { color: PALETTE.gunmetal, texel: 1 });
-  kit.boxMM("metal", [xb, y0 - depth, cz - h - 0.06], [xb + 0.06, y0, cz + h + 0.06], { color: PALETTE.gunmetal, texel: 1 });
-  kit.boxMM(light, [xa + 0.2, y0 - depth + 0.005, cz - h + 0.08], [xb - 0.2, y0 - depth + 0.03, cz - h + 0.14]);
-  kit.boxMM(light, [xa + 0.2, y0 - depth + 0.005, cz + h - 0.14], [xb - 0.2, y0 - depth + 0.03, cz + h - 0.08]);
-  kit.cyl("metal", xm, y0 - depth + 0.22, cz - h * 0.35, 0.07, len - 0.1, "x", { color: PALETTE.steel, segments: 10 });
-  kit.cyl("metal", xm, y0 - depth + 0.16, cz + h * 0.2, 0.045, len - 0.1, "x", { color: PALETTE.orange, segments: 8 });
-  kit.cyl("metal", xm, y0 - depth + 0.3, cz + h * 0.55, 0.035, len - 0.1, "x", { color: PALETTE.gunmetal, segments: 8 });
-  for (let x = xa + 0.7; x < xb - 0.3; x += 1.6) {
-    kit.box("metal", x, y0 - depth + 0.22, cz - h * 0.35, 0.1, 0.2, 0.2, { color: PALETTE.darkMetal });
-    kit.box("metal", x + 0.5, y0 - depth + 0.14, cz + h * 0.3, 0.12, 0.14, 0.3, { color: PALETTE.darkMetal });
+  MM("metal", a, y0 - depth - 0.08, c - h - 0.05, b, y0 - depth, c + h + 0.05, { color: PALETTE.darkMetal, texel: 1 });
+  MM("metal", a, y0 - depth, c - h - 0.06, b, y0, c - h, { color: PALETTE.gunmetal, texel: 1 });
+  MM("metal", a, y0 - depth, c + h, b, y0, c + h + 0.06, { color: PALETTE.gunmetal, texel: 1 });
+  MM("metal", a - 0.06, y0 - depth, c - h - 0.06, a, y0, c + h + 0.06, { color: PALETTE.gunmetal, texel: 1 });
+  MM("metal", b, y0 - depth, c - h - 0.06, b + 0.06, y0, c + h + 0.06, { color: PALETTE.gunmetal, texel: 1 });
+  MM(light, a + 0.2, y0 - depth + 0.005, c - h + 0.08, b - 0.2, y0 - depth + 0.03, c - h + 0.14);
+  MM(light, a + 0.2, y0 - depth + 0.005, c + h - 0.14, b - 0.2, y0 - depth + 0.03, c + h - 0.08);
+  CYL("metal", m, y0 - depth + 0.22, c - h * 0.35, 0.07, len - 0.1, { color: PALETTE.steel, segments: 10 });
+  CYL("metal", m, y0 - depth + 0.16, c + h * 0.2, 0.045, len - 0.1, { color: PALETTE.orange, segments: 8 });
+  CYL("metal", m, y0 - depth + 0.3, c + h * 0.55, 0.035, len - 0.1, { color: PALETTE.gunmetal, segments: 8 });
+  for (let t = a + 0.7; t < b - 0.3; t += 1.6) {
+    BOX("metal", t, y0 - depth + 0.22, c - h * 0.35, 0.1, 0.2, 0.2, { color: PALETTE.darkMetal });
+    BOX("metal", t + 0.5, y0 - depth + 0.14, c + h * 0.3, 0.12, 0.14, 0.3, { color: PALETTE.darkMetal });
   }
-  const g = new THREE.PlaneGeometry(len, w);
+  const g = new THREE.PlaneGeometry(X ? len : w, X ? w : len);
   g.rotateX(-Math.PI / 2);
-  grateQuad(kit, g, [xm, y0 - 0.004, cz], len, w);
-  for (let i = 0; i <= 4; i++) kit.box("metal", xm, y0 - 0.02, cz - h + (w * i) / 4, len, 0.05, 0.035, { color: PALETTE.gunmetal, texel: 2 });
-  for (let x = xa; x <= xb + 0.01; x += 1.2) kit.box("metal", Math.min(x, xb), y0 - 0.02, cz, 0.05, 0.05, w + 0.1, { color: PALETTE.gunmetal, texel: 2 });
-  kit.boxMM("rubber", [xa - 0.06, y0, cz - h - 0.12], [xb + 0.06, y0 + 0.015, cz - h - 0.04], { color: PALETTE.rubber, texel: 2 });
-  kit.boxMM("rubber", [xa - 0.06, y0, cz + h + 0.04], [xb + 0.06, y0 + 0.015, cz + h + 0.12], { color: PALETTE.rubber, texel: 2 });
+  grateQuad(kit, g, X ? [m, y0 - 0.004, c] : [c, y0 - 0.004, m], X ? len : w, X ? w : len);
+  for (let i = 0; i <= 4; i++) BOX("metal", m, y0 - 0.02, c - h + (w * i) / 4, len, 0.05, 0.035, { color: PALETTE.gunmetal, texel: 2 });
+  for (let t = a; t <= b + 0.01; t += 1.2) BOX("metal", Math.min(t, b), y0 - 0.02, c, 0.05, 0.05, w + 0.1, { color: PALETTE.gunmetal, texel: 2 });
+  MM("rubber", a - 0.06, y0, c - h - 0.12, b + 0.06, y0 + 0.015, c - h - 0.04, { color: PALETTE.rubber, texel: 2 });
+  MM("rubber", a - 0.06, y0, c + h + 0.04, b + 0.06, y0 + 0.015, c + h + 0.12, { color: PALETTE.rubber, texel: 2 });
 }
 
 // Pipe run with flanges and a clamp every `step` metres; along 'x' | 'z' between a and b at (across, y).
@@ -316,9 +322,75 @@ export function locker(frame, u, w, h, opts = {}) {
   frame.collider(u - w / 2, u + w / 2, 0, h, 0, depth + 0.05, "locker");
 }
 
+// Wall rifle rack: back board, floor tray, mid clamp rail, red status strip and a stencilled header, with
+// upright rifle silhouettes every 0.28 m. Rifles face into the room (yaw derived from the frame normal).
+export function rifleRack(frame, u0, u1) {
+  const kit = frame.kit;
+  const uc = (u0 + u1) / 2;
+  const len = u1 - u0;
+  const yaw = Math.atan2(frame.N.x, frame.N.z);
+  frame.box("satinBlack", uc, 1.05, 0.03, len, 1.9, 0.06);
+  frame.box("metal", uc, 0.22, 0.18, len, 0.05, 0.36, { color: PALETTE.gunmetal, texel: 2 });
+  frame.box("metal", uc, 0.03, 0.18, len + 0.04, 0.06, 0.4, { color: PALETTE.darkMetal, texel: 2 });
+  frame.box("metal", uc, 1.36, 0.2, len, 0.04, 0.05, { color: PALETTE.steel, texel: 2 });
+  frame.box("emitRed", uc, 1.97, 0.07, len - 0.2, 0.03, 0.02);
+  frame.box("leds", uc, 0.3, 0.37, len - 0.4, 0.03, 0.006, { uv: "keep" });
+  frame.box("painted", uc, 2.02, 0.05, len, 0.08, 0.1, { color: PALETTE.gunmetal, uv: "keep" });
+  for (let u = u0 + 0.16; u < u1 - 0.1; u += 0.28) {
+    frame.box("metal", u, 1.36, 0.22, 0.05, 0.08, 0.1, { color: PALETTE.gunmetal });
+    const p = frame.pos(u, 0.25, 0.2);
+    rifle(kit, p.x, p.y, p.z, yaw);
+  }
+  frame.collider(u0 - 0.02, u1 + 0.02, 0, 2.1, 0, 0.42, "rack");
+}
+
+// Seven-segment numeral built from thin boxes on a wall frame: (u, v) is the digit centre, h its height.
+const SEGMENTS = { 0: "abcdef", 1: "bc", 2: "abged", 3: "abgcd", 4: "fgbc", 5: "afgcd", 6: "afgedc", 7: "abc", 8: "abcdefg", 9: "abcdfg", "-": "g" };
+export function sevenSeg(frame, u, v, n, digit, h, mat = "painted", opts = {}) {
+  const w = h * 0.55;
+  const t = h * 0.13;
+  const segs = SEGMENTS[String(digit)] || "";
+  const geo = { a: [0, h / 2 - t / 2, w, t], d: [0, -h / 2 + t / 2, w, t], g: [0, 0, w, t], b: [w / 2 - t / 2, h / 4, t, h / 2], c: [w / 2 - t / 2, -h / 4, t, h / 2], e: [-w / 2 + t / 2, -h / 4, t, h / 2], f: [-w / 2 + t / 2, h / 4, t, h / 2] };
+  for (const s of segs) {
+    const [du, dv, su, sv] = geo[s];
+    frame.box(mat, u + du, v + dv, n, su, sv, 0.008, { uv: "keep", ...opts });
+  }
+}
+// A row of numerals centred on u (string of digits / dashes).
+export function sevenSegText(frame, u, v, n, text, h, mat = "painted", opts = {}) {
+  const pitch = h * 0.75;
+  const start = u - ((text.length - 1) * pitch) / 2;
+  for (let i = 0; i < text.length; i++) sevenSeg(frame, start + i * pitch, v, n, text[i], h, mat, opts);
+}
+
+// Horizontal scanline texture for containment fields (repeat-wrapped so its offset can scroll).
+export function scanlineTexture() {
+  const c = document.createElement("canvas");
+  c.width = 4;
+  c.height = 64;
+  const g = c.getContext("2d");
+  const grad = g.createLinearGradient(0, 0, 0, 64);
+  grad.addColorStop(0, "#5a1e18");
+  grad.addColorStop(0.45, "#ff5a48");
+  grad.addColorStop(0.5, "#ffd0c8");
+  grad.addColorStop(0.55, "#ff5a48");
+  grad.addColorStop(1, "#5a1e18");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 4, 64);
+  g.fillStyle = "rgba(0,0,0,0.45)";
+  for (let y = 0; y < 64; y += 4) g.fillRect(0, y, 4, 1);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 // Additive holographic material (cloned per room so pulses stay independent).
-export function holoMaterial(color, opacity = 0.35) {
-  return new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+export function holoMaterial(color, opacity = 0.35, map = null) {
+  return new THREE.MeshBasicMaterial({ color, map, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
 }
 
 export { pointLight, PALETTE, decalRect };

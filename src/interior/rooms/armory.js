@@ -6,7 +6,7 @@ import * as THREE from "three";
 import { roomShell, wallLightBar, wallConsole } from "../shell.js";
 import { PALETTE } from "../../materials.js";
 import { pointLight } from "../lib.js";
-import { stencil, floorStencil, bench, locker, rifle, helmet, chestPlate, crate, grateQuad } from "./aftProps.js";
+import { stencil, floorStencil, bench, locker, rifle, rifleRack, helmet, chestPlate, crate, grateQuad } from "./aftProps.js";
 
 export function build(kit, ctx, room, lib) {
   const shell = roomShell(kit, ctx, room, { style: "dark", lights: false, lightRows: 2, lightMat: "emitCoolSoft", seed: 51 });
@@ -151,25 +151,8 @@ export function build(kit, ctx, room, lib) {
   }
 
   // ------------------------------------------------------------ cage: wall rifle racks
-  const rackUnit = (frame, u0, u1, xWorld, zOf, yaw) => {
-    const uc = (u0 + u1) / 2;
-    const len = u1 - u0;
-    frame.box("satinBlack", uc, 1.05, 0.03, len, 1.9, 0.06);
-    frame.box("metal", uc, 0.22, 0.18, len, 0.05, 0.36, { color: PALETTE.gunmetal, texel: 2 });
-    frame.box("metal", uc, 0.03, 0.18, len + 0.04, 0.06, 0.4, { color: PALETTE.darkMetal, texel: 2 });
-    frame.box("metal", uc, 1.36, 0.2, len, 0.04, 0.05, { color: PALETTE.steel, texel: 2 });
-    frame.box("emitRed", uc, 1.97, 0.07, len - 0.2, 0.03, 0.02);
-    frame.box("leds", uc, 0.3, 0.37, len - 0.4, 0.03, 0.006, { uv: "keep" });
-    frame.box("painted", uc, 2.02, 0.05, len, 0.08, 0.1, { color: PALETTE.gunmetal, uv: "keep" });
-    for (let u = u0 + 0.16; u < u1 - 0.1; u += 0.28) {
-      frame.box("metal", u, 1.36, 0.22, 0.05, 0.08, 0.1, { color: PALETTE.gunmetal });
-      const p = frame.pos(u, 0.25, 0.2);
-      rifle(kit, p.x, p.y, p.z, yaw);
-    }
-    frame.collider(u0 - 0.02, u1 + 0.02, 0, 2.1, 0, 0.42, "rack");
-  };
-  rackUnit(fE, 1.0, 6.0, x1, null, -Math.PI / 2);
-  rackUnit(fE, 7.0, 12.0, x1, null, -Math.PI / 2);
+  rifleRack(fE, 1.0, 6.0);
+  rifleRack(fE, 7.0, 12.0);
   stencil(fE, 3.5, 2.4, 0.4, 14, { color: PALETTE.creamDark });
   stencil(fE, 9.5, 2.4, 0.4, 0, { color: PALETTE.creamDark });
   stencil(fE, 6.5, 1.2, 0.36, 10, { color: PALETTE.cream });
