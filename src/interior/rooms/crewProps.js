@@ -27,11 +27,12 @@ export const SIGN = {
   BAY5: 40, BAY6: 41, BAY7: 42, GUARD: 43,
   BAY8: 44, BAY9: 45, BAY10: 46, BAY11: 47,
   BAY12: 48, BAY13: 49, BAY14: 50, ROSTER: 51,
+  REFRESHER: 52, TRAYS: 53, HANDWASH: 54, KEEPCLEAR: 55,
 };
 /** Sign cell for quarters bay `n` (1-based, 1..14). */
 export const baySign = (n) => (n <= 4 ? SIGN.BAY1 + n - 1 : n <= 7 ? SIGN.BAY5 + n - 5 : SIGN.BAY8 + Math.min(n - 8, 6));
 const SIGN_COLS = 4;
-const SIGN_ROWS = 13;
+const SIGN_ROWS = 14;
 const SIGN_TEXT = [
   "MESS HALL", "GALLEY", "RATIONS", "CREW QUARTERS",
   "BAY 1", "BAY 2", "BAY 3", "BAY 4",
@@ -46,6 +47,7 @@ const SIGN_TEXT = [
   "BAY 5", "BAY 6", "BAY 7", "GUARD STATION",
   "BAY 8", "BAY 9", "BAY 10", "BAY 11",
   "BAY 12", "BAY 13", "BAY 14", "DUTY ROSTER",
+  "REFRESHER", "TRAY RETURN", "WASH HANDS", "KEEP AISLE CLEAR",
 ];
 // lit colours per cell family
 const LIT_COL = (i) => {
@@ -55,7 +57,7 @@ const LIT_COL = (i) => {
   if ((i >= 24 && i <= 25) || (i >= 32 && i <= 38)) return "#ffb347";
   if (i >= 26 && i <= 28) return "#4cff88";
   if (i >= 8 && i <= 10) return "#8fe3ff";
-  if (i <= 2 || i === 39) return "#fff1d6";
+  if (i <= 2 || i === 39 || (i >= 53 && i <= 55)) return "#fff1d6";
   return "#eef3ff";
 };
 const INK_COL = (i) => {
@@ -101,7 +103,8 @@ function drawSignSheet(lit, seed) {
         const u = x / w;
         const n = fbm(u, v, { octaves: 3, freq: 50, seed: seed + 2 });
         let a = d[k + 3] / 255;
-        a *= Math.min(1, Math.max(0, (n - 0.28) * 4));
+        // worn, but no glyph ever drops out completely (floor stencils lost whole letters at the ends)
+        a *= Math.min(1, Math.max(0.35, (n - 0.28) * 4));
         d[k + 3] = a * 255;
       }
     }
@@ -240,6 +243,9 @@ export function ensureCrewMaterials(ctx) {
   // continuous full-length bar)
   m.crew_coolStrip = m.emitWhiteDim.clone();
   m.crew_coolStrip.emissiveIntensity = 0.7;
+  // recreation holo-board: the amber tabular screen at ~60 % so it reads as a dim display, not a lamp
+  m.crew_holoDim = m.impScreen4.clone();
+  m.crew_holoDim.emissiveIntensity = 0.85;
   // quarters night blue: a muted navy emitter (not the azure of emitBlue) at about half strength, for
   // the aisle kick strips, the ceiling spine and the bay-lane strips
   m.crew_nightBlue = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: new THREE.Color("#3a5a9a"), emissiveIntensity: 1.5, roughness: 0.5, metalness: 0 });
