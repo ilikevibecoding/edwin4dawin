@@ -23,7 +23,7 @@ export function build(kit, ctx, room) {
   const { x0, x1, z0, z1, height: h } = room;
   // lighter slate ceiling than the shell's gunmetal so the quarters read as a lit space; beams sit on the
   // shell's rib pitch (every 3.67 m) so the pendants and downlights below stay clear of them
-  const yTop = flatCeiling(kit, room, y0, { beams: [1, 2, 3, 4, 5].map((i) => x0 + ((x1 - x0) * i) / 6), along: "x", plate: P.slate });
+  const yTop = flatCeiling(kit, room, y0, { beams: [1, 2, 3, 4, 5].map((i) => x0 + ((x1 - x0) * i) / 6), along: "x", plate: P.creamDark });
   const quiet = { panel: 0.9, strip: 0.04, greeble: 0.04, screen: 0.02 };
   const hallPaints = [[P.cream, 0.72], [P.creamDark, 0.28]];
   const cabinPaints = [[P.creamDark, 0.6], [P.cream, 0.3], [P.tealPaint, 0.1]];
