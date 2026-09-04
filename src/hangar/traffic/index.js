@@ -122,7 +122,8 @@ export default {
   materials: (shared) => makeTrafficMaterials(shared),
   views: {
     "sys-traffic-approach": { mode: "exterior", camPos: [70, -140, -30], lookAt: [0, -85, 32], time: 40 },
-    "sys-traffic-racks": { pos: [-30, -72, 40], yaw: 90, pitch: 14, time: 40 },
+    // on the deck outside the aperture rail (x -36), looking up at the port rack tiers
+    "sys-traffic-racks": { pos: [-42, -72, 40], yaw: 90, pitch: 14, time: 40 },
     "sys-traffic-hover": { pos: [0, -72, 120], yaw: 0, pitch: 18, time: 43 },
     "sys-traffic-patrol": { mode: "exterior", camPos: [1600, 200, -900], lookAt: [0, 0, 0], time: 40 },
   },
