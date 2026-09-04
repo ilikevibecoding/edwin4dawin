@@ -240,7 +240,9 @@ export function buildInterior({ scene, materials }) {
   doors.build(root);
   doors.rebuild = () => {
     root.remove(doors.mesh);
+    root.remove(doors.lamps);
     doors.mesh.dispose();
+    doors.lamps.dispose();
     doors.build(root);
   };
   for (const it of lifts.interactables) interactables.push(it);
@@ -403,7 +405,10 @@ export function buildInterior({ scene, materials }) {
         x = dx + (facing === "+x" ? -1.4 : facing === "-x" ? 1.4 : 0);
         z = dz + (facing === "+z" ? -1.4 : facing === "-z" ? 1.4 : 0);
       } else {
-        x = r.x0 + 1.5;
+        // corridors: stand near one end and look down the long axis (dead ends face their lift portal)
+        const longX = r.x1 - r.x0 >= r.z1 - r.z0;
+        if (longX) x = r.x1 - 1.2;
+        else z = r.z1 - 1.2;
       }
       const yaw = THREE.MathUtils.radToDeg(Math.atan2(-(cx - x), -(cz - z)));
       return { x, z, y, yaw, pitch: -4, zone: DECKS[r.deck].zone, space: r.id };

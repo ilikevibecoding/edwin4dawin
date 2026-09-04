@@ -87,10 +87,21 @@ export class DoorSystem {
     return door;
   }
 
-  // Create the instanced leaf mesh once every door has been added.
+  // Create the instanced leaf mesh (and the per-door status lamps) once every door has been added.
   build(parent) {
     const geo = new THREE.BoxGeometry(1, 1, 1);
-    const mat = new THREE.MeshStandardMaterial({ color: 0x5a5e66, roughness: 0.55, metalness: 0.35, envMapIntensity: 0.7 });
+    const metal = this.materials.metal;
+    // worn painted-steel leaves: the shared metal maps give seams and wear at door scale
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x646972,
+      map: metal.map,
+      roughnessMap: metal.roughnessMap,
+      normalMap: metal.normalMap,
+      normalScale: new THREE.Vector2(0.5, 0.5),
+      roughness: 0.6,
+      metalness: 0.45,
+      envMapIntensity: 0.6,
+    });
     this.mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, this.doors.length * 2));
     this.mesh.name = "doorLeaves";
     this.mesh.castShadow = false;
@@ -98,8 +109,21 @@ export class DoorSystem {
     this.mesh.frustumCulled = false;
     this.mesh.count = this.doors.length * 2;
     parent.add(this.mesh);
+    // status lamp above each door: red while sealed, blue-white while open
+    const lampMat = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, fog: false });
+    this.lamps = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), lampMat, Math.max(1, this.doors.length));
+    this.lamps.name = "doorLamps";
+    this.lamps.frustumCulled = false;
+    this.lamps.count = this.doors.length;
+    parent.add(this.lamps);
     for (let i = 0; i < this.doors.length; i++) this._place(i);
     this.mesh.instanceMatrix.needsUpdate = true;
+    this.lamps.instanceMatrix.needsUpdate = true;
+    if (this.lamps.instanceColor) this.lamps.instanceColor.needsUpdate = true;
+  }
+
+  _lampColor(d, out) {
+    return d.open > 0.5 ? out.setRGB(0.55, 0.8, 1.6) : out.setRGB(1.6, 0.25, 0.2);
   }
 
   _place(i) {
@@ -118,6 +142,15 @@ export class DoorSystem {
       }
       this._m.compose(this._p, this._q, this._s);
       this.mesh.setMatrixAt(i * 2 + k, this._m);
+    }
+    if (this.lamps) {
+      const y = d.y + d.height + (d.blast ? 0.45 : 0.16) + 0.06;
+      if (d.axis === "x") this._s.set(0.36, 0.06, d.depth + 0.1);
+      else this._s.set(d.depth + 0.1, 0.06, 0.36);
+      this._p.set(d.x, y, d.z);
+      this._m.compose(this._p, this._q, this._s);
+      this.lamps.setMatrixAt(i, this._m);
+      this.lamps.setColorAt(i, this._lampColor(d, this._c || (this._c = new THREE.Color())));
     }
   }
 
@@ -157,7 +190,11 @@ export class DoorSystem {
       }
       d.collider.disabled = d.open > 0.55;
     }
-    if (dirty) this.mesh.instanceMatrix.needsUpdate = true;
+    if (dirty) {
+      this.mesh.instanceMatrix.needsUpdate = true;
+      this.lamps.instanceMatrix.needsUpdate = true;
+      if (this.lamps.instanceColor) this.lamps.instanceColor.needsUpdate = true;
+    }
   }
 
   byId(id) {
@@ -177,6 +214,10 @@ export class DoorSystem {
       d.locked = s.locked;
       this._place(this.doors.indexOf(d));
     }
-    if (this.mesh) this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.mesh) {
+      this.mesh.instanceMatrix.needsUpdate = true;
+      this.lamps.instanceMatrix.needsUpdate = true;
+      if (this.lamps.instanceColor) this.lamps.instanceColor.needsUpdate = true;
+    }
   }
 }
