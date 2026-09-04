@@ -135,9 +135,12 @@ export function buildDetention(kit, ctx) {
     kit.boxMM("paintedMetal", [Math.min(x0, x1) - 0.14, H - 0.1, Math.min(z0, z1) - 0.14], [Math.max(x0, x1) + 0.14, H, Math.max(z0, z1) + 0.14], { color: PALETTE.impBlack, texel: 2 });
     kit.boxMM(mat, [Math.min(x0, x1), H - 0.11, Math.min(z0, z1)], [Math.max(x0, x1), H - 0.09, Math.max(z0, z1)], { uv: "keep" });
   };
-  // the corridor spine is seen end-on from the fixed view, where the soft emitter flared into a hot red
-  // bar above the gate; the dim one keeps the red line without the bloom
-  strip("emitRedDim", guardX1 + 0.4, -36.04, chamberX0 - 0.4, -35.96);
+  // the corridor ceiling carries three short dim red fixtures, one over each cell pair: the continuous
+  // spine was seen end-on from the fixed view and bloomed into a hot red streak above the gate
+  for (let i = 0; i < 3; i++) {
+    const xc = guardX1 + (i + 0.5) * cellW;
+    strip("emitRedDim", xc - 0.45, -36.04, xc + 0.45, -35.96);
+  }
   strip("emitRedSoft", guardX1 + 0.6, -43.84, max[0] - 0.6, -43.76);
   strip("emitRedSoft", guardX1 + 0.6, -28.24, max[0] - 0.6, -28.16);
   for (const z of [-30.0, -33.0, -39.0, -42.0]) strip("emitStrip", 43.4, z - 0.07, 47.6, z + 0.07);
@@ -155,7 +158,9 @@ export function buildDetention(kit, ctx) {
 
   // ------------------------------------------------------------------ lights (6): three whites in the anteroom (one over the
   // door approach so the white zone reads from the camera side), red in the block, white in the chamber
-  ctx.light(pointLight(0xff3a2a, 12, 13, [52.2, H - 0.5, -36.0]));
+  // (hung 1.2 m below the ceiling: at 0.5 m it lit a hot red patch on the corridor ceiling that showed
+  // above the gate as a flare from the fixed view)
+  ctx.light(pointLight(0xff3a2a, 12, 13, [52.2, H - 1.2, -36.0]));
   ctx.light(pointLight(0xe8eeff, 18, 14, [46.0, H - 0.5, -36.0]));
   ctx.light(pointLight(0xe8eeff, 15, 10, [44.8, H - 0.5, -36.2]));
   ctx.light(pointLight(0xdfe8ff, 12, 9, [59.0, H - 0.6, -36.0]));
