@@ -531,8 +531,8 @@ function buildHangarMouth(ctx) {
   // the approach lights wash the plating outboard of the frame (white along the sides, red fore / aft)
   const wash = chunks.batch(zm, "mid", "exta_pool");
   const xo = o.x1 + th + 3.3;
-  const white = C(0xfff2dc).multiplyScalar(0.06);
-  const red = C(0xff5030).multiplyScalar(0.05);
+  const white = C(0xfff2dc).multiplyScalar(0.05);
+  const red = C(0xff5030).multiplyScalar(0.035);
   for (const s of [-1, 1]) ventralWash(wash, [s * xo, o.z0 - 3], [s * xo, o.z1 + 3], [s, 0], 4, 18, white);
   ventralWash(wash, [-xo, o.z0 - th - 3.3], [xo, o.z0 - th - 3.3], [0, -1], 4, 18, red);
   ventralWash(wash, [-xo, o.z1 + th + 3.3], [xo, o.z1 + th + 3.3], [0, 1], 4, 18, red);

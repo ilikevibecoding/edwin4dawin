@@ -90,9 +90,20 @@ export function buildEngines(ctx) {
     const prof = BELL.map(([f, k]) => ({ r: r * k, t: f * L }));
     // outer skin: heat-tempering ramp along the axis (u), slight vertex darkening toward the lip
     at("far", "exta_heat").lathe(prof, o, IDENT, segs, { uv: "axial", colorAt: (i, f) => shade(0xffffff, 0.9 + 0.1 * (1 - f) + (rand() - 0.5) * 0.04) });
-    // inner bell from the throat to the lip: dark metal, glow-tinted toward the throat
-    const inner = prof.filter((p) => p.t >= 0.24 * L - 1e-6).map((p) => ({ r: p.r - (b.main ? 0.7 : 0.4), t: p.t }));
-    at("far", "hullGreeble").lathe(inner, o, IDENT, segs, { inside: true, colorAt: (i, f) => mixC(T, blue, 0.6 * (1 - f) * (1 - f)), texel: TEXEL * 3 });
+    // inner bell from the throat to the lip: dark worn metal, only the throat end glow-tinted (the sun
+    // sits aft of the ship and shines straight into the nozzles, so a light tint here would wash the
+    // whole opening into a flat sheet)
+    const wallIn = b.main ? 0.7 : 0.4;
+    const inner = prof.filter((p) => p.t >= 0.24 * L - 1e-6).map((p) => ({ r: p.r - wallIn, t: p.t }));
+    at("far", "hullGreeble").lathe(inner, o, IDENT, segs, { inside: true, colorAt: (i, f) => mixC(shade(T, 0.85), blue, 0.3 * Math.pow(1 - f, 3)), texel: TEXEL * 3 });
+    // interior stiffener rings, slightly embedded in the wall so nothing is coplanar
+    {
+      const rings = at("mid", "hullTrim");
+      for (const f of b.main ? [0.4, 0.55, 0.7, 0.85] : [0.5, 0.75]) {
+        const R = r * bellR(f) - wallIn - 0.25;
+        rings.addGeometry(new THREE.TorusGeometry(R, b.main ? 0.45 : 0.3, 8, segs), { pos: [b.x, b.y, e.z + f * L], color: shade(T, 0.7), texel: TEXEL * 3 });
+      }
+    }
     // throat: a white core disc (under half the lip radius, so the dark throat ring around it and
     // the bell walls stay visible from any angle) and a blue disc filling the rest of the throat
     at("far", "engineCore").disc(V(b.x, b.y, e.z + 0.24 * L + 0.5), Z, r * 0.44, segs, 0xffffff);
@@ -111,11 +122,13 @@ export function buildEngines(ctx) {
     // anything lining the whole bell turns the opening into a flat haze and hides the walls / rings
     cone(0.25, 0.55, 0.7, 0.8, blue.clone().multiplyScalar(0.22), 2.0);
     cone(0.25, 0.5, 0.42, 0.28, C(0xffffff).multiplyScalar(0.55), 2.0);
-    cone(1.0, 1.4, 1.0, 0.55, blue.clone().multiplyScalar(0.2), 2.0);
+    // plume past the lip and the halo in the lip plane both sit between an aft camera and the
+    // opening (two additive layers each), so they must stay faint or the whole bell reads as haze
+    cone(1.0, 1.4, 1.0, 0.55, blue.clone().multiplyScalar(0.015), 2.0);
     // soft additive disc around the core (its bright centre is inside the core disc, only the soft
     // rim shows) + a dim vertex-gradient halo just behind the lip
     at("far", "glowDisc").addGeometry(new THREE.PlaneGeometry(r * 1.0, r * 1.0), { pos: [b.x, b.y, e.z + 0.27 * L], uv: "keep" });
-    glow.disc(V(b.x, b.y, e.z + L + 1.5), Z, r * 1.25, segs, blue.clone().multiplyScalar(0.2), 1, { colorOut: 0x000000 });
+    glow.disc(V(b.x, b.y, e.z + L + 1.5), Z, r * 1.25, segs, blue.clone().multiplyScalar(0.025), 1, { colorOut: 0x000000 });
     // lip ring, gimbal collar at the housing face, stiffener rings
     const trim = at("far", "hullTrim");
     trim.addGeometry(new THREE.TorusGeometry(r * 1.035 + 0.15, b.main ? 1.0 : 0.6, 10, segs), { pos: [b.x, b.y, e.z + L], color: T, texel: TEXEL * 3 });
