@@ -186,10 +186,10 @@ function sdVarPolyline(px: number, pz: number, pts: Vec2[], widths: number[]): n
 // ---------------------------------------------------------------- authored geography
 
 /** Isla Garza's main body (the reference hero island): long axis north-south. */
-const G = { cx: 195, cz: 2520, rx: 262, rz: 440, rot: 0.05 } as const;
+const G = { cx: 195, cz: 2520, rx: 262, rz: 400, rot: 0.05 } as const;
 /** Low sandy spit off Garza's north shore that carries the causeway approach; the bridge abutment
  *  sits at its northern end. */
-export const GARZA_SPIT: [Vec2, Vec2] = [[40, 2060], [-5, 1790]];
+export const GARZA_SPIT: [Vec2, Vec2] = [[50, 2140], [-5, 1790]];
 const GARZA_SPIT_HW = 42;
 /** Garza's interior lagoon (negative inside the water). Shared by the landmass SDF (which cuts it
  *  out of the land) and the seabed pass (which gives it a proper turquoise depth). */
@@ -279,8 +279,8 @@ export function createLandmasses(): Landmass[] {
       d = smin(d, sdIsland(x, z, 260, 2900, 160, 150, 0.1, 12, 0.2), 110);   // southern tip lobe
       d = smin(d, sdIsland(x, z, -10, 2740, 115, 120, 0.3, 13, 0.25), 100);  // south-west lobe (settlement)
       d = smin(d, sdIsland(x, z, 390, 2500, 100, 150, 0.0, 17, 0.2), 110);   // east lobe (exposed beach)
-      d = smin(d, sdIsland(x, z, 385, 2150, 105, 120, 0.2, 14, 0.2), 110);   // north-east lobe (park, marina)
-      d = smin(d, sdIsland(x, z, 110, 2110, 130, 110, -0.1, 16, 0.2), 100);  // north lobe (spit root)
+      d = smin(d, sdIsland(x, z, 385, 2150, 90, 120, 0.2, 14, 0.2), 110);    // north-east lobe (park, marina)
+      d = smin(d, sdIsland(x, z, 120, 2200, 120, 95, -0.1, 16, 0.2), 100);   // north lobe (spit root)
       d = smin(d, sdSegment(x, z, GARZA_SPIT[0][0], GARZA_SPIT[0][1], GARZA_SPIT[1][0], GARZA_SPIT[1][1]) - GARZA_SPIT_HW, 60);
       // interior lagoon; its distance is steepened so only a narrow sandy rim surrounds the pond
       d = Math.max(d, -garzaLagoon(x, z) * 2.5 + 12);
@@ -401,7 +401,7 @@ export function createDistricts(): District[] {
   // island settlements: a sandy lane through the canopy instead of a street grid
   add({
     id: 'garza-res', zone: Zone.RES_LOW, cx: 40, cz: 2770, hw: 200, hh: 170, rot: 0.1, gridX: 0, gridZ: 0, density: 0.55, hMin: 4, hMax: 9,
-    track: [[-10, 2600], [-60, 2690], [-60, 2780], [20, 2830], [110, 2850], [200, 2820]],
+    track: [[-10, 2600], [-60, 2690], [-60, 2780], [20, 2800], [110, 2830], [200, 2800]],
   });
   add({
     id: 'tortuga-res', zone: Zone.RES_LOW, cx: 1180, cz: -830, hw: 420, hh: 230, rot: 0.35, gridX: 0, gridZ: 0, density: 0.55, hMin: 4, hMax: 10,
@@ -481,7 +481,7 @@ export function createRoads(): RoadSpec[] {
   R.push({ id: 'garza-hwy', cls: 'highway', width: 22, lanes: 4, traffic: 14, pts: [[-1650, 2590], [-1050, 2540], [-990, 2537]] });
   // across Garza: from the western causeway landing up the island's spine, west of the lagoon, and out
   // along the sandy spit to the reference bridge abutment
-  R.push({ id: 'garza-hwy-2', cls: 'highway', width: 22, lanes: 4, traffic: 14, pts: [[-10, 2600], [10, 2450], [30, 2300], [40, 2160], [GARZA_SPIT[0][0], GARZA_SPIT[0][1]], [GARZA_SPIT[1][0], GARZA_SPIT[1][1]]] });
+  R.push({ id: 'garza-hwy-2', cls: 'highway', width: 22, lanes: 4, traffic: 14, pts: [[-10, 2600], [10, 2450], [30, 2300], [GARZA_SPIT[0][0], GARZA_SPIT[0][1]], [GARZA_SPIT[1][0], GARZA_SPIT[1][1]]] });
   // island arterial skirting the lagoon's north shore, ending in a turnaround loop in the park; spur to the marina
   R.push({ id: 'garza-east', cls: 'arterial', width: 14, lanes: 2, traffic: 5, pts: [[30, 2300], [150, 2265], [290, 2230], [370, 2180], [400, 2150], [415, 2190], [385, 2215], [350, 2200], [370, 2180]] });
   R.push({ id: 'garza-marina-rd', cls: 'street', width: 9, lanes: 2, traffic: 2, pts: [[370, 2180], [400, 2120], [420, 2075]] });
