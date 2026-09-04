@@ -152,7 +152,16 @@ async function boot() {
     // multi-second hitch behind a loading screen that has already gone — and
     // made this stage report six milliseconds for the most expensive thing that
     // happens at boot.
+    //
+    // Compiled *into the composer's target*. Three keys a program on the render
+    // target's tone mapping and colour space, so a compile with the screen
+    // bound built every program tone-mapped, and the composer's first frame,
+    // drawn linear into renderTarget1, built all of them again: 124 of 284
+    // programs were never used by anything, and the compile stage was twice
+    // the length it needed to be (perf/census-r1.md, win 1).
+    renderer.setRenderTarget(p.composer.renderTarget1);
     renderer.compile(scene, camera);
+    renderer.setRenderTarget(null);
     p.render(1 / 60);
     return p;
   });
