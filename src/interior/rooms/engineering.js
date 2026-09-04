@@ -296,13 +296,13 @@ export function build(kit, ctx, room, lib) {
   // ---------------------------------------------------------------- lights: amber over the boards, cool over the stations
   for (const phi of [40, 90, 140]) {
     const [lx, lz] = arcPoint(phi, ARC_R - 2.4);
-    ctx.lights.warm.push(pointLight(0xffb060, 10, 14, [lx, yTop - 0.7, lz]));
+    ctx.lights.warm.push(pointLight(0xffb060, 16, 16, [lx, yTop - 0.7, lz]));
   }
-  ctx.lights.warm.push(pointLight(0xffb060, 6, 9, [25.5, yTop - 0.8, 484.0]));
-  ctx.lights.teal.push(pointLight(0x6fb4ff, 5.0, 9, [18, yTop - 1.4, 494.6]));
-  ctx.lights.teal.push(pointLight(0x6fb4ff, 3.5, 7, [13.4, yTop - 1.2, 484.2]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 8.0, 15, [12.8, yTop - 0.5, 490.4]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 8.0, 15, [23.2, yTop - 0.5, 490.4]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 6.0, 12, [18, yTop - 0.6, 483.5]));
+  ctx.lights.warm.push(pointLight(0xffb060, 8, 10, [25.5, yTop - 0.8, 484.0]));
+  ctx.lights.teal.push(pointLight(0x6fb4ff, 7.0, 10, [18, yTop - 1.4, 494.6]));
+  ctx.lights.teal.push(pointLight(0x6fb4ff, 4.0, 7, [13.4, yTop - 1.2, 484.2]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 14.0, 18, [12.8, yTop - 0.5, 490.4]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 14.0, 18, [23.2, yTop - 0.5, 490.4]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 9.0, 12, [18, yTop - 0.6, 483.5]));
   return shell;
 }

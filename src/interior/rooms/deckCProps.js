@@ -21,6 +21,37 @@ export function yawToward(x, z, tx, tz) {
   return Math.atan2(tx - x, tz - z);
 }
 
+// Dark walls for a roomShell built with skipWalls on all four sides: the standard panel system at a
+// coarser pitch and without the greeble panels (about half the triangles of the default grid), a plain
+// dark plate with ribs, unit stencils and a soft light band above the 3.2 m panel band in tall rooms.
+export function coarseWalls(kit, room, lib, shell, opts = {}) {
+  const { seed = 900, panelW = 2.0, styles = { panel: 0.72, vent: 0.1, conduit: 0.08, strip: 0.06, screen: 0.04 }, bandMat = "emitWhiteSoft" } = opts;
+  const h = room.height;
+  const y0 = shell.y0;
+  const bandH = Math.min(3.2, h);
+  let s = seed;
+  for (const [dir, { frame, length }] of Object.entries(shell.frames)) {
+    const ops = [];
+    for (const door of room.doors || []) if (door[3] === dir) ops.push(lib.doorOpening(room, door, y0, length, Math.min(h - 0.1, door[4] || lib.DOOR_H)));
+    lib.panelGrid(frame, length, bandH, { openings: ops, depth: lib.WALL_T, seed: s++, kick: true, topPipes: false, panelW, styles, paints: lib.DARK_PAINTS, tag: room.id + dir });
+    if (h > bandH + 0.3) {
+      const upper = h - bandH;
+      frame.box("paintedMetal", length / 2, bandH + upper / 2, -0.09, length, upper, 0.14, { color: PALETTE.darkMetal, texel: 0.5 });
+      frame.box("paintedMetal", length / 2, bandH + 0.1, 0.08, length, 0.2, 0.2, { color: PALETTE.gunmetal, texel: 1 });
+      const nRibs = Math.max(1, Math.round(length / 4.5));
+      for (let i = 0; i < nRibs; i++) frame.box("paintedMetal", ((i + 0.5) / nRibs) * length, bandH + upper / 2, 0.1, 0.4, upper, 0.22, { color: PALETTE.gunmetal, texel: 1 });
+      frame.box("paintedMetal", length / 2, h - 0.9, 0.12, length, 0.4, 0.26, { color: PALETTE.darkMetal, texel: 1 });
+      frame.box(bandMat, length / 2, h - 1.17, 0.06, length - 0.4, 0.07, 0.02, { uv: "keep" });
+      if (upper > 3) {
+        const idx = [2, 14, 0, 8];
+        frame.add("decal", new THREE.PlaneGeometry(1.6, 1.6), length * 0.28, bandH + 1.6, -0.015, { uv: "keep", uvRect: decalRect(idx[s % 4]) });
+        frame.add("decal", new THREE.PlaneGeometry(1.6, 1.6), length * 0.72, bandH + 1.6, -0.015, { uv: "keep", uvRect: decalRect(idx[(s + 1) % 4]) });
+      }
+    }
+    frame.box("satinBlack", length / 2, h - 0.09, 0.02, length, 0.18, 0.05);
+  }
+}
+
 // Cylinder between two world points.
 export function cylBetween(kit, mat, a, b, r, opts = {}) {
   const A = new THREE.Vector3(a[0], a[1], a[2]);
@@ -54,6 +85,11 @@ export function pipeRun(kit, mat, pts, r, opts = {}) {
   for (let i = 1; i + 1 < pts.length; i++) kit.add(mat, new THREE.SphereGeometry(r * 1.12, segments, Math.max(6, segments >> 1)), { pos: pts[i], color, uv: "world" });
 }
 
+// pipeRun with the polyline given in a Frame's (u, v, n) coordinates.
+export function framePipe(f, pts, r, opts = {}) {
+  pipeRun(f.kit, opts.mat || "metal", pts.map(([u, v, n]) => f.pos(u, v, n).toArray()), r, opts);
+}
+
 // Bolted flange disc on a pipe at p, pipe direction d.
 export function flange(kit, p, d, r, opts = {}) {
   const { color = PALETTE.gunmetal, t = 0.08 } = opts;
@@ -74,14 +110,14 @@ export function pipeClamp(kit, x, y, z, r, opts = {}) {
 export function valveWheel(kit, cx, cy, cz, axis = "y", r = 0.22, opts = {}) {
   const { color = PALETTE.orange, stem = 0.2 } = opts;
   const rot = axis === "x" ? [0, Math.PI / 2, 0] : axis === "y" ? [Math.PI / 2, 0, 0] : [0, 0, 0];
-  kit.add("painted", new THREE.TorusGeometry(r, 0.024, 8, 24), { pos: [cx, cy, cz], rot, color, uv: "scale", uvScale: [4, 1] });
+  kit.add("painted", new THREE.TorusGeometry(r, 0.024, 6, 16), { pos: [cx, cy, cz], rot, color, uv: "scale", uvScale: [4, 1] });
   for (let k = 0; k < 2; k++) {
     const spin = (k * Math.PI) / 2;
     if (axis === "y") kit.add("metal", new THREE.BoxGeometry(r * 2, 0.02, 0.02), { pos: [cx, cy, cz], rot: [0, spin, 0], color: PALETTE.steel });
     else if (axis === "x") kit.add("metal", new THREE.BoxGeometry(0.02, r * 2, 0.02), { pos: [cx, cy, cz], rot: [spin, 0, 0], color: PALETTE.steel });
     else kit.add("metal", new THREE.BoxGeometry(r * 2, 0.02, 0.02), { pos: [cx, cy, cz], rot: [0, 0, spin], color: PALETTE.steel });
   }
-  kit.cyl("metal", cx, cy, cz, 0.04, 0.06, axis, { color: PALETTE.steel, segments: 10 });
+  kit.cyl("metal", cx, cy, cz, 0.04, 0.06, axis, { color: PALETTE.steel, segments: 8 });
   const off = stem / 2;
   const sp = axis === "x" ? [cx - off, cy, cz] : axis === "y" ? [cx, cy - off, cz] : [cx, cy, cz - off];
   kit.cyl("metal", sp[0], sp[1], sp[2], 0.025, stem, axis, { color: PALETTE.gunmetal, segments: 8 });
@@ -179,7 +215,7 @@ export function cageLight(kit, ctx, x, yCeil, z, drop, opts = {}) {
     const a = (k / 6) * Math.PI * 2;
     kit.box("metal", x + Math.cos(a) * 0.15, y - 0.14, z + Math.sin(a) * 0.15, 0.012, 0.3, 0.012, { color: PALETTE.gunmetal });
   }
-  kit.add("metal", new THREE.TorusGeometry(0.15, 0.008, 6, 18), { pos: [x, y - 0.28, z], rot: [Math.PI / 2, 0, 0], color: PALETTE.gunmetal, uv: "scale", uvScale: [4, 1] });
+  kit.add("metal", new THREE.TorusGeometry(0.15, 0.008, 5, 12), { pos: [x, y - 0.28, z], rot: [Math.PI / 2, 0, 0], color: PALETTE.gunmetal, uv: "scale", uvScale: [4, 1] });
   ctx.lights.warm.push(pointLight(color, intensity, distance, [x, y - 0.45, z]));
 }
 
@@ -366,12 +402,17 @@ export function chair(f, u, n) {
   f.collider(u - 0.3, u + 0.3, 0, 1.0, n - 0.3, n + 0.3, "chair");
 }
 
+// Frame parallel to `f`, shifted `n` along its normal (to build on the face of a plate placed at n).
+export function offsetFrame(f, n) {
+  return new Frame(f.kit, f.pos(0, 0, n), f.U, f.V);
+}
+
 // Wall-mounted round pressure gauge (in a wall frame): bezel, dark face, emissive tick ring and needle.
 export function gauge(frame, u, v, r = 0.18, opts = {}) {
   const { mat = "emitAmber", needle = 0.6 } = opts;
-  frame.cylN("metal", u, v, 0.03, r, 0.06, { color: PALETTE.gunmetal, segments: 20 });
-  frame.cylN("darkGloss", u, v, 0.061, r - 0.025, 0.004, { segments: 20 });
-  frame.add(mat, new THREE.TorusGeometry(r - 0.045, 0.008, 6, 24), u, v, 0.066);
+  frame.cylN("metal", u, v, 0.03, r, 0.06, { color: PALETTE.gunmetal, segments: 14 });
+  frame.cylN("darkGloss", u, v, 0.061, r - 0.025, 0.004, { segments: 14 });
+  frame.add(mat, new THREE.TorusGeometry(r - 0.045, 0.008, 4, 18), u, v, 0.066);
   // needle pivots about the dial centre: sweep runs from 7:30 (0) to 4:30 (1)
   const ang = Math.PI * 1.25 - needle * Math.PI * 1.5;
   const L = r - 0.07;
@@ -389,6 +430,25 @@ export function breakerColumn(frame, u, v0, count, opts = {}) {
     frame.box("painted", u, v + (on ? 0.02 : -0.02), 0.06, 0.04, 0.05, 0.05, { color: on ? PALETTE.orange : PALETTE.creamDark, uv: "keep" });
     frame.box(on ? "emitAmber" : "emitOrange", u + 0.035, v + 0.04, 0.041, 0.012, 0.012, 0.004);
   }
+}
+
+// Wheeled tool cart (orange drawer chest with a push handle and tools on top), yaw as in yawFrame.
+export function toolCart(kit, x, y, z, yaw = 0, seed = 1) {
+  const f = yawFrame(kit, x, y, z, yaw);
+  f.box("painted", 0, 0.52, 0, 0.9, 0.72, 0.55, { color: PALETTE.orange, uv: "keep" });
+  f.box("metal", 0, 0.9, 0, 0.96, 0.04, 0.62, { color: PALETTE.darkMetal, texel: 2 });
+  for (let d = 0; d < 3; d++) {
+    f.box("satinBlack", 0, 0.3 + d * 0.2, 0.278, 0.82, 0.16, 0.01);
+    f.box("metal", 0, 0.3 + d * 0.2, 0.29, 0.5, 0.025, 0.02, { color: PALETTE.steel });
+  }
+  for (const [u, n] of [[-0.36, -0.2], [0.36, -0.2], [-0.36, 0.2], [0.36, 0.2]]) f.cylU("rubber", u, 0.08, n, 0.08, 0.06, { color: PALETTE.rubber, segments: 10 });
+  f.cylV("metal", -0.52, 0.65, 0.22, 0.015, 0.7, { color: PALETTE.steel, segments: 6 });
+  f.cylV("metal", -0.52, 0.65, -0.22, 0.015, 0.7, { color: PALETTE.steel, segments: 6 });
+  f.cylU("metal", -0.52, 1.0, 0, 0.015, 0.02, { color: PALETTE.steel, segments: 6 });
+  f.box("metal", -0.52, 1.0, 0, 0.03, 0.03, 0.46, { color: PALETTE.steel });
+  const p = f.pos(0.05, 0.92, 0);
+  toolCluster(kit, p.x, p.y, p.z, seed);
+  f.collider(-0.6, 0.5, 0, 1.05, -0.32, 0.32, "cart");
 }
 
 // Small kit-bashed props for benches and carts: returns nothing, adds a cluster of tools at (x, y, z).

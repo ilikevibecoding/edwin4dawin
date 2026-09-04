@@ -65,7 +65,7 @@ export function build(kit, ctx, room, lib) {
   for (const [dir, { frame, length }] of Object.entries(shell.frames)) {
     const ops = [];
     for (const door of room.doors || []) if (door[3] === dir) ops.push(lib.doorOpening(room, door, y0, length, Math.min(h - 0.1, door[4] || lib.DOOR_H)));
-    lib.panelGrid(frame, length, 3.2, { openings: ops, depth: lib.WALL_T, seed: seed++, kick: true, topPipes: false, panelW: 1.6, styles: { panel: 0.72, vent: 0.1, conduit: 0.1, strip: 0.08 }, paints: lib.DARK_PAINTS, tag: room.id + dir });
+    lib.panelGrid(frame, length, 3.2, { openings: ops, depth: lib.WALL_T, seed: seed++, kick: true, topPipes: false, panelW: 2.2, styles: { panel: 0.74, vent: 0.1, conduit: 0.08, strip: 0.08 }, paints: lib.DARK_PAINTS, tag: room.id + dir });
     frame.box("paintedMetal", length / 2, 3.2 + (h - 3.2) / 2, -0.09, length, h - 3.2, 0.14, { color: PALETTE.darkMetal, texel: 0.5 });
     frame.box("paintedMetal", length / 2, 3.3, 0.08, length, 0.2, 0.2, { color: PALETTE.gunmetal, texel: 1 });
     const nRibs = Math.round(length / 5.5);
@@ -189,7 +189,7 @@ export function build(kit, ctx, room, lib) {
     const yb = y0 + b;
     kit.cyl("paintedMetal", cx, (ya + yb) / 2, cz, COLLAR_R, yb - ya, "y", { color: PALETTE.gunmetal, segments: 48, texel: 0.5 });
     kit.cyl("satinBlack", cx, (ya + yb) / 2, cz, COLLAR_R + 0.06, (yb - ya) * 0.3, "y", { segments: 48 });
-    kit.add("metal", new THREE.TorusGeometry(COLLAR_R + 0.45, 0.42, 12, 64), { pos: [cx, (ya + yb) / 2, cz], rot: [Math.PI / 2, 0, 0], color: PALETTE.steel, uv: "world", texel: 1 });
+    kit.add("metal", new THREE.TorusGeometry(COLLAR_R + 0.45, 0.42, 8, 48), { pos: [cx, (ya + yb) / 2, cz], rot: [Math.PI / 2, 0, 0], color: PALETTE.steel, uv: "world", texel: 1 });
     for (let i = 0; i < 16; i++) {
       const ang = (i / 16) * Math.PI * 2;
       const r = COLLAR_R + 0.45;
@@ -209,7 +209,7 @@ export function build(kit, ctx, room, lib) {
     const n = Math.max(2, Math.round((b - a) / 1.3));
     for (let i = 0; i < n; i++) {
       const y = y0 + a + ((i + 0.5) / n) * (b - a);
-      kit.add("emitWhiteSoft", new THREE.TorusGeometry(CORE_R + 0.08, 0.05, 6, 64), { pos: [cx, y, cz], rot: [Math.PI / 2, 0, 0], uv: "keep" });
+      kit.add("emitWhiteSoft", new THREE.TorusGeometry(CORE_R + 0.08, 0.05, 4, 48), { pos: [cx, y, cz], rot: [Math.PI / 2, 0, 0], uv: "keep" });
     }
   }
   // eight vertical struts of the containment cage with blue running lights
@@ -234,20 +234,19 @@ export function build(kit, ctx, room, lib) {
     }
     const merged = mergeGeometries(parts, false);
     const mat = ctx.materials.emitBlueSoft.clone();
-    mat.emissiveIntensity = 3.0;
+    mat.emissive = new THREE.Color("#9cc8ff");
+    mat.emissiveIntensity = 1.35;
     const core = new THREE.Mesh(merged, mat);
     core.name = "reactorCore";
     core.castShadow = false;
     core.receiveShadow = false;
+    // the chamber is lit by the column itself: one strong source on the axis per glow gap (inverse-square
+    // falloff over a 44 x 37 x 30 m room needs a few hundred candela, not a scatter of small lights)
     const coreLights = [];
     for (const [k, [a, b]] of GAPS.entries()) {
-      const n = k < 2 ? 4 : 2;
-      for (let i = 0; i < n; i++) {
-        const ang = (i / n) * Math.PI * 2 + (k % 2) * (Math.PI / 4);
-        const l = pointLight(0xa8d4ff, k < 2 ? 16 : 12, 55, [cx + Math.cos(ang) * (COLLAR_R - 0.8), y0 + (a + b) / 2, cz + Math.sin(ang) * (COLLAR_R - 0.8)]);
-        ctx.lights.teal.push(l);
-        coreLights.push(l);
-      }
+      const l = pointLight(0xa8d4ff, [130, 160, 150, 110][k], 70, [cx, y0 + (a + b) / 2, cz]);
+      ctx.lights.teal.push(l);
+      coreLights.push(l);
     }
     let t = 0;
     const base = mat.emissiveIntensity;
@@ -311,7 +310,7 @@ export function build(kit, ctx, room, lib) {
     kit.box("paintedMetal", px, walkY + 2.28, pz, 0.34, 0.16, 0.34, { color: PALETTE.gunmetal, texel: 2 });
     kit.box("emitAmber", px, walkY + 2.18, pz, 0.26, 0.05, 0.26, { uv: "keep" });
     kit.collider([px - 0.2, walkY, pz - 0.2], [px + 0.2, walkY + 2.3, pz + 0.2], "lamp");
-    ctx.lights.warm.push(pointLight(0xffb060, 4, 10, [px, walkY + 1.9, pz]));
+    ctx.lights.warm.push(pointLight(0xffb060, 12, 14, [px, walkY + 1.9, pz]));
   }
 
   // ---------------------------------------------------------------- two stair runs (port and starboard)
@@ -363,8 +362,8 @@ export function build(kit, ctx, room, lib) {
       for (const [row, v] of [1.85, 4.55].entries()) {
         for (const u of [-2.35, 0, 2.35]) {
           f.cylN("paintedMetal", u, v, 1.4, 0.88, 2.4, { color: row ? PALETTE.slate : PALETTE.gunmetal, segments: 28, texel: 0.8 });
-          f.add("metal", new THREE.TorusGeometry(0.86, 0.1, 10, 40), u, v, 2.62, { color: PALETTE.steel, uv: "scale", uvScale: [6, 1] });
-          f.add("metal", new THREE.TorusGeometry(0.86, 0.08, 10, 40), u, v, 0.4, { color: PALETTE.steel, uv: "scale", uvScale: [6, 1] });
+          f.add("metal", new THREE.TorusGeometry(0.86, 0.1, 6, 20), u, v, 2.62, { color: PALETTE.steel, uv: "scale", uvScale: [6, 1] });
+          f.add("metal", new THREE.TorusGeometry(0.86, 0.08, 6, 20), u, v, 0.4, { color: PALETTE.steel, uv: "scale", uvScale: [6, 1] });
           f.cylN("metal", u, v, 2.75, 0.3, 0.3, { color: PALETTE.darkMetal, segments: 16 });
           f.cylN("emitBlueSoft", u, v, 2.92, 0.46, 0.06, { segments: 24, uv: "keep" });
           f.box("metal", u, v - 0.6, 2.75, 0.5, 0.25, 0.3, { color: PALETTE.darkMetal, texel: 2 });
@@ -375,7 +374,7 @@ export function build(kit, ctx, room, lib) {
       f.box("emitBlueSoft", 0, 3.2, 3.0, 0.12, 2.7, 0.1, { uv: "keep" });
       f.box("paintedMetal", 0, 6.4, 1.5, 7.4, 0.3, 3.0, { color: PALETTE.gunmetal, texel: 1 });
       f.collider(-3.75, 3.75, 0, 6.6, 0, 3.3, "capBank");
-      ctx.lights.cool.push(pointLight(0xdfe8ff, 6, 16, [wx - s * 4.5, y0 + 7.0, zc]));
+      ctx.lights.cool.push(pointLight(0xdfe8ff, 28, 22, [wx - s * 4.5, y0 + 7.0, zc]));
     }
     // wall stretches between the banks: light bars, a console, a stencil
     const f = shell.frames[s < 0 ? "-x" : "+x"].frame;
@@ -448,9 +447,18 @@ export function build(kit, ctx, room, lib) {
   });
 
   // ---------------------------------------------------------------- lights beyond the core
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 6, 12, [cx, y0 + 3.2, z1 - 3.0]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 6, 14, [cx, y0 + 4.0, z0 + 3.5]));
-  ctx.lights.teal.push(pointLight(0x6fb4ff, 3, 8, [cx, pitY + 0.8, cz + PIT_A - 0.9]));
-  ctx.lights.teal.push(pointLight(0x6fb4ff, 3, 8, [cx, pitY + 0.8, cz - PIT_A + 0.9]));
+  // the axis lights cannot reach surfaces facing away from the axis (collars, plinth, cage struts), so
+  // blue-white ring lights outside the catwalk shine back at the core at three heights
+  for (const [ry, inten] of [[9.0, 70], [15.5, 60], [22.5, 55]]) {
+    for (let k = 0; k < 4; k++) {
+      const ang = Math.PI / 4 + (k * Math.PI) / 2;
+      ctx.lights.cool.push(pointLight(0xbfd8ff, inten, 34, [cx + Math.cos(ang) * 11.5, y0 + ry, cz + Math.sin(ang) * 11.5]));
+    }
+  }
+  ctx.lights.cool.push(pointLight(0xbfd8ff, 40, 20, [cx, y0 + 3.6, cz + PIT_A + 4.5]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 24, 18, [cx, y0 + 3.4, z1 - 3.0]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 30, 20, [cx, y0 + 4.5, z0 + 3.5]));
+  ctx.lights.teal.push(pointLight(0x6fb4ff, 7, 10, [cx, pitY + 0.8, cz + PIT_A - 0.9]));
+  ctx.lights.teal.push(pointLight(0x6fb4ff, 7, 10, [cx, pitY + 0.8, cz - PIT_A + 0.9]));
   return shell;
 }
