@@ -128,4 +128,13 @@ None. No scaffold yet — working against the contract text with a local shim.
 ## Interface notes
 - Future-expansion doors use `to: null` (not an unknown room id) so the registry's "neighbour does not
   declare the door" check stays quiet; the doors system builds `to: null` locked with an info log, and
-  warns only when `to` names a room that exists but does not declare the id.
+  warns only when `to` names a room that exists but does not declare the id. Doors whose `to` names a
+  room that does not exist (B's `d1-future-*`) are also built locked, with a `[doors]` warning.
+- **Lift door opening = 2.4 w × 3.0 h, centred on the lift anchor** (`LIFT_DOOR` in
+  `src/systems/lifts/helper.js`). B and C already cut that size on decks 1–3 — confirmed, no change
+  needed. `liftCabinBox(lift)` returns the 4 × 4 × 3.6 volume to keep free.
+- Door-hole helpers for every deck: `src/systems/doors/helper.js` exports `doorHole(kindOrDoor)`,
+  `doorOpening(door)` (world AABB + u/v extents on the wall), `doorAsWallOpening(door, from, to)`
+  (a `panelGrid`-style opening record), `WALL_T` 0.16, `FRAME_W` 0.22.
+- Corridor kit (`src/systems/corridor/corridor.js`) signature is §9.3 plus `caps: {start, end}` and
+  `openings: [{ side: "L"|"R"|"start"|"end", u, w, h, offset }]`; documented at the top of the file.
