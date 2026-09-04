@@ -166,7 +166,8 @@ export function buildBriefing(kit, ctx) {
     kit.box("impPaintedMetal", x0 + t + 0.3, y + 1.9, 606.1, 0.5, 0.05, 2.2, { color: IMP.trim, texel: 1 });
     for (let i = 0; i < 3; i++) kit.add("impPaintedMetal", new THREE.SphereGeometry(0.16, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [x0 + t + 0.3, y + 1.93, 605.4 + i * 0.7], color: IMP.wallLight, uv: "scale", uvScale: [1, 1] });
     placard(frame, w.u(56.4), 3.1, 0.6, 3);
-    pointLightDesc(ctx, WHITE, 1.4, 6, [56.4, y + 3.0, 606.6], 0);
+    // the alcove's key under the soffit (its fascia bands light nothing since the dimming)
+    pointLightDesc(ctx, WHITE, 2.6, 8, [56.4, y + 3.0, 606.6], 0);
     floorDecal(kit, 58.6, y, 607.2, 0.8, 13);
   }
 
