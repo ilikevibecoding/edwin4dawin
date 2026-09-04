@@ -21,8 +21,8 @@ const BUNK_W = 0.9;
 const SHELF_Y = [0.33, 0.99, 1.65];
 const STACK_H = 2.35;
 // bedding colours: grey-blue regulation issue (blanket, mattress ticking), off-white pillow / turned sheet
-const BED_BLANKET = 0x5a6884;
-const BED_BLANKET_FOLD = 0x72809b;
+const BED_BLANKET = 0x46546e;
+const BED_BLANKET_FOLD = 0x5e6c88;
 const BED_MATTRESS = 0x9aa2b0;
 const BED_SHEET = 0xdadee6;
 const BED_PILLOW = 0xe0e4ea;
@@ -430,8 +430,8 @@ export function buildCrewQuarters(kit, ctx, room) {
   // Every key has a shade: a hollow black slot fixture hanging 0.6 m under the ceiling on two stems. The three
   // keys the spawn looks at (the near barracks pair and the door zone) are down-spots just under the louvres,
   // so no light reaches the ceiling above them and the near bunks throw real shadows; the far keys are
-  // linear-falloff points held low (2.0 m, top-berth height) so the ceiling above them gets a soft wash, not
-  // a hot blob, and the berth fronts are lit face-on.
+  // linear-falloff points held low (1.5 m, 1.3 m under their shades: any closer and the black louvres light
+  // up into a blob) so the ceiling above them gets a soft wash and the berth fronts are lit face-on.
   const warm = 0xf6ead6;
   const shadeDrop = 0.6;
   const shadeBottom = h - shadeDrop - 0.2;
@@ -450,11 +450,11 @@ export function buildCrewQuarters(kit, ctx, room) {
   for (const [x, z] of rig) slotLight(kit, x, z, h, 1.6, "z", "emitWhiteDim", { drop: shadeDrop });
   spot(5.6, -5.9, 11.0, 0.6, { shadow: true });
   spot(5.6, 5.9, 11.0, 0.58);
-  spot(12.5, 0, 6.0, 0.56, { color: 0xe6ecfa });
-  const ky = 2.0;
-  keyLight(kit, -1.4, ky, -5.9, { color: warm, k: 7.4, distance: 13, priority: 0.5 });
-  keyLight(kit, -1.4, ky, 5.9, { color: warm, k: 7.4, distance: 13, priority: 0.49 });
-  keyLight(kit, -8.4, ky, -5.9, { color: warm, k: 7.0, distance: 12, priority: 0.48 });
-  keyLight(kit, -8.4, ky, 5.9, { color: warm, k: 7.0, distance: 12, priority: 0.47 });
-  keyLight(kit, -14.6, ky, 0, { color: warm, k: 7.8, distance: 14, priority: 0.46 });
+  spot(12.5, 0, 7.0, 0.56, { color: 0xe6ecfa });
+  const ky = 1.5;
+  keyLight(kit, -1.4, ky, -5.9, { color: warm, k: 9.0, distance: 13, priority: 0.5 });
+  keyLight(kit, -1.4, ky, 5.9, { color: warm, k: 9.0, distance: 13, priority: 0.49 });
+  keyLight(kit, -8.4, ky, -5.9, { color: warm, k: 8.5, distance: 12, priority: 0.48 });
+  keyLight(kit, -8.4, ky, 5.9, { color: warm, k: 8.5, distance: 12, priority: 0.47 });
+  keyLight(kit, -14.6, ky, 0, { color: warm, k: 9.5, distance: 14, priority: 0.46 });
 }

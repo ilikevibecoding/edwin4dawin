@@ -96,11 +96,11 @@ function buildCell(kit, ctx, cx, cz, yaw, number, opts = {}) {
   for (const s of [-1, 1]) {
     p.box("impTrim", s * (half - 0.16), h / 2, half + 0.02, 0.32, h, 0.36, { color: CHR, texel: 1 });
     p.box("impMetal", s * (half - 0.16), h / 2, half + 0.205, 0.2, h - 0.5, 0.02, { color: GD, texel: 1 });
-    p.box(ACCENT, s * (half - 0.32) - s * 0.0, 1.5, half + 0.02, 0.012, h - 0.6, 0.06);
+    p.box("emitRedDim", s * (half - 0.32) - s * 0.0, 1.5, half + 0.02, 0.012, h - 0.6, 0.06);
     for (let k = 0; k < 5; k++) p.box("impMetal", s * (half - 0.16), 0.5 + k * 0.5, half + 0.21, 0.16, 0.03, 0.01, { color: GD });
   }
   p.box("impTrim", 0, h - 0.2, half + 0.02, size - 0.3, 0.4, 0.36, { color: CHR, texel: 1 });
-  p.box(ACCENT, 0, h - 0.42, half + 0.02, size - 0.66, 0.012, 0.06);
+  p.box("emitRedDim", 0, h - 0.42, half + 0.02, size - 0.66, 0.012, 0.06);
   p.decal(decal, 0, h - 0.2, half + 0.205, 0.32);
   p.box("scrRed1", 0.9, h - 0.2, half + 0.205, 0.4, 0.16, 0.01, { uv: "keep" });
   p.box(occupied ? "emitRedImp" : "emitGreen", -0.9, h - 0.2, half + 0.205, 0.08, 0.08, 0.01);
@@ -282,7 +282,8 @@ export function buildDetention(kit, ctx, room) {
   // force fields: one mesh for all eight doorways; shimmer = opacity flicker on the shared material (allocation-free)
   kit.attach(new THREE.Mesh(mergeGeometries(cctx.fieldGeos, false), fieldMat));
   kit.onUpdate((dt, t) => {
-    fieldMat.opacity = 0.2 + 0.05 * Math.sin(t * 9.0) + 0.03 * Math.sin(t * 23.0);
+    // faint: the bars, lock box and the cell behind must read through it (a strong field was a red slab)
+    fieldMat.opacity = 0.085 + 0.025 * Math.sin(t * 9.0) + 0.015 * Math.sin(t * 23.0);
   });
   // pillars between cell pairs carrying beacons; cable runs over the cell roofs
   for (const s of [-1, 1]) {
@@ -423,10 +424,10 @@ export function buildDetention(kit, ctx, room) {
   // spawn (over the railing gate, so it lights the desk front and the floor beyond it rather than the deck behind
   // the camera), two side keys over the open floor between the desk wings and the cell rows (that floor read as
   // a black void when the only cool light sat on the centre line), one aisle key behind the desk
-  keyLight(kit, 0, h - 1.0, -4.4, { color: 0xff4a34, k: 3.2, distance: 12, priority: 0.5 });
-  keyLight(kit, 0, h - 1.0, -7.6, { color: 0xdfe8ff, k: 3.4, distance: 13, priority: 0.47 });
+  keyLight(kit, 0, h - 1.0, -4.4, { color: 0xff4a34, k: 3.6, distance: 12, priority: 0.5 });
+  keyLight(kit, 0, h - 1.0, -7.6, { color: 0xdfe8ff, k: 4.6, distance: 13, priority: 0.47 });
   // (the side keys carry a faint rose cast so the block's floor stays in the red family rather than going steel-blue)
-  keyLight(kit, -8.0, h - 1.0, -4.6, { color: 0xf4dcd6, k: 3.2, distance: 14, priority: 0.46 });
-  keyLight(kit, 8.0, h - 1.0, -4.6, { color: 0xf4dcd6, k: 3.2, distance: 14, priority: 0.45 });
-  keyLight(kit, 0, h - 1.0, 2.5, { color: 0xdfe8ff, k: 3.0, distance: 14, priority: 0.43 });
+  keyLight(kit, -8.0, h - 1.0, -4.6, { color: 0xf4dcd6, k: 4.4, distance: 14, priority: 0.46 });
+  keyLight(kit, 8.0, h - 1.0, -4.6, { color: 0xf4dcd6, k: 4.4, distance: 14, priority: 0.45 });
+  keyLight(kit, 0, h - 1.0, 2.5, { color: 0xdfe8ff, k: 4.0, distance: 14, priority: 0.43 });
 }
