@@ -93,8 +93,11 @@ export function createHUD() {
     },
     setStartMode(mode) {
       start.dataset.mode = mode;
-      $("start-hint").textContent = mode === "interior" ? "Click to resume" : "Click to take command";
-      $("start-keys").textContent = mode === "interior" ? "WASD move · Shift sprint · mouse look · E interact · V exterior · Esc release" : "Drag to orbit · wheel to zoom · F free-fly · Enter to board";
+      const touch = document.body.classList.contains("touch");
+      const verb = touch ? "Tap" : "Click";
+      $("start-hint").textContent = mode === "interior" ? `${verb} to resume` : `${verb} to take command`;
+      if (touch) $("start-keys").textContent = mode === "interior" ? "left thumb: walk · right thumb: look · USE / RUN / EXTERIOR buttons" : "drag to orbit · pinch to zoom · BOARD to go inside";
+      else $("start-keys").textContent = mode === "interior" ? "WASD move · Shift sprint · mouse look · E interact · V exterior · Esc release" : "Drag to orbit · wheel to zoom · F free-fly · Enter to board";
     },
     setStats(text) {
       stats.textContent = text;
@@ -111,6 +114,26 @@ export function createHUD() {
         menu.classList.add("hidden");
         onChoose(k);
       };
+      // tappable entries (touch / mouse)
+      [...menuList.children].forEach((li, i) => {
+        li.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (!menuHandler) return;
+          const h = menuHandler;
+          menuHandler = null;
+          h(i);
+        });
+      });
+      const foot = menu.querySelector(".menu-foot");
+      if (foot) {
+        foot.textContent = document.body.classList.contains("touch") ? "tap outside to cancel" : "Esc cancel";
+        foot.onclick = () => {
+          if (!menuHandler) return;
+          const h = menuHandler;
+          menuHandler = null;
+          h(null);
+        };
+      }
     },
     hideMenu() {
       menu.classList.add("hidden");

@@ -36,6 +36,9 @@ export class Player {
     this.onLockChange = null;
     this.onFall = null;
     this._t = 0;
+    // touch mode: no pointer lock; movement from a virtual stick, look from drag deltas
+    this.touchMode = false;
+    this.touch = { move: new THREE.Vector2(), sprint: false };
 
     this._onMouseMove = (e) => {
       if (!this.locked || this.frozen || !this.enabled) return;
@@ -62,12 +65,28 @@ export class Player {
 
   requestLock() {
     if (this.locked) return;
+    if (this.touchMode) {
+      this.locked = true;
+      if (this.onLockChange) this.onLockChange(true);
+      return;
+    }
     const p = this.dom.requestPointerLock({ unadjustedMovement: true });
     if (p && p.catch) p.catch(() => this.dom.requestPointerLock());
   }
 
   releaseLock() {
+    if (this.touchMode) {
+      this.locked = false;
+      return;
+    }
     if (this.locked) document.exitPointerLock();
+  }
+
+  /** Touch look: apply yaw / pitch deltas in radians. */
+  touchLook(dyaw, dpitch) {
+    if (this.frozen || !this.enabled) return;
+    this.yaw += dyaw;
+    this.pitch = THREE.MathUtils.clamp(this.pitch + dpitch, -PITCH_LIMIT, PITCH_LIMIT);
   }
 
   setPose(x, y, z, yawDeg, pitchDeg = 0) {
@@ -94,16 +113,23 @@ export class Player {
       return;
     }
     const k = this.keys;
-    const fwd = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
-    const strafe = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
-    const sprint = k.has("ShiftLeft") || k.has("ShiftRight");
+    let fwd = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
+    let strafe = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
+    let sprint = k.has("ShiftLeft") || k.has("ShiftRight");
+    let mag = 1;
+    if (this.touchMode) {
+      fwd += this.touch.move.y;
+      strafe += this.touch.move.x;
+      sprint = sprint || this.touch.sprint;
+      mag = Math.min(1, Math.hypot(fwd, strafe));
+    }
     const wish = new THREE.Vector3();
     if (this.locked && (fwd || strafe)) {
       const fx = -Math.sin(this.yaw);
       const fz = -Math.cos(this.yaw);
       const rx = Math.cos(this.yaw);
       const rz = -Math.sin(this.yaw);
-      wish.set(fx * fwd + rx * strafe, 0, fz * fwd + rz * strafe).normalize().multiplyScalar(sprint ? SPRINT : WALK);
+      wish.set(fx * fwd + rx * strafe, 0, fz * fwd + rz * strafe).normalize().multiplyScalar((sprint ? SPRINT : WALK) * mag);
     }
     const t = 1 - Math.exp(-ACCEL * dt);
     this.velocity.lerp(wish, t);

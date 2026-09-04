@@ -15,12 +15,14 @@ function timed(name, fn) {
   return r;
 }
 
-export function buildMaterials() {
+/** opts.mobile: smaller procedural textures (4x faster generation, a quarter of the texture memory). */
+export function buildMaterials({ mobile = false } = {}) {
+  const big = mobile ? 512 : 1024;
   const panel = timed("imperialPanel", () => makeImperialPanel(512, 5));
-  const metal = timed("wornMetal", () => makeWornMetal(1024, 23));
-  const deckBlack = timed("deckBlack", () => makeDeckBlack(1024, 43));
-  const deckGrey = timed("deckGrey", () => makeDeckGrey(1024, 47));
-  const hull = timed("hullPlate", () => makeHullPlate(2048, 31));
+  const metal = timed("wornMetal", () => makeWornMetal(big, 23));
+  const deckBlack = timed("deckBlack", () => makeDeckBlack(big, 43));
+  const deckGrey = timed("deckGrey", () => makeDeckGrey(big, 47));
+  const hull = timed("hullPlate", () => makeHullPlate(mobile ? 1024 : 2048, 31));
   const rubber = timed("rubber", () => makeRubber(256, 53));
   const fabric = timed("fabric", () => makeFabric(256, 67));
   const hazard = timed("hazard", () => makeHazard(256, 71));
@@ -28,7 +30,7 @@ export function buildMaterials() {
   const grate = timed("grate", () => makeGrate(1024, 768, 61));
   const diffuser = timed("diffuser", () => makeDiffuser(256, 13));
   const decals = timed("decals", () => makeDecalSheet(1024, 19));
-  const screens = timed("screens", () => makeScreenAtlas(2048, 5));
+  const screens = timed("screens", () => makeScreenAtlas(mobile ? 1024 : 2048, 5));
   const leds = timed("leds", () => makeLedAtlas(1024, 9));
 
   const std = (set, extra = {}) =>

@@ -20,6 +20,7 @@ import { createHUD } from "./hud.js";
 import { SYSTEMS } from "./core/systems.js";
 import { createFighters } from "./fighters/index.js";
 import { createAtmosphere } from "./systems/atmosphere.js";
+import { TouchControls, isTouchDevice } from "./systems/touch.js";
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 const bootT0 = performance.now();
@@ -29,8 +30,11 @@ const timings = {};
 // Renderer / scene
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById("view");
+const TOUCH = isTouchDevice();
+const MOBILE = TOUCH || Math.min(window.innerWidth, window.innerHeight) < 620;
+if (TOUCH) document.body.classList.add("touch");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, MOBILE ? 1.0 : 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -53,7 +57,7 @@ await nextFrame();
 // World
 // ---------------------------------------------------------------------------
 let t0 = performance.now();
-const materials = buildMaterials();
+const materials = buildMaterials({ mobile: MOBILE });
 timings.materials = +(performance.now() - t0).toFixed(0);
 hud.setLoading(0.35, "Laying down 1,600 m of hull…");
 await nextFrame();
@@ -71,7 +75,7 @@ await nextFrame();
 // sun + fill
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
 sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.mapSize.set(MOBILE ? 2048 : 4096, MOBILE ? 2048 : 4096);
 sun.shadow.bias = -0.0006;
 sun.shadow.normalBias = 0.6;
 scene.add(sun);
@@ -139,11 +143,11 @@ player.onLockChange = (locked) => {
   } else if (!debugMode && modes.isInterior) hud.showStart();
 };
 hud.startEl.addEventListener("click", () => {
+  audio.start();
   if (modes.isInterior) player.requestLock();
-  else {
-    hud.hideStart();
-    audio.start();
-  }
+  else hud.hideStart();
+  // phones: go full screen for an immersive view (ignored where unsupported, e.g. iOS Safari)
+  if (TOUCH && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
 });
 
 function roomAudioProfile(def) {
@@ -189,12 +193,14 @@ function onModeChange(mode) {
   hud.showCrosshair(mode === "interior");
   if (post) post.setMode(mode);
   hud.setStartMode(mode);
+  if (touchControls) touchControls.setMode(mode);
 }
 
 // ---------------------------------------------------------------------------
 // Post
 // ---------------------------------------------------------------------------
 const post = createPost(renderer, scene, camera);
+const touchControls = TOUCH ? new TouchControls({ player, rig, modes, hud, audio, interactions }) : null;
 
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -206,13 +212,20 @@ window.addEventListener("resize", () => {
 // ---------------------------------------------------------------------------
 // Adaptive quality (pixel ratio + AO quality); never removes content
 // ---------------------------------------------------------------------------
-const QUALITY_LEVELS = [
-  { ratio: 0.66, ao: "Low" },
-  { ratio: 0.8, ao: "Low" },
-  { ratio: 1.0, ao: "Medium" },
-  { ratio: Math.min(window.devicePixelRatio, 1.5), ao: "Medium" },
-];
-const quality = { level: QUALITY_LEVELS.length - 1, slow: 0, fast: 0, enabled: true };
+const QUALITY_LEVELS = MOBILE
+  ? [
+      { ratio: 0.5, ao: "Performance" },
+      { ratio: 0.66, ao: "Low" },
+      { ratio: 0.85, ao: "Low" },
+    ]
+  : [
+      { ratio: 0.66, ao: "Low" },
+      { ratio: 0.8, ao: "Low" },
+      { ratio: 1.0, ao: "Medium" },
+      { ratio: Math.min(window.devicePixelRatio, 1.5), ao: "Medium" },
+    ];
+const quality = { level: MOBILE ? 1 : QUALITY_LEVELS.length - 1, slow: 0, fast: 0, enabled: true };
+if (MOBILE) applyQuality();
 function applyQuality() {
   const q = QUALITY_LEVELS[quality.level];
   renderer.setPixelRatio(q.ratio);
@@ -453,6 +466,8 @@ const debugAPI = {
       fighters: fighters.stats(),
       qualityLevel: quality.level,
       pixelRatio: renderer.getPixelRatio(),
+      touch: TOUCH,
+      mobile: MOBILE,
       boot: { ...timings, materials: materials.timings, totalMs: +(bootReady - bootT0).toFixed(0) },
       longTasks: longTasks.slice(-20),
       doors: doors.snapshot(),
@@ -538,6 +553,7 @@ function frame() {
   // streaming: at most one room per frame while a cluster is prefetching
   rooms.step();
 
+  if (touchControls) touchControls.update(dt);
   player.update(dt);
   rig.update(dt);
   if (modes.isInterior) {
