@@ -568,7 +568,7 @@ export function createChannels(): ChannelSpec[] {
     // reference channel under the Garza bridge arch and toward the mouth
     { id: 'garza-channel', pts: [[-1000, 3300], [200, 3250], [1000, 3100], [1900, 2400], [2600, 1400], [3400, 400]], width: 90, depth: 7, boats: 9, speed: 12 },
     { id: 'arch-channel', pts: [[-1200, 1200], [-300, 1000], [500, 750], [1400, 300], [2400, -100]], width: 100, depth: 8, boats: 6, speed: 11 },
-    { id: 'ref-boats', pts: [[-500, 3650], [200, 3450], [900, 3150], [1600, 2750]], width: 40, depth: 4, boats: 3, speed: 18 },
+    { id: 'ref-boats', pts: [[-200, 3550], [300, 3250], [520, 2950], [800, 2600], [1200, 2250]], width: 40, depth: 4, boats: 3, speed: 18 },
     // south-west flats route
     { id: 'flats-route', pts: [[-2100, 3400], [-1200, 3500], [-300, 3600], [700, 3700], [1500, 4100]], width: 40, depth: 3, boats: 5, speed: 10 },
     // bay crossing pleasure route

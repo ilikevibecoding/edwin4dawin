@@ -50,9 +50,11 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
     void main() {
       float edge = 1.0 - smoothstep(0.55, 1.0, abs(vSide));
       float life = 1.0 - vAge;
-      // foam is strongest along the two arms of the V and right behind the hull
-      float arms = smoothstep(0.35, 0.75, abs(vSide)) * 0.9 + (1.0 - smoothstep(0.0, 0.3, abs(vSide))) * 0.7 * (1.0 - smoothstep(0.0, 0.35, vAge));
-      float foam = arms * life * life * edge * uStrength;
+      // turbulent white core right behind the hull, fading and thinning with age, plus fainter V arms;
+      // kept wide enough to survive the wake map's ~1.6 m texels (the old thin twin lines aliased into dots)
+      float core = (1.0 - smoothstep(0.0, 0.9, abs(vSide))) * (0.55 + 0.45 * (1.0 - smoothstep(0.0, 0.5, vAge)));
+      float arms = smoothstep(0.45, 0.8, abs(vSide)) * (1.0 - smoothstep(0.85, 1.0, abs(vSide))) * 0.5;
+      float foam = (core + arms) * life * life * edge * uStrength;
       vec2 n = vec2(sign(vSide) * 0.35 * life * edge, 0.0);
       gl_FragColor = vec4(foam, 0.5 + n.x, 0.5 + n.y, edge * life);
     }
@@ -226,8 +228,8 @@ export class WakeTrail {
     for (let i = 0; i < n; i++) {
       const p = this.points[i];
       const age = Math.min(1, (time - p.t) / this.lifetime);
-      // wake widens with age (Kelvin pattern ~19.5 degrees)
-      const w = this.width * (0.35 + 1.3 * age);
+      // the foamy wake spreads slowly with age (the Kelvin wave pattern itself is not foam)
+      const w = this.width * (0.6 + 1.8 * age);
       const nx = -p.dz * w, nz = p.dx * w;
       this.positions[i * 6] = p.x - nx; this.positions[i * 6 + 1] = 0.05; this.positions[i * 6 + 2] = p.z - nz;
       this.positions[i * 6 + 3] = p.x + nx; this.positions[i * 6 + 4] = 0.05; this.positions[i * 6 + 5] = p.z + nz;

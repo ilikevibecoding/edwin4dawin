@@ -176,7 +176,8 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR;
   mss += 0.0025 + 0.004 * wind * mix(0.3, 1.0, open);
 
   // ---- wakes: r = foam, gb = normal perturbation, a = coverage
-  vec2 wuv = (wp - uWakeRegion.xy) / uWakeRegion.z + 0.5;
+  // the wake map is rendered top-down with screen-up = north (-Z), so v grows toward -Z
+  vec2 wuv = vec2(wp.x - uWakeRegion.x, uWakeRegion.y - wp.y) / uWakeRegion.z + 0.5;
   vec4 wake = vec4(0.0);
   if (all(greaterThan(wuv, vec2(0.0))) && all(lessThan(wuv, vec2(1.0)))) wake = texture2D(uWakeTex, wuv);
   g += (wake.gb - 0.5) * 2.0 * wake.a * 0.4;

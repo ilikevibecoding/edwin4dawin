@@ -129,7 +129,7 @@ export class Game {
     this.sky = new Sky(this.atmos, this.renderer, { cloudSteps: q.cloudSteps, scale: q.skyScale });
     this.sky.dome.name = 'sky';
     this.scene.add(this.sky.dome);
-    this.wakes = new WakeMap(1024, 3200);
+    this.wakes = new WakeMap(2048, 3200); // 1.56 m/px: boat wakes are 3-10 m wide
     this.terrain = new Terrain(this.textures);
     this.registerLit(this.terrain.material);
     this.terrain.group.name = 'terrain';
