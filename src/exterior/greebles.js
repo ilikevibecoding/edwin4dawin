@@ -4,7 +4,7 @@
 // with seeded variation so nothing overlaps: each area keeps an occupancy list.
 import * as THREE from "three";
 import { HULL, SUPERSTRUCTURE, TOWER } from "../config/shipSpec.js";
-import { TRENCH_HALF, TRENCH_DEPTH, EDGE_YAW, UP, dorsal, surfaceY, surfaceNormal, surfaceQuat, frameQuat, merge, box, bevelBox, atlasBox, atlasQuad, macroTint, instancedFromList, overlapsAny } from "./util.js";
+import { TRENCH_HALF, TRENCH_DEPTH, EDGE_YAW, UP, dorsal, surfaceY, surfaceNormal, surfaceQuat, frameQuat, merge, box, bevelBox, atlasBox, atlasQuad, macroTint, instancedFromList, layerMesh, overlapsAny } from "./util.js";
 
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
@@ -16,6 +16,9 @@ const _c = new THREE.Color();
 function item(list, p, q, s, c) {
   list.push({ m: new THREE.Matrix4().compose(p, q, s), c: c.clone() });
 }
+
+// Dorsal spine ridge footprint (built in hull.js); the plates and fittings keep clear of it.
+export const SPINE = { halfBase: 15, halfTop: 8.5, height: 3.6, z0: -700, z1: 146 };
 
 // Terrace descriptors: spec box plus the sloped front (rises from the footprint edge to the top over `inset`).
 export function terraceDescriptors() {
@@ -42,68 +45,141 @@ function gridFill(rand, u0, u1, v0, v1, [cMin, cMax], gap, fn) {
 // ---------------------------------------------------------------------------
 // hull armour plates
 // ---------------------------------------------------------------------------
+// Recursive partition of a rectangle into plates of four size classes. Every sub-rectangle first draws
+// its own target size, so a large plate survives wherever the draw comes before the split and seams never
+// line up across the hull (T-junctions instead of a lattice). Emits { x0, x1, z0, z1 }.
+const PLATE_CLASSES = [
+  [0.1, 68, 112],
+  [0.4, 36, 68],
+  [0.8, 18, 36],
+  [1.0, 10, 18],
+];
+function partition(rand, rect, out) {
+  const w = rect.x1 - rect.x0;
+  const d = rect.z1 - rect.z0;
+  const r = rand();
+  const cls = PLATE_CLASSES.find(([p]) => r <= p) || PLATE_CLASSES[3];
+  const target = cls[1] + rand() * (cls[2] - cls[1]);
+  const longest = Math.max(w, d);
+  if (longest <= target || longest < 14) {
+    out.push({ ...rect });
+    return;
+  }
+  // split the longer side (or the aspect-heavy one) at a random ratio
+  const ratio = 0.35 + rand() * 0.3;
+  if (w >= d) {
+    const xm = rect.x0 + w * ratio;
+    partition(rand, { x0: rect.x0, x1: xm, z0: rect.z0, z1: rect.z1 }, out);
+    partition(rand, { x0: xm, x1: rect.x1, z0: rect.z0, z1: rect.z1 }, out);
+  } else {
+    const zm = rect.z0 + d * ratio;
+    partition(rand, { x0: rect.x0, x1: rect.x1, z0: rect.z0, z1: zm }, out);
+    partition(rand, { x0: rect.x0, x1: rect.x1, z0: zm, z1: rect.z1 }, out);
+  }
+}
+
+// Dorsal plates are raised chamfered slabs / skins / strips; ventral plates are flat "paint" quads drawn
+// with polygonOffset (no side faces, so nothing sparkles at grazing angles) whose value jitter gives the
+// belly its legible plating. Returns the cells (plate or bare) for the fittings pass.
 export function buildHullPlates(ctx) {
   const { rand, mats, detail, exclude } = ctx;
   const fams = {
     slab: { geo: bevelBox(30, 1.5, 30, 0.55), w: 30, d: 30, th: 1.5, list: [] },
     skin: { geo: bevelBox(30, 0.6, 30, 0.25), w: 30, d: 30, th: 0.6, list: [] },
     strip: { geo: bevelBox(8, 0.9, 60, 0.35), w: 8, d: 60, th: 0.9, list: [] },
+    paint: { geo: new THREE.PlaneGeometry(30, 30).rotateX(-Math.PI / 2), w: 30, d: 30, th: 0, list: [] },
   };
   const cells = [];
+  const gap = 2.4;
   for (const top of [true, false]) {
     for (const side of [-1, 1]) {
-      let z = HULL.bowZ + 34;
-      const zEnd = HULL.sternZ - 10;
-      while (z < zEnd - 12) {
-        const rowD = 18 + rand() * 34;
-        const z1 = Math.min(z + rowD, zEnd);
-        const hwRow = HULL.halfWidthAt(z) - 9;
-        let x = 5 + rand() * 8;
-        if (top && z1 > 144 && z < 566) x = Math.max(x, 167);
-        if (!top && z1 > HULL.keelPlate.z0 - 6 && z < HULL.keelPlate.z1 + 6) x = Math.max(x, HULL.keelPlate.x + 5);
-        while (x < hwRow - 10) {
-          let cw = 14 + rand() * 34;
-          if (x + cw > hwRow) cw = hwRow - x;
-          if (cw < 10) break;
-          const gap = 2.4;
-          const rect = { x0: side > 0 ? x : -(x + cw), x1: side > 0 ? x + cw : -x, z0: z, z1 };
-          const cell = { ...rect, top, plate: null, th: 0 };
-          const r = rand();
-          const blocked = overlapsAny(rect, top ? exclude.top : exclude.bottom, 3);
-          if (!blocked && r > 0.3) {
-            let fam = r < 0.62 ? "slab" : r < 0.88 ? "skin" : "strip";
-            const w = cw - gap;
-            const d = z1 - z - gap;
-            if (fam === "strip" && !(w < 20 && d > 26)) fam = "slab";
-            const cx = side * (x + cw / 2);
-            const cz = (z + z1) / 2;
-            const f = fams[fam];
-            surfaceQuat(cx, cz, top, _q);
-            surfaceNormal(cx, cz, top, _n);
-            _p.set(cx, surfaceY(cx, cz, top), cz).addScaledVector(_n, 0.04);
-            _s.set(w / f.w, 1, d / f.d);
-            macroTint(cx, _p.y, cz, _n.y, _c);
-            // per-plate paint batch: distinct grey levels with a faint warm/cool drift
-            _c.multiplyScalar(0.84 + rand() * 0.24);
-            const hue = (rand() - 0.5) * 0.05;
-            _c.r *= 1 + hue;
-            _c.b *= 1 - hue * 1.3;
-            item(f.list, _p, _q, _s, _c);
-            cell.plate = fam;
-            cell.th = f.th;
+      // partition short z-bands of the flank (each as wide as its narrow, forward end) so the wedge edge
+      // is followed in steps of random length; the leftover slivers along the edge show the bare hull
+      const rects = [];
+      let zb = HULL.bowZ + 30;
+      while (zb < HULL.sternZ - 40) {
+        const z1 = Math.min(zb + 80 + rand() * 70, HULL.sternZ - 10);
+        partition(rand, { x0: 4, x1: HULL.halfWidthAt(zb) - 9, z0: zb, z1 }, rects);
+        zb = z1;
+      }
+      // the ventral flank strips (ventral.js) run at 56 % of the half-width: rects crossing that band are
+      // split around it so no paint plate lies under a strip
+      if (!top) {
+        const split = [];
+        for (const r of rects) {
+          const b0 = HULL.halfWidthAt(r.z0) * 0.56 - 7;
+          const b1 = HULL.halfWidthAt(r.z1) * 0.56 + 7;
+          if (r.z1 < -520 || r.z0 > 700 || r.x1 <= b0 || r.x0 >= b1) {
+            split.push(r);
+            continue;
           }
-          if (!blocked) cells.push(cell);
-          x += cw + gap;
+          if (b0 - r.x0 > 9) split.push({ ...r, x1: b0 });
+          if (r.x1 - b1 > 9) split.push({ ...r, x0: b1 });
         }
-        z = z1 + 2.4;
+        rects.length = 0;
+        rects.push(...split);
+      }
+      for (const r of rects) {
+        let x1 = r.x1;
+        let x0 = r.x0;
+        if (top && r.z1 > 144 && r.z0 < 566) x0 = Math.max(x0, 167);
+        if (top && r.z1 > SPINE.z0 - 4 && r.z0 < SPINE.z1 + 4) x0 = Math.max(x0, SPINE.halfBase + 3);
+        if (!top && r.z1 > HULL.keelPlate.z0 - 6 && r.z0 < HULL.keelPlate.z1 + 6) x0 = Math.max(x0, HULL.keelPlate.x + 5);
+        if (!top && r.z1 > 640 && r.z0 < 760) x0 = Math.max(x0, 48); // reactor bulb
+        if (!top && x0 < 18 && r.z0 > -600 && r.z1 < 660) x0 = Math.max(x0, 18); // ventral channel
+        const w = x1 - x0 - gap;
+        const d = r.z1 - r.z0 - gap;
+        if (w < 7 || d < 7) continue;
+        const rect = { x0: side > 0 ? x0 : -x1, x1: side > 0 ? x1 : -x0, z0: r.z0, z1: r.z1 };
+        const cell = { ...rect, top, plate: null, th: 0 };
+        if (overlapsAny(rect, top ? exclude.top : exclude.bottom, 3)) continue;
+        const rr = rand();
+        if (rr > 0.28) {
+          let fam;
+          if (!top) fam = "paint";
+          else if (w < 16 && d > 30) fam = "strip";
+          else if (d < 16 && w > 30) fam = "strip";
+          else fam = rr < 0.68 ? "slab" : "skin";
+          const cx = side * (x0 + x1) / 2;
+          const cz = (r.z0 + r.z1) / 2;
+          const f = fams[fam];
+          surfaceQuat(cx, cz, top, _q);
+          surfaceNormal(cx, cz, top, _n);
+          _p.set(cx, surfaceY(cx, cz, top), cz).addScaledVector(_n, fam === "paint" ? 0.05 : 0.04);
+          if (fam === "strip" && d < w) {
+            // strips run along z; yaw the long axis across for the wide-and-shallow case
+            _q2.setFromAxisAngle(UP, Math.PI / 2);
+            _q.multiply(_q2);
+            _s.set(d / f.w, 1, w / f.d);
+          } else _s.set(w / f.w, 1, d / f.d);
+          macroTint(cx, _p.y, cz, _n.y, _c);
+          // per-plate paint batch: ±10 % value jitter with a faint warm/cool drift
+          _c.multiplyScalar(0.9 + rand() * 0.2);
+          const hue = (rand() - 0.5) * 0.05;
+          _c.r *= 1 + hue;
+          _c.b *= 1 - hue * 1.3;
+          item(f.list, _p, _q, _s, _c);
+          cell.plate = fam;
+          cell.th = f.th;
+        }
+        cells.push(cell);
       }
     }
   }
-  for (const [name, f] of Object.entries(fams)) instancedFromList(f.geo, mats.plate, f.list, detail.mid, "plates_" + name);
+  // the three raised families share one mesh (and one shadow pass); the flat paint quads keep their own
+  layerMesh(
+    ["slab", "skin", "strip"].map((n) => ({ geo: fams[n].geo, list: fams[n].list })),
+    mats.plate,
+    detail.mid,
+    "plates",
+  );
+  instancedFromList(fams.paint.geo, mats.paint, fams.paint.list, detail.mid, "plates_paint");
   return cells;
 }
 
-// Hatches (4 m), vents and service-access clusters on free hull cells and on some plate tops.
+// Hatches (4 m), vents and service-access clusters: hardpoints cluster along the trench edges and around
+// the superstructure base with randomised spacing; the open dorsal plane stays nearly bare so no lattice
+// forms at distance. A few hatches ride on plate tops.
 export function buildHullFittings(ctx, cells) {
   const { rand, mats, detail, atlas } = ctx;
   const A = atlas.cells;
@@ -126,38 +202,68 @@ export function buildHullFittings(ctx, cells) {
     _c.multiplyScalar(tone);
     item(list, _p, _q, _s, _c);
   };
+  // density of hardpoints at a hull position: high beside the trench and around the superstructure
+  const density = (x, z, top) => {
+    const edge = HULL.halfWidthAt(z) - Math.abs(x);
+    let k = 0.04;
+    if (edge < 90) k = Math.max(k, 0.9 * (1 - edge / 90));
+    if (top) {
+      const dxSup = Math.max(0, Math.abs(x) - 165);
+      const dzSup = Math.max(0, 140 - z, z - 600);
+      const dSup = Math.hypot(dxSup, dzSup);
+      if (dSup < 80) k = Math.max(k, 0.85 * (1 - dSup / 80));
+    } else {
+      const dKeel = Math.hypot(Math.max(0, Math.abs(x) - 70), Math.max(0, HULL.keelPlate.z0 - 20 - z, z - HULL.keelPlate.z1 - 20));
+      if (dKeel < 70) k = Math.max(k, 0.7 * (1 - dKeel / 70));
+    }
+    return k;
+  };
   for (const cell of cells) {
     const w = cell.x1 - cell.x0;
     const d = cell.z1 - cell.z0;
     if (w < 12 || d < 12) continue;
+    const cx = (cell.x0 + cell.x1) / 2;
+    const cz = (cell.z0 + cell.z1) / 2;
+    const k = density(cx, cz, cell.top);
+    if (rand() > k) continue;
     const r = rand();
     if (cell.plate) {
-      // a few hatches sit on top of plates
-      if (r < 0.14) {
+      if (cell.plate === "paint" || r < 0.5) {
         const n = 1 + Math.floor(rand() * 3);
-        for (let k = 0; k < n; k++) place(hatches, cell.x0 + 4 + rand() * (w - 8), cell.z0 + 4 + rand() * (d - 8), cell.top, cell.th + 0.02 + 0.175, rand() < 0.5 ? 0 : Math.PI / 2, 1);
+        for (let q = 0; q < n; q++) place(hatches, cell.x0 + 4 + rand() * (w - 8), cell.z0 + 4 + rand() * (d - 8), cell.top, cell.th + 0.02 + 0.175, rand() < 0.5 ? 0 : Math.PI / 2, 1);
       }
       continue;
     }
-    if (r < 0.3) {
-      const n = 1 + Math.floor(rand() * 4);
+    if (r < 0.4) {
+      // a run of hatches with irregular pitch
+      const n = 2 + Math.floor(rand() * 4);
       const yaw = rand() < 0.5 ? 0 : Math.PI / 2;
-      const x0 = cell.x0 + 3 + rand() * Math.max(0, w - 6 - n * 5);
+      let x = cell.x0 + 3 + rand() * Math.max(0, w - 6 - n * 5.5);
       const z = cell.z0 + 3 + rand() * (d - 6);
-      for (let k = 0; k < n; k++) place(hatches, x0 + k * 5 + 2, z, cell.top, 0.175, yaw, 1);
-    } else if (r < 0.42) {
+      for (let q = 0; q < n && x + 4 < cell.x1 - 2; q++) {
+        place(hatches, x + 2, z + (rand() - 0.5) * 2, cell.top, 0.175, yaw, 1);
+        x += 4.6 + rand() * 4;
+      }
+    } else if (r < 0.55) {
       place(services, cell.x0 + w / 2 + (rand() - 0.5) * (w - 10), cell.z0 + d / 2 + (rand() - 0.5) * (d - 10), cell.top, 0.25, rand() < 0.5 ? 0 : Math.PI, 1);
-    } else if (r < 0.58) {
-      const n = 1 + Math.floor(rand() * 3);
-      for (let k = 0; k < n; k++) place(vents, cell.x0 + 3 + rand() * (w - 6), cell.z0 + 3 + rand() * (d - 6), cell.top, 0.35, rand() < 0.5 ? 0 : Math.PI / 2, 0.9);
-    } else if (r < 0.64) {
+    } else if (r < 0.8) {
+      const n = 1 + Math.floor(rand() * 4);
+      for (let q = 0; q < n; q++) place(vents, cell.x0 + 3 + rand() * (w - 6), cell.z0 + 3 + rand() * (d - 6), cell.top, 0.35, rand() < 0.5 ? 0 : Math.PI / 2, 0.9);
+    } else {
       place(sensors, cell.x0 + w / 2, cell.z0 + d / 2, cell.top, 0.4, rand() * Math.PI, 1);
     }
   }
-  instancedFromList(hatchGeo, mats.atlas, hatches, detail.near, "hatches");
-  instancedFromList(ventGeo, mats.atlas, vents, detail.near, "vents");
-  instancedFromList(serviceGeo, mats.atlas, services, detail.near, "serviceHatches");
-  instancedFromList(sensorGeo, mats.atlas, sensors, detail.near, "sensorPanels");
+  layerMesh(
+    [
+      { geo: hatchGeo, list: hatches },
+      { geo: ventGeo, list: vents },
+      { geo: serviceGeo, list: services },
+      { geo: sensorGeo, list: sensors },
+    ],
+    mats.atlas,
+    detail.near,
+    "hatches",
+  );
 }
 
 // Docking pads: 60 m flat areas with painted markings and edge lights, on the dorsal hull beside the
@@ -225,8 +331,14 @@ export function buildSuperstructure(ctx) {
   const pipeGeo = new THREE.CylinderGeometry(1, 1, 1, 12).rotateX(Math.PI / 2);
   const smallPlateGeo = bevelBox(10, 0.4, 10, 0.18);
   const bezelGeo = atlasBox(1, 1, 1, { all: A.plate });
+  const recessGeo = new THREE.PlaneGeometry(1, 1); // flat dark panel, faces +z
+  const wallVentGeo = atlasQuad(1, 1, A.vent);
+  const drumGeo = merge([new THREE.CylinderGeometry(0.5, 0.5, 1, 18).translate(0, 0.5, 0), new THREE.CylinderGeometry(0.42, 0.42, 0.08, 18).translate(0, 1.03, 0), new THREE.TorusGeometry(0.5, 0.03, 6, 18).rotateX(Math.PI / 2).translate(0, 0.34, 0), new THREE.TorusGeometry(0.5, 0.03, 6, 18).rotateX(Math.PI / 2).translate(0, 0.68, 0)]);
+  const vPipeGeo = new THREE.CylinderGeometry(1, 1, 1, 10).translate(0, 0.5, 0); // vertical pipe, base at origin
+  const ladderGeo = merge([box(-0.32, 5, 0, 0.14, 10, 0.14), box(0.32, 5, 0, 0.14, 10, 0.14), ...Array.from({ length: 10 }, (_, i) => box(0, 0.5 + i, 0, 0.78, 0.08, 0.08))]);
+  const Z_AXIS = new THREE.Vector3(0, 0, 1);
 
-  const L = { blocks: [], towers: [], bays: [], mach: [], gantries: [], domes: [], masts: [], dishes: [], ribs: [], wallBoxes: [], pipes: [], smallPlates: [], bezels: [] };
+  const L = { blocks: [], towers: [], bays: [], mach: [], gantries: [], domes: [], masts: [], dishes: [], ribs: [], wallBoxes: [], pipes: [], smallPlates: [], bezels: [], recess: [], wallVents: [], drums: [], vPipes: [], ladders: [] };
   const lightTone = () => 0.92 + rand() * 0.14;
 
   const setYaw = (yaw) => _q.setFromAxisAngle(UP, yaw);
@@ -260,9 +372,53 @@ export function buildSuperstructure(ctx) {
   const outYaw = { "-x": -Math.PI / 2, "+x": Math.PI / 2, "-z": Math.PI, "+z": 0 };
   const blockTops = []; // { x, z, w, d, y } for domes / masts / dishes
   const freeCells = [];
+  // asymmetric masses: a few hand-placed structures that differ port / starboard so the tiers stop reading
+  // as a mirrored staircase (the grid fill keeps clear of their footprints)
+  const t1 = terraces[0];
+  const t2 = terraces[1];
+  const t3 = terraces[2];
+  const specials = [
+    { kind: "hangarBlock", x: -139, z: 330, w: 30, d: 64, h: 15, y: t1.yTop },
+    { kind: "commsBlock", x: 100, z: 262, w: 27, d: 26, h: 24, y: t2.yTop },
+    { kind: "stepBlock", x: -62, z: 410, w: 22, d: 40, h: 12, y: t3.yTop },
+    { kind: "tanks", x: 140, z: 470, w: 32, d: 40, h: 12, y: t1.yTop },
+    { kind: "lowBay", x: -101, z: 340, w: 28, d: 52, h: 8, y: t2.yTop },
+  ];
+  const specialRects = specials.map((s) => ({ x0: s.x - s.w / 2 - 2, x1: s.x + s.w / 2 + 2, z0: s.z - s.d / 2 - 2, z1: s.z + s.d / 2 + 2 }));
+  for (const s of specials) {
+    if (s.kind === "tanks") {
+      for (const [dx, dz, r] of [
+        [-8, -11, 7],
+        [8, -11, 7],
+        [-8, 8, 7],
+        [8, 8, 7],
+      ]) addAt(L.drums, s.x + dx, s.y, s.z + dz, r * 2, s.h + (rand() - 0.5) * 3, r * 2, 0, 0.9 + rand() * 0.1);
+      addAt(L.wallBoxes, s.x, s.y + 1.2, s.z, s.w - 4, 2.4, 3, 0, 0.8);
+      continue;
+    }
+    addAt(L.blocks, s.x, s.y, s.z, s.w, s.h, s.d, 0, s.kind === "commsBlock" ? 0.96 : 0.86 + rand() * 0.12);
+    blockTops.push({ x: s.x, z: s.z, w: s.w, d: s.d, y: s.y + s.h });
+    // dark recess along the outboard face, lit row above it
+    const side = s.x < 0 ? -1 : 1;
+    const xf = s.x + side * (s.w / 2 + 0.06);
+    _q.setFromAxisAngle(UP, side > 0 ? Math.PI / 2 : -Math.PI / 2);
+    _p.set(xf, s.y + s.h * 0.42, s.z);
+    _s.set(s.d - 6, s.h * 0.45, 1);
+    _c.setRGB(1, 1, 1);
+    item(L.recess, _p, _q, _s, _c);
+    windowQuad(s.d - 10, 2.5, [s.x + side * (s.w / 2 + 0.3), s.y + s.h - 2.6, s.z], [0, side > 0 ? Math.PI / 2 : -Math.PI / 2, 0]);
+    if (s.kind === "commsBlock") {
+      addAt(L.masts, s.x - 6, s.y + s.h, s.z + 4, 1.4, 28, 1.4, 0.4, 0.75);
+      _q.setFromAxisAngle(UP, 2.2);
+      _q2.setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.6);
+      _q.multiply(_q2);
+      addAt(L.dishes, s.x + 6, s.y + s.h + 3.5, s.z - 5, 6, 6, 6, 0, 0.9, _q);
+    }
+  }
   for (const a of areas) {
     gridFill(rand, a.x0, a.x1, a.z0, a.z1, [8, 26], 2.2, (cell) => {
       if (cell.w < 5 || cell.d < 5) return;
+      if (overlapsAny({ x0: cell.u0, x1: cell.u1, z0: cell.v0, z1: cell.v1 }, specialRects)) return;
       const x = cell.uc;
       const z = cell.vc;
       const r = rand();
@@ -308,7 +464,7 @@ export function buildSuperstructure(ctx) {
       }
       if (r < 0.95) {
         const h = 9 + rand() * 9;
-        addAt(L.gantries, x, a.y, z, cell.w, h, cell.d, 0, 0.55 + rand() * 0.2);
+        addAt(L.gantries, x, a.y, z, cell.w, h, cell.d, 0, 0.72 + rand() * 0.25);
         return;
       }
       const rr = big * 0.32;
@@ -325,7 +481,7 @@ export function buildSuperstructure(ctx) {
       addAt(L.domes, b.x + (rand() - 0.5) * (b.w - 2 * rr), b.y, b.z + (rand() - 0.5) * (b.d - 2 * rr), rr, rr, rr, 0, 1);
     } else if (r < 0.34) {
       const h = 6 + rand() * 12;
-      addAt(L.masts, b.x + (rand() - 0.5) * (b.w - 3), b.y, b.z + (rand() - 0.5) * (b.d - 3), 1, h, 1, rand() * Math.PI, 0.55);
+      addAt(L.masts, b.x + (rand() - 0.5) * (b.w - 3), b.y, b.z + (rand() - 0.5) * (b.d - 3), 1, h, 1, rand() * Math.PI, 0.75);
     } else if (r < 0.46) {
       // stepped second tier on top of the block
       const tw = b.w * (0.45 + rand() * 0.3);
@@ -362,7 +518,7 @@ export function buildSuperstructure(ctx) {
       }
     } else if (r < 0.46) {
       const h = 8 + rand() * 16;
-      addAt(L.masts, f.x0 + w / 2, f.y, f.z0 + d / 2, 1, h, 1, rand() * Math.PI, 0.55);
+      addAt(L.masts, f.x0 + w / 2, f.y, f.z0 + d / 2, 1, h, 1, rand() * Math.PI, 0.75);
     } else if (r < 0.7) {
       const rr = Math.min(w, d) * 0.3;
       addAt(L.domes, f.x0 + w / 2, f.y, f.z0 + d / 2, rr, rr, rr, 0, 1);
@@ -388,6 +544,35 @@ export function buildSuperstructure(ctx) {
       const zc = (t.z0 + t.inset + t.z1) / 2;
       windowQuad(len, 5, [xw + side * 0.25, t.yTop - 8, zc], [0, yaw, 0]);
       windowQuad(len, 2.5, [xw + side * 0.25, t.yTop - 16, zc], [0, yaw, 0]);
+      // dark recessed panels (port carries more of them) and louvred vents, clear of the window bands
+      const wallLen = t.z1 - (t.z0 + t.inset);
+      const nRec = side < 0 ? 3 + Math.floor(rand() * 3) : 1 + Math.floor(rand() * 2);
+      for (let i = 0; i < nRec; i++) {
+        const w = 12 + rand() * 26;
+        const h = 4 + rand() * 6;
+        const zr = t.z0 + t.inset + 10 + w / 2 + rand() * Math.max(1, wallLen - 20 - w);
+        const yBase = dorsal(xw, zr) + 3;
+        const yc = yBase + h / 2 + 2 + rand() * Math.max(1, t.yTop - 20 - yBase - h);
+        if (Math.abs(yc - (t.yTop - 8)) < h / 2 + 3 || Math.abs(yc - (t.yTop - 16)) < h / 2 + 2) continue;
+        setYaw(yaw);
+        _p.set(xw + side * 0.06, yc, zr);
+        _s.set(w, h, 1);
+        _c.setRGB(1, 1, 1);
+        item(L.recess, _p, _q, _s, _c);
+      }
+      const nVent = 2 + Math.floor(rand() * 3);
+      for (let i = 0; i < nVent; i++) {
+        const w = 4 + rand() * 5;
+        const h = 3 + rand() * 2.5;
+        const zr = t.z0 + t.inset + 8 + rand() * (wallLen - 16);
+        const yBase = dorsal(xw, zr) + 3;
+        const yc = yBase + h / 2 + 1 + rand() * Math.max(1, t.yTop - 22 - yBase - h);
+        setYaw(yaw);
+        _p.set(xw + side * 0.08, yc, zr);
+        _s.set(w, h, 1);
+        _c.setRGB(1, 1, 1);
+        item(L.wallVents, _p, _q, _s, _c);
+      }
       // bays and boxes between ribs
       for (let i = 0; i + 1 < ribZs.length; i++) {
         const za = ribZs[i] + 2.5;
@@ -409,7 +594,7 @@ export function buildSuperstructure(ctx) {
             const sy = 2 + rand() * 5;
             const sz = Math.min(span - 2, 4 + rand() * 10);
             const by = yBase + 2 + rand() * Math.max(1, t.yTop - 22 - yBase);
-            addAt(L.wallBoxes, xw + side * (sx / 2 + 0.1), by, za + sz / 2 + rand() * Math.max(0, span - sz), sx, sy, sz, 0, 0.5 + rand() * 0.35);
+            addAt(L.wallBoxes, xw + side * (sx / 2 + 0.1), by, za + sz / 2 + rand() * Math.max(0, span - sz), sx, sy, sz, 0, 0.7 + rand() * 0.35);
           }
         } else {
           // small plate on the wall face
@@ -431,7 +616,7 @@ export function buildSuperstructure(ctx) {
         const r = 0.6 + rand() * 0.6;
         const zc2 = zp + Math.min(seg, t.z1 - 6 - zp) / 2;
         const yb = dorsal(xw, zc2) + 2.5 + r;
-        addAt(L.pipes, xw + side * (r + 0.3), yb, zc2, r, r, Math.min(seg, t.z1 - 6 - zp), 0, 0.45 + rand() * 0.2);
+        addAt(L.pipes, xw + side * (r + 0.3), yb, zc2, r, r, Math.min(seg, t.z1 - 6 - zp), 0, 0.68 + rand() * 0.25);
         zp += seg + 3 + rand() * 12;
       }
     }
@@ -445,6 +630,24 @@ export function buildSuperstructure(ctx) {
       const yy = yBaseF + slopeH * f;
       const zz = t.z0 + (yy / t.yTop) * t.inset;
       windowQuad(width, f === 0.42 ? 5 : 2.5, [0, yy + _n.y * 0.25, zz + _n.z * 0.25], [slopeAngle, Math.PI, 0]);
+    }
+    // dark recesses on the slope at different offsets per tier (never mirrored)
+    {
+      const nRec = 2 + Math.floor(rand() * 2);
+      for (let i = 0; i < nRec; i++) {
+        const w = 14 + rand() * 30;
+        const h = 4 + rand() * 4;
+        const xc = -t.hx + 8 + w / 2 + rand() * Math.max(1, width - 8 - w);
+        const f = 0.12 + rand() * 0.22 + (rand() < 0.5 ? 0 : 0.36);
+        const yy = yBaseF + slopeH * f;
+        if (Math.abs(yy - (yBaseF + slopeH * 0.42)) < h / 2 + 3.5 || Math.abs(yy - (yBaseF + slopeH * 0.68)) < h / 2 + 2.5) continue;
+        const zz = t.z0 + (yy / t.yTop) * t.inset;
+        _q.setFromUnitVectors(Z_AXIS, _n);
+        _p.set(xc, yy, zz).addScaledVector(_n, 0.06);
+        _s.set(w, h, 1);
+        _c.setRGB(1, 1, 1);
+        item(L.recess, _p, _q, _s, _c);
+      }
     }
     // small plates on the slope
     gridFill(rand, -t.hx + 4, t.hx - 4, yBaseF + 3, t.yTop - 4, [6, 16], 1.6, (cell) => {
@@ -463,41 +666,96 @@ export function buildSuperstructure(ctx) {
     });
   }
 
-  // --- neck: ribs on the four faces, window rows, bays
+  // --- neck: ribs on the four faces, a dark recessed channel per face (off-centre, different on each),
+  // dense window rows split by the channel, vertical pipe runs and ladders beside the ribs, bays
   {
     const nH = neck.y1 - neck.y0;
     const nY = (neck.y0 + neck.y1) / 2;
     const faces = [
-      { c: [0, nY, neck.z0], yaw: Math.PI, len: neck.halfX * 2, axis: "x" },
-      { c: [0, nY, neck.z1], yaw: 0, len: neck.halfX * 2, axis: "x" },
-      { c: [-neck.halfX, nY, (neck.z0 + neck.z1) / 2], yaw: -Math.PI / 2, len: neck.z1 - neck.z0, axis: "z" },
-      { c: [neck.halfX, nY, (neck.z0 + neck.z1) / 2], yaw: Math.PI / 2, len: neck.z1 - neck.z0, axis: "z" },
+      { c: [0, nY, neck.z0], yaw: Math.PI, len: neck.halfX * 2, ch: 0.18 },
+      { c: [0, nY, neck.z1], yaw: 0, len: neck.halfX * 2, ch: -0.22 },
+      { c: [-neck.halfX, nY, (neck.z0 + neck.z1) / 2], yaw: -Math.PI / 2, len: neck.z1 - neck.z0, ch: 0.12 },
+      { c: [neck.halfX, nY, (neck.z0 + neck.z1) / 2], yaw: Math.PI / 2, len: neck.z1 - neck.z0, ch: -0.16 },
+    ];
+    const bands = [
+      [14, 2.5],
+      [30, 2.5],
+      [44, 5],
+      [60, 2.5],
+      [78, 2.5],
+      [96, 5],
     ];
     for (const f of faces) {
       const out = new THREE.Vector3(Math.sin(f.yaw), 0, Math.cos(f.yaw));
       const along = new THREE.Vector3(-out.z, 0, out.x);
+      const at = (u, y, o) => _p.set(f.c[0], y, f.c[2]).addScaledVector(along, u).addScaledVector(out, o);
       const nRibs = Math.floor(f.len / 14);
+      const ribU = [];
       for (let i = 0; i <= nRibs; i++) {
         const u = -f.len / 2 + 2 + (i / nRibs) * (f.len - 4);
-        _p.set(f.c[0], neck.y0 - 2, f.c[2]).addScaledVector(along, u).addScaledVector(out, 0.9);
+        ribU.push(u);
+        at(u, neck.y0 - 2, 0.9);
         setYaw(f.yaw);
         _s.set(2.4, nH + 2, 1.8);
         macroTint(_p.x, nY, _p.z, 0, _c);
         _c.multiplyScalar(lightTone());
         item(L.ribs, _p, _q, _s, _c);
       }
-      for (const yy of [neck.y0 + 18, neck.y0 + 44, neck.y0 + 70, neck.y0 + 96]) {
-        _p.set(f.c[0], yy, f.c[2]).addScaledVector(out, 0.25);
-        windowQuad(f.len - 6, yy === neck.y0 + 44 ? 5 : 2.5, [_p.x, _p.y, _p.z], [0, f.yaw, 0]);
+      // recessed channel
+      const chU = f.len * f.ch;
+      const chW = 5.5;
+      at(chU, neck.y0 + nH * 0.47, 0.06);
+      setYaw(f.yaw);
+      _s.set(chW, nH - 14, 1);
+      _c.setRGB(1, 1, 1);
+      item(L.recess, _p, _q, _s, _c);
+      // window rows on both sides of the channel
+      for (const [dy, h] of bands) {
+        const yy = neck.y0 + dy;
+        for (const [ua, ub] of [
+          [-f.len / 2 + 4, chU - chW / 2 - 1.5],
+          [chU + chW / 2 + 1.5, f.len / 2 - 4],
+        ]) {
+          if (ub - ua < 6) continue;
+          at((ua + ub) / 2, yy, 0.25);
+          windowQuad(ub - ua, h, [_p.x, _p.y, _p.z], [0, f.yaw, 0]);
+        }
+      }
+      // pipes and ladders hug the ribs
+      for (let i = 0; i < ribU.length; i++) {
+        const r = rand();
+        if (r < 0.3) {
+          const rad = 0.45 + rand() * 0.5;
+          const u = ribU[i] + (rand() < 0.5 ? -1 : 1) * (1.3 + rad);
+          if (Math.abs(u - chU) < chW / 2 + rad + 0.5 || Math.abs(u) > f.len / 2 - 2) continue;
+          at(u, neck.y0 - 1, rad + 0.15);
+          setYaw(0);
+          _s.set(rad, nH - 4 - rand() * 20, rad);
+          _c.setScalar(0.72 + rand() * 0.28);
+          item(L.vPipes, _p, _q, _s, _c);
+        } else if (r < 0.42) {
+          const u = ribU[i] + (rand() < 0.5 ? -1 : 1) * 2.0;
+          if (Math.abs(u - chU) < chW / 2 + 1) continue;
+          const segs = 2 + Math.floor(rand() * ((nH - 12) / 10 - 2));
+          const yStart = neck.y0 + 2 + rand() * Math.max(0, nH - 8 - segs * 10);
+          for (let k = 0; k < segs; k++) {
+            at(u, yStart + k * 10, 0.45);
+            setYaw(f.yaw);
+            _s.set(1, 1, 1);
+            _c.setScalar(0.85);
+            item(L.ladders, _p, _q, _s, _c);
+          }
+        }
       }
       for (let i = 0; i < nRibs; i++) {
-        if (rand() < 0.5) continue;
+        if (rand() < 0.55) continue;
         const u = -f.len / 2 + 2 + ((i + 0.5) / nRibs) * (f.len - 4);
+        if (Math.abs(u - chU) < chW / 2 + 5) continue;
         const yy = neck.y0 + 8 + rand() * (nH - 30);
         let onBand = false;
-        for (const band of [18, 44, 70, 96]) if (Math.abs(yy - (neck.y0 + band)) < 6) onBand = true;
+        for (const [dy] of bands) if (Math.abs(yy - (neck.y0 + dy)) < 6) onBand = true;
         if (onBand) continue;
-        _p.set(f.c[0], yy, f.c[2]).addScaledVector(along, u).addScaledVector(out, 0.7);
+        at(u, yy, 0.7);
         addAt(L.bays, _p.x, _p.y, _p.z, 9, 5 + rand() * 4, 1.5, f.yaw, 1);
       }
     }
@@ -519,7 +777,7 @@ export function buildSuperstructure(ctx) {
         _c.multiplyScalar(lightTone());
         item(L.smallPlates, _p, _q, _s, _c);
       } else if (r < 0.45) {
-        addAt(L.masts, cell.uc, slab.y1, cell.vc, 1, 10 + rand() * 24, 1, rand() * Math.PI, 0.55);
+        addAt(L.masts, cell.uc, slab.y1, cell.vc, 1, 10 + rand() * 24, 1, rand() * Math.PI, 0.75);
       } else if (r < 0.55) {
         const h = 2.5 + rand() * 3;
         addAt(L.mach, cell.uc, slab.y1 + h / 2, cell.vc, cell.w * 0.7, h, cell.d * 0.7, 0, 1);
@@ -540,12 +798,12 @@ export function buildSuperstructure(ctx) {
       const yaw = side > 0 ? Math.PI / 2 : -Math.PI / 2;
       for (let z = slab.z0 + 12; z < slab.z1 - 10; z += 18 + rand() * 14) {
         if (rand() < 0.5) addAt(L.bays, xw + side * 0.7, sY + (rand() - 0.5) * 12, z, 9, 5, 1.5, yaw, 1);
-        else addAt(L.wallBoxes, xw + side * 1.3, sY + (rand() - 0.5) * 16, z, 2.6, 2 + rand() * 3, 4 + rand() * 6, 0, 0.55);
+        else addAt(L.wallBoxes, xw + side * 1.3, sY + (rand() - 0.5) * 16, z, 2.6, 2 + rand() * 3, 4 + rand() * 6, 0, 0.78);
       }
     }
     for (let x = -slab.halfX + 14; x < slab.halfX - 10; x += 16 + rand() * 14) {
       if (rand() < 0.45) addAt(L.bays, x, sY + (rand() - 0.5) * 12, slab.z1 + 0.7, 9, 5, 1.5, 0, 1);
-      else addAt(L.wallBoxes, x, sY + (rand() - 0.5) * 16, slab.z1 + 1.3, 4 + rand() * 6, 2 + rand() * 3, 2.6, 0, 0.55);
+      else addAt(L.wallBoxes, x, sY + (rand() - 0.5) * 16, slab.z1 + 1.3, 4 + rand() * 6, 2 + rand() * 3, 2.6, 0, 0.78);
     }
     // forward face: bezels around the real openings (frame + brow + sill), all outside the glass
     for (const o of ctx.openings) {
@@ -561,25 +819,49 @@ export function buildSuperstructure(ctx) {
       addAt(L.bezels, o.x1 + fw / 2, cy, zc, fw, h + fw * 2, depth, 0, 1);
       addAt(L.bezels, cx, o.y1 + fw / 2, zc, w + fw * 2, fw, depth, 0, 1);
       addAt(L.bezels, cx, o.y0 - fw / 2, zc, w + fw * 2, fw, depth, 0, 1);
-      // brow above and sill below
-      addAt(L.bezels, cx, o.y1 + fw + 0.9, zf - 1.3, w + fw * 2 + 2, 1.8, 2.6, 0, 1);
-      addAt(L.bezels, cx, o.y0 - fw - 0.5, zf - 0.9, w + fw * 2 + 1, 1.0, 1.8, 0, 1);
     }
   }
 
-  instancedFromList(blockGeo, mats.hull, L.blocks, detail.mid, "cityBlocks");
-  instancedFromList(towerGeo, mats.hull, L.towers, detail.mid, "cityTowers");
-  instancedFromList(bayGeo, mats.atlas, L.bays, detail.mid, "bays");
-  instancedFromList(machGeo, mats.atlas, L.mach, detail.near, "machineryBlocks");
-  instancedFromList(gantryGeo, mats.greebleDark, L.gantries, detail.near, "gantries");
+  // one mesh per material / LOD / interior-culling group (see HIDE_INSIDE in hull.js)
+  layerMesh(
+    [
+      { geo: blockGeo, list: L.blocks },
+      { geo: towerGeo, list: L.towers },
+      { geo: ribGeo, list: L.ribs },
+      { geo: drumGeo, list: L.drums },
+    ],
+    mats.hull,
+    detail.mid,
+    "cityBlocks",
+  );
+  layerMesh(
+    [
+      { geo: bayGeo, list: L.bays },
+      { geo: machGeo, list: L.mach },
+      { geo: bezelGeo, list: L.bezels },
+    ],
+    mats.atlas,
+    detail.mid,
+    "bays",
+  );
+  layerMesh(
+    [
+      { geo: gantryGeo, list: L.gantries },
+      { geo: mastGeo, list: L.masts },
+      { geo: wallBoxGeo, list: L.wallBoxes },
+      { geo: pipeGeo, list: L.pipes },
+      { geo: vPipeGeo, list: L.vPipes },
+      { geo: ladderGeo, list: L.ladders },
+    ],
+    mats.greebleDark,
+    detail.near,
+    "gantries",
+  );
   instancedFromList(domeGeo, mats.hullUv, L.domes, detail.near, "sensorDomes");
-  instancedFromList(mastGeo, mats.greebleDark, L.masts, detail.near, "antennaMasts");
   instancedFromList(dishGeo, mats.greeble, L.dishes, detail.near, "dishes");
-  instancedFromList(ribGeo, mats.hull, L.ribs, detail.mid, "buttresses");
-  instancedFromList(wallBoxGeo, mats.greebleDark, L.wallBoxes, detail.near, "wallBoxes");
-  instancedFromList(pipeGeo, mats.greebleDark, L.pipes, detail.near, "wallPipes");
   instancedFromList(smallPlateGeo, mats.plate, L.smallPlates, detail.near, "smallPlates");
-  instancedFromList(bezelGeo, mats.atlas, L.bezels, detail.near, "windowBezels");
+  instancedFromList(recessGeo, mats.darkFlat, L.recess, detail.mid, "terraceRecess");
+  instancedFromList(wallVentGeo, mats.atlasFlat, L.wallVents, detail.near, "wallVents");
 }
 
 // ---------------------------------------------------------------------------
@@ -594,7 +876,7 @@ export function buildTrench(ctx) {
   const winGeo = atlasQuad(1, 1, A.windowRow);
   const ductGeo = atlasBox(1, 1, 1, { pz: A.duct, side: A.dark });
   const L = { units: [], pipes: [], ribs: [], bays: [], windows: [], ducts: [] };
-  const darkTone = () => 0.32 + rand() * 0.4;
+  const darkTone = () => 0.62 + rand() * 0.4;
   for (const s of [-1, 1]) {
     const yaw = s * EDGE_YAW;
     const outward = s > 0 ? Math.PI / 2 : -Math.PI / 2;
@@ -669,16 +951,30 @@ export function buildTrench(ctx) {
         at(zc, d, y + (rand() - 0.5) * 0.6);
         _q.setFromAxisAngle(UP, yaw);
         _s.set(r, r, len / Math.cos(EDGE_YAW));
-        _c.setScalar(0.4 + rand() * 0.25);
+        _c.setScalar(0.66 + rand() * 0.3);
         item(L.pipes, _p, _q, _s, _c);
         zp += len + 6 + rand() * 30;
       }
     }
   }
-  instancedFromList(unitGeo, mats.greebleDark, L.units, detail.mid, "trenchUnits");
-  instancedFromList(pipeGeo, mats.greebleDark, L.pipes, detail.mid, "trenchPipes");
+  layerMesh(
+    [
+      { geo: unitGeo, list: L.units },
+      { geo: pipeGeo, list: L.pipes },
+    ],
+    mats.greebleDark,
+    detail.mid,
+    "trenchUnits",
+  );
   instancedFromList(unitGeo, mats.greeble, L.ribs, detail.mid, "trenchRibs");
-  instancedFromList(bayGeo, mats.atlas, L.bays, detail.mid, "trenchBays");
-  instancedFromList(winGeo, mats.atlas, L.windows, detail.near, "trenchWindows");
-  instancedFromList(ductGeo, mats.atlas, L.ducts, detail.near, "trenchDucts");
+  layerMesh(
+    [
+      { geo: bayGeo, list: L.bays },
+      { geo: winGeo, list: L.windows },
+      { geo: ductGeo, list: L.ducts },
+    ],
+    mats.atlas,
+    detail.mid,
+    "trenchBays",
+  );
 }

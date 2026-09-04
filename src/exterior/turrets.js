@@ -3,7 +3,8 @@
 // emplacements along the trench edges. All geometry is original kit-bash of primitives.
 import * as THREE from "three";
 import { HULL } from "../config/shipSpec.js";
-import { UP, dorsal, surfaceNormal, frameQuat, merge, box, bevelBox, cylX, cylZ, macroTint, instancedFromList } from "./util.js";
+import { rng } from "../kit.js";
+import { UP, dorsal, surfaceNormal, frameQuat, merge, box, bevelBox, cylX, cylZ, macroTint, layerMesh } from "./util.js";
 
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
@@ -14,15 +15,30 @@ const _c = new THREE.Color();
 const _m = new THREE.Matrix4();
 const X = new THREE.Vector3(1, 0, 0);
 
+// Heavy batteries stay in two rows flanking the superstructure (the recognisable Imperial layout) with a
+// little stagger; the light emplacements cluster in twos and threes along the trench edges with random
+// gaps and insets, so no fixed-interval lattice appears on the slopes. Deterministic (seeded).
+const trand = rng(7701);
 export const HEAVY_SPOTS = [];
-for (const side of [-1, 1]) for (let i = 0; i < 4; i++) HEAVY_SPOTS.push([side * (176 + (i % 2) * 7), 215 + i * 75]);
-export const LIGHT_SPOTS = [];
-for (const side of [-1, 1]) for (let i = 0; i < 8; i++) LIGHT_SPOTS.push([side, -520 + i * 150]);
+for (const side of [-1, 1]) for (let i = 0; i < 4; i++) HEAVY_SPOTS.push([side * (176 + (i % 2) * 7), 208 + i * 75 + (trand() - 0.5) * 16]);
+export const LIGHT_SPOTS = []; // [side, z, inset from the trench edge]
+for (const side of [-1, 1]) {
+  let z = -560 + trand() * 80;
+  while (z < 690) {
+    const n = 1 + Math.floor(trand() * 3);
+    const inset = 22 + trand() * 16;
+    for (let i = 0; i < n && z < 690; i++) {
+      LIGHT_SPOTS.push([side, z, inset + (trand() - 0.5) * 4]);
+      z += 30 + trand() * 26;
+    }
+    z += 70 + trand() * 190;
+  }
+}
 
 export function turretRects() {
   const rects = HEAVY_SPOTS.map(([x, z]) => ({ x0: x - 18, x1: x + 18, z0: z - 18, z1: z + 18 }));
-  for (const [side, z] of LIGHT_SPOTS) {
-    const x = side * (HULL.halfWidthAt(z) - 26);
+  for (const [side, z, inset] of LIGHT_SPOTS) {
+    const x = side * (HULL.halfWidthAt(z) - inset);
     rects.push({ x0: x - 8, x1: x + 8, z0: z - 8, z1: z + 8 });
   }
   return rects;
@@ -108,8 +124,8 @@ export function buildTurrets(ctx) {
     const gq = _q.clone().multiply(_q2);
     guns.push({ m: new THREE.Matrix4().compose(pivot, gq, _s), c: _c.clone() });
   }
-  for (const [side, z] of LIGHT_SPOTS) {
-    const x = side * (HULL.halfWidthAt(z) - 26);
+  for (const [side, z, inset] of LIGHT_SPOTS) {
+    const x = side * (HULL.halfWidthAt(z) - inset);
     surfaceNormal(x, z, true, _n);
     frameQuat(_n, _q);
     _q2.setFromAxisAngle(UP, side * -0.6 + (rand() - 0.5) * 1.2);
@@ -118,7 +134,15 @@ export function buildTurrets(ctx) {
     macroTint(x, _p.y, z, 1, _c);
     lights.push({ m: new THREE.Matrix4().compose(_p, _q, _s), c: _c.clone() });
   }
-  instancedFromList(heavyBaseGeometry(), mats.greeble, bases, detail.mid, "heavyTurretBases");
-  instancedFromList(heavyGunGeometry(), mats.greeble, guns, detail.mid, "heavyTurretGuns");
-  instancedFromList(lightTurretGeometry(), mats.greeble, lights, detail.near, "lightTurrets");
+  // one mesh (and one shadow pass) for every weapon on the ship
+  layerMesh(
+    [
+      { geo: heavyBaseGeometry(), list: bases },
+      { geo: heavyGunGeometry(), list: guns },
+      { geo: lightTurretGeometry(), list: lights },
+    ],
+    mats.greeble,
+    detail.mid,
+    "turrets",
+  );
 }

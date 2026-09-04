@@ -4,7 +4,7 @@
 // engines is heat-discoloured through vertex colours; exhaust duct greebles fill the wall between them.
 import * as THREE from "three";
 import { ENGINES } from "../config/shipSpec.js";
-import { dorsal, ventral, merge, box, cylZ, atlasBox, instancedFromList, worldUV, macroColor } from "./util.js";
+import { dorsal, ventral, merge, box, cylZ, atlasBox, layerMesh, worldUV, macroColor } from "./util.js";
 
 const ALL_ENGINES = [...ENGINES.main.positions.map(([x, y]) => [x, y, ENGINES.main.radius]), ...ENGINES.aux.positions.map(([x, y]) => [x, y, ENGINES.aux.radius])];
 
@@ -29,6 +29,7 @@ export function sternHeatTint(x, y, z, col) {
   return col;
 }
 
+// bell: throat well inside the hull, flaring to a thick rounded lip at the mouth, outer shell back to the wall
 function bellProfile(R) {
   const pts = [
     [0.26, -0.66],
@@ -38,14 +39,52 @@ function bellProfile(R) {
     [0.66, -0.38],
     [0.8, -0.22],
     [0.92, -0.06],
-    [0.99, 0.1],
-    [1.0, 0.16],
-    [1.07, 0.17],
-    [1.09, 0.05],
-    [1.1, -0.3],
+    [0.985, 0.08],
+    [1.0, 0.15],
+    [1.025, 0.2],
+    [1.07, 0.225],
+    [1.12, 0.2],
+    [1.15, 0.14],
+    [1.15, 0.06],
+    [1.13, -0.04],
+    [1.11, -0.2],
     [1.1, -0.5],
   ];
   return pts.map(([r, a]) => new THREE.Vector2(r * R, a * R));
+}
+
+// a flat fan disc with concentric rings; colour(t) gives the rgb at normalised radius t
+function gradientDisc(x, y, z, radius, n, rings, color) {
+  const pos = [];
+  const col = [];
+  const c0 = [0, 0, 0];
+  const c1 = [0, 0, 0];
+  for (let r = 0; r < rings; r++) {
+    const t0 = r / rings;
+    const t1 = (r + 1) / rings;
+    color(t0, c0);
+    color(t1, c1);
+    for (let i = 0; i < n; i++) {
+      const a0 = (i / n) * Math.PI * 2;
+      const a1 = ((i + 1) / n) * Math.PI * 2;
+      const p = (t, a) => [x + Math.cos(a) * radius * t, y + Math.sin(a) * radius * t, z];
+      const A = p(t0, a0);
+      const B = p(t1, a0);
+      const C = p(t1, a1);
+      const D = p(t0, a1);
+      if (r === 0) {
+        pos.push(...A, ...B, ...C);
+        col.push(...c0, ...c1, ...c1);
+      } else {
+        pos.push(...A, ...B, ...C, ...A, ...C, ...D);
+        col.push(...c0, ...c1, ...c1, ...c0, ...c1, ...c0);
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  return g;
 }
 
 function lathe(points, seg) {
@@ -66,59 +105,39 @@ export function buildEngines(ctx) {
     bell.translate(x, y, z0);
     metal.push(bell);
     // mounting flange on the stern wall (also covers the cut-out edge of the wall grid) with bolt ring
-    const flange = new THREE.RingGeometry(0.98 * R, R + 9, seg);
+    const flange = new THREE.RingGeometry(0.98 * R, R + 12, seg);
     flange.translate(x, y, z0 + 0.4);
     metal.push(flange);
-    const boltRing = new THREE.TorusGeometry(R + 6.5, 0.45, 6, seg);
+    const boltRing = new THREE.TorusGeometry(R + 9, 0.45, 6, seg);
     boltRing.translate(x, y, z0 + 0.6);
     metal.push(boltRing);
+    // inner rings step down the bell; two outer hoops give the shell depth and shading
     for (const [rr, a, tube] of [
       [0.72, -0.3, 0.022],
       [0.86, -0.12, 0.02],
       [0.58, -0.46, 0.02],
+      [1.125, -0.12, 0.025],
+      [1.115, -0.36, 0.022],
     ]) {
       const ring = new THREE.TorusGeometry(rr * R, tube * R, 8, seg);
       ring.translate(x, y, z0 + a * R);
       metal.push(ring);
     }
-    const vanes = R > 40 ? 14 : 10;
-    for (let i = 0; i < vanes; i++) {
-      const v = box(0.46 * R, 0, 0, 0.32 * R, 0.07 * R, Math.max(0.3, 0.008 * R));
-      v.rotateZ((i / vanes) * Math.PI * 2);
-      v.translate(x, y, z0 - 0.5 * R);
-      metal.push(v);
-    }
-    // hub in the throat
-    const hub = cylZ(0.12 * R, 0.16 * R, 0.14 * R, 16);
-    hub.translate(x, y, z0 - 0.56 * R);
+    // small hub deep in the throat
+    const hub = cylZ(0.1 * R, 0.13 * R, 0.1 * R, 16);
+    hub.translate(x, y, z0 - 0.6 * R);
     metal.push(hub);
-    // hot core disc: fan with bright centre, cooler rim
-    {
-      const n = 40;
-      const pos = [];
-      const col = [];
-      const rc = 0.5 * R;
-      const zc = z0 - 0.5 * R;
-      for (let i = 0; i < n; i++) {
-        const a0 = (i / n) * Math.PI * 2;
-        const a1 = ((i + 1) / n) * Math.PI * 2;
-        pos.push(x, y, zc, x + Math.cos(a0) * rc, y + Math.sin(a0) * rc, zc, x + Math.cos(a1) * rc, y + Math.sin(a1) * rc, zc);
-        col.push(1.9, 2.0, 2.3, 0.3, 0.5, 1.05, 0.3, 0.5, 1.05);
-      }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-      g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
-      cores.push(g);
-    }
-    // additive haze cone inside the bell
-    {
-      const profile = [
-        [0.45, -0.5, 0.34],
-        [0.62, -0.4, 0.22],
-        [0.78, -0.22, 0.1],
-        [0.93, 0.05, 0.03],
-        [0.97, 0.14, 0.0],
-      ];
+    // hot core: smooth radial gradient, white-blue centre falling to a deep blue rim (bloom-friendly)
+    cores.push(
+      gradientDisc(x, y, z0 - 0.5 * R, 0.6 * R, seg, 6, (t, c) => {
+        const k = Math.pow(1 - t, 1.6);
+        c[0] = 0.12 + 1.3 * k;
+        c[1] = 0.22 + 1.6 * k;
+        c[2] = 0.7 + 1.55 * k;
+      }),
+    );
+    // additive haze inside the bell (fades toward the lip)
+    const haze = (profile) => {
       const g = lathe(
         profile.map(([r, a]) => new THREE.Vector2(r * R, a * R)),
         seg,
@@ -145,7 +164,32 @@ export function buildEngines(ctx) {
       ng.setAttribute("color", new THREE.BufferAttribute(c, 3));
       ng.translate(x, y, z0);
       glows.push(ng);
-    }
+    };
+    haze([
+      [0.45, -0.5, 0.3],
+      [0.62, -0.4, 0.2],
+      [0.78, -0.22, 0.09],
+      [0.93, 0.05, 0.03],
+      [0.97, 0.14, 0.0],
+    ]);
+    // soft plume: an additive cone trailing aft of the mouth, brightest at the axis and the mouth
+    haze([
+      [0.9, 0.12, 0.0],
+      [0.82, 0.3, 0.14],
+      [0.66, 0.7, 0.09],
+      [0.46, 1.2, 0.045],
+      [0.22, 1.75, 0.012],
+      [0.0, 2.05, 0.0],
+    ]);
+    // faint halo disc just behind the lip
+    glows.push(
+      gradientDisc(x, y, z0 + 0.25 * R, 1.18 * R, seg, 4, (t, c) => {
+        const k = 0.1 * Math.pow(1 - t, 2.2);
+        c[0] = 0.45 * k;
+        c[1] = 0.68 * k;
+        c[2] = 1.0 * k;
+      }),
+    );
   }
   const metalGeo = merge(metal);
   worldUV(metalGeo, 1 / 12);
@@ -206,7 +250,7 @@ export function buildEngines(ctx) {
         q.identity();
         p.set(xx, yy, z0 + len / 2 - 1);
         s.set(rr, rr, len);
-        c.setScalar(0.4 + rand() * 0.3);
+        c.setScalar(0.66 + rand() * 0.3);
         L.pipes.push({ m: new THREE.Matrix4().compose(p, q, s), c: c.clone() });
       } else if (r < 0.78) {
         const sx = 4 + rand() * 6;
@@ -216,7 +260,7 @@ export function buildEngines(ctx) {
         q.identity();
         p.set(xx, yy, z0 + sz / 2 - 0.5);
         s.set(sx, sy, sz);
-        c.setScalar(0.35 + rand() * 0.35);
+        c.setScalar(0.62 + rand() * 0.35);
         L.boxes.push({ m: new THREE.Matrix4().compose(p, q, s), c: c.clone() });
       } else if (r < 0.9) {
         const sx = 6 + rand() * 6;
@@ -239,8 +283,22 @@ export function buildEngines(ctx) {
       }
     }
   }
-  instancedFromList(pipeGeo, mats.greebleDark, L.pipes, detail.mid, "sternPipes");
-  instancedFromList(boxGeo, mats.greebleDark, L.boxes, detail.mid, "sternBoxes");
-  instancedFromList(finGeo, mats.atlas, L.fins, detail.mid, "sternFins");
-  instancedFromList(ductGeo, mats.atlas, L.ducts, detail.mid, "sternDucts");
+  layerMesh(
+    [
+      { geo: pipeGeo, list: L.pipes },
+      { geo: boxGeo, list: L.boxes },
+    ],
+    mats.greebleDark,
+    detail.mid,
+    "sternPipes",
+  );
+  layerMesh(
+    [
+      { geo: finGeo, list: L.fins },
+      { geo: ductGeo, list: L.ducts },
+    ],
+    mats.atlas,
+    detail.mid,
+    "sternFins",
+  );
 }
