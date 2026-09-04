@@ -342,6 +342,82 @@ export function locker(kit, p, { w = 0.8, h = 2.2, d = 0.55, seed = 0, label = 6
 }
 
 /**
+ * Chart-drawer chest (nav-specific cabinet): a wide, waist-high carcass of shallow flat-file drawers — mid-grey
+ * fronts with a recessed steel pull and a lit amber label tab each, one drawer pulled out showing a chart sheet
+ * — under a steel top with a front lip, kick recess below. Deliberately not the locker's proportions.
+ */
+export function chartChest(kit, p, { w = 1.3, h = 1.45, d = 0.62, drawers = 7, seed = 0, pulled = 2 } = {}) {
+  const rand = rng(seed + 11);
+  const f = WALL_OFF + d;
+  const bodyH = h - 0.04;
+  p.box("metalRough", 0, bodyH / 2, WALL_OFF + d / 2, w, bodyH, d, { color: IMP.dark, texel: 1 });
+  p.box("metal", 0, h - 0.02, WALL_OFF + d / 2, w + 0.03, 0.04, d + 0.03, { color: IMP.mid, texel: 2 });
+  p.box("metal", 0, h + 0.01, f + 0.005, w + 0.03, 0.03, 0.02, { color: IMP.steel, texel: 2 });
+  p.box("metalRough", 0, 0.06, f - 0.04, w - 0.04, 0.12, 0.02, { color: IMP.black, texel: 2 });
+  const y0 = 0.14;
+  const pitch = (bodyH - 0.03 - y0) / drawers;
+  for (let i = 0; i < drawers; i++) {
+    const yc = y0 + pitch * (i + 0.5);
+    const out = i === pulled ? 0.16 : 0;
+    p.box("impPanel", 0, yc, f + 0.008 + out, w - 0.05, pitch - 0.018, 0.016, { color: IMP.mid, texel: 0.8 });
+    p.box("paintedMetal", 0, yc - 0.012, f + 0.017 + out, 0.36, 0.028, 0.004, { color: IMP.black });
+    p.box("metal", 0, yc - 0.012, f + 0.03 + out, 0.3, 0.014, 0.02, { color: IMP.steel, texel: 2 });
+    p.box("paintedMetal", -w / 2 + 0.2, yc + 0.02, f + 0.018 + out, 0.18, 0.05, 0.004, { color: IMP.black });
+    p.box("emitAmber", -w / 2 + 0.2, yc + 0.02, f + 0.022 + out, 0.13, 0.022, 0.004);
+    if (rand() < 0.35) p.box(rand() < 0.5 ? "emitBlue" : "emitRedImp", w / 2 - 0.14, yc + 0.02, f + 0.02 + out, 0.02, 0.02, 0.006);
+    if (out) {
+      // the pulled drawer's tray: black sides, a light chart sheet lying on top of the stack
+      p.box("metalRough", 0, yc - 0.004, f + out / 2, w - 0.07, pitch - 0.03, out, { color: IMP.black, texel: 2 });
+      p.box("impPanel", 0, yc + (pitch - 0.03) / 2 - 0.006, f + out / 2 + 0.01, w - 0.14, 0.006, out - 0.03, { color: IMP.white, texel: 2 });
+      p.decal(0.12, yc + (pitch - 0.03) / 2 - 0.002, f + out / 2 + 0.01, 0.1, 9, -Math.PI / 2);
+    }
+  }
+  p.collider(-w / 2 - 0.02, w / 2 + 0.02, 0, h + 0.03, 0, f + 0.2, "chart-chest");
+}
+
+/**
+ * Map-tube rack (nav-specific): a latched base cabinet under an open steel frame with `shelves` cradles of
+ * upright rolled-chart tubes (mixed greys, black caps, an amber band each) behind a steel retaining rail,
+ * a lit amber label strip per shelf and a spec plate on the top rail.
+ */
+export function mapTubeRack(kit, p, { w = 0.7, h = 2.0, d = 0.45, shelves = 3, seed = 0 } = {}) {
+  const rand = rng(seed + 17);
+  const f = WALL_OFF + d;
+  const baseH = 0.5;
+  p.box("metalRough", 0, baseH / 2, WALL_OFF + d / 2, w, baseH, d, { color: IMP.dark, texel: 1 });
+  p.box("impPanel", 0, baseH / 2 + 0.03, f + 0.008, w - 0.06, baseH - 0.1, 0.016, { color: IMP.mid, texel: 0.8 });
+  p.box("metal", 0.2, baseH / 2 + 0.03, f + 0.024, 0.02, 0.12, 0.024, { color: IMP.steel, texel: 2 });
+  p.box(seed % 2 ? "emitBlue" : "emitAmber", -0.2, baseH / 2 + 0.12, f + 0.018, 0.016, 0.016, 0.006);
+  p.box("metalRough", 0, 0.05, f - 0.03, w - 0.04, 0.1, 0.02, { color: IMP.black, texel: 2 });
+  for (const sx of [-1, 1]) for (const zz of [WALL_OFF + 0.03, f - 0.03]) p.box("metal", sx * (w / 2 - 0.03), baseH + (h - baseH) / 2, zz, 0.05, h - baseH, 0.05, { color: IMP.mid, texel: 2 });
+  p.box("metal", 0, h - 0.02, WALL_OFF + d / 2, w, 0.04, d, { color: IMP.mid, texel: 2 });
+  p.box("metalRough", 0, baseH + (h - baseH) / 2, WALL_OFF + 0.012, w - 0.1, h - baseH - 0.05, 0.02, { color: IMP.black, texel: 1 });
+  const pitch = (h - baseH - 0.06) / shelves;
+  const r = 0.045;
+  for (let s = 0; s < shelves; s++) {
+    const ys = baseH + 0.03 + s * pitch;
+    p.box("metal", 0, ys, WALL_OFF + d / 2, w - 0.08, 0.025, d - 0.06, { color: IMP.dark, texel: 2 });
+    p.box("metal", 0, ys + 0.06, f - 0.045, w - 0.08, 0.012, 0.012, { color: IMP.steel, texel: 2 });
+    p.box("paintedMetal", 0, ys, f - 0.028, w - 0.14, 0.028, 0.006, { color: IMP.black });
+    p.box("emitAmber", -0.08, ys, f - 0.024, 0.24, 0.014, 0.004);
+    const n = 5;
+    const tubeH = pitch - 0.1;
+    for (let k = 0; k < n; k++) {
+      if (rand() < 0.2) continue;
+      const tx = -w / 2 + 0.11 + k * ((w - 0.22) / (n - 1));
+      const col = [IMP.grey, IMP.mid, IMP.white, IMP.dark][Math.floor(rand() * 4)];
+      const tz = WALL_OFF + d / 2 + (rand() - 0.5) * 0.05;
+      const th = tubeH * (0.82 + rand() * 0.18);
+      p.cyl("paintedMetal", tx, ys + 0.0125 + th / 2, tz, r, th, "y", { color: col, segments: 10, texel: 2 });
+      p.cyl("metal", tx, ys + 0.0125 + th + 0.01, tz, r + 0.005, 0.02, "y", { color: IMP.black, segments: 10 });
+      p.cyl("emitAmber", tx, ys + 0.0125 + th - 0.07, tz, r + 0.003, 0.012, "y", { segments: 10 });
+    }
+  }
+  p.decal(0, h - 0.06, f + 0.001, 0.14, 9);
+  p.collider(-w / 2 - 0.02, w / 2 + 0.02, 0, h + 0.02, 0, f + 0.02, "tube-rack");
+}
+
+/**
  * Open-frame equipment rack: four uprights with cross members, stacked modules of varying height with
  * gloss front plates, LED rows, handles and one small screen, patch loops down one side, a cable bundle
  * from the top into the wall. p at floor, centred (replaces a pair of lockers).
@@ -655,11 +731,13 @@ export function lightTrough(kit, axis, at, a0, a1, ceilY, { w = 0.5, depth = 0.1
 
 /**
  * Hung light canopy over a dais / seating group: a dark fascia box (depth `depth`) under the ceiling with a
- * steel lip and a blue seam line along its faces, a matte soffit and `channels` recessed louvred light troughs
- * across it (along x; the trough axis = "x" → at = z). min/max = [x, z] footprint; ceilY = ceiling face.
- * `open` = fascia faces to draw ("n" | "s" | "e" | "w"; the wall side is left open).
+ * steel lip and a blue seam line along its faces, a light matte soffit and `channels` recessed louvred light
+ * troughs across it (along x; the trough axis = "x" → at = z). min/max = [x, z] footprint; ceilY = ceiling face.
+ * `open` = fascia faces to draw ("n" | "s" | "e" | "w"; the wall side is left open). The soffit is the clean
+ * impPanel in the wall panels' light grey: rubber's texture base is charcoal (0.037 linear), so a "white" rubber
+ * soffit rendered near-black and swallowed the uplight channel's wash under it.
  */
-export function lightCanopy(kit, min, max, ceilY, { depth = 0.5, channels = 3, chW = 0.5, faces = ["n", "e", "w"], soffitMat = "rubber", soffitColor = IMP.white, glow = "emitBlue", emit = "emitCoolSoft" } = {}) {
+export function lightCanopy(kit, min, max, ceilY, { depth = 0.5, channels = 3, chW = 0.5, faces = ["n", "e", "w"], soffitMat = "impPanel", soffitColor = IMP.grey, glow = "emitBlue", emit = "emitCoolSoft" } = {}) {
   const [x0, z0] = min;
   const [x1, z1] = max;
   const y0 = ceilY - depth;
@@ -670,10 +748,10 @@ export function lightCanopy(kit, min, max, ceilY, { depth = 0.5, channels = 3, c
     kit.boxMM("metal", [mn[0] - 0.015, y0 - 0.03, mn[2] - 0.015], [mx[0] + 0.015, y0, mx[2] + 0.015], { color: IMP.mid, texel: 2 });
     if (alongX) {
       const zs = mn[2] < (z0 + z1) / 2 ? mn[2] - 0.004 : mx[2] - 0.002;
-      kit.boxMM(glow, [mn[0] + 0.1, y0 + 0.14, zs], [mx[0] - 0.1, y0 + 0.152, zs + 0.006]);
+      kit.boxMM(glow, [mn[0] + 0.1, y0 + 0.14, zs], [mx[0] - 0.1, y0 + 0.164, zs + 0.006]);
     } else {
       const xs = mn[0] < (x0 + x1) / 2 ? mn[0] - 0.004 : mx[0] - 0.002;
-      kit.boxMM(glow, [xs, y0 + 0.14, mn[2] + 0.1], [xs + 0.006, y0 + 0.152, mx[2] - 0.1]);
+      kit.boxMM(glow, [xs, y0 + 0.14, mn[2] + 0.1], [xs + 0.006, y0 + 0.164, mx[2] - 0.1]);
     }
   };
   if (faces.includes("n")) fascia([x0, y0, z0], [x1, ceilY + 0.01, z0 + t], true);
@@ -694,6 +772,28 @@ export function lightCanopy(kit, min, max, ceilY, { depth = 0.5, channels = 3, c
     cur = zc + chW / 2;
   }
   kit.boxMM(soffitMat, [xi0, y0, cur], [xi1, y0 + 0.06, zi1], { color: soffitColor, texel: 1 });
+}
+
+/**
+ * Indirect light channel: an open-topped dark U-channel (bottom face at y) hung on rods under a soffit at
+ * soffitY, running along x at z. Its point sources sit INSIDE the channel (returned y = y + 0.06): the
+ * underside and outer walls of a convex housing cannot face a source inside it, so the channel stays a dark
+ * bar while the light goes up and washes the soffit — the lit soffit is what the room sees. Rods are ≥ 1.4 m
+ * from any source (metal has no diffuse term, so only a faint sheen).
+ */
+export function uplightChannel(kit, x0, x1, z, y, soffitY, { w = 0.3, hangers = [] } = {}) {
+  const t = 0.02;
+  const hgt = 0.1;
+  kit.boxMM("metalRough", [x0, y, z - w / 2], [x1, y + t, z + w / 2], { color: IMP.dark, texel: 1 });
+  kit.boxMM("metalRough", [x0, y, z - w / 2], [x1, y + hgt, z - w / 2 + t], { color: IMP.dark, texel: 1 });
+  kit.boxMM("metalRough", [x0, y, z + w / 2 - t], [x1, y + hgt, z + w / 2], { color: IMP.dark, texel: 1 });
+  kit.boxMM("metalRough", [x0, y, z - w / 2], [x0 + t, y + hgt, z + w / 2], { color: IMP.dark, texel: 1 });
+  kit.boxMM("metalRough", [x1 - t, y, z - w / 2], [x1, y + hgt, z + w / 2], { color: IMP.dark, texel: 1 });
+  // light-grey reflector strip inside (seen only from above)
+  kit.boxMM("metalRough", [x0 + t, y + t, z - w / 2 + t], [x1 - t, y + t + 0.004, z + w / 2 - t], { color: IMP.white, texel: 1 });
+  const hh = soffitY - (y + hgt);
+  for (const hx of hangers) for (const s of [-1, 1]) kit.cyl("metal", hx, y + hgt + hh / 2, z + s * (w / 2 - 0.04), 0.012, hh, "y", { color: IMP.mid, segments: 6 });
+  return y + 0.06;
 }
 
 /** Cable tray: U-channel with cable bundles and hangers to the ceiling. Straight run along x or z. */
@@ -765,10 +865,12 @@ export function ceilingPipe(kit, from, to, y, { r = 0.05, color = IMP.mid, hangT
  * cover the emitter and the fixture reads as a dark housing with a glow. y = housing top (under the ceiling).
  */
 export function downlight(kit, x, y, z, { r = 0.08, emit = "emitCoolSoft" } = {}) {
-  const R = r + 0.1;
-  const b = y - 0.22; // can bottom
-  kit.cyl("metalRough", x, y - 0.11, z, R, 0.22, "y", { color: IMP.dark, segments: 16, texel: 1 });
-  kit.add("paintedMetal", new THREE.RingGeometry(r + 0.03, R, 16), { pos: [x, b - 0.002, z], rot: [Math.PI / 2, 0, 0], color: IMP.mid, uv: "keep" });
+  // 0.28 m can, 0.14 m deep, dark bezel: from a floor camera the fixture reads as a small recessed can (the old
+  // 0.36 m can with a light-grey bezel ring read as an oversized dome)
+  const R = r + 0.06;
+  const b = y - 0.14; // can bottom
+  kit.cyl("metalRough", x, y - 0.07, z, R, 0.14, "y", { color: IMP.dark, segments: 16, texel: 1 });
+  kit.add("paintedMetal", new THREE.RingGeometry(r + 0.03, R, 16), { pos: [x, b - 0.002, z], rot: [Math.PI / 2, 0, 0], color: IMP.dark, uv: "keep" });
   kit.add("paintedMetal", new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.004, 16), { pos: [x, b - 0.004, z], color: IMP.black, uv: "keep" });
   kit.add(emit, new THREE.CylinderGeometry(r * 0.7, r * 0.7, 0.004, 16), { pos: [x, b - 0.009, z], uv: "keep" });
   // louvre: a dark rim ring hanging under the throat, five blades across it and one cross blade

@@ -21,6 +21,9 @@ export const UI = {
   status1: [640, 0, 128, 512],
   status2: [768, 0, 128, 512],
   status3: [896, 0, 128, 512],
+  // floor stencils overpaint the unused status2/3 columns (text runs along the cell's long axis, tops toward -x)
+  stencil0: [768, 0, 128, 512],
+  stencil1: [896, 0, 128, 512],
   console0: [0, 256, 256, 128],
   console1: [256, 256, 256, 128],
   console2: [0, 384, 256, 128],
@@ -323,6 +326,25 @@ function drawSign(g, cell, lines, accent = BLUE) {
   lines.forEach((s, i) => text(g, s, x + w / 2, y + h / 2 + (i - (lines.length - 1) / 2) * 30, i === 0 ? 24 : 15, i === 0 ? BLUE_HI : accent, "center"));
 }
 
+/**
+ * Floor stencil for a marked service zone: painted in a 128 × 512 cell rotated a quarter turn (reading up the
+ * cell, letter tops toward its left edge) so a 0.28 × 1.1 m floor plane with u across / v along the aisle shows
+ * it upright to someone standing on the aisle side. Amber on near-black, double rule top and bottom.
+ */
+function drawFloorStencil(g, cell, lines, accent = AMBER) {
+  const [x, y, w, h] = cell;
+  g.fillStyle = "#07080a";
+  g.fillRect(x, y, w, h);
+  g.save();
+  g.translate(x + w / 2, y + h / 2);
+  g.rotate(-Math.PI / 2);
+  g.fillStyle = accent;
+  g.fillRect(-h / 2 + 14, -w / 2 + 8, h - 28, 5);
+  g.fillRect(-h / 2 + 14, w / 2 - 13, h - 28, 5);
+  lines.forEach((s, i) => text(g, s, 0, (i - (lines.length - 1) / 2) * 46 + 2, i === 0 ? 42 : 28, accent, "center"));
+  g.restore();
+}
+
 function drawReadout(g, cell, rand, idx) {
   const [x, y, w, h] = cell;
   base(g, cell, { grid: 16, border: false });
@@ -414,7 +436,9 @@ export function makeCommsAtlas() {
   g.fillStyle = BG;
   g.fillRect(0, 0, ATLAS, ATLAS);
   drawMap(g, UI.map, rand);
-  for (let i = 0; i < 4; i++) drawStatus(g, UI["status" + i], rand, i);
+  for (let i = 0; i < 4; i++) drawStatus(g, UI["status" + i], rand, i); // 2 and 3 are overpainted below (keeps the rand sequence)
+  drawFloorStencil(g, UI.stencil0, ["SENSOR PWR", "KEEP CLEAR"]);
+  drawFloorStencil(g, UI.stencil1, ["SERVICE ZONE", "NO STORAGE"]);
   for (let i = 0; i < 4; i++) drawConsole(g, UI["console" + i], rand, i);
   drawSensor(g, UI.sensor0, rand, 0);
   drawSensor(g, UI.sensor1, rand, 1);

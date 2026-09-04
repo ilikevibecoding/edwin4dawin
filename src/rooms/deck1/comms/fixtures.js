@@ -337,7 +337,27 @@ export function sensorTower(kit, x, y0, z, idx, { labelSide = 1 } = {}) {
     kit.add("decal", g, { pos: [x, H(1.55), zo(0.021)], uv: "keep", uvRect: decalRect(s < 0 ? 13 : 1) });
     const [ga, gb] = mm(zo(-0.15), zo(0.06));
     kit.boxMM("metal", [x + 0.2, H(0.28), ga], [x + 0.32, H(0.36), gb], { color: IMP.dark });
-    cable(kit, "paintedMetal", [x + 0.26, H(0.3), zo(0.06)], [x + 0.3, H(0.02), zo(0.9)], 0.012, { color: s < 0 ? IMP.blue : IMP.black, sag: 0.05, pieces: 3 });
+    // cable clipped straight down from the gland into a flanged deck gland on the base drum's top (no loose
+    // loops in the walkway)
+    kit.cyl("paintedMetal", x + 0.26, H(0.265), zo(0.03), 0.012, 0.05, "y", { color: s < 0 ? IMP.blue : IMP.black, segments: 8 });
+    kit.cyl("metal", x + 0.26, H(0.255), zo(0.03), 0.032, 0.014, "y", { color: IMP.dark, segments: 10 });
+  }
+  // marked service zone on the centre-aisle side of the ring (labelSide), 6 cm outside the ring plate: black pad,
+  // orange border, lit amber floor stencil ("SENSOR PWR / KEEP CLEAR" or "SERVICE ZONE / NO STORAGE"). The text
+  // runs along x with its top toward the tower, so a reader in the aisle facing the tower reads it upright and the
+  // aisle cameras see it beside the ring (a pad on the +x side sat 64° off the racks camera's axis, out of frame)
+  {
+    const zc = z + labelSide * 1.25;
+    const b = 0.012;
+    kit.boxMM("impFloor", [x - 0.66, H(0.002), zc - 0.21], [x + 0.66, H(0.012), zc + 0.21], { color: IMP.black, texel: 1 });
+    kit.boxMM("paintedMetal", [x - 0.64, H(0.012), zc - 0.19], [x + 0.64, H(0.016), zc - 0.19 + b], { color: PAINT, texel: 2 });
+    kit.boxMM("paintedMetal", [x - 0.64, H(0.012), zc + 0.19 - b], [x + 0.64, H(0.016), zc + 0.19], { color: PAINT, texel: 2 });
+    kit.boxMM("paintedMetal", [x - 0.64, H(0.012), zc - 0.19], [x - 0.64 + b, H(0.016), zc + 0.19], { color: PAINT, texel: 2 });
+    kit.boxMM("paintedMetal", [x + 0.64 - b, H(0.012), zc - 0.19], [x + 0.64, H(0.016), zc + 0.19], { color: PAINT, texel: 2 });
+    const g = new THREE.PlaneGeometry(0.3, 1.2);
+    g.rotateX(-Math.PI / 2);
+    g.rotateY((-labelSide * Math.PI) / 2); // cell text tops → −labelSide·z (toward the tower), reads along x
+    kit.add("commsUI", g, { pos: [x, H(0.017), zc], uv: "keep", uvRect: uvRect(UI["stencil" + (idx % 2)]) });
   }
   // identification band at azimuth ±70° from +x (between the +x status column and the ±z access panel, clear of the
   // 45° rib): radial boxes have local x = radial thickness, local z = tangential width; their backs start inside
@@ -455,23 +475,27 @@ export function spotHead(kit, pos, target, ceilY) {
  * The point-light descriptors sit INSIDE the channel (y = ceilY - drop + 0.06): a convex closed housing cannot
  * face a source inside it, so the fixture stays dark while the light passes through to the aisle; nothing else
  * (lips, louvres, rods) is placed within 1.3 m of a source. Nothing may protrude below the underside near a
- * source either (no shadows: a lip 7 cm from a 10-intensity point renders white), so the "louvre" is drawn in
- * the emitter itself: eight 0.2 × 0.024 m cells with black bars between them — 35 % of the old 2.2 × 0.05 m tube's
- * area. Returns the descriptor y.
+ * source either (no shadows: a lip 7 cm from a 10-intensity point renders white), so the diffuser housing is
+ * drawn as flat layers on the underside: black frame, blue outline, a continuous `lamp` strip (a module-local
+ * dim emissive, ~half of emitWhite, so it cannot clip) with flat black louvre bars across it. Returns the
+ * descriptor y.
  */
-export function linearLuminaire(kit, x0, x1, z, ceilY, lightXs, { drop = 1.25 } = {}) {
+export function linearLuminaire(kit, x0, x1, z, ceilY, lightXs, { drop = 1.25, lamp = EMIT } = {}) {
   const yb = ceilY - drop; // housing underside
   const yt = yb + 0.12; // housing top
   kit.boxMM("paintedMetal", [x0, yb, z - 0.15], [x1, yt, z + 0.15], { color: IMP.dark, texel: 1 });
   // end caps flush with the body (no lip below the underside)
   for (const xe of [x0, x1]) kit.boxMM("metal", [xe - 0.03, yb - 0.002, z - 0.152], [xe + 0.03, yt + 0.002, z + 0.152], { color: IMP.black, texel: 2 });
   for (const lx of lightXs) {
-    // black diffuser frame flush with the underside; the louvred strip proud of it by 8 mm, centred on the source
-    kit.boxMM("paintedMetal", [lx - 1.25, yb - 0.004, z - 0.07], [lx + 1.25, yb, z + 0.07], { color: IMP.black });
-    for (let k = 0; k < 8; k++) {
-      const cx0 = lx - 1.1 + 0.0375 + k * 0.275;
-      kit.boxMM(EMIT, [cx0, yb - 0.012, z - 0.012], [cx0 + 0.2, yb - 0.002, z + 0.012], { uv: "keep" });
-    }
+    // diffuser housing drawn as flat layers on the underside plane (every face points down, away from the
+    // source inside, so nothing here is lit and only the emissives read; nothing protrudes more than 12 mm —
+    // a lip 7 cm from a 10-intensity point renders white): black frame, a thin blue outline, and a 2.3 m
+    // louvred diffuser — one continuous `lamp` strip 8 cm wide with 1 mm-proud black louvre bars every 9 cm
+    kit.boxMM("paintedMetal", [lx - 1.3, yb - 0.004, z - 0.09], [lx + 1.3, yb, z + 0.09], { color: IMP.black });
+    kit.boxMM("emitBlue", [lx - 1.27, yb - 0.006, z - 0.075], [lx + 1.27, yb - 0.004, z + 0.075]);
+    kit.boxMM("paintedMetal", [lx - 1.26, yb - 0.008, z - 0.066], [lx + 1.26, yb - 0.005, z + 0.066], { color: IMP.black });
+    kit.boxMM(lamp, [lx - 1.15, yb - 0.011, z - 0.04], [lx + 1.15, yb - 0.007, z + 0.04], { uv: "keep" });
+    for (let bx = lx - 1.15 + 0.045; bx < lx + 1.15; bx += 0.09) kit.boxMM("paintedMetal", [bx - 0.006, yb - 0.012, z - 0.041], [bx + 0.006, yb - 0.01, z + 0.041], { color: IMP.black });
     // driver box standing on the top face (its underside 1 mm above it, so no lit face is exposed) with a status LED
     kit.box("metalRough", lx, yt + 0.041, z, 0.4, 0.08, 0.2, { color: IMP.mid, texel: 2 });
     led(kit, "emitBlue", lx + 0.15, yt + 0.045, z + 0.1, "z", 1, 0.015);
@@ -492,7 +516,7 @@ export function linearLuminaire(kit, x0, x1, z, ceilY, lightXs, { drop = 1.25 } 
 /**
  * Ceiling cable/light hub at (x, z): rectangular channel body hung from the ceiling with trim frames, corner
  * posts, seams, an access hatch, status LED rows, two readouts, gland plates on the z faces with cable bundles
- * dropping onto the four ladder trays (trayY), and a recessed downlight centred on the underside.
+ * dropping onto the four hub trays (trayY), and a recessed downlight centred on the underside.
  * The room light sits inside the body (see hubLight): all outer faces turn away from it, the trim frames never
  * extend below the underside, and the recess walls are black, so the hub reads as a dark shape with a lit floor
  * below it. Returns the underside y.
@@ -520,7 +544,7 @@ export function cableHub(kit, x, ceilY, z, { w = 2.6, d = 1.8, h = 0.7, trayXs =
     const zf = z + sz * (d / 2);
     const [za, zb] = sz > 0 ? [zf, zf + 0.006] : [zf - 0.006, zf];
     kit.boxMM("commsUI", [x - 0.2, yb + 0.12, za], [x + 0.2, yb + 0.32, zb], { uv: "keep", uvRect: uvRect(sz > 0 ? UI.readout5 : UI.readout7) });
-    // gland plates where the ladder-tray bundles leave, bundles dropping onto the tray below
+    // gland plates where the hub-tray bundles leave, bundles dropping onto the tray below
     for (const tx of trayXs) {
       const [ga, gb] = sz > 0 ? [zf, zf + 0.05] : [zf - 0.05, zf];
       kit.boxMM("metal", [x + tx - 0.3, yb + 0.05, ga], [x + tx + 0.3, yb + 0.3, gb], { color: IMP.black, texel: 2 });

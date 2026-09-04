@@ -1,6 +1,6 @@
 // d1-tactical — holo planning room (Phase 2 detail, critic round 1): a 5 × 3 m holo table projecting an
 // animated fleet plot (planet, tagged ship icons with course vectors, feathered grid), the commander's raised
-// tier (mid-grey plate, lit nosing) with rail, stairs, lectern, pedestals and a floor hatch, an animated display
+// tier (dark plate, lit nosing) with rail, stairs, lectern, pedestals and a floor hatch, an animated display
 // wall behind it, stepped briefing seating for 16 + two standing consoles facing the table from the west, sensor
 // stations along the side walls, lockers of two widths, wall cable trays at 3.2 m with conduit drops, two
 // ceiling pipes at 3.6 m, recessed louvred light troughs and bezelled downlights.
@@ -24,6 +24,9 @@ const TX = IN.max[0] - 4.0; // tier front edge (x = 39.7)
 const TY = FLOOR + 3.2; // wall cable-tray underside
 const DLX = [CX - 6.4, CX + 6.4]; // downlight rows (over the seating and the tier, 3.5 m off the side walls)
 const DLZ = [472.6, CZ, 481.4];
+// raised plates (tier, stairs, seating steps): darker than the deck so impFloor's sheen dominates and they read
+// as dark gloss like the rest of the deck instead of a matte mid-grey carpet
+const PLATE = IMP.dark.clone().multiplyScalar(0.8);
 
 let atlas = null;
 
@@ -94,12 +97,12 @@ const manifest = {
     cableCover(kit, [34.1, 469.5], [34.1, 474.4], FLOOR);
     for (const i of [0, 1]) placer(kit, IN.min[0] + 3.0 + i * 3.8, FLOOR + 0.02, CZ, 0).decal(0, 0, 0, 0.5, i ? 9 : 6, -Math.PI / 2);
 
-    // ---- raised tier (east): mid-grey plate with steel nosing, lit edge strip, hazard riser with step lights,
+    // ---- raised tier (east): dark plate (deck tint × 0.8) with steel nosing, lit edge strip, hazard riser with step lights,
     //      rails and two-step stairs; lectern, two equipment pedestals, round floor hatch, cable cover to the rack
-    stepBlock(kit, [TX, FLOOR, IN.min[2]], [IN.max[0], TIER, IN.max[2]], { edges: ["w"], hazardRiser: true, glow: "emitBlue", color: IMP.mid, tag: "tier" });
+    stepBlock(kit, [TX, FLOOR, IN.min[2]], [IN.max[0], TIER, IN.max[2]], { edges: ["w"], hazardRiser: true, glow: "emitBlue", color: PLATE, tag: "tier" });
     kit.boxMM("emitBlue", [TX - 0.006, FLOOR + 0.18, IN.min[2] + 0.05], [TX, FLOOR + 0.2, CZ - 1.65]);
     kit.boxMM("emitBlue", [TX - 0.006, FLOOR + 0.18, CZ + 1.65], [TX, FLOOR + 0.2, IN.max[2] - 0.05]);
-    stairs(kit, { x0: TX - 0.8, x1: TX, z0: CZ - 1.6, z1: CZ + 1.6, yTop: TIER, yBottom: FLOOR, dir: "-x", color: IMP.mid });
+    stairs(kit, { x0: TX - 0.8, x1: TX, z0: CZ - 1.6, z1: CZ + 1.6, yTop: TIER, yBottom: FLOOR, dir: "-x", color: PLATE });
     railing(kit, [TX, IN.min[2] + 0.3], [TX, CZ - 1.6], TIER);
     railing(kit, [TX, CZ + 1.6], [TX, IN.max[2] - 0.3], TIER);
     lectern(kit, placer(kit, TX + 1.3, TIER, CZ, 1), { w: 1.2, screenMat: M, screenRect: cells.lect, stripRect: cells.rb[1], seed: 2 });
@@ -185,7 +188,7 @@ const manifest = {
         { zMin: 477.75, zMax: 480.25, seatZ: [478.2, 479.0, 479.8], skip: [{ row: 2, i: 0 }] },
       ];
       for (const b of blocks) {
-        seatBlock(kit, FLOOR, { rows, zMin: b.zMin, zMax: b.zMax, seatZ: b.seatZ, facing: 3, aimZ: CZ, skip: b.skip, chairFn: (p) => chair(kit, p, { padColor: IMP.grey, shellColor: IMP.mid, backLed: true }) });
+        seatBlock(kit, FLOOR, { rows, zMin: b.zMin, zMax: b.zMax, seatZ: b.seatZ, facing: 3, aimZ: CZ, skip: b.skip, jitter: 0.25, seed: Math.round(b.zMin * 10), platformColor: PLATE, chairFn: (p) => chair(kit, p, { padColor: IMP.grey, shellColor: IMP.mid, backLed: true }) });
         lowRail(kit, [30.5, b.zMin], [30.5, b.zMax], FLOOR, { postEvery: 1.2 });
         lowRail(kit, [27.15, b.zMin], [27.15, b.zMax], FLOOR + 0.46, { postEvery: 1.2 });
         lowRail(kit, [27.15, b.zMin], [28.25, b.zMin], FLOOR + 0.46, { postEvery: 1.2, collide: false });

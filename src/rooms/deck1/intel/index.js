@@ -197,18 +197,27 @@ const manifest = {
     wallSign(kit, "z", zn, 1, 38.0, 38.6, y0 + 1.9, y0 + 2.2, "tag2");
     riser(kit, R, 39.05, 39.65, zn + 0.05, zn + 0.65);
     riser(kit, R, 39.05, 39.65, zs - 0.65, zs - 0.05);
+    // perimeter: inlaid red floor strips (4 cm lens) 25 cm in front of the column faces (north / south) and the
+    // archive fronts (east), joined at the east corners — the room boundary reads from every camera even where the
+    // floor pools do not reach; clear of the watch / cipher desks (west ends) and the evidence-hatch floor plate
+    floorStrip(kit, y0, 491.35, 27.5, 38.8, { alongX: true, lens: 0.04 });
+    floorStrip(kit, y0, 502.45, 28.6, 38.8, { alongX: true, lens: 0.04 });
+    floorStrip(kit, y0, 38.75, 491.3, 502.5, { lens: 0.04 });
 
-    // --- east wall: six locked archive cabinets, red strips between them, duct with grilles above
+    // --- east wall: six locked archive cabinets (each with its own numbered / named / state-labelled header plate),
+    // dark pilasters in the gaps between them, duct with grilles above
     for (let i = 0; i < 6; i++) {
       const z0 = 491.75 + i * 1.8;
       archiveCabinet(kit, R, xe, z0, z0 + 1.5, i);
       if (i) {
-        // dark pilaster between cabinets with a 5 cm slot; the red lens sits 10 cm back at the slot's bottom
+        // dark 8 cm pilaster with a 5 cm slot; a 1.2 cm red lens sits 4.6 cm back in the slot, so the slit reads
+        // narrow head-on and thins out at oblique angles (the old lens stood bare on the wall — the pilaster slabs
+        // had a zero height — and read as a 2 cm bar from everywhere)
         const zp = z0 - 0.15;
-        slab(kit, "paintedMetal", "x", xe, -1, zp - 0.15, zp - 0.025, y0, ceilY - y0, 0, 0.12, { color: IMP.dark, texel: 1 });
-        slab(kit, "paintedMetal", "x", xe, -1, zp + 0.025, zp + 0.15, y0, ceilY - y0, 0, 0.12, { color: IMP.dark, texel: 1 });
-        slab(kit, "paintedMetal", "x", xe, -1, zp - 0.025, zp + 0.025, y0, ceilY - y0, 0, 0.01, { color: IMP.black, texel: 1 });
-        slab(kit, "emitRedImp", "x", xe, -1, zp - 0.01, zp + 0.01, y0 + 0.5, y0 + 2.0, 0.01, 0.014);
+        slab(kit, "paintedMetal", "x", xe, -1, zp - 0.15, zp - 0.025, y0, ceilY, 0, 0.08, { color: IMP.dark, texel: 1 });
+        slab(kit, "paintedMetal", "x", xe, -1, zp + 0.025, zp + 0.15, y0, ceilY, 0, 0.08, { color: IMP.dark, texel: 1 });
+        slab(kit, "paintedMetal", "x", xe, -1, zp - 0.025, zp + 0.025, y0, ceilY, 0, 0.03, { color: IMP.black, texel: 1 });
+        slab(kit, "emitRedImp", "x", xe, -1, zp - 0.006, zp + 0.006, y0 + 0.5, y0 + 2.0, 0.03, 0.034);
       }
     }
     duct(kit, 491.3, 502.7, y0 + 2.62, y0 + 2.98, xe - 0.45, xe, { alongX: false, grilles: [493.5, 497.0, 500.5], grilleFace: xe - 0.45 });
@@ -240,11 +249,13 @@ const manifest = {
     // never touches their own housing or the ceiling; the table spot (priority 1.0) is the shadow caster.
     const red = LIGHT.red;
     const point = (pos, intensity, distance, priority) => ctx.lights.push({ type: "point", pos, color: red, intensity, distance, priority });
-    const spot = (pos, target, intensity, distance, angle, priority) => ctx.lights.push({ type: "spot", pos, target, color: red, intensity, distance, angle, penumbra: 0.6, priority });
-    // room: four cans between the table-axis channel and the rack channels, two over the archive wall (intensities
-    // give ~1.5 lx-equivalent on the floor: the shots at half this read 4 % grey, target ~8 %)
-    for (const x of [29.6, 37.2]) for (const z of [cz - 2.6, cz + 2.6]) point(canLight(kit, ceilY, x, z), 20, 10, 0.5);
-    for (const z of [cz - 3.6, cz + 3.6]) point(canLight(kit, ceilY, xe - 1.25, z), 16, 9, 0.45);
+    const spot = (pos, target, intensity, distance, angle, priority, penumbra = 0.6) => ctx.lights.push({ type: "spot", pos, target, color: red, intensity, distance, angle, penumbra, priority });
+    // room: four cans between the table-axis channel and the rack channels at 40 cd (E ≈ 3 on the floor under and
+    // between them, ≈ 1.9 in the far corners — the "2–4 % red ambient" the floor grid and wall bases need; the room
+    // sits at the 14-descriptor cap, so the fill comes from the housed cans rather than extra points), two over the
+    // archive wall pulled 1.7 m off it so the cabinet fronts get a 20° incidence instead of a graze
+    for (const x of [29.6, 37.2]) for (const z of [cz - 2.6, cz + 2.6]) point(canLight(kit, ceilY, x, z), 40, 12, 0.5);
+    for (const z of [cz - 3.6, cz + 3.6]) point(canLight(kit, ceilY, xe - 1.7, z), 20, 10, 0.45);
     // vestibule: three cans 2 m apart over the north half — lockers, the desk approach (the vestibule view's far-end
     // pool: ≈ E 4 at the desk's foot, the brightest floor in the room) and the door / RESTRICTED sign — plus the
     // south can over the booth / compartments (faces the booth's grey back panel: kept at 12)
@@ -254,8 +265,10 @@ const manifest = {
     point(canLight(kit, ceilY, 25.0, 501.6), 12, 9, 0.55);
     // guard booth (no descriptor of its own: the south can lights its interior through the wall — no shadows)
     guardBooth(kit, R, pxW, 500.4, 502.4, { w: pxW - xA });
-    // spots: analysis table (shadow caster), lock path in front of the arch, gate threshold, surveillance wall wash
-    spot(tableFixture(kit, R, tx, cz), [tx, tyb + 0.93, cz], 14, 6, 0.8, 1.0);
+    // spots: analysis table (shadow caster — a tight 0.76 rad cone with a hard 0.28 penumbra: full at the table
+    // top, half at the stools, out at the dais's x ends, so table, stools and dais read as one lit island), lock
+    // path in front of the arch, gate threshold, surveillance wall wash
+    spot(tableFixture(kit, R, tx, cz), [tx, tyb + 0.93, cz], 22, 6, 0.76, 1.0, 0.28);
     spot(canSpot(kit, ceilY, 24.9, 498.6), [25.4, y0, 498.6], 18, 7, 0.75, 0.9);
     spot(canSpot(kit, ceilY, px + 0.9, (gate.z0 + gate.z1) / 2), [px + 0.3, y0, (gate.z0 + gate.z1) / 2], 16, 6, 0.6, 0.7);
     spot(spotHood(kit, R, pxE, 1, 492.9), [pxE + 0.35, y0, 492.9], 10, 8, 0.85, 0.6);

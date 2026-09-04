@@ -285,6 +285,34 @@ function drawLabel(g, cell, s, sub) {
   if (sub) text(g, sub, x + w / 2, y + 46, 9, RED, "center", false);
 }
 
+// --- archive cabinet header (2:1, 0.64 × 0.32 m on the cabinet): dark field, thin border, a number block (filled
+// for LOCKED / SEALED, outlined for OPEN), the archive name, its clearance line and a state bar — pure RED, no
+// RED_HI text, so at 10 m the plate mip-averages to a dark plate with one bright block instead of a pink bar
+function drawArchiveLabel(g, cell, num, name, sub, state) {
+  const [x, y, w, h] = cell;
+  g.fillStyle = "#0a0304";
+  g.fillRect(x, y, w, h);
+  g.strokeStyle = RED_LO;
+  g.lineWidth = 2;
+  g.strokeRect(x + 3, y + 3, w - 6, h - 6);
+  const open = state === "OPEN";
+  if (open) {
+    g.strokeStyle = RED;
+    g.lineWidth = 2;
+    g.strokeRect(x + 9, y + 9, 34, h - 18);
+    text(g, num, x + 26, y + h / 2, 24, RED, "center");
+  } else {
+    g.fillStyle = RED;
+    g.fillRect(x + 8, y + 8, 36, h - 16);
+    text(g, num, x + 26, y + h / 2, 24, "#0a0304", "center");
+  }
+  text(g, name, x + 52, y + 19, 10, RED);
+  text(g, sub, x + 52, y + 33, 7, RED_DIM, "left", false);
+  g.fillStyle = open ? "rgba(255,42,26,0.12)" : RED_LO;
+  g.fillRect(x + 52, y + 42, w - 60, 13);
+  text(g, state, x + 52 + (w - 60) / 2, y + 48.5, 8, RED, "center");
+}
+
 function drawReadout(g, cell, rand, idx) {
   const [x, y, w, h] = cell;
   base(g, cell, { grid: 16, border: false });
@@ -412,8 +440,10 @@ export function makeIntelAtlas() {
   drawSign(g, UI.sign3, ["LOCK IN OPERATION"], { big: 16 }); // dark plate, lit text + border lines only
   drawSign(g, UI.post, ["GUARD POST", "CALL FOR ASSISTANCE"], { big: 15, small: 8 });
   drawSign(g, UI.check, ["CHECKPOINT 4-A · GUARD POST", "PRESENT IDENT · WAIT FOR CLEARANCE"], { big: 17, small: 11 });
+  // archive headers: state follows the cabinet kind in props.archiveCabinet (idx % 3: drawers / pulled / vault)
   const labels = ["SIGINT VAULT", "ASSET FILES", "CIPHER KEYS", "WATCHLIST", "PURGE HOLD", "CUSTODY"];
-  labels.forEach((s, i) => drawLabel(g, UI["label" + i], s, ["ARCHIVE 01 · L4", "ARCHIVE 02 · L3", "ARCHIVE 03 · L4", "ARCHIVE 04 · L2", "ARCHIVE 05 · SEALED", "ARCHIVE 06 · L4"][i]));
+  const clear = ["CLEARANCE L4", "CLEARANCE L3", "CLEARANCE L4", "CLEARANCE L2", "CLEARANCE L4", "CLEARANCE L4"];
+  labels.forEach((s, i) => drawArchiveLabel(g, UI["label" + i], String(i + 1).padStart(2, "0"), s, clear[i], ["LOCKED", "OPEN", "SEALED"][i % 3]));
   ["DATASTREAM 01", "DATASTREAM 02", "DATASTREAM 03", "DATASTREAM 04", "DATASTREAM 05", "SURVEILLANCE"].forEach((s, i) => drawLabel(g, UI["tag" + i], s));
   for (let i = 0; i < 4; i++) drawReadout(g, UI["readout" + i], rand, i);
   const tex = toTexture(c, { srgb: true, wrap: false });

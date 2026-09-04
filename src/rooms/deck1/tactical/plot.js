@@ -16,13 +16,23 @@ function edgePanel(kit, p, w, rand, atlasMat, screenRect, { sy0 = 0.9, sz0 = -0.
     const [, ty, tz] = p.onSlope(0, 0.005, 0.165, tilt);
     p.box("metal", 0, sy0 + ty, sz0 + tz, w, 0.02, 0.025, { color: IMP.mid, texel: 2, tilt });
   }
-  const cols = Math.max(4, Math.floor((w - 0.7) / 0.085));
+  // one labelled key block (4–5 caps, about half lit) instead of a run of eight across the whole slope
+  const cols = Math.max(4, Math.floor((w - 0.9) / 0.11));
   for (let i = 0; i < cols; i++) {
-    const ox = -w / 2 + 0.12 + i * 0.085;
+    const ox = -w / 2 + 0.3 + i * 0.085;
     const [lx, ly, lz] = p.onSlope(ox, 0.026, 0.09, tilt);
     const v = rand();
     const mat = v < 0.5 ? "paintedMetal" : v < 0.72 ? "emitBlue" : v < 0.9 ? "emitAmber" : "emitRedImp";
     p.box(mat, lx, sy0 + ly, sz0 + lz, 0.055, 0.014, 0.045, { color: IMP.black, texel: 4, tilt });
+  }
+  {
+    // label strip under the key block
+    const lw = 0.06 + (cols - 1) * 0.085;
+    const lx0 = -w / 2 + 0.3 + (cols - 1) * 0.0425;
+    const [px, py, pz] = p.onSlope(lx0, 0.022, 0.145, tilt);
+    p.box("impPanel", px, sy0 + py, sz0 + pz, lw, 0.004, 0.026, { color: IMP.white, texel: 2, tilt });
+    const [tx, ty, tz] = p.onSlope(lx0 - lw * 0.1, 0.0255, 0.145, tilt);
+    p.box("paintedMetal", tx, sy0 + ty, sz0 + tz, lw * 0.7, 0.002, 0.005, { color: IMP.black, tilt });
   }
   if (screen) {
     const [sx, sy, sz] = p.onSlope(w / 2 - 0.36, 0.024, -0.03, tilt);
@@ -40,8 +50,17 @@ function edgePanel(kit, p, w, rand, atlasMat, screenRect, { sy0 = 0.9, sz0 = -0.
     const [rx, ry, rz] = p.onSlope(-w / 2 + 0.18 + i * 0.1, 0.04, -0.06, tilt);
     p.box("paintedMetal", rx, sy0 + ry, sz0 + rz, 0.06, 0.03, 0.08, { color: IMP.dark, texel: 4, tilt, roll: 0 });
   }
-  const [ix, iy, iz] = p.onSlope(-w / 2 + 0.4, 0.024, -0.06, tilt);
-  p.box(IND[Math.floor(rand() * IND.length)], ix, sy0 + iy, sz0 + iz, 0.08, 0.012, 0.03, { tilt });
+  rand();
+}
+
+/**
+ * Small label plate on a vertical prop face (local +z): light plate with two dark text bars, sized to sit
+ * beside a block of LEDs so the block reads as a labelled group instead of loose confetti.
+ */
+function labelPlate(p, ox, oy, oz, { w = 0.1, h = 0.03 } = {}) {
+  p.box("impPanel", ox, oy, oz, w, h, 0.004, { color: IMP.white, texel: 2 });
+  p.box("paintedMetal", ox, oy + h * 0.16, oz + 0.003, w * 0.7, h * 0.16, 0.002, { color: IMP.black });
+  p.box("paintedMetal", ox - w * 0.1, oy - h * 0.2, oz + 0.003, w * 0.5, h * 0.12, 0.002, { color: IMP.black });
 }
 
 /** Builds the rectangular holo table centred at (cx, cz), long axis along z. atlasMat = atlas material KEY. Returns { top }. */
@@ -61,10 +80,14 @@ export function buildHoloTable(kit, atlasMat, cells, cx, floorY, cz, { hx = 1.5,
   kit.boxMM("paintedMetal", [cx - hx, y(0.22), cz - hz], [cx + hx, y(0.72), cz + hz], { color: IMP.black, texel: 1 });
   // rim block carrying the sloped edge panels
   kit.boxMM("paintedMetal", [cx - hx - 0.08, y(0.72), cz - hz - 0.08], [cx + hx + 0.08, y(0.86), cz + hz + 0.08], { color: IMP.dark, texel: 1 });
-  // top plates (frame, blue border, dark gloss field)
+  // top plates (frame, blue border, a dark-gloss margin around a MATTE black field under the hologram — the
+  // gloss field mirrored the lit north wall through the grid as a white blob at the table centre)
   kit.boxMM("metal", [cx - hx + 0.18, y(0.95), cz - hz + 0.18], [cx + hx - 0.18, y(0.98), cz + hz - 0.18], { color: IMP.mid, texel: 2 });
   kit.boxMM("emitBlue", [cx - hx + 0.28, y(0.98), cz - hz + 0.28], [cx + hx - 0.28, y(0.995), cz + hz - 0.28]);
-  kit.boxMM("darkGloss", [cx - hx + 0.32, y(0.985), cz - hz + 0.32], [cx + hx - 0.32, y(1.007), cz + hz - 0.32]);
+  kit.boxMM("darkGloss", [cx - hx + 0.32, y(0.985), cz - hz + 0.32], [cx + hx - 0.32, y(1.005), cz + hz - 0.32]);
+  const fx = hx - 0.42;
+  const fz = hz - 0.42;
+  kit.boxMM("rubber", [cx - fx, y(0.99), cz - fz], [cx + fx, y(1.007), cz + fz], { color: IMP.black, texel: 1 });
   const top = y(1.007);
   // emitter field: matrix of small lenses and an amber inner border
   for (let i = 0; i < 4; i++) {
@@ -89,11 +112,15 @@ export function buildHoloTable(kit, atlasMat, cells, cx, floorY, cz, { hx = 1.5,
       kit.box("paintedMetal", px, y(0.52), pz, 0.2, 1.04, 0.2, { color: IMP.dark, texel: 1 });
       kit.box("metal", px, y(1.055), pz, 0.22, 0.03, 0.22, { color: IMP.mid, texel: 2 });
       kit.box("emitBlue", px, y(1.077), pz, 0.06, 0.014, 0.06);
-      // LED column on both outward faces
-      for (let i = 0; i < 6; i++) {
-        kit.box(IND[(i + (sx > 0 ? 1 : 0) + (sz > 0 ? 3 : 0)) % IND.length], px + sx * 0.104, y(0.5 + i * 0.07), pz + sz * 0.04, 0.008, 0.03, 0.03);
-        kit.box(IND[(i * 2 + (sx > 0 ? 2 : 0)) % IND.length], px + sx * 0.04, y(0.5 + i * 0.07), pz + sz * 0.104, 0.03, 0.03, 0.008);
+      // one labelled LED block (4) on each outward face, black backing plate, label plate under it
+      for (let i = 0; i < 4; i++) {
+        kit.box(IND[(i + (sx > 0 ? 1 : 0) + (sz > 0 ? 3 : 0)) % IND.length], px + sx * 0.104, y(0.62 + i * 0.07), pz + sz * 0.04, 0.008, 0.03, 0.03);
+        kit.box(IND[(i * 2 + (sx > 0 ? 2 : 0)) % IND.length], px + sx * 0.04, y(0.62 + i * 0.07), pz + sz * 0.104, 0.03, 0.03, 0.008);
       }
+      kit.box("paintedMetal", px + sx * 0.101, y(0.7), pz + sz * 0.04, 0.002, 0.34, 0.06, { color: IMP.black });
+      kit.box("paintedMetal", px + sx * 0.04, y(0.7), pz + sz * 0.101, 0.06, 0.34, 0.002, { color: IMP.black });
+      labelPlate(placerRad(kit, px + sx * 0.102, floorY, pz + sz * 0.04, sx > 0 ? Math.PI / 2 : -Math.PI / 2), 0, 0.56, 0, { w: 0.05, h: 0.025 });
+      labelPlate(placerRad(kit, px + sx * 0.04, floorY, pz + sz * 0.102, sz > 0 ? 0 : Math.PI), 0, 0.56, 0, { w: 0.05, h: 0.025 });
       placerRad(kit, px + sx * 0.102, floorY, pz, sx > 0 ? Math.PI / 2 : -Math.PI / 2).decal(0, 0.28, 0, 0.12, 9);
     }
   }
@@ -115,15 +142,19 @@ export function buildHoloTable(kit, atlasMat, cells, cx, floorY, cz, { hx = 1.5,
       // recessed body panel with seam, LED trio / vent slats alternating
       p.box("paintedMetal", 0, 0.47, 0.01, f.panelW - 0.1, 0.42, 0.02, { color: IMP.dark, texel: 1 });
       p.box("paintedMetal", 0, 0.47, 0.021, f.panelW - 0.16, 0.02, 0.004, { color: IMP.black });
+      // LEDs come in labelled blocks (a plate beside each group), ~40 % fewer than the old runs
       if (k % 2 === 0) {
         for (let i = 0; i < 3; i++) p.box(IND[(i + k) % IND.length], -0.2 + i * 0.08, 0.6, 0.024, 0.035, 0.02, 0.006);
+        labelPlate(p, -0.36, 0.6, 0.024, { w: 0.11, h: 0.03 });
         for (let j = 0; j < 4; j++) p.box("metal", f.panelW / 2 - 0.3, 0.32 + j * 0.05, 0.026, 0.3, 0.01, 0.012, { color: IMP.mid });
       } else {
         p.decal(-f.panelW / 2 + 0.25, 0.36, 0.026, 0.18, 6);
-        for (let i = 0; i < 6; i++) p.box(IND[(i * 2 + k) % IND.length], -0.25 + i * 0.1, 0.62, 0.024, 0.04, 0.02, 0.006);
+        for (let i = 0; i < 4; i++) p.box(IND[(i * 2 + k) % IND.length], -0.15 + i * 0.1, 0.62, 0.024, 0.04, 0.02, 0.006);
+        labelPlate(p, 0.26, 0.62, 0.024, { w: 0.11, h: 0.03 });
       }
-      // indicator run along the rim block's outer face and the sloped panel above it
-      for (let i = 0; i < 7; i++) p.box(IND[(i + k * 3) % IND.length], -0.3 + i * 0.1, 0.8, 0.084, 0.04, 0.02, 0.006);
+      // indicator trio on the rim block's outer face with its label, blue seam line under it
+      for (let i = 0; i < 3; i++) p.box(IND[(i + k * 3) % IND.length], -0.1 + i * 0.1, 0.8, 0.084, 0.04, 0.02, 0.006);
+      labelPlate(p, 0.2, 0.8, 0.084, { w: 0.12, h: 0.03 });
       p.box("emitBlue", 0, 0.755, 0.084, f.panelW - 0.4, 0.008, 0.006);
       edgePanel(kit, p, f.panelW, rand, atlasMat, cells.con[f.cells[k] % cells.con.length], { screen: k % 2 === 0 || f.n === 2 });
     }
@@ -411,13 +442,14 @@ export function wallRack(kit, p, { w = 6.0, h = 0.9, d = 0.5, seed = 0, screenMa
  * strip, hazard riser). Seats turn toward `aimZ` by up to `maxTurn` radians; `skip` = [{ row, i }] positions
  * left empty for the caller (standing consoles). facing 3 = occupants face +x.
  */
-export function seatBlock(kit, floorY, { rows, zMin, zMax, seatZ, facing = 3, chairFn, aimZ = null, maxTurn = 0.26, skip = [] }) {
+export function seatBlock(kit, floorY, { rows, zMin, zMax, seatZ, facing = 3, chairFn, aimZ = null, maxTurn = 0.26, skip = [], jitter = 0, seed = 0, platformColor = IMP.mid }) {
+  const rand = rng(seed + 77);
   // rows: [{ x, y }] from the front (lowest) to the back (highest); platforms rise toward the back (−x)
   for (let r = 1; r < rows.length; r++) {
     const xe = (rows[r].x + rows[r - 1].x) / 2;
     const xw = r + 1 < rows.length ? (rows[r].x + rows[r + 1].x) / 2 : rows[r].x - 0.55;
     const yBelow = rows[r - 1].y;
-    kit.boxMM("impFloor", [xw, floorY, zMin], [xe, rows[r].y, zMax], { color: IMP.mid, texel: 0.5 });
+    kit.boxMM("impFloor", [xw, floorY, zMin], [xe, rows[r].y, zMax], { color: platformColor, texel: 0.5 });
     kit.boxMM("metal", [xe - 0.035, rows[r].y, zMin], [xe, rows[r].y + 0.006, zMax], { color: IMP.steel });
     kit.boxMM("emitBlue", [xe - 0.08, rows[r].y, zMin + 0.1], [xe - 0.06, rows[r].y + 0.008, zMax - 0.1]);
     kit.boxMM("hazard", [xe, yBelow + 0.015, zMin + 0.05], [xe + 0.006, yBelow + 0.065, zMax - 0.05], { texel: 3 });
@@ -428,9 +460,13 @@ export function seatBlock(kit, floorY, { rows, zMin, zMax, seatZ, facing = 3, ch
   rows.forEach((row, r) => {
     seatZ.forEach((z, i) => {
       if (skip.some((s) => s.row === r && s.i === i)) return;
-      // turn toward aimZ: for facing 3 a smaller yaw turns the occupant toward +z
+      // turn toward aimZ: for facing 3 a smaller yaw turns the occupant toward +z; `jitter` adds a per-seat
+      // swivel (± jitter rad) and spacing / pull-back offsets (± 0.4 jitter m) so the rows read as used seats
       const turn = aimZ === null ? 0 : Math.max(-maxTurn, Math.min(maxTurn, ((aimZ - z) / 2.8) * maxTurn));
-      chairFn(placerRad(kit, row.x, row.y, z, base - turn));
+      const sw = jitter ? (rand() - 0.5) * 2 * jitter : 0;
+      const dz = jitter ? (rand() - 0.5) * 0.8 * jitter : 0;
+      const dx = jitter ? (rand() - 0.3) * 0.5 * jitter : 0;
+      chairFn(placerRad(kit, row.x + dx, row.y, z + dz, base - turn + sw));
     });
   });
 }

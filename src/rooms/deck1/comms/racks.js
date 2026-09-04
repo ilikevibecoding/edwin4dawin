@@ -1,5 +1,5 @@
 // Comms equipment: rack cabinets (open-front with visible cabling / closed with a door display), patch frames,
-// patch cables, overhead cable trays (U-channel and ladder), bundle drops, ducting, pipes and the ceiling beams.
+// patch cables, overhead cable trays (closed-bottom U-channels), bundle drops, ducting, pipes and the ceiling beams.
 // World-space kit-bashing.
 import * as THREE from "three";
 import { rng } from "../../../kit.js";
@@ -341,52 +341,35 @@ function hangers(kit, R, y, ceilY, w, hangEvery, hangStart = 0.6) {
   for (let l = R.lo + hangStart; l < R.hi - 0.3; l += hangEvery) {
     for (const s of [-1, 1]) {
       const cc = R.c + s * (w / 2 - 0.03);
-      if (R.alongX) kit.cyl("metal", l, (y + 0.09 + ceilY) / 2, cc, 0.012, ceilY - y - 0.09, "y", { color: IMP.mid, segments: 6 });
-      else kit.cyl("metal", cc, (y + 0.09 + ceilY) / 2, l, 0.012, ceilY - y - 0.09, "y", { color: IMP.mid, segments: 6 });
+      if (R.alongX) kit.cyl("metalRough", l, (y + 0.09 + ceilY) / 2, cc, 0.012, ceilY - y - 0.09, "y", { color: IMP.dark, segments: 6 });
+      else kit.cyl("metalRough", cc, (y + 0.09 + ceilY) / 2, l, 0.012, ceilY - y - 0.09, "y", { color: IMP.dark, segments: 6 });
     }
-    R.bx("metal", l - 0.04, l + 0.04, y + 0.09, y + 0.12, R.c - w / 2 - 0.02, R.c + w / 2 + 0.02, { color: IMP.dark });
+    R.bx("metalRough", l - 0.04, l + 0.04, y + 0.09, y + 0.12, R.c - w / 2 - 0.02, R.c + w / 2 + 0.02, { color: IMP.dark });
   }
 }
 
 /**
- * Cable tray: U-channel running from a to b ([x,z]) at height y with cross ribs, cables and hanger rods
- * up to ceilY. w = width. Axis-aligned only.
+ * Cable tray: solid-bottom U-channel running from a to b ([x,z]) at height y with cross ribs, cables and hanger
+ * rods up to ceilY. w = width. Axis-aligned only.
+ * All the metalwork is `metalRough` in dark tints: the trays run 0.27 m above and 1.2–2.4 m beside the aisle
+ * sources, and bare `metal` (worn roughness down to 0.2, F0 0.1 in impMid) mirrored them as four clipped
+ * "downlight" glints on tray undersides and rail ends. `metalRough` × impDark caps the worst-texel specular peak
+ * near 0.4, the black underside (F0 0.004) cannot spike even at grazing angles, and the 9 cm rails keep the
+ * cables (dielectric paintedMetal, the strongest remaining mirror) hidden from below and from low aisle cameras.
  */
-export function cableTray(kit, a, b, y, ceilY, { w = 0.4, hangEvery = 2.2, hangStart = 0.6, ribEvery = 0.5, cables = 3, seed = 1 } = {}) {
+export function cableTray(kit, a, b, y, ceilY, { w = 0.4, hangEvery = 2.2, hangStart = 0.6, ribEvery = 0.5, cables = 3, seed = 1, cols = [IMP.black, IMP.blue, IMP.dark, IMP.mid] } = {}) {
   const rand = rng(seed);
   const R = run(kit, a, b);
   const { lo, hi, c, bx } = R;
-  bx("metal", lo, hi, y, y + 0.02, c - w / 2, c + w / 2, { color: IMP.mid, texel: 2 });
-  bx("metal", lo, hi, y, y + 0.09, c - w / 2, c - w / 2 + 0.02, { color: IMP.dark, texel: 2 });
-  bx("metal", lo, hi, y, y + 0.09, c + w / 2 - 0.02, c + w / 2, { color: IMP.dark, texel: 2 });
-  for (let l = lo + 0.25; l < hi; l += ribEvery) bx("metal", l - 0.015, l + 0.015, y + 0.02, y + 0.035, c - w / 2 + 0.02, c + w / 2 - 0.02, { color: IMP.mid });
-  const cols = [IMP.black, IMP.blue, IMP.dark, IMP.mid];
+  bx("metalRough", lo, hi, y, y + 0.02, c - w / 2 + 0.02, c + w / 2 - 0.02, { color: IMP.black, texel: 2 });
+  bx("metalRough", lo, hi, y, y + 0.09, c - w / 2, c - w / 2 + 0.02, { color: IMP.dark, texel: 2 });
+  bx("metalRough", lo, hi, y, y + 0.09, c + w / 2 - 0.02, c + w / 2, { color: IMP.dark, texel: 2 });
+  for (let l = lo + 0.25; l < hi; l += ribEvery) bx("metalRough", l - 0.015, l + 0.015, y + 0.02, y + 0.035, c - w / 2 + 0.02, c + w / 2 - 0.02, { color: IMP.mid });
   for (let k = 0; k < cables; k++) {
     const off = -w / 2 + 0.07 + (k * (w - 0.14)) / Math.max(1, cables - 1) + (rand() - 0.5) * 0.02;
     const r = 0.012 + rand() * 0.012;
     R.cyl("paintedMetal", lo + 0.05, hi - 0.05, y + 0.02 + r, c + off, r, { color: cols[k % cols.length], segments: 6 });
   }
-  hangers(kit, R, y, ceilY, w, hangEvery, hangStart);
-}
-
-/**
- * Ladder tray: two side rails with rungs (no floor) so the cable bundle on it stays visible from below; runs
- * from a to b ([x,z]) at height y, hanger rods up to ceilY.
- */
-export function ladderTray(kit, a, b, y, ceilY, { w = 0.45, rungEvery = 0.3, cables = 4, hangEvery = 2.4, hangStart = 0.6, seed = 1 } = {}) {
-  const rand = rng(seed);
-  const R = run(kit, a, b);
-  const { lo, hi, c, bx } = R;
-  bx("metal", lo, hi, y, y + 0.06, c - w / 2, c - w / 2 + 0.03, { color: IMP.grey, texel: 2 });
-  bx("metal", lo, hi, y, y + 0.06, c + w / 2 - 0.03, c + w / 2, { color: IMP.grey, texel: 2 });
-  for (let l = lo + 0.15; l < hi - 0.05; l += rungEvery) bx("metal", l - 0.012, l + 0.012, y + 0.01, y + 0.03, c - w / 2 + 0.03, c + w / 2 - 0.03, { color: IMP.mid });
-  for (let k = 0; k < cables; k++) {
-    const off = -w / 2 + 0.09 + (k * (w - 0.18)) / Math.max(1, cables - 1) + (rand() - 0.5) * 0.02;
-    const r = 0.014 + rand() * 0.01;
-    R.cyl("paintedMetal", lo + 0.03, hi - 0.03, y + 0.03 + r, c + off, r, { color: CABLE_COLS[k % CABLE_COLS.length], segments: 6 });
-  }
-  // tie straps over the bundle every third rung
-  for (let l = lo + 0.45; l < hi - 0.2; l += rungEvery * 3) bx("metal", l - 0.015, l + 0.015, y + 0.03, y + 0.075, c - w / 2 + 0.06, c + w / 2 - 0.06, { color: IMP.black });
   hangers(kit, R, y, ceilY, w, hangEvery, hangStart);
 }
 
@@ -442,9 +425,11 @@ export function pipe(kit, a, b, y, c, r, { alongX = true, color = IMP.steel, bra
  * (Light fixtures are separate: see linearLuminaire / recessedDownlight / spotHead in fixtures.js.)
  */
 export function ceilingStructure(kit, x0, x1, z0, z1, ceilY, { beamsZ = [], beamsX = [] } = {}) {
+  // flanges in metalRough, not bare metal: their undersides sit 0.86 m above the aisle sources and the worn map's
+  // roughness-0.2 texels mirrored them as 50-px clipped glints (d1-comms-signal-wall); the flat lobe stays under 0.25
   for (const z of beamsZ) {
     kit.boxMM("paintedMetal", [x0, ceilY - 0.3, z - 0.12], [x1, ceilY, z + 0.12], { color: IMP.dark, texel: 1 });
-    kit.boxMM("metal", [x0, ceilY - 0.33, z - 0.18], [x1, ceilY - 0.3, z + 0.18], { color: IMP.mid, texel: 2 });
+    kit.boxMM("metalRough", [x0, ceilY - 0.33, z - 0.18], [x1, ceilY - 0.3, z + 0.18], { color: IMP.mid, texel: 2 });
     // bolt heads along the flange every 2 m
     for (let x = x0 + 1; x < x1 - 0.5; x += 2) {
       kit.box("metal", x, ceilY - 0.34, z - 0.14, 0.05, 0.02, 0.05, { color: IMP.steel });
@@ -453,6 +438,6 @@ export function ceilingStructure(kit, x0, x1, z0, z1, ceilY, { beamsZ = [], beam
   }
   for (const x of beamsX) {
     kit.boxMM("paintedMetal", [x - 0.1, ceilY - 0.26, z0], [x + 0.1, ceilY, z1], { color: IMP.dark, texel: 1 });
-    kit.boxMM("metal", [x - 0.15, ceilY - 0.28, z0], [x + 0.15, ceilY - 0.26, z1], { color: IMP.mid, texel: 2 });
+    kit.boxMM("metalRough", [x - 0.15, ceilY - 0.28, z0], [x + 0.15, ceilY - 0.26, z1], { color: IMP.mid, texel: 2 });
   }
 }

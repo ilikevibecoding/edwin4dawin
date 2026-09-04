@@ -2,7 +2,7 @@
 // with door displays, one door open) with patch cabling and bundle drops from the row trays, four operator
 // stations (twin / hooded / wrap kinds) and a supervisor dais facing the signal-wall array (animated receiver
 // display, status columns, system maps, upper-band cable tray), two sensor-processing towers with rotating
-// scanner rings, a ceiling cable/light hub feeding four ladder trays, linear aisle luminaires, ducting and beams.
+// scanner rings, a ceiling cable/light hub feeding four cable trays, linear aisle luminaires, ducting and beams.
 // Blue displays / amber status (COORDINATION.md §11).
 import * as THREE from "three";
 import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
@@ -11,7 +11,7 @@ import { IMP, LIGHT } from "../shared/palette.js";
 import { rng } from "../../../kit.js";
 import { makeCommsAtlas, makeWaveDisplay } from "./ui.js";
 import { screenMaterial, beginLedBatch, flushLedBatch } from "./lib.js";
-import { rack, patchFrame, patchBetween, bundleDrop, workLamp, cableTray, ladderTray, duct, pipe, ceilingStructure } from "./racks.js";
+import { rack, patchFrame, patchBetween, bundleDrop, workLamp, cableTray, duct, pipe, ceilingStructure } from "./racks.js";
 import { station } from "./stations.js";
 import { signalWall, eastWall, sensorTower, ringGeometry, cableHub, hubLight, washSpot, linearLuminaire, canDownlight, spotHead, dais, walkway, cableCover } from "./fixtures.js";
 
@@ -44,7 +44,10 @@ const manifest = {
   materials() {
     atlasTex = makeCommsAtlas();
     wave = makeWaveDisplay();
-    return { commsUI: screenMaterial(atlasTex, 1.3), commsWave: screenMaterial(wave.texture, 1.4) };
+    // commsLamp: the aisle luminaires' diffuser strips — a dim white emissive (0.65 vs emitWhite's 1.35) that
+    // stays under the ACES + bloom clip threshold even where the strips are seen end-on and pile up
+    const lamp = new THREE.MeshStandardMaterial({ color: 0x0a0c10, emissive: 0xe6eeff, emissiveIntensity: 0.65, roughness: 0.5, metalness: 0 });
+    return { commsUI: screenMaterial(atlasTex, 1.3), commsWave: screenMaterial(wave.texture, 1.4), commsLamp: lamp };
   },
   build(ctx) {
     const { kit } = ctx;
@@ -103,22 +106,40 @@ const manifest = {
     workLamp(kit, cx - 2.75, y0 + 1.75, zn + 0.9, +1);
     workLamp(kit, cx + 2.9, y0 + 1.75, zs - 0.9, -1);
 
-    // --- overhead trays at 3.28 m (all below the pendant luminaires at 3.45 m): a U-channel tray over each rack
-    // row, one cross tray over the operator row (station conduit drops), the hub's four ladder trays out to both
-    // rows (hanger rods kept 1.2 m clear of the aisle sources), one feed tray from the hub to the signal wall at
-    // 3.5 m crossing over the south ladder trays
+    // --- overhead trays at 3.28 m (all above the pendant luminaires, whose sources sit at 3.01 m): a U-channel
+    // tray over each rack row, one cross tray over the operator row (station conduit drops), the hub's four
+    // wider trays out to both rows (hanger rods kept 1.2 m clear of the aisle sources: hangStart/hangEvery are
+    // tuned per run), one feed tray from the hub to the signal wall at 3.5 m crossing over the south hub trays.
+    // Every tray is a closed-bottom channel: the sources are 0.27 m below the tray undersides and 0.75–2.4 m to
+    // the side, so anything glossy seen from below at grazing angles mirrors them (round 3 read four such glints
+    // as clipped downlights) — see cableTray for the material choice. Even a black underside reflects ~40 % at
+    // grazing incidence (Fresnel goes to 1 whatever F0), and at roughness 1 the lobe is flat, so the hot spot is
+    // simply wherever a tray underside passes closest to a source: E·cosθ ∝ 0.27 / d³. The hub trays used to
+    // cross the aisle lines 0.75 m beside the inner sources (d1-comms-racks: 90 clipped px per tray, both sides);
+    // they now leave the hub at ±1.25, jog out at cz ± 3.5 (3 m short of the aisles) and cross at cx ± 4, midway
+    // between the ±2 and ±6 sources: 2 m from each, 16× less irradiance than at 0.75 m, and 4× less than the
+    // ±0.8 layout that still showed soft spots.
     const trayY = y0 + 3.28;
     cableTray(kit, [rowX0, zn + 0.35], [rowX1, zn + 0.35], trayY, ceilY, { w: 0.4, seed: 11 });
     cableTray(kit, [rowX0, zs - 0.35], [rowX1, zs - 0.35], trayY, ceilY, { w: 0.4, seed: 12 });
     const stationX = xw + 5.5;
     const trayA = stationX;
     cableTray(kit, [trayA, zn + 0.55], [trayA, zs - 0.55], trayY, ceilY, { w: 0.36, seed: 13 });
-    const hubW = 2.6;
+    const hubW = 3.2; // wide enough for the gland plates (tray x ± 0.3) to stay on its z faces
     const hubD = 1.8;
-    const hubTrayXs = [-0.8, 0.8];
+    const hubTrayXs = [-1.25, 1.25];
+    const hubCrossX = 4.0; // aisle crossing, midway between the cx ± 2 and cx ± 6 sources
+    const hubJogZ = 3.5;
+    const hubCols = [IMP.black, IMP.blue, IMP.black, IMP.amber];
     hubTrayXs.forEach((tx, i) => {
-      ladderTray(kit, [cx + tx, cz - hubD / 2 - 0.05], [cx + tx, zn + 0.56], trayY, ceilY, { w: 0.45, seed: 40 + i, hangStart: 0.44 });
-      ladderTray(kit, [cx + tx, cz + hubD / 2 + 0.05], [cx + tx, zs - 0.56], trayY, ceilY, { w: 0.45, seed: 50 + i, hangStart: 1.95 });
+      const ox = Math.sign(tx) * hubCrossX;
+      for (const [s, zEnd, seed, hangStart] of [[-1, zn + 0.56, 40 + i, 0.44], [1, zs - 0.56, 50 + i, 1.95]]) {
+        const jog = cz + s * hubJogZ;
+        // butt joints (no coplanar overlaps): the z runs stop at the cross tray's near and far edges
+        cableTray(kit, [cx + tx, cz + s * (hubD / 2 + 0.05)], [cx + tx, jog - s * 0.225], trayY, ceilY, { w: 0.45, cables: 4, cols: hubCols, seed, hangStart, hangEvery: 2.4 });
+        cableTray(kit, [cx + tx - Math.sign(tx) * 0.225, jog], [cx + ox + Math.sign(tx) * 0.225, jog], trayY, ceilY, { w: 0.45, cables: 4, cols: hubCols, seed: seed + 100, hangStart: 1.2, hangEvery: 2.4 });
+        cableTray(kit, [cx + ox, jog + s * 0.225], [cx + ox, zEnd], trayY, ceilY, { w: 0.45, cables: 4, cols: hubCols, seed: seed + 200, hangStart: 0.9, hangEvery: 2.4 });
+      }
     });
     const feedZ = cz + 1.9;
     const feedY = y0 + 3.5;
@@ -132,8 +153,8 @@ const manifest = {
     const aisleXs = [cx - 6.0, cx - 2.0, cx + 2.0, cx + 6.0];
     const aisleN = zn + 2.2;
     const aisleS = zs - 2.2;
-    const aisleY = linearLuminaire(kit, rowX0 + 0.2, rowX1 - 0.2, aisleN, ceilY, aisleXs);
-    linearLuminaire(kit, rowX0 + 0.2, rowX1 - 0.2, aisleS, ceilY, aisleXs);
+    const aisleY = linearLuminaire(kit, rowX0 + 0.2, rowX1 - 0.2, aisleN, ceilY, aisleXs, { lamp: "commsLamp" });
+    linearLuminaire(kit, rowX0 + 0.2, rowX1 - 0.2, aisleS, ceilY, aisleXs, { lamp: "commsLamp" });
     const eastLights = [
       [xe - 2.5, cz - 3.0],
       [xe - 2.5, cz + 3.0],

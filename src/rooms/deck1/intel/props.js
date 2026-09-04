@@ -753,12 +753,16 @@ export function tableDressing(kit, R, cx, cz, yb) {
   }
 }
 
-/** Locked archive cabinet against the east wall (back plane xBack, face toward -x), z0..z1. */
+/**
+ * Locked archive cabinet against the east wall (back plane xBack, face toward -x), z0..z1. Three kinds (drawer stack,
+ * pulled drawers, vault door) under a 0.36 m header carrying a 0.64 × 0.32 m label plate — number block, name and
+ * LOCKED / OPEN / SEALED state, one cell per cabinet — so the six headers read as signage, not a row of lit bars.
+ */
 export function archiveCabinet(kit, R, xBack, z0, z1, idx) {
   const { y0 } = R;
   const H = (v) => y0 + v;
   const D = 0.7;
-  const h = 2.4;
+  const h = 2.5;
   const xf = xBack - D;
   const zc = (z0 + z1) / 2;
   const rand = rng(700 + idx);
@@ -813,14 +817,16 @@ export function archiveCabinet(kit, R, xBack, z0, z1, idx) {
     led(kit, OFF, xf - 0.06, H(1.97), zc + 0.05, "x", -1, 0.025);
     reach = 0.24;
   }
-  // header: label plate, status lamp pair, and (drawer stacks only) a recessed light line behind a black lip
-  slab(kit, "intelUI", "x", xf, -1, zc - 0.24, zc + 0.24, H(2.16), H(2.38), 0, 0.006, { uv: "keep", uvRect: uvRect(UI["label" + (idx % 6)]) });
+  // header: bezelled label plate (black bezel 2 cm proud, plate 4 mm in front of it), status lamp pair, and (drawer
+  // stacks only) a recessed light line behind a black lip
+  slab(kit, "paintedMetal", "x", xf, -1, zc - 0.35, zc + 0.35, H(2.135), H(2.49), 0, 0.02, { color: IMP.black, texel: 2 });
+  slab(kit, "intelUI", "x", xf, -1, zc - 0.32, zc + 0.32, H(2.16), H(2.48), 0.02, 0.024, { uv: "keep", uvRect: uvRect(UI["label" + (idx % 6)]) });
   if (kind === 0) {
     kit.boxMM("paintedMetal", [xf - 0.012, H(2.1), z0 + 0.06], [xf + 0.005, H(2.112), z1 - 0.06], { color: IMP.black, texel: 2 });
     kit.boxMM(RED, [xf - 0.001, H(2.115), z0 + 0.08], [xf + 0.005, H(2.13), z1 - 0.08]);
   }
-  led(kit, kind === 1 ? OFF : RED, xf, H(2.27), z1 - 0.16, "x", -1, 0.06, 0.015);
-  led(kit, kind === 1 ? RED : OFF, xf, H(2.27), z0 + 0.16, "x", -1, 0.06, 0.015);
+  led(kit, kind === 1 ? OFF : RED, xf, H(2.32), z1 - 0.16, "x", -1, 0.06, 0.015);
+  led(kit, kind === 1 ? RED : OFF, xf, H(2.32), z0 + 0.16, "x", -1, 0.06, 0.015);
   kit.collider([xf - reach, y0, z0], [xBack, H(h + 0.04), z1], "cabinet");
 }
 
@@ -1182,12 +1188,22 @@ export function floorPath(kit, y0, x0, x1, z0, z1, { bars = [] } = {}) {
   for (const bx of bars) kit.boxMM(RED, [bx - 0.02, y0 + 0.012, z0 + 0.15], [bx + 0.02, y0 + 0.018, z1 - 0.15]);
 }
 
-/** Inlaid red floor strip along z at x: 10 cm black inlay plate 4 mm proud with a 3 cm red lens 5 mm up its centre. */
-export function floorStrip(kit, y0, x, z0, z1) {
-  const lo = Math.min(z0, z1);
-  const hi = Math.max(z0, z1);
-  kit.boxMM("metalRough", [x - 0.05, y0 + 0.002, lo], [x + 0.05, y0 + 0.006, hi], { color: IMP.black, texel: 2 });
-  kit.boxMM(RED, [x - 0.015, y0 + 0.006, lo + 0.03], [x + 0.015, y0 + 0.011, hi - 0.03]);
+/**
+ * Inlaid red floor strip: black inlay plate (lens + 7 cm) 4 mm proud with a red lens 5 mm up its centre. Runs along
+ * z at x = c (default) or, with alongX, along x at z = c; a0..a1 = extent along the run.
+ */
+export function floorStrip(kit, y0, c, a0, a1, { alongX = false, lens = 0.03 } = {}) {
+  const lo = Math.min(a0, a1);
+  const hi = Math.max(a0, a1);
+  const hw = lens / 2 + 0.035;
+  const hl = lens / 2;
+  if (alongX) {
+    kit.boxMM("metalRough", [lo, y0 + 0.002, c - hw], [hi, y0 + 0.006, c + hw], { color: IMP.black, texel: 2 });
+    kit.boxMM(RED, [lo + 0.03, y0 + 0.006, c - hl], [hi - 0.03, y0 + 0.011, c + hl]);
+  } else {
+    kit.boxMM("metalRough", [c - hw, y0 + 0.002, lo], [c + hw, y0 + 0.006, hi], { color: IMP.black, texel: 2 });
+    kit.boxMM(RED, [c - hl, y0 + 0.006, lo + 0.03], [c + hl, y0 + 0.011, hi - 0.03]);
+  }
 }
 
 /** Red floor strip (thin emissive line) along x or z. */

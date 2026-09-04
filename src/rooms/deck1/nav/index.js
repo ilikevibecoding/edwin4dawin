@@ -4,10 +4,10 @@
 // recessed louvred light troughs, wall greebles and painted floor inlays.
 // Contract (COORDINATION.md §7): id/kind/deck/owner/bounds/doors/lift/spawn/apertures unchanged from Phase 1.
 import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
-import { roomShell, doorReveal, railing, stairs } from "../shared/imperial.js";
+import { roomShell, doorReveal, stairs } from "../shared/imperial.js";
 import { IMP, LIGHT } from "../shared/palette.js";
 import { ScreenAtlas, UI, paintStarMap, paintStatusColumn, paintConsole, paintReadoutBar, paintGauge, paintStack, paintRoutePlot } from "./ui.js";
-import { placer, wallAnchor, station, chair, stool, locker, equipmentRack, dataColumn, junctionBox, vent, intercom, emergencyCabinet, framedScreen, readoutBar, conduitBundle, wallPipe, wallTray, stencilPlate, beam, ceilingPanels, lightTrough, lightCanopy, ceilingRibs, cableTray, downlight, ceilingVent, projectorRig, floorInlay, floorHatch, stepBlock, WALL_OFF } from "./props.js";
+import { placer, wallAnchor, station, chair, stool, locker, chartChest, mapTubeRack, equipmentRack, dataColumn, junctionBox, vent, intercom, emergencyCabinet, framedScreen, readoutBar, conduitBundle, wallPipe, wallTray, stencilPlate, beam, ceilingPanels, lightTrough, lightCanopy, uplightChannel, ceilingRibs, cableTray, downlight, ceilingVent, projectorRig, floorInlay, floorHatch, stepBlock, WALL_OFF } from "./props.js";
 import { buildChartTable, buildChartHolo, buildChartDesk } from "./table.js";
 import { tickHolo } from "./holo.js";
 
@@ -22,6 +22,8 @@ const DLX = [CX - 6.4, CX + 6.4]; // downlight rows (3.5 m off the side walls: n
 const DLZ = [472.6, CZ, 481.4];
 // dais light canopy footprint (hung 0.5 m under the ceiling over the raised dais, open on the wall side)
 const CAN = { x0: -37.9, x1: -29.7, z0: 482.9, z1: B.max[2] - 0.3, depth: 0.5 };
+// indirect (soffit-wash) channel under the canopy: z of its centre line, x of its three sources
+const UPL = { z: 483.2, xs: [CX - 2.9, CX, CX + 2.9] };
 
 let atlas = null;
 
@@ -100,8 +102,17 @@ const manifest = {
     for (const x of DLX) for (const z of DLZ) downlight(kit, x, CY, z);
     downlight(kit, CX + 0.8, CY, 470.9); // the console-bank pool's source (beside the ceiling tray)
     // dais canopy: hung fascia box over the dais footprint with three louvred light channels across it (the
-    // dais key/wash spot sits inside the room-side channel)
+    // dais key/wash spot sits inside the room-side channel). Under its soffit, an indirect light channel runs
+    // the canopy's width just behind the fascia (three low sources inside it wash the soffit, so the canopy's
+    // underside reads as a lit surface from the room), and two cable trays branch off it over the wall screens
+    // to the south wall tray.
     lightCanopy(kit, [CAN.x0, CAN.z0], [CAN.x1, CAN.z1], CY, { depth: CAN.depth, channels: 3 });
+    {
+      const soffitY = CY - CAN.depth;
+      const chY = soffitY - 0.61; // channel bottom (its top rim 0.1 m higher sits just under the wall tray level)
+      uplightChannel(kit, CAN.x0 + 0.3, CAN.x1 - 0.3, UPL.z, chY, soffitY, { w: 0.3, hangers: [CX - 3.45, CX - 1.45, CX + 1.45, CX + 3.45] });
+      for (const x of [CX - 2.4, CX + 2.4]) cableTray(kit, [x, UPL.z + 0.17], [x, IN.max[2] - 0.42], chY, { w: 0.3, hangTo: soffitY, cables: 2 });
+    }
     ceilingRibs(kit, [CX - 7.5, CX + 7.5], IN.min[2] + 0.3, IN.max[2] - 0.3, CY);
     ceilingRibs(kit, [CX - 2.5, CX + 2.5], IN.min[2] + 0.3, CAN.z0 - 0.1, CY);
     for (const [x0, x1] of [
@@ -212,18 +223,21 @@ const manifest = {
       floorHatch(kit, IN.max[0] - 1.4, FLOOR, 483.0);
     }
 
-    // ---- south: navigator's raised dais (mid-grey plate, lit nosing) with centre steps and rails, the tilted
-    //      chart desk against the wall with two stools, route plot + beacon screen and gauges above it
+    // ---- south: navigator's raised dais (a 0.3 m plate: mid-grey, steel nosing, blue edge glow, hazard riser)
+    //      with a centre step — no guard rail: a 0.3 m platform does not warrant one, and a rail box around the
+    //      desk read as a fence. The step tread carries blue step-light strips under both nosings. The tilted
+    //      chart desk stands against the wall with two stools, route plot + beacon screen and gauges above it.
     {
       const dx0 = -37.6;
       const dx1 = -30.0;
       const dz0 = 482.9;
       stepBlock(kit, [dx0, FLOOR, dz0], [dx1, FLOOR + 0.3, IN.max[2]], { edges: ["n", "e", "w"], hazardRiser: true, glow: "emitBlue", color: IMP.mid, tag: "dais" });
       stairs(kit, { x0: CX - 0.8, x1: CX + 0.8, z0: 482.0, z1: dz0, yTop: FLOOR + 0.3, yBottom: FLOOR, dir: "-z", color: IMP.mid });
-      railing(kit, [dx0, dz0], [CX - 0.9, dz0], FLOOR + 0.3);
-      railing(kit, [CX + 0.9, dz0], [dx1, dz0], FLOOR + 0.3);
-      railing(kit, [dx1, dz0], [dx1, IN.max[2] - 0.3], FLOOR + 0.3);
-      railing(kit, [dx0, dz0], [dx0, IN.max[2] - 0.3], FLOOR + 0.3);
+      // step lights: a strip on the intermediate step's riser (z 482.45, 0.15 m tread) and one on the dais riser
+      // above the step, both just under the nosing; steel edge trims either side of the step
+      kit.boxMM("emitBlue", [CX - 0.72, FLOOR + 0.105, 482.444], [CX + 0.72, FLOOR + 0.125, 482.45]);
+      kit.boxMM("emitBlue", [CX - 0.72, FLOOR + 0.255, dz0 - 0.006], [CX + 0.72, FLOOR + 0.275, dz0]);
+      for (const s of [-1, 1]) kit.boxMM("metal", [CX + s * 0.8 - 0.02, FLOOR, 482.0], [CX + s * 0.8 + 0.02, FLOOR + 0.16, dz0], { color: IMP.steel, texel: 2 });
       // chart desk: 2 × 1 m display tilted toward the navigators (who sit on the room side, facing the wall screens)
       buildChartDesk(kit, placer(kit, CX, FLOOR + 0.3, 485.0, 2), M, cells.deskDisp, { w: 2.6, d: 1.4, seed: 50 });
       for (const s of [-1, 1]) stool(kit, placer(kit, CX + s * 0.7, FLOOR + 0.3, 483.95, 0));
@@ -238,9 +252,10 @@ const manifest = {
       wallPipe(kit, wallAnchor(kit, "s", IN, -40.5, FLOOR + 3.6), { len: 5.4, r: 0.04 });
       wallPipe(kit, wallAnchor(kit, "s", IN, -40.5, FLOOR + 3.85), { len: 5.4, r: 0.025, color: IMP.dark });
       stencilPlate(kit, wallAnchor(kit, "s", IN, -41.8, FLOOR + 2.4), 0.3, 5);
-      // east of the dais: wide + narrow lockers, low chart cabinet, junction, vent, pipe
-      locker(kit, wallAnchor(kit, "s", IN, -29.05, FLOOR), { w: 0.9, seed: 5, label: 6, ajar: true });
-      locker(kit, wallAnchor(kit, "s", IN, -28.25, FLOOR), { w: 0.6, seed: 6, label: 9 });
+      // east of the dais: chart-drawer chest + map-tube rack (nav-specific storage instead of the stock locker
+      // bank), low chart cabinet, junction, vent, pipe
+      chartChest(kit, wallAnchor(kit, "s", IN, -29.2, FLOOR), { w: 1.3, h: 1.45, seed: 5, pulled: 2 });
+      mapTubeRack(kit, wallAnchor(kit, "s", IN, -28.1, FLOOR), { w: 0.7, h: 2.0, seed: 6 });
       {
         const p = wallAnchor(kit, "s", IN, -26.2, FLOOR);
         p.box("paintedMetal", 0, 0.5, WALL_OFF + 0.3, 1.4, 1.0, 0.6, { color: IMP.dark, texel: 1 });
@@ -258,7 +273,7 @@ const manifest = {
       intercom(kit, wallAnchor(kit, "s", IN, -24.6, FLOOR + 1.5));
     }
 
-    // ---- lights (11 descriptors: 8 point + 3 spot; corridor keeps 4 point + 1 spot pool slots)
+    // ---- lights (14 descriptors: 11 point + 3 spot; corridor keeps 1 point + 1 spot pool slots)
     // Downlight points sit 1.0 m under their housings, 3.5 m off the side walls and ≥ 4.3 m off the end walls,
     // so they pool on the floor (and softly on the matte ceiling) instead of throwing hot specular blobs onto
     // the glossy wall panels; the end walls get down-aimed spots whose cones cut off before the panel band a
@@ -279,6 +294,10 @@ const manifest = {
       const zc = CAN.z0 + 0.08 + (CAN.z1 - CAN.z0 - 0.08) / 6;
       ctx.lights.push({ type: "spot", pos: [CX, CY - CAN.depth + 0.1, zc], color: LIGHT.coolWhite, intensity: 14, distance: 7.5, target: [CX, FLOOR + 0.6, 485.2], angle: 0.8, penumbra: 0.5, priority: 0.62 });
     }
+    // canopy soffit wash: three low sources inside the indirect channel 0.55 m under the soffit (E ≈ 3.3 on the
+    // light-grey impPanel soffit above each, ≈ 0.3 midway) — the canopy's underside reads as a lit surface; the
+    // channel is a convex dark housing, the spot above sits outside its own cone's reach of the channel
+    for (const x of UPL.xs) ctx.lights.push({ type: "point", pos: [x, CY - CAN.depth - 0.55, UPL.z], color: LIGHT.coolWhite, intensity: 1.0, distance: 4, priority: 0.4 });
     ctx.lights.push({ type: "point", pos: [CX, FLOOR + 0.35, CZ], color: LIGHT.blue, intensity: 1.5, distance: 4.5, priority: 0.3 });
 
     return {
