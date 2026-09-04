@@ -629,14 +629,15 @@ export function buildHangar(kit, ctx) {
   // =========================================================================================
   // Lights
   // =========================================================================================
-  // big cool floodlights: spot descriptors with shadow (two are live at any time — the nearest). The
-  // cones are wide enough (60°) that neighbouring arches overlap on the long walls; narrower cones
-  // leave dark up-pointing wedges between them from the deck to the galleries.
+  // big cool floodlights: spot descriptors with shadow (two are live at any time — the nearest). Wide
+  // 60° cones so neighbouring arches overlap on the long walls, and kept well clear of the crane
+  // rails (z 100..128 and 252..290): a spot a few metres above a 117 m crane bridge throws its
+  // shadow as a huge dark wedge across the deck and up the opposite wall.
   const spotI = 2600;
-  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [-40, yC - 1, 116], [-40, y, 118], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
-  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [40, yC - 1, 116], [40, y, 118], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
-  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [-40, yC - 1, 274], [-40, y, 272], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
-  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [40, yC - 1, 274], [40, y, 272], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
+  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [-40, yC - 1, 135], [-40, y, 132], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
+  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [40, yC - 1, 135], [40, y, 132], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
+  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [-40, yC - 1, 245], [-40, y, 248], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
+  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [40, yC - 1, 245], [40, y, 248], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
   spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [-42, yC - 1, 190], [-42, y, 190], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
   spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [42, yC - 1, 190], [42, y, 190], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
   // planet light coming up through the open well (no shadow; only bound while the doors are open)
