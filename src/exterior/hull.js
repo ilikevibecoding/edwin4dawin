@@ -103,11 +103,12 @@ export function buildExterior(mats, opts = {}) {
     const keelPts = (z, hole) => {
       const wk = halfWidth(z) * HULL.keelFlatFrac;
       const y = keelY(z);
-      // strip runs starboard -> port along -x so its normal faces down (-y)
-      if (!hole) return [[[wk, y], [-wk, y]]];
+      // loft() winds (a0, b1, b0) with b further aft, so a strip whose points run port -> starboard
+      // (along +x) gets a normal facing down (-y): the keel has to be seen from below
+      if (!hole) return [[[-wk, y], [wk, y]]];
       return [
-        [[wk, y], [hole.x1, y]],
-        [[hole.x0, y], [-wk, y]],
+        [[-wk, y], [hole.x0, y]],
+        [[hole.x1, y], [wk, y]],
       ];
     };
     for (const r of ranges) {
