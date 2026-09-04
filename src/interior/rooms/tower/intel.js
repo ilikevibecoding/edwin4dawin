@@ -1,15 +1,16 @@
 // Restricted Intelligence Room (ISB). Clean light-grey panels over a black gloss deck, every light
 // source red: red wall bands, two red ceiling troughs, a red planet hologram over the central analysis
 // table. Encrypted-terminal desks line the west wall, six sealed data vaults with lock wheels and status
-// lights the south wall, a records wall the east. The SE corner is an interrogation cell behind dark
-// observation glass: one restraint chair under the room's only hard white spot, an interrogation droid
+// lights the south wall, a records wall the east. The SE corner is an interrogation cell sealed behind
+// red containment fields (post-and-rail bays with emitter strips) with a framed keypad door: one
+// restraint chair on a stepped plinth under the room's only hard white spot, an interrogation droid
 // drifting beside it. ISB stencils (red cells 5, 11, 12) at the door, the vaults and the cell.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { buildShell, roomWalls } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
-import { console as impConsole, chair, ceilingLight, pointLightDesc, spotLightDesc, glassWall, screenArray, wallScreen, alertBeacon, floorDecal, placard, lockers, column } from "../../impKit.js";
-import { IMP } from "../../../materials/imperial.js";
+import { console as impConsole, chair, ceilingLight, pointLightDesc, spotLightDesc, walkable, screenArray, wallScreen, alertBeacon, floorDecal, placard, lockers, column } from "../../impKit.js";
+import { IMP, NO_SHADOW_KEYS } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
 
@@ -22,10 +23,28 @@ export function buildIntel(kit, ctx) {
   const yc = y + h;
   const RED = IMP.red;
 
+  // the black gloss deck as a semi-gloss dielectric with a red-tinted environment. The deck's roughness
+  // map has mirror smears (0.01-0.3) that no scalar factor can lift, and they reflect the room
+  // environment's ceiling panels and the point lights as blown white tiles right across the red room;
+  // the map is remapped in the shader to 0.32-0.6 (seams rougher still), so the plates and boot-polish
+  // smears still vary the sheen without any of them going mirror. The sheen itself is the neutral-grey
+  // environment map seen at grazing angles, which is most of what a dark floor shows and goes white
+  // whatever the base colour (also for a metal: Fresnel), so it is tinted red and dimmed in the same
+  // patch — the material's envMapIntensity is inert, three.js drives that uniform from
+  // scene.environmentIntensity for every material without an envMap of its own. The red practicals
+  // reflect red on their own.
+  if (!ctx.mats.isbFloor) {
+    const m = ctx.mats.impGlossSoft.clone();
+    m.metalnessMap = null;
+    m.metalness = 0.0;
+    m.roughness = 0.9; // span of the remapped roughness map (see isbFloorPatch)
+    m.needsUpdate = true;
+    ctx.mats.isbFloor = isbFloorPatch(m, { roughLo: 0.32, tint: 0xff6050, gain: 0.35 });
+  }
   buildShell(kit, ctx, ctx.id, room, {
     wall: { pitch: 3.5, tone: IMP.wallLight, toneAlt: IMP.wallMid, bandMat: "lightBandRed", styles: { plain: 0.6, control: 0.12, vent: 0.08, hatch: 0.08, screen: 0.08, niche: 0.04 } },
     ceiling: { lights: false, tone: IMP.trim, panelW: 2.5 },
-    floor: { mat: "impGlossSoft", tone: IMP.black, strip: false, texel: 0.35 },
+    floor: { mat: "isbFloor", tone: new THREE.Color("#5a1412"), strip: false, texel: 0.35 },
   });
   const walls = roomWalls(room);
 
@@ -153,37 +172,127 @@ export function buildIntel(kit, ctx) {
     pointLightDesc(ctx, RED, 1.5, 7, [-66.8, y + 3.1, zf - 1.6], 0);
   }
 
-  // ---- interrogation cell (SE corner) behind observation glass -------------------------------------------------
+  // ---- interrogation cell (SE corner) behind red containment fields ---------------------------------------------
   {
-    const gx = -60.0; // glass line
-    const gz = 617.5;
+    if (!ctx.mats.isbField) {
+      ctx.mats.isbField = makeFieldMaterial();
+      NO_SHADOW_KEYS.add("isbField");
+    }
+    const gx = -60.0; // west field line
+    const gz = 617.5; // north field line
     const cellH = 3.2;
-    glassWall(kit, [gx, gz], [gx, z1 - t], y, cellH, { mullions: 3, sill: 0.35 });
-    glassWall(kit, [gx, gz], [-56.6, gz], y, cellH, { mullions: 1, sill: 0.35 });
-    glassWall(kit, [-54.6, gz], [x1 - t, gz], y, cellH, { sill: 0.35 });
-    // doorway header between the two north segments, red status strip
-    kit.box("impPaintedMetal", -55.6, y + cellH - 0.15, gz, 2.2, 0.3, 0.16, { color: IMP.trim, texel: 1 });
-    kit.box("emitRed", -55.6, y + cellH - 0.15, gz - 0.085, 1.4, 0.04, 0.01);
-    floorDecal(kit, -55.6, y, gz - 0.9, 0.9, 11);
-    // restraint chair on a round plinth, facing the glass
+    const SILL = 0.35;
+    const DOOR = [-56.6, -54.6]; // doorway span in the north line (frame + pocket wall east of it)
+    // field wall from -> to: sill rail with a steel nosing, head rail, a post at every bay boundary with
+    // emitter strips facing the bays, a scan-line containment field filling each bay (all one mesh)
+    const fieldWall = (from, to, bays, tag) => {
+      const dx = to[0] - from[0];
+      const dz = to[1] - from[1];
+      const L = Math.hypot(dx, dz);
+      const ux = dx / L;
+      const uz = dz / L;
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(-uz, ux));
+      const at = (along, dy) => [from[0] + ux * along, y + dy, from[1] + uz * along];
+      const add = (mat, along, dy, sx, sy, sz, extra = {}) => kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: at(along, dy), quat: q, ...extra });
+      add("impPaintedMetal", L / 2, SILL / 2, L, SILL, 0.24, { color: IMP.trim, texel: 1 });
+      add("impMetal", L / 2, SILL + 0.01, L, 0.02, 0.26, { color: IMP.steel });
+      add("impPaintedMetal", L / 2, cellH - 0.1, L, 0.2, 0.24, { color: IMP.trim, texel: 1 });
+      add("emitRed", L / 2, cellH - 0.205, L - 0.3, 0.01, 0.06);
+      const pitch = L / bays;
+      const fv = (cellH - 0.2 + SILL) / 2;
+      const fh = cellH - 0.2 - SILL;
+      for (let i = 0; i <= bays; i++) {
+        const a = Math.min(Math.max(i * pitch, 0.1), L - 0.1);
+        add("impPaintedMetal", a, cellH / 2, 0.2, cellH, 0.2, { color: IMP.trim, texel: 1 });
+        for (const e of [-1, 1]) if ((i > 0 || e > 0) && (i < bays || e < 0)) add("emitRed", a + e * 0.103, fv, 0.006, fh - 0.2, 0.05);
+      }
+      for (let i = 0; i < bays; i++) kit.add("isbField", new THREE.PlaneGeometry(pitch - 0.24, fh - 0.06), { pos: at((i + 0.5) * pitch, fv), quat: q, uv: "keep" });
+      const pad = 0.14;
+      kit.collider([Math.min(from[0], to[0]) - pad, y, Math.min(from[1], to[1]) - pad], [Math.max(from[0], to[0]) + pad, y + cellH, Math.max(from[1], to[1]) + pad], tag);
+    };
+    fieldWall([gx, gz], [gx, z1 - t], 4, "cellField");
+    fieldWall([gx, gz], [DOOR[0], gz], 2, "cellField");
+    // door: heavy jambs with steel reveals, lintel, header panel with the ISB roundel, red status lamp in a
+    // housing over the opening, keypad on the outer jamb; the leaf stands open, slid into the pocket wall
+    // east of the frame (its lit leading edge shows in the reveal)
+    const dcx = (DOOR[0] + DOOR[1]) / 2;
+    const dw = DOOR[1] - DOOR[0];
+    for (const jx of [DOOR[0] + 0.15, DOOR[1] - 0.15]) {
+      kit.box("impPaintedMetal", jx, y + 1.3, gz, 0.3, 2.6, 0.3, { color: IMP.trim, texel: 1 });
+      kit.box("impMetal", jx + (jx < dcx ? 0.15 : -0.15), y + 1.3, gz, 0.02, 2.5, 0.36, { color: IMP.gunmetal });
+    }
+    kit.box("impPaintedMetal", dcx, y + 2.75, gz, dw, 0.3, 0.3, { color: IMP.trim, texel: 1 });
+    kit.box("impMetal", dcx, y + 2.61, gz, dw - 0.6, 0.02, 0.36, { color: IMP.gunmetal });
+    kit.box("impPaintedMetal", dcx, y + (2.9 + cellH) / 2, gz, dw, cellH - 2.9, 0.24, { color: IMP.trim, texel: 1 });
+    kit.box("impPaintedMetal", dcx + 0.45, y + 3.02, gz - 0.16, 0.7, 0.16, 0.1, { color: IMP.consoleDark, texel: 1 });
+    kit.box("emitRed", dcx + 0.45, y + 3.02, gz - 0.215, 0.5, 0.06, 0.01);
+    for (const zs of [gz - 0.121, gz + 0.121]) {
+      const g = new THREE.PlaneGeometry(0.3, 0.3);
+      if (zs > gz) g.rotateY(Math.PI);
+      kit.add("impDecal", g, { pos: [dcx - 0.55, y + 3.03, zs + (zs > gz ? 0.002 : -0.002)], uv: "keep", uvRect: impDecalRect(5) });
+    }
+    kit.box("impPaintedMetal", DOOR[0] + 0.15, y + 1.35, gz - 0.17, 0.16, 0.26, 0.04, { color: IMP.consoleDark, texel: 1 });
+    kit.box("blinkSparse", DOOR[0] + 0.15, y + 1.32, gz - 0.192, 0.11, 0.14, 0.006, { uv: "keep" });
+    kit.box("emitRed", DOOR[0] + 0.15, y + 1.44, gz - 0.192, 0.08, 0.02, 0.006);
+    // pocket wall east of the door (the leaf slides into it): trim frame, dark panel, warning stencil
+    const pk = [DOOR[1], x1 - t];
+    kit.boxMM("impPaintedMetal", [pk[0], y, gz - 0.12], [pk[1], y + cellH, gz + 0.12], { color: IMP.trim, texel: 1 });
+    for (const zs of [gz - 0.125, gz + 0.125]) kit.boxMM("impPanel1", [pk[0] + 0.12, y + SILL, zs - 0.015], [pk[1] - 0.12, y + cellH - 0.2, zs + 0.015], { color: IMP.wallDark, uv: "keep" });
+    kit.box("impMetal", pk[0] + 0.1, y + 1.3, gz, 0.2, 2.5, 0.1, { color: IMP.gunmetal });
+    kit.box("emitRed", pk[0] + 0.005, y + 1.3, gz, 0.006, 2.3, 0.05);
+    // the pocket wall's room face: a restricted-area placard over a cell-status readout
+    {
+      const px = (pk[0] + pk[1]) / 2;
+      const zp = gz - 0.14;
+      kit.box("impPaintedMetal", px, y + 2.05, zp - 0.015, 0.84, 0.84, 0.03, { color: IMP.trim, texel: 1 });
+      kit.box("impPanel", px, y + 2.05, zp - 0.025, 0.76, 0.76, 0.03, { color: IMP.wallLight, uv: "keep" });
+      const g = new THREE.PlaneGeometry(0.6, 0.6);
+      g.rotateY(Math.PI);
+      kit.add("impDecal", g, { pos: [px, y + 2.05, zp - 0.042], uv: "keep", uvRect: impDecalRect(12) });
+      kit.box("impPaintedMetal", px, y + 1.3, zp - 0.02, 0.8, 0.3, 0.04, { color: IMP.consoleDark, texel: 1 });
+      kit.box("blinkSparse", px - 0.08, y + 1.3, zp - 0.042, 0.5, 0.16, 0.006, { uv: "keep" });
+      kit.box("emitRed", px + 0.28, y + 1.3, zp - 0.042, 0.06, 0.06, 0.006);
+    }
+    kit.collider([pk[0], y, gz - 0.14], [pk[1], y + cellH, gz + 0.14], "cellPocket");
+    kit.collider([DOOR[0], y, gz - 0.15], [DOOR[0] + 0.3, y + cellH, gz + 0.15], "cellJamb");
+    kit.collider([DOOR[1] - 0.3, y, gz - 0.15], [DOOR[1], y + cellH, gz + 0.15], "cellJamb");
+    floorDecal(kit, dcx, y, gz - 0.9, 0.9, 11);
+    floorDecal(kit, dcx, y, gz + 0.9, 0.9, 5, Math.PI);
+    // restraint chair on a two-step plinth, facing the door; a reclined seat with head clamp, wrist and
+    // ankle clamps, chest straps, and an instrument arm carrying a monitor at the occupant's side
     const chX = -56.0;
     const chZ = 623.2;
-    kit.cyl("impPaintedMetal", chX, y + 0.06, chZ, 1.3, 0.12, "y", { color: IMP.trim, segments: 32, texel: 1 });
-    kit.add("emitRed", new THREE.TorusGeometry(1.2, 0.015, 6, 48), { pos: [chX, y + 0.125, chZ], rot: [Math.PI / 2, 0, 0] });
-    kit.box("impPaintedMetal", chX, y + 0.3, chZ, 0.7, 0.36, 0.7, { color: IMP.consoleDark, texel: 1 });
-    kit.box("impRubber", chX, y + 0.55, chZ + 0.05, 0.68, 0.14, 0.62, { color: IMP.rubber });
-    kit.box("impRubber", chX, y + 1.15, chZ + 0.34, 0.66, 1.1, 0.16, { color: IMP.rubber });
-    kit.box("impPaintedMetal", chX, y + 1.15, chZ + 0.45, 0.74, 1.2, 0.08, { color: IMP.trim, texel: 1 });
+    const yP = y + 0.3;
+    kit.cyl("impPaintedMetal", chX, y + 0.09, chZ, 1.35, 0.18, "y", { color: IMP.trim, segments: 32, texel: 1 });
+    kit.cyl("impPaintedMetal", chX, y + 0.24, chZ, 1.0, 0.12, "y", { color: IMP.consoleDark, segments: 32, texel: 1 });
+    kit.add("emitRed", new THREE.TorusGeometry(1.26, 0.015, 6, 48), { pos: [chX, y + 0.185, chZ], rot: [Math.PI / 2, 0, 0] });
+    kit.add("emitRed", new THREE.TorusGeometry(0.92, 0.012, 6, 48), { pos: [chX, y + 0.305, chZ], rot: [Math.PI / 2, 0, 0] });
+    walkable(ctx, chX - 0.95, chZ - 0.95, chX + 0.95, chZ + 0.95, yP, "plinth");
+    kit.box("impPaintedMetal", chX, yP + 0.2, chZ + 0.05, 0.4, 0.4, 0.5, { color: IMP.consoleDark, texel: 1 });
+    kit.box("impRubber", chX, yP + 0.45, chZ + 0.02, 0.66, 0.1, 0.64, { color: IMP.rubber });
+    kit.box("impFabric", chX, yP + 0.52, chZ, 0.56, 0.05, 0.52, { color: IMP.fabricBlack, uv: "world", texel: 2 });
+    const tilt = 0.3;
+    const bz = chZ + 0.3;
+    kit.add("impPaintedMetal", new THREE.BoxGeometry(0.72, 1.2, 0.08), { pos: [chX, yP + 1.05, bz + 0.2], rot: [tilt, 0, 0], color: IMP.trim, texel: 1 });
+    kit.add("impRubber", new THREE.BoxGeometry(0.6, 1.02, 0.08), { pos: [chX, yP + 1.0, bz + 0.13], rot: [tilt, 0, 0], color: IMP.rubber });
+    kit.add("impRubber", new THREE.BoxGeometry(0.3, 0.22, 0.1), { pos: [chX, yP + 1.62, bz + 0.31], rot: [tilt, 0, 0], color: IMP.rubber });
+    kit.add("impMetal", new THREE.TorusGeometry(0.19, 0.02, 6, 20, Math.PI), { pos: [chX, yP + 1.62, bz + 0.23], rot: [tilt, 0, 0], color: IMP.steel });
+    for (const sy of [0.85, 1.15]) kit.add("impRubber", new THREE.BoxGeometry(0.64, 0.05, 0.02), { pos: [chX, yP + sy, bz + 0.08 + (sy - 1.0) * tilt], rot: [tilt, 0, 0], color: IMP.rubber });
     for (const s of [-1, 1]) {
-      kit.box("impPaintedMetal", chX + s * 0.42, y + 0.78, chZ + 0.02, 0.1, 0.06, 0.5, { color: IMP.trim, texel: 1 });
-      kit.box("impPaintedMetal", chX + s * 0.42, y + 0.6, chZ + 0.2, 0.08, 0.34, 0.08, { color: IMP.trim, texel: 1 });
-      kit.add("impMetal", new THREE.TorusGeometry(0.07, 0.014, 6, 16), { pos: [chX + s * 0.42, y + 0.84, chZ - 0.12], rot: [0, Math.PI / 2, 0], color: IMP.steel });
-      kit.add("impMetal", new THREE.TorusGeometry(0.09, 0.014, 6, 16), { pos: [chX + s * 0.22, y + 0.12, chZ - 0.22], rot: [0, Math.PI / 2, 0], color: IMP.steel });
+      kit.box("impPaintedMetal", chX + s * 0.42, yP + 0.74, chZ + 0.02, 0.1, 0.06, 0.56, { color: IMP.trim, texel: 1 });
+      kit.box("impPaintedMetal", chX + s * 0.42, yP + 0.6, chZ + 0.22, 0.08, 0.3, 0.08, { color: IMP.trim, texel: 1 });
+      kit.add("impMetal", new THREE.TorusGeometry(0.07, 0.014, 6, 16), { pos: [chX + s * 0.42, yP + 0.8, chZ - 0.16], rot: [0, Math.PI / 2, 0], color: IMP.steel });
+      kit.add("impMetal", new THREE.TorusGeometry(0.085, 0.014, 6, 16), { pos: [chX + s * 0.2, yP + 0.2, chZ - 0.66], rot: [0, Math.PI / 2, 0], color: IMP.steel });
     }
-    // head clamp arch
-    kit.add("impMetal", new THREE.TorusGeometry(0.2, 0.02, 6, 20, Math.PI), { pos: [chX, y + 1.62, chZ + 0.2], rot: [0, 0, 0], color: IMP.steel });
-    kit.box("blinkSparse", chX + 0.5, y + 0.5, chZ + 0.34, 0.18, 0.12, 0.01, { uv: "keep" });
-    kit.collider([chX - 0.5, y, chZ - 0.4], [chX + 0.5, y + 1.8, chZ + 0.5], "restraintChair");
+    kit.add("impPaintedMetal", new THREE.BoxGeometry(0.6, 0.06, 0.44), { pos: [chX, yP + 0.14, chZ - 0.6], rot: [-0.5, 0, 0], color: IMP.trim, texel: 1 });
+    kit.box("impPaintedMetal", chX, yP + 0.1, chZ - 0.42, 0.12, 0.2, 0.3, { color: IMP.consoleDark, texel: 1 });
+    // instrument arm: post on the plinth, cantilever, monitor angled toward the occupant, indicator block
+    kit.box("impPaintedMetal", chX + 0.85, yP + 0.55, chZ - 0.2, 0.12, 1.1, 0.12, { color: IMP.trim, texel: 1 });
+    kit.box("impMetal", chX + 0.6, yP + 1.12, chZ - 0.2, 0.5, 0.05, 0.05, { color: IMP.gunmetal });
+    kit.add("darkGloss", new THREE.BoxGeometry(0.4, 0.28, 0.03), { pos: [chX + 0.4, yP + 1.22, chZ - 0.2], rot: [0, -0.6, 0] });
+    kit.add("screen0", new THREE.PlaneGeometry(0.36, 0.24), { pos: [chX + 0.4 - 0.0093, yP + 1.22, chZ - 0.2 + 0.0136], rot: [0, -0.6, 0], uv: "keep" });
+    kit.box("blinkSparse", chX + 0.85, yP + 0.5, chZ - 0.262, 0.1, 0.3, 0.006, { uv: "keep" });
+    kit.collider([chX - 0.55, yP, chZ - 0.8], [chX + 0.95, yP + 1.9, chZ + 0.6], "restraintChair");
     // interrogation droid: black sphere, sensor band, injector needle — one dark-gloss mesh, drifts and bobs
     const sphere = new THREE.SphereGeometry(0.3, 20, 14);
     const band = new THREE.TorusGeometry(0.31, 0.025, 8, 36);
@@ -201,10 +310,13 @@ export function buildIntel(kit, ctx) {
     const droid = new THREE.Mesh(droidGeo, ctx.mats.darkGloss);
     droid.position.set(chX - 1.0, y + 1.55, chZ - 0.9);
     ctx.add(droid);
+    const fieldMat = ctx.mats.isbField;
     ctx.animate((dt, tm) => {
       const a = tm * 0.18;
       droid.position.set(chX + Math.cos(a) * 1.15, y + 1.55 + Math.sin(tm * 1.1) * 0.07, chZ - 0.5 + Math.sin(a) * 0.9);
       droid.rotation.y = Math.atan2(chX - droid.position.x, chZ - droid.position.z) + Math.PI;
+      fieldMat.opacity = 0.5 + 0.06 * Math.sin(tm * 7.3) + 0.04 * Math.sin(tm * 23.1 + 1.0);
+      fieldMat.map.offset.y = (tm * 0.03) % 1;
     });
     // hard white spot with shadow over the chair: the only non-red light in the room
     spotLightDesc(ctx, 0xfff1dc, 9, 9, [chX, yc - 0.3, chZ - 0.3], [chX, y, chZ], { angle: 0.42, penumbra: 0.45, shadow: true, priority: 2 });
@@ -257,6 +369,50 @@ export function buildIntel(kit, ctx) {
   const eye = y + STD.eye;
   ctx.view("intel", cx, eye, z0 + 2.2, 180, -5);
   ctx.view("intel_vaults", -75.5, eye, 618.5, 158, -4);
-  ctx.view("intel_cell", -63.2, eye, 619.6, -128, -4);
+  ctx.view("intel_cell", -55.8, eye, 614.0, -178, -4);
   ctx.view("intel_desks", -62.0, eye, 610.5, 104, -4);
+}
+
+// ISB deck shader patch for a MeshStandardMaterial: (1) the roughness map is remapped to
+// roughLo + texel * material.roughness instead of scaling material.roughness, so a near-mirror map
+// keeps its plate/smear variation above a floor; (2) the image-based (scene.environment) specular is
+// multiplied by `tint * gain`. Chunk includes are expanded here because onBeforeCompile sees the
+// directives unresolved. Direct lights are untouched.
+function isbFloorPatch(material, { roughLo, tint, gain }) {
+  const c = new THREE.Color(tint).multiplyScalar(gain);
+  const iblLine = "radiance += getIBLRadiance( geometryViewDir, geometryNormal, material.roughness );";
+  const maps = THREE.ShaderChunk.lights_fragment_maps.replace(iblLine, iblLine.slice(0, -1) + " * uEnvTint;");
+  const roughLine = "roughnessFactor *= texelRoughness.g;";
+  const rough = THREE.ShaderChunk.roughnessmap_fragment.replace(roughLine, "roughnessFactor = uRoughLo + texelRoughness.g * roughness;");
+  if (maps === THREE.ShaderChunk.lights_fragment_maps || rough === THREE.ShaderChunk.roughnessmap_fragment) console.warn("isbFloorPatch: shader chunk changed, patch inert");
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uEnvTint = { value: c };
+    shader.uniforms.uRoughLo = { value: roughLo };
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform vec3 uEnvTint;\nuniform float uRoughLo;")
+      .replace("#include <lights_fragment_maps>", maps)
+      .replace("#include <roughnessmap_fragment>", rough);
+  };
+  material.customProgramCacheKey = () => "isbFloor";
+  return material;
+}
+
+// Red containment-field material for the cell bays: additive scan lines over a dark red base, scrolled
+// and flickered by the room animator (same construction as the detention block's blue fields).
+function makeFieldMaterial() {
+  const c = document.createElement("canvas");
+  c.width = 16;
+  c.height = 64;
+  const g = c.getContext("2d");
+  g.fillStyle = "#2a0507";
+  g.fillRect(0, 0, 16, 64);
+  g.fillStyle = "#8c1a16";
+  for (let v = 0; v < 64; v += 8) g.fillRect(0, v, 16, 2);
+  g.fillStyle = "#ff8a72";
+  for (let v = 1; v < 64; v += 8) g.fillRect(0, v, 16, 1);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(1, 3);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.MeshBasicMaterial({ color: 0xffffff, map: t, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 }
