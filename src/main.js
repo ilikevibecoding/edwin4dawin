@@ -37,11 +37,16 @@ const startTime = TIMES.includes(params.get('time')) ? params.get('time') : 'day
 
 const bootLabel = document.getElementById('boot-label');
 const bootBar = document.getElementById('boot-bar');
+// how long each boot stage took, for the performance report
+const bootTimings = [];
 const step = async (label, pct, fn) => {
   if (bootLabel) bootLabel.textContent = label;
   if (bootBar) bootBar.style.width = `${pct}%`;
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
-  return fn();
+  const t0 = performance.now();
+  const out = await fn();
+  bootTimings.push({ label, ms: Math.round(performance.now() - t0) });
+  return out;
 };
 
 async function boot() {
@@ -137,7 +142,17 @@ async function boot() {
   rig.attach({ wildlife });
   const hud = createHud();
 
-  const post = await step('Compiling shaders', 92, () => createPost(renderer, scene, camera, { quality }));
+  const post = await step('Compiling shaders', 92, () => {
+    const p = createPost(renderer, scene, camera, { quality });
+    // Actually compile them. Left to itself the browser compiles every program
+    // on the first frame that needs it, which turns the first frame into a
+    // multi-second hitch behind a loading screen that has already gone — and
+    // made this stage report six milliseconds for the most expensive thing that
+    // happens at boot.
+    renderer.compile(scene, camera);
+    p.render(1 / 60);
+    return p;
+  });
 
   // --- time of day ----------------------------------------------------------
   // The sky owns the look; this only routes the change and keeps the lamps
@@ -270,12 +285,85 @@ async function boot() {
 
   // --- loop ----------------------------------------------------------------
   let last = performance.now();
+  // The raw frame interval, before the simulation clamps it. Performance is
+  // measured from this, not from the clamped value — a 400 ms hitch is exactly
+  // the thing a frame-time histogram exists to catch.
+  let rawFrameMs = 16.7;
   const tick = () => {
     const now = performance.now();
-    const dt = (now - last) / 1000;
+    rawFrameMs = now - last;
     last = now;
-    return THREE.MathUtils.clamp(dt, 1e-4, 0.1);
+    return THREE.MathUtils.clamp(rawFrameMs / 1000, 1e-4, 0.1);
   };
+
+  // --- performance sampling ---------------------------------------------------
+  // Recorded from the real requestAnimationFrame loop, so what it reports is what
+  // the player gets. GPU time comes from the disjoint timer query extension when
+  // the driver offers one and stays null when it does not; a number that could
+  // not be measured is not reported as one.
+  const perf = { active: false, frames: [], gpuMs: [], pending: [] };
+  const gl = renderer.getContext();
+  const timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+  function gpuBegin() {
+    if (!perf.active || !timerExt) return null;
+    const q = gl.createQuery();
+    gl.beginQuery(timerExt.TIME_ELAPSED_EXT, q);
+    return q;
+  }
+  function gpuEnd(q) {
+    if (!q) return;
+    gl.endQuery(timerExt.TIME_ELAPSED_EXT);
+    perf.pending.push(q);
+    // collect whatever has resolved; results arrive a frame or more later
+    for (let i = perf.pending.length - 1; i >= 0; i--) {
+      const p = perf.pending[i];
+      if (!gl.getQueryParameter(p, gl.QUERY_RESULT_AVAILABLE)) continue;
+      if (!gl.getParameter(timerExt.GPU_DISJOINT_EXT)) perf.gpuMs.push(gl.getQueryParameter(p, gl.QUERY_RESULT) / 1e6);
+      gl.deleteQuery(p);
+      perf.pending.splice(i, 1);
+    }
+  }
+  const pct = (sorted, q) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+  function perfSummary() {
+    const f = perf.frames.slice().sort((a, b) => a - b);
+    const n = f.length;
+    const total = perf.frames.reduce((a, b) => a + b, 0);
+    const mem = performance.memory;
+    // what is actually inside the view, as opposed to what is in the scene
+    const frustum = new THREE.Frustum().setFromProjectionMatrix(
+      new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+    );
+    let visible = 0;
+    let instances = 0;
+    scene.traverse((o) => {
+      if (!o.visible || !(o.isMesh || o.isPoints || o.isSprite)) return;
+      if (!frustum.intersectsObject(o)) return;
+      visible++;
+      if (o.isInstancedMesh) instances += o.count;
+    });
+    const g = perf.gpuMs;
+    return {
+      quality,
+      frames: n,
+      seconds: +(total / 1000).toFixed(2),
+      fps: n ? +((n * 1000) / total).toFixed(1) : 0,
+      // 1 per cent low: the fps of the slowest 1 per cent of frames
+      fpsLow1: n ? +(1000 / pct(f, 0.99)).toFixed(1) : 0,
+      frameMs: n ? { p50: +pct(f, 0.5).toFixed(2), p95: +pct(f, 0.95).toFixed(2), p99: +pct(f, 0.99).toFixed(2), max: +f[n - 1].toFixed(2) } : null,
+      // frames the browser would count as long tasks
+      longFrames: perf.frames.filter((x) => x > 50).length,
+      gpuMs: g.length ? +(g.reduce((a, b) => a + b, 0) / g.length).toFixed(2) : null,
+      calls: post.sceneStats.calls,
+      triangles: post.sceneStats.triangles,
+      programs: renderer.info.programs?.length ?? 0,
+      textures: renderer.info.memory.textures,
+      geometries: renderer.info.memory.geometries,
+      visibleObjects: visible,
+      visibleInstances: instances,
+      animals: wildlife.stats?.animals ?? 0,
+      jsHeapMB: mem ? +(mem.usedJSHeapSize / 1048576).toFixed(1) : null,
+    };
+  }
   let simTime = 0;
   let frozen = false;
   let frames = 0;
@@ -336,7 +424,10 @@ async function boot() {
     if (!frozen || rig.photo) rig.update(dt, driver.state);
     hud.fade(rig.fade);
     skyRig.updateSky(camera);
+    const q = gpuBegin();
     post.render(dt);
+    gpuEnd(q);
+    if (perf.active) perf.frames.push(rawFrameMs);
 
     frames++;
     fpsAccum += dt;
@@ -484,9 +575,31 @@ async function boot() {
     },
     objects: { scene, camera, renderer, terrain, forest, vehicle, skyRig, post, driver, rig, camp, fleet, wildlife, audio },
     build: { rev: __BUILD_REV__, stamp: __BUILD_STAMP__ },
+    /**
+     * Performance sampling from the live frame loop. `start`, drive for a
+     * while, `stop` returns the summary. `boot` is how long each stage of
+     * startup took and `readyMs` when the first frame could be drawn.
+     */
+    perf: {
+      start() {
+        perf.frames.length = 0;
+        perf.gpuMs.length = 0;
+        perf.active = true;
+      },
+      stop() {
+        perf.active = false;
+        return perfSummary();
+      },
+      snapshot: () => perfSummary(),
+      boot: bootTimings,
+      readyMs: () => readyAt,
+      gpuTimer: !!timerExt,
+    },
   };
+  readyAt = Math.round(performance.now());
   window.__READY__ = true;
 }
+let readyAt = 0;
 
 boot().catch((err) => {
   console.error(err);
