@@ -208,7 +208,14 @@ export function buildExterior(scene, materials) {
     const cz = (b.z0 + b.z1) / 2;
     // body: box minus the forward face (built separately with cut-outs); chamfered underside via a
     // slightly smaller lower slab
-    kit.boxMM("hullPlate", [-b.hw, b.y0, b.z0 + 1], [b.hw, b.y1, b.z1], { color: PALETTE.hullLight, uv: "world", texel: HULL_TEXEL });
+    // body as five slabs (no forward face): the perforated face slab closes the front, so from outside
+    // the viewports look into the bridge / gallery interiors instead of at a wall
+    const T = 4;
+    kit.boxMM("hullPlate", [-b.hw, b.y1 - T, b.z0 + 1], [b.hw, b.y1, b.z1], { color: PALETTE.hullLight, uv: "world", texel: HULL_TEXEL });
+    kit.boxMM("hullPlate", [-b.hw, b.y0, b.z0 + 1], [b.hw, b.y0 + T, b.z1], { color: PALETTE.hullLight, uv: "world", texel: HULL_TEXEL });
+    kit.boxMM("hullPlate", [-b.hw, b.y0, b.z0 + 1], [-b.hw + T, b.y1, b.z1], { color: PALETTE.hullLight, uv: "world", texel: HULL_TEXEL });
+    kit.boxMM("hullPlate", [b.hw - T, b.y0, b.z0 + 1], [b.hw, b.y1, b.z1], { color: PALETTE.hullLight, uv: "world", texel: HULL_TEXEL });
+    kit.boxMM("hullPlate", [-b.hw, b.y0, b.z1 - T], [b.hw, b.y1, b.z1], { color: PALETTE.hullLight, uv: "world", texel: HULL_TEXEL });
     kit.boxMM("hullPlate1", [-b.hw + 8, b.y0 - 6, b.z0 + 12], [b.hw - 8, b.y0 + 0.1, b.z1 - 6], { color: PALETTE.hullMid, uv: "world", texel: HULL_TEXEL });
     // forward face with viewport cut-outs: bridge strip and the two gallery runs
     const holes = [];
