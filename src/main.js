@@ -114,7 +114,7 @@ async function init() {
   });
   director.applyModeSettings();
   hud.setMode("interior");
-  hud.setHint("WASD move · Shift sprint · mouse look · E interact · V exterior view · F3 stats");
+  hud.setHint("WASD move · Shift sprint · mouse look · E interact · V exterior view · R red alert · F3 stats");
   hud.setLoading(1);
   hud.showStart();
   metrics.markReady();
@@ -339,6 +339,9 @@ const debugAPI = {
   lift(deckId) {
     return interior.lift.go(deckId);
   },
+  setAlert(on) {
+    return interior.setAlert(on);
+  },
   liftState() {
     return interior.lift.state;
   },
@@ -471,6 +474,7 @@ document.addEventListener("keydown", (e) => {
     hud.toggleStats(showStats);
   }
   if (e.code === "KeyM") audio.toggleMute();
+  if (e.code === "KeyR" && interior && !e.repeat) interior.setAlert(interior.alert.target === 0);
 });
 
 const timer = new THREE.Timer();

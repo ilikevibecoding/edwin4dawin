@@ -50,6 +50,34 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     pool.spots.push(l);
   }
   const _wp = new THREE.Vector3();
+  // --- ship-wide alert state (red alert): pool lights and white strips shift to red and pulse
+  const alert = { level: 0, target: 0, t: 0, alarmTimer: 0 };
+  const ALERT_RED = new THREE.Color("#ff2a1a");
+  const _tmpC = new THREE.Color();
+  const alertMats = () => ["emitWhite", "emitWhiteSoft", "emitBlue"].map((k) => materials[k]).filter(Boolean);
+  for (const m of alertMats()) m.userData.baseEmissive = m.emissive.clone();
+  function applyAlert(dt) {
+    const dir = Math.sign(alert.target - alert.level);
+    if (dir) {
+      alert.level = THREE.MathUtils.clamp(alert.level + dir * dt * 1.5, 0, 1);
+      if ((dir > 0 && alert.level > alert.target) || (dir < 0 && alert.level < alert.target)) alert.level = alert.target;
+    }
+    alert.t += dt;
+    if (alert.level <= 0) {
+      for (const m of alertMats()) if (m.userData.baseEmissive) m.emissive.copy(m.userData.baseEmissive);
+      return;
+    }
+    const pulse = 0.55 + 0.45 * Math.sin(alert.t * 4.5);
+    for (const m of alertMats()) {
+      if (!m.userData.baseEmissive) continue;
+      m.emissive.copy(m.userData.baseEmissive).lerp(ALERT_RED, alert.level * (0.6 + 0.4 * pulse));
+    }
+    alert.alarmTimer += dt;
+    if (alert.alarmTimer > 1.6 && alert.target > 0) {
+      alert.alarmTimer = 0;
+      if (audio) audio.event("alarm", player.position);
+    }
+  }
   const worldPos = (light, out) => {
     const o = light.userData.sector.deck.origin;
     return out.set(light.position.x + o[0], light.position.y + o[1], light.position.z + o[2]);
@@ -85,12 +113,21 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     syncPool();
   }
   function syncPool() {
+    const pulse = 0.5 + 0.5 * Math.sin(alert.t * 4.5);
+    const tint = (slot, src) => {
+      if (alert.level > 0) {
+        slot.color.copy(src.color).lerp(ALERT_RED, alert.level * 0.85);
+        slot.intensity = src.intensity * (1 - alert.level * 0.55 + alert.level * 0.7 * pulse);
+      } else {
+        slot.color.copy(src.color);
+        slot.intensity = src.intensity;
+      }
+    };
     for (const slot of pool.points) {
       const src = slot.userData.src;
       if (!src) continue;
       worldPos(src, slot.position);
-      slot.color.copy(src.color);
-      slot.intensity = src.intensity;
+      tint(slot, src);
       slot.distance = src.distance;
       slot.decay = src.decay;
     }
@@ -100,8 +137,7 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
       worldPos(src, slot.position);
       const o = src.userData.sector.deck.origin;
       slot.target.position.set(src.target.position.x + o[0], src.target.position.y + o[1], src.target.position.z + o[2]);
-      slot.color.copy(src.color);
-      slot.intensity = src.intensity;
+      tint(slot, src);
       slot.distance = src.distance;
       slot.decay = src.decay;
       slot.angle = src.angle;
@@ -139,6 +175,14 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     },
     lift: null,
     lightPool: pool,
+    alert,
+    setAlert(on) {
+      alert.target = on ? 1 : 0;
+      if (on) alert.alarmTimer = 10;
+      if (hud) hud.setStatus(on ? "RED ALERT — all hands to battle stations." : "Alert cancelled. Resume normal operations.");
+      document.body.classList.toggle("alert", !!on);
+      return alert.target;
+    },
     /** Number of pool lights carrying a source light, plus how many visible lights had no slot. */
     lightUsage() {
       const used = pool.points.filter((l) => l.userData.src).length + pool.spots.filter((l) => l.userData.src).length;
@@ -177,6 +221,7 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
       if (collidersDirty) rebuildColliders();
       // light pool: re-rank by distance twice a second, sync animated values every frame
       pool.timer += dt;
+      applyAlert(dt);
       if (pool.timer > 0.5) {
         pool.timer = 0;
         assignPool();

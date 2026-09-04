@@ -319,3 +319,12 @@ body {
 body.exterior #status-tag {
   background: rgba(255, 59, 48, 0.85);
 }
+
+body.alert #status-tag {
+  background: rgba(255, 42, 26, 0.95);
+  animation: alertPulse 0.9s ease-in-out infinite;
+}
+@keyframes alertPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(0.55); }
+}
