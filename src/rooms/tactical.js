@@ -3,12 +3,14 @@
 // rail around the dais edge, standing stations with stools on the main floor and on two raised side
 // galleries (all facing the tank), a huge situation-map wall with a lean rail, pulsing red alert lamps,
 // dark ceiling with a thin recessed ring cove and a downlight over the dais, blue key light from the
-// tank (the brightest object). Accent blue; the door-to-dais runway is the one kept on this deck.
+// tank (the brightest object). Accent blue. The dais sits 2.5 m toward the door so the tank fills the
+// view from the spawn; the short door-to-dais approach is the only floor lane (dim edges), and a
+// plotting table stands between the dais and the situation map.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRoomShell, impRailing, impPillar, impWallGear, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
-import { deckASetup, yawToward, behind, station, dataBank, wallScreen, indicatorRow, conduitRun, projectorCone, wireDestroyerGeometry, wireGridGeometry, wireRingGeometry, lineSegments, mergedMesh, stepBlock, alertLamp, ceilingRingLight, downlight, segRailing, datapad, cup } from "./deck_a_kit.js";
+import { deckASetup, yawToward, behind, station, dataBank, wallScreen, indicatorRow, conduitRun, projectorCone, wireDestroyerGeometry, wireGridGeometry, wireRingGeometry, lineSegments, mergedLines, mergedMesh, stepBlock, alertLamp, ceilingRingLight, downlight, segRailing, datapad, cup, holoTable, stool } from "./deck_a_kit.js";
 
 export function buildTactical(kit, ctx, room) {
   const [w, h, d] = room.size;
@@ -19,6 +21,7 @@ export function buildTactical(kit, ctx, room) {
   const accentKey = "emitBlue";
   const dimKey = "emitBlueDim";
   const blue = new THREE.Color(room.accent || "#3fb0ff").getHex();
+  const DX = -2.5; // dais / tank centre x (toward the W door and the spawn)
 
   // ---- shell: wide panels over a low dado band; dark ceiling without troughs (ring cove + downlight) --
   const walls = impRoomShell(kit, room, ctx.doors, {
@@ -30,99 +33,100 @@ export function buildTactical(kit, ctx, room) {
     ceiling: { troughs: 0, withLights: false, dark: PALETTE.impBlack, beamStep: 3.7 },
   });
   // thin dim cove line (0.1 m emitter in a 0.3 m channel) instead of the glowing ring; one downlight over the dais
-  ceilingRingLight(kit, 0, 0, 5.4, h, 16, { key: "emitWhiteDim", w: 0.3, emitW: 0.1, drop: 0.2 });
-  downlight(kit, 0, h, 0, { r: 0.28, key: "emitWhiteSoft" });
+  ceilingRingLight(kit, DX, 0, 5.4, h, 16, { key: "emitWhiteDim", w: 0.3, emitW: 0.1, drop: 0.2 });
+  downlight(kit, DX, h, 0, { r: 0.28, key: "emitWhiteSoft" });
   // small blue ceiling markers on a wider ring
   for (let i = 0; i < 8; i++) {
     const a = (i + 0.5) * (Math.PI / 4);
-    kit.box("impTrim", Math.cos(a) * 8.2, h - 0.04, Math.sin(a) * 8.2, 0.5, 0.08, 0.5, { color: PALETTE.impBlack });
-    kit.box(dimKey, Math.cos(a) * 8.2, h - 0.085, Math.sin(a) * 8.2, 0.3, 0.02, 0.3);
+    kit.box("impTrim", DX + Math.cos(a) * 8.2, h - 0.04, Math.sin(a) * 8.2, 0.5, 0.08, 0.5, { color: PALETTE.impBlack });
+    kit.box(dimKey, DX + Math.cos(a) * 8.2, h - 0.085, Math.sin(a) * 8.2, 0.3, 0.02, 0.3);
   }
 
-  // ---- floor markings: the door-to-dais runway (kept), a dark inlay from the dais to the map wall,
-  // a dim ring around the dais
+  // ---- floor markings: the short door-to-dais approach (the only lane: dark inlay, dim hairlines)
+  // and a dim ring around the dais; the floor E of the dais is plain deck
   const R = 4.4; // dais circumradius (octagon)
   const A = R * Math.cos(Math.PI / 8); // apothem
   const S = R * Math.sin(Math.PI / 8); // half flat
   const daisY = 0.36;
-  for (const s of [-1, 1]) {
-    const x0 = s < 0 ? -hx + 0.5 : A + 1.05;
-    const x1 = s < 0 ? -A - 1.05 : hx - 1.9;
-    kit.boxMM(s < 0 ? "impMetalRough" : "impDeck", [x0, 0, -1.3], [x1, 0.012, 1.3], { color: PALETTE.impGreyDark, texel: 0.7 });
+  {
+    const x0 = -hx + 0.5;
+    const x1 = DX - A - 1.05;
+    kit.boxMM("impMetalRough", [x0, 0, -1.3], [x1, 0.012, 1.3], { color: PALETTE.impGreyDark, texel: 0.7 });
     for (const e of [-1, 1]) {
-      if (s < 0) kit.boxMM(accentKey, [x0, 0.002, e * 1.34 - 0.02], [x1, 0.014, e * 1.34 + 0.02]);
-      else {
-        kit.boxMM("impTrim", [x0, 0.002, e * 1.34 - 0.04], [x1, 0.014, e * 1.34 + 0.04], { color: PALETTE.impBlack });
-        kit.boxMM(dimKey, [x0, 0.004, e * 1.34 - 0.01], [x1, 0.016, e * 1.34 + 0.01]);
-      }
+      kit.boxMM("impTrim", [x0, 0.002, e * 1.34 - 0.04], [x1, 0.014, e * 1.34 + 0.04], { color: PALETTE.impBlack });
+      kit.boxMM(dimKey, [x0, 0.004, e * 1.34 - 0.012], [x1, 0.016, e * 1.34 + 0.012]);
     }
-    kit.box("chevronY", s < 0 ? x1 + 0.2 : x0 - 0.2, 0.005, 0, 0.3, 0.01, 2.6, { texel: 1.5 });
   }
-  kit.add(dimKey, new THREE.RingGeometry(5.3, 5.35, 96).rotateX(-Math.PI / 2), { pos: [0, 0.006, 0], uv: "keep" });
-  kit.add("impTrim", new THREE.RingGeometry(5.36, 5.6, 96).rotateX(-Math.PI / 2), { pos: [0, 0.005, 0], color: PALETTE.impBlack });
+  kit.add(dimKey, new THREE.RingGeometry(5.3, 5.35, 96).rotateX(-Math.PI / 2), { pos: [DX, 0.006, 0], uv: "keep" });
+  kit.add("impTrim", new THREE.RingGeometry(5.36, 5.6, 96).rotateX(-Math.PI / 2), { pos: [DX, 0.005, 0], color: PALETTE.impBlack });
 
   // ---- dais: octagon, two steps up on the W (door) and E (map) sides, rail on the other six flats --
-  kit.add("impMetal", new THREE.CylinderGeometry(R + 0.1, R + 0.1, 0.12, 8).rotateY(Math.PI / 8), { pos: [0, 0.06, 0], color: PALETTE.impCharcoal, texel: 1 });
-  kit.add("impTrim", new THREE.CylinderGeometry(R, R, 0.34, 8).rotateY(Math.PI / 8), { pos: [0, 0.17, 0], color: PALETTE.impBlack, texel: 1 });
-  kit.add(accentKey, new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.025, 8, 1, true).rotateY(Math.PI / 8), { pos: [0, 0.295, 0], uv: "keep" });
-  kit.add("impDeck", new THREE.CylinderGeometry(R + 0.05, R + 0.05, 0.06, 8).rotateY(Math.PI / 8), { pos: [0, daisY - 0.03, 0], color: PALETTE.impGrey, texel: 0.7 });
-  kit.add("impTrim", new THREE.RingGeometry(R - 0.25, R - 0.19, 8, 1).rotateX(-Math.PI / 2).rotateY(Math.PI / 8), { pos: [0, daisY + 0.004, 0], color: PALETTE.impBlack });
+  kit.add("impMetal", new THREE.CylinderGeometry(R + 0.1, R + 0.1, 0.12, 8).rotateY(Math.PI / 8), { pos: [DX, 0.06, 0], color: PALETTE.impCharcoal, texel: 1 });
+  kit.add("impTrim", new THREE.CylinderGeometry(R, R, 0.34, 8).rotateY(Math.PI / 8), { pos: [DX, 0.17, 0], color: PALETTE.impBlack, texel: 1 });
+  kit.add(accentKey, new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.025, 8, 1, true).rotateY(Math.PI / 8), { pos: [DX, 0.295, 0], uv: "keep" });
+  kit.add("impDeck", new THREE.CylinderGeometry(R + 0.05, R + 0.05, 0.06, 8).rotateY(Math.PI / 8), { pos: [DX, daisY - 0.03, 0], color: PALETTE.impGrey, texel: 0.7 });
+  kit.add("impTrim", new THREE.RingGeometry(R - 0.25, R - 0.19, 8, 1).rotateX(-Math.PI / 2).rotateY(Math.PI / 8), { pos: [DX, daisY + 0.004, 0], color: PALETTE.impBlack });
   // walkable top: five rects approximating the octagon
-  kit.floor(-A, -S, A, S, daisY, "dais");
-  kit.floor(-S, -A, S, A, daisY, "dais");
-  kit.floor(-2.87, -2.87, 2.87, 2.87, daisY, "dais");
-  kit.floor(-3.5, -2.2, 3.5, 2.2, daisY, "dais");
-  kit.floor(-2.2, -3.5, 2.2, 3.5, daisY, "dais");
-  stepBlock(kit, "x", -A - 0.95, -A, -1.5, 1.5, 0, daisY, 2, { accentKey });
-  stepBlock(kit, "x", A + 0.95, A, -1.5, 1.5, 0, daisY, 2, { accentKey });
+  kit.floor(DX - A, -S, DX + A, S, daisY, "dais");
+  kit.floor(DX - S, -A, DX + S, A, daisY, "dais");
+  kit.floor(DX - 2.87, -2.87, DX + 2.87, 2.87, daisY, "dais");
+  kit.floor(DX - 3.5, -2.2, DX + 3.5, 2.2, daisY, "dais");
+  kit.floor(DX - 2.2, -3.5, DX + 2.2, 3.5, daisY, "dais");
+  stepBlock(kit, "x", DX - A - 0.95, DX - A, -1.5, 1.5, 0, daisY, 2, { accentKey });
+  stepBlock(kit, "x", DX + A + 0.95, DX + A, -1.5, 1.5, 0, daisY, 2, { accentKey });
   // briefing rail around the dais edge (six flats; the E/W flats are the step openings). Segmented
   // colliders: a single AABB per diagonal flat would fence off the dais corners.
   for (let k = 0; k < 8; k++) {
     if (k === 0 || k === 4) continue; // E and W flats
     const a0 = -Math.PI / 8 + (k * Math.PI) / 4;
     const a1 = a0 + Math.PI / 4;
-    const p0 = [Math.cos(a0) * (R - 0.12), Math.sin(a0) * (R - 0.12)];
-    const p1 = [Math.cos(a1) * (R - 0.12), Math.sin(a1) * (R - 0.12)];
+    const p0 = [DX + Math.cos(a0) * (R - 0.12), Math.sin(a0) * (R - 0.12)];
+    const p1 = [DX + Math.cos(a1) * (R - 0.12), Math.sin(a1) * (R - 0.12)];
     segRailing(kit, p0, p1, daisY, { light: accentKey, postStep: 1.7 });
   }
 
   // ---- holo tank ----------------------------------------------------------------------------------
   const tr = 1.5;
   const tTop = daisY + 0.8;
-  kit.cyl("impMetal", 0, daisY + 0.07, 0, tr + 0.1, 0.14, "y", { color: PALETTE.impCharcoal, segments: 32, texel: 1 });
-  kit.cyl("impTrim", 0, daisY + 0.4, 0, tr, 0.8, "y", { color: PALETTE.impBlack, segments: 32, texel: 1 });
-  kit.cyl("impMetal", 0, daisY + 0.46, 0, tr + 0.03, 0.26, "y", { color: PALETTE.impGreyDark, segments: 32, texel: 1 });
-  kit.cyl(accentKey, 0, daisY + 0.46, 0, tr + 0.055, 0.03, "y", { segments: 32, open: true, uv: "keep" });
-  kit.cyl("impGloss", 0, tTop + 0.025, 0, tr + 0.06, 0.05, "y", { segments: 32 });
-  kit.cyl("impTrim", 0, tTop + 0.065, 0, 1.15, 0.03, "y", { color: PALETTE.impCharcoal, segments: 32 });
-  kit.add(accentKey, new THREE.TorusGeometry(1.0, 0.012, 6, 64).rotateX(Math.PI / 2), { pos: [0, tTop + 0.09, 0] });
-  kit.add(accentKey, new THREE.TorusGeometry(0.45, 0.01, 6, 40).rotateX(Math.PI / 2), { pos: [0, tTop + 0.09, 0] });
-  kit.cyl("impGloss", 0, tTop + 0.1, 0, 0.12, 0.04, "y", { segments: 16, r2: 0.08 });
+  kit.cyl("impMetal", DX, daisY + 0.07, 0, tr + 0.1, 0.14, "y", { color: PALETTE.impCharcoal, segments: 32, texel: 1 });
+  kit.cyl("impTrim", DX, daisY + 0.4, 0, tr, 0.8, "y", { color: PALETTE.impBlack, segments: 32, texel: 1 });
+  kit.cyl("impMetal", DX, daisY + 0.46, 0, tr + 0.03, 0.26, "y", { color: PALETTE.impGreyDark, segments: 32, texel: 1 });
+  kit.cyl(accentKey, DX, daisY + 0.46, 0, tr + 0.055, 0.03, "y", { segments: 32, open: true, uv: "keep" });
+  kit.cyl("impGloss", DX, tTop + 0.025, 0, tr + 0.06, 0.05, "y", { segments: 32 });
+  kit.cyl("impTrim", DX, tTop + 0.065, 0, 1.15, 0.03, "y", { color: PALETTE.impCharcoal, segments: 32 });
+  kit.add(accentKey, new THREE.TorusGeometry(1.0, 0.012, 6, 64).rotateX(Math.PI / 2), { pos: [DX, tTop + 0.09, 0] });
+  kit.add(accentKey, new THREE.TorusGeometry(0.45, 0.01, 6, 40).rotateX(Math.PI / 2), { pos: [DX, tTop + 0.09, 0] });
+  kit.cyl("impGloss", DX, tTop + 0.1, 0, 0.12, 0.04, "y", { segments: 16, r2: 0.08 });
   // control strip: keys and four small readouts around the gloss annulus
   for (let i = 0; i < 32; i++) {
     const a = (i / 32) * Math.PI * 2;
     const key = i % 8 === 0 ? accentKey : i % 8 === 3 ? "emitWhite" : i % 8 === 5 ? "emitRedImp" : "impGloss";
-    kit.box(key, Math.cos(a) * 1.47, tTop + 0.062, Math.sin(a) * 1.47, 0.07, 0.024, 0.08, { rot: [0, -a, 0] });
+    kit.box(key, DX + Math.cos(a) * 1.47, tTop + 0.062, Math.sin(a) * 1.47, 0.07, 0.024, 0.08, { rot: [0, -a, 0] });
   }
   for (let i = 0; i < 4; i++) {
     const a = Math.PI / 4 + (i * Math.PI) / 2;
-    kit.add(i % 2 ? "scrBlue0" : "scrBlue1", new THREE.PlaneGeometry(0.4, 0.18).rotateX(-Math.PI / 2), { pos: [Math.cos(a) * 1.3, tTop + 0.058, Math.sin(a) * 1.3], rot: [0, -a + Math.PI / 2, 0], uv: "keep" });
+    kit.add(i % 2 ? "scrBlue0" : "scrBlue1", new THREE.PlaneGeometry(0.4, 0.18).rotateX(-Math.PI / 2), { pos: [DX + Math.cos(a) * 1.3, tTop + 0.058, Math.sin(a) * 1.3], rot: [0, -a + Math.PI / 2, 0], uv: "keep" });
   }
   // colliders approximating the round tank (union of five boxes)
-  for (const [ex, ez] of [[1.62, 0.5], [0.5, 1.62], [1.14, 1.14], [1.46, 0.86], [0.86, 1.46]]) kit.collider([-ex, daisY, -ez], [ex, tTop + 0.12, ez], "tank");
-  cup(kit, Math.cos(3.49) * 1.3, tTop + 0.05, Math.sin(3.49) * 1.3);
+  for (const [ex, ez] of [[1.62, 0.5], [0.5, 1.62], [1.14, 1.14], [1.46, 0.86], [0.86, 1.46]]) kit.collider([DX - ex, daisY, -ez], [DX + ex, tTop + 0.12, ez], "tank");
+  cup(kit, DX + Math.cos(3.49) * 1.3, tTop + 0.05, Math.sin(3.49) * 1.3);
+
+  // ---- plotting table between the dais and the situation map (fills the E floor), two stools -----
+  holoTable(kit, 6.4, 0, 2.6, 1.6, 0.95, { accentKey });
+  datapad(kit, 5.6, 0.985, -0.35, 0.4, { screen: "scrWhite1", accentKey });
+  stool(kit, 6.0, 0, 1.55, { h: 0.7 });
+  stool(kit, 6.9, 0, -1.55, { h: 0.7 });
 
   // ---- hologram: the ship, a plotting grid, orbiting contacts -------------------------------------
   {
     const baseY = tTop + 0.55;
-    projectorCone(kit, 0, tTop + 0.12, 0, baseY, 0.11, 1.12, "deckA_holoDim");
+    projectorCone(kit, DX, tTop + 0.12, 0, baseY, 0.11, 1.12, "deckA_holoDim");
     const grid = new THREE.Group();
-    grid.position.set(0, baseY, 0);
-    grid.add(lineSegments(wireGridGeometry(2.3, 8, 0), M.deckA_holoLineDim));
-    grid.add(lineSegments(wireRingGeometry(1.15, 64, 0.002), M.deckA_holoLine));
+    grid.position.set(DX, baseY, 0);
+    grid.add(mergedLines([wireGridGeometry(2.3, 8, 0), wireRingGeometry(1.15, 64, 0.002)], M.deckA_holoLine));
     kit.attach(grid);
     const ship = new THREE.Group();
-    ship.position.set(0, baseY + 0.42, 0);
+    ship.position.set(DX, baseY + 0.42, 0);
     ship.add(lineSegments(wireDestroyerGeometry(1.5), M.deckA_holoLineBright));
     // faint hull fill so the wedge reads as a solid from a distance
     const wedge = new THREE.BufferGeometry();
@@ -145,7 +149,7 @@ export function buildTactical(kit, ctx, room) {
         geos.push(new THREE.BoxGeometry(size, size, size).translate(Math.cos(a) * r, 0.05 * Math.sin(i * 2.1), Math.sin(a) * r));
       }
       const g = new THREE.Group();
-      g.position.set(0, baseY + 0.42, 0);
+      g.position.set(DX, baseY + 0.42, 0);
       g.rotation.x = tilt;
       g.add(mergedMesh(geos, mat));
       if (ring) g.add(lineSegments(wireRingGeometry(r, 64, 0), M.deckA_holoLineDim));
@@ -156,7 +160,7 @@ export function buildTactical(kit, ctx, room) {
     mk(0.82, -0.2, 2, M.holoBright, 0.05, false);
     mk(1.25, 0.32, 4, M.holoBright, 0.045, true);
     const sweep = new THREE.Mesh(new THREE.CircleGeometry(1.15, 40, 0, Math.PI * 0.5).rotateX(-Math.PI / 2), M.holo);
-    sweep.position.set(0, baseY + 0.004, 0);
+    sweep.position.set(DX, baseY + 0.004, 0);
     sweep.castShadow = sweep.receiveShadow = false;
     kit.attach(sweep);
     kit.onUpdate((dt, t) => {
@@ -173,9 +177,9 @@ export function buildTactical(kit, ctx, room) {
     let k = 0;
     const sets = [["scrBlue0", "scrBlue2", "scrWhite1"], ["scrBlue1", "scrWhite0", "scrBlue3"], ["scrBlue2", "scrWhite3", "scrBlue0"], ["scrBlue3", "scrBlue1", "scrWhite2"]];
     for (const a of [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4]) {
-      const x = Math.cos(a) * 7.0;
+      const x = DX + Math.cos(a) * 7.0;
       const z = Math.sin(a) * 7.0;
-      const yaw = yawToward(x, z, 0, 0);
+      const yaw = yawToward(x, z, DX, 0);
       station(kit, x, 0, z, 2.4, 0.9, { yaw, seed: 40 + k, screens: sets[k], accentKey, hoodKey: dimKey, height: 1.0, stool: true, stoolH: 0.7, conduits: 2 });
       if (k === 1) {
         const [dx, dz] = behind(x + Math.cos(yaw) * 0.85, z - Math.sin(yaw) * 0.85, yaw, 0.42);
@@ -204,7 +208,7 @@ export function buildTactical(kit, ctx, room) {
     let gk = 0;
     for (const x of [-7.9, -3.7, 3.7, 7.9]) {
       const z = s * (gIn + 1.25);
-      const yaw = yawToward(x, z, 0, 0);
+      const yaw = yawToward(x, z, DX, 0);
       station(kit, x, gY, z, 2.5, 0.9, { yaw, seed: 60 + Math.round(x) + (s > 0 ? 20 : 0), screens: [["scrBlue0", "scrWhite2", "scrBlue1"], ["scrBlue3", "scrWhite0", "scrBlue2"], ["scrBlue1", "scrWhite3", "scrBlue0"], ["scrBlue2", "scrWhite1", "scrBlue3"]][(gk + (s > 0 ? 2 : 0)) % 4], accentKey, hoodKey: dimKey, height: 1.0, stool: true, stoolH: 0.7, conduits: 2 });
       gk++;
     }
@@ -278,13 +282,14 @@ export function buildTactical(kit, ctx, room) {
 
   // ---- lights -----------------------------------------------------------------------------------
   // downlight over the dais (the fixture is drawn at the ceiling) + the tank's own blue glow: brightest object
-  kit.light({ type: "spot", pos: [0, h - 0.3, 0], target: [0, tTop, 0], color: 0xdfe8ff, intensity: lux(h - 0.3 - tTop, 2.6), distance: 13, angle: 0.62, penumbra: 0.5, shadow: true, priority: 0.95 });
-  kit.light({ type: "point", pos: [0, tTop + 0.95, 0], color: blue, intensity: 12.0, distance: 14, priority: 0.7 });
-  kit.light({ type: "point", pos: [0, h - 0.6, -8.8], color: 0xe4ecff, intensity: lux(h - 0.6 - gY, 1.1), distance: 14, priority: 0.5 });
-  kit.light({ type: "point", pos: [0, h - 0.6, 8.8], color: 0xe4ecff, intensity: lux(h - 0.6 - gY, 1.1), distance: 14, priority: 0.49 });
-  kit.light({ type: "point", pos: [10.2, h - 0.8, 0], color: 0xe4ecff, intensity: lux(h - 0.8, 1.0), distance: 13, priority: 0.52 });
-  kit.light({ type: "point", pos: [-10.2, h - 0.8, 0], color: 0xe4ecff, intensity: lux(h - 0.8, 1.1), distance: 13, priority: 0.51 });
+  kit.light({ type: "spot", pos: [DX, h - 0.3, 0], target: [DX, tTop, 0], color: 0xdfe8ff, intensity: lux(h - 0.3 - tTop, 3.0), distance: 13, angle: 0.62, penumbra: 0.5, shadow: true, priority: 0.95 });
+  kit.light({ type: "point", pos: [DX, tTop + 0.95, 0], color: blue, intensity: 14.0, distance: 14, priority: 0.7 });
+  // cool-white fills (one temperature: the ring cove's): over the galleries, the approach and the table
+  kit.light({ type: "point", pos: [DX, h - 0.6, -8.8], color: 0xe4ecff, intensity: lux(h - 0.6 - gY, 2.4), distance: 16, priority: 0.5 });
+  kit.light({ type: "point", pos: [DX, h - 0.6, 8.8], color: 0xe4ecff, intensity: lux(h - 0.6 - gY, 2.4), distance: 16, priority: 0.49 });
+  kit.light({ type: "point", pos: [7.0, h - 0.8, 0], color: 0xe4ecff, intensity: lux(h - 0.8, 2.6), distance: 15, priority: 0.52 });
+  kit.light({ type: "point", pos: [-9.2, h - 0.6, 0], color: 0xe4ecff, intensity: lux(h - 0.6, 1.9), distance: 15, priority: 0.51 });
   // blue practicals low over the two door-side floor stations so their control surfaces read
-  kit.light({ type: "point", pos: [-5.4, 1.9, -5.4], color: blue, intensity: 5.0, distance: 7, priority: 0.36 });
-  kit.light({ type: "point", pos: [-5.4, 1.9, 5.4], color: blue, intensity: 5.0, distance: 7, priority: 0.35 });
+  kit.light({ type: "point", pos: [DX - 5.4, 1.9, -5.4], color: blue, intensity: 5.0, distance: 7, priority: 0.36 });
+  kit.light({ type: "point", pos: [DX - 5.4, 1.9, 5.4], color: blue, intensity: 5.0, distance: 7, priority: 0.35 });
 }
