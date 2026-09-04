@@ -13,6 +13,7 @@ import { rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
 
 const PAD = { x: -64, z: -105, hw: 15, hd: 12, y: 0.12 }; // landing pad centre, half extents, height
+const SHUTTLE_YAW = -0.85; // parked in 3/4 view: nose toward the portal (+x) and forward (-z)
 const YELLOW = new THREE.Color("#d9b23c");
 
 export function buildShuttleBay(kit, ctx) {
@@ -20,8 +21,8 @@ export function buildShuttleBay(kit, ctx) {
   const rand = rng(ctx.seed + 21);
   shell(kit, ctx);
   landingPad(kit, ctx);
-  shuttle(kit, ctx, PAD.x, PAD.z);
-  clampsAndFuel(kit, ctx, min, max);
+  const hookup = shuttle(kit, ctx, PAD.x, PAD.z, SHUTTLE_YAW);
+  clampsAndFuel(kit, ctx, min, max, hookup);
   blastDoor(kit, ctx, min, max);
   controlBooth(kit, ctx, -46, -75.5);
   cargo(kit, ctx, min, max, rand);
@@ -35,30 +36,30 @@ function shell(kit, ctx) {
   const H = max[1];
   impFloor(kit, ctx, {});
   for (const side of ["zmin", "zmax", "xmin", "xmax"]) {
+    // big plates: every panel carries bolts / hatches, so panel count is the triangle budget here
     impWall(kit, ctx, side, {
-      rows: [0, 0.5, 2.0, 3.4, 7.2, 11.4, 15.0, H],
-      panelW: 3.2,
+      rows: [0, 0.6, 2.4, 6.2, 10.4, 14.4, H],
+      panelW: 4.4,
       paints: [
-        [PALETTE.impLight, 0.4],
-        [PALETTE.impGrey, 0.34],
-        [PALETTE.impMid, 0.18],
-        [PALETTE.impDark, 0.08],
+        [PALETTE.impLight, 0.56],
+        [PALETTE.impGrey, 0.3],
+        [PALETTE.impMid, 0.14],
       ],
-      styles: { panel: 0.7, vent: 0.06, greeble: 0.08, strip: 0.08, screen: 0.03, conduit: 0.05 },
+      styles: { panel: 0.74, vent: 0.05, greeble: 0.07, strip: 0.08, screen: 0.02, conduit: 0.04 },
       seed: ctx.seed * 5 + side.length,
       cove: true,
     });
   }
   impCeiling(kit, ctx, {
-    panelW: 5,
-    rowH: 5,
+    panelW: 6,
+    rowH: 6,
     spacing: 9,
     lights: false,
-    styles: { panel: 0.88, greeble: 0.04, vent: 0.08 },
+    styles: { panel: 0.9, greeble: 0.03, vent: 0.07 },
     paints: [
-      [PALETTE.impMid, 0.55],
-      [PALETTE.impDark, 0.3],
-      [PALETTE.impGrey, 0.15],
+      [PALETTE.impGrey, 0.6],
+      [PALETTE.impMid, 0.3],
+      [PALETTE.impLight, 0.1],
     ],
   });
   // pilasters and a string course; a heavy lintel over the portal to the main bay
@@ -70,7 +71,7 @@ function shell(kit, ctx) {
   for (const side of ["zmin", "zmax", "xmin", "xmax"]) {
     const seg = wallSegment(ctx.bounds, side);
     const { frame, length } = wallFrame(kit, seg.from, seg.to, 0);
-    frame.box("paintedMetal", length / 2, 3.48, 0.1, length, 0.16, 0.2, { color: PALETTE.impBlack, texel: 2 });
+    frame.box("paintedMetal", length / 2, 6.28, 0.1, length, 0.16, 0.2, { color: PALETTE.impBlack, texel: 2 });
   }
   const portal = ctx.doors.find((d) => d.wall === "z");
   if (portal) {
@@ -125,22 +126,38 @@ function landingPad(kit, ctx) {
 // ---------------------------------------------------------------------------
 // The shuttle: wedge nose, boxy fuselage with a raised cockpit, tall swept dorsal fin, two wings
 // folded up on the hull's shoulders, three landing struts and a lowered starboard boarding ramp.
-// Local frame: origin at the pad centre, nose toward -z, +x = starboard (toward the portal).
+// Local frame: origin at the pad centre, nose toward -z, +x = starboard; `yaw` turns the whole craft
+// (positive = nose swings toward -x). Colliders are AABBs of the rotated parts, chained along the hull.
 // ---------------------------------------------------------------------------
-function shuttle(kit, ctx, X, Z) {
+function shuttle(kit, ctx, X, Z, yaw = 0) {
   const Y = PAD.y;
-  const add = (mat, geo, x, y, z, opts = {}) => kit.add(mat, geo, { pos: [X + x, Y + y, Z + z], ...opts });
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const P = (x, y, z) => {
+    const v = new THREE.Vector3(x, 0, z).applyQuaternion(q);
+    return [X + v.x, Y + y, Z + v.z];
+  };
+  const add = (mat, geo, x, y, z, opts = {}) => kit.add(mat, geo, { pos: P(x, y, z), quat: q, ...opts });
   const box = (mat, x, y, z, sx, sy, sz, opts = {}) => add(mat, new THREE.BoxGeometry(sx, sy, sz), x, y, z, opts);
+  const cylZ = (mat, x, y, z, r, len, opts = {}) => add(mat, new THREE.CylinderGeometry(r, r, len, opts.segments || 12).rotateX(Math.PI / 2), x, y, z, opts);
+  // AABB collider of a local box (centre, half extents) after the yaw
+  const col = (cx, y0, cz, hx, y1, hz, tag) => {
+    const c = Math.abs(Math.cos(yaw));
+    const s = Math.abs(Math.sin(yaw));
+    const ex = hx * c + hz * s;
+    const ez = hx * s + hz * c;
+    const [wx, , wz] = P(cx, 0, cz);
+    kit.collider([wx - ex, Y + y0, wz - ez], [wx + ex, Y + y1, wz + ez], tag);
+  };
   // landing struts + pads
   for (const [sx, sz] of [
     [0, -4.6],
     [-2.0, 4.2],
     [2.0, 4.2],
   ]) {
-    kit.cyl("metal", X + sx, Y + 0.95, Z + sz, 0.16, 1.5, "y", { color: PALETTE.steel, segments: 10 });
-    kit.cyl("tiePanel", X + sx, Y + 1.55, Z + sz, 0.3, 0.5, "y", { segments: 10 });
+    add("metal", new THREE.CylinderGeometry(0.16, 0.16, 1.5, 10), sx, 0.95, sz, { color: PALETTE.steel });
+    add("tiePanel", new THREE.CylinderGeometry(0.3, 0.3, 0.5, 10), sx, 1.55, sz);
     box("tiePanel", sx, 0.12, sz, 0.9, 0.24, 0.9);
-    kit.collider([X + sx - 0.45, Y, Z + sz - 0.45], [X + sx + 0.45, Y + 1.8, Z + sz + 0.45], "strut");
+    col(sx, 0, sz, 0.45, 1.8, 0.45, "strut");
   }
   // fuselage: belly, main hull, upper spine, side skirts
   box("tiePanel", 0, 1.95, 1.0, 2.6, 0.7, 10.4);
@@ -195,18 +212,15 @@ function shuttle(kit, ctx, X, Z) {
       ig.rotateZ(lean);
       add("tiePanel", ig, s * 1.9, 4.0, 1.4);
     }
-    // hinge fairing and a red tip light
-    kit.cyl("tiePanel", X + s * 1.9, Y + 4.0, Z + 1.4, 0.45, 5.6, "z", { segments: 12 });
+    // hinge fairing and a red tip light (the wings stay well above head height: no collider needed)
+    cylZ("tiePanel", s * 1.9, 4.0, 1.4, 0.45, 5.6);
     const tip = new THREE.Vector3(0, 9.7, 1.4).applyAxisAngle(new THREE.Vector3(0, 0, 1), lean);
     box("emitRed", s * 1.9 + tip.x, 4.0 + tip.y, tip.z, 0.3, 0.2, 0.6);
-    // wing collider: the leaned slab's AABB (the player walks under the lean, so keep it above 2 m)
-    const tx = Math.sin(0.38) * 9.6;
-    kit.collider([X + Math.min(s * 1.9, s * 1.9 + s * tx) - 0.2, Y + 4.0, Z - 2.2], [X + Math.max(s * 1.9, s * 1.9 + s * tx) + 0.2, Y + 4.0 + Math.cos(0.38) * 9.6, Z + 5.0], "wing");
   }
   // engines: rear block with three blue thrusters
   box("tiePanel", 0, 3.0, 6.7, 3.0, 1.8, 0.9);
   for (const ex of [-0.9, 0, 0.9]) {
-    kit.cyl("tieHull", X + ex, Y + 3.0, Z + 7.05, 0.36, 0.3, "z", { segments: 14 });
+    cylZ("tieHull", ex, 3.0, 7.05, 0.36, 0.3, { segments: 14 });
     add("emitBlue", new THREE.CircleGeometry(0.28, 14), ex, 3.0, 7.22);
   }
   // starboard boarding ramp: lit hatch in the hull side, slab down to the pad at ~24°
@@ -228,20 +242,32 @@ function shuttle(kit, ctx, X, Z) {
     hg.rotateZ(Math.PI / 2 - rampAng);
     add("metal", hg, 1.7 + rampLen / 2, 0.85 + 0.9, 2.4 + s * 0.8, { color: PALETTE.steel });
   }
-  kit.colliders.push({ type: "ramp", min: new THREE.Vector3(X + 1.7, Y, Z + 2.4 - 0.85), max: new THREE.Vector3(X + 1.7 + rampLen, Y + 1.7, Z + 2.4 + 0.85), axis: "x", y0: Y + 1.7, y1: Y, tag: "ramp" });
-  // hull collider (the belly is 1.6 m up: block the whole footprint so the player walks around it)
-  kit.collider([X - 1.8, Y, Z - 9.8], [X + 1.8, Y + 5.8, Z + 7.3], "shuttle");
-  for (const s of [-1, 1]) kit.collider([X + Math.min(s * 1.0, s * 2.0), Y, Z - 5.4], [X + Math.max(s * 1.0, s * 2.0), Y + 3.0, Z - 1.8], "cheek");
-  // umbilicals plugged into the belly from the pad's fuel hookup
-  pipeRun(kit, [[X - 3.2, Y + 0.05, Z + 4.0], [X - 2.2, Y + 0.6, Z + 3.2], [X - 0.8, Y + 1.55, Z + 3.0]], 0.07, PALETTE.impBlack, "rubber");
-  pipeRun(kit, [[X - 3.2, Y + 0.05, Z - 1.5], [X - 2.0, Y + 0.7, Z - 1.0], [X - 0.6, Y + 1.55, Z - 0.6]], 0.06, PALETTE.impMid, "rubber");
+  // the ramp is walkable as a run of steppable slabs (a rotated ramp cannot be one axis-aligned ramp collider)
+  const segs = 6;
+  for (let i = 0; i < segs; i++) {
+    const u0 = (i / segs) * rampLen;
+    const u1 = ((i + 1) / segs) * rampLen;
+    const top = 1.7 - (1.7 / rampLen) * u0;
+    col(1.7 + (u0 + u1) / 2, 0, 2.4, (u1 - u0) / 2, top, 0.85, "ramp");
+  }
+  // hull colliders: a chain of blocks along the fuselage (the belly is 1.6 m up: the player walks around)
+  for (const lz of [-8.6, -6.0, -3.4, -0.8, 1.8, 4.4, 6.6]) col(0, 0, lz, 1.8, 5.8, 1.4, "shuttle");
+  for (const s of [-1, 1]) for (const lz of [-4.6, -2.6]) col(s * 1.5, 0, lz, 0.5, 3.0, 1.0, "cheek");
+  // hookup pedestal on the pad's port side with umbilicals plugged into the belly
+  const hook = P(-3.6, 0, 1.2);
+  kit.box("paintedMetal", hook[0], Y + 0.45, hook[2], 0.6, 0.9, 0.6, { color: PALETTE.impDark, texel: 2 });
+  kit.box("emitBlue", hook[0], Y + 0.95, hook[2], 0.3, 0.02, 0.3);
+  kit.collider([hook[0] - 0.3, Y, hook[2] - 0.3], [hook[0] + 0.3, Y + 0.9, hook[2] + 0.3], "pedestal");
+  pipeRun(kit, [P(-3.6, 0.3, 1.5), P(-2.4, 0.6, 3.0), P(-0.8, 1.55, 3.0)], 0.07, PALETTE.impBlack, "rubber");
+  pipeRun(kit, [P(-3.6, 0.3, 0.9), P(-2.2, 0.7, -0.8), P(-0.6, 1.55, -0.6)], 0.06, PALETTE.impMid, "rubber");
   void ctx;
+  return hook;
 }
 
 // ---------------------------------------------------------------------------
 // Docking clamps at the pad corners and fuel lines from a bunker on the forward wall
 // ---------------------------------------------------------------------------
-function clampsAndFuel(kit, ctx, min, max) {
+function clampsAndFuel(kit, ctx, min, max, hookup) {
   const { x, z, hw, hd } = PAD;
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
@@ -273,15 +299,13 @@ function clampsAndFuel(kit, ctx, min, max) {
   railing(kit, -75, bz + 3.0, -58, bz + 3.0, 0);
   railing(kit, -75, bz - 1.9, -75, bz + 3.0, 0);
   railing(kit, -58, bz - 1.9, -58, bz + 3.0, 0);
-  // manifold + lines along the floor to the pad's hookup point (port side of the shuttle)
+  // manifold + lines along the floor and across the pad to the shuttle's hookup pedestal
   kit.boxMM("paintedMetal", [-67.5, 0, bz + 1.6], [-65.5, 0.6, bz + 2.3], { color: PALETTE.impDark, texel: 2 });
   for (const dx of [-0.6, 0.6]) kit.cyl("metal", -66.5 + dx, 0.8, bz + 1.95, 0.22, 0.05, "y", { color: new THREE.Color("#b8352a"), segments: 12 });
-  pipeRun(kit, [[-66.5, 0.35, bz + 2.3], [-66.5, 0.12, bz + 4.0], [-67.2, 0.12, z - hd - 0.6], [-67.2, PAD.y + 0.05, z - hd + 0.4], [-67.2, PAD.y + 0.05, z - 1.5]], 0.08, PALETTE.impMid, "metal");
-  pipeRun(kit, [[-66.0, 0.35, bz + 2.3], [-66.0, 0.1, bz + 4.0], [-66.6, 0.1, z - hd - 0.6], [-66.6, PAD.y + 0.05, z - hd + 0.4], [-67.2, PAD.y + 0.05, z + 4.0]], 0.06, PALETTE.impBlack, "rubber");
-  // hookup pedestal on the pad
-  kit.box("paintedMetal", -67.2, PAD.y + 0.45, z + 1.2, 0.6, 0.9, 0.6, { color: PALETTE.impDark, texel: 2 });
-  kit.box("emitBlue", -67.2, PAD.y + 0.7, z + 0.89, 0.3, 0.08, 0.01);
-  kit.collider([-67.5, PAD.y, z + 0.9], [-66.9, PAD.y + 0.9, z + 1.5], "pedestal");
+  const hx = hookup[0];
+  const hz = hookup[2];
+  pipeRun(kit, [[-66.5, 0.35, bz + 2.3], [-66.5, 0.12, bz + 4.0], [hx - 0.3, 0.12, z - hd - 0.6], [hx - 0.3, PAD.y + 0.06, z - hd + 0.4], [hx - 0.3, PAD.y + 0.06, hz - 0.2]], 0.08, PALETTE.impMid, "metal");
+  pipeRun(kit, [[-66.0, 0.35, bz + 2.3], [-66.0, 0.1, bz + 4.0], [hx + 0.3, 0.1, z - hd - 0.6], [hx + 0.3, PAD.y + 0.05, z - hd + 0.4], [hx + 0.3, PAD.y + 0.05, hz - 0.2]], 0.06, PALETTE.impBlack, "rubber");
   void max;
 }
 

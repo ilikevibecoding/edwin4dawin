@@ -148,13 +148,21 @@ function ensureMaterials(ctx) {
     f.map = m.forceField.map.clone();
     f.map.repeat.set(11, 17.5); // 4 m tiles → 0.5 m cells over the 44 × 70 m opening
     f.map.needsUpdate = true;
-    f.opacity = 0.24;
+    f.opacity = 0.34;
     m.hg_field = f;
   }
   if (!m.hg_beaconRed) m.hg_beaconRed = m.emitRed.clone();
   if (!m.hg_beaconAmber) m.hg_beaconAmber = m.emitAmber.clone();
   if (!m.hg_seam) m.hg_seam = m.emitAmber.clone();
-  if (!m.hg_lane) m.hg_lane = m.emitWhite.clone();
+  // recessed deck lights: dimmer than the shared emitters so they read as fixtures, not bloom blobs
+  if (!m.hg_lane) {
+    m.hg_lane = m.emitWhite.clone();
+    m.hg_lane.emissiveIntensity = 1.5;
+  }
+  if (!m.hg_laneAmber) {
+    m.hg_laneAmber = m.emitAmber.clone();
+    m.hg_laneAmber.emissiveIntensity = 1.4;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +310,12 @@ function ceiling(kit, ctx, B0) {
     }
     kit.box("emitWhiteSoft", 0, yBot - 0.16, z, W - 1.2, 0.03, 0.14, { uv: "keep" });
   }
+  // approach-light bars over the opening: four long lit channels hung under the trusses, the view a
+  // pilot (and the exterior camera) gets looking up through the hole
+  for (const x of [-16, -6, 6, 16]) {
+    kit.boxMM("paintedMetal", [x - 0.35, CEIL - 1.9, HOLE.z0 - 3], [x + 0.35, CEIL - 1.5, HOLE.z1 + 3], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("emitWhiteSoft", [x - 0.22, CEIL - 1.93, HOLE.z0 - 2.6], [x + 0.22, CEIL - 1.9, HOLE.z1 + 2.6], { uv: "keep" });
+  }
   // longitudinal crane rails and their hangers are added with the crane (structure())
 }
 
@@ -340,7 +354,7 @@ function well(kit, ctx) {
     frame.box("metal", length / 2, WELL_DEPTH - SLOT + 0.04, 0.065, length, 0.05, 0.02, { color: PALETTE.steel });
     // continuous white approach strip under the hazard lip: outlines the bay from space
     frame.box("paintedMetal", length / 2, WELL_DEPTH - SLOT - LIP - 0.45, 0.05, length, 0.5, 0.1, { color: PALETTE.impBlack, texel: 2 });
-    frame.box("emitWhite", length / 2, WELL_DEPTH - SLOT - LIP - 0.45, 0.105, length - 0.4, 0.22, 0.01);
+    frame.box("emitWhite", length / 2, WELL_DEPTH - SLOT - LIP - 0.45, 0.105, length - 0.4, 0.14, 0.01);
     // containment-field emitter rim at y = -9
     frame.box("paintedMetal", length / 2, 1.0, 0.08, length, 0.36, 0.16, { color: PALETTE.impBlack, texel: 2 });
     frame.box("emitBlue", length / 2, 1.0, 0.165, length - 0.3, 0.14, 0.01);
@@ -388,7 +402,7 @@ function curbAndRails(kit, ctx) {
   // recessed lane lights around the opening (amber) just outside the curb
   const lane = (x0, z0, x1, z1) => {
     kit.boxMM("paintedMetal", [x0 - 0.16, 0, z0 - 0.16], [x1 + 0.16, 0.02, z1 + 0.16], { color: PALETTE.impBlack, texel: 2 });
-    kit.boxMM("emitAmber", [x0, 0.02, z0], [x1, 0.032, z1], {});
+    kit.boxMM("hg_laneAmber", [x0, 0.02, z0], [x1, 0.032, z1], {});
   };
   lane(cx0 - 0.9, cz0 - 0.9, cx0 - 0.76, cz1 + 0.9);
   lane(cx1 + 0.76, cz0 - 0.9, cx1 + 0.9, cz1 + 0.9);
@@ -1025,7 +1039,7 @@ function containmentField(ctx) {
   ctx.mesh(mesh);
   return (t) => {
     mat.map.offset.set((t * 0.011) % 1, (-t * 0.017) % 1);
-    mat.opacity = 0.22 + 0.04 * Math.sin(t * 1.6) + 0.02 * Math.sin(t * 4.3);
+    mat.opacity = 0.32 + 0.05 * Math.sin(t * 1.6) + 0.02 * Math.sin(t * 4.3);
   };
 }
 

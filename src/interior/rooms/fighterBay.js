@@ -43,14 +43,13 @@ function shell(kit, ctx) {
   for (const side of ["zmin", "zmax", "xmin", "xmax"]) {
     impWall(kit, ctx, side, {
       rows: [0, 0.5, 2.0, 3.4, 6.6, 10.2, H],
-      panelW: 2.4,
+      panelW: 2.8,
       paints: [
-        [PALETTE.impGrey, 0.4],
-        [PALETTE.impLight, 0.3],
-        [PALETTE.impMid, 0.2],
-        [PALETTE.impDark, 0.1],
+        [PALETTE.impGrey, 0.5],
+        [PALETTE.impLight, 0.34],
+        [PALETTE.impMid, 0.16],
       ],
-      styles: { panel: 0.62, vent: 0.08, greeble: 0.1, strip: 0.08, screen: 0.04, conduit: 0.08 },
+      styles: { panel: 0.64, vent: 0.08, greeble: 0.1, strip: 0.08, screen: 0.04, conduit: 0.06 },
       seed: ctx.seed * 5 + side.length,
       cove: true,
     });
@@ -62,9 +61,9 @@ function shell(kit, ctx) {
     lights: false,
     styles: { panel: 0.86, greeble: 0.04, vent: 0.1 },
     paints: [
-      [PALETTE.impMid, 0.55],
-      [PALETTE.impDark, 0.3],
-      [PALETTE.impGrey, 0.15],
+      [PALETTE.impGrey, 0.6],
+      [PALETTE.impMid, 0.3],
+      [PALETTE.impLight, 0.1],
     ],
   });
   // pilasters between the wall bays and a heavy lintel over the portal
@@ -220,18 +219,21 @@ function enginePod(kit, ctx, x, z, yaw) {
     add("paintedMetal", new THREE.BoxGeometry(0.3, 1.0, 0.3), 0.6, 0.6, lz, { color: PALETTE.impMid, texel: 2 });
     add("hazard", new THREE.BoxGeometry(1.5, 0.12, 0.3), 0, 1.16, lz, { texel: 3 });
   }
-  // body along z at y = 1.9
-  const body = new THREE.CylinderGeometry(0.72, 0.72, 3.2, 18).rotateX(Math.PI / 2);
-  add("tieHull", body, 0, 1.9, 0);
-  add("tiePanel", new THREE.CylinderGeometry(0.75, 0.75, 0.5, 18).rotateX(Math.PI / 2), 0, 1.9, -0.6);
-  add("tiePanel", new THREE.CylinderGeometry(0.75, 0.75, 0.5, 18).rotateX(Math.PI / 2), 0, 1.9, 0.7);
+  // body along z at y = 1.9: dark housing with light structural bands, exposed ribs between them
+  const body = new THREE.CylinderGeometry(0.66, 0.66, 3.2, 18).rotateX(Math.PI / 2);
+  add("tiePanel", body, 0, 1.9, 0);
+  for (const bz of [-1.1, -0.2, 0.7]) add("tieHull", new THREE.CylinderGeometry(0.74, 0.74, 0.34, 18).rotateX(Math.PI / 2), 0, 1.9, bz);
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2;
+    add("metal", new THREE.BoxGeometry(0.1, 0.1, 2.6), 0.68 * Math.cos(a), 1.9 + 0.68 * Math.sin(a), -0.1, { color: PALETTE.gunmetal });
+  }
   // nozzle ring + glow disc at the rear, intake cone at the front
   add("tieHull", new THREE.CylinderGeometry(0.55, 0.78, 0.6, 18, 1, true).rotateX(Math.PI / 2), 0, 1.9, 1.9);
   add("emitBlue", new THREE.CircleGeometry(0.5, 18), 0, 1.9, 1.62);
   add("tieHull", new THREE.CylinderGeometry(0.5, 0.72, 0.5, 18).rotateX(Math.PI / 2), 0, 1.9, -1.85);
   add("tiePanel", new THREE.CircleGeometry(0.48, 18).rotateY(Math.PI), 0, 1.9, -2.11);
   // fittings and a service cable to the floor
-  for (let k = 0; k < 4; k++) add("metal", new THREE.BoxGeometry(0.16, 0.12, 0.6), 0.55 * Math.cos((k / 4) * Math.PI * 2 + 0.4), 1.9 + 0.55 * Math.sin((k / 4) * Math.PI * 2 + 0.4), -0.2 + k * 0.3, { color: PALETTE.gunmetal });
+  for (let k = 0; k < 4; k++) add("metal", new THREE.BoxGeometry(0.16, 0.12, 0.5), 0.6 * Math.cos((k / 4) * Math.PI * 2 + 0.4), 1.9 + 0.6 * Math.sin((k / 4) * Math.PI * 2 + 0.4), 0.25 + (k % 2) * 0.6, { color: PALETTE.gunmetal });
   add("emitAmber", new THREE.BoxGeometry(0.3, 0.06, 0.01), 0, 2.5, -0.35);
   pipeRun(kit, [P(0.5, 2.2, 0.2), P(1.4, 1.2, 0.6), P(2.4, 0.1, 1.2)], 0.04, PALETTE.impBlack, "rubber");
   kit.collider([x - 1.2, 0, z - 2.3], [x + 1.2, 2.7, z + 2.3], "pod");
@@ -438,11 +440,11 @@ function props(kit, ctx, min, max, rand) {
 // ---------------------------------------------------------------------------
 function lighting(kit, ctx, min, max) {
   const y = max[1] - 2.2;
-  for (const c of CRADLES) ctx.light(pointLight(0xffb060, 26, 30, [c.x, y, c.z]));
-  ctx.light(pointLight(0xffb060, 14, 22, [46, y, -80]));
-  ctx.light(pointLight(0xe8f0ff, 22, 30, [46, y, -100]));
-  ctx.light(pointLight(0xe8f0ff, 18, 26, [64, y, -100]));
-  ctx.light(pointLight(0xffb060, 10, 18, [49, 6, -107.5]));
+  for (const c of CRADLES) ctx.light(pointLight(0xffb060, 44, 40, [c.x, y, c.z]));
+  ctx.light(pointLight(0xffb060, 22, 28, [46, y, -80]));
+  ctx.light(pointLight(0xe8f0ff, 40, 44, [46, y, -100]));
+  ctx.light(pointLight(0xe8f0ff, 34, 40, [64, y, -100]));
+  ctx.light(pointLight(0xffb060, 14, 20, [49, 6, -107.5]));
   // fixtures: amber-lensed floods under the ceiling above each light
   for (const [x, z, amber] of [
     [CRADLES[0].x, CRADLES[0].z, true],
