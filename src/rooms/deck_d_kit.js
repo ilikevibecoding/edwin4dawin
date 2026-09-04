@@ -48,7 +48,12 @@ export function ensureDeckDMaterials(kit) {
     const greenLow = emit(PALETTE.impGreen, 0.5);
     // hyperdrive core: unlit blue, colour animated (pulse) by the room's updater
     const coreBlue = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9fd0ff).multiplyScalar(1.6) });
-    deckDMaterials = { roomsd_decal: decal, roomsd_pulse: pulse, roomsd_glow: glow, roomsd_core: core, roomsd_slot: slot, roomsd_slotWarm: slotWarm, roomsd_amberLow: amberLow, roomsd_warmLow: warmLow, roomsd_blueLow: blueLow, roomsd_greenLow: greenLow, roomsd_coreBlue: coreBlue };
+    // deck stencils: the Imperial decal atlas in dark paint (a grey cog on grey tile, never a white blaze)
+    const stencil = kit.materials.decalImp.clone();
+    stencil.color = new THREE.Color(0x3e4249);
+    stencil.opacity = 0.92;
+    setDomain(stencil, "interior");
+    deckDMaterials = { roomsd_decal: decal, roomsd_pulse: pulse, roomsd_glow: glow, roomsd_core: core, roomsd_slot: slot, roomsd_slotWarm: slotWarm, roomsd_amberLow: amberLow, roomsd_warmLow: warmLow, roomsd_blueLow: blueLow, roomsd_greenLow: greenLow, roomsd_coreBlue: coreBlue, roomsd_stencil: stencil };
   }
   for (const [k, m] of Object.entries(deckDMaterials)) if (!kit.materials[k]) kit.materials[k] = m;
   return deckDMaterials;
@@ -62,12 +67,12 @@ export function decalD(kit, index, pos, facing, size, opts = {}) {
   return kit.add("roomsd_decal", g, { pos, rot, quat: opts.quat || null, uv: "keep", uvRect: deckDDecalRect(index) });
 }
 
-/** Imperial decal quad facing a cardinal direction (for props, not walls); opts.quat overrides. */
+/** Imperial decal quad facing a cardinal direction (for props, not walls); opts.quat overrides; opts.mat = "roomsd_stencil" for dark deck paint. */
 export function decalImp(kit, index, pos, facing, size, opts = {}) {
   const g = new THREE.PlaneGeometry(size, opts.h || size);
   if (opts.spin) g.rotateZ(opts.spin);
   const rot = facing === "up" ? [-Math.PI / 2, 0, 0] : facing === "-z" ? [0, Math.PI, 0] : facing === "+x" ? [0, Math.PI / 2, 0] : facing === "-x" ? [0, -Math.PI / 2, 0] : [0, 0, 0];
-  return kit.add("decalImp", g, { pos, rot, quat: opts.quat || null, uv: "keep", uvRect: impDecalRect(index) });
+  return kit.add(opts.mat || "decalImp", g, { pos, rot, quat: opts.quat || null, uv: "keep", uvRect: impDecalRect(index) });
 }
 
 // ---------------------------------------------------------------------------
@@ -340,12 +345,12 @@ export function hazardBars(kit, x0, z0, x1, z1, opts = {}) {
 }
 
 /**
- * Engineering-style equipment cabinet run against a wall: black shells with charcoal fronts, drawer
+ * Engineering-style equipment cabinet run against a wall: black shells with grey enamel fronts, drawer
  * fronts / vent grilles / amber readouts per bay, a dim amber strip along the top edge of every bay and
  * a status LED. facing: '+z' (back to the N wall), '-z', '+x', '-x'. Adds one collider for the run.
  */
 export function cabinetRow(kit, x0, x1, zBack, facing, opts = {}) {
-  const { h = 2.4, depth = 0.7, bay = 1.25, seed = 1, accentKey = "emitAmber", strip = "roomsd_amberLow", screens = ["scrAmber0", "scrAmber1", "scrAmber2", "scrAmber3"] } = opts;
+  const { h = 2.4, depth = 0.7, bay = 1.25, seed = 1, accentKey = "emitAmber", strip = "emitAmberDim", front = PALETTE.impGreyDark, screens = ["scrAmber0", "scrAmber1", "scrAmber2", "scrAmber3"] } = opts;
   const rand = rng(seed);
   const n = [0, 0, 0];
   if (facing === "+z") n[2] = 1;
@@ -377,7 +382,7 @@ export function cabinetRow(kit, x0, x1, zBack, facing, opts = {}) {
       const p = at(dn, y, off);
       kit.box(mat, p[0], p[1], p[2], sx, hgt, szz, col !== undefined ? { color: col, texel: 1.5 } : { uv: "keep" });
     };
-    face("impMetal", 0.0, h / 2, 0.012, bw - 0.1, h - 0.3, PALETTE.impCharcoal);
+    face("impPanel1", 0.0, h / 2, 0.012, bw - 0.1, h - 0.3, front); // enamel front (responds to the room's light, unlike bare metal)
     // top: amber strip in a shallow black channel + status LED
     face("impTrim", 0.012, h - 0.32, 0.03, bw - 0.3, 0.1, PALETTE.impBlack);
     face(strip, 0.03, h - 0.32, 0.012, bw - 0.5, 0.03);
@@ -424,8 +429,8 @@ export function wallManifold(kit, x0, x1, zWall, side, opts = {}) {
   for (let k = 0; k < risers; k++) {
     const x = x0 + ((x1 - x0) * k) / Math.max(1, risers - 1);
     pipe(kit, [x, yLo, z], [x, yHi, z], 0.07, { color: [PALETTE.impGrey, PALETTE.impGreyDark][k % 2] });
-    valveWheel(kit, [x, (yLo + yHi) / 2, z - side * 0.36], "z", 0.17, { color: k % 3 === 2 ? PALETTE.impAmber : PALETTE.impRed, stem: 0.22 });
-    if (k % 2 === 0) gauge(kit, [x + 0.32, yHi - 0.55, z - side * 0.14], side < 0 ? "-z" : "+z", 0.09, { seed: seed + k, warn: rand() < 0.25 });
+    valveWheel(kit, [x, (yLo + yHi) / 2, z + side * 0.36], "z", 0.17, { color: k % 3 === 2 ? PALETTE.impAmber : PALETTE.impRed, stem: 0.22 });
+    if (k % 2 === 0) gauge(kit, [x + 0.32, yHi - 0.55, z + side * 0.14], side < 0 ? "-z" : "+z", 0.09, { seed: seed + k, warn: rand() < 0.25 });
     kit.box("impTrim", x, yLo, z, 0.3, 0.42, 0.42, { color: PALETTE.impBlack });
   }
   for (const x of [x0 - 0.3, x1 + 0.3]) {

@@ -1,19 +1,21 @@
 // Hyperdrive & Propulsion (deck D): an 18 m horizontal hyperdrive core on two cradles, wrapped in
-// alternating armour and blue coil rings that pulse in sequence, power conduits arcing to the walls,
-// a raised inspection catwalk ring at y = 3.6 with railings reached by two stair runs, a control pulpit
-// on a dais by the door, coolant tanks in the aft corners, a power coupling block at the core's aft
-// nozzle, hazard stripes around the cradle footprint, roof trusses and a hoist rail with a slowly
-// traversing trolley. The forward nozzle is a dark aperture ring with a pulsing blue core behind a
-// slowly turning rotor and coil rings. The N wall carries the equipment bank (racks, breaker board,
-// cable trays from the cradles); the S wall the coolant manifold (header, valves, gauges, floor runs
-// to the cradles). Light: the drive's own blue glow plus five hooded work lamps hung from the trusses
-// and aimed at the drive / pulpit at half strength; no bare lamps under the ceiling.
+// alternating armour and blue coil rings that pulse in sequence, three pairs of heavy black power
+// conduits rising from the core's spine into ceiling mains, a raised inspection catwalk ring at y = 3.6
+// with railings reached by two stair runs, a control pulpit on a dais by the door, coolant tanks in
+// the aft corners, a power coupling block at the core's aft nozzle, hazard stripes around the cradle
+// footprint, roof trusses and a hoist rail with a slowly traversing trolley. The forward nozzle is a
+// dark aperture ring with a pulsing blue core behind a slowly turning rotor and coil rings. Both long
+// walls carry equipment along their lower band: N = amber-lit cabinet run, racks, breaker board, pipe
+// manifold; S = cabinet run and the coolant manifold (header, valves, gauges, floor runs to the
+// cradles). The deck is plain tile with the section's cog stencil in front of the aperture (no lane).
+// Light: the drive's own blue glow plus five hooded work lamps hung from the trusses and aimed at the
+// drive / pulpit; no bare lamps under the ceiling.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impConsole, impChair, impRailing, impWallGear, impCrate, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { rng, insideOut } from "../kit.js";
-import { ensureDeckDMaterials, shellNoFloor, deckFloor, screenBank, pipe, pipePath, valveWheel, gauge, junctionBox, tank, dais, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, solidStairs, catwalk, pulseRings, assembly, truss, blinkers, hexBolt, cableTray, shroudLamp, equipmentRack, breakerBoard } from "./deck_d_kit.js";
+import { ensureDeckDMaterials, shellNoFloor, deckFloor, screenBank, pipe, pipePath, valveWheel, gauge, junctionBox, tank, dais, hazardBorder, hazardBars, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, solidStairs, catwalk, pulseRings, assembly, truss, blinkers, hexBolt, cableTray, shroudLamp, equipmentRack, breakerBoard, cabinetRow, wallManifold } from "./deck_d_kit.js";
 
 const LOW = "roomsd_blueLow"; // dim blue practicals: rail LEDs, strips, collar rings
 const SLOT = "roomsd_slot"; // recessed white slots (screen-wall cornices)
@@ -38,15 +40,11 @@ export function buildHyperdrive(kit, ctx, room) {
     ceiling: { troughs: 2, troughW: 0.6, beamStep: 4.2, accentKey: LOW },
   });
   deckFloor(kit, -hx, -hz, hx, hz, []);
-  // entry lane from the blast door, chevron lanes to both stairs (fine chevron repeat: no stair-stepped edges)
-  kit.boxMM("impMetalRough", [-hx + 0.3, 0.0, -1.3], [-8.3, 0.012, 1.3], { color: PALETTE.impGreyDark, texel: 0.7 });
-  for (const s of [-1, 1]) kit.boxMM("impTrim", [-hx + 0.3, 0, s * 1.3 - 0.03], [-8.3, 0.014, s * 1.3 + 0.03], { color: PALETTE.impBlack });
-  for (const s of [-1, 1]) {
-    kit.boxMM("chevronY", [-12.7, 0.003, s > 0 ? 1.3 : -12.3], [-11.5, 0.009, s > 0 ? 12.3 : -1.3], { texel: 3.0 });
-    kit.boxMM("chevronY", [-11.5, 0.003, s > 0 ? 11.7 : -12.3], [-10.5, 0.009, s > 0 ? 12.3 : -11.7], { texel: 3.0 });
-  }
-  decalImp(kit, IMP_DECAL.arrowRight, [-14.5, 0.016, 0], "up", 1.0);
-  decalImp(kit, IMP_DECAL.hazard, [-11.5, 0.016, 0], "up", 0.9);
+  // plain tile from the blast door to the aperture (nothing drives in here): the section's cog stencil
+  // where the drive axis meets the deck, and geometry hazard bars across both stair feet (mesh edges,
+  // no textured chevrons to stair-step)
+  decalImp(kit, IMP_DECAL.cog, [-12.0, 0.016, 0], "up", 2.2, { mat: "roomsd_stencil" });
+  for (const s of [-1, 1]) hazardBars(kit, -10.5, s * 11.95, -8.9, s * 11.95, { w: 0.5, bar: 0.32 });
 
   // --- the core
   const cy = 3.4;
@@ -160,19 +158,20 @@ export function buildHyperdrive(kit, ctx, room) {
     }
     kit.add("impTrim", new THREE.TorusGeometry(R + 0.28, 0.24, 10, 48), { pos: [cxC, cy, 0], rot: [0, Math.PI / 2, 0], color: PALETTE.impBlack, uv: "scale", uvScale: [12, 1] });
     for (const zz of [-2.2, 2.2]) kit.box("impMetal", cxC, 0.9, zz, 1.9, 0.6, 0.5, { color: PALETTE.impGreyDark, texel: 1 });
-    decalD(kit, DECK_D_DECAL.oil, [cxC + 1.6, 0.018, 1.4], "up", 1.5);
+    decalD(kit, DECK_D_DECAL.oil, [cxC + 1.7, 0.018, 1.6], "up", 3.0);
   }
   kit.collider([cx0 - 2.0, 0, -3.0], [cx1 + 1.9, cy + R + 0.4, 3.0], "core"); // ends at the aft nozzle: the E run deck starts there
   hazardBorder(kit, cx0 - 2.4, -3.5, cx1 + 3.5, 3.5, 0, 0.32, "chevronY", 3.0);
-  // power conduits arcing from the core top to junction blocks on the N and S walls
-  for (const x of [-1.2, 6.9]) {
+  // heavy black power conduits from the core's spine straight up into ceiling mains: three pairs, each
+  // pair collected by a black junction slab under the ceiling (between the trusses) with a status strip
+  for (const x of [-2.0, 3.0, 8.0]) {
     for (const s of [-1, 1]) {
-      pipePath(kit, [[x, cy + R - 0.6, s * 1.6], [x, cy + R + 0.9, s * 4.0], [x, cy + R + 0.9, s * (hz - 1.2)], [x, cy + R + 0.9, s * (hz - 0.5)]], 0.3, { color: PALETTE.impGreyDark, clampStep: 2.0 });
-      kit.box("impTrim", x, cy + R + 0.9, s * (hz - 0.35), 1.3, 1.3, 0.7, { color: PALETTE.impBlack, texel: 1 });
-      kit.box("impMetal", x, cy + R + 0.9, s * (hz - 0.72), 1.0, 1.0, 0.04, { color: PALETTE.impCharcoal, texel: 1 });
-      for (let k = 0; k < 4; k++) kit.box(k === 2 ? "emitRedImp" : accentKey, x - 0.36 + k * 0.24, cy + R + 1.35, s * (hz - 0.75), 0.06, 0.06, 0.02);
-      kit.box("impTrim", x, cy + R + 0.9, s * (hz - 0.74), 0.9, 0.06, 0.02, { color: PALETTE.impBlack });
+      pipe(kit, [x, cy + R - 0.55, s * 1.4], [x, h - 0.5, s * 1.4], 0.42, { color: PALETTE.impBlack, clampStep: 1.1, clampColor: PALETTE.impCharcoal, flanges: true, segments: 14 });
+      kit.cyl("impTrim", x, cy + R - 0.15, s * 1.4, 0.6, 0.3, "y", { color: PALETTE.impBlack, segments: 14 }); // root collar on the armour
     }
+    kit.box("impTrim", x, h - 0.28, 0, 1.5, 0.56, 4.2, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("impMetal", x, h - 0.58, 0, 1.3, 0.06, 1.0, { color: PALETTE.impCharcoal, texel: 1 });
+    for (let k = 0; k < 3; k++) kit.box(k === 1 ? "emitRedImp" : accentKey, x - 0.3 + k * 0.3, h - 0.62, 0, 0.08, 0.02, 0.08);
   }
   // N side: cable trays on the floor from the cradle feet to the equipment bank on the wall
   cableTray(kit, [[-2.3, 0, -3.4], [-4.6, 0, -3.4], [-4.6, 0, -(hz - 0.45)]], { w: 0.5, seed: 21, cables: 4 });
@@ -184,7 +183,7 @@ export function buildHyperdrive(kit, ctx, room) {
   // S side: coolant runs on the floor from the cradle feet up into the manifold header on the wall
   for (const x of [-4.0, 8.0]) {
     pipePath(kit, [[x, 0.17, 2.6], [x, 0.17, hz - 0.55], [x, 1.35, hz - 0.55]], 0.15, { color: PALETTE.impGreyDark, clampStep: 1.8 });
-    decalD(kit, DECK_D_DECAL.grime, [x + 0.6, 0.018, 8.0], "up", 1.2);
+    decalD(kit, DECK_D_DECAL.grime, [x + 0.7, 0.018, 8.0], "up", 2.6);
   }
 
   // --- catwalk ring at y = 3.6 (N/S runs, W/E runs) with columns; railings routed around the stair landings.
@@ -290,8 +289,12 @@ export function buildHyperdrive(kit, ctx, room) {
     for (const [i, x] of [-3.0, -1.6, -0.2].entries()) equipmentRack(kit, x, -(hz - 0.45), 1.2, 2.4, 0.7, "+z", { seed: 700 + i, accentKey, screens: false });
     breakerBoard(F, wallU(room, "N", 2.6), 0.3, 1.6, 2.2, { seed: 41, accentKey: "emitAmber" });
     hazardBorder(kit, -3.8, -(hz - 0.1), 3.6, -(hz - 1.25), 0, 0.2, "chevronY", 3.0);
+    // engineering-style amber-lit cabinet run W of the racks, a pipe manifold E of the breaker board:
+    // the pale wall carries equipment along its whole lower band
+    cabinetRow(kit, -9.7, -5.5, -(hz - 0.04), "+z", { seed: 731, h: 2.4, bay: 1.4 });
+    wallManifold(kit, 4.9, 9.3, -(hz - 0.04), 1, { yLo: 1.3, yHi: 3.5, yTop: 6.4, risers: 4, seed: 741 });
     junctionBox(F, wallU(room, "N", -13.5), 2.2, 0.8, 1.0, { seed: 599, accentKey });
-    junctionBox(F, wallU(room, "N", 6.4), 2.4, 0.7, 0.9, { seed: 609, accentKey, drops: 1 });
+    junctionBox(F, wallU(room, "N", 12.3), 2.4, 0.7, 0.9, { seed: 609, accentKey, drops: 1 });
     impWallGear(F, wallU(room, "N", 11.0), 1.5, { seed: 619, accentKey });
     F.decal(IMP_DECAL.keepClear, wallU(room, "N", -9.7), 3.9, 0.03, 0.6);
     F.decal(IMP_DECAL.power, wallU(room, "N", -1.6), 3.4, 0.03, 0.7);
@@ -322,9 +325,11 @@ export function buildHyperdrive(kit, ctx, room) {
       F.decal(IMP_DECAL.glyphs1, wallU(room, "S", x) + 0.45, yh + 0.95, 0.03, 0.22);
     }
     kit.collider([-6.4, 0, hz - 0.85], [12.4, 1.9, hz], "manifold");
-    decalD(kit, DECK_D_DECAL.grime, [1.0, 0.018, hz - 1.3], "up", 1.4);
-    decalD(kit, DECK_D_DECAL.oil, [6.5, 0.018, hz - 1.5], "up", 1.2);
-    junctionBox(F, wallU(room, "S", -13.5), 2.2, 0.8, 1.0, { seed: 601, accentKey });
+    decalD(kit, DECK_D_DECAL.grime, [1.0, 0.018, hz - 1.4], "up", 3.0);
+    decalD(kit, DECK_D_DECAL.oil, [6.5, 0.018, hz - 1.5], "up", 2.6);
+    // cabinet run between the door wall and the manifold (the junction box above it moves up the wall)
+    cabinetRow(kit, -16.0, -8.8, hz - 0.04, "-z", { seed: 751, h: 2.4, bay: 1.44 });
+    junctionBox(F, wallU(room, "S", -13.5), 3.7, 0.8, 1.0, { seed: 601, accentKey, drops: 0 });
     junctionBox(F, wallU(room, "S", 3.2), 3.1, 0.7, 0.9, { seed: 611, accentKey, drops: 1 });
     impWallGear(F, wallU(room, "S", -7.6), 2.6, { seed: 621, accentKey });
     F.decal(IMP_DECAL.keepClear, wallU(room, "S", -9.7), 3.9, 0.03, 0.6);
@@ -371,17 +376,17 @@ export function buildHyperdrive(kit, ctx, room) {
   kit.light({ type: "point", pos: [3.0, cy, 0], color: blue, intensity: lux(4.5, 3.0), distance: 17, priority: 0.7 });
   // (kept low, > 1 m under the W run's deck, so the deck edge above the aperture carries no hotspot)
   kit.light({ type: "point", pos: [xa - 0.5, cy - 0.9, 0], color: 0x8fbcff, intensity: lux(4.0, 2.6), distance: 15, priority: 0.68, dim: (t) => 0.55 + 0.45 * corePulse(t) });
-  kit.light({ type: "point", pos: [8.5, cy + R + 1.2, 0], color: blue, intensity: lux(3.8, 3.0), distance: 16, priority: 0.65 });
+  kit.light({ type: "point", pos: [10.3, cy + R + 1.0, 0], color: blue, intensity: lux(3.8, 3.0), distance: 16, priority: 0.65 });
   const yT = h - 0.95; // truss bottom chord
   for (const [i, [x, z]] of [[-7, -6.6], [-7, 6.6], [5, -6.6], [5, 6.6]].entries()) {
     const lamp = [x, 5.7, z];
     const aim = [x + 1.0, cy - 0.4, 0];
     shroudLamp(kit, [x, yT, z], lamp, aim, { key: "emitWhiteDim", size: 0.55 });
-    if (x < 0) kit.light({ type: "spot", pos: lamp, target: aim, color: work, intensity: lux(5.5, 3.2), distance: 22, angle: 0.78, penumbra: 0.55, priority: 0.8 - i * 0.01 });
-    else kit.light({ type: "point", pos: [lamp[0] + 0.15, lamp[1] - 0.35, lamp[2] - Math.sign(z) * 0.35], color: work, intensity: lux(5.5, 2.0), distance: 18, priority: 0.6 - i * 0.01 });
+    if (x < 0) kit.light({ type: "spot", pos: lamp, target: aim, color: work, intensity: lux(5.5, 3.8), distance: 22, angle: 0.82, penumbra: 0.55, priority: 0.8 - i * 0.01 });
+    else kit.light({ type: "point", pos: [lamp[0] + 0.15, lamp[1] - 0.45, lamp[2] - Math.sign(z) * 0.35], color: work, intensity: 2.8 * 5.5, decay: 1, distance: 18, priority: 0.6 - i * 0.01 });
   }
   // pulpit / entry lamp: hung between the door and the pulpit so the entry lane is lit as well
   shroudLamp(kit, [-13, yT, 2.6], [-13.2, 5.3, 2.6], [-13.6, 0.9, 3.4], { key: "emitWhiteDim", size: 0.45 });
-  kit.light({ type: "point", pos: [-13.3, 5.0, 2.6], color: 0xfff0dc, intensity: lux(5.0, 2.4), distance: 16, priority: 0.55 });
+  kit.light({ type: "point", pos: [-13.3, 4.9, 2.6], color: 0xeef2ff, intensity: 3.8 * 5.0, decay: 1, distance: 17, priority: 0.55 });
   void rand;
 }
