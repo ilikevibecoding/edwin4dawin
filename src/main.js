@@ -403,7 +403,7 @@ const KESTREL_VIEWS = {
   aft: { x: 0.2, z: -6.5, yaw: 180, pitch: -3 },
   ramp: { x: 0.0, z: 1.2, yaw: 180, pitch: -12 },
   // deck-level view of the parked freighter from the hangar floor (hull, gear, ramp, service gear)
-  kestrel_deck: { x: -9.5, z: 4.5, yaw: 150, pitch: 4, y: -KESTREL.clearance },
+  kestrel_deck: { x: -11, z: 6, yaw: -32, pitch: 6, y: -KESTREL.clearance },
 };
 function kestrelPose(v) {
   const c = Math.cos(KESTREL.yaw);
