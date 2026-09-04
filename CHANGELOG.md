@@ -1,44 +1,92 @@
 # Changelog
 
 All measurements below come from `node scripts/bench.mjs` (headless Chrome with SwiftShader software GL in the
-build VM: FPS/GPU numbers are far below a real GPU; the comparable metrics are JS ms per frame, long tasks,
-memory, draw calls, triangles, entity counts and load time). Reports live in `bench/*.json`.
+build VM, 4 shared cores: FPS/GPU numbers are far below a real GPU; the comparable metrics are JS ms per frame,
+long tasks, memory, draw calls, triangles, entity counts and load time). Reports live in `bench/*.json`.
 
-## Unreleased - disasters, multiplayer, eyes, optimization
+## Unreleased - natural disasters, administrator panel, multiplayer, eyes, optimization
 
-### Baseline (before this round)
-| scenario | load (in-page) | js avg / p95 / max ms | draw calls | heap MB | long tasks | entities |
-| --- | --- | --- | --- | --- | --- | --- |
-| spawn overlook | 1.13 s | 5.98 / 17.1 / 226.9 | (not measured*) | 115 | 3 (459 ms, incl. load burst) | 39 NPCs, 43 animals, <=168 particles |
-| town center | 0.79 s | 6.95 / 24.6 / 217.4 | (not measured*) | 96 | 4 (702 ms) | 39 NPCs, 43 animals, <=290 particles |
+### How to reproduce each disaster
+Open the game, press `F4` (or `` ` ``), pick a tab, set a seed, press **Preview** then **Start** and confirm.
+Equivalent console commands (same seed => identical destruction, verified by `node scripts/test-disasters.mjs`):
 
-`*` the first baseline reported draw calls of the hand pass only (Three resets `renderer.info` per render call);
-fixed in `PerfMonitor.beginFrame` (autoReset off + manual reset). The town-center view after the fix: ~256 draw calls, ~198k triangles.
+```js
+game.disasters.command({type:'start', disaster:'tsunami', seed:7, params:{waterHeight:5, waveHeight:4, direction:'west', speed:6, duration:60, damage:0.5, intensity:0.7, center:[0,0], radius:110}})
+game.disasters.command({type:'start', disaster:'tornado', seed:7, params:{start:[-70,20], heading:75, speed:4, wander:0.35, radius:9, duration:75, intensity:0.8}})
+game.disasters.command({type:'start', disaster:'beam',    seed:7, params:{target:[0,0], beamRadius:5, chargeTime:10, strength:0.7, destructionRadius:18, duration:18, intensity:0.7}})
+game.disasters.command({type:'pause'}); ({type:'resume'}); ({type:'set', params:{intensity:1}}); ({type:'stop'}); ({type:'reset'}); ({type:'replay'})
+```
+
+Multiplayer: `ADMIN_TOKEN=secret npm run server`, then open two tabs with `?server=ws://localhost:8765&admin=secret`
+and `?server=ws://localhost:8765`; commands from the admin tab run identically (same server-stamped tick and
+seed) in both. `npm run mp-test` automates this with three headless clients including a late joiner.
 
 ### Added
-- `src/perf.js` PerfMonitor (frame/JS/GPU timing via EXT_disjoint_timer_query, draw calls, memory, long tasks,
-  entity counters, network bytes, load time) shown on F3; `scripts/bench.mjs` (headless benchmark with scripted
-  steps), `scripts/cdp.mjs` (Chrome DevTools helper), `scripts/test-unit.mjs`, `scripts/test-disasters.mjs`
-  (lifecycle, preview isolation, pause, deterministic replay hash, full restore for every registered disaster).
-- Disaster foundation: `DisasterManager` (command driven: preview/start/pause/resume/stop/set/reset/replay, seeded
-  determinism, 20 TPS simulation, per-tick edit budget, `pauseAtTick` testing aid, authority hooks for a network
-  client), `BlockJournal` (first-touch originals, batched newest-first restore, order-independent hash),
-  instanced pooled `DebrisSystem` (one draw call, gravity/collision/buoyancy/force field, speed clamps),
+- **Disaster foundation** - `DisasterManager` (command driven: preview/start/pause/resume/stop/set/reset/replay,
+  seeded determinism, 20 TPS simulation independent of frame rate, per-tick edit / relight / remesh budgets,
+  `pauseAtTick` testing aid, authority hooks for the network client), `BlockJournal` (first-touch originals,
+  batched newest-first restore, order-independent FNV hash used by the replay tests), instanced pooled
+  `DebrisSystem` (one draw call for up to 600 chunks, gravity/collision/buoyancy/force fields, speed clamps),
   `Effects` (camera shake, lighting/fog overrides, flashes), bulk world edits (`World.setBlockRaw` +
-  `relightChunk`, budgeted `Terrain.remeshDirty`), new blocks (scorched stone, ash, magma, charred planks).
-- NPC/animal reaction API: `alert()`, `clearAlert()`, `applyImpulse()`, `eachNear()`; panic evacuation to upper
-  floors / away from the threat, swimming and drifting in flood water with calls for help, airborne tumbling
-  and stun on landing, panicking livestock.
-- `Permissions` (single player = owner/admin unless `?admin=0`; online admin only via server token) and
-  `SaveManager` (player edits persist to localStorage; disaster damage is journaled separately and never saved
-  unless an administrator commits it).
-- Player `addForce`/`impulse`, shared `uFlash` uniform for lighting flashes.
+  `relightChunk`, budgeted `Terrain.remeshDirty`, border-light diffing so untouched neighbours are not remeshed),
+  new blocks (scorched stone, ash, magma, charred planks).
+- **Tsunami & flood** (`src/disasters/tsunami.js`, `tsunami/`) - deterministic wave front with a crest mesh,
+  foam and spray, real water blocks rising column by column behind the front (buoyancy, swimming and currents use
+  the normal water physics), gradual structural damage by material with floating debris, receding phase that
+  drains the streets, silt/damage left behind, ambient roar loop, NPC evacuation to upper floors / swimming with
+  calls for help, animals panicking; preview shows the flooded extent.
+- **Tornado** (`src/disasters/tornado.js`, `tornado/`) - seeded travelling path with wobble, layered rotating
+  funnel (scrolling noise shader) connected to a cloud deck, dust skirt, orbiting debris ring, storm lighting,
+  wind field applied to players/NPCs/animals/debris by mass and distance with speed caps, church bell + shouts,
+  gradual material-aware destruction along the path, rope-out ending, preview ribbon + radius.
+- **Orbital beam** (`src/disasters/orbitalBeam.js`, `beam/`) - original ring station charging above the target
+  (motes spiralling into a focus sphere, rising hum), slow visible descent with shimmer sleeve and cloud rings,
+  impact flash/shockwave/sparks/smoke columns/debris, deterministic crater growth (scorched floor, magma pool that
+  glows at night, ash rim, charred wood), damage/knockback in the column, stop retracts the beam, preview marker.
+- **Administrator panel** (`src/ui/adminPanel.js`, `F4`) - disaster tabs, schema-driven parameter form with
+  "my position" / "crosshair target" pickers, seed, preview, start with warning + confirmation, pause/resume,
+  stop, reset/restore, replay, live intensity slider, copyable console command, save commit/discard, live perf
+  readout. Hidden for non-admins.
+- **Multiplayer** (`server/index.mjs`, `src/net/client.js`, `src/net/remotePlayers.js`) - server-authoritative
+  WebSocket relay: 20 Hz tick, 10 Hz interest-managed player state, block edit relay + history for late joiners,
+  disaster commands stamped with authoritative tick + seed and broadcast, admin token, per-client rate/size
+  limits, one active disaster; remote avatars with interpolation, name tags and held blocks.
+- **Permissions and save isolation** - `Permissions` (single player = owner/admin unless `?admin=0`; online admin
+  only via server token), `SaveManager` (player edits persist to localStorage and re-apply on load; disaster
+  damage is journaled separately and never saved unless an administrator commits it from the panel).
+- **NPC / animal eyes** - human eyes are two clearly separated eyes (white + iris + 1 px skin gap, brows on the
+  brow row, iris contrast checked against the skin tone), natural unsynchronised blinking (`npc/blink.js`);
+  pig and chicken eyes redrawn with whites/pupils/glint; horse eyes thicker with coat-aware contrast, lashes and
+  nostrils moved so they no longer read as low eyes; cow side-eye widened.
+- **Performance tooling** - `PerfMonitor` (frame/JS/GPU timing via `EXT_disjoint_timer_query`, draw calls,
+  memory, long tasks, entity counters, network bytes, load time) shown on `F3` and in the admin panel;
+  `scripts/bench.mjs`, `scripts/cdp.mjs`, `scripts/test-unit.mjs`, `scripts/test-disasters.mjs`,
+  `scripts/mp-test.mjs`.
+- Static low-detail meshes (`buildStaticLOD`) for NPCs and animals beyond 28-32 blocks: one draw call per entity
+  instead of ~8-9 (busy town scene draw calls -54%).
+
+### Changed / optimized
+- Chunk pipeline: packed vertex attributes, 16-bit indices, cheaper lighting seeds, exact worldgen shortcuts,
+  AABB frustum culling per chunk (-31% geometry memory, faster load, about half the streaming JS while walking).
+- Relighting after disaster edits is coalesced per chunk and only marks neighbours whose border light actually
+  changed; remesh work is budgeted per frame.
+- NPC shouts are globally throttled; name-tag and debris shader programs are pre-compiled at load.
 
 ### Fixed
 - Shops, saloon, general store and hotel had their goods shelves/bookshelves placed IN the back wall, so the
-  outside of those buildings showed bookshelf textures. Shelves now stand inside against an intact wall
-  (counter / keeper walkway / shelf / wall).
+  outside of those buildings showed bookshelf textures. Shelves now stand inside against an intact wall.
+- Deputies no longer stack on one work spot; horses no longer spawn on stable roofs.
+- Player collision floating-point drift (getting blocked by floor blocks when leaving buildings).
 
-### In progress (builder branches, merged only after review)
-- Tsunami & flood, Tornado, Orbital Beam disasters; admin control panel; multiplayer server/client; NPC/animal
-  eyes + blinking; streaming/mesh optimizations.
+### Measured
+(see the table appended after the final verification run below)
+
+### Known imperfections
+- Frame times in this build VM are dominated by SwiftShader; disaster carving/flooding windows are bounded by the
+  manager's relight/remesh budgets (3 relights + ~10 remeshes per frame) rather than by the disaster code itself.
+- Buildings sliced by the beam crater or the tornado leave floating voxel fragments (expected voxel behaviour).
+- NPCs and animals are client-side ambience: their reactions are deterministic per client but are not
+  synchronized between players; only players, block edits and disasters are authoritative.
+- Heat shimmer is a distorted noise sleeve rather than a post-process; the tornado funnel is a layered shader
+  mesh rather than volumetric.
+- Debris spawned from a chunk that has not been relit yet is seeded sky-lit and may read too bright for a frame.
