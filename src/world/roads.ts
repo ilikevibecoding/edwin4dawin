@@ -3,6 +3,7 @@ import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { Rng } from '../core/seed';
 import { clamp } from '../core/noise';
 import { Zone, type District, type RoadClass, type RoadSpec, type Vec2, type WorldMap } from './map';
+import { balanceGroundIbl } from './terrain';
 
 export interface RoadSegment {
   a: Vec2;
@@ -47,7 +48,10 @@ function trimToLand(map: WorldMap, a: Vec2, b: Vec2): [Vec2, Vec2] | null {
 
 export interface Block { x0: number; x1: number; z0: number; z1: number; streetWidth: number; }
 
-/** Generates the district street grids and combines them with authored roads. */
+/** Generates the district street grids and combines them with authored roads. Districts earlier
+ *  in the list take priority: streets and blocks of a later district are dropped where they fall
+ *  inside an earlier one (parks and golf courses stay free of the surrounding suburb's grid). Island
+ *  settlements with a `track` get a sandy lane and small lots along it instead of a grid. */
 export function buildRoadNetwork(map: WorldMap): { segments: RoadSegment[]; streetsByDistrict: Map<string, RoadSegment[]>; blocksByDistrict: Map<string, Block[]> } {
   const segments: RoadSegment[] = [];
   const streetsByDistrict = new Map<string, RoadSegment[]>();
@@ -57,41 +61,66 @@ export function buildRoadNetwork(map: WorldMap): { segments: RoadSegment[]; stre
       segments.push({ a: r.pts[i], b: r.pts[i + 1], width: r.width, cls: r.cls, lanes: r.lanes, traffic: r.traffic, lift: 0 });
     }
   }
-  const rng = new Rng('streets');
+  const rng = new Rng('lots');
+  const ownedBy = (d: District, x: number, z: number) => map.districtAt(x, z) === d;
   for (const d of map.districts) {
-    if (d.gridX <= 0 || d.gridZ <= 0) continue;
-    const list: RoadSegment[] = [];
     const c = Math.cos(d.rot), s = Math.sin(d.rot);
     const toWorld = (lx: number, lz: number): Vec2 => [d.cx + lx * c - lz * s, d.cz + lx * s + lz * c];
+    const toLocal = (x: number, z: number): Vec2 => { const dx = x - d.cx, dz = z - d.cz; return [dx * c + dz * s, -dx * s + dz * c]; };
+    if (d.track) {
+      // sandy lane following the island, split at water gaps; small lots alternate sides along it
+      const list: RoadSegment[] = [];
+      const blocks: Block[] = [];
+      let side = 1;
+      let carry = 0;
+      for (let i = 0; i < d.track.length - 1; i++) {
+        const a = d.track[i], b = d.track[i + 1];
+        const t = trimToLand(map, a, b);
+        if (t) { const seg: RoadSegment = { a: t[0], b: t[1], width: 7, cls: 'lane', lanes: 2, traffic: 0.6, lift: 0 }; segments.push(seg); list.push(seg); }
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        const [la0, lz0] = toLocal(a[0], a[1]), [la1, lz1] = toLocal(b[0], b[1]);
+        const alongX = Math.abs(la1 - la0) >= Math.abs(lz1 - lz0);
+        for (let sPos = carry; sPos < len - 12; sPos += rng.range(42, 58)) {
+          const u = sPos / len;
+          const lx = la0 + (la1 - la0) * u, lz = lz0 + (lz1 - lz0) * u;
+          side = -side;
+          const off = 6;
+          const depth = 46, half = 20;
+          const block: Block = alongX
+            ? { x0: lx - half, x1: lx + half, z0: Math.min(lz + side * off, lz + side * (off + depth)), z1: Math.max(lz + side * off, lz + side * (off + depth)), streetWidth: 7 }
+            : { z0: lz - half, z1: lz + half, x0: Math.min(lx + side * off, lx + side * (off + depth)), x1: Math.max(lx + side * off, lx + side * (off + depth)), streetWidth: 7 };
+          const [wx, wz] = toWorld((block.x0 + block.x1) / 2, (block.z0 + block.z1) / 2);
+          if (map.heightAt(wx, wz) < 1.2 || !ownedBy(d, wx, wz)) continue;
+          blocks.push(block);
+          carry = 0;
+        }
+      }
+      streetsByDistrict.set(d.id, list);
+      blocksByDistrict.set(d.id, blocks);
+      continue;
+    }
+    const grid = map.grids.get(d.id);
+    if (!grid) continue;
+    const list: RoadSegment[] = [];
     const width = d.zone === Zone.DOWNTOWN ? 14 : d.zone === Zone.RES_MID || d.zone === Zone.HOTEL ? 12 : d.zone === Zone.INDUSTRIAL ? 12 : 9;
-    const cls: RoadClass = d.zone === Zone.RES_LOW ? 'street' : 'street';
-    // slight irregularity in spacing keeps the grid from looking machine-made
-    const xs: number[] = [];
-    for (let x = -d.hw; x <= d.hw + 1; x += d.gridX * rng.range(0.9, 1.15)) xs.push(Math.min(x, d.hw));
-    const zs: number[] = [];
-    for (let z = -d.hh; z <= d.hh + 1; z += d.gridZ * rng.range(0.9, 1.15)) zs.push(Math.min(z, d.hh));
-    for (const x of xs) {
-      // streets along local z, split at each cross street so water gaps can be trimmed
-      for (let i = 0; i < zs.length - 1; i++) {
-        const a = toWorld(x, zs[i]), b = toWorld(x, zs[i + 1]);
-        const t = trimToLand(map, a, b);
-        if (!t) continue;
-        const seg: RoadSegment = { a: t[0], b: t[1], width, cls, lanes: 2, traffic: d.zone === Zone.DOWNTOWN ? 4 : 1.5, lift: 0 };
-        segments.push(seg); list.push(seg);
-      }
-    }
-    for (const z of zs) {
-      for (let i = 0; i < xs.length - 1; i++) {
-        const a = toWorld(xs[i], z), b = toWorld(xs[i + 1], z);
-        const t = trimToLand(map, a, b);
-        if (!t) continue;
-        const seg: RoadSegment = { a: t[0], b: t[1], width, cls, lanes: 2, traffic: d.zone === Zone.DOWNTOWN ? 4 : 1.5, lift: 0 };
-        segments.push(seg); list.push(seg);
-      }
-    }
+    const cls: RoadClass = 'street';
+    const { xs, zs } = grid;
+    const addStreet = (a: Vec2, b: Vec2) => {
+      const t = trimToLand(map, a, b);
+      if (!t) return;
+      const mid: Vec2 = [(t[0][0] + t[1][0]) / 2, (t[0][1] + t[1][1]) / 2];
+      if (!ownedBy(d, mid[0], mid[1])) return;
+      const seg: RoadSegment = { a: t[0], b: t[1], width, cls, lanes: 2, traffic: d.zone === Zone.DOWNTOWN ? 4 : 1.5, lift: 0 };
+      segments.push(seg); list.push(seg);
+    };
+    // streets along local z, split at each cross street so water gaps and other districts can be trimmed
+    for (const x of xs) for (let i = 0; i < zs.length - 1; i++) addStreet(toWorld(x, zs[i]), toWorld(x, zs[i + 1]));
+    for (const z of zs) for (let i = 0; i < xs.length - 1; i++) addStreet(toWorld(xs[i], z), toWorld(xs[i + 1], z));
     streetsByDistrict.set(d.id, list);
     const blocks: Block[] = [];
     for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < zs.length - 1; j++) {
+      const [wx, wz] = toWorld((xs[i] + xs[i + 1]) / 2, (zs[j] + zs[j + 1]) / 2);
+      if (!ownedBy(d, wx, wz)) continue;
       blocks.push({ x0: xs[i], x1: xs[i + 1], z0: zs[j], z1: zs[j + 1], streetWidth: width });
     }
     blocksByDistrict.set(d.id, blocks);
@@ -122,7 +151,16 @@ const ROAD_FRAG_MAIN = /* glsl */ `
   vec3 asphalt = mix(vec3(0.16, 0.16, 0.165), vec3(0.24, 0.235, 0.23), n) * (0.92 + 0.16 * n2);
   // causeways and highways are pale, sun-bleached concrete-asphalt
   if (cls > 2.5 && cls < 4.5) asphalt = mix(vec3(0.30, 0.30, 0.29), vec3(0.40, 0.39, 0.37), n) * (0.94 + 0.12 * n2);
-  if (cls > 4.5) {
+  if (cls < 0.5) {
+    // island lane: packed sand and shell with twin wheel ruts, grass creeping in from the verges
+    vec3 sand = mix(vec3(0.62, 0.56, 0.44), vec3(0.72, 0.66, 0.52), n) * (0.92 + 0.16 * n2);
+    float rut = exp(-pow((abs(xm) - width * 0.22) * 2.2, 2.0));
+    sand *= 1.0 - 0.14 * rut;
+    float verge = smoothstep(0.55, 1.0, abs(across)) * (0.5 + 0.5 * n2);
+    float crown = smoothstep(0.05, 0.16, 0.16 - abs(xm) / max(width, 1.0)) * smoothstep(0.3, 0.7, fbm3(vWorldPosR.xz * 0.6 + 2.0));
+    diffuseColor.rgb = mix(sand, vec3(0.30, 0.36, 0.16) * (0.85 + 0.3 * n2), max(verge * 0.8, crown * 0.5));
+    roughnessFactor = 0.95;
+  } else if (cls > 4.5) {
     // runway: concrete, centre line dashes, threshold bars
     vec3 concrete = mix(vec3(0.33, 0.33, 0.32), vec3(0.42, 0.41, 0.4), n) * (0.94 + 0.12 * n2);
     float centre = step(abs(xm), 0.45) * step(fract(along / 60.0), 0.5);
@@ -164,37 +202,66 @@ const ROAD_FRAG_MAIN = /* glsl */ `
 }
 `;
 
-/** One merged mesh per road class. */
+/** All roads in one merged mesh (a single draw call). Consecutive segments of an authored polyline
+ *  are stitched into one strip with mitered corners so bends have neither gaps nor overlapping
+ *  decks; the strip follows the height field at 15 m steps. */
 export function buildRoadMeshes(map: WorldMap, segments: RoadSegment[], material: THREE.Material): THREE.Mesh[] {
   const pos: number[] = [], uv: number[] = [], info: number[] = [], idx: number[] = [], nrm: number[] = [];
   let vcount = 0;
-  const clsId = (c: RoadClass) => (c === 'highway' || c === 'causeway' ? 3 : c === 'arterial' ? 2 : c === 'runway' ? 5 : c === 'taxiway' ? 6 : 1);
+  const clsId = (c: RoadClass) => (c === 'highway' || c === 'causeway' ? 3 : c === 'arterial' ? 2 : c === 'runway' ? 5 : c === 'taxiway' ? 6 : c === 'lane' ? 0 : 1);
+  const chains: RoadSegment[][] = [];
   for (const s of segments) {
-    const dx = s.b[0] - s.a[0], dz = s.b[1] - s.a[1];
-    const len = Math.hypot(dx, dz);
-    if (len < 1) continue;
-    const ux = dx / len, uz = dz / len;
-    const nx = -uz, nz = ux;
-    const hw = s.width * 0.5;
-    const steps = Math.max(1, Math.ceil(len / 25));
-    const lanes = s.lanes, cid = clsId(s.cls);
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const x = s.a[0] + dx * t, z = s.a[1] + dz * t;
-      for (const side of [-1, 1]) {
-        const px = x + nx * hw * side, pz = z + nz * hw * side;
-        const h = map.heightAt(px, pz) + 0.12 + s.lift;
-        pos.push(px, h, pz);
-        nrm.push(0, 1, 0);
-        uv.push(side, t * len);
-        info.push(lanes, s.width, cid);
-      }
-      if (i > 0) {
-        const b = vcount + i * 2;
-        idx.push(b - 2, b - 1, b, b, b - 1, b + 1);
-      }
+    if (Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) < 1) continue;
+    const last = chains[chains.length - 1];
+    const prev = last && last[last.length - 1];
+    if (prev && prev.cls === s.cls && prev.width === s.width && prev.lift === s.lift && prev.b[0] === s.a[0] && prev.b[1] === s.a[1]) last.push(s);
+    else chains.push([s]);
+  }
+  for (const chain of chains) {
+    const pts: Vec2[] = [chain[0].a, ...chain.map((s) => s.b)];
+    const m = pts.length;
+    const dirs: Vec2[] = [];
+    for (let i = 0; i < m - 1; i++) {
+      const dx = pts[i + 1][0] - pts[i][0], dz = pts[i + 1][1] - pts[i][1];
+      const len = Math.hypot(dx, dz);
+      dirs.push([dx / len, dz / len]);
     }
-    vcount += (steps + 1) * 2;
+    // cross vector per polyline vertex: segment normal at the ends, mitre (clamped to 2x) inside
+    const cross: Vec2[] = [];
+    for (let i = 0; i < m; i++) {
+      const d0 = dirs[Math.max(0, i - 1)], d1 = dirs[Math.min(m - 2, i)];
+      let nx = -(d0[1] + d1[1]), nz = d0[0] + d1[0];
+      const nl = Math.hypot(nx, nz) || 1;
+      nx /= nl; nz /= nl;
+      const cosHalf = Math.max(0.5, nx * -d1[1] + nz * d1[0]);
+      cross.push([nx / cosHalf, nz / cosHalf]);
+    }
+    const width = chain[0].width, hw = width * 0.5, cid = clsId(chain[0].cls), lanes = chain[0].lanes, lift = chain[0].lift;
+    let along = 0;
+    let first = true;
+    for (let i = 0; i < m - 1; i++) {
+      const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
+      const len = Math.hypot(bx - ax, bz - az);
+      const steps = Math.max(1, Math.ceil(len / 15));
+      const c0 = cross[i], c1 = cross[i + 1];
+      for (let k = first ? 0 : 1; k <= steps; k++) {
+        const t = k / steps;
+        const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
+        const cx = c0[0] + (c1[0] - c0[0]) * t, cz = c0[1] + (c1[1] - c0[1]) * t;
+        for (const side of [-1, 1]) {
+          const px = x + cx * hw * side, pz = z + cz * hw * side;
+          const h = map.heightAt(px, pz) + 0.15 + lift;
+          pos.push(px, h, pz);
+          nrm.push(0, 1, 0);
+          uv.push(side, along + t * len);
+          info.push(lanes, width, cid);
+        }
+        vcount += 2;
+        if (!first || k > 0) idx.push(vcount - 4, vcount - 3, vcount - 2, vcount - 2, vcount - 3, vcount - 1);
+        first = false;
+      }
+      along += len;
+    }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -220,8 +287,9 @@ export function createRoadMaterial(): THREE.MeshStandardMaterial {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${ROAD_FRAG_PARS}`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${ROAD_FRAG_MAIN}`);
+    balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'road-v1';
+  mat.customProgramCacheKey = () => 'road-v3';
   return mat;
 }
 
