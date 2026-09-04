@@ -5,6 +5,7 @@
 // corners. Inside: a rail along the glass, benches, low warm floor lights and star-chart plaques on
 // the side walls under a dim ceiling so the exterior carries the room.
 import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { PALETTE } from "../../materials.js";
 import { roomShell, impWall, wallScreen, railing, pipeRun, wallSegment, IMP_STYLES, IMP_PAINTS_DARK, IMP_THEME } from "../imperial.js";
 import { pointLight, wallFrame, ceilingFrame, panelGrid } from "../builders.js";
@@ -16,7 +17,7 @@ export function buildObservation(kit, ctx) {
   const [min, max] = ctx.bounds; // [-16, 0, -48] .. [16, 4, -41]; everything is placed relative to these
   const H = max[1];
   const zw = min[2]; // window plane (the neck's front face)
-  const bz = zw + 3.6; // bench line
+  const bz = zw + 2.4; // bench line: a row of benches faces the glass 1.4 m behind the rail
   const rand = rng(ctx.seed + 9);
   const labels = labelAtlas(ctx, "obs_labels", [
     "OBSERVATION GALLERY",
@@ -56,12 +57,12 @@ export function buildObservation(kit, ctx) {
   kit.boxMM("impPanel1", [run0, 0.16, zw + depth - 0.075], [run1, sillH - 0.12, zw + depth - 0.06], { color: PALETTE.impMid, uv: "keep" });
   kit.boxMM("paintedMetal", [run0, 0, zw], [run1, 0.14, zw + depth - 0.04], { color: PALETTE.impBlack, texel: 2 });
   kit.boxMM("paintedMetal", [run0 - 0.02, sillH - 0.06, zw], [run1 + 0.02, sillH, zw + depth], { color: PALETTE.impGrey, texel: 1.5 });
-  kit.boxMM("emitWhiteDim", [run0 + 0.2, sillH - 0.075, zw + depth - 0.06], [run1 - 0.2, sillH - 0.06, zw + depth - 0.02], { uv: "keep" });
+  kit.boxMM("obs_floor", [run0 + 0.2, sillH - 0.075, zw + depth - 0.06], [run1 - 0.2, sillH - 0.06, zw + depth - 0.02], { uv: "keep" });
   kit.collider([run0, 0, zw - 0.2], [run1, sillH, zw + depth], "sill");
-  // header beam with a blue reveal line and warm down-spots over each mullion
+  // header beam with a warm reveal line along its foot (the uplights' wash reaching the beam)
   kit.boxMM("paintedMetal", [run0 - 0.02, glassTop, zw], [run1 + 0.02, H, zw + depth], { color: PALETTE.impDark, texel: 1.5 });
   kit.boxMM("paintedMetal", [run0, glassTop, zw], [run1, glassTop + 0.08, zw + depth + 0.03], { color: PALETTE.impBlack, texel: 2 });
-  kit.boxMM("emitBlue", [run0 + 0.3, glassTop + 0.1, zw + depth - 0.005], [run1 - 0.3, glassTop + 0.13, zw + depth + 0.008]);
+  kit.boxMM("obs_floor", [run0 + 0.3, glassTop + 0.1, zw + depth - 0.005], [run1 - 0.3, glassTop + 0.15, zw + depth + 0.008], { uv: "keep" });
   signPlate(wallFrame(kit, [run0, zw + depth], [run1, zw + depth], 0).frame, labels, 1, { u: (run1 - run0) / 2, v: (glassTop + H) / 2 + 0.06, h: 0.34 });
   // panes: glass, instrument tray in the sill, pane number, a warm spot in the header
   for (let i = 0; i < panes; i++) {
@@ -72,17 +73,29 @@ export function buildObservation(kit, ctx) {
     // slim black glazing bead around the pane
     kit.boxMM("paintedMetal", [x0 + 0.13, sillH, zw + 0.08], [x1 - 0.13, sillH + 0.04, zw + 0.16], { color: PALETTE.impBlack, texel: 2 });
     kit.boxMM("paintedMetal", [x0 + 0.13, glassTop - 0.04, zw + 0.08], [x1 - 0.13, glassTop, zw + 0.16], { color: PALETTE.impBlack, texel: 2 });
-    // instrument tray: a readout tilted toward the room with a row of small lamps, set into the ledge
+    // instrument tray set into the ledge, tilted toward the room; three layouts alternate along the
+    // sill (wide readout + lamp row / twin readouts + knobs / tall readout + keypad + lever)
     const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.5);
     const tz = zw + depth - 0.22;
     const tp = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(tilt).add(new THREE.Vector3(xc, sillH + 0.06, tz)).toArray();
-    kit.add("paintedMetal", new THREE.BoxGeometry(0.9, 0.04, 0.3), { pos: [xc, sillH + 0.06, tz], quat: tilt, color: PALETTE.impBlack, texel: 2 });
-    kit.add("impScreen" + ((i * 3 + 1) % 5), new THREE.PlaneGeometry(0.6, 0.2).rotateX(-Math.PI / 2), { pos: tp(0, 0.021, 0.02), quat: tilt, uv: "keep" });
-    for (let k = 0; k < 4; k++) kit.add(k === i % 4 ? "emitAmber" : "emitBlue", new THREE.BoxGeometry(0.06, 0.012, 0.03), { pos: tp(-0.3 + k * 0.2, 0.024, -0.11), quat: tilt });
-    // header spot under the beam over every other pane: dark can with a warm disc washing the sill
-    if (i % 2 === 0) {
-      kit.cyl("paintedMetal", xc, glassTop - 0.06, zw + depth - 0.18, 0.11, 0.12, "y", { color: PALETTE.impBlack, segments: 14 });
-      kit.cyl("obs_warm", xc, glassTop - 0.125, zw + depth - 0.18, 0.08, 0.01, "y", { segments: 14, uv: "keep" });
+    const tadd = (mat, geo, lx, ly, lz, extra = {}) => kit.add(mat, geo, { pos: tp(lx, ly, lz), quat: tilt, ...extra });
+    const flat = (w, h) => new THREE.PlaneGeometry(w, h).rotateX(-Math.PI / 2);
+    tadd("paintedMetal", new THREE.BoxGeometry(0.9, 0.04, 0.3), 0, 0, 0, { color: PALETTE.impBlack, texel: 2 });
+    const layout = i % 3;
+    if (layout === 0) {
+      tadd("impScreen" + ((i * 2 + 1) % 5), flat(0.6, 0.2), 0, 0.021, 0.02, { uv: "keep" });
+      for (let k = 0; k < 4; k++) tadd(k === i % 4 ? "emitAmber" : "emitBlue", new THREE.BoxGeometry(0.06, 0.012, 0.03), -0.3 + k * 0.2, 0.024, -0.11);
+    } else if (layout === 1) {
+      tadd("impScreen" + ((i + 3) % 5), flat(0.26, 0.2), -0.24, 0.021, 0.0, { uv: "keep" });
+      tadd("impScreen4", flat(0.26, 0.2), 0.08, 0.021, 0.0, { uv: "keep" });
+      for (const dx of [0.28, 0.38]) tadd("metal", new THREE.CylinderGeometry(0.03, 0.035, 0.03, 12), dx, 0.035, -0.02, { color: PALETTE.steel });
+      tadd("emitRedDim", new THREE.BoxGeometry(0.08, 0.012, 0.02), 0.33, 0.024, -0.1);
+    } else {
+      tadd("impScreen" + ((i * 3) % 5), flat(0.3, 0.22), -0.25, 0.021, 0.0, { uv: "keep" });
+      for (let k = 0; k < 6; k++) tadd(k === 4 ? "emitBlue" : "rubber", new THREE.BoxGeometry(0.05, 0.012, 0.05), 0.02 + (k % 3) * 0.07, 0.024, -0.06 + Math.floor(k / 3) * 0.08, { color: PALETTE.rubber });
+      tadd("metal", new THREE.BoxGeometry(0.04, 0.03, 0.14), 0.34, 0.03, 0.0, { color: PALETTE.impBlack });
+      tadd("metal", new THREE.CylinderGeometry(0.012, 0.012, 0.14, 8), 0.34, 0.1, -0.03, { color: PALETTE.steel });
+      tadd("emitAmber", new THREE.BoxGeometry(0.03, 0.012, 0.03), 0.34, 0.024, 0.1);
     }
   }
   // mullions (12): dark column with a grey rebate strip up the face, a small marker light and pane numbers
@@ -93,6 +106,15 @@ export function buildObservation(kit, ctx) {
     kit.boxMM("paintedMetal", [x - 0.035, sillH, zw + depth + 0.075], [x + 0.035, glassTop, zw + depth + 0.082], { color: PALETTE.impBlack, texel: 2 });
     kit.box("emitWhiteDim", x, 1.3, zw + depth + 0.084, 0.03, 0.14, 0.006, { uv: "keep" });
     kit.collider([x - 0.16, 0, zw], [x + 0.16, H, zw + depth + 0.06], "mullion");
+    // uplight on the mullion face: a dark hood with a warm frosted top (throws light past the header
+    // onto the ceiling) and a warm tell-tale slit on its front
+    {
+      const fz = zw + depth + 0.075;
+      kit.boxMM("paintedMetal", [x - 0.13, 2.5, fz], [x + 0.13, 2.6, fz + 0.16], { color: PALETTE.impBlack, texel: 2 });
+      kit.boxMM("obs_warm", [x - 0.1, 2.6, fz + 0.03], [x + 0.1, 2.61, fz + 0.14], { uv: "keep" });
+      kit.boxMM("obs_floor", [x - 0.08, 2.54, fz + 0.16], [x + 0.08, 2.56, fz + 0.166], { uv: "keep" });
+      kit.boxMM("obs_floor", [x - 0.045, 2.62, fz + 0.008], [x + 0.045, 2.96, fz + 0.014], { uv: "keep" });
+    }
     if (i < panes) {
       // pane number plate on the mullion's right cheek (reads walking along the rail)
       const w = 0.14 * labels.aspect(PANE0 + i);
@@ -103,10 +125,10 @@ export function buildObservation(kit, ctx) {
   // "do not lean" plates on the sill front under two panes
   for (const i of [2, 8]) signAt(kit, labels, 5, { x: run0 + (i + 0.5) * paneW, y: 0.6, z: zw + depth + 0.03, yaw: 0, h: 0.12, bezel: true });
 
-  // --- rail 0.5 m behind the sill with warm floor lights along it and a dark runner
+  // --- rail 0.5 m behind the sill with low warm floor lights along it (the deck itself stays the
+  // ship's gloss plate floor from roomShell)
   const railZ = zw + depth + 0.5;
   railing(kit, run0 + 0.2, railZ, run1 - 0.2, railZ, 0, { h: 1.05 });
-  kit.box("paintedMetal", 0, 0.004, railZ + 0.45, run1 - run0 - 0.4, 0.008, 0.9, { color: PALETTE.impBlack, texel: 1.5 });
   for (let i = 0; i <= panes; i += 2) {
     const x = run0 + i * paneW;
     kit.cyl("paintedMetal", x, 0.012, railZ + 0.6, 0.11, 0.024, "y", { color: PALETTE.impBlack, segments: 16 });
@@ -115,12 +137,13 @@ export function buildObservation(kit, ctx) {
   // "hold rail" plates hanging from the top bar at the rail ends
   for (const s of [-1, 1]) signAt(kit, labels, 2, { x: s * (run1 - 1.2), y: 0.94, z: railZ + 0.03, yaw: 0, h: 0.16 });
 
-  // --- benches facing the windows, light bollards between them, a viewing pedestal at the centre
-  for (const x of [-9.5, -3.6, 3.6, 9.5]) bench(kit, x, bz, 2.4, rand);
-  for (const x of [-12.8, -6.55, 6.55, 12.8]) bollard(kit, x, bz + 0.2); // centre aisle (the spawn) stays clear
-  // two plaque pedestals flanking the centre aisle (the spawn looks straight out between them)
-  pedestal(kit, ctx, labels, -3.0, zw + 1.7, 4);
-  pedestal(kit, ctx, labels, 3.0, zw + 1.7, 3);
+  // --- a row of Imperial benches facing the glass (dark padded boxes on low plinths), light bollards
+  // between them; the centre aisle (spawn → rail) stays 2 m clear
+  for (const x of [-10.6, -6.6, -2.2, 2.2, 6.6, 10.6]) bench(kit, x, bz, 2.4, rand);
+  for (const x of [-12.6, -8.6, -4.4, 4.4, 8.6, 12.6]) bollard(kit, x, bz);
+  // plaque pedestals in the corners past the rail ends
+  pedestal(kit, ctx, labels, -14.6, zw + 3.0, 4);
+  pedestal(kit, ctx, labels, 14.6, zw + 3.0, 3);
   // macrobinocular stands at the rail
   for (const x of [-7.3, 7.3]) binoculars(kit, x, railZ + 0.55);
   // wall benches against the aft wall either side of the door, with backrests
@@ -167,55 +190,60 @@ export function buildObservation(kit, ctx) {
     frame.cylU("metal", length / 2, 0.42, 0.05, 0.02, length - 0.6, { color: PALETTE.steel });
   }
 
-  // --- ceiling: dark grid, a recessed blue channel along the room, dim warm downlights over the benches
+  // --- ceiling: a mid-grey grid that takes the warm uplight, a faint recessed channel along the room
   {
     const f = ceilingFrame(kit, min[0], min[2], H);
-    panelGrid(f, max[0] - min[0], max[2] - min[2], { rowH: 1.4, panelW: 1.6, kick: false, topPipes: false, seed: ctx.seed * 17 + 31, collide: false, styles: { panel: 0.9, greeble: 0.04, vent: 0.06 }, paints: [[PALETTE.impMid, 0.55], [PALETTE.impDark, 0.35], [PALETTE.impGrey, 0.1]], ...IMP_THEME, decals: false });
-    kit.boxMM("paintedMetal", [min[0] + 0.8, H - 0.12, bz - 0.2], [max[0] - 0.8, H, bz + 0.2], { color: PALETTE.impBlack, texel: 2 });
-    kit.boxMM("emitBlue", [min[0] + 1.0, H - 0.13, bz - 0.1], [max[0] - 1.0, H - 0.115, bz + 0.1]);
-    for (const x of [-9.5, -3.6, 3.6, 9.5]) {
-      kit.cyl("paintedMetal", x, H - 0.1, bz + 0.7, 0.22, 0.14, "y", { color: PALETTE.impBlack, segments: 20 });
-      kit.cyl("obs_warm", x, H - 0.175, bz + 0.7, 0.15, 0.01, "y", { segments: 20, uv: "keep" });
-    }
-    // white entry strip at the door and a cable tray feeding the header spots
+    panelGrid(f, max[0] - min[0], max[2] - min[2], { rowH: 1.4, panelW: 1.6, kick: false, topPipes: false, seed: ctx.seed * 17 + 31, collide: false, styles: { panel: 0.9, greeble: 0.04, vent: 0.06 }, paints: [[PALETTE.impLight, 0.5], [PALETTE.impGrey, 0.4], [PALETTE.impMid, 0.1]], ...IMP_THEME, decals: false });
+    // recessed warm channel along the room behind the benches (a narrow line, not a lit bar)
+    kit.boxMM("paintedMetal", [min[0] + 0.8, H - 0.12, bz + 0.6], [max[0] - 0.8, H, bz + 1.0], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("obs_floor", [min[0] + 1.0, H - 0.13, bz + 0.77], [max[0] - 1.0, H - 0.115, bz + 0.83], { uv: "keep" });
+    // white entry strip at the door and a cable tray feeding the mullion uplights
     kit.boxMM("paintedMetal", [-1.4, H - 0.1, max[2] - 1.0], [1.4, H, max[2] - 0.6], { color: PALETTE.impDark, texel: 2 });
     kit.boxMM("emitWhiteDim", [-1.2, H - 0.12, max[2] - 0.9], [1.2, H - 0.09, max[2] - 0.7], { uv: "keep" });
     cableTray(kit, [min[0] + 0.3, H - 0.14, zw + depth + 0.3], [max[0] - 0.3, H - 0.14, zw + depth + 0.3], { w: 0.26, count: 4 });
   }
   pipeRun(kit, [[min[0] + 0.3, H - 0.3, zw + depth + 0.3], [min[0] + 0.3, 0.42, zw + depth + 0.3]], 0.03, PALETTE.steel);
 
-  // --- lights (5): dim warm over the benches, cool at the glass, white at the door
-  ctx.light(pointLight(0xffd9a8, 2.6, 9.0, [-7.5, 3.2, bz + 0.5]));
-  ctx.light(pointLight(0xffd9a8, 2.6, 9.0, [7.5, 3.2, bz + 0.5]));
-  ctx.light(pointLight(0x9fb8e0, 2.2, 10.0, [0, 2.4, zw + 1.2]));
-  ctx.light(pointLight(0xe8f0ff, 2.6, 6.0, [0, H - 0.5, max[2] - 1.2]));
-  ctx.light(pointLight(0x9fb8e0, 1.6, 8.0, [0, 2.8, bz]));
+  // --- lights (6): five warm-white uplights hung 0.65 m under the ceiling over the mullion fixtures
+  // (where the fixtures' beams land) so the ceiling above the glass carries soft warm pools and the
+  // header / mullion tops catch the spill; the deck below stays dim so the exterior keeps the room.
+  // Intensity kept where the pool directly overhead peaks well short of white — and a white at the door
+  for (const x of [-11.25, -6.25, 0, 6.25, 11.25]) ctx.light(pointLight(0xffe0b8, 5.0, 8.0, [x, H - 0.55, zw + 1.05]));
+  ctx.light(pointLight(0xe8f0ff, 2.4, 6.0, [0, H - 0.5, max[2] - 1.2]));
   if (ctx.audioZone) ctx.audioZone({ id: "obs_quiet", pos: [0, 1.5, bz], radius: 12, loop: "hum_low" });
 }
 
 // ---------------------------------------------------------------------------
 // Pieces
 // ---------------------------------------------------------------------------
-/** Backless gallery bench (long axis along x) with a warm light under the seat lip and something left on it. */
+/**
+ * Imperial gallery bench facing the glass (-z): a low black plinth, dark box body, a padded seat and
+ * a low padded back, grey end cheeks with a warm slit light under the seat lip, something left on it.
+ */
 function bench(kit, x, z, len, rand) {
   // matte, near-black finishes: the exterior sun reaches in through the glass and lifts anything glossy
-  kit.box("rubber", x, 0.2, z, len - 0.3, 0.4, 0.5, { color: PALETTE.impDark, texel: 1.5 });
-  for (const s of [-1, 1]) kit.box("rubber", x + s * (len / 2 - 0.1), 0.24, z, 0.08, 0.48, 0.62, { color: PALETTE.impDark, texel: 2 });
-  for (const s of [-1, 1]) kit.box("emitWhiteSoft", x + s * (len / 2 - 0.055), 0.44, z, 0.006, 0.006, 0.4, { uv: "keep" });
-  kit.box("rubber", x, 0.47, z, len - 0.2, 0.1, 0.6, { color: PALETTE.impBlack, texel: 2 });
-  kit.box("obs_floor", x, 0.06, z - 0.255, len - 0.5, 0.015, 0.01, { uv: "keep" });
-  kit.box("obs_floor", x, 0.06, z + 0.255, len - 0.5, 0.015, 0.01, { uv: "keep" });
-  kit.collider([x - len / 2, 0, z - 0.32], [x + len / 2, 0.52, z + 0.32], "bench");
+  kit.box("paintedMetal", x, 0.05, z, len - 0.4, 0.1, 0.5, { color: PALETTE.impBlack, texel: 2 });
+  kit.box("rubber", x, 0.27, z, len - 0.2, 0.34, 0.6, { color: PALETTE.impDark, texel: 1.5 });
+  kit.add("fabric", new RoundedBoxGeometry(len - 0.24, 0.12, 0.6, 3, 0.04), { pos: [x, 0.5, z], color: PALETTE.impBlack, uv: "world", texel: 2 });
+  // low back along the aft edge (+z), leaning slightly
+  kit.box("rubber", x, 0.62, z + 0.3, len - 0.24, 0.32, 0.06, { color: PALETTE.impDark, texel: 2 });
+  kit.add("fabric", new RoundedBoxGeometry(len - 0.3, 0.3, 0.08, 3, 0.03), { pos: [x, 0.7, z + 0.26], rot: [-0.12, 0, 0], color: PALETTE.impBlack, uv: "world", texel: 2 });
+  for (const s of [-1, 1]) {
+    kit.box("paintedMetal", x + s * (len / 2 - 0.06), 0.42, z + 0.02, 0.06, 0.84, 0.66, { color: PALETTE.impDark, texel: 2 });
+    kit.box("paintedMetal", x + s * (len / 2 - 0.06), 0.85, z + 0.02, 0.08, 0.02, 0.68, { color: PALETTE.impGrey, texel: 2 });
+  }
+  kit.box("obs_floor", x, 0.43, z - 0.302, len - 0.5, 0.015, 0.01, { uv: "keep" });
+  kit.collider([x - len / 2, 0, z - 0.33], [x + len / 2, 0.86, z + 0.33], "bench");
   const r = rand();
-  if (r < 0.5) datapad(kit, x + (rand() - 0.5) * 1.4, 0.52, z + (rand() - 0.5) * 0.2, rand() * Math.PI, Math.floor(rand() * 5));
-  else if (r < 0.8) mug(kit, x + (rand() - 0.5) * 1.6, 0.52, z, PALETTE.impLight);
+  if (r < 0.5) datapad(kit, x + (rand() - 0.5) * 1.4, 0.56, z - 0.05 + (rand() - 0.5) * 0.2, rand() * Math.PI, Math.floor(rand() * 5));
+  else if (r < 0.8) mug(kit, x + (rand() - 0.5) * 1.6, 0.56, z - 0.05, PALETTE.impLight);
 }
 
 /** Short light bollard: dark post with a warm cap, a marker at the base. */
 function bollard(kit, x, z) {
   kit.box("paintedMetal", x, 0.3, z, 0.16, 0.6, 0.16, { color: PALETTE.impDark, texel: 2 });
   kit.box("paintedMetal", x, 0.63, z, 0.2, 0.06, 0.2, { color: PALETTE.impBlack, texel: 2 });
-  kit.box("obs_warm", x, 0.595, z, 0.14, 0.01, 0.14, { uv: "keep" });
+  kit.box("obs_floor", x, 0.595, z, 0.14, 0.01, 0.14, { uv: "keep" });
   kit.box("paintedMetal", x, 0.03, z, 0.24, 0.06, 0.24, { color: PALETTE.impBlack, texel: 2 });
   kit.collider([x - 0.12, 0, z - 0.12], [x + 0.12, 0.66, z + 0.12], "bollard");
 }
