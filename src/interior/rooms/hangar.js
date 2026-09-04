@@ -8,7 +8,7 @@
 // Deck-local metres, floor y = 0. Room bounds x -36..36, y -10..30, z -155..-35.
 import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
-import { impWall, impCeiling, impConsole, wallScreen, equipmentRack, crate, stairs, platform, railing, pipeRun, pillar, doorOpenings, wallSegment, IMP_PAINTS_DARK } from "../imperial.js";
+import { impWall, impConsole, wallScreen, equipmentRack, crate, stairs, platform, railing, pipeRun, pillar, doorOpenings, wallSegment } from "../imperial.js";
 import { pointLight, wallFrame } from "../builders.js";
 import { Kit, rng } from "../../kit.js";
 import { makeHangarMarkings, decalRect } from "../../textures.js";
@@ -21,18 +21,23 @@ const HOLE = { x0: HANGAR_OPENING.x[0], x1: HANGAR_OPENING.x[1], z0: HANGAR_OPEN
 const WELL_DEPTH = 10; // deck → hull skin
 const FIELD_Y = -9;
 const CEIL = 30;
-const RACK_X = 30;
-const RACK_Y = 21; // TIE centre height (wing 17.4..24.6, ball top 22.9)
+const RACK_X = 29;
+const RACK_Y = 16; // TIE centre height (wing 12.4..19.6, ball top 17.9)
 const RACK_Z = [-124, -106, -88, -70];
 const TIE_R = 1.9;
 const WING_H = 7.2;
 const WING_X = TIE_R + 1.75; // wing plane offset from the ball centre
 const CAT_Y = 8; // catwalk / mezzanine level
-const GANTRY_Y = 25.2; // boarding gantry (0.6 above the wing apex)
-const BEAM_Y0 = 27.0;
-const BEAM_Y1 = 28.4;
+const GANTRY_Y = RACK_Y + WING_H / 2 + 0.9; // boarding gantry, 0.9 above the wing apex (clears the clamps)
+const BEAM_Y0 = GANTRY_Y + 1.8;
+const BEAM_Y1 = BEAM_Y0 + 1.4;
 const LOWER_H = 4.2; // human-scale panel band at the bottom of the walls
 const TOWER = { x0: -13, x1: 13, z0: -44, z1: -35.16, y0: CAT_Y, y1: 12 };
+// gantry stairs: two straight flights (catwalk → landing → gantry) along the long walls from z = -37.2
+const STAIR_Z0 = -37.2;
+const FLIGHT = Math.round((GANTRY_Y - CAT_Y) / 2 / 0.18) * 0.3; // run of one flight (stairs() geometry)
+const LANDING = 2.6;
+const GANTRY_Z1 = STAIR_Z0 - FLIGHT - LANDING - FLIGHT; // aft end of the boarding gantry (= top of the stairs)
 
 const LOWER_PAINTS = [
   [PALETTE.impGrey, 0.42],
@@ -40,11 +45,11 @@ const LOWER_PAINTS = [
   [PALETTE.impLight, 0.18],
   [PALETTE.impDark, 0.1],
 ];
+// near-uniform light plates: at 4 m scale any tonal mix reads as a checkerboard from across the bay
 const UPPER_PAINTS = [
-  [PALETTE.impLight, 0.5],
-  [PALETTE.impGrey, 0.3],
-  [PALETTE.impWhite, 0.12],
-  [PALETTE.impMid, 0.08],
+  [PALETTE.impLight, 0.74],
+  [PALETTE.impGrey, 0.18],
+  [PALETTE.impWhite, 0.08],
 ];
 const WELL_PAINTS = [
   [PALETTE.impMid, 0.5],
@@ -128,6 +133,7 @@ function ensureMaterials(ctx) {
     m.hg_markings = new THREE.MeshStandardMaterial({
       map: makeHangarMarkings(2048, 1024),
       transparent: true,
+      opacity: 0.72,
       depthWrite: false,
       roughness: 0.6,
       metalness: 0.05,
@@ -142,7 +148,7 @@ function ensureMaterials(ctx) {
     f.map = m.forceField.map.clone();
     f.map.repeat.set(11, 17.5); // 4 m tiles → 0.5 m cells over the 44 × 70 m opening
     f.map.needsUpdate = true;
-    f.opacity = 0.16;
+    f.opacity = 0.24;
     m.hg_field = f;
   }
   if (!m.hg_beaconRed) m.hg_beaconRed = m.emitRed.clone();
@@ -195,25 +201,27 @@ function shellWalls(kit, ctx, B0) {
       base: 0,
       height: LOWER_H,
       rows: [0, 0.5, 2.0, 3.2, LOWER_H],
-      panelW: 1.5,
+      panelW: 1.6,
       paints: LOWER_PAINTS,
-      styles: { panel: 0.5, vent: 0.12, greeble: 0.14, strip: 0.08, screen: 0.06, conduit: 0.1 },
+      styles: { panel: 0.58, vent: 0.08, greeble: 0.1, strip: 0.1, screen: 0.06, conduit: 0.08 },
       seed: ctx.seed * 3 + side.length,
       tag: "wall",
     });
+    // upper band: big calm plates (the cavern reads through its silhouette, not its greebles)
+    const UH = H - LOWER_H;
     impWall(kit, ctx, side, {
       bounds: B0,
       base: LOWER_H,
-      height: H - LOWER_H,
+      height: UH,
       noDoors: true,
       openings: shiftedOpenings(ctx, side, B0, LOWER_H),
-      rows: [0, 3.0, 8.0, 13.0, 18.0, 22.6, H - LOWER_H],
-      panelW: 3.0,
+      rows: [0, 4.4, 9.8, 15.2, 20.6, UH],
+      panelW: 4.0,
       kick: false,
       trim: false,
       collide: false,
       paints: UPPER_PAINTS,
-      styles: { panel: 0.66, vent: 0.1, greeble: 0.08, strip: 0.1, conduit: 0.06 },
+      styles: { panel: 0.86, vent: 0.0, greeble: 0.02, strip: 0.08, conduit: 0.04 },
       seed: ctx.seed * 7 + side.length * 5,
     });
     // dark cornice band under the ceiling with a recessed white cove
@@ -231,22 +239,49 @@ function shellWalls(kit, ctx, B0) {
 // ---------------------------------------------------------------------------
 function ceiling(kit, ctx, B0) {
   const [min, max] = B0;
-  impCeiling(kit, ctx, {
-    bounds: B0,
-    y: CEIL,
-    lights: false,
-    panelW: 4,
-    rowH: 4,
-    spacing: 1000,
-    styles: { panel: 0.8, greeble: 0.08, vent: 0.12 },
-    paints: [
-      [PALETTE.impMid, 0.55],
-      [PALETTE.impDark, 0.3],
-      [PALETTE.impGrey, 0.15],
-    ],
-  });
-  // transverse trusses every ~13 m: two chords, verticals, alternating diagonals, a light line
   const W = max[0] - min[0];
+  const D = max[2] - min[2];
+  // black backing slab, then a coarse field of 6 × 6 m plates hanging 0.12 below it (the gaps read
+  // as dark seams); a few plates are swapped for recessed vent grilles
+  kit.boxMM("paintedMetal", [min[0] - 0.4, CEIL, min[2] - 0.4], [max[0] + 0.4, CEIL + 0.3, max[2] + 0.4], { color: PALETTE.impBlack, texel: 2 });
+  const rand = rng(ctx.seed * 17 + 3);
+  const cols = Math.round(W / 6);
+  const rows = Math.round(D / 6);
+  const pw = W / cols;
+  const ph = D / rows;
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      const x0 = min[0] + i * pw + 0.1;
+      const z0 = min[2] + j * ph + 0.1;
+      const r = rand();
+      if (r < 0.07) {
+        // vent grille: dark recess with slats
+        kit.boxMM("paintedMetal", [x0 + 0.3, CEIL - 0.04, z0 + 0.3], [x0 + pw - 0.5, CEIL, z0 + ph - 0.5], { color: PALETTE.impBlack, texel: 2 });
+        for (let k = 0; k < 7; k++) {
+          const z = z0 + 0.7 + (k / 6) * (ph - 1.6);
+          kit.boxMM("metal", [x0 + 0.5, CEIL - 0.1, z - 0.12], [x0 + pw - 0.7, CEIL - 0.04, z + 0.12], { color: PALETTE.gunmetal });
+        }
+        continue;
+      }
+      // mostly one mid-grey tone so the floods read on it (it is what the exterior camera sees through
+      // the opening); a few darker plates and recessed service hatches break it up
+      const col = r < 0.72 ? PALETTE.impGrey : r < 0.9 ? PALETTE.impMid : PALETTE.impLight;
+      kit.boxMM("impPanel1", [x0, CEIL - 0.12, z0], [x0 + pw - 0.2, CEIL, z0 + ph - 0.2], { color: col, uv: "keep" });
+      if (r > 0.94) kit.boxMM("impPanel", [x0 + 0.8, CEIL - 0.2, z0 + 0.8], [x0 + pw - 1.0, CEIL - 0.12, z0 + ph - 1.0], { color: PALETTE.impMid, uv: "keep" });
+    }
+  }
+  // big service ducts along the long walls under the ceiling, with hanger straps
+  for (const s of [-1, 1]) {
+    for (const [dx, r] of [
+      [3.2, 0.75],
+      [5.2, 0.45],
+    ]) {
+      const x = s * (max[0] - dx);
+      kit.cyl("paintedMetal", x, CEIL - 2.7, (min[2] + max[2]) / 2, r, D - 3, "z", { color: PALETTE.impDark, segments: 14, texel: 0.5 });
+      for (let z = min[2] + 4; z < max[2] - 2; z += 12) kit.box("metal", x, CEIL - 1.35, z, r * 2 + 0.2, 2.7, 0.16, { color: PALETTE.gunmetal });
+    }
+  }
+  // transverse trusses every ~13 m: two chords, verticals, alternating diagonals, a light line
   const n = 9;
   for (let i = 0; i < n; i++) {
     const z = min[2] + 6 + (i / (n - 1)) * (max[2] - min[2] - 12);
@@ -279,35 +314,40 @@ function well(kit, ctx) {
     [HOLE.x1 - 0.1, 0, HOLE.z1 - 0.1],
   ];
   const fake = { doors: [], bounds: wb, seed: ctx.seed + 3 };
+  const SLOT = 1.25; // door-leaf slot under the deck (leaves run at y -1.1 .. -0.02)
+  const LIP = 0.6;
   for (const side of ["zmin", "zmax", "xmin", "xmax"]) {
     impWall(kit, fake, side, {
       bounds: wb,
       base: -WELL_DEPTH,
-      height: WELL_DEPTH,
+      height: WELL_DEPTH - SLOT - LIP,
       noDoors: true,
-      rows: [0, 1.6, 4.8, 7.6, 8.6, WELL_DEPTH],
+      rows: [0, 1.6, 4.6, 6.6, WELL_DEPTH - SLOT - LIP],
       panelW: 3.5,
       kick: false,
       trim: false,
       collide: false,
       paints: WELL_PAINTS,
-      styles: { panel: 0.56, vent: 0.14, greeble: 0.1, conduit: 0.14, strip: 0.06 },
+      styles: { panel: 0.62, vent: 0.1, greeble: 0.06, conduit: 0.14, strip: 0.08 },
       seed: ctx.seed + side.length * 3,
     });
     const seg = wallSegment(wb, side);
     const { frame, length } = wallFrame(kit, seg.from, seg.to, -WELL_DEPTH);
-    // hazard lip right under the deck edge, then the black door slot / track band
-    frame.box("hazard", length / 2, WELL_DEPTH - 0.3, 0.02, length, 0.6, 0.04, { texel: 2 });
-    frame.box("paintedMetal", length / 2, WELL_DEPTH - 1.15, 0.03, length, 1.1, 0.06, { color: PALETTE.impBlack, texel: 2 });
-    frame.box("metal", length / 2, WELL_DEPTH - 0.66, 0.065, length, 0.05, 0.02, { color: PALETTE.steel });
-    frame.box("metal", length / 2, WELL_DEPTH - 1.64, 0.065, length, 0.05, 0.02, { color: PALETTE.steel });
+    // hazard lip under the door slot, then the black slot / track band right under the deck edge
+    frame.box("hazard", length / 2, WELL_DEPTH - SLOT - LIP / 2, 0.02, length, LIP, 0.04, { texel: 2 });
+    frame.box("paintedMetal", length / 2, WELL_DEPTH - SLOT / 2, 0.03, length, SLOT, 0.06, { color: PALETTE.impBlack, texel: 2 });
+    frame.box("metal", length / 2, WELL_DEPTH - 0.08, 0.065, length, 0.05, 0.02, { color: PALETTE.steel });
+    frame.box("metal", length / 2, WELL_DEPTH - SLOT + 0.04, 0.065, length, 0.05, 0.02, { color: PALETTE.steel });
+    // continuous white approach strip under the hazard lip: outlines the bay from space
+    frame.box("paintedMetal", length / 2, WELL_DEPTH - SLOT - LIP - 0.45, 0.05, length, 0.5, 0.1, { color: PALETTE.impBlack, texel: 2 });
+    frame.box("emitWhite", length / 2, WELL_DEPTH - SLOT - LIP - 0.45, 0.105, length - 0.4, 0.22, 0.01);
     // containment-field emitter rim at y = -9
     frame.box("paintedMetal", length / 2, 1.0, 0.08, length, 0.36, 0.16, { color: PALETTE.impBlack, texel: 2 });
     frame.box("emitBlue", length / 2, 1.0, 0.165, length - 0.3, 0.14, 0.01);
     // amber guide lights half way down, every 5 m
     for (let u = 2.5; u < length - 1.5; u += 5) {
-      frame.box("paintedMetal", u, 5.6, 0.05, 1.0, 0.4, 0.1, { color: PALETTE.impDark, texel: 2 });
-      frame.box("emitAmber", u, 5.6, 0.105, 0.8, 0.2, 0.01);
+      frame.box("paintedMetal", u, 5.0, 0.05, 1.0, 0.4, 0.1, { color: PALETTE.impDark, texel: 2 });
+      frame.box("emitAmber", u, 5.0, 0.105, 0.8, 0.2, 0.01);
     }
   }
 }
@@ -329,6 +369,7 @@ function curbAndRails(kit, ctx) {
   ]) {
     kit.boxMM("paintedMetal", [x0, 0, z0], [x1, 0.2, z1], { color: PALETTE.impDark, texel: 1.5 });
     kit.boxMM("hazard", [x0 + 0.02, 0.2, z0 + 0.02], [x1 - 0.02, 0.215, z1 - 0.02], { texel: 2 });
+    kit.collider([x0, 0, z0], [x1, 0.2, z1], "curb"); // steppable: the player stands on it, the railing stops them
   }
   const ry = 0.2;
   const rx0 = HOLE.x0 - 0.35;
@@ -389,19 +430,26 @@ function barrierPosts(kit, x0, x1, z, y) {
 // ---------------------------------------------------------------------------
 function deckMarkings(kit, ctx, B0) {
   const [min, max] = B0;
-  const w = max[0] - min[0] - 3;
-  // aft apron: chevrons point forward (toward the opening); forward apron mirrored
+  const w = max[0] - min[0] - 3; // the whole 2048 px texture width spans the deck width
+  // the parking aprons either side of the launch lane get the marked-up decal (numbered bays, boundary
+  // stroke, worn paint); the 22 m centre lane stays black gloss with only the lit lane dashes
+  const uCut = 0.34;
   for (const [z0, z1, flip] of [
     [HOLE.z1 + 2.2, max[2] - 3.2, false],
     [min[2] + 3.2, HOLE.z0 - 2.2, true],
   ]) {
     const d = z1 - z0;
-    const g = new THREE.PlaneGeometry(w, d);
-    g.rotateX(-Math.PI / 2);
-    if (flip) g.rotateY(Math.PI);
     // uniform texel scale: 2048 px across w metres; take the matching slice of the 1024 px height
     const vSpan = Math.min(1, (d / w) * 2);
-    kit.add("hg_markings", g, { pos: [0, 0.012, (z0 + z1) / 2], uv: "keep", uvRect: [0, 1 - vSpan, 1, 1] });
+    for (const s of [-1, 1]) {
+      const pw = w * uCut;
+      const g = new THREE.PlaneGeometry(pw, d);
+      g.rotateX(-Math.PI / 2);
+      if (flip) g.rotateY(Math.PI);
+      const cx = s * (w / 2 - pw / 2);
+      const u0 = (flip ? -s : s) < 0 ? 0 : 1 - uCut;
+      kit.add("hg_markings", g, { pos: [cx, 0.012, (z0 + z1) / 2], uv: "keep", uvRect: [u0, 1 - vSpan, u0 + uCut, 1] });
+    }
   }
   void ctx;
 }
@@ -433,28 +481,35 @@ function structure(kit, ctx, B0) {
     const xi = s * 32.6; // inner edge
     const xoNarrow = s * 34.1; // beside the gantry stairs
     const xoWide = s * 35.3;
-    const zStairEnd = -68.4;
+    const zStairEnd = GANTRY_Z1;
     platform(kit, ctx, { x0: Math.min(xi, xoNarrow), z0: zStairEnd, x1: Math.max(xi, xoNarrow), z1: -39.6, y: CAT_Y, thickness: 0.25, mat: "grate" });
     platform(kit, ctx, { x0: Math.min(xi, xoWide), z0: zEnd, x1: Math.max(xi, xoWide), z1: zStairEnd, y: CAT_Y, thickness: 0.25, mat: "grate" });
     railing(kit, xi, -39.6, xi, zEnd, CAT_Y);
     railing(kit, xi, zEnd, xoWide, zEnd, CAT_Y);
     railing(kit, xoWide, zEnd, xoWide, zStairEnd - 0.1, CAT_Y);
+    // the gantry stairs climb beside the narrow catwalk; where they are above head height the void
+    // under them is fenced (outer edge of the narrow walk + the dead end of the wide walk)
+    const zUnder = STAIR_Z0 - (2.0 / ((GANTRY_Y - CAT_Y) / 2)) * FLIGHT;
+    railing(kit, xoNarrow, zStairEnd - 0.1, xoNarrow, zUnder, CAT_Y);
+    railing(kit, xoNarrow, zStairEnd - 0.1, xoWide, zStairEnd - 0.1, CAT_Y);
     // wall brackets: a beam under the walk every 6 m plus a knee brace
     for (let z = zEnd + 1; z < -40; z += 6) {
       kit.box("paintedMetal", s * 34.3, CAT_Y - 0.4, z, 3.4, 0.24, 0.24, { color: PALETTE.impDark, texel: 2 });
       kit.add("paintedMetal", new THREE.BoxGeometry(0.16, 3.6, 0.16), { pos: [s * 34.2, CAT_Y - 1.9, z], rot: [0, 0, s * 0.62], color: PALETTE.impDark, texel: 2 });
     }
-    // switchback stairs from the catwalk to the boarding gantry (two flights + landing)
+    // stairs from the catwalk up to the boarding gantry: two straight flights with a landing, hugging
+    // the wall (x 34.4 .. 35.9) so the catwalk beside them stays walkable
     const sx = s * 35.15;
     const midY = (CAT_Y + GANTRY_Y) / 2;
-    const a = stairs(kit, ctx, { x: sx, z: -37.2, y0: CAT_Y, y1: midY, axis: "z", dir: -1, w: 1.5 });
-    const landZ0 = -37.2 - a.total;
-    platform(kit, ctx, { x0: Math.min(sx - 0.75, sx + 0.75), z0: landZ0 - 2.6, x1: Math.max(sx - 0.75, sx + 0.75), z1: landZ0, y: midY, thickness: 0.25, mat: "grate" });
-    railing(kit, s * 34.4, landZ0 - 2.6, s * 34.4, landZ0, midY);
-    railing(kit, s * 34.4, landZ0 - 2.6, s * 35.9, landZ0 - 2.6, midY);
-    const b = stairs(kit, ctx, { x: sx, z: landZ0 - 2.6, y0: midY, y1: GANTRY_Y, axis: "z", dir: -1, w: 1.5 });
-    stairGuard(kit, { x: sx, z: -37.2, axis: "z", dir: -1, w: 1.5, y0: CAT_Y, y1: midY, total: a.total, sides: [-s] });
-    stairGuard(kit, { x: sx, z: landZ0 - 2.6, axis: "z", dir: -1, w: 1.5, y0: midY, y1: GANTRY_Y, total: b.total, sides: [-s] });
+    const a = stairs(kit, ctx, { x: sx, z: STAIR_Z0, y0: CAT_Y, y1: midY, axis: "z", dir: -1, w: 1.5 });
+    const landZ0 = STAIR_Z0 - a.total;
+    platform(kit, ctx, { x0: Math.min(sx - 0.75, sx + 0.75), z0: landZ0 - LANDING, x1: Math.max(sx - 0.75, sx + 0.75), z1: landZ0, y: midY, thickness: 0.25, mat: "grate" });
+    railing(kit, s * 34.4, landZ0 - LANDING, s * 34.4, landZ0, midY);
+    const b = stairs(kit, ctx, { x: sx, z: landZ0 - LANDING, y0: midY, y1: GANTRY_Y, axis: "z", dir: -1, w: 1.5 });
+    stairGuard(kit, { x: sx, z: STAIR_Z0, axis: "z", dir: -1, w: 1.5, y0: CAT_Y, y1: midY, total: a.total, sides: [-s] });
+    stairGuard(kit, { x: sx, z: landZ0 - LANDING, axis: "z", dir: -1, w: 1.5, y0: midY, y1: GANTRY_Y, total: b.total, sides: [-s] });
+    // columns from the deck carrying the landing
+    for (const z of [landZ0 - LANDING + 0.3, landZ0 - 0.3]) pillar(kit, sx, z, 0, midY - 0.25, 0.4, PALETTE.impDark);
   }
 
   // flood housings hanging from the trusses (the lights themselves are in lighting())
@@ -492,16 +547,18 @@ function structure(kit, ctx, B0) {
     frame.box("emitRed", length / 2, 14.6, 0.13, 8.4, 0.12, 0.02);
     frame.box("emitRed", length / 2, 22.3, 0.13, 8.4, 0.12, 0.02);
   }
+  // rack numbers between the racks (clear of the wings and the portal heads), lit white on black
   RACK_Z.forEach((rz, i) => {
     for (const s of [-1, 1]) {
       const side = s < 0 ? "xmin" : "xmax";
       const seg = wallSegment(B0, side);
       const { frame } = wallFrame(kit, seg.from, seg.to, 0);
-      const u = side === "xmax" ? rz - min[2] : max[2] - rz;
+      const zz = rz + 6.5;
+      const u = side === "xmax" ? zz - min[2] : max[2] - zz;
       const digit = i + 1 + (s > 0 ? 4 : 0);
-      frame.box("paintedMetal", u, 12.6, 0.05, 2.4, 3.2, 0.1, { color: PALETTE.impBlack, texel: 2 });
-      segDigit(frame, "emitWhite", u, 11.3, 0.11, digit, 2.4);
-      frame.box("emitAmber", u, 14.05, 0.11, 2.0, 0.08, 0.02);
+      frame.box("paintedMetal", u, 15.0, 0.05, 2.4, 3.2, 0.1, { color: PALETTE.impBlack, texel: 2 });
+      segDigit(frame, "emitWhite", u, 13.7, 0.11, digit, 2.4);
+      frame.box("emitAmber", u, 16.45, 0.11, 2.0, 0.08, 0.02);
     }
   });
 }
@@ -601,6 +658,8 @@ function towerAndMezzanine(kit, ctx, B0) {
     platform(kit, ctx, { x0: Math.min(xa, xb), z0: -39.6, x1: Math.max(xa, xb), z1: -37.0, y: T.y0, thickness: 0.25, mat: "grate" });
     platform(kit, ctx, { x0: Math.min(xStairEnd, xb), z0: -37.0, x1: Math.max(xStairEnd, xb), z1: T.z1, y: T.y0, thickness: 0.25, mat: "grate" });
     railing(kit, xa, -39.6, s * 32.5, -39.6, T.y0);
+    // railing along the walkway edge above the stair flight (the flight's top lands beyond it)
+    railing(kit, s * 13.3, -37.0, s * (13.3 + run.total - 0.4), -37.0, T.y0);
     // solid parapet under the walkway edge so the stair well below reads as a bay, not a hole
     kit.boxMM("paintedMetal", [Math.min(xa, xStairEnd), T.y0 - 0.5, -37.1], [Math.max(xa, xStairEnd), T.y0 - 0.25, -36.95], { color: PALETTE.impBlack, texel: 2 });
   }
@@ -622,13 +681,20 @@ function racks(kit, ctx, B0) {
     kit.boxMM("paintedMetal", [rx - 0.8, BEAM_Y0, zA], [rx + 0.8, BEAM_Y1, zB], { color: PALETTE.impDark, texel: 1.2 });
     kit.boxMM("hazard", [rx - 0.82, BEAM_Y0 + 0.2, zA], [rx + 0.82, BEAM_Y0 + 0.5, zB], { texel: 2 });
     kit.boxMM("emitWhiteSoft", [rx - 0.2, BEAM_Y0 - 0.03, zA + 0.5], [rx + 0.2, BEAM_Y0, zB - 0.5], { uv: "keep" });
-    // boarding gantry along the wall at the wing-apex level
+    // boarding gantry along the wall at the wing-apex level, from the forward rack to the stair head;
+    // the inner railing is broken where the bridges leave it
     const gx0 = Math.min(s * 34.4, s * 35.9);
     const gx1 = Math.max(s * 34.4, s * 35.9);
-    platform(kit, ctx, { x0: gx0, z0: RACK_Z[0] - 3, x1: gx1, z1: -68.4, y: GANTRY_Y, thickness: 0.25, mat: "grate" });
-    railing(kit, s * 34.4, RACK_Z[0] - 3, s * 34.4, -68.4, GANTRY_Y, { skipAt: RACK_Z });
-    railing(kit, s * 34.4, RACK_Z[0] - 3, s * 35.9, RACK_Z[0] - 3, GANTRY_Y);
-    for (let z = RACK_Z[0]; z < -70; z += 9) {
+    const gz0 = RACK_Z[0] - 3;
+    platform(kit, ctx, { x0: gx0, z0: gz0, x1: gx1, z1: GANTRY_Z1, y: GANTRY_Y, thickness: 0.25, mat: "grate" });
+    let zr = gz0;
+    for (const rz of RACK_Z) {
+      railing(kit, s * 34.4, zr, s * 34.4, rz - 0.75, GANTRY_Y);
+      zr = rz + 0.75;
+    }
+    railing(kit, s * 34.4, zr, s * 34.4, GANTRY_Z1, GANTRY_Y);
+    railing(kit, s * 34.4, gz0, s * 35.9, gz0, GANTRY_Y);
+    for (let z = gz0 + 2; z < GANTRY_Z1; z += 9) {
       kit.box("paintedMetal", s * 35.2, GANTRY_Y - 0.45, z, 1.6, 0.2, 0.2, { color: PALETTE.impDark, texel: 2 });
       kit.add("paintedMetal", new THREE.BoxGeometry(0.14, 1.9, 0.14), { pos: [s * 35.0, GANTRY_Y - 1.2, z], rot: [0, 0, -s * 0.72], color: PALETTE.impDark, texel: 2 });
     }
@@ -637,17 +703,21 @@ function racks(kit, ctx, B0) {
       const xin = s * (HOLE.x1 + 1.4);
       kit.boxMM("paintedMetal", [Math.min(wallX, xin), BEAM_Y0 + 0.35, rz - 0.5], [Math.max(wallX, xin), BEAM_Y1 - 0.15, rz + 0.5], { color: PALETTE.impMid, texel: 1.2 });
       kit.boxMM("emitWhite", [Math.min(rx - 6, rx + 6), BEAM_Y0 + 0.33, rz - 0.08], [Math.max(rx - 6, rx + 6), BEAM_Y0 + 0.35, rz + 0.08], {});
-      // clamp yokes over both wing apexes
+      // clamp yokes: two arms per wing gripping the top edge at z = rz ± 1.2 (the boarding bridge
+      // passes between them), hazard-striped clamp blocks with a green "locked" lamp
+      // (the wing hexagon's upper slanted edges pass y = RACK_Y + 2.7 at z = ±1.2, so the blocks straddle them)
+      const grip = RACK_Y + 3.05;
       for (const w of [-1, 1]) {
         const wx = rx + w * WING_X;
-        const apex = RACK_Y + WING_H / 2;
-        kit.box("paintedMetal", wx, (BEAM_Y0 + apex + 0.35) / 2, rz, 0.55, BEAM_Y0 - (apex + 0.35), 0.7, { color: PALETTE.impDark, texel: 1.5 });
-        kit.box("metal", wx, apex + 0.15, rz, 0.8, 0.8, 2.0, { color: PALETTE.gunmetal });
-        kit.box("hazard", wx, apex + 0.15, rz + 1.08, 0.82, 0.5, 0.16, { texel: 3 });
-        kit.box("hazard", wx, apex + 0.15, rz - 1.08, 0.82, 0.5, 0.16, { texel: 3 });
-        kit.cyl("metal", wx + w * 0.55, BEAM_Y0 - 0.9, rz + 0.4, 0.13, 1.5, "y", { color: PALETTE.steel });
-        kit.cyl("metal", wx + w * 0.55, BEAM_Y0 - 0.9, rz - 0.4, 0.13, 1.5, "y", { color: PALETTE.steel });
-        kit.box("emitGreen", wx, apex + 0.42, rz + 1.02, 0.24, 0.08, 0.02);
+        for (const dz of [-1.2, 1.2]) {
+          kit.box("paintedMetal", wx, (BEAM_Y0 + grip + 0.4) / 2, rz + dz, 0.5, BEAM_Y0 - (grip + 0.4), 0.6, { color: PALETTE.impDark, texel: 1.5 });
+          kit.box("metal", wx, grip, rz + dz, 0.8, 0.8, 0.8, { color: PALETTE.gunmetal });
+          kit.box("hazard", wx, grip, rz + dz + Math.sign(dz) * 0.41, 0.82, 0.5, 0.02, { texel: 3 });
+          kit.cyl("metal", wx + w * 0.5, BEAM_Y0 - 0.9, rz + dz, 0.12, 1.5, "y", { color: PALETTE.steel, segments: 8 });
+          kit.box("emitGreen", wx + w * 0.41, grip + 0.27, rz + dz, 0.02, 0.08, 0.3);
+        }
+        // grip bar bridging the two blocks over the wing apex
+        kit.box("metal", wx, grip + 0.45, rz, 0.5, 0.2, 2.4, { color: PALETTE.gunmetal });
       }
       // power umbilical from the beam to the hull, with a coupling block
       pipeRun(kit, [[rx + 0.6, BEAM_Y0, rz + 1.2], [rx + 1.1, RACK_Y + 3.1, rz + 1.9], [rx + 0.35, RACK_Y + 1.95, rz + 0.7]], 0.07, PALETTE.impBlack, "rubber");
@@ -664,14 +734,14 @@ function racks(kit, ctx, B0) {
       for (const dz of [-0.3, 0.3]) kit.box("metal", lx, (GANTRY_Y - 0.2 + RACK_Y + 1.5) / 2, rz + dz, 0.05, GANTRY_Y - 0.2 - (RACK_Y + 1.5), 0.05, { color: PALETTE.steel });
       for (let y = RACK_Y + 1.7; y < GANTRY_Y - 0.3; y += 0.3) kit.box("metal", lx, y, rz, 0.04, 0.04, 0.6, { color: PALETTE.steel });
       // refuelling station on the gantry: pump cabinet, gauge, hose to the hull
-      const cz = rz + 2.3;
-      kit.box("paintedMetal", s * 35.5, GANTRY_Y + 0.8, cz, 0.8, 1.6, 0.7, { color: PALETTE.impDark, texel: 2 });
-      kit.box("impPanel", s * 35.08, GANTRY_Y + 0.9, cz, 0.02, 1.2, 0.5, { color: PALETTE.impGrey, uv: "keep" });
-      kit.box("emitAmber", s * 35.06, GANTRY_Y + 1.35, cz, 0.01, 0.12, 0.3);
-      kit.box("leds", s * 35.06, GANTRY_Y + 1.1, cz, 0.01, 0.05, 0.3, { uv: "keep" });
-      kit.cyl("metal", s * 35.5, GANTRY_Y + 1.62, cz, 0.16, 0.3, "y", { color: PALETTE.steel });
-      kit.collider([Math.min(s * 35.1, s * 35.9), GANTRY_Y, cz - 0.35], [Math.max(s * 35.1, s * 35.9), GANTRY_Y + 1.6, cz + 0.35], "pump");
-      pipeRun(kit, [[s * 35.1, GANTRY_Y + 0.5, cz], [s * 34.2, GANTRY_Y + 0.25, rz + 1.6], [rx + s * 2.6, RACK_Y + 2.6, rz + 1.1], [rx + s * 1.1, RACK_Y + 1.55, rz - 0.5]], 0.06, PALETTE.impMid, "rubber");
+      const cz = rz + 2.6;
+      kit.box("paintedMetal", s * 35.6, GANTRY_Y + 0.8, cz, 0.6, 1.6, 0.7, { color: PALETTE.impDark, texel: 2 });
+      kit.box("impPanel", s * 35.29, GANTRY_Y + 0.9, cz, 0.02, 1.2, 0.5, { color: PALETTE.impGrey, uv: "keep" });
+      kit.box("emitAmber", s * 35.27, GANTRY_Y + 1.35, cz, 0.01, 0.12, 0.3);
+      kit.box("leds", s * 35.27, GANTRY_Y + 1.1, cz, 0.01, 0.05, 0.3, { uv: "keep" });
+      kit.cyl("metal", s * 35.6, GANTRY_Y + 1.62, cz, 0.16, 0.3, "y", { color: PALETTE.steel, segments: 10 });
+      kit.collider([Math.min(s * 35.3, s * 35.9), GANTRY_Y, cz - 0.35], [Math.max(s * 35.3, s * 35.9), GANTRY_Y + 1.6, cz + 0.35], "pump");
+      pipeRun(kit, [[s * 35.3, GANTRY_Y + 0.5, cz], [s * 34.2, GANTRY_Y + 0.25, rz + 2.0], [rx + s * 2.6, RACK_Y + 2.6, rz + 1.3], [rx + s * 1.1, RACK_Y + 1.55, rz - 0.5]], 0.06, PALETTE.impMid, "rubber");
       kit.box("metal", rx + s * 1.1, RACK_Y + 1.5, rz - 0.5, 0.3, 0.3, 0.3, { color: PALETTE.gunmetal });
       void i;
     });
@@ -955,7 +1025,7 @@ function containmentField(ctx) {
   ctx.mesh(mesh);
   return (t) => {
     mat.map.offset.set((t * 0.011) % 1, (-t * 0.017) % 1);
-    mat.opacity = 0.14 + 0.035 * Math.sin(t * 1.6) + 0.02 * Math.sin(t * 4.3);
+    mat.opacity = 0.22 + 0.04 * Math.sin(t * 1.6) + 0.02 * Math.sin(t * 4.3);
   };
 }
 
@@ -1043,6 +1113,3 @@ function crateOn(k, x, y, z, sx, sy, sz, col) {
   k.box("paintedMetal", x, y + sy * 0.95, z, sx + 0.03, sy * 0.1, sz + 0.03, { color: PALETTE.impBlack, texel: 2 });
   k.box("emitBlue", x + sx * 0.25, y + sy * 0.5, z + sz / 2 + 0.006, 0.12, 0.03, 0.01);
 }
-
-// unused-import guards (kept for the helper signatures above)
-void IMP_PAINTS_DARK;
