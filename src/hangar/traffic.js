@@ -674,6 +674,9 @@ export function createTraffic({ mats, audio, zone } = {}) {
         }
         _fp.copy(flareLocal[k]).multiplyScalar(pull).applyQuaternion(f.quat).add(f.pos);
         if (cameraPos) {
+          // at range the quad sits inside the cockpit ball: lift it toward the camera so the body
+          // cannot punch a hole through it
+          _fp.addScaledVector(_v2.subVectors(cameraPos, f.pos).normalize(), 2.6 * (1 - pull));
           _look.lookAt(cameraPos, _fp, UP);
           _fq.setFromRotationMatrix(_look);
         } else _fq.copy(f.quat);
