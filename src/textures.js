@@ -924,8 +924,10 @@ export function makeDecalSheet(size = 1024, seed = 19) {
       const n = fbm(u, v, { octaves: 4, freq: 60, seed: seed + 2 });
       const scuff = Math.pow(fbm(u * 0.3, v, { octaves: 3, freq: 40, seed: seed + 5 }), 2);
       let a = d[i + 3] / 255;
-      a *= clamp01((n - 0.3) * 4);
-      a *= 1 - scuff * 0.7;
+      // wear thins the paint but never cuts a stroke: at full knock-out the erosion broke glyphs
+      // ("BAſ 2") on stencils 0.5 m tall
+      a *= 0.5 + 0.5 * clamp01((n - 0.3) * 4);
+      a *= 1 - scuff * 0.4;
       d[i + 3] = a * 255;
     }
   }

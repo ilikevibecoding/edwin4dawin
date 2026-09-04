@@ -446,6 +446,30 @@ const debugAPI = {
     });
   },
   stepMode: false,
+  /** Distinct textures on scene materials, largest first: [{ MB, w, h, mips, users: [material names] }]. */
+  textureInventory(limit = 40) {
+    const seen = new Map();
+    scene.traverse((o) => {
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      for (const m of mats) {
+        for (const k of ["map", "normalMap", "roughnessMap", "metalnessMap", "emissiveMap", "aoMap", "alphaMap"]) {
+          const t = m[k];
+          if (!t || !t.image) continue;
+          const key = t.uuid;
+          const name = Object.keys(materials).find((n) => materials[n] === m) || m.name || m.type;
+          if (!seen.has(key)) {
+            const w = t.image.width || 0;
+            const h = t.image.height || 0;
+            seen.set(key, { MB: +((w * h * 4 * (t.generateMipmaps === false ? 1 : 1.333)) / 1048576).toFixed(2), w, h, mips: t.generateMipmaps !== false, slot: k, users: new Set([name]) });
+          } else seen.get(key).users.add(name);
+        }
+      }
+    });
+    return [...seen.values()]
+      .map((e) => ({ ...e, users: [...e.users].slice(0, 6) }))
+      .sort((a, b) => b.MB - a.MB)
+      .slice(0, limit);
+  },
   freezeGrain: false,
   frames() {
     return framesRendered;

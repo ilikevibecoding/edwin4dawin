@@ -59,7 +59,8 @@ export function buildMaterials() {
   const painted1 = makePaintedPanel(512, 47);
   const painted2 = makePaintedPanel(512, 83);
   const metal = makeWornMetal(1024, 23);
-  const grate = makeGrate(1024, 768, 61);
+  // 512×384 is plenty for a repeating 1.24 m grating tile (was 1024×768: 12 MB of the texture budget)
+  const grate = makeGrate(512, 384, 61);
   const deck = makeDeckPlate(1024, 41);
   const rubber = makeRubber(256, 53);
   const fabric = makeFabric(256, 67);

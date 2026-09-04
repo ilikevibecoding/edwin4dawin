@@ -25,7 +25,9 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
   const listeners = { sector: [], deckBuilt: [] };
 
   // --- fixed light pool (constant shader light counts → no program recompiles between rooms)
-  const POOL_POINTS = 14;
+  // 16 points: the crew-deck rooms + their corridor request 16 together; at 14 the two farthest
+  // dropped out (no visible pop, but it showed as pool overflow in every crew view)
+  const POOL_POINTS = 16;
   const POOL_SPOTS = 2;
   const pool = { points: [], spots: [], assigned: [], timer: 0, held: new Set() };
   for (let i = 0; i < POOL_POINTS; i++) {
