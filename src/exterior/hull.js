@@ -8,7 +8,7 @@
 // Lighting: exterior materials carry their own sun + fill terms (see hullShader.js) so the interior never
 // receives stray sunlight and no shadow map is needed; n8ao supplies the contact shadows between plates.
 import * as THREE from "three";
-import { HULL, SUPERSTRUCTURE, TOWER, HANGAR, ROOMS, roomFloorY } from "../config/shipSpec.js";
+import { HULL, TOWER, HANGAR, ENGINES, ROOMS, roomFloorY } from "../config/shipSpec.js";
 import { makeHullPlating, makeHullDetail, makeMachinery, makeWindowStrips, makeDetailAtlas } from "./hullTextures.js";
 import { makeSun, exteriorPatch, sunPatch } from "./hullShader.js";
 import { panelWithHoles, rng } from "../kit.js";
@@ -46,11 +46,14 @@ function buildWedge() {
       bottom.quad([A[0], ventral(A[0], za), za], [B[0], ventral(B[0], za), za], [C[0], ventral(C[0], zb), zb], [D[0], ventral(D[0], zb), zb]);
     }
   }
-  // stern wall (faces +Z), finely tessellated so the heat discolouration reads as smooth gradients
+  // stern wall (faces +Z), finely tessellated so the heat discolouration reads as smooth gradients; cells
+  // under the engine nozzles are left out (the bells' mounting flanges cover the jagged hole edges)
   const stern = new Soup();
   const hwS = HULL.halfWidthAt(HULL.sternZ);
-  const SX = 72;
-  const SY = 18;
+  const SX = 150;
+  const SY = 40;
+  const nozzles = [...ENGINES.main.positions.map(([x, y]) => [x, y, ENGINES.main.radius]), ...ENGINES.aux.positions.map(([x, y]) => [x, y, ENGINES.aux.radius])];
+  const underNozzle = (x, y, halfDiag) => nozzles.some(([ex, ey, R]) => Math.hypot(x - ex, y - ey) < R + halfDiag);
   for (let xi = 0; xi < SX; xi++) {
     const xa = -hwS + (2 * hwS * xi) / SX;
     const xb = -hwS + (2 * hwS * (xi + 1)) / SX;
@@ -61,6 +64,10 @@ function buildWedge() {
     for (let yi = 0; yi < SY; yi++) {
       const t0 = yi / SY;
       const t1 = (yi + 1) / SY;
+      const cx = (xa + xb) / 2;
+      const cy = (ya0 + (ya1 - ya0) * (t0 + t1) * 0.5 + yb0 + (yb1 - yb0) * (t0 + t1) * 0.5) / 2;
+      const halfDiag = Math.hypot(xb - xa, (ya1 - ya0) * (t1 - t0)) / 2;
+      if (underNozzle(cx, cy, halfDiag)) continue;
       stern.quad([xa, ya0 + (ya1 - ya0) * t0, HULL.sternZ], [xb, yb0 + (yb1 - yb0) * t0, HULL.sternZ], [xb, yb0 + (yb1 - yb0) * t1, HULL.sternZ], [xa, ya0 + (ya1 - ya0) * t1, HULL.sternZ]);
     }
   }
@@ -78,7 +85,7 @@ function buildWedge() {
       const q = (a, b, c, d) => (s > 0 ? lips.quad(a, b, c, d) : lips.quad(a, d, c, b));
       const qi = (a, b, c, d) => (s > 0 ? trench.quad(a, b, c, d) : trench.quad(a, d, c, b));
       q([ea, TRENCH_HALF, za], [ia, TRENCH_HALF, za], [ib, TRENCH_HALF, zb], [eb, TRENCH_HALF, zb]);
-      qi([ia, TRENCH_HALF, za], [ia, -TRENCH_HALF, za], [ib, -TRENCH_HALF, zb], [ib, TRENCH_HALF, zb]);
+      qi([ia, TRENCH_HALF, za], [ib, TRENCH_HALF, zb], [ib, -TRENCH_HALF, zb], [ia, -TRENCH_HALF, za]);
       q([ia, -TRENCH_HALF, za], [ea, -TRENCH_HALF, za], [eb, -TRENCH_HALF, zb], [ib, -TRENCH_HALF, zb]);
     }
   }
@@ -91,10 +98,10 @@ function terraceGeometry(t) {
   const { hx, z0, z1, yTop, inset } = t;
   const zf = z0 + inset;
   s.quad([-hx, yTop, zf], [-hx, yTop, z1], [hx, yTop, z1], [hx, yTop, zf]); // top (+y)
-  s.quad([-hx, 0, z0], [hx, 0, z0], [hx, yTop, zf], [-hx, yTop, zf]); // sloped front (-z, +y)
-  s.quad([hx, 0, z1], [-hx, 0, z1], [-hx, yTop, z1], [hx, yTop, z1]); // back (+z)
-  s.quad([hx, 0, z0], [hx, 0, z1], [hx, yTop, z1], [hx, yTop, zf]); // starboard side (+x)
-  s.quad([-hx, 0, z1], [-hx, 0, z0], [-hx, yTop, zf], [-hx, yTop, z1]); // port side (-x)
+  s.quad([-hx, 0, z0], [-hx, yTop, zf], [hx, yTop, zf], [hx, 0, z0]); // sloped front (-z, +y)
+  s.quad([hx, 0, z1], [hx, yTop, z1], [-hx, yTop, z1], [-hx, 0, z1]); // back (+z)
+  s.quad([hx, 0, z0], [hx, yTop, zf], [hx, yTop, z1], [hx, 0, z1]); // starboard side (+x)
+  s.quad([-hx, 0, z1], [-hx, yTop, z1], [-hx, yTop, zf], [-hx, 0, z0]); // port side (-x)
   return s.geometry();
 }
 
@@ -126,7 +133,7 @@ export function buildExterior(scene) {
   // ---------------- textures (5 sets, all <= 1024^2)
   const plating = makeHullPlating(1024, 301);
   const detailTex = makeHullDetail(512, 311);
-  const machinery = makeMachinery(1024, 351);
+  const machinery = makeMachinery(512, 351);
   const windowsTex = makeWindowStrips(512, 64, 401);
   const atlas = makeDetailAtlas(1024, 421);
 
@@ -213,6 +220,29 @@ export function buildExterior(scene) {
     bays.push(boxMM([o.x1, o.y0 - 0.5, slab.z0], [o.x1 + 0.5, o.y1 + 0.5, slab.z0 + d]));
     bays.push(boxMM([o.x0 - 0.5, o.y0 - 0.5, slab.z0], [o.x1 + 0.5, o.y0, slab.z0 + d]));
     bays.push(boxMM([o.x0 - 0.5, o.y1, slab.z0], [o.x1 + 0.5, o.y1 + 0.5, slab.z0 + d]));
+  }
+  // recessed dark window channels along the slab faces (the lit rows sit inside them)
+  {
+    const sY = (slab.y0 + slab.y1) / 2;
+    const bands = [
+      [sY - 11.75, sY - 8.25],
+      [sY - 1, sY + 5],
+      [sY + 10.25, sY + 13.75],
+    ];
+    for (const [ya, yb] of bands) {
+      bays.push(boxMM([-slab.halfX - 0.15, ya, slab.z0 + 4], [-slab.halfX + 0.3, yb, slab.z1 - 4]));
+      bays.push(boxMM([slab.halfX - 0.3, ya, slab.z0 + 4], [slab.halfX + 0.15, yb, slab.z1 - 4]));
+      bays.push(boxMM([-slab.halfX + 4, ya, slab.z1 - 0.3], [slab.halfX - 4, yb, slab.z1 + 0.15]));
+    }
+    for (const sx of [-1, 1]) {
+      for (const [ya, yb] of [
+        [slab.y0 + 7.25, slab.y0 + 10.75],
+        [slab.y0 + 15.5, slab.y0 + 21.5],
+        [slab.y1 - 7.25, slab.y1 - 3.75],
+      ]) {
+        bays.push(boxMM([Math.min(sx * 53, sx * 129), ya, slab.z0 - 0.15], [Math.max(sx * 53, sx * 129), yb, slab.z0 + 0.3]));
+      }
+    }
   }
   addMesh(finish(merge(bays), 1 / 4, { base: 0.6 }), darkMat, "windowBays");
 
@@ -377,8 +407,8 @@ export function buildExterior(scene) {
       windowRows.add(74, 5, [sx * 91, slab.y0 + 18.5, slab.z0 - 0.25], [0, Math.PI, 0]);
       windowRows.add(74, 2.5, [sx * 91, slab.y1 - 5.5, slab.z0 - 0.25], [0, Math.PI, 0]);
     }
-    // sensor/comms bands on the forward face upper corners
-    windowRows.add(120, 2.5, [0, slab.y1 - 4, slab.z0 - 0.25], [0, Math.PI, 0]);
+    // short lit strip over the bridge windows, just under the slab roof line
+    windowRows.add(100, 2.5, [0, slab.y1 - 2.4, slab.z0 - 0.25], [0, Math.PI, 0]);
   }
   windowRows.build(windowMat, group);
   const running = buildRunningLights(ctx);
@@ -419,7 +449,5 @@ export function buildExterior(scene) {
     group.visible = any;
   }
 
-  const api = { group, detail, materials, sun, update, setInteriorView, stats, openings };
-  globalThis.__exterior = api; // DEBUG-TEMP
-  return api;
+  return { group, detail, materials, sun, update, setInteriorView, stats, openings };
 }

@@ -15,8 +15,10 @@ export function makeSun() {
     // cool starfield fill from above, faint planet-shine from below, a whisper of bounce opposite the sun
     // (irradiance values; a fully shadowed face ends up around sRGB 60, never pitch black)
     fillUp: { value: new THREE.Color(0.13, 0.15, 0.2) },
-    fillDown: { value: new THREE.Color(0.08, 0.09, 0.12) },
+    fillDown: { value: new THREE.Color(0.13, 0.14, 0.19) },
     fillBack: { value: new THREE.Color(0.045, 0.045, 0.05) },
+    // blue ion wash on aft-facing surfaces near the stern wall
+    engineGlow: { value: new THREE.Color(0.5, 0.75, 1.25) },
   };
 }
 
@@ -31,6 +33,8 @@ const FILL_GLSL = /* glsl */ `
     float sky = wN.y * 0.5 + 0.5;
     vec3 fill = mix( uFillDown, uFillUp, sky );
     fill += uFillBack * clamp( dot( wN, -uSunDir ) * 0.5 + 0.5, 0.0, 1.0 );
+    // ion wash: aft-facing surfaces near the stern pick up the engines' blue light
+    fill += uEngineGlow * smoothstep( 520.0, 800.0, vHullPos.z ) * clamp( wN.z, 0.0, 1.0 );
     reflectedLight.indirectDiffuse += fill * BRDF_Lambert( material.diffuseColor );
   }`;
 
@@ -56,15 +60,14 @@ export function exteriorPatch(mat, sun, opts = {}) {
     shader.uniforms.uFillBack = sun.fillBack;
     let frag = shader.fragmentShader;
     let vert = shader.vertexShader;
-    let pars = "uniform vec3 uSunDir;\nuniform vec3 uSunColor;\nuniform vec3 uFillUp;\nuniform vec3 uFillDown;\nuniform vec3 uFillBack;\n";
-    if (world) {
-      shader.uniforms.uHullTexel = { value: opts.worldTexel };
-      pars += "uniform float uHullTexel;\nvarying vec3 vHullPos;\nvarying vec3 vHullNormal;\n";
-      vert = vert
-        .replace("#include <common>", "#include <common>\nvarying vec3 vHullPos;\nvarying vec3 vHullNormal;")
-        .replace(
-          "#include <worldpos_vertex>",
-          `#include <worldpos_vertex>
+    shader.uniforms.uEngineGlow = sun.engineGlow;
+    let pars = "uniform vec3 uSunDir;\nuniform vec3 uSunColor;\nuniform vec3 uFillUp;\nuniform vec3 uFillDown;\nuniform vec3 uFillBack;\nuniform vec3 uEngineGlow;\n";
+    pars += "varying vec3 vHullPos;\nvarying vec3 vHullNormal;\n";
+    vert = vert
+      .replace("#include <common>", "#include <common>\nvarying vec3 vHullPos;\nvarying vec3 vHullNormal;")
+      .replace(
+        "#include <worldpos_vertex>",
+        `#include <worldpos_vertex>
   {
     vec4 hp = vec4( transformed, 1.0 );
     #ifdef USE_INSTANCING
@@ -74,7 +77,10 @@ export function exteriorPatch(mat, sun, opts = {}) {
     vHullPos = hp.xyz;
     vHullNormal = inverseTransformDirection( transformedNormal, viewMatrix );
   }`,
-        );
+      );
+    if (world) {
+      shader.uniforms.uHullTexel = { value: opts.worldTexel };
+      pars += "uniform float uHullTexel;\n";
       let uvSetup = `
   vec2 hUv;
   {

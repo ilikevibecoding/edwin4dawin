@@ -267,19 +267,19 @@ export function buildSuperstructure(ctx) {
       const z = cell.vc;
       const r = rand();
       const big = Math.min(cell.w, cell.d);
-      if (r < 0.28) {
+      if (r < 0.25) {
         freeCells.push({ x0: cell.u0, x1: cell.u1, z0: cell.v0, z1: cell.v1, y: a.y });
         return;
       }
-      if (r < 0.58) {
+      if (r < 0.62) {
         const h = 4 + rand() * 10 + big * 0.25;
-        addAt(L.blocks, x, a.y, z, cell.w, h, cell.d, 0);
+        addAt(L.blocks, x, a.y, z, cell.w, h, cell.d, 0, 0.82 + rand() * 0.24);
         blockTops.push({ x, z, w: cell.w, d: cell.d, y: a.y + h });
         return;
       }
-      if (r < 0.7) {
-        const h = 16 + rand() * 26;
-        addAt(L.towers, x, a.y, z, cell.w, h, cell.d, 0);
+      if (r < 0.68) {
+        const h = 12 + rand() * 22;
+        addAt(L.towers, x, a.y, z, cell.w, h, cell.d, 0, 0.86 + rand() * 0.2);
         // lit rows on the shaft faces
         const fw = cell.w * 0.5;
         const fd = cell.d * 0.5;
@@ -292,7 +292,7 @@ export function buildSuperstructure(ctx) {
         return;
       }
       if (r < 0.8) {
-        const h = 7 + rand() * 8;
+        const h = 6 + rand() * 7;
         const yaw = outYaw[a.out];
         // the lit face is +z in the geometry: yaw it toward the terrace edge, sizes swap with the yaw
         const along = Math.abs(Math.sin(yaw)) > 0.5 ? cell.d : cell.w;
@@ -323,9 +323,15 @@ export function buildSuperstructure(ctx) {
     if (r < 0.2) {
       const rr = m * (0.2 + rand() * 0.15);
       addAt(L.domes, b.x + (rand() - 0.5) * (b.w - 2 * rr), b.y, b.z + (rand() - 0.5) * (b.d - 2 * rr), rr, rr, rr, 0, 1);
-    } else if (r < 0.45) {
-      const h = 8 + rand() * 18;
+    } else if (r < 0.34) {
+      const h = 6 + rand() * 12;
       addAt(L.masts, b.x + (rand() - 0.5) * (b.w - 3), b.y, b.z + (rand() - 0.5) * (b.d - 3), 1, h, 1, rand() * Math.PI, 0.55);
+    } else if (r < 0.46) {
+      // stepped second tier on top of the block
+      const tw = b.w * (0.45 + rand() * 0.3);
+      const td = b.d * (0.45 + rand() * 0.3);
+      const th = 2.5 + rand() * 5;
+      addAt(L.blocks, b.x + (rand() - 0.5) * (b.w - tw), b.y, b.z + (rand() - 0.5) * (b.d - td), tw, th, td, 0, 0.82 + rand() * 0.24);
     } else if (r < 0.62) {
       const rr = 2.5 + rand() * Math.min(5, m * 0.3);
       // dishes point up and outward: tilt about a random horizontal axis
@@ -354,8 +360,8 @@ export function buildSuperstructure(ctx) {
         _c.multiplyScalar(lightTone());
         item(L.smallPlates, _p, _q, _s, _c);
       }
-    } else if (r < 0.55) {
-      const h = 10 + rand() * 22;
+    } else if (r < 0.46) {
+      const h = 8 + rand() * 16;
       addAt(L.masts, f.x0 + w / 2, f.y, f.z0 + d / 2, 1, h, 1, rand() * Math.PI, 0.55);
     } else if (r < 0.7) {
       const rr = Math.min(w, d) * 0.3;

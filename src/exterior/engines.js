@@ -65,6 +65,13 @@ export function buildEngines(ctx) {
     const bell = lathe(bellProfile(R), seg);
     bell.translate(x, y, z0);
     metal.push(bell);
+    // mounting flange on the stern wall (also covers the cut-out edge of the wall grid) with bolt ring
+    const flange = new THREE.RingGeometry(0.98 * R, R + 9, seg);
+    flange.translate(x, y, z0 + 0.4);
+    metal.push(flange);
+    const boltRing = new THREE.TorusGeometry(R + 6.5, 0.45, 6, seg);
+    boltRing.translate(x, y, z0 + 0.6);
+    metal.push(boltRing);
     for (const [rr, a, tube] of [
       [0.72, -0.3, 0.022],
       [0.86, -0.12, 0.02],
@@ -90,13 +97,13 @@ export function buildEngines(ctx) {
       const n = 40;
       const pos = [];
       const col = [];
-      const rc = 0.41 * R;
-      const zc = z0 - 0.61 * R;
+      const rc = 0.5 * R;
+      const zc = z0 - 0.5 * R;
       for (let i = 0; i < n; i++) {
         const a0 = (i / n) * Math.PI * 2;
         const a1 = ((i + 1) / n) * Math.PI * 2;
         pos.push(x, y, zc, x + Math.cos(a0) * rc, y + Math.sin(a0) * rc, zc, x + Math.cos(a1) * rc, y + Math.sin(a1) * rc, zc);
-        col.push(2.4, 2.55, 2.8, 0.55, 0.85, 1.7, 0.55, 0.85, 1.7);
+        col.push(1.9, 2.0, 2.3, 0.3, 0.5, 1.05, 0.3, 0.5, 1.05);
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
@@ -106,10 +113,10 @@ export function buildEngines(ctx) {
     // additive haze cone inside the bell
     {
       const profile = [
-        [0.4, -0.6, 0.85],
-        [0.6, -0.42, 0.5],
-        [0.78, -0.22, 0.22],
-        [0.93, 0.05, 0.05],
+        [0.45, -0.5, 0.34],
+        [0.62, -0.4, 0.22],
+        [0.78, -0.22, 0.1],
+        [0.93, 0.05, 0.03],
         [0.97, 0.14, 0.0],
       ];
       const g = lathe(
@@ -151,11 +158,11 @@ export function buildEngines(ctx) {
     }
     const a = (z - z0) / best.R;
     const heat = THREE.MathUtils.clamp((-0.1 - a) / 0.5, 0, 1);
-    _t.setRGB(0.5 + heat * 0.25, 0.52 + heat * 0.3, 0.56 + heat * 0.5);
-    col.lerp(_t, 0.75);
+    _t.setRGB(0.66 + heat * 0.2, 0.68 + heat * 0.26, 0.72 + heat * 0.42);
+    col.lerp(_t, 0.7);
     return col;
   };
-  macroColor(metalGeo, { base: 0.85, tint: bellTint });
+  macroColor(metalGeo, { base: 0.95, tint: bellTint });
   metalGeo.computeBoundingSphere();
   const engMesh = new THREE.Mesh(metalGeo, mats.engine);
   engMesh.name = "engines";

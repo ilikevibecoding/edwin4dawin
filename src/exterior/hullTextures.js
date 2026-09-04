@@ -68,8 +68,8 @@ export function makeHullPlating(size = 1024, seed = 301) {
   const plates = platePartition(rand, 5, 0.14, 0.1);
   const lookup = plateIndex(plates);
   const meta = plates.map(() => ({
-    tone: 1 + (rand() - 0.5) * 0.11,
-    warm: (rand() - 0.5) * 0.028,
+    tone: 1 + (rand() - 0.5) * 0.2,
+    warm: (rand() - 0.5) * 0.034,
     rough: (rand() - 0.5) * 0.16,
     soot: rand() < 0.14 ? 0.4 + rand() * 0.6 : 0,
     rivets: rand() < 0.5,
