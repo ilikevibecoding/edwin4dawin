@@ -49,23 +49,29 @@ export class Placer {
   decal(lx, ly, lz, w, h, index, opts = {}) {
     return this.add("decal", new THREE.PlaneGeometry(w, h), lx, ly, lz, { uv: "keep", uvRect: decalRect(index), ...opts });
   }
-  // world AABB of a local box (exact for yaw multiples of 90°, conservative otherwise)
+  // world AABB of a local box: exact for yaw multiples of 90°; a rotated box is split along its long axis into
+  // ~0.6 m segments so a diagonal railing does not claim its whole bounding square
   collider(min, max, tag) {
-    const cs = [
-      this.world(min[0], min[1], min[2]),
-      this.world(max[0], min[1], min[2]),
-      this.world(min[0], min[1], max[2]),
-      this.world(max[0], min[1], max[2]),
-      this.world(min[0], max[1], min[2]),
-      this.world(max[0], max[1], max[2]),
-    ];
-    const lo = new THREE.Vector3(Infinity, Infinity, Infinity);
-    const hi = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
-    for (const c of cs) {
-      lo.min(c);
-      hi.max(c);
+    const axisAligned = Math.abs(Math.sin(2 * this.yaw)) < 1e-3;
+    const lx = max[0] - min[0];
+    const lz = max[2] - min[2];
+    const n = axisAligned ? 1 : Math.max(1, Math.ceil(Math.max(lx, lz) / 0.6));
+    let last = null;
+    for (let i = 0; i < n; i++) {
+      const t0 = i / n;
+      const t1 = (i + 1) / n;
+      const seg = lx >= lz ? [[min[0] + lx * t0, min[1], min[2]], [min[0] + lx * t1, max[1], max[2]]] : [[min[0], min[1], min[2] + lz * t0], [max[0], max[1], min[2] + lz * t1]];
+      const [a, b] = seg;
+      const cs = [this.world(a[0], a[1], a[2]), this.world(b[0], a[1], a[2]), this.world(a[0], a[1], b[2]), this.world(b[0], a[1], b[2]), this.world(a[0], b[1], a[2]), this.world(b[0], b[1], b[2])];
+      const lo = new THREE.Vector3(Infinity, Infinity, Infinity);
+      const hi = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+      for (const c of cs) {
+        lo.min(c);
+        hi.max(c);
+      }
+      last = this.kit.collider([lo.x, lo.y, lo.z], [hi.x, hi.y, hi.z], tag);
     }
-    return this.kit.collider([lo.x, lo.y, lo.z], [hi.x, hi.y, hi.z], tag);
+    return last;
   }
 }
 

@@ -50,6 +50,11 @@ export class BuildContext {
     return { frame, length, height: this.h, openings, side };
   }
 
+  /** Window openings declared on the room for one wall side, in that wall's u/v coordinates. */
+  windows(side) {
+    return this.doors.filter((d) => d.side === side && d.type === "window" && !d.other).map((d) => ({ u0: d.u0, u1: d.u1, v0: d.v0, v1: d.v1 }));
+  }
+
   /** Ceiling frame over the whole inner box (faces down). */
   ceilingFrame() {
     return { frame: ceilingFrame(this.kit, this.inner.x0, this.inner.z0, this.ceil), w: this.inner.x1 - this.inner.x0, d: this.inner.z1 - this.inner.z0 };
