@@ -98,6 +98,24 @@ for (const id of buildableRoomIds()) {
 zone.finalize();
 const tInt = performance.now() - tInt0;
 
+// Precompile every interior material now (in parallel via KHR_parallel_shader_compile) instead of
+// stalling the frame the first time each room comes into view. compile() traverses the given object
+// regardless of visibility, so the hidden rooms are covered; the light pool is constant, so the
+// programs stay valid.
+const precompile = { started: performance.now(), done: false, ms: 0 };
+requestAnimationFrame(() => {
+  renderer
+    .compileAsync(zone.root, camera, scene)
+    .then(() => {
+      precompile.done = true;
+      precompile.ms = Math.round(performance.now() - precompile.started);
+    })
+    .catch(() => {
+      precompile.done = true;
+      precompile.ms = -1;
+    });
+});
+
 // Fighter traffic
 const traffic = createTraffic({ mats, audio, zone });
 scene.add(traffic.group);
@@ -421,6 +439,7 @@ const debugAPI = {
       qualityLevel: quality.level,
       pixelRatio: renderer.getPixelRatio(),
       buildMs: { materials: Math.round(tMats), exterior: Math.round(tExt), interior: Math.round(tInt) },
+      precompile: { done: precompile.done, ms: precompile.ms },
       exteriorTris: exterior.stats.triangles,
       greebles: greebles.stats,
       traffic: traffic.stats,
