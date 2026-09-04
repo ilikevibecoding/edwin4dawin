@@ -9,8 +9,8 @@ import { rng } from "../../../kit.js";
 import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
 import { rail } from "../_shared/shell.js";
-import { placer, console as consoleProp, indicatorField, wallScreen, crate, holoTable, cabinet } from "../_shared/props.js";
-import { fixedSeat, deskRow, statusBoard, statusStrip, cableTray, lightChannel, junctionBox, dutyDesk, podiumBack } from "./props.js";
+import { placer, console as consoleProp, indicatorField, wallScreen, crate, holoTable, cabinet, floorLine } from "../_shared/props.js";
+import { fixedSeat, deskRow, statusBoard, statusStrip, cableTray, lightChannel, junctionBox, dutyDesk, podiumBack, podiumTop, lectern, ventGrille, duct } from "./props.js";
 
 const Y = 40;
 const CEIL = 46;
@@ -39,20 +39,23 @@ export default defineRoom({
   spawn: { pos: [22, Y, 370], yaw: 0 },
   views: {
     "d2-briefing-door": { pos: [22, Y, 369.6], yaw: 0, pitch: -2 },
-    "d2-briefing-holo": { pos: [14.4, Y, 357.6], yaw: -52, pitch: 1 },
+    "d2-briefing-holo": { pos: [14.7, Y, 357.3], yaw: -52, pitch: 2 },
     "d2-briefing-seats": { pos: [22, Y, 357.0], yaw: 180, pitch: 1 },
-    "d2-briefing-aft": { pos: [30.2, Y, 368.4], yaw: 118, pitch: -2 },
+    "d2-briefing-aft": { pos: [30.2, Y, 368.4], yaw: 122, pitch: -2 },
   },
   shell: {
     panelW: 1.6,
     wallColor: IMP.impGrey,
     wallAlt: IMP.impMid,
     floor: { color: IMP.impDark, mat: "blackGloss" },
-    ceiling: { channels: 0, color: IMP.impDark, panelW: 2.0 },
+    // own ceiling below (texel 4 slab): the shell's painted panels read as low-frequency mottling under
+    // the blue fills and its 2.5-texel plates as speckle
+    ceiling: false,
     lights: false,
     doorDressing: { accent: "emitBlue" },
-    // tray + pipe runs at 3.5 m on the side and aft walls (the forward wall is the display wall)
-    serviceBand: { y: 3.5, faces: ["e", "w", "s"] },
+    // tray + pipe runs at 3.5 m on the side walls only: on the aft wall the polished pipes threw two
+    // bare white highlights at 3 m in the seats view, so that wall carries matte ducting instead
+    serviceBand: { y: 3.5, faces: ["e", "w"] },
   },
   detail(ctx, shell, room) {
     const { kit, PALETTE } = ctx;
@@ -63,7 +66,9 @@ export default defineRoom({
       { x0: 12.7, x1: AISLE[0], seats: [0, 1, 2, 3, 4, 5].map((i) => 13.95 + 1.1 * i), railX: AISLE[0] - 0.05, edgeX: AISLE[0] },
       { x0: AISLE[1], x1: 31.3, seats: [0, 1, 2, 3, 4, 5].map((i) => 24.55 + 1.1 * i), railX: AISLE[1] + 0.05, edgeX: AISLE[1] },
     ];
-    const cushions = [DARK, 0x1e2126, 0x2a2e3a];
+    // two cushion colours alternate along every row (charcoal / oxblood), the middle row has solid
+    // panel arms, ~15 % of seats are folded up and a few are swivelled
+    const cushions = [0x1e2126, 0x4a3038];
     for (let k = 0; k < 3; k++) {
       const z0 = TIER_Z0 + k * TIER_D;
       const z1 = z0 + TIER_D;
@@ -77,16 +82,16 @@ export default defineRoom({
         const ex0 = b.edgeX === AISLE[0] ? b.edgeX - 0.005 : b.edgeX - 0.01;
         kit.boxMM("emitBlue", [ex0, top - 0.05, z0 + 0.1], [ex0 + 0.015, top - 0.035, z1 - 0.1]);
         deskRow(kit, b.seats[0] - 0.65, b.seats[5] + 0.65, top, z0, b.seats, 100 + k * 7 + b.x0);
-        // seats: front row with headrests, a few swivelled, the odd one folded up; cushions vary per row
-        for (const sx of b.seats) {
+        b.seats.forEach((sx, i) => {
           const v = seatRand();
           fixedSeat(kit, sx, top, z0 + 1.7, {
-            yaw: v > 0.55 ? (seatRand() - 0.5) * 0.6 : 0,
-            folded: v < 0.1,
+            yaw: v > 0.6 ? (seatRand() - 0.5) * 0.7 : 0,
+            folded: v < 0.15,
             headrest: k === 0,
-            cushion: cushions[k],
+            cushion: cushions[(i + k) % 2],
+            arms: k === 1 ? 1 : 0,
           });
-        }
+        });
         rail(kit, PALETTE, [b.railX, top, z0 + 0.1], [b.railX, top, z1 - 0.1], top, { h: 1.02, post: 1.4 });
       }
     }
@@ -126,21 +131,26 @@ export default defineRoom({
       kit.collider([sx0, Y, TIER_Z0], [sx1, Y + 2.6, zBack], "steps");
     }
     // aisle: dark carpet filling the aisle wall to wall (ends buried 0.1 in the tier blocks), running
-    // from the front of the tiers to 1 m short of the door, with dim grey edge lines
-    const CZ1 = IZ1 - 1.0;
+    // from the front of the tiers right up to the shell's threshold strip (z 371.5), with dim grey edge
+    // lines; no bare floor is left between the runner and the strip to catch the fill as a pale pad
+    const CZ1 = 371.46;
     kit.boxMM("fabric", [AISLE[0] - 0.1, Y, TIER_Z0 - 0.6], [AISLE[1] + 0.1, Y + 0.012, CZ1], { color: CARPET, texel: 2 });
     for (const x of [AISLE[0] + 0.14, AISLE[1] - 0.17]) kit.boxMM("paintedMetal", [x, Y + 0.012, TIER_Z0 - 0.5], [x + 0.03, Y + 0.015, CZ1 - 0.1], { color: IMP.impGrey });
     kit.boxMM("paintedMetal", [AISLE[0] + 0.14, Y + 0.012, CZ1 - 0.13], [AISLE[1] - 0.14, Y + 0.015, CZ1 - 0.1], { color: IMP.impGrey });
     kit.boxMM("paintedMetal", [AISLE[0] + 0.14, Y + 0.012, TIER_Z0 - 0.5], [AISLE[1] - 0.14, Y + 0.015, TIER_Z0 - 0.47], { color: IMP.impGrey });
 
-    // ---- front: holo table, dais, podium consoles ---------------------------------------------------
+    // ---- front: holo table, dais, podium consoles with audience-facing top screens, lectern ----------
     kit.cyl("darkGloss", HOLO[0], Y + 0.01, HOLO[2], 2.7, 0.02, "y", { segments: 48 });
     kit.add("emitBlue", new THREE.TorusGeometry(2.62, 0.02, 6, 72), { pos: [HOLO[0], Y + 0.03, HOLO[2]], rot: [Math.PI / 2, 0, 0] });
     const holo = holoTable(ctx, HOLO, { r: 1.8, h: 0.95, holoH: 2.3 });
     consoleProp(kit, PALETTE, [17.3, Y, 353.7], Math.PI, { w: 1.6, d: 0.8, h: 1.2, screens: 2, seed: 31, screenMat: "screenImp1" });
     podiumBack(kit, [17.3, Y, 354.105], 0, 1.6, { screenMat: "screenImp2" });
+    podiumTop(kit, [17.3, Y, 353.7], Math.PI, 1.6, { h: 1.2, d: 0.8, screenMat: "screenImp0" });
     consoleProp(kit, PALETTE, [26.7, Y, 353.7], Math.PI, { w: 1.2, d: 0.8, h: 1.15, screens: 1, seed: 32, screenMat: "screenImp0" });
     podiumBack(kit, [26.7, Y, 354.105], 0, 1.2, { screenMat: "screenImp3" });
+    podiumTop(kit, [26.7, Y, 353.7], Math.PI, 1.2, { h: 1.15, d: 0.8, screenMat: "screenImp2" });
+    // the briefing officer's lectern beside the podium, facing the seats
+    lectern(kit, [15.7, Y, 355.05], 0.12, { screenMat: "screenImp1" });
 
     // ---- forward display wall ------------------------------------------------------------------------
     const FZ = IZ0 + 0.02;
@@ -178,9 +188,14 @@ export default defineRoom({
       statusBoard(kit, [side.x, 42.15, 360.0], side.yaw, 2.6, 1.2, 410 + side.x, { rows: 4, accent: "emitBlue", secondary: "emitAmber" });
       wallScreen(kit, [side.x + side.d * 0.1, 42.0, 362.4], side.yaw, 1.4, 0.9, side.mats[1]);
       statusBoard(kit, [side.x, 42.15, 364.8], side.yaw, 2.6, 1.2, 420 + side.x, { rows: 4 });
+      // 2.9-3.4 m band between the boards and the shell's service tray: vent grilles + junction boxes
+      // with conduits up to the tray
+      for (const z of [353.0, 358.2, 362.4, 367.4]) ventGrille(kit, [side.x, 43.15, z], side.yaw, 0.9, 0.45);
+      for (const z of [355.7, 364.8, 370.2]) junctionBox(kit, [side.x, 43.1, z], side.yaw, { w: 0.34, h: 0.4, conduitUp: 0.19 });
     }
 
-    // ---- aft zone: comms console, duty desks, equipment locker, crates, rear boards -------------------
+    // ---- aft zone: duty stations backed against the aft wall either side of the door, comms console,
+    //      equipment locker, crates, rear boards ---------------------------------------------------------
     consoleProp(kit, PALETTE, [IX1 - 0.45, Y, 370.3], -Math.PI / 2, { w: 1.6, d: 0.8, h: 1.2, screens: 1, seed: 41, screenMat: "screenImp0" });
     wallScreen(kit, [IX1 - 0.1, 42.0, 370.3], -Math.PI / 2, 1.4, 0.9, "screenImp2");
     junctionBox(kit, [IX1, 42.6, 368.2], -Math.PI / 2, { conduitUp: 0.65 });
@@ -188,16 +203,33 @@ export default defineRoom({
     crate(kit, PALETTE, [12.35, Y, 371.15], 0.12, { seed: 5, color: MID, bumperMat: "paintedMetal" });
     crate(kit, PALETTE, [13.75, Y, 371.3], -0.08, { seed: 6, color: DARK, bumperMat: "paintedMetal" });
     crate(kit, PALETTE, [12.35, Y + 1.2, 371.15], 0.12, { w: 0.8, h: 0.6, d: 0.8, seed: 7, color: IMP.impGrey, bumperMat: "paintedMetal" });
-    // duty desks flanking the door approach; the officers face the door, screens toward the room
-    dutyDesk(kit, [16.6, Y, 369.6], Math.PI, { screenMat: "screenImp2", seed: 61 });
-    dutyDesk(kit, [27.6, Y, 369.6], Math.PI, { screenMat: "screenImp1", seed: 62 });
-    // rear wall (the shell's door dressing supplies keypad, sign, lintel indicator and floor strip)
-    consoleProp(kit, PALETTE, [16.2, Y, IZ1 - 0.47], Math.PI, { w: 2.4, d: 0.9, h: 1.15, screens: 2, seed: 51 });
-    statusBoard(kit, [16.2, 42.3, IZ1], Math.PI, 3.2, 1.2, 500, { rows: 4 });
-    wallScreen(kit, [25.4, 42.0, IZ1 - 0.1], Math.PI, 1.4, 0.9, "screenImp3");
-    statusBoard(kit, [28.0, 42.1, IZ1], Math.PI, 2.4, 1.2, 501, { rows: 4, accent: "emitBlue", secondary: "emitAmber" });
+    // duty desks: backs to the aft wall under their status boards, officers facing the wall screens;
+    // the shell's door dressing supplies keypad, sign, lintel indicator and threshold strip
+    dutyDesk(kit, [16.9, Y, IZ1 - 0.45], Math.PI, { screenMat: "screenImp2", seed: 61 });
+    statusBoard(kit, [16.9, 42.3, IZ1], Math.PI, 3.2, 1.2, 500, { rows: 4 });
+    dutyDesk(kit, [27.1, Y, IZ1 - 0.45], Math.PI, { screenMat: "screenImp1", seed: 62 });
+    statusBoard(kit, [27.1, 42.3, IZ1], Math.PI, 2.4, 1.2, 501, { rows: 4, accent: "emitBlue", secondary: "emitAmber" });
+    // station bays marked on the deck (three-sided, open to the wall) so the aft floor in front of the
+    // camera carries a read instead of bare gloss
+    for (const [x0, x1] of [[15.4, 18.4], [25.6, 30.1]]) {
+      floorLine(kit, [x0, Y + 0.012, 369.5], [x1, Y + 0.012, 369.5], 0.06, "paintedMetal", IMP.impGrey);
+      for (const x of [x0, x1]) floorLine(kit, [x, Y + 0.012, 369.5], [x, Y + 0.012, IZ1 - 0.12], 0.06, "paintedMetal", IMP.impGrey);
+    }
+    wallScreen(kit, [24.95, 42.0, IZ1 - 0.1], Math.PI, 1.2, 0.9, "screenImp3");
     wallScreen(kit, [30.6, 42.0, IZ1 - 0.1], Math.PI, 1.4, 0.9, "screenImp2");
     junctionBox(kit, [32.15, 41.6, IZ1], Math.PI, { w: 0.4, h: 0.5, conduitUp: 1.6 });
+    // equipment cases stacked beside the starboard duty station
+    crate(kit, PALETTE, [29.0, Y, 371.5], -0.06, { seed: 8, color: MID, bumperMat: "paintedMetal" });
+    crate(kit, PALETTE, [29.0, Y + 1.2, 371.5], 0.1, { w: 0.8, h: 0.6, d: 0.8, seed: 9, color: DARK, bumperMat: "paintedMetal" });
+    // aft wall 2.9-4.0 m: vents above the boards, junction boxes, a matte duct run at 3.85 m
+    for (const x of [13.5, 19.3, 24.95, 30.6]) ventGrille(kit, [x, 43.15, IZ1], Math.PI, 0.9, 0.45);
+    for (const x of [14.9, 29.1]) junctionBox(kit, [x, 43.2, IZ1], Math.PI, { w: 0.34, h: 0.4, conduitUp: 0.3 });
+    duct(kit, [IX0 + 0.6, 43.85, IZ1 - 0.24], [IX1 - 0.6, 43.85, IZ1 - 0.24], { w: 0.44, h: 0.3, flange: 2.4 });
+
+    // ---- ceiling: plated slab with a 2 m seam grid (texel 4 keeps the worn-metal map sub-pixel) ----------
+    kit.boxMM("paintedMetal", [room.bounds.min[0], CEIL - 0.06, room.bounds.min[2]], [room.bounds.max[0], CEIL + 0.5, room.bounds.max[2]], { color: DARK, texel: 4 });
+    for (let x = IX0 + 2.0; x < IX1 - 0.5; x += 2.0) kit.boxMM("paintedMetal", [x - 0.015, CEIL - 0.072, IZ0], [x + 0.015, CEIL - 0.06, IZ1], { color: BLACK });
+    for (let z = IZ0 + 2.0; z < IZ1 - 0.5; z += 2.0) kit.boxMM("paintedMetal", [IX0, CEIL - 0.072, z - 0.015], [IX1, CEIL - 0.06, z + 0.015], { color: BLACK });
 
     // ---- high level: cable trays, light channels, holo coffer ------------------------------------------
     cableTray(kit, [IX0 + 0.3, 45.25, 349.0], [IX0 + 0.3, 45.25, 371.5], { wallDir: [-1, 0, 0] });
@@ -209,13 +241,13 @@ export default defineRoom({
       const [nx0, nx1, nz0, nz1] = [19.3, 24.7, 351.9, 357.3];
       const yb = CEIL - 0.45;
       const yt = CEIL - 0.06;
-      // clean painted panels: the worn-metal map sparkles as speckle where the holo/display lights graze it
-      kit.boxMM("impPanel", [ox0, yb, oz0], [ox1, yt, nz0], { color: BLACK, uv: "keep" });
-      kit.boxMM("impPanel", [ox0, yb, nz1], [ox1, yt, oz1], { color: BLACK, uv: "keep" });
-      kit.boxMM("impPanel", [ox0, yb, nz0], [nx0, yt, nz1], { color: BLACK, uv: "keep" });
-      kit.boxMM("impPanel", [nx1, yb, nz0], [ox1, yt, nz1], { color: BLACK, uv: "keep" });
+      // clean plates (texel 4): the panel map's grime and the 2.5-texel worn metal both read as dirt here
+      kit.boxMM("paintedMetal", [ox0, yb, oz0], [ox1, yt, nz0], { color: BLACK, texel: 4 });
+      kit.boxMM("paintedMetal", [ox0, yb, nz1], [ox1, yt, oz1], { color: BLACK, texel: 4 });
+      kit.boxMM("paintedMetal", [ox0, yb, nz0], [nx0, yt, nz1], { color: BLACK, texel: 4 });
+      kit.boxMM("paintedMetal", [nx1, yb, nz0], [ox1, yt, nz1], { color: BLACK, texel: 4 });
       // outer lip and inner blue ring
-      kit.boxMM("impPanel", [ox0 - 0.05, yb - 0.02, oz0 - 0.05], [ox1 + 0.05, yb + 0.06, oz1 + 0.05], { color: MID, uv: "keep" });
+      kit.boxMM("paintedMetal", [ox0 - 0.05, yb - 0.02, oz0 - 0.05], [ox1 + 0.05, yb + 0.06, oz1 + 0.05], { color: MID, texel: 4 });
       const sy0 = yb + 0.14;
       const sy1 = yb + 0.24;
       kit.boxMM("emitBlue", [nx0 + 0.05, sy0, nz0 - 0.005], [nx1 - 0.05, sy1, nz0 + 0.02]);
@@ -228,9 +260,31 @@ export default defineRoom({
       kit.boxMM("emitBlue", [ox0 + 0.3, yb - 0.012, oz0 + 0.34], [ox0 + 0.34, yb + 0.005, oz1 - 0.34]);
       kit.boxMM("emitBlue", [ox1 - 0.34, yb - 0.012, oz0 + 0.34], [ox1 - 0.3, yb + 0.005, oz1 - 0.34]);
       kit.boxMM("darkGloss", [nx0 + 0.05, CEIL - 0.1, nz0 + 0.05], [nx1 - 0.05, CEIL - 0.07, nz1 - 0.05]);
-      // holo projector
-      kit.cyl("paintedMetal", HOLO[0], CEIL - 0.25, HOLO[2], 0.4, 0.3, "y", { color: BLACK, segments: 24, texel: 2.5 });
-      kit.cyl("emitBlue", HOLO[0], CEIL - 0.405, HOLO[2], 0.22, 0.02, "y", { segments: 24 });
+      // holo projector: a drum hung 0.7 m into the coffer on a stem, mid-grey band, dark lens inside a
+      // blue lens ring, status LEDs, and three feed cables running out to the coffer frame
+      const PJ = CEIL - 0.1;
+      kit.cyl("paintedMetal", HOLO[0], PJ - 0.2, HOLO[2], 0.05, 0.4, "y", { color: BLACK, segments: 10, texel: 2.5 });
+      kit.cyl("paintedMetal", HOLO[0], PJ - 0.55, HOLO[2], 0.42, 0.3, "y", { color: BLACK, segments: 28, texel: 4 });
+      kit.cyl("paintedMetal", HOLO[0], PJ - 0.62, HOLO[2], 0.44, 0.05, "y", { color: MID, segments: 28, open: true });
+      kit.cyl("paintedMetal", HOLO[0], PJ - 0.44, HOLO[2], 0.44, 0.04, "y", { color: MID, segments: 28, open: true });
+      kit.cyl("darkGloss", HOLO[0], PJ - 0.715, HOLO[2], 0.2, 0.03, "y", { segments: 24 });
+      kit.add("emitBlue", new THREE.TorusGeometry(0.27, 0.014, 6, 48), { pos: [HOLO[0], PJ - 0.705, HOLO[2]], rot: [Math.PI / 2, 0, 0] });
+      for (let i = 0; i < 4; i++) {
+        const a = (i * Math.PI) / 2 + Math.PI / 4;
+        kit.box(i === 1 ? "emitRedImp" : "emitAmber", HOLO[0] + Math.sin(a) * 0.425, PJ - 0.53, HOLO[2] + Math.cos(a) * 0.425, 0.03, 0.02, 0.03);
+      }
+      const cableCols = [BLACK, DARK, 0x3a3f5a];
+      [Math.PI / 2, (7 * Math.PI) / 6, (11 * Math.PI) / 6].forEach((a, i) => {
+        // run to the square inner face of the frame (half-width 2.7), 3 cm into it
+        const t = Math.min(2.7 / Math.max(Math.abs(Math.sin(a)), 1e-3), 2.7 / Math.max(Math.abs(Math.cos(a)), 1e-3)) + 0.03;
+        const from = new THREE.Vector3(HOLO[0] + Math.sin(a) * 0.3, PJ - 0.4, HOLO[2] + Math.cos(a) * 0.3);
+        const to = new THREE.Vector3(HOLO[0] + Math.sin(a) * t, yb + 0.1, HOLO[2] + Math.cos(a) * t);
+        const d = to.clone().sub(from);
+        const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize());
+        // 6 cm cables: at 15 m (door view) that is two pixels, thin enough to read as a cable, thick
+        // enough not to alias into a dotted line
+        kit.add("paintedMetal", new THREE.CylinderGeometry(0.03, 0.03, d.length(), 8), { pos: from.clone().add(to).multiplyScalar(0.5).toArray(), quat: q, color: cableCols[i], uv: "scale", uvScale: [0.3, d.length()] });
+      });
     }
 
     // ---- lights (fills 1.3 m below the ceiling, each under a light channel) -----------------------------
@@ -241,7 +295,10 @@ export default defineRoom({
     L([27.5, 44.7, 359.7], 0xd6e2ff, 26, 12);
     L([16.5, 44.7, 365.7], 0xd6e2ff, 26, 12);
     L([27.5, 44.7, 365.7], 0xd6e2ff, 26, 12);
-    L([CX, 44.7, 369.6], 0xd6e2ff, 16, 10, 0.6);
+    // aft fills over the two duty stations instead of one over the door approach (whose pool on the
+    // gloss floor read as a pale pad at the end of the runner)
+    L([17.2, 44.7, 369.6], 0xd6e2ff, 14, 9, 0.6);
+    L([26.8, 44.7, 369.6], 0xd6e2ff, 14, 9, 0.6);
     L([12.2, 44.3, 353.0], 0xffa540, 10, 6, 0.3);
     L([31.8, 44.3, 353.0], 0xffa540, 10, 6, 0.3);
 

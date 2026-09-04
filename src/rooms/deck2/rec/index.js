@@ -6,7 +6,7 @@
 import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
 import { console as consoleProp, wallScreen, lockerBank, tank, cabinet, dropLight, floorLine } from "../_shared/props.js";
-import { stool, gameTable, benchSeat, lowTable, bottleRow, dispenser, exerciseRack, mat, mediaWall, scoreBoard, gearCrate, zoneRect, infoColumn, standTable, lightObelisk, tapCluster, cup, tray, barTerminal, lightChannel } from "./props.js";
+import { stool, gameTable, benchSeat, lowTable, bottleRow, dispenser, exerciseRack, mat, mediaWall, scoreBoard, gearCrate, zoneRect, infoColumn, standTable, lightObelisk, tapCluster, cup, tray, barTerminal, lightChannel, uplight, ventGrille, junctionBox } from "./props.js";
 
 const Y = 40;
 const CEIL = 45;
@@ -28,9 +28,9 @@ export default defineRoom({
   ceil: CEIL,
   spawn: { pos: [48, Y, 370], yaw: 0 },
   views: {
-    "d2-rec-door": { pos: [48, Y, 368.0], yaw: 0, pitch: -3 },
+    "d2-rec-door": { pos: [48, Y, 365.0], yaw: 0, pitch: -5 },
     "d2-rec-bar": { pos: [52.2, Y, 350.0], yaw: 30, pitch: -2 },
-    "d2-rec-tables": { pos: [43.8, Y, 360.7], yaw: -40, pitch: -4 },
+    "d2-rec-tables": { pos: [43.0, Y, 363.9], yaw: -40, pitch: -4 },
     "d2-rec-lounge": { pos: [53.4, Y, 369.0], yaw: -48, pitch: -4 },
   },
   shell: {
@@ -64,7 +64,7 @@ export default defineRoom({
     const nBays = 6;
     const bayW = (BX1 - BX0) / nBays;
     // per-bay stock: [upper, lower] bottle counts; bay 2 is nearly empty (one bottle knocked over),
-    // bay 4 is shuttered behind a locked panel
+    // bay 4 carries the lit menu board instead of shelving
     const stock = [[7, 6], [5, 8], [0, 2], [8, 3], null, [4, 7]];
     for (let i = 0; i <= nBays; i++) {
       const x = BX0 + i * bayW;
@@ -82,19 +82,22 @@ export default defineRoom({
         // back-lit panel behind each bay
         kit.boxMM("emitAmber", [x + 0.1, Y + 1.05, bz + 0.05], [x + bayW - 0.1, Y + 1.09, bz + 0.056]);
         if (!stock[i]) {
-          // shutter panel with a lock LED
-          kit.boxMM("paintedMetal", [x + 0.04, Y + 1.04, bz + 0.455], [x + bayW - 0.04, Y + 2.36, bz + 0.475], { color: MID, texel: 2.5 });
-          kit.boxMM("paintedMetal", [x + 0.16, Y + 1.16, bz + 0.475], [x + bayW - 0.16, Y + 2.24, bz + 0.48], { color: DARK });
-          kit.box("metal", x + bayW - 0.25, Y + 1.7, bz + 0.5, 0.02, 0.2, 0.02, { color: IMP.steel });
-          kit.box("emitRedImp", x + 0.3, Y + 1.7, bz + 0.483, 0.05, 0.05, 0.006);
-          // small crates on the worktop instead of a bottle row
-          kit.box("paintedMetal", x + bayW / 2 - 0.25, Y + 1.15, bz + 0.3, 0.4, 0.3, 0.3, { color: DARK, texel: 2.5 });
-          kit.box("paintedMetal", x + bayW / 2 + 0.25, Y + 1.12, bz + 0.3, 0.36, 0.24, 0.3, { color: GREY, texel: 2.5 });
-          kit.box("emitBlue", x + bayW / 2 - 0.25, Y + 1.25, bz + 0.452, 0.08, 0.02, 0.006);
+          // menu board: framed text screen with an amber header, a label plate underneath with the
+          // day's list in amber/blue bars, a serving tray on the worktop
+          const mx = x + bayW / 2;
+          kit.boxMM("paintedMetal", [x + 0.06, Y + 1.32, bz + 0.44], [x + bayW - 0.06, Y + 2.34, bz + 0.48], { color: MID, texel: 2.5 });
+          kit.boxMM("darkGloss", [x + 0.1, Y + 1.36, bz + 0.48], [x + bayW - 0.1, Y + 2.3, bz + 0.488]);
+          kit.boxMM("screenImp2", [x + 0.14, Y + 1.4, bz + 0.488], [x + bayW - 0.14, Y + 2.18, bz + 0.494], { uv: "keep" });
+          kit.boxMM("emitAmber", [x + 0.14, Y + 2.2, bz + 0.488], [x + bayW - 0.14, Y + 2.25, bz + 0.494]);
+          kit.boxMM("paintedMetal", [x + 0.2, Y + 1.1, bz + 0.44], [x + bayW - 0.2, Y + 1.28, bz + 0.47], { color: BLACK });
+          for (let k = 0; k < 5; k++) kit.boxMM(k % 2 ? "emitBlue" : "emitAmber", [x + 0.28 + k * 0.28, Y + 1.17, bz + 0.47], [x + 0.46 + k * 0.28, Y + 1.21, bz + 0.476]);
+          tray(kit, mx, Y + 1.0, bz + 0.25, 0.2, 14);
         } else if (i % 2 === 0) bottleRow(kit, x + bayW / 2, Y + 1.0, bz + 0.3, bayW - 0.4, 800 + i, i === 2 ? 3 : 8, { slots: 8 });
         else dispenser(kit, x + bayW / 2, Y + 1.0, bz + 0.32, 900 + i);
       }
     }
+    // uplights on the canopy top throw the bar-back fill onto the ceiling and the sign band
+    for (const x of [46.0, 50.0]) uplight(kit, x, Y + 2.76, bz + 0.37, 0.7);
     // bar sign band above the canopy
     kit.boxMM("darkGloss", [BX0 + 1.4, Y + 3.15, bz], [BX1 - 1.4, Y + 3.45, bz + 0.04]);
     kit.boxMM("emitAmber", [BX0 + 1.6, Y + 3.27, bz + 0.04], [BX1 - 1.6, Y + 3.33, bz + 0.052]);
@@ -153,27 +156,28 @@ export default defineRoom({
     // ---- media wall (port wall) with two bench rows, the rear one on a 0.2 m platform -----------------------
     mediaWall(kit, [IX0 + 0.02, Y + 0.35, 357.0], Math.PI / 2, (pos, yaw, w, h, m) => wallScreen(kit, pos, yaw, w, h, m));
     kit.collider([IX0, Y, 354.1], [IX0 + 0.55, Y + 4.2, 359.9], "media-wall");
-    benchSeat(kit, [38.7, Y, 357.0], -Math.PI / 2, 4.4, { color: MID, cushion: DARK });
+    benchSeat(kit, [38.7, Y, 357.0], -Math.PI / 2, 4.4, { color: MID });
     kit.boxMM("paintedMetal", [39.9, Y, 354.3], [41.5, Y + 0.18, 359.7], { color: DARK, texel: 2.5 });
     kit.boxMM("impFloor", [39.9, Y + 0.18, 354.3], [41.5, Y + 0.2, 359.7], { color: MID, texel: 0.5 });
     kit.boxMM("emitWhite", [39.885, Y + 0.16, 354.4], [39.9, Y + 0.18, 359.6]);
     kit.collider([39.9, Y, 354.3], [41.5, Y + 0.2, 359.7], "platform");
-    benchSeat(kit, [40.7, Y + 0.2, 357.0], -Math.PI / 2, 4.4, { color: MID, cushion: DARK });
+    benchSeat(kit, [40.7, Y + 0.2, 357.0], -Math.PI / 2, 4.4, { color: MID });
     lowTable(kit, 38.7, Y, 354.0, 0.7, 0.7);
     lowTable(kit, 38.7, Y, 360.0, 0.7, 0.7);
     floorLine(kit, [IX0 + 0.3, Y, 353.6], [42.2, Y, 353.6], 0.08, "paintedMetal", IMP.impWhite);
     floorLine(kit, [IX0 + 0.3, Y, 360.4], [42.2, Y, 360.4], 0.08, "paintedMetal", IMP.impWhite);
 
-    // ---- holo-game tables: a tight 2x2 cluster (3.4 m pitch) inside a painted zone ---------------------------
-    const tables = [[46.3, 355.4], [49.7, 355.4], [46.3, 358.8], [49.7, 358.8]];
+    // ---- holo-game tables: a tight 2x2 cluster (3.4 m pitch) inside a painted zone, brought aft so the
+    //      near pair and their stools stand 3-4 m in front of the door view ---------------------------------
+    const tables = [[46.3, 357.8], [49.7, 357.8], [46.3, 361.2], [49.7, 361.2]];
     tables.forEach(([x, z], i) => gameTable(kit, x, Y, z, 300 + i));
-    zoneRect(kit, 44.3, 353.4, 51.7, 360.8, Y, "paintedMetal", IMP.impWhite, 0.06);
+    zoneRect(kit, 44.3, 355.8, 51.7, 363.2, Y, "paintedMetal", IMP.impWhite, 0.06);
     standTable(kit, 45.0, Y, 350.6);
     standTable(kit, 51.0, Y, 350.6);
-    // info kiosk between the tables and the entry, off the door axis
-    infoColumn(kit, 45.4, Y, 363.6, (pos, yaw, w, h, m) => wallScreen(kit, pos, yaw, w, h, m));
+    // info kiosk between the games zone and the starboard lounge, off the door axis
+    infoColumn(kit, 52.8, Y, 363.8, (pos, yaw, w, h, m) => wallScreen(kit, pos, yaw, w, h, m));
     // walkway lines from the entry to the games zone
-    for (const x of [46.6, 49.4]) floorLine(kit, [x, Y, 361.6], [x, Y, 367.6], 0.08, "paintedMetal", IMP.impWhite);
+    for (const x of [46.6, 49.4]) floorLine(kit, [x, Y, 363.6], [x, Y, 367.6], 0.08, "paintedMetal", IMP.impWhite);
     // lit obelisks flanking the entry (outside the 1 m door approach)
     lightObelisk(kit, 44.4, Y, 369.6);
     lightObelisk(kit, 51.6, Y, 369.6);
@@ -181,10 +185,10 @@ export default defineRoom({
     // ---- lounge clusters flanking the entry --------------------------------------------------------------------
     for (const [cx, screenX, yawOpen] of [[39.8, IX0, 1], [56.2, IX1, -1]]) {
       lowTable(kit, cx, Y, 365.6, 1.6, 0.9);
-      benchSeat(kit, [cx, Y, 364.15], 0, 2.4, { color: GREY, cushion: DARK });
-      benchSeat(kit, [cx, Y, 367.05], Math.PI, 2.4, { color: GREY, cushion: DARK });
+      benchSeat(kit, [cx, Y, 364.15], 0, 2.4, { color: MID });
+      benchSeat(kit, [cx, Y, 367.05], Math.PI, 2.4, { color: MID });
       // side sofa on the room side, facing the wall screen
-      benchSeat(kit, [cx + yawOpen * 1.7, Y, 365.6], yawOpen > 0 ? -Math.PI / 2 : Math.PI / 2, 1.6, { color: GREY, cushion: DARK });
+      benchSeat(kit, [cx + yawOpen * 1.7, Y, 365.6], yawOpen > 0 ? -Math.PI / 2 : Math.PI / 2, 1.6, { color: MID });
       const yaw = yawOpen > 0 ? Math.PI / 2 : -Math.PI / 2;
       wallScreen(kit, [screenX + yawOpen * 0.1, 42.0, 365.6], yaw, 2.4, 1.35, yawOpen > 0 ? "screenImp1" : "screenImp0");
       scoreBoard(kit, [screenX, 42.0, 362.9], yaw, 1.4, 0.9, 610 + cx, { rows: 3, accent: yawOpen > 0 ? "emitBlue" : "emitAmber", secondary: yawOpen > 0 ? "emitAmber" : "emitBlue" });
@@ -203,6 +207,9 @@ export default defineRoom({
     scoreBoard(kit, [IX1, 42.15, 357.6], -Math.PI / 2, 3.0, 1.4, 620, { rows: 6 });
     wallScreen(kit, [IX1 - 0.1, 42.0, 361.0], -Math.PI / 2, 1.6, 0.9, "screenImp3");
     consoleProp(kit, PALETTE, [IX1 - 0.47, Y, 361.0], -Math.PI / 2, { w: 1.6, d: 0.9, h: 1.15, screens: 1, seed: 71, screenMat: "screenImp0" });
+    // starboard wall 2.9-3.4 m, between the screens and the shell's service tray: vents + junction boxes
+    for (const z of [357.6, 361.0, 365.6, 369.9]) ventGrille(kit, [IX1, 43.15, z], -Math.PI / 2, 0.9, 0.45);
+    for (const z of [359.3, 363.4, 367.8]) junctionBox(kit, [IX1, 43.1, z], -Math.PI / 2, { w: 0.34, h: 0.4, conduitUp: 0.19 });
 
     // ---- aft wall either side of the door (hole x 46.8..49.2; the shell dresses the door itself) ---------------
     cabinet(kit, PALETTE, [38.2, Y, IZ1 - 0.32], Math.PI, { w: 1.2, h: 2.0, d: 0.6, color: MID, emit: "emitAmber", seed: 25 });
@@ -217,8 +224,9 @@ export default defineRoom({
     gearCrate(kit, [58.4, Y + 1.2, 371.3], -0.1, { w: 0.9, h: 0.6, d: 0.9, color: DARK, tab: "emitAmber" });
     scoreBoard(kit, [56.6, 42.15, IZ1], Math.PI, 2.4, 1.1, 631, { rows: 4, accent: "emitBlue", secondary: "emitAmber" });
 
-    // ---- ceiling: black plated slab with a 2 m seam grid and six recessed warm light channels -------------------
-    kit.boxMM("paintedMetal", [room.bounds.min[0], CEIL, room.bounds.min[2]], [room.bounds.max[0], CEIL + 0.5, room.bounds.max[2]], { color: BLACK, texel: 2.5 });
+    // ---- ceiling: dark plated slab (texel 4 keeps the worn-metal map sub-pixel, so no speckle under the
+    //      fixtures) with a 2 m seam grid and six recessed warm light channels ---------------------------------
+    kit.boxMM("paintedMetal", [room.bounds.min[0], CEIL, room.bounds.min[2]], [room.bounds.max[0], CEIL + 0.5, room.bounds.max[2]], { color: DARK, texel: 4 });
     const CHANNELS = [346.6, 351.3, 355.9, 360.6, 365.2, 369.9];
     for (let x = IX0 + 2.0; x < IX1 - 0.5; x += 2.0) kit.boxMM("paintedMetal", [x - 0.015, CEIL - 0.012, IZ0], [x + 0.015, CEIL, IZ1], { color: MID });
     for (let z = IZ0 + 2.0; z < IZ1 - 0.5; z += 2.0) {
@@ -230,8 +238,9 @@ export default defineRoom({
     // ---- housed fixtures: one suspended drop light per fill, diffusers 1.1 m below the ceiling -------------------
     const FIX = CEIL - 0.06;
     const fixtures = [
-      [45.4, 346.05, 3.2, 0.4, 0xffd2a0, 22, 9, 0.7],
-      [50.6, 346.05, 3.2, 0.4, 0xffd2a0, 22, 9, 0.7],
+      // over the counter's front edge so the customer face and the stools are lit, not just the top
+      [45.4, 347.0, 3.2, 0.4, 0xffd2a0, 22, 9, 0.7],
+      [50.6, 347.0, 3.2, 0.4, 0xffd2a0, 22, 9, 0.7],
       ...tables.map(([x, z]) => [x, z, 1.2, 1.2, 0xffe0c0, 14, 6.5, 0.5]),
       [39.8, 365.6, 1.4, 0.6, 0xffe0c0, 16, 7, 0.5],
       [56.2, 365.6, 1.4, 0.6, 0xffe0c0, 16, 7, 0.5],
@@ -244,6 +253,8 @@ export default defineRoom({
       // the fill sits 0.4 m under the diffuser, 1.8 m below the ceiling
       ctx.lights.push({ type: "point", pos: [x, 43.2, z], color, intensity, distance, priority });
     }
+    // bar-back uplights (housings on the canopy): a warm wash on the ceiling and sign band over the bar
+    for (const x of [46.0, 50.0]) ctx.lights.push({ type: "point", pos: [x, 43.9, bz + 0.5], color: 0xffd2a0, intensity: 9, distance: 5.5, priority: 0.4 });
     return {};
   },
 });

@@ -69,26 +69,35 @@ export function gameTable(kit, x, y, z, seed, { r = 0.75, h = 0.78 } = {}) {
   });
 }
 
-// Lounge sofa along local X, backrest on the local -Z side: painted plinth with a toe recess,
-// segmented seat cushions, leaning back cushions on a painted shell, arm panels at both ends, an
-// amber strip under the seat.
-export function benchSeat(kit, pos, yaw, len, { back = true, color = MID, cushion = DARK } = {}) {
+// Lounge sofa along local X, backrest on the local -Z side: black plinth with a toe recess, an
+// upholstered base and back shell in dark blue-grey fabric, segmented seat and back cushions a shade
+// lighter with pale piping along their front/top edges, painted arm panels with black pads, an amber
+// strip under the seat. `color` is the arm/frame paint, `cushion` the upholstery tint.
+export function benchSeat(kit, pos, yaw, len, { back = true, color = MID, cushion = 0x3a3d45, piping = 0x9aa0aa } = {}) {
   const P = placer(kit, pos, yaw);
   const n = Math.max(1, Math.round(len / 0.75));
   const segW = (len - 0.12) / n;
-  P.box("paintedMetal", 0, 0.15, 0, len, 0.3, 0.62, { color, texel: 2.5 });
+  // the base band sits a step darker than the pads so the seams between cushions read at range; every
+  // pad carries a smaller crown on top (two-step profile = stuffed cushion, not a slab) and a pale
+  // piping strip along its front edge
+  const base = 0x2c2f36;
   P.box("paintedMetal", 0, 0.05, 0, len - 0.1, 0.1, 0.56, { color: BLACK });
+  P.box("fabric", 0, 0.2, 0, len, 0.2, 0.62, { color: base, texel: 2 });
   for (let i = 0; i < n; i++) {
     const lx = -len / 2 + 0.06 + (i + 0.5) * segW;
-    P.box("fabric", lx, 0.37, 0.03, segW - 0.03, 0.14, 0.56, { color: cushion, texel: 2 });
+    P.box("fabric", lx, 0.36, 0.03, segW - 0.03, 0.12, 0.56, { color: cushion, texel: 2 });
+    P.box("fabric", lx, 0.44, 0.02, segW - 0.1, 0.05, 0.48, { color: cushion, texel: 2 });
+    P.box("fabric", lx, 0.425, 0.305, segW - 0.05, 0.02, 0.03, { color: piping, texel: 2 });
   }
   if (back) {
     const lean = 0.14;
     const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(lean, 0, 0)));
-    kit.add("paintedMetal", new THREE.BoxGeometry(len, 0.56, 0.05), { pos: P.world(0, 0.6, -0.33), quat: tq, color, texel: 2.5 });
+    kit.add("fabric", new THREE.BoxGeometry(len, 0.56, 0.06), { pos: P.world(0, 0.6, -0.33), quat: tq, color: base, texel: 2 });
     for (let i = 0; i < n; i++) {
       const lx = -len / 2 + 0.06 + (i + 0.5) * segW;
-      kit.add("fabric", new THREE.BoxGeometry(segW - 0.03, 0.44, 0.1), { pos: P.world(lx, 0.64, -0.27), quat: tq, color: cushion, texel: 2 });
+      kit.add("fabric", new THREE.BoxGeometry(segW - 0.03, 0.44, 0.08), { pos: P.world(lx, 0.64, -0.28), quat: tq, color: cushion, texel: 2 });
+      kit.add("fabric", new THREE.BoxGeometry(segW - 0.1, 0.34, 0.05), { pos: P.world(lx, 0.64, -0.225), quat: tq, color: cushion, texel: 2 });
+      kit.add("fabric", new THREE.BoxGeometry(segW - 0.05, 0.022, 0.03), { pos: P.world(lx, 0.865, -0.225), quat: tq, color: piping, texel: 2 });
     }
   }
   for (const sx of [-1, 1]) {
@@ -97,6 +106,33 @@ export function benchSeat(kit, pos, yaw, len, { back = true, color = MID, cushio
   }
   P.box("emitAmber", 0, 0.12, 0.312, len - 0.3, 0.012, 0.006);
   P.collider([-len / 2 - 0.06, 0, -0.36], [len / 2 + 0.06, back ? 0.9 : 0.55, 0.31], "sofa");
+}
+
+// Uplight housing sitting on a canopy top: black box, mid-grey end caps, warm diffuser facing the
+// ceiling (the room's fill for the bar back sits just above it).
+export function uplight(kit, x, y, z, w = 0.6) {
+  kit.box("paintedMetal", x, y + 0.07, z, w, 0.14, 0.26, { color: BLACK, texel: 2.5 });
+  for (const sx of [-1, 1]) kit.box("paintedMetal", x + (sx * (w + 0.02)) / 2, y + 0.08, z, 0.03, 0.18, 0.3, { color: MID });
+  kit.box("emitWarmSoft", x, y + 0.145, z, w - 0.1, 0.012, 0.18, { uv: "keep" });
+}
+
+// Wall vent grille facing local +Z: dark frame, black recess, mid-grey horizontal slats.
+export function ventGrille(kit, pos, yaw, w = 0.9, h = 0.45) {
+  const P = placer(kit, pos, yaw);
+  P.box("paintedMetal", 0, 0, 0.03, w, h, 0.06, { color: DARK, texel: 2.5 });
+  P.box("paintedMetal", 0, 0, 0.061, w - 0.1, h - 0.1, 0.004, { color: BLACK });
+  const n = Math.max(3, Math.round((h - 0.1) / 0.06));
+  for (let i = 0; i < n; i++) P.box("paintedMetal", 0, -h / 2 + 0.05 + (i + 0.5) * ((h - 0.1) / n), 0.066, w - 0.14, 0.018, 0.006, { color: MID });
+  for (const sx of [-1, 1]) P.box("metal", (sx * (w - 0.06)) / 2, 0, 0.062, 0.025, 0.025, 0.008, { color: STEEL });
+}
+
+// Small wall junction box with a matte conduit rising from its top (to the shell's service tray).
+export function junctionBox(kit, pos, yaw, { w = 0.3, h = 0.4, conduitUp = 0 } = {}) {
+  const P = placer(kit, pos, yaw);
+  P.box("paintedMetal", 0, 0, 0.07, w, h, 0.14, { color: MID, texel: 2.5 });
+  P.box("paintedMetal", 0, 0, 0.145, w - 0.06, h - 0.06, 0.01, { color: DARK });
+  P.box("emitAmber", w / 2 - 0.08, h / 2 - 0.08, 0.152, 0.05, 0.02, 0.008);
+  if (conduitUp > 0) P.cyl("paintedMetal", 0, h / 2 + conduitUp / 2, 0.06, 0.03, conduitUp, "y", { color: DARK, segments: 8, texel: 2.5 });
 }
 
 // Low lounge table (0.45 m) with a lit inset.
