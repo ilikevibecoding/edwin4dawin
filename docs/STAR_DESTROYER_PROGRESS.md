@@ -231,5 +231,4 @@ there under software GL. Evidence frames: `docs/evidence/final/*.jpg`.
   key lights and the rest of the lighting is unshadowed.
 - Fighters use scripted/formation pilots only; NPC crew, boarding gameplay, flight and landing remain
   reserved stubs by design of this milestone.
-- The GitHub pull request could not be opened from this agent ("must be a collaborator"); the branch is
-  pushed and up to date.
+- Pull request: https://github.com/ilikevibecoding/edwin4dawin/pull/19 (stacked on #18).
