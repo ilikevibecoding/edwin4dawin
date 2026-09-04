@@ -74,8 +74,25 @@ extendPalette(PALETTE);
 const hemi = new THREE.HemisphereLight(0x5a6f86, 0x2a2c30, 0.12);
 scene.add(hemi);
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.25;
+// Bootstrap environment: a dark hall with two ceiling light channels rather than RoomEnvironment's bright
+// box (whose big area lights mirrored at grazing angles as a bright patch on every reflective deck).
+// main.js later replaces this with a capture of the real interior.
+function makeDarkEnvironment() {
+  const s = new THREE.Scene();
+  s.add(new THREE.Mesh(new THREE.BoxGeometry(24, 9, 24), new THREE.MeshBasicMaterial({ color: 0x15171b, side: THREE.BackSide })));
+  const strip = new THREE.MeshBasicMaterial({ color: 0xdfe9ff });
+  for (const x of [-4, 4]) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 18), strip);
+    m.position.set(x, 4.4, 0);
+    s.add(m);
+  }
+  const wallStrip = new THREE.Mesh(new THREE.BoxGeometry(22, 0.06, 0.05), new THREE.MeshBasicMaterial({ color: 0x9fb6d8 }));
+  wallStrip.position.set(0, 0.6, -11.9);
+  s.add(wallStrip);
+  return pmrem.fromScene(s, 0.04).texture;
+}
+scene.environment = params.has("roomEnv") ? pmrem.fromScene(new RoomEnvironment(), 0.04).texture : makeDarkEnvironment();
+scene.environmentIntensity = 0.35;
 
 // ---------------------------------------------------------------------------
 // Player with a real y (feet) and the §8 extras the contract promises (shake)

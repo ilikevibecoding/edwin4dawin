@@ -38,6 +38,10 @@ page.on("pageerror", (e) => {
   console.log("PAGE ERROR:", e.message);
 });
 
+// Six people edit this tree at once: keep Vite's HMR client out of the page so their saves cannot
+// reload it mid-shoot (the page still gets fresh modules on every load).
+await page.route("**/@vite/client", (r) => r.abort());
+
 console.log(`loading ${base}`);
 const tLoad = Date.now();
 await page.goto(base, { waitUntil: "load" });
