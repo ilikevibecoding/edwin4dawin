@@ -8,7 +8,7 @@ import { IMP, ACCENT } from "./palette.js";
 import { ROOMS, ROOM_BY_ID, DOORS, WALL_T, roomsInCluster } from "./layout.js";
 import { decalRect, DECAL } from "../textures.js";
 
-const LIGHT_SCALE = 0.8;
+const LIGHT_SCALE = 0.7;
 
 /** Everything a room builder needs. */
 export class BuildContext {
@@ -68,7 +68,7 @@ export class BuildContext {
    * false to skip), ceiling: opts|false, skipFloor, stripSpacing, pilasterEvery, seed }
    */
   shell(opts = {}) {
-    const { floorMat = "deckGrey", floorColor = IMP.plateDark, walls = {}, ceiling = {}, skipFloor = false, stripSpacing = 4, pilasterEvery = 0, seed = 1, wallStyles = null, stripMat = "emitWhiteSoft" } = opts;
+    const { floorMat = "deckGrey", floorColor = IMP.plateDark, walls = {}, ceiling = {}, skipFloor = false, stripSpacing = 4, pilasterEvery = 0, seed = 1, wallStyles = null, stripMat = "emitWhiteSoft", ceilingWash = true } = opts;
     const { x0, x1, z0, z1 } = this.box;
     if (!skipFloor) {
       if (this.def.well) this.floorWithWell(floorMat, floorColor);
@@ -82,6 +82,21 @@ export class BuildContext {
     if (ceiling !== false) {
       const { frame, w, d } = this.ceilingFrame();
       imperialCeiling(frame, w, d, { seed: seed * 7 + 1, stripSpacing, stripMat, ...ceiling });
+    }
+    // ceiling wash: dim cool points just under the ceiling so it reads as plating instead of a black void
+    // (practical lights hang low and point down; nothing else ever lights the overhead)
+    if (ceilingWash && this.h <= 9) {
+      const w = x1 - x0;
+      const d = z1 - z0;
+      const area = w * d;
+      const n = Math.max(1, Math.min(3, Math.round(area / 220)));
+      for (let i = 0; i < n; i++) {
+        const t = (i + 0.5) / n;
+        const px = w >= d ? x0 + w * t : (x0 + x1) / 2;
+        const pz = w >= d ? (z0 + z1) / 2 : z0 + d * t;
+        // dark plating has ~5 % albedo: the wash must be strong right under the ceiling and fall off fast
+        this.light(0xc4cfe4, 5 + Math.min(4, area / 120), Math.min(14, 4 + Math.sqrt(area) * 0.4), [px, this.ceil - 0.8, pz]);
+      }
     }
     let i = 0;
     for (const side of ["zmin", "zmax", "xmin", "xmax"]) {

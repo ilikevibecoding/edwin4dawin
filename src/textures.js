@@ -390,10 +390,10 @@ export function makeWornMetal(size = 1024, seed = 23) {
     const streak = vnoise2(u, v, 24, 300, seed) * 0.55 + vnoise2(u, v, 20, 520, seed + 3) * 0.45;
     const blotch = fbm(u, v, { octaves: 4, freq: 3, seed: seed + 2 });
     const spots = fbm(u, v, { octaves: 5, freq: 12, seed: seed + 6 });
-    let lum = 0.66 + (streak - 0.5) * 0.06 + (blotch - 0.5) * 0.045;
-    // dull oxidised patches
+    let lum = 0.66 + (streak - 0.5) * 0.04 + (blotch - 0.5) * 0.02;
+    // dull oxidised patches (kept faint: strong patches read as rust or plywood on clean consoles)
     const dull = clamp01((spots - 0.6) * 6);
-    lum *= 1 - dull * 0.1;
+    lum *= 1 - dull * 0.04;
     let rough = 0.36 + (streak - 0.5) * 0.16 + dull * 0.32 + (blotch - 0.5) * 0.1;
     let hgt = 0.5 + (streak - 0.5) * 0.05 + (spots - 0.5) * 0.04;
     // scratches
@@ -1230,7 +1230,7 @@ export function makeDeckBlack(size = 1024, seed = 43) {
   const t = new TexGen(size, size);
   const rand = mulberry32(seed);
   const scuffs = [];
-  for (let i = 0; i < 30; i++) scuffs.push({ x: rand(), y: rand(), a: rand() * Math.PI, l: 0.05 + rand() * 0.2, w: 0.002 + rand() * 0.005 });
+  for (let i = 0; i < 14; i++) scuffs.push({ x: rand(), y: rand(), a: rand() * Math.PI, l: 0.03 + rand() * 0.08, w: 0.001 + rand() * 0.002 });
   const plates = 4;
   t.each((u, v, i) => {
     const pu = (u * plates) % 1;
@@ -1252,9 +1252,9 @@ export function makeDeckBlack(size = 1024, seed = 43) {
       const along = dx * Math.cos(s.a) + dy * Math.sin(s.a);
       const perp = -dx * Math.sin(s.a) + dy * Math.cos(s.a);
       if (Math.abs(along) < s.l && Math.abs(perp) < s.w) {
-        const k = (1 - Math.abs(perp) / s.w) * 0.6;
-        lum = lerp(lum, 0.3, k);
-        rough = lerp(rough, 0.7, k);
+        const k = (1 - Math.abs(perp) / s.w) * 0.35;
+        lum = lerp(lum, 0.24, k);
+        rough = lerp(rough, 0.6, k);
       }
     }
     t.setColor(i, lum, lum * 1.02, lum * 1.08);

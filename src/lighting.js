@@ -27,8 +27,18 @@ export function createLightingController({ materials, rooms, hemi, audio = null 
       else tmp.copy(b.c);
       m.emissive.copy(tmp);
     }
-    materials.screen.emissiveIntensity = base.screen * (0.5 + 0.5 * day);
-    materials.leds.emissiveIntensity = base.leds;
+    // every screen and indicator matrix in the ship shares an atlas: stepping the atlas offset by one cell
+    // pages every display to another readout (screens every ~5 s, LED matrices every ~1.3 s), and a small
+    // flicker keeps them alive between pages
+    const sp = Math.floor(state.t / 5.2);
+    const sm = materials.screen.emissiveMap;
+    if (sm) sm.offset.set((sp % 4) * 0.25, (Math.floor(sp / 4) % 4) * 0.25);
+    const lp = Math.floor(state.t / 1.3);
+    const lm = materials.leds.emissiveMap;
+    if (lm) lm.offset.set((lp % 4) * 0.25, (Math.floor(lp / 4) % 4) * 0.25);
+    const flick = 0.96 + 0.04 * Math.sin(state.t * 23.0) * Math.sin(state.t * 7.1);
+    materials.screen.emissiveIntensity = base.screen * (0.5 + 0.5 * day) * flick;
+    materials.leds.emissiveIntensity = base.leds * (0.9 + 0.1 * Math.sin(state.t * 17.0 + 1.0));
     if (hemi) hemi.intensity = base.hemi * (0.4 + 0.6 * day);
     // active interior lights: dim in rest, red-shift in alert
     for (const r of rooms.visibleRooms) {

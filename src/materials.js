@@ -67,23 +67,24 @@ export function buildMaterials({ mobile = false } = {}) {
     hazardRed: std(hazardRed, { normalScale: new THREE.Vector2(0.4, 0.4), envMapIntensity: 0.5 }),
     grate: std(grate, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.8, transparent: true, depthWrite: true, alphaTest: 0, side: THREE.DoubleSide }),
     darkGloss: new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.22, metalness: 0.25, envMapIntensity: 1.0 }),
-    glass: new THREE.MeshPhysicalMaterial({ color: 0x6d8a96, roughness: 0.2, metalness: 0, transparent: true, opacity: 0.08, depthWrite: false, envMapIntensity: 0.15, side: THREE.DoubleSide }),
+    // near-clear: two panes (room + exterior) stack in front of the bridge view, so each must veil very little
+    glass: new THREE.MeshPhysicalMaterial({ color: 0x9fb2bc, roughness: 0.18, metalness: 0, transparent: true, opacity: 0.045, depthWrite: false, envMapIntensity: 0.12, side: THREE.DoubleSide }),
 
     // ---- emissive families (the lighting controller animates intensities / alert colours)
-    emitWhite: emit("#e6edff", 2.2),
-    emitWhiteSoft: emit("#e6edff", 2.0, { emissiveMap: diffuser }),
-    emitWarmSoft: emit("#ffc78a", 1.9, { emissiveMap: diffuser }),
-    emitRed: emit("#ff3b2f", 2.4),
-    emitBlue: emit("#3f8dff", 2.4),
-    emitAmber: emit("#ffb547", 2.2),
+    emitWhite: emit("#e6edff", 1.55),
+    emitWhiteSoft: emit("#e6edff", 1.45, { emissiveMap: diffuser }),
+    emitWarmSoft: emit("#ffc78a", 1.4, { emissiveMap: diffuser }),
+    emitRed: emit("#ff3b2f", 2.0),
+    emitBlue: emit("#3f8dff", 2.0),
+    emitAmber: emit("#ffb547", 1.8),
     emitGreen: emit("#3ad17a", 2.0),
-    emitCyan: emit("#5ad8ff", 2.4),
-    emitViolet: emit("#8a7cff", 2.4),
+    emitCyan: emit("#5ad8ff", 2.0),
+    emitViolet: emit("#8a7cff", 2.0),
     engineGlow: emit("#6fb4ff", 3.0),
 
     // ---- atlases
-    screen: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: screens, emissiveIntensity: 1.4, roughness: 0.15, metalness: 0, envMapIntensity: 1.0 }),
-    leds: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: leds, emissiveIntensity: 2.2, roughness: 0.3, metalness: 0 }),
+    screen: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: screens, emissiveIntensity: 1.2, roughness: 0.15, metalness: 0, envMapIntensity: 1.0 }),
+    leds: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: leds, emissiveIntensity: 1.8, roughness: 0.3, metalness: 0 }),
     // vertex colours tint stencils (white by default); rooms can pass `color:` to dim or colour a decal
     decal: new THREE.MeshStandardMaterial({ map: decals, transparent: true, depthWrite: false, roughness: 0.75, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.3 }),
 
@@ -92,7 +93,12 @@ export function buildMaterials({ mobile = false } = {}) {
     field: makeFieldMaterial(),
   };
   // the hull lives in vacuum: never let the interior haze fog it (it is seen through the bridge glazing)
-  for (const k of ["hull", "hullDark", "engineGlow"]) mats[k].fog = false;
+  for (const k of ["hull", "hullDark", "engineGlow", "glass"]) mats[k].fog = false;
+  // the emissive atlases page-cycle by texture offset (lighting controller): they must wrap
+  screens.wrapS = screens.wrapT = THREE.RepeatWrapping;
+  leds.wrapS = leds.wrapT = THREE.RepeatWrapping;
+  screens.needsUpdate = true;
+  leds.needsUpdate = true;
   mats.timings = timings;
   // back-compat aliases used by shared helpers
   mats.emitTeal = mats.emitCyan;

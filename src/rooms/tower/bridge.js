@@ -483,7 +483,7 @@ function buildCeiling(ctx) {
   const rows = [];
   for (let v = 0; v < d - 0.5; v += 2.4) rows.push(+v.toFixed(3));
   rows.push(d);
-  panelGrid(frame, w, d, { rows, panelW: 2.5, kick: false, cornice: false, seed: 77, collide: false, styles: { plate: 0.86, vent: 0.1, pipes: 0.04 }, bands: [], tints: [[IMP.black, 0.45], [IMP.trim, 0.4], [IMP.darkMetal, 0.15]], detail: 0 });
+  panelGrid(frame, w, d, { rows, panelW: 2.5, kick: false, cornice: false, seed: 77, collide: false, styles: { plate: 0.86, vent: 0.1, pipes: 0.04 }, bands: [], tints: [[IMP.plateDark, 0.55], [IMP.trim, 0.3], [IMP.darkMetal, 0.15]], detail: 0 }); // dark plating, not black: the ceiling wash needs albedo to work on
   const U = (x) => x - ctx.inner.x0;
   const Vv = (z) => z - ctx.inner.z0;
   // central trough over the walkway: black housing, two diffuser strips, dark gloss channel between them

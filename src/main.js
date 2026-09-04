@@ -81,7 +81,8 @@ sun.shadow.bias = -0.0006;
 sun.shadow.normalBias = 0.6;
 scene.add(sun);
 scene.add(sun.target);
-const hemi = new THREE.HemisphereLight(0x4a5670, 0x14161c, 0.35);
+// ground colour lifts ceilings and undersides out of black (hemi ground lights downward-facing surfaces)
+const hemi = new THREE.HemisphereLight(0x56637a, 0x2a2e36, 0.45);
 scene.add(hemi);
 
 // environment: neutral room bootstrap, then a space capture for the hull and an interior capture per cluster
@@ -317,8 +318,8 @@ const VIEWS = {
   bridge_pit: { mode: "interior", pos: [-8, 208.6, 200], yaw: 20, pitch: 4 },
   cmd_corridor: { mode: "interior", pos: [-40, 210, 209], yaw: -90, pitch: 0 },
   lift_lobby: { mode: "interior", pos: [0, 210, 214], yaw: 180, pitch: 0 },
-  hangar: { mode: "interior", pos: [-34, -40, -84], yaw: -35, pitch: 6 },
-  hangar_well: { mode: "interior", pos: [-30, -40, -10], yaw: -90, pitch: -8 },
+  hangar: { mode: "interior", pos: [0, -40, -82], yaw: 180, pitch: 14 },
+  hangar_well: { mode: "interior", pos: [-36.5, -32, -12], yaw: -105, pitch: -22 },
   shuttle_bay: { mode: "interior", pos: [0, -40, 80], yaw: 180, pitch: 4 },
   reactor: { mode: "interior", pos: [0, -10, 308], yaw: 180, pitch: 14 },
   engineering: { mode: "interior", pos: [0, -10, 274], yaw: 180, pitch: 0 },
@@ -329,8 +330,15 @@ const VIEWS = {
   medbay: { mode: "interior", pos: [49, 6, -134], yaw: 0, pitch: 0 },
   detention: { mode: "interior", pos: [-12, 6, -182], yaw: 0, pitch: 0 },
 };
-// every room also gets a view at its spawn point
+// every room also gets a view at its spawn point (a few overridden to face the room's hero content)
 for (const r of ROOMS) if (!VIEWS["room_" + r.id]) VIEWS["room_" + r.id] = { mode: "interior", pos: [r.spawn[0], r.spawn[1], r.spawn[2]], yaw: r.spawn[3], pitch: 0 };
+Object.assign(VIEWS, {
+  room_briefing: { mode: "interior", pos: [-23, 210, 226], yaw: 0, pitch: 2 },
+  room_comms: { mode: "interior", pos: [23, 210, 213.5], yaw: 180, pitch: 2 },
+  room_fighter_maint: { mode: "interior", pos: [-77, -40, -15], yaw: -90, pitch: 4 },
+  room_repair_bay: { mode: "interior", pos: [47, -40, 60], yaw: -90, pitch: 3 },
+  room_cargo_bay: { mode: "interior", pos: [47, -40, -42], yaw: -90, pitch: 3 },
+});
 
 let framesRendered = 0;
 let frameMs = 16;

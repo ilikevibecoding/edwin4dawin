@@ -144,7 +144,7 @@ export function makeHoloMaterial(baseColor = 0x5fb8ff) {
 // Dust motes: one THREE.Points, positions integrated and wrapped on the GPU inside a box that follows the
 // camera but never leaves the current room. Lit by up to 8 of the room's own lights.
 // ---------------------------------------------------------------------------------------------------
-const MOTE_COUNT = 1200;
+const MOTE_COUNT = 450;
 const MOTE_LIGHTS = 8;
 const CLOUD = new THREE.Vector3(22, 9, 22); // max extent of the mote cloud around the camera (metres)
 
@@ -222,9 +222,9 @@ function makeMotes() {
         gl_Position = projectionMatrix * mv;
         float d = max(-mv.z, 0.05);
         float px = sizeBase * aRand.x * projectionMatrix[1][1] * viewH * 0.5 / d;
-        gl_PointSize = clamp(px, 1.5, 14.0);
+        gl_PointSize = clamp(px, 1.0, 5.0);
         // never a blob in the face, gone before the fog eats it
-        float fade = smoothstep(0.6, 2.4, d) * (1.0 - smoothstep(14.0, 26.0, d));
+        float fade = smoothstep(1.2, 3.5, d) * (1.0 - smoothstep(14.0, 26.0, d));
         float tw = 0.65 + 0.35 * sin(time * aRand.w + aRand.z * 40.0);
         vec3 lit = ambient;
         for (int i = 0; i < ${MOTE_LIGHTS}; i++) {
@@ -876,7 +876,7 @@ export function createAtmosphere({ scene, camera, materials, rooms }) {
         state.shaftCount = buildHangarCones(def);
         state.shaftRoom = def;
         state.shaftKind = "work";
-        shafts.material.uniforms.strength.value = 0.16;
+        shafts.material.uniforms.strength.value = 0.1;
       }
       return;
     }
@@ -919,7 +919,7 @@ export function createAtmosphere({ scene, camera, materials, rooms }) {
       state.shaftKind = kind;
       state.shaftGain = gain;
       _lastAxis.copy(_dir);
-      shafts.material.uniforms.strength.value = kind === "sun" ? 0.3 : 0.22;
+      shafts.material.uniforms.strength.value = kind === "sun" ? 0.2 : 0.08; // planet-shine barely veils the glazing
     }
   }
 

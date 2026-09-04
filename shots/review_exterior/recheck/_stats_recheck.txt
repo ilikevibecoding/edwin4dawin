@@ -1,0 +1,2 @@
+ready in 13538 ms
+boot {"materials":{"imperialPanel":167,"wornMetal":469,"deckBlack":443,"deckGrey":314,"hullPlate":2058,"rubber":21,"fabric":30,"hazard":32,"hazardRed":14,"grate":252,"diffuser":12,"decals":57,"screens":8,"leds":2},"space":1107,"exterior":196,"boot":5432,"totalMs":5432}

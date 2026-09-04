@@ -443,7 +443,7 @@ export function mirrorUVs(geo, rand) {
  * frame: ceilingFrame; w along U (x), d along V (z). dir 'u' runs the strips along U.
  */
 export function imperialCeiling(frame, w, d, { seed = 9, stripSpacing = 4, stripW = 0.3, stripMat = "emitWhiteSoft", dir = "v", panelW = 1.8, styles = { plate: 0.85, vent: 0.1, pipes: 0.05 } } = {}) {
-  panelGrid(frame, w, d, { rows: null, panelW, kick: false, cornice: false, seed, collide: false, styles, bands: [], tints: [[IMP.plateDark, 0.7], [IMP.trim, 0.3]], detail: 0 });
+  panelGrid(frame, w, d, { rows: null, panelW, kick: false, cornice: false, seed, collide: false, styles, bands: [], tints: [[IMP.plateDark, 0.6], [IMP.plate, 0.25], [IMP.trim, 0.15]], detail: 0 });
   const along = dir === "u" ? w : d;
   const across = dir === "u" ? d : w;
   const n = Math.max(1, Math.floor(across / stripSpacing));
