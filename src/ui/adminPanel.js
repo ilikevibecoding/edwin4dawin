@@ -39,7 +39,13 @@ function h(tag, attrs, ...children) {
 }
 function setText(el, text) { if (el.textContent !== text) el.textContent = text; }
 function clampNum(v, min, max) { if (Number.isFinite(min) && v < min) v = min; if (Number.isFinite(max) && v > max) v = max; return v; }
-function decimalsFor(step) { if (!Number.isFinite(step) || step <= 0 || step >= 1) return 0; return Math.min(4, Math.ceil(-Math.log10(step) - 1e-9)); }
+function decimalsFor(step) {
+  if (!Number.isFinite(step) || step <= 0) return 0;
+  const s = String(step);
+  if (s.includes('e-')) return Math.min(6, parseInt(s.split('e-')[1], 10) || 0);
+  const i = s.indexOf('.');
+  return i < 0 ? 0 : Math.min(6, s.length - i - 1);
+}
 function fmtNum(v, step) { return Number.isFinite(v) ? Number(v).toFixed(decimalsFor(step)) : '?'; }
 function compassLabel(deg) { const d = ((Number(deg) % 360) + 360) % 360; return COMPASS[Math.round(d / 45) % 8]; }
 function isTextTarget(t) { return !!t && ((t.tagName === 'INPUT' && !['range', 'checkbox', 'button'].includes(t.type)) || t.tagName === 'TEXTAREA' || t.isContentEditable); }
@@ -334,10 +340,12 @@ export class AdminPanel {
       h('div', { class: 'ap-minmax' }, h('span', { text: `min ${min ?? '\u2212\u221e'}${unit}` }), h('span', { text: `max ${max ?? '\u221e'}${unit}` })));
     let cur = Number(value);
     const show = () => { setText(val, fmtNum(cur, s.step) + unit); if (compass) setText(compass, compassLabel(cur)); };
+    // snap committed values to the schema step grid so the slider, the number input and the sent params agree
+    const snap = (v) => { if (typeof step !== 'number') return v; const base = Number.isFinite(min) ? min : 0; return Number((Math.round((v - base) / step) * step + base).toFixed(decimalsFor(step))); };
     const set = (v) => {
       v = Number(v);
       if (!Number.isFinite(v)) v = Number(s.default) || 0;
-      cur = clampNum(v, min, max);
+      cur = clampNum(snap(v), min, max);
       range.value = String(cur);
       num.value = fmtNum(cur, s.step);
       show();
