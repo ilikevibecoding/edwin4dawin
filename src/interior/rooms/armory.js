@@ -240,13 +240,14 @@ export function buildArmory(kit, ctx) {
   ctx.light(pointLight(0xf4f6ff, 9, 10, [-45.0, H - 0.6, -32.0]));
   // red beacons flank the counter (z -39.5 / -32.5) so the red identity is in frame from the door
   const beaconZ = [-39.5, -32.5];
-  const redA = ctx.light(pointLight(0xff3020, 5, 7, [cageX + 0.35, 3.0, beaconZ[0]]));
-  const redB = ctx.light(pointLight(0xff3020, 5, 7, [cageX + 0.35, 3.0, beaconZ[1]]));
+  // (held low: the pair sit high in the fixed view and bloomed into two hot red blobs on the header)
+  const redA = ctx.light(pointLight(0xff3020, 3.5, 6, [cageX + 0.35, 3.0, beaconZ[0]]));
+  const redB = ctx.light(pointLight(0xff3020, 3.5, 6, [cageX + 0.35, 3.0, beaconZ[1]]));
   // pulsing red beacons on the cage posts (material clone so other rooms keep steady red)
   const alert = ctx.materials.crew_alert;
   ctx.anim((dt, t) => {
     const k = 0.55 + 0.45 * Math.sin(t * 2.4);
-    alert.emissiveIntensity = 0.6 + k * 2.4;
+    alert.emissiveIntensity = 0.5 + k * 1.5;
     redA.intensity = redA.userData.baseIntensity * (0.4 + k * 0.8);
     redB.intensity = redB.userData.baseIntensity * (0.4 + k * 0.8);
   });
@@ -256,7 +257,7 @@ export function buildArmory(kit, ctx) {
     kit.box("paintedMetal", cageX + 0.09, 3.0, z, 0.06, 0.34, 0.34, { color: PALETTE.impBlack, texel: 2 });
     kit.box("paintedMetal", bx, 2.9, z, 0.28, 0.06, 0.28, { color: PALETTE.impBlack, texel: 2 });
     kit.cyl("paintedMetal", bx, 2.96, z, 0.11, 0.06, "y", { color: PALETTE.impBlack, segments: 14 });
-    kit.add("crew_alert", new THREE.SphereGeometry(0.1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [bx, 2.99, z], uv: "keep" });
+    kit.add("crew_alert", new THREE.SphereGeometry(0.075, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [bx, 2.99, z], uv: "keep" });
     kit.box("paintedMetal", bx, 3.14, z, 0.26, 0.04, 0.26, { color: PALETTE.impDark, texel: 2 });
     for (const s of [-1, 1]) kit.cyl("metal", bx + 0.06, 3.06, z + s * 0.12, 0.012, 0.16, "y", { color: PALETTE.gunmetal, segments: 6 });
   }

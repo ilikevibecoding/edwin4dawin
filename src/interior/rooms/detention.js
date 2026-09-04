@@ -135,14 +135,18 @@ export function buildDetention(kit, ctx) {
     kit.boxMM("paintedMetal", [Math.min(x0, x1) - 0.14, H - 0.1, Math.min(z0, z1) - 0.14], [Math.max(x0, x1) + 0.14, H, Math.max(z0, z1) + 0.14], { color: PALETTE.impBlack, texel: 2 });
     kit.boxMM(mat, [Math.min(x0, x1), H - 0.11, Math.min(z0, z1)], [Math.max(x0, x1), H - 0.09, Math.max(z0, z1)], { uv: "keep" });
   };
-  strip("emitRedSoft", guardX1 + 0.4, -36.04, chamberX0 - 0.4, -35.96);
+  // the corridor spine is seen end-on from the fixed view, where the soft emitter flared into a hot red
+  // bar above the gate; the dim one keeps the red line without the bloom
+  strip("emitRedDim", guardX1 + 0.4, -36.04, chamberX0 - 0.4, -35.96);
   strip("emitRedSoft", guardX1 + 0.6, -43.84, max[0] - 0.6, -43.76);
   strip("emitRedSoft", guardX1 + 0.6, -28.24, max[0] - 0.6, -28.16);
   for (const z of [-30.0, -33.0, -39.0, -42.0]) strip("emitStrip", 43.4, z - 0.07, 47.6, z + 0.07);
   // lighter deck in the guard anteroom (the white zone) against the black rubber deck of the block
   kit.boxMM("floorGloss", [min[0] + 0.18, 0, min[2] + 0.18], [guardX1 - 0.2, 0.006, max[2] - 0.18], { color: 0x8c8c94, texel: 0.33 });
-  // black rubber deck in the corridor and the chamber, dim red light channels along the corridor edges
-  kit.boxMM("rubber", [guardX1, 0, corrZ0], [chamberX0, 0.012, corrZ1], { color: PALETTE.rubber });
+  // black rubber deck in the corridor and the chamber, dim red light channels along the corridor edges.
+  // The corridor deck runs out through the scanner arch: the gloss slab there caught the block's red
+  // light at a grazing angle and its roughness speckle read as a grime decal on the threshold
+  kit.boxMM("rubber", [47.0, 0, corrZ0], [chamberX0, 0.012, corrZ1], { color: PALETTE.rubber });
   kit.boxMM("rubber", [chamberX0, 0, cellBackS], [max[0] - 0.2, 0.012, cellBackN], { color: PALETTE.rubber });
   for (const z of [corrZ0 + 0.18, corrZ1 - 0.18]) {
     kit.boxMM("paintedMetal", [guardX1, 0, z - 0.05], [chamberX0, 0.016, z + 0.05], { color: PALETTE.impBlack, texel: 2 });
@@ -395,7 +399,7 @@ export function buildDetention(kit, ctx) {
     kit.box("emitRedDim", 47.6, 2.79, -36, 0.05, 0.015, 3.0);
     kit.box("darkGloss", 47.4, 3.0, -36, 0.02, 0.2, 1.2);
     signQuad(kit, SIGN.DETENTION, [47.39, 3.0, -36], [0, -Math.PI / 2, 0], 1.0, true);
-    kit.boxMM("paintedMetal", [47.3, 0.012, -37.6], [47.9, 0.02, -34.4], { color: PALETTE.impBlack, texel: 2 });
+    // (no plate under the arch: the black rubber corridor deck runs out through it)
     // weapons locker + holding bench with cuff rings on the south wall
     lockerBank(kit, ctx, { x: 45.0, z: min[2], yaw: 0, n: 4, w: 0.5, h: 2.0, d: 0.5, seed: ctx.seed + 73, color: PALETTE.impDark, lamp: "emitRed" });
     const bx = 43.6;

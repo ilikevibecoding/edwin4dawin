@@ -25,13 +25,16 @@ const HATCH_R = 1.0;
 
 const DOOR_N = -0.45; // hatch door plane, set back into the tube
 
-/** Hub, spokes, dog clamps (rotated per seed), rim ring, lit viewport and pod numeral on a door face. */
+// door face reinforcing: two horizontal ribs and a vertical spine (a plug door with a ribbed face; the
+// earlier eight radial spokes were what made every hatch read as a washing-machine drum)
+const RIB_V = 0.45;
+const RIB_LEN = 2 * Math.sqrt(HATCH_R * HATCH_R - RIB_V * RIB_V) - 0.3;
+
+/** Hub, ribs, dog clamps (rotated per seed), rim ring, lit viewport and pod numeral on a door face. */
 function doorFace(frame, u, doorN, index, armed, clampRot) {
   frame.add("paintedMetal", new THREE.TorusGeometry(HATCH_R - 0.05, 0.035, 8, 40), u, HATCH_V, doorN + 0.09, { color: PALETTE.impDark, texel: 2 });
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    frame.box("paintedMetal", u + Math.cos(a) * 0.6, HATCH_V + Math.sin(a) * 0.6, doorN + 0.1, 0.6, 0.07, 0.04, { color: PALETTE.impMid, texel: 2, spin: a });
-  }
+  for (const s of [-1, 1]) frame.box("paintedMetal", u, HATCH_V + s * RIB_V, doorN + 0.1, RIB_LEN, 0.09, 0.04, { color: PALETTE.impMid, texel: 2 });
+  frame.box("paintedMetal", u, HATCH_V, doorN + 0.1, 0.09, 2 * (HATCH_R - 0.15), 0.04, { color: PALETTE.impMid, texel: 2 });
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + clampRot;
     frame.box("metal", u + Math.cos(a) * (HATCH_R - 0.12), HATCH_V + Math.sin(a) * (HATCH_R - 0.12), doorN + 0.12, 0.16, 0.1, 0.08, { color: PALETTE.steel, spin: a });
@@ -78,10 +81,8 @@ function openHatch(kit, ctx, frame, u, index, clampRot, hs = -1) {
   const toFace = frame.quat(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), hs * (Math.PI / 2))); // local n -> hs*u
   const f = (d) => hu + hs * d;
   frame.add("paintedMetal", new THREE.TorusGeometry(HATCH_R - 0.05, 0.035, 8, 40), f(0.09), HATCH_V, cn, { quat: toFace, color: PALETTE.impDark, texel: 2 });
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    frame.box("paintedMetal", f(0.1), HATCH_V - Math.sin(a) * 0.6, cn + Math.cos(a) * 0.6, 0.04, 0.07, 0.6, { color: PALETTE.impMid, texel: 2, tilt: a });
-  }
+  for (const s of [-1, 1]) frame.box("paintedMetal", f(0.1), HATCH_V + s * RIB_V, cn, 0.04, 0.09, RIB_LEN, { color: PALETTE.impMid, texel: 2 });
+  frame.box("paintedMetal", f(0.1), HATCH_V, cn, 0.04, 2 * (HATCH_R - 0.15), 0.09, { color: PALETTE.impMid, texel: 2 });
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + clampRot;
     frame.box("metal", f(0.12), HATCH_V - Math.sin(a) * (HATCH_R - 0.12), cn + Math.cos(a) * (HATCH_R - 0.12), 0.08, 0.1, 0.16, { color: PALETTE.steel, tilt: a });
@@ -174,8 +175,9 @@ function podHatch(kit, ctx, frame, u, index, seed, { open = false, service = fal
     }
     for (const su of [-1, 1]) for (const sv of [-1, 1]) frame.cylN("metal", u + su * (fw / 2 - 0.16), HATCH_V + sv * (fw / 2 - 0.16), 0.1, 0.035, 0.03, { color: PALETTE.steel, segments: 8 });
   }
-  // hatch rim on the wall face: thin hazard ring and a cast collar with bolts
-  frame.add("hazard", new THREE.TorusGeometry(HATCH_R + 0.145, 0.035, 8, 48), u, HATCH_V, 0.1, { uv: "scale", uvScale: [28, 1] });
+  // hatch rim on the wall face: a cast collar with an outer flange ring and bolts (the striped hazard
+  // ring was the porthole rim of the drum read; the amber identity lives on the header plate instead)
+  frame.add("paintedMetal", new THREE.TorusGeometry(HATCH_R + 0.145, 0.035, 8, 48), u, HATCH_V, 0.1, { color: PALETTE.impMid, texel: 2 });
   frame.add("paintedMetal", new THREE.TorusGeometry(HATCH_R + 0.06, 0.05, 8, 48), u, HATCH_V, 0.08, { color: PALETTE.impDark, texel: 2 });
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
@@ -366,15 +368,16 @@ export function buildEscape(kit, ctx) {
   }
 
   // ------------------------------------------------------------------ lights (6): two amber over the
-  // lane, a white over the door, and three warm-white washes hung close to the hatch wall so the
-  // housings and header plates read (the wall had gone muddy at 14 m)
+  // lane, a white over the door, and three warm-white washes hung 1.4 m below the ceiling close to the
+  // hatch wall so they wash the housings and header plates (the wall had gone muddy at 14 m) instead
+  // of blowing out the ceiling plate above them
   const amber = 0xffb347;
   ctx.light(pointLight(amber, 14, 14, [-7, H - 0.6, -80.5]));
   ctx.light(pointLight(amber, 14, 14, [7, H - 0.6, -80.5]));
-  ctx.light(pointLight(0xffe2c0, 15, 11, [0, H - 0.8, -84.3]));
+  ctx.light(pointLight(0xffe2c0, 15, 11, [0, H - 1.4, -84.0]));
   ctx.light(pointLight(0xe8f0ff, 12, 12, [0, H - 0.6, -73.5]));
-  ctx.light(pointLight(0xffe2c0, 13, 10, [-8, H - 0.8, -84.3]));
-  ctx.light(pointLight(0xffe2c0, 13, 10, [8, H - 0.8, -84.3]));
+  ctx.light(pointLight(0xffe2c0, 13, 10, [-8, H - 1.4, -84.0]));
+  ctx.light(pointLight(0xffe2c0, 13, 10, [8, H - 1.4, -84.0]));
 
   // ------------------------------------------------------------------ pod hatches (zmin wall)
   {

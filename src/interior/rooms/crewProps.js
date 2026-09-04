@@ -236,6 +236,10 @@ export function ensureCrewMaterials(ctx) {
   // lounge ceiling glow bands: the warm diffuser held well below the star windows
   m.crew_warmBand = m.emitWarmSoft.clone();
   m.crew_warmBand.emissiveIntensity = 1.1;
+  // medbay ceiling spines: the dim white emitter at ~60 % (emitWhiteDim still rendered ≈220 in a
+  // continuous full-length bar)
+  m.crew_coolStrip = m.emitWhiteDim.clone();
+  m.crew_coolStrip.emissiveIntensity = 0.7;
   // quarters night blue: a muted navy emitter (not the azure of emitBlue) at about half strength, for
   // the aisle kick strips, the ceiling spine and the bay-lane strips
   m.crew_nightBlue = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: new THREE.Color("#3a5a9a"), emissiveIntensity: 1.5, roughness: 0.5, metalness: 0 });

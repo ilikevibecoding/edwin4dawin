@@ -210,7 +210,14 @@ function wasteUnit(kit, ctx, x, z) {
   C.add("paintedMetal", new THREE.BoxGeometry(0.92, 0.04, 0.72).rotateX(0.35), 0, 0.98, -0.2, { color: PALETTE.impDark, texel: 2 });
   C.box("hazard", 0, 0.5, 0.36, 0.5, 0.12, 0.01, { texel: 3 });
   for (const [dx, dz] of [[-0.3, -0.25], [0.3, -0.25], [-0.3, 0.25], [0.3, 0.25]]) C.cyl("rubber", dx, 0.07, dz, 0.07, 0.05, "x", { color: PALETTE.rubber, segments: 10 });
-  for (let k = 0; k < 3; k++) C.add("rubber", new THREE.SphereGeometry(0.16, 10, 7), -0.2 + k * 0.2, 0.95 + (k % 2) * 0.06, -0.05 + (k % 2) * 0.1, { color: PALETTE.rubber });
+  // refuse sacks as tilted boxes with tied necks (the sphere sacks read as balls from the door)
+  for (let k = 0; k < 3; k++) {
+    const sx = -0.24 + k * 0.24;
+    const sy = 0.98 + (k % 2) * 0.05;
+    const sz = -0.05 + (k % 2) * 0.12;
+    C.add("rubber", new THREE.BoxGeometry(0.26, 0.24, 0.24).rotateZ((k - 1) * 0.3).rotateX(0.15 * (k % 2 ? 1 : -1)), sx, sy, sz, { color: PALETTE.rubber });
+    C.add("rubber", new THREE.CylinderGeometry(0.03, 0.05, 0.08, 8).rotateZ((k - 1) * 0.3), sx - (k - 1) * 0.05, sy + 0.15, sz, { color: PALETTE.impDark });
+  }
   C.collider(-0.5, -0.4, 0.5, 0.4, 0.95, "cart");
 }
 
@@ -239,8 +246,9 @@ export function buildLifesupport(kit, ctx) {
     // wall strips are neutral white; green is reserved for the trench edges and the gauges / indicator dots
     impWall(kit, ctx, side, { rows: [0, 0.5, 1.6, 2.6, 3.6, H], paints: LS_PAINTS, styles: LS_STYLES, theme: { accent: "emitWhiteDim", accent2: "emitGreen", screenMats: ["impScreen1", "impScreen3"], pipeCol: PALETTE.impMid } });
   }
-  // dark ceiling with a big air duct along the room, neutral strip over the trench, white strips over the tanks
-  kit.boxMM("paintedMetal", [min[0] - 0.2, H, min[2] - 0.2], [max[0] + 0.2, H + 0.12, max[2] + 0.2], { color: PALETTE.impDark, texel: 1.5 });
+  // mid-grey plate ceiling (the impDark slab was a black void over an already dark room) with black
+  // beams, a big air duct along the room, neutral strip over the trench, white strips over the tanks
+  kit.boxMM("impPanel1", [min[0] - 0.2, H, min[2] - 0.2], [max[0] + 0.2, H + 0.12, max[2] + 0.2], { color: PALETTE.impMid, uv: "world", texel: 0.5 });
   for (let x = min[0] + 2; x < max[0] - 1; x += 3) kit.box("paintedMetal", x, H - 0.1, (min[2] + max[2]) / 2, 0.24, 0.2, max[2] - min[2] - 0.3, { color: PALETTE.impBlack, texel: 2 });
   const strip = (mat, x0, z0, x1, z1) => {
     kit.boxMM("paintedMetal", [Math.min(x0, x1) - 0.14, H - 0.1, Math.min(z0, z1) - 0.14], [Math.max(x0, x1) + 0.14, H, Math.max(z0, z1) + 0.14], { color: PALETTE.impBlack, texel: 2 });
@@ -281,11 +289,11 @@ export function buildLifesupport(kit, ctx) {
   // the trench edge channels, the gauges and the indicator dots only. Two white downlights sit over
   // the tank rows so the drums and the wall racks read.
   const neutral = 0xf2f4f8;
-  ctx.light(pointLight(neutral, 16, 16, [-23.5, H - 0.6, 0]));
-  ctx.light(pointLight(neutral, 15, 16, [-15.5, H - 0.6, 0]));
-  ctx.light(pointLight(0xeef2ff, 16, 13, [-8.5, H - 0.6, -1.5]));
-  ctx.light(pointLight(0xffffff, 13, 12, [-21.5, H - 0.7, -4.2]));
-  ctx.light(pointLight(0xfafcff, 12, 11, [-19.5, H - 0.7, 5.4]));
+  ctx.light(pointLight(neutral, 18, 16, [-23.5, H - 0.6, 0]));
+  ctx.light(pointLight(neutral, 17, 16, [-15.5, H - 0.6, 0]));
+  ctx.light(pointLight(0xeef2ff, 17, 13, [-8.5, H - 0.6, -1.5]));
+  ctx.light(pointLight(0xffffff, 16, 12, [-21.5, H - 0.7, -4.2]));
+  ctx.light(pointLight(0xfafcff, 15, 11, [-19.5, H - 0.7, 5.4]));
   ctx.light(pointLight(0xff4030, 5, 7, [-9.3, 3.6, 5.8]));
 
   // ------------------------------------------------------------------ trench with grating

@@ -190,11 +190,24 @@ export function buildMedbay(kit, ctx) {
   const rand = rng(ctx.seed + 13);
 
   roomShell(kit, ctx, {
-    // three strips across the 22 m depth (spacing 7.5) instead of five: the strips light the room,
-    // they should not be the room
-    ceiling: { lights: false, spacing: 7.5, along: "x", stripMat: "emitWhiteDim", paints: [[PALETTE.impLight, 0.55], [PALETTE.impWhite, 0.3], [PALETTE.impGrey, 0.15]] },
+    // no stock strips: the three spines below are segmented and on a dimmer emitter (the continuous
+    // emitWhiteDim bar down the middle still rendered ≈220 white, the brightest thing in the frame)
+    ceiling: { lights: false, strips: false, paints: [[PALETTE.impLight, 0.55], [PALETTE.impWhite, 0.3], [PALETTE.impGrey, 0.15]] },
     walls: { rows: [0, 0.5, 1.7, 2.7, H], paints: WHITE_PAINTS, styles: { panel: 0.72, vent: 0.08, greeble: 0.08, strip: 0.06, screen: 0.04, conduit: 0.02 }, theme: { accent2: "emitGreen", screenMats: ["impScreen1", "impScreen2"] } },
   });
+  // three ceiling spines along x (spacing 7.3 m): a dark channel carrying 1.6 m dim panels with black
+  // clips between them, so the spine reads as a run of fixtures rather than one hot bar
+  for (let i = 0; i < 3; i++) {
+    const z = min[2] + ((i + 0.5) / 3) * (max[2] - min[2]);
+    const x0 = min[0] + 0.6;
+    const x1 = max[0] - 0.6;
+    kit.boxMM("paintedMetal", [x0, H - 0.1, z - 0.21], [x1, H, z + 0.21], { color: PALETTE.impDark, texel: 2 });
+    const pitch = 2.0;
+    for (let x = x0 + 0.3; x + 1.6 <= x1 - 0.2; x += pitch) {
+      kit.boxMM("crew_coolStrip", [x, H - 0.11, z - 0.07], [x + 1.6, H - 0.08, z + 0.07], { uv: "keep" });
+      kit.box("paintedMetal", x + 1.8, H - 0.11, z, 0.4, 0.04, 0.3, { color: PALETTE.impBlack, texel: 2 });
+    }
+  }
   // identity line: a green band along the ward wall above the monitors
   {
     const seg = wallSegment(ctx.bounds, "zmin");
