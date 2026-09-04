@@ -1,0 +1,22 @@
+EXT-A verification captures (1280x720, software GL via vite preview of the production build)
+Exterior geometry (hull.js + superstructure/tower/engines + instanced trench sub-blocks): 257,464 triangles, 84 meshes (+1 instanced), 11 THREE.LOD nodes.
+
+Whole-frame stats include the interior bridge cell and the AO pre-pass; "exterior-only" = frame with the exterior group visible minus hidden
+(main pass + AO normal/depth pass + sun shadow pass of the far level):
+  ext_hero      frame 339 calls 1.80M tris | exterior-only 110 calls 281k tris
+  ext_stern     frame 532 calls 2.64M tris | exterior-only 183 calls 482k tris
+  ext_belly     frame 351 calls 1.91M tris | exterior-only 117 calls 384k tris
+  ext_top       frame 510 calls 2.56M tris | exterior-only 182 calls 482k tris
+  plates_close  frame 192 calls 1.53M tris | exterior-only  87 calls 292k tris
+  tower_sb      frame 517 calls 2.62M tris | exterior-only 203 calls 622k tris
+
+Free cameras (pos:look:fov):
+  plates_close  230/62/-120 : 200/30/-40 : 55      belly_close  120/-130/380 : 0/-95/330 : 60
+  trench_close  400/-5/-60 : 305/-16/40 : 55       belly_mid    500/-250/100 : 0/-60/-100 : 50
+  bells_close   250/20/700 : 190/-8/650 : 55       hangar_close 60/-110/-30 : 0/-45/10 : 60
+  bells_mid     420/60/900 : 120/-10/620 : 50      tower_sb     330/300/520 : 0/230/300 : 45
+  bridge_sb     200/275/240 : 0/250/260 : 50       bow_sb       80/45/-880 : 0/10/-960 : 55
+  sb_mid        600/120/300 : 250/20/100 : 50
+
+Note: bridge_sb / bow_sb / sb_mid / ext_top / ext_far / ext_tower / ext_bridge_close / ext_trench were captured one or two
+iterations earlier (before the planet-shine fill and the final engine pass); everything else is from the final build.
