@@ -488,6 +488,7 @@ export class Game {
       if (ah) { this.lookingAtName = ah.name; }
     }
     this.highlight.update(this.world, hit);
+    this.lastHit = hit; // exposed for admin tools ("use crosshair target")
 
     // breaking
     if (playing && this.input.mouseDown[0] && !p.dead) {
