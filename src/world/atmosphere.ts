@@ -64,7 +64,7 @@ export const WEATHER: Record<Weather, WeatherPreset> = {
   // cumulus, 0.34 ~ 15 % (about 40 % of the sky band seen from 400 m), 0.66 ~ 60 % broken stratocumulus
   clear: { coverage: 0.24, hazeDensity: 1.5e-5, hazeHeight: 1400, windSpeed: 5, turbulence: 0.25, cloudBase: 1500, cloudTop: 2400, rain: 0, sunDim: 1 },
   scattered: { coverage: 0.34, hazeDensity: 1.9e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 2500, rain: 0, sunDim: 0.97 },
-  cloudy: { coverage: 0.66, hazeDensity: 3.2e-5, hazeHeight: 1100, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2100, rain: 0, sunDim: 0.72 },
+  cloudy: { coverage: 0.66, hazeDensity: 3.2e-5, hazeHeight: 1100, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 1800, rain: 0, sunDim: 0.72 },
   storm: { coverage: 0.92, hazeDensity: 5.5e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 2600, rain: 1, sunDim: 0.4 },
 };
 

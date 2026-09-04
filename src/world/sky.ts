@@ -93,11 +93,14 @@ vec4 macroField(vec2 wp) {
  *  this column's own height, H = column height fraction. */
 float envelope(vec3 p, vec4 f, out float hf, out float hn, out float H) {
   float thick = uCloudTop - uCloudBase;
-  float base = uCloudBase + (f.z - 0.5) * 0.06 * thick;
+  float base = uCloudBase + (f.z - 0.5) * 0.12 * thick;
   hf = (p.y - base) / thick;
   H = mix(0.3, 1.0, smoothstep(0.05, 0.75, f.y));
   hn = hf / H;
-  float v = smoothstep(0.0, 0.05, hf) * (1.0 - smoothstep(0.55, 1.0, hn));
+  // cumulus keep a sharp flat base; a closed deck (high coverage) gets a soft one that the shape noise
+  // carves into hanging lumps, which is what gives stratocumulus its cellular underside
+  float baseRamp = mix(0.05, 0.22, smoothstep(0.45, 0.7, uCloudCoverage));
+  float v = smoothstep(0.0, baseRamp, hf) * (1.0 - smoothstep(0.55, 1.0, hn));
   // thin columns (cell edges, the gaps of a deck) are less dense: light gets through, the underside of an
   // overcast reads as cells instead of an even grey
   return f.x * v * mix(0.8, 1.2, f.w);
@@ -173,7 +176,7 @@ void main() {
   vec3 moonDir = normalize(vec3(-uSunDir.x, max(0.25, -uSunDir.y * 0.8 + 0.3), -uSunDir.z));
   vec3 L = normalize(mix(uSunDir, moonDir, nightMix));
   // moonlight is dimmer relative to the (exposure-boosted) night sky than the key colours alone suggest
-  vec3 lightCol = uSunColor * 2.7 * mix(1.0, 0.5, nightMix);
+  vec3 lightCol = uSunColor * 2.9 * mix(1.0, 0.5, nightMix);
 
   float T = 1.0;
   vec3 col = vec3(0.0);
@@ -203,7 +206,7 @@ void main() {
     float forward = smoothstep(0.3, 0.95, cosSun);
     // sky light on the tops: hemisphere average of the dome (deep blue) whitened by aerosol scatter
     vec3 skyAmb = mix(uZenithColor, uHazeColor, 0.5) * 0.95;
-    vec3 gndAmb = uHazeColor * 0.55;
+    vec3 gndAmb = uHazeColor * 0.45;
     // low sun: grazing light reaches the undersides (warm sunset bases)
     float lowSun = (1.0 - smoothstep(0.04, 0.3, L.y)) * (1.0 - nightMix);
 
