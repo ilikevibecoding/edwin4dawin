@@ -138,11 +138,11 @@ export function build(kit, ctx, room, lib) {
     const wz = bay.north ? z0 + 1.7 : z1 - 1.7;
     const lz = bay.north ? AISLE.z0 - 1.0 : AISLE.z1 + 1.0;
     const xm = (bay.xa + bay.xb) / 2;
-    ctx.lights.warm.push(pointLight(0xffc48c, 4.0, 8, [xm - 2.8, yTop - 0.5, wz]));
-    ctx.lights.warm.push(pointLight(0xffc48c, 4.0, 8, [xm + 2.8, yTop - 0.5, wz]));
-    ctx.lights.warm.push(pointLight(0xffd2a8, 4.5, 8, [xm, yTop - 0.5, lz]));
+    ctx.lights.warm.push(pointLight(0xffc48c, 6.0, 10, [xm - 2.8, yTop - 0.5, wz]));
+    ctx.lights.warm.push(pointLight(0xffc48c, 6.0, 10, [xm + 2.8, yTop - 0.5, wz]));
+    ctx.lights.warm.push(pointLight(0xffd2a8, 6.5, 10, [xm, yTop - 0.5, lz]));
   }
-  for (const x of [-21.5, -15.5, -9.5, -4]) ctx.lights.cool.push(pointLight(0xe9dfd2, 5.0, 9, [x, yTop - 0.5, 494]));
+  for (const x of [-21.5, -15.5, -9.5, -4]) ctx.lights.cool.push(pointLight(0xe9dfd2, 7.0, 11, [x, yTop - 0.5, 494]));
 
   // ------------------------------------------------------------ the interactable bunk
   if (restBunk) {

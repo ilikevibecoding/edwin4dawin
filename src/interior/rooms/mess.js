@@ -21,7 +21,7 @@ export function build(kit, ctx, room, lib) {
     lights: false,
     lightMat: "emitWarmSoft",
     lightRows: 2,
-    floorColor: PALETTE.impGreyDark,
+    floorColor: PALETTE.impGrey,
     seed: 83,
   });
   const { y0, yTop, frames } = shell;
@@ -84,8 +84,8 @@ export function build(kit, ctx, room, lib) {
   const tableX = [6.75, 13.75];
   for (const z of rows) for (const cx of tableX) messTable(kit, cx, y0, z, 5.5, rand);
   for (const z of rows) for (const cx of tableX) for (const dx of [-1.5, 1.5]) pendant(kit, cx + dx, yTop, z, 0.75, 0.3, "emitWarmSoft");
-  // floor runner from the door to the hatch
-  kit.boxMM("deck", [x0 + 0.4, y0, 495.7], [PART_X - 0.9, y0 + 0.01, 498.3], { color: PALETTE.impGrey, texel: 1 });
+  // dark floor runner from the door to the hatch
+  kit.boxMM("deck", [x0 + 0.4, y0, 495.7], [PART_X - 0.9, y0 + 0.01, 498.3], { color: PALETTE.impGreyDark, texel: 1 });
   for (const z of [495.65, 498.35]) kit.box("satinBlack", (x0 + PART_X) / 2 - 0.2, y0 + 0.006, z, PART_X - x0 - 1.2, 0.012, 0.06);
 
   // ------------------------------------------------------------ hall walls
@@ -167,16 +167,18 @@ export function build(kit, ctx, room, lib) {
 
   // ------------------------------------------------------------ galley line along the starboard wall
   galley(kit, ctx, frames["+x"].frame, y0, yTop, h, rand);
-  kit.boxMM("deck", [PART_X + WALL_T + 0.05, y0, z0 + 0.2], [x1 - 0.3, y0 + 0.01, z1 - 0.2], { color: PALETTE.impGrey, texel: 1 });
+  kit.boxMM("deck", [PART_X + WALL_T + 0.05, y0, z0 + 0.2], [x1 - 0.3, y0 + 0.01, z1 - 0.2], { color: PALETTE.impWhite, texel: 1 });
   grateStrip(kit, x1 - 1.15, z0 + 1.0, x1 - 0.85, z1 - 1.0, y0 + 0.008);
   frosted.build("mess-frosted");
 
   // ------------------------------------------------------------ lights: warm pendants over the tables, amber hatch, cool galley
-  for (const z of rows) for (const cx of tableX) ctx.lights.warm.push(pointLight(0xffc48c, 6.5, 9, [cx, yTop - 1.0, z]));
-  for (const x of [5.0, 11.5]) ctx.lights.warm.push(pointLight(0xffd2a8, 5.0, 9, [x, yTop - 0.5, 497]));
-  for (const z of [495.0, 499.0]) ctx.lights.warm.push(pointLight(0xffb060, 5.0, 8, [PART_X - 0.3, y0 + 2.2, z]));
-  for (const z of [491, 503]) ctx.lights.cool.push(pointLight(0xe0ecff, 6.0, 10, [23.5, yTop - 0.5, z]));
-  ctx.lights.cool.push(pointLight(0xe0ecff, 5.5, 10, [23.5, yTop - 0.5, 497]));
+  // The light pool only realises 14 fixtures at a time, so the hall uses a few strong, long-reach
+  // practicals rather than one per pendant.
+  for (const z of rows) for (const cx of tableX) ctx.lights.warm.push(pointLight(0xffc48c, 9.0, 13, [cx, yTop - 1.0, z]));
+  for (const x of [5.0, 11.5]) ctx.lights.warm.push(pointLight(0xffd2a8, 7.5, 12, [x, yTop - 0.6, 497]));
+  for (const z of [495.0, 499.0]) ctx.lights.warm.push(pointLight(0xffb060, 5.5, 9, [PART_X - 0.3, y0 + 2.2, z]));
+  for (const z of [491, 503]) ctx.lights.cool.push(pointLight(0xe0ecff, 7.5, 12, [23.5, yTop - 0.6, z]));
+  ctx.lights.cool.push(pointLight(0xe0ecff, 7.0, 12, [23.5, yTop - 0.6, 497]));
   return shell;
 }
 

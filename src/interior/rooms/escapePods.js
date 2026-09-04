@@ -16,8 +16,9 @@ const DOOR_V = 1.4; // centre height of the round door
 const DOOR_R = 0.78;
 // The exterior tower's forward face plate (hull.js, 1.2 m thick from z 470) ends at z 471.2, i.e. 0.2 m
 // inside this room, and it is drawn while the player is in here (the room lists a forward window).
-// The hatch wall is therefore built on its own plane just proud of that face so nothing is buried in hull.
-const FWD = 0.28;
+// The hatch wall is therefore built on its own plane far enough proud of that face that the porthole
+// sleeves, their glass and the closed shutters behind the glass all sit in front of the hull plate.
+const FWD = 0.5;
 
 export function build(kit, ctx, room, lib) {
   const { x0, x1, z0, z1, height: h } = room;
