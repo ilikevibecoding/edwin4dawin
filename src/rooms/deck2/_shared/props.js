@@ -115,12 +115,25 @@ export function chair(kit, PALETTE, pos, yaw, { seatMat = "fabric", back = true 
 }
 
 // Wall-mounted screen with bezel. Face key: which way the screen faces (world dir as yaw).
-export function wallScreen(kit, pos, yaw, w = 1.6, h = 0.9, mat = "screenImp0") {
+// `tilt` (rad, downward) sends the glossy screen's reflection of ceiling fills to the deck instead of
+// the eye; `accent` is the underline emitter (emitAmber in engineering rooms).
+export function wallScreen(kit, pos, yaw, w = 1.6, h = 0.9, mat = "screenImp0", { tilt = 0, accent = "emitBlue" } = {}) {
   const P = placer(kit, pos, yaw);
+  if (tilt) {
+    const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, 0, 0)));
+    const ny = -Math.sin(tilt);
+    const nz = Math.cos(tilt);
+    P.box("paintedMetal", 0, 0, -0.14, 0.3, 0.3, 0.2, { color: IMP.impBlack }); // mount block
+    const at = (d) => P.world(0, ny * d, -0.04 + nz * d);
+    kit.add("paintedMetal", new THREE.BoxGeometry(w + 0.12, h + 0.12, 0.08), { pos: at(0), quat: tq, color: IMP.impBlack });
+    kit.add("darkGloss", new THREE.BoxGeometry(w + 0.04, h + 0.04, 0.01), { pos: at(0.042), quat: tq });
+    kit.add(mat, new THREE.BoxGeometry(w, h, 0.01), { pos: at(0.052), quat: tq, uv: "keep" });
+    return;
+  }
   P.box("paintedMetal", 0, 0, -0.04, w + 0.12, h + 0.12, 0.08, { color: IMP.impBlack });
   P.box("darkGloss", 0, 0, 0.002, w + 0.04, h + 0.04, 0.01);
   P.box(mat, 0, 0, 0.012, w, h, 0.01, { uv: "keep" });
-  P.box("emitBlue", 0, -h / 2 - 0.03, 0.0, w * 0.6, 0.012, 0.01);
+  P.box(accent, 0, -h / 2 - 0.03, 0.0, w * 0.6, 0.012, 0.01);
 }
 
 // Imperial cargo crate: 1.2 m module with recessed side panels and a lit status tab.
@@ -213,7 +226,7 @@ export function pipe(kit, PALETTE, a, b, r = 0.08, { color, bracket = 2.5, mat =
   const dir = new THREE.Vector3(dx, dy, dz).normalize();
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
   kit.add(mat, new THREE.CylinderGeometry(r, r, len, segments), { pos: mid, quat: q, uv: "scale", uvScale: [2 * Math.PI * r, len], color: color || col(PALETTE, "steel") });
-  const n = Math.floor(len / bracket);
+  const n = bracket > 0 ? Math.floor(len / bracket) : 0;
   for (let i = 1; i <= n; i++) {
     const t = i / (n + 1);
     kit.add("paintedMetal", new THREE.CylinderGeometry(r + 0.04, r + 0.04, 0.12, segments), { pos: [a[0] + dx * t, a[1] + dy * t, a[2] + dz * t], quat: q, color: col(PALETTE, "impDark") });

@@ -339,6 +339,15 @@ export function buildShell(ctx, spec) {
     const li = spec.lights || {};
     const w = x1 - x0 - 2 * WALL_T;
     const d = z1 - z0 - 2 * WALL_T;
+    if (li.positions) {
+      // explicit [x, z] fill positions (e.g. to keep a fill off the mirror position of a dead-end screen)
+      const y = li.y ?? ceilY - 0.5;
+      const dist = li.distance ?? 12;
+      for (const [px, pz] of li.positions) {
+        ctx.lights.push({ type: "point", pos: [px, y, pz], color: li.color ?? 0xd6e2ff, intensity: li.intensity ?? Math.min(60, 6 + dist * 2.2), distance: dist, priority: li.priority ?? 0.5 });
+      }
+      return { faces: F, openings: perFace, H };
+    }
     const target = li.count ?? Math.min(6, Math.max(1, Math.round((w * d) / 60)));
     const nx = Math.min(target, Math.max(1, Math.round(Math.sqrt(target * (w / Math.max(d, 1))))));
     const nz = Math.max(1, Math.floor(target / nx));
