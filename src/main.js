@@ -119,6 +119,7 @@ const rooms = new RoomManager({
     fitSunShadow();
   },
 });
+rooms.lightBudget = MOBILE ? 8 : 14;
 const player = new Player(camera, canvas, rooms.activeColliders);
 const lifts = new LiftSystem({ scene, materials, player, hud, audio });
 lifts.attach(rooms);
