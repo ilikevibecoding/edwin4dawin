@@ -497,6 +497,7 @@ function frame() {
   // visible from outside through its ventral opening
   const showExterior = director.mode === "exterior" || interior.seesExterior();
   exterior.setVisible(showExterior);
+  space.root.visible = showExterior; // planets/stars/dust: ~100k tris that windowless rooms never see
   exterior.setViewMode(director.mode);
   // from the hangar deck only the ventral skin is ever visible (through the bay opening)
   const cur = interior.currentSector;
