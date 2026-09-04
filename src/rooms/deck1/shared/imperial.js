@@ -177,9 +177,12 @@ export function wall(kit, spec) {
           if (detail && cw > 1.2 && rand() < 0.5) box("metal", c0 + cw * 0.3, c1 - cw * 0.3, r0 + 0.08, r1 - 0.08, -0.02, 0.01, { color: IMP.mid, texel: 2 });
           break;
         case "strip": {
-          // channel housing with the emissive strip set into it
+          // channel housing with a narrow emitter recessed into it (wide bare bars clip to white under bloom)
           box("paintedMetal", c0, c1, r0, r1, 0.0, 0.04, { color: IMP.black, texel: 1 });
-          box(strip, c0 + g, c1 - g, r0 + 0.06, r1 - 0.06, -0.012, 0.0);
+          // two proud lips with the 4 cm emitter set back flush between them (recessed channel, no bare bar)
+          box("metalRough", c0 + g, c1 - g, r0 + 0.035, r0 + 0.075, -0.03, 0.0, { color: IMP.dark, texel: 2 });
+          box("metalRough", c0 + g, c1 - g, r1 - 0.075, r1 - 0.035, -0.03, 0.0, { color: IMP.dark, texel: 2 });
+          box(strip, c0 + g + 0.04, c1 - g - 0.04, r0 + 0.08, r1 - 0.08, -0.006, 0.0);
           if (detail && cw > 1.5 && rand() < 0.35) {
             // junction box breaking the strip's monotony
             const ja = c0 + 0.25 + rand() * (cw - 0.5);
@@ -242,9 +245,9 @@ export function ceiling(kit, bounds, ceilY, { axis = "z", channels = [], color =
     const w = c.w || 0.5;
     panel(cur, c.at - w / 2);
     // channel side lips + emissive strip recessed near the top slab
-    const ew = c.emitW || 0.18;
+    const ew = Math.min(c.emitW || 0.18, 0.08);
     const emit = c.emit || "emitWhite";
-    const eLo = ceilY + depth - 0.06;
+    const eLo = ceilY + depth - 0.05;
     const eHi = ceilY + depth - 0.03;
     if (axis === "z") {
       kit.boxMM("metalRough", [c.at - w / 2 - 0.04, ceilY + 0.02, z0], [c.at - w / 2 + 0.03, ceilY + depth, z1], { color: IMP.mid, texel: 1 });
@@ -434,12 +437,12 @@ export function corridorDressing(kit, manifest, floorY, ceilY, { ribEvery = 4, r
   // centre floor strip (slightly proud, lit edge lines)
   if (alongZ) {
     const cx = (x0 + x1) / 2;
-    run("paintedMetal", z0, z1, (m, a, c, o) => kit.boxMM(m, [cx - 0.5, floorY, a], [cx + 0.5, floorY + 0.012, c], o), { color: IMP.black, texel: 1 });
+    run("blackGloss", z0, z1, (m, a, c, o) => kit.boxMM(m, [cx - 0.5, floorY, a], [cx + 0.5, floorY + 0.012, c], o), { color: IMP.black });
     run("emitBlue", z0 + 0.4, z1 - 0.4, (m, a, c) => kit.boxMM(m, [cx - 0.53, floorY, a], [cx - 0.5, floorY + 0.01, c]));
     run("emitBlue", z0 + 0.4, z1 - 0.4, (m, a, c) => kit.boxMM(m, [cx + 0.5, floorY, a], [cx + 0.53, floorY + 0.01, c]));
   } else {
     const cz = (z0 + z1) / 2;
-    run("paintedMetal", x0, x1, (m, a, c, o) => kit.boxMM(m, [a, floorY, cz - 0.5], [c, floorY + 0.012, cz + 0.5], o), { color: IMP.black, texel: 1 });
+    run("blackGloss", x0, x1, (m, a, c, o) => kit.boxMM(m, [a, floorY, cz - 0.5], [c, floorY + 0.012, cz + 0.5], o), { color: IMP.black });
     run("emitBlue", x0 + 0.4, x1 - 0.4, (m, a, c) => kit.boxMM(m, [a, floorY, cz - 0.53], [c, floorY + 0.01, cz - 0.5]));
     run("emitBlue", x0 + 0.4, x1 - 0.4, (m, a, c) => kit.boxMM(m, [a, floorY, cz + 0.5], [c, floorY + 0.01, cz + 0.53]));
   }
@@ -456,12 +459,12 @@ export function corridorDressing(kit, manifest, floorY, ceilY, { ribEvery = 4, r
       kit.boxMM("paintedMetal", [x0, floorY, a - rib / 2], [x0 + depth, ceilY, a + rib / 2], { color: IMP.dark, texel: 1 });
       kit.boxMM("paintedMetal", [x1 - depth, floorY, a - rib / 2], [x1, ceilY, a + rib / 2], { color: IMP.dark, texel: 1 });
       kit.boxMM("paintedMetal", [x0, ceilY - depth, a - rib / 2], [x1, ceilY, a + rib / 2], { color: IMP.dark, texel: 1 });
-      kit.boxMM("emitWhite", [x0 + depth, ceilY - 0.08, a - 0.03], [x1 - depth, ceilY - 0.05, a + 0.03]);
+      kit.boxMM("emitWhite", [x0 + depth, ceilY - 0.07, a - 0.015], [x1 - depth, ceilY - 0.05, a + 0.015]);
     } else {
       kit.boxMM("paintedMetal", [a - rib / 2, floorY, z0], [a + rib / 2, ceilY, z0 + depth], { color: IMP.dark, texel: 1 });
       kit.boxMM("paintedMetal", [a - rib / 2, floorY, z1 - depth], [a + rib / 2, ceilY, z1], { color: IMP.dark, texel: 1 });
       kit.boxMM("paintedMetal", [a - rib / 2, ceilY - depth, z0], [a + rib / 2, ceilY, z1], { color: IMP.dark, texel: 1 });
-      kit.boxMM("emitWhite", [a - 0.03, ceilY - 0.08, z0 + depth], [a + 0.03, ceilY - 0.05, z1 - depth]);
+      kit.boxMM("emitWhite", [a - 0.015, ceilY - 0.07, z0 + depth], [a + 0.015, ceilY - 0.05, z1 - depth]);
     }
   }
 }

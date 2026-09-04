@@ -41,7 +41,7 @@ renderer.info.autoReset = false;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
-scene.fog = new THREE.FogExp2(0x07090d, 0.012);
+scene.fog = new THREE.FogExp2(0x07090d, 0.006);
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 6000);
 scene.add(camera);
 const hud = createHUD();
