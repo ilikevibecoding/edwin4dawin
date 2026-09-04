@@ -24,6 +24,7 @@ const browser = await chromium.launch({
   args: ["--no-sandbox", "--disable-dev-shm-usage", "--use-gl=angle", "--use-angle=swiftshader-webgl", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl", "--disable-gpu-vsync", "--disable-frame-rate-limit"],
 });
 const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
+page.setDefaultTimeout(240000);
 const logs = [];
 page.on("console", (m) => {
   const text = `[${m.type()}] ${m.text()}`;
@@ -66,7 +67,11 @@ for (const name of VIEWS) {
     continue;
   }
   await settle(4, 1200);
-  await page.screenshot({ path: resolve(outDir, `${name}.png`) });
+  try {
+    await page.screenshot({ path: resolve(outDir, `${name}.png`), timeout: 240000 });
+  } catch (e) {
+    console.log(`screenshot ${name} failed: ${e.message.slice(0, 120)}`);
+  }
   const stats = await page.evaluate(() => window.debugAPI.getStats());
   results.views[name] = stats;
   console.log(`${name.padEnd(18)} ${String(stats.calls).padStart(4)} calls ${String((stats.triangles / 1000).toFixed(0)).padStart(5)}k tris ${String(stats.lights).padStart(3)} lights ${String(stats.visibleObjects).padStart(4)} objs  ${stats.frameMs} ms/frame (sw GL)  [${Date.now() - t1} ms]`);

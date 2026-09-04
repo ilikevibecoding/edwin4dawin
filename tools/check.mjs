@@ -25,6 +25,7 @@ const browser = await chromium.launch({
   args: ["--no-sandbox", "--disable-dev-shm-usage", "--use-gl=angle", "--use-angle=swiftshader-webgl", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl", "--disable-gpu-vsync", "--disable-frame-rate-limit"],
 });
 const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
+page.setDefaultTimeout(240000);
 const errors = [];
 page.on("console", (m) => {
   if (m.type() === "error" || m.type() === "warning") {

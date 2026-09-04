@@ -1,12 +1,14 @@
-# Kestrel — first-person spaceship interior demo
+# ISD *Vigilance* — Imperial Star Destroyer (exterior + explorable interior)
 
-A small first-person walkthrough of a Star Wars-style ship interior in flight, built with Vite and
-Three.js. Everything is procedural: geometry is kit-bashed from primitives, every texture (albedo,
-roughness/metalness, normal, emissive, decals, planets, nebulae) is generated on a canvas at load.
-No downloaded models or textures.
+A first-person / orbit-camera walkthrough of a 1,600 m Imperial-class Star Destroyer built with Vite
+and Three.js. Everything is procedural — hull, plating, superstructure, TIE fighters, 25 rooms across
+five decks, every texture — generated in code from primitives and canvas textures. No downloaded
+models or textures, so nothing proprietary is copied; the Star Wars visual language (wedge hull,
+tiered superstructure, twin deflector domes, ISD bridge with crew pits, black-floored white corridors,
+ventral hangar with TIE racks) is recreated with original geometry.
 
-Rooms: main corridor with two portholes, cockpit with a slanted viewport, crew quarters with a bunk,
-galley, bathroom. Three interactions (bed, galley dispenser, sink) via raycast from screen centre.
+The Kestrel light-freighter demo this grew out of is kept intact in `src/ship.js` (see
+`PROGRESS.md` Part I).
 
 ## Run
 
@@ -14,28 +16,58 @@ galley, bathroom. Three interactions (bed, galley dispenser, sink) via raycast f
 npm install
 npm run dev        # http://127.0.0.1:5173
 npm run build      # production bundle in dist/
+npm run publish    # build + push dist/ to the play branch (live demo link below)
 ```
 
-Click to lock the pointer. `WASD` to move, mouse to look, `E` to interact, `F3` for the stats overlay.
+Live demo (latest published build): https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/star-destroyer-play-c80b/index.html
 
-## Screenshot harness
+## Controls
 
-```sh
-npm run shots -- <iteration>          # shots/iter_<N>/*.png + results.json
-SHOT_QUICK=1 SHOT_VIEWS=cockpit,window npm run shots -- <iteration>   # partial re-check
-```
+| Key | Interior | Exterior |
+|-----|----------|----------|
+| click | take the bridge (pointer lock) | |
+| WASD / Shift | move / sprint | nudge orbit target · fly (F) |
+| mouse | look | drag rotate · wheel zoom · right-drag pan |
+| E | interact | |
+| V | exterior view | board the ship |
+| 1–5 | choose a deck inside the turbolift | camera stations 1–9 |
+| F | | toggle orbit / fly camera |
+| R | red alert | |
+| M | mute | mute |
+| F3 | stats overlay | stats overlay |
 
-`tools/shots.mjs` drives headless Chromium through `window.debugAPI` (`setView`, `advanceSky`,
-`capturePixels`, `lookAt`, `interact`), captures the four rubric views plus QA views, measures sky
-drift against an interior control region, and exercises all three interactions.
+Doors open when you approach. The turbolift is at the aft end of every deck's lobby: step in, press a
+deck number. Decks: 1 Bridge · 2 Command · 3 Crew · 4 Engineering · 5 Hangar.
 
 ## Layout
 
-- `src/main.js` — renderer, scene, environment capture, adaptive quality, debug API, loop
-- `src/player.js` — pointer-lock first-person controller, capsule-vs-box collision, head bob
-- `src/ship.js` — the ship interior (corridor, cockpit, quarters, galley, bathroom, lights)
-- `src/space.js` — starfield layers, planets with atmosphere halos, rings, nebulae, dust, drift
-- `src/interact.js` — hover highlight, prompts, the three scripted events
-- `src/post.js` — N8AO → bloom → ACES/sRGB → SMAA → vignette/grain/shadow-lift
-- `src/kit.js`, `textures.js`, `materials.js`, `lighting.js`, `hud.js` — helpers
-- `PROGRESS.md` — iteration log with rubric scoring
+- `src/main.js` — bootstrap, staged loading, mode switching, loop, `window.debugAPI`.
+- `src/exterior/` — `dims.js` (dimensional model shared with the interior), `hull.js` (skins,
+  trench, stern, instanced multi-scale plating per z-chunk, hangar module, reactor bulb),
+  `superstructure.js` (city tiers, tower, bridge module with the real window opening, domes, mast,
+  turrets), `details.js` (hatches, ports, sensors, docking bays, machinery), `engines.js`,
+  `batch.js`, `exttex.js`, `exterior.js` (assembly, lighting rig, LOD, camera stations).
+- `src/interior/` — `layout.js` (decks / sectors / doors as data), `interior.js` (streaming,
+  door-aware visibility graph, fixed light pool, red alert), `sector.js`, `doors.js`, `turbolift.js`,
+  `corridor.js` (corridors + lobbies), `imperial.js` (shared Imperial toolkit), `builders.js`
+  (panel grids, frames), `rooms/*.js` (one builder per room, auto-registered by `rooms/index.js`).
+- `src/traffic/fighters.js` — instanced TIE fighters, racks, launch / patrol / return paths through
+  the ventral bay, bay-door state, `PilotHook` and snapshot / apply for NPC and network work.
+- `src/camera/director.js` — interior first-person ↔ exterior orbit / fly, fades, hand-off stations.
+- `src/player.js` — controller with gravity, floors / pits / ramps / stairs, sprint.
+- `src/perf/metrics.js`, `src/fx/audio.js` (event hooks + procedural ambience),
+  `src/systems/reserved.js` (flight, atmospheric entry, landing gear, docking, surface contact,
+  hangar deployment, camera phases, landing zones — interfaces for the next phases).
+- `src/materials.js`, `src/textures.js`, `src/kit.js`, `src/post.js`, `src/space.js`, `src/hud.js`.
+
+## Tools
+
+```sh
+node tools/check.mjs [url] --views a;b;c --out dir      # screenshots + stats per view (ad hoc: sector@x,z,yaw,pitch · ext@px,py,pz,lx,ly,lz)
+node tools/shots.mjs <iteration>                        # full rubric run → shots/sd_iter_<N>/ (+ drift / door / lift / traffic / transition passes)
+node tools/navtest.mjs                                  # walks every door both ways, rides the lift between decks, exercises traffic
+node tools/publish.mjs                                  # build + push the play branch
+```
+
+`PLAN.md` holds the ship model and scene hierarchy, `docs/WORKSTREAMS.md` the contract used by the
+parallel build workstreams, `PROGRESS.md` the iteration log with measured stats.
