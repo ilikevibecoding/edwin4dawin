@@ -1,17 +1,18 @@
 # Status — B: command tower (Deck 1)
 
-Branch: `cursor/sd-command-tower-e845` · Last push: 356bcd37 · 2026-09-04 10:25 UTC
-Run: bc-624cbbb1-95b2-4ce5-82bb-455f2d92e845 · Phase: 2 (detail) — all 11 modules detailed and pushed; critic loop running
+Branch: `cursor/sd-command-tower-e845` · Last push: see git log · 2026-09-04 23:40 UTC
+Run: bc-624cbbb1-95b2-4ce5-82bb-455f2d92e845 · Phase: 3 (finalisation) — three critic rounds applied; round-4 blind pass on the final frames
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
 
 All 11 Deck 1 modules (`src/rooms/deck1/**`: bridge, observation, nav, comms, tactical, intel, officers, two side
-passages, spine, lift lobby) are built to the §7/§8 contract and fully detailed (Phase 2). Full-deck harness run
-`p2-verify`: **54 views, 0 registry warnings**, every room inside budget (bridge 55.9k tris / 22 calls / 24 desc;
-largest room 72.7k tris; builds 10–140 ms). Two blind critics are reviewing 22 shots now; fixes follow per room.
-Scaffold has not landed, so testing runs through `src/rooms/deck1/_dev/` (registry/ctx/light-pool shim, no-HMR
-Vite config, own shots runner). Open interface items for A: wall thickness vs D's doors helper, N8AO leak, player
-floor height, `metal` reading black at room scale (see Requests).
+passages, spine, lift lobby) are built to the §7/§8 contract, fully detailed, and have been through three blind critic
+rounds (FAIL 17 → 4 → 1 → round 4 below). Final full-deck harness run `p3-final2`: **55 views, 0 registry warnings**,
+every room inside budget (bridge 101k tris / 23 calls / 22 desc against its 300k / 24 / 28 allowance; largest standard
+room spine 114k / 14 / 13; builds 19–181 ms). 18 of the 24 critic views have 0 clipped pixels, the rest ≤ 26 px except
+holo/screen edge specks. Scaffold has not landed, so testing runs through `src/rooms/deck1/_dev/` (registry/ctx/
+light-pool shim, closed door-leaf stand-ins, no-HMR Vite config, own shots runner). Open interface items for A: wall
+thickness vs D's doors helper, N8AO leak, player floor height, `metal` reading black at room scale (see Requests).
 
 ## Plan
 
@@ -66,11 +67,11 @@ lining x ±19, y 241.2..245.4, z 455.5..458.3). `d1-observation` → `["observat
 | 4 | Officers' quarters (private corridor + cabins + wardroom) | `src/rooms/deck1/officers/**` | done (f0a80c75) |
 | 5 | Observation gallery (window band) | `src/rooms/deck1/observation/**` | done (f4120da1) |
 | 6 | Deck 1 corridors + lift lobby (spine, port/stbd passages, lobby) | `src/rooms/deck1/spine/**`, `src/rooms/deck1/corridor-port/**`, `src/rooms/deck1/corridor-stbd/**`, `src/rooms/deck1/lobby/**` | done (27f6d314) |
-| C | Blind visual critic (screenshots + §11 brief only) | none (report only) | round 1: two critics on 22 shots (done) · round 2: one critic on 24 shots (done) · round 3: final pass (below) |
-| 1b | Bridge critic rounds 1 + 2 (same owner, resumed) | `src/rooms/deck1/bridge/**` | done (942b4a63, 9ef7ce24) |
-| 2b | Nav + tactical + comms + intel critic round 2 | those four folders | done (c07fad9e) |
-| 3b | Officers + observation critic round 2 | those two folders | done (583ebb25) |
-| 4b | Spine + passages + lobby critic round 2 | those four folders | done (2a8514d5) |
+| C | Blind visual critic (screenshots + §11 brief only) | none (report only) | round 1: two critics on 22 shots · round 2: one critic on 24 · round 3: one critic on 24 · round 4: one critic on the final 24 (result below) |
+| 1b | Bridge critic rounds 1–3 (same owner, resumed) | `src/rooms/deck1/bridge/**` | done (942b4a63, 9ef7ce24, cde48c42) |
+| 2b | Nav + tactical + comms + intel critic rounds 2–3 | those four folders | done (c07fad9e, 35c32249) |
+| 3b | Officers + observation critic rounds 2–3 | those two folders | done (583ebb25, 7160c11f) |
+| 4b | Spine + passages + lobby critic rounds 2–3 | those four folders | done (2a8514d5, 34f6f087) |
 
 Shared Deck-1 helpers (mine, not copies of ship.js): `src/rooms/deck1/shared/` — `imperial.js` (wall with openings,
 floor, ceiling with recessed channels, light strip, railing, stairs, partition, corridor dressing, door reveal),
@@ -78,6 +79,43 @@ floor, ceiling with recessed channels, light strip, railing, stairs, partition, 
 the scaffold adds `PALETTE.imp*`), `plan.js`. Dev harness: `src/rooms/deck1/_dev/` (no `index.js` inside).
 
 ## Done
+Critic round 3 fixes (pushed; each verified with a fresh harness run, 0 registry-shim warnings):
+- `d1-bridge` (cde48c42): pit walls with a 6 m pilaster rhythm, manifold panel + riser bank + breaker cluster between
+  the upper monitors, monitors on twin brackets with cable boxes, 5 cm `emitBlue` head strip in a lipped channel, kick
+  band under the console row; holo wedge colours clamped to cyan (they saturated to white at 34 m), lintel strip 3.0 ×
+  0.03 m recessed, AFT LOCK 01 header sign, 3.6 × 1.3 m status board + conduits/vents/junctions on the upper aft wall;
+  the "hot lamp" over the door was the pendant mirrored in the ceiling slab — centre panel now dielectric `bridgeSeam`;
+  aide standing consoles turned to face the dais with matte desks (313 → 10 clipped px), chair wing hairline
+  segmented, pit floor plate bands + lane dashes, floor hatches, lit dais reveals on all sides, data terminal header;
+  `pickScreen`: every third wall display live, the rest cycle 4 textures × 5 crops × 3 bezels. 101.2k tris / 23 calls /
+  22 desc / 177 colliders / 181 ms. The harness now hides the HUD crosshair in captures (it sat on the door axis in
+  `d1-bridge-aft` and read as an emissive blob).
+- `d1-nav`, `d1-tactical`, `d1-comms`, `d1-intel` (35c32249, 567767b6): nav uplight channel + cable branches fill the
+  canopy void, chart chest + map-tube rack replace the locker pair, dais rail box → step-light reveals; tactical holo
+  field matte (the white blob was the gloss top mirroring the north wall), ~40 % fewer edge LEDs with label plates,
+  per-seat jitter, downlight domes r 0.08; comms luminaires as flat louvred diffusers in a module-local `commsLamp`,
+  tray metalwork `metalRough` in closed-bottom channels, sensor towers with glanded conduits + service pads; intel red
+  perimeter strips, cans 20 → 40 cd, tighter table cone, pilaster height bug fixed, archive labels. After the
+  subagent: the hub trays now jog out and cross the aisle lines midway between the sources (its unverified ±1.25 m move
+  had made the "downlight" blobs worse — at roughness 1 the hot spot is wherever a tray underside passes closest to a
+  source, E·cosθ ∝ 0.27/d³: 184 → 9 clipped px), beam flanges `metalRough` in comms and nav (59-px and 356-px glints
+  gone), nav table control slabs matte. Nav 44.6k / 16 / 14; tactical 52.6k / 16 / 13; comms 77.5k / 16 / 14; intel
+  35.6k / 13 / 14.
+- `d1-officers`, `d1-observation` (7160c11f, 567767b6): wardroom second table by the door, pendants as points in deep
+  shades, wall-wash can over a drinks cabinet / galley pass-through with crest; cabins with rug + low table, desk facing
+  a half-height bulkhead with housed uplight, own ceiling slab with beams/vent/hung louvred luminaire, wall cabinet
+  with reading-light rail; corridor threshold mats, louvred channel housing, amber floor lines, fire recess, ajar
+  utility door with amber sconce; observation feature bay with half-width rhythm, housed raking key, side table,
+  display case with ship model. After the subagent: module-local `offLamp` (warm, emissive 1.15) replaces
+  `emitWarmSoft` (1.9) across the module — the cabin lens panes no longer clip (258 / 212 → 0 px); a matte `fabric`
+  ceiling field in the wardroom (the semi-gloss shell mirrored the middle pendant as a 204-px patch: 291 → 12 px);
+  raking key 200 → 140 cd; observation's white emitters on the transit spaces' non-specular `emitStrip`. Officers
+  62.0k / 16 / 14 / 96; observation 31.2k / 15 / 14 / 43.
+- `d1-spine`, `d1-lobby` (34f6f087): every third spine bay swaps to a half-width-module kit (seam pilasters, slatted
+  grilles, half plates), 8 cm strip end-caps at each rib, continuous 0.2–0.48 m kick/scuff band with a cast top edge;
+  lobby drum pool 9 → 6.5, header 2.4 → 1.8, corner fills 2.5 → 1.8 (side view mean 23.7 → 20.7), benches rebuilt as
+  open steel end frames + split fabric cushions + armrest bars. Spine 114.3k / 14 / 13 / 201; lobby 14.1k / 16 / 5.
+
 Critic round 2 fixes (pushed; each verified with a fresh harness run, 0 registry-shim warnings):
 - Shared (f67b912a): ceilings and officers' plates off the chip-mapped `paintedMetal`; transit pool lights −0.7 EV;
   stand-in emissive cap 1.35–1.6, `blackGloss` roughness 0.3, `impPanel` dents/grime flattened (see Tested).
@@ -261,15 +299,26 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   (channels, comms downlights, holo cores, the tactical table's mirror blob); (4) one stock locker prop recurs in nav,
   tactical and the wardroom; slab furniture; (5) footprints sized for the bridge, not the function (cabin, wardroom);
   (6) functional wear absent or misreading. DoD words still attached to 10 views (bridge pit/dais/command, nav dais,
-  tactical overview, observation lounge, officers corridor/cabin/wardroom, spine bay). Round-3 lists dispatched to
-  the four owners (running); the harness now closes every paired door with a leaf stand-in (4e8d0d39) so a corridor
+  tactical overview, observation lounge, officers corridor/cabin/wardroom, spine bay). Round-3 lists went to the four
+  owners (all done, see Done); the harness now closes every paired door with a leaf stand-in (4e8d0d39) so a corridor
   luminaire 40 m away no longer reads as a white blob inside the bridge's aft doorway.
 
+- Final full-deck run `p3-final2` after the round-3 fixes: **55 views, 0 registry-shim warnings**, every room inside
+  budget (bridge 101.2k tris / 23 calls / 22 desc / 177 colliders / 181 ms; spine 114.3k / 14 / 13 / 201 / 143 ms;
+  comms 77.5k / 16 / 14; officers 62.0k / 16 / 14; tactical 52.6k / 16 / 13; nav 44.6k / 16 / 14; intel 35.6k / 13 /
+  14; observation 31.2k / 15 / 14; passages 27.4k / 26.7k / 14–15; lobby 14.1k / 16 / 5). Whole frame 83–224 calls,
+  133k–710k tris, 12–16 pool lights, well inside the 450 / 1.5 M / 16 frame budget. Mean luminance per view: bridge
+  18–30, transit 18–30, lobby 20–22, nav 22–30, tactical 20–28, comms 20–29, officers 20–29, observation 29–45, intel
+  16–20. Clipped pixels (≥ 236 luminance): 0 in 18 of the 24 critic views; ≤ 26 px in the bridge aft/command/walkway/
+  pit-stbd (1–4 px lamp-diffuser specks, one 6 × 7 px raft diffuser), 12 in the wardroom, 9 in comms racks; the only
+  three-digit counts are 1–3 px-tall holo-icon and screen-edge highlights in `d1-nav-holo` and the two tactical views.
+- Critic round 4 (one blind critic, the 24 critic views from `p3-final2` plus the six nav/tactical/observation views
+  re-shot after 567767b6): result recorded below when it returns.
+
 ## Remaining
-1. Critic round 3 room fixes (four owners running) → verify each with a harness run → push → final full-deck run.
+1. Critic round 4 verdicts → any last per-view fixes → push.
 2. Replace corridor greybox with D's `corridorSegment` when it lands; switch `doorHole` import to D's helper.
 3. Delete `_dev/` and re-test on the real registry when `SCAFFOLD READY`.
-4. Phase 3 budgets/warnings/status.
 
 ## Blockers
 - None. Scaffold not landed: I mimic `ctx` locally (see Summary); the Imperial material names from §10 are provided
