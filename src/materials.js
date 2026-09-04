@@ -128,7 +128,7 @@ export function buildMaterials() {
       ...extra,
     });
   const emit = (color, intensity, extra = {}) =>
-    new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.08), emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 0.45, metalness: 0, ...extra });
+    new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 0.6, metalness: 0, ...extra });
 
   const mats = {
     // ---------------- Kestrel (unchanged) ----------------
@@ -181,6 +181,7 @@ export function buildMaterials() {
     emitWhiteSoft: emit("#e8f0ff", 1.9, { emissiveMap: diffuser }),
     // recessed ceiling / cornice slots: a dim, warm-white fixture that never becomes the brightest surface
     emitWhiteDim: emit("#dfe6f4", 0.85, { emissiveMap: diffuser }),
+    emitWhiteSlot: emit("#dfe6f4", 0.42, { emissiveMap: diffuser }),
     emitAmberDim: emit(PALETTE.impAmber, 0.9),
     emitBlueDim: emit(PALETTE.impBlue, 0.7),
     emitRedDim: emit(PALETTE.impRed, 0.8),

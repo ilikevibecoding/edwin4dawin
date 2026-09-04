@@ -328,7 +328,7 @@ export function impCeiling(kit, x0, z0, x1, z1, y, opts = {}) {
   const nB = Math.max(1, Math.round(d / beamStep));
   for (let i = 0; i <= nB; i++) {
     const z = z0 + (i / nB) * d;
-    kit.boxMM("impTrim", [x0, y - 0.22, z - 0.12], [x1, y + 0.01, z + 0.12], { color: PALETTE.impBlack, texel: 1 });
+    kit.boxMM("impMetalRough", [x0, y - 0.22, z - 0.12], [x1, y + 0.01, z + 0.12], { color: PALETTE.impBlack, texel: 1 });
   }
   // light troughs along z
   for (let t = 0; t < troughs; t++) {
@@ -348,7 +348,7 @@ export function impCeiling(kit, x0, z0, x1, z1, y, opts = {}) {
   const nR = Math.max(2, Math.round(w / 1.1));
   for (let i = 0; i <= nR; i++) {
     const x = x0 + (i / nR) * w;
-    kit.boxMM("impTrim", [x - 0.04, y - 0.08, z0 + 0.15], [x + 0.04, y + 0.01, z1 - 0.15], { color: PALETTE.impCharcoal, texel: 1 });
+    kit.boxMM("impMetalRough", [x - 0.04, y - 0.08, z0 + 0.15], [x + 0.04, y + 0.01, z1 - 0.15], { color: PALETTE.impCharcoal, texel: 1 });
   }
   // coffers: small vents / accent strips in some cells
   const nC = Math.max(1, Math.round(w / 3.2));
