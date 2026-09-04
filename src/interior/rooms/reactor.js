@@ -50,16 +50,25 @@ export function buildReactor(kit, ctx) {
   const slabCollider = (x0, z0, x1, z1, tag = "walk") => kit.collider([x0, -0.3, z0], [x1, 0, z1], tag);
 
   // ---------------------------------------------------------------- the core
-  // a saturated reactor blue at ~1.0 so the column reads as coloured light rather than a white bar
-  const core = emitMat(ctx, "rx_core", 0x5fb0ff, 1.0);
+  // deep reactor blue, driven hard enough to light the shaft but short of clipping to white
+  const core = emitMat(ctx, "rx_core", 0x2a7dff, 1.7);
   kit.cyl("rx_core", 0, (Y0 + Y1) / 2, CZ, 2.4, Y1 - Y0, "y", { segments: 40 });
-  // cage: 12 ribs + collars every 4 m with pulsing bands
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    kit.add("paintedMetal", new THREE.BoxGeometry(0.55, Y1 - Y0, 0.5), { pos: [Math.cos(a) * 2.85, (Y0 + Y1) / 2, CZ + Math.sin(a) * 2.85], rot: [0, Math.PI / 2 - a, 0], color: PALETTE.impDark, texel: 1.2 });
+  // containment cage: eight slim rods (a horizontal read must win over a lift-shaft read), collars
+  // every 4 m with pulsing bands, and between the collars three energy rings on the column carrying
+  // a travelling pulse, behind a translucent field segment framed by the rods
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.24, Y1 - Y0, 0.24), { pos: [Math.cos(a) * 2.95, (Y0 + Y1) / 2, CZ + Math.sin(a) * 2.95], rot: [0, Math.PI / 2 - a, 0], color: PALETTE.impDark, texel: 1.2 });
   }
-  const bands = pulseSet(ctx, "rx_band", 0x8fc8ff, 8, { min: 0.4, max: 2.0, speed: 1.4 });
+  const bands = pulseSet(ctx, "rx_band", 0x4a9dff, 8, { min: 0.5, max: 1.8, speed: 1.4 });
+  const flow = pulseSet(ctx, "rx_flow", 0x6fb4ff, 6, { min: 0.7, max: 2.6, speed: 3.2 });
+  const field = ctx.materials.forceField.clone();
+  field.opacity = 0.3;
+  ctx.materials.rx_field = field;
+  const fx = new THREE.Group();
+  const fk = new Kit(ctx.materials);
   const collarYs = [-10, -6, -2, 2, 6, 10, 14, 18];
+  let ring = 0;
   collarYs.forEach((y, i) => {
     kit.cyl("paintedMetal", 0, y, CZ, 3.25, 0.7, "y", { color: PALETTE.impBlack, segments: 40, texel: 1 });
     kit.cyl("metal", 0, y, CZ, 3.32, 0.16, "y", { color: PALETTE.gunmetal, segments: 40 });
@@ -70,7 +79,16 @@ export function buildReactor(kit, ctx) {
       const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
       kit.box("metal", Math.cos(a) * 3.3, y, CZ + Math.sin(a) * 3.3, 0.24, 0.3, 0.24, { color: PALETTE.steel, rot: [0, -a, 0] });
     }
+    // energy rings and the field segment in the gap above this collar (the top collar meets the cap)
+    for (const g0 of i === collarYs.length - 1 ? [] : [y]) {
+      for (let k = 1; k <= 3; k++) {
+        kit.cyl(flow.keys[ring++ % flow.keys.length], 0, g0 + k, CZ, 2.47, 0.12, "y", { segments: 40, uv: "keep" });
+        kit.cyl("paintedMetal", 0, g0 + k + 0.11, CZ, 2.44, 0.04, "y", { color: PALETTE.impBlack, segments: 40, texel: 2 });
+      }
+      fk.cyl("rx_field", 0, g0 + 2, CZ, 2.72, 3.22, "y", { segments: 40, open: true, uv: "scale", uvScale: [10, 2] });
+    }
   });
+  fk.build(fx);
   // top cap and base plinth
   kit.cyl("paintedMetal", 0, Y1 - 0.6, CZ, 3.9, 1.2, "y", { color: PALETTE.impDark, segments: 8, texel: 1 });
   kit.cyl("hazard", 0, Y1 - 1.25, CZ, 3.75, 0.12, "y", { segments: 8, texel: HAZARD_TEXEL });
@@ -81,14 +99,7 @@ export function buildReactor(kit, ctx) {
   kit.collider([-5.1, Y0, CZ - 5.1], [5.1, Y0 + 1.25, CZ + 5.1], "plinth");
   floorBorder(kit, -5.6, CZ - 5.6, 5.6, CZ + 5.6, { w: 0.14, y: Y0 + 0.004 });
 
-  // energy: containment field cylinder, tilted arc rings and spinning arc sheets (additive)
-  const fx = new THREE.Group();
-  const fk = new Kit(ctx.materials);
-  const field = ctx.materials.forceField.clone();
-  field.opacity = 0.16;
-  ctx.materials.rx_field = field;
-  fk.cyl("rx_field", 0, (Y0 + Y1) / 2, CZ, 3.55, Y1 - Y0 - 1.4, "y", { segments: 48, open: true, uv: "scale", uvScale: [12, 16] });
-  fk.build(fx);
+  // energy: tilted arc rings and spinning arc sheets (additive) around the cage
   const rings = new THREE.Group();
   const rk = new Kit(ctx.materials);
   // (rings / sheets are built around the origin and parented at the core axis so they can spin)
@@ -117,11 +128,12 @@ export function buildReactor(kit, ctx) {
     ctx.mesh(g);
   }
   ctx.anim((dt, t) => {
-    core.emissiveIntensity = 1.0 + Math.sin(t * 1.7) * 0.12 + Math.sin(t * 5.3) * 0.05;
+    core.emissiveIntensity = 1.7 + Math.sin(t * 1.7) * 0.16 + Math.sin(t * 5.3) * 0.06;
     bands.update(t);
+    flow.update(t);
     rings.rotation.y = t * 0.35;
     sheets.rotation.y = -t * 0.22;
-    field.opacity = 0.14 + 0.05 * Math.sin(t * 2.6) + 0.02 * Math.sin(t * 11);
+    field.opacity = 0.28 + 0.07 * Math.sin(t * 2.6) + 0.03 * Math.sin(t * 11);
   });
 
   // ---------------------------------------------------------------- ring platform (octagon, apothem 8.5, round hole 3.9)
@@ -213,7 +225,7 @@ export function buildReactor(kit, ctx) {
       const b = a + Math.PI / 8;
       kit.add("rx_guide", new THREE.BoxGeometry(0.1, 0.008, 1.6), { pos: [Math.cos(b) * 5.6, 0.006, CZ + Math.sin(b) * 5.6], rot: [0, -b - Math.PI / 2, 0], uv: "keep" });
     }
-    kit.add("emitBlue", new THREE.RingGeometry(RH + 0.3, RH + 0.36, 48).rotateX(-Math.PI / 2), { pos: [0, 0.007, CZ], uv: "keep" });
+    kit.add("emitBlueDim", new THREE.RingGeometry(RH + 0.3, RH + 0.36, 48).rotateX(-Math.PI / 2), { pos: [0, 0.007, CZ], uv: "keep" });
     floorStencil(kit, 0, CZ - 6.4, 2.2, 14, Math.PI);
     floorStencil(kit, -6.2, CZ, 1.4, 12, Math.PI / 2);
     floorStencil(kit, 6.2, CZ, 1.4, 13, -Math.PI / 2);
@@ -308,7 +320,7 @@ export function buildReactor(kit, ctx) {
     kit.boxMM("paintedMetal", [x0, 7.4, CZ - 1.3], [x1, 7.75, CZ + 1.3], { color: PALETTE.impDark, texel: 1.5 });
     for (const s of [-1, 1]) {
       railing(kit, x0, CZ + s * 1.1, x1, CZ + s * 1.1, 8, { collide: false });
-      kit.boxMM("emitRed", [x0 + 0.2, 8.005, CZ + s * 1.17 - 0.03], [x1 - 0.2, 8.02, CZ + s * 1.17 + 0.03], { uv: "keep" });
+      kit.boxMM("emitRedDim", [x0 + 0.2, 8.005, CZ + s * 1.17 - 0.03], [x1 - 0.2, 8.02, CZ + s * 1.17 + 0.03], { uv: "keep" });
     }
     // clamp ring where the gantry meets the core cage
     const cx = x0 < 0 ? -3.4 : 3.4;
@@ -364,12 +376,14 @@ export function buildReactor(kit, ctx) {
   // emissive light panels lift the shaft walls out of black: three rows (lower band, deck level +5,
   // upper band) of soft strips in dark housings, kept clear of the vents and the coolant risers
   {
+    // cool blue-white strips (not the corridor white) so the panels themselves read as core light
+    emitMat(ctx, "rx_wall", 0xa8c8ff, 1.2, "emitWhiteDim");
     const lightPanel = (side, u, y, w = 2.4) => {
       const seg = wallSegment(ctx.bounds, side);
       const { frame } = wallFrame(kit, seg.from, seg.to, Y0);
       const v = y - Y0;
       frame.box("paintedMetal", u, v, 0.05, w + 0.3, 0.6, 0.1, { color: PALETTE.impDark, texel: 2 });
-      frame.box("emitStrip", u, v, 0.106, w, 0.3, 0.01, { uv: "keep" });
+      frame.box("rx_wall", u, v, 0.106, w, 0.3, 0.01, { uv: "keep" });
       frame.box("emitBlueDim", u, v - 0.24, 0.106, w, 0.03, 0.01, { uv: "keep" });
     };
     for (const z of [-70, -78, -86, -95, -104]) {
@@ -399,12 +413,14 @@ export function buildReactor(kit, ctx) {
   cableTray(kit, [-22, -66.2], [22, -66.2], Y1 - 0.7, { w: 0.6, ceil: Y1, cables: 5, seed: 3 });
   cableTray(kit, [-22, -110.8], [22, -110.8], Y1 - 0.7, { w: 0.6, ceil: Y1, cables: 4, seed: 4 });
 
-  // ---------------------------------------------------------------- lights (8): core glow x3 (reactor blue, kept below
-  // the point where the ring platform clips to white), red gantry, door, amber stair, amber floor, shadow spot
-  ctx.light(pointLight(0x6fb4ff, 50, 30, [0, 2.6, CZ]));
-  ctx.light(pointLight(0x5fa8ff, 42, 28, [0, Y0 + 2.5, CZ]));
-  ctx.light(pointLight(0x5fa8ff, 34, 28, [0, 13, CZ]));
-  ctx.light(pointLight(0xff3a2a, 9, 9, [0, 1.2, -77.5]));
+  // ---------------------------------------------------------------- lights (8): one core glow (reactor blue, raised
+  // and held back so the ring platform and the grate never clip to white), three blue wall washes
+  // that give the shaft walls their bounce, door, amber stair, amber floor, shadow spot. The red
+  // under-gantry light is gone: the gantry's red is the marker studs only.
+  ctx.light(pointLight(0x3d8bff, 26, 26, [0, 3.6, CZ]));
+  ctx.light(pointLight(0x3d8bff, 24, 22, [min[0] + 2.6, 4.5, -90]));
+  ctx.light(pointLight(0x3d8bff, 24, 22, [max[0] - 2.6, 4.5, -90]));
+  ctx.light(pointLight(0x3d8bff, 22, 22, [0, 5.0, min[2] + 2.6]));
   ctx.light(pointLight(0xe8f0ff, 16, 12, [0, 3.6, -67.5]));
   ctx.light(pointLight(AMBER, 20, 14, [-18, 3.0, -68.5]));
   ctx.light(pointLight(AMBER, 28, 16, [16, Y0 + 3, -80]));
