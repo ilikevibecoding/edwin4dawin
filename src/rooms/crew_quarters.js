@@ -21,11 +21,11 @@ const BUNK_W = 0.9;
 const SHELF_Y = [0.33, 0.99, 1.65];
 const STACK_H = 2.35;
 // bedding colours: grey-blue regulation issue (blanket, mattress ticking), off-white pillow / turned sheet
-const BED_BLANKET = 0x46546e;
-const BED_BLANKET_FOLD = 0x5e6c88;
+const BED_BLANKET = 0x56668a;
+const BED_BLANKET_FOLD = 0x6e7e9e;
 const BED_MATTRESS = 0x9aa2b0;
-const BED_SHEET = 0xdadee6;
-const BED_PILLOW = 0xe0e4ea;
+const BED_SHEET = 0xcfd4dd;
+const BED_PILLOW = 0xd4d9e2;
 
 /** Rounded box part for compound(): the 2–3 cm bevel that makes bedding read as soft rather than as a shelf. */
 const R = (sx, sy, sz, pos, color, radius = 0.025) => ({ geo: new RoundedBoxGeometry(sx, sy, sz, 1, Math.min(radius, sy / 2 - 0.001)), pos, color });
@@ -74,8 +74,8 @@ function bunkSoftGeo() {
     parts.push(B(0.34, 0.015, 0.82, [-0.36, top + 0.145, 0], BED_SHEET));
     parts.push(R(1.3, 0.05, 0.86, [0.31, top + 0.165, 0], BED_BLANKET, 0.02));
     parts.push(R(0.2, 0.07, 0.86, [-0.27, top + 0.175, 0], BED_BLANKET_FOLD, 0.03));
-    // blanket hangs a little over the front lip
-    parts.push(B(1.3, 0.08, 0.02, [0.31, top + 0.13, 0.44], BED_BLANKET));
+    // blanket hangs over the front lip (outside it, so from the aisle the berth edge is cloth, not a shelf lip)
+    parts.push(R(1.3, 0.14, 0.024, [0.31, top + 0.11, 0.472], BED_BLANKET, 0.01));
   }
   return compound(parts, 2);
 }
@@ -121,7 +121,7 @@ function bunkStack(kit, rand, x, z, yaw, opts = {}) {
 function rowSoffit(kit, p, len, opts = {}) {
   const { accentKey = "emitBlue", depth = 1.3, y = STACK_H + 0.25 } = opts;
   // p: Placer at the row's centre on the wall line, local +z toward the open side, local x along the row
-  p.box("impTrim", 0, y, depth / 2, len, 0.22, depth, { color: PALETTE.impBlack, texel: 1 });
+  p.box("rubber", 0, y, depth / 2, len, 0.22, depth, { color: PALETTE.impBlack, texel: 1 });
   p.box("impMetal", 0, y - 0.12, depth - 0.25, len - 0.3, 0.02, 0.24, { color: PALETTE.impCharcoal });
   p.box("emitWhiteDim", 0, y - 0.125, depth - 0.25, len - 0.5, 0.012, 0.12, { uv: "keep" });
   for (let u = -len / 2 + 0.4; u < len / 2 - 0.3; u += 0.3) p.box("impTrim", u, y - 0.14, depth - 0.25, 0.02, 0.02, 0.2, { color: PALETTE.impBlack });
@@ -196,9 +196,11 @@ export function buildCrewQuarters(kit, ctx, room) {
       }
       const zm = s * 5.875;
       const len = 5.3;
-      // shared spine between the two stacks, canopy beam with two lit soffits, bay number header
+      // shared spine between the two stacks, canopy beam with two lit soffits, bay number header. The canopy
+      // is matte powder-black (rubber): as trim metal its underside threw a broad specular blob of the aisle
+      // keys toward the door, which read as a hot lamp on every stack corner
       kit.box("impTrim", x0, STACK_H / 2, zm, 0.1, STACK_H, len, { color: PALETTE.impBlack, texel: 1 });
-      kit.box("impTrim", x0, STACK_H + 0.25, zm, 2.4, 0.22, len + 0.3, { color: PALETTE.impBlack, texel: 1 });
+      kit.box("rubber", x0, STACK_H + 0.25, zm, 2.4, 0.22, len + 0.3, { color: PALETTE.impBlack, texel: 1 });
       for (const e of [-1, 1]) {
         kit.box("impMetal", x0 + e * 1.0, STACK_H + 0.13, zm, 0.24, 0.02, len - 0.3, { color: PALETTE.impCharcoal });
         kit.box("emitWhiteDim", x0 + e * 1.0, STACK_H + 0.125, zm, 0.12, 0.012, len - 0.5, { uv: "keep" });
@@ -448,13 +450,13 @@ export function buildCrewQuarters(kit, ctx, room) {
     [12.5, 0],
   ];
   for (const [x, z] of rig) slotLight(kit, x, z, h, 1.6, "z", "emitWhiteDim", { drop: shadeDrop });
-  spot(5.6, -5.9, 11.0, 0.6, { shadow: true });
-  spot(5.6, 5.9, 11.0, 0.58);
+  spot(5.6, -5.9, 12.5, 0.6, { shadow: true });
+  spot(5.6, 5.9, 12.5, 0.58);
   spot(12.5, 0, 7.0, 0.56, { color: 0xe6ecfa });
   const ky = 1.5;
-  keyLight(kit, -1.4, ky, -5.9, { color: warm, k: 9.0, distance: 13, priority: 0.5 });
-  keyLight(kit, -1.4, ky, 5.9, { color: warm, k: 9.0, distance: 13, priority: 0.49 });
-  keyLight(kit, -8.4, ky, -5.9, { color: warm, k: 8.5, distance: 12, priority: 0.48 });
-  keyLight(kit, -8.4, ky, 5.9, { color: warm, k: 8.5, distance: 12, priority: 0.47 });
-  keyLight(kit, -14.6, ky, 0, { color: warm, k: 9.5, distance: 14, priority: 0.46 });
+  keyLight(kit, -1.4, ky, -5.9, { color: warm, k: 10.0, distance: 13, priority: 0.5 });
+  keyLight(kit, -1.4, ky, 5.9, { color: warm, k: 10.0, distance: 13, priority: 0.49 });
+  keyLight(kit, -8.4, ky, -5.9, { color: warm, k: 9.5, distance: 12, priority: 0.48 });
+  keyLight(kit, -8.4, ky, 5.9, { color: warm, k: 9.5, distance: 12, priority: 0.47 });
+  keyLight(kit, -14.6, ky, 0, { color: warm, k: 10.5, distance: 14, priority: 0.46 });
 }

@@ -733,13 +733,14 @@ export function buildMedbay(kit, ctx, room) {
   const ky = h - 1.0;
   // (pass 2: keys pulled back ~30% — at k 2.4 the white deck read as a 92-luma wash with no tile grid;
   // pass 3: the bacta pool trimmed from 10 / 14 m — at that reach it was washing the door-end deck teal)
-  // pass 4 (round-2 critic): cornice channel removed, keys −20 % — the white tile deck sat at 150/255 by the door
+  // pass 4 (round-2 critic): cornice channel removed, keys −27 % — the white tile deck sat at 150/255 by the door
+  // and the room mean at 68; target 50–65, the pod and the arm lamps carry the picture
   kit.light({ type: "point", pos: [4.0, 2.0, 4.0], color: DECK_C.bacta.getHex(), intensity: 6.5, decay: 1, distance: 10, priority: 0.52 });
-  keyLight(kit, -10.0, ky, -7.0, { color: white, k: 1.25, distance: 13, priority: 0.5 });
-  keyLight(kit, -3.0, ky, -7.0, { color: white, k: 1.25, distance: 13, priority: 0.49 });
-  keyLight(kit, 2.0, ky, -7.0, { color: white, k: 1.25, distance: 13, priority: 0.48 });
-  keyLight(kit, -4.0, ky, 5.6, { color: 0xffffff, k: 1.3, distance: 11, priority: 0.47 });
-  keyLight(kit, 12.5, ky, 0.0, { color: white, k: 0.8, distance: 13, priority: 0.46 });
-  keyLight(kit, -11.5, ky, 3.0, { color: white, k: 1.15, distance: 12, priority: 0.45 });
-  keyLight(kit, 7.6, ky, -4.4, { color: white, k: 1.25, distance: 12, priority: 0.44 });
+  keyLight(kit, -10.0, ky, -7.0, { color: white, k: 1.15, distance: 13, priority: 0.5 });
+  keyLight(kit, -3.0, ky, -7.0, { color: white, k: 1.15, distance: 13, priority: 0.49 });
+  keyLight(kit, 2.0, ky, -7.0, { color: white, k: 1.15, distance: 13, priority: 0.48 });
+  keyLight(kit, -4.0, ky, 5.6, { color: 0xffffff, k: 1.2, distance: 11, priority: 0.47 });
+  keyLight(kit, 12.5, ky, 0.0, { color: white, k: 0.72, distance: 13, priority: 0.46 });
+  keyLight(kit, -11.5, ky, 3.0, { color: white, k: 1.05, distance: 12, priority: 0.45 });
+  keyLight(kit, 7.6, ky, -4.4, { color: white, k: 1.15, distance: 12, priority: 0.44 });
 }

@@ -313,17 +313,19 @@ export function slotLight(kit, cx, cz, y, len, axis = "x", key = "emitWhiteDim",
       kit.cyl("impTrim", px, y - 0.03, pz, 0.06, 0.06, "y", { color: PALETTE.impBlack, segments: 10 });
     }
   }
-  // hollow housing (top plate + four walls, open toward the floor) so the bar really is recessed inside it
-  kit.box("impTrim", cx, top - 0.02, cz, sx, 0.04, sz, { color: PALETTE.impBlack, texel: 1 });
+  // hollow housing (top plate + four walls, open toward the floor) so the bar really is recessed inside it.
+  // Matte powder-black (rubber: no metalness) rather than trim metal: a key light hung under the shade
+  // otherwise paints a broad specular blob across the louvres, which reads as a hot fixture from the door.
+  kit.box("rubber", cx, top - 0.02, cz, sx, 0.04, sz, { color: PALETTE.impBlack, texel: 1 });
   for (const e of [-1, 1]) {
-    kit.box("impTrim", cx + e * (sx / 2 - 0.015), top - h / 2, cz, 0.03, h, sz, { color: PALETTE.impBlack, texel: 1 });
-    kit.box("impTrim", cx, top - h / 2, cz + e * (sz / 2 - 0.015), sx, h, 0.03, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("rubber", cx + e * (sx / 2 - 0.015), top - h / 2, cz, 0.03, h, sz, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("rubber", cx, top - h / 2, cz + e * (sz / 2 - 0.015), sx, h, 0.03, { color: PALETTE.impBlack, texel: 1 });
   }
-  kit.box("impMetal", cx, top - 0.06, cz, sx - 0.08, 0.02, sz - 0.08, { color: PALETTE.impCharcoal });
+  kit.box("rubber", cx, top - 0.06, cz, sx - 0.08, 0.02, sz - 0.08, { color: PALETTE.impCharcoal });
   kit.box(key, cx, top - 0.075, cz, along ? len - 0.3 : bar, 0.012, along ? bar : len - 0.3, { uv: "keep" });
   for (let f = -len / 2 + 0.2; f < len / 2 - 0.1; f += finStep) {
-    if (along) kit.box("impTrim", cx + f, bot + 0.02, cz, 0.02, 0.04, w - 0.04, { color: PALETTE.impBlack });
-    else kit.box("impTrim", cx, bot + 0.02, cz + f, w - 0.04, 0.04, 0.02, { color: PALETTE.impBlack });
+    if (along) kit.box("rubber", cx + f, bot + 0.02, cz, 0.02, 0.04, w - 0.04, { color: PALETTE.impBlack });
+    else kit.box("rubber", cx, bot + 0.02, cz + f, w - 0.04, 0.04, 0.02, { color: PALETTE.impBlack });
   }
   if (tag) kit.collider([cx - sx / 2, bot, cz - sz / 2], [cx + sx / 2, y, cz + sz / 2], tag);
   return bot;

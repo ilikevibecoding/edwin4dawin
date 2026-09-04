@@ -384,11 +384,11 @@ export function buildHyperdrive(kit, ctx, room) {
     const lamp = [x, 5.7, z];
     const aim = [x + 1.0, cy - 0.4, 0];
     shroudLamp(kit, [x, yT, z], lamp, aim, { key: "emitWhiteDim", size: 0.55 });
-    if (x < 0) kit.light({ type: "spot", pos: lamp, target: aim, color: work, intensity: lux(5.5, 4.4), distance: 22, angle: 0.82, penumbra: 0.55, priority: 0.8 - i * 0.01 });
-    else kit.light({ type: "point", pos: [lamp[0] + 0.15, lamp[1] - 0.45, lamp[2] - Math.sign(z) * 0.35], color: work, intensity: 3.2 * 5.5, decay: 1, distance: 18, priority: 0.6 - i * 0.01 });
+    if (x < 0) kit.light({ type: "spot", pos: lamp, target: aim, color: work, intensity: lux(5.5, 4.8), distance: 22, angle: 0.82, penumbra: 0.55, priority: 0.8 - i * 0.01 });
+    else kit.light({ type: "point", pos: [lamp[0] + 0.15, lamp[1] - 0.45, lamp[2] - Math.sign(z) * 0.35], color: work, intensity: 3.5 * 5.5, decay: 1, distance: 18, priority: 0.6 - i * 0.01 });
   }
   // pulpit / entry lamp: hung between the door and the pulpit so the entry lane is lit as well
   shroudLamp(kit, [-13, yT, 2.6], [-13.2, 5.3, 2.6], [-13.6, 0.9, 3.4], { key: "emitWhiteDim", size: 0.45 });
-  kit.light({ type: "point", pos: [-13.3, 4.9, 2.6], color: 0xeef2ff, intensity: 4.3 * 5.0, decay: 1, distance: 17, priority: 0.55 });
+  kit.light({ type: "point", pos: [-13.3, 4.9, 2.6], color: 0xeef2ff, intensity: 4.7 * 5.0, decay: 1, distance: 17, priority: 0.55 });
   void rand;
 }

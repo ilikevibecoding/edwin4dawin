@@ -4,8 +4,9 @@
 // an interrogation room at the far end (restraint chair, interrogation droid on a stand, bright white spot),
 // a weapon-locker cage, camera housings in every corner, rotating red beacons.
 // Dark ribbed wall variant (grey-dark / charcoal panels, conduit-heavy, banded), the cells darker still.
-// Red accent; dim red slots over the desk, red pools everywhere else, cool fill at the door and the aisle,
-// one harsh white spot in the interrogation room. Rails are dark with a single dim indicator per gate post;
+// Red accent carried by emissive strips, beacons and painted lines; the lights themselves are pale (dim red
+// slots over the desk, salmon pools on the cell rows so the cells read grey through their bars, cool fill at
+// the door and the aisle), one harsh white spot in the interrogation room. Rails are dark with a single dim indicator per gate post;
 // the aisle edges are painted red lines, not light strips. The no-entry roundel appears once (facing the door).
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -300,11 +301,12 @@ export function buildDetention(kit, ctx, room) {
         lens.rotation.y += dt * 3.2;
       });
     }
-    // one pulsing red pool per cell row (pass 3: was one per pair — the two freed slots became the cool side keys
-    // below): 2.5 m in front of the row centre, 3 m up, so all four cell fronts and the walkway are lit face-on
-    // and the red spills through the doorways
+    // one pool per cell row, 4 m in front of the row centre and 3 m up, so all four cell fronts and the walkway
+    // are lit face-on. Pale salmon, not saturated red: a red pool turned every doorway into a uniform red slab
+    // (the grey cell behind it saturated to red); with a near-white pool the bars, lock box, lintel strip and
+    // readout read as a cell door and the red stays in the emissive strips, beacons and painted lines
     const phase = rand() * 6.28;
-    kit.light({ type: "point", pos: [s * (cellX - 4.0), 3.0, (cellZ[1] + cellZ[2]) / 2], color: 0xff3a28, intensity: lux(3.0, 4.2) / 3.0, decay: 1, distance: 15, priority: 0.44, dim: (t) => 0.72 + 0.28 * Math.sin(t * 3.2 + phase) });
+    kit.light({ type: "point", pos: [s * (cellX - 4.0), 3.0, (cellZ[1] + cellZ[2]) / 2], color: 0xffcdb8, intensity: lux(3.0, 4.2) / 3.0, decay: 1, distance: 15, priority: 0.44, dim: (t) => 0.9 + 0.1 * Math.sin(t * 3.2 + phase) });
   }
 
   // ---------------------------------------------------------------- interrogation room at the far end (S wall): raised dais, chair, droid, spot, screens
@@ -419,7 +421,7 @@ export function buildDetention(kit, ctx, room) {
   cameraHousing(kit, -hx + 0.3, h - 0.55, hz - 0.3, -Math.PI * 0.25);
   cameraHousing(kit, 0.9, h - 0.55, -4.6 - 3.0, Math.PI);
 
-  // ---------------------------------------------------------------- lights (8): 2 pulsing red row pools (above), interrogation spot (above),
+  // ---------------------------------------------------------------- lights (8): 2 salmon row pools (above), interrogation spot (above),
   // dim red pool over the desk (the screens carry the white there), cool fill: entrance key 2.4 m in front of the
   // spawn (over the railing gate, so it lights the desk front and the floor beyond it rather than the deck behind
   // the camera), two side keys over the open floor between the desk wings and the cell rows (that floor read as

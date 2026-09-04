@@ -3,8 +3,9 @@
 // grilles on the S wall (the middle fan turns), filter banks with instanced removable cartridges on
 // the W wall, a waste processing hopper with hazard marking in the SE corner, a pump manifold rack
 // through the middle of the room, a monitoring console by the door, a grated service trench with
-// lit pipes below, condensation streaks low on the walls; in the E half a chemical dosing skid under
-// the N-wall gauges and a CO2 processor column with its air-quality screen bank on the S wall.
+// lit pipes below, condensation streaks low on the walls; in the E half a run of engineering-style
+// equipment cabinets and a chemical dosing skid under the N-wall gauges, and a CO2 processor column
+// with its air-quality screen bank on the S wall.
 // Light: the ship's cool white — three hooded spots (pump rack, door approach) and low pendants over
 // the tanks, the scrubbers, the filter banks and the waste unit; green is reserved for the one status
 // light / level gauge on each tank; wall and equipment accents are the ship's blue; the ceiling slots
@@ -14,7 +15,7 @@ import { PALETTE } from "../materials.js";
 import { impConsole, impChair, impWallGear, impWallLight, impCrate, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { rng } from "../kit.js";
-import { ensureDeckDMaterials, shellNoFloor, deckFloor, grateTrench, pipe, pipePath, valveWheel, gauge, junctionBox, tank, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, assembly, blinkers, equipmentRack, screenBank, instGeo, shroudLamp, hexBolt } from "./deck_d_kit.js";
+import { ensureDeckDMaterials, shellNoFloor, deckFloor, grateTrench, pipe, pipePath, valveWheel, gauge, junctionBox, tank, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, assembly, blinkers, equipmentRack, screenBank, instGeo, shroudLamp, hexBolt, cabinetRow } from "./deck_d_kit.js";
 
 export function buildLifeSupport(kit, ctx, room) {
   const [w, h, d] = room.size;
@@ -296,6 +297,9 @@ export function buildLifeSupport(kit, ctx, room) {
     kit.collider([sx0 - 0.25, 0, -hz], [sx0 + 4.05, 1.6, sz + 0.9], "dosing");
     decalD(kit, DECK_D_DECAL.grime, [sx0 + 1.6, 0.018, sz + 1.3], "up", 2.6);
   }
+  // --- engineering-style equipment cabinets on the N wall between the last tank and the dosing skid (four
+  // bays: amber top strips, blue status LEDs, readouts in the room's blue / white)
+  cabinetRow(kit, 3.4, 7.8, -hz + 0.05, "+z", { seed: 840, accentKey, strip: "emitAmberDim", screens: ["scrBlue0", "scrWhite1", "scrBlue1", "scrWhite0"] });
   // --- CO2 processor column on the S wall between the scrubbers and the waste unit, with an air-quality
   // screen bank beside it: tall drum, bolted band flanges, sight glass, valve cluster, riser into the ceiling
   {
@@ -351,9 +355,11 @@ export function buildLifeSupport(kit, ctx, room) {
   // falloff — source 30 cm under the hood mouth, so the hood is dark inside and the ceiling over it gets
   // no more than the deck below; a cool blue point in the trench under the grate. No bare ceiling lamps.
   const work = 0xe4ecff;
-  for (const [i, [x, z]] of [[-8.0, -3.4], [2.0, -3.4], [10.0, 0.6]].entries()) {
-    const mouth = shroudLamp(kit, [x, h - 0.08, z], [x, 3.95, z], [x, 0, z], { key: LENS, size: 0.55 });
-    kit.light({ type: "spot", pos: [mouth[0], mouth[1] - 0.1, mouth[2]], target: [x, 0, z], color: work, intensity: lux(3.8, 4.8), distance: 15, angle: 1.2, penumbra: 0.5, priority: 0.6 - i * 0.01 });
+  // (the E pump-rack spot is tilted 27° toward the N wall so its cone also carries the cabinet run and the
+  // dosing skid; its upper edge stays 6° below the horizontal, so it puts nothing on the ceiling)
+  for (const [i, [x, z, tx, tz]] of [[-8.0, -3.4, -8.0, -3.4], [4.0, -5.5, 4.5, -7.5], [10.0, 0.6, 10.0, 0.6]].entries()) {
+    const mouth = shroudLamp(kit, [x, h - 0.08, z], [x, 3.95, z], [tx, 0, tz], { key: LENS, size: 0.55 });
+    kit.light({ type: "spot", pos: [mouth[0], mouth[1] - 0.1, mouth[2]], target: [tx, 0, tz], color: work, intensity: lux(3.8, 4.8), distance: 15, angle: 1.2, penumbra: 0.5, priority: 0.6 - i * 0.01 });
   }
   const pendant = (x, z, y, target, k, priority) => {
     const mouth = shroudLamp(kit, [x, h - 0.08, z], [x, y, z], target, { key: LENS, size: 0.5 });

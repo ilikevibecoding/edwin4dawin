@@ -525,13 +525,13 @@ export function buildArmory(kit, ctx, room) {
 
   // ---------------------------------------------------------------- lights (8): armour spot + fill (above), booth amber + red beacon (above), vestibule white, 2 amber aisle, bench white
   // vestibule white sits a little S of the door so it also carries the inspection table and the S-wall lockers
-  keyLight(kit, -11.5, 3.0, 2.5, { color: 0xe8eeff, k: 4.4, distance: 14, priority: 0.5 });
+  keyLight(kit, -11.5, 3.0, 2.5, { color: 0xe8eeff, k: 4.8, distance: 14, priority: 0.5 });
   // the two aisle keys sit just north of the aisle so the rifle racks / cell cages get direct light and the
   // grating still catches the pool; the armour rig carries the middle (pass 2: +30%, longer reach — the far
   // half of the room read as a black void at k 2.6 / 13 m)
-  // (pass 3, round-2 critic: keys dropped from 3.4 to 2.9 m — 0.6 m under the ceiling they painted hot blobs on the
-  // coffers — and +10 % so the room mean climbs toward the 50–65 target)
-  keyLight(kit, -4.5, 2.9, -2.5, { color: 0xffc38a, k: 4.8, distance: 16, priority: 0.49 });
-  keyLight(kit, 10.5, 2.9, -2.5, { color: 0xffc38a, k: 4.8, distance: 16, priority: 0.47 });
-  keyLight(kit, 13.2, 2.8, 5.6, { color: 0xf0f4ff, k: 3.2, distance: 8, priority: 0.44 });
+  // (pass 3, round-2 critic: keys dropped from 3.4 to 2.7 m — 0.6 m under the ceiling they painted hot blobs on the
+  // coffers — and +20 % so the room mean climbs into the 50–65 target)
+  keyLight(kit, -4.5, 2.7, -2.5, { color: 0xffc38a, k: 5.3, distance: 16, priority: 0.49 });
+  keyLight(kit, 10.5, 2.7, -2.5, { color: 0xffc38a, k: 5.3, distance: 16, priority: 0.47 });
+  keyLight(kit, 13.2, 2.8, 5.6, { color: 0xf0f4ff, k: 3.5, distance: 8, priority: 0.44 });
 }
