@@ -32,7 +32,7 @@ export function buildBriefing(kit, ctx) {
     walls: { styles: IMP_STYLES_TECH, panelW: 1.3 },
     wall: { zmin: { styles: flat }, xmax: { styles: flat } },
   });
-  const sheets = sheetAtlas(ctx, "briefing_sheets");
+  const boards = sheetAtlas(ctx, "briefing_boards", { dark: true });
 
   // --- tiers: row A on the deck, rows B and C stepping up 0.15 m each toward the aft wall
   const rowsX = [12.1, 10.4, 8.7];
@@ -46,7 +46,7 @@ export function buildBriefing(kit, ctx) {
   // step nosing on the exposed edges (flat black cap) with a recessed white step light on the riser
   const nose = (x, y, z0, z1, dir) => {
     kit.boxMM("paintedMetal", [x - (dir > 0 ? 0.08 : 0.005), y - 0.012, z0], [x + (dir > 0 ? 0.005 : 0.08), y + 0.006, z1], { color: PALETTE.impBlack, texel: 2 });
-    kit.boxMM("emitWhiteSoft", [x + (dir > 0 ? 0 : -0.012), y - 0.1, z0 + 0.1], [x + (dir > 0 ? 0.012 : 0), y - 0.07, z1 - 0.1], { uv: "keep" });
+    kit.boxMM("emitWhiteDim", [x + (dir > 0 ? 0 : -0.012), y - 0.1, z0 + 0.1], [x + (dir > 0 ? 0.012 : 0), y - 0.07, z1 - 0.1], { uv: "keep" });
   };
   nose(tiers[0].x1, 0.15, tierZ0, tierZ1, 1);
   nose(tiers[1].x1, 0.3, tierZ0, tierZ1, 1);
@@ -64,7 +64,7 @@ export function buildBriefing(kit, ctx) {
     const { frame } = wallFrame(kit, seg.from, seg.to, 0);
     // u runs from zmin (u=0) to zmax
     const uAt = (z) => z - min[2];
-    const dispZ = -6.55; // display centre
+    const dispZ = -6.35; // display centre
     const dispW = 3.9;
     const dispH = 1.9;
     const dv = 1.62;
@@ -86,8 +86,8 @@ export function buildBriefing(kit, ctx) {
     frame.box("emitBlue", uAt(dispZ), dv + dispH / 2 + 0.11, 0.13, dispW * 0.9, 0.02, 0.01);
     signPlate(frame, labels, 1, { u: uAt(dispZ), v: dv + dispH / 2 + 0.38, h: 0.22 });
     // emblem on the port half, lectern in front of it
-    const emZ = -9.75;
-    emblem(kit, ctx, frame, uAt(emZ), 2.05, 0.7);
+    const emZ = -9.8;
+    emblem(kit, ctx, frame, uAt(emZ), 2.1, 0.85);
     lectern(kit, ctx, max[0] - 1.9, emZ, labels);
     // presenter's cable duct from the lectern into the wall
     pipeRun(kit, [[max[0] - 1.9, 0.05, emZ + 0.3], [max[0] - 0.2, 0.05, emZ + 0.3]], 0.03, PALETTE.impBlack, "rubber");
@@ -119,17 +119,18 @@ export function buildBriefing(kit, ctx) {
         frame.add("impScreen" + (idx % 5), new THREE.PlaneGeometry(1.1, 0.7), uAt(x), 1.8, 0.072, { uv: "keep" });
         frame.box("leds", uAt(x), 1.36, 0.066, 0.6, 0.03, 0.008, { uv: "keep" });
       } else {
-        // printed flimsi sheet held by two clips
-        frame.add(sheets.key, new THREE.PlaneGeometry(0.68, 0.85), uAt(x), 1.82, 0.066, { uv: "keep", uvRect: sheets.rect(idx) });
-        for (const du of [-0.22, 0.22]) frame.box("metal", uAt(x) + du, 2.26, 0.07, 0.08, 0.05, 0.02, { color: PALETTE.steel });
-        frame.box("emitBlue", uAt(x), 2.34, 0.066, 0.18, 0.02, 0.004);
+        // lit mission board: dark display panel in a black bezel with an amber header light
+        frame.box("paintedMetal", uAt(x), 1.82, 0.065, 0.78, 0.98, 0.03, { color: PALETTE.impBlack, texel: 2 });
+        frame.add(boards.key, new THREE.PlaneGeometry(0.68, 0.85), uAt(x), 1.82, 0.082, { uv: "keep", uvRect: boards.rect(idx) });
+        frame.box("emitAmber", uAt(x), 2.29, 0.081, 0.5, 0.012, 0.004);
+        frame.box(idx % 2 ? "emitBlue" : "emitAmber", uAt(x) + 0.3, 1.36, 0.081, 0.05, 0.02, 0.004);
       }
     }
     // small map lamps over the boards, wired along a conduit at the top
     for (let k = 0; k < 4; k++) {
       const u = uAt(6.8 + k * 2.4);
       frame.box("paintedMetal", u, 2.66, 0.14, 0.4, 0.05, 0.26, { color: PALETTE.impBlack, texel: 2 });
-      frame.box("emitWhiteSoft", u, 2.63, 0.14, 0.32, 0.01, 0.16, { uv: "keep" });
+      frame.box("emitWhiteDim", u, 2.63, 0.14, 0.32, 0.01, 0.16, { uv: "keep" });
     }
     frame.cylU("metal", uAt(10.0), 2.95, 0.06, 0.03, 9.4, { color: PALETTE.impMid });
     ventGrille(frame, uAt(16.5), 3.15, 1.1, 0.36);
@@ -150,7 +151,7 @@ export function buildBriefing(kit, ctx) {
     kit.box("paintedMetal", cx0, 0.45, max[2] - 0.3, cw, 0.9, 0.6, { color: PALETTE.impDark, texel: 1.5 });
     kit.box("impPanel1", cx0, 0.5, max[2] - 0.61, cw - 0.2, 0.7, 0.02, { color: PALETTE.impGrey, uv: "keep" });
     kit.box("darkGloss", cx0, 0.915, max[2] - 0.3, cw + 0.06, 0.03, 0.66);
-    kit.box("emitWhiteSoft", cx0, 0.1, max[2] - 0.6, cw - 0.3, 0.015, 0.01, { uv: "keep" });
+    kit.box("emitWhiteDim", cx0, 0.1, max[2] - 0.6, cw - 0.3, 0.015, 0.01, { uv: "keep" });
     for (let k = 0; k < 4; k++) kit.box("paintedMetal", cx0 - cw / 2 + 0.38 + k * 0.75, 0.5, max[2] - 0.625, 0.02, 0.6, 0.01, { color: PALETTE.impBlack, texel: 3 });
     // dispenser unit on the counter and cups
     kit.box("paintedMetal", cx0 + 0.95, 1.2, max[2] - 0.3, 0.5, 0.56, 0.45, { color: PALETTE.impLight, texel: 2 });
@@ -202,21 +203,23 @@ export function buildBriefing(kit, ctx) {
     kit.box("paintedMetal", (min[0] + 0.3 + tiers[1].x0) / 2, 0.004, cz, tiers[1].x0 - min[0] - 0.3, 0.008, 2.2, { color: PALETTE.impBlack, texel: 1.5 });
     for (let k = 0; k < 5; k++) {
       const x = min[0] + 1.0 + k * 1.05;
-      for (const s of [-1, 1]) kit.cyl("emitWhiteSoft", x, 0.009, cz + s * 1.0, 0.04, 0.004, "y", { segments: 10, uv: "keep" });
+      for (const s of [-1, 1]) kit.cyl("emitWhiteDim", x, 0.009, cz + s * 1.0, 0.04, 0.004, "y", { segments: 10, uv: "keep" });
     }
     wallScreen(kit, ctx, { side: "xmin", u: uDoor + 2.6, v: 1.9, w: 1.2, h: 0.7, screen: 4 });
     wallScreen(kit, ctx, { side: "xmin", u: uDoor - 2.6, v: 1.9, w: 1.2, h: 0.7, screen: 2 });
   }
 
-  // --- ceiling: darker panels, a downlight per seat, a cove strip over the display wall, cable tray to the lectern
+  // --- ceiling: darker panels, one recessed light trough per seat row, a cove strip over the display wall, cable tray to the lectern
   {
     const f = ceilingFrame(kit, min[0], min[2], H);
     panelGrid(f, max[0] - min[0], max[2] - min[2], { rowH: 1.4, panelW: 1.4, kick: false, topPipes: false, seed: ctx.seed * 17 + 9, collide: false, styles: { panel: 0.84, greeble: 0.08, vent: 0.08 }, paints: [[PALETTE.impGrey, 0.5], [PALETTE.impMid, 0.4], [PALETTE.impDark, 0.1]], ...IMP_THEME, decals: false });
     for (const x of rowsX) {
-      for (const z of seatZ) {
-        kit.cyl("paintedMetal", x + 0.1, H - 0.1, z, 0.2, 0.12, "y", { color: PALETTE.impBlack, segments: 20 });
-        kit.cyl("emitWhiteSoft", x + 0.1, H - 0.165, z, 0.14, 0.01, "y", { segments: 20, uv: "keep" });
-      }
+      const z0 = seatZ[0] - 0.45;
+      const z1 = seatZ[seatZ.length - 1] + 0.45;
+      // black recess with a narrow frosted diffuser deep inside it
+      kit.boxMM("paintedMetal", [x - 0.12, H - 0.16, z0 - 0.12], [x + 0.32, H, z1 + 0.12], { color: PALETTE.impBlack, texel: 2 });
+      kit.boxMM("emitWhiteDim", [x + 0.02, H - 0.17, z0], [x + 0.18, H - 0.15, z1], { uv: "keep" });
+      for (const z of [z0 - 0.06, z1 + 0.06]) kit.boxMM("paintedMetal", [x - 0.14, H - 0.2, z - 0.03], [x + 0.34, H - 0.16, z + 0.03], { color: PALETTE.impDark, texel: 2 });
     }
     // cove over the forward wall: a dropped soffit with a blue strip washing the display
     kit.boxMM("paintedMetal", [max[0] - 1.3, H - 0.35, min[2] + 0.2], [max[0] - 0.0, H, max[2] - 0.2], { color: PALETTE.impDark, texel: 1.5 });
@@ -224,7 +227,7 @@ export function buildBriefing(kit, ctx) {
     kit.boxMM("emitAmber", [max[0] - 1.2, H - 0.36, -10.4], [max[0] - 0.2, H - 0.345, -8.7]);
     // entry strip by the door and a service tray from the aft wall to the lectern
     kit.boxMM("paintedMetal", [min[0] + 0.6, H - 0.1, cz - 1.4], [min[0] + 1.0, H, cz + 1.4], { color: PALETTE.impDark, texel: 2 });
-    kit.boxMM("emitWhiteSoft", [min[0] + 0.72, H - 0.12, cz - 1.2], [min[0] + 0.88, H - 0.09, cz + 1.2], { uv: "keep" });
+    kit.boxMM("emitWhiteDim", [min[0] + 0.72, H - 0.12, cz - 1.2], [min[0] + 0.88, H - 0.09, cz + 1.2], { uv: "keep" });
     cableTray(kit, [min[0] + 0.4, H - 0.12, min[2] + 0.45], [max[0] - 1.4, H - 0.12, min[2] + 0.45], { w: 0.24, count: 3 });
     for (const [dz, col] of [[-0.06, PALETTE.impBlack], [0.06, PALETTE.steel]]) kit.cyl("metal", max[0] - 1.9, H - 0.35 - 0.15, min[2] + 0.45 + dz, 0.02, 0.3, "y", { color: col, segments: 8 });
   }
@@ -252,8 +255,8 @@ function benchRow(kit, x, y, zs, row) {
   kit.boxMM("paintedMetal", [x - 0.42, y, z0 - 0.1], [x + 0.3, y + 0.08, z1 + 0.1], { color: PALETTE.impBlack, texel: 2 });
   kit.boxMM("paintedMetal", [x - 0.32, y + 0.08, z0], [x + 0.22, y + 0.36, z1], { color: PALETTE.impDark, texel: 1.5 });
   kit.boxMM("emitBlue", [x + 0.221, y + 0.14, z0 + 0.15], [x + 0.226, y + 0.16, z1 - 0.15]);
-  kit.boxMM("emitWhiteSoft", [x - 0.432, y + 0.03, z0 + 0.1], [x - 0.42, y + 0.06, z1 - 0.1], { uv: "keep" });
-  for (const [i, z] of zs.entries()) {
+  kit.boxMM("emitWhiteDim", [x - 0.432, y + 0.03, z0 + 0.1], [x - 0.42, y + 0.06, z1 - 0.1], { uv: "keep" });
+  for (const z of zs) {
     // seat shell (grey), cushion and backrest (black fabric), tilted back a little
     kit.box("paintedMetal", x - 0.02, y + 0.4, z, 0.58, 0.1, 0.56, { color: PALETTE.impGrey, texel: 2 });
     kit.box("fabric", x + 0.02, y + 0.47, z, 0.5, 0.07, 0.5, { color: PALETTE.impBlack, uv: "world", texel: 2 });
@@ -278,46 +281,47 @@ function benchRow(kit, x, y, zs, row) {
 }
 
 /**
- * Original geometric emblem on a wall Frame: a hexagonal ring with six spokes and a solid centre hex,
- * standing 6 cm in front of a slightly larger emissive hex plate so it reads as backlit.
+ * Original geometric emblem on a wall Frame: a heavy hexagonal ring with six spokes and a solid centre
+ * hex on a black hex backing plate; a warm glow ring runs just outside the rim (a lit-edge insignia,
+ * not a backlit wheel), an amber core at the hub.
  */
 function emblem(kit, ctx, frame, u, v, R) {
-  // warm, softer glow than the ceiling strips so the emblem reads as a lit insignia, not a lamp
   ctx.materials.briefing_glow ||= new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#ffe6c2"), emissiveIntensity: 1.5, roughness: 0.5, metalness: 0 });
-  const plate = new THREE.CylinderGeometry(R + 0.14, R + 0.14, 0.02, 6);
-  plate.rotateX(Math.PI / 2);
-  frame.add("briefing_glow", plate, u, v, 0.02, { uv: "keep" });
-  const dark = new THREE.CylinderGeometry(R + 0.26, R + 0.26, 0.03, 6);
-  dark.rotateX(Math.PI / 2);
-  frame.add("paintedMetal", dark, u, v, 0.005, { color: PALETTE.impBlack, texel: 2 });
-  // hex ring: six flat bars
-  const side = R; // side length of a regular hexagon equals its circumradius
+  const hexPlate = (r, depth, n, mat, extra) => {
+    // vertices along ±u (flat top and bottom) to match the ring bars
+    const g = new THREE.CylinderGeometry(r, r, depth, 6);
+    g.rotateY(Math.PI / 6);
+    g.rotateX(Math.PI / 2);
+    frame.add(mat, g, u, v, n, extra);
+  };
+  // backing: black hex plate with a thin dark-grey chamfer ring behind it
+  hexPlate(R + 0.42, 0.02, 0.0, "paintedMetal", { color: PALETTE.impDark, texel: 2 });
+  hexPlate(R + 0.34, 0.04, 0.02, "paintedMetal", { color: PALETTE.impBlack, texel: 2 });
+  const apo = Math.cos(Math.PI / 6);
   for (let k = 0; k < 6; k++) {
     const a = (Math.PI / 3) * k + Math.PI / 6;
-    const cu = Math.cos(a) * R * Math.cos(Math.PI / 6);
-    const cv = Math.sin(a) * R * Math.cos(Math.PI / 6);
-    frame.box("paintedMetal", u + cu, v + cv, 0.075, side + 0.06, 0.11, 0.05, { color: PALETTE.impDark, texel: 2, spin: a + Math.PI / 2 });
-    // spokes to the vertices
+    // rim glow bar just outside the ring, then the ring bar in front of it
+    const rg = R + 0.1;
+    frame.box("briefing_glow", u + Math.cos(a) * rg * apo, v + Math.sin(a) * rg * apo, 0.05, rg + 0.04, 0.06, 0.02, { spin: a + Math.PI / 2, uv: "keep" });
+    frame.box("paintedMetal", u + Math.cos(a) * R * apo, v + Math.sin(a) * R * apo, 0.085, R + 0.08, 0.16, 0.07, { color: PALETTE.impGrey, texel: 2, spin: a + Math.PI / 2 });
+    // spokes from the hub to the vertices (light grey on the black plate so the figure reads)
     const av = (Math.PI / 3) * k;
-    const su = Math.cos(av) * R * 0.55;
-    const sv = Math.sin(av) * R * 0.55;
-    frame.box("paintedMetal", u + su, v + sv, 0.075, R * 0.7, 0.06, 0.05, { color: PALETTE.impDark, texel: 2, spin: av });
+    const s0 = R * 0.34;
+    const s1 = R - 0.08;
+    frame.box("paintedMetal", u + Math.cos(av) * (s0 + s1) / 2, v + Math.sin(av) * (s0 + s1) / 2, 0.085, s1 - s0 + 0.04, 0.07, 0.07, { color: PALETTE.impGrey, texel: 2, spin: av });
   }
-  const centre = new THREE.CylinderGeometry(R * 0.3, R * 0.3, 0.06, 6);
-  centre.rotateX(Math.PI / 2);
-  frame.add("paintedMetal", centre, u, v, 0.08, { color: PALETTE.impDark, texel: 2 });
-  const core = new THREE.CylinderGeometry(R * 0.16, R * 0.16, 0.01, 6);
-  core.rotateX(Math.PI / 2);
-  frame.add("emitAmber", core, u, v, 0.115, { uv: "keep" });
-  // three thin chevrons under the ring
-  for (let k = 0; k < 3; k++) frame.box("paintedMetal", u, v - R - 0.34 - k * 0.09, 0.05, 0.9 - k * 0.2, 0.04, 0.03, { color: PALETTE.impDark, texel: 3 });
+  hexPlate(R * 0.38, 0.08, 0.09, "paintedMetal", { color: PALETTE.impGrey, texel: 2 });
+  hexPlate(R * 0.3, 0.02, 0.135, "paintedMetal", { color: PALETTE.impBlack, texel: 2 });
+  hexPlate(R * 0.19, 0.012, 0.15, "briefing_glow", { uv: "keep" });
+  // three thin chevrons under the ring on the backing plate
+  for (let k = 0; k < 3; k++) frame.box("paintedMetal", u, v - R * apo - 0.2 - k * 0.06, 0.05, 0.8 - k * 0.2, 0.03, 0.02, { color: PALETTE.impGrey, texel: 3 });
 }
 
 /**
  * Printed mission sheets: one canvas with four 4:5 sheets (roster table, route map, orbital chart,
  * classified text block) as a lit-by-lights (non emissive) material. Returns { key, rect(i) }.
  */
-export function sheetAtlas(ctx, key) {
+export function sheetAtlas(ctx, key, { dark = false } = {}) {
   const N = 4;
   const W = 256;
   const Hh = 320;
@@ -325,10 +329,15 @@ export function sheetAtlas(ctx, key) {
     const c = makeCanvas(W * N, Hh);
     const g = c.getContext("2d");
     const rand = rng(41);
-    const INK = "#1c1f24";
-    const ORANGE = "#e9782f";
-    const BLUE = "#2f6fb5";
-    const RED = "#c8322a";
+    // `dark`: the same four layouts as lit display boards (near-black ground, pale ink, emissive)
+    const INK = dark ? "#c9d3e2" : "#1c1f24";
+    const PAPER = dark ? "#0f1318" : "#c9cdd3";
+    const HEADER = dark ? "#26304a" : INK;
+    const SHADE = dark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.05)";
+    const GRID = dark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.25)";
+    const ORANGE = dark ? "#ffb347" : "#e9782f";
+    const BLUE = dark ? "#4a9dff" : "#2f6fb5";
+    const RED = dark ? "#ff4136" : "#c8322a";
     const font = (px, bold = true) => `${bold ? "bold " : ""}${px}px "DejaVu Sans Mono", "Liberation Mono", monospace`;
     const titles = ["WING ASSIGNMENT  ·  CYCLE 14", "PATROL ROUTE  ·  SECTOR 7", "ORBITAL APPROACH  ·  DANTOOINE", "OPERATION  ·  RESTRICTED"];
     for (let i = 0; i < N; i++) {
@@ -337,17 +346,17 @@ export function sheetAtlas(ctx, key) {
       g.beginPath();
       g.rect(0, 0, W, Hh);
       g.clip();
-      g.fillStyle = "#c9cdd3";
+      g.fillStyle = PAPER;
       g.fillRect(0, 0, W, Hh);
-      // paper grain
+      // paper grain / panel noise
       for (let k = 0; k < 500; k++) {
-        g.fillStyle = `rgba(0,0,0,${(rand() * 0.06).toFixed(3)})`;
+        g.fillStyle = dark ? `rgba(255,255,255,${(rand() * 0.05).toFixed(3)})` : `rgba(0,0,0,${(rand() * 0.06).toFixed(3)})`;
         g.fillRect(rand() * W, rand() * Hh, 2, 2);
       }
       g.strokeStyle = INK;
       g.lineWidth = 2;
       g.strokeRect(10, 10, W - 20, Hh - 20);
-      g.fillStyle = INK;
+      g.fillStyle = HEADER;
       g.fillRect(10, 10, W - 20, 30);
       g.fillStyle = "#e6e9ee";
       g.font = font(11);
@@ -366,7 +375,7 @@ export function sheetAtlas(ctx, key) {
         // roster table
         for (let r = 0; r < 12; r++) {
           const y = 58 + r * 20;
-          g.fillStyle = r % 2 ? "rgba(0,0,0,0.05)" : "rgba(0,0,0,0)";
+          g.fillStyle = r % 2 ? SHADE : "rgba(0,0,0,0)";
           g.fillRect(16, y - 8, W - 32, 18);
           g.fillStyle = INK;
           g.font = font(9, false);
@@ -378,7 +387,7 @@ export function sheetAtlas(ctx, key) {
         }
       } else if (i === 1) {
         // hex-grid route map
-        g.strokeStyle = "rgba(0,0,0,0.25)";
+        g.strokeStyle = GRID;
         g.lineWidth = 1;
         const cell = 18;
         for (let r = 0; r < 14; r++) {
@@ -465,7 +474,9 @@ export function sheetAtlas(ctx, key) {
       g.restore();
     }
     const tex = toTexture(c, { srgb: true, wrap: false });
-    ctx.materials[key] = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0 });
+    ctx.materials[key] = dark
+      ? new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.1, roughness: 0.4, metalness: 0 })
+      : new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0 });
   }
   return {
     key,
