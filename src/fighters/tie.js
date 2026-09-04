@@ -20,7 +20,7 @@ export const TIE = {
   bound: 3.6, // bounding sphere radius
 };
 
-const POD_COLOR = new THREE.Color("#5e6672"); // blue-grey Imperial fighter livery
+const POD_COLOR = new THREE.Color("#6a7381"); // blue-grey Imperial fighter livery
 const POD_DARK = new THREE.Color("#3a3f48");
 const PANEL_COLOR = new THREE.Color("#171a20"); // solar cells
 const FRAME_COLOR = new THREE.Color("#7c838d");

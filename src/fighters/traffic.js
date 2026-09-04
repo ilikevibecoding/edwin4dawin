@@ -289,7 +289,7 @@ export class Traffic {
         const curve = this.launchCurves[f.slot];
         const w = smoothstep(0.3, 0.65, u);
         this.curvePose(f, curve, u, w, slot.yaw || 0, 1.8 * Math.pow(Math.max(k, 0.05), 0.8) * (curve.len / f.dur));
-        f.throttle = smoothstep(0.12, 0.45, u);
+        f.throttle = smoothstep(0.02, 0.3, u); // engines lit through the shaft, full glow by the field
         f.armLen = ARM_TOP_Y - (RELEASE_Y + 2.45) - 6 * smooth(tau / 3);
         f.progress = u;
         break;

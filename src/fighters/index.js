@@ -277,8 +277,8 @@ export function createFighters({ scene, materials, audio = null }) {
             p.glows[1].scale.set(0.9 + 1.1 * k, 0.9 + 1.1 * k, 1);
             p.glows[0].material.opacity = Math.min(1, 0.15 + k);
             p.glows[1].material.opacity = Math.min(1, 0.15 + k);
-            p.glows[2].scale.set(2 + 6 * k, 2 + 6 * k, 1);
-            p.glows[2].material.opacity = 0.5 * k;
+            p.glows[2].scale.set(2 + 7 * k, 2 + 7 * k, 1);
+            p.glows[2].material.opacity = 0.6 * k;
           }
         }
         if (f.state === "ascending") beamF = f;
