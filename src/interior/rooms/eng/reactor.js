@@ -44,10 +44,11 @@ export function buildReactor(kit, ctx) {
     impFloor(kit, b, y, { mat: "engDeck", tone: IMP.wallDark, trim: false, texel: 0.5 });
     walkable(ctx, b[0], b[1], b[2], b[3], y, id);
   }
-  // glossy circulation strips from the doors to the pit edge
-  kit.boxMM("impGloss", [CX - 1.4, y - 0.001, PIT.z1 + 2.2], [CX + 1.4, y + 0.006, z1], { color: IMP.white, texel: 0.25 });
-  kit.boxMM("impGloss", [x0, y - 0.001, 590.8], [PIT.x0 - 2.2, y + 0.006, 593.2], { color: IMP.white, texel: 0.25 });
-  kit.boxMM("impGloss", [PIT.x1 + 2.2, y - 0.001, 590.8], [x1, y + 0.006, 593.2], { color: IMP.white, texel: 0.25 });
+  // circulation strips from the doors to the pit edge (soft gloss: the plain gloss deck mirrored the
+  // ceiling bars as white streaks in the door view)
+  kit.boxMM("impGlossSoft", [CX - 1.4, y - 0.001, PIT.z1 + 2.2], [CX + 1.4, y + 0.006, z1], { color: IMP.white, texel: 0.25 });
+  kit.boxMM("impGlossSoft", [x0, y - 0.001, 590.8], [PIT.x0 - 2.2, y + 0.006, 593.2], { color: IMP.white, texel: 0.25 });
+  kit.boxMM("impGlossSoft", [PIT.x1 + 2.2, y - 0.001, 590.8], [x1, y + 0.006, 593.2], { color: IMP.white, texel: 0.25 });
   // grating service strip around the pit behind the kerb (drainage for the coolant galleries), with a
   // steel edge angle on the room side, and hazard kerbs marking the pump bay and the capacitor bank
   const grateStrip = (gx0, gz0, gx1, gz1) => {
@@ -407,7 +408,9 @@ export function buildReactor(kit, ctx) {
   pointLightDesc(ctx, 0xdfe8ff, 6, 10, [CX, y + 3.2, z1 - 2.5], 1);
 
   // ---------------------------------------------------------------- views
-  ctx.view("reactor", CX, y + STD.eye, z1 - 2.2, 0, 16); // pitched up: the column runs into the ceiling collar with headroom
+  // pitched well up from the door: the whole column from the gallery rail to the ceiling collar, with the
+  // collar's underside and a ceiling bay of headroom above it (the consoles stay along the bottom edge)
+  ctx.view("reactor", CX, y + STD.eye, z1 - 2.2, 0, 24);
   ctx.view("reactor_core", x0 + 6.5, y + STD.eye, CZ + 6, -70, 8);
   ctx.view("reactor_pit", PIT.x0 + 2.0, RING_Y + STD.eye, INNER.z0 + 3, -100, 24);
   ctx.view("reactor_north", 24.5, y + STD.eye, 549.5, 140, -4);
@@ -506,7 +509,7 @@ function upperWall(frame, L, v0, v1, seed) {
       frame.box("impPaintedMetal", cu, vc, 0.06, bw * 0.8, lh * 0.7, 0.08, { color: IMP.consoleDark, texel: 1 });
       const slats = 5;
       for (let s = 0; s < slats; s++) frame.box("impMetal", cu, vc - lh * 0.29 + (s / (slats - 1)) * lh * 0.58, 0.11, bw * 0.8 - 0.3, 0.07, 0.12, { color: IMP.gunmetal, tilt: 0.5 });
-      gaugeCluster(frame, cu, g1 - 1.1, { n: 2, r: 0.3, seed: seed + i, manifold: false });
+      gaugeCluster(frame, cu, g1 - 1.1, { n: 2, r: 0.3, seed: seed + i, manifold: false, lite: true });
     } else if (r < 0.55) {
       // riser triple with flanged headers and handwheel isolation valves facing the gallery
       for (const du of [-0.3, 0, 0.3]) frame.cylV("impMetal", cu + du * bw, lc, 0.32, 0.18, lh, { color: du === 0 ? IMP.gunmetal : IMP.steel, segments: 10 });
@@ -535,7 +538,7 @@ function upperWall(frame, L, v0, v1, seed) {
     } else {
       // instrument bay: gauge cluster under a valved pipe manifold, stencil to the side
       frame.box("impPanel1", cu, lc, 0.03, bw, lh, 0.06, { color: IMP.wallMid, uv: "keep" });
-      gaugeCluster(frame, cu, v0 + 2.1, { n: 4, r: 0.32, seed: seed + i * 3 });
+      gaugeCluster(frame, cu, v0 + 2.1, { n: 4, r: 0.32, seed: seed + i * 3, lite: true });
       valveManifold(frame, cu - bw * 0.42, cu + bw * 0.42, g1 - 1.4, { n: 3, r: 0.2, drop: 1.7, seed: seed + i });
       frame.quad("impDecal", cu + bw * 0.34, v0 + 1.0, 0.065, 0.9, 0.9, { uvRect: impDecalRect([2, 4, 11, 15][Math.floor(rand() * 4)]) });
     }
