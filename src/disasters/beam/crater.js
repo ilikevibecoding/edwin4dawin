@@ -20,7 +20,7 @@ export class CraterPlan {
     this.m = manager;
     this.world = manager.world;
     this.cx = cx; this.cz = cz; this.R = R; this.D = D; this.g = groundY; this.seed = seed;
-    this.magmaR = Math.max(1.5, R * 0.22 + D * 0.35);
+    this.magmaR = Math.max(1.5, R * 0.3 + D * 0.4);
     const outer = R + RIM_WIDTH;
     const tmp = [];
     for (let x = Math.floor(cx - outer); x <= Math.ceil(cx + outer); x++) {
@@ -129,7 +129,8 @@ export class CraterPlan {
       if (id === B.BEDROCK) return;
       const def = BLOCKS[id];
       if (def.shape !== SHAPE.CUBE) { this.m.setBlock(x, y, z, B.AIR); continue; }
-      const pMagma = Math.max(0, 1.6 * (1 - d / this.magmaR));
+      // solid pool at the centre thinning out to scattered glowing cracks across the inner floor
+      const pMagma = d < this.magmaR ? 1.8 * (1 - d / this.magmaR) : d < this.R * 0.75 ? 0.06 : 0;
       const magma = pMagma > 0 && hash2(x, z, this.seed + 7) < pMagma;
       this.m.setBlock(x, y, z, magma ? B.MAGMA : B.SCORCHED_STONE);
       if (magma && pMagma > 1.2 && this.m.budgetLeft > 0) this.m.setBlock(x, y - 1, z, B.MAGMA);

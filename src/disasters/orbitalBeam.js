@@ -15,7 +15,7 @@ import { RingSet } from './beam/rings.js';
 import { CraterPlan } from './beam/crater.js';
 import { PreviewGuide } from './beam/guide.js';
 
-const STATION_Y = 214;            // platform altitude (world y)
+const STATION_Y = 200;            // platform altitude (world y); the focus point hangs ~16 blocks under it
 const DESCENT_MIN_S = 3, DESCENT_MAX_S = 5;
 const FADE_TICKS = 30;            // beam fade-out after firing (1.5 s)
 const LINGER_TICKS = 200;         // smoke lingers after the beam is gone (10 s)
@@ -227,7 +227,8 @@ export class OrbitalBeam extends Disaster {
     if (this.debrisThisTick >= MAX_DEBRIS_PER_TICK) return;
     const edge = rNow - d;
     if (edge > 3.5 && y <= this.groundY) return; // deep interior: vaporised silently
-    const p = (edge > 3.5 ? 0.12 : 0.42) * (0.5 + 0.5 * this.params.intensity);
+    // first contact throws almost everything it touches; later only the crater edge sheds blocks
+    const p = (this.tick - this.T2 < 30 ? 0.95 : edge > 3.5 ? 0.12 : 0.42) * (0.5 + 0.5 * this.params.intensity);
     if (this.rng.next() >= p) return;
     this.debrisThisTick++;
     const dx = x + 0.5 - this.cx, dz = z + 0.5 - this.cz;
@@ -260,7 +261,7 @@ export class OrbitalBeam extends Disaster {
     if (!this.station) return;
     const p = this.params;
     const t1 = this.T1 / 20, t2 = this.T2 / 20, t3 = this.T3 / 20, t4 = this.T4 / 20;
-    const maxSphere = 2.2 + 2.2 * p.intensity;
+    const maxSphere = 3 + 2.6 * p.intensity;
     const pulse = Math.sin(this.visTime * 9);
     let power = 0, heat = 0, dy = 0, stationAlpha = 1, bottom = this.focusY, intensity = 0, sphereR = 0, sphereAlpha = 0, tipHot = 0;
     let moteRate = 0, sparkRate = 0, smokeRate = 0;
@@ -331,32 +332,37 @@ export class OrbitalBeam extends Disaster {
 
   renderRings(t, t1, t2) {
     const rings = this.rings, R = this.R, br = this.params.beamRadius;
-    // ring 0: ground shockwave, ring 1: slower dust ring, rings 2-3: cloud rings pushed outward
+    // ground shockwave: ring 0 = expanding wall of dust, ring 1 = glowing band at its foot, ring 2 = slower flat dust ring;
+    // rings 3-4 = cloud rings pushed outward when the tip crosses the cloud layer
     let u = t - t2;
-    if (u >= 0 && u < 2.4 && !this.stopping) { const k = 1 - (1 - u / 2.4) * (1 - u / 2.4); rings.setColor(0, 1, 0.85, 0.6); rings.set(0, 1.5 + (R * 3.2 - 1.5) * k, 2.5 + 3 * k, 1.1 * (1 - k) * (1 - k), this.impactY + 0.08); }
-    else rings.hide(0);
-    if (u >= 0.2 && u < 4 && !this.stopping) { const k = smooth((u - 0.2) / 3.8); rings.setColor(1, 0.85, 0.7, 0.55); rings.set(1, 2 + (R * 2.1 - 2) * k, 4 + 4 * k, 0.35 * (1 - k), this.impactY + 0.6 + 2 * k); }
-    else rings.hide(1);
+    if (u >= 0 && u < 3 && !this.stopping) {
+      const k = 1 - (1 - u / 3) * (1 - u / 3), r = 1.5 + (R * 3.2 - 1.5) * k, fade = Math.pow(1 - k, 1.2);
+      rings.setColor(0, 0.6, 0.52, 0.43, 1); rings.set(0, r, -(3.5 + 8 * k), 0.92 * fade, this.impactY - 0.6);
+      rings.setColor(1, 1, 0.75, 0.4, 0); rings.set(1, r - 0.4, -(1.2 + 2.5 * k), 1.0 * (1 - k) * (1 - k), this.impactY - 0.6);
+    } else { rings.hide(0); rings.hide(1); }
+    if (u >= 0.2 && u < 4.5 && !this.stopping) { const k = smooth((u - 0.2) / 4.3); rings.setColor(2, 0.8, 0.7, 0.58, 0.9); rings.set(2, 2 + (R * 2.1 - 2) * k, 4 + 5 * k, 0.5 * (1 - k), this.impactY + 0.4 + 1.5 * k); }
+    else rings.hide(2);
     // time at which the descending tip crosses the cloud layer
     const fc = Math.pow(clamp01((this.focusY - (CLOUD_HEIGHT + 4)) / (this.focusY - this.impactY)), 1 / 1.7);
     const tc = t1 + fc * (t2 - t1);
     u = t - tc;
     for (let i = 0; i < 2; i++) {
       const uu = u - i * 0.35, dur = 3.2 + i * 0.9;
-      if (uu >= 0 && uu < dur && !this.stopping) { const k = smooth(uu / dur); rings.setColor(2 + i, 0.9, 0.95, 1); rings.set(2 + i, br * 2 + (38 + i * 14) * k, 5 + 6 * k, 0.55 * (1 - k), CLOUD_HEIGHT + 1.5 + i * 1.2); }
-      else rings.hide(2 + i);
+      if (uu >= 0 && uu < dur && !this.stopping) { const k = smooth(uu / dur); rings.setColor(3 + i, 0.92, 0.96, 1, 0.4); rings.set(3 + i, br * 2 + (38 + i * 14) * k, 5 + 6 * k, 0.6 * (1 - k), CLOUD_HEIGHT + 1.5 + i * 1.2); }
+      else rings.hide(3 + i);
     }
     rings.commit();
   }
 
   renderPreview(t) {
     const rings = this.rings, R = this.R, br = this.params.beamRadius, y = this.impactY + 0.06;
-    const pulse = 0.72 + 0.28 * Math.sin(this.visTime * 3);
-    rings.setColor(0, 1, 0.7, 0.25); rings.set(0, R - 0.3, 0.7, pulse, y);
-    rings.setColor(1, 0.35, 0.9, 1); rings.set(1, br - 0.2, 0.4, 0.8, y);
-    const k = (this.visTime * 0.45) % 1; // scanning pulse travelling from the beam radius out to the crater edge
-    rings.setColor(2, 1, 0.85, 0.5); rings.set(2, br + (R - br) * k, 0.5, 0.6 * (1 - k), y + 0.02);
-    rings.hide(3);
+    const pulse = 0.8 + 0.2 * Math.sin(this.visTime * 3);
+    // destruction radius: a glowing curtain plus a flat ring; beam radius: a cyan curtain; a scanning pulse travels between them
+    rings.setColor(0, 1, 0.7, 0.25, 0.6); rings.set(0, R, -4, 0.9 * pulse, y);
+    rings.setColor(1, 1, 0.75, 0.3, 0.3); rings.set(1, R - 0.6, 1.2, pulse, y);
+    rings.setColor(2, 0.35, 0.9, 1, 0.45); rings.set(2, br, -2.4, 0.85, y);
+    const k = (this.visTime * 0.45) % 1;
+    rings.setColor(3, 1, 0.85, 0.5, 0); rings.set(3, br + (R - br) * k, -1.2, 0.8 * (1 - k), y);
     rings.commit();
     if (this.guide) this.guide.set(0.25 + 0.15 * Math.sin(this.visTime * 5));
   }
@@ -365,7 +371,7 @@ export class OrbitalBeam extends Disaster {
     const a = Math.random() * Math.PI * 2;
     const r = STATION_RING_RADIUS + (Math.random() - 0.5) * 2;
     const amber = Math.random() < 0.18;
-    this.motes.spawnMote(this.cx + Math.cos(a) * r, this.stationY + (Math.random() - 0.5) * 1.6, this.cz + Math.sin(a) * r, 20 + Math.random() * 10, 1.1 + Math.random() * 1.1,
+    this.motes.spawnMote(this.cx + Math.cos(a) * r, this.stationY + (Math.random() - 0.5) * 2.4, this.cz + Math.sin(a) * r, 24 + Math.random() * 12, 1.5 + Math.random() * 1.5,
       amber ? 1 : 0.5 + Math.random() * 0.2, amber ? 0.7 : 0.9, amber ? 0.3 : 1);
   }
 

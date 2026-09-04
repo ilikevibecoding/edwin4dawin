@@ -5,12 +5,15 @@
 import * as THREE from 'three';
 import { SHARED } from '../../entityMaterial.js';
 
-export const STATION_RING_RADIUS = 26;
-export const STATION_FOCUS_DROP = 11; // focus point sits this far below the station centre
+const MODEL_RING_RADIUS = 26;                                     // hull ring radius in model units
+const MODEL_FOCUS_DROP = 11;                                      // focus point below the hub, model units
+export const STATION_SCALE = 1.5;                                 // model -> world scale
+export const STATION_RING_RADIUS = MODEL_RING_RADIUS * STATION_SCALE; // world radius of the hull ring
+export const STATION_FOCUS_DROP = MODEL_FOCUS_DROP * STATION_SCALE;   // focus point sits this far below the station centre
 
-const HULL = [0.11, 0.12, 0.15];
-const HULL_LIGHT = [0.17, 0.18, 0.22];
-const HULL_PANEL = [0.08, 0.09, 0.12];
+const HULL = [0.2, 0.21, 0.25];
+const HULL_LIGHT = [0.3, 0.31, 0.36];
+const HULL_PANEL = [0.14, 0.15, 0.19];
 
 const VERT = /* glsl */ `
 attribute float aEmissive;
@@ -23,8 +26,8 @@ void main() {
   vec3 n = normalize(mat3(modelMatrix) * normal);
   vec3 l1 = normalize(vec3(0.35, 1.0, -0.55));
   vec3 l2 = normalize(vec3(-0.4, -0.5, 0.6));
-  float d = max(dot(n, l1), 0.0) + 0.45 * max(dot(n, l2), 0.0);
-  vShade = clamp(0.3 + 0.7 * d, 0.0, 1.0);
+  float d = max(dot(n, l1), 0.0) + 0.7 * max(dot(n, l2), 0.0);
+  vShade = clamp(0.38 + 0.62 * d, 0.0, 1.0);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
@@ -72,7 +75,7 @@ const T = (x, y, z, rx = 0, ry = 0, rz = 0) => M.makeRotationFromEuler(new THREE
 
 export function buildStationGeometry() {
   const acc = { pos: [], nor: [], col: [], emi: [] };
-  const R = STATION_RING_RADIUS;
+  const R = MODEL_RING_RADIUS;
   // main hull ring (axis vertical) + cyan running strip on its underside + amber strip on top
   append(acc, new THREE.TorusGeometry(R, 2.2, 10, 64), T(0, 0, 0, Math.PI / 2), HULL, 0);
   append(acc, new THREE.TorusGeometry(R, 0.55, 6, 64), T(0, -2.0, 0, Math.PI / 2), HULL, 1);
@@ -133,6 +136,7 @@ export class StationMesh {
     });
     this.geometry = buildStationGeometry();
     this.mesh = new THREE.Mesh(this.geometry, this.material);
+    this.mesh.scale.setScalar(STATION_SCALE);
     this.mesh.frustumCulled = true;
     this.mesh.renderOrder = 8;
     this.mesh.visible = false;

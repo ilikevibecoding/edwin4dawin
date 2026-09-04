@@ -1,36 +1,42 @@
-// A small set of flat, additive glowing rings driven entirely by uniforms (radius, width, alpha, height per
-// ring) in one geometry: used for the ground shockwave, the cloud rings pushed outward by the descending
-// beam, and the preview target marker. One draw call for all rings.
+// A small set of glowing rings driven entirely by uniforms (radius, width, alpha, height per ring) in one
+// geometry: used for the ground shockwave, the cloud rings pushed outward by the descending beam, and the
+// preview target marker. Rings are flat discs (width > 0) or vertical curtains (width < 0 = height). Each
+// ring also has a "body" factor: 0 = pure additive glow, 1 = ordinary translucent dust (premultiplied alpha),
+// so a single material/draw call covers both looks.
 import * as THREE from 'three';
 
-export const RING_COUNT = 4;
+export const RING_COUNT = 6;
 const SEGMENTS = 72;
 
 const VERT = /* glsl */ `
 attribute float aRing;
 attribute float aEdge;
 attribute float aAngle;
-uniform vec4 uRings[${RING_COUNT}];   // x radius, y width, z alpha, w world y
+uniform vec4 uRings[${RING_COUNT}];   // x radius, y width (negative = vertical band of that height), z alpha, w world y
+uniform vec4 uColors[${RING_COUNT}];  // rgb colour, w body (0 additive .. 1 opaque-ish)
 uniform vec3 uCenter;
 varying float vEdge;
 varying float vAlpha;
-varying vec3 vColor;
-uniform vec3 uColors[${RING_COUNT}];
+varying float vVert;
+varying vec4 vColor;
 void main() {
   int i = int(aRing + 0.5);
   vec4 r = uRings[i];
-  float rad = r.x + aEdge * r.y;
-  vec3 world = vec3(uCenter.x + cos(aAngle) * rad, r.w, uCenter.z + sin(aAngle) * rad);
-  vEdge = aEdge; vAlpha = r.z; vColor = uColors[i];
+  float rad = r.y < 0.0 ? r.x : r.x + aEdge * r.y;
+  float y = r.y < 0.0 ? r.w - aEdge * r.y : r.w;
+  vec3 world = vec3(uCenter.x + cos(aAngle) * rad, y, uCenter.z + sin(aAngle) * rad);
+  vEdge = aEdge; vAlpha = r.z; vColor = uColors[i]; vVert = r.y < 0.0 ? 1.0 : 0.0;
   gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
 }`;
 const FRAG = /* glsl */ `
 varying float vEdge;
 varying float vAlpha;
-varying vec3 vColor;
+varying float vVert;
+varying vec4 vColor;
 void main() {
-  float a = sin(vEdge * 3.14159) * vAlpha;
-  gl_FragColor = vec4(vColor * a, a);
+  // flat rings fade at both edges; vertical bands are solid at the ground and fade towards the top
+  float a = mix(sin(vEdge * 3.14159), 1.0 - smoothstep(0.25, 1.0, vEdge), vVert) * vAlpha;
+  gl_FragColor = vec4(vColor.rgb * a, a * vColor.w);
 }`;
 
 export class RingSet {
@@ -55,11 +61,13 @@ export class RingSet {
     this.geometry = g;
     this.rings = [];
     this.colors = [];
-    for (let i = 0; i < RING_COUNT; i++) { this.rings.push(new THREE.Vector4(0, 1, 0, 60)); this.colors.push(new THREE.Vector3(1, 1, 1)); }
+    for (let i = 0; i < RING_COUNT; i++) { this.rings.push(new THREE.Vector4(0, 1, 0, 60)); this.colors.push(new THREE.Vector4(1, 1, 1, 0)); }
+    // premultiplied-alpha blending: out = src + dst * (1 - a * body); body 0 is pure additive glow
     this.material = new THREE.ShaderMaterial({
       uniforms: { uRings: { value: this.rings }, uColors: { value: this.colors }, uCenter: { value: new THREE.Vector3() } },
       vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest: true,
-      blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+      side: THREE.DoubleSide,
     });
     this.mesh = new THREE.Mesh(g, this.material);
     this.mesh.frustumCulled = false;
@@ -69,7 +77,8 @@ export class RingSet {
   }
 
   setCenter(x, z) { this.material.uniforms.uCenter.value.set(x, 0, z); }
-  setColor(i, r, g, b) { this.colors[i].set(r, g, b); }
+  // body: 0 = additive light, 1 = translucent dust that also darkens/covers what is behind it
+  setColor(i, r, g, b, body = 0) { this.colors[i].set(r, g, b, body); }
   set(i, radius, width, alpha, y) { this.rings[i].set(radius, width, alpha, y); }
   hide(i) { this.rings[i].z = 0; }
 
