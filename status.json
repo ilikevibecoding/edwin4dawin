@@ -1,7 +1,7 @@
 {
-  "updated": "2026-09-04T09:02:13.774Z",
-  "phase": "Phase 3 of 5: parallel builders finishing, merging + verifying into the integration branch",
-  "summary": "Plan: (1) baseline measured, (2) shared disaster foundation built, (3) 7 builder agents in isolated worktrees, (4) independent critics + verification agents, (5) final baseline comparison, changelog, PR. Nothing counts as done until it is merged, tested and measured in the actual game.",
+  "updated": "2026-09-04T09:08:55.598Z",
+  "phase": "Phase 4 of 5: all builders merged; independent critics and verification running",
+  "summary": "All seven workstreams are merged into the integration branch. Now: harsh visual critics for each disaster, an independent verification pass (tests, multiplayer, determinism, permissions, save isolation, performance), then fixes, final baseline comparison, changelog, README and PR update.",
   "links": [
     {
       "label": "Pull request #17",
@@ -55,8 +55,8 @@
     },
     {
       "name": "Orbital beam",
-      "status": "in progress",
-      "detail": "Builder committed the ring station, descending beam and deterministic crater carving; tuning crater floors and smoke."
+      "status": "merged",
+      "detail": "Charging ring station, motes, descending beam with shimmer, impact flash/shockwave/sparks/smoke/debris, deterministic crater (scorched floor, magma, ash rim, charred wood), cancel retracts; 12/12 lifecycle checks pass; replay hash f91885f7:7406 reproduced."
     },
     {
       "name": "Chunk pipeline optimization",
@@ -65,8 +65,8 @@
     },
     {
       "name": "Critics + verification (visuals, tests, replay, multiplayer, perf)",
-      "status": "pending",
-      "detail": "Eye critic done (round 1). Disaster visual critics, deterministic replay tests, multiplayer checks and perf comparison run after each merge."
+      "status": "in progress",
+      "detail": "Three independent disaster critics (tsunami, tornado, beam) and one verification agent (build, unit tests, lifecycle/replay, multiplayer, cross-page determinism, permissions, save isolation, perf comparison) are running against the integrated build."
     }
   ],
   "metrics": [
@@ -100,6 +100,18 @@
   ],
   "screenshots": [
     {
+      "src": "img/beam_charge.png",
+      "caption": "Ring station charging above the town (09:08 UTC)"
+    },
+    {
+      "src": "img/beam_crater_night.png",
+      "caption": "Crater at night lit by the magma pool (09:08 UTC)"
+    },
+    {
+      "src": "img/beam_impact.png",
+      "caption": "Orbital beam impact: shockwave, sparks, debris, fleeing NPCs (09:08 UTC)"
+    },
+    {
       "src": "img/tornado_plains.png",
       "caption": "Tornado funnel approaching over the plains (08:59 UTC)"
     },
@@ -126,18 +138,6 @@
     {
       "src": "img/tsunami_aerial.png",
       "caption": "Aerial view of the flooded town (07:56 UTC)"
-    },
-    {
-      "src": "img/tsunami_street.png",
-      "caption": "Flooded main street: swimming NPCs, floating debris (07:56 UTC)"
-    },
-    {
-      "src": "img/back_store.png",
-      "caption": "Back of the general store after the shelves fix (07:49 UTC)"
-    },
-    {
-      "src": "img/mp_avatar.png",
-      "caption": "Remote player avatar seen from another client (07:49 UTC)"
     }
   ],
   "log": [
@@ -192,6 +192,10 @@
     {
       "time": "2026-09-04 09:02 UTC",
       "text": "Far-entity LOD added: draw calls during a tornado in town 359 -> 164 (-54%), visuals unchanged at distance."
+    },
+    {
+      "time": "2026-09-04 09:08 UTC",
+      "text": "Orbital beam merged (12/12 checks). All builders done; 3 disaster critics + 1 verifier launched."
     }
   ],
   "issues": [
