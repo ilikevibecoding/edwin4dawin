@@ -610,7 +610,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         const depth = Math.min(30, bd / 2 - 2);
         const blockRoof = pickWeighted(drng, [[0, 0.3], [2, 0.14], [5, 0.16], [6, 0.14], [1, 0.12], [7, 0.1], [3, 0.04]] as const);
         // the two rows face away from each other; lots never overlap, so only landmarks/other districts are checked
-        const sides: [number, number][] = bd >= 2 * depth + 4 ? [[bz0 + depth / 2, 0], [bz1 - depth / 2, Math.PI]] : [[(bz0 + bz1) / 2, 0]];
+        const sides: [number, number][] = bd >= 40 ? [[bz0 + depth / 2, 0], [bz1 - depth / 2, Math.PI]] : [[(bz0 + bz1) / 2, 0]];
         for (const [lz, face] of sides) {
           let lx = bx0 + frontage / 2;
           while (lx < bx1 - frontage / 2) {
