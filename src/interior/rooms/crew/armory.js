@@ -71,10 +71,29 @@ export function buildArmory(kit, ctx) {
     kit.box("impPanel", cageX + 0.035, y + 1.63, hatch[0] + 0.95, 0.012, 1.1, 1.7, { color: IMP.wallMid, uv: "keep" });
     kit.box("crewPaintRed", cageX + 0.045, y + 2.1, hatch[0] + 0.95, 0.004, 0.12, 1.7);
     kit.box("impMetal", cageX + 0.06, y + 1.63, hatch[0] + 1.85, 0.03, 0.9, 0.05, { color: IMP.steel }); // shutter handle bar
-    // counter under the hatch (doors on the store side), datapad, a rifle laid out on it
+    // counter under the hatch (doors on the store side) with the issue terminal inset in the top on
+    // the store side, and a kit being issued through the open half of the hatch: helmet, folded chest
+    // and back plates with the belt on top, a rifle laid across, a tray of power cells, a datapad
     counter(kit, [cageX, y, (hatch[0] + hatch[1]) / 2], hatch[1] - hatch[0] + 0.8, Math.PI / 2, { d: 1.0, h: 0.92, doors: true, tone: IMP.consoleDark, kickLight: "emitRed", tag: "issueCounter" });
-    kit.box("darkGloss", cageX + 0.3, y + 0.93, hatch[1] - 0.8, 0.22, 0.012, 0.3);
-    kit.box("blink", cageX - 0.25, y + 0.93, hatch[0] + 0.7, 0.3, 0.008, 0.5, { uv: "keep" });
+    kit.box("darkGloss", cageX - 0.25, y + 0.925, hatch[0] + 0.7, 0.32, 0.012, 0.5);
+    kit.box("screen2", cageX - 0.25, y + 0.933, hatch[0] + 0.7, 0.28, 0.004, 0.44, { uv: "keep" });
+    kit.box("darkGloss", cageX - 0.32, y + 0.93, hatch[1] - 0.35, 0.22, 0.012, 0.3);
+    buildHelmet(kit, [cageX + 0.25, y + 0.92, hatch[1] - 0.45], yawQ(Math.PI / 2 + 0.3));
+    kit.box("impPaintedMetal", cageX - 0.2, y + 0.98, hatch[1] - 1.75, 0.42, 0.12, 0.5, { color: IMP.white, texel: 2 });
+    kit.box("impPaintedMetal", cageX - 0.2, y + 1.07, hatch[1] - 1.75, 0.3, 0.06, 0.34, { color: IMP.black, texel: 2 });
+    kit.box("impPaintedMetal", cageX - 0.2, y + 1.11, hatch[1] - 1.75, 0.2, 0.03, 0.16, { color: IMP.wallMid, texel: 2 });
+    // rifle laid along the counter on the lobby side (grip down, scope up), stock toward the shutter
+    buildRifle(kit, [cageX + 0.12, y + 1.02, hatch[0] + 2.0], yawQ(0.12).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2)));
+    kit.box("impMetal", cageX - 0.3, y + 0.94, hatch[0] + 1.45, 0.3, 0.04, 0.24, { color: IMP.steel, texel: 2 });
+    for (let k = 0; k < 4; k++) kit.add("impMetal", new THREE.CylinderGeometry(0.02, 0.02, 0.14, 8), { pos: [cageX - 0.3, y + 0.985, hatch[0] + 1.36 + k * 0.06], rot: [0, 0, Math.PI / 2], color: k === 2 ? IMP.gunmetal : IMP.steel, uv: "scale", uvScale: [0.2, 0.3] });
+    kit.box("crewEmit", cageX - 0.3, y + 0.965, hatch[0] + 1.62, 0.28, 0.008, 0.02, { color: 0x40ff70 });
+    // issue trolley inside the cage beside the counter: a rack of two helmets and a stack of chest plates
+    kit.box("impPaintedMetal", cageX - 1.05, y + 0.45, hatch[0] - 0.9, 0.6, 0.06, 0.9, { color: IMP.trim, texel: 1 });
+    kit.box("impPaintedMetal", cageX - 1.05, y + 0.9, hatch[0] - 0.9, 0.6, 0.04, 0.9, { color: IMP.trim, texel: 1 });
+    for (const dz of [-0.4, 0.4]) for (const dx of [-0.26, 0.26]) kit.box("impMetal", cageX - 1.05 + dx, y + 0.5, hatch[0] - 0.9 + dz, 0.03, 1.0, 0.03, { color: IMP.steel });
+    for (const [k, dz] of [-0.22, 0.22].entries()) buildHelmet(kit, [cageX - 1.05, y + 0.92, hatch[0] - 0.9 + dz], yawQ(Math.PI / 2 + (k ? 0.2 : -0.15)));
+    for (let k = 0; k < 3; k++) kit.box("impPaintedMetal", cageX - 1.05, y + 0.54 + k * 0.1, hatch[0] - 0.9, 0.4, 0.09, 0.5, { color: k === 1 ? IMP.wallLight : IMP.white, texel: 2 });
+    kit.collider([cageX - 1.4, y, hatch[0] - 1.4], [cageX - 0.7, y + 1.0, hatch[0] - 0.4], "issueTrolley");
     kit.collider([cageX - 0.12, y, zN], [cageX + 0.12, y + h, gate[0]], "cage");
     kit.collider([cageX - 0.12, y, gate[1]], [cageX + 0.12, y + h, zS], "cage");
     // gate leaf: hinged at the north jamb, standing open 70° into the store
@@ -141,8 +160,15 @@ export function buildArmory(kit, ctx) {
     partition(kit, [cageX + 0.5, 329.6], [cageX + 0.5, zS], y, 2.4, { t: 0.1, tone: IMP.wallDark, toneAlt: IMP.wallMid, band: null, features: false, seed: 31, tag: "baffle", pitch: 2.7 });
     // firing stand butts against the baffle; a 1 m gap at the east wall leads downrange to the target
     counter(kit, [laneX - 0.45, y, 329.2], 2.0, 0, { d: 0.6, h: 0.95, doors: false, tone: IMP.consoleDark, top: "impMetal", tag: "firingStand" });
+    // on the stand: a closed pistol case, the range log datapad, a rack of spare power cells, ear defenders
     kit.box("impPaintedMetal", laneX - 0.45, y + 0.99, 329.15, 0.5, 0.06, 0.4, { color: IMP.wallDark, texel: 1 });
-    kit.box("blink", laneX - 1.1, y + 0.98, 329.2, 0.4, 0.008, 0.3, { uv: "keep" });
+    kit.box("impMetal", laneX - 0.45, y + 1.0, 329.15, 0.52, 0.01, 0.06, { color: IMP.steel });
+    kit.box("darkGloss", laneX - 1.1, y + 0.965, 329.25, 0.3, 0.012, 0.22);
+    kit.box("screen1", laneX - 1.1, y + 0.973, 329.25, 0.26, 0.004, 0.18, { uv: "keep" });
+    kit.box("impMetal", laneX + 0.25, y + 0.98, 329.15, 0.32, 0.04, 0.2, { color: IMP.steel, texel: 2 });
+    for (let k = 0; k < 4; k++) kit.add("impMetal", new THREE.CylinderGeometry(0.02, 0.02, 0.14, 8), { pos: [laneX + 0.14 + k * 0.07, y + 1.02, 329.15], rot: [Math.PI / 2, 0, 0], color: k === 1 ? IMP.gunmetal : IMP.steel, uv: "scale", uvScale: [0.2, 0.3] });
+    kit.add("impPaintedMetal", new THREE.TorusGeometry(0.09, 0.02, 6, 16, Math.PI), { pos: [laneX + 0.62, y + 0.98, 329.25], rot: [0, 0.3, 0], color: IMP.black, uv: "scale", uvScale: [2, 1] });
+    for (const s of [-1, 1]) kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.045, 0.045, 0.04, 10), { pos: [laneX + 0.62 + s * 0.09 * Math.cos(0.3), y + 0.98, 329.25 - s * 0.09 * Math.sin(0.3)], rot: [0, 0.3, Math.PI / 2], color: IMP.black, uv: "scale", uvScale: [0.3, 0.1] });
     floorLine(kit, [cageX + 0.7, 329.9], [xE - 0.2, 329.9], y, 0.12);
     floorDecal(kit, xE - 0.55, y, 329.2, 0.5, 13, 180);
     floorDecal(kit, laneX, y, 330.6, 0.6, 13, 180);
@@ -171,12 +197,14 @@ export function buildArmory(kit, ctx) {
   }
 
   // ---- rifle racks (instanced rifles) ------------------------------------------------------------------
+  // rack variants per [row][rack]: 0 standard, 1 sealed (red lamps, red band, hazard plates, full),
+  // 2 half-issued (amber lamps, issue log on the rail, gaps in the slots), 3 empty (dark, maintenance tags)
+  const VARIANTS = [[0, 1, 0, 2], [2, 0, 1, 0], [0, 0, 3, 1], [0, 2, 0, 0]];
   const rifleT = [];
   const rand = rng(41);
-  for (const rx of rowsX) {
-    for (const rz of rackZ) {
-      const t = rifleRack(kit, [rx, y, rz], Math.PI / 2, { len: 4.6, perSide: 12, seed: Math.floor(rand() * 1000) });
-      for (const tr of t) if (rand() < 0.86) rifleT.push(tr);
+  for (const [ri, rx] of rowsX.entries()) {
+    for (const [ci, rz] of rackZ.entries()) {
+      rifleT.push(...rifleRack(kit, [rx, y, rz], Math.PI / 2, { len: 4.6, perSide: 12, seed: Math.floor(rand() * 1000), variant: VARIANTS[ri][ci] }));
     }
   }
   instancedProp(kit, (k) => buildRifle(k), rifleT);
@@ -277,16 +305,16 @@ export function buildArmory(kit, ctx) {
   // ---- lighting: harsh white bars over every rack aisle and along the cross aisle ------------------------
   // (every second rack-aisle bar carries a real light; the others are emissive only)
   for (const z of [313.4, 330.6]) {
-    for (const [i, x] of [-13.6, -18.3, -23.0, -27.4].entries()) ceilingLight(kit, ctx, [x, y + h, z], 8.0, "z", { mat: "lightBand", color: HARSH, intensity: i % 2 === 0 ? 12 : 0, distance: 14, priority: 1, drop: 0.5 });
+    for (const [i, x] of [-13.6, -18.3, -23.0, -27.4].entries()) ceilingLight(kit, ctx, [x, y + h, z], 8.0, "z", { mat: "lightBand", color: HARSH, intensity: i % 2 === 0 ? 9 : 0, distance: 14, priority: 1, drop: 0.5 });
   }
-  for (const x of [-12.6, -19.6, -26.4]) ceilingLight(kit, ctx, [x, y + h, 322.0], 5.0, "x", { mat: "lightBand", color: HARSH, intensity: 11, distance: 13, priority: 1, drop: 0.5 });
-  ceilingLight(kit, ctx, [-4.9, y + h, 312.6], 8.0, "z", { mat: "lightBand", color: HARSH, intensity: 7, distance: 10, priority: 1, drop: 0.5 });
-  ceilingLight(kit, ctx, [-4.9, y + h, 322.0], 6.0, "z", { mat: "lightBand", color: HARSH, intensity: 8, distance: 10, priority: 2, drop: 0.5 });
+  for (const x of [-12.6, -19.6, -26.4]) ceilingLight(kit, ctx, [x, y + h, 322.0], 5.0, "x", { mat: "lightBand", color: HARSH, intensity: 8.5, distance: 13, priority: 1, drop: 0.5 });
+  ceilingLight(kit, ctx, [-4.9, y + h, 312.6], 8.0, "z", { mat: "lightBand", color: HARSH, intensity: 6.5, distance: 10, priority: 1, drop: 0.5 });
+  ceilingLight(kit, ctx, [-4.9, y + h, 322.0], 6.0, "z", { mat: "lightBand", color: HARSH, intensity: 7.5, distance: 10, priority: 2, drop: 0.5 });
   ceilingLight(kit, ctx, [-9.6, y + h, 322.0], 6.0, "z", { mat: "lightBand", color: HARSH, intensity: 6, distance: 9, priority: 0, drop: 0.5 });
 
   // ---- views --------------------------------------------------------------------------------------
   ctx.view("armory", xE - 0.7, y + STD.eye, doorZ + 1.4, 42, -4);
-  ctx.view("armory_counter", -9.4, y + STD.eye, 313.4, 172, -6);
+  ctx.view("armory_counter", -10.0, y + STD.eye, 318.0, -146, -10);
   ctx.view("armory_racks", -9.6, y + STD.eye, 326.6, 62, -5);
   ctx.view("armory_helmets", -23.6, y + STD.eye, 320.6, 122, -5);
   ctx.view("armory_range", -4.7, y + STD.eye, 327.4, 180, -4);
@@ -324,20 +352,44 @@ export function buildRifle(k, pos = [0, 0, 0], quat = null) {
  * pos = floor centre, len along local x, yaw. Returns rifle transforms (pos + quat) for instancing.
  */
 export function rifleRack(kit, pos, yaw = 0, opts = {}) {
-  const { len = 3.8, perSide = 10, seed = 1 } = opts;
+  const { len = 3.8, perSide = 10, seed = 1, variant = 0 } = opts;
   const rand = rng(seed);
   const q = yawQ(yaw);
   const o = new THREE.Vector3(...pos);
   const L = (x, y, z) => o.clone().add(new THREE.Vector3(x, y, z).applyQuaternion(q));
   const box = (mat, x, y, z, sx, sy, sz, extra = {}) => kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: L(x, y, z).toArray(), quat: q, ...extra });
+  // variant: 0 standard, 1 sealed (locked), 2 half-issued, 3 empty / in maintenance
+  const panelTone = [IMP.wallMid, IMP.wallDark, IMP.wallMid, IMP.consoleDark][variant];
+  const lamp = [0x40ff70, RED, 0xffb454, null][variant];
+  const fill = [[0.94, 0.94], [1, 1], [0.35, 0.6], [0, 0]][variant];
+  const stripe = variant === 1 ? RED : variant === 3 ? 0xffb454 : RED;
   box("impPaintedMetal", 0, 0.06, 0, len, 0.12, 0.8, { color: IMP.trim, texel: 1 });
   box("impMetal", 0, 0.125, 0, len - 0.1, 0.01, 0.74, { color: IMP.gunmetal, texel: 1 });
-  box("impPaintedMetal", 0, 0.72, 0, len - 0.2, 1.2, 0.05, { color: IMP.wallMid, texel: 1 });
+  box("impPaintedMetal", 0, 0.72, 0, len - 0.2, 1.2, 0.05, { color: panelTone, texel: 1 });
   for (const s of [-1, 1]) {
     box("impPaintedMetal", 0, 0.95, s * 0.2, len, 0.05, 0.05, { color: IMP.trim, texel: 1 });
     box("impMetal", 0, 0.93, s * 0.2, len - 0.1, 0.02, 0.09, { color: IMP.steel, texel: 1 });
-    box("crewEmit", 0, 1.3, s * 0.03, len - 0.4, 0.02, 0.006, { color: RED });
+    if (variant !== 3) box("crewEmit", 0, 1.3, s * 0.03, len - 0.4, 0.02, 0.006, { color: stripe });
+    // sealed racks carry a red band and hazard plates across the centre panel; empty racks a maintenance stripe
+    if (variant === 1) {
+      box("crewPaintRed", 0, 1.12, s * 0.028, len - 0.4, 0.1, 0.004);
+      for (const dx of [-len / 4, len / 4]) {
+        const dg = new THREE.PlaneGeometry(0.26, 0.26);
+        if (s < 0) dg.rotateY(Math.PI);
+        const dp = L(dx, 0.62, s * 0.03);
+        kit.add("impDecal", dg, { pos: [dp.x, dp.y, dp.z], quat: q, uv: "keep", uvRect: impDecalRect(13) });
+      }
+    } else if (variant === 3) {
+      for (let k = -2; k <= 2; k++) box("impPaintedMetal", k * (len / 6), 1.12, s * 0.028, 0.3, 0.1, 0.006, { color: 0xffb454, texel: 2 });
+    }
     for (let i = 0; i < perSide; i++) box("impPaintedMetal", -((perSide - 1) * 0.38) / 2 + i * 0.38 + 0.19, 0.95, s * 0.2, 0.03, 0.06, 0.09, { color: IMP.black, texel: 2 });
+  }
+  // half-issued: the issue log datapad lies on the top rail at one end; empty: two tags hang from the rail
+  if (variant === 2) {
+    box("darkGloss", len / 2 - 0.5, 0.965, 0.2, 0.24, 0.012, 0.16);
+    box("screen1", len / 2 - 0.5, 0.973, 0.2, 0.2, 0.004, 0.12, { uv: "keep" });
+  } else if (variant === 3) {
+    for (const dx of [-len / 3, len / 3]) box("impPaintedMetal", dx, 0.8, 0.26, 0.12, 0.18, 0.01, { color: 0xffb454, texel: 2 });
   }
   for (const s of [-1, 1]) {
     box("impPaintedMetal", s * (len / 2 - 0.05), 0.7, 0, 0.1, 1.4, 0.8, { color: IMP.trim, texel: 1 });
@@ -345,16 +397,20 @@ export function rifleRack(kit, pos, yaw = 0, opts = {}) {
     const dp = L(s * (len / 2 + 0.006), 1.0, 0);
     const dg = new THREE.PlaneGeometry(0.3, 0.3);
     dg.rotateY(s > 0 ? Math.PI / 2 : -Math.PI / 2);
-    kit.add("impDecal", dg, { pos: [dp.x, dp.y, dp.z], quat: q, uv: "keep", uvRect: impDecalRect([0, 3, 6, 9, 11][Math.floor(rand() * 5)]) });
-    box("crewEmit", s * (len / 2 + 0.006), 0.72, 0, 0.004, 0.03, 0.3, { color: rand() < 0.8 ? 0x40ff70 : RED });
+    const id = variant === 1 ? 13 : variant === 3 ? 15 : [0, 3, 6, 9, 11][Math.floor(rand() * 5)];
+    kit.add("impDecal", dg, { pos: [dp.x, dp.y, dp.z], quat: q, uv: "keep", uvRect: impDecalRect(id) });
+    if (lamp !== null) box("crewEmit", s * (len / 2 + 0.006), 0.72, 0, 0.004, 0.03, 0.3, { color: lamp });
+    else box("impPaintedMetal", s * (len / 2 + 0.006), 0.72, 0, 0.004, 0.03, 0.3, { color: IMP.black, texel: 2 });
   }
   const c0 = L(-len / 2, 0, -0.4);
   const c1 = L(len / 2, 0, 0.4);
   kit.collider([Math.min(c0.x, c1.x), pos[1], Math.min(c0.z, c1.z)], [Math.max(c0.x, c1.x), pos[1] + 1.4, Math.max(c0.z, c1.z)], "rack");
-  // rifle slots: standing on the base, leaning 9° in against the centre panel, grip facing out
+  // rifle slots: standing on the base, leaning 9° in against the centre panel, grip facing out;
+  // the variant's fill decides which slots are occupied
   const out = [];
-  for (const s of [-1, 1]) {
+  for (const [si, s] of [-1, 1].entries()) {
     for (let i = 0; i < perSide; i++) {
+      if (rand() >= fill[si]) continue;
       const lx = -((perSide - 1) * 0.38) / 2 + i * 0.38;
       const p = L(lx, 0.12, s * 0.245);
       const rq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -s * 0.16)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), s > 0 ? 0 : Math.PI));
@@ -435,23 +491,55 @@ function armourDisplay(kit, pos, yaw = 0) {
   box("glass", 0, 1.48, D / 2 - 0.01, W - 0.12, 2.06, 0.006);
   box("impPaintedMetal", 0, 1.48, -D / 2 + 0.02, W - 0.12, 2.06, 0.03, { color: IMP.wallDark, texel: 1 });
   box("blinkSparse", 0, 2.2, -D / 2 + 0.04, 0.6, 0.12, 0.006, { uv: "keep" });
-  // stand + armour
-  box("impMetal", 0, 0.9, -0.1, 0.06, 1.0, 0.06, { color: IMP.gunmetal });
-  box("impPaintedMetal", 0, 1.5, 0, 0.48, 0.5, 0.26, { color: IMP.white, texel: 2 }); // chest + back plates
-  box("impPaintedMetal", 0, 1.5, 0.135, 0.36, 0.34, 0.02, { color: IMP.white, texel: 2 });
-  box("impPaintedMetal", 0, 1.32, 0.14, 0.34, 0.1, 0.02, { color: IMP.black, texel: 2 }); // abdomen bands
-  box("impPaintedMetal", 0, 1.2, 0, 0.36, 0.1, 0.24, { color: IMP.black, texel: 2 }); // belt
-  box("impPaintedMetal", 0, 1.19, 0.125, 0.2, 0.08, 0.02, { color: IMP.wallMid, texel: 2 });
-  for (const s of [-1, 1]) {
-    kit.add("impPaintedMetal", new THREE.SphereGeometry(0.13, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), { pos: L(s * 0.3, 1.66, 0).toArray(), quat: q, color: IMP.white, uv: "scale", uvScale: [1, 1] });
-    box("impPaintedMetal", s * 0.3, 1.3, 0, 0.12, 0.42, 0.12, { color: IMP.black, texel: 2 }); // arm (black under-suit)
-    box("impPaintedMetal", s * 0.3, 1.36, 0.005, 0.14, 0.24, 0.14, { color: IMP.white, texel: 2 }); // bicep plate
-  }
-  buildHelmet(kit, L(0, 1.78, 0).toArray(), q);
+  // full-height (1.85 m) armour set on a mannequin standing on the plinth, support post behind
+  box("impMetal", 0, 1.1, -0.16, 0.05, 1.34, 0.05, { color: IMP.gunmetal });
+  trooperFigure(kit, L(0, 0.43, 0), q);
+  // placard on the plinth face
+  box("impPaintedMetal", 0, 0.22, D / 2 + 0.005, 0.5, 0.16, 0.01, { color: IMP.wallDark, texel: 2 });
+  box("crewEmit", -0.16, 0.22, D / 2 + 0.012, 0.04, 0.04, 0.004, { color: 0x40ff70 });
   kit.collider([Math.min(L(-W / 2, 0, -D / 2).x, L(W / 2, 0, D / 2).x), pos[1], Math.min(L(-W / 2, 0, -D / 2).z, L(W / 2, 0, D / 2).z)], [Math.max(L(-W / 2, 0, -D / 2).x, L(W / 2, 0, D / 2).x), pos[1] + 2.6, Math.max(L(-W / 2, 0, -D / 2).z, L(W / 2, 0, D / 2).z)], "displayCase");
 }
 
-// Heavy repeating blaster on a tripod with its generator pack (original E-Web-like silhouette).
+/**
+ * Full-height trooper armour set on a mannequin (1.85 m, original silhouette): boots, shin and knee
+ * plates, thigh plates, belt with pouches, abdomen with black bands, chest and back plates, shoulder
+ * bells, biceps and forearm plates over a black under-suit, gloves, helmet. base = feet centre (world),
+ * q = yaw quaternion (faces +Z local).
+ */
+function trooperFigure(kit, base, q) {
+  const L = (x, y, z) => base.clone().add(new THREE.Vector3(x, y, z).applyQuaternion(q));
+  const box = (mat, x, y, z, sx, sy, sz, extra = {}) => kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: L(x, y, z).toArray(), quat: q, ...extra });
+  const W = (x, y, z, sx, sy, sz) => box("impPaintedMetal", x, y, z, sx, sy, sz, { color: IMP.white, texel: 2 });
+  const B = (x, y, z, sx, sy, sz) => box("impPaintedMetal", x, y, z, sx, sy, sz, { color: IMP.black, texel: 2 });
+  for (const s of [-1, 1]) {
+    B(s * 0.12, 0.06, 0.03, 0.14, 0.12, 0.3); // boot
+    W(s * 0.12, 0.33, 0.0, 0.14, 0.4, 0.16); // shin plate
+    W(s * 0.12, 0.56, 0.01, 0.15, 0.09, 0.18); // knee plate
+    B(s * 0.12, 0.62, 0.0, 0.12, 0.06, 0.14); // under-suit at the knee
+    W(s * 0.12, 0.8, 0.0, 0.16, 0.34, 0.18); // thigh plate
+    B(s * 0.12, 0.96, 0.0, 0.13, 0.06, 0.15); // hip gap
+    // arms hang beside the chest: bell, bicep plate, elbow, forearm plate, glove
+    kit.add("impPaintedMetal", new THREE.SphereGeometry(0.12, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), { pos: L(s * 0.28, 1.53, 0).toArray(), quat: q, color: IMP.white, uv: "scale", uvScale: [1, 1] });
+    B(s * 0.3, 1.36, 0.0, 0.11, 0.3, 0.11);
+    W(s * 0.3, 1.4, 0.005, 0.14, 0.2, 0.14);
+    W(s * 0.31, 1.07, 0.05, 0.11, 0.28, 0.11);
+    B(s * 0.31, 0.88, 0.07, 0.08, 0.1, 0.08);
+  }
+  B(0, 1.01, 0.0, 0.38, 0.14, 0.26); // belt / codpiece
+  W(0, 1.02, 0.135, 0.36, 0.08, 0.02);
+  for (const x of [-0.11, 0, 0.11]) W(x, 1.0, 0.15, 0.08, 0.07, 0.03); // pouches
+  W(0, 1.17, 0.0, 0.34, 0.18, 0.22); // abdomen
+  for (const yb of [1.12, 1.2]) B(0, yb, 0.112, 0.3, 0.02, 0.006);
+  W(0, 1.42, 0.0, 0.44, 0.34, 0.28); // chest + back plates
+  B(0, 1.42, -0.145, 0.3, 0.26, 0.01); // back detail
+  W(0, 1.47, 0.145, 0.34, 0.2, 0.01); // chest plate raised centre
+  kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.07, 0.08, 0.1, 10), { pos: L(0, 1.6, 0).toArray(), quat: q, color: IMP.black, uv: "scale", uvScale: [1, 0.2] }); // collar
+  buildHelmet(kit, L(0, 1.56, 0).toArray(), q);
+}
+
+// Heavy repeating blaster on a tripod with its generator (original E-Web-like silhouette): three
+// braced legs on foot pads under a yoke head, gun body with sight and grips, and the generator unit on
+// a framed base with a cooling-fin stack, readout, hazard chevrons and the power cable up to the gun.
 // pos = tripod centre, yaw 0 => barrel toward -Z.
 function heavyBlaster(kit, pos, yaw = 0) {
   const q = yawQ(yaw);
@@ -460,10 +548,17 @@ function heavyBlaster(kit, pos, yaw = 0) {
   const box = (mat, x, y, z, sx, sy, sz, extra = {}) => kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: L(x, y, z).toArray(), quat: q, ...extra });
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
-    const lq = q.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5)));
-    kit.add("impMetal", new THREE.CylinderGeometry(0.025, 0.03, 1.15, 8), { pos: L(Math.cos(a) * 0.3, 0.55, Math.sin(a) * 0.3).toArray(), quat: lq, color: IMP.gunmetal, uv: "scale", uvScale: [0.2, 1] });
+    // legs meet under the head and splay outward to the deck (the sign puts the foot end outboard)
+    const lq = q.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.sin(a) * 0.5, 0, Math.cos(a) * 0.5)));
+    kit.add("impMetal", new THREE.CylinderGeometry(0.03, 0.025, 1.15, 8), { pos: L(Math.cos(a) * 0.3, 0.55, Math.sin(a) * 0.3).toArray(), quat: lq, color: IMP.gunmetal, uv: "scale", uvScale: [0.2, 1] });
+    // foot pad where the leg meets the deck, and a brace strut from the centre hub down to the leg
+    kit.add("impMetal", new THREE.CylinderGeometry(0.07, 0.08, 0.04, 10), { pos: L(Math.cos(a) * 0.58, 0.02, Math.sin(a) * 0.58).toArray(), quat: q, color: IMP.black, uv: "scale", uvScale: [0.5, 0.1] });
+    const bq = q.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.sin(a) * 0.83, 0, Math.cos(a) * 0.83)));
+    kit.add("impMetal", new THREE.CylinderGeometry(0.012, 0.012, 0.55, 6), { pos: L(Math.cos(a) * 0.2, 0.535, Math.sin(a) * 0.2).toArray(), quat: bq, color: IMP.steel, uv: "scale", uvScale: [0.1, 0.5] });
   }
+  kit.add("impMetal", new THREE.CylinderGeometry(0.05, 0.05, 0.06, 10), { pos: L(0, 0.72, 0).toArray(), quat: q, color: IMP.gunmetal, uv: "scale", uvScale: [0.5, 0.1] }); // brace hub
   kit.add("impMetal", new THREE.CylinderGeometry(0.09, 0.12, 0.18, 12), { pos: L(0, 1.1, 0).toArray(), quat: q, color: IMP.gunmetal, uv: "scale", uvScale: [1, 0.3] });
+  for (const s of [-1, 1]) box("impMetal", s * 0.14, 1.24, 0.05, 0.04, 0.16, 0.2, { color: IMP.steel }); // yoke cheeks
   box("impPaintedMetal", 0, 1.28, 0.1, 0.24, 0.2, 0.7, { color: IMP.black, texel: 2 });
   box("impPaintedMetal", 0, 1.42, 0.3, 0.12, 0.1, 0.24, { color: IMP.consoleDark, texel: 2 }); // sight
   box("blinkSparse", 0, 1.42, 0.425, 0.1, 0.06, 0.006, { uv: "keep" });
@@ -472,14 +567,26 @@ function heavyBlaster(kit, pos, yaw = 0) {
   kit.add("impMetal", new THREE.CylinderGeometry(0.065, 0.065, 0.6, 12), { pos: L(0, 1.28, -0.6).toArray(), quat: bq, color: IMP.steel, uv: "scale", uvScale: [0.5, 0.6] });
   kit.add("impMetal", new THREE.CylinderGeometry(0.05, 0.05, 0.1, 12), { pos: L(0, 1.28, -1.72).toArray(), quat: bq, color: IMP.steel, uv: "scale", uvScale: [0.5, 0.2] });
   for (const s of [-1, 1]) box("impMetal", s * 0.16, 1.22, 0.45, 0.04, 0.04, 0.2, { color: IMP.steel }); // grips
-  // generator pack beside the tripod with a power cable up to the gun
-  box("impPaintedMetal", 0.75, 0.32, 0.35, 0.5, 0.64, 0.45, { color: IMP.wallDark, texel: 1 });
-  box("impPaintedMetal", 0.75, 0.66, 0.35, 0.44, 0.04, 0.4, { color: IMP.trim, texel: 1 });
-  box("blink", 0.75, 0.45, 0.58, 0.3, 0.14, 0.006, { uv: "keep" });
-  box("crewEmit", 0.75, 0.2, 0.58, 0.2, 0.02, 0.006, { color: RED });
+  // generator unit: framed skid base with hazard chevrons, horizontal drum with a fin stack, end-cap
+  // readout and status lamp, carry handles, cable up to the gun
+  const gx = 0.8;
+  const gz = 0.35;
+  box("impPaintedMetal", gx, 0.04, gz, 0.66, 0.08, 0.56, { color: IMP.trim, texel: 1 });
+  for (const s of [-1, 1]) box("impMetal", gx + s * 0.31, 0.3, gz, 0.04, 0.52, 0.5, { color: IMP.gunmetal, texel: 1 });
+  for (const k of [-1, 0, 1]) box("impPaintedMetal", gx + k * 0.2, 0.04, gz + 0.283, 0.1, 0.06, 0.006, { color: k ? 0xffb454 : IMP.black, texel: 2 });
+  const dq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2));
+  kit.add("impMetal", new THREE.CylinderGeometry(0.2, 0.2, 0.58, 16), { pos: L(gx, 0.32, gz).toArray(), quat: dq, color: IMP.gunmetal, uv: "scale", uvScale: [1, 1] });
+  for (let k = 0; k < 6; k++) box("impMetal", gx, 0.5 + k * 0.02, gz, 0.5, 0.008, 0.36 - k * 0.03, { color: IMP.steel });
+  box("impPaintedMetal", gx, 0.32, gz + 0.215, 0.44, 0.24, 0.03, { color: IMP.consoleDark, texel: 1 }); // front face panel
+  box("darkGloss", gx - 0.08, 0.34, gz + 0.234, 0.18, 0.1, 0.006);
+  box("screen1", gx - 0.08, 0.34, gz + 0.238, 0.15, 0.08, 0.004, { uv: "keep" });
+  box("leds", gx + 0.12, 0.37, gz + 0.234, 0.1, 0.02, 0.006, { uv: "keep" });
+  box("crewEmit", gx + 0.12, 0.28, gz + 0.234, 0.08, 0.02, 0.006, { color: RED });
+  box("impMetal", gx, 0.64, gz, 0.3, 0.025, 0.025, { color: IMP.steel }); // carry handle
+  for (const s of [-1, 1]) box("impMetal", gx + s * 0.14, 0.6, gz, 0.025, 0.08, 0.025, { color: IMP.steel });
   kit.add("impMetal", new THREE.TorusGeometry(0.45, 0.02, 6, 18, Math.PI * 0.9), { pos: L(0.42, 0.9, 0.2).toArray(), quat: q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 0.3)), color: IMP.rubber, uv: "scale", uvScale: [2, 1] });
-  const a = L(-0.5, 0, -0.5);
-  const b = L(1.05, 0, 0.7);
+  const a = L(-0.6, 0, -0.6);
+  const b = L(1.15, 0, 0.7);
   kit.collider([Math.min(a.x, b.x), pos[1], Math.min(a.z, b.z)], [Math.max(a.x, b.x), pos[1] + 1.4, Math.max(a.z, b.z)], "heavyBlaster");
 }
 
