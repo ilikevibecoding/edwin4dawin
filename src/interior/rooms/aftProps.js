@@ -15,13 +15,14 @@ export function standFrame(kit, x, y, z, facing) {
   return new Frame(kit, new THREE.Vector3(x, y, z), U, UP);
 }
 
-// Dark ceiling plate with cross ribs and no light channels: rooms add their own fixtures.
+// Dark ceiling plate with cross ribs and no light channels: rooms add their own fixtures. Matte paint,
+// not metal: a metallic plate throws a specular blob for every pooled light.
 export function ceilingPlate(kit, room, yTop, opts = {}) {
   const { ribStep = 3.2, wallDepth = WALL_T } = opts;
   const { x0, x1, z0, z1 } = room;
   const w = x1 - x0;
   const d = z1 - z0;
-  kit.boxMM("paintedMetal", [x0 - wallDepth, yTop, z0 - wallDepth], [x1 + wallDepth, yTop + 0.12, z1 + wallDepth], { color: PALETTE.gunmetal, uv: "world", texel: 0.7 });
+  kit.boxMM("painted", [x0 - wallDepth, yTop, z0 - wallDepth], [x1 + wallDepth, yTop + 0.12, z1 + wallDepth], { color: PALETTE.gunmetal, uv: "world", texel: 0.5 });
   const longX = w >= d;
   const n = Math.max(1, Math.floor((longX ? w : d) / ribStep));
   for (let i = 1; i < n; i++) {
@@ -61,7 +62,7 @@ export function pendant(kit, ctx, x, yTop, z, opts = {}) {
   kit.cyl("satinBlack", x, yShade + 0.1, z, r, 0.2, "y", { segments: 20 });
   kit.cyl("metal", x, yShade + 0.2, z, r - 0.03, 0.02, "y", { color: PALETTE.steel, segments: 20 });
   kit.cyl(mat, x, yShade - 0.004, z, r - 0.05, 0.012, "y", { segments: 20, uv: "keep" });
-  ctx.lights[family].push(pointLight(color, intensity, distance, [x, yShade - 0.3, z]));
+  if (intensity > 0) ctx.lights[family].push(pointLight(color, intensity, distance, [x, yShade - 0.3, z]));
 }
 
 // Industrial cage lamp hung from a duct or the ceiling: stem, conical hood, guard bars and the practical.
@@ -117,56 +118,86 @@ export function bench(kit, axis, cAlong, cAcross, y, len, opts = {}) {
   }
 }
 
-// Lounge sofa: light-grey Imperial shell, rounded cushions, armrests and a warm under-glow strip.
-// Runs along `axis`, facing like bench().
+// Rounded box placed by centre; `rot` optional Euler.
+function roundedBox(kit, mat, pos, size, radius, opts = {}) {
+  kit.add(mat, new RoundedBoxGeometry(size[0], size[1], size[2], opts.segments || 2, radius), { pos, ...opts });
+}
+
+// Lounge sofa: dark satin shell on a recessed plinth, fat rounded seat and back cushions (one per seat),
+// padded armrests with a pale accent pad, a warm glow strip under the front edge. Runs along `axis`,
+// `facing` like bench() (+1 sitter faces +across).
 export function sofa(kit, axis, cAlong, cAcross, y, len, opts = {}) {
-  const { color = PALETTE.fabricTeal, cushion = PALETTE.fabricCream, facing = 1, depth = 0.9, shell = PALETTE.impGrey, glow = "emitWarmSoft" } = opts;
-  const seatH = 0.45;
-  alongBox(kit, "painted", axis, cAlong, cAcross, y + 0.2, len, depth - 0.1, 0.32, { color: shell, uv: "world", texel: 0.8 });
-  alongBox(kit, "satinBlack", axis, cAlong, cAcross, y + 0.02, len - 0.1, depth - 0.3, 0.04);
-  alongBox(kit, glow, axis, cAlong, cAcross + facing * (depth / 2 - 0.16), y + 0.035, len - 0.3, 0.04, 0.02, { uv: "keep" });
-  const bAcross = cAcross - facing * (depth / 2 - 0.13);
-  alongBox(kit, "painted", axis, cAlong, bAcross, y + seatH + 0.28, len, 0.16, 0.56, { color: shell, uv: "world", texel: 0.8 });
-  alongBox(kit, "satinBlack", axis, cAlong, bAcross, y + seatH + 0.57, len + 0.02, 0.2, 0.03);
-  const sections = Math.max(1, Math.round((len - 0.3) / 1.0));
-  const secLen = (len - 0.3) / sections;
-  for (let i = 0; i < sections; i++) {
-    const a = cAlong - (len - 0.3) / 2 + secLen * (i + 0.5);
-    const seat = new RoundedBoxGeometry(axis === "x" ? secLen - 0.04 : depth - 0.36, 0.16, axis === "x" ? depth - 0.36 : secLen - 0.04, 3, 0.05);
-    const sp = axis === "x" ? [a, y + 0.42, cAcross + facing * 0.06] : [cAcross + facing * 0.06, y + 0.42, a];
-    kit.add("fabric", seat, { pos: sp, color: cushion, uv: "world", texel: 2 });
-    const back = new RoundedBoxGeometry(axis === "x" ? secLen - 0.04 : 0.14, 0.46, axis === "x" ? 0.14 : secLen - 0.04, 3, 0.05);
-    const bp = axis === "x" ? [a, y + seatH + 0.27, bAcross + facing * 0.12] : [bAcross + facing * 0.12, y + seatH + 0.27, a];
-    const tilt = -facing * 0.1;
-    kit.add("fabric", back, { pos: bp, rot: axis === "x" ? [tilt, 0, 0] : [0, 0, -tilt], color, uv: "world", texel: 2 });
+  const { color = PALETTE.fabricTeal, cushion = color, accent = PALETTE.fabricCream, facing = 1, depth = 0.95, shell = PALETTE.impGreyDark, glow = "emitWarmSoft" } = opts;
+  const X = axis === "x";
+  const P = (a, yy, c) => (X ? [a, yy, c] : [c, yy, a]);
+  const S = (sa, sy, sc) => (X ? [sa, sy, sc] : [sc, sy, sa]);
+  const R = (tiltAcross) => (X ? [tiltAcross, 0, 0] : [0, 0, -tiltAcross]);
+  const armW = 0.22;
+  const inner = len - 2 * armW;
+  const bAcross = cAcross - facing * (depth / 2 - 0.11); // back shell centre
+  // plinth (recessed, so the shell appears to float), base shell, glow strip
+  alongBox(kit, "satinBlack", axis, cAlong, cAcross, y + 0.045, len - 0.24, depth - 0.34, 0.09);
+  roundedBox(kit, "painted", P(cAlong, y + 0.24, cAcross), S(len, 0.3, depth - 0.06), 0.04, { color: shell, uv: "world", texel: 0.8 });
+  alongBox(kit, glow, axis, cAlong, cAcross + facing * (depth / 2 - 0.2), y + 0.1, len - 0.5, 0.04, 0.02, { uv: "keep" });
+  // back shell (a tall rounded slab) with a satin cap rail
+  roundedBox(kit, "painted", P(cAlong, y + 0.6, bAcross), S(len, 0.72, 0.2), 0.04, { color: shell, uv: "world", texel: 0.8 });
+  alongBox(kit, "satinBlack", axis, cAlong, bAcross, y + 0.965, len + 0.02, 0.24, 0.03);
+  // one seat + back cushion per place
+  const n = Math.max(1, Math.round(inner / 0.72));
+  const secLen = inner / n;
+  for (let i = 0; i < n; i++) {
+    const a = cAlong - inner / 2 + secLen * (i + 0.5);
+    roundedBox(kit, "fabric", P(a, y + 0.48, cAcross + facing * 0.09), S(secLen - 0.035, 0.2, depth - 0.42), 0.07, { color: cushion, uv: "world", texel: 2, segments: 3 });
+    roundedBox(kit, "fabric", P(a, y + 0.76, bAcross + facing * 0.17), S(secLen - 0.035, 0.5, 0.17), 0.07, { color, uv: "world", texel: 2, segments: 3, rot: R(-facing * 0.12) });
+    // pale piping seam between seat and back
+    alongBox(kit, "fabric", axis, a, bAcross + facing * 0.26, y + 0.585, secLen - 0.08, 0.03, 0.02, { color: accent, uv: "world", texel: 2 });
   }
+  // armrests: shell block + fabric pad
   for (const s of [-1, 1]) {
-    const a = cAlong + s * (len / 2 - 0.075);
-    alongBox(kit, "painted", axis, a, cAcross, y + 0.33, 0.15, depth - 0.1, 0.66, { color: shell, uv: "world", texel: 0.8 });
-    alongBox(kit, "fabric", axis, a, cAcross, y + 0.67, 0.15, depth - 0.14, 0.04, { color, uv: "world", texel: 2 });
+    const a = cAlong + s * (len / 2 - armW / 2);
+    roundedBox(kit, "painted", P(a, y + 0.42, cAcross), S(armW, 0.66, depth - 0.1), 0.04, { color: shell, uv: "world", texel: 0.8 });
+    roundedBox(kit, "fabric", P(a, y + 0.78, cAcross + facing * 0.03), S(armW - 0.02, 0.08, depth - 0.28), 0.03, { color: accent, uv: "world", texel: 2 });
   }
   const half = depth / 2 + 0.02;
-  if (axis === "x") kit.collider([cAlong - len / 2, y, cAcross - half], [cAlong + len / 2, y + 1.0, cAcross + half], "sofa");
-  else kit.collider([cAcross - half, y, cAlong - len / 2], [cAcross + half, y + 1.0, cAlong + len / 2], "sofa");
+  if (X) kit.collider([cAlong - len / 2, y, cAcross - half], [cAlong + len / 2, y + 1.05, cAcross + half], "sofa");
+  else kit.collider([cAcross - half, y, cAlong - len / 2], [cAcross + half, y + 1.05, cAlong + len / 2], "sofa");
 }
 
 // Single armchair spun by yaw (0 faces +z), same shell language as the sofa.
 export function armchair(kit, x, y, z, yaw, opts = {}) {
-  const { color = PALETTE.fabricTeal, cushion = PALETTE.fabricCream, shell = PALETTE.impGrey } = opts;
+  const { color = PALETTE.fabricTeal, cushion = color, accent = PALETTE.fabricCream, shell = PALETTE.impGreyDark } = opts;
   const rot = [0, yaw, 0];
   const s = Math.sin(yaw);
   const c = Math.cos(yaw);
   const P = (dx, dy, dz) => [x + dx * c + dz * s, y + dy, z - dx * s + dz * c];
-  kit.box("painted", ...P(0, 0.2, 0), 0.8, 0.32, 0.8, { rot, color: shell, uv: "world", texel: 0.8 });
-  kit.box("satinBlack", ...P(0, 0.02, 0), 0.7, 0.04, 0.7, { rot });
-  kit.add("fabric", new RoundedBoxGeometry(0.56, 0.16, 0.56, 3, 0.05), { pos: P(0, 0.42, 0.06), rot, color: cushion, uv: "world", texel: 2 });
-  kit.box("painted", ...P(0, 0.72, -0.34), 0.8, 0.56, 0.14, { rot: [-0.1, yaw, 0], color: shell, uv: "world", texel: 0.8 });
-  kit.add("fabric", new RoundedBoxGeometry(0.56, 0.46, 0.14, 3, 0.05), { pos: P(0, 0.72, -0.24), rot: [-0.1, yaw, 0], color, uv: "world", texel: 2 });
+  kit.box("satinBlack", ...P(0, 0.045, 0), 0.6, 0.09, 0.6, { rot });
+  roundedBox(kit, "painted", P(0, 0.24, 0), [0.86, 0.3, 0.84], 0.04, { rot, color: shell, uv: "world", texel: 0.8 });
+  roundedBox(kit, "fabric", P(0, 0.48, 0.08), [0.5, 0.2, 0.52], 0.07, { rot, color: cushion, uv: "world", texel: 2, segments: 3 });
+  roundedBox(kit, "painted", P(0, 0.62, -0.34), [0.86, 0.74, 0.2], 0.04, { rot: [-0.1, yaw, 0], color: shell, uv: "world", texel: 0.8 });
+  roundedBox(kit, "fabric", P(0, 0.76, -0.2), [0.5, 0.5, 0.17], 0.07, { rot: [-0.12, yaw, 0], color, uv: "world", texel: 2, segments: 3 });
+  kit.box("fabric", ...P(0, 0.585, -0.1), 0.46, 0.03, 0.02, { rot, color: accent, uv: "world", texel: 2 });
   for (const sd of [-1, 1]) {
-    kit.box("painted", ...P(sd * 0.34, 0.33, 0), 0.12, 0.66, 0.8, { rot, color: shell, uv: "world", texel: 0.8 });
-    kit.box("fabric", ...P(sd * 0.34, 0.68, 0), 0.12, 0.04, 0.76, { rot, color, uv: "world", texel: 2 });
+    roundedBox(kit, "painted", P(sd * 0.32, 0.42, 0.02), [0.22, 0.66, 0.8], 0.04, { rot, color: shell, uv: "world", texel: 0.8 });
+    roundedBox(kit, "fabric", P(sd * 0.32, 0.78, 0.04), [0.2, 0.08, 0.62], 0.03, { rot, color: accent, uv: "world", texel: 2 });
   }
-  kit.collider([x - 0.5, y, z - 0.5], [x + 0.5, y + 1.0, z + 0.5], "chair");
+  kit.collider([x - 0.5, y, z - 0.5], [x + 0.5, y + 1.05, z + 0.5], "chair");
+}
+
+// Area rug with real thickness: rounded body, a pale border band and a thin inner accent line.
+export function rug(kit, xa, za, xb, zb, y, opts = {}) {
+  const { color = PALETTE.fabricTeal, border = PALETTE.fabricCream, line = PALETTE.fabricOrange, bw = 0.22 } = opts;
+  const cx = (xa + xb) / 2;
+  const cz = (za + zb) / 2;
+  const w = xb - xa;
+  const d = zb - za;
+  roundedBox(kit, "fabric", [cx, y + 0.017, cz], [w, 0.034, d], 0.012, { color: border, uv: "world", texel: 1.5 });
+  kit.box("fabric", cx, y + 0.036, cz, w - 2 * bw, 0.004, d - 2 * bw, { color, uv: "world", texel: 1.5 });
+  const lw = 0.04;
+  const ins = bw + 0.12;
+  kit.box("fabric", cx, y + 0.039, za + ins, w - 2 * ins, 0.003, lw, { color: line, uv: "world", texel: 1.5 });
+  kit.box("fabric", cx, y + 0.039, zb - ins, w - 2 * ins, 0.003, lw, { color: line, uv: "world", texel: 1.5 });
+  kit.box("fabric", xa + ins, y + 0.039, cz, lw, 0.003, d - 2 * ins, { color: line, uv: "world", texel: 1.5 });
+  kit.box("fabric", xb - ins, y + 0.039, cz, lw, 0.003, d - 2 * ins, { color: line, uv: "world", texel: 1.5 });
 }
 
 // Low table on a pedestal; top at 0.42 m (lounge) or 0.75 m (dining) via opts.h.
@@ -181,10 +212,11 @@ export function table(kit, x, y, z, sx, sz, opts = {}) {
 
 // Bar stool: cast base, column, rubber seat.
 export function stool(kit, x, y, z, opts = {}) {
-  const { seatH = 0.46, collide = true } = opts;
+  const { seatH = 0.46, collide = true, ring = false, seat = PALETTE.rubber } = opts;
   kit.cyl("metal", x, y + 0.02, z, 0.2, 0.04, "y", { color: PALETTE.darkMetal, segments: 16 });
   kit.cyl("metal", x, y + seatH / 2, z, 0.045, seatH - 0.06, "y", { color: PALETTE.gunmetal, segments: 10 });
-  kit.cyl("rubber", x, y + seatH - 0.035, z, 0.2, 0.07, "y", { color: PALETTE.rubber, segments: 16 });
+  kit.cyl("rubber", x, y + seatH - 0.035, z, 0.2, 0.07, "y", { color: seat, segments: 16 });
+  if (ring) kit.add("metal", new THREE.TorusGeometry(0.17, 0.012, 6, 16).rotateX(Math.PI / 2), { pos: [x, y + 0.3, z], color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
   if (collide) kit.collider([x - 0.2, y, z - 0.2], [x + 0.2, y + seatH, z + 0.2], "stool");
 }
 
@@ -216,19 +248,40 @@ export function crate(kit, cx, cy, cz, sx, sy, sz, color, opts = {}) {
   if (collide) kit.collider([cx - sx / 2, cy - sy / 2, cz - sz / 2], [cx + sx / 2, cy + sy / 2, cz + sz / 2], "crate");
 }
 
-// Blaster-rifle silhouette standing upright (muzzle up), front toward local +z, spun by yaw.
+// Blaster rifle standing upright (muzzle up) with its profile in the local y-z plane (muzzle side +z,
+// scope side -z) and its right flank toward local +x, spun by yaw about the vertical. Built from
+// distinct parts in contrasting finishes so it reads at rack distance: gloss stock with a rubber butt,
+// gunmetal receiver with a steel side plate and a red charge lamp, black magazine and grip, long steel
+// barrel in a dark shroud with a muzzle flange, and a scope tube with a lens on top of the receiver.
 export function rifle(kit, x, y, z, yaw = 0) {
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
   const rot = [0, yaw, 0];
   const P = (dx, dy, dz) => [x + dx * c + dz * s, y + dy, z - dx * s + dz * c];
-  kit.box("satinBlack", ...P(0, 0.14, -0.035), 0.05, 0.28, 0.13, { rot });
-  kit.box("satinBlack", ...P(0, 0.5, 0), 0.07, 0.44, 0.17, { rot });
-  kit.box("satinBlack", ...P(0, 0.4, 0.12), 0.045, 0.22, 0.07, { rot });
-  kit.box("metal", ...P(0, 0.64, -0.1), 0.03, 0.16, 0.05, { rot, color: PALETTE.gunmetal });
-  kit.cyl("metal", ...P(0, 0.93, 0.03), 0.016, 0.42, "y", { color: PALETTE.gunmetal, segments: 8 });
-  kit.cyl("metal", ...P(0, 0.8, 0.03), 0.032, 0.18, "y", { color: PALETTE.darkMetal, segments: 8 });
-  kit.cyl("metal", ...P(0, 0.72, -0.115), 0.024, 0.2, "y", { color: PALETTE.darkMetal, segments: 8 });
+  // stock and butt pad (the butt is the lowest part; the stock leans back toward -z)
+  kit.box("rubber", ...P(0, 0.015, -0.06), 0.06, 0.03, 0.15, { rot, color: PALETTE.rubber });
+  kit.box("darkGloss", ...P(0, 0.17, -0.07), 0.05, 0.28, 0.13, { rot });
+  kit.box("darkGloss", ...P(0, 0.31, -0.02), 0.05, 0.06, 0.2, { rot });
+  // receiver body with a steel side plate, charge lamp and ejection slot
+  kit.box("metal", ...P(0, 0.52, 0.0), 0.07, 0.4, 0.18, { rot, color: PALETTE.gunmetal, texel: 3 });
+  kit.box("metal", ...P(0.04, 0.55, 0.0), 0.012, 0.22, 0.1, { rot, color: PALETTE.steel, texel: 3 });
+  kit.box("emitRed", ...P(0.042, 0.66, -0.05), 0.006, 0.02, 0.02, { rot });
+  kit.box("satinBlack", ...P(0.042, 0.45, 0.03), 0.006, 0.04, 0.07, { rot });
+  // pistol grip (raked) and trigger guard, magazine ahead of the grip
+  kit.box("satinBlack", ...P(0, 0.4, 0.12), 0.04, 0.16, 0.05, { rot: [0.35, yaw, 0] });
+  kit.box("satinBlack", ...P(0, 0.335, 0.05), 0.03, 0.012, 0.09, { rot });
+  kit.box("satinBlack", ...P(0, 0.44, 0.21), 0.05, 0.2, 0.05, { rot: [-0.12, yaw, 0] });
+  // barrel: steel tube in a dark shroud, muzzle flange, forward handguard
+  kit.box("metal", ...P(0, 0.79, 0.06), 0.06, 0.16, 0.1, { rot, color: PALETTE.gunmetal, texel: 3 });
+  kit.cyl("metal", ...P(0, 0.98, 0.09), 0.03, 0.26, "y", { color: PALETTE.darkMetal, segments: 8 });
+  kit.cyl("metal", ...P(0, 1.14, 0.09), 0.015, 0.5, "y", { color: PALETTE.steel, segments: 8 });
+  kit.cyl("metal", ...P(0, 1.36, 0.09), 0.03, 0.06, "y", { color: PALETTE.darkMetal, segments: 8 });
+  kit.box("metal", ...P(0, 1.1, 0.06), 0.02, 0.1, 0.03, { rot, color: PALETTE.gunmetal });
+  // scope: two mounts, tube, lens cap, power dot
+  for (const dy of [0.5, 0.64]) kit.box("metal", ...P(0, dy, -0.115), 0.03, 0.03, 0.05, { rot, color: PALETTE.gunmetal });
+  kit.cyl("metal", ...P(0, 0.6, -0.15), 0.024, 0.3, "y", { color: PALETTE.darkMetal, segments: 8 });
+  kit.cyl("darkGloss", ...P(0, 0.753, -0.15), 0.026, 0.01, "y", { segments: 8 });
+  kit.box("emitTeal", ...P(0.02, 0.5, -0.15), 0.012, 0.012, 0.012, { rot });
 }
 
 // Trooper-style helmet: white dome, dark visor band, cast ring at the rim. Front toward local +z.
@@ -340,24 +393,30 @@ export function locker(frame, u, w, h, opts = {}) {
 
 // Wall rifle rack: back board, floor tray, mid clamp rail, red status strip and a stencilled header, with
 // upright rifle silhouettes every 0.28 m. Rifles face into the room (yaw derived from the frame normal).
-export function rifleRack(frame, u0, u1) {
+export function rifleRack(frame, u0, u1, opts = {}) {
+  const { pitch = 0.34, light = "emitCoolSoft" } = opts;
   const kit = frame.kit;
   const uc = (u0 + u1) / 2;
   const len = u1 - u0;
-  const yaw = Math.atan2(frame.N.x, frame.N.z);
-  frame.box("satinBlack", uc, 1.05, 0.03, len, 1.9, 0.06);
+  const yaw = Math.atan2(-frame.N.z, frame.N.x); // rifle profile (local +x) toward the room
+  // pale back board so the dark rifles read as silhouettes, with a satin frame
+  frame.box("satinBlack", uc, 1.05, 0.025, len + 0.08, 2.1, 0.05);
+  frame.box("painted", uc, 1.05, 0.055, len - 0.04, 1.9, 0.01, { color: PALETTE.slate, uv: "world", texel: 0.8 });
   frame.box("metal", uc, 0.22, 0.18, len, 0.05, 0.36, { color: PALETTE.gunmetal, texel: 2 });
   frame.box("metal", uc, 0.03, 0.18, len + 0.04, 0.06, 0.4, { color: PALETTE.darkMetal, texel: 2 });
   frame.box("metal", uc, 1.36, 0.2, len, 0.04, 0.05, { color: PALETTE.steel, texel: 2 });
-  frame.box("emitRed", uc, 1.97, 0.07, len - 0.2, 0.03, 0.02);
   frame.box("leds", uc, 0.3, 0.37, len - 0.4, 0.03, 0.006, { uv: "keep" });
-  frame.box("painted", uc, 2.02, 0.05, len, 0.08, 0.1, { color: PALETTE.gunmetal, uv: "keep" });
-  for (let u = u0 + 0.16; u < u1 - 0.1; u += 0.28) {
+  // header hood with a downward diffuser lighting the rack, red status strip on its face
+  frame.box("satinBlack", uc, 2.06, 0.2, len + 0.08, 0.12, 0.4);
+  frame.box(light, uc, 1.995, 0.22, len - 0.2, 0.01, 0.24, { uv: "keep" });
+  frame.box("emitRed", uc, 2.06, 0.405, len - 0.2, 0.03, 0.01);
+  for (let u = u0 + pitch / 2; u < u1 - pitch / 2 + 0.01; u += pitch) {
     frame.box("metal", u, 1.36, 0.22, 0.05, 0.08, 0.1, { color: PALETTE.gunmetal });
+    frame.box("metal", u, 0.3, 0.24, 0.04, 0.1, 0.02, { color: PALETTE.steel });
     const p = frame.pos(u, 0.25, 0.2);
     rifle(kit, p.x, p.y, p.z, yaw);
   }
-  frame.collider(u0 - 0.02, u1 + 0.02, 0, 2.1, 0, 0.42, "rack");
+  frame.collider(u0 - 0.02, u1 + 0.02, 0, 2.15, 0, 0.42, "rack");
 }
 
 // Seven-segment numeral built from thin boxes on a wall frame: (u, v) is the digit centre, h its height.
