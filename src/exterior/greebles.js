@@ -372,7 +372,7 @@ function seamLanes(ctx, surf, { along, spacing, len, gap, prob, tint = [0.42, 0.
 }
 
 /** Warning / marker lights along a line u = uFn(v) every `step` metres; every `redEvery`-th is red. */
-function edgeLights(ctx, surf, { uFn, step, redEvery = 3, scale = 1.8, lift = 0, v0 = surf.v0, v1 = surf.v1 }) {
+function edgeLights(ctx, surf, { uFn, step, redEvery = 3, scale = 1.25, lift = 0, v0 = surf.v0, v1 = surf.v1 }) {
   let k = 0;
   for (let v = v0 + step / 2; v < v1; v += step, k++) {
     const u = uFn(v);
@@ -514,7 +514,7 @@ function topPlate(ctx) {
       return discsHit(discs, u, v, du, dv);
     },
   };
-  plateDetail(ctx, surf, { seamLane: 32, seamCross: 46, seamProb: 0.75, large: 0.22, medium: 0.34, small: 0.32, rows: 70 });
+  plateDetail(ctx, surf, { seamLane: 28, seamCross: 44, seamProb: 0.8, large: 0.24, medium: 0.42, small: 0.4, rows: 90 });
   // marker lights along the plate edges (white, every third red)
   edgeLights(ctx, surf, { uFn: (v) => 0.72 * hullHalfWidth(v) - 5, step: 42, v0: -880 });
   edgeLights(ctx, surf, { uFn: (v) => -(0.72 * hullHalfWidth(v) - 5), step: 42, v0: -880 });
@@ -549,7 +549,7 @@ function bottomPlate(ctx) {
       return discsHit(discs, u, v, du, dv);
     },
   };
-  plateDetail(ctx, surf, { seamLane: 40, seamCross: 56, seamProb: 0.7, large: 0.16, medium: 0.24, small: 0.22, rows: 40 });
+  plateDetail(ctx, surf, { seamLane: 40, seamCross: 56, seamProb: 0.7, large: 0.18, medium: 0.3, small: 0.28, rows: 50 });
   edgeLights(ctx, surf, { uFn: (v) => 0.62 * hullHalfWidth(v) - 5, step: 60, v0: -860 });
   edgeLights(ctx, surf, { uFn: (v) => -(0.62 * hullHalfWidth(v) - 5), step: 60, v0: -860 });
   return surf;
@@ -613,7 +613,7 @@ function trench(ctx, s) {
     if (H(z) < 2 * recessUp + 1.2) continue;
     const yc = trenchBand(z).yBottom + 0.4 + recessUp + 0.15;
     if (put(ctx, wall, "dockRecess", yc, z, { scale: 1, pad: 1.5 })) {
-      put(ctx, wall, "lightW", yc + recessUp + 0.5, z, { scale: [0.67, 0.5, 20], pad: 0, tint: 1, check: false, register: false });
+      put(ctx, wall, "lightW", yc + recessUp + 0.4, z, { scale: [0.5, 0.4, 14], pad: 0, tint: 1, check: false, register: false });
     }
   }
   // --- wall: service doorways with lit door slabs
@@ -622,7 +622,7 @@ function trench(ctx, s) {
     if (H(z) < 2 * doorUp + 1.2 || rand() > 0.72) continue;
     const yc = trenchBand(z).yBottom + 0.4 + doorUp + 0.1;
     if (put(ctx, wall, "doorFrame", yc, z, { scale: 1, pad: 0.8 })) {
-      put(ctx, wall, "lightW", yc - 0.2, z, { scale: [5.3, 0.3, 4], pad: 0, tint: 1, check: false, register: false, lift: 0.02 });
+      put(ctx, wall, "lightW", yc + 1.45, z, { scale: [0.5, 0.3, 4.5], pad: 0, tint: 1, check: false, register: false, lift: 0.05 });
     }
   }
   // --- wall: lit window bands (cityLights quads), rows at up to four heights
@@ -697,7 +697,7 @@ function trench(ctx, s) {
     },
   });
   // --- floor lip: alternating red / white runway beacons along the outer edge
-  edgeLights(ctx, floor, { uFn: (v) => s * (hullHalfWidth(v) - 0.9), step: 36, redEvery: 2, scale: 1.6, v0: -620 });
+  edgeLights(ctx, floor, { uFn: (v) => s * (hullHalfWidth(v) - 0.9), step: 36, redEvery: 2, scale: 1.2, v0: -620 });
   return { wall, floor };
 }
 
@@ -729,9 +729,9 @@ function terraceRoofs(ctx) {
         return discsHit(discs, u, v, du, dv);
       },
     };
-    plateDetail(ctx, surf, { seamLane: 24, seamCross: 40, seamProb: 0.7, large: 0.2, medium: 0.36, small: 0.34, rows: 26 });
-    edgeLights(ctx, surf, { uFn: (v) => terraceHalfWidth(t, v) - 1.6, step: 44, redEvery: 2, scale: 1.6 });
-    edgeLights(ctx, surf, { uFn: (v) => -(terraceHalfWidth(t, v) - 1.6), step: 44, redEvery: 2, scale: 1.6 });
+    plateDetail(ctx, surf, { seamLane: 24, seamCross: 40, seamProb: 0.75, large: 0.22, medium: 0.42, small: 0.4, rows: 32 });
+    edgeLights(ctx, surf, { uFn: (v) => terraceHalfWidth(t, v) - 1.6, step: 44, redEvery: 2, scale: 1.25 });
+    edgeLights(ctx, surf, { uFn: (v) => -(terraceHalfWidth(t, v) - 1.6), step: 44, redEvery: 2, scale: 1.25 });
     out.push(surf);
   });
   return out;
@@ -791,7 +791,7 @@ function towerNeck(ctx) {
       }
     }
     scatterGrid(ctx, f, { cell: 5.5, prob: 0.42, noiseScale: 40, pick: pickWallSmall });
-    edgeLights(ctx, f, { uFn: () => n.yTop - 4.5, step: 30, redEvery: 2, scale: 1.5 });
+    edgeLights(ctx, f, { uFn: () => n.yTop - 4.5, step: 30, redEvery: 2, scale: 1.25 });
   }
   return faces;
 }
@@ -821,8 +821,8 @@ function bridgeRoof(ctx) {
   rowsProgram(ctx, surf, { count: 10, key: "hatchSmall", n: [3, 5], spacing: [3.6, 4.4], scale: [1.0, 1.3] });
   scatterGrid(ctx, surf, { cell: 12, prob: 0.4, noiseScale: 50, pick: (r) => pickWeighted(r, [[30, { key: "boxStack", scale: [rr(r, 0.8, 1.5), rr(r, 0.8, 1.3), rr(r, 0.8, 1.5)] }], [20, { key: "ventLarge", scale: rr(r, 0.9, 1.3), yaw: r() < 0.5 ? Math.PI / 2 : 0 }], [20, { key: "radiator", scale: rr(r, 1.0, 1.5) }], [15, { key: "mast", scale: rr(r, 0.9, 1.4) }], [15, { key: "sensorCluster", scale: rr(r, 0.9, 1.3) }]]) });
   scatterGrid(ctx, surf, { cell: 6.5, prob: 0.4, noiseScale: 50, pick: pickSmallPlate });
-  edgeLights(ctx, surf, { uFn: () => b.hw - 4.5, step: 40, redEvery: 2, scale: 1.6 });
-  edgeLights(ctx, surf, { uFn: () => -(b.hw - 4.5), step: 40, redEvery: 2, scale: 1.6 });
+  edgeLights(ctx, surf, { uFn: () => b.hw - 4.5, step: 40, redEvery: 2, scale: 1.25 });
+  edgeLights(ctx, surf, { uFn: () => -(b.hw - 4.5), step: 40, redEvery: 2, scale: 1.25 });
   return surf;
 }
 
@@ -874,7 +874,7 @@ function sternFace(ctx) {
     }
     scatterGrid(ctx, f, { cell: 5.5, prob: 0.5, noiseScale: 45, pick: pickWallSmall });
   }
-  edgeLights(ctx, strip, { uFn: () => 48, step: 48, redEvery: 2, scale: 1.6 });
+  edgeLights(ctx, strip, { uFn: () => 48, step: 48, redEvery: 2, scale: 1.25 });
   return [face, strip];
 }
 
