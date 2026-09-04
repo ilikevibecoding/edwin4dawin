@@ -6,9 +6,9 @@ import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
 import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
-import { impWall, impCeiling, wallScreen, equipmentRack, crate, pipeRun, railing } from "../imperial.js";
-import { pointLight } from "../builders.js";
-import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, cableTray, wallVent, wallStencil, floorStencil, floorLine, hazardBorder, oilStain, workLight, warningLamp, craneRail, cabinet, shelfFrame, workbench, gratedTrench, emitMat, loader, palletJack } from "./engProps.js";
+import { impWall, impCeiling, wallScreen, equipmentRack, crate, pipeRun, railing, wallSegment } from "../imperial.js";
+import { pointLight, wallFrame } from "../builders.js";
+import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, hazardBorder, floorBorder, oilStain, workLight, warningLamp, craneRail, cabinet, shelfFrame, workbench, gratedTrench, emitMat, loader, palletJack, toolChest, weldScreen, hose, lockerRow, pipeManifold, jobBoardMat } from "./engProps.js";
 
 export function buildMaintenance(kit, ctx) {
   const [min, max] = ctx.bounds; // [2.9, 0, -64] .. [48, 9, -36]
@@ -38,7 +38,8 @@ export function buildMaintenance(kit, ctx) {
     [min[0], min[2], min[0] + g, max[2]],
     [max[0] - g, min[2], max[0], max[2]],
   ]) kit.boxMM("paintedMetal", [x0, 0, z0], [x1, 0.015, z1], { color: PALETTE.impBlack, texel: 2 });
-  impCeiling(kit, ctx, { lights: false, paints: ENG_CEIL_PAINTS, panelW: 2.4, rowH: 2.4, along: "x", spacing: 12, styles: { panel: 0.74, greeble: 0.1, vent: 0.16 } });
+  // two long strips over the bays (not the aisle), dimmed so they do not blow out in the 45 m view
+  impCeiling(kit, ctx, { lights: false, stripMat: "emitWhiteDim", paints: ENG_CEIL_PAINTS, panelW: 2.4, rowH: 2.4, along: "x", spacing: 12, styles: { panel: 0.74, greeble: 0.1, vent: 0.16 } });
   for (const side of ["zmin", "zmax", "xmin", "xmax"]) impWall(kit, ctx, side, { paints: ENG_PAINTS, styles: ENG_STYLES, theme: ENG_THEME, rows: [0, 0.5, 1.7, 3.2, 5.2, 7.2, H], panelW: 2.0, seed: ctx.seed * 3 + side.length });
 
   // ---------------------------------------------------------------- lift A: engine pod on a two-post lift
@@ -49,7 +50,7 @@ export function buildMaintenance(kit, ctx) {
     kit.box("paintedMetal", ax, 1.7, pz, 0.6, 3.4, 0.5, { color: PALETTE.impAmber, texel: 1.5 });
     kit.box("paintedMetal", ax, 0.08, pz, 1.4, 0.16, 0.9, { color: PALETTE.impBlack, texel: 2 });
     kit.cyl("metal", ax, 1.9, pz - s * 0.05, 0.1, 2.6, "y", { color: PALETTE.steel });
-    kit.box("hazard", ax, 3.45, pz, 0.62, 0.12, 0.52, { texel: 3 });
+    kit.box("hazard", ax, 3.45, pz, 0.62, 0.12, 0.52, { texel: HAZARD_TEXEL });
     // arms to the platform beams
     kit.box("paintedMetal", ax, 1.6, pz - s * 0.9, 0.5, 0.22, 1.4, { color: PALETTE.impAmber, texel: 1.5 });
     kit.collider([ax - 0.35, 0, pz - 0.3], [ax + 0.35, 3.5, pz + 0.3], "liftpost");
@@ -124,6 +125,65 @@ export function buildMaintenance(kit, ctx) {
   oilStain(kit, bx + 1.0, bz - 1.9, 0.8, ctx.seed + 6);
   hazardBorder(kit, bx - 5.4, bz - 3.0, bx + 6.6, bz + 3.0, 0.3);
 
+  // ---------------------------------------------------------------- work stand C (middle of the south bay): a sublight
+  // compressor disc on an A-frame spindle stand, tool chests, air hoses, a welding screen
+  const cx = 27.5;
+  const cz = -57.4;
+  for (const s of [-1, 1]) {
+    for (const t of [-1, 1]) kit.add("paintedMetal", new THREE.BoxGeometry(0.2, 2.3, 0.2), { pos: [cx + s * 1.5, 1.1, cz + t * 0.55], rot: [t * 0.42, 0, 0], color: PALETTE.impAmber, texel: 2 });
+    kit.box("paintedMetal", cx + s * 1.5, 2.25, cz, 0.5, 0.25, 0.7, { color: PALETTE.impDark, texel: 2 });
+    kit.box("paintedMetal", cx + s * 1.5, 0.06, cz, 0.5, 0.12, 2.2, { color: PALETTE.impBlack, texel: 2 });
+    kit.collider([cx + s * 1.5 - 0.3, 0, cz - 1.1], [cx + s * 1.5 + 0.3, 2.4, cz + 1.1], "stand");
+  }
+  kit.cyl("metal", cx, 2.25, cz, 0.09, 3.2, "x", { color: PALETTE.steel, segments: 12 });
+  kit.cyl("metal", cx, 2.25, cz, 0.45, 0.7, "x", { color: PALETTE.gunmetal, segments: 24 });
+  kit.cyl("metal", cx, 2.25, cz, 1.25, 0.16, "x", { color: PALETTE.hullGrey, segments: 40, texel: 0.6 });
+  kit.add("metal", new THREE.TorusGeometry(1.3, 0.09, 10, 48).rotateY(Math.PI / 2), { pos: [cx, 2.25, cz], color: PALETTE.steel });
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2;
+    kit.add("metal", new THREE.BoxGeometry(0.42, 0.55, 0.05), { pos: [cx, 2.25 + Math.cos(a) * 1.55, cz + Math.sin(a) * 1.55], rot: [a, 0.35, 0], color: i % 7 === 0 ? PALETTE.brass : PALETTE.steel });
+  }
+  kit.collider([cx - 0.5, 0, cz - 1.9], [cx + 0.5, 4.1, cz + 1.9], "disc");
+  // a removed blade row and a bearing on a stool, tool chests, hoses from the wall coupling
+  kit.box("paintedMetal", cx - 0.6, 0.3, cz + 2.6, 0.6, 0.6, 0.6, { color: PALETTE.impDark, texel: 2 });
+  kit.add("metal", new THREE.TorusGeometry(0.34, 0.07, 10, 28).rotateX(Math.PI / 2), { pos: [cx - 0.6, 0.67, cz + 2.6], color: PALETTE.gunmetal });
+  for (let i = 0; i < 5; i++) kit.add("metal", new THREE.BoxGeometry(0.42, 0.55, 0.05), { pos: [cx + 1.2 + i * 0.12, 0.28, cz + 2.7], rot: [0.2, 0, 1.35], color: PALETTE.steel });
+  kit.collider([cx - 1.0, 0, cz + 2.2], [cx + 1.9, 0.8, cz + 3.0], "parts");
+  toolChest(kit, cx - 2.5, cz + 2.0, { yaw: 0.2, seed: ctx.seed + 71 });
+  toolChest(kit, cx + 2.7, cz - 2.2, { yaw: -0.4, seed: ctx.seed + 72, color: PALETTE.impMid });
+  hose(kit, [[cx + 2.7, cz - 1.6], [cx + 1.8, cz - 1.0], [cx + 1.1, cz - 0.2], [cx + 0.7, cz + 0.9]], { r: 0.035 });
+  hose(kit, [[cx - 3.5, T[0][3] + 0.3], [cx - 3.0, cz + 3.6], [cx - 2.0, cz + 3.0], [cx - 1.2, cz + 1.3]], { r: 0.03, color: PALETTE.impAmber });
+  kit.box("paintedMetal", cx - 3.5, 0.12, T[0][3] + 0.3, 0.36, 0.24, 0.36, { color: PALETTE.impDark, texel: 2 });
+  kit.box("emitAmberDim", cx - 3.5, 0.245, T[0][3] + 0.3, 0.14, 0.01, 0.14, { uv: "keep" });
+  weldScreen(kit, cx + 3.3, cz + 1.6, { yaw: 0.5 });
+  oilStain(kit, cx + 0.4, cz - 2.6, 0.7, ctx.seed + 73);
+  floorBorder(kit, cx - 2.3, cz - 2.4, cx + 2.3, cz + 3.2, { w: 0.12 });
+  floorStencil(kit, cx, cz - 3.2, 1.2, 8, 0, 0.006);
+
+  // ---------------------------------------------------------------- north bay middle: a landing strut on trestles, parts trolley in the aisle
+  {
+    const sx = 26.5;
+    const sz = -41.6;
+    for (const x of [sx - 1.8, sx + 1.8]) {
+      for (const s of [-1, 1]) kit.add("paintedMetal", new THREE.BoxGeometry(0.16, 1.2, 0.16), { pos: [x, 0.58, sz + s * 0.38], rot: [s * 0.5, 0, 0], color: PALETTE.impAmber, texel: 2 });
+      kit.box("paintedMetal", x, 1.14, sz, 0.4, 0.14, 0.8, { color: PALETTE.impDark, texel: 2 });
+      kit.collider([x - 0.25, 0, sz - 0.7], [x + 0.25, 1.25, sz + 0.7], "trestle");
+    }
+    kit.cyl("metal", sx - 0.6, 1.45, sz, 0.26, 3.0, "x", { color: PALETTE.impMid, segments: 20, texel: 0.8 });
+    kit.cyl("metal", sx + 1.6, 1.45, sz, 0.16, 1.6, "x", { color: PALETTE.steel, segments: 16 });
+    kit.box("paintedMetal", sx + 2.5, 1.45, sz, 0.3, 0.9, 0.9, { color: PALETTE.impDark, texel: 2 });
+    kit.cyl("paintedMetal", sx - 2.15, 1.45, sz, 0.34, 0.16, "x", { color: PALETTE.impBlack, segments: 20 });
+    for (const s of [-1, 1]) kit.cyl("metal", sx - 0.4, 1.45 + s * 0.3, sz + 0.28, 0.04, 2.2, "x", { color: PALETTE.gunmetal, segments: 8 });
+    kit.collider([sx - 2.3, 1.1, sz - 0.5], [sx + 2.7, 1.9, sz + 0.5], "strut");
+    toolChest(kit, sx + 0.4, sz - 1.9, { yaw: Math.PI + 0.15, seed: ctx.seed + 74 });
+    hose(kit, [[sx + 0.9, sz - 1.5], [sx + 0.2, sz - 1.0], [sx - 0.6, sz - 0.5]], { r: 0.03 });
+    oilStain(kit, sx - 1.0, sz + 1.1, 0.6, ctx.seed + 75);
+    floorBorder(kit, sx - 2.6, sz - 2.4, sx + 3.0, sz + 1.2, { w: 0.12 });
+    // parts trolley parked on the north edge of the aisle (leaves 2.8 m of walkway)
+    palletJack(kit, 31.5, -48.7, Math.PI / 2);
+    crate(kit, ctx, { x: 31.0, y: 0.15, z: -48.7, sx: 0.9, sy: 0.7, sz: 0.9, seed: ctx.seed + 76 });
+  }
+
   // ---------------------------------------------------------------- machine tools and benches (zmin wall)
   const mz = min[2] + 1.0;
   // lathe
@@ -165,6 +225,18 @@ export function buildMaintenance(kit, ctx) {
     kit.cyl("metal", 8.5 + (rand() - 0.5) * 2.4, 0.6 + r + rand() * 0.5, mz + (rand() - 0.5) * 0.6, r, 3.2 + rand() * 1.4, "y", { color: rand() < 0.5 ? PALETTE.steel : PALETTE.gunmetal, segments: 8, rot: [0.16, 0, (rand() - 0.5) * 0.12] });
   }
   kit.collider([6.9, 0, mz - 0.6], [10.1, 4.4, mz + 0.6], "stock");
+  // crew lockers and a coolant manifold fill the plain wall behind lift A; a lit work-order board over the tools
+  lockerRow(kit, ctx, "zmin", 13 - min[0], { n: 10, seed: ctx.seed + 81 });
+  pipeManifold(kit, ctx, "zmin", 18 - min[0], { w: 2.6, v0: 0.5, v1: 3.2, n: 5, seed: ctx.seed + 82 });
+  jobBoardMat(ctx, "mnt_jobs", { title: "WORK ORDERS  ·  BAY 04", seed: ctx.seed + 83 });
+  {
+    const seg = wallSegment(ctx.bounds, "zmin");
+    const { frame } = wallFrame(kit, seg.from, seg.to, 0);
+    const u = 28.6 - min[0];
+    frame.box("paintedMetal", u, 3.3, 0.05, 2.7, 1.45, 0.1, { color: PALETTE.impBlack, texel: 2 });
+    frame.add("mnt_jobs", new THREE.PlaneGeometry(2.4, 1.2), u, 3.3, 0.106, { uv: "keep" });
+    frame.box("emitAmberDim", u, 2.5, 0.09, 2.2, 0.03, 0.01, { uv: "keep" });
+  }
 
   // ---------------------------------------------------------------- welding booth (zmin / xmax corner)
   const wx = 43.2;
@@ -172,7 +244,7 @@ export function buildMaintenance(kit, ctx) {
   emitMat(ctx, "mnt_weld", 0xdfefff, 0.5, "emitWhite");
   for (const s of [-1, 1]) kit.box("paintedMetal", wx + s * 1.9, 1.1, wz + 0.2, 0.06, 2.2, 3.2, { color: PALETTE.impDark, texel: 2 });
   kit.box("paintedMetal", wx, 1.1, wz - 1.55, 3.86, 2.2, 0.06, { color: PALETTE.impDark, texel: 2 });
-  kit.box("hazard", wx, 2.25, wz - 1.55, 3.9, 0.12, 0.1, { texel: 3 });
+  kit.box("hazard", wx, 2.25, wz - 1.55, 3.9, 0.12, 0.1, { texel: HAZARD_TEXEL });
   kit.box("metal", wx, 0.85, wz, 1.6, 0.08, 1.0, { color: PALETTE.gunmetal, texel: 2 });
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box("paintedMetal", wx + sx * 0.7, 0.4, wz + sz * 0.4, 0.08, 0.8, 0.08, { color: PALETTE.impDark, texel: 2 });
   kit.box("metal", wx - 0.2, 1.05, wz, 0.9, 0.3, 0.5, { color: PALETTE.hullGrey });
@@ -189,7 +261,7 @@ export function buildMaintenance(kit, ctx) {
   kit.collider([wx + 0.8, 0, wz + 0.6], [wx + 1.8, 2.2, wz + 1.4], "bottles");
   kit.collider([wx - 1.95, 0, wz - 1.6], [wx - 1.85, 2.2, wz + 1.8], "screen");
   kit.collider([wx + 1.85, 0, wz - 1.6], [wx + 1.95, 2.2, wz + 1.8], "screen");
-  hazardBorder(kit, wx - 2.0, wz - 1.6, wx + 2.0, wz + 1.9, 0.25);
+  floorBorder(kit, wx - 2.0, wz - 1.6, wx + 2.0, wz + 1.9, { w: 0.12 });
   wallStencil(kit, ctx, "zmin", wx - min[0], 3.0, 0.8, 1);
   const weld = pointLight(0xcfe4ff, 0, 8, [wx + 0.3, 1.6, wz + 0.2]);
   ctx.light(weld);
@@ -214,7 +286,7 @@ export function buildMaintenance(kit, ctx) {
         else kit.box("paintedMetal", max[0] - 0.85, ly + 0.25, z, 1.0, 0.5, 0.6, { color: PALETTE.impGrey, texel: 2 });
       }
     }
-    hazardBorder(kit, max[0] - 1.7, z0 - 0.1, max[0], z1 + 0.1, 0.2);
+    floorBorder(kit, max[0] - 1.9, z0 - 0.1, max[0] - 0.05, z1 + 0.1, { w: 0.1 });
   }
   // tool boards between the racks with hung tools and a status screen
   for (const [z, seed] of [[-51.6, 1], [-48.4, 2]]) {
@@ -249,7 +321,7 @@ export function buildMaintenance(kit, ctx) {
     kit.box("paintedMetal", x, 1.3, z, 2.2, 2.6, 1.1, { color: PALETTE.impDark, texel: 1.5 });
     kit.box("paintedMetal", x, 1.3, z - 0.02, 1.7, 2.2, 1.06, { color: PALETTE.impBlack, texel: 2 });
     kit.box("impPanel", x, 1.3, z + 0.5, 1.7, 2.2, 0.02, { color: PALETTE.impMid, uv: "keep" });
-    kit.box("hazard", x, 2.5, z - 0.56, 2.2, 0.1, 0.02, { texel: 3 });
+    kit.box("hazard", x, 2.5, z - 0.56, 2.2, 0.1, 0.02, { texel: HAZARD_TEXEL });
     kit.box("leds", x, 2.28, z - 0.56, 1.2, 0.05, 0.01, { uv: "keep" });
     kit.cyl(i % 3 === 1 ? "emitAmber" : "emitBlue", x, 0.02, z - 0.1, 0.55, 0.02, "y", { segments: 24 });
     kit.cyl("paintedMetal", x, 0.015, z - 0.1, 0.62, 0.03, "y", { color: PALETTE.impBlack, segments: 24 });
@@ -273,8 +345,28 @@ export function buildMaintenance(kit, ctx) {
   wallStencil(kit, ctx, "zmax", max[0] - 12.5, 4.0, 1.0, 4);
   wallVent(kit, ctx, "zmax", 10, 6.2, 2.6, 1.0);
   wallVent(kit, ctx, "zmax", 34, 6.2, 2.6, 1.0);
-  wallScreen(kit, ctx, { side: "zmax", u: max[0] - 32.5, v: 2.2, w: 1.8, h: 1.0, screen: 1 });
-  wallScreen(kit, ctx, { side: "zmax", u: max[0] - 36.5, v: 2.2, w: 1.8, h: 1.0, screen: 4 });
+  // east of the alcoves the wall changes rhythm: a locker row, a stocked wall rack with a lit job board over it
+  lockerRow(kit, ctx, "zmax", max[0] - 30.0, { n: 8, seed: ctx.seed + 84 });
+  wallScreen(kit, ctx, { side: "zmax", u: max[0] - 32.5, v: 3.1, w: 1.8, h: 1.0, screen: 1 });
+  {
+    const heights = shelfFrame(kit, 36.0, max[2] - 0.75, 39.2, max[2] - 0.1, { levels: 3, levelH: 0.95, color: PALETTE.impMid });
+    const rr = rng(ctx.seed + 85);
+    for (const ly of [0, ...heights.slice(0, -1)]) {
+      for (let x = 36.5; x < 38.9; x += 0.7 + rr() * 0.4) {
+        const r = rr();
+        if (r < 0.4) crate(kit, ctx, { x, y: ly, z: max[2] - 0.42, sx: 0.5 + rr() * 0.2, sy: 0.35 + rr() * 0.3, sz: 0.5, seed: ctx.seed + Math.floor(x * 9) });
+        else if (r < 0.7) kit.cyl("metal", x, ly + 0.25, max[2] - 0.42, 0.12 + rr() * 0.08, 0.5, "y", { color: rr() < 0.5 ? PALETTE.steel : PALETTE.impRed, segments: 12 });
+        else kit.box("paintedMetal", x, ly + 0.15, max[2] - 0.42, 0.55, 0.3, 0.45, { color: PALETTE.impGrey, texel: 2 });
+      }
+    }
+    jobBoardMat(ctx, "mnt_jobs", { title: "WORK ORDERS  ·  BAY 04", seed: ctx.seed + 83 });
+    const seg = wallSegment(ctx.bounds, "zmax");
+    const { frame } = wallFrame(kit, seg.from, seg.to, 0);
+    const u = max[0] - 37.6;
+    frame.box("paintedMetal", u, 3.75, 0.05, 2.9, 1.5, 0.1, { color: PALETTE.impBlack, texel: 2 });
+    frame.add("mnt_jobs", new THREE.PlaneGeometry(2.6, 1.3), u, 3.75, 0.106, { uv: "keep" });
+    frame.box("emitAmberDim", u, 2.92, 0.09, 2.4, 0.03, 0.01, { uv: "keep" });
+  }
   cabinet(kit, 40, max[2] - 0.36, { yaw: Math.PI, w: 1.4, h: 2.4, d: 0.66, seed: ctx.seed + 41, screen: 1 });
   cabinet(kit, 41.5, max[2] - 0.36, { yaw: Math.PI, w: 1.4, h: 2.0, d: 0.66, seed: ctx.seed + 42, screen: 4 });
   crate(kit, ctx, { x: 45.0, z: max[2] - 1.1, sx: 1.4, sy: 1.0, sz: 1.2, seed: ctx.seed + 43 });
@@ -307,36 +399,68 @@ export function buildMaintenance(kit, ctx) {
   crate(kit, ctx, { x: 30.6, y: 1.1, z: -39.5, sx: 1.2, sy: 0.7, sz: 1.1, yaw: 0.1, seed: ctx.seed + 65 });
   oilStain(kit, 37.5, -44.5, 0.7, ctx.seed + 66);
   floorStencil(kit, 36, -46.2, 1.2, 9, Math.PI / 2);
-  hazardBorder(kit, 29.5, -40.5, 31.6, -38.6, 0.2);
+  floorBorder(kit, 29.5, -40.5, 31.6, -38.6, { w: 0.1 });
 
   // ---------------------------------------------------------------- overhead: crane, trays, lights
   const ry = H - 1.3;
   craneRail(kit, min[0] + 1.5, max[0] - 1.5, -61.5, ry, { axis: "x", ceil: H });
   craneRail(kit, min[0] + 1.5, max[0] - 1.5, -38.5, ry, { axis: "x", ceil: H });
+  // bridge crane: end trucks hang under both rails, a deep box girder between them, a hoist trolley
+  // with a cable drum, twin ropes to a hook block at ~4 m and a slung hull plate (nothing hangs
+  // over the lifts: the bridge only travels x 23..30, the trolley z -54..-45)
   const crane = new THREE.Group();
   const ck = new Kit(ctx.materials);
-  ck.box("paintedMetal", 0, ry - 0.45, -50, 0.6, 0.7, 23.6, { color: PALETTE.impAmber, texel: 1.5 });
-  ck.box("hazard", 0, ry - 0.85, -50, 0.62, 0.1, 23.6, { texel: 3 });
+  const gy = ry - 1.15;
+  ck.box("paintedMetal", 0, gy, -50, 0.7, 1.1, 23.6, { color: PALETTE.impAmber, texel: 1.5 });
+  ck.box("paintedMetal", 0, gy + 0.6, -50, 0.9, 0.14, 23.8, { color: PALETTE.impDark, texel: 2 });
+  ck.box("paintedMetal", 0, gy - 0.6, -50, 0.9, 0.1, 23.8, { color: PALETTE.impLight, texel: 2 });
+  for (let z = -61; z <= -39; z += 2) ck.box("paintedMetal", 0, gy, z, 0.78, 0.92, 0.1, { color: PALETTE.impDark, texel: 2 });
   for (const z of [-61.5, -38.5]) {
-    ck.box("paintedMetal", 0, ry + 0.35, z, 1.2, 0.5, 1.0, { color: PALETTE.impDark, texel: 2 });
-    ck.box("emitAmber", 0, ry + 0.62, z, 0.2, 0.06, 0.2);
+    ck.box("paintedMetal", 0, ry - 0.42, z, 1.8, 0.7, 1.3, { color: PALETTE.impDark, texel: 2 });
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) ck.add("metal", new THREE.CylinderGeometry(0.16, 0.16, 0.1, 14).rotateZ(Math.PI / 2), { pos: [sx * 0.6, ry + 0.19, z + sz * 0.2], color: PALETTE.steel });
+    ck.box("emitAmber", 0, ry - 0.8, z, 0.24, 0.08, 0.24);
+    ck.box("emitRedDim", 0, ry - 0.42, z + (z < -50 ? -0.66 : 0.66), 0.5, 0.06, 0.01);
   }
   ck.build(crane);
   const trolley = new THREE.Group();
   const tk = new Kit(ctx.materials);
-  tk.box("paintedMetal", 0, ry - 1.05, 0, 1.4, 0.5, 1.2, { color: PALETTE.impDark, texel: 2 });
-  tk.box("paintedMetal", 0, ry - 1.4, 0, 0.6, 0.2, 0.6, { color: PALETTE.impDark, texel: 2 });
-  tk.box("paintedMetal", 0, ry - 2.9, 0, 0.05, 2.8, 0.05, { color: PALETTE.impBlack, texel: 2 });
-  tk.box("paintedMetal", 0, ry - 4.5, 0, 0.36, 0.5, 0.36, { color: PALETTE.impAmber, texel: 2 });
-  tk.add("paintedMetal", new THREE.TorusGeometry(0.2, 0.05, 8, 16), { pos: [0, ry - 5.0, 0], color: PALETTE.steel });
-  tk.box("emitAmber", 0, ry - 4.3, 0.19, 0.16, 0.08, 0.01);
+  const ty = gy - 1.05;
+  tk.box("paintedMetal", 0, ty, 0, 1.7, 0.8, 1.5, { color: PALETTE.impDark, texel: 2 });
+  for (const s of [-1, 1]) tk.box("paintedMetal", s * 0.5, ty + 0.45, 0, 0.16, 0.3, 1.3, { color: PALETTE.impBlack, texel: 2 });
+  tk.box("emitAmberDim", 0.86, ty, 0, 0.01, 0.12, 0.7, { uv: "keep" });
+  tk.box("emitAmberDim", -0.86, ty, 0, 0.01, 0.12, 0.7, { uv: "keep" });
+  tk.box("emitRed", 0, ty + 0.44, 0.7, 0.12, 0.08, 0.12);
+  tk.add("metal", new THREE.CylinderGeometry(0.25, 0.25, 1.0, 18).rotateZ(Math.PI / 2), { pos: [0, ty - 0.55, 0], color: PALETTE.gunmetal });
+  for (const s of [-1, 1]) tk.box("metal", s * 0.55, ty - 0.55, 0, 0.06, 0.6, 0.5, { color: PALETTE.impDark });
+  const hy = 4.1;
+  for (const s of [-1, 1]) tk.box("paintedMetal", s * 0.2, (ty - 0.55 + hy + 0.3) / 2, 0, 0.03, ty - 0.55 - hy - 0.3, 0.03, { color: PALETTE.impBlack, texel: 2 });
+  tk.box("paintedMetal", 0, hy, 0, 0.7, 0.6, 0.4, { color: PALETTE.impAmber, texel: 2 });
+  tk.box("paintedMetal", 0, hy, 0, 0.72, 0.12, 0.42, { color: PALETTE.impBlack, texel: 2 });
+  tk.box("emitAmber", 0, hy + 0.08, 0.21, 0.24, 0.08, 0.01);
+  tk.box("metal", 0, hy - 0.45, 0, 0.08, 0.3, 0.08, { color: PALETTE.steel });
+  tk.add("metal", new THREE.TorusGeometry(0.22, 0.05, 8, 20, Math.PI * 1.5), { pos: [0, hy - 0.82, 0], rot: [0, 0, Math.PI / 4], color: PALETTE.steel });
+  // slung hull plate on four slings from the hook
+  const plateY = 2.7;
+  const sling = (a, b) => {
+    const A = new THREE.Vector3(...a);
+    const B = new THREE.Vector3(...b);
+    const d = B.clone().sub(A);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize());
+    const m = A.clone().add(B).multiplyScalar(0.5);
+    tk.add("metal", new THREE.CylinderGeometry(0.012, 0.012, d.length(), 6), { pos: [m.x, m.y, m.z], quat: q, color: PALETTE.gunmetal });
+  };
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) sling([0, hy - 1.02, 0], [sx * 1.15, plateY + 0.04, sz * 0.75]);
+  tk.box("paintedMetal", 0, plateY, 0, 2.6, 0.08, 1.7, { color: PALETTE.hullGrey, texel: 1.5 });
+  for (const sx of [-1, 1]) tk.box("paintedMetal", sx * 1.0, plateY + 0.06, 0, 0.16, 0.04, 1.5, { color: PALETTE.impDark, texel: 2 });
+  tk.box("hazard", 0, plateY, -0.86, 2.6, 0.08, 0.02, { texel: HAZARD_TEXEL });
   tk.build(trolley);
   crane.add(trolley);
   ctx.mesh(crane);
-  trolley.position.z = -50;
+  crane.position.x = 26.5;
+  trolley.position.z = -49.5;
   ctx.anim((dt, t) => {
-    crane.position.x = 25 + Math.sin(t * 0.13) * 11;
-    trolley.position.z = -50 + Math.sin(t * 0.21 + 1) * 7;
+    crane.position.x = 26.5 + Math.sin(t * 0.1) * 3.5;
+    trolley.position.z = -49.5 + Math.sin(t * 0.17 + 1) * 4.5;
   });
   cableTray(kit, [min[0] + 1.2, -55.5], [max[0] - 1.2, -55.5], H - 0.5, { w: 0.6, ceil: H, cables: 5, seed: 3 });
   cableTray(kit, [min[0] + 1.2, -44.5], [max[0] - 1.2, -44.5], H - 0.5, { w: 0.6, ceil: H, cables: 4, seed: 4 });
@@ -349,6 +473,12 @@ export function buildMaintenance(kit, ctx) {
   workLight(kit, ctx, bx, 5.6, bz, { ceil: H, color: 0xfff1dc, intensity: 12, distance: 14, w: 1.6, d: 0.5 });
   workLight(kit, ctx, 31, 5.4, -60.5, { ceil: H, color: AMBER, intensity: 9, distance: 12, w: 1.4, d: 0.5 });
   workLight(kit, ctx, 22, 5.4, -39.5, { ceil: H, color: 0xfff1dc, intensity: 8, distance: 12, w: 1.4, d: 0.5 });
+  // stand-mounted task lamps on the A-frame heads (real light kept clear of the crane's travel)
+  for (const s of [-1, 1]) {
+    kit.box("paintedMetal", cx + s * 1.5, 2.5, cz, 0.36, 0.26, 0.5, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("emitWhiteSoft", cx + s * (1.5 - 0.185), 2.5, cz, 0.01, 0.18, 0.4, { uv: "keep" });
+  }
+  ctx.light(pointLight(0xfff1dc, 9, 12, [cx, 3.4, cz]));
   ctx.light(pointLight(COOL, 7, 11, [7, H - 2.5, -50]));
   railing(kit, 40.6, -53.3, 40.6, -52.3, 0, { collide: false, h: 0.6 });
   railing(kit, 40.6, -47.7, 40.6, -46.7, 0, { collide: false, h: 0.6 });
