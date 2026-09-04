@@ -1,10 +1,12 @@
 // d1-officers — officers' country: a private corridor off the spine (x 64.2..67.8) with the wardroom and four
 // senior cabins to port, six cabins and a duty office to starboard. Warmer grey, single amber lamp per cabin.
-import * as THREE from "three";
 import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
 import { roomShell, partition, corridorDressing, doorReveal } from "../shared/imperial.js";
-import { seat } from "../shared/props.js";
 import { IMP, LIGHT } from "../shared/palette.js";
+import { buildCabin } from "./cabin.js";
+import { cableTrays, doorway, endWall, noticeScreen, ribs } from "./corridor.js";
+import { buildWardroom } from "./wardroom.js";
+import { buildDutyOffice, buildUtility } from "./service.js";
 
 const ID = "d1-officers";
 const B = BOUNDS[ID];
@@ -15,6 +17,12 @@ const WARD_Z1 = 471;
 const WEST_CABIN_X0 = 56;
 const EAST_CABIN_X1 = 76;
 const CABIN = 8;
+const WT = 0.15; // partition half thickness
+const AMBER_WARM = 0xffb060;
+
+// cabins whose door leaf is closed (no real light inside; they read from the corridor status lamp only)
+const CLOSED = { w3: true, e1: true, e4: true };
+const NUMBER_CELLS = [14, 0, 8, 2];
 
 const manifest = {
   id: ID,
@@ -31,6 +39,8 @@ const manifest = {
     "d1-officers-corridor": { pos: [66, FLOOR, 510.5], yaw: 0, pitch: -2 },
     "d1-officers-cabin": { pos: [63.3, FLOOR, 483], yaw: 90, pitch: -6 },
     "d1-officers-wardroom": { pos: [62.8, FLOOR, 465], yaw: 100, pitch: -4 },
+    "d1-officers-captain": { pos: [63.3, FLOOR, 475.3], yaw: 96, pitch: -4 },
+    "d1-officers-duty": { pos: [68.8, FLOOR, 509.0], yaw: -76, pitch: -4 },
   },
   build(ctx) {
     const { kit } = ctx;
@@ -56,64 +66,71 @@ const manifest = {
     partition(kit, { axis: "z", at: COR.x1, from: Z0, to: Z1, floorY: FLOOR, ceilY, openings: eastDoors, seed: 87, strip: "emitWhite", tone });
     // corridor look (floor strip + ribs) on a synthetic corridor manifest
     // (synthetic bounds so the dressing's interior x0/x1 land on the partitions' visible faces at 64.35 / 67.65)
-    corridorDressing(kit, { bounds: { min: [COR.x0 + 0.15 - 0.3, FLOOR, B.min[2]], max: [COR.x1 - 0.15 + 0.3, ceilY, B.max[2]] }, doors: [...westDoors, ...eastDoors].map((o) => ({ pos: [66, FLOOR, (o.a0 + o.a1) / 2] })) }, FLOOR, ceilY, { ribEvery: 4 });
+    corridorDressing(kit, { bounds: { min: [COR.x0 + WT - 0.3, FLOOR, B.min[2]], max: [COR.x1 - WT + 0.3, ceilY, B.max[2]] }, doors: [...westDoors, ...eastDoors].map((o) => ({ pos: [66, FLOOR, (o.a0 + o.a1) / 2] })) }, FLOOR, ceilY, { ribEvery: 4 });
 
     // --- west block: wardroom back wall, cabin cross walls, cabins' west wall
-    partition(kit, { axis: "x", at: WARD_Z1, from: B.min[0] + 0.3, to: COR.x0 - 0.15, floorY: FLOOR, ceilY, seed: 89, tone });
+    partition(kit, { axis: "x", at: WARD_Z1, from: B.min[0] + 0.3, to: COR.x0 - WT, floorY: FLOOR, ceilY, seed: 89, tone });
     partition(kit, { axis: "z", at: WEST_CABIN_X0, from: WARD_Z1, to: Z1, floorY: FLOOR, ceilY, seed: 91, tone, strip: null });
-    for (let i = 1; i <= 4; i++) partition(kit, { axis: "x", at: WARD_Z1 + CABIN * i, from: WEST_CABIN_X0 + 0.15, to: COR.x0 - 0.15, floorY: FLOOR, ceilY, seed: 93 + i, tone, strip: null });
+    for (let i = 1; i <= 4; i++) partition(kit, { axis: "x", at: WARD_Z1 + CABIN * i, from: WEST_CABIN_X0 + WT, to: COR.x0 - WT, floorY: FLOOR, ceilY, seed: 93 + i, tone, strip: null });
     // --- east block: cabins' east wall + cross walls
     partition(kit, { axis: "z", at: EAST_CABIN_X1, from: Z0, to: Z1, floorY: FLOOR, ceilY, seed: 101, tone, strip: null });
-    for (let i = 1; i <= 6; i++) partition(kit, { axis: "x", at: Z0 + CABIN * i, from: COR.x1 + 0.15, to: EAST_CABIN_X1 - 0.15, floorY: FLOOR, ceilY, seed: 103 + i, tone, strip: null });
+    for (let i = 1; i <= 6; i++) partition(kit, { axis: "x", at: Z0 + CABIN * i, from: COR.x1 + WT, to: EAST_CABIN_X1 - WT, floorY: FLOOR, ceilY, seed: 103 + i, tone, strip: null });
 
-    // --- cabins: bunk against the outer wall, desk + seat, locker, amber lamp
-    const cabin = (x0, x1, z0, z1, side) => {
-      const outerX = side < 0 ? x0 + 0.2 : x1 - 0.2; // far wall from the corridor
-      const bx0 = side < 0 ? outerX : outerX - 0.95;
-      const bx1 = side < 0 ? outerX + 0.95 : outerX;
-      kit.boxMM("paintedMetal", [bx0, FLOOR, z0 + 0.4], [bx1, FLOOR + 0.45, z0 + 2.5], { color: IMP.dark, texel: 1 });
-      kit.boxMM("fabric", [bx0 + 0.03, FLOOR + 0.45, z0 + 0.43], [bx1 - 0.03, FLOOR + 0.62, z0 + 2.47], { color: IMP.grey, texel: 2 });
-      kit.boxMM("fabric", [bx0 + 0.1, FLOOR + 0.62, z0 + 0.5], [bx1 - 0.1, FLOOR + 0.72, z0 + 1.0], { color: IMP.white, texel: 2 });
-      kit.collider([bx0, FLOOR, z0 + 0.4], [bx1, FLOOR + 0.7, z0 + 2.5], "bunk");
-      // desk on the far wall further along, seat facing it
-      const dx0 = side < 0 ? outerX : outerX - 0.7;
-      const dx1 = side < 0 ? outerX + 0.7 : outerX;
-      kit.boxMM("paintedMetal", [dx0, FLOOR + 0.7, z1 - 2.6], [dx1, FLOOR + 0.76, z1 - 1.0], { color: IMP.black, texel: 1 });
-      kit.boxMM("paintedMetal", [dx0 + 0.1, FLOOR, z1 - 1.3], [dx1 - 0.1, FLOOR + 0.7, z1 - 1.05], { color: IMP.dark, texel: 1 });
-      kit.boxMM("screenImp3", [side < 0 ? dx1 - 0.02 : dx0 + 0.01, FLOOR + 0.9, z1 - 2.3], [side < 0 ? dx1 - 0.01 : dx0 + 0.02, FLOOR + 1.4, z1 - 1.3], { uv: "keep" });
-      kit.collider([dx0, FLOOR, z1 - 2.6], [dx1, FLOOR + 0.8, z1 - 1.0], "desk");
-      seat(kit, side < 0 ? dx1 + 0.55 : dx0 - 0.55, FLOOR, z1 - 1.8, side < 0 ? 1 : 3);
-      // locker by the door wall
-      const lx0 = side < 0 ? x1 - 0.8 : x0 + 0.2;
-      kit.boxMM("paintedMetal", [lx0, FLOOR, z0 + 0.3], [lx0 + 0.6, FLOOR + 2.1, z0 + 1.3], { color: IMP.dark, texel: 1 });
-      kit.collider([lx0, FLOOR, z0 + 0.3], [lx0 + 0.6, FLOOR + 2.1, z0 + 1.3], "locker");
-      // amber lamp over the bunk
-      kit.boxMM("paintedMetal", [side < 0 ? outerX : outerX - 0.12, FLOOR + 1.9, z0 + 1.3], [side < 0 ? outerX + 0.12 : outerX, FLOOR + 2.0, z0 + 1.7], { color: IMP.black, texel: 1 });
-      kit.boxMM("emitAmber", [side < 0 ? outerX + 0.12 : outerX - 0.13, FLOOR + 1.92, z0 + 1.35], [side < 0 ? outerX + 0.13 : outerX - 0.12, FLOOR + 1.98, z0 + 1.65]);
-    };
-    for (let i = 0; i < 4; i++) cabin(WEST_CABIN_X0 + 0.15, COR.x0 - 0.15, WARD_Z1 + CABIN * i, WARD_Z1 + CABIN * (i + 1), -1);
-    for (let i = 0; i < 6; i++) cabin(COR.x1 + 0.15, EAST_CABIN_X1 - 0.15, Z0 + CABIN * i, Z0 + CABIN * (i + 1), +1);
-
-    // --- wardroom: long table with chairs, sideboard along the north wall, viewscreen on the west wall
-    const wx = (B.min[0] + 0.3 + COR.x0) / 2;
-    const wz = (Z0 + WARD_Z1) / 2;
-    kit.boxMM("paintedMetal", [wx - 4, FLOOR + 0.72, wz - 0.7], [wx + 4, FLOOR + 0.78, wz + 0.7], { color: IMP.black, texel: 1 });
-    for (const x of [wx - 3, wx + 3]) kit.boxMM("paintedMetal", [x - 0.25, FLOOR, wz - 0.45], [x + 0.25, FLOOR + 0.72, wz + 0.45], { color: IMP.dark, texel: 1 });
-    kit.collider([wx - 4, FLOOR, wz - 0.7], [wx + 4, FLOOR + 0.8, wz + 0.7], "table");
-    for (let k = 0; k < 6; k++) {
-      seat(kit, wx - 3.3 + k * 1.3, FLOOR, wz - 1.25, 2);
-      seat(kit, wx - 3.3 + k * 1.3, FLOOR, wz + 1.25, 0);
+    // --- corridor: doorways with leaves + plates + intercoms, ribs, cable trays, notice screens, end wall
+    const westFace = COR.x0 + WT; // 64.35
+    const eastFace = COR.x1 - WT; // 67.65
+    doorway(kit, { wallX: COR.x0, face: westFace, n: "+x", z0: 463.4, z1: 464.6, cell: 0, rankCell: 9, pocket: -1 });
+    for (let i = 0; i < 4; i++) {
+      const zc = WARD_Z1 + CABIN * i + CABIN / 2;
+      doorway(kit, { wallX: COR.x0, face: westFace, n: "+x", z0: zc - 0.6, z1: zc + 0.6, closed: !!CLOSED["w" + i], cell: NUMBER_CELLS[i % 4], rankCell: i % 2 ? 6 : 9, pocket: i % 2 ? 1 : -1 });
     }
-    kit.boxMM("paintedMetal", [B.min[0] + 0.35, FLOOR, Z0 + 0.35], [COR.x0 - 1.2, FLOOR + 0.95, Z0 + 0.95], { color: IMP.dark, texel: 1 });
-    kit.collider([B.min[0] + 0.35, FLOOR, Z0 + 0.35], [COR.x0 - 1.2, FLOOR + 0.95, Z0 + 0.95], "sideboard");
-    kit.boxMM("darkGloss", [B.min[0] + 0.3, FLOOR + 1.0, wz - 2.5], [B.min[0] + 0.4, FLOOR + 3.0, wz + 2.5]);
-    kit.boxMM("screenImp0", [B.min[0] + 0.4, FLOOR + 1.1, wz - 2.4], [B.min[0] + 0.41, FLOOR + 2.9, wz + 2.4], { uv: "keep" });
+    doorway(kit, { wallX: COR.x0, face: westFace, n: "+x", z0: 506.7, z1: 507.9, cell: 12, rankCell: 6, pocket: 1 });
+    for (let i = 0; i < 6; i++) {
+      const zc = Z0 + CABIN * i + CABIN / 2;
+      doorway(kit, { wallX: COR.x1, face: eastFace, n: "-x", z0: zc - 0.6, z1: zc + 0.6, closed: !!CLOSED["e" + i], cell: NUMBER_CELLS[(i + 2) % 4], rankCell: i % 2 ? 9 : 6, pocket: i % 2 ? -1 : 1 });
+    }
+    doorway(kit, { wallX: COR.x1, face: eastFace, n: "-x", z0: 508.4, z1: 509.6, cell: 13, rankCell: 9, pocket: -1 });
+    ribs(kit, westFace, eastFace, FLOOR, ceilY, [460.3, 466.3, 472.6, 480.3, 488.3, 496.3, 504.3]);
+    cableTrays(kit, ceilY, Z0 + 0.2, Z1 - 0.2, [64.95, 67.05]);
+    noticeScreen(kit, [westFace, FLOOR + 1.7, 509.7], "+x", 1.3, 0.72, "screenImp0");
+    noticeScreen(kit, [eastFace, FLOOR + 1.7, 505.9], "-x", 0.9, 0.55, "screenImp3");
+    endWall(kit, Z0, 66, "+z");
 
-    // --- lights (10 of 14): corridor pools, wardroom pair, one amber per west cabin, duty office
-    for (const z of [466, 486, 506]) ctx.lights.push({ type: "point", pos: [66, ceilY - 0.5, z], color: LIGHT.coolWhite, intensity: 7, distance: 11, priority: 0.6 });
-    for (const x of [wx - 3, wx + 3]) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.5, wz], color: LIGHT.warm, intensity: 8, distance: 10, priority: 0.5 });
-    for (let i = 0; i < 4; i++) ctx.lights.push({ type: "point", pos: [WEST_CABIN_X0 + 1.2, FLOOR + 1.95, WARD_Z1 + CABIN * i + 1.5], color: LIGHT.amber, intensity: 2.5, distance: 6, priority: 0.3 });
-    ctx.lights.push({ type: "point", pos: [72, ceilY - 0.5, 509], color: LIGHT.coolWhite, intensity: 6, distance: 8, priority: 0.3 });
+    // --- cabins (one function, varied by seed); the west cabin next to the wardroom is the captain's suite
+    const centers = {};
+    for (let i = 0; i < 4; i++) {
+      const faces = { x0: WEST_CABIN_X0 + WT, x1: COR.x0 - WT, z0: WARD_Z1 + CABIN * i + WT, z1: WARD_Z1 + CABIN * (i + 1) - WT };
+      const r = buildCabin(kit, faces, -1, WARD_Z1 + CABIN * i + CABIN / 2, { seed: 11 + i, captain: i === 0, ceilY, plateCell: NUMBER_CELLS[i % 4] });
+      centers["w" + i] = r.center;
+    }
+    for (let i = 0; i < 6; i++) {
+      const faces = { x0: COR.x1 + WT, x1: EAST_CABIN_X1 - WT, z0: Z0 + CABIN * i + (i ? WT : 0), z1: Z0 + CABIN * (i + 1) - WT };
+      const r = buildCabin(kit, faces, +1, Z0 + CABIN * i + CABIN / 2, { seed: 31 + i, ceilY, plateCell: NUMBER_CELLS[(i + 2) % 4] });
+      centers["e" + i] = r.center;
+    }
+
+    // --- wardroom, duty office, utility room
+    const wardFaces = { x0: B.min[0] + 0.3, x1: COR.x0 - WT, z0: Z0, z1: WARD_Z1 - WT };
+    buildWardroom(kit, wardFaces, { z0: 463.4, z1: 464.6 }, ceilY);
+    buildDutyOffice(kit, { x0: COR.x1 + WT, x1: EAST_CABIN_X1 - WT, z0: Z0 + CABIN * 6 + WT, z1: Z1 }, { z0: 508.4, z1: 509.6 }, ceilY);
+    buildUtility(kit, { x0: WEST_CABIN_X0 + WT, x1: COR.x0 - WT, z0: WARD_Z1 + CABIN * 4 + WT, z1: Z1 }, { z0: 506.7, z1: 507.9 }, ceilY);
+
+    // --- lights (14 of 14): corridor pools ×3, wardroom pair, duty office, utility, captain + six open cabins.
+    // Closed cabins have no real light (their leaves are shut); every cabin still has an emissive luminaire.
+    const wx = (wardFaces.x0 + wardFaces.x1) / 2;
+    const wz = (wardFaces.z0 + wardFaces.z1) / 2;
+    for (const z of [466, 486, 506]) ctx.lights.push({ type: "point", pos: [66, ceilY - 0.45, z], color: LIGHT.coolWhite, intensity: 8, distance: 12, priority: 0.6 });
+    // Large volumes: one light per 8 m cabin / two per 20 m wardroom, so intensity is sized for the walls
+    // (h ≈ 4–6 m from the fitting, E ≈ 1) rather than the floor directly below.
+    for (const x of [wx - 2.6, wx + 2.6]) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.5, wz], color: LIGHT.warm, intensity: 20, distance: 16, priority: 0.5 });
+    ctx.lights.push({ type: "point", pos: [71.5, ceilY - 0.4, 508.8], color: LIGHT.coolWhite, intensity: 8, distance: 9, priority: 0.35 });
+    ctx.lights.push({ type: "point", pos: [60.4, ceilY - 0.4, 507.4], color: LIGHT.coolWhite, intensity: 9, distance: 9, priority: 0.3 });
+    const c0 = centers.w0;
+    ctx.lights.push({ type: "point", pos: [c0[0], ceilY - 0.4, c0[2]], color: AMBER_WARM, intensity: 16, distance: 10, priority: 0.45 });
+    for (const k of ["w1", "w2", "e0", "e2", "e3", "e5"]) {
+      const c = centers[k];
+      ctx.lights.push({ type: "point", pos: [c[0], ceilY - 0.4, c[2]], color: AMBER_WARM, intensity: 14, distance: 9.5, priority: 0.3 });
+    }
     return {};
   },
 };
