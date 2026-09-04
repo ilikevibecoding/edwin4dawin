@@ -345,7 +345,12 @@ export function wheelProto({ r = 0.42, w = 0.28, rimR = 0.215, style = 'alloy', 
  * for the left so the dish faces out. `spin` randomises the lug phase, and the
  * bottom of the tread is squashed onto the ground.
  */
-export function addWheel(k, proto, { x, z, y = proto.r, side = 1, steer = 0, spin = 0, camber = 0, squash = 0.02 }) {
+export function addWheel(k, proto, { x, z, y = null, side = 1, steer = 0, spin = 0, camber = 0, squash = 0.02, travel = 0.12, contact = null }) {
+  // A loaded tyre squashes: the carcass below the flat is folded up to it and
+  // the hub comes down by the same amount, so the flat is *on* the ground
+  // rather than hovering a squash above it.
+  const hubY = y ?? proto.r - squash;
+  const id = contact ?? (k.contact ? k.contact({ x, z, r: proto.r, travel }) : undefined);
   for (const piece of proto.pieces) {
     const g = piece.geo.clone();
     transform(g, { rot: [spin, 0, 0] });
@@ -361,16 +366,18 @@ export function addWheel(k, proto, { x, z, y = proto.r, side = 1, steer = 0, spi
       }
     }
     k.add(piece.key, g, {
-      pos: [x, y, z],
+      pos: [x, hubY, z],
       rot: [0, steer, side * camber],
       scale: side < 0 ? [-1, 1, 1] : undefined,
       tint: piece.tint,
       shade: piece.shade,
+      contact: id,
       // the tyre and rim carry their own baked dust; full road film cakes them
       // into one dark disc
       wear: piece.key === 'rubber' || piece.key === 'tread' ? 0.2 : 0.35,
     });
   }
+  return id;
 }
 
 /** Standard axle set. `rear.dual` puts two wheels a side on the rear. */
@@ -379,8 +386,9 @@ export function addWheels(k, proto, { front, rear, track, steer = 0, seed = 1, d
   for (const side of [-1, 1]) {
     addWheel(k, proto, { x: side * track, z: front, side, steer, spin: rnd() * 6.28, camber });
     if (dual) {
-      addWheel(k, proto, { x: side * (track - proto.w * 0.55), z: rear, side: -side, spin: rnd() * 6.28 });
-      addWheel(k, proto, { x: side * (track + proto.w * 0.55), z: rear, side, spin: rnd() * 6.28 });
+      // twin rears share one hub, so one contact
+      const id = addWheel(k, proto, { x: side * (track + proto.w * 0.55), z: rear, side, spin: rnd() * 6.28 });
+      addWheel(k, proto, { x: side * (track - proto.w * 0.55), z: rear, side: -side, spin: rnd() * 6.28, contact: id });
     } else {
       addWheel(k, proto, { x: side * track, z: rear, side, spin: rnd() * 6.28, camber });
     }

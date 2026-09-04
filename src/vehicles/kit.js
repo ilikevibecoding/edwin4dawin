@@ -38,16 +38,35 @@ export function hash3(x, y, z, seed = 0) {
  * one stamping. This is the fallback for everything the per-pixel dirt does not
  * reach — and a first pass of value range for everything it does.
  */
-export function grime(baseHex, { dust = 0x8b7c5d, up = 0.5, down = 0.42, jitter = 0.08, seed = 0 } = {}) {
+export function grime(baseHex, { dust = 0x8b7c5d, up = 0.5, down = 0.42, jitter = 0.08, seed = 0, edge = 0, edgeTint = 0x9c968b } = {}) {
   const base = Array.isArray(baseHex) ? baseHex : LIN(baseHex);
   const dst = LIN(dust);
-  return (x, y, z, nx, ny) => {
+  const et = LIN(edgeTint);
+  return (x, y, z, nx, ny, nz = 0) => {
     const t = clamp(ny * 0.75 + 0.25) ** 1.6 * up;
-    const c = mix3(base, dst, t);
+    let c = mix3(base, dst, t);
     const j = jitter ? (hash3(x, y, z, seed) - 0.5) * jitter * 2 : 0;
     const k = 1 - clamp(-ny) ** 1.2 * down + j;
+    if (edge > 0) {
+      const e = edgeWear(x, y, z, nx, ny, nz, seed) * edge;
+      if (e > 0) c = mix3(c, et, e);
+    }
     return [c[0] * k, c[1] * k, c[2] * k];
   };
+}
+
+/**
+ * Edge-wear mask: a chamfered box's bevel vertices carry diagonal normals, so
+ * "how far off an axis the normal is" is "how close to a panel edge". Paint
+ * rubs through on those edges first, in patches rather than as a rule, so the
+ * mask is broken up by a coarse position hash.
+ */
+export function edgeWear(x, y, z, nx, ny, nz, seed = 0) {
+  const m = Math.max(Math.abs(nx), Math.abs(ny), Math.abs(nz));
+  if (m > 0.93) return 0;
+  const onEdge = smoothstep(0.93, 0.72, m);
+  const h = hash3(Math.round(x * 9), Math.round(y * 9), Math.round(z * 9), seed + 5);
+  return onEdge * smoothstep(0.35, 0.85, h);
 }
 
 /**
@@ -55,14 +74,19 @@ export function grime(baseHex, { dust = 0x8b7c5d, up = 0.5, down = 0.42, jitter 
  * fixing points and along the bottom edges of the panels. `fixings` are local
  * points where the panel is bolted through; rust streaks run down from them.
  */
-export function aged(baseHex, { age = 0.5, fixings = [], rust = 0x6e3a1c, chalk = 0xb9b2a1, seed = 1, floorY = 0.5 } = {}) {
+export function aged(baseHex, { age = 0.5, fixings = [], rust = 0x6e3a1c, chalk = 0xb9b2a1, seed = 1, floorY = 0.5, edge = 0.5, edgeTint = 0x8f8a80 } = {}) {
   const base = LIN(baseHex);
   const ru = LIN(rust);
   const ch = LIN(chalk);
-  return (x, y, z, nx, ny) => {
+  const et = LIN(edgeTint);
+  return (x, y, z, nx, ny, nz = 0) => {
     const up = clamp(ny);
     const h = hash3(Math.round(x * 20), Math.round(y * 20), Math.round(z * 20), seed);
     let c = mix3(base, ch, up * up * age * 0.55 * (0.6 + h * 0.8));
+    if (edge > 0) {
+      const e = edgeWear(x, y, z, nx, ny, nz, seed) * edge;
+      if (e > 0) c = mix3(c, et, e);
+    }
     let r = 0;
     for (const f of fixings) {
       const dx = x - f[0];
@@ -188,16 +212,32 @@ export class VehicleKit {
     this.spec = spec;
     this.pieces = [];
     this.panes = [];
+    // ground contacts registered by addWheel / the jockey wheel: { x, z, r, travel }
+    // in vehicle space. The placer probes the terrain under each one and the
+    // pieces tagged with its id ride up or down to meet it.
+    this.contacts = [];
+    this.drops = [];
   }
 
-  /** add(key, geo, { pos, rot, quat, scale, tint, shade, flap, wear }) — geometry is cloned; `wear` scales the road film. */
+  /** Register a ground contact; returns its id for tagging pieces. `travel` is how far it may move to reach the ground. */
+  contact({ x, z, r, travel = 0.12 }) {
+    this.contacts.push({ x, z, r, travel });
+    return this.contacts.length - 1;
+  }
+
+  /**
+   * add(key, geo, { pos, rot, quat, scale, tint, shade, flap, wear, contact, stretchBelow })
+   * Geometry is cloned; `wear` scales the road film. `contact` ties the piece to
+   * a ground contact so it follows the terrain; with `stretchBelow: y` only the
+   * vertices under that height move (a telescoping post).
+   */
   add(key, geo, opts = {}) {
     const g = opts.pos || opts.rot || opts.quat || opts.scale ? transform(geo.clone(), opts) : geo.clone();
     const s = opts.scale;
     const det = Array.isArray(s) ? s[0] * s[1] * s[2] : typeof s === 'number' ? s * s * s : 1;
     const p = prep(g);
     if (det < 0) flipWinding(p);
-    this.pieces.push({ key, geo: p, tint: opts.tint, shade: opts.shade, flap: opts.flap, wear: opts.wear ?? 1 });
+    this.pieces.push({ key, geo: p, tint: opts.tint, shade: opts.shade, flap: opts.flap, wear: opts.wear ?? 1, contact: opts.contact, stretchBelow: opts.stretchBelow });
     return this;
   }
 
@@ -255,6 +295,15 @@ export class VehicleKit {
       const p = g.attributes.position;
       const nrm = g.attributes.normal;
       const n = p.count;
+      // suspension: the wheel (and whatever else hangs off that contact) meets the ground
+      const drop = piece.contact !== undefined ? this.drops[piece.contact] || 0 : 0;
+      if (drop) {
+        const cut = piece.stretchBelow;
+        for (let i = 0; i < n; i++) {
+          const py = p.getY(i);
+          if (cut === undefined || py < cut) p.setY(i, py + drop);
+        }
+      }
       if (!UV_KEEP.has(key)) boxProjectUV(g, UV_SCALE[key] ?? 1);
 
       const col = new Float32Array(n * 3);

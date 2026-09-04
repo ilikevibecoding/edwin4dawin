@@ -43,7 +43,9 @@ const PAINT_BY_KIND = {
   motorcycle: ['oxideRed', 'white', 'yellow', 'navy'],
 };
 
-const GLASS = ['glass', 'glass', 'glassDark', 'glassDusty', 'glassDusty'];
+// Cab glass is the hero's clear tint, wiped or dusty; the privacy tint is for
+// living-box windows only, never for a windscreen (it reads as painted black).
+const GLASS = ['glass', 'glass', 'glassDusty', 'glass', 'glassDusty'];
 
 /**
  * Per-instance variant. `slot` is the placement index, `ordinal` counts
@@ -86,7 +88,12 @@ export function variant(kind, { slot, ordinal = 0, site = { low: 0.5, edge: 0.5 
     tyres: old ? pick(['steel', 'steel', 'alloy']) : pick(['alloy', 'steel', 'alloy']),
     lightsOn: false, // decided fleet-wide so roughly a third are lit at night
     brokenPane: false, // exactly one in the camp
-    heading: range(-0.05, 0.05), // parking is never quite square
+    // Parking is never square: up to ±12° of yaw, and pulled a little short or
+    // long of the slot, a little left or right of it. The placer trims these
+    // back where a neighbour would be clipped.
+    heading: range(-0.21, 0.21),
+    slotAlong: range(-0.9, 0.9),
+    slotAcross: range(-0.35, 0.35),
     steer: chance(0.4) ? range(-0.35, 0.35) : 0,
     rhd: true,
     missingPanel: FORCE_DAMAGE || (old && chance(0.35)),
@@ -108,10 +115,13 @@ const clamp01 = (v) => Math.min(1, Math.max(0, v));
  * on top and rusts out of its fixings. `fixings` are vehicle-space points where
  * the body is bolted through; `floorY` is the panel bottom edge.
  */
-export function paintShade(v, { fixings = [], floorY = 0.5, tint = null } = {}) {
+export function paintShade(v, { fixings = [], floorY = 0.5, tint = null, edge = null } = {}) {
   const base = tint ?? v.paint;
-  if (!v.old) return grime(base, { dust: 0x9a8b6b, up: 0.18 + v.age * 0.25, down: 0.28, jitter: 0.03 + v.age * 0.05, seed: v.seed });
-  return aged(base, { age: v.age, fixings, floorY, seed: v.seed });
+  // paint rubs through on the panel edges first: a little on a fresh vehicle,
+  // primer-grey on a tired one
+  const edgeK = edge ?? 0.18 + v.age * 0.55;
+  if (!v.old) return grime(base, { dust: 0x9a8b6b, up: 0.18 + v.age * 0.25, down: 0.28, jitter: 0.03 + v.age * 0.05, seed: v.seed, edge: edgeK, edgeTint: 0xa39e93 });
+  return aged(base, { age: v.age, fixings, floorY, seed: v.seed, edge: edgeK });
 }
 
 /** Two-tone: a second colour below the swage line, on the older bush vehicles. */

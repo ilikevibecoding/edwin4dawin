@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 import {
   applyBrightwork,
+  applyGlassFilm,
   brushedMaps,
   diamondPlateMaps,
   dirtLayers,
   fabricMaps,
-  glassFilmMap,
   glassRoughness,
   glassTintMap,
   meshAlpha,
@@ -723,23 +723,29 @@ export function fleetMaterials(env = null) {
       side: THREE.DoubleSide,
     }),
   );
-  applyBrightwork(m.reflector, { tag: 'fleetRefl', strength: 0.62, band: 0.75, trees: 0.35, line: 0.46, ground: 0x120e09, wall: 0x1f1e16, rim: 0xffe8c4, sky: 0x93b0cc });
+  // a stamped bowl seen straight on used to fill its lens with one white
+  // disc at midday; the streak is narrower and dimmer, and the bowl keeps its
+  // facets, so an unlit lamp reads as a lamp rather than a light
+  applyBrightwork(m.reflector, { tag: 'fleetRefl', strength: 0.4, band: 0.42, trees: 0.45, line: 0.46, ground: 0x120e09, wall: 0x1f1e16, rim: 0xffe8c4, sky: 0x93b0cc });
   // Two of each lamp: the `On` set is what a vehicle left with its lights on
   // uses, and it is the only set the night switch touches.
+  // By day nothing on a parked vehicle glows: an unlit bulb is a grey glass
+  // pip in a reflector, a tail lens is red plastic. The small emissive left
+  // here is the plastic's own translucency, well under a blown disc.
   const lamp = (color, emissive, intensity, extra = {}) =>
     new THREE.MeshStandardMaterial(V({ color, emissive, emissiveIntensity: intensity, roughness: 0.2, metalness: 0, envMapIntensity: 0.55, ...extra }));
-  m.headOff = lamp(0xf0e7d4, 0x6f6653, 1.4);
-  m.headOn = lamp(0xf0e7d4, 0x6f6653, 1.4);
+  m.headOff = lamp(0xd9d4c8, 0x3a3833, 0.25, { roughness: 0.3 });
+  m.headOn = lamp(0xd9d4c8, 0x3a3833, 0.25, { roughness: 0.3 });
   const prism = prismNormal();
   const lens = { normalMap: prism, normalScale: new THREE.Vector2(1.3, 1.3), roughness: 0.13, metalness: 0.08, envMapIntensity: 1.9 };
-  m.tailOff = lamp(0x8e150a, 0x5c0b05, 1.5, lens);
-  m.tailOn = lamp(0x8e150a, 0x5c0b05, 1.5, lens);
-  m.amber = lamp(0xcf6b06, 0x5e330a, 0.22, lens);
-  m.amberOn = lamp(0xcf6b06, 0x5e330a, 0.22, lens);
-  m.lampBlue = lamp(0x2c4ed8, 0x142a8a, 0.3, lens);
-  m.lampBlueOn = lamp(0x2c4ed8, 0x142a8a, 0.3, lens);
+  m.tailOff = lamp(0x8e150a, 0x5c0b05, 0.5, lens);
+  m.tailOn = lamp(0x8e150a, 0x5c0b05, 0.5, lens);
+  m.amber = lamp(0xcf6b06, 0x5e330a, 0.12, lens);
+  m.amberOn = lamp(0xcf6b06, 0x5e330a, 0.12, lens);
+  m.lampBlue = lamp(0x2c4ed8, 0x142a8a, 0.2, lens);
+  m.lampBlueOn = lamp(0x2c4ed8, 0x142a8a, 0.2, lens);
   // camp lantern / interior glow, warm
-  m.lampWarmOn = lamp(0xffe3b8, 0xffb060, 0.4, { roughness: 0.4 });
+  m.lampWarmOn = lamp(0xffe3b8, 0xffb060, 0.0, { roughness: 0.4 });
   m.lensClear = new THREE.MeshPhysicalMaterial({
     color: 0xc3d4de,
     metalness: 0,
@@ -763,70 +769,76 @@ export function fleetMaterials(env = null) {
   });
 
   // --- glass ---------------------------------------------------------------
-  // The hero's panes carry a heavy dust film and a strong graded reflection
-  // tuned for its own object space; on a parked fleet seen from outside they
-  // read as cream-coloured sheet. These are thinner: tint, a light film, and a
-  // reflection that still leaves the seats visible.
-  const glassBase = {
-    map: glassTintMap(),
-    metalness: 0,
-    roughnessMap: glassRoughness(),
-    emissive: 0xffffff,
-    emissiveMap: glassFilmMap(),
-    transparent: true,
-    clearcoat: 1.0,
-    side: THREE.DoubleSide,
-    depthWrite: false,
+  // The same substance as the hero truck's panes (src/vehicle/materials.js,
+  // `pane()`): its tint, opacity, Fresnel-weighted graded sky reflection and
+  // *lit* dust film, so a jeep windscreen in the camp mirrors the tree line at
+  // the same angles the hero's does and goes quiet in shade the same way. Own
+  // instances, because the fleet's panes are in world space under their own
+  // roots; the parameters are mirrored, not shared. What differs per key is
+  // only the film: wiped, unwiped, dusty, the privacy tint on a living box, and
+  // one cracked pane.
+  const glassBW = {
+    strength: 1.25,
+    band: 0.55,
+    trees: 1.15,
+    line: 0.3,
+    pane: 1.2,
+    clearcoat: true,
+    ground: 0x141712,
+    wall: 0x1c2117,
+    rim: 0xfff0d2,
   };
-  // Clear: a faint green-grey, the seats and the far pane show through.
-  m.glass = new THREE.MeshPhysicalMaterial({
-    ...glassBase,
-    color: 0x6d8890,
-    roughness: 0.05,
-    emissiveIntensity: 0.3,
-    opacity: 0.28,
-    envMapIntensity: 0.9,
-    clearcoatRoughness: 0.03,
-  });
-  applyBrightwork(m.glass, { tag: 'fleetGlass', strength: 0.85, band: 0.5, trees: 0.9, line: 0.42, pane: 0.9, clearcoat: true, ground: 0x141712, wall: 0x1c2117, rim: 0xfff0d2 });
-  m.glass.userData.sortPieces = true;
-  // Dark: privacy tint, so the interior is a suggestion and the sky a mirror.
-  m.glassDark = new THREE.MeshPhysicalMaterial({
-    ...glassBase,
-    color: 0x1a2429,
-    roughness: 0.06,
-    emissiveIntensity: 0.22,
-    opacity: 0.55,
-    envMapIntensity: 0.9,
-    clearcoatRoughness: 0.03,
-  });
-  applyBrightwork(m.glassDark, { tag: 'fleetGlassDark', strength: 0.9, band: 0.5, trees: 0.9, line: 0.42, pane: 1.0, clearcoat: true, ground: 0x141712, wall: 0x1c2117, rim: 0xfff0d2 });
-  m.glassDark.userData.sortPieces = true;
-  // Dusty: thicker film, so it hazes more and mirrors less.
-  m.glassDusty = new THREE.MeshPhysicalMaterial({
-    ...glassBase,
-    color: 0x4a4e48,
-    roughness: 0.28,
-    emissiveIntensity: 0.95,
-    opacity: 0.46,
-    envMapIntensity: 0.6,
-    clearcoatRoughness: 0.2,
-  });
-  applyBrightwork(m.glassDusty, { tag: 'fleetGlassDusty', strength: 0.7, band: 0.4, trees: 0.8, line: 0.42, pane: 0.9, clearcoat: true, ground: 0x141712, wall: 0x1c2117, rim: 0xfff0d2 });
-  m.glassDusty.userData.sortPieces = true;
-  // Cracked: a shatter web on the film channel.
-  m.glassCracked = new THREE.MeshPhysicalMaterial({
-    ...glassBase,
-    color: 0x3a4a50,
+  const pane = (key, { kind, color, opacity, roughness, film, bw = {}, tag = key, emissiveMap = null, emissiveIntensity = 0 }) => {
+    const mat = new THREE.MeshPhysicalMaterial({
+      color,
+      map: glassTintMap(),
+      metalness: 0,
+      roughness,
+      roughnessMap: kind === 'screen' ? glassRoughness() : null,
+      opacity,
+      transparent: true,
+      envMapIntensity: 1.0,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.03,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      emissive: emissiveMap ? 0xffffff : 0x000000,
+      emissiveMap,
+      emissiveIntensity,
+    });
+    // `tag` is the program key: panes that differ only in uniform values share
+    // one program, so the fleet adds at most four glass programs to the scene
+    applyBrightwork(mat, { tag: `fleet_${tag}`, ...glassBW, ...bw });
+    applyGlassFilm(mat, { tag: `fleet_${tag}`, kind, ...film });
+    mat.userData.sortPieces = true;
+    m[key] = mat;
+    return mat;
+  };
+  // Windscreens and door glass: the hero's `glass`, wiped
+  pane('glass', { kind: 'screen', color: 0x33474f, opacity: 0.26, roughness: 0.07, film: { dustAmount: 0.9, dustAlpha: 0.5, band: 0.5 } });
+  // Door and rear glass on a wagon: nothing ever wipes it
+  pane('glassSide', { kind: 'side', color: 0x33474f, opacity: 0.26, roughness: 0.08, film: { dustAmount: 1.0, dustAlpha: 0.42, band: 0 } });
+  // Dusty: the same program as `glass` with the film turned up
+  pane('glassDusty', { kind: 'screen', tag: 'glass', color: 0x33474f, opacity: 0.26, roughness: 0.07, film: { dustAmount: 1.5, dustAlpha: 0.62, band: 0.5, dustRough: 0.7 } });
+  // Privacy tint on a living-box window: the hero's rear-glass recipe
+  pane('glassDark', {
+    kind: 'rear',
+    color: 0x2c3d44,
+    opacity: 0.3,
     roughness: 0.1,
+    film: { dustAmount: 1.0, dustAlpha: 0.7, band: 0, dustAmbient: 0.42 },
+    bw: { strength: 1.1, band: 0.45, trees: 1.0, pane: 1.1, wall: 0x1b2016, rim: 0xfbecce, sky: reflectedSky(1.2) },
+  });
+  // Cracked: a shatter web carried on the emissive channel over the wiped screen
+  pane('glassCracked', {
+    kind: 'screen',
+    color: 0x33474f,
+    opacity: 0.3,
+    roughness: 0.1,
+    film: { dustAmount: 0.9, dustAlpha: 0.5, band: 0.5 },
     emissiveMap: crackMap(),
     emissiveIntensity: 0.55,
-    opacity: 0.36,
-    envMapIntensity: 1.0,
-    clearcoatRoughness: 0.05,
   });
-  applyBrightwork(m.glassCracked, { tag: 'fleetGlassCracked', strength: 1.1, band: 0.5, trees: 1.0, line: 0.42, pane: 1.2, clearcoat: true, ground: 0x141712, wall: 0x1c2117, rim: 0xfff0d2, sky: reflectedSky(1.1) });
-  m.glassCracked.userData.sortPieces = true;
 
   if (env) for (const mat of Object.values(m)) if (mat && 'envMap' in mat) mat.envMap = env;
   for (const [key, mat] of Object.entries(m)) if (mat && mat.isMaterial && !mat.name) mat.name = `fleet_${key}`;
@@ -852,7 +864,7 @@ export const SWAY_KEYS = new Set(['whip', 'canvas']);
 
 /** Materials whose uvs are kept as authored rather than box-projected. */
 export const UV_KEEP = new Set([
-  'glass', 'glassDark', 'glassDusty', 'glassCracked', 'lensClear', 'reflector', 'headOff', 'headOn', 'tailOff', 'tailOn',
+  'glass', 'glassSide', 'glassDark', 'glassDusty', 'glassCracked', 'lensClear', 'reflector', 'headOff', 'headOn', 'tailOff', 'tailOn',
   'amber', 'amberOn', 'lampBlue', 'lampBlueOn', 'lampWarmOn', 'decal', 'mesh', 'pool',
 ]);
 
@@ -877,26 +889,27 @@ export const UV_SCALE = {
   vinylFaded: 3,
 };
 
-/** Night switch: only the `On` lamp set brightens. */
+/**
+ * Hour switch. Only the `On` lamp set responds, and only the pieces the placer
+ * put on it: the one vehicle still arriving (headlamps, tail, pool), the one or
+ * two left with parking lamps (amber markers, tail), and the interior glow of
+ * whoever is living in the camper. Everything else is off at every hour.
+ */
 export function setFleetLights(m, on) {
-  // the lit set swaps to a bright emissive colour as well as a higher
-  // intensity: the daytime values are a dim bulb seen through a lens
-  m.headOn.emissive.set(on ? 0xfff3dc : 0x6f6653);
-  m.headOn.emissiveIntensity = on ? 5.0 : 1.4;
+  m.headOn.emissive.set(on ? 0xfff3dc : 0x3a3833);
+  m.headOn.emissiveIntensity = on ? 5.0 : 0.25;
   m.tailOn.emissive.set(on ? 0xff2a12 : 0x5c0b05);
-  m.tailOn.emissiveIntensity = on ? 3.0 : 1.5;
+  m.tailOn.emissiveIntensity = on ? 2.2 : 0.5;
   m.amberOn.emissive.set(on ? 0xff9a22 : 0x5e330a);
-  m.amberOn.emissiveIntensity = on ? 2.6 : 0.22;
+  m.amberOn.emissiveIntensity = on ? 1.8 : 0.12;
   m.lampBlueOn.emissive.set(on ? 0x4a80ff : 0x142a8a);
-  m.lampBlueOn.emissiveIntensity = on ? 3.5 : 0.3;
-  m.lampWarmOn.emissiveIntensity = on ? 4.5 : 0.4;
+  m.lampBlueOn.emissiveIntensity = on ? 2.0 : 0.2;
+  // a lantern or a reading light behind a curtain, not a floodlit box
+  m.lampWarmOn.emissiveIntensity = on ? 1.6 : 0.0;
   m.pool.opacity = on ? 0.4 : 0;
-  // the dust / crack films on the panes are emissive stand-ins for scattered
-  // daylight; at night they would glow
-  for (const key of ['glass', 'glassDark', 'glassDusty', 'glassCracked']) {
-    const g = m[key];
-    if (!g) continue;
-    g.userData.dayFilm ??= g.emissiveIntensity;
-    g.emissiveIntensity = g.userData.dayFilm * (on ? 0.12 : 1);
+  // the shatter web is a film catching daylight; at night it has nothing to catch
+  if (m.glassCracked) {
+    m.glassCracked.userData.dayFilm ??= m.glassCracked.emissiveIntensity;
+    m.glassCracked.emissiveIntensity = m.glassCracked.userData.dayFilm * (on ? 0.12 : 1);
   }
 }

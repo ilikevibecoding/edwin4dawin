@@ -22,6 +22,13 @@ import { Buffer } from 'node:buffer';
 // vehicle, `--suffix` tags the files of an alternate framing. `--times`
 // repeats the set at each time of day. Also dumps the fleet's stats (vehicles,
 // draw calls, triangles) and the renderer's frame info.
+//
+// The camp parks its vehicles four metres apart, so the default front
+// three-quarter is often looking through a neighbour. Before each capture the
+// camera raycasts to the subject (centre, nose, tail, roof, hubs) against the
+// fleet and the camp's structures; if the first thing a ray hits is not the
+// subject, the camera orbits in 10° steps out to ±30° (then lifts) until it
+// is, and the offset it settled on is logged. `--orbit 0` disables this.
 // ---------------------------------------------------------------------------
 
 const argv = process.argv.slice(2);
@@ -44,6 +51,7 @@ const row = arg('row', '0') !== '0';
 const only = arg('only', ''); // one vehicle name, e.g. safari-jeep_1
 const suffix = arg('suffix', ''); // appended to file names, for alternate framings
 const focus = arg('focus', ''); // 'wheel' frames the front-right wheel instead of the body
+const orbit = Number(arg('orbit', '30')); // max orbit (degrees) either way to clear an occluder; 0 disables
 const log = (...a) => console.log('[fleet]', ...a);
 
 async function main() {
@@ -112,9 +120,22 @@ async function main() {
     }, time);
     for (const v of list) {
       const t1 = Date.now();
-      const dataUrl = await page.evaluate(
-        ({ v, angle, distK, lift, fov, focus }) => {
-          const { camera, skyRig } = window.debugAPI.objects;
+      const shot = await page.evaluate(
+        async ({ v, angle, distK, lift, fov, focus, orbit }) => {
+          const { camera, skyRig, fleet, camp } = window.debugAPI.objects;
+          const V3 = camera.position.constructor;
+          const M4 = camera.matrixWorld.constructor;
+          // THREE is not a global; a second copy of the module gives us a
+          // Raycaster the camp's meshes are happy to be tested with
+          if (!window.__fleetRay && orbit > 0) {
+            try {
+              const T = await import('/node_modules/three/build/three.module.js');
+              window.__fleetRay = new T.Raycaster();
+            } catch (e) {
+              window.__fleetRay = false;
+            }
+          }
+          const rc = window.__fleetRay || null;
           const [x, y, z] = v.pos;
           const len = v.length[1] - v.length[0];
           const cz = (v.length[0] + v.length[1]) * 0.5;
@@ -131,19 +152,130 @@ async function main() {
             d = w.r * 4.5 * distK;
             camY = y + w.r * 1.6;
           }
-          const a = h + angle;
-          camera.position.set(centre[0] + Math.sin(a) * d, camY, centre[2] + Math.cos(a) * d);
+
+          // --- occluders: every other vehicle as an oriented box in its root's
+          // frame (the fleet is merged per material, so a scene raycast could not
+          // say whose triangle it hit), and the camp's structures by triangle
+          // raycast (they are merged per material too, so their bounding boxes
+          // span the whole camp). Grass, ground wear, fire, bulbs and signs are
+          // skipped: they cannot hide a vehicle.
+          const subject = fleet.vehicles.find((o) => o.name === v.name);
+          const boxes = [];
+          for (const o of fleet.vehicles) {
+            if (o === subject) continue;
+            const fp = o.footprint || { hw: 1.2, z0: o.length[0], z1: o.length[1] };
+            const hw = Math.max(0.6, fp.hw - 0.35);
+            boxes.push({ inv: new M4().copy(o.root.matrixWorld).invert(), min: [-hw, 0, fp.z0], max: [hw, o.height, fp.z1] });
+          }
+          const meshes = [];
+          if (rc) {
+            camp?.group?.traverse((o) => {
+              if (!o.isMesh || !o.geometry || o.isInstancedMesh) return;
+              if (/wear|grass|ground|fire|bulb|ash|ember|flag|sign|beacon|smoke/i.test(o.name)) return;
+              meshes.push(o);
+            });
+          }
+
+          // sample points on the subject: centre, nose, tail, roof and the hubs
+          const local = (lx, ly, lz) => subject.root.localToWorld(new V3(lx, ly, lz)).toArray();
+          const samples = [
+            centre,
+            local(0, v.height * 0.35, v.length[1]),
+            local(0, v.height * 0.35, v.length[0]),
+            local(0, v.height * 0.95, cz),
+            ...(v.wheels || []).map((w) => local(w.x, w.r, w.z)),
+          ];
+          const o0 = new V3();
+          const o1 = new V3();
+          const hits = [];
+          const blocked = (eye) => {
+            let n = 0;
+            for (const p of samples) {
+              const dx = p[0] - eye[0];
+              const dy = p[1] - eye[1];
+              const dz = p[2] - eye[2];
+              // the cheap oriented-box test against the other vehicles first,
+              // then the camp's triangles (merged meshes, no BVH: slow)
+              let hit = false;
+              for (const b of boxes) {
+                // ray into the box's frame; slab test with t in world units (the
+                // direction is a transformed segment, not re-normalised)
+                o0.set(eye[0], eye[1], eye[2]).applyMatrix4(b.inv);
+                o1.set(eye[0] + dx, eye[1] + dy, eye[2] + dz).applyMatrix4(b.inv);
+                let t0 = 0;
+                let t1 = 0.97;
+                let inBox = true;
+                for (let k = 0; k < 3; k++) {
+                  const oa = o0.getComponent(k);
+                  const da = o1.getComponent(k) - oa;
+                  if (Math.abs(da) < 1e-9) {
+                    if (oa < b.min[k] || oa > b.max[k]) inBox = false;
+                    continue;
+                  }
+                  let ta = (b.min[k] - oa) / da;
+                  let tb = (b.max[k] - oa) / da;
+                  if (ta > tb) [ta, tb] = [tb, ta];
+                  t0 = Math.max(t0, ta);
+                  t1 = Math.min(t1, tb);
+                  if (t0 > t1) inBox = false;
+                }
+                if (inBox) {
+                  hit = true;
+                  break;
+                }
+              }
+              if (!hit && rc) {
+                const dist = Math.hypot(dx, dy, dz);
+                rc.ray.origin.set(eye[0], eye[1], eye[2]);
+                rc.ray.direction.set(dx / dist, dy / dist, dz / dist);
+                rc.near = 0.05;
+                rc.far = dist * 0.97;
+                for (const m of meshes) {
+                  hits.length = 0;
+                  m.raycast(rc, hits);
+                  if (hits.length) {
+                    hit = true;
+                    break;
+                  }
+                }
+              }
+              if (hit) n++;
+            }
+            return n;
+          };
+
+          const place = (off, up) => {
+            const a = h + angle + off;
+            return [centre[0] + Math.sin(a) * d, camY + up, centre[2] + Math.cos(a) * d];
+          };
+          const step = Math.PI / 18;
+          const offsets = [0];
+          for (let k = 1; k * 10 <= orbit + 1e-6; k++) offsets.push(k * step, -k * step);
+          let best = { off: 0, up: 0, n: blocked(place(0, 0)) };
+          if (best.n > 0 && orbit > 0) {
+            search: for (const up of [0, 0.6, 1.2]) {
+              for (const off of offsets) {
+                const n = blocked(place(off, up));
+                if (n < best.n) best = { off, up, n };
+                if (n === 0) break search;
+              }
+            }
+          }
+          const eye = place(best.off, best.up);
+          camera.position.set(eye[0], eye[1], eye[2]);
           camera.fov = fov;
           camera.lookAt(centre[0], centre[1], centre[2]);
           camera.updateProjectionMatrix();
           skyRig.follow?.(camera.position);
-          return window.debugAPI.captureFrame(2);
+          return { dataUrl: window.debugAPI.captureFrame(2), orbit: (best.off * 180) / Math.PI, up: best.up, blocked: best.n, samples: samples.length, boxes: boxes.length };
         },
-        { v, angle, distK, lift, fov, focus },
+        { v, angle, distK, lift, fov, focus, orbit },
       );
       const file = path.join(outDir, `${v.name}_${time}${suffix}.png`);
-      await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'));
-      log(`${v.name} ${time} -> ${file} (${((Date.now() - t1) / 1000).toFixed(1)}s)`);
+      await writeFile(file, Buffer.from(shot.dataUrl.split(',')[1], 'base64'));
+      const cam = shot.orbit || shot.up ? ` orbit=${shot.orbit.toFixed(0)}° lift=${shot.up.toFixed(1)}` : '';
+      const occ = shot.blocked ? ` STILL OCCLUDED ${shot.blocked}/${shot.samples}` : '';
+      log(`${v.name} ${time} -> ${file} (${((Date.now() - t1) / 1000).toFixed(1)}s)${cam}${occ}`);
     }
     if (row) {
       const t1 = Date.now();

@@ -33,11 +33,17 @@ function archTub(k, { z, r, hw, flare = true, flareKey = 'trim', flareTint = 0x3
 }
 
 /** A door mirror on an arm off the A pillar. */
-export function doorMirror(k, { x, y, z, side, arm = 0.14, big = false, tint = 0x383c41 }) {
+export function doorMirror(k, { x, y, z, side, arm = 0.14, big = false, tint = 0x383c41, frame = false }) {
   const w = big ? 0.26 : 0.19;
-  const h = big ? 0.2 : 0.13;
+  const h = big ? 0.32 : 0.13;
   const mx = x + side * arm;
-  k.add('steel', gbox(arm + 0.04, 0.02, 0.035, 0.005), { pos: [x + side * arm * 0.5, y + 0.02, z], tint: 0x3a3d40 });
+  if (frame) {
+    // truck mirror: a tubular frame off two stalks, the head hung inside it
+    k.add('steel', tube([[x, y + h * 0.5 + 0.06, z], [mx + side * 0.03, y + h * 0.5 + 0.06, z], [mx + side * 0.03, y - h * 0.5 - 0.06, z], [x, y - h * 0.5 - 0.06, z]], 0.011, 8, 0.1), { tint: 0x3a3d40 });
+    k.add('steel', gbox(0.03, h + 0.16, 0.03, 0.005), { pos: [mx + side * 0.03, y, z], tint: 0x3a3d40 });
+  } else {
+    k.add('steel', gbox(arm + 0.04, 0.02, 0.035, 0.005), { pos: [x + side * arm * 0.5, y + 0.02, z], tint: 0x3a3d40 });
+  }
   k.add('trim', gbox(0.05, h, w, 0.014), { pos: [mx, y, z], tint });
   k.add('chrome', pbox(0.006, h - 0.03, w - 0.03), { pos: [mx - side * 0.024, y, z], tint: 0xdfe6ea });
 }
@@ -98,9 +104,9 @@ export function bonnetBody(k, o) {
   const {
     hw, sill, belt, roof, hood, nose, cabFront, cabRear, tail, front, rear, r,
     style = 'wagon', doors = 4, paintKey = 'paint', paint, glassKey = 'glass', brokenPane = false,
-    lightsOn = false, rhd = true, rake = 0.32, roundLamps = true, flareKey = 'trim', flareTint = 0x383c41,
+    lightsOn = false, markersOn = lightsOn, rhd = true, rake = 0.32, roundLamps = true, flareKey = 'trim', flareTint = 0x383c41,
     interior = true, seatTint = 0x4a4438, bedFloor = null, roofRailKey = null, bullbar = false, cabW = null,
-    missingPanel = false, crackedLens = false,
+    missingPanel = false, crackedLens = false, edge = 0,
   } = o;
   const P = paint; // shade fn
   const ar = r + 0.11;
@@ -169,7 +175,7 @@ export function bonnetBody(k, o) {
   } else {
     for (const s of [-1, 1]) rectLamp(k, { pos: [s * lampX, lampY, nose + 0.03], w: 0.3, h: 0.14, kind: 'head', on: lightsOn, segments: ['head', 'amber'] });
   }
-  for (const s of [-1, 1]) roundLamp(k, { pos: [s * (hw - 0.14), lampY - 0.22, nose + 0.02], r: 0.035, kind: 'amber', on: lightsOn, depth: 0.03 });
+  for (const s of [-1, 1]) roundLamp(k, { pos: [s * (hw - 0.14), lampY - 0.22, nose + 0.02], r: 0.035, kind: 'amber', on: markersOn, depth: 0.03 });
   // bumper
   k.add('steel', gbox(hw * 2 + 0.06, 0.15, 0.14, 0.02), { pos: [0, sill - 0.02, nose + 0.04], shade: grime(0x4a4e52, { up: 0.6, down: 0.45 }) });
   k.add('steel', gbox(hw * 2 - 0.4, 0.04, 0.16, 0.008), { pos: [0, sill - 0.12, nose + 0.06], shade: grime(0x3d4144, { up: 0.6, down: 0.45 }) });
@@ -251,7 +257,7 @@ export function bonnetBody(k, o) {
       k.add(paintKey, gbox(cw * 2 - 0.12, 0.08, 0.06, 0.012), { pos: [0, roof - 0.08, tail + 0.01], shade: P });
       k.addMirrored(paintKey, gbox(0.1, gh2, 0.06, 0.012), { pos: [cw - 0.1, gy2, tail + 0.01], shade: P });
       k.add('chrome', gbox(0.2, 0.03, 0.02, 0.006), { pos: [0.3, belt - 0.1, tail - 0.03], tint: 0xb9bec2 });
-      for (const s of [-1, 1]) rectLamp(k, { pos: [s * (cw - 0.24), sill + 0.5, tail - 0.02], w: 0.16, h: 0.3, dir: -1, on: lightsOn, segments: ['tail', 'amber'] });
+      for (const s of [-1, 1]) rectLamp(k, { pos: [s * (cw - 0.24), sill + 0.5, tail - 0.02], w: 0.16, h: 0.3, dir: -1, on: markersOn, segments: ['tail', 'amber'] });
       decal(k, 'plate', { w: 0.42, h: 0.1, pos: [0, sill + 0.3, tail - 0.045], rot: [0, Math.PI, 0] });
     } else if (style === 'pickup' || style === 'truck') {
       // cab back wall and rear window
@@ -303,7 +309,7 @@ export function bonnetBody(k, o) {
     const tub = new THREE.CylinderGeometry(ar - 0.02, ar - 0.02, 0.3, 14, 1, true, 0, Math.PI);
     tub.rotateZ(Math.PI / 2);
     k.addMirrored('trim', tub, { pos: [hw - 0.22, r * 0.98, rear], shade: grime(0x32363b, { up: 0.6, dust: 0x6f6350 }) });
-    for (const s of [-1, 1]) rectLamp(k, { pos: [s * (hw - 0.2), bf + 0.26, tail - 0.02], w: 0.14, h: 0.34, dir: -1, on: lightsOn, segments: ['tail', 'amber'] });
+    for (const s of [-1, 1]) rectLamp(k, { pos: [s * (hw - 0.2), bf + 0.26, tail - 0.02], w: 0.14, h: 0.34, dir: -1, on: markersOn, segments: ['tail', 'amber'] });
     // rear bumper / step
     k.add('steel', gbox(hw * 2 + 0.02, 0.12, 0.14, 0.02), { pos: [0, sill - 0.03, tail - 0.06], shade: grime(0x4a4e52, { up: 0.6, down: 0.45 }) });
     decal(k, 'plate2', { w: 0.42, h: 0.1, pos: [0, bf + 0.1, tail - 0.04], rot: [0, Math.PI, 0] });
@@ -312,7 +318,7 @@ export function bonnetBody(k, o) {
     // rear panel and the cut-down tail
     k.add(paintKey, gbox(hw * 2 - 0.12, flankTop - sill - 0.06, 0.05, 0.012), { pos: [0, (flankTop + sill) * 0.5, tail + 0.01], shade: P });
     k.add('steel', gbox(hw * 2 + 0.02, 0.1, 0.12, 0.02), { pos: [0, sill - 0.02, tail - 0.05], shade: grime(0x4a4e52, { up: 0.6, down: 0.45 }) });
-    for (const s of [-1, 1]) roundLamp(k, { pos: [s * (hw - 0.22), sill + 0.28, tail - 0.02], r: 0.055, dir: -1, kind: 'tail', on: lightsOn, depth: 0.04 });
+    for (const s of [-1, 1]) roundLamp(k, { pos: [s * (hw - 0.22), sill + 0.28, tail - 0.02], r: 0.055, dir: -1, kind: 'tail', on: markersOn, depth: 0.04 });
   }
   if (style === 'wagon') {
     k.add('steel', gbox(hw * 2 + 0.02, 0.12, 0.14, 0.02), { pos: [0, sill - 0.03, tail - 0.06], shade: grime(0x4a4e52, { up: 0.6, down: 0.45 }) });
@@ -335,25 +341,41 @@ export function bonnetBody(k, o) {
  */
 export function cabOverCab(k, o) {
   const {
-    hw, floorY, roof, front, rear, wheelZ, r, paintKey = 'paint', paint: P, glassKey = 'glass', lightsOn = false, rhd = true, seatTint = 0x4a4438,
+    hw, floorY, roof, front, rear, wheelZ, r, paintKey = 'paint', paint: P, glassKey = 'glass', lightsOn = false, markersOn = lightsOn, rhd = true, seatTint = 0x4a4438,
     skirt = 0.42, bumperY = floorY - 0.32, beltUp = 0.95, brokenPane = false, big = true,
-    missingPanel = false, crackedLens = false,
+    missingPanel = false, crackedLens = false, bevel = BEVEL, roofPaint = null,
   } = o;
   const h = roof - floorY;
   const belt = floorY + beltUp;
   const cz = (front + rear) * 0.5;
   const len = front - rear;
+  const PR = roofPaint ?? P;
   // shell: front panel, flanks with the arch cut into the lower skirt, roof
-  k.add(paintKey, gbox(hw * 2 - 0.08, belt - floorY + skirt, 0.08, 0.04), { pos: [0, floorY + (belt - floorY + skirt) * 0.5 - skirt, front - 0.04], shade: P });
-  k.add(paintKey, gbox(hw * 2 - 0.08, 0.14, 0.08, 0.03), { pos: [0, roof - 0.1, front - 0.04], shade: P });
+  k.add(paintKey, gbox(hw * 2 - 0.08, belt - floorY + skirt, 0.08, bevel), { pos: [0, floorY + (belt - floorY + skirt) * 0.5 - skirt, front - 0.04], shade: P });
+  k.add(paintKey, gbox(hw * 2 - 0.08, 0.14, 0.08, bevel), { pos: [0, roof - 0.1, front - 0.04], shade: PR });
   const ar = r + 0.12;
   const sill = floorY - skirt;
-  const pts = [[front - 0.02, sill], ...archCut(wheelZ, ar, sill), [rear + 0.01, sill], [rear + 0.01, roof - 0.02], [front - 0.02, roof - 0.02]];
-  k.addMirrored(paintKey, sidePanel(pts, SKIN, BEVEL), { pos: [hw - SKIN * 0.5 - BEVEL, 0, 0], shade: P });
+  // The flank is stamped up to the belt; above it the glasshouse is framed
+  // out of pillars, a header and a belt strip, so the door window is an
+  // opening with a pane in it rather than a rectangle drawn on the skin.
+  const doorF = front - 0.42;
+  const doorR = rear + 0.1;
+  const gB = belt + 0.05;
+  const gT = roof - 0.24;
+  const pts = [[front - 0.02, sill], ...archCut(wheelZ, ar, sill), [rear + 0.01, sill], [rear + 0.01, belt + 0.01], [front - 0.02, belt + 0.01]];
+  const skinX = hw - SKIN * 0.5 - bevel;
+  k.addMirrored(paintKey, sidePanel(pts, SKIN, bevel), { pos: [skinX, 0, 0], shade: P });
+  const upper = (z0, z1, y0, y1) => k.addMirrored(paintKey, gbox(SKIN + bevel * 2, y1 - y0, z0 - z1, bevel), { pos: [skinX, (y0 + y1) * 0.5, (z0 + z1) * 0.5], shade: P });
+  const winF = doorF - 0.07;
+  const winR = doorR + 0.07;
+  upper(front - 0.02, winF, belt, roof - 0.02); // A pillar and the front corner
+  upper(winR, rear + 0.01, belt, roof - 0.02); // B pillar back to the rear corner
+  upper(winF, winR, gT, roof - 0.02); // cant rail over the door glass
+  upper(winF, winR, belt, gB); // belt strip under it
   k.addMirrored('gap', cylX(ar - 0.005, ar - 0.005, 0.5, 18, true), { pos: [hw - 0.27, ar * 0.98, wheelZ], tint: 0x0b0c0d });
   k.addMirrored('trim', bend(ar + 0.02, 0.028, Math.PI, 14), { pos: [hw + 0.004, ar * 0.98, wheelZ], rot: [0, Math.PI / 2, 0], tint: 0x383c41 });
-  k.add(paintKey, gbox(hw * 2 - 0.1, 0.06, len - 0.06, 0.03), { pos: [0, roof - 0.03, cz], shade: P });
-  k.add(paintKey, gbox(hw * 2 - 0.1, h - 0.1, 0.06, 0.02), { pos: [0, floorY + h * 0.5, rear + 0.02], shade: P });
+  k.add(paintKey, gbox(hw * 2 - 0.1, 0.06, len - 0.06, bevel), { pos: [0, roof - 0.03, cz], shade: PR });
+  k.add(paintKey, gbox(hw * 2 - 0.1, h - 0.1, 0.06, bevel), { pos: [0, floorY + h * 0.5, rear + 0.02], shade: P });
   k.add('trim', gbox(hw * 2 - 0.2, 0.05, len - 0.2, 0.01), { pos: [0, floorY + 0.02, cz], tint: 0x32363b });
   // two-piece screen with a centre divider and a deep sun visor
   const wsB = belt + 0.02;
@@ -377,7 +399,7 @@ export function cabOverCab(k, o) {
   const lampZ = big ? front + 0.13 : front + 0.02;
   for (const s of [-1, 1]) {
     roundLamp(k, { pos: [s * (hw - 0.34), lampY, lampZ], r: big ? 0.1 : 0.085, on: lightsOn, bezel: 'steel', bezelTint: 0x3a3e42, missing: missingPanel && s > 0, cracked: crackedLens && s < 0 });
-    roundLamp(k, { pos: [s * (hw - 0.12), lampY, lampZ], r: 0.045, kind: 'amber', on: lightsOn, depth: 0.03 });
+    roundLamp(k, { pos: [s * (hw - 0.12), lampY, lampZ], r: 0.045, kind: 'amber', on: markersOn, depth: 0.03 });
   }
   if (missingPanel) {
     // the lower corner skirt panel has been torn off on the passenger side, showing the frame rail behind
@@ -385,14 +407,11 @@ export function cabOverCab(k, o) {
     k.add('steel', gbox(0.06, 0.1, 0.36, 0.01), { pos: [hw - 0.12, sill + skirt * 0.36, rear + 0.5], shade: grime(0x3a3c3f, { up: 0.5, down: 0.6 }) });
   }
   // doors: shut lines, a window each, a handle, steps
-  const doorF = front - 0.42;
-  const doorR = rear + 0.1;
-  const gB = belt + 0.05;
-  const gT = roof - 0.24;
   for (const s of [-1, 1]) {
     shutLine(k, { x: s * (hw + 0.002), y0: floorY - 0.2, y1: roof - 0.1, z: doorF });
     shutLine(k, { x: s * (hw + 0.002), y0: floorY - 0.2, y1: roof - 0.1, z: doorR });
-    k.pane(glassKey, paneGeo(doorF - doorR - 0.14, gT - gB), { pos: [s * (hw - 0.03), (gB + gT) * 0.5, (doorF + doorR) * 0.5], rot: [0, s * Math.PI / 2, 0] });
+    // the pane sits 3 cm inside the skin, oversize so the frame overlaps its edge
+    k.pane(glassKey, paneGeo(winF - winR + 0.04, gT - gB + 0.04), { pos: [s * (hw - 0.03), (gB + gT) * 0.5, (winF + winR) * 0.5], rot: [0, s * Math.PI / 2, 0] });
     k.add('chrome', gbox(0.014, 0.022, 0.14, 0.004), { pos: [s * (hw + 0.016), belt - 0.25, doorR + 0.25], tint: 0xb4b8bb });
     // two steps and a grab handle
     for (const [i, sy] of [floorY - 0.55, floorY - 0.2].entries()) {
@@ -400,9 +419,9 @@ export function cabOverCab(k, o) {
       k.add('plate', gbox(0.12, 0.03, 0.42, 0.006), { pos: [s * (hw + 0.04 - i * 0.02), sy, (doorF + doorR) * 0.5], tint: 0x8a8d88 });
     }
     if (big) k.add('steel', gbox(0.03, 0.9, 0.03, 0.008), { pos: [s * (hw + 0.03), belt + 0.1, doorF + 0.06], tint: 0x3a3e42 });
-    doorMirror(k, { x: s * (hw + 0.02), y: belt + 0.55, z: front - 0.1, side: s, arm: big ? 0.3 : 0.16, big });
+    doorMirror(k, { x: s * (hw + 0.02), y: belt + 0.55, z: front - 0.1, side: s, arm: big ? 0.3 : 0.24, big, frame: true });
     // corner marker light up top
-    roundLamp(k, { pos: [s * (hw - 0.14), roof - 0.1, front + 0.03], r: 0.03, kind: 'amber', on: lightsOn, depth: 0.03 });
+    roundLamp(k, { pos: [s * (hw - 0.14), roof - 0.1, front + 0.03], r: 0.03, kind: 'amber', on: markersOn, depth: 0.03 });
   }
   cabin(k, { hw, floorY: floorY + 0.05, belt, z: rear + 0.7, rhd, seatTint, wheelZ: front - 0.05 });
   return { belt, sill };

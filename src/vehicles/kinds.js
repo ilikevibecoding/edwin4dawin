@@ -13,6 +13,8 @@ import { PALETTE, paintShade, shade, twoTone } from './wear.js';
 // ---------------------------------------------------------------------------
 
 const STEEL = grime(0x3a3e42, { up: 0.5, down: 0.4, jitter: 0.08 });
+/** Parking lamps: on for the vehicle left with its markers on, and for the one still arriving. */
+const mk = (o) => !!(o.lightsOn || o.markers);
 const SEATS = [0x4a4438, 0x5b4f3a, 0x3a3f36, 0x6a5a48, 0x2f3438];
 
 /** Wheel set for a variant, sized for the kind. */
@@ -45,7 +47,7 @@ export function expeditionTruck(k, v, o) {
   const cabFloor = railY + 0.22;
   const roof = 3.05;
   const P = paintShade(v, { fixings: [[hw, 1.6, 2.9], [-hw, 1.6, 2.9], [hw, 1.6, 1.4], [-hw, 1.6, 1.4]], floorY: 0.72 });
-  cabOverCab(k, { hw, floorY: cabFloor, roof, front: nose - 0.1, rear: 1.25, wheelZ: front, r, paintKey: v.paintKey, paint: P, glassKey: v.glassKey, lightsOn: o.lightsOn, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens, seatTint: v.pick(SEATS) });
+  cabOverCab(k, { hw, floorY: cabFloor, roof, front: nose - 0.1, rear: 1.25, wheelZ: front, r, paintKey: v.paintKey, paint: P, glassKey: v.glassKey, lightsOn: o.lightsOn, markersOn: mk(o), brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens, seatTint: v.pick(SEATS) });
   decal(k, v.ordinal % 2 ? 'unit2' : 'unit', { w: 0.3, h: 0.3, pos: [hw + 0.03, cabFloor + 0.45, 2.6], rot: [0, Math.PI / 2, 0] });
   decal(k, v.ordinal % 2 ? 'unit2' : 'unit', { w: 0.3, h: 0.3, pos: [-hw - 0.03, cabFloor + 0.45, 2.6], rot: [0, -Math.PI / 2, 0] });
 
@@ -71,7 +73,7 @@ export function expeditionTruck(k, v, o) {
     roofRail: false,
     seams: 4,
   });
-  if (o.lightsOn) {
+  if (o.cabin) {
     windowGlow(k, { x: bx, y: by0 + 1.45, z: -0.4, w: 0.8, h: 0.5, side: 1 });
     windowGlow(k, { x: -bx, y: by0 + 1.45, z: -0.4, w: 0.8, h: 0.5, side: -1 });
   }
@@ -92,7 +94,7 @@ export function expeditionTruck(k, v, o) {
   // exhaust stack behind the cab, spots and an aerial on the cab roof
   k.add('rust', cyl(0.055, 0.055, 2.0, 12), { pos: [1.02, railY + 1.0, 1.18], tint: 0x5e5048 });
   k.add('steel', cyl(0.07, 0.06, 0.2, 12), { pos: [1.02, railY + 2.05, 1.18], rot: [0.3, 0, 0], shade: STEEL });
-  spots(k, { xs: [-0.55, 0.55], y: roof + 0.1, z: nose - 0.25, r: 0.085, on: o.lightsOn });
+  spots(k, { xs: [-0.55, 0.55], y: roof + 0.1, z: nose - 0.25, r: 0.085, on: false });
   aerial(k, { x: -hw + 0.1, y: roof, z: 1.5, h: 1.3, phase: v.seed });
   for (const s of [-1, 1]) mudFlap(k, { x: s * track, z: rear - r - 0.12, y: railY - 0.05, w: 0.42, h: 0.42 });
   // winch bumper
@@ -123,13 +125,13 @@ export function safariJeep(k, v, o) {
   const b = bonnetBody(k, {
     hw, sill, belt, roof: 0, hood, nose, cabFront, cabRear: -0.35, tail, front, rear, r,
     style: 'open', doors: 2, paintKey: v.paintKey, paint: tone, glassKey: v.glassKey, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens,
-    lightsOn: o.lightsOn, rake: 0.22, bullbar: true, seatTint: v.pick(SEATS),
+    lightsOn: o.lightsOn, markersOn: mk(o), rake: 0.22, bullbar: true, seatTint: v.pick(SEATS),
   });
   const seatTint = v.pick(SEATS);
   benchTiers(k, { hw, rows: [{ z: -0.95, y: b.floorY + 0.12 }, { z: -1.85, y: b.floorY + 0.3 }], tint: seatTint });
   const cageTop = 1.95;
   rollCage(k, { hw, y0: b.floorY, top: cageTop, hoops: [0.55, -0.4, -1.35, -2.25], canvas: o.canvas ?? true, canvasTint: v.pick([0x8b8064, 0x6f6a55, 0x5c6a4a]), seed: v.seed });
-  spots(k, { xs: [-0.45, 0.45], y: cageTop + 0.1, z: 0.5, r: 0.07, on: o.lightsOn });
+  spots(k, { xs: [-0.45, 0.45], y: cageTop + 0.1, z: 0.5, r: 0.07, on: false });
   // spotter's seat out on the bull bar
   k.add('steel', gbox(0.5, 0.05, 0.4, 0.01), { pos: [0.2, sill + 0.28, nose + 0.32], shade: STEEL });
   k.add('fabric', gbox(0.44, 0.08, 0.36, 0.03), { pos: [0.2, sill + 0.34, nose + 0.32], shade: grime(seatTint, { up: 0.4 }) });
@@ -172,7 +174,7 @@ export function suv(k, v, o) {
   bonnetBody(k, {
     hw, sill, belt, roof, hood, nose, cabFront, cabRear, tail, front, rear, r,
     style: 'wagon', doors: 4, paintKey: v.paintKey, paint: P, glassKey: v.glassKey, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens,
-    lightsOn: o.lightsOn, rake: 0.3, bullbar: v.chance(0.7), roundLamps: v.chance(0.5), seatTint: v.pick(SEATS),
+    lightsOn: o.lightsOn, markersOn: mk(o), rake: 0.3, bullbar: v.chance(0.7), roundLamps: v.chance(0.5), seatTint: v.pick(SEATS),
   });
   // roof: full-length rack and what rides on it
   const { deckY } = roofRack(k, { x: hw - 0.14, z0: cabFront - 0.5, z1: tail + 0.2, y: roof + 0.1, h: 0.13, legs: [cabFront - 0.7, -0.4, tail + 0.4], legH: 0.1 });
@@ -183,8 +185,8 @@ export function suv(k, v, o) {
   else crate(k, { x: 0.35, y: deckY, z: -0.2, w: 0.6, h: 0.35, d: 0.7, seed: v.seed });
   awning(k, { side: 1, x: hw - 0.02, y: roof + 0.04, z0: -0.2, z1: tail + 0.35, open: false, tint: 0x6f6a55 });
   snorkel(k, { side: 1, x: hw - 0.06, y0: hood - 0.08, y1: roof - 0.04, z0: cabFront + 0.3, z1: cabFront - 0.25 });
-  if (v.chance(0.8)) spots(k, { xs: [-0.35, 0.35], y: hood + 0.14, z: nose + 0.14, r: 0.07, on: o.lightsOn });
-  if (v.chance(0.7)) lightBar(k, { y: roof + 0.28, z: cabFront - 0.42, len: 1.1, on: o.lightsOn });
+  if (v.chance(0.8)) spots(k, { xs: [-0.35, 0.35], y: hood + 0.14, z: nose + 0.14, r: 0.07, on: false });
+  if (v.chance(0.7)) lightBar(k, { y: roof + 0.28, z: cabFront - 0.42, len: 1.1, on: false });
   spare(k, proto, { x: 0.3, y: sill + 0.72, z: tail - proto.w * 0.5 - 0.05, axis: 'z', side: -1 });
   aerial(k, { x: -hw + 0.2, y: hood - 0.05, z: cabFront + 0.25, h: 1.2, phase: v.seed + 1, amp: 0.04 });
   for (const s of [-1, 1]) mudFlap(k, { x: s * track, z: rear - r - 0.12, y: sill - 0.02, w: 0.34, h: 0.3 });
@@ -217,7 +219,7 @@ export function pickup(k, v, o) {
   const b = bonnetBody(k, {
     hw, sill, belt, roof, hood, nose, cabFront, cabRear, tail, front, rear, r,
     style: 'pickup', doors: doubleCab ? 4 : 2, paintKey: v.paintKey, paint: P, glassKey: v.glassKey, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens,
-    lightsOn: o.lightsOn, rake: 0.32, bullbar: v.chance(0.5), roundLamps: v.chance(0.4), seatTint: v.pick(SEATS),
+    lightsOn: o.lightsOn, markersOn: mk(o), rake: 0.32, bullbar: v.chance(0.5), roundLamps: v.chance(0.4), seatTint: v.pick(SEATS),
   });
   // the load: crates, a drum, cans, a rolled tent, all under a net
   const bf = b.bedFloor;
@@ -246,7 +248,7 @@ export function pickup(k, v, o) {
   };
   cargoNet(k, { x0: -hw + 0.1, x1: hw - 0.1, z0: bedStart - 0.05, z1: tail + 0.12, heightAt });
   lashing(k, { x: 0, z: bedMid - 0.35, y0: b.bedTop - 0.02, y1: bf + 0.88, halfW: hw - 0.12, along: 'x' });
-  if (v.chance(0.5)) lightBar(k, { y: roof + 0.12, z: cabFront - 0.5, len: 0.9, on: o.lightsOn });
+  if (v.chance(0.5)) lightBar(k, { y: roof + 0.12, z: cabFront - 0.5, len: 0.9, on: false });
   else roofRack(k, { x: hw - 0.16, z0: cabFront - 0.45, z1: cabRear + 0.1, y: roof + 0.1, h: 0.12, legs: [cabFront - 0.6, cabRear + 0.25], legH: 0.08 });
   if (v.chance(0.6)) snorkel(k, { side: 1, x: hw - 0.06, y0: hood - 0.08, y1: roof - 0.06, z0: cabFront + 0.3, z1: cabFront - 0.25 });
   aerial(k, { x: hw - 0.2, y: hood - 0.05, z: cabFront + 0.3, h: 1.0, phase: v.seed + 3, amp: 0.03 });
@@ -280,7 +282,7 @@ export function ranger(k, v, o) {
   bonnetBody(k, {
     hw, sill, belt, roof, hood, nose, cabFront, cabRear, tail, front, rear, r,
     style: 'wagon', doors: 2, paintKey: 'paint', paint: P, glassKey: v.glassKey, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens,
-    lightsOn: o.lightsOn, rake: 0.28, bullbar: true, roundLamps: true, seatTint: 0x3a3f36,
+    lightsOn: o.lightsOn, markersOn: mk(o), rake: 0.28, bullbar: true, roundLamps: true, seatTint: 0x3a3f36,
   });
   for (const s of [-1, 1]) {
     decal(k, 'rangerStripe', { w: cabFront - tail - 0.3, h: 0.14, pos: [s * (hw + 0.012), sill + (belt - sill) * 0.66, (cabFront + tail) * 0.5 - 0.05], rot: [0, s * Math.PI / 2, 0] });
@@ -290,12 +292,12 @@ export function ranger(k, v, o) {
   decal(k, 'unit', { w: 0.34, h: 0.34, pos: [-0.45, hood + 0.008, 1.3], rot: [-Math.PI / 2, 0, 0] });
   // spare on the bonnet, beacon bar, aerials, spots
   spare(k, proto, { x: 0.3, y: hood + proto.w * 0.5 + 0.04, z: 1.45, axis: 'y' });
-  beaconBar(k, { y: roof + 0.12, z: cabFront - 0.55, len: 1.1, on: o.lightsOn });
+  beaconBar(k, { y: roof + 0.12, z: cabFront - 0.55, len: 1.1, on: false });
   aerial(k, { x: hw - 0.15, y: roof, z: tail + 0.35, h: 1.8, phase: v.seed + 4, amp: 0.06 });
   aerial(k, { x: -hw + 0.18, y: hood - 0.04, z: cabFront + 0.3, h: 1.1, phase: v.seed + 5, amp: 0.03 });
-  spots(k, { xs: [-0.55, 0.55], y: roof + 0.1, z: cabFront - 0.3, r: 0.07, on: o.lightsOn });
+  spots(k, { xs: [-0.55, 0.55], y: roof + 0.1, z: cabFront - 0.3, r: 0.07, on: false });
   k.add('steel', gbox(0.04, 0.05, 1.0, 0.008), { pos: [0, roof + 0.03, cabFront - 0.9], shade: STEEL });
-  spots(k, { xs: [-0.3, 0.3], y: hood + 0.14, z: nose + 0.14, r: 0.06, on: o.lightsOn });
+  spots(k, { xs: [-0.3, 0.3], y: hood + 0.14, z: nose + 0.14, r: 0.06, on: false });
   // shovel and a hi-lift jack strapped along the flank
   k.add('rust', gbox(0.03, 0.06, 1.2, 0.006), { pos: [hw + 0.03, belt + 0.03, -0.6], tint: 0x5a4a3c });
   k.add('rust', gbox(0.03, 0.14, 0.2, 0.01), { pos: [hw + 0.03, belt + 0.03, -1.3], tint: 0x5a4a3c });
@@ -322,12 +324,18 @@ export function utility(k, v, o) {
   chassis(k, { front, rear, track, r, railHW: 0.32, railY, nose: nose - 0.15, tail: tail + 0.1, leaf: true, coilFront: false, tankSide: -1, exhaust: true });
   const floorY = railY + 0.06;
   const roof = 1.76;
-  const P = paintShade(v, { fixings: [[hw, floorY + 0.3, 1.2], [-hw, floorY + 0.3, 1.2]], floorY: floorY - 0.15 });
+  // A work truck: the cab in the fleet colour with a white roof, a heavier
+  // edge-wear pass than anything else in the camp, and the deck in the
+  // galvanised grey it was delivered in.
+  const P = paintShade(v, { fixings: [[hw, floorY + 0.3, 1.2], [-hw, floorY + 0.3, 1.2]], floorY: floorY - 0.15, edge: 0.45 + v.age * 0.5 });
+  const PR = paintShade(v, { tint: PALETTE.white, edge: 0.3 });
+  const PD = paintShade(v, { tint: 0x9a9c96, edge: 0.6 });
   cabOverCab(k, {
-    hw, floorY, roof, front: nose, rear: 0.3, wheelZ: front, r, paintKey: v.paintKey, paint: P, glassKey: v.glassKey, lightsOn: o.lightsOn,
+    hw, floorY, roof, front: nose, rear: 0.3, wheelZ: front, r, paintKey: v.paintKey, paint: P, roofPaint: PR, glassKey: v.glassKey, lightsOn: o.lightsOn, markersOn: mk(o),
     skirt: 0.16, bumperY: floorY - 0.1, beltUp: 0.6, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens, big: false, seatTint: v.pick(SEATS),
+    bevel: 0.025,
   });
-  const { deckY } = flatDeck(k, { hw: hw + 0.03, y: railY + 0.12, z0: 0.25, z1: tail, sides: 0.28, headboard: 0.55, key: v.paintKey, paint: P });
+  const { deckY } = flatDeck(k, { hw: hw + 0.03, y: railY + 0.12, z0: 0.25, z1: tail, sides: 0.28, headboard: 0.55, key: 'paint', paint: PD });
   // the day's load: gas bottles, a water tank, a toolbox, a coil of hose
   tank(k, { x: -0.25, y: deckY + 0.24, z: -0.6, r: 0.23, len: 0.9, axis: 'z', tint: 0xd8d4c4, tap: true });
   for (const [i, x] of [0.28, 0.5].entries()) {
@@ -340,7 +348,7 @@ export function utility(k, v, o) {
   stowedRope(k, { x: -0.4, y: deckY + 0.05, z: -1.6, r: 0.18 });
   lashing(k, { x: 0, z: -0.5, y0: deckY + 0.28, y1: deckY + 0.48, halfW: hw - 0.05, along: 'x' });
   decal(k, 'hazard', { w: 1.3, h: 0.12, pos: [0, deckY - 0.1, tail - 0.045], rot: [0, Math.PI, 0] });
-  for (const s of [-1, 1]) rectLamp(k, { pos: [s * (hw - 0.14), deckY - 0.12, tail - 0.05], w: 0.12, h: 0.09, dir: -1, on: o.lightsOn });
+  for (const s of [-1, 1]) rectLamp(k, { pos: [s * (hw - 0.14), deckY - 0.12, tail - 0.05], w: 0.12, h: 0.09, dir: -1, on: mk(o) });
   aerial(k, { x: -hw + 0.1, y: roof, z: 0.6, h: 0.8, phase: v.seed + 6, amp: 0.03 });
   k.add('amber', gbox(0.12, 0.08, 0.12, 0.02), { pos: [0, roof + 0.05, 1.2], tint: 0xffffff });
   if (o.lightsOn) lampPool(k, { z: nose, w: 2.0, len: 3.6 });
@@ -412,7 +420,7 @@ export function supplyTruck(k, v, o) {
   bonnetBody(k, {
     hw, sill, belt, roof, hood, nose, cabFront, cabRear, tail: cabRear - 0.05, front, rear, r,
     style: 'truck', doors: 2, paintKey: v.paintKey, paint: P, glassKey: v.glassKey, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens,
-    lightsOn: o.lightsOn, rake: 0.18, bullbar: false, roundLamps: true, interior: true, seatTint: v.pick(SEATS),
+    lightsOn: o.lightsOn, markersOn: mk(o), rake: 0.18, bullbar: false, roundLamps: true, interior: true, seatTint: v.pick(SEATS),
   });
   // the deck and its load
   const deckHW = hw + 0.04;
@@ -439,7 +447,7 @@ export function supplyTruck(k, v, o) {
   spare(k, proto, { x: 0.2, y: railY - 0.02, z: tail + 0.55, axis: 'y', carrier: false });
   k.add('steel', gbox(0.08, 0.05, 1.2, 0.01), { pos: [0.2, railY - 0.02 - proto.w * 0.5 - 0.03, tail + 0.55], shade: STEEL });
   decal(k, 'hazard', { w: 2.0, h: 0.16, pos: [0, railY + 0.06, tail - 0.06], rot: [0, Math.PI, 0] });
-  for (const s of [-1, 1]) rectLamp(k, { pos: [s * (deckHW - 0.2), railY - 0.08, tail - 0.06], w: 0.22, h: 0.1, dir: -1, on: o.lightsOn });
+  for (const s of [-1, 1]) rectLamp(k, { pos: [s * (deckHW - 0.2), railY - 0.08, tail - 0.06], w: 0.22, h: 0.1, dir: -1, on: mk(o) });
   decal(k, 'plate2', { w: 0.42, h: 0.1, pos: [0, railY - 0.1, tail - 0.07], rot: [0, Math.PI, 0] });
   for (const s of [-1, 1]) mudFlap(k, { x: s * track, z: rear - r - 0.16, y: railY, w: 0.6, h: 0.42 });
   k.addMirrored('steel', gbox(0.06, 0.05, 0.5, 0.01), { pos: [hw - 0.1, sill - 0.25, cabFront - 0.2], shade: STEEL });
@@ -472,7 +480,7 @@ export function camper(k, v, o) {
   bonnetBody(k, {
     hw, sill, belt, roof, hood, nose, cabFront, cabRear, tail: cabRear - 0.05, front, rear, r,
     style: 'truck', doors: 2, paintKey: v.paintKey, paint: P, glassKey: v.glassKey, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens,
-    lightsOn: o.lightsOn, rake: 0.3, bullbar: v.chance(0.6), roundLamps: false, seatTint: v.pick(SEATS),
+    lightsOn: o.lightsOn, markersOn: mk(o), rake: 0.3, bullbar: v.chance(0.6), roundLamps: false, seatTint: v.pick(SEATS),
   });
   // the habitation box: wider than the cab, an alcove out over the cab roof
   const bx = 1.08;
@@ -492,7 +500,7 @@ export function camper(k, v, o) {
     roofRail: false,
     seams: 3,
   });
-  if (o.lightsOn) {
+  if (o.cabin) {
     windowGlow(k, { x: bx, y: by0 + 0.95, z: -1.25, w: 0.8, h: 0.45, side: 1 });
     windowGlow(k, { x: -bx, y: by0 + 0.95, z: -1.25, w: 0.8, h: 0.45, side: -1 });
   }
@@ -530,7 +538,7 @@ export function camper(k, v, o) {
   awning(k, { side: -1, x: bx + 0.04, y: top - 0.08, z0: -0.7, z1: -2.8, open: o.awningOpen ?? true, out: 2.0, tint: v.pick([0x8b8064, 0x6f6a55, 0xb0a482]), seed: v.seed });
   ladder(k, { x: -0.7, y0: by0 + 0.1, y1: lidY + 0.15, z: z1 - 0.06 });
   spare(k, proto, { x: 0.55, y: by0 + 0.72, z: z1 - proto.w * 0.5 - 0.06, axis: 'z', side: -1 });
-  for (const s of [-1, 1]) rectLamp(k, { pos: [s * (bx - 0.22), by0 + 0.1, z1 - 0.03], w: 0.16, h: 0.16, dir: -1, on: o.lightsOn, segments: ['tail', 'amber'] });
+  for (const s of [-1, 1]) rectLamp(k, { pos: [s * (bx - 0.22), by0 + 0.1, z1 - 0.03], w: 0.16, h: 0.16, dir: -1, on: mk(o), segments: ['tail', 'amber'] });
   decal(k, 'plate', { w: 0.42, h: 0.1, pos: [-0.35, by0 + 0.08, z1 - 0.05], rot: [0, Math.PI, 0] });
   k.add('steel', gbox(bx * 2, 0.1, 0.16, 0.02), { pos: [0, sill - 0.08, z1 - 0.08], shade: grime(0x4a4e52, { up: 0.6, down: 0.45 }) });
   hitch(k, { y: sill - 0.12, z: tail - 0.1 });
@@ -586,33 +594,40 @@ export function trailer(k, v, o) {
     for (const dx of [-0.12, 0.12]) k.add('steel', cyl(0.08, 0.08, 0.02, 12), { pos: [sx + dx, y0 + 0.735, 0.55], shade: STEEL });
     k.add('alu', cyl(0.08, 0.07, 0.14, 12), { pos: [sx - 0.12, y0 + 0.81, 0.55], tint: 0xb4b8bb });
     k.add('rust', gbox(0.3, 0.02, 0.22, 0.004), { pos: [sx + 0.1, y0 + 0.68, 0.05], shade: grime(0x8a7250, { up: 0.4 }) });
-    // gas bottle on the drawbar, hose to the stove
-    k.add('paint', cyl(0.11, 0.11, 0.5, 14), { pos: [0.4, y0 + 0.2, z0 + 0.35], shade: grime(0xc9741f, { up: 0.4 }) });
-    k.add('steel', cyl(0.03, 0.04, 0.06, 8), { pos: [0.4, y0 + 0.48, z0 + 0.35], shade: STEEL });
-    k.add('trim', tube([[0.42, y0 + 0.5, z0 + 0.35], [0.7, y0 + 0.62, z0 + 0.1], [sx - 0.1, y0 + 0.62, 0.75]], 0.008, 5), { tint: 0xc9741f });
+    // gas bottle standing on the drawbar's centre bar, hose back to the stove
+    const gy = railY + 0.04;
+    k.add('paint', cyl(0.11, 0.11, 0.5, 14), { pos: [0, gy + 0.25, z0 + 0.95], shade: grime(0xc9741f, { up: 0.4 }) });
+    k.add('steel', cyl(0.03, 0.04, 0.06, 8), { pos: [0, gy + 0.53, z0 + 0.95], shade: STEEL });
+    k.add('trim', gbox(0.3, 0.02, 0.06, 0.004), { pos: [0, gy + 0.3, z0 + 0.95], tint: 0x433d34 });
+    k.add('trim', tube([[0.03, gy + 0.55, z0 + 0.95], [0.5, gy + 0.5, z0 + 0.5], [hw + 0.02, y0 + 0.5, z0 - 0.1], [sx - 0.1, y0 + 0.62, 0.75]], 0.008, 5), { tint: 0xc9741f });
     // slide rails
     k.add('steel', gbox(0.7, 0.04, 0.06, 0.006), { pos: [hw + 0.1, y0 + 0.12, 0.0], shade: STEEL });
     k.add('steel', gbox(0.7, 0.04, 0.06, 0.006), { pos: [hw + 0.1, y0 + 0.12, 0.7], shade: STEEL });
   } else {
     k.add('gap', pbox(0.01, 0.6, 0.95), { pos: [hw + 0.002, y0 + 0.4, 0.35], tint: 0x0c0d0e });
   }
-  // drawbar and the water tank riding on it
+  // drawbar with a chequer-plate tray across the A-frame; the water tank and a
+  // jerry can stand on the tray, bolted through
   const tip = drawbar(k, { y: railY, z0: z0 + 1.35, z1: z0, hw: 0.45, hitched: o.hitched ?? false });
-  tank(k, { x: -0.3, y: railY + 0.24, z: z0 + 0.4, r: 0.2, len: 0.7, axis: 'z', tint: 0xd8d4c4, tap: false });
-  canRack(k, { x: -0.55, y: y0 + 0.02, z: z0 + 0.12, n: 1, along: 'x', rot: 0 });
+  const trayY = railY + 0.04;
+  k.add('plate', gbox(0.84, 0.02, 0.62, 0.004), { pos: [0, trayY, z0 + 0.31], tint: 0x8a8d88 });
+  k.add('steel', gbox(0.84, 0.05, 0.05, 0.006), { pos: [0, trayY - 0.02, z0 + 0.6], shade: STEEL });
+  tank(k, { x: -0.22, y: trayY + 0.21, z: z0 + 0.32, r: 0.2, len: 0.58, axis: 'z', tint: 0xd8d4c4, tap: false });
+  canRack(k, { x: 0.26, y: trayY + 0.01, z: z0 + 0.3, n: 1, along: 'x', rot: 0, tints: [0xb43a2a], labels: ['diesel'] });
   // roof: rack with a closed tent, spare on the back, lamps, chevrons
   const { deckY } = roofRack(k, { x: hw - 0.1, z0: z0 - 0.08, z1: z1 + 0.08, y: top + 0.04, h: 0.12, slats: false, legs: [z0 - 0.3, z1 + 0.3], legH: 0.04 });
   roofTent(k, { x0: -0.7, x1: 0.7, z0: z0 - 0.2, z1: z1 + 0.3, y: deckY, open: false, tint: v.pick([0x6f6a55, 0x8b8064]) });
   spare(k, proto, { x: 0.2, y: y0 + 0.5, z: z1 - proto.w * 0.5 - 0.05, axis: 'z', side: -1 });
-  for (const s of [-1, 1]) rectLamp(k, { pos: [s * (hw - 0.2), y0 + 0.14, z1 - 0.03], w: 0.18, h: 0.12, dir: -1, on: o.lightsOn, segments: ['tail', 'amber'] });
+  for (const s of [-1, 1]) rectLamp(k, { pos: [s * (hw - 0.2), y0 + 0.14, z1 - 0.03], w: 0.18, h: 0.12, dir: -1, on: mk(o), segments: ['tail', 'amber'] });
   decal(k, 'hazard', { w: 1.4, h: 0.12, pos: [0, y0 - 0.02, z1 - 0.04], rot: [0, Math.PI, 0] });
   decal(k, 'plate2', { w: 0.36, h: 0.09, pos: [-0.45, y0 + 0.14, z1 - 0.045], rot: [0, Math.PI, 0] });
   for (const s of [-1, 1]) mudFlap(k, { x: s * track, z: -r - 0.1, y: y0 - 0.06, w: 0.3, h: 0.24 });
   edgeBolts(k, { from: [hw + 0.012, y0 + 0.05, z0 - 0.1], to: [hw + 0.012, y0 + 0.05, z1 + 0.1], n: 6, seed: v.seed });
   edgeBolts(k, { from: [-hw - 0.012, y0 + 0.05, z0 - 0.1], to: [-hw - 0.012, y0 + 0.05, z1 + 0.1], n: 6, seed: v.seed + 1 });
-  // three contacts: the wheels and the jockey wheel
+  // three contacts: the wheels and the jockey wheel. The stand winds up and
+  // down, so the body never pitches more than 5° whatever the ground does.
   const jz = tip[2] - 0.5;
-  return { wheels: [{ x: track, z: 0, r }, { x: -track, z: 0, r }, { x: 0.1, z: jz, r: 0.1 }], track, length: [z1 - 0.5, tip[2] + 0.1], height: deckY + 0.5 };
+  return { wheels: [{ x: track, z: 0, r }, { x: -track, z: 0, r }, { x: 0.12, z: jz, r: 0.1 }], track, length: [z1 - 0.5, tip[2] + 0.1], height: deckY + 0.5, maxPitch: 0.087 };
 }
 
 // --- 10. dual-sport motorcycle ---------------------------------------------------
@@ -665,7 +680,7 @@ export function motorcycle(k, v, o) {
   k.addMirrored(v.paintKey, gbox(0.03, 0.22, 0.34, 0.02), { pos: [0.15, 0.7, -0.3], rot: [0.2, 0, 0], shade: P });
   k.add(v.paintKey, gbox(0.2, 0.05, 0.4, 0.02), { pos: [0, 0.82, -0.9], rot: [0.25, 0, 0], shade: P });
   k.add('steel', gbox(0.28, 0.02, 0.26, 0.006), { pos: [0, 0.9, -0.82], shade: dark });
-  roundLamp(k, { pos: [0, 0.72, -1.0], r: 0.035, dir: -1, kind: 'tail', on: o.lightsOn, depth: 0.03 });
+  roundLamp(k, { pos: [0, 0.72, -1.0], r: 0.035, dir: -1, kind: 'tail', on: mk(o), depth: 0.03 });
   decal(k, 'plate', { w: 0.2, h: 0.05, pos: [0, 0.65, -1.02], rot: [0.2, Math.PI, 0] });
   // engine, exhaust, radiator, bash plate
   k.add('steel', gbox(0.3, 0.32, 0.36, 0.04), { pos: [0, 0.5, 0.0], shade: grime(0x555a5e, { up: 0.6, jitter: 0.08 }) });
@@ -675,10 +690,14 @@ export function motorcycle(k, v, o) {
   k.add('rust', tube([[0.12, 0.6, 0.2], [0.17, 0.4, 0.05], [0.18, 0.5, -0.4], [0.2, 0.68, -0.85]], 0.024, 8), { tint: 0x8a7a6a });
   k.add('alu', cylZ(0.055, 0.05, 0.42, 14), { pos: [0.2, 0.7, -0.7], shade: grime(0x9a9ea2, { up: 0.3, down: 0.3, dust: 0x736a58 }) });
   k.add('alu', gbox(0.3, 0.04, 0.42, 0.01), { pos: [0, 0.31, 0.0], tint: 0x8a8e92 });
-  // footpegs, chain, side stand down
+  // footpegs, chain, side stand down on the left: pivot bracket on the frame,
+  // the leg out and down to a foot pad. The bike leans 9° onto it (`roll`
+  // below), which brings the pad from 0.048 to the dirt.
   k.addMirrored('steel', gbox(0.12, 0.02, 0.05, 0.005), { pos: [0.2, 0.42, -0.15], shade: dark });
   k.add('steel', gbox(0.02, 0.02, zF - zR - 0.6, 0.004), { pos: [-0.1, rR + 0.05, -0.35], tint: 0x33363a });
-  k.add('steel', tube([[-0.1, 0.4, -0.15], [-0.26, 0.02, -0.3]], 0.012, 6), { shade: dark });
+  k.add('steel', gbox(0.04, 0.05, 0.06, 0.006), { pos: [-0.12, 0.4, -0.12], shade: dark });
+  k.add('steel', tube([[-0.13, 0.39, -0.12], [-0.22, 0.2, -0.22], [-0.27, 0.06, -0.28]], 0.011, 8), { shade: dark });
+  k.add('steel', gbox(0.05, 0.012, 0.07, 0.003), { pos: [-0.27, 0.048, -0.28], rot: [0, 0, 0.16], shade: dark });
   // panniers and a top box
   for (const s of [-1, 1]) pannier(k, { x: s * 0.15, y: 0.66, z: -0.6, side: s, w: 0.44, h: 0.38, d: 0.26 });
   k.add('alu', gbox(0.4, 0.28, 0.36, 0.015), { pos: [0, 1.05, -0.85], shade: grime(0x9a9ea2, { dust: 0x736a58, up: 0.4 }) });
@@ -696,7 +715,9 @@ export function motorcycle(k, v, o) {
     track: 0.2,
     length: [zR - 0.4, zF + 0.4],
     height: 1.4,
-    roll: -0.16, // leaning on the side stand
+    // leaning 9° onto the side stand: a positive roll about +Z takes the left
+    // (-X) side down, which is where the stand is
+    roll: 0.157,
   };
 }
 

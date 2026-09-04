@@ -413,17 +413,35 @@ export function drawbar(k, { y, z0, z1, hw, hitched = false }) {
   k.add('steel', gbox(0.12, 0.08, 0.5, 0.01), { pos: [0, y, z0 - 0.3], shade: STEEL });
   k.add('steel', gbox(0.09, 0.12, 0.18, 0.02), { pos: [0, y + 0.02, z0 - 0.02], shade: STEEL });
   k.add('steel', gbox(0.05, 0.04, 0.16, 0.008), { pos: [0, y + 0.1, z0 - 0.06], rot: [0.5, 0, 0], shade: STEEL });
-  // jockey wheel: post, clamp, handle, wheel
+  // Jockey wheel: clamp on the drawbar, an outer tube, an inner tube that
+  // telescopes to the ground, a yoke round a small solid wheel, and a winding
+  // handle. The inner tube, yoke and wheel are tied to a ground contact so the
+  // stand always reaches the dirt whatever the pitch of the trailer.
   const jz = z0 - 0.5;
-  k.add('steel', gbox(0.07, 0.14, 0.07, 0.01), { pos: [0.1, y + 0.02, jz], shade: STEEL });
+  const jx = 0.12;
+  k.add('steel', gbox(0.09, 0.14, 0.09, 0.012), { pos: [jx, y + 0.02, jz], shade: STEEL });
+  k.add('steel', gbox(0.05, 0.06, 0.1, 0.008), { pos: [jx - 0.06, y + 0.02, jz], shade: STEEL });
   const post = hitched ? y + 0.6 : y + 0.25;
-  k.add('chrome', cyl(0.024, 0.024, hitched ? 0.5 : 0.7, 10), { pos: [0.1, hitched ? y + 0.3 : y - 0.05, jz], tint: 0xb4b8bb });
-  k.add('steel', cyl(0.03, 0.03, 0.34, 10), { pos: [0.1, post + 0.05, jz], shade: STEEL });
-  k.add('steel', bend(0.07, 0.008, Math.PI * 1.5, 10), { pos: [0.1, post + 0.25, jz], rot: [Math.PI / 2, 0, 0], shade: STEEL });
+  k.add('steel', cyl(0.03, 0.03, 0.5, 10), { pos: [jx, post - 0.05, jz], shade: STEEL });
+  k.add('steel', bend(0.07, 0.008, Math.PI * 1.5, 10), { pos: [jx, post + 0.25, jz], rot: [Math.PI / 2, 0, 0], shade: STEEL });
+  k.add('steel', cyl(0.012, 0.012, 0.1, 6), { pos: [jx + 0.07, post + 0.25, jz], rot: [Math.PI / 2, 0, 0], shade: STEEL });
   if (!hitched) {
-    k.add('rubber', cylX(0.1, 0.1, 0.07, 14), { pos: [0.1, 0.1, jz], tint: 0x262b34 });
-    k.add('alu', cylX(0.05, 0.05, 0.08, 10), { pos: [0.1, 0.1, jz], shade: ALU });
-    k.add('steel', gbox(0.02, 0.22, 0.05, 0.005), { pos: [0.16, 0.22, jz], shade: STEEL });
+    const jr = 0.1;
+    const jid = k.contact({ x: jx, z: jz, r: jr, travel: 0.45 });
+    const yokeTop = jr + 0.1;
+    // inner tube from inside the outer tube down to the yoke; only its lower
+    // half moves with the contact, so it slides rather than detaches
+    const innerTop = y - 0.12;
+    const inner = cyl(0.022, 0.022, innerTop - yokeTop, 10);
+    inner.translate(0, (innerTop + yokeTop) * 0.5, 0);
+    k.add('chrome', inner, { pos: [jx, 0, jz], tint: 0xb4b8bb, contact: jid, stretchBelow: yokeTop + 0.02 });
+    k.add('steel', gbox(0.06, 0.05, 0.08, 0.008), { pos: [jx, yokeTop - 0.02, jz], shade: STEEL, contact: jid });
+    k.addMirrored('steel', gbox(0.012, jr + 0.06, 0.08, 0.003), { pos: [jx + 0.05, jr + 0.02, jz], shade: STEEL, contact: jid });
+    k.add('rubber', cylX(jr, jr, 0.07, 14), { pos: [jx, jr - 0.008, jz], tint: 0x262b34, contact: jid });
+    k.add('alu', cylX(0.045, 0.045, 0.076, 10), { pos: [jx, jr - 0.008, jz], shade: ALU, contact: jid });
+  } else {
+    k.add('chrome', cyl(0.022, 0.022, 0.3, 10), { pos: [jx, y - 0.15, jz], tint: 0xb4b8bb });
+    k.add('rubber', cylX(0.1, 0.1, 0.07, 14), { pos: [jx, y - 0.32, jz], tint: 0x262b34 });
   }
   // chain hanging from the coupler
   k.add('steel', tube([[0.05, y - 0.02, z0 - 0.05], [0.09, y - 0.22, z0 + 0.08], [0.02, y - 0.1, z0 + 0.22]], 0.008, 5), { tint: 0x55595d });
