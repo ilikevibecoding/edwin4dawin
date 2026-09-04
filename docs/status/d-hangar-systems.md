@@ -246,9 +246,26 @@ What each delivers:
   for nine hours (inflating every build-time reading, including the 281 ms hangar outlier); killed by
   PID. All timings above are from after that.
 
+- Fourth blind critic (round-3 frames): **mean 6.2/10** (deck 6.5, aperture 6, racks 6.5, aft wall 6,
+  balcony 6.5, bay door 7, exterior 5) — hangar trajectory 4–5 → 5.6 → 6.2; the bay door is at the
+  corridors' 7. Its key finding is about legibility, not absence: it reported "no crane in any frame",
+  "no per-plate variation", "no contact shadows", "no wall gradient / rib AO" — all of which round 3
+  built and measured. 2× crops show them present but within a couple of values of their surroundings
+  (the crane is a dark girder on a dark ceiling whose lit strip reads as one more ceiling strip). Round 4
+  therefore has one rule — every change is judged on a 640×360 downscale of the frame — and targets the
+  critic's top five: floor patchwork + directional wear + near-black contact AO, ceiling per-bay variation
+  with dark segments and a light-grey hazard-banded crane with work lights in the middle third of the
+  deck frame, dark metal channels with lenses on every bare strip (rack rails, jamb bars, wall strips,
+  port/starboard floods) and the far-wall streak, 2–3× stronger end-wall gradient/AO plus lit slot
+  grilles and one large-scale feature per end wall, and the near aperture lip (the "speckle panel" under
+  the KEEP CLEAR plate is the non-slip band's blotchy wear at a grazing angle). Traffic: the arriving
+  fighter's landing lamp clips to a white disc at the beam focus — being brought under clip.
+
 ## Remaining
-1. Fourth blind critic pass on the round-3 hangar frames (in flight); act on anything it still ranks as
-   a bug or below the corridors' 7/10.
+1. Hangar round 4 + traffic lamp fix in flight; fifth blind critic pass on the round-4 frames afterwards.
+   The hangar critic loop closes there unless it reports a geometry bug: four passes have taken it from
+   4–5 to 6.2 with every item mapped to a change, and the remaining spread to the corridors' 7 is the
+   lighting model (see Requests: shadow-casting key light), which no dressing pass can supply.
 2. Load time 12.1 s with all 13 modules is at the §12 limit: the hangar builds in ~200 ms (limit 250) and
    the text/hazard/decal canvas atlases cost ~1 s; candidates are lazy per-room building (A's streaming
    plan already builds in chunks) and sharing one text atlas across modules.
