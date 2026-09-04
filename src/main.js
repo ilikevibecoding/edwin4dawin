@@ -222,14 +222,24 @@ function updateQuality(dt) {
 
 // Shadow frustum follows the point of interest
 const shadowTmp = new THREE.Vector3();
+const shadowFocus = new THREE.Vector3();
 function fitSunShadow() {
   const dir = space.sunWorld;
   const cam = sun.shadow.camera;
   let focus;
   let half;
   if (modes.mode === "interior") {
-    focus = player.position;
-    half = 70;
+    // cover the whole current room (plus its neighbours' reach): fragments outside the shadow frustum
+    // count as lit, so a 190 m hangar with a 70 m frustum got raw sunlight on its far walls
+    const r = zone.current;
+    if (r) {
+      const b = r.bounds;
+      focus = shadowFocus.copy(b.min).add(b.max).multiplyScalar(0.5);
+      half = Math.max(70, 0.5 * Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z) + 30);
+    } else {
+      focus = player.position;
+      half = 70;
+    }
   } else {
     focus = exteriorCam.sTarget;
     half = THREE.MathUtils.clamp(exteriorCam.distance * 0.9, 160, 1250);
