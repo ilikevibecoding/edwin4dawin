@@ -1,5 +1,6 @@
 // Remote player avatars: a humanoid per connected player, name tag, snapshot interpolation (~100 ms
-// buffer), walking animation derived from movement speed, sneaking pose, held block in hand, world light.
+// buffer, in server time so bursts of late-processed messages do not jitter), walking animation derived
+// from movement speed, sneaking pose, held block in hand, world light.
 import * as THREE from 'three';
 import { buildHumanoid, PX } from '../npc/model.js';
 import { paintSkin } from '../npc/skins.js';
@@ -7,8 +8,8 @@ import { measureText, drawText } from '../font.js';
 import { BLOCKS } from '../blocks.js';
 import { tileUV } from '../textures.js';
 
-const INTERP_DELAY_MS = 100;   // render this far in the past so there is always a snapshot to interpolate toward
-const MAX_EXTRAPOLATE_MS = 120;
+const INTERP_DELAY_MS = 100;   // render this far in the (server-time) past so there is a snapshot to interpolate toward
+const MAX_EXTRAPOLATE_MS = 150;
 const SNAPSHOT_TTL_MS = 1000;
 const HIDE_DISTANCE = 120;
 const TAG_DISTANCE = 32;
@@ -84,7 +85,7 @@ class RemotePlayer {
     this.root.visible = false;
     this.tag = makeTag(this.name);
     this.root.add(this.tag);
-    this.snapshots = [];          // [{t, x, y, z, yaw, pitch}] in local receive time (ms)
+    this.snapshots = [];          // [{t, x, y, z, yaw, pitch}] with t in server ms (tick * 50)
     this.pos = new THREE.Vector3();
     this.lastPos = null;
     this.yaw = 0; this.pitch = 0;
@@ -99,13 +100,15 @@ class RemotePlayer {
     this.armSwing = 0;
   }
 
-  push(s, now) {
+  // s: server player state; t: server time (ms) the state was sent at; now: local performance.now()
+  push(s, t, now) {
     const q = this.snapshots;
     const last = q[q.length - 1];
     // teleport: drop the history so we do not glide across the map
     if (last && (Math.abs(last.x - s.x) > 12 || Math.abs(last.z - s.z) > 12 || Math.abs(last.y - s.y) > 12)) q.length = 0;
-    q.push({ t: now, x: s.x, y: s.y, z: s.z, yaw: s.yaw || 0, pitch: s.pitch || 0 });
-    while (q.length > 2 && now - q[0].t > SNAPSHOT_TTL_MS) q.shift();
+    if (last && t <= last.t) { if (t < last.t) return; q.pop(); } // same server tick: keep the newest state
+    q.push({ t, x: s.x, y: s.y, z: s.z, yaw: s.yaw || 0, pitch: s.pitch || 0 });
+    while (q.length > 2 && t - q[0].t > SNAPSHOT_TTL_MS) q.shift();
     if (q.length > 20) q.shift();
     this.sneak = !!s.sneak; this.sprint = !!s.sprint;
     this.setHeld(Number.isInteger(s.held) ? s.held : 0);
@@ -127,11 +130,11 @@ class RemotePlayer {
     this.heldMesh = mesh;
   }
 
-  // interpolated state at render time; returns false when there is nothing to show yet
-  sample(now) {
+  // interpolated state at server time `serverNow` (ms); returns false when there is nothing to show yet
+  sample(serverNow) {
     const q = this.snapshots;
     if (q.length === 0) return false;
-    const t = now - INTERP_DELAY_MS;
+    const t = serverNow - INTERP_DELAY_MS;
     let i = 0;
     while (i < q.length && q[i].t < t) i++;
     let x, y, z, yaw, pitch;
@@ -142,9 +145,9 @@ class RemotePlayer {
       // beyond the newest snapshot: hold, with a short extrapolation from the last two samples
       const n = q.length, b = q[n - 1];
       x = b.x; y = b.y; z = b.z; yaw = b.yaw; pitch = b.pitch;
-      if (n >= 2) {
+      if (n >= 2 && b.t - q[n - 2].t >= 20) {
         const p = q[n - 2];
-        const k = Math.min(MAX_EXTRAPOLATE_MS, t - b.t) / ((b.t - p.t) || 1);
+        const k = Math.min(MAX_EXTRAPOLATE_MS, t - b.t) / (b.t - p.t);
         x += (b.x - p.x) * k; z += (b.z - p.z) * k; y += (b.y - p.y) * k;
       }
     } else {
@@ -203,12 +206,13 @@ export class RemotePlayers {
     this.players.delete(id);
   }
 
-  // welcome.players / players.list: a full list of the players in interest range
-  onList(list) {
+  // welcome.players / players.list: a full list of the players in interest range, stamped with the server tick
+  onList(list, serverTick) {
     const now = performance.now();
+    const t = Number.isFinite(serverTick) ? serverTick * 50 : now;
     for (const s of list) {
       if (!Number.isInteger(s.id)) continue;
-      this.ensure(s.id, s.name).push(s, now);
+      this.ensure(s.id, s.name).push(s, t, now);
     }
   }
 
@@ -216,13 +220,14 @@ export class RemotePlayers {
     for (const id of [...this.players.keys()]) this.onLeave(id);
   }
 
-  update(dt) {
+  // serverNow: estimated server time in ms (null before the clock is known)
+  update(dt, serverNow) {
     const now = performance.now();
     const cam = this.game.camera.position;
     let visible = 0;
     for (const p of this.players.values()) {
       const r = p.root;
-      if (!p.everSeen || now - p.lastSeen > STALE_MS || !p.sample(now)) { r.visible = false; p.lastPos = null; continue; }
+      if (serverNow === null || !p.everSeen || now - p.lastSeen > STALE_MS || !p.sample(serverNow)) { r.visible = false; p.lastPos = null; continue; }
       const dx = p.pos.x - cam.x, dz = p.pos.z - cam.z;
       const d2 = dx * dx + dz * dz;
       if (d2 > HIDE_DISTANCE * HIDE_DISTANCE) { r.visible = false; p.lastPos = null; continue; }

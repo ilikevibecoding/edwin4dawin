@@ -187,7 +187,7 @@ export class NetClient {
     if (!m || typeof m !== 'object') return;
     switch (m.t) {
       case 'welcome': this._onWelcome(m); break;
-      case 'players': if (Array.isArray(m.list)) this.remote.onList(m.list); break;
+      case 'players': if (Array.isArray(m.list)) this.remote.onList(m.list, m.tick); break;
       case 'join': this.remote.onJoin(m.id, m.name); if (this.game.hud) this.game.hud.addMessage(`${m.name} joined the frontier.`); break;
       case 'leave': { const p = this.remote.players.get(m.id); if (p && this.game.hud) this.game.hud.addMessage(`${p.name} left.`); this.remote.onLeave(m.id); break; }
       case 'block': this._applyBlock(m.x, m.y, m.z, m.id, true); this.remote.swing(m.from); break;
@@ -222,7 +222,7 @@ export class NetClient {
     this.pingMin = 0;
     this._addOffsetSample(m.tick * TICK_MS - performance.now()); // first (conservative) estimate; pongs refine it
     this.game.permissions.setOnline(true, this.admin);
-    if (Array.isArray(m.players)) this.remote.onList(m.players);
+    if (Array.isArray(m.players)) this.remote.onList(m.players, m.tick);
     if (Array.isArray(m.blocks)) {
       for (const b of m.blocks) if (Array.isArray(b) && b.length >= 4) this._applyBlock(b[0], b[1], b[2], b[3], false);
       if (m.blocks.length) this.game.terrain.remeshDirty(64, this.game.player.pos.x, this.game.player.pos.z);
@@ -468,6 +468,7 @@ export class NetClient {
       const step = this.replay.next();
       if (step.done) this.replay = null;
     }
-    this.remote.update(dt);
+    const est = this.estimatedServerTick();
+    this.remote.update(dt, est === null ? null : est * TICK_MS);
   }
 }
