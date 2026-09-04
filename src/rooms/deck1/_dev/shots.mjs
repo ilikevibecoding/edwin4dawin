@@ -115,7 +115,8 @@ async function shootView(name) {
     return;
   }
   await settle(4, 1500);
-  await page.screenshot({ path: resolve(outDir, `${name}.png`) });
+  // one software-GL frame can take > 30 s when another agent's Chrome shares the 4 CPUs
+  await page.screenshot({ path: resolve(outDir, `${name}.png`), timeout: 240000 });
   const stats = await page.evaluate(() => window.debugAPI.getStats());
   results.views[name] = stats;
   console.log(`shot ${name}: ${stats.calls} calls, ${stats.triangles} tris, ${stats.lights} pool lights (${stats.descriptors} desc, ${stats.lightsDropped} dropped), ${stats.frameMs} ms/frame (software GL), active=${stats.active.join("+")}`);

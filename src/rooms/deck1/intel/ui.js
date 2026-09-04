@@ -1,6 +1,7 @@
-// Intel room UI textures (module-local, ≤ 2 canvases, red only): a static 1024² atlas (surveillance monitors,
-// guard/table consoles, backlit warning signs, labels) and a 512×1024 repeat-wrapped column of scrolling text
-// whose v-offset is animated from update().
+// Intel room UI textures (module-local, ≤ 2 canvases, red only): a static 1024² atlas (8 surveillance monitors,
+// guard/table consoles, scan-status readout, 3-state lock bar, holo callout labels, datapad, booth panel, backlit
+// warning signs — dark plates with lit text/borders only — and labels) and a 512×1024 repeat-wrapped column of
+// scrolling text whose v-offset is animated from update().
 import * as THREE from "three";
 import { makeCanvas, toTexture, mulberry32 } from "../../../textures.js";
 
@@ -14,6 +15,10 @@ const GRID = "rgba(255,42,26,0.09)";
 const MONO = (px, bold = true) => `${bold ? "bold " : ""}${px}px "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace`;
 
 export const UI = {
+  scan: [0, 384, 288, 192], // 3:2 scan-status readout (arch pillar)
+  status3: [288, 384, 256, 64], // 4:1 three-state lock bar (LOCKED / SCAN / CLEAR)
+  pad: [544, 384, 256, 192], // 4:3 datapad screen
+  booth: [800, 384, 224, 192], // guard-booth control panel
   guard: [0, 576, 512, 256],
   table: [512, 576, 256, 256],
   sign0: [768, 576, 256, 128],
@@ -22,10 +27,12 @@ export const UI = {
   sign2: [0, 960, 256, 64],
   sign3: [256, 960, 256, 64],
 };
-for (let i = 0; i < 12; i++) UI["mon" + i] = [(i % 4) * 256, Math.floor(i / 4) * 192, 256, 192];
+for (let i = 0; i < 8; i++) UI["mon" + i] = [(i % 4) * 256, Math.floor(i / 4) * 192, 256, 192];
+for (let i = 0; i < 4; i++) UI["call" + i] = [288, 448 + i * 32, 256, 32]; // 8:1 holo callout labels
 for (let i = 0; i < 6; i++) UI["label" + i] = [256 + i * 128, 832, 128, 64];
 for (let i = 0; i < 6; i++) UI["tag" + i] = [256 + i * 128, 896, 128, 64];
 for (let i = 0; i < 4; i++) UI["readout" + i] = [512 + i * 128, 960, 128, 64];
+export const CALLOUTS = ["BRIDGE TOWER", "SHIELD GEN 2", "MAIN REACTOR", "HANGAR BAY"];
 
 export function uvRect(cell, size = ATLAS) {
   const [x, y, w, h] = cell;
@@ -288,22 +295,121 @@ function drawReadout(g, cell, rand, idx) {
   } else bars(g, x + 6, y + 8, w - 12, h - 16, 14, rand);
 }
 
+// --- scan-status readout on the arch's right pillar (3:2)
+function drawScan(g, cell) {
+  const [x, y, w, h] = cell;
+  base(g, cell, { grid: 16 });
+  header(g, cell, "SCAN STATUS · LOCK 4-A", "ARMED", 12);
+  text(g, "STANDBY", x + w / 2, y + 62, 30, RED_HI, "center");
+  [
+    ["IDENT", "—"],
+    ["BIOMETRIC", "—"],
+    ["CODE CYLINDER", "NOT PRESENT"],
+  ].forEach(([k, v], i) => {
+    text(g, k, x + 16, y + 98 + i * 20, 12, RED);
+    text(g, v, x + w - 16, y + 98 + i * 20, 12, RED_HI, "right", false);
+  });
+  g.strokeStyle = RED;
+  g.lineWidth = 2;
+  g.strokeRect(x + 16, y + h - 32, w - 32, 14);
+  g.fillStyle = RED;
+  for (let k = 0; k < 4; k++) g.fillRect(x + 19 + k * 18, y + h - 29, 14, 8);
+}
+
+// --- three-state lock bar (4:1): LOCKED lit, SCAN / CLEAR dark outlines
+function drawStatus3(g, cell) {
+  const [x, y, w, h] = cell;
+  g.fillStyle = "#0a0304";
+  g.fillRect(x, y, w, h);
+  const bw = (w - 32) / 3;
+  ["LOCKED", "SCAN", "CLEAR"].forEach((s, k) => {
+    const bx = x + 8 + k * (bw + 8);
+    if (k === 0) {
+      g.fillStyle = RED;
+      g.fillRect(bx, y + 10, bw, h - 20);
+      text(g, s, bx + bw / 2, y + h / 2, 18, "#0a0304", "center");
+    } else {
+      g.strokeStyle = RED_LO;
+      g.lineWidth = 2;
+      g.strokeRect(bx + 1, y + 11, bw - 2, h - 22);
+      text(g, s, bx + bw / 2, y + h / 2, 18, RED_DIM, "center");
+    }
+  });
+}
+
+// --- holo callout label (8:1): tick square + text, thin baseline
+function drawCallout(g, cell, s) {
+  const [x, y, w, h] = cell;
+  g.fillStyle = "#0a0304";
+  g.fillRect(x, y, w, h);
+  g.fillStyle = RED_HI;
+  g.fillRect(x + 6, y + h / 2 - 5, 10, 10);
+  text(g, s, x + 24, y + h / 2, 22, RED_HI);
+  g.fillStyle = RED_LO;
+  g.fillRect(x + 6, y + h - 3, w - 12, 1);
+}
+
+// --- datapad screen (4:3): case file header, lines, biometric frame
+function drawPad(g, cell, rand) {
+  const [x, y, w, h] = cell;
+  base(g, cell);
+  header(g, cell, "CASE FILE 4-A-117", "L4", 11);
+  rows(g, x + 14, y + 42, w - 100, 7, 15, rand);
+  g.strokeStyle = RED;
+  g.lineWidth = 2;
+  g.beginPath();
+  g.ellipse(x + w - 50, y + 84, 24, 34, 0, 0, Math.PI * 2);
+  g.stroke();
+  g.strokeStyle = RED_LO;
+  g.lineWidth = 1;
+  g.strokeRect(x + w - 84, y + 42, 68, 88);
+  text(g, "SUBJECT 0419 · HOLD", x + 14, y + h - 22, 11, RED_HI, "left", false);
+  text(g, "CLASSIFIED", x + w - 12, y + h - 22, 11, RED, "right");
+}
+
+// --- guard-booth control panel: button grid + gate state
+function drawBooth(g, cell, rand) {
+  const [x, y, w, h] = cell;
+  base(g, cell);
+  header(g, cell, "LOCK CONTROL", "BOOTH", 11);
+  const labels = ["GATE", "ARCH", "CURTAIN", "PURGE", "ALARM", "HOLD"];
+  labels.forEach((s, i) => {
+    const bx = x + 12 + (i % 3) * 68;
+    const by = y + 42 + Math.floor(i / 3) * 40;
+    const lit = i === 0 || i === 2;
+    g.fillStyle = lit ? "rgba(255,42,26,0.35)" : "rgba(255,42,26,0.08)";
+    g.fillRect(bx, by, 60, 30);
+    g.strokeStyle = lit ? RED : RED_LO;
+    g.lineWidth = 1.5;
+    g.strokeRect(bx + 0.5, by + 0.5, 59, 29);
+    text(g, s, bx + 30, by + 15, 11, lit ? RED_HI : RED, "center");
+  });
+  text(g, "GATE  LOCKED", x + 12, y + 138, 13, RED_HI);
+  text(g, "ARCH  ARMED", x + 12, y + 156, 13, RED);
+  rows(g, x + 12, y + 168, w - 24, 1, 14, rand);
+}
+
 export function makeIntelAtlas() {
   const c = makeCanvas(ATLAS, ATLAS);
   const g = c.getContext("2d");
   const rand = mulberry32(8123);
   g.fillStyle = BG;
   g.fillRect(0, 0, ATLAS, ATLAS);
-  for (let i = 0; i < 12; i++) drawMonitor(g, UI["mon" + i], rand, i);
+  for (let i = 0; i < 8; i++) drawMonitor(g, UI["mon" + i], rand, i);
+  drawScan(g, UI.scan);
+  drawStatus3(g, UI.status3);
+  CALLOUTS.forEach((s, i) => drawCallout(g, UI["call" + i], s));
+  drawPad(g, UI.pad, rand);
+  drawBooth(g, UI.booth, rand);
   drawGuard(g, UI.guard, rand);
   drawTable(g, UI.table, rand);
   drawSign(g, UI.sign0, ["RESTRICTED AREA", "LEVEL 4 CLEARANCE REQUIRED", "SURVEILLANCE ACTIVE"]);
-  drawSign(g, UI.sign1, ["SECURITY LOCK", "AUTHORISED PERSONNEL ONLY", "SCANNER ARMED"], { invert: false });
+  drawSign(g, UI.sign1, ["SECURITY LOCK", "AUTHORISED PERSONNEL ONLY", "SCANNER ARMED"]);
   drawSign(g, UI.hatch, ["EVIDENCE", "SEALED — DO NOT OPEN", "CUSTODY SEAL 4-A-117"]);
   drawSign(g, UI.sign2, ["NO RECORDING DEVICES"], { big: 16 });
-  drawSign(g, UI.sign3, ["LOCK IN OPERATION"], { big: 16, invert: true });
-  const labels = ["ARCHIVE 01", "ARCHIVE 02", "ARCHIVE 03", "ARCHIVE 04", "ARCHIVE 05", "ARCHIVE 06"];
-  labels.forEach((s, i) => drawLabel(g, UI["label" + i], s, ["SIGINT", "ASSETS", "CIPHER", "WATCHLIST", "PURGED", "CUSTODY"][i]));
+  drawSign(g, UI.sign3, ["LOCK IN OPERATION"], { big: 16 }); // dark plate, lit text + border lines only
+  const labels = ["SIGINT VAULT", "ASSET FILES", "CIPHER KEYS", "WATCHLIST", "PURGE HOLD", "CUSTODY"];
+  labels.forEach((s, i) => drawLabel(g, UI["label" + i], s, ["ARCHIVE 01 · L4", "ARCHIVE 02 · L3", "ARCHIVE 03 · L4", "ARCHIVE 04 · L2", "ARCHIVE 05 · SEALED", "ARCHIVE 06 · L4"][i]));
   ["DATASTREAM 01", "DATASTREAM 02", "DATASTREAM 03", "DATASTREAM 04", "DATASTREAM 05", "SURVEILLANCE"].forEach((s, i) => drawLabel(g, UI["tag" + i], s));
   for (let i = 0; i < 4; i++) drawReadout(g, UI["readout" + i], rand, i);
   const tex = toTexture(c, { srgb: true, wrap: false });

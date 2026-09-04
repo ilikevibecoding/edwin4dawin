@@ -97,9 +97,34 @@ export class Local {
   }
 }
 
-// Emissive screen material over a canvas texture (same recipe as the shared screens).
+// Emissive screen material over a canvas texture (shared recipe, but rougher / less env reflection so the many
+// red-lit panels do not pick up specular blobs from the pool lights).
 export function screenMaterial(tex, intensity = 1.3) {
-  return new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: intensity, roughness: 0.15, metalness: 0, envMapIntensity: 1.0 });
+  return new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: intensity, roughness: 0.45, metalness: 0, envMapIntensity: 0.3 });
+}
+
+/**
+ * Minimal corridor-frame-compatible object for spine/dressing.js ribs(): the two facing wall frames (`sides`
+ * keys into `walls`), the across extent c0..c1 and a box() mapping (along a, y, across c) to world.
+ * alongZ = false → `a` runs along x (main room), true → along z (vestibule).
+ */
+export function ribFrame(walls, sides, c0, c1, floorY, ceilY, alongZ = false) {
+  return {
+    floorY,
+    ceilY,
+    sides,
+    walls,
+    c0,
+    c1,
+    box(kit, mat, a0, a1, y0, y1, cc0, cc1, opts = {}) {
+      const lo = Math.min(a0, a1);
+      const hi = Math.max(a0, a1);
+      const clo = Math.min(cc0, cc1);
+      const chi = Math.max(cc0, cc1);
+      if (alongZ) kit.boxMM(mat, [clo, y0, lo], [chi, y1, hi], opts);
+      else kit.boxMM(mat, [lo, y0, clo], [hi, y1, chi], opts);
+    },
+  };
 }
 
 // Deterministic picker
