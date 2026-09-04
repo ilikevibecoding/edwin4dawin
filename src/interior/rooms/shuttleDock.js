@@ -9,7 +9,7 @@ import { Kit } from "../../kit.js";
 import { roomFloorY } from "../../config/shipSpec.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, bayWalls, crate, toolCart, pedestalConsole, shadowCasters,
-  cabinet, lightBank, pipeRun, stairTower, stairRun, beacons,
+  cabinet, lightBank, lightBar, pipeRun, stairTower, stairRun, beacons,
 } from "../../hangar/machinery.js";
 
 const CAT_H = 8; // catwalk height above the deck
@@ -25,7 +25,7 @@ export function build(kit, ctx, room, lib) {
   const T = lib.WALL_T;
   const shell = lib.roomShell(kit, ctx, room, { style: "dark", floor: false, lights: false, lightRows: 3, skipWalls: ["-z", "+z", "-x", "+x"] });
   // light strip row 5.4..11.6 puts a wall light above the catwalk; no kick strip (keeps rubber out of the room)
-  bayWalls(kit, room, shell, y0, { rows: [2.4, 5.4, 11.6, 16.8, room.height], lightRow: 1, kick: false, seed: 71 });
+  bayWalls(kit, room, shell, y0, { rows: [2.4, 5.4, 11.6, 16.8, room.height], lightRow: 1, kick: false, lampMat: "emitBlue", seed: 71 });
   shadowCasters(kit, ["paintedMetal"]);
 
   deck(kit, P, room, y0, T);
@@ -72,12 +72,12 @@ function bellyDoor(kit, ctx, mats, P, y0) {
   kit.boxMM("paintedMetal", [D.x0, dy - 0.3, D.z0], [D.x1, dy, D.z1], { color: P.darkMetal, uv: "world", texel: 0.8 });
   kit.floor(D.x0, D.z0, D.x1, D.z1, dy);
   // seam between the two leaves, leaf ribs and locking dogs
-  kit.boxMM("satinBlack", [-0.08, dy, D.z0], [0.08, dy + 0.012, D.z1]);
+  kit.boxMM("darkGloss", [-0.08, dy, D.z0], [0.08, dy + 0.012, D.z1]);
   for (let z = D.z0 + 4; z < D.z1 - 1; z += 4) kit.boxMM("paintedMetal", [D.x0 + 0.3, dy, z - 0.1], [D.x1 - 0.3, dy + 0.02, z + 0.1], { color: P.gunmetal, texel: 1 });
   for (const sx of [-1, 1]) kit.boxMM("paintedMetal", [sx * 5 - 0.1, dy, D.z0 + 0.3], [sx * 5 + 0.1, dy + 0.02, D.z1 - 0.3], { color: P.gunmetal, texel: 1 });
   for (let z = D.z0 + 2; z < D.z1; z += 4) for (const sx of [-1, 1]) {
     kit.box("metal", sx * 0.45, dy + 0.03, z, 0.5, 0.06, 0.9, { color: P.steel });
-    kit.box("emitAmber", sx * 0.45, dy + 0.062, z, 0.12, 0.006, 0.5);
+    kit.box("emitBlue", sx * 0.45, dy + 0.062, z, 0.12, 0.006, 0.5);
   }
   // hazard chevrons around the recess at deck level and NO STEP / EMERGENCY stencils
   hazardBand(kit, D.x0 - 0.8, D.z0 - 0.8, D.x0, D.z1 + 0.8, y0);
@@ -88,8 +88,8 @@ function bellyDoor(kit, ctx, mats, P, y0) {
   for (const sx of [-1, 1]) for (const [sz, z] of [[-1, D.z0 - 1.8], [1, D.z1 + 1.8]]) deckDecal(kit, sx * 8.6, y0, z, 1.4, 7, sz > 0 ? Math.PI : 0);
   deckDecal(kit, 0, dy, 380, 3.2, 8, 0);
   // amber edge lights flush in the deck along the chevron band
-  for (let z = D.z0 - 0.4; z <= D.z1 + 0.4; z += 3.2) for (const x of [D.x0 - 1.1, D.x1 + 1.1]) kit.box("emitAmber", x, y0 + 0.004, z, 0.36, 0.01, 0.16);
-  for (let x = D.x0 + 1.6; x < D.x1; x += 3.2) for (const z of [D.z0 - 1.1, D.z1 + 1.1]) kit.box("emitAmber", x, y0 + 0.004, z, 0.16, 0.01, 0.36);
+  for (let z = D.z0 - 0.4; z <= D.z1 + 0.4; z += 3.2) for (const x of [D.x0 - 1.1, D.x1 + 1.1]) kit.box("emitBlue", x, y0 + 0.004, z, 0.36, 0.01, 0.16);
+  for (let x = D.x0 + 1.6; x < D.x1; x += 3.2) for (const z of [D.z0 - 1.1, D.z1 + 1.1]) kit.box("emitBlue", x, y0 + 0.004, z, 0.16, 0.01, 0.36);
   // pulsing blue seal strip on the recess walls (own mesh so the emissive can breathe)
   const seal = new THREE.Group();
   seal.name = "shuttleDock.seal";
@@ -154,7 +154,7 @@ function clampTower(kit, P, sx, z, y0) {
   kit.boxMM("hazard", [Math.min(x, ax) + 0.5, y0 + 7.2, z - 0.46], [Math.max(x, ax) - 0.5, y0 + 7.5, z - 0.44], { uv: "world", texel: 1.2 });
   const jx = sx * 8.9;
   kit.boxMM("paintedMetal", [jx - 0.5, y0 + 5.3, z - 1.0], [jx + 0.5, y0 + 7.0, z + 1.0], { color: P.darkMetal, uv: "world", texel: 0.8 });
-  kit.boxMM("satinBlack", [sx > 0 ? jx - 0.62 : jx + 0.5, y0 + 5.4, z - 0.9], [sx > 0 ? jx - 0.5 : jx + 0.62, y0 + 6.9, z + 0.9]);
+  kit.boxMM("darkGloss", [sx > 0 ? jx - 0.62 : jx + 0.5, y0 + 5.4, z - 0.9], [sx > 0 ? jx - 0.5 : jx + 0.62, y0 + 6.9, z + 0.9]);
   kit.box("emitBlue", jx, y0 + 5.26, z, 0.9, 0.08, 1.8);
   // hydraulic rams from the tower head down to the arm
   for (const dz of [-0.3, 0.3]) {
@@ -164,11 +164,11 @@ function clampTower(kit, P, sx, z, y0) {
     kit.add("metal", new THREE.CylinderGeometry(0.1, 0.1, L, 8), { pos: [(x + sx * 10.5) / 2, y0 + 8.45, z + dz], rot: [0, 0, -Math.atan2(dx, dyy)], color: P.steel, uv: "scale", uvScale: [1, 4] });
   }
   kit.box("paintedMetal", x, y0 + 8.6, z, 1.6, 1.2, 1.6, { color: P.gunmetal, texel: 1 });
-  kit.box("emitAmber", x + sx * 0.81, y0 + 8.6, z, 0.02, 0.2, 0.8);
+  kit.box("emitBlue", x + sx * 0.81, y0 + 8.6, z, 0.02, 0.2, 0.8);
   // control panel on the base facing the pad
-  kit.box("satinBlack", x - sx * 1.42, y0 + 1.5, z, 0.06, 1.2, 1.0);
+  kit.box("darkGloss", x - sx * 1.42, y0 + 1.5, z, 0.06, 1.2, 1.0);
   kit.box("screen6", x - sx * 1.46, y0 + 1.7, z, 0.01, 0.4, 0.8, { uv: "keep" });
-  kit.box("emitAmber", x - sx * 1.46, y0 + 1.3, z, 0.01, 0.05, 0.6, { uv: "keep" });
+  kit.box("emitBlue", x - sx * 1.46, y0 + 1.3, z, 0.01, 0.05, 0.6, { uv: "keep" });
 }
 
 // ---------------------------------------------------------------- umbilical arms: fuel (hose) and power (rigid conduit)
@@ -183,25 +183,25 @@ function umbilical(kit, P, sx, z, y0, kind) {
   const bx = sx * 13.6;
   kit.boxMM("paintedMetal", [Math.min(x, bx), y0 + 4.95, z - 0.25], [Math.max(x, bx), y0 + 5.45, z + 0.25], { color: P.gunmetal, uv: "world", texel: 0.8 });
   kit.box("metal", bx, y0 + 4.75, z, 0.6, 1.0, 0.6, { color: P.darkMetal });
-  kit.box("emitAmber", bx, y0 + 5.0, z + 0.31, 0.2, 0.1, 0.02);
+  kit.box("emitBlue", bx, y0 + 5.0, z + 0.31, 0.2, 0.1, 0.02);
   if (kind === "fuel") {
     const hx = bx - sx * 1.2;
     const pts = [new THREE.Vector3(bx, y0 + 4.3, z), new THREE.Vector3(bx - sx * 0.3, y0 + 3.5, z + 0.35), new THREE.Vector3(hx, y0 + 2.95, z)];
-    kit.add("satinBlack", new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5), 10, 0.09, 8, false), { uv: "scale", uvScale: [1, 6] });
+    kit.add("darkGloss", new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5), 10, 0.09, 8, false), { uv: "scale", uvScale: [1, 6] });
     kit.cyl("metal", hx, y0 + 2.55, z, 0.22, 0.7, "y", { color: P.steel, segments: 12 });
     kit.cyl("hazard", hx, y0 + 2.3, z, 0.24, 0.16, "y", { segments: 12, uv: "world", texel: 1 });
-    kit.box("emitAmber", hx, y0 + 2.85, z + 0.2, 0.1, 0.1, 0.1);
+    kit.box("emitBlue", hx, y0 + 2.85, z + 0.2, 0.1, 0.1, 0.1);
     // fuel line along the boom and up the column
     kit.cyl("metal", (x + bx) / 2, y0 + 5.6, z, 0.12, Math.abs(bx - x), "x", { color: P.orange, segments: 8 });
   } else {
     const px = bx - sx * 0.5;
     kit.cyl("metal", px, y0 + 3.6, z, 0.16, 1.5, "y", { color: P.gunmetal, segments: 10 });
-    kit.box("satinBlack", px, y0 + 2.6, z, 0.7, 0.5, 0.7);
+    kit.box("darkGloss", px, y0 + 2.6, z, 0.7, 0.5, 0.7);
     kit.box("emitBlue", px, y0 + 2.34, z, 0.5, 0.03, 0.5);
     for (const dz of [-0.12, 0.12]) kit.cyl("metal", (x + bx) / 2, y0 + 5.6, z + dz, 0.07, Math.abs(bx - x), "x", { color: P.steel, segments: 8 });
   }
   // pedestal panel and deck warning stencil
-  kit.box("satinBlack", x - sx * 1.12, y0 + 0.9, z, 0.06, 0.5, 0.7);
+  kit.box("darkGloss", x - sx * 1.12, y0 + 0.9, z, 0.06, 0.5, 0.7);
   kit.box("screen6", x - sx * 1.16, y0 + 0.95, z, 0.01, 0.3, 0.5, { uv: "keep" });
   deckDecal(kit, x - sx * 2.4, y0, z, 1.4, 5, sx > 0 ? -Math.PI / 2 : Math.PI / 2);
 }
@@ -221,9 +221,9 @@ function booth(kit, ctx, lib, y0, z0) {
     kit.collider([px - 0.3, y0, pz - 0.3], [px + 0.3, fy, pz + 0.3], "boothColumn");
   }
   // storage alcove underneath
-  for (let i = 0; i < 3; i++) cabinet(kit, propFrame(kit, bx0 + 1.6 + i * 1.4, y0, bz0 + 0.32, 0), { screen: i === 1 ? "screen6" : null, color: i === 2 ? P.slate : P.impGreyDark });
+  for (let i = 0; i < 3; i++) cabinet(kit, propFrame(kit, bx0 + 1.6 + i * 1.4, y0, bz0 + 0.32, 0), { screen: i === 1 ? "screen6" : null, color: i === 2 ? P.slate : P.impGreyDark, lamp: "emitBlue" });
   crate(kit, propFrame(kit, bx1 - 1.6, y0, bz0 + 1.2, 0.2), { decal: 9 });
-  kit.box("satinBlack", (bx0 + bx1) / 2, fy - 0.45, (bz0 + bz1) / 2, 0.5, 0.15, 3.2);
+  kit.box("darkGloss", (bx0 + bx1) / 2, fy - 0.45, (bz0 + bz1) / 2, 0.5, 0.15, 3.2);
   kit.box("emitWhiteSoft", (bx0 + bx1) / 2, fy - 0.53, (bz0 + bz1) / 2, 0.4, 0.02, 3.0, { uv: "keep" });
   // floor
   kit.boxMM("paintedMetal", [bx0, fy - 0.3, bz0], [bx1, fy, bz1], { color: P.gunmetal, uv: "world", texel: 0.8 });
@@ -232,14 +232,14 @@ function booth(kit, ctx, lib, y0, z0) {
   // walls: glass front (+z) and port side (-x); the +x side is glass beyond the stair doorway (z bz0..bz0+1.7)
   const glazed = (a, b, alongX) => {
     kit.boxMM("painted1", [a[0], fy, a[1]], [b[0], fy + par, b[1]], { color: P.impGreyDark, uv: "world", texel: 1 });
-    kit.boxMM("satinBlack", [a[0] - 0.02, fy + par, a[1] - 0.02], [b[0] + 0.02, fy + par + 0.08, b[1] + 0.02]);
+    kit.boxMM("darkGloss", [a[0] - 0.02, fy + par, a[1] - 0.02], [b[0] + 0.02, fy + par + 0.08, b[1] + 0.02]);
     kit.boxMM("glass", [a[0] + 0.09, fy + par + 0.08, a[1] + 0.09], [b[0] - 0.09, roofY, b[1] - 0.09], { uv: "keep" });
     const len = alongX ? b[0] - a[0] : b[1] - a[1];
     const n = Math.max(1, Math.round(len / 2.1));
     for (let i = 0; i <= n; i++) {
       const t = i / n;
-      if (alongX) kit.boxMM("satinBlack", [a[0] + len * t - 0.05, fy + par, a[1]], [a[0] + len * t + 0.05, roofY, b[1]]);
-      else kit.boxMM("satinBlack", [a[0], fy + par, a[1] + len * t - 0.05], [b[0], roofY, a[1] + len * t + 0.05]);
+      if (alongX) kit.boxMM("darkGloss", [a[0] + len * t - 0.05, fy + par, a[1]], [a[0] + len * t + 0.05, roofY, b[1]]);
+      else kit.boxMM("darkGloss", [a[0], fy + par, a[1] + len * t - 0.05], [b[0], roofY, a[1] + len * t + 0.05]);
     }
     kit.collider([a[0], fy, a[1]], [b[0], roofY, b[1]], "boothWall");
   };
@@ -247,23 +247,23 @@ function booth(kit, ctx, lib, y0, z0) {
   glazed([bx0 - 0.1, bz0], [bx0 + 0.1, bz1], false);
   glazed([bx1 - 0.1, bz0 + 1.7], [bx1 + 0.1, bz1], false);
   // door frame posts at the stair doorway
-  kit.boxMM("satinBlack", [bx1 - 0.12, fy, bz0 + 1.62], [bx1 + 0.12, roofY, bz0 + 1.7]);
-  kit.boxMM("satinBlack", [bx1 - 0.12, fy + 2.3, bz0], [bx1 + 0.12, roofY, bz0 + 1.7]);
+  kit.boxMM("darkGloss", [bx1 - 0.12, fy, bz0 + 1.62], [bx1 + 0.12, roofY, bz0 + 1.7]);
+  kit.boxMM("darkGloss", [bx1 - 0.12, fy + 2.3, bz0], [bx1 + 0.12, roofY, bz0 + 1.7]);
   kit.collider([bx1 - 0.12, fy + 2.3, bz0], [bx1 + 0.12, roofY, bz0 + 1.7], "boothWall");
   // roof with blue edge lights and a soft ceiling panel
   kit.boxMM("paintedMetal", [bx0 - 0.5, roofY, bz0 - 0.2], [bx1 + 0.5, roofY + 0.3, bz1 + 0.5], { color: P.gunmetal, uv: "world", texel: 0.8 });
   kit.boxMM("emitBlue", [bx0 - 0.45, roofY + 0.1, bz1 + 0.5], [bx1 + 0.45, roofY + 0.18, bz1 + 0.52], { uv: "keep" });
   kit.boxMM("emitBlue", [bx0 - 0.52, roofY + 0.1, bz0], [bx0 - 0.5, roofY + 0.18, bz1 + 0.45], { uv: "keep" });
-  kit.boxMM("satinBlack", [bx0 + 0.8, roofY - 0.12, bz0 + 0.8], [bx1 - 0.8, roofY, bz1 - 0.8]);
+  kit.boxMM("darkGloss", [bx0 + 0.8, roofY - 0.12, bz0 + 0.8], [bx1 - 0.8, roofY, bz1 - 0.8]);
   kit.boxMM("emitWhiteSoft", [bx0 + 1.0, roofY - 0.14, bz0 + 1.0], [bx1 - 1.0, roofY - 0.12, bz1 - 1.0], { uv: "keep" });
   // consoles facing the pad, seats, screen bank on the back wall
-  for (const x of [13.6, 15.4, 17.2, 19.0]) pedestalConsole(kit, propFrame(kit, x, fy, bz1 - 0.95, Math.PI), "screen6", { w: 1.6 });
+  for (const x of [13.6, 15.4, 17.2, 19.0]) pedestalConsole(kit, propFrame(kit, x, fy, bz1 - 0.95, Math.PI), "screen6", { w: 1.6, lamp: "emitBlue" });
   for (const x of [13.6, 15.4, 17.2, 19.0]) {
-    kit.box("satinBlack", x, fy + 0.5, bz1 - 1.9, 0.5, 0.1, 0.5);
-    kit.box("satinBlack", x, fy + 0.3, bz1 - 1.9, 0.12, 0.4, 0.12);
-    kit.box("satinBlack", x, fy + 0.8, bz1 - 2.12, 0.5, 0.5, 0.08);
+    kit.box("darkGloss", x, fy + 0.5, bz1 - 1.9, 0.5, 0.1, 0.5);
+    kit.box("darkGloss", x, fy + 0.3, bz1 - 1.9, 0.12, 0.4, 0.12);
+    kit.box("darkGloss", x, fy + 0.8, bz1 - 2.12, 0.5, 0.5, 0.08);
   }
-  kit.box("satinBlack", 16.3, fy + 1.9, bz0 + 0.03, 6.0, 1.2, 0.06);
+  kit.box("darkGloss", 16.3, fy + 1.9, bz0 + 0.03, 6.0, 1.2, 0.06);
   kit.box("screen6", 14.9, fy + 1.9, bz0 + 0.065, 2.6, 1.0, 0.01, { uv: "keep" });
   kit.box("screen6", 17.7, fy + 1.9, bz0 + 0.065, 2.6, 1.0, 0.01, { uv: "keep" });
   cabinet(kit, propFrame(kit, bx0 + 0.42, fy, bz0 + 1.6, Math.PI / 2), { w: 1.4, h: 2.4, d: 0.6, screen: "screen6" });
@@ -299,11 +299,11 @@ function catwalk(kit, ctx, lib, room, y0) {
   // wall brackets and floods under the catwalk
   for (let z = za + 2; z < zb; z += 8) kit.boxMM("paintedMetal", [xa, cy - 1.0, z - 0.2], [xb - 0.3, cy - 0.25, z + 0.2], { color: P.darkMetal, texel: 0.8 });
   for (let z = 358; z <= 402; z += 22) {
-    kit.box("satinBlack", -26.2, cy - 0.5, z, 2.0, 0.2, 0.7);
+    kit.box("darkGloss", -26.2, cy - 0.5, z, 2.0, 0.2, 0.7);
     kit.box("emitWhiteSoft", -26.2, cy - 0.61, z, 1.8, 0.02, 0.5, { uv: "keep" });
   }
   // consoles and cabinets along the catwalk wall
-  for (const z of [366, 380, 394]) pedestalConsole(kit, propFrame(kit, -25.4, cy, z, -Math.PI / 2), "screen6", { w: 1.4 });
+  for (const z of [366, 380, 394]) pedestalConsole(kit, propFrame(kit, -25.4, cy, z, -Math.PI / 2), "screen6", { w: 1.4, lamp: "emitBlue" });
   for (const z of [372, 388]) cabinet(kit, propFrame(kit, x0 + 0.48, cy, z, Math.PI / 2), { w: 1.2, h: 2.0, d: 0.6, screen: null, color: P.slate });
 }
 
@@ -331,14 +331,14 @@ function props(kit, lib, room, y0) {
   const P = lib.PALETTE;
   const { x1, z0, z1 } = room;
   // starboard wall: cabinets, power cart and crates
-  for (let i = 0; i < 4; i++) cabinet(kit, propFrame(kit, x1 - 0.32, y0, 366 + i * 1.4, -Math.PI / 2), { screen: i % 2 ? "screen6" : null, color: i > 1 ? P.slate : P.impGreyDark });
+  for (let i = 0; i < 4; i++) cabinet(kit, propFrame(kit, x1 - 0.32, y0, 366 + i * 1.4, -Math.PI / 2), { screen: i % 2 ? "screen6" : null, color: i > 1 ? P.slate : P.impGreyDark, lamp: "emitBlue" });
   for (let i = 0; i < 3; i++) crate(kit, propFrame(kit, x1 - 1.2, y0, 388 + i * 1.3, 0.1 * i), { decal: [11, 6, 9][i] });
   crate(kit, propFrame(kit, x1 - 1.2, y0 + 0.8, 389.3, 0.15), { decal: 5, h: 0.7 });
-  toolCart(kit, propFrame(kit, x1 - 2.4, y0, 384, Math.PI / 2 + 0.3));
-  toolCart(kit, propFrame(kit, -21, y0, 358, 0.4));
+  toolCart(kit, propFrame(kit, x1 - 2.4, y0, 384, Math.PI / 2 + 0.3), { lamp: "emitBlue" });
+  toolCart(kit, propFrame(kit, -21, y0, 358, 0.4), { lamp: "emitBlue" });
   // forward wall under the catwalk end: pedestal consoles by the door lane and the pad
-  pedestalConsole(kit, propFrame(kit, -8, y0, 401, Math.PI), "screen6", { w: 1.4 });
-  pedestalConsole(kit, propFrame(kit, 8, y0, 401, Math.PI), "screen6", { w: 1.4 });
+  pedestalConsole(kit, propFrame(kit, -8, y0, 401, Math.PI), "screen6", { w: 1.4, lamp: "emitBlue" });
+  pedestalConsole(kit, propFrame(kit, 8, y0, 401, Math.PI), "screen6", { w: 1.4, lamp: "emitBlue" });
   // ground power drums and chocks
   for (let i = 0; i < 4; i++) {
     const dx = -18 + (i % 2) * 1.1;
@@ -346,10 +346,10 @@ function props(kit, lib, room, y0) {
     kit.cyl("painted2", dx, y0 + 0.6, dz, 0.45, 1.2, "y", { color: i % 2 ? P.impGreyDark : P.orange, segments: 14, uv: "world", texel: 1 });
   }
   kit.collider([-18.6, y0, 401.4], [-16.3, y0 + 1.25, 403.7], "drums");
-  lib.wallLightBar(propFrame(kit, x1 - 0.02, y0, 380, -Math.PI / 2), -26, 26, 2.9);
-  lib.wallLightBar(propFrame(kit, 0, y0, z0 + 0.02, 0), -27, -11, 2.9);
-  lib.wallLightBar(propFrame(kit, 0, y0, z1 - 0.02, Math.PI), -27, -5, 2.9);
-  lib.wallLightBar(propFrame(kit, 0, y0, z1 - 0.02, Math.PI), 5, 27, 2.9);
+  lightBar(propFrame(kit, x1 - 0.02, y0, 380, -Math.PI / 2), -26, 26, 2.9);
+  lightBar(propFrame(kit, 0, y0, z0 + 0.02, 0), -27, -11, 2.9);
+  lightBar(propFrame(kit, 0, y0, z1 - 0.02, Math.PI), -27, -5, 2.9);
+  lightBar(propFrame(kit, 0, y0, z1 - 0.02, Math.PI), 5, 27, 2.9);
 }
 
 // ---------------------------------------------------------------- lighting: cool floods, blue accents, amber practicals

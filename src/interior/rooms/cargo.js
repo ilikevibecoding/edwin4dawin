@@ -91,7 +91,7 @@ function island(kit, ctx, lib, y0) {
   pedestalConsole(kit, propFrame(kit, 0, ty, iz - 1.85, Math.PI), "screen6", { w: 1.8 });
   pedestalConsole(kit, propFrame(kit, 0, ty, iz + 1.85, 0), "screen6", { w: 1.8 });
   // central pillar with four screens and an amber "LOGISTICS" halo
-  kit.boxMM("satinBlack", [-0.45, ty, iz - 0.45], [0.45, ty + 3.6, iz + 0.45]);
+  kit.boxMM("darkGloss", [-0.45, ty, iz - 0.45], [0.45, ty + 3.6, iz + 0.45]);
   kit.collider([-0.45, ty, iz - 0.45], [0.45, ty + 3.6, iz + 0.45], "islandPillar");
   for (const [dx, dz, rot] of [[0.46, 0, Math.PI / 2], [-0.46, 0, -Math.PI / 2], [0, 0.46, 0], [0, -0.46, Math.PI]]) {
     const g = new THREE.PlaneGeometry(0.8, 0.5);
@@ -102,7 +102,7 @@ function island(kit, ctx, lib, y0) {
     kit.add("decal", d, { pos: [dx, ty + 1.7, iz + dz], uv: "keep", uvRect: decalRect(11) });
   }
   kit.boxMM("emitAmber", [-0.6, ty + 3.6, iz - 0.6], [0.6, ty + 3.7, iz + 0.6], { uv: "keep" });
-  kit.boxMM("satinBlack", [-0.7, ty + 3.7, iz - 0.7], [0.7, ty + 3.8, iz + 0.7]);
+  kit.boxMM("darkGloss", [-0.7, ty + 3.7, iz - 0.7], [0.7, ty + 3.8, iz + 0.7]);
   lightBank(kit, 0, y0 + 16, iz, 5, 1.2, "emitWarmSoft");
   ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 80, 22, [0, ty + 4.5, iz]));
 }
@@ -160,14 +160,14 @@ function mezzanine(kit, ctx, lib, room, y0, mats) {
   // under the mezzanine: sealed loading-dock doors on the aft wall, work lights, pallets
   for (const dx of [-24, -10, 10, 24]) {
     kit.boxMM("paintedMetal", [dx - 2.3, y0, zb - 0.34], [dx + 2.3, y0 + 4.9, zb], { color: P.gunmetal, uv: "world", texel: 0.8 });
-    kit.boxMM("satinBlack", [dx - 2.0, y0 + 0.05, zb - 0.4], [dx + 2.0, y0 + 4.6, zb - 0.32]);
+    kit.boxMM("darkGloss", [dx - 2.0, y0 + 0.05, zb - 0.4], [dx + 2.0, y0 + 4.6, zb - 0.32]);
     for (let y = y0 + 0.6; y < y0 + 4.4; y += 0.8) kit.boxMM("paintedMetal", [dx - 1.95, y, zb - 0.42], [dx + 1.95, y + 0.08, zb - 0.38], { color: P.darkMetal, texel: 1 });
     kit.boxMM("hazard", [dx - 2.3, y0 + 4.6, zb - 0.36], [dx + 2.3, y0 + 4.9, zb - 0.34], { uv: "world", texel: 1.2 });
     hazardBand(kit, dx - 2.3, zb - 1.4, dx + 2.3, zb - 0.4, y0);
     kit.add("decal", new THREE.PlaneGeometry(1.2, 1.2), { pos: [dx, y0 + 3.2, zb - 0.41], rot: [0, Math.PI, 0], uv: "keep", uvRect: decalRect(11) });
     kit.box("emitAmber", dx + 2.0, y0 + 3.4, zb - 0.41, 0.3, 0.12, 0.02);
     kit.collider([dx - 2.3, y0, zb - 0.42], [dx + 2.3, y0 + 4.9, zb], "dockDoor");
-    kit.box("satinBlack", dx, my - 0.5, MEZZ_Z + 3.4, 2.0, 0.2, 0.7);
+    kit.box("darkGloss", dx, my - 0.5, MEZZ_Z + 3.4, 2.0, 0.2, 0.7);
     kit.box("emitWarmSoft", dx, my - 0.61, MEZZ_Z + 3.4, 1.8, 0.02, 0.5, { uv: "keep" });
   }
   for (const [px, pz, t] of [[-5, 566.5, 2], [-3.4, 566.2, 1], [4.5, 567, 2], [6.2, 565.6, 1], [-17, 565.8, 2], [17, 565.8, 1]]) pallet(kit, propFrame(kit, px, y0, pz, (px * 3) % 1), { tiers: t, tone: [P.impGrey, P.impGreyDark, P.slate][Math.abs(Math.round(px)) % 3], decal: t === 2 ? 11 : 6 });

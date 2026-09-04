@@ -10,6 +10,9 @@ import { doorOpening, DARK_PAINTS } from "../interior/shell.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
 export const RAIL_H = 1.05;
+// Black trim / housings. darkGloss is in every room anyway (panelGrid hatch handles), so using it for all
+// black trim keeps satinBlack out of the fighter maintenance, shuttle dock and cargo kits (one draw call each).
+export const BLACK = "darkGloss";
 
 // Frame for a free-standing prop: u = right, v = up, n = forward (yaw 0 faces +z).
 export function propFrame(kit, cx, cy, cz, yaw = 0) {
@@ -33,7 +36,7 @@ export function railing(kit, ax, az, bx, bz, y, opts = {}) {
   const sz = alongX ? 0.05 : len;
   kit.box(mat, cx, y + h, cz, sx, 0.06, sz, { color, texel: 2 });
   if (mid) kit.box(mat, cx, y + h * 0.55, cz, alongX ? len : 0.035, 0.035, alongX ? 0.035 : len, { color, texel: 2 });
-  if (kick) kit.box("satinBlack", cx, y + 0.07, cz, alongX ? len : 0.04, 0.14, alongX ? 0.04 : len);
+  if (kick) kit.box(BLACK, cx, y + 0.07, cz, alongX ? len : 0.04, 0.14, alongX ? 0.04 : len);
   const n = Math.max(1, Math.round(len / postEvery));
   for (let i = 0; i <= n; i++) {
     const t = n === 0 ? 0.5 : i / n;
@@ -132,7 +135,7 @@ export function bigWall(frame, length, rows, opts = {}) {
       if (hits(u0, u0 + cw, ra, rb)) continue;
       frame.box(variant === 0 ? "painted" : "painted" + variant, cu, (ra + rb) / 2, -0.03, cw - 0.08, rh - 0.08, 0.06, { color: col, uv: "world", texel: 0.35 });
       if (r === lightRow) {
-        frame.box("satinBlack", cu, ra + rh * 0.5, 0.02, cw - 0.6, 0.3, 0.06);
+        frame.box(BLACK, cu, ra + rh * 0.5, 0.02, cw - 0.6, 0.3, 0.06);
         frame.box(lightMat, cu, ra + rh * 0.5, 0.055, cw - 0.7, 0.16, 0.01, { uv: "keep" });
       } else if (f < 0.16 && rh > 2.5) {
         // big vent grille
@@ -154,7 +157,7 @@ export function bigWall(frame, length, rows, opts = {}) {
       }
     }
     // horizontal seam band between rows
-    if (r < rows.length - 2) for (const [a, b] of spans(rb - 0.06, rb + 0.06)) frame.box("satinBlack", (a + b) / 2, rb, 0.0, b - a, 0.12, 0.05);
+    if (r < rows.length - 2) for (const [a, b] of spans(rb - 0.06, rb + 0.06)) frame.box(BLACK, (a + b) / 2, rb, 0.0, b - a, 0.12, 0.05);
   }
   // pilasters (none through a door opening)
   for (let c = 0; c <= nCols; c += ribEvery) {
@@ -189,7 +192,7 @@ export function bayWalls(kit, room, shell, y0, opts = {}) {
     panelGrid(frame, length, lower, { openings: ops, rows: [0, 0.45, lower], panelW, depth: WALL_T, seed: s++, kick, topPipes: false, styles, paints, tag: room.id + dir });
     bigWall(frame, length, upper, { colW, seed: s++, depth: WALL_T, lightRow, ribEvery: 2, lampMat, lightMat, openings: ops });
     frame.collider(0, length, lower, h, -WALL_T, 0.02, room.id + dir);
-    frame.box("satinBlack", length / 2, h - 0.09, 0.02, length, 0.18, 0.05);
+    frame.box(BLACK, length / 2, h - 0.09, 0.02, length, 0.18, 0.05);
   }
   return upper;
 }
@@ -300,20 +303,20 @@ export function crate(kit, f, opts = {}) {
 
 /** Rolling tool cart: black chest with drawers, wheels, push handle, tools on top. */
 export function toolCart(kit, f, opts = {}) {
-  const { w = 1.1, h = 0.95, d = 0.6 } = opts;
-  f.box("satinBlack", 0, 0.2 + h / 2, 0, w, h, d);
+  const { w = 1.1, h = 0.95, d = 0.6, lamp = "emitAmber" } = opts;
+  f.box(BLACK, 0, 0.2 + h / 2, 0, w, h, d);
   for (let i = 0; i < 4; i++) {
     const v = 0.3 + i * (h - 0.2) / 4;
     f.box("painted", 0, v + (h - 0.2) / 8, d / 2 + 0.01, w - 0.1, (h - 0.2) / 4 - 0.04, 0.02, { color: PALETTE.orange, uv: "keep" });
     f.box("metal", 0, v + (h - 0.2) / 8, d / 2 + 0.03, 0.3, 0.03, 0.02, { color: PALETTE.steel });
   }
-  f.box("satinBlack", 0, 0.2 + h + 0.02, 0, w + 0.05, 0.04, d + 0.05);
-  for (const su of [-1, 1]) for (const sn of [-1, 1]) f.cylU("satinBlack", su * (w / 2 - 0.12), 0.12, sn * (d / 2 - 0.1), 0.12, 0.08, { segments: 10 });
+  f.box(BLACK, 0, 0.2 + h + 0.02, 0, w + 0.05, 0.04, d + 0.05);
+  for (const su of [-1, 1]) for (const sn of [-1, 1]) f.cylU(BLACK, su * (w / 2 - 0.12), 0.12, sn * (d / 2 - 0.1), 0.12, 0.08, { segments: 10 });
   f.cylU("metal", -w / 2 - 0.1, 0.2 + h + 0.05, 0, 0.02, 0.05, { color: PALETTE.steel, segments: 8 });
   f.cylV("metal", -w / 2 - 0.1, 0.2 + h * 0.7, 0, 0.02, h * 0.6, { color: PALETTE.steel, segments: 8 });
   f.box("metal", 0.2, 0.2 + h + 0.08, 0.1, 0.35, 0.08, 0.2, { color: PALETTE.gunmetal });
   f.box("metal", -0.25, 0.2 + h + 0.06, -0.1, 0.2, 0.04, 0.12, { color: PALETTE.steel });
-  f.box("emitAmber", -0.3, 0.2 + h * 0.5, d / 2 + 0.04, 0.08, 0.02, 0.005, { uv: "keep" });
+  f.box(lamp, -0.3, 0.2 + h * 0.5, d / 2 + 0.04, 0.08, 0.02, 0.005, { uv: "keep" });
   f.collider(-w / 2 - 0.15, w / 2, 0, h + 0.3, -d / 2, d / 2, "cart");
 }
 
@@ -328,7 +331,7 @@ export function fuelBowser(kit, f, opts = {}) {
   f.box("metal", 0, 2.45, 0, 0.5, 0.16, 1.6, { color: PALETTE.steel, texel: 1 });
   f.cylV("metal", 0, 2.6, 0.4, 0.12, 0.2, { color: PALETTE.gunmetal, segments: 10 });
   // control cabinet at the rear with a pump gauge screen
-  f.box("satinBlack", 0.4, 1.1, -1.85, 0.8, 1.0, 0.35);
+  f.box(BLACK, 0.4, 1.1, -1.85, 0.8, 1.0, 0.35);
   f.box("screen6", 0.4, 1.3, -2.03, 0.5, 0.25, 0.01, { uv: "keep" });
   f.box("emitAmber", 0.4, 0.95, -2.03, 0.5, 0.05, 0.01, { uv: "keep" });
   f.box("emitAmber", 0.4, 2.85, 0, 0.16, 0.14, 0.16);
@@ -350,12 +353,12 @@ export function fuelBowser(kit, f, opts = {}) {
 /** Deck tug / loader vehicle: orange chassis, black cab, forks at the +n end, wheels, work lights. */
 export function loaderVehicle(kit, f) {
   f.box("paintedMetal", 0, 0.7, 0, 2.2, 0.6, 3.6, { color: PALETTE.orange, texel: 1 });
-  f.box("satinBlack", 0, 1.3, -0.9, 1.6, 0.6, 1.4);
-  f.box("satinBlack", 0, 1.75, -0.6, 1.4, 0.5, 1.2);
+  f.box(BLACK, 0, 1.3, -0.9, 1.6, 0.6, 1.4);
+  f.box(BLACK, 0, 1.75, -0.6, 1.4, 0.5, 1.2);
   f.box("paintedMetal", 0, 1.1, 1.2, 1.9, 0.2, 1.2, { color: PALETTE.impGreyDark, texel: 1 });
   for (const su of [-0.5, 0.5]) f.box("metal", su, 0.35, 2.4, 0.16, 0.06, 1.4, { color: PALETTE.steel });
   f.box("metal", 0, 1.2, 1.85, 1.6, 1.4, 0.1, { color: PALETTE.gunmetal, texel: 1 });
-  for (const su of [-1, 1]) for (const sn of [-1.2, 1.2]) f.cylU("satinBlack", su * 1.2, 0.45, sn, 0.45, 0.4, { segments: 14 });
+  for (const su of [-1, 1]) for (const sn of [-1.2, 1.2]) f.cylU(BLACK, su * 1.2, 0.45, sn, 0.45, 0.4, { segments: 14 });
   f.box("hazard", 0, 0.45, 1.85, 2.2, 0.3, 0.1, { uv: "world", texel: 1.5 });
   f.box("emitAmber", 0, 2.05, -0.6, 0.3, 0.12, 0.3);
   f.box("emitWhiteSoft", -0.7, 0.9, 1.92, 0.3, 0.12, 0.02);
@@ -381,37 +384,44 @@ export function pallet(kit, f, opts = {}) {
   }
   const top = 0.16 + tiers * 0.6;
   // straps
-  for (const u of [-0.35, 0.35]) f.box("satinBlack", u, top / 2 + 0.08, 0, 0.05, top - 0.16, 1.22);
+  for (const u of [-0.35, 0.35]) f.box(BLACK, u, top / 2 + 0.08, 0, 0.05, top - 0.16, 1.22);
   f.add("decal", new THREE.PlaneGeometry(0.5, 0.5), 0, top * 0.55, 0.61, { uv: "keep", uvRect: decalRect(decal) });
   f.collider(-0.62, 0.62, 0, top, -0.62, 0.62, "pallet");
 }
 
 /** Free-standing pedestal console: black desk, slanted screen, key strip. screenMat e.g. "screen4" / "screen6". */
 export function pedestalConsole(kit, f, screenMat = "screen6", opts = {}) {
-  const { w = 1.2, h = 1.05, d = 0.55 } = opts;
-  f.box("satinBlack", 0, h / 2, 0, w, h, d);
-  f.box("satinBlack", 0, h + 0.14, d * 0.05, w, 0.28, d * 0.9, { tilt: -0.5 });
+  const { w = 1.2, h = 1.05, d = 0.55, lamp = "emitAmber" } = opts;
+  f.box(BLACK, 0, h / 2, 0, w, h, d);
+  f.box(BLACK, 0, h + 0.14, d * 0.05, w, 0.28, d * 0.9, { tilt: -0.5 });
   f.box(screenMat, 0, h + 0.16, d * 0.05 + 0.13, w - 0.12, 0.2, 0.01, { uv: "keep", tilt: -0.5 });
-  f.box("emitAmber", 0, h + 0.02, d / 2 + 0.005, w - 0.2, 0.05, 0.01, { uv: "keep" });
+  f.box(lamp, 0, h + 0.02, d / 2 + 0.005, w - 0.2, 0.05, 0.01, { uv: "keep" });
   f.box("metal", 0, 0.05, 0, w + 0.06, 0.1, d + 0.06, { color: PALETTE.darkMetal });
   f.collider(-w / 2, w / 2, 0, h + 0.3, -d / 2, d / 2 + 0.05, "console");
 }
 
 /** Tall equipment cabinet against a wall (frame facing into the room). */
 export function cabinet(kit, f, opts = {}) {
-  const { w = 1.2, h = 2.2, d = 0.6, screen = null, color = PALETTE.impGreyDark } = opts;
+  const { w = 1.2, h = 2.2, d = 0.6, screen = null, color = PALETTE.impGreyDark, lamp = "emitAmber" } = opts;
   f.box("painted1", 0, h / 2, 0, w, h, d, { color, uv: "world", texel: 1 });
-  f.box("satinBlack", 0, h / 2, d / 2 + 0.005, w - 0.16, h - 0.16, 0.01);
+  f.box(BLACK, 0, h / 2, d / 2 + 0.005, w - 0.16, h - 0.16, 0.01);
   if (screen) f.box(screen, 0, h * 0.7, d / 2 + 0.015, w - 0.4, 0.3, 0.01, { uv: "keep" });
-  f.box("emitAmber", 0, h * 0.5, d / 2 + 0.015, w - 0.4, 0.05, 0.01, { uv: "keep" });
+  f.box(lamp, 0, h * 0.5, d / 2 + 0.015, w - 0.4, 0.05, 0.01, { uv: "keep" });
   for (let i = 0; i < 3; i++) f.box("metal", -w / 2 + 0.25 + i * 0.3, h * 0.3, d / 2 + 0.02, 0.18, 0.06, 0.02, { color: PALETTE.steel });
-  f.box("emitAmber", w / 2 - 0.2, h * 0.9, d / 2 + 0.015, 0.06, 0.06, 0.01);
+  f.box(lamp, w / 2 - 0.2, h * 0.9, d / 2 + 0.015, 0.06, 0.06, 0.01);
   f.collider(-w / 2, w / 2, 0, h, -d / 2, d / 2 + 0.05, "cabinet");
+}
+
+/** Wall light bar (like shell.wallLightBar, black housing in BLACK). u0..u1 along the frame at height v. */
+export function lightBar(frame, u0, u1, v, mat = "emitWhiteSoft") {
+  const len = u1 - u0;
+  frame.box(BLACK, (u0 + u1) / 2, v, 0.03, len, 0.16, 0.06);
+  frame.box(mat, (u0 + u1) / 2, v, 0.062, len - 0.06, 0.08, 0.01, { uv: "keep" });
 }
 
 /** Ceiling light bank: black housing with a soft white diffuser facing down. */
 export function lightBank(kit, cx, yCeil, cz, w, d, mat = "emitWhiteSoft") {
-  kit.box("satinBlack", cx, yCeil - 0.18, cz, w + 0.3, 0.36, d + 0.3);
+  kit.box(BLACK, cx, yCeil - 0.18, cz, w + 0.3, 0.36, d + 0.3);
   kit.box(mat, cx, yCeil - 0.37, cz, w, 0.03, d, { uv: "keep" });
 }
 
@@ -471,9 +481,9 @@ export function stairTower(kit, o) {
   // the top landing's other lane drops two flights: rail it off at the landing edge
   railing(kit, otherLane[0], zA, otherLane[1], zA, yTop, { postEvery: 1.4, kick: false, tag });
   // frame posts, header and safety screens
-  for (const [px, pz] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) kit.boxMM("satinBlack", [px - 0.08, yBottom, pz - 0.08], [px + 0.08, yTop + 1.25, pz + 0.08]);
-  kit.boxMM("satinBlack", [x0 - 0.08, yTop + 1.15, z0 - 0.08], [x1 + 0.08, yTop + 1.25, z1 + 0.08]);
-  kit.boxMM("satinBlack", [x0 - 0.08, yBottom + 2.6, zEntry - 0.1], [x1 + 0.08, yBottom + 2.85, zEntry + 0.1]);
+  for (const [px, pz] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) kit.boxMM(BLACK, [px - 0.08, yBottom, pz - 0.08], [px + 0.08, yTop + 1.25, pz + 0.08]);
+  kit.boxMM(BLACK, [x0 - 0.08, yTop + 1.15, z0 - 0.08], [x1 + 0.08, yTop + 1.25, z1 + 0.08]);
+  kit.boxMM(BLACK, [x0 - 0.08, yBottom + 2.6, zEntry - 0.1], [x1 + 0.08, yBottom + 2.85, zEntry + 0.1]);
   const farRail = entry === "-z" ? [z0 + landing, z1] : [z0, z1 - landing];
   const exitFaceX = exit === "x1" ? x1 : x0;
   const otherX = exit === "x1" ? x0 : x1;
@@ -611,12 +621,12 @@ export function gantryCrane(ctx, mats, o) {
   const { x0, x1, y, zMin, zMax, trolleyRange = [-8, 8], hookDrop = 7, load = true, speed = 0.7, name = "hangar.crane" } = o;
   const span = x1 - x0;
   const cx = (x0 + x1) / 2;
-  // three materials on the bridge, two on the trolley: each one is a draw call in every deck D view
+  // two materials on the bridge, one on the trolley: each one is a draw call in every deck D view
   const bridge = buildGroup(mats, name + ".bridge", (k) => {
     for (const dz of [-1.3, 1.3]) k.box("paintedMetal", 0, 0, dz, span, 1.6, 0.8, { color: PALETTE.gunmetal, texel: 0.7 });
     for (let x = -span / 2 + 3; x < span / 2 - 2; x += 6) k.box("paintedMetal", x, 0.5, 0, 0.3, 0.5, 2.0, { color: PALETTE.darkMetal });
-    k.box("hazard", 0, -0.6, -1.71, span - 2, 0.35, 0.02, { uv: "world", texel: 1.5 });
-    k.box("hazard", 0, -0.6, 1.71, span - 2, 0.35, 0.02, { uv: "world", texel: 1.5 });
+    k.box("paintedMetal", 0, -0.6, -1.71, span - 2, 0.35, 0.02, { color: PALETTE.impAmber, uv: "world", texel: 1.5 });
+    k.box("paintedMetal", 0, -0.6, 1.71, span - 2, 0.35, 0.02, { color: PALETTE.impAmber, uv: "world", texel: 1.5 });
     for (const sx of [-1, 1]) {
       k.box("paintedMetal", sx * (span / 2 - 0.8), -0.4, 0, 1.6, 2.4, 3.8, { color: PALETTE.darkMetal, texel: 0.7 });
       k.box("emitAmber", sx * (span / 2 - 0.8), 1.1, 0, 0.5, 0.25, 0.5);
@@ -681,9 +691,9 @@ export function blastLeaves(ctx, mats, o) {
   for (const side of [-1, 1]) {
     const leaf = buildGroup(mats, name + (side < 0 ? ".port" : ".stbd"), (k) => {
       k.box("paintedMetal", 0, 0, 0, leafW, thickness, len, { color: PALETTE.darkMetal, texel: 0.5 });
-      // inner edge: hazard band and tooth blocks
+      // inner edge: amber warning band and tooth blocks (one material per leaf)
       const edge = -side * leafW / 2;
-      k.box("hazard", edge + side * 0.01, 0, 0, 0.02, thickness - 0.1, len - 0.4, { uv: "world", texel: 1.2 });
+      k.box("paintedMetal", edge + side * 0.01, 0, 0, 0.02, thickness - 0.1, len - 0.4, { color: PALETTE.impAmber, uv: "world", texel: 1.2 });
       for (let z = -len / 2 + 2; z < len / 2 - 1; z += 4) k.box("paintedMetal", edge + side * 0.6, thickness * 0.15, z, 1.2, thickness * 0.5, 1.2, { color: PALETTE.gunmetal });
       // ribs on the underside face the void
       for (let x = -leafW / 2 + 2; x < leafW / 2; x += 4) k.box("paintedMetal", x, -thickness / 2 - 0.1, 0, 0.6, 0.2, len - 0.2, { color: PALETTE.gunmetal, texel: 0.5 });
@@ -724,8 +734,8 @@ export function beacons(kit, ctx, mats, positions, name = "hangar.beacons") {
       kit.cyl("metal", x, y + ph / 2, z, 0.06, ph, "y", { color: PALETTE.gunmetal, segments: 8 });
       kit.cyl("metal", x, y + 0.05, z, 0.22, 0.1, "y", { color: PALETTE.darkMetal, segments: 10 });
     }
-    kit.cyl("satinBlack", x, y + ph + 0.06, z, 0.24, 0.12, "y", { segments: 12 });
-    kit.cyl("satinBlack", x, y + ph + 0.62, z, 0.2, 0.06, "y", { segments: 12 });
+    kit.cyl(BLACK, x, y + ph + 0.06, z, 0.24, 0.12, "y", { segments: 12 });
+    kit.cyl(BLACK, x, y + ph + 0.62, z, 0.2, 0.06, "y", { segments: 12 });
   }
   const mat = mats.emitAmber.clone();
   mat.emissiveIntensity = 2.5;
@@ -843,14 +853,15 @@ export function cargoLift(kit, ctx, mats, o) {
   kit.boxMM("hazard", [x0 - 0.3, yLow, z0 - 0.3], [x1 + 0.3, yLow + 0.008, z1 + 0.3], { uv: "world", texel: 1.2 });
   kit.boxMM("deck", [x0 - 0.05, yLow - 0.02, z0 - 0.05], [x1 + 0.05, yLow + 0.006, z1 + 0.05], { color: PALETTE.impBlack, uv: "world", texel: 1 });
 
-  // the moving platform is two materials (plate + hazard edges); its rails share the plate material
+  // the moving platform is one material (plate, amber-tinted edges, rails); the hazard texture stays on the deck
   const plat = buildGroup(mats, name, (k) => {
     k.boxMM("paintedMetal", [-w / 2, -0.3, -d / 2], [w / 2, 0, d / 2], { color: PALETTE.gunmetal, uv: "world", texel: 1 });
     k.boxMM("paintedMetal", [-w / 2 + 0.05, 0, -d / 2 + 0.05], [w / 2 - 0.05, 0.02, d / 2 - 0.05], { color: PALETTE.darkMetal, uv: "world", texel: 1.5 });
-    k.boxMM("hazard", [-w / 2, 0.02, -d / 2], [w / 2, 0.03, -d / 2 + 0.3], { uv: "world", texel: 1.5 });
-    k.boxMM("hazard", [-w / 2, 0.02, d / 2 - 0.3], [w / 2, 0.03, d / 2], { uv: "world", texel: 1.5 });
-    k.boxMM("hazard", [-w / 2, -0.3, -d / 2 - 0.01], [w / 2, 0, -d / 2], { uv: "world", texel: 1.5 });
-    k.boxMM("hazard", [-w / 2, -0.3, d / 2], [w / 2, 0, d / 2 + 0.01], { uv: "world", texel: 1.5 });
+    const A = { color: PALETTE.impAmber, uv: "world", texel: 1.5 };
+    k.boxMM("paintedMetal", [-w / 2, 0.02, -d / 2], [w / 2, 0.03, -d / 2 + 0.3], A);
+    k.boxMM("paintedMetal", [-w / 2, 0.02, d / 2 - 0.3], [w / 2, 0.03, d / 2], A);
+    k.boxMM("paintedMetal", [-w / 2, -0.3, -d / 2 - 0.01], [w / 2, 0, -d / 2], A);
+    k.boxMM("paintedMetal", [-w / 2, -0.3, d / 2], [w / 2, 0, d / 2 + 0.01], A);
     const ro = { collide: false, mat: "paintedMetal", kick: false };
     for (const side of ["-x", "+x", "-z", "+z"]) {
       if (openSides.includes(side)) continue;

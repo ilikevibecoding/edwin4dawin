@@ -7,7 +7,7 @@ import { roomFloorY } from "../../config/shipSpec.js";
 import { decalRect } from "../../textures.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, bayWalls, crate, toolCart, fuelBowser, pedestalConsole,
-  cabinet, lightBank, pipeRun, tieShape, tieWing, hoist, shadowCasters,
+  cabinet, lightBank, lightBar, pipeRun, tieShape, tieWing, hoist, shadowCasters,
 } from "../../hangar/machinery.js";
 
 export function build(kit, ctx, room, lib) {
@@ -106,16 +106,16 @@ export function build(kit, ctx, room, lib) {
   for (const bx of [36.5, 41.5, 46.5, 51.5, 56.5]) {
     const f = propFrame(kit, bx, y0, wallZ + 0.45, 0);
     f.box("metal", 0, 0.45, 0, 3.0, 0.9, 0.9, { color: P.gunmetal, texel: 1 });
-    f.box("satinBlack", 0, 0.92, 0, 3.1, 0.06, 0.95);
+    f.box("darkGloss", 0, 0.92, 0, 3.1, 0.06, 0.95);
     f.box("metal", -0.9, 1.05, -0.1, 0.5, 0.2, 0.4, { color: P.steel });
     f.box("metal", 0.7, 1.0, 0.1, 0.8, 0.1, 0.5, { color: P.slate });
     f.cylV("metal", 1.2, 1.05, -0.2, 0.08, 0.2, { color: P.orange, segments: 8 });
     f.box("emitAmber", 0, 0.7, 0.46, 1.0, 0.04, 0.01, { uv: "keep" });
     f.collider(-1.5, 1.5, 0, 1.0, -0.45, 0.5, "bench");
-    kit.box("satinBlack", bx, y0 + 1.95, wallZ + 0.03, 2.4, 0.8, 0.06);
+    kit.box("darkGloss", bx, y0 + 1.95, wallZ + 0.03, 2.4, 0.8, 0.06);
     kit.box("screen6", bx, y0 + 1.95, wallZ + 0.065, 2.2, 0.6, 0.01, { uv: "keep" });
   }
-  lib.wallLightBar(shell.frames["-z"].frame, 2, 26, 2.9, "emitWarmSoft");
+  lightBar(shell.frames["-z"].frame, 2, 26, 2.9, "emitWarmSoft");
   for (const bx of [39, 49]) toolCart(kit, propFrame(kit, bx, y0, wallZ + 1.8, 0.2));
 
   // ---- parts racks along the starboard wall: spare wing panels in slots, shelves with pylon parts
@@ -144,9 +144,9 @@ export function build(kit, ctx, room, lib) {
   pedestalConsole(kit, propFrame(kit, cx - 8, y0, cz + 5, Math.PI / 2), "screen6", { w: 1.6 });
   for (let i = 0; i < 4; i++) cabinet(kit, propFrame(kit, x0 + 0.32, y0, 430 + i * 1.4, Math.PI / 2), { screen: i % 2 ? "screen6" : null });
   for (let i = 0; i < 3; i++) cabinet(kit, propFrame(kit, x0 + 0.32, y0, 486 + i * 1.4, Math.PI / 2), { screen: i === 1 ? "screen6" : null, color: P.slate });
-  lib.wallLightBar(shell.frames["-x"].frame, 2, 36, 2.9, "emitWarmSoft");
-  lib.wallLightBar(shell.frames["-x"].frame, 44, 78, 2.9, "emitWarmSoft");
-  lib.wallLightBar(shell.frames["+x"].frame, 2, 78, 2.9, "emitWarmSoft");
+  lightBar(shell.frames["-x"].frame, 2, 36, 2.9, "emitWarmSoft");
+  lightBar(shell.frames["-x"].frame, 44, 78, 2.9, "emitWarmSoft");
+  lightBar(shell.frames["+x"].frame, 2, 78, 2.9, "emitWarmSoft");
   // crates, carts and drums around the bay
   for (let i = 0; i < 3; i++) crate(kit, propFrame(kit, 36.5 + i * 1.5, y0, 448, 0.15 * i), { decal: [6, 11, 9][i] });
   crate(kit, propFrame(kit, 37.2, y0 + 0.8, 448, 0.1), { decal: 5, h: 0.7 });

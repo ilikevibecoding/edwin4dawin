@@ -255,7 +255,7 @@ function catwalks(kit, ctx, lib, room, y0) {
     if (516.5 > z + 0.3) railing(kit, s * inX, z, s * inX, 516.5, CAT_Y, { postEvery: 2.2, tag: "catwalkRail" });
     // flood fixtures under the catwalk
     for (let fz = 418; fz <= 506; fz += 22) {
-      kit.box("satinBlack", s * 30.0, CAT_Y - 0.5, fz, 2.0, 0.2, 0.7);
+      kit.box("darkGloss", s * 30.0, CAT_Y - 0.5, fz, 2.0, 0.2, 0.7);
       kit.box("emitWhiteSoft", s * 30.0, CAT_Y - 0.61, fz, 1.8, 0.02, 0.5, { uv: "keep" });
     }
     // stair towers (inboard of the catwalk, exiting sideways onto it)
@@ -273,7 +273,7 @@ function catwalks(kit, ctx, lib, room, y0) {
   catwalkSlab(kit, lib, x0 - 0.0, 516.5, x1 + 0.0, z1 - 0.16, CAT_Y);
   for (const [a, b] of [[-25.8, -23.2], [-18.8, 18.8], [23.2, 25.8]]) railing(kit, a, 516.5, b, 516.5, CAT_Y, { postEvery: 2.2, tag: "catwalkRail" });
   for (const x of [-12, 12]) for (const z of [412.4, 517.6]) {
-    kit.box("satinBlack", x, CAT_Y - 0.5, z, 2.0, 0.2, 0.7);
+    kit.box("darkGloss", x, CAT_Y - 0.5, z, 2.0, 0.2, 0.7);
     kit.box("emitWhiteSoft", x, CAT_Y - 0.61, z, 1.8, 0.02, 0.5, { uv: "keep" });
   }
   // wall brackets under the side catwalks
@@ -349,7 +349,7 @@ function platforms(kit, lib) {
       }
       // work lamp and a tool locker on each platform
       kit.box("metal", xi + s * 0.6, PLAT_Y + 1.5, rz, 0.08, 3.0, 0.08, { color: P.gunmetal });
-      kit.box("satinBlack", xi + s * 0.6, PLAT_Y + 3.0, rz, 0.4, 0.2, 1.4);
+      kit.box("darkGloss", xi + s * 0.6, PLAT_Y + 3.0, rz, 0.4, 0.2, 1.4);
       kit.box("emitWhiteSoft", xi + s * 0.6, PLAT_Y + 2.89, rz, 0.3, 0.02, 1.2, { uv: "keep" });
       const f = propFrame(kit, xo - s * 1.2, PLAT_Y, rz - 2.2, s > 0 ? -Math.PI / 2 : Math.PI / 2);
       cabinet(kit, f, { w: 1.0, h: 1.6, d: 0.5, screen: "screen6" });
@@ -379,7 +379,7 @@ function stations(kit, ctx, lib, y0) {
       toolCart(kit, propFrame(kit, s * 29.6, y0, z + 2.4, face + 0.4));
       crate(kit, propFrame(kit, s * 27.2, y0, z + 3.2, face), { decal: 5 });
       // fuel manifold on the wall with valves and a warning plate
-      kit.box("satinBlack", s * (wallX - 0.25), y0 + 1.3, z, 0.5, 2.0, 2.4);
+      kit.box("darkGloss", s * (wallX - 0.25), y0 + 1.3, z, 0.5, 2.0, 2.4);
       for (let i = 0; i < 4; i++) {
         kit.cyl("metal", s * (wallX - 0.6), y0 + 0.9 + i * 0.35, z - 0.8 + i * 0.5, 0.08, 0.7, "x", { color: i % 2 ? P.orange : P.steel, segments: 8 });
         kit.box("metal", s * (wallX - 0.95), y0 + 0.9 + i * 0.35, z - 0.8 + i * 0.5, 0.2, 0.2, 0.2, { color: P.gunmetal });
@@ -389,7 +389,7 @@ function stations(kit, ctx, lib, y0) {
       ctx.lights.warm.push(lib.pointLight(0xffb347, 12, 14, [s * 28.4, y0 + 3.2, z]));
       // amber work lamp on a mast
       kit.box("metal", s * 30.8, y0 + 2.0, z - 3.6, 0.1, 4.0, 0.1, { color: P.gunmetal });
-      kit.box("satinBlack", s * 30.6, y0 + 4.0, z - 3.6, 0.6, 0.3, 0.3);
+      kit.box("darkGloss", s * 30.6, y0 + 4.0, z - 3.6, 0.6, 0.3, 0.3);
       kit.box("emitAmber", s * 30.6, y0 + 3.84, z - 3.6, 0.5, 0.02, 0.2, { uv: "keep" });
     } else {
       pedestalConsole(kit, propFrame(kit, s * 27.4, y0, z - 2.6, face), "screen6");
@@ -470,7 +470,7 @@ function controlCab(kit, ctx, lib, y0) {
   kit.boxMM("paintedMetal", [9, y0, 506], [13.2, fy - 0.3, 509.2], { color: P.gunmetal, uv: "world", texel: 0.8 });
   kit.collider([9, y0, 506], [13.2, fy, 509.2], "cabCore");
   for (let y = y0 + 0.8; y < fy - 1; y += 1.4) kit.box("metal", 9.0, y, 507.6, 0.06, 0.5, 2.6, { color: P.darkMetal, texel: 1 });
-  kit.box("satinBlack", 11.1, y0 + 1.1, 505.98, 1.2, 2.2, 0.06);
+  kit.box("darkGloss", 11.1, y0 + 1.1, 505.98, 1.2, 2.2, 0.06);
   kit.box("emitBlue", 11.7, y0 + 1.6, 505.95, 0.06, 0.4, 0.02);
   for (const [px, pz] of [[cx0 + 0.3, cz0 + 0.3], [cx1 - 0.3, cz0 + 0.3], [cx0 + 0.3, cz1 - 0.3], [cx1 - 0.3, cz1 - 0.3]]) {
     kit.boxMM("paintedMetal", [px - 0.3, y0, pz - 0.3], [px + 0.3, fy, pz + 0.3], { color: P.darkMetal, uv: "world", texel: 0.8 });
@@ -478,7 +478,7 @@ function controlCab(kit, ctx, lib, y0) {
   }
   // under-cab work lights
   for (const x of [8.5, 13.7]) {
-    kit.box("satinBlack", x, fy - 0.45, 507.6, 0.5, 0.15, 3.0);
+    kit.box("darkGloss", x, fy - 0.45, 507.6, 0.5, 0.15, 3.0);
     kit.box("emitWhiteSoft", x, fy - 0.53, 507.6, 0.4, 0.02, 2.8, { uv: "keep" });
   }
   // floor, parapet, glazing, roof
@@ -494,7 +494,7 @@ function controlCab(kit, ctx, lib, y0) {
   ];
   for (const [dir, a, b] of wallsCab) {
     kit.boxMM("painted1", [a[0], fy, a[1]], [b[0], fy + par, b[1]], { color: P.impGreyDark, uv: "world", texel: 1 });
-    kit.boxMM("satinBlack", [a[0] - 0.02, fy + par, a[1] - 0.02], [b[0] + 0.02, fy + par + 0.08, b[1] + 0.02]);
+    kit.boxMM("darkGloss", [a[0] - 0.02, fy + par, a[1] - 0.02], [b[0] + 0.02, fy + par + 0.08, b[1] + 0.02]);
     if (dir === "+z" || dir === "+x") kit.boxMM("painted1", [a[0], fy + par, a[1]], [b[0], roofY, b[1]], { color: P.impGreyDark, uv: "world", texel: 1 });
     else {
       // glass with mullions
@@ -504,8 +504,8 @@ function controlCab(kit, ctx, lib, y0) {
       const n = Math.max(1, Math.round(len / 2.1));
       for (let i = 0; i <= n; i++) {
         const t = i / n;
-        if (alongX) kit.boxMM("satinBlack", [a[0] + len * t - 0.05, fy + par, a[1]], [a[0] + len * t + 0.05, roofY, b[1]]);
-        else kit.boxMM("satinBlack", [a[0], fy + par, a[1] + len * t - 0.05], [b[0], roofY, a[1] + len * t + 0.05]);
+        if (alongX) kit.boxMM("darkGloss", [a[0] + len * t - 0.05, fy + par, a[1]], [a[0] + len * t + 0.05, roofY, b[1]]);
+        else kit.boxMM("darkGloss", [a[0], fy + par, a[1] + len * t - 0.05], [b[0], roofY, a[1] + len * t + 0.05]);
       }
     }
     kit.collider([a[0], fy, a[1]], [b[0], roofY, b[1]], "cabWall");
@@ -513,7 +513,7 @@ function controlCab(kit, ctx, lib, y0) {
   kit.boxMM("paintedMetal", [cx0 - 0.5, roofY, cz0 - 0.5], [cx1 + 0.5, roofY + 0.3, cz1 + 0.5], { color: P.gunmetal, uv: "world", texel: 0.8 });
   kit.boxMM("emitAmber", [cx0 - 0.45, roofY + 0.1, cz0 - 0.52], [cx1 + 0.45, roofY + 0.18, cz0 - 0.5], { uv: "keep" });
   kit.boxMM("emitAmber", [cx0 - 0.52, roofY + 0.1, cz0 - 0.45], [cx0 - 0.5, roofY + 0.18, cz1 + 0.45], { uv: "keep" });
-  kit.boxMM("satinBlack", [cx0 + 1, roofY - 0.12, cz0 + 1], [cx1 - 1, roofY, cz1 - 1]);
+  kit.boxMM("darkGloss", [cx0 + 1, roofY - 0.12, cz0 + 1], [cx1 - 1, roofY, cz1 - 1]);
   kit.boxMM("emitWhiteSoft", [cx0 + 1.2, roofY - 0.14, cz0 + 1.2], [cx1 - 1.2, roofY - 0.12, cz1 - 1.2], { uv: "keep" });
   // sensor mast and dish on the roof
   kit.box("metal", 8.2, roofY + 1.6, 509.6, 0.12, 2.6, 0.12, { color: P.gunmetal });
@@ -521,9 +521,9 @@ function controlCab(kit, ctx, lib, y0) {
   // consoles facing the well, equipment rack at the back, seats
   for (const x of [8.6, 10.2, 11.8, 13.4]) pedestalConsole(kit, propFrame(kit, x, fy, cz0 + 0.95, 0), "screen6", { w: 1.5 });
   for (const x of [8.6, 10.2, 11.8, 13.4]) {
-    kit.box("satinBlack", x, fy + 0.5, cz0 + 1.9, 0.5, 0.1, 0.5);
-    kit.box("satinBlack", x, fy + 0.3, cz0 + 1.9, 0.12, 0.4, 0.12);
-    kit.box("satinBlack", x, fy + 0.8, cz0 + 2.12, 0.5, 0.5, 0.08);
+    kit.box("darkGloss", x, fy + 0.5, cz0 + 1.9, 0.5, 0.1, 0.5);
+    kit.box("darkGloss", x, fy + 0.3, cz0 + 1.9, 0.12, 0.4, 0.12);
+    kit.box("darkGloss", x, fy + 0.8, cz0 + 2.12, 0.5, 0.5, 0.08);
   }
   cabinet(kit, propFrame(kit, 8.6, fy, cz1 - 0.42, Math.PI), { w: 2.6, h: 2.6, d: 0.6, screen: "screen6" });
   cabinet(kit, propFrame(kit, 12.4, fy, cz1 - 0.42, Math.PI), { w: 2.6, h: 2.6, d: 0.6, screen: "screen6" });
