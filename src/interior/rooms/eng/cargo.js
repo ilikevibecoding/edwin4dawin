@@ -7,7 +7,7 @@
 import * as THREE from "three";
 import { buildShell, roomWalls } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
-import { console as impConsole, ceilingLight, pointLightDesc, railing, catwalk, wallScreen, lockers, walkable, pipeRun, column, rng } from "../../impKit.js";
+import { console as impConsole, ceilingLight, pointLightDesc, spotLightDesc, railing, catwalk, wallScreen, lockers, walkable, pipeRun, column, crate, rng } from "../../impKit.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
@@ -135,6 +135,18 @@ export function buildCargo(kit, ctx) {
     xf.push({ pos: [cx, y, cz], quat: yawQ(yaw), color: palette[Math.floor(rand() * palette.length)] });
     kit.collider([cx - 1.8, y, cz - 1.8], [cx + 1.8, y + 2.4, cz + 1.8], "container");
   }
+  // receiving area inside the blast door, east of the lane: three containers just set down on a
+  // keep-clear hatch (one stacked), waiting for the sled parked in front of them
+  {
+    const RZ = 677.5;
+    for (const [cx, cz, yaw, col] of [[9.6, RZ - 0.1, 0.05, IMP.steel], [12.3, RZ + 0.1, 0.18, 0x7a3a2c]]) {
+      xf.push({ pos: [cx, y, cz], quat: yawQ(yaw), color: col });
+    }
+    xf.push({ pos: [9.7, y + C + 0.05, RZ], quat: yawQ(-0.12), color: IMP.fabricOlive });
+    kit.collider([8.2, y, RZ - 1.6], [13.8, y + 2 * C + 0.1, RZ + 1.6], "receiving");
+    deckMark(kit, 11.0, y, RZ, 6.6, 3.6, 2, 0);
+    hazardKerb(kit, [7.6, RZ - 2.1], [7.6, RZ + 2.1], y, { w: 0.22, h: 0.05 });
+  }
   const colorKeys = new Set(["impPaintedMetal"]);
 
   // ------------------------------------------------------------ loader sleds (original repulsor-sled shapes)
@@ -183,6 +195,16 @@ export function buildCargo(kit, ctx) {
   sled([17, y, 710.5], -Math.PI / 2 + 0.3, { color: IMP.red, seed: 2 });
   sled([-8, y, 730], Math.PI, { color: IMP.hazardYellow, forks: false, seed: 3 });
   toolCart(kit, [-16, y, 732.5], 0.5, { seed: 12 });
+  // receiving area: a sled nosed up to the fresh containers (forks toward them), and a pile of small
+  // crates being sorted on the west side of the lane with the checker's cart
+  sled([9.4, y, 684.2], 0, { color: IMP.hazardYellow, seed: 4 });
+  crate(kit, [-10.6, y, 676.4], [1.6, 1.2, 1.4], { seed: 61 });
+  crate(kit, [-8.6, y, 677.0], [1.3, 1.0, 1.2], { seed: 62, yaw: 0.3 });
+  crate(kit, [-10.5, y + 1.2, 676.5], [1.2, 0.9, 1.0], { seed: 63, yaw: -0.15 });
+  crate(kit, [-12.6, y, 678.4], [1.1, 0.8, 1.1], { seed: 64, yaw: 0.6 });
+  kit.collider([-13.3, y, 675.5], [-7.8, y + 2.2, 679.1], "sorting");
+  toolCart(kit, [-9.2, y, 680.6], 1.25, { seed: 13 });
+  deckMark(kit, -10.4, y, 677.4, 6.0, 4.0, 2, 0);
 
   // ------------------------------------------------------------ gantry crane on columns, carrying a container
   const CRX = 24;
@@ -299,7 +321,15 @@ export function buildCargo(kit, ctx) {
   }
 
   // ------------------------------------------------------------ lights: amber work light on long drops
-  for (const lx of [-30, 0, 30]) for (const lz of [676, 700, 724]) ceilingLight(kit, ctx, [lx, y + h, lz], 8, "x", { mat: "lightBandWarm", color: 0xffc27a, intensity: 10, distance: 30, priority: lx === 0 ? 2 : 1, drop: 5.0 });
+  // The bay is 92 x 76 m under a 12 m ceiling, so the fixtures hang their light 5.5 m over the deck and
+  // run hot; priority 2 keeps them ahead of the lobby lights in the pool when standing at the door. The
+  // two centre-lane fixtures over the receiving area and the lift hand over to shadow-casting spots.
+  for (const lx of [-30, 0, 30]) for (const lz of [676, 700, 724]) {
+    const spot = lx === 0 && lz !== 724;
+    ceilingLight(kit, ctx, [lx, y + h, lz], 8, "x", { mat: "lightBandWarm", color: 0xffc27a, intensity: spot ? 0 : 90, distance: 40, priority: 2, drop: 6.5 });
+  }
+  spotLightDesc(ctx, 0xffd3a0, 560, 40, [0, y + h - 1.4, 677], [0, y, 679], { angle: 0.8, penumbra: 0.5, priority: 2 }); // receiving lane
+  spotLightDesc(ctx, 0xffd3a0, 380, 40, [0, y + h - 1.4, LIFT.z - 2], [0, y, LIFT.z], { angle: 0.8, penumbra: 0.5, priority: 2 }); // lift plate (yellow paint blows out sooner)
   pointLightDesc(ctx, 0xdfe8ff, 3.0, 9, [0, y + 3.6, z0 + T + 2.0], 1); // blast door
 
   // ------------------------------------------------------------ views

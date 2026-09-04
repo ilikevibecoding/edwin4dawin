@@ -1,8 +1,9 @@
 // Engineering Control: the reactor's watch room. Its east wall is the shared wall with the reactor
 // chamber and carries a 26 m observation window so the core is visible from every station. Two tiers
 // of consoles face the window: a lower row on the deck and an upper row on a raised platform reached
-// by two short stairs, with the chief engineer's station in the middle of the platform. Behind them a
-// wall of status screens; a reactor schematic on the north wall; cable trays feed every row.
+// by two short stairs, with the chief engineer's station in the middle of the platform. The north wall
+// is a status wall of screens readable from both tiers; a reactor schematic hangs behind the upper
+// tier on the west wall; cable trays feed every row.
 import * as THREE from "three";
 import { buildShell, roomWalls } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
@@ -78,19 +79,29 @@ export function buildEngControl(kit, ctx) {
 
   // ------------------------------------------------------------ walls: screen wall, schematic, trays
   {
-    const w = walls.west;
-    const { frame } = wallFrame(kit, w.from, w.to, y);
-    screenBank(frame, w.u(576), 2.95, 6, 2, 1.55, 0.86, 5);
-    relayCabinet(frame, w.u(594.5), 0, 2.3, 2.0, 71);
-    relayCabinet(frame, w.u(557.5), 0, 2.3, 2.0, 73);
-    frame.quad("impDecal", w.u(587), 1.5, 0.064, 0.9, 0.9, { uvRect: impDecalRect(0) });
-    frame.quad("impDecal", w.u(565), 1.5, 0.064, 0.9, 0.9, { uvRect: impDecalRect(4) });
-  }
-  {
-    // north wall: reactor schematic (emissive line diagram) between two status screens + cable tray
+    // north wall: the status wall — 8 x 3 screens the whole watch can read from the deck, flanked by
+    // two larger displays, cable tray above with a drop to the lower row
     const w = walls.north;
     const { frame } = wallFrame(kit, w.from, w.to, y);
-    const cu = w.u(x0 + 13);
+    screenBank(frame, w.u(x0 + 15), 2.7, 8, 3, 1.55, 0.86, 5);
+    wallScreen(frame, w.u(x0 + 4.6), 2.4, 1.8, 1.0, 2);
+    wallScreen(frame, w.u(x0 + 24.2), 2.4, 1.6, 0.9, 0);
+    frame.quad("impDecal", w.u(x0 + 6.8), 1.2, 0.064, 0.7, 0.7, { uvRect: impDecalRect(11) });
+    cableTray(frame, 1.0, w.length - 1.0, h - 0.6, { n: 0.4, cables: 4 });
+    cableDrop(frame, w.u(x0 + 19), 0.9, h - 0.65, { n: 0.12 });
+  }
+  {
+    // west wall behind the upper tier: reactor schematic (emissive line diagram) between two status
+    // screens, relay cabinets in the corners
+    const w = walls.west;
+    const { frame } = wallFrame(kit, w.from, w.to, y);
+    relayCabinet(frame, w.u(594.5), 0, 2.3, 2.0, 71);
+    relayCabinet(frame, w.u(557.5), 0, 2.3, 2.0, 73);
+    frame.quad("impDecal", w.u(590), 1.5, 0.064, 0.9, 0.9, { uvRect: impDecalRect(0) });
+    frame.quad("impDecal", w.u(562), 1.5, 0.064, 0.9, 0.9, { uvRect: impDecalRect(4) });
+    wallScreen(frame, w.u(566), 2.4, 1.8, 1.0, 2);
+    wallScreen(frame, w.u(586), 2.4, 1.8, 1.0, 0);
+    const cu = w.u(576);
     frame.box("impPaintedMetal", cu, 2.6, 0.05, 7.0, 3.0, 0.08, { color: IMP.consoleDark, texel: 1 });
     frame.box("darkGloss", cu, 2.6, 0.095, 6.8, 2.8, 0.01);
     frame.add("emitBlue", new THREE.TorusGeometry(0.75, 0.035, 6, 40), cu, 2.7, 0.11, {});
@@ -105,10 +116,6 @@ export function buildEngControl(kit, ctx) {
     }
     frame.box("leds", cu, 1.3, 0.11, 3.0, 0.06, 0.01, { uv: "keep" });
     frame.quad("impDecal", cu, 3.75, 0.11, 0.5, 0.5, { uvRect: impDecalRect(11) });
-    wallScreen(frame, w.u(x0 + 5), 2.4, 1.8, 1.0, 2);
-    wallScreen(frame, w.u(x0 + 21), 2.4, 1.8, 1.0, 0);
-    cableTray(frame, 1.0, w.length - 1.0, h - 0.6, { n: 0.4, cables: 4 });
-    cableDrop(frame, w.u(x0 + 19), 0.9, h - 0.65, { n: 0.12 });
   }
   {
     const w = walls.south;
@@ -147,17 +154,17 @@ export function buildEngControl(kit, ctx) {
   floorDecal(kit, x0 + 15.5, y, z0 + 3, 1.0, 15);
 
   // ------------------------------------------------------------ lights
-  for (const [lz, pri] of [[566, 1], [576, 2], [586, 1]]) ceilingLight(kit, ctx, [x0 + 16, y + h, lz], 6, "x", { intensity: 4.2, distance: 12, color: 0xd6e2ff, priority: pri });
-  ceilingLight(kit, ctx, [x0 + 7.5, y + h, 576], 8, "z", { intensity: 3.2, distance: 11, color: 0xd6e2ff, priority: 1 });
-  ceilingLight(kit, ctx, [x0 + 12, y + h, 594.5], 7, "x", { intensity: 3.6, distance: 11, color: 0xd6e2ff, priority: 1 }); // entrance bay
+  for (const [lz, pri] of [[566, 1], [576, 2], [586, 1]]) ceilingLight(kit, ctx, [x0 + 16, y + h, lz], 6, "x", { intensity: 8, distance: 13, color: 0xd6e2ff, priority: pri });
+  ceilingLight(kit, ctx, [x0 + 7.5, y + h, 576], 8, "z", { intensity: 6, distance: 12, color: 0xd6e2ff, priority: 1 });
+  ceilingLight(kit, ctx, [x0 + 12, y + h, 594.5], 7, "x", { intensity: 7, distance: 12, color: 0xd6e2ff, priority: 1 }); // entrance bay
   pointLightDesc(ctx, 0x8fb8ff, 4.5, 16, [x1 - 1.6, y + 3.4, 573], 1); // core spill through the window
-  pointLightDesc(ctx, 0x6fa0ff, 2.6, 8, [x0 + 1.5, y + 2.9, 576], 0); // screen wall glow
+  pointLightDesc(ctx, 0x6fa0ff, 5.0, 12, [x0 + 15, y + 3.0, z0 + 1.6], 1); // status wall glow
   pointLightDesc(ctx, IMP.blue, 1.4, 6, [P.x1 + 0.4, y + 0.3, 576], 0); // platform kick glow
-  pointLightDesc(ctx, 0xdfe8ff, 2.5, 7, [x0 + 13, y + h - 0.6, z1 - 2], 0); // door
+  pointLightDesc(ctx, 0xdfe8ff, 6.0, 9, [x0 + 13, y + h - 0.6, z1 - 2], 1); // door
 
   // ------------------------------------------------------------ views
   ctx.view("engControl", x0 + 13, y + STD.eye, z1 - 2.2, 28, -3);
   ctx.view("engControl_window", x0 + 15, y + STD.eye, 574, -90, 3);
-  ctx.view("engControl_screens", x0 + 21, y + STD.eye, 575, 90, 1);
+  ctx.view("engControl_screens", x0 + 15.6, y + STD.eye, 569.0, 4, 3);
   void rand;
 }

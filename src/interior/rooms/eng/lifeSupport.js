@@ -318,7 +318,7 @@ export function buildLifeSupport(kit, ctx) {
 
   // ------------------------------------------------------------ views
   ctx.view("lifeSupport", x1 - T - 1.6, y + STD.eye, 634, 90, -2);
-  ctx.view("lifeSupport_tanks", -29.5, y + STD.eye, 645.5, 118, 2);
+  ctx.view("lifeSupport_tanks", -27.5, y + STD.eye, 649.5, 82, 3);
   ctx.view("lifeSupport_scrubbers", -12.5, y + STD.eye, 631.5, 40, 4);
   void rand;
 }
