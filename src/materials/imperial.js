@@ -304,17 +304,17 @@ export function buildImperialMaterials() {
 
   // indicator grids (three densities) with the blink shader
   mats.blink = blinkPatch(
-    new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: makeIndicatorGrid(512, 256, 351), emissiveIntensity: 2.2, roughness: 0.3, metalness: 0 }),
+    new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: makeIndicatorGrid(512, 256, 351, { density: 0.42 }), emissiveIntensity: 1.9, roughness: 0.3, metalness: 0 }),
     [32, 16],
     1.0,
   );
   mats.blinkSparse = blinkPatch(
-    new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: makeIndicatorGrid(512, 256, 353, { density: 0.3 }), emissiveIntensity: 2.2, roughness: 0.3, metalness: 0 }),
+    new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: makeIndicatorGrid(512, 256, 353, { density: 0.22 }), emissiveIntensity: 1.9, roughness: 0.3, metalness: 0 }),
     [32, 16],
     0.7,
   );
   mats.blinkDense = blinkPatch(
-    new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: makeIndicatorGrid(512, 256, 357, { cols: 48, rows: 24, density: 0.7 }), emissiveIntensity: 2.0, roughness: 0.3, metalness: 0 }),
+    new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: makeIndicatorGrid(512, 256, 357, { cols: 48, rows: 24, density: 0.5 }), emissiveIntensity: 1.8, roughness: 0.3, metalness: 0 }),
     [48, 24],
     1.4,
   );

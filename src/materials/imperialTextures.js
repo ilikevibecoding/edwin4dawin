@@ -313,23 +313,74 @@ export function makeIndicatorGrid(w = 512, h = 256, seed = 351, { cols = 32, row
   const rand = mulberry32(seed);
   ctx.fillStyle = "#050607";
   ctx.fillRect(0, 0, w, h);
-  const colors = ["#ff2a1a", "#ff2a1a", "#2f7bff", "#2f7bff", "#2f7bff", "#ffb020", "#e8ecff", "#4fd8cc", "#ff6a3a"];
+  // Ordered console light banks, not confetti: the grid is split into blocks of 3–8 columns, each
+  // block carries one colour family and one pattern (solid row, alternating, bar-graph run, single
+  // status lamp), and whole blocks / rows stay dark so the panel reads as engineered switchgear.
+  const families = [
+    ["#3a86ff", "#3a86ff", "#5a9cff", "#9fc3ff"],
+    ["#3a86ff", "#e8ecff", "#3a86ff"],
+    ["#ff2a1a", "#ff2a1a", "#ff6a3a"],
+    ["#ffb020", "#ffb020", "#ffd27a"],
+    ["#e8ecff", "#e8ecff", "#c9d4ff"],
+    ["#3ddc84", "#3a86ff"],
+  ];
+  const famWeights = [0.34, 0.2, 0.12, 0.14, 0.14, 0.06];
+  const pickFamily = () => {
+    let r = rand();
+    for (let i = 0; i < families.length; i++) {
+      r -= famWeights[i];
+      if (r <= 0) return families[i];
+    }
+    return families[0];
+  };
   const cw = w / cols;
   const ch = h / rows;
-  for (let r = 0; r < rows; r++) {
-    for (let k = 0; k < cols; k++) {
-      if (rand() > density) continue;
-      const col = colors[Math.floor(rand() * colors.length)];
-      ctx.fillStyle = col;
-      const x = k * cw + cw * 0.5;
-      const y = r * ch + ch * 0.5;
-      if (rand() < 0.5) ctx.fillRect(x - cw * 0.3, y - ch * 0.3, cw * 0.6, ch * 0.6);
-      else {
-        ctx.beginPath();
-        ctx.arc(x, y, Math.min(cw, ch) * 0.28, 0, Math.PI * 2);
-        ctx.fill();
+  const lamp = (k, r, col, shape) => {
+    ctx.fillStyle = col;
+    const x = k * cw + cw * 0.5;
+    const y = r * ch + ch * 0.5;
+    if (shape === "bar") ctx.fillRect(x - cw * 0.36, y - ch * 0.16, cw * 0.72, ch * 0.32);
+    else if (shape === "square") ctx.fillRect(x - cw * 0.24, y - ch * 0.24, cw * 0.48, ch * 0.48);
+    else {
+      ctx.beginPath();
+      ctx.arc(x, y, Math.min(cw, ch) * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+  // dark separators every few rows (panel joints)
+  const rowOn = [];
+  for (let r = 0; r < rows; r++) rowOn.push(rand() < 0.82);
+  let k = 0;
+  while (k < cols) {
+    const bw = 3 + Math.floor(rand() * 6);
+    const fam = pickFamily();
+    const pattern = rand();
+    const shape = rand() < 0.5 ? "square" : rand() < 0.5 ? "dot" : "bar";
+    const blockOn = rand() < density + 0.25;
+    for (let r = 0; r < rows; r++) {
+      if (!blockOn || !rowOn[r]) continue;
+      for (let i = 0; i < bw && k + i < cols; i++) {
+        const cc = fam[Math.floor(rand() * fam.length)];
+        if (pattern < 0.3) {
+          // solid row at reduced density
+          if (rand() < density) lamp(k + i, r, cc, shape);
+        } else if (pattern < 0.55) {
+          // alternating
+          if ((i + r) % 2 === 0 && rand() < density + 0.2) lamp(k + i, r, cc, shape);
+        } else if (pattern < 0.8) {
+          // bar graph: lit run from the left, length varies per row
+          const run = Math.floor(rand() * (bw + 1));
+          if (i < run) lamp(k + i, r, i === run - 1 && rand() < 0.4 ? "#ffb020" : cc, "bar");
+        } else {
+          // sparse status lamps
+          if (rand() < 0.18) lamp(k + i, r, cc, "dot");
+        }
       }
     }
+    // thin dark joint line after the block
+    ctx.fillStyle = "#0b0d10";
+    ctx.fillRect((k + bw) * cw - 1, 0, 2, h);
+    k += bw;
   }
   return toTexture(c, { srgb: true, wrap: true });
 }

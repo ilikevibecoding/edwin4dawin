@@ -165,22 +165,22 @@ export class Door {
       const p = place(x, y, z);
       return kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [p.x, p.y, p.z], quat: q, ...extra });
     };
-    box("impPaintedMetal", -w / 2 - jamb / 2, h / 2 + 0.1, 0, jamb, h + 0.2, frameD, { color: trim, texel: 1 });
-    box("impPaintedMetal", w / 2 + jamb / 2, h / 2 + 0.1, 0, jamb, h + 0.2, frameD, { color: trim, texel: 1 });
-    box("impPaintedMetal", 0, h + 0.1 + jamb / 2, 0, w + jamb * 2, jamb, frameD, { color: trim, texel: 1 });
+    box("impPanel", -w / 2 - jamb / 2, h / 2 + 0.1, 0, jamb, h + 0.2, frameD, { color: trim, uv: "world", texel: 0.8 });
+    box("impPanel", w / 2 + jamb / 2, h / 2 + 0.1, 0, jamb, h + 0.2, frameD, { color: trim, uv: "world", texel: 0.8 });
+    box("impPanel", 0, h + 0.1 + jamb / 2, 0, w + jamb * 2, jamb, frameD, { color: trim, uv: "world", texel: 0.8 });
     box("impDeck", 0, -0.006, 0, w + jamb * 2, 0.012, frameD, { color: IMP.wallDark, texel: 1 });
     for (const s of [-1, 1]) {
       const cb = new THREE.BoxGeometry(jamb * 1.4, jamb * 1.4, frameD + 0.02);
       cb.rotateZ(Math.PI / 4);
       const p = place(s * (w / 2 + jamb * 0.2), h + 0.1 + jamb * 0.2, 0);
-      kit.add("impPaintedMetal", cb, { pos: [p.x, p.y, p.z], quat: q, color: trim, texel: 1 });
+      kit.add("impPanel", cb, { pos: [p.x, p.y, p.z], quat: q, color: trim, texel: 1 });
     }
     for (const side of [-1, 1]) {
       const zf = side * (frameD / 2 + 0.004);
       box("impMetal", -w / 2 - jamb / 2, h / 2 + 0.1, zf, 0.04, h - 0.2, 0.008, { color: IMP.steel });
       box("impMetal", w / 2 + jamb / 2, h / 2 + 0.1, zf, 0.04, h - 0.2, 0.008, { color: IMP.steel });
-      box("impPaintedMetal", 0, h + 0.1 + jamb * 0.5, zf + 0.02 * side, Math.min(1.2, w * 0.5), jamb * 0.5, 0.05, { color: IMP.consoleDark, texel: 1 });
-      box("impPaintedMetal", side * (w / 2 + jamb / 2), 1.25, zf + 0.02 * side, 0.16, 0.24, 0.05, { color: IMP.consoleDark, texel: 1 });
+      box("impPanel", 0, h + 0.1 + jamb * 0.5, zf + 0.02 * side, Math.min(1.2, w * 0.5), jamb * 0.5, 0.05, { color: IMP.consoleDark, uv: "world", texel: 0.8 });
+      box("impPanel", side * (w / 2 + jamb / 2), 1.25, zf + 0.02 * side, 0.16, 0.24, 0.05, { color: IMP.consoleDark, uv: "world", texel: 0.8 });
       box("blinkSparse", side * (w / 2 + jamb / 2), 1.3, zf + 0.05 * side, 0.12, 0.1, 0.006, { uv: "keep" });
       const dg = new THREE.PlaneGeometry(0.22, 0.22);
       if (side < 0) dg.rotateY(Math.PI);
