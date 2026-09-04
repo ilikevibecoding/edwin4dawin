@@ -1,13 +1,18 @@
 # Demo recording
 
-`neo_detroit_demo_360p.mp4` — a 9 minute 30 second playthrough of all three
-chapters, captured from the game itself. Scripted input, nothing pre-baked; the
-choices it makes are one path through the branching script, so the outcomes and
-the closing cards are specific to that run.
+A 9 minute 30 second playthrough of all three chapters, captured from the game
+itself. Scripted input, nothing pre-baked; the choices it makes are one path
+through the branching script, so the outcomes and the closing cards are specific
+to that run.
 
-640x360, H.264 Main profile, AAC stereo, 15 MB. Deliberately small and
-conservatively encoded so it downloads quickly and plays anywhere, including
-inline in a browser or a pull request.
+| file | size | for |
+| --- | --- | --- |
+| `neo_detroit_demo_540p.mp4` | 960x540, 49 MB | watching it properly |
+| `neo_detroit_demo_360p.mp4` | 640x360, 15 MB | quick download, playing inline |
+
+Both are H.264 Main profile with AAC stereo and the index at the front of the
+file, so they start playing before the download finishes and do not need a
+player that copes with a high-profile stream.
 
 ## Regenerating it
 
