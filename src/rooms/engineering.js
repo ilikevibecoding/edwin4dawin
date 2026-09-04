@@ -2,20 +2,24 @@
 // banks around a holo ship schematic with a sweeping scan line) on the W wall, two rows of engineer
 // consoles facing it, a supervisor pulpit on a dais behind them, an 8 m power-distribution breaker
 // board on the N wall, equipment racks and coolant manifolds on the S wall, clamped pipe runs with
-// valve stations and gauges along both long walls, grated cable trenches feeding the console rows.
-// Amber key light, white console fill.
+// valve stations and gauges along both long walls, grated cable trenches feeding the console rows, and
+// a power-distribution island (two transformer banks under their own hooded lamps, bus ducts to the
+// walls) filling the E half between the door and the pulpit.
+// Light: the amber wash on the display wall is the key; hooded lamps pool light on the console rows,
+// the pulpit and the transformer banks; the ceiling slots are dim recessed lines, never the key.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impConsole, impChair, impRailing, impWallGear, impWallLight, impCrate, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { rng } from "../kit.js";
-import { ensureDeckDMaterials, shellNoFloor, deckFloor, grateTrench, screenBank, breakerBoard, pipe, valveWheel, gauge, junctionBox, equipmentRack, dais, blinkers, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, ceilingLamp } from "./deck_d_kit.js";
+import { ensureDeckDMaterials, shellNoFloor, deckFloor, grateTrench, screenBank, breakerBoard, pipe, valveWheel, gauge, junctionBox, equipmentRack, dais, blinkers, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, ceilingLamp, shroudLamp, cableTray, hexBolt, hazardBorder } from "./deck_d_kit.js";
 
 export function buildEngineering(kit, ctx, room) {
   const [w, h, d] = room.size;
   const hx = w / 2;
   const hz = d / 2;
   const accentKey = "emitAmber";
+  const DIM = "emitAmberDim"; // amber practicals (rail LEDs, cabinet strips, lamp lenses)
   ensureDeckDMaterials(kit);
   const rand = rng(4471);
 
@@ -23,9 +27,9 @@ export function buildEngineering(kit, ctx, room) {
   const walls = shellNoFloor(kit, room, ctx.doors, {
     accentKey,
     seed: 913,
-    wall: { panelW: 1.9, features: { vent: 0.08, equipment: 0.14, conduit: 0.1, light: 0.06, screen: 0.08 }, altChance: 0.25 },
+    wall: { panelW: 1.9, features: { vent: 0.08, equipment: 0.14, conduit: 0.1, light: 0.0, screen: 0.08 }, altChance: 0.25 },
     walls: { W: { features: { vent: 0.0, equipment: 0.0, conduit: 0.0, light: 0.0, screen: 0.0 }, altChance: 0.6, panelColor: PALETTE.impGrey } },
-    ceiling: { troughs: 2, troughW: 0.55, beamStep: 3.25, accentKey },
+    ceiling: { troughs: 2, troughW: 0.36, beamStep: 3.25, accentKey: DIM, lightKey: "roomsd_slot" },
   });
   const trenches = [
     { x0: -12.6, z0: -9.6, x1: -11.7, z1: 9.6 },
@@ -110,9 +114,9 @@ export function buildEngineering(kit, ctx, room) {
       else {
         W.box("impGloss", u, 1.0, 0.575, 0.9, 0.22, 0.01);
         W.box("impMetal", u, 0.62, 0.58, 0.3, 0.03, 0.02, { color: PALETTE.impGrey });
-        W.box(i % 2 ? accentKey : "emitWhite", u - 0.4, 1.0, 0.58, 0.04, 0.04, 0.01);
+        W.box(i % 2 ? accentKey : "emitWhiteDim", u - 0.4, 1.0, 0.58, 0.04, 0.04, 0.01);
       }
-      W.box(accentKey, u, 1.36, 0.565, 1.0, 0.02, 0.01);
+      W.box(DIM, u, 1.36, 0.565, 1.0, 0.02, 0.01);
     }
     W.collider(cu0 - 0.1, cu1 + 0.1, 0, 1.4, 0, 0.6, "displayCabinet");
     W.collider(cu0 - 0.1, cu1 + 0.1, 1.4, h, 0, 0.2, "displayWall");
@@ -125,13 +129,14 @@ export function buildEngineering(kit, ctx, room) {
     for (const du of [-5.2, 0, 5.2]) impWallLight(W, uc + du, h - 0.55, { key: accentKey, w: 1.6 });
   }
 
-  // --- engineer console rows (face W = yaw +90°); chairs on the E side
+  // --- engineer console rows (face W = yaw +90°); chairs on the E side; every station a different screen set
   const rowA = { x: -10.5, zs: [-6.6, -2.2, 2.2, 6.6], w: 3.0 };
   const rowB = { x: -6.3, zs: [-4.4, 0, 4.4], w: 3.4 };
+  const stationScreens = [["scrAmber0", "scrBlue2", "scrAmber1"], ["scrAmber2", "scrBlue0", "scrAmber3"], ["scrBlue1", "scrAmber1", "scrAmber2"], ["scrAmber3", "scrBlue3", "scrAmber0"]];
   let seed = 100;
   for (const row of [rowA, rowB]) {
     for (const z of row.zs) {
-      impConsole(kit, row.x, 0, z, row.w, 0.9, { yaw: Math.PI / 2, seed: seed++, screens: ["scrAmber0", "scrBlue0", "scrAmber1"], accentKey });
+      impConsole(kit, row.x, 0, z, row.w, 0.9, { yaw: Math.PI / 2, seed: seed++, screens: stationScreens[seed % stationScreens.length], accentKey });
       impChair(kit, row.x + 1.05, 0, z, Math.PI / 2);
       // a cable drop from the console's back to the trench beside it
       cable(kit, [[row.x - 0.45, 0.35, z - 0.6], [row.x - 0.9, 0.1, z - 0.7], [row.x - 1.35, -0.2, z - 0.75]], 0.025, { color: PALETTE.impBlack });
@@ -146,11 +151,11 @@ export function buildEngineering(kit, ctx, room) {
     dais(kit, x0, z0, x1, z1, 0.3, { hazard: false });
     impConsole(kit, -2.2, 0.32, 0, 2.6, 0.9, { yaw: Math.PI / 2, seed: 77, screens: ["scrAmber1", "scrBlue1"], accentKey, tall: true });
     impChair(kit, -1.1, 0.32, 0, Math.PI / 2);
-    impRailing(kit, [x0 + 0.1, z0 + 0.1], [x0 + 0.1, z1 - 0.1], 0.32, { light: accentKey });
+    impRailing(kit, [x0 + 0.1, z0 + 0.1], [x0 + 0.1, z1 - 0.1], 0.32, { light: DIM });
     impRailing(kit, [x0 + 0.1, z0 + 0.1], [x1 - 0.1, z0 + 0.1], 0.32);
     impRailing(kit, [x0 + 0.1, z1 - 0.1], [x1 - 0.1, z1 - 0.1], 0.32);
-    // deck stencil + amber edge glow
-    kit.boxMM(accentKey, [x1 - 0.05, 0.02, z0 + 0.3], [x1 - 0.02, 0.3, z1 - 0.3]);
+    // deck stencil + dim amber kick strip on the dais riser
+    kit.boxMM(DIM, [x1 - 0.05, 0.04, z0 + 0.3], [x1 - 0.02, 0.1, z1 - 0.3]);
     decalImp(kit, IMP_DECAL.cog, [-1.3, 0.34, -1.5], "up", 0.7);
   }
 
@@ -248,15 +253,70 @@ export function buildEngineering(kit, ctx, room) {
   decalD(kit, DECK_D_DECAL.scorch, [-6.4, 0.018, -hz + 1.6], "up", 1.3);
   decalD(kit, DECK_D_DECAL.streak, [-13.5, 0.9, -hz + 0.075], "+z", 1.6, { h: 1.2 });
 
-  // --- lights: amber key over the display + rows, white console fill, white over the boards, amber floor fill
+  // --- power-distribution island in the E half: two transformer banks (three cabinets each with coil
+  // stacks on top), a bus duct from each bank up into the ceiling and out to its wall, floor cable trays
+  // from the banks to the wall junction boxes, hazard borders. Fills the floor between door and pulpit.
+  const bankX = [6.0, 8.0, 10.0];
+  for (const s of [-1, 1]) {
+    const zc = s * 5.4;
+    const F = s < 0 ? N : S;
+    for (const [i, x] of bankX.entries()) {
+      kit.box("impTrim", x, 1.1, zc, 1.8, 2.2, 1.5, { color: PALETTE.impBlack, texel: 1 });
+      kit.box("impMetal", x, 0.06, zc, 1.9, 0.12, 1.6, { color: PALETTE.impCharcoal, texel: 1 });
+      // lane-facing front: grey panel, louvre grille, gauge, status LEDs, power stencil, corner bolts
+      const zf = zc - s * 0.76;
+      const face = s < 0 ? "+z" : "-z";
+      kit.box("impMetal", x, 1.15, zf, 1.6, 1.9, 0.02, { color: PALETTE.impGrey, texel: 1.5 });
+      for (let k = 0; k < 7; k++) kit.box("impTrim", x, 0.55 + k * 0.09, zf - s * 0.012, 1.1, 0.03, 0.02, { color: PALETTE.impBlack });
+      gauge(kit, [x - 0.5, 1.75, zf - s * 0.02], face, 0.11, { seed: 300 + i + (s > 0 ? 3 : 0), warn: i === 1 && s > 0 });
+      for (let k = 0; k < 3; k++) kit.box(k === 2 && i === 1 ? "emitRedImp" : k === 0 ? accentKey : DIM, x + 0.15 + k * 0.18, 1.75, zf - s * 0.015, 0.06, 0.06, 0.01);
+      decalImp(kit, IMP_DECAL.power, [x + 0.45, 1.3, zf - s * 0.02], face, 0.32);
+      decalImp(kit, IMP_DECAL.glyphs2, [x - 0.4, 1.3, zf - s * 0.02], face, 0.3);
+      for (const [du, dv] of [[-0.72, 0.15], [0.72, 0.15], [-0.72, 2.05], [0.72, 2.05]]) hexBolt(kit, [x + du, dv, zf - s * 0.012], face, 0.04);
+      // coil stack on the roof: three insulator columns with a bus bar across
+      for (let k = 0; k < 3; k++) {
+        const cxk = x - 0.5 + k * 0.5;
+        kit.cyl("impMetal", cxk, 2.5, zc, 0.16, 0.6, "y", { color: PALETTE.impGreyDark, segments: 14 });
+        for (let r = 0; r < 4; r++) kit.cyl("impTrim", cxk, 2.3 + r * 0.14, zc, 0.2, 0.04, "y", { color: PALETTE.impBlack, segments: 14 });
+        kit.cyl("impMetal", cxk, 2.86, zc, 0.06, 0.12, "y", { color: PALETTE.impGrey, segments: 8 });
+      }
+      kit.box("impMetal", x, 2.92, zc, 1.2, 0.05, 0.1, { color: PALETTE.impGrey });
+      kit.collider([x - 0.95, 0, zc - 0.8], [x + 0.95, 2.3, zc + 0.8], "transformer");
+    }
+    // bus duct along the bank tops; at the E end a riser into the ceiling and a spur to the wall (the E
+    // end keeps both clear of the S manifold risers and the N valve-station drops)
+    const xe = bankX[2] + 0.7;
+    kit.boxMM("impTrim", [bankX[0] - 0.9, 3.0, zc - 0.2], [xe + 0.2, 3.4, zc + 0.2], { color: PALETTE.impBlack, texel: 1 });
+    for (const x of bankX) kit.box("impMetal", x, 2.98, zc, 0.5, 0.12, 0.5, { color: PALETTE.impCharcoal, texel: 1 });
+    kit.boxMM("impTrim", [xe - 0.2, 3.4, zc - 0.2], [xe + 0.2, h - 0.4, zc + 0.2], { color: PALETTE.impBlack, texel: 1 });
+    kit.box("impMetal", xe, h - 0.42, zc, 0.6, 0.06, 0.6, { color: PALETTE.impCharcoal });
+    kit.boxMM("impTrim", [xe - 0.2, 3.0, s < 0 ? -(hz - 0.1) : zc + 0.2], [xe + 0.2, 3.4, s < 0 ? zc - 0.2 : hz - 0.1], { color: PALETTE.impBlack, texel: 1 });
+    kit.box("impTrim", xe, 3.2, s * (hz - 0.3), 0.9, 0.9, 0.5, { color: PALETTE.impBlack, texel: 1 });
+    // floor cable tray from the bank's wall side into a wall box, and a wall stencil
+    cableTray(kit, [[xe - 0.3, 0, zc + s * 0.8], [xe - 0.3, 0, s * (hz - 0.45)]], { w: 0.44, seed: 330 + s, cables: 3 });
+    kit.box("impTrim", xe - 0.3, 0.14, s * (hz - 0.32), 0.7, 0.28, 0.3, { color: PALETTE.impBlack, texel: 1 });
+    F.decal(IMP_DECAL.hazard, wallU(room, s < 0 ? "N" : "S", xe), 2.3, 0.03, 0.45);
+    hazardBorder(kit, bankX[0] - 1.3, zc - 1.2, bankX[2] + 1.3, zc + 1.2, 0, 0.22);
+    // hooded lamp over the bank (its point light is the E half's work light)
+    shroudLamp(kit, [bankX[1], h - 0.08, zc], [bankX[1], 4.15, zc], [bankX[1], 2.3, zc], { key: "emitWhiteDim", size: 0.5 });
+  }
+  decalD(kit, DECK_D_DECAL.scorch, [bankX[0] - 0.4, 0.018, -3.6], "up", 1.1);
+  decalD(kit, DECK_D_DECAL.grime, [bankX[2] + 0.6, 0.018, 4.0], "up", 1.3);
+
+  // --- lights (8). Key: the amber wash on the display wall (spot) + the two amber lamps at its ends.
+  // Work light: hooded lamps over each console row, the pulpit and both transformer banks. No bare
+  // ceiling points: the ceiling slots are dim recessed lines.
   const amber = 0xffb040;
+  const work = 0xe6ecff;
   kit.light({ type: "spot", pos: [-12.0, h - 0.4, 0], target: [-17, 2.2, 0], color: amber, intensity: lux(5.5, 3.0), distance: 16, angle: 1.15, penumbra: 0.55, priority: 0.7 });
-  for (const z of [-8.0, 8.0]) ceilingLamp(kit, -11.5, z, h, accentKey, 0.6);
+  for (const z of [-8.0, 8.0]) ceilingLamp(kit, -11.5, z, h, DIM, 0.6);
   kit.light({ type: "point", pos: [-11.5, h - 0.5, -8.0], color: amber, intensity: lux(h - 0.5, 1.8), distance: 13, priority: 0.62 });
   kit.light({ type: "point", pos: [-11.5, h - 0.5, 8.0], color: amber, intensity: lux(h - 0.5, 1.8), distance: 13, priority: 0.61 });
-  kit.light({ type: "point", pos: [-8.5, h - 0.6, -4.5], color: 0xe6ecff, intensity: lux(h - 0.6, 3.0), distance: 15, priority: 0.58 });
-  kit.light({ type: "point", pos: [-8.5, h - 0.6, 4.5], color: 0xe6ecff, intensity: lux(h - 0.6, 3.0), distance: 15, priority: 0.57 });
-  kit.light({ type: "point", pos: [-1.5, h - 0.6, 0], color: 0xe6ecff, intensity: lux(h - 0.6, 2.6), distance: 15, priority: 0.5 });
-  kit.light({ type: "point", pos: [-6.0, h - 0.7, -10.0], color: 0xf4ecdc, intensity: lux(h - 0.7, 2.4), distance: 13, priority: 0.42 });
-  kit.light({ type: "point", pos: [6.0, h - 0.7, 6.0], color: 0xf4ecdc, intensity: lux(h - 0.7, 2.4), distance: 15, priority: 0.41 });
+  for (const z of [-4.5, 4.5]) {
+    shroudLamp(kit, [-8.4, h - 0.08, z], [-8.4, 4.05, z], [-8.4, 0.9, z], { key: "emitWhiteDim", size: 0.55 });
+    kit.light({ type: "point", pos: [-8.4, 3.8, z], color: work, intensity: lux(3.0, 3.4), distance: 13, priority: z < 0 ? 0.58 : 0.57 });
+  }
+  shroudLamp(kit, [-1.4, h - 0.08, 0], [-1.4, 4.1, 0], [-2.2, 1.0, 0], { key: "emitWhiteDim", size: 0.5 });
+  kit.light({ type: "point", pos: [-1.4, 3.85, 0], color: work, intensity: lux(3.0, 2.8), distance: 13, priority: 0.5 });
+  for (const s of [-1, 1]) kit.light({ type: "point", pos: [bankX[1], 3.9, s * 5.4], color: 0xf4ecdc, intensity: lux(3.6, 3.6), distance: 16, priority: 0.44 + (s < 0 ? 0.01 : 0) });
 }
