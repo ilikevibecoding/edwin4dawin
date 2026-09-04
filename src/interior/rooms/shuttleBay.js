@@ -1,9 +1,12 @@
 // Deck 5 — Shuttle & Secondary Docking Bay. A 53.6 × 70 × 18 m bay off the main hangar's port
 // portal: a raised landing pad with painted markings and a blue ring light, an Imperial-style shuttle
-// parked on it with its wings folded up and the boarding ramp down, docking clamps and fuel lines,
-// floodlight masts, ground-crew carts and a bowser by the portal, cargo pallets, a glassed control
-// booth and a huge closed space door in the far wall: dark plated leaves with horizontal seams in a
-// red-lit frame. Lit by one cool key over the shuttle, a warm flood over the apron and the red door glow.
+// parked on it with its wings folded up (panel lines, edge lights, wing-tip cannon pods) and the
+// boarding ramp down, docking clamps and fuel lines, floodlight masts, ground crew by the portal (two
+// deck crew, a tug, a bowser with lines to the pad, carts, containers), cargo pallets, a glassed control
+// booth and a huge closed space door in the far wall — dark plated leaves with horizontal seams in a
+// red-lit frame, set 12 m forward of the pad axis (the shuttle parks 4 m aft of the centre mark) so it
+// reads past the shuttle's nose from the portal. Lit by one cool key over the shuttle, a warm flood over
+// the apron and the red door glow.
 //
 // Deck-local metres, floor y = 0. Room bounds x -90..-36.4, y 0..18, z -140..-70.
 import * as THREE from "three";
@@ -12,12 +15,14 @@ import { impWall, impFloor, impCeiling, impConsole, wallScreen, equipmentRack, c
 import { pointLight, wallFrame } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
-import { bowser, toolCart } from "./hangar.js";
+import { bowser, toolCart, cargoPod } from "./hangar.js";
 
 const PAD = { x: -64, z: -105, hw: 15, hd: 12, y: 0.12 }; // landing pad centre, half extents, height
+const SHUTTLE_Z = PAD.z + 4; // parked a little off the pad's centre mark, toward the aft half of the pad
+const DOOR_Z = PAD.z - 12; // space door centre: forward of the pad axis so it is not hidden behind the shuttle from the portal
 const SHUTTLE_YAW = -0.85; // parked in 3/4 view: nose toward the portal (+x) and forward (-z)
 const YELLOW = new THREE.Color("#d9b23c");
-const KEY = [PAD.x + 5, 15.6, PAD.z - 3]; // cool key light over the shuttle's nose quarter
+const KEY = [PAD.x + 5, 15.6, SHUTTLE_Z - 3]; // cool key light over the shuttle's nose quarter
 
 export function buildShuttleBay(kit, ctx) {
   const [min, max] = ctx.bounds;
@@ -25,7 +30,7 @@ export function buildShuttleBay(kit, ctx) {
   ensureMaterials(ctx);
   shell(kit, ctx);
   landingPad(kit, ctx);
-  const hookup = shuttle(kit, ctx, PAD.x, PAD.z, SHUTTLE_YAW);
+  const hookup = shuttle(kit, ctx, PAD.x, SHUTTLE_Z, SHUTTLE_YAW);
   clampsAndFuel(kit, ctx, min, max, hookup);
   blastDoor(kit, ctx, min, max);
   controlBooth(kit, ctx, -46, -75.5);
@@ -84,7 +89,7 @@ function shell(kit, ctx) {
     ],
   });
   // pilasters and a string course; a heavy lintel over the portal to the main bay
-  for (const z of [-134, -122, -88, -76]) pillar(kit, min[0] + 0.4, z, 0, H, 0.8, PALETTE.impMid);
+  for (const z of [-136, DOOR_Z - 15.5, DOOR_Z + 15.5, -88, -76]) pillar(kit, min[0] + 0.4, z, 0, H, 0.8, PALETTE.impMid);
   for (const x of [-84, -72, -60, -48]) {
     pillar(kit, x, min[2] + 0.4, 0, H, 0.8, PALETTE.impMid);
     pillar(kit, x, max[2] - 0.4, 0, H, 0.8, PALETTE.impMid);
@@ -239,6 +244,41 @@ function shuttle(kit, ctx, X, Z, yaw = 0) {
       ig.rotateZ(lean);
       add("tiePanel", ig, s * 1.9, 4.0, 1.4);
     }
+    // wing greebles, placed in the wing shape's frame (shape x = fore/aft, y = up the wing, depth
+    // = across the slab) and run through the same transform chain as the slab itself
+    const onWing = (mat, geo, sx, sy, depth) => {
+      geo.translate(sx, sy, depth);
+      geo.rotateY(-Math.PI / 2);
+      geo.translate(0.13, 0, 0);
+      geo.rotateZ(lean);
+      add(mat, geo, s * 1.9, 4.0, 1.4);
+    };
+    const lead = (sy) => -3.4 + 2.8 * (sy / 9.6); // leading (forward) edge x at height sy
+    const trail = (sy) => 3.4 - 0.4 * (sy / 9.6); // trailing edge
+    const atX = (xf) => 0.13 - xf; // shape depth that lands a geometry's centre at final wing x = xf
+    for (const f of [-1, 1]) {
+      const depth = atX(f > 0 ? 0.17 : -0.21); // flush with the inner panel face on each side
+      // raised panel lines across the wing and two spars up it
+      for (const sy of [2.2, 4.0, 5.8, 7.4]) {
+        const x0 = lead(sy) + 0.5;
+        const x1 = trail(sy) - 0.5;
+        onWing("tieHull", new THREE.BoxGeometry(x1 - x0, 0.07, 0.04), (x0 + x1) / 2, sy, depth);
+      }
+      for (const sx of [-1.4, 1.3]) onWing("tieHull", new THREE.BoxGeometry(0.07, 6.4, 0.04), sx, 4.6, depth);
+      // hatch plates and a marker stencil
+      onWing("tiePanel", new THREE.BoxGeometry(0.9, 0.6, 0.05), 0.4, 3.0, depth);
+      onWing("tiePanel", new THREE.BoxGeometry(0.7, 0.5, 0.05), 1.6, 6.6, depth);
+      onWing("emitRed", new THREE.BoxGeometry(0.5, 0.09, 0.04), 0.9, 4.9, depth);
+    }
+    // white edge lights along the leading edge and an amber one on the trailing edge
+    for (const sy of [2.6, 5.2, 7.8]) onWing("emitWhite", new THREE.BoxGeometry(0.16, 0.4, 0.34), lead(sy) + 0.06, sy, atX(0));
+    onWing("emitAmber", new THREE.BoxGeometry(0.16, 0.4, 0.34), trail(4.8) - 0.06, 4.8, atX(0));
+    // wing-tip cannon pod: fairing through the slab, twin barrels reaching forward past the leading edge
+    onWing("tiePanel", new THREE.BoxGeometry(2.0, 0.7, 0.6), 0.9, 8.9, atX(0));
+    for (const xf of [-0.16, 0.16]) {
+      onWing("tieHull", new THREE.CylinderGeometry(0.11, 0.13, 3.4, 10).rotateZ(Math.PI / 2), -0.6, 8.95, atX(xf));
+      onWing("tiePanel", new THREE.CylinderGeometry(0.15, 0.15, 0.5, 10).rotateZ(Math.PI / 2), -2.2, 8.95, atX(xf));
+    }
     // hinge fairing and a red tip light (the wings stay well above head height: no collider needed)
     cylZ("tiePanel", s * 1.9, 4.0, 1.4, 0.45, 5.6);
     const tip = new THREE.Vector3(0, 9.7, 1.4).applyAxisAngle(new THREE.Vector3(0, 0, 1), lean);
@@ -342,9 +382,9 @@ function clampsAndFuel(kit, ctx, min, max, hookup) {
 // ---------------------------------------------------------------------------
 function blastDoor(kit, ctx, min, max) {
   const x = min[0];
-  const zc = PAD.z;
-  const hw = 14; // half width along z
-  const h = 14.5;
+  const zc = DOOR_Z;
+  const hw = 12; // half width along z
+  const h = 15;
   const d = 1.4; // frame depth: the door stands well proud of the plate wall
   // frame: jambs, head, sill, black with a light-grey chamfer band and coarse hazard strips
   kit.boxMM("paintedMetal", [x, 0, zc - hw - 1.6], [x + d + 0.3, h + 1.6, zc - hw], { color: PALETTE.impBlack, texel: 1.5 });
@@ -383,10 +423,10 @@ function blastDoor(kit, ctx, min, max) {
     for (const zz of [z0 + 1.5, (z0 + z1) / 2, z1 - 1.5]) kit.boxMM("metal", [x + d - 0.6, 0.35, zz - 0.5], [x + d - 0.2, 0.7, zz + 0.5], { color: PALETTE.gunmetal });
   }
   kit.collider([x, 0, zc - hw - 1.6], [x + d + 0.35, h + 1.6, zc + hw + 1.6], "blastdoor");
-  // door number and warning stencil over the frame, floor hazard band in front
-  kit.boxMM("paintedMetal", [x + d + 0.3, h + 1.9, zc - 4.2], [x + d + 0.42, h + 3.0, zc + 4.2], { color: PALETTE.impBlack, texel: 2 });
-  kit.boxMM("emitWhite", [x + d + 0.42, h + 2.15, zc - 3.8], [x + d + 0.44, h + 2.75, zc + 3.8], {});
-  kit.boxMM("emitRed", [x + d + 0.42, h + 3.05, zc - 4.2], [x + d + 0.44, h + 3.2, zc + 4.2], {});
+  // door number plate on the frame head (the head reaches to 0.4 under the ceiling), floor hazard band in front
+  kit.boxMM("paintedMetal", [x + d + 0.3, h + 0.35, zc - 4.2], [x + d + 0.42, h + 1.35, zc + 4.2], { color: PALETTE.impBlack, texel: 2 });
+  kit.boxMM("emitWhite", [x + d + 0.42, h + 0.55, zc - 3.8], [x + d + 0.44, h + 1.15, zc + 3.8], {});
+  kit.boxMM("emitRed", [x + d + 0.42, h + 1.38, zc - 4.2], [x + d + 0.44, h + 1.5, zc + 4.2], {});
   kit.boxMM("hazard", [x + d + 0.35, 0, zc - hw - 1.6], [x + d + 2.4, 0.012, zc + hw + 1.6], { texel: 0.5 });
   const seg = wallSegment(ctx.bounds, "xmin");
   const { frame } = wallFrame(kit, seg.from, seg.to, 0);
@@ -497,22 +537,92 @@ function cargo(kit, ctx, min, max, rand) {
 }
 
 // ---------------------------------------------------------------------------
-// Ground crew on the apron between the portal and the pad: a bowser with fuel lines run to the pad's
-// near clamp, tool carts, a couple of containers — the foreground of the view from the portal
+// Ground crew on the apron between the portal and the pad — the foreground of the fixed view from
+// the portal (camera x -38, z -105 looking -x): a bowser on the right with its fuel lines run across
+// the apron to the pad's near clamp, two deck crew (one at the coupling, one walking a hose), a tug
+// cart on the left, tool carts and containers
 // ---------------------------------------------------------------------------
 function groundCrew(kit, ctx) {
-  bowser(kit, ctx, -42.8, -116.5, 0.25);
-  toolCart(kit, ctx, -41.5, -112.8, 0.4);
-  toolCart(kit, ctx, -44.6, -97.3, -0.9);
+  bowser(kit, ctx, -44.6, -112.0, 0.35);
+  tugCart(kit, ctx, -44.2, -100.2, 0.5);
+  toolCart(kit, ctx, -41.5, -113.6, 0.4);
+  toolCart(kit, ctx, -42.4, -96.6, -0.9);
   toolCart(kit, ctx, -52.5, -93.5, 0.3);
-  crate(kit, ctx, { x: -40.8, z: -97.9, sx: 1.4, sy: 1.1, sz: 1.2, yaw: 0.25, seed: ctx.seed + 71 });
-  crate(kit, ctx, { x: -40.9, y: 1.1, z: -97.8, sx: 1.1, sy: 0.8, sz: 1.0, yaw: -0.1, seed: ctx.seed + 72 });
+  cargoPod(kit, ctx, { x: -40.8, z: -97.9, sx: 1.4, sy: 1.1, sz: 1.2, yaw: 0.25 - Math.PI / 2, tone: 1, label: 11 });
+  cargoPod(kit, ctx, { x: -40.9, y: 1.1, z: -97.8, sx: 1.1, sy: 0.8, sz: 1.0, yaw: -0.1 - Math.PI / 2, tone: 2, label: 6 });
   // fuel lines from the bowser's pump to the pad edge by the near clamp, with a floor coupling block
-  pipeRun(kit, [[-42.2, 0.15, -113.8], [-45.2, 0.1, -112.4], [-48.6, 0.1, -111.6], [-49.2, PAD.y + 0.08, -110.9], [-51.5, PAD.y + 0.08, -110.2]], 0.06, PALETTE.impBlack, "rubber");
-  pipeRun(kit, [[-42.6, 0.12, -113.9], [-45.6, 0.08, -112.8], [-48.6, 0.08, -112.1], [-49.2, PAD.y + 0.06, -111.5]], 0.045, PALETTE.impMid, "rubber");
-  kit.box("paintedMetal", -48.6, 0.18, -111.8, 0.9, 0.36, 1.0, { color: PALETTE.impDark, texel: 2 });
-  kit.box("emitAmber", -48.6, 0.37, -111.8, 0.3, 0.02, 0.3);
-  kit.collider([-49.05, 0, -112.3], [-48.15, 0.4, -111.3], "coupling");
+  pipeRun(kit, [[-44.0, 0.15, -109.4], [-46.2, 0.1, -109.6], [-48.4, 0.1, -110.3], [-49.2, PAD.y + 0.08, -110.9], [-51.5, PAD.y + 0.08, -110.2]], 0.06, PALETTE.impBlack, "rubber");
+  pipeRun(kit, [[-44.4, 0.12, -109.7], [-46.6, 0.08, -110.0], [-48.4, 0.08, -110.9], [-49.2, PAD.y + 0.06, -111.5]], 0.045, PALETTE.impMid, "rubber");
+  kit.box("paintedMetal", -48.6, 0.18, -111.0, 0.9, 0.36, 1.0, { color: PALETTE.impDark, texel: 2 });
+  kit.box("emitAmber", -48.6, 0.37, -111.0, 0.3, 0.02, 0.3);
+  kit.collider([-49.05, 0, -111.5], [-48.15, 0.4, -110.5], "coupling");
+  // deck crew: one crouched at the coupling, one standing by the tug with a hose over the shoulder
+  crewFigure(kit, ctx, { x: -47.9, z: -110.0, yaw: -2.3, crouch: true });
+  crewFigure(kit, ctx, { x: -45.2, z: -103.6, yaw: 2.4 });
+  pipeRun(kit, [[-45.0, 1.35, -103.4], [-44.4, 0.9, -102.9], [-44.2, 0.1, -102.6], [-45.6, 0.1, -102.8]], 0.05, PALETTE.impBlack, "rubber");
+}
+
+/** Deck crew figure: capsule torso, cylinder legs and arms, black helmet with a dark visor, in Imperial grey. */
+function crewFigure(kit, ctx, { x, z, yaw = 0, crouch = false }) {
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const v = new THREE.Vector3(lx, ly, lz).applyQuaternion(q);
+    return kit.add(mat, geo, { pos: [v.x + x, ly, v.z + z], quat: q, ...extra });
+  };
+  const grey = { color: PALETTE.impGrey, texel: 3 };
+  const legH = crouch ? 0.5 : 0.85;
+  for (const s of [-1, 1]) {
+    add("paintedMetal", new THREE.CylinderGeometry(0.09, 0.1, legH, 8), s * 0.13, legH / 2 + 0.05, crouch ? -0.15 : 0, grey);
+    add("rubber", new THREE.BoxGeometry(0.16, 0.1, 0.3), s * 0.13, 0.05, 0.04, { color: PALETTE.impBlack });
+  }
+  const torsoY = legH + 0.05 + 0.42;
+  add("paintedMetal", new THREE.CapsuleGeometry(0.2, 0.5, 4, 10), 0, torsoY, 0, grey);
+  add("rubber", new THREE.BoxGeometry(0.42, 0.08, 0.28), 0, legH + 0.12, 0, { color: PALETTE.impBlack });
+  add("emitBlue", new THREE.BoxGeometry(0.06, 0.03, 0.01), 0.1, torsoY + 0.14, 0.2);
+  // arms: down at the sides, or forward when crouched at the coupling
+  for (const s of [-1, 1]) {
+    const arm = new THREE.CylinderGeometry(0.055, 0.06, 0.62, 8);
+    if (crouch) arm.rotateX(-1.1);
+    add("paintedMetal", arm, s * 0.27, crouch ? torsoY - 0.05 : torsoY - 0.1, crouch ? 0.28 : 0.02, grey);
+  }
+  // helmet: black dome with a dark visor band and a chin guard
+  const headY = torsoY + 0.5;
+  add("paintedMetal", new THREE.SphereGeometry(0.15, 12, 8), 0, headY, 0, { color: PALETTE.impBlack, texel: 3 });
+  add("darkGloss", new THREE.BoxGeometry(0.2, 0.07, 0.06), 0, headY + 0.01, 0.13);
+  add("paintedMetal", new THREE.BoxGeometry(0.22, 0.08, 0.1), 0, headY - 0.12, 0.08, { color: PALETTE.impDark, texel: 3 });
+  kit.collider([x - 0.3, 0, z - 0.3], [x + 0.3, headY + 0.15, z + 0.3], "crew");
+  void ctx;
+}
+
+/** Tug cart: low four-wheel tractor with a drawbar, a seat, a roll bar with a beacon and a rear hitch. */
+function tugCart(kit, ctx, x, z, yaw) {
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const v = new THREE.Vector3(lx, ly, lz).applyQuaternion(q);
+    return kit.add(mat, geo, { pos: [v.x + x, ly, v.z + z], quat: q, ...extra });
+  };
+  const box = (mat, lx, ly, lz, w, h, d, extra = {}) => add(mat, new THREE.BoxGeometry(w, h, d), lx, ly, lz, extra);
+  box("paintedMetal", 0, 0.45, 0, 1.4, 0.5, 2.6, { color: PALETTE.impMid, texel: 1.5 });
+  box("hazard", 0, 0.24, 0, 1.42, 0.14, 2.62, { texel: 1 });
+  box("paintedMetal", 0, 0.95, -0.7, 1.2, 0.5, 1.0, { color: PALETTE.impDark, texel: 2 }); // engine cowl
+  box("rubber", 0, 0.85, 0.5, 0.7, 0.16, 0.6, { color: PALETTE.impBlack }); // seat
+  box("rubber", 0, 1.15, 0.85, 0.7, 0.5, 0.1, { color: PALETTE.impBlack });
+  add("metal", new THREE.CylinderGeometry(0.02, 0.02, 0.5, 6), 0, 1.0, -0.15, { color: PALETTE.steel });
+  add("metal", new THREE.TorusGeometry(0.16, 0.02, 6, 14).rotateX(Math.PI / 2 - 0.5), 0, 1.22, -0.2, { color: PALETTE.impBlack });
+  for (const s of [-1, 1]) box("paintedMetal", s * 0.6, 1.4, 0.4, 0.08, 1.2, 0.08, { color: PALETTE.impDark, texel: 2 }); // roll bar
+  box("paintedMetal", 0, 2.0, 0.4, 1.28, 0.08, 0.08, { color: PALETTE.impDark, texel: 2 });
+  add("emitAmber", new THREE.CylinderGeometry(0.08, 0.08, 0.14, 10), 0, 2.11, 0.4);
+  for (const sx of [-0.75, 0.75]) for (const sz of [-0.95, 0.95]) add("rubber", new THREE.CylinderGeometry(0.28, 0.28, 0.24, 12).rotateZ(Math.PI / 2), sx, 0.28, sz, { color: PALETTE.impBlack });
+  box("metal", 0, 0.3, 1.6, 0.1, 0.1, 0.7, { color: PALETTE.steel }); // drawbar
+  box("metal", 0, 0.3, 1.98, 0.3, 0.16, 0.1, { color: PALETTE.gunmetal });
+  box("emitRed", -0.5, 0.75, 1.31, 0.14, 0.06, 0.01);
+  box("emitWhiteDim", 0.5, 0.75, -1.31, 0.14, 0.06, 0.01);
+  const c = Math.abs(Math.cos(yaw));
+  const s = Math.abs(Math.sin(yaw));
+  const ex = (1.6 * c + 4.2 * s) / 2;
+  const ez = (1.6 * s + 4.2 * c) / 2;
+  kit.collider([x - ex, 0, z - ez], [x + ex, 2.2, z + ez], "tug");
+  void ctx;
 }
 
 // ---------------------------------------------------------------------------
@@ -548,7 +658,7 @@ function lighting(kit, ctx, min, max) {
   const H = max[1];
   ctx.light(pointLight(0xcfe0ff, 260, 50, KEY));
   ctx.light(pointLight(0xffb060, 70, 34, [-44, 10.5, -105]));
-  ctx.light(pointLight(0xff3020, 40, 34, [min[0] + 5, 7.5, PAD.z]));
+  ctx.light(pointLight(0xff3020, 40, 34, [min[0] + 5, 7.5, DOOR_Z]));
   // key: four-lamp head on a stem from the ceiling
   kit.cyl("paintedMetal", KEY[0], (H + KEY[1] + 1.1) / 2, KEY[2], 0.14, H - KEY[1] - 1.1, "y", { color: PALETTE.impDark, segments: 8, texel: 0.5 });
   kit.box("paintedMetal", KEY[0], KEY[1] + 0.7, KEY[2], 2.4, 0.8, 2.4, { color: PALETTE.impDark, texel: 1.5 });
