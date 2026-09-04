@@ -8,6 +8,7 @@ import { roomShell, wallScreen, wallSegment, impChair, hologram } from "../imper
 import { pointLight, wallFrame } from "../builders.js";
 import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
+import { signPlate } from "../corridor.js";
 import { ensureCrewMaterials, SIGN, wallSign, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, intercom, stool, propFrame } from "./crewProps.js";
 
 const LOUNGE_PAINTS = [
@@ -16,10 +17,12 @@ const LOUNGE_PAINTS = [
   [PALETTE.impMid, 0.2],
   [PALETTE.impDark, 0.08],
 ];
-// upholstery held well above the black deck so the furniture reads from the door: slate blue, oxblood,
-// olive, tan
-const FABRICS = [new THREE.Color("#56627a"), new THREE.Color("#6b3838"), new THREE.Color("#5d6a4a"), new THREE.Color("#8a7a5a")];
-const RUG = new THREE.Color("#3a3238");
+// upholstery held well above the black deck so the furniture reads from the door (albedo lifted ~30 %
+// after the lounge measured darkest on the deck): slate blue, oxblood, olive, tan
+const FABRICS = [new THREE.Color("#707f9e"), new THREE.Color("#8b4a4a"), new THREE.Color("#798a60"), new THREE.Color("#b39f75")];
+// rugs: a warm grey field with a lighter woven border, so they read as rugs rather than stains
+const RUG = new THREE.Color("#5a4e55");
+const RUG_EDGE = new THREE.Color("#867a76");
 
 /** Sofa of `len` metres, seat facing +Z when yaw = 0 (back at -Z). */
 function sofa(kit, { x, z, yaw = 0, len = 2.2, color = FABRICS[0], seed = 1 }) {
@@ -74,12 +77,12 @@ function lowTable(kit, { x, z, yaw = 0, w = 1.2, d = 0.7, seed = 2 }) {
   L.collider(-w / 2, -d / 2, w / 2, d / 2, 0.47, "table");
 }
 
-/** Fabric rug under a seating cluster. */
+/** Fabric rug under a seating cluster: lighter woven border, field, and a thin inner line. */
 function rug(kit, x, z, w, d, color, yaw = 0) {
-  const g = new THREE.BoxGeometry(w, 0.016, d);
-  kit.add("fabric", g, { pos: [x, 0.008, z], rot: [0, yaw, 0], color, uv: "world", texel: 1.5 });
-  const b = new THREE.BoxGeometry(w + 0.06, 0.01, d + 0.06);
-  kit.add("rubber", b, { pos: [x, 0.004, z], rot: [0, yaw, 0], color: PALETTE.rubber });
+  kit.add("fabric", new THREE.BoxGeometry(w, 0.014, d), { pos: [x, 0.007, z], rot: [0, yaw, 0], color: RUG_EDGE, uv: "world", texel: 1.5 });
+  kit.add("fabric", new THREE.BoxGeometry(w - 0.5, 0.006, d - 0.5), { pos: [x, 0.017, z], rot: [0, yaw, 0], color, uv: "world", texel: 1.5 });
+  kit.add("fabric", new THREE.BoxGeometry(w - 0.8, 0.004, d - 0.8), { pos: [x, 0.022, z], rot: [0, yaw, 0], color: RUG_EDGE, uv: "world", texel: 1.5 });
+  kit.add("fabric", new THREE.BoxGeometry(w - 0.9, 0.004, d - 0.9), { pos: [x, 0.0245, z], rot: [0, yaw, 0], color, uv: "world", texel: 1.5 });
 }
 
 /** Standing lamp: dark pole with an amber-lit drum shade (no real light; the room lights carry it). */
@@ -287,20 +290,26 @@ export function buildRecreation(kit, ctx) {
   const W = max[0] - min[0];
   const D = max[2] - min[2];
 
-  // window openings in the zmin wall (u = x - min.x)
+  // window openings in the zmin wall (u = x - min.x) and one smaller viewport in the zmax wall
+  // (u = max.x - x) so the left wall seen from the door is not a blank run of grille panels
   const windows = [-20.4, -14.45, -8.5].map((x) => ({ u: x - min[0], w: 3.8, h: 1.7, v: 1.95 }));
+  const sideWindow = { u: max[0] - -20.5, w: 2.2, h: 1.2, v: 2.0 };
+  const opening = (w) => ({ type: "window", u0: w.u - w.w / 2 - 0.12, u1: w.u + w.w / 2 + 0.12, v0: w.v - w.h / 2 - 0.12, v1: w.v + w.h / 2 + 0.12 });
   roomShell(kit, ctx, {
     ceiling: false,
     walls: { rows: [0, 0.5, 1.5, 2.6, H], paints: LOUNGE_PAINTS, styles: { panel: 0.74, vent: 0.08, greeble: 0.08, strip: 0.04, screen: 0.03, conduit: 0.03 }, theme: { accent: "emitAmber", accent2: "emitBlue" } },
-    wall: { zmin: { openings: windows.map((w) => ({ type: "window", u0: w.u - w.w / 2 - 0.12, u1: w.u + w.w / 2 + 0.12, v0: w.v - w.h / 2 - 0.12, v1: w.v + w.h / 2 + 0.12 })) } },
+    wall: { zmin: { openings: windows.map(opening) }, zmax: { openings: [opening(sideWindow)] } },
   });
 
   // ------------------------------------------------------------------ slatted ceiling with four soft warm bands, beams, perimeter soffit
   // (the ceiling is kept quiet so the star windows are the brightest thing in the room)
   kit.boxMM("paintedMetal", [min[0] - 0.2, H, min[2] - 0.2], [max[0] + 0.2, H + 0.12, max[2] + 0.2], { color: PALETTE.impBlack, texel: 2 });
+  // the bands stop 7.5 m short of the door wall: the stretch overhead of the fixed view showed through
+  // the slats as two hotspots in the top corners of the frame
+  const bandX1 = -10.5;
   for (let i = 0; i < 4; i++) {
     const z = min[2] + ((i + 0.5) / 4) * D;
-    kit.box("crew_warmBand", min[0] + W / 2, H - 0.008, z, W - 1.6, 0.012, 1.6, { uv: "keep" });
+    kit.box("crew_warmBand", (min[0] + 0.8 + bandX1) / 2, H - 0.008, z, bandX1 - min[0] - 0.8, 0.012, 1.6, { uv: "keep" });
   }
   const slatMat = "paintedMetal";
   for (let z = min[2] + 0.9; z < max[2] - 0.7; z += 0.3) {
@@ -325,12 +334,12 @@ export function buildRecreation(kit, ctx) {
   kit.boxMM("emitAmber", [max[0] - sof - 0.03, H - drop - 0.01, min[2] + sof], [max[0] - sof + 0.03, H - drop + 0.02, max[2] - sof]);
 
   // ------------------------------------------------------------------ lights (6): amber clusters, bar, cool window wash, holo teal, door
-  ctx.light(pointLight(0xffb060, 22, 15, [-18.0, 2.8, -56.5]));
-  ctx.light(pointLight(0xffb060, 22, 15, [-11.0, 2.8, -48.0]));
+  ctx.light(pointLight(0xffb060, 24, 15, [-18.0, 2.8, -56.5]));
+  ctx.light(pointLight(0xffb060, 24, 15, [-11.0, 2.8, -48.0]));
   ctx.light(pointLight(0xffc27a, 16, 11, [-22.6, 2.4, -54.0]));
   ctx.light(pointLight(0x7f9fe0, 10, 12, [-14.5, 2.2, -61.8]));
   ctx.light(pointLight(0x4fd8cc, 6, 6, [-8.6, 1.6, -58.6]));
-  ctx.light(pointLight(0xffe0c0, 12, 11, [-7.0, 2.9, -53.0]));
+  ctx.light(pointLight(0xffe0c0, 17, 12, [-7.0, 2.9, -53.5]));
 
   // ------------------------------------------------------------------ windows to space + window seat
   {
@@ -372,6 +381,13 @@ export function buildRecreation(kit, ctx) {
   sofa(kit, { x: -15.4, z: -61.0, yaw: Math.PI + 0.45, len: 1.0, color: FABRICS[1], seed: ctx.seed + 8 });
   sofa(kit, { x: -13.6, z: -61.0, yaw: Math.PI - 0.45, len: 1.0, color: FABRICS[1], seed: ctx.seed + 9 });
   lowTable(kit, { x: -14.5, z: -60.2, w: 0.6, d: 0.6, seed: ctx.seed + 10 });
+
+  // near cluster in the front third by the door: two armchairs across a low table on a rug (the deck
+  // between the door and the card table was an empty apron in the fixed view)
+  rug(kit, -8.3, -55.2, 2.6, 3.2, RUG);
+  sofa(kit, { x: -8.3, z: -53.9, yaw: Math.PI, len: 1.0, color: FABRICS[1], seed: ctx.seed + 17 });
+  sofa(kit, { x: -8.3, z: -56.5, yaw: 0, len: 1.0, color: FABRICS[3], seed: ctx.seed + 18 });
+  lowTable(kit, { x: -8.3, z: -55.2, w: 1.1, d: 0.65, seed: ctx.seed + 19 });
 
   // ------------------------------------------------------------------ holo-game table with four stools
   holoTable(kit, ctx, -8.6, -58.6, ctx.seed + 11);
@@ -449,13 +465,19 @@ export function buildRecreation(kit, ctx) {
     const seg = wallSegment(ctx.bounds, "zmax");
     const { frame } = wallFrame(kit, seg.from, seg.to, 0); // u = max.x - x
     gameShelf(frame, max[0] - -17.6, ctx.seed + 13);
+    // lit header over the shelf and two lit notice posters beside it (this wall was a featureless
+    // grille from the door)
+    signPlate(kit, ctx, { side: "zmax", u: max[0] - -17.6, v: 2.78, w: 2.2, h: 0.36, text: "Games", sub: "Sign out at the bar", accent: "#ffb347" });
+    signPlate(kit, ctx, { side: "zmax", u: max[0] - -15.0, v: 2.05, w: 1.3, h: 0.5, text: "Sabacc", sub: "Cycle 04 tournament", accent: "#ffb347" });
+    signPlate(kit, ctx, { side: "zmax", u: max[0] - -15.0, v: 1.35, w: 1.3, h: 0.5, text: "Holonet", sub: "Fleet news 21:00", accent: "#4a9dff" });
+    // side viewport between the shelf and the dispensers, with its own sill
+    starWindow(frame, sideWindow.u, sideWindow.v, sideWindow.w, sideWindow.h, true);
     dispenser(frame, max[0] - -23.6);
     dispenser(frame, max[0] - -22.4);
     wallScreen(kit, ctx, { side: "zmax", u: max[0] - -13.0, v: 1.9, w: 1.6, h: 0.9, screen: 1 });
     wallScreen(kit, ctx, { side: "zmax", u: max[0] - -7.4, v: 1.9, w: 1.6, h: 0.9, screen: 3 });
     cableTray(kit, ctx, "zmax", 0.8, W - 0.8, 3.05);
     ventGrille(frame, max[0] - -10.2, 0.4, 0.8, 0.35);
-    frame.add("decal", new THREE.PlaneGeometry(0.34, 0.34), max[0] - -15.4, 2.6, 0.004, { uv: "keep", uvRect: decalRect(9) });
     wallGrime(kit, ctx, "zmax", max[0] - -23.0, 0.5, 2.2, 0.6);
     // a couple of standing tables near the dispensers
     for (const [x, z] of [[-21.0, -44.2], [-19.0, -45.0]]) {

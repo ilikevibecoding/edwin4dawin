@@ -17,6 +17,9 @@ const WHITE_PAINTS = [
   [PALETTE.impLight, 0.4],
   [PALETTE.impGrey, 0.15],
 ];
+// issue blanket blue-grey and its darker hem: the one colour band on the white beds
+const MED_BLANKET = new THREE.Color("#4f6a86");
+const MED_HEM = new THREE.Color("#35485e");
 
 /** Scanner boom built around a pivot (post top). k: kit-like target (sector kit or a mini kit). */
 function scannerBoom(k, seed, lit) {
@@ -48,25 +51,35 @@ function medBed(kit, ctx, { x, z, seed, arm = true, animate = false, occupied = 
   kit.box("impPanel", x, 0.55, zc, W + 0.06, 0.1, L, { color: PALETTE.impMid, uv: "keep" });
   kit.box("fabric", x, 0.66, zc, W - 0.06, 0.12, L - 0.1, { color: PALETTE.impWhite, uv: "world", texel: 2 });
   kit.box("fabric", x, 0.75, zc - L / 2 + 0.3, 0.5, 0.08, 0.32, { color: PALETTE.impWhite, uv: "world", texel: 2 });
+  // issue blanket: a blue-grey band over the foot two thirds with a darker turned-down hem, so the
+  // beds are not one grey slab each
+  const blanketZ = zc + 0.4;
+  kit.box("fabric", x, 0.745, blanketZ, W - 0.08, 0.05, 1.2, { color: MED_BLANKET, uv: "world", texel: 2 });
+  kit.box("fabric", x, 0.752, blanketZ - 0.5, W - 0.06, 0.055, 0.2, { color: MED_HEM, uv: "world", texel: 2 });
   if (occupied) {
-    // patient under a sheet: head, body ridge
-    kit.add("crew_white", new THREE.SphereGeometry(0.11, 12, 8), { pos: [x, 0.83, zc - L / 2 + 0.34], color: new THREE.Color("#c9b39b") });
-    kit.box("fabric", x, 0.78, zc + 0.15, 0.6, 0.14, 1.4, { color: PALETTE.impLight, uv: "world", texel: 2 });
-  } else if (rand() < 0.6) kit.box("fabric", x, 0.745, zc + 0.45, W - 0.1, 0.05, 1.0, { color: PALETTE.impLight, uv: "world", texel: 2 });
+    // patient under the sheet: a boxed head bump and a body ridge (no bare sphere)
+    kit.box("fabric", x, 0.8, zc - L / 2 + 0.34, 0.28, 0.14, 0.26, { color: PALETTE.impLight, uv: "world", texel: 2 });
+    kit.box("fabric", x, 0.8, zc - 0.25, 0.62, 0.16, 0.7, { color: PALETTE.impLight, uv: "world", texel: 2 });
+    kit.box("fabric", x, 0.79, blanketZ + 0.1, 0.5, 0.12, 1.0, { color: MED_BLANKET, uv: "world", texel: 2 });
+  }
   // side rails on posts
   for (const s of [-1, 1]) {
     kit.cyl("metal", x + s * (W / 2 + 0.04), 0.98, zc + 0.1, 0.016, 1.2, "z", { color: PALETTE.steel, segments: 8 });
     for (const dz of [-0.5, 0.5]) kit.cyl("metal", x + s * (W / 2 + 0.04), 0.79, zc + 0.1 + dz, 0.014, 0.38, "y", { color: PALETTE.steel, segments: 6 });
   }
-  // head panel with vitals readout
+  // head-end panel: a light headboard in a black frame rising well above the mattress, carrying the
+  // vitals readout and status lamps
   const hz = zc - L / 2 - 0.05;
-  kit.box("paintedMetal", x, 0.95, hz, W + 0.06, 0.7, 0.06, { color: PALETTE.impDark, texel: 2 });
-  kit.box("darkGloss", x, 1.05, hz + 0.035, 0.5, 0.26, 0.01);
+  kit.box("paintedMetal", x, 0.9, hz - 0.01, W + 0.14, 1.3, 0.05, { color: PALETTE.impBlack, texel: 2 });
+  kit.box("impPanel1", x, 0.92, hz + 0.01, W + 0.04, 1.2, 0.04, { color: PALETTE.impLight, uv: "keep" });
+  kit.box("paintedMetal", x, 1.2, hz + 0.03, 0.6, 0.36, 0.02, { color: PALETTE.impDark, texel: 2 });
+  kit.box("darkGloss", x, 1.2, hz + 0.042, 0.5, 0.26, 0.01);
   const sg = new THREE.PlaneGeometry(0.44, 0.2);
-  kit.add("impScreen1", sg, { pos: [x, 1.05, hz + 0.042], uv: "keep" });
-  kit.box("leds", x, 0.8, hz + 0.035, 0.5, 0.03, 0.006, { uv: "keep" });
-  for (let k = 0; k < 3; k++) kit.box(["emitGreen", "emitBlue", rand() < 0.3 ? "emitRed" : "emitGreen"][k], x - 0.3 + k * 0.08, 0.7, hz + 0.035, 0.03, 0.03, 0.006);
-  kit.collider([x - W / 2 - 0.08, 0, zc - L / 2 - 0.1], [x + W / 2 + 0.08, 1.0, zc + L / 2], "medbed");
+  kit.add("impScreen1", sg, { pos: [x, 1.2, hz + 0.05], uv: "keep" });
+  kit.box("leds", x, 0.95, hz + 0.035, 0.5, 0.03, 0.006, { uv: "keep" });
+  for (let k = 0; k < 3; k++) kit.box(["emitGreen", "emitBlue", rand() < 0.3 ? "emitRed" : "emitGreen"][k], x - 0.3 + k * 0.08, 0.85, hz + 0.035, 0.03, 0.03, 0.006);
+  kit.box("emitGreen", x, 1.46, hz + 0.035, W - 0.3, 0.012, 0.006);
+  kit.collider([x - W / 2 - 0.08, 0, zc - L / 2 - 0.1], [x + W / 2 + 0.08, 1.5, zc + L / 2], "medbed");
   // bedside cabinet with a tray and a cup
   const cx = x + W / 2 + 0.45;
   kit.box("impPanel1", cx, 0.4, hz + 0.6, 0.45, 0.8, 0.5, { color: PALETTE.impLight, uv: "keep" });
@@ -140,7 +153,7 @@ function bactaTank(kit, ctx, { x, z, seed, patient }) {
   if (patient) {
     // suspended figure: dark silhouette with a breathing mask and feed tubes
     const fy = 1.75;
-    kit.add("rubber", new THREE.SphereGeometry(0.13, 14, 10), { pos: [x, fy + 0.62, z - 0.05], color: PALETTE.rubber });
+    kit.box("rubber", x, fy + 0.62, z - 0.05, 0.22, 0.26, 0.22, { color: PALETTE.rubber, rot: [0.1, 0, 0] });
     kit.box("rubber", x, fy + 0.2, z, 0.42, 0.62, 0.22, { color: PALETTE.rubber, rot: [0.1, 0, 0] });
     kit.box("rubber", x, fy - 0.45, z + 0.05, 0.36, 0.5, 0.2, { color: PALETTE.rubber, rot: [-0.05, 0, 0] });
     for (const s of [-1, 1]) {
@@ -177,11 +190,24 @@ export function buildMedbay(kit, ctx) {
   const rand = rng(ctx.seed + 13);
 
   roomShell(kit, ctx, {
-    // three strips across the 22 m depth (spacing 7.5) instead of five: the strips light the room,
-    // they should not be the room
-    ceiling: { lights: false, spacing: 7.5, along: "x", paints: [[PALETTE.impLight, 0.55], [PALETTE.impWhite, 0.3], [PALETTE.impGrey, 0.15]] },
+    // no stock strips: the three spines below are segmented and on a dimmer emitter (the continuous
+    // emitWhiteDim bar down the middle still rendered ≈220 white, the brightest thing in the frame)
+    ceiling: { lights: false, strips: false, paints: [[PALETTE.impLight, 0.55], [PALETTE.impWhite, 0.3], [PALETTE.impGrey, 0.15]] },
     walls: { rows: [0, 0.5, 1.7, 2.7, H], paints: WHITE_PAINTS, styles: { panel: 0.72, vent: 0.08, greeble: 0.08, strip: 0.06, screen: 0.04, conduit: 0.02 }, theme: { accent2: "emitGreen", screenMats: ["impScreen1", "impScreen2"] } },
   });
+  // three ceiling spines along x (spacing 7.3 m): a dark channel carrying 1.6 m dim panels with black
+  // clips between them, so the spine reads as a run of fixtures rather than one hot bar
+  for (let i = 0; i < 3; i++) {
+    const z = min[2] + ((i + 0.5) / 3) * (max[2] - min[2]);
+    const x0 = min[0] + 0.6;
+    const x1 = max[0] - 0.6;
+    kit.boxMM("paintedMetal", [x0, H - 0.1, z - 0.21], [x1, H, z + 0.21], { color: PALETTE.impDark, texel: 2 });
+    const pitch = 2.0;
+    for (let x = x0 + 0.3; x + 1.6 <= x1 - 0.2; x += pitch) {
+      kit.boxMM("crew_coolStrip", [x, H - 0.11, z - 0.07], [x + 1.6, H - 0.08, z + 0.07], { uv: "keep" });
+      kit.box("paintedMetal", x + 1.8, H - 0.11, z, 0.4, 0.04, 0.3, { color: PALETTE.impBlack, texel: 2 });
+    }
+  }
   // identity line: a green band along the ward wall above the monitors
   {
     const seg = wallSegment(ctx.bounds, "zmin");
@@ -478,18 +504,40 @@ export function buildMedbay(kit, ctx) {
   wallScreen(kit, ctx, { side: "xmin", u: max[2] - (-58.5), v: 1.9, w: 1.4, h: 0.8, screen: 1 });
   {
     // gurney left parked mid-ward between the second bed row and the sterile zone, a little askew
+    // (a wheeled stretcher, not a low table: tall tubular side rails, big castors on forks, a push
+    // handle at the head, a folded blanket and an IV pole)
     const g = propFrame(kit, 12.0, -52.0, 0.32);
     g.box("metal", 0, 0.8, 0, 0.7, 0.06, 1.9, { color: PALETTE.steel, texel: 1 });
-    g.box("fabric", 0, 0.87, 0, 0.6, 0.08, 1.8, { color: PALETTE.impWhite, uv: "world", texel: 2 });
-    g.box("fabric", 0, 0.93, -0.65, 0.4, 0.06, 0.28, { color: PALETTE.impWhite, uv: "world", texel: 2 });
-    g.box("fabric", 0, 0.925, 0.35, 0.56, 0.03, 0.9, { color: PALETTE.impLight, uv: "world", texel: 2 });
-    for (const dz of [-0.7, 0.7]) {
-      g.box("paintedMetal", 0, 0.4, dz, 0.5, 0.74, 0.08, { color: PALETTE.impDark, texel: 2 });
-      for (const s of [-1, 1]) g.cyl("rubber", s * 0.28, 0.08, dz, 0.08, 0.05, "x", { color: PALETTE.rubber, segments: 12 });
+    g.box("fabric", 0, 0.88, 0, 0.62, 0.1, 1.8, { color: PALETTE.impWhite, uv: "world", texel: 2 });
+    g.box("fabric", 0, 0.96, -0.65, 0.42, 0.07, 0.3, { color: PALETTE.impWhite, uv: "world", texel: 2 });
+    g.box("fabric", 0, 0.955, 0.3, 0.58, 0.035, 1.0, { color: PALETTE.impLight, uv: "world", texel: 2 });
+    g.box("fabric", 0, 1.0, 0.72, 0.5, 0.08, 0.34, { color: MED_BLANKET, uv: "world", texel: 2 });
+    // undercarriage: a narrow central column on an H-frame with four visible castor forks
+    g.box("paintedMetal", 0, 0.45, 0, 0.3, 0.64, 1.2, { color: PALETTE.impDark, texel: 2 });
+    g.box("paintedMetal", 0, 0.12, 0, 0.16, 0.08, 1.7, { color: PALETTE.impBlack, texel: 2 });
+    for (const dz of [-0.78, 0.78]) {
+      g.box("paintedMetal", 0, 0.12, dz, 0.74, 0.06, 0.06, { color: PALETTE.impBlack, texel: 2 });
+      for (const s of [-1, 1]) {
+        g.box("paintedMetal", s * 0.33, 0.12, dz, 0.04, 0.14, 0.05, { color: PALETTE.impMid, texel: 2 });
+        g.cyl("rubber", s * 0.36, 0.11, dz, 0.11, 0.05, "x", { color: PALETTE.rubber, segments: 14 });
+        g.cyl("metal", s * 0.36, 0.11, dz, 0.04, 0.06, "x", { color: PALETTE.steel, segments: 10 });
+      }
     }
-    for (const s of [-1, 1]) g.cyl("metal", s * 0.36, 1.05, 0, 0.014, 1.5, "z", { color: PALETTE.steel, segments: 6 });
+    // side rails: a tubular loop each side on two stanchions
+    for (const s of [-1, 1]) {
+      g.cyl("metal", s * 0.37, 1.22, 0, 0.016, 1.4, "z", { color: PALETTE.steel, segments: 8 });
+      for (const dz of [-0.65, 0.65]) g.cyl("metal", s * 0.37, 1.02, dz, 0.014, 0.42, "y", { color: PALETTE.steel, segments: 6 });
+      g.cyl("metal", s * 0.37, 1.02, 0, 0.012, 1.3, "z", { color: PALETTE.steel, segments: 6 });
+    }
+    // push handle at the head end, IV pole with a bag at the foot corner
+    g.cyl("metal", 0, 1.15, -1.0, 0.016, 0.6, "x", { color: PALETTE.steel, segments: 8 });
+    for (const s of [-1, 1]) g.cyl("metal", s * 0.3, 0.98, -1.0, 0.014, 0.36, "y", { color: PALETTE.steel, segments: 6 });
+    g.cyl("metal", 0.3, 1.4, 0.9, 0.012, 1.2, "y", { color: PALETTE.steel, segments: 6 });
+    g.box("metal", 0.3, 2.0, 0.9, 0.3, 0.02, 0.02, { color: PALETTE.steel });
+    g.box("crew_glass", 0.42, 1.85, 0.9, 0.12, 0.26, 0.05);
+    g.box("crew_bacta", 0.42, 1.82, 0.9, 0.1, 0.16, 0.04);
     g.box("emitBlueDim", 0, 0.5, 0.75, 0.3, 0.02, 0.01);
-    g.collider(-0.42, -1.0, 0.42, 1.0, 1.1, "gurney");
+    g.collider(-0.45, -1.05, 0.45, 1.0, 1.25, "gurney");
     // stacked supply crates opposite
     kit.box("impPanel1", 4.3, 0.35, -46.4, 0.9, 0.7, 0.9, { color: PALETTE.impWhite, uv: "keep" });
     kit.box("paintedMetal", 4.3, 0.06, -46.4, 0.94, 0.12, 0.94, { color: PALETTE.impBlack, texel: 2 });

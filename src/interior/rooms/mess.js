@@ -4,11 +4,11 @@
 // storage and a cold store. Warm-white dining light, amber over the counter, cooler galley light.
 import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
-import { roomShell, wallScreen, equipmentRack, crate, pipeRun, wallSegment } from "../imperial.js";
+import { roomShell, impWall, wallScreen, equipmentRack, crate, pipeRun, wallSegment } from "../imperial.js";
 import { pointLight, wallFrame } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect, GRATE_TILE } from "../../textures.js";
-import { ensureCrewMaterials, SIGN, signRect, wallSign, messTable, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, valveWheel, gauge, intercom, stool, wallShelf } from "./crewProps.js";
+import { ensureCrewMaterials, SIGN, signRect, wallSign, messTable, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, valveWheel, gauge, intercom, stool, wallShelf, propFrame } from "./crewProps.js";
 
 /** Round pedestal table (light plate top, black rim) with four stools. */
 function roundTable(kit, ctx, { x, z, seed }) {
@@ -72,14 +72,29 @@ export function buildMess(kit, ctx) {
   const rand = rng(ctx.seed + 5);
   const cols0 = [7.6, 12.6, 17.6];
 
+  // walls in a regular band scheme instead of the procedural light/dark chequer: light plate below and
+  // above a continuous grey equipment band (1.6-2.7 m) that carries the vents, screens and greebles.
+  // The three walls in the fixed view are built band by band (no doors on them, so the split is safe);
+  // the door wall behind the camera keeps one light paint so it matches.
+  const BAND_SIDES = ["zmin", "zmax", "xmax"];
+  const warmTheme = { accent: "emitAmberDim", accent2: "emitWhiteDim" };
   roomShell(kit, ctx, {
     // no white ceiling strips: the warm square fixtures own the light hierarchy
     ceiling: { lights: false, strips: false, along: "x" },
-    walls: { rows: [0, 0.5, 1.6, 2.7, H], styles: { panel: 0.66, vent: 0.1, greeble: 0.1, strip: 0.06, screen: 0.04, conduit: 0.04 } },
-    wall: {
-      xmax: { styles: { panel: 0.55, vent: 0.2, greeble: 0.15, conduit: 0.1 } },
-    },
+    skip: BAND_SIDES,
+    walls: { rows: [0, 0.5, 1.6, 2.7, H], paints: [[PALETTE.impLight, 1]], styles: { panel: 0.8, vent: 0.1, greeble: 0.1 }, theme: warmTheme },
   });
+  for (const side of BAND_SIDES) {
+    const galley = side === "xmax";
+    const seed = (ctx.seed + 5) * 31 + side.length * 7;
+    impWall(kit, ctx, side, { noDoors: true, base: 0, height: 1.6, rows: [0, 0.5, 1.6], paints: [[PALETTE.impLight, 1]], styles: { panel: galley ? 0.75 : 0.9, vent: galley ? 0.25 : 0.1 }, theme: warmTheme, seed, tag: side + "L" });
+    impWall(kit, ctx, side, { noDoors: true, base: 1.6, height: 1.1, rows: [0, 1.1], kick: false, trim: false, paints: [[PALETTE.impGrey, 1]], styles: galley ? { panel: 0.45, vent: 0.25, greeble: 0.2, conduit: 0.1 } : { panel: 0.6, vent: 0.1, greeble: 0.14, screen: 0.08, conduit: 0.08 }, theme: warmTheme, seed: seed + 1, tag: side + "M" });
+    impWall(kit, ctx, side, { noDoors: true, base: 2.7, height: H - 2.7, rows: [0, H - 2.7], kick: false, trim: false, collide: false, paints: [[PALETTE.impLight, 1]], styles: { panel: 0.94, strip: 0.06 }, theme: warmTheme, seed: seed + 2, tag: side + "U" });
+    // black reveal lines at the band edges so the band reads as a deliberate course, not a paint change
+    const seg = wallSegment(ctx.bounds, side);
+    const { frame, length } = wallFrame(kit, seg.from, seg.to, 0);
+    for (const v of [1.6, 2.7]) frame.box("paintedMetal", length / 2, v, 0.005, length, 0.05, 0.03, { color: PALETTE.impBlack, texel: 2 });
+  }
 
   // ------------------------------------------------------------------ lights (6)
   const warm = 0xffcf98;
@@ -91,12 +106,25 @@ export function buildMess(kit, ctx) {
   ]) ctx.light(pointLight(warm, 17, 15, [x, H - 0.7, z]));
   ctx.light(pointLight(0xffc48a, 9, 11, [20.9, 2.7, -20.0]));
   ctx.light(pointLight(0xeaf0ff, 12, 14, [26.2, H - 0.5, -19.5]));
-  // warm square ceiling fixtures over the table columns (the real lights hang under these)
+  // warm square ceiling fixtures over the table columns (the real lights hang under these). Two of the
+  // six differ: a louvred unit over the far mid column and a twin-tube unit with one tube ageing
+  // amber over the near right column, so the ceiling is not six identical squares.
   for (const x of cols0) {
     for (const z of [-24.8, -13.2]) {
       kit.box("paintedMetal", x, H - 0.05, z, 2.0, 0.08, 1.4, { color: PALETTE.impDark, texel: 2 });
-      kit.box("emitWarmSoft", x, H - 0.095, z, 1.8, 0.02, 1.2, { uv: "keep" });
-      for (const s of [-1, 1]) kit.box("paintedMetal", x + s * 0.6, H - 0.1, z, 0.04, 0.03, 1.3, { color: PALETTE.impBlack, texel: 2 });
+      if (x === 12.6 && z === -13.2) {
+        kit.box("emitWarmSoft", x, H - 0.095, z, 1.8, 0.02, 1.2, { uv: "keep" });
+        for (let k = 0; k < 7; k++) kit.box("paintedMetal", x - 0.75 + k * 0.25, H - 0.115, z, 0.05, 0.03, 1.28, { color: PALETTE.impBlack, texel: 2 });
+        kit.box("paintedMetal", x, H - 0.115, z, 1.7, 0.03, 0.05, { color: PALETTE.impBlack, texel: 2 });
+      } else if (x === 17.6 && z === -24.8) {
+        kit.box("paintedMetal", x, H - 0.09, z, 1.8, 0.02, 1.2, { color: PALETTE.impBlack, texel: 2 });
+        kit.cyl("emitWarmSoft", x, H - 0.15, z - 0.3, 0.05, 1.6, "x", { segments: 12, uv: "keep" });
+        kit.cyl("emitAmberDim", x, H - 0.15, z + 0.3, 0.05, 1.6, "x", { segments: 12, uv: "keep" });
+        for (const s of [-1, 1]) for (const e of [-1, 1]) kit.box("metal", x + e * 0.84, H - 0.15, z + s * 0.3, 0.08, 0.12, 0.12, { color: PALETTE.gunmetal });
+      } else {
+        kit.box("emitWarmSoft", x, H - 0.095, z, 1.8, 0.02, 1.2, { uv: "keep" });
+        for (const s of [-1, 1]) kit.box("paintedMetal", x + s * 0.6, H - 0.1, z, 0.04, 0.03, 1.3, { color: PALETTE.impBlack, texel: 2 });
+      }
     }
   }
 
@@ -105,10 +133,14 @@ export function buildMess(kit, ctx) {
   // identical slabs; two mid-column slots are round four-stool tables; bench fabric alternates by column
   const cols = cols0;
   const rows = [-28.3, -25.0, -21.7, -16.3, -13.0, -9.9];
+  // seat cushions in two issue fabrics well above the bench's dark frame (impMid/impDark pads read
+  // as part of the plank): warm tan on the outer columns, slate on the middle one
+  const TAN = new THREE.Color("#8c7b5c");
+  const SLATE = new THREE.Color("#6a7488");
   let ti = 0;
   for (const z of [-27.4, -23.4, -14.7, -10.6]) {
     ti++;
-    messTable(kit, ctx, { x: cols[0], z, yaw: Math.PI / 2, seed: ctx.seed * 3 + ti, props: ti % 3 !== 0, fabric: PALETTE.impMid });
+    messTable(kit, ctx, { x: cols[0], z, yaw: Math.PI / 2, seed: ctx.seed * 3 + ti, props: ti % 3 !== 0, fabric: TAN });
   }
   for (const z of rows) {
     for (const x of cols.slice(1)) {
@@ -119,11 +151,26 @@ export function buildMess(kit, ctx) {
         roundTable(kit, ctx, { x, z, seed: ctx.seed * 3 + ti });
         continue;
       }
-      messTable(kit, ctx, { x, z, seed: ctx.seed * 3 + ti, props: ti % 4 !== 0, fabric: x === 12.6 ? PALETTE.impDark : PALETTE.impMid });
+      messTable(kit, ctx, { x, z, seed: ctx.seed * 3 + ti, props: ti % 4 !== 0, fabric: x === 12.6 ? SLATE : TAN });
     }
   }
-  // tray trolley parked at the side of the cross-aisle
+  // tray trolley parked at the side of the cross-aisle, loaded: a steel urn, a jug, cup stacks, a red
+  // ration crate and a cutlery bin on the top shelf (it read as an empty frame from the door)
   trayTrolley(kit, 15.1, -20.1, 0.18, ctx.seed + 8);
+  {
+    const T = propFrame(kit, 15.1, -20.1, 0.18);
+    const ty = 0.97;
+    T.cyl("metal", -0.25, ty + 0.19, 0.05, 0.13, 0.38, "y", { color: PALETTE.steel, segments: 14 });
+    T.cyl("paintedMetal", -0.25, ty + 0.4, 0.05, 0.14, 0.04, "y", { color: PALETTE.impBlack, segments: 14, texel: 2 });
+    T.cyl("metal", -0.25, ty + 0.12, -0.12, 0.012, 0.1, "z", { color: PALETTE.gunmetal, segments: 6 });
+    T.box("emitAmber", -0.25, ty + 0.3, -0.135, 0.05, 0.03, 0.01);
+    T.cyl("metal", 0.06, ty + 0.1, -0.14, 0.06, 0.2, "y", { color: PALETTE.steel, segments: 12 });
+    for (let k = 0; k < 2; k++) T.cyl("paintedMetal", 0.08 + k * 0.11, ty + 0.06, 0.16, 0.04, 0.12, "y", { color: k ? PALETTE.impMid : PALETTE.impWhite, segments: 10, texel: 3 });
+    T.box("paintedMetal", 0.3, ty + 0.09, 0.0, 0.26, 0.18, 0.34, { color: PALETTE.impRed, texel: 2 });
+    T.box("paintedMetal", 0.3, ty + 0.19, 0.0, 0.2, 0.01, 0.28, { color: PALETTE.impBlack, texel: 2 });
+    T.box("paintedMetal", -0.05, ty + 0.06, 0.18, 0.2, 0.12, 0.14, { color: PALETTE.impDark, texel: 2 });
+    for (let k = 0; k < 5; k++) T.cyl("metal", -0.12 + k * 0.035, ty + 0.16, 0.18 + (k % 2) * 0.03, 0.006, 0.18, "y", { color: PALETTE.steel, segments: 5 });
+  }
   // tray-return station in the empty slot: cart with tray slots, waste bin, wall screen above
   {
     const x = 17.6;
@@ -190,6 +237,32 @@ export function buildMess(kit, ctx) {
   // tray stack + rations sign, condiment bottles
   for (let k = 0; k < 8; k++) kit.box("paintedMetal", 21.5, cH + 0.07 + k * 0.03, -13.4, 0.44, 0.02, 0.32, { color: k % 2 ? PALETTE.impMid : PALETTE.impGrey, texel: 3 });
   for (let k = 0; k < 4; k++) kit.cyl("paintedMetal", 21.65, cH + 0.15, -12.4 + k * 0.18, 0.035, 0.2, "y", { color: [PALETTE.impRed, PALETTE.impAmber, PALETTE.impMid, PALETTE.impWhite][k], segments: 8, texel: 3 });
+  // taller service items that show above the counter lip from the door: lidded pots on two of the hot
+  // wells, a soup kettle with a ladle, a bowl stack, a bread basket, a vertical tray rack and a menu board
+  for (const z of [-26.45, -24.15]) {
+    kit.cyl("metal", 21.45, cH + 0.16, z, 0.19, 0.2, "y", { color: PALETTE.steel, segments: 16 });
+    kit.cyl("metal", 21.45, cH + 0.275, z, 0.2, 0.03, "y", { color: PALETTE.gunmetal, segments: 16 });
+    kit.cyl("metal", 21.45, cH + 0.32, z, 0.03, 0.06, "y", { color: PALETTE.impBlack, segments: 8 });
+    for (const s of [-1, 1]) kit.box("metal", 21.45, cH + 0.2, z + s * 0.23, 0.06, 0.03, 0.08, { color: PALETTE.gunmetal });
+  }
+  kit.cyl("paintedMetal", 21.45, cH + 0.24, -22.35, 0.24, 0.36, "y", { color: PALETTE.impDark, segments: 18, texel: 2 });
+  kit.cyl("metal", 21.45, cH + 0.435, -22.35, 0.25, 0.03, "y", { color: PALETTE.steel, segments: 18 });
+  kit.cyl("metal", 21.55, cH + 0.62, -22.15, 0.012, 0.4, "y", { color: PALETTE.steel, segments: 6 });
+  kit.box("emitAmber", 21.45, cH + 0.2, -22.1, 0.04, 0.03, 0.01);
+  for (let k = 0; k < 6; k++) kit.cyl("paintedMetal", 21.5, cH + 0.075 + k * 0.045, -20.2, 0.12 - k * 0.004, 0.05, "y", { color: k % 2 ? PALETTE.impWhite : PALETTE.impLight, segments: 14, texel: 3 });
+  kit.box("fabric", 21.5, cH + 0.11, -14.4, 0.5, 0.12, 0.34, { color: new THREE.Color("#8c7b5c"), texel: 3 });
+  for (let k = 0; k < 5; k++) kit.cyl("paintedMetal", 21.38 + (k % 3) * 0.11, cH + 0.2, -14.5 + Math.floor(k / 3) * 0.12 + (k % 2) * 0.05, 0.05, 0.08, "z", { color: PALETTE.impAmber, segments: 8, texel: 3 });
+  kit.box("paintedMetal", 21.6, cH + 0.25, -11.5, 0.4, 0.4, 0.04, { color: PALETTE.impBlack, texel: 2 });
+  for (let k = 0; k < 5; k++) kit.box("paintedMetal", 21.6, cH + 0.27, -11.7 + k * 0.1, 0.34, 0.36, 0.014, { color: k % 2 ? PALETTE.impMid : PALETTE.impGrey, texel: 3 });
+  {
+    // A-frame menu board at the tray-return end of the counter
+    const g = new THREE.PlaneGeometry(0.5, 0.125);
+    g.rotateY(-Math.PI / 2);
+    kit.box("paintedMetal", 21.35, cH + 0.32, -28.45, 0.03, 0.6, 0.6, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("darkGloss", 21.33, cH + 0.34, -28.45, 0.01, 0.5, 0.52);
+    kit.add("crew_signLit", g, { pos: [21.322, cH + 0.42, -28.45], uv: "keep", uvRect: signRect(SIGN.MENU) });
+    for (const s of [-1, 1]) kit.box("metal", 21.42, cH + 0.2, -28.45 + s * 0.27, 0.16, 0.02, 0.03, { color: PALETTE.gunmetal });
+  }
   kit.collider([cx0 - 0.3, 0, cz0 - 0.05], [cx1 + 0.15, cH + 0.9, cz1 + 0.05], "counter");
   // staff pass at the zmax end: hazard sill and a swing gate (open)
   kit.boxMM("hazard", [cx0 - 0.1, 0.005, cz1 + 0.1], [cx1 + 0.1, 0.014, -8.4], { texel: 3 });
@@ -459,12 +532,6 @@ export function buildMess(kit, ctx) {
   wallGrime(kit, ctx, "xmax", 2.4, 2.85, 3.2, 0.8); // soot over the range hoods
   wallGrime(kit, ctx, "xmax", 6.0, 2.85, 2.4, 0.7);
   wallGrime(kit, ctx, "xmin", 2.0, 0.6, 2.0, 0.9);
-  // mismatched replacement panel: a darker plate on the dining zmax wall
-  {
-    const seg = wallSegment(ctx.bounds, "zmax");
-    const { frame } = wallFrame(kit, seg.from, seg.to, 0);
-    frame.box("impPanel1", max[0] - 8.2, 2.15, -0.02, 1.16, 1.06, 0.03, { color: PALETTE.impMid, uv: "keep" });
-  }
   // floor stencil at the door approach
   {
     const g = new THREE.PlaneGeometry(0.9, 0.9);
