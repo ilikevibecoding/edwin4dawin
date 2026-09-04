@@ -234,7 +234,7 @@ export class Traffic {
         const kind: HullKind = ch.id === 'ocean-route' || ch.id === 'ship-channel' ? (rng.chance(0.6) ? 'cargo' : 'ferry') : rng.pick(['speed', 'speed', 'console', 'yacht', 'sail', 'speed']);
         const b = factory.build(kind, rng);
         const speed = kind === 'cargo' ? rng.range(4, 6) : kind === 'ferry' ? 7 : kind === 'sail' ? rng.range(2.5, 4) : kind === 'yacht' ? rng.range(5, 9) : rng.range(9, 16);
-        const wake = new WakeTrail(kind === 'cargo' ? 90 : 60, b.wakeWidth, kind === 'cargo' ? 60 : kind === 'sail' ? 18 : 28, kind === 'sail' ? 0.4 : 1.0);
+        const wake = new WakeTrail(kind === 'cargo' ? 90 : 80, b.wakeWidth, kind === 'cargo' ? 70 : kind === 'sail' ? 20 : 42, kind === 'sail' ? 0.45 : 1.5);
         wakeScene.add(wake.mesh);
         b.group.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; } });
         this.group.add(b.group);

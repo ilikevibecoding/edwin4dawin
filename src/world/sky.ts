@@ -21,20 +21,20 @@ in vec2 vUv;
 
 float cloudDensity(vec3 p, float cov) {
   float hf = (p.y - uCloudBase) / (uCloudTop - uCloudBase);
-  float top = 0.45 + cov * 0.5;
-  float vert = smoothstep(0.0, 0.08, hf) * (1.0 - smoothstep(top * 0.55, top, hf));
+  // taller towers where the macro coverage is strong; flat bases, rounded tops
+  float top = 0.35 + cov * 0.65;
+  float vert = smoothstep(0.0, 0.06, hf) * (1.0 - smoothstep(top * 0.5, top, hf));
   if (vert <= 0.0) return 0.0;
-  vec3 q = (p + vec3(uCloudWind.x, 0.0, uCloudWind.y)) * (1.0 / 1650.0);
+  vec3 q = (p + vec3(uCloudWind.x, 0.0, uCloudWind.y)) * (1.0 / 1500.0);
   vec4 n = texture(uNoise3D, q);
-  float shape = n.r;
-  float d = cov * 1.35 * vert - 0.28;
-  d -= (1.0 - shape) * 0.62;
+  // perlin-worley shape, eroded more strongly toward the top (cauliflower silhouettes)
+  float shape = mix(n.r, n.a, 0.35);
+  float d = cov * 1.5 * vert - 0.22;
+  d -= (1.0 - shape) * (0.5 + 0.35 * hf);
   if (d <= 0.0) return 0.0;
-  float detail = texture(uNoise3D, q * 4.7 + vec3(0.13, 0.31, 0.71)).g;
-  d -= detail * 0.22 * (1.0 - smoothstep(0.0, 0.35, d));
-  // wispier tops
-  d *= 1.0 - 0.35 * smoothstep(0.6, 1.0, hf);
-  return max(d, 0.0);
+  float detail = texture(uNoise3D, q * 5.1 + vec3(0.13, 0.31, 0.71)).g;
+  d -= detail * 0.28 * (1.0 - smoothstep(0.0, 0.4, d));
+  return max(d, 0.0) * 1.35;
 }
 
 float lightMarch(vec3 p, float cov) {
@@ -98,8 +98,8 @@ void main() {
       float t = t0 + jitter;
       float cosSun = dot(dir, uSunDir);
       float phase = hg(cosSun, 0.5) * 0.9 + hg(cosSun, -0.2) * 0.3 + 0.12;
-      vec3 ambient = mix(uHorizonColor, uZenithColor, 0.45) * 1.05;
-      vec3 sunLight = uSunColor * 2.6;
+      vec3 ambient = mix(uHorizonColor, uZenithColor, 0.5) * 0.95;
+      vec3 sunLight = uSunColor * 3.0;
       float sigma = 0.011;
       float wsum = 0.0;
       meanDist = 0.0;
@@ -112,8 +112,8 @@ void main() {
           if (dens > 0.001) {
             float hf = clamp((p.y - uCloudBase) / (uCloudTop - uCloudBase), 0.0, 1.0);
             float lt = lightMarch(p, cov);
-            float powder = 1.0 - exp(-dens * 6.0);
-            vec3 amb = ambient * mix(0.42, 1.0, hf);
+            float powder = 1.0 - exp(-dens * 7.0);
+            vec3 amb = ambient * mix(0.36, 1.0, hf);
             vec3 scat = sunLight * lt * phase * mix(0.5, 1.0, powder) + amb * mix(0.55, 1.0, lt);
             float a = 1.0 - exp(-dens * sigma * dt);
             cloudCol += transmittance * a * scat;

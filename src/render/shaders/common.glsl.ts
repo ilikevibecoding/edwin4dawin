@@ -45,10 +45,10 @@ uniform float uTime;
 /** 2D cloud coverage field used for both the raymarched clouds' macro shape and the ground shadows. */
 export const GLSL_CLOUD_FIELD = /* glsl */ `
 float cloudCoverage2D(vec2 wp) {
-  vec2 p = (wp + uCloudWind) * 0.00016 + uCloudSeed;
+  vec2 p = (wp + uCloudWind) * 0.00015 + uCloudSeed;
   float c = fbm(p);
-  float c2 = fbm(p * 3.1 + 7.7);
-  float f = c * 0.78 + c2 * 0.22;
+  float c2 = fbm(p * 3.3 + 7.7);
+  float f = c * 0.7 + c2 * 0.3;
   // coverage remaps the field so that low coverage leaves discrete cumulus masses
   float thr = 0.7 - uCloudCoverage * 0.42;
   return smoothstep(thr, thr + 0.2, f);

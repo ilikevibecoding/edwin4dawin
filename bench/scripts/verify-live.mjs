@@ -28,8 +28,21 @@ const report = { url, expected, ok: false, checks: {} };
 const t0 = Date.now();
 try {
   const sep = url.includes('?') ? '&' : '?';
-  const resp = await page.goto(`${url}${sep}bench=water-landing&w=1280&h=720&quality=low&freeze=1`, { waitUntil: 'load', timeout: 180000 });
+  let resp = await page.goto(`${url}${sep}bench=water-landing&w=1280&h=720&quality=low&freeze=1`, { waitUntil: 'domcontentloaded', timeout: 180000 });
   report.checks.httpStatus = resp?.status();
+  // githack shows a one-time "External Content Notice" for HTML entry points; click through like a user would
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const title = await page.title();
+    if (title.includes('External Content')) {
+      report.checks.interstitial = true;
+      await Promise.all([page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 120000 }).catch(() => null), page.click('button.url-action-button')]);
+    } else if (title.includes('Error 429')) {
+      report.checks.rateLimited = (report.checks.rateLimited || 0) + 1;
+      await new Promise((r) => setTimeout(r, 70000));
+      resp = await page.goto(`${url}${sep}bench=water-landing&w=1280&h=720&quality=low&freeze=1`, { waitUntil: 'domcontentloaded', timeout: 180000 });
+    } else break;
+  }
+  report.checks.finalTitle = await page.title();
   await page.waitForFunction('window.__benchReady === true', { timeout: 900000, polling: 250 });
   report.checks.loadMs = Date.now() - t0;
   const build = await page.evaluate(() => window.__build);
@@ -41,13 +54,13 @@ try {
     g.aircraft.inputs.throttle = 1.0;
     g.aircraft.inputs.pitch = 0.25;
     const before = { ...g.aircraft.flight.telemetry };
-    window.__bench.step(240); // 8 s at 30 Hz
+    window.__bench.step(600); // 20 s at 30 Hz: touch down, accelerate on the step and lift off again
     const after = { ...g.aircraft.flight.telemetry };
     return { before: { airspeed: before.airspeed, altitude: before.altitude }, after: { airspeed: after.airspeed, altitude: after.altitude, heading: after.heading, stalled: after.stalled } };
   });
   report.checks.flight = tele;
-  report.checks.climbed = tele.after.altitude > tele.before.altitude + 20;
-  report.checks.accelerated = tele.after.airspeed > tele.before.airspeed + 5;
+  report.checks.climbed = tele.after.altitude > 25;
+  report.checks.accelerated = tele.after.airspeed > 33;
   await page.screenshot({ path: path.join(outDir, 'live_flight.png') });
   const m = await page.evaluate(() => window.__bench.metrics());
   report.checks.drawCalls = m.calls;

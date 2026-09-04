@@ -125,7 +125,8 @@ function mergeWithUv(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return out;
 }
 
-/** Lumpy canopy made of displaced icosphere puffs. */
+/** Lumpy canopy made of displaced icosphere puffs: one broad crown plus offset side lobes so no two
+ *  variants share a silhouette and the profile is wider than tall (tropical hardwoods). */
 function canopyGeometry(rng: Rng, puffs: number, flat: number, detail = 1): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
   for (let i = 0; i < puffs; i++) {
@@ -134,18 +135,19 @@ function canopyGeometry(rng: Rng, puffs: number, flat: number, detail = 1): THRE
     const seed = rng.range(0, 100);
     for (let k = 0; k < p.count; k++) {
       const x = p.getX(k), y = p.getY(k), z = p.getZ(k);
-      const d = 1 + 0.22 * perlin2(x * 2.1 + seed, y * 2.1 + z * 1.7);
-      p.setXYZ(k, x * d, y * d * flat, z * d);
+      const d = 1 + 0.28 * perlin2(x * 2.3 + seed, y * 2.3 + z * 1.9);
+      // flatter underside than top
+      const fy = y < 0 ? flat * 0.6 : flat;
+      p.setXYZ(k, x * d, y * d * fy, z * d);
     }
-    const s = i === 0 ? 1 : rng.range(0.55, 0.85);
-    g.scale(s, s, s);
-    const a = rng.range(0, Math.PI * 2), r = i === 0 ? 0 : rng.range(0.35, 0.7);
-    g.translate(Math.cos(a) * r, rng.range(-0.15, 0.25) * (i === 0 ? 0 : 1), Math.sin(a) * r);
+    const s = i === 0 ? 1 : rng.range(0.5, 0.8);
+    g.scale(s * (i === 0 ? 1.25 : 1.0), s, s * (i === 0 ? 1.1 : 1.0));
+    const a = rng.range(0, Math.PI * 2), r = i === 0 ? 0 : rng.range(0.45, 0.85);
+    g.translate(Math.cos(a) * r, i === 0 ? 0 : rng.range(-0.3, 0.15), Math.sin(a) * r);
     g.computeVertexNormals();
     parts.push(g);
   }
-  const merged = mergeNonIndexed(parts);
-  return merged;
+  return mergeNonIndexed(parts);
 }
 
 function mergeNonIndexed(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
@@ -168,9 +170,9 @@ function treeGeometry(rng: Rng): THREE.BufferGeometry {
   const tc = new Float32Array(trunk.getAttribute('position').count * 3);
   for (let i = 0; i < tc.length; i += 3) { tc[i] = 0.36; tc[i + 1] = 0.27; tc[i + 2] = 0.2; }
   trunk.setAttribute('color', new THREE.BufferAttribute(tc, 3));
-  const canopy = canopyGeometry(rng, rng.int(3, 4), rng.range(0.7, 0.9), 0);
-  canopy.scale(0.62, 0.42, 0.62);
-  canopy.translate(0, 0.66, 0);
+  const canopy = canopyGeometry(rng, rng.int(3, 5), rng.range(0.75, 0.95), 0);
+  canopy.scale(0.55, 0.4, 0.55);
+  canopy.translate(0, 0.62, 0);
   return mergeWithUv([trunk, canopy]);
 }
 

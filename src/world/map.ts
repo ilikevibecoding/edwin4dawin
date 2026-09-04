@@ -358,7 +358,7 @@ export function createRoads(): RoadSpec[] {
 export function createBridges(): BridgeSpec[] {
   const B: BridgeSpec[] = [];
   // Reference bridge: Garza north shore -> barrier tip, long low causeway with an arched channel span.
-  B.push({ id: 'garza-bridge', pts: [[-40, 2060], [330, 1250], [700, 300], [980, -400]], width: 22, deck: 7, archHeight: 24, archT: 0.55, archLength: 520, lanes: 4, traffic: 12 });
+  B.push({ id: 'garza-bridge', pts: [[-40, 2060], [330, 1250], [700, 300], [980, -400]], width: 30, deck: 8, archHeight: 26, archT: 0.55, archLength: 560, lanes: 6, traffic: 16 });
   B.push({ id: 'tortuga-bridge', pts: [[1480, -1050], [1800, -600], [2050, -500]], width: 22, deck: 7, archHeight: 18, archT: 0.45, archLength: 380, lanes: 4, traffic: 12 });
   // Southern chain hops
   B.push({ id: 'garza-west', pts: [[-620, 2520], [-420, 2500]], width: 22, deck: 6, archHeight: 0, archT: 0.5, archLength: 0, lanes: 4, traffic: 14 });
@@ -405,7 +405,7 @@ export function createChannels(): ChannelSpec[] {
     // reference channel under the Garza bridge arch and toward the mouth
     { id: 'garza-channel', pts: [[-1000, 3300], [200, 3250], [1000, 3100], [1900, 2400], [2600, 1400], [3400, 400]], width: 90, depth: 7, boats: 9, speed: 12 },
     { id: 'arch-channel', pts: [[-1200, 1200], [-300, 1000], [500, 750], [1400, 300], [2400, -100]], width: 100, depth: 8, boats: 6, speed: 11 },
-    { id: 'ref-boats', pts: [[-500, 3650], [200, 3450], [900, 3150], [1600, 2750]], width: 40, depth: 4, boats: 3, speed: 15 },
+    { id: 'ref-boats', pts: [[-500, 3650], [200, 3450], [900, 3150], [1600, 2750]], width: 40, depth: 4, boats: 3, speed: 18 },
     // south-west flats route
     { id: 'flats-route', pts: [[-2100, 3400], [-1200, 3500], [-300, 3600], [700, 3700], [1500, 4100]], width: 40, depth: 3, boats: 5, speed: 10 },
     // bay crossing pleasure route
@@ -504,6 +504,9 @@ export class WorldMap implements WorldMapData {
   regionalDepth(x: number, z: number): number {
     // bay is shallow and turquoise; deepens towards the mouth and the ocean.
     let depth = 3.0 + 2.6 * (0.5 + 0.5 * fbm2(x / 1100, z / 1100, 3)) + 1.2 * fbm2(x / 350 + 4.0, z / 350, 2);
+    // broad seagrass/sand flats (1-2 m) that read as pale turquoise patches from the air
+    depth -= 2.4 * smoothstep(0.12, 0.42, fbm2(x / 650 + 9.0, z / 650 + 2.0, 3));
+    depth = Math.max(depth, 0.7);
     // ocean beyond the barrier island / south key: continental shelf ramp
     const oceanEdge = 3050 + 320 * fbm2(z / 4000, 0.5, 2) + 110 * fbm2(z / 800 + 3.1, 2.2, 3);
     const east = x - oceanEdge;

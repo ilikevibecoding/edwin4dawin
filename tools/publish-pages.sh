@@ -25,6 +25,7 @@ git fetch -q origin gh-pages || true
 git worktree add -q "$WORK" gh-pages
 find "$WORK" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 cp -a dist/. "$WORK"/
+mkdir -p "$WORK/.github/workflows" && cp tools/pages-workflow.yml "$WORK/.github/workflows/pages.yml"
 (
   cd "$WORK"
   git add -A

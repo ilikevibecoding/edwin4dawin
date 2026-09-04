@@ -117,6 +117,32 @@ export class Bench {
   /** Render the current (frozen) state again without advancing. */
   render(): void { this.game.render(); }
 
+  /** Render and block until the GPU (or software rasterizer) has finished, returning the wall time in ms.
+   *  On a real GPU this is a true frame time; on SwiftShader it measures CPU rasterization. */
+  renderSync(): number {
+    const gl = this.game.renderer.getContext();
+    const t0 = performance.now();
+    this.game.render();
+    gl.finish();
+    // reading one pixel forces completion on drivers where finish() is lazy
+    const px = new Uint8Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    return performance.now() - t0;
+  }
+
+  /** Run n synchronous frames (with simulation) and return frame-time statistics. */
+  profile(n = 20): { frames: number; avgMs: number; minMs: number; maxMs: number; p95Ms: number; onePercentLowMs: number } {
+    const times: number[] = [];
+    for (let i = 0; i < n; i++) {
+      this.game.update(this.fixedDt, true);
+      this.updateCamera(this.fixedDt);
+      times.push(this.renderSync());
+    }
+    const s = times.slice().sort((a, b) => a - b);
+    const avg = s.reduce((a, b) => a + b, 0) / s.length;
+    return { frames: n, avgMs: avg, minMs: s[0], maxMs: s[s.length - 1], p95Ms: s[Math.floor(s.length * 0.95)], onePercentLowMs: s[s.length - 1] };
+  }
+
   metrics(): unknown {
     const m = this.game.metrics.snapshot();
     const t = this.game.aircraft.flight.telemetry;

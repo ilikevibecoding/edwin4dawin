@@ -79,6 +79,9 @@ for (const view of views) {
     const landmarks = await page.evaluate(() => window.__bench.landmarks());
     result.still = { warmupRenderMs: warm, renderMs: t1, metrics, landmarks };
     summary.build = metrics.build;
+    // synchronous frame-time profile (software rasterizer on this VM; a true GPU frame time on real hardware)
+    const prof = await page.evaluate(() => window.__bench.profile(8));
+    result.profile = prof;
     if (doFlight) {
       const tf = await renderTimed(page, 90); // 3 s of flight at 30 Hz
       await page.screenshot({ path: path.join(dir, 'flight.png'), type: 'png' });
@@ -89,7 +92,7 @@ for (const view of views) {
     fs.writeFileSync(path.join(dir, 'console.txt'), logs.join('\n'));
     result.consoleErrors = logs.filter((l) => l.startsWith('[error]') || l.startsWith('[pageerror]')).length;
     await page.close();
-    console.log(`still: setup ${setupMs} ms, render ${t1.toFixed(0)} ms, calls ${metrics.calls}, tris ${metrics.triangles}, heap ${metrics.jsHeapMB?.toFixed(0)} MB`);
+    console.log(`still: setup ${setupMs} ms, sync frame ${prof.avgMs.toFixed(0)} ms (sw), calls ${metrics.calls}, tris ${metrics.triangles}, heap ${metrics.jsHeapMB?.toFixed(0)} MB`);
   }
   // ---- clip at clip quality (fixed 30 Hz simulation, 3 sim frames per captured frame => 10 fps video)
   if (doClip) {
