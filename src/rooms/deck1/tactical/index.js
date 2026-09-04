@@ -108,7 +108,7 @@ const manifest = {
       [480.1, 4],
     ])
       equipmentPedestal(kit, placer(kit, 40.85, TIER, z, 1), { seed: s, screenMat: M, screenRect: cells.ped });
-    floorHatchRound(kit, 42.3, TIER, 472.9, { r: 0.5 });
+    floorHatchRound(kit, 42.3, TIER, 472.9, { r: 0.5, facing: 2 }); // stencils upright for the overview camera (north of it)
     cableCover(kit, [43.1, CZ - 0.45], [41.45, CZ - 0.45], TIER);
     // two sensor stations on the tier facing the flank displays
     {
@@ -313,8 +313,14 @@ const manifest = {
     // get their own pools.
     ctx.lights.push({ type: "point", pos: [CX, FLOOR + 2.7, CZ], color: 0x4fd8ff, intensity: 9, distance: 9, priority: 0.9 });
     ctx.lights.push({ type: "spot", pos: [CX, CY - 0.85, CZ], color: LIGHT.coolWhite, intensity: 10, distance: 8, target: [CX, top, CZ], angle: 0.9, penumbra: 0.4, priority: 0.85 });
-    for (const x of DLX) for (const z of [472.6, 481.4]) ctx.lights.push({ type: "point", pos: [x, CY - 1.0, z], color: LIGHT.coolWhite, intensity: 11, distance: 11, priority: 0.5 });
-    ctx.lights.push({ type: "point", pos: [DLX[0], CY - 1.0, CZ], color: LIGHT.coolWhite, intensity: 12, distance: 10, priority: 0.55 });
+    // west row (over the seating): 1.5 m under the ceiling and a notch dimmer — from the tier's NE corner the
+    // overview camera sees the west ceiling bays at a grazing angle, where a point 1 m under the panels mirrored
+    // as a blown streak; the floor irradiance is unchanged (9 / 3.2² ≈ 11 / 3.7²). Cutoff 9.5 m, not 11: the
+    // plot camera (SE table corner) mirrors the NW point in the darkGloss field at 9.1 m, and the r185 window
+    // term (1 − (r/cutoff)⁴)² is what keeps that streak from clipping — the seating floor sits inside 5 m.
+    for (const z of [472.6, 481.4]) ctx.lights.push({ type: "point", pos: [DLX[0], CY - 1.5, z], color: LIGHT.coolWhite, intensity: 9, distance: 9.5, priority: 0.5 });
+    for (const z of [472.6, 481.4]) ctx.lights.push({ type: "point", pos: [DLX[1], CY - 1.0, z], color: LIGHT.coolWhite, intensity: 11, distance: 11, priority: 0.5 });
+    ctx.lights.push({ type: "point", pos: [DLX[0], CY - 1.5, CZ], color: LIGHT.coolWhite, intensity: 10, distance: 10, priority: 0.55 });
     ctx.lights.push({ type: "point", pos: [DLX[1], CY - 1.0, CZ], color: LIGHT.coolWhite, intensity: 8, distance: 9, priority: 0.45 });
     ctx.lights.push({ type: "spot", pos: [IN.max[0] - 2.6, CY - 0.7, CZ], color: 0xbfd4ff, intensity: 12, distance: 8, target: [IN.max[0], FLOOR + 0.6, CZ], angle: 0.8, penumbra: 0.5, priority: 0.6 });
     // commander's position: white pool on the lectern, low amber accent

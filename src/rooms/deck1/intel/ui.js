@@ -19,7 +19,9 @@ export const UI = {
   status3: [288, 384, 256, 64], // 4:1 three-state lock bar (LOCKED / SCAN / CLEAR)
   pad: [544, 384, 256, 192], // 4:3 datapad screen
   booth: [800, 384, 224, 192], // guard-booth control panel
-  guard: [0, 576, 512, 256],
+  guard: [0, 576, 384, 192], // 2:1 guard-desk screen
+  post: [384, 576, 128, 64], // 2:1 GUARD POST header (booth exterior)
+  check: [0, 768, 384, 64], // 6:1 CHECKPOINT bar (guard-desk public face)
   table: [512, 576, 256, 256],
   sign0: [768, 576, 256, 128],
   sign1: [768, 704, 256, 128],
@@ -207,33 +209,33 @@ function drawMonitor(g, cell, rand, idx) {
 }
 
 function drawGuard(g, cell, rand) {
-  const [x, y, w, h] = cell;
+  const [x, y, w] = cell;
   base(g, cell);
-  header(g, cell, "SECURITY LOCK 4-A · INTELLIGENCE SECTION", "GUARD POST", 12);
-  // big LOCKED box
+  header(g, cell, "SECURITY LOCK 4-A · INTELLIGENCE", "GUARD POST", 11);
+  // big gate-state box: the inner gate's leaves stand retracted, so the post reads CLEAR (the arch stays armed)
   g.strokeStyle = RED;
   g.lineWidth = 3;
-  g.strokeRect(x + 16, y + 44, 170, 70);
+  g.strokeRect(x + 12, y + 38, 130, 54);
   g.fillStyle = "rgba(255,42,26,0.15)";
-  g.fillRect(x + 16, y + 44, 170, 70);
-  text(g, "LOCKED", x + 101, y + 72, 26, RED_HI, "center");
-  text(g, "INNER GATE · SCANNER ARMED", x + 101, y + 100, 9, RED, "center", false);
+  g.fillRect(x + 12, y + 38, 130, 54);
+  text(g, "CLEAR", x + 77, y + 60, 22, RED_HI, "center");
+  text(g, "INNER GATE OPEN · SCANNER ARMED", x + 77, y + 82, 8, RED, "center", false);
   // access log
-  text(g, "ACCESS LOG", x + 204, y + 44, 10, RED_HI);
-  for (let k = 0; k < 9; k++) {
+  text(g, "ACCESS LOG", x + 156, y + 38, 9, RED_HI);
+  for (let k = 0; k < 7; k++) {
     const denied = rand() < 0.35;
-    text(g, `${code(rand, 6)}  ${denied ? "DENIED " : "GRANTED"}  L${1 + Math.floor(rand() * 4)}  ${String(Math.floor(rand() * 24)).padStart(2, "0")}:${String(Math.floor(rand() * 60)).padStart(2, "0")}`, x + 204, y + 62 + k * 15, 10, denied ? RED_HI : RED, "left", false);
+    text(g, `${code(rand, 6)}  ${denied ? "DENIED " : "GRANTED"}  L${1 + Math.floor(rand() * 4)}  ${String(Math.floor(rand() * 24)).padStart(2, "0")}:${String(Math.floor(rand() * 60)).padStart(2, "0")}`, x + 156, y + 54 + k * 13, 9, denied ? RED_HI : RED, "left", false);
   }
   // biometric bars + status matrix
-  text(g, "BIOMETRIC", x + 16, y + 130, 10, RED_HI);
-  bars(g, x + 16, y + 140, 170, 50, 14, rand);
+  text(g, "BIOMETRIC", x + 12, y + 104, 9, RED_HI);
+  bars(g, x + 12, y + 112, 130, 36, 12, rand);
   for (let r = 0; r < 3; r++)
-    for (let c = 0; c < 10; c++) {
+    for (let c = 0; c < 8; c++) {
       if (rand() < 0.3) continue;
       g.fillStyle = rand() < 0.2 ? RED_HI : RED;
-      g.fillRect(x + 16 + c * 17, y + 200 + r * 14, 12, 9);
+      g.fillRect(x + 12 + c * 16, y + 156 + r * 10, 11, 7);
     }
-  rows(g, x + 204, y + 200, w - 224, 3, 14, rand);
+  rows(g, x + 156, y + 150, w - 168, 3, 12, rand);
 }
 
 function drawTable(g, cell, rand) {
@@ -316,7 +318,7 @@ function drawScan(g, cell) {
   for (let k = 0; k < 4; k++) g.fillRect(x + 19 + k * 18, y + h - 29, 14, 8);
 }
 
-// --- three-state lock bar (4:1): LOCKED lit, SCAN / CLEAR dark outlines
+// --- three-state lock bar (4:1): CLEAR lit (the inner gate's leaves stand retracted), LOCKED / SCAN dark outlines
 function drawStatus3(g, cell) {
   const [x, y, w, h] = cell;
   g.fillStyle = "#0a0304";
@@ -324,7 +326,7 @@ function drawStatus3(g, cell) {
   const bw = (w - 32) / 3;
   ["LOCKED", "SCAN", "CLEAR"].forEach((s, k) => {
     const bx = x + 8 + k * (bw + 8);
-    if (k === 0) {
+    if (k === 2) {
       g.fillStyle = RED;
       g.fillRect(bx, y + 10, bw, h - 20);
       text(g, s, bx + bw / 2, y + h / 2, 18, "#0a0304", "center");
@@ -384,7 +386,7 @@ function drawBooth(g, cell, rand) {
     g.strokeRect(bx + 0.5, by + 0.5, 59, 29);
     text(g, s, bx + 30, by + 15, 11, lit ? RED_HI : RED, "center");
   });
-  text(g, "GATE  LOCKED", x + 12, y + 138, 13, RED_HI);
+  text(g, "GATE  OPEN", x + 12, y + 138, 13, RED_HI);
   text(g, "ARCH  ARMED", x + 12, y + 156, 13, RED);
   rows(g, x + 12, y + 168, w - 24, 1, 14, rand);
 }
@@ -408,6 +410,8 @@ export function makeIntelAtlas() {
   drawSign(g, UI.hatch, ["EVIDENCE", "SEALED — DO NOT OPEN", "CUSTODY SEAL 4-A-117"]);
   drawSign(g, UI.sign2, ["NO RECORDING DEVICES"], { big: 16 });
   drawSign(g, UI.sign3, ["LOCK IN OPERATION"], { big: 16 }); // dark plate, lit text + border lines only
+  drawSign(g, UI.post, ["GUARD POST", "CALL FOR ASSISTANCE"], { big: 15, small: 8 });
+  drawSign(g, UI.check, ["CHECKPOINT 4-A · GUARD POST", "PRESENT IDENT · WAIT FOR CLEARANCE"], { big: 17, small: 11 });
   const labels = ["SIGINT VAULT", "ASSET FILES", "CIPHER KEYS", "WATCHLIST", "PURGE HOLD", "CUSTODY"];
   labels.forEach((s, i) => drawLabel(g, UI["label" + i], s, ["ARCHIVE 01 · L4", "ARCHIVE 02 · L3", "ARCHIVE 03 · L4", "ARCHIVE 04 · L2", "ARCHIVE 05 · SEALED", "ARCHIVE 06 · L4"][i]));
   ["DATASTREAM 01", "DATASTREAM 02", "DATASTREAM 03", "DATASTREAM 04", "DATASTREAM 05", "SURVEILLANCE"].forEach((s, i) => drawLabel(g, UI["tag" + i], s));

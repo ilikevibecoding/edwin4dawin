@@ -248,6 +248,23 @@ export function equipmentPedestal(kit, p, { h = 1.2, seed = 0, screenMat = null,
   for (let k = 0; k < 5; k++) p.box("metalRough", 0.06, 0.22 + k * 0.045, 0.232, 0.24, 0.012, 0.012, { color: IMP.black });
   p.box("impPanel", 0, h * 0.62, 0.232, 0.3, 0.3, 0.008, { color: IMP.grey, texel: 1 });
   p.decal(0.1, 0.95, 0.238, 0.14, rand() < 0.5 ? 9 : 6);
+  // side faces (local ±x — what a viewer on the tier sees): a recessed panel with a seam groove, a seven-LED
+  // indicator run over a blue seam (the holo table's rim density), a light-grey plate with a stencil, vent
+  // slats low down and, on the +x side, a small readout when a screen material is given
+  for (const s of [-1, 1]) {
+    const q = placerRad(kit, ...p.P(s * 0.23, 0, 0), p.a + (s * Math.PI) / 2);
+    q.box("paintedMetal", 0, h * 0.5, 0.008, 0.38, h - 0.3, 0.016, { color: IMP.dark, texel: 1 });
+    q.box("paintedMetal", 0, h * 0.5, 0.017, 0.34, 0.012, 0.004, { color: IMP.black });
+    for (let i = 0; i < 7; i++) q.box(IND[(i * 2 + seed + (s > 0 ? 1 : 0)) % IND.length], -0.15 + i * 0.05, h * 0.5 + 0.07, 0.02, 0.03, 0.02, 0.006);
+    q.box("emitBlue", 0, h * 0.5 + 0.035, 0.02, 0.32, 0.008, 0.006);
+    if (s > 0 && screenMat) q.screenV(screenMat, 0, h * 0.5 - 0.14, 0.021, 0.3, 0.18, screenRect);
+    else {
+      q.box("impPanel", 0, h * 0.5 - 0.14, 0.02, 0.26, 0.2, 0.008, { color: IMP.grey, texel: 1 });
+      q.decal(0, h * 0.5 - 0.14, 0.026, 0.16, s > 0 ? 6 : 9);
+    }
+    for (let k = 0; k < 4; k++) q.box("metalRough", 0, 0.22 + k * 0.045, 0.02, 0.26, 0.012, 0.012, { color: IMP.black });
+    q.box("metal", 0, h - 0.24, 0.022, 0.3, 0.02, 0.02, { color: IMP.steel, texel: 2 });
+  }
   p.cyl("metalRough", 0, 0.14, -0.3, 0.025, 0.2, "y", { color: IMP.mid, segments: 8 });
   p.box("metal", 0, 0.02, -0.3, 0.16, 0.04, 0.12, { color: IMP.mid, texel: 2 });
   p.collider(-0.31, 0.31, 0, h + 0.1, -0.31, 0.31, "pedestal");
@@ -258,37 +275,54 @@ export function equipmentPedestal(kit, p, { h = 1.2, seed = 0, screenMat = null,
 // ---------------------------------------------------------------------------
 
 /**
- * Storage locker: dark carcass with a lighter panelled door (single ≤ 0.7 m, double above), recessed handle
- * plates, vent slats, status LED, a proud label plate. `open` swings the (right) door out ~75° and shows the
- * interior: shelves, a canister, a case and a coiled cable. p at floor, centred.
+ * Storage locker: dark carcass with a lighter panelled door (single ≤ 0.7 m, double above). Each closed leaf
+ * carries two recessed horizontal seams (three panels), hinge knuckles on its outer edge, a black handle
+ * recess with a steel bar and a lock LED, lower vent slats and a numeral plate; the carcass has a black kick
+ * plate and a steel cap. `open` swings the (right) door out ~75° and shows the interior (shelves, a canister,
+ * a case and a coiled cable); `ajar` leaves it 14° open instead. p at floor, centred.
  */
-export function locker(kit, p, { w = 0.8, h = 2.2, d = 0.55, seed = 0, label = 6, double = w > 0.7, open = false } = {}) {
+export function locker(kit, p, { w = 0.8, h = 2.2, d = 0.55, seed = 0, label = 6, double = w > 0.7, open = false, ajar = false } = {}) {
   const f = WALL_OFF + d;
   const dw = double ? (w - 0.06) / 2 : w - 0.06; // door leaf width
   const dh = h - 0.16;
+  const angle = open ? 1.3 : ajar ? 0.24 : 0;
   p.box("paintedMetal", 0, h / 2, WALL_OFF + d / 2, w, h, d, { color: IMP.dark, texel: 1 });
   p.box("metal", 0, h + 0.015, WALL_OFF + d / 2, w + 0.02, 0.03, d + 0.02, { color: IMP.mid, texel: 2 });
-  const leaf = (cx, openAngle) => {
-    if (!openAngle) {
-      p.box("impPanel", cx, h / 2 + 0.02, f + 0.008, dw, dh, 0.016, { color: IMP.grey, texel: 0.8 });
-      p.box("metal", cx + (cx < 0 ? dw / 2 - 0.06 : -dw / 2 + 0.06), 1.05, f + 0.03, 0.025, 0.16, 0.025, { color: IMP.steel, texel: 2 });
-      p.box("paintedMetal", cx + (cx < 0 ? dw / 2 - 0.06 : -dw / 2 + 0.06), 1.05, f + 0.018, 0.05, 0.2, 0.004, { color: IMP.black });
-      return;
-    }
-    // hinge on the leaf's outer (right) edge; the leaf swings out into the room
-    const hx = cx + dw / 2;
+  p.box("metalRough", 0, 0.07, f + 0.014, w, 0.14, 0.028, { color: IMP.black, texel: 2 }); // kick plate
+  p.box("metal", 0, 0.145, f + 0.014, w, 0.01, 0.03, { color: IMP.steel }); // kick plate edge
+  // A leaf hinged on its outer edge (hingeSide +1 = right edge, -1 = left edge) swung `openAngle` into the
+  // room: leaf-local (u = distance from the hinge toward the free edge, proud = in front of the leaf plane)
+  // → prop space. Leaf, seams, hinge knuckles, handle, lock LED, numeral plate and vent slats share the frame.
+  const leaf = (cx, openAngle, hingeSide) => {
+    const hx = cx + hingeSide * (dw / 2);
     const c = Math.cos(openAngle);
     const s = Math.sin(openAngle);
-    p.box("impPanel", hx - (dw / 2) * c, h / 2 + 0.02, f + 0.008 + (dw / 2) * s, dw, dh, 0.016, { color: IMP.grey, texel: 0.8, yaw: openAngle });
-    p.box("metal", hx - (dw - 0.06) * c + 0.022 * s, 1.05, f + 0.008 + (dw - 0.06) * s + 0.022 * c, 0.025, 0.16, 0.025, { color: IMP.steel, texel: 2, yaw: openAngle });
+    const yaw = hingeSide * openAngle;
+    const at = (u, proud) => [hx - hingeSide * u * c + hingeSide * proud * s, f + 0.008 + u * s + proud * c];
+    const B = (mat, u, y, proud, sx, sy, sz, opts = {}) => {
+      const [px, pz] = at(u, proud);
+      p.box(mat, px, y, pz, sx, sy, sz, { yaw, ...opts });
+    };
+    B("impPanel", dw / 2, h / 2 + 0.02, 0, dw, dh, 0.016, { color: IMP.grey, texel: 0.8 });
+    for (const y of [0.66, 1.42]) B("paintedMetal", dw / 2, y, 0.009, dw - 0.04, 0.012, 0.004, { color: IMP.black });
+    for (const y of [0.45, 1.16, 1.87]) B("metal", 0.012, y, 0.012, 0.024, 0.09, 0.03, { color: IMP.steel, texel: 2 });
+    B("paintedMetal", dw - 0.09, 1.05, 0.009, 0.07, 0.26, 0.004, { color: IMP.black });
+    B("metal", dw - 0.09, 1.05, 0.026, 0.024, 0.18, 0.024, { color: IMP.steel, texel: 2 });
+    B(seed % 3 === 0 ? "emitRedImp" : "emitBlue", dw - 0.09, 1.22, 0.012, 0.016, 0.016, 0.006);
+    B("metal", dw / 2, h - 0.28, 0.01, 0.14, 0.1, 0.006, { color: IMP.dark, texel: 2 });
+    {
+      const [px, pz] = at(dw / 2, 0.015);
+      kit.add("decal", new THREE.PlaneGeometry(0.1, 0.1), { pos: p.P(px, h - 0.28, pz), quat: quatYX(p.a + yaw), uv: "keep", uvRect: decalRect(2) });
+    }
+    for (let k = 0; k < 5; k++) B("metalRough", dw / 2, 0.24 + k * 0.045, 0.012, dw - 0.16, 0.012, 0.012, { color: IMP.black });
   };
   if (double) {
-    leaf(-(dw / 2 + 0.03), 0);
-    leaf(dw / 2 + 0.03, open ? 1.3 : 0);
+    leaf(-(dw / 2 + 0.03), 0, -1);
+    leaf(dw / 2 + 0.03, angle, 1);
     p.box("paintedMetal", 0, h / 2 + 0.02, f + 0.017, 0.02, dh, 0.004, { color: IMP.black });
-  } else leaf(0, open ? 1.3 : 0);
-  if (open) {
-    // interior behind the open leaf: back panel, two shelves, contents
+  } else leaf(0, angle, 1);
+  if (angle) {
+    // interior behind the swung leaf: back panel, two shelves, contents
     const ix = double ? dw / 2 + 0.03 : 0;
     p.box("impPanel", ix, h / 2 + 0.02, WALL_OFF + 0.03, dw - 0.02, dh - 0.02, 0.01, { color: IMP.mid, texel: 1 });
     for (const y of [0.8, 1.5]) p.box("metal", ix, y, WALL_OFF + d / 2, dw - 0.02, 0.02, d - 0.06, { color: IMP.mid, texel: 2 });
@@ -299,13 +333,12 @@ export function locker(kit, p, { w = 0.8, h = 2.2, d = 0.55, seed = 0, label = 6
     kit.add("metal", new THREE.TorusGeometry(0.09, 0.014, 6, 16), { pos: p.P(ix, 1.5 + 0.02, WALL_OFF + d / 2), quat: quatYX(p.a, Math.PI / 2), color: IMP.black, uv: "keep" });
     p.box("emitAmber", ix + 0.08, 0.8 + 0.13, WALL_OFF + d / 2 + 0.152, 0.02, 0.012, 0.006);
   }
-  for (let k = 0; k < 5; k++) p.box("metalRough", double ? -(dw / 2 + 0.03) : 0, 0.22 + k * 0.045, f + 0.02, dw - 0.16, 0.012, 0.012, { color: IMP.black });
-  p.box(seed % 2 ? "emitAmber" : "emitBlue", w / 2 - 0.1, h - 0.18, f + 0.02, 0.03, 0.03, 0.008);
+  p.box(seed % 2 ? "emitAmber" : "emitBlue", w / 2 - 0.1, h - 0.1, f + 0.02, 0.03, 0.03, 0.008);
   // label plate (proud) on the fixed / left leaf
   const lx = double ? -(dw / 2 + 0.03) : 0;
   p.box("metal", lx, h - 0.5, f + 0.02, 0.24, 0.1, 0.008, { color: IMP.mid, texel: 2 });
   p.decal(lx, h - 0.5, f + 0.027, 0.2, label);
-  p.collider(-w / 2 - 0.02, w / 2 + 0.02, 0, h + 0.05, 0, f + (open ? dw + 0.05 : 0.05), "locker");
+  p.collider(-w / 2 - 0.02, w / 2 + 0.02, 0, h + 0.05, 0, f + (angle ? Math.sin(angle) * dw + 0.05 : 0.05), "locker");
 }
 
 /**
@@ -620,6 +653,49 @@ export function lightTrough(kit, axis, at, a0, a1, ceilY, { w = 0.5, depth = 0.1
   for (let u = a0 + 0.15; u < a1 - 0.1; u += louvreEvery) B(u - 0.005, u + 0.005, ceilY - depth + 0.005, bTop, -w / 2 + t, w / 2 - t, "metal", { color: IMP.mid, texel: 2 });
 }
 
+/**
+ * Hung light canopy over a dais / seating group: a dark fascia box (depth `depth`) under the ceiling with a
+ * steel lip and a blue seam line along its faces, a matte soffit and `channels` recessed louvred light troughs
+ * across it (along x; the trough axis = "x" → at = z). min/max = [x, z] footprint; ceilY = ceiling face.
+ * `open` = fascia faces to draw ("n" | "s" | "e" | "w"; the wall side is left open).
+ */
+export function lightCanopy(kit, min, max, ceilY, { depth = 0.5, channels = 3, chW = 0.5, faces = ["n", "e", "w"], soffitMat = "rubber", soffitColor = IMP.white, glow = "emitBlue", emit = "emitCoolSoft" } = {}) {
+  const [x0, z0] = min;
+  const [x1, z1] = max;
+  const y0 = ceilY - depth;
+  const t = 0.08;
+  const fascia = (mn, mx, alongX) => {
+    kit.boxMM("paintedMetal", mn, mx, { color: IMP.dark, texel: 1 });
+    // lip along the bottom outer edge, blue seam a hand above it
+    kit.boxMM("metal", [mn[0] - 0.015, y0 - 0.03, mn[2] - 0.015], [mx[0] + 0.015, y0, mx[2] + 0.015], { color: IMP.mid, texel: 2 });
+    if (alongX) {
+      const zs = mn[2] < (z0 + z1) / 2 ? mn[2] - 0.004 : mx[2] - 0.002;
+      kit.boxMM(glow, [mn[0] + 0.1, y0 + 0.14, zs], [mx[0] - 0.1, y0 + 0.152, zs + 0.006]);
+    } else {
+      const xs = mn[0] < (x0 + x1) / 2 ? mn[0] - 0.004 : mx[0] - 0.002;
+      kit.boxMM(glow, [xs, y0 + 0.14, mn[2] + 0.1], [xs + 0.006, y0 + 0.152, mx[2] - 0.1]);
+    }
+  };
+  if (faces.includes("n")) fascia([x0, y0, z0], [x1, ceilY + 0.01, z0 + t], true);
+  if (faces.includes("s")) fascia([x0, y0, z1 - t], [x1, ceilY + 0.01, z1], true);
+  if (faces.includes("w")) fascia([x0, y0, z0], [x0 + t, ceilY + 0.01, z1], false);
+  if (faces.includes("e")) fascia([x1 - t, y0, z0], [x1, ceilY + 0.01, z1], false);
+  // soffit strips between the channels, channels recessed above the soffit face
+  const zi0 = z0 + (faces.includes("n") ? t : 0);
+  const zi1 = z1 - (faces.includes("s") ? t : 0);
+  const xi0 = x0 + (faces.includes("w") ? t : 0);
+  const xi1 = x1 - (faces.includes("e") ? t : 0);
+  const pitch = (zi1 - zi0) / channels;
+  let cur = zi0;
+  for (let i = 0; i < channels; i++) {
+    const zc = zi0 + pitch * (i + 0.5);
+    kit.boxMM(soffitMat, [xi0, y0, cur], [xi1, y0 + 0.06, zc - chW / 2], { color: soffitColor, texel: 1 });
+    lightTrough(kit, "x", zc, xi0 + 0.06, xi1 - 0.06, y0 + 0.2, { w: chW, depth: 0.2, emit });
+    cur = zc + chW / 2;
+  }
+  kit.boxMM(soffitMat, [xi0, y0, cur], [xi1, y0 + 0.06, zi1], { color: soffitColor, texel: 1 });
+}
+
 /** Cable tray: U-channel with cable bundles and hangers to the ceiling. Straight run along x or z. */
 export function cableTray(kit, from, to, y, { w = 0.36, hangTo = null, cables = 3 } = {}) {
   const alongX = Math.abs(to[0] - from[0]) > Math.abs(to[1] - from[1]);
@@ -683,17 +759,22 @@ export function ceilingPipe(kit, from, to, y, { r = 0.05, color = IMP.mid, hangT
 }
 
 /**
- * Downlight: dark can with a lighter bezel ring, a deep black recess and a small centre-bright diffuser
- * (emitCoolSoft, per-face uvs) set 6 cm up inside it behind a cross louvre. y = housing top (under the ceiling).
+ * Downlight: deep dark can (0.22 m) with a matte painted bezel (dielectric — no grazing-angle glint), a black
+ * throat and a small centre-bright diffuser (emitCoolSoft, per-face uvs; ≈ half the emitting area of the
+ * Phase-2 can) hidden behind a 5 cm five-blade louvre with a cross blade, so from any oblique view the blades
+ * cover the emitter and the fixture reads as a dark housing with a glow. y = housing top (under the ceiling).
  */
 export function downlight(kit, x, y, z, { r = 0.08, emit = "emitCoolSoft" } = {}) {
-  kit.cyl("metalRough", x, y - 0.08, z, r + 0.1, 0.16, "y", { color: IMP.dark, segments: 16, texel: 1 });
-  // bezel ring, black throat and the diffuser stacked just under the can's bottom face
-  kit.add("metal", new THREE.RingGeometry(r + 0.03, r + 0.09, 16), { pos: [x, y - 0.162, z], rot: [Math.PI / 2, 0, 0], color: IMP.mid, uv: "keep" });
-  kit.add("paintedMetal", new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.004, 16), { pos: [x, y - 0.164, z], color: IMP.black, uv: "keep" });
-  kit.add(emit, new THREE.CylinderGeometry(r, r, 0.004, 16), { pos: [x, y - 0.169, z], uv: "keep" });
-  kit.box("metalRough", x, y - 0.175, z, r * 2 + 0.04, 0.008, 0.014, { color: IMP.mid });
-  kit.box("metalRough", x, y - 0.175, z, 0.014, 0.008, r * 2 + 0.04, { color: IMP.mid });
+  const R = r + 0.1;
+  const b = y - 0.22; // can bottom
+  kit.cyl("metalRough", x, y - 0.11, z, R, 0.22, "y", { color: IMP.dark, segments: 16, texel: 1 });
+  kit.add("paintedMetal", new THREE.RingGeometry(r + 0.03, R, 16), { pos: [x, b - 0.002, z], rot: [Math.PI / 2, 0, 0], color: IMP.mid, uv: "keep" });
+  kit.add("paintedMetal", new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.004, 16), { pos: [x, b - 0.004, z], color: IMP.black, uv: "keep" });
+  kit.add(emit, new THREE.CylinderGeometry(r * 0.7, r * 0.7, 0.004, 16), { pos: [x, b - 0.009, z], uv: "keep" });
+  // louvre: a dark rim ring hanging under the throat, five blades across it and one cross blade
+  kit.add("paintedMetal", new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.05, 16, 1, true), { pos: [x, b - 0.035, z], color: IMP.dark, uv: "keep" });
+  for (let k = -2; k <= 2; k++) kit.box("paintedMetal", x + k * r * 0.45, b - 0.035, z, 0.006, 0.05, Math.sqrt(Math.max(0.01, (r + 0.03) ** 2 - (k * r * 0.45) ** 2)) * 2, { color: IMP.dark });
+  kit.box("paintedMetal", x, b - 0.035, z, r * 2 + 0.06, 0.05, 0.006, { color: IMP.dark });
 }
 
 /** Ceiling vent grille (square). y = ceiling face. */
@@ -797,16 +878,24 @@ export function cableCover(kit, from, to, y, { w = 0.28 } = {}) {
   }
 }
 
-/** Round floor access hatch: hazard ring, steel rim ring, recessed dark lid with bolt heads and a lifting bar. */
-export function floorHatchRound(kit, cx, y, cz, { r = 0.5 } = {}) {
+/**
+ * Round floor access hatch: hazard ring, steel rim ring, recessed dark lid with bolt heads and a lifting bar,
+ * a HATCH stencil and a NO STEP stencil on the lid, four amber seal markers on the rim. `facing` = quarter
+ * turns for the stencils' upright direction (0: readable from +z).
+ */
+export function floorHatchRound(kit, cx, y, cz, { r = 0.5, facing = 0 } = {}) {
   kit.add("hazard", new THREE.RingGeometry(r + 0.04, r + 0.14, 32), { pos: [cx, y + 0.004, cz], rot: [-Math.PI / 2, 0, 0], uv: "scale", uvScale: [6, 6] });
   kit.add("metal", new THREE.CylinderGeometry(r + 0.04, r + 0.04, 0.014, 32), { pos: [cx, y + 0.007, cz], color: IMP.mid, uv: "keep" });
   kit.add("paintedMetal", new THREE.CylinderGeometry(r - 0.04, r - 0.04, 0.006, 32), { pos: [cx, y + 0.016, cz], color: IMP.dark, uv: "keep" });
   for (let k = 0; k < 8; k++) {
     const a = (k / 8) * Math.PI * 2;
     kit.cyl("metal", cx + Math.sin(a) * (r - 0.12), y + 0.021, cz + Math.cos(a) * (r - 0.12), 0.02, 0.006, "y", { color: IMP.steel, segments: 8 });
+    if (k % 2 === 1) kit.box("emitAmber", cx + Math.sin(a) * (r + 0.01), y + 0.015, cz + Math.cos(a) * (r + 0.01), 0.05, 0.004, 0.05);
   }
   kit.box("metal", cx, y + 0.024, cz, 0.3, 0.012, 0.04, { color: IMP.steel, texel: 2 });
+  const p = placer(kit, cx, y + 0.021, cz, facing);
+  p.decal(0, 0, -0.22, 0.34, 8, -Math.PI / 2);
+  p.decal(0, 0, 0.24, 0.3, 7, -Math.PI / 2);
 }
 
 /**

@@ -39,6 +39,7 @@ import {
   cableTray,
   riser,
   guideLine,
+  floorStrip,
   dais,
   slab,
   canLight,
@@ -120,8 +121,9 @@ const manifest = {
     barrier(kit, R, xA, 493.9, 497.36);
     barrier(kit, R, xA, 499.84, 500.36);
     barrier(kit, R, xA, 502.44, zs);
-    // guard post: counter on the barrier line, guard behind it (north) facing the door, public sign on the front
-    consoleDesk(kit, R, xA, 493.5, { w: 1.5, facing: 2, screens: ["guard"], screenAspect: 2, tilt: -0.75, chairs: [0], readouts: ["readout2", "readout1"], sign: "sign1", seed: 41 });
+    // guard post: counter on the barrier line, guard behind it (north) facing the door, CHECKPOINT bar on the front
+    // (the vestibule view's far-end destination together with the desk-approach can)
+    consoleDesk(kit, R, xA, 493.5, { w: 1.5, facing: 2, screens: ["guard"], screenAspect: 2, tilt: -0.75, chairs: [0], readouts: ["readout2", "readout1"], sign: "check", signW: 1.0, seed: 41 });
     lockerBank(kit, R, 24.5, 4, 0.5, 2.0, zn, 1, { seed: 3 });
     duct(kit, 24.0, pxW - 0.05, y0 + 2.5, y0 + 2.88, zn, zn + 0.45, { alongX: true, grilles: [25.4], grilleFace: zn + 0.45 });
     // west wall: equipment cabinet, wall monitor and alarm point north of the door; compartments + sign south
@@ -146,6 +148,13 @@ const manifest = {
     guideLine(kit, y0, xw + 0.3, xA - 0.5, gz);
     guideLine(kit, y0, xA + 0.5, px - 0.34, gz);
     guideLine(kit, y0, px + 0.34, 30.4, gz);
+    // inlaid red edge strips along both sides of the vestibule walkway (west: 0.55 m off the wall, clear of the
+    // compartments; east: 0.3 m off the barrier line), bench → guard desk, broken at the guide line and the arch
+    // threshold plate — two converging lines that lead the eye to the guard post
+    floorStrip(kit, y0, 24.45, 503.1, gz + 0.15);
+    floorStrip(kit, y0, 24.45, gz - 0.15, 494.3);
+    floorStrip(kit, y0, 25.6, 503.1, 499.9);
+    floorStrip(kit, y0, 25.6, 497.3, 494.3);
     // cameras watching the door, the lock and the gate
     camera(kit, 24.35, ceilY, 490.9, -2.5);
     camera(kit, 24.35, ceilY, 503.15, -0.64);
@@ -236,13 +245,15 @@ const manifest = {
     // give ~1.5 lx-equivalent on the floor: the shots at half this read 4 % grey, target ~8 %)
     for (const x of [29.6, 37.2]) for (const z of [cz - 2.6, cz + 2.6]) point(canLight(kit, ceilY, x, z), 20, 10, 0.5);
     for (const z of [cz - 3.6, cz + 3.6]) point(canLight(kit, ceilY, xe - 1.25, z), 16, 9, 0.45);
-    // vestibule: north end (guard desk / lockers), mid (lockers + RESTRICTED sign), south end (compartments / bench)
+    // vestibule: three cans 2 m apart over the north half — lockers, the desk approach (the vestibule view's far-end
+    // pool: ≈ E 4 at the desk's foot, the brightest floor in the room) and the door / RESTRICTED sign — plus the
+    // south can over the booth / compartments (faces the booth's grey back panel: kept at 12)
     point(canLight(kit, ceilY, 25.0, 492.2), 18, 9, 0.65);
-    point(canLight(kit, ceilY, 25.1, 495.4), 18, 9, 0.7);
-    point(canLight(kit, ceilY, 25.0, 501.6), 12, 9, 0.55); // faces the booth's grey back panel: kept at 12
-    // guard-booth interior (housed can under the booth roof; seen only through the booth window). 0.3 cd at 0.6 m
-    // from the back panel ≈ E 0.8 — together with the vestibule can the panel stays under 1.0.
-    point(guardBooth(kit, R, pxW, 500.4, 502.4, { w: pxW - xA }), 0.3, 2.2, 0.4);
+    point(canLight(kit, ceilY, 25.4, 494.3), 20, 8, 0.72);
+    point(canLight(kit, ceilY, 25.1, 496.3), 18, 9, 0.7);
+    point(canLight(kit, ceilY, 25.0, 501.6), 12, 9, 0.55);
+    // guard booth (no descriptor of its own: the south can lights its interior through the wall — no shadows)
+    guardBooth(kit, R, pxW, 500.4, 502.4, { w: pxW - xA });
     // spots: analysis table (shadow caster), lock path in front of the arch, gate threshold, surveillance wall wash
     spot(tableFixture(kit, R, tx, cz), [tx, tyb + 0.93, cz], 14, 6, 0.8, 1.0);
     spot(canSpot(kit, ceilY, 24.9, 498.6), [25.4, y0, 498.6], 18, 7, 0.75, 0.9);

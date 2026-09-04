@@ -155,8 +155,8 @@ export function signalWall(kit, xw, y0, zc, ceilY) {
     kit.cyl("metal", xw + 0.72, ceilY - 0.015, zz, 0.03, 0.03, "y", { color: IMP.steel, segments: 8 });
     kit.cyl("metal", xw + 0.3, ceilY - 0.1, zz, 0.02, 0.5, "x", { color: IMP.mid, segments: 8 });
   }
-  // --- floor inlay with a painted edge line and cable cover to the plinth
-  kit.boxMM("paintedMetal", [xw + 0.47, H(0), zc - 6.8], [xw + 1.3, H(0.012), zc + 6.8], { color: IMP.black, texel: 1 });
+  // --- floor inlay (impFloor: 11 m² of paintedMetal read as stains) with a painted edge line
+  kit.boxMM("impFloor", [xw + 0.47, H(0), zc - 6.8], [xw + 1.3, H(0.012), zc + 6.8], { color: IMP.black, texel: 1 });
   kit.boxMM("paintedMetal", [xw + 1.3, H(0), zc - 6.6], [xw + 1.34, H(0.008), zc + 6.6], { color: PAINT });
   kit.collider([xw, y0, zc - 6.8], [xw + 0.47, y0 + 3.6, zc + 6.8], "signal-wall");
 }
@@ -268,13 +268,17 @@ export function eastWall(kit, xe, y0, zn, zs, dz0, dz1, dh, ceilY) {
 /**
  * Sensor-processing tower at (x, z): 2.5 m cylinder on a hazard-banded drum, four ribs, a waisted neck at 2.1 m
  * that the instanced scanner ring (see ringGeometry) rotates around, status LED column + readout facing +x,
- * control screen facing -x, vents / latched access panels on ±z, cap with antenna and beacon. Returns the ring y.
+ * control screen facing -x, vents / latched access panels on ±z, cap with antenna and beacon. `labelSide` (±1)
+ * picks the z side of the +x face that carries the unit's identification: a white plate with the HV power
+ * stencil, a status readout with LEDs and the unit ID on the upper drum, all turned 70° off +x toward the centre
+ * aisle so the towers read as power/antenna units from the walkway. Returns the ring y.
  */
-export function sensorTower(kit, x, y0, z, idx) {
+export function sensorTower(kit, x, y0, z, idx, { labelSide = 1 } = {}) {
   const rand = rng(9100 + idx);
   const H = (h) => y0 + h;
-  // floor plate with a painted ring, drum with the hazard chevron band
-  kit.cyl("paintedMetal", x, H(0.006), z, 0.98, 0.012, "y", { color: IMP.black, segments: 24, texel: 1 });
+  // floor plate with a painted ring, drum with the hazard chevron band (plate in impFloor: paintedMetal's chip
+  // map reads as stains at 3 m²)
+  kit.cyl("impFloor", x, H(0.006), z, 0.98, 0.012, "y", { color: IMP.black, segments: 24, texel: 1 });
   kit.add("paintedMetal", new THREE.TorusGeometry(0.95, 0.012, 5, 40), { pos: [x, H(0.012), z], rot: [Math.PI / 2, 0, 0], color: PAINT });
   kit.cyl("metalRough", x, H(0.11), z, 0.7, 0.22, "y", { color: IMP.mid, segments: 16, texel: 1 });
   kit.cyl("hazard", x, H(0.2), z, 0.705, 0.06, "y", { segments: 16, texel: 3 });
@@ -335,6 +339,33 @@ export function sensorTower(kit, x, y0, z, idx) {
     kit.boxMM("metal", [x + 0.2, H(0.28), ga], [x + 0.32, H(0.36), gb], { color: IMP.dark });
     cable(kit, "paintedMetal", [x + 0.26, H(0.3), zo(0.06)], [x + 0.3, H(0.02), zo(0.9)], 0.012, { color: s < 0 ? IMP.blue : IMP.black, sag: 0.05, pieces: 3 });
   }
+  // identification band at azimuth ±70° from +x (between the +x status column and the ±z access panel, clear of the
+  // 45° rib): radial boxes have local x = radial thickness, local z = tangential width; their backs start inside
+  // the r 0.45 drum so the 0.26 m chords do not float off the curve
+  {
+    const th = labelSide * 1.222; // 70°
+    const rad = [Math.cos(th), Math.sin(th)];
+    const tan = [-Math.sin(th), Math.cos(th)]; // local z of a box rotated by -th about y
+    const at = (rc, tc) => [x + rad[0] * rc + tan[0] * tc, 0, z + rad[1] * rc + tan[1] * tc];
+    const rbox = (mat, rc, tc, t, yc, h, w, opts = {}) => {
+      const p = at(rc, tc);
+      kit.add(mat, new THREE.BoxGeometry(t, h, w), { pos: [p[0], yc, p[2]], rot: [0, -th, 0], ...opts });
+    };
+    const decal = (idx2, rc, yc, size) => {
+      const g = new THREE.PlaneGeometry(size, size);
+      g.rotateY(Math.PI / 2 - th);
+      const p = at(rc, 0);
+      kit.add("decal", g, { pos: [p[0], yc, p[2]], uv: "keep", uvRect: decalRect(idx2) });
+    };
+    // black backing plate, white label plate with the HV power stencil, readout in the bezel above it, three LEDs
+    rbox("paintedMetal", 0.44, 0, 0.06, H(0.97), 0.54, 0.3, { color: IMP.black, texel: 2 });
+    rbox("impPanel", 0.472, 0, 0.006, H(0.88), 0.28, 0.26, { color: IMP.white, texel: 2 });
+    decal(5, 0.4765, H(0.88), 0.22);
+    rbox("commsUI", 0.472, 0, 0.006, H(1.16), 0.1, 0.22, { uv: "keep", uvRect: uvRect(UI["readout" + (idx % 2 ? 6 : 5)]) });
+    ["emitBlue", "emitAmber", idx % 2 ? "emitRedImp" : "emitBlue"].forEach((mat, k) => rbox(mat, 0.472, -0.05 + k * 0.05, 0.006, H(1.06), 0.018, 0.018));
+    // unit ID stencil on the upper drum (r 0.45 paintedMetal band at 2.27–2.49 m)
+    decal(idx % 2 ? 14 : 0, 0.452, H(2.38), 0.18);
+  }
   kit.collider([x - 0.72, y0, z - 0.72], [x + 0.72, y0 + 2.6, z + 0.72], "tower");
   return H(2.1);
 }
@@ -366,16 +397,20 @@ export function ringGeometry() {
   return merged;
 }
 
+// Every visible emitter in this room is the capped emitWhite stand-in (1.35: under the ACES + bloom clip threshold
+// of ~1.7). emitCoolSoft (2.4, centre-bright map) clipped to white with a halo from every camera.
+const EMIT = "emitWhite";
+
 /**
  * Surface-mounted recessed downlight can hanging under a face at yFace: black four-wall recess, emitter set
  * `depth` up inside it so the lips hide the source beyond ~6 m, louvre fins across the mouth, grey trim.
  * The room light that "comes from" it sits inside the body above (never in the recess), so nothing here faces
- * a source at close range.
+ * a source at close range. The emitter is 0.16 m square (half the old 0.22 m area).
  */
 export function recessedDownlight(kit, x, yFace, z, { size = 0.4, depth = 0.14 } = {}) {
   ring4(kit, "paintedMetal", x, z, yFace - depth, yFace, size, size, 0.02, { color: IMP.black, texel: 2 });
   ring4(kit, "metalRough", x, z, yFace - depth - 0.01, yFace - depth + 0.03, size + 0.08, size + 0.08, 0.05, { color: IMP.mid, texel: 2 });
-  kit.box("emitCoolSoft", x, yFace - 0.035, z, size - 0.2, 0.012, size - 0.2, { uv: "keep" });
+  kit.box(EMIT, x, yFace - 0.035, z, (size - 0.2) * 0.72, 0.012, (size - 0.2) * 0.72, { uv: "keep" });
   for (const d of [-0.25, 0, 0.25]) kit.box("paintedMetal", x + d * size, yFace - depth + 0.03, z, 0.012, 0.025, size - 0.05, { color: IMP.black });
 }
 
@@ -388,7 +423,7 @@ export function canDownlight(kit, x, ceilY, z, { r = 0.1 } = {}) {
   kit.cyl("metalRough", x, ceilY - 0.08, z, r + 0.1, 0.16, "y", { color: IMP.dark, segments: 16, texel: 1 });
   kit.add("metal", new THREE.RingGeometry(r + 0.03, r + 0.1, 16), { pos: [x, ceilY - 0.162, z], rot: [Math.PI / 2, 0, 0], color: IMP.mid, uv: "keep" });
   kit.add("paintedMetal", new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.004, 16), { pos: [x, ceilY - 0.164, z], color: IMP.black, uv: "keep" });
-  kit.add("emitCoolSoft", new THREE.CylinderGeometry(r - 0.02, r - 0.02, 0.004, 16), { pos: [x, ceilY - 0.169, z], uv: "keep" });
+  kit.add(EMIT, new THREE.CylinderGeometry((r - 0.02) * 0.7, (r - 0.02) * 0.7, 0.004, 16), { pos: [x, ceilY - 0.169, z], uv: "keep" });
   kit.box("paintedMetal", x, ceilY - 0.175, z, r * 2 + 0.04, 0.008, 0.014, { color: IMP.black });
   kit.box("paintedMetal", x, ceilY - 0.175, z, 0.014, 0.008, r * 2 + 0.04, { color: IMP.black });
 }
@@ -411,15 +446,18 @@ export function spotHead(kit, pos, target, ceilY) {
   kit.add("paintedMetal", can, { pos: at(-0.14), quat: q, color: IMP.black, uv: "keep" });
   kit.add("metal", canIn, { pos: at(-0.14), quat: q, color: IMP.dark, uv: "keep" });
   kit.add("metal", new THREE.CylinderGeometry(0.075, 0.075, 0.02, 14), { pos: at(-0.27), quat: q, color: IMP.dark, uv: "keep" });
-  kit.add("emitCoolSoft", new THREE.CylinderGeometry(0.06, 0.06, 0.01, 14), { pos: at(-0.09), quat: q, uv: "keep" });
+  kit.add(EMIT, new THREE.CylinderGeometry(0.042, 0.042, 0.01, 14), { pos: at(-0.09), quat: q, uv: "keep" });
 }
 
 /**
  * Linear aisle luminaire: a closed dark pendant channel hung `drop` below the ceiling from x0 to x1 at z, with a
- * 2.2 m emitCoolSoft tube under each light position, a driver box on top and pairs of hanger rods.
+ * louvred 2.2 m emitWhite strip under each light position, a driver box on top and pairs of hanger rods.
  * The point-light descriptors sit INSIDE the channel (y = ceilY - drop + 0.06): a convex closed housing cannot
  * face a source inside it, so the fixture stays dark while the light passes through to the aisle; nothing else
- * (lips, louvres, rods) is placed within 1.3 m of a source. Returns the descriptor y.
+ * (lips, louvres, rods) is placed within 1.3 m of a source. Nothing may protrude below the underside near a
+ * source either (no shadows: a lip 7 cm from a 10-intensity point renders white), so the "louvre" is drawn in
+ * the emitter itself: eight 0.2 × 0.024 m cells with black bars between them — 35 % of the old 2.2 × 0.05 m tube's
+ * area. Returns the descriptor y.
  */
 export function linearLuminaire(kit, x0, x1, z, ceilY, lightXs, { drop = 1.25 } = {}) {
   const yb = ceilY - drop; // housing underside
@@ -428,10 +466,12 @@ export function linearLuminaire(kit, x0, x1, z, ceilY, lightXs, { drop = 1.25 } 
   // end caps flush with the body (no lip below the underside)
   for (const xe of [x0, x1]) kit.boxMM("metal", [xe - 0.03, yb - 0.002, z - 0.152], [xe + 0.03, yt + 0.002, z + 0.152], { color: IMP.black, texel: 2 });
   for (const lx of lightXs) {
-    // black diffuser frame flush with the underside; one 2.2 m tube proud of it by 8 mm, centred on the source so
-    // its end faces are 1.1 m away
+    // black diffuser frame flush with the underside; the louvred strip proud of it by 8 mm, centred on the source
     kit.boxMM("paintedMetal", [lx - 1.25, yb - 0.004, z - 0.07], [lx + 1.25, yb, z + 0.07], { color: IMP.black });
-    kit.boxMM("emitCoolSoft", [lx - 1.1, yb - 0.012, z - 0.025], [lx + 1.1, yb - 0.002, z + 0.025], { uv: "keep" });
+    for (let k = 0; k < 8; k++) {
+      const cx0 = lx - 1.1 + 0.0375 + k * 0.275;
+      kit.boxMM(EMIT, [cx0, yb - 0.012, z - 0.012], [cx0 + 0.2, yb - 0.002, z + 0.012], { uv: "keep" });
+    }
     // driver box standing on the top face (its underside 1 mm above it, so no lit face is exposed) with a status LED
     kit.box("metalRough", lx, yt + 0.041, z, 0.4, 0.08, 0.2, { color: IMP.mid, texel: 2 });
     led(kit, "emitBlue", lx + 0.15, yt + 0.045, z + 0.1, "z", 1, 0.015);
@@ -495,9 +535,15 @@ export function cableHub(kit, x, ceilY, z, { w = 2.6, d = 1.8, h = 0.7, trayXs =
   return yb;
 }
 
-/** Descriptor position for the hub's room light: inside the body, 0.28 m under the ceiling, over the downlight. */
+/**
+ * Descriptor position for the hub's room light: inside the body, 0.12 m under the ceiling, over the downlight.
+ * The ceiling directly above is hidden by the hub from every eye height, but the ceiling just outside the hub's
+ * footprint is not: at 1–2.5 m from the source its irradiance scales with the source's depth below the ceiling
+ * (E ≈ I·h/r³), so 0.28 m gave a clipped specular streak on the ceiling in front of the hub (racks camera) and
+ * 0.12 m gives less than half of it.
+ */
 export function hubLight(x, ceilY, z) {
-  return [x, ceilY - 0.28, z];
+  return [x, ceilY - 0.12, z];
 }
 
 /**
@@ -509,22 +555,42 @@ export function washSpot(xw, y0, ceilY, zc) {
   return { pos: [xw + 0.72, ceilY - 0.25, zc], target: [xw + 0.72, y0, zc] };
 }
 
+const DAIS = new THREE.Color("#3f434a"); // a step lighter than the IMP.dark deck, far from the old light-grey slab
+
 /**
- * Supervisor dais: raised platform with a nosing, painted step line and a rail on the aft side.
+ * Supervisor dais: a raised deck plate (dark impFloor, split into plates by seam grooves) on a recessed black kick
+ * with a steel nosing all round; the room side (+x) carries a blue toe strip, the painted step line, a small
+ * readout in a bezel with two LEDs and a "MIND THE GAP" stencil, so the step reads as equipment, not a bare slab.
  */
 export function dais(kit, x0, x1, y0, z0, z1) {
-  kit.boxMM("impFloor", [x0, y0, z0 + 0.02], [x1 - 0.03, y0 + 0.15, z1 - 0.02], { color: IMP.mid, texel: 1 });
-  kit.boxMM("metal", [x1 - 0.06, y0 + 0.15, z0], [x1, y0 + 0.16, z1], { color: IMP.steel, texel: 2 });
-  kit.boxMM("paintedMetal", [x1 - 0.03, y0, z0], [x1, y0 + 0.148, z1], { color: IMP.black, texel: 1 });
-  kit.boxMM("paintedMetal", [x1, y0 + 0.05, z0 + 0.2], [x1 + 0.006, y0 + 0.075, z1 - 0.2], { color: PAINT });
-  kit.boxMM("paintedMetal", [x0, y0, z0], [x1, y0 + 0.148, z0 + 0.02], { color: IMP.black, texel: 1 });
-  kit.boxMM("paintedMetal", [x0, y0, z1 - 0.02], [x1, y0 + 0.148, z1], { color: IMP.black, texel: 1 });
+  const top = y0 + 0.15;
+  const xm = (x0 + x1) / 2;
+  const zm = (z0 + z1) / 2;
+  kit.boxMM("paintedMetal", [x0 + 0.03, y0, z0 + 0.03], [x1 - 0.03, top - 0.03, z1 - 0.03], { color: IMP.black, texel: 1 });
+  kit.boxMM("impFloor", [x0, top - 0.03, z0], [x1, top, z1], { color: DAIS, texel: 1 });
+  ring4(kit, "metal", xm, zm, top - 0.032, top + 0.005, x1 - x0 + 0.004, z1 - z0 + 0.004, 0.05, { color: IMP.steel, texel: 2 });
+  // seam grooves: three plates across z, two along x
+  for (let z = z0 + 0.8; z < z1 - 0.4; z += 0.8) kit.boxMM("paintedMetal", [x0 + 0.05, top - 0.002, z - 0.006], [x1 - 0.05, top + 0.002, z + 0.006], { color: IMP.black });
+  kit.boxMM("paintedMetal", [xm - 0.006, top - 0.002, z0 + 0.05], [xm + 0.006, top + 0.002, z1 - 0.05], { color: IMP.black });
+  // room-side riser: toe strip in the kick recess, painted step line, readout bezel + LEDs, stencil
+  kit.boxMM("emitBlue", [x1 - 0.03, y0 + 0.03, z0 + 0.35], [x1 - 0.024, y0 + 0.042, z1 - 0.35]);
+  kit.boxMM("paintedMetal", [x1 - 0.03, y0 + 0.06, z0 + 0.2], [x1 - 0.024, y0 + 0.085, z1 - 0.2], { color: PAINT });
+  kit.boxMM("paintedMetal", [x1 - 0.03, y0 + 0.04, zm + 0.5], [x1 + 0.004, y0 + 0.11, zm + 0.86], { color: IMP.dark, texel: 2 });
+  kit.boxMM("commsUI", [x1 + 0.004, y0 + 0.05, zm + 0.53], [x1 + 0.008, y0 + 0.1, zm + 0.77], { uv: "keep", uvRect: uvRect(UI.readout6) });
+  led(kit, "emitAmber", x1 + 0.004, y0 + 0.09, zm + 0.82, "x", 1, 0.016);
+  led(kit, "emitBlue", x1 + 0.004, y0 + 0.06, zm + 0.82, "x", 1, 0.016);
+  {
+    const g = new THREE.PlaneGeometry(0.09, 0.09);
+    g.rotateY(Math.PI / 2);
+    kit.add("decal", g, { pos: [x1 - 0.029, y0 + 0.065, zm - 0.7], uv: "keep", uvRect: decalRect(15) });
+  }
   kit.collider([x0, y0, z0], [x1, y0 + 0.15, z1], "dais");
 }
 
-// Floor inlay strip (dark plate with painted edge lines) along x or z
+// Floor inlay strip (dark deck plate with painted edge lines) along x or z. impFloor, not paintedMetal: the chip
+// map on the 2.4 × 9 m aisle plate read as dark blotching from the racks camera.
 export function walkway(kit, y0, x0, x1, z0, z1, { alongX = true } = {}) {
-  kit.boxMM("paintedMetal", [x0, y0, z0], [x1, y0 + 0.012, z1], { color: IMP.black, texel: 1 });
+  kit.boxMM("impFloor", [x0, y0, z0], [x1, y0 + 0.012, z1], { color: IMP.black, texel: 1 });
   if (alongX) {
     kit.boxMM("paintedMetal", [x0 + 0.2, y0 + 0.012, z0 + 0.02], [x1 - 0.2, y0 + 0.017, z0 + 0.06], { color: PAINT });
     kit.boxMM("paintedMetal", [x0 + 0.2, y0 + 0.012, z1 - 0.06], [x1 - 0.2, y0 + 0.017, z1 - 0.02], { color: PAINT });

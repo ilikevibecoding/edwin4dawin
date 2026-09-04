@@ -335,6 +335,10 @@ export function lectern(kit, p, { w = 1.2, screenMat, screenRect = null, stripRe
     q.screenV(screenMat, 0, 0.98, 0.032, 0.42, 0.26, stripRect || screenRect);
     for (let i = 0; i < 3; i++) q.box(IND[(i + s + 4) % IND.length], -0.16 + i * 0.06, 0.78, 0.014, 0.035, 0.02, 0.006);
     q.decal(0.15, 0.78, 0.014, 0.1, 9);
+    // seam groove, seven-LED indicator run over a blue seam (the holo table's rim density), vent slats
+    q.box("paintedMetal", 0, 0.7, 0.012, 0.46, 0.012, 0.004, { color: IMP.black });
+    for (let i = 0; i < 7; i++) q.box(IND[(i * 2 + s + 3 + seed) % IND.length], -0.18 + i * 0.06, 0.6, 0.014, 0.035, 0.02, 0.006);
+    q.box("emitBlue", 0, 0.555, 0.014, 0.4, 0.008, 0.006);
     for (let k = 0; k < 4; k++) q.box("metalRough", 0, 0.28 + k * 0.05, 0.014, 0.3, 0.012, 0.012, { color: IMP.black });
   }
   // sloped top (high at the far side), frame edge, grab bar along the near edge

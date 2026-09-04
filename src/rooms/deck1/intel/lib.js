@@ -98,9 +98,10 @@ export class Local {
 }
 
 // Emissive screen material over a canvas texture (shared recipe, but rougher / less env reflection so the many
-// red-lit panels do not pick up specular blobs from the pool lights).
+// red-lit panels do not pick up specular blobs from the pool lights). 0.7, not 0.45: the vestibule camera mirrors
+// the walkway can in the arch's "LOCK IN OPERATION" plate as a hot red blob at 0.45.
 export function screenMaterial(tex, intensity = 1.3) {
-  return new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: intensity, roughness: 0.45, metalness: 0, envMapIntensity: 0.3 });
+  return new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: intensity, roughness: 0.7, metalness: 0, envMapIntensity: 0.2 });
 }
 
 /**

@@ -12,6 +12,8 @@ export const RACK_W = 1.2;
 export const RACK_D = 0.9;
 export const RACK_H = 2.6;
 const LED_MATS = ["emitBlue", "emitBlue", "emitBlue", "emitBlue", "emitBlue", "emitAmber", "emitAmber", "emitRedImp"];
+// per-rack indicator palettes: blue-dominant (default), amber-heavy, blue with a rare red, and a fault rack
+const PALETTES = [LED_MATS, LED_MATS, ["emitBlue", "emitBlue", "emitAmber", "emitAmber", "emitAmber", "emitRedImp"], ["emitBlue", "emitBlue", "emitBlue", "emitBlue", "emitBlue", "emitBlue", "emitBlue", "emitRedImp"], ["emitAmber", "emitBlue", "emitRedImp", "emitRedImp", "emitBlue", "emitRedImp"]];
 const CABLE_COLS = [IMP.black, IMP.black, IMP.blue, IMP.mid, IMP.amber];
 
 /**
@@ -19,10 +21,17 @@ const CABLE_COLS = [IMP.black, IMP.black, IMP.blue, IMP.mid, IMP.amber];
  * type "open": no door, module stack with a vertical cable channel and loose patch loops.
  * type "closed": full-height door with a 0.3 m display, handle, vents; doorOpen swings it 75° into the aisle
  * (hinge on the west edge) so the module stack behind is visible.
+ * pulledTray slides one drawer module (0.85–1.6 m) 0.32 m into the aisle on its rails, board and LEDs exposed.
+ * Each rack draws its own indicator fill (55–88 %), palette and matrix pattern (grid / rows / columns / block)
+ * from its seed, so no two cabinets carry the same LED field.
  * Returns the face z and the patch points used for cabling.
  */
-export function rack(kit, x0, y0, zBack, f, seed, { type = "open", doorOpen = false } = {}) {
+export function rack(kit, x0, y0, zBack, f, seed, { type = "open", doorOpen = false, pulledTray = false } = {}) {
   const rand = rng(seed);
+  const skip = 0.12 + rand() * 0.45;
+  const mats = pick(rand, PALETTES);
+  const pattern = pick(rand, ["grid", "grid", "rows", "cols", "block"]);
+  let pulled = false;
   const x1 = x0 + RACK_W;
   const zFace = zBack + f * RACK_D;
   const zIn = (d) => zFace - f * d; // d metres behind the face plane
@@ -68,17 +77,30 @@ export function rack(kit, x0, y0, zBack, f, seed, { type = "open", doorOpen = fa
       const ya = y;
       const yb = y + h - 0.015;
       const cy = (ya + yb) / 2;
-      const r = rand();
+      let r = rand();
+      if (pulledTray && !pulled && h >= 0.2 && ya > 0.85 && ya < 1.6) r = 0; // force a drawer where the tray goes
       if (r < 0.34) {
-        // drawer: dark face, wide handle, one status LED
-        boxD("paintedMetal", mx0, mx1, ya, yb, 0.008, 0.05, { color: IMP.dark, texel: 1 });
-        boxD("metal", mx0 + mw * 0.3, mx1 - mw * 0.3, cy - 0.012, cy + 0.012, -0.018, 0.008, { color: IMP.grey, texel: 2 });
-        boxD("metal", mx0 + mw * 0.3, mx0 + mw * 0.3 + 0.02, cy - 0.012, cy + 0.012, -0.018, 0.0, { color: IMP.grey });
-        boxD("metal", mx1 - mw * 0.3 - 0.02, mx1 - mw * 0.3, cy - 0.012, cy + 0.012, -0.018, 0.0, { color: IMP.grey });
-        led(kit, pick(rand, LED_MATS), mx1 - 0.06, y0 + cy, zIn(0.008), "z", f, 0.02);
-        if (h > 0.2) led(kit, "emitBlue", mx0 + 0.06, y0 + cy, zIn(0.008), "z", f, 0.02);
+        // drawer: dark face, wide handle, one status LED. The rack's pulled tray is the first drawer between
+        // 0.85 and 1.6 m: face, handle and LEDs slide `out` into the aisle on grey rails, with the black tray body
+        // and a gloss board with a service LED row exposed on top
+        const out = pulledTray && !pulled && h >= 0.2 && ya > 0.85 && ya < 1.6 ? 0.32 : 0;
+        if (out) {
+          pulled = true;
+          boxD("paintedMetal", mx0 + 0.03, mx1 - 0.03, ya + 0.012, yb - 0.03, 0.03 - out, 0.06, { color: IMP.black, texel: 1 });
+          for (const rx of [mx0, mx1 - 0.014]) boxD("metal", rx, rx + 0.014, ya + 0.015, ya + 0.045, 0.03 - out, 0.05, { color: IMP.grey });
+          boxD("darkGloss", mx0 + 0.05, mx1 - 0.05, yb - 0.03, yb - 0.024, 0.05 - out, 0.02);
+          for (let k = 0; k < 4; k++) led(kit, pick(rand, mats), mx0 + 0.1 + k * 0.06, y0 + yb - 0.024, zIn(0.1 - out), "y", 1, 0.014, 0.006);
+          const [ta, tb] = zmm(-out, 0.0);
+          kit.collider([mx0, y0 + ya, ta], [mx1, y0 + yb, tb], "rack-tray");
+        }
+        boxD("paintedMetal", mx0, mx1, ya, yb, 0.008 - out, 0.05 - out, { color: IMP.dark, texel: 1 });
+        boxD("metal", mx0 + mw * 0.3, mx1 - mw * 0.3, cy - 0.012, cy + 0.012, -0.018 - out, 0.008 - out, { color: IMP.grey, texel: 2 });
+        boxD("metal", mx0 + mw * 0.3, mx0 + mw * 0.3 + 0.02, cy - 0.012, cy + 0.012, -0.018 - out, 0.0 - out, { color: IMP.grey });
+        boxD("metal", mx1 - mw * 0.3 - 0.02, mx1 - mw * 0.3, cy - 0.012, cy + 0.012, -0.018 - out, 0.0 - out, { color: IMP.grey });
+        led(kit, pick(rand, mats), mx1 - 0.06, y0 + cy, zIn(0.008 - out), "z", f, 0.02);
+        if (h > 0.2) led(kit, "emitBlue", mx0 + 0.06, y0 + cy, zIn(0.008 - out), "z", f, 0.02);
       } else if (r < 0.64) {
-        // LED matrix module: dense indicator grid on a gloss face
+        // LED matrix module: indicator grid on a gloss face, thinned by the rack's fill and pattern
         boxD("paintedMetal", mx0, mx1, ya, yb, 0.008, 0.05, { color: IMP.dark, texel: 1 });
         boxD("darkGloss", mx0 + 0.02, mx1 - 0.02, ya + 0.02, yb - 0.02, 0.004, 0.008);
         const rowsN = Math.max(1, Math.floor((h - 0.05) / 0.05));
@@ -86,10 +108,11 @@ export function rack(kit, x0, y0, zBack, f, seed, { type = "open", doorOpen = fa
         const pitch = (mw - 0.16) / colsN;
         for (let rr = 0; rr < rowsN; rr++)
           for (let cc = 0; cc < colsN; cc++) {
-            if (rand() < 0.22) continue;
+            const inPattern = pattern === "rows" ? rr % 2 === 0 : pattern === "cols" ? cc % 2 === 0 : pattern === "block" ? cc < colsN * 0.55 || rand() < 0.25 : true;
+            if (!inPattern || rand() < skip) continue;
             const lx = mx0 + 0.08 + pitch * (cc + 0.5);
             const ly = ya + 0.035 + rr * 0.05;
-            led(kit, pick(rand, LED_MATS), lx, y0 + ly, zIn(0.004), "z", f, 0.02, 0.006);
+            led(kit, pick(rand, mats), lx, y0 + ly, zIn(0.004), "z", f, 0.02, 0.006);
           }
         if (rand() < 0.5) patch.push([mx1 - 0.1, y0 + cy, zIn(0.0)]);
       } else if (r < 0.8) {
@@ -100,7 +123,7 @@ export function rack(kit, x0, y0, zBack, f, seed, { type = "open", doorOpen = fa
         const sx = mx0 + 0.08;
         const [za, zb] = zmm(0.0, 0.008);
         kit.boxMM("commsUI", [sx, y0 + cy - sh / 2, za], [sx + sw, y0 + cy + sh / 2, zb], { uv: "keep", uvRect: uvRect(UI["readout" + (idx % 8)]) });
-        for (let k = 0; k < 3; k++) led(kit, pick(rand, LED_MATS), sx + sw + 0.06 + k * 0.05, y0 + cy, zIn(0.008), "z", f, 0.02);
+        for (let k = 0; k < 3; k++) led(kit, pick(rand, mats), sx + sw + 0.06 + k * 0.05, y0 + cy, zIn(0.008), "z", f, 0.02);
         for (let k = 0; k < 2; k++) boxD("metal", mx1 - 0.12 - k * 0.07, mx1 - 0.09 - k * 0.07, cy - 0.02, cy + 0.02, -0.02, 0.008, { color: IMP.grey });
         patch.push([mx1 - 0.05, y0 + cy, zIn(0.0)]);
       } else {
@@ -152,7 +175,7 @@ export function rack(kit, x0, y0, zBack, f, seed, { type = "open", doorOpen = fa
     dbox("paintedMetal", du - 0.34, du + 0.34, 1.42, 1.78, 0.015, 0.03, { color: IMP.black, texel: 2 });
     const cell = pick(rand, ["console0", "console1", "console2", "console3"]);
     dbox("commsUI", du - 0.3, du + 0.3, 1.45, 1.75, 0.03, 0.034, { uv: "keep", uvRect: uvRect(UI[cell]) });
-    for (let k = 0; k < 4; k++) dbox(pick(rand, LED_MATS), du - 0.15 + k * 0.1, du - 0.13 + k * 0.1, 1.36, 1.38, 0.015, 0.023);
+    for (let k = 0; k < 4; k++) dbox(pick(rand, mats), du - 0.15 + k * 0.1, du - 0.13 + k * 0.1, 1.36, 1.38, 0.015, 0.023);
     // handle bar with stand-offs + lock cylinder
     dbox("metal", dw - 0.16, dw - 0.13, 1.15, 1.55, 0.06, 0.09, { color: IMP.grey });
     dbox("metal", dw - 0.16, dw - 0.13, 1.17, 1.2, 0.015, 0.06, { color: IMP.grey });

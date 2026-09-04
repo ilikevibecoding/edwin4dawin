@@ -7,7 +7,7 @@ import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
 import { roomShell, doorReveal, railing, stairs } from "../shared/imperial.js";
 import { IMP, LIGHT } from "../shared/palette.js";
 import { ScreenAtlas, UI, paintStarMap, paintStatusColumn, paintConsole, paintReadoutBar, paintGauge, paintStack, paintRoutePlot } from "./ui.js";
-import { placer, wallAnchor, station, chair, stool, locker, equipmentRack, dataColumn, junctionBox, vent, intercom, emergencyCabinet, framedScreen, readoutBar, conduitBundle, wallPipe, wallTray, stencilPlate, beam, ceilingPanels, lightTrough, ceilingRibs, cableTray, downlight, ceilingVent, projectorRig, floorInlay, floorHatch, stepBlock, WALL_OFF } from "./props.js";
+import { placer, wallAnchor, station, chair, stool, locker, equipmentRack, dataColumn, junctionBox, vent, intercom, emergencyCabinet, framedScreen, readoutBar, conduitBundle, wallPipe, wallTray, stencilPlate, beam, ceilingPanels, lightTrough, lightCanopy, ceilingRibs, cableTray, downlight, ceilingVent, projectorRig, floorInlay, floorHatch, stepBlock, WALL_OFF } from "./props.js";
 import { buildChartTable, buildChartHolo, buildChartDesk } from "./table.js";
 import { tickHolo } from "./holo.js";
 
@@ -20,6 +20,8 @@ const CZ = (B.min[2] + B.max[2]) / 2; // 477
 const TY = FLOOR + 3.2; // wall cable-tray underside
 const DLX = [CX - 6.4, CX + 6.4]; // downlight rows (3.5 m off the side walls: no hot specular blobs on the panels)
 const DLZ = [472.6, CZ, 481.4];
+// dais light canopy footprint (hung 0.5 m under the ceiling over the raised dais, open on the wall side)
+const CAN = { x0: -37.9, x1: -29.7, z0: 482.9, z1: B.max[2] - 0.3, depth: 0.5 };
 
 let atlas = null;
 
@@ -96,9 +98,12 @@ const manifest = {
     cableTray(kit, [CX, 471.95], [CX, IN.min[2] + 0.35], CY - 0.2, { w: 0.36, hangTo: CY });
     cableTray(kit, [CX + 0.18, 475.0], [IN.max[0] - 0.35, 475.0], CY - 0.2, { w: 0.3, hangTo: CY, cables: 2 });
     for (const x of DLX) for (const z of DLZ) downlight(kit, x, CY, z);
-    downlight(kit, CX, CY, 484.0); // the dais wall-wash source
     downlight(kit, CX + 0.8, CY, 470.9); // the console-bank pool's source (beside the ceiling tray)
-    ceilingRibs(kit, [CX - 7.5, CX - 2.5, CX + 2.5, CX + 7.5], IN.min[2] + 0.3, IN.max[2] - 0.3, CY);
+    // dais canopy: hung fascia box over the dais footprint with three louvred light channels across it (the
+    // dais key/wash spot sits inside the room-side channel)
+    lightCanopy(kit, [CAN.x0, CAN.z0], [CAN.x1, CAN.z1], CY, { depth: CAN.depth, channels: 3 });
+    ceilingRibs(kit, [CX - 7.5, CX + 7.5], IN.min[2] + 0.3, IN.max[2] - 0.3, CY);
+    ceilingRibs(kit, [CX - 2.5, CX + 2.5], IN.min[2] + 0.3, CAN.z0 - 0.1, CY);
     for (const [x0, x1] of [
       [IN.min[0] + 0.3, CX - 5.3],
       [CX - 4.7, CX + 4.7],
@@ -106,7 +111,7 @@ const manifest = {
     ])
       ceilingRibs(kit, [474.7, 479.3], x0, x1, CY, { axis: "x" });
     ceilingVent(kit, CX + 3.2, CY, 470.0);
-    ceilingVent(kit, CX - 3.2, CY, 484.6);
+    ceilingVent(kit, CX - 5.6, CY, 484.6);
     // ceiling tray → east wall tray: short conduit bundle down the wall (clear of the door opening)
     conduitBundle(kit, wallAnchor(kit, "e", IN, 475.0, FLOOR), { y0: 3.32, y1: CY - FLOOR - 0.12, pipes: [[-0.06, 0.025], [0.06, 0.025]] });
 
@@ -234,7 +239,7 @@ const manifest = {
       wallPipe(kit, wallAnchor(kit, "s", IN, -40.5, FLOOR + 3.85), { len: 5.4, r: 0.025, color: IMP.dark });
       stencilPlate(kit, wallAnchor(kit, "s", IN, -41.8, FLOOR + 2.4), 0.3, 5);
       // east of the dais: wide + narrow lockers, low chart cabinet, junction, vent, pipe
-      locker(kit, wallAnchor(kit, "s", IN, -29.05, FLOOR), { w: 0.9, seed: 5, label: 6 });
+      locker(kit, wallAnchor(kit, "s", IN, -29.05, FLOOR), { w: 0.9, seed: 5, label: 6, ajar: true });
       locker(kit, wallAnchor(kit, "s", IN, -28.25, FLOOR), { w: 0.6, seed: 6, label: 9 });
       {
         const p = wallAnchor(kit, "s", IN, -26.2, FLOOR);
@@ -265,10 +270,15 @@ const manifest = {
     ctx.lights.push({ type: "point", pos: [DLX[1], CY - 1.0, CZ], color: LIGHT.coolWhite, intensity: 9, distance: 10, priority: 0.45 });
     // chart-wall console bank: down-aimed pool over the four stations
     ctx.lights.push({ type: "spot", pos: [CX + 0.8, CY - 0.5, 470.9], color: 0xbfd4ff, intensity: 15, distance: 8, target: [CX, FLOOR, 470.4], angle: 1.05, penumbra: 0.5, priority: 0.6 });
-    // navigator's dais: one spot high over the chart desk aimed at the foot of the south wall — it washes the
-    // wall panels between the screens (cone tops out just above the 3.2 m tray, so the panel band a floor camera
-    // mirrors is outside it) and pools straight down onto the desk, stools and dais plate
-    ctx.lights.push({ type: "spot", pos: [CX, CY - 0.3, 484.0], color: LIGHT.coolWhite, intensity: 14, distance: 7.5, target: [CX, FLOOR + 1.0, IN.max[2]], angle: 0.72, penumbra: 0.45, priority: 0.62 });
+    // navigator's dais: one spot inside the canopy's room-side light channel (a closed dark trough; the cone
+    // points down and away, so nothing of the fixture is inside it), aimed at the foot of the chart desk. From
+    // the room side it keys the desk's light-grey face and display (the desk reads as a lit instrument instead
+    // of a silhouette), pools on the dais plate and stools, and washes the south wall to ≈ 3.6 m; the panel
+    // band a floor camera mirrors (≈ 4.1 m, under the canopy) is outside the cone.
+    {
+      const zc = CAN.z0 + 0.08 + (CAN.z1 - CAN.z0 - 0.08) / 6;
+      ctx.lights.push({ type: "spot", pos: [CX, CY - CAN.depth + 0.1, zc], color: LIGHT.coolWhite, intensity: 14, distance: 7.5, target: [CX, FLOOR + 0.6, 485.2], angle: 0.8, penumbra: 0.5, priority: 0.62 });
+    }
     ctx.lights.push({ type: "point", pos: [CX, FLOOR + 0.35, CZ], color: LIGHT.blue, intensity: 1.5, distance: 4.5, priority: 0.3 });
 
     return {

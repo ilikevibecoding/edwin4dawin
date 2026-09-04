@@ -127,12 +127,15 @@ function scanReadout(kit, xf, zm, yc) {
   led(kit, RED, xf - 0.05, yc + 0.115, zm + 0.16, "x", -1, 0.015);
 }
 
-/** Three-state lock bar on the approach face: housing, the LOCKED / SCAN / CLEAR cell and three lenses (first lit). */
+/**
+ * Three-state lock bar on the approach face: housing, the LOCKED / SCAN / CLEAR cell and three lenses. The inner
+ * gate's leaves stand retracted in their pockets, so the third (CLEAR) lamp is the lit one.
+ */
 function statusBar(kit, xf, zc, yc) {
   slab(kit, "paintedMetal", "x", xf, -1, zc - 0.38, zc + 0.38, yc - 0.12, yc + 0.12, 0.015, 0.06, { color: IMP.black, texel: 2 });
   slab(kit, "metalRough", "x", xf, -1, zc - 0.36, zc + 0.36, yc - 0.1, yc + 0.1, 0.06, 0.066, { color: IMP.dark, texel: 2 });
   slab(kit, "intelUI", "x", xf, -1, zc - 0.32, zc + 0.32, yc - 0.1, yc + 0.06, 0.066, 0.07, { uv: "keep", uvRect: uvRect(UI.status3) });
-  for (let k = 0; k < 3; k++) bezelLens(kit, "x", xf, -1, zc - 0.213 + k * 0.213, yc + 0.08, 0.16, 0.02, 0.066, k === 0 ? RED : OFF);
+  for (let k = 0; k < 3; k++) bezelLens(kit, "x", xf, -1, zc - 0.213 + k * 0.213, yc + 0.08, 0.16, 0.02, 0.066, k === 2 ? RED : OFF);
 }
 
 /**
@@ -250,9 +253,10 @@ export function gateFrame(kit, R) {
     // vestibule side: the 2:1 "SECURITY LOCK" sign (the arch in front already says LOCK IN OPERATION); room side: 4:1
     if (sx < 0) slab(kit, "intelUI", "x", xf + sx * 0.02, sx, zc - 0.3, zc + 0.3, H(h + 0.075), H(h + 0.375), 0, 0.006, { uv: "keep", uvRect: uvRect(UI.sign1) });
     else slab(kit, "intelUI", "x", xf + sx * 0.02, sx, zc - 0.6, zc + 0.6, H(h + 0.075), H(h + 0.375), 0, 0.006, { uv: "keep", uvRect: uvRect(UI.sign3) });
-    // north post: three-lamp status column; south post: hand scanner with a gloss window and keypad LEDs
+    // north post: three-lamp status column (LOCKED / SCAN / CLEAR bottom → top; the leaves are open, so CLEAR is lit);
+    // south post: hand scanner with a gloss window and keypad LEDs
     slab(kit, "paintedMetal", "x", xf + sx * 0.02, sx, z0 - pw + 0.07, z0 - 0.07, H(1.3), H(1.78), 0, 0.03, { color: IMP.black, texel: 2 });
-    for (let k = 0; k < 3; k++) led(kit, k === 0 ? RED : OFF, xf + sx * 0.05, H(1.39 + k * 0.15), z0 - pw / 2, "x", sx, 0.07, 0.012);
+    for (let k = 0; k < 3; k++) led(kit, k === 2 ? RED : OFF, xf + sx * 0.05, H(1.39 + k * 0.15), z0 - pw / 2, "x", sx, 0.07, 0.012);
     slab(kit, "paintedMetal", "x", xf + sx * 0.02, sx, z1 + 0.05, z1 + pw - 0.05, H(1.02), H(1.42), 0, 0.06, { color: IMP.black, texel: 2 });
     slab(kit, OFF, "x", xf + sx * 0.08, sx, z1 + 0.07, z1 + pw - 0.07, H(1.22), H(1.4), 0, 0.004);
     for (let k = 0; k < 3; k++) led(kit, k === 2 ? OFF : RED, xf + sx * 0.08, H(1.1), z1 + 0.08 + k * 0.08, "x", sx, 0.03);
@@ -279,7 +283,7 @@ export function gateFrame(kit, R) {
  * Console desk in a Local frame (operator sits at +w, screens face the operator). Options: w, facing, screens
  * (atlas cells), screenAspect, tilt, chairs (u offsets), readouts, sign (atlas cell on the public face), seed.
  */
-export function consoleDesk(kit, R, cx, cz, { w = 2.0, facing = 1, screens = ["mon0"], screenAspect = 4 / 3, tilt = -0.35, chairs = [0], readouts = ["readout0", "readout1"], sign = null, seed = 1, drops = true } = {}) {
+export function consoleDesk(kit, R, cx, cz, { w = 2.0, facing = 1, screens = ["mon0"], screenAspect = 4 / 3, tilt = -0.35, chairs = [0], readouts = ["readout0", "readout1"], sign = null, signW = 0.8, seed = 1, drops = true } = {}) {
   const rand = rng(seed);
   const L = new Local(kit, cx, R.y0, cz, facing);
   const d = 0.8;
@@ -332,11 +336,15 @@ export function consoleDesk(kit, R, cx, cz, { w = 2.0, facing = 1, screens = ["m
   });
   for (let k = 0; k < 6; k++) hbox(rand() < 0.6 ? RED : OFF, -w / 2 + 0.2 + k * ((w - 0.4) / 5), -sh / 2 - 0.045, 0.084, 0.03, 0.02, 0.006);
   hbox(RED, -w / 2 + 0.075, 0.03, 0.084, 0.012, sh * 0.6, 0.006);
-  // public face (-w side): sign plate + intercom + status lamp
+  // public face (-w side): bezelled sign plate (size from the atlas cell's aspect) + intercom + status lamp
   if (sign) {
     const wf = -(d - 0.14) / 2 - 0.004;
-    L.box("intelUI", 0.1, 0.55, wf, 0.8, 0.4, 0.008, { uv: "keep", uvRect: uvRect(UI[sign]) });
-    L.box(RED, 0.1, 0.78, wf, 0.3, 0.02, 0.008);
+    const [, , cw, ch] = UI[sign];
+    const sh = (signW * ch) / cw;
+    const su = 0.15;
+    L.box("paintedMetal", su, 0.6, wf, signW + 0.05, sh + 0.05, 0.008, { color: IMP.black, texel: 2 });
+    L.box("intelUI", su, 0.6, wf - 0.006, signW, sh, 0.004, { uv: "keep", uvRect: uvRect(UI[sign]) });
+    L.box(RED, su, 0.6 + sh / 2 + 0.06, wf, Math.min(0.3, signW * 0.4), 0.02, 0.008);
     const ui = -w / 2 + 0.2;
     L.box("paintedMetal", ui, 0.62, wf - 0.02, 0.18, 0.24, 0.05, { color: IMP.dark, texel: 2 });
     for (let k = 0; k < 5; k++) L.box("metal", ui, 0.66 + k * 0.02, wf - 0.046, 0.12, 0.006, 0.004, { color: IMP.black });
@@ -853,10 +861,14 @@ export function monitorBank(kit, R, xFace, zc) {
 }
 
 /**
- * Guard booth in the secure strip, back against the partition face xBack (booth extends toward -x by `w`), z0..z1:
- * dark walls with a steel base band, a window on the approach face (shared glass, +1 call) showing a lit interior
- * (grey back panel, the booth control panel and a stool), a door with a small window on the gate side, a housed
- * point light in the ceiling. Returns the interior light position.
+ * Guard booth in the secure strip, back against the partition face xBack (booth extends toward -x by `w`), z0..z1.
+ * Approach face (seen large from the vestibule view): steel base band, a three-panel seam grid under the window with
+ * an intercom, a code-cylinder reader and a SURVEILLANCE tag, the window (shared glass, +1 call) and a bezelled GUARD
+ * POST header above it. Gate-side wall: a pier with an LED column, lintel and a black door leaf with a small window
+ * in a real opening. Interior seen through the window: mid-grey back panel with a seam, a 2 × 2 surveillance monitor
+ * cluster + label + LED row, a junction box, the control panel on a shelf tilted toward the stool, a dead red can
+ * under the roof. No light descriptor: the vestibule can already lights the interior through the wall (no shadows
+ * in the pool), so the old 0.3 cd interior point added nothing visible.
  */
 export function guardBooth(kit, R, xBack, z0, z1, { w = 1.1, h = 2.3 } = {}) {
   const { y0 } = R;
@@ -865,12 +877,28 @@ export function guardBooth(kit, R, xBack, z0, z1, { w = 1.1, h = 2.3 } = {}) {
   const zc = (z0 + z1) / 2;
   const t = 0.06;
   const dk = { color: IMP.dark, texel: 1 };
-  // roof, floor plate, side walls
+  const bk = { color: IMP.black, texel: 2 };
+  const mid = { color: IMP.mid, texel: 2 };
+  // roof, floor plate, south wall
   kit.boxMM("paintedMetal", [xf, H(h - t), z0], [xBack, H(h), z1], dk);
-  kit.boxMM("metal", [xf - 0.02, H(h), z0 - 0.02], [xBack, H(h + 0.05), z1 + 0.02], { color: IMP.mid, texel: 2 });
+  kit.boxMM("metal", [xf - 0.02, H(h), z0 - 0.02], [xBack, H(h + 0.05), z1 + 0.02], mid);
   kit.boxMM("paintedMetal", [xf, H(0), z0], [xBack, H(0.03), z1], { color: IMP.black, texel: 1 });
-  kit.boxMM("paintedMetal", [xf, H(0), z0], [xBack, H(h - t), z0 + t], dk);
   kit.boxMM("paintedMetal", [xf, H(0), z1 - t], [xBack, H(h - t), z1], dk);
+  // north wall (gate side): pier + lintel + narrow east post around a door opening; black 4 cm leaf with a window
+  const dx0 = xf + 0.3;
+  const dx1 = xBack - 0.02;
+  kit.boxMM("paintedMetal", [xf, H(0), z0], [dx0, H(h - t), z0 + t], dk);
+  kit.boxMM("paintedMetal", [dx0, H(2.1), z0], [xBack, H(h - t), z0 + t], dk);
+  kit.boxMM("paintedMetal", [dx1, H(0), z0], [xBack, H(2.1), z0 + t], dk);
+  const leaf = (xa, xb, ya, yb) => kit.boxMM("paintedMetal", [xa, H(ya), z0 + 0.01], [xb, H(yb), z0 + t - 0.01], { color: IMP.black, texel: 1 });
+  const [wx0, wx1, wy0, wy1] = [dx0 + 0.13, dx1 - 0.13, 1.4, 1.8];
+  leaf(dx0 + 0.005, dx1 - 0.005, 0.03, wy0);
+  leaf(dx0 + 0.005, dx1 - 0.005, wy1, 2.08);
+  leaf(dx0 + 0.005, wx0, wy0, wy1);
+  leaf(wx1, dx1 - 0.005, wy0, wy1);
+  kit.boxMM("glass", [wx0, H(wy0), z0 + 0.025], [wx1, H(wy1), z0 + 0.035]);
+  for (const zz of [z0 - 0.01, z0 + t + 0.01]) kit.box("metal", dx0 + 0.1, H(1.0), zz, 0.03, 0.14, 0.02, { color: IMP.steel });
+  for (let k = 0; k < 3; k++) led(kit, k === 1 ? OFF : RED, xf + 0.15, H(1.5 + k * 0.12), z0 + t, "z", 1, 0.02);
   // front (approach) wall with the window opening z0+0.25..z1-0.25, y 1.2..1.95
   const wz0 = z0 + 0.25;
   const wz1 = z1 - 0.25;
@@ -878,34 +906,62 @@ export function guardBooth(kit, R, xBack, z0, z1, { w = 1.1, h = 2.3 } = {}) {
   kit.boxMM("paintedMetal", [xf, H(1.95), z0 + t], [xf + t, H(h - t), z1 - t], dk);
   kit.boxMM("paintedMetal", [xf, H(1.2), z0 + t], [xf + t, H(1.95), wz0], dk);
   kit.boxMM("paintedMetal", [xf, H(1.2), wz1], [xf + t, H(1.95), z1 - t], dk);
-  kit.boxMM("metal", [xf - 0.015, H(1.17), wz0 - 0.03], [xf + t, H(1.2), wz1 + 0.03], { color: IMP.mid, texel: 2 });
-  kit.boxMM("metal", [xf - 0.015, H(1.95), wz0 - 0.03], [xf + t, H(1.98), wz1 + 0.03], { color: IMP.mid, texel: 2 });
+  kit.boxMM("metal", [xf - 0.015, H(1.17), wz0 - 0.03], [xf + t, H(1.2), wz1 + 0.03], mid);
+  kit.boxMM("metal", [xf - 0.015, H(1.95), wz0 - 0.03], [xf + t, H(1.98), wz1 + 0.03], mid);
   kit.boxMM("glass", [xf + 0.02, H(1.2), wz0], [xf + 0.03, H(1.95), wz1]);
-  kit.boxMM("metal", [xf - 0.01, H(0.05), z0 + t], [xf + t, H(0.35), z1 - t], { color: IMP.mid, texel: 2 });
-  // north wall (gate side): door leaf with a small window and a handle
-  kit.boxMM("paintedMetal", [xf + 0.3, H(0.03), z0 + 0.005], [xf + 1.0, H(2.1), z0 + t - 0.005], { color: IMP.black, texel: 1 });
-  kit.boxMM("glass", [xf + 0.5, H(1.4), z0 + 0.02], [xf + 0.8, H(1.8), z0 + 0.03]);
-  kit.box("metal", xf + 0.42, H(1.0), z0 - 0.01, 0.03, 0.14, 0.02, { color: IMP.steel });
-  // interior: mid-grey back panel (lit), control panel on a shelf, stool. Mid grey, not impPanel: this face looks
-  // straight at the starboard corridor's cool-white pool lights through the shared wall (no shadows in the pool),
-  // and a light panel there blew out to pink-white whenever the corridor was active.
+  kit.boxMM("metal", [xf - 0.01, H(0.05), z0 + t], [xf + t, H(0.35), z1 - t], mid);
+  // approach face dressing: seam grid (two vertical + one horizontal groove) on the lower panel, intercom (north
+  // third), code-cylinder reader (middle), SURVEILLANCE tag + lamp pair (south third), GUARD POST header above
+  const pz0 = z0 + t;
+  const pz1 = z1 - t;
+  const third = (pz1 - pz0) / 3;
+  for (let k = 1; k < 3; k++) slab(kit, "paintedMetal", "x", xf, -1, pz0 + k * third - 0.006, pz0 + k * third + 0.006, H(0.37), H(1.15), 0, 0.004, bk);
+  slab(kit, "paintedMetal", "x", xf, -1, pz0 + 0.03, pz1 - 0.03, H(0.694), H(0.706), 0, 0.004, bk);
+  intercom(kit, "x", xf, -1, pz0 + third / 2, H(0.95));
+  cylinderReader(kit, xf, zc, H(0.95));
+  const sz = pz1 - third / 2;
+  slab(kit, "paintedMetal", "x", xf, -1, sz - 0.14, sz + 0.14, H(0.93), H(1.09), 0, 0.012, bk);
+  slab(kit, "intelUI", "x", xf, -1, sz - 0.12, sz + 0.12, H(0.95), H(1.07), 0.012, 0.016, { uv: "keep", uvRect: uvRect(UI.tag5) });
+  led(kit, RED, xf, H(0.86), sz - 0.03, "x", -1, 0.02);
+  led(kit, OFF, xf, H(0.86), sz + 0.03, "x", -1, 0.02);
+  slab(kit, "paintedMetal", "x", xf, -1, zc - 0.24, zc + 0.24, H(1.99), H(2.23), 0, 0.02, bk);
+  slab(kit, "intelUI", "x", xf, -1, zc - 0.2, zc + 0.2, H(2.01), H(2.21), 0.02, 0.026, { uv: "keep", uvRect: uvRect(UI.post) });
+  // interior: mid-grey back panel. Mid grey, not impPanel: this face looks straight at the starboard corridor's
+  // cool-white pool lights through the shared wall (no shadows in the pool), and a light panel there blew out to
+  // pink-white whenever the corridor was active.
   slab(kit, "paintedMetal", "x", xBack, -1, z0 + t, z1 - t, H(0.03), H(h - t), 0, 0.01, { color: IMP.mid, texel: 1 });
-  kit.boxMM("paintedMetal", [xBack - 0.42, H(0.9), z0 + t], [xBack - 0.02, H(0.95), z1 - t], { color: IMP.black, texel: 2 });
+  const seamZ = z0 + t + 1.14;
+  slab(kit, "paintedMetal", "x", xBack, -1, seamZ - 0.006, seamZ + 0.006, H(0.1), H(h - t - 0.05), 0.01, 0.014, bk);
+  // 2 × 2 surveillance monitors (4:3 cells) in black bezels with gloss glass, label plate above, LED row below
+  const mz0 = z0 + t + 0.06;
+  const cells = ["mon1", "mon6", "mon4", "mon2"];
+  for (let r = 0; r < 2; r++)
+    for (let c = 0; c < 2; c++) {
+      const zm = mz0 + 0.2 + c * 0.42;
+      const ym = 1.47 + r * 0.33;
+      slab(kit, "paintedMetal", "x", xBack, -1, zm - 0.2, zm + 0.2, H(ym - 0.157), H(ym + 0.157), 0.01, 0.05, bk);
+      slab(kit, OFF, "x", xBack, -1, zm - 0.18, zm + 0.18, H(ym - 0.14), H(ym + 0.14), 0.05, 0.054);
+      slab(kit, "intelUI", "x", xBack, -1, zm - 0.17, zm + 0.17, H(ym - 0.1275), H(ym + 0.1275), 0.054, 0.058, { uv: "keep", uvRect: uvRect(UI[cells[r * 2 + c]]) });
+    }
+  slab(kit, "paintedMetal", "x", xBack, -1, mz0 + 0.27, mz0 + 0.55, H(2.03), H(2.17), 0.01, 0.02, bk);
+  slab(kit, "intelUI", "x", xBack, -1, mz0 + 0.29, mz0 + 0.53, H(2.04), H(2.16), 0.02, 0.026, { uv: "keep", uvRect: uvRect(UI.tag5) });
+  for (let k = 0; k < 4; k++) led(kit, k === 2 ? OFF : RED, xBack - 0.01, H(1.24), mz0 + 0.08 + k * 0.1, "x", -1, 0.02);
+  junctionBox(kit, "x", xBack, -1, seamZ + 0.42, H(1.65), { w: 0.26, h: 0.3 });
+  // shelf under the monitors, control panel tilted toward the stool (west), stool
+  kit.boxMM("paintedMetal", [xBack - 0.42, H(0.9), z0 + t], [xBack - 0.02, H(0.95), z1 - t], bk);
   const L = new Local(kit, xBack - 0.28, H(0.95), zc, 1);
   L.box("paintedMetal", 0, 0.12, 0, 0.5, 0.04, 0.34, { color: IMP.dark, texel: 2, tilt: -0.6 });
   L.box("intelUI", 0, 0.14, 0, 0.42, 0.004, 0.3, { uv: "keep", uvRect: uvRect(UI.booth), tilt: -0.6 });
   kit.cyl("metal", xBack - 0.55, H(0.28), zc, 0.025, 0.5, "y", { color: IMP.mid, segments: 8 });
   kit.cyl("paintedMetal", xBack - 0.55, H(0.55), zc, 0.16, 0.04, "y", { color: IMP.dark, segments: 14 });
-  // housed ceiling light: black open-bottom can under the roof, red lens. Sits in the front third so the grey back
-  // panel is ≥ 0.6 m from the source (at w/2 it blew out to pink-white through the window).
+  // ceiling can under the roof (black open-bottom housing, red lens); emissive only, no descriptor
   const lx = xf + 0.22;
-  kit.boxMM("paintedMetal", [lx - 0.14, H(h - t - 0.1), zc - 0.14], [lx + 0.14, H(h - t), zc - 0.11], { color: IMP.black, texel: 2 });
-  kit.boxMM("paintedMetal", [lx - 0.14, H(h - t - 0.1), zc + 0.11], [lx + 0.14, H(h - t), zc + 0.14], { color: IMP.black, texel: 2 });
-  kit.boxMM("paintedMetal", [lx - 0.14, H(h - t - 0.1), zc - 0.11], [lx - 0.11, H(h - t), zc + 0.11], { color: IMP.black, texel: 2 });
-  kit.boxMM("paintedMetal", [lx + 0.11, H(h - t - 0.1), zc - 0.11], [lx + 0.14, H(h - t), zc + 0.11], { color: IMP.black, texel: 2 });
+  kit.boxMM("paintedMetal", [lx - 0.14, H(h - t - 0.1), zc - 0.14], [lx + 0.14, H(h - t), zc - 0.11], bk);
+  kit.boxMM("paintedMetal", [lx - 0.14, H(h - t - 0.1), zc + 0.11], [lx + 0.14, H(h - t), zc + 0.14], bk);
+  kit.boxMM("paintedMetal", [lx - 0.14, H(h - t - 0.1), zc - 0.11], [lx - 0.11, H(h - t), zc + 0.11], bk);
+  kit.boxMM("paintedMetal", [lx + 0.11, H(h - t - 0.1), zc - 0.11], [lx + 0.14, H(h - t), zc + 0.11], bk);
   kit.box(RED, lx, H(h - t - 0.02), zc, 0.1, 0.008, 0.1);
-  kit.collider([xf - 0.02, y0, z0 - 0.02], [xBack, H(h + 0.05), z1 + 0.02], "booth");
-  return [lx, H(h - t - 0.09), zc];
+  kit.collider([xf - 0.1, y0, z0 - 0.02], [xBack, H(h + 0.05), z1 + 0.02], "booth");
 }
 
 /** Sealed evidence hatch on a wall along x (face plane zFace, sign toward the room), centred at xc. */
@@ -1124,6 +1180,14 @@ export function floorPath(kit, y0, x0, x1, z0, z1, { bars = [] } = {}) {
   kit.boxMM(RED, [x0 + 0.1, y0 + 0.012, z0 + 0.02], [x1 - 0.1, y0 + 0.018, z0 + 0.05]);
   kit.boxMM(RED, [x0 + 0.1, y0 + 0.012, z1 - 0.05], [x1 - 0.1, y0 + 0.018, z1 - 0.02]);
   for (const bx of bars) kit.boxMM(RED, [bx - 0.02, y0 + 0.012, z0 + 0.15], [bx + 0.02, y0 + 0.018, z1 - 0.15]);
+}
+
+/** Inlaid red floor strip along z at x: 10 cm black inlay plate 4 mm proud with a 3 cm red lens 5 mm up its centre. */
+export function floorStrip(kit, y0, x, z0, z1) {
+  const lo = Math.min(z0, z1);
+  const hi = Math.max(z0, z1);
+  kit.boxMM("metalRough", [x - 0.05, y0 + 0.002, lo], [x + 0.05, y0 + 0.006, hi], { color: IMP.black, texel: 2 });
+  kit.boxMM(RED, [x - 0.015, y0 + 0.006, lo + 0.03], [x + 0.015, y0 + 0.011, hi - 0.03]);
 }
 
 /** Red floor strip (thin emissive line) along x or z. */

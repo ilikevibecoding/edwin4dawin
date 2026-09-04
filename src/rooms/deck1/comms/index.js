@@ -74,7 +74,8 @@ const manifest = {
     for (const d of manifest.doors) doorReveal(kit, manifest, d, y0);
 
     // --- rack rows along the north and south walls (11 slots each; slot 5 is an open patch frame).
-    // Two cabinet types alternate irregularly; north slot 7 stands with its door open into the aisle.
+    // Two cabinet types alternate irregularly; north slot 7 stands with its door open into the aisle, south slot 7
+    // has a tray pulled out; every rack draws its own LED fill / palette / pattern from its seed.
     const TYPES = {
       n: ["open", "closed", "open", "closed", "open", null, "open", "closed", "open", "closed", "open"],
       s: ["closed", "open", "open", "closed", "open", null, "closed", "open", "closed", "open", "closed"],
@@ -88,7 +89,7 @@ const manifest = {
       for (let k = 0; k < 11; k++) {
         const x0 = xw + 1.1 + k * 1.5;
         const type = TYPES[key][k];
-        row.push(k === 5 ? patchFrame(kit, x0, y0, zBack, f, 300 + k + (f > 0 ? 0 : 50)) : rack(kit, x0, y0, zBack, f, 100 + k * 7 + (f > 0 ? 0 : 500), { type, doorOpen: key === "n" && k === 7 }));
+        row.push(k === 5 ? patchFrame(kit, x0, y0, zBack, f, 300 + k + (f > 0 ? 0 : 50)) : rack(kit, x0, y0, zBack, f, 100 + k * 7 + (f > 0 ? 0 : 500), { type, doorOpen: key === "n" && k === 7, pulledTray: key === "s" && k === 7 }));
       }
       for (let k = 0; k + 1 < row.length; k++) patchBetween(kit, row[k], row[k + 1], rand);
       // cable bundles from the row tray into every second rack
@@ -187,7 +188,7 @@ const manifest = {
       [cx + 4.6, cz - 4.1],
       [cx + 4.6, cz + 4.1],
     ];
-    const ringY = towers.map(([x, z], i) => sensorTower(kit, x, y0, z, i));
+    const ringY = towers.map(([x, z], i) => sensorTower(kit, x, y0, z, i, { labelSide: z < cz ? 1 : -1 })); // ID plates face the centre aisle
     const rings = new THREE.InstancedMesh(ringGeometry(), ctx.materials.metal, towers.length);
     rings.name = "comms-scanner-rings";
     rings.castShadow = true;
@@ -228,11 +229,11 @@ const manifest = {
     // closed dark housing (a convex box cannot face a source inside it) at least 1.2 m from the ceiling, and every
     // spot points down from the mouth of its can, so no surface is lit at point-blank range (no blobs / halos):
     // eight cool aisle washes inside the pendant luminaires (four per row, 3.5 m up), a cool downlight inside
-    // the hub body, an amber accent 0.8 m in front of the south work lamp, a blue wall-wash spot in the centre
-    // hood of the signal wall, two downward spots in the east can downlights and a spot key over the operator
-    // row (shadow caster)
+    // the hub body (0.12 m under the ceiling, 12: at 0.28 m / 14 its ceiling specular clipped in front of the hub),
+    // an amber accent 0.8 m in front of the south work lamp, a blue wall-wash spot in the centre hood of the
+    // signal wall, two downward spots in the east can downlights and a spot key over the operator row (shadow caster)
     for (const z of [aisleN, aisleS]) for (const x of aisleXs) ctx.lights.push({ type: "point", pos: [x, aisleY, z], color: LIGHT.coolWhite, intensity: 10, distance: 10, priority: 0.5 });
-    ctx.lights.push({ type: "point", pos: hubLight(cx, ceilY, cz), color: LIGHT.coolWhite, intensity: 14, distance: 11, priority: 0.6 });
+    ctx.lights.push({ type: "point", pos: hubLight(cx, ceilY, cz), color: LIGHT.coolWhite, intensity: 12, distance: 11, priority: 0.6 });
     ctx.lights.push({ type: "point", pos: [cx + 2.9, y0 + 1.6, zs - 1.8], color: LIGHT.amber, intensity: 2.5, distance: 6, priority: 0.3 });
     ctx.lights.push({ type: "spot", pos: wash.pos, target: wash.target, color: LIGHT.blue, intensity: 25, distance: 9, angle: 0.9, penumbra: 0.6, priority: 0.8 });
     for (const [x, z] of eastLights) ctx.lights.push({ type: "spot", pos: [x, ceilY - 0.2, z], target: [x, y0, z], color: LIGHT.coolWhite, intensity: 36, distance: 12, angle: 1.15, penumbra: 0.6, priority: 0.45 });
