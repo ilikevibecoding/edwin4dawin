@@ -266,7 +266,7 @@ function door(a, b, pos, axis, opts = {}) {
   room({ id: "cargo", name: "Cargo Storage & Logistics", deck: "E", origin: [0, y, 110.4], size: [80, 14, 60], accent: "#d0a060", fog: 0.01, spawn: { x: 0, z: -27, yaw: 180, pitch: -2 } });
   room({ id: "lobby_e", name: "Hangar Deck Lobby", deck: "E", origin: [61, y, 90], size: [24, 4.2, 12], accent: "#ffb45a", kind: "lobby" });
   // raised booth set into the hangar's east wall, 16 m above the deck, reached by the stair tower
-  room({ id: "flight_control", name: "Hangar Flight Control", deck: "E", origin: [77.4, -24, -30], size: [24, 4.0, 14], accent: "#5fd0ff", spawn: { x: 6, z: 0, yaw: 90, pitch: -8 }, tags: ["seeThrough"] });
+  room({ id: "flight_control", name: "Hangar Flight Control", deck: "E", origin: [77.4, -24, -30], size: [24, 4.0, 14], accent: "#5fd0ff", fog: 0.0035, spawn: { x: 6, z: 0, yaw: 90, pitch: -8 }, tags: ["seeThrough"] });
 
   door("hangar", "fighter_bay", [-65.2, y, -60], "x", { type: "blast", w: 16, h: 12 });
   door("hangar", "shuttle_bay", [65.2, y, -60], "x", { type: "blast", w: 20, h: 16 });

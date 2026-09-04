@@ -191,6 +191,7 @@ export class Player {
     // a low collider we could step onto is not a wall
     const stepTop = p.y + STEP_UP;
     for (const c of this.colliders) {
+      if (c.disabled) continue; // open door leaves
       if (c.max.y < feet || c.min.y > head) continue;
       if (c.max.y <= stepTop && c.min.y <= feet + 0.01 && c.walkable) continue;
       // closest point on the AABB footprint to the player circle centre

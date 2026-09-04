@@ -12,6 +12,7 @@ import { lux, roomWalls, impConsole, impChair } from "./imperial_kit.js";
 import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
 import { HG_DECAL, hgNumber } from "../textures_hangar.js";
 import { rng } from "../kit.js";
+import { buildShuttle } from "../fighters/shuttle.js";
 import {
   hgSetup,
   Placer,
@@ -145,6 +146,8 @@ export function buildShuttleBay(kit, ctx, room) {
   const redBlink = [];
   const amberBlink = [];
   const PAD = { x: 0, z: -5, r: 12 };
+  // the parked shuttle (fighters workstream): nose toward +z, wings folded, ramp down on the pad
+  buildShuttle(kit, new THREE.Vector3(PAD.x, 0, PAD.z), Math.PI);
 
   // ---- flight-control intrusion (room-local box) -> soffit + wall notch + ceiling skip
   const fc = ROOM_BY_ID.flight_control;
