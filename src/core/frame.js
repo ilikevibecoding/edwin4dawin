@@ -248,12 +248,13 @@ export function panelGrid(frame, length, height, opts = {}) {
           frame.box("metal", cu, v0 + 0.04, 0.0, cw - gap, 0.03, 0.03, { color: IMP.steelDark });
           break;
         case "strip": {
-          // recessed housing with a diffuser strip; occasional dark segments (broken run) read as designed
+          // recessed U-channel: black back plate, steel lips top and bottom, the diffuser sitting in the recess
+          // in front of the back plate (a diffuser buried inside a solid housing never renders)
           const m = band && band.mat ? band.mat : stripMat;
-          frame.box("paintedMetal", cu, cv, -0.1, cw, ch, 0.12, { color: IMP.black, texel: 1 });
-          frame.box("metal", cu, v1 - 0.01, -0.02, cw, 0.02, 0.06, { color: IMP.steelDark });
-          frame.box("metal", cu, v0 + 0.01, -0.02, cw, 0.02, 0.06, { color: IMP.steelDark });
-          frame.box(m, cu, cv, -0.075, cw - 0.04, ch - 0.08, 0.02, { uv: "keep" });
+          frame.box("paintedMetal", cu, cv, -0.14, cw, ch, 0.04, { color: IMP.black, texel: 1 });
+          frame.box("metal", cu, v1 - 0.012, -0.08, cw, 0.024, 0.16, { color: IMP.steelDark });
+          frame.box("metal", cu, v0 + 0.012, -0.08, cw, 0.024, 0.16, { color: IMP.steelDark });
+          frame.box(m, cu, cv, -0.1, cw - 0.02, ch - 0.06, 0.02, { uv: "keep" });
           break;
         }
         case "panel": {

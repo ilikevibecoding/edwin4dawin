@@ -138,8 +138,9 @@ export const ENGINES = {
   nozzleLen: 60,
 };
 
-// Reactor bulb under the aft belly
-export const REACTOR_BULB = { x: 0, y: -62, z: 330, r: 82 };
+// Reactor bulb under the aft belly. Its top (y −20) stays below the engineering deck (floor −10), so the
+// sphere never crosses a room volume; it emerges from the belly (y ≈ −72 there) and hangs 108 m below it.
+export const REACTOR_BULB = { x: 0, y: -100, z: 330, r: 80 };
 
 // Ventral bays cut through the belly (x0,x1,z0,z1); the shaft runs from the hangar deck to the belly
 export const BAYS = {
