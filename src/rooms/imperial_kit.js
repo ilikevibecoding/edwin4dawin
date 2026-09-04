@@ -402,7 +402,7 @@ export function impConsole(kit, cx, cy, cz, w, d, opts = {}) {
   // shell
   addBox("impTrim", 0, height / 2, 0, w, height, d, { color: PALETTE.impBlack, texel: 1 });
   addBox("impMetal", 0, 0.06, 0, w + 0.04, 0.12, d + 0.04, { color: PALETTE.impCharcoal, texel: 1 });
-  // operator-side recess (the -Z side is where the operator stands)
+  // operator-side recess (the +Z side is where the operator stands; the sloped top faces +Z)
   addBox("impMetal", 0, height * 0.45, d / 2 - 0.02, w - 0.2, height * 0.5, 0.03, { color: PALETTE.impGreyDark, texel: 1 });
   addBox(accentKey, 0, 0.18, d / 2 + 0.005, w - 0.4, 0.025, 0.01);
   // sloped top (toward the operator)
@@ -500,10 +500,13 @@ export function impRailing(kit, from, to, y = 0, opts = {}) {
     const g = new THREE.BoxGeometry(0.03, 0.03, L - 0.2);
     kit.add(light, g, { pos: [mid.x, y + h - 0.06, mid.z], quat: q });
   }
-  // thin collider along the rail
-  const min = new THREE.Vector3(Math.min(a.x, b.x) - 0.08, y, Math.min(a.z, b.z) - 0.08);
-  const max = new THREE.Vector3(Math.max(a.x, b.x) + 0.08, y + h, Math.max(a.z, b.z) + 0.08);
-  kit.collider([min.x, min.y, min.z], [max.x, max.y, max.z], "rail");
+  // collider chain (short boxes) so diagonal runs do not fence off their bounding square
+  const m = Math.max(1, Math.ceil(L / 0.45));
+  for (let i = 0; i < m; i++) {
+    const p0 = a.clone().addScaledVector(dir, (L * i) / m);
+    const p1 = a.clone().addScaledVector(dir, (L * (i + 1)) / m);
+    kit.collider([Math.min(p0.x, p1.x) - 0.06, y, Math.min(p0.z, p1.z) - 0.06], [Math.max(p0.x, p1.x) + 0.06, y + h, Math.max(p0.z, p1.z) + 0.06], "rail");
+  }
 }
 
 // Structural pillar (black, with a lit inset), room-local
