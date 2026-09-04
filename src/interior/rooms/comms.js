@@ -49,7 +49,7 @@ export function buildComms(kit, ctx) {
   buildProps(kit, ctx);
   buildFloorDetail(kit, ctx, B);
   ctx.light(pointLight(0x4a9dff, 4, 6, [HOLO_X, 2.4, -8.5]));
-  ctx.light(pointLight(0x4cff88, 2.5, 5, [9.5, 2.6, -12.2]));
+  ctx.light(pointLight(0xffb347, 2.2, 5, [9.5, 2.6, -12.2]));
   ctx.anim((dt, t) => {
     mats.pulse.emissiveIntensity = 1.2 + 0.35 * Math.sin(t * 2.3) + 0.1 * Math.sin(t * 9.1);
     mats.green.emissiveIntensity = 1.6 + 0.5 * (0.5 + 0.5 * Math.sin(t * 1.3));
@@ -73,14 +73,14 @@ function ensureMaterials(ctx) {
     m.cms_dim0.emissiveIntensity = 0.5;
     m.cms_sweep = m.holo.clone();
     m.cms_sweep.opacity = 0.8;
-    m.cms_sweep.color = new THREE.Color("#7fe0c8");
+    m.cms_sweep.color = new THREE.Color("#8ec5ff");
     m.cms_faint = m.holo.clone();
     m.cms_faint.opacity = 0.16;
-    // untextured additive teal for the plot's wire structure (rings, spindle, contacts): stays
+    // untextured additive blue for the plot's wire structure (rings, spindle, contacts): stays
     // legible from the door where the flat grid disc is seen edge-on
     m.cms_bright = m.holo.clone();
     m.cms_bright.map = null;
-    m.cms_bright.color = new THREE.Color("#7fe0c8");
+    m.cms_bright.color = new THREE.Color("#7fb8ff");
     m.cms_bright.opacity = 0.85;
   }
   return { pulse: m.cms_pulse, green: m.cms_green, sweep: m.cms_sweep, faint: m.cms_faint, bright: m.cms_bright };
@@ -167,7 +167,7 @@ function buildScreenWall(kit, ctx, B) {
   }
   // status band above (green/blue lamps and a stencil), readout strip below
   frame.box("paintedMetal", uc, vc + Hh / 2 + 0.45, 0.06, W + 0.3, 0.36, 0.12, DARK);
-  for (let i = 0; i < 14; i++) frame.box(i % 4 === 3 ? "emitAmber" : i % 3 === 1 ? "cms_green" : "emitBlue", uc - W / 2 + 0.5 + i * 0.5, vc + Hh / 2 + 0.45, 0.125, 0.22, 0.06, 0.01);
+  for (let i = 0; i < 14; i++) frame.box(i % 4 === 3 ? "emitAmber" : "emitBlue", uc - W / 2 + 0.5 + i * 0.5, vc + Hh / 2 + 0.45, 0.125, 0.22, 0.06, 0.01);
   frame.add("decal", new THREE.PlaneGeometry(0.5, 0.5), uc - W / 2 - 0.55, vc + Hh / 2 + 0.2, 0.001, { uv: "keep", uvRect: decalRect(6) });
   frame.add("decal", new THREE.PlaneGeometry(0.5, 0.5), uc + W / 2 + 0.55, vc + Hh / 2 + 0.2, 0.001, { uv: "keep", uvRect: decalRect(9) });
   frame.box("paintedMetal", uc, vc - Hh / 2 - 0.33, 0.08, W + 0.3, 0.3, 0.16, BLACK);
@@ -190,10 +190,10 @@ function buildPatchWall(kit, ctx, B, H) {
   const u = (x) => x - min[0];
   const racks = [
     { x: 6.0, w: 1.2, h: 2.4, lit: "emitBlue", kind: "closed" },
-    { x: 7.3, w: 1.2, h: 2.2, lit: "cms_green", kind: "closed" },
+    { x: 7.3, w: 1.2, h: 2.2, lit: "emitAmber", kind: "closed" },
     { x: 8.6, w: 1.2, h: 2.5, lit: "emitBlue", kind: "open" },
     { x: 9.9, w: 1.2, h: 2.4, lit: "emitBlue", kind: "closed" },
-    { x: 11.2, w: 1.2, h: 2.3, lit: "cms_green", kind: "closed" },
+    { x: 11.2, w: 1.2, h: 2.3, lit: "emitAmber", kind: "closed" },
     { x: 12.5, w: 1.2, h: 2.4, lit: "emitAmber", kind: "service" },
     { x: 13.8, w: 1.2, h: 2.5, lit: "emitBlue", kind: "closed" },
   ];
@@ -245,7 +245,7 @@ function openRack(kit, ctx, B, u, w, h, seed) {
     const sh = 0.16 + rand() * 0.2;
     frame.box("metal", u, y + sh / 2, d * 0.55, w - 0.2, sh - 0.04, d * 0.5, { color: rand() < 0.5 ? PALETTE.impBlack : PALETTE.impMid, texel: 2 });
     const nl = 2 + Math.floor(rand() * 4);
-    for (let i = 0; i < nl; i++) frame.box(rand() < 0.2 ? "emitRed" : rand() < 0.5 ? "cms_green" : "emitBlue", u - w / 2 + 0.2 + i * 0.09, y + sh / 2, d * 0.8 + 0.01, 0.03, 0.02, 0.01);
+    for (let i = 0; i < nl; i++) frame.box(rand() < 0.2 ? "emitRed" : rand() < 0.3 ? "cms_green" : "emitBlue", u - w / 2 + 0.2 + i * 0.09, y + sh / 2, d * 0.8 + 0.01, 0.03, 0.02, 0.01);
     if (rand() < 0.6) plugs.push([u + w * 0.15 + rand() * 0.2, y + sh / 2]);
     y += sh;
   }
@@ -325,7 +325,7 @@ function buildFeedWall(kit, ctx, B, H) {
   // junction cabinet
   kit.boxMM("paintedMetal", [12.2, 0, max[2] - 0.62], [13.9, 2.0, max[2] - 0.02], DARK);
   kit.boxMM("impPanel", [12.3, 0.15, max[2] - 0.63], [13.8, 1.85, max[2] - 0.62], { color: PALETTE.impMid, uv: "keep" });
-  for (let i = 0; i < 5; i++) kit.box(i === 2 ? "emitAmber" : "cms_green", 12.5 + i * 0.3, 1.5, max[2] - 0.64, 0.14, 0.05, 0.01, {});
+  for (let i = 0; i < 5; i++) kit.box(i === 2 ? "emitAmber" : "emitBlue", 12.5 + i * 0.3, 1.5, max[2] - 0.64, 0.14, 0.05, 0.01, {});
   kit.box("leds", 13.05, 1.2, max[2] - 0.64, 1.2, 0.05, 0.01, { uv: "keep" });
   kit.box("hazard", 13.05, 0.04, max[2] - 0.32, 1.7, 0.08, 0.6, { texel: 3 });
   kit.collider([12.2, 0, max[2] - 0.62], [13.9, 2.0, max[2]], "junction");
@@ -339,7 +339,7 @@ function buildFeedWall(kit, ctx, B, H) {
   frame.box("impPanel1", bu, 1.6, 0.105, 1.0, 1.4, 0.01, { color: PALETTE.impDark, uv: "keep" });
   for (let i = 0; i < 8; i++) {
     const lit = i < 5;
-    frame.box(lit ? (i < 3 ? "cms_green" : "emitAmber") : "rubber", bu - 0.3, 1.0 + i * 0.15, 0.115, 0.3, 0.09, 0.01, { color: PALETTE.rubber });
+    frame.box(lit ? (i === 4 ? "emitRed" : "emitAmber") : "rubber", bu - 0.3, 1.0 + i * 0.15, 0.115, 0.3, 0.09, 0.01, { color: PALETTE.rubber });
     frame.box(i < 6 ? "emitBlue" : "rubber", bu + 0.2, 1.0 + i * 0.15, 0.115, 0.3, 0.09, 0.01, { color: PALETTE.rubber });
   }
   frame.add("decal", new THREE.PlaneGeometry(0.36, 0.36), bu, 2.2, 0.115, { uv: "keep", uvRect: decalRect(12) });
@@ -352,7 +352,7 @@ function buildFeedWall(kit, ctx, B, H) {
 function buildDoorWall(kit, ctx, B) {
   const [min, max] = B;
   const u = (z) => max[2] - z;
-  equipmentRack(kit, ctx, { side: "xmin", u: u(-11.9), w: 1.2, h: 2.4, seed: ctx.seed + 50, bounds: B, lit: "cms_green" });
+  equipmentRack(kit, ctx, { side: "xmin", u: u(-11.9), w: 1.2, h: 2.4, seed: ctx.seed + 50, bounds: B, lit: "emitBlue" });
   equipmentRack(kit, ctx, { side: "xmin", u: u(-5.4), w: 1.0, h: 2.6, d: 0.5, seed: ctx.seed + 51, bounds: B, lit: "emitAmber" });
   const seg = wallSegment(B, "xmin");
   const { frame } = wallFrame(kit, seg.from, seg.to, min[1]);
@@ -368,10 +368,10 @@ function buildDoorWall(kit, ctx, B) {
 function buildStations(kit, ctx) {
   const yaw = -Math.PI / 2; // desk faces +X (the screen wall); operator sits at -X
   operatorDesk(kit, ctx, { x: 13.5, z: -6.7, yaw, screens: ["impScreen0", "cms_pulse", "impScreen2"], seed: ctx.seed + 60, lampMat: "emitBlue" });
-  operatorDesk(kit, ctx, { x: 13.5, z: -10.3, yaw, screens: ["impScreen2", "impScreen1", "impScreen0"], seed: ctx.seed + 61, lampMat: "cms_green" });
-  // a comms duty desk near the door wall: standing console facing the room with a mug and a headset
-  impConsole(kit, ctx, { x: 6.2, z: -5.6, yaw: Math.PI, w: 1.5, d: 0.7, h: 1.0, screens: [1], seed: ctx.seed + 70, lampMat: "cms_green" });
-  kit.cyl("metal", 6.7, 1.0, -5.62, 0.045, 0.1, "y", { color: PALETTE.impBlack, segments: 12 });
+  operatorDesk(kit, ctx, { x: 13.5, z: -10.3, yaw, screens: ["impScreen2", "impScreen1", "impScreen0"], seed: ctx.seed + 61, lampMat: "emitAmber" });
+  // duty station by the zmax wall: a third desk turned to face +X like the others (its screen bank
+  // and keypad face the door), operator seated at -X
+  operatorDesk(kit, ctx, { x: 6.7, z: -5.6, yaw, screens: ["impScreen1", "impScreen0", "cms_pulse"], seed: ctx.seed + 70, lampMat: "emitBlue" });
 }
 
 /**
@@ -405,7 +405,7 @@ function operatorDesk(kit, ctx, { x, z, yaw, screens, seed, lampMat }) {
   add("paintedMetal", new THREE.BoxGeometry(w, 0.06, d), 0, h - 0.03, 0, BLACK);
   add("rubber", new THREE.BoxGeometry(w, 0.03, 0.05), 0, h - 0.015, d / 2 - 0.025, { color: PALETTE.rubber });
   add("paintedMetal", new THREE.BoxGeometry(0.9, 0.02, 0.28), -0.1, h + 0.01, 0.12, { color: PALETTE.impDark, texel: 2 });
-  for (let r = 0; r < 3; r++) for (let i = 0; i < 9; i++) add(rand() < 0.2 ? (rand() < 0.5 ? "emitBlue" : "cms_green") : "rubber", new THREE.BoxGeometry(0.06, 0.015, 0.05), -0.5 + i * 0.09 + (r % 2) * 0.03, h + 0.028, 0.03 + r * 0.075, { color: PALETTE.rubber });
+  for (let r = 0; r < 3; r++) for (let i = 0; i < 9; i++) add(rand() < 0.2 ? (rand() < 0.5 ? "emitBlue" : "emitAmber") : "rubber", new THREE.BoxGeometry(0.06, 0.015, 0.05), -0.5 + i * 0.09 + (r % 2) * 0.03, h + 0.028, 0.03 + r * 0.075, { color: PALETTE.rubber });
   add("leds", new THREE.BoxGeometry(0.6, 0.012, 0.04), -0.1, h + 0.026, -0.08, { uv: "keep" });
   // canted screen bank on a rail along the far edge, leaning back, facing the operator
   const bt = 0.16;
@@ -476,7 +476,7 @@ function sensorHolo(kit, ctx, mats, x, z) {
   flat(new THREE.RingGeometry(0.84, 0.87, 40), top + 0.004, "metal", { color: PALETTE.impMid });
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    kit.box(i % 2 ? "cms_green" : "emitBlue", x + Math.cos(a) * 0.8, 0.62, z + Math.sin(a) * 0.8, 0.08, 0.16, 0.08, {});
+    kit.box(i % 2 ? "emitAmber" : "emitBlue", x + Math.cos(a) * 0.8, 0.62, z + Math.sin(a) * 0.8, 0.08, 0.16, 0.08, {});
   }
   kit.box("leds", x, 0.3, z + 0.79, 0.9, 0.04, 0.01, { uv: "keep" });
   kit.collider([x - 0.95, 0, z - 0.95], [x + 0.95, top + 0.3, z + 0.95], "sensortable");
@@ -570,7 +570,7 @@ function buildProps(kit, ctx) {
     kit.box("impPanel1", cx, cy + 0.31, cz, 0.9, 0.62, 0.7, { color: i ? PALETTE.impMid : PALETTE.impDark, uv: "keep" });
     kit.box("paintedMetal", cx, cy + 0.6, cz, 0.94, 0.05, 0.74, BLACK);
     kit.box("paintedMetal", cx, cy + 0.03, cz, 0.94, 0.06, 0.74, BLACK);
-    kit.box(i ? "cms_green" : "emitBlue", cx + 0.46, cy + 0.4, cz, 0.01, 0.03, 0.12, {});
+    kit.box(i ? "emitAmber" : "emitBlue", cx + 0.46, cy + 0.4, cz, 0.01, 0.03, 0.12, {});
     kit.add("decal", new THREE.PlaneGeometry(0.22, 0.22), { pos: [cx + 0.461, cy + 0.25, cz + 0.15], rot: [0, Math.PI / 2, 0], uv: "keep", uvRect: decalRect(i ? 12 : 9) });
   }
   kit.collider([4.9, 0, -12.15], [6.0, 1.3, -11.35], "cases");

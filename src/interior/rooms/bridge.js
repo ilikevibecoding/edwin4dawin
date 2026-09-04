@@ -32,6 +32,7 @@ const STAIR_W = 1.6;
 const CMD = { z0: -22.4, z1: -17.6, hz: -19.6, y: 0.3 }; // command platform + holo dais centre
 const DAIS_R = 1.15; // holo dais radius (the tactical plot overhangs it slightly)
 const DATUM = 1.45; // bottom edge shared by every wall display (side bays + aft wall)
+const BAND_H = 1.4; // height shared by the secondary wall displays (one band over the datum)
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const BLACK = { color: PALETTE.impBlack, texel: 2 };
 const DARK = { color: PALETTE.impDark, texel: 1.5 };
@@ -47,15 +48,22 @@ export function buildBridge(kit, ctx) {
   buildWindowWall(kit, ctx);
   buildCeiling(kit, ctx, B);
   for (const s of [-1, 1]) buildPit(kit, ctx, s);
-  buildWalkway(kit);
+  buildWalkway(kit, ctx);
   buildCommand(kit, ctx, mats);
   buildForward(kit, ctx);
   for (const s of [-1, 1]) buildSideBay(kit, ctx, s, B, mats);
   buildAftWall(kit, ctx, B);
   buildLights(ctx);
+  // screen life: the pulse readouts breathe, the strip charts creep, the list screens redraw a row at
+  // a time (accumulated from dt so a stepped clock advances them too), the alert housings idle
+  let clock = 0;
   ctx.anim((dt, t) => {
+    clock += dt;
     mats.pulse.emissiveIntensity = 1.25 + 0.3 * Math.sin(t * 1.7) + 0.08 * Math.sin(t * 7.3);
     mats.alert.emissiveIntensity = 0.25 + 0.22 * (0.5 + 0.5 * Math.sin(t * 0.9));
+    mats.scroll.emissiveMap.offset.x = (clock * 0.045) % 1;
+    mats.step.emissiveMap.offset.y = (Math.floor(clock * 1.1) % 8) / 8;
+    mats.step.emissiveIntensity = 1.4 + 0.25 * ((clock * 1.1) % 1 < 0.12 ? 1 : 0);
   });
   ctx.audioZone({ kind: "bridge", center: [0, 2, -32], radius: 26 });
 }
@@ -88,25 +96,41 @@ function ensureMaterials(ctx) {
     m.brg_holoBright.map = null;
     m.brg_holoBright.color = new THREE.Color("#78bcff");
     m.brg_holoBright.opacity = 0.3;
-    // the ship hologram: faint additive fill under a bright wire outline
+    // the ship hologram: a translucent additive body (the wedge reads as a solid volume with the tower
+    // and tiers standing off it) under a faint wire outline that only sharpens the silhouette
     m.brg_holoFill = m.holo.clone();
     m.brg_holoFill.map = null;
     m.brg_holoFill.color = new THREE.Color("#6fb4ff");
-    m.brg_holoFill.opacity = 0.07;
-    m.brg_holoLine = new THREE.LineBasicMaterial({ color: 0x8ec5ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false });
+    m.brg_holoFill.opacity = 0.34;
+    m.brg_holoFill.side = THREE.FrontSide;
+    m.brg_holoLine = new THREE.LineBasicMaterial({ color: 0x8ec5ff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false });
+    // animated readouts: each owns a clone of its texture so the UV offset can move without touching
+    // the shared screens. brg_scroll is a strip chart creeping sideways, brg_step a list that redraws
+    // (jumps a row) about once a second; brg_pulse (above) breathes in intensity
+    const own = (src) => {
+      const mat = src.clone();
+      mat.emissiveMap = src.emissiveMap.clone();
+      mat.emissiveMap.wrapS = THREE.RepeatWrapping;
+      mat.emissiveMap.wrapT = THREE.RepeatWrapping;
+      mat.emissiveMap.needsUpdate = true;
+      return mat;
+    };
+    m.brg_scroll = own(m.impScreen1);
+    m.brg_scroll.name = "brg_scroll";
+    m.brg_step = own(m.impScreen0);
+    m.brg_step.name = "brg_step";
     // unlit near-black for the window reveal (see buildWindowWall)
     m.brg_void = new THREE.MeshBasicMaterial({ color: 0x05060a });
     // window frame steel: matte near-black with almost no environment response, so the mullions stay
     // black against space instead of picking up the room environment as a blue-grey sheen
     m.brg_frame = new THREE.MeshStandardMaterial({ color: 0x0c0d10, roughness: 0.82, metalness: 0.1, envMapIntensity: 0.15 });
     // bridgeGlass with the diffuse tint taken out (the shared material's light body colour lays a grey
-    // veil over everything seen through the panes) and a sharper, slightly stronger reflection so the
-    // panes read as glass: a faint sheen of the room, not a hole in the wall
+    // veil over everything seen through the panes). Roughness / specular stay at the shared values:
+    // a sharper reflection turned the exterior sun into a hot disc blooming across the mullions.
     m.brg_glass = m.bridgeGlass.clone();
     m.brg_glass.name = "brg_glass";
     m.brg_glass.color.set(0x0c0f13);
-    m.brg_glass.roughness = 0.06;
-    m.brg_glass.envMapIntensity = 0.55;
+    m.brg_glass.envMapIntensity = 0.4;
     m.brg_glass.opacity = 0.1;
     // deck gloss with the environment reflection pulled back: the shared RoomEnvironment carries a
     // 43x area light low on its +Z side, and the stock floor mirrors it as a white flare whenever the
@@ -123,7 +147,7 @@ function ensureMaterials(ctx) {
     m.brg_top.envMapIntensity = 0.3;
     m.brg_top.roughness = 0.4;
   }
-  return { pulse: m.brg_pulse, alert: m.brg_alert, sweep: m.brg_sweep, cone: m.brg_cone, bright: m.brg_holoBright, fill: m.brg_holoFill, line: m.brg_holoLine };
+  return { pulse: m.brg_pulse, alert: m.brg_alert, sweep: m.brg_sweep, cone: m.brg_cone, bright: m.brg_holoBright, fill: m.brg_holoFill, line: m.brg_holoLine, scroll: m.brg_scroll, step: m.brg_step };
 }
 
 // ---------------------------------------------------------------------------
@@ -165,25 +189,27 @@ function buildWalls(kit, ctx, B) {
     [X0, SPLIT, Z0],
     [X1, H, Z1],
   ];
+  // two plate types per zone (painted plates + vent plates), no light-grey paint, and rows that keep
+  // one style along their length: the walls are a calm backdrop, every screen on them is placed
+  // explicitly on the datum by the side-bay / aft-wall builders
   const lowPaints = [
-    [PALETTE.impMid, 0.4],
+    [PALETTE.impMid, 0.42],
     [PALETTE.impGrey, 0.28],
-    [PALETTE.impDark, 0.26],
-    [PALETTE.impLight, 0.06],
+    [PALETTE.impDark, 0.3],
   ];
   const upPaints = [
     [PALETTE.impMid, 0.42],
     [PALETTE.impDark, 0.4],
     [PALETTE.impGrey, 0.18],
   ];
-  const lowStyles = { panel: 0.56, vent: 0.1, greeble: 0.06, strip: 0.1, screen: 0.06, conduit: 0.12 };
-  const upStyles = { panel: 0.8, vent: 0.08, strip: 0.06, conduit: 0.06 };
+  const lowStyles = { panel: 0.8, vent: 0.2 };
+  const upStyles = { panel: 0.86, vent: 0.14 };
   const lowRows = [0, 0.5, 1.7, 2.9, SPLIT];
   const upRows = [0, 1.8, 3.0, H - SPLIT];
   let i = 0;
   for (const side of ["zmax", "xmin", "xmax"]) {
-    impWall(kit, ctx, side, { bounds: lowB, rows: lowRows, paints: lowPaints, styles: lowStyles, seed: ctx.seed + 11 + i * 13, panelW: 1.3, theme: { accent: "brg_hair" } });
-    impWall(kit, ctx, side, { bounds: upB, rows: upRows, paints: upPaints, styles: upStyles, seed: ctx.seed + 17 + i * 13, panelW: 2.6, kick: false, trim: false, noDoors: true, theme: { accent: "brg_hair" } });
+    impWall(kit, ctx, side, { bounds: lowB, rows: lowRows, paints: lowPaints, styles: lowStyles, seed: ctx.seed + 11 + i * 13, panelW: 1.3, theme: { accent: "brg_hair", coherence: 0.9 } });
+    impWall(kit, ctx, side, { bounds: upB, rows: upRows, paints: upPaints, styles: upStyles, seed: ctx.seed + 17 + i * 13, panelW: 2.6, kick: false, trim: false, noDoors: true, theme: { accent: "brg_hair", coherence: 0.9 } });
     // dark waist rail where the two wall zones meet, a hairline under it, and a dark cove at the top
     const seg = wallSegment(B, side);
     const { frame, length } = wallFrame(kit, seg.from, seg.to, 0);
@@ -236,21 +262,58 @@ function buildWindowWall(kit, ctx) {
   };
   onSlope("paintedMetal", new THREE.BoxGeometry(ax1 - ax0, slopeL + 0.02, 0.08), 0, 0.5, -0.04, BLACK);
   const rand = rng(ctx.seed + 77);
+  const screenOn = (mat, x, t, w, h) => {
+    onSlope("darkGloss", new THREE.BoxGeometry(w + 0.1, h + 0.06, 0.03), x, t, 0.027);
+    onSlope(mat, new THREE.PlaneGeometry(w, h), x, t, 0.044, { uv: "keep" });
+  };
+  const buttons = (x0, n, t) => {
+    for (let b = 0; b < n; b++) {
+      const lit = rand() < 0.45;
+      onSlope(lit ? (rand() < 0.6 ? "emitBlue" : rand() < 0.5 ? "emitAmber" : "emitRed") : "rubber", new THREE.BoxGeometry(0.07, 0.05, 0.02), x0 + b * 0.125, t, 0.04, { color: PALETTE.rubber });
+    }
+  };
   for (let k = 0; k < PANES; k++) {
     const xc = paneX(k);
-    // one readout group per pane on the slope: bezelled screen, button row along the kick, led strip,
-    // stencil and a status lamp; the dark inset panel keeps each group reading as its own bay
+    // one readout bay per pane on the slope, in three builds so neighbours are never copies: A one
+    // wide chart with a button row, B two small screens beside a keypad block, C a screen with a
+    // column of ticker bars. The readouts are the animated materials (chart creeping, list redrawing,
+    // pulse breathing), so the sill is alive from the walkway
     onSlope("impPanel1", new THREE.BoxGeometry(2.6, slopeL - 0.06, 0.012), xc, 0.5, 0.006, { color: PALETTE.impDark, uv: "keep" });
-    const scr = k % 3 === 1 ? "brg_pulse" : "impScreen" + [2, 2, 0, 1][k % 4];
-    onSlope("darkGloss", new THREE.BoxGeometry(1.5, 0.36, 0.03), xc, 0.56, 0.027);
-    onSlope(scr, new THREE.PlaneGeometry(1.4, 0.3), xc, 0.56, 0.044, { uv: "keep" });
-    onSlope("paintedMetal", new THREE.BoxGeometry(1.6, 0.11, 0.02), xc, 0.15, 0.022, { color: PALETTE.impDark, texel: 2 });
-    for (let b = 0; b < 12; b++) {
-      const lit = rand() < 0.45;
-      onSlope(lit ? (rand() < 0.6 ? "emitBlue" : rand() < 0.5 ? "emitAmber" : "emitRed") : "rubber", new THREE.BoxGeometry(0.07, 0.05, 0.02), xc - 0.7 + b * 0.125, 0.15, 0.04, { color: PALETTE.rubber });
+    const build = k % 3;
+    const scr = ["brg_step", "brg_pulse", "brg_scroll"][build];
+    if (build === 0) {
+      screenOn(scr, xc, 0.56, 1.4, 0.3);
+      onSlope("paintedMetal", new THREE.BoxGeometry(1.6, 0.11, 0.02), xc, 0.15, 0.022, { color: PALETTE.impDark, texel: 2 });
+      buttons(xc - 0.7, 12, 0.15);
+      onSlope("leds", new THREE.BoxGeometry(0.44, 0.04, 0.012), xc + 1.02, 0.56, 0.018, { uv: "keep" });
+      onSlope("decal", new THREE.PlaneGeometry(0.24, 0.24), xc - 1.0, 0.56, 0.014, { uv: "keep", uvRect: decalRect([9, 6, 14, 0][k % 4]) });
+    } else if (build === 1) {
+      screenOn(scr, xc - 0.72, 0.56, 0.62, 0.3);
+      screenOn("impScreen2", xc - 0.02, 0.56, 0.62, 0.3);
+      // keypad block: 4 x 3 keys, a few lit
+      onSlope("paintedMetal", new THREE.BoxGeometry(0.62, 0.34, 0.03), xc + 0.72, 0.56, 0.026, { color: PALETTE.impBlack, texel: 2 });
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 4; c++) {
+          const lit = rand() < 0.3;
+          onSlope(lit ? (rand() < 0.5 ? "emitBlueDim" : "emitAmberDim") : "rubber", new THREE.BoxGeometry(0.11, 0.06, 0.02), xc + 0.72 - 0.21 + c * 0.14, 0.44 + r * 0.12, 0.046, { color: PALETTE.rubber });
+        }
+      }
+      onSlope("paintedMetal", new THREE.BoxGeometry(1.0, 0.11, 0.02), xc - 0.4, 0.15, 0.022, { color: PALETTE.impDark, texel: 2 });
+      buttons(xc - 0.8, 7, 0.15);
+      onSlope("leds", new THREE.BoxGeometry(0.6, 0.04, 0.012), xc + 0.6, 0.15, 0.018, { uv: "keep" });
+    } else {
+      screenOn(scr, xc - 0.32, 0.56, 1.0, 0.3);
+      // ticker column: four bars of different length, blue with one amber and one red
+      onSlope("darkGloss", new THREE.BoxGeometry(0.76, 0.36, 0.03), xc + 0.62, 0.56, 0.027);
+      for (let r = 0; r < 4; r++) {
+        const lw = 0.28 + rand() * 0.4;
+        onSlope(r === 1 ? "emitAmberDim" : r === 3 ? "emitRedDim" : "emitBlueDim", new THREE.BoxGeometry(lw, 0.03, 0.012), xc + 0.28 + lw / 2, 0.44 + r * 0.08, 0.046);
+      }
+      onSlope("paintedMetal", new THREE.BoxGeometry(0.7, 0.11, 0.02), xc + 0.45, 0.15, 0.022, { color: PALETTE.impDark, texel: 2 });
+      buttons(xc + 0.15, 5, 0.15);
+      onSlope("leds", new THREE.BoxGeometry(0.9, 0.04, 0.012), xc - 0.5, 0.15, 0.018, { uv: "keep" });
+      onSlope("decal", new THREE.PlaneGeometry(0.24, 0.24), xc - 1.06, 0.56, 0.014, { uv: "keep", uvRect: decalRect([2, 12, 5][k % 3]) });
     }
-    onSlope("leds", new THREE.BoxGeometry(0.44, 0.04, 0.012), xc + 1.02, 0.56, 0.018, { uv: "keep" });
-    onSlope("decal", new THREE.PlaneGeometry(0.24, 0.24), xc - 1.0, 0.56, 0.014, { uv: "keep", uvRect: decalRect([9, 6, 14, 0][k % 4]) });
     onSlope(k % 5 === 2 ? "emitAmber" : "emitBlue", new THREE.BoxGeometry(0.05, 0.18, 0.012), xc - 1.24, 0.56, 0.018);
   }
 
@@ -277,8 +340,11 @@ function buildWindowWall(kit, ctx) {
   for (let k = 0; k < PANES; k++) {
     const xc = paneX(k);
     kit.box("impPanel", xc, WIN_Y1 + 0.95, Z0 + 0.71, 2.6, 0.9, 0.02, { color: PALETTE.impMid, uv: "keep" });
-    kit.box("paintedMetal", xc, WIN_Y1 + 0.34, Z0 + 0.905, 1.4, 0.06, 0.16, BLACK);
-    kit.box("emitWhiteDim", xc, WIN_Y1 + 0.34, Z0 + 0.905, 1.2, 0.025, 0.14, { uv: "keep" });
+    // recessed header lamp over every viewport hood: black trough in the fascia's underside with a dim
+    // diffuser core, so the header reads as a lit fixture line from anywhere on the walkway
+    kit.box("paintedMetal", xc, WIN_Y1 + 0.36, Z0 + 0.9, 2.5, 0.14, 0.2, BLACK);
+    kit.box("emitWhiteDim", xc, WIN_Y1 + 0.31, Z0 + 0.9, 2.3, 0.05, 0.16, { uv: "keep" });
+    kit.box("emitWhiteFaint", xc, WIN_Y1 + 0.3, Z0 + 0.79, 2.4, 0.03, 0.06, { uv: "keep" }); // lit lip on the room side
     // lamp pair + label on the fascia face, vent slats on every other pane
     kit.box("paintedMetal", xc - 0.9, WIN_Y1 + 0.75, Z0 + 0.73, 0.5, 0.16, 0.03, BLACK);
     kit.box(k % 4 === 1 ? "brg_red" : "emitBlue", xc - 1.05, WIN_Y1 + 0.75, Z0 + 0.75, 0.12, 0.05, 0.01, {});
@@ -309,12 +375,23 @@ function buildWindowWall(kit, ctx) {
   {
     const hw = PANE_W / 2;
     const hl = paneLen / 2;
+    // hole foot 0.4 m above the glass foot: it trims the steepest downward sightline (the lit tower
+    // terraces right under the bridge) while the hull further forward stays in view from the sill
+    const vFoot = -hl + 0.4;
+    const vTop = hl - 0.5;
     const shape = new THREE.Shape([new THREE.Vector2(-hw, -hl), new THREE.Vector2(hw, -hl), new THREE.Vector2(hw, hl + 0.1), new THREE.Vector2(-hw, hl + 0.1)]);
-    shape.holes.push(new THREE.Path([new THREE.Vector2(-1.3, -hl + 0.2), new THREE.Vector2(1.3, -hl + 0.2), new THREE.Vector2(1.1, hl - 0.5), new THREE.Vector2(-1.1, hl - 0.5)]));
+    shape.holes.push(new THREE.Path([new THREE.Vector2(-1.3, vFoot), new THREE.Vector2(1.3, vFoot), new THREE.Vector2(1.1, vTop), new THREE.Vector2(-1.1, vTop)]));
     const maskGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.1, bevelEnabled: false });
+    // hood lamp: a dim lit seam along the top edge of every hood on the room face of the mask (the
+    // recessed fixture line over the viewports), so the hoods read as built architecture from the
+    // walkway. The tapered sides stay dark: lit side seams read as white stripes on the mullions.
+    const topGeo = new THREE.BoxGeometry(2.16, 0.02, 0.012);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(tilt);
     for (let k = 0; k < PANES; k++) {
       const c = new THREE.Vector3(paneX(k), yMid, zMid).addScaledVector(nIn, 0.19);
       kit.add("brg_frame", maskGeo.clone(), { pos: [c.x, c.y, c.z], quat: tilt });
+      const face = c.clone().addScaledVector(nIn, 0.106);
+      kit.add("brg_hair", topGeo.clone(), { pos: face.clone().addScaledVector(up, vTop + 0.02).toArray(), quat: tilt });
     }
   }
 
@@ -441,7 +518,8 @@ function buildPit(kit, ctx, s) {
   const yawOut = s > 0 ? -Math.PI / 2 : Math.PI / 2; // operator faces the hull side
   const yawIn = -yawOut; // operator faces the walkway wall
   const rand = rng(ctx.seed + 100 + s * 7);
-  const screenSets = [[0, 1, 2], [1, 2, 0], [0, 2, 1], [2, 0, 1], [0, 0, 2], [1, 0, 2]];
+  // screen sets mix the static blue readouts with the three animated ones (chart, list, pulse)
+  const screenSets = [[0, 1, 2], ["brg_scroll", 2, 0], [0, "brg_step", 1], [2, 0, "brg_scroll"], ["brg_step", 0, 2], [1, "brg_scroll", 0]];
   const gap = 0.45;
   // fill z0..z1 greedily: every fifth slot is a cabinet, the stations cycle through the three builds
   // and fall back to the narrow one when the row is nearly full
@@ -508,12 +586,18 @@ function buildPit(kit, ctx, s) {
   kit.add("decal", dg, { pos: [s * (PIT.x0 - 0.7), 0.004, STAIR_Z], uv: "keep", uvRect: decalRect(1) });
 }
 
-/** Three station builds alternated along a row: width, desk height, top of the canted back, screens. */
+/**
+ * Three station builds alternated along a row: width, desk height, top of the canted back, and the
+ * way the back and the slab are laid out — "main": one wide display beside a column of ticker bars,
+ * slab with two button rows; "equal": three equal screens, slab with a keypad block; "split": one
+ * tall screen beside two stacked half-height readouts, slab with a wide readout strip.
+ */
 const STATION_VARIANTS = [
-  { w: 1.9, h: 0.78, top: 1.5, n: 2 },
-  { w: 2.3, h: 0.8, top: 1.66, n: 3 },
-  { w: 1.6, h: 0.76, top: 1.38, n: 2 },
+  { w: 1.9, h: 0.78, top: 1.5, n: 2, lay: "main", slab: "buttons" },
+  { w: 2.3, h: 0.8, top: 1.66, n: 3, lay: "equal", slab: "keypad" },
+  { w: 1.6, h: 0.76, top: 1.46, n: 2, lay: "split", slab: "strip" },
 ];
+const screenMat = (s) => (typeof s === "string" ? s : "impScreen" + (s % 5));
 
 /**
  * Bridge crew station: a desk with a foot-well under the operator edge, a sloped control slab, and a
@@ -522,7 +606,7 @@ const STATION_VARIANTS = [
  * (most sightlines on the bridge see the backs). Local frame: operator at +Z, back at -Z. The back
  * tops out below deck level (pit stations) so nothing pokes up beside the walkway.
  */
-function pitStation(kit, ctx, { x, y = 0, z, yaw, variant = 0, screens = [0, 1, 2], seed = 1, lampMat = "emitBlue", chair = true, pulse = null, trunk = true }) {
+export function pitStation(kit, ctx, { x, y = 0, z, yaw, variant = 0, screens = [0, 1, 2], seed = 1, lampMat = "emitBlue", chair = true, pulse = null, trunk = true }) {
   const V = STATION_VARIANTS[variant % STATION_VARIANTS.length];
   const { w, h } = V;
   const d = 0.85;
@@ -559,24 +643,41 @@ function pitStation(kit, ctx, { x, y = 0, z, yaw, variant = 0, screens = [0, 1, 
   kit.add("paintedMetal", new THREE.BoxGeometry(w - 0.16, 0.05, slabL), { pos: pS.toArray(), quat: qs, color: PALETTE.impBlack, texel: 2 });
   // solid wedge under the slab so it grows out of the worktop instead of floating over it
   kit.add("paintedMetal", new THREE.BoxGeometry(w - 0.18, 0.2, slabL - 0.02), { pos: pS.clone().addScaledVector(sUp, -0.125).toArray(), quat: qs, color: PALETTE.impDark, texel: 1.5 });
-  const nb = Math.floor((w - 0.5) / 0.09);
-  for (let r = 0; r < 2; r++) {
-    for (let i = 0; i < nb; i++) {
-      const off = -w / 2 + 0.25 + i * 0.09;
-      const lit = rand() < 0.3;
-      const mat = lit ? (rand() < 0.6 ? "emitBlue" : rand() < 0.5 ? "emitAmber" : "emitRed") : "rubber";
-      const c = pS.clone().addScaledVector(right, off).addScaledVector(sFwd, 0.05 + r * 0.08).addScaledVector(sUp, 0.035);
-      kit.add(mat, new THREE.BoxGeometry(0.05, 0.022, 0.04), { pos: c.toArray(), quat: qs, color: PALETTE.rubber });
-    }
-  }
-  {
-    const c = pS.clone().addScaledVector(right, -w * 0.22).addScaledVector(sFwd, -0.11).addScaledVector(sUp, 0.03);
-    kit.add("leds", new THREE.BoxGeometry(w * 0.4, 0.012, 0.05), { pos: c.toArray(), quat: qs, uv: "keep" });
-    const c2 = pS.clone().addScaledVector(right, w * 0.25).addScaledVector(sFwd, -0.1).addScaledVector(sUp, 0.03);
-    kit.add("darkGloss", new THREE.BoxGeometry(w * 0.34, 0.012, 0.14), { pos: c2.toArray(), quat: qs });
+  const onSlab = (off, along, lift) => pS.clone().addScaledVector(right, off).addScaledVector(sFwd, along).addScaledVector(sUp, lift);
+  const key = (off, along, sx, sz, p = 0.3) => {
+    const lit = rand() < p;
+    const mat = lit ? (rand() < 0.6 ? "emitBlue" : rand() < 0.5 ? "emitAmber" : "emitRed") : "rubber";
+    kit.add(mat, new THREE.BoxGeometry(sx, 0.022, sz), { pos: onSlab(off, along, 0.035).toArray(), quat: qs, color: PALETTE.rubber });
+  };
+  if (V.slab === "buttons") {
+    // two full-width button rows along the operator edge, led strip and a small amber readout at the back
+    const nb = Math.floor((w - 0.5) / 0.09);
+    for (let r = 0; r < 2; r++) for (let i = 0; i < nb; i++) key(-w / 2 + 0.25 + i * 0.09, 0.05 + r * 0.08, 0.05, 0.04);
+    kit.add("leds", new THREE.BoxGeometry(w * 0.4, 0.012, 0.05), { pos: onSlab(-w * 0.22, -0.11, 0.03).toArray(), quat: qs, uv: "keep" });
+    kit.add("darkGloss", new THREE.BoxGeometry(w * 0.34, 0.012, 0.14), { pos: onSlab(w * 0.25, -0.1, 0.03).toArray(), quat: qs });
     const sg = new THREE.PlaneGeometry(w * 0.3, 0.11);
     sg.rotateX(-Math.PI / 2);
-    kit.add("impScreen4", sg, { pos: c2.clone().addScaledVector(sUp, 0.008).toArray(), quat: qs, uv: "keep" });
+    kit.add("impScreen4", sg, { pos: onSlab(w * 0.25, -0.1, 0.038).toArray(), quat: qs, uv: "keep" });
+  } else if (V.slab === "keypad") {
+    // one button row on the left, a black keypad block (4 x 3 keys) on the right, a wide flat readout behind
+    const nb = Math.floor((w * 0.55 - 0.3) / 0.09);
+    for (let i = 0; i < nb; i++) key(-w / 2 + 0.2 + i * 0.09, 0.09, 0.05, 0.04);
+    const kx = w / 2 - 0.36;
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.56, 0.014, 0.32), { pos: onSlab(kx, 0.0, 0.027).toArray(), quat: qs, color: PALETTE.impBlack, texel: 2 });
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) key(kx - 0.195 + c * 0.13, -0.1 + r * 0.1, 0.1, 0.07, 0.25);
+    kit.add("darkGloss", new THREE.BoxGeometry(w * 0.5, 0.012, 0.12), { pos: onSlab(-w * 0.2, -0.12, 0.03).toArray(), quat: qs });
+    const sg = new THREE.PlaneGeometry(w * 0.46, 0.09);
+    sg.rotateX(-Math.PI / 2);
+    kit.add(screenMat(screens[0]), sg, { pos: onSlab(-w * 0.2, -0.12, 0.038).toArray(), quat: qs, uv: "keep" });
+  } else {
+    // a single sparse button row and one long readout strip (bar gauges) across the slab's back
+    const nb = Math.floor((w - 0.6) / 0.14);
+    for (let i = 0; i < nb; i++) key(-w / 2 + 0.3 + i * 0.14, 0.08, 0.08, 0.05, 0.4);
+    kit.add("darkGloss", new THREE.BoxGeometry(w - 0.4, 0.012, 0.13), { pos: onSlab(0, -0.1, 0.03).toArray(), quat: qs });
+    const sg = new THREE.PlaneGeometry(w - 0.5, 0.1);
+    sg.rotateX(-Math.PI / 2);
+    kit.add("brg_scroll", sg, { pos: onSlab(0, -0.1, 0.038).toArray(), quat: qs, uv: "keep" });
+    kit.add("leds", new THREE.BoxGeometry(w * 0.3, 0.012, 0.04), { pos: onSlab(w * 0.28, 0.16, 0.03).toArray(), quat: qs, uv: "keep" });
   }
   // --- canted back joined to the rear of the worktop, leaning away from the operator
   const bt = 0.14;
@@ -589,15 +690,38 @@ function pitStation(kit, ctx, { x, y = 0, z, yaw, variant = 0, screens = [0, 1, 
   kit.add("paintedMetal", new THREE.BoxGeometry(w, backH, 0.1), { pos: atB(0, backH / 2, 0).toArray(), quat: qb, color: PALETTE.impDark, texel: 1.5 });
   kit.add("paintedMetal", new THREE.BoxGeometry(w + 0.04, 0.06, 0.16), { pos: atB(0, backH - 0.03, 0).toArray(), quat: qb, color: PALETTE.impBlack, texel: 2 });
   const n = V.n;
-  const cell = (w - 0.16) / n;
-  const sw = cell - 0.08;
   const sh = backH - 0.4;
-  for (let i = 0; i < n; i++) {
-    const off = -w / 2 + 0.08 + (i + 0.5) * cell;
-    const v = 0.26 + sh / 2;
-    kit.add("darkGloss", new THREE.BoxGeometry(sw + 0.05, sh + 0.05, 0.012), { pos: atB(off, v, 0.056).toArray(), quat: qb });
-    const mat = pulse && i === n - 1 ? pulse : "impScreen" + (screens[i % screens.length] % 5);
-    kit.add(mat, new THREE.PlaneGeometry(sw, sh), { pos: atB(off, v, 0.064).toArray(), quat: qb, uv: "keep" });
+  const scr = (i) => (pulse && i === n - 1 ? pulse : screenMat(screens[i % screens.length]));
+  const bezel = (off, v, sw, hh, mat) => {
+    kit.add("darkGloss", new THREE.BoxGeometry(sw + 0.05, hh + 0.05, 0.012), { pos: atB(off, v, 0.056).toArray(), quat: qb });
+    kit.add(mat, new THREE.PlaneGeometry(sw, hh), { pos: atB(off, v, 0.064).toArray(), quat: qb, uv: "keep" });
+  };
+  if (V.lay === "main") {
+    // one wide display on the left 64 %, a column of ticker bars on the right
+    const mainW = (w - 0.16) * 0.64 - 0.06;
+    bezel(-w / 2 + 0.08 + mainW / 2 + 0.03, 0.26 + sh / 2, mainW, sh, scr(0));
+    const colX = w / 2 - 0.08 - ((w - 0.16) * 0.36) / 2;
+    const colW = (w - 0.16) * 0.36 - 0.1;
+    kit.add("darkGloss", new THREE.BoxGeometry(colW + 0.05, sh + 0.05, 0.012), { pos: atB(colX, 0.26 + sh / 2, 0.056).toArray(), quat: qb });
+    const nBars = Math.max(4, Math.floor(sh / 0.075));
+    for (let k = 0; k < nBars; k++) {
+      const mat = k % 5 === 1 ? "emitAmberDim" : k % 7 === 4 ? "emitRedDim" : "emitBlueDim";
+      const bw = colW * (0.35 + 0.6 * rand());
+      kit.add(mat, new THREE.BoxGeometry(bw, 0.024, 0.008), { pos: atB(colX - colW / 2 + 0.02 + bw / 2, 0.3 + k * 0.075, 0.068).toArray(), quat: qb });
+    }
+  } else if (V.lay === "split") {
+    // a tall screen on the left, two stacked half-height readouts on the right
+    const leftW = (w - 0.16) * 0.56 - 0.06;
+    bezel(-w / 2 + 0.08 + leftW / 2 + 0.03, 0.26 + sh / 2, leftW, sh, scr(0));
+    const rx = w / 2 - 0.08 - ((w - 0.16) * 0.44) / 2;
+    const rw = (w - 0.16) * 0.44 - 0.1;
+    const hh = (sh - 0.08) / 2;
+    bezel(rx, 0.26 + hh / 2, rw, hh, scr(1));
+    bezel(rx, 0.26 + hh + 0.08 + hh / 2, rw, hh, "impScreen4");
+  } else {
+    const cell = (w - 0.16) / n;
+    const sw = cell - 0.08;
+    for (let i = 0; i < n; i++) bezel(-w / 2 + 0.08 + (i + 0.5) * cell, 0.26 + sh / 2, sw, sh, scr(i));
   }
   kit.add("leds", new THREE.BoxGeometry(w * 0.45, 0.03, 0.01), { pos: atB(-w * 0.15, 0.2, 0.056).toArray(), quat: qb, uv: "keep" });
   kit.add(rand() < 0.75 ? lampMat : "emitRed", new THREE.BoxGeometry(0.14, 0.03, 0.01), { pos: atB(w / 2 - 0.2, 0.2, 0.056).toArray(), quat: qb });
@@ -668,15 +792,62 @@ function pitCabinet(kit, x, z, y, yaw, w, seed) {
 }
 
 // ---------------------------------------------------------------------------
-// Walkway: the black spine. One dim recessed strip per side just inside the railings, a threshold
-// plate at the forward apron; nothing else on the deck pulls the eye off the glass.
+// Command walkway: the black spine, raised 12 cm between the pits from the forward area up to the
+// command platform's step, black kerb faces, one narrow recessed blue channel along each edge inside
+// the railings, a transverse channel at the forward step, and two pairs of low equipment posts on
+// the kerbs. Nothing on the deck itself pulls the eye off the glass.
 // ---------------------------------------------------------------------------
-function buildWalkway(kit) {
+const SPINE = { hw: 2.5, y: 0.12, z0: -45.4 };
+function buildWalkway(kit, ctx) {
+  const { hw, y, z0 } = SPINE;
+  const z1 = CMD.z0;
+  platform(kit, ctx, { x0: -hw, z0, x1: hw, z1, y, thickness: y, mat: "brg_floor", edge: false });
+  kit.boxMM("paintedMetal", [-hw - 0.03, 0, z0 - 0.03], [hw + 0.03, y - 0.018, z1], BLACK); // kerb faces
   for (const s of [-1, 1]) {
-    kit.boxMM("paintedMetal", [s * 2.72 - 0.06, 0, PIT.z0 - 0.3], [s * 2.72 + 0.06, 0.02, STAIR_Z - 1.0], BLACK);
-    kit.boxMM("emitWhiteDim", [s * 2.72 - 0.015, 0.02, PIT.z0], [s * 2.72 + 0.015, 0.028, STAIR_Z - 1.2], { uv: "keep" });
+    const xa = Math.min(s * (hw - 0.05), s * (hw - 0.17));
+    const xb = Math.max(s * (hw - 0.05), s * (hw - 0.17));
+    kit.boxMM("paintedMetal", [xa, y, z0 + 0.2], [xb, y + 0.012, z1 - 0.2], BLACK);
+    kit.boxMM("brg_ring", [xa + 0.035, y + 0.012, z0 + 0.4], [xb - 0.035, y + 0.02, z1 - 0.4], {});
   }
-  kit.boxMM("paintedMetal", [-2.9, 0, Z0 + 1.2], [2.9, 0.012, Z0 + 1.4], BLACK);
+  kit.boxMM("paintedMetal", [-hw + 0.3, y, z0 + 0.1], [hw - 0.3, y + 0.012, z0 + 0.24], BLACK);
+  kit.boxMM("brg_ring", [-hw + 0.5, y + 0.012, z0 + 0.15], [hw - 0.5, y + 0.02, z0 + 0.19], {});
+  // the edge channels continue at deck level from the step to the sill apron, past the helm pair
+  for (const s of [-1, 1]) {
+    const xa = Math.min(s * (hw - 0.11), s * (hw + 0.01));
+    const xb = Math.max(s * (hw - 0.11), s * (hw + 0.01));
+    kit.boxMM("paintedMetal", [xa, 0, Z0 + 1.45], [xb, 0.012, z0 - 0.05], BLACK);
+    kit.boxMM("brg_ring", [xa + 0.035, 0.012, Z0 + 1.6], [xb - 0.035, 0.02, z0 - 0.25], {});
+  }
+  for (const z of [-39.5, -28.5]) for (const s of [-1, 1]) spinePost(kit, s * (hw - 0.34), y, z, s > 0 ? -Math.PI / 2 : Math.PI / 2, ctx.seed + 700 + z + s);
+  kit.boxMM("paintedMetal", [-2.9, 0, Z0 + 1.2], [2.9, 0.012, Z0 + 1.4], BLACK); // threshold plate at the apron
+}
+
+/** Low equipment post on the walkway kerb: dark column, a small canted readout facing the walkway (local
+ *  -Z after yaw), a blue lamp slot on the pit side, led strip and a stencil. */
+function spinePost(kit, x, y, z, yaw, seed) {
+  const q = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw);
+  const P = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
+  const add = (mat, geo, lx, ly, lz, extra = {}, qq = q) => {
+    const p = P(lx, ly, lz);
+    return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: qq, ...extra });
+  };
+  const h = 1.08;
+  add("paintedMetal", new THREE.BoxGeometry(0.34, 0.05, 0.34), 0, 0.025, 0, BLACK);
+  add("paintedMetal", new THREE.BoxGeometry(0.24, h - 0.1, 0.24), 0, 0.05 + (h - 0.1) / 2, 0, DARK);
+  add("paintedMetal", new THREE.BoxGeometry(0.28, 0.05, 0.28), 0, h - 0.025, 0, BLACK);
+  add("brg_ring", new THREE.BoxGeometry(0.04, 0.5, 0.01), 0, 0.55, -0.125, {}); // slot toward the pit
+  add("leds", new THREE.BoxGeometry(0.16, 0.025, 0.01), 0, 0.3, 0.125, { uv: "keep" });
+  add("decal", new THREE.PlaneGeometry(0.16, 0.16), 0, 0.72, 0.121, { uv: "keep", uvRect: decalRect(seed % 16) });
+  // canted readout on top, screen toward the walkway, on a wedge block so it grows out of the cap
+  const qt = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, 0.5));
+  add("paintedMetal", new THREE.BoxGeometry(0.26, 0.09, 0.16), 0, h + 0.02, -0.03, DARK);
+  add("paintedMetal", new THREE.BoxGeometry(0.3, 0.04, 0.22), 0, h + 0.04, 0.03, BLACK, qt);
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(qt);
+  const sg = new THREE.PlaneGeometry(0.24, 0.15);
+  sg.rotateX(-Math.PI / 2);
+  const sp = P(0, h + 0.04, 0.03).addScaledVector(up, 0.021);
+  kit.add(seed % 2 ? "brg_step" : "impScreen2", sg, { pos: sp.toArray(), quat: qt, uv: "keep" });
+  kit.collider([x - 0.17, y, z - 0.17], [x + 0.17, y + h + 0.1, z + 0.17], "post");
 }
 
 // ---------------------------------------------------------------------------
@@ -781,7 +952,7 @@ function holoDais(kit, ctx, mats, x, yBase, z) {
   });
   // the ship itself above the tactical plot (kept below eye level so it sits against the dark sill
   // from the aft door rather than against the planet through the glass)
-  shipHologram(ctx, mats, x, hy + 0.6, z, 0.42);
+  shipHologram(ctx, mats, x, hy + 0.62, z, 0.5);
   // faint projector cone from the dais up to the plot
   const cone = new THREE.Mesh(new THREE.CylinderGeometry(1.4 * scale, 0.5, hy - top - 0.02, 32, 1, true), mats.cone);
   cone.position.set(x, (top + hy) / 2, z);
@@ -860,7 +1031,7 @@ function shipHologram(ctx, mats, x, y, z, scale) {
  * `screens` are material names. h < 0.6 builds just the slab on a short block (dais rim consoles).
  * `riser` > 0 adds a vertical screen bank standing on the slab's far edge, with a detailed rear plate.
  */
-function slabConsole(kit, { x, y, z, yaw, w = 0.8, d = 0.5, h = 1.15, screens = ["impScreen0"], tilt = 0.5, lampMat = "emitBlue", pulse = null, seed = 1, collide = true, riser = 0, riserScreens = null }) {
+function slabConsole(kit, { x, y, z, yaw, w = 0.8, d = 0.5, h = 1.15, screens = ["impScreen0"], tilt = 0.5, lampMat = "emitBlue", pulse = null, seed = 1, collide = true, riser = 0, riserScreens = null, panelCol = PALETTE.impMid }) {
   const q = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw);
   const qs = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, tilt)); // +Z (operator) edge lower
   const P = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
@@ -874,7 +1045,7 @@ function slabConsole(kit, { x, y, z, yaw, w = 0.8, d = 0.5, h = 1.15, screens = 
   if (bodyH > 0.4) {
     add("paintedMetal", new THREE.BoxGeometry(w, 0.08, d), 0, 0.04, 0, BLACK);
     add("paintedMetal", new THREE.BoxGeometry(w - 0.08, bodyH - 0.08, d - 0.1), 0, 0.08 + (bodyH - 0.08) / 2, -0.02, DARK);
-    add("impPanel", new THREE.BoxGeometry(w - 0.2, bodyH - 0.34, 0.012), 0, 0.14 + (bodyH - 0.34) / 2, d / 2 - 0.07 + 0.006, { color: PALETTE.impMid, uv: "keep" });
+    add("impPanel", new THREE.BoxGeometry(w - 0.2, bodyH - 0.34, 0.012), 0, 0.14 + (bodyH - 0.34) / 2, d / 2 - 0.07 + 0.006, { color: panelCol, uv: "keep" });
     add(lampMat, new THREE.BoxGeometry(w - 0.3, 0.02, 0.01), 0, 0.11, d / 2 - 0.06);
     add("leds", new THREE.BoxGeometry(w * 0.45, 0.03, 0.01), -w * 0.12, bodyH - 0.3, d / 2 - 0.058, { uv: "keep" });
     add("decal", new THREE.PlaneGeometry(0.2, 0.2), w * 0.28, bodyH - 0.3, d / 2 - 0.057, { uv: "keep", uvRect: decalRect((seed + 3) % 16) });
@@ -985,9 +1156,29 @@ function mergeGroupMeshes(group) {
 // amber zone: amber lamps and the two amber pools live here)
 // ---------------------------------------------------------------------------
 function buildForward(kit, ctx) {
+  // helm pair at the foot of the spine: low standing consoles facing aft (the officer stands on the
+  // walkway end looking over them at the glass), kept under the sill readouts' sightline
   for (const s of [-1, 1]) {
-    impConsole(kit, ctx, { x: s * 5.1, z: -46.6, yaw: 0, w: 2.0, screens: [2, 2], chair: true, seed: ctx.seed + 400 + s, lampMat: "emitAmber" });
-    impConsole(kit, ctx, { x: s * 7.6, z: -46.6, yaw: 0, w: 2.0, screens: [2, 0], chair: true, seed: ctx.seed + 402 + s, lampMat: "emitAmber" });
+    slabConsole(kit, {
+      x: s * 1.75,
+      y: 0,
+      z: -46.3,
+      yaw: 0,
+      w: 1.1,
+      d: 0.55,
+      h: 0.92,
+      tilt: 0.42,
+      screens: s > 0 ? ["brg_scroll", "impScreen2"] : ["impScreen2", "brg_step"],
+      pulse: s > 0 ? "brg_pulse" : null,
+      lampMat: "emitBlue",
+      seed: ctx.seed + 410 + s,
+      panelCol: PALETTE.impBlack, // this face takes the exterior sun through the glass: mid grey rendered as a white slab
+    });
+  }
+  for (const s of [-1, 1]) {
+    // navigation stations: four different layouts and screen sets across the two pairs
+    impConsole(kit, ctx, { x: s * 5.1, z: -46.6, yaw: 0, w: 2.0, screens: s > 0 ? [2, 1] : [2, 2], chair: true, seed: ctx.seed + 400 + s, lampMat: "emitAmber", layout: s > 0 ? "main" : "keypad" });
+    impConsole(kit, ctx, { x: s * 7.6, z: -46.6, yaw: 0, w: 2.0, screens: s > 0 ? [0, 2] : [2, 0], chair: true, seed: ctx.seed + 402 + s, lampMat: "emitAmber", layout: s > 0 ? "keypad" : "equal" });
     // low equipment plinth between the nav pair and the pit head (keeps the aisle to the side floors open)
     kit.boxMM("paintedMetal", [Math.min(s * 4.2, s * 8.6), 0, -43.6], [Math.max(s * 4.2, s * 8.6), 0.45, -43.1], DARK);
     kit.boxMM("leds", [Math.min(s * 4.5, s * 8.3), 0.3, -43.1], [Math.max(s * 4.5, s * 8.3), 0.34, -43.09], { uv: "keep" });
@@ -1005,22 +1196,24 @@ function buildSideBay(kit, ctx, s, B, mats) {
   const u = (z) => (s > 0 ? z - Z0 : Z1 - z);
   const yawWall = s > 0 ? -Math.PI / 2 : Math.PI / 2; // operator faces the side wall
   const rand = rng(ctx.seed + 500 + s * 11);
-  // --- wall furniture (forward to aft); every display's bottom edge sits on DATUM
+  // --- wall furniture (forward to aft). One display band: every screen's bottom edge sits on DATUM and
+  // the secondary displays share one height (BAND_H); only the tactical display rises above the band.
+  // Nothing else on the wall is a screen (the wall plates carry none), so the band is the datum.
   equipmentRack(kit, ctx, { side, u: u(-46.4), w: 1.4, h: 2.6, seed: ctx.seed + 1 + s, bounds: B });
   equipmentRack(kit, ctx, { side, u: u(-44.9), w: 1.4, h: 2.6, seed: ctx.seed + 2 + s, bounds: B, lit: "emitAmber" });
   deflectorBoard(kit, side, u(-41.2), B, s);
-  display(kit, side, u(-37.2), DATUM + 0.45, 1.6, 0.9, s > 0 ? 1 : 2, B);
-  display(kit, side, u(-33), DATUM + 1.15, 4.2, 2.3, 0, B, true);
-  display(kit, side, u(-28.8), DATUM + 0.45, 1.6, 0.9, s > 0 ? 2 : 1, B);
-  display(kit, side, u(-33), 5.6, 3.0, 0.6, 4, B); // amber status band high on the wall
+  display(kit, side, u(-37.2), DATUM + BAND_H / 2, 1.6, BAND_H, s > 0 ? "brg_scroll" : 2, B);
+  display(kit, side, u(-33), DATUM + 1.0, 4.2, 2.0, 0, B, true);
+  display(kit, side, u(-28.8), DATUM + BAND_H / 2, 1.6, BAND_H, s > 0 ? 2 : "brg_step", B);
   equipmentRack(kit, ctx, { side, u: u(-24.6), w: 1.4, h: 2.6, seed: ctx.seed + 3 + s, bounds: B });
   equipmentRack(kit, ctx, { side, u: u(-23.1), w: 1.4, h: 2.6, seed: ctx.seed + 4 + s, bounds: B, lit: s > 0 ? "emitRed" : "emitBlue" });
-  display(kit, side, u(-19.5), DATUM + 0.6, 2.2, 1.2, 3, B);
+  display(kit, side, u(-19.5), DATUM + BAND_H / 2, 2.2, BAND_H, 3, B);
   {
     const seg = wallSegment(B, side);
     const { frame } = wallFrame(kit, seg.from, seg.to, 0);
-    // datum rail tying the displays together, stencils high on the wall
-    frame.box("paintedMetal", u(-31), DATUM - 0.12, 0.02, 24, 0.05, 0.04, BLACK);
+    // datum rails under and over the band tying the displays together, stencils high on the wall
+    frame.box("paintedMetal", u(-31), DATUM - 0.14, 0.02, 24, 0.05, 0.04, BLACK);
+    frame.box("paintedMetal", u(-31), DATUM + BAND_H + 0.16, 0.02, 24, 0.04, 0.04, BLACK);
     frame.add("decal", new THREE.PlaneGeometry(1.1, 1.1), u(-40), 5.6, 0.001, { uv: "keep", uvRect: decalRect(s > 0 ? 2 : 14) });
     frame.add("decal", new THREE.PlaneGeometry(0.8, 0.8), u(-24), 5.3, 0.001, { uv: "keep", uvRect: decalRect(0) });
   }
@@ -1066,7 +1259,7 @@ function display(kit, side, u, v, w, h, screen, B, big = false) {
   frame.box("paintedMetal", u, v, 0.075, w + 0.24, h + 0.28, 0.15, BLACK);
   frame.box("impPanel", u, v, 0.152, w + 0.16, h + 0.2, 0.01, { color: PALETTE.impDark, uv: "keep" });
   frame.box("darkGloss", u, v, 0.16, w + 0.05, h + 0.05, 0.008);
-  frame.add("impScreen" + (screen % 5), new THREE.PlaneGeometry(w, h), u, v, 0.166, { uv: "keep" });
+  frame.add(screenMat(screen), new THREE.PlaneGeometry(w, h), u, v, 0.166, { uv: "keep" });
   frame.box("leds", u - w * 0.2, v - h / 2 - 0.09, 0.16, w * 0.5, 0.03, 0.012, { uv: "keep" });
   frame.box(screen === 3 ? "emitRed" : "emitBlue", u + w * 0.42, v - h / 2 - 0.09, 0.16, 0.12, 0.03, 0.012);
   if (big) {
@@ -1082,23 +1275,24 @@ function display(kit, side, u, v, w, h, screen, B, big = false) {
 function deflectorBoard(kit, side, u, B, s) {
   const seg = wallSegment(B, side);
   const { frame } = wallFrame(kit, seg.from, seg.to, 0);
+  // sits in the display band: bottom on the datum, same height as the secondary displays
   const w = 2.8;
-  const h = 2.1;
-  const v = DATUM + h / 2;
+  const h = BAND_H + 0.28;
+  const v = DATUM - 0.14 + h / 2;
   frame.box("paintedMetal", u, v, 0.09, w, h, 0.18, BLACK);
   frame.box("impPanel1", u, v, 0.185, w - 0.16, h - 0.16, 0.01, { color: PALETTE.impDark, uv: "keep" });
-  frame.box("darkGloss", u - 0.3, v + 0.32, 0.195, 1.9, 0.9, 0.01);
-  frame.add("impScreen1", new THREE.PlaneGeometry(1.8, 0.8), u - 0.3, v + 0.32, 0.202, { uv: "keep" });
-  for (let i = 0; i < 7; i++) frame.box(i === 4 ? "emitRed" : i === 6 ? "emitGreen" : "emitAmber", u + 1.05, v + 0.72 - i * 0.2, 0.198, 0.18, 0.07, 0.012);
+  frame.box("darkGloss", u - 0.3, v + 0.22, 0.195, 1.9, 0.66, 0.01);
+  frame.add("brg_scroll", new THREE.PlaneGeometry(1.8, 0.56), u - 0.3, v + 0.22, 0.202, { uv: "keep" });
+  for (let i = 0; i < 6; i++) frame.box(i === 4 ? "emitRed" : i === 5 ? "emitGreen" : "emitAmber", u + 1.2, v + 0.5 - i * 0.16, 0.198, 0.16, 0.06, 0.012);
   for (let i = 0; i < 3; i++) {
-    const x = u - 0.9 + i * 0.9;
-    frame.box("darkGloss", x, v - 0.42, 0.195, 0.72, 0.4, 0.01);
-    frame.add("impScreen" + [4, 1, 3][i], new THREE.PlaneGeometry(0.64, 0.32), x, v - 0.42, 0.202, { uv: "keep" });
+    const x = u - 1.0 + i * 0.8;
+    frame.box("darkGloss", x, v - 0.32, 0.195, 0.72, 0.3, 0.01);
+    frame.add("impScreen" + [4, 1, 3][i], new THREE.PlaneGeometry(0.64, 0.24), x, v - 0.32, 0.202, { uv: "keep" });
   }
-  frame.box("leds", u - 0.2, v - 0.75, 0.198, 1.6, 0.05, 0.012, { uv: "keep" });
-  frame.box("hazard", u, v - h / 2 + 0.06, 0.19, w - 0.2, 0.07, 0.012, { texel: 3 });
-  frame.add("decal", new THREE.PlaneGeometry(0.36, 0.36), u + 1.05, v - 0.55, 0.203, { uv: "keep", uvRect: decalRect(5) });
-  frame.add("decal", new THREE.PlaneGeometry(0.5, 0.5), u - 1.0, v + 0.85, 0.203, { uv: "keep", uvRect: decalRect(s > 0 ? 12 : 6) });
+  frame.box("leds", u - 0.3, v - 0.56, 0.198, 1.6, 0.04, 0.012, { uv: "keep" });
+  frame.box("hazard", u, v - h / 2 + 0.05, 0.19, w - 0.2, 0.05, 0.012, { texel: 3 });
+  frame.add("decal", new THREE.PlaneGeometry(0.28, 0.28), u + 1.2, v - 0.5, 0.203, { uv: "keep", uvRect: decalRect(5) });
+  frame.add("decal", new THREE.PlaneGeometry(0.5, 0.5), u - 1.0, v + h / 2 + 0.4, 0.001, { uv: "keep", uvRect: decalRect(s > 0 ? 12 : 6) });
   frame.collider(u - w / 2, u + w / 2, 0, v + h / 2, 0, 0.2, "board");
 }
 
@@ -1177,14 +1371,15 @@ function buildAftWall(kit, ctx, B) {
     frame.box("brg_alert", u(s * 2.1), 3.9, 0.205, 0.26, 0.14, 0.01);
     // tall lockers flanking the door
     equipmentRack(kit, ctx, { side: "zmax", u: u(s * 3.6), w: 1.2, h: 2.8, d: 0.5, seed: ctx.seed + 600 + s, bounds: B, lit: "emitAmber" });
-    // ship status displays: main display on the datum, amber status band above the waist rail
-    display(kit, "zmax", u(s * 8.5), DATUM + 0.85, 3.0, 1.7, s > 0 ? 0 : 1, B);
-    display(kit, "zmax", u(s * 8.5), 5.3, 1.8, 0.5, 4, B);
+    // ship status displays on the datum (nothing hangs above the waist rail but stencils and lamps)
+    display(kit, "zmax", u(s * 8.5), DATUM + 0.85, 3.0, 1.7, s > 0 ? 0 : "brg_step", B);
+    frame.box("paintedMetal", u(s * 8.5), 5.3, 0.04, 1.8, 0.3, 0.08, BLACK);
+    frame.box("brg_alert", u(s * 8.5), 5.3, 0.085, 1.5, 0.08, 0.01);
     // rack pairs further out
     equipmentRack(kit, ctx, { side: "zmax", u: u(s * 14.2), w: 1.4, h: 2.6, seed: ctx.seed + 610 + s, bounds: B });
     equipmentRack(kit, ctx, { side: "zmax", u: u(s * 15.7), w: 1.4, h: 2.6, seed: ctx.seed + 611 + s, bounds: B, lit: "emitRed" });
-    display(kit, "zmax", u(s * 20), DATUM + 0.45, 1.6, 0.9, 2, B);
-    frame.add("decal", new THREE.PlaneGeometry(0.9, 0.9), u(s * 20), 3.4, 0.001, { uv: "keep", uvRect: decalRect(s > 0 ? 0 : 14) });
+    display(kit, "zmax", u(s * 20), DATUM + BAND_H / 2, 1.6, BAND_H, 2, B);
+    frame.add("decal", new THREE.PlaneGeometry(0.9, 0.9), u(s * 20), 3.6, 0.001, { uv: "keep", uvRect: decalRect(s > 0 ? 0 : 14) });
   }
 }
 
