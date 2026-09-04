@@ -221,6 +221,39 @@ export const LIFTS = [
   { id: "lift_H2", lobby: "liftLobbyH", cluster: "hangar", axis: "x", at: -8, c: 93, side: -1 },
 ];
 
+// Hangar: TIE racks hang from the ceiling over the launch well (fighters drop straight out of the
+// belly); two rows of six. `y` is the rack arm pivot height; the fighter hangs ~4 m below it.
+export const HANGAR_RACKS = (() => {
+  const out = [];
+  for (const x of [-12, 12]) for (let i = 0; i < 6; i++) out.push({ id: `rack_${x < 0 ? "P" : "S"}${i + 1}`, x, y: 14, z: 145 + i * 18, side: x < 0 ? -1 : 1 });
+  return out;
+})();
+// Patrol anchors around the ship (world). Fighters fly loops through these after leaving the well.
+export const PATROL_LOOPS = {
+  dorsal: [
+    [0, -140, 240],
+    [-260, -40, 60],
+    [-420, 120, -300],
+    [-120, 260, -700],
+    [200, 240, -600],
+    [380, 140, -100],
+    [220, 190, 420],
+    [60, 330, 700],
+    [-160, 280, 620],
+    [-40, 60, 380],
+  ],
+  ventral: [
+    [0, -140, 240],
+    [180, -260, 0],
+    [360, -180, -420],
+    [120, -120, -760],
+    [-280, -220, -520],
+    [-420, -160, 40],
+    [-220, -260, 520],
+    [120, -200, 620],
+  ],
+};
+
 // Where the player appears when boarding from the exterior camera, per cluster
 export const SPAWNS = {
   tower: { x: 0, z: 612, yaw: 180, room: "liftLobbyT" }, // facing the corridor / bridge

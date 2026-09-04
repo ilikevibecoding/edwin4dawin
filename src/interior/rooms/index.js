@@ -4,13 +4,21 @@ import { ROOMS } from "../../config/layout.js";
 import { makeCorridorBuilder } from "../corridors.js";
 import { makeLiftLobbyBuilder } from "./common/liftLobby.js";
 import { buildGenericRoom } from "./common/generic.js";
+import { register as registerTower } from "./tower/index.js";
+import { register as registerCrew } from "./crew/index.js";
+import { register as registerEng } from "./eng/index.js";
+import { register as registerHangar } from "./hangar/index.js";
 
-// Dedicated builders (filled in by the room workstreams)
+// Dedicated builders (filled in by the room workstreams via their cluster index files)
 const DEDICATED = {};
 
 export function registerRoom(id, builder) {
   DEDICATED[id] = builder;
 }
+registerTower(registerRoom);
+registerCrew(registerRoom);
+registerEng(registerRoom);
+registerHangar(registerRoom);
 
 export function builderFor(id, systems) {
   const spec = ROOMS[id];
