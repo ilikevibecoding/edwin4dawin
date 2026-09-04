@@ -1,7 +1,7 @@
 # Status — B: command tower (Deck 1)
 
-Branch: `cursor/sd-command-tower-e845` · Last push: 51c843f6 · 2026-09-04 07:05 UTC
-Run: bc-624cbbb1-95b2-4ce5-82bb-455f2d92e845 · Phase: 1 done → 2 (detail) starting
+Branch: `cursor/sd-command-tower-e845` · Last push: 27f6d314 · 2026-09-04 09:50 UTC
+Run: bc-624cbbb1-95b2-4ce5-82bb-455f2d92e845 · Phase: 2 (detail) — 6 of 11 modules detailed and pushed
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
 
@@ -62,9 +62,9 @@ lining x ±19, y 241.2..245.4, z 455.5..458.3). `d1-observation` → `["observat
 | 1 | Bridge (flagship): pits, walkway, window wall, stations, command dais, animated displays | `src/rooms/deck1/bridge/**` | Phase 2 running |
 | 2 | Nav + tactical/holo planning rooms | `src/rooms/deck1/nav/**`, `src/rooms/deck1/tactical/**` | Phase 2 running |
 | 3 | Comms + sensors, intel room | `src/rooms/deck1/comms/**`, `src/rooms/deck1/intel/**` | Phase 2 running |
-| 4 | Officers' quarters (private corridor + cabins + wardroom) | `src/rooms/deck1/officers/**` | Phase 2 running |
-| 5 | Observation gallery (window band) | `src/rooms/deck1/observation/**` | Phase 2 running |
-| 6 | Deck 1 corridors + lift lobby (spine, port/stbd passages, lobby) | `src/rooms/deck1/spine/**`, `src/rooms/deck1/corridor-port/**`, `src/rooms/deck1/corridor-stbd/**`, `src/rooms/deck1/lobby/**` | Phase 2 running |
+| 4 | Officers' quarters (private corridor + cabins + wardroom) | `src/rooms/deck1/officers/**` | done (f0a80c75) |
+| 5 | Observation gallery (window band) | `src/rooms/deck1/observation/**` | done (f4120da1) |
+| 6 | Deck 1 corridors + lift lobby (spine, port/stbd passages, lobby) | `src/rooms/deck1/spine/**`, `src/rooms/deck1/corridor-port/**`, `src/rooms/deck1/corridor-stbd/**`, `src/rooms/deck1/lobby/**` | done (27f6d314) |
 | C | Blind visual critic (screenshots + §11 brief only) | none (report only) | after each batch |
 
 Shared Deck-1 helpers (mine, not copies of ship.js): `src/rooms/deck1/shared/` — `imperial.js` (wall with openings,
@@ -73,6 +73,29 @@ floor, ceiling with recessed channels, light strip, railing, stairs, partition, 
 the scaffold adds `PALETTE.imp*`), `plan.js`. Dev harness: `src/rooms/deck1/_dev/` (no `index.js` inside).
 
 ## Done
+Phase 2 detail (pushed; each verified with a fresh harness run, 0 registry-shim warnings):
+- `d1-observation` (f4120da1): reveal lining + heavy outer frame + inner frame, chamfered mullion caps, red lamp per
+  mullion foot, 7 tilted sill instruments, leaning rail, 3 binocular viewers, 3 seating groups, 3 holo plinths (one
+  additive LineSegments, 3 original wireframe ships rotating in update), refreshment counter, star-map wall, briefing
+  niche, west end screen, coves + beams every 4 m + cable tray, south-wall greebles. Key spots hidden inside
+  mullions (no visible source). Views + `d1-observation-counter`, `-viewer`. 16.2k tris / 16 calls / 12 desc /
+  40 colliders / 48 ms.
+- `d1-officers` (f0a80c75): 14 corridor doorways (stepped frames, leaves open/closed with status lamps, number + rank
+  plates, intercoms), ribs + 2 cable trays + notice screens + end wall; 10 seeded cabins from one function (bunk with
+  bedding, overhead cabinet + amber lamp, desk + screen + chair, locker, shelves, fresher hatch, personal items),
+  captain's suite (W0), wardroom (wainscot, pilasters, table for 12 with settings, sideboard, fleet-status bank,
+  viewscreen, pantry alcove), duty office, utility room. Views + `d1-officers-captain`, `-duty`. 72.5k tris /
+  16 calls / 14 desc / 142 colliders / 160 ms.
+- `d1-spine`, `d1-corridor-port`, `d1-corridor-stbd`, `d1-lobby` (27f6d314): bay kit in `spine/dressing.js`
+  (ribs, conduit runs, cable trays, handrails, grating strips, junction boxes, vents, intercoms, hatches, scuffs),
+  signage atlas `spine/signage.js` (one 1024² canvas shared by the four rooms: 21 original labels, arrows, "01",
+  chevrons; +2 materials per room), junction node at x 0 (heavy ribs, ceiling housing, floor medallion, 4 directory
+  panels, chevrons at both blast doors), sealed future doors at both spine ends, door signs in the passages, sealed
+  bulkhead at the starboard dead end, lobby arrival (lift surround with seams/bolts/indicator bar + `api.setIndicator(u)`
+  for D, deck plates, fire point, directories, notice screens, floor strips, ceiling light frame). Views +
+  `d1-spine-bay`, `d1-corridor-stbd-bulkhead`, `d1-lobby-indicator`. Spine 54.4k tris / 14 calls / 14 desc / 135
+  colliders / 71 ms; passages ~14k / 13 / 6–7; lobby 8.2k / 15 / 5.
+
 Phase 1 greybox (all 11 modules): closed floor/ceiling/walls with Imperial panelling (light-grey panels, black
 recessed seams, kick, cornice, blue-white strip at 2.05 m), recessed ceiling light channels, door holes cut to §7
 sizes with jamb liners + threshold plates (D's assembly goes on top), colliders, spawn, views, light descriptors.
@@ -104,7 +127,13 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   (includes the post passes and the exterior stand-in), 9–14 pool lights. Frame time 1.6–3.1 s/frame is SwiftShader
   and only useful relatively.
 - Per-room build times 5–56 ms (budget 250). Largest room 38.6k tris (budget 120k), bridge 24.8k (300k).
-- Critic: not yet (Phase 2).
+- Phase 2 verification runs: `obs-verify`, `officers-verify`, `corr-4`, `leakfix` (all 0 warnings). Whole-frame with
+  neighbours: 87–175 calls, 87k–308k tris.
+- Rendering artifact traced (not Deck 1 geometry): in `d1-lobby-side` a faint dashed blue line of the spine's
+  `emitBlue` floor-strip edges shows through two solid walls. Probes: gone with `?post=0` (direct render), gone when
+  the spine's `kit_emitBlue` mesh is hidden, persists with bloom disabled and with N8AO at full res → it is the N8AO
+  pass in `src/post.js` under SwiftShader. Reported under Requests.
+- Critic: not yet (after the remaining three subagents land).
 
 ## Remaining
 1. Phase 2 detail per room via subagents (running): density, materials, animated displays, per-room lighting balance
@@ -118,6 +147,15 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   as stand-ins by the harness only, rooms reference them by the §10 names.
 
 ## Requests for integrator
+- **N8AO pass leaks thin hidden emissives through walls (software GL).** Repro: harness view `d1-lobby-side`
+  (rooms d1-lobby + d1-spine): a dashed blue line of the spine's 1 cm floor-strip edges is drawn across the lobby's
+  north wall. Disappears with direct rendering (`?post=0`) and when the spine's `kit_emitBlue` mesh is hidden;
+  unchanged with bloom off or `halfRes: false`. Probably a depth-buffer precision difference in N8AO's beauty target
+  at world coordinates ~500 m from the origin. Please check on a GPU; if it reproduces, a 32-bit depth texture on the
+  N8AO target or a tighter camera near plane per mode would be the first things to try.
+- **Vite HMR kills harness runs in a shared working tree.** Any file save by another agent full-reloads the page
+  mid-run. `src/rooms/deck1/_dev/vite.harness.config.mjs` (hmr off, watch off) + a reload-resilient runner fixed it
+  for us; `tools/shots.mjs` users will hit the same thing once several agents share a checkout.
 - **Player floor height.** The bridge pits (+237.6) and stairs need the player to follow floor height (Kestrel's
   `Player.setPose` zeroes y and never changes it). Suggestion: colliders tagged `"floor"` carry a top y the player
   snaps to, or `ctx.player.setFloor(y)`. Until then I block the stair tops with colliders tagged `stairs-pending`
