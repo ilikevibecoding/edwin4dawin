@@ -1,0 +1,1 @@
+import{t as e}from"./index-DOcxUX4e.js";function t(t,n,r){return e(t,n,r)}export{t as buildDetention};
