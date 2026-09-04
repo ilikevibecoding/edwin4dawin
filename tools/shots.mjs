@@ -64,6 +64,11 @@ async function main() {
     log('page error:', e.message);
   });
 
+  // Against the dev server, another agent saving a file reloads the page through
+  // HMR mid-capture, and the run dies on debugAPI being undefined. Stubbing the
+  // client out makes a capture a snapshot of the code as it was when it booted.
+  await page.route('**/@vite/client', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: '' }));
+
   log(`loading ${url} at ${width}x${height}`);
   const t0 = Date.now();
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });

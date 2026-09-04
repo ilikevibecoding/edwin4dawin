@@ -134,6 +134,7 @@ async function boot() {
 
   const driver = createDriver({ terrain, vehicle });
   const rig = createCameraRig(camera, { vehicle, terrain });
+  rig.attach({ wildlife });
   const hud = createHud();
 
   const post = await step('Compiling shaders', 92, () => createPost(renderer, scene, camera, { quality }));
@@ -175,6 +176,20 @@ async function boot() {
       hud.setStatus(driver.state.auto ? 'Auto-drive engaged' : 'Manual control');
     } else if (e.code === 'KeyN') {
       setTimeOfDay(TIMES[(TIMES.indexOf(timeOfDay) + 1) % TIMES.length]);
+    } else if (e.code === 'KeyP') {
+      // Photo mode freezes the world, hides the HUD and frees the camera. The
+      // rig remembers where it was; this only owns the freeze and the HUD.
+      if (rig.photo) {
+        rig.exitPhoto();
+        frozen = false;
+        last = performance.now();
+        hud.root.style.opacity = '';
+      } else {
+        rig.enterPhoto();
+        frozen = true;
+        hud.root.style.opacity = '0';
+      }
+      hud.setCamera(rig.label);
     } else if (e.code.startsWith('Digit')) {
       const n = Number(e.code.slice(5));
       if (n >= 1 && n <= VIEW_NAMES.length && rig.showView(VIEW_NAMES[n - 1])) {
@@ -316,10 +331,10 @@ async function boot() {
   function frame() {
     requestAnimationFrame(frame);
     const dt = tick();
-    if (!frozen) {
-      simulate(dt);
-      rig.update(dt, driver.state);
-    }
+    if (!frozen) simulate(dt);
+    // the camera keeps moving in photo mode; that is the point of it
+    if (!frozen || rig.photo) rig.update(dt, driver.state);
+    hud.fade(rig.fade);
     skyRig.updateSky(camera);
     post.render(dt);
 

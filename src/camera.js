@@ -56,14 +56,42 @@ const LOOK_MIN_PITCH = -0.62;
 const LOOK_MAX_PITCH = 0.72;
 const LOOK_HOLD = 2.4;
 
-/** What the camera key walks through. `interior` is a view, the rest are modes. */
-const DRIVE_CAMS = ['chase', 'hood', 'interior', 'orbit'];
+/**
+ * What the camera key walks through. `interior` is a view, the rest are modes.
+ * `orbit` is labelled the inspection camera: it is the one you look at the truck
+ * with.
+ */
+const DRIVE_CAMS = ['chase', 'hood', 'interior', 'cinematic', 'wildlife', 'orbit'];
+const LABELS = { orbit: 'Inspect cam', cinematic: 'Cinematic cam', wildlife: 'Wildlife cam', hood: 'Bonnet cam' };
+
+/**
+ * The cinematic camera is a small automatic director. Each shot is a way of
+ * placing the camera relative to the truck's heading; shots are held for a few
+ * seconds and cut between with a short dip to black. `world: true` shots plant
+ * the camera in the world and let the truck drive past — the only kind of shot
+ * that shows speed, and the one every racing replay is built on.
+ */
+const SHOTS = [
+  { name: 'low-front-quarter', pos: [3.6, 0.7, 7.5], target: [0, 1.0, 0.6], fov: 34, hold: 6 },
+  { name: 'high-wide', pos: [-6, 6.5, -11], target: [0, 1.0, 4], fov: 44, hold: 7 },
+  { name: 'roadside-pan', world: true, side: 5.5, ahead: 22, height: 1.3, fov: 30, hold: 7 },
+  { name: 'rear-low', pos: [-1.2, 0.55, -6.5], target: [0, 1.4, 6], fov: 40, hold: 6 },
+  { name: 'wheel-track', pos: [2.4, 0.5, 2.2], target: [0.8, 0.5, -3], fov: 38, hold: 5 },
+  { name: 'roadside-pan-far', world: true, side: -9, ahead: 30, height: 2.4, fov: 26, hold: 8 },
+];
 
 export function createCameraRig(camera, { vehicle, terrain }) {
-  const modes = ['chase', 'hood', 'orbit'];
+  const modes = ['chase', 'hood', 'orbit', 'cinematic', 'wildlife'];
   let mode = 'chase';
   // set only in 'view' mode; names a live, truck-tracking beauty framing
   let viewName = null;
+  // what the wildlife camera looks for; attached after the world is built
+  let wildlife = null;
+
+  // cinematic director state
+  const cine = { shot: 0, time: 0, fade: 0, anchor: new THREE.Vector3(), anchored: false };
+  // photo mode remembers where the camera was so it can hand back
+  let photoReturn = null;
 
   // Free look from the driver's seat. `hold` keeps the camera where it was put
   // for a couple of seconds after the drag ends and then eases it forward
@@ -183,6 +211,83 @@ export function createCameraRig(camera, { vehicle, terrain }) {
     _t.copy(_p).addScaledVector(_d, len);
   }
 
+  /**
+   * The director. Holds a shot, then cuts. Truck-relative shots are placed off
+   * the heading like the chase cam; world shots plant the camera beside the road
+   * ahead once, at the cut, and hold it there while the truck drives through
+   * frame. A world shot is abandoned early if the truck gets far enough past it
+   * that the camera would be watching a tailgate recede.
+   */
+  function updateCinematic(dt, heading, speed) {
+    const shot = SHOTS[cine.shot % SHOTS.length];
+    cine.time += dt;
+    let cut = cine.time >= shot.hold;
+    if (shot.world) {
+      if (!cine.anchored) {
+        yawToWorld([shot.side, shot.height, shot.ahead], heading, cine.anchor);
+        clampToGround(cine.anchor, 0.9);
+        cine.anchored = true;
+      }
+      _p.copy(cine.anchor);
+      localToWorld([0, 1.1, 0.5], _t);
+      camera.fov = shot.fov;
+      // past the camera and pulling away: cut rather than watch it go
+      const dx = vehicle.root.position.x - cine.anchor.x;
+      const dz = vehicle.root.position.z - cine.anchor.z;
+      const along = dx * Math.sin(heading) + dz * Math.cos(heading);
+      if (along > 14) cut = true;
+    } else {
+      yawToWorld(shot.pos, heading, _p);
+      yawToWorld(shot.target, heading, _t);
+      camera.fov = shot.fov + Math.min(speed, 20) * 0.25;
+      clampToGround(_p, 0.5);
+    }
+    // the dip to black either side of a cut, read by the HUD
+    cine.fade = Math.max(0, Math.min(1, cine.time < 0.18 ? 1 - cine.time / 0.18 : (cine.time - shot.hold + 0.18) / 0.18));
+    if (cut) {
+      cine.shot++;
+      cine.time = 0;
+      cine.anchored = false;
+      // a cut is a cut: no easing across it
+      initialised = false;
+    }
+  }
+
+  /**
+   * A long lens on the nearest animal, from the truck's roof hatch. If nothing
+   * is in range it points the same lens at where the pride lives, which is what
+   * a guide does with binoculars before anything is visible.
+   */
+  function updateWildlife(dt, heading) {
+    yawToWorld([0.3, 2.1, -0.4], heading, _p);
+    let target = null;
+    let best = 1e9;
+    const list = wildlife?.animals ?? [];
+    for (const a of list) {
+      const o = a.root?.position;
+      if (!o) continue;
+      const d = o.distanceTo(vehicle.root.position);
+      if (d < best && d < 160) {
+        best = d;
+        target = o;
+      }
+    }
+    if (target) {
+      _t.copy(target);
+      _t.y += 0.6;
+      // a lens that tightens with distance, capped so a far animal still has
+      // some ground around it
+      camera.fov = THREE.MathUtils.clamp((36 * 9) / Math.max(best, 4), 9, 40);
+    } else if (wildlife?.anchor) {
+      _t.set(wildlife.anchor.x, wildlife.anchor.y + 1.2, wildlife.anchor.z);
+      const d = _t.distanceTo(_p);
+      camera.fov = THREE.MathUtils.clamp((36 * 30) / Math.max(d, 20), 12, 40);
+    } else {
+      localToWorld([0, 1.2, 40], _t);
+      camera.fov = 30;
+    }
+  }
+
   function update(dt, drive = 0) {
     const speed = typeof drive === 'number' ? drive : (drive?.speed ?? 0);
     const steer = typeof drive === 'number' ? 0 : (drive?.steer ?? 0);
@@ -215,6 +320,10 @@ export function createCameraRig(camera, { vehicle, terrain }) {
       localToWorld([hoodOffset.x, hoodOffset.y, hoodOffset.z], _p);
       localToWorld([hoodOffset.x * 0.6, hoodOffset.y - 0.32, hoodOffset.z + 9], _t);
       camera.fov = 62;
+    } else if (mode === 'cinematic') {
+      updateCinematic(dt, heading ?? 0, speed);
+    } else if (mode === 'wildlife') {
+      updateWildlife(dt, heading ?? 0);
     } else {
       // chase: pulls back and drops as speed rises
       const back = chaseOffset.z - Math.min(speed, 20) * 0.075;
@@ -245,8 +354,13 @@ export function createCameraRig(camera, { vehicle, terrain }) {
       smoothPos.copy(_p);
       smoothTarget.lerp(_t, 1 - Math.exp(-dt * 12));
     } else {
-      smoothPos.lerp(_p, 1 - Math.exp(-dt * (mode === 'hood' ? 24 : 7)));
-      smoothTarget.lerp(_t, 1 - Math.exp(-dt * 9));
+      // A long lens magnifies every tremor, so the wildlife cam aims slowly and
+      // sits hard on the roof; a planted cinematic camera does not move at all
+      // and only pans.
+      const posRate = mode === 'hood' ? 24 : mode === 'wildlife' ? 30 : mode === 'cinematic' ? 12 : 7;
+      const aimRate = mode === 'wildlife' ? 2.6 : mode === 'cinematic' ? 5 : 9;
+      smoothPos.lerp(_p, 1 - Math.exp(-dt * posRate));
+      smoothTarget.lerp(_t, 1 - Math.exp(-dt * aimRate));
     }
     camera.position.copy(smoothPos);
     camera.lookAt(smoothTarget);
@@ -293,8 +407,40 @@ export function createCameraRig(camera, { vehicle, terrain }) {
     },
     /** What the HUD shows. */
     get label() {
-      const n = viewName ?? mode;
-      return `${n.charAt(0).toUpperCase()}${n.slice(1)} ${viewName ? 'view' : 'cam'}`;
+      if (photoReturn) return 'Photo mode';
+      if (viewName) return `${viewName.charAt(0).toUpperCase()}${viewName.slice(1)} view`;
+      return LABELS[mode] ?? `${mode.charAt(0).toUpperCase()}${mode.slice(1)} cam`;
+    },
+    /** 0..1 dip to black around a cinematic cut, for the HUD to apply. */
+    get fade() {
+      return mode === 'cinematic' ? cine.fade : 0;
+    },
+    /** Hand the rig the things its cameras look for once they exist. */
+    attach({ wildlife: w } = {}) {
+      if (w) wildlife = w;
+    },
+    /**
+     * Photo mode: the world is frozen by the caller, the camera becomes a free
+     * orbit seeded from wherever it already was, and `exitPhoto` puts everything
+     * back. Kept here so the rest of the rig does not need to know it happened.
+     */
+    enterPhoto() {
+      if (photoReturn) return;
+      photoReturn = { mode, viewName };
+      seedOrbitFromCamera();
+      mode = 'orbit';
+      viewName = null;
+      orbitAuto = false;
+    },
+    exitPhoto() {
+      if (!photoReturn) return;
+      mode = photoReturn.mode;
+      viewName = photoReturn.viewName;
+      photoReturn = null;
+      initialised = false;
+    },
+    get photo() {
+      return !!photoReturn;
     },
     cycle() {
       // The cockpit is a view rather than a mode, but it belongs in the camera
@@ -311,6 +457,12 @@ export function createCameraRig(camera, { vehicle, terrain }) {
         if (next === 'orbit') {
           seedOrbitFromCamera();
           orbitAuto = true;
+        }
+        if (next === 'cinematic') {
+          cine.shot = 0;
+          cine.time = 0;
+          cine.anchored = false;
+          initialised = false;
         }
       }
       return next;

@@ -46,8 +46,11 @@ const check = (name, ok, detail = '') => {
  */
 const readRig = (settle = 120) =>
   page.evaluate((steps) => {
-    const { camera, vehicle, rig } = window.debugAPI.objects;
-    for (let i = 0; i < steps; i++) rig.update(1 / 60, 8.6);
+    const { camera, vehicle, rig, driver } = window.debugAPI.objects;
+    // the real heading, so cameras placed off the heading land where the
+    // truck-local readout below expects them
+    const drive = { speed: 8.6, steer: 0, heading: driver.state.heading };
+    for (let i = 0; i < steps; i++) rig.update(1 / 60, drive);
     vehicle.root.updateMatrixWorld();
     const inv = vehicle.root.matrixWorld.clone().invert();
     const p = camera.position.clone().applyMatrix4(inv);
@@ -163,6 +166,50 @@ for (let i = 0; i < 4; i++) {
   seen.push(s.view ?? s.mode);
 }
 check('the camera key reaches the cockpit', seen.includes('interior'), seen.join(' -> '));
+check('the camera key reaches the cinematic and wildlife cams', seen.includes('cinematic') && seen.includes('wildlife'), seen.join(' -> '));
+
+log('cinematic director');
+await page.evaluate(() => {
+  const { rig } = window.debugAPI.objects;
+  rig.mode = 'cinematic';
+});
+s = await readRig(30);
+const firstShotPos = [s.x, s.y, s.z];
+check('cinematic places the camera somewhere other than the chase offset', Math.abs(s.z + 7.84) > 0.5, `local ${firstShotPos.join(',')}`);
+// run the director past its first hold so it cuts
+s = await readRig(60 * 8);
+check('the director cuts to a different shot', Math.hypot(s.x - firstShotPos[0], s.z - firstShotPos[2]) > 1, `local ${[s.x, s.y, s.z].join(',')}`);
+check('the camera stays above the ground through a cut', s.y > 0.2, `local y ${s.y}`);
+
+log('wildlife cam');
+await page.evaluate(() => {
+  window.debugAPI.objects.rig.mode = 'wildlife';
+});
+s = await readRig();
+check('wildlife cam sits on the roof', s.y > 1.8 && Math.abs(s.x) < 1 && s.z > -1.2 && s.z < 0.4, `local ${[s.x, s.y, s.z].join(',')}`);
+check('wildlife cam uses a long lens', s.fov <= 40, `fov ${s.fov}`);
+
+log('photo mode');
+await page.keyboard.press('KeyC');
+const beforePhoto = await readRig();
+await page.keyboard.press('KeyP');
+s = await readRig(5);
+check('P enters photo mode', /photo/i.test(s.label), s.label);
+const hudHidden = await page.evaluate(() => document.querySelector('.hud').style.opacity === '0');
+check('photo mode hides the HUD', hudHidden);
+await page.mouse.move(cx, cy);
+await page.mouse.down();
+await page.mouse.move(cx + 120, cy, { steps: 5 });
+await page.mouse.up();
+s = await readRig();
+check('drag orbits in photo mode', /photo/i.test(s.label) && s.mode === 'orbit', `${s.label} / ${s.mode}`);
+await page.keyboard.press('KeyP');
+// leaving photo mode unfreezes the world; hold it still again for the readout
+await page.evaluate(() => window.debugAPI.pause());
+s = await readRig(5);
+check('P again returns to the previous camera', s.mode === beforePhoto.mode && s.view === beforePhoto.view, `${beforePhoto.label} -> ${s.label}`);
+const hudBack = await page.evaluate(() => document.querySelector('.hud').style.opacity !== '0');
+check('the HUD comes back', hudBack);
 
 log('free look from the cab');
 await page.evaluate(() => window.debugAPI.objects.rig.showView('interior'));
