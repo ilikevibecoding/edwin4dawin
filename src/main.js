@@ -20,6 +20,7 @@ import { createHUD } from "./hud.js";
 import { SYSTEMS } from "./core/systems.js";
 import { createFighters } from "./fighters/index.js";
 import { createAtmosphere } from "./systems/atmosphere.js";
+import { TouchControls, isTouchDevice } from "./systems/touch.js";
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 const bootT0 = performance.now();
@@ -29,8 +30,11 @@ const timings = {};
 // Renderer / scene
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById("view");
+const TOUCH = isTouchDevice();
+const MOBILE = TOUCH; // render profile follows the input class, not the window size
+if (TOUCH) document.body.classList.add("touch");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, MOBILE ? 1.0 : 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -53,7 +57,7 @@ await nextFrame();
 // World
 // ---------------------------------------------------------------------------
 let t0 = performance.now();
-const materials = buildMaterials();
+const materials = buildMaterials({ mobile: MOBILE });
 timings.materials = +(performance.now() - t0).toFixed(0);
 hud.setLoading(0.35, "Laying down 1,600 m of hull…");
 await nextFrame();
@@ -71,7 +75,7 @@ await nextFrame();
 // sun + fill
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
 sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.mapSize.set(MOBILE ? 2048 : 4096, MOBILE ? 2048 : 4096);
 sun.shadow.bias = -0.0006;
 sun.shadow.normalBias = 0.6;
 scene.add(sun);
@@ -83,6 +87,23 @@ scene.add(hemi);
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.25;
+{
+  // the hull reflects space (planet glow, star field), never the interior captures
+  const cubeRT = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType, generateMipmaps: false });
+  const cubeCam = new THREE.CubeCamera(1, 20000, cubeRT);
+  cubeCam.position.set(0, 300, -300);
+  exterior.group.visible = false;
+  space.root.position.copy(cubeCam.position);
+  cubeCam.update(renderer, scene);
+  exterior.group.visible = true;
+  const spaceEnv = pmrem.fromCubemap(cubeRT.texture).texture;
+  for (const k of ["hull", "hullDark"]) {
+    materials[k].envMap = spaceEnv;
+    materials[k].envMapIntensity = 0.35;
+    materials[k].needsUpdate = true;
+  }
+  cubeRT.dispose();
+}
 
 const audio = new AudioSystem();
 const fighters = createFighters({ scene, materials, audio });
@@ -94,10 +115,11 @@ const rooms = new RoomManager({
   doorSystem: doors,
   onRoomChange: (def, prev) => {
     hud.roomToast(def.title.toUpperCase(), `${def.cluster.toUpperCase()} · DECK ${def.floor} m`);
-    audio.setRoom(roomAudioProfile(def));
+    audio.setRoom(def); // the audio layer's per-room ambience table is authoritative
     fitSunShadow();
   },
 });
+rooms.lightBudget = MOBILE ? 8 : 14;
 const player = new Player(camera, canvas, rooms.activeColliders);
 const lifts = new LiftSystem({ scene, materials, player, hud, audio });
 lifts.attach(rooms);
@@ -122,17 +144,12 @@ player.onLockChange = (locked) => {
   } else if (!debugMode && modes.isInterior) hud.showStart();
 };
 hud.startEl.addEventListener("click", () => {
+  audio.start();
   if (modes.isInterior) player.requestLock();
-  else {
-    hud.hideStart();
-    audio.start();
-  }
+  else hud.hideStart();
+  // phones: go full screen for an immersive view (ignored where unsupported, e.g. iOS Safari)
+  if (TOUCH && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
 });
-
-function roomAudioProfile(def) {
-  const map = { reactor: { hum: 1, air: 0.4, cutoff: 260 }, hyperdrive: { hum: 0.9, air: 0.3, cutoff: 500 }, hangar: { hum: 0.4, air: 1, cutoff: 900 }, bridge: { hum: 0.3, air: 0.35, cutoff: 600 } };
-  return map[def.id] || { hum: 0.5, air: 0.5, cutoff: 400 };
-}
 
 // ---------------------------------------------------------------------------
 // Sun shadow frustum: whole ship outside, the current cluster inside
@@ -172,12 +189,14 @@ function onModeChange(mode) {
   hud.showCrosshair(mode === "interior");
   if (post) post.setMode(mode);
   hud.setStartMode(mode);
+  if (touchControls) touchControls.setMode(mode);
 }
 
 // ---------------------------------------------------------------------------
 // Post
 // ---------------------------------------------------------------------------
 const post = createPost(renderer, scene, camera);
+const touchControls = TOUCH ? new TouchControls({ player, rig, modes, hud, audio, interactions }) : null;
 
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -189,19 +208,28 @@ window.addEventListener("resize", () => {
 // ---------------------------------------------------------------------------
 // Adaptive quality (pixel ratio + AO quality); never removes content
 // ---------------------------------------------------------------------------
-const QUALITY_LEVELS = [
-  { ratio: 0.66, ao: "Low" },
-  { ratio: 0.8, ao: "Low" },
-  { ratio: 1.0, ao: "Medium" },
-  { ratio: Math.min(window.devicePixelRatio, 1.5), ao: "Medium" },
-];
-const quality = { level: QUALITY_LEVELS.length - 1, slow: 0, fast: 0, enabled: true };
+const QUALITY_LEVELS = MOBILE
+  ? [
+      { ratio: 0.5, ao: "Performance" },
+      { ratio: 0.66, ao: "Low" },
+      { ratio: 0.85, ao: "Low" },
+    ]
+  : [
+      { ratio: 0.66, ao: "Low" },
+      { ratio: 0.8, ao: "Low" },
+      { ratio: 1.0, ao: "Medium" },
+      { ratio: Math.min(window.devicePixelRatio, 1.5), ao: "Medium" },
+    ];
+const quality = { level: MOBILE ? 1 : QUALITY_LEVELS.length - 1, slow: 0, fast: 0, enabled: true };
+if (MOBILE) applyQuality();
 function applyQuality() {
   const q = QUALITY_LEVELS[quality.level];
   renderer.setPixelRatio(q.ratio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   post.setSize(window.innerWidth, window.innerHeight);
-  post.ao.setQualityMode(q.ao);
+  // AO quality + bloom chain resolution scale together (mobile has 3 levels, desktop 4)
+  if (post.setQuality) post.setQuality(MOBILE ? quality.level : quality.level);
+  else post.ao.setQualityMode(q.ao);
 }
 function updateQuality(dt) {
   if (!quality.enabled) return;
@@ -267,7 +295,7 @@ const VIEWS = {
   ext_close: { mode: "exterior", pos: [-90, 230, 90], target: [0, 214, 172] },
   // interior (player pose: feet x,y,z, yaw, pitch)
   bridge: { mode: "interior", pos: [0, 210, 203], yaw: 0, pitch: -3 },
-  bridge_window: { mode: "interior", pos: [0, 210, 176], yaw: 0, pitch: -6 },
+  bridge_window: { mode: "interior", pos: [0, 210, 176], yaw: 0, pitch: -10 },
   bridge_pit: { mode: "interior", pos: [-8, 208.6, 200], yaw: 20, pitch: 4 },
   cmd_corridor: { mode: "interior", pos: [-40, 210, 209], yaw: -90, pitch: 0 },
   lift_lobby: { mode: "interior", pos: [0, 210, 214], yaw: 180, pitch: 0 },
@@ -436,6 +464,8 @@ const debugAPI = {
       fighters: fighters.stats(),
       qualityLevel: quality.level,
       pixelRatio: renderer.getPixelRatio(),
+      touch: TOUCH,
+      mobile: MOBILE,
       boot: { ...timings, materials: materials.timings, totalMs: +(bootReady - bootT0).toFixed(0) },
       longTasks: longTasks.slice(-20),
       doors: doors.snapshot(),
@@ -521,6 +551,7 @@ function frame() {
   // streaming: at most one room per frame while a cluster is prefetching
   rooms.step();
 
+  if (touchControls) touchControls.update(dt);
   player.update(dt);
   rig.update(dt);
   if (modes.isInterior) {
@@ -529,6 +560,8 @@ function frame() {
     lifts.update(dt, player.position);
     audio.listener = player.position;
     if (envFrames++ % 240 === 5) captureEnvironment();
+  } else {
+    rooms.updateAnimators(dt, t);
   }
   space.update(dt);
   space.root.position.copy(camera.position);
@@ -538,6 +571,7 @@ function frame() {
   fighters.update(dt, t, { mode: modes.mode, cameraPos: camera.position, playerPos: player.position, hangarVisible: rooms.visibleIds.has("hangar") });
   atmosphere.update(dt, t, { mode: modes.mode, playerPos: player.position, currentRoom: rooms.current });
   lighting.update(dt);
+  if (audio.update) audio.update(dt);
   interactions.update();
   sync.tick(dt);
   if (framesRendered > 60) updateQuality(dt);

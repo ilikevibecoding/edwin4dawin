@@ -87,6 +87,9 @@ export class Kit {
     for (const key of Object.keys(geo.attributes)) {
       if (!["position", "normal", "uv"].includes(key)) geo.deleteAttribute(key);
     }
+    // explicit white vertex colour: the shared materials use vertexColors, and the per-instance colour is
+    // multiplied on top of it (a missing attribute is not guaranteed to default to white everywhere)
+    setVertexColor(geo, 0xffffff);
     this.protos.set(name, { mat, geo, items: [] });
   }
 

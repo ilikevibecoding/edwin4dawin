@@ -15,12 +15,14 @@ function timed(name, fn) {
   return r;
 }
 
-export function buildMaterials() {
+/** opts.mobile: smaller procedural textures (4x faster generation, a quarter of the texture memory). */
+export function buildMaterials({ mobile = false } = {}) {
+  const big = mobile ? 512 : 1024;
   const panel = timed("imperialPanel", () => makeImperialPanel(512, 5));
-  const metal = timed("wornMetal", () => makeWornMetal(1024, 23));
-  const deckBlack = timed("deckBlack", () => makeDeckBlack(1024, 43));
-  const deckGrey = timed("deckGrey", () => makeDeckGrey(1024, 47));
-  const hull = timed("hullPlate", () => makeHullPlate(2048, 31));
+  const metal = timed("wornMetal", () => makeWornMetal(big, 23));
+  const deckBlack = timed("deckBlack", () => makeDeckBlack(big, 43));
+  const deckGrey = timed("deckGrey", () => makeDeckGrey(big, 47));
+  const hull = timed("hullPlate", () => makeHullPlate(mobile ? 1024 : 2048, 31));
   const rubber = timed("rubber", () => makeRubber(256, 53));
   const fabric = timed("fabric", () => makeFabric(256, 67));
   const hazard = timed("hazard", () => makeHazard(256, 71));
@@ -28,7 +30,7 @@ export function buildMaterials() {
   const grate = timed("grate", () => makeGrate(1024, 768, 61));
   const diffuser = timed("diffuser", () => makeDiffuser(256, 13));
   const decals = timed("decals", () => makeDecalSheet(1024, 19));
-  const screens = timed("screens", () => makeScreenAtlas(2048, 5));
+  const screens = timed("screens", () => makeScreenAtlas(mobile ? 1024 : 2048, 5));
   const leds = timed("leds", () => makeLedAtlas(1024, 9));
 
   const std = (set, extra = {}) =>
@@ -82,12 +84,15 @@ export function buildMaterials() {
     // ---- atlases
     screen: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: screens, emissiveIntensity: 1.4, roughness: 0.15, metalness: 0, envMapIntensity: 1.0 }),
     leds: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: leds, emissiveIntensity: 2.2, roughness: 0.3, metalness: 0 }),
-    decal: new THREE.MeshStandardMaterial({ map: decals, transparent: true, depthWrite: false, roughness: 0.75, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.3 }),
+    // vertex colours tint stencils (white by default); rooms can pass `color:` to dim or colour a decal
+    decal: new THREE.MeshStandardMaterial({ map: decals, transparent: true, depthWrite: false, roughness: 0.75, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.3 }),
 
     // ---- holograms and fields (additive, animated by their owners)
     holo: new THREE.MeshBasicMaterial({ color: 0x5fb8ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
     field: makeFieldMaterial(),
   };
+  // the hull lives in vacuum: never let the interior haze fog it (it is seen through the bridge glazing)
+  for (const k of ["hull", "hullDark", "engineGlow"]) mats[k].fog = false;
   mats.timings = timings;
   // back-compat aliases used by shared helpers
   mats.emitTeal = mats.emitCyan;

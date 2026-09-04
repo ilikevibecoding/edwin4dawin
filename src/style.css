@@ -32,6 +32,7 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
+  z-index: 10;
 }
 
 #crosshair {
@@ -211,6 +212,7 @@ body {
 #fade {
   position: fixed;
   inset: 0;
+  z-index: 15;
   background: #000;
   opacity: 0;
   pointer-events: none;
@@ -231,6 +233,7 @@ body {
 #loading {
   position: fixed;
   inset: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -302,4 +305,180 @@ body {
   font-family: var(--mono);
   font-size: 12px;
   color: rgba(223, 230, 242, 0.7);
+}
+
+/* ---------------------------------------------------------------- touch / mobile ---- */
+html,
+body {
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#view {
+  touch-action: none;
+}
+#menu {
+  pointer-events: auto;
+}
+#menu li {
+  cursor: pointer;
+}
+body.touch #menu li {
+  padding: 12px 0;
+  font-size: 17px;
+}
+body.touch #menu .menu-foot {
+  padding-top: 8px;
+  font-size: 13px;
+}
+body.touch #crosshair {
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+}
+body.touch #prompt {
+  top: 60%;
+}
+body.touch #mode-hint {
+  display: none;
+}
+
+#touch-ui {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#stick {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+#stick.hidden {
+  display: none;
+}
+#stick-base {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 128px;
+  height: 128px;
+  margin: -64px 0 0 -64px;
+  border-radius: 50%;
+  border: 2px solid rgba(79, 155, 255, 0.45);
+  background: rgba(6, 10, 18, 0.35);
+  box-shadow: 0 0 24px rgba(79, 155, 255, 0.15) inset;
+}
+#stick-knob {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(79, 155, 255, 0.55);
+  border: 2px solid rgba(223, 230, 242, 0.7);
+  transform: translate(-50%, -50%);
+}
+#touch-buttons {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(72px, calc(env(safe-area-inset-bottom) + 64px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+}
+.tb {
+  pointer-events: auto;
+  min-width: 96px;
+  padding: 14px 18px;
+  border-radius: 4px;
+  border: 1px solid rgba(79, 155, 255, 0.6);
+  background: rgba(6, 10, 18, 0.7);
+  color: var(--imp-white);
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  text-shadow: 0 0 8px rgba(79, 155, 255, 0.5);
+}
+.tb:active,
+.tb.on {
+  background: rgba(79, 155, 255, 0.85);
+  color: #04101c;
+}
+.tb.hidden {
+  display: none;
+}
+#tb-interact {
+  border-color: rgba(255, 181, 71, 0.8);
+  color: var(--imp-amber);
+}
+#touch-hint {
+  position: absolute;
+  left: 50%;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: rgba(223, 230, 242, 0.45);
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  #start .card,
+  #loading .card {
+    min-width: 0;
+    width: min(88vw, 380px);
+    padding: 22px 20px;
+  }
+  #start h1,
+  #loading h1 {
+    font-size: 28px;
+    letter-spacing: 0.3em;
+  }
+  #start .hint {
+    font-size: 16px;
+  }
+  #start .keys,
+  #start .sub,
+  #loading .sub {
+    font-size: 10px;
+  }
+  #status {
+    left: 12px;
+    bottom: 10px;
+    font-size: 10px;
+    gap: 8px;
+    max-width: 60vw;
+    flex-wrap: wrap;
+  }
+  #status-tag {
+    padding: 1px 6px;
+  }
+  #room-toast .t {
+    font-size: 13px;
+    letter-spacing: 0.15em;
+  }
+  #room-toast .s {
+    font-size: 9px;
+  }
+  #prompt {
+    font-size: 12px;
+  }
+  #menu {
+    min-width: min(86vw, 320px);
+    padding: 14px 18px;
+  }
+  #stats {
+    font-size: 10px;
+  }
+}
+body.touch #status {
+  bottom: 26px;
 }
