@@ -7,19 +7,25 @@ import { balanceGroundIbl } from './terrain';
 import { layerMask, type ViewCull } from './culling';
 
 /**
- * Procedural planting. Two instanced geometry families cover five archetypes:
- *  - crown trees (broadleaf hardwood, tall emergent, squat mangrove, low shrub): a main puff and two
- *    lobes of displaced icospheres on a short trunk (66 triangles). Lobe placement, squash and trunk
- *    length are per-instance shader parameters, so no two crowns share a silhouette.
- *  - palms: bent tapered trunk and seven drooping frond strips (52 triangles) with per-instance
- *    frond rotation and droop.
+ * Procedural planting. Two instanced geometry families cover six archetypes:
+ *  - crown trees (broadleaf hardwood, tall emergent, squat mangrove, low shrub, dune grass tussock): a
+ *    main puff and two lobes of displaced icospheres on a short trunk (66 triangles; the main puff is
+ *    subdivided to 126 within HI_DISTANCE). Lobe placement, squash and trunk length are per-instance
+ *    shader parameters, so no two crowns share a silhouette. The crown shader adds wrap lighting in
+ *    crown space (sunlit yellow-green cap, cool dark underside, per-crown yellowness), leaf-cluster
+ *    noise, a ragged dissolved silhouette and perturbed normals up close, and a back-lit rim.
+ *  - palms: bent, leaning, tapered trunk and seven drooping frond strips (52 triangles) with
+ *    per-instance frond rotation and droop.
  * Every plant also exists as a 2-triangle camera-facing card whose texture blends between a side
  * view and a top view with the viewing elevation. Tiles of 900 m switch between the 3D meshes (near
  * the camera, up to an instance budget) and the cards (everything else), so a dense island canopy
  * costs about the same as the sparse planting it replaces. Cards are thinned with distance. Shadows
  * always come from the light-facing cards; for near tiles the card mesh sits on the shadow-only layers
- * so the main pass never touches it. Tiles are culled against the camera frustum with their own
- * world-space boxes, and cast shadows only when their footprint can shade something in view.
+ * so the main pass never touches it. Foliage receives shadow with one lookup per plant at the crown's
+ * sun-facing point (VEG_SHADOWMAP_VERTEX), so crowns are shaded whole by taller neighbours and
+ * buildings instead of being cut by the planar shadows of the cards. Tiles are culled against the
+ * camera frustum with their own world-space boxes, and cast shadows only when their footprint can
+ * shade something in view.
  */
 
 // ---------------------------------------------------------------- procedural textures
@@ -365,8 +371,8 @@ const CROWN_FRAG = /* glsl */ `
     // yellowness so neighbouring trees differ in more than their base tint
     float yellow = hash11(vSeed * 41.7 + 3.0);
     float cap = smoothstep(-0.55, 0.85, cn.y);
-    vec3 sunlit = diffuseColor.rgb * mix(vec3(1.12, 1.12, 0.94), vec3(1.26, 1.22, 0.78), yellow);
-    vec3 shade = diffuseColor.rgb * vec3(0.5, 0.58, 0.6);
+    vec3 sunlit = diffuseColor.rgb * mix(vec3(1.08, 1.06, 0.94), vec3(1.2, 1.12, 0.78), yellow);
+    vec3 shade = diffuseColor.rgb * vec3(0.55, 0.6, 0.64);
     diffuseColor.rgb = mix(shade, sunlit, cap);
     // leaf clusters: fine value noise breaks the smooth shading of the puffs; gaps between clusters darken
     float leaf = vnoise(vWP.xz * 1.7 + vWP.y * 1.3);
@@ -467,6 +473,21 @@ vec4 vegShadowPos = vegShadowR > 0.0 ? vec4(vegShadowC - vegL * vegShadowR, 1.0)
 #endif
 ${THREE.ShaderChunk.shadowmap_vertex.replace(/worldPosition/g, 'vegShadowPos')}
 `;
+/** Foliage is never fully shadowed: leaves scatter and pass light, so a crown under a taller neighbour
+ *  or a building keeps a third of the direct sun instead of going black. Wraps three's getShadow
+ *  (already inlined by the CSM hook by the time the material's own hook runs). */
+const VEG_SHADOW_PARS_FRAG = /* glsl */ `
+#include <shadowmap_pars_fragment>
+#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+float vegShadow( sampler2D shadowMap, vec2 shadowMapSize, float shadowIntensity, float shadowBias, float shadowRadius, vec4 shadowCoord ) {
+  return mix( 0.34, 1.0, getShadow( shadowMap, shadowMapSize, shadowIntensity, shadowBias, shadowRadius, shadowCoord ) );
+}
+#endif
+`;
+function softenFoliageShadow(fragmentShader: string): string {
+  // rename the (inlined) lookups first; the wrapper inserted afterwards must keep calling getShadow
+  return fragmentShader.replace(/\bgetShadow\(/g, 'vegShadow(').replace('#include <shadowmap_pars_fragment>', VEG_SHADOW_PARS_FRAG);
+}
 
 // cards: screen-aligned quads centred on the crown; texture blends side/top views with elevation
 const CARD_VERT_PARS = /* glsl */ `
@@ -518,7 +539,7 @@ const CARD_FRAG = /* glsl */ `
   vec4 t = mix(side, top, vElev);
   if (t.a < 0.5) discard;
   // lit leaf mass yellows, shaded parts cool off: matches the 3D crowns' wrap lighting
-  diffuseColor.rgb *= t.r * 1.05 * mix(vec3(0.72, 0.84, 0.9), vec3(1.16, 1.12, 0.82), smoothstep(0.35, 1.05, t.r));
+  diffuseColor.rgb *= t.r * 1.02 * mix(vec3(0.72, 0.82, 0.9), vec3(1.12, 1.04, 0.82), smoothstep(0.35, 1.05, t.r));
 }
 `;
 
@@ -532,14 +553,14 @@ function crownMaterial(time: THREE.IUniform<number>, wind: THREE.IUniform<number
       .replace('#include <beginnormal_vertex>', CROWN_NORMAL)
       .replace('#include <begin_vertex>', CROWN_VERTEX)
       .replace('#include <shadowmap_vertex>', VEG_SHADOWMAP_VERTEX);
-    shader.fragmentShader = shader.fragmentShader
+    shader.fragmentShader = softenFoliageShadow(shader.fragmentShader)
       .replace('#include <common>', `#include <common>\n${CROWN_FRAG_PARS}`)
       .replace('#include <color_fragment>', CROWN_FRAG)
       .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG)
       .replace('#include <emissivemap_fragment>', CROWN_EMISSIVE_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-crown-v6';
+  mat.customProgramCacheKey = () => 'veg-crown-v7';
   return mat;
 }
 
@@ -553,10 +574,10 @@ function palmMaterial(tex: THREE.Texture, time: THREE.IUniform<number>, wind: TH
       .replace('#include <beginnormal_vertex>', PALM_NORMAL)
       .replace('#include <begin_vertex>', PALM_VERTEX)
       .replace('#include <shadowmap_vertex>', VEG_SHADOWMAP_VERTEX);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>\nvarying float vPart; varying vec3 vWP;`);
+    shader.fragmentShader = softenFoliageShadow(shader.fragmentShader).replace('#include <common>', `#include <common>\nvarying float vPart; varying vec3 vWP;`);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-palm-v5';
+  mat.customProgramCacheKey = () => 'veg-palm-v6';
   return mat;
 }
 
@@ -584,12 +605,12 @@ function cardMaterial(atlas: THREE.Texture): THREE.MeshStandardMaterial {
       .replace('#include <common>', `#include <common>\n${CARD_VERT_PARS}`)
       .replace('#include <project_vertex>', CARD_PROJECT)
       .replace('#include <shadowmap_vertex>', VEG_SHADOWMAP_VERTEX);
-    shader.fragmentShader = shader.fragmentShader
+    shader.fragmentShader = softenFoliageShadow(shader.fragmentShader)
       .replace('#include <common>', `#include <common>\n${CARD_FRAG_PARS}`)
       .replace('#include <color_fragment>', CARD_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-card-v6';
+  mat.customProgramCacheKey = () => 'veg-card-v7';
   return mat;
 }
 
@@ -607,8 +628,10 @@ interface Plant { x: number; y: number; z: number; s: number; rot: number; lean:
 interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; }
 
 const TILE = 900;
-const NEAR_DISTANCE = 650;
-const HI_DISTANCE = 250;
+// 3D distances to the planted footprint: at 420 m a 12 m crown is ~18 px tall (720p), where the card
+// is the better representation; the subdivided crown mesh is only worth its triangles closer than 200 m
+const NEAR_DISTANCE = 420;
+const HI_DISTANCE = 200;
 const NEAR_BUDGET = 60000;
 
 const _n23 = new THREE.Vector3(), _n31 = new THREE.Vector3(), _n12 = new THREE.Vector3(), _apex = new THREE.Vector3();
@@ -627,7 +650,7 @@ function frustumApex(f: THREE.Frustum, out: THREE.Vector3, fallbackX: number, fa
 /** Base tints (sRGB). The canopy needs a spread from sunlit yellow-greens through mid greens to dark
  *  shaded crowns: about a third of the broadleaf crowns are bright, a third mid, a third dark. */
 const PALETTE: Record<Archetype, string[]> = {
-  0: ['#7aa23c', '#7fa242', '#6c9a38', '#86a446', '#7d9a3a', '#4f8a33', '#5b9040', '#3f7a2f', '#62953a', '#557f2c', '#2f5c26', '#376a2c', '#2a4f22', '#417234', '#33613a'],
+  0: ['#7c9c44', '#809c4a', '#709542', '#88a04e', '#7e9644', '#558a3c', '#5f8c46', '#467a37', '#649242', '#5a7f36', '#3c6431', '#3d6a32', '#375a2e', '#467238', '#3e6844'],
   1: ['#3a7030', '#457a36', '#4d8a3c', '#35652d', '#5a8f42', '#2b5528'],
   2: ['#3e6b2e', '#4a7734', '#365f28', '#55803f', '#436d33', '#2d4f26'],
   3: ['#6f9a4a', '#7ea452', '#5f8a40', '#8aa04c', '#93a24f', '#7b9a3e'],

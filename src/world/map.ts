@@ -1064,8 +1064,10 @@ export class WorldMap implements WorldMapData {
             const edgeDist = clamp(400 + 130 * fbm2(x / 520 + 3.7, z / 520 - 2.1, 3) + 210 * fbm2(x / 1700 + 1.0, z / 1700 + 8.0, 2), 200, 620);
             const edgeW = 170 + 110 * (0.5 + 0.5 * perlin2(x / 300 - 1.0, z / 300 + 6.0));
             const ex = x - sNx * (sd - edgeDist), ez = z - sNz * (sd - edgeDist);
-            const groove = 0.6 * perlin2(ex / 150 + 2.2, ez / 150 - 9.9) + 0.4 * perlin2(ex / 60 - 4.4, ez / 60 + 1.7);
-            const edgeT = smoothstep(edgeDist - edgeW, edgeDist + edgeW, sd + 220 * groove);
+            // the channels meander and pinch off (the second term follows the point itself, not its
+            // projection), so they read as sand channels between reef patches rather than comb teeth
+            const groove = 0.5 * perlin2(ex / 150 + 2.2, ez / 150 - 9.9) + 0.3 * perlin2(x / 95 - 4.4, z / 95 + 1.7) + 0.2 * perlin2(x / 260 + 7.7, z / 260 - 3.1);
+            const edgeT = smoothstep(edgeDist - edgeW, edgeDist + edgeW, sd + 200 * groove);
             terrace += 1.4 * smoothstep(0.3, 0.7, -groove) * smoothstep(edgeDist - 320, edgeDist - 60, sd);
             // crescentic longshore bars off exposed beaches: pale streaks that come and go along the shore
             if (expo > 0.35 && sd < 300) {
@@ -1100,7 +1102,8 @@ export class WorldMap implements WorldMapData {
             if (Math.abs(x - c.bx) > c.br || Math.abs(z - c.bz) > c.br) continue;
             const wide = c.width >= 200;
             let d = sdPolyline(x, z, c.pts) - c.width * 0.5;
-            if (wide) d += 90 * fbm2(x / 380 + 1.5, z / 380 - 2.5, 2);
+            // the lips wander by up to ~200 m; the noise fades out inside the lane so its authored depth holds
+            if (wide) d += (80 * fbm2(x / 380 + 1.5, z / 380 - 2.5, 2) + 130 * perlin2(x / 1100 + 3.3, z / 1100 - 6.1)) * smoothstep(-c.width * 0.3, 0, d);
             const blend = wide ? 220 : 60;
             if (d < blend) {
               let t = smoothstep(-c.width * 0.1, blend, d);
