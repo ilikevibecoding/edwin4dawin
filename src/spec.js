@@ -293,7 +293,7 @@ for (const r of rooms.filter((x) => x.kind === "lobby")) {
 export function roomBounds(r) {
   const [x, y, z] = r.origin;
   const [w, h, d] = r.size;
-  return { min: new THREE.Vector3(x - w / 2, y, z - d / 2), max: new THREE.Vector3(x + w / 2, y + h, z + d / 2) };
+  return new THREE.Box3(new THREE.Vector3(x - w / 2, y, z - d / 2), new THREE.Vector3(x + w / 2, y + h, z + d / 2));
 }
 
 /** Doors touching a room, expressed in that room's local frame. */

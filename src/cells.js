@@ -293,9 +293,9 @@ export class CellManager {
       if (spec.target) l.target.position.copy(spec.target);
       else l.target.position.copy(spec.pos).add(new THREE.Vector3(0, -1, 0));
       if (l.castShadow) {
-        l.shadow.camera.far = this.shadowSuspended ? 0.05 : Math.max(8, spec.distance * 1.2);
+        l.shadow.camera.far = Math.max(8, spec.distance * 1.2);
         l.shadow.camera.updateProjectionMatrix();
-        l.shadow.needsUpdate = true;
+        if (!this.shadowSuspended) l.shadow.needsUpdate = true;
       }
     }
   }
@@ -346,9 +346,10 @@ export class CellManager {
     for (const s of this.pool.spots) {
       const l = s.light;
       if (!l.castShadow) continue;
-      l.shadow.camera.far = v ? 0.05 : Math.max(8, (s.current ? s.current.distance : 10) * 1.2);
-      l.shadow.camera.updateProjectionMatrix();
-      l.shadow.needsUpdate = true;
+      // autoUpdate=false skips the shadow pass entirely (a collapsed frustum would still draw every
+      // ship-sized instanced mesh whose bounding sphere contains the light)
+      l.shadow.autoUpdate = !v;
+      l.shadow.needsUpdate = !v;
     }
   }
 

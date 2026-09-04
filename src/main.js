@@ -116,8 +116,16 @@ function buildKestrel() {
   cell.built = true;
   cells.registerCell(cell);
   lighting = createLightingController({ lights: kestrel.lights, materials, hemi: null });
+  kestrelMirror = kestrel.group.getObjectByName("mirror");
+  if (kestrelMirror) {
+    kestrel.group.updateMatrixWorld(true);
+    kestrelMirror.getWorldPosition(kestrelMirrorPos);
+    kestrelMirror.visible = false;
+  }
   return cell;
 }
+let kestrelMirror = null;
+const kestrelMirrorPos = new THREE.Vector3();
 
 const player = new Player(camera, canvas, cells.colliders, cells.floors);
 let rig = null;
@@ -269,13 +277,13 @@ async function buildInterior() {
     audio.setZone(zoneFor(cell.room));
     if (prev && cell.room.deck !== prev.room.deck) hud.setStatus(`${DECKS[cell.room.deck].name}.`);
   };
-  // fighter traffic lives in world coordinates but is parented to the hangar cell so it shows / hides with it
+  // fighter traffic lives in world coordinates at the scene root: fighters on patrol must stay visible
+  // from orbit even when the hangar cell itself is culled; visibility is managed per frame below
   try {
     traffic = createTraffic({ materials, audio, camera });
-    const hangarCell = cells.cells.get("hangar");
-    if (hangarCell && traffic.group) {
-      traffic.group.position.set(-hangarCell.room.origin[0], -hangarCell.room.origin[1], -hangarCell.room.origin[2]);
-      hangarCell.group.add(traffic.group);
+    if (traffic.group) {
+      scene.add(traffic.group);
+      traffic.group.visible = false;
     }
   } catch (e) {
     console.error("[fighters] traffic failed:", e);
@@ -649,10 +657,31 @@ function updateSun() {
     exterior.group.visible = seesOut;
     space.root.visible = seesOut;
   }
+  // from inside, only the part of the hull that the openings face can be seen: through the hangar mouth
+  // the belly around the mouth, from the bridge / gallery everything forward of the tower
+  const viewMode = outside ? "all" : cells.visibleIds.has("hangar") && !cells.visibleIds.has("bridge") && !cells.visibleIds.has("observation") ? "hangar" : cells.visibleIds.has("hangar") ? "all" : "bridge";
+  if (seesOut && viewMode !== exteriorViewMode) {
+    exteriorViewMode = viewMode;
+    applyExteriorViewMode(viewMode);
+  }
+  // outside, the rooms with openings to space are only worth drawing when the camera is near them
+  if (outside) {
+    for (const id of ["bridge", "observation", "hangar", "kestrel"]) {
+      const cell = cells.cells.get(id);
+      if (!cell) continue;
+      const near = cell.bounds.distanceToPoint(camera.position) < (id === "hangar" || id === "kestrel" ? 700 : 450);
+      if (cell.group.visible !== near) cell.group.visible = near;
+    }
+  }
   // outside, only the rooms with openings to space can be seen: hide the rest of the interior
   if (outside !== interiorHiddenForExterior) {
     interiorHiddenForExterior = outside;
     cells.setShadowSuspended(outside);
+    // exterior meshes have ship-sized bounds, so the interior key spot's shadow pass would draw all of
+    // them every frame while inside; they only need to cast shadows for the sun, i.e. outside
+    exterior.group.traverse((o) => {
+      if (o.isMesh || o.isInstancedMesh) o.castShadow = outside;
+    });
     for (const cell of cells.cells.values()) {
       if (outside) cell.group.visible = cell.room.tags.includes("key") || cell.id === "kestrel";
       else cell.group.visible = cell.visible;
@@ -660,9 +689,39 @@ function updateSun() {
     for (const d of doors) d.group.visible = outside ? false : cells.visibleIds.has(d.spec.a) || cells.visibleIds.has(d.spec.b);
   }
 }
-let interiorHiddenForExterior = false;
+let interiorHiddenForExterior = null; // null: apply the interior state on the first frame
 // rooms with real openings to space (viewports / the hangar mouth)
 const VIEW_ROOMS = new Set(["bridge", "observation", "hangar"]);
+let exteriorViewMode = "all";
+const exteriorBoxes = new Map(); // mesh -> world Box3 (exterior meshes never move)
+const HANGAR_VIEW_BOX = new THREE.Box3(new THREE.Vector3(-240, -180, -280), new THREE.Vector3(240, -24, 280));
+function applyExteriorViewMode(mode) {
+  exterior.group.updateMatrixWorld(true);
+  exterior.group.traverse((o) => {
+    if (!(o.isMesh || o.isInstancedMesh || o.isLine || o.isPoints) || o.parent === null) return;
+    // LOD children are managed by their LOD parent; filter at the LOD level instead
+    if (o.parent.isLOD) return;
+    let box = exteriorBoxes.get(o);
+    if (!box) {
+      box = new THREE.Box3().setFromObject(o);
+      exteriorBoxes.set(o, box);
+    }
+    if (mode === "all") o.visible = true;
+    else if (mode === "hangar") o.visible = box.intersectsBox(HANGAR_VIEW_BOX);
+    else o.visible = box.min.z < 250; // bridge / gallery: anything forward of the tower face
+  });
+  exterior.group.traverse((o) => {
+    if (!o.isLOD) return;
+    let box = exteriorBoxes.get(o);
+    if (!box) {
+      box = new THREE.Box3().setFromObject(o);
+      exteriorBoxes.set(o, box);
+    }
+    if (mode === "all") o.visible = true;
+    else if (mode === "hangar") o.visible = box.intersectsBox(HANGAR_VIEW_BOX);
+    else o.visible = box.min.z < 250;
+  });
+}
 
 function frame() {
   requestAnimationFrame(frame);
@@ -685,11 +744,18 @@ function frame() {
     space.update(dt);
     if (lighting) lighting.update(dt);
     cells.update(player.position, dt, t);
+    // the Kestrel's bathroom mirror is a Reflector: it re-renders the whole scene whenever it is drawn,
+    // so it only exists while the player stands in front of it
+    if (kestrelMirror) kestrelMirror.visible = rig.mode === "interior" && cells.current && cells.current.id === "kestrel" && player.position.distanceTo(kestrelMirrorPos) < 7;
     for (const d of doors) if (d.group.visible || d.type === "lift") d.update(dt, player.position);
     lifts.update(dt, t);
     interactions.update();
     exterior.update(camera, dt, t);
-    if (traffic && (cells.visibleIds.has("hangar") || rig.exterior)) traffic.update(dt, t, camera);
+    if (traffic && traffic.group) {
+      const show = cells.visibleIds.has("hangar") || rig.exterior || rig.mode === "transition";
+      traffic.group.visible = show;
+      if (show) traffic.update(dt, t, camera);
+    }
     flight.update(dt);
     updateSun();
     // fog: per-room density inside, none outside

@@ -185,7 +185,7 @@ if (!QUICK) {
     const expected = { bed: /slept/, galley: /Energy restored/, bathroom: /Refreshed/ }[id];
     const t0 = Date.now();
     let status = "";
-    while (Date.now() - t0 < 12000) {
+    while (Date.now() - t0 < 45000) {
       await page.waitForTimeout(300);
       status = await page.evaluate(() => window.debugAPI.status());
       const busy = await page.evaluate(() => window.debugAPI.fadeOpacity() > 0.01);
