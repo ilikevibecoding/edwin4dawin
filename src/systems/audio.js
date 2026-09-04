@@ -48,8 +48,9 @@
 //   depart / return{ position?, id? }   fly-by whoosh: band-passed noise + saw engine tone with a
 //                  doppler-like pitch slide (depart falls, return rises then settles), pan sweeps across
 //   dock           { position?, id? }   tractor clamp thud (75→38 Hz) + metallic clank + hydraulic hiss
-//   alert          {}   two-tone klaxon loop (non-positional); stops when SYSTEMS.lighting.alert < 0.05
-//                  (polled by update()); 12 s safety stop when no lighting controller is reachable
+//   alert          {}   two-tone klaxon loop (non-positional, level 0.25); follows the commanded alert state
+//                  (SYSTEMS.lighting.state.alertTarget ≥ 0.5, polled by update()) and stops when it is
+//                  cleared; 12 s safety stop when no lighting controller is reachable
 //   ui_open / ui_choose / ui_cancel / ui_hover / ui_toast   soft sine blips (auto-hooked to the HUD menu and
 //                  interaction prompt when SYSTEMS.hud is reachable; the fighters/HUD never call these)
 //   launch         { id, … }   alias emitted by fighter traffic → fighter_launch (de-duplicated within 400 ms)
