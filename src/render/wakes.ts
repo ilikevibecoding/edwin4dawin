@@ -41,12 +41,15 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
   vertexShader: /* glsl */ `
     attribute float aAge;     // 0 fresh .. 1 old
     attribute float aSide;    // -1 .. 1 across the ribbon
-    varying float vAge; varying float vSide;
-    void main() { vAge = aAge; vSide = aSide; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+    varying float vAge; varying float vSide; varying vec2 vWp;
+    void main() { vAge = aAge; vSide = aSide; vWp = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
   `,
   fragmentShader: /* glsl */ `
-    varying float vAge; varying float vSide;
+    varying float vAge; varying float vSide; varying vec2 vWp;
     uniform float uStrength;
+    float h21(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+    float vn(vec2 q) { vec2 i = floor(q), f = fract(q); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
     void main() {
       float edge = 1.0 - smoothstep(0.55, 1.0, abs(vSide));
       float life = 1.0 - vAge;
@@ -54,7 +57,9 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
       // kept wide enough to survive the wake map's ~1.6 m texels (the old thin twin lines aliased into dots)
       float core = (1.0 - smoothstep(0.0, 0.9, abs(vSide))) * (0.55 + 0.45 * (1.0 - smoothstep(0.0, 0.5, vAge)));
       float arms = smoothstep(0.45, 0.8, abs(vSide)) * (1.0 - smoothstep(0.85, 1.0, abs(vSide))) * 0.5;
-      float foam = (core + arms) * life * life * edge * uStrength;
+      // world-anchored breakup so a long wake reads as churned foam patches, not a chalk line
+      float breakup = 0.55 + 0.45 * vn(vWp * 0.35) * (0.7 + 0.6 * vn(vWp * 1.3 + 4.0));
+      float foam = (core + arms) * life * life * edge * uStrength * breakup;
       vec2 n = vec2(sign(vSide) * 0.35 * life * edge, 0.0);
       gl_FragColor = vec4(foam, 0.5 + n.x, 0.5 + n.y, edge * life);
     }
