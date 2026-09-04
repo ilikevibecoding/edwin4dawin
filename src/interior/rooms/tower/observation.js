@@ -229,11 +229,12 @@ export function buildObservation(kit, ctx) {
   for (const [bx, bz, len] of [[-7.6, 637.4, 6.4], [7.6, 637.4, 6.4], [-7.6, 641.6, 6.4], [7.6, 641.6, 6.4], [-13.2, 645.9, 4.6], [13.2, 645.9, 4.6]]) {
     bench(kit, [bx, y, bz], len, Math.PI, { color: IMP.fabricBlack });
   }
-  // low steel side tables at the walkway end of each bench row
+  // low steel side tables at the walkway end of each bench row (matte tops: a gloss top mirrors the
+  // ceiling ring as a blown white cube)
   for (const s of [-1, 1]) {
     for (const sz of [637.4, 641.6]) {
       kit.box("impPaintedMetal", s * 3.6, y + 0.3, sz, 0.6, 0.6, 0.6, { color: IMP.consoleDark, texel: 1 });
-      kit.box("darkGloss", s * 3.6, y + 0.615, sz, 0.66, 0.03, 0.66);
+      kit.box("impMatte", s * 3.6, y + 0.615, sz, 0.66, 0.03, 0.66, { color: IMP.black });
       kit.box("emitWarm", s * 3.6, y + 0.1, sz - 0.305, 0.4, 0.02, 0.01);
       kit.collider([s * 3.6 - 0.35, y, sz - 0.35], [s * 3.6 + 0.35, y + 0.65, sz + 0.35], "sideTable");
     }
@@ -293,12 +294,17 @@ export function buildObservation(kit, ctx) {
     // back counter along the wall with three dispensers and cups; front counter 1.3 m into the room
     frame.box("impPaintedMetal", ub, 0.5, 0.25, BW, 1.0, 0.5, { color: IMP.console, texel: 1 });
     frame.box("darkGloss", ub, 1.015, 0.26, BW + 0.04, 0.03, 0.54);
-    frame.box("impPaintedMetal", ub, 2.15, 0.06, BW, 2.3, 0.12, { color: IMP.consoleDark, texel: 1 });
-    frame.box("lightBandWarm", ub, 3.22, 0.125, BW - 0.4, 0.05, 0.01, { uv: "keep" });
+    frame.box("impPaintedMetal", ub, 2.15, 0.06, BW, 2.3, 0.12, { color: IMP.wallDark, texel: 1 });
+    // lit shelf rail along the head of the back panel and an under-shelf strip at its foot, showing
+    // between the dispensers
+    frame.box("impPaintedMetal", ub, 3.22, 0.16, BW - 0.2, 0.08, 0.2, { color: IMP.consoleDark, texel: 1 });
+    frame.box("emitWarm", ub, 3.175, 0.16, BW - 0.4, 0.01, 0.16);
+    frame.box("emitWarm", ub, 1.08, 0.125, BW - 0.4, 0.02, 0.01);
     for (const du of [-2.6, 0, 2.6]) {
-      frame.box("impPaintedMetal", ub + du, 1.75, 0.24, 0.9, 1.3, 0.36, { color: IMP.wallDark, texel: 1 });
+      // mid-grey bodies with steel fascias: the earlier near-black finish swallowed the counter's key light
+      frame.box("impPaintedMetal", ub + du, 1.75, 0.24, 0.9, 1.3, 0.36, { color: IMP.console, texel: 1 });
       frame.box("blinkSparse", ub + du, 2.1, 0.425, 0.6, 0.18, 0.01, { uv: "keep" });
-      frame.box("impMetal", ub + du, 1.62, 0.425, 0.7, 0.3, 0.01, { color: IMP.gunmetal });
+      frame.box("impMetal", ub + du, 1.62, 0.425, 0.7, 0.3, 0.01, { color: IMP.steel });
       frame.cylN("impMetal", ub + du, 1.25, 0.5, 0.03, 0.2, { color: IMP.steel, segments: 8 });
       frame.box("emitBlue", ub + du + 0.3, 2.3, 0.425, 0.06, 0.06, 0.01);
       frame.quad("impDecal", ub + du - 0.25, 2.3, 0.427, 0.3, 0.3, { uvRect: impDecalRect(6) });
@@ -329,7 +335,9 @@ export function buildObservation(kit, ctx) {
     for (const sz of [625.4, 631.6]) table(kit, [x1 - t - 5.0, y, sz], 0.9, 0.9, { h: 1.05, tone: IMP.consoleDark, yaw: Math.PI / 4 });
     placard(frame, ub - 5.2, 2.2, 0.5, 0);
     frame.quad("impDecal", ub + 5.2, 2.2, 0.062, 0.6, 0.6, { uvRect: impDecalRect(13) });
-    pointLightDesc(ctx, WARM, 2.2, 8, [x1 - 2.4, y + 3.2, 628.5], 0);
+    // the counter's own key, low over the front counter so the dispenser fascias, cups and stools catch it
+    // (the warm band over them lights nothing now, and a light 3 m up does nothing on dark finishes)
+    pointLightDesc(ctx, WARM, 7.0, 8, [x1 - t - 1.9, y + 2.3, 628.5], 1);
     sealedPort(frame, w.u(639.0), 2.6);
     sealedPort(frame, w.u(645.0), 2.6);
     alertBeacon(frame, ctx, w.u(635.5), 3.4, { intensity: 0.7, distance: 5 });
