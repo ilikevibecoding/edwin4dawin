@@ -14,7 +14,7 @@ import { PALETTE } from "../../materials.js";
 import { impWall, impConsole, wallScreen, equipmentRack, crate, stairs, platform, railing, pipeRun, pillar, doorOpenings, wallSegment } from "../imperial.js";
 import { pointLight, wallFrame, LIGHT_SCALE } from "../builders.js";
 import { Kit, rng } from "../../kit.js";
-import { decalRect } from "../../textures.js";
+import { decalRect, makeCanvas, toTexture } from "../../textures.js";
 import { HANGAR_OPENING } from "../layout.js";
 import { signPlate } from "../corridor.js";
 
@@ -157,12 +157,15 @@ function ensureMaterials(ctx) {
   if (!m.hg_paintW) m.hg_paintW = paint(PAINT_W, 0.22);
   if (!m.hg_paintR) m.hg_paintR = paint(new THREE.Color("#c8382c"), 0.3);
   if (!m.hg_field) {
+    // translucent energy plane: additive, low opacity, ~1 m cells, vertex colours fade the outer 2 m
+    // to nothing (black adds nothing) so the field has a soft edge and the well below stays visible
     const f = m.forceField.clone();
     f.map = m.forceField.map.clone();
-    f.map.repeat.set(11, 17.5); // 4 m tiles → 0.5 m cells over the 44 × 70 m opening
+    f.map.repeat.set((HOLE.x1 - HOLE.x0) / 8, (HOLE.z1 - HOLE.z0) / 8); // 8 cells per tile → 1 m cells
     f.map.needsUpdate = true;
-    f.color = new THREE.Color("#4f9cff").multiplyScalar(1.7);
-    f.opacity = 0.5;
+    f.color = new THREE.Color("#4f9cff");
+    f.opacity = 0.3;
+    f.vertexColors = true;
     m.hg_field = f;
   }
   if (!m.hg_beaconRed) m.hg_beaconRed = m.emitRed.clone();
@@ -186,14 +189,17 @@ function ensureMaterials(ctx) {
     m.hg_laneAmber = m.emitAmber.clone();
     m.hg_laneAmber.emissiveIntensity = 1.0;
   }
-  // well approach strip / ceiling approach channels / cornice cove: guidance lines, not room light
+  // flood faces (rig heads, hooded ceiling spots): warm, just under the bloom threshold, recessed
+  // behind rims so they read as warm floods from the deck and through the field from outside
+  if (!m.hg_flood) {
+    m.hg_flood = m.emitWhite.clone();
+    m.hg_flood.emissive = new THREE.Color("#ffd9ad");
+    m.hg_flood.emissiveIntensity = 1.05;
+  }
+  // well approach strip / cornice cove: guidance lines, not room light
   if (!m.hg_approach) {
     m.hg_approach = m.emitWhite.clone();
     m.hg_approach.emissiveIntensity = 0.55;
-  }
-  if (!m.hg_channel) {
-    m.hg_channel = m.emitWhiteSoft.clone();
-    m.hg_channel.emissiveIntensity = 0.42;
   }
   if (!m.hg_cove) {
     m.hg_cove = m.emitWhiteSoft.clone();
@@ -202,6 +208,23 @@ function ensureMaterials(ctx) {
   if (!m.hg_edge) {
     m.hg_edge = m.emitWhite.clone();
     m.hg_edge.emissiveIntensity = 0.85;
+  }
+  // flight-control cab: warm ceiling panels and a soft white band along the back wall (seen through
+  // the canted glass from the deck; both under the bloom threshold)
+  if (!m.hg_cabLight) {
+    m.hg_cabLight = m.emitAmber.clone();
+    m.hg_cabLight.emissiveIntensity = 1.0;
+  }
+  if (!m.hg_cabBack) {
+    m.hg_cabBack = m.emitWhiteSoft.clone();
+    m.hg_cabBack.emissiveIntensity = 0.8;
+  }
+  // the cab ceiling is what the deck actually sees through the canted glass (the sightline from the
+  // apron clears the parapet only near the roof), so it is a soft warm lit surface, not black
+  if (!m.hg_cabCeil) {
+    m.hg_cabCeil = m.emitWhiteSoft.clone();
+    m.hg_cabCeil.emissive = new THREE.Color("#ffd6a4");
+    m.hg_cabCeil.emissiveIntensity = 0.5;
   }
 }
 
@@ -350,12 +373,8 @@ function ceiling(kit, ctx, B0) {
       }
     }
   }
-  // approach-light bars over the opening: four long channels hung under the trusses, dimmed so they
-  // read as guidance for a pilot looking up through the hole rather than as room lighting
-  for (const x of [-16, -6, 6, 16]) {
-    kit.boxMM("paintedMetal", [x - 0.35, CEIL - 1.9, HOLE.z0 - 3], [x + 0.35, CEIL - 1.5, HOLE.z1 + 3], { color: PALETTE.impBlack, texel: 2 });
-    kit.boxMM("hg_channel", [x - 0.2, CEIL - 1.93, HOLE.z0 - 2.6], [x + 0.2, CEIL - 1.9, HOLE.z1 + 2.6], { uv: "keep" });
-  }
+  // no light lines up here: the ceiling is a dark lid; guidance for a pilot looking up through the
+  // hole is the lit curb / the well rim, not ceiling channels
   // longitudinal crane rails and their hangers are added with the crane (structure())
 }
 
@@ -641,20 +660,22 @@ function structure(kit, ctx, B0) {
     for (const z of [landZ0 - LANDING + 0.3, landZ0 - 0.3]) pillar(kit, sx, z, 0, midY - 0.25, 0.4, PALETTE.impDark);
   }
 
-  // ceiling flood housings over the aprons (the spot lights sit in them, lighting())
+  // ceiling flood housings over the aprons (the spot lights sit in them, lighting()): a deep hood
+  // with the dim lamp face recessed 0.5 m behind its rim and three louvre slats across the mouth, so
+  // from the deck it reads as a floodlight fixture, not a lit hatch in the ceiling
   for (const [x, z] of SPOTS) {
-    kit.box("paintedMetal", x, CEIL - 2.2, z, 3.2, 1.0, 3.2, { color: PALETTE.impDark, texel: 1.5 });
-    kit.box("paintedMetal", x, CEIL - 1.4, z, 0.6, 0.8, 0.6, { color: PALETTE.impBlack, texel: 2 });
-    // four lamp faces (a lit fixture, not one blown-out square)
-    for (const dx of [-0.75, 0.75]) for (const dz of [-0.75, 0.75]) kit.box("hg_lane", x + dx, CEIL - 2.72, z + dz, 1.2, 0.04, 1.2);
+    kit.box("paintedMetal", x, CEIL - 1.0, z, 3.4, 0.5, 3.4, { color: PALETTE.impDark, texel: 1.5 });
+    kit.box("paintedMetal", x, CEIL - 0.4, z, 0.6, 0.8, 0.6, { color: PALETTE.impBlack, texel: 2 });
     for (const [dx, dz] of [
       [1, 0],
       [-1, 0],
       [0, 1],
       [0, -1],
     ]) {
-      kit.box("metal", x + dx * 1.65, CEIL - 2.2, z + dz * 1.65, dx ? 0.1 : 3.0, 0.6, dz ? 0.1 : 3.0, { color: PALETTE.gunmetal });
+      kit.box("paintedMetal", x + dx * 1.6, CEIL - 2.0, z + dz * 1.6, dx ? 0.2 : 3.4, 1.6, dz ? 0.2 : 3.4, { color: PALETTE.impDark, texel: 1.5 });
     }
+    kit.box("hg_flood", x, CEIL - 2.3, z, 2.6, 0.04, 2.6);
+    for (const dz of [-0.85, 0, 0.85]) kit.box("paintedMetal", x, CEIL - 2.7, z + dz, 3.0, 0.08, 0.36, { color: PALETTE.impBlack, texel: 2 });
   }
   // flood rigs hanging on stems from the trusses to y = 16 at the opening's ends: four lamp heads on
   // a square frame, a red anti-collision lamp on the hub (the point lights sit under them)
@@ -664,21 +685,23 @@ function structure(kit, ctx, B0) {
   for (const s of [-1, 1]) {
     const x = s * 24.6;
     kit.boxMM("paintedMetal", [x - 0.35, 24.7, HOLE.z0 - 4], [x + 0.35, 25.3, HOLE.z1 + 4], { color: PALETTE.impDark, texel: 1.5 });
-    kit.boxMM("metal", [x - 0.08, 25.3, HOLE.z0 - 4], [x + 0.08, 25.42, HOLE.z1 + 4], { color: PALETTE.gunmetal });
+    // matte rail head: a bare-metal strip up here catches the rigs as a white line across the ceiling
+    kit.boxMM("paintedMetal", [x - 0.08, 25.3, HOLE.z0 - 4], [x + 0.08, 25.42, HOLE.z1 + 4], { color: PALETTE.impBlack, texel: 2 });
     for (let z = HOLE.z0 - 3; z <= HOLE.z1 + 3; z += 9.5) {
       kit.box("paintedMetal", x, (25.3 + CEIL - 1.5) / 2, z, 0.3, CEIL - 1.5 - 25.3, 0.3, { color: PALETTE.impMid, texel: 2 });
     }
   }
 
-  // bay numerals: big lit "05" on the forward wall, rack numbers on the side walls
+  // deck / bay code on the forward wall: a lit "H-05" (the sign gantry at the entry already says
+  // "BAY 05", so the wall carries the hangar code, not the same number again); rack numbers on the side walls
   {
     const seg = wallSegment(B0, "zmin");
     const { frame, length } = wallFrame(kit, seg.from, seg.to, 0);
-    frame.box("paintedMetal", length / 2, 18.5, 0.06, 9.2, 6.4, 0.12, { color: PALETTE.impBlack, texel: 2 });
-    segDigit(frame, "emitWhite", length / 2 - 2.2, 16.0, 0.13, 0, 5.0);
-    segDigit(frame, "emitWhite", length / 2 + 2.2, 16.0, 0.13, 5, 5.0);
-    frame.box("emitRed", length / 2, 14.6, 0.13, 8.4, 0.12, 0.02);
-    frame.box("emitRed", length / 2, 22.3, 0.13, 8.4, 0.12, 0.02);
+    frame.box("paintedMetal", length / 2, 18.5, 0.06, 12.0, 5.6, 0.12, { color: PALETTE.impBlack, texel: 2 });
+    const chars = ["bcefg", "g", DIGITS[0], DIGITS[5]]; // H - 0 5
+    chars.forEach((pat, i) => segChar(frame, "emitWhite", length / 2 + (i - 1.5) * 2.7, 16.5, 0.13, pat, 4.0));
+    frame.box("emitRed", length / 2, 15.2, 0.13, 11.2, 0.12, 0.02);
+    frame.box("emitRed", length / 2, 21.8, 0.13, 11.2, 0.12, 0.02);
   }
   // rack numbers between the racks (clear of the wings and the portal heads), lit white on black
   RACK_Z.forEach((rz, i) => {
@@ -710,9 +733,21 @@ function floodRig(kit, x, z) {
     [-1, 1],
     [1, 1],
   ]) {
-    kit.box("paintedMetal", x + dx * 1.05, y - 0.15, z + dz * 1.05, 1.2, 0.6, 1.2, { color: PALETTE.impDark, texel: 2 });
-    // dim emitter: the real light is the pool point light; a full emitWhite face here blooms out from the entry
-    kit.box("emitWhiteDim", x + dx * 1.05, y - 0.47, z + dz * 1.05, 1.0, 0.03, 1.0);
+    // lamp head: a hollow black hood (top plate + four lips) with the warm emitter face (under the
+    // bloom threshold) recessed 0.25 m behind the rim; the real light is the pool point light hung
+    // well below, and an exposed bright face here blooms out to a white blob in the entry view's top corners
+    const hx = x + dx * 1.05;
+    const hz = z + dz * 1.05;
+    kit.box("paintedMetal", hx, y + 0.05, hz, 1.2, 0.2, 1.2, { color: PALETTE.impBlack, texel: 2 });
+    for (const [lx, lz] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ]) {
+      kit.box("paintedMetal", hx + lx * 0.56, y - 0.25, hz + lz * 0.56, lx ? 0.08 : 1.2, 0.5, lz ? 0.08 : 1.2, { color: PALETTE.impBlack, texel: 2 });
+    }
+    kit.box("hg_flood", hx, y - 0.24, hz, 0.9, 0.03, 0.9);
   }
   kit.box("emitRed", x, y + 0.85, z, 0.24, 0.2, 0.24);
   // hoist cable loop to the truss for servicing
@@ -742,8 +777,41 @@ function stairGuard(kit, { x, z, axis, dir, w, y0, y1, total, sides }) {
 }
 
 function segDigit(frame, mat, u, v, n, digit, h) {
+  segChar(frame, mat, u, v, n, DIGITS[digit], h);
+}
+
+/**
+ * High-contrast lit lettering: bold white text (amber sub line) on black, brighter than signPlate so
+ * it still reads white from 30 m across the bay. The plane faces -z; `key` names the material.
+ */
+function letterPlate(kit, ctx, { key, text, sub, x, y, z, w, h }) {
+  if (!ctx.materials[key]) {
+    const c = makeCanvas(1024, 128);
+    const g = c.getContext("2d");
+    g.fillStyle = "#050608";
+    g.fillRect(0, 0, 1024, 128);
+    g.fillStyle = "#ffb347";
+    g.fillRect(18, 16, 8, 96);
+    g.fillRect(998, 16, 8, 96);
+    g.textBaseline = "middle";
+    g.textAlign = "center";
+    g.font = "bold 74px 'Helvetica Neue', Arial, sans-serif";
+    g.fillStyle = "#ffffff";
+    g.fillText(text, 512, sub ? 50 : 64);
+    if (sub) {
+      g.font = "bold 30px 'Helvetica Neue', Arial, sans-serif";
+      g.fillStyle = "#ffb347";
+      g.fillText(sub, 512, 104);
+    }
+    ctx.materials[key] = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: toTexture(c, { srgb: true, wrap: false }), emissiveIntensity: 1.7, roughness: 0.4, metalness: 0 });
+  }
+  kit.add(key, new THREE.PlaneGeometry(w, h), { pos: [x, y, z], rot: [0, Math.PI, 0], uv: "keep" });
+}
+
+/** Seven-segment character from a segment pattern string (a..g), `h` tall, centred on u. */
+function segChar(frame, mat, u, v, n, pattern, h) {
   const s = h / 1.8;
-  for (const k of DIGITS[digit]) {
+  for (const k of pattern) {
     const [cx, cy, w, hh] = SEG[k];
     frame.box(mat, u + (cx - 0.5) * s, v + cy * s, n, w * s, hh * s, 0.03);
   }
@@ -763,7 +831,7 @@ function towerAndMezzanine(kit, ctx, B0) {
   kit.boxMM("impPanel", [T.x0 - 0.3, T.y1 + 0.5, zt - 0.3], [T.x1 + 0.3, T.y1 + 0.65, T.z1], { color: PALETTE.impGrey, uv: "keep" });
   // underside: dark soffit with light strips lighting the entry below
   kit.boxMM("paintedMetal", [T.x0 - 0.4, T.y0 - 0.55, T.z0 - 0.4], [T.x1 + 0.4, T.y0 - 0.4, T.z1], { color: PALETTE.impDark, texel: 1.5 });
-  for (const x of [-8, 0, 8]) kit.boxMM("emitWhiteSoft", [x - 2.6, T.y0 - 0.58, T.z0 + 1.5], [x + 2.6, T.y0 - 0.55, T.z0 + 1.9], { uv: "keep" });
+  for (const x of [-8, 0, 8]) kit.boxMM("hg_cabBack", [x - 2.6, T.y0 - 0.58, T.z0 + 1.5], [x + 2.6, T.y0 - 0.55, T.z0 + 1.9], { uv: "keep" });
   // front parapet, then the canted glass (leaning out over the bay) with its mullions and head beam
   kit.boxMM("impPanel1", [T.x0, T.y0, zf - 0.12], [T.x1, T.y0 + 1.05, zf + 0.12], { color: PALETTE.impMid, uv: "keep" });
   kit.boxMM("paintedMetal", [T.x0 - 0.1, T.y0 + 1.05, zf - 0.16], [T.x1 + 0.1, T.y0 + 1.25, zf + 0.14], { color: PALETTE.impBlack, texel: 2 });
@@ -779,10 +847,15 @@ function towerAndMezzanine(kit, ctx, B0) {
     kit.add("paintedMetal", new THREE.BoxGeometry(0.16, gh, 0.24), { pos: [x, gmid[1], gmid[2]], rot: [cant, 0, 0], color: PALETTE.impBlack, texel: 2 });
   }
   kit.add("paintedMetal", new THREE.BoxGeometry(T.x1 - T.x0, 0.1, 0.2), { pos: [0, gmid[1], gmid[2]], rot: [cant, 0, 0], color: PALETTE.impBlack, texel: 2 });
-  kit.add("bridgeGlass", new THREE.PlaneGeometry(T.x1 - T.x0, gh), { pos: gmid, rot: [cant, Math.PI, 0], uv: "keep" });
+  // "glass" (not bridgeGlass): the kit's glass key does not cast shadows, so the cab interior is not
+  // blacked out of the aft flood's shadow map
+  kit.add("glass", new THREE.PlaneGeometry(T.x1 - T.x0, gh), { pos: gmid, rot: [cant, Math.PI, 0], uv: "keep" });
   kit.collider([T.x0 - 0.1, T.y0, zt - 0.2], [T.x1 + 0.1, T.y1, zf + 0.2], "towerglass");
-  // lit lettering on the roof fascia over the glass, facing the bay
-  signPlate(kit, ctx, { side: "zmax", u: 7, v: T.y1 + 0.25, w: 9.6, h: 0.9, text: "Flight Control", sub: "Deck 05 · bay operations", accent: "#4a9dff", bounds: [[-7, 0, -60], [7, 20, zt - 0.42]] });
+  // big white-on-black lettering board standing on the roof edge over the glass, facing the bay
+  const boardZ = zt - 0.5;
+  kit.boxMM("paintedMetal", [-6.6, T.y1 + 0.65, boardZ - 0.06], [6.6, T.y1 + 2.35, boardZ + 0.14], { color: PALETTE.impBlack, texel: 2 });
+  for (const x of [-5.6, 5.6]) kit.box("paintedMetal", x, T.y1 + 0.55, boardZ + 0.3, 0.3, 0.3, 0.7, { color: PALETTE.impBlack, texel: 2 });
+  letterPlate(kit, ctx, { key: "hg_signFlightControl", text: "FLIGHT CONTROL", sub: "DECK 05 · BAY OPERATIONS", x: 0, y: T.y1 + 1.5, z: boardZ - 0.07, w: 12.6, h: 1.5 });
   for (const s of [-1, 1]) {
     const x = s > 0 ? T.x1 : T.x0;
     const zEnd = -39.6;
@@ -804,10 +877,19 @@ function towerAndMezzanine(kit, ctx, B0) {
   kit.box("paintedMetal", 0, T.y0 + 0.45, T.z0 + 4.4, 1.6, 0.9, 1.0, { color: PALETTE.impBlack, texel: 2 });
   kit.box("emitBlue", 0, T.y0 + 0.905, T.z0 + 4.4, 1.3, 0.01, 0.7);
   kit.collider([-0.8, T.y0, T.z0 + 3.9], [0.8, T.y0 + 0.9, T.z0 + 4.9], "holotable");
-  // ceiling light fixtures inside the tower (emissive only; the bay floods light the glass front)
-  for (const z of [T.z0 + 2.4, T.z0 + 5.6]) {
-    kit.box("paintedMetal", 0, T.y1 - 0.06, z, 12, 0.1, 0.6, { color: PALETTE.impBlack, texel: 2 });
-    kit.box("emitWhiteSoft", 0, T.y1 - 0.11, z, 11.6, 0.03, 0.3, { uv: "keep" });
+  // the cab reads as a lit room through the canted glass: two wide warm ceiling panels (what the deck
+  // sees first, looking up through the glass), a lit band along the back wall at desk height that
+  // silhouettes the consoles and chairs, and a row of status screens facing the bay behind the glass
+  kit.box("hg_cabCeil", 0, T.y1 - 0.03, (zt + 0.3 + T.z1 - 0.2) / 2, T.x1 - T.x0 - 0.6, 0.02, T.z1 - 0.2 - (zt + 0.3), { uv: "keep" });
+  for (const z of [T.z0 + 2.4, T.z0 + 5.8]) {
+    kit.box("paintedMetal", 0, T.y1 - 0.06, z, 20, 0.1, 1.4, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("hg_cabLight", 0, T.y1 - 0.115, z, 19.4, 0.03, 1.0, { uv: "keep" });
+  }
+  kit.box("paintedMetal", 0, T.y0 + 0.95, T.z1 - 0.06, 24, 1.2, 0.08, { color: PALETTE.impBlack, texel: 2 });
+  kit.box("hg_cabBack", 0, T.y0 + 0.95, T.z1 - 0.1, 23.4, 0.9, 0.02, { uv: "keep" });
+  for (const x of [-10.5, -8.5, 8.5, 10.5]) {
+    kit.box("paintedMetal", x, T.y0 + 2.2, zf + 0.9, 1.7, 1.1, 0.12, { color: PALETTE.impBlack, texel: 2 });
+    kit.box(x < 0 ? "impScreen1" : "impScreen3", x, T.y0 + 2.2, zf + 0.83, 1.5, 0.9, 0.01, { uv: "keep" });
   }
   // blue status strip along the parapet top, readable from the deck below
   kit.box("emitBlueDim", 0, T.y0 + 1.26, zf - 0.02, T.x1 - T.x0 - 0.6, 0.02, 0.12);
@@ -842,10 +924,10 @@ function racks(kit, ctx, B0) {
     const wallX = s * max[0];
     const zA = RACK_Z[0] - 3.5;
     const zB = RACK_Z[RACK_Z.length - 1] + 3.5;
-    // main gantry beam along the row + lit underside
+    // main gantry beam along the row (no light strip under it: 60 m of emitter over the TIEs read as a
+    // white-hot line from the deck)
     kit.boxMM("paintedMetal", [rx - 0.8, BEAM_Y0, zA], [rx + 0.8, BEAM_Y1, zB], { color: PALETTE.impDark, texel: 1.2 });
     kit.boxMM("hazard", [rx - 0.82, BEAM_Y0 + 0.2, zA], [rx + 0.82, BEAM_Y0 + 0.5, zB], { texel: 0.5 });
-    kit.boxMM("hg_lane", [rx - 0.2, BEAM_Y0 - 0.03, zA + 0.5], [rx + 0.2, BEAM_Y0, zB - 0.5], { uv: "keep" });
     // boarding gantry along the wall at the wing-apex level, from the forward rack to the stair head;
     // the inner railing is broken where the bridges leave it
     const gx0 = Math.min(s * 34.4, s * 35.9);
@@ -867,7 +949,8 @@ function racks(kit, ctx, B0) {
       // cross beam from the wall to the inner rail
       const xin = s * (HOLE.x1 + 1.4);
       kit.boxMM("paintedMetal", [Math.min(wallX, xin), BEAM_Y0 + 0.35, rz - 0.5], [Math.max(wallX, xin), BEAM_Y1 - 0.15, rz + 0.5], { color: PALETTE.impMid, texel: 1.2 });
-      kit.boxMM("hg_lane", [Math.min(rx - 6, rx + 6), BEAM_Y0 + 0.33, rz - 0.08], [Math.max(rx - 6, rx + 6), BEAM_Y0 + 0.35, rz + 0.08], {});
+      for (const dx of [-3.2, 3.2]) kit.box("emitAmber", rx + dx, BEAM_Y0 + 0.3, rz, 0.5, 0.06, 0.2);
+      rackFrame(kit, s, rx, rz, wallX, i);
       // clamp yokes: two arms per wing gripping the top edge at z = rz ± 1.2 (the boarding bridge
       // passes between them), yellow-banded clamp blocks with a green "locked" lamp
       // (the wing hexagon's upper slanted edges pass y = RACK_Y + 2.7 at z = ±1.2, so the blocks straddle them)
@@ -912,6 +995,40 @@ function racks(kit, ctx, B0) {
     });
   }
   void min;
+}
+
+/**
+ * Wall-mounted rack frame around one TIE so "rack" reads from the deck: two heavy uprights behind the
+ * outer wing (x = ±33.4: clear of the wing plane at ±32.65 and of the boarding gantry at ±34.4), wall
+ * brackets tying them back at two heights, a lower rail with two saddle arms reaching under the outer
+ * wing's bottom edge, a mid rail at wing-centre height and a lit status plate. Nothing sits inboard of
+ * the wings or under the TIE's inner half: the taxi path leaves the rack sideways toward the lane.
+ */
+function rackFrame(kit, s, rx, rz, wallX, i) {
+  const ux = s * 33.4;
+  const yBot = RACK_Y - WING_H / 2 - 0.9; // 0.9 under the wing's bottom edge
+  const yTop = BEAM_Y0;
+  for (const dz of [-2.6, 2.6]) {
+    kit.box("paintedMetal", ux, (yBot + yTop) / 2, rz + dz, 0.5, yTop - yBot, 0.5, { color: PALETTE.impMid, texel: 1.5 });
+    for (const y of [yBot + 0.3, RACK_Y + 2.6]) {
+      kit.boxMM("paintedMetal", [Math.min(ux, wallX), y - 0.18, rz + dz - 0.18], [Math.max(ux, wallX), y + 0.18, rz + dz + 0.18], { color: PALETTE.impDark, texel: 2 });
+    }
+  }
+  // lower rail with a yellow band, saddle arms + rubber pads under the outer wing
+  kit.boxMM("paintedMetal", [ux - 0.22, yBot, rz - 2.6], [ux + 0.22, yBot + 0.44, rz + 2.6], { color: PALETTE.impDark, texel: 1.5 });
+  kit.boxMM("hg_paintY", [ux - 0.23, yBot + 0.1, rz - 2.3], [ux + 0.23, yBot + 0.34, rz + 2.3], {});
+  const wx = rx + s * WING_X;
+  for (const dz of [-1.5, 1.5]) {
+    kit.boxMM("paintedMetal", [Math.min(ux, wx - s * 0.3), yBot + 0.1, rz + dz - 0.2], [Math.max(ux, wx - s * 0.3), yBot + 0.4, rz + dz + 0.2], { color: PALETTE.impDark, texel: 2 });
+    kit.box("rubber", wx - s * 0.1, yBot + 0.5, rz + dz, 0.6, 0.2, 0.5, { color: PALETTE.impBlack });
+  }
+  // mid rail at wing-centre height
+  kit.boxMM("paintedMetal", [ux - 0.18, RACK_Y - 0.18, rz - 2.6], [ux + 0.18, RACK_Y + 0.18, rz + 2.6], { color: PALETTE.impDark, texel: 1.5 });
+  // status plate on the lower rail facing the deck: black plate, green "secured" bar, rack index pips
+  const px = ux - s * 0.26;
+  kit.box("paintedMetal", px, yBot - 0.55, rz, 0.06, 0.7, 1.6, { color: PALETTE.impBlack, texel: 2 });
+  kit.box("emitGreen", px - s * 0.035, yBot - 0.35, rz, 0.01, 0.1, 1.3);
+  for (let p = 0; p <= i; p++) kit.box("emitAmber", px - s * 0.035, yBot - 0.72, rz - 0.6 + p * 0.4, 0.01, 0.12, 0.2);
 }
 
 // ---------------------------------------------------------------------------
@@ -994,12 +1111,35 @@ export function bowser(kit, ctx, x, z, yaw) {
   add("paintedMetal", tank, 0, 1.7, -0.2, { color: PALETTE.impGrey, texel: 1 });
   for (const sz of [-1, 1]) add("paintedMetal", new THREE.SphereGeometry(0.95, 18, 10), 0, 1.7, -0.2 + sz * 1.8, { color: PALETTE.impGrey, texel: 1 });
   add("hazard", new THREE.CylinderGeometry(0.97, 0.97, 0.3, 18).rotateX(Math.PI / 2), 0, 1.7, -0.2, { texel: 1 });
+  // tank furniture: yellow product band, manhole cap with a red vent, hazard placard on each side
+  add("hg_paintY", new THREE.CylinderGeometry(0.965, 0.965, 0.16, 18).rotateX(Math.PI / 2), 0, 1.7, -1.3);
+  add("paintedMetal", new THREE.CylinderGeometry(0.34, 0.34, 0.16, 14), 0, 2.72, -0.6, { color: PALETTE.impDark, texel: 2 });
+  add("emitRed", new THREE.BoxGeometry(0.1, 0.12, 0.1), 0.2, 2.86, -0.6);
+  for (const sx of [-1, 1]) {
+    add("paintedMetal", new THREE.BoxGeometry(0.04, 0.74, 0.74), sx * 0.96, 1.75, 0.5, { color: PALETTE.impBlack, texel: 2 });
+    add("decal", new THREE.PlaneGeometry(0.62, 0.62).rotateY(sx * (Math.PI / 2)), sx * 0.985, 1.75, 0.5, { uv: "keep", uvRect: decalRect(1) });
+  }
+  // pump housing with a valve panel: two red valve wheels, a pressure gauge, lit readout + LEDs
   add("paintedMetal", new THREE.BoxGeometry(1.4, 1.3, 0.9), 0, 1.35, 2.05, { color: PALETTE.impDark, texel: 2 });
   add("impPanel", new THREE.BoxGeometry(1.0, 0.6, 0.02), 0, 1.5, 2.51, { color: PALETTE.impGrey, uv: "keep" });
   add("emitAmber", new THREE.BoxGeometry(0.5, 0.08, 0.01), 0, 1.65, 2.525);
   add("leds", new THREE.BoxGeometry(0.6, 0.05, 0.01), 0, 1.4, 2.525, { uv: "keep" });
-  add("metal", new THREE.TorusGeometry(0.5, 0.12, 8, 20).rotateY(Math.PI / 2), 1.2, 1.4, 1.2, { color: PALETTE.impMid });
-  pipeRun(kit, [P(1.25, 1.4, 1.2), P(1.6, 0.6, 1.8), P(1.3, 0.2, 2.9), P(0.4, 0.15, 3.4)], 0.06, PALETTE.impBlack, "rubber");
+  for (const sx of [-0.45, 0.45]) {
+    add("metal", new THREE.CylinderGeometry(0.05, 0.05, 0.2, 8).rotateX(Math.PI / 2), sx, 1.05, 2.55, { color: PALETTE.steel });
+    add("metal", new THREE.TorusGeometry(0.13, 0.025, 6, 14), sx, 1.05, 2.66, { color: new THREE.Color("#b8352a") });
+  }
+  add("metal", new THREE.CylinderGeometry(0.12, 0.12, 0.06, 12).rotateX(Math.PI / 2), 0, 1.06, 2.54, { color: PALETTE.steel });
+  add("emitGreen", new THREE.BoxGeometry(0.02, 0.02, 0.08), 0.04, 1.11, 2.58);
+  // hose reel on the starboard side: drum between two discs, coiled hose, hose to the nozzle on its hook
+  add("paintedMetal", new THREE.BoxGeometry(0.3, 0.6, 0.12), 1.2, 1.05, 1.2, { color: PALETTE.impDark, texel: 2 });
+  for (const dx of [-0.24, 0.24]) add("metal", new THREE.CylinderGeometry(0.5, 0.5, 0.04, 20).rotateZ(Math.PI / 2), 1.2 + dx, 1.4, 1.2, { color: PALETTE.impMid });
+  add("rubber", new THREE.CylinderGeometry(0.42, 0.42, 0.4, 16).rotateZ(Math.PI / 2), 1.2, 1.4, 1.2, { color: PALETTE.impBlack });
+  add("rubber", new THREE.TorusGeometry(0.42, 0.055, 8, 22).rotateY(Math.PI / 2), 1.1, 1.4, 1.2, { color: PALETTE.impBlack });
+  add("rubber", new THREE.TorusGeometry(0.42, 0.055, 8, 22).rotateY(Math.PI / 2), 1.3, 1.4, 1.2, { color: PALETTE.impBlack });
+  pipeRun(kit, [P(1.25, 1.0, 1.2), P(1.6, 0.6, 1.8), P(1.3, 0.2, 2.9), P(0.9, 0.5, 3.0), P(0.86, 1.1, 2.62)], 0.06, PALETTE.impBlack, "rubber");
+  add("metal", new THREE.CylinderGeometry(0.06, 0.09, 0.42, 10), 0.86, 1.32, 2.62, { color: PALETTE.gunmetal });
+  add("hg_paintY", new THREE.BoxGeometry(0.08, 0.16, 0.08), 0.86, 1.4, 2.7);
+  add("metal", new THREE.BoxGeometry(0.16, 0.05, 0.06), 0.86, 1.55, 2.58, { color: PALETTE.steel });
   for (const sx of [-1, 1]) add("metal", new THREE.CylinderGeometry(0.05, 0.05, 1.0, 8), sx * 0.9, 1.2, 2.55, { color: PALETTE.steel });
   add("emitRed", new THREE.BoxGeometry(0.15, 0.08, 0.05), 0.9, 2.55, -0.2);
   const c = Math.abs(Math.cos(yaw));
@@ -1044,6 +1184,43 @@ export function toolCart(kit, ctx, x, z, yaw) {
   void ctx;
 }
 
+/**
+ * Detailed cargo container (the generic `crate` is a plain box): panelled body on two skids inside a
+ * black frame with corner posts, two latch bars with steel latches on the front face, a white label
+ * plate with a stencil and a status lamp. The front face is +z before `yaw`; `tone` picks the body
+ * colour, `label` the decal cell (11 cargo, 6 barcode label, 14 B-12, 9 spec plate).
+ */
+export function cargoPod(kit, ctx, { x, y = 0, z, sx = 1.4, sy = 1.1, sz = 1.3, yaw = 0, tone = 0, label = 11, collide = true }) {
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const v = new THREE.Vector3(lx, ly, lz).applyQuaternion(q);
+    return kit.add(mat, geo, { pos: [v.x + x, y + ly, v.z + z], quat: q, ...extra });
+  };
+  const box = (mat, lx, ly, lz, w, h, d, extra = {}) => add(mat, new THREE.BoxGeometry(w, h, d), lx, ly, lz, extra);
+  const body = [PALETTE.impGrey, PALETTE.impMid, PALETTE.impLight, PALETTE.impDark][((tone % 4) + 4) % 4];
+  box("impPanel1", 0, sy / 2 + 0.04, 0, sx - 0.1, sy - 0.16, sz - 0.1, { color: body, uv: "keep" });
+  for (const s of [-1, 1]) box("paintedMetal", s * (sx / 2 - 0.16), 0.04, 0, 0.22, 0.08, sz - 0.1, { color: PALETTE.impBlack, texel: 2 });
+  for (const ly of [0.12, sy - 0.04]) box("paintedMetal", 0, ly, 0, sx, 0.08, sz, { color: PALETTE.impBlack, texel: 2 });
+  for (const s of [-1, 1]) for (const t of [-1, 1]) box("paintedMetal", s * (sx / 2 - 0.06), sy / 2, t * (sz / 2 - 0.06), 0.12, sy, 0.12, { color: PALETTE.impBlack, texel: 2 });
+  const fz = sz / 2 - 0.05;
+  for (const ly of [sy * 0.34, sy * 0.72]) {
+    box("metal", 0, ly, fz + 0.03, sx - 0.36, 0.05, 0.04, { color: PALETTE.gunmetal });
+    for (const s of [-1, 1]) box("metal", s * (sx / 2 - 0.32), ly, fz + 0.05, 0.12, 0.16, 0.06, { color: PALETTE.steel });
+  }
+  const lw = Math.min(sx * 0.32, sy * 0.5);
+  box("impPanel", -sx * 0.2, sy * 0.53, fz + 0.012, lw, lw * 0.7, 0.012, { color: PALETTE.impWhite, uv: "keep" });
+  add("decal", new THREE.PlaneGeometry(lw * 0.6, lw * 0.6), -sx * 0.2, sy * 0.53, fz + 0.02, { uv: "keep", uvRect: decalRect(label) });
+  box(tone % 2 ? "emitGreen" : "emitAmber", sx * 0.24, sy * 0.53, fz + 0.02, 0.12, 0.04, 0.01);
+  if (collide) {
+    const c = Math.abs(Math.cos(yaw));
+    const s = Math.abs(Math.sin(yaw));
+    const ex = (sx * c + sz * s) / 2;
+    const ez = (sx * s + sz * c) / 2;
+    kit.collider([x - ex, y, z - ez], [x + ex, y + sy, z + ez], "container");
+  }
+  void ctx;
+}
+
 /** Red fire-suppression cabinet on a wall with a stencil and a lamp. */
 function fireCabinet(kit, ctx, side, u, bounds) {
   const seg = wallSegment(bounds, side);
@@ -1058,19 +1235,23 @@ function fireCabinet(kit, ctx, side, u, bounds) {
 }
 
 // ---------------------------------------------------------------------------
-// Lighting: two ceiling spots pooling light on the aprons and four hanging rigs over the aprons'
-// inner edges. The blue field / red beacon light is owned by beacons(). Five point lights + two
-// spots in total so the pool (14 + 2) has room for the corridor and the two side bays (3 each).
+// Lighting: two ceiling spots pooling light on the aprons, four warm hanging rigs over the aprons'
+// inner edges (warm so the lit deck reads through the field from outside), and a warm lamp inside
+// the flight-control cab. Five point lights + two spots in total so the pool (14 + 2) has room for
+// the corridor and the two side bays (3 each).
 // ---------------------------------------------------------------------------
 function lighting(kit, ctx, B0) {
   SPOTS.forEach(([x, z], i) => {
-    const s = new THREE.SpotLight(0xf4f7ff, 900 * LIGHT_SCALE, 62, 0.8, 0.6, 2);
+    const s = new THREE.SpotLight(0xfff1de, 540 * LIGHT_SCALE, 62, 0.8, 0.6, 2);
     s.position.set(x, CEIL - 2.9, z);
     s.target.position.set(x, 0, z);
     s.castShadow = i === 0; // the pool's shadow-casting slot goes to the aft apron flood
     ctx.light(s);
   });
-  for (const [x, z] of RIGS) ctx.light(pointLight(0xf3f6ff, 190, 60, [x, RIG_Y - 0.8, z]));
+  // hung 2.6 m under the rig so the rig's own underside is not the brightest thing in the room
+  for (const [x, z] of RIGS) ctx.light(pointLight(0xffe0bd, 190, 60, [x, RIG_Y - 2.6, z]));
+  // cab light: warm, inside the tower, lights the consoles and crew silhouettes behind the glass
+  ctx.light(pointLight(0xffc27a, 34, 18, [0, TOWER.y1 - 0.6, TOWER.z0 + 3.6]));
   void kit;
   void B0;
 }
@@ -1148,12 +1329,14 @@ function bayDoors(ctx, wellGroup) {
 }
 
 // ---------------------------------------------------------------------------
-// Warning beacons: four 6 m corner masts just outside the curb with red beacon heads, and a sign
-// gantry across the launch lane at the aft curb carrying the lit "BAY 05" plate toward the entry
-// (with two more beacons). The lamps breathe slowly when idle and strobe while the doors move. The
-// single point light here doubles as the field's blue glow when the doors are open (one pool slot).
+// Warning beacons: four slim 6 m poles with red dome heads a few metres beyond the curb corners
+// (set 6.5 m off the well's ends so none stands in the foreground of the fixed deck / rack cameras
+// at the aft corners), and a sign gantry across the launch lane at the aft curb carrying the lit
+// "BAY 05" plate toward the entry (with two more beacons). The lamps breathe slowly when idle and
+// strobe while the doors move; they are emissive only (the pool slot went to the tower cab light).
 // ---------------------------------------------------------------------------
 const MAST_H = 6;
+const MAST_OFF = 6.5; // masts sit this far beyond the well's ends along z
 const GANTRY = { x: 12.5, z: -56.2, h: 7.0 };
 function beacons(ctx) {
   const k = new Kit(ctx.materials);
@@ -1165,15 +1348,18 @@ function beacons(ctx) {
     k.box("hg_beaconAmber", x, y + 1.06, z, 0.18, 0.28, 0.18);
     k.cyl("metal", x, y + 1.24, z, 0.1, 0.08, "y", { color: PALETTE.gunmetal, segments: 8 });
   };
+  // slim poles: 0.28 m tube on a low plinth, two yellow bands, a red ring lamp, black collar + red dome
   for (const x of [HOLE.x0 - 2.6, HOLE.x1 + 2.6]) {
-    for (const z of [HOLE.z0 - 2.6, HOLE.z1 + 2.6]) {
-      k.box("paintedMetal", x, 0.25, z, 1.0, 0.5, 1.0, { color: PALETTE.impBlack, texel: 2 });
-      k.box("paintedMetal", x, MAST_H / 2 + 0.5, z, 0.44, MAST_H, 0.44, { color: PALETTE.impDark, texel: 1.5 });
-      k.box("hg_paintY", x, 1.5, z, 0.46, 0.9, 0.46);
-      k.box("hg_paintY", x, 4.9, z, 0.46, 0.5, 0.46);
-      k.box("emitRed", x, 3.4, z, 0.47, 0.08, 0.47);
-      head(x, z, MAST_H + 0.5);
-      ctx.collider([x - 0.5, 0, z - 0.5], [x + 0.5, MAST_H + 1.8, z + 0.5], "mast");
+    for (const z of [HOLE.z0 - MAST_OFF, HOLE.z1 + MAST_OFF]) {
+      k.box("paintedMetal", x, 0.1, z, 0.6, 0.2, 0.6, { color: PALETTE.impBlack, texel: 2 });
+      k.cyl("paintedMetal", x, MAST_H / 2 + 0.2, z, 0.14, MAST_H, "y", { color: PALETTE.impDark, segments: 10, texel: 1.5 });
+      k.cyl("hg_paintY", x, 1.3, z, 0.15, 0.5, "y", { segments: 10 });
+      k.cyl("hg_paintY", x, 4.8, z, 0.15, 0.36, "y", { segments: 10 });
+      k.cyl("emitRed", x, 3.1, z, 0.152, 0.06, "y", { segments: 10 });
+      const top = MAST_H + 0.2;
+      k.cyl("paintedMetal", x, top + 0.07, z, 0.21, 0.14, "y", { color: PALETTE.impBlack, segments: 12, texel: 2 });
+      k.add("hg_beaconRed", new THREE.SphereGeometry(0.2, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [x, top + 0.14, z] });
+      ctx.collider([x - 0.25, 0, z - 0.25], [x + 0.25, top + 0.4, z + 0.25], "mast");
     }
   }
   // sign gantry: two posts outside the lane edges, a header beam with the plate facing the entry
@@ -1193,23 +1379,17 @@ function beacons(ctx) {
   ctx.mesh(g);
   const red = ctx.materials.hg_beaconRed;
   const amber = ctx.materials.hg_beaconAmber;
-  const BLUE = new THREE.Color(0x3f8cff);
-  const RED = new THREE.Color(0xff3a20);
-  const light = ctx.light(pointLight(0x3f8cff, 0, 60, [0, 2.6, (HOLE.z0 + HOLE.z1) / 2]));
   return (o, t, moving) => {
     if (moving) {
       const p = Math.max(0, Math.sin(t * 7));
       const q = Math.max(0, Math.sin(t * 7 + Math.PI));
       red.emissiveIntensity = 0.6 + 5 * p;
       amber.emissiveIntensity = 0.6 + 4 * q;
-      light.color.copy(RED);
-      light.intensity = 40 * p * LIGHT_SCALE;
     } else {
       red.emissiveIntensity = 1.7 + 0.9 * Math.sin(t * 2.4);
       amber.emissiveIntensity = 1.3 + 0.5 * Math.sin(t * 2.4 + Math.PI);
-      light.color.copy(BLUE);
-      light.intensity = 26 * o * LIGHT_SCALE;
     }
+    void o;
   };
 }
 
@@ -1218,7 +1398,28 @@ function beacons(ctx) {
 // ---------------------------------------------------------------------------
 function containmentField(ctx) {
   const mat = ctx.materials.hg_field;
-  const geo = new THREE.PlaneGeometry(HOLE.x1 - HOLE.x0 - 0.3, HOLE.z1 - HOLE.z0 - 0.3);
+  const w = HOLE.x1 - HOLE.x0 - 0.3;
+  const d = HOLE.z1 - HOLE.z0 - 0.3;
+  const FADE = 2.0; // the outer 2 m fade out (vertex colour → black adds nothing)
+  // 3 × 3 quads: the 16 vertices of a 4 × 4 grid are pulled to the fade ring, then coloured
+  const geo = new THREE.PlaneGeometry(w, d, 3, 3);
+  const pos = geo.attributes.position;
+  const col = new Float32Array(pos.count * 3);
+  const stops = (len) => [-len / 2, -len / 2 + FADE, len / 2 - FADE, len / 2];
+  const sx = stops(w);
+  const sy = stops(d);
+  for (let j = 0; j < 4; j++) {
+    for (let i = 0; i < 4; i++) {
+      const v = j * 4 + i;
+      pos.setXY(v, sx[i], sy[3 - j]);
+      const inner = i > 0 && i < 3 && j > 0 && j < 3 ? 1 : 0;
+      col[v * 3] = col[v * 3 + 1] = col[v * 3 + 2] = inner;
+    }
+  }
+  // uvs follow the vertex positions so the 1 m cells stay square across the ring
+  const uv = geo.attributes.uv;
+  for (let v = 0; v < pos.count; v++) uv.setXY(v, pos.getX(v) / w + 0.5, pos.getY(v) / d + 0.5);
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
   geo.rotateX(-Math.PI / 2);
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.set(0, FIELD_Y, (HOLE.z0 + HOLE.z1) / 2);
@@ -1226,8 +1427,9 @@ function containmentField(ctx) {
   mesh.frustumCulled = true;
   ctx.mesh(mesh);
   return (t, o) => {
-    mat.map.offset.set((t * 0.011) % 1, (-t * 0.017) % 1);
-    mat.opacity = 0.48 + 0.05 * Math.sin(t * 1.6) + 0.02 * Math.sin(t * 4.3);
+    // slow drift + gentle breathing; it must stay see-through (0.3 ± 0.04)
+    mat.map.offset.set((t * 0.006) % 1, (-t * 0.009) % 1);
+    mat.opacity = 0.3 + 0.03 * Math.sin(t * 1.1) + 0.012 * Math.sin(t * 3.7);
     // nothing of it shows under the shut leaves; skip the blend when closed
     mesh.visible = o > 0.002;
   };

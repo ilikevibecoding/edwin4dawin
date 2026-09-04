@@ -1,25 +1,30 @@
 // Deck 5 — Cargo Lift & Logistics. A 25 × 22 × 7 m logistics hall between the access corridor and
 // the hangar: a big fenced cargo lift that cycles between the deck and +3 m, a long roller conveyor
-// feeding it on the forward side and a short one with a weigh station on the aft side, container
-// stacks (tall on the forward wall, a low row plus drums and a loader tug on the aft wall), a logistics
-// station with inventory screens, a ceiling hoist on a rail carrying a container over the lane, and
-// hazard-striped traffic lanes. Three real lights: two ceiling floods and the amber lift lamp.
+// feeding it on the forward side with a container wall behind it, and on the aft side (no conveyor) a
+// weigh station, a loader tug, drums and pallets, a logistics station with inventory screens, a
+// ceiling hoist on a rail carrying a slung container over the lane, and hazard-striped traffic lanes.
+// Three real lights: two ceiling floods and the amber lift lamp.
 //
 // Deck-local metres, floor y = 0. Room bounds x 2.9..28, y 0..7, z -30..-8; blast door on xmin at z = -19.
 import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
-import { roomShell, impConsole, wallScreen, equipmentRack, crate, railing, pipeRun, pillar, wallSegment } from "../imperial.js";
+import { roomShell, impConsole, wallScreen, equipmentRack, railing, pipeRun, pillar, wallSegment } from "../imperial.js";
 import { pointLight, wallFrame } from "../builders.js";
 import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
+import { cargoPod } from "./hangar.js";
 
 const LIFT = { x: 22.5, z: -19, half: 3.2 };
-const LANES = [-24.5, -13.5]; // conveyor centre lines (z): forward (long) / aft (short, weigh station)
+const LANES = [-24.5, -13.5]; // forward (long roller conveyor) / aft (weigh station + handling apron)
 
 export function buildHangarCargo(kit, ctx) {
   const [min, max] = ctx.bounds;
   const rand = rng(ctx.seed + 33);
+  ensureMaterials(ctx);
   roomShell(kit, ctx, {
+    // the same dark gloss deck as the hangar: darkened, and lit softly enough that the plate speckle
+    // does not read as a light terrazzo
+    floor: { color: 0x666c74, texel: 0.4 },
     walls: {
       rows: [0, 0.5, 2.0, 3.4, 5.2, max[1]],
       panelW: 1.8,
@@ -37,13 +42,12 @@ export function buildHangarCargo(kit, ctx) {
       rowH: 2.6,
       spacing: 6,
       maxLights: 2, // two floods + the amber lift light: the pool is shared with the hangar next door
-      lightIntensity: 26,
+      lightIntensity: 17,
       lightDistance: 24,
       styles: { panel: 0.86, greeble: 0.06, vent: 0.08 },
       paints: [
-        [PALETTE.impLight, 0.5],
-        [PALETTE.impGrey, 0.35],
-        [PALETTE.impMid, 0.15],
+        [PALETTE.impMid, 0.7],
+        [PALETTE.impGrey, 0.3],
       ],
     },
   });
@@ -52,9 +56,12 @@ export function buildHangarCargo(kit, ctx) {
     pillar(kit, 18, z, 0, max[1], 0.6, PALETTE.impMid);
   }
   hazardLanes(kit, min, max);
+  // forward side: the long roller conveyor feeding the lift, a container wall behind it;
+  // aft side: no conveyor — the weigh station, a loader tug, drums and low pallets (the two sides
+  // of the lane read differently)
   conveyor(kit, ctx, 6.5, LIFT.x - LIFT.half - 1.6, LANES[0], rand, { density: 0.55 });
-  conveyor(kit, ctx, 11.5, LIFT.x - LIFT.half - 1.6, LANES[1], rand, { density: 0.3 });
   weighStation(kit, ctx, 7.6, LANES[1]);
+  handlingApron(kit, ctx, min, max, rand);
   cargoLift(kit, ctx);
   containers(kit, ctx, min, max, rand);
   logistics(kit, ctx, min, max);
@@ -62,50 +69,104 @@ export function buildHangarCargo(kit, ctx) {
   ctx.light(pointLight(0xffb060, 14, 18, [LIFT.x, 5.6, LIFT.z]));
 }
 
+function ensureMaterials(ctx) {
+  const m = ctx.materials;
+  // lane edge / lift frame lamps: 20 m of amber strip 2 m from the camera bloomed white at emitAmber's 2.2
+  if (!m.hc_amber) {
+    m.hc_amber = m.emitAmber.clone();
+    m.hc_amber.emissiveIntensity = 0.9;
+  }
+}
+
 // ---------------------------------------------------------------------------
 function hazardLanes(kit, min, max) {
   // a black lane from the door to the lift with amber edge lights; hazard bands at the conveyor ends
   const z0 = -20.8;
   const z1 = -17.2;
-  kit.boxMM("paintedMetal", [min[0] + 0.4, 0, z0], [LIFT.x - LIFT.half - 1.0, 0.012, z1], { color: PALETTE.impBlack, texel: 2 });
+  // the lane itself is a darker band of the same gloss deck (a black painted-metal slab here read as a
+  // speckled terrazzo under the floods)
+  kit.boxMM("floorGloss", [min[0] + 0.4, 0, z0], [LIFT.x - LIFT.half - 1.0, 0.012, z1], { color: 0x2c3036, texel: 0.33 });
   for (const z of [z0, z1]) {
     kit.boxMM("hazard", [min[0] + 0.4, 0, z - 0.2], [LIFT.x - LIFT.half - 1.0, 0.014, z + 0.2], { texel: 0.7 });
-    for (let x = min[0] + 1.5; x < LIFT.x - LIFT.half - 1.6; x += 2.2) kit.boxMM("emitAmber", [x, 0.014, z - 0.06], [x + 1.0, 0.026, z + 0.06], {});
+    for (let x = min[0] + 1.5; x < LIFT.x - LIFT.half - 1.6; x += 2.2) kit.boxMM("hc_amber", [x, 0.014, z - 0.06], [x + 1.0, 0.026, z + 0.06], {});
   }
   void max;
 }
 
 // ---------------------------------------------------------------------------
-// Roller conveyor along x: low side rails on legs, steel rollers standing proud of the rails so they
-// read from the lane, a drive box, a control post, crates riding on it (`density` = share of the run)
+// Aft handling apron (no conveyor on this side): a loader tug with a container on its forks, a drum
+// row against the wall, a stack of empty pallets and a hand pallet jack
+// ---------------------------------------------------------------------------
+function handlingApron(kit, ctx, min, max, rand) {
+  // loader tug: low chassis on four wheels, cab with dark glazing, forks carrying a container
+  const tx = 13.2;
+  const tz = -12.6;
+  kit.box("paintedMetal", tx, 0.5, tz, 3.0, 0.6, 1.6, { color: PALETTE.impMid, texel: 1.5 });
+  kit.box("hazard", tx, 0.2, tz, 3.04, 0.2, 1.64, { texel: 1 });
+  kit.box("paintedMetal", tx + 0.9, 1.35, tz, 1.2, 1.1, 1.4, { color: PALETTE.impDark, texel: 1.5 });
+  kit.box("tieGlass", tx + 0.29, 1.5, tz, 0.04, 0.6, 1.2);
+  kit.box("emitAmber", tx + 0.9, 1.95, tz, 0.3, 0.1, 0.3);
+  for (const sx of [-1.0, 1.0]) for (const sz of [-0.85, 0.85]) kit.cyl("rubber", tx + sx, 0.3, tz + sz, 0.3, 0.3, "z", { color: PALETTE.impBlack, segments: 12 });
+  kit.box("paintedMetal", tx - 1.6, 0.9, tz, 0.2, 1.6, 1.3, { color: PALETTE.impDark, texel: 2 });
+  for (const sz of [-0.45, 0.45]) kit.box("metal", tx - 2.4, 0.25, tz + sz, 1.6, 0.1, 0.14, { color: PALETTE.steel });
+  cargoPod(kit, ctx, { x: tx - 2.4, y: 0.3, z: tz, sx: 1.3, sy: 1.0, sz: 1.3, yaw: Math.PI / 2, tone: 1, label: 14, collide: false });
+  kit.collider([tx - 3.2, 0, tz - 0.95], [tx + 1.6, 2.0, tz + 0.95], "tug");
+  // drums against the aft wall
+  for (let i = 0; i < 5; i++) {
+    const x = 15.5 + i * 1.05 + (rand() - 0.5) * 0.2;
+    const z = max[2] - 1.2 + (rand() - 0.5) * 0.3;
+    kit.cyl("paintedMetal", x, 0.6, z, 0.42, 1.2, "y", { color: i % 3 ? PALETTE.impMid : PALETTE.impGrey, segments: 14, texel: 1 });
+    kit.cyl("hazard", x, 0.6, z, 0.43, 0.2, "y", { segments: 14, texel: 1 });
+    kit.collider([x - 0.45, 0, z - 0.45], [x + 0.45, 1.25, z + 0.45], "drum");
+  }
+  // empty pallets and a hand pallet jack parked by the weigh station
+  for (let i = 0; i < 5; i++) kit.box("paintedMetal", 10.4, 0.08 + i * 0.18, -10.4, 2.4, 0.14, 1.8, { color: i % 2 ? PALETTE.impDark : PALETTE.impMid, texel: 2 });
+  kit.collider([9.2, 0, -11.3], [11.6, 1.0, -9.5], "pallets");
+  for (const sz of [-0.3, 0.3]) kit.box("metal", 7.4, 0.12, -10.6 + sz, 1.6, 0.08, 0.16, { color: PALETTE.steel });
+  kit.box("paintedMetal", 6.5, 0.35, -10.6, 0.4, 0.5, 0.7, { color: PALETTE.impDark, texel: 2 });
+  kit.add("metal", new THREE.CylinderGeometry(0.02, 0.02, 1.2, 6), { pos: [6.1, 0.9, -10.6], rot: [0, 0, 0.5], color: PALETTE.steel });
+  kit.collider([6.2, 0, -11.0], [8.2, 0.6, -10.2], "jack");
+  void min;
+}
+
+// ---------------------------------------------------------------------------
+// Roller conveyor along x: tall dark side rails (hazard band outside, steel lip on top) on legs, a black
+// belt band between them and fat steel rollers standing proud of the belt, a drive box at the lift end,
+// a control post at the door end, containers riding it (`density` = share of the run)
 // ---------------------------------------------------------------------------
 function conveyor(kit, ctx, x0, x1, z, rand, { density = 0.5 } = {}) {
-  const y = 0.85;
-  const w = 1.3;
+  const y = 0.85; // roller axis height
+  const w = 1.4; // rail spacing
   for (const s of [-1, 1]) {
-    kit.boxMM("paintedMetal", [x0, y - 0.16, z + s * (w / 2) - 0.06], [x1, y - 0.02, z + s * (w / 2) + 0.06], { color: PALETTE.impDark, texel: 2 });
-    kit.boxMM("hazard", [x0 + 0.3, y - 0.14, z + s * (w / 2) + s * 0.061], [x1 - 0.3, y - 0.04, z + s * (w / 2) + s * 0.062], { texel: 0.5 });
+    const rz = z + s * (w / 2);
+    kit.boxMM("paintedMetal", [x0, y - 0.45, rz - 0.05], [x1, y + 0.06, rz + 0.05], { color: PALETTE.impDark, texel: 2 });
+    kit.boxMM("hazard", [x0 + 0.3, y - 0.36, rz + s * 0.051], [x1 - 0.3, y - 0.14, rz + s * 0.056], { texel: 0.7 });
+    kit.boxMM("metal", [x0, y + 0.06, rz - 0.07], [x1, y + 0.1, rz + 0.07], { color: PALETTE.steel });
   }
+  // belt band under the rollers and the legs / cross ties
+  kit.boxMM("rubber", [x0 + 0.1, y - 0.2, z - w / 2 + 0.05], [x1 - 0.1, y - 0.06, z + w / 2 - 0.05], { color: PALETTE.impBlack });
   for (let x = x0 + 0.4; x < x1; x += 2.2) {
-    for (const s of [-1, 1]) kit.box("paintedMetal", x, (y - 0.16) / 2, z + s * (w / 2), 0.1, y - 0.16, 0.1, { color: PALETTE.impDark, texel: 2 });
+    for (const s of [-1, 1]) kit.box("paintedMetal", x, (y - 0.45) / 2, z + s * (w / 2), 0.12, y - 0.45, 0.12, { color: PALETTE.impDark, texel: 2 });
     kit.box("paintedMetal", x, 0.04, z, 0.3, 0.08, w + 0.3, { color: PALETTE.impBlack, texel: 2 });
-    kit.box("paintedMetal", x, y - 0.3, z, 0.08, 0.06, w, { color: PALETTE.impDark, texel: 2 });
+    kit.box("paintedMetal", x, y - 0.5, z, 0.1, 0.08, w, { color: PALETTE.impDark, texel: 2 });
   }
-  for (let x = x0 + 0.25; x < x1 - 0.2; x += 0.3) kit.cyl("metal", x, y, z, 0.09, w - 0.14, "z", { color: PALETTE.steel, segments: 10 });
+  for (let x = x0 + 0.3; x < x1 - 0.2; x += 0.42) kit.cyl("metal", x, y, z, 0.11, w - 0.12, "z", { color: PALETTE.steel, segments: 12 });
   // drive housing at the lift end, control post at the door end
-  kit.box("paintedMetal", x1 - 0.5, y - 0.35, z, 1.0, 0.5, w + 0.2, { color: PALETTE.impDark, texel: 2 });
-  kit.box("emitGreen", x1 - 0.5, y - 0.35, z + w / 2 + 0.11, 0.3, 0.08, 0.01);
+  kit.box("paintedMetal", x1 - 0.5, y - 0.3, z, 1.0, 0.7, w + 0.3, { color: PALETTE.impDark, texel: 2 });
+  kit.box("emitGreen", x1 - 0.5, y - 0.2, z + w / 2 + 0.16, 0.3, 0.08, 0.01);
   kit.box("paintedMetal", x0 - 0.2, 0.6, z + w / 2 + 0.5, 0.3, 1.2, 0.3, { color: PALETTE.impDark, texel: 2 });
   kit.box("impScreen1", x0 - 0.2, 1.22, z + w / 2 + 0.5, 0.26, 0.02, 0.26, { uv: "keep" });
   kit.box("emitAmber", x0 - 0.05, 1.0, z + w / 2 + 0.5, 0.01, 0.06, 0.16);
   kit.collider([x0 - 0.1, 0, z - w / 2 - 0.15], [x1, y + 0.1, z + w / 2 + 0.15], "conveyor");
   kit.collider([x0 - 0.35, 0, z + w / 2 + 0.35], [x0 - 0.05, 1.25, z + w / 2 + 0.65], "post");
-  // crates riding the rollers
+  // containers riding the rollers
   let x = x0 + 1.0 + rand() * 1.5;
+  let n = 0;
   while (x < x1 - 1.8) {
-    const sx = 0.8 + rand() * 0.7;
-    crate(kit, ctx, { x: x + sx / 2, y: y + 0.09, z, sx, sy: 0.6 + rand() * 0.6, sz: 0.9 + rand() * 0.3, yaw: 0, seed: ctx.seed + Math.floor(x * 7) });
+    const sx = 0.9 + rand() * 0.6;
+    cargoPod(kit, ctx, { x: x + sx / 2, y: y + 0.11, z, sx, sy: 0.7 + rand() * 0.5, sz: 1.0 + rand() * 0.2, yaw: 0, tone: n, label: [11, 6, 14, 9][n % 4], collide: false });
     x += sx + (1.2 + rand() * 3.5) * (0.5 / density);
+    n++;
   }
 }
 
@@ -141,8 +202,8 @@ function cargoLift(kit, ctx) {
   }
   kit.boxMM("paintedMetal", [x - half - 0.55, H - 0.5, z - half - 0.55], [x + half + 0.55, H, z + half + 0.55], { color: PALETTE.impDark, texel: 2 });
   kit.boxMM("hazard", [x - half - 0.56, H - 0.45, z - half - 0.56], [x + half + 0.56, H - 0.15, z - half - 0.54], { texel: 1 });
-  kit.boxMM("emitAmber", [x - half, H - 0.52, z - 0.15], [x + half, H - 0.5, z + 0.15], {});
-  kit.boxMM("emitAmber", [x - 0.15, H - 0.52, z - half], [x + 0.15, H - 0.5, z + half], {});
+  kit.boxMM("hc_amber", [x - half, H - 0.52, z - 0.15], [x + half, H - 0.5, z + 0.15], {});
+  kit.boxMM("hc_amber", [x - 0.15, H - 0.52, z - half], [x + 0.15, H - 0.5, z + half], {});
   // recessed pit (dark) under the platform and the hazard curb around it
   kit.boxMM("paintedMetal", [x - half - 0.1, -0.5, z - half - 0.1], [x + half + 0.1, -0.02, z + half + 0.1], { color: PALETTE.impBlack, texel: 2 });
   kit.boxMM("hazard", [x - half - 0.7, 0, z - half - 0.7], [x + half + 0.7, 0.04, z + half + 0.7], { texel: 1 });
@@ -176,10 +237,10 @@ function cargoLift(kit, ctx) {
   k.box("emitWhite", 0, -0.29, -half - 0.01, half * 2 - 0.6, 0.04, 0.01);
   // pallet of containers riding the lift
   k.box("paintedMetal", 0, 0.08, 0, 2.8, 0.16, 2.2, { color: PALETTE.impDark, texel: 2 });
-  crateOn(k, -0.7, 0.16, -0.4, 1.3, 1.1, 1.3, PALETTE.impMid);
-  crateOn(k, 0.7, 0.16, -0.4, 1.2, 0.9, 1.3, PALETTE.impGrey);
-  crateOn(k, 0.0, 0.16, 0.7, 1.4, 0.8, 0.8, PALETTE.impDark);
-  crateOn(k, -0.65, 1.26, -0.4, 1.1, 0.8, 1.1, PALETTE.impGrey);
+  cargoPod(k, ctx, { x: -0.7, y: 0.16, z: -0.4, sx: 1.3, sy: 1.1, sz: 1.3, yaw: -Math.PI / 2, tone: 1, label: 11, collide: false });
+  cargoPod(k, ctx, { x: 0.7, y: 0.16, z: -0.4, sx: 1.2, sy: 0.9, sz: 1.3, yaw: -Math.PI / 2, tone: 0, label: 6, collide: false });
+  cargoPod(k, ctx, { x: 0.0, y: 0.16, z: 0.7, sx: 1.4, sy: 0.8, sz: 0.8, yaw: -Math.PI / 2, tone: 3, label: 9, collide: false });
+  cargoPod(k, ctx, { x: -0.65, y: 1.26, z: -0.4, sx: 1.1, sy: 0.8, sz: 1.1, yaw: -Math.PI / 2, tone: 2, label: 14, collide: false });
   k.build(g);
   g.position.set(x, 0.05, z);
   ctx.mesh(g);
@@ -190,34 +251,23 @@ function cargoLift(kit, ctx) {
   });
 }
 
-function crateOn(k, x, y, z, sx, sy, sz, col) {
-  k.box("impPanel1", x, y + sy / 2, z, sx, sy, sz, { color: col, uv: "keep" });
-  k.box("paintedMetal", x, y + sy * 0.06, z, sx + 0.03, sy * 0.12, sz + 0.03, { color: PALETTE.impBlack, texel: 2 });
-  k.box("paintedMetal", x, y + sy * 0.95, z, sx + 0.03, sy * 0.1, sz + 0.03, { color: PALETTE.impBlack, texel: 2 });
-  k.box("emitBlue", x + sx * 0.25, y + sy * 0.5, z + sz / 2 + 0.006, 0.12, 0.03, 0.01);
-}
-
 // ---------------------------------------------------------------------------
 function containers(kit, ctx, min, max, rand) {
-  // stacks along the forward and aft walls, a tall stack by the lift, numbered bay marks on the floor
-  const stack = (x, z, cols, rows, seed) => {
-    for (let i = 0; i < cols; i++) {
-      for (let j = 0; j < rows; j++) {
-        if (j > 0 && rand() < 0.3) continue;
-        crate(kit, ctx, { x: x + i * 1.5, y: j * 1.15, z, sx: 1.35, sy: 1.1, sz: 1.35, yaw: (rand() - 0.5) * 0.06, seed: seed + i * 3 + j });
+  // forward wall: a container wall behind the conveyor, two and three high with a ragged top line;
+  // aft wall: only a low pair by the door (the rest of that side is the handling apron)
+  const wall = (x, z, heights, tone0) => {
+    heights.forEach((h, i) => {
+      for (let j = 0; j < h; j++) {
+        cargoPod(kit, ctx, { x: x + i * 1.55, y: j * 1.12, z, sx: 1.4, sy: 1.1, sz: 1.35, yaw: (rand() - 0.5) * 0.05, tone: tone0 + i + j, label: [11, 6, 14, 9, 11][(i + j) % 5] });
       }
-    }
-    kit.boxMM("hazard", [x - 0.9, 0, z - 0.9], [x + (cols - 1) * 1.5 + 0.9, 0.012, z - 0.86], { texel: 1 });
+    });
+    kit.boxMM("hazard", [x - 0.9, 0, z - 0.95], [x + (heights.length - 1) * 1.55 + 0.9, 0.012, z - 0.91], { texel: 1 });
   };
-  stack(6.5, min[2] + 1.0, 5, 2, ctx.seed + 11);
-  stack(15.5, min[2] + 1.0, 3, 3, ctx.seed + 21);
-  stack(6.5, max[2] - 1.0, 4, 2, ctx.seed + 31);
-  stack(14.0, max[2] - 1.0, 2, 2, ctx.seed + 41);
-  // loose containers waiting at the lift gate and a stack of empty pallets
-  crate(kit, ctx, { x: 16.5, z: -16.0, sx: 1.6, sy: 1.3, sz: 1.4, yaw: 0.2, seed: ctx.seed + 51 });
-  crate(kit, ctx, { x: 16.3, z: -22.3, sx: 1.2, sy: 0.9, sz: 1.2, yaw: -0.3, seed: ctx.seed + 52 });
-  for (let i = 0; i < 4; i++) kit.box("paintedMetal", 25.5, 0.08 + i * 0.18, -10.5, 2.4, 0.14, 1.8, { color: i % 2 ? PALETTE.impDark : PALETTE.impMid, texel: 2 });
-  kit.collider([24.3, 0, -11.4], [26.7, 0.8, -9.6], "pallets");
+  wall(6.5, min[2] + 1.05, [3, 3, 2, 3, 3, 1, 2, 3], 0);
+  wall(6.5, max[2] - 1.05, [1, 1], 2);
+  // loose containers waiting at the lift gate
+  cargoPod(kit, ctx, { x: 16.5, z: -16.0, sx: 1.6, sy: 1.3, sz: 1.4, yaw: 0.2 - Math.PI / 2, tone: 2, label: 11 });
+  cargoPod(kit, ctx, { x: 16.3, z: -22.3, sx: 1.2, sy: 0.9, sz: 1.2, yaw: -0.3 - Math.PI / 2, tone: 3, label: 6 });
   void max;
 }
 
@@ -253,8 +303,8 @@ function logistics(kit, ctx, min, max) {
   decal("xmin", -8 - -19 - 3.0, 2.2, 5, 1.2); // z = -16
   decal("zmin", 20 - min[0], 3.0, 13, 1.4);
   // pipes and a cable tray along the forward wall over the container stacks
-  pipeRun(kit, [[min[0] + 0.3, 3.2, min[2] + 0.5], [max[0] - 0.3, 3.2, min[2] + 0.5]], 0.09, PALETTE.impMid, "metal");
-  pipeRun(kit, [[min[0] + 0.3, 3.5, min[2] + 0.5], [max[0] - 0.3, 3.5, min[2] + 0.5]], 0.06, PALETTE.impDark, "metal");
+  pipeRun(kit, [[min[0] + 0.3, 4.1, min[2] + 0.5], [max[0] - 0.3, 4.1, min[2] + 0.5]], 0.09, PALETTE.impMid, "metal");
+  pipeRun(kit, [[min[0] + 0.3, 4.4, min[2] + 0.5], [max[0] - 0.3, 4.4, min[2] + 0.5]], 0.06, PALETTE.impDark, "metal");
 }
 
 // ---------------------------------------------------------------------------
@@ -262,21 +312,41 @@ function logistics(kit, ctx, min, max) {
 // ---------------------------------------------------------------------------
 function hoist(kit, ctx, min, max) {
   const y = max[1] - 0.6;
-  kit.boxMM("paintedMetal", [min[0] + 2, y, LIFT.z - 0.2], [LIFT.x - LIFT.half - 1.2, y + 0.4, LIFT.z + 0.2], { color: PALETTE.impDark, texel: 1.5 });
-  kit.boxMM("metal", [min[0] + 2, y - 0.08, LIFT.z - 0.3], [LIFT.x - LIFT.half - 1.2, y, LIFT.z + 0.3], { color: PALETTE.steel });
-  for (let x = min[0] + 3; x < LIFT.x - LIFT.half - 1.2; x += 4) kit.box("paintedMetal", x, y + 0.5, LIFT.z, 0.2, 0.3, 0.2, { color: PALETTE.impMid, texel: 2 });
+  // the rail runs between the lane and the forward conveyor (not down the lane's axis, where the load
+  // would swing through the fixed camera's foreground), from mid-room to the lift
+  const hz = -22.6;
+  const x0 = min[0] + 6;
+  kit.boxMM("paintedMetal", [x0, y, hz - 0.2], [LIFT.x - LIFT.half - 1.2, y + 0.4, hz + 0.2], { color: PALETTE.impDark, texel: 1.5 });
+  kit.boxMM("metal", [x0, y - 0.08, hz - 0.3], [LIFT.x - LIFT.half - 1.2, y, hz + 0.3], { color: PALETTE.steel });
+  for (let x = x0 + 1; x < LIFT.x - LIFT.half - 1.2; x += 4) kit.box("paintedMetal", x, y + 0.5, hz, 0.2, 0.3, 0.2, { color: PALETTE.impMid, texel: 2 });
   const k = new Kit(ctx.materials);
   const g = new THREE.Group();
   k.box("paintedMetal", 0, y - 0.45, 0, 0.9, 0.7, 0.8, { color: PALETTE.impDark, texel: 2 });
   k.box("hazard", 0, y - 0.82, 0, 0.92, 0.06, 0.82, { texel: 1 });
   k.box("emitRed", 0.3, y - 0.45, 0.41, 0.15, 0.1, 0.01);
-  k.cyl("metal", 0, y - 2.0, 0, 0.025, 2.4, "y", { color: PALETTE.steel, segments: 6 });
-  k.box("paintedMetal", 0, y - 3.3, 0, 0.4, 0.3, 0.3, { color: PALETTE.impDark, texel: 2 });
-  k.add("metal", new THREE.TorusGeometry(0.18, 0.04, 6, 12), { pos: [0, y - 3.62, 0], color: PALETTE.steel });
+  // twin chains to a hook block, a proper hook (open torus on a shank) and a container slung from it
+  for (const dz of [-0.14, 0.14]) k.cyl("metal", 0, y - 1.3, dz, 0.045, 1.0, "y", { color: PALETTE.steel, segments: 6 });
+  k.box("paintedMetal", 0, y - 2.05, 0, 0.5, 0.5, 0.42, { color: PALETTE.impDark, texel: 2 });
+  k.box("hazard", 0, y - 2.05, 0, 0.52, 0.16, 0.44, { texel: 1 });
+  k.cyl("metal", 0, y - 2.45, 0, 0.05, 0.3, "y", { color: PALETTE.steel, segments: 8 });
+  k.add("metal", new THREE.TorusGeometry(0.2, 0.06, 8, 16, Math.PI * 1.55).rotateZ(Math.PI * 0.72), { pos: [0, y - 2.8, 0], color: PALETTE.steel });
+  const loadY = y - 3.05; // sling ring hooked under the hook's tip
+  k.add("metal", new THREE.TorusGeometry(0.14, 0.03, 6, 12), { pos: [0, loadY, 0], color: PALETTE.steel });
+  const podY = loadY - 0.8; // container top under the slings (bottom 1.75 m over the lane)
+  for (const [sx, sz] of [
+    [-0.6, -0.55],
+    [0.6, -0.55],
+    [-0.6, 0.55],
+    [0.6, 0.55],
+  ]) {
+    pipeRun(k, [[0, loadY - 0.1, 0], [sx, podY + 0.02, sz]], 0.02, PALETTE.steel, "metal");
+  }
+  cargoPod(k, ctx, { x: 0, y: podY - 0.8, z: 0, sx: 1.3, sy: 0.8, sz: 1.2, yaw: Math.PI / 2, tone: 3, label: 14, collide: false });
   k.build(g);
-  g.position.set(12, 0, LIFT.z);
+  g.position.set(13.5, 0, hz);
   ctx.mesh(g);
   ctx.anim((dt, t) => {
-    g.position.x = 12 + Math.sin(t * 0.13) * 5;
+    g.position.x = 13.5 + Math.sin(t * 0.13) * 3.2;
+    g.rotation.z = 0.01 * Math.sin(t * 0.8);
   });
 }
