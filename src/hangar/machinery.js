@@ -4,11 +4,13 @@
 import * as THREE from "three";
 import { Kit, rng } from "../kit.js";
 import { PALETTE } from "../materials.js";
-import { decalRect, GRATE_TILE } from "../textures.js";
+import { decalRect, GRATE_TILE, makeCanvas, toTexture } from "../textures.js";
 import { Frame, panelGrid, WALL_T, DOOR_H } from "../interior/lib.js";
 import { doorOpening, DARK_PAINTS } from "../interior/shell.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
 export const RAIL_H = 1.05;
 // Black trim / housings. darkGloss is in every room anyway (panelGrid hatch handles), so using it for all
 // black trim keeps satinBlack out of the fighter maintenance, shuttle dock and cargo kits (one draw call each).
@@ -17,6 +19,93 @@ export const BLACK = "darkGloss";
 // Frame for a free-standing prop: u = right, v = up, n = forward (yaw 0 faces +z).
 export function propFrame(kit, cx, cy, cz, yaw = 0) {
   return new Frame(kit, new THREE.Vector3(cx, cy, cz), new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)), UP);
+}
+
+// ---------------------------------------------------------------------------
+// Deck D signage: one stencil sheet of wide labels (bay names, rack numbers, warnings) in a material of its
+// own, `hangarLabel`, registered on the shared material set by the first deck D room that needs it. Wide
+// text does not fit the square cells of the generic decal sheet.
+// ---------------------------------------------------------------------------
+export const LABELS = [
+  "DECK D · HANGAR", "FIGHTER MAINT · BAY 2", "SHUTTLE DOCK · BAY 3", "CARGO · BAY 4",
+  "LAUNCH LANE", "RECOVERY LANE", "FLIGHT CONTROL", "READY ROOM",
+  "RACK 01", "RACK 02", "RACK 03", "RACK 04", "RACK 05", "RACK 06", "RACK 07", "RACK 08",
+  "DANGER · OPEN WELL", "BLAST DOOR · KEEP CLEAR", "FUEL · NO IGNITION", "TRAFFIC CONTROL",
+];
+const LABEL_COLS = 2;
+const LABEL_ROWS = 10;
+export const LABEL_ASPECT = 5; // width / height of one label cell
+
+/** uv rect [u0, v0, u1, v1] of label `i` on the sheet. */
+export function labelRect(i) {
+  const c = i % LABEL_COLS;
+  const r = Math.floor(i / LABEL_COLS);
+  return [c / LABEL_COLS, 1 - (r + 1) / LABEL_ROWS, (c + 1) / LABEL_COLS, 1 - r / LABEL_ROWS];
+}
+
+function makeLabelSheet(size = 1024) {
+  const c = makeCanvas(size, size);
+  const ctx = c.getContext("2d");
+  const cw = size / LABEL_COLS;
+  const ch = size / LABEL_ROWS;
+  ctx.clearRect(0, 0, size, size);
+  LABELS.forEach((s, i) => {
+    const x0 = (i % LABEL_COLS) * cw;
+    const y0 = Math.floor(i / LABEL_COLS) * ch;
+    const danger = /DANGER|BLAST/.test(s);
+    const fuel = /FUEL/.test(s);
+    const color = danger ? "#d8452f" : fuel ? "#ffb347" : "#d8dbe0";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(x0 + 14, y0 + 12, cw - 28, ch - 24);
+    if (danger) {
+      // hazard tick marks at both ends of a warning plate
+      ctx.fillStyle = color;
+      for (let k = 0; k < 3; k++) {
+        ctx.fillRect(x0 + 30 + k * 18, y0 + 26, 8, ch - 52);
+        ctx.fillRect(x0 + cw - 38 - k * 18, y0 + 26, 8, ch - 52);
+      }
+    }
+    ctx.fillStyle = color;
+    ctx.font = `bold ${Math.floor(ch * 0.5)}px "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(s, x0 + cw / 2, y0 + ch / 2 + 2, cw - 120);
+  });
+  return toTexture(c, { srgb: true, wrap: false });
+}
+
+/** Make sure the shared material set carries the deck D label material (idempotent). */
+export function ensureLabels(mats) {
+  if (mats.hangarLabel) return mats.hangarLabel;
+  const map = makeLabelSheet();
+  mats.hangarLabel = new THREE.MeshStandardMaterial({
+    map,
+    emissive: new THREE.Color(0xffffff),
+    emissiveMap: map,
+    emissiveIntensity: 0.22,
+    transparent: true,
+    depthWrite: false,
+    roughness: 0.7,
+    metalness: 0,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    envMapIntensity: 0.3,
+  });
+  return mats.hangarLabel;
+}
+
+/** Wall label on a frame: width w (height w / LABEL_ASPECT), centred at (u, v), a hair off the surface. */
+export function frameLabel(frame, u, v, w, index, n = 0.012) {
+  frame.add("hangarLabel", new THREE.PlaneGeometry(w, w / LABEL_ASPECT), u, v, n, { uv: "keep", uvRect: labelRect(index) });
+}
+
+/** Free-standing label plane facing +z rotated by yaw about y, centred at (x, y, z). */
+export function label(kit, x, y, z, w, index, yaw = 0) {
+  const g = new THREE.PlaneGeometry(w, w / LABEL_ASPECT);
+  g.rotateY(yaw);
+  kit.add("hangarLabel", g, { pos: [x, y, z], uv: "keep", uvRect: labelRect(index) });
 }
 
 // ---------------------------------------------------------------------------
@@ -460,6 +549,90 @@ export function lightBank(kit, cx, yCeil, cz, w, d, mat = "emitWhiteSoft") {
   kit.box(mat, cx, yCeil - 0.37, cz, w, 0.03, d, { uv: "keep" });
 }
 
+/**
+ * Recessed light bank: an open-bottomed black housing hanging `depth` under the ceiling with the diffuser set
+ * `inset` up inside it, so from the deck the emitter is mostly hidden behind the housing rim and only its
+ * glow on the housing walls shows (high-bay louvre look instead of a blown white plate).
+ */
+export function recessedBank(kit, cx, yCeil, cz, w, d, mat = "emitWhiteSoft", depth = 0.55, inset = 0.3) {
+  const t = 0.06;
+  kit.boxMM(BLACK, [cx - w / 2 - t, yCeil - depth, cz - d / 2 - t], [cx - w / 2, yCeil, cz + d / 2 + t]);
+  kit.boxMM(BLACK, [cx + w / 2, yCeil - depth, cz - d / 2 - t], [cx + w / 2 + t, yCeil, cz + d / 2 + t]);
+  kit.boxMM(BLACK, [cx - w / 2, yCeil - depth, cz - d / 2 - t], [cx + w / 2, yCeil, cz - d / 2]);
+  kit.boxMM(BLACK, [cx - w / 2, yCeil - depth, cz + d / 2], [cx + w / 2, yCeil, cz + d / 2 + t]);
+  kit.box(mat, cx, yCeil - inset, cz, w - 0.02, 0.02, d - 0.02, { uv: "keep" });
+}
+
+/**
+ * Visored flood fixture under a catwalk or beam: black housing with a lip on the room side and three small
+ * diffusers, so it reads as a lamp cluster rather than a single blown plate. `face` is the direction the lip
+ * faces (+1 → +x side lipped, -1 → -x side) when the fixture runs along z; set alongX for the other axis.
+ */
+export function floodFixture(kit, cx, y, cz, mat = "emitWhiteSoft", opts = {}) {
+  const { alongX = false, lip = 0.28, w = 2.0 } = opts;
+  const bx = alongX ? w : 0.7;
+  const bz = alongX ? 0.7 : w;
+  kit.box(BLACK, cx, y, cz, bx, 0.22, bz);
+  // lips on both long sides (louvre) hanging below the emitter plane
+  for (const s of [-1, 1]) {
+    if (alongX) kit.box(BLACK, cx, y - 0.11 - lip / 2, cz + s * 0.33, bx, lip, 0.04);
+    else kit.box(BLACK, cx + s * 0.33, y - 0.11 - lip / 2, cz, 0.04, lip, bz);
+  }
+  for (const k of [-1, 0, 1]) {
+    const off = k * (w / 3);
+    if (alongX) kit.box(mat, cx + off, y - 0.115, cz, w / 3 - 0.12, 0.01, 0.42, { uv: "keep" });
+    else kit.box(mat, cx, y - 0.115, cz + off, 0.42, 0.01, w / 3 - 0.12, { uv: "keep" });
+  }
+}
+
+/**
+ * Warren truss along `axis` ("x" or "z") from `from` to `to`, centred on `at` across, chords at yTop / yBot,
+ * diagonals every `panel` metres. Structural ceiling steel: dark, deep and cheap (boxes only).
+ */
+export function truss(kit, o) {
+  const { axis = "x", from, to, at, yTop, yBot, panel = 4, chord = 0.5, web = 0.26, color = PALETTE.darkMetal, chordColor = PALETTE.gunmetal } = o;
+  const len = to - from;
+  const mid = (from + to) / 2;
+  const depth = yTop - yBot;
+  const along = (c, y, s, size, col) => {
+    if (axis === "x") kit.box("paintedMetal", c, y, at, s, size, size, { color: col, uv: "world", texel: 0.6 });
+    else kit.box("paintedMetal", at, y, c, size, size, s, { color: col, uv: "world", texel: 0.6 });
+  };
+  along(mid, yTop - chord / 2, len, chord, chordColor);
+  along(mid, yBot + chord / 2, len, chord, chordColor);
+  const n = Math.max(1, Math.round(len / panel));
+  const p = len / n;
+  for (let i = 0; i <= n; i++) {
+    const c = from + i * p;
+    if (axis === "x") kit.box("paintedMetal", c, (yTop + yBot) / 2, at, web, depth - chord, web, { color, texel: 1 });
+    else kit.box("paintedMetal", at, (yTop + yBot) / 2, c, web, depth - chord, web, { color, texel: 1 });
+  }
+  const L = Math.hypot(p, depth - chord);
+  const ang = Math.atan2(depth - chord, p);
+  for (let i = 0; i < n; i++) {
+    const c = from + (i + 0.5) * p;
+    const s = i % 2 ? -1 : 1;
+    if (axis === "x") kit.add("paintedMetal", new THREE.BoxGeometry(L, web, web), { pos: [c, (yTop + yBot) / 2, at], rot: [0, 0, s * ang], color, uv: "scale", uvScale: [L, 1] });
+    else kit.add("paintedMetal", new THREE.BoxGeometry(web, web, L), { pos: [at, (yTop + yBot) / 2, c], rot: [-s * ang, 0, 0], color, uv: "scale", uvScale: [1, L] });
+  }
+}
+
+/** Cable tray along an axis: shallow channel with cross rungs and a few cable bundles inside. */
+export function cableTray(kit, x, y, z, len, axis, w = 0.8, color = PALETTE.darkMetal) {
+  const alongX = axis === "x";
+  const box = (cx, cy, cz, sx, sy, sz, col) => kit.box("paintedMetal", cx, cy, cz, alongX ? sx : sz, sy, alongX ? sz : sx, { color: col, uv: "world", texel: 1 });
+  box(x, y, z, len, 0.06, w, color);
+  for (const s of [-1, 1]) box(alongX ? x : x + s * (w / 2), y + 0.1, alongX ? z + s * (w / 2) : z, len, 0.2, 0.05, color);
+  const n = Math.floor(len / 3);
+  for (let i = 0; i <= n; i++) {
+    const c = -len / 2 + (i / Math.max(1, n)) * len;
+    box(alongX ? x + c : x, y + 0.04, alongX ? z : z + c, 0.08, 0.04, w - 0.1, PALETTE.gunmetal);
+  }
+  for (const [off, r, col] of [[-0.22, 0.06, PALETTE.impBlack], [0, 0.05, PALETTE.orange], [0.2, 0.07, PALETTE.impBlack]]) {
+    kit.cyl("metal", alongX ? x : x + off, y + 0.09, alongX ? z + off : z, r, len - 0.2, axis, { color: col, segments: 6 });
+  }
+}
+
 /** Pipe run along an axis with clamps every `clampEvery` metres. */
 export function pipeRun(kit, x, y, z, len, axis, r, color, clampEvery = 6) {
   kit.cyl("metal", x, y, z, r, len, axis, { color, segments: 10 });
@@ -546,77 +719,152 @@ export function stairTower(kit, o) {
 }
 
 // ---------------------------------------------------------------------------
-// Kit-bashed TIE-style fighter shape (static, for the maintenance cradle). Matches src/hangar/tie.js:
-// 2 m pod, twin pylons at x ±2.9, hexagonal 7.6 x 5.6 m wing panels at x ±4.1, faces -z.
+// Kit-bashed TIE-style fighter (static, for cradles). Same proportions as src/hangar/tie.js: 2 m pod flattened
+// at the octagonal viewport hatch and the rear hatch, twin pylons, 7 x 4.6 m hexagonal wings in the planes
+// u = ±3.18 with a lattice of frame bars over eight dark solar rows (one row carries the unit band). Built in a
+// prop frame: u = wing axis, v = up, n = nose direction.
 // ---------------------------------------------------------------------------
-const WING_H = 3.8;
-const WING_D = 2.8;
-function hexWingGeometry() {
-  const shape = new THREE.Shape();
-  shape.moveTo(0, -WING_H);
-  shape.lineTo(WING_D, -WING_H * 0.5);
-  shape.lineTo(WING_D, WING_H * 0.5);
-  shape.lineTo(0, WING_H);
-  shape.lineTo(-WING_D, WING_H * 0.5);
-  shape.lineTo(-WING_D, -WING_H * 0.5);
-  shape.closePath();
-  const g = new THREE.ExtrudeGeometry(shape, { depth: 0.14, bevelEnabled: false });
-  g.rotateY(Math.PI / 2); // panel lies in the y-z plane, normal along x
+const TIE = { R: 2.0, H: 3.5, D: 2.3, PX: 3.18, NOSE: 1.7, TAIL: -1.82 };
+const TIE_C = {
+  pod: new THREE.Color(0x9ea4ab),
+  mid: new THREE.Color(0x767d86),
+  frame: new THREE.Color(0x474d57),
+  panel: new THREE.Color(0x353d4a),
+};
+const TIE_BANDS = [new THREE.Color(0x8c2424), new THREE.Color(0xc4c8ce), new THREE.Color(0x2f568f)];
+const TIE_HEX = [[TIE.H, 0], [TIE.H / 2, TIE.D], [-TIE.H / 2, TIE.D], [-TIE.H, 0], [-TIE.H / 2, -TIE.D], [TIE.H / 2, -TIE.D]]; // [v, n]
+const TIE_ROWS = [-TIE.H, -TIE.H * 0.75, -TIE.H / 2, -TIE.H / 4, 0, TIE.H / 4, TIE.H / 2, TIE.H * 0.75, TIE.H];
+const hexDepth = (v) => (Math.abs(v) <= TIE.H / 2 ? TIE.D : (TIE.D * (TIE.H - Math.abs(v))) / (TIE.H / 2));
+
+// two-sided trapezoid row of a wing panel in the plane u = x, between v0 and v1
+function wingRowGeometry(x, v0, v1) {
+  const d0 = hexDepth(v0);
+  const d1 = hexDepth(v1);
+  const A = [x, v0, -d0];
+  const B = [x, v0, d0];
+  const C = [x, v1, d1];
+  const E = [x, v1, -d1];
+  const pos = [];
+  const nrm = [];
+  const push = (tri, nx) => {
+    for (const p of tri) {
+      pos.push(...p);
+      nrm.push(nx, 0, 0);
+    }
+  };
+  push([A, C, B], 1);
+  push([A, E, C], 1);
+  push([A, B, C], -1);
+  push([A, C, E], -1);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nrm, 3));
   return g;
 }
 
-/** Hexagonal wing panel with rim and spokes, centred at (cx,cy,cz), panel normal along x rotated by yaw about y. */
-export function tieWing(kit, cx, cy, cz, yaw = 0) {
-  const q = new THREE.Quaternion().setFromAxisAngle(UP, yaw);
-  const place = (mat, geo, lx, ly, lz, localRot, opts) => {
-    const p = new THREE.Vector3(lx, ly, lz).applyQuaternion(q);
-    const qq = localRot ? q.clone().multiply(localRot) : q;
-    kit.add(mat, geo, { pos: [cx + p.x, cy + p.y, cz + p.z], quat: qq, ...opts });
-  };
-  place("painted2", hexWingGeometry(), -0.07, 0, 0, null, { color: PALETTE.impBlack, uv: "world", texel: 0.5 });
-  // rim: six boxes along the hexagon edges (vertices in the y-z plane)
-  const verts = [[0, -WING_H], [-WING_D, -WING_H / 2], [-WING_D, WING_H / 2], [0, WING_H], [WING_D, WING_H / 2], [WING_D, -WING_H / 2]]; // [z, y]
-  for (let i = 0; i < 6; i++) {
-    const [z0, y0] = verts[i];
-    const [z1, y1] = verts[(i + 1) % 6];
-    const L = Math.hypot(z1 - z0, y1 - y0) + 0.2;
-    const rot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.atan2(-(y1 - y0), z1 - z0));
-    place("metal", new THREE.BoxGeometry(0.3, 0.3, L), 0, (y0 + y1) / 2, (z0 + z1) / 2, rot, { color: PALETTE.slate, uv: "scale", uvScale: [1, 3] });
-  }
-  for (const [dy, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.5, 0.5], [0.5, -0.5], [-0.5, 0.5], [-0.5, -0.5]]) {
-    const len = Math.hypot(dy * WING_H, dz * WING_D);
-    const rot = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.atan2(dz * WING_D, dy * WING_H));
-    place("metal", new THREE.BoxGeometry(0.2, len, 0.2), 0, (dy * WING_H) / 2, (dz * WING_D) / 2, rot, { color: PALETTE.slate, uv: "scale", uvScale: [1, 3] });
-  }
-  place("metal", new THREE.CylinderGeometry(0.7, 0.7, 0.36, 12), 0, 0, 0, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2), { color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
+// bar between (v0,n0) and (v1,n1) in the plane u = x, square section t: BoxGeometry along v rotated about u
+function wingBar(f, x, v0, n0, v1, n1, t, color) {
+  const len = Math.hypot(v1 - v0, n1 - n0);
+  const rot = new THREE.Quaternion().setFromAxisAngle(X_AXIS, Math.atan2(n1 - n0, v1 - v0));
+  f.add("metal", new THREE.BoxGeometry(t, len, t), x, (v0 + v1) / 2, (n0 + n1) / 2, { quat: f.quat(rot), color, uv: "scale", uvScale: [1, len] });
 }
 
-/** Pod, pylons, collars and optionally each wing. wings: { left: bool (x-), right: bool (x+) }. */
-export function tieShape(kit, cx, cy, cz, opts = {}) {
-  const { wings = { left: true, right: true } } = opts;
-  kit.add("paintedMetal", new THREE.SphereGeometry(2.0, 22, 14), { pos: [cx, cy, cz], color: PALETTE.impGrey, uv: "world", texel: 0.6 });
-  kit.cyl("darkGloss", cx, cy, cz - 1.95, 1.1, 0.25, "z", { segments: 8 });
-  kit.add("metal", new THREE.TorusGeometry(1.15, 0.09, 6, 8), { pos: [cx, cy, cz - 2.0], color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
-  kit.add("metal", new THREE.TorusGeometry(0.9, 0.1, 6, 12), { pos: [cx, cy, cz + 1.95], color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
-  for (const x of [-0.45, 0.45]) kit.cyl("darkGloss", cx + x, cy - 0.3, cz + 2.05, 0.28, 0.04, "z", { segments: 12 }); // engines cold
-  // top hatch ring
-  kit.add("metal", new THREE.TorusGeometry(0.6, 0.07, 6, 16), { pos: [cx, cy + 1.96, cz], rot: [Math.PI / 2, 0, 0], color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
+/** Hexagonal wing (panel rows + lattice) in the plane u = x of frame f, side ±1 gives the outward normal. */
+export function tieWingAt(kit, f, x, side, variant = 0) {
+  const band = TIE_BANDS[variant % TIE_BANDS.length];
+  const bandRow = 1 + (variant % 6);
+  const c = new THREE.Color();
+  for (let r = 0; r < TIE_ROWS.length - 1; r++) {
+    if (r === bandRow) c.copy(band);
+    else c.copy(TIE_C.panel).multiplyScalar(r % 2 ? 0.85 : 1.15);
+    f.add("paintedMetal", wingRowGeometry(x, TIE_ROWS[r], TIE_ROWS[r + 1]), 0, 0, 0, { color: c.clone(), uv: "world", texel: 0.5 });
+  }
+  for (let i = 0; i < 6; i++) {
+    const [av, an] = TIE_HEX[i];
+    const [bv, bn] = TIE_HEX[(i + 1) % 6];
+    wingBar(f, x, av, an, bv, bn, 0.2, TIE_C.frame);
+    wingBar(f, x, 0, 0, av, an, 0.13, TIE_C.frame);
+  }
+  for (const v of [TIE.H / 2, -TIE.H / 2]) wingBar(f, x, v, -TIE.D, v, TIE.D, 0.11, TIE_C.frame);
+  for (const n of [-TIE.D / 2, TIE.D / 2]) {
+    const vTop = TIE.H - (TIE.H / 2) * (Math.abs(n) / TIE.D);
+    wingBar(f, x, -vTop, n, vTop, n, 0.11, TIE_C.frame);
+  }
+  // hub cap on the outer face
+  f.cylU("metal", x + side * 0.12, 0, 0, 0.7, 0.24, { color: PALETTE.steel, segments: 12 });
+}
+
+/** Detached wing standing upright in frame f (panel centred at the frame origin + (0, cv, 0), normal along u). */
+export function tieWing(kit, f, cv, variant = 0) {
+  const g = new Frame(kit, f.pos(0, cv, 0), f.U, f.V);
+  tieWingAt(kit, g, 0, 1, variant);
+}
+
+/**
+ * Pod, pylons, hatches and optionally each wing, centred on frame f (pod centre at the frame origin).
+ * wings: { left: bool (u-), right: bool (u+) }. engines: emissive material key for hot engine discs or null.
+ */
+export function tieShape(kit, f, opts = {}) {
+  const { wings = { left: true, right: true }, variant = 0, engines = null } = opts;
+  const pod = new THREE.SphereGeometry(TIE.R, 22, 14);
+  const pp = pod.attributes.position;
+  for (let i = 0; i < pp.count; i++) pp.setZ(i, THREE.MathUtils.clamp(pp.getZ(i), TIE.TAIL, TIE.NOSE));
+  f.add("paintedMetal", pod, 0, 0, 0, { color: TIE_C.pod, uv: "world", texel: 0.6 });
+  // octagonal viewport hatch: bezel, frame ring, eight struts, dark glass
+  const oct = Math.PI / 8;
+  const bezel = new THREE.CylinderGeometry(1.22, 1.34, 0.3, 8);
+  bezel.rotateY(oct);
+  bezel.rotateX(Math.PI / 2);
+  f.add("metal", bezel, 0, 0, TIE.NOSE + 0.1, { color: TIE_C.mid, uv: "world", texel: 1 });
+  const ring = new THREE.TorusGeometry(1.12, 0.09, 6, 8);
+  ring.rotateZ(oct);
+  f.add("metal", ring, 0, 0, TIE.NOSE + 0.27, { color: TIE_C.frame, uv: "scale", uvScale: [4, 1] });
+  for (let i = 0; i < 8; i++) {
+    const a = i * (Math.PI / 4) + oct;
+    const rot = new THREE.Quaternion().setFromAxisAngle(Z_AXIS, a - Math.PI / 2);
+    f.add("metal", new THREE.BoxGeometry(0.06, 1.08, 0.06), Math.cos(a) * 0.56, Math.sin(a) * 0.56, TIE.NOSE + 0.3, { quat: f.quat(rot), color: TIE_C.frame });
+  }
+  const glass = new THREE.CircleGeometry(1.06, 8);
+  glass.rotateZ(oct);
+  f.add(BLACK, glass, 0, 0, TIE.NOSE + 0.26, { uv: "keep" });
+  // rear hatch ring and plate, twin engine housings low on the aft face
+  const tail = new THREE.TorusGeometry(0.72, 0.08, 6, 8);
+  tail.rotateZ(oct);
+  f.add("metal", tail, 0, 0, TIE.TAIL, { color: TIE_C.frame, uv: "scale", uvScale: [4, 1] });
+  const plate = new THREE.CircleGeometry(0.68, 8);
+  plate.rotateZ(oct);
+  plate.rotateY(Math.PI);
+  f.add(BLACK, plate, 0, 0, TIE.TAIL - 0.01, { uv: "keep" });
+  for (const sx of [-1, 1]) {
+    f.cylN("metal", sx * 0.78, -1.02, TIE.TAIL + 0.32, 0.42, 0.5, { r2: 0.34, segments: 12, color: TIE_C.frame });
+    const disc = new THREE.CircleGeometry(0.34, 12);
+    disc.rotateY(Math.PI);
+    f.add(engines || BLACK, disc, sx * 0.78, -1.02, TIE.TAIL + 0.06, { uv: "keep" });
+  }
+  // pylons: collar at the pod, tapered strut, wing hub and cap
   for (const side of [-1, 1]) {
-    kit.cyl("metal", cx + side * 2.9, cy, cz, 0.6, 2.2, "x", { color: PALETTE.slate, segments: 10 });
-    kit.cyl("paintedMetal", cx + side * 3.9, cy, cz, 0.9, 0.5, "x", { color: PALETTE.impGrey, segments: 10 });
+    f.cylU("metal", side * 2.02, 0, 0, 0.72, 0.3, { color: TIE_C.mid, segments: 12 });
+    const strut = new THREE.CylinderGeometry(0.62, 0.5, 1.4, 10);
+    strut.rotateZ(-side * Math.PI / 2);
+    f.add("metal", strut, side * 2.45, 0, 0, { color: TIE_C.mid, uv: "world", texel: 1 });
+    f.cylU("metal", side * 2.95, 0, 0, 0.95, 0.46, { color: TIE_C.mid, segments: 12 });
+    f.cylU("metal", side * 3.36, 0, 0, 0.5, 0.22, { color: TIE_C.frame, segments: 10 });
     const has = side < 0 ? wings.left : wings.right;
-    if (has) tieWing(kit, cx + side * 4.1, cy, cz, 0);
+    if (has) tieWingAt(kit, f, side * TIE.PX, side, variant);
     else {
       // bare hub: exposed mounting flange with bolts and a warning ring
-      kit.cyl("metal", cx + side * 4.2, cy, cz, 0.75, 0.12, "x", { color: PALETTE.darkMetal, segments: 12 });
-      kit.cyl("hazard", cx + side * 4.15, cy, cz, 0.92, 0.06, "x", { segments: 12, uv: "world", texel: 1 });
+      f.cylU("metal", side * 3.5, 0, 0, 0.75, 0.12, { color: PALETTE.darkMetal, segments: 12 });
+      f.cylU("hazard", side * 3.45, 0, 0, 0.92, 0.06, { segments: 12, uv: "world", texel: 1 });
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2;
-        kit.cyl("metal", cx + side * 4.28, cy + Math.cos(a) * 0.55, cz + Math.sin(a) * 0.55, 0.06, 0.06, "x", { color: PALETTE.steel, segments: 6 });
+        f.cylU("metal", side * 3.58, Math.cos(a) * 0.55, Math.sin(a) * 0.55, 0.06, 0.06, { color: PALETTE.steel, segments: 6 });
       }
     }
   }
 }
+
+/** Half extents of the kit TIE in its frame (u, v, n). */
+export const TIE_HALF = { u: 3.4, v: TIE.H + 0.1, n: TIE.D + 0.1 };
 
 // ---------------------------------------------------------------------------
 // Moving machinery (ctx.dynamic entries)
@@ -998,4 +1246,345 @@ export function pulsingMaterial(ctx, base, { min = 0.8, max = 2.4, rate = 1.2, n
   };
   ctx.dynamic.push({ object: null, update, name, state });
   return { material, update };
+}
+
+// ---------------------------------------------------------------------------
+// Wave 2 additions: launch cradle, door surrounds, well shaft, shimmer sheet, shuttle, crane trolley
+// ---------------------------------------------------------------------------
+
+/**
+ * Drop-rail launch cradle: a heavy rail beam across the well (static, in the room kit) and a travelling carriage
+ * (dynamic) whose clamp arms grip a kit TIE by the wings, hanging over the void. Carriage top is 0.1 below the
+ * rail underside `y`; the fighter's pod hangs 5.7 m below that. Moves slowly along x between x0 and x1.
+ */
+export function launchCradle(kit, ctx, mats, o) {
+  const { z, y, x0, x1, postX, yDeck, xStart = 0, speed = 0.22, variant = 3, name = "hangar.launchCradle" } = o;
+  // rail beam on two A-frame posts standing on the deck edges
+  kit.boxMM("paintedMetal", [-postX - 0.6, y, z - 0.7], [postX + 0.6, y + 1.4, z + 0.7], { color: PALETTE.gunmetal, uv: "world", texel: 0.6 });
+  kit.boxMM("metal", [-postX - 0.6, y - 0.14, z - 1.0], [postX + 0.6, y, z + 1.0], { color: PALETTE.steel, uv: "world", texel: 1 });
+  kit.boxMM("hazard", [-postX - 0.61, y + 0.3, z - 0.71], [postX + 0.61, y + 0.7, z - 0.69], { uv: "world", texel: 1.2 });
+  kit.boxMM("hazard", [-postX - 0.61, y + 0.3, z + 0.69], [postX + 0.61, y + 0.7, z + 0.71], { uv: "world", texel: 1.2 });
+  for (const s of [-1, 1]) {
+    const px = s * postX;
+    kit.boxMM("paintedMetal", [px - 0.5, yDeck, z - 0.5], [px + 0.5, y + 1.4, z + 0.5], { color: PALETTE.gunmetal, uv: "world", texel: 0.6 });
+    kit.boxMM("paintedMetal", [px - 0.9, yDeck, z - 0.9], [px + 0.9, yDeck + 0.8, z + 0.9], { color: PALETTE.darkMetal, uv: "world", texel: 0.6 });
+    kit.boxMM("hazard", [px - 0.91, yDeck + 0.3, z - 0.91], [px + 0.91, yDeck + 0.6, z + 0.91], { uv: "world", texel: 1.2 });
+    kit.collider([px - 0.9, yDeck, z - 0.9], [px + 0.9, y, z + 0.9], "cradlePost");
+    // knee braces along the rail
+    const L = Math.hypot(4, 3);
+    kit.add("paintedMetal", new THREE.BoxGeometry(L, 0.3, 0.3), { pos: [px - s * 2, y - 1.5, z], rot: [0, 0, s * Math.atan2(3, 4)], color: PALETTE.darkMetal, uv: "scale", uvScale: [L, 1] });
+    kit.box("emitAmber", px - s * 0.52, y + 1.0, z, 0.02, 0.2, 0.6);
+  }
+  const g = buildGroup(mats, name, (k) => {
+    // carriage under the running flange
+    k.box("paintedMetal", 0, -0.95, 0, 5.6, 1.7, 2.8, { color: PALETTE.slate, texel: 0.8 });
+    k.box("hazard", 0, -1.62, 0, 5.62, 0.32, 2.82, { uv: "world", texel: 1.5 });
+    for (const dx of [-2.0, 2.0]) for (const dz of [-1.0, 1.0]) k.box("metal", dx, -0.06, dz, 0.7, 0.24, 0.7, { color: PALETTE.darkMetal });
+    k.box("paintedMetal", 0, -0.4, 1.41, 3.2, 0.7, 0.04, { color: PALETTE.impAmber, uv: "world", texel: 1.5 });
+    // clamp arms down the outside of both wings, pads gripping the wing faces at two heights
+    const podY = -5.7;
+    const armX = TIE.PX + 0.62;
+    for (const s of [-1, 1]) {
+      k.boxMM("paintedMetal", [s * armX - 0.3, podY - 1.6, -0.35], [s * armX + 0.3, -1.75, 0.35], { color: PALETTE.gunmetal, texel: 0.8 });
+      k.boxMM("paintedMetal", [Math.min(s * 2.0, s * armX), -2.35, -0.35], [Math.max(s * 2.0, s * armX), -1.75, 0.35], { color: PALETTE.gunmetal, texel: 0.8 });
+      for (const py of [podY + 1.9, podY - 0.9]) {
+        k.box("paintedMetal", s * (armX - 0.2), py, 0, 0.5, 0.7, 1.5, { color: PALETTE.darkMetal, texel: 1 });
+        k.box(BLACK, s * (TIE.PX + 0.16), py, 0, 0.14, 0.6, 1.3);
+        k.box("emitAmber", s * (armX + 0.31), py, 0, 0.02, 0.12, 0.8);
+      }
+      // hydraulic rams beside the arm
+      k.cyl("metal", s * (armX + 0.45), podY + 1.2, 0.5, 0.09, 3.6, "y", { color: PALETTE.steel, segments: 8 });
+      k.cyl("metal", s * (armX + 0.45), podY + 1.2, -0.5, 0.09, 3.6, "y", { color: PALETTE.steel, segments: 8 });
+    }
+    // work lamps under the carriage lighting the fighter, status beacon housing on top
+    for (const s of [-1, 1]) {
+      k.box(BLACK, s * 2.3, -1.95, 0, 0.7, 0.24, 1.6);
+      k.box("emitWhiteSoft", s * 2.3, -2.08, 0, 0.5, 0.02, 1.4, { uv: "keep" });
+    }
+    k.box(BLACK, 0, -1.9, -1.2, 1.2, 0.2, 0.3);
+    k.box("emitAmber", 0, -2.01, -1.2, 1.0, 0.02, 0.2, { uv: "keep" });
+    // the fighter, nose toward -z (launch direction)
+    const f = new Frame(k, new THREE.Vector3(0, podY, 0), new THREE.Vector3(-1, 0, 0), UP);
+    tieShape(k, f, { variant, engines: "emitAmber" });
+  });
+  g.position.set(xStart, y - 0.1, z);
+  const state = { x: xStart, dir: 1, pause: 8 };
+  const update = (dt) => {
+    if (state.pause > 0) state.pause -= dt;
+    else {
+      state.x += state.dir * speed * dt;
+      if (state.x > x1) (state.x = x1), (state.dir = -1), (state.pause = 14);
+      if (state.x < x0) (state.x = x0), (state.dir = 1), (state.pause = 14);
+    }
+    g.position.x = state.x;
+  };
+  update(0);
+  const entry = { object: g, update, name, state };
+  ctx.dynamic.push(entry);
+  return entry;
+}
+
+/** Wall frame for a spec door [x, z, w, dir, h]: origin at the door's centre on the floor, n into the room. */
+export function doorWallFrame(kit, room, door, y0) {
+  const [dx, dz, , dir] = door;
+  const U = dir === "-x" ? new THREE.Vector3(0, 0, -1) : dir === "+x" ? new THREE.Vector3(0, 0, 1) : dir === "-z" ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(-1, 0, 0);
+  return new Frame(kit, new THREE.Vector3(dx, y0, dz), U, UP);
+}
+
+/**
+ * Heavy surround for a doorway (the DoorSystem draws the leaves and a thin frame): pilasters and a lintel
+ * standing 0.5 m off the wall, hazard bands on the jambs and under the lintel, a label plate above, indicator
+ * lamps beside the opening and a threshold band on the deck. Nothing is built inside the opening.
+ */
+export function doorSurround(kit, room, door, y0, opts = {}) {
+  const [, , w, , hh] = door;
+  const h = hh || DOOR_H;
+  const blast = w >= 4;
+  const fw = blast ? 0.45 : 0.16; // DoorSystem frame width
+  const { label: idx = null, labelW = Math.min(w, 4.5), pilaster = blast ? 1.0 : 0.6, depth = blast ? 0.5 : 0.3, lintel = blast ? 1.6 : 0.7, lamps = true, threshold = true, color = PALETTE.gunmetal } = opts;
+  const f = doorWallFrame(kit, room, door, y0);
+  const top = h + fw + lintel;
+  const n0 = 0.05;
+  for (const s of [-1, 1]) {
+    const u = s * (w / 2 + fw + pilaster / 2);
+    f.box("paintedMetal", u, top / 2, n0 + depth / 2, pilaster, top, depth, { color, uv: "world", texel: 0.6 });
+    // hazard band on the jamb face and a raised plate on the room face
+    f.box("hazard", s * (w / 2 + fw + 0.005), h * 0.5, n0 + depth / 2, 0.01, h - 0.3, depth - 0.1, { uv: "world", texel: 1.2 });
+    f.box("paintedMetal", u, h * 0.5, n0 + depth + 0.02, pilaster - 0.3, h - 0.6, 0.04, { color: PALETTE.darkMetal, texel: 1 });
+    if (lamps) {
+      f.box(BLACK, u, h - 0.35, n0 + depth + 0.05, pilaster - 0.4, 0.5, 0.08);
+      f.box("emitAmber", u, h - 0.24, n0 + depth + 0.095, pilaster - 0.5, 0.1, 0.01, { uv: "keep" });
+      f.box("emitBlue", u, h - 0.46, n0 + depth + 0.095, pilaster - 0.5, 0.1, 0.01, { uv: "keep" });
+    }
+    f.collider(u - pilaster / 2, u + pilaster / 2, 0, top, n0, n0 + depth + 0.1, "doorFrame");
+  }
+  const span = w + 2 * fw + 2 * pilaster;
+  f.box("paintedMetal", 0, h + fw + lintel / 2, n0 + depth / 2, span, lintel, depth, { color, uv: "world", texel: 0.6 });
+  f.box("hazard", 0, h + fw + 0.02, n0 + depth / 2, w + 2 * fw, 0.04, depth - 0.1, { uv: "world", texel: 1.2 });
+  f.box("hazard", 0, h + fw + 0.18, n0 + depth + 0.005, w + 2 * fw, 0.3, 0.01, { uv: "world", texel: 1.2 });
+  if (idx !== null) {
+    const lw = labelW;
+    f.box(BLACK, 0, h + fw + lintel * 0.66, n0 + depth + 0.005, lw + 0.3, lw / LABEL_ASPECT + 0.16, 0.02);
+    frameLabel(f, 0, h + fw + lintel * 0.66, lw, idx, n0 + depth + 0.02);
+  }
+  if (threshold) f.box("hazard", 0, 0.005, n0 + depth + 0.45, w + 2 * fw, 0.01, 0.9, { uv: "world", texel: 1.5 });
+  return f;
+}
+
+/**
+ * Well shaft: lining walls inside the opening from the deck down to the exterior plate, a raised lip around the
+ * mouth, recessed rim lights on the shaft faces, and the blast-leaf tracks with rack teeth on the two short
+ * faces (the leaves slide along x on them).
+ */
+export function wellShaft(kit, W, y0, opts = {}) {
+  const { depth = 2.5, lip = 0.42, lining = 0.4, rimY = 0.9, trackY = 1.45 } = opts;
+  const yB = y0 - depth;
+  const c = PALETTE.gunmetal;
+  // lining (inside the opening) and lip cap (over the exterior curb and the slab edge)
+  kit.boxMM("paintedMetal", [W.x0, yB, W.z0], [W.x0 + lining, y0 + lip, W.z1], { color: c, uv: "world", texel: 0.6 });
+  kit.boxMM("paintedMetal", [W.x1 - lining, yB, W.z0], [W.x1, y0 + lip, W.z1], { color: c, uv: "world", texel: 0.6 });
+  kit.boxMM("paintedMetal", [W.x0, yB, W.z0], [W.x1, y0 + lip, W.z0 + lining], { color: c, uv: "world", texel: 0.6 });
+  kit.boxMM("paintedMetal", [W.x0, yB, W.z1 - lining], [W.x1, y0 + lip, W.z1], { color: c, uv: "world", texel: 0.6 });
+  const out = 0.75;
+  kit.boxMM("paintedMetal", [W.x0 - out, y0 - 0.02, W.z0 - out], [W.x0 + lining, y0 + lip, W.z1 + out], { color: PALETTE.darkMetal, uv: "world", texel: 0.6 });
+  kit.boxMM("paintedMetal", [W.x1 - lining, y0 - 0.02, W.z0 - out], [W.x1 + out, y0 + lip, W.z1 + out], { color: PALETTE.darkMetal, uv: "world", texel: 0.6 });
+  kit.boxMM("paintedMetal", [W.x0 - out, y0 - 0.02, W.z0 - out], [W.x1 + out, y0 + lip, W.z0 + lining], { color: PALETTE.darkMetal, uv: "world", texel: 0.6 });
+  kit.boxMM("paintedMetal", [W.x0 - out, y0 - 0.02, W.z1 - lining], [W.x1 + out, y0 + lip, W.z1 + out], { color: PALETTE.darkMetal, uv: "world", texel: 0.6 });
+  // hazard chevrons on the lip top
+  kit.boxMM("hazard", [W.x0 - out, y0 + lip, W.z0 - out], [W.x1 + out, y0 + lip + 0.01, W.z1 + out], { uv: "world", texel: 1.5 });
+  // the lip is a step, not a wall: walkable on top (four strips, never the well), invisible stop at its inner edge
+  kit.floor(W.x0 - out, W.z0 - out, W.x0 + lining, W.z1 + out, y0 + lip);
+  kit.floor(W.x1 - lining, W.z0 - out, W.x1 + out, W.z1 + out, y0 + lip);
+  kit.floor(W.x0 - out, W.z0 - out, W.x1 + out, W.z0 + lining, y0 + lip);
+  kit.floor(W.x0 - out, W.z1 - lining, W.x1 + out, W.z1 + out, y0 + lip);
+  kit.collider([W.x0 + lining - 0.05, y0, W.z0], [W.x0 + lining + 0.05, y0 + lip + 1.2, W.z1], "wellLip");
+  kit.collider([W.x1 - lining - 0.05, y0, W.z0], [W.x1 - lining + 0.05, y0 + lip + 1.2, W.z1], "wellLip");
+  kit.collider([W.x0, y0, W.z0 + lining - 0.05], [W.x1, y0 + lip + 1.2, W.z0 + lining + 0.05], "wellLip");
+  kit.collider([W.x0, y0, W.z1 - lining - 0.05], [W.x1, y0 + lip + 1.2, W.z1 - lining + 0.05], "wellLip");
+  // ribs down the long faces, rim light strips recessed into every face
+  for (let z = W.z0 + 5; z < W.z1 - 1; z += 5) {
+    kit.boxMM("metal", [W.x0 + lining, yB + 0.1, z - 0.12], [W.x0 + lining + 0.14, y0 - 0.15, z + 0.12], { color: PALETTE.steel, texel: 1 });
+    kit.boxMM("metal", [W.x1 - lining - 0.14, yB + 0.1, z - 0.12], [W.x1 - lining, y0 - 0.15, z + 0.12], { color: PALETTE.steel, texel: 1 });
+  }
+  const ry = y0 - rimY;
+  kit.boxMM(BLACK, [W.x0 + lining - 0.02, ry - 0.1, W.z0 + 1], [W.x0 + lining + 0.06, ry + 0.1, W.z1 - 1]);
+  kit.boxMM("emitWhiteSoft", [W.x0 + lining + 0.06, ry - 0.05, W.z0 + 1.2], [W.x0 + lining + 0.07, ry + 0.05, W.z1 - 1.2], { uv: "keep" });
+  kit.boxMM(BLACK, [W.x1 - lining - 0.06, ry - 0.1, W.z0 + 1], [W.x1 - lining + 0.02, ry + 0.1, W.z1 - 1]);
+  kit.boxMM("emitWhiteSoft", [W.x1 - lining - 0.07, ry - 0.05, W.z0 + 1.2], [W.x1 - lining - 0.06, ry + 0.05, W.z1 - 1.2], { uv: "keep" });
+  kit.boxMM(BLACK, [W.x0 + 1, ry - 0.1, W.z0 + lining - 0.02], [W.x1 - 1, ry + 0.1, W.z0 + lining + 0.06]);
+  kit.boxMM("emitWhiteSoft", [W.x0 + 1.2, ry - 0.05, W.z0 + lining + 0.06], [W.x1 - 1.2, ry + 0.05, W.z0 + lining + 0.07], { uv: "keep" });
+  kit.boxMM(BLACK, [W.x0 + 1, ry - 0.1, W.z1 - lining - 0.06], [W.x1 - 1, ry + 0.1, W.z1 - lining + 0.02]);
+  kit.boxMM("emitWhiteSoft", [W.x0 + 1.2, ry - 0.05, W.z1 - lining - 0.07], [W.x1 - 1.2, ry + 0.05, W.z1 - lining - 0.06], { uv: "keep" });
+  // leaf tracks on the short faces: rail, rack teeth, end stops
+  const ty = y0 - trackY;
+  for (const zf of [W.z0 + lining, W.z1 - lining]) {
+    const sgn = zf < (W.z0 + W.z1) / 2 ? 1 : -1;
+    kit.boxMM("metal", [W.x0 + lining, ty - 0.14, zf], [W.x1 - lining, ty + 0.14, zf + sgn * 0.3], { color: PALETTE.steel, uv: "world", texel: 1 });
+    for (let x = W.x0 + lining + 0.6; x < W.x1 - lining - 0.4; x += 1.2) kit.boxMM("metal", [x - 0.15, ty + 0.14, zf], [x + 0.15, ty + 0.3, zf + sgn * 0.26], { color: PALETTE.darkMetal, texel: 1 });
+  }
+}
+
+/**
+ * Containment shimmer: a barely-there additive sheet just below the deck across the well mouth, facing up
+ * (the exterior draws its own down-facing sheet), breathing between 0.018 and 0.03 opacity.
+ */
+export function shimmerSheet(ctx, W, y, color = 0x66b6ff, name = "hangar.shimmer") {
+  const g = new THREE.PlaneGeometry(W.x1 - W.x0 - 1.2, W.z1 - W.z0 - 1.2);
+  g.rotateX(-Math.PI / 2);
+  g.translate((W.x0 + W.x1) / 2, y, (W.z0 + W.z1) / 2);
+  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.024, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+  const mesh = new THREE.Mesh(g, mat);
+  mesh.name = name;
+  mesh.renderOrder = 2;
+  const state = { t: 0 };
+  const update = (dt) => {
+    state.t += dt;
+    mat.opacity = 0.024 + 0.006 * Math.sin(state.t * 0.9) * Math.sin(state.t * 2.3);
+  };
+  const entry = { object: mesh, update, name, state };
+  ctx.dynamic.push(entry);
+  return entry;
+}
+
+// plate from a 2D outline (points [a, b]) extruded `t` thick: a → local n, b → local v, thickness along u
+function outlinePlate(points, t) {
+  const shape = new THREE.Shape();
+  points.forEach(([a, b], i) => (i ? shape.lineTo(a, b) : shape.moveTo(a, b)));
+  shape.closePath();
+  const g = new THREE.ExtrudeGeometry(shape, { depth: t, bevelEnabled: false });
+  g.translate(0, 0, -t / 2);
+  g.rotateY(-Math.PI / 2); // shape x -> +z (n), extrusion -> -x (u)
+  return g;
+}
+
+/**
+ * Kit-bashed shuttle, folded wings (~19 m nose to tail, 10 m tall folded). Frame f: origin on the pad under the
+ * hull centre, n = nose direction. Dark hull, three fins (one dorsal, two folded wings), cockpit wedge, twin
+ * engines, three-strut landing gear with chocks. Returns the wing plane positions for a cradle to grip.
+ */
+export function shuttleShape(kit, f, opts = {}) {
+  const { hull = PALETTE.impGreyDark, fin = PALETTE.darkMetal, trim = PALETTE.slate } = opts;
+  const gear = 1.2; // hull underside above the pad
+  // fuselage: lower hull, upper hull, sponsons, spine
+  f.box("paintedMetal", 0, gear + 0.9, -0.5, 4.6, 1.8, 13.0, { color: hull, uv: "world", texel: 0.5 });
+  f.box("paintedMetal", 0, gear + 2.5, -1.5, 3.4, 1.5, 10.5, { color: hull, uv: "world", texel: 0.5 });
+  f.box("paintedMetal", 0, gear + 3.35, -2.5, 1.6, 0.4, 7.0, { color: trim, uv: "world", texel: 0.5 });
+  for (const s of [-1, 1]) {
+    f.box("paintedMetal", s * 2.6, gear + 0.8, -1.0, 0.7, 1.3, 7.5, { color: fin, uv: "world", texel: 0.5 });
+    f.box("hazard", s * 2.96, gear + 0.8, -1.0, 0.02, 0.24, 6.0, { uv: "world", texel: 1.2 });
+    f.box("emitBlue", s * 2.97, gear + 1.3, -3.5, 0.01, 0.1, 0.5);
+  }
+  // nose: square frustum from the hull front to the tip, cockpit wedge with dark glazing on top
+  const nose = new THREE.CylinderGeometry(0.85, 2.9, 5.2, 4, 1);
+  nose.rotateY(Math.PI / 4);
+  nose.rotateX(Math.PI / 2);
+  nose.scale(1, 0.7, 1);
+  f.add("paintedMetal", nose, 0, gear + 1.3, 8.6, { color: hull, uv: "world", texel: 0.5 });
+  f.box("paintedMetal", 0, gear + 2.6, 7.4, 2.2, 1.1, 2.6, { color: hull, uv: "world", texel: 0.5, tilt: 0.25 });
+  f.box(BLACK, 0, gear + 2.75, 8.2, 1.9, 0.7, 1.2, { tilt: 0.3 });
+  f.box("emitBlue", 0, gear + 1.0, 11.15, 0.5, 0.06, 0.02);
+  // dorsal fin: swept plate rising from the spine
+  f.add("paintedMetal", outlinePlate([[-4.5, gear + 3.5], [1.6, gear + 3.5], [-2.2, gear + 9.8], [-5.6, gear + 9.8]], 0.4), 0, 0, 0, { color: fin, uv: "world", texel: 0.5 });
+  f.add("metal", outlinePlate([[-5.6, gear + 9.8], [-2.2, gear + 9.8], [-2.35, gear + 9.55], [-5.45, gear + 9.55]], 0.46), 0, 0, 0, { color: trim, uv: "world", texel: 1 });
+  f.box("emitAmber", 0, gear + 9.4, -5.5, 0.5, 0.16, 0.16);
+  // folded wings: plates leaning 24 degrees outward from the hull shoulders
+  const root = { u: 2.35, v: gear + 2.2 };
+  const tilt = 0.42;
+  const span = 8.2;
+  const wingPts = [[-6.0, 0], [5.8, 0], [1.6, span], [-6.0, span]];
+  for (const s of [-1, 1]) {
+    const g = outlinePlate(wingPts, 0.3);
+    g.rotateZ(-s * tilt);
+    g.translate(s * root.u, root.v, 0);
+    f.add("paintedMetal", g, 0, 0, 0, { color: fin, uv: "world", texel: 0.5 });
+    // rim along the leading edge and tip, two panel seams, a squadron stripe
+    const rim = outlinePlate([[5.8, 0], [1.6, span], [1.25, span], [5.35, 0]], 0.34);
+    rim.rotateZ(-s * tilt);
+    rim.translate(s * root.u, root.v, 0);
+    f.add("metal", rim, 0, 0, 0, { color: trim, uv: "world", texel: 1 });
+    for (const sv of [span * 0.35, span * 0.7]) {
+      const seam = outlinePlate([[-6.0, sv - 0.06], [5.8 - (sv / span) * 4.2, sv - 0.06], [5.8 - (sv / span) * 4.2, sv + 0.06], [-6.0, sv + 0.06]], 0.34);
+      seam.rotateZ(-s * tilt);
+      seam.translate(s * root.u, root.v, 0);
+      f.add("metal", seam, 0, 0, 0, { color: PALETTE.gunmetal, uv: "world", texel: 1 });
+    }
+    const stripe = outlinePlate([[-6.0, span * 0.5], [3.5, span * 0.5], [3.3, span * 0.56], [-6.0, span * 0.56]], 0.33);
+    stripe.rotateZ(-s * tilt);
+    stripe.translate(s * root.u, root.v, 0);
+    f.add("paintedMetal", stripe, 0, 0, 0, { color: PALETTE.orange, uv: "world", texel: 1 });
+    // wing hinge fairing at the shoulder
+    f.cylN("metal", s * 2.35, gear + 2.2, -0.1, 0.55, 11.8, { color: trim, segments: 12 });
+    f.box("emitBlue", s * 2.35, gear + 2.2, 5.85, 0.2, 0.2, 0.02);
+  }
+  // engines at the tail with cold nozzles, tail hatch
+  for (const s of [-1, 1]) {
+    f.cylN("metal", s * 1.35, gear + 2.0, -7.0, 0.72, 1.6, { color: PALETTE.gunmetal, segments: 14 });
+    f.cylN(BLACK, s * 1.35, gear + 2.0, -7.85, 0.56, 0.12, { segments: 14 });
+  }
+  f.box(BLACK, 0, gear + 0.9, -7.05, 2.0, 1.2, 0.1);
+  f.box("hazard", 0, gear + 1.6, -7.06, 2.2, 0.16, 0.02, { uv: "world", texel: 1.2 });
+  // landing gear: three struts on pads, chocks against the pads
+  for (const [u, n] of [[0, 6.0], [-1.9, -3.6], [1.9, -3.6]]) {
+    f.cylV(BLACK, u, gear / 2 + 0.1, n, 0.17, gear - 0.2, { segments: 10 });
+    f.box("metal", u, 0.08, n, 1.0, 0.16, 1.2, { color: PALETTE.darkMetal, texel: 1 });
+    f.box("hazard", u, 0.14, n + 0.75, 0.9, 0.28, 0.3, { uv: "world", texel: 1.5 });
+    f.box("hazard", u, 0.14, n - 0.75, 0.9, 0.28, 0.3, { uv: "world", texel: 1.5 });
+  }
+  // open boarding ramp at the port side, hazard edged, and a tied-down cargo strap over the hull
+  const ramp = new THREE.BoxGeometry(2.6, 0.12, 1.4);
+  const rp = f.pos(-3.2, gear / 2 + 0.05, 1.5);
+  kit.add("paintedMetal", ramp, { pos: [rp.x, rp.y, rp.z], quat: f.quat(new THREE.Quaternion().setFromAxisAngle(Z_AXIS, Math.atan2(gear - 0.1, 2.4))), color: PALETTE.slate, uv: "world", texel: 1 });
+  f.box("hazard", -1.95, gear + 0.02, 1.5, 0.3, 0.02, 1.4, { uv: "world", texel: 1.5 });
+  f.box(BLACK, -2.31, gear + 0.85, 1.5, 0.02, 1.5, 1.3);
+  f.box("emitWarmSoft", -2.32, gear + 1.55, 1.5, 0.01, 0.06, 1.1, { uv: "keep" });
+  f.collider(-2.9, 2.9, 0, gear + 4.0, -7.6, 8.0, "shuttleHull");
+  f.collider(-1.6, 1.6, 0, gear + 3.2, 8.0, 11.3, "shuttleNose");
+  f.collider(-4.6, -2.9, 0, gear, 0.8, 2.2, "shuttleRamp");
+  return { root, tilt, span, gear };
+}
+
+/**
+ * Crane trolley for the side rooms: a boxy hoist trolley with a spreader beam and a slung load travelling along
+ * an x-axis rail at y (the rail itself is built by the room). Dynamic entry.
+ */
+export function craneTrolley(ctx, mats, o) {
+  const { x0, x1, y, z, drop = 4, speed = 0.4, load = "container", name = "hangar.trolley" } = o;
+  const trolley = buildGroup(mats, name, (k) => {
+    k.box("paintedMetal", 0, -0.55, 0, 2.6, 1.1, 2.2, { color: PALETTE.slate, texel: 1 });
+    for (const dx of [-0.9, 0.9]) for (const dz of [-0.8, 0.8]) k.box("metal", dx, -0.02, dz, 0.5, 0.3, 0.5, { color: PALETTE.darkMetal });
+    k.box("paintedMetal", 0, -0.55, 1.11, 1.6, 0.4, 0.02, { color: PALETTE.impAmber, uv: "world", texel: 1.5 });
+    k.box(BLACK, 0, -1.2, 0, 0.9, 0.3, 0.9);
+    k.box("emitWhiteSoft", 0, -1.36, 0, 0.7, 0.02, 0.7, { uv: "keep" });
+    for (const dx of [-0.5, 0.5]) k.cyl("metal", dx, -1.3 - drop / 2, 0, 0.035, drop, "y", { color: PALETTE.steel, segments: 6 });
+    // spreader beam and slings
+    k.box("paintedMetal", 0, -1.3 - drop, 0, 3.0, 0.3, 0.3, { color: PALETTE.impAmber, uv: "world", texel: 1.5 });
+    if (load === "container") {
+      const py = -1.3 - drop - 0.25 - 1.3;
+      k.box("paintedMetal", 0, py, 0, 2.4, 2.5, 6, { color: PALETTE.gunmetal, uv: "world", texel: 0.5 });
+      for (const dx of [-1.2, 1.2]) for (const dz of [-3, 3]) k.box("metal", dx, py, dz, 0.16, 2.6, 0.16, { color: PALETTE.darkMetal });
+      for (const [dx, dz] of [[-1.15, -2.9], [1.15, -2.9], [-1.15, 2.9], [1.15, 2.9]]) {
+        const len = Math.hypot(dx - Math.sign(dx) * 1.4, dz, 1.3);
+        k.add("metal", new THREE.CylinderGeometry(0.03, 0.03, len, 5), { pos: [dx * 0.55, -1.3 - drop - 0.7, dz / 2], rot: [Math.atan2(dz, 1.3) * 0.5, 0, 0], color: PALETTE.steel, uv: "scale", uvScale: [1, 1] });
+      }
+    } else if (load === "wing") {
+      const py = -1.3 - drop - 0.3;
+      const f = new Frame(k, new THREE.Vector3(0, py - TIE.H, 0), new THREE.Vector3(0, 0, 1), UP);
+      tieWingAt(k, f, 0, 1, 4);
+      for (const dz of [-1.0, 1.0]) k.box("metal", 0, py - 0.15, dz, 0.1, 0.3, 0.1, { color: PALETTE.steel });
+    }
+  });
+  const state = { x: (x0 + x1) / 2, dir: 1, pause: 4 };
+  trolley.position.set(state.x, y, z);
+  const update = (dt) => {
+    if (state.pause > 0) state.pause -= dt;
+    else {
+      state.x += state.dir * speed * dt;
+      if (state.x > x1) (state.x = x1), (state.dir = -1), (state.pause = 6);
+      if (state.x < x0) (state.x = x0), (state.dir = 1), (state.pause = 6);
+    }
+    trolley.position.x = state.x;
+  };
+  const entry = { object: trolley, update, name, state };
+  ctx.dynamic.push(entry);
+  return entry;
 }
