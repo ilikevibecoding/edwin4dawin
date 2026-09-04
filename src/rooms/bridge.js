@@ -295,10 +295,21 @@ export function buildBridge(kit, ctx, room) {
   }
   kit.floor(-hx - 0.5, -hz - 0.5, hx + 0.5, PIT.z0, L);
   kit.floor(-4, PIT.z0, 4, 6, L);
+  // flush floor grating (service duct cover) with black edging, on the upper deck
+  const grateStrip = (x0, z0, x1, z1) => {
+    kit.boxMM("impTrim", [x0 - 0.03, L, z0 - 0.03], [x1 + 0.03, L + 0.008, z1 + 0.03], { color: BLACK });
+    const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2);
+    kit.add("grate", g, { pos: [(x0 + x1) / 2, L + 0.012, (z0 + z1) / 2], uv: "scale", uvScale: [(x1 - x0) / 1.24, (z1 - z0) / 0.9] });
+    for (let z = z0 + 1.5; z < z1 - 0.5; z += 3) kit.boxMM("impMetal", [x0, L + 0.008, z - 0.02], [x1, L + 0.014, z + 0.02], { color: GREYD });
+  };
   // walkway lane + edge lights on the ledges outside the railings
   kit.boxMM("impDeck", [-1.5, L, PIT.z0 + 0.3], [1.5, L + 0.012, 5.8], { color: GREYD, texel: 0.5 });
   for (const s of [-1, 1]) {
     kit.boxMM("impTrim", [s * 1.5 - 0.03, L, PIT.z0 + 0.3], [s * 1.5 + 0.03, L + 0.014, 5.8], { color: BLACK });
+    // grated service strips either side of the lane, floor lamps between the rail posts, a cable run at the rail base
+    grateStrip(Math.min(s * 2.05, s * 2.75), PIT.z0 + 0.3, Math.max(s * 2.05, s * 2.75), 5.8);
+    for (let z = -8; z <= 5.5; z += 2.25) kit.boxMM("emitWhiteSoft", [s * 3.3 - 0.06, L + 0.003, z - 0.2], [s * 3.3 + 0.06, L + 0.015, z + 0.2], { uv: "keep" });
+    kit.cyl("impMetal", s * 3.78, L + 0.1, (PIT.z0 - 0.6 + VZ - 0.1) / 2, 0.03, VZ - 0.1 - (PIT.z0 - 0.6), "z", { color: GREYD, segments: 8 });
     kit.boxMM("emitBlue", [s * 3.85 - 0.03, L + 0.002, PIT.z0 - 0.3], [s * 3.85 + 0.03, L + 0.012, VZ - 0.2]);
     kit.boxMM("impTrim", [Math.min(s * 3.94, s * 4.0), L + 0.001, PIT.z0], [Math.max(s * 3.94, s * 4.0), L + 0.02, VZ], { color: BLACK });
     // pit rims on the outer decks and the forward strip
@@ -306,6 +317,7 @@ export function buildBridge(kit, ctx, room) {
     kit.boxMM("emitBlue", [Math.min(s * 4.3, s * 13.7), L + 0.002, PIT.z0 - 0.23], [Math.max(s * 4.3, s * 13.7), L + 0.012, PIT.z0 - 0.17]);
     kit.boxMM("chevronY", [Math.min(s * 14.35, s * 14.95), L + 0.003, PIT.z0], [Math.max(s * 14.35, s * 14.95), L + 0.011, PIT.z1], { texel: 1.5 });
     kit.boxMM("impTrim", [Math.min(s * 14.0, s * 14.06), L + 0.001, PIT.z0 - 0.06], [Math.max(s * 14.0, s * 14.06), L + 0.02, PIT.z1], { color: BLACK });
+    grateStrip(Math.min(s * 15.0, s * 15.7), PIT.z0 + 0.2, Math.max(s * 15.0, s * 15.7), PIT.z1 - 0.8);
     // outer deck lane between the computer bank and the wall stations
     kit.boxMM("impDeck", [Math.min(s * 23.4, s * 25.6), L, -hz + 0.6], [Math.max(s * 23.4, s * 25.6), L + 0.012, VZ - 1.0], { color: GREYD, texel: 0.5 });
     for (const e of [23.4, 25.6]) kit.boxMM("impTrim", [s * e - 0.03, L, -hz + 0.6], [s * e + 0.03, L + 0.014, VZ - 1.0], { color: BLACK });
@@ -463,6 +475,21 @@ export function buildBridge(kit, ctx, room) {
     const px = cx + fx * off;
     const pz = cz + fz * off;
     if (seated) impChair(kit, px, cy, pz, yaw);
+    if (o.backPanel) {
+      // dressed rear face (service panel with vents, a readout strip and a lamp) for consoles seen from behind
+      const { q, place } = placer(cx, cy, cz, yaw);
+      const add = (mat, lx, ly, lz, sx, sy, sz, extra = {}) => {
+        const p = place(lx, ly, lz);
+        kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [p.x, p.y, p.z], quat: q, ...extra });
+      };
+      add("impMetalRough", 0, 0.47, -d / 2 - 0.012, w - 0.3, 0.62, 0.024, { color: GREYD, uv: "world", texel: 1 });
+      for (let k = 0; k < 6; k++) add("impTrim", -w / 4 + 0.05, 0.3 + k * 0.07, -d / 2 - 0.028, w / 2 - 0.5, 0.025, 0.01, { color: BLACK });
+      add("impTrim", w / 4 - 0.05, 0.62, -d / 2 - 0.028, w / 2 - 0.5, 0.14, 0.01, { color: BLACK });
+      add("leds", w / 4 - 0.05, 0.64, -d / 2 - 0.036, w / 2 - 0.6, 0.05, 0.006, { uv: "keep" });
+      add("emitBlueSoft", 0, 0.12, -d / 2 - 0.02, w - 0.5, 0.025, 0.008, { uv: "keep" });
+      const dp = place(w / 4 - 0.05, 0.4, -d / 2 - 0.03);
+      kit.add("decalImp", new THREE.PlaneGeometry(0.26, 0.26).rotateY(Math.PI), { pos: [dp.x, dp.y, dp.z], quat: q, uv: "keep", uvRect: impDecalRect(IMP_DECAL.glyphs1) });
+    }
     crewSpots.push({ id: o.label || `station${crewSpots.length}`, x: +px.toFixed(2), y: cy, z: +pz.toFixed(2), yaw: +yaw.toFixed(3), seated });
   }
   const scr = {
@@ -477,14 +504,15 @@ export function buildBridge(kit, ctx, room) {
     const side = s > 0 ? "stbd" : "port";
     const zRow = [-6.4, -3.2, 0, 3.2, 6.4];
     zRow.forEach((zc, i) => {
-      station(s * 4.6, 0, zc, 2.6, 0.9, s > 0 ? Math.PI / 2 : -Math.PI / 2, { seed: 100 + i + s, screens: [scr.blue, scr.mix, scr.green, scr.blue, scr.white][i], label: `${side}-pit-inner-${i}` });
+      station(s * 4.6, 0, zc, 2.6, 0.9, s > 0 ? Math.PI / 2 : -Math.PI / 2, { seed: 100 + i + s, screens: [scr.blue, scr.mix, scr.green, scr.blue, scr.green][i], label: `${side}-pit-inner-${i}` });
       station(s * 13.4, 0, zc, 2.6, 0.9, s > 0 ? -Math.PI / 2 : Math.PI / 2, { seed: 120 + i - s, screens: [scr.mix, scr.blue, scr.blue, scr.red, scr.blue][i], label: `${side}-pit-outer-${i}` });
     });
     // forward row: tall stations (their upright displays face aft, down the length of the pit);
-    // aft row: low consoles so the pit stays readable from its aft entrance
+    // aft row: low consoles whose operators face aft, so their button fields (white keys bloom hard)
+    // are turned away from the vestibule and the spawn view
     for (const [xc, k] of [[7.7, 0], [10.3, 1]]) {
       station(s * xc, 0, -4.6, 2.4, 0.9, 0, { seed: 140 + k + s, screens: k ? scr.mix : scr.blue, tall: true, label: `${side}-pit-fwd-${k}` });
-      station(s * xc, 0, 5.0, 2.4, 0.9, 0, { seed: 150 + k - s, screens: k ? scr.blue : scr.green, label: `${side}-pit-aft-${k}` });
+      station(s * xc, 0, 4.4, 2.4, 0.9, Math.PI, { seed: 150 + k - s, screens: k ? scr.blue : scr.green, backPanel: true, label: `${side}-pit-aft-${k}` });
     }
     // pit supervisor's plotting table (octagonal, screen top, standing spot)
     const px = s * 9;
@@ -509,12 +537,12 @@ export function buildBridge(kit, ctx, room) {
       station(xc, L, -hz + 0.95, 3.2, 0.9, 0, { seed: 200 + k * 2 + (s > 0 ? 1 : 0), screens: isCmd ? scr.red : [scr.blue, scr.mix, scr.white, scr.green][k % 4], chair: false, label: `fwd-bank-${s > 0 ? "s" : "p"}${k}`, accentKey: isCmd ? "emitRedImp" : accentKey });
     }
   }
-  crewSpots.push({ id: "commander", x: 0, y: L, z: -hz + 2.1, yaw: 0, seated: false });
+  crewSpots.push({ id: "commander", x: 0, y: L, z: -hz + 1.75, yaw: 0, seated: false });
   // --- command platform: holo table, flag officers' tall consoles, tactical display columns
   const HZ = -11.4;
   buildHoloTable(0, L, HZ);
   for (const s of [-1, 1]) {
-    station(s * 4.8, L, -12.7, 2.2, 0.9, 0, { seed: 240 + s, screens: s > 0 ? scr.red : scr.mix, tall: true, chair: false, label: s > 0 ? "executive-officer" : "flag-officer" });
+    station(s * 4.8, L, -12.2, 2.2, 0.9, 0, { seed: 240 + s, screens: s > 0 ? scr.red : scr.mix, tall: true, chair: false, label: s > 0 ? "executive-officer" : "flag-officer" });
     displayColumn(s * 8.8, L, -12.4, 0, 260 + s);
   }
   // --- outer decks: tactical wall display + standing stations, equipment banks, comms alcove, pillars
@@ -560,7 +588,7 @@ export function buildBridge(kit, ctx, room) {
     commsMast(s * 30.4, L, VZ - 1.3);
     // computer bank island: two rows of cabinets back to back (fronts to the pit / to the wall lane)
     // with a cable-tray spine on top, between the pit railing and the wall lane
-    const BANK = { z0: -5.6, z1: 4.3, n: 7 };
+    const BANK = { z0: -5.6, z1: 5.0, n: 7 }; // 7 cabinets at 1.5 m pitch, 10 cm clear of both end plates
     for (let k = 0; k < BANK.n; k++) {
       const zc = BANK.z0 + 0.8 + k * 1.5;
       cabinet(s * 19.2, L, zc, s > 0 ? -Math.PI / 2 : Math.PI / 2, 500 + k * 2 + s, 1.4, 2.3, 0.7);
@@ -697,20 +725,27 @@ export function buildBridge(kit, ctx, room) {
   }
 
   function guardAlcove(f, u) {
-    // proud niche on the aft wall: side posts, lintel, dark back panel, red light, weapon rack, floor pad
+    // proud niche on the aft wall: side posts, lintel, pale back panel (so the rack reads in silhouette),
+    // a white lamp under the lintel with a red "restricted" line on its face, weapon rack, floor pad
     for (const s of [-1, 1]) f.box("impTrim", u + s * 1.15, 1.6, 0.36, 0.3, 3.2, 0.72, { color: BLACK, texel: 1 });
     f.box("impTrim", u, 3.05, 0.36, 2.6, 0.3, 0.72, { color: BLACK, texel: 1 });
-    f.box("impMetalRough", u, 1.5, 0.15, 2.0, 2.9, 0.02, { color: CHAR, texel: 1 });
-    f.box("emitRedImp", u, 2.86, 0.4, 1.6, 0.03, 0.3);
-    f.box("impMetal", u, 2.86, 0.6, 1.9, 0.05, 0.2, { color: CHAR });
-    f.box("impTrim", u, 1.7, 0.2, 1.7, 0.08, 0.1, { color: BLACK });
+    f.box("impPanel1", u, 1.5, 0.15, 2.0, 2.9, 0.02, { color: GREY, uv: "world", texel: 1 });
+    f.box("impMetal", u, 2.87, 0.4, 1.9, 0.04, 0.3, { color: CHAR });
+    f.box("emitWhiteSoft", u, 2.84, 0.4, 1.6, 0.02, 0.24, { uv: "keep" });
+    f.box("emitRedImp", u, 2.92, 0.725, 2.2, 0.04, 0.01);
+    for (const s of [-1, 1]) f.box("emitWhiteSoft", u + s * 0.995, 1.6, 0.4, 0.01, 2.4, 0.04, { uv: "keep" });
+    f.box("impMetal", u, 1.7, 0.2, 1.7, 0.08, 0.1, { color: GREYD });
+    f.box("impMetal", u, 0.45, 0.2, 1.7, 0.06, 0.16, { color: GREYD });
     for (let k = 0; k < 4; k++) {
       const ru = u - 0.6 + k * 0.4;
       f.box("impTrim", ru, 1.0, 0.24, 0.06, 1.0, 0.1, { color: BLACK, tilt: 0.06 });
-      f.cylV("impMetal", ru, 1.55, 0.24, 0.018, 0.45, { color: GREYD, segments: 8 });
+      f.cylV("impMetal", ru, 1.55, 0.24, 0.018, 0.45, { color: GREY, segments: 8 });
       f.box("impGloss", ru, 0.7, 0.29, 0.1, 0.22, 0.05);
+      f.box("impTrim", ru + 0.08, 0.95, 0.27, 0.05, 0.16, 0.03, { color: CHAR });
+      const p = f.pos(ru, 1.28, 0.3);
+      addBlink("amber", p.x, p.y, p.z, 0.03, 0.03, 0.02);
     }
-    f.decal(IMP_DECAL.restricted, u, 0.5, 0.17, 0.45);
+    for (const s of [-1, 1]) f.decal(IMP_DECAL.restricted, u + s * 1.15, 1.9, 0.725, 0.26);
     f.box("chevronR", u, 0.005, 0.5, 2.0, 0.01, 0.9, { texel: 1.5 });
     f.collider(u - 1.3, u - 1.0, 0, 3.2, 0, 0.75, "alcove");
     f.collider(u + 1.0, u + 1.3, 0, 3.2, 0, 0.75, "alcove");
@@ -742,7 +777,10 @@ export function buildBridge(kit, ctx, room) {
     kit.cyl("impMetal", x, y + 0.63, z, 1.4, 0.24, "y", { segments: 8, color: CHAR, texel: 1 });
     kit.cyl("impTrim", x, y + 0.81, z, 1.32, 0.12, "y", { segments: 8, color: BLACK, texel: 1 });
     kit.cyl("emitBlueSoft", x, y + 0.05, z, 1.17, 0.03, "y", { segments: 8, uv: "keep" });
-    kit.add("emitBlue", new THREE.TorusGeometry(1.24, 0.025, 8, 48).rotateX(Math.PI / 2), { pos: [x, y + 0.9, z] });
+    kit.add("emitBlue", new THREE.TorusGeometry(1.24, 0.016, 8, 48).rotateX(Math.PI / 2), { pos: [x, y + 0.9, z] });
+    // command dais: a darker deck disc under the table with a metal kerb ring
+    kit.cyl("impDeck", x, y + 0.015, z, 2.0, 0.03, "y", { segments: 24, color: GREYD, texel: 0.5 });
+    kit.add("impMetal", new THREE.TorusGeometry(2.0, 0.02, 6, 48).rotateX(Math.PI / 2), { pos: [x, y + 0.03, z], color: GREYD });
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
       const sx = x + Math.cos(a) * 1.08;
