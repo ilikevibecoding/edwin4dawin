@@ -325,7 +325,7 @@ export function wallCabinet(frame, u0, u1, v0, v1, opts = {}) {
  * position / quaternion of the keypad so the room can hang an interactable there.
  */
 export function dispenser(kit, pos, yaw = 0, opts = {}) {
-  const { w = 0.9, d = 0.6, h = 2.05, accent = "emitAmber", screen = 1, tone = IMP.console, collide = true } = opts;
+  const { w = 0.9, d = 0.6, h = 2.05, accent = "emitAmber", accentColor = null, screen = 1, tone = IMP.console, collide = true } = opts;
   const q = yawQ(yaw);
   const o = new THREE.Vector3(...pos);
   const L = (x, y, z) => o.clone().add(new THREE.Vector3(x, y, z).applyQuaternion(q));
@@ -432,6 +432,44 @@ export function washStation(frame, u, opts = {}) {
     frame.box("crewMirror", u, 1.55, 0.085, 0.5, 0.64, 0.01);
     frame.box("impPaintedMetal", u, 1.925, 0.08, 0.56, 0.07, 0.04, { color: IMP.trim, texel: 1 });
     frame.box(light, u, 1.925, 0.102, 0.5, 0.04, 0.006, { uv: "keep" });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Beds
+// ---------------------------------------------------------------------------
+// Single platform bed (officer cabins, medbay recovery). pos = floor centre, yaw 0 => head toward -Z.
+// Drawer fronts on the local +X side, headboard with a reading lamp and a shelf, pillow, blanket.
+export function bed(kit, pos, yaw = 0, opts = {}) {
+  const { w = 1.0, l = 2.1, color = IMP.fabricGrey, blanket = IMP.fabricBlack, collide = true, tone = IMP.trim, lamp = "crewEmit", shelf = true, side = 1 } = opts;
+  const q = yawQ(yaw);
+  const o = new THREE.Vector3(...pos);
+  const L = (x, y, z) => o.clone().add(new THREE.Vector3(x, y, z).applyQuaternion(q));
+  const box = (mat, x, y, z, sx, sy, sz, extra = {}) => {
+    const p = L(x, y, z);
+    return kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  box("impPaintedMetal", 0, 0.06, 0, w - 0.16, 0.12, l - 0.16, { color: IMP.consoleDark, texel: 1 });
+  box("impPaintedMetal", 0, 0.28, 0, w, 0.32, l, { color: tone, texel: 1 });
+  for (const dz of [-l * 0.25, l * 0.25]) {
+    box("impPanel", side * (w / 2 + 0.008), 0.26, dz, 0.016, 0.2, l * 0.42, { color: IMP.wallDark, uv: "keep" });
+    box("impMetal", side * (w / 2 + 0.02), 0.26, dz + l * 0.12, 0.012, 0.03, 0.12, { color: IMP.steel });
+  }
+  box("impFabric", 0, 0.51, 0, w - 0.06, 0.14, l - 0.08, { color, uv: "world", texel: 2 });
+  box("impFabric", 0, 0.6, -l / 2 + 0.35, w * 0.7, 0.1, 0.42, { color: IMP.white, uv: "world", texel: 2 });
+  box("impFabric", 0, 0.6, l * 0.14, w - 0.02, 0.05, l * 0.62, { color: blanket, uv: "world", texel: 2 });
+  // headboard, lamp, shelf
+  box("impPaintedMetal", 0, 0.85, -l / 2 - 0.02, w + 0.04, 0.9, 0.06, { color: IMP.consoleDark, texel: 1 });
+  box(lamp, 0, 1.18, -l / 2 + 0.015, w * 0.4, 0.03, 0.012, { color: 0xffc890 });
+  if (shelf) {
+    box("impMetal", 0, 1.62, -l / 2 + 0.1, w, 0.03, 0.26, { color: IMP.steel, texel: 1 });
+    box("darkGloss", -w * 0.25, 1.645, -l / 2 + 0.1, 0.16, 0.012, 0.22);
+    kit.add("impMetal", new THREE.CylinderGeometry(0.04, 0.035, 0.1, 10), { pos: L(w * 0.2, 1.685, -l / 2 + 0.1).toArray(), color: IMP.gunmetal, uv: "scale", uvScale: [0.3, 0.2] });
+  }
+  if (collide) {
+    const a = L(-w / 2 - 0.02, 0, -l / 2 - 0.06);
+    const b = L(w / 2 + 0.02, 0, l / 2);
+    kit.collider([Math.min(a.x, b.x), pos[1], Math.min(a.z, b.z)], [Math.max(a.x, b.x), pos[1] + 1.0, Math.max(a.z, b.z)], "bed");
   }
 }
 
