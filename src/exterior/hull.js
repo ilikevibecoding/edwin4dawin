@@ -236,7 +236,11 @@ export function buildExterior(scene) {
 
   // ---------------- base hull (always visible): both planes, the trench lips and the dorsal spine ridge
   const wedge = buildWedge();
-  addMesh(merge([finish(wedge.top), finish(wedge.bottom), finish(wedge.lips), finish(buildSpine(), 1 / 12)]), hullMat, "hull");
+  addMesh(merge([finish(wedge.top), finish(wedge.lips), finish(buildSpine(), 1 / 12)]), hullMat, "hull");
+  // The ventral surface runs through the keel block (inside the closed block, never visible from outside),
+  // so it is its own chunk that the belly windows leave out: from the hangar deck it read as a low
+  // light-grey ceiling hiding the racks, girders and the real ceiling.
+  addMesh(finish(wedge.bottom), hullMat, "hullBottom");
   addMesh(finish(wedge.stern, 1 / 12, { base: 0.72, tint: sternHeatTint }), darkMat, "sternWall");
   addMesh(finish(wedge.trench, 1 / 12, { trench: true }), darkMat, "trenchWall");
 
@@ -559,7 +563,7 @@ export function buildExterior(scene) {
   // the well. Chunks are matched by mesh name so anything unlisted stays visible.
   const HIDE_INSIDE = {
     forward: /^(sternWall|trenchWall|keelBlock|keelDark|wellRimLight|tractorField|ventral|reactor|plates_paint|domesSpire|engine|stern|trench(Units|Ribs|Bays))/,
-    belly: /^(sternWall|trenchWall|towerTerraces|terraceRecess|windowBays|windowRows|domesSpire|engine|stern|trench(Units|Ribs|Bays)|dockingPads|city|bays|gantries|sensorDomes|dishes|smallPlates|plates|hatches|wallVents|turrets|ventral|reactor|wellRimLight)/,
+    belly: /^(hullBottom|sternWall|trenchWall|towerTerraces|terraceRecess|windowBays|windowRows|domesSpire|engine|stern|trench(Units|Ribs|Bays)|dockingPads|city|bays|gantries|sensorDomes|dishes|smallPlates|plates|hatches|wallVents|turrets|ventral|reactor|wellRimLight)/,
   };
   let culled = null; // Set of meshes hidden for the current interior view; null = draw everything
   const applyCulling = () => {

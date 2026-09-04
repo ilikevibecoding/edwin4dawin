@@ -137,6 +137,49 @@ await teleport(0, 518.5, 90, -10);
 a = await pose();
 check("aft gallery height", near(a.y, CAT, 0.05), a);
 
+// 7. flight-control cab on the starboard catwalk (y -62): walk toward the consoles / glazing over the well
+await teleport(26.5, 464, 90, -6);
+a = await pose();
+check("flight control cab height", near(a.y, CAT, 0.05), a);
+await walk("KeyW", 3); // facing -x
+b = await pose();
+check("flight control consoles block the glazing", near(b.y, CAT, 0.05) && b.x > 22.2 && b.x < 24.5, b);
+await shot("walk_flightControl");
+
+// 8. launch-lane opening at the well: the raised lip is a step (0.42), its inner edge stops the player
+await teleport(0, 426.5, 180, -20);
+a = await pose();
+check("deck height at the launch lane", near(a.y, DECK, 0.05), a);
+await walk("KeyW", 4); // facing +z, toward the open well
+b = await pose();
+check("well lip stops the player (no floor over the well)", near(b.y, DECK + 0.42, 0.06) && b.z < 430.45 && b.z > 429.4, b);
+await shot("walk_wellLip");
+
+// 9. port deck by the cradled fighter: level deck, the cradle skid blocks the way to the pod
+await teleport(-25, 463, 180, -2);
+a = await pose();
+check("deck height at the cradle bay", near(a.y, DECK, 0.05), a);
+await walk("KeyW", 3); // facing +z, into the cradle
+b = await pose();
+check("cradle collider blocks the pod", near(b.y, DECK, 0.05) && b.z > 464.6 && b.z < 465.4, b);
+
+// 10. lift corridor into the hangar: the door-side pilasters narrow the corridor end to 2.3 m but leave the
+// lane open (the door opens on approach), while a pilaster itself blocks the corner
+await teleport(-36.2, 479.5, -90, 2);
+a = await pose();
+check("lift corridor deck height", near(a.y, DECK, 0.05), a);
+await shot("walk_liftPortal");
+await walk("KeyW", 5); // facing +x, through the door
+b = await pose();
+check("corridor portal lets the player into the hangar", near(b.y, DECK, 0.05) && b.x > -31.5, b);
+// hugging the corridor's -z wall (0.08 m of clearance): the 0.34 m pilaster at the corner deflects the capsule
+// inward to z >= 478.66 (its inner face + the 0.32 m radius) and the player still gets through; without the
+// pilaster's collider z would stay at 478.4
+await teleport(-36.2, 478.4, -90, 2);
+await walk("KeyW", 4);
+c = await pose();
+check("portal pilaster deflects a wall-hugging player into the opening", near(c.y, DECK, 0.05) && c.z > 478.6 && c.x > -31.5, c);
+
 const failed = results.filter((r) => !r.ok);
 writeFileSync(resolve(outDir, "walk.json"), JSON.stringify(results, null, 1));
 console.log(failed.length ? `${failed.length} FAILED` : "all walk checks passed");
