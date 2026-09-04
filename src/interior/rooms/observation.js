@@ -1,7 +1,9 @@
 // Observation gallery: a tall, quiet viewing room beside the bridge. The whole forward wall is flat glass
 // in slim black mullions over a low sill, with a raised viewing terrace and a leaning rail along it. Four
-// rows of theatre benches (legs, open backs with cream rear panels and steel rails) face the view,
-// pilasters with lit slots and low floor light line the side walls, star-chart displays flank the aft
+// rows of theatre benches (legs, open backs with painted rear panels and steel rails or ledges) face the
+// view, no two rows alike in length, offset, recline or what was left on the ledges, with a steward's
+// trolley parked in a missing seat; pilasters with lit slots and low floor light line the side walls,
+// star-chart displays flank the aft
 // door and a slowly turning astrogation globe with two chart lecterns stands on the port side of the
 // third row, well off the entry axis. Dim cool light so the view dominates, with cool space-light keys
 // coming in through the glass.
@@ -10,7 +12,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { roomShell, wallLightBar, wallConsole } from "../shell.js";
 import { pointLight, windowSpot, wallFrame } from "../lib.js";
 import { PALETTE as P } from "../../materials.js";
-import { wallScreen, theatreBench, handrail, floorStrip, pilaster, podium, downlight, stencil, commPanel, cabinet, effects } from "./commandKit.js";
+import { wallScreen, theatreBench, serviceTrolley, handrail, floorStrip, pilaster, podium, downlight, stencil, commPanel, cabinet, effects } from "./commandKit.js";
 
 export function build(kit, ctx, room) {
   const shell = roomShell(kit, ctx, room, { style: "light", skipWalls: ["-z"], ceiling: false, lights: false, seed: 71 });
@@ -69,17 +71,32 @@ export function build(kit, ctx, room) {
   wallScreen(Et, uE(z0 + 3.3), 2.15, 1.5, 0.9, "screen1", { leds: false });
 
   // ------------------------------------------------------------ seating facing the view
-  // four rows of theatre benches; the port half of the third row is the astrogation globe and its two
-  // lecterns, well forward of the door and off its sightline so the glass owns the view from the entrance
+  // four rows of theatre benches; no two rows repeat: bench lengths, outboard offsets, back angles, rear
+  // tones and the cups / datapads left on the ledges all differ. The port half of the third row is the
+  // astrogation globe and its two lecterns, well forward of the door and off its sightline so the glass
+  // owns the view from the entrance; its starboard half has a seat missing, with the steward's trolley
+  // parked in the gap.
   const rows = [z0 + 7.8, z0 + 12.0, z0 + 16.2, z0 + 20.4];
   const gz = z0 + 16.2;
-  const rearTone = [P.creamDark, P.cream, P.creamDark, P.cream];
-  rows.forEach((rz, i) => {
-    for (const bx of [x0 + 5.3, x0 + 8.6, x1 - 8.6, x1 - 5.3]) {
-      if (rz === gz && bx < cx) continue;
-      theatreBench(kit, bx, y0, rz, "-z", { len: 3.0, color: P.fabricTeal, rear: rearTone[i] });
-    }
-  });
+  const B = (x, z, o) => theatreBench(kit, x, y0, z, "-z", { color: P.fabricTeal, ...o });
+  // front row: two full benches a side, ledges with what the row behind left on them
+  B(x0 + 5.3, rows[0], { len: 3.0, rear: P.creamDark, ledge: true, props: [[-0.9, "mug"], [0.6, "datapad", 0.4]] });
+  B(x0 + 8.6, rows[0], { len: 3.0, rear: P.creamDark });
+  B(x1 - 8.5, rows[0], { len: 3.0, rear: P.creamDark, tilt: -0.16 });
+  B(x1 - 5.3, rows[0], { len: 3.0, rear: P.creamDark, ledge: true, props: [[0.8, "mug"], [-0.4, "stack", 0.2]] });
+  // second row: a short and a long bench a side, reclined further, cream rear panels, pushed outboard
+  B(x0 + 5.0, rows[1], { len: 2.4, rear: P.cream, tilt: -0.2 });
+  B(x0 + 8.3, rows[1], { len: 3.6, rear: P.cream, tilt: -0.2, ledge: true, props: [[1.2, "mug"], [-0.6, "datapad", -0.3]] });
+  B(x1 - 7.6, rows[1], { len: 4.6, rear: P.cream, tilt: -0.2, ledge: true, props: [[-1.5, "mug"], [-1.2, "mug"], [1.4, "datapad", 0.2]] });
+  B(x1 - 4.3, rows[1], { len: 1.6, rear: P.cream, tilt: -0.2 });
+  // third row, starboard: a full bench, the missing seat with the trolley, a short bench
+  B(x1 - 8.5, rows[2], { len: 3.0, rear: P.creamDark, ledge: true, props: [[0.3, "canister"]] });
+  serviceTrolley(kit, x1 - 6.1, y0, rows[2] + 0.1, "+z");
+  B(x1 - 4.4, rows[2], { len: 1.8, rear: P.creamDark });
+  // back row by the door: one long upright bench port, two unequal upright benches starboard, dark rears
+  B(x0 + 7.0, rows[3], { len: 5.2, rear: P.gunmetal, tilt: -0.06, ledge: true, props: [[-1.8, "datapad", 0.5], [0.9, "mug"]] });
+  B(x1 - 8.8, rows[3], { len: 2.4, rear: P.gunmetal, tilt: -0.06 });
+  B(x1 - 5.5, rows[3], { len: 3.4, rear: P.gunmetal, tilt: -0.06 });
   // low guide lights along the centre aisle and the side aisles
   for (const gx of [cx - 1.7, cx + 1.7]) floorStrip(kit, [gx, tz1 + 0.6], [gx, z1 - 2.2], y0, "emitCoolSoft", { w: 0.05 });
   for (const gx of [x0 + 0.75, x1 - 0.75]) floorStrip(kit, [gx, tz1 + 0.6], [gx, z1 - 2.4], y0, "emitCoolSoft", { w: 0.05 });
@@ -94,9 +111,20 @@ export function build(kit, ctx, room) {
   }
   const sideZ = [z0 + 8.5, z0 + 13.5, z0 + 18.5];
   const sideDecals = [[9, 4], [0, 9], [12, 0]];
+  // wall benches differ along each wall too (length, recline, something left on a seat) and between the walls
+  const sideW = [
+    { len: 1.8, tilt: -0.06 },
+    { len: 2.4, props: [[0.5, "mug"]] },
+    { len: 2.4, tilt: -0.2, rear: P.slate },
+  ];
+  const sideE = [
+    { len: 2.4, props: [[-0.6, "datapad", 0.3], [0.7, "mug"]] },
+    { len: 1.8, tilt: -0.06, rear: P.slate },
+    { len: 2.4, tilt: -0.2 },
+  ];
   sideZ.forEach((z, i) => {
-    theatreBench(kit, x0 + 0.46, y0, z, "+x", { len: 2.4, color: P.fabricTeal, rear: P.gunmetal });
-    theatreBench(kit, x1 - 0.46, y0, z, "-x", { len: 2.4, color: P.fabricTeal, rear: P.gunmetal });
+    theatreBench(kit, x0 + 0.46, y0, z, "+x", { color: P.fabricTeal, rear: P.gunmetal, ...sideW[i] });
+    theatreBench(kit, x1 - 0.46, y0, z, "-x", { color: P.fabricTeal, rear: P.gunmetal, ...sideE[i] });
     wallLightBar(Wf, uW(z) - 1.3, uW(z) + 1.3, 2.6, "emitCoolSoft");
     wallLightBar(Ef, uE(z) - 1.3, uE(z) + 1.3, 2.6, "emitCoolSoft");
     stencil(Wf, uW(z), 1.75, 0.42, sideDecals[i][0]);

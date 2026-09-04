@@ -2,7 +2,8 @@
 // operator stations face a wall of sensor displays; the supervisor's dais sits behind them on the door
 // side with a rail and two rear-lit podiums; two free-standing signal boards face the entrance; headset
 // racks hang by the door; the walls carry racks of blinking comms arrays and an antenna schematic wall
-// with two dish models; overhead, cable trays and antenna feed conduits run to the display wall.
+// with two dish models; overhead, cable trays and matte antenna feed conduits flank a capped blue service
+// spine on the centre line, with the shell's two light channels over the operator rows.
 // Green-blue accent, brighter than tactical, every station a different UI layout.
 import { roomShell, wallConsole, wallLightBar } from "../shell.js";
 import { pointLight } from "../lib.js";
@@ -10,7 +11,8 @@ import { PALETTE as P } from "../../materials.js";
 import { customWall, wallScreen, station, rack, BlinkSet, cableTray, pipe, cabinet, stencil, podium, chair, downlight, effects, handrail, floorStrip, facingFrame, leaningBox } from "./commandKit.js";
 
 export function build(kit, ctx, room) {
-  const shell = roomShell(kit, ctx, room, { style: "light", skipWalls: ["+x"], lightRows: 3, lights: false, seed: 23 });
+  // two light channels (over the operator rows); the centre line gets its own capped spine below
+  const shell = roomShell(kit, ctx, room, { style: "light", skipWalls: ["+x"], lightRows: 2, lights: false, seed: 23 });
   const y0 = shell.y0;
   const { x0, x1, z0, z1, height: h } = room;
   const yTop = y0 + h;
@@ -70,9 +72,9 @@ export function build(kit, ctx, room) {
   handrail(kit, [dx - 1.6, cz - 1.5], [dx + 0.2, cz - 1.5], daisY, { h: 0.9, postEvery: 1.8 });
   handrail(kit, [dx - 1.6, cz + 1.5], [dx + 0.2, cz + 1.5], daisY, { h: 0.9, postEvery: 1.8 });
   effects(kit, dx + 0.7, daisY + 0.96, cz - 1.45, "mug");
-  // (the shell's middle light channel runs over the dais centre line)
-  downlight(kit, dx, yTop, cz - 1.4, 1.0, 0.5, "emitCoolSoft");
-  downlight(kit, dx, yTop, cz + 1.4, 1.0, 0.5, "emitCoolSoft");
+  // downlights just outside the dais edges, clear of the conduits and the centre spine
+  downlight(kit, dx, yTop, cz - 2.1, 1.0, 0.5, "emitCoolSoft");
+  downlight(kit, dx, yTop, cz + 2.1, 1.0, 0.5, "emitCoolSoft");
 
   // ------------------------------------------------------------ signal boards facing the entrance, either side of the door path
   signalBoard(kit, 6.0, y0, 507.4, "-x", { screen: "screen9", side: "screen8" });
@@ -81,13 +83,25 @@ export function build(kit, ctx, room) {
   floorStrip(kit, [x0 + 1.4, cz - 1.9], [dx - 1.9, cz - 1.9], y0, "emitCoolSoft", { w: 0.04 });
   floorStrip(kit, [x0 + 1.4, cz + 1.9], [dx - 1.9, cz + 1.9], y0, "emitCoolSoft", { w: 0.04 });
 
-  // cross trays and antenna feed conduits from the forward array wall to the display wall
+  // cross trays, and a capped service spine down the centre line: black housing with a narrow soft blue
+  // diffuser (no bare emissive tube), matte-painted antenna feed conduits well to either side of it and of
+  // the practicals below, so nothing overhead reads as a blown cluster from the door
   for (const tz of [z0 + 1.8, z1 - 1.8]) cableTray(kit, [x0 + 2.2, tz], [x1 - 0.9, tz], yTop - 0.35, { w: 0.5 });
-  for (const [pz, r, col] of [[cz - 0.9, 0.11, P.steel], [cz - 0.5, 0.08, P.gunmetal], [cz + 0.6, 0.11, P.steel], [cz + 1.0, 0.06, P.orange]]) {
-    pipe(kit, [x0 + 3.2, yTop - 0.36, pz], [x1 - 0.5, yTop - 0.36, pz], r, { color: col });
+  // (both start 4.6 m in from the door wall, well past the door view camera, so their near ends sit high
+  // and small in the frame instead of filling its top)
+  const sx0 = x0 + 4.6;
+  const sx1 = x1 - 1.0;
+  kit.boxMM("satinBlack", [sx0, yTop - 0.11, cz - 0.25], [sx1, yTop, cz + 0.25]);
+  kit.boxMM("paintedMetal", [sx0, yTop - 0.13, cz - 0.27], [sx1, yTop - 0.11, cz + 0.27], { color: P.gunmetal, texel: 1.5 });
+  kit.boxMM("emitBlueSoft", [sx0 + 0.3, yTop - 0.136, cz - 0.06], [sx1 - 0.3, yTop - 0.13, cz + 0.06], { uv: "keep" });
+  for (let i = 0; i < 7; i++) kit.box("metal", sx0 + 1.2 + i * 2.35, yTop - 0.12, cz, 0.12, 0.06, 0.6, { color: P.steel });
+  for (const [pz, r, col] of [[cz - 1.5, 0.11, P.slate], [cz - 1.1, 0.08, P.gunmetal], [cz + 1.1, 0.11, P.slate], [cz + 1.5, 0.06, P.orange]]) {
+    pipe(kit, [sx0, yTop - 0.36, pz], [x1 - 0.5, yTop - 0.36, pz], r, { color: col, mat: "paintedMetal" });
+    // capped elbow where each conduit leaves the ceiling plate
+    kit.box("paintedMetal", sx0 - 0.1, yTop - 0.25, pz, 0.2, 0.5, r * 2 + 0.1, { color: P.darkMetal });
   }
   // conduit drops behind the display counter
-  for (const dz of [504.5, 511, 517.5]) pipe(kit, [x1 - 0.45, y0 + 1.0, dz], [x1 - 0.45, yTop - 0.36, dz], 0.09, { color: P.steel, clamps: false });
+  for (const dz of [504.5, 509.5, 512.5, 517.5]) pipe(kit, [x1 - 0.45, y0 + 1.0, dz], [x1 - 0.45, yTop - 0.36, dz], 0.09, { color: P.slate, clamps: false, mat: "paintedMetal" });
 
   // ------------------------------------------------------------ comms array racks + headset racks (port wall, flanking the door)
   const Wf = shell.frames["-x"].frame; // u = z1 - z, 0..18, door at u 8..10
@@ -170,12 +184,15 @@ export function build(kit, ctx, room) {
   // ------------------------------------------------------------ ceiling fixtures + lights
   for (const fx of [6.5, 12.5, 18.5]) for (const fz of [505.5, 516.5]) downlight(kit, fx, yTop, fz, 0.5, 0.5, "emitCoolSoft");
   for (const fz of [509.3, 512.7]) downlight(kit, x0 + 2.0, yTop, fz, 0.5, 0.5, "emitCoolSoft");
-  // a 3x3 grid of strong cool practicals on the downlight lines plus a fill just inside the door (the
-  // foreground boards and dais), two teal accents washing the rack walls and one over the dais: 13
-  // fixtures so the 14-slot pool holds the whole room
+  // a 3x3 grid of cool practicals on the downlight lines (the centre row hangs lower so the conduits above
+  // it are not lit point-blank), two fills over the foreground boards and dais front (3.4 m off the door
+  // view camera), two teal accents washing the rack walls and one over the dais: 14 fixtures, the pool size
   const L = ctx.lights;
-  for (const gx of [6.5, 12.5, 18.5]) for (const gz of [505.5, 511, 516.5]) L.cool.push(pointLight(0xd8f0ff, 15, 14, [gx, yTop - 0.7, gz]));
-  L.cool.push(pointLight(0xd8f0ff, 11, 9, [x0 + 2.0, yTop - 0.6, cz]));
+  for (const gx of [6.5, 12.5, 18.5]) {
+    for (const gz of [505.5, 516.5]) L.cool.push(pointLight(0xd8f0ff, 15, 14, [gx, yTop - 0.7, gz]));
+    L.cool.push(pointLight(0xd8f0ff, 12, 13, [gx, yTop - 1.1, cz]));
+  }
+  for (const fz of [cz - 2.6, cz + 2.6]) L.cool.push(pointLight(0xd8f0ff, 8, 9, [x0 + 3.6, yTop - 1.3, fz]));
   L.teal.push(pointLight(0x62d9c9, 5, 8, [x0 + 1.4, y0 + 2.2, z1 - 3.3]));
   L.teal.push(pointLight(0x62d9c9, 5, 8, [x0 + 1.4, y0 + 2.2, z0 + 3.3]));
   L.teal.push(pointLight(0x62d9c9, 4, 5, [dx + 0.6, daisY + 1.5, cz]));

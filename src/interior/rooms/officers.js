@@ -1,10 +1,12 @@
-// Officers' quarters. The door opens onto a wardroom (dining table, lounge, seating booths against the
-// cabin wall, a galley counter, an honours wall) and the four cabins face the entrance: two open straight
-// off the wardroom with their sliding doors parked, two more at the end of a short passage between them,
-// so bunks, desks and lit lamps are in view from the doorway. Every cabin: bunk with drawers, headboard
-// shelf and a hooded reading lamp, desk with monitor and lamp, sitting corner (bench, low table, chairs,
-// rug), locker, wardrobe, refresher cubicle and personal effects. Warm, quiet palette: cream / creamDark
-// panels, teal and orange soft furnishings, amber-tinted practicals.
+// Officers' quarters. The door opens onto a wardroom and the four cabins face the entrance: two open
+// straight off the wardroom with their sliding doors parked, two more at the end of a short passage between
+// them, so bunks, desks and lit lamps are in view from the doorway. The dining table (under a pendant) and
+// the lounge group stand against the cabin wall either side of the passage mouth, inside the door's view
+// cone; the seating booths take the far corner and the door wall, with a galley counter and an honours wall.
+// Every cabin: bunk with drawers, headboard shelf and a hooded reading lamp, desk with monitor and lamp,
+// sitting corner (bench, low table, chairs, rug), locker, wardrobe, refresher cubicle and personal effects.
+// Warm, quiet palette: cream / creamDark panels, teal and orange soft furnishings, amber-tinted practicals.
+// No fixture hangs within 2 m of the door: the ceiling over the entrance is plain slate.
 import { roomShell, wallLightBar } from "../shell.js";
 import { pointLight, wallFrame, WALL_T } from "../lib.js";
 import { PALETTE as P } from "../../materials.js";
@@ -21,9 +23,10 @@ export function build(kit, ctx, room) {
   const shell = roomShell(kit, ctx, room, { style: "light", ceiling: false, lights: false, seed: 53 });
   const y0 = shell.y0;
   const { x0, x1, z0, z1, height: h } = room;
-  // lighter slate ceiling than the shell's gunmetal so the quarters read as a lit space; beams sit on the
-  // shell's rib pitch (every 3.67 m) so the pendants and downlights below stay clear of them
-  const yTop = flatCeiling(kit, room, y0, { beams: [1, 2, 3, 4, 5].map((i) => x0 + ((x1 - x0) * i) / 6), along: "x", plate: P.creamDark });
+  // mid-grey slate ceiling: lighter than the shell's gunmetal so the quarters read as a lit space, dark
+  // enough not to blow out under the practicals; beams sit on the shell's rib pitch (every 3.67 m) so the
+  // pendants and downlights below stay clear of them
+  const yTop = flatCeiling(kit, room, y0, { beams: [1, 2, 3, 4, 5].map((i) => x0 + ((x1 - x0) * i) / 6), along: "x", plate: P.slate });
   const quiet = { panel: 0.9, strip: 0.04, greeble: 0.04, screen: 0.02 };
   const hallPaints = [[P.cream, 0.72], [P.creamDark, 0.28]];
   const cabinPaints = [[P.creamDark, 0.6], [P.cream, 0.3], [P.tealPaint, 0.1]];
@@ -44,17 +47,41 @@ export function build(kit, ctx, room) {
     kit.collider([px - s / 2, y0, pz - s / 2], [px + s / 2, y0 + h, pz + s / 2], "post");
   }
 
-  // ------------------------------------------------------------ wardroom west wall: nameplates, booths, lockers
+  // ------------------------------------------------------------ wardroom west wall: nameplates, corner booth, locker
   const AN = westN.A.frame; // u = 533.24 - z
   const AS = westS.A.frame; // u = 544 - z
   nameplate(AN, 2.22, 1.55, { label: 9, label2: 14 });
   nameplate(AS, 5.02, 1.55, { label: 14, label2: 9 });
   wallLightBar(AN, 2.5, 6.9, 2.52, "emitWarmSoft");
   wallLightBar(AS, 0.4, 4.8, 2.52, "emitWarmSoft");
-  booth(kit, WARD_X + T, 528.9, y0, P.fabricTeal, "screen3");
-  booth(kit, WARD_X + T, 541.1, y0, P.fabricOrange, "screen1");
-  cabinet(AN, 6.6, 1.0, 2.1, 0.55, { color: P.creamDark, doors: 1, band: P.tealPaint, label: 11, lamp: "emitAmber" });
+  booth(kit, WARD_X + T, 527.6, y0, P.fabricTeal, "screen3");
   cabinet(AS, 0.65, 1.0, 2.1, 0.55, { color: P.creamDark, doors: 1, band: P.tealPaint, label: 11, lamp: "emitAmber" });
+
+  // ------------------------------------------------------------ dining table and lounge group against the cabin wall
+  // Both sit inside the door's view cone (camera 1.4 m inside the door, 104 deg horizontal): right of the
+  // north cabin door the table for six under a pendant, left of the south cabin door the lounge group.
+  const tx = WARD_X + 1.56;
+  const tz = 531.05;
+  table(kit, tx, y0, tz, 1.05, 2.3, { h: 0.75, color: P.creamDark });
+  for (const cz of [tz - 0.72, tz, tz + 0.72]) chair(kit, tx + 1.05, y0, cz, "-x", { seatColor: P.fabricTeal });
+  for (const cz of [tz - 0.72, tz]) chair(kit, tx - 1.0, y0, cz, "+x", { seatColor: P.fabricTeal });
+  chair(kit, tx, y0, tz - 1.7, "+z", { seatColor: P.fabricTeal });
+  effects(kit, tx - 0.2, y0 + 0.75, tz - 0.8, "mug");
+  effects(kit, tx + 0.15, y0 + 0.75, tz - 0.25, "datapad", 1.2);
+  effects(kit, tx - 0.1, y0 + 0.75, tz + 0.4, "stack", 0.4);
+  effects(kit, tx + 0.22, y0 + 0.75, tz + 0.85, "mug");
+  pendant(kit, ctx, tx, yTop, tz, 0.5, 1.8, 14);
+  const lz = 540.4;
+  kit.boxMM("fabric", [WARD_X + T, y0, lz - 1.25], [WARD_X + 2.7, y0 + 0.012, lz + 1.25], { color: P.fabricTeal, uv: "world", texel: 1.5 });
+  bench(kit, WARD_X + 0.52, y0, lz, "+x", { len: 2.0, color: P.fabricOrange });
+  kit.boxMM("satinBlack", [WARD_X + 1.0, y0 + 0.42, lz - 0.5], [WARD_X + 1.6, y0 + 0.46, lz + 0.5]);
+  for (const [lx, lzz] of [[WARD_X + 1.05, lz - 0.45], [WARD_X + 1.55, lz - 0.45], [WARD_X + 1.05, lz + 0.45], [WARD_X + 1.55, lz + 0.45]]) kit.box("metal", lx, y0 + 0.21, lzz, 0.04, 0.42, 0.04, { color: P.steel });
+  kit.collider([WARD_X + 1.0, y0, lz - 0.5], [WARD_X + 1.6, y0 + 0.46, lz + 0.5], "lowtable");
+  effects(kit, WARD_X + 1.3, y0 + 0.46, lz + 0.15, "datapad", 0.4);
+  effects(kit, WARD_X + 1.2, y0 + 0.46, lz - 0.3, "mug");
+  chair(kit, WARD_X + 2.15, y0, lz - 0.52, "-x", { arms: false, seatColor: P.fabricCream });
+  chair(kit, WARD_X + 2.15, y0, lz + 0.52, "-x", { arms: false, seatColor: P.fabricCream });
+  pendant(kit, ctx, WARD_X + 1.3, yTop, lz, 0.5, 1.2, 11);
 
   // ------------------------------------------------------------ passage
   const PN = passN.B.frame; // faces +z, u = x + 15.6 (0 at the end wall)
@@ -110,9 +137,8 @@ export function build(kit, ctx, room) {
   }
   E.box("satinBlack", 12.3, 2.45, 0.04, 2.0, 0.08, 0.08);
   E.box("emitWarmSoft", 12.3, 2.405, 0.06, 1.9, 0.008, 0.04, { uv: "keep" });
-  cabinet(E, 14.6, 1.4, 2.1, 0.55, { color: P.creamDark, doors: 2, band: P.tealPaint, label: 11, lamp: "emitAmber" });
-  cabinet(E, 16.4, 1.4, 2.1, 0.55, { color: P.cream, doors: 2, band: P.orange, label: 13, lamp: "emitRed" });
-  stencil(E, 17.5, 1.85, 0.4, 14);
+  booth(kit, x1 - 0.08, 541.5, y0, P.fabricOrange, "screen1", -1);
+  stencil(E, 17.55, 1.85, 0.4, 14);
   wallLightBar(E, 0.3, 7.7, 2.52, "emitWarmSoft");
   wallLightBar(E, 10.2, 17.7, 2.52, "emitWarmSoft");
 
@@ -130,20 +156,17 @@ export function build(kit, ctx, room) {
   wallLightBar(N, 15.5, 17.0, 2.52, "emitWarmSoft");
   wallLightBar(N, 20.2, 21.7, 2.52, "emitWarmSoft");
   stencil(N, 15.7, 1.75, 0.36, 9);
-  table(kit, -5.2, y0, 528.7, 2.8, 1.1, { h: 0.75, color: P.creamDark });
-  for (const tx of [-6.1, -5.2, -4.3]) {
-    chair(kit, tx, y0, 527.6, "+z", { seatColor: P.fabricTeal });
-    chair(kit, tx, y0, 529.8, "-z", { seatColor: P.fabricTeal });
-  }
-  effects(kit, -6.0, y0 + 0.75, 528.45, "mug");
-  effects(kit, -5.3, y0 + 0.75, 528.95, "datapad", 0.3);
-  effects(kit, -4.4, y0 + 0.75, 528.5, "stack", -0.2);
-  effects(kit, -4.6, y0 + 0.75, 529.0, "mug");
-  // downlights either side of the shell's ceiling rib at x -5.67
-  downlight(kit, -6.3, yTop, 528.7, 0.5, 0.5, "emitWarmSoft");
-  downlight(kit, -4.2, yTop, 528.7, 0.5, 0.5, "emitWarmSoft");
+  // sideboard for the dining end: a low credenza with a lit shelf, so the forward wall is not bare
+  N.box("metal", 19.0, 0.04, 0.3, 2.1, 0.08, 0.5, { color: P.darkMetal });
+  N.box("painted", 19.0, 0.44, 0.3, 2.2, 0.72, 0.56, { color: P.creamDark, uv: "keep" });
+  N.box("metal", 19.0, 0.815, 0.3, 2.26, 0.03, 0.6, { color: P.steel });
+  for (const du of [-0.55, 0, 0.55]) N.box("metal", 19.0 + du + 0.22, 0.44, 0.585, 0.03, 0.2, 0.02, { color: P.steel });
+  N.box("emitWarmSoft", 19.0, 0.1, 0.585, 1.8, 0.02, 0.006, { uv: "keep" });
+  N.collider(17.9, 20.1, 0, 0.85, 0, 0.6, "sideboard");
+  effects(kit, x0 + 18.4, y0 + 0.83, z0 + 0.3, "canister");
+  effects(kit, x0 + 19.4, y0 + 0.83, z0 + 0.28, "stack", -0.3);
 
-  // ------------------------------------------------------------ wardroom: lounge end (aft, +z)
+  // ------------------------------------------------------------ wardroom: aft end (+z)
   const S = shell.frames["+z"].frame; // u = x1 - x; wardroom portion u 0..6.84
   wallScreen(S, 3.3, 1.95, 2.0, 1.0, "screen9", { leds: false });
   S.box("emitBlue", 2.1, 2.55, 0.04, 0.05, 0.05, 0.02);
@@ -153,26 +176,21 @@ export function build(kit, ctx, room) {
   wallLightBar(S, 0.3, 2.2, 2.52, "emitWarmSoft");
   wallLightBar(S, 4.4, 6.6, 2.52, "emitWarmSoft");
   stencil(S, 6.5, 1.85, 0.34, 3);
-  const lz = 541.7;
-  kit.boxMM("fabric", [-7.1, y0, lz - 1.5], [-3.5, y0 + 0.012, lz + 1.5], { color: P.fabricTeal, uv: "world", texel: 1.5 });
-  kit.boxMM("satinBlack", [-5.9, y0 + 0.42, lz - 0.4], [-4.7, y0 + 0.46, lz + 0.4]);
-  for (const [lx, lzz] of [[-5.85, lz - 0.35], [-4.75, lz - 0.35], [-5.85, lz + 0.35], [-4.75, lz + 0.35]]) kit.box("metal", lx, y0 + 0.21, lzz, 0.04, 0.42, 0.04, { color: P.steel });
-  kit.collider([-5.9, y0, lz - 0.4], [-4.7, y0 + 0.46, lz + 0.4], "lowtable");
-  effects(kit, -5.5, y0 + 0.46, lz + 0.1, "datapad", 0.4);
-  effects(kit, -4.95, y0 + 0.46, lz - 0.2, "mug");
-  bench(kit, -5.3, y0, lz - 1.05, "+z", { len: 2.2, color: P.fabricOrange });
-  bench(kit, -5.3, y0, lz + 1.05, "-z", { len: 2.2, color: P.fabricOrange });
-  chair(kit, -6.85, y0, lz, "+x", { arms: false, seatColor: P.fabricCream });
-  chair(kit, -3.75, y0, lz, "-x", { arms: false, seatColor: P.fabricCream });
-  downlight(kit, -6.3, yTop, lz, 0.5, 0.5, "emitWarmSoft");
-  downlight(kit, -4.3, yTop, lz, 0.5, 0.5, "emitWarmSoft");
+  // a second small table for two in the aft corner, off the door view
+  table(kit, -4.9, y0, 542.5, 0.9, 0.9, { h: 0.75, color: P.creamDark });
+  chair(kit, -5.8, y0, 542.5, "+x", { seatColor: P.fabricOrange });
+  chair(kit, -4.0, y0, 542.5, "-x", { seatColor: P.fabricOrange });
+  effects(kit, -5.0, y0 + 0.75, 542.3, "datapad", -0.5);
+  effects(kit, -4.75, y0 + 0.75, 542.75, "mug");
 
-  // ------------------------------------------------------------ wardroom ceiling: two light channels, entry downlight
-  for (const cx of [-4.0, -7.2]) {
-    kit.box("satinBlack", cx, yTop - 0.03, 535, 0.46, 0.06, 16.8);
-    kit.box("emitWarmSoft", cx, yTop - 0.06, 535, 0.34, 0.02, 16.6, { uv: "keep" });
-  }
-  downlight(kit, -3.0, yTop, 535, 0.8, 0.3, "emitWarmSoft");
+  // ------------------------------------------------------------ wardroom ceiling
+  // One cove strip along the door wall (behind the door view camera, so it never enters the frame), two
+  // small downlights over the walk to the passage and the pendants over the table and lounge. Nothing
+  // emissive hangs over the entrance itself: the near ceiling is plain slate.
+  kit.box("satinBlack", -2.7, yTop - 0.03, 535, 0.34, 0.06, 16.8);
+  kit.box("emitWarmSoft", -2.7, yTop - 0.06, 535, 0.24, 0.02, 16.6, { uv: "keep" });
+  downlight(kit, -7.0, yTop, 533.5, 0.4, 0.4, "emitWarmSoft");
+  downlight(kit, -7.0, yTop, 536.5, 0.4, 0.4, "emitWarmSoft");
   downlight(kit, -3.0, yTop, 531.2, 0.6, 0.6, "emitWhiteSoft");
   downlight(kit, -3.0, yTop, 538.8, 0.6, 0.6, "emitWhiteSoft");
 
@@ -189,41 +207,55 @@ export function build(kit, ctx, room) {
   cabin(kit, ctx, { x0, x1: MID_X - T, z0: BACK_Z + T, z1 }, y0, h, "-z", [0.14, 1.24], V[3]);
 
   // ------------------------------------------------------------ lights (cabins add one pendant each, front cabins a desk lamp)
-  // four wardroom practicals, two more just inside the door so the entrance wall and the booths read,
-  // one in the passage: with the cabins' six this stays inside the 14-slot pool
+  // two pendants (above), two practicals over the walk to the passage, two just inside the door for the
+  // entrance wall and the booths (3.8 m off the door view camera), one in the passage: with the cabins'
+  // six this stays inside the 14-slot pool. None sits within 2 m of the door camera.
   const L = ctx.lights;
-  for (const lz2 of [528.7, 533.2, 536.8, 541.7]) L.cool.push(pointLight(0xf6ecdc, 22, 13, [-5.6, yTop - 0.7, lz2]));
-  for (const lz2 of [531.2, 538.8]) L.cool.push(pointLight(0xf6ecdc, 17, 11, [-3.3, yTop - 0.6, lz2]));
+  for (const lz2 of [533.5, 536.5]) L.cool.push(pointLight(0xf6ecdc, 12, 11, [-7.0, yTop - 0.7, lz2]));
+  for (const lz2 of [531.2, 538.8]) L.cool.push(pointLight(0xf6ecdc, 12, 10, [-3.3, yTop - 0.6, lz2]));
   L.cool.push(pointLight(0xf6ecdc, 11, 9, [-12.3, yTop - 0.5, BACK_Z]));
   return shell;
 }
 
-// Seating booth against a wall face at xFace (normal +x): black wings with a lit slot, a canopy with a
-// soft light underneath, padded back, bench, low table with effects and a small screen.
-function booth(kit, xFace, zc, y, color, screen) {
+// Hanging pendant: rod from the ceiling to a black shade with a soft warm diffuser underneath and the
+// practical just below the shade, so the ceiling above gets only spill and never blows out.
+function pendant(kit, ctx, x, yTop, z, w, d, intensity) {
+  kit.box("metal", x, yTop - 0.02, z, 0.16, 0.04, 0.16, { color: P.darkMetal });
+  kit.cyl("metal", x, yTop - 0.3, z, 0.014, 0.56, "y", { color: P.steel, segments: 8 });
+  kit.box("satinBlack", x, yTop - 0.62, z, w, 0.08, d);
+  kit.box("metal", x, yTop - 0.575, z, w - 0.08, 0.012, d - 0.08, { color: P.steel });
+  kit.box("emitWarmSoft", x, yTop - 0.665, z, w - 0.1, 0.01, d - 0.1, { uv: "keep" });
+  ctx.lights.cool.push(pointLight(0xffd9b0, intensity, 10, [x, yTop - 0.82, z]));
+}
+
+// Seating booth against a wall face at xFace, opening toward dir (+1: normal +x, -1: normal -x): black
+// wings with a lit slot, a canopy with a soft light underneath, padded back, bench, low table with effects
+// and a small screen.
+function booth(kit, xFace, zc, y, color, screen, dir = 1) {
   const w = 3.0;
   const d = 0.9;
+  const X = (t) => xFace + dir * t;
+  const MM = (mat, t0, t1, ya, yb, za, zb, opts) => kit.boxMM(mat, [Math.min(X(t0), X(t1)), y + ya, za], [Math.max(X(t0), X(t1)), y + yb, zb], opts);
+  const COL = (t0, t1, ya, yb, za, zb, tag) => kit.collider([Math.min(X(t0), X(t1)), y + ya, za], [Math.max(X(t0), X(t1)), y + yb, zb], tag);
   for (const s of [-1, 1]) {
     const zi = zc + s * (w / 2 - 0.06);
-    kit.boxMM("satinBlack", [xFace, y, zc + s * (w / 2) - 0.06], [xFace + d, y + 2.3, zc + s * (w / 2) + 0.06]);
-    kit.boxMM("emitWarm", [xFace + d - 0.2, y + 0.65, Math.min(zi, zi - s * 0.01)], [xFace + d - 0.15, y + 1.85, Math.max(zi, zi - s * 0.01)]);
-    kit.collider([xFace, y, zc + s * (w / 2) - 0.06], [xFace + d, y + 2.3, zc + s * (w / 2) + 0.06], "wing");
+    MM("satinBlack", 0, d, 0, 2.3, zc + s * (w / 2) - 0.06, zc + s * (w / 2) + 0.06);
+    MM("emitWarm", d - 0.2, d - 0.15, 0.65, 1.85, Math.min(zi, zi - s * 0.01), Math.max(zi, zi - s * 0.01));
+    COL(0, d, 0, 2.3, zc + s * (w / 2) - 0.06, zc + s * (w / 2) + 0.06, "wing");
   }
-  kit.boxMM("satinBlack", [xFace, y + 2.16, zc - w / 2 - 0.06], [xFace + d, y + 2.3, zc + w / 2 + 0.06]);
-  kit.boxMM("emitWarmSoft", [xFace + 0.15, y + 2.152, zc - w / 2 + 0.2], [xFace + d - 0.15, y + 2.16, zc + w / 2 - 0.2], { uv: "keep" });
-  kit.boxMM("fabric", [xFace, y + 0.5, zc - w / 2 + 0.1], [xFace + 0.08, y + 1.35, zc + w / 2 - 0.1], { color, uv: "world", texel: 2 });
-  kit.boxMM("satinBlack", [xFace, y + 1.35, zc - w / 2 + 0.08], [xFace + 0.1, y + 1.4, zc + w / 2 - 0.08]);
-  bench(kit, xFace + 0.3, y, zc, "+x", { len: w - 0.3, back: false, color });
-  kit.boxMM("satinBlack", [xFace + 0.02, y + 1.6, zc - 0.3], [xFace + 0.08, y + 1.95, zc + 0.3]);
-  kit.boxMM(screen, [xFace + 0.08, y + 1.64, zc - 0.26], [xFace + 0.086, y + 1.91, zc + 0.26], { uv: "keep" });
-  const tx0 = xFace + 0.78;
-  const tx1 = xFace + 1.38;
-  kit.boxMM("satinBlack", [tx0, y + 0.42, zc - 0.55], [tx1, y + 0.46, zc + 0.55]);
-  for (const [lx, lz] of [[tx0 + 0.05, zc - 0.5], [tx1 - 0.05, zc - 0.5], [tx0 + 0.05, zc + 0.5], [tx1 - 0.05, zc + 0.5]]) kit.box("metal", lx, y + 0.21, lz, 0.04, 0.42, 0.04, { color: P.steel });
-  kit.collider([tx0, y, zc - 0.55], [tx1, y + 0.46, zc + 0.55], "boothtable");
-  effects(kit, xFace + 1.05, y + 0.46, zc + 0.2, "mug");
-  effects(kit, xFace + 1.1, y + 0.46, zc - 0.25, "datapad", 0.5);
-  kit.boxMM("fabric", [xFace + 0.1, y, zc - w / 2 + 0.15], [xFace + 1.7, y + 0.012, zc + w / 2 - 0.15], { color: P.fabricCream, uv: "world", texel: 1.5 });
+  MM("satinBlack", 0, d, 2.16, 2.3, zc - w / 2 - 0.06, zc + w / 2 + 0.06);
+  MM("emitWarmSoft", 0.15, d - 0.15, 2.152, 2.16, zc - w / 2 + 0.2, zc + w / 2 - 0.2, { uv: "keep" });
+  MM("fabric", 0, 0.08, 0.5, 1.35, zc - w / 2 + 0.1, zc + w / 2 - 0.1, { color, uv: "world", texel: 2 });
+  MM("satinBlack", 0, 0.1, 1.35, 1.4, zc - w / 2 + 0.08, zc + w / 2 - 0.08);
+  bench(kit, X(0.3), y, zc, dir > 0 ? "+x" : "-x", { len: w - 0.3, back: false, color });
+  MM("satinBlack", 0.02, 0.08, 1.6, 1.95, zc - 0.3, zc + 0.3);
+  MM(screen, 0.08, 0.086, 1.64, 1.91, zc - 0.26, zc + 0.26, { uv: "keep" });
+  MM("satinBlack", 0.78, 1.38, 0.42, 0.46, zc - 0.55, zc + 0.55);
+  for (const [t, lz] of [[0.83, zc - 0.5], [1.33, zc - 0.5], [0.83, zc + 0.5], [1.33, zc + 0.5]]) kit.box("metal", X(t), y + 0.21, lz, 0.04, 0.42, 0.04, { color: P.steel });
+  COL(0.78, 1.38, 0, 0.46, zc - 0.55, zc + 0.55, "boothtable");
+  effects(kit, X(1.05), y + 0.46, zc + 0.2, "mug");
+  effects(kit, X(1.1), y + 0.46, zc - 0.25, "datapad", 0.5);
+  MM("fabric", 0.1, 1.7, 0, 0.012, zc - w / 2 + 0.15, zc + w / 2 - 0.15, { color: P.fabricCream, uv: "world", texel: 1.5 });
 }
 
 // One cabin. `b` is the clear floor rectangle; the door is in the east wall next to the `doorEnd` side wall
