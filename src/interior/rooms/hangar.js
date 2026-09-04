@@ -569,11 +569,13 @@ function cradleBay(kit, ctx, lib, y0) {
   // Lights. From the door the craft stood as a black cut-out: the bay's two lights hung above and behind it
   // and the banks 36 m up only graze it. The cradle's own work light (a mast on the starboard wing jaw, head 2 m
   // off the wing face, warm, 12 m range) lights the wing panel and pod side that face the door; a tripod lamp
-  // on the deck behind the tail rims the pod's underside and the wing edges from below (2 m up: on the deck
-  // itself an 18 cd source burns a white disc into the plates); the overhead cool light stays as the top light
+  // on the deck behind the tail rims the pod's underside and the wing edges from below (1.3 m up, tipped well
+  // back: on the deck itself an 18 cd source burns a white disc into the plates, and at 2 m its head sat in
+  // the hangarDeck view's eyeline right over the launch-cradle fighter's pod); the overhead cool light stays
+  // as the top light
   ctx.lights.warm.push(lib.pointLight(0xffc880, 24, 12, cradle.lamp.toArray()));
   ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 40, 18, [cx + 3.5, y0 + 9.5, cz]));
-  const rim = tripodLamp(kit, propFrame(kit, -22.3, y0, 465.5, Math.atan2(cx + 1.0 + 22.3, cz - 465.5)), { h: 2.0, pitch: 0.7, mat: "emitDiffuser" });
+  const rim = tripodLamp(kit, propFrame(kit, -22.3, y0, 465.5, Math.atan2(cx + 1.0 + 22.3, cz - 465.5)), { h: 1.3, pitch: 0.9, mat: "emitDiffuser" });
   ctx.lights.cool.push(lib.pointLight(0xcfe0ff, 18, 12, rim.toArray()));
 }
 
