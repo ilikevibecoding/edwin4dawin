@@ -11,9 +11,10 @@ import { pointLight } from "../lib.js";
 import { rng } from "../../kit.js";
 import { counter, wallScreen, stencil, pipeRun, hazardBand, lockerRun, Frosted } from "./crewFwdKit.js";
 
-const BED_U = [3.0, 6.6, 10.2, 13.8]; // bed centres along the forward wall (u = x - x0)
-const PART_U = [4.8, 8.4, 12.0, 15.6]; // privacy partitions between / after the beds
-const TANK = { x: -19.6, z: 517 };
+const BED_U = [2.4, 5.6, 8.8, 12.0]; // bed centres along the forward wall (u = x - x0)
+const PART_U = [4.0, 7.2, 10.4, 13.6]; // privacy partitions between / after the beds
+const TANK = { x: -19.6, z: 517 }; // main tank: terminus of the walkway from the door
+const TANK2 = { x: -8.0, z: 513.9 }; // second tank in the door sightline, between the ward and the walkway
 const OP = { x: -13.0, z: 522.2 };
 
 // Axis-aligned frosted sheet expressed in a wall frame (u, v, n) -> world box.
@@ -33,26 +34,57 @@ function tiltedScreen(f, u, v, n, w, hgt, tilt, mat = "screen4") {
   f.box(mat, u, v + 0.018 * c, n + 0.018 * s, w, 0.006, hgt, { tilt, uv: "keep" });
 }
 
-// Treatment bed with its head at the wall (n = 0.3), headwall unit and diagnostic screen above.
+// Treatment bed with its head at the wall (n = 0.3): cast pedestal, platform at 0.78 m with a raised,
+// tilted head section, white mattress, blanket and pillow, fold-up side rails, a monitor on an
+// articulated arm at the head, foot-end control pad, headwall unit and diagnostic screen above.
 function treatmentBed(f, u, idx) {
   const W = 0.9;
   const L = 2.1;
   const n0 = 0.3;
   const nc = n0 + L / 2;
-  f.box("metal", u, 0.03, nc, 0.8, 0.06, 1.5, { color: PALETTE.darkMetal, texel: 2 });
-  f.box("satinBlack", u, 0.3, nc, 0.56, 0.5, 1.1);
-  f.box("metal", u, 0.545, nc, 0.7, 0.05, 1.3, { color: PALETTE.gunmetal, texel: 1.5 });
-  f.box("metal", u, 0.61, nc, W, 0.07, L, { color: PALETTE.gunmetal, texel: 1.5 });
-  f.box("fabric", u, 0.705, nc, W - 0.06, 0.12, L - 0.06, { color: PALETTE.impWhite, uv: "world", texel: 2 });
-  f.box("fabric", u, 0.8, n0 + 0.32, 0.5, 0.09, 0.36, { color: PALETTE.fabricCream, uv: "world", texel: 3 });
-  f.box("fabric", u, 0.79, n0 + L - 0.3, W - 0.14, 0.06, 0.42, { color: PALETTE.fabricTeal, uv: "world", texel: 3 });
+  const P = 0.78;
+  const t = 0.55; // head section tilt
+  const ct = Math.cos(t);
+  const st = Math.sin(t);
+  // pedestal
+  f.box("metal", u, 0.04, nc, 0.9, 0.08, 1.4, { color: PALETTE.darkMetal, texel: 2 });
+  f.box("satinBlack", u, 0.36, nc, 0.6, 0.56, 1.0);
+  f.box("leds", u + 0.301, 0.5, nc, 0.006, 0.03, 0.5, { uv: "keep" });
+  f.box("metal", u, 0.66, nc, 0.74, 0.06, 1.44, { color: PALETTE.gunmetal, texel: 1.5 });
+  f.box("metal", u, P - 0.035, nc, W, 0.07, L, { color: PALETTE.gunmetal, texel: 1.5 });
+  // flat section: mattress + blanket over the legs
+  const hn = n0 + 0.74; // hinge of the head section
+  const flatL = n0 + L - hn - 0.03;
+  f.box("fabric", u, P + 0.06, hn + flatL / 2, W - 0.06, 0.12, flatL, { color: PALETTE.impWhite, uv: "world", texel: 2 });
+  f.box("fabric", u, P + 0.145, n0 + L - 0.62, W - 0.02, 0.05, 1.05, { color: PALETTE.fabricTeal, uv: "world", texel: 3 });
+  // raised head section: backboard and mattress tilted up toward the wall, pillow on top
+  const hl = 0.72;
+  const cN = hn - (hl / 2) * ct;
+  const cV = P + 0.06 + (hl / 2) * st;
+  f.box("metal", u, cV - 0.09 * ct, cN - 0.09 * st, W, 0.04, hl, { color: PALETTE.gunmetal, texel: 1.5, tilt: t });
+  f.box("fabric", u, cV, cN, W - 0.06, 0.12, hl, { color: PALETTE.impWhite, uv: "world", texel: 2, tilt: t });
+  f.box("fabric", u, cV + 0.1 * ct + 0.2 * st, cN + 0.1 * st - 0.2 * ct, 0.5, 0.09, 0.32, { color: PALETTE.fabricCream, uv: "world", texel: 3, tilt: t });
+  // side rails on uprights
   for (const s of [-1, 1]) {
-    f.cylN("metal", u + s * (W / 2 + 0.03), 0.98, n0 + 1.25, 0.016, 1.3, { color: PALETTE.steel, segments: 8 });
-    for (const dn of [0.65, 1.85]) f.cylV("metal", u + s * (W / 2 + 0.03), 0.87, n0 + dn, 0.014, 0.26, { color: PALETTE.steel, segments: 8 });
+    const ru = u + s * (W / 2 + 0.05);
+    f.cylN("metal", ru, P + 0.34, hn + 0.62, 0.016, 1.16, { color: PALETTE.steel, segments: 8 });
+    f.cylN("metal", ru, P + 0.2, hn + 0.62, 0.012, 1.16, { color: PALETTE.steel, segments: 8 });
+    for (const dn of [0.1, 1.14]) f.cylV("metal", ru, P + 0.14, hn + dn, 0.014, 0.42, { color: PALETTE.steel, segments: 8 });
   }
+  // monitor arm: post at the head corner, arm over the bed, display angled toward the foot end
+  const pu = u + W / 2 + 0.16;
+  f.cylV("metal", pu, 0.85, n0 + 0.25, 0.03, 1.7, { color: PALETTE.steel, segments: 10 });
+  f.cylV("metal", pu, 0.03, n0 + 0.25, 0.14, 0.06, { color: PALETTE.gunmetal, segments: 14 });
+  f.add("metal", new THREE.SphereGeometry(0.05, 12, 8), pu, 1.72, n0 + 0.25, { color: PALETTE.gunmetal });
+  f.box("metal", (pu + u + 0.1) / 2, 1.72, n0 + 0.25, pu - u - 0.1, 0.05, 0.05, { color: PALETTE.steel, texel: 2 });
+  f.cylN("metal", u + 0.1, 1.72, n0 + 0.4, 0.02, 0.3, { color: PALETTE.steel, segments: 8 });
+  f.cylV("metal", u + 0.1, 1.6, n0 + 0.55, 0.018, 0.24, { color: PALETTE.steel, segments: 8 });
+  f.box("satinBlack", u + 0.1, 1.38, n0 + 0.56, 0.44, 0.32, 0.05, { tilt: -0.25 });
+  f.box(idx % 2 ? "screen8" : "screen4", u + 0.1, 1.38 + 0.028 * Math.sin(0.25), n0 + 0.56 + 0.028 * Math.cos(0.25), 0.38, 0.26, 0.004, { uv: "keep", tilt: -0.25 });
+  f.box("emitTeal", u + 0.26, 1.24, n0 + 0.6, 0.02, 0.012, 0.004, { tilt: -0.25 });
   // foot-end control pad
-  f.box("satinBlack", u, 0.7, n0 + L + 0.03, 0.5, 0.2, 0.05);
-  f.box("leds", u, 0.7, n0 + L + 0.056, 0.3, 0.03, 0.006, { uv: "keep" });
+  f.box("satinBlack", u, P - 0.02, n0 + L + 0.03, 0.5, 0.22, 0.05);
+  f.box("leds", u, P - 0.02, n0 + L + 0.056, 0.3, 0.03, 0.006, { uv: "keep" });
   // headwall: gas outlets + indicators, screen above, bed numeral and call lamp
   f.box("satinBlack", u, 1.2, 0.05, 1.0, 0.36, 0.1);
   for (let k = 0; k < 3; k++) {
@@ -62,12 +94,11 @@ function treatmentBed(f, u, idx) {
     f.box(k === 1 ? "emitAmber" : "emitTeal", gu, 1.32, 0.101, 0.02, 0.012, 0.006);
   }
   stencil(f, u + 0.44, 1.2, 0.14, 4, 0.101);
-  wallScreen(f, u, 1.78, 0.62, 0.36, "screen4");
+  wallScreen(f, u, 1.78, 0.62, 0.36, idx % 2 ? "screen4" : "screen9");
   stencil(f, u - 0.62, 2.3, 0.3, 2);
   f.box("satinBlack", u, 2.62, 0.02, 0.56, 0.07, 0.04);
   f.box("emitBlue", u, 2.62, 0.041, 0.48, 0.03, 0.006, { uv: "keep" });
-  f.collider(u - W / 2 - 0.05, u + W / 2 + 0.05, 0, 0.76, n0, n0 + L + 0.08, "bed");
-  void idx;
+  f.collider(u - W / 2 - 0.08, u + W / 2 + 0.24, 0, P + 0.4, n0, n0 + L + 0.08, "bed");
 }
 
 // Ceiling-mounted articulated scanner arm reaching over the chest of the bed at u.
@@ -87,7 +118,7 @@ function scannerArm(f, u, h) {
   f.box("satinBlack", u, hv - 0.08, an, 0.6, 0.03, 0.3);
   f.box("emitBlue", u, hv - 0.096, an, 0.46, 0.008, 0.06, { uv: "keep" });
   f.cylV("darkGloss", u + 0.2, hv - 0.097, an + 0.12, 0.05, 0.01, { segments: 14 });
-  f.box("screen4", u, hv, an + 0.212, 0.34, 0.09, 0.004, { uv: "keep" });
+  f.box("screen8", u, hv, an + 0.212, 0.34, 0.09, 0.004, { uv: "keep" });
   f.box("emitTeal", u + 0.28, hv + 0.03, an + 0.212, 0.02, 0.02, 0.004);
 }
 
@@ -236,8 +267,9 @@ function crashCart(f, u, n) {
 
 // Bacta tank on a plinth: glass cylinder with a blue fluid volume, faint emissive core, harness,
 // bubbles, capped with pipe work that runs across to the wall console.
-function bactaTank(kit, fluid, y0, yTop, x0, rand) {
-  const { x: tx, z: tz } = TANK;
+function bactaTank(kit, fluid, y0, yTop, x0, rand, pos = TANK) {
+  const { x: tx, z: tz } = pos;
+  const toWall = pos === TANK;
   const gR = 0.78;
   const gH = 2.2;
   const gY = y0 + 0.5;
@@ -280,8 +312,10 @@ function bactaTank(kit, fluid, y0, yTop, x0, rand) {
     const pz = tz + s * 0.3;
     kit.cyl("metal", tx, capTop + 0.06, pz, 0.06, 0.16, "y", { color: PALETTE.steel, segments: 12 });
     kit.add("metal", new THREE.SphereGeometry(0.078, 12, 8), { pos: [tx, capTop + 0.12, pz], color: PALETTE.steel });
-    kit.cyl("metal", (tx + x0) / 2, capTop + 0.12, pz, 0.06, tx - x0, "x", { color: PALETTE.steel, segments: 12 });
+    if (toWall) kit.cyl("metal", (tx + x0) / 2, capTop + 0.12, pz, 0.06, tx - x0, "x", { color: PALETTE.steel, segments: 12 });
+    else kit.cyl("metal", tx, (capTop + 0.12 + yTop) / 2, pz, 0.06, yTop - capTop - 0.12, "y", { color: PALETTE.steel, segments: 12 });
   }
+  if (!toWall) kit.box("paintedMetal", tx, yTop - 0.15, tz, 1.0, 0.3, 1.1, { color: PALETTE.gunmetal, texel: 1.5 });
   for (const k of [0, 1, 2]) kit.box("emitBlue", tx + 0.86, capY + 0.11, tz - 0.12 + k * 0.12, 0.03, 0.03, 0.05);
   kit.collider([tx - 1.1, y0, tz - 1.1], [tx + 1.1, y0 + 3.0, tz + 1.1], "bacta-tank");
 }
@@ -354,14 +388,15 @@ export function build(kit, ctx, room, lib) {
     });
     for (const u of PART_U) partition(frosted, f, u, 0.2, 1.9);
     // corner past the last bay: waste unit and a wall comm panel
-    f.box("satinBlack", 17.6, 0.45, 0.3, 0.5, 0.9, 0.5);
-    f.box("metal", 17.6, 0.91, 0.3, 0.52, 0.03, 0.52, { color: PALETTE.steel, texel: 2 });
-    f.box("painted", 17.6, 0.6, 0.556, 0.36, 0.08, 0.01, { color: PALETTE.impRed, uv: "keep" });
-    stencil(f, 17.6, 0.35, 0.2, 13, 0.556);
-    f.collider(17.35, 17.85, 0, 0.95, 0, 0.56, "waste");
-    wallScreen(f, 18.4, 1.7, 0.5, 0.32, "screen0");
-    stencil(f, 17.0, 2.0, 0.3, 0);
-    wallLightBar(f, 16.4, 19.4, 2.62, "emitWhiteSoft");
+    f.box("satinBlack", 18.3, 0.45, 0.3, 0.5, 0.9, 0.5);
+    f.box("metal", 18.3, 0.91, 0.3, 0.52, 0.03, 0.52, { color: PALETTE.steel, texel: 2 });
+    f.box("painted", 18.3, 0.6, 0.556, 0.36, 0.08, 0.01, { color: PALETTE.impRed, uv: "keep" });
+    stencil(f, 18.3, 0.35, 0.2, 13, 0.556);
+    f.collider(18.05, 18.55, 0, 0.95, 0, 0.56, "waste");
+    wallScreen(f, 17.2, 1.75, 0.6, 0.36, "screen7");
+    wallScreen(f, 18.9, 1.75, 0.5, 0.32, "screen0");
+    stencil(f, 15.6, 2.0, 0.3, 0);
+    wallLightBar(f, 14.8, 19.4, 2.62, "emitWhiteSoft");
   }
 
   // ------------------------------------------------------------ aft wall: cabinets, scrub sink, surgical suite, lab
@@ -404,7 +439,7 @@ export function build(kit, ctx, room, lib) {
     // lab bench
     counter(f, 13.6, 19.4, { h: 0.9, d: 0.65, color: PALETTE.impWhite, doorW: 0.72 });
     f.box("satinBlack", 14.3, 1.2, 0.36, 0.7, 0.54, 0.5);
-    f.box("screen0", 14.3, 1.3, 0.612, 0.42, 0.22, 0.004, { uv: "keep" });
+    f.box("screen9", 14.3, 1.3, 0.612, 0.42, 0.22, 0.004, { uv: "keep" });
     f.box("leds", 14.3, 1.08, 0.612, 0.4, 0.03, 0.006, { uv: "keep" });
     f.box("darkGloss", 14.3, 0.98, 0.612, 0.5, 0.06, 0.004);
     f.cylV("metal", 15.2, 1.05, 0.35, 0.18, 0.3, { color: PALETTE.gunmetal, segments: 20 });
@@ -432,7 +467,7 @@ export function build(kit, ctx, room, lib) {
         x += rr * 2 + 0.03 + rand() * 0.06;
       }
     }
-    wallScreen(f, 18.4, 1.85, 0.7, 0.42, "screen4");
+    wallScreen(f, 18.4, 1.85, 0.7, 0.42, "screen8");
     stencil(f, 17.5, 2.2, 0.26, 9);
     stencil(f, 19.4, 1.5, 0.26, 12);
     wallLightBar(f, 13.6, 17.0, 2.62, "emitWhiteSoft");
@@ -446,8 +481,8 @@ export function build(kit, ctx, room, lib) {
     // tank monitoring console
     f.box("satinBlack", 7.0, 1.15, 0.18, 3.0, 2.3, 0.36);
     f.box("metal", 7.0, 2.33, 0.18, 3.04, 0.06, 0.4, { color: PALETTE.steel, texel: 2 });
-    wallScreen(f, 7.0, 1.72, 0.9, 0.5, "screen4", { n: 0.36 });
-    wallScreen(f, 6.0, 1.15, 0.5, 0.3, "screen0", { n: 0.36 });
+    wallScreen(f, 7.0, 1.72, 0.9, 0.5, "screen8", { n: 0.36 });
+    wallScreen(f, 6.0, 1.15, 0.5, 0.3, "screen9", { n: 0.36 });
     wallScreen(f, 8.0, 1.15, 0.5, 0.3, "screen0", { n: 0.36 });
     for (let k = 0; k < 4; k++) {
       const gu = 5.9 + k * 0.73;
@@ -464,13 +499,13 @@ export function build(kit, ctx, room, lib) {
     f.collider(5.5, 8.5, 0, 2.4, 0, 0.4, "tank-console");
     // patient status board over a counter
     f.box("satinBlack", 11.3, 1.85, 0.03, 3.4, 1.2, 0.06);
-    f.box("screen4", 11.0, 1.95, 0.062, 2.2, 0.8, 0.006, { uv: "keep" });
-    for (const v of [2.15, 1.75]) f.box("screen0", 12.55, v, 0.062, 0.6, 0.3, 0.006, { uv: "keep" });
+    f.box("screen7", 11.0, 1.95, 0.062, 2.2, 0.8, 0.006, { uv: "keep" });
+    for (const [v, m] of [[2.15, "screen9"], [1.75, "screen0"]]) f.box(m, 12.55, v, 0.062, 0.6, 0.3, 0.006, { uv: "keep" });
     f.box("leds", 11.3, 1.3, 0.062, 2.8, 0.03, 0.006, { uv: "keep" });
     counter(f, 9.6, 13.0, { h: 0.9, d: 0.6, color: PALETTE.impWhite, doorW: 0.85 });
     f.box("darkGloss", 10.3, 0.925, 0.3, 0.32, 0.012, 0.22);
     f.box("darkGloss", 11.0, 0.925, 0.36, 0.26, 0.012, 0.18);
-    tiltedScreen(f, 12.1, 1.08, 0.3, 0.5, 0.3, 1.15, "screen0");
+    tiltedScreen(f, 12.1, 1.08, 0.3, 0.5, 0.3, 1.15, "screen9");
     f.cylV("painted", 9.9, 0.99, 0.4, 0.045, 0.12, { color: PALETTE.tealPaint, uv: "keep", segments: 10 });
     stencil(f, 13.5, 1.9, 0.3, 0);
     wallLightBar(f, 9.6, 13.0, 2.75, "emitWhiteSoft");
@@ -497,7 +532,7 @@ export function build(kit, ctx, room, lib) {
     f.collider(1.4, 3.6, 0, 0.78, 0, 0.8, "desk");
     f.collider(2.27, 2.73, 0, 1.0, 0.77, 1.25, "chair");
     wallScreen(f, 2.0, 1.75, 0.8, 0.45, "screen4");
-    wallScreen(f, 3.0, 1.75, 0.5, 0.32, "screen0");
+    wallScreen(f, 3.0, 1.75, 0.5, 0.32, "screen9");
     stencil(f, 3.6, 1.9, 0.26, 0);
     f.box("satinBlack", 4.6, 1.4, 0.05, 0.4, 0.6, 0.1);
     f.box("screen0", 4.6, 1.55, 0.101, 0.3, 0.16, 0.004, { uv: "keep" });
@@ -518,8 +553,16 @@ export function build(kit, ctx, room, lib) {
     wallLightBar(f, 8.4, 12.0, 2.62, "emitWhiteSoft");
   }
 
-  // ------------------------------------------------------------ free-standing: bacta tank, surgical suite, floor
+  // ------------------------------------------------------------ free-standing: bacta tanks, surgical suite, floor
   bactaTank(kit, fluid, y0, yTop, x0, rand);
+  bactaTank(kit, fluid, y0, yTop, x0, rand, TANK2);
+  // the near tank's own monitor pedestal on the walkway side
+  kit.box("satinBlack", TANK2.x + 1.5, y0 + 0.5, TANK2.z + 0.9, 0.4, 1.0, 0.45);
+  kit.box("metal", TANK2.x + 1.5, y0 + 1.01, TANK2.z + 0.9, 0.42, 0.02, 0.47, { color: PALETTE.steel, texel: 2 });
+  kit.box("satinBlack", TANK2.x + 1.5, y0 + 1.1, TANK2.z + 0.9, 0.36, 0.03, 0.5, { rot: [0.5, 0, 0] });
+  kit.box("screen9", TANK2.x + 1.5, y0 + 1.1 + 0.018 * Math.cos(0.5), TANK2.z + 0.9 + 0.018 * Math.sin(0.5), 0.3, 0.006, 0.44, { rot: [0.5, 0, 0], uv: "keep" });
+  kit.box("leds", TANK2.x + 1.5, y0 + 0.8, TANK2.z + 1.13, 0.3, 0.02, 0.006, { uv: "keep" });
+  kit.collider([TANK2.x + 1.28, y0, TANK2.z + 0.65], [TANK2.x + 1.72, y0 + 1.2, TANK2.z + 1.15], "pedestal");
   // control pedestal at the foot of the walkway, facing the tank
   kit.box("satinBlack", -17.3, y0 + 0.5, 518.7, 0.45, 1.0, 0.4);
   kit.box("metal", -17.3, y0 + 1.01, 518.7, 0.47, 0.02, 0.42, { color: PALETTE.steel, texel: 2 });
@@ -558,13 +601,35 @@ export function build(kit, ctx, room, lib) {
   for (const z of [515.85, 518.15]) kit.box("emitBlue", -10.0, y0 + 0.007, z, 15.4, 0.004, 0.03);
   kit.box("emitBlue", -17.7, y0 + 0.007, 517, 0.03, 0.004, 2.33);
 
+  // ------------------------------------------------------------ ceiling: coffers and the walkway light trough
+  // Pale panels between the shell's ribs on both sides of each light channel, and a pair of dropped
+  // white soffits with lit inner faces flanking the central channel over the walkway.
+  {
+    const w = x1 - x0;
+    const n = Math.max(1, Math.floor(w / 3.2));
+    const bands = [[z0 + 0.3, 512.0], [512.7, 516.15], [517.85, 521.3], [522.0, z1 - 0.3]];
+    for (let i = 0; i < n; i++) {
+      const xa = x0 + (w * i) / n + (i === 0 ? 0.3 : 0.22);
+      const xb = x0 + (w * (i + 1)) / n - (i === n - 1 ? 0.3 : 0.22);
+      for (const [za, zb] of bands) kit.boxMM("painted", [xa, yTop - 0.04, za], [xb, yTop - 0.005, zb], { color: PALETTE.impGrey, uv: "world", texel: 0.6 });
+    }
+    for (const [za, zb, zi] of [[516.2, 516.7, 516.705], [517.3, 517.8, 517.295]]) {
+      kit.boxMM("painted", [x0 + 0.4, yTop - 0.3, za], [x1 - 0.4, yTop, zb], { color: PALETTE.impWhite, uv: "world", texel: 0.8 });
+      kit.box("emitCoolSoft", (x0 + x1) / 2, yTop - 0.17, zi, x1 - x0 - 1.2, 0.18, 0.01, { uv: "keep" });
+    }
+    for (let x = x0 + 2.0; x < x1 - 1.0; x += 3.6) kit.box("metal", x, yTop - 0.31, 517, 0.06, 0.03, 1.62, { color: PALETTE.steel, texel: 2 });
+  }
+
   // ------------------------------------------------------------ lights: white-blue, the brightest room on the deck
-  for (const x of [-17.2, -12.6, -8.0]) ctx.lights.cool.push(pointLight(0xe6f0ff, 8.0, 11, [x, yTop - 0.7, 512.8]));
-  for (const x of [-6.0, -12.0, -17.0]) ctx.lights.cool.push(pointLight(0xe6f0ff, 8.0, 11, [x, yTop - 0.7, 517.4]));
+  // ward and walkway practicals hang under the shell's light channels (z 512.33 / 517), the rest under
+  // the surgical light and the aft-wall light bars
+  for (const x of [-17.2, -12.6, -8.0]) ctx.lights.cool.push(pointLight(0xe6f0ff, 8.0, 11, [x, yTop - 0.7, 512.33]));
+  for (const x of [-6.0, -12.0, -17.0]) ctx.lights.cool.push(pointLight(0xe6f0ff, 8.0, 11, [x, yTop - 0.7, 517.0]));
   ctx.lights.cool.push(pointLight(0xffffff, 7.5, 8, [OP.x, yTop - 1.4, OP.z]));
-  ctx.lights.cool.push(pointLight(0xe6f0ff, 7.0, 10, [-18.5, yTop - 0.7, 521.8]));
-  ctx.lights.cool.push(pointLight(0xe6f0ff, 7.0, 10, [-6.0, yTop - 0.7, 522.0]));
+  ctx.lights.cool.push(pointLight(0xe6f0ff, 7.0, 10, [-18.5, yTop - 0.7, 521.67]));
+  ctx.lights.cool.push(pointLight(0xe6f0ff, 7.0, 10, [-6.0, yTop - 0.7, 521.67]));
   ctx.lights.teal.push(pointLight(0x4a8dff, 5.0, 7, [TANK.x, y0 + 1.6, TANK.z]));
+  ctx.lights.teal.push(pointLight(0x4a8dff, 5.0, 7, [TANK2.x, y0 + 1.6, TANK2.z]));
 
   frosted.build("medbay-frosted");
   fluid.build("medbay-bacta-fluid");

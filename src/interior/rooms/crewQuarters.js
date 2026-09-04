@@ -8,7 +8,7 @@ import { PALETTE } from "../../materials.js";
 import { roomShell, wallLightBar, IMPERIAL_STYLES, IMPERIAL_PAINTS } from "../shell.js";
 import { panelGrid, pointLight, wallFrame, WALL_T } from "../lib.js";
 import { rng } from "../../kit.js";
-import { locker, lockerRun, footlocker, wallScreen, stencil, ceilingFixture, bench, pipeRun } from "./crewFwdKit.js";
+import { locker, lockerRun, footlocker, wallScreen, stencil, ceilingFixture, bench, bedding, pipeRun, decalRect } from "./crewFwdKit.js";
 
 const BUNK_L = 2.0;
 const BUNK_D = 0.9;
@@ -96,32 +96,37 @@ export function build(kit, ctx, room, lib) {
     const hi = Math.max(pzA, pzB);
     const pf = eastBay ? wallFrame(kit, [X_MID + WALL_T, hi], [X_MID + WALL_T, lo], y0) : wallFrame(kit, [X_MID - WALL_T, lo], [X_MID - WALL_T, hi], y0);
     lockerRun(pf.frame, 0.05, pf.length - 0.05, { w: 0.6, h: 1.9, d: 0.45, decals: [14, null, 0], band: PALETTE.tealPaint });
-    wallScreen(pf.frame, pf.length / 2, 2.3, 0.5, 0.3, "screen0");
+    wallScreen(pf.frame, pf.length / 2, 2.3, 0.5, 0.3, bay.north ? "screen7" : "screen9");
   }
 
-  // ------------------------------------------------------------ walkway / lane ceiling fixtures
+  // ------------------------------------------------------------ ceiling fixtures: one housing over every practical
+  // (walkway pair + lane fixture per bay, four along the aisle); the point lights below sit at the same x/z
+  const walkZ = (bay) => (bay.north ? z0 + 0.05 + BUNK_D + 0.775 : z1 - 0.05 - BUNK_D - 0.775);
+  const laneZ = (bay) => (bay.north ? AISLE.z0 - 1.0 : AISLE.z1 + 1.0);
+  const AISLE_X = [-21.5, -15.5, -9.5, -4];
   for (const bay of bays) {
-    const wz = bay.north ? z0 + 0.05 + BUNK_D + 0.775 : z1 - 0.05 - BUNK_D - 0.775;
-    for (let k = 0; k < 4; k++) ceilingFixture(kit, bay.xa + ((bay.xb - bay.xa) * (k + 0.5)) / 4, yTop, wz, 0.7, 0.14, "emitWarmSoft");
-    const lz = bay.north ? AISLE.z0 - 1.0 : AISLE.z1 + 1.0;
-    for (let k = 0; k < 2; k++) ceilingFixture(kit, bay.xa + ((bay.xb - bay.xa) * (k + 0.5)) / 2, yTop, lz, 1.2, 0.16, "emitWarmSoft");
+    const xm = (bay.xa + bay.xb) / 2;
+    for (const dx of [-2.8, 2.8]) ceilingFixture(kit, xm + dx, yTop, walkZ(bay), 1.1, 0.18, "emitWarmSoft");
+    ceilingFixture(kit, xm, yTop, laneZ(bay), 1.8, 0.22, "emitWarmSoft");
   }
+  // the aisle practicals hang under the shell's continuous light channel (lightRows: 1 along the aisle)
 
   // ------------------------------------------------------------ aisle: benches, end wall, door wall
   bench(kit, -20.5, y0, 494, 6.0, "x");
   bench(kit, -9.5, y0, 494, 6.0, "x");
   for (const bx of [-23, -18, -12, -7]) kit.box("darkGloss", bx, y0 + 0.47, 494 + (rand() - 0.5) * 0.2, 0.28, 0.012, 0.2);
+  for (const bx of [-21.2, -8.1]) kit.box("fabric", bx, y0 + 0.51, 494.02, 0.36, 0.12, 0.28, { color: PALETTE.fabricTeal, uv: "world", texel: 3 });
   {
     const { frame: f, length } = frames["-x"]; // u = z1 - z ; aisle at u 5.4..10.6
     lockerRun(f, length / 2 - 2.4, length / 2 + 2.4, { w: 0.6, h: 2.0, d: 0.5, decals: [0, null, 14, null], band: PALETTE.tealPaint });
-    wallScreen(f, length / 2 - 1.2, 2.45, 0.7, 0.36, "screen0");
+    wallScreen(f, length / 2 - 1.2, 2.45, 0.7, 0.36, "screen7");
     wallScreen(f, length / 2 + 1.2, 2.45, 0.7, 0.36, "screen3");
     wallLightBar(f, length / 2 - 2.5, length / 2 + 2.5, 2.85, "emitWarmSoft");
   }
   {
     const { frame: f } = frames["+x"]; // u = z - z0 ; door at u 7.1..8.9
     wallScreen(f, 5.6, 1.75, 0.7, 0.42, "screen2");
-    wallScreen(f, 10.4, 1.75, 0.7, 0.42, "screen0");
+    wallScreen(f, 10.4, 1.75, 0.7, 0.42, "screen9");
     stencil(f, 6.6, 1.7, 0.36, 0);
     stencil(f, 9.4, 1.7, 0.36, 13);
     for (const u of [5.9, 6.2, 6.5, 9.5, 9.8, 10.1]) f.box("metal", u, 2.25, 0.03, 0.03, 0.06, 0.06, { color: PALETTE.steel });
@@ -134,15 +139,14 @@ export function build(kit, ctx, room, lib) {
   for (const z of [493.15, 494.85]) kit.box("satinBlack", (x0 + x1) / 2, y0 + 0.006, z, x1 - x0 - 0.6, 0.012, 0.06);
 
   // ------------------------------------------------------------ lights: warm walkways and lanes, warm-neutral aisle
+  // Every practical hangs under one of the fixtures above, well below the ceiling plate so it lights
+  // the bunks and the deck rather than the ceiling.
   for (const bay of bays) {
-    const wz = bay.north ? z0 + 1.7 : z1 - 1.7;
-    const lz = bay.north ? AISLE.z0 - 1.0 : AISLE.z1 + 1.0;
     const xm = (bay.xa + bay.xb) / 2;
-    ctx.lights.warm.push(pointLight(0xffc48c, 6.0, 10, [xm - 2.8, yTop - 0.5, wz]));
-    ctx.lights.warm.push(pointLight(0xffc48c, 6.0, 10, [xm + 2.8, yTop - 0.5, wz]));
-    ctx.lights.warm.push(pointLight(0xffd2a8, 7.0, 10, [xm, yTop - 0.5, lz]));
+    for (const dx of [-2.8, 2.8]) ctx.lights.warm.push(pointLight(0xffc48c, 7.5, 11, [xm + dx, yTop - 0.85, walkZ(bay)]));
+    ctx.lights.warm.push(pointLight(0xffd2a8, 9.5, 12, [xm, yTop - 0.8, laneZ(bay)]));
   }
-  for (const x of [-21.5, -15.5, -9.5, -4]) ctx.lights.cool.push(pointLight(0xe9dfd2, 8.0, 12, [x, yTop - 0.5, 494]));
+  for (const x of AISLE_X) ctx.lights.cool.push(pointLight(0xe9dfd2, 11.0, 15, [x, yTop - 0.75, 494]));
 
   // ------------------------------------------------------------ the interactable bunk
   if (restBunk) {
@@ -173,21 +177,17 @@ function bunkStack(kit, ctx, cx, y0, cz, openDir, headSide, backPanel, rand, int
   const post = 0.06;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box("satinBlack", cx + sx * (BUNK_L / 2 - post / 2), y0 + STACK_H / 2, cz + sz * (BUNK_D / 2 - post / 2), post, STACK_H, post);
   kit.box("satinBlack", cx, y0 + STACK_H - 0.03, cz, BUNK_L, 0.06, BUNK_D);
-  const bedding = (li) => [
-    [BUNK_L - 0.14, 0.08, BUNK_D - 0.16, PALETTE.fabricCream, cx, y0 + LEVELS[li] + 0.04, cz],
-    [BUNK_L * 0.6, 0.035, BUNK_D - 0.12, PALETTE.fabricTeal, cx - headSide * 0.32, y0 + LEVELS[li] + 0.095, cz],
-    [0.36, 0.07, BUNK_D - 0.36, PALETTE.fabricCream, cx + headSide * (BUNK_L / 2 - 0.3), y0 + LEVELS[li] + 0.115, cz],
-  ];
   let result = null;
   LEVELS.forEach((lv, li) => {
     const yP = y0 + lv;
     kit.box("metal", cx, yP - 0.03, cz, BUNK_L - post * 2, 0.06, BUNK_D - post * 2 + 0.02, { color: PALETTE.gunmetal, texel: 1.5 });
     kit.box("metal", cx, yP - 0.09, zOpen - openDir * 0.04, BUNK_L - post * 2, 0.06, 0.03, { color: PALETTE.darkMetal, texel: 2 });
+    // pale mattress, blue blanket draped over the open edge, pillow: the bedding has to read from the aisle
     if (interactive && li === 0 && ctx.group) {
       const mat = ctx.materials.fabric.clone();
       const g = new THREE.Group();
       g.name = "bunk";
-      for (const [sx, sy, sz, col, px, py, pz] of bedding(0)) {
+      const add = (col, px, py, pz, sx, sy, sz) => {
         const geo = new THREE.BoxGeometry(sx, sy, sz);
         const n = geo.attributes.position.count;
         const arr = new Float32Array(n * 3);
@@ -204,29 +204,40 @@ function bunkStack(kit, ctx, cx, y0, cz, openDir, headSide, backPanel, rand, int
         m.castShadow = true;
         m.receiveShadow = true;
         g.add(m);
-      }
+      };
+      bedding(kit, cx, yP, cz, BUNK_L, BUNK_D, headSide, openDir, { add });
       ctx.group.add(g);
       result = { object: g, material: mat };
     } else {
-      for (const [sx, sy, sz, col, px, py, pz] of bedding(li)) kit.box("fabric", px, py, pz, sx, sy, sz, { color: col, uv: "world", texel: 2 });
+      bedding(kit, cx, yP, cz, BUNK_L, BUNK_D, headSide, openDir, { foldedFoot: li === 2 && rand() < 0.5 });
     }
     if (li > 0) {
-      kit.cyl("metal", cx - headSide * 0.2, yP + 0.28, zOpen - openDir * 0.03, 0.014, BUNK_L * 0.55, "x", { color: PALETTE.steel, segments: 8 });
-      for (const dx of [-0.5, 0.5]) kit.cyl("metal", cx - headSide * 0.2 + dx, yP + 0.14, zOpen - openDir * 0.03, 0.012, 0.28, "y", { color: PALETTE.steel, segments: 8 });
+      kit.cyl("metal", cx - headSide * 0.2, yP + 0.34, zOpen - openDir * 0.03, 0.014, BUNK_L * 0.55, "x", { color: PALETTE.steel, segments: 8 });
+      for (const dx of [-0.5, 0.5]) kit.cyl("metal", cx - headSide * 0.2 + dx, yP + 0.17, zOpen - openDir * 0.03, 0.012, 0.34, "y", { color: PALETTE.steel, segments: 8 });
     }
     // reading light + shelf at the head end, on the closed side of the bunk
     const hx = cx + headSide * (BUNK_L / 2 - 0.25);
-    kit.box("satinBlack", hx, yP + 0.55, zBack + openDir * 0.05, 0.16, 0.05, 0.09);
-    kit.box("emitWarm", hx, yP + 0.522, zBack + openDir * 0.05, 0.12, 0.012, 0.06, { uv: "keep" });
-    kit.box("metal", cx + headSide * 0.35, yP + 0.42, zBack + openDir * 0.08, 0.3, 0.02, 0.14, { color: PALETTE.gunmetal });
-    if (rand() < 0.5) kit.cyl("painted", cx + headSide * 0.42, yP + 0.48, zBack + openDir * 0.08, 0.035, 0.1, "y", { color: rand() < 0.5 ? PALETTE.tealPaint : PALETTE.creamDark, uv: "keep", segments: 10 });
-    else kit.box("darkGloss", cx + headSide * 0.3, yP + 0.44, zBack + openDir * 0.08, 0.14, 0.012, 0.1);
-    if (rand() < 0.35 && !(interactive && li === 0)) kit.box("fabric", cx - headSide * 0.6, yP + 0.13, cz + openDir * 0.1, 0.32, 0.08, 0.26, { color: PALETTE.fabricCream, uv: "world", texel: 3 });
+    kit.box("satinBlack", hx, yP + 0.58, zBack + openDir * 0.05, 0.16, 0.05, 0.09);
+    kit.box("emitWarm", hx, yP + 0.552, zBack + openDir * 0.05, 0.12, 0.012, 0.06, { uv: "keep" });
+    kit.box("metal", cx + headSide * 0.35, yP + 0.46, zBack + openDir * 0.08, 0.3, 0.02, 0.14, { color: PALETTE.gunmetal });
+    if (rand() < 0.5) kit.cyl("painted", cx + headSide * 0.42, yP + 0.52, zBack + openDir * 0.08, 0.035, 0.1, "y", { color: rand() < 0.5 ? PALETTE.tealPaint : PALETTE.creamDark, uv: "keep", segments: 10 });
+    else kit.box("darkGloss", cx + headSide * 0.3, yP + 0.48, zBack + openDir * 0.08, 0.14, 0.012, 0.1);
+    if (rand() < 0.35 && !(interactive && li === 0)) kit.box("fabric", cx - headSide * 0.6, yP + 0.24, cz + openDir * 0.1, 0.32, 0.08, 0.26, { color: PALETTE.fabricCream, uv: "world", texel: 3 });
   });
   // ladder on the open side at the foot end
   const lx = cx - headSide * (BUNK_L / 2 - 0.2);
   for (const dx of [-0.14, 0.14]) kit.cyl("metal", lx + dx, y0 + 1.05, zOpen + openDir * 0.02, 0.014, 2.0, "y", { color: PALETTE.steel, segments: 8 });
   for (let k = 0; k < 6; k++) kit.cyl("metal", lx, y0 + 0.3 + k * 0.32, zOpen + openDir * 0.02, 0.011, 0.28, "x", { color: PALETTE.steel, segments: 8 });
+  // every stack owns a footlocker on the deck at its head end, kit bag dropped on top of some
+  const fx = cx + headSide * (BUNK_L / 2 - 0.42);
+  const fz = zOpen + openDir * 0.2;
+  kit.box("painted", fx, y0 + 0.21, fz, 0.72, 0.42, 0.34, { color: PALETTE.impGreyDark, uv: "keep" });
+  kit.box("metal", fx, y0 + 0.36, fz, 0.74, 0.016, 0.36, { color: PALETTE.darkMetal });
+  kit.box("metal", fx, y0 + 0.03, fz, 0.74, 0.06, 0.36, { color: PALETTE.darkMetal, texel: 2 });
+  for (const s of [-1, 1]) kit.box("metal", fx + s * 0.22, y0 + 0.27, fz + openDir * 0.178, 0.06, 0.1, 0.016, { color: PALETTE.steel });
+  kit.add("decal", new THREE.PlaneGeometry(0.16, 0.16), { pos: [fx, y0 + 0.19, fz + openDir * 0.174], rot: [0, openDir > 0 ? 0 : Math.PI, 0], uv: "keep", uvRect: decalRect(14) });
+  if (rand() < 0.45) kit.box("fabric", fx + (rand() - 0.5) * 0.2, y0 + 0.5, fz, 0.34, 0.16, 0.26, { color: rand() < 0.5 ? PALETTE.fabricTeal : PALETTE.fabricCream, uv: "world", texel: 3 });
+  kit.collider([fx - 0.37, y0, fz - 0.18], [fx + 0.37, y0 + 0.44, fz + 0.18], "footlocker");
   // back panel toward the walkway (inner rows only)
   if (backPanel) {
     const pz = zBack - openDir * 0.025;
@@ -234,7 +245,7 @@ function bunkStack(kit, ctx, cx, y0, cz, openDir, headSide, backPanel, rand, int
     kit.box("satinBlack", cx, y0 + 0.2, pz - openDir * 0.02, BUNK_L, 0.4, 0.02);
     const faceZ = pz - openDir * 0.021;
     const wf = openDir > 0 ? wallFrame(kit, [cx + BUNK_L / 2, faceZ], [cx - BUNK_L / 2, faceZ], y0) : wallFrame(kit, [cx - BUNK_L / 2, faceZ], [cx + BUNK_L / 2, faceZ], y0);
-    wallScreen(wf.frame, BUNK_L / 2 + 0.35, 1.5, 0.34, 0.22, "screen0");
+    wallScreen(wf.frame, BUNK_L / 2 + 0.35, 1.5, 0.34, 0.22, ["screen0", "screen9", "screen3", "screen7"][Math.floor(rand() * 4)]);
     stencil(wf.frame, BUNK_L / 2 - 0.5, 1.5, 0.26, 14, 0.003);
     pipeRun(wf.frame, 0.1, BUNK_L - 0.1, 2.15, 0.02, { color: PALETTE.steel });
     wf.frame.box("leds", BUNK_L / 2, 0.9, 0.004, 0.5, 0.03, 0.006, { uv: "keep" });
