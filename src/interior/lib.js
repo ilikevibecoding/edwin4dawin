@@ -212,8 +212,9 @@ export function panelGrid(frame, length, height, opts = {}) {
         continue;
       }
       const style = pickStyle(cw, ch, ri, nRows);
-      // backing plate
-      frame.box("metal", cu, cv, -depth + 0.05, cw, ch, 0.1, { color: PALETTE.darkMetal, texel: 1.2 });
+      // backing plate (never thicker than the wall, so thin partitions keep their painted face in front)
+      const plateT = Math.min(0.1, Math.max(0.02, depth - 0.03));
+      frame.box("metal", cu, cv, -depth + plateT / 2, cw, ch, plateT, { color: PALETTE.darkMetal, texel: 1.2 });
       switch (style) {
         case "kick":
           frame.box("metal", cu, cv, -0.03, cw - gap, ch - gap, 0.06, { color: PALETTE.gunmetal, texel: 1.5 });

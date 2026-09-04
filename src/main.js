@@ -300,9 +300,9 @@ const debugAPI = {
   transitionProgress() {
     return modes.transition ? modes.transition.t : null;
   },
-  // Teleport inside the active zone (x, z; y from floors) and settle lights
-  teleport(x, z, yaw = 0, pitch = 0) {
-    player.setPose(x, z, yaw, pitch);
+  // Teleport inside the active zone (x, z; y from the highest floor unless given) and settle lights
+  teleport(x, z, yaw = 0, pitch = 0, y = null) {
+    player.setPose(x, z, yaw, pitch, y);
     interior.update(0, player);
     pool.settle(camera.position);
     framesRendered = 0;
