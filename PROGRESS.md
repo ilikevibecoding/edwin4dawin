@@ -494,3 +494,80 @@ Navigation validation (`tools/navtest.mjs`): 74 door traversals in both directio
 failure is a placeholder crate blocking a straight-line walk in the briefing placeholder — the walk
 tool now side-steps when stuck); 5/5 turbolift rides arrive on the right deck at the right height
 (180 / 150 / 60 / 10 / -30); traffic launches and recovers (3 aloft → 1 returning after 45 s).
+
+## SD iteration 2 — all decks merged, critique round 1 (`shots/sd_iter_2/`)
+
+Six parallel workstreams (exterior detail, bridge deck, command deck, crew deck, engineering deck,
+hangar deck) landed their rooms; 25 rooms + corridors / lobbies / lift cabs on five decks, all real
+builders (no placeholders left). Four independent visual critics and one technical validator
+reviewed the 55 rubric shots; their findings drove a shared-file pass and one fix round per
+workstream (below). Recorded critique headlines: exterior plating read as a runway, hull ~40 % too
+thin at the stern, engine halos as crescents, city lights illegible; bridge with white floor lanes,
+flat lighting, blank pit stations, hull invisible below the window sill; hangar ceiling a
+"fluorescent warehouse", opening invisible from the entry, TIE launch never visible (arc-length
+parametrised 1.3 km path spent 2 s inside the bay), parked TIEs with glowing engine "eyes"; crew
+rooms over-bright, hazard striping everywhere, identical repeated props; light pool overflowing (11
+lights dropped in the hangar) and popping every re-rank.
+
+## SD iteration 3 — critique round 1 fixes merged (`shots/sd_iter_3/`, `/tmp/navtest_iter3b.json`)
+
+Shared fixes (integrator): thicker hull / bigger engines / wider neck (`dims.js`); mid-grey hull and
+lower sun; theme-aware wall plates (no cream); two-leg TIE paths (14 s visible descent through the
+bay) and engine glow only while flying; light pool prioritises the current room's own lights, holds
+assignments with 3 m hysteresis, and its spot slot renders a shadow map only while carrying a
+source (the idle slot had been re-rendering the whole visible interior into a 1024² map every
+frame); corridors request ≤ 4 real lights; dim emitters for console buttons / ceiling strips;
+door leaves with full-height seam lamps + hazard band; lift cab deck readout + lit current-deck
+button; camera-gated exterior-view rooms; space (planets / stars / dust) hidden from windowless
+rooms; shader programs compiled per deck as it finishes building (behind shut lift doors);
+`Sector.dispose()` + `interior.trimDecks()` release decks two or more lift stops away (heap 604 →
+382 MB in a five-deck tour); door `lock / unlock / hold` API, interior + traffic snapshots with
+remote-authority timeout, `PilotHook.steer`, NPC seat / stand markers (54 seats registered by the
+chairs), docking port + landing zone registered, systems receive the world each frame.
+
+Per-workstream rounds (all merged): exterior — segmented grooves + patchwork tone, 12 greeble
+complexes / 14 galleries, facade bays + terraces, trapezoid neck base, halos seated in nozzles,
+clustered 0.8 m window panes; bridge — black spine, zoned low-key lighting, pit stations, hooded
+viewports, ISD hologram; command — lit officers' cabins, dark observation mullions, ring-station
+variants, star-chart hologram, briefing troughs + emblem; crew — per-side bay numbering, frosted
+medbay screens, mesh armory cage + RESTRICTED lintel, red-dim detention channels, lighter rec
+fabrics, neutral life-support light with numbered tanks, open escape pod; engineering — blue
+motivator, saturated reactor core, continuous status board, filled maintenance bay, detailed
+containers; hangar — field at deck level, opaque markings + TIE pads, dark 5-truss ceiling with 2
+spots + 4 flood rigs, plated bay doors, beacon masts + BAY 05 gantry, tower at y 8–15, TIE in the
+fighter-bay cradle, plated shuttle blast door, roller conveyors.
+
+Measured (1280×720, software GL; iteration 2 → 3):
+
+| View | Calls | Tris | Pool overflow | iter 2 (calls / tris) |
+|------|-------|------|---------------|-----------------------|
+| exterior_medium | 154 | 430k | 0 | 292 / 1,166k |
+| exterior_close | 221 | 737k | 0 | — |
+| exterior_dock (worst view) | 282 | 891k | — | 436 / 2,225k |
+| bridge_aft | 188 | 716k | 0 | 294 / 1,121k |
+| observation | 167 | 492k | 0 | 283 / 740k |
+| corridor_crew | 130 | 142k | 3 | 145 / 192k |
+| quarters | 102 | 236k | 3 | 112 / 259k |
+| engineering | 79 | 182k | 0 | 117 / 361k |
+| reactor | 66 | 191k | 0 | 103 / 413k |
+| hangar_entry | 271 | 654k | 1 | 421 / 1,770k |
+| hangar_deck | 249 | 651k | 1 | 403 / 1,760k |
+| fighterbay | 188 | 535k | 0 | 340 / 1,631k |
+
+All 49 views inside the budget (≤ 350 calls, ≤ 1.2 M triangles). Programs after visiting every room:
+235 (compiled per deck up front; 87 at the bridge alone). Texture memory 161 MB (at the 160 MB
+limit — the crew / engineering canvas boards added ~15 MB), heap 417 MB with every deck resident
+(the harness teleports, so `trimDecks` never fires; it does on lift rides). Load 16.6 s on this CPU
+(JS-bound texture synthesis + bridge deck build; ≈ 4–6 s expected on a desktop core).
+
+Dynamic passes: door held at 35–41 % open reads as two leaves with seam lamps; lift ride 3.2 s mid →
+arrives `d5_lift`; launch of 3 TIEs captured mid-descent inside the bay (y −20, between the racks
+and the well) and again ~16 m below the hull from a free camera; exterior ↔ interior round trip
+returns to the same spot in `d1_bridge`.
+
+Navigation (`tools/navtest.mjs`, after all merges): 80 door / portal traversals + 5 lift rides, 0
+failures, 0 page errors; one budget flag — `d4_cargo` 207k sector triangles vs the 180k room budget
+(detailed containers; trim queued for round 2).
+
+Critique round 2 (four independent critics on `shots/sd_iter_3/`) is in progress; its fix lists
+feed the next round.
