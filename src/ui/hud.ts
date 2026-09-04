@@ -18,6 +18,7 @@ export class Hud {
   private time = el('hud-time');
   private visible = true;
   private msgTimer = 0;
+  private wasCrashed = false;
 
   show(v: boolean): void { this.visible = v; this.root.classList.toggle('hidden', !v); }
   toggle(): void { this.show(!this.visible); }
@@ -38,6 +39,8 @@ export class Hud {
     this.thrVal.textContent = `${Math.round(throttle * 100)}%`;
     this.rpm.textContent = Math.round(600 + t.rpm * 2000).toString();
     this.stall.classList.toggle('hidden', !t.stalled);
+    if (t.crashed && !this.wasCrashed) this.flash('Crashed — aircraft reset upright on the surface. Throttle up to go again.', 5);
+    this.wasCrashed = t.crashed;
     this.cam.textContent = camMode.toUpperCase();
     const h = Math.floor(hour) % 24, m = Math.floor((hour % 1) * 60);
     this.time.textContent = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;

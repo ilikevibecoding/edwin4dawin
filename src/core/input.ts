@@ -1,5 +1,17 @@
 import type { FlightInputs } from '../plane/physics';
 
+/** full-travel times of the yoke/pedals: away from centre and back to centre (seconds) */
+const SLEW_OUT_S = 0.22;
+const SLEW_BACK_S = 0.15;
+
+/** Move `cur` toward `target` at the yoke's hand-speed limit. */
+function slew(cur: number, target: number, dt: number): number {
+  const towardCentre = Math.abs(target) < Math.abs(cur) - 1e-6 && (target === 0 || Math.sign(target) === Math.sign(cur));
+  const maxStep = dt / (towardCentre ? SLEW_BACK_S : SLEW_OUT_S);
+  const d = target - cur;
+  return Math.abs(d) <= maxStep ? target : cur + Math.sign(d) * maxStep;
+}
+
 /** Keyboard + mouse + gamepad input with smoothing so control surfaces move with inertia. */
 export class Input {
   private keys = new Set<string>();
@@ -7,6 +19,9 @@ export class Input {
   private targetPitch = 0;
   private targetRoll = 0;
   private targetYaw = 0;
+  private cmdPitch = 0;
+  private cmdRoll = 0;
+  private cmdYaw = 0;
   orbitYaw = 0;
   orbitPitch = 0;
   private dragging = false;
@@ -58,11 +73,16 @@ export class Input {
       if (gp.buttons[6]?.value) f.throttle = Math.max(0, f.throttle - gp.buttons[6].value * dt * 0.8);
     }
     const clampU = (v: number) => Math.max(-1, Math.min(1, v));
-    // control surfaces move with a little lag (cable stretch / actuator rate)
-    const rate = 1 - Math.exp(-dt * 9);
-    f.pitch += (clampU(this.targetPitch) - f.pitch) * rate;
-    f.roll += (clampU(this.targetRoll) - f.roll) * rate;
-    f.yaw += (clampU(this.targetYaw) - f.yaw) * rate;
+    // A key press is a yoke moved by a hand, not a surface teleporting: the command slews at a finite rate
+    // (full travel in 0.22 s, back to centre in 0.15 s) and the surface follows with a short lag, so a full
+    // input takes ~0.25 s to arrive and the aircraft stops feeling like a floating camera.
+    this.cmdPitch = slew(this.cmdPitch, clampU(this.targetPitch), dt);
+    this.cmdRoll = slew(this.cmdRoll, clampU(this.targetRoll), dt);
+    this.cmdYaw = slew(this.cmdYaw, clampU(this.targetYaw), dt);
+    const lag = 1 - Math.exp(-dt * 25);
+    f.pitch += (this.cmdPitch - f.pitch) * lag;
+    f.roll += (this.cmdRoll - f.roll) * lag;
+    f.yaw += (this.cmdYaw - f.yaw) * lag;
     if (this.down('ShiftLeft') || this.down('ShiftRight')) f.throttle = Math.min(1, f.throttle + dt * 0.55);
     if (this.down('ControlLeft') || this.down('ControlRight')) f.throttle = Math.max(0, f.throttle - dt * 0.55);
     if (this.consume('KeyF')) f.flaps = f.flaps > 0.5 ? 0 : f.flaps > 0 ? 1 : 0.5;
