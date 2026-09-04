@@ -20,7 +20,7 @@ export class Aircraft {
   place(x: number, y: number, z: number, headingRad: number, pitchRad: number, bankRad: number, speed: number, throttle: number): void {
     this.flight.position.set(x, y, z);
     // heading 0 = north (-Z). Model +X forward. yaw about Y: forward = (sin h, 0, -cos h)
-    const yaw = Math.atan2(-Math.cos(headingRad), Math.sin(headingRad));
+    const yaw = Math.atan2(Math.cos(headingRad), Math.sin(headingRad));
     const e = new THREE.Euler(0, 0, 0, 'YZX');
     e.set(bankRad, yaw, pitchRad, 'YZX');
     this.flight.quaternion.setFromEuler(e);

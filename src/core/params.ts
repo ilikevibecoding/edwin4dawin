@@ -27,6 +27,8 @@ export interface Params {
   grid: boolean;
   debug: boolean;
   debugRoads: boolean;
+  /** comma-separated debug switches: noterrain, noshadow, nowake, noveg, nocity */
+  dbg: Set<string>;
 }
 
 export function readParams(): Params {
@@ -57,5 +59,6 @@ export function readParams(): Params {
     grid: q.get('grid') === '1',
     debug: q.get('debug') === '1',
     debugRoads: q.get('debugroads') === '1',
+    dbg: new Set((q.get('dbg') ?? '').split(',').filter(Boolean)),
   };
 }

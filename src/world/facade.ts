@@ -102,14 +102,14 @@ vec3 roofPalette(float k) {
     float lod = clamp(px * 1.6, 0.0, 1.0);
     float litHash = hash12(vec2(colIdx * 1.31 + facadeSeed, floorIdx * 0.77 + seed));
     float lit = step(0.72 - 0.25 * uNight, litHash) * uNight;
-    vec3 glassCol = vec3(0.10, 0.14, 0.17);
+    vec3 glassCol = vec3(0.07, 0.10, 0.13);
     vec3 warm = mix(vec3(1.0, 0.82, 0.55), vec3(0.75, 0.85, 1.0), step(0.75, hash11(litHash * 17.0)));
     if (style < 0.5) {
       // curtain wall: nearly all glass, thin mullions, spandrel every floor
       float mullion = step(fx, 0.06) + step(0.94, fx);
       float spandrel = step(fy, 0.16);
       float glass = 1.0 - max(min(mullion, 1.0), spandrel);
-      vec3 tint = mix(vec3(0.08, 0.16, 0.20), vec3(0.06, 0.10, 0.16), hash11(seed * 5.3));
+      vec3 tint = mix(vec3(0.07, 0.15, 0.20), vec3(0.05, 0.09, 0.15), hash11(seed * 5.3));
       vec3 spandrelCol = wall * 0.55;
       col = mix(spandrelCol, tint, glass);
       col = mix(col, mix(spandrelCol, tint, 0.8), lod);

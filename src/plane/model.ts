@@ -37,7 +37,7 @@ export class PlaneModel {
   readonly floatBowR = new THREE.Vector3(2.6, -2.0, 1.25);
   readonly wingTipL = new THREE.Vector3(0.2, 1.35, -7.3);
   readonly wingTipR = new THREE.Vector3(0.2, 1.35, 7.3);
-  readonly cockpitEye = new THREE.Vector3(1.15, 0.62, -0.36);
+  readonly cockpitEye = new THREE.Vector3(1.0, 0.9, -0.36);
   readonly exteriorMeshes: THREE.Mesh[] = [];
   readonly interiorMeshes: THREE.Object3D[] = [];
   readonly spanHalf = 7.3;
@@ -64,8 +64,8 @@ export class PlaneModel {
     const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2c2f33, roughness: 0.45, metalness: 0.8 });
     const exhaust = new THREE.MeshStandardMaterial({ color: 0x5a4a3c, roughness: 0.6, metalness: 0.9 });
     const rubber = new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.92, metalness: 0.0 });
-    const interior = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.8, metalness: 0.05, side: THREE.BackSide });
-    const interiorPlastic = new THREE.MeshStandardMaterial({ color: 0x2a2d31, roughness: 0.75 });
+    const interior = new THREE.MeshStandardMaterial({ color: 0x6a6d72, roughness: 0.85, metalness: 0.0, side: THREE.BackSide, envMapIntensity: 2.2 });
+    const interiorPlastic = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.7, envMapIntensity: 2.0 });
     const seatLeather = new THREE.MeshStandardMaterial({ color: 0x7a5535, roughness: 0.55 });
     const carpet = new THREE.MeshStandardMaterial({ color: 0x35302b, roughness: 0.95 });
     const panelTex = panelTexture();
@@ -174,7 +174,7 @@ export class PlaneModel {
       this.propeller.add(pivot);
       this.exteriorMeshes.push(blade);
     }
-    const discMat = new THREE.MeshBasicMaterial({ map: propDiscTexture(), transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide });
+    const discMat = new THREE.MeshStandardMaterial({ map: propDiscTexture(), transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6, color: 0x888888 });
     this.materials.push(discMat);
     this.propDisc = new THREE.Mesh(new THREE.CircleGeometry(1.5, 40), discMat);
     this.propDisc.rotation.y = Math.PI / 2;
@@ -195,7 +195,7 @@ export class PlaneModel {
     // control surfaces: flaps (inboard) and ailerons (outboard) hinged at the trailing edge
     const mkSurface = (spanZ: number, chordRoot: number, chordTip: number, zStart: number, side: number, mat: THREE.Material): THREE.Group => {
       const g = new THREE.Group();
-      const plate = new THREE.Mesh(plateGeometry(spanZ, chordRoot, chordTip, 0.06), mat);
+      const plate = new THREE.Mesh(plateGeometry(spanZ, chordRoot, chordTip, 0.11), mat);
       plate.castShadow = true;
       g.add(plate);
       this.exteriorMeshes.push(plate);
@@ -228,7 +228,7 @@ export class PlaneModel {
     this.elevator.position.set(-4.25 - 0.7 * 1.0, 0.44, 0);
     this.root.add(this.elevator);
     for (const side of [-1, 1]) {
-      const el = new THREE.Mesh(plateGeometry(2.5, 0.42, 0.3, 0.05), wingPaint);
+      const el = new THREE.Mesh(plateGeometry(2.5, 0.42, 0.3, 0.09), wingPaint);
       el.scale.z = side; el.castShadow = true;
       this.elevator.add(el); this.exteriorMeshes.push(el);
     }
@@ -242,7 +242,7 @@ export class PlaneModel {
     this.rudder = new THREE.Group();
     this.rudder.position.set(-4.35 - 0.7 * 1.5 + 0.05, 0.45, 0);
     this.root.add(this.rudder);
-    const rud = new THREE.Mesh(plateGeometry(1.5, 0.6, 0.4, 0.05), wingPaint);
+    const rud = new THREE.Mesh(plateGeometry(1.5, 0.6, 0.4, 0.1), wingPaint);
     rud.rotation.x = -Math.PI / 2; rud.castShadow = true;
     this.rudder.add(rud); this.exteriorMeshes.push(rud);
     this.strobe = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0 }));
@@ -314,7 +314,7 @@ export class PlaneModel {
     const panel = add(new THREE.BoxGeometry(0.16, 0.42, 1.36), interiorPlastic, this.root, false);
     panel.position.set(2.0, 0.55, 0);
     const face = add(new THREE.PlaneGeometry(1.34, 0.4), panelMat, this.root, false);
-    face.position.set(1.915, 0.56, 0); face.rotation.y = -Math.PI / 2;
+    face.position.set(1.915, 0.56, 0); face.rotation.y = Math.PI / 2;
     const glareShield = add(new THREE.BoxGeometry(0.5, 0.04, 1.4), interiorPlastic, this.root, false);
     glareShield.position.set(2.15, 0.78, 0);
     const pedestal = add(new THREE.BoxGeometry(0.7, 0.32, 0.22), interiorPlastic, this.root, false);
@@ -343,12 +343,22 @@ export class PlaneModel {
       const back = add(backGeo, seatLeather, this.root, false); back.position.set(x - 0.25, 0.12, z); back.rotation.z = 0.15;
       const frame = add(new THREE.BoxGeometry(0.4, 0.3, 0.4), darkMetal, this.root, false); frame.position.set(x, -0.42, z);
     }
+    // pilot: torso, head with headset, arms toward the yoke
+    const shirt = new THREE.MeshStandardMaterial({ color: 0x2f4f6f, roughness: 0.85 });
+    const skin = new THREE.MeshStandardMaterial({ color: 0xc8956c, roughness: 0.7 });
+    const headset = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: 0.5 });
+    this.materials.push(shirt, skin, headset);
+    const torso = add(new THREE.BoxGeometry(0.28, 0.5, 0.42), shirt, this.root, false); torso.position.set(0.95, 0.12, -0.36);
+    const head = add(new THREE.SphereGeometry(0.11, 12, 10), skin, this.root, false); head.position.set(0.98, 0.5, -0.36);
+    const band = add(new THREE.TorusGeometry(0.115, 0.018, 6, 16, Math.PI), headset, this.root, false); band.position.set(0.98, 0.53, -0.36); band.rotation.set(0, Math.PI / 2, 0);
+    for (const side of [-1, 1]) { const cup = add(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 10), headset, this.root, false); cup.position.set(0.98, 0.5, -0.36 + side * 0.12); cup.rotation.x = Math.PI / 2; }
+    for (const side of [-1, 1]) { const arm = add(new THREE.CylinderGeometry(0.04, 0.045, 0.5, 8), shirt, this.root, false); arm.position.set(1.25, 0.2, -0.36 + side * 0.16); arm.rotation.z = Math.PI / 2 - 0.35; }
     for (const z of [-0.5, -0.2, 0.2, 0.5]) { const pedal = add(new THREE.BoxGeometry(0.12, 0.18, 0.08), darkMetal, this.root, false); pedal.position.set(1.9, -0.36, z); pedal.rotation.z = 0.5; }
     // overhead switch panel & compass
-    const overhead = add(new THREE.BoxGeometry(0.5, 0.06, 0.35), interiorPlastic, this.root, false);
-    overhead.position.set(1.4, 1.02, 0);
-    const compass = add(new THREE.SphereGeometry(0.05, 10, 8), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 }), this.root, false);
-    compass.position.set(1.9, 0.98, 0);
+    const overhead = add(new THREE.BoxGeometry(0.6, 0.05, 0.4), interiorPlastic, this.root, false);
+    overhead.position.set(1.3, 1.1, 0);
+    const compass = add(new THREE.BoxGeometry(0.08, 0.07, 0.09), interiorPlastic, this.root, false);
+    compass.position.set(2.05, 0.82, 0);
 
     for (const m of this.materials) if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial) (m as THREE.MeshStandardMaterial).envMapIntensity = 1.0;
   }

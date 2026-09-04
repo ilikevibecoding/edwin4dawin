@@ -22,8 +22,8 @@ export class FlightCamera {
   /** external orbit offsets (mouse) */
   orbitYaw = 0;
   orbitPitch = 0;
-  chaseDistance = 18;
-  chaseHeight = 5.5;
+  chaseDistance = 25;
+  chaseHeight = 6.5;
 
   constructor(readonly camera: THREE.PerspectiveCamera) {}
 
@@ -60,13 +60,15 @@ export class FlightCamera {
     const fwd = flight.forward(this.tmp);
     const yaw = Math.atan2(fwd.x, fwd.z);
     const speed = t.airspeed;
-    const dist = this.chaseDistance + speed * 0.06;
-    const heightOff = this.chaseHeight + speed * 0.01;
+    const dist = this.chaseDistance + speed * 0.08;
+    const heightOff = this.chaseHeight + speed * 0.012;
     const orbitQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.orbitPitch, yaw + this.orbitYaw, 0, 'YXZ'));
     const desired = this.tmp2.set(0, heightOff, -dist).applyQuaternion(orbitQ).add(flight.position);
     // bank the camera slightly with the aircraft so turns feel dynamic
     if (!this.initialised) { this.pos.copy(desired); this.vel.set(0, 0, 0); this.initialised = true; }
-    const k = 26, c = 9;
+    const k = 60, c = 2 * 0.9 * Math.sqrt(60);
+    // feed the aircraft velocity forward so the spring only has to absorb accelerations
+    desired.addScaledVector(flight.velocity, c / k);
     const acc = this.tmp.copy(desired).sub(this.pos).multiplyScalar(k).addScaledVector(this.vel, -c);
     this.vel.addScaledVector(acc, dt);
     this.pos.addScaledVector(this.vel, dt);

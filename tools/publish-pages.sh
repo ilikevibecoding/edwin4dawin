@@ -16,11 +16,15 @@ npm run build --silent
 echo "$BUILD_ID" > dist/BUILD_ID.txt
 echo "built from $(git rev-parse HEAD) on $(git rev-parse --abbrev-ref HEAD) at $(date -u +%FT%TZ)" > dist/BUILD_INFO.txt
 touch dist/.nojekyll
+# play.html: same page, but the (content-hashed) assets are loaded from jsDelivr, which serves JS/CSS with
+# the right MIME types even when GitHub Pages is not enabled. githack serves the small HTML entry point.
+sed 's#"\./assets/#"https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/assets/#g' dist/index.html > dist/play.html
 WORK=$(mktemp -d)
 rm -rf "$WORK"
 git fetch -q origin gh-pages || true
 git worktree add -q "$WORK" gh-pages
-rsync -a --delete --exclude .git dist/ "$WORK"/
+find "$WORK" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+cp -a dist/. "$WORK"/
 (
   cd "$WORK"
   git add -A
@@ -30,8 +34,8 @@ rsync -a --delete --exclude .git dist/ "$WORK"/
   fi
   PAGES_SHA=$(git rev-parse HEAD)
   echo "gh-pages commit: $PAGES_SHA"
-  echo "pinned:  https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/$PAGES_SHA/index.html"
-  echo "latest:  https://raw.githack.com/ilikevibecoding/edwin4dawin/gh-pages/index.html"
+  echo "pinned:  https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/$PAGES_SHA/play.html"
+  echo "latest:  https://raw.githack.com/ilikevibecoding/edwin4dawin/gh-pages/play.html"
   echo "pages:   https://ilikevibecoding.github.io/edwin4dawin/  (requires Pages enabled)"
   echo "$PAGES_SHA" > "$OLDPWD/dist/PAGES_SHA.txt"
 )

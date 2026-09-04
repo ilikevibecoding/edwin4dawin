@@ -19,9 +19,9 @@ export interface AtmosState {
 interface Key { el: number; sun: [number, number, number]; sunI: number; zen: [number, number, number]; hor: [number, number, number]; haze: [number, number, number]; sunHaze: [number, number, number]; amb: number; }
 
 const KEYS: Key[] = [
-  { el: -18, sun: [0.02, 0.03, 0.06], sunI: 0.0, zen: [0.0025, 0.0045, 0.012], hor: [0.010, 0.014, 0.026], haze: [0.008, 0.011, 0.02], sunHaze: [0.01, 0.012, 0.02], amb: 0.06 },
-  { el: -8, sun: [0.05, 0.05, 0.1], sunI: 0.0, zen: [0.004, 0.008, 0.022], hor: [0.03, 0.03, 0.06], haze: [0.02, 0.022, 0.04], sunHaze: [0.06, 0.03, 0.03], amb: 0.1 },
-  { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.047, zen: [0.02, 0.04, 0.11], hor: [0.42, 0.22, 0.2], haze: [0.22, 0.16, 0.2], sunHaze: [0.9, 0.35, 0.18], amb: 0.25 },
+  { el: -18, sun: [0.5, 0.6, 0.85], sunI: 0.12, zen: [0.006, 0.010, 0.024], hor: [0.018, 0.024, 0.042], haze: [0.014, 0.018, 0.03], sunHaze: [0.02, 0.022, 0.03], amb: 0.12 },
+  { el: -8, sun: [0.5, 0.6, 0.85], sunI: 0.12, zen: [0.006, 0.011, 0.028], hor: [0.035, 0.035, 0.065], haze: [0.024, 0.026, 0.045], sunHaze: [0.06, 0.03, 0.03], amb: 0.14 },
+  { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.06, zen: [0.02, 0.04, 0.11], hor: [0.42, 0.22, 0.2], haze: [0.22, 0.16, 0.2], sunHaze: [0.9, 0.35, 0.18], amb: 0.25 },
   { el: 4, sun: [1.0, 0.5, 0.22], sunI: 0.437, zen: [0.08, 0.17, 0.42], hor: [0.9, 0.5, 0.35], haze: [0.55, 0.42, 0.42], sunHaze: [1.0, 0.55, 0.3], amb: 0.5 },
   { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.75, zen: [0.10, 0.24, 0.62], hor: [0.80, 0.66, 0.58], haze: [0.58, 0.56, 0.6], sunHaze: [1.0, 0.75, 0.5], amb: 0.75 },
   { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.13, 0.32, 0.78], hor: [0.60, 0.74, 0.90], haze: [0.55, 0.68, 0.86], sunHaze: [0.95, 0.9, 0.82], amb: 0.95 },
@@ -42,8 +42,8 @@ export interface WeatherPreset { coverage: number; hazeDensity: number; hazeHeig
 
 export const WEATHER: Record<Weather, WeatherPreset> = {
   clear: { coverage: 0.2, hazeDensity: 1.5e-5, hazeHeight: 1400, windSpeed: 5, turbulence: 0.25, cloudBase: 1500, cloudTop: 2500, rain: 0, sunDim: 1 },
-  scattered: { coverage: 0.34, hazeDensity: 1.9e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 2700, rain: 0, sunDim: 0.97 },
-  cloudy: { coverage: 0.68, hazeDensity: 3.2e-5, hazeHeight: 1100, windSpeed: 10, turbulence: 0.7, cloudBase: 1000, cloudTop: 2500, rain: 0, sunDim: 0.72 },
+  scattered: { coverage: 0.36, hazeDensity: 1.9e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1200, cloudTop: 2900, rain: 0, sunDim: 0.97 },
+  cloudy: { coverage: 0.66, hazeDensity: 3.2e-5, hazeHeight: 1100, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2600, rain: 0, sunDim: 0.72 },
   storm: { coverage: 0.92, hazeDensity: 5.5e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 2600, rain: 1, sunDim: 0.4 },
 };
 
@@ -107,7 +107,10 @@ export class Atmosphere {
     const { dir, elevation } = sunDirection(this.hour);
     const k = mixKey(elevation);
     const s = this.state;
-    s.sunDir.copy(dir);
+    // below the horizon the moon takes over as the key light (roughly opposite the sun, kept above the horizon)
+    const moon = new THREE.Vector3(-dir.x, Math.max(0.25, -dir.y * 0.8 + 0.3), -dir.z).normalize();
+    const moonMix = smoothstep(0.0, -4.0, elevation);
+    s.sunDir.copy(dir).lerp(moon, moonMix).normalize();
     s.sunElevation = elevation;
     s.sunColor.setRGB(k.sun[0], k.sun[1], k.sun[2]);
     s.sunIntensity = k.sunI * p.sunDim;

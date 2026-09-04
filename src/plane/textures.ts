@@ -309,8 +309,8 @@ export function propDiscTexture(): THREE.CanvasTexture {
   const g = ctx.createRadialGradient(s / 2, s / 2, s * 0.08, s / 2, s / 2, s / 2);
   g.addColorStop(0, 'rgba(40,40,44,0.55)');
   g.addColorStop(0.5, 'rgba(40,40,44,0.22)');
-  g.addColorStop(0.92, 'rgba(200,190,60,0.30)');
-  g.addColorStop(1, 'rgba(200,190,60,0)');
+  g.addColorStop(0.92, 'rgba(170,150,60,0.22)');
+  g.addColorStop(1, 'rgba(170,150,60,0)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;

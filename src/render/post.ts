@@ -231,7 +231,7 @@ export class PostPipeline {
     c.tBloom1.value = this.bloomRTs[1].texture;
     c.tBloom2.value = this.bloomRTs[2].texture;
     c.uBloom.value = this.opts.bloom ? 0.22 : 0.0;
-    c.uExposure.value = this.exposure;
+    c.uExposure.value = this.exposure * (1 + 5.0 * (this.aerialMat.uniforms.uNight.value as number));
     c.uTime.value = time;
     this.blit(this.compositeMat, null);
     r.setRenderTarget(null);

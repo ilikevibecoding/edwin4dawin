@@ -1,0 +1,1412 @@
+{
+  "critic": "technical",
+  "tag": "iter01-baseline",
+  "build": "e796c003fa26-2026-09-04T0804 (frames); source read at HEAD bd0004c1 - note that HEAD already adds flight.step(inputs, 0) in Aircraft.place(), which the captured frames do not show",
+  "methodology": "Every still_grid.png, flight.png and crops/*.png inspected at 1:1 and 1.5-8x magnification; still vs flight difference images computed for the two fixed-camera views (aerial-a, skyline-high) to measure temporal change per grid cell; telemetry, landmark projections and renderer.info from metrics.json; physics.ts, camera.ts, game.ts, post.ts, water.ts, sky.ts, plus vegetation.ts, city.ts, terrain.ts, model.ts, aircraft.ts, hud.ts, main.ts and bench.ts read for root causes. Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source.",
+  "frames": {
+    "aerial-a": {
+      "scores": {
+        "20": 6,
+        "21": 5,
+        "23": 5,
+        "25": 3,
+        "26": 3,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 6,
+          "cells": "A1-H8 (still vs flight, fixed camera)",
+          "condition": "Fixed camera, 14:35, clear; still.png vs flight.png (3 s of simulated environment time) differenced per grid cell",
+          "evidence": "Sky and cloud cells differ by <0.6/255 mean and buildings by <1/255 (temporally stable), water cells by 1-3.4 (wave motion), but every canopy on the island (B5-H7) is outlined in the difference image (mean 5-7/255, 9-17 % of pixels changed) and the whole shore foam ring pulses (shoreFoam uses sin(uWaveTime*1.4 + depth*6), i.e. the same phase along the entire shore).",
+          "defect": "Vegetation sway at 1.5 km shifts silhouettes by several pixels while the shadow pass ignores the wind displacement (onBeforeCompile does not reach the depth material), and the shore foam breathes in phase around the island; cloud raymarch uses a static per-pixel jitter (hash12(gl_FragCoord)) that will crawl as a fixed screen-door pattern during camera motion.",
+          "fix": "Fade sway amplitude with distance (k *= 1 - smoothstep(600, 1500, dist)), apply the same WIND_MAIN to customDepthMaterial, add a per-position phase term to the shore foam (depth*6 + fbm3(wp*0.01)*6), and replace the static jitter with a 4-frame temporal jitter + reprojection.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 5,
+          "cells": "G6-H7 (still), out of frame (flight)",
+          "condition": "Fixed camera; aircraft placed at ~380 m with 75 % throttle then 3 s of flight",
+          "evidence": "Still telemetry reads airspeed 0, altitude 0, heading 0 although the plane is placed airborne; after 3 s telemetry is 52.3 m/s, 377 m, heading 200.4, alpha 0.055 rad (3.2 deg), not stalled; the still shows static propeller blades and extended wheels over water.",
+          "defect": "Placement does not initialise telemetry/rpm (rpm stays 0, so model.animate() shows static blades at 75 % throttle and telemetry.gearDown keeps its default true, so the amphibious wheels hang below the floats in cruise over water); the fixed view cannot assess camera lag.",
+          "fix": "Aircraft.place(): call flight.step(inputs, 0) (HEAD does) and set gearDown from heightAt() before syncModel(); bench: log the placement telemetry in metrics.json to catch this regression.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 5,
+          "cells": "B5-H7 island vs C3/G3-H3 city vs G4-H3 bridge",
+          "condition": "Fixed aerial view, objects at 1.5 km (island), 2.5 km (bridge), 4-5 km (city)",
+          "evidence": "Island trees are full-geometry lollipops with a bright pixelated sand/foam ring; the bridge is a 2-3 px flat ribbon with no piers; the city is flat pastel boxes; clouds are rendered at 0.6 scale and upsampled (soft 2 px blocks) while geometry is 4x MSAA sharp.",
+          "defect": "Detail density is inverted with distance: near vegetation is over-detailed and clone-like, mid-distance bridge has no supports, far city has no facade detail, and the sky is blurrier than the ground.",
+          "fix": "Add vegetation impostors with baked lighting so far trees keep silhouette variety, add pier geometry to bridges.ts at 60-80 m spacing, add a procedural window grid to the facade shader beyond 2 km, and upsample the sky RT with depth-aware bilateral filtering.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "A5-H7 shore ring; G4-H3 bridge; G6-G7 plane; B1-F2 clouds",
+          "condition": "Fixed aerial view, all regions inspected at 2-3x magnification",
+          "evidence": "Uniform-width white foam/sand ring around the entire island (crop A6-H7); bridge deck spans ~2 km of water with no visible piers (crop G4-H3); yellow propeller tip boxes read as detached squares above the cabin because the static blade is invisible against the dark fuselage (G6); cloud edges show 2-3 px blocks; far coastline stair-steps; consoleErrors = 1 in metrics.json.",
+          "defect": "Hard failures per protocol: uniform foam ring, bridge supports missing over water, clone trees (3 variants), floating-looking geometry (prop tips), plus one console error during capture.",
+          "fix": "Modulate shoreFoam and beach width with fbm3(wp*0.008) and the shore slope; add piers to bridges; spin the propeller (rpm init) or make blades a lighter colour; fix the console error before the next round.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 3,
+          "cells": "A1-A2, E1, H1-H2 HUD",
+          "condition": "HUD legibility and correctness, 1920x1080",
+          "evidence": "HUD boxes are legible (high contrast, 14-16 px type) and do not cover the reference composition, but HUD shows KIAS 0, ALT 0, V/S 0, HDG 000 and RPM 600 (idle) while the throttle bar shows a cruise setting and the telemetry/placement says the aircraft is airborne; in the flight frame the HUD still shows the frame-0 values.",
+          "defect": "Instrument values are wrong in both frames (0 KIAS at 52 m/s, RPM 600 at 75 % throttle); HUD is stale in the flight capture.",
+          "fix": "Bench harness: Aircraft.place() must run flight.step(inputs, 0) so telemetry (airspeed, altitude, heading, rpm, gearDown) is populated before the first render, and Bench.step()/render() must call hud.update(...) every stepped frame (main.ts only calls hud.update once inside frozenLoop when freeze=1). Also display RPM from rpm=throttle at placement.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "A1-H8",
+          "condition": "aerial-a: structural cost analysis at 1920x1080, quality=high (4x MSAA HalfFloat, 3x2048 CSM PCFSoft, 24-step cloud raymarch at 0.6 scale, logarithmicDepthBuffer, bloom), 60 FPS 1080p mid-range-GPU target",
+          "evidence": "renderer.info per frame: still 3436 draw calls / 14.95 M triangles / 2001 geometries / 126 MB JS heap; flight 3300 calls / 14.94 M triangles / 2001 geometries / 127 MB. Counters include the 3 CSM cascade passes, the wake RT pass, the sky quad and 8 post passes. This is the highest call count of the round (2001 geometries: island vegetation tiles x 3 variants x parts, boats, city tiles). Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source.",
+          "defect": "Draw-call count of 1.7k-3.6k per frame is CPU-submission bound in WebGL (three.js costs roughly 5-15 us per call, i.e. 10-50 ms of main-thread time on a mid-range CPU); 11-16 M triangles per frame with no vegetation LOD and 3 shadow re-renders, plus logarithmicDepthBuffer writing gl_FragDepth (disables early-Z for every material) make the 60 FPS target unlikely with headroom; sky.updateEnvironment() regenerates a PMREM every 5 s synchronously, causing a periodic hitch.",
+          "fix": "(1) Vegetation: add a 2-level LOD (full mesh < 800 m, 2-quad crossed billboard impostor 800-9000 m) and shrink tiles from 4000 m to 1000 m so frustum culling works; drop castShadow beyond 600 m for shrubs/palms. (2) Shadows: keep 3 cascades but render cascade 2 (far) every other frame and cull vegetation/traffic from it; replace PCFSoftShadowMap with PCFShadowMap + the existing normalBias. (3) Depth: replace logarithmicDepthBuffer with a reversed-Z / float depth (EXT_color_buffer_float depth24+stencil is enough with camera.near 0.5 and far 45 km) so early-Z works again. (4) Sky: keep 24 steps but render the cloud layer at 0.5 scale with a temporal 2x2 reprojection instead of 0.6 static-jitter; move lightMarch to 3 steps. (5) Buildings: merge per-kind tiles into one InstancedMesh per tile with a kind attribute (cuts ~9x calls); cars: one InstancedMesh with body+cabin merged. (6) Post: run the aerial-perspective pass at half resolution and upsample with the depth buffer; disable preserveDrawingBuffer outside bench capture. (7) Env map: spread PMREM regeneration across 6 frames or cross-fade two env maps. None of these lower the approved look at the tested distances.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "worst3": [
+        "Uniform foam/sand ring around the whole island (A5-H7)",
+        "Bridge without piers over 2 km of water (G4-H3)",
+        "Wrong HUD data and static propeller from uninitialised placement telemetry (A1-H2, G6)"
+      ],
+      "best3": [
+        "Sky and building cells are temporally stable (<1/255 change over 3 s)",
+        "Flight model holds a believable cruise (alpha 3.2 deg, no stall) after 3 s",
+        "Only 41 shader programs and 126 MB heap: memory structure is sound"
+      ],
+      "hardArtifacts": [
+        {
+          "type": "uniform foam ring / floating shore",
+          "cells": "A5-H7",
+          "frame": "both",
+          "description": "Constant-width bright band (sand + shoreFoam) around the island with no variation by slope or exposure.",
+          "fix": "Vary beach width and foam by slope/exposure noise.",
+          "hardFailure": true
+        },
+        {
+          "type": "bridge supports missing",
+          "cells": "G4-H3",
+          "frame": "both",
+          "description": "Bridge deck ribbon crosses ~2 km of water with no piers reaching the water.",
+          "fix": "Add pier instances every 60-80 m in bridges.ts.",
+          "hardFailure": true
+        },
+        {
+          "type": "clone trees",
+          "cells": "B5-H7",
+          "frame": "both",
+          "description": "All island trees are the same 3 lollipop variants at identical scale range.",
+          "fix": "Add impostor variety / more variants and scale range.",
+          "hardFailure": true
+        },
+        {
+          "type": "apparent floating geometry",
+          "cells": "G6",
+          "frame": "still",
+          "description": "Yellow propeller-tip boxes appear as detached squares above the cabin (blade static and invisible against the fuselage).",
+          "fix": "Initialise rpm at placement; lighten blade material.",
+          "hardFailure": true
+        },
+        {
+          "type": "aliasing",
+          "cells": "A3-H3 far shoreline, B1-F2 cloud edges",
+          "frame": "both",
+          "description": "Stair-stepped coast edges and 2-3 px blocky cloud edges from the 0.6-scale sky RT.",
+          "fix": "Depth-aware sky upsample; increase far terrain ring resolution.",
+          "hardFailure": true
+        },
+        {
+          "type": "console error",
+          "cells": "n/a",
+          "frame": "still",
+          "description": "metrics.json consoleErrors = 1 during capture.",
+          "fix": "Fix before next round.",
+          "hardFailure": true
+        }
+      ]
+    },
+    "cockpit-city": {
+      "scores": {
+        "20": 5,
+        "21": 3,
+        "23": 4,
+        "25": 1,
+        "26": 4,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 5,
+          "cells": "D5-H8 panel; F3-G3; E3",
+          "condition": "Cockpit camera, 10:30, still and 3 s flight",
+          "evidence": "Panel and cabin roof show shadow-map streaking (crop D5-F6: diagonal light/dark bands on the glare shield) that will crawl as the CSM light frustums re-fit every frame (three.js CSM does not snap cascades to texels); the static prop tip (E3) will pop to the blur disc when rpm crosses 0.55 (pivot.visible toggles).",
+          "defect": "Shadow acne/streaks on interior surfaces and a binary blade-to-disc pop are visible in ordinary play.",
+          "fix": "Exclude interiorMeshes from shadow receiving (receiveShadow=false) and light the cabin with a hemisphere/probe; cross-fade blade opacity over rpm 0.4-0.6 instead of a visibility toggle; snap CSM cascade origins to shadow texels.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "A1-H8",
+          "condition": "Cockpit camera: eye at model.cockpitEye (1.15, 0.62, -0.36); flight 3 s at 70 % throttle",
+          "evidence": "Eye height 0.62 m is below the panel top (panel box y 0.34-0.76 at x 1.92-2.08), so the instrument panel fills rows 5-8 and the horizon sits at row 5; telemetry after 3 s: 58.6 m/s, 316 m, heading 202.7, alpha 0.022 (steady cruise). Head-lag slerp (1-exp(-14 dt)) is fine.",
+          "defect": "Camera placement is not a pilot eye point (should be ~0.25-0.35 m above the glare shield); exterior parts and a floating compass sphere sit in the field of view; the flight frame is indistinguishable from the still apart from ground motion.",
+          "fix": "Set cockpitEye to about (1.05, 0.98, -0.36) and pitch the camera down 4 deg; hide exteriorMeshes that enclose the eye in cockpit mode via layers; mount the compass on the windshield post.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "D5-H8 panel vs A5-B8 exterior",
+          "condition": "Cockpit interior vs world seen through the windows",
+          "evidence": "Gauges are crisp canvas textures; the GPS shows a map and text (TRK 342, DIS 12.4); the panel body is an untextured dark box; the window post at B-C carries a compressed copy of the whole fuselage livery (stripe, cheatline, letter B).",
+          "defect": "Interior detail is inconsistent: photoreal gauges next to untextured boxes and a livery-textured post; exterior islands (A5-B8) are the same clone trees at 1-3 km.",
+          "fix": "Give the panel a brushed/plastic normal map and screws; assign interiorPlastic (not paint) to posts; add vegetation impostors.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 1,
+          "cells": "A1-C8 post; E3-G6 diagonal bar; F3-G3 sphere; F1-H2 wedge; D5-F6 panel; E3 tip",
+          "condition": "Cockpit camera, all regions inspected at 2-4x",
+          "evidence": "A vertical box at A1-C8 shows the exterior livery with mirrored/rotated registration letters (crop cc_left); a livery-striped diagonal bar runs from E3 to G6 and overlaps the GPS screen although the panel is nearer to the eye; a dark glossy sphere (the compass, SphereGeometry 0.05 at (1.9, 0.98, 0)) floats in the windshield at F3-G3 with no mount; the wing root/fairing appears as an unlit black wedge at F1-H2; shadow streaks on the panel; a detached yellow prop tip at E3.",
+          "defect": "Hard failures: intersecting/inside-out geometry (exterior texture seen from inside), floating geometry (compass), mis-sorted overlap of bar over panel, shadow acne on interior, unlit black slab.",
+          "fix": "Rebuild the cabin interior as its own meshes (liner, posts with interiorPlastic), give the compass a bracket, make the fairing underside receive ambient (hemisphere light or envMapIntensity on interior), disable shadow receive in the cabin, verify depth ordering (no depthTest/renderOrder overrides on the post).",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 4,
+          "cells": "A1-A2, E1, H1-H2 HUD; D5-H8 panel",
+          "condition": "HUD + panel legibility",
+          "evidence": "HUD legible but HUD shows KIAS 0, ALT 0, V/S 0, HDG 000 and RPM 600 (idle) while the throttle bar shows a cruise setting and the telemetry/placement says the aircraft is airborne; in the flight frame the HUD still shows the frame-0 values. The panel gauges (KIAS, ALT, HDG, TURN, VSI) also read zero and duplicate the HUD.",
+          "defect": "Two instrument systems both show wrong data; the panel occupies 45 % of the frame.",
+          "fix": "Bench harness: Aircraft.place() must run flight.step(inputs, 0) so telemetry (airspeed, altitude, heading, rpm, gearDown) is populated before the first render, and Bench.step()/render() must call hud.update(...) every stepped frame (main.ts only calls hud.update once inside frozenLoop when freeze=1). Also display RPM from rpm=throttle at placement. Hide the 2D HUD in cockpit mode once the panel is driven by telemetry.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "A1-H8",
+          "condition": "cockpit-city: structural cost analysis at 1920x1080, quality=high (4x MSAA HalfFloat, 3x2048 CSM PCFSoft, 24-step cloud raymarch at 0.6 scale, logarithmicDepthBuffer, bloom), 60 FPS 1080p mid-range-GPU target",
+          "evidence": "renderer.info per frame: still 2284 draw calls / 16.31 M triangles / 898 geometries / 125 MB JS heap; flight 2181 calls / 15.62 M triangles / 1038 geometries / 126 MB. Counters include the 3 CSM cascade passes, the wake RT pass, the sky quad and 8 post passes. Highest triangle count of the round (16.3 M): the cabin interior (36-segment lofts, 40-segment discs) adds ~0.5 M and the downtown tiles the rest. Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source.",
+          "defect": "Draw-call count of 1.7k-3.6k per frame is CPU-submission bound in WebGL (three.js costs roughly 5-15 us per call, i.e. 10-50 ms of main-thread time on a mid-range CPU); 11-16 M triangles per frame with no vegetation LOD and 3 shadow re-renders, plus logarithmicDepthBuffer writing gl_FragDepth (disables early-Z for every material) make the 60 FPS target unlikely with headroom; sky.updateEnvironment() regenerates a PMREM every 5 s synchronously, causing a periodic hitch.",
+          "fix": "(1) Vegetation: add a 2-level LOD (full mesh < 800 m, 2-quad crossed billboard impostor 800-9000 m) and shrink tiles from 4000 m to 1000 m so frustum culling works; drop castShadow beyond 600 m for shrubs/palms. (2) Shadows: keep 3 cascades but render cascade 2 (far) every other frame and cull vegetation/traffic from it; replace PCFSoftShadowMap with PCFShadowMap + the existing normalBias. (3) Depth: replace logarithmicDepthBuffer with a reversed-Z / float depth (EXT_color_buffer_float depth24+stencil is enough with camera.near 0.5 and far 45 km) so early-Z works again. (4) Sky: keep 24 steps but render the cloud layer at 0.5 scale with a temporal 2x2 reprojection instead of 0.6 static-jitter; move lightMarch to 3 steps. (5) Buildings: merge per-kind tiles into one InstancedMesh per tile with a kind attribute (cuts ~9x calls); cars: one InstancedMesh with body+cabin merged. (6) Post: run the aerial-perspective pass at half resolution and upsample with the depth buffer; disable preserveDrawingBuffer outside bench capture. (7) Env map: spread PMREM regeneration across 6 frames or cross-fade two env maps. None of these lower the approved look at the tested distances.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "worst3": [
+        "Exterior livery with mirrored lettering rendered inside the cabin (A1-C8, E3-G6)",
+        "Floating compass sphere in the windshield (F3-G3)",
+        "Eye point below the glare shield: panel fills 45 % of the frame (D5-H8)"
+      ],
+      "best3": [
+        "Gauge faces and GPS text are crisp and readable",
+        "Head-lag orientation smoothing is stable",
+        "Flight remains a steady cruise (alpha 1.3 deg) after 3 s"
+      ],
+      "hardArtifacts": [
+        {
+          "type": "intersecting / inside-out geometry",
+          "cells": "A1-C8",
+          "frame": "both",
+          "description": "Box with exterior paint texture (stripes, mirrored 'B') seen from inside the cabin.",
+          "fix": "Use interiorPlastic on posts; hide exterior shells enclosing the eye.",
+          "hardFailure": true
+        },
+        {
+          "type": "mis-sorted / intersecting part",
+          "cells": "E3-G6",
+          "frame": "both",
+          "description": "Livery-striped diagonal bar overlaps the instrument panel and GPS screen.",
+          "fix": "Check post position vs panel; ensure depth test.",
+          "hardFailure": true
+        },
+        {
+          "type": "floating geometry",
+          "cells": "F3-G3",
+          "frame": "both",
+          "description": "Compass sphere floats in front of the windshield without a mount.",
+          "fix": "Add bracket or remove.",
+          "hardFailure": true
+        },
+        {
+          "type": "shadow acne",
+          "cells": "D5-F6, F1-H2",
+          "frame": "both",
+          "description": "Diagonal shadow-map streaks on glare shield and roof.",
+          "fix": "receiveShadow=false for interior; texel-snapped CSM.",
+          "hardFailure": true
+        },
+        {
+          "type": "apparent floating geometry",
+          "cells": "E3",
+          "frame": "still",
+          "description": "Detached yellow propeller tip in front of the windshield.",
+          "fix": "Initialise rpm.",
+          "hardFailure": true
+        },
+        {
+          "type": "unlit slab",
+          "cells": "F1-H2",
+          "frame": "both",
+          "description": "Wing root/fairing underside renders as flat black.",
+          "fix": "Ambient/hemisphere light for undersides.",
+          "hardFailure": true
+        }
+      ]
+    },
+    "bridge-low": {
+      "scores": {
+        "20": 5,
+        "21": 3,
+        "23": 5,
+        "25": 3,
+        "26": 3,
+        "27": 6
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 5,
+          "cells": "C5-F7 plane (still) -> B2-C3 (flight)",
+          "condition": "Chase camera, 15:30; still vs flight after 3 s",
+          "evidence": "The aircraft moves from screen (0.50, 0.57) to (0.31, 0.25) while the camera FOV grows 50 -> 52.0; the chase camera swings away from the aircraft instead of tracking it; grain difference in static areas is <1/255.",
+          "defect": "Camera-induced motion instability: the subject leaves the frame centre within 3 s of level flight.",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "C5-F7 / B2-C3",
+          "condition": "Chase camera, level flight at 70 % throttle along the bridge",
+          "evidence": "Telemetry after 3 s: 53.5 m/s, 40.4 m, heading 86.9 (from 90), alpha 0.028 rad: the airframe is stable. Chase camera aim is corrupted in flight: FlightCamera.update() computes fwd = flight.forward(this.tmp) and then reuses this.tmp for the spring acceleration (acc = tmp.copy(desired).sub(pos)*k - c*vel), so the look target becomes position + 6*acceleration instead of position + 6*forward; plus the spring (k=26, c=9) trails a moving target by c*v/k = 0.35*v (about 19 m at 55 m/s), so the aircraft shrinks to roughly half its intended size. Measured plane centroid after 3 s of flight: (0.31, 0.25) (should stay near (0.50, 0.57)). Decoded camera orientation: flight camera heading 103.7 deg / pitch -27.5 deg vs aircraft heading 86.9 deg (17 deg yaw error, 14 deg extra down-pitch).",
+          "defect": "Camera look-target bug and spring lag make the chase view unusable in flight; static propeller and lowered wheels in the still.",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 5,
+          "cells": "D3-E8 deck; G3-H4 port; C3-H3 skyline",
+          "condition": "Low chase view over the bridge deck, 40 m AGL",
+          "evidence": "The deck within 100 m is a flat grey slab with a median stripe but no railings, barrier, lane markings or expansion joints; the container port at 1.5 km has coloured container stacks and cranes; the skyline at 4 km is a row of near-identical towers.",
+          "defect": "Near detail is lower than mid-distance detail (deck vs port), and the far skyline repeats the same tower silhouette.",
+          "fix": "Add railing/barrier ribbons and lane-marking texture to the deck in bridges.ts; vary tower heights/roofs per landmark seed.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "D3-E8 deck; C3-H3 skyline; D8-E8 shadow; E4-E5 tips; D7/E7 wheels",
+          "condition": "All regions at 2x",
+          "evidence": "No piers visible beneath the deck where it meets the water (D8-E3); a soft dark shadow blob at D8-E8 lies on the water 40 m from the plane; two yellow prop-tip boxes float above the cabin (E4-E5); wheels are extended over water; the skyline repeats identical towers.",
+          "defect": "Hard failures: bridge supports missing, clone buildings, apparent floating geometry; plus incorrect gear state and a shapeless shadow.",
+          "fix": "Add piers; per-landmark tower variation; rpm/gear init at placement; use PCF (not PCFSoft) with normalBias so the shadow keeps the wing silhouette.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 3,
+          "cells": "A1-A2, E1, H1-H2",
+          "condition": "HUD legibility and correctness",
+          "evidence": "HUD legible; HUD shows KIAS 0, ALT 0, V/S 0, HDG 000 and RPM 600 (idle) while the throttle bar shows a cruise setting and the telemetry/placement says the aircraft is airborne; in the flight frame the HUD still shows the frame-0 values.",
+          "defect": "Wrong instrument data in both frames.",
+          "fix": "Bench harness: Aircraft.place() must run flight.step(inputs, 0) so telemetry (airspeed, altitude, heading, rpm, gearDown) is populated before the first render, and Bench.step()/render() must call hud.update(...) every stepped frame (main.ts only calls hud.update once inside frozenLoop when freeze=1). Also display RPM from rpm=throttle at placement.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 6,
+          "cells": "A1-H8",
+          "condition": "bridge-low: structural cost analysis at 1920x1080, quality=high (4x MSAA HalfFloat, 3x2048 CSM PCFSoft, 24-step cloud raymarch at 0.6 scale, logarithmicDepthBuffer, bloom), 60 FPS 1080p mid-range-GPU target",
+          "evidence": "renderer.info per frame: still 2715 draw calls / 15.34 M triangles / 1335 geometries / 126 MB JS heap; flight 1782 calls / 15.54 M triangles / 1350 geometries / 127 MB. Counters include the 3 CSM cascade passes, the wake RT pass, the sky quad and 8 post passes. Calls drop to 1782 in flight as the camera turns away from the port tiles; triangle count stays at 15.5 M because vegetation has no LOD. Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source.",
+          "defect": "Draw-call count of 1.7k-3.6k per frame is CPU-submission bound in WebGL (three.js costs roughly 5-15 us per call, i.e. 10-50 ms of main-thread time on a mid-range CPU); 11-16 M triangles per frame with no vegetation LOD and 3 shadow re-renders, plus logarithmicDepthBuffer writing gl_FragDepth (disables early-Z for every material) make the 60 FPS target unlikely with headroom; sky.updateEnvironment() regenerates a PMREM every 5 s synchronously, causing a periodic hitch.",
+          "fix": "(1) Vegetation: add a 2-level LOD (full mesh < 800 m, 2-quad crossed billboard impostor 800-9000 m) and shrink tiles from 4000 m to 1000 m so frustum culling works; drop castShadow beyond 600 m for shrubs/palms. (2) Shadows: keep 3 cascades but render cascade 2 (far) every other frame and cull vegetation/traffic from it; replace PCFSoftShadowMap with PCFShadowMap + the existing normalBias. (3) Depth: replace logarithmicDepthBuffer with a reversed-Z / float depth (EXT_color_buffer_float depth24+stencil is enough with camera.near 0.5 and far 45 km) so early-Z works again. (4) Sky: keep 24 steps but render the cloud layer at 0.5 scale with a temporal 2x2 reprojection instead of 0.6 static-jitter; move lightMarch to 3 steps. (5) Buildings: merge per-kind tiles into one InstancedMesh per tile with a kind attribute (cuts ~9x calls); cars: one InstancedMesh with body+cabin merged. (6) Post: run the aerial-perspective pass at half resolution and upsample with the depth buffer; disable preserveDrawingBuffer outside bench capture. (7) Env map: spread PMREM regeneration across 6 frames or cross-fade two env maps. None of these lower the approved look at the tested distances.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "worst3": [
+        "Chase camera loses the aircraft within 3 s (plane at 0.31, 0.25)",
+        "Bridge deck without railings/markings and no visible piers (D3-E8)",
+        "Clone tower skyline (C3-H3)"
+      ],
+      "best3": [
+        "Airframe stays on heading (90 -> 86.9) and altitude (40 m) over 3 s",
+        "Container port reads as a port at 1.5 km",
+        "Wave detail fades with distance without visible tiling in this view"
+      ],
+      "hardArtifacts": [
+        {
+          "type": "bridge supports missing",
+          "cells": "D3-E8",
+          "frame": "both",
+          "description": "Deck over water with no visible piers at the waterline.",
+          "fix": "Add piers.",
+          "hardFailure": true
+        },
+        {
+          "type": "clone buildings",
+          "cells": "C3-H3",
+          "frame": "both",
+          "description": "Row of near-identical tower silhouettes on the horizon.",
+          "fix": "Per-instance height/roof variation.",
+          "hardFailure": true
+        },
+        {
+          "type": "apparent floating geometry",
+          "cells": "E4-E5",
+          "frame": "still",
+          "description": "Yellow prop-tip boxes detached above the cabin.",
+          "fix": "Initialise rpm.",
+          "hardFailure": true
+        },
+        {
+          "type": "incorrect gear state",
+          "cells": "D7, E7",
+          "frame": "still",
+          "description": "Amphibious wheels extended in flight over water.",
+          "fix": "gearDown from telemetry at placement.",
+          "hardFailure": true
+        },
+        {
+          "type": "shapeless shadow",
+          "cells": "D8-E8",
+          "frame": "still",
+          "description": "Aircraft shadow is a soft blob without wing/float silhouette.",
+          "fix": "PCF + normalBias; tighter near cascade.",
+          "hardFailure": true
+        }
+      ]
+    },
+    "skyline-high": {
+      "scores": {
+        "20": 6,
+        "21": 5,
+        "23": 4,
+        "25": 3,
+        "26": 3,
+        "27": 6
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 6,
+          "cells": "A1-H8 (still vs flight, fixed camera)",
+          "condition": "Fixed camera at 900 m, 16:11; still vs flight differenced per cell",
+          "evidence": "Sky/cloud cells differ by 0.5-1.0/255 and downtown towers by 0.6-1.0/255 (stable); water 1.5-6/255 (waves); suburb cells show speckled differences from canopy sway of ~10 m trees at 2-4 km.",
+          "defect": "Vegetation sway is visible as pixel crawl at 2-4 km where it should be sub-pixel; 4 km vegetation tiles toggle visibility at 9000 m and castShadow at 1800 m in one step (tile-sized pop when flying).",
+          "fix": "Distance-fade the sway amplitude; hysteresis + per-instance fade for tile visibility and shadow casting.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 5,
+          "cells": "F6-G6 (still), out of frame (flight)",
+          "condition": "Fixed camera; aircraft placed at ~870 m at 70 % throttle",
+          "evidence": "Still telemetry 0/0/0 (placement bug); after 3 s: 62.8 m/s, 868 m, heading 225.8, alpha 0.012 rad; airframe is in a clean cruise; static blades and lowered wheels in the still.",
+          "defect": "Telemetry/rpm/gear not initialised at placement; fixed view gives no camera evidence.",
+          "fix": "Aircraft.place(): flight.step(inputs, 0) + gearDown from terrain; consider a slow 3 deg/s pan for fixed bench views so the flight frame keeps the aircraft.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "A4-H4 suburb edge; D6-H8 apron; A5-C7 downtown ground; H5-H6 island",
+          "condition": "High oblique view: 1-6 km",
+          "evidence": "The tiled suburb texture ends in a straight horizontal line at row 4 and gives way to a featureless flat green plane up to the horizon; the port apron (D6-H8) and downtown ground (A5-C7) are untextured grey planes with buildings standing on them; the island at H5 has a bright uniform sand ring; the shallow-water colour boundary is a sawtooth (crop 150-700 x 820-960).",
+          "defect": "Detail collapses beyond ~3 km (flat colour plane, no roads/fields), ground planes have no texture at any distance, and the depth-driven water shading exposes the 9.8 m height texel grid.",
+          "fix": "Add a far-field land albedo (fields/roads noise) in the terrain shader beyond the RES_LOW zone; give asphalt/apron a detail normal + line markings; smooth the seabed profile over >=5 texels in map.ts or bicubic-sample uHeightTex in water.ts.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "B7-C8 sawtooth; F6-H7 ships; H5 island ring; D6-H8 apron; B1-E2 clouds; H5-H6 far coast",
+          "condition": "All regions at 1.5-3x",
+          "evidence": "Zigzag (triangle-wave) boundary between pale shallow and deep water with ~25 px teeth (bilinear iso-line of a stepped 9.8 m height texel field); five identical container ships moored at equal spacing along the quay (F6-H7); uniform white ring around the island at H5; the apron is a flat untextured grey plane; clouds are 2-3 px blocky; the far coast at H5-H6 is a stair-stepped aliased edge.",
+          "defect": "Hard failures: water shading tiles visibly (sawtooth), evenly spaced clone objects (ships), uniform shore ring; plus aliasing.",
+          "fix": "Smooth seabed steps; jitter ship spacing/heading/length and add 2 hull variants; vary beach width; depth-aware sky upsample.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 3,
+          "cells": "A1-A2, E1, H1-H2",
+          "condition": "HUD legibility and correctness",
+          "evidence": "HUD legible; HUD shows KIAS 0, ALT 0, V/S 0, HDG 000 and RPM 600 (idle) while the throttle bar shows a cruise setting and the telemetry/placement says the aircraft is airborne; in the flight frame the HUD still shows the frame-0 values.",
+          "defect": "Wrong instrument data in both frames.",
+          "fix": "Bench harness: Aircraft.place() must run flight.step(inputs, 0) so telemetry (airspeed, altitude, heading, rpm, gearDown) is populated before the first render, and Bench.step()/render() must call hud.update(...) every stepped frame (main.ts only calls hud.update once inside frozenLoop when freeze=1). Also display RPM from rpm=throttle at placement.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 6,
+          "cells": "A1-H8",
+          "condition": "skyline-high: structural cost analysis at 1920x1080, quality=high (4x MSAA HalfFloat, 3x2048 CSM PCFSoft, 24-step cloud raymarch at 0.6 scale, logarithmicDepthBuffer, bloom), 60 FPS 1080p mid-range-GPU target",
+          "evidence": "renderer.info per frame: still 2376 draw calls / 13.47 M triangles / 1154 geometries / 125 MB JS heap; flight 2240 calls / 13.46 M triangles / 1154 geometries / 126 MB. Counters include the 3 CSM cascade passes, the wake RT pass, the sky quad and 8 post passes. Whole-city view: building tiles (9 kinds x 1500 m tiles) dominate calls; vegetation to 9 km dominates triangles. Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source.",
+          "defect": "Draw-call count of 1.7k-3.6k per frame is CPU-submission bound in WebGL (three.js costs roughly 5-15 us per call, i.e. 10-50 ms of main-thread time on a mid-range CPU); 11-16 M triangles per frame with no vegetation LOD and 3 shadow re-renders, plus logarithmicDepthBuffer writing gl_FragDepth (disables early-Z for every material) make the 60 FPS target unlikely with headroom; sky.updateEnvironment() regenerates a PMREM every 5 s synchronously, causing a periodic hitch.",
+          "fix": "(1) Vegetation: add a 2-level LOD (full mesh < 800 m, 2-quad crossed billboard impostor 800-9000 m) and shrink tiles from 4000 m to 1000 m so frustum culling works; drop castShadow beyond 600 m for shrubs/palms. (2) Shadows: keep 3 cascades but render cascade 2 (far) every other frame and cull vegetation/traffic from it; replace PCFSoftShadowMap with PCFShadowMap + the existing normalBias. (3) Depth: replace logarithmicDepthBuffer with a reversed-Z / float depth (EXT_color_buffer_float depth24+stencil is enough with camera.near 0.5 and far 45 km) so early-Z works again. (4) Sky: keep 24 steps but render the cloud layer at 0.5 scale with a temporal 2x2 reprojection instead of 0.6 static-jitter; move lightMarch to 3 steps. (5) Buildings: merge per-kind tiles into one InstancedMesh per tile with a kind attribute (cuts ~9x calls); cars: one InstancedMesh with body+cabin merged. (6) Post: run the aerial-perspective pass at half resolution and upsample with the depth buffer; disable preserveDrawingBuffer outside bench capture. (7) Env map: spread PMREM regeneration across 6 frames or cross-fade two env maps. None of these lower the approved look at the tested distances.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "worst3": [
+        "Sawtooth shallow/deep water boundary from the height texel grid (B7-C8)",
+        "Suburb texture ends in a straight line, flat green plain to the horizon (A4-H4)",
+        "Evenly spaced identical container ships and untextured apron (D6-H8)"
+      ],
+      "best3": [
+        "Downtown towers are temporally stable (<1/255 change)",
+        "Haze gradient to the horizon has no seam in this view",
+        "13.5 M triangles despite a whole-city view thanks to instancing"
+      ],
+      "hardArtifacts": [
+        {
+          "type": "water tiles visibly / depth sawtooth",
+          "cells": "B7-C8, C6",
+          "frame": "both",
+          "description": "Triangle-wave shallow/deep boundary following the 9.8 m height texels.",
+          "fix": "Smooth seabed profile; bicubic depth sampling.",
+          "hardFailure": true
+        },
+        {
+          "type": "evenly spaced clone objects",
+          "cells": "F6-H7",
+          "frame": "both",
+          "description": "Five identical container ships at equal intervals along the quay.",
+          "fix": "Jitter spacing and vary hulls.",
+          "hardFailure": true
+        },
+        {
+          "type": "uniform foam ring",
+          "cells": "H5, G8-H8, A8-C8",
+          "frame": "both",
+          "description": "Constant-width bright sand/foam ring around islands.",
+          "fix": "Vary beach width/foam.",
+          "hardFailure": true
+        },
+        {
+          "type": "aliasing",
+          "cells": "H5-H6 far coast; B1-E2 cloud edges",
+          "frame": "both",
+          "description": "Stair-stepped coastline and blocky cloud edges.",
+          "fix": "Higher far-ring resolution; sky upsample.",
+          "hardFailure": true
+        },
+        {
+          "type": "apparent floating geometry",
+          "cells": "F6",
+          "frame": "still",
+          "description": "Detached yellow prop tips.",
+          "fix": "Initialise rpm.",
+          "hardFailure": true
+        },
+        {
+          "type": "untextured plane",
+          "cells": "D6-H8, A5-C7",
+          "frame": "both",
+          "description": "Apron and downtown ground are flat grey planes.",
+          "fix": "Detail normal + markings.",
+          "hardFailure": true
+        }
+      ]
+    },
+    "island-pass": {
+      "scores": {
+        "20": 5,
+        "21": 3,
+        "23": 5,
+        "25": 3,
+        "26": 3,
+        "27": 7
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 5,
+          "cells": "C5-F7 (still) -> F2-G3 (flight)",
+          "condition": "Chase camera, 11:30; still vs flight after 3 s",
+          "evidence": "Aircraft moves from (0.50, 0.57) to (0.68, 0.27) and shrinks to ~55 % of its still size; the camera pitches down so the horizon rises to the top 3 % of the frame; the straight shelf boundary sweeps across the whole frame.",
+          "defect": "Camera aim/lag instability dominates motion; the diagonal shelf edge will read as a moving hard line.",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "C5-F7 / F2-G3",
+          "condition": "Chase camera, 65 % throttle, pass along the island",
+          "evidence": "Telemetry after 3 s: 54.1 m/s, 117.7 m, heading 189, alpha 0.023 rad, stable; Chase camera aim is corrupted in flight: FlightCamera.update() computes fwd = flight.forward(this.tmp) and then reuses this.tmp for the spring acceleration (acc = tmp.copy(desired).sub(pos)*k - c*vel), so the look target becomes position + 6*acceleration instead of position + 6*forward; plus the spring (k=26, c=9) trails a moving target by c*v/k = 0.35*v (about 19 m at 55 m/s), so the aircraft shrinks to roughly half its intended size. Measured plane centroid after 3 s of flight: (0.68, 0.27) (should stay near (0.50, 0.57)). Decoded camera orientation: flight camera heading 170.3 deg / pitch -26.9 deg vs aircraft heading 189.0 deg (19 deg yaw error, 13.5 deg extra down-pitch).",
+          "defect": "Chase camera fails to keep the aircraft framed; still shows static blades and extended wheels over water.",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 5,
+          "cells": "A4-C8 deep water; D6-H8 shallow water; G3-H4 city; H4 shore",
+          "condition": "Low chase view, 100 m AGL",
+          "evidence": "Foreground water (D6-H8) is a nearly uniform cyan with faint normal detail; the city at 3 km is flat pastel boxes with one windowed tower; identical palms line the beach at H4 at equal spacing; the far coast at the top is a row of identical trees.",
+          "defect": "Near water lacks visible wave structure while far land is clone-heavy: detail is flat across all distances rather than consistent.",
+          "fix": "Add a near-field wave normal layer (wp*1.6, f3 fade < 120 m) and sun glitter; per-instance palm scale/rotation jitter already exists but add trunk lean and 2 more frond variants; window grid on all towers.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "C3-C8 shelf line; D4-E5 prop tips; D7/E7 wheels; H4 palms; G3-H4 beach",
+          "condition": "All regions at 2x",
+          "evidence": "A perfectly straight diagonal boundary from C3 to C8 separates deep blue and cyan water with a hard 2-4 px transition; two yellow prop-tip boxes float above the cabin (crop 860-1000 x 430-540); wheels extended below the floats in flight; evenly spaced clone palms on the beach; uniform bright beach band with a hard edge against the grey city ground.",
+          "defect": "Hard failures: water shows a hard straight tile-like boundary, evenly spaced clone trees, apparent floating geometry, wrong gear state.",
+          "fix": "Blur the shelf depth step over >=60 m in map.ts and add noise to the iso-line; rpm/gear init; palm spacing jitter; beach width noise.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 3,
+          "cells": "A1-A2, E1, H1-H2",
+          "condition": "HUD legibility and correctness",
+          "evidence": "HUD legible; HUD shows KIAS 0, ALT 0, V/S 0, HDG 000 and RPM 600 (idle) while the throttle bar shows a cruise setting and the telemetry/placement says the aircraft is airborne; in the flight frame the HUD still shows the frame-0 values.",
+          "defect": "Wrong instrument data in both frames.",
+          "fix": "Bench harness: Aircraft.place() must run flight.step(inputs, 0) so telemetry (airspeed, altitude, heading, rpm, gearDown) is populated before the first render, and Bench.step()/render() must call hud.update(...) every stepped frame (main.ts only calls hud.update once inside frozenLoop when freeze=1). Also display RPM from rpm=throttle at placement.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 7,
+          "cells": "A1-H8",
+          "condition": "island-pass: structural cost analysis at 1920x1080, quality=high (4x MSAA HalfFloat, 3x2048 CSM PCFSoft, 24-step cloud raymarch at 0.6 scale, logarithmicDepthBuffer, bloom), 60 FPS 1080p mid-range-GPU target",
+          "evidence": "renderer.info per frame: still 2669 draw calls / 8.31 M triangles / 1309 geometries / 136 MB JS heap; flight 2393 calls / 8.24 M triangles / 1321 geometries / 126 MB. Counters include the 3 CSM cascade passes, the wake RT pass, the sky quad and 8 post passes. Lowest triangle count of the round (8.3 M) but still 2.4-2.7k calls, showing the call count is driven by tile x variant x part x cascade fan-out, not by visible content; still heap 135.6 MB is a transient from setup. Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source.",
+          "defect": "Draw-call count of 1.7k-3.6k per frame is CPU-submission bound in WebGL (three.js costs roughly 5-15 us per call, i.e. 10-50 ms of main-thread time on a mid-range CPU); 11-16 M triangles per frame with no vegetation LOD and 3 shadow re-renders, plus logarithmicDepthBuffer writing gl_FragDepth (disables early-Z for every material) make the 60 FPS target unlikely with headroom; sky.updateEnvironment() regenerates a PMREM every 5 s synchronously, causing a periodic hitch.",
+          "fix": "(1) Vegetation: add a 2-level LOD (full mesh < 800 m, 2-quad crossed billboard impostor 800-9000 m) and shrink tiles from 4000 m to 1000 m so frustum culling works; drop castShadow beyond 600 m for shrubs/palms. (2) Shadows: keep 3 cascades but render cascade 2 (far) every other frame and cull vegetation/traffic from it; replace PCFSoftShadowMap with PCFShadowMap + the existing normalBias. (3) Depth: replace logarithmicDepthBuffer with a reversed-Z / float depth (EXT_color_buffer_float depth24+stencil is enough with camera.near 0.5 and far 45 km) so early-Z works again. (4) Sky: keep 24 steps but render the cloud layer at 0.5 scale with a temporal 2x2 reprojection instead of 0.6 static-jitter; move lightMarch to 3 steps. (5) Buildings: merge per-kind tiles into one InstancedMesh per tile with a kind attribute (cuts ~9x calls); cars: one InstancedMesh with body+cabin merged. (6) Post: run the aerial-perspective pass at half resolution and upsample with the depth buffer; disable preserveDrawingBuffer outside bench capture. (7) Env map: spread PMREM regeneration across 6 frames or cross-fade two env maps. None of these lower the approved look at the tested distances.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "worst3": [
+        "Straight hard shelf boundary through the water (C3-C8)",
+        "Chase camera pitches down and loses framing (plane at 0.68, 0.27)",
+        "Detached prop tips and extended wheels on the still (D4-E7)"
+      ],
+      "best3": [
+        "Airframe stable at 54 m/s with 1.3 deg alpha",
+        "Lowest triangle count (8.3 M) for a low-altitude view",
+        "Prop blur disc renders correctly once rpm > 0.55 (flight frame)"
+      ],
+      "hardArtifacts": [
+        {
+          "type": "water hard boundary / tiling",
+          "cells": "C3-C8",
+          "frame": "both",
+          "description": "Straight diagonal deep/shallow boundary across the frame.",
+          "fix": "Smooth shelf profile; noise on iso-line.",
+          "hardFailure": true
+        },
+        {
+          "type": "apparent floating geometry",
+          "cells": "D4-E5",
+          "frame": "still",
+          "description": "Two detached yellow prop-tip boxes above the cabin.",
+          "fix": "Initialise rpm.",
+          "hardFailure": true
+        },
+        {
+          "type": "incorrect gear state",
+          "cells": "D7, E7",
+          "frame": "still",
+          "description": "Wheels extended below floats in flight over water.",
+          "fix": "gearDown from telemetry.",
+          "hardFailure": true
+        },
+        {
+          "type": "evenly spaced clone trees",
+          "cells": "H4, top edge (flight)",
+          "frame": "both",
+          "description": "Identical palms at regular intervals along the shore.",
+          "fix": "Spacing/scale jitter, more variants.",
+          "hardFailure": true
+        },
+        {
+          "type": "uniform beach band",
+          "cells": "G3-H4",
+          "frame": "both",
+          "description": "Constant-width bright beach with hard edge to the grey city ground.",
+          "fix": "Vary width; blend to ground.",
+          "hardFailure": true
+        }
+      ]
+    },
+    "harbor": {
+      "scores": {
+        "20": 5,
+        "21": 3,
+        "23": 4,
+        "25": 2,
+        "26": 3,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 5,
+          "cells": "C5-F7 (still) -> D2-E2 (flight); D3-H7 foam",
+          "condition": "Chase camera, 09:30; still vs flight after 3 s",
+          "evidence": "Aircraft moves to (0.50, 0.19), the horizon leaves the frame; the shallow area (D3-H7) is covered in high-frequency whitecap speckle (vnoise at wp*0.05, gated to depth 3-8 m) that is at the pixel scale from 150 m altitude and will shimmer with motion.",
+          "defect": "Camera framing instability and pixel-scale foam speckle (no distance fade below 800 m) are motion-visible.",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2. Fade whitecaps by screen-space frequency (fwidth) and lower the gate to depth 1-25 m so foam is not confined to blocks.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "C5-F7 / D2-E2",
+          "condition": "Chase camera, 65 % throttle over the mangroves",
+          "evidence": "Telemetry after 3 s: 49.7 m/s (decelerating from placement speed at 65 %), 144 m, heading 130.7, alpha 0.032 rad; Chase camera aim is corrupted in flight: FlightCamera.update() computes fwd = flight.forward(this.tmp) and then reuses this.tmp for the spring acceleration (acc = tmp.copy(desired).sub(pos)*k - c*vel), so the look target becomes position + 6*acceleration instead of position + 6*forward; plus the spring (k=26, c=9) trails a moving target by c*v/k = 0.35*v (about 19 m at 55 m/s), so the aircraft shrinks to roughly half its intended size. Measured plane centroid after 3 s of flight: (0.50, 0.19) (should stay near (0.50, 0.57)). Decoded camera orientation: flight camera heading 129.6 deg / pitch -30.1 deg vs aircraft heading 130.7 deg (17 deg extra down-pitch puts the aircraft at the top edge).",
+          "defect": "Camera aims below the aircraft; deceleration at 65 % throttle is plausible for the drag model (cd0 0.034 + gear 0.012 with gearDown true).",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "E4-H7 mangroves; A6-C8 water blocks; A3-D3 skyline",
+          "condition": "Chase view, 150 m AGL, mangrove cay",
+          "evidence": "Hundreds of identical hexagonal-canopy mangroves (3 variants) on a flat mud plane at 150-1500 m; rectangular blocks of deeper water with right-angle corners; the skyline at 6 km is fine as silhouettes.",
+          "defect": "Vegetation detail is uniform (same 3 meshes) at every distance and the seabed has axis-aligned steps.",
+          "fix": "Add 6+ mangrove variants with prop-root spread and canopy scale 0.6-1.4; smooth dredged basin edges in map.ts by >=40 m.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "A6-C8 and A4-B7 (flight) water blocks; E4-H7 mangroves; D3-H7 shore fringe; E4-E5 tips",
+          "condition": "All regions at 1.5-2x",
+          "evidence": "Large rectangular patches of darker water with straight edges and 90-degree corners, with white surf dots strung along the edges (crop A6-C8 and flight A4-C7): the depth-gated whitecap and surf terms outline the stepped seabed; clone mangroves; a pixelated bright shore fringe with stair-stepped edges; detached yellow prop tip above the cabin.",
+          "defect": "Hard failures: water tiles visibly (rectangular depth blocks with foam edges), clone trees, uniform shore fringe, apparent floating geometry.",
+          "fix": "Smooth seabed steps; remove depth gating from whitecaps (or widen to 1-25 m); drive surf from shore distance not sin(depth*2.4); rpm init.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 3,
+          "cells": "A1-A2, E1, H1-H2",
+          "condition": "HUD legibility and correctness",
+          "evidence": "HUD legible; HUD shows KIAS 0, ALT 0, V/S 0, HDG 000 and RPM 600 (idle) while the throttle bar shows a cruise setting and the telemetry/placement says the aircraft is airborne; in the flight frame the HUD still shows the frame-0 values.",
+          "defect": "Wrong instrument data in both frames.",
+          "fix": "Bench harness: Aircraft.place() must run flight.step(inputs, 0) so telemetry (airspeed, altitude, heading, rpm, gearDown) is populated before the first render, and Bench.step()/render() must call hud.update(...) every stepped frame (main.ts only calls hud.update once inside frozenLoop when freeze=1). Also display RPM from rpm=throttle at placement.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "A1-H8",
+          "condition": "harbor: structural cost analysis at 1920x1080, quality=high (4x MSAA HalfFloat, 3x2048 CSM PCFSoft, 24-step cloud raymarch at 0.6 scale, logarithmicDepthBuffer, bloom), 60 FPS 1080p mid-range-GPU target",
+          "evidence": "renderer.info per frame: still 3327 draw calls / 16.27 M triangles / 1326 geometries / 126 MB JS heap; flight 2363 calls / 16.26 M triangles / 1327 geometries / 128 MB. Counters include the 3 CSM cascade passes, the wake RT pass, the sky quad and 8 post passes. Second-highest cost of the round: 16.3 M triangles from full-geometry mangroves (each with roots) to 9 km; 3327 calls in the still. Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source.",
+          "defect": "Draw-call count of 1.7k-3.6k per frame is CPU-submission bound in WebGL (three.js costs roughly 5-15 us per call, i.e. 10-50 ms of main-thread time on a mid-range CPU); 11-16 M triangles per frame with no vegetation LOD and 3 shadow re-renders, plus logarithmicDepthBuffer writing gl_FragDepth (disables early-Z for every material) make the 60 FPS target unlikely with headroom; sky.updateEnvironment() regenerates a PMREM every 5 s synchronously, causing a periodic hitch.",
+          "fix": "(1) Vegetation: add a 2-level LOD (full mesh < 800 m, 2-quad crossed billboard impostor 800-9000 m) and shrink tiles from 4000 m to 1000 m so frustum culling works; drop castShadow beyond 600 m for shrubs/palms. (2) Shadows: keep 3 cascades but render cascade 2 (far) every other frame and cull vegetation/traffic from it; replace PCFSoftShadowMap with PCFShadowMap + the existing normalBias. (3) Depth: replace logarithmicDepthBuffer with a reversed-Z / float depth (EXT_color_buffer_float depth24+stencil is enough with camera.near 0.5 and far 45 km) so early-Z works again. (4) Sky: keep 24 steps but render the cloud layer at 0.5 scale with a temporal 2x2 reprojection instead of 0.6 static-jitter; move lightMarch to 3 steps. (5) Buildings: merge per-kind tiles into one InstancedMesh per tile with a kind attribute (cuts ~9x calls); cars: one InstancedMesh with body+cabin merged. (6) Post: run the aerial-perspective pass at half resolution and upsample with the depth buffer; disable preserveDrawingBuffer outside bench capture. (7) Env map: spread PMREM regeneration across 6 frames or cross-fade two env maps. None of these lower the approved look at the tested distances. For mangroves specifically: merge root+canopy into one geometry and cap castShadow at 500 m.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "worst3": [
+        "Rectangular depth blocks with surf-dot edges in the water (A6-C8, flight A4-C7)",
+        "Clone hexagonal mangroves at all distances (E4-H7)",
+        "Camera aims below the aircraft in flight (plane at 0.50, 0.19)"
+      ],
+      "best3": [
+        "Sun glitter position in the flight frame matches a 09:30 sun",
+        "Cloud shadow on water is soft and correctly attenuated",
+        "Shallow-water colour ramp near the cay is believable in hue"
+      ],
+      "hardArtifacts": [
+        {
+          "type": "water tiles visibly",
+          "cells": "A6-C8 (still), A4-C7 (flight)",
+          "frame": "both",
+          "description": "Axis-aligned rectangular depth blocks with foam dots along the edges.",
+          "fix": "Smooth seabed; ungate whitecaps.",
+          "hardFailure": true
+        },
+        {
+          "type": "clone trees",
+          "cells": "E4-H7",
+          "frame": "both",
+          "description": "Identical hexagonal mangrove canopies.",
+          "fix": "More variants and scale range.",
+          "hardFailure": true
+        },
+        {
+          "type": "uniform shore fringe / aliasing",
+          "cells": "D3-H7",
+          "frame": "flight",
+          "description": "Pixelated constant-brightness foam fringe with stair-stepped edges.",
+          "fix": "fwidth-aware foam threshold.",
+          "hardFailure": true
+        },
+        {
+          "type": "apparent floating geometry",
+          "cells": "E4-E5",
+          "frame": "still",
+          "description": "Detached yellow prop tip above the cabin.",
+          "fix": "Initialise rpm.",
+          "hardFailure": true
+        },
+        {
+          "type": "incorrect gear state",
+          "cells": "D7, E7",
+          "frame": "still",
+          "description": "Wheels extended over water.",
+          "fix": "gearDown from telemetry.",
+          "hardFailure": true
+        }
+      ]
+    },
+    "water-landing": {
+      "scores": {
+        "20": 4,
+        "21": 2,
+        "23": 5,
+        "25": 3,
+        "26": 3,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 4,
+          "cells": "C5-G7 (still) -> off-screen (flight); G4-H6 wake",
+          "condition": "Chase camera, 13:00; touchdown from 5.5 m at 25 % throttle",
+          "evidence": "Camera yaw in the flight frame is ~20 deg while the aircraft heading is 88 deg; the aircraft is entirely out of frame and only its wake streak (G4-H6) is visible; the horizon jumps from row 3 to row 1.",
+          "defect": "Water contact produces a large deceleration, the acceleration-corrupted look target swings the camera ~70 deg off the aircraft.",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 2,
+          "cells": "C5-G7 / off-screen",
+          "condition": "Chase camera; water landing",
+          "evidence": "Telemetry after 3 s: 17.9 m/s, altitude 1.97 m (float draft), heading 88.3, alpha -0.049 rad (nose 2.8 deg down), onWater true, not stalled; the still shows the aircraft 5.5 m above water with static blades and wheels down. Chase camera aim is corrupted in flight: FlightCamera.update() computes fwd = flight.forward(this.tmp) and then reuses this.tmp for the spring acceleration (acc = tmp.copy(desired).sub(pos)*k - c*vel), so the look target becomes position + 6*acceleration instead of position + 6*forward; plus the spring (k=26, c=9) trails a moving target by c*v/k = 0.35*v (about 19 m at 55 m/s), so the aircraft shrinks to roughly half its intended size. Measured plane centroid after 3 s of flight: (1.97, 0.74) - outside the frame (should stay near (0.50, 0.57)). Decoded camera orientation: flight camera heading 20.0 deg / pitch -19.2 deg vs aircraft heading 88.3 deg (68 deg yaw error); still camera pitch -13.4 deg.",
+          "defect": "Camera failure on water contact is total; nose-down attitude on the water at 18 m/s suggests bow-heavy trim (bow contact points at x=2.6 carry the same 22 kN/m as the sterns) and the wheels are shown down for a water landing.",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2. Physics: give the stern points 1.3x buoyancy or move the float CG aft 0.3 m; gearDown must be false over water at placement.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 5,
+          "cells": "A4-H8 water; A3-H3 horizon strip; C3-D3 bridge",
+          "condition": "Low chase view, 5.5 m over calm water",
+          "evidence": "Foreground water is a flat cyan with faint ripples and no Fresnel sky reflection; the horizon is a continuous strip of identical trees; the arch bridge at 3 km is readable.",
+          "defect": "Near water is under-detailed for a 5 m camera height while the far shore repeats one tree.",
+          "fix": "Add near wave layer and a Fresnel-weighted env reflection (roughness 0.06 exists; check envMapIntensity/normal scale); vary shore trees.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "C7-G8 shadow; A3-H3 horizon; E4 tip; D7/E7 wheels; A4-H8 water",
+          "condition": "All regions at 2x",
+          "evidence": "The aircraft shadow at C7-G8 is an oversized blurry blob with no wing/float silhouette (sun near zenith at 13:00, so the silhouette should be crisp directly beneath); hard sky/land/water horizon with a clone tree row; detached yellow prop tip at E4; wheels down over water.",
+          "defect": "Hard failures: detached/incorrect shadow, clone tree row at the horizon, apparent floating geometry; water reads close to a flat plane.",
+          "fix": "Reduce PCFSoft radius for the near cascade (or use PCF with normalBias) so the wing silhouette survives; tree variation; rpm/gear init.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 3,
+          "cells": "A1-A2, E1, H1-H2",
+          "condition": "HUD legibility and correctness",
+          "evidence": "HUD legible; HUD shows KIAS 0, ALT 0, V/S 0, HDG 000 and RPM 600 (idle) while the throttle bar shows a cruise setting and the telemetry/placement says the aircraft is airborne; in the flight frame the HUD still shows the frame-0 values. THR reads 25 % while RPM shows idle 600.",
+          "defect": "Wrong instrument data in both frames.",
+          "fix": "Bench harness: Aircraft.place() must run flight.step(inputs, 0) so telemetry (airspeed, altitude, heading, rpm, gearDown) is populated before the first render, and Bench.step()/render() must call hud.update(...) every stepped frame (main.ts only calls hud.update once inside frozenLoop when freeze=1). Also display RPM from rpm=throttle at placement.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "A1-H8",
+          "condition": "water-landing: structural cost analysis at 1920x1080, quality=high (4x MSAA HalfFloat, 3x2048 CSM PCFSoft, 24-step cloud raymarch at 0.6 scale, logarithmicDepthBuffer, bloom), 60 FPS 1080p mid-range-GPU target",
+          "evidence": "renderer.info per frame: still 2282 draw calls / 15.19 M triangles / 893 geometries / 152 MB JS heap; flight 3649 calls / 15.20 M triangles / 2078 geometries / 127 MB. Counters include the 3 CSM cascade passes, the wake RT pass, the sky quad and 8 post passes. Flight frame jumps to 3649 calls and 2078 geometries (189 points): spray/wake particle clouds and wake-trail meshes add ~1400 draw calls when the floats touch the water; still heap 152.5 MB is the round's peak. Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source.",
+          "defect": "Draw-call count of 1.7k-3.6k per frame is CPU-submission bound in WebGL (three.js costs roughly 5-15 us per call, i.e. 10-50 ms of main-thread time on a mid-range CPU); 11-16 M triangles per frame with no vegetation LOD and 3 shadow re-renders, plus logarithmicDepthBuffer writing gl_FragDepth (disables early-Z for every material) make the 60 FPS target unlikely with headroom; sky.updateEnvironment() regenerates a PMREM every 5 s synchronously, causing a periodic hitch.",
+          "fix": "(1) Vegetation: add a 2-level LOD (full mesh < 800 m, 2-quad crossed billboard impostor 800-9000 m) and shrink tiles from 4000 m to 1000 m so frustum culling works; drop castShadow beyond 600 m for shrubs/palms. (2) Shadows: keep 3 cascades but render cascade 2 (far) every other frame and cull vegetation/traffic from it; replace PCFSoftShadowMap with PCFShadowMap + the existing normalBias. (3) Depth: replace logarithmicDepthBuffer with a reversed-Z / float depth (EXT_color_buffer_float depth24+stencil is enough with camera.near 0.5 and far 45 km) so early-Z works again. (4) Sky: keep 24 steps but render the cloud layer at 0.5 scale with a temporal 2x2 reprojection instead of 0.6 static-jitter; move lightMarch to 3 steps. (5) Buildings: merge per-kind tiles into one InstancedMesh per tile with a kind attribute (cuts ~9x calls); cars: one InstancedMesh with body+cabin merged. (6) Post: run the aerial-perspective pass at half resolution and upsample with the depth buffer; disable preserveDrawingBuffer outside bench capture. (7) Env map: spread PMREM regeneration across 6 frames or cross-fade two env maps. None of these lower the approved look at the tested distances. Merge WakeTrail meshes into one geometry and cap spray emitters to one ParticleCloud.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "worst3": [
+        "Aircraft completely out of frame after touchdown (camera yaw 20 deg vs heading 88 deg)",
+        "Shapeless oversized shadow blob under the aircraft (C7-G8)",
+        "Clone tree row along the entire horizon (A3-H3)"
+      ],
+      "best3": [
+        "Water-contact deceleration is believable (to 17.9 m/s in 3 s at 25 % throttle)",
+        "Float draft (1.97 m datum) matches the 0.26 m static sink of the buoyancy model",
+        "Wake streak persists behind the aircraft"
+      ],
+      "hardArtifacts": [
+        {
+          "type": "detached / incorrect shadow",
+          "cells": "C7-G8",
+          "frame": "still",
+          "description": "Oversized blurry blob without silhouette under a zenith sun.",
+          "fix": "Tighter near cascade filtering.",
+          "hardFailure": true
+        },
+        {
+          "type": "clone trees",
+          "cells": "A3-H3",
+          "frame": "both",
+          "description": "Identical trees along the whole horizon.",
+          "fix": "Variants and spacing jitter.",
+          "hardFailure": true
+        },
+        {
+          "type": "apparent floating geometry",
+          "cells": "E4",
+          "frame": "still",
+          "description": "Detached yellow prop tip above the cabin.",
+          "fix": "Initialise rpm.",
+          "hardFailure": true
+        },
+        {
+          "type": "incorrect gear state",
+          "cells": "D7, E7",
+          "frame": "still",
+          "description": "Wheels extended for a water landing.",
+          "fix": "gearDown from telemetry.",
+          "hardFailure": true
+        },
+        {
+          "type": "camera loses subject",
+          "cells": "whole frame",
+          "frame": "flight",
+          "description": "Aircraft outside the frame (centroid 1.97, 0.74).",
+          "fix": "Fix look-target aliasing in camera.ts.",
+          "hardFailure": true
+        }
+      ]
+    },
+    "sunset": {
+      "scores": {
+        "20": 4,
+        "21": 4,
+        "23": 5,
+        "25": 3,
+        "26": 3,
+        "27": 7
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 4,
+          "cells": "A4-H8 water; A3-H3 horizon",
+          "condition": "Chase camera, 18:45; grain and horizon inspected at 1:1",
+          "evidence": "Film grain (post.ts: hash(gl_FragCoord + fract(uTime)*100) * 0.004) is re-seeded every frame at a constant absolute amplitude; in this dark frame the water's signal is ~0.01-0.02 so the grain is 20-40 % of the signal and will sparkle; the sky-to-water transition is a 1-pixel step at row 276/277.",
+          "defect": "Temporal sparkle over the whole lower frame and a hard horizon seam.",
+          "fix": "Scale grain with luminance (uGrain * (0.3 + luma)) or apply after tone mapping with a 1/255 floor; blend water and sky at the horizon using the aerial-perspective pass (extinction to horizon colour over the last 0.5 deg).",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 4,
+          "cells": "D5-E7 (still) -> D4-E5 (flight)",
+          "condition": "Chase camera, 70 % throttle, 280 m",
+          "evidence": "Telemetry after 3 s: 61.4 m/s, 279.5 m, heading 278.5, alpha 0.021 rad; centroid (0.52, 0.45) (closer to centre than other views because the aircraft is slightly climbing, which partially cancels the aim error); FOV 53.2 from the speed term. Decoded camera orientation: flight camera heading 276.7 deg / pitch -12.2 deg vs aircraft heading 278.5 deg (climb partially cancels the aim error).",
+          "defect": "Camera aim bug still visible (aircraft high in frame); aircraft body is invisible in the still (no ambient), so attitude cannot be judged.",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2. Add a hemisphere/sky ambient term on the airframe at dusk.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 5,
+          "cells": "G3-H3 city; A3-F3 light dots; A1-H2 clouds",
+          "condition": "Dusk, lights on",
+          "evidence": "City lights are single white pixels without emissive windows or silhouettes; clouds are flat dark bands; the aircraft has nav lights but no lit body or cabin.",
+          "defect": "Distance detail is carried by point lights only; nothing has surface detail at dusk.",
+          "fix": "Emissive facade windows via the night uniform (facade.ts) with 2 px minimum size; lit cabin/panel glow on the aircraft.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "A3-H3 horizon; D5 prop disc (flight); A1-H2 clouds; D5-E7 aircraft",
+          "condition": "All regions at 1:1 and brightened",
+          "evidence": "Hard 1-px horizon seam; in the flight frame the propeller blur disc renders as a saturated yellow self-lit disc (MeshBasicMaterial is unlit); clouds are 2-3 px blocky; the aircraft is nearly invisible with static blades and a detached yellow tip in the still.",
+          "defect": "Hard failures: hard horizon seam, unlit glowing prop disc, apparent floating geometry.",
+          "fix": "Use MeshStandardMaterial (or multiply disc colour by scene ambient/sun) for the prop disc; horizon blend; rpm init.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 3,
+          "cells": "A1-A2, E1, H1-H2",
+          "condition": "HUD legibility and correctness at dusk",
+          "evidence": "HUD legible against the dark sky; HUD shows KIAS 0, ALT 0, V/S 0, HDG 000 and RPM 600 (idle) while the throttle bar shows a cruise setting and the telemetry/placement says the aircraft is airborne; in the flight frame the HUD still shows the frame-0 values.",
+          "defect": "Wrong instrument data in both frames.",
+          "fix": "Bench harness: Aircraft.place() must run flight.step(inputs, 0) so telemetry (airspeed, altitude, heading, rpm, gearDown) is populated before the first render, and Bench.step()/render() must call hud.update(...) every stepped frame (main.ts only calls hud.update once inside frozenLoop when freeze=1). Also display RPM from rpm=throttle at placement.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 7,
+          "cells": "A1-H8",
+          "condition": "sunset: structural cost analysis at 1920x1080, quality=high (4x MSAA HalfFloat, 3x2048 CSM PCFSoft, 24-step cloud raymarch at 0.6 scale, logarithmicDepthBuffer, bloom), 60 FPS 1080p mid-range-GPU target",
+          "evidence": "renderer.info per frame: still 1747 draw calls / 11.71 M triangles / 689 geometries / 124 MB JS heap; flight 1880 calls / 11.73 M triangles / 690 geometries / 126 MB. Counters include the 3 CSM cascade passes, the wake RT pass, the sky quad and 8 post passes. Lowest call count of the round (1747) because most tiles are behind the camera; 11.7 M triangles remain (vegetation without LOD). Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source.",
+          "defect": "Draw-call count of 1.7k-3.6k per frame is CPU-submission bound in WebGL (three.js costs roughly 5-15 us per call, i.e. 10-50 ms of main-thread time on a mid-range CPU); 11-16 M triangles per frame with no vegetation LOD and 3 shadow re-renders, plus logarithmicDepthBuffer writing gl_FragDepth (disables early-Z for every material) make the 60 FPS target unlikely with headroom; sky.updateEnvironment() regenerates a PMREM every 5 s synchronously, causing a periodic hitch.",
+          "fix": "(1) Vegetation: add a 2-level LOD (full mesh < 800 m, 2-quad crossed billboard impostor 800-9000 m) and shrink tiles from 4000 m to 1000 m so frustum culling works; drop castShadow beyond 600 m for shrubs/palms. (2) Shadows: keep 3 cascades but render cascade 2 (far) every other frame and cull vegetation/traffic from it; replace PCFSoftShadowMap with PCFShadowMap + the existing normalBias. (3) Depth: replace logarithmicDepthBuffer with a reversed-Z / float depth (EXT_color_buffer_float depth24+stencil is enough with camera.near 0.5 and far 45 km) so early-Z works again. (4) Sky: keep 24 steps but render the cloud layer at 0.5 scale with a temporal 2x2 reprojection instead of 0.6 static-jitter; move lightMarch to 3 steps. (5) Buildings: merge per-kind tiles into one InstancedMesh per tile with a kind attribute (cuts ~9x calls); cars: one InstancedMesh with body+cabin merged. (6) Post: run the aerial-perspective pass at half resolution and upsample with the depth buffer; disable preserveDrawingBuffer outside bench capture. (7) Env map: spread PMREM regeneration across 6 frames or cross-fade two env maps. None of these lower the approved look at the tested distances.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "worst3": [
+        "Self-lit yellow propeller disc at dusk (D5, flight)",
+        "Hard 1-px horizon seam (A3-H3)",
+        "Grain sparkle over the dark water (A4-H8)"
+      ],
+      "best3": [
+        "Sky gradient hue and cloud band placement read as dusk",
+        "Nav lights are correctly coloured and placed",
+        "Lowest draw-call count of the round"
+      ],
+      "hardArtifacts": [
+        {
+          "type": "hard horizon seam",
+          "cells": "A3-H3",
+          "frame": "both",
+          "description": "1-pixel sky/water step at row 276/277.",
+          "fix": "Blend via aerial perspective.",
+          "hardFailure": true
+        },
+        {
+          "type": "unlit transparent disc",
+          "cells": "D5",
+          "frame": "flight",
+          "description": "Propeller disc glows saturated yellow at dusk.",
+          "fix": "Lit material for the disc.",
+          "hardFailure": true
+        },
+        {
+          "type": "apparent floating geometry",
+          "cells": "E5",
+          "frame": "still",
+          "description": "Detached yellow prop tip.",
+          "fix": "Initialise rpm.",
+          "hardFailure": true
+        },
+        {
+          "type": "temporal grain sparkle",
+          "cells": "A4-H8",
+          "frame": "both",
+          "description": "Constant-amplitude re-seeded grain dominates dark water.",
+          "fix": "Luminance-scaled grain.",
+          "hardFailure": true
+        },
+        {
+          "type": "aliasing",
+          "cells": "A1-H2",
+          "frame": "both",
+          "description": "Blocky cloud edges from 0.6-scale sky RT.",
+          "fix": "Depth-aware upsample.",
+          "hardFailure": true
+        }
+      ]
+    },
+    "cloudy": {
+      "scores": {
+        "20": 5,
+        "21": 3,
+        "23": 4,
+        "25": 3,
+        "26": 3,
+        "27": 7
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 5,
+          "cells": "A6-H8 water; C5-F7 -> D3-E4",
+          "condition": "Chase camera, 15:00 overcast; still vs flight after 3 s",
+          "evidence": "Aircraft moves to (0.48, 0.38); rectangular foam bands and a straight diagonal foam line (A8-H4) would translate rigidly with the camera; whitecap speckle at pixel scale in A6-H8.",
+          "defect": "Camera framing drift plus pixel-scale foam speckle that will shimmer under motion.",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2. fwidth-based foam threshold softening.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "C5-F7 / D3-E4",
+          "condition": "Chase camera, 70 % throttle, 300 m, 10-14 m/s wind",
+          "evidence": "Telemetry after 3 s: 58.1 m/s, 292 m, heading 214.3, alpha 0.024 rad, stable in the gusts (turbulence 0.3 preset); Chase camera aim is corrupted in flight: FlightCamera.update() computes fwd = flight.forward(this.tmp) and then reuses this.tmp for the spring acceleration (acc = tmp.copy(desired).sub(pos)*k - c*vel), so the look target becomes position + 6*acceleration instead of position + 6*forward; plus the spring (k=26, c=9) trails a moving target by c*v/k = 0.35*v (about 19 m at 55 m/s), so the aircraft shrinks to roughly half its intended size. Measured plane centroid after 3 s of flight: (0.48, 0.38) (should stay near (0.50, 0.57)). Decoded camera orientation: flight camera heading 211.1 deg / pitch -17.5 deg vs aircraft heading 214.3 deg.",
+          "defect": "Camera aim bug; wind response is plausible but the camera shake term (0.35 m at 12-15 Hz per unit shake) would be excessive if triggered.",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2. Reduce positional shake to 0.08 m and add 0.3 deg rotational shake instead.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "A6-H8 water boundary; A3-H3 far coast; A1-H2 overcast; H4 buoy",
+          "condition": "Overcast, 300 m",
+          "evidence": "Hard boundary between saturated cyan and pale blue-grey water across rows 6-7; the far coast is a stair-stepped aliased edge; the overcast shows faint gradient banding; a small flat unshaded yellow buoy at H4.",
+          "defect": "Water detail is a hard two-tone split rather than a continuous depth gradient; far land aliased; sky banded.",
+          "fix": "Smooth depth ramp (see harbor); higher far-ring resolution; dither the sky RT before the HalfFloat write or raise grain in bright areas only.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "A8-H4 diagonal line; A6-C8 rectangles; A3-H3 coast; E4-E5 tips; H4 buoy",
+          "condition": "All regions at 2x",
+          "evidence": "A straight diagonal foam line from A8 to H4 with rectangular foam bands beside it (depth-gated whitecaps outlining the stepped seabed); stair-stepped far coast; detached yellow prop tip above the cabin; flat unshaded buoy quad; wheels down over water.",
+          "defect": "Hard failures: water tiles visibly (straight lines/rectangles), aliasing, apparent floating geometry.",
+          "fix": "Smooth seabed steps and ungate whitecaps; rpm/gear init; give buoys a lit mesh.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 3,
+          "cells": "A1-A2, E1, H1-H2",
+          "condition": "HUD legibility and correctness",
+          "evidence": "HUD legible; HUD shows KIAS 0, ALT 0, V/S 0, HDG 000 and RPM 600 (idle) while the throttle bar shows a cruise setting and the telemetry/placement says the aircraft is airborne; in the flight frame the HUD still shows the frame-0 values.",
+          "defect": "Wrong instrument data in both frames.",
+          "fix": "Bench harness: Aircraft.place() must run flight.step(inputs, 0) so telemetry (airspeed, altitude, heading, rpm, gearDown) is populated before the first render, and Bench.step()/render() must call hud.update(...) every stepped frame (main.ts only calls hud.update once inside frozenLoop when freeze=1). Also display RPM from rpm=throttle at placement.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 7,
+          "cells": "A1-H8",
+          "condition": "cloudy: structural cost analysis at 1920x1080, quality=high (4x MSAA HalfFloat, 3x2048 CSM PCFSoft, 24-step cloud raymarch at 0.6 scale, logarithmicDepthBuffer, bloom), 60 FPS 1080p mid-range-GPU target",
+          "evidence": "renderer.info per frame: still 1897 draw calls / 13.68 M triangles / 662 geometries / 125 MB JS heap; flight 1722 calls / 13.67 M triangles / 666 geometries / 125 MB. Counters include the 3 CSM cascade passes, the wake RT pass, the sky quad and 8 post passes. Moderate: 1.7-1.9k calls, 13.7 M triangles; the overcast preset does not reduce the 24-step cloud raymarch cost (full coverage means no early transmittance exit until several steps in). Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source.",
+          "defect": "Draw-call count of 1.7k-3.6k per frame is CPU-submission bound in WebGL (three.js costs roughly 5-15 us per call, i.e. 10-50 ms of main-thread time on a mid-range CPU); 11-16 M triangles per frame with no vegetation LOD and 3 shadow re-renders, plus logarithmicDepthBuffer writing gl_FragDepth (disables early-Z for every material) make the 60 FPS target unlikely with headroom; sky.updateEnvironment() regenerates a PMREM every 5 s synchronously, causing a periodic hitch.",
+          "fix": "(1) Vegetation: add a 2-level LOD (full mesh < 800 m, 2-quad crossed billboard impostor 800-9000 m) and shrink tiles from 4000 m to 1000 m so frustum culling works; drop castShadow beyond 600 m for shrubs/palms. (2) Shadows: keep 3 cascades but render cascade 2 (far) every other frame and cull vegetation/traffic from it; replace PCFSoftShadowMap with PCFShadowMap + the existing normalBias. (3) Depth: replace logarithmicDepthBuffer with a reversed-Z / float depth (EXT_color_buffer_float depth24+stencil is enough with camera.near 0.5 and far 45 km) so early-Z works again. (4) Sky: keep 24 steps but render the cloud layer at 0.5 scale with a temporal 2x2 reprojection instead of 0.6 static-jitter; move lightMarch to 3 steps. (5) Buildings: merge per-kind tiles into one InstancedMesh per tile with a kind attribute (cuts ~9x calls); cars: one InstancedMesh with body+cabin merged. (6) Post: run the aerial-perspective pass at half resolution and upsample with the depth buffer; disable preserveDrawingBuffer outside bench capture. (7) Env map: spread PMREM regeneration across 6 frames or cross-fade two env maps. None of these lower the approved look at the tested distances.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "worst3": [
+        "Straight diagonal foam line and rectangular foam bands in the water (A8-H4, A6-C8)",
+        "Camera aim drift (plane at 0.48, 0.38)",
+        "Aliased far coast and banded overcast (A3-H3, A1-H2)"
+      ],
+      "best3": [
+        "Airframe rides the 10-14 m/s wind preset without excursions",
+        "Overcast lighting is consistent between aircraft and terrain",
+        "Moderate draw-call count (1.7-1.9k)"
+      ],
+      "hardArtifacts": [
+        {
+          "type": "water tiles visibly",
+          "cells": "A8-H4, A6-C8",
+          "frame": "both",
+          "description": "Straight diagonal foam line and rectangular foam bands.",
+          "fix": "Smooth seabed; ungate whitecaps.",
+          "hardFailure": true
+        },
+        {
+          "type": "aliasing",
+          "cells": "A3-H3",
+          "frame": "both",
+          "description": "Stair-stepped far coastline.",
+          "fix": "Higher far-ring resolution.",
+          "hardFailure": true
+        },
+        {
+          "type": "apparent floating geometry",
+          "cells": "E4-E5",
+          "frame": "still",
+          "description": "Detached yellow prop tip.",
+          "fix": "Initialise rpm.",
+          "hardFailure": true
+        },
+        {
+          "type": "incorrect gear state",
+          "cells": "D7, E7",
+          "frame": "still",
+          "description": "Wheels down over water.",
+          "fix": "gearDown from telemetry.",
+          "hardFailure": true
+        },
+        {
+          "type": "unshaded flat quad",
+          "cells": "H4",
+          "frame": "still",
+          "description": "Yellow buoy renders as a flat unlit rectangle.",
+          "fix": "Lit buoy mesh.",
+          "hardFailure": true
+        }
+      ]
+    },
+    "night": {
+      "scores": {
+        "20": 3,
+        "21": 4,
+        "23": 3,
+        "25": 2,
+        "26": 3,
+        "27": 7
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 3,
+          "cells": "A4-H8 water; B3-H4 city lights",
+          "condition": "Chase camera, 22:00; grain measured on the still",
+          "evidence": "The entire water area is film grain (constant absolute amplitude 0.004 re-seeded each frame on a ~0.003 signal); city lights are sub-pixel emissive dots with no minimum size, so they will flicker in and out with 4x MSAA as the camera moves.",
+          "defect": "Full-frame temporal sparkle and light flicker at night.",
+          "fix": "Luminance-scaled grain; give lights a 2 px minimum screen size (point sprites with size clamp) or bloom-only emission.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 4,
+          "cells": "D5-E7 (still) -> D2-E3 (flight)",
+          "condition": "Chase camera, 70 % throttle, 320 m",
+          "evidence": "Telemetry after 3 s: 58.4 m/s, 312.5 m, heading 226.2, alpha 0.022 rad; centroid (0.50, 0.37); the airframe is invisible apart from nav lights and a glowing prop ring, so attitude cannot be read. Decoded camera orientation: flight camera heading 224.2 deg / pitch -18.1 deg vs aircraft heading 226.2 deg.",
+          "defect": "Camera aim bug persists; no visible airframe at night.",
+          "fix": "Use a dedicated vector for the acceleration (or compute fwd into this.fwd), add velocity feed-forward to the spring target (desired += flight.velocity * (c/k)) or spring on the offset in the aircraft's yaw frame, and raise stiffness to k=60-80 with c = 2*0.9*sqrt(k) so the lag at 55 m/s drops below 6 m; clamp the look-target to position + forward*6 + up*1.2. Add a minimum ambient term and lit cabin/panel glow at night.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 3,
+          "cells": "B3-H4 city lights; H4 cluster; D5-E7 aircraft",
+          "condition": "Night, 320 m",
+          "evidence": "City is a field of isolated white dots without building silhouettes or window grids; the aircraft at 20 m is invisible; no lit roads, bridge lights or moon/sky gradient on the water.",
+          "defect": "No detail survives at night at any distance.",
+          "fix": "Emissive facade windows and street-lamp instancing (lampMesh exists, emissiveIntensity 8*night) need bloom-visible size; add moonlit water specular and a minimum ambient.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "D5-E7 aircraft; D2 prop ring (flight); A3-H3 horizon; A4-H8 grain",
+          "condition": "All regions at 1:1 and brightened",
+          "evidence": "Aircraft body absent (only 2 nav dots); in flight the propeller disc is a saturated yellow ring (unlit material); the horizon is a hard step between navy sky and black water; grain dominates; lights float without buildings.",
+          "defect": "Hard failures: unlit glowing disc, hard horizon seam, invisible airframe, floating lights.",
+          "fix": "Lit prop disc; horizon blend; ambient/emissive on the airframe; facade emission.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 3,
+          "cells": "A1-A2, E1, H1-H2",
+          "condition": "HUD legibility and correctness at night",
+          "evidence": "HUD is the only legible element and HUD shows KIAS 0, ALT 0, V/S 0, HDG 000 and RPM 600 (idle) while the throttle bar shows a cruise setting and the telemetry/placement says the aircraft is airborne; in the flight frame the HUD still shows the frame-0 values.",
+          "defect": "Wrong instrument data in both frames.",
+          "fix": "Bench harness: Aircraft.place() must run flight.step(inputs, 0) so telemetry (airspeed, altitude, heading, rpm, gearDown) is populated before the first render, and Bench.step()/render() must call hud.update(...) every stepped frame (main.ts only calls hud.update once inside frozenLoop when freeze=1). Also display RPM from rpm=throttle at placement.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 7,
+          "cells": "A1-H8",
+          "condition": "night: structural cost analysis at 1920x1080, quality=high (4x MSAA HalfFloat, 3x2048 CSM PCFSoft, 24-step cloud raymarch at 0.6 scale, logarithmicDepthBuffer, bloom), 60 FPS 1080p mid-range-GPU target",
+          "evidence": "renderer.info per frame: still 1859 draw calls / 14.71 M triangles / 641 geometries / 124 MB JS heap; flight 1831 calls / 15.07 M triangles / 642 geometries / 126 MB. Counters include the 3 CSM cascade passes, the wake RT pass, the sky quad and 8 post passes. 1.8k calls, 14.7-15.1 M triangles; the night preset renders the same geometry with no visible benefit (invisible airframe/vegetation), so shadow cascades could be disabled below sunIntensity 0.02. Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source.",
+          "defect": "Draw-call count of 1.7k-3.6k per frame is CPU-submission bound in WebGL (three.js costs roughly 5-15 us per call, i.e. 10-50 ms of main-thread time on a mid-range CPU); 11-16 M triangles per frame with no vegetation LOD and 3 shadow re-renders, plus logarithmicDepthBuffer writing gl_FragDepth (disables early-Z for every material) make the 60 FPS target unlikely with headroom; sky.updateEnvironment() regenerates a PMREM every 5 s synchronously, causing a periodic hitch.",
+          "fix": "(1) Vegetation: add a 2-level LOD (full mesh < 800 m, 2-quad crossed billboard impostor 800-9000 m) and shrink tiles from 4000 m to 1000 m so frustum culling works; drop castShadow beyond 600 m for shrubs/palms. (2) Shadows: keep 3 cascades but render cascade 2 (far) every other frame and cull vegetation/traffic from it; replace PCFSoftShadowMap with PCFShadowMap + the existing normalBias. (3) Depth: replace logarithmicDepthBuffer with a reversed-Z / float depth (EXT_color_buffer_float depth24+stencil is enough with camera.near 0.5 and far 45 km) so early-Z works again. (4) Sky: keep 24 steps but render the cloud layer at 0.5 scale with a temporal 2x2 reprojection instead of 0.6 static-jitter; move lightMarch to 3 steps. (5) Buildings: merge per-kind tiles into one InstancedMesh per tile with a kind attribute (cuts ~9x calls); cars: one InstancedMesh with body+cabin merged. (6) Post: run the aerial-perspective pass at half resolution and upsample with the depth buffer; disable preserveDrawingBuffer outside bench capture. (7) Env map: spread PMREM regeneration across 6 frames or cross-fade two env maps. None of these lower the approved look at the tested distances. Skip the CSM passes when sunIntensity < 0.02.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "worst3": [
+        "Airframe invisible except lights and a glowing yellow prop ring (D5-E7, D2)",
+        "Water rendered as full-frame film grain (A4-H8)",
+        "City is floating light dots without buildings (B3-H4)"
+      ],
+      "best3": [
+        "Nav light colours/positions are correct",
+        "Star field is present above 0.15 elevation",
+        "Frame cost is unchanged at night (no extra passes)"
+      ],
+      "hardArtifacts": [
+        {
+          "type": "unlit transparent disc",
+          "cells": "D2",
+          "frame": "flight",
+          "description": "Propeller disc renders as a saturated yellow ring at night.",
+          "fix": "Lit disc material.",
+          "hardFailure": true
+        },
+        {
+          "type": "hard horizon seam",
+          "cells": "A3-H3",
+          "frame": "both",
+          "description": "Hard step between navy sky and black water.",
+          "fix": "Horizon blend.",
+          "hardFailure": true
+        },
+        {
+          "type": "invisible airframe",
+          "cells": "D5-E7",
+          "frame": "still",
+          "description": "Aircraft body not visible at 20 m.",
+          "fix": "Minimum ambient + cabin glow.",
+          "hardFailure": true
+        },
+        {
+          "type": "temporal grain sparkle",
+          "cells": "A4-H8",
+          "frame": "both",
+          "description": "Constant-amplitude grain dominates the water.",
+          "fix": "Luminance-scaled grain.",
+          "hardFailure": true
+        },
+        {
+          "type": "floating lights",
+          "cells": "B3-H4",
+          "frame": "both",
+          "description": "City lights without building silhouettes.",
+          "fix": "Emissive windows / silhouettes.",
+          "hardFailure": true
+        }
+      ]
+    }
+  },
+  "flightModel": {
+    "source": "src/plane/physics.ts (FlightModel), src/plane/camera.ts (FlightCamera), telemetry from metrics.json (10 views, 3 s of flight each)",
+    "believable": [
+      "Airframe class matches a DHC-2 Beaver: mass 2350 kg, S 23.2 m2, span 14.6 m (AR 9.2), maxThrust 7.4 kN (T/W 0.32) with linear prop falloff to 95 m/s; computed max level speed ~62-65 m/s and 2.6 m/s climb at 55 m/s are realistic.",
+      "Longitudinal derivatives: CL0 0.32, CLa 5.4/rad, Cma -1.15/rad, Cmq -16 (stable, well damped); telemetry in all 9 airborne views settles at alpha 0.012-0.055 rad with no stall after 3 s.",
+      "Lateral-directional: Clp -0.45, Cnb -0.10, Cnr -0.16, Clb -0.08 (dihedral), adverse yaw +0.012*ail, engine lag tau 0.7 s, first-order gust random walk at 0.35 Hz with altitude-dependent turbulence; stall onset at 15.5 deg with buffet at 17 rad/s and gentle post-stall CL decay (floor 0.55).",
+      "Float buoyancy 22 kN/m per point on 4 float points gives a 0.26 m static draft (matches the 1.97 m datum altitude on water in water-landing) with planing relief from 9-24 m/s and water-rudder steering; ground contacts have lateral grip and brakes."
+    ],
+    "arcade_like": [
+      {
+        "issue": "Roll inertia and aileron power: Ixx 3200 kg m2 is about half a Beaver's (~7000); Cl_da 0.14 per full deflection gives a steady roll rate of 0.311*2V/b = ~134 deg/s at 55 m/s (real ~50 deg/s).",
+        "suggestion": "inertia = (7000, 12000, 8000); Cl_da 0.07; keep Clp -0.45."
+      },
+      {
+        "issue": "Elevator power Cm_de 0.95 per full deflection with Izz(pitch) 5600 gives snappy pitch; combined with the low speed-dependent FOV it feels twitchy.",
+        "suggestion": "Cm_de 0.6, Izz 8000, add 0.15 s control-surface actuator lag."
+      },
+      {
+        "issue": "Side-force Cy_b -0.9/rad is 2-3x typical; sideslip decays unrealistically fast.",
+        "suggestion": "Cy_b -0.4."
+      },
+      {
+        "issue": "Water damping: 2600 N s/m per point on 4 points against k 88 kN/m and m 2350 kg gives zeta 0.36 (visible bobbing after touchdown).",
+        "suggestion": "5500 N s/m per point (zeta ~0.75)."
+      },
+      {
+        "issue": "Hump drag: with 4 wetted points at 0.26 m draft the hydrodynamic drag at 10 m/s is ~8.2 kN (55*v^2 + 900*v)/6 per point vs 6.6 kN available thrust; takeoff only proceeds nose-up with the bows out, which is realistic in spirit but likely too punishing.",
+        "suggestion": "linear term 900 -> 500, planing onset 6-18 m/s, bow points 0.8x drag."
+      },
+      {
+        "issue": "Hard floor clamp at ground+1.55 m with velocity.y *= -0.1 and 2.5/s velocity bleed masks contact errors as a soft bounce.",
+        "suggestion": "Keep as a safety net but log when it triggers; it should never fire during normal water contact."
+      },
+      {
+        "issue": "Chase camera: this.tmp aliasing corrupts the look target with the spring acceleration, and the spring (k 26, c 9) trails by 0.35*v (19 m at 55 m/s); plane centroid after 3 s ranged from (0.48, 0.38) to (1.97, 0.74) across chase views instead of (0.50, 0.57). Positional shake of 0.35 m at 12-15 Hz per unit shake is a violent vibration.",
+        "suggestion": "Dedicated acceleration vector; velocity feed-forward (desired += velocity*c/k); k 60-80, c 2*0.9*sqrt(k); positional shake 0.08 m plus 0.3 deg rotational shake; camera bank 0.18 -> 0.25 for turn feel."
+      },
+      {
+        "issue": "Cockpit eye at (1.15, 0.62, -0.36) is below the glare shield; exterior shells are visible from inside.",
+        "suggestion": "Eye (1.05, 0.98, -0.36), layer-mask exterior shells in cockpit mode."
+      },
+      {
+        "issue": "Placement path: place() in the captured build did not run step(inputs, 0) so telemetry, rpm and gearDown were stale (0 KIAS, RPM 600, wheels down over water in every still). HEAD adds flight.step(inputs, 0) but the bench never refreshes the HUD during Bench.step().",
+        "suggestion": "Verify in the next round: place() -> step(0); Bench.step() -> hud.update(); gearDown derived from heightAt at placement."
+      }
+    ],
+    "verdict": "The aerodynamic core is a credible light-utility floatplane model (derivatives, engine lag, stall, buoyancy and planing all in plausible ranges); the arcade feel comes from halved inertias, 2x aileron power, over-strong side force and under-damped floats, and the chase camera bug/lag ruins the flight presentation in every chase view. Fix the camera first, then retune inertia/control power."
+  },
+  "performance": {
+    "measured": {
+      "drawCallsPerFrame": "1747-3649 (median ~2300), including 3 CSM cascade passes, wake RT, sky quad, 8 post passes",
+      "trianglesPerFrame": "8.2-16.3 M (median ~14.9 M), all instances and shadow passes counted",
+      "geometries": "641-2078",
+      "programs": 41,
+      "textures": "39-42",
+      "jsHeapMB": "124-153",
+      "fps": "Real-GPU FPS was NOT measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only times JS submission, so avgFps/p99Ms in metrics.json are non-representative. Category 27 is scored from draw calls, triangle count, geometry count, JS heap and the pipeline structure read from the source."
+    },
+    "targetAssessment": "For a 60 FPS 1080p target on a mid-range desktop GPU (GTX 1660 / RTX 3060 / RX 6600 class) the GPU budget is 16.7 ms: estimated 3-5 ms geometry (15 M tris incl. 3 shadow re-renders), 3-6 ms vegetation overdraw with alphaTest fronds and no early-Z (logarithmicDepthBuffer writes gl_FragDepth in every fragment shader), 2-4 ms cloud raymarch (1152x648 x 24 steps x (1+4 light steps) x multi-octave noise), 2-3 ms full-screen water (4 noised layers + 3 fbm3 + wake sample), ~2 ms post (full-res aerial pass, 5-level bloom, composite, 4x MSAA HalfFloat resolve), ~1 ms CSM PCFSoft receive: 13-21 ms total, i.e. 45-75 FPS with no headroom. CPU: 2.3-3.6k WebGL draw calls at 5-15 us each is 12-50 ms of main-thread submission on a mid-range CPU, so the game is likely CPU-bound below 60 FPS before the GPU is; the 5-second synchronous PMREM regeneration adds a periodic hitch.",
+    "biggestCosts": [
+      "Vegetation: full-geometry palms/trees/mangroves to 9 km with no LOD or impostors, 4 km tiles (poor frustum culling), alphaTest DoubleSide fronds, castShadow to 1800 m -> largest share of the 15 M triangles and of the calls (tile x 3 variants x parts x 4 passes).",
+      "Shadow cascades: 3 x 2048 PCFSoft, shadowFar 3500, every castShadow InstancedMesh re-rendered per cascade (three.js CSM); buildings cast to 2600 m.",
+      "Draw-call fan-out: buildings split per kind (9) per 1500 m tile, vegetation per variant per tile, traffic 3 meshes, moored boats and props as individual meshes -> 1.7-3.6k calls.",
+      "logarithmicDepthBuffer: gl_FragDepth in all shaders disables early-Z/Hi-Z, so vegetation and building overdraw is paid in full.",
+      "Sky raymarch: 24 steps + 4-step lightMarch per sample at 0.6 scale with static jitter; overcast does not reduce cost.",
+      "MSAA 4x on a HalfFloat scene target with depth texture (66 MB colour + 33 MB depth at 1080p) and preserveDrawingBuffer=true (extra copy).",
+      "Water shader: 4 analytic-noise layers, 3 fbm3 evaluations and a wake texture per pixel at full resolution, including under opaque terrain (no depth prepass).",
+      "Env map: PMREM regeneration every 5 s or 0.02 h on the main thread."
+    ],
+    "proposedReductions": "(1) Vegetation: add a 2-level LOD (full mesh < 800 m, 2-quad crossed billboard impostor 800-9000 m) and shrink tiles from 4000 m to 1000 m so frustum culling works; drop castShadow beyond 600 m for shrubs/palms. (2) Shadows: keep 3 cascades but render cascade 2 (far) every other frame and cull vegetation/traffic from it; replace PCFSoftShadowMap with PCFShadowMap + the existing normalBias. (3) Depth: replace logarithmicDepthBuffer with a reversed-Z / float depth (EXT_color_buffer_float depth24+stencil is enough with camera.near 0.5 and far 45 km) so early-Z works again. (4) Sky: keep 24 steps but render the cloud layer at 0.5 scale with a temporal 2x2 reprojection instead of 0.6 static-jitter; move lightMarch to 3 steps. (5) Buildings: merge per-kind tiles into one InstancedMesh per tile with a kind attribute (cuts ~9x calls); cars: one InstancedMesh with body+cabin merged. (6) Post: run the aerial-perspective pass at half resolution and upsample with the depth buffer; disable preserveDrawingBuffer outside bench capture. (7) Env map: spread PMREM regeneration across 6 frames or cross-fade two env maps. None of these lower the approved look at the tested distances.",
+    "expectedGain": "Vegetation LOD/impostors + tile split: -50 to -60 % triangles, -30 % calls; cascade 2 at half rate + PCF: -20 % shadow cost; removing log depth: -20 to -30 % fragment cost on overdrawn passes; merged building/car instancing: -40 % calls; half-res aerial + 0.5-scale temporal sky: -1.5 ms. Combined estimate: 60 FPS with ~25 % headroom on the target GPU without visible change at the tested views."
+  },
+  "crossFrameDefects": [
+    "HUD/telemetry not initialised at placement and not refreshed during Bench.step(): every frame shows 0 KIAS / 0 ALT / HDG 000 / RPM 600.",
+    "Chase camera look-target corrupted by the spring acceleration (this.tmp aliasing) + 0.35*v spring lag: aircraft off-centre or out of frame in all 7 chase flight frames.",
+    "Static propeller (rpm 0) with detached-looking yellow tip boxes and wheels extended over water in every still.",
+    "Depth-driven water shading exposes the stepped seabed as straight lines, rectangles and sawtooth edges (skyline-high, island-pass, harbor, cloudy).",
+    "Uniform shore/foam rings, clone trees (3 variants) and evenly spaced props (ships, palms) in every daylight view.",
+    "Unlit MeshBasicMaterial prop disc glows yellow at dusk/night; constant-amplitude re-seeded grain dominates dark frames; hard horizon seam at dusk/night."
+  ]
+}

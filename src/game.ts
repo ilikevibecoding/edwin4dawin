@@ -195,6 +195,12 @@ export class Game {
     this.aircraft.place(base.x + 120, 1.6, base.z + 60, Math.PI * 0.5, 0, 0, 0, 0);
 
     this.post = new PostPipeline(this.renderer, this.atmos, { samples: q.samples, bloom: q.bloom });
+    const dbg = this.params.dbg;
+    if (dbg.has('noterrain')) this.terrain.group.visible = false;
+    if (dbg.has('noshadow')) this.renderer.shadowMap.enabled = false;
+    if (dbg.has('noveg')) this.vegetation.group.visible = false;
+    if (dbg.has('nocity')) this.city.batches.group.visible = false;
+    if (dbg.has('nocloudshadow')) this.post.cloudShadowStrength = 0;
     this.atmos.update(0);
     this.refreshEnvironment();
     progress('Ready', 1);
@@ -246,6 +252,9 @@ export class Game {
     this.city.batches.updateLod(cx, cz);
     this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size);
     this.wakes.render(this.renderer, cx, cz);
+    // shadow range grows with altitude so a high aerial still shows building shadows
+    const wantFar = Math.min(12000, Math.max(this.quality.shadowFar, cam.position.y * 9));
+    if (Math.abs(wantFar - this.csm.maxFar) > 200) { this.csm.maxFar = wantFar; this.csm.updateFrustums(); }
     this.csm.update();
     for (const l of this.csm.lights) {
       const sc = l.shadow.camera;

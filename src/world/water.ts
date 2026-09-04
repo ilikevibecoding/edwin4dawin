@@ -118,7 +118,7 @@ const WATER_FRAG_MAIN = /* glsl */ `
   body *= waveShade;
   diffuseColor.rgb = mix(body, foamCol, foam);
   // roughness: mirror-like water, rough foam, rougher with distance to suppress sparkle aliasing
-  roughnessFactor = mix(mix(0.06, 0.22, smoothstep(300.0, 6000.0, dist)), 0.85, foam);
+  roughnessFactor = mix(mix(0.045, 0.16, smoothstep(300.0, 6000.0, dist)), 0.85, foam);
   metalnessFactor = 0.0;
 }
 `;
@@ -131,7 +131,7 @@ export class Water {
 
   constructor(textures: MapTextures, wakeTex: THREE.Texture) {
     const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.08, metalness: 0.0 });
-    mat.envMapIntensity = 1.0;
+    mat.envMapIntensity = 1.35;
     this.uniforms = {
       uHeightTex: { value: textures.height },
       uZoneTex: { value: textures.zone },

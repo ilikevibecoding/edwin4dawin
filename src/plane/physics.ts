@@ -180,7 +180,7 @@ export class FlightModel {
       let fy: number, fh: number;
       if (isWater) {
         onWater = true;
-        const buoyK = 22000; // N per metre submerged per point
+        const buoyK = cp.x < 0 ? 26000 : 19000; // sterns carry more so the floats trim slightly bow-up
         fy = buoyK * Math.min(depth, 0.9) - 2600 * vPoint.y;
         // hydrodynamic drag with planing relief; the step reduces wetted area at speed
         const vh = Math.hypot(vPoint.x, vPoint.z);

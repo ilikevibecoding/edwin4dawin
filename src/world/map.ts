@@ -211,7 +211,7 @@ export function createLandmasses(): Landmass[] {
       const n = 60 * fbm2(x / 700 + 1.2, z / 700 + 4.4, 3);
       return d + n;
     },
-    beach: 90, height: 2.6, seabed: 0.012, shelf: 6,
+    beach: 62, height: 2.6, seabed: 0.012, shelf: 6,
   });
 
   // Hero island ("Isla Garza") - reference near island with a lagoon and beaches.
@@ -505,9 +505,9 @@ export class WorldMap implements WorldMapData {
     // bay is shallow and turquoise; deepens towards the mouth and the ocean.
     let depth = 3.0 + 2.6 * (0.5 + 0.5 * fbm2(x / 1100, z / 1100, 3)) + 1.2 * fbm2(x / 350 + 4.0, z / 350, 2);
     // ocean beyond the barrier island / south key: continental shelf ramp
-    const oceanEdge = 3050 + 200 * fbm2(z / 4000, 0.5, 2);
+    const oceanEdge = 3050 + 320 * fbm2(z / 4000, 0.5, 2) + 110 * fbm2(z / 800 + 3.1, 2.2, 3);
     const east = x - oceanEdge;
-    if (east > 0) depth = Math.max(depth, 4 + east * 0.011 + 6 * smoothstep(600, 1800, east) + 14 * smoothstep(1800, 4500, east));
+    if (east > 0) depth += east * 0.006 + 5 * smoothstep(200, 1500, east) + 15 * smoothstep(1500, 4500, east) + 1.5 * ridged2(x / 600 + 1.0, z / 260, 3) * smoothstep(0, 900, east);
     // bay mouth (between barrier tip and south key) is deeper
     const mouth = smoothstep(-400, 1400, x + 300 * fbm2(z / 1200, 3.3, 2)) * (1 - smoothstep(0.4, 1.4, Math.hypot((x - 2600) / 2600, (z - 1900) / 2400)));
     depth += 4.5 * mouth;
@@ -532,6 +532,8 @@ export class WorldMap implements WorldMapData {
     const cId = new Int16Array(coarseN * coarseN);
     const cDepth = new Float32Array(coarseN * coarseN);
     const cLandNoise = new Float32Array(coarseN * coarseN);
+    const cSeabed = new Float32Array(coarseN * coarseN);
+    const cShelf = new Float32Array(coarseN * coarseN);
     for (let j = 0; j < coarseN; j++) {
       const z = -HALF + (j + 0.5) * CELL * cStep;
       for (let i = 0; i < coarseN; i++) {
@@ -547,6 +549,8 @@ export class WorldMap implements WorldMapData {
         }
         cSd[j * coarseN + i] = best;
         cId[j * coarseN + i] = id;
+        cSeabed[j * coarseN + i] = L[id].seabed;
+        cShelf[j * coarseN + i] = L[id].shelf;
         cDepth[j * coarseN + i] = this.regionalDepth(x, z);
         cLandNoise[j * coarseN + i] = fbm2(x / 260, z / 260, 3);
       }
@@ -655,10 +659,13 @@ export class WorldMap implements WorldMapData {
         } else {
           // WATER
           const regional = bilerp(cDepth, sTx, sTz, sX0, sZ0);
+          // seabed slope / shelf interpolated across landmass boundaries so no depth steps appear
+          const seabed = bilerp(cSeabed, sTx, sTz, sX0, sZ0);
+          const shelf = bilerp(cShelf, sTx, sTz, sX0, sZ0);
           let depth: number;
-          if (lm.wet) depth = Math.min(regional, 0.05 + sd * lm.seabed);
-          else if (lm.beach === 0) depth = Math.min(regional, lm.shelf + sd * lm.seabed);
-          else depth = Math.min(regional, 0.05 + sd * lm.seabed);
+          if (lm.wet) depth = Math.min(regional, 0.05 + sd * seabed);
+          else if (lm.beach === 0) depth = Math.min(regional, shelf + sd * seabed);
+          else depth = Math.min(regional, 0.05 + sd * seabed);
           // dredged channels
           for (const c of channels) {
             if (Math.abs(x - c.bx) > c.br || Math.abs(z - c.bz) > c.br) continue;
