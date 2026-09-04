@@ -1,14 +1,17 @@
-// Medical Bay (Deck C): a four-bed ward along the north wall under overhead monitor arms and headwall
-// units, a bacta tank on a railed platform at the west end (bubbling, pulsing core), a surgical station
-// under an articulated ceiling boom, glass-fronted supply cabinets with medical stencils along the south
-// wall, a droid docking niche, and a reception counter + wash station by the door.
-// Teal accent; sterile whites: emissive ceiling panels + high white keys, teal floor edge strips.
+// Medical Bay (Deck C): a four-bed ward along the north wall under monitor arms, teal overhead lamp arms
+// and headwall units, a second triage row of two beds with mobile vitals stands, a medication cabinet island
+// and a droid charging stand toward the door; the bacta tank on a railed platform 11 m from the door is the
+// room's hero (bright teal filtration core inside the glass, pulsing liquid, bubbles, a soft teal pool of
+// light, its pump cabinet behind it); a surgical station under an articulated boom, the gantry scanner island
+// at the west end, glass-fronted supply cabinets along the south wall, a droid docking niche and a reception
+// counter + wash station by the door.
+// Teal accent; sterile whites: narrow white wall tiles, white 0.3 m tile deck, dim louvred ceiling slots, white keys.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRoomShell, impConsole, impChair, impRailing, impWallGear } from "./imperial_kit.js";
 import { rng } from "../kit.js";
 import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
-import { Placer, compound, B, C, DECK_C, ceilingPanel, cameraHousing, cableRun, wallSign, statusUnit, medDroid, monitorArm, counter, hoodLamp, crateStack, rod, tube, ring, keyLight } from "./deck_c_kit.js";
+import { Placer, compound, B, C, DECK_C, slotLight, cameraHousing, cableRun, wallSign, statusUnit, medDroid, monitorArm, counter, hoodLamp, crateStack, rod, tube, ring, keyLight } from "./deck_c_kit.js";
 
 const ACCENT = "emitTeal";
 const WHITE = PALETTE.impWhite;
@@ -17,9 +20,10 @@ const CHR = PALETTE.impCharcoal;
 const GD = PALETTE.impGreyDark;
 const STEEL = DECK_C.steel;
 const PALE_TEAL = new THREE.Color("#a9cfc9");
+const FLOOR_Y = 0.012; // top of the room's own white tile slab
 
 /** Floor decal (room-local, facing up). */
-function floorDecal(kit, index, x, z, size, y = 0.008, yaw = 0) {
+function floorDecal(kit, index, x, z, size, y = FLOOR_Y + 0.008, yaw = 0) {
   kit.add("decalImp", new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2), { pos: [x, y, z], rot: [0, yaw, 0], uv: "keep", uvRect: impDecalRect(index) });
 }
 
@@ -109,7 +113,67 @@ function bedsideUnit(kit, x, z) {
   kit.collider([x - 0.26, 0, z - 0.26], [x + 0.26, 0.86, z + 0.3], "bedside");
 }
 
-/** Glass-fronted supply cabinet: solid lower doors, lit upper cavity with shelves and containers. Faces local +z. */
+/** Overhead teal examination lamp: ceiling flange, drop rod, elbow, angled arm, dished black head with a teal ring. */
+function tealArmLamp(kit, x, z, hCeil, opts = {}) {
+  const { yaw = 0, drop = 1.0, reach = 0.75 } = opts;
+  const p = new Placer(kit, x, hCeil, z, yaw);
+  p.cyl("impTrim", 0, -0.04, 0, 0.14, 0.08, "y", { color: BLK, segments: 12 });
+  p.cyl("impMetal", 0, -drop / 2, 0, 0.03, drop, "y", { color: GD, segments: 8 });
+  p.sphere("impMetal", 0, -drop, 0, 0.07, { color: CHR, segments: 10 });
+  const a0 = p.pos(0, -drop, 0);
+  const a1 = p.pos(0, -drop - 0.35, reach);
+  rod(kit, "impMetal", [a0.x, a0.y, a0.z], [a1.x, a1.y, a1.z], 0.025, { color: GD });
+  p.sphere("impMetal", 0, -drop - 0.35, reach, 0.05, { color: CHR, segments: 8 });
+  p.cyl("impTrim", 0, -drop - 0.43, reach, 0.26, 0.1, "y", { color: BLK, segments: 18, r2: 0.16 });
+  const hp = p.pos(0, -drop - 0.485, reach);
+  ring(kit, ACCENT, hp.x, hp.y, hp.z, 0.17, 0.012, { segments: 28 });
+  p.cyl("impGloss", 0, -drop - 0.482, reach, 0.14, 0.01, "y", { segments: 16 });
+  p.box("impMetal", 0.22, -drop - 0.43, reach, 0.05, 0.1, 0.05, { color: GD });
+  p.box(ACCENT, -0.2, -drop - 0.4, reach, 0.03, 0.02, 0.03);
+}
+
+/** Mobile vitals stand at a triage bed: caster base, post, tilted screen head, cable to the bed. */
+function vitalsStand(kit, x, z, yaw, screen = "scrGreen2") {
+  const p = new Placer(kit, x, 0, z, yaw);
+  p.box("impTrim", 0, 0.05, 0, 0.5, 0.1, 0.5, { color: BLK, texel: 1 });
+  for (const [cx, cz] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]]) p.cyl("rubber", cx, 0.035, cz, 0.035, 0.03, "x", { color: CHR, segments: 8 });
+  p.cyl("impMetal", 0, 0.75, 0, 0.025, 1.3, "y", { color: GD, segments: 8 });
+  p.box("impTrim", 0, 1.5, 0.04, 0.5, 0.4, 0.08, { color: BLK, tilt: -0.25 });
+  p.screen(screen, 0, 1.5, 0.085, 0.44, 0.32, "+z", { tilt: -0.25 });
+  p.box("leds", 0, 1.26, 0.05, 0.3, 0.03, 0.01, { uv: "keep" });
+  p.box(ACCENT, 0.18, 1.26, 0.05, 0.04, 0.03, 0.01);
+  p.box("impMetal", 0, 1.0, 0.1, 0.3, 0.02, 0.2, { color: PALETTE.impGrey });
+  p.collider(-0.26, 0, -0.26, 0.26, 1.75, 0.26, "vitals");
+  return p;
+}
+
+/** Droid charging stand: octagonal plinth with a teal ring, charging mast with readout and power stencil, cable into the droid. */
+function droidStand(kit, x, z, yaw) {
+  const p = new Placer(kit, x, 0, z, yaw);
+  p.cyl("impTrim", 0, 0.07, 0, 0.78, 0.14, "y", { color: BLK, segments: 8 });
+  p.cyl("impMetal", 0, 0.15, 0, 0.7, 0.02, "y", { color: CHR, segments: 8 });
+  const rp = p.pos(0, 0.16, 0);
+  ring(kit, ACCENT, rp.x, rp.y, rp.z, 0.72, 0.012, { segments: 8 });
+  p.box("impTrim", 0, 1.15, -0.62, 0.34, 2.3, 0.22, { color: BLK, texel: 1 });
+  p.box("impMetal", 0, 1.15, -0.5, 0.26, 2.1, 0.02, { color: CHR });
+  p.box("leds", 0, 2.0, -0.485, 0.18, 0.05, 0.01, { uv: "keep" });
+  p.screen("scrGreen3", 0, 1.7, -0.485, 0.22, 0.16, "+z");
+  p.decal(IMP_DECAL.power, 0, 1.3, -0.485, 0.2);
+  p.box(ACCENT, 0, 2.24, -0.485, 0.2, 0.02, 0.01);
+  p.box("emitGreen", -0.08, 0.9, -0.485, 0.04, 0.03, 0.01);
+  p.box("emitRedImp", 0.08, 0.9, -0.485, 0.04, 0.03, 0.01);
+  p.cyl("impMetal", 0, 1.35, -0.32, 0.02, 0.36, "z", { color: STEEL, segments: 8 });
+  const c0 = p.pos(0.12, 0.6, -0.5);
+  const c1 = p.pos(0.25, 0.35, -0.35);
+  const c2 = p.pos(0.2, 0.55, -0.24);
+  tube(kit, "rubber", [[c0.x, c0.y, c0.z], [c1.x, c1.y, c1.z], [c2.x, c2.y, c2.z]], 0.014, { color: CHR });
+  const dp = p.pos(0, 0, 0.05);
+  medDroid(kit, dp.x, dp.z, yaw, { eyeKey: ACCENT, body: WHITE, y: 0.16 });
+  p.collider(-0.78, 0, -0.78, 0.78, 0.18, 0.78, "stand");
+  p.collider(-0.2, 0, -0.75, 0.2, 2.3, -0.5, "mast");
+}
+
+/** Glass-fronted supply cabinet: solid lower doors, dim-lit upper cavity with shelves and containers. Faces local +z. */
 function supplyCabinet(kit, x, z, yaw, opts = {}) {
   const { seed = 1, decal = IMP_DECAL.medical, w = 1.6, h = 2.2, d = 0.6 } = opts;
   const rand = rng(seed);
@@ -121,7 +185,7 @@ function supplyCabinet(kit, x, z, yaw, opts = {}) {
   for (const s of [-1, 1]) p.box("impTrim", s * (w / 2 - 0.03), (split + h) / 2, 0, 0.06, h - split, d, { color: BLK, texel: 1 });
   p.box("impTrim", 0, h - 0.03, 0, w, 0.06, d, { color: BLK, texel: 1 });
   p.box("impMetal", 0, h + 0.02, 0, w + 0.04, 0.04, d + 0.04, { color: CHR, texel: 1 });
-  p.box("emitWhiteSoft", 0, h - 0.075, 0.05, w - 0.3, 0.015, 0.1, { uv: "keep" });
+  p.box("emitWhiteDim", 0, h - 0.075, 0.05, w - 0.3, 0.015, 0.1, { uv: "keep" });
   for (const y of [split + 0.06, split + 0.55]) {
     p.box("impMetal", 0, y, 0, w - 0.14, 0.02, d - 0.12, { color: GD });
     const n = 3 + Math.floor(rand() * 3);
@@ -153,44 +217,61 @@ export function buildMedbay(kit, ctx, room) {
   const hx = w / 2;
   const hz = d / 2;
   const accentKey = ACCENT;
-  const accent = new THREE.Color(room.accent || "#7fe0d8").getHex();
   const rand = rng(6303);
+  // wall variant: narrow 1.1 m white tiles (no bare wall light slots); the room adds horizontal grout seams below
   const walls = impRoomShell(kit, room, ctx.doors, {
     seed: 6303,
     accentKey,
-    wall: { panelW: 1.6, features: { vent: 0.06, equipment: 0.06, conduit: 0.04, light: 0.1, screen: 0.05 }, altChance: 0.08, panelColor: WHITE, panelColorAlt: PALETTE.impGrey, accent: DECK_C.teal },
-    walls: { N: { features: { vent: 0.04, light: 0.14 }, altChance: 0.02 } },
-    floor: { laneW: 2.2 },
-    floorEdgeLight: accentKey,
+    wall: { panelW: 1.1, features: { vent: 0.05, equipment: 0.03, conduit: 0.02, light: 0, screen: 0.04 }, altChance: 0.04, panelColor: WHITE, panelColorAlt: PALETTE.impGrey, accent: DECK_C.teal },
+    floor: { lane: false },
     ceiling: { troughs: 2, troughW: 0.5, beamStep: 4.4 },
   });
-  // teal edge strips along the long walls too (the shell only does the short ones)
-  for (const s of [-1, 1]) kit.boxMM(accentKey, [-hx + 0.6, 0.002, s * (hz - 0.28) - 0.03], [hx - 0.6, 0.012, s * (hz - 0.28) + 0.03]);
+  const N = walls.N.frame; // u = x + hx, n = +z
+  const S = walls.S.frame; // u = hx - x, n = -z
+  const E = walls.E.frame; // u = z + hz, n = -x
+  const W = walls.W.frame; // u = hz - z, n = +x
+  // horizontal grout seams across the wall tiles (two per wall, broken at the door)
+  for (const [F, len, gaps] of [[N, w, []], [S, w, []], [W, d, []], [E, d, ctx.doors.filter((dd) => dd.side === "E").map((dd) => [dd.lz + hz - dd.w / 2 - 0.2, dd.lz + hz + dd.w / 2 + 0.2])]]) {
+    for (const v of [1.32, 2.36]) {
+      let u0 = 0.15;
+      const spans = [];
+      for (const [g0, g1] of gaps.sort((a, b) => a[0] - b[0])) {
+        if (g0 > u0) spans.push([u0, g0]);
+        u0 = g1;
+      }
+      spans.push([u0, len - 0.15]);
+      for (const [a, b] of spans) if (b - a > 0.3) F.box("impTrim", (a + b) / 2, v, 0.038, b - a, 0.018, 0.016, { color: PALETTE.impBlack });
+    }
+  }
+  // sterile white tile deck: one bevelled enamel panel per 0.3 m tile, laid over the shell's grey deck, teal edge strips along the long walls
+  kit.boxMM("impPanel1", [-hx + 0.42, 0, -hz + 0.42], [hx - 0.42, FLOOR_Y, hz - 0.42], { color: WHITE, texel: 1 / 0.3 });
+  for (const s of [-1, 1]) kit.boxMM(accentKey, [-hx + 0.6, FLOOR_Y + 0.002, s * (hz - 0.6) - 0.03], [hx - 0.6, FLOOR_Y + 0.012, s * (hz - 0.6) + 0.03]);
+  for (const s of [-1, 1]) kit.boxMM(accentKey, [s * (hx - 0.6) - 0.03, FLOOR_Y + 0.002, -hz + 0.9], [s * (hx - 0.6) + 0.03, FLOOR_Y + 0.012, hz - 0.9]);
 
   // ---------------------------------------------------------------- ward: four beds along the N wall
-  const N = walls.N.frame; // u = x + hx, n = +z
   const bedX = [-12.5, -7.0, -1.5, 4.0];
   const bedZ = -9.6;
   const blips = [];
   for (const [i, bx] of bedX.entries()) {
-    kit.instance("mb_bed", "impPanel1", medBedGeo, new THREE.Matrix4().makeTranslation(bx, 0, bedZ), 0xffffff);
-    kit.box("fabric", bx, 0.83, bedZ + 0.3, 0.86, 0.03, 1.3, { color: i === 2 ? DECK_C.fabricGrey : PALE_TEAL, texel: 1 });
-    kit.box("impGloss", bx - 0.25, 0.98, bedZ + 1.06, 0.2, 0.14, 0.012);
-    kit.add("scrGreen1", new THREE.PlaneGeometry(0.16, 0.1), { pos: [bx - 0.25, 0.98, bedZ + 1.068], uv: "keep" });
-    kit.box("rubber", bx, 0.006, bedZ + 0.3, 2.2, 0.012, 2.8, { color: CHR, texel: 1 });
+    kit.instance("mb_bed", "impPanel1", medBedGeo, new THREE.Matrix4().makeTranslation(bx, FLOOR_Y, bedZ), 0xffffff);
+    kit.box("fabric", bx, 0.84, bedZ + 0.3, 0.86, 0.03, 1.3, { color: i === 2 ? DECK_C.fabricGrey : PALE_TEAL, texel: 1 });
+    kit.box("impGloss", bx - 0.25, 0.99, bedZ + 1.06, 0.2, 0.14, 0.012);
+    kit.add("scrGreen1", new THREE.PlaneGeometry(0.16, 0.1), { pos: [bx - 0.25, 0.99, bedZ + 1.068], uv: "keep" });
+    kit.box("rubber", bx, FLOOR_Y + 0.006, bedZ + 0.3, 2.2, 0.012, 2.8, { color: CHR, texel: 1 });
     kit.collider([bx - 0.5, 0, bedZ - 1.08], [bx + 0.5, 1.0, bedZ + 1.08], "bed");
     // headwall unit: bezel, vitals screen, gas outlets, LEDs, call button, bay number
     const u = bx + hx;
     N.box("impTrim", u, 1.45, 0.07, 1.3, 0.5, 0.14, { color: BLK, texel: 1 });
     N.box("impGloss", u - 0.28, 1.47, 0.145, 0.58, 0.34, 0.01);
-    N.screen("scrGreen0", u - 0.28, 1.47, 0.152, 0.52, 0.28);
+    N.screen(i % 2 ? "scrGreen2" : "scrGreen0", u - 0.28, 1.47, 0.152, 0.52, 0.28);
     for (let k = 0; k < 3; k++) N.cylN("impMetal", u + 0.2 + k * 0.16, 1.4, 0.16, 0.035, 0.05, { color: STEEL, segments: 10 });
     for (let k = 0; k < 3; k++) N.box(k === 1 ? accentKey : "emitGreen", u + 0.2 + k * 0.16, 1.58, 0.145, 0.04, 0.02, 0.01);
     N.box("emitRedImp", u + 0.55, 1.3, 0.145, 0.06, 0.06, 0.01);
     N.decal(IMP_DECAL.medical, u - 0.55, 1.28, 0.145, 0.14);
     N.decal([IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03, IMP_DECAL.glyphs2][i], u, 2.2, 0.03, 0.34);
     blips.push([bx + 0.55, 1.66, -hz + 0.152]);
-    monitorArm(kit, bx + 0.95, bedZ + 0.4, h, { screen: i % 2 ? "scrGreen1" : "scrGreen0", yaw: 0, drop: 1.45, reach: 0.5 });
+    monitorArm(kit, bx + 0.95, bedZ + 0.4, h, { screen: i % 2 ? "scrGreen3" : "scrGreen1", yaw: 0, drop: 1.45, reach: 0.5 });
+    tealArmLamp(kit, bx - 0.75, bedZ - 0.55, h, { yaw: 1.0, drop: 1.0, reach: 0.8 });
     bedsideUnit(kit, bx - 0.95, bedZ - 0.55);
     ivStand(kit, bx + 0.8, bedZ - 0.95, 1);
     if (i < 3) privacyScreen(kit, bx + 2.75, bedZ + 0.1, Math.PI / 2, 2.4, { color: i === 1 ? DECK_C.fabricGrey : PALE_TEAL });
@@ -208,7 +289,7 @@ export function buildMedbay(kit, ctx, room) {
   // scanner ring sliding along bed 2, with its floor emitter
   {
     const ringMesh = new THREE.Mesh(new THREE.TorusGeometry(0.66, 0.018, 8, 40), ctx.materials.emitTeal);
-    ringMesh.position.set(bedX[1], 0.78, bedZ);
+    ringMesh.position.set(bedX[1], 0.79, bedZ);
     kit.attach(ringMesh);
     let s = 0;
     kit.onUpdate((dt) => {
@@ -220,26 +301,49 @@ export function buildMedbay(kit, ctx, room) {
     kit.box("scrGreen1", bedX[1], 0.16, bedZ + 1.352, 0.2, 0.06, 0.005, { uv: "keep" });
   }
   cableRun(N, 2.0, hx + 6.0, 2.75, { n: 3, seed: 8, accentKey });
-  hoodLamp(N, hx - 15.5, 2.6, "emitWhiteSoft", 0.8);
-  hoodLamp(N, hx + 7.5, 2.6, "emitWhiteSoft", 0.8);
+  hoodLamp(N, hx - 15.5, 2.6, "emitWhiteDim", 0.8);
+  hoodLamp(N, hx + 7.5, 2.6, "emitWhiteDim", 0.8);
+
+  // ---------------------------------------------------------------- triage row (second row of beds toward the door) + medication island + droid stand
+  {
+    const tz = -5.6;
+    for (const [i, bx] of [3.6, 7.0].entries()) {
+      kit.instance("mb_bed", "impPanel1", medBedGeo, new THREE.Matrix4().makeTranslation(bx, FLOOR_Y, tz), 0xffffff);
+      kit.box("fabric", bx, 0.84, tz + 0.3, 0.86, 0.03, 1.3, { color: i ? PALE_TEAL : DECK_C.fabricGrey, texel: 1 });
+      kit.box("rubber", bx, FLOOR_Y + 0.006, tz + 0.2, 2.4, 0.012, 2.9, { color: CHR, texel: 1 });
+      kit.collider([bx - 0.5, 0, tz - 1.08], [bx + 0.5, 1.0, tz + 1.08], "bed");
+      tealArmLamp(kit, bx + 0.8, tz - 0.6, h, { yaw: -0.9, drop: 1.0, reach: 0.85 });
+      monitorArm(kit, bx - 1.0, tz + 0.5, h, { screen: i ? "scrGreen2" : "scrGreen3", yaw: 0.3, drop: 1.4, reach: 0.5 });
+      vitalsStand(kit, bx - 0.85, tz - 1.0, 0.5, i ? "scrGreen0" : "scrGreen2");
+      ivStand(kit, bx + 0.8, tz - 1.05, 1);
+      floorDecal(kit, [IMP_DECAL.bay01, IMP_DECAL.bay02][i], bx, tz + 1.75, 0.4);
+    }
+    // medication cabinet island: two glass-front cabinets back to back at the east end of the row
+    supplyCabinet(kit, 10.3, tz, Math.PI / 2, { seed: 21, decal: IMP_DECAL.medical });
+    supplyCabinet(kit, 9.7, tz, -Math.PI / 2, { seed: 22, decal: IMP_DECAL.hazard });
+    kit.box("impTrim", 10.0, 2.26, tz, 0.9, 0.08, 1.8, { color: BLK, texel: 1 });
+    kit.box(accentKey, 10.0, 2.31, tz, 0.2, 0.02, 1.5);
+    // med droid on its charging stand between the island and the reception counter, facing the door
+    droidStand(kit, 10.4, -2.2, Math.PI / 2);
+    // wheeled med carts parked at the foot of the ward
+    for (const [cx, cz, yaw] of [[-9.8, -6.4, 0.4], [1.0, -6.6, -0.3]]) {
+      const p = new Placer(kit, cx, FLOOR_Y, cz, yaw);
+      kit.instance("mb_cart", "impPanel1", medCartGeo, p.matrix(), 0xffffff);
+      p.collider(-0.42, 0, -0.3, 0.36, 1.28, 0.3, "cart");
+    }
+  }
 
   // ---------------------------------------------------------------- diagnostic console facing the ward
   // (impConsole's operator side is local +z: yaw 0 puts the operator on the south side, where the chair is)
-  impConsole(kit, 8.6, 0, -4.6, 2.6, 1.0, { yaw: 0, seed: 63, screens: ["scrGreen0", "scrGreen1"], accentKey });
-  impChair(kit, 8.6, 0, -3.4, 0);
-  // med carts parked at the foot of the ward
-  for (const [cx, cz, yaw] of [[-9.8, -6.4, 0.4], [1.4, -6.2, -0.3]]) {
-    const p = new Placer(kit, cx, 0, cz, yaw);
-    kit.instance("mb_cart", "impPanel1", medCartGeo, p.matrix(), 0xffffff);
-    p.collider(-0.42, 0, -0.3, 0.36, 1.28, 0.3, "cart");
-  }
+  impConsole(kit, -3.2, FLOOR_Y, -4.6, 2.6, 1.0, { yaw: 0, seed: 63, screens: ["scrGreen2", "scrGreen0"], accentKey });
+  impChair(kit, -3.2, FLOOR_Y, -3.4, 0);
 
-  // ---------------------------------------------------------------- diagnostic scanner island (room centre, S of the lane)
-  // A bed on a low plinth with a gantry arch riding a pair of rails along the patient — the room's main
-  // animated element, in view straight from the door — plus its readout pedestal at the foot end.
+  // ---------------------------------------------------------------- diagnostic scanner island (W end, S side)
+  // A bed on a low plinth with a gantry arch riding a pair of rails along the patient — the far-end animated
+  // element under its own key — plus its readout pedestal at the foot end.
   {
-    const cx = 4.0;
-    const cz = 4.6;
+    const cx = -12.4;
+    const cz = 4.4;
     kit.box("impTrim", cx, 0.06, cz, 3.6, 0.12, 2.4, { color: BLK, texel: 1 });
     kit.box("impMetal", cx, 0.13, cz, 3.5, 0.02, 2.3, { color: CHR, texel: 1 });
     for (const s of [-1, 1]) {
@@ -249,8 +353,6 @@ export function buildMedbay(kit, ctx, room) {
     kit.instance("mb_bed", "impPanel1", medBedGeo, new THREE.Matrix4().makeRotationY(Math.PI / 2).setPosition(cx, 0.14, cz), 0xffffff);
     kit.box("fabric", cx + 0.3, 0.97, cz, 1.3, 0.03, 0.86, { color: PALE_TEAL, texel: 1 });
     kit.collider([cx - 1.85, 0, cz - 1.25], [cx + 1.85, 2.2, cz + 1.25], "scanner");
-    // gantry: half-torus arch on two posts + rail carriages (one merged impMetal mesh) carrying an
-    // emissive inner arc; eases back and forth along the rails
     const archR = 0.95;
     const archY = 1.0;
     const gantry = new THREE.Mesh(
@@ -278,22 +380,21 @@ export function buildMedbay(kit, ctx, room) {
       const k = g < 1 ? g : 2 - g;
       gantry.position.x = cx - 1.1 + 2.2 * k * k * (3 - 2 * k);
     });
-    // readout pedestal (screen toward the operator standing at the foot end), floor stencil, overhead panel
-    const p = new Placer(kit, cx + 2.35, 0, cz + 0.55, Math.PI / 2);
+    const p = new Placer(kit, cx + 2.35, FLOOR_Y, cz + 0.55, Math.PI / 2);
     p.box("impTrim", 0, 0.5, 0, 0.5, 1.0, 0.36, { color: BLK, texel: 1 });
     p.box("impPanel1", 0, 0.45, 0.19, 0.42, 0.7, 0.02, { color: WHITE, uv: "world", texel: 1 });
     p.box("leds", 0, 0.86, 0.19, 0.3, 0.03, 0.02, { uv: "keep" });
     p.box(accentKey, 0, 0.12, 0.205, 0.3, 0.02, 0.01);
     p.box("impTrim", 0, 1.18, 0.02, 0.6, 0.42, 0.06, { color: BLK, tilt: -0.35 });
-    p.screen("scrGreen0", 0, 1.19, 0.055, 0.52, 0.34, "+z", { tilt: -0.35 });
+    p.screen("scrGreen3", 0, 1.19, 0.055, 0.52, 0.34, "+z", { tilt: -0.35 });
     p.collider(-0.32, 0, -0.2, 0.32, 1.4, 0.2, "readout");
     floorDecal(kit, IMP_DECAL.medical, cx, cz - 1.7, 0.5);
-    ceilingPanel(kit, cx, cz, h, 2.4, 0.9);
+    slotLight(kit, cx, cz, h, 2.4, "x", "emitWhiteDim");
   }
 
-  // ---------------------------------------------------------------- bacta tank on a railed platform (W end)
+  // ---------------------------------------------------------------- bacta tank on a railed platform, 11 m from the door left of centre: the hero
   {
-    const tx = -13.2;
+    const tx = 4.0;
     const tz = 4.0;
     kit.cyl("impTrim", tx, 0.09, tz, 1.75, 0.18, "y", { color: BLK, segments: 32, texel: 1 });
     kit.cyl("impMetal", tx, 0.2, tz, 1.62, 0.04, "y", { color: CHR, segments: 32, texel: 1 });
@@ -305,23 +406,29 @@ export function buildMedbay(kit, ctx, room) {
       const a = (k / 8) * Math.PI * 2;
       kit.box("impTrim", tx + Math.cos(a) * 1.0, 0.4, tz + Math.sin(a) * 1.0, 0.16, 0.3, 0.16, { color: BLK, rot: [0, -a, 0] });
     }
-    // glass column, four external ribs, liquid core (holo clone, pulsing), harness ring + mask
+    // glass column, four external ribs; inside: a bright teal filtration core with two glowing collars, the
+    // pulsing liquid volume (holo clone), harness ring + mask
     kit.cyl("viewGlass", tx, 1.88, tz, 0.95, 2.5, "y", { open: true, segments: 40, uv: "keep" });
     for (let k = 0; k < 4; k++) {
       const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
       kit.box("impTrim", tx + Math.cos(a) * 0.97, 1.88, tz + Math.sin(a) * 0.97, 0.07, 2.5, 0.07, { color: BLK, rot: [0, -a, 0] });
     }
+    kit.cyl(accentKey, tx, 1.9, tz, 0.2, 2.3, "y", { segments: 16, uv: "keep" });
+    kit.cyl("impMetal", tx, 1.9, tz, 0.09, 2.4, "y", { color: STEEL, segments: 10 });
+    for (const y of [1.0, 2.8]) {
+      kit.cyl("impTrim", tx, y, tz, 0.3, 0.08, "y", { color: BLK, segments: 16 });
+      ring(kit, accentKey, tx, y, tz, 0.5, 0.02, { segments: 32 });
+    }
     const coreMat = ctx.materials.holo.clone();
     coreMat.color.set(DECK_C.bacta.getHex());
-    coreMat.opacity = 0.26;
+    coreMat.opacity = 0.4;
     const core = new THREE.Mesh(new THREE.CylinderGeometry(0.86, 0.86, 2.4, 32), coreMat);
     core.position.set(tx, 1.88, tz);
     kit.attach(core);
     ring(kit, "impMetal", tx, 2.95, tz, 0.3, 0.02, { color: STEEL, segments: 24 });
     for (const a of [0.4, 2.5, 4.6]) rod(kit, "impMetal", [tx + Math.cos(a) * 0.3, 2.95, tz + Math.sin(a) * 0.3], [tx, 3.14, tz], 0.006, { color: STEEL });
-    rod(kit, "impMetal", [tx, 2.95, tz], [tx, 2.3, tz], 0.012, { color: GD });
-    kit.box("impTrim", tx, 2.2, tz, 0.2, 0.14, 0.12, { color: BLK });
-    kit.box("impGloss", tx, 2.2, tz + 0.065, 0.14, 0.08, 0.01);
+    kit.box("impTrim", tx + 0.5, 2.2, tz, 0.2, 0.14, 0.12, { color: BLK });
+    kit.box("impGloss", tx + 0.5, 2.2, tz + 0.065, 0.14, 0.08, 0.01);
     // bubbles: one InstancedMesh, allocation-free update
     const N_BUB = 36;
     const bubMat = ctx.materials.holo.clone();
@@ -337,7 +444,7 @@ export function buildMedbay(kit, ctx, room) {
     const yBot = 0.72;
     const yTop = 3.02;
     for (let i = 0; i < N_BUB; i++) {
-      const r = Math.sqrt(rand()) * 0.72;
+      const r = 0.28 + Math.sqrt(rand()) * 0.5;
       const a = rand() * Math.PI * 2;
       bub.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, y: yBot + rand() * (yTop - yBot), v: 0.22 + rand() * 0.3, ph: rand() * 6.28, s: 0.6 + rand() * 0.8 });
       _s.setScalar(bub[i].s);
@@ -356,7 +463,7 @@ export function buildMedbay(kit, ctx, room) {
         bubbles.setMatrixAt(i, _m);
       }
       bubbles.instanceMatrix.needsUpdate = true;
-      coreMat.opacity = 0.24 + 0.05 * Math.sin(t * 1.4);
+      coreMat.opacity = 0.38 + 0.07 * Math.sin(t * 1.4);
     });
     // top cap, stack to the ceiling, status readout, hoses to the pump unit on the W wall
     kit.cyl("impMetal", tx, 3.32, tz, 1.05, 0.4, "y", { color: CHR, segments: 24, texel: 1 });
@@ -365,36 +472,39 @@ export function buildMedbay(kit, ctx, room) {
     kit.cyl("impMetal", tx, (3.52 + h) / 2, tz, 0.34, h - 3.52, "y", { color: GD, segments: 16, texel: 1 });
     kit.cyl("impTrim", tx, h - 0.06, tz, 0.4, 0.12, "y", { color: BLK, segments: 16 });
     for (let k = 0; k < 6; k++) kit.box("impTrim", tx + Math.cos((k / 6) * 6.283) * 0.7, 3.32, tz + Math.sin((k / 6) * 6.283) * 0.7, 0.1, 0.3, 0.1, { color: BLK, rot: [0, -(k / 6) * 6.283, 0] });
-    kit.add("scrGreen0", new THREE.PlaneGeometry(0.5, 0.2), { pos: [tx + 0.76, 0.42, tz + 0.76], rot: [0, Math.PI / 4, 0], uv: "keep" });
-    const W = walls.W.frame; // u = hz - z, n = +x
-    const pu = hz - tz;
-    W.box("impTrim", pu, 1.3, 0.18, 1.8, 2.0, 0.36, { color: BLK, texel: 1 });
-    W.box("impPanel1", pu, 1.3, 0.365, 1.66, 1.84, 0.02, { color: PALETTE.impGrey, uv: "world", texel: 1 });
+    kit.add("scrGreen2", new THREE.PlaneGeometry(0.5, 0.2), { pos: [tx + 0.76, 0.42, tz + 0.76], rot: [0, Math.PI / 4, 0], uv: "keep" });
+    // filtration / pump cabinet on the S edge of the platform (faces the tank), three pressure gauges, hoses from the cap
+    const pz = tz + 2.85;
+    const pm = new Placer(kit, tx, FLOOR_Y, pz, Math.PI);
+    pm.box("impTrim", 0, 1.0, 0, 1.8, 2.0, 0.7, { color: BLK, texel: 1 });
+    pm.box("impPanel1", 0, 1.0, 0.36, 1.66, 1.84, 0.02, { color: PALETTE.impGrey, uv: "world", texel: 1 });
+    pm.box("impMetal", 0, 2.03, 0, 1.84, 0.06, 0.74, { color: CHR, texel: 1 });
     for (const du of [-0.5, 0.0, 0.5]) {
-      W.cylN("impTrim", pu + du, 1.85, 0.4, 0.16, 0.05, { color: BLK, segments: 16 });
-      W.cylN("impGloss", pu + du, 1.85, 0.43, 0.13, 0.01, { segments: 16 });
-      W.box(accentKey, pu + du, 1.85, 0.44, 0.02, 0.1, 0.005);
+      pm.cyl("impTrim", du, 1.55, 0.4, 0.16, 0.05, "z", { color: BLK, segments: 16 });
+      pm.cyl("impGloss", du, 1.55, 0.43, 0.13, 0.01, "z", { segments: 16 });
+      pm.box(accentKey, du, 1.55, 0.44, 0.02, 0.1, 0.005);
     }
-    W.screen("scrGreen1", pu - 0.35, 1.2, 0.38, 0.6, 0.3);
-    W.box("leds", pu + 0.4, 1.2, 0.38, 0.5, 0.05, 0.01, { uv: "keep" });
+    pm.screen("scrGreen3", -0.35, 0.95, 0.38, 0.6, 0.3, "+z");
+    pm.box("leds", 0.4, 0.95, 0.38, 0.5, 0.05, 0.01, { uv: "keep" });
     for (const du of [-0.45, 0.45]) {
-      W.cylN("impMetal", pu + du, 0.7, 0.46, 0.05, 0.2, { color: GD, segments: 10 });
-      ring(kit, "impMetal", -hx + 0.58, 0.7, tz - du, 0.14, 0.02, { axis: "x", color: STEEL, segments: 20 });
+      pm.cyl("impMetal", du, 0.5, 0.46, 0.05, 0.2, "z", { color: GD, segments: 10 });
+      const rp = pm.pos(du, 0.5, 0.58);
+      ring(kit, "impMetal", rp.x, rp.y, rp.z, 0.14, 0.02, { axis: "z", color: STEEL, segments: 20 });
     }
-    W.box(accentKey, pu, 0.38, 0.365, 1.5, 0.03, 0.01);
-    W.collider(pu - 0.92, pu + 0.92, 0, 2.32, 0, 0.5, "pump");
+    pm.box(accentKey, 0, 0.12, 0.365, 1.5, 0.03, 0.01);
+    pm.decal(IMP_DECAL.power, 0.55, 0.5, 0.372, 0.26, "+z");
+    pm.collider(-0.92, 0, -0.37, 0.92, 2.1, 0.5, "pump");
     for (const s of [-1, 1]) {
-      tube(kit, "rubber", [[tx - 0.5, 3.4, tz + s * 0.3], [tx - 1.6, 3.1, tz + s * 0.55], [tx - 2.6, 2.5, tz + s * 0.55], [-hx + 0.5, 2.2, tz + s * 0.5]], 0.05, { color: CHR, segments: 28 });
-      W.box("impTrim", pu - s * 0.5, 2.2, 0.42, 0.26, 0.26, 0.12, { color: BLK });
+      tube(kit, "rubber", [[tx + s * 0.3, 3.4, tz + 0.5], [tx + s * 0.55, 3.1, tz + 1.6], [tx + s * 0.55, 2.6, tz + 2.3], [tx + s * 0.5, 2.15, pz - 0.3]], 0.05, { color: CHR, segments: 28 });
+      kit.box("impTrim", tx + s * 0.5, 2.06, pz - 0.36, 0.26, 0.12, 0.26, { color: BLK });
     }
-    // railing around the platform (open toward the pump wall), deck stencil
-    impRailing(kit, [tx - 1.95, tz - 1.95], [tx + 1.95, tz - 1.95], 0, { h: 1.0, light: accentKey });
-    impRailing(kit, [tx + 1.95, tz - 1.95], [tx + 1.95, tz + 1.95], 0, { h: 1.0, light: accentKey });
-    impRailing(kit, [tx + 1.95, tz + 1.95], [tx - 1.95, tz + 1.95], 0, { h: 1.0, light: accentKey });
+    // railing around the platform (open toward the pump), deck stencil
+    impRailing(kit, [tx - 1.95, tz + 1.95], [tx - 1.95, tz - 1.95], FLOOR_Y, { h: 1.0, light: accentKey });
+    impRailing(kit, [tx - 1.95, tz - 1.95], [tx + 1.95, tz - 1.95], FLOOR_Y, { h: 1.0, light: accentKey });
+    impRailing(kit, [tx + 1.95, tz - 1.95], [tx + 1.95, tz + 1.95], FLOOR_Y, { h: 1.0, light: accentKey });
     kit.collider([tx - 1.8, 0, tz - 1.8], [tx + 1.8, 3.6, tz + 1.8], "tank");
-    floorDecal(kit, IMP_DECAL.keepClear, tx + 2.6, tz, 0.6, 0.006, -Math.PI / 2);
-    hoodLamp(W, pu + 2.6, 2.6, "emitWhiteSoft", 0.8);
-    hoodLamp(W, pu - 2.6, 2.6, "emitWhiteSoft", 0.8);
+    floorDecal(kit, IMP_DECAL.keepClear, tx, tz - 2.6, 0.6, FLOOR_Y + 0.006, Math.PI);
+    slotLight(kit, tx - 3.0, tz, h, 2.0, "z", "emitWhiteDim");
   }
 
   // ---------------------------------------------------------------- surgical station under a ceiling boom
@@ -426,7 +536,7 @@ export function buildMedbay(kit, ctx, room) {
     rod(kit, "impMetal", j1, [sx, 2.32, sz + 0.1], 0.04, { color: GD });
     kit.cyl("impTrim", sx, 2.26, sz + 0.1, 0.34, 0.12, "y", { color: BLK, segments: 20 });
     kit.cyl("impMetal", sx, 2.33, sz + 0.1, 0.2, 0.04, "y", { color: GD, segments: 14 });
-    kit.cyl("emitWhiteSoft", sx, 2.185, sz + 0.1, 0.28, 0.02, "y", { segments: 20, uv: "keep" });
+    kit.cyl("emitWhiteDim", sx, 2.185, sz + 0.1, 0.28, 0.02, "y", { segments: 20, uv: "keep" });
     kit.box("impMetal", sx + 0.36, 2.2, sz + 0.1, 0.06, 0.16, 0.06, { color: GD });
     const j2 = [sx - 0.5, 2.7, sz + 0.9];
     rod(kit, "impMetal", [bx, 3.0, bz], j2, 0.035, { color: GD });
@@ -446,7 +556,7 @@ export function buildMedbay(kit, ctx, room) {
     kit.box("impTrim", sx - 1.5, 0.06, sz + 0.9, 0.5, 0.12, 0.5, { color: BLK });
     kit.cyl("impMetal", sx - 1.5, 0.7, sz + 0.9, 0.03, 1.2, "y", { color: GD, segments: 8 });
     kit.box("impTrim", sx - 1.5, 1.45, sz + 0.9, 0.06, 0.5, 0.7, { color: BLK });
-    kit.add("scrGreen0", new THREE.PlaneGeometry(0.6, 0.4).rotateY(Math.PI / 2), { pos: [sx - 1.465, 1.47, sz + 0.9], uv: "keep" });
+    kit.add("scrGreen2", new THREE.PlaneGeometry(0.6, 0.4).rotateY(Math.PI / 2), { pos: [sx - 1.465, 1.47, sz + 0.9], uv: "keep" });
     kit.box("emitGreen", sx - 1.465, 1.17, sz + 1.15, 0.006, 0.02, 0.06);
     kit.collider([sx - 1.75, 0, sz + 0.65], [sx - 1.25, 1.75, sz + 1.15], "monitor");
     kit.box("impPanel1", sx - 1.5, 0.55, sz - 0.6, 0.55, 1.1, 0.5, { color: WHITE, uv: "world", texel: 1 });
@@ -458,23 +568,23 @@ export function buildMedbay(kit, ctx, room) {
     kit.collider([sx - 1.8, 0, sz - 0.9], [sx - 1.2, 1.2, sz - 0.3], "anaesthesia");
     kit.cyl("impMetal", sx + 0.75, 0.16, sz - 1.1, 0.14, 0.32, "y", { color: STEEL, segments: 14, r2: 0.16 });
     kit.collider([sx + 0.6, 0, sz - 1.25], [sx + 0.9, 0.35, sz - 0.95], "bucket");
-    // sterile-zone floor lines + stencil, emissive panels overhead
+    // sterile-zone floor lines + stencil, dim louvred slots overhead
     const zx0 = sx - 2.4;
     const zx1 = sx + 2.0;
     const zz0 = sz - 1.7;
     const zz1 = sz + 1.8;
-    kit.boxMM(accentKey, [zx0, 0.004, zz0], [zx1, 0.012, zz0 + 0.04]);
-    kit.boxMM(accentKey, [zx0, 0.004, zz1 - 0.04], [zx1, 0.012, zz1]);
-    kit.boxMM(accentKey, [zx0, 0.004, zz0], [zx0 + 0.04, 0.012, zz1]);
-    kit.boxMM(accentKey, [zx1 - 0.04, 0.004, zz0], [zx1, 0.012, zz1]);
-    floorDecal(kit, IMP_DECAL.restricted, sx, zz0 - 0.5, 0.6);
-    ceilingPanel(kit, sx - 1.2, sz + 1.7, h, 1.6, 0.9);
-    ceilingPanel(kit, sx - 1.2, sz - 1.0, h, 1.6, 0.9);
+    const ly = FLOOR_Y + 0.002;
+    kit.boxMM(accentKey, [zx0, ly, zz0], [zx1, ly + 0.01, zz0 + 0.04]);
+    kit.boxMM(accentKey, [zx0, ly, zz1 - 0.04], [zx1, ly + 0.01, zz1]);
+    kit.boxMM(accentKey, [zx0, ly, zz0], [zx0 + 0.04, ly + 0.01, zz1]);
+    kit.boxMM(accentKey, [zx1 - 0.04, ly, zz0], [zx1, ly + 0.01, zz1]);
+    floorDecal(kit, IMP_DECAL.keepClear, sx, zz0 - 0.5, 0.6);
+    slotLight(kit, sx - 1.2, sz + 1.7, h, 1.6, "x", "emitWhiteDim");
+    slotLight(kit, sx - 1.2, sz - 1.0, h, 1.6, "x", "emitWhiteDim");
   }
 
   // ---------------------------------------------------------------- south wall: supply cabinets, autoclave, waste
   {
-    const S = walls.S.frame; // u = hx - x, n = -z
     const cz = hz - 0.4;
     for (const [k, cx] of [-11.6, -9.9, -8.2, 1.6, 3.3, 5.0, 6.7].entries()) supplyCabinet(kit, cx, cz, 0, { seed: 11 + k, decal: k % 3 === 2 ? IMP_DECAL.hazard : IMP_DECAL.medical });
     // autoclave: cabinet with a drum, round door with a viewport, status screen, steam vents
@@ -501,54 +611,57 @@ export function buildMedbay(kit, ctx, room) {
     wallSign(S, hx - 9.3, 2.5, IMP_DECAL.hazard, 0.5, accentKey);
     S.decal(IMP_DECAL.glyphs2, hx - 10.2, 2.5, 0.03, 0.4);
     cableRun(S, hx - 8.0, hx + 12.2, 2.95, { n: 2, seed: 9, accentKey });
-    statusUnit(S, hx - 12.6, 1.7, { screen: "scrGreen1", accentKey });
+    statusUnit(S, hx - 12.6, 1.7, { screen: "scrGreen3", accentKey });
     impWallGear(S, hx + 14.0, 1.6, { seed: 64, accentKey });
-    hoodLamp(S, hx + 10.5, 2.55, "emitWhiteSoft", 0.8);
+    hoodLamp(S, hx + 10.5, 2.55, "emitWhiteDim", 0.8);
     crateStack(kit, hx - 1.4, hz - 1.4, 0.15, { seed: 12, decal: IMP_DECAL.medical, n: 2 });
   }
 
   // ---------------------------------------------------------------- droid docking niche (W wall)
   {
-    const W = walls.W.frame; // u = hz - z, n = +x
     const nz = -5.5;
     const nu = hz - nz;
     W.box("impTrim", nu - 1.05, 1.4, 0.35, 0.16, 2.8, 0.7, { color: BLK, texel: 1 });
     W.box("impTrim", nu + 1.05, 1.4, 0.35, 0.16, 2.8, 0.7, { color: BLK, texel: 1 });
     W.box("impTrim", nu, 2.72, 0.35, 2.26, 0.16, 0.7, { color: BLK, texel: 1 });
     W.box("impPanel2", nu, 1.4, 0.09, 1.9, 2.5, 0.04, { color: CHR, uv: "world", texel: 1 });
-    W.box("emitWhiteSoft", nu, 2.63, 0.4, 1.7, 0.02, 0.3, { uv: "keep" });
-    W.box("impMetalRough", nu, 0.01, 0.35, 2.0, 0.02, 0.7, { color: GD, texel: 1 });
-    W.box(accentKey, nu, 0.015, 0.71, 2.0, 0.012, 0.03);
+    W.box("emitWhiteDim", nu, 2.63, 0.4, 1.7, 0.02, 0.3, { uv: "keep" });
+    W.box("impMetalRough", nu, 0.02, 0.35, 2.0, 0.04, 0.7, { color: GD, texel: 1 });
+    W.box(accentKey, nu, 0.03, 0.71, 2.0, 0.012, 0.03);
     W.screen("scrGreen1", nu, 2.2, 0.115, 0.7, 0.3);
     W.box("leds", nu, 1.95, 0.115, 0.7, 0.05, 0.01, { uv: "keep" });
     W.decal(IMP_DECAL.power, nu - 0.7, 1.7, 0.115, 0.3);
     W.decal(IMP_DECAL.glyphs1, nu + 0.7, 1.7, 0.115, 0.3);
     W.box("impTrim", nu + 0.7, 0.55, 0.23, 0.3, 1.1, 0.24, { color: BLK, texel: 1 });
     W.box(accentKey, nu + 0.7, 0.9, 0.352, 0.16, 0.03, 0.01);
-    medDroid(kit, -hx + 0.85, nz, Math.PI / 2, { eyeKey: accentKey, body: PALETTE.impWhite });
+    medDroid(kit, -hx + 0.85, nz, Math.PI / 2, { eyeKey: accentKey, body: PALETTE.impWhite, y: 0.04 });
     tube(kit, "rubber", [[-hx + 0.35, 1.0, nz - 0.7], [-hx + 0.6, 0.6, nz - 0.5], [-hx + 0.85, 0.55, nz - 0.22]], 0.014, { color: CHR });
     tube(kit, "rubber", [[-hx + 0.35, 0.85, nz - 0.7], [-hx + 0.65, 0.45, nz - 0.45], [-hx + 0.85, 0.5, nz - 0.2]], 0.012, { color: GD });
     W.collider(nu - 1.15, nu + 1.15, 0, 2.85, 0, 0.75, "niche");
     wallSign(W, nu, 3.15, IMP_DECAL.medical, 0.4, accentKey);
     impWallGear(W, nu - 3.4, 1.6, { seed: 65, accentKey });
-    statusUnit(W, nu + 3.2, 1.7, { screen: "scrWhite0", accentKey });
+    statusUnit(W, nu + 3.2, 1.7, { screen: "scrWhite2", accentKey });
+    // behind the scanner island: cog roundel, scan-result board, hood lamps
+    wallSign(W, hz - 4.4, 2.85, IMP_DECAL.cog, 0.6, accentKey);
+    statusUnit(W, hz - 4.4, 1.6, { screen: "scrGreen2", accentKey, w: 1.2 });
+    hoodLamp(W, hz - 1.6, 2.6, "emitWhiteDim", 0.8);
+    hoodLamp(W, hz - 7.0, 2.6, "emitWhiteDim", 0.8);
   }
 
-  // ---------------------------------------------------------------- entrance: reception counter, wash station, bench
+  // ---------------------------------------------------------------- entrance: reception counter, wash station, bench, cabinets
   {
-    const E = walls.E.frame; // u = z + hz, n = -x
-    counter(kit, 13.4, -4.6, Math.PI / 2, 3.6, { accentKey, top: WHITE, tag: "reception" });
-    kit.box("impGloss", 13.5, 1.02, -5.6, 0.16, 0.014, 0.24);
-    kit.add("scrWhite0", new THREE.PlaneGeometry(0.2, 0.13).rotateX(-Math.PI / 2), { pos: [13.5, 1.032, -5.6], uv: "keep" });
+    counter(kit, 13.4, -4.6, Math.PI / 2, 3.6, { accentKey, top: WHITE, tag: "reception", y: FLOOR_Y });
+    kit.box("impGloss", 13.5, 1.03, -5.6, 0.16, 0.014, 0.24);
+    kit.add("scrWhite2", new THREE.PlaneGeometry(0.2, 0.13).rotateX(-Math.PI / 2), { pos: [13.5, 1.044, -5.6], uv: "keep" });
     {
-      const p = new Placer(kit, 13.4, 1.01, -3.6, -Math.PI / 2 + 0.35);
+      const p = new Placer(kit, 13.4, 1.02, -3.6, -Math.PI / 2 + 0.35);
       p.cyl("impMetal", 0, 0.15, 0, 0.02, 0.3, "y", { color: GD, segments: 8 });
       p.box("impTrim", 0, 0.45, 0, 0.5, 0.34, 0.05, { color: BLK });
       p.screen("scrGreen0", 0, 0.45, 0.03, 0.44, 0.28, "+z");
     }
-    kit.box("impTrim", 13.3, 1.07, -4.6, 0.3, 0.12, 0.2, { color: BLK });
-    kit.box("emitGreen", 13.3, 1.135, -4.6, 0.04, 0.01, 0.04);
-    impChair(kit, 12.4, 0, -4.6, -Math.PI / 2);
+    kit.box("impTrim", 13.3, 1.08, -4.6, 0.3, 0.12, 0.2, { color: BLK });
+    kit.box("emitGreen", 13.3, 1.145, -4.6, 0.04, 0.01, 0.04);
+    impChair(kit, 12.4, FLOOR_Y, -4.6, -Math.PI / 2);
     // wash station N of the door: basin, mirror, tap, dispensers
     const wu = hz - 3.2;
     E.box("impTrim", wu, 0.42, 0.28, 1.3, 0.84, 0.56, { color: BLK, texel: 1 });
@@ -560,7 +673,7 @@ export function buildMedbay(kit, ctx, room) {
     E.cylN("impMetal", wu, 1.16, 0.22, 0.014, 0.26, { color: STEEL, segments: 8 });
     E.box("impTrim", wu, 1.75, 0.07, 1.0, 0.8, 0.06, { color: BLK });
     E.box("impGloss", wu, 1.75, 0.11, 0.9, 0.7, 0.02);
-    hoodLamp(E, wu, 2.3, "emitWhiteSoft", 0.9);
+    hoodLamp(E, wu, 2.3, "emitWhiteDim", 0.9);
     E.box("impTrim", wu - 0.75, 1.3, 0.14, 0.2, 0.32, 0.2, { color: BLK });
     E.box("impPanel1", wu - 0.75, 1.3, 0.245, 0.16, 0.26, 0.01, { color: WHITE, uv: "world", texel: 2 });
     E.box(accentKey, wu - 0.75, 1.4, 0.252, 0.06, 0.02, 0.005);
@@ -568,6 +681,9 @@ export function buildMedbay(kit, ctx, room) {
     E.box("impPanel1", wu + 0.75, 1.2, 0.245, 0.22, 0.06, 0.01, { color: WHITE, uv: "world", texel: 2 });
     E.decal(IMP_DECAL.glyphs3, wu + 0.75, 1.42, 0.245, 0.16);
     E.collider(wu - 0.7, wu + 0.7, 0, 0.9, 0, 0.6, "wash");
+    // glass-front supply cabinets on the E wall behind the reception counter
+    supplyCabinet(kit, hx - 0.72, -5.4, -Math.PI / 2, { seed: 23, decal: IMP_DECAL.medical });
+    supplyCabinet(kit, hx - 0.72, -7.0, -Math.PI / 2, { seed: 24, decal: IMP_DECAL.medical });
     // waiting bench S of the door
     const bu = hz + 3.6;
     E.box("impTrim", bu, 0.42, 0.34, 2.4, 0.08, 0.5, { color: BLK, texel: 1 });
@@ -578,33 +694,34 @@ export function buildMedbay(kit, ctx, room) {
     E.collider(bu - 1.25, bu + 1.25, 0, 1.0, 0, 0.62, "bench");
     // signage around the door, status unit, wall gear, biohazard bin
     wallSign(E, hz - 1.9, 2.7, IMP_DECAL.medical, 0.6, accentKey);
-    E.decal(IMP_DECAL.restricted, hz + 1.9, 2.7, 0.03, 0.44);
+    E.decal(IMP_DECAL.glyphs3, hz + 1.9, 2.7, 0.03, 0.44);
     statusUnit(E, hz + 6.6, 1.8, { screen: "scrGreen0", accentKey, w: 0.9 });
-    impWallGear(E, hz - 7.6, 1.6, { seed: 66, accentKey });
-    kit.cyl("impTrim", 16.5, 0.34, -6.4, 0.2, 0.68, "y", { color: BLK, segments: 14, texel: 1 });
-    kit.cyl("impMetal", 16.5, 0.7, -6.4, 0.21, 0.04, "y", { color: PALETTE.impRed, segments: 14 });
-    kit.add("decalImp", new THREE.PlaneGeometry(0.2, 0.2).rotateY(-Math.PI / 2), { pos: [16.29, 0.42, -6.4], uv: "keep", uvRect: impDecalRect(IMP_DECAL.hazard) });
-    kit.collider([16.3, 0, -6.6], [16.7, 0.75, -6.2], "bin");
+    impWallGear(E, hz - 9.2, 1.6, { seed: 66, accentKey });
+    kit.cyl("impTrim", 16.3, 0.34, -9.2, 0.2, 0.68, "y", { color: BLK, segments: 14, texel: 1 });
+    kit.cyl("impMetal", 16.3, 0.7, -9.2, 0.21, 0.04, "y", { color: PALETTE.impRed, segments: 14 });
+    kit.add("decalImp", new THREE.PlaneGeometry(0.2, 0.2).rotateY(-Math.PI / 2), { pos: [16.09, 0.42, -9.2], uv: "keep", uvRect: impDecalRect(IMP_DECAL.hazard) });
+    kit.collider([16.1, 0, -9.4], [16.5, 0.75, -9.0], "bin");
   }
   cameraHousing(kit, hx - 0.3, h - 0.55, -hz + 0.3, Math.PI * 0.75);
   cameraHousing(kit, -hx + 0.3, h - 0.55, hz - 0.3, -Math.PI * 0.25);
 
-  // ---------------------------------------------------------------- emissive ceiling panels over ward + entrance + cabinets
-  for (const bx of bedX) ceilingPanel(kit, bx, -7.2, h, 2.0, 0.9);
-  ceilingPanel(kit, 13.4, -3.6, h, 1.6, 0.9);
-  ceilingPanel(kit, 13.4, 3.6, h, 1.6, 0.9);
-  ceilingPanel(kit, 4.6, 7.4, h, 1.6, 0.9);
+  // ---------------------------------------------------------------- dim louvred ceiling slots over the ward, triage row, entrance, cabinets
+  for (const bx of bedX) slotLight(kit, bx, -7.2, h, 2.0, "x", "emitWhiteDim");
+  for (const bx of [3.6, 7.0]) slotLight(kit, bx, -3.3, h, 2.0, "x", "emitWhiteDim");
+  slotLight(kit, 13.4, -3.6, h, 1.6, "z", "emitWhiteDim");
+  slotLight(kit, 13.4, 3.6, h, 1.6, "z", "emitWhiteDim");
+  slotLight(kit, 4.2, 9.0, h, 1.6, "x", "emitWhiteDim");
 
-  // ---------------------------------------------------------------- lights (8)
-  // keys hang 1 m below the white ceiling (linear falloff would otherwise blow the ceiling out)
+  // ---------------------------------------------------------------- lights (8): the bacta pool (hero, highest priority), six white keys, a warmer surgical key
+  // keys hang 1 m below the ceiling (linear falloff would otherwise blow the ceiling out)
   const white = 0xf2f7ff;
   const ky = h - 1.0;
-  keyLight(kit, -10.0, ky, -7.0, { color: white, k: 1.7, distance: 13, priority: 0.5 });
-  keyLight(kit, -3.0, ky, -7.0, { color: white, k: 1.7, distance: 13, priority: 0.49 });
-  keyLight(kit, 2.0, ky, -7.0, { color: white, k: 1.7, distance: 13, priority: 0.48 });
-  keyLight(kit, -4.0, ky, 5.6, { color: 0xffffff, k: 2.0, distance: 11, priority: 0.47 });
-  keyLight(kit, 13.0, ky, 0.0, { color: white, k: 1.6, distance: 13, priority: 0.46 });
-  keyLight(kit, 4.5, ky, 6.5, { color: white, k: 1.5, distance: 13, priority: 0.45 });
-  kit.light({ type: "point", pos: [-13.2, 2.4, 4.0], color: DECK_C.bacta.getHex(), intensity: 5.0, decay: 1, distance: 10, priority: 0.44 });
-  kit.light({ type: "point", pos: [-15.6, 1.8, -5.5], color: accent, intensity: 2.5, decay: 1, distance: 7, priority: 0.4 });
+  kit.light({ type: "point", pos: [4.0, 2.0, 4.0], color: DECK_C.bacta.getHex(), intensity: 10.0, decay: 1, distance: 14, priority: 0.52 });
+  keyLight(kit, -10.0, ky, -7.0, { color: white, k: 2.4, distance: 13, priority: 0.5 });
+  keyLight(kit, -3.0, ky, -7.0, { color: white, k: 2.4, distance: 13, priority: 0.49 });
+  keyLight(kit, 2.0, ky, -7.0, { color: white, k: 2.4, distance: 13, priority: 0.48 });
+  keyLight(kit, -4.0, ky, 5.6, { color: 0xffffff, k: 2.6, distance: 11, priority: 0.47 });
+  keyLight(kit, 12.5, ky, 0.0, { color: white, k: 2.2, distance: 13, priority: 0.46 });
+  keyLight(kit, -11.5, ky, 3.0, { color: white, k: 2.2, distance: 12, priority: 0.45 });
+  keyLight(kit, 7.6, ky, -4.4, { color: white, k: 2.4, distance: 12, priority: 0.44 });
 }

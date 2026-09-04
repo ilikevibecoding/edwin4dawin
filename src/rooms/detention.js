@@ -3,14 +3,16 @@
 // emitter strip, cell number stencils, red overhead light), an interrogation room at the far end
 // (restraint chair, interrogation droid on a stand, bright white spot), a weapon-locker cage, camera
 // housings in every corner, rotating red beacons and red floor edge lighting.
-// Red accent; harsh white key at the desk, red pools everywhere else.
+// Dark ribbed wall variant (grey-dark / charcoal panels, conduit-heavy, banded), the cells darker still.
+// Red accent; dim red slots over the desk, red pools everywhere else, cool fill at the door and the aisle,
+// one harsh white spot in the interrogation room. The no-entry roundel appears once (facing the door).
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { PALETTE } from "../materials.js";
 import { impRoomShell, impWall, wallFrame, impConsole, impChair, impRailing, impWallGear, lux } from "./imperial_kit.js";
 import { rng } from "../kit.js";
 import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
-import { Placer, compound, B, C, DECK_C, ceilingPanel, cameraHousing, cableRun, wallSign, statusUnit, hoodLamp, crateStack, rifleRack, floorStripe, keyLight, ring } from "./deck_c_kit.js";
+import { Placer, compound, B, C, DECK_C, slotLight, cameraHousing, cableRun, wallSign, statusUnit, hoodLamp, crateStack, rifleRack, floorStripe, keyLight, ring } from "./deck_c_kit.js";
 
 const ACCENT = "emitRedImp";
 const BLK = PALETTE.impBlack;
@@ -54,7 +56,7 @@ function buildCell(kit, ctx, cx, cz, yaw, number, opts = {}) {
     const Bp = p.pos(b[0], 0, b[1]);
     return wallFrame(kit, [A.x, A.z], [Bp.x, Bp.z]);
   };
-  const wallOpts = { panelW: 1.5, kickH: 0.28, corniceH: 0.3, depth: 0.16, features: { vent: 0.15, equipment: 0, conduit: 0.08, light: 0, screen: 0 }, panelColor: GREY, panelColorAlt: GD, altChance: 0.3, accent: PALETTE.impRed, accentKey: ACCENT, corniceLight: false, collide: false, tag: "cell" };
+  const wallOpts = { panelW: 1.5, kickH: 0.28, corniceH: 0.3, depth: 0.16, features: { vent: 0.15, equipment: 0, conduit: 0.08, light: 0, screen: 0 }, panelColor: GD, panelColorAlt: CHR, altChance: 0.3, accent: PALETTE.impRed, accentKey: ACCENT, corniceLight: false, collide: false, tag: "cell" };
   const back = mk([-half, -half], [half, -half]);
   const left = mk([-half, half], [-half, -half]);
   const right = mk([half, -half], [half, half]);
@@ -165,7 +167,8 @@ export function buildDetention(kit, ctx, room) {
   const walls = impRoomShell(kit, room, ctx.doors, {
     seed: 8505,
     accentKey,
-    wall: { panelW: 1.7, features: { vent: 0.1, equipment: 0.08, conduit: 0.08, light: 0.04, screen: 0.04 }, altChance: 0.35, panelColor: GREY, panelColorAlt: GD, accent: PALETTE.impRed },
+    // wall variant: dark ribbed — grey-dark / charcoal panels cut by two bands, conduit-heavy, no bare wall light slots
+    wall: { panelW: 1.4, bands: [1.05, 2.25], features: { vent: 0.1, equipment: 0.06, conduit: 0.22, light: 0, screen: 0.03 }, altChance: 0.35, panelColor: GD, panelColorAlt: CHR, accent: PALETTE.impRed },
     floor: { laneW: 2.6, laneAxis: "z" },
     floorEdgeLight: accentKey,
     ceiling: { troughs: 2, troughW: 0.5, beamStep: 4.8 },
@@ -190,7 +193,7 @@ export function buildDetention(kit, ctx, room) {
     const dz = -4.6;
     // guards sit on the south side (console operator side = local +z, yaw 0) facing the blast door;
     // the two wings are angled so their operator sides face the centre seats
-    impConsole(kit, 0, 0, dz, 3.4, 1.0, { yaw: 0, seed: 85, screens: ["scrRed0", "scrWhite0"], accentKey });
+    impConsole(kit, 0, 0, dz, 3.4, 1.0, { yaw: 0, seed: 85, screens: ["scrRed2", "scrWhite1"], accentKey });
     impConsole(kit, -2.7, 0, dz + 0.6, 1.6, 0.9, { yaw: 1.2, seed: 86, screens: ["scrRed1", "scrRed0"], accentKey });
     impConsole(kit, 2.7, 0, dz + 0.6, 1.6, 0.9, { yaw: -1.2, seed: 87, screens: ["scrWhite0", "scrRed1"], accentKey });
     impChair(kit, -0.7, 0, dz + 1.15, 0);
@@ -200,7 +203,7 @@ export function buildDetention(kit, ctx, room) {
     kit.box("impTrim", 0, my, dz - 0.9, 3.6, 0.9, 0.12, { color: BLK, texel: 1 });
     kit.box("impMetal", 0, my + 0.5, dz - 0.9, 3.7, 0.08, 0.2, { color: CHR, texel: 1 });
     for (const x of [-1.5, 1.5]) kit.cyl("impMetal", x, (my + 0.54 + h) / 2, dz - 0.9, 0.03, h - my - 0.54, "y", { color: GD, segments: 8 });
-    const scr = ["scrRed0", "scrWhite0", "scrRed1", "scrWhite0", "scrRed0", "scrRed1"];
+    const scr = ["scrRed2", "scrWhite1", "scrRed3", "scrWhite0", "scrRed0", "scrRed1"];
     for (let i = 0; i < 6; i++) {
       const x = -1.15 + (i % 3) * 1.15;
       const y = my + 0.2 - Math.floor(i / 3) * 0.42;
@@ -236,9 +239,11 @@ export function buildDetention(kit, ctx, room) {
     impRailing(kit, [1.5, dz - 2.3], [5.5, dz - 2.3], 0, { h: 1.0, light: accentKey });
     impRailing(kit, [-5.5, dz - 2.3], [-5.5, dz + 2.6], 0, { h: 1.0 });
     impRailing(kit, [5.5, dz - 2.3], [5.5, dz + 2.6], 0, { h: 1.0 });
-    floorDecal(kit, IMP_DECAL.restricted, 0, dz - 3.2, 0.8, Math.PI);
+    floorDecal(kit, IMP_DECAL.keepClear, 0, dz - 3.2, 0.8, Math.PI);
     kit.boxMM("rubber", [-5.3, 0.002, dz - 2.1], [5.3, 0.02, dz + 2.5], { color: CHR, texel: 1 });
-    ceilingPanel(kit, 0, dz + 0.4, h, 3.0, 1.0, "emitWhiteSoft");
+    // over the desk: a pair of dim red louvred slots in one black housing (the old white panel killed the red mood)
+    kit.box("impTrim", 0, h - 0.11, dz + 0.4, 3.6, 0.22, 1.5, { color: BLK, texel: 1 });
+    for (const dzz of [-0.45, 0.45]) slotLight(kit, 0, dz + 0.4 + dzz, h - 0.02, 3.2, "x", "emitRedDim", { w: 0.34, bar: 0.1 });
   }
 
   // ---------------------------------------------------------------- cell rows: 4 cells along E and W walls, doors facing the aisle
@@ -308,10 +313,11 @@ export function buildDetention(kit, ctx, room) {
     kit.cyl("impMetal", 0.4, h - 0.5, iz + 0.2, 0.04, 0.8, "y", { color: GD, segments: 8 });
     kit.cyl("impTrim", 0.4, h - 0.98, iz + 0.2, 0.3, 0.16, "y", { color: BLK, segments: 18, r2: 0.16 });
     kit.cyl("emitWhite", 0.4, h - 1.07, iz + 0.2, 0.22, 0.02, "y", { segments: 18, uv: "keep" });
+    for (const f of [-0.14, 0, 0.14]) kit.box("impTrim", 0.4, h - 1.085, iz + 0.2 + f, 0.42, 0.02, 0.02, { color: BLK });
     // wall unit: screens and a recorder, restraint hooks, a drain
     S.box("impTrim", hx, 1.6, 0.08, 3.0, 1.2, 0.16, { color: BLK, texel: 1 });
-    S.screen("scrRed0", hx - 0.8, 1.7, 0.165, 1.2, 0.7);
-    S.screen("scrWhite0", hx + 0.9, 1.7, 0.165, 1.0, 0.7);
+    S.screen("scrRed3", hx - 0.8, 1.7, 0.165, 1.2, 0.7);
+    S.screen("scrWhite1", hx + 0.9, 1.7, 0.165, 1.0, 0.7);
     S.box("leds", hx, 1.12, 0.165, 2.6, 0.04, 0.01, { uv: "keep" });
     S.box(accentKey, hx, 2.24, 0.165, 2.8, 0.02, 0.01);
     for (const du of [-2.2, 2.2]) {
@@ -325,7 +331,7 @@ export function buildDetention(kit, ctx, room) {
     for (let k = 0; k < 4; k++) kit.cyl("impMetal", -2.6 + k * 0.12, 1.08, iz + 1.5 + (k % 2) * 0.12, 0.012, 0.16, "y", { color: STEEL, segments: 6 });
     kit.box("impGloss", -2.3, 1.07, iz + 1.75, 0.2, 0.014, 0.14);
     kit.collider([-2.72, 0, iz + 1.33], [-2.08, 1.1, iz + 1.87], "cart");
-    wallSign(S, hx - 3.0, 2.7, IMP_DECAL.restricted, 0.5, accentKey);
+    wallSign(S, hx - 3.0, 2.7, IMP_DECAL.glyphs2, 0.5, accentKey);
     S.decal(IMP_DECAL.glyphs3, hx + 3.0, 2.7, 0.03, 0.44);
     keyLight(kit, 0.4, h - 1.1, iz + 0.2, { color: 0xffffff, k: 6.0, distance: 9, priority: 0.46 });
   }
@@ -356,35 +362,35 @@ export function buildDetention(kit, ctx, room) {
     for (let u = 1.05; u < 1.95; u += 0.1) front.box("impMetal", u, 1.45, 0.045, 0.02, 2.3, 0.02, { color: STEEL });
     front.box("impTrim", 1.1, 1.1, 0.06, 0.16, 0.24, 0.08, { color: BLK });
     front.box("emitRedImp", 1.1, 1.16, 0.105, 0.05, 0.03, 0.005);
-    front.decal(IMP_DECAL.restricted, 1.5, 1.9, 0.06, 0.34);
+    front.decal(IMP_DECAL.glyphs1, 1.5, 1.9, 0.06, 0.34);
     kit.box("impTrim", cx + 0.2, 2.86, cz + 1.6, 1.0, 0.3, 0.2, { color: BLK });
     kit.box("scrRed0", cx + 0.2, 2.86, cz + 1.71, 0.8, 0.14, 0.01, { uv: "keep" });
     crateStack(kit, cx - 1.2, cz + 0.6, 0.2, { seed: 46, decal: IMP_DECAL.hazard, n: 2 });
     // above the cage top rail (the wall further south is hidden behind the cell row)
-    W.decal(IMP_DECAL.restricted, hz + 9.0, 3.3, 0.03, 0.44);
+    W.decal(IMP_DECAL.hazard, hz + 9.0, 3.3, 0.03, 0.44);
     hoodLamp(W, hz + 10.6, 3.3, ACCENT, 0.8);
     // guard post NE: stool, standing console, wall board
     impConsole(kit, hx - 2.2, 0, -hz + 1.6, 1.4, 0.8, { yaw: 0, seed: 88, screens: ["scrRed0", "scrRed1"], accentKey, tall: true });
     impChair(kit, hx - 2.2, 0, -hz + 2.6, 0);
     E.box("impTrim", 1.6, 1.8, 0.06, 1.6, 0.9, 0.12, { color: BLK, texel: 1 });
-    E.screen("scrRed1", 1.6, 1.85, 0.125, 1.4, 0.6);
+    E.screen("scrRed2", 1.6, 1.85, 0.125, 1.4, 0.6);
     E.box("leds", 1.6, 1.4, 0.125, 1.2, 0.04, 0.01, { uv: "keep" });
     crateStack(kit, hx - 1.3, -hz + 3.2, -0.2, { seed: 47, decal: IMP_DECAL.glyphs1, n: 3 });
   }
 
   // ---------------------------------------------------------------- door wall (N): signage, status units, blast stripes on the deck
-  wallSign(N, hx - 3.2, 2.7, IMP_DECAL.restricted, 0.6, accentKey);
+  wallSign(N, hx - 3.2, 2.7, IMP_DECAL.hazard, 0.6, accentKey);
   wallSign(N, hx + 3.2, 2.7, IMP_DECAL.cog, 0.6, accentKey);
   statusUnit(N, hx - 5.2, 1.7, { screen: "scrRed0", accentKey, w: 0.9 });
-  statusUnit(N, hx + 5.2, 1.7, { screen: "scrWhite0", accentKey, w: 0.9 });
-  hoodLamp(N, hx - 7.5, 2.5, "emitWhiteSoft", 0.9);
-  hoodLamp(N, hx + 7.5, 2.5, "emitWhiteSoft", 0.9);
+  statusUnit(N, hx + 5.2, 1.7, { screen: "scrWhite3", accentKey, w: 0.9 });
+  hoodLamp(N, hx - 7.5, 2.5, "emitWhiteDim", 0.9);
+  hoodLamp(N, hx + 7.5, 2.5, "emitWhiteDim", 0.9);
   impWallGear(N, hx + 10.5, 1.6, { seed: 89, accentKey });
   cableRun(N, hx + 6.5, hx + 16.0, 2.95, { n: 3, seed: 14, accentKey });
   cableRun(N, hx - 16.0, hx - 6.5, 2.95, { n: 2, seed: 15, accentKey });
   floorStripe(kit, -1.95, -hz + 0.5, -1.95, -hz + 3.4, 0.12, "chevronR", 0.018);
   floorStripe(kit, 1.95, -hz + 0.5, 1.95, -hz + 3.4, 0.12, "chevronR", 0.018);
-  floorDecal(kit, IMP_DECAL.keepClear, 0, -hz + 2.0, 0.8, Math.PI, 0.02);
+  floorDecal(kit, IMP_DECAL.arrowUp, 0, -hz + 2.0, 0.8, Math.PI, 0.02);
   // E/W wall detail above the cell roofs
   for (const [F, u0] of [[E, hz - 8.0], [W, hz - 8.0]]) {
     cableRun(F, u0, u0 + 15.0, 3.6, { n: 2, seed: 16, accentKey });
@@ -396,8 +402,8 @@ export function buildDetention(kit, ctx, room) {
   cameraHousing(kit, 0.9, h - 0.55, -4.6 - 3.0, Math.PI);
 
   // ---------------------------------------------------------------- lights (8): 4 pulsing red beacons (above), interrogation spot (above),
-  // harsh white desk key, cool white over the entrance and the aisle so the block stays readable
-  keyLight(kit, 0, h - 1.0, -4.4, { color: 0xf4f6ff, k: 2.8, distance: 13, priority: 0.5 });
-  keyLight(kit, 0, h - 1.0, -9.6, { color: 0xdfe8ff, k: 2.0, distance: 12, priority: 0.47 });
-  keyLight(kit, 0, h - 1.0, 1.5, { color: 0xdfe8ff, k: 2.0, distance: 13, priority: 0.48 });
+  // dim red pool over the desk (the screens carry the white there), cool fill over the entrance and the aisle so the block stays readable
+  keyLight(kit, 0, h - 1.0, -4.4, { color: 0xff4a34, k: 2.6, distance: 12, priority: 0.5 });
+  keyLight(kit, 0, h - 1.0, -9.6, { color: 0xdfe8ff, k: 2.6, distance: 12, priority: 0.47 });
+  keyLight(kit, 0, h - 1.0, 1.5, { color: 0xdfe8ff, k: 2.4, distance: 13, priority: 0.48 });
 }

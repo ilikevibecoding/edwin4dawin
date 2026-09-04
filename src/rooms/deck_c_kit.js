@@ -274,6 +274,26 @@ export function ceilingPanel(kit, cx, cz, y, w, d, key = "emitWhiteSoft") {
   for (let f = -d / 2 + 0.2; f < d / 2 - 0.1; f += 0.25) kit.box("impTrim", cx, y - 0.125, cz + f, w + 0.02, 0.012, 0.02, { color: PALETTE.impBlack });
 }
 
+/**
+ * Recessed ceiling slot light: black housing proud of the ceiling ribs, a narrow dim emissive bar set
+ * back inside it and louvre fins across the opening, so the fixture reads as a shape and never blooms.
+ * `axis` is the slot's long direction ("x" | "z"); `key` should be one of the *Dim emitters.
+ */
+export function slotLight(kit, cx, cz, y, len, axis = "x", key = "emitWhiteDim", opts = {}) {
+  const { w = 0.36, h = 0.2, finStep = 0.25, bar = 0.07, tag = null } = opts;
+  const along = axis === "x";
+  const sx = along ? len : w;
+  const sz = along ? w : len;
+  kit.box("impTrim", cx, y - h / 2, cz, sx + 0.1, h, sz + 0.1, { color: PALETTE.impBlack, texel: 1 });
+  kit.box("impMetal", cx, y - h + 0.05, cz, sx - 0.08, 0.02, sz - 0.08, { color: PALETTE.impCharcoal });
+  kit.box(key, cx, y - h + 0.045, cz, along ? len - 0.3 : bar, 0.012, along ? bar : len - 0.3, { uv: "keep" });
+  for (let f = -len / 2 + 0.2; f < len / 2 - 0.1; f += finStep) {
+    if (along) kit.box("impTrim", cx + f, y - h + 0.01, cz, 0.02, 0.03, w - 0.04, { color: PALETTE.impBlack });
+    else kit.box("impTrim", cx, y - h + 0.01, cz + f, w - 0.04, 0.03, 0.02, { color: PALETTE.impBlack });
+  }
+  if (tag) kit.collider([cx - sx / 2, y - h, cz - sz / 2], [cx + sx / 2, y, cz + sz / 2], tag);
+}
+
 /** Pendant lamp over a table: rod, conical housing, warm diffuser. */
 export function pendantGeo() {
   return compound([
@@ -438,7 +458,7 @@ export function wallSign(frame, u, v, decal, size = 0.5, accentKey = "emitBlue")
 
 /** Standing droid silhouette (original design): tripod base, drum body, dome head with a visor slit, tool arms. */
 export function medDroid(kit, x, z, yaw, opts = {}) {
-  const p = new Placer(kit, x, 0, z, yaw);
+  const p = new Placer(kit, x, opts.y || 0, z, yaw);
   const eye = opts.eyeKey || "emitRedImp";
   for (let k = 0; k < 3; k++) {
     const a = (k / 3) * Math.PI * 2 + Math.PI / 6;
@@ -489,10 +509,10 @@ export function crateStack(kit, x, z, yaw, opts = {}) {
 
 /** Half-height counter (serving line / issue counter), length along local x, front face +z. */
 export function counter(kit, cx, cz, yaw, len, opts = {}) {
-  const { depth = 0.7, h = 0.95, top = PALETTE.impGrey, accentKey = "emitAmber", y = 0, tag = "counter", kickLight = true } = opts;
+  const { depth = 0.7, h = 0.95, top = PALETTE.impGrey, front = PALETTE.impWhite, accentKey = "emitAmber", y = 0, tag = "counter", kickLight = true } = opts;
   const p = new Placer(kit, cx, y, cz, yaw);
   p.box("impTrim", 0, h / 2, 0, len, h, depth, { color: PALETTE.impBlack, texel: 1 });
-  p.box("impPanel1", 0, h / 2 + 0.05, depth / 2 + 0.012, len - 0.1, h - 0.3, 0.024, { color: PALETTE.impWhite, uv: "world", texel: 1 });
+  p.box("impPanel1", 0, h / 2 + 0.05, depth / 2 + 0.012, len - 0.1, h - 0.3, 0.024, { color: front, uv: "world", texel: 1 });
   for (let x = -len / 2 + 0.9; x < len / 2 - 0.4; x += 0.9) p.box("impTrim", x, h / 2 + 0.05, depth / 2 + 0.026, 0.02, h - 0.34, 0.01, { color: PALETTE.impBlack });
   p.box("impMetal", 0, h + 0.02, 0, len + 0.06, 0.04, depth + 0.1, { color: top, texel: 1 });
   p.box("impMetal", 0, h + 0.05, 0, len + 0.02, 0.02, depth + 0.06, { color: PALETTE.impGrey, texel: 1 });

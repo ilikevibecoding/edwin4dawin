@@ -1,14 +1,16 @@
 // Armory & Equipment Storage (Deck C): a caged quartermaster booth with an issue window beside the blast
 // door (red "armed" beacon over the cage), a heavy floor grating down the central aisle, rifle racks
-// along the walls, a kit-issue table, four armour stands, power-cell cages with glowing cells, hazard-
-// striped charge lockers and a maintenance bench with a pegboard on the east wall.
-// Orange accent; amber work-light pools, cool white over the bench, harsh white in the vestibule.
+// along the walls, a kit-issue table, four armour stands under a white track-light rig in front of a mesh
+// screen (the hero), power-cell cages with glowing cells, hazard-striped charge lockers and a maintenance
+// bench with a pegboard on the east wall. Dark ribbed wall variant (narrow grey-dark panels, vents/conduits).
+// Orange accent; amber slot pools over the aisle, white on the armour and the bench, cool white in the vestibule.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRoomShell, impConsole, impChair, impWallGear } from "./imperial_kit.js";
 import { rng } from "../kit.js";
 import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
-import { Placer, compound, B, C, DECK_C, ceilingPanel, cameraHousing, cableRun, wallSign, statusUnit, hoodLamp, crateStack, rifleRack, rifleGeo, helmet, boots, floorGrate, floorStripe, keyLight, rod, tube } from "./deck_c_kit.js";
+import { Placer, compound, B, C, DECK_C, slotLight, cameraHousing, cableRun, wallSign, statusUnit, hoodLamp, crateStack, rifleRack, rifleGeo, helmet, boots, floorGrate, floorStripe, keyLight, rod, tube } from "./deck_c_kit.js";
+import { lux } from "./imperial_kit.js";
 
 const ACCENT = "emitOrange";
 const WORK = "emitAmber";
@@ -294,7 +296,8 @@ export function buildArmory(kit, ctx, room) {
   const walls = impRoomShell(kit, room, ctx.doors, {
     seed: 7404,
     accentKey,
-    wall: { panelW: 1.7, features: { vent: 0.1, equipment: 0.12, conduit: 0.1, light: 0.06, screen: 0.03 }, altChance: 0.3, panelColor: GREY, panelColorAlt: GD, accent: ORANGE },
+    // wall variant: narrow dark ribbed panels (grey-dark / charcoal), heavy on vents and conduit, no bare wall light slots
+    wall: { panelW: 1.2, bands: [1.15], features: { vent: 0.16, equipment: 0.1, conduit: 0.16, light: 0, screen: 0.03 }, altChance: 0.35, panelColor: GD, panelColorAlt: CHR, accent: ORANGE },
     floor: { lane: false },
     ceiling: { troughs: 2, troughW: 0.5, beamStep: 4.4 },
   });
@@ -345,7 +348,7 @@ export function buildArmory(kit, ctx, room) {
       lens.rotation.y += dt * 4.0;
     });
     kit.box("impTrim", cx + 1.0, 2.3, bz0, 0.46, 0.46, 0.06, { color: BLK });
-    kit.add("decalImp", new THREE.PlaneGeometry(0.4, 0.4), { pos: [cx + 1.0, 2.3, bz0 + 0.035], uv: "keep", uvRect: impDecalRect(IMP_DECAL.restricted) });
+    kit.add("decalImp", new THREE.PlaneGeometry(0.4, 0.4), { pos: [cx + 1.0, 2.3, bz0 + 0.035], uv: "keep", uvRect: impDecalRect(IMP_DECAL.hazard) });
     kit.light({ type: "point", pos: [cx, 2.7, bz0 + 0.6], color: 0xff3020, intensity: 1.8, decay: 1, distance: 5, priority: 0.42 });
     // inside: quartermaster console facing the window, chair, rifle rack, shelving, wall board
     // operator side (console local +z) toward the north, where the quartermaster sits facing the window
@@ -355,7 +358,7 @@ export function buildArmory(kit, ctx, room) {
     partsShelf(kit, -14.2, -7.4, Math.PI / 2, 31);
     partsShelf(kit, -14.2, -5.6, Math.PI / 2, 32);
     N.box("impTrim", hx - 10.4, 1.8, 0.06, 1.4, 0.9, 0.12, { color: BLK, texel: 1 });
-    N.screen("scrAmber1", hx - 10.4, 1.85, 0.125, 1.2, 0.6);
+    N.screen("scrAmber2", hx - 10.4, 1.85, 0.125, 1.2, 0.6);
     N.box("leds", hx - 10.4, 1.4, 0.125, 1.0, 0.04, 0.01, { uv: "keep" });
     hoodLamp(N, hx - 12.1, 2.6, WORK, 0.8);
     N.decal(IMP_DECAL.glyphs3, 1.2, 2.3, 0.03, 0.4);
@@ -364,13 +367,13 @@ export function buildArmory(kit, ctx, room) {
   }
 
   // ---------------------------------------------------------------- vestibule: door wall signage, status, gear
-  W.decal(IMP_DECAL.restricted, hz - 4.6, 2.6, 0.03, 0.5);
-  wallSign(W, hz - 2.4, 2.6, IMP_DECAL.hazard, 0.5, accentKey);
-  statusUnit(W, hz - 3.8, 1.7, { screen: "scrAmber0", accentKey, w: 0.9 });
+  wallSign(W, hz - 4.6, 2.6, IMP_DECAL.cog, 0.6, accentKey);
+  W.decal(IMP_DECAL.hazard, hz - 2.4, 2.6, 0.03, 0.44);
+  statusUnit(W, hz - 3.8, 1.7, { screen: "scrAmber3", accentKey, w: 0.9 });
   impWallGear(W, hz - 6.8, 1.6, { seed: 75, accentKey });
   hoodLamp(W, hz - 8.6, 2.5, WORK, 0.9);
   hoodLamp(W, hz + 7.0, 2.5, WORK, 0.9);
-  ceilingPanel(kit, -12.2, 0, h, 1.6, 0.9, "emitWhiteSoft");
+  slotLight(kit, -12.2, 0, h, 1.8, "z", "emitWhiteDim");
   // cage top rail continues as a lintel over the vestibule's S half with a stencil
   S.decal(IMP_DECAL.glyphs1, hx + 12.0, 2.4, 0.03, 0.4);
   impWallGear(S, hx + 13.5, 1.6, { seed: 76, accentKey });
@@ -380,7 +383,7 @@ export function buildArmory(kit, ctx, room) {
   // ---------------------------------------------------------------- north side: rifle racks, kit-issue table, shelving, cell cages
   for (const [k, rx] of [-6.5, -3.5, -0.5].entries()) rifleRack(kit, rx, -10.7, 0, 5, { accentKey, seed: 22 + k });
   cableRun(N, hx - 8.0, hx + 1.2, 2.9, { n: 3, seed: 12, accentKey });
-  N.decal(IMP_DECAL.restricted, hx - 3.5, 2.5, 0.03, 0.44);
+  N.decal(IMP_DECAL.glyphs3, hx - 3.5, 2.5, 0.03, 0.44);
   hoodLamp(N, hx - 6.5, 2.55, WORK, 0.9);
   hoodLamp(N, hx - 0.5, 2.55, WORK, 0.9);
   issueTable(kit, -3.5, -5.6, 0, 3.2);
@@ -392,20 +395,41 @@ export function buildArmory(kit, ctx, room) {
   cellCage(kit, ctx, 12.4, -10.1, 0, { seed: 52 });
   for (const cx of [9.6, 12.4]) tube(kit, "rubber", [[cx, 2.05, -10.2], [cx + 0.2, 2.3, -10.6], [cx + 0.3, 2.5, -hz + 0.1]], 0.025, { color: CHR });
   N.box("impTrim", hx + 11.0, 2.7, 0.07, 1.6, 0.4, 0.14, { color: BLK, texel: 1 });
-  N.screen("scrAmber0", hx + 11.0, 2.72, 0.145, 1.3, 0.26);
+  N.screen("scrAmber3", hx + 11.0, 2.72, 0.145, 1.3, 0.26);
   N.decal(IMP_DECAL.power, hx + 12.7, 2.7, 0.03, 0.36);
   kit.box("chevronY", 11.0, 0.02, -8.9, 3.6, 0.008, 0.12, { texel: 3 });
   floorDecal(kit, IMP_DECAL.power, 11.0, -8.3, 0.6);
-  statusUnit(N, hx + 3.0, 1.9, { screen: "scrAmber1", accentKey });
+  statusUnit(N, hx + 3.0, 1.9, { screen: "scrRed1", accentKey });
 
-  // ---------------------------------------------------------------- south side: armour stands, rifle rack, open crate, lockers
-  for (const [k, ax] of [-1.4, 1.3, 4.0, 6.7].entries()) {
+  // ---------------------------------------------------------------- south side: armour stands (the hero), rifle rack, open crate, lockers
+  // Four stands on a rubber mat in front of a mesh screen; a white track-light rig overhead (one real spot +
+  // fill point, four lit cans) makes them the brightest thing in the room.
+  const standX = [-1.4, 1.3, 4.0, 6.7];
+  for (const [k, ax] of standX.entries()) {
     armourStand(kit, ax, 9.2, 0, { ledKey: k === 2 ? "emitRedImp" : "emitGreen" });
-    hoodLamp(S, hx - ax, 2.6, WORK, 0.8);
     S.decal([IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03, IMP_DECAL.glyphs2][k], hx - ax, 2.15, 0.03, 0.3);
   }
   kit.boxMM("rubber", [-2.4, 0.002, 8.2], [7.7, 0.014, 10.4], { color: CHR, texel: 1 });
   kit.boxMM(accentKey, [-2.4, 0.004, 8.2], [7.7, 0.016, 8.24]);
+  cageWall(kit, 7.9, 10.45, -2.6, 10.45, 2.7, { color: GD, postStep: 2.1 });
+  {
+    const tz = 7.0;
+    const tx = (standX[0] + standX[3]) / 2;
+    const tl = standX[3] - standX[0] + 1.2;
+    kit.box("impTrim", tx, h - 0.06, tz, tl, 0.12, 0.16, { color: BLK, texel: 1 });
+    kit.box("impMetal", tx, h - 0.13, tz, tl - 0.1, 0.02, 0.06, { color: GD });
+    for (const ax of standX) {
+      const from = new THREE.Vector3(ax, h - 0.2, tz);
+      const to = new THREE.Vector3(ax, 1.2, 9.2);
+      const dir = to.clone().sub(from).normalize();
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
+      kit.add("impTrim", new THREE.CylinderGeometry(0.15, 0.11, 0.34, 14), { pos: [ax, h - 0.34, tz + 0.12], quat: q, color: BLK, uv: "scale", uvScale: [1, 0.4] });
+      kit.add("emitWhiteDim", new THREE.CylinderGeometry(0.105, 0.105, 0.012, 14), { pos: [ax + dir.x * 0.17, h - 0.34 + dir.y * 0.17, tz + 0.12 + dir.z * 0.17], quat: q, uv: "keep" });
+      kit.box("impMetal", ax, h - 0.16, tz, 0.05, 0.1, 0.05, { color: GD });
+    }
+    kit.light({ type: "spot", pos: [tx, h - 0.3, tz], target: [tx, 1.0, 9.3], color: 0xf4f6ff, intensity: lux(2.7, 7.0), distance: 10, angle: 0.82, penumbra: 0.45, priority: 0.56 });
+    keyLight(kit, tx, 3.0, 7.9, { color: 0xf4f6ff, k: 2.6, distance: 9, priority: 0.55 });
+  }
   rifleRack(kit, -6.5, 10.7, Math.PI, 4, { accentKey, seed: 25 });
   hoodLamp(S, hx + 6.5, 2.55, WORK, 0.9);
   // heavy lockers W of the rack, and an inspection table on the open floor S of the aisle (two racked-out
@@ -487,24 +511,22 @@ export function buildArmory(kit, ctx, room) {
     kit.collider([12.95, 0, 4.75], [13.45, 0.72, 5.25], "stool");
     kit.boxMM("rubber", [12.6, 0.002, 3.2], [14.0, 0.014, 8.0], { color: CHR, texel: 1 });
     impWallGear(E, hz + 9.4, 1.6, { seed: 77, accentKey });
-    statusUnit(E, hz + 8.6, 2.6, { screen: "scrAmber1", accentKey });
-    hoodLamp(E, hz + 5.6, 2.75, "emitWhiteSoft", 1.2);
+    statusUnit(E, hz + 8.6, 2.6, { screen: "scrAmber2", accentKey });
+    hoodLamp(E, hz + 5.6, 2.75, "emitWhiteDim", 1.2);
     crateStack(kit, hx - 1.3, hz - 1.4, 0.1, { seed: 45, decal: IMP_DECAL.glyphs1, n: 2 });
   }
   cameraHousing(kit, hx - 0.3, h - 0.55, -hz + 0.3, Math.PI * 0.75);
   cameraHousing(kit, -hx + 0.3, h - 0.55, hz - 0.3, -Math.PI * 0.25);
   cameraHousing(kit, hx - 0.3, h - 0.55, hz - 0.3, Math.PI * 0.25);
 
-  // ---------------------------------------------------------------- overhead: warm panels over the aisle
-  for (const x of [-4.5, 3.0, 10.5]) ceilingPanel(kit, x, 0, h, 2.4, 0.9, "emitWarmSoft");
+  // ---------------------------------------------------------------- overhead: dim amber louvred slots over the aisle (no bare panels)
+  for (const x of [-4.5, 3.0, 10.5]) slotLight(kit, x, 0, h, 2.4, "x", "emitAmberDim", { w: 0.4, bar: 0.1 });
 
-  // ---------------------------------------------------------------- lights (8): vestibule white, booth amber (above), red beacon (above), 3 amber aisle, bench white, armour amber
+  // ---------------------------------------------------------------- lights (8): armour spot + fill (above), booth amber + red beacon (above), vestibule white, 2 amber aisle, bench white
   // vestibule white sits a little S of the door so it also carries the inspection table and the S-wall lockers
   keyLight(kit, -11.5, 3.4, 2.5, { color: 0xe8eeff, k: 2.6, distance: 13, priority: 0.5 });
-  // the two outer aisle keys sit north of the aisle so the rifle racks / cell cages get direct light
+  // the two aisle keys sit north of the aisle so the rifle racks / cell cages get direct light; the armour rig carries the middle
   keyLight(kit, -4.5, 3.4, -3.5, { color: 0xffc38a, k: 2.6, distance: 13, priority: 0.49 });
-  keyLight(kit, 3.0, 3.4, 0, { color: 0xffc38a, k: 2.6, distance: 13, priority: 0.48 });
   keyLight(kit, 10.5, 3.4, -3.5, { color: 0xffc38a, k: 2.6, distance: 13, priority: 0.47 });
   keyLight(kit, 13.2, 2.8, 5.6, { color: 0xf0f4ff, k: 2.6, distance: 8, priority: 0.44 });
-  keyLight(kit, 2.6, 3.2, 8.4, { color: 0xffb060, k: 2.4, distance: 11, priority: 0.43 });
 }
