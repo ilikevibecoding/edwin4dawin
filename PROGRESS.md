@@ -735,3 +735,52 @@ eight metres in the grass under an acacia it is unmistakably a lion. Build
   sub-pixel lanterns vanish at 512 px.
 - Crown foliage shows flat cards inside 5 m; termite mounds too smooth; plume
   tufts read near-white in low sun.
+
+## Gauntlet round 1 — baseline and defect inventory
+
+**Build `8754528`**, live: HUD reads `build 8754528 · 2026-09-04 12:46Z`,
+zero page errors, smoke-tested by `tools/deploy.mjs`. The rubric every critic
+scores against is `gauntlet/RUBRIC.md`.
+
+### Two master-side fixes before the frames were shot
+
+- **The skyline band was the forest's ridge cards.** Two rings of 44–66 m ridge
+  silhouettes at 560 and 690 m — unlit, `fog: false`, pale grey-beige — stood
+  among the terrain's new far hills as a band brighter than the sky behind it,
+  with a dark line along their base at canopy height. The `forestSkirt` was
+  already carrying the terrain's far-ground map, so it was not the skirt.
+  Removed; the hills carry the horizon and take the hour's fog. Before/after:
+  `shots/iter_16/forest.png` → `shots/cand_noridge/forest.png`.
+- The water reflection and the dusk `uSky` hue were checked against the frames
+  and are fine as landed (the reflection panorama was already redrawn for the
+  savanna); dropped from the list.
+
+### A camera family for the glass loop
+
+Seven fixed cameras, `glass_screen / side / shade / rear / mirror / inside /
+moving`, in `src/camera.js` under `family: 'glass'`, so the default capture and
+the digit keys never see them. The truck heads the same way on the spur every
+time, so `+X` is the sunlit flank by day and `-X` the shaded one, and the two
+side views are the sun/shade pair. Every frame is taken at 8.6 m/s after the
+pre-roll, so the wheel dust is up in all of them. Two framings were moved after
+the first capture (the rear view was a picture of the rack ladder, the mirror
+view a picture of the snorkel). Round-one glass frames: `shots/glass_r1/day/`.
+
+### Baseline frames
+
+97 frames in `shots/round1/`: `truck_day|dusk|night` (nine views + HUD each),
+`camp_day` (six), `camp_night` (four), `fleet` (twelve vehicles, day and
+night), `lions_day` (seven), `lions_dusk` (three), `lions_walk` (an eight-frame
+strip of one lion walking past a fixed camera, plus close/medium/far/seat), and
+`shots/glass_r1/day` (seven). Three critics, blind to each other, score the
+identical set; their reports land in `gauntlet/round1/critic_{A,B,C}.md`.
+
+### Measured on the integrated build (`fast`, software raster)
+
+`perf/2026-09-04T12-46-27-505Z-ad7ef04+.json`: 453 draw calls, 2.57 M
+triangles, 254 visible objects, 26.9 k visible instances, 4 animated animals,
+277 shader programs, 275 textures, 319 geometries, JS heap 334 MB and flat
+(−0.3 MB) over three reset loops, zero errors. Boot 43 s under SwiftShader, of
+which shader compilation is 24.3 s — 277 programs is the number to bring down,
+and a census (`tools/census.mjs`) is attributing them to modules before anyone
+guesses.

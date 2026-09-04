@@ -17,6 +17,24 @@ numbers the targets are about.
 
 ---
 
+## Gauntlet round 1 — baseline
+
+**Build `8754528`** — live, smoke-tested (HUD reads `build 8754528 · 2026-09-04 12:46Z`, zero page errors).
+
+- Removed the forest-era ridge cards: two unlit, unfogged rings of pale ridge
+  silhouette at 560/690 m that stood among the far hills as a band brighter
+  than the sky, with a dark line at their base. The horizon is the terrain's
+  hills now. Before/after `shots/iter_16/forest.png` → `shots/cand_noridge/forest.png`.
+- Seven fixed cameras for the car-glass gauntlet (`glass_*` views), hidden from
+  the default capture and the digit keys. Round-one glass frames in
+  `shots/glass_r1/day/`.
+- `gauntlet/RUBRIC.md`: the eighteen categories, scale, report shape and gate.
+  97 baseline frames in `shots/round1/`; three blind critics score them.
+- Measured (`fast`, software raster): 453 calls, 2.57 M tris, 277 programs,
+  275 textures, heap 334 MB flat over three reset loops, zero errors. Shader
+  compile is 24.3 s of a 43 s software boot; the program count is the next
+  performance target.
+
 ## Safari, iteration 16 — the biome change
 
 **Build `2f0f5ba`** — live, smoke-tested (page boots, HUD reads `build 2f0f5ba · 2026-09-04 12:07Z`, zero page errors). Supersedes `34d3fc8`, which lacked the lions.
