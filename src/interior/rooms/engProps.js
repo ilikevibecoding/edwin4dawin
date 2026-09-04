@@ -444,36 +444,6 @@ export function floorBorder(kit, x0, z0, x1, z1, { w = 0.1, color = PALETTE.impA
   floorLine(kit, x1, z0, x1, z1, { w, color, mat, y });
 }
 
-/**
- * Overlay the ceiling light strips that impCeiling placed (same placement maths: `n` strips across
- * the `along` axis) with a dark cover and a dimmer emitter, for rooms whose strips would otherwise
- * saturate in the shot. `mat` is the replacement emitter (emitWhiteDim / emitAmberDim / ...).
- */
-export function dimCeilingStrips(kit, bounds, { along = "x", spacing = 4.5, mat = "emitWhiteDim", y = null, width = 0.14 } = {}) {
-  const [min, max] = bounds;
-  const yy = y ?? max[1];
-  const x0 = min[0];
-  const z0 = min[2];
-  const w = max[0] - x0;
-  const d = max[2] - z0;
-  const span = along === "x" ? w : d;
-  const across = along === "x" ? d : w;
-  const n = Math.max(1, Math.round(across / spacing));
-  const L = span - 1.2;
-  for (let i = 0; i < n; i++) {
-    const c = (i + 0.5) / n;
-    if (along === "x") {
-      const z = z0 + c * d;
-      kit.box("paintedMetal", x0 + w / 2, yy - 0.125, z, L + 0.1, 0.02, 0.22, { color: PALETTE.impDark, texel: 2 });
-      kit.box(mat, x0 + w / 2, yy - 0.14, z, L, 0.01, width, { uv: "keep" });
-    } else {
-      const x = x0 + c * w;
-      kit.box("paintedMetal", x, yy - 0.125, z0 + d / 2, 0.22, 0.02, L + 0.1, { color: PALETTE.impDark, texel: 2 });
-      kit.box(mat, x, yy - 0.14, z0 + d / 2, width, 0.01, L, { uv: "keep" });
-    }
-  }
-}
-
 /** Dark, glossy spill on the floor: a few overlapping flattened discs. */
 export function oilStain(kit, x, z, r = 0.6, seed = 5) {
   const rand = rng(seed);

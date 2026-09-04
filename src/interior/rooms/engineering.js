@@ -9,7 +9,7 @@ import { roomShell, impConsole, wallScreen, equipmentRack, stairs, platform, rai
 import { wallFrame, pointLight } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect, GRATE_TILE } from "../../textures.js";
-import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, AMBER_DEEP, COOL, BLUE, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, floorBorder, dimCeilingStrips, cabinet, barGauges, spotLight, statusBoardMat, pipeManifold, workbench, toolChest, hose, railScreen } from "./engProps.js";
+import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, AMBER_DEEP, COOL, BLUE, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, floorBorder, cabinet, barGauges, spotLight, statusBoardMat, pipeManifold, workbench, toolChest, hose, railScreen } from "./engProps.js";
 
 export function buildEngineering(kit, ctx) {
   const [min, max] = ctx.bounds; // [-32, 0, -30] .. [-2.9, 4, -8]
@@ -18,12 +18,10 @@ export function buildEngineering(kit, ctx) {
 
   // two ceiling strips at the quarter lines (nothing runs down the camera axis from the door) and
   // both dimmed: the 4 m ceiling puts them close enough to saturate at the standard emitter
-  const STRIP_SPACING = 11;
   roomShell(kit, ctx, {
-    ceiling: { lights: false, paints: ENG_CEIL_PAINTS, panelW: 1.6, rowH: 1.6, along: "x", spacing: STRIP_SPACING, styles: { panel: 0.7, greeble: 0.12, vent: 0.18 } },
+    ceiling: { lights: false, stripMat: "emitWhiteDim", paints: ENG_CEIL_PAINTS, panelW: 1.6, rowH: 1.6, along: "x", spacing: 11, styles: { panel: 0.7, greeble: 0.12, vent: 0.18 } },
     walls: { paints: ENG_PAINTS, styles: ENG_STYLES, theme: ENG_THEME, rows: [0, 0.5, 1.7, 2.9, H] },
   });
-  dimCeilingStrips(kit, ctx.bounds, { along: "x", spacing: STRIP_SPACING, mat: "emitWhiteDim" });
 
   // ---------------------------------------------------------------- master systems display (xmin): one continuous board
   const segX = wallSegment(ctx.bounds, "xmin");

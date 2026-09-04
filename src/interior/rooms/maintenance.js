@@ -8,7 +8,7 @@ import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
 import { impWall, impCeiling, wallScreen, equipmentRack, crate, pipeRun, railing, wallSegment } from "../imperial.js";
 import { pointLight, wallFrame } from "../builders.js";
-import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, hazardBorder, floorBorder, dimCeilingStrips, oilStain, workLight, warningLamp, craneRail, cabinet, shelfFrame, workbench, gratedTrench, emitMat, loader, palletJack, toolChest, weldScreen, hose, lockerRow, pipeManifold, jobBoardMat } from "./engProps.js";
+import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, hazardBorder, floorBorder, oilStain, workLight, warningLamp, craneRail, cabinet, shelfFrame, workbench, gratedTrench, emitMat, loader, palletJack, toolChest, weldScreen, hose, lockerRow, pipeManifold, jobBoardMat } from "./engProps.js";
 
 export function buildMaintenance(kit, ctx) {
   const [min, max] = ctx.bounds; // [2.9, 0, -64] .. [48, 9, -36]
@@ -39,8 +39,7 @@ export function buildMaintenance(kit, ctx) {
     [max[0] - g, min[2], max[0], max[2]],
   ]) kit.boxMM("paintedMetal", [x0, 0, z0], [x1, 0.015, z1], { color: PALETTE.impBlack, texel: 2 });
   // two long strips over the bays (not the aisle), dimmed so they do not blow out in the 45 m view
-  impCeiling(kit, ctx, { lights: false, paints: ENG_CEIL_PAINTS, panelW: 2.4, rowH: 2.4, along: "x", spacing: 12, styles: { panel: 0.74, greeble: 0.1, vent: 0.16 } });
-  dimCeilingStrips(kit, ctx.bounds, { along: "x", spacing: 12, mat: "emitWhiteDim" });
+  impCeiling(kit, ctx, { lights: false, stripMat: "emitWhiteDim", paints: ENG_CEIL_PAINTS, panelW: 2.4, rowH: 2.4, along: "x", spacing: 12, styles: { panel: 0.74, greeble: 0.1, vent: 0.16 } });
   for (const side of ["zmin", "zmax", "xmin", "xmax"]) impWall(kit, ctx, side, { paints: ENG_PAINTS, styles: ENG_STYLES, theme: ENG_THEME, rows: [0, 0.5, 1.7, 3.2, 5.2, 7.2, H], panelW: 2.0, seed: ctx.seed * 3 + side.length });
 
   // ---------------------------------------------------------------- lift A: engine pod on a two-post lift
