@@ -10,7 +10,7 @@ import { TOWER, HANGAR, HULL, ENGINES } from "./dims.js";
 
 // lod 0 (fine detail: greebles, hatches, pipes, lights) / lod 1 (plates, grooves) per hull chunk;
 // `fine` toggles the superstructure / engine / detail fine groups by distance to their centre.
-export const LOD_DISTANCES = { greebles: 1500, plates: 4200, fine: 2000 };
+export const LOD_DISTANCES = { greebles: 1700, plates: 4200, fine: 2000 };
 
 export function buildExterior(scene, materials) {
   const group = new THREE.Group();

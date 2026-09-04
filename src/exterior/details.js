@@ -8,8 +8,11 @@ import * as THREE from "three";
 import { rng } from "../kit.js";
 import { HULL, halfWidth, dorsalH, ventralH, skinPoint, CHUNKS, chunkIndex, CITY, TOWER } from "./dims.js";
 import { instancedMesh, frameItem, boxItem, mergeParts, unitPipeGeometry, grey } from "./batch.js";
+import { makeSurface } from "./hull.js";
 
 const _p = new THREE.Vector3();
+const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _m = new THREE.Matrix4();
@@ -97,46 +100,54 @@ export function buildDetails(materials, hull, sup) {
 
   const per = Array.from({ length: CHUNKS }, () => ({ boxes: [], lights: [], pipes: [], reds: [] }));
   const city = { boxes: [], lights: [], pipes: [], reds: [] };
-  const global = { radiators: [], sensors: [], antennas: [], wedges: [], reds: [] };
+  const global = { radiators: [], sensors: [], antennas: [], wedges: [], reds: [], dim: [] };
   let greebles = 0;
 
-  // --- city tier tops: dense, organised machinery on the tier plating (blocks, towers with window
-  // strips, hatches, ports, conduits) — the "city" of the superstructure
+  // --- city tier tops: dense, organised machinery on the tier plating (blocks, towers and long halls
+  // with window strips, hatches, ports, conduits) — the "city" of the superstructure
   for (const a of sup.anchors) {
     const r = rand();
-    if (r < 0.62 && a.w > 4 && a.l > 4) {
-      const tower = rand() < 0.18;
-      const gw = 2 + rand() * Math.min(6, a.w * 0.6);
-      const gd = 2 + rand() * Math.min(7, a.l * 0.6);
-      const gh = tower ? 6 + rand() * 12 : 1 + rand() * 3.2;
+    if (r < 0.68 && a.w > 4 && a.l > 4) {
+      const kind = rand();
+      const tower = kind < 0.26;
+      const hall = !tower && kind < 0.5 && a.l > 9;
+      const gw = hall ? 3 + rand() * Math.min(4, a.w * 0.5) : 2 + rand() * Math.min(6, a.w * 0.6);
+      const gd = hall ? Math.min(a.l - 2, 9 + rand() * 10) : 2 + rand() * Math.min(7, a.l * 0.6);
+      const gh = tower ? 7 + rand() * 13 : hall ? 3 + rand() * 3 : 1.5 + rand() * 3.5;
       const ox = (rand() - 0.5) * Math.max(0, a.w - gw - 1);
       const oz = (rand() - 0.5) * Math.max(0, a.l - gd - 1);
       const k = rand() < 0.15 ? 0.3 + rand() * 0.1 : 0.58 + rand() * 0.3;
       city.boxes.push(onPlate(a, ox, gh / 2 - 0.15, oz, gw, gh, gd, grey(k, 1.02)));
       greebles++;
-      if (tower) {
-        for (let y = 2.5; y < gh - 1.5; y += 3.2) {
+      if (tower || hall) {
+        for (let y = 2.2; y < gh - 1.2; y += 3.2) {
           if (rand() < 0.3) continue;
-          city.lights.push(onPlate(a, ox, y, oz + gd / 2 + 0.06, gw * 0.6, 0.35, 0.16, null));
-          if (rand() < 0.5) city.lights.push(onPlate(a, ox + gw / 2 + 0.06, y, oz, 0.16, 0.35, gd * 0.6, null));
+          if (tower) city.lights.push(onPlate(a, ox, y, oz + gd / 2 + 0.06, gw * 0.6, 0.35, 0.16, null));
+          if (hall || rand() < 0.5) city.lights.push(onPlate(a, ox + gw / 2 + 0.06, y, oz, 0.16, 0.35, gd * 0.7, null));
         }
-        if (rand() < 0.5) city.boxes.push(onPlate(a, ox, gh + 2.5, oz, 0.4, 5, 0.4, grey(0.4)));
-      } else if (rand() < 0.45) {
+        if (tower && rand() < 0.5) city.boxes.push(onPlate(a, ox, gh + 2.5, oz, 0.4, 5, 0.4, grey(0.4)));
+        if (hall) {
+          // roof detail: a ridge and a couple of vents
+          city.boxes.push(onPlate(a, ox, gh + 0.3, oz, gw * 0.3, 0.7, gd - 1.5, grey(k * 0.85)));
+          city.boxes.push(onPlate(a, ox + gw * 0.3, gh + 0.2, oz - gd * 0.3, gw * 0.3, 0.5, 1.6, grey(0.2, 1.1)));
+          greebles += 2;
+        }
+      } else if (rand() < 0.5) {
         city.boxes.push(onPlate(a, ox + (rand() - 0.5) * gw * 0.5, gh + 0.4, oz + (rand() - 0.5) * gd * 0.5, gw * 0.4, 0.9, gd * 0.4, grey(k * 0.8)));
         greebles++;
       }
-    } else if (r < 0.7 && a.w > 6 && a.l > 6) {
+    } else if (r < 0.75 && a.w > 6 && a.l > 6) {
       const hw = 3.2 + rand() * 1.2;
       const hl = 2.4 + rand() * 0.8;
       const ox = (rand() - 0.5) * (a.w - hw - 1.5);
       const oz = (rand() - 0.5) * (a.l - hl - 1.5);
       city.boxes.push(onPlate(a, ox, 0.14, oz, hw, 0.45, hl, grey(a.tone * (rand() < 0.5 ? 0.9 : 1.05))));
-      city.lights.push(onPlate(a, ox, 0.02, oz, hw + 0.7, 0.12, hl + 0.7, null));
+      global.dim.push(onPlate(a, ox, 0.02, oz, hw + 0.7, 0.12, hl + 0.7, null));
       greebles += 2;
-    } else if (r < 0.77 && a.w > 5 && a.l > 5) {
+    } else if (r < 0.81 && a.w > 5 && a.l > 5) {
       city.boxes.push(onPlate(a, (rand() - 0.5) * (a.w - 3.5), 0.08, (rand() - 0.5) * (a.l - 3.5), 1.6 + rand(), 0.2, 1.6 + rand(), grey(0.16, 1.1)));
       greebles++;
-    } else if (r < 0.83 && a.w > 6 && a.l > 9) {
+    } else if (r < 0.88 && a.w > 6 && a.l > 9) {
       const rr = 0.25 + rand() * 0.3;
       const ox = (rand() - 0.5) * (a.w - 2.5);
       _p.copy(a.p).addScaledVector(a.X, ox).addScaledVector(a.Y, rr + 0.1);
@@ -178,7 +189,7 @@ export function buildDetails(materials, hull, sup) {
         const ox = (rand() - 0.5) * (a.w - hw - 2);
         const oz = (rand() - 0.5) * (a.l - hl - 2);
         out.boxes.push(onPlate(a, ox, 0.16, oz, hw, 0.5, hl, grey(tone * (rand() < 0.5 ? 0.9 : 1.05), 1.0)));
-        out.lights.push(onPlate(a, ox, 0.02, oz, hw + 0.8, 0.12, hl + 0.8, null));
+        global.dim.push(onPlate(a, ox, 0.02, oz, hw + 0.8, 0.12, hl + 0.8, null));
         greebles += 2;
       }
       // recessed service port (dark, flush)
@@ -247,6 +258,42 @@ export function buildDetails(materials, hull, sup) {
         const across = new THREE.Vector3().crossVectors(up, dir).normalize();
         const c = new THREE.Vector3((xa + xb) / 2, (ya + yb) / 2, (z0 + z1) / 2).addScaledVector(up, 1.9);
         per[ci].boxes.push(frameItem(c, across, up, dir, 1.1, 0.7, len, grey(0.78, 1.02)));
+      }
+    }
+  }
+
+  // --- bevel landmarks: large louvred intake / vent housings on the bevels with a lit slot on the
+  // trench side (the eye needs a few big repeated features to read the 1,600 m at medium range)
+  for (const side of [1, -1]) {
+    for (const s of [-1, 1]) {
+      const surf = makeSurface(side, s < 0 ? "bevelL" : "bevelR");
+      const zs = side > 0 ? [-470, -250, -40, 170, 380, 590] : [-380, -120, 140, 400, 620];
+      for (const z0 of zs) {
+        const z = z0 + (rand() - 0.5) * 30;
+        const u = 0.3 + rand() * 0.3;
+        surf.at(u + 0.01, z, _b);
+        surf.at(u - 0.01, z, _a);
+        const X = _b.clone().sub(_a).normalize();
+        surf.at(u, z + 1, _b);
+        surf.at(u, z - 1, _a);
+        const Z = _b.clone().sub(_a).normalize();
+        const Y = new THREE.Vector3().crossVectors(Z, X).normalize();
+        if (Y.dot(surf.hint) < 0) Y.negate();
+        const c = surf.at(u, z, new THREE.Vector3()).addScaledVector(Y, 1.5);
+        const f = { p: c, X, Y, Z };
+        const out = per[chunkIndex(z)];
+        const W = 18 + rand() * 14;
+        const L = 8 + rand() * 6;
+        const frame = grey(0.6, 1.02);
+        out.boxes.push(onPlate(f, 0, 1.2, 0, W, 0.6, L, grey(0.13, 1.08)));
+        for (const t of [-1, 1]) {
+          out.boxes.push(onPlate(f, 0, 1.2, t * (L / 2 + 0.6), W + 2.4, 1.2, 1.2, frame));
+          out.boxes.push(onPlate(f, t * (W / 2 + 0.6), 1.2, 0, 1.2, 1.2, L, frame));
+        }
+        const nl = Math.floor(L / 2);
+        for (let k = 0; k < nl; k++) out.boxes.push(onPlate(f, 0, 1.55, -L / 2 + (k + 0.5) * (L / nl), W - 1.5, 0.3, 0.5, grey(0.5, 1.02)));
+        out.lights.push(onPlate(f, W / 2 + 1.9, 1.0, 0, 0.5, 0.3, L * 0.8, null));
+        greebles += 6 + nl;
       }
     }
   }
@@ -424,6 +471,7 @@ export function buildDetails(materials, hull, sup) {
   lod0.add(instancedMesh(sensorArrayGeometry(), materials.hullDark, global.sensors, { name: "sensorArrays", castShadow: true }));
   lod0.add(instancedMesh(antennaClusterGeometry(), materials.hullDark, global.antennas, { name: "antennaClusters" }));
   lod0.add(instancedMesh(wedgeGeometry(), materials.hull, global.wedges, { name: "buttresses", castShadow: true }));
+  if (global.dim.length) lod0.add(instancedMesh(boxGeo, materials.ext_dimLight, global.dim, { name: "hatchLamps" }));
   group.add(instancedMesh(boxGeo, materials.exteriorRed, global.reds, { name: "navLights" }));
   greebles += global.radiators.length + global.sensors.length + global.antennas.length + global.wedges.length;
 

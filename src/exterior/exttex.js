@@ -137,6 +137,8 @@ export function makeExtHullWorn(size = 512, seed = 211) {
 /** Register the exterior-only materials once on the shared library. */
 export function ensureExtMaterials(materials) {
   if (materials.ext_hullWorn) return materials;
+  // dim warm emitter for hatch rims / access-port lamps (the shared exteriorLight is too bright for ~4 m hatches)
+  materials.ext_dimLight = new THREE.MeshStandardMaterial({ color: 0x0c0a08, emissive: new THREE.Color("#ffd39a"), emissiveIntensity: 1.1, roughness: 0.7, metalness: 0, fog: false });
   const worn = makeExtHullWorn(512, 211);
   materials.ext_hullWorn = new THREE.MeshStandardMaterial({
     map: worn.map,

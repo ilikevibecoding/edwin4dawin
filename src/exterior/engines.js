@@ -41,8 +41,8 @@ export function buildEngines(materials) {
     const zMouth = z0 + len;
     // heat gradient: hull grey at the front of the shroud → dark, slightly bluish metal at the rim
     const heat = (x, y, z, c) => {
-      const k = 0.62 - 0.42 * smoothstep(z0 + len * 0.35, zMouth, z);
-      const blue = 1 + 0.18 * smoothstep(z0 + len * 0.5, zMouth, z);
+      const k = 0.66 - 0.36 * smoothstep(z0 + len * 0.4, zMouth, z);
+      const blue = 1 + 0.16 * smoothstep(z0 + len * 0.55, zMouth, z);
       c.setRGB(k * (2 - blue) * 0.98, k * 0.96, k * blue);
     };
     // shroud (open cylinder), rim ring (heat-blackened), collars, bracing ribs
@@ -109,12 +109,15 @@ export function buildEngines(materials) {
     const outer = new THREE.CircleGeometry(e.r * 0.88, main ? 40 : 24);
     outer.translate(e.x, e.y, z0 + len * 0.74);
     batch.add("engineGlowOuter", outer, 0xffffff);
-    // exhaust halo sprite just outside the nozzle (kept modest so the far view does not blow out)
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x7fbcff, transparent: true, opacity: main ? 0.62 : 0.5, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-    sp.position.set(e.x, e.y, zMouth + e.r * 0.35);
-    sp.scale.setScalar(e.r * 2.5);
-    group.add(sp);
-    glows.push({ sprite: sp, base: e.r * 2.5 });
+    // exhaust halo sprite just outside the nozzle (kept modest so the far view does not blow out;
+    // the verniers are too small to need one — saves a draw call each)
+    if (e.kind < 2) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x7fbcff, transparent: true, opacity: main ? 0.62 : 0.5, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+      sp.position.set(e.x, e.y, zMouth + e.r * 0.35);
+      sp.scale.setScalar(e.r * 2.5);
+      group.add(sp);
+      glows.push({ sprite: sp, base: e.r * 2.5 });
+    }
     // soot streaks radiating from the nozzle over the stern plating
     const nStreak = main ? 9 : 4;
     for (let k = 0; k < nStreak; k++) {
@@ -161,7 +164,31 @@ export function buildEngines(materials) {
   ]) {
     batch.cyl("hullDark", 0, y, sternZ + 3.5, 1.1, 1.1, len, "x", PALETTE.hullGrey.clone().multiplyScalar(0.62), 10);
   }
-  greebles += 30;
+  // thrust-frame blocks below the inner secondaries, pods along the dorsal / ventral edges, spines
+  // between the engine groups and a scatter of small panel boxes where the face is free
+  const darkGrey = PALETTE.hullGrey.clone().multiplyScalar(0.55);
+  for (const s of [-1, 1]) {
+    batch.box("hullDark", s * 89, -26, sternZ + 4, 44, 20, 8, darkGrey, 0.05);
+    batch.box("cityDense", s * 89, -26, sternZ + 8.5, 30, 6, 1.2, PALETTE.hullDark, 0.025);
+    batch.box("hullDark", s * 228, 2, sternZ + 4, 6, 76, 6, PALETTE.hullDark, 0.05);
+    for (let k = 0; k < 4; k++) {
+      batch.box("hullDark", s * (238 + k * 44), topY - 11, sternZ + 4, 10 + (k % 2) * 4, 7, 6, k % 2 ? darkGrey : PALETTE.hullDark, 0.05);
+      batch.box("hullDark", s * (60 + k * 50), botY + 12.5, sternZ + 4, 12, 6, 6, k % 2 ? PALETTE.hullDark : darkGrey, 0.05);
+    }
+    // feed lines from the pipe bundle across to the side main
+    for (const yy of [-8, 4, 16]) batch.cyl("hullDark", s * 146, yy, sternZ + 5, 0.8, 0.8, 26, "x", PALETTE.hullGrey.clone().multiplyScalar(0.66), 8);
+  }
+  const occupied = (x, y) => all.some((e) => Math.hypot(x - e.x, y - e.y) < e.r * 1.3 + 4);
+  for (let k = 0; k < 90; k++) {
+    const x = (rand() - 0.5) * 2 * (w - 30);
+    const y = botY + 8 + rand() * (topY - botY - 16);
+    if (occupied(x, y)) continue;
+    const bw = 3 + rand() * 5;
+    const bh = 2 + rand() * 4;
+    batch.box("hullDark", x, y, sternZ + 1.5, bw, bh, 3, rand() < 0.3 ? PALETTE.hullBlack : darkGrey, 0.05);
+    greebles++;
+  }
+  greebles += 50;
   batch.build(group, { name: "engines" });
 
   // blue point light behind the stern so the hull's rear catches the exhaust glow

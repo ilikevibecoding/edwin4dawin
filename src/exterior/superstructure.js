@@ -334,15 +334,11 @@ export function buildSuperstructure(materials) {
   batch.box("hull", 0, wn.y1 + 1.3, wn.z - 1.3, wn.x * 2 + 8, 1.4, 2.8, PALETTE.hullGrey);
   batch.box("hull", 0, wn.y0 - 1.2, wn.z - 1.3, wn.x * 2 + 8, 1.2, 2.8, PALETTE.hullGrey);
   batch.box("hullDark", 0, wn.y1 + 3.2, wn.z - 2.2, wn.x * 2 + 12, 1.6, 4.4, PALETTE.hullDark); // brow
-  {
-    const items = [];
-    for (let x = -wn.x + 3; x < wn.x; x += 3) {
-      const thick = Math.abs(x) < 0.1 ? 1.0 : 0.5;
-      items.push(boxItem(x, (wn.y0 + wn.y1) / 2, wn.z - 1.1, thick, wn.y1 - wn.y0, 0.6, [0.35, 0.36, 0.38]));
-    }
-    items.push(boxItem(0, (wn.y0 + wn.y1) / 2, wn.z - 1.1, wn.x * 2, 0.3, 0.6, [0.35, 0.36, 0.38]));
-    lod0.add(instancedMesh(new THREE.BoxGeometry(1, 1, 1), materials.hullDark, items, { name: "bridgeMullions" }));
+  for (let x = -wn.x + 3; x < wn.x; x += 3) {
+    const thick = Math.abs(x) < 0.1 ? 1.0 : 0.5;
+    dark.push(boxItem(x, (wn.y0 + wn.y1) / 2, wn.z - 1.1, thick, wn.y1 - wn.y0, 0.6, [0.35, 0.36, 0.38]));
   }
+  dark.push(boxItem(0, (wn.y0 + wn.y1) / 2, wn.z - 1.1, wn.x * 2, 0.3, 0.6, [0.35, 0.36, 0.38]));
   // observation-deck window rows along the bridge module's front and sides
   windowRow(windows, -br.x + 16, br.y0 + 6, br.z0 - 0.3, br.x - 16, br.z0 - 0.3, 34, rand);
   windowRow(windows, -br.x - 0.3, bcy, br.z0 + 6, -br.x - 0.3, br.z1 - 6, 10, rand, [0.4, 0.8, 1.2]);
@@ -409,15 +405,15 @@ export function buildSuperstructure(materials) {
 
   batch.build(group, { name: "superstructure" });
 
-  // instanced detail groups
+  // instanced detail groups (tier-top grooves share the dark-box mesh with the channels)
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
   group.add(instancedMesh(boxGeo, materials.exteriorLight, windows, { name: "windows" }));
+  dark.push(...plateBucket.grooves);
   lod0.add(instancedMesh(boxGeo, materials.hullDark, dark, { name: "channels" }));
   lod0.add(instancedMesh(boxGeo, materials.hull2, light, { name: "facadeBlocks", castShadow: true }));
   lod0.add(instancedMesh(wedgeGeometry(), materials.hull, wedges, { name: "bridgeButtresses", castShadow: true }));
   // tier-top plating (LOD like the hull plates: visible far out)
   group.add(instancedMesh(boxGeo, materials.hull2, plateBucket.plates, { name: "tierPlates", castShadow: true }));
-  if (plateBucket.grooves.length) lod0.add(instancedMesh(boxGeo, materials.hullDark, plateBucket.grooves, { name: "tierGrooves" }));
 
   // --- turbolaser batteries: 6 heavy turrets per side (4 on the plateau, 2 raised on the tier-0 top)
   const turretGeo = turretGeometry();
