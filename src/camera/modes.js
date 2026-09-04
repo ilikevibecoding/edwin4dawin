@@ -3,7 +3,7 @@
 // PerspectiveCamera is shared; the near plane is switched per mode so both the 1.6 km hull and a 3 cm
 // console bezel keep depth precision.
 import * as THREE from "three";
-import { TOWER, HANGAR, ROOMS, roomFloorY } from "../config/shipSpec.js";
+import { TOWER, HANGAR, ROOMS, DECKS, roomFloorY } from "../config/shipSpec.js";
 
 const NEAR = { interior: 0.05, exterior: 1.5, transition: 0.2 };
 const FOV = { interior: 72, exterior: 50, transition: 60 };
@@ -140,6 +140,9 @@ export class ModeManager {
             const pos = this.orbit.positionFor(finalTarget, 2600, 0.75, 0.3);
             this.camera.position.copy(pos);
             this.camera.lookAt(finalTarget);
+            this.camera.near = NEAR.exterior;
+            this.camera.fov = FOV.exterior;
+            this.camera.updateProjectionMatrix();
           } else this.hud.setFade(1 - (tr.t - 0.45) / 0.55);
         } else {
           tr.curve.getPoint(k, this.camera.position);
@@ -150,7 +153,9 @@ export class ModeManager {
           const outside = (tr.wp.crossZ !== undefined && p.z < tr.wp.crossZ) || (tr.wp.crossY !== undefined && p.y < tr.wp.crossY);
           if (outside && !tr.crossed) {
             tr.crossed = true;
-            this.interior.root.visible = false;
+            // leaving through the well: keep the lit hangar visible up the shaft (exterior peek)
+            if (tr.wp.crossY !== undefined && this.interior.peek) this.interior.peek("hangar", ["hangar"]);
+            else this.interior.root.visible = false;
             this.camera.near = NEAR.exterior;
             this.camera.updateProjectionMatrix();
           }
@@ -173,9 +178,10 @@ export class ModeManager {
     if (this.mode !== "exterior" || this.transition) return;
     const room = ROOMS.find((r) => r.id === target) || ROOMS[0];
     const y0 = roomFloorY(room);
-    const pose = target === "bridge" ? BOARD_POSE : { x: (room.x0 + room.x1) / 2, z: (room.z0 + room.z1) / 2, y: y0, yaw: 0, pitch: -3, zone: null };
+    const pose = target === "bridge" ? BOARD_POSE : { x: (room.x0 + room.x1) / 2, z: (room.z0 + room.z1) / 2, y: y0, yaw: 0, pitch: -3, zone: DECKS[room.deck].zone };
     // resident zone + player pose ready before the camera arrives
-    this.interior.setActiveZone("tower");
+    if (this.interior.unpeek) this.interior.unpeek(false);
+    this.interior.setActiveZone(pose.zone || "tower");
     this.player.colliders = this.interior.colliders();
     this.player.floors = this.interior.floors();
     this.player.setPose(pose.x, pose.z, pose.yaw, pose.pitch, pose.y);

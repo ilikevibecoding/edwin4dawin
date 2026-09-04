@@ -353,8 +353,9 @@ export function panelGrid(frame, length, height, opts = {}) {
     }
   }
   if (collide) {
-    // one collider per u-span not covered by a door opening
-    const doors = openings.filter((o) => o.type === "door");
+    // one collider per u-span not covered by a floor-reaching opening (doors, junctions, lift portals);
+    // portholes / windows / hatches above the floor keep the wall solid
+    const doors = openings.filter((o) => o.type !== "porthole" && o.type !== "window" && (o.v0 === undefined || o.v0 <= 0.01) && !o.solid);
     let spans = [[0, length]];
     for (const d of doors) {
       const next = [];

@@ -11,6 +11,9 @@ const MOUSE_SENS = 0.0022;
 const PITCH_LIMIT = Math.PI / 2 - 0.05;
 const STEP_UP = 0.45; // tallest ledge / stair riser the player walks up
 const FALL_SPEED = 6; // m/s when stepping down onto a lower floor
+const MAX_MOVE = RADIUS * 0.5; // sub-step so one hitch frame can never carry the capsule through a wall
+const _wish = new THREE.Vector3();
+const _step = new THREE.Vector3();
 
 export class Player {
   /**
@@ -100,7 +103,7 @@ export class Player {
       strafe += this.touchMove.x;
       run = run || this.touchRun;
     }
-    const wish = new THREE.Vector3();
+    const wish = _wish.set(0, 0, 0);
     if ((this.locked || this.touchMode) && (fwd || strafe)) {
       // camera forward / right on the XZ plane for the current yaw
       const fx = -Math.sin(this.yaw);
@@ -119,12 +122,17 @@ export class Player {
     // ride a moving platform before integrating our own motion
     if (this.groundFloor && this.groundFloor.carry) this.position.y = this.groundFloor.y;
 
-    // integrate with collision, axis by axis
-    const step = this.velocity.clone().multiplyScalar(dt);
-    this.position.x += step.x;
-    this.resolveCollisions("x");
-    this.position.z += step.z;
-    this.resolveCollisions("z");
+    // integrate with collision, axis by axis, in sub-steps short enough that a long frame cannot
+    // push the capsule centre past a thin wall's mid-plane
+    const step = _step.copy(this.velocity).multiplyScalar(dt);
+    const n = Math.max(1, Math.ceil(step.length() / MAX_MOVE));
+    step.divideScalar(n);
+    for (let i = 0; i < n; i++) {
+      this.position.x += step.x;
+      this.resolveCollisions("x");
+      this.position.z += step.z;
+      this.resolveCollisions("z");
+    }
     this.resolveGround(dt);
 
     // head bob
