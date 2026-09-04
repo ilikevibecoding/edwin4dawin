@@ -10,7 +10,7 @@ import { wallFrame } from "../../../core/frame.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { console as impConsole, chair, pipeRun, pointLightDesc, spotLightDesc, walkable, lockers, wallScreen } from "../../impKit.js";
-import { bayWall, bayCeiling, deckMark, floorStencil, hoseReel, bowser, toolCart, wallLadder, fireStation, fuelTank, partsRack, serviceGantry, crateStack, statusBoard, tieCradle, wingStand, bridgeCrane, TIE_CRADLE_HANG } from "../../../hangar/hangarKit.js";
+import { bayWall, bayCeiling, deckMark, taxiLights, floorStencil, hoseReel, bowser, toolCart, wallLadder, fireStation, fuelTank, partsRack, serviceGantry, crateStack, statusBoard, tieCradle, wingStand, bridgeCrane, deckTractor, cargoSled, generator, rollingLadder, TIE_CRADLE_HANG } from "../../../hangar/hangarKit.js";
 import { addTIE, addTIEWing, TIE } from "../../../hangar/tie.js";
 
 const RIB = "impPaintedMetal";
@@ -53,8 +53,10 @@ export function buildFighterMaint(kit, ctx) {
   // deck
   kit.boxMM("impDeck", [x0, y - 0.15, z0], [x1, y, z1], { color: IMP.wallDark, texel: 0.35 });
   walkable(ctx, x0, z0, x1, z1, y, id);
-  for (let x = x0 + 10; x < x1; x += 10) kit.boxMM(RIB, [x - 0.05, y, z0], [x + 0.05, y + 0.006, z1], { color: IMP.trim });
-  for (let z = z0 + 10; z < z1; z += 10) kit.boxMM(RIB, [x0, y, z - 0.05], [x1, y + 0.006, z + 0.05], { color: IMP.trim });
+  // plate seams as dark grooves in the deck material (a glossier strip reads as a white hairline at
+  // grazing angles)
+  for (let x = x0 + 10; x < x1; x += 10) kit.boxMM("impDeck", [x - 0.05, y, z0], [x + 0.05, y + 0.006, z1], { color: IMP.trim, texel: 0.35 });
+  for (let z = z0 + 10; z < z1; z += 10) kit.boxMM("impDeck", [x0, y, z - 0.05], [x1, y + 0.006, z + 0.05], { color: IMP.trim, texel: 0.35 });
 
   // ---- bays: hazard borders, landing crosses, numerals ------------------------------------------
   const bays = [
@@ -73,9 +75,22 @@ export function buildFighterMaint(kit, ctx) {
     deckMark(kit, b.cx - hw + 2.6, b.cz - hd + 2.6, y, 3.2, 3.2, 3);
     floorStencil(kit, b.cx + hw - 2.4, y, b.cz + hd - 2.4, 2.4, 8);
   }
-  // lane from the door to both bays
+  // lane from the door to both bays, with marker lights
   for (const b of bays) deckMark(kit, 66, b.cz, y, 8, 3.6, 0, Math.PI / 2);
   deckMark(kit, 66, 191, y, 3.6, 44, 0);
+  taxiLights(kit, [66, 170], [66, 212], y, { pitch: 6, halfW: 2.4 });
+
+  // ---- deck between the door wall and the bays: tractor + sled by the north wall, power units, stores
+  deckTractor(kit, [71, y, 158.5], Math.PI / 2 + 0.3);
+  cargoSled(kit, [76.2, y, 156.9], Math.PI / 2 + 0.3, { seed: 31, n: 2 });
+  rollingLadder(kit, [90, y, 162], -2.2, { h: 2.4 });
+  crateStack(kit, [92, y, 156], 0.2, { seed: 71, n: 2 });
+  crateStack(kit, [95.5, y, 156.5], -0.1, { seed: 74, n: 1 });
+  // (kept off the door view's centre line so the room still reads across to the pump skid)
+  generator(kit, [73, y, 182.5], 0.5);
+  toolCart(kit, [76, y, 185.5], 1.0, { seed: 18 });
+  deckTractor(kit, [80, y, 197], 0.15);
+  crateStack(kit, [92, y, 186], 0.1, { seed: 77, n: 2, size: [2, 1.2, 1.6] });
 
   // ---- bay 1: complete fighter on a cradle, refuelling + diagnostics ----------------------------
   {
@@ -117,6 +132,9 @@ export function buildFighterMaint(kit, ctx) {
     serviceGantry(kit, [b.cx + 1.0, y, b.cz + 7.4], 0, { h: 3.6, len: 3.6 });
     toolCart(kit, [b.cx - 4.2, y, b.cz + 5.2], 2.0, { seed: 7 });
     toolCart(kit, [b.cx + 6.8, y, b.cz - 3.6], -0.4, { seed: 8 });
+    // ground power unit by the bay entrance, cable across the deck to the ball
+    const gpu = generator(kit, [86.5, y, 199.5], -0.5);
+    pipeRun(kit, [gpu, [85.2, y + 0.12, 203.2], [b.cx + 0.6, y + 0.12, b.cz - 1.8], [b.cx + 0.4, y + 3.0, b.cz - 1.5]], 0.05, { mat: "impRubber", color: IMP.rubber, clamps: false });
     // the pulled hub bolts and a spare spoke laid out on a tarp
     kit.box("impRubber", b.cx - 5.6, y + 0.01, b.cz + 1.6, 2.6, 0.02, 1.8, { color: IMP.wallDark });
     for (let i = 0; i < 5; i++) kit.cyl("impMetal", b.cx - 6.5 + i * 0.4, y + 0.06, b.cz + 1.2, 0.07, 0.1, "y", { color: IMP.steel, segments: 8 });

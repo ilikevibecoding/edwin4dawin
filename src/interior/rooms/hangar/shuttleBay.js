@@ -1,16 +1,17 @@
 // Shuttle Docking Bay — box [-50,290,50,380], floor y = -20, 22 m tall, south of the main hangar through
 // the wide blast door. A Lambda-class-style shuttle sits parked (wings folded, ramp down) on the raised
 // landing pad that caps the closed SHUTTLE_WELL: the well's two door halves meet in a lit seam under the
-// shuttle. Cargo loaders and containers on the east apron, the fuel point on the west, crew-shelter
-// alcoves along both long walls, wall consoles by the door and a service gallery across the south wall.
+// shuttle. Cargo loaders, tractors, sleds and containers on the aprons, the fuel point on the west,
+// crew-shelter alcoves and parts stores along both long walls, wall consoles by the door and service
+// galleries round the south, west and east walls at y + 11.
 import * as THREE from "three";
 import { STD, SHUTTLE_WELL } from "../../../config/layout.js";
 import { wallOpenings } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
-import { console as impConsole, pipeRun, pointLightDesc, spotLightDesc, walkable, lockers, wallScreen, bench } from "../../impKit.js";
-import { bayWall, bayCeiling, gallery, pillar, openStairs, deckMark, laneMarks, floorStencil, hoseReel, bowser, toolCart, wallLadder, fireStation, fuelTank, crateStack, statusBoard, floodMast } from "../../../hangar/hangarKit.js";
+import { console as impConsole, pipeRun, pointLightDesc, spotLightDesc, walkable, lockers, wallScreen, bench, railing } from "../../impKit.js";
+import { bayWall, bayCeiling, gallery, pillar, openStairs, deckMark, laneMarks, hatchBand, padLights, taxiLights, floorStencil, hoseReel, bowser, toolCart, wallLadder, fireStation, fuelTank, crateStack, partsRack, statusBoard, floodMast, serviceGantry, deckTractor, cargoSled, generator, rollingLadder } from "../../../hangar/hangarKit.js";
 import { addShuttle } from "../../../hangar/shuttle.js";
 
 const RIB = "impPaintedMetal";
@@ -116,8 +117,10 @@ export function buildShuttleBay(kit, ctx) {
   // ---- deck + the raised pad over the closed well -------------------------------------------------
   kit.boxMM("impDeck", [x0, y - 0.15, z0], [x1, y, z1], { color: IMP.wallDark, texel: 0.35 });
   walkable(ctx, x0, z0, x1, z1, y, id);
-  for (let x = x0 + 10; x < x1; x += 10) kit.boxMM(RIB, [x - 0.05, y, z0], [x + 0.05, y + 0.006, z1], { color: IMP.trim });
-  for (let z = z0 + 10; z < z1; z += 10) kit.boxMM(RIB, [x0, y, z - 0.05], [x1, y + 0.006, z + 0.05], { color: IMP.trim });
+  // plate seams as dark grooves in the deck material: a glossier painted strip catches the pad spots
+  // and reads as a white hairline when it runs straight away from the camera
+  for (let x = x0 + 10; x < x1; x += 10) kit.boxMM("impDeck", [x - 0.05, y, z0], [x + 0.05, y + 0.006, z1], { color: IMP.trim, texel: 0.35 });
+  for (let z = z0 + 10; z < z1; z += 10) kit.boxMM("impDeck", [x0, y, z - 0.05], [x1, y + 0.006, z + 0.05], { color: IMP.trim, texel: 0.35 });
   // pad: door plates flush with the hull's shaft-wall tops (y + 0.5), one step up from the deck
   const lip = 1.2;
   const pY = y + 0.5;
@@ -145,15 +148,16 @@ export function buildShuttleBay(kit, ctx) {
   kit.boxMM("hazard", [px0 - 0.02, y, pz1 - 0.02], [px1 + 0.02, y + 0.5, pz1 + 0.02], { uv: "world", texel: 0.5 });
   kit.boxMM("hazard", [px0 - 0.02, y, pz0], [px0 + 0.02, y + 0.5, pz1], { uv: "world", texel: 0.5 });
   kit.boxMM("hazard", [px1 - 0.02, y, pz0], [px1 + 0.02, y + 0.5, pz1], { uv: "world", texel: 0.5 });
-  kit.boxMM("lightBand", [px0 + 0.3, pY + 0.001, pz0 + 0.3], [px1 - 0.3, pY + 0.02, pz0 + 0.5], { uv: "keep" });
-  kit.boxMM("lightBand", [px0 + 0.3, pY + 0.001, pz1 - 0.5], [px1 - 0.3, pY + 0.02, pz1 - 0.3], { uv: "keep" });
-  kit.boxMM("lightBand", [px0 + 0.3, pY + 0.001, pz0 + 0.5], [px0 + 0.5, pY + 0.02, pz1 - 0.5], { uv: "keep" });
-  kit.boxMM("lightBand", [px1 - 0.5, pY + 0.001, pz0 + 0.5], [px1 - 0.3, pY + 0.02, pz1 - 0.5], { uv: "keep" });
+  // perimeter lights as discrete 9 cm blocks (a continuous 2 cm strip collapsed to a white hairline
+  // from the apron)
+  padLights(kit, [px0, pz0, px1, pz1], pY, { pitch: 4, inset: 0.5 });
   walkable(ctx, px0, pz0, px1, pz1, pY, "pad");
   // landing markings on the pad and the approach lanes on the deck
   deckMark(kit, cx, cz, pY, 20, 20, 1);
   for (const sz of [-1, 1]) deckMark(kit, cx, cz + sz * 19, pY, 6, 6, 3);
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) deckMark(kit, cx + sx * 15, cz + sz * 19, pY, 6, 6, 2);
+  // keep-clear squares at the pad corners: a bold painted frame with two wide diagonals (fine stripes
+  // aliased into red noise from across the bay)
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) hatchBand(kit, [cx + sx * 15 - 3, cz + sz * 19 - 3, cx + sx * 15 + 3, cz + sz * 19 + 3], pY, { pitch: 2.2, stripe: 0.6, border: 0.35, margin: 0.5, frame: true });
   laneMarks(kit, [0, z0 + 10.5], [0, pz0 - 0.6], y, 5);
   laneMarks(kit, [x1 - 4, cz], [px1 + 0.6, cz], y, 4);
   laneMarks(kit, [x0 + 4, cz], [px0 - 0.6, cz], y, 4);
@@ -166,15 +170,26 @@ export function buildShuttleBay(kit, ctx) {
   // ground power / fuel connections: bowser on the west apron with hoses up onto the pad
   bowser(kit, [px0 - 5, y, cz + 9], Math.PI / 2 + 0.2);
   pipeRun(kit, [[px0 - 5.8, y + 1.3, cz + 10.8], [px0 - 2.5, y + 0.15, cz + 9.5], [px0 + 1.0, pY + 0.15, cz + 8.6], [cx - 2.2, pY + 0.15, cz + 6.0], [cx - 1.9, pY + 1.0, cz + 4.6]], 0.07, { mat: "impRubber", color: IMP.rubber, clamps: false });
-  // power cart on the east side with a cable to the belly
+  // ground power unit on the east apron with its cable up the lip to the belly hatch
   toolCart(kit, [px1 + 3.5, y, cz - 3], -Math.PI / 2 + 0.3, { seed: 21 });
-  kit.box(RIB, px1 + 3.5, y + 0.6, cz + 1.0, 1.4, 1.2, 1.8, { color: IMP.consoleDark, texel: 1 });
-  kit.box("blinkSparse", px1 + 2.79, y + 0.8, cz + 1.0, 0.01, 0.3, 1.2, { uv: "keep" });
-  kit.box("hazard", px1 + 3.5, y + 0.06, cz + 1.0, 1.42, 0.12, 1.82, { uv: "world", texel: 1 });
-  kit.collider([px1 + 2.7, y, cz], [px1 + 4.3, y + 1.3, cz + 2.0], "powerCart");
-  pipeRun(kit, [[px1 + 2.8, y + 0.4, cz + 1.0], [px1 - 1.0, pY + 0.12, cz + 1.5], [cx + 2.6, pY + 0.12, cz + 3.6], [cx + 2.4, pY + 1.2, cz + 3.0]], 0.06, { mat: "impRubber", color: IMP.rubber, clamps: false });
+  const gpu = generator(kit, [px1 + 3.6, y, cz + 1.0], -Math.PI / 2 + 0.2);
+  pipeRun(kit, [gpu, [px1 + 2.4, y + 0.12, cz + 2.0], [px1 - 1.0, pY + 0.12, cz + 1.6], [cx + 2.6, pY + 0.12, cz + 3.6], [cx + 2.4, pY + 1.2, cz + 3.0]], 0.06, { mat: "impRubber", color: IMP.rubber, clamps: false });
   // wheel chocks around the skids
   for (const [dx, dz] of [[-1.5, 6.2], [1.5, 6.2], [0, -2.2]]) kit.box("impRubber", cx + 0.5 + dx, pY + 0.12, cz + 1.5 + dz + 1.0, 0.7, 0.24, 0.3, { color: IMP.rubber });
+  // crew access: rolling ladder at the starboard flank hatch, tool cart beside it, service gantry at
+  // the port side of the tail under the thrusters (both in the shuttle's frame: yaw 0.18)
+  rollingLadder(kit, [cx + 4.9, pY, cz - 2.35], shuttleYaw + Math.PI / 2, { h: 3.0 });
+  rollingLadder(kit, [cx - 4.96, pY, cz - 0.6], shuttleYaw - Math.PI / 2, { h: 3.0 });
+  toolCart(kit, [cx + 7.6, pY, cz - 4.6], 0.7, { seed: 23 });
+  serviceGantry(kit, [cx - 2.0, pY, cz + 10.1], shuttleYaw - Math.PI / 2, { h: 3.0 });
+  // cargo waiting beside the ramp foot (east of it, so the ramp view from the north-west stays open)
+  crateStack(kit, [cx + 3.5, pY, cz - 10], 0.3, { seed: 111, n: 2 });
+  crateStack(kit, [cx + 6.6, pY, cz - 11.6], 0.05, { seed: 114, n: 1, size: [2, 1.2, 1.6] });
+  toolCart(kit, [cx - 7, pY, cz - 15], 1.2, { seed: 26 });
+  // taxi marker lights along the approach lanes
+  taxiLights(kit, [0, z0 + 10.5], [0, pz0 - 1.5], y, { pitch: 5, halfW: 3.2 });
+  taxiLights(kit, [px1 + 1.5, cz], [x1 - 4, cz], y, { pitch: 5, halfW: 2.7 });
+  taxiLights(kit, [x0 + 4, cz], [px0 - 1.5, cz], y, { pitch: 5, halfW: 2.7 });
 
   // ---- east apron: cargo loaders + containers -----------------------------------------------------
   cargoLoader(kit, [33, y, 318], -Math.PI / 2 - 0.35, { seed: 1, lift: 0.8 });
@@ -187,22 +202,49 @@ export function buildShuttleBay(kit, ctx) {
   crateStack(kit, [45.5, y, 372], 0.1, { seed: 87, n: 3, size: [1.8, 1.1, 1.5] });
   deckMark(kit, 43, 302, y, 9, 9, 2);
   deckMark(kit, 43.5, 369, y, 9, 9, 2);
+  // deck tractor towing a sled between the loaders, a second power unit, stores along the east wall
+  deckTractor(kit, [31, y, 330], Math.PI / 2 - 0.1);
+  cargoSled(kit, [36.3, y, 330.5], Math.PI / 2 - 0.1, { seed: 88, n: 2 });
+  deckTractor(kit, [30, y, 344], 2.2);
+  cargoSled(kit, [34.4, y, 340.8], 2.2, { seed: 89, n: 1 });
+  generator(kit, [30, y, 313], Math.PI + 0.3);
+  const ex = x1 - t;
+  for (const [z, seed] of [[325, 81], [335, 82], [345, 83]]) partsRack(kit, [ex - 1.05, y, z], -Math.PI / 2, { w: 4, h: 3.0, seed });
+  crateStack(kit, [ex - 1.9, y, 340], 0.05, { seed: 84, n: 1, size: [2, 1.2, 1.6] });
   // ---- west apron: fuel point -----------------------------------------------------------------
   const wx = x0 + t;
   fuelTank(kit, [wx + 2.6, y, 318], 1.6, 8, "z", { tone: IMP.wallLight });
   fuelTank(kit, [wx + 2.6, y, 354], 1.6, 8, "z", { tone: IMP.wallMid });
-  pipeRun(kit, [[wx + 0.9, y + 3.9, 312], [wx + 0.9, y + 3.9, 360]], 0.18, { color: IMP.steel });
-  pipeRun(kit, [[wx + 0.9, y + 4.4, 312], [wx + 0.9, y + 4.4, 360]], 0.12, { color: IMP.gunmetal });
-  for (const z of [318, 354]) pipeRun(kit, [[wx + 2.6, y + 3.7, z], [wx + 0.9, y + 3.9, z]], 0.12, { color: IMP.steel, clamps: false });
+  // manifold above the shelter roofs (3.9 m) feeding both tanks and the reels
+  pipeRun(kit, [[wx + 0.9, y + 4.3, 300], [wx + 0.9, y + 4.3, 372]], 0.18, { color: IMP.steel });
+  pipeRun(kit, [[wx + 0.9, y + 4.8, 300], [wx + 0.9, y + 4.8, 372]], 0.12, { color: IMP.gunmetal });
+  for (const z of [318, 354]) pipeRun(kit, [[wx + 2.6, y + 3.7, z], [wx + 2.6, y + 4.3, z], [wx + 0.9, y + 4.3, z]], 0.12, { color: IMP.steel, clamps: false });
   hoseReel(kit, [wx + 1.2, y, 336], Math.PI / 2);
   hoseReel(kit, [wx + 1.2, y, 341], Math.PI / 2);
   toolCart(kit, [wx + 4.5, y, 330], 1.4, { seed: 22 });
+  // tractor + sled waiting by the fuel point, crates and a ladder on both ends of the apron
+  deckTractor(kit, [-31, y, 326], -Math.PI / 2 + 0.1);
+  cargoSled(kit, [-36.4, y, 326.5], -Math.PI / 2 + 0.1, { seed: 91, load: "tank" });
+  crateStack(kit, [-42, y, 297], 0.1, { seed: 93, n: 2 });
+  crateStack(kit, [-38.4, y, 297.6], -0.15, { seed: 96, n: 3, size: [2, 1.2, 1.6] });
+  crateStack(kit, [-40, y, 372], 0.1, { seed: 98, n: 2 });
+  crateStack(kit, [-36.5, y, 372.5], -0.2, { seed: 101, n: 1 });
+  rollingLadder(kit, [-30, y, 367], -0.6, { h: 2.4 });
+  generator(kit, [-35, y, 365], 0.4);
+  // door-side aprons: spare crates and a power unit either side of the lane (lane x -7..7 kept clear)
+  crateStack(kit, [10.5, y, 298], 0.2, { seed: 103, n: 2 });
+  crateStack(kit, [14, y, 298.6], -0.1, { seed: 106, n: 1, size: [2, 1.2, 1.6] });
+  toolCart(kit, [9.5, y, 302.5], 1.9, { seed: 25 });
+  generator(kit, [-10.5, y, 300.5], -1.2);
+  crateStack(kit, [-15, y, 298.5], 0.15, { seed: 108, n: 2 });
 
   // ---- crew-shelter alcoves along both long walls, ladders, fire stations -------------------------
   for (const u of [16, 42, 68]) shelter(frames.west.frame, kit, u, 5, -Math.PI / 2);
   for (const u of [22, 66]) shelter(frames.east.frame, kit, u, 5, Math.PI / 2);
-  wallLadder(frames.west.frame, 30, 0, 9.6, {});
-  wallLadder(frames.east.frame, 40, 0, 9.6, {});
+  // ladders end under the gallery slabs (hatch access)
+  const gy = y + 11;
+  wallLadder(frames.west.frame, 30, 0, gy - y - 0.4, {});
+  wallLadder(frames.east.frame, 40, 0, gy - y - 0.4, {});
   fireStation(frames.west.frame, 8, { big: true });
   fireStation(frames.west.frame, 80, { big: true });
   fireStation(frames.east.frame, 10, { big: true });
@@ -222,18 +264,23 @@ export function buildShuttleBay(kit, ctx) {
     fireStation(f, 3, { big: true });
     fireStation(f, 97, { big: true });
   }
-  // ---- south wall: service gallery at y + 9 with a stair at the east end, wall gear below ----------
+  // ---- service galleries at y + 11 (above the tier-10 girder) round the south, west and east walls,
+  // one stair up at the south-east corner, wall gear below -------------------------------------------
   {
     const f = frames.south.frame;
-    const gy = y + 9;
     const sx = x1 - t;
-    gallery(kit, ctx, [sx, z1 - t], [x0 + t, z1 - t], [0, -1], gy, 3, { railGaps: [[1.1, 3.7]] });
-    // stair up to the gallery's east end, climbing +z along the east wall (47 risers, 14.1 m run)
-    const run = Math.round(9 / 0.19) * 0.3;
+    const L = sx - (x0 + t);
+    // stair up to the gallery's east end, climbing +z along the east wall (58 risers, 17.4 m run)
+    const run = Math.round((gy - y) / 0.19) * 0.3;
     const stairX = sx - 2.4;
-    openStairs(kit, ctx, [stairX, z1 - t - 3 - run], [0, 1], 2.4, y, gy, { tread: 0.3 });
-    pillar(kit, stairX - 1.15, z1 - t - 3 - run / 2, y, y + 4.5 - 0.55, 0.4);
-    pillar(kit, stairX - 1.15, z1 - t - 3 - run * 0.25, y, y + 2.25 - 0.55, 0.4);
+    const stairZ0 = z1 - t - 3 - run;
+    gallery(kit, ctx, [sx, z1 - t], [x0 + t, z1 - t], [0, -1], gy, 3, { railGaps: [[1.1, 3.7], [L - 3.0, L]] });
+    gallery(kit, ctx, [wx, z1 - t - 3], [wx, z0 + t], [1, 0], gy, 3, {});
+    gallery(kit, ctx, [ex, z0 + t], [ex, stairZ0 - 1.5], [-1, 0], gy, 3, {});
+    railing(kit, [ex - 3, stairZ0 - 1.5], [ex, stairZ0 - 1.5], gy, { h: 1.1, lit: true });
+    openStairs(kit, ctx, [stairX, stairZ0], [0, 1], 2.4, y, gy, { tread: 0.3 });
+    pillar(kit, stairX - 1.15, z1 - t - 3 - run / 2, y, y + (gy - y) / 2 - 0.55, 0.4);
+    pillar(kit, stairX - 1.15, z1 - t - 3 - run * 0.75, y, y + (gy - y) * 0.25 - 0.55, 0.4);
     statusBoard(f, 50, 4.6, 10, 3.0, { seed: 65 });
     lockers(f, 20, 28, 2.1, { seed: 66 });
     lockers(f, 72, 80, 2.1, { seed: 67 });
@@ -248,10 +295,12 @@ export function buildShuttleBay(kit, ctx) {
   // ---- lights ------------------------------------------------------------------------------------
   spotLightDesc(ctx, 0xdfe8ff, 2200, 60, [cx - 22, yC - 1.2, cz - 10], [cx, pY, cz - 4], { angle: 0.7, penumbra: 0.5, shadow: true, priority: 2 });
   spotLightDesc(ctx, 0xdfe8ff, 2200, 60, [cx + 22, yC - 1.2, cz + 12], [cx, pY, cz + 4], { angle: 0.7, penumbra: 0.5, shadow: true, priority: 2 });
-  pointLightDesc(ctx, 0xcfd9ff, 60, 40, [0, y + 9, 298], 1);
-  pointLightDesc(ctx, 0xcfd9ff, 50, 36, [38, y + 9, 305], 0);
-  pointLightDesc(ctx, 0xcfd9ff, 50, 36, [38, y + 9, 365], 0);
-  pointLightDesc(ctx, 0xcfd9ff, 50, 36, [-38, y + 9, 335], 0);
+  // apron fill (raised after the framework dimmed the emissive fixtures: the door apron and the east
+  // apron read as black deck in the review shots)
+  pointLightDesc(ctx, 0xcfd9ff, 110, 44, [0, y + 9, 298], 1);
+  pointLightDesc(ctx, 0xcfd9ff, 80, 40, [36, y + 9, 312], 0);
+  pointLightDesc(ctx, 0xcfd9ff, 80, 40, [36, y + 9, 352], 1);
+  pointLightDesc(ctx, 0xcfd9ff, 80, 40, [-38, y + 9, 335], 0);
   pointLightDesc(ctx, 0xa9c4ff, 40, 30, [0, y + 12, 374], 0);
   // shuttle engine glow spill
   pointLightDesc(ctx, 0x8fb4ff, 18, 14, [cx + 0.5, pY + 3.4, cz + 13], 0);
@@ -261,5 +310,5 @@ export function buildShuttleBay(kit, ctx) {
   ctx.view("shuttleBay_ramp", -13, y + STD.eye, 318, 236, 4);
   ctx.view("shuttleBay_apron", 42, y + STD.eye, 350, 72, 2);
   // gallery view: not a ROOMS id on purpose, so the debug harness takes the floor from y (gallery level)
-  ctx.views.shuttleBay_gallery = { x: 20, y: y + 9 + STD.eye, z: z1 - t - 1.5, yaw: 20, pitch: -12, room: "shuttleBay:gallery" };
+  ctx.views.shuttleBay_gallery = { x: 20, y: gy + STD.eye, z: z1 - t - 1.5, yaw: 20, pitch: -12, room: "shuttleBay:gallery" };
 }

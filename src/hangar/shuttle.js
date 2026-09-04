@@ -3,8 +3,9 @@
 // origin on the deck under the fuselage centre, forward = -Z, up = +Y. Same part-list scheme as tie.js
 // so it can be baked into a room kit (addShuttle) or built as a standalone Group (buildShuttle).
 import * as THREE from "three";
-import { setVertexColor, worldUVs, prism, loft } from "../kit.js";
+import { setVertexColor, worldUVs, rectUVs, prism, loft } from "../kit.js";
 import { IMP } from "../materials/imperial.js";
+import { impDecalRect } from "../materials/imperialTextures.js";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
 export const SHUTTLE = {
@@ -43,6 +44,15 @@ class PartList {
   box(mat, color, cx, cy, cz, sx, sy, sz, rot = null) {
     return this.add(mat, color, new THREE.BoxGeometry(sx, sy, sz), { pos: [cx, cy, cz], rot });
   }
+}
+
+// Stencil from the Imperial decal sheet on a flank: a quad of size s facing ±x (side), uvs remapped to
+// the atlas cell so the room kit can bake it with uv: "keep".
+function decal(P, idx, pos, side, s) {
+  const g = new THREE.PlaneGeometry(s, s);
+  g.rotateY(side > 0 ? Math.PI / 2 : -Math.PI / 2);
+  rectUVs(g, impDecalRect(idx));
+  P.add("impDecal", 0xffffff, g, { pos });
 }
 
 // octagonal fuselage section: width w, bottom y0, top ridge y1 (CCW seen from +z)
@@ -88,11 +98,17 @@ function fuselage(P) {
   // sensor chin + landing lights under the nose
   P.box("impPaintedMetal", HULL2, 0, b + 1.55, -7.9, 1.4, 0.5, 1.6);
   for (const sx of [-1, 1]) P.box("emitWhite", 0xffffff, sx * 0.45, b + 1.28, -8.4, 0.22, 0.06, 0.22);
-  // flank details: intake blisters, access hatches, a red squadron band
+  // flank details: intake blisters with a slatted grille (crisp geometry, not a textured inset), a
+  // framed access hatch with a lit latch, the Imperial roundel stencilled on the flank, a red squadron band
   for (const sx of [-1, 1]) {
     P.box("impPaintedMetal", HULL2, sx * 2.45, b + 2.2, 1.0, 0.3, 1.2, 4.0);
-    P.box("impPaintedMetal", DARK, sx * 2.62, b + 2.2, 1.0, 0.06, 0.9, 3.4);
+    P.box("impPaintedMetal", IMP.trench, sx * 2.61, b + 2.2, 1.0, 0.04, 0.9, 3.4);
+    for (let s = 0; s < 5; s++) P.box("impMetal", STEEL, sx * 2.64, b + 1.86 + s * 0.17, 1.0, 0.04, 0.05, 3.2);
+    for (const z of [-0.6, 2.6]) P.box("impPaintedMetal", DARK, sx * 2.63, b + 2.2, z, 0.04, 0.96, 0.1);
     P.box("impPaintedMetal", DARK, sx * 2.36, b + 3.4, -3.2, 0.14, 0.9, 1.4);
+    P.box("impPaintedMetal", HULL2, sx * 2.42, b + 3.4, -3.2, 0.04, 0.74, 1.24);
+    P.box("emitGreen", 0xffffff, sx * 2.45, b + 3.7, -2.7, 0.02, 0.06, 0.16);
+    decal(P, 4, [sx * 2.515, b + 2.16, 4.0], sx, 1.0);
     P.box("impPaintedMetal", IMP.red, sx * 2.5, b + 1.6, 6.2, 0.05, 0.4, 2.4);
     P.box("impPaintedMetal", DARK, sx * 1.6, b + 0.02, 3.0, 0.9, 0.08, 1.6);
   }

@@ -379,6 +379,129 @@ export function hazardKerb(kit, min, max, opts = {}) {
   if (top) kit.boxMM("impMetal", [min[0], max[1], min[2]], [max[0], max[1] + 0.03, max[2]], { color: IMP.steel });
   if (collide) kit.collider(min, max, "kerb");
 }
+// Armoured coaming around a deck opening: a dark kerb block with a steel top plate, a crisp hazard band
+// on its outboard face and a raised inner lip carrying small white edge lights. `inward` = unit [x,z]
+// pointing from the kerb toward the opening. Colliders cover the whole block.
+export function armouredKerb(kit, min, max, inward, opts = {}) {
+  const { lightPitch = 6, lightMat = "lightBand", lip = 0.35, lipRise = 0.22, collide = true } = opts;
+  const [x0, y0, z0] = min;
+  const [x1, y1, z1] = max;
+  const alongX = Math.abs(inward[0]) < 0.5; // kerb runs along x when the opening is to ±z
+  kit.boxMM(RIB, min, max, { color: IMP.darkMetal, texel: 0.5 });
+  // top plate in painted metal: a bare-metal plate mirrored the dark ceiling and read as a black void
+  // at the player's feet
+  kit.boxMM(RIB, [x0, y1, z0], [x1, y1 + 0.04, z1], { color: IMP.gunmetal, texel: 0.5 });
+  // outboard face: hazard band between two dark rails (world uv keeps the chevrons at a fixed pitch)
+  const bandY0 = y0 + 0.1;
+  const bandY1 = y1 - 0.08;
+  if (alongX) {
+    const zf = inward[1] > 0 ? z0 : z1; // outboard face
+    const o = inward[1] > 0 ? -0.02 : 0.02;
+    kit.boxMM("hazard", [x0 + 0.02, bandY0, Math.min(zf, zf + o)], [x1 - 0.02, bandY1, Math.max(zf, zf + o)], { uv: "world", texel: 1.25 });
+    const zl0 = inward[1] > 0 ? z1 - lip : z0;
+    const zl1 = inward[1] > 0 ? z1 : z0 + lip;
+    kit.boxMM(RIB, [x0, y1, zl0], [x1, y1 + lipRise, zl1], { color: IMP.trim, texel: 0.5 });
+    kit.boxMM(RIB, [x0, y1 + lipRise, zl0], [x1, y1 + lipRise + 0.03, zl1], { color: IMP.steel, texel: 0.5 });
+    for (let x = x0 + lightPitch / 2; x < x1; x += lightPitch) kit.box(lightMat, x, y1 + lipRise + 0.05, (zl0 + zl1) / 2, 0.5, 0.05, lip - 0.12, { uv: "keep" });
+  } else {
+    const xf = inward[0] > 0 ? x0 : x1;
+    const o = inward[0] > 0 ? -0.02 : 0.02;
+    kit.boxMM("hazard", [Math.min(xf, xf + o), bandY0, z0 + 0.02], [Math.max(xf, xf + o), bandY1, z1 - 0.02], { uv: "world", texel: 1.25 });
+    const xl0 = inward[0] > 0 ? x1 - lip : x0;
+    const xl1 = inward[0] > 0 ? x1 : x0 + lip;
+    kit.boxMM(RIB, [xl0, y1, z0], [xl1, y1 + lipRise, z1], { color: IMP.trim, texel: 0.5 });
+    kit.boxMM(RIB, [xl0, y1 + lipRise, z0], [xl1, y1 + lipRise + 0.03, z1], { color: IMP.steel, texel: 0.5 });
+    for (let z = z0 + lightPitch / 2; z < z1; z += lightPitch) kit.box(lightMat, (xl0 + xl1) / 2, y1 + lipRise + 0.05, z, lip - 0.12, 0.05, 0.5, { uv: "keep" });
+  }
+  // end caps carry the band round the corners where two kerbs meet
+  if (alongX) {
+    kit.boxMM("hazard", [x0 - 0.02, bandY0, z0 + 0.02], [x0, bandY1, z1 - 0.02], { uv: "world", texel: 1.25 });
+    kit.boxMM("hazard", [x1, bandY0, z0 + 0.02], [x1 + 0.02, bandY1, z1 - 0.02], { uv: "world", texel: 1.25 });
+  } else {
+    kit.boxMM("hazard", [x0 + 0.02, bandY0, z0 - 0.02], [x1 - 0.02, bandY1, z0], { uv: "world", texel: 1.25 });
+    kit.boxMM("hazard", [x0 + 0.02, bandY0, z1], [x1 - 0.02, bandY1, z1 + 0.02], { uv: "world", texel: 1.25 });
+  }
+  if (collide) kit.collider(min, [x1, y1 + lipRise, z1], "kerb");
+}
+// Keep-clear hatching as geometry: crisp 45° stripes (thin painted slabs) inside the band
+// box = [x0, z0, x1, z1] with solid border lines along both long edges. Replaces the noisy decal hatch
+// for the big bands around the launch wells.
+export function hatchBand(kit, box, y, opts = {}) {
+  const { color = IMP.red, pitch = 2.0, stripe = 0.4, border = 0.22, margin = 0.5, mat = RIB, frame = false } = opts;
+  const [x0, z0, x1, z1] = box;
+  const w = x1 - x0;
+  const d = z1 - z0;
+  const alongZ = d >= w; // long axis
+  const yb = y + 0.004;
+  const yt = y + 0.016;
+  // stripes are the lines x + z = c clipped to the inner box (margin inside the border lines); a box
+  // rotated +45° about y has its long axis along (1, 0, -1), i.e. along such a line
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 4);
+  const ix0 = x0 + margin;
+  const ix1 = x1 - margin;
+  const iz0 = z0 + margin;
+  const iz1 = z1 - margin;
+  const cMin = ix0 + iz0;
+  const cMax = ix1 + iz1;
+  const step = pitch * Math.SQRT2;
+  const n = Math.floor((cMax - cMin) / step);
+  for (let i = 0; i <= n; i++) {
+    const c = cMin + ((cMax - cMin) - n * step) / 2 + i * step;
+    const za = Math.max(iz0, c - ix1);
+    const zb = Math.min(iz1, c - ix0);
+    const len = (zb - za) * Math.SQRT2 - stripe;
+    if (len < stripe) continue;
+    const zm = (za + zb) / 2;
+    kit.add(mat, new THREE.BoxGeometry(len, yt - yb, stripe), { pos: [c - zm, (yb + yt) / 2, zm], quat: q, color, texel: 1 });
+  }
+  // border lines along both long edges (all four with frame: true)
+  if (alongZ || frame) {
+    kit.boxMM(mat, [x0, yb, z0], [x0 + border, yt, z1], { color, texel: 1 });
+    kit.boxMM(mat, [x1 - border, yb, z0], [x1, yt, z1], { color, texel: 1 });
+  }
+  if (!alongZ || frame) {
+    kit.boxMM(mat, [x0, yb, z0], [x1, yt, z0 + border], { color, texel: 1 });
+    kit.boxMM(mat, [x0, yb, z1 - border], [x1, yt, z1], { color, texel: 1 });
+  }
+}
+// Taxi-lane marker lights: small recessed emitters along both edges of a lane from -> to ([x,z])
+export function taxiLights(kit, from, to, y, opts = {}) {
+  const { halfW = 2.6, pitch = 6, mat = "emitBlue", size = 0.26 } = opts;
+  const dx = to[0] - from[0];
+  const dz = to[1] - from[1];
+  const L = Math.hypot(dx, dz);
+  if (L < 1) return;
+  const ux = dx / L;
+  const uz = dz / L;
+  const n = Math.max(1, Math.floor(L / pitch));
+  for (let i = 0; i <= n; i++) {
+    const a = (L - n * pitch) / 2 + i * pitch;
+    for (const s of [-1, 1]) {
+      const x = from[0] + ux * a - uz * s * halfW;
+      const z = from[1] + uz * a + ux * s * halfW;
+      kit.box(RIB, x, y + 0.03, z, size + 0.12, 0.06, size + 0.12, { color: IMP.darkMetal, texel: 1 });
+      kit.box(mat, x, y + 0.065, z, size, 0.02, size);
+    }
+  }
+}
+// Discrete perimeter lights around a raised pad: box = [x0, z0, x1, z1] at surface y. Chunky blocks
+// (8 cm tall) instead of a continuous strip, so a grazing view never collapses them to a hairline.
+export function padLights(kit, box, y, opts = {}) {
+  const { pitch = 3, mat = "lightBand", inset = 0.4 } = opts;
+  const [x0, z0, x1, z1] = box;
+  const put = (x, z, alongX) => {
+    kit.box(RIB, x, y + 0.045, z, alongX ? 0.7 : 0.34, 0.09, alongX ? 0.34 : 0.7, { color: IMP.darkMetal, texel: 1 });
+    kit.box(mat, x, y + 0.1, z, alongX ? 0.56 : 0.2, 0.03, alongX ? 0.2 : 0.56, { uv: "keep" });
+  };
+  for (let x = x0 + inset + pitch / 2; x < x1 - inset; x += pitch) {
+    put(x, z0 + inset, true);
+    put(x, z1 - inset, true);
+  }
+  for (let z = z0 + inset + pitch / 2; z < z1 - inset; z += pitch) {
+    put(x0 + inset, z, false);
+    put(x1 - inset, z, false);
+  }
+}
 // Stencil decal on the floor
 export function floorStencil(kit, x, y, z, s, idx, yaw = 0) {
   const g = new THREE.PlaneGeometry(s, s);
@@ -712,6 +835,119 @@ export function crateStack(kit, pos, yaw, opts = {}) {
   const { seed = 1, n = 2, size = [2.2, 1.4, 1.6] } = opts;
   const [w, h, d] = size;
   for (let i = 0; i < n; i++) crate(kit, [pos[0], pos[1] + i * h, pos[2]], [w - i * 0.15, h, d - i * 0.1], { yaw: yaw + (i % 2 ? 0.08 : 0), seed: seed + i, collide: i === 0 });
+}
+
+// Deck tractor: a low tug that tows sleds and fighters across the deck. Chassis on four wheels, open
+// cab at the rear with a dark canopy, amber beacon, hitch at the front (yaw 0 = front toward -Z).
+export function deckTractor(kit, pos, yaw, opts = {}) {
+  const { collide = true, tone = IMP.wallMid } = opts;
+  const f = local(pos, yaw);
+  const box = boxer(kit, f);
+  box(RIB, 0, 0.62, 0.1, 1.9, 0.5, 3.4, { color: IMP.darkMetal, texel: 1 });
+  box(RIB, 0, 0.98, -0.75, 1.7, 0.3, 1.7, { color: tone, texel: 1 }); // bonnet
+  box("hazard", 0, 0.5, 0.1, 1.92, 0.16, 3.42, { uv: "world", texel: 1 });
+  for (const sx of [-1, 1]) for (const sz of [-1.15, 1.15]) cylAt(kit, f, "impRubber", sx * 1.0, 0.45, sz, 0.45, 0.4, "x", { color: IMP.rubber, segments: 14 });
+  for (const sx of [-1, 1]) for (const sz of [-1.15, 1.15]) cylAt(kit, f, "impMetal", sx * 1.21, 0.45, sz, 0.22, 0.04, "x", { color: IMP.steel, segments: 10 });
+  // cab: seat + control column + canopy frame
+  box(RIB, 0, 1.15, 0.9, 1.5, 0.6, 1.2, { color: tone, texel: 1 });
+  box("impRubber", 0, 1.5, 1.25, 0.9, 0.12, 0.5, { color: IMP.rubber });
+  box("impRubber", 0, 1.85, 1.5, 0.9, 0.6, 0.12, { color: IMP.rubber });
+  box(RIB, 0, 1.7, 0.4, 0.6, 0.5, 0.2, { color: IMP.consoleDark, texel: 1, tilt: -0.4 });
+  box("blinkSparse", 0, 1.8, 0.28, 0.5, 0.18, 0.01, { uv: "keep", tilt: -0.4 });
+  for (const sx of [-1, 1]) box(RIB, sx * 0.74, 1.95, 1.55, 0.08, 1.3, 0.08, { color: IMP.trim, texel: 1 });
+  for (const sx of [-1, 1]) box(RIB, sx * 0.74, 2.15, 0.25, 0.08, 0.9, 0.08, { color: IMP.trim, texel: 1 });
+  box(RIB, 0, 2.62, 0.9, 1.6, 0.1, 1.5, { color: IMP.trim, texel: 1 });
+  box("darkGloss", 0, 2.1, 0.22, 1.4, 0.9, 0.06); // tinted windscreen (a key every bay already batches)
+  box("emitAmber", 0, 2.75, 1.2, 0.22, 0.16, 0.22);
+  // headlights, hitch, rear pintle
+  for (const sx of [-1, 1]) box("emitBlue", sx * 0.6, 0.98, -1.61, 0.3, 0.1, 0.02);
+  box("impMetal", 0, 0.55, -2.0, 0.14, 0.12, 0.7, { color: IMP.steel });
+  box("impMetal", 0, 0.62, -2.3, 0.3, 0.26, 0.12, { color: IMP.steel });
+  box("impMetal", 0, 0.62, 1.95, 0.4, 0.3, 0.3, { color: IMP.gunmetal });
+  if (collide) footprint(kit, f, pos, 1.0, 2.0, 2.7, "tractor");
+}
+
+// Cargo sled: a flat bed on two skids with a tow bar and a load of crates (or a tank when load = 'tank')
+export function cargoSled(kit, pos, yaw, opts = {}) {
+  const { collide = true, seed = 3, load = "crates", n = 2 } = opts;
+  const f = local(pos, yaw);
+  const box = boxer(kit, f);
+  for (const sx of [-1, 1]) box(RIB, sx * 1.05, 0.12, 0, 0.3, 0.24, 4.4, { color: IMP.trim, texel: 1 });
+  box(RIB, 0, 0.32, 0, 2.5, 0.16, 4.0, { color: IMP.darkMetal, texel: 1 });
+  box("hazard", 0, 0.32, 0, 2.52, 0.1, 4.02, { uv: "world", texel: 1 });
+  box("impMetal", 0, 0.28, -2.6, 0.12, 0.1, 1.2, { color: IMP.steel });
+  box("impMetal", 0, 0.28, -3.15, 0.5, 0.1, 0.12, { color: IMP.steel });
+  for (const sz of [-1.8, 1.8]) for (const sx of [-1, 1]) box(RIB, sx * 1.15, 0.7, sz, 0.1, 0.6, 0.1, { color: IMP.hazardYellow, texel: 1 });
+  const top = 0.4;
+  if (load === "tank") {
+    cylAt(kit, f, RIB, 0, top + 0.9, 0, 0.85, 3.4, "z", { color: IMP.wallLight, texel: 1, segments: 18 });
+    for (const z of [-1.0, 1.0]) box("impMetal", 0, top + 0.9, z, 1.8, 1.8, 0.1, { color: IMP.gunmetal });
+    box("hazard", 0, top + 0.9, 0, 1.75, 0.3, 1.2, { uv: "world", texel: 1 });
+  } else {
+    const p = f.L(0, top, 0);
+    for (let i = 0; i < n; i++) crate(kit, [p.x, p.y + i * 1.2, p.z], [2.0 - i * 0.1, 1.2, 3.2 - i * 0.2], { yaw: yaw + (i % 2 ? 0.05 : 0), seed: seed + i, collide: false });
+  }
+  if (collide) footprint(kit, f, pos, 1.3, 2.3, 2.6, "sled");
+}
+
+// Ground power unit: a generator cabinet with vent slats, exhaust stack, panel and a cable reel;
+// returns the cable outlet [x,y,z] so callers can run a pipeRun to the craft it feeds.
+export function generator(kit, pos, yaw, opts = {}) {
+  const { collide = true, tone = IMP.consoleDark } = opts;
+  const f = local(pos, yaw);
+  const box = boxer(kit, f);
+  box(RIB, 0, 0.12, 0, 1.6, 0.24, 2.4, { color: IMP.trim, texel: 1 });
+  box("hazard", 0, 0.12, 0, 1.62, 0.16, 2.42, { uv: "world", texel: 1 });
+  box(RIB, 0, 0.95, 0, 1.4, 1.4, 2.2, { color: tone, texel: 1 });
+  box(RIB, 0, 1.7, 0, 1.46, 0.12, 2.26, { color: IMP.trim, texel: 1 });
+  for (const sx of [-1, 1]) for (let s = 0; s < 5; s++) box("impMetal", sx * 0.71, 0.5 + s * 0.2, -0.4, 0.02, 0.06, 1.0, { color: IMP.gunmetal });
+  cylAt(kit, f, "impMetal", 0.4, 2.0, 0.6, 0.14, 0.6, "y", { color: IMP.gunmetal, segments: 10 });
+  box(RIB, -0.3, 1.2, 1.115, 0.7, 0.5, 0.03, { color: IMP.wallDark, texel: 1 });
+  box("blinkSparse", -0.3, 1.25, 1.135, 0.56, 0.24, 0.01, { uv: "keep" });
+  box("emitGreen", -0.55, 0.9, 1.135, 0.08, 0.06, 0.01);
+  box("emitAmber", -0.05, 0.9, 1.135, 0.08, 0.06, 0.01);
+  // cable reel on the +x side, cable tail to the deck
+  cylAt(kit, f, "impMetal", 0.82, 0.9, 0.3, 0.42, 0.24, "x", { color: IMP.gunmetal, segments: 14 });
+  const coil = new THREE.TorusGeometry(0.34, 0.08, 6, 18);
+  coil.rotateY(Math.PI / 2);
+  const cp = f.L(0.94, 0.9, 0.3);
+  kit.add("impRubber", coil, { pos: [cp.x, cp.y, cp.z], quat: f.q, color: IMP.rubber, uv: "scale", uvScale: [3, 1] });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) cylAt(kit, f, "impRubber", sx * 0.7, 0.14, sz * 0.95, 0.14, 0.12, "x", { color: IMP.rubber, segments: 10 });
+  if (collide) footprint(kit, f, pos, 0.95, 1.25, 2.0, "generator");
+  const out = f.L(0.95, 0.5, 0.3);
+  return [out.x, out.y, out.z];
+}
+
+// Rolling maintenance ladder: an inclined stair on a wheeled frame up to a small railed platform
+export function rollingLadder(kit, pos, yaw, opts = {}) {
+  const { h = 2.6, collide = true } = opts;
+  const f = local(pos, yaw);
+  const box = boxer(kit, f);
+  const run = h * 0.75;
+  const w = 0.9;
+  box(RIB, 0, 0.1, 0, w + 0.3, 0.12, run + 1.2, { color: IMP.trim, texel: 1 });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) cylAt(kit, f, "impRubber", sx * (w / 2 + 0.1), 0.12, sz * (run / 2 + 0.4), 0.12, 0.1, "x", { color: IMP.rubber, segments: 10 });
+  const n = Math.max(3, Math.round(h / 0.26));
+  for (let i = 1; i <= n; i++) {
+    const t = i / n;
+    box("impDeck", 0, 0.12 + t * (h - 0.12), run / 2 - t * run, w - 0.1, 0.05, 0.28, { color: IMP.wallDark, texel: 1 });
+  }
+  for (const sx of [-1, 1]) {
+    const bar = new THREE.BoxGeometry(0.08, 0.12, Math.hypot(run, h));
+    // the flight climbs toward -z: a negative tilt about x raises the -z end
+    const bq = f.q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, -Math.atan2(h, run)));
+    const bp = f.L(sx * (w / 2), h / 2 + 0.1, 0);
+    kit.add(RIB, bar, { pos: [bp.x, bp.y, bp.z], quat: bq, color: IMP.hazardYellow, texel: 1 });
+    const rail = new THREE.BoxGeometry(0.04, 0.04, Math.hypot(run, h));
+    const rp = f.L(sx * (w / 2 + 0.02), h / 2 + 1.0, 0);
+    kit.add("impMetal", rail, { pos: [rp.x, rp.y, rp.z], quat: bq, color: IMP.steel });
+    for (const z of [run / 2 - 0.1, -run / 2 + 0.1]) box(RIB, sx * (w / 2 + 0.02), (z > 0 ? 0.12 : h) + 0.5, z, 0.05, 1.0, 0.05, { color: IMP.trim });
+    box(RIB, sx * (w / 2 + 0.02), h + 0.9, -run / 2 - 0.5, 0.05, 0.05, 1.0, { color: IMP.trim });
+  }
+  box("impDeck", 0, h + 0.03, -run / 2 - 0.5, w, 0.06, 1.0, { color: IMP.wallDark, texel: 1 });
+  box("hazard", 0, h + 0.03, -run / 2 - 0.5, w + 0.02, 0.04, 1.02, { uv: "world", texel: 1 });
+  for (const sx of [-1, 1]) box(RIB, sx * (w / 2 - 0.05), h / 2, -run / 2 - 0.95, 0.08, h, 0.08, { color: IMP.trim, texel: 1 });
+  if (collide) footprint(kit, f, pos, w / 2 + 0.2, run / 2 + 0.7, h + 1.0, "ladder");
 }
 
 // Wall console bank in a wall frame (tall wall consoles are 2 m; these are big bay status boards)
