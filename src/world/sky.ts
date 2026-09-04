@@ -47,13 +47,13 @@ uniform float uCovExtent;
 in vec2 vUv;
 void main() {
   vec2 cs = uCovCenter + (vUv - 0.5) * uCovExtent;
-  vec2 f = cloudFieldCS(cs);
+  vec3 f = cloudFieldCS(cs);
   vec2 p = cs * 0.00015 + uCloudSeed;
   // slow field: which masses develop vertically (0 flat .. 1 towering)
   float tower = clamp((fbm3(p * 0.7 + 3.1) - 0.22) / 0.46, 0.0, 1.0);
   // slight variation of the base altitude between cells
   float baseVar = clamp((fbm3(p * 2.2 + 5.5) - 0.2) / 0.5, 0.0, 1.0);
-  gl_FragColor = vec4(f.x, mix(f.y, tower, 0.5), baseVar, f.y);
+  gl_FragColor = vec4(f.x, mix(f.y, tower, 0.5), baseVar, f.z);
 }
 `;
 
@@ -82,7 +82,7 @@ const float NOISE_SCALE = 1.0 / 1600.0;
 // interleaved gradient noise: a pure function of the pixel position, so frames are reproducible
 float ign(vec2 px) { return fract(52.9829189 * fract(0.06711056 * px.x + 0.00583715 * px.y)); }
 
-/** Macro field at a world xz position: x coverage, y vertical development, z base variation, w interior. */
+/** Macro field at a world xz position: x coverage, y vertical development, z base variation, w column thickness. */
 vec4 macroField(vec2 wp) {
   vec2 uv = (wp + uCloudWind - uCovCenter) / uCovExtent + 0.5;
   return texture(uCovTex, uv);
@@ -95,7 +95,7 @@ float envelope(vec3 p, vec4 f, out float hf, out float hn, out float H) {
   float thick = uCloudTop - uCloudBase;
   float base = uCloudBase + (f.z - 0.5) * 0.06 * thick;
   hf = (p.y - base) / thick;
-  H = mix(0.22, 1.0, smoothstep(0.05, 0.75, f.y));
+  H = mix(0.3, 1.0, smoothstep(0.05, 0.75, f.y));
   hn = hf / H;
   float v = smoothstep(0.0, 0.05, hf) * (1.0 - smoothstep(0.55, 1.0, hn));
   return f.x * v;
@@ -133,7 +133,7 @@ float densityFull(vec3 p, float e, float hn, out float mott) {
   float wisp = texture(uNoise3D, q * 5.0 + vec3(0.61, 0.29, 0.17)).b;
   float er = mix(det, wisp, smoothstep(0.35, 0.95, hn));
   // remap (rather than subtract) so eroded edges keep a steep density gradient: crisp cauliflower lobes
-  float k = 0.38 * (1.0 - er);
+  float k = 0.46 * (1.0 - er);
   d = (d - k) / (1.0 - k);
   return clamp(d * 2.0, 0.0, 1.0);
 }
@@ -257,7 +257,7 @@ void main() {
       // (thin cells of an overcast deck stay bright underneath, thick cells go dark). The overhead
       // thickness is modulated by the low-frequency shape noise so the flat bases read as mottled
       // (hollows between the lobes let more sky light through) instead of a uniform grey.
-      float above = max(H - hf, 0.0) * (uCloudTop - uCloudBase) * e * mix(1.6, 0.55, mott);
+      float above = max(H - hf, 0.0) * (uCloudTop - uCloudBase) * e * mix(1.6, 0.55, mott) * mix(0.45, 1.3, f.w);
       float ao = mix(0.14, 1.0, exp(-above * 0.0015));
       vec3 amb = mix(gndAmb, skyAmb, clamp(hf * 1.3, 0.0, 1.0)) * ao;
       vec3 S = lightCol * sunTerm + amb;

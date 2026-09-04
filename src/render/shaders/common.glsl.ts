@@ -56,11 +56,13 @@ float worley2(vec2 p) {
   return sqrt(d);
 }
 /** Macro cloud field in cloud space: x = coverage (0 clear .. 1 solid), y = "interior" (how deep inside a
- *  mass; drives vertical development so large cells tower while small ones stay flat).
+ *  mass; drives vertical development so large cells tower while small ones stay flat), z = column
+ *  thickness over a wide ramp (keeps varying across a closed deck, where x and y have saturated, so the
+ *  underside of an overcast shows its cells).
  *  Individual cumulus are domain-warped cellular blobs (two worley scales, ~6 km and ~3 km spacing) that
- *  only develop where a slow ~30 km macro field is high: clusters of distinct 1-4 km masses separated by
+ *  only develop where a slow ~17 km macro field is high: clusters of distinct 1-4 km masses separated by
  *  sectors of clear sky, rather than an even sprinkle that fuses into a band near the horizon. */
-vec2 cloudFieldCS(vec2 cs) {
+vec3 cloudFieldCS(vec2 cs) {
   vec2 p = cs * 0.00015 + uCloudSeed;
   vec2 warp = (vec2(fbm3(p * 1.3), fbm3(p * 1.3 + 4.2)) - 0.5) * 0.35;
   float macro = fbm3(p * 0.4 + 9.0);
@@ -71,7 +73,8 @@ vec2 cloudFieldCS(vec2 cs) {
   // narrow ramp: the edge detail comes from the 3D noise erosion, a wide ramp only made thin veils
   float cov = smoothstep(thr, thr + 0.09, f);
   float interior = smoothstep(thr + 0.03, thr + 0.25, f);
-  return vec2(cov, interior);
+  float column = smoothstep(thr - 0.04, thr + 0.5, f);
+  return vec3(cov, interior, column);
 }
 float cloudCoverageCS(vec2 cs) { return cloudFieldCS(cs).x; }
 float cloudCoverage2D(vec2 wp) { return cloudCoverageCS(wp + uCloudWind); }
@@ -94,7 +97,9 @@ export const GLSL_SKY = /* glsl */ `
 vec3 skyRadiance(vec3 dir) {
   float y = clamp(dir.y, -1.0, 1.0);
   float up = max(y, 0.0);
-  float lowMix = pow(1.0 - up, 5.0);
+  // the horizon glow reaches higher when the sun is low (long paths through lit air all around)
+  float kLow = mix(3.5, 5.0, smoothstep(0.05, 0.35, uSunDir.y));
+  float lowMix = pow(1.0 - up, kLow);
   vec3 col = mix(uZenithColor, uHorizonColor, lowMix);
   // narrow warm-white haze band; never darker than the low sky so a warm sunset horizon keeps its glow
   float hband = pow(1.0 - up, 55.0);
