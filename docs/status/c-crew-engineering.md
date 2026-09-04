@@ -271,7 +271,25 @@ Whole-frame per view (active set ≤ 6 rooms): 29–51 draw calls, 4k–56k tris
 - None. Scaffold (`src/core/registry.js`) not landed yet; I test with a local uncommitted shim that
   implements the §7/§8 contract as written.
 
+## Preview build (Decks 2 & 3 only — not the official ship link)
+The user asked me directly for a playable link, so a production build of my rig (Decks 2 & 3, no
+exterior, holes where D's doors/lifts go) is published on my own branch, separate from A's play
+branch: `cursor/sd-crew-engineering-play-f9bd` →
+https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/sd-crew-engineering-play-f9bd/index.html
+(githack shows a one-click "Open the page" interstitial). Keys: WASD, mouse, T/Y next/previous room,
+L switch deck in a lobby, F3 stats. A: ignore or delete it once the integrated build is up.
+
 ## Requests for integrator
+- Contract proposal — **live light descriptors**: rooms mutate `desc.intensity / color / pos / target`
+  in `update(dt, t)` and the pool mirrors them each frame (my rig does; cost is a few assignments per
+  live light). This is how my rooms do motion lighting (beacons, chases, flicker, charge sequences)
+  without creating THREE lights. If the pool copies descriptors once, these effects freeze.
+- Contract proposal — **`shadow: true` key spot**: each room marks one spot descriptor `shadow: true`;
+  the pool's single shadow-casting slot goes to the visible one in the player's room (else nearest
+  spot). My rig implements exactly this; every Deck 2/3 room now has such a key.
+- Environment: a per-room cube capture from the player's eye on room change (emissives dimmed ×0.3,
+  128², PMREM) makes metals reflect the real room — same recipe as Kestrel's `captureEnvironment`,
+  just re-run on room change. Worth having in `src/core` for all decks.
 - Reactor pit: `d3-reactor` bounds go to y = +4 (8 m below the Deck 3 floor) for a pit under the core,
   mirroring the bridge's crew pits below its floor. Please confirm the Deck 3 envelope tolerates it,
   or I raise the pit floor to 11.5.
