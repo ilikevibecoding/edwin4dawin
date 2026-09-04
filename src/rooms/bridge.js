@@ -542,18 +542,18 @@ export function buildBridge(kit, ctx, room) {
   const alertDim = (t) => (state.alert ? 0.7 + 0.3 * Math.sin(t * 5) : 1);
   // starlight key: sits inside the centre viewport tunnel, so the sill, head and jambs clip its cone to the
   // window shape; it rakes the command platform and the walkway and throws the railing shadows aft
-  kit.light({ type: "spot", pos: [0, 4.0, -hz - 0.25], target: [0, 0, 1], color: 0xd8e6ff, intensity: 240, distance: 40, angle: 0.95, penumbra: 0.55, shadow: true, priority: 1.0, dim: alertDim });
+  kit.light({ type: "spot", pos: [0, 4.0, -hz - 0.25], target: [0, 0, 1], color: 0xd8e6ff, intensity: 300, distance: 40, angle: 0.95, penumbra: 0.55, shadow: true, priority: 1.0, dim: alertDim });
   // aft deck: a cool fill over the floor crest that also reaches the door, the guard posts and the crest
   // plate (kept 2 m off the wall so the plate does not blow out)
-  kit.light({ type: "point", pos: [0, 3.4, hz - 2.6], color: 0xe6ecff, intensity: lux(3.4, 1.0), distance: 16, priority: 0.8 });
+  kit.light({ type: "point", pos: [0, 3.6, hz - 2.6], color: 0xe6ecff, intensity: lux(3.6, 2.0), distance: 18, priority: 0.8 });
   for (const s of [-1, 1]) {
-    // pit fill: blue-white from the console banks, low; set aft of centre because the key spills into the
-    // pits' forward ends through the viewports
-    kit.light({ type: "point", pos: [s * 9, 1.6, 1.5], color: 0xa8c8ff, intensity: 28, distance: 24, priority: 0.85 - (s > 0 ? 0.01 : 0) });
+    // pit fill: blue-white console glow, set aft of centre because the key spills into the pits' forward
+    // ends through the viewports; high enough to also catch the console tops seen from the walkway
+    kit.light({ type: "point", pos: [s * 9, 2.6, 1.5], color: 0xb4d0ff, intensity: lux(4.4, 3.0), distance: 26, priority: 0.85 - (s > 0 ? 0.01 : 0) });
     // one red practical per guard alcove
     kit.light({ type: "point", pos: [s * 12.5, 2.6, hz - 0.8], color: 0xff4030, intensity: lux(2.6, 0.9), distance: 9, priority: 0.6 - (s > 0 ? 0.01 : 0) });
-    // outer decks: dim white from the ceiling slots
-    kit.light({ type: "point", pos: [s * 23, CEIL - 0.6, -2], color: 0xdfe8ff, intensity: lux(CEIL - 0.6, 1.1), distance: 26, priority: 0.7 - (s > 0 ? 0.01 : 0) });
+    // outer decks: cool white from the ceiling slots over the bank islands
+    kit.light({ type: "point", pos: [s * 23, 5.2, -2.5], color: 0xdfe8ff, intensity: lux(5.2, 2.4), distance: 28, priority: 0.7 - (s > 0 ? 0.01 : 0) });
   }
 
   // =========================================================================
