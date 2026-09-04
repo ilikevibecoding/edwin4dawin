@@ -49,7 +49,7 @@ z 526                                +--------+  x±2, z 522..526, y 240..243.6 
 | `d1-intel` | (23.6, 239.5, 490) → (40, 244.2, 504) | 243.4 | `d1-intel-corridor` (23.6,240,497) (-1,0,0) blast → d1-corridor-stbd |
 | `d1-officers` | (44, 239.5, 458) → (84, 244, 512) | 243.2 | `d1-officers-spine` (66,240,512) (0,0,1) standard → d1-spine |
 | `d1-corridor-port` | (-23.6, 239.5, 466) → (-20, 244, 512) | 243.2 | shares `d1-bridge-port`, `d1-observation-corridor`, `d1-nav-corridor`, `d1-comms-corridor`; `d1-spine-port` (-21.8,240,512) (0,0,1) standard → d1-spine |
-| `d1-corridor-stbd` | (20, 239.5, 466) → (23.6, 244, 512) | 243.2 | shares `d1-bridge-stbd`, `d1-tactical-corridor`, `d1-intel-corridor`; `d1-spine-stbd` (21.8,240,512) (0,0,1) standard → d1-spine |
+| `d1-corridor-stbd` | (20, 239.5, 466) → (23.6, 244.2, 512) | 243.2 | shares `d1-bridge-stbd`, `d1-tactical-corridor`, `d1-intel-corridor`; `d1-spine-stbd` (21.8,240,512) (0,0,1) standard → d1-spine |
 | `d1-spine` | (-84, 239.5, 512) → (84, 244.2, 516) | 243.2 | shares `d1-bridge-aft`, `d1-spine-port`, `d1-spine-stbd`, `d1-officers-spine`; `d1-spine-lobby` (0,240,516) (0,0,1) blast → d1-lobby; `d1-spine-end-port` (-84,240,514) (-1,0,0) standard → d1-future-port (unpaired = locked); `d1-spine-end-stbd` (84,240,514) (1,0,0) standard → d1-future-stbd (unpaired = locked) |
 | `d1-lobby` | (-8, 239.5, 516) → (8, 244.6, 526) | 244 | shares `d1-spine-lobby`; `lift: { id: "T1", pos: [0, 240, 522], dir: [0, 0, -1] }` — cabin box x ±2, z 522..526, y 240..243.6 left empty; my lift-door hole in the z=522 wall is 2.4 w × 3.0 h |
 
@@ -187,9 +187,27 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   at 236 under the bridge footprint). Two follow-ups after its run: the pit floors dropped paintedMetal's chip map
   (the same spilled-fluid blotches as round 1) and the `screenImp` stand-ins went from roughness 0.15 to 0.42 — at
   0.15 every console screen facing a pool spot mirrored it as a white blob; blown pixels in `d1-bridge-sill` 166 → 6).
+- Phase 3 full-deck run `p3-all` (all 11 rooms built together, every registered view): **55 views, 0 registry-shim
+  warnings**, every room inside budget — bridge 74.4k tris / 23 calls / 22 desc / 167 colliders / 143 ms; spine
+  109k / 14 / 14 / 201 / 146 ms; officers 91k / 16 / 14 / 148 / 139 ms; comms 77k / 15 / 14 / 50 / 110 ms; tactical
+  49k / 16 / 13; nav 40k / 16 / 11; intel 34k / 13 / 14; passages 27k / 14–15 / 6–7; observation 21.6k / 16 / 11;
+  lobby 11.6k / 15 / 5. Whole frame with door-neighbours: 81–203 calls, 90k–622k tris, 12–16 pool lights (the
+  corridor cameras activate up to six rooms → 78 descriptors offered, 62 dropped by the pool).
+- Critic round 2 (one blind critic, 24 final shots): PASS `d1-bridge-window`, `d1-nav-holo`, `d1-tactical-plot`,
+  `d1-comms-station`, `d1-intel-gate`, `d1-intel-table`, `d1-spine-bay`; FAIL `d1-observation-window` (bench = black
+  slabs in a black room), `d1-officers-corridor` (blotched walls), `d1-officers-cabin` (blown lamp, slab bed),
+  `d1-spine-junction` (brightest frame, strips clip); the other 13 MARGINAL. Ranked systemic list: (1) emissives still
+  clip (strips, downlights, warm lamps); (2) exposure inverted (transit spaces 1.5–2 stops over the bridge); (3) grime
+  moved from floors to ceilings/walls (paintedMetal's chip map on ceilings, officers' plates); (4) one wall-monitor
+  template tiled at one height; (5) slab furniture / featureless cabinets; (6) ceiling voids in destination rooms.
+  Systemic fixes (f67b912a): shared `ceiling()` and the bridge ceiling draw in `impPanel`/`bridgeFloor` instead of
+  paintedMetal (tint-compensated, no extra draw call); officers' `cleanPlate` likewise (the blotches were flaked dents
+  with metalness > 0 rendering black); transit pool lights −0.7 EV; stand-in emissives capped 1.35–1.6, `blackGloss`
+  roughness 0.3, `impPanel` dents/grime flattened. Room lists (items 4–6 + every FAIL/MARGINAL line) dispatched to
+  four owners: bridge, officers + observation, nav/tactical/comms/intel, corridors + lobby.
 
 ## Remaining
-1. Critic findings (two blind critics on 22 shots) → fixes per room → re-shoot → push.
+1. Critic round 2 room fixes (four owners running) → verify each with a harness run → push → final full-deck run.
 2. Replace corridor greybox with D's `corridorSegment` when it lands; switch `doorHole` import to D's helper.
 3. Delete `_dev/` and re-test on the real registry when `SCAFFOLD READY`.
 4. Phase 3 budgets/warnings/status.

@@ -12,7 +12,7 @@ export const BOUNDS = {
   "d1-intel": { min: [23.6, 239.5, 490], max: [40, 244.2, 504] }, // 244.2: blast-door lintel sits at 244.05
   "d1-officers": { min: [44, 239.5, 458], max: [84, 244, 512] },
   "d1-corridor-port": { min: [-23.6, 239.5, 466], max: [-20, 244, 512] },
-  "d1-corridor-stbd": { min: [20, 239.5, 466], max: [23.6, 244, 512] },
+  "d1-corridor-stbd": { min: [20, 239.5, 466], max: [23.6, 244.2, 512] }, // 244.2: the intel blast-door lintel sits at 244.05
   "d1-spine": { min: [-84, 239.5, 512], max: [84, 244.2, 516] }, // 244.2: blast-door lintels (bridge-aft, lobby)
   "d1-lobby": { min: [-8, 239.5, 516], max: [8, 244.6, 526] },
 };
