@@ -39,12 +39,12 @@ export function buildIntel(kit, ctx) {
     m.metalness = 0.0;
     m.roughness = 0.9; // span of the remapped roughness map (see isbFloorPatch)
     m.needsUpdate = true;
-    ctx.mats.isbFloor = isbFloorPatch(m, { roughLo: 0.32, tint: 0xff6050, gain: 0.35 });
+    ctx.mats.isbFloor = isbFloorPatch(m, { roughLo: 0.32, tint: 0xff6050, gain: 0.45 });
   }
   buildShell(kit, ctx, ctx.id, room, {
     wall: { pitch: 3.5, tone: IMP.wallLight, toneAlt: IMP.wallMid, bandMat: "lightBandRed", styles: { plain: 0.6, control: 0.12, vent: 0.08, hatch: 0.08, screen: 0.08, niche: 0.04 } },
     ceiling: { lights: false, tone: IMP.trim, panelW: 2.5 },
-    floor: { mat: "isbFloor", tone: new THREE.Color("#5a1412"), strip: false, texel: 0.35 },
+    floor: { mat: "isbFloor", tone: new THREE.Color("#6e1a16"), strip: false, texel: 0.35 },
   });
   const walls = roomWalls(room);
 
@@ -126,7 +126,7 @@ export function buildIntel(kit, ctx) {
     frame.quad("impDecal", w.u(613.2), 2.9, 0.062, 0.5, 0.5, { uvRect: impDecalRect(5) });
     alertBeacon(frame, ctx, w.u(621.5), 3.2, { mat: "emitRed", color: RED, intensity: 0.9, distance: 5 });
     frame.quad("impDecal", w.u(623.5), 1.6, 0.062, 0.7, 0.7, { uvRect: impDecalRect(12) });
-    pointLightDesc(ctx, RED, 1.6, 8, [x0 + 2.6, y + 3.2, 613.2], 1);
+    pointLightDesc(ctx, RED, 2.4, 8, [x0 + 2.6, y + 3.2, 613.2], 1);
   }
 
   // ---- south wall: six sealed data vaults ---------------------------------------------------------------------
@@ -361,7 +361,8 @@ export function buildIntel(kit, ctx) {
 
   // ---- ceiling: two long red troughs, transverse beams -----------------------------------------------------------
   {
-    for (const s of [-1, 1]) ceilingLight(kit, ctx, [cx + s * 7.5, yc, 616], 20, "z", { mat: "lightBandRed", color: RED, intensity: 2.0, distance: 9, priority: 1, w: 0.3 });
+    // the troughs are the floor's key now that the deck no longer throws white specular; raised after the band dimming
+    for (const s of [-1, 1]) ceilingLight(kit, ctx, [cx + s * 7.5, yc, 616], 20, "z", { mat: "lightBandRed", color: RED, intensity: 3.0, distance: 10, priority: 1, w: 0.3 });
     for (const bz of [609.5, 622.0]) kit.box("impPaintedMetal", cx, yc - 0.22, bz, x1 - x0 - 0.6, 0.44, 0.4, { color: IMP.trim, texel: 1 });
   }
 
