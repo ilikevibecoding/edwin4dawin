@@ -34,7 +34,8 @@ export function buildHyperdrive(kit, ctx) {
   emitMat(ctx, "hyp_core", 0x8fc4ff, 3.0);
   emitMat(ctx, "hyp_coil", 0x3d8bff, 2.5);
   emitMat(ctx, "hyp_flood", 0x9fc8ff, 2.2, "emitWhiteSoft");
-  kit.cyl("metal", CX, CY, CZ, R, L, "x", { color: PALETTE.impMid, segments: 40, texel: 0.5 });
+  // dark shell so the blue channels and collars carry the silhouette (a mid-grey drum read as plain)
+  kit.cyl("metal", CX, CY, CZ, R, L, "x", { color: PALETTE.impDark, segments: 40, texel: 0.5 });
   // end domes (shallow) with a glowing injector disc, its ring and eight radial feed channels
   for (const [x, s] of [[X0, -1], [X1, 1]]) {
     const dome = new THREE.SphereGeometry(R, 40, 12, 0, Math.PI * 2, 0, Math.PI / 2);
@@ -58,7 +59,8 @@ export function buildHyperdrive(kit, ctx) {
   for (const x of [X0 + 1.2, X0 + 5.6, X0 + 10.0, X0 + 14.4, X0 + 18.8, X1 - 1.0]) {
     kit.cyl("paintedMetal", x, CY, CZ, R + 0.28, 0.75, "x", { color: PALETTE.impBlack, segments: 40, texel: 1 });
     kit.cyl("metal", x, CY, CZ, R + 0.34, 0.25, "x", { color: PALETTE.impGrey, segments: 40 });
-    kit.cyl("hyp_coil", x, CY, CZ, R + 0.3, 0.06, "x", { segments: 40 });
+    kit.cyl("hyp_coil", x - 0.22, CY, CZ, R + 0.3, 0.1, "x", { segments: 40 });
+    kit.cyl("hyp_coil", x + 0.22, CY, CZ, R + 0.3, 0.1, "x", { segments: 40 });
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2;
       kit.box("metal", x, CY + (R + 0.3) * Math.cos(a), CZ + (R + 0.3) * Math.sin(a), 0.5, 0.12, 0.12, { color: PALETTE.steel, rot: [a, 0, 0] });

@@ -11,7 +11,7 @@ import { GRATE_TILE } from "../../textures.js";
 import { impFloor, impCeiling, impWall, stairs, platform, railing, pipeRun, pillar, wallScreen, equipmentRack, wallSegment } from "../imperial.js";
 import { pointLight, wallFrame } from "../builders.js";
 import { signPlate } from "../corridor.js";
-import { ENG_PAINTS, ENG_PAINTS_DARK, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, emitMat, pulseSet, wallVent, wallStencil, floorStencil, floorBorder, tank, cabinet, gratedTrench, warningLamp, cableTray, spotLight } from "./engProps.js";
+import { ENG_PAINTS, ENG_PAINTS_DARK, ENG_CEIL_PAINTS, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, emitMat, pulseSet, wallVent, wallStencil, floorStencil, floorBorder, tank, cabinet, gratedTrench, warningLamp, cableTray, spotLight } from "./engProps.js";
 
 export function buildReactor(kit, ctx) {
   const [min, max] = ctx.bounds; // [-24, -12, -112] .. [24, 20, -65]
