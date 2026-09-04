@@ -115,7 +115,7 @@ const rooms = new RoomManager({
   doorSystem: doors,
   onRoomChange: (def, prev) => {
     hud.roomToast(def.title.toUpperCase(), `${def.cluster.toUpperCase()} · DECK ${def.floor} m`);
-    audio.setRoom(roomAudioProfile(def));
+    audio.setRoom(def); // the audio layer's per-room ambience table is authoritative
     fitSunShadow();
   },
 });
@@ -149,11 +149,6 @@ hud.startEl.addEventListener("click", () => {
   // phones: go full screen for an immersive view (ignored where unsupported, e.g. iOS Safari)
   if (TOUCH && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
 });
-
-function roomAudioProfile(def) {
-  const map = { reactor: { hum: 1, air: 0.4, cutoff: 260 }, hyperdrive: { hum: 0.9, air: 0.3, cutoff: 500 }, hangar: { hum: 0.4, air: 1, cutoff: 900 }, bridge: { hum: 0.3, air: 0.35, cutoff: 600 } };
-  return map[def.id] || { hum: 0.5, air: 0.5, cutoff: 400 };
-}
 
 // ---------------------------------------------------------------------------
 // Sun shadow frustum: whole ship outside, the current cluster inside
@@ -573,6 +568,7 @@ function frame() {
   fighters.update(dt, t, { mode: modes.mode, cameraPos: camera.position, playerPos: player.position, hangarVisible: rooms.visibleIds.has("hangar") });
   atmosphere.update(dt, t, { mode: modes.mode, playerPos: player.position, currentRoom: rooms.current });
   lighting.update(dt);
+  if (audio.update) audio.update(dt);
   interactions.update();
   sync.tick(dt);
   if (framesRendered > 60) updateQuality(dt);
