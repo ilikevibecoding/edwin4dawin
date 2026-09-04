@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { Rng } from '../core/seed';
 
-export interface PbrMaps { map: THREE.CanvasTexture; roughnessMap: THREE.CanvasTexture; normalMap: THREE.CanvasTexture; }
+export interface PbrMaps {
+  map: THREE.CanvasTexture;
+  roughnessMap: THREE.CanvasTexture;
+  normalMap: THREE.CanvasTexture;
+  /** clearcoat roughness in the green channel (multiplies the material's `clearcoatRoughness`) */
+  clearcoatRoughnessMap?: THREE.CanvasTexture;
+}
 
 function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement('canvas');
@@ -60,6 +66,11 @@ function panels(hctx: CanvasRenderingContext2D, actx: CanvasRenderingContext2D, 
   for (const u of stationsU) {
     const x = u * w;
     hctx.beginPath(); hctx.moveTo(x, 0); hctx.lineTo(x, h); hctx.stroke();
+    // faint grime settled along the seam, then the crisp line itself
+    actx.save();
+    actx.strokeStyle = 'rgba(40,38,34,0.07)'; actx.lineWidth = 9;
+    actx.beginPath(); actx.moveTo(x, 0); actx.lineTo(x, h); actx.stroke();
+    actx.restore();
     actx.beginPath(); actx.moveTo(x, 0); actx.lineTo(x, h); actx.stroke();
     // rivet rows either side of the seam
     for (const off of [-7, 7]) {
@@ -91,6 +102,8 @@ function panels(hctx: CanvasRenderingContext2D, actx: CanvasRenderingContext2D, 
 
 export const LIVERY = {
   upper: '#f3f1ea',
+  /** wing / stabiliser undersides */
+  under: '#e3d9c2',
   lower: '#f6c230',
   cheat: '#1c2d5a',
   pin: '#d8322e',
@@ -190,8 +203,9 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   actx.fillStyle = '#9aa0a6'; actx.fillRect(ringU - 6, 0, 6, h);
   actx.fillStyle = '#1b1d20';
   for (let i = 0; i < 12; i++) actx.fillRect(ringU * 0.45, (i / 12) * h + 6, ringU * 0.15, h / 12 - 12);
-  // registration on the rear fuselage and the operator script under the cabin windows (both sides, readable)
-  bodyText(actx, lay, w, h, LIVERY.registration, -2.65, 0.03, 0.22, 'bold', '"Helvetica Neue", Arial, sans-serif', LIVERY.cheat);
+  // registration on the white rear fuselage above the cheat line (clear of the float struts from the quarter views)
+  // and the operator script under the cabin windows (both sides, readable)
+  bodyText(actx, lay, w, h, LIVERY.registration, -3.05, 0.47, 0.18, 'bold', '"Helvetica Neue", Arial, sans-serif', LIVERY.cheat);
   bodyText(actx, lay, w, h, 'BAHÍA VISTA AIR TAXI', -0.25, 0.10, 0.085, 'bold italic', 'Georgia, "Times New Roman", serif', LIVERY.cheat);
   // panel lines / rivets
   const stations = [3.9, 3.2, 2.32, 1.85, 0.0, -0.9, -1.6, -2.6, -3.7, -4.7].map((x) => lay.uOf(x));
@@ -209,10 +223,27 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     const hv = lay.vOf(1.0, 0.05) ?? 0.25;
     actx.fillStyle = '#8a8f94'; actx.fillRect(du1 - 40, (side > 0 ? hv : 1 - hv) * h - 4, 22, 8);
   }
-  // exhaust soot on the lower starboard side aft of the cowl, oil streaks on the belly, grime along seams
-  const soot = actx.createLinearGradient(w * 0.09, 0, w * 0.45, 0);
-  soot.addColorStop(0, 'rgba(25,22,20,0.55)'); soot.addColorStop(1, 'rgba(25,22,20,0)');
-  actx.fillStyle = soot; actx.fillRect(w * 0.09, h * 0.36, w * 0.36, h * 0.12);
+  // exhaust staining: a streak trailing aft from the exhaust stubs (starboard side, low), darkest at the stubs and
+  // widening as it fades; the roughness map gets the same streak (soot is matte)
+  const stubU = lay.uOf(2.75), stubV = vLow(2.75, -0.5), sootEndU = lay.uOf(-0.9);
+  const sootStreak = (ctx: CanvasRenderingContext2D, rgb: string, a0: number) => {
+    const soot = ctx.createLinearGradient(stubU * w, 0, sootEndU * w, 0);
+    soot.addColorStop(0, `rgba(${rgb},${a0})`); soot.addColorStop(0.3, `rgba(${rgb},${a0 * 0.5})`); soot.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = soot;
+    ctx.beginPath();
+    ctx.moveTo(stubU * w, (stubV - 0.018) * h); ctx.lineTo(sootEndU * w, (stubV - 0.05) * h);
+    ctx.lineTo(sootEndU * w, (stubV + 0.05) * h); ctx.lineTo(stubU * w, (stubV + 0.018) * h);
+    ctx.closePath(); ctx.fill();
+  };
+  sootStreak(actx, '25,22,20', 0.5);
+  // oil streaks under the cowl (belly, v 0.5) trailing aft from the cowl seams
+  for (let i = 0; i < 16; i++) {
+    const x0 = lay.uOf(rng.range(3.0, 4.0)) * w, y0 = (0.5 + rng.range(-0.06, 0.06)) * h, len = rng.range(40, 150);
+    const og = actx.createLinearGradient(x0, 0, x0 + len, 0);
+    og.addColorStop(0, `rgba(35,30,22,${rng.range(0.14, 0.32)})`); og.addColorStop(1, 'rgba(35,30,22,0)');
+    actx.fillStyle = og; actx.fillRect(x0, y0 - rng.range(1, 2), len, rng.range(2, 4));
+  }
+  // general grime and faint belly streaks along the airflow
   grime(actx, rng, w, h, 140, 0.08);
   for (let i = 0; i < 60; i++) {
     const x = rng.range(w * 0.1, w * 0.9), y = rng.range(h * 0.42, h * 0.58);
@@ -225,7 +256,7 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   // roughness: clearcoat paint ~0.35, cowl 0.5, soot/grime rougher, scratches
   rctx.fillStyle = '#5a5a5a'; rctx.fillRect(0, 0, w, h);
   rctx.fillStyle = '#7a7a7a'; rctx.fillRect(0, 0, ringU, h);
-  rctx.fillStyle = 'rgba(160,160,160,0.6)'; rctx.fillRect(w * 0.09, h * 0.36, w * 0.3, h * 0.12);
+  sootStreak(rctx, '170,170,170', 0.7);
   grime(rctx, rng, w, h, 160, 0.25, '150,150,150');
   for (let i = 0; i < 400; i++) {
     rctx.strokeStyle = `rgba(120,120,120,${rng.range(0.2, 0.5)})`;
@@ -233,7 +264,24 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     const x = rng.range(0, w), y = rng.range(0, h);
     rctx.beginPath(); rctx.moveTo(x, y); rctx.lineTo(x + rng.range(-40, 40), y + rng.range(-6, 6)); rctx.stroke();
   }
-  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.4), false) };
+  // clearcoat roughness (green channel): the engine cowl is polished a little glossier than the cabin/tail paint,
+  // the matte anti-glare panel has no gloss to speak of and the soot streak dulls the coat
+  const [cc, cctx] = canvas(w / 4, h / 4);
+  cctx.scale(0.25, 0.25);
+  cctx.fillStyle = 'rgb(0,34,0)'; cctx.fillRect(0, 0, w, h);
+  cctx.fillStyle = 'rgb(0,16,0)'; cctx.fillRect(0, 0, lay.uOf(3.15) * w, h);
+  cctx.fillStyle = 'rgb(0,120,0)';
+  for (const side of [1, -1]) {
+    const edge = side > 0 ? 0 : h;
+    cctx.beginPath();
+    cctx.moveTo(glare[0][0], edge);
+    for (const [px, py] of glare) cctx.lineTo(px, side > 0 ? py : h - py);
+    cctx.lineTo(glare[glare.length - 1][0], edge);
+    cctx.closePath();
+    cctx.fill();
+  }
+  sootStreak(cctx, '0,110,0', 0.8);
+  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.4), false), clearcoatRoughnessMap: toTexture(cc, false) };
 }
 
 /** Wing (both halves and tail share): u chordwise (0 trailing edge -> 0.5 leading edge -> 1 trailing), v spanwise. */
@@ -244,13 +292,16 @@ export function wingMaps(): PbrMaps {
   const [hc, hctx] = canvas(w, h);
   const [rc, rctx] = canvas(w, h);
   hctx.fillStyle = '#808080'; hctx.fillRect(0, 0, w, h);
+  // white upper surface (u < 0.5), cream underside (u > 0.5) so the wing reads as a thin flat panel from below
   actx.fillStyle = LIVERY.upper; actx.fillRect(0, 0, w, h);
+  actx.fillStyle = LIVERY.under; actx.fillRect(w * 0.5, 0, w * 0.5, h);
   // yellow wingtip with a navy band and red pinstripe, yellow leading-edge stripe
   actx.fillStyle = LIVERY.lower; actx.fillRect(0, h * 0.905, w, h * 0.095);
   actx.fillStyle = LIVERY.cheat; actx.fillRect(0, h * 0.885, w, h * 0.02);
   actx.fillStyle = LIVERY.pin; actx.fillRect(0, h * 0.876, w, h * 0.009);
-  // leading-edge stripe: 10% chord over the top, 3.5% under (u 0.5 is the leading edge)
-  actx.fillStyle = LIVERY.lower; actx.fillRect(w * 0.45, 0, w * 0.0675, h);
+  // leading-edge stripe: 5% chord over the top, 1.5% under (u 0.5 is the leading edge), so the wing keeps a thin
+  // yellow edge instead of a yellow nose when seen from below
+  actx.fillStyle = LIVERY.lower; actx.fillRect(w * 0.475, 0, w * 0.0325, h);
   // rib lines spanwise every ~0.55 m, spar and hinge lines chordwise
   const ribs: number[] = [];
   for (let v = 0.04; v < 0.87; v += 0.075) ribs.push(v);
@@ -360,16 +411,32 @@ export function panelTexture(): { map: THREE.CanvasTexture; emissive: THREE.Canv
   return { map, emissive };
 }
 
-/** Radial-blur disc texture for the spinning propeller. */
+/**
+ * Motion-blur disc for the spinning propeller: a faint translucent grey disc (denser near the hub where the blades
+ * are wide) with three darker arcs smeared behind the blade positions and a faint yellow ring where the tips pass.
+ */
 export function propDiscTexture(): THREE.CanvasTexture {
-  const s = 256;
+  const s = 256, cx = s / 2, cy = s / 2;
   const [c, ctx] = canvas(s, s);
-  const g = ctx.createRadialGradient(s / 2, s / 2, s * 0.08, s / 2, s / 2, s / 2);
-  g.addColorStop(0, 'rgba(40,40,44,0.55)');
-  g.addColorStop(0.5, 'rgba(40,40,44,0.22)');
-  g.addColorStop(0.92, 'rgba(170,150,60,0.22)');
-  g.addColorStop(1, 'rgba(170,150,60,0)');
+  const g = ctx.createRadialGradient(cx, cy, s * 0.07, cx, cy, s / 2);
+  g.addColorStop(0, 'rgba(40,40,44,0.4)');
+  g.addColorStop(0.35, 'rgba(40,40,44,0.18)');
+  g.addColorStop(0.9, 'rgba(40,40,44,0.13)');
+  g.addColorStop(1, 'rgba(40,40,44,0)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+  // smeared blades: a continuous angular fade behind each blade position (a conic gradient, so no spokes)
+  const SMEAR = 1.3 / (Math.PI * 2);
+  for (let b = 0; b < 3; b++) {
+    const cg = ctx.createConicGradient((b / 3) * Math.PI * 2, cx, cy);
+    cg.addColorStop(0, 'rgba(18,18,22,0.2)');
+    cg.addColorStop(SMEAR * 0.5, 'rgba(18,18,22,0.08)');
+    cg.addColorStop(SMEAR, 'rgba(18,18,22,0)');
+    cg.addColorStop(1, 'rgba(18,18,22,0)');
+    ctx.fillStyle = cg;
+    ctx.beginPath(); ctx.arc(cx, cy, s * 0.49, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(200,170,60,0.28)'; ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.arc(cx, cy, s * 0.46, 0, Math.PI * 2); ctx.stroke();
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
