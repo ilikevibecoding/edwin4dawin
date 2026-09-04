@@ -321,8 +321,10 @@ function suite() {
       if (T.crashed === true) crashedSeen = true;
       if (!td) {
         const agl = T.altitude - surfaceY;
-        // stabilised approach: 3 m/s down high up, shallowing continuously into a 0.4 m/s flare; 30 m/s held
-        const targetVs = -clamp(agl * 0.12 + 0.3, 0.4, 3.0);
+        // stabilised approach: 3 m/s down high up, shallowing continuously into a 0.4 m/s flare; 30 m/s held.
+        // The profile is read 1.5 s ahead (height plus closure) because the V/S loop lags a ramping target by
+        // about that much - the same anticipation a pilot uses in the flare.
+        const targetVs = -clamp((agl + 1.5 * T.verticalSpeed) * 0.12 + 0.3, 0.4, 3.0);
         inp.pitch = vsHold(T, targetVs);
         inp.roll = bankHold(T, hdgToBank(T, hdg, 15 * D2R) * (agl > 15 ? 1 : 0));
         inp.throttle = agl > 6 ? spd(T, 30) : agl > 2.5 ? 0.2 : 0.08;

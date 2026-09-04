@@ -208,9 +208,13 @@ export class FlightModel {
     const hinge = clamp(Math.sqrt(614 / Math.max(qdyn, 1)), 0.4, 1);
     const elev = clamp(inp.pitch, -1, 1) * hinge;
     // Cm_alpha -1.3 (stable, trims hands-off at ~55 m/s), Cm_q -36 per (qc/2V) (Beaver ~-31; the extra damping
-    // tames the pitch-rate spike that precedes the alpha build-up), Cm_de 0.45 per full travel: at cruise a full
+    // tames the pitch-rate spike that precedes the alpha build-up), Cm_de 0.43 per full travel: at cruise a full
     // pull peaks near 18 deg/s and ~2 g instead of 100 deg/s and 6 g.
-    const cm = 0.04 - 1.3 * alpha - 36.0 * qHat + 0.45 * elev * (1 - 0.15 * flaps) - 0.06 * flaps;
+    // Stall break: as the flow separates the wing's centre of pressure moves aft and the tail loses downwash,
+    // a firm nose-down increment (-0.18 within ~2 deg past the stall) that makes the break decisive and gets
+    // the nose down to flying speed quickly instead of mushing.
+    const cmBreak = -0.18 * smoothstep(0, 0.035, over);
+    const cm = 0.04 - 1.3 * alpha - 36.0 * qHat + 0.43 * elev * (1 - 0.15 * flaps) - 0.06 * flaps + cmBreak;
     // roll: Cl_p -0.5 (Beaver -0.505), Cl_da 0.072 per full travel -> ~62 deg/s before the sideslip from adverse
     // yaw takes its ~15% back (was 0.14 -> 147 deg/s); dihedral Cl_beta -0.08; roll due to yaw rate +0.08
     // (sign flipped for the nose-left yaw axis)
@@ -221,6 +225,12 @@ export class FlightModel {
     // of induced drag, i.e. +CL/16 in this axis convention)
     const cn = -0.10 * beta - 0.16 * rHat - 0.075 * rud + 0.008 * ail + 0.06 * clamp(cl, 0, 1.5) * pHat;
     const M = new THREE.Vector3(qdyn * S * b * clRoll, qdyn * S * b * cn, qdyn * S * c * cm);
+    // power-on pitch-up: the slipstream raises the dynamic pressure over the download-carrying tail and the
+    // wing root's extra lift deepens the downwash there, which with the low thrust line gives the familiar
+    // nose-up with power of a prop single. Modelled as an equivalent thrust-line offset 0.25 m below the CG:
+    // ~2.5 deg more trim alpha at full power and 30 m/s (a hands-off power-on recovery rounds out near CLmax
+    // instead of diving for speed), ~0.2 deg at cruise power.
+    M.z += 0.25 * thrust;
     // stall buffet & wing drop
     if (stalled) {
       M.x += qdyn * S * b * 0.02 * Math.sin(this.time * 17) * this.buffet;
@@ -353,10 +363,11 @@ export class FlightModel {
       this.velocity.multiplyScalar(1 - 2.5 * dt);
     }
 
-    // wrecked attitude on the surface (on its back, on a wing, nosed over) for more than 3 s -> reset
+    // wrecked attitude on the surface (on its back, on a wing, nosed over) -> reset; the timer trips at 2.9 s so
+    // that with frame granularity the aircraft never stays inverted on the surface past the 3 s limit
     const upY = 1 - 2 * (this.quaternion.x * this.quaternion.x + this.quaternion.z * this.quaternion.z);
     const nearSurface = anyContact || this.position.y - Math.max(gh, 0) < 3.5;
-    if (nearSurface && upY < 0.35) { this.wreckedTimer += dt; if (this.wreckedTimer > 3) this.crash(); }
+    if (nearSurface && upY < 0.35) { this.wreckedTimer += dt; if (this.wreckedTimer > 2.9) this.crash(); }
     else this.wreckedTimer = 0;
 
     const fwd = this.forward(this.tmpV);
