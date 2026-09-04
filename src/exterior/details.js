@@ -244,16 +244,17 @@ export function buildDetails(materials, hull, sup) {
       const n = 1 + Math.floor(rand() * 2);
       for (let k = 0; k < n; k++) {
         const tw = 4.5 + rand() * 4;
+        const td = tw * (0.8 + rand() * 0.6);
         const th = 14 + rand() * 16;
         const tx = c.x + (rand() - 0.5) * c.r;
         const tz = c.z + (rand() - 0.5) * c.r;
         const tone = rand() < 0.5 ? 0.3 + rand() * 0.12 : 0.5 + rand() * 0.15;
-        out.boxes.push(plateauItem(side, tx, tz, tw, th, tw * (0.8 + rand() * 0.6), grey(tone, 1.02), c.yaw));
-        out.boxes.push(plateauItem(side, tx, tz, tw * 0.6, 2.2, tw * 0.6, grey(tone * 0.8), c.yaw, 1.4 + th));
+        out.boxes.push(plateauItem(side, tx, tz, tw, th, td, grey(tone, 1.02)));
+        out.boxes.push(plateauItem(side, tx, tz, tw * 0.6, 2.2, td * 0.6, grey(tone * 0.8), 0, 1.4 + th));
         out.boxes.push(plateauItem(side, tx, tz, 0.5, 6, 0.5, grey(0.4), 0, 1.4 + th + 2.2));
-        for (let y = 3; y < th - 2; y += 3.4) if (rand() < 0.7) out.lights.push(plateauItem(side, tx, tz + tw * 0.4 + 0.1, tw * 0.55, 0.35, 0.2, null, c.yaw, y));
+        for (let y = 3; y < th - 2; y += 3.4) if (rand() < 0.7) out.lights.push(plateauItem(side, tx, tz + td / 2 + 0.1, tw * 0.55, 0.35, 0.2, null, 0, y));
         // soot fan trailing aft of the tower base
-        out.boxes.push(plateauItem(side, tx, tz + tw * 0.5 + 6, tw * 1.1, 0.06, 12 + rand() * 8, grey(0.42, 0.98), 0, 0.02));
+        out.boxes.push(plateauItem(side, tx, tz + td / 2 + 7, tw * 1.1, 0.06, 12 + rand() * 8, grey(0.42, 0.98), 0, 0.02));
         greebles += 4;
       }
       // a pair of big low housings and a pipe manifold across the complex
