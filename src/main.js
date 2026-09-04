@@ -277,13 +277,29 @@ const debugAPI = {
     player.frozen = false;
     const start = player.position.clone();
     let steps = 0;
+    let lastD = Infinity;
+    let stuck = 0;
+    let sidestep = 0;
     for (let t = 0; t < seconds; t += dt) {
       const dx = x - player.position.x;
       const dz = z - player.position.z;
       const d = Math.hypot(dx, dz);
       if (d < 0.15) break;
       player.yaw = Math.atan2(-dx, -dz);
-      player.keys = new Set(["KeyW", "ShiftLeft"]);
+      // stuck against an obstacle: strafe for half a second, alternating sides
+      if (d > lastD - 0.002) stuck += dt;
+      else stuck = 0;
+      lastD = d;
+      const keys = ["KeyW", "ShiftLeft"];
+      if (stuck > 0.4) {
+        sidestep = sidestep || (Math.floor(t * 2) % 2 ? 1 : -1);
+        keys.push(sidestep > 0 ? "KeyD" : "KeyA");
+        if (stuck > 1.2) {
+          sidestep = -sidestep;
+          stuck = 0.5;
+        }
+      } else sidestep = 0;
+      player.keys = new Set(keys);
       player.update(dt);
       interior.update(dt, t);
       steps++;
@@ -291,6 +307,16 @@ const debugAPI = {
     player.keys = new Set();
     const s = interior.currentSector;
     return { from: start.toArray(), to: player.position.toArray(), reached: Math.hypot(x - player.position.x, z - player.position.z) < 0.6, steps, sector: s ? s.id : null };
+  },
+  /** Step the simulation (player, interior, doors, lift, traffic) without rendering. */
+  advance(seconds, dt = 1 / 30) {
+    player.locked = true;
+    for (let t = 0; t < seconds; t += dt) {
+      player.update(dt);
+      interior.update(dt, t);
+      traffic.update(dt, t);
+    }
+    return debugAPI.current();
   },
   /** Open the door nearest the player instantly (for traversal tests). */
   openNearestDoor() {
@@ -382,6 +408,7 @@ const debugAPI = {
       sector: interior && interior.currentSector ? interior.currentSector.id : null,
       colliders: player ? player.colliders.length : 0,
       lights: countLights(),
+      poolLights: interior ? interior.lightUsage() : null,
       qualityLevel: quality.level,
       pixelRatio: renderer.getPixelRatio(),
       reverseDepth,

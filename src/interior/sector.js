@@ -62,12 +62,15 @@ export class Sector {
       audio: interior.audio,
       floorY: this.def.floor ?? 0,
       seed: 7 + this.def.id.length * 13 + this.deck.index * 101,
+      // Lights are virtual: they are not added to the scene. The interior copies the nearest ones
+      // into a fixed pool of real lights every frame, so the shader light count (and therefore the
+      // compiled program set) never changes when moving between rooms. Animating `l.intensity` /
+      // `l.color` / `l.position` on the returned object still works.
       light(l) {
         sector.lights.push(l);
-        sector.group.add(l);
-        if (l.target) sector.group.add(l.target);
         l.userData.baseIntensity = l.intensity;
         l.userData.baseColor = l.color.clone();
+        l.userData.sector = sector;
         return l;
       },
       mesh(obj) {

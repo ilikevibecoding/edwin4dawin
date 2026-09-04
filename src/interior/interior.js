@@ -24,6 +24,88 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
   let collidersDirty = true;
   const listeners = { sector: [] };
 
+  // --- fixed light pool (constant shader light counts → no program recompiles between rooms)
+  const POOL_POINTS = 14;
+  const POOL_SPOTS = 2;
+  const pool = { points: [], spots: [], assigned: [], timer: 0 };
+  for (let i = 0; i < POOL_POINTS; i++) {
+    const l = new THREE.PointLight(0xffffff, 0, 1, 2);
+    l.name = "pool_point_" + i;
+    group.add(l);
+    pool.points.push(l);
+  }
+  for (let i = 0; i < POOL_SPOTS; i++) {
+    const l = new THREE.SpotLight(0xffffff, 0, 1, 0.5, 0.5, 1.5);
+    l.name = "pool_spot_" + i;
+    if (i === 0) {
+      l.castShadow = true;
+      l.shadow.mapSize.set(1024, 1024);
+      l.shadow.bias = -0.0003;
+      l.shadow.normalBias = 0.03;
+      l.shadow.camera.near = 0.3;
+      l.shadow.camera.far = 40;
+    }
+    group.add(l);
+    group.add(l.target);
+    pool.spots.push(l);
+  }
+  const _wp = new THREE.Vector3();
+  const worldPos = (light, out) => {
+    const o = light.userData.sector.deck.origin;
+    return out.set(light.position.x + o[0], light.position.y + o[1], light.position.z + o[2]);
+  };
+  function assignPool() {
+    const pts = [];
+    const sps = [];
+    for (const id of visibleSet) {
+      for (const l of sectors.get(id).lights) {
+        const d = worldPos(l, _wp).distanceTo(player.position);
+        // priority: bright lights that can actually reach the player
+        const score = d - l.distance * 0.5;
+        (l.isSpotLight ? sps : pts).push({ l, score });
+      }
+    }
+    pts.sort((a, b) => a.score - b.score);
+    sps.sort((a, b) => (b.l.castShadow ? 1 : 0) - (a.l.castShadow ? 1 : 0) || a.score - b.score);
+    pool.assigned = [];
+    pool.points.forEach((slot, i) => {
+      const src = pts[i] ? pts[i].l : null;
+      slot.userData.src = src;
+      if (!src) slot.intensity = 0;
+    });
+    pool.spots.forEach((slot, i) => {
+      const src = sps[i] ? sps[i].l : null;
+      slot.userData.src = src;
+      if (!src) slot.intensity = 0;
+    });
+    pool.overflow = Math.max(0, pts.length - POOL_POINTS) + Math.max(0, sps.length - POOL_SPOTS);
+    syncPool();
+  }
+  function syncPool() {
+    for (const slot of pool.points) {
+      const src = slot.userData.src;
+      if (!src) continue;
+      worldPos(src, slot.position);
+      slot.color.copy(src.color);
+      slot.intensity = src.intensity;
+      slot.distance = src.distance;
+      slot.decay = src.decay;
+    }
+    for (const slot of pool.spots) {
+      const src = slot.userData.src;
+      if (!src) continue;
+      worldPos(src, slot.position);
+      const o = src.userData.sector.deck.origin;
+      slot.target.position.set(src.target.position.x + o[0], src.target.position.y + o[1], src.target.position.z + o[2]);
+      slot.color.copy(src.color);
+      slot.intensity = src.intensity;
+      slot.distance = src.distance;
+      slot.decay = src.decay;
+      slot.angle = src.angle;
+      slot.penumbra = src.penumbra;
+    }
+  }
+
   const api = {
     group,
     decks,
@@ -53,6 +135,12 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
       listeners.sector.push(fn);
     },
     lift: null,
+    lightPool: pool,
+    /** Number of pool lights carrying a source light, plus how many visible lights had no slot. */
+    lightUsage() {
+      const used = pool.points.filter((l) => l.userData.src).length + pool.spots.filter((l) => l.userData.src).length;
+      return { used, overflow: pool.overflow || 0 };
+    },
     /** Any sector with a view of the exterior currently visible? */
     seesExterior() {
       for (const id of visibleSet) if (sectors.get(id).def.seesExterior) return true;
@@ -80,6 +168,12 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
       const s = locate(player.position);
       if (s && s !== currentSector) setCurrent(s);
       if (collidersDirty) rebuildColliders();
+      // light pool: re-rank by distance twice a second, sync animated values every frame
+      pool.timer += dt;
+      if (pool.timer > 0.5) {
+        pool.timer = 0;
+        assignPool();
+      } else syncPool();
       // doors of visible sectors
       const seen = new Set();
       for (const id of visibleSet) {
@@ -215,6 +309,7 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     // door groups: a deck's doors show when any of its sectors is visible
     for (const deck of decks) deck.doorGroup.visible = deck.sectors.some((s) => vis.has(s.id));
     collidersDirty = true;
+    assignPool();
   }
 
   function rebuildColliders() {
