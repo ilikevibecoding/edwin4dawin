@@ -11,6 +11,7 @@ import { wallFrame } from "../../../core/frame.js";
 import { bench, chair, ceilingLight, pointLightDesc, wallScreen, alertBeacon, floorDecal, placard, column, pipeRun, railing } from "../../impKit.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
+import { makeStarSprite } from "../../../textures.js";
 import { STD } from "../../../config/layout.js";
 import { setVertexColor } from "../../../kit.js";
 
@@ -152,13 +153,15 @@ export function buildObservation(kit, ctx) {
     kit.add("impMetal", new THREE.CylinderGeometry(r + 0.06, r + 0.06, 0.06, 32), { pos: [tx, y + th, tz], color: IMP.steel, uv: "scale", uvScale: [4, 0.2] });
     kit.add("emitBlue", new THREE.TorusGeometry(r - 0.08, 0.012, 8, 48), { pos: [tx, y + th + 0.03, tz], rot: [Math.PI / 2, 0, 0] });
     // matte black top: a gloss top mirrors the hologram light straight into the camera as a white slab
-    kit.add("impPaintedMetal", new THREE.CylinderGeometry(r - 0.12, r - 0.12, 0.02, 32), { pos: [tx, y + th + 0.02, tz], color: IMP.black, uv: "scale", uvScale: [1, 1] });
+    kit.add("impMatte", new THREE.CylinderGeometry(r - 0.12, r - 0.12, 0.02, 32), { pos: [tx, y + th + 0.02, tz], color: IMP.black, uv: "keep" });
     kit.add("blinkSparse", new THREE.CylinderGeometry(r + 0.001, r + 0.001, 0.1, 32, 1, true), { pos: [tx, y + th - 0.18, tz], uv: "scale", uvScale: [6, 1] });
     kit.collider([tx - r, y, tz - r], [tx + r, y + th, tz + r], "chartTable");
-    // projector cone so the chart reads as a hologram from across the deck
-    kit.add("beam", new THREE.CylinderGeometry(1.3, r - 0.2, 0.55, 32, 1, true), { pos: [tx, y + th + 0.3, tz] });
-    // galaxy: a spiral disc of points, hyperlane segments, one target marker
-    const N = 1400;
+    // projector cone from the emitter ring so the chart reads as a hologram from across the deck
+    kit.add("beam", new THREE.CylinderGeometry(1.25, 0.3, 0.6, 32, 1, true), { pos: [tx, y + th + 0.32, tz] });
+    // galaxy: a spiral disc of points with a central bulge, hyperlane segments, one target marker.
+    // Flat additive discs saturate to a white slab when seen edge-on from eye height, so the disc is
+    // thickened, tilted toward the door and kept at modest per-point opacity.
+    const N = 1100;
     const pos = new Float32Array(N * 3);
     const col = new Float32Array(N * 3);
     const rnd = mulberry(4021);
@@ -168,10 +171,11 @@ export function buildObservation(kit, ctx) {
       const tt = Math.pow(rnd(), 0.6) * 1.15;
       const a = tt * 3.4 + arm * ((Math.PI * 2) / 3) + (rnd() - 0.5) * 0.7;
       const rr = 0.12 + tt * 1.05 + (rnd() - 0.5) * 0.12;
-      pos[i * 3] = Math.cos(a) * rr;
-      pos[i * 3 + 1] = (rnd() - 0.5) * 0.08 * (1.3 - tt);
-      pos[i * 3 + 2] = Math.sin(a) * rr;
-      c.setHSL(0.58 + (rnd() - 0.5) * 0.08, 0.7, 0.55 + rnd() * 0.35);
+      const bulge = Math.max(0, 1 - tt / 0.35);
+      pos[i * 3] = Math.cos(a) * rr * (1 - 0.5 * bulge);
+      pos[i * 3 + 1] = (rnd() - 0.5) * (0.1 + 0.55 * bulge * bulge);
+      pos[i * 3 + 2] = Math.sin(a) * rr * (1 - 0.5 * bulge);
+      c.setHSL(0.58 + (rnd() - 0.5) * 0.08, 0.7, 0.5 + rnd() * 0.3);
       col[i * 3] = c.r;
       col[i * 3 + 1] = c.g;
       col[i * 3 + 2] = c.b;
@@ -179,7 +183,7 @@ export function buildObservation(kit, ctx) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-    const stars = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.042, vertexColors: true, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const stars = new THREE.Points(geo, new THREE.PointsMaterial({ size: 0.055, map: makeStarSprite(32), vertexColors: true, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
     const lanes = [];
     const laneMat = new THREE.LineBasicMaterial({ color: IMP.holo, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
     const node = (i) => [pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]];
@@ -197,13 +201,16 @@ export function buildObservation(kit, ctx) {
     }
     const laneGeo = new THREE.BufferGeometry();
     laneGeo.setAttribute("position", new THREE.Float32BufferAttribute(lanes, 3));
-    const chart = new THREE.Group();
-    chart.position.set(tx, y + th + 0.55, tz);
-    chart.add(stars, new THREE.LineSegments(laneGeo, laneMat));
+    const spin = new THREE.Group();
+    spin.add(stars, new THREE.LineSegments(laneGeo, laneMat));
+    const chart = new THREE.Group(); // tilted mount: the disc faces whoever walks in from the door
+    chart.position.set(tx, y + th + 0.62, tz);
+    chart.rotation.x = -0.55; // normal leans toward -z (the door side)
+    chart.add(spin);
     ctx.add(chart);
     ctx.animate((dt, tm) => {
-      chart.rotation.y += dt * 0.08;
-      chart.position.y = y + th + 0.55 + Math.sin(tm * 0.6) * 0.02;
+      spin.rotation.y += dt * 0.08;
+      chart.position.y = y + th + 0.62 + Math.sin(tm * 0.6) * 0.02;
       laneMat.opacity = 0.38 + 0.1 * Math.sin(tm * 2.4);
     });
     pointLightDesc(ctx, IMP.holo, 1.6, 6, [tx, y + th + 1.4, tz], 2);

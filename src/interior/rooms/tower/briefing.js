@@ -88,9 +88,9 @@ export function buildBriefing(kit, ctx) {
     kit.add("screen2", sg, { pos: [lx - 0.56 - 0.0136, y + 1.32 + 0.0083, lz], rot: [0, 0, -0.55], uv: "keep" });
     kit.box("blinkSparse", lx - 0.66, y + 1.2, lz, 0.01, 0.08, 0.7, { uv: "keep" });
     // emitter disc and hologram: wireframe target planet with a reticle ring and a wedge (the strike group)
-    kit.cyl("darkGloss", lx, y + 1.235, lz, 0.32, 0.03, "y", { segments: 24 });
+    kit.cyl("impMatte", lx, y + 1.235, lz, 0.32, 0.03, "y", { color: IMP.black, segments: 24 }); // matte: gloss mirrors the spot as a white ball
     kit.add("emitBlue", new THREE.TorusGeometry(0.3, 0.015, 6, 36), { pos: [lx, y + 1.25, lz], rot: [Math.PI / 2, 0, 0] });
-    const planet = new THREE.SphereGeometry(0.28, 16, 10);
+    const planet = new THREE.SphereGeometry(0.28, 10, 6); // coarse: a dense additive wire ball saturates to white from the back rows
     const reticle = new THREE.TorusGeometry(0.42, 0.006, 4, 48);
     reticle.rotateX(Math.PI / 2);
     const shape = new THREE.Shape([new THREE.Vector2(0, 0.16), new THREE.Vector2(0.09, -0.1), new THREE.Vector2(-0.09, -0.1)]);

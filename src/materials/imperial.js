@@ -202,6 +202,9 @@ export function buildImperialMaterials() {
     impGloss: std(gloss, { normalScale: new THREE.Vector2(0.5, 0.5), envMapIntensity: 1.2 }),
     // same gloss deck with broader highlights: point lights over a large gloss floor otherwise tone-map to white blobs
     impGlossSoft: std(gloss, { normalScale: new THREE.Vector2(0.5, 0.5), roughness: 2.6, envMapIntensity: 1.0 }),
+    // map-less matte (vertex-tinted) for table tops and cylinder caps: the tiled metal maps smear into
+    // radial wedges on polar cap UVs, and darkGloss mirrors any point light as a white slab
+    impMatte: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.9, metalness: 0.1, envMapIntensity: 0.3 }),
     impDeck: std(dark, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.9 }),
     impGrate: std(grate, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.8, transparent: true, depthWrite: true, alphaTest: 0, side: THREE.DoubleSide }),
     // --- exterior
