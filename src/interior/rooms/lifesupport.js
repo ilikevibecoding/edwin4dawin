@@ -250,14 +250,26 @@ export function buildLifesupport(kit, ctx) {
   // beams, a big air duct along the room, neutral strip over the trench, white strips over the tanks
   kit.boxMM("impPanel1", [min[0] - 0.2, H, min[2] - 0.2], [max[0] + 0.2, H + 0.12, max[2] + 0.2], { color: PALETTE.impMid, uv: "world", texel: 0.5 });
   for (let x = min[0] + 2; x < max[0] - 1; x += 3) kit.box("paintedMetal", x, H - 0.1, (min[2] + max[2]) / 2, 0.24, 0.2, max[2] - min[2] - 0.3, { color: PALETTE.impBlack, texel: 2 });
+  // strips are built like the shared imperial fixture (dark housing, a faint diffuser that reads as the
+  // lit fixture body, a narrow dim core): the earlier raw 0.1 m emitStrip boxes were three blown white
+  // bars with halos where the beams cut the spine
   const strip = (mat, x0, z0, x1, z1) => {
-    kit.boxMM("paintedMetal", [Math.min(x0, x1) - 0.14, H - 0.1, Math.min(z0, z1) - 0.14], [Math.max(x0, x1) + 0.14, H, Math.max(z0, z1) + 0.14], { color: PALETTE.impBlack, texel: 2 });
-    kit.boxMM(mat, [Math.min(x0, x1), H - 0.11, Math.min(z0, z1)], [Math.max(x0, x1), H - 0.09, Math.max(z0, z1)]);
+    const alongX = Math.abs(x1 - x0) >= Math.abs(z1 - z0);
+    const xc = (x0 + x1) / 2;
+    const zc = (z0 + z1) / 2;
+    const L = alongX ? Math.abs(x1 - x0) : Math.abs(z1 - z0);
+    const dims = (w, len) => (alongX ? [len, w] : [w, len]);
+    let [sx, sz] = dims(0.42, L + 0.2);
+    kit.box("paintedMetal", xc, H - 0.06, zc, sx, 0.1, sz, { color: PALETTE.impDark, texel: 2 });
+    [sx, sz] = dims(0.26, L);
+    kit.box("emitWhiteFaint", xc, H - 0.095, zc, sx, 0.02, sz, { uv: "keep" });
+    [sx, sz] = dims(0.05, L - 0.1);
+    kit.box(mat, xc, H - 0.11, zc, sx, 0.02, sz, { uv: "keep" });
   };
-  strip("emitStrip", min[0] + 1, -0.05, max[0] - 1, 0.05);
-  strip("emitWhiteSoft", min[0] + 1, -4.65, -12, -4.55);
-  strip("emitWhiteSoft", min[0] + 1, 5.55, -12, 5.65);
-  strip("emitWhiteSoft", -9.5, -5.5, -6.5, -5.4);
+  strip("emitWhiteDim", min[0] + 1, 0, max[0] - 1, 0);
+  strip("emitWhiteDim", min[0] + 1, -4.6, -12, -4.6);
+  strip("emitWhiteDim", min[0] + 1, 5.6, -12, 5.6);
+  strip("emitWhiteDim", -9.5, -5.45, -6.5, -5.45);
   // main air duct: rectangular trunk along x with grille outlets and a fan housing
   const dz = 2.6;
   kit.boxMM("paintedMetal", [min[0] + 0.5, H - 0.9, dz - 0.55], [max[0] - 2.5, H - 0.12, dz + 0.55], { color: PALETTE.impMid, texel: 1.2 });
@@ -287,13 +299,17 @@ export function buildLifesupport(kit, ctx) {
   // ------------------------------------------------------------------ lights (6)
   // neutral white throughout (the mint pair tinted every metal green): the green identity comes from
   // the trench edge channels, the gauges and the indicator dots only. Two white downlights sit over
-  // the tank rows so the drums and the wall racks read.
+  // the tank rows so the drums and the wall racks read. The spine whites hang 1.3 m below the ceiling
+  // and the tank whites 1 m (between the drums, clear of their tops): at 0.6 m each light burnt a
+  // blown white patch into the plate above it, and the three along the spine read from the door as
+  // three clipped bars with halos.
   const neutral = 0xf2f4f8;
-  ctx.light(pointLight(neutral, 18, 16, [-23.5, H - 0.6, 0]));
-  ctx.light(pointLight(neutral, 17, 16, [-15.5, H - 0.6, 0]));
-  ctx.light(pointLight(0xeef2ff, 17, 13, [-8.5, H - 0.6, -1.5]));
-  ctx.light(pointLight(0xffffff, 16, 12, [-21.5, H - 0.7, -4.2]));
-  ctx.light(pointLight(0xfafcff, 15, 11, [-19.5, H - 0.7, 5.4]));
+  const ly = H - 1.3;
+  ctx.light(pointLight(neutral, 18, 16, [-23.5, ly, 0]));
+  ctx.light(pointLight(neutral, 17, 16, [-15.5, ly, 0]));
+  ctx.light(pointLight(0xeef2ff, 17, 13, [-8.5, ly, -1.5]));
+  ctx.light(pointLight(0xffffff, 16, 12, [-19.8, H - 1.0, -4.2]));
+  ctx.light(pointLight(0xfafcff, 15, 11, [-19.0, H - 1.0, 5.4]));
   ctx.light(pointLight(0xff4030, 5, 7, [-9.3, 3.6, 5.8]));
 
   // ------------------------------------------------------------------ trench with grating
