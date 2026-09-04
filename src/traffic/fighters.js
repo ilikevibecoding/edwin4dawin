@@ -10,6 +10,7 @@ const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3(1, 1, 1);
+const _zero = new THREE.Vector3(0.001, 0.001, 0.001);
 const _up = new THREE.Vector3(0, 1, 0);
 const _look = new THREE.Matrix4();
 
@@ -73,7 +74,7 @@ export function tieGeometries() {
     add(hull, new THREE.BoxGeometry(0.2, 0.3, W * 0.98), s * (R + 1.78), 0, 0);
   }
   // twin engine glows at the rear
-  for (const s of [-1, 1]) add(glow, new THREE.CircleGeometry(0.28, 12), s * 0.55, -0.2, R * 0.98 + 0.42);
+  for (const s of [-1, 1]) add(glow, new THREE.CircleGeometry(0.42, 14), s * 0.55, -0.2, R * 0.98 + 0.42);
   const merge = (arr) => {
     const g = mergeGeometries(arr, false);
     g.computeVertexNormals();
@@ -175,17 +176,42 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
   const below = () => new THREE.Vector3(0, HANGAR.module.bottomY - 30, (HANGAR.opening.z0 + HANGAR.opening.z1) / 2);
   const throat = (x, z) => new THREE.Vector3(THREE.MathUtils.clamp(x, -HANGAR.opening.x + 6, HANGAR.opening.x - 6), HANGAR.module.bottomY - 4, THREE.MathUtils.clamp(z, HANGAR.opening.z0 + 6, HANGAR.opening.z1 - 6));
 
+  // Paths are two legs so the slow, visible part inside the bay (rack → lane → throat → just below
+  // the hull, ~65 m) gets its own time budget instead of ~2 s of a 1.3 km arc-length curve.
   function launchPath(f) {
     const r = f.rack.pos;
     const t1 = throat(r.x * 0.35, r.z);
-    const pts = [r.clone(), new THREE.Vector3(r.x * 0.5, HANGAR.deckY + 6, r.z), new THREE.Vector3(t1.x, HANGAR.deckY - 4, t1.z), t1, new THREE.Vector3(t1.x, HANGAR.module.bottomY - 40, t1.z + 20), new THREE.Vector3(t1.x * 3, HANGAR.module.bottomY - 120, t1.z + 140), new THREE.Vector3(t1.x * 6 - 200, -220, 450), loop.getPoint(0)];
-    return { curve: new THREE.CatmullRomCurve3(pts, false, "centripetal"), duration: 26 };
+    const exit = new THREE.Vector3(t1.x, HANGAR.module.bottomY - 30, t1.z + 10);
+    const inside = new THREE.CatmullRomCurve3([r.clone(), new THREE.Vector3(r.x * 0.55, HANGAR.deckY + 8, r.z), new THREE.Vector3(t1.x, HANGAR.deckY + 1, t1.z), t1, exit], false, "centripetal");
+    const outside = new THREE.CatmullRomCurve3([exit, new THREE.Vector3(t1.x * 3, HANGAR.module.bottomY - 120, t1.z + 160), new THREE.Vector3(t1.x * 6 - 200, -220, 450), loop.getPoint(0)], false, "centripetal");
+    return { legs: [{ curve: inside, duration: 14, ease: "in" }, { curve: outside, duration: 14, ease: "accel" }] };
   }
   function returnPath(f) {
     const r = f.rack.pos;
     const t1 = throat(r.x * 0.35, r.z);
-    const pts = [f.position.clone(), new THREE.Vector3(f.position.x * 0.5, -260, 700), new THREE.Vector3(t1.x * 3, -140, 260), new THREE.Vector3(t1.x, HANGAR.module.bottomY - 50, t1.z + 30), t1, new THREE.Vector3(t1.x, HANGAR.deckY - 4, t1.z), new THREE.Vector3(r.x * 0.5, HANGAR.deckY + 6, r.z), r.clone()];
-    return { curve: new THREE.CatmullRomCurve3(pts, false, "centripetal"), duration: 30 };
+    const entry = new THREE.Vector3(t1.x, HANGAR.module.bottomY - 30, t1.z + 10);
+    const outside = new THREE.CatmullRomCurve3([f.position.clone(), new THREE.Vector3(f.position.x * 0.5, -260, 700), new THREE.Vector3(t1.x * 3, -140, 260), entry], false, "centripetal");
+    const inside = new THREE.CatmullRomCurve3([entry, t1, new THREE.Vector3(t1.x, HANGAR.deckY + 1, t1.z), new THREE.Vector3(r.x * 0.55, HANGAR.deckY + 8, r.z), r.clone()], false, "centripetal");
+    return { legs: [{ curve: outside, duration: 16, ease: "decel" }, { curve: inside, duration: 16, ease: "out" }] };
+  }
+  // evaluate a multi-leg path at time t → { p, tan, done }
+  function evalPath(path, t) {
+    let acc = 0;
+    for (let i = 0; i < path.legs.length; i++) {
+      const leg = path.legs[i];
+      if (t <= acc + leg.duration || i === path.legs.length - 1) {
+        const u = THREE.MathUtils.clamp((t - acc) / leg.duration, 0, 1);
+        let e = u;
+        if (leg.ease === "in") e = u * u * (3 - 2 * u); // gentle start and stop (unclamping, descent)
+        else if (leg.ease === "accel") e = u * u; // throttles up once clear of the hull
+        else if (leg.ease === "decel") e = 1 - (1 - u) * (1 - u); // bleeds speed on approach
+        else if (leg.ease === "out") e = u * u * (3 - 2 * u);
+        return { p: leg.curve.getPointAt(e), tan: leg.curve.getTangentAt(e), done: i === path.legs.length - 1 && u >= 1 };
+      }
+      acc += leg.duration;
+    }
+    const last = path.legs[path.legs.length - 1];
+    return { p: last.curve.getPointAt(1), tan: last.curve.getTangentAt(1), done: true };
   }
 
   function setState(f, s) {
@@ -306,12 +332,8 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
             f.quaternion.setFromAxisAngle(_up, f.rack.yaw || 0);
           } else if (f.state === "launching" || f.state === "returning") {
             f.pathTime += dt;
-            const u = THREE.MathUtils.clamp(f.pathTime / f.path.duration, 0, 1);
-            // ease in/out so the craft creeps through the bay and accelerates outside
-            const e = f.state === "launching" ? u * u * (3 - 2 * u) : 1 - Math.pow(1 - u, 2);
-            const uu = f.state === "launching" ? Math.pow(e, 0.85) : e;
-            const p = f.path.curve.getPointAt(uu);
-            const tan = f.path.curve.getTangentAt(uu);
+            const { p, tan, done } = evalPath(f.path, f.pathTime);
+            const u = done ? 1 : 0;
             f.velocity.copy(p).sub(f.position).divideScalar(Math.max(dt, 1e-3));
             f.position.copy(p);
             // face along the tangent (nose = -z), banked slightly
@@ -352,10 +374,15 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
           }
         }
       }
-      // --- instance matrices
+      // --- instance matrices (engine glow discs collapse to nothing while parked)
       for (const f of fighters) {
         _m.compose(f.position, f.quaternion, _s);
-        for (const m of Object.values(meshes)) m.setMatrixAt(f.id, _m);
+        meshes.hull.setMatrixAt(f.id, _m);
+        meshes.panel.setMatrixAt(f.id, _m);
+        meshes.glass.setMatrixAt(f.id, _m);
+        const flying = f.state !== "parked";
+        _m.compose(f.position, f.quaternion, flying ? _s : _zero);
+        meshes.glow.setMatrixAt(f.id, _m);
       }
       for (const m of Object.values(meshes)) m.instanceMatrix.needsUpdate = true;
     },

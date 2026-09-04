@@ -110,8 +110,12 @@ if (!QUICK) {
   {
     const r = await page.evaluate(async () => {
       await window.debugAPI.teleport("d1_corridor");
-      const a = window.debugAPI.walkTo(0, 627.6, 8); // 2.4 m in front of the blast door (world z = 640-14.8+2.4)
-      window.debugAPI.advance(0.9);
+      const a = window.debugAPI.walkTo(0, 628.6, 8); // 3.4 m in front of the blast door (world z = 640-14.8+3.4)
+      // freeze the leaves a third of the way open for a legible capture
+      const door = window.debugAPI.interior.decks[0].doors.find((d) => d.def.b === "d1_bridge");
+      door.openness = 0.35;
+      door.target = 0.35;
+      door.update(0, window.debugAPI.player.position, true);
       const doors = window.debugAPI.doors().filter((d) => d.name.includes("d1_bridge"));
       window.debugAPI.player.frozen = true;
       window.debugAPI.player.pitch = -0.05;

@@ -92,8 +92,10 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     for (const id of ids) {
       for (const l of sectors.get(id).lights) {
         const d = worldPos(l, _wp).distanceTo(ref);
-        // priority: bright lights that can actually reach the player
-        const score = d - l.distance * 0.5;
+        // priority: bright lights that can actually reach the player; the current sector's own
+        // lights win over neighbours' lights behind the player (they are its designed lighting)
+        const own = currentSector && l.userData.sector === currentSector ? 12 : 0;
+        const score = d - l.distance * 0.5 - own;
         (l.isSpotLight ? sps : pts).push({ l, score });
       }
     }

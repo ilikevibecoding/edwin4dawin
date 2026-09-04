@@ -135,8 +135,10 @@ export class Door {
         mk("impPanel", mid + (s < 0 ? 0.03 : -0.03) - (leafW - 0.3) / 2, mid + (s < 0 ? 0.03 : -0.03) + (leafW - 0.3) / 2, 0.35, h - 0.45, Math.min(n, n - f * 0.012), Math.max(n, n - f * 0.012), { color: PALETTE.impGrey, uv: "keep" });
         mk("paintedMetal", mid - (leafW - 0.3) / 2, mid + (leafW - 0.3) / 2, 0.02, 0.3, Math.min(n, n - f * 0.008), Math.max(n, n - f * 0.008), { color: PALETTE.impDark, texel: 2 });
         if (st.hazard) mk("hazard", s < 0 ? -0.5 : 0.14, s < 0 ? -0.14 : 0.5, h * 0.42, h * 0.58, Math.min(n, n - f * 0.004), Math.max(n, n - f * 0.004), { texel: 3 });
-        // edge lamp: blue when idle, red on blast / secure doors
-        mk(st.lamp, s < 0 ? -0.12 : 0.09, s < 0 ? -0.09 : 0.12, 0.5, h - 0.6, Math.min(n, n - f * 0.006), Math.max(n, n - f * 0.006));
+        // full-height seam lamp: blue when idle, red on blast / secure doors — the leaves must read
+        // as leaves from either side even in a dim corridor
+        mk(st.lamp, s < 0 ? -0.14 : 0.09, s < 0 ? -0.09 : 0.14, 0.15, h - 0.2, Math.min(n, n - f * 0.006), Math.max(n, n - f * 0.006));
+        if (st.hazard) mk("hazard", u0 + 0.08, u1 - 0.08, h - 0.32, h - 0.12, Math.min(n, n - f * 0.004), Math.max(n, n - f * 0.004), { texel: 3 });
         if (st.keypad || st.hazard) {
           const g = new THREE.PlaneGeometry(0.3, 0.3);
           const [gx, gz] = this.place(mid, n - f * 0.002);

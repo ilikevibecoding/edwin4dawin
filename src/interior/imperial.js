@@ -193,11 +193,11 @@ export function impCeiling(kit, ctx, opts = {}) {
     if (along === "x") {
       const z = z0 + c * d;
       kit.box("paintedMetal", x0 + w / 2, y - 0.06, z, L + 0.2, 0.1, 0.42, { color: PALETTE.impDark, texel: 2 });
-      kit.box("emitWhiteSoft", x0 + w / 2, y - 0.1, z, L, 0.03, 0.16, { uv: "keep" });
+      kit.box("emitStrip", x0 + w / 2, y - 0.1, z, L, 0.03, 0.14, { uv: "keep" });
     } else {
       const x = x0 + c * w;
       kit.box("paintedMetal", x, y - 0.06, z0 + d / 2, 0.42, 0.1, L + 0.2, { color: PALETTE.impDark, texel: 2 });
-      kit.box("emitWhiteSoft", x, y - 0.1, z0 + d / 2, 0.16, 0.03, L, { uv: "keep" });
+      kit.box("emitStrip", x, y - 0.1, z0 + d / 2, 0.14, 0.03, L, { uv: "keep" });
     }
   }
   // real lights: a budgeted grid (forward renderer — every light costs every pixel). Big rooms get
@@ -474,13 +474,13 @@ export function impConsole(kit, ctx, { x, z, y = 0, yaw = 0, w = 1.8, d = 0.8, h
     for (let i = 0; i < nb; i++) {
       const bx = -w / 2 + 0.15 + i * 0.11;
       const lit = rand() < 0.4;
-      const mat = lit ? (rand() < 0.5 ? "emitBlue" : rand() < 0.6 ? "emitRed" : "emitAmber") : "rubber";
+      const mat = lit ? (rand() < 0.5 ? "emitBlueDim" : rand() < 0.6 ? "emitRedDim" : "emitAmberDim") : "rubber";
       const p = local(bx, h - 0.18, 0.02);
       const qq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, tilt));
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(qq);
       const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(qq);
-      const pos = p.clone().addScaledVector(up, 0.06).addScaledVector(fwd, slabD * 0.28 + r * 0.09);
-      kit.add(mat, new THREE.BoxGeometry(0.07, 0.03, 0.06), { pos: [pos.x, pos.y, pos.z], quat: qq, color: PALETTE.rubber });
+      const pos = p.clone().addScaledVector(up, 0.055).addScaledVector(fwd, slabD * 0.28 + r * 0.09);
+      kit.add(mat, new THREE.BoxGeometry(0.05, 0.02, 0.045), { pos: [pos.x, pos.y, pos.z], quat: qq, color: PALETTE.rubber });
     }
   }
   // status lamps on the cheeks

@@ -64,7 +64,7 @@ export function buildExterior(scene, materials) {
     exterior_close: { pos: [-420, 260, 560], look: [-80, 120, 520] },
     exterior_tower: { pos: [-260, 240, 330], look: [0, 185, 620] },
     exterior_bridge: { pos: [40, 196, 470], look: [0, 184, 592] },
-    exterior_hangar: { pos: [-140, -260, -160], look: [0, -40, 0] },
+    exterior_hangar: { pos: [-110, -200, -90], look: [0, -46, 0] },
     exterior_engines: { pos: [420, 120, 1300], look: [0, 10, 780] },
     exterior_plating: { pos: [-260, 92, -120], look: [-120, 40, -300] },
     exterior_trench: { pos: [-520, 4, 120], look: [-380, 0, 300] },
