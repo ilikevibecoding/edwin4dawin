@@ -103,3 +103,66 @@ build machine, JS heap 253 MB (includes the procedural texture canvases), zone b
 
 Review after this merge: three independent visual critics (exterior, decks A+B, decks C+D) and one
 technical reviewer; their fix lists drive wave 2.
+
+## Review after wave 1
+
+Three independent visual critics and one technical reviewer (see the agent reports) produced ranked fix
+lists. Headline findings: the exterior collapsed to a flat white cutout beyond 1.3 km and the belly was
+crushed and sparkling; the hangar read as a "blue pool" with no fighters visible, a flat bright ceiling
+and an empty deck; the reactor was under-scaled and the hyperdrive off-palette; the officers' quarters
+read as a corridor; emissive strips blew out and ceilings went void everywhere; the legacy wing kept its
+freighter palette; decal labels named the wrong deck. The technical reviewer found that wall colliders
+were left across corridor junctions and lift portals (the player could not walk between corridors on
+foot; the automated checks had teleported past it), the light pool allocated per frame, culling fell back
+to "draw everything" in lift shafts, and transitions had edge cases.
+
+## Wave 2 (seven resumed workstreams + shared fixes) — integrated at commit fc80414
+
+Shared fixes (integration branch): junction and lift-portal colliders cut (physical walk test added to
+`verify.mjs`), door-state-aware portal culling (a neighbour behind a closed door is never drawn; corridor
+views fell from ~430 to ~140 draw calls), nearest-space culling in shafts, lifts prebuild the destination
+zone and serialise fully, sub-stepped player integration, allocation-free light pool, textured door
+leaves with red/blue status lamps, corridor floor guide lights and bulkhead frames, room-name door signs,
+generic Imperial decal texts, four extra console UI layouts, tamer emissives, matte ceilings, more
+ambient, legacy wing re-lit cool with shuttered portholes, exterior sky cleaned (no dust streaks outside,
+fainter galactic glow, calmer planet halo), mode manager drives `exterior.setMode`, NPC hooks
+(`kit.marker`, `interior.navData`, fighter event listeners).
+
+Workstreams: exterior (form lighting with a cast-shadow sun in orbit view, ventral detail, engines,
+de-tiling, bridge face, neck), bridge (viewport alcove, pilastered walls, lit pits, blast-door surround),
+command deck (officers' wardroom + cabins, projected tactical hologram, comms props, intel cool key,
+theatre benches, lobby surrounds), crew deck forward (bedding, mirrors, dressed mess, medbay beds, pod
+states), crew deck aft (lounge, briefing amphitheatre, armoury, cells, life support variants), engineering
+(27 m reactor column with upper gallery, hero motivator, board variants, crane), hangar (clamp racks with
+lit fighters, launch cradle, trussed ceiling, well shaft with blast leaves and beacons, populated deck,
+flight-control cab, shuttle, cargo stacks).
+
+`tools/verify.mjs`: 27/27 (rooms resolve, 35/35 spaces reachable, physical walks through junctions, a
+door and to the lift portal, doors, both lifts across every deck carrying the player, transitions,
+traffic, reserved systems, budgets, no page errors).
+
+`tools/shots.mjs sd2_wave2` (build snapshot, 1280×720, 56 frames + checks) after the culling change:
+
+| View | Calls | Triangles | Lights |
+| --- | --- | --- | --- |
+| ext_far | 97 | 411 k | sun |
+| ext_mid | 101 | 420 k | sun |
+| ext_close | 102 | 432 k | sun |
+| ext_belly | 146 | 581 k | sun |
+| bridge | 177 | 451 k | 15 |
+| bridgeAft | 135 | 347 k | 15 |
+| hangarDeck | 159 | 317 k | 15 |
+| room:reactor | 105 | 241 k | 14 |
+| room:officers | 137 | 219 k | 14 |
+| room:B-spine (corridor) | 136 | 137 k | 6 |
+| room:A-spine (corridor) | 139 | 152 k | 5 |
+| room:flightControl (legacy wing) | 314 | 710 k | 16 |
+
+Every view is under the 360-call / 1.6 M-triangle guard; the legacy wing remains the heaviest space
+(five freighter rooms in one space with ~35 materials). Totals: 139 MB estimated texture memory (mips
+included; the technical reviewer's independent count was ~140 MB), 127 shader programs, 1.9 s shader
+compile on the build machine, JS heap 299 MB in Chromium (procedural texture canvases included), zone
+build 1.3 s / 0.65 s / 0.55 s (tower / engineering / hangar) on the build machine's CPU, ready in ~30 s
+there (software GL; the same page reaches its first frame in a few seconds on a laptop GPU).
+
+Evidence frames: `docs/evidence/wave2/*.jpg`.
