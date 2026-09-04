@@ -573,52 +573,69 @@ function sparesRack(kit, x, z) {
 function starboardStrip(ctx) {
   const { kit, props } = ctx;
   const xw = ctx.inner.x1; // 39.75
-  // stair tower: flight A (deck -> landing at catwalk level) against the wall climbing -z, a 6 m landing that
-  // also receives the forward catwalk, flight B (landing -> gallery) outboard climbing +z.
-  props.stairs(kit, { pos: [38.55, Y, -18], yaw: 0, rise: 8, stepH: 0.25, width: 2.4 }); // top z -27.6
-  slab(kit, 32.4, -33.6, xw, -27.6, CAT_Y, "landing");
-  props.stairs(kit, { pos: [33.75, CAT_Y, -33.6], yaw: Math.PI, rise: 10, stepH: 0.25, width: 2.4 }); // top z -21.6
-  railing(kit, { from: [32.4, -33.6], to: [32.4, -27.6], y: CAT_Y, color: IMP.gunmetal });
-  railing(kit, { from: [35.0, -33.75], to: [37.3, -33.75], y: CAT_Y, color: IMP.gunmetal });
-  railing(kit, { from: [32.4, -27.45], to: [37.3, -27.45], y: CAT_Y, color: IMP.gunmetal });
+  // stair tower (x 32..40, z -46..-29): a scissor stair. Flight A (deck -> landing at catwalk level) climbs
+  // forward (-z) from its foot at z -31.2, so from the deck at (36, -30) you look straight up the steps; the
+  // landing at z -46..-40.8 also receives the forward catwalk; flight B (landing -> gallery) climbs back aft
+  // (+z) outboard of A and lands on the gallery at z -28.8, ten metres in front of the booth opening.
+  const A = props.stairs(kit, { pos: [36.0, Y, -31.2], yaw: 0, rise: 8, stepH: 0.25, width: 2.4 }); // top z -40.8
+  const LZ0 = A.top.z - 5.2; // -46
+  slab(kit, 32.0, LZ0, xw, A.top.z, CAT_Y, "landing");
+  const B = props.stairs(kit, { pos: [33.2, CAT_Y, A.top.z], yaw: Math.PI, rise: 10, stepH: 0.25, width: 2.4 }); // top z -28.8
+  // the flights' handrails are visual (props.stairs): thin walls along the stringers keep the player on the
+  // treads (otherwise a sidestep off A drops through B's riser fill)
+  kit.collider([34.6, Y, A.top.z], [34.8, Y + 9.2, -31.2], "stair_side");
+  kit.collider([37.2, Y, A.top.z], [37.4, Y + 9.2, -31.2], "stair_side");
+  kit.collider([31.8, CAT_Y, A.top.z], [32.0, CAT_Y + 11.2, B.top.z], "stair_side");
+  kit.collider([34.4, CAT_Y, A.top.z], [34.6, CAT_Y + 11.2, B.top.z], "stair_side");
+  railing(kit, { from: [32.0, LZ0], to: [32.0, A.top.z], y: CAT_Y, color: IMP.gunmetal });
+  railing(kit, { from: [32.0, LZ0 - 0.15], to: [37.3, LZ0 - 0.15], y: CAT_Y, color: IMP.gunmetal });
+  railing(kit, { from: [37.3, A.top.z + 0.15], to: [xw, A.top.z + 0.15], y: CAT_Y, color: IMP.gunmetal });
+  railing(kit, { from: [34.4, A.top.z + 0.15], to: [34.8, A.top.z + 0.15], y: CAT_Y, color: IMP.gunmetal });
   // amber stringer lights along the open sides of both flights + a soffit lamp under the landing, so the
   // tower reads from the deck (the nearest work light is 25 m away)
-  bar(kit, "emitAmber", [37.26, Y + 0.32, -18], [37.26, Y + 8.32, -27.6], 0.02, 0.06);
-  bar(kit, "emitAmber", [32.46, CAT_Y + 0.32, -33.6], [32.46, CAT_Y + 10.32, -21.6], 0.02, 0.06);
-  bar(kit, "emitAmber", [35.04, CAT_Y + 0.32, -33.6], [35.04, CAT_Y + 10.32, -21.6], 0.02, 0.06);
-  kit.boxMM("paintedMetal", [35.6, CAT_Y - 0.44, -31.0], [37.2, CAT_Y - 0.3, -30.2], { color: IMP.black, texel: 1 });
-  kit.boxMM("emitWhiteSoft", [35.75, CAT_Y - 0.45, -30.85], [37.05, CAT_Y - 0.44, -30.35], { uv: "keep" });
+  for (const x of [34.74, 37.26]) bar(kit, "emitAmber", [x, Y + 0.32, -31.2], [x, Y + 8.32, A.top.z], 0.02, 0.06);
+  for (const x of [31.94, 34.46]) bar(kit, "emitAmber", [x, CAT_Y + 0.32, A.top.z], [x, CAT_Y + 10.32, B.top.z], 0.02, 0.06);
+  kit.boxMM("paintedMetal", [35.6, CAT_Y - 0.44, -43.8], [37.2, CAT_Y - 0.3, -43.0], { color: IMP.black, texel: 1 });
+  kit.boxMM("emitWhiteSoft", [35.75, CAT_Y - 0.45, -43.65], [37.05, CAT_Y - 0.44, -43.15], { uv: "keep" });
   // gallery in front of the flight-control booth (its slab bridges the wall gap into the booth floor)
-  slab(kit, 31, -21.6, 40.0, 3, GAL_Y, "gallery");
-  railing(kit, { from: [31.15, -21.6], to: [31.15, HOIST.z0], y: GAL_Y, color: IMP.gunmetal });
+  slab(kit, 31, B.top.z, 40.0, 3, GAL_Y, "gallery");
+  railing(kit, { from: [31.15, B.top.z], to: [31.15, HOIST.z0], y: GAL_Y, color: IMP.gunmetal });
   railing(kit, { from: [31.15, HOIST.z1], to: [31.15, 3], y: GAL_Y, color: IMP.gunmetal });
-  railing(kit, { from: [31, -21.45], to: [32.45, -21.45], y: GAL_Y, color: IMP.gunmetal });
-  railing(kit, { from: [35.05, -21.45], to: [xw, -21.45], y: GAL_Y, color: IMP.gunmetal });
+  railing(kit, { from: [31, B.top.z + 0.15], to: [31.9, B.top.z + 0.15], y: GAL_Y, color: IMP.gunmetal });
+  railing(kit, { from: [34.5, B.top.z + 0.15], to: [xw, B.top.z + 0.15], y: GAL_Y, color: IMP.gunmetal });
   railing(kit, { from: [31, 2.85], to: [37.25, 2.85], y: GAL_Y, color: IMP.gunmetal });
   // tower frame: four columns, top frame, X-bracing on the outboard and forward faces, gallery columns
-  const cols = [[32.1, -34.1], [32.1, -21.1], [36.15, -34.1], [36.15, -21.1]];
+  const TZ0 = LZ0 - 0.3, TZ1 = B.top.z + 0.3;
+  const cols = [[31.7, TZ0], [31.7, TZ1], [37.6, TZ0], [37.6, TZ1]];
   for (const [x, z] of cols) {
     kit.boxMM("paintedMetal", [x - 0.25, Y, z - 0.25], [x + 0.25, GAL_Y + 1.4, z + 0.25], { color: IMP.plateDark, texel: 1 });
     kit.boxMM("paintedMetal", [x - 0.4, Y, z - 0.4], [x + 0.4, Y + 0.5, z + 0.4], { color: IMP.black, texel: 1 });
     kit.collider([x - 0.3, Y, z - 0.3], [x + 0.3, GAL_Y, z + 0.3], "column");
   }
-  kit.boxMM("paintedMetal", [31.85, GAL_Y + 1.1, -34.35], [36.4, GAL_Y + 1.4, -20.85], { color: IMP.trim, texel: 1 });
-  kit.boxMM("paintedMetal", [31.85, GAL_Y + 1.1, -34.35], [xw, GAL_Y + 1.4, -33.85], { color: IMP.trim, texel: 1 });
-  kit.boxMM("emitAmber", [32.0, GAL_Y + 1.2, -34.5], [36.25, GAL_Y + 1.3, -34.36]);
+  kit.boxMM("paintedMetal", [31.45, GAL_Y + 1.1, TZ0 - 0.25], [31.95, GAL_Y + 1.4, TZ1 + 0.25], { color: IMP.trim, texel: 1 });
+  kit.boxMM("paintedMetal", [31.45, GAL_Y + 1.1, TZ0 - 0.25], [xw, GAL_Y + 1.4, TZ0 + 0.25], { color: IMP.trim, texel: 1 });
+  kit.boxMM("emitAmber", [31.6, GAL_Y + 1.2, TZ0 - 0.4], [37.45, GAL_Y + 1.3, TZ0 - 0.26]);
   for (const [ya, yb] of [[Y + 0.5, CAT_Y - 0.4], [CAT_Y - 0.4, GAL_Y + 1.0]]) {
-    bar(kit, "paintedMetal", [32.1, ya, -34.1], [32.1, yb, -21.1], 0.16, 0.3, { color: IMP.gunmetal });
-    bar(kit, "paintedMetal", [32.1, ya, -21.1], [32.1, yb, -34.1], 0.16, 0.3, { color: IMP.gunmetal });
+    bar(kit, "paintedMetal", [31.7, ya, TZ0], [31.7, yb, TZ1], 0.16, 0.3, { color: IMP.gunmetal });
+    bar(kit, "paintedMetal", [31.7, ya, TZ1], [31.7, yb, TZ0], 0.16, 0.3, { color: IMP.gunmetal });
   }
-  bar(kit, "paintedMetal", [32.1, Y + 0.5, -34.1], [36.15, CAT_Y - 0.4, -34.1], 0.3, 0.16, { color: IMP.gunmetal });
-  bar(kit, "paintedMetal", [36.15, Y + 0.5, -34.1], [32.1, CAT_Y - 0.4, -34.1], 0.3, 0.16, { color: IMP.gunmetal });
+  bar(kit, "paintedMetal", [31.7, Y + 0.5, TZ0], [37.6, CAT_Y - 0.4, TZ0], 0.3, 0.16, { color: IMP.gunmetal });
+  bar(kit, "paintedMetal", [37.6, Y + 0.5, TZ0], [31.7, CAT_Y - 0.4, TZ0], 0.3, 0.16, { color: IMP.gunmetal });
   for (const z of [-14.5, 2.6]) {
     kit.boxMM("paintedMetal", [31.15, Y, z - 0.25], [31.65, GAL_Y - 0.3, z + 0.25], { color: IMP.plateDark, texel: 1 });
     kit.collider([31.1, Y, z - 0.3], [31.7, GAL_Y, z + 0.3], "column");
   }
   // gallery underside: stiffeners + a lit soffit so the space below is not a black slab
-  for (let z = -20; z < 3; z += 4) kit.boxMM("paintedMetal", [31, GAL_Y - 0.6, z - 0.15], [xw, GAL_Y - 0.3, z + 0.15], { color: IMP.black, texel: 1 });
-  kit.boxMM("paintedMetal", [34.6, GAL_Y - 0.44, -21], [35.4, GAL_Y - 0.3, 2.5], { color: IMP.black, texel: 1 });
-  kit.boxMM("emitWhiteSoft", [34.75, GAL_Y - 0.45, -20.5], [35.25, GAL_Y - 0.44, 2], { uv: "keep" });
+  for (let z = -27; z < 3; z += 4) kit.boxMM("paintedMetal", [31, GAL_Y - 0.6, z - 0.15], [xw, GAL_Y - 0.3, z + 0.15], { color: IMP.black, texel: 1 });
+  kit.boxMM("paintedMetal", [34.6, GAL_Y - 0.44, -28.3], [35.4, GAL_Y - 0.3, 2.5], { color: IMP.black, texel: 1 });
+  kit.boxMM("emitWhiteSoft", [34.75, GAL_Y - 0.45, -27.8], [35.25, GAL_Y - 0.44, 2], { uv: "keep" });
+  // ops banks against the wall beside flight A and under the landing, a control panel at the foot
+  props.computerBank(kit, { pos: [xw - 0.6, Y, -43.5], yaw: -Math.PI / 2, w: 3.2, h: 2.4, d: 0.6, seed: 12, accent: "emitAmber" });
+  props.computerBank(kit, { pos: [xw - 0.6, Y, -36.5], yaw: -Math.PI / 2, w: 3.2, h: 2.4, d: 0.6, seed: 13, accent: "emitAmber" });
+  const FX = ctx.wall("xmax").frame; // u = z - z0
+  props.wallPanel(kit, FX, -31.5 - ctx.inner.z0, 1.55, { w: 1.1, h: 0.75, accent: "emitAmber", seed: 44 });
+  FX.decal(-33.2 - ctx.inner.z0, 3.6, 0.03, 1.4, 1.4, DECAL.TEXT_B);
+  toolCart(kit, 38.6, -40.4, 1.2, IMP.plateBlue);
   // gallery furniture: observation console at the rail, status board on the wall
   props.consoleStation(kit, { pos: [32.6, GAL_Y, -8.5], yaw: Math.PI / 2, w: 2.2, d: 0.8, screens: 3, accent: "emitAmber", seed: 21, screenSet: [7, 2, 12] });
   props.chair(kit, { pos: [33.6, GAL_Y, -8.5], yaw: Math.PI / 2 });
@@ -652,7 +669,7 @@ function catwalks(ctx) {
   catwalkRun(ctx, x0, x0 + W, -76.4, 56.4, +1);
   // starboard: forward run to the tower landing, aft run from the gallery stair to the aft stair
   props.stairs(kit, { pos: [38.55, Y, -86], yaw: Math.PI, rise: 8, stepH: 0.25, width: W });
-  catwalkRun(ctx, x1 - W, x1, -76.4, -33.6, -1);
+  catwalkRun(ctx, x1 - W, x1, -76.4, -46, -1);
   props.stairs(kit, { pos: [38.55, CAT_Y, 15], yaw: 0, rise: 10, stepH: 0.25, width: W });
   props.stairs(kit, { pos: [38.55, Y, 67], yaw: 0, rise: 8, stepH: 0.25, width: W });
   catwalkRun(ctx, x1 - W, x1, 15, 57.4, -1);
