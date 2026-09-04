@@ -1,0 +1,900 @@
+{
+  "iter": "2",
+  "loadMs": 15249,
+  "viewport": [
+    1280,
+    720
+  ],
+  "views": {
+    "observation": {
+      "frameMs": 3491.63,
+      "fps": 0.3,
+      "frameP50": 3717.3,
+      "frameP95": 12213.3,
+      "calls": 283,
+      "triangles": 739870,
+      "geometries": 235,
+      "textures": 88,
+      "programs": 59,
+      "shaderCompiles": 59,
+      "visibleObjects": 248,
+      "visibleInstances": 18198,
+      "textureMB": 138.1,
+      "jsHeapMB": 144,
+      "longTasks": 20,
+      "longTaskMs": 81478,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d2_observation",
+      "colliders": 84,
+      "lights": 19,
+      "poolLights": {
+        "used": 10,
+        "overflow": 0
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "mess": {
+      "frameMs": 2517.32,
+      "fps": 0.4,
+      "frameP50": 3682.4,
+      "frameP95": 10315.9,
+      "calls": 117,
+      "triangles": 241462,
+      "geometries": 308,
+      "textures": 92,
+      "programs": 70,
+      "shaderCompiles": 70,
+      "visibleObjects": 223,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 253,
+      "longTasks": 32,
+      "longTaskMs": 109269,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d3_mess",
+      "colliders": 177,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 8
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "quarters": {
+      "frameMs": 2925.76,
+      "fps": 0.3,
+      "frameP50": 3534.7,
+      "frameP95": 5102.7,
+      "calls": 112,
+      "triangles": 259324,
+      "geometries": 358,
+      "textures": 93,
+      "programs": 73,
+      "shaderCompiles": 73,
+      "visibleObjects": 220,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 253,
+      "longTasks": 45,
+      "longTaskMs": 148589,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d3_quarters",
+      "colliders": 356,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 8
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "medbay": {
+      "frameMs": 2692.69,
+      "fps": 0.4,
+      "frameP50": 3208,
+      "frameP95": 5102.7,
+      "calls": 123,
+      "triangles": 221878,
+      "geometries": 392,
+      "textures": 93,
+      "programs": 74,
+      "shaderCompiles": 74,
+      "visibleObjects": 231,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 253,
+      "longTasks": 56,
+      "longTaskMs": 176253,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d3_medbay",
+      "colliders": 168,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 8
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "recreation": {
+      "frameMs": 2479.14,
+      "fps": 0.4,
+      "frameP50": 3123.3,
+      "frameP95": 4673.7,
+      "calls": 121,
+      "triangles": 170314,
+      "geometries": 420,
+      "textures": 94,
+      "programs": 76,
+      "shaderCompiles": 76,
+      "visibleObjects": 229,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 254,
+      "longTasks": 68,
+      "longTaskMs": 204855,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d3_rec",
+      "colliders": 166,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 8
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "armory": {
+      "frameMs": 2523.36,
+      "fps": 0.4,
+      "frameP50": 2728.1,
+      "frameP95": 4673.7,
+      "calls": 68,
+      "triangles": 89464,
+      "geometries": 445,
+      "textures": 94,
+      "programs": 76,
+      "shaderCompiles": 76,
+      "visibleObjects": 222,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 254,
+      "longTasks": 81,
+      "longTaskMs": 238135,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d3_armory",
+      "colliders": 153,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 8
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "detention": {
+      "frameMs": 3011.23,
+      "fps": 0.3,
+      "frameP50": 2920.6,
+      "frameP95": 4600.2,
+      "calls": 76,
+      "triangles": 81752,
+      "geometries": 476,
+      "textures": 95,
+      "programs": 76,
+      "shaderCompiles": 76,
+      "visibleObjects": 227,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 254,
+      "longTasks": 93,
+      "longTaskMs": 276188,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d3_detention",
+      "colliders": 190,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 8
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "escape": {
+      "frameMs": 2338.57,
+      "fps": 0.4,
+      "frameP50": 2728.1,
+      "frameP95": 4514,
+      "calls": 76,
+      "triangles": 117060,
+      "geometries": 504,
+      "textures": 95,
+      "programs": 76,
+      "shaderCompiles": 76,
+      "visibleObjects": 224,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 254,
+      "longTasks": 104,
+      "longTaskMs": 299090,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d3_escape",
+      "colliders": 139,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 8
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "lifesupport": {
+      "frameMs": 2293.63,
+      "fps": 0.4,
+      "frameP50": 2622.5,
+      "frameP95": 4514,
+      "calls": 120,
+      "triangles": 220484,
+      "geometries": 536,
+      "textures": 95,
+      "programs": 76,
+      "shaderCompiles": 76,
+      "visibleObjects": 234,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 254,
+      "longTasks": 116,
+      "longTaskMs": 326011,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d3_lifesupport",
+      "colliders": 140,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 8
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "corridor_crew": {
+      "frameMs": 2571.09,
+      "fps": 0.4,
+      "frameP50": 2578.9,
+      "frameP95": 4448.6,
+      "calls": 145,
+      "triangles": 191642,
+      "geometries": 580,
+      "textures": 95,
+      "programs": 76,
+      "shaderCompiles": 76,
+      "visibleObjects": 234,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 254,
+      "longTasks": 129,
+      "longTaskMs": 360178,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d3_corridor",
+      "colliders": 140,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 8
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "engineering": {
+      "frameMs": 2842.29,
+      "fps": 0.4,
+      "frameP50": 2649.9,
+      "frameP95": 4448.6,
+      "calls": 117,
+      "triangles": 360522,
+      "geometries": 625,
+      "textures": 95,
+      "programs": 78,
+      "shaderCompiles": 78,
+      "visibleObjects": 175,
+      "visibleInstances": 28,
+      "textureMB": 146.7,
+      "jsHeapMB": 357,
+      "longTasks": 141,
+      "longTaskMs": 393747,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d4_engctrl",
+      "colliders": 125,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 0
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "hyperdrive": {
+      "frameMs": 2550.6,
+      "fps": 0.4,
+      "frameP50": 2578.9,
+      "frameP95": 4408.3,
+      "calls": 104,
+      "triangles": 278822,
+      "geometries": 653,
+      "textures": 95,
+      "programs": 78,
+      "shaderCompiles": 78,
+      "visibleObjects": 178,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 357,
+      "longTasks": 153,
+      "longTaskMs": 423757,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d4_hyperdrive",
+      "colliders": 129,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 0
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "maintenance": {
+      "frameMs": 1936.45,
+      "fps": 0.5,
+      "frameP50": 2479,
+      "frameP95": 4187.8,
+      "calls": 105,
+      "triangles": 279422,
+      "geometries": 681,
+      "textures": 95,
+      "programs": 78,
+      "shaderCompiles": 78,
+      "visibleObjects": 177,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 357,
+      "longTasks": 164,
+      "longTaskMs": 442373,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d4_maintenance",
+      "colliders": 137,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 0
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "cargo": {
+      "frameMs": 2148.32,
+      "fps": 0.5,
+      "frameP50": 2441.5,
+      "frameP95": 4187.8,
+      "calls": 121,
+      "triangles": 412670,
+      "geometries": 710,
+      "textures": 95,
+      "programs": 78,
+      "shaderCompiles": 78,
+      "visibleObjects": 180,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 357,
+      "longTasks": 176,
+      "longTaskMs": 468514,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d4_cargo",
+      "colliders": 108,
+      "lights": 16,
+      "poolLights": {
+        "used": 14,
+        "overflow": 0
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "reactor": {
+      "frameMs": 1998.69,
+      "fps": 0.5,
+      "frameP50": 2370.7,
+      "frameP95": 4170.4,
+      "calls": 103,
+      "triangles": 412802,
+      "geometries": 743,
+      "textures": 95,
+      "programs": 78,
+      "shaderCompiles": 78,
+      "visibleObjects": 184,
+      "visibleInstances": 0,
+      "textureMB": 146.7,
+      "jsHeapMB": 358,
+      "longTasks": 188,
+      "longTaskMs": 492107,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d4_reactor",
+      "colliders": 165,
+      "lights": 16,
+      "poolLights": {
+        "used": 15,
+        "overflow": 1
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "hangar_entry": {
+      "frameMs": 3211.42,
+      "fps": 0.3,
+      "frameP50": 2437.4,
+      "frameP95": 4187.8,
+      "calls": 421,
+      "triangles": 1769570,
+      "geometries": 907,
+      "textures": 96,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "visibleObjects": 331,
+      "visibleInstances": 18605,
+      "textureMB": 157.7,
+      "jsHeapMB": 449,
+      "longTasks": 200,
+      "longTaskMs": 534376,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d5_hangar",
+      "colliders": 417,
+      "lights": 19,
+      "poolLights": {
+        "used": 14,
+        "overflow": 11
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "hangar_deck": {
+      "frameMs": 3858.13,
+      "fps": 0.3,
+      "frameP50": 2475.1,
+      "frameP95": 4260.6,
+      "calls": 403,
+      "triangles": 1759802,
+      "geometries": 907,
+      "textures": 96,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "visibleObjects": 331,
+      "visibleInstances": 18605,
+      "textureMB": 157.7,
+      "jsHeapMB": 449,
+      "longTasks": 212,
+      "longTaskMs": 583153,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d5_hangar",
+      "colliders": 417,
+      "lights": 19,
+      "poolLights": {
+        "used": 14,
+        "overflow": 11
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "hangar_racks": {
+      "frameMs": 3930.83,
+      "fps": 0.3,
+      "frameP50": 2572.1,
+      "frameP95": 4228.1,
+      "calls": 363,
+      "triangles": 1701206,
+      "geometries": 907,
+      "textures": 97,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "visibleObjects": 298,
+      "visibleInstances": 18605,
+      "textureMB": 157.7,
+      "jsHeapMB": 449,
+      "longTasks": 224,
+      "longTaskMs": 631087,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d5_hangar",
+      "colliders": 383,
+      "lights": 19,
+      "poolLights": {
+        "used": 14,
+        "overflow": 7
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "fighterbay": {
+      "frameMs": 3547.47,
+      "fps": 0.3,
+      "frameP50": 2692.9,
+      "frameP95": 4228.1,
+      "calls": 340,
+      "triangles": 1630772,
+      "geometries": 907,
+      "textures": 97,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "visibleObjects": 298,
+      "visibleInstances": 18605,
+      "textureMB": 157.7,
+      "jsHeapMB": 449,
+      "longTasks": 236,
+      "longTaskMs": 672224,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d5_fighterbay",
+      "colliders": 383,
+      "lights": 19,
+      "poolLights": {
+        "used": 14,
+        "overflow": 7
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "shuttlebay": {
+      "frameMs": 3236.21,
+      "fps": 0.3,
+      "frameP50": 2728.1,
+      "frameP95": 4143.6,
+      "calls": 342,
+      "triangles": 1682020,
+      "geometries": 907,
+      "textures": 97,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "visibleObjects": 298,
+      "visibleInstances": 18605,
+      "textureMB": 157.7,
+      "jsHeapMB": 449,
+      "longTasks": 248,
+      "longTaskMs": 709707,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d5_shuttlebay",
+      "colliders": 383,
+      "lights": 19,
+      "poolLights": {
+        "used": 14,
+        "overflow": 7
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    },
+    "hangar_cargo": {
+      "frameMs": 2092.46,
+      "fps": 0.5,
+      "frameP50": 2572.1,
+      "frameP95": 4108.7,
+      "calls": 96,
+      "triangles": 114428,
+      "geometries": 945,
+      "textures": 97,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "visibleObjects": 151,
+      "visibleInstances": 0,
+      "textureMB": 157.7,
+      "jsHeapMB": 449,
+      "longTasks": 260,
+      "longTaskMs": 730777,
+      "loadMs": 12212,
+      "mode": "interior",
+      "sector": "d5_cargo",
+      "colliders": 98,
+      "lights": 16,
+      "poolLights": {
+        "used": 9,
+        "overflow": 0
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 10185,
+      "hullGreebles": 6593
+    }
+  },
+  "dynamic": {
+    "drift": {
+      "skyRegion": {
+        "meanAbsDiff": 1.43,
+        "changedFraction": 0.029
+      },
+      "interiorControl": {
+        "meanAbsDiff": 0,
+        "changedFraction": 0
+      }
+    },
+    "door": {
+      "walked": true,
+      "doors": [
+        {
+          "name": "door_d1_corridor_d1_bridge",
+          "state": "opening",
+          "openness": 0.69,
+          "style": "blast"
+        }
+      ]
+    },
+    "lift": {
+      "started": true,
+      "state": "moving",
+      "seconds": 1,
+      "current": {
+        "id": "d5_lift",
+        "deck": "hangar",
+        "visible": [
+          "d5_lift",
+          "d5_lobby",
+          "d5_corridor"
+        ],
+        "colliders": 43
+      }
+    },
+    "traffic": {
+      "counts": {
+        "launching": 5,
+        "parked": 3
+      },
+      "bay": 1,
+      "first": {
+        "id": 0,
+        "s": "launching",
+        "p": [
+          -875.36,
+          -181.61,
+          402.27
+        ],
+        "q": [
+          -0.023,
+          -0.7448,
+          -0.0257,
+          0.6664
+        ]
+      }
+    },
+    "transition": {
+      "m0": "interior",
+      "m1": "exterior",
+      "cam": [
+        -1100,
+        520,
+        300
+      ],
+      "m2": "interior",
+      "samePlace": true,
+      "sector": "d1_bridge"
+    },
+    "reserved": {
+      "flight": {
+        "state": "idle",
+        "calls": 0
+      },
+      "entry": {
+        "state": "idle",
+        "calls": 0
+      },
+      "gear": {
+        "state": "idle",
+        "calls": 0
+      },
+      "docking": {
+        "state": "idle",
+        "calls": 0
+      },
+      "contact": {
+        "state": "idle",
+        "calls": 0
+      },
+      "hangar": {
+        "state": "idle",
+        "calls": 0
+      },
+      "cameraTransition": {
+        "state": "idle",
+        "calls": 0
+      },
+      "landingZones": {
+        "state": "idle",
+        "calls": 0
+      }
+    },
+    "audio": [
+      {
+        "t": 891646.6999999993,
+        "name": "door_closed",
+        "pos": {
+          "x": 2.7,
+          "y": -28.2,
+          "z": 76
+        }
+      },
+      {
+        "t": 898622.5999999978,
+        "name": "tie_launch",
+        "pos": {
+          "x": -29,
+          "y": -14,
+          "z": -11
+        }
+      },
+      {
+        "t": 901686,
+        "name": "tie_launch",
+        "pos": {
+          "x": -29,
+          "y": -14,
+          "z": 7
+        }
+      },
+      {
+        "t": 901686,
+        "name": "tie_launch",
+        "pos": {
+          "x": -29,
+          "y": -14,
+          "z": 25
+        }
+      },
+      {
+        "t": 901686.0999999978,
+        "name": "tie_launch",
+        "pos": {
+          "x": 29,
+          "y": -14,
+          "z": -29
+        }
+      },
+      {
+        "t": 901691.8000000007,
+        "name": "mode_exterior",
+        "pos": null
+      },
+      {
+        "t": 933472.5,
+        "name": "mode_interior",
+        "pos": null
+      },
+      {
+        "t": 972485.3000000007,
+        "name": "mode_exterior",
+        "pos": null
+      },
+      {
+        "t": 972485.3999999985,
+        "name": "mode_interior",
+        "pos": null
+      },
+      {
+        "t": 972485.8000000007,
+        "name": "door_open",
+        "pos": {
+          "x": 0,
+          "y": 181.6,
+          "z": 625.2
+        }
+      }
+    ]
+  },
+  "logs": [
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected."
+  ],
+  "finalStats": {
+    "frameMs": 3717.85,
+    "fps": 0.3,
+    "frameP50": 2814.2,
+    "frameP95": 4937.2,
+    "calls": 309,
+    "triangles": 1200944,
+    "geometries": 1022,
+    "textures": 99,
+    "programs": 104,
+    "shaderCompiles": 104,
+    "visibleObjects": 251,
+    "visibleInstances": 17829,
+    "textureMB": 157.7,
+    "jsHeapMB": 455,
+    "longTasks": 336,
+    "longTaskMs": 977190,
+    "loadMs": 12212,
+    "mode": "interior",
+    "sector": "d1_bridge",
+    "colliders": 185,
+    "lights": 19,
+    "poolLights": {
+      "used": 12,
+      "overflow": 0
+    },
+    "qualityLevel": 3,
+    "pixelRatio": 1,
+    "reverseDepth": true,
+    "hullPlates": 10185,
+    "hullGreebles": 6593
+  }
+}

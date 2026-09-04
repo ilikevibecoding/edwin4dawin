@@ -192,6 +192,7 @@ export class CameraDirector {
     this.goToStation(station, true);
     this.applyModeSettings();
     this.hud.setMode("exterior");
+    this.hud.setLocation("Exterior", station.replace("exterior_", "").replace("__adhoc", "free camera"));
     this.hud.setHint("ORBIT: drag rotate · wheel zoom · right-drag pan · 1-9 camera stations · F fly · V board ship");
     if (this.onModeChange) this.onModeChange("exterior");
     this.audio.event("mode_exterior");
@@ -216,7 +217,9 @@ export class CameraDirector {
     }
     this.applyModeSettings();
     this.hud.setMode("interior");
-    this.hud.setHint("WASD move · Shift sprint · mouse look · E interact · V exterior view · F3 stats");
+    const cur = this.interior.currentSector;
+    if (cur) this.hud.setLocation(cur.deck.name, cur.def.name);
+    this.hud.setHint("WASD move · Shift sprint · mouse look · E interact · V exterior view · R red alert · F3 stats");
     if (this.onModeChange) this.onModeChange("interior");
     this.audio.event("mode_interior");
     if (!instant) await this.hud.fadeOut(600);

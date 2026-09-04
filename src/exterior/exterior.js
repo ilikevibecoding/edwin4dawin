@@ -42,6 +42,10 @@ export function buildExterior(scene, materials) {
   sun.shadow.camera.bottom = -900;
   sun.shadow.bias = -0.0006;
   sun.shadow.normalBias = 1.5;
+  // the ship and the sun never move: render the sun's shadow map once (and again only when the LOD
+  // set or the visible side changes) instead of re-rendering the whole exterior into it every frame
+  sun.shadow.autoUpdate = false;
+  sun.shadow.needsUpdate = true;
   group.add(sun);
   group.add(sun.target);
   // cool fill from the planet / nebula side, no shadows
@@ -92,21 +96,42 @@ export function buildExterior(scene, materials) {
      * while the hull is only seen through a room's windows, where the room itself is the priority.
      */
     updateLOD(cameraPos, scale = 1) {
+      let changed = false;
+      const set = (o, v) => {
+        if (o.visible !== v) {
+          o.visible = v;
+          changed = true;
+        }
+      };
       for (const cg of chunkGroups) {
         tmp.set(0, 0, cg.userData.centerZ);
         const d = tmp.distanceTo(cameraPos);
         for (const child of cg.children) {
-          if (child.userData.lod === 0) child.visible = d < LOD_DISTANCES.greebles * scale;
-          else if (child.userData.lod === 1) child.visible = d < LOD_DISTANCES.plates * scale;
+          if (child.userData.lod === 0) set(child, d < LOD_DISTANCES.greebles * scale);
+          else if (child.userData.lod === 1) set(child, d < LOD_DISTANCES.plates * scale);
         }
       }
-      for (const f of fineGroups) f.group.visible = f.center.distanceTo(cameraPos) < LOD_DISTANCES.fine * scale;
+      for (const f of fineGroups) set(f.group, f.center.distanceTo(cameraPos) < LOD_DISTANCES.fine * scale);
+      if (changed) sun.shadow.needsUpdate = true;
     },
     update(dt, t) {
       eng.update(t);
     },
     setVisible(v) {
       group.visible = v;
+    },
+    /**
+     * Which side of the ship a room can see. "ventral" (the hangar bay looks down through its opening)
+     * hides the superstructure, engines and dorsal detail groups; "all" restores them.
+     */
+    setViewSide(side) {
+      if (api.viewSide === side) return;
+      const dorsal = side !== "ventral";
+      sup.group.visible = dorsal;
+      eng.group.visible = dorsal;
+      det.group.visible = dorsal;
+      api.viewSide = side;
+      sun.shadow.needsUpdate = true;
     },
     /**
      * "interior": the hull is seen through windows while the player stands in a room — the flat fills

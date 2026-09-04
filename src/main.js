@@ -498,6 +498,10 @@ function frame() {
   const showExterior = director.mode === "exterior" || interior.seesExterior();
   exterior.setVisible(showExterior);
   exterior.setViewMode(director.mode);
+  // from the hangar deck only the ventral skin is ever visible (through the bay opening)
+  const cur = interior.currentSector;
+  exterior.setViewSide(director.mode === "interior" && cur && cur.deck.id === "hangar" ? "ventral" : "all");
+  interior.lift.enabled = director.mode === "interior";
   if (showExterior) exterior.updateLOD(camera.position, director.mode === "interior" ? 0.55 : 1);
   exterior.update(dt, t);
   const hangar = interior.sectors.get("d5_hangar");

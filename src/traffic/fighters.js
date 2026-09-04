@@ -138,7 +138,8 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
     glow: new THREE.InstancedMesh(geos.glow, materials.emitRed, count),
   };
   for (const m of Object.values(meshes)) {
-    m.castShadow = true;
+    // the sun's shadow map is cached (static ship); moving craft must not bake into it
+    m.castShadow = false;
     m.receiveShadow = true;
     m.frustumCulled = false;
     group.add(m);

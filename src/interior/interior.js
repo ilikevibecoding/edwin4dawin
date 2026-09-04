@@ -202,9 +202,12 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
       if (on) {
         for (const s of sectors.values()) if (s.built) s.group.visible = false;
         for (const deck of decks) deck.doorGroup.visible = false;
+        const cam = player.camera.position;
         for (const id of EXTERIOR_VISIBLE) {
           const sec = sectors.get(id);
-          if (sec && sec.built) sec.group.visible = true;
+          if (!sec || !sec.built) continue;
+          // the bay shows from below the hull, the bridge / gallery from above and within ~700 m of the tower
+          sec.group.visible = id === "d5_hangar" ? cam.y < 40 : cam.y > -20 && cam.distanceTo(sec.worldCenter) < 700;
         }
         if (!api.exteriorView) {
           api.exteriorView = true;

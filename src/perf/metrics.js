@@ -53,13 +53,19 @@ export function createMetrics(renderer, scene) {
   function visibleObjects() {
     let n = 0;
     let instances = 0;
+    let tris = 0;
     scene.traverseVisible((o) => {
       if (o.isMesh || o.isPoints || o.isSprite || o.isLine) {
         n++;
         if (o.isInstancedMesh) instances += o.count;
+        const g = o.geometry;
+        if (g && g.attributes.position) {
+          const prim = (g.index ? g.index.count : g.attributes.position.count) / 3;
+          tris += prim * (o.isInstancedMesh ? o.count : 1);
+        }
       }
     });
-    return { n, instances };
+    return { n, instances, tris: Math.round(tris) };
   }
 
   return {
@@ -98,8 +104,11 @@ export function createMetrics(renderer, scene) {
         textures: info.memory.textures,
         programs: info.programs ? info.programs.length : 0,
         shaderCompiles,
+        // renderer.info totals include every pass (shadow maps, AO); sceneTriangles is the visible
+        // scene geometry alone (what one beauty pass submits)
         visibleObjects: vis.n,
         visibleInstances: vis.instances,
+        sceneTriangles: vis.tris,
         textureMB: +(textureBytes() / 1048576).toFixed(1),
         jsHeapMB: mem,
         longTasks,

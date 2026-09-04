@@ -126,6 +126,13 @@ export class Turbolift {
     const cur = interior.currentSector;
     const inCab = cur && cur.def.kind === "lift";
     this.cabSector = inCab ? cur : null;
+    if (!this.enabled) {
+      if (this._prompt) {
+        this.hud.setLiftPrompt(null);
+        this._prompt = null;
+      }
+      return;
+    }
     if (this.state === "idle") {
       // proximity control of the lift door on the current deck
       const deck = interior.currentDeck;
@@ -137,10 +144,11 @@ export class Turbolift {
           door.setOpen(d < 2.8 || inCab);
         }
       }
-      if (inCab) {
-        const decks = interior.decks.map((d) => `${d.def.index} ${d.def.name}`).join("   ");
-        this.hud.setLiftPrompt(`TURBOLIFT — press a deck number:  ${decks}`);
-      } else this.hud.setLiftPrompt(null);
+      const text = inCab ? `TURBOLIFT — press a deck number:  ${interior.decks.map((d) => `${d.def.index} ${d.def.name}`).join("   ")}` : null;
+      if (text !== this._prompt) {
+        this.hud.setLiftPrompt(text);
+        this._prompt = text;
+      }
       return;
     }
     this.timer += dt;
