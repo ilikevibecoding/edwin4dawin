@@ -20,6 +20,7 @@ export class DoorSystem {
     this._q = new THREE.Quaternion();
     this._s = new THREE.Vector3();
     this._p = new THREE.Vector3();
+    this._audioPos = new THREE.Vector3();
   }
 
   /**
@@ -171,14 +172,14 @@ export class DoorSystem {
         const dy = playerPos.y - d.y;
         const near = inZone && dx * dx + dz * dz < OPEN_RANGE * OPEN_RANGE && dy > -1.5 && dy < 2.5;
         if (near) {
-          if (d.target === 0 && this.audio) this.audio.play("door.open", d);
+          if (d.target === 0 && this.audio) this.audio.play("door.open", this._audioPos.set(d.x, d.y + 1, d.z));
           d.target = 1;
           d.timer = CLOSE_DELAY;
         } else if (d.target === 1) {
           d.timer -= dt;
           if (d.timer <= 0) {
             d.target = 0;
-            if (this.audio) this.audio.play("door.close", d);
+            if (this.audio) this.audio.play("door.close", this._audioPos.set(d.x, d.y + 1, d.z));
           }
         }
       }
@@ -188,7 +189,8 @@ export class DoorSystem {
         this._place(i);
         dirty = true;
       }
-      d.collider.disabled = d.open > 0.55;
+      // the gap must clear the player's capsule (2 × 0.32 m) before the collider lets them through
+      d.collider.disabled = d.open * d.width > 0.78;
     }
     if (dirty) {
       this.mesh.instanceMatrix.needsUpdate = true;
