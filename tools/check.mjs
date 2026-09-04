@@ -10,7 +10,8 @@ const opt = (name) => {
   return i >= 0 ? args[i + 1] : null;
 };
 const view = opt("--view");
-const views = opt("--views") ? opt("--views").split(",") : null;
+// use ";" as the separator when present so ext@px,py,pz,lx,ly,lz cameras survive
+const views = opt("--views") ? opt("--views").split(opt("--views").includes(";") ? ";" : ",") : null;
 const outDir = opt("--out") || "/tmp/shots";
 const shot = opt("--shot");
 const evalJs = opt("--eval");

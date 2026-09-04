@@ -24,7 +24,7 @@ export function tieGeometries() {
     g.rotateY(ry);
     g.rotateZ(rz);
     g.translate(x, y, z);
-    arr.push(g.toNonIndexed());
+    arr.push(g.index ? g.toNonIndexed() : g);
   };
   const R = 1.9;
   // cockpit ball + rear hatch bulge
@@ -66,7 +66,7 @@ export function tieGeometries() {
       // panel local (x = fwd/back, y = up) → world: rotate about y so x → z
       g.rotateY(s * (Math.PI / 2));
       g.translate(s * (R + 1.78), 0, 0);
-      hull.push(g.toNonIndexed());
+      hull.push(g.index ? g.toNonIndexed() : g);
     }
     // centre spar (vertical) and horizontal spar
     add(hull, new THREE.BoxGeometry(0.2, H * 0.98, 0.3), s * (R + 1.78), 0, 0);
