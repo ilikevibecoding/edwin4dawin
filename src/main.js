@@ -238,6 +238,7 @@ let framesRendered = 0;
 let pendingCapture = null;
 const debugAPI = {
   ready: false,
+  fixedDt: null,
   get views() {
     return [...Object.keys(exterior ? exterior.stations : {}), ...Object.keys(INTERIOR_VIEWS)];
   },
@@ -434,6 +435,17 @@ const debugAPI = {
       pendingCapture = { x, y, w, h, resolve };
     });
   },
+  /**
+   * Whole frame as a data URL, read straight off the canvas after the next render. With stepMode on,
+   * the loop only simulates + renders when a capture is pending, so every call is exactly one
+   * fixedDt step (tools/tour.mjs).
+   */
+  captureFrame(type = "image/png", quality = 0.92) {
+    return new Promise((resolve) => {
+      pendingCapture = { full: true, type, quality, resolve };
+    });
+  },
+  stepMode: false,
   freezeGrain: false,
   frames() {
     return framesRendered;
@@ -512,15 +524,21 @@ document.addEventListener("keydown", (e) => {
 
 const TOWER_POS = new THREE.Vector3(0, 170, 600);
 const timer = new THREE.Timer();
+let simTime = null;
 let statsTick = 0;
 
 function frame() {
   requestAnimationFrame(frame);
   if (!debugAPI.ready) return;
+  if (debugAPI.stepMode && !pendingCapture) return;
   metrics.begin();
   timer.update();
-  const dt = Math.min(timer.getDelta(), 0.1);
-  const t = timer.getElapsed();
+  // harness: debugAPI.fixedDt steps the simulation by a fixed amount per rendered frame so a headless
+  // capture (tools/tour.mjs) is frame-paced regardless of how long the software renderer takes
+  const fixed = debugAPI.fixedDt != null;
+  const dt = fixed ? debugAPI.fixedDt : Math.min(timer.getDelta(), 0.1);
+  simTime = fixed ? (simTime == null ? timer.getElapsed() : simTime) + dt : null;
+  const t = fixed ? simTime : timer.getElapsed();
   renderer.info.reset();
 
   player.update(dt);
@@ -559,15 +577,24 @@ function frame() {
   else post.render(debugAPI.freezeGrain ? 0.37 : t);
   framesRendered++;
   if (pendingCapture) {
-    const { x, y, w, h, resolve } = pendingCapture;
+    const cap = pendingCapture;
     pendingCapture = null;
-    const c2 = document.createElement("canvas");
-    c2.width = w;
-    c2.height = h;
-    const ctx = c2.getContext("2d");
-    const pr = renderer.getPixelRatio();
-    ctx.drawImage(canvas, x * pr, y * pr, w * pr, h * pr, 0, 0, w, h);
-    resolve(Array.from(ctx.getImageData(0, 0, w, h).data));
+    if (cap.full) {
+      const c2 = document.createElement("canvas");
+      c2.width = canvas.width;
+      c2.height = canvas.height;
+      c2.getContext("2d").drawImage(canvas, 0, 0);
+      cap.resolve(c2.toDataURL(cap.type, cap.quality));
+    } else {
+      const { x, y, w, h } = cap;
+      const c2 = document.createElement("canvas");
+      c2.width = w;
+      c2.height = h;
+      const ctx = c2.getContext("2d");
+      const pr = renderer.getPixelRatio();
+      ctx.drawImage(canvas, x * pr, y * pr, w * pr, h * pr, 0, 0, w, h);
+      cap.resolve(Array.from(ctx.getImageData(0, 0, w, h).data));
+    }
   }
   if (showStats && ++statsTick % 10 === 0) {
     const s = debugAPI.getStats();
