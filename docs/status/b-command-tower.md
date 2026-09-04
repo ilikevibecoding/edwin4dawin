@@ -162,7 +162,17 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   `emitBlue` floor-strip edges shows through two solid walls. Probes: gone with `?post=0` (direct render), gone when
   the spine's `kit_emitBlue` mesh is hidden, persists with bloom disabled and with N8AO at full res → it is the N8AO
   pass in `src/post.js` under SwiftShader. Reported under Requests.
-- Critic: not yet (after the remaining three subagents land).
+- Critic round 1 (two blind critics, 22 shots, images + §11 brief only): PASS `d1-nav-holo`, `d1-tactical-plot`
+  (marginal), `d1-comms-station` (marginal), `d1-spine-junction`, `d1-corridor-stbd-bulkhead`; FAIL the five bridge
+  frames, `d1-nav-dais`, `d1-tactical-overview`, `d1-comms-racks`, both intel, both observation, all three officers,
+  `d1-spine-bay`, `d1-lobby-side`. Systemic findings: (1) emissive strips clip to white with 2× bloom halos; (2) the
+  stock `screenImp` texture repeats ≥ 12× in the rooms without their own atlas; (3) bare light sources read as blobs
+  (~20 counted); (4) glowing outlines standing in for objects (thresholds, floor plates, holo "hairballs", scanner
+  lattice); (5) exposure ladder inverted (corridors brightest, destination rooms darkest; bridge window not the key);
+  (6) floor chip map reads as spilled fluid, random panel dots as pitting. Fixed once in shared code + harness
+  (6d27326a): recessed 4 cm strip emitters between lips, 8 cm channel emitters, gloss centre strip, stand-in
+  emissive 1.6–1.9, clean floor stand-in, fog halved. Room-specific fix lists dispatched to all six owners (running).
+  The critics' full reports are in this run's transcript; the ranked cross-room lists were forwarded verbatim.
 
 ## Remaining
 1. Critic findings (two blind critics on 22 shots) → fixes per room → re-shoot → push.
@@ -180,6 +190,11 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   A shared dielectric-ish trim material (`steelPainted`: metalness ≈ 0.3, IMP.mid base) in §10 would save every deck
   the same discovery. Also please check the real `impFloor`: the stand-in (metalness 0.6, dark tint) renders as a
   void at E ≈ 1.5 — the bridge pits switched to painted grey plating.
+- **Exposure ladder (critic proposal, worth adopting deck-wide in §11).** Bridge = 0 EV reference; corridors ≤ +1;
+  officers' country −0.5; intel −1.5; observation 0 with star-light as key. Today transit spaces are the brightest
+  surfaces and destination rooms the darkest, so the three decks will not read as one ship unless A sets a common
+  strip/emitter level in the shared materials (a clipped `emitWhite` at 2.4 under ACES + bloom threshold 1.15 is the
+  main offender; 1.6–1.9 with narrow recessed emitters reads right).
 - **Light intensities.** Practical values to make pools read on dark Imperial surfaces are ~2× the E·h² ≈ 1 rule
   (bridge runs E ≈ 2–3, rafts 62 cd at 4 m). Worth a line in §9.4, together with the pool scoring ratio (in my shim
   0.1 priority ≡ 12 m of distance) so rooms can tune fills deliberately.
