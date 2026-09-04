@@ -224,12 +224,24 @@ export function floorSlab(kit, bounds, floorY, { mat = "impFloor", color = IMP.d
  * Ceiling: dark top slab with recessed light channels running along an axis.
  * channels: [{ at: <x or z>, w: 0.5, emit: "emitWhite", emitW: 0.18 }], axis: "z" | "x"
  */
+// paintedMetal's worn-metal chips read as dirt specks on a ceiling-sized surface (critic round 2: "speckled ceiling
+// reads stained"), so ceiling slabs and panels default to the clean panel map every room already draws its walls
+// with (no extra draw call). Its base is ~2.1× brighter than the worn-metal mean, so tints written for paintedMetal
+// are scaled down to keep the same albedo; the panel bevels give the ceiling a seam grid for free.
+const CEIL_CLEAN = 0.47;
+function cleanCeilMat(mat, color) {
+  if (mat !== "paintedMetal") return [mat, color];
+  return ["impPanel", color.clone().multiplyScalar(CEIL_CLEAN)];
+}
+
 export function ceiling(kit, bounds, ceilY, { axis = "z", channels = [], color = IMP.black, mat = "paintedMetal", inset = 0, panelMat = "paintedMetal", panelColor = IMP.dark, depth = 0.22 } = {}) {
   const [mn, mx] = [bounds.min, bounds.max];
   const x0 = mn[0] + inset;
   const x1 = mx[0] - inset;
   const z0 = mn[2] + inset;
   const z1 = mx[2] - inset;
+  [mat, color] = cleanCeilMat(mat, color);
+  [panelMat, panelColor] = cleanCeilMat(panelMat, panelColor);
   // top slab (seen through the channels)
   kit.boxMM(mat, [x0, ceilY + depth, z0], [x1, ceilY + depth + 0.15, z1], { color, texel: 0.5 });
   // hanging panels between channels

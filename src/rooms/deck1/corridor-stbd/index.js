@@ -71,7 +71,7 @@ const manifest = {
     sealedBulkhead(kit, cf, "n", { rand: rng(3702) });
     signPanel(kit, cf.walls.w, 470, 0, [{ label: "MAINTENANCE" }, { label: "AUTHORISED PERSONNEL ONLY" }], { top: FLOOR + SIGN_TOP });
 
-    for (let z = 469; z <= 509; z += 8) ctx.lights.push({ type: "point", pos: [21.8, ceilY - 0.5, z], color: LIGHT.coolWhite, intensity: 7, distance: 11, priority: 0.5 });
+    for (let z = 469; z <= 509; z += 8) ctx.lights.push({ type: "point", pos: [21.8, ceilY - 0.5, z], color: LIGHT.coolWhite, intensity: 4.5, distance: 11, priority: 0.5 });
     ctx.lights.push({ type: "point", pos: [21.8, FLOOR + 2.7, 467.0], color: LIGHT.red, intensity: 1.3, distance: 3.5, priority: 0.4 });
     return {};
   },

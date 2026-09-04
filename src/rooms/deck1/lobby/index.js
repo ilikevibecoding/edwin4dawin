@@ -234,9 +234,9 @@ const manifest = {
     for (const x of [-half, half]) for (const z of [cz - half, cz + half]) downlight(kit, ceilY, x, z, { s: 0.34, h: 0.11, lens: 0.16 });
 
     // 5 descriptors (budget 14)
-    ctx.lights.push({ type: "point", pos: [0, ceilY - 0.5, 519], color: LIGHT.coolWhite, intensity: 16, distance: 15, priority: 0.8 });
+    ctx.lights.push({ type: "point", pos: [0, ceilY - 0.5, 519], color: LIGHT.coolWhite, intensity: 10, distance: 15, priority: 0.8 });
     ctx.lights.push({ type: "point", pos: [0, FLOOR + 3.2, lz - 0.7], color: LIGHT.amber, intensity: 3, distance: 6, priority: 0.5 });
-    for (const x of [-6.3, 6.3]) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.8, 518.7], color: LIGHT.coolWhite, intensity: 5, distance: 8, priority: 0.4 });
+    for (const x of [-6.3, 6.3]) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.8, 518.7], color: LIGHT.coolWhite, intensity: 3.2, distance: 8, priority: 0.4 });
     ctx.lights.push({ type: "point", pos: [4.6, FLOOR + 2.55, lz - 0.65], color: LIGHT.red, intensity: 1.2, distance: 3.5, priority: 0.3 }); // from the beacon
 
     // indicator: demo sweep between the deck marks until a lift system drives it (u = 0 → deck 1 … 1 → deck 4)

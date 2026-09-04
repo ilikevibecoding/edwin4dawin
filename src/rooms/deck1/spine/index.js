@@ -108,12 +108,13 @@ const manifest = {
     for (const d of cf.endDoors) sealedEnd(kit, cf, d, { signFace: "n", clusterFace: "s", rand });
 
     // 14 descriptors (budget 14): one pool every 13.5 m (the outer pair at ±81 lights the sealed-end treatments),
-    // the junction brightest, plus a low blue accent on the medallion. 11 ≈ E 1.5 under a pool and ≈ 0.4 midway
-    // between two (6.75 m out), so the bays between pools stay readable instead of dropping to black.
+    // the junction brightest, plus a low blue accent on the medallion. 6.5 ≈ E 0.9 under a pool and ≈ 0.25 midway
+    // between two (6.75 m out): bays stay readable, and the corridor sits ~0.7 EV under its old level so it no
+    // longer out-shines the bridge it leads to (critic rounds 1 and 2: transit spaces were the brightest frames).
     for (let i = -6; i <= 6; i++) {
       const x = i * 13.5;
       const end = Math.abs(i) === 6;
-      ctx.lights.push({ type: "point", pos: [x, ceilY - 0.5, 514], color: LIGHT.coolWhite, intensity: x === 0 ? 13 : 11, distance: 17, priority: x === 0 ? 0.9 : end ? 0.4 : 0.3 });
+      ctx.lights.push({ type: "point", pos: [x, ceilY - 0.5, 514], color: LIGHT.coolWhite, intensity: x === 0 ? 8 : 6.5, distance: 17, priority: x === 0 ? 0.9 : end ? 0.4 : 0.3 });
     }
     ctx.lights.push({ type: "point", pos: [0, FLOOR + 0.5, 514], color: LIGHT.blue, intensity: 1.6, distance: 5, priority: 0.6 });
     return {};

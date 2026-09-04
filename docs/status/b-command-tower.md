@@ -180,8 +180,13 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   on Deck 1 by design of its wall-wash key, see the exposure ladder under Requests). Intel (da355adb: `intel-c-verify`
   + `-verify3` — blown pixels 627 → 0 in `d1-intel-gate`, 0 in table/columns, 7 in the vestibule; mean luminance 13–21
   = the −1.5 EV room of the ladder; every point is a recessed can 20 cm above the ceiling plane so the ceiling can
-  never blob, which also leaves the ceiling unlit — the per-room ambient under Requests would lift it). Bridge still
-  running.
+  never blob, which also leaves the ceiling unlit — the per-room ambient under Requests would lift it). Bridge
+  (942b4a63: `bridge-c-verify`/`-verify2`/`-verify3` — the bridge owner traced the critics' "long dark hangar with a
+  rail" to the harness, not the room: the exterior stand-in's floor slab topped out at 239.5, 1.9 m above the pit
+  floors, so every above-deck camera saw both pits filled with a grey plane; fixed in `_dev/harness.js` (floor stops
+  at 236 under the bridge footprint). Two follow-ups after its run: the pit floors dropped paintedMetal's chip map
+  (the same spilled-fluid blotches as round 1) and the `screenImp` stand-ins went from roughness 0.15 to 0.42 — at
+  0.15 every console screen facing a pool spot mirrored it as a white blob; blown pixels in `d1-bridge-sill` 166 → 6).
 
 ## Remaining
 1. Critic findings (two blind critics on 22 shots) → fixes per room → re-shoot → push.
@@ -209,6 +214,12 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   × bloom threshold 1.15; even black paint blows past ~0.5 m through its specular term). Rules that fixed it: every
   point descriptor sits inside a closed dark housing ≥ 1.2 m below the ceiling; anything that must hang near a surface
   is a downward spot whose cone never reaches its own can or the ceiling.
+- **Screen materials must be anti-glare (§10 `screenImp0–3`, and any deck's own atlas material).** A screen at
+  roughness 0.15–0.18 mirrors whichever pool spot faces it as a clipped white blob with a bloom halo (that was the
+  round-1 "hot spot" on the nav route plot, on every bridge sill console and on the tactical banks). Roughness 0.42
+  with `envMapIntensity` ≤ 0.4 keeps a faint sheen and no blob; bridge, nav, tactical, intel and the harness stand-ins
+  all use that now. Please set the real `screenImp*` the same way, or every room that used the shared screens
+  inherits the blobs back the moment the stand-ins are deleted.
 - **Pool lights leak through shared walls (found by the intel round, matters for every deck).** Pool lights cast no
   shadows, so a neighbour room's descriptors light every surface in the current room that faces them. Repro:
   `d1-intel-vestibule` with `d1-corridor-stbd` active — the corridor's two nearest cool-white points (5 m away, behind

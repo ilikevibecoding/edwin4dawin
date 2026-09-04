@@ -61,7 +61,7 @@ const manifest = {
     const { e } = cf.walls;
     signPanel(kit, e, 470, 0, [{ label: "OBSERVATION GALLERY", arrow: arrowToward(e, 470, 466) }], { top: FLOOR + SIGN_TOP });
 
-    for (let z = 469; z <= 509; z += 8) ctx.lights.push({ type: "point", pos: [-21.8, ceilY - 0.5, z], color: LIGHT.coolWhite, intensity: 7, distance: 11, priority: 0.5 });
+    for (let z = 469; z <= 509; z += 8) ctx.lights.push({ type: "point", pos: [-21.8, ceilY - 0.5, z], color: LIGHT.coolWhite, intensity: 4.5, distance: 11, priority: 0.5 });
     return {};
   },
 };

@@ -72,7 +72,9 @@ export function display(kit, p, n, name, w, { bezel = 0.035, depth = 0.04, frame
 
 // Clean panel plate (covers the shared panel texture) with 2 cm bolts in rows at its corners only
 export function cleanPlate(kit, p, n, w, h, { color, proud = 0.025, bolts = true, texel = 1 } = {}) {
-  mount(kit, "paintedMetal", p, n, w, h, 0, proud, { color, texel });
+  // impPanel, not paintedMetal: the worn-metal chip map read as mould blotches on every corridor plate (critic
+  // round 2). impPanel's base is ~2.1× brighter than the worn-metal mean, so the tint is scaled to keep the albedo.
+  mount(kit, "impPanel", p, n, w, h, 0, proud, { color: color.clone().multiplyScalar(0.47), texel });
   if (!bolts) return;
   const alongZ = n === "+x" || n === "-x";
   const inset = 0.08;

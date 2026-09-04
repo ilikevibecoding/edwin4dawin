@@ -14,7 +14,8 @@ export function buildCeiling(kit, { xIn, z0, z1, ceilY, beamsZ, walkwayLightsZ, 
   const flange = shade(IMP.mid, 0.85);
 
   // top slab (seen through the channels) and the hanging panels between channels
-  kit.boxMM("paintedMetal", [-xo, top, z0 - 0.05], [xo, top + 0.14, z1 + 0.05], { color: IMP.black, texel: 0.5 });
+  // slab and panels in the module-local bridgeFloor (no map): paintedMetal's chips read as dirt specks on a ceiling
+  kit.boxMM("bridgeFloor", [-xo, top, z0 - 0.05], [xo, top + 0.14, z1 + 0.05], { color: IMP.black, texel: 0.5 });
   const chans = [
     { at: -11.5, w: 0.5, emit: "emitBlue", ew: 0.1 },
     { at: -1.9, w: 0.42, emit: "emitWhite", ew: 0.1 },
@@ -23,12 +24,12 @@ export function buildCeiling(kit, { xIn, z0, z1, ceilY, beamsZ, walkwayLightsZ, 
   ];
   let cur = -xo;
   for (const c of chans) {
-    kit.boxMM("paintedMetal", [cur, ceilY - 0.02, z0 - 0.05], [c.at - c.w / 2, top, z1 + 0.05], { color: near, texel: 0.5 });
+    kit.boxMM("bridgeFloor", [cur, ceilY - 0.02, z0 - 0.05], [c.at - c.w / 2, top, z1 + 0.05], { color: near, texel: 0.5 });
     kit.boxMM("paintedMetal", [c.at - c.w / 2 - 0.05, ceilY - 0.02, z0], [c.at - c.w / 2 + 0.03, top, z1], { color: IMP.mid, texel: 1 });
     kit.boxMM("paintedMetal", [c.at + c.w / 2 - 0.03, ceilY - 0.02, z0], [c.at + c.w / 2 + 0.05, top, z1], { color: IMP.mid, texel: 1 });
     cur = c.at + c.w / 2;
   }
-  kit.boxMM("paintedMetal", [cur, ceilY - 0.02, z0 - 0.05], [xo, top, z1 + 0.05], { color: near, texel: 0.5 });
+  kit.boxMM("bridgeFloor", [cur, ceilY - 0.02, z0 - 0.05], [xo, top, z1 + 0.05], { color: near, texel: 0.5 });
 
   // channel emitters, one segment per bay between beams (the beams cross the channels)
   const bays = [z0 + 0.3, ...beamsZ, z1 - 0.3];
