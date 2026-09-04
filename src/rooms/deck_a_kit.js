@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { PALETTE } from "../materials.js";
 import { rng } from "../kit.js";
-import { IMP_DECAL } from "../textures_imperial.js";
+import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
 import { Frame, UP } from "./imperial_kit.js";
 import { ensureDeckAMaterials } from "../textures_deck_a.js";
 
@@ -17,7 +17,7 @@ const ONE = new THREE.Vector3(1, 1, 1);
 /** Register the deckA_* materials and keep hologram keys out of the shadow pass. */
 export function deckASetup(kit) {
   ensureDeckAMaterials(kit.materials);
-  for (const k of ["deckA_holoDim", "deckA_holoAmber", "deckA_holoAmberBright", "deckA_holoCyan", "deckA_holoCyanBright", "holo", "holoBright", "viewGlass"]) kit.noShadowKeys.add(k);
+  for (const k of ["deckA_holoDim", "deckA_holoAmber", "deckA_holoAmberBright", "deckA_holoCyan", "deckA_holoCyanBright", "deckA_holoCyanDim", "deckA_holoRed", "deckA_holoRedBright", "deckA_dataScroll", "deckA_dataScroll2", "holo", "holoBright", "viewGlass"]) kit.noShadowKeys.add(k);
 }
 
 /** Yaw for an object whose local -Z (its "front") should point from (x, z) toward (tx, tz). */
@@ -57,49 +57,221 @@ export function mergedLines(geos, material) {
   return lineSegments(mergeGeometries(geos, false), material);
 }
 
+/** Cylinder between two world points (cables, struts, slanted conduits). */
+export function tube(kit, a, b, r, mat = "impMetal", opts = {}) {
+  const A = new THREE.Vector3(a[0], a[1], a[2]);
+  const B = new THREE.Vector3(b[0], b[1], b[2]);
+  const dir = B.clone().sub(A);
+  const L = dir.length();
+  if (L < 1e-4) return;
+  const mid = A.clone().add(B).multiplyScalar(0.5);
+  const q = new THREE.Quaternion().setFromUnitVectors(UP, dir.normalize());
+  kit.add(mat, new THREE.CylinderGeometry(r, r, L, opts.segments || 8), { pos: [mid.x, mid.y, mid.z], quat: q, color: opts.color || PALETTE.impCharcoal, uv: "scale", uvScale: [0.2, L] });
+}
+
+// ---------------------------------------------------------------------------
+// Operator station (the deck A console) + stool
+// ---------------------------------------------------------------------------
+/**
+ * Operator station: inset plinth (kick recess with a dim hairline), black shell with charcoal cheeks,
+ * a mid-grey sloped control surface (screens under a hood, key field, dials) so light actually lands
+ * on the controls, the hood's underside carrying an emissive practical strip, a detailed back face
+ * with two flexible conduits down into a deck box, optional display column (tall) and stool.
+ * Faces local -Z (the operator stands on +Z) like impConsole; w along x, d along z.
+ */
+export function station(kit, cx, cy, cz, w, d, opts = {}) {
+  const { yaw = 0, seed = 3, screens = ["scrBlue0", "scrBlue1"], accentKey = "emitBlue", hoodKey = "emitAmberDim", height = 0.9, tall = false, stool: withStool = false, stoolH = 0.6, conduits = 2, tag = "console" } = opts;
+  const rand = rng(seed);
+  const f = yawFrame(kit, cx, cy, cz, yaw);
+  const H = height;
+  // plinth: recessed kick under the shell, dim hairline in the recess on the operator side
+  f.box("impTrim", 0, 0.07, -0.04, w - 0.36, 0.14, d - 0.28, { color: PALETTE.impBlack, texel: 1 });
+  f.box(hoodKey, 0, 0.1, d / 2 - 0.16, w - 0.6, 0.012, 0.012);
+  // shell, charcoal base lip and side cheeks
+  f.box("impTrim", 0, 0.14 + (H - 0.14) / 2, 0, w, H - 0.14, d, { color: PALETTE.impCharcoal, texel: 1 });
+  f.box("impMetal", 0, 0.17, 0, w + 0.03, 0.06, d + 0.03, { color: PALETTE.impGreyDark, texel: 1 });
+  for (const s of [-1, 1]) {
+    f.box("impMetal", s * (w / 2 - 0.04), H * 0.56, 0, 0.1, H * 0.6, d - 0.16, { color: PALETTE.impGreyDark, texel: 1 });
+    // side vent: three dark slots and a small lamp so the cheeks are not flat slabs
+    for (let k = 0; k < 3; k++) f.box("impTrim", s * (w / 2 + 0.012), H * 0.62 - k * 0.06, -d * 0.12, 0.01, 0.02, d * 0.3, { color: PALETTE.impBlack });
+    f.box(accentKey, s * (w / 2 + 0.012), H * 0.4, d * 0.22, 0.008, 0.03, 0.03);
+  }
+  // operator face: recessed grey panel with a knee cutout and an accent strip
+  f.box("impMetal", 0, H * 0.55, d / 2 - 0.005, w - 0.32, H * 0.5, 0.03, { color: PALETTE.impGreyDark, texel: 1 });
+  f.box("impTrim", 0, H * 0.4, d / 2 + 0.012, w * 0.42, H * 0.3, 0.02, { color: PALETTE.impBlack });
+  f.box(accentKey, 0, H * 0.8, d / 2 + 0.012, w - 0.5, 0.02, 0.01);
+  // back face: charcoal panel with vent slots (this side faces the walls / the camera in arc layouts)
+  f.box("impMetal", 0, H * 0.55, -d / 2 - 0.005, w - 0.3, H * 0.6, 0.012, { color: PALETTE.impCharcoal, texel: 2 });
+  for (let s = 0; s < 4; s++) f.box("impTrim", -w * 0.18, H * 0.34 + s * 0.05, -d / 2 - 0.014, w * 0.36, 0.018, 0.01, { color: PALETTE.impBlack });
+  f.box("impGloss", w * 0.26, H * 0.62, -d / 2 - 0.014, 0.2, 0.1, 0.01);
+  f.box(rand() < 0.5 ? accentKey : "emitWhite", w * 0.26 - 0.05, H * 0.62, -d / 2 - 0.02, 0.04, 0.04, 0.008);
+  f.add("decalImp", new THREE.PlaneGeometry(0.16, 0.16).rotateY(Math.PI), -w * 0.18, H * 0.66, -d / 2 - 0.016, { uv: "keep", uvRect: impDecalRect(IMP_DECAL.glyphs2) });
+  // sloped control surface: a tilted frame (u across, v = surface normal, n down the slope toward the operator)
+  const tilt = 0.26;
+  const topD = d * 0.82;
+  const sc = f.pos(0, H + 0.07, -d * 0.04);
+  const t = new Frame(kit, sc, f.U, new THREE.Vector3(0, Math.cos(tilt), Math.sin(tilt)).applyQuaternion(f.q));
+  t.box("impTrim", 0, -0.035, 0, w - 0.04, 0.07, topD + 0.08, { color: PALETTE.impBlack, texel: 1 });
+  t.box("impMetal", 0, 0.004, 0.02, w - 0.2, 0.012, topD - 0.06, { color: PALETTE.impGreyDark, texel: 2 });
+  // screens on the far half under the hood
+  const nS = Math.max(1, Math.min(screens.length, Math.floor((w - 0.3) / 0.62)));
+  const sh = Math.min(0.3, topD * 0.36);
+  const sn = -topD * 0.24;
+  for (let i = 0; i < nS; i++) {
+    const su = -w / 2 + 0.16 + ((w - 0.32) * (i + 0.5)) / nS;
+    const sw = Math.min(0.62, (w - 0.32) / nS - 0.08);
+    t.box("impGloss", su, 0.013, sn, sw + 0.05, 0.01, sh + 0.05);
+    t.add(screens[i % screens.length], new THREE.PlaneGeometry(sw, sh).rotateX(-Math.PI / 2), su, 0.02, sn, { uv: "keep" });
+  }
+  // key field along the operator edge (two rows), dials between the rows
+  const nb = Math.floor((w - 0.36) / 0.095);
+  for (let row = 0; row < 2; row++) {
+    const kn = topD * (row === 0 ? 0.3 : 0.17);
+    for (let i = 0; i < nb; i++) {
+      const bu = -w / 2 + 0.2 + i * 0.095;
+      const r = rand();
+      const mat = r < 0.16 ? accentKey : r < 0.24 ? "emitRedImp" : r < 0.3 ? "emitWhiteSoft" : r < 0.5 ? "impGloss" : "impTrim";
+      t.box(mat, bu, 0.018, kn, 0.065, 0.024, row === 0 ? 0.065 : 0.05, mat === "impTrim" ? { color: PALETTE.impBlack } : {});
+    }
+  }
+  for (let i = 0; i < Math.max(1, Math.floor(w / 0.8)); i++) {
+    const du = -w / 2 + 0.36 + i * 0.8 + (rand() - 0.5) * 0.1;
+    t.add("impMetal", new THREE.CylinderGeometry(0.03, 0.036, 0.04, 10), du, 0.03, topD * 0.04, { color: PALETTE.impGrey, uv: "scale", uvScale: [0.2, 0.1] });
+    t.box(accentKey, du, 0.052, topD * 0.04 - 0.02, 0.006, 0.006, 0.02);
+  }
+  // hood over the screens: black canopy on side cheeks, charcoal underside channel with the practical strip
+  const hn = sn - 0.02;
+  t.box("impTrim", 0, 0.34, hn, w - 0.08, 0.05, 0.46, { color: PALETTE.impBlack, texel: 1 });
+  for (const s of [-1, 1]) t.box("impTrim", s * (w / 2 - 0.07), 0.17, hn - 0.1, 0.06, 0.34, 0.26, { color: PALETTE.impBlack });
+  t.box("impMetal", 0, 0.312, hn + 0.06, w - 0.3, 0.012, 0.22, { color: PALETTE.impCharcoal });
+  t.box(hoodKey, 0, 0.303, hn + 0.08, w - 0.4, 0.008, 0.06, { uv: "keep" });
+  for (let k = 0; k < 3; k++) t.box(k === 1 ? accentKey : "impGloss", -w / 2 + 0.2 + k * 0.12, 0.312, hn + 0.2, 0.06, 0.012, 0.03);
+  // flexible conduits from the back face into a deck box behind
+  if (conduits > 0) {
+    const bz = -d / 2 - 0.3;
+    f.box("impTrim", 0, 0.06, bz, w * 0.55, 0.12, 0.24, { color: PALETTE.impBlack, texel: 1 });
+    f.box("impMetal", 0, 0.125, bz, w * 0.55 - 0.06, 0.012, 0.18, { color: PALETTE.impCharcoal });
+    f.box(accentKey, w * 0.2, 0.08, bz - 0.125, 0.06, 0.02, 0.01);
+    for (let c = 0; c < conduits; c++) {
+      const u = (c - (conduits - 1) / 2) * (w * 0.22);
+      const a = f.pos(u, H * 0.5, -d / 2 - 0.02);
+      const b = f.pos(u, 0.13, bz);
+      f.add("impMetal", new THREE.SphereGeometry(0.045, 8, 6), u, H * 0.5, -d / 2 - 0.02, { color: PALETTE.impBlack });
+      tube(kit, [a.x, a.y, a.z], [b.x, b.y, b.z], 0.032, "impMetal", { color: c % 2 ? PALETTE.impGreyDark : PALETTE.impCharcoal });
+    }
+  }
+  if (tall) {
+    // upright display column: black panel, gloss bezel, main screen facing the operator, lamp row
+    f.box("impTrim", 0, H + 0.62, -d / 2 - 0.02, w - 0.2, 1.24, 0.18, { color: PALETTE.impBlack, texel: 1 });
+    f.box("impMetal", 0, H + 1.26, -d / 2 - 0.02, w - 0.14, 0.05, 0.22, { color: PALETTE.impCharcoal });
+    f.box("impGloss", 0, H + 0.76, -d / 2 + 0.075, w - 0.5, 0.74, 0.012);
+    f.screen(screens[0], 0, H + 0.78, -d / 2 + 0.083, w - 0.6, 0.6);
+    f.box(accentKey, 0, H + 0.4, -d / 2 + 0.083, w - 0.6, 0.02, 0.01);
+    for (let k = 0; k < 5; k++) f.box(k % 2 ? "impGloss" : k === 2 ? "emitWhite" : accentKey, -0.24 + k * 0.12, H + 0.3, -d / 2 + 0.083, 0.06, 0.04, 0.01);
+  }
+  if (withStool) {
+    const p = f.pos(0, 0, d / 2 + 0.62);
+    stool(kit, p.x, cy, p.z, { h: stoolH });
+  }
+  // collider (AABB of the rotated footprint incl. the deck box)
+  f.collider(-w / 2 - 0.02, w / 2 + 0.02, 0, H + (tall ? 1.3 : 0.5), conduits > 0 ? -d / 2 - 0.44 : -d / 2 - 0.03, d / 2 + 0.03, tag);
+}
+
+/** Operator stool: black base disc, charcoal column with a foot ring, padded seat. */
+export function stool(kit, x, y, z, opts = {}) {
+  const { h = 0.6, color = PALETTE.impGreyDark } = opts;
+  kit.add("impTrim", new THREE.CylinderGeometry(0.2, 0.25, 0.04, 14), { pos: [x, y + 0.02, z], color: PALETTE.impBlack, uv: "scale", uvScale: [1, 0.1] });
+  kit.add("impMetal", new THREE.CylinderGeometry(0.04, 0.055, h - 0.1, 10), { pos: [x, y + 0.04 + (h - 0.1) / 2, z], color: PALETTE.impCharcoal, uv: "scale", uvScale: [0.3, h] });
+  kit.add("impMetal", new THREE.TorusGeometry(0.16, 0.012, 6, 20).rotateX(Math.PI / 2), { pos: [x, y + 0.24, z], color: PALETTE.impGrey });
+  kit.add("impTrim", new THREE.CylinderGeometry(0.19, 0.16, 0.06, 16), { pos: [x, y + h - 0.03, z], color: PALETTE.impBlack, uv: "scale", uvScale: [1, 0.1] });
+  kit.add("rubber", new THREE.CylinderGeometry(0.17, 0.17, 0.03, 16), { pos: [x, y + h + 0.015, z], color, uv: "scale", uvScale: [1, 0.1] });
+  if (opts.collide !== false) kit.collider([x - 0.22, y, z - 0.22], [x + 0.22, y + h + 0.05, z + 0.22], "stool");
+}
+
+/** Ceiling downlight: black can with a charcoal baffle and a lens (pair it with a spot / point light). */
+export function downlight(kit, x, y, z, opts = {}) {
+  const { r = 0.22, key = "emitWhiteSoft" } = opts;
+  kit.cyl("impTrim", x, y - 0.12, z, r + 0.06, 0.24, "y", { color: PALETTE.impBlack, segments: 20, texel: 1 });
+  kit.cyl("impMetal", x, y - 0.245, z, r, 0.02, "y", { color: PALETTE.impCharcoal, segments: 20 });
+  kit.cyl(key, x, y - 0.262, z, r - 0.05, 0.014, "y", { segments: 20, uv: "keep" });
+}
+
 // ---------------------------------------------------------------------------
 // Wall-mounted equipment (all on a wall Frame: u along the wall, v up, n into the room)
 // ---------------------------------------------------------------------------
-/** Encrypted data bank: black cabinet, indicator lamp rows, readout, key row, access panel, vents. */
+/**
+ * Data bank / blade rack: black cabinet with a charcoal inner frame and seam lines, rows of metal
+ * blades (handle bar, status lamp, occasional tag; one pulled out), a readout with keys at the top,
+ * a vent grille and a deck junction box at the foot, a three-cable bundle rising from the top and
+ * bending into the wall (cables: "wall") or dropping into a box behind (cables: "floor", for
+ * free-standing racks on a yawFrame), and an optional hood with a downward practical strip.
+ */
 export function dataBank(frame, u, opts = {}) {
-  const { w = 1.2, h = 2.3, depth = 0.6, seed = 1, accentKey = "emitRedImp", screen = "scrRed0", n0 = 0.08, rows = 4, decal = IMP_DECAL.glyphs1 } = opts;
+  const { w = 1.2, h = 2.3, depth = 0.6, seed = 1, accentKey = "emitRedImp", screen = "scrRed0", n0 = 0.08, decal = IMP_DECAL.glyphs1, cables = "wall", practical = null } = opts;
   const rand = rng(seed);
   const nc = n0 + depth / 2;
   const front = n0 + depth;
+  const cableCols = [PALETTE.impGreyDark, PALETTE.impCharcoal, PALETTE.impGrey];
   frame.box("impTrim", u, h / 2, nc, w, h, depth, { color: PALETTE.impBlack, texel: 1 });
-  frame.box("impMetal", u, h / 2 + 0.06, front + 0.005, w - 0.16, h - 0.36, 0.01, { color: PALETTE.impCharcoal, texel: 2 });
+  frame.box("impMetal", u, h / 2 + 0.04, front + 0.005, w - 0.14, h - 0.3, 0.01, { color: PALETTE.impCharcoal, texel: 2 });
   frame.box("impMetal", u, h + 0.03, nc, w + 0.04, 0.06, depth + 0.04, { color: PALETTE.impGreyDark, texel: 1 });
   frame.box("impMetal", u, 0.06, nc, w + 0.04, 0.12, depth + 0.04, { color: PALETTE.impCharcoal, texel: 1 });
-  // indicator rows
-  const cols = Math.max(4, Math.floor((w - 0.4) / 0.11));
-  let v = h - 0.4;
-  for (let r = 0; r < rows; r++, v -= 0.15) {
-    frame.box("impGloss", u, v, front + 0.012, w - 0.3, 0.1, 0.012);
-    for (let k = 0; k < cols; k++) {
-      const lu = u - (w - 0.4) / 2 + (k / (cols - 1)) * (w - 0.4);
-      const rr = rand();
-      const key = rr < 0.42 ? accentKey : rr < 0.66 ? "emitWhite" : rr < 0.76 ? "emitAmber" : null;
-      if (key) frame.box(key, lu, v, front + 0.023, 0.05, 0.05, 0.01);
-      else frame.box("impTrim", lu, v, front + 0.021, 0.05, 0.05, 0.006, { color: PALETTE.impGreyDark });
+  for (const s of [-1, 1]) frame.box("impTrim", u + s * (w / 2 - 0.1), h / 2 + 0.04, front + 0.012, 0.014, h - 0.4, 0.006, { color: PALETTE.impBlack });
+  // readout at the top: gloss bezel, screen, keys, a status lamp
+  const sv = h - 0.5;
+  frame.box("impGloss", u, sv, front + 0.012, w - 0.34, 0.36, 0.012);
+  frame.screen(screen, u, sv + 0.03, front + 0.02, w - 0.46, 0.22);
+  for (let k = 0; k < 3; k++) frame.box(k === 0 ? accentKey : k === 2 ? "emitWhite" : "impGloss", u - w / 2 + 0.3 + k * 0.14, sv - 0.12, front + 0.022, 0.09, 0.04, 0.02);
+  frame.box(rand() < 0.5 ? accentKey : "emitAmber", u + w / 2 - 0.3, sv - 0.12, front + 0.022, 0.04, 0.04, 0.012);
+  // blade rows between dark seams
+  const bH = 0.13;
+  const pitch = 0.17;
+  const v0 = 0.5;
+  const nBl = Math.max(3, Math.floor((sv - 0.24 - v0) / pitch));
+  const pulledRow = Math.floor(rand() * nBl);
+  for (let r = 0; r < nBl; r++) {
+    const v = v0 + r * pitch + bH / 2;
+    const dn = r === pulledRow && rand() < 0.6 ? 0.05 : 0;
+    frame.box("impMetal", u, v, front + 0.012 + dn / 2, w - 0.34, bH, 0.012 + dn, { color: r % 2 ? PALETTE.impGreyDark : PALETTE.impGrey, texel: 2 });
+    frame.box("impTrim", u - 0.1, v, front + 0.026 + dn, w * 0.42, 0.024, 0.014, { color: PALETTE.impBlack });
+    const lr = rand();
+    if (lr < 0.8) frame.box(lr < 0.55 ? accentKey : "emitWhite", u + w / 2 - 0.28, v, front + 0.024 + dn, 0.035, 0.035, 0.012);
+    else frame.box("impTrim", u + w / 2 - 0.28, v, front + 0.022 + dn, 0.035, 0.035, 0.008, { color: PALETTE.impBlack });
+    if (rand() < 0.3) frame.decal(rand() < 0.5 ? IMP_DECAL.glyphs1 : IMP_DECAL.glyphs2, u + w / 2 - 0.44, v, front + 0.022 + dn, 0.1);
+  }
+  // vent grille at the foot, deck junction box with a stub cable up into the grille
+  frame.box("impTrim", u, 0.3, front + 0.008, w - 0.34, 0.26, 0.008, { color: PALETTE.impBlack });
+  for (let s = 0; s < 5; s++) frame.box("impMetal", u, 0.2 + s * 0.05, front + 0.014, w - 0.44, 0.016, 0.01, { color: PALETTE.impGreyDark });
+  frame.box("impTrim", u - w / 2 + 0.26, 0.06, front + 0.1, 0.3, 0.12, 0.16, { color: PALETTE.impBlack, texel: 1 });
+  frame.box("impMetal", u - w / 2 + 0.26, 0.125, front + 0.1, 0.24, 0.01, 0.1, { color: PALETTE.impCharcoal });
+  frame.box(accentKey, u - w / 2 + 0.16, 0.08, front + 0.182, 0.04, 0.02, 0.006);
+  frame.cylV("impMetal", u - w / 2 + 0.3, 0.26, front + 0.06, 0.02, 0.28, { color: PALETTE.impGreyDark, segments: 8 });
+  frame.decal(decal, u, h - 0.16, front + 0.014, Math.min(0.24, w * 0.2));
+  // cable bundle from the cabinet top
+  const top = h + 0.06;
+  for (let c = 0; c < 3; c++) {
+    const cu = u + (c - 1) * 0.22 * (w / 1.2);
+    const cn = nc + (c - 1) * 0.1;
+    const rise = 0.28 + c * 0.07;
+    const col = cableCols[c];
+    frame.cylV("impMetal", cu, top + rise / 2, cn, 0.03, rise, { color: col, segments: 8 });
+    frame.add("impMetal", new THREE.SphereGeometry(0.034, 8, 6), cu, top + rise, cn, { color: col });
+    if (cables === "wall") frame.cylN("impMetal", cu, top + rise, cn / 2, 0.03, cn, { color: col, segments: 8 });
+    else if (cables === "floor") {
+      const back = n0 - 0.14;
+      frame.cylN("impMetal", cu, top + rise, (cn + back) / 2, 0.03, cn - back, { color: col, segments: 8 });
+      frame.add("impMetal", new THREE.SphereGeometry(0.034, 8, 6), cu, top + rise, back, { color: col });
+      frame.cylV("impMetal", cu, (top + rise + 0.16) / 2, back, 0.03, top + rise - 0.16, { color: col, segments: 8 });
     }
   }
-  // readout + keys
-  const sv = v - 0.2;
-  frame.box("impGloss", u, sv, front + 0.012, w - 0.4, 0.32, 0.012);
-  frame.screen(screen, u, sv, front + 0.02, w - 0.5, 0.24);
-  for (let k = 0; k < 4; k++) frame.box(k === 1 ? accentKey : k === 3 ? "emitWhite" : "impGloss", u - 0.3 + k * 0.2, sv - 0.27, front + 0.022, 0.12, 0.06, 0.02);
-  // access panel (lower half) with a pull slot and a status lamp, vents at the foot
-  const pv0 = 0.34;
-  const pv1 = sv - 0.42;
-  if (pv1 - pv0 > 0.3) {
-    frame.box("impTrim", u, (pv0 + pv1) / 2, front + 0.01, w - 0.3, pv1 - pv0, 0.02, { color: PALETTE.impBlack, texel: 1 });
-    frame.box("impMetal", u, pv1 - 0.1, front + 0.025, 0.3, 0.03, 0.012, { color: PALETTE.impGreyDark });
-    frame.box(rand() < 0.5 ? accentKey : "emitWhite", u + w / 2 - 0.3, pv1 - 0.1, front + 0.026, 0.03, 0.03, 0.012);
-    frame.decal(rand() < 0.5 ? IMP_DECAL.glyphs3 : IMP_DECAL.power, u - w / 2 + 0.32, (pv0 + pv1) / 2, front + 0.022, 0.2);
+  if (cables === "wall") frame.box("impTrim", u, top + 0.4, 0.02, w * 0.62, 0.34, 0.05, { color: PALETTE.impBlack, texel: 1 });
+  else if (cables === "floor") frame.box("impTrim", u, 0.08, n0 - 0.14, w * 0.7, 0.16, 0.2, { color: PALETTE.impBlack, texel: 1 });
+  // hood with a downward practical strip
+  if (practical) {
+    frame.box("impTrim", u, h + 0.03, front + 0.1, w - 0.2, 0.06, 0.2, { color: PALETTE.impBlack, texel: 1 });
+    frame.box(practical, u, h - 0.006, front + 0.12, w - 0.5, 0.01, 0.08, { uv: "keep" });
   }
-  for (let s = 0; s < 4; s++) frame.box("impMetal", u, 0.15 + s * 0.045, front + 0.012, w - 0.4, 0.018, 0.012, { color: PALETTE.impGreyDark });
-  frame.decal(decal, u, h - 0.2, front + 0.014, Math.min(0.26, w * 0.22));
-  frame.collider(u - w / 2 - 0.02, u + w / 2 + 0.02, 0, h + 0.06, n0, front + 0.03, "databank");
+  frame.collider(u - w / 2 - 0.02, u + w / 2 + 0.02, 0, h + 0.06, cables === "floor" ? n0 - 0.26 : n0, front + (practical ? 0.21 : 0.2), "databank");
 }
 
 /** Sealed cabinet: double doors, stencil across the seam, keypad, status lamp, handles. */
@@ -457,20 +629,116 @@ export function alertLamp(kit, x, y, z, yaw) {
   return frameGeo(f, new THREE.BoxGeometry(0.26, 0.12, 0.02), 0, 0, 0.16);
 }
 
-/** Ring light trough at the ceiling: n housings with emissive strips around (cx, cz) at radius r. */
+/**
+ * Ring light trough at the ceiling: n housings around (cx, cz) at radius r. `w` is the housing width,
+ * `emitW` the emitter width (default the housing minus its rim) — pass a narrow emitW with a dim key
+ * for a recessed cove line instead of a glowing slab; `drop` is how far the housing hangs down.
+ */
 export function ceilingRingLight(kit, cx, cz, r, y, n = 16, opts = {}) {
-  const { key = "emitWhiteSoft", w = 0.5, accentKey = null } = opts;
+  const { key = "emitWhiteSoft", w = 0.5, accentKey = null, emitW = null, drop = 0.24 } = opts;
+  const ew = emitW !== null ? emitW : w - 0.16;
   const step = (Math.PI * 2) / n;
   const chord = 2 * r * Math.sin(step / 2);
   for (let i = 0; i < n; i++) {
     const a = (i + 0.5) * step;
     const o = new THREE.Vector3(cx + Math.cos(a) * r, y, cz + Math.sin(a) * r);
     const f = new Frame(kit, o, new THREE.Vector3(-Math.sin(a), 0, Math.cos(a)), UP);
-    f.box("impTrim", 0, -0.12, 0, chord + 0.06, 0.24, w + 0.2, { color: PALETTE.impBlack, texel: 1 });
-    f.box("impMetal", 0, -0.2, 0, chord - 0.12, 0.09, w, { color: PALETTE.impCharcoal });
-    f.box(key, 0, -0.25, 0, chord - 0.24, 0.02, w - 0.16, { uv: "keep" });
-    if (accentKey) f.box(accentKey, 0, -0.2, w / 2 + 0.06, chord - 0.3, 0.02, 0.02);
+    f.box("impTrim", 0, -drop / 2, 0, chord + 0.06, drop, w + 0.2, { color: PALETTE.impBlack, texel: 1 });
+    f.box("impMetal", 0, -drop + 0.04, 0, chord - 0.12, 0.09, w, { color: PALETTE.impCharcoal });
+    // louvre fins either side of a narrow emitter keep it reading as a recessed fixture
+    f.box(key, 0, -drop - 0.006, 0, chord - 0.24, 0.012, ew, { uv: "keep" });
+    if (ew < w - 0.3) for (const s of [-1, 1]) f.box("impTrim", 0, -drop - 0.012, s * (ew / 2 + 0.04), chord - 0.2, 0.024, 0.05, { color: PALETTE.impBlack });
+    if (accentKey) f.box(accentKey, 0, -drop + 0.04, w / 2 + 0.06, chord - 0.3, 0.02, 0.02);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Sensor / data holograms (returned as THREE groups for the room to attach and animate)
+// ---------------------------------------------------------------------------
+/**
+ * Spinning tri-plane radar cone: three translucent vertical blades at 120 degrees (the swept volume
+ * reads as a cone), fine rings at three heights, a rim ring and a handful of contact blips.
+ * Returns { blades, blips } — spin blades fast, blips slowly the other way.
+ */
+export function triPlaneRadar(M, r = 1.0, h = 1.6, keys = {}) {
+  const { fill = "deckA_holoCyan", bright = "deckA_holoCyanBright", line = "deckA_holoLineCyan", lineDim = "deckA_holoLineDim" } = keys;
+  const blades = new THREE.Group();
+  const geos = [];
+  const edges = [];
+  for (let i = 0; i < 3; i++) {
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0);
+    shape.lineTo(0, h);
+    shape.lineTo(r * 0.3, h);
+    shape.quadraticCurveTo(r * 1.02, h * 0.8, r, h * 0.36);
+    shape.lineTo(r * 0.55, 0.04);
+    shape.lineTo(0, 0);
+    const g = new THREE.ShapeGeometry(shape, 10).rotateY((i / 3) * Math.PI * 2);
+    geos.push(g);
+    // bright outer edge of each blade
+    const pts = [];
+    const n = 10;
+    for (let k = 0; k < n; k++) {
+      const t0 = k / n;
+      const t1 = (k + 1) / n;
+      const q = (t) => [(1 - t) * (1 - t) * r * 0.3 + 2 * (1 - t) * t * r * 1.02 + t * t * r, (1 - t) * (1 - t) * h + 2 * (1 - t) * t * h * 0.8 + t * t * h * 0.36];
+      const [x0, y0] = q(t0);
+      const [x1, y1] = q(t1);
+      pts.push(x0, y0, 0, x1, y1, 0);
+    }
+    pts.push(r, h * 0.36, 0, r * 0.55, 0.04, 0);
+    const eg = new THREE.BufferGeometry();
+    eg.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    eg.rotateY((i / 3) * Math.PI * 2);
+    edges.push(eg);
+  }
+  blades.add(mergedMesh(geos, M[fill]));
+  blades.add(mergedLines(edges, M[line]));
+  // static-ish reference: rings at three heights + a spindle
+  const blips = new THREE.Group();
+  blips.add(mergedLines([wireRingGeometry(r * 0.62, 48, h * 0.55), wireRingGeometry(r * 0.98, 64, h * 0.62), wireRingGeometry(r * 0.3, 32, h * 0.2), wireRingGeometry(r * 0.25, 32, h * 0.98)], M[lineDim]));
+  const bg = [];
+  for (let i = 0; i < 6; i++) {
+    const a = i * 1.9;
+    const rr = r * (0.45 + 0.5 * ((i * 0.37) % 1));
+    bg.push(new THREE.OctahedronGeometry(0.045).translate(Math.cos(a) * rr, h * (0.3 + 0.55 * ((i * 0.61) % 1)), Math.sin(a) * rr));
+  }
+  blips.add(mergedMesh(bg, M[bright]));
+  const spindle = new THREE.BufferGeometry();
+  spindle.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 0, h, 0], 3));
+  blips.add(lineSegments(spindle, M[line]));
+  return { blades, blips };
+}
+
+/**
+ * Navicomp data core: a stack of concentric transparent cylinders wrapped in scrolling glyph
+ * textures (materials deckA_dataScroll / deckA_dataScroll2, whose userData.scroll is advanced by the
+ * room), a solid inner column with lit rings, cap discs. Returns { group, scrolls } where scrolls are
+ * the textures to offset per frame.
+ */
+export function dataCore(M, r = 0.42, h = 1.5) {
+  const group = new THREE.Group();
+  const scrolls = [];
+  for (const [rr, key, rep] of [[r, "deckA_dataScroll", 3], [r * 0.7, "deckA_dataScroll2", 2]]) {
+    const g = new THREE.CylinderGeometry(rr, rr, h, 48, 1, true);
+    // wrap `rep` copies of the texture around; one copy tall
+    const uv = g.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * rep);
+    const m = new THREE.Mesh(g, M[key]);
+    m.castShadow = m.receiveShadow = false;
+    group.add(m);
+    if (M[key].userData.scroll) scrolls.push(M[key].userData.scroll);
+  }
+  // inner column: dark glass with red lit rings, cap discs top and bottom
+  const inner = [];
+  inner.push(new THREE.CylinderGeometry(r * 0.32, r * 0.32, h * 0.96, 24, 1, true));
+  group.add(mergedMesh(inner, M.deckA_holoRed));
+  const rings = [];
+  for (let i = 0; i < 5; i++) rings.push(new THREE.TorusGeometry(r * 0.34, 0.008, 6, 40).rotateX(Math.PI / 2).translate(0, -h / 2 + (h * (i + 0.5)) / 5, 0));
+  rings.push(new THREE.RingGeometry(r * 0.3, r * 1.02, 48).rotateX(-Math.PI / 2).translate(0, h / 2, 0));
+  rings.push(new THREE.RingGeometry(r * 0.3, r * 1.02, 48).rotateX(Math.PI / 2).translate(0, -h / 2, 0));
+  group.add(mergedMesh(rings, M.deckA_holoRedBright));
+  return { group, scrolls };
 }
 
 // ---------------------------------------------------------------------------
