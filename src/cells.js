@@ -116,6 +116,7 @@ export class CellManager {
     this.stats = { visibleCells: 0, activeLights: 0, current: null };
     this.playerPos = new THREE.Vector3();
     this.reassignTimer = 0;
+    this.shadowSuspended = false;
   }
 
   /** Build a room with the given builder. ctx is passed through to the builder. */
@@ -164,13 +165,18 @@ export class CellManager {
     return d ? d.openness > 0.05 : true;
   }
 
-  /** Compute the visible set for the current cell. */
+  /**
+   * Compute the visible set for the current cell: neighbours whose door is open (or opening), plus
+   * their neighbours through further open doors. Rooms tagged "seeThrough" (windows into the next
+   * room, the Kestrel parked inside the hangar) are visible to their neighbours regardless of doors.
+   */
   computeVisible(currentId) {
     const vis = new Set([currentId]);
-    const ring1 = neighbours(currentId);
-    for (const n of ring1) {
-      vis.add(n);
-      if (this.isDoorOpen(currentId, n)) for (const m of neighbours(n)) vis.add(m);
+    const seeThrough = (id) => (ROOM_BY_ID[id]?.tags || []).includes("seeThrough");
+    for (const n of neighbours(currentId)) {
+      const open = this.isDoorOpen(currentId, n);
+      if (open || seeThrough(currentId) || seeThrough(n)) vis.add(n);
+      if (open) for (const m of neighbours(n)) if (this.isDoorOpen(n, m) || seeThrough(n) || seeThrough(m)) vis.add(m);
     }
     return vis;
   }
@@ -287,7 +293,8 @@ export class CellManager {
       if (spec.target) l.target.position.copy(spec.target);
       else l.target.position.copy(spec.pos).add(new THREE.Vector3(0, -1, 0));
       if (l.castShadow) {
-        l.shadow.camera.far = Math.max(8, spec.distance * 1.2);
+        l.shadow.camera.far = this.shadowSuspended ? 0.05 : Math.max(8, spec.distance * 1.2);
+        l.shadow.camera.updateProjectionMatrix();
         l.shadow.needsUpdate = true;
       }
     }
@@ -326,6 +333,22 @@ export class CellManager {
           if (s.phase === "idle") l.intensity = src.intensity * this.dim(s.current);
         }
       }
+    }
+  }
+
+  /**
+   * Outside the hull the interior key spot's shadow pass has nothing worth rendering: collapse its
+   * frustum (no recompile, unlike toggling castShadow) and restore it when the camera comes back in.
+   */
+  setShadowSuspended(v) {
+    if (this.shadowSuspended === v) return;
+    this.shadowSuspended = v;
+    for (const s of this.pool.spots) {
+      const l = s.light;
+      if (!l.castShadow) continue;
+      l.shadow.camera.far = v ? 0.05 : Math.max(8, (s.current ? s.current.distance : 10) * 1.2);
+      l.shadow.camera.updateProjectionMatrix();
+      l.shadow.needsUpdate = true;
     }
   }
 

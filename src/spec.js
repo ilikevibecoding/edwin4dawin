@@ -266,7 +266,7 @@ function door(a, b, pos, axis, opts = {}) {
   room({ id: "cargo", name: "Cargo Storage & Logistics", deck: "E", origin: [0, y, 110.4], size: [80, 14, 60], accent: "#d0a060", fog: 0.01, spawn: { x: 0, z: -27, yaw: 180, pitch: -2 } });
   room({ id: "lobby_e", name: "Hangar Deck Lobby", deck: "E", origin: [61, y, 90], size: [24, 4.2, 12], accent: "#ffb45a", kind: "lobby" });
   // raised booth set into the hangar's east wall, 16 m above the deck, reached by the stair tower
-  room({ id: "flight_control", name: "Hangar Flight Control", deck: "E", origin: [77.4, -24, -30], size: [24, 4.0, 14], accent: "#5fd0ff", spawn: { x: 6, z: 0, yaw: 90, pitch: -8 } });
+  room({ id: "flight_control", name: "Hangar Flight Control", deck: "E", origin: [77.4, -24, -30], size: [24, 4.0, 14], accent: "#5fd0ff", spawn: { x: 6, z: 0, yaw: 90, pitch: -8 }, tags: ["seeThrough"] });
 
   door("hangar", "fighter_bay", [-65.2, y, -60], "x", { type: "blast", w: 16, h: 12 });
   door("hangar", "shuttle_bay", [65.2, y, -60], "x", { type: "blast", w: 20, h: 16 });
@@ -346,7 +346,7 @@ export const KESTREL = {
   const y = DECKS.E.y;
   // The Kestrel's cabin is a room too (its colliders/floors come from the legacy builder); its aft
   // blast door opens onto the ramp into the hangar. Local -z (bow) is world +z after the 180° yaw.
-  room({ id: "kestrel", name: "Kestrel — Light Freighter", deck: "E", origin: [-22, KESTREL.position.y, -108 + 12.6], size: [10.7, 3.0, 25.8], accent: "#4fd8cc", fog: 0.03, spawn: { x: 0, z: -11.0, yaw: 180, pitch: 0 }, kind: "room", tags: ["legacy"] });
+  room({ id: "kestrel", name: "Kestrel — Light Freighter", deck: "E", origin: [-22, KESTREL.position.y, -108 + 12.6], size: [10.7, 3.0, 25.8], accent: "#4fd8cc", fog: 0.03, spawn: { x: 0, z: -11.0, yaw: 180, pitch: 0 }, kind: "room", tags: ["legacy", "seeThrough"] });
   door("kestrel", "hangar", [-22, KESTREL.position.y, -108], "z", { type: "blast", w: 1.7, h: 2.35, span: [-0.28, 0.28], kestrel: true });
   void y;
 }

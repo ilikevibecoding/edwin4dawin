@@ -647,6 +647,7 @@ function updateSun() {
   // outside, only the rooms with openings to space can be seen: hide the rest of the interior
   if (outside !== interiorHiddenForExterior) {
     interiorHiddenForExterior = outside;
+    cells.setShadowSuspended(outside);
     for (const cell of cells.cells.values()) {
       if (outside) cell.group.visible = cell.room.tags.includes("key") || cell.id === "kestrel";
       else cell.group.visible = cell.visible;
