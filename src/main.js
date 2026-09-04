@@ -402,11 +402,13 @@ const KESTREL_VIEWS = {
   bathroom: { x: 2.1, z: -3.9, yaw: -100, pitch: -4 },
   aft: { x: 0.2, z: -6.5, yaw: 180, pitch: -3 },
   ramp: { x: 0.0, z: 1.2, yaw: 180, pitch: -12 },
+  // deck-level view of the parked freighter from the hangar floor (hull, gear, ramp, service gear)
+  kestrel_deck: { x: -9.5, z: 4.5, yaw: 150, pitch: 4, y: -KESTREL.clearance },
 };
 function kestrelPose(v) {
   const c = Math.cos(KESTREL.yaw);
   const s = Math.sin(KESTREL.yaw);
-  return { x: v.x * c + v.z * s + KESTREL.position.x, z: -v.x * s + v.z * c + KESTREL.position.z, y: KESTREL.position.y, yaw: v.yaw + THREE.MathUtils.radToDeg(KESTREL.yaw), pitch: v.pitch };
+  return { x: v.x * c + v.z * s + KESTREL.position.x, z: -v.x * s + v.z * c + KESTREL.position.z, y: KESTREL.position.y + (v.y || 0), yaw: v.yaw + THREE.MathUtils.radToDeg(KESTREL.yaw), pitch: v.pitch };
 }
 let framesRendered = 0;
 let pendingCapture = null;
@@ -433,7 +435,7 @@ const debugAPI = {
       rig.setMode("interior");
       player.frozen = true;
       player.setPose(p.x, p.z, p.yaw, p.pitch, p.y);
-      cells.setCurrent("kestrel");
+      cells.setCurrent(KESTREL_VIEWS[name].y ? "hangar" : "kestrel");
       cells.update(player.position, 0, 0);
       return true;
     }

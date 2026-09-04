@@ -757,8 +757,11 @@ export function makeFieldPattern(size = 512, seed = 12) {
   const ctx = c.getContext("2d");
   ctx.clearRect(0, 0, size, size);
   const r = size / 12;
-  ctx.strokeStyle = "rgba(160,200,255,0.55)";
-  ctx.lineWidth = 1.5;
+  // soft haze between the cells so the plane reads as a shimmer, lattice lines kept faint
+  ctx.fillStyle = "rgba(120,160,255,0.35)";
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = "rgba(160,200,255,0.22)";
+  ctx.lineWidth = 1.0;
   const hexAt = (cx, cy) => {
     ctx.beginPath();
     for (let k = 0; k < 6; k++) {
