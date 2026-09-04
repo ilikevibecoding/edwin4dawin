@@ -103,14 +103,14 @@ export class WaveVisuals {
     if (this.ribbon) { this.scene.remove(this.ribbon); this.ribbon.geometry.dispose(); this.ribbon.material.dispose(); }
     // chevrons: lanes across the disc, one chevron every SPACING blocks along the travel axis (the group scrolls)
     const px = -dirZ, pz = dirX, pos = [];
-    const spacing = 14, half = 2.6, len = 3.2;
+    const spacing = 14, half = 3.2, len = 4.2;
     const chevron = (ax, az) => {
-      // an open "V" pointing along (dirX, dirZ): two slanted bars of width 0.7
+      // an open "V" pointing along (dirX, dirZ): two slanted bars about a block wide
       const tipX = ax + dirX * len * 0.5, tipZ = az + dirZ * len * 0.5;
       const backX = ax - dirX * len * 0.5, backZ = az - dirZ * len * 0.5;
       for (const sgn of [-1, 1]) {
         const bx = backX + px * sgn * half, bz = backZ + pz * sgn * half;
-        const ox = px * sgn * 0.35 - dirX * 0.35, oz = pz * sgn * 0.35 - dirZ * 0.35; // bar thickness
+        const ox = px * sgn * 0.55 - dirX * 0.55, oz = pz * sgn * 0.55 - dirZ * 0.55; // bar thickness
         pos.push(tipX, y + 0.08, tipZ, bx, y + 0.08, bz, bx + ox, y + 0.08, bz + oz);
         pos.push(tipX, y + 0.08, tipZ, bx + ox, y + 0.08, bz + oz, tipX + ox, y + 0.08, tipZ + oz);
       }
