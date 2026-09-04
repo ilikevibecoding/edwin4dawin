@@ -22,9 +22,12 @@ import { PathPreview } from './tornado/preview.js';
 const ROPE_TICKS = 120;           // rope-out length (6 s)
 const TOUCHDOWN_TICKS = 60;       // funnel descends / spins up over the first 3 s
 const RIP_PICKS = 24;             // candidate cells tested per tick
-const RIP_BATCH_TICKS = 8;        // decided rips are applied in bursts (2.5 Hz) so touched chunks relight/remesh ~2.5x/s, not 20x/s
+// Decided rips are applied in bursts every RIP_BATCH_TICKS (0.8 s). Each burst costs the manager one full chunk
+// relight plus a remesh of the chunk and its lit neighbours (~15 ms on this VM), so the burst rate, not the
+// block count, sets the price: 1.25 bursts/s keeps it ~2 ms/frame at 10 fps versus 20 relights/s unbatched.
+const RIP_BATCH_TICKS = 16;
 const PENDING_MAX = 64;           // cells waiting for the next burst (x,y,z,id each)
-const MAX_DEBRIS_PER_TICK = 10;
+const MAX_DEBRIS_PER_BURST = 12;  // debris launched per burst tick (~15 per second on average)
 const MAX_FLING_PER_TICK = 3;
 const ALERT_INTERVAL = 40;        // ticks between NPC/animal alerts (2 s)
 const CLOUD_DECK_Y = 120;
@@ -244,7 +247,7 @@ export class Tornado extends Disaster {
       this.ripCount++;
       if (this.ripQueue.length < RIP_QUEUE_MAX * 4) this.ripQueue.push(x, y, z, id);
       const def = BLOCKS[id];
-      if (spawned < MAX_DEBRIS_PER_TICK && def.shape !== SHAPE.CROSS && def.shape !== SHAPE.TORCH && def.shape !== SHAPE.RAIL) {
+      if (spawned < MAX_DEBRIS_PER_BURST && def.shape !== SHAPE.CROSS && def.shape !== SHAPE.TORCH && def.shape !== SHAPE.RAIL) {
         spawned++;
         const h = hash3(x, y, z, this.seed);
         const dx = x + 0.5 - cx, dz = z + 0.5 - cz;
@@ -252,7 +255,7 @@ export class Tornado extends Disaster {
         const vt = 12 + 8 * h, vy = 7 + 6 * (1 - h);
         const tx = SWIRL_SIGN * uz, tz = -SWIRL_SIGN * ux;
         const size = def.shape === SHAPE.CUBE ? 0.7 + 0.15 * h : 0.45;
-        this.m.debris.spawn(x + 0.5, y + 0.5, z + 0.5, tx * vt - ux * 2, vy, tz * vt - uz * 2, id, size, 6 + h * 4, { force: true });
+        this.m.debris.spawn(x + 0.5, y + 0.5, z + 0.5, tx * vt - ux * 2, vy, tz * vt - uz * 2, id, size, 8 + h * 4, { force: true });
         this.m.stats.debrisSpawned++;
       }
     }

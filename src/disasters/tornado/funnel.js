@@ -34,7 +34,7 @@ function fbm(size, periods, rng) {
 
 export function getNoiseTexture() {
   if (noiseTexture) return noiseTexture;
-  const size = 256;
+  const size = 128;   // soft smoke detail; generated once per session (~2-3 ms)
   const rng = new RNG(0x70a2d0);
   const r = fbm(size, [6, 12, 24, 48], rng);      // broad wisps
   const g = fbm(size, [4, 8, 16, 32, 64], rng);   // finer mottling
