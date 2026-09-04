@@ -8,7 +8,7 @@ import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
 import { roomShell, impConsole, wallScreen, equipmentRack, crate, pipeRun, wallSegment } from "../imperial.js";
 import { wallFrame, pointLight } from "../builders.js";
-import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, cableTray, wallVent, wallStencil, floorStencil, floorLine, hazardBorder, oilStain, workLight, warningLamp, craneRail, cabinet, shelfFrame, loader, palletJack, emitMat } from "./engProps.js";
+import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, hazardBorder, floorBorder, oilStain, workLight, warningLamp, craneRail, cabinet, shelfFrame, loader, palletJack, emitMat, container } from "./engProps.js";
 
 export function buildCargo(kit, ctx) {
   const [min, max] = ctx.bounds; // [-48, 0, -64] .. [-2.9, 9, -36]
@@ -24,36 +24,35 @@ export function buildCargo(kit, ctx) {
   const uXmax = (z) => z - min[2];
   const uXmin = (z) => max[2] - z;
 
-  // container without its own collider (the racking frame already blocks the whole row)
-  const binCols = [null, null, null, null, PALETTE.hullDark, PALETTE.impAmber.clone().multiplyScalar(0.55), PALETTE.hullGrey, PALETTE.impRed.clone().multiplyScalar(0.45)];
-  const bin = (x, y, z, sx, sy, sz, seed, yaw = 0) => {
-    const n = kit.colliders.length;
-    crate(kit, ctx, { x, y, z, sx, sy, sz, yaw, seed, color: binCols[seed % binCols.length] });
-    kit.colliders.length = n;
-  };
+  // shipping container (ribbed flanks, door end with latch bars and handles, label plate, lamp,
+  // placard on some; 2–3 paint tones per rack) without its own collider — the racking frame
+  // already blocks the whole row. `face` is the side the doors are on (toward the aisle).
+  const bin = (x, y, z, sx, sy, sz, seed, face, tones) => container(kit, { x, y, z, sx, sy, sz, seed, face, tone: tones[seed % tones.length], ribs: false });
 
-  // ---------------------------------------------------------------- racking: four rows along x
-  const LEVEL_H = 1.7;
-  const rack = (x0, z0, x1, z1, seed, { rows = 1, fill = 0.82 } = {}) => {
-    const heights = shelfFrame(kit, x0, z0, x1, z1, { levels: 3, levelH: LEVEL_H, color: PALETTE.impAmber });
+  // ---------------------------------------------------------------- racking: four rows along x, each a different build
+  const rack = (x0, z0, x1, z1, seed, { rows = 1, fill = 0.82, levels = 3, levelH = 1.7, color = PALETTE.impAmber, tones = [0, 1, 5], wide = 0.22 } = {}) => {
+    const heights = shelfFrame(kit, x0, z0, x1, z1, { levels, levelH, color });
     const r = rng(seed);
     const depth = (z1 - z0) / rows;
     const ys = [0, ...heights.map((h) => h + 0.01)];
+    const south = (z0 + z1) / 2 < -50;
     for (let row = 0; row < rows; row++) {
       const cz = z0 + depth * (row + 0.5);
+      // doors face the walkway: outer rows toward the wall aisle, inner rows toward the main lane
+      const face = south ? (row === rows - 1 ? 1 : -1) : row === 0 ? -1 : 1;
       for (let li = 0; li < ys.length; li++) {
         let x = x0 + 0.75;
         const yy = ys[li];
         while (x < x1 - 0.7) {
-          const wide = r() < 0.22;
-          const sx = wide ? 2.2 : 1.05 + r() * 0.25;
+          const isWide = r() < wide;
+          const sx = isWide ? 2.2 : 1.05 + r() * 0.25;
           if (x + sx / 2 > x1 - 0.1) break;
           const gapChance = li === ys.length - 1 ? 0.35 : 1 - fill;
           if (r() > gapChance) {
             const sy = li === 0 ? 1.1 + r() * 0.4 : 0.8 + r() * 0.75;
             const sz = Math.min(depth - 0.12, 1.1 + r() * 0.2);
-            bin(x + sx / 2, yy, cz, sx, Math.min(sy, LEVEL_H - 0.16), sz, seed + li * 31 + Math.floor(x * 7));
-            if (li > 0 && r() < 0.25 && sy < LEVEL_H - 0.75) bin(x + sx / 2, yy + Math.min(sy, LEVEL_H - 0.16), cz, sx * 0.8, 0.45, sz * 0.8, seed + 3 + Math.floor(x * 5));
+            bin(x + sx / 2, yy, cz, sx, Math.min(sy, levelH - 0.16), sz, seed + li * 31 + Math.floor(x * 7), face, tones);
+            if (li > 0 && r() < 0.25 && sy < levelH - 0.75) bin(x + sx / 2, yy + Math.min(sy, levelH - 0.16), cz, sx * 0.8, 0.45, sz * 0.8, seed + 3 + Math.floor(x * 5), face, tones);
           }
           x += sx + 0.12;
         }
@@ -63,12 +62,12 @@ export function buildCargo(kit, ctx) {
     const nb = Math.round((x1 - x0) / 2.8);
     for (let i = 0; i < nb; i++) floorStencil(kit, x0 + ((i + 0.5) / nb) * (x1 - x0), z1 + 0.55, 0.7, 8 + (i % 4), 0);
   };
-  // south side (zmin): single row on the wall, double row in the middle
-  rack(-45, -63.5, -11, -62.1, ctx.seed + 1);
-  rack(-43, -58.8, -13, -56.0, ctx.seed + 2, { rows: 2 });
-  // north side (zmax)
-  rack(-43, -44.0, -13, -41.2, ctx.seed + 3, { rows: 2 });
-  rack(-45, -37.9, -11, -36.5, ctx.seed + 4);
+  // south side (zmin): a tall four-level grey wall rack of small bins, a double amber row in the middle
+  rack(-45, -63.5, -11, -62.1, ctx.seed + 1, { levels: 4, levelH: 1.4, color: PALETTE.impMid, tones: [0, 2, 5], wide: 0.1, fill: 0.9 });
+  rack(-43, -58.8, -13, -56.0, ctx.seed + 2, { rows: 2, tones: [0, 1, 3] });
+  // north side (zmax): a heavy two-level double row (big containers), then a standard three-level wall rack
+  rack(-43, -44.0, -13, -41.2, ctx.seed + 3, { rows: 2, levels: 2, levelH: 2.3, tones: [1, 2, 4], wide: 0.45, fill: 0.86 });
+  rack(-45, -37.9, -11, -36.5, ctx.seed + 4, { tones: [0, 3, 5] });
   // rack-end guards (hazard bumpers) and end-of-row lit labels
   for (const [x, z0, z1] of [
     [-45, -63.5, -62.1],
@@ -80,7 +79,7 @@ export function buildCargo(kit, ctx) {
     [-45, -37.9, -36.5],
     [-11, -37.9, -36.5],
   ]) {
-    kit.box("hazard", x, 0.2, (z0 + z1) / 2, 0.16, 0.4, z1 - z0 + 0.3, { texel: 3 });
+    kit.box("hazard", x, 0.2, (z0 + z1) / 2, 0.16, 0.4, z1 - z0 + 0.3, { texel: HAZARD_TEXEL });
     kit.box("paintedMetal", x, 2.4, (z0 + z1) / 2, 0.06, 0.5, 0.9, { color: PALETTE.impBlack, texel: 2 });
     kit.box("emitAmber", x + (x < -20 ? -0.035 : 0.035), 2.4, (z0 + z1) / 2, 0.01, 0.34, 0.7, { uv: "keep" });
   }
@@ -102,7 +101,7 @@ export function buildCargo(kit, ctx) {
   for (let x = laneX0 + 0.5; x < laneX1; x += 1.2) floorLine(kit, x, -46.9, x + 0.7, -46.2, { w: 0.08, color: PALETTE.impWhite });
   // door approach keep-clear box and dock apron
   hazardBorder(kit, max[0] - 5.2, doorZ - 3, max[0] - 0.3, doorZ + 3, 0.25);
-  hazardBorder(kit, min[0] + 0.3, -55.5, min[0] + 4.2, -44.5, 0.3);
+  floorBorder(kit, min[0] + 0.3, -55.5, min[0] + 4.2, -44.5, { w: 0.14 });
   for (let i = 0; i < 4; i++) floorStencil(kit, min[0] + 2.2, -54 + i * 2.7, 1.1, 12 + (i % 3), Math.PI / 2);
   floorStencil(kit, max[0] - 3.2, doorZ - 1.6, 1.2, 7, -Math.PI / 2);
   floorStencil(kit, max[0] - 3.2, doorZ + 1.6, 1.2, 15, -Math.PI / 2);
@@ -119,7 +118,7 @@ export function buildCargo(kit, ctx) {
     // jambs, lintel, sill
     for (const [za, zb] of [[z0 - 0.9, z0], [z1, z1 + 0.9]]) {
       kit.boxMM("paintedMetal", [dx, 0, za], [dx + 0.9, dh + 0.8, zb], { color: PALETTE.impDark, texel: 1.5 });
-      kit.boxMM("hazard", [dx + 0.9, 0.3, za], [dx + 0.92, dh + 0.2, zb], { texel: 3 });
+      kit.boxMM("hazard", [dx + 0.9, 0.3, za], [dx + 0.92, dh + 0.2, zb], { texel: HAZARD_TEXEL });
     }
     kit.boxMM("paintedMetal", [dx, dh, z0 - 0.9], [dx + 0.9, dh + 0.8, z1 + 0.9], { color: PALETTE.impDark, texel: 1.5 });
     kit.boxMM("paintedMetal", [dx, 0, z0], [dx + 0.6, 0.35, z1], { color: PALETTE.impBlack, texel: 2 });
@@ -129,7 +128,7 @@ export function buildCargo(kit, ctx) {
       const lb = s ? z1 : doorZ - 0.06;
       kit.boxMM("paintedMetal", [dx + 0.2, 0.35, la], [dx + 0.55, dh, lb], { color: PALETTE.impGrey, texel: 1.2 });
       for (let i = 1; i < 5; i++) kit.boxMM("paintedMetal", [dx + 0.55, 0.35 + i * 1.25 - 0.08, la + 0.15], [dx + 0.62, 0.35 + i * 1.25 + 0.08, lb - 0.15], { color: PALETTE.impMid, texel: 2 });
-      kit.boxMM("hazard", [dx + 0.55, 0.35, s ? la : lb - 0.24], [dx + 0.58, dh - 0.2, s ? la + 0.24 : lb], { texel: 3 });
+      kit.boxMM("hazard", [dx + 0.55, 0.35, s ? la : lb - 0.24], [dx + 0.58, dh - 0.2, s ? la + 0.24 : lb], { texel: HAZARD_TEXEL });
       kit.add("decal", new THREE.PlaneGeometry(1.6, 1.6), { pos: [dx + 0.56, 3.6, s ? la + 2.6 : lb - 2.6], rot: [0, Math.PI / 2, 0], uv: "keep", uvRect: decalRect(s ? 3 : 4) });
     }
     kit.boxMM("paintedMetal", [dx + 0.2, 0.35, doorZ - 0.08], [dx + 0.6, dh, doorZ + 0.08], { color: PALETTE.impBlack, texel: 2 });
@@ -186,31 +185,34 @@ export function buildCargo(kit, ctx) {
   }
 
   // ---------------------------------------------------------------- vehicles, floor stock, jacks
-  loader(kit, ctx, -22, -54.6, { yaw: -Math.PI / 2, seed: ctx.seed + 1, carry: (x, y, z, yaw) => crate(kit, ctx, { x, y, z, sx: 1.0, sy: 0.9, sz: 1.0, yaw, seed: ctx.seed + 15 }) });
+  loader(kit, ctx, -22, -54.6, { yaw: -Math.PI / 2, seed: ctx.seed + 1, carry: (x, y, z, yaw) => container(kit, { x, y, z, sx: 1.0, sy: 0.9, sz: 1.0, yaw, seed: ctx.seed + 15, tone: 3 }) });
   loader(kit, ctx, -36, -45.5, { yaw: Math.PI / 2, seed: ctx.seed + 2 });
-  loader(kit, ctx, -12.5, -47.9, { yaw: Math.PI, seed: ctx.seed + 3, color: PALETTE.impMid });
+  loader(kit, ctx, -12.5, -47.9, { yaw: Math.PI, seed: ctx.seed + 3, color: PALETTE.impMid }); // forks empty and toward the lane
   palletJack(kit, -29, -54.9, Math.PI / 2);
   palletJack(kit, -16.5, -45.4, -Math.PI / 2 + 0.3);
   palletJack(kit, -41, -55.0, Math.PI);
-  // floor stacks in the working aisles (with colliders: the player can walk into them)
-  const stack = (x, z, yaw, n, seed) => {
-    let y = 0;
+  // floor stacks in the working aisles: a container on the deck (collides) with crates stacked on it
+  const stack = (x, z, yaw, n, seed, face = 1) => {
     const r = rng(seed);
-    for (let i = 0; i < n; i++) {
-      const s = 1.5 - i * 0.2;
-      const sy = 0.8 + r() * 0.4;
-      crate(kit, ctx, { x, y, z, sx: s, sy, sz: s, yaw: yaw + (r() - 0.5) * 0.2, seed: seed + i });
+    const s0 = 1.5;
+    const h0 = 0.9 + r() * 0.4;
+    container(kit, { x, z, sx: s0, sy: h0, sz: s0 * 0.9, yaw, seed, face, collide: true });
+    let y = h0;
+    for (let i = 1; i < n; i++) {
+      const s = 1.5 - i * 0.25;
+      const sy = 0.6 + r() * 0.4;
+      crate(kit, ctx, { x, y, z, sx: s, sy, sz: s * 0.9, yaw: yaw + (r() - 0.5) * 0.2, seed: seed + i });
       y += sy;
     }
   };
-  stack(-31.5, -54.6, 0.1, 3, ctx.seed + 21);
-  stack(-33.2, -54.7, -0.2, 2, ctx.seed + 22);
-  stack(-26, -45.4, 0.3, 2, ctx.seed + 23);
-  stack(-40.5, -45.6, 0, 3, ctx.seed + 24);
-  stack(-9.5, -61.8, 0.1, 2, ctx.seed + 25);
-  stack(-9.2, -38.5, -0.15, 3, ctx.seed + 26);
-  crate(kit, ctx, { x: -18, z: -54.7, sx: 2.6, sy: 1.1, sz: 1.3, yaw: 0.05, seed: ctx.seed + 27 });
-  crate(kit, ctx, { x: -11.2, z: -44.6, sx: 1.3, sy: 0.9, sz: 1.3, yaw: -0.4, seed: ctx.seed + 28 });
+  stack(-31.5, -54.6, 0.1, 3, ctx.seed + 21, 1);
+  stack(-33.2, -54.7, -0.2, 2, ctx.seed + 22, 1);
+  stack(-26, -45.4, 0.3, 2, ctx.seed + 23, -1);
+  stack(-40.5, -45.6, 0, 3, ctx.seed + 24, -1);
+  stack(-9.5, -61.8, 0.1, 2, ctx.seed + 25, 1);
+  stack(-9.2, -38.5, -0.15, 3, ctx.seed + 26, -1);
+  container(kit, { x: -18, z: -54.7, sx: 2.6, sy: 1.1, sz: 1.3, yaw: 0.05, seed: ctx.seed + 27, tone: 2, face: 1, collide: true });
+  container(kit, { x: -11.2, z: -44.6, sx: 1.3, sy: 0.9, sz: 1.3, yaw: -0.4, seed: ctx.seed + 28, tone: 4, face: -1, collide: true });
 
   // ---------------------------------------------------------------- walls: vents, stencils, screens above the racks, pipes
   for (const side of ["zmin", "zmax"]) {
@@ -237,7 +239,7 @@ export function buildCargo(kit, ctx) {
   const trolley = new THREE.Group();
   const tk = new Kit(ctx.materials);
   tk.box("paintedMetal", 0, ry - 0.55, 0, 1.6, 0.6, 1.1, { color: PALETTE.impDark, texel: 2 });
-  tk.box("hazard", 0, ry - 0.9, 0, 1.62, 0.1, 1.12, { texel: 3 });
+  tk.box("hazard", 0, ry - 0.9, 0, 1.62, 0.1, 1.12, { texel: HAZARD_TEXEL });
   tk.box("paintedMetal", 0, ry - 1.1, 0, 0.5, 0.3, 0.5, { color: PALETTE.impDark, texel: 2 });
   tk.box("paintedMetal", 0, ry - 2.7, 0, 0.05, 3.0, 0.05, { color: PALETTE.impBlack, texel: 2 });
   tk.box("paintedMetal", 0, ry - 4.35, 0, 0.4, 0.5, 0.4, { color: PALETTE.impAmber, texel: 2 });
@@ -245,7 +247,7 @@ export function buildCargo(kit, ctx) {
   // spreader beam and slung container
   tk.box("metal", 0, ry - 4.75, 0, 1.6, 0.12, 0.12, { color: PALETTE.gunmetal });
   for (const s of [-1, 1]) tk.box("metal", s * 0.7, ry - 5.05, 0, 0.03, 0.5, 0.03, { color: PALETTE.steel });
-  crate(tk, ctx, { x: 0, y: ry - 6.35, z: 0, sx: 1.5, sy: 1.05, sz: 1.3, seed: ctx.seed + 29 });
+  container(tk, { x: 0, y: ry - 6.35, z: 0, sx: 1.5, sy: 1.05, sz: 1.3, seed: ctx.seed + 29, tone: 3 });
   tk.colliders.length = 0; // the slung container moves; never a collider
   tk.build(trolley);
   ctx.mesh(trolley);

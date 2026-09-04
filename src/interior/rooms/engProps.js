@@ -663,7 +663,7 @@ export const CONTAINER_TONES = [
  * and handles) on the `face` (+1: +z, -1: -z) side, a label plate, a status lamp and — on some —
  * a hazard placard. `tone` indexes CONTAINER_TONES; no collider by default (racks carry their own).
  */
-export function container(kit, { x, y = 0, z, sx = 1.2, sy = 1.0, sz = 1.2, yaw = 0, seed = 1, tone = null, face = 1, collide = false }) {
+export function container(kit, { x, y = 0, z, sx = 1.2, sy = 1.0, sz = 1.2, yaw = 0, seed = 1, tone = null, face = 1, collide = false, ribs = true }) {
   const rand = rng(seed);
   const [body, trim] = CONTAINER_TONES[tone ?? Math.floor(rand() * CONTAINER_TONES.length)];
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
@@ -676,9 +676,11 @@ export function container(kit, { x, y = 0, z, sx = 1.2, sy = 1.0, sz = 1.2, yaw 
   add("paintedMetal", new THREE.BoxGeometry(sx + 0.03, sy * 0.1, sz + 0.03), 0, sy * 0.05, 0, { color: PALETTE.impBlack, texel: 2 });
   add("paintedMetal", new THREE.BoxGeometry(sx + 0.03, sy * 0.08, sz + 0.03), 0, sy - sy * 0.04, 0, { color: PALETTE.impBlack, texel: 2 });
   for (const cx of [-1, 1]) for (const cz of [-1, 1]) add("paintedMetal", new THREE.BoxGeometry(0.07, sy, 0.07), cx * (sx / 2 - 0.02), sy / 2, cz * (sz / 2 - 0.02), { color: PALETTE.impBlack, texel: 2 });
-  // corrugation ribs on the long flanks (±x faces)
-  const nr = Math.max(2, Math.floor((sz - 0.3) / 0.3));
-  for (const s of [-1, 1]) for (let i = 0; i < nr; i++) add("paintedMetal", new THREE.BoxGeometry(0.02, sy * 0.72, 0.06), s * (sx / 2 + 0.005), sy * 0.5, -sz / 2 + 0.2 + (i + 0.5) * ((sz - 0.4) / nr), { color: trim, texel: 2 });
+  // corrugation ribs on the long flanks (±x faces) — skipped for bins packed side by side in racks
+  if (ribs) {
+    const nr = Math.max(2, Math.floor((sz - 0.3) / 0.3));
+    for (const s of [-1, 1]) for (let i = 0; i < nr; i++) add("paintedMetal", new THREE.BoxGeometry(0.02, sy * 0.72, 0.06), s * (sx / 2 + 0.005), sy * 0.5, -sz / 2 + 0.2 + (i + 0.5) * ((sz - 0.4) / nr), { color: trim, texel: 2 });
+  }
   // door end: two leaves with a centre seam, latch bars, handles, a sill
   const f = face;
   const dz = f * (sz / 2 + 0.006);
