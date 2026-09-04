@@ -8,9 +8,10 @@ import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
 import { Kit, rng } from "../../kit.js";
 import { GRATE_TILE } from "../../textures.js";
-import { impFloor, impCeiling, impWall, stairs, platform, railing, pipeRun, pillar, wallScreen, equipmentRack } from "../imperial.js";
-import { pointLight } from "../builders.js";
-import { ENG_PAINTS, ENG_PAINTS_DARK, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, emitMat, pulseSet, wallVent, wallStencil, floorStencil, hazardBorder, tank, cabinet, gratedTrench, warningLamp, cableTray, spotLight } from "./engProps.js";
+import { impFloor, impCeiling, impWall, stairs, platform, railing, pipeRun, pillar, wallScreen, equipmentRack, wallSegment } from "../imperial.js";
+import { pointLight, wallFrame } from "../builders.js";
+import { signPlate } from "../corridor.js";
+import { ENG_PAINTS, ENG_PAINTS_DARK, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, emitMat, pulseSet, wallVent, wallStencil, floorStencil, floorBorder, tank, cabinet, gratedTrench, warningLamp, cableTray, spotLight } from "./engProps.js";
 
 export function buildReactor(kit, ctx) {
   const [min, max] = ctx.bounds; // [-24, -12, -112] .. [24, 20, -65]
@@ -49,14 +50,15 @@ export function buildReactor(kit, ctx) {
   const slabCollider = (x0, z0, x1, z1, tag = "walk") => kit.collider([x0, -0.3, z0], [x1, 0, z1], tag);
 
   // ---------------------------------------------------------------- the core
-  const core = emitMat(ctx, "rx_core", 0xb9dcff, 1.7);
+  // a saturated reactor blue at ~1.0 so the column reads as coloured light rather than a white bar
+  const core = emitMat(ctx, "rx_core", 0x5fb0ff, 1.0);
   kit.cyl("rx_core", 0, (Y0 + Y1) / 2, CZ, 2.4, Y1 - Y0, "y", { segments: 40 });
   // cage: 12 ribs + collars every 4 m with pulsing bands
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2;
     kit.add("paintedMetal", new THREE.BoxGeometry(0.55, Y1 - Y0, 0.5), { pos: [Math.cos(a) * 2.85, (Y0 + Y1) / 2, CZ + Math.sin(a) * 2.85], rot: [0, Math.PI / 2 - a, 0], color: PALETTE.impDark, texel: 1.2 });
   }
-  const bands = pulseSet(ctx, "rx_band", 0xbfe0ff, 8, { min: 0.5, max: 2.6, speed: 1.4 });
+  const bands = pulseSet(ctx, "rx_band", 0x8fc8ff, 8, { min: 0.4, max: 2.0, speed: 1.4 });
   const collarYs = [-10, -6, -2, 2, 6, 10, 14, 18];
   collarYs.forEach((y, i) => {
     kit.cyl("paintedMetal", 0, y, CZ, 3.25, 0.7, "y", { color: PALETTE.impBlack, segments: 40, texel: 1 });
@@ -71,13 +73,13 @@ export function buildReactor(kit, ctx) {
   });
   // top cap and base plinth
   kit.cyl("paintedMetal", 0, Y1 - 0.6, CZ, 3.9, 1.2, "y", { color: PALETTE.impDark, segments: 8, texel: 1 });
-  kit.cyl("hazard", 0, Y1 - 1.25, CZ, 3.75, 0.12, "y", { segments: 8, texel: 3 });
+  kit.cyl("hazard", 0, Y1 - 1.25, CZ, 3.75, 0.12, "y", { segments: 8, texel: HAZARD_TEXEL });
   kit.add("paintedMetal", new THREE.CylinderGeometry(4.8, 5.3, 1.2, 8), { pos: [0, Y0 + 0.6, CZ], rot: [0, Math.PI / 8, 0], color: PALETTE.impDark, texel: 1 });
-  kit.cyl("hazard", 0, Y0 + 1.21, CZ, 4.75, 0.02, "y", { segments: 8, texel: 3 });
+  kit.cyl("hazard", 0, Y0 + 1.21, CZ, 4.75, 0.02, "y", { segments: 8, texel: HAZARD_TEXEL });
   kit.cyl("metal", 0, Y0 + 1.3, CZ, 3.5, 0.2, "y", { color: PALETTE.gunmetal, segments: 40 });
   kit.collider([-3.35, Y0, CZ - 3.35], [3.35, Y1, CZ + 3.35], "core");
   kit.collider([-5.1, Y0, CZ - 5.1], [5.1, Y0 + 1.25, CZ + 5.1], "plinth");
-  hazardBorder(kit, -5.6, CZ - 5.6, 5.6, CZ + 5.6, 0.35, Y0 + 0.004);
+  floorBorder(kit, -5.6, CZ - 5.6, 5.6, CZ + 5.6, { w: 0.14, y: Y0 + 0.004 });
 
   // energy: containment field cylinder, tilted arc rings and spinning arc sheets (additive)
   const fx = new THREE.Group();
@@ -115,7 +117,7 @@ export function buildReactor(kit, ctx) {
     ctx.mesh(g);
   }
   ctx.anim((dt, t) => {
-    core.emissiveIntensity = 1.7 + Math.sin(t * 1.7) * 0.25 + Math.sin(t * 5.3) * 0.08;
+    core.emissiveIntensity = 1.0 + Math.sin(t * 1.7) * 0.12 + Math.sin(t * 5.3) * 0.05;
     bands.update(t);
     rings.rotation.y = t * 0.35;
     sheets.rotation.y = -t * 0.22;
@@ -147,12 +149,12 @@ export function buildReactor(kit, ctx) {
     ann.rotateX(-Math.PI / 2);
     kit.add("grate", ann, { pos: [0, -0.02, CZ], texel: 1 / GRATE_TILE[0] });
     kit.cyl("metal", 0, -0.04, CZ, RH + 0.05, 0.08, "y", { color: PALETTE.steel, segments: 48, open: true });
-    // outer edges: hazard strip, railing (axis-aligned edges collide; diagonals get a staircase of boxes)
+    // outer edges: light-grey kerb, railing (axis-aligned edges collide; diagonals get a staircase of boxes)
     const side = 2 * A * Math.tan(Math.PI / 8);
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      const d = A - 0.16;
-      kit.add("hazard", new THREE.BoxGeometry(side - 0.3, 0.012, 0.28), { pos: [Math.cos(a) * d, 0.004, CZ + Math.sin(a) * d], rot: [0, -a - Math.PI / 2, 0], texel: 3 });
+      const d = A - 0.12;
+      kit.add("paintedMetal", new THREE.BoxGeometry(side - 0.3, 0.012, 0.2), { pos: [Math.cos(a) * d, 0.004, CZ + Math.sin(a) * d], rot: [0, -a - Math.PI / 2, 0], color: PALETTE.impLight, texel: 2 });
       const a0 = a - Math.PI / 8;
       const a1 = a + Math.PI / 8;
       const rr = (A - 0.26) / Math.cos(Math.PI / 8);
@@ -228,9 +230,10 @@ export function buildReactor(kit, ctx) {
     for (let z = GZ0 + 0.75; z < GZ1; z += 1.5) kit.box("metal", 0, -0.14, z, 1.4, 0.14, 0.12, { color: PALETTE.gunmetal });
     for (const s of [-1, 1]) {
       kit.boxMM("paintedMetal", [s * 1.85 - 0.16, -1.05, GZ0 - 0.2], [s * 1.85 + 0.16, -0.3, GZ1], { color: PALETTE.impDark, texel: 1.5 });
-      kit.boxMM("hazard", [s * 2.0 - (s > 0 ? 0.3 : 0), -0.002, GZ0], [s * 2.0 + (s > 0 ? 0 : 0.3), 0.006, GZ1], { texel: 3 });
-      kit.boxMM("emitRed", [s * 1.97 - 0.03, 0.006, GZ0 + 0.2], [s * 1.97 + 0.03, 0.02, GZ1 - 0.2], { uv: "keep" });
-      for (let z = GZ0 + 1.5; z < GZ1 - 0.5; z += 2.5) kit.box("emitRed", s * 1.86, 0.1, z, 0.14, 0.08, 0.14);
+      kit.boxMM("paintedMetal", [s * 2.0 - (s > 0 ? 0.2 : 0), -0.002, GZ0], [s * 2.0 + (s > 0 ? 0 : 0.2), 0.006, GZ1], { color: PALETTE.impLight, texel: 2 });
+      // blue kerb light (the reactor colour) with small red beacon studs every 2.5 m
+      kit.boxMM("emitBlueDim", [s * 1.97 - 0.02, 0.006, GZ0 + 0.2], [s * 1.97 + 0.02, 0.016, GZ1 - 0.2], { uv: "keep" });
+      for (let z = GZ0 + 1.5; z < GZ1 - 0.5; z += 2.5) kit.box("emitRedDim", s * 1.86, 0.08, z, 0.1, 0.05, 0.1);
       railing(kit, s * 1.92, GZ0 - 0.3, s * 1.92, GZ1, 0, { collide: true });
     }
     slabCollider(-2, GZ0 - 0.1, 2, GZ1 + 0.1, "gantry");
@@ -261,7 +264,7 @@ export function buildReactor(kit, ctx) {
     kit.collider([-21.06, Y0, -87.1], [-20.86, 1.3, -67], "stairwall");
     kit.boxMM("paintedMetal", [-21.06, Y0, -87.1], [-20.92, Y0 + 0.4, -87.1 + st.total], { color: PALETTE.impDark, texel: 2 });
     // bottom landing markings and an amber stair light
-    hazardBorder(kit, -23, -90.4, -21, -87.1, 0.25, Y0 + 0.004);
+    floorBorder(kit, -23, -90.4, -21, -87.1, { w: 0.1, y: Y0 + 0.004 });
     floorStencil(kit, -22, -89, 1.2, 12, 0, Y0 + 0.006);
     wallStencil(kit, ctx, "xmin", max[2] + 77, 3.2 - Y0, 1.6, 15);
   }
@@ -270,8 +273,14 @@ export function buildReactor(kit, ctx) {
   const catwalk = (x0, z0, x1, z1, y, inner) => {
     kit.boxMM("floorGloss", [x0, y - 0.25, z0], [x1, y, z1], { texel: 0.33 });
     kit.boxMM("paintedMetal", [x0 - 0.05, y - 0.35, z0 - 0.05], [x1 + 0.05, y - 0.25, z1 + 0.05], { color: PALETTE.impDark, texel: 2 });
-    kit.boxMM("hazard", [x0, y - 0.05, z0], [x1, y + 0.001, z1], { texel: 3 });
-    kit.boxMM("floorGloss", [x0 + 0.25, y - 0.04, z0 + 0.25], [x1 - 0.25, y + 0.002, z1 - 0.25], { texel: 0.33 });
+    kit.boxMM("paintedMetal", [x0, y - 0.05, z0], [x1, y + 0.001, z1], { color: PALETTE.impLight, texel: 2 });
+    kit.boxMM("floorGloss", [x0 + 0.2, y - 0.04, z0 + 0.2], [x1 - 0.2, y + 0.002, z1 - 0.2], { texel: 0.33 });
+    // blue level-marker line under the room-facing edge (reads the deck levels on the dark shaft walls)
+    const e = 0.04;
+    if (inner === "xmax") kit.boxMM("emitBlueDim", [x1 - e, y - 0.42, z0 + 0.3], [x1, y - 0.36, z1 - 0.3], { uv: "keep" });
+    if (inner === "xmin") kit.boxMM("emitBlueDim", [x0, y - 0.42, z0 + 0.3], [x0 + e, y - 0.36, z1 - 0.3], { uv: "keep" });
+    if (inner === "zmax") kit.boxMM("emitBlueDim", [x0 + 0.3, y - 0.42, z1 - e], [x1 - 0.3, y - 0.36, z1], { uv: "keep" });
+    if (inner === "zmin") kit.boxMM("emitBlueDim", [x0 + 0.3, y - 0.42, z0], [x1 - 0.3, y - 0.36, z0 + e], { uv: "keep" });
     if (inner === "xmax") railing(kit, x1 - 0.1, z0, x1 - 0.1, z1, y, { collide: false });
     if (inner === "xmin") railing(kit, x0 + 0.1, z0, x0 + 0.1, z1, y, { collide: false });
     if (inner === "zmax") railing(kit, x0, z1 - 0.1, x1, z1 - 0.1, y, { collide: false });
@@ -339,13 +348,44 @@ export function buildReactor(kit, ctx) {
   for (const [x, z] of [[-12, -108.5], [-8.5, -108.5], [12, -108.5], [8.5, -108.5], [19, -87], [19, -90.5]]) tank(kit, x, z, { r: 0.9, h: 3.4, y: Y0, color: PALETTE.impMid, lamp: "emitBlue", front: z > -100 ? -1 : 1 });
   for (let i = 0; i < 4; i++) floorStencil(kit, [-15, 15, -15, 15][i], CZ + [-14, -14, 14, 14][i], 2.0, 8 + i, 0, Y0 + 0.006);
 
-  // ---------------------------------------------------------------- walls: vents, stencils, screens by the door, warning lamps
+  // ---------------------------------------------------------------- walls: vents, stencils, lit signs, panels, screens by the door, warning lamps
   for (const side of ["xmin", "xmax", "zmin"]) {
     for (const u of [12, 34]) wallVent(kit, ctx, side, u, 14 - Y0, 5.0, 2.2, { slats: 9 });
-    wallStencil(kit, ctx, side, 23, 4.2 - Y0, 2.4, 14);
   }
+  // bay stencils sit on the core line (u = 30 on the side walls → z = CZ), clear of the risers and
+  // the ring pylons, with a lit sign under each; the back wall gets one either side of the core
+  for (const side of ["xmin", "xmax"]) {
+    wallStencil(kit, ctx, side, 30, 4.4 - Y0, 3.2, 14);
+    signPlate(kit, ctx, { side, u: 30, v: 2.0 - Y0, w: 4.2, h: 0.62, text: "Reactor Core", sub: "Level 0 · Shaft B-1", accent: "#4a9dff" });
+  }
+  for (const u of [8, 40]) wallStencil(kit, ctx, "zmin", u, 4.4 - Y0, 3.0, 14);
   wallVent(kit, ctx, "zmax", 10, 14 - Y0, 5.0, 2.2, { slats: 9 });
   wallVent(kit, ctx, "zmax", 38, 14 - Y0, 5.0, 2.2, { slats: 9 });
+  // emissive light panels lift the shaft walls out of black: three rows (lower band, deck level +5,
+  // upper band) of soft strips in dark housings, kept clear of the vents and the coolant risers
+  {
+    const lightPanel = (side, u, y, w = 2.4) => {
+      const seg = wallSegment(ctx.bounds, side);
+      const { frame } = wallFrame(kit, seg.from, seg.to, Y0);
+      const v = y - Y0;
+      frame.box("paintedMetal", u, v, 0.05, w + 0.3, 0.6, 0.1, { color: PALETTE.impDark, texel: 2 });
+      frame.box("emitStrip", u, v, 0.106, w, 0.3, 0.01, { uv: "keep" });
+      frame.box("emitBlueDim", u, v - 0.24, 0.106, w, 0.03, 0.01, { uv: "keep" });
+    };
+    for (const z of [-70, -78, -86, -95, -104]) {
+      lightPanel("xmin", max[2] - z, 5.0);
+      lightPanel("xmin", max[2] - z, 11.5);
+      lightPanel("xmax", z - min[2], 5.0);
+      lightPanel("xmax", z - min[2], 11.5);
+      lightPanel("xmax", z - min[2], -4.5);
+      if (z < -80) lightPanel("xmin", max[2] - z, -4.5);
+    }
+    for (const x of [-18, -6, 6, 18]) for (const y of [5.0, 11.5, -4.5]) lightPanel("zmin", x - min[0], y);
+    for (const x of [-19, -9, 9, 19]) for (const y of [5.0, 11.5, -4.5]) lightPanel("zmax", max[0] - x, y);
+    wallScreen(kit, ctx, { side: "xmin", u: max[2] - -76, v: 3.0 - Y0, w: 2.4, h: 1.3, screen: 2 });
+    wallScreen(kit, ctx, { side: "xmax", u: -76 - min[2], v: 3.0 - Y0, w: 2.4, h: 1.3, screen: 0 });
+    wallScreen(kit, ctx, { side: "xmax", u: -100 - min[2], v: 3.0 - Y0, w: 2.4, h: 1.3, screen: 2 });
+  }
   // door wall (zmax): u = max.x - x
   const uZ = (x) => max[0] - x;
   wallScreen(kit, ctx, { side: "zmax", u: uZ(-5.4), v: 2.0 - Y0, w: 1.6, h: 0.9, screen: 3 });
@@ -359,10 +399,11 @@ export function buildReactor(kit, ctx) {
   cableTray(kit, [-22, -66.2], [22, -66.2], Y1 - 0.7, { w: 0.6, ceil: Y1, cables: 5, seed: 3 });
   cableTray(kit, [-22, -110.8], [22, -110.8], Y1 - 0.7, { w: 0.6, ceil: Y1, cables: 4, seed: 4 });
 
-  // ---------------------------------------------------------------- lights (8): core glow x3, red gantry, door, amber stair, amber floor, shadow spot
-  ctx.light(pointLight(0xcfe4ff, 90, 30, [0, 2.6, CZ]));
-  ctx.light(pointLight(0x9fc8ff, 70, 28, [0, Y0 + 2.5, CZ]));
-  ctx.light(pointLight(0x8fbfff, 50, 28, [0, 13, CZ]));
+  // ---------------------------------------------------------------- lights (8): core glow x3 (reactor blue, kept below
+  // the point where the ring platform clips to white), red gantry, door, amber stair, amber floor, shadow spot
+  ctx.light(pointLight(0x6fb4ff, 50, 30, [0, 2.6, CZ]));
+  ctx.light(pointLight(0x5fa8ff, 42, 28, [0, Y0 + 2.5, CZ]));
+  ctx.light(pointLight(0x5fa8ff, 34, 28, [0, 13, CZ]));
   ctx.light(pointLight(0xff3a2a, 9, 9, [0, 1.2, -77.5]));
   ctx.light(pointLight(0xe8f0ff, 16, 12, [0, 3.6, -67.5]));
   ctx.light(pointLight(AMBER, 20, 14, [-18, 3.0, -68.5]));
