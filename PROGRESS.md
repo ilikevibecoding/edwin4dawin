@@ -569,5 +569,82 @@ Navigation (`tools/navtest.mjs`, after all merges): 80 door / portal traversals 
 failures, 0 page errors; one budget flag — `d4_cargo` 207k sector triangles vs the 180k room budget
 (detailed containers; trim queued for round 2).
 
-Critique round 2 (four independent critics on `shots/sd_iter_3/`) is in progress; its fix lists
-feed the next round.
+Critique round 2 (four independent critics on `shots/sd_iter_3/`) produced the fix lists for
+iteration 4.
+
+## SD iteration 4 — critique round 2 fixes merged (`shots/sd_iter_4/`, `/tmp/navtest_iter4.json`)
+
+Shared fixes (integrator, from the bridge / command critic's cross-cutting items): turbolift cab
+with a canvas call panel (numerals + deck names, current deck lit amber), an "IN TRANSIT → DECK n /
+PASSING DECK m / ARRIVING" readout, three chasing light channels per side wall and physical call
+buttons; HUD lift prompt docked bottom-right (it sat over the panel); lobby header sign lowered to
+3.1 m, wall screens moved out to u ±2.3, ceiling fixture as dark tray + faint diffuser + narrow
+ring; every ceiling strip is now a dark housing + faint lit diffuser + narrow bright core
+(`emitStrip` 1.55 → 1.3, new `emitWhiteFaint`) so fixtures read as lights, not white bars; bridge
+glass roughness 0.12 → 0.34 with specular 0.2 (the "unoccluded sun glare" was bloom off a specular
+disc on the pane); decals 6 mm off their plates (the log depth buffer was eating letters at 1 mm);
+blast-door chevrons on the frame header / kick only with a larger lintel lamp; `impChair` rebuilt
+as an Imperial bucket seat (pedestal, winged high back, boxed armrests); `impConsole` layout
+variants (`equal` / `main` / `keypad`); `panelGrid` row coherence (plate rows keep one style and
+paint); floor texture scuff streaks + hairline plate joints instead of per-pixel speckle; ringed
+planets' night side lifted; superstructure window glow dimmed 1.6 → 0.35 (and the pane runs
+1.4 → 0.4) while the player is inside, so the tiers under the bridge viewports read as hull, not a
+city; `bridge_window` reframed (z −41.5, pitch −1) to keep the header trough in frame.
+
+Per-workstream rounds (all merged): bridge — filled rotating ISD hologram, header trough + hood
+seam lamps, three pit-station variants and three sill readouts, raised walkway with kerbs / blue
+channels / spine posts / helm pair, datum-aligned wall displays; comms — blue/amber palette,
+operator desk; intel — mapped globe with graticule, three data pillars + analysis station, table
+light 3.0; command — officers / observation / tactical / navigation / briefing round 2; crew — round
+2 list; engineering — cargo trimmed to budget, reactor blue core, plumbed hologram drum, hyperdrive
+sign, dressed maintenance bay; hangar — round 2 list; exterior — trench back wall, closed bow tip,
+stern machinery clipped to the hex, hangar module marker lights / flared recess / plated floor,
+centred trapezoid neck with pilasters + window rows, capped city roofline, radial engine glow with
+flicker (crescent gone), LOD distances retuned.
+
+Measured (1280×720, software GL, static production build served from `dist/`; iteration 3 → 4):
+
+| View | Calls | Tris | iter 3 (calls / tris) |
+|------|-------|------|-----------------------|
+| exterior_medium | 125 | 399k | 154 / 430k |
+| exterior_close | 235 | 780k | 221 / 737k |
+| exterior_dock (worst view) | 304 | 955k | 282 / 891k |
+| exterior_launch (new) | 223 | 649k | — |
+| bridge_aft | 197 | 735k | 188 / 716k |
+| bridge_window | 184 | 732k | 176 / 721k |
+| observation | 172 | 519k | 167 / 492k |
+| corridor_crew | 125 | 142k | 130 / 142k |
+| quarters | 99 | 242k | 102 / 236k |
+| engineering | 78 | 181k | 79 / 182k |
+| reactor | 74 | 199k | 66 / 191k |
+| cargo | 82 | 172k | 81 / 263k |
+| hangar_entry | 286 | 693k | 271 / 654k |
+| hangar_deck | 257 | 684k | 249 / 651k |
+| fighterbay | 195 | 543k | 188 / 535k |
+
+All 50 views inside the budget (≤ 350 calls, ≤ 1.2 M triangles); the round-2 detail passes cost
++5–8 % calls on the exterior and hangar views. Programs after visiting every room 249 (235). Texture
+memory 181 MB (161) — over the 160 MB target: the round-2 canvas boards (comms / intel / bridge
+displays, lift panel) added ~20 MB; a trim (share the 1024² boards, 512² for small readouts) is
+queued for round 3. Heap 323 MB (417) with every deck visited. Load 19.4 s on this CPU with two
+harnesses sharing four cores (16.6 s alone). Light pool: the crew-deck rooms and `corridor_crew`
+leave 2 requested lights unassigned (14 point slots); the dropped ones are the farthest, no
+visible popping in the shots.
+
+Dynamic passes: blast door captured at 41 % open (chevrons on the frame, plain leaves, seam lamps);
+lift ride mid-transit and arrival at `d5_lift`; launch of TIEs captured mid-descent at y −20 inside
+the bay and 16 m below the hull; exterior ↔ interior round trip returns to the same spot in
+`d1_bridge`. Sky drift 3 s: 1 % of the window region changed, 0 % of the console control.
+
+Navigation (`tools/navtest.mjs` against the dev build, survived one hot reload mid-run): 80 door /
+portal traversals + 5 lift rides, 0 failures, 0 page errors, no sector over its triangle or light
+budget (the `d4_cargo` flag from iteration 3 is cleared).
+
+Tour video (`tools/tour.mjs`, new): a frame-paced capture — `debugAPI.fixedDt` steps the simulation
+1/12 s per rendered frame and `debugAPI.stepMode` + `captureFrame()` read each frame off the canvas
+right after the render, so doors, the lift, TIE traffic and screen animations advance exactly one
+step per frame however long the software renderer takes. Nine segments (approach, tower, bridge
+module, TIE launch from below, bridge walkway, corridor → blast door, turbolift ride bridge → hangar
+deck, hangar sweep with a launch, departure) → `tour.mp4`.
+
+Critique round 3 (the four round-2 critics, on `shots/sd_iter_4/`) is in progress.

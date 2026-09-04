@@ -66,6 +66,7 @@ deck number. Decks: 1 Bridge · 2 Command · 3 Crew · 4 Engineering · 5 Hangar
 node tools/check.mjs [url] --views a;b;c --out dir      # screenshots + stats per view (ad hoc: sector@x,z,yaw,pitch · ext@px,py,pz,lx,ly,lz)
 node tools/shots.mjs <iteration>                        # full rubric run → shots/sd_iter_<N>/ (+ drift / door / lift / traffic / transition passes)
 node tools/navtest.mjs                                  # walks every door both ways, rides the lift between decks, exercises traffic
+node tools/tour.mjs <outDir> [url]                      # frame-paced tour (exterior sweep, bridge, blast door, lift ride, hangar launch) → frames + tour.mp4
 node tools/publish.mjs                                  # build + push the play branch
 ```
 
