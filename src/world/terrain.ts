@@ -195,20 +195,41 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     rough = 0.8;
   } else if (zone == 2) {
     vec3 dry = vec3(0.68, 0.58, 0.40);
-    vec3 wet = vec3(0.40, 0.33, 0.23);
+    vec3 wet = vec3(0.33, 0.27, 0.18);
+    // the bands are keyed to height, so every threshold wanders with a slow along-shore noise: the wet
+    // band, tide lines and dune toe come and go instead of ringing the island as contours
+    float wander = fbm3(wp * 0.011 + 23.0) - 0.5;
+    float wander2 = vnoise(wp * 0.03 + 41.0) - 0.5;
     // swash zone widens with wave exposure; a darker saturated band sits right at the waterline
-    float swash = 0.35 + 0.45 * expo;
-    float wetness = 1.0 - smoothstep(0.18, swash + 0.35, h);
+    float swash = 0.35 + 0.45 * expo + 0.3 * wander;
+    float wetness = 1.0 - smoothstep(0.18, swash + 0.35, h + 0.12 * wander2);
     c = mix(dry, wet, wetness) * (0.92 + 0.16 * n2) * (0.95 + 0.1 * n1);
-    c = mix(c, vec3(0.28, 0.25, 0.20), (1.0 - smoothstep(0.05, 0.3, h)) * 0.6);
-    // tide marks: thin wrack lines that wander along the beach
-    float tide1 = 1.0 - smoothstep(0.0, 0.045, abs(h - (swash + 0.12 + 0.06 * n2)));
-    float tide2 = 1.0 - smoothstep(0.0, 0.03, abs(h - (swash + 0.28 + 0.05 * n1)));
-    c *= 1.0 - 0.18 * tide1 * (0.5 + 0.5 * n1) - 0.1 * tide2;
-    // sea oats and dune scrub clumps on the upper beach
-    float dune = smoothstep(1.15, 1.7, h) * smoothstep(0.52, 0.7, vnoise(wp * 0.22 + 4.0));
-    c = mix(c, vec3(0.34, 0.36, 0.17) * (0.85 + 0.3 * n1), dune * 0.7);
-    rough = mix(0.95, 0.72, wetness);
+    c = mix(c, vec3(0.26, 0.23, 0.19), (1.0 - smoothstep(0.05, 0.3, h)) * 0.6);
+    // close range: wind ripples in the dry sand, trampled paths and footprints where people walk
+    float dist = length(cameraPosition - vWorldPos);
+    float closeF = 1.0 - smoothstep(60.0, 220.0, dist);
+    if (closeF > 0.0) {
+      float ripple = 0.5 + 0.5 * sin(dot(wp, vec2(0.83, 0.55)) * 5.5 + 2.5 * vnoise(wp * 0.6));
+      float grain = vnoise(wp * 5.0);
+      float path = smoothstep(0.86, 0.94, vnoise(wp * 0.07 + 7.0 + 0.6 * vec2(n2)));
+      c *= 1.0 + closeF * (1.0 - wetness) * ((0.07 * ripple - 0.035) + 0.06 * (grain - 0.5) - 0.12 * path);
+      c *= 1.0 - closeF * wetness * 0.08 * (grain - 0.5);
+    }
+    // tide marks: thin wrack lines that wander along the beach, strewn with weed and debris
+    float tideH1 = swash + 0.12 + 0.06 * n2 + 0.1 * wander2;
+    float tideH2 = swash + 0.28 + 0.05 * n1 + 0.08 * wander;
+    float tide1 = 1.0 - smoothstep(0.0, 0.05, abs(h - tideH1));
+    float tide2 = 1.0 - smoothstep(0.0, 0.03, abs(h - tideH2));
+    float debris = smoothstep(0.55, 0.75, vnoise(wp * 1.3 + 9.0)) * step(0.35, vnoise(wp * 0.09));
+    c *= 1.0 - 0.16 * tide1 * (0.5 + 0.5 * n1) - 0.08 * tide2;
+    c = mix(c, vec3(0.30, 0.25, 0.14), (0.7 * tide1 + 0.4 * tide2) * debris);
+    // sea oats and dune grass on the upper beach: khaki tussocks in patches, denser where the shore faces the sea
+    float grassN = vnoise(wp * 0.05 + 4.0);
+    float tuft = vnoise(wp * 0.9 + 2.0);
+    float dune = smoothstep(0.95 + 0.2 * wander, 1.5, h) * smoothstep(0.5 - 0.15 * expo, 0.68, grassN) * (0.55 + 0.45 * smoothstep(0.35, 0.7, tuft));
+    c = mix(c, vec3(0.42, 0.42, 0.20) * (0.8 + 0.4 * n1), dune * 0.8);
+    // wet sand is dark and a little glossy (the sun glints off it), dry sand matte
+    rough = mix(0.95, 0.42, wetness * wetness);
   } else if (zone == 3) {
     vec3 mud = vec3(0.28, 0.24, 0.16);
     vec3 shade = vec3(0.075, 0.15, 0.06);
@@ -349,7 +370,7 @@ export class Terrain {
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${TERRAIN_FRAG_MAIN}`);
       balanceGroundIbl(shader);
     };
-    mat.customProgramCacheKey = () => 'terrain-v3';
+    mat.customProgramCacheKey = () => 'terrain-v4';
     this.material = mat;
     for (let level = 0; level < RINGS; level++) {
       const geo = buildRing(level, level > 0);
