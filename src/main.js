@@ -228,6 +228,7 @@ const INTERIOR_VIEWS = {
   hangar_entry: { sector: "d5_hangar", x: 0, z: -37, yaw: 0, pitch: -4 },
   hangar_deck: { sector: "d5_hangar", x: -28, z: -57, yaw: -35, pitch: -6 },
   hangar_racks: { sector: "d5_hangar", x: -25, z: -78, yaw: -70, pitch: 14 },
+  hangar_tower: { sector: "d5_hangar", x: 0, z: -82, yaw: 180, pitch: 9 },
   fighterbay: { sector: "d5_fighterbay", x: 38, z: -100, yaw: -90, pitch: -4 },
   shuttlebay: { sector: "d5_shuttlebay", x: -38, z: -105, yaw: 90, pitch: -4 },
   hangar_cargo: { sector: "d5_cargo", x: 5, z: -19, yaw: -90, pitch: -4 },
