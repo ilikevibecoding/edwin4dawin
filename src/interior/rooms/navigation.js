@@ -6,7 +6,7 @@
 // starboard wall. Amber practicals over the crew, blue from the displays.
 import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
-import { roomShell, impConsole, impChair, wallScreen, equipmentRack, crate, pipeRun, hologram, wallSegment, IMP_STYLES_TECH, IMP_THEME } from "../imperial.js";
+import { roomShell, impConsole, impChair, wallScreen, equipmentRack, crate, pipeRun, wallSegment, IMP_STYLES_TECH, IMP_THEME } from "../imperial.js";
 import { pointLight, wallFrame, ceilingFrame, panelGrid } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
@@ -42,16 +42,16 @@ export function buildNavigation(kit, ctx) {
     }
     // amber wash strip over the flight director
     kit.boxMM("paintedMetal", [cx - 1.6, H - 0.1, -17.1], [cx + 1.6, H, -16.7], { color: PALETTE.impDark, texel: 2 });
-    kit.boxMM("emitAmber", [cx - 1.4, H - 0.12, -17.0], [cx + 1.4, H - 0.09, -16.8]);
+    kit.boxMM("emitAmber", [cx - 1.4, H - 0.12, -16.96], [cx + 1.4, H - 0.09, -16.84]);
   }
 
   // --- pilot row facing the forward arc, flight director's station behind them
   const pz = min[2] + 3.6; // console line
-  for (const [i, x] of [cx - 1.55, cx + 1.55].entries()) pilotStation(kit, ctx, x, pz, ctx.seed + i * 7);
+  for (const [i, x] of [cx - 1.55, cx + 1.55].entries()) pilotStation(kit, ctx, x, pz, ctx.seed + i * 7, i === 0 ? -1 : 1);
   impConsole(kit, ctx, { x: cx, z: pz + 3.3, yaw: 0, w: 2.6, d: 0.85, h: 1.0, screens: [2, 0, 2], chair: true, seed: ctx.seed + 41, lampMat: "emitAmber" });
   signAt(kit, labels, 3, { x: cx, y: 0.55, z: pz + 3.3 - 0.43, yaw: Math.PI, h: 0.08 });
-  // floor marking: dark lane from the door to the director's station with amber edge studs
-  for (let k = 0; k < 7; k++) {
+  // floor marking: sparse amber edge studs along the lane from the door to the director's station
+  for (let k = 0; k < 7; k += 2) {
     const x = min[0] + 1.2 + k * 0.95;
     for (const s of [-1, 1]) kit.box("emitAmber", x, 0.006, -18 + s * 1.1, 0.12, 0.012, 0.05);
   }
@@ -177,9 +177,43 @@ export function buildNavigation(kit, ctx) {
 // ---------------------------------------------------------------------------
 // Pieces
 // ---------------------------------------------------------------------------
-/** Pilot station: console with three nav screens, a yoke on a column, throttle quadrant, seat. */
-function pilotStation(kit, ctx, x, z, seed) {
+/**
+ * Pilot station: console with three nav screens, an instrument panel rising off its forward edge
+ * (three readouts facing the seat, so the station reads as a cockpit from the door too), a yoke on
+ * a column, throttle quadrant, side wing with switch rows on the outer side, seat.
+ */
+function pilotStation(kit, ctx, x, z, seed, outer) {
   impConsole(kit, ctx, { x, z, yaw: 0, w: 2.2, d: 0.9, h: 0.95, screens: [2, 2, 2], seed, lampMat: "emitAmber" });
+  // instrument panel: dark hood with three screens and a lamp row, facing +z over the slab's far edge
+  {
+    const pz = z - 0.5;
+    kit.box("paintedMetal", x, 1.065, pz, 2.1, 0.93, 0.16, { color: PALETTE.impDark, texel: 1.5 });
+    kit.box("paintedMetal", x, 1.55, pz + 0.05, 2.16, 0.05, 0.3, { color: PALETTE.impBlack, texel: 2 });
+    for (let i = 0; i < 3; i++) {
+      const sx = x - 0.66 + i * 0.66;
+      kit.box("darkGloss", sx, 1.27, pz + 0.083, 0.56, 0.36, 0.012);
+      kit.add("impScreen" + [2, 0, 4][i], new THREE.PlaneGeometry(0.5, 0.3), { pos: [sx, 1.27, pz + 0.091], uv: "keep" });
+    }
+    for (let k = 0; k < 8; k++) kit.box(k % 3 === 0 ? "emitAmber" : k % 3 === 1 ? "emitBlue" : "rubber", x - 0.7 + k * 0.2, 1.01, pz + 0.085, 0.08, 0.03, 0.01, { color: PALETTE.rubber });
+    kit.box("emitAmber", x, 1.5, pz + 0.085, 1.8, 0.012, 0.006);
+    kit.collider([x - 1.08, 0, pz - 0.08], [x + 1.08, 1.58, pz + 0.08], "ipanel");
+  }
+  // side wing on the outer side: low sloped panel with switch rows and a small readout
+  {
+    const wx = x + outer * 1.35;
+    kit.box("paintedMetal", wx, 0.42, z + 0.7, 0.4, 0.84, 0.9, { color: PALETTE.impDark, texel: 1.5 });
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -outer * 0.3);
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.44, 0.05, 0.94), { pos: [wx, 0.88, z + 0.7], quat: q, color: PALETTE.impBlack, texel: 2 });
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+    for (let k = 0; k < 4; k++) {
+      const p = new THREE.Vector3(wx, 0.88, z + 0.4 + k * 0.2).addScaledVector(up, 0.035);
+      kit.add(k === 1 ? "emitBlue" : k === 3 ? "emitAmber" : "rubber", new THREE.BoxGeometry(0.22, 0.03, 0.08), { pos: p.toArray(), quat: q, color: PALETTE.rubber });
+    }
+    const sp = new THREE.Vector3(wx, 0.88, z + 1.02).addScaledVector(up, 0.03);
+    kit.add("impScreen4", new THREE.PlaneGeometry(0.26, 0.14).rotateX(-Math.PI / 2), { pos: sp.toArray(), quat: q, uv: "keep" });
+    kit.box(outer < 0 ? "emitBlue" : "emitAmber", wx + outer * 0.201, 0.6, z + 0.7, 0.006, 0.03, 0.5);
+    kit.collider([wx - 0.22, 0, z + 0.24], [wx + 0.22, 0.92, z + 1.16], "wing");
+  }
   // yoke column rising from the console's operator edge
   const yz = z + 0.62;
   kit.box("paintedMetal", x, 0.55, yz, 0.16, 1.1, 0.16, { color: PALETTE.impBlack, texel: 2 });
@@ -248,12 +282,29 @@ function displayArc(kit, ctx, cx, zWall, labels) {
     kit.add("paintedMetal", new THREE.BoxGeometry(colW + gap, 0.22, 0.42), { pos: at(0, 2.75 + 0.11, -0.05), quat: q, color: PALETTE.impBlack, texel: 1.5 });
     kit.add("emitAmber", new THREE.BoxGeometry(colW - 0.1, 0.02, 0.01), { pos: at(0, 0.66, 0.16), quat: q });
     kit.add("emitBlue", new THREE.BoxGeometry(colW - 0.1, 0.025, 0.01), { pos: at(0, 2.8, 0.165), quat: q });
-    // screens
-    for (const [row, [vy, vh, idx]] of rows.entries()) {
-      const sIdx = row === 2 ? (c % 3 === 1 ? 4 : 2) : c === 4 && row === 0 ? 0 : idx;
+    // screens: content varies column to column (charts, plots, lists), column 6 is powered down
+    const dark = c === 6;
+    const pick = [
+      [2, 0, 4],
+      [0, 2, 2],
+      [2, 4, 0],
+      [1, 2, 4],
+      [0, 3, 2],
+      [2, 2, 4],
+      [2, 0, 2],
+      [3, 2, 0],
+      [2, 1, 4],
+    ][c];
+    for (const [row, [vy, vh]] of rows.entries()) {
       kit.add("darkGloss", new THREE.BoxGeometry(colW - 0.06, vh + 0.03, 0.012), { pos: at(0, vy + vh / 2, 0.056), quat: q });
-      kit.add("impScreen" + sIdx, new THREE.PlaneGeometry(colW - 0.1, vh), { pos: at(0, vy + vh / 2, 0.063), quat: q, uv: "keep" });
+      if (dark) {
+        // standby: a single amber cursor on a black pane
+        if (row === 1) kit.add("emitAmber", new THREE.BoxGeometry(0.08, 0.02, 0.006), { pos: at(-0.25, vy + vh / 2, 0.063), quat: q });
+        continue;
+      }
+      kit.add("impScreen" + pick[row], new THREE.PlaneGeometry(colW - 0.1, vh), { pos: at(0, vy + vh / 2, 0.063), quat: q, uv: "keep" });
     }
+    if (dark) kit.add("emitRed", new THREE.BoxGeometry(0.06, 0.03, 0.01), { pos: at(0.3, 0.86, 0.165), quat: q });
     // mullion lamp between columns
     kit.add("paintedMetal", new THREE.BoxGeometry(0.05, 2.0, 0.06), { pos: at(colW / 2 + gap / 2, 1.72, 0.06), quat: q, color: PALETTE.impMid, texel: 2 });
     kit.add(c % 2 ? "emitAmber" : "emitBlue", new THREE.BoxGeometry(0.02, 0.05, 0.02), { pos: at(colW / 2 + gap / 2, 0.85 + (c % 3) * 0.6, 0.095), quat: q });
@@ -282,12 +333,33 @@ function displayArc(kit, ctx, cx, zWall, labels) {
   void max;
 }
 
-/** Overhead instrument pod: a dark housing on two struts with three down-tilted screens. */
+/**
+ * Overhead instrument pod: a housed fixture (grey shroud with chamfered skirts, end cheeks, a vented
+ * back and a slim light channel underneath) hung on two collared struts, three down-tilted screens.
+ */
 function instrumentPod(kit, x, z, H) {
   const y = H - 0.95; // pod centre
+  // core body and the lighter shroud wrapping it
   kit.box("paintedMetal", x, y, z, 1.3, 0.34, 0.6, { color: PALETTE.impDark, texel: 1.5 });
-  kit.box("paintedMetal", x, y + 0.19, z, 1.1, 0.06, 0.45, { color: PALETTE.impBlack, texel: 2 });
-  for (const s of [-1, 1]) kit.cyl("metal", x + s * 0.45, (y + 0.17 + H) / 2, z, 0.035, H - (y + 0.17), "y", { color: PALETTE.impMid, segments: 10 });
+  kit.box("impPanel1", x, y + 0.12, z, 1.46, 0.16, 0.76, { color: PALETTE.impGrey, uv: "keep" });
+  kit.box("paintedMetal", x, y + 0.215, z, 1.5, 0.05, 0.8, { color: PALETTE.impBlack, texel: 2 });
+  // chamfered skirts along the long sides and solid end cheeks
+  for (const s of [-1, 1]) {
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), s * 0.6);
+    kit.add("impPanel1", new THREE.BoxGeometry(1.46, 0.03, 0.26), { pos: [x, y - 0.06, z + s * 0.44], quat: q, color: PALETTE.impGrey, uv: "keep" });
+    kit.box("paintedMetal", x + s * 0.72, y + 0.02, z, 0.05, 0.36, 0.78, { color: PALETTE.impMid, texel: 2 });
+    kit.box(s < 0 ? "emitBlue" : "emitAmber", x + s * 0.748, y + 0.1, z, 0.006, 0.03, 0.3);
+  }
+  // vent slats on the back face
+  for (let k = 0; k < 5; k++) kit.box("metal", x, y - 0.1 + k * 0.05, z - 0.305, 0.9, 0.012, 0.02, { color: PALETTE.steel });
+  // struts with ceiling collars and a cable loom between them
+  for (const s of [-1, 1]) {
+    kit.cyl("metal", x + s * 0.45, (y + 0.24 + H) / 2, z, 0.035, H - (y + 0.24), "y", { color: PALETTE.impMid, segments: 10 });
+    kit.cyl("paintedMetal", x + s * 0.45, H - 0.04, z, 0.09, 0.08, "y", { color: PALETTE.impBlack, segments: 12 });
+    kit.cyl("paintedMetal", x + s * 0.45, y + 0.26, z, 0.07, 0.05, "y", { color: PALETTE.impBlack, segments: 12 });
+  }
+  kit.cyl("rubber", x, (y + 0.24 + H) / 2 + 0.1, z - 0.12, 0.02, H - (y + 0.24) - 0.2, "y", { color: PALETTE.impBlack, segments: 8 });
+  // screens on the underside facing the pilots
   const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.75);
   for (let i = 0; i < 3; i++) {
     const sx = x - 0.4 + i * 0.4;
@@ -295,8 +367,10 @@ function instrumentPod(kit, x, z, H) {
     kit.add("darkGloss", new THREE.BoxGeometry(0.36, 0.24, 0.012), { pos: p.toArray(), quat: tilt });
     kit.add("impScreen" + (i === 1 ? 4 : 2), new THREE.PlaneGeometry(0.32, 0.2), { pos: p.clone().add(new THREE.Vector3(0, 0, 0.007).applyQuaternion(tilt)).toArray(), quat: tilt, uv: "keep" });
   }
-  kit.box("emitAmber", x, y - 0.175, z - 0.1, 1.0, 0.012, 0.03);
-  for (let k = 0; k < 5; k++) kit.box(k % 2 ? "emitRed" : "emitBlue", x - 0.5 + k * 0.25, y - 0.05, z - 0.305, 0.05, 0.02, 0.01);
+  // recessed amber light channel under the body (diffused, in a black trough)
+  kit.box("paintedMetal", x, y - 0.18, z - 0.1, 1.1, 0.03, 0.1, { color: PALETTE.impBlack, texel: 2 });
+  kit.box("emitAmber", x, y - 0.199, z - 0.1, 0.96, 0.008, 0.03);
+  for (let k = 0; k < 5; k++) kit.box(k % 2 ? "emitRed" : "emitBlue", x - 0.5 + k * 0.25, y - 0.05, z + 0.305, 0.05, 0.02, 0.01);
 }
 
 /** Hexagonal floor inlay: dark hex plate with a glowing hex-cell grid, centred at (cx, cz). */
@@ -329,6 +403,30 @@ function hexInlay(kit, cx, cz, R, cell) {
   }
 }
 
+/** Rotating star-chart hologram: gridded planet with a bright core and a tilted ring (own material). */
+function starChart(kit, ctx, x, y, z, hm, swatch) {
+  const base = ctx.materials.holo;
+  const mat = (ctx.materials.nav_holo ||= Object.assign(base.clone(), { opacity: 1.0, color: new THREE.Color("#8ccaff") }));
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.add(new THREE.Mesh(new THREE.SphereGeometry(0.56, 28, 18), mat));
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.78, 1.05, 56), mat);
+  ring.rotation.x = Math.PI / 2 - 0.3;
+  group.add(ring);
+  // meridian and equator hoops so the sphere reads as a globe
+  group.add(new THREE.Mesh(new THREE.TorusGeometry(0.57, 0.008, 6, 64), mat));
+  const eq = new THREE.Mesh(new THREE.TorusGeometry(0.57, 0.008, 6, 64), mat);
+  eq.rotation.x = Math.PI / 2;
+  group.add(eq);
+  ctx.mesh(group);
+  ctx.anim((dt, t) => {
+    group.rotation.y = t * 0.22;
+    group.position.y = y + Math.sin(t * 0.8) * 0.03;
+  });
+  // static lit core (additive scope material, not part of the spinning group)
+  kit.add(hm.key, new THREE.SphereGeometry(0.36, 20, 14), { pos: [x, y, z], uv: "keep", uvRect: swatch(hm.mid) });
+}
+
 /** Plotting table with an amber rim, control panels, a scope disc and the star-chart hologram. */
 function plottingTable(kit, ctx, x, z, labels, hm, swatch) {
   const W = 2.6;
@@ -353,10 +451,11 @@ function plottingTable(kit, ctx, x, z, labels, hm, swatch) {
   kit.add("emitBlue", new THREE.TorusGeometry(0.6, 0.014, 6, 48).rotateX(Math.PI / 2), { pos: [x, Hh + 0.012, z] });
   kit.add(hm.key, new THREE.CircleGeometry(0.58, 40).rotateX(-Math.PI / 2), { pos: [x, Hh + 0.014, z], uv: "keep" });
   kit.add(hm.key, holoCone(x, Hh + 0.02, z, 0.12, 1.55, 0.62), { uv: "keep", uvRect: swatch(hm.dim) });
-  hologram(kit, ctx, { x, y: 1.7, z, kind: "planet", scale: 0.7 });
-  // a dim core inside the wireframe planet so the grid sphere reads from across the room,
-  // a bright equatorial orbit ring and a few plotted waypoints (the course markers)
-  kit.add(hm.key, new THREE.SphereGeometry(0.3, 20, 14), { pos: [x, 1.7, z], uv: "keep", uvRect: swatch(hm.dim) });
+  // the star-chart planet: own opaque clone of the shared holo grid material (the stock one is a ghost
+  // from across the room), a lit core, and a static grid disc under it that the chart sits on
+  starChart(kit, ctx, x, 1.7, z, hm, swatch);
+  kit.add(hm.key, new THREE.CircleGeometry(1.0, 48).rotateX(-Math.PI / 2), { pos: [x, 1.12, z], uv: "keep" });
+  kit.add(hm.key, new THREE.TorusGeometry(1.0, 0.012, 6, 64).rotateX(Math.PI / 2), { pos: [x, 1.12, z], uv: "keep", uvRect: swatch(hm.bright) });
   kit.add(hm.key, new THREE.TorusGeometry(0.9, 0.012, 6, 64).rotateX(Math.PI / 2 - 0.3), { pos: [x, 1.7, z], uv: "keep", uvRect: swatch(hm.bright) });
   const wp = rng(ctx.seed + 5);
   for (let i = 0; i < 6; i++) {

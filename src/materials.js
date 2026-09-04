@@ -281,6 +281,10 @@ function addImperialMaterials(mats, std) {
     new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: new THREE.Color(hex), emissiveIntensity: intensity, roughness: 0.5, metalness: 0, ...extra });
   mats.emitWhite = emit("#f2f6ff", 2.6);
   mats.emitWhiteDim = emit("#dfe6f2", 1.15);
+  mats.emitStrip = emit("#eef3ff", 1.55, { emissiveMap: makeDiffuser(256, 25) });
+  mats.emitBlueDim = emit("#4a9dff", 1.3);
+  mats.emitRedDim = emit("#ff3a2a", 1.2);
+  mats.emitAmberDim = emit("#ffb347", 1.2);
   mats.emitWhiteSoft = emit("#f2f6ff", 2.4, { emissiveMap: makeDiffuser(256, 21) });
   mats.emitBlue = emit("#4a9dff", 2.6);
   mats.emitAmber = emit("#ffb347", 2.2);

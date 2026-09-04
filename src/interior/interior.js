@@ -22,12 +22,12 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
   let currentDeck = null;
   let visibleSet = new Set();
   let collidersDirty = true;
-  const listeners = { sector: [] };
+  const listeners = { sector: [], deckBuilt: [] };
 
   // --- fixed light pool (constant shader light counts → no program recompiles between rooms)
   const POOL_POINTS = 14;
   const POOL_SPOTS = 2;
-  const pool = { points: [], spots: [], assigned: [], timer: 0 };
+  const pool = { points: [], spots: [], assigned: [], timer: 0, held: new Set() };
   for (let i = 0; i < POOL_POINTS; i++) {
     const l = new THREE.PointLight(0xffffff, 0, 1, 2);
     l.name = "pool_point_" + i;
@@ -44,6 +44,10 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
       l.shadow.normalBias = 0.03;
       l.shadow.camera.near = 0.3;
       l.shadow.camera.far = 40;
+      // the map is only rendered when a source is assigned (see assignPool); an idle slot would
+      // otherwise re-render the whole visible interior into a 1024² map every frame
+      l.shadow.autoUpdate = false;
+      l.shadow.needsUpdate = true; // one render at start so the shadow sampler always has a real map bound
     }
     group.add(l);
     group.add(l.target);
@@ -92,23 +96,33 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     for (const id of ids) {
       for (const l of sectors.get(id).lights) {
         const d = worldPos(l, _wp).distanceTo(ref);
-        // priority: bright lights that can actually reach the player
-        const score = d - l.distance * 0.5;
+        // priority: bright lights that can actually reach the player; the current sector's own
+        // lights win over neighbours' lights behind the player (they are its designed lighting)
+        const own = currentSector && l.userData.sector === currentSector ? 12 : 0;
+        // hysteresis: a light already in the pool keeps its place unless beaten by > 3 m (no popping)
+        const held = pool.held.has(l) ? 3 : 0;
+        const score = d - l.distance * 0.5 - own - held;
         (l.isSpotLight ? sps : pts).push({ l, score });
       }
     }
     pts.sort((a, b) => a.score - b.score);
     sps.sort((a, b) => (b.l.castShadow ? 1 : 0) - (a.l.castShadow ? 1 : 0) || a.score - b.score);
     pool.assigned = [];
+    pool.held.clear();
     pool.points.forEach((slot, i) => {
       const src = pts[i] ? pts[i].l : null;
       slot.userData.src = src;
       if (!src) slot.intensity = 0;
+      else pool.held.add(src);
     });
     pool.spots.forEach((slot, i) => {
       const src = sps[i] ? sps[i].l : null;
       slot.userData.src = src;
       if (!src) slot.intensity = 0;
+      else pool.held.add(src);
+      // shadow map refreshed on each re-rank (twice a second) while a source is assigned; static rooms
+      // need nothing more, and door leaves only lag by half a second
+      if (slot.castShadow && src) slot.shadow.needsUpdate = true;
     });
     pool.overflow = Math.max(0, pts.length - POOL_POINTS) + Math.max(0, sps.length - POOL_SPOTS);
     syncPool();
@@ -169,10 +183,54 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     ensureDeckBuilt,
     streamDeck,
     deckBuilt,
+    unloadDeck,
+    /** Unload every built deck at least 'keep' deck-indices away from the current one. */
+    trimDecks(keep = 2) {
+      if (!currentDeck) return [];
+      const dropped = [];
+      for (const deck of decks) if (deck.built && Math.abs(deck.def.index - currentDeck.def.index) >= keep && unloadDeck(deck.id)) dropped.push(deck.id);
+      return dropped;
+    },
     teleport,
     forceSector,
     onSectorChange(fn) {
       listeners.sector.push(fn);
+    },
+    /** Fires (deck) when a deck finishes building (synchronously or streamed). */
+    onDeckBuilt(fn) {
+      listeners.deckBuilt.push(fn);
+    },
+    /** Door by name ("door_<a>_<b>") or by its two sector ids in either order. */
+    door(a, b) {
+      for (const deck of decks) for (const d of deck.doors) if (d.group.name === a || (d.def.a === a && d.def.b === b) || (d.def.a === b && d.def.b === a)) return d;
+      return null;
+    },
+    /** NPC / gameplay markers registered by room builders (kind: "stand" | "seat" | "patrol" | ...). */
+    markers(kind = null, sectorId = null) {
+      const out = [];
+      for (const s of sectors.values()) {
+        if (sectorId && s.id !== sectorId) continue;
+        for (const m of s.markers) if (!kind || m.kind === kind) out.push({ ...m, sector: s.id, world: s.markerWorld(m.id) });
+      }
+      return out;
+    },
+    /** Network-friendly interior state: doors, lift, alert. */
+    snapshot() {
+      const doors = [];
+      for (const deck of decks) for (const d of deck.doors) doors.push({ n: d.group.name, o: +d.openness.toFixed(3), t: d.target, l: d.locked ? 1 : 0, h: d.holdState === null ? -1 : d.holdState ? 1 : 0 });
+      return { t: Date.now(), doors, lift: api.lift ? api.lift.snapshot() : null, alert: alert.target };
+    },
+    applySnapshot(snap) {
+      for (const s of snap.doors || []) {
+        const d = api.door(s.n);
+        if (!d) continue;
+        d.locked = !!s.l;
+        d.holdState = s.h < 0 ? null : !!s.h;
+        d.target = s.t;
+        if (Math.abs(d.openness - s.o) > 0.25) d.openness = s.o; // snap on large drift, else let the local anim converge
+      }
+      if (snap.lift && api.lift) api.lift.applySnapshot(snap.lift);
+      if (snap.alert !== undefined && snap.alert !== alert.target) api.setAlert(!!snap.alert);
     },
     lift: null,
     lightPool: pool,
@@ -327,6 +385,7 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     for (const s of deck.sectors) s.ensureBuilt();
     deck.built = true;
     deck.pending = [];
+    for (const fn of listeners.deckBuilt) fn(deck);
     return deck;
   }
 
@@ -344,12 +403,29 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     if (!deck.pending.length) {
       deck.built = true;
       deck.streaming = false;
+      for (const fn of listeners.deckBuilt) fn(deck);
     }
     return deck.built;
   }
 
   function deckBuilt(id) {
     return deckById(id).built;
+  }
+
+  /**
+   * Free a deck's sector geometry (the current deck is never unloaded; doors are kept, they are
+   * small). Returns true when something was released.
+   */
+  function unloadDeck(id) {
+    const deck = deckById(id);
+    if (!deck || !deck.built || deck === currentDeck) return false;
+    for (const s of deck.sectors) s.dispose();
+    deck.built = false;
+    deck.pending = [];
+    deck.streaming = false;
+    deck.doorGroup.visible = false;
+    assignPool(); // drop pool sources that pointed into the released sectors
+    return true;
   }
 
   // A sector behind a door is only visible while that door is not fully closed or the player is

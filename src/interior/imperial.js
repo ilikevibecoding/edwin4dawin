@@ -186,18 +186,21 @@ export function impCeiling(kit, ctx, opts = {}) {
   const along = opts.along || (w >= d ? "x" : "z");
   const span = along === "x" ? w : d;
   const across = along === "x" ? d : w;
-  const n = Math.max(1, Math.round(across / (opts.spacing || 4.5)));
+  // opts.strips === false drops the strips entirely; opts.stripMat swaps the emitter (e.g. a dim or
+  // coloured one) so rooms can own their light hierarchy without rebuilding the ceiling
+  const n = opts.strips === false ? 0 : Math.max(1, Math.round(across / (opts.spacing || 4.5)));
+  const stripMat = opts.stripMat || "emitStrip";
   for (let i = 0; i < n; i++) {
     const c = (i + 0.5) / n;
     const L = span - 1.2;
     if (along === "x") {
       const z = z0 + c * d;
       kit.box("paintedMetal", x0 + w / 2, y - 0.06, z, L + 0.2, 0.1, 0.42, { color: PALETTE.impDark, texel: 2 });
-      kit.box("emitWhiteSoft", x0 + w / 2, y - 0.1, z, L, 0.03, 0.16, { uv: "keep" });
+      kit.box(stripMat, x0 + w / 2, y - 0.1, z, L, 0.03, 0.14, { uv: "keep" });
     } else {
       const x = x0 + c * w;
       kit.box("paintedMetal", x, y - 0.06, z0 + d / 2, 0.42, 0.1, L + 0.2, { color: PALETTE.impDark, texel: 2 });
-      kit.box("emitWhiteSoft", x, y - 0.1, z0 + d / 2, 0.16, 0.03, L, { uv: "keep" });
+      kit.box(stripMat, x, y - 0.1, z0 + d / 2, 0.14, 0.03, L, { uv: "keep" });
     }
   }
   // real lights: a budgeted grid (forward renderer — every light costs every pixel). Big rooms get
@@ -385,12 +388,14 @@ export function stairs(kit, ctx, { x, z, y0 = 0, y1, axis = "z", dir = -1, w = 2
 }
 
 /** Raised platform slab (walkable: solid collider ≤ STEP is stepped on, higher ones need stairs). */
-export function platform(kit, ctx, { x0, z0, x1, z1, y, thickness = 0.3, mat = "floorGloss", edge = true }) {
+export function platform(kit, ctx, { x0, z0, x1, z1, y, thickness = 0.3, mat = "floorGloss", edge = true, hazard = false }) {
   kit.boxMM(mat, [x0, y - thickness, z0], [x1, y, z1], { texel: 0.33 });
   if (edge) {
     const e = 0.08;
     kit.boxMM("paintedMetal", [x0 - e, y - thickness, z0 - e], [x1 + e, y - thickness + 0.1, z1 + e], { color: PALETTE.impDark, texel: 2 });
-    kit.boxMM("hazard", [x0 - 0.01, y - 0.06, z0 - 0.01], [x1 + 0.01, y - 0.001, z1 + 0.01], { texel: 3 });
+    // plain light-grey nosing by default; hazard striping is opt-in (it aliases to dots at distance)
+    if (hazard) kit.boxMM("hazard", [x0 - 0.01, y - 0.06, z0 - 0.01], [x1 + 0.01, y - 0.001, z1 + 0.01], { texel: 3 });
+    else kit.boxMM("paintedMetal", [x0 - 0.01, y - 0.06, z0 - 0.01], [x1 + 0.01, y - 0.001, z1 + 0.01], { color: PALETTE.impLight, texel: 2 });
   }
   kit.collider([x0, y - thickness, z0], [x1, y, z1], "platform");
 }
@@ -474,13 +479,13 @@ export function impConsole(kit, ctx, { x, z, y = 0, yaw = 0, w = 1.8, d = 0.8, h
     for (let i = 0; i < nb; i++) {
       const bx = -w / 2 + 0.15 + i * 0.11;
       const lit = rand() < 0.4;
-      const mat = lit ? (rand() < 0.5 ? "emitBlue" : rand() < 0.6 ? "emitRed" : "emitAmber") : "rubber";
+      const mat = lit ? (rand() < 0.5 ? "emitBlueDim" : rand() < 0.6 ? "emitRedDim" : "emitAmberDim") : "rubber";
       const p = local(bx, h - 0.18, 0.02);
       const qq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, tilt));
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(qq);
       const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(qq);
-      const pos = p.clone().addScaledVector(up, 0.06).addScaledVector(fwd, slabD * 0.28 + r * 0.09);
-      kit.add(mat, new THREE.BoxGeometry(0.07, 0.03, 0.06), { pos: [pos.x, pos.y, pos.z], quat: qq, color: PALETTE.rubber });
+      const pos = p.clone().addScaledVector(up, 0.055).addScaledVector(fwd, slabD * 0.28 + r * 0.09);
+      kit.add(mat, new THREE.BoxGeometry(0.05, 0.02, 0.045), { pos: [pos.x, pos.y, pos.z], quat: qq, color: PALETTE.rubber });
     }
   }
   // status lamps on the cheeks
@@ -503,6 +508,7 @@ export function impConsole(kit, ctx, { x, z, y = 0, yaw = 0, w = 1.8, d = 0.8, h
 
 /** Black operator chair facing -Z (rotated by yaw). */
 export function impChair(kit, ctx, { x, z, y = 0, yaw = 0 }) {
+  if (ctx && ctx.marker) ctx.marker({ kind: "seat", pos: [x, y, z], yaw });
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   const local = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
   const add = (mat, geo, lx, ly, lz, extra = {}) => {

@@ -24,6 +24,7 @@ import { DECKS } from "./interior/layout.js";
 const canvas = document.getElementById("view");
 const probe = document.createElement("canvas").getContext("webgl2");
 const reverseDepth = !!(probe && probe.getExtension("EXT_clip_control"));
+if (probe) probe.getExtension("WEBGL_lose_context")?.loseContext(); // the probe context is not needed again
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false, reverseDepthBuffer: reverseDepth, logarithmicDepthBuffer: !reverseDepth });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -79,7 +80,22 @@ async function init() {
   await nextFrame();
   player = new Player(camera, canvas, []);
   interior = createInterior({ scene, materials, player, hud, audio, traffic, exterior });
+  // Every deck that finishes building gets its shader programs compiled up front (parallel compile
+  // where the driver supports it) so the first look into a new room does not hitch. Streamed decks
+  // finish while the lift doors are still shut.
+  interior.onDeckBuilt(() => {
+    if (renderer.extensions.has("KHR_parallel_shader_compile")) renderer.compileAsync(scene, camera).catch(() => {});
+    else renderer.compile(scene, camera);
+  });
   interior.ensureDeckBuilt("bridge");
+  // reserved-system wiring: the shuttle bay pad is the ship's docking port, the hangar apron its
+  // landing zone (no landing gameplay yet; future phases find them registered)
+  {
+    const sb = interior.sectors.get("d5_shuttlebay");
+    const hg = interior.sectors.get("d5_hangar");
+    systems.docking.registerPort("shuttle_pad", sb.worldCenter.clone().setY(sb.floorY), new THREE.Vector3(0, 0, 1));
+    systems.landingZones.register({ id: "hangar_apron", worldPos: hg.worldCenter.clone().setY(hg.floorY), approach: new THREE.Vector3(0, -1, 0), radius: 20 });
+  }
 
   hud.setLoading(0.9, "Powering post-processing…");
   await nextFrame();
@@ -87,6 +103,7 @@ async function init() {
   interactions = new Interactions({ camera, interactables: [], lighting: null, space, player, hud, audio });
   director = new CameraDirector({ camera, canvas, player, interior, exterior, space, hud, post, scene, audio });
   director.onModeChange = (mode) => {
+    systems.cameraTransition.setPhase(mode === "exterior" ? "orbit" : "interior");
     interactions.enabled = mode === "interior";
     audio.setZone(mode === "exterior" ? "exterior" : zoneFor(interior.currentSector));
   };
@@ -210,7 +227,7 @@ const INTERIOR_VIEWS = {
   reactor: { sector: "d4_reactor", x: 0, z: -67, yaw: 0, pitch: -2 },
   hangar_entry: { sector: "d5_hangar", x: 0, z: -37, yaw: 0, pitch: -4 },
   hangar_deck: { sector: "d5_hangar", x: -28, z: -57, yaw: -35, pitch: -6 },
-  hangar_racks: { sector: "d5_hangar", x: 10, z: -95, yaw: -110, pitch: 10 },
+  hangar_racks: { sector: "d5_hangar", x: -25, z: -78, yaw: -70, pitch: 14 },
   fighterbay: { sector: "d5_fighterbay", x: 38, z: -100, yaw: -90, pitch: -4 },
   shuttlebay: { sector: "d5_shuttlebay", x: -38, z: -105, yaw: 90, pitch: -4 },
   hangar_cargo: { sector: "d5_cargo", x: 5, z: -19, yaw: -90, pitch: -4 },
@@ -360,6 +377,21 @@ const debugAPI = {
   trafficSnapshot() {
     return traffic.snapshot();
   },
+  /** Timestamped ship state for network sync: doors, lift, alert, bay door and fighters. */
+  snapshot() {
+    return { t: Date.now(), interior: interior.snapshot(), traffic: traffic.snapshot() };
+  },
+  applySnapshot(snap) {
+    if (snap.interior) interior.applySnapshot(snap.interior);
+    if (snap.traffic) traffic.applySnapshot(snap.traffic);
+  },
+  /** NPC / gameplay anchors registered by the rooms (kind: "seat" | "stand" | "patrol" ...). */
+  markers(kind = null, sectorId = null) {
+    return interior.markers(kind, sectorId).map((m) => ({ ...m, world: m.world ? m.world.toArray().map((v) => +v.toFixed(2)) : null }));
+  },
+  door(a, b) {
+    return interior.door(a, b);
+  },
   trafficCounts() {
     return traffic.counts();
   },
@@ -497,6 +529,7 @@ function frame() {
   // visible from outside through its ventral opening
   const showExterior = director.mode === "exterior" || interior.seesExterior();
   exterior.setVisible(showExterior);
+  space.root.visible = showExterior; // planets/stars/dust: ~100k tris that windowless rooms never see
   exterior.setViewMode(director.mode);
   // from the hangar deck only the ventral skin is ever visible (through the bay opening)
   const cur = interior.currentSector;
@@ -509,11 +542,12 @@ function frame() {
     // stream the hangar bay in when the camera can see the ventral opening
     if (!hangar.built && camera.position.y < -30) interior.streamDeck("hangar");
     if (!interior.deckBuilt("command") && camera.position.distanceTo(TOWER_POS) < 900) interior.streamDeck("command");
+    if (!interior.deckBuilt("bridge") && camera.position.distanceTo(TOWER_POS) < 900) interior.streamDeck("bridge");
     interior.setExteriorView(true);
   } else interior.setExteriorView(false);
   traffic.group.visible = showExterior || (hangar && hangar.visible);
   traffic.update(dt, t);
-  systems.update(dt);
+  systems.update(dt, { player, camera, director, interior, traffic, exterior, space });
   space.update(dt);
   audio.setListener(camera.position);
   audio.update(dt);

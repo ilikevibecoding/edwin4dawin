@@ -99,7 +99,7 @@ export function buildCorridor(kit, ctx) {
   const cb = alongZ ? [[cx - flatHalf, 0, min[2]], [cx + flatHalf, h, max[2]]] : [[min[0], 0, cz - flatHalf], [max[0], h, cz + flatHalf]];
   impCeiling(kit, ctx, { bounds: cb, spacing: 100, lights: false, paints: [[PALETTE.impGrey, 0.7], [PALETTE.impMid, 0.3]] });
   // budgeted lights along the run: one every ~9 m, max 8; the emissive strips fill in between
-  const nl = Math.max(1, Math.min(8, Math.round(len / 9)));
+  const nl = Math.max(1, Math.min(4, Math.round(len / 12)));
   for (let i = 0; i < nl; i++) {
     const a = a0 + ((i + 0.5) / nl) * len;
     ctx.light(pointLight(0xe8f0ff, 5.5, 11, alongZ ? [cx, h - 0.6, a] : [a, h - 0.6, cz]));

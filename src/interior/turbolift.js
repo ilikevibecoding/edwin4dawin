@@ -4,7 +4,8 @@
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { pointLight, wallFrame } from "./builders.js";
-import { impFloor, impWall, wallScreen } from "./imperial.js";
+import { impFloor, impWall } from "./imperial.js";
+import { signPlate } from "./corridor.js";
 
 /** Cab interior builder (sector kind "lift"). Door is on the zmin side (toward the lobby). */
 export function buildLiftCab(kit, ctx) {
@@ -24,6 +25,7 @@ export function buildLiftCab(kit, ctx) {
         [PALETTE.impLight, 0.15],
       ],
       seed: ctx.seed + side.length,
+      theme: { decals: false },
     });
   }
   // ceiling: dark panel with a bright white square diffuser and a ring of small lamps
@@ -45,16 +47,17 @@ export function buildLiftCab(kit, ctx) {
     kit.box("paintedMetal", x, h / 2, cz, 0.06, h - 0.5, 0.16, { color: PALETTE.impBlack, texel: 2 });
     kit.box("lift_streak", x + (s < 0 ? 0.035 : -0.035), h / 2, cz, 0.01, h - 0.7, 0.06, { uv: "keep" });
   }
-  // control panel + deck readout on the rear wall
-  wallScreen(kit, ctx, { side: "zmax", u: (max[0] - min[0]) / 2, v: 1.9, w: 1.0, h: 0.4, screen: 2 });
-  const { frame } = wallFrame(kit, [max[0], max[2]], [min[0], max[2]], 0);
+  // deck readout (this cab's deck) and the call panel on the rear wall: the current deck's button is
+  // lit amber, the others blue
   const u = (max[0] - min[0]) / 2;
+  signPlate(kit, ctx, { side: "zmax", u, v: 2.05, w: 1.7, h: 0.34, text: `Deck ${ctx.deck.index}`, sub: ctx.deck.name, accent: "#ffb347" });
+  const { frame } = wallFrame(kit, [max[0], max[2]], [min[0], max[2]], 0);
   frame.box("paintedMetal", u, 1.25, 0.04, 0.5, 0.7, 0.08, { color: PALETTE.impDark, texel: 2 });
   frame.box("impPanel", u, 1.25, 0.082, 0.42, 0.62, 0.006, { color: PALETTE.impGrey, uv: "keep" });
   for (let i = 0; i < 5; i++) {
     const y = 1.5 - i * 0.12;
     frame.box("rubber", u - 0.12, y, 0.09, 0.08, 0.06, 0.02, { color: PALETTE.rubber });
-    frame.box(i === 0 ? "emitAmber" : "emitBlue", u + 0.08, y, 0.088, 0.14, 0.03, 0.008);
+    frame.box(i === ctx.deck.index - 1 ? "emitAmber" : "emitBlueDim", u + 0.08, y, 0.088, 0.14, 0.03, 0.008);
   }
   frame.box("leds", u, 1.0, 0.088, 0.3, 0.03, 0.008, { uv: "keep" });
   // handrail on the side walls
@@ -119,6 +122,19 @@ export class Turbolift {
     this.hud.setLiftPrompt(null);
     this.audio.event("lift_doors", cur.worldCenter);
     return true;
+  }
+
+  /** Network-friendly ride state. */
+  snapshot() {
+    return { state: this.state, from: this.from, to: this.to, timer: +this.timer.toFixed(2) };
+  }
+  /** Adopt a remote ride state (the local sequence continues from there). */
+  applySnapshot(s) {
+    if (!s) return;
+    this.from = s.from;
+    this.to = s.to;
+    this.timer = s.timer || 0;
+    this.state = s.state || "idle";
   }
 
   update(dt) {
@@ -193,6 +209,8 @@ export class Turbolift {
         if (interior.materials.lift_streak) interior.materials.lift_streak.emissiveIntensity = 2.6;
         this.audio.event("lift_arrive", dest);
         this.hud.setStatus(`${interior.deckById(this.to).def.name}.`);
+        // memory: decks two or more stops away are released (they rebuild on demand)
+        interior.trimDecks(2);
         if (this.onArrive) this.onArrive(this.to);
       }
       return;
