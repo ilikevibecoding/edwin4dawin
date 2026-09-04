@@ -1,48 +1,35 @@
-// Builds the shared PBR material library from procedural textures.
+// Shared PBR material library from procedural textures. Interior plating, decks, metals, exterior hull,
+// emissive families, screen/LED atlases, glass, holograms and the hangar containment field.
+// All tinted materials use vertex colours so one material serves many surfaces (few draw calls).
 import * as THREE from "three";
-import {
-  makePaintedPanel,
-  makeWornMetal,
-  makeDeckPlate,
-  makeRubber,
-  makeFabric,
-  makeHazard,
-  makeScreen,
-  makeLedStrip,
-  makeDecalSheet,
-  makeGrate,
-  makeDiffuser,
-} from "./textures.js";
+import { makeImperialPanel, makeWornMetal, makeDeckBlack, makeDeckGrey, makeHullPlate, makeRubber, makeFabric, makeHazard, makeGrate, makeDiffuser, makeDecalSheet, makeScreenAtlas, makeLedAtlas } from "./textures.js";
+import { IMP } from "./core/palette.js";
 
-export const PALETTE = {
-  cream: new THREE.Color("#e2d9c6"),
-  creamDark: new THREE.Color("#b9b0a0"),
-  orange: new THREE.Color("#e9782f"),
-  tealPaint: new THREE.Color("#5d8a86"),
-  slate: new THREE.Color("#6b7079"),
-  gunmetal: new THREE.Color("#4a4e55"),
-  darkMetal: new THREE.Color("#2b2e33"),
-  steel: new THREE.Color("#9ea3aa"),
-  brass: new THREE.Color("#b58a4a"),
-  rubber: new THREE.Color("#ffffff"),
-  fabricCream: new THREE.Color("#d9cfbd"),
-  fabricTeal: new THREE.Color("#3f8c86"),
-  fabricOrange: new THREE.Color("#d8722f"),
-  teal: new THREE.Color("#4fd8cc"),
-  warm: new THREE.Color("#ffc78a"),
-};
+export { IMP as PALETTE };
+
+const timings = {};
+function timed(name, fn) {
+  const t0 = performance.now();
+  const r = fn();
+  timings[name] = +(performance.now() - t0).toFixed(0);
+  return r;
+}
 
 export function buildMaterials() {
-  const painted = makePaintedPanel(512, 11);
-  const painted1 = makePaintedPanel(512, 47);
-  const painted2 = makePaintedPanel(512, 83);
-  const metal = makeWornMetal(1024, 23);
-  const grate = makeGrate(1024, 768, 61);
-  const deck = makeDeckPlate(1024, 41);
-  const rubber = makeRubber(256, 53);
-  const fabric = makeFabric(256, 67);
-  const hazard = makeHazard(256, 71);
-  const diffuser = makeDiffuser(256, 13);
+  const panel = timed("imperialPanel", () => makeImperialPanel(512, 5));
+  const metal = timed("wornMetal", () => makeWornMetal(1024, 23));
+  const deckBlack = timed("deckBlack", () => makeDeckBlack(1024, 43));
+  const deckGrey = timed("deckGrey", () => makeDeckGrey(1024, 47));
+  const hull = timed("hullPlate", () => makeHullPlate(2048, 31));
+  const rubber = timed("rubber", () => makeRubber(256, 53));
+  const fabric = timed("fabric", () => makeFabric(256, 67));
+  const hazard = timed("hazard", () => makeHazard(256, 71));
+  const hazardRed = timed("hazardRed", () => makeHazard(256, 73, [0.85, 0.16, 0.12], [0.88, 0.88, 0.9]));
+  const grate = timed("grate", () => makeGrate(1024, 768, 61));
+  const diffuser = timed("diffuser", () => makeDiffuser(256, 13));
+  const decals = timed("decals", () => makeDecalSheet(1024, 19));
+  const screens = timed("screens", () => makeScreenAtlas(2048, 5));
+  const leds = timed("leds", () => makeLedAtlas(1024, 9));
 
   const std = (set, extra = {}) =>
     new THREE.MeshStandardMaterial({
@@ -56,143 +43,108 @@ export function buildMaterials() {
       color: 0xffffff,
       ...extra,
     });
+  const emit = (color, intensity, extra = {}) =>
+    new THREE.MeshStandardMaterial({ color: 0x0a0b0e, emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 0.4, metalness: 0, ...extra });
 
   const mats = {
-    // Painted hull panels (tint from vertex colors); three wear variants
-    painted: std(painted, { normalScale: new THREE.Vector2(0.9, 0.9), envMapIntensity: 0.8 }),
-    painted1: std(painted1, { normalScale: new THREE.Vector2(0.9, 0.9), envMapIntensity: 0.8 }),
-    painted2: std(painted2, { normalScale: new THREE.Vector2(0.9, 0.9), envMapIntensity: 0.8 }),
-    // Structural / trim metal (tint from vertex colors)
+    // ---- interior plating (tint from vertex colours)
+    plate: std(panel, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.7 }),
+    // dark painted structural steel (beams, housings, trim): dielectric so it never reads as a black mirror
+    paintedMetal: std(metal, { normalScale: new THREE.Vector2(0.5, 0.5), metalness: 0.15, roughness: 1.1, envMapIntensity: 0.5 }),
     metal: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 0.85 }),
-    // Cast / sand-blasted metal: same wear, but the roughness map is pushed up so point lights spread
-    // into a soft sheen instead of a hot ring (porthole frames, fixtures, appliance bezels)
-    metalRough: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.7, envMapIntensity: 0.7 }),
-    // Dark painted structural steel (ribs, beams, housings): the worn-metal maps for wear, but
-    // dielectric — a bare-metal box that reflects nothing but a dim interior reads as a black hole
-    paintedMetal: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), metalness: 0.15, roughness: 1.15, envMapIntensity: 0.6 }),
-    // Floor grating: cut-out texture on a single quad (mipmapped, so no distance moiré)
-    grate: std(grate, {
-      normalScale: new THREE.Vector2(1.0, 1.0),
-      envMapIntensity: 0.8,
-      transparent: true,
-      depthWrite: true,
-      alphaTest: 0,
-      side: THREE.DoubleSide,
-    }),
-    // Deck plating
-    deck: std(deck, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 1.0 }),
-    // Rubber / plastics
-    rubber: std(rubber, { normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 0.4 }),
-    // Fabric (tinted by vertex colors)
-    fabric: std(fabric, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.3 }),
-    // Hazard stripes
-    hazard: std(hazard, { normalScale: new THREE.Vector2(0.4, 0.4), envMapIntensity: 0.6 }),
+    metalRough: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.6, envMapIntensity: 0.6 }),
+    deckBlack: std(deckBlack, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 1.2 }),
+    deckGrey: std(deckGrey, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.8 }),
+    // ---- exterior armour (tint from vertex colours; lit by the sun + space environment)
+    hull: std(hull, { normalScale: new THREE.Vector2(1.2, 1.2), envMapIntensity: 0.5 }),
+    hullDark: std(hull, { normalScale: new THREE.Vector2(1.0, 1.0), roughness: 1.3, envMapIntensity: 0.35 }),
+    // ---- soft goods / misc
+    rubber: std(rubber, { normalScale: new THREE.Vector2(0.6, 0.6), envMapIntensity: 0.3 }),
+    fabric: std(fabric, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.25 }),
+    hazard: std(hazard, { normalScale: new THREE.Vector2(0.4, 0.4), envMapIntensity: 0.5 }),
+    hazardRed: std(hazardRed, { normalScale: new THREE.Vector2(0.4, 0.4), envMapIntensity: 0.5 }),
+    grate: std(grate, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.8, transparent: true, depthWrite: true, alphaTest: 0, side: THREE.DoubleSide }),
+    darkGloss: new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.22, metalness: 0.25, envMapIntensity: 1.0 }),
+    glass: new THREE.MeshPhysicalMaterial({ color: 0x6d8a96, roughness: 0.2, metalness: 0, transparent: true, opacity: 0.08, depthWrite: false, envMapIntensity: 0.15, side: THREE.DoubleSide }),
 
-    // Emissives — intensity animated by the lighting controller (rest cycle)
-    emitTeal: new THREE.MeshStandardMaterial({
-      color: 0x0a1a1a,
-      emissive: PALETTE.teal,
-      emissiveIntensity: 2.4,
-      roughness: 0.4,
-      metalness: 0,
-    }),
-    emitWarm: new THREE.MeshStandardMaterial({
-      color: 0x1a1410,
-      emissive: PALETTE.warm,
-      emissiveIntensity: 1.7,
-      roughness: 0.5,
-      metalness: 0,
-    }),
-    emitOrange: new THREE.MeshStandardMaterial({
-      color: 0x1a0a04,
-      emissive: PALETTE.orange,
-      emissiveIntensity: 2.0,
-      roughness: 0.5,
-      metalness: 0,
-    }),
-    emitRed: new THREE.MeshStandardMaterial({
-      color: 0x100404,
-      emissive: new THREE.Color("#ff3a2a"),
-      emissiveIntensity: 1.8,
-      roughness: 0.5,
-      metalness: 0,
-    }),
-    emitCool: new THREE.MeshStandardMaterial({
-      color: 0x0a0e14,
-      emissive: new THREE.Color("#cfe4ff"),
-      emissiveIntensity: 2.2,
-      roughness: 0.5,
-      metalness: 0,
-    }),
-    // Fixture diffusers: same emitters with a centre-bright falloff map (uv "keep" per emitter face)
-    emitWarmSoft: new THREE.MeshStandardMaterial({
-      color: 0x1a1410,
-      emissive: PALETTE.warm,
-      emissiveMap: diffuser,
-      emissiveIntensity: 1.9,
-      roughness: 0.5,
-      metalness: 0,
-    }),
-    emitCoolSoft: new THREE.MeshStandardMaterial({
-      color: 0x0a0e14,
-      emissive: new THREE.Color("#cfe4ff"),
-      emissiveMap: diffuser,
-      emissiveIntensity: 2.4,
-      roughness: 0.5,
-      metalness: 0,
-    }),
+    // ---- emissive families (the lighting controller animates intensities / alert colours)
+    emitWhite: emit("#e6edff", 2.2),
+    emitWhiteSoft: emit("#e6edff", 2.0, { emissiveMap: diffuser }),
+    emitWarmSoft: emit("#ffc78a", 1.9, { emissiveMap: diffuser }),
+    emitRed: emit("#ff3b2f", 2.4),
+    emitBlue: emit("#3f8dff", 2.4),
+    emitAmber: emit("#ffb547", 2.2),
+    emitGreen: emit("#3ad17a", 2.0),
+    emitCyan: emit("#5ad8ff", 2.4),
+    emitViolet: emit("#8a7cff", 2.4),
+    engineGlow: emit("#6fb4ff", 3.0),
 
-    // Dark glass / plastic for screens frame etc.
-    darkGloss: new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.25, metalness: 0.2, envMapIntensity: 1.0 }),
+    // ---- atlases
+    screen: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: screens, emissiveIntensity: 1.4, roughness: 0.15, metalness: 0, envMapIntensity: 1.0 }),
+    leds: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: leds, emissiveIntensity: 2.2, roughness: 0.3, metalness: 0 }),
+    decal: new THREE.MeshStandardMaterial({ map: decals, transparent: true, depthWrite: false, roughness: 0.75, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.3 }),
 
-    // Window glass: nearly transparent, faint reflective sheen (kept dim so deep space stays black)
-    glass: new THREE.MeshPhysicalMaterial({
-      color: 0x6d8a96,
-      roughness: 0.22,
-      metalness: 0,
-      transparent: true,
-      opacity: 0.06,
-      depthWrite: false,
-      envMapIntensity: 0.12,
-      side: THREE.DoubleSide,
-    }),
-
-    // Stencil decals (labels / hazard markings) laid over painted panels
-    decal: new THREE.MeshStandardMaterial({
-      map: makeDecalSheet(1024, 19),
-      transparent: true,
-      depthWrite: false,
-      roughness: 0.7,
-      metalness: 0,
-      polygonOffset: true,
-      polygonOffsetFactor: -2,
-      polygonOffsetUnits: -2,
-      envMapIntensity: 0.3,
-    }),
+    // ---- holograms and fields (additive, animated by their owners)
+    holo: new THREE.MeshBasicMaterial({ color: 0x5fb8ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+    field: makeFieldMaterial(),
   };
-
-  // Console screens: black diffuse, emissive UI
-  const screenTex = [makeScreen(512, 256, 5), makeScreen(512, 256, 17), makeScreen(512, 256, 29, "#f08a3c", "#4fd8cc"), makeScreen(512, 256, 41)];
-  mats.screens = screenTex.map(
-    (tex) =>
-      new THREE.MeshStandardMaterial({
-        color: 0x000000,
-        emissive: 0xffffff,
-        emissiveMap: tex,
-        emissiveIntensity: 1.3,
-        roughness: 0.15,
-        metalness: 0.0,
-        envMapIntensity: 1.0,
-      }),
-  );
-  mats.leds = new THREE.MeshStandardMaterial({
-    color: 0x000000,
-    emissive: 0xffffff,
-    emissiveMap: makeLedStrip(256, 32, 9),
-    emissiveIntensity: 2.0,
-    roughness: 0.3,
-    metalness: 0,
-  });
-
+  mats.timings = timings;
+  // back-compat aliases used by shared helpers
+  mats.emitTeal = mats.emitCyan;
+  mats.emitWarm = mats.emitAmber;
+  mats.emitOrange = mats.emitAmber;
+  mats.emitCool = mats.emitWhite;
+  mats.emitCoolSoft = mats.emitWhiteSoft;
+  mats.painted = mats.plate;
+  mats.painted1 = mats.plate;
+  mats.painted2 = mats.plate;
+  mats.deck = mats.deckGrey;
   return mats;
+}
+
+/** Hangar containment field: animated, additive, transparent shimmer with a hexagonal interference pattern. */
+export function makeFieldMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { time: { value: 0 }, color: { value: new THREE.Color(0x5fb8ff) }, strength: { value: 0.35 } },
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      varying vec3 vW;
+      void main() {
+        vUv = uv;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vW = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform float time;
+      uniform vec3 color;
+      uniform float strength;
+      varying vec2 vUv;
+      varying vec3 vW;
+      float hex(vec2 p) {
+        p = abs(p);
+        return max(dot(p, normalize(vec2(1.0, 1.73))), p.x);
+      }
+      void main() {
+        vec2 p = vW.xz * 0.35;
+        // hexagonal cells
+        vec2 r = vec2(1.0, 1.73);
+        vec2 h = r * 0.5;
+        vec2 a = mod(p, r) - h;
+        vec2 b = mod(p - h, r) - h;
+        vec2 g = dot(a, a) < dot(b, b) ? a : b;
+        float d = hex(g);
+        float edge = smoothstep(0.42, 0.5, d);
+        float pulse = 0.5 + 0.5 * sin(time * 1.6 + vW.x * 0.05 + vW.z * 0.07);
+        float wave = 0.5 + 0.5 * sin(vW.z * 0.4 - time * 2.5);
+        float a2 = strength * (0.25 + 0.5 * edge + 0.25 * wave * pulse);
+        // fade toward the rim so the plane never shows a hard border
+        float rim = smoothstep(0.0, 0.08, vUv.x) * smoothstep(0.0, 0.08, 1.0 - vUv.x) * smoothstep(0.0, 0.08, vUv.y) * smoothstep(0.0, 0.08, 1.0 - vUv.y);
+        gl_FragColor = vec4(color * (0.6 + 0.8 * edge), a2 * (0.4 + 0.6 * rim));
+      }`,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
 }

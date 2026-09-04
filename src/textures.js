@@ -540,7 +540,7 @@ export function makeFabric(size = 256, seed = 67) {
 }
 
 // Hazard stripes (orange/near-black), worn.
-export function makeHazard(size = 256, seed = 71) {
+export function makeHazard(size = 256, seed = 71, colA = [0.92, 0.72, 0.18], colB = [0.1, 0.1, 0.11]) {
   const t = new TexGen(size, size);
   t.each((u, v, i) => {
     const s = ((u + v) * 4) % 1;
@@ -548,15 +548,8 @@ export function makeHazard(size = 256, seed = 71) {
     const n = fbm(u, v, { octaves: 4, freq: 12, seed });
     const wear = clamp01((n - 0.55) * 5);
     let r, g, b;
-    if (stripe) {
-      r = 0.9;
-      g = 0.42;
-      b = 0.12;
-    } else {
-      r = 0.12;
-      g = 0.12;
-      b = 0.13;
-    }
+    if (stripe) [r, g, b] = colA;
+    else [r, g, b] = colB;
     const m = 1 - wear * 0.6;
     t.setColor(i, lerp(r * m, 0.35, wear * 0.5), lerp(g * m, 0.35, wear * 0.5), lerp(b * m, 0.37, wear * 0.5));
     t.rough[i] = 0.5 + wear * 0.3;
@@ -735,27 +728,151 @@ export function makeDiffuser(size = 256, seed = 13) {
 }
 
 // ---------------------------------------------------------------------------
-// Stencil decals: a 4x4 sheet of worn labels / markings (transparent background).
-// Cell (col,row) -> uv rect via decalRect(). Text is drawn with canvas fonts, then eroded.
+// Imperial stencil decals: a 4x4 sheet (transparent background) of Aurebesh-style stencils, deck numbers,
+// hazard chevrons, restricted bands and the cog emblem. Cell index -> uv rect via decalRect().
+// The glyph alphabet is an original angular design in the spirit of the films' signage.
 // ---------------------------------------------------------------------------
 export const DECAL_CELLS = 4;
+export const DECAL = {
+  EMBLEM: 0,
+  RESTRICTED: 1,
+  HAZARD_BAND: 2,
+  DECK_A: 3,
+  NUMBER0: 4, // 4..7 = numerals 1..4 in Aurebesh-style digits + latin
+  NUMBER1: 5,
+  NUMBER2: 6,
+  NUMBER3: 7,
+  ARROW: 8,
+  TEXT_A: 9,
+  TEXT_B: 10,
+  TEXT_C: 11,
+  WARNING: 12,
+  SPEC_PLATE: 13,
+  BAY_CODE: 14,
+  EMBLEM_RED: 15,
+};
+
 export function decalRect(index) {
   const c = index % DECAL_CELLS;
   const r = Math.floor(index / DECAL_CELLS);
   const s = 1 / DECAL_CELLS;
-  // canvas rows run top-down, texture v runs bottom-up
   return [c * s, 1 - (r + 1) * s, (c + 1) * s, 1 - r * s];
 }
+
+// Angular glyph strokes on a unit cell (x right, y down), ~22 letters + 10 digits.
+const GLYPHS = [
+  [[[0, 1], [0, 0], [1, 0], [1, 0.5], [0.4, 0.5]]],
+  [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0.4]]],
+  [[[1, 0], [0, 0.5], [1, 1]], [[0.3, 0.5], [1, 0.5]]],
+  [[[0, 1], [0, 0], [0.7, 0], [1, 0.3], [1, 1]]],
+  [[[0, 0], [1, 0]], [[0.5, 0], [0.5, 1]], [[0.2, 1], [0.8, 1]]],
+  [[[0, 0.3], [0.5, 0], [1, 0.3], [1, 1]], [[0, 0.3], [0, 1]]],
+  [[[0, 1], [0, 0], [1, 0.5], [0, 0.5]]],
+  [[[0, 0], [0, 1], [1, 1]], [[0.5, 0.5], [1, 0.5]]],
+  [[[0, 0], [1, 0], [0.5, 0.5], [1, 1], [0, 1]]],
+  [[[0, 0.5], [0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]]],
+  [[[0, 0], [1, 1]], [[0, 1], [1, 0]], [[0.5, 0], [0.5, 1]]],
+  [[[0, 1], [0.5, 0], [1, 1]], [[0.25, 0.5], [0.75, 0.5]]],
+  [[[0, 0], [1, 0], [1, 1]], [[0, 0.5], [1, 0.5]]],
+  [[[0, 1], [0, 0], [1, 0]], [[0, 0.5], [0.6, 0.5], [0.6, 1]]],
+  [[[0, 0], [0, 1], [1, 0.5], [0, 0]]],
+  [[[1, 0], [0, 0], [0, 1], [1, 1], [1, 0.6]]],
+  [[[0, 0], [1, 0]], [[1, 0], [0, 1]], [[0, 1], [1, 1]]],
+  [[[0, 0.5], [1, 0.5]], [[0.5, 0], [0.5, 1]], [[0, 0], [1, 1]]],
+  [[[0, 0], [0, 1]], [[1, 0], [1, 1]], [[0, 0.5], [1, 0.5]]],
+  [[[0, 1], [1, 0.5], [0, 0]], [[1, 0.5], [1, 1]]],
+  [[[0, 0], [0.5, 0.5], [1, 0]], [[0.5, 0.5], [0.5, 1]]],
+  [[[0.5, 0], [0, 0.4], [0.5, 1], [1, 0.4], [0.5, 0]]],
+];
+const DIGITS = [
+  [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]],
+  [[[0.5, 0], [0.5, 1]], [[0.2, 1], [0.8, 1]]],
+  [[[0, 0], [1, 0], [1, 0.5], [0, 0.5], [0, 1], [1, 1]]],
+  [[[0, 0], [1, 0], [1, 1], [0, 1]], [[0.4, 0.5], [1, 0.5]]],
+  [[[0, 0], [0, 0.5], [1, 0.5]], [[1, 0], [1, 1]]],
+  [[[1, 0], [0, 0], [0, 0.5], [1, 0.5], [1, 1], [0, 1]]],
+  [[[1, 0], [0, 0.5], [0, 1], [1, 1], [1, 0.5], [0, 0.5]]],
+  [[[0, 0], [1, 0], [0.3, 1]]],
+  [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]], [[0, 0.5], [1, 0.5]]],
+  [[[1, 0.5], [0, 0.5], [0, 0], [1, 0], [1, 1]]],
+];
+
+/** Draw an Aurebesh-style string: `text` letters/digits map to glyphs; x,y top-left; cell height h. */
+export function drawGlyphs(ctx, text, x, y, h, color, weight = 0.14) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = h * weight;
+  ctx.lineCap = "square";
+  ctx.lineJoin = "miter";
+  const w = h * 0.72;
+  let cx = x;
+  for (const ch of text) {
+    if (ch === " ") {
+      cx += w * 0.7;
+      continue;
+    }
+    let g;
+    if (ch >= "0" && ch <= "9") g = DIGITS[ch.charCodeAt(0) - 48];
+    else g = GLYPHS[(ch.toUpperCase().charCodeAt(0) - 65 + 26) % GLYPHS.length];
+    const pad = h * weight * 0.6;
+    for (const stroke of g) {
+      ctx.beginPath();
+      stroke.forEach(([gx, gy], i) => {
+        const px = cx + pad + gx * (w - pad * 2);
+        const py = y + pad + gy * (h - pad * 2);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+    }
+    cx += w * 1.15;
+  }
+  return cx - x;
+}
+
+/** Imperial-style cog emblem: outer ring, six inward tabs, inner disc + ring. Drawn centred at (cx,cy). */
+export function drawEmblem(ctx, cx, cy, R, color) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  // outer ring
+  ctx.lineWidth = R * 0.14;
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 0.9, 0, Math.PI * 2);
+  ctx.stroke();
+  // six tabs
+  for (let i = 0; i < 6; i++) {
+    ctx.save();
+    ctx.rotate((i / 6) * Math.PI * 2);
+    ctx.beginPath();
+    ctx.moveTo(-R * 0.2, -R * 0.86);
+    ctx.lineTo(R * 0.2, -R * 0.86);
+    ctx.lineTo(R * 0.13, -R * 0.5);
+    ctx.lineTo(-R * 0.13, -R * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  // inner ring + disc
+  ctx.lineWidth = R * 0.1;
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 0.42, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 0.22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 export function makeDecalSheet(size = 1024, seed = 19) {
   const c = makeCanvas(size, size);
   const ctx = c.getContext("2d");
   const rand = mulberry32(seed);
   const cell = size / DECAL_CELLS;
-  const INK = "#1d1e21";
-  const ORANGE = "#e9782f";
-  const CREAM = "#e8dfcc";
-  const TEAL = "#4fd8cc";
-  const font = (px, bold = true) => `${bold ? "bold " : ""}${px}px "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace`;
+  const WHITE = "#dfe4ee";
+  const RED = "#e63b2e";
+  const AMBER = "#f0b040";
+  const BLACK = "#0c0d10";
   const at = (i, fn) => {
     const cx = (i % DECAL_CELLS) * cell;
     const cy = Math.floor(i / DECAL_CELLS) * cell;
@@ -766,13 +883,6 @@ export function makeDecalSheet(size = 1024, seed = 19) {
     ctx.clip();
     fn(cell);
     ctx.restore();
-  };
-  const text = (s, x, y, px, color, align = "center", bold = true) => {
-    ctx.fillStyle = color;
-    ctx.font = font(px, bold);
-    ctx.textAlign = align;
-    ctx.textBaseline = "middle";
-    ctx.fillText(s, x, y);
   };
   const chevrons = (x, y, w, h, n, color) => {
     ctx.fillStyle = color;
@@ -787,130 +897,83 @@ export function makeDecalSheet(size = 1024, seed = 19) {
       ctx.fill();
     }
   };
-  // 0: bay code
-  at(0, (s) => {
-    text("A-07", s / 2, s * 0.42, s * 0.34, INK);
-    ctx.fillStyle = ORANGE;
-    ctx.fillRect(s * 0.15, s * 0.64, s * 0.7, s * 0.05);
-    text("DECK 02", s / 2, s * 0.8, s * 0.13, INK);
+  at(DECAL.EMBLEM, (s) => drawEmblem(ctx, s / 2, s / 2, s * 0.44, WHITE));
+  at(DECAL.EMBLEM_RED, (s) => drawEmblem(ctx, s / 2, s / 2, s * 0.44, RED));
+  at(DECAL.RESTRICTED, (s) => {
+    ctx.fillStyle = RED;
+    ctx.fillRect(s * 0.06, s * 0.3, s * 0.88, s * 0.4);
+    drawGlyphs(ctx, "RESTRICTED", s * 0.1, s * 0.38, s * 0.24, BLACK, 0.16);
+    chevrons(s * 0.06, s * 0.12, s * 0.88, s * 0.1, 6, RED);
+    chevrons(s * 0.06, s * 0.78, s * 0.88, s * 0.1, 6, RED);
   });
-  // 1: caution block
-  at(1, (s) => {
-    chevrons(s * 0.08, s * 0.18, s * 0.84, s * 0.14, 5, ORANGE);
-    text("CAUTION", s / 2, s * 0.5, s * 0.17, INK);
-    text("LOW CLEARANCE", s / 2, s * 0.68, s * 0.09, INK);
-    chevrons(s * 0.08, s * 0.78, s * 0.84, s * 0.14, 5, ORANGE);
+  at(DECAL.HAZARD_BAND, (s) => chevrons(s * 0.02, s * 0.3, s * 0.96, s * 0.4, 4, AMBER));
+  at(DECAL.DECK_A, (s) => {
+    drawGlyphs(ctx, "DECK", s * 0.14, s * 0.18, s * 0.28, WHITE);
+    ctx.fillStyle = WHITE;
+    ctx.fillRect(s * 0.12, s * 0.52, s * 0.76, s * 0.04);
+    drawGlyphs(ctx, "07", s * 0.3, s * 0.6, s * 0.3, AMBER);
   });
-  // 2: big numeral
-  at(2, (s) => {
-    text("3", s / 2, s * 0.5, s * 0.78, INK);
-  });
-  // 3: arrow + AIRLOCK
-  at(3, (s) => {
-    ctx.fillStyle = ORANGE;
+  for (let n = 0; n < 4; n++) {
+    at(DECAL.NUMBER0 + n, (s) => {
+      drawGlyphs(ctx, String(n + 1), s * 0.3, s * 0.12, s * 0.5, WHITE, 0.18);
+      ctx.fillStyle = WHITE;
+      ctx.font = `bold ${s * 0.22}px "DejaVu Sans", Arial, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillText(String(n + 1), s / 2, s * 0.9);
+    });
+  }
+  at(DECAL.ARROW, (s) => {
+    ctx.fillStyle = WHITE;
     ctx.beginPath();
-    ctx.moveTo(s * 0.12, s * 0.32);
-    ctx.lineTo(s * 0.55, s * 0.32);
-    ctx.lineTo(s * 0.55, s * 0.18);
-    ctx.lineTo(s * 0.9, s * 0.42);
-    ctx.lineTo(s * 0.55, s * 0.66);
-    ctx.lineTo(s * 0.55, s * 0.52);
-    ctx.lineTo(s * 0.12, s * 0.52);
+    ctx.moveTo(s * 0.1, s * 0.36);
+    ctx.lineTo(s * 0.55, s * 0.36);
+    ctx.lineTo(s * 0.55, s * 0.2);
+    ctx.lineTo(s * 0.92, s * 0.47);
+    ctx.lineTo(s * 0.55, s * 0.74);
+    ctx.lineTo(s * 0.55, s * 0.58);
+    ctx.lineTo(s * 0.1, s * 0.58);
     ctx.closePath();
     ctx.fill();
-    text("AIRLOCK", s / 2, s * 0.82, s * 0.16, INK);
+    drawGlyphs(ctx, "HANGAR", s * 0.12, s * 0.78, s * 0.14, WHITE);
   });
-  // 4: O2 roundel
-  at(4, (s) => {
-    ctx.strokeStyle = TEAL;
-    ctx.lineWidth = s * 0.05;
-    ctx.beginPath();
-    ctx.arc(s / 2, s / 2, s * 0.36, 0, Math.PI * 2);
-    ctx.stroke();
-    text("O2", s / 2, s * 0.5, s * 0.3, TEAL);
+  at(DECAL.TEXT_A, (s) => {
+    drawGlyphs(ctx, "SECTOR", s * 0.08, s * 0.2, s * 0.2, WHITE);
+    drawGlyphs(ctx, "TK 421", s * 0.08, s * 0.5, s * 0.2, WHITE);
+    ctx.fillStyle = AMBER;
+    ctx.fillRect(s * 0.08, s * 0.8, s * 0.84, s * 0.05);
   });
-  // 5: power warning
-  at(5, (s) => {
-    ctx.fillStyle = ORANGE;
+  at(DECAL.TEXT_B, (s) => {
+    for (let k = 0; k < 4; k++) drawGlyphs(ctx, ["POWER", "COUPLING", "ACCESS", "LEVEL 3"][k], s * 0.08, s * 0.12 + k * s * 0.2, s * 0.14, k === 3 ? RED : WHITE, 0.14);
+  });
+  at(DECAL.TEXT_C, (s) => {
+    ctx.strokeStyle = WHITE;
+    ctx.lineWidth = s * 0.03;
+    ctx.strokeRect(s * 0.08, s * 0.12, s * 0.84, s * 0.76);
+    drawGlyphs(ctx, "CARGO", s * 0.16, s * 0.22, s * 0.22, WHITE);
+    drawGlyphs(ctx, "CLASS B", s * 0.16, s * 0.56, s * 0.18, AMBER);
+  });
+  at(DECAL.WARNING, (s) => {
+    ctx.fillStyle = AMBER;
     ctx.beginPath();
     ctx.moveTo(s * 0.5, s * 0.08);
-    ctx.lineTo(s * 0.92, s * 0.8);
-    ctx.lineTo(s * 0.08, s * 0.8);
+    ctx.lineTo(s * 0.94, s * 0.82);
+    ctx.lineTo(s * 0.06, s * 0.82);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = INK;
-    ctx.beginPath();
-    ctx.moveTo(s * 0.55, s * 0.3);
-    ctx.lineTo(s * 0.42, s * 0.55);
-    ctx.lineTo(s * 0.52, s * 0.55);
-    ctx.lineTo(s * 0.44, s * 0.74);
-    ctx.lineTo(s * 0.62, s * 0.48);
-    ctx.lineTo(s * 0.52, s * 0.48);
-    ctx.lineTo(s * 0.6, s * 0.3);
-    ctx.closePath();
-    ctx.fill();
-    text("HV", s / 2, s * 0.91, s * 0.12, INK);
+    ctx.fillStyle = BLACK;
+    ctx.fillRect(s * 0.46, s * 0.3, s * 0.08, s * 0.3);
+    ctx.fillRect(s * 0.46, s * 0.66, s * 0.08, s * 0.08);
+    drawGlyphs(ctx, "HIGH ENERGY", s * 0.1, s * 0.86, s * 0.1, WHITE, 0.16);
   });
-  // 6: maintenance panel label with fake barcode
-  at(6, (s) => {
-    text("MAINT", s / 2, s * 0.3, s * 0.2, INK);
-    text("PNL 114-C", s / 2, s * 0.48, s * 0.1, INK);
-    ctx.fillStyle = INK;
-    let x = s * 0.15;
-    while (x < s * 0.85) {
-      const w = s * (0.008 + rand() * 0.02);
-      ctx.fillRect(x, s * 0.6, w, s * 0.22);
-      x += w + s * (0.006 + rand() * 0.02);
-    }
-  });
-  // 7: NO STEP
-  at(7, (s) => {
-    ctx.fillStyle = CREAM;
-    ctx.fillRect(s * 0.08, s * 0.3, s * 0.84, s * 0.4);
-    text("NO STEP", s / 2, s * 0.5, s * 0.17, INK);
-  });
-  // 8: hatch code
-  at(8, (s) => {
-    text("H-2", s / 2, s * 0.36, s * 0.32, ORANGE);
-    text("PRESSURE DOOR", s / 2, s * 0.66, s * 0.09, INK);
-    text("KEEP CLEAR", s / 2, s * 0.78, s * 0.09, INK);
-  });
-  // 9: small text block (spec plate)
-  at(9, (s) => {
-    for (let k = 0; k < 6; k++) text(k % 2 ? "SN 0091-77-A  LOT 14" : "KESTREL FLEET SYS", s / 2, s * (0.25 + k * 0.1), s * 0.06, INK, "center", false);
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = s * 0.015;
+  at(DECAL.SPEC_PLATE, (s) => {
+    ctx.strokeStyle = WHITE;
+    ctx.lineWidth = s * 0.02;
     ctx.strokeRect(s * 0.1, s * 0.15, s * 0.8, s * 0.7);
+    for (let k = 0; k < 5; k++) drawGlyphs(ctx, ["KDY 1137", "IMP NAVY", "SER 0091", "LOT 14 A", "REDOUBT"][k], s * 0.14, s * 0.2 + k * s * 0.12, s * 0.08, WHITE, 0.16);
   });
-  // 10: stripe band
-  at(10, (s) => {
-    chevrons(s * 0.02, s * 0.35, s * 0.96, s * 0.3, 4, ORANGE);
-  });
-  // 11: cargo
-  at(11, (s) => {
-    text("CARGO", s / 2, s * 0.4, s * 0.22, INK);
-    text("↑ THIS SIDE UP", s / 2, s * 0.64, s * 0.1, INK);
-  });
-  // 12: vent label
-  at(12, (s) => {
-    text("ATMO", s / 2, s * 0.38, s * 0.2, TEAL);
-    text("RECYC 04", s / 2, s * 0.6, s * 0.11, INK);
-  });
-  // 13: emergency
-  at(13, (s) => {
-    ctx.fillStyle = ORANGE;
-    ctx.fillRect(s * 0.1, s * 0.22, s * 0.8, s * 0.56);
-    text("EMERG", s / 2, s * 0.42, s * 0.17, INK);
-    text("RELEASE", s / 2, s * 0.6, s * 0.13, INK);
-  });
-  // 14: B-12
-  at(14, (s) => {
-    text("B-12", s / 2, s * 0.5, s * 0.34, INK);
-  });
-  // 15: fine hazard text
-  at(15, (s) => {
-    text("MIND", s / 2, s * 0.36, s * 0.18, INK);
-    text("THE GAP", s / 2, s * 0.58, s * 0.18, INK);
+  at(DECAL.BAY_CODE, (s) => {
+    drawGlyphs(ctx, "BAY", s * 0.16, s * 0.12, s * 0.3, AMBER, 0.16);
+    drawGlyphs(ctx, "3 27", s * 0.12, s * 0.5, s * 0.36, WHITE, 0.16);
   });
   // erode: knock out speckles + scuffed streaks so stencils look worn
   const img = ctx.getImageData(0, 0, size, size);
@@ -921,11 +984,11 @@ export function makeDecalSheet(size = 1024, seed = 19) {
       const i = (y * size + x) * 4;
       if (d[i + 3] === 0) continue;
       const u = x / size;
-      const n = fbm(u, v, { octaves: 4, freq: 60, seed: seed + 2 });
+      const n = fbm(u, v, { octaves: 3, freq: 60, seed: seed + 2 });
       const scuff = Math.pow(fbm(u * 0.3, v, { octaves: 3, freq: 40, seed: seed + 5 }), 2);
       let a = d[i + 3] / 255;
-      a *= clamp01((n - 0.3) * 4);
-      a *= 1 - scuff * 0.7;
+      a *= clamp01((n - 0.28) * 4.5);
+      a *= 1 - scuff * 0.5;
       d[i + 3] = a * 255;
     }
   }
@@ -934,6 +997,634 @@ export function makeDecalSheet(size = 1024, seed = 19) {
   tex.anisotropy = 8;
   return tex;
 }
+
+// ---------------------------------------------------------------------------
+// Imperial interior plating: dark painted steel with bevelled edges, faint sub-panel seams, scratches and
+// edge grime. Vertex colour supplies the tint (plate / plateDark / plateBlue / plateLight).
+// ---------------------------------------------------------------------------
+export function makeImperialPanel(size = 512, seed = 5) {
+  const t = new TexGen(size, size);
+  t.each((u, v, i) => {
+    const ed = edgeDist(u, v);
+    const n1 = fbm(u, v, { octaves: 4, freq: 5, seed });
+    const n2 = fbm(u, v, { octaves: 4, freq: 18, seed: seed + 3 });
+    let lum = 0.9 + (n1 - 0.5) * 0.12 + (n2 - 0.5) * 0.05;
+    const grime = clamp01(1 - ed / 0.12) * fbm(u, v, { octaves: 3, freq: 8, seed: seed + 9 });
+    lum *= 1 - grime * 0.22;
+    // sub-panel seam: one recessed line splitting the plate at a third
+    const seamU = Math.abs(u - 0.66);
+    const seamV = Math.abs(v - 0.34);
+    let hgt = 0.5 + clamp01(ed / 0.025) * 0.3;
+    let rough = 0.55 + (n2 - 0.5) * 0.2 + grime * 0.25;
+    if (seamU < 0.006) {
+      hgt -= 0.2 * (1 - seamU / 0.006);
+      lum *= 0.8;
+    }
+    if (seamV < 0.006 && u > 0.66) {
+      hgt -= 0.2 * (1 - seamV / 0.006);
+      lum *= 0.8;
+    }
+    // scratches: glancing bright hairlines
+    const sc = worley(u, v, 14, seed + 7);
+    if (sc < 0.01) {
+      const k = 1 - sc / 0.01;
+      lum += k * 0.12;
+      rough -= k * 0.15;
+    }
+    // edge polish
+    const wear = smooth(clamp01(1 - Math.abs(ed - 0.02) / 0.015)) * clamp01((fbm(u, v, { octaves: 3, freq: 26, seed: seed + 13 }) - 0.5) * 3);
+    lum += wear * 0.1;
+    rough -= wear * 0.2;
+    t.setColor(i, lum, lum * 1.0, lum * 1.02);
+    t.rough[i] = clamp01(rough);
+    t.metal[i] = 0.25 + wear * 0.5;
+    t.height[i] = hgt;
+  });
+  return finish(t.bake({ normalStrength: 2.6 }));
+}
+
+// ---------------------------------------------------------------------------
+// Exterior armour plating: irregular plate grid with recessed seams, per-plate paint variation, rivet rows,
+// soot streaks, heat discolouration, scratches and dust. One tile ≈ 40 m of hull.
+// ---------------------------------------------------------------------------
+export function makeHullPlate(size = 2048, seed = 31) {
+  const t = new TexGen(size, size);
+  const rand = mulberry32(seed);
+  // irregular plate grid: 7 rows of varying height, each split into 3..6 plates with random cuts
+  const rows = [];
+  {
+    let y = 0;
+    const heights = [];
+    for (let r = 0; r < 7; r++) heights.push(0.6 + rand() * 0.9);
+    const total = heights.reduce((a, b) => a + b, 0);
+    for (let r = 0; r < 7; r++) {
+      const h = heights[r] / total;
+      const n = 3 + Math.floor(rand() * 4);
+      const cuts = [0];
+      for (let k = 1; k < n; k++) cuts.push(k / n + (rand() - 0.5) * (0.4 / n));
+      cuts.push(1);
+      const shade = [];
+      for (let k = 0; k < n; k++) shade.push((rand() - 0.5) * 0.14);
+      rows.push({ y0: y, y1: y + h, cuts, shade, offset: rand() });
+      y += h;
+    }
+  }
+  const streaks = [];
+  for (let i = 0; i < 40; i++) streaks.push({ x: rand(), y: rand(), len: 0.05 + rand() * 0.25, w: 0.004 + rand() * 0.01, k: rand() });
+  const heat = [];
+  for (let i = 0; i < 6; i++) heat.push({ x: rand(), y: rand(), r: 0.06 + rand() * 0.12 });
+  t.each((u, v, i) => {
+    // find row / plate
+    let row = rows[rows.length - 1];
+    for (const r of rows) {
+      if (v >= r.y0 && v < r.y1) {
+        row = r;
+        break;
+      }
+    }
+    const uu = (u + row.offset) % 1;
+    let pi = 0;
+    for (let k = 0; k < row.cuts.length - 1; k++) if (uu >= row.cuts[k] && uu < row.cuts[k + 1]) pi = k;
+    const pu0 = row.cuts[pi];
+    const pu1 = row.cuts[pi + 1];
+    const pw = pu1 - pu0;
+    const ph = row.y1 - row.y0;
+    const lu = (uu - pu0) / pw; // local plate coords 0..1
+    const lv = (v - row.y0) / ph;
+    const edU = Math.min(lu, 1 - lu) * pw; // distance to seam in tile units
+    const edV = Math.min(lv, 1 - lv) * ph;
+    const ed = Math.min(edU, edV);
+    const n1 = fbm(u, v, { octaves: 3, freq: 6, seed });
+    const n2 = fbm(u, v, { octaves: 4, freq: 40, seed: seed + 3 });
+    let lum = 0.72 + row.shade[pi] + (n1 - 0.5) * 0.08 + (n2 - 0.5) * 0.05;
+    let rough = 0.58 + (n2 - 0.5) * 0.2;
+    let metal = 0.55;
+    let hgt = 0.5;
+    // seams
+    const seam = 0.004;
+    if (ed < seam) {
+      const k = 1 - ed / seam;
+      hgt -= 0.4 * smooth(k);
+      lum *= 0.45 + 0.2 * (1 - k);
+      rough += 0.3;
+    } else {
+      hgt += clamp01((ed - seam) / 0.006) * 0.08;
+      // rivet rows just inside the seams
+      const rivetPitch = 0.012;
+      const inU = Math.min(lu, 1 - lu) * pw;
+      const inV = Math.min(lv, 1 - lv) * ph;
+      if (inU > 0.008 && inU < 0.012) {
+        const along = (v % rivetPitch) / rivetPitch;
+        if (Math.abs(along - 0.5) < 0.15) {
+          hgt += 0.12;
+          lum += 0.05;
+          metal = 0.9;
+        }
+      } else if (inV > 0.008 && inV < 0.012) {
+        const along = (u % rivetPitch) / rivetPitch;
+        if (Math.abs(along - 0.5) < 0.15) {
+          hgt += 0.12;
+          lum += 0.05;
+          metal = 0.9;
+        }
+      }
+      // sub-panel line across big plates
+      if (pw > 0.25 && Math.abs(lu - 0.5) < 0.004) {
+        hgt -= 0.15;
+        lum *= 0.75;
+      }
+    }
+    // grime toward seams
+    const grime = clamp01(1 - ed / 0.03) * fbm(u, v, { octaves: 3, freq: 12, seed: seed + 11 });
+    lum *= 1 - grime * 0.3;
+    rough += grime * 0.15;
+    // soot streaks trailing "aft" (+v)
+    for (const s of streaks) {
+      const dx = u - s.x;
+      let dy = v - s.y;
+      if (dy < 0) dy += 1;
+      if (Math.abs(dx) < s.w && dy < s.len) {
+        const k = (1 - Math.abs(dx) / s.w) * (1 - dy / s.len) * 0.7;
+        lum = lerp(lum, s.k > 0.7 ? 0.85 : 0.3, k);
+        rough = lerp(rough, s.k > 0.7 ? 0.35 : 0.85, k);
+      }
+    }
+    let r = lum,
+      g = lum * 1.0,
+      b = lum * 1.03;
+    // heat discolouration: warm-brown to blue-ish tint patches
+    for (const hcirc of heat) {
+      const dd = Math.hypot(u - hcirc.x, v - hcirc.y);
+      if (dd < hcirc.r) {
+        const k = smooth(1 - dd / hcirc.r) * 0.5;
+        r = lerp(r, lum * 0.95, k);
+        g = lerp(g, lum * 0.78, k);
+        b = lerp(b, lum * 0.62, k);
+        rough += k * 0.2;
+      }
+    }
+    // fine scratches
+    const sc = worley(u, v, 30, seed + 7);
+    if (sc < 0.004) {
+      const k = 1 - sc / 0.004;
+      r += k * 0.15;
+      g += k * 0.15;
+      b += k * 0.15;
+      rough -= k * 0.2;
+    }
+    // dust: light matte haze in low-frequency patches
+    const dust = clamp01((fbm(u, v, { octaves: 2, freq: 3, seed: seed + 21 }) - 0.55) * 4) * 0.08;
+    r += dust;
+    g += dust;
+    b += dust * 0.9;
+    rough += dust * 2;
+    t.setColor(i, clamp01(r), clamp01(g), clamp01(b));
+    t.rough[i] = clamp01(rough);
+    t.metal[i] = clamp01(metal - dust * 3);
+    t.height[i] = hgt;
+  });
+  return finish(t.bake({ normalStrength: 3.2, anisotropy: 16 }));
+}
+
+// Black gloss deck (bridge / lobbies): near-black plates with a fine grid, scuffs and a soft sheen.
+export function makeDeckBlack(size = 1024, seed = 43) {
+  const t = new TexGen(size, size);
+  const rand = mulberry32(seed);
+  const scuffs = [];
+  for (let i = 0; i < 30; i++) scuffs.push({ x: rand(), y: rand(), a: rand() * Math.PI, l: 0.05 + rand() * 0.2, w: 0.002 + rand() * 0.005 });
+  const plates = 4;
+  t.each((u, v, i) => {
+    const pu = (u * plates) % 1;
+    const pv = (v * plates) % 1;
+    const ed = edgeDist(pu, pv);
+    const n = fbm(u, v, { octaves: 4, freq: 6, seed });
+    let lum = 0.16 + (n - 0.5) * 0.05;
+    let rough = 0.32 + (n - 0.5) * 0.15;
+    let hgt = 0.5;
+    if (ed < 0.01) {
+      const k = 1 - ed / 0.01;
+      hgt -= 0.25 * smooth(k);
+      lum *= 0.7;
+      rough += 0.3;
+    }
+    for (const s of scuffs) {
+      const dx = u - s.x;
+      const dy = v - s.y;
+      const along = dx * Math.cos(s.a) + dy * Math.sin(s.a);
+      const perp = -dx * Math.sin(s.a) + dy * Math.cos(s.a);
+      if (Math.abs(along) < s.l && Math.abs(perp) < s.w) {
+        const k = (1 - Math.abs(perp) / s.w) * 0.6;
+        lum = lerp(lum, 0.3, k);
+        rough = lerp(rough, 0.7, k);
+      }
+    }
+    t.setColor(i, lum, lum * 1.02, lum * 1.08);
+    t.rough[i] = clamp01(rough);
+    t.metal[i] = 0.35;
+    t.height[i] = hgt;
+  });
+  return finish(t.bake({ normalStrength: 1.6 }));
+}
+
+// Grey corridor deck: matte plates with a tight grid, worn traffic lane down the middle.
+export function makeDeckGrey(size = 1024, seed = 47) {
+  const t = new TexGen(size, size);
+  const plates = 4;
+  t.each((u, v, i) => {
+    const pu = (u * plates) % 1;
+    const pv = (v * plates) % 1;
+    const ed = edgeDist(pu, pv);
+    const n = fbm(u, v, { octaves: 4, freq: 7, seed });
+    const n2 = fbm(u, v, { octaves: 4, freq: 28, seed: seed + 2 });
+    let lum = 0.5 + (n - 0.5) * 0.14 + (n2 - 0.5) * 0.06;
+    let rough = 0.7 + (n2 - 0.5) * 0.2;
+    let metal = 0.3;
+    let hgt = 0.5;
+    if (ed < 0.012) {
+      const k = 1 - ed / 0.012;
+      hgt -= 0.3 * smooth(k);
+      lum *= 0.55;
+      rough += 0.2;
+    }
+    // anti-slip micro texture
+    const kn = vnoise(u, v, 96, seed + 5);
+    hgt += (kn - 0.5) * 0.05;
+    // worn lane along v in the middle of the tile
+    const lane = smooth(clamp01(1 - Math.abs(u - 0.5) / 0.3));
+    lum += lane * 0.05 * n2;
+    rough -= lane * 0.15;
+    metal += lane * 0.2;
+    t.setColor(i, lum, lum * 1.0, lum * 1.03);
+    t.rough[i] = clamp01(rough);
+    t.metal[i] = clamp01(metal);
+    t.height[i] = hgt;
+  });
+  return finish(t.bake({ normalStrength: 2.0 }));
+}
+
+// ---------------------------------------------------------------------------
+// Emissive atlases: 4x4 screens (Imperial UI: red / blue / amber graphics) and 4x4 LED matrices.
+// ---------------------------------------------------------------------------
+const ATLAS_CELLS = 4;
+export function screenRect(i) {
+  const c = i % ATLAS_CELLS;
+  const r = Math.floor(i / ATLAS_CELLS);
+  const s = 1 / ATLAS_CELLS;
+  // inset slightly so bilinear filtering never bleeds a neighbour
+  const e = 0.004;
+  return [c * s + e, 1 - (r + 1) * s + e, (c + 1) * s - e, 1 - r * s - e];
+}
+export const ledRect = screenRect;
+
+export function makeScreenAtlas(size = 2048, seed = 5) {
+  const c = makeCanvas(size, size);
+  const ctx = c.getContext("2d");
+  const rand = mulberry32(seed);
+  const cell = size / ATLAS_CELLS;
+  const RED = "#ff3b2f";
+  const BLUE = "#3f8dff";
+  const AMBER = "#ffb547";
+  const GREEN = "#3ad17a";
+  const WHITE = "#dfe8ff";
+  const rgba = (hex, a) => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  };
+  const at = (i, fn) => {
+    const cx = (i % ATLAS_CELLS) * cell;
+    const cy = Math.floor(i / ATLAS_CELLS) * cell;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.beginPath();
+    ctx.rect(0, 0, cell, cell);
+    ctx.clip();
+    ctx.fillStyle = "#03050a";
+    ctx.fillRect(0, 0, cell, cell);
+    fn(cell);
+    // scanlines
+    ctx.fillStyle = "rgba(0,0,0,0.22)";
+    for (let y = 0; y < cell; y += 4) ctx.fillRect(0, y, cell, 1);
+    ctx.restore();
+  };
+  const grid = (s, color, step) => {
+    ctx.strokeStyle = rgba(color, 0.12);
+    ctx.lineWidth = 1;
+    for (let x = 0; x < s; x += step) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, s);
+      ctx.stroke();
+    }
+    for (let y = 0; y < s; y += step) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(s, y);
+      ctx.stroke();
+    }
+  };
+  const textLines = (s, x, y, n, color, h) => {
+    for (let k = 0; k < n; k++) {
+      const len = 3 + Math.floor(rand() * 7);
+      let str = "";
+      for (let q = 0; q < len; q++) str += String.fromCharCode(65 + Math.floor(rand() * 22));
+      drawGlyphs(ctx, str, x, y + k * h * 1.6, h, k % 5 === 4 ? AMBER : color, 0.14);
+    }
+  };
+  const wedge = (s, cx, cy, L, color) => {
+    // top-down Star Destroyer silhouette (schematic)
+    ctx.strokeStyle = color;
+    ctx.lineWidth = s * 0.006;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - L / 2);
+    ctx.lineTo(cx + L * 0.28, cy + L / 2);
+    ctx.lineTo(cx + L * 0.2, cy + L * 0.44);
+    ctx.lineTo(cx - L * 0.2, cy + L * 0.44);
+    ctx.lineTo(cx - L * 0.28, cy + L / 2);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - L * 0.2);
+    ctx.lineTo(cx + L * 0.12, cy + L * 0.42);
+    ctx.lineTo(cx - L * 0.12, cy + L * 0.42);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = rgba(color, 0.5);
+    ctx.fillRect(cx - L * 0.08, cy + L * 0.26, L * 0.16, L * 0.04);
+  };
+  // 0: tactical radar
+  at(0, (s) => {
+    grid(s, BLUE, s / 16);
+    ctx.strokeStyle = rgba(BLUE, 0.6);
+    ctx.lineWidth = 2;
+    for (let r = 1; r <= 4; r++) {
+      ctx.beginPath();
+      ctx.arc(s / 2, s / 2, (s * 0.42 * r) / 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(s * 0.08, s / 2);
+    ctx.lineTo(s * 0.92, s / 2);
+    ctx.moveTo(s / 2, s * 0.08);
+    ctx.lineTo(s / 2, s * 0.92);
+    ctx.stroke();
+    const g = ctx.createConicGradient ? ctx.createConicGradient(-1.2, s / 2, s / 2) : null;
+    if (g) {
+      g.addColorStop(0, rgba(BLUE, 0.0));
+      g.addColorStop(0.2, rgba(BLUE, 0.35));
+      g.addColorStop(0.21, rgba(BLUE, 0));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(s / 2, s / 2, s * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let k = 0; k < 9; k++) {
+      ctx.fillStyle = k < 6 ? RED : GREEN;
+      const a = rand() * Math.PI * 2;
+      const r = rand() * s * 0.38;
+      ctx.fillRect(s / 2 + Math.cos(a) * r - 3, s / 2 + Math.sin(a) * r - 3, 7, 7);
+    }
+    textLines(s, s * 0.05, s * 0.05, 3, BLUE, s * 0.03);
+  });
+  // 1: ship schematic
+  at(1, (s) => {
+    grid(s, BLUE, s / 12);
+    wedge(s, s * 0.32, s * 0.5, s * 0.8, BLUE);
+    textLines(s, s * 0.62, s * 0.12, 8, WHITE, s * 0.035);
+    ctx.fillStyle = rgba(AMBER, 0.9);
+    ctx.fillRect(s * 0.62, s * 0.86, s * 0.3, s * 0.03);
+  });
+  // 2: waveform
+  at(2, (s) => {
+    grid(s, GREEN, s / 10);
+    ctx.strokeStyle = GREEN;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i <= 80; i++) {
+      const x = (i / 80) * s;
+      const y = s / 2 + Math.sin(i * 0.4 + seed) * s * 0.18 * Math.sin(i * 0.07) + (rand() - 0.5) * s * 0.02;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    textLines(s, s * 0.05, s * 0.82, 1, GREEN, s * 0.05);
+  });
+  // 3: status bars (red/amber)
+  at(3, (s) => {
+    for (let k = 0; k < 9; k++) {
+      const y = s * 0.08 + k * s * 0.1;
+      ctx.fillStyle = rgba(WHITE, 0.25);
+      ctx.fillRect(s * 0.3, y, s * 0.62, s * 0.05);
+      const f = rand();
+      ctx.fillStyle = f > 0.8 ? RED : f > 0.55 ? AMBER : BLUE;
+      ctx.fillRect(s * 0.3, y, s * 0.62 * f, s * 0.05);
+      drawGlyphs(ctx, String.fromCharCode(65 + k) + "" + (k + 1), s * 0.05, y, s * 0.05, WHITE, 0.14);
+    }
+  });
+  // 4: planet orbit display
+  at(4, (s) => {
+    grid(s, BLUE, s / 14);
+    ctx.strokeStyle = rgba(BLUE, 0.8);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(s * 0.5, s * 0.55, s * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = rgba(BLUE, 0.25);
+    ctx.fill();
+    ctx.strokeStyle = rgba(WHITE, 0.6);
+    ctx.beginPath();
+    ctx.ellipse(s * 0.5, s * 0.55, s * 0.4, s * 0.14, 0.3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = RED;
+    ctx.fillRect(s * 0.86, s * 0.45, 8, 8);
+    textLines(s, s * 0.05, s * 0.06, 2, WHITE, s * 0.035);
+  });
+  // 5: red alert text block
+  at(5, (s) => {
+    ctx.fillStyle = rgba(RED, 0.15);
+    ctx.fillRect(0, 0, s, s);
+    textLines(s, s * 0.06, s * 0.08, 9, RED, s * 0.045);
+    ctx.fillStyle = RED;
+    ctx.fillRect(s * 0.06, s * 0.9, s * 0.88, s * 0.03);
+  });
+  // 6: power distribution bars
+  at(6, (s) => {
+    grid(s, AMBER, s / 12);
+    for (let k = 0; k < 14; k++) {
+      const h = s * (0.15 + rand() * 0.6);
+      ctx.fillStyle = k % 4 === 3 ? RED : AMBER;
+      ctx.globalAlpha = 0.6 + rand() * 0.4;
+      ctx.fillRect(s * 0.06 + k * s * 0.064, s * 0.9 - h, s * 0.045, h);
+    }
+    ctx.globalAlpha = 1;
+    textLines(s, s * 0.06, s * 0.05, 1, AMBER, s * 0.05);
+  });
+  // 7: hangar traffic board
+  at(7, (s) => {
+    for (let k = 0; k < 8; k++) {
+      const y = s * 0.1 + k * s * 0.1;
+      drawGlyphs(ctx, "TIE " + (k + 1), s * 0.06, y, s * 0.05, WHITE, 0.14);
+      ctx.fillStyle = [GREEN, AMBER, BLUE, GREEN, RED, GREEN, BLUE, AMBER][k];
+      ctx.fillRect(s * 0.6, y, s * 0.3, s * 0.05);
+    }
+  });
+  // 8: sensor sweep (blue rings + noise)
+  at(8, (s) => {
+    for (let k = 0; k < 400; k++) {
+      ctx.fillStyle = rgba(BLUE, rand() * 0.8);
+      ctx.fillRect(rand() * s, rand() * s, 3, 3);
+    }
+    ctx.strokeStyle = BLUE;
+    ctx.lineWidth = 2;
+    for (let r = 0; r < 5; r++) {
+      ctx.beginPath();
+      ctx.arc(s * 0.5, s * 0.9, s * 0.16 * (r + 1), Math.PI, Math.PI * 2);
+      ctx.stroke();
+    }
+  });
+  // 9: engineering gauges
+  at(9, (s) => {
+    for (let g = 0; g < 4; g++) {
+      const cx = s * (0.25 + (g % 2) * 0.5);
+      const cy = s * (0.3 + Math.floor(g / 2) * 0.45);
+      ctx.strokeStyle = rgba(WHITE, 0.3);
+      ctx.lineWidth = s * 0.03;
+      ctx.beginPath();
+      ctx.arc(cx, cy, s * 0.14, Math.PI * 0.75, Math.PI * 2.25);
+      ctx.stroke();
+      ctx.strokeStyle = g === 3 ? RED : g === 1 ? AMBER : BLUE;
+      ctx.beginPath();
+      ctx.arc(cx, cy, s * 0.14, Math.PI * 0.75, Math.PI * (0.75 + 1.5 * (0.3 + rand() * 0.7)));
+      ctx.stroke();
+    }
+  });
+  // 10: navigation vector field
+  at(10, (s) => {
+    grid(s, BLUE, s / 8);
+    ctx.strokeStyle = rgba(WHITE, 0.7);
+    ctx.lineWidth = 2;
+    for (let k = 0; k < 24; k++) {
+      const x = rand() * s;
+      const y = rand() * s;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + s * 0.06, y - s * 0.03);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = AMBER;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.1, s * 0.8);
+    ctx.quadraticCurveTo(s * 0.5, s * 0.1, s * 0.9, s * 0.3);
+    ctx.stroke();
+  });
+  // 11: life support readouts
+  at(11, (s) => {
+    for (let k = 0; k < 6; k++) {
+      const y = s * 0.1 + k * s * 0.14;
+      drawGlyphs(ctx, ["O2", "CO2", "H2O", "TEMP", "PRESS", "WASTE"][k], s * 0.06, y, s * 0.06, WHITE, 0.14);
+      ctx.strokeStyle = k === 5 ? AMBER : GREEN;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i <= 30; i++) {
+        const x = s * 0.4 + (i / 30) * s * 0.52;
+        const yy = y + s * 0.03 + Math.sin(i * 0.5 + k) * s * 0.02;
+        if (i === 0) ctx.moveTo(x, yy);
+        else ctx.lineTo(x, yy);
+      }
+      ctx.stroke();
+    }
+  });
+  // 12: targeting reticle
+  at(12, (s) => {
+    ctx.strokeStyle = RED;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(s / 2, s / 2, s * 0.3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(s * 0.1, s / 2);
+    ctx.lineTo(s * 0.35, s / 2);
+    ctx.moveTo(s * 0.65, s / 2);
+    ctx.lineTo(s * 0.9, s / 2);
+    ctx.moveTo(s / 2, s * 0.1);
+    ctx.lineTo(s / 2, s * 0.35);
+    ctx.moveTo(s / 2, s * 0.65);
+    ctx.lineTo(s / 2, s * 0.9);
+    ctx.stroke();
+    ctx.strokeStyle = rgba(WHITE, 0.4);
+    ctx.strokeRect(s * 0.42, s * 0.42, s * 0.16, s * 0.16);
+    textLines(s, s * 0.6, s * 0.75, 3, RED, s * 0.035);
+  });
+  // 13: crew manifest (white text)
+  at(13, (s) => textLines(s, s * 0.06, s * 0.06, 11, WHITE, s * 0.038));
+  // 14: hyperdrive plot
+  at(14, (s) => {
+    grid(s, "#8a7cff", s / 10);
+    ctx.strokeStyle = "#8a7cff";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i <= 60; i++) {
+      const x = (i / 60) * s;
+      const y = s * 0.7 - Math.pow(i / 60, 3) * s * 0.55;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    textLines(s, s * 0.06, s * 0.78, 2, WHITE, s * 0.04);
+  });
+  // 15: cargo manifest grid
+  at(15, (s) => {
+    for (let r = 0; r < 6; r++) {
+      for (let cc = 0; cc < 4; cc++) {
+        const f = rand();
+        ctx.fillStyle = f > 0.85 ? RED : f > 0.6 ? AMBER : rgba(BLUE, 0.7);
+        ctx.fillRect(s * 0.06 + cc * s * 0.23, s * 0.08 + r * s * 0.15, s * 0.2, s * 0.1);
+      }
+    }
+  });
+  return toTexture(c, { srgb: true, wrap: false });
+}
+
+/** 4x4 atlas of indicator-light matrices (Death Star computer panels): coloured squares/dots on black. */
+export function makeLedAtlas(size = 1024, seed = 9) {
+  const c = makeCanvas(size, size);
+  const ctx = c.getContext("2d");
+  const rand = mulberry32(seed);
+  const cell = size / ATLAS_CELLS;
+  const colors = ["#ff3b2f", "#3f8dff", "#dfe8ff", "#ffb547", "#3ad17a", "#3f8dff", "#ff3b2f", "#dfe8ff"];
+  ctx.fillStyle = "#04050a";
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 16; i++) {
+    const cx = (i % ATLAS_CELLS) * cell;
+    const cy = Math.floor(i / ATLAS_CELLS) * cell;
+    const cols = 6 + Math.floor(rand() * 10);
+    const rows = 1 + Math.floor(rand() * 3);
+    const pad = cell * 0.08;
+    const w = (cell - pad * 2) / cols;
+    const h = (cell - pad * 2) / rows;
+    const density = 0.35 + rand() * 0.5;
+    const square = rand() < 0.5;
+    const palette = rand() < 0.3 ? [colors[i % 8]] : colors;
+    for (let r = 0; r < rows; r++) {
+      for (let k = 0; k < cols; k++) {
+        if (rand() > density) continue;
+        ctx.fillStyle = palette[Math.floor(rand() * palette.length)];
+        ctx.globalAlpha = 0.6 + rand() * 0.4;
+        const x = cx + pad + k * w + w * 0.2;
+        const y = cy + pad + r * h + h * 0.25;
+        if (square) ctx.fillRect(x, y, w * 0.6, h * 0.5);
+        else {
+          ctx.beginPath();
+          ctx.arc(x + w * 0.3, y + h * 0.25, Math.min(w, h) * 0.22, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  return toTexture(c, { srgb: true, wrap: false });
+}
+
 
 // ---------------------------------------------------------------------------
 // Space textures

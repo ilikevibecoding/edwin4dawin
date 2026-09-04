@@ -99,6 +99,22 @@ export function createPost(renderer, scene, camera) {
     ao,
     bloom,
     finalPass,
+    /** Per-mode tuning: AO radius in world units scales with the subject (a room vs a 1.6 km hull). */
+    setMode(mode) {
+      if (mode === "exterior") {
+        ao.configuration.aoRadius = 12;
+        ao.configuration.distanceFalloff = 6;
+        ao.configuration.intensity = 2.0;
+        bloom.strength = 0.42;
+        finalPass.uniforms.vignette.value = 0.28;
+      } else {
+        ao.configuration.aoRadius = 0.9;
+        ao.configuration.distanceFalloff = 0.9;
+        ao.configuration.intensity = 2.6;
+        bloom.strength = 0.3;
+        finalPass.uniforms.vignette.value = 0.34;
+      }
+    },
     setSize(width, height) {
       composer.setSize(width, height);
       const p = renderer.getPixelRatio();

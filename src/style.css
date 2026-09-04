@@ -1,7 +1,8 @@
 :root {
-  --teal: #4fd8cc;
-  --orange: #f08a3c;
-  --cream: #e8e0d0;
+  --imp-blue: #4f9bff;
+  --imp-red: #ff3b2f;
+  --imp-amber: #ffb547;
+  --imp-white: #dfe6f2;
   --hud-font: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --mono: "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
 }
@@ -15,7 +16,7 @@ body {
   overflow: hidden;
   background: #000;
   font-family: var(--hud-font);
-  color: var(--cream);
+  color: var(--imp-white);
   user-select: none;
 }
 
@@ -41,13 +42,13 @@ body {
   height: 6px;
   margin: -3px 0 0 -3px;
   border-radius: 50%;
-  background: rgba(232, 224, 208, 0.75);
+  background: rgba(223, 230, 242, 0.75);
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.7);
   transition: transform 120ms ease, background 120ms ease;
 }
 #crosshair.active {
   transform: scale(1.5);
-  background: var(--teal);
+  background: var(--imp-blue);
 }
 
 #prompt {
@@ -56,14 +57,14 @@ body {
   top: 56%;
   transform: translateX(-50%);
   padding: 6px 14px;
-  border: 1px solid rgba(79, 216, 204, 0.6);
-  border-radius: 3px;
-  background: rgba(8, 14, 18, 0.7);
+  border: 1px solid rgba(79, 155, 255, 0.6);
+  border-radius: 2px;
+  background: rgba(6, 10, 18, 0.75);
   font-family: var(--mono);
   font-size: 14px;
   letter-spacing: 0.08em;
-  color: var(--teal);
-  text-shadow: 0 0 8px rgba(79, 216, 204, 0.6);
+  color: var(--imp-blue);
+  text-shadow: 0 0 8px rgba(79, 155, 255, 0.6);
   transition: opacity 120ms ease;
 }
 #prompt.hidden {
@@ -75,10 +76,84 @@ body {
   padding: 0 5px;
   margin-right: 8px;
   border-radius: 2px;
-  background: var(--teal);
+  background: var(--imp-blue);
   color: #061012;
   text-align: center;
   font-weight: 700;
+}
+
+#room-toast {
+  position: absolute;
+  left: 50%;
+  top: 9%;
+  transform: translateX(-50%) translateY(-8px);
+  text-align: center;
+  opacity: 0;
+  transition: opacity 400ms ease, transform 400ms ease;
+  font-family: var(--mono);
+  letter-spacing: 0.25em;
+}
+#room-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+#room-toast .t {
+  font-size: 18px;
+  color: var(--imp-white);
+  text-shadow: 0 0 12px rgba(79, 155, 255, 0.5);
+}
+#room-toast .s {
+  font-size: 11px;
+  color: var(--imp-amber);
+  margin-top: 4px;
+}
+
+#menu {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 320px;
+  padding: 18px 24px;
+  border: 1px solid rgba(79, 155, 255, 0.5);
+  background: rgba(4, 8, 16, 0.88);
+  font-family: var(--mono);
+  color: var(--imp-white);
+  box-shadow: 0 0 40px rgba(79, 155, 255, 0.15);
+}
+#menu.hidden {
+  display: none;
+}
+#menu-title {
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  color: var(--imp-blue);
+  margin-bottom: 12px;
+}
+#menu ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#menu li {
+  padding: 6px 0;
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
+#menu li b {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 6px;
+  margin-right: 12px;
+  background: var(--imp-blue);
+  color: #061012;
+  border-radius: 2px;
+  text-align: center;
+}
+#menu .menu-foot {
+  margin-top: 12px;
+  font-size: 11px;
+  color: rgba(223, 230, 242, 0.5);
 }
 
 #status {
@@ -91,18 +166,29 @@ body {
   font-family: var(--mono);
   font-size: 13px;
   letter-spacing: 0.06em;
-  color: rgba(232, 224, 208, 0.85);
+  color: rgba(223, 230, 242, 0.85);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 #status-tag {
   padding: 2px 8px;
   border-radius: 2px;
-  background: rgba(240, 138, 60, 0.9);
-  color: #1a0d04;
+  background: rgba(79, 155, 255, 0.9);
+  color: #04101c;
   font-weight: 700;
 }
 #status-text {
   transition: opacity 200ms ease;
+}
+
+#mode-hint {
+  position: absolute;
+  right: 24px;
+  bottom: 22px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(223, 230, 242, 0.5);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 #stats {
@@ -111,10 +197,12 @@ body {
   top: 12px;
   font-family: var(--mono);
   font-size: 12px;
-  color: rgba(232, 224, 208, 0.8);
+  color: rgba(223, 230, 242, 0.85);
   text-align: right;
   white-space: pre;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 6px 8px;
 }
 #stats.hidden {
   display: none;
@@ -134,56 +222,84 @@ body {
   font-family: var(--mono);
   font-size: 22px;
   letter-spacing: 0.3em;
-  color: var(--cream);
+  color: var(--imp-white);
   opacity: 0;
   transition: opacity 400ms ease;
 }
 
-#start {
+#start,
+#loading {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at center, rgba(10, 16, 20, 0.55), rgba(0, 0, 0, 0.85));
+  background: radial-gradient(ellipse at center, rgba(8, 12, 20, 0.55), rgba(0, 0, 0, 0.85));
   cursor: pointer;
   transition: opacity 300ms ease;
 }
-#start.hidden {
+#loading {
+  cursor: default;
+  background: #000;
+}
+#start.hidden,
+#loading.hidden {
   opacity: 0;
   pointer-events: none;
 }
-#start .card {
+#start .card,
+#loading .card {
   text-align: center;
   padding: 36px 56px;
-  border: 1px solid rgba(79, 216, 204, 0.35);
-  border-radius: 4px;
-  background: rgba(6, 10, 14, 0.75);
-  box-shadow: 0 0 40px rgba(79, 216, 204, 0.12);
+  border: 1px solid rgba(79, 155, 255, 0.35);
+  border-radius: 2px;
+  background: rgba(4, 8, 14, 0.8);
+  box-shadow: 0 0 60px rgba(79, 155, 255, 0.12);
+  min-width: 380px;
 }
-#start h1 {
+#start h1,
+#loading h1 {
   margin: 0;
   font-family: var(--mono);
   font-weight: 700;
   font-size: 40px;
-  letter-spacing: 0.35em;
-  color: var(--cream);
+  letter-spacing: 0.45em;
+  color: var(--imp-white);
 }
-#start .sub {
+#start .sub,
+#loading .sub {
   margin: 6px 0 22px;
   font-family: var(--mono);
-  font-size: 13px;
+  font-size: 12px;
   letter-spacing: 0.2em;
-  color: var(--orange);
+  color: var(--imp-amber);
 }
 #start .hint {
   margin: 0 0 8px;
   font-size: 18px;
-  color: var(--teal);
+  color: var(--imp-blue);
 }
 #start .keys {
   margin: 0;
   font-family: var(--mono);
   font-size: 12px;
-  color: rgba(232, 224, 208, 0.6);
+  color: rgba(223, 230, 242, 0.6);
+}
+#loading .bar {
+  height: 4px;
+  background: rgba(79, 155, 255, 0.15);
+  margin: 0 0 12px;
+}
+#loading-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--imp-blue);
+  box-shadow: 0 0 10px var(--imp-blue);
+  transition: width 200ms ease;
+}
+#loading-text {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: rgba(223, 230, 242, 0.7);
 }

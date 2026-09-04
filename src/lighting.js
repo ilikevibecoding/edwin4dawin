@@ -1,86 +1,76 @@
-// Day / rest-cycle lighting controller. Smoothly blends practical lights, emissive
-// strips and screens between the normal ship state and a dim red night watch.
+// Ship lighting states: normal / rest cycle (dimmed) / red alert (strips pulse red, practicals dim).
+// Blends emissive families and the active interior lights each frame.
 import * as THREE from "three";
-import { PALETTE } from "./materials.js";
+import { IMP } from "./core/palette.js";
 
-const NIGHT_TEAL = new THREE.Color("#ff3b24");
-const NIGHT_WARM = new THREE.Color("#ff6a3a");
+const ALERT_RED = new THREE.Color("#ff2a1a");
 
-export function createLightingController({ lights, materials, hemi }) {
-  const warm = lights.warm;
-  const teal = lights.teal;
-  const cool = lights.cool;
-  const emitTeal = materials.emitTeal;
-  const emitWarm = materials.emitWarm;
-  const emitOrange = materials.emitOrange;
-  const emitCool = materials.emitCool;
-  const emitWarmSoft = materials.emitWarmSoft;
-  const emitCoolSoft = materials.emitCoolSoft;
-  const screens = materials.screens;
-  const base = {
-    emitTeal: emitTeal.emissiveIntensity,
-    emitWarm: emitWarm.emissiveIntensity,
-    emitOrange: emitOrange.emissiveIntensity,
-    emitCool: emitCool.emissiveIntensity,
-    emitWarmSoft: emitWarmSoft.emissiveIntensity,
-    emitCoolSoft: emitCoolSoft.emissiveIntensity,
-    screens: screens.map((m) => m.emissiveIntensity),
-    leds: materials.leds.emissiveIntensity,
-    hemi: hemi ? hemi.intensity : 0,
-  };
-  const tealBase = emitTeal.emissive.clone();
-  const warmBase = emitWarm.emissive.clone();
+export function createLightingController({ materials, rooms, hemi, audio = null }) {
+  const fams = ["emitWhite", "emitWhiteSoft", "emitWarmSoft", "emitBlue", "emitCyan", "emitAmber", "emitGreen", "emitViolet"];
+  const base = {};
+  for (const k of fams) base[k] = { i: materials[k].emissiveIntensity, c: materials[k].emissive.clone() };
+  base.screen = materials.screen.emissiveIntensity;
+  base.leds = materials.leds.emissiveIntensity;
+  base.hemi = hemi ? hemi.intensity : 0;
+  const state = { rest: 0, restTarget: 0, alert: 0, alertTarget: 0, speed: 1.0, t: 0 };
   const tmp = new THREE.Color();
 
-  const state = { current: 0, target: 0, speed: 1.0 };
-
-  function apply(t) {
-    const day = 1 - t;
-    for (const l of warm) {
-      l.intensity = l.userData.baseIntensity * (0.06 + 0.94 * day);
-      tmp.copy(l.userData.baseColor).lerp(NIGHT_WARM, t * 0.8);
-      l.color.copy(tmp);
+  function apply() {
+    const day = 1 - state.rest * 0.7;
+    const a = state.alert;
+    const pulse = 0.55 + 0.45 * Math.sin(state.t * 4.0);
+    for (const k of fams) {
+      const m = materials[k];
+      const b = base[k];
+      m.emissiveIntensity = b.i * day * (1 - a * 0.35 + a * 0.35 * pulse);
+      if (k === "emitWhite" || k === "emitWhiteSoft" || k === "emitBlue" || k === "emitCyan") tmp.copy(b.c).lerp(ALERT_RED, a * 0.85);
+      else tmp.copy(b.c);
+      m.emissive.copy(tmp);
     }
-    for (const l of teal) {
-      l.intensity = l.userData.baseIntensity * (0.7 + 0.3 * day);
-      tmp.copy(l.userData.baseColor).lerp(NIGHT_TEAL, t);
-      l.color.copy(tmp);
-    }
-    for (const l of cool) l.intensity = l.userData.baseIntensity * (0.55 + 0.45 * day);
-    emitWarm.emissiveIntensity = base.emitWarm * (0.05 + 0.95 * day);
-    emitWarm.emissive.copy(warmBase).lerp(NIGHT_WARM, t * 0.7);
-    emitWarmSoft.emissiveIntensity = base.emitWarmSoft * (0.05 + 0.95 * day);
-    emitWarmSoft.emissive.copy(emitWarm.emissive);
-    emitTeal.emissiveIntensity = base.emitTeal * (0.75 + 0.25 * day);
-    emitTeal.emissive.copy(tealBase).lerp(NIGHT_TEAL, t);
-    emitOrange.emissiveIntensity = base.emitOrange * (0.6 + 0.4 * day);
-    emitCool.emissiveIntensity = base.emitCool * (0.35 + 0.65 * day);
-    emitCoolSoft.emissiveIntensity = base.emitCoolSoft * (0.35 + 0.65 * day);
-    screens.forEach((m, i) => (m.emissiveIntensity = base.screens[i] * (0.45 + 0.55 * day)));
+    materials.screen.emissiveIntensity = base.screen * (0.5 + 0.5 * day);
     materials.leds.emissiveIntensity = base.leds;
-    if (hemi) hemi.intensity = base.hemi * (0.35 + 0.65 * day);
+    if (hemi) hemi.intensity = base.hemi * (0.4 + 0.6 * day);
+    // active interior lights: dim in rest, red-shift in alert
+    for (const r of rooms.visibleRooms) {
+      if (!r.ctx) continue;
+      for (const l of r.ctx.lights) {
+        if (l.userData.baseIntensity === undefined) {
+          l.userData.baseIntensity = l.intensity;
+          l.userData.baseColor = l.color.clone();
+        }
+        l.intensity = l.userData.baseIntensity * (0.25 + 0.75 * day) * (1 - a * 0.4);
+        tmp.copy(l.userData.baseColor).lerp(ALERT_RED, a * 0.6);
+        l.color.copy(tmp);
+      }
+    }
   }
 
   return {
     state,
-    /** t: 0 = day, 1 = rest cycle. instant: skip the blend. */
     setRest(t, instant = false) {
-      state.target = THREE.MathUtils.clamp(t, 0, 1);
-      if (instant) {
-        state.current = state.target;
-        apply(state.current);
-      }
+      state.restTarget = THREE.MathUtils.clamp(t, 0, 1);
+      if (instant) state.rest = state.restTarget;
+    },
+    setAlert(t, instant = false) {
+      const was = state.alertTarget;
+      state.alertTarget = THREE.MathUtils.clamp(t, 0, 1);
+      if (instant) state.alert = state.alertTarget;
+      if (audio && was < 0.5 && t >= 0.5) audio.event("alert", {});
     },
     update(dt) {
-      if (Math.abs(state.current - state.target) < 1e-4) return;
-      const dir = Math.sign(state.target - state.current);
-      state.current += dir * dt * state.speed;
-      if ((dir > 0 && state.current > state.target) || (dir < 0 && state.current < state.target)) state.current = state.target;
-      apply(state.current);
+      state.t += dt;
+      for (const [k, tk] of [["rest", "restTarget"], ["alert", "alertTarget"]]) {
+        const d = state[tk] - state[k];
+        if (Math.abs(d) > 1e-4) state[k] += Math.sign(d) * Math.min(Math.abs(d), dt * state.speed);
+      }
+      apply();
     },
     get rest() {
-      return state.current;
+      return state.rest;
     },
-    palette: PALETTE,
+    get alert() {
+      return state.alert;
+    },
+    palette: IMP,
   };
 }

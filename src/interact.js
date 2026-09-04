@@ -1,53 +1,83 @@
-// Raycast interactions: hover highlight + prompt, and the three scripted actions
-// (sleep / eat / wash up) with fades, status text and the rest-cycle lighting shift.
+// Raycast interactions: hover highlight + prompt, and scripted actions. Items come from the RoomManager
+// (rooms register { object, material, id, label, key, action }); built-in actions cover the crew basics.
 import * as THREE from "three";
 
-const REACH = 2.6;
-const HIGHLIGHT = new THREE.Color("#4fd8cc");
-
+const REACH = 3.0;
+const HIGHLIGHT = new THREE.Color("#4f9bff");
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export class Interactions {
-  constructor({ camera, interactables, lighting, space, player, hud }) {
+  constructor({ camera, rooms, lighting, space, player, hud, audio = null }) {
     this.camera = camera;
-    this.items = interactables;
+    this.rooms = rooms;
     this.lighting = lighting;
     this.space = space;
     this.player = player;
     this.hud = hud;
+    this.audio = audio;
     this.ray = new THREE.Raycaster();
     this.ray.far = REACH;
     this.hovered = null;
     this.busy = false;
     this.restTimer = null;
     this.targets = [];
-    for (const it of this.items) {
-      it.object.traverse((o) => {
-        if (o.isMesh) {
-          o.userData.interactable = it;
-          this.targets.push(o);
-        }
-      });
-      it.baseEmissive = it.material.emissive ? it.material.emissive.clone() : new THREE.Color(0, 0, 0);
-      it.baseEmissiveIntensity = it.material.emissiveIntensity;
-    }
+    this.version = -1;
     this._onKey = (e) => {
       if (e.code === "KeyE" && !e.repeat) this.activate();
     };
     document.addEventListener("keydown", this._onKey);
   }
 
+  get items() {
+    return this.rooms.interactables;
+  }
+
+  refreshTargets() {
+    this.targets = [];
+    for (const it of this.items) {
+      if (it.baseEmissive === undefined) {
+        it.baseEmissive = it.material.emissive ? it.material.emissive.clone() : new THREE.Color(0, 0, 0);
+        it.baseEmissiveIntensity = it.material.emissiveIntensity;
+      }
+      it.object.traverse((o) => {
+        if (o.isMesh) {
+          o.userData.interactable = it;
+          this.targets.push(o);
+        }
+      });
+    }
+    this.version = this.rooms.interactablesVersion;
+  }
+
   update() {
-    if (this.busy) {
+    if (this.version !== this.rooms.interactablesVersion) this.refreshTargets();
+    if (this.busy || !this.player.enabled) {
       this.setHovered(null);
       return;
     }
     this.ray.setFromCamera({ x: 0, y: 0 }, this.camera);
-    const hits = this.ray.intersectObjects(this.targets, false);
-    const hit = hits.length ? hits[0].object.userData.interactable : null;
+    let hit = null;
+    if (this.targets.length) {
+      const hits = this.ray.intersectObjects(this.targets, false);
+      for (const h of hits) {
+        // only visible rooms' objects count
+        let o = h.object;
+        let vis = true;
+        while (o) {
+          if (!o.visible) {
+            vis = false;
+            break;
+          }
+          o = o.parent;
+        }
+        if (vis) {
+          hit = h.object.userData.interactable;
+          break;
+        }
+      }
+    }
     this.setHovered(hit);
-    if (this.hovered) {
-      // slow pulse, kept low so the object's own shading still reads under the tint
+    if (this.hovered && this.hovered.material.emissive) {
       const k = 0.1 + 0.05 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004));
       this.hovered.material.emissive.copy(HIGHLIGHT).multiplyScalar(k);
     }
@@ -55,15 +85,17 @@ export class Interactions {
 
   setHovered(item) {
     if (item === this.hovered) return;
-    if (this.hovered) {
+    if (this.hovered && this.hovered.material.emissive) {
       this.hovered.material.emissive.copy(this.hovered.baseEmissive);
       this.hovered.material.emissiveIntensity = this.hovered.baseEmissiveIntensity;
     }
     this.hovered = item;
     if (item) {
-      item.material.emissive.copy(HIGHLIGHT).multiplyScalar(0.12);
-      item.material.emissiveIntensity = 1;
-      this.hud.showPrompt(item.key, item.label);
+      if (item.material.emissive) {
+        item.material.emissive.copy(HIGHLIGHT).multiplyScalar(0.12);
+        item.material.emissiveIntensity = 1;
+      }
+      this.hud.showPrompt(item.key || "E", item.label);
     } else {
       this.hud.hidePrompt();
     }
@@ -74,18 +106,25 @@ export class Interactions {
     const item = id ? this.items.find((i) => i.id === id) : this.hovered;
     if (!item || this.busy) return false;
     if (!id && !this.player.locked) return false;
-    this.run(item.id);
+    if (this.hud.menuOpen && this.hud.menuOpen()) return false;
+    this.run(item);
     return true;
   }
 
-  async run(id) {
+  async run(item) {
+    if (item.action) {
+      // custom actions manage their own busy state (menus, toggles)
+      await item.action({ hud: this.hud, player: this.player, lighting: this.lighting, space: this.space, audio: this.audio, item });
+      return;
+    }
     this.busy = true;
     this.player.frozen = true;
     this.setHovered(null);
     try {
-      if (id === "bed") await this.sleep();
-      else if (id === "galley") await this.eat();
-      else if (id === "bathroom") await this.wash();
+      const kind = item.kind || item.id;
+      if (kind === "bunk" || kind === "bed") await this.sleep();
+      else if (kind === "mess" || kind === "galley") await this.eat();
+      else if (kind === "refresher" || kind === "bathroom") await this.wash();
     } finally {
       this.player.frozen = false;
       this.busy = false;
@@ -93,24 +132,23 @@ export class Interactions {
   }
 
   async sleep() {
-    this.hud.setStatus("Lying down...");
+    this.hud.setStatus("Lying down…");
     await this.hud.fadeIn(900);
     await this.hud.showFadeText("8 HOURS PASS", 2000);
-    // the ship kept flying: jump the far field ahead and switch to the night watch lighting
     this.space.setTime(this.space.state.time + 240);
     this.lighting.setRest(1, true);
     await this.hud.fadeOut(1200);
-    this.hud.setStatus("You slept 8 hours. Rest cycle lighting engaged.");
+    this.hud.setStatus("You slept 8 hours. Rest-cycle lighting engaged.");
     if (this.restTimer) clearTimeout(this.restTimer);
     this.restTimer = setTimeout(() => {
       this.lighting.state.speed = 0.22;
       this.lighting.setRest(0);
-      this.hud.setStatus("Day cycle resumed. Systems nominal. Cruising.");
+      this.hud.setStatus("Duty cycle resumed. All stations nominal.");
     }, 9000);
   }
 
   async eat() {
-    this.hud.setStatus("Dispensing ration...");
+    this.hud.setStatus("Dispensing ration…");
     await wait(700);
     this.hud.setStatus("You eat. Energy restored.");
     await wait(300);

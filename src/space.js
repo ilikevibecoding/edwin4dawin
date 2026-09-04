@@ -1,9 +1,10 @@
-// Everything outside the windows: drifting parallax stars, planets with atmosphere glow,
-// nebula billboards, a distant sun and near-field dust streaks that sell forward motion.
+// Everything outside the hull: a sky dome that follows the camera (rendered first, without depth, so it is
+// at infinity relative to a 1.6 km ship): parallax star layers, galactic band, nebulae, a distant sun and
+// planets with atmosphere glow. The primary world fills the lower sky the way a Star Destroyer hangs in orbit.
 import * as THREE from "three";
 import { makeStarSprite, makeNebula, makeGasGiant, makeOceanWorld, makeMoon, makeClouds, mulberry32 } from "./textures.js";
 
-const TURN_RATE = THREE.MathUtils.degToRad(1.3); // ship slowly banking: the sky slides past at 1.3 deg/s (a planet crosses the windshield in ~80 s)
+const TURN_RATE = THREE.MathUtils.degToRad(0.12); // slow orbital drift: the planet crosses a bridge window in ~10 min
 
 const planetVert = /* glsl */ `
   varying vec3 vN;
@@ -333,94 +334,50 @@ export function buildSpace(scene) {
     return g;
   }
 
+  // primary world: a big ocean/continent planet filling the lower sky ahead and to starboard
+  addPlanet({
+    tex: makeOceanWorld(1024, 512, 88),
+    clouds: makeClouds(1024, 512, 111),
+    radius: 1250,
+    dist: 2350,
+    bearingDeg: 24,
+    elevation: -1500,
+    atmo: "#58b8ff",
+    atmoStrength: 1.4,
+    brightness: 0.95,
+    spin: 0.004,
+    tilt: 0.12,
+  });
+  // ringed gas giant, far off the port quarter
   addPlanet({
     tex: makeGasGiant(1024, 512, 77),
-    radius: 430,
-    dist: 2150,
-    bearingDeg: 0,
-    elevation: -60,
-    // saturated amber: the halo has to differ from the cream disc or it reads as more disc
+    radius: 300,
+    dist: 2400,
+    bearingDeg: -118,
+    elevation: 260,
     atmo: "#ffae5c",
-    atmoStrength: 1.35,
-    brightness: 1.15,
+    atmoStrength: 1.3,
+    brightness: 1.1,
     spin: 0.006,
     tilt: 0.28,
     ring: { inner: 1.35, outer: 2.25, colA: "#c9b393", colB: "#7d6a55", tiltX: 0.42, tiltY: 0.15 },
   });
-  addPlanet({
-    tex: makeOceanWorld(1024, 512, 88),
-    clouds: makeClouds(1024, 512, 111),
-    radius: 300,
-    dist: 1900,
-    bearingDeg: 60,
-    elevation: 40,
-    atmo: "#58b8ff",
-    atmoStrength: 1.4,
-    brightness: 0.85,
-    spin: 0.02,
-    tilt: 0.1,
-  });
+  // small grey moon high astern
   addPlanet({
     tex: makeMoon(512, 256, 99),
-    radius: 95,
-    dist: 1150,
-    bearingDeg: -62,
-    elevation: -20,
+    radius: 120,
+    dist: 2300,
+    bearingDeg: 165,
+    elevation: 900,
     atmo: "#8a8f99",
     atmoStrength: 0.15,
-    brightness: 0.85,
+    brightness: 0.9,
     spin: 0.01,
     tilt: 0.05,
   });
-  addPlanet({
-    tex: makeMoon(512, 256, 143),
-    radius: 240,
-    dist: 2300,
-    bearingDeg: 190,
-    elevation: 90,
-    atmo: "#ff8a5a",
-    atmoStrength: 0.7,
-    brightness: 0.8,
-    spin: 0.008,
-    tilt: 0.3,
-  });
 
-  // --- dust streaks near the ship (not rotating with the far field)
-  const dustCount = 260;
-  const dustPos = new Float32Array(dustCount * 2 * 3);
-  const dust = [];
-  const spawn = (i, zOverride = null) => {
-    let x, y, z;
-    do {
-      x = (rand() * 2 - 1) * 90;
-      y = (rand() * 2 - 1) * 60;
-      z = zOverride !== null ? zOverride : (rand() * 2 - 1) * 160;
-    } while (Math.abs(x) < 9 && y > -4 && y < 7); // keep them out of the hull volume
-    dust[i] = { x, y, z, len: 1.2 + rand() * 2.2 };
-  };
-  for (let i = 0; i < dustCount; i++) spawn(i);
-  const dustGeo = new THREE.BufferGeometry();
-  dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
-  const dustMat = new THREE.LineBasicMaterial({ color: 0xa9c3e6, transparent: true, opacity: 0.42, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
-  const dustLines = new THREE.LineSegments(dustGeo, dustMat);
-  dustLines.frustumCulled = false;
-  dustLines.name = "dust";
-  scene.add(dustLines);
-  const updateDust = (dt) => {
-    const speed = 34;
-    for (let i = 0; i < dustCount; i++) {
-      const d = dust[i];
-      d.z += speed * dt;
-      if (d.z > 160) spawn(i, -160 + (d.z - 160));
-      dustPos[i * 6] = d.x;
-      dustPos[i * 6 + 1] = d.y;
-      dustPos[i * 6 + 2] = d.z;
-      dustPos[i * 6 + 3] = d.x;
-      dustPos[i * 6 + 4] = d.y;
-      dustPos[i * 6 + 5] = d.z - d.len;
-    }
-    dustGeo.attributes.position.needsUpdate = true;
-  };
+  // (no near-field dust: a capital ship in orbit does not stream particles past its windows)
+  const updateDust = () => {};
 
   // --- state / animation
   const state = { time: 0, baseAngle: 0 };
@@ -466,6 +423,20 @@ export function buildSpace(scene) {
     apply();
   }
 
+  // sky dome: no depth, drawn first, never culled — it is "at infinity" for a 1.6 km ship
+  // `transparent:false` keeps them in the opaque list, where renderOrder is honoured (the transparent list
+  // is always drawn after every opaque object and would paint the sky over the hull); blending still applies.
+  root.traverse((o) => {
+    if (o.material) {
+      o.material.depthTest = false;
+      o.material.depthWrite = false;
+      o.material.transparent = false;
+    }
+    o.frustumCulled = false;
+    o.renderOrder = -1000;
+  });
+  const sunWorldDir = () => sunWorld.clone();
+
   apply();
-  return { root, planets, layers, update, setTime, framePlanet, sunDirLocal, state };
+  return { root, planets, layers, update, setTime, framePlanet, sunDirLocal, sunWorld, sunWorldDir, state };
 }
