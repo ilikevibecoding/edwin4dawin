@@ -10,7 +10,10 @@ import { rng } from "../../kit.js";
 import { GRATE_TILE, decalRect } from "../../textures.js";
 import { roomFloorY } from "../../config/shipSpec.js";
 
-const PIT = { x0: 3.2, x1: 14, z0: 474, z1: 492, depth: 1.6 };
+// Pit depth: the registry only resolves a room while the player's feet are within 1.5 m below its
+// floor (registry.js spaceAt), so the pits stop at 1.45 m rather than the 1.6 m of the brief; deeper
+// pits would drop the player out of the room (HUD, culling and the hull behind the windows all go).
+const PIT = { x0: 3.2, x1: 14, z0: 474, z1: 492, depth: 1.45 };
 const WALK_HW = 2.4;
 const STAIR = { z0: 490.4, z1: 492, run: 2.4, steps: 8 };
 const RAIL_H = 1.05;
@@ -85,6 +88,8 @@ export function build(kit, ctx, room, lib) {
     f.box("satinBlack", u, 0.1 + (hd - 0.12) / 2, 0.06 + (d - 0.06) / 2, w, hd - 0.12, d - 0.06);
     f.box("darkGloss", u, hd - 0.01, 0.06 + d / 2, w + 0.02, 0.02, d + 0.02);
     if (accent === "emitRed") f.box("painted", u, 0.2, 0.06 + d + 0.002, w - 0.3, 0.035, 0.004, { color: P.orange, uv: "keep" });
+    // kick light under the desk front: the pits read as rows of consoles even where no practical reaches
+    f.box(accent === "emitRed" ? "emitRedSoft" : "emitBlueSoft", u, 0.12, 0.06 + d + 0.002, w - 0.4, 0.02, 0.004, { uv: "keep" });
     const tilt = -0.32;
     tiltedBox(f, "satinBlack", u, hd, 0.24, w - 0.04, panelH, 0.06, tilt);
     tiltedBox(f, "darkGloss", u, hd, 0.24, w - 0.26, panelH - 0.08, 0.006, tilt, { along: 0.04, lift: 0.06 });
@@ -425,8 +430,7 @@ export function build(kit, ctx, room, lib) {
     box("paintedMetal", [x0, y0 + winV.y1 - 0.05, z0 - 0.1], [x1, yTop, shelfZ], { color: P.gunmetal, uv: "world", texel: 0.7 });
     box("satinBlack", [x0, y0 + winV.y1 - 0.05, shelfZ - 0.02], [x1, y0 + winV.y1 + 0.3, shelfZ + 0.06]);
     box("satinBlack", [x0 + 0.5, y0 + winV.y1 - 0.1, z0 + 0.5], [x1 - 0.5, y0 + winV.y1 - 0.05, z0 + 0.86]);
-    box("emitWhiteSoft", [x0 + 0.7, y0 + winV.y1 - 0.11, z0 + 0.58], [x1 - 0.7, y0 + winV.y1 - 0.1, z0 + 0.78], { uv: "keep" });
-    box("painted", [x0 + 0.3, y0 + winV.y1 + 0.12, shelfZ + 0.06], [x1 - 0.3, y0 + winV.y1 + 0.17, shelfZ + 0.07], { color: P.orange, uv: "keep" });
+    box("emitCoolSoft", [x0 + 0.7, y0 + winV.y1 - 0.11, z0 + 0.64], [x1 - 0.7, y0 + winV.y1 - 0.1, z0 + 0.72], { uv: "keep" });
   }
 
   // ---------------------------------------------------------------- captain's platform
@@ -555,8 +559,8 @@ export function build(kit, ctx, room, lib) {
     ctx.lights.cool.push(pointLight(0xd8e2ff, 12, 22, [s * 15.0, y0 + 4.7, 483]));
     const fam = s > 0 ? "warm" : "teal";
     const col = s > 0 ? 0xff5a3a : 0x4a8dff;
-    ctx.lights[fam].push(pointLight(col, 7, 12, [s * 8.6, pitY + 1.8, 483.5]));
-    ctx.lights[fam].push(pointLight(col, 7, 12, [s * 12.5, pitY + 1.8, 477.5]));
+    ctx.lights[fam].push(pointLight(col, 9, 13, [s * 8.6, pitY + 1.9, 484]));
+    ctx.lights[fam].push(pointLight(col, 9, 13, [s * 11.5, pitY + 1.9, 477.5]));
   }
   ctx.lights.teal.push(pointLight(0x66b6ff, 3, 8, [holoX, plat.y + 1.6, holoZ]));
   // key light: cool space light through the windows, one spot parked well outside the glass and aimed
