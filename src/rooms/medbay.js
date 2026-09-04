@@ -11,9 +11,10 @@ import { PALETTE } from "../materials.js";
 import { impRoomShell, impConsole, impChair, impRailing, impWallGear } from "./imperial_kit.js";
 import { rng } from "../kit.js";
 import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
-import { Placer, compound, B, C, DECK_C, slotLight, cameraHousing, cableRun, wallSign, statusUnit, medDroid, monitorArm, counter, hoodLamp, crateStack, rod, tube, ring, keyLight } from "./deck_c_kit.js";
+import { Placer, compound, B, C, DECK_C, slotLight, cameraHousing, cableRun, wallSign, statusUnit, medDroid, monitorArm, counter, hoodLamp, crateStack, rod, tube, ring, keyLight, ensureDeckCMaterials } from "./deck_c_kit.js";
 
 const ACCENT = "emitTeal";
+const SLOT = "roomsc_slot"; // half-strength white slot emitter (troughs + louvred ceiling slots)
 const WHITE = PALETTE.impWhite;
 const BLK = PALETTE.impBlack;
 const CHR = PALETTE.impCharcoal;
@@ -218,13 +219,18 @@ export function buildMedbay(kit, ctx, room) {
   const hz = d / 2;
   const accentKey = ACCENT;
   const rand = rng(6303);
-  // wall variant: narrow 1.1 m white tiles (no bare wall light slots); the room adds horizontal grout seams below
+  ensureDeckCMaterials(kit);
+  // wall variant: narrow 1.1 m white tiles (no bare wall light slots); the room adds horizontal grout seams below.
+  // No cornice light channel (on 1.1 m tiles the kit's strip became a continuous rim under the ceiling) and the
+  // two ceiling troughs carry the half-strength roomsc_slot emitter: from the door they sit exactly where the
+  // walls meet the ceiling and read as a hot cornice at emitWhiteDim. The bacta pod and the teal arm lamps are
+  // the room's visible key sources.
   const walls = impRoomShell(kit, room, ctx.doors, {
     seed: 6303,
     accentKey,
-    wall: { panelW: 1.1, features: { vent: 0.05, equipment: 0.03, conduit: 0.02, light: 0, screen: 0.04 }, altChance: 0.04, panelColor: WHITE, panelColorAlt: PALETTE.impGrey, accent: DECK_C.teal },
+    wall: { panelW: 1.1, features: { vent: 0.05, equipment: 0.03, conduit: 0.02, light: 0, screen: 0.04 }, altChance: 0.04, panelColor: WHITE, panelColorAlt: PALETTE.impGrey, accent: DECK_C.teal, corniceLight: false },
     floor: { lane: false },
-    ceiling: { troughs: 2, troughW: 0.5, beamStep: 4.4 },
+    ceiling: { troughs: 2, troughW: 0.5, beamStep: 4.4, lightKey: SLOT },
   });
   const N = walls.N.frame; // u = x + hx, n = +z
   const S = walls.S.frame; // u = hx - x, n = -z
@@ -398,7 +404,7 @@ export function buildMedbay(kit, ctx, room) {
     p.screen("scrGreen3", 0, 1.19, 0.055, 0.52, 0.34, "+z", { tilt: -0.35 });
     p.collider(-0.32, 0, -0.2, 0.32, 1.4, 0.2, "readout");
     floorDecal(kit, IMP_DECAL.medical, cx, cz - 1.7, 0.5);
-    slotLight(kit, cx, cz, h, 2.4, "x", "emitWhiteDim");
+    slotLight(kit, cx, cz, h, 2.4, "x", SLOT);
   }
 
   // ---------------------------------------------------------------- bacta tank on a railed platform, 11 m from the door left of centre: the hero
@@ -513,7 +519,7 @@ export function buildMedbay(kit, ctx, room) {
     impRailing(kit, [tx + 1.95, tz - 1.95], [tx + 1.95, tz + 1.95], FLOOR_Y, { h: 1.0, light: accentKey });
     kit.collider([tx - 1.8, 0, tz - 1.8], [tx + 1.8, 3.6, tz + 1.8], "tank");
     floorDecal(kit, IMP_DECAL.keepClear, tx, tz - 2.6, 0.6, FLOOR_Y + 0.006, Math.PI);
-    slotLight(kit, tx - 3.0, tz, h, 2.0, "z", "emitWhiteDim");
+    slotLight(kit, tx - 3.0, tz, h, 2.0, "z", SLOT);
   }
 
   // ---------------------------------------------------------------- surgical station under a ceiling boom
@@ -588,8 +594,8 @@ export function buildMedbay(kit, ctx, room) {
     kit.boxMM(accentKey, [zx0, ly, zz0], [zx0 + 0.04, ly + 0.01, zz1]);
     kit.boxMM(accentKey, [zx1 - 0.04, ly, zz0], [zx1, ly + 0.01, zz1]);
     floorDecal(kit, IMP_DECAL.keepClear, sx, zz0 - 0.5, 0.6);
-    slotLight(kit, sx - 1.2, sz + 1.7, h, 1.6, "x", "emitWhiteDim");
-    slotLight(kit, sx - 1.2, sz - 1.0, h, 1.6, "x", "emitWhiteDim");
+    slotLight(kit, sx - 1.2, sz + 1.7, h, 1.6, "x", SLOT);
+    slotLight(kit, sx - 1.2, sz - 1.0, h, 1.6, "x", SLOT);
   }
 
   // ---------------------------------------------------------------- south wall: supply cabinets, autoclave, waste
@@ -715,11 +721,11 @@ export function buildMedbay(kit, ctx, room) {
   cameraHousing(kit, -hx + 0.3, h - 0.55, hz - 0.3, -Math.PI * 0.25);
 
   // ---------------------------------------------------------------- dim louvred ceiling slots over the ward, triage row, entrance, cabinets
-  for (const bx of bedX) slotLight(kit, bx, -7.2, h, 2.0, "x", "emitWhiteDim");
-  for (const bx of [3.6, 7.0]) slotLight(kit, bx, -3.3, h, 2.0, "x", "emitWhiteDim");
-  slotLight(kit, 13.4, -3.6, h, 1.6, "z", "emitWhiteDim");
-  slotLight(kit, 13.4, 3.6, h, 1.6, "z", "emitWhiteDim");
-  slotLight(kit, 4.2, 9.0, h, 1.6, "x", "emitWhiteDim");
+  for (const bx of bedX) slotLight(kit, bx, -7.2, h, 2.0, "x", SLOT);
+  for (const bx of [3.6, 7.0]) slotLight(kit, bx, -3.3, h, 2.0, "x", SLOT);
+  slotLight(kit, 13.4, -3.6, h, 1.6, "z", SLOT);
+  slotLight(kit, 13.4, 3.6, h, 1.6, "z", SLOT);
+  slotLight(kit, 4.2, 9.0, h, 1.6, "x", SLOT);
 
   // ---------------------------------------------------------------- lights (8): the bacta pool (hero, highest priority), six white keys, a warmer surgical key
   // keys hang 1 m below the ceiling (linear falloff would otherwise blow the ceiling out)
@@ -727,12 +733,13 @@ export function buildMedbay(kit, ctx, room) {
   const ky = h - 1.0;
   // (pass 2: keys pulled back ~30% — at k 2.4 the white deck read as a 92-luma wash with no tile grid;
   // pass 3: the bacta pool trimmed from 10 / 14 m — at that reach it was washing the door-end deck teal)
-  kit.light({ type: "point", pos: [4.0, 2.0, 4.0], color: DECK_C.bacta.getHex(), intensity: 7.0, decay: 1, distance: 10, priority: 0.52 });
-  keyLight(kit, -10.0, ky, -7.0, { color: white, k: 1.7, distance: 13, priority: 0.5 });
-  keyLight(kit, -3.0, ky, -7.0, { color: white, k: 1.7, distance: 13, priority: 0.49 });
-  keyLight(kit, 2.0, ky, -7.0, { color: white, k: 1.7, distance: 13, priority: 0.48 });
-  keyLight(kit, -4.0, ky, 5.6, { color: 0xffffff, k: 1.9, distance: 11, priority: 0.47 });
-  keyLight(kit, 12.5, ky, 0.0, { color: white, k: 1.2, distance: 13, priority: 0.46 });
-  keyLight(kit, -11.5, ky, 3.0, { color: white, k: 1.6, distance: 12, priority: 0.45 });
-  keyLight(kit, 7.6, ky, -4.4, { color: white, k: 1.7, distance: 12, priority: 0.44 });
+  // pass 4 (round-2 critic): cornice channel removed, keys −20 % — the white tile deck sat at 150/255 by the door
+  kit.light({ type: "point", pos: [4.0, 2.0, 4.0], color: DECK_C.bacta.getHex(), intensity: 6.5, decay: 1, distance: 10, priority: 0.52 });
+  keyLight(kit, -10.0, ky, -7.0, { color: white, k: 1.4, distance: 13, priority: 0.5 });
+  keyLight(kit, -3.0, ky, -7.0, { color: white, k: 1.4, distance: 13, priority: 0.49 });
+  keyLight(kit, 2.0, ky, -7.0, { color: white, k: 1.4, distance: 13, priority: 0.48 });
+  keyLight(kit, -4.0, ky, 5.6, { color: 0xffffff, k: 1.5, distance: 11, priority: 0.47 });
+  keyLight(kit, 12.5, ky, 0.0, { color: white, k: 0.9, distance: 13, priority: 0.46 });
+  keyLight(kit, -11.5, ky, 3.0, { color: white, k: 1.3, distance: 12, priority: 0.45 });
+  keyLight(kit, 7.6, ky, -4.4, { color: white, k: 1.4, distance: 12, priority: 0.44 });
 }

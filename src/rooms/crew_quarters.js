@@ -1,54 +1,81 @@
 // Crew Quarters (Deck C): an enlisted barracks. Triple bunk stacks line the far (W) wall and both side
 // walls up to the door zone and stand back-to-back in three centre rows (the nearest 10 m from the spawn),
-// so the berths are the first thing seen from the door; each stack has reading lamps, shelves, part-drawn
-// curtains and a footlocker under a lit black soffit. The door zone keeps the common life: two mess tables
-// at the frame edges, grey locker banks on the door wall behind the spawn, a refresher alcove with sinks and
-// mirrors, a duty roster board (animated scan line) and a holo game table tucked into the recreation corner.
-// Grey-blue accent: warm white soffit keys over the bunks, cool key at the door, blue night strips.
+// so the berths are the first thing seen from the door; each berth is a made bed (bevelled grey-blue
+// mattress, blanket, turned sheet, pillow) behind a steel privacy rail, with a ladder up the foot end,
+// reading lamps, shelves, part-drawn curtains and a footlocker under a lit black soffit. The door zone keeps
+// the common life: two mess tables at the frame edges, grey locker banks on the door wall behind the spawn, a
+// refresher alcove with sinks and mirrors, a duty roster board (animated scan line) and a holo game table
+// tucked into the recreation corner. Grey-blue accent: warm keys under louvred slot shades, cool door key,
+// blue night strips, two thin grey painted aisle lines instead of hazard chevrons.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { PALETTE } from "../materials.js";
-import { impRoomShell, impWallGear } from "./imperial_kit.js";
+import { impRoomShell, impWallGear, lux } from "./imperial_kit.js";
 import { rng } from "../kit.js";
 import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
-import { Placer, compound, B, C, DECK_C, longTable, lockerBank, hoodLamp, cameraHousing, cableRun, helmet, boots, floorGrate, floorStripe, wallSign, statusUnit, keyLight } from "./deck_c_kit.js";
+import { Placer, compound, B, C, DECK_C, longTable, lockerBank, hoodLamp, slotLight, cameraHousing, cableRun, helmet, boots, floorGrate, wallSign, statusUnit, keyLight } from "./deck_c_kit.js";
 
 const BUNK_L = 2.05;
 const BUNK_W = 0.9;
 const SHELF_Y = [0.33, 0.99, 1.65];
 const STACK_H = 2.35;
+// bedding colours: grey-blue regulation issue (blanket, mattress ticking), off-white pillow / turned sheet
+const BED_BLANKET = 0x5a6884;
+const BED_BLANKET_FOLD = 0x72809b;
+const BED_MATTRESS = 0x9aa2b0;
+const BED_SHEET = 0xdadee6;
+const BED_PILLOW = 0xe0e4ea;
+
+/** Rounded box part for compound(): the 2–3 cm bevel that makes bedding read as soft rather than as a shelf. */
+const R = (sx, sy, sz, pos, color, radius = 0.025) => ({ geo: new RoundedBoxGeometry(sx, sy, sz, 1, Math.min(radius, sy / 2 - 0.001)), pos, color });
 
 function bunkFrameGeo() {
   const blk = PALETTE.impBlack;
   const chr = PALETTE.impCharcoal;
   const grey = PALETTE.impGreyDark;
+  const steel = DECK_C.steel;
   const parts = [];
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(B(0.06, STACK_H, 0.06, [sx * 1.0, STACK_H / 2, sz * 0.42], blk));
-  for (const y of SHELF_Y) {
-    parts.push(B(BUNK_L, 0.05, BUNK_W, [0, y, 0], grey));
-    parts.push(B(BUNK_L, 0.08, 0.03, [0, y + 0.05, 0.44], chr));
-    parts.push(C(0.012, 2.0, [0, y + 0.66, 0.47], grey, "x", 6));
-    parts.push(B(0.03, 0.08, 0.06, [-0.98, y + 0.62, 0.44], grey));
-    parts.push(B(0.03, 0.08, 0.06, [0.98, y + 0.62, 0.44], grey));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(B(0.07, STACK_H, 0.07, [sx * 1.0, STACK_H / 2, sz * 0.43], blk));
+  for (const [k, y] of SHELF_Y.entries()) {
+    // berth pan: dark tray with a deep black front lip, so the pale bedding sits *in* a bed, not on a shelf
+    parts.push(B(BUNK_L, 0.06, BUNK_W, [0, y, 0], chr));
+    parts.push(B(BUNK_L, 0.1, 0.03, [0, y + 0.02, 0.445], blk));
+    parts.push(B(BUNK_L, 0.1, 0.03, [0, y + 0.02, -0.445], blk));
+    // head-end privacy panel (grey-blue) closes the berth at the pillow end
+    parts.push(B(0.03, 0.56, BUNK_W - 0.02, [-1.0, y + 0.3, 0], 0x4a5266));
+    // privacy / safety rail along the open front (upper berths full length, bottom berth short), steel
+    const railLen = k === 0 ? 0.7 : 1.25;
+    const railX = k === 0 ? -0.6 : -0.33;
+    parts.push(C(0.018, railLen, [railX, y + 0.44, 0.47], steel, "x", 8));
+    parts.push(C(0.014, 0.3, [railX - railLen / 2 + 0.05, y + 0.3, 0.47], steel, "y", 6));
+    parts.push(C(0.014, 0.3, [railX + railLen / 2 - 0.05, y + 0.3, 0.47], steel, "y", 6));
+    // curtain track under the berth above
+    parts.push(C(0.012, 2.0, [0, y + 0.64, 0.47], grey, "x", 6));
   }
-  // top rails, back board (privacy / lamp mounting), ladder at the +x (foot) end
-  parts.push(B(BUNK_L, 0.06, 0.06, [0, STACK_H - 0.03, 0.42], blk));
-  parts.push(B(BUNK_L, 0.06, 0.06, [0, STACK_H - 0.03, -0.42], blk));
-  parts.push(B(BUNK_L - 0.1, STACK_H - 0.4, 0.03, [0, STACK_H / 2, -0.43], chr));
-  for (const z of [-0.2, 0.2]) parts.push(B(0.03, 2.2, 0.03, [1.07, 1.1, z], grey));
-  for (let i = 0; i < 7; i++) parts.push(B(0.03, 0.03, 0.43, [1.07, 0.3 + i * 0.3, 0], grey));
+  // top rails, back board (privacy / lamp mounting)
+  parts.push(B(BUNK_L, 0.06, 0.06, [0, STACK_H - 0.03, 0.43], blk));
+  parts.push(B(BUNK_L, 0.06, 0.06, [0, STACK_H - 0.03, -0.43], blk));
+  parts.push(B(BUNK_L - 0.1, STACK_H - 0.4, 0.03, [0, STACK_H / 2, -0.44], chr));
+  // ladder on the front face at the foot end: steel stiles and rungs
+  for (const x of [0.74, 1.0]) parts.push(C(0.02, STACK_H - 0.2, [x, STACK_H / 2 - 0.05, 0.52], steel, "y", 8));
+  for (let i = 0; i < 8; i++) parts.push(C(0.016, 0.3, [0.87, 0.22 + i * 0.27, 0.52], steel, "x", 6));
+  for (const y of [0.4, 1.5]) for (const x of [0.74, 1.0]) parts.push(B(0.05, 0.05, 0.1, [x, y, 0.47], blk));
   return compound(parts, 1);
 }
 function bunkSoftGeo() {
-  // regulation berth: pale grey mattress, white top sheet turned down at the head, grey-blue blanket, pillow
+  // regulation berth: bevelled grey-blue mattress, off-white sheet turned down at the head, grey-blue blanket
+  // with a folded top edge, a pillow; all rounded so the highlights read as cloth
   const parts = [];
   for (const y of SHELF_Y) {
-    const top = y + 0.025;
-    parts.push(B(1.95, 0.1, 0.82, [0, top + 0.05, 0], 0xa9adb5));
-    parts.push(B(0.42, 0.09, 0.3, [-0.7, top + 0.145, -0.05], 0xe8ebf0));
-    parts.push(B(0.5, 0.02, 0.84, [-0.5, top + 0.11, 0], 0xdfe3e9));
-    parts.push(B(1.15, 0.035, 0.84, [0.33, top + 0.118, 0], 0x6c7b98));
-    parts.push(B(1.15, 0.03, 0.08, [0.33, top + 0.15, 0.36], 0x6c7b98));
+    const top = y + 0.03;
+    parts.push(R(1.94, 0.14, 0.8, [0, top + 0.07, 0], BED_MATTRESS, 0.03));
+    parts.push(R(0.46, 0.11, 0.34, [-0.7, top + 0.195, -0.04], BED_PILLOW, 0.04));
+    parts.push(B(0.34, 0.015, 0.82, [-0.36, top + 0.145, 0], BED_SHEET));
+    parts.push(R(1.3, 0.05, 0.86, [0.31, top + 0.165, 0], BED_BLANKET, 0.02));
+    parts.push(R(0.2, 0.07, 0.86, [-0.27, top + 0.175, 0], BED_BLANKET_FOLD, 0.03));
+    // blanket hangs a little over the front lip
+    parts.push(B(1.3, 0.08, 0.02, [0.31, top + 0.13, 0.44], BED_BLANKET));
   }
   return compound(parts, 2);
 }
@@ -66,18 +93,18 @@ function bunkStack(kit, rand, x, z, yaw, opts = {}) {
   const headX = -0.7;
   for (const [k, y] of SHELF_Y.entries()) {
     // reading lamp over the pillow (dim white, a few switched off), personal shelf with a datapad / mug
-    p.box("impTrim", headX, y + 0.5, -0.38, 0.14, 0.06, 0.07, { color: PALETTE.impBlack });
-    p.box(rand() < 0.7 ? "emitWhiteDim" : "impGloss", headX, y + 0.48, -0.34, 0.08, 0.02, 0.012, { uv: "keep" });
-    p.box("impMetal", headX + 0.42, y + 0.42, -0.36, 0.3, 0.02, 0.1, { color: PALETTE.impGreyDark });
-    if (rand() < 0.5) p.box("impGloss", headX + 0.42, y + 0.44, -0.36, 0.14, 0.012, 0.08);
-    else p.cyl("impMetal", headX + 0.42, y + 0.47, -0.36, 0.03, 0.08, "y", { color: PALETTE.impGrey, segments: 8 });
-    if (rand() < 0.55) {
-      const cw = 0.35 + rand() * 0.7;
-      const cx = (rand() < 0.5 ? -1 : 1) * (1.0 - cw / 2);
-      p.box("fabric", cx, y + 0.36, 0.49, cw, 0.56, 0.02, { color: rand() < 0.3 ? DECK_C.fabricBlue : DECK_C.fabricDark, uv: "world", texel: 2 });
+    p.box("impTrim", headX, y + 0.52, -0.38, 0.14, 0.06, 0.07, { color: PALETTE.impBlack });
+    p.box(rand() < 0.7 ? "emitWhiteDim" : "impGloss", headX, y + 0.5, -0.34, 0.08, 0.02, 0.012, { uv: "keep" });
+    p.box("impMetal", headX + 0.42, y + 0.46, -0.36, 0.3, 0.02, 0.1, { color: PALETTE.impGreyDark });
+    if (rand() < 0.5) p.box("impGloss", headX + 0.42, y + 0.48, -0.36, 0.14, 0.012, 0.08);
+    else p.cyl("impMetal", headX + 0.42, y + 0.51, -0.36, 0.03, 0.08, "y", { color: PALETTE.impGrey, segments: 8 });
+    // privacy curtain (grey-blue issue cloth) part-drawn from the head end on about half the berths
+    if (rand() < 0.5) {
+      const cw = 0.3 + rand() * 0.6;
+      p.box("fabric", -1.0 + cw / 2, y + 0.36, 0.5, cw, 0.54, 0.02, { color: rand() < 0.7 ? DECK_C.fabricBlue : DECK_C.fabricDark, uv: "world", texel: 2 });
     }
-    // berth number tag on the front rail (bottom berth only carries the stack number)
-    if (k === 0) p.decal([IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03][number % 3], 0.9, y + 0.09, 0.46, 0.09);
+    // berth number tag on the front lip (bottom berth only carries the stack number)
+    if (k === 0) p.decal([IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03][number % 3], 0.5, y + 0.05, 0.462, 0.09);
   }
   const fx = 0.7;
   p.box("impPanel1", fx, 0.14, 0.15, 0.62, 0.27, 0.5, { color: PALETTE.impGreyDark, uv: "world", texel: 1 });
@@ -197,8 +224,8 @@ export function buildCrewQuarters(kit, ctx, room) {
   W.decal(IMP_DECAL.glyphs1, hz + 1.4, 2.95, 0.03, 0.34);
   cableRun(W, 1.0, hz - 3.0, 3.05, { n: 3, seed: 9, accentKey });
   cableRun(N, 0.6, hx - 3.0, 3.05, { n: 2, seed: 10, accentKey });
-  // floor lane arrows from the door toward the barracks
-  for (let x = 13; x > -14; x -= 6) floorStripe(kit, x, 0.3, x - 1.4, 0.3, 0.16, "chevronY");
+  // aisle edges: two thin painted grey lines from the door to the far wall (no hazard chevrons in a barracks)
+  for (const s of [-1, 1]) kit.box("impPanel1", -0.75, 0.006, s * 1.3, 29.5, 0.012, 0.05, { color: 0x5e636b, uv: "world", texel: 1 });
 
   // ---------------------------------------------------------------- door zone (east 5 m): mess tables at the frame edges, lockers on the door wall
   // Tables run along z beside the door so only their near ends show in the lower corners of the spawn view.
@@ -399,18 +426,35 @@ export function buildCrewQuarters(kit, ctx, room) {
     });
   }
 
-  // ---------------------------------------------------------------- lights (8): six warm barracks keys, one warm far-wall key, one cool door key
-  // Keys hang 1.2 m under the ceiling (a 0.7 m drop painted hot blobs on the ribbed ceiling), 2 m east of the
-  // fronts they light, so the berths facing the door are lit face-on rather than grazed; the door key sits
-  // behind the spawn so its ceiling highlight stays out of frame.
+  // ---------------------------------------------------------------- lights (8) under suspended louvred slot shades
+  // Every key has a shade: a hollow black slot fixture hanging 0.6 m under the ceiling on two stems. The three
+  // keys the spawn looks at (the near barracks pair and the door zone) are down-spots just under the louvres,
+  // so no light reaches the ceiling above them and the near bunks throw real shadows; the far keys are
+  // linear-falloff points held low (2.0 m, top-berth height) so the ceiling above them gets a soft wash, not
+  // a hot blob, and the berth fronts are lit face-on.
   const warm = 0xf6ead6;
-  const ky = h - 1.2;
-  keyLight(kit, 5.6, ky, -5.9, { color: warm, k: 5.2, distance: 14, priority: 0.5 });
-  keyLight(kit, 5.6, ky, 5.9, { color: warm, k: 5.2, distance: 14, priority: 0.49 });
-  keyLight(kit, -1.4, ky, -5.9, { color: warm, k: 4.8, distance: 14, priority: 0.48 });
-  keyLight(kit, -1.4, ky, 5.9, { color: warm, k: 4.8, distance: 14, priority: 0.47 });
-  keyLight(kit, -8.4, ky, -5.9, { color: warm, k: 4.4, distance: 13, priority: 0.46 });
-  keyLight(kit, -8.4, ky, 5.9, { color: warm, k: 4.4, distance: 13, priority: 0.45 });
-  keyLight(kit, -14.6, ky, 0, { color: warm, k: 5.0, distance: 15, priority: 0.44 });
-  keyLight(kit, 13.0, ky, 0, { color: 0xdfe8ff, k: 4.2, distance: 14, priority: 0.43 });
+  const shadeDrop = 0.6;
+  const shadeBottom = h - shadeDrop - 0.2;
+  const spotY = shadeBottom - 0.03;
+  const spot = (x, z, k, priority, extra = {}) => kit.light({ type: "spot", pos: [x, spotY, z], target: [x, 0, z], color: warm, intensity: lux(spotY, k), distance: 14, angle: 1.2, penumbra: 0.5, priority, ...extra });
+  const rig = [
+    [5.6, -5.9],
+    [5.6, 5.9],
+    [-1.4, -5.9],
+    [-1.4, 5.9],
+    [-8.4, -5.9],
+    [-8.4, 5.9],
+    [-14.6, 0],
+    [12.5, 0],
+  ];
+  for (const [x, z] of rig) slotLight(kit, x, z, h, 1.6, "z", "emitWhiteDim", { drop: shadeDrop });
+  spot(5.6, -5.9, 11.0, 0.6, { shadow: true });
+  spot(5.6, 5.9, 11.0, 0.58);
+  spot(12.5, 0, 6.0, 0.56, { color: 0xe6ecfa });
+  const ky = 2.0;
+  keyLight(kit, -1.4, ky, -5.9, { color: warm, k: 7.4, distance: 13, priority: 0.5 });
+  keyLight(kit, -1.4, ky, 5.9, { color: warm, k: 7.4, distance: 13, priority: 0.49 });
+  keyLight(kit, -8.4, ky, -5.9, { color: warm, k: 7.0, distance: 12, priority: 0.48 });
+  keyLight(kit, -8.4, ky, 5.9, { color: warm, k: 7.0, distance: 12, priority: 0.47 });
+  keyLight(kit, -14.6, ky, 0, { color: warm, k: 7.8, distance: 14, priority: 0.46 });
 }
