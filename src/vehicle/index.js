@@ -1,18 +1,19 @@
 import * as THREE from 'three';
 import { PALETTE } from '../palette.js';
 import { buildBody } from './body.js';
+import { createGroundContact } from './contact.js';
 import { buildDetails } from './details.js';
 import { buildInterior } from './interior.js';
 import { vehicleMaterials } from './materials.js';
 import { SPEC as S } from './spec.js';
-import { buildAxles, buildWheel } from './wheels.js';
+import { TYRE_SINK, buildAxles, buildWheel } from './wheels.js';
 
 // ---------------------------------------------------------------------------
 // Assembles the truck and drives its moving parts: wheel spin, steering,
 // suspension travel, body pitch/roll and the lamps.
 // ---------------------------------------------------------------------------
 
-export function createVehicle({ env = null } = {}) {
+export function createVehicle({ env = null, terrain = null } = {}) {
   const materials = vehicleMaterials(env);
 
   const root = new THREE.Group();
@@ -35,13 +36,25 @@ export function createVehicle({ env = null } = {}) {
   unsprung.add(buildAxles(materials));
 
   const wheels = S.wheelPositions.map((wp) => {
-    const { group, spin } = buildWheel(materials, { side: Math.sign(wp.x) });
+    const { group, spin, contact } = buildWheel(materials, { side: Math.sign(wp.x) });
     const pivot = new THREE.Group();
     pivot.position.set(wp.x, S.axleY, wp.z);
     pivot.add(group);
     unsprung.add(pivot);
-    return { ...wp, pivot, spin, restY: S.axleY };
+    return { ...wp, pivot, spin, contact, restY: S.axleY };
   });
+
+  // Contact shadows and tyre tracks. World-space geometry, so it lives beside
+  // the truck in the scene rather than under it, and is parented lazily the
+  // first frame the root has a parent to offer.
+  const ground = createGroundContact();
+  // Terrain height lookup for the decals. Handed in by whoever builds the
+  // truck, or through setTerrain(); until either happens the decals fall back
+  // to the four contact heights the driver already samples.
+  let heightAt = terrain?.heightAt ?? null;
+  function setTerrain(t) {
+    heightAt = typeof t === 'function' ? t : (t?.heightAt ?? null);
+  }
 
   // --- lamps ---------------------------------------------------------------
   const lamps = new THREE.Group();
@@ -74,6 +87,7 @@ export function createVehicle({ env = null } = {}) {
     wheelAngle: 0,
     lightsOn: false,
     suspension: [0, 0, 0, 0],
+    load: [1, 1, 1, 1],
   };
 
   function setLights(on) {
@@ -144,6 +158,55 @@ export function createVehicle({ env = null } = {}) {
     sprung.rotation.z += (targetRoll - sprung.rotation.z) * (1 - Math.exp(-dt * 5));
     sprung.position.y += (avg * 0.6 - sprung.position.y) * (1 - Math.exp(-dt * 7));
 
+    // Tyre load, for the squash. The spring at each corner is as compressed as
+    // the body's corner is low relative to its hub, so the side the body leans
+    // toward and the axle it dives onto carry more — read straight off the
+    // attitude above, so the squash always agrees with the lean. Normalised to
+    // a mean of one: the truck weighs what it weighs however it is heaving.
+    const bodyY = sprung.position.y;
+    const sinPitch = Math.sin(sprung.rotation.x);
+    const sinRoll = Math.sin(sprung.rotation.z);
+    let loadSum = 0;
+    for (let i = 0; i < wheels.length; i++) {
+      const w = wheels[i];
+      const cornerY = bodyY + sinRoll * w.x - sinPitch * w.z;
+      const y = THREE.MathUtils.clamp(state.suspension[i], -S.suspensionTravel, S.suspensionTravel);
+      // 4 per metre: a corner spring with 0.25 m of static deflection, which is
+      // soft for the class but keeps a wheel on a rut wall from pinning the
+      // squash to its clamp while the body is still level.
+      state.load[i] = Math.max(0.2, 1 + (y - cornerY) * 4);
+      loadSum += state.load[i];
+    }
+    const norm = loadSum > 1e-3 ? wheels.length / loadSum : 1;
+    // slower than the springs: the squash is a read of the load, not a rattle
+    const ease = 1 - Math.exp(-dt * 6);
+    for (let i = 0; i < wheels.length; i++) {
+      const load = THREE.MathUtils.clamp(state.load[i] * norm, 0.5, 1.6);
+      state.load[i] = load;
+      const c = wheels[i].contact;
+      c.load += (load - c.load) * ease;
+      // a loaded tyre presses deeper into the dirt rather than lifting the hub
+      c.sink = TYRE_SINK + (c.load - 1) * 0.012;
+    }
+
+    // Stopgap until main.js hands the terrain over: the live scene exposes it
+    // through the debug API, and the decals are noticeably better following the
+    // real ruts and crown than the plane through the four patches.
+    if (!heightAt) {
+      const t = globalThis.debugAPI?.objects?.terrain;
+      if (t?.heightAt) heightAt = t.heightAt;
+    }
+    if (!ground.mesh.parent && root.parent) root.parent.add(ground.mesh);
+    ground.update(dt, {
+      pos: root.position,
+      quat: root.quaternion,
+      wheels,
+      suspension: state.suspension,
+      steer,
+      contacts,
+      heightAt,
+    });
+
     instruments?.update(dt, {
       speed,
       maxSpeed: finite(drive.maxSpeed, 21),
@@ -161,7 +224,9 @@ export function createVehicle({ env = null } = {}) {
     wheels,
     materials,
     state,
+    ground,
     setLights,
+    setTerrain,
     update,
     spec: S,
   };

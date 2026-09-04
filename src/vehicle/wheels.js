@@ -41,9 +41,20 @@ const LUG_H = 0.056; // lug block radial thickness
 const LUG_R = CROWN + 0.024; // lug block centre radius -> tip at R + 0.022
 const LUG_ROWS = 16;
 const BEAD_R = RIM + 0.003;
-// Depth below the hub at which the tread flattens off. Slightly more than the
-// ride height so the contact patch is buried in the dirt, never tangent to it.
-const CONTACT = R + 0.005;
+// Radius over the lug tips: what actually meets the dirt.
+const TIP_R = CROWN + 0.024 + 0.028;
+// Static deflection of the loaded carcass. A 35-inch mud terrain at road
+// pressure under a corner of a 2.5 t truck squats about this much; the loaded
+// outside wheel in a turn squats half again as much and the unloaded inside
+// wheel half as much, so this is scaled by the per-wheel load at draw time.
+const SQUASH = 0.021;
+// How far the sidewall at the section's widest point bellies out at unit load,
+// as a fraction of its half width.
+const BULGE = 0.1;
+// How far the tread sinks into the dirt at unit load. It is the tread that
+// disappears into the soil, so the visible tyre never ends on a tangent, and
+// under load it presses deeper rather than lifting the hub.
+const SINK = 0.006;
 
 const LIN = (hex) => {
   const c = new THREE.Color(hex);
@@ -590,31 +601,6 @@ function mudMaps() {
   });
 }
 
-/** Soft dust blob laid under the contact patch. */
-function contactDecal() {
-  return cached('wheel.contact', () => {
-    const n = 128;
-    return makeTex(
-      n,
-      n,
-      (x, y, out) => {
-        const u = x / n - 0.5;
-        const v = y / n - 0.5;
-        const d = Math.hypot(u * 1.5, v * 0.95) * 2;
-        const puff = fbm(x / n * 7, y / n * 7, { octaves: 5, period: 7, seed: 51 });
-        const a = clamp((1 - smoothstep(0.15, 1.0, d)) * (0.35 + puff * 1.3));
-        const c = SRGB(0x9c8863);
-        const k = 0.7 + puff * 0.6;
-        out[0] = Math.min(255, c[0] * k);
-        out[1] = Math.min(255, c[1] * k);
-        out[2] = Math.min(255, c[2] * k);
-        out[3] = a * 235;
-      },
-      { srgb: true, repeat: 1 },
-    );
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Local materials. materials.js has no machined-aluminium-with-dust, no cast
 // iron and no mud, and the running gear needs a wider value range than the
@@ -751,63 +737,99 @@ function wheelMaterials(base) {
     envMapIntensity: 0.12,
     side: THREE.DoubleSide,
   });
-  m.contactM = new THREE.MeshStandardMaterial({
-    name: 'contactDust',
-    map: contactDecal(),
-    transparent: true,
-    depthWrite: false,
-    roughness: 1,
-    metalness: 0,
-    envMap: env,
-    envMapIntensity: 0.7,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-    polygonOffsetUnits: -2,
-  });
-
-  // Shared by every tyre part: the spin angle, so the tread can be flattened
-  // into the ground in the hub frame while the wheel turns.
-  m.spinU = { value: 0 };
-  loadedTyre(m.carcass, m.spinU, { bulge: 0.05 });
-  loadedTyre(m.lugRub, m.spinU, { bulge: 0.05 });
+  // Shared by every tyre part and set per wheel just before each draw: the spin
+  // angle, so the deformation can be done in the hub frame while the mesh
+  // turns, and the load, so the outside wheel in a turn squats harder than the
+  // inside one. Three uploads uniforms per draw call, so one uniform object
+  // serves four wheels.
+  m.tyreU = { value: new THREE.Vector4(0, 1, SINK, 0) };
+  for (const mat of [m.carcass, m.lugRub, m.mudM]) loadedTyre(mat, m.tyreU);
 
   MATS = m;
   return m;
 }
 
 /**
- * Flatten the bottom of the tyre against the ground and bulge the sidewall
- * where it is loaded. The displacement is done in the hub frame, so it stays
- * at the bottom of the wheel while the mesh spins. Everything here is a clamp
- * or a trig call on a finite value — nothing can produce a NaN.
+ * A tyre that bears weight. In the hub frame (un-spun about the axle) the
+ * loaded section is lifted toward the hub over the bottom ~45 degrees and the
+ * sidewall bellies outward there, so the carcass squats; then the tread is
+ * clamped to the soil plane so the contact patch is genuinely flat and sits a
+ * few millimetres into the dirt rather than tangent to it. The lowest 15 cm
+ * of rubber also takes an occlusion crease where the ground shuts the sky out.
+ *
+ * uTyre = ( spin angle, load factor, sink depth, unused ). Gated on the radius
+ * from the axle: the bead is clamped to the rim and cannot move, and the same
+ * materials dress the valve stem, the brake hose and the axle bump stops, all
+ * of which sit well outside the gate whichever way the hub frame is turned
+ * (a rotation about X preserves length( yz )).
+ *
+ * Nothing here can produce a NaN: every division has a floor and the one
+ * normalize is guarded.
  */
-function loadedTyre(mat, spinU, { bulge = 0 } = {}) {
+function loadedTyre(mat, tyreU) {
   mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uSpin = spinU;
+    shader.uniforms.uTyre = tyreU;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uSpin;')
       .replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-        {
-          float sc = cos( uSpin ), ss = sin( uSpin );
-          float hy = sc * transformed.y - ss * transformed.z;
-          float hz = ss * transformed.y + sc * transformed.z;
-          float squash = min( max( -hy - ${CONTACT.toFixed(4)}, 0.0 ), 0.07 );
-          hy += squash * 0.95;
-          // The loaded quarter of the carcass squats outward, widest at the
-          // contact patch and gone by the time the section is level with the hub.
-          // The radius gate pins the bead, which is clamped on the rim and cannot
-          // move, and keeps the valve stem and brake hose out of it.
-          float rr = length( vec2( hy, hz ) );
-          float load = smoothstep( 0.0, 0.26, -hy - 0.13 ) * smoothstep( 0.26, 0.32, rr );
-          transformed.x *= 1.0 + squash * 2.6 + load * ${bulge.toFixed(4)};
-          transformed.y = sc * hy + ss * hz;
-          transformed.z = -ss * hy + sc * hz;
+        '#include <common>',
+        `#include <common>
+        uniform vec4 uTyre;
+        varying float vTyreAO;
+        void tyreDeform( inout vec3 p, inout vec3 n ) {
+          float sc = cos( uTyre.x ), ss = sin( uTyre.x );
+          float hy = sc * p.y - ss * p.z;
+          float hz = ss * p.y + sc * p.z;
+          float ny = sc * n.y - ss * n.z;
+          float nz = ss * n.y + sc * n.z;
+          float r = length( vec2( hy, hz ) );
+          // on the tyre and off the bead
+          float g = smoothstep( 0.27, 0.36, r ) * ( 1.0 - smoothstep( 0.50, 0.56, r ) );
+          // 1 at bottom dead centre, 0 level with the hub
+          float ct = clamp( -hy / max( r, 1e-3 ), 0.0, 1.0 );
+          // the loaded zone: full over the patch, gone by 45 degrees
+          float w = smoothstep( 0.70, 0.985, ct );
+          float load = uTyre.y;
+          // carcass squat: the section lifts toward the hub. The tread blocks
+          // take the plane clamp below instead, so their roots follow the
+          // carcass and their faces follow the ground.
+          float tread = smoothstep( 0.415, 0.45, r );
+          float lift = ${SQUASH.toFixed(4)} * load * w * g * ( 1.0 - tread * 0.6 );
+          hy += lift;
+          // the soil plane, a few millimetres below the tips
+          float ground = ${TIP_R.toFixed(4)} - ${SQUASH.toFixed(4)} + uTyre.z;
+          float over = max( -hy - ground, 0.0 ) * g;
+          hy += over * 0.92;
+          // sidewall bulge, widest at the section's widest point
+          float sw = smoothstep( 0.265, 0.33, r ) * ( 1.0 - smoothstep( 0.355, 0.415, r ) );
+          float belly = ${BULGE.toFixed(4)} * load * w * sw;
+          p.x *= 1.0 + belly;
+          // normals: the flattened tread faces the ground, the belly leans out
+          float fl = smoothstep( 0.0, 0.012, over ) * step( 0.44, r );
+          ny = mix( ny, -1.0, fl * 0.8 );
+          nz = mix( nz, 0.0, fl * 0.8 );
+          n.x += sign( p.x ) * belly * 3.0 * ( 1.0 - fl );
+          p.y = sc * hy + ss * hz;
+          p.z = -ss * hy + sc * hz;
+          n.y = sc * ny + ss * nz;
+          n.z = -ss * ny + sc * nz;
+          float nl = length( n );
+          n = nl > 1e-4 ? n / nl : vec3( 0.0, 1.0, 0.0 );
+          // occlusion crease: the ground shuts the sky out of the bottom of the tyre
+          vTyreAO = smoothstep( 0.29, 0.445, -hy ) * g;
         }`,
-      );
+      )
+      .replace(
+        '#include <beginnormal_vertex>',
+        `#include <beginnormal_vertex>
+        vec3 tyreP = vec3( position );
+        tyreDeform( tyreP, objectNormal );`,
+      )
+      .replace('#include <begin_vertex>', 'vec3 transformed = tyreP;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vTyreAO;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= 1.0 - vTyreAO * 0.5;');
   };
-  mat.customProgramCacheKey = () => `loadedTyre_${mat.name}_${bulge}`;
+  mat.customProgramCacheKey = () => `loadedTyre_${mat.name}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -1727,23 +1749,15 @@ function buildProto(materials) {
   buildBrakes(staticKit);
   const stat = staticKit.build(mats);
 
-  // dust piled against the contact patch, in the non-spinning frame
-  const decal = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.92), mats.contactM);
-  decal.rotation.x = -Math.PI / 2;
-  decal.position.y = -S.axleY + 0.012;
-  decal.renderOrder = 3;
-  decal.castShadow = false;
-  decal.receiveShadow = true;
-  decal.name = 'contact_dust';
-  stat.add(decal);
-
   PROTO = { spin, stat, mats };
   return PROTO;
 }
 
 /**
- * One complete corner. Returns { group, spin } where `spin` is the child that
- * should be rotated about X for wheel rotation.
+ * One complete corner. Returns { group, spin, contact } where `spin` is the
+ * child that should be rotated about X for wheel rotation and `contact` is
+ * the live load state the tyre shader reads: `load` is 1 for a quarter of
+ * the truck's weight, `sink` how far the tread is pressed into the soil.
  */
 export function buildWheel(materials, { side = 1 } = {}) {
   const { spin: protoSpin, stat: protoStat, mats } = buildProto(materials);
@@ -1759,15 +1773,21 @@ export function buildWheel(materials, { side = 1 } = {}) {
   }
   group.add(spin, stat);
 
-  // keep the tread flattened against the ground while the wheel turns
+  const contact = { load: 1, sink: SINK };
+  // Uniforms are uploaded per draw, so each corner writes its own spin and
+  // load into the shared material just before its meshes are drawn.
   for (const child of spin.children) {
     child.onBeforeRender = () => {
-      mats.spinU.value = spin.rotation.x;
+      mats.tyreU.value.set(spin.rotation.x, contact.load, contact.sink, 0);
     };
   }
 
-  return { group, spin };
+  return { group, spin, contact };
 }
+
+/** Radius over the lug tips, for anything that has to meet the tyre at the dirt. */
+export const TYRE_TIP_RADIUS = TIP_R;
+export const TYRE_SINK = SINK;
 
 // ---------------------------------------------------------------------------
 // Live axles: housings, coils, shocks, links, driveshafts and brake plumbing.

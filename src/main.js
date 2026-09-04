@@ -116,7 +116,9 @@ async function boot() {
   );
   scene.add(forest.group);
 
-  const vehicle = await step('Assembling the truck', 70, () => createVehicle({ env: skyRig.env }));
+  // the terrain is for the ground-contact decals, which sample its height per
+  // vertex; without it they fall back to the plane through the four tyre patches
+  const vehicle = await step('Assembling the truck', 70, () => createVehicle({ env: skyRig.env, terrain }));
   setVehicleEnv(skyRig.env);
   scene.add(vehicle.root);
 

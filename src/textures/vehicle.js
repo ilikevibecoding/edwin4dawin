@@ -3453,3 +3453,89 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
   if (dirt > 0) applyDirt(m, { amount: dirt, tag: 'paint' + dirtTag, arch: dirtArch, scratch: dirtArch ? 1 : 0, ...dirtOpts });
   return m;
 }
+
+// ---------------------------------------------------------------------------
+// Ground contact
+// ---------------------------------------------------------------------------
+
+/**
+ * The imprint a mud-terrain tread leaves in damp laterite, as a multiplier map
+ * for the track decals. u runs across the track (0 and 1 are the loose edges,
+ * the tyre itself spans about 0.07..0.93), v runs along it and wraps every two
+ * lug rows so consecutive quads continue the stagger.
+ *
+ * R  compression: the rut floor, darkest where a block has pressed the fines
+ *    into a smooth face, lighter in the voids between blocks
+ * G  displaced soil: the ridge squeezed up at the rut's edges and the thin
+ *    rims between block prints, which catch the light
+ * B  break-up noise
+ *
+ * Layout follows `wheels.js` buildLugs: staggered centre pairs, shoulder blocks
+ * offset a quarter row, in metres across a 0.385 m track.
+ */
+export function treadImprint() {
+  return cached('vehicle.treadImprint', () => {
+    const W = 128;
+    const H = 256;
+    const TRACK = 0.385;
+    const PITCH = 0.1834;
+    const blocks = [];
+    const add = (cx, cv, w, l) => blocks.push({ cx, cv, w, l });
+    for (let row = 0; row < 2; row++) {
+      const v0 = row * 0.5;
+      const odd = row % 2 === 1;
+      add((odd ? -1 : 1) * 0.046, v0 + 0.0, 0.05, 0.1);
+      add((odd ? 1 : -1) * 0.056, v0 + 0.25, 0.05, 0.096);
+      add(0.107, v0 + 0.11, 0.048, 0.12);
+      add(-0.107, v0 + 0.36, 0.048, 0.12);
+    }
+    const rrect = (x, y, hw, hh) => {
+      const qx = Math.abs(x) - hw;
+      const qy = Math.abs(y) - hh;
+      return Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0);
+    };
+    const tex = pixelTexture(
+      W,
+      H,
+      (x, y, out) => {
+        const u = (x + 0.5) / W;
+        const v = (y + 0.5) / H;
+        const ax = (u - 0.5) * TRACK; // metres across
+        const n = fbm(u * 6, v * 12, { octaves: 4, period: 6, seed: 803 });
+        const grain = fbm(u * 18, v * 36, { octaves: 3, period: 18, seed: 211 });
+        // the rut: flat floor across the tread, walls over the last 3 cm
+        const floor = 1 - smoothstep(0.15, 0.185, Math.abs(ax));
+        // block prints, with the pattern wrapping along v
+        let print = 0;
+        for (const b of blocks) {
+          for (const dv of [-1, 0, 1]) {
+            const dy = (v - b.cv + dv) * 2 * PITCH; // metres along
+            const d = rrect(ax - b.cx, dy, b.w * 0.5, b.l * 0.5);
+            print = Math.max(print, 1 - smoothstep(-0.004, 0.006, d));
+          }
+        }
+        // rims of squeezed soil just outside each print
+        let rim = 0;
+        for (const b of blocks) {
+          for (const dv of [-1, 0, 1]) {
+            const dy = (v - b.cv + dv) * 2 * PITCH;
+            const d = rrect(ax - b.cx, dy, b.w * 0.5, b.l * 0.5);
+            rim = Math.max(rim, (1 - smoothstep(0.004, 0.018, Math.abs(d - 0.008))) * 0.8);
+          }
+        }
+        const compress = clamp(floor * (0.42 + print * 0.5) * (0.8 + n * 0.4));
+        const edgeRidge = smoothstep(0.13, 0.165, Math.abs(ax)) * (1 - smoothstep(0.17, 0.195, Math.abs(ax)));
+        const lift = clamp(edgeRidge * (0.5 + grain * 0.5) + rim * floor * (1 - print) * 0.7);
+        out[0] = compress * 255;
+        out[1] = lift * 255;
+        out[2] = clamp(0.35 + grain * 0.5) * 255;
+        out[3] = 255;
+      },
+      { srgb: false, flipY: false },
+    );
+    // clamped across so the loose edge is the last texel, wrapped along the track
+    tex.wrapS = THREE.ClampToEdgeWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    return tex;
+  });
+}
