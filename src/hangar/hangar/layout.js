@@ -44,25 +44,30 @@ export const WINDOW = { x0: -10, x1: 10, y0: -58.6, y1: -56.0 };
 // balcony reached through the control-gantry hatch
 export const BALCONY = { x0: -12, x1: 12, z0: 166, z1: 170, y: -60 };
 
-// rack tiers: fighter centres
+// rack tiers: fighter centres. The slot rows sit between the two bay doors of each side wall (z 15 and
+// z 120): every slot centre is >= 15 m from a door centre, and the tiers are 16 m apart (9 m of air
+// between a tier-1 fighter's top and a tier-2 fighter's belly).
 export const RACK = {
   wallX: 80,
   centreX: 70,
   tiers: [
     { tier: 1, y: -62, platformY: -65.6 },
-    { tier: 2, y: -50, platformY: -53.6 },
+    { tier: 2, y: -46, platformY: -49.6 },
   ],
-  slotsZ: [0, 10, 20, 30, 40, 50, 60],
-  zoneZ0: -8,
-  zoneZ1: 68,
+  slotsZ: [30, 40, 50, 60, 70, 80, 90],
+  zoneZ0: 24,
+  zoneZ1: 98,
   clampDX: 4.0, // clamp arms at +-4.0 m in x from the fighter centre
   platformX0: 78.3, // service platform inner edge (|x|); its back edge is the wall panel front
   clearR: 4.2, // nothing but the clamp arms inside this radius of a fighter centre
 };
-// deck -> tier-1 stairs (z spans, along the side walls between the bay door jambs and the rib at 35)
-export const STAIRS = { starboard: [25, 33], port: [25.4, 33.4] };
-// caged ladders deck -> tier 2, z positions (both sides)
-export const LADDER_Z = [4, 44];
+// deck -> tier-1 stairs: foot on the deck at z 106, climbing forward to land on the platform's aft end
+export const STAIRS = { starboard: { foot: 106, top: 98 }, port: { foot: 106, top: 98 } };
+// caged ladders deck -> tier 2 -> catwalk, z positions (both sides), between cradles
+export const LADDER_Z = [45, 75];
+// maintenance catwalk ring round all four walls (plate top), 1.0 m wide, standing on the third
+// structural band (top y -35.6); openingH = clear height of its pass-through in each frame rib
+export const CATWALK = { y: -35.46, w: 1.0, openingH: 2.8 };
 
 // landing pads (centre x,z, radius) and their numbers
 export const PADS = [
@@ -85,6 +90,8 @@ export const SEAM = 0.1;
 export const BAND_EVERY = 12;
 
 export const RAIL_H = 1.02;
+export const RAIL_MID = 0.55;
+export const RAIL_KICK = 0.15;
 
 // local colours that the shared PALETTE does not carry
 export const HG = {

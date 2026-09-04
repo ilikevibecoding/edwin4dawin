@@ -1,14 +1,15 @@
 // d4-hangar rack tiers: two tiers of gantry cradles along both side walls (7 slots per tier per side,
-// fighter centres at (+-70, -62 | -50, z 0..60)). Each slot: overhead beam from the wall, two hinged
-// clamp arms (closed: hanging 8 m apart on the fighter's wing panels; open: swung up clear of the
-// traffic system's approach along the slot's x axis), carriage + winch, umbilical reel + hose, slot light
-// + label. Service platforms (1.4 m wide) with rails run along the wall at each tier, detouring around
-// the frame ribs, with a stair from the deck to tier 1 and caged ladders to tier 2. Exposes the slot list
-// for the traffic system; the arms follow each slot's `occupied` flag, which that system writes.
+// fighter centres at (+-70, -62 | -46, z 30..90) - clear of both bay doors, 16 m between tiers). Each
+// slot: overhead beam from the wall, two hinged clamp arms (closed: hanging 8 m apart on the fighter's
+// wing panels; open: swung up clear of the traffic system's approach along the slot's x axis), carriage
+// + winch, umbilical reel + hose, housed slot lamp + label. Service platforms (1.4 m wide) with rails run
+// along the wall at each tier, detouring around the frame ribs, with a two-railed stair from the deck to
+// tier 1 and caged ladders to tier 2. Exposes the slot list for the traffic system; the arms follow each
+// slot's `occupied` flag, which that system writes.
 import * as THREE from "three";
 import { Batch, Batcher, sharedCylinder, axisQuat } from "./batch.js";
-import { FLOOR, HALL, WALL_T, DOORS, RACK, RIB_Z, RIB_W, RIB_D, STAIRS, LADDER_Z, RAIL_H, HG } from "./layout.js";
-import { label, railRun, ladder } from "./util.js";
+import { FLOOR, HALL, WALL_T, DOORS, RACK, RIB_Z, RIB_W, RIB_D, STAIRS, LADDER_Z, RAIL_H, RAIL_MID, HG } from "./layout.js";
+import { label, railRun, ladder, housedLamp } from "./util.js";
 
 const WALL_FACE = HALL.x1 - WALL_T - 0.12; // 79.72: wall panel front
 const RIB_FACE = HALL.x1 - WALL_T - RIB_D; // 78.64: rib front
@@ -38,8 +39,8 @@ export function buildRacks(ctx) {
         buildCradle(ctx, B, s, tier, z, id, arms);
         slots.push({ id, pos: [s * RACK.centreX, tier.y, z], yaw: 0, tier: tier.tier, side: sideName, occupied: false });
       });
-      // one point light per tier per side over the middle of the platform
-      ctx.lights.push({ type: "point", pos: [s * 76.5, tier.platformY + 3.2, 30], color: 0xd6e4ff, intensity: 60, distance: 34, priority: 0.45 });
+      // one low-priority point light per tier per side over the middle of the platform
+      ctx.lights.push({ type: "point", pos: [s * 76.5, tier.platformY + 3.2, 60], color: 0xd6e4ff, intensity: 60, distance: 34, priority: 0.35 });
     }
     buildStairs(ctx, B, s, STAIRS[sideName]);
     for (const z of LADDER_Z) ladder(B, kit, s * WALL_FACE, z, FLOOR, RACK.tiers[1].platformY, -s, { cage: true });
@@ -124,17 +125,15 @@ function ribsInZone() {
 }
 
 /**
- * z spans of the platform plate for a side/tier. Tier 1 breaks at the bay door (hole + jambs) and its
- * aft span starts where the deck stairs land (`landing`: no end rail / column there).
+ * z spans of the platform plate for a side/tier. Tier 1 ends where the deck stair lands (`openEnd`: no
+ * end rail there); tier 2 runs the whole zone.
  */
 function plateSpans(s, tier) {
-  const spans = [];
   if (tier.tier === 1) {
-    const [d0] = s > 0 ? [8, 22] : [7, 23];
-    const stairTop = STAIRS[s < 0 ? "port" : "starboard"][1];
-    spans.push({ z0: RACK.zoneZ0, z1: d0 - 2.4 }, { z0: stairTop + 0.02, z1: RACK.zoneZ1, landing: true });
-  } else spans.push({ z0: RACK.zoneZ0, z1: RACK.zoneZ1 });
-  return spans;
+    const st = STAIRS[s < 0 ? "port" : "starboard"];
+    return [{ z0: RACK.zoneZ0, z1: Math.min(st.top, st.foot) - 0.02, openEnd: "z1" }];
+  }
+  return [{ z0: RACK.zoneZ0, z1: RACK.zoneZ1 }];
 }
 
 function buildPlatform(ctx, B, s, tier) {
@@ -142,12 +141,12 @@ function buildPlatform(ctx, B, s, tier) {
   const py = tier.platformY;
   const xIn = RACK.platformX0, xOut = WALL_FACE; // |x| inner edge .. wall
   const mm = (x0, x1) => [Math.min(s * x0, s * x1), Math.max(s * x0, s * x1)];
-  const ribs = ribsInZone().filter((z) => (tier.tier === 1 ? plateSpans(s, tier).some(({ z0, z1 }) => z > z0 && z < z1) : true));
+  const ribs = ribsInZone().filter((z) => plateSpans(s, tier).some(({ z0, z1 }) => z > z0 && z < z1));
   const detourX = RIB_FACE - 1.7; // detour plate inner edge (|x|)
   const ladderZ = new Set(LADDER_Z);
   const ribHalf = RIB_W / 2 + 0.3; // rib body + side flanges + 6 cm
 
-  for (const { z0, z1, landing } of plateSpans(s, tier)) {
+  for (const { z0, z1, openEnd } of plateSpans(s, tier)) {
     // main plate pieces between ribs (body + flanges) and ladder holes (+-0.6)
     const breaks = [];
     for (const z of ribs) if (z > z0 && z < z1) breaks.push([z - ribHalf, z + ribHalf]);
@@ -173,10 +172,10 @@ function buildPlatform(ctx, B, s, tier) {
       B.boxMM("paintedMetal", PALETTE.impDark, [xa, py - PLATE_T - 0.05, a], [xb, py + 0.02, b], { texel: 0.5 });
       [xa, xb] = mm(xIn - 0.02, xIn + 0.12);
       B.boxMM("emitWhite", 0xffffff, [xa, py - PLATE_T - 0.11, a + 0.3], [xb, py - PLATE_T - 0.05, b - 0.3]);
-      [xa, xb] = mm(xOut - 0.1, xOut);
-      B.boxMM("emitCool", 0xffffff, [xa, py + 0.86, a + 0.2], [xb, py + 0.92, b - 0.2]);
       [xa, xb] = mm(xOut - 0.12, xOut);
       B.boxMM("paintedMetal", PALETTE.impBlack, [xa, py + 0.82, a + 0.15], [xb, py + 0.96, b - 0.15]);
+      [xa, xb] = mm(xOut - 0.13, xOut - 0.12);
+      B.boxMM("emitWhite", 0xffffff, [xa, py + 0.86, a + 0.2], [xb, py + 0.92, b - 0.2]);
       // brackets under the plate every 6 m
       for (let z = a + 2; z < b - 1; z += 6) {
         [xa, xb] = mm(xIn + 0.1, xOut);
@@ -195,8 +194,8 @@ function buildPlatform(ctx, B, s, tier) {
     }
     path.push([s * (xIn + 0.1), z1]);
     for (let i = 0; i < path.length - 1; i++) railRun(B, kit, path[i], path[i + 1], py, { collide: false, kick: true });
-    if (!landing) railRun(B, kit, [s * (xIn + 0.1), z0], [s * (xOut - 0.05), z0], py, { collide: false, kick: true });
-    railRun(B, kit, [s * (xIn + 0.1), z1], [s * (xOut - 0.05), z1], py, { collide: false, kick: true });
+    if (openEnd !== "z0") railRun(B, kit, [s * (xIn + 0.1), z0], [s * (xOut - 0.05), z0], py, { collide: false, kick: true });
+    if (openEnd !== "z1") railRun(B, kit, [s * (xIn + 0.1), z1], [s * (xOut - 0.05), z1], py, { collide: false, kick: true });
     // detour plates around the ribs + a filler in front of the rib face between the main plate ends
     for (const z of ribs) {
       if (z <= z0 || z >= z1) continue;
@@ -209,8 +208,8 @@ function buildPlatform(ctx, B, s, tier) {
       // hanger rods from the rib to the detour corners
       for (const dz of [-1.4, 1.4]) B.tube("metal", HG.gunmetal, [s * (detourX + 0.2), py, z + dz], [s * (RIB_FACE - 0.1), py + 2.6, z + dz], 0.05, 8);
     }
-    // support columns to the deck (tier 1) / to tier 1 (tier 2) at the span ends (not at the stair landing)
-    for (const z of landing ? [z1 - 0.4] : [z0 + 0.4, z1 - 0.4]) {
+    // support columns to the deck (tier 1) / to tier 1 (tier 2) at both span ends
+    for (const z of [z0 + 0.4, z1 - 0.4]) {
       const [xa, xb] = mm(xIn + 0.15, xIn + 0.55);
       const yBottom = tier.tier === 1 ? FLOOR : RACK.tiers[0].platformY;
       B.boxMM("paintedMetal", PALETTE.impDark, [xa, yBottom, z - 0.2], [xb, py - PLATE_T, z + 0.2], { texel: 0.5 });
@@ -277,11 +276,12 @@ function buildCradle(ctx, B, s, tier, z, id, arms) {
   box("rubber", HG.rubber, X0 + 4.47, WALL_FACE - 0.42, hy - 0.08, hy + 0.08, z + 0.67, z + 0.83);
   box("rubber", HG.rubber, X0 + 4.47, X0 + 4.63, ty - 0.5, hy + 0.08, z + 0.67, z + 0.83);
   box("metal", HG.steel, X0 + 4.4, X0 + 4.85, ty - 0.75, ty - 0.45, z + 0.58, z + 0.92, {}, true);
-  // slot light + label on the beam's hall-facing end, slot stencil + status panel on the wall behind
-  // (not where a tier-1 slot's wall strip is taken by a bay door hole and its surround)
-  box("emitAmber", 0xffffff, X0 - 5.1, X0 - 5.0, beamB + 0.15, beamB + 0.45, z - 0.35, z + 0.35);
+  // housed amber slot lamp + lit label on the beam's hall-facing end, slot stencil + status panel on the
+  // wall behind (not where a tier-1 slot's wall strip is taken by a bay door hole and its surround)
+  housedLamp(B, "emitAmber", [s * (X0 - 5.0), beamB + 0.32, z], [-s, 0, 0], [0.9, 0.16, 0.3], { inset: 0.04 });
   const lab = id.slice(2); // "P1-03"
-  label(kit, "hgSign", lab, [s * (X0 - 5.02), beamB + 0.85, z], [-s, 0, 0], 1.6);
+  box("paintedMetal", PALETTE.impBlack, X0 - 5.02, X0 - 5.0, beamB + 0.62, beamB + 1.12, z - 0.9, z + 0.9);
+  label(kit, "hgSign", lab, [s * (X0 - 5.03), beamB + 0.87, z], [-s, 0, 0], 1.6);
   const inDoorZone = tier.tier === 1 && DOORS.some((d) => d.kind === "bay" && Math.sign(d.dir[0]) === s && z - 3.9 < d.pos[2] + d.w / 2 + 2.6 && z - 2.1 > d.pos[2] - d.w / 2 - 2.6);
   if (!inDoorZone) {
     label(kit, "hgSign", lab, [s * (WALL_FACE - 0.02), tier.platformY + 2.6, z - 3.0], [-s, 0, 0], 1.8);
@@ -293,36 +293,47 @@ function buildCradle(ctx, B, s, tier, z, id, arms) {
 }
 
 // ---------------------------------------------------------------------------
-function buildStairs(ctx, B, s, [z0, z1]) {
+/** deck -> tier-1 stair from `foot` (deck) to `top` (platform end), two handrails (open side + wall side) */
+function buildStairs(ctx, B, s, { foot, top }) {
   const { kit, PALETTE } = ctx;
   const y0 = FLOOR, y1 = RACK.tiers[0].platformY;
-  const rise = y1 - y0, run = z1 - z0;
+  const dir = Math.sign(top - foot); // climbing direction along z
+  const rise = y1 - y0, run = Math.abs(top - foot);
   const n = 20;
   const xIn = RACK.platformX0 + 0.1, xOut = WALL_FACE - 0.1;
   const mm = (a, b) => [Math.min(s * a, s * b), Math.max(s * a, s * b)];
+  const [xa, xb] = mm(xIn, xOut);
   for (let i = 1; i <= n; i++) {
-    const yt = y0 + (rise * i) / n, zc = z0 + (run * (i - 0.5)) / n;
-    const [xa, xb] = mm(xIn, xOut);
+    const yt = y0 + (rise * i) / n, zc = foot + (dir * run * (i - 0.5)) / n;
     B.boxMM("grate", 0xffffff, [xa, yt - 0.12, zc - 0.22], [xb, yt, zc + 0.22], { texel: 0.8 });
-    // hazard nosing on the leading (downhill, -z) edge
-    B.boxMM("hgHazard", 0xffffff, [xa, yt - 0.04, zc - 0.24], [xb, yt + 0.005, zc - 0.16], { texel: 1 });
+    // hazard nosing on the leading (downhill) edge
+    const ze = zc - dir * 0.2;
+    B.boxMM("hgHazard", 0xffffff, [xa, yt - 0.04, ze - 0.04], [xb, yt + 0.005, ze + 0.04], { texel: 1 });
   }
   // stringers: the treads embed 4 cm into their top edge; the upper end stays flush with the landing plate
   const ang = Math.atan2(rise, run);
   const len = Math.hypot(rise, run);
   for (const x of [xIn - 0.04, xOut + 0.04]) {
-    kit.add("paintedMetal", new THREE.BoxGeometry(0.08, 0.32, len), { pos: [s * x, (y0 + y1) / 2 - 0.12, (z0 + z1) / 2], rot: [-ang, 0, 0], color: PALETTE.impDark, texel: 0.5 });
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.08, 0.32, len), { pos: [s * x, (y0 + y1) / 2 - 0.12, (foot + top) / 2], rot: [-ang * dir, 0, 0], color: PALETTE.impDark, texel: 0.5 });
   }
-  // handrail on the open side, posts every 4 steps
-  B.tube("metal", HG.steel, [s * (xIn - 0.04), y0 + RAIL_H, z0], [s * (xIn - 0.04), y1 + RAIL_H, z1], 0.03, 8);
-  B.tube("metal", HG.steel, [s * (xIn - 0.04), y0 + RAIL_H * 0.55, z0], [s * (xIn - 0.04), y1 + RAIL_H * 0.55, z1], 0.02, 8);
-  for (let i = 0; i <= n; i += 4) {
-    const yt = y0 + (rise * i) / n, zc = z0 + (run * i) / n;
-    const [xa, xb] = mm(xIn - 0.08, xIn);
-    B.boxMM("metal", HG.gunmetal, [xa, yt, zc - 0.04], [xb, yt + RAIL_H, zc + 0.04]);
+  // handrails: open side on posts every 4 steps, wall side on brackets; light top rail, dark mid rail
+  for (const [x, wallSide] of [[xIn - 0.04, false], [xOut + 0.04, true]]) {
+    B.tube("metal", HG.steel, [s * x, y0 + RAIL_H, foot], [s * x, y1 + RAIL_H, top], 0.03, 8);
+    B.tube("paintedMetal", HG.gunmetal, [s * x, y0 + RAIL_MID, foot], [s * x, y1 + RAIL_MID, top], 0.02, 8);
+    for (let i = 0; i <= n; i += 4) {
+      const yt = y0 + (rise * i) / n, zc = foot + (dir * run * i) / n;
+      if (wallSide) {
+        const [ba, bb] = mm(x - 0.03, WALL_FACE);
+        B.boxMM("metal", HG.gunmetal, [ba, yt + RAIL_H - 0.08, zc - 0.03], [bb, yt + RAIL_H - 0.03, zc + 0.03]);
+      } else {
+        const [pa, pb] = mm(x - 0.04, x + 0.04);
+        B.boxMM("paintedMetal", HG.gunmetal, [pa, yt, zc - 0.04], [pb, yt + RAIL_H, zc + 0.04]);
+      }
+    }
   }
   // foot plate + collider (the whole stair volume blocks the player at deck level)
   const [fa, fb] = mm(xIn - 0.2, xOut + 0.1);
-  B.boxMM("metal", HG.gunmetal, [fa, FLOOR, z0 - 0.25], [fb, FLOOR + 0.03, z0 + 0.15]);
-  kit.collider([fa, FLOOR, z0 - 0.25], [fb, y1 + 1, z1 + 0.1], "stairs");
+  const zf0 = Math.min(foot, top), zf1 = Math.max(foot, top);
+  B.boxMM("metal", HG.gunmetal, [fa, FLOOR, foot - dir * 0.15 - 0.2], [fb, FLOOR + 0.03, foot - dir * 0.15 + 0.2]);
+  kit.collider([fa, FLOOR, zf0 - 0.25], [fb, y1 + 1, zf1 + 0.25], "stairs");
 }

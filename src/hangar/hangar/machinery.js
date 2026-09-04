@@ -120,7 +120,7 @@ export function buildCrane(ctx) {
   group.add(bridge);
 
   // moving work light under the trolley (descriptor pos is re-read every frame by the pool)
-  const light = { type: "point", pos: [0, -22, 32], color: 0xf4f7ff, intensity: 90, distance: 45, priority: 0.5 };
+  const light = { type: "point", pos: [0, -22, 32], color: 0xf4f7ff, intensity: 90, distance: 45, priority: 0.35 };
   ctx.lights.push(light);
 
   const update = (t) => {
@@ -210,16 +210,146 @@ class Placer {
 
 const F = FLOOR;
 
-/** 1.2 m (default) crate on skids with corner posts and a lid frame; level stacks them */
+/**
+ * 1.2 m (default) crate on skids: painted-panel body, recessed dark side panels, corner posts, lid
+ * frame, mid band, optional stencil; level stacks them
+ */
 function crate(P, lx, lz, s = 1.2, tone = "mid", level = 0, text = null) {
   const y0 = F + level * (s + 0.11);
   const color = tone === "dark" ? P.P.impDark : tone === "grey" ? P.P.impGrey : P.P.impMid;
-  P.box("paintedMetal", color, lx, y0 + 0.08 + s / 2, lz, s, s, s, { texel: 1 });
+  const cy = y0 + 0.08 + s / 2;
+  P.box("impPanel", color, lx, cy, lz, s, s, s, { texel: 1 });
+  // recessed panels on the four sides (upper and lower halves, split by the band)
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const w = s * 0.72, h = s * 0.32;
+    for (const vy of [-s * 0.24, s * 0.24]) P.box("paintedMetal", P.P.impBlack, lx + dx * (s / 2 + 0.01), cy + vy, lz + dz * (s / 2 + 0.01), dx ? 0.02 : w, h, dz ? 0.02 : w, { texel: 1 });
+  }
   for (const d of [-1, 1]) P.box("metal", HG.gunmetal, lx + d * s * 0.35, y0 + 0.04, lz, 0.12, 0.08, s * 0.9);
-  for (const dx of [-1, 1]) for (const dz of [-1, 1]) P.box("metal", HG.gunmetal, lx + (dx * s) / 2, y0 + 0.08 + s / 2, lz + (dz * s) / 2, 0.09, s + 0.02, 0.09);
+  for (const dx of [-1, 1]) for (const dz of [-1, 1]) P.box("metal", HG.gunmetal, lx + (dx * s) / 2, cy, lz + (dz * s) / 2, 0.09, s + 0.02, 0.09);
   P.box("paintedMetal", P.P.impDark, lx, y0 + 0.08 + s + 0.02, lz, s - 0.24, 0.04, s - 0.24, { texel: 1 });
-  P.box("metal", HG.gunmetal, lx, y0 + 0.08 + s * 0.5, lz, s + 0.03, 0.06, s + 0.03);
-  if (text) P.label("hgDecal", text, [lx, y0 + 0.08 + s * 0.72, lz - s / 2 - 0.006], [0, 0, -1], s * 0.62, { color: HG.white });
+  P.box("metal", HG.gunmetal, lx, cy, lz, s + 0.03, 0.06, s + 0.03);
+  if (text) P.label("hgDecal", text, [lx, cy - s * 0.24, lz - s / 2 - 0.03], [0, 0, -1], s * 0.5, { color: HG.white });
+}
+
+/** deck tug: low cab with a canopy, four wheels, headlights, beacon, tow hitch at +lz */
+function tug(P, lx, lz) {
+  P.box("paintedMetal", HG.yellow, lx, F + 0.75, lz, 2.2, 0.7, 3.6, { texel: 0.5 });
+  P.box("paintedMetal", P.P.impDark, lx, F + 0.42, lz, 2.3, 0.14, 3.7, { texel: 1 });
+  for (const dx of [-1.0, 1.0]) for (const dz of [-1.2, 1.2]) {
+    P.cyl("rubber", HG.rubber, lx + dx, F + 0.42, lz + dz, 0.42, 0.34, "x", { segments: 14 });
+    P.cyl("metal", HG.steel, lx + dx, F + 0.42, lz + dz, 0.2, 0.36, "x", { segments: 10 });
+  }
+  // cab: seat well, canopy on four posts, control column
+  P.box("paintedMetal", P.P.impBlack, lx, F + 1.25, lz - 0.6, 1.6, 0.3, 1.6, { texel: 1 });
+  P.box("paintedMetal", P.P.impMid, lx, F + 1.55, lz - 1.2, 1.4, 0.5, 0.35, { texel: 1 });
+  P.box("darkGloss", 0x101214, lx, F + 1.75, lz - 1.0, 1.3, 0.12, 0.08);
+  for (const dx of [-0.9, 0.9]) for (const dz of [-1.4, 0.3]) P.box("metal", HG.gunmetal, lx + dx, F + 1.95, lz + dz, 0.07, 1.7, 0.07);
+  P.box("paintedMetal", P.P.impDark, lx, F + 2.82, lz - 0.55, 2.0, 0.08, 2.0, { texel: 1 });
+  P.box("emitAmber", 0xffffff, lx, F + 2.98, lz - 0.55, 0.22, 0.24, 0.22);
+  for (const dx of [-0.8, 0.8]) P.box("emitWhite", 0xffffff, lx + dx, F + 0.9, lz - 1.81, 0.3, 0.14, 0.02);
+  for (const dx of [-0.8, 0.8]) P.box("emitRedImp", 0xffffff, lx + dx, F + 0.9, lz + 1.81, 0.24, 0.1, 0.02);
+  P.box("metal", HG.gunmetal, lx, F + 0.55, lz + 2.0, 0.2, 0.2, 0.5);
+  P.label("hgDecal", "DECK 4", [lx - 1.101, F + 0.85, lz], [-1, 0, 0], 1.6, { color: P.P.impBlack });
+  P.label("hgDecal", "DECK 4", [lx + 1.101, F + 0.85, lz], [1, 0, 0], 1.6, { color: P.P.impBlack });
+}
+
+/** flatbed trailer (4.4 x 2.4) on four wheels with a draw bar toward -lz and a load of crates */
+function trailer(P, lx, lz, load = "crates") {
+  P.box("paintedMetal", P.P.impDark, lx, F + 0.72, lz, 2.4, 0.16, 4.4, { texel: 0.5 });
+  P.box("hgHazard", 0xffffff, lx, F + 0.72, lz + 2.21, 2.4, 0.17, 0.02, { texel: 1 });
+  for (const dx of [-1.1, 1.1]) for (const dz of [-1.4, 1.4]) {
+    P.cyl("rubber", HG.rubber, lx + dx, F + 0.4, lz + dz, 0.4, 0.3, "x", { segments: 14 });
+    P.cyl("metal", HG.steel, lx + dx, F + 0.4, lz + dz, 0.18, 0.32, "x", { segments: 10 });
+  }
+  P.tube("metal", HG.gunmetal, [lx, F + 0.66, lz - 2.2], [lx, F + 0.62, lz - 3.1], 0.06, { segments: 8 });
+  for (const dx of [-1.15, 1.15]) P.box("metal", HG.gunmetal, lx + dx, F + 1.0, lz, 0.06, 0.4, 4.3);
+  if (load === "crates") {
+    // crates ride on the bed (top at 0.8 m)
+    const bed = 0.8;
+    crateOn(P, lx - 0.55, lz - 1.0, 1.1, "mid", bed, "CAUTION");
+    crateOn(P, lx + 0.6, lz - 1.0, 1.0, "grey", bed);
+    crateOn(P, lx, lz + 1.1, 1.3, "dark", bed, "DECK 4");
+  } else {
+    // a horizontal tank
+    P.kcyl("paintedMetal", P.P.impGrey, lx, F + 1.7, lz, 0.85, 3.8, "z", { segments: 18, texel: 0.5 });
+    for (const dz of [-1.6, 1.6]) P.cyl("metal", HG.gunmetal, lx, F + 1.7, lz + dz, 0.7, 0.16, "z", { segments: 18 });
+    for (const dz of [-1.2, 1.2]) P.box("metal", HG.gunmetal, lx, F + 1.0, lz + dz, 1.8, 0.4, 0.2);
+    P.kcyl("hgHazard", 0xffffff, lx, F + 1.7, lz, 0.865, 0.3, "z", { segments: 18, texel: 1 });
+    P.label("hgDecal", "FUEL", [lx - 0.855, F + 1.75, lz + 1.0], [-1, 0, 0], 1.2, { color: HG.red });
+    P.label("hgDecal", "FUEL", [lx + 0.855, F + 1.75, lz + 1.0], [1, 0, 0], 1.2, { color: HG.red });
+  }
+}
+
+/** crate whose base sits `lift` above the deck (trailer loads) */
+function crateOn(P, lx, lz, s, tone, lift, text = null) {
+  const color = tone === "dark" ? P.P.impDark : tone === "grey" ? P.P.impGrey : P.P.impMid;
+  const cy = F + lift + s / 2;
+  P.box("impPanel", color, lx, cy, lz, s, s, s, { texel: 1 });
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    for (const vy of [-s * 0.24, s * 0.24]) P.box("paintedMetal", P.P.impBlack, lx + dx * (s / 2 + 0.01), cy + vy, lz + dz * (s / 2 + 0.01), dx ? 0.02 : s * 0.72, s * 0.32, dz ? 0.02 : s * 0.72, { texel: 1 });
+  }
+  for (const dx of [-1, 1]) for (const dz of [-1, 1]) P.box("metal", HG.gunmetal, lx + (dx * s) / 2, cy, lz + (dz * s) / 2, 0.09, s + 0.02, 0.09);
+  P.box("metal", HG.gunmetal, lx, cy, lz, s + 0.03, 0.06, s + 0.03);
+  if (text) P.label("hgDecal", text, [lx, cy - s * 0.24, lz - s / 2 - 0.03], [0, 0, -1], s * 0.5, { color: HG.white });
+}
+
+/** tug + two trailers in a train along +lz (tug at the -lz end) */
+function train(P, lx, lz) {
+  tug(P, lx, lz);
+  trailer(P, lx, lz + 5.4, "crates");
+  trailer(P, lx, lz + 10.6, "tank");
+}
+
+/**
+ * tall rolling maintenance gantry: 6 x 3 m castored base, four 8 m columns with cross bracing, a top
+ * work platform with rails at 7 m, an intermediate platform at 3.5 m, a caged ladder, work lamps
+ */
+function tallGantry(P, lx, lz) {
+  const W = 6, D = 3, Ht = 7.0;
+  P.box("paintedMetal", P.P.impDark, lx, F + 0.35, lz, W, 0.25, D, { texel: 0.5 });
+  for (const dx of [-W / 2 + 0.4, W / 2 - 0.4]) for (const dz of [-D / 2 + 0.3, D / 2 - 0.3]) {
+    P.cyl("rubber", HG.rubber, lx + dx, F + 0.22, lz + dz, 0.22, 0.2, "x", { segments: 12 });
+    P.box("metal", HG.gunmetal, lx + dx, F + 0.4, lz + dz, 0.4, 0.14, 0.4);
+  }
+  for (const dz of [-D / 2, D / 2]) P.box("hgHazard", 0xffffff, lx, F + 0.35, lz + dz, W + 0.02, 0.26, 0.03, { texel: 1 });
+  for (const dx of [-W / 2 + 0.15, W / 2 - 0.15]) for (const dz of [-D / 2 + 0.15, D / 2 - 0.15]) P.box("paintedMetal", P.P.impMid, lx + dx, F + 0.47 + (Ht + 0.6) / 2, lz + dz, 0.22, Ht + 0.6, 0.22, { texel: 0.5 });
+  // cross bracing on the long faces, two bays
+  for (const dz of [-D / 2 + 0.15, D / 2 - 0.15]) {
+    for (const [y0, y1] of [[0.6, 3.3], [3.8, 6.6]]) {
+      P.tube("metal", HG.steel, [lx - W / 2 + 0.2, F + y0, lz + dz], [lx + W / 2 - 0.2, F + y1, lz + dz], 0.04, { segments: 6 });
+      P.tube("metal", HG.steel, [lx - W / 2 + 0.2, F + y1, lz + dz], [lx + W / 2 - 0.2, F + y0, lz + dz], 0.04, { segments: 6 });
+    }
+  }
+  for (const dx of [-W / 2 + 0.15, W / 2 - 0.15]) for (const y of [3.5, 7.0]) P.box("paintedMetal", P.P.impMid, lx + dx, F + y - 0.15, lz, 0.22, 0.3, D - 0.3, { texel: 0.5 });
+  // platforms + rails (top: three sides; mid: outer side only)
+  for (const [y, full] of [[3.5, false], [Ht, true]]) {
+    P.box("grate", 0xffffff, lx, F + y - 0.05, lz, W - 0.5, 0.1, D - 0.5, { texel: 0.8 });
+    const c = (a, b) => P.w(a, b);
+    const yy = F + y;
+    const p0 = c(lx - W / 2 + 0.3, lz - D / 2 + 0.3), p1 = c(lx + W / 2 - 0.3, lz - D / 2 + 0.3), p2 = c(lx + W / 2 - 0.3, lz + D / 2 - 0.3), p3 = c(lx - W / 2 + 0.3, lz + D / 2 - 0.3);
+    railRun(P.B, P.kit, p0, p1, yy, { collide: false, postEvery: 1.5 });
+    if (full) {
+      railRun(P.B, P.kit, p1, p2, yy, { collide: false, postEvery: 1.5 });
+      railRun(P.B, P.kit, p3, p0, yy, { collide: false, postEvery: 1.5 });
+    }
+  }
+  // caged ladder on the +lz face, work lamps under the top platform
+  const [wx, wz] = P.w(lx - 1.0, lz + D / 2);
+  const [nx, nz] = P.dir(0, 1);
+  ladderLite(P, wx, wz, nx, nz, F + 0.5, F + Ht);
+  for (const dx of [-1.8, 1.8]) P.box("emitWhite", 0xffffff, lx + dx, F + Ht - 0.14, lz, 0.7, 0.06, 0.3);
+  for (const dx of [-1.8, 1.8]) P.box("paintedMetal", P.P.impDark, lx + dx, F + Ht - 0.13, lz, 0.8, 0.1, 0.4, { texel: 1 });
+  P.box("emitAmber", 0xffffff, lx + W / 2 - 0.15, F + Ht + 1.35, lz - D / 2 + 0.15, 0.2, 0.3, 0.2);
+  P.label("hgDecal", "CAUTION", [lx, F + 1.6, lz - D / 2 - 0.16], [0, 0, -1], 2.4, { color: HG.yellow });
+}
+
+/** plain ladder (no cage) standing off a face with normal (nx, nz), in world coordinates */
+function ladderLite(P, x, z, nx, nz, y0, y1) {
+  const h = y1 - y0;
+  const ox = nx * 0.2, oz = nz * 0.2;
+  const along = Math.abs(nx) > 0.5 ? [0, 0.25] : [0.25, 0];
+  for (const s of [-1, 1]) P.B.box("metal", HG.gunmetal, x + ox + s * along[0], (y0 + y1) / 2, z + oz + s * along[1], 0.05, h, 0.05);
+  for (let y = y0 + 0.3; y < y1; y += 0.3) P.B.box("metal", HG.steel, x + ox, y, z + oz, Math.abs(nx) > 0.5 ? 0.03 : 0.5, 0.03, Math.abs(nx) > 0.5 ? 0.5 : 0.03);
 }
 
 function drum(P, lx, lz, color) {
@@ -332,14 +462,19 @@ function leanLadder(P, lx, lz, h = 2.6) {
 function clusters(s) {
   const q0 = s > 0 ? 0 : 2;
   return [
-    // under the racks, forward end (z -7..5): bowser + power cart + crates
-    { x: s * 64, z: -1, q: q0, cmin: [-3.2, -3.3], cmax: [3.6, 3.3], f(P) { bowser(P, -1.7, 0.2); gpu(P, 1.8, -1.9, [3.3, 2.4]); crate(P, 1.7, 1.3, 1.2, "mid", 0, "CAUTION"); crate(P, 1.7, 1.3, 1.2, "dark", 1); crate(P, 3.0, 1.4, 1.0, "grey"); } },
-    // under the racks, aft of the stairs (z 36..48): crate stack + tool carts + drums
-    { x: s * 66, z: 42, q: q0 + 1, cmin: [-3.4, -2.2], cmax: [3.4, 2.4], f(P) { crate(P, -2.2, 0.3); crate(P, -2.2, 0.3, 1.2, "dark", 1); crate(P, -0.9, 0.3, 1.2, "grey", 0, "DECK 4"); crate(P, -2.2, -1.0, 1.0, "mid"); toolCart(P, 1.0, -0.6); drum(P, 2.4, 0.4, HG.red); drum(P, 2.4, -0.4, P.P.impGrey); drum(P, 3.0, 0.0, P.P.impGrey); leanLadder(P, -2.2, 1.56); } },
-    // under the racks, aft end (z 56..66): access platform + cable reel + crates
-    { x: s * 65, z: 61, q: q0, cmin: [-3.6, -3.0], cmax: [3.4, 3.0], f(P) { accessPlatform(P, -2.2, 0); cableReel(P, 1.2, -1.6); crate(P, 1.6, 1.4, 1.2, "dark", 0, "FUEL"); crate(P, 2.8, 1.5, 1.0, "mid"); gpu(P, 2.6, -1.2); } },
+    // under the racks, forward end (z 27..33): bowser + power cart + crates
+    { x: s * 64, z: 30, q: q0, cmin: [-3.2, -3.3], cmax: [3.6, 3.3], f(P) { bowser(P, -1.7, 0.2); gpu(P, 1.8, -1.9, [3.3, 2.4]); crate(P, 1.7, 1.3, 1.2, "mid", 0, "CAUTION"); crate(P, 1.7, 1.3, 1.2, "dark", 1); crate(P, 3.0, 1.4, 1.0, "grey"); } },
+    // under the racks, middle (z 60..64): crate stack + tool carts + drums
+    { x: s * 66, z: 62, q: q0 + 1, cmin: [-3.4, -2.2], cmax: [3.4, 2.4], f(P) { crate(P, -2.2, 0.3); crate(P, -2.2, 0.3, 1.2, "dark", 1); crate(P, -0.9, 0.3, 1.2, "grey", 0, "DECK 4"); crate(P, -2.2, -1.0, 1.0, "mid"); toolCart(P, 1.0, -0.6); drum(P, 2.4, 0.4, HG.red); drum(P, 2.4, -0.4, P.P.impGrey); drum(P, 3.0, 0.0, P.P.impGrey); leanLadder(P, -2.2, 1.56); } },
+    // under the racks, aft end (z 85..91): access platform + cable reel + crates
+    { x: s * 65, z: 88, q: q0, cmin: [-3.6, -3.0], cmax: [3.4, 3.0], f(P) { accessPlatform(P, -2.2, 0); cableReel(P, 1.2, -1.6); crate(P, 1.6, 1.4, 1.2, "dark", 0, "FUEL"); crate(P, 2.8, 1.5, 1.0, "mid"); gpu(P, 2.6, -1.2); } },
     // bow wall corner (behind pad 05/06): crates + drums
     { x: s * 45, z: -64, q: q0 + 3, cmin: [-2.8, -2.4], cmax: [2.8, 2.4], f(P) { crate(P, -1.6, 0, 1.2, "mid", 0, "CAUTION"); crate(P, -0.3, 0, 1.2, "dark"); crate(P, -0.3, 0, 1.2, "mid", 1); crate(P, -1.6, 1.3, 1.0, "grey"); drum(P, 1.4, -0.6, HG.red); drum(P, 1.4, 0.3, HG.red); toolCart(P, 2.2, 1.0); } },
+    // hall-scale props: a tug + trailer train parked across the aft apron between the pad rows (port
+    // side only, heading +x), tall rolling gantries on both aprons
+    ...(s < 0 ? [{ x: -22, z: 130, q: 1, cmin: [-1.6, -4.2], cmax: [1.6, 11.0], f(P) { train(P, 0, -2.0); } }] : []),
+    { x: s * 44, z: 112, q: q0 + 1, cmin: [-3.2, -1.7], cmax: [3.2, 1.7], f(P) { tallGantry(P, 0, 0); } },
+    { x: s * 40, z: -38, q: q0 + 1, cmin: [-3.2, -1.7], cmax: [3.2, 1.7], f(P) { tallGantry(P, 0, 0); } },
     // aft apron, forward of the cargo/repair doors (z 98..108): bowser + crates
     { x: s * 66, z: 103, q: q0, cmin: [-3.2, -3.4], cmax: [3.2, 3.4], f(P) { bowser(P, 1.2, 0.3); crate(P, -1.6, -1.6, 1.2, "grey", 0, "FUEL"); crate(P, -1.6, -0.3, 1.2, "dark"); crate(P, -1.6, -0.3, 1.2, "mid", 1); drum(P, -1.8, 1.4, P.P.impGrey); drum(P, -1.0, 1.6, P.P.impGrey); } },
     // aft apron, aft of the doors (z 134..146): access platform + power cart + tool cart

@@ -11,25 +11,30 @@ import { buildWalls } from "./walls.js";
 import { buildRacks } from "./racks.js";
 import { buildCrane, buildClutter } from "./machinery.js";
 
-// Light descriptors (<= 28 with the four rack-platform points from racks.js and the crane's work light):
-// harsh white ceiling floods as spots (two by the spawn at priority 0.9), red beacon pools at the
-// aperture corners, warm pools at the bay doors, the door approaches, the balcony and the shaft.
+// Light descriptors (24 with the four rack-platform points from racks.js and the crane's work light).
+// The harness pool is 12 points + 4 spots for the whole active set, so the few that matter carry the
+// priority: the four spots are the louvred ceiling floods over the spawn apron and the two nearest pads
+// (0.9, the first of them casts the shadows), the four red beacon points at the aperture corners (0.6),
+// then the rim-spill points under the lip for the exterior view, the balcony, the door approaches, the
+// bay-door pools and the shaft (all <= 0.45). Everything else in the hall is emissive fixtures.
 function addLights(ctx) {
   const L = ctx.lights;
-  for (const z of [155, 95, 35, -45]) {
-    for (const x of [-30, 30]) {
-      L.push({ type: "spot", pos: [x, -15.2, z], target: [x * 1.25, FLOOR, z - 6], color: 0xf6f8ff, intensity: 700, distance: 70, decay: 1.2, angle: 0.6, penumbra: 0.4, priority: z === 155 ? 0.9 : 0.6 });
-    }
-  }
-  for (const p of TRACTOR_POINTS) L.push({ type: "point", pos: [p[0] * 1.04, FLOOR + 1.0, p[2] + Math.sign(p[2] - 32) * 1.5], color: 0xff2a1a, intensity: 14, distance: 16, priority: 0.3 });
-  L.push({ type: "point", pos: [0, BALCONY.y + 2.5, 167], color: 0xd6e4ff, intensity: 40, distance: 22, priority: 0.5 });
+  const spot = (pos, target) => L.push({ type: "spot", pos, target, color: 0xf6f8ff, intensity: 1300, distance: 85, decay: 1.2, angle: 0.55, penumbra: 0.45, priority: 0.9 });
   for (const s of [-1, 1]) {
-    L.push({ type: "point", pos: [s * 74, FLOOR + 7, 15], color: 0xfff0e0, intensity: 90, distance: 32, priority: 0.4 });
-    L.push({ type: "point", pos: [s * 74, FLOOR + 6, 120], color: 0xfff0e0, intensity: 90, distance: 32, priority: 0.4 });
+    spot([s * 26, -15.5, 155], [s * 12, FLOOR, 158]);
+    spot([s * 26, -15.5, 135], [s * 22, FLOOR, 142]);
   }
-  L.push({ type: "point", pos: [0, FLOOR + 6, 164], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.85 });
-  L.push({ type: "point", pos: [0, FLOOR + 6, -64], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.4 });
-  for (const z of [-12, 76]) L.push({ type: "point", pos: [0, -79, z], color: 0x3b6cff, intensity: 60, distance: 46, priority: 0.35 });
+  for (const p of TRACTOR_POINTS) L.push({ type: "point", pos: [p[0] + Math.sign(p[0]) * 1.6, FLOOR + 3.4, p[2] + Math.sign(p[2] - 32) * 1.6], color: 0xff2a1a, intensity: 55, distance: 28, decay: 1.6, priority: 0.6 });
+  // rim spill under the deck edge: lights the shaft lining and the deck lip from below (exterior view)
+  for (const z of [2, 62]) L.push({ type: "point", pos: [0, FLOOR - 2.5, z], color: 0xfff1dc, intensity: 170, distance: 52, decay: 1.4, priority: 0.45 });
+  L.push({ type: "point", pos: [0, BALCONY.y + 2.5, 167], color: 0xd6e4ff, intensity: 40, distance: 22, priority: 0.4 });
+  L.push({ type: "point", pos: [0, FLOOR + 6, 164], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.4 });
+  L.push({ type: "point", pos: [0, FLOOR + 6, -64], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.3 });
+  for (const s of [-1, 1]) {
+    L.push({ type: "point", pos: [s * 74, FLOOR + 7, 15], color: 0xfff0e0, intensity: 70, distance: 32, priority: 0.3 });
+    L.push({ type: "point", pos: [s * 74, FLOOR + 6, 120], color: 0xfff0e0, intensity: 70, distance: 32, priority: 0.3 });
+  }
+  for (const z of [-12, 76]) L.push({ type: "point", pos: [0, -79, z], color: 0x3b6cff, intensity: 60, distance: 46, priority: 0.3 });
 }
 
 export default {

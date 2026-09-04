@@ -9,7 +9,10 @@ import * as THREE from "three";
 const ATLAS = 1024;
 const LABEL_SPEC = [
   // [name, text, cellW, cellH, options]
-  ["HANGAR CONTROL", "HANGAR CONTROL", 1024, 112, { weight: 900 }],
+  ["HANGAR CONTROL", "HANGAR CONTROL", 1024, 112, { weight: 900, spacing: 0.22, bridges: false }],
+  ["MAINT ACCESS", "MAINT ACCESS", 512, 80, {}],
+  ["AUTHORISED ONLY", "AUTHORISED ONLY", 512, 80, {}],
+  ["CATWALK 3", "CATWALK 3", 512, 80, {}],
   ["01", "01", 256, 128, {}],
   ["02", "02", 256, 128, {}],
   ["03", "03", 256, 128, {}],
@@ -81,22 +84,30 @@ function buildAtlas() {
       g.textAlign = "center";
       g.textBaseline = "middle";
       const font = (p) => `${opt.weight || 700} ${p}px "DejaVu Sans", "Liberation Sans", Arial, sans-serif`;
-      g.font = font(px);
+      const setFont = (p) => {
+        g.font = font(p);
+        // wide tracking for signage (canvas letterSpacing; ignored where unsupported)
+        if (opt.spacing) g.letterSpacing = `${Math.round(p * opt.spacing)}px`;
+      };
+      setFont(px);
       // shrink to fit the cell width with a margin (text width scales linearly with the font size)
       const avail = w - 2 * pad - h * 0.25;
       const wid = g.measureText(text).width;
       if (wid > avail) {
         px = Math.max(8, Math.floor((px * avail) / wid));
-        g.font = font(px);
+        setFont(px);
       }
-      // stencil look: letters cut by two thin horizontal bridges
       g.fillText(text, x + w / 2, y + h / 2 + px * 0.04);
-      g.globalCompositeOperation = "destination-out";
-      g.fillStyle = "#000";
-      const bh = Math.max(1, Math.round(px * 0.045));
-      g.fillRect(x, y + h / 2 - px * 0.16, w, bh);
-      g.fillRect(x, y + h / 2 + px * 0.22, w, bh);
-      g.globalCompositeOperation = "source-over";
+      if (opt.spacing) g.letterSpacing = "0px";
+      if (opt.bridges !== false) {
+        // stencil look: letters cut by two thin horizontal bridges
+        g.globalCompositeOperation = "destination-out";
+        g.fillStyle = "#000";
+        const bh = Math.max(1, Math.round(px * 0.045));
+        g.fillRect(x, y + h / 2 - px * 0.16, w, bh);
+        g.fillRect(x, y + h / 2 + px * 0.22, w, bh);
+        g.globalCompositeOperation = "source-over";
+      }
     }
     g.restore();
     LABELS[name] = { rect: [x / ATLAS, 1 - (y + h) / ATLAS, (x + w) / ATLAS, 1 - y / ATLAS], aspect: w / h };
@@ -185,13 +196,14 @@ function buildField() {
         float cell = 0.5 + 0.5 * sin(p.x * 1.9 + t * 0.9) * sin(p.y * 1.9 - t * 1.3);
         // a scan band sweeping along z every ~9 s
         float scan = exp(-pow(mod(p.y - t * 14.0, uSize.y) - uSize.y * 0.5, 2.0) / 40.0);
-        // rim: brighter within 3 m of the hole edge
+        // rim: a visible blue glow that fades over ~6 m from the hole edge (the field "grips" the lip)
         float d = min(min(p.x, uSize.x - p.x), min(p.y, uSize.y - p.y));
-        float rim = exp(-d * 0.9);
-        // linear-light levels: the whole field stays around 0.01-0.03 (≈ 12 % opacity on screen) so the
-        // stars read through it; only the rim and the scan band flicker brighter
-        float k = 0.007 + 0.004 * a + 0.003 * b + 0.004 * cell + 0.012 * scan + 0.04 * rim;
-        vec3 col = vec3(0.28, 0.55, 1.0) * k + vec3(0.5, 0.8, 1.0) * rim * 0.012;
+        float rim = exp(-d * 0.45);
+        float rimFlicker = 0.85 + 0.15 * sin(t * 5.0 + d * 2.0);
+        // linear-light levels: the open field stays around 0.01-0.03 (≈ 12 % opacity on screen) so the
+        // stars read through it; the rim and the scan band are the bright parts
+        float k = 0.007 + 0.004 * a + 0.003 * b + 0.004 * cell + 0.012 * scan + 0.06 * rim * rimFlicker;
+        vec3 col = vec3(0.28, 0.55, 1.0) * k + vec3(0.5, 0.8, 1.0) * rim * rimFlicker * 0.035;
         gl_FragColor = vec4(col, 1.0);
       }`,
     transparent: true,
@@ -212,7 +224,7 @@ export function makeMaterials(shared) {
   const atlas = buildAtlas();
   const hazard = buildHazard(256);
   live.field = buildField();
-  live.pulse = new THREE.MeshStandardMaterial({ color: 0x1a0606, emissive: new THREE.Color("#ff2a1a"), emissiveIntensity: 2.0, roughness: 0.45, metalness: 0 });
+  live.pulse = new THREE.MeshStandardMaterial({ color: 0x1a0606, emissive: new THREE.Color("#ff2018"), emissiveIntensity: 1.3, roughness: 0.45, metalness: 0 });
   const decalOpts = { transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
   return {
     hgHazard: new THREE.MeshStandardMaterial({ map: hazard, roughness: 0.6, metalness: 0.08, envMapIntensity: 0.5 }),
@@ -230,5 +242,6 @@ export function makeMaterials(shared) {
 /** per-frame animation of the local materials (t = module clock seconds) */
 export function animateMaterials(t) {
   if (live.field) live.field.uniforms.uTime.value = t;
-  if (live.pulse) live.pulse.emissiveIntensity = 0.9 + 1.5 * (0.5 + 0.5 * Math.sin(t * 3.6));
+  // 0.8 .. 1.5: the peak sits just over the bloom threshold (1.15) so the lens glows red, never clips to orange
+  if (live.pulse) live.pulse.emissiveIntensity = 0.8 + 0.7 * (0.5 + 0.5 * Math.sin(t * 3.6));
 }
