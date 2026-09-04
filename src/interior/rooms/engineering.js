@@ -1,19 +1,26 @@
-// Engineering control (deck C): a 159-degree arc of satin-black power-distribution boards with the
-// amber ship-status wall at its apex, two rows of engineer stations facing it, a raised supervisor
-// platform beside the door, data-core racks and a plotting table, and cable trays overhead whose
-// conduit bundles drop into every board. Dark shell, amber accent, blue-white instrument glow.
+// Engineering control (deck C): a 159-degree arc of satin-black power-distribution boards in five
+// variants (gauge boards, breaker cabinets, dark failed panels, open cable-tray bays and one board with
+// its door swung open on the wiring) with the amber ship-status wall at its apex, two rows of engineer
+// stations facing it, a ship-status holo table in the middle of the floor, a raised supervisor platform
+// beside the door, data-core racks and a plotting table, cable trays overhead whose conduit bundles drop
+// into every board. Dark shell; pendant tube fittings keep the ceiling clean so the screens light the
+// consoles; low fill along the wall bases; amber accent, blue-white instrument glow.
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { roomShell, wallLightBar, wallConsole } from "../shell.js";
 import { pointLight } from "../lib.js";
 import { PALETTE } from "../../materials.js";
 import { decalRect } from "../../textures.js";
-import { yawFrame, yawToward, cableTray, pipeRun, station, gauge, breakerColumn, railing, floorStrip, stencil, valveWheel } from "./deckCProps.js";
+import { yawFrame, yawToward, cableTray, pipeRun, framePipe, station, chair, gauge, breakerColumn, railing, paintStrip, stencil, valveWheel, tubeFixture, wallBaseTube } from "./deckCProps.js";
 
 const ARC_C = [18, 485.5]; // arc centre (x, z)
 const ARC_R = 12.2; // front face radius of the boards
 const PHI0 = 10.5; // degrees, arc start (starboard wall) .. 180 - PHI0 (port wall)
 const SLOTS = 21;
 const STATUS_SLOTS = [9, 10, 11];
+// board variant per slot: 0 gauge board, 1 breaker cabinet, 2 dark / failed, 3 cable-tray bay, 4 open panel
+const VARIANTS = { 0: 1, 1: 0, 2: 3, 3: 0, 4: 2, 5: 0, 6: 1, 7: 4, 8: 0, 12: 0, 13: 2, 14: 0, 15: 1, 16: 0, 17: 3, 18: 0, 19: 1, 20: 0 };
+const HOLO = { x: 18, z: 490.6 };
 
 const deg = (d) => (d * Math.PI) / 180;
 const arcPoint = (phiDeg, r = ARC_R) => [ARC_C[0] + Math.cos(deg(phiDeg)) * r, ARC_C[1] + Math.sin(deg(phiDeg)) * r];
@@ -26,33 +33,140 @@ function stroke(f, p, q, mat, t = 0.03, n = 0.03) {
   f.box(mat, (p[0] + q[0]) / 2, (p[1] + q[1]) / 2, n, t, len, 0.008, { spin: Math.atan2(-du, dv), uv: "keep" });
 }
 
-// One power-distribution board. Frame origin: front-face centre at floor level, n > 0 into the room.
-function board(f, i) {
-  const w = 1.52;
-  const h = 2.75;
-  const d = 0.75;
-  f.box("satinBlack", 0, h / 2, -d / 2 - 0.03, w, h, d - 0.06);
-  for (const s of [-1, 1]) f.box("metal", s * (w / 2 - 0.03), h / 2, -0.03, 0.06, h, 0.06, { color: PALETTE.steel, texel: 2 });
-  f.box("metal", 0, 0.15, -0.035, w - 0.12, 0.3, 0.05, { color: PALETTE.darkMetal, texel: 2 });
-  f.box("emitAmber", 0, 0.06, -0.008, w - 0.4, 0.025, 0.01, { uv: "keep" });
-  for (const [v0, v1] of [[0.34, 1.15], [1.19, 2.05], [2.09, 2.62]]) f.box("satinBlack", 0, (v0 + v1) / 2, -0.03, w - 0.12, v1 - v0, 0.06);
-  // lower section: breaker levers, rotary selector, status leds, stencil
+const BW = 1.52;
+const BH = 2.75;
+const BD = 0.75;
+
+// Cabinet body shared by every board variant: satin-black box, steel edge posts, kick with a toe light
+// under a lip, conduit collar on top.
+function boardBody(f, open = false) {
+  f.box("satinBlack", 0, BH / 2, -BD / 2 - 0.03, BW, BH, BD - 0.06);
+  for (const s of [-1, 1]) f.box("metal", s * (BW / 2 - 0.03), BH / 2, -0.03, 0.06, BH, 0.06, { color: PALETTE.steel, texel: 2 });
+  f.box("metal", 0, 0.15, -0.035, BW - 0.12, 0.3, 0.05, { color: PALETTE.darkMetal, texel: 2 });
+  f.box("satinBlack", 0, 0.1, 0.0, BW - 0.3, 0.02, 0.06);
+  f.box("emitAmber", 0, 0.075, 0.01, BW - 0.4, 0.02, 0.01, { uv: "keep" });
+  if (!open) for (const [v0, v1] of [[0.34, 1.15], [1.19, 2.05], [2.09, 2.62]]) f.box("satinBlack", 0, (v0 + v1) / 2, -0.03, BW - 0.12, v1 - v0, 0.06);
+  f.box("metal", 0, BH - 0.05, -BD / 2, BW + 0.02, 0.1, BD + 0.02, { color: PALETTE.darkMetal, texel: 2 });
+  f.box("paintedMetal", 0, BH + 0.08, -BD / 2, 0.7, 0.16, 0.36, { color: PALETTE.gunmetal, texel: 2 });
+}
+
+// Variant 0: gauge board (breakers, rotary selector, amber readout, three gauges).
+function gaugeBoard(f, i) {
+  boardBody(f);
   breakerColumn(f, -0.46, 0.46, 4);
   breakerColumn(f, -0.26, 0.46, 4);
   f.cylN("metal", 0.18, 0.78, 0.03, 0.12, 0.06, { color: PALETTE.gunmetal, segments: 16 });
   f.box("painted", 0.18, 0.78, 0.065, 0.03, 0.16, 0.02, { color: PALETTE.orange, uv: "keep", spin: ((i * 53) % 7) * 0.4 });
   f.box("leds", 0.45, 0.48, 0.005, 0.3, 0.04, 0.01, { uv: "keep" });
   f.add("decal", new THREE.PlaneGeometry(0.28, 0.28), 0.46, 0.92, 0.003, { uv: "keep", uvRect: decalRect([5, 6, 9][i % 3]) });
-  // middle section: amber readout
   f.box("darkGloss", 0, 1.62, 0.012, 1.12, 0.62, 0.025);
   f.box("screen6", 0, 1.62, 0.026, 1.04, 0.54, 0.006, { uv: "keep" });
   f.box("leds", 0, 1.24, 0.005, 0.8, 0.045, 0.01, { uv: "keep" });
-  // top section: three amber gauges
   for (const [k, u] of [-0.42, 0, 0.42].entries()) gauge(f, u, 2.35, 0.17, { needle: 0.3 + (((i * 37 + k * 11) % 10) / 10) * 0.5 });
-  // cap with conduit collar
-  f.box("metal", 0, h - 0.05, -d / 2, w + 0.02, 0.1, d + 0.02, { color: PALETTE.darkMetal, texel: 2 });
-  f.box("paintedMetal", 0, h + 0.08, -d / 2, 0.7, 0.16, 0.36, { color: PALETTE.gunmetal, texel: 2 });
-  f.collider(-w / 2, w / 2, 0, h + 0.2, -d, 0.12, "board");
+}
+
+// Variant 1: breaker cabinet (three tall lever columns, main isolator, two gauges, a tactical readout).
+function breakerCabinet(f, i) {
+  boardBody(f);
+  for (const u of [-0.5, -0.27, -0.04]) breakerColumn(f, u, 0.42, 9, { step: 0.17 });
+  f.box("metal", -0.27, 1.16, 0.0, 0.8, 1.72, 0.012, { color: PALETTE.darkMetal, texel: 2 });
+  f.cylN("metal", 0.44, 1.15, 0.03, 0.2, 0.08, { color: PALETTE.gunmetal, segments: 18 });
+  f.cylN("darkGloss", 0.44, 1.15, 0.071, 0.16, 0.004, { segments: 18 });
+  f.box("painted", 0.44, 1.15, 0.09, 0.05, 0.32, 0.04, { color: PALETTE.orange, uv: "keep", spin: 0.35 + (i % 3) * 0.6 });
+  f.box("leds", 0.44, 0.7, 0.005, 0.42, 0.04, 0.01, { uv: "keep" });
+  f.box("emitAmber", 0.44, 0.55, 0.005, 0.1, 0.05, 0.01, { uv: "keep" });
+  f.add("decal", new THREE.PlaneGeometry(0.3, 0.3), 0.44, 1.6, 0.003, { uv: "keep", uvRect: decalRect(8) });
+  gauge(f, -0.4, 2.35, 0.15, { needle: 0.35 + (i % 4) * 0.1 });
+  gauge(f, -0.02, 2.35, 0.15, { mat: "emitWhite", needle: 0.6 - (i % 3) * 0.1 });
+  f.box("darkGloss", 0.44, 2.35, 0.012, 0.5, 0.5, 0.025);
+  f.box("screen4", 0.44, 2.35, 0.026, 0.44, 0.44, 0.006, { uv: "keep" });
+}
+
+// Variant 2: dark / failed panel (dead screens, unlit gauges, a fault lamp and a lockout tag).
+function failedBoard(f, i) {
+  boardBody(f);
+  breakerColumn(f, -0.46, 0.46, 4);
+  f.box("metal", -0.26, 0.7, 0.02, 0.09, 0.6, 0.04, { color: PALETTE.darkMetal });
+  f.box("painted", -0.26, 0.55, 0.06, 0.16, 0.22, 0.01, { color: PALETTE.orange, uv: "keep", spin: 0.15 });
+  f.box("metal", -0.26, 0.68, 0.055, 0.02, 0.06, 0.02, { color: PALETTE.steel });
+  f.box("darkGloss", 0, 1.62, 0.012, 1.12, 0.62, 0.025);
+  f.box("darkGloss", 0, 1.24, 0.005, 0.8, 0.045, 0.02);
+  f.box("emitRed", 0.5, 2.0, 0.008, 0.06, 0.06, 0.01, { uv: "keep" });
+  f.box("leds", 0.15, 0.48, 0.005, 0.3, 0.04, 0.01, { uv: "keep" });
+  for (const [k, u] of [-0.42, 0, 0.42].entries()) gauge(f, u, 2.35, 0.17, { mat: "metal", needle: k === 1 ? 0.02 : 0.0 });
+  f.add("decal", new THREE.PlaneGeometry(0.5, 0.5), 0, 1.0, 0.003, { uv: "keep", uvRect: decalRect(5) });
+  f.add("decal", new THREE.PlaneGeometry(0.3, 0.3), -0.5, 1.0, 0.003, { uv: "keep", uvRect: decalRect(13) });
+  void i;
+}
+
+// Variant 3: open cable-tray bay (no front: a rung ladder of trays with vertical looms and a junction box).
+function cableBay(f, i) {
+  f.box("satinBlack", 0, BH / 2, -BD + 0.03, BW - 0.12, BH - 0.2, 0.06);
+  for (const s of [-1, 1]) f.box("metal", s * (BW / 2 - 0.05), BH / 2, -BD / 2, 0.1, BH, BD, { color: PALETTE.gunmetal, texel: 2 });
+  f.box("metal", 0, 0.15, -BD / 2, BW, 0.3, BD, { color: PALETTE.darkMetal, texel: 2 });
+  f.box("metal", 0, BH - 0.1, -BD / 2, BW + 0.02, 0.2, BD + 0.02, { color: PALETTE.darkMetal, texel: 2 });
+  f.box("paintedMetal", 0, BH + 0.08, -BD / 2, 0.7, 0.16, 0.36, { color: PALETTE.gunmetal, texel: 2 });
+  for (let r = 0; r < 6; r++) f.box("metal", 0, 0.5 + r * 0.4, -BD + 0.2, BW - 0.3, 0.03, 0.03, { color: PALETTE.steel });
+  const cols = [PALETTE.rubber, PALETTE.orange, PALETTE.steel, PALETTE.rubber, PALETTE.slate, PALETTE.rubber, PALETTE.orange];
+  for (let c = 0; c < 7; c++) {
+    const u = -0.54 + c * 0.18;
+    const r = 0.03 + ((c + i) % 3) * 0.008;
+    f.cylV("rubber", u, 1.45, -BD + 0.28, r, 2.1, { color: cols[(c + i) % cols.length], segments: 7 });
+    for (const v of [0.7, 1.5, 2.3]) f.box("metal", u, v, -BD + 0.28, r * 2 + 0.03, 0.03, r * 2 + 0.03, { color: PALETTE.darkMetal });
+  }
+  f.box("paintedMetal", 0.3, 1.4, -BD + 0.42, 0.5, 0.36, 0.16, { color: PALETTE.darkMetal, texel: 2 });
+  f.box("leds", 0.3, 1.46, -BD + 0.505, 0.36, 0.03, 0.005, { uv: "keep" });
+  f.box("emitAmber", 0.18, 1.33, -BD + 0.505, 0.04, 0.04, 0.005, { uv: "keep" });
+  framePipe(f, [[0.3, 1.22, -BD + 0.42], [0.3, 0.95, -BD + 0.45], [0.55, 0.6, -BD + 0.3], [0.55, 0.3, -BD + 0.3]], 0.025, { mat: "rubber", color: PALETTE.rubber, segments: 6 });
+  f.add("decal", new THREE.PlaneGeometry(0.3, 0.3), 0, BH - 0.1, 0.012, { uv: "keep", uvRect: decalRect(i % 2 ? 6 : 14) });
+  f.box("emitAmber", 0, 0.075, 0.01, BW - 0.4, 0.02, 0.01, { uv: "keep" });
+}
+
+// Variant 4: gauge board with its door swung open on the wiring (boards, looms, bus bars, relay bank).
+function openBoard(kit, f, i) {
+  boardBody(f, true);
+  f.box("satinBlack", 0, (2.09 + 2.62) / 2, -0.03, BW - 0.12, 0.53, 0.06);
+  for (const [k, u] of [-0.42, 0, 0.42].entries()) gauge(f, u, 2.35, 0.17, { needle: 0.3 + (((i * 37 + k * 11) % 10) / 10) * 0.5 });
+  // cavity behind the door: back plate, three circuit boards, bus bars, relay grid, cable loom
+  f.box("satinBlack", 0, 1.2, -BD + 0.08, BW - 0.2, 1.7, 0.04);
+  for (const [k, u] of [-0.42, -0.1, 0.22].entries()) {
+    f.box("darkGloss", u, 1.5, -BD + 0.15, 0.26, 0.6, 0.02);
+    f.box("leds", u, 1.72, -BD + 0.165, 0.2, 0.03, 0.005, { uv: "keep" });
+    f.box(k === 1 ? "emitAmber" : "emitBlue", u - 0.08, 1.3, -BD + 0.165, 0.03, 0.03, 0.005, { uv: "keep" });
+    for (let c = 0; c < 4; c++) f.box("metal", u - 0.09 + c * 0.06, 1.5, -BD + 0.17, 0.03, 0.2, 0.02, { color: PALETTE.darkMetal });
+  }
+  for (const v of [0.55, 0.68, 0.81]) f.box("metal", -0.1, v, -BD + 0.14, 0.9, 0.05, 0.02, { color: PALETTE.brass, texel: 2 });
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) f.box("metal", 0.32 + c * 0.09, 0.98 + r * 0.1, -BD + 0.14, 0.07, 0.08, 0.08, { color: c % 2 ? PALETTE.darkMetal : PALETTE.slate });
+  for (let c = 0; c < 5; c++) {
+    const u = 0.48 + c * 0.04;
+    f.cylV("rubber", u, 1.5, -BD + 0.2, 0.012, 0.9, { color: c % 2 ? PALETTE.orange : PALETTE.rubber, segments: 5 });
+  }
+  framePipe(f, [[0.55, 1.95, -BD + 0.2], [0.3, 2.0, -BD + 0.4], [-0.4, 1.95, -BD + 0.45], [-0.55, 1.6, -BD + 0.4]], 0.02, { mat: "rubber", color: PALETTE.rubber, segments: 6 });
+  f.box("emitWarmSoft", -0.6, 1.95, -BD + 0.35, 0.06, 0.06, 0.12, { uv: "keep" });
+  // the door, hinged on the left edge and swung 100 degrees into the room; its inner face carries the
+  // readout that normally faces the operator
+  const hinge = f.pos(-BW / 2 + 0.06, 0, 0.0);
+  const yaw = Math.atan2(-f.U.z, f.U.x) - 1.75;
+  const df = yawFrame(kit, hinge.x, hinge.y, hinge.z, yaw);
+  const dw = BW - 0.16;
+  df.box("satinBlack", dw / 2, 1.2, 0.0, dw, 1.7, 0.04);
+  df.box("metal", 0.02, 1.2, 0.0, 0.05, 1.72, 0.06, { color: PALETTE.steel, texel: 2 });
+  df.box("darkGloss", dw / 2, 1.42, -0.032, 1.12, 0.62, 0.025);
+  df.box("screen6", dw / 2, 1.42, -0.046, 1.04, 0.54, 0.006, { uv: "keep" });
+  df.box("leds", dw / 2, 1.0, -0.028, 0.8, 0.045, 0.01, { uv: "keep" });
+  df.box("metal", dw - 0.1, 1.2, 0.03, 0.03, 0.2, 0.03, { color: PALETTE.steel });
+  df.collider(0, dw, 0, 2.1, -0.06, 0.06, "boardDoor");
+  f.add("decal", new THREE.PlaneGeometry(0.3, 0.3), 0.5, 0.45, 0.003, { uv: "keep", uvRect: decalRect(13) });
+}
+
+function board(kit, f, i) {
+  const v = VARIANTS[i] ?? 0;
+  if (v === 1) breakerCabinet(f, i);
+  else if (v === 2) failedBoard(f, i);
+  else if (v === 3) cableBay(f, i);
+  else if (v === 4) openBoard(kit, f, i);
+  else gaugeBoard(f, i);
+  f.collider(-BW / 2, BW / 2, 0, BH + 0.2, -BD, 0.12, "board");
 }
 
 // Status wall: flat 4.8 m panel at the arc apex with three amber readouts and the ship diagram.
@@ -63,7 +177,8 @@ function statusWall(f) {
   f.box("satinBlack", 0, h / 2, -d / 2 - 0.03, w, h, d - 0.06);
   for (const s of [-1, 1]) f.box("metal", s * (w / 2 - 0.03), h / 2, -0.03, 0.06, h, 0.06, { color: PALETTE.steel, texel: 2 });
   f.box("metal", 0, 0.15, -0.035, w - 0.12, 0.3, 0.05, { color: PALETTE.darkMetal, texel: 2 });
-  f.box("emitAmber", 0, 0.06, -0.008, w - 0.5, 0.025, 0.01, { uv: "keep" });
+  f.box("satinBlack", 0, 0.1, 0.0, w - 0.4, 0.02, 0.06);
+  f.box("emitAmber", 0, 0.075, 0.01, w - 0.5, 0.02, 0.01, { uv: "keep" });
   f.box("satinBlack", 0, (0.34 + 1.42) / 2, -0.03, w - 0.12, 1.08, 0.06);
   f.box("satinBlack", 0, (1.46 + 3.4) / 2, -0.03, w - 0.12, 1.94, 0.06);
   for (const u of [-1.55, 0, 1.55]) {
@@ -121,17 +236,106 @@ function dataRack(kit, x, y, z, seed) {
   kit.collider([x - w / 2, y, z], [x + w / 2, y + h + 0.1, z + d + 0.05], "dataRack");
 }
 
+// Ship-status holo table: round satin-black plotting table with a slowly turning translucent wireframe
+// Star Destroyer, a projection cone and status rings above it.
+function holoTable(kit, ctx, x, y, z) {
+  kit.cyl("metal", x, y + 0.06, z, 1.42, 0.12, "y", { color: PALETTE.darkMetal, segments: 32, texel: 1 });
+  kit.cyl("satinBlack", x, y + 0.5, z, 1.28, 0.78, "y", { segments: 32 });
+  kit.cyl("metal", x, y + 0.9, z, 1.34, 0.05, "y", { color: PALETTE.steel, segments: 32 });
+  kit.cyl("darkGloss", x, y + 0.935, z, 1.24, 0.03, "y", { segments: 32 });
+  kit.add("emitBlue", new THREE.TorusGeometry(1.08, 0.014, 6, 48).rotateX(Math.PI / 2), { pos: [x, y + 0.955, z] });
+  kit.add("emitAmber", new THREE.TorusGeometry(0.3, 0.012, 6, 32).rotateX(Math.PI / 2), { pos: [x, y + 0.955, z] });
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    kit.box(k % 4 === 0 ? "emitAmber" : "emitBlue", x + Math.cos(a) * 1.3, y + 0.7, z + Math.sin(a) * 1.3, 0.04, 0.05, 0.04);
+  }
+  for (const a of [0.5, 2.6, 4.7]) {
+    const f = yawFrame(kit, x + Math.sin(a) * 1.28, y, z + Math.cos(a) * 1.28, a);
+    f.box("darkGloss", 0, 0.62, 0.005, 0.7, 0.16, 0.02);
+    f.box("leds", 0, 0.62, 0.02, 0.6, 0.03, 0.005, { uv: "keep" });
+    f.box("darkGloss", 0, 0.8, 0.12, 0.8, 0.03, 0.24, { tilt: 0.15 });
+  }
+  kit.collider([x - 1.42, y, z - 1.42], [x + 1.42, y + 1.0, z + 1.42], "holoTable");
+  // hologram
+  const holoMat = new THREE.MeshBasicMaterial({ color: 0x5fb0ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const ring = (r, yy, tube = 0.012, tiltX = 0) => {
+    const g = new THREE.TorusGeometry(r, tube, 6, 64);
+    g.rotateX(Math.PI / 2 + tiltX);
+    g.translate(0, yy, 0);
+    return g;
+  };
+  const cone = new THREE.CylinderGeometry(1.15, 0.3, 1.7, 40, 1, true);
+  cone.translate(0, 0.85, 0);
+  const parts = [cone, ring(1.1, 0.02), ring(1.3, 1.75), ring(1.15, 1.75, 0.008), ring(1.2, 1.75, 0.006, 0.5), ring(1.2, 1.75, 0.006, -0.5)];
+  const holo = new THREE.Group();
+  holo.position.set(x, y + 0.97, z);
+  holo.add(new THREE.Mesh(mergeGeometries(parts, false), holoMat));
+  // the ship: wedge hull + neck + tower, as a faint solid and a brighter wireframe
+  const hull = new THREE.Shape();
+  hull.moveTo(0, 1.35);
+  hull.lineTo(0.78, -0.95);
+  hull.lineTo(-0.78, -0.95);
+  hull.closePath();
+  const hullGeo = new THREE.ExtrudeGeometry(hull, { depth: 0.14, bevelEnabled: false });
+  hullGeo.rotateX(-Math.PI / 2);
+  hullGeo.translate(0, 0.0, 0);
+  const ridge = new THREE.BoxGeometry(0.3, 0.1, 1.2);
+  ridge.translate(0, 0.19, -0.3);
+  const neck = new THREE.BoxGeometry(0.12, 0.22, 0.2);
+  neck.translate(0, 0.35, -0.7);
+  const tower = new THREE.BoxGeometry(0.42, 0.08, 0.16);
+  tower.translate(0, 0.5, -0.7);
+  const engines = [];
+  for (const ex of [-0.3, 0, 0.3]) {
+    const e = new THREE.CylinderGeometry(0.06, 0.06, 0.1, 10);
+    e.rotateX(Math.PI / 2);
+    e.translate(ex, 0.07, -1.0);
+    engines.push(e);
+  }
+  // the extruded hull is non-indexed; the primitives must match it before merging
+  const shipGeo = mergeGeometries([hullGeo, ridge, neck, tower, ...engines].map((g) => (g.index ? g.toNonIndexed() : g)), false);
+  const solidMat = new THREE.MeshBasicMaterial({ color: 0x4a9cff, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const wireMat = new THREE.MeshBasicMaterial({ color: 0x9fd0ff, wireframe: true, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+  const ship = new THREE.Group();
+  ship.add(new THREE.Mesh(shipGeo, solidMat));
+  ship.add(new THREE.Mesh(shipGeo, wireMat));
+  ship.position.y = 1.05;
+  ship.rotation.x = 0.12;
+  holo.add(ship);
+  // amber status marker over the engineering deck (aft third of the hull)
+  const markMat = new THREE.MeshBasicMaterial({ color: 0xffb060, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+  const mark = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.01, 6, 24).rotateX(Math.PI / 2), markMat);
+  mark.position.set(0, 0.2, -0.55);
+  ship.add(mark);
+  let t = 0;
+  ctx.dynamic.push({
+    object: holo,
+    update(dt) {
+      t += dt;
+      ship.rotation.y += dt * 0.3;
+      holoMat.opacity = 0.2 + 0.05 * Math.sin(t * 2.1);
+      markMat.opacity = 0.45 + 0.35 * Math.sin(t * 4.0);
+    },
+  });
+  ctx.lights.teal.push(pointLight(0x66b6ff, 8, 8, [x, y + 1.9, z]));
+}
+
 export function build(kit, ctx, room, lib) {
   const shell = roomShell(kit, ctx, room, { style: "dark", lights: false, lightRows: 2 });
   const y0 = shell.y0;
   const yTop = shell.yTop;
   const { x0, x1, z0, z1 } = room;
 
-  // ---------------------------------------------------------------- floor: centre runner + amber edges
-  kit.boxMM("deck", [16.5, y0, z0 + 0.16], [19.5, y0 + 0.006, 494.6], { color: PALETTE.impGrey, uv: "world", texel: 1 });
-  floorStrip(kit, 16.4, z0 + 0.3, 16.5, 494.6, y0);
-  floorStrip(kit, 19.5, z0 + 0.3, 19.6, 494.6, y0);
-  stencil(kit, 18, y0 + 0.009, 486.5, 1.4, 1, "up");
+  // ---------------------------------------------------------------- floor: centre runner + painted edges, ring around the holo table
+  kit.boxMM("deck", [16.5, y0, z0 + 0.16], [19.5, y0 + 0.006, 488.6], { color: PALETTE.impGrey, uv: "world", texel: 1 });
+  paintStrip(kit, 16.4, z0 + 0.3, 16.5, 488.6, y0);
+  paintStrip(kit, 19.5, z0 + 0.3, 19.6, 488.6, y0);
+  stencil(kit, 18, y0 + 0.009, 485.2, 1.4, 1, "up");
+  {
+    const g = new THREE.RingGeometry(1.7, 1.8, 48);
+    g.rotateX(-Math.PI / 2);
+    kit.add("painted", g, { pos: [HOLO.x, y0 + 0.004, HOLO.z], color: PALETTE.impAmber, uv: "keep" });
+  }
 
   // ---------------------------------------------------------------- the arc of boards + status wall
   const step = (180 - 2 * PHI0) / SLOTS;
@@ -144,7 +348,7 @@ export function build(kit, ctx, room, lib) {
       continue;
     }
     const [px, pz] = arcPoint(phi);
-    board(yawFrame(kit, px, y0, pz, yawToward(px, pz, ARC_C[0], ARC_C[1])), i);
+    board(kit, yawFrame(kit, px, y0, pz, yawToward(px, pz, ARC_C[0], ARC_C[1])), i);
   }
   // ---------------------------------------------------------------- overhead: cable trays and conduit drops
   const trayY = yTop - 0.5;
@@ -170,10 +374,11 @@ export function build(kit, ctx, room, lib) {
     pipeRun(kit, "metal", [[cx, topY, cz], [cx, upY + 0.1, cz], [tx, trayY + 0.1, tz]], 0.05, { color: PALETTE.steel, segments: 10 });
   }
 
-  // ---------------------------------------------------------------- engineer stations (two rows facing the arc)
+  // ---------------------------------------------------------------- engineer stations (two rows facing the arc), holo table between them
   for (const [sx, sz, w] of [[12.4, 488.6, 3.4], [23.6, 488.6, 3.4], [13.6, 492.0, 3.0], [22.4, 492.0, 3.0]]) {
     station(kit, sx, y0, sz, yawToward(sx, sz, ARC_C[0], 497.7), w, { chairs: 2, screen: "screen6" });
   }
+  holoTable(kit, ctx, HOLO.x, y0, HOLO.z);
 
   // ---------------------------------------------------------------- supervisor platform (starboard of the door)
   const P = { x0: 21.0, x1: x1 - 0.4, z0: z0 + 0.16, z1: 486.2, y: y0 + 0.6 };
@@ -181,8 +386,11 @@ export function build(kit, ctx, room, lib) {
   kit.boxMM("deck", [P.x0, P.y - 0.05, P.z0], [P.x1, P.y, P.z1], { color: PALETTE.impGrey, uv: "world", texel: 1 });
   kit.boxMM("hazard", [P.x0, P.y, P.z0], [P.x0 + 0.14, P.y + 0.004, P.z1], { texel: 3 });
   kit.boxMM("hazard", [P.x0, P.y, P.z1 - 0.14], [P.x1, P.y + 0.004, P.z1], { texel: 3 });
-  kit.boxMM("emitAmber", [P.x0 - 0.02, y0 + 0.04, P.z0 + 0.2], [P.x0, y0 + 0.07, P.z1 - 0.2], { uv: "keep" });
-  kit.boxMM("emitAmber", [P.x0 + 0.2, y0 + 0.04, P.z1], [P.x1 - 0.2, y0 + 0.07, P.z1 + 0.02], { uv: "keep" });
+  // toe lights under a lip along the platform edges
+  kit.boxMM("satinBlack", [P.x0 - 0.06, y0 + 0.08, P.z0 + 0.2], [P.x0, y0 + 0.11, P.z1 - 0.2]);
+  kit.boxMM("emitAmber", [P.x0 - 0.02, y0 + 0.04, P.z0 + 0.2], [P.x0, y0 + 0.065, P.z1 - 0.2], { uv: "keep" });
+  kit.boxMM("satinBlack", [P.x0 + 0.2, y0 + 0.08, P.z1], [P.x1 - 0.2, y0 + 0.11, P.z1 + 0.06]);
+  kit.boxMM("emitAmber", [P.x0 + 0.2, y0 + 0.04, P.z1], [P.x1 - 0.2, y0 + 0.065, P.z1 + 0.02], { uv: "keep" });
   kit.floor(P.x0, P.z0, P.x1, P.z1, P.y);
   kit.collider([P.x0, y0, P.z0], [P.x1, P.y, P.z1], "platform");
   kit.stairs("paintedMetal", P.x0 - 0.9, 483.0, P.x0, 484.6, y0, P.y, "x", { color: PALETTE.gunmetal, steps: 3 });
@@ -214,7 +422,7 @@ export function build(kit, ctx, room, lib) {
   }
   kit.collider([21.8, P.y, P.z0], [25.6, P.y + 1.9, P.z0 + 0.6], "lockers");
 
-  // ---------------------------------------------------------------- port side: data-core racks, plotting table
+  // ---------------------------------------------------------------- port side: data-core racks, plotting table with two chairs
   for (const [k, rx] of [7.7, 9.3, 10.9].entries()) dataRack(kit, rx, y0, z0 + 0.2, k);
   {
     const tx = 13.6;
@@ -226,12 +434,8 @@ export function build(kit, ctx, room, lib) {
     kit.box("emitBlue", tx, y0 + 0.9, tz - 0.5, 1.8, 0.02, 0.01, { uv: "keep" });
     kit.box("emitBlue", tx, y0 + 0.9, tz + 0.5, 1.8, 0.02, 0.01, { uv: "keep" });
     kit.collider([tx - 0.9, y0, tz - 0.5], [tx + 0.9, y0 + 1.0, tz + 0.5], "table");
-    for (const sx of [tx - 1.3, tx + 1.3]) {
-      kit.cyl("metal", sx, y0 + 0.24, tz, 0.05, 0.48, "y", { color: PALETTE.gunmetal });
-      kit.cyl("metal", sx, y0 + 0.02, tz, 0.22, 0.04, "y", { color: PALETTE.darkMetal, segments: 16 });
-      kit.cyl("rubber", sx, y0 + 0.5, tz, 0.2, 0.06, "y", { color: PALETTE.rubber, segments: 16 });
-      kit.collider([sx - 0.22, y0, tz - 0.22], [sx + 0.22, y0 + 0.56, tz + 0.22], "stool");
-    }
+    chair(yawFrame(kit, tx - 1.35, y0, tz, Math.PI / 2), 0, 0);
+    chair(yawFrame(kit, tx + 1.35, y0, tz, -Math.PI / 2), 0, 0);
   }
   // coolant unit by the port wall with risers into the ceiling tray
   {
@@ -256,6 +460,7 @@ export function build(kit, ctx, room, lib) {
   wallLightBar(S, doorU1 + 0.2, 23.4, 3.45);
   S.add("decal", new THREE.PlaneGeometry(0.5, 0.5), doorU0 - 0.5, 1.75, 0.005, { uv: "keep", uvRect: decalRect(5) });
   S.add("decal", new THREE.PlaneGeometry(0.5, 0.5), doorU1 + 0.5, 1.75, 0.005, { uv: "keep", uvRect: decalRect(1) });
+  wallBaseTube(S, 6.2, doorU0 - 0.3, 0.4, "emitCoolSoft");
   // deck-plan display above the platform lockers
   S.box("darkGloss", 18.0, 2.9, 0.03, 1.5, 0.75, 0.05);
   S.box("screen4", 18.0, 2.9, 0.058, 1.4, 0.65, 0.006, { uv: "keep" });
@@ -264,6 +469,7 @@ export function build(kit, ctx, room, lib) {
     const u0 = z1 - 487.4; // wall stretch between the arc end and the aft wall
     const u1 = z1 - z0 - 0.3;
     wallLightBar(W, u0 + 0.3, u1 - 0.3, 2.35);
+    wallBaseTube(W, u0 + 0.3, u1 - 4.2, 0.4, "emitCoolSoft");
     wallConsole(W, u1 - 2.4, 1.4, "screen6");
     // fire cabinet + shutoff valves
     W.box("painted", u1 - 1.1, 1.35, 0.14, 0.6, 0.9, 0.28, { color: PALETTE.orange, uv: "keep" });
@@ -293,16 +499,24 @@ export function build(kit, ctx, room, lib) {
     wallLightBar(E, u0 + 0.3, u1 - 2.0, 3.4);
   }
 
-  // ---------------------------------------------------------------- lights: amber over the boards, cool over the stations
-  for (const phi of [40, 90, 140]) {
-    const [lx, lz] = arcPoint(phi, ARC_R - 2.4);
-    ctx.lights.warm.push(pointLight(0xffb060, 60, 18, [lx, yTop - 0.7, lz]));
+  // ---------------------------------------------------------------- lights: pendant tubes over the boards and stations (no ceiling
+  // hot spots), low fill along the arc foot and the platform so floors and bases read
+  for (const phi of [38, 90, 142]) {
+    const [lx, lz] = arcPoint(phi, ARC_R - 2.6);
+    const [ux, uz] = arcPoint(phi, ARC_R - 2.6 + 1);
+    tubeFixture(kit, ctx, lx, yTop, lz, 2.6, Math.abs(ux - lx) > Math.abs(uz - lz) ? "z" : "x", { drop: 1.1, intensity: 26, distance: 15, color: 0xffcf98 });
   }
-  ctx.lights.warm.push(pointLight(0xffb060, 28, 12, [25.5, yTop - 0.8, 484.0]));
-  ctx.lights.teal.push(pointLight(0x6fb4ff, 20, 12, [18, yTop - 1.4, 494.6]));
-  ctx.lights.teal.push(pointLight(0x6fb4ff, 12, 8, [13.4, yTop - 1.2, 484.2]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 55, 20, [12.8, yTop - 0.5, 490.4]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 55, 20, [23.2, yTop - 0.5, 490.4]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 30, 14, [18, yTop - 0.6, 483.5]));
+  for (const phi of [60, 120]) {
+    const [lx, lz] = arcPoint(phi, ARC_R - 1.2);
+    ctx.lights.cool.push(pointLight(0xbfd8ff, 14, 9, [lx, y0 + 0.9, lz]));
+  }
+  ctx.lights.cool.push(pointLight(0xbfd8ff, 14, 9, [18, y0 + 0.9, 496.4]));
+  tubeFixture(kit, ctx, 25.5, yTop, 484.0, 2.4, "x", { drop: 1.0, intensity: 16, distance: 11, color: 0xffcf98 });
+  ctx.lights.teal.push(pointLight(0x6fb4ff, 10, 10, [18, yTop - 1.4, 494.6]));
+  ctx.lights.teal.push(pointLight(0x6fb4ff, 8, 7, [13.4, yTop - 1.2, 484.2]));
+  tubeFixture(kit, ctx, 12.8, yTop, 490.4, 2.6, "x", { drop: 1.0, intensity: 30, distance: 16, color: 0xdfe8ff, mat: "emitCoolSoft", family: "cool" });
+  tubeFixture(kit, ctx, 23.2, yTop, 490.4, 2.6, "x", { drop: 1.0, intensity: 30, distance: 16, color: 0xdfe8ff, mat: "emitCoolSoft", family: "cool" });
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 18, 12, [18, yTop - 0.9, 483.5]));
+  ctx.lights.cool.push(pointLight(0xbfd8ff, 12, 9, [9.5, y0 + 0.9, 484.6]));
   return shell;
 }
