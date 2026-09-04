@@ -56,17 +56,25 @@ float worley2(vec2 p) {
   return sqrt(d);
 }
 /** Macro cloud field in cloud space: x = coverage (0 clear .. 1 solid), y = "interior" (how deep inside a
- *  mass; drives vertical development so large cells tower while small ones stay flat). */
-vec2 cloudFieldCS(vec2 cs) {
+ *  mass; drives vertical development so large cells tower while small ones stay flat), z = column
+ *  thickness over a wide ramp (keeps varying across a closed deck, where x and y have saturated, so the
+ *  underside of an overcast shows its cells).
+ *  Individual cumulus are domain-warped cellular blobs (two worley scales, ~6 km and ~3 km spacing) that
+ *  only develop where a slow ~17 km macro field is high: clusters of distinct 1-4 km masses separated by
+ *  sectors of clear sky, rather than an even sprinkle that fuses into a band near the horizon. */
+vec3 cloudFieldCS(vec2 cs) {
   vec2 p = cs * 0.00015 + uCloudSeed;
-  float f = fbm(p) * 0.62 + fbm3(p * 3.1 + 7.7) * 0.38;
-  // cellular term breaks the fbm into separate cumulus masses (~2.6 km cells)
-  float cells = 1.0 - worley2(cs * (1.0 / 2600.0) + uCloudSeed * 0.37);
-  f = f * 0.76 + cells * 0.24;
-  float thr = 0.64 - uCloudCoverage * 0.44;
-  float cov = smoothstep(thr, thr + 0.2, f);
-  float interior = smoothstep(thr + 0.04, thr + 0.3, f);
-  return vec2(cov, interior);
+  vec2 warp = (vec2(fbm3(p * 1.3), fbm3(p * 1.3 + 4.2)) - 0.5) * 0.35;
+  float macro = fbm3(p * 0.4 + 9.0);
+  float cellsA = 1.0 - worley2(cs * (1.0 / 6000.0) + warp + uCloudSeed * 0.37);
+  float cellsB = 1.0 - worley2(cs * (1.0 / 3000.0) + warp * 1.5 + uCloudSeed * 0.61 + 2.3);
+  float f = (cellsA * 0.65 + cellsB * 0.35) * 0.55 + macro * 0.45;
+  float thr = 0.72 - uCloudCoverage * 0.40;
+  // narrow ramp: the edge detail comes from the 3D noise erosion, a wide ramp only made thin veils
+  float cov = smoothstep(thr, thr + 0.09, f);
+  float interior = smoothstep(thr + 0.03, thr + 0.25, f);
+  float column = smoothstep(thr - 0.04, thr + 0.5, f);
+  return vec3(cov, interior, column);
 }
 float cloudCoverageCS(vec2 cs) { return cloudFieldCS(cs).x; }
 float cloudCoverage2D(vec2 wp) { return cloudCoverageCS(wp + uCloudWind); }
@@ -82,18 +90,24 @@ float cloudShadow(vec3 wp) {
 
 /** Analytic sky radiance (no clouds) for a direction. Shared by the dome, water reflections and haze. */
 export const GLSL_SKY = /* glsl */ `
+/** Sky gradient. uZenithColor is the deep blue of the upper sky, uHorizonColor the saturated blue-cyan a
+ *  few degrees above the horizon; the blend has a short tail (most of it happens below 20 deg) so the sky
+ *  stays saturated down to ~5 deg. Only the last ~2 deg whiten toward the haze colour (the band the
+ *  aerial perspective fades distant terrain and clouds into), so there is no pale zone above the horizon. */
 vec3 skyRadiance(vec3 dir) {
   float y = clamp(dir.y, -1.0, 1.0);
   float up = max(y, 0.0);
-  float horizonMix = pow(1.0 - up, 14.0);
-  float midMix = pow(1.0 - up, 3.5) * 0.22;
-  vec3 col = mix(uZenithColor, uHorizonColor, clamp(horizonMix + midMix, 0.0, 1.0));
-  // bright, slightly warm haze band in the last few degrees above the horizon (sunlit humid air)
-  float hband = pow(1.0 - up, 30.0);
-  vec3 hazeWhite = mix(uHorizonColor, uSunHazeColor, 0.4) * 1.12;
-  col = mix(col, hazeWhite, hband * 0.55 * smoothstep(-0.05, 0.12, uSunDir.y));
+  // the horizon glow reaches higher when the sun is low (long paths through lit air all around)
+  float kLow = mix(3.5, 5.0, smoothstep(0.05, 0.35, uSunDir.y));
+  float lowMix = pow(1.0 - up, kLow);
+  vec3 col = mix(uZenithColor, uHorizonColor, lowMix);
+  // narrow warm-white haze band; never darker than the low sky so a warm sunset horizon keeps its glow
+  float hband = pow(1.0 - up, 55.0);
+  vec3 hazeWhite = max(mix(uHazeColor, uSunHazeColor, 0.3), uHorizonColor * 1.05);
+  col = mix(col, hazeWhite, hband * 0.85 * smoothstep(-0.05, 0.12, uSunDir.y));
   // slight brightening of the sky toward the sun (mie forward scatter), strongest near horizon
   float cosSun = dot(dir, uSunDir);
+  float horizonMix = pow(1.0 - up, 14.0);
   float mie = pow(max(cosSun, 0.0), 8.0) * (0.08 + 0.5 * horizonMix);
   col += uSunHazeColor * mie * smoothstep(-0.1, 0.15, uSunDir.y);
   // sunset band
