@@ -59,6 +59,7 @@ export function buildReactor(kit, ctx) {
     const { frame, length } = wallFrame(kit, w.from, w.to, y);
     impWall(frame, length, LOWER_H, {
       openings,
+      slabHoles: true,
       pitch: 4,
       seed: 900 + wi * 13,
       tone: IMP.wallMid,
@@ -387,7 +388,7 @@ export function buildReactor(kit, ctx) {
   // ---------------------------------------------------------------- views
   ctx.view("reactor", CX, y + STD.eye, z1 - 2.2, 0, -4);
   ctx.view("reactor_core", x0 + 6.5, y + STD.eye, CZ + 6, -70, 8);
-  ctx.view("reactor_pit", PIT.x0 + 2.0, RING_Y + STD.eye, INNER.z0 + 3, -55, 20);
+  ctx.view("reactor_pit", PIT.x0 + 2.0, RING_Y + STD.eye, INNER.z0 + 3, -100, 24);
   ctx.view("reactor_north", 24.5, y + STD.eye, 549.5, 140, -4);
 }
 

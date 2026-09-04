@@ -23,7 +23,7 @@ export function buildCargo(kit, ctx) {
   const rand = rng(97);
 
   buildShell(kit, ctx, id, room, {
-    wall: { pitch: 4, tone: IMP.wallDark, toneAlt: IMP.wallMid, bandMat: "lightBandWarm", styles: { plain: 0.35, control: 0.1, vent: 0.2, hatch: 0.15, pipes: 0.15, screen: 0.05 } },
+    wall: { slabHoles: true, pitch: 4, tone: IMP.wallDark, toneAlt: IMP.wallMid, bandMat: "lightBandWarm", styles: { plain: 0.35, control: 0.1, vent: 0.2, hatch: 0.15, pipes: 0.15, screen: 0.05 } },
     ceiling: { lights: false, panelW: 3.0, tone: IMP.wallDark },
     floor: { tone: IMP.wallDark },
   });
@@ -91,7 +91,7 @@ export function buildCargo(kit, ctx) {
   }
 
   // ------------------------------------------------------------ container blocks (instanced)
-  const palette = [IMP.wallDark, IMP.gunmetal, IMP.consoleDark, IMP.wallMid, 0x5a2a22, 0x6e6a2a, IMP.darkMetal];
+  const palette = [IMP.wallMid, IMP.gunmetal, IMP.wallMid, IMP.steel, 0x7a3a2c, 0x8a8440, IMP.wallDark, IMP.fabricOlive];
   const pf = containerPrefab(ctx.mats, [2.4, 2.4, 2.4], { label: 3, label2: 9 });
   const xf = [];
   const C = 2.4;
@@ -299,7 +299,7 @@ export function buildCargo(kit, ctx) {
   }
 
   // ------------------------------------------------------------ lights: amber work light on long drops
-  for (const lx of [-30, 0, 30]) for (const lz of [676, 700, 724]) ceilingLight(kit, ctx, [lx, y + h, lz], 8, "x", { mat: "lightBandWarm", color: 0xffc27a, intensity: 7, distance: 22, priority: lx === 0 ? 2 : 1, drop: 3.5 });
+  for (const lx of [-30, 0, 30]) for (const lz of [676, 700, 724]) ceilingLight(kit, ctx, [lx, y + h, lz], 8, "x", { mat: "lightBandWarm", color: 0xffc27a, intensity: 10, distance: 30, priority: lx === 0 ? 2 : 1, drop: 5.0 });
   pointLightDesc(ctx, 0xdfe8ff, 3.0, 9, [0, y + 3.6, z0 + T + 2.0], 1); // blast door
 
   // ------------------------------------------------------------ views

@@ -23,7 +23,7 @@ export function buildMaintenance(kit, ctx) {
   const rand = rng(83);
 
   buildShell(kit, ctx, id, room, {
-    wall: { pitch: 4, tone: IMP.wallMid, toneAlt: IMP.wallLight, bandMat: "lightBand", styles: { plain: 0.35, control: 0.15, vent: 0.15, hatch: 0.15, pipes: 0.15, screen: 0.05 } },
+    wall: { slabHoles: true, pitch: 4, tone: IMP.wallMid, toneAlt: IMP.wallLight, bandMat: "lightBand", styles: { plain: 0.35, control: 0.15, vent: 0.15, hatch: 0.15, pipes: 0.15, screen: 0.05 } },
     ceiling: { lights: false, panelW: 2.5, tone: IMP.wallDark },
     floor: { tone: IMP.wallDark },
   });
@@ -281,6 +281,33 @@ export function buildMaintenance(kit, ctx) {
   // ------------------------------------------------------------ deck marks, spare pipe bits
   deckMark(kit, x0 + T + 6.5, y, 634, 12, 3.4, 0, 0);
   floorDecal(kit, x0 + T + 3.5, y, 631.4, 1.2, 0);
+  // inside the door, either side of the lane: a parts pallet with crates (north) and a spare ram
+  // cylinder on trestles beside two lubricant drums (south), so the bay reads busy from the doorway
+  {
+    kit.box("impPaintedMetal", 12.4, y + 0.12, 629.6, 3.2, 0.24, 2.2, { color: IMP.hazardYellow, texel: 1 });
+    kit.box("impPaintedMetal", 12.4, y + 0.26, 629.6, 3.0, 0.04, 2.0, { color: IMP.trim, texel: 1 });
+    crate(kit, [11.6, y + 0.28, 629.5], [1.4, 1.1, 1.3], { seed: 44 });
+    crate(kit, [13.3, y + 0.28, 629.8], [1.2, 0.8, 1.2], { seed: 45, yaw: 0.12 });
+    crate(kit, [11.7, y + 1.38, 629.6], [1.1, 0.7, 0.9], { seed: 46, yaw: -0.2 });
+    kit.collider([10.7, y, 628.4], [14.1, y + 2.2, 630.8], "pallet");
+    floorDecal(kit, 12.4, y, 631.6, 0.9, 9);
+    const cz = 638.4;
+    for (const tx of [9.6, 13.0]) {
+      kit.box("impPaintedMetal", tx, y + 0.45, cz, 0.4, 0.7, 1.6, { color: IMP.hazardYellow, texel: 1 });
+      kit.box("impPaintedMetal", tx, y + 0.1, cz, 0.9, 0.2, 0.4, { color: IMP.trim, texel: 1 });
+    }
+    kit.cyl("impMetal", 11.3, y + 1.15, cz, 0.34, 4.6, "x", { color: IMP.steel, segments: 18, texel: 0.5 });
+    for (const rx of [9.9, 12.7]) kit.cyl("impPaintedMetal", rx, y + 1.15, cz, 0.42, 0.28, "x", { color: IMP.trim, segments: 18 });
+    kit.cyl("impMetal", 13.75, y + 1.15, cz, 0.16, 0.5, "x", { color: IMP.gunmetal, segments: 12 });
+    kit.collider([8.9, y, cz - 0.9], [14.0, y + 1.6, cz + 0.9], "ramCylinder");
+    for (const [dx, dz] of [[7.4, 637.6], [7.4, 638.8]]) {
+      kit.cyl("impMetal", dx, y + 0.5, dz, 0.42, 1.0, "y", { color: IMP.gunmetal, segments: 16, texel: 0.5 });
+      kit.cyl("impPaintedMetal", dx, y + 0.98, dz, 0.4, 0.04, "y", { color: IMP.trim, segments: 16 });
+      kit.cyl("impPaintedMetal", dx, y + 0.5, dz, 0.43, 0.12, "y", { color: IMP.amber, segments: 16 });
+    }
+    kit.collider([6.9, y, 637.1], [7.9, y + 1.0, 639.3], "drums");
+    floorDecal(kit, 11.3, y, 640.4, 0.9, 6, Math.PI);
+  }
   valve(kit, [30.5, y + 3.2, z0 + T + 0.35], 0.3, "z", { stem: 0.3 });
   pipeRun(kit, [[30.5, y + 0.3, z0 + T + 0.35], [30.5, y + 3.2, z0 + T + 0.35], [30.5, y + h - 1.0, z0 + T + 0.35], [30.5, y + h - 1.0, z0 + T + 2.4]], 0.16, { color: IMP.steel, clampPitch: 2 });
 
@@ -292,7 +319,7 @@ export function buildMaintenance(kit, ctx) {
 
   // ------------------------------------------------------------ views
   ctx.view("maintenance", x0 + T + 1.6, y + STD.eye, 634, -90, -2);
-  ctx.view("maintenance_bay", 37.5, y + STD.eye, 623.5, 132, 3);
-  ctx.view("maintenance_welding", 17.5, y + STD.eye, 647.5, 90, 2);
+  ctx.view("maintenance_bay", 31.5, y + STD.eye, 646.5, 45, 4); // actuator under the crane, benches beyond
+  ctx.view("maintenance_welding", 10.8, y + STD.eye, 643.4, 160, -1); // from the screen gap into the welding bay
   void rand;
 }

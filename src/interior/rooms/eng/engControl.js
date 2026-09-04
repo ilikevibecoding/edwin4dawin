@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { buildShell, roomWalls } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
-import { console as impConsole, chair, ceilingLight, pointLightDesc, railing, stairs, lockers, wallScreen, walkable, rng } from "../../impKit.js";
+import { console as impConsole, chair, ceilingLight, pointLightDesc, railing, stairs, lockers, wallScreen, walkable, table, rng } from "../../impKit.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
@@ -22,7 +22,7 @@ export function buildEngControl(kit, ctx) {
   ctx.portal("reactor"); // the window: the core must render while we stand here
 
   buildShell(kit, ctx, id, room, {
-    wall: { pitch: 4, tone: IMP.wallMid, toneAlt: IMP.wallLight, bandMat: "lightBand", styles: { plain: 0.4, control: 0.25, vent: 0.1, hatch: 0.05, pipes: 0.05, screen: 0.15 } },
+    wall: { slabHoles: true, pitch: 4, tone: IMP.wallMid, toneAlt: IMP.wallLight, bandMat: "lightBand", styles: { plain: 0.4, control: 0.25, vent: 0.1, hatch: 0.05, pipes: 0.05, screen: 0.15 } },
     walls: { east: { styles: { plain: 0.6, control: 0.2, screen: 0.2 } } },
     ceiling: { lights: false, panelW: 2.0, tone: IMP.wallDark },
     floor: { tone: IMP.wallDark },
@@ -57,7 +57,7 @@ export function buildEngControl(kit, ctx) {
   for (const dz of [-2.2, 2.2]) {
     kit.box("impPaintedMetal", P.x0 + 4.6, PY + 0.75, 574 + dz, 0.5, 1.5, 0.5, { color: IMP.consoleDark, texel: 1 });
     kit.box("darkGloss", P.x0 + 4.86, PY + 1.2, 574 + dz, 0.01, 0.5, 0.4);
-    kit.box("screen" + (dz < 0 ? 3 : 1), P.x0 + 4.866, PY + 1.2, 574 + dz, 0.004, 0.42, 0.34, { uv: "keep" });
+    kit.box("screen" + (dz < 0 ? 2 : 1), P.x0 + 4.866, PY + 1.2, 574 + dz, 0.004, 0.42, 0.34, { uv: "keep" });
     kit.box("blinkSparse", P.x0 + 4.86, PY + 0.6, 574 + dz, 0.006, 0.2, 0.4, { uv: "keep" });
   }
   floorDecal(kit, P.x0 + 3.5, PY + 0.126, 578.2, 0.9, 4, Math.PI / 2);
@@ -106,7 +106,7 @@ export function buildEngControl(kit, ctx) {
     frame.box("leds", cu, 1.3, 0.11, 3.0, 0.06, 0.01, { uv: "keep" });
     frame.quad("impDecal", cu, 3.75, 0.11, 0.5, 0.5, { uvRect: impDecalRect(11) });
     wallScreen(frame, w.u(x0 + 5), 2.4, 1.8, 1.0, 2);
-    wallScreen(frame, w.u(x0 + 21), 2.4, 1.8, 1.0, 4);
+    wallScreen(frame, w.u(x0 + 21), 2.4, 1.8, 1.0, 0);
     cableTray(frame, 1.0, w.length - 1.0, h - 0.6, { n: 0.4, cables: 4 });
     cableDrop(frame, w.u(x0 + 19), 0.9, h - 0.65, { n: 0.12 });
   }
@@ -128,6 +128,20 @@ export function buildEngControl(kit, ctx) {
     kit.cyl("impRubber", x0 + 18.9, y + (h - 0.7 + 0.9) / 2, tz, 0.05, h - 1.6, "y", { color: IMP.rubber, segments: 8 });
     kit.cyl("impRubber", x0 + 6.6 + 0.4, y + (h - 0.7 + PY - y + 0.9) / 2, tz, 0.05, h - 0.7 - (PY - y) - 0.9, "y", { color: IMP.gunmetal, segments: 8 });
   }
+  // shift-briefing table west of the corridor door, under the south wall screen
+  {
+    const bx = x0 + 6.5;
+    const bz = z1 - 5.2;
+    table(kit, [bx, y, bz], 2.8, 1.3, { h: 0.8, tone: IMP.consoleDark, top: "impPaintedMetal" });
+    kit.box("emitBlue", bx, y + 0.815, bz, 1.8, 0.01, 0.7, { color: IMP.blue });
+    kit.box("darkGloss", bx, y + 0.812, bz, 1.9, 0.004, 0.8);
+    for (const s of [-1, 1]) kit.box("blinkSparse", bx + s * 1.1, y + 0.815, bz, 0.4, 0.004, 0.6, { uv: "keep" });
+    chair(kit, [bx - 0.6, y, bz + 1.3], 0);
+    chair(kit, [bx + 0.6, y, bz + 1.3], 0);
+    chair(kit, [bx - 0.6, y, bz - 1.3], Math.PI);
+    chair(kit, [bx + 0.6, y, bz - 1.3], Math.PI);
+    floorDecal(kit, bx, y, bz + 2.6, 0.9, 11);
+  }
   // deck stencils
   floorDecal(kit, x0 + 21.5, y, z1 - 6.5, 1.2, 0);
   floorDecal(kit, x0 + 15.5, y, z0 + 3, 1.0, 15);
@@ -135,13 +149,14 @@ export function buildEngControl(kit, ctx) {
   // ------------------------------------------------------------ lights
   for (const [lz, pri] of [[566, 1], [576, 2], [586, 1]]) ceilingLight(kit, ctx, [x0 + 16, y + h, lz], 6, "x", { intensity: 4.2, distance: 12, color: 0xd6e2ff, priority: pri });
   ceilingLight(kit, ctx, [x0 + 7.5, y + h, 576], 8, "z", { intensity: 3.2, distance: 11, color: 0xd6e2ff, priority: 1 });
+  ceilingLight(kit, ctx, [x0 + 12, y + h, 594.5], 7, "x", { intensity: 3.6, distance: 11, color: 0xd6e2ff, priority: 1 }); // entrance bay
   pointLightDesc(ctx, 0x8fb8ff, 4.5, 16, [x1 - 1.6, y + 3.4, 573], 1); // core spill through the window
   pointLightDesc(ctx, 0x6fa0ff, 2.6, 8, [x0 + 1.5, y + 2.9, 576], 0); // screen wall glow
   pointLightDesc(ctx, IMP.blue, 1.4, 6, [P.x1 + 0.4, y + 0.3, 576], 0); // platform kick glow
   pointLightDesc(ctx, 0xdfe8ff, 2.5, 7, [x0 + 13, y + h - 0.6, z1 - 2], 0); // door
 
   // ------------------------------------------------------------ views
-  ctx.view("engControl", x0 + 13, y + STD.eye, z1 - 2.2, 12, -3);
+  ctx.view("engControl", x0 + 13, y + STD.eye, z1 - 2.2, 28, -3);
   ctx.view("engControl_window", x0 + 15, y + STD.eye, 574, -90, 3);
   ctx.view("engControl_screens", x0 + 21, y + STD.eye, 575, 90, 1);
   void rand;

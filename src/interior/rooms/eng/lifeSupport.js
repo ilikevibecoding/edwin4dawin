@@ -23,7 +23,7 @@ export function buildLifeSupport(kit, ctx) {
   const T = STD.wallT;
 
   buildShell(kit, ctx, id, room, {
-    wall: { pitch: 4, tone: IMP.wallDark, toneAlt: IMP.wallMid, bandMat: "lightBandCool", styles: { plain: 0.25, control: 0.1, vent: 0.3, hatch: 0.1, pipes: 0.25 } },
+    wall: { slabHoles: true, pitch: 4, tone: IMP.wallDark, toneAlt: IMP.wallMid, bandMat: "lightBandCool", styles: { plain: 0.25, control: 0.1, vent: 0.3, hatch: 0.1, pipes: 0.25 } },
     ceiling: { lights: false, panelW: 2.5, tone: IMP.wallDark },
     skip: ["floor"],
   });

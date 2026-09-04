@@ -22,7 +22,7 @@ export function buildHyperdrive(kit, ctx) {
   const rand = rng(53);
 
   buildShell(kit, ctx, id, room, {
-    wall: { pitch: 4, tone: IMP.wallMid, toneAlt: IMP.wallDark, bandMat: "lightBandWarm", styles: { plain: 0.3, control: 0.15, vent: 0.2, hatch: 0.1, pipes: 0.2, screen: 0.05 } },
+    wall: { slabHoles: true, pitch: 4, tone: IMP.wallMid, toneAlt: IMP.wallDark, bandMat: "lightBandWarm", styles: { plain: 0.3, control: 0.15, vent: 0.2, hatch: 0.1, pipes: 0.2, screen: 0.05 } },
     ceiling: { lights: false, panelW: 2.5, tone: IMP.wallDark },
     skip: ["floor"],
   });
