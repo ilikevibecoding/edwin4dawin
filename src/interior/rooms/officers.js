@@ -51,6 +51,10 @@ export function buildOfficers(kit, ctx) {
   ctx.materials.officers_warm ||= new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#ffd9a8"), emissiveIntensity: 1.9, roughness: 0.5, metalness: 0 });
   // frosted light boxes / ceiling panels: large areas, so kept well under white
   ctx.materials.officers_warm_soft ||= new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#ffd9a8"), emissiveIntensity: 1.15, roughness: 0.5, metalness: 0 });
+  // frosted diffuser of the corridor strip fixtures: lit enough to read as a light panel, well short of white
+  ctx.materials.officers_diffuser ||= new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#e9eef7"), emissiveIntensity: 0.32, roughness: 0.6, metalness: 0 });
+  // cabin cove strips: warm and clearly below white
+  ctx.materials.officers_cove ||= new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#ffd2a0"), emissiveIntensity: 0.7, roughness: 0.6, metalness: 0 });
   const sheets = sheetAtlas(ctx, "briefing_sheets");
 
   // --- plan
@@ -152,8 +156,8 @@ export function buildOfficers(kit, ctx) {
       const cz = (za + zb) / 2;
       const L = ax ? xb - xa : zb - za;
       kit.box("paintedMetal", cx, H - 0.05, cz, ax ? L + 0.2 : 0.42, 0.1, ax ? 0.42 : L + 0.2, { color: PALETTE.impDark, texel: 2 });
-      kit.box("emitWhiteFaint", cx, H - 0.095, cz, ax ? L : 0.26, 0.02, ax ? 0.26 : L, { uv: "keep" });
-      kit.box(mat, cx, H - 0.11, cz, ax ? L - 0.1 : 0.06, 0.02, ax ? 0.06 : L - 0.1, { uv: "keep" });
+      kit.box("officers_diffuser", cx, H - 0.095, cz, ax ? L : 0.26, 0.02, ax ? 0.26 : L, { uv: "keep" });
+      kit.box(mat, cx, H - 0.11, cz, ax ? L - 0.1 : 0.045, 0.02, ax ? 0.045 : L - 0.1, { uv: "keep" });
     };
     strip(-6.65, min[2] + 0.8, -6.65, max[2] - 0.8); // entry corridor
     strip(spineFrom + 0.7, 0, spineTo - 0.4, 0); // spine
@@ -362,7 +366,7 @@ function cabin(kit, ctx, labels, c, variant) {
     const seg = wallSegment(bounds, side);
     const { frame, length } = wallFrame(kit, seg.from, seg.to, 0);
     frame.box("paintedMetal", length / 2, 3.3, 0.12, length - 0.1, 0.16, 0.24, { color: PALETTE.impDark, texel: 2 });
-    frame.box("officers_warm_soft", length / 2, 3.216, 0.19, length - 0.4, 0.012, 0.08, { uv: "keep" });
+    frame.box("officers_cove", length / 2, 3.216, 0.19, length - 0.4, 0.012, 0.08, { uv: "keep" });
   }
   // frosted light box on the far wall above the shelf: the lit rectangle that reads through the door
   {
@@ -632,7 +636,7 @@ function wardroom(kit, ctx, labels, sheets, r) {
     }
     // warm cove along the top of the sofa wall
     frame.box("paintedMetal", length / 2, 3.3, 0.12, length - 0.1, 0.16, 0.24, { color: PALETTE.impDark, texel: 2 });
-    frame.box("officers_warm", length / 2, 3.216, 0.19, length - 0.4, 0.012, 0.08, { uv: "keep" });
+    frame.box("officers_cove", length / 2, 3.216, 0.19, length - 0.4, 0.012, 0.08, { uv: "keep" });
     // standing lamp in the corner: a frosted drum shade that glows
     const lp = frame.pos(0.5, 0, 0.5);
     kit.cyl("paintedMetal", lp.x, 0.02, lp.z, 0.22, 0.04, "y", { color: PALETTE.impBlack, segments: 16 });
