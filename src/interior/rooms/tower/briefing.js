@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { buildShell, roomWalls } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
-import { bench, ceilingLight, pointLightDesc, spotLightDesc, platform, wallScreen, screenArray, alertBeacon, floorDecal, placard, lockers, column, pipeRun, cableTray } from "../../impKit.js";
+import { bench, ceilingLight, pointLightDesc, spotLightDesc, platform, wallScreen, screenArray, alertBeacon, floorDecal, placard, lockers, pipeRun, cableTray } from "../../impKit.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
@@ -25,7 +25,7 @@ export function buildBriefing(kit, ctx) {
   buildShell(kit, ctx, ctx.id, room, {
     wall: { pitch: 4, tone: IMP.wallLight, toneAlt: IMP.wallMid, bandMat: "lightBand", styles: { plain: 0.62, control: 0.08, vent: 0.1, hatch: 0.08, pipes: 0.02, screen: 0.06, niche: 0.04 } },
     ceiling: { lights: false, tone: IMP.wallDark, panelW: 2.0 },
-    floor: { strip: false, tone: IMP.wallDark },
+    floor: { strip: false, tone: IMP.wallMid }, // the deck has to return some of the white key
   });
   const walls = roomWalls(room);
 
@@ -65,14 +65,32 @@ export function buildBriefing(kit, ctx) {
     const w = walls.west;
     const { frame } = wallFrame(kit, w.from, w.to, y);
     const uc = w.u(cz);
-    wallScreen(frame, uc, 2.7, 8.6, 3.0, 1, { leds: true });
-    placard(frame, uc - 6.6, 3.0, 1.1, 4);
-    placard(frame, uc + 6.6, 3.0, 1.1, 4);
-    frame.quad("impDecal", uc - 6.6, 1.55, 0.062, 0.6, 0.6, { uvRect: impDecalRect(0) });
-    frame.quad("impDecal", uc + 6.6, 1.55, 0.062, 0.6, 0.6, { uvRect: impDecalRect(15) });
-    // steel sill under the map with an indicator strip
-    frame.box("impPaintedMetal", uc, 1.05, 0.14, 9.0, 0.1, 0.28, { color: IMP.consoleDark, texel: 1 });
-    frame.box("leds", uc, 1.05, 0.285, 8.4, 0.05, 0.01, { uv: "keep" });
+    // mission display: a 16.8 m triptych (tactical map centre, data panels either side) on one backing
+    // plate that stands proud of the wall ribs (they would otherwise cut through the glass every 4 m),
+    // spanning the tiers from the ready-room soffit to the south roundel
+    const SW = [4.6, 7.0, 4.6];
+    const GAP = 0.3;
+    const TOTAL = SW[0] + SW[1] + SW[2] + 2 * GAP;
+    const SH = 3.0;
+    const SV = 2.75;
+    const N0 = 0.15; // clear of the wall ribs (0.14 deep)
+    frame.box("impPaintedMetal", uc, SV, N0 + 0.04, TOTAL + 0.5, SH + 0.5, 0.08, { color: IMP.trim, texel: 1 });
+    let zs = cz - TOTAL / 2;
+    for (const [i, sw] of SW.entries()) {
+      const su = w.u(zs + sw / 2);
+      frame.box("impPaintedMetal", su, SV, N0 + 0.11, sw + 0.14, SH + 0.14, 0.06, { color: IMP.consoleDark, texel: 1 });
+      frame.box("darkGloss", su, SV, N0 + 0.143, sw + 0.04, SH + 0.04, 0.01);
+      frame.box("screen" + [0, 1, 2][i], su, SV, N0 + 0.15, sw, SH, 0.004, { uv: "keep" });
+      zs += sw + GAP;
+    }
+    frame.box("leds", uc, SV - SH / 2 - 0.11, N0 + 0.13, 1.2, 0.05, 0.01, { uv: "keep" });
+    placard(frame, w.u(606.1), 2.75, 1.1, 4);
+    placard(frame, w.u(626.0), 3.0, 1.1, 4);
+    frame.quad("impDecal", w.u(626.0), 1.55, 0.062, 0.6, 0.6, { uvRect: impDecalRect(15) });
+    // steel sill under the display with an indicator strip
+    frame.box("impPaintedMetal", uc, 1.05, N0 + 0.14, TOTAL + 0.4, 0.1, 0.28, { color: IMP.consoleDark, texel: 1 });
+    frame.box("leds", uc, 1.05, N0 + 0.285, TOTAL - 0.8, 0.05, 0.01, { uv: "keep" });
+    kit.collider([x0 + t, y, cz - TOTAL / 2 - 0.25], [x0 + t + 0.45, y + SV + SH / 2 + 0.3, cz + TOTAL / 2 + 0.25], "missionDisplay");
     pointLightDesc(ctx, 0xc8d8ff, 2.0, 9, [x0 + 2.4, y + 3.2, cz], 1);
     // lectern: tapered plinth, sloped top with a screen and controls facing the speaker (west), emitter ring
     const lx = x0 + 6.0;
@@ -127,19 +145,26 @@ export function buildBriefing(kit, ctx) {
     frame.quad("impDecal", ud + 1.9, 1.6, 0.062, 0.6, 0.6, { uvRect: impDecalRect(7) });
     alertBeacon(frame, ctx, ud + 4.0, 3.5, { intensity: 0 });
     screenArray(frame, w.u(75.5), 3.3, 3, 1, 1.3, 0.8, { seed: 301, variants: [0, 1, 2] });
-    // alcove: lockers on the north wall, kit bench on the west wall, column + lit soffit framing it
+    // alcove: lockers on the north wall, kit bench on the west wall, under a dropped soffit (edge-lit
+    // fascia, 3.6 m clear) that lands on wall pilasters — no free-standing column, which stood in the
+    // audience's sightline to the mission display
     const ax = 60.4; // alcove's east edge
-    const az = 608.6; // alcove's south edge
+    const az = 607.4; // alcove's south edge (north of the mission display)
+    const SOF = 3.6;
     lockers(frame, w.u(53.4), w.u(59.4), 2.3, { seed: 303, tone: IMP.wallMid, doorW: 0.75 });
-    bench(kit, [x0 + t + 0.55, y, 606.9], 3.2, -Math.PI / 2, { color: IMP.fabricGrey });
-    column(kit, ax, az, y, yc, { w: 0.5, d: 0.5, lit: false });
-    kit.box("impPaintedMetal", ax, y + 3.4, (z0 + t + az) / 2, 0.5, 0.4, az - z0 - t, { color: IMP.trim, texel: 1 });
-    kit.box("impPaintedMetal", (x0 + t + ax) / 2, y + 3.4, az, ax - x0 - t, 0.4, 0.5, { color: IMP.trim, texel: 1 });
-    kit.box("emitWhite", ax, y + 3.195, (z0 + t + az) / 2, 0.3, 0.01, az - z0 - t - 0.8);
-    kit.box("emitWhite", (x0 + t + ax) / 2, y + 3.195, az, ax - x0 - t - 0.8, 0.01, 0.3);
+    bench(kit, [x0 + t + 0.55, y, 606.1], 2.2, -Math.PI / 2, { color: IMP.fabricGrey });
+    kit.boxMM("impPaintedMetal", [x0 + t, y + SOF, z0 + t], [ax, yc, az], { color: IMP.trim, texel: 1 });
+    kit.box("lightBand", ax - 0.22, y + SOF - 0.005, (z0 + t + az) / 2, 0.24, 0.01, az - z0 - t - 0.6, { uv: "keep" });
+    kit.box("lightBand", (x0 + t + ax) / 2, y + SOF - 0.005, az - 0.22, ax - x0 - t - 0.6, 0.01, 0.24, { uv: "keep" });
+    kit.box("impPaintedMetal", ax, y + SOF / 2, z0 + t + 0.2, 0.5, SOF, 0.4, { color: IMP.wallDark, texel: 1 });
+    kit.box("impPaintedMetal", x0 + t + 0.2, y + SOF / 2, az, 0.4, SOF, 0.5, { color: IMP.wallDark, texel: 1 });
+    kit.box("impMetal", ax, y + SOF / 2, z0 + t + 0.404, 0.04, SOF - 0.4, 0.008, { color: IMP.gunmetal });
+    kit.box("impMetal", x0 + t + 0.404, y + SOF / 2, az, 0.008, SOF - 0.4, 0.04, { color: IMP.gunmetal });
+    kit.collider([ax - 0.3, y, z0], [ax + 0.3, y + SOF, z0 + t + 0.45], "pilaster");
+    kit.collider([x0, y, az - 0.3], [x0 + t + 0.45, y + SOF, az + 0.3], "pilaster");
     // helmet shelf over the bench and a duty roster screen
-    kit.box("impPaintedMetal", x0 + t + 0.3, y + 1.9, 606.9, 0.5, 0.05, 3.0, { color: IMP.trim, texel: 1 });
-    for (let i = 0; i < 4; i++) kit.add("impPaintedMetal", new THREE.SphereGeometry(0.16, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [x0 + t + 0.3, y + 1.93, 605.9 + i * 0.68], color: IMP.wallLight, uv: "scale", uvScale: [1, 1] });
+    kit.box("impPaintedMetal", x0 + t + 0.3, y + 1.9, 606.1, 0.5, 0.05, 2.2, { color: IMP.trim, texel: 1 });
+    for (let i = 0; i < 3; i++) kit.add("impPaintedMetal", new THREE.SphereGeometry(0.16, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [x0 + t + 0.3, y + 1.93, 605.4 + i * 0.7], color: IMP.wallLight, uv: "scale", uvScale: [1, 1] });
     placard(frame, w.u(56.4), 3.1, 0.6, 3);
     pointLightDesc(ctx, WHITE, 1.4, 6, [56.4, y + 3.0, 606.6], 0);
     floorDecal(kit, 58.6, y, 607.2, 0.8, 13);
@@ -173,11 +198,13 @@ export function buildBriefing(kit, ctx) {
   // ---- ceiling: white troughs over the tiers and the front, transverse beams framing the aisle -------------------
   {
     const L = zA[1] - zA[0] - 0.4;
-    for (const tx of [60.0, X_T0 + TIER_D * 0.5, X_T0 + TIER_D * 2.5, X_T0 + TIER_D * 4.5]) {
-      // two lights per long trough
+    for (const tx of [61.0, X_T0 + TIER_D * 0.5, X_T0 + TIER_D * 2.5, X_T0 + TIER_D * 4.5]) {
+      // two lights per long trough; the tier troughs carry the room's key (dark benches on a dark deck,
+      // and the band emissives light nothing), the front trough sits near the display's own light
+      const I = tx > X_T0 ? 7.5 : 5.0;
       ceilingLight(kit, ctx, [tx, yc, cz], L, "z", { color: WHITE, intensity: 0, w: 0.34 });
-      pointLightDesc(ctx, WHITE, 2.7, 10, [tx, yc - 0.6, 610.5], 1);
-      pointLightDesc(ctx, WHITE, 2.7, 10, [tx, yc - 0.6, 621.5], 1);
+      pointLightDesc(ctx, WHITE, I, 11, [tx, yc - 0.6, 610.5], 1);
+      pointLightDesc(ctx, WHITE, I, 11, [tx, yc - 0.6, 621.5], 1);
     }
     for (const bz of [aisle[0] - 0.5, aisle[1] + 0.5]) {
       kit.box("impPaintedMetal", (x0 + x1) / 2, yc - 0.24, bz, x1 - x0 - 0.6, 0.48, 0.4, { color: IMP.trim, texel: 1 });
@@ -188,7 +215,7 @@ export function buildBriefing(kit, ctx) {
 
   // ---- camera views ---------------------------------------------------------------------------------------------
   const eye = y + STD.eye;
-  ctx.view("briefing", 64.5, eye, z0 + 2.4, 145, -4);
+  ctx.view("briefing", 64.5, eye, z0 + 2.4, 138, -4);
   ctx.view("briefing_tiers", x0 + 8.5, eye, cz - 0.6, -84, -2);
   ctx.view("briefing_screen", X_T0 + TIER_D * 2.5, eye, cz, 90, -4);
   ctx.view("briefing_ready", 58.5, eye, 611.8, 30, -4);
