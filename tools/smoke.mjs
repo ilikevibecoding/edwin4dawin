@@ -7,8 +7,11 @@ import { resolve } from "node:path";
 const base = process.argv[2] || "http://127.0.0.1:5173/";
 const view = process.argv[3] || null;
 const executablePath = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/local/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].find((p) => existsSync(p));
+const launchEnv = { ...process.env };
+delete launchEnv.DISPLAY; // a DISPLAY makes headless Chrome try GLX on the VNC X server and WebGL context creation fails
 const browser = await chromium.launch({
   headless: true,
+  env: launchEnv,
   executablePath,
   args: ["--no-sandbox", "--disable-dev-shm-usage", "--use-gl=angle", "--use-angle=swiftshader-webgl", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl", "--disable-gpu-vsync", "--disable-frame-rate-limit"],
 });
