@@ -108,7 +108,7 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss) {
 
 /** Runs after normal_fragment_begin: wave normal, body reflectance, foam. Leaves w* variables in main scope. */
 const WATER_FRAG_SURFACE = /* glsl */ `
-vec3 wN; vec3 wV; float wFoam; float wMss; float wDepth; vec3 wBodyR;
+vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR;
 {
   vec2 wp = vWorldPos.xz;
   float foot = length(fwidth(wp)); // metres of water per pixel
@@ -245,7 +245,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; float wDepth; vec3 wBodyR;
   float whitecap = smoothstep(0.74, 0.86, val0) * smoothstep(7.0, 14.0, uWindSpeed) * smoothstep(2.0, 6.0, depth) * open * w0;
   foam = clamp(foam + wake.r * 1.2 + whitecap, 0.0, 1.0);
 
-  wN = N; wV = V; wFoam = foam; wMss = mss; wDepth = depth;
+  wN = N; wV = V; wFoam = foam; wMss = mss;
   wBodyR = R;
   normal = normalize((viewMatrix * vec4(N, 0.0)).xyz);
   nonPerturbedNormal = normal;
