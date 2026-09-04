@@ -80,7 +80,9 @@ export class LightPool {
     const range = (f.distance || 10) * 1.6;
     if (d2 > range * range) return 0;
     const s = f.intensity / (1 + d2 * 0.25);
-    return sp && sp === this.current ? s * 1.8 : s;
+    // the room the viewer stands in keeps its own lights: fixtures seen through a doorway from a
+    // neighbouring space (a hangar's 2600 cd banks next to a small dock) are scored well below them
+    return !sp || !this.current || sp === this.current ? s : s * 0.22;
   }
 
   // Top-k selection without per-frame allocation: scores go into a preallocated array, the k best
