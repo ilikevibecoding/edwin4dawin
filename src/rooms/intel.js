@@ -143,6 +143,31 @@ export function buildIntel(kit, ctx, room) {
     impChair(kit, -6.5 - 0.45, 0, cz + s * 1.02, yaw);
     impChair(kit, -6.5 + 0.55, 0, cz + s * 1.02, yaw);
   }
+
+  // ---- central analyst table on the analysis floor between the arch and the holo table: black frame,
+  // gloss top with two inset readouts and a centre data strip, datapads, four chairs -----------------
+  {
+    const ax = 3.6;
+    const az = 0;
+    const aw = 3.6;
+    const ad = 1.6;
+    const ah = 0.78;
+    kit.box("impMetal", ax, 0.06, az, aw - 0.6, 0.12, ad - 0.6, { color: PALETTE.impCharcoal, texel: 1 });
+    kit.box("impTrim", ax, ah / 2, az, aw - 1.0, ah - 0.1, ad - 0.8, { color: PALETTE.impBlack, texel: 1 });
+    for (const s of [-1, 1]) kit.box("impMetal", ax + s * (aw / 2 - 0.5), ah / 2, az, 0.08, ah - 0.1, ad - 0.9, { color: PALETTE.impGreyDark, texel: 1 });
+    kit.box("impTrim", ax, ah - 0.035, az, aw, 0.07, ad, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("impGloss", ax, ah + 0.006, az, aw - 0.08, 0.012, ad - 0.08);
+    for (const s of [-1, 1]) kit.box(accentKey, ax, ah - 0.035, az + s * (ad / 2 + 0.006), aw - 0.4, 0.014, 0.012);
+    // centre data strip (dim red) flanked by two inset readouts, one per side
+    kit.box("emitRedDim", ax, ah + 0.014, az, 1.6, 0.006, 0.08);
+    kit.add("scrRed3", new THREE.PlaneGeometry(0.9, 0.5).rotateX(-Math.PI / 2), { pos: [ax - 1.1, ah + 0.014, az - 0.25], rot: [0, Math.PI, 0], uv: "keep" });
+    kit.add("scrWhite3", new THREE.PlaneGeometry(0.9, 0.5).rotateX(-Math.PI / 2), { pos: [ax + 1.1, ah + 0.014, az + 0.25], uv: "keep" });
+    datapad(kit, ax - 0.5, ah + 0.02, az + 0.5, 2.9, { screen: "scrRed0", accentKey });
+    datapad(kit, ax + 0.6, ah + 0.02, az - 0.5, -0.3, { screen: "scrWhite1", accentKey });
+    cup(kit, ax + 1.5, ah + 0.02, az - 0.55);
+    kit.collider([ax - aw / 2, 0, az - ad / 2], [ax + aw / 2, ah + 0.03, az + ad / 2], "analyst table");
+    for (const s of [-1, 1]) for (const dx of [-0.85, 0.85]) impChair(kit, ax + dx, 0, az + s * (ad / 2 + 0.55), s > 0 ? 0 : Math.PI);
+  }
   // structural pillars mark the edge of the analysis floor
   impPillar(kit, 3.8, -6.3, h, { w: 0.5, accentKey });
   impPillar(kit, 3.8, 6.3, h, { w: 0.5, accentKey });
@@ -175,12 +200,12 @@ export function buildIntel(kit, ctx, room) {
 
   // ---- lights: hard key over the core, white fills, a dim red area light from the ceiling troughs,
   // cool practicals along the rack walls; the vestibule fill stays off the door axis (dark door frame)
-  kit.light({ type: "spot", pos: [tx, h - 0.25, tz], target: [tx, th, tz], color: 0xdfe6ff, intensity: lux(h - 0.25 - th, 2.8), distance: 10, angle: 0.5, penumbra: 0.45, shadow: true, priority: 0.95 });
-  kit.light({ type: "point", pos: [4.0, h - 0.5, 0], color: 0xc8d0e0, intensity: lux(h - 0.5, 3.7), distance: 16, priority: 0.5 });
-  kit.light({ type: "point", pos: [-7.5, h - 0.5, 0], color: 0xc8d0e0, intensity: lux(h - 0.5, 3.4), distance: 16, priority: 0.48 });
-  kit.light({ type: "point", pos: [10.2, h - 0.5, -3.6], color: 0xc8d0e0, intensity: lux(h - 0.5, 2.6), distance: 11, priority: 0.46 });
-  kit.light({ type: "point", pos: [-6.0, h - 0.4, -3.5], color: red, intensity: lux(h - 0.4, 2.5), distance: 15, priority: 0.42 });
-  kit.light({ type: "point", pos: [-6.0, h - 0.4, 3.5], color: red, intensity: lux(h - 0.4, 2.5), distance: 15, priority: 0.41 });
+  kit.light({ type: "spot", pos: [tx, h - 0.25, tz], target: [tx, th, tz], color: 0xdfe6ff, intensity: lux(h - 0.25 - th, 3.2), distance: 10, angle: 0.5, penumbra: 0.45, shadow: true, priority: 0.95 });
+  kit.light({ type: "point", pos: [4.0, h - 0.5, 0], color: 0xc8d0e0, intensity: lux(h - 0.5, 6.2), distance: 17, priority: 0.5 });
+  kit.light({ type: "point", pos: [-7.5, h - 0.5, 0], color: 0xc8d0e0, intensity: lux(h - 0.5, 5.4), distance: 17, priority: 0.48 });
+  kit.light({ type: "point", pos: [10.6, h - 0.5, -1.8], color: 0xc8d0e0, intensity: lux(h - 0.5, 5.4), distance: 13, priority: 0.46 });
+  kit.light({ type: "point", pos: [-6.0, h - 0.4, -3.5], color: red, intensity: lux(h - 0.4, 3.4), distance: 15, priority: 0.42 });
+  kit.light({ type: "point", pos: [-6.0, h - 0.4, 3.5], color: red, intensity: lux(h - 0.4, 3.4), distance: 15, priority: 0.41 });
   kit.light({ type: "point", pos: [-4.5, 2.3, -6.4], color: 0xcfe0ff, intensity: 10.0, distance: 10, priority: 0.36 });
   kit.light({ type: "point", pos: [-4.5, 2.3, 6.4], color: 0xcfe0ff, intensity: 10.0, distance: 10, priority: 0.35 });
 }
