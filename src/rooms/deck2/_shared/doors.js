@@ -36,7 +36,8 @@ export const DOOR_TABLE = {
   "d3-lobby-cor": { pos: [6.5, 12, 565], kind: "blast", rooms: ["d3-lobby", "d3-cor"] },
   "d3-engctl-cor": { pos: [4, 12, 590], kind: "standard", rooms: ["d3-engctl", "d3-cor"] },
   "d3-cor-reactor": { pos: [6.5, 12, 612.5], kind: "blast", rooms: ["d3-cor", "d3-reactor"] },
-  "d3-engctl-reactor": { pos: [-12, 12, 612.5], kind: "standard", rooms: ["d3-engctl", "d3-reactor"] },
+  // sits east of the shared window (x −26..−2) and west of the corridor blast door (x 4.5..8.5)
+  "d3-engctl-reactor": { pos: [1, 12, 612.5], kind: "standard", rooms: ["d3-engctl", "d3-reactor"] },
   "d3-reactor-hyper": { pos: [0, 12, 690], kind: "blast", rooms: ["d3-reactor", "d3-hyperdrive"] },
 };
 
