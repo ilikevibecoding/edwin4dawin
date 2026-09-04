@@ -47,6 +47,16 @@ const smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
+/** Individual windows (0.8 m wide on a 1.5 m pitch) centred along a run of length `len`; `place(t)` builds
+ *  the window at offset t. Runs of separate panes read as lit galleries instead of blooming into bars. */
+const WINDOW_W = 0.8;
+const WINDOW_PITCH = 1.5;
+function windowRun(len, place) {
+  const n = Math.max(1, Math.floor((len - WINDOW_W) / WINDOW_PITCH) + 1);
+  const t0 = (-(n - 1) * WINDOW_PITCH) / 2;
+  for (let i = 0; i < n; i++) place(t0 + i * WINDOW_PITCH);
+}
+
 // ---------------------------------------------------------------------------
 // Detail geometry library (metres; instanced with near-uniform scale)
 // ---------------------------------------------------------------------------
@@ -124,7 +134,7 @@ export function buildDetails(materials, hull, sup) {
   lod0.name = "details_lod0";
   group.add(lod0);
 
-  const per = Array.from({ length: CHUNKS }, () => ({ boxes: [], lights: [], pipes: [], reds: [] }));
+  const per = Array.from({ length: CHUNKS }, () => ({ boxes: [], lights: [], windows: [], pipes: [], reds: [] }));
   const city = { boxes: [], lights: [], pipes: [], reds: [] };
   const global = { radiators: [], sensors: [], antennas: [], wedges: [], reds: [], dim: [] };
   let greebles = 0;
@@ -143,7 +153,8 @@ export function buildDetails(materials, hull, sup) {
       const gh = tower ? (rand() < 0.35 ? 22 + rand() * 16 : 9 + rand() * 12) : hall ? 3 + rand() * 3 : 1.5 + rand() * 3.5;
       const ox = (rand() - 0.5) * Math.max(0, a.w - gw - 1);
       const oz = (rand() - 0.5) * Math.max(0, a.l - gd - 1);
-      const k = rand() < 0.15 ? 0.3 + rand() * 0.1 : 0.58 + rand() * 0.3;
+      // mostly mid greys with a third of the blocks dark, so the city does not bleach to white in the sun
+      const k = rand() < 0.3 ? 0.3 + rand() * 0.12 : 0.5 + rand() * 0.24;
       city.boxes.push(onPlate(a, ox, gh / 2 - 0.15, oz, gw, gh, gd, grey(k, 1.02)));
       greebles++;
       if (tower || hall) {
@@ -252,7 +263,10 @@ export function buildDetails(materials, hull, sup) {
         out.boxes.push(plateauItem(side, tx, tz, tw, th, td, grey(tone, 1.02)));
         out.boxes.push(plateauItem(side, tx, tz, tw * 0.6, 2.2, td * 0.6, grey(tone * 0.8), 0, 1.4 + th));
         out.boxes.push(plateauItem(side, tx, tz, 0.5, 6, 0.5, grey(0.4), 0, 1.4 + th + 2.2));
-        for (let y = 3; y < th - 2; y += 3.4) if (rand() < 0.7) out.lights.push(plateauItem(side, tx, tz + td / 2 + 0.1, tw * 0.55, 0.35, 0.2, null, 0, y));
+        for (let y = 3; y < th - 2; y += 3.4) {
+          if (rand() < 0.3) continue;
+          windowRun(tw * 0.55, (t) => out.windows.push(plateauItem(side, tx + t, tz + td / 2 + 0.1, WINDOW_W, 1.0, 0.2, null, 0, y)));
+        }
         // soot fan trailing aft of the tower base
         out.boxes.push(plateauItem(side, tx, tz + td / 2 + 7, tw * 1.1, 0.06, 12 + rand() * 8, grey(0.42, 0.98), 0, 0.02));
         greebles += 4;
@@ -278,9 +292,12 @@ export function buildDetails(materials, hull, sup) {
         let z0 = -gl / 2 + 2;
         while (z0 < gl / 2 - 3) {
           const run = Math.min(gl / 2 - 1 - z0, 3 + rand() * 6);
-          const cx = c.x + Math.cos(c.yaw) * sx * (gw / 2 + 0.08) + Math.sin(c.yaw) * (z0 + run / 2);
-          const cz = c.z - Math.sin(c.yaw) * sx * (gw / 2 + 0.08) + Math.cos(c.yaw) * (z0 + run / 2);
-          out.lights.push(plateauItem(side, cx, cz, 0.16, 0.35, run, null, c.yaw, 1.4 + gh * 0.55));
+          const mid = z0 + run / 2;
+          windowRun(run, (t) => {
+            const cx = c.x + Math.cos(c.yaw) * sx * (gw / 2 + 0.08) + Math.sin(c.yaw) * (mid + t);
+            const cz = c.z - Math.sin(c.yaw) * sx * (gw / 2 + 0.08) + Math.cos(c.yaw) * (mid + t);
+            out.windows.push(plateauItem(side, cx, cz, 0.16, 0.9, WINDOW_W, null, c.yaw, 1.4 + gh * 0.5));
+          });
           z0 += run + 1.5 + rand() * 4;
         }
       }
@@ -459,8 +476,11 @@ export function buildDetails(materials, hull, sup) {
       while (t < gl / 2 - 2) {
         const run = Math.min(gl / 2 - 1 - t, 2 + rand() * 5);
         const lz = zc + t + run / 2;
-        const lx = halfWidth(lz) - HULL.trenchInset + gd * 1.045 + 0.1;
-        out.lights.push(worldItem(s * lx, gy + gh * 0.5, lz, 0.16, 0.45, run, 0, yaw, 0, null));
+        windowRun(run, (u) => {
+          const wz = lz + u;
+          const wx = halfWidth(wz) - HULL.trenchInset + gd * 1.045 + 0.1;
+          out.windows.push(worldItem(s * wx, gy + gh * 0.5, wz, 0.16, 1.0, WINDOW_W, 0, yaw, 0, null));
+        });
         t += run + 1 + rand() * 3;
       }
       greebles += 3;
@@ -625,6 +645,7 @@ export function buildDetails(materials, hull, sup) {
     const p = per[ci];
     if (p.boxes.length) cg.add(instancedMesh(boxGeo, materials.hullDark, p.boxes, { name: "detailBoxes", lod: 0 }));
     if (p.lights.length) cg.add(instancedMesh(boxGeo, materials.exteriorLight, p.lights, { name: "detailLights", lod: 0 }));
+    if (p.windows.length) cg.add(instancedMesh(boxGeo, materials.ext_window, p.windows, { name: "detailWindows", lod: 0 }));
     if (p.pipes.length) cg.add(instancedMesh(pipeGeo, materials.hullDark, p.pipes, { name: "detailPipes", lod: 0 }));
     if (p.reds.length) cg.add(instancedMesh(boxGeo, materials.exteriorRed, p.reds, { name: "detailReds", lod: 0 }));
   }
