@@ -186,7 +186,7 @@ export function buildCorridorBox(kit, ctx, b, opts = {}) {
   }
 
   // ceiling: plate, ribs, two edge light channels along the long axis
-  kit.boxMM("paintedMetal", [b.x0 - WALL_T, y0 + h, b.z0 - WALL_T], [b.x1 + WALL_T, y0 + h + 0.12, b.z1 + WALL_T], { color: PALETTE.gunmetal, uv: "world", texel: 0.7 });
+  kit.boxMM("painted", [b.x0 - WALL_T, y0 + h, b.z0 - WALL_T], [b.x1 + WALL_T, y0 + h + 0.12, b.z1 + WALL_T], { color: PALETTE.gunmetal, uv: "world", texel: 0.5 });
   const len = longX ? w : d;
   const ribs = Math.max(1, Math.floor(len / 4));
   for (let i = 1; i < ribs; i++) {
@@ -212,7 +212,7 @@ export function buildCorridorBox(kit, ctx, b, opts = {}) {
     const t = (i + 0.5) / n;
     const px = longX ? b.x0 + w * t : (b.x0 + b.x1) / 2;
     const pz = longX ? (b.z0 + b.z1) / 2 : b.z0 + d * t;
-    ctx.lights.cool.push(pointLight(style.light, 4.5, 10, [px, y0 + h - 0.45, pz]));
+    ctx.lights.cool.push(pointLight(style.light, 4.5, 10, [px, y0 + h - 0.9, pz]));
   }
   return { y0, h, openings, frames };
 }

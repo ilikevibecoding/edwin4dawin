@@ -121,7 +121,8 @@ export function roomShell(kit, ctx, room, opts = {}) {
 
   // ceiling: dark plate, structural ribs across the short axis, recessed light channels along the long axis
   if (ceiling) {
-    kit.boxMM("paintedMetal", [x0 - wallDepth, yTop, z0 - wallDepth], [x1 + wallDepth, yTop + 0.12, z1 + wallDepth], { color: PALETTE.gunmetal, uv: "world", texel: 0.7 });
+    // matte painted ceiling plate: a metallic plate throws specular blobs from every pooled light
+    kit.boxMM("painted", [x0 - wallDepth, yTop, z0 - wallDepth], [x1 + wallDepth, yTop + 0.12, z1 + wallDepth], { color: PALETTE.gunmetal, uv: "world", texel: 0.5 });
     const longX = w >= d;
     const ribStep = 3.2;
     const ribCount = Math.max(1, Math.floor((longX ? w : d) / ribStep));
@@ -154,7 +155,7 @@ export function roomShell(kit, ctx, room, opts = {}) {
       for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
         const px = x0 + (w * (i + 0.5)) / nx;
         const pz = z0 + (d * (j + 0.5)) / nz;
-        ctx.lights.cool.push(pointLight(0xdfe8ff, intensity, reach, [px, yTop - 0.6, pz]));
+        ctx.lights.cool.push(pointLight(0xdfe8ff, intensity, reach, [px, yTop - Math.min(1.1, h * 0.3), pz]));
       }
     }
   }

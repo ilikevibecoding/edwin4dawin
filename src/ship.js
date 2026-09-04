@@ -9,7 +9,7 @@ import { PALETTE } from "./materials.js";
 import { decalRect, GRATE_TILE } from "./textures.js";
 import {
   UP, X_AXIS, Z_AXIS, WALL_T, DOOR_H, Frame, wallFrame, ceilingFrame, panelGrid, porthole,
-  LIGHT_SCALE, pointLight, chamferBoxes, windowSpot, jitterPanelUVs, colorGeo,
+  LIGHT_SCALE, pointLight, chamferBoxes, windowSpot, jitterPanelUVs, colorGeo, PORTHOLE_DEFAULTS,
 } from "./interior/lib.js";
 
 // Corridor dimensions (local wing space: corridor runs from z=0 aft to z=-16 forward).
@@ -137,9 +137,9 @@ function buildCorridor(kit, ctx) {
   }
   // four warm point lights hung well below the ceiling (the panels beside the fixtures don't blow out,
   // and 0.6 m down nobody can tell which fixture a pool belongs to)
-  for (const z of [-1.5, -5.5, -9.5, -13.5]) ctx.lights.warm.push(pointLight(0xffc48c, 6.5, 10, [0, h - 0.6, z]));
+  for (const z of [-1.5, -5.5, -9.5, -13.5]) ctx.lights.warm.push(pointLight(0xe2eaff, 6.5, 10, [0, h - 0.6, z]));
   // teal trench light (soft floor glow; the strips themselves carry the look through bloom)
-  ctx.lights.teal.push(pointLight(0x4fd8cc, 2.6, 10, [0, -0.1, zMid]));
+  ctx.lights.teal.push(pointLight(0x7fb8ff, 2.6, 10, [0, -0.1, zMid]));
 
   // --- handrails along both walls (broken at the doorways), with brackets
   const railY = 1.02;
@@ -570,13 +570,13 @@ function buildCockpit(kit, ctx) {
     kit.collider([-2.2, 0, cz0 - 0.2], [2.2, 1.2, cz1 + 0.15], "console");
     kit.collider([-0.35, 0, -19.6], [0.35, 1.0, -18.7], "pedestal");
     // console glow lights
-    ctx.lights.warm.push(pointLight(0xff9d55, 2.4, 4, [-1.2, 1.3, -20.4]));
-    ctx.lights.teal.push(pointLight(0x4fd8cc, 2.0, 4, [1.2, 1.3, -20.4]));
+    ctx.lights.warm.push(pointLight(0xffd2a0, 2.4, 4, [-1.2, 1.3, -20.4]));
+    ctx.lights.teal.push(pointLight(0x7fb8ff, 2.0, 4, [1.2, 1.3, -20.4]));
     // teal kick strip along the console base + pedestal foot: lifts the floor out of black
     kit.boxMM("emitTeal", [-2.1, 0.13, cz0 + 0.8], [2.1, 0.16, cz0 + 0.812]);
     kit.boxMM("metalRough", [-2.15, 0.11, cz0 + 0.75], [2.15, 0.18, cz0 + 0.8], { color: PALETTE.darkMetal });
     for (const s of [-1, 1]) kit.boxMM("emitTeal", [s > 0 ? hwC - 0.56 : -hwC + 0.55, 0.12, -20.5], [s > 0 ? hwC - 0.548 : -hwC + 0.562, 0.15, -18.5]);
-    ctx.lights.teal.push(pointLight(0x4fd8cc, 2.2, 4.5, [0, 0.3, -19.7]));
+    ctx.lights.teal.push(pointLight(0x7fb8ff, 2.2, 4.5, [0, 0.3, -19.7]));
   }
 
   // --- pilot seats
@@ -691,7 +691,7 @@ function buildCockpit(kit, ctx) {
   kit.box("paintedMetal", 0, h - 0.06, -17.9, 1.4, 0.08, 0.3, { color: PALETTE.gunmetal });
   kit.box("emitWarmSoft", 0, h - 0.11, -17.9, 1.2, 0.03, 0.1, { uv: "keep" });
   // hung lower than the corridor lights: this one has to reach the mat between the seats
-  ctx.lights.warm.push(pointLight(0xffc48c, 6, 7, [0, h - 0.7, -17.9]));
+  ctx.lights.warm.push(pointLight(0xe2eaff, 6, 7, [0, h - 0.7, -17.9]));
 }
 
 function buildQuarters(kit, ctx) {
@@ -741,7 +741,7 @@ function buildQuarters(kit, ctx) {
   kit.boxMM("metal", [bx1 + 0.02, 0.27, bz1 - 0.7], [bx1 + 0.05, 0.31, bz1 - 0.4], { color: PALETTE.steel });
   // under-bunk teal strip (proud of the frame face)
   kit.boxMM("emitTeal", [bx1 - 0.03, 0.1, bz0 + 0.1], [bx1 + 0.012, 0.125, bz1 - 0.1]);
-  ctx.lights.teal.push(pointLight(0x4fd8cc, 1.2, 3, [bx1 + 0.3, 0.15, (bz0 + bz1) / 2]));
+  ctx.lights.teal.push(pointLight(0x7fb8ff, 1.2, 3, [bx1 + 0.3, 0.15, (bz0 + bz1) / 2]));
   // headboard shelf + reading lamp (beside the porthole, over the pillow end)
   kit.boxMM("metal", [x0, 1.15, bz1 + 0.05], [bx1, 1.2, bz1 + 0.5], { color: PALETTE.gunmetal, texel: 1 });
   kit.boxMM("metal", [x0 + 0.05, 1.2, bz1 + 0.15], [x0 + 0.35, 1.32, bz1 + 0.35], { color: PALETTE.steel });
@@ -753,7 +753,7 @@ function buildQuarters(kit, ctx) {
   for (const ly of [1.62, 1.66, 1.7]) kit.boxMM("metal", [x0 + 0.31, ly, bz1 + 0.16], [x0 + 0.36, ly + 0.015, bz1 + 0.42], { color: PALETTE.gunmetal });
   kit.boxMM("metal", [x0 + 0.3, 1.52, bz1 + 0.1], [x0 + 0.42, 1.55, bz1 + 0.48], { color: PALETTE.gunmetal });
   kit.boxMM("metal", [x0 + 0.3, 1.78, bz1 + 0.1], [x0 + 0.42, 1.81, bz1 + 0.48], { color: PALETTE.gunmetal });
-  ctx.lights.warm.push(pointLight(0xffb070, 2.2, 4, [x0 + 0.75, 1.55, bz1 + 0.3]));
+  ctx.lights.warm.push(pointLight(0xffd2a0, 2.2, 4, [x0 + 0.75, 1.55, bz1 + 0.3]));
   kit.collider([x0, 0, bz0], [bx1 + 0.05, 0.75, bz1], "bunk");
 
   // mattress / blanket / pillow -> separate interactable mesh
@@ -812,7 +812,7 @@ function buildQuarters(kit, ctx) {
     kit.box("emitTeal", (x0 + x1) / 2, h - 0.09, (z0 + z1) / 2 + s * 0.47, 0.8, 0.02, 0.012);
   }
   // the spot only throws downward; this small uplight is what lets the ceiling panels read at all
-  ctx.lights.warm.push(pointLight(0xffc48c, 2.6, 4.5, [(x0 + x1) / 2, h - 0.32, (z0 + z1) / 2]));
+  ctx.lights.warm.push(pointLight(0xe2eaff, 2.6, 4.5, [(x0 + x1) / 2, h - 0.32, (z0 + z1) / 2]));
   const spot = new THREE.SpotLight(0xffc08a, 32 * LIGHT_SCALE, 8, 0.8, 0.6, 1.7);
   spot.position.set((x0 + x1) / 2, h - 0.15, (z0 + z1) / 2);
   spot.target.position.set((x0 + x1) / 2 - 0.45, 0, (z0 + z1) / 2 - 0.2);
@@ -920,12 +920,12 @@ function buildGalley(kit, ctx) {
   kit.boxMM("paintedMetal", [x1 - 0.4, 1.56, cz0 + 0.1], [x1 - 0.25, 1.62, cz1 - 0.1], { color: PALETTE.darkMetal, texel: 2 });
   kit.boxMM("emitWarmSoft", [x1 - 0.36, 1.555, cz0 + 0.15], [x1 - 0.29, 1.565, cz1 - 0.15], { uv: "keep" });
   // small and well clear of the cabinet fronts: inverse-square at 5 cm was a white blob on the doors
-  ctx.lights.warm.push(pointLight(0xffc48c, 0.5, 2.5, [x1 - 0.6, 1.3, (cz0 + cz1) / 2]));
+  ctx.lights.warm.push(pointLight(0xe2eaff, 0.5, 2.5, [x1 - 0.6, 1.3, (cz0 + cz1) / 2]));
   // the room's key: a warm downlight over the counter (fixture on the ceiling, light hung below it), so
   // the counter, backsplash and cabinet fronts carry the highlights and the far wall falls off
   kit.box("paintedMetal", x1 - 0.95, h - 0.05, (cz0 + cz1) / 2, 0.4, 0.08, 2.2, { color: PALETTE.gunmetal });
   kit.box("emitWarmSoft", x1 - 0.95, h - 0.1, (cz0 + cz1) / 2, 0.16, 0.03, 2.0, { uv: "keep" });
-  ctx.lights.warm.push(pointLight(0xffc48c, 3.6, 7, [x1 - 1.35, h - 0.4, (cz0 + cz1) / 2]));
+  ctx.lights.warm.push(pointLight(0xe2eaff, 3.6, 7, [x1 - 1.35, h - 0.4, (cz0 + cz1) / 2]));
   // sink
   kit.boxMM("metal", [cx0 + 0.1, 0.9, cz1 - 1.0], [cx1 - 0.08, 0.93, cz1 - 0.45], { color: PALETTE.darkMetal, texel: 1 });
   kit.cyl("metal", cx1 - 0.15, 1.05, cz1 - 0.72, 0.015, 0.3, "y", { color: PALETTE.steel, segments: 8 });
@@ -1063,7 +1063,7 @@ function buildGalley(kit, ctx) {
   // centre ceiling fixture (emissive only; the counter downlight is the room's key)
   kit.box("paintedMetal", (x0 + x1) / 2 - 0.4, h - 0.05, (z0 + z1) / 2, 1.6, 0.08, 0.3, { color: PALETTE.gunmetal });
   kit.box("emitWarmSoft", (x0 + x1) / 2 - 0.4, h - 0.1, (z0 + z1) / 2, 1.4, 0.03, 0.1, { uv: "keep" });
-  ctx.lights.teal.push(pointLight(0x4fd8cc, 1.6, 4, [x0 + 0.6, 1.6, z1 - 0.4]));
+  ctx.lights.teal.push(pointLight(0x7fb8ff, 1.6, 4, [x0 + 0.6, 1.6, z1 - 0.4]));
 }
 
 function buildBathroom(kit, ctx) {
@@ -1191,11 +1191,14 @@ export function buildShip(parent, materials, opts = {}) {
   const kit = new Kit(mats);
   const ctx = { group, materials, interactables: [], lights: { warm: [], cool: [], teal: [], spots: [] }, aftOpen: !!opts.aftOpen };
 
+  // the wing sits inside the command tower: its side portholes face structure, so they are shuttered
+  PORTHOLE_DEFAULTS.shutter = !!opts.shutterPortholes;
   buildCorridor(kit, ctx);
   buildCockpit(kit, ctx);
   buildQuarters(kit, ctx);
   buildGalley(kit, ctx);
   buildBathroom(kit, ctx);
+  PORTHOLE_DEFAULTS.shutter = false;
 
   const meshes = kit.build(group);
   for (const arr of Object.values(ctx.lights)) {
