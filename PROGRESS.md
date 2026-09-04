@@ -13,6 +13,78 @@ count, light count and visual defects, and flag the fps part explicitly.
 Rubric: 1 lighting · 2 materials · 3 detail density · 4 post stack · 5 space view · 6 palette · 7 tech ·
 8 cold-look · 9 interactions. A maybe is a fail.
 
+# Milestone 2 — ISD *Redoubt* (Imperial Star Destroyer transformation)
+
+The Kestrel light freighter (milestone 1, below) became a 1,600 m Imperial-class Star Destroyer: true-scale
+exterior, four connected interior decks (34 rooms + corridors + turbolifts), a ventral hangar with scripted
+TIE-fighter traffic, orbit / free-fly / first-person cameras with boarding and exit transitions, mobile touch
+mode, procedural audio, atmosphere and post grading. Everything is still generated in code — no external
+assets. Live build: https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/star-destroyer-play-a618/index.html
+
+## Loop followed
+
+1. **Baseline** — `shots/iter_baseline`, `perf/greybox_core.*`: Kestrel at 110–171 calls, 226–366k tris,
+   22 lights; SwiftShader 2.0–2.8 s/frame at 1280×720 (the only GPU here is software; all frame times in
+   this document are relative).
+2. **Plan** — `PLAN.md`: world frame, scene hierarchy, analytic hull, room layout with every door and lift,
+   camera modes, traffic interfaces, design language, budgets. `docs/WORKSTREAM_GUIDE.md` for the agents.
+3. **Core** (lead) — kit/frame/props (Imperial panel grid, prop library), `RoomManager` (door-portal
+   culling, per-cluster streaming, light budget, distance-culled arch neighbours, shadow scoping), doors,
+   turbolifts, gravity/stairs player, orbit/fly rig, boarding/exit transitions, sky dome, Imperial materials
+   and atlases (Aurebesh-style stencils, cog emblem, 16-screen atlas, LED atlas, 2K hull plating), grey-box
+   for all 34 rooms, exterior first pass, debug views, `navtest`, `perf`, `smoke`, hourly `publish`.
+4. **Nine parallel workstreams in isolated worktrees** (one file-set each): exterior hull detail; bridge;
+   hangar + fighter traffic; tower rooms; engineering + hangar-deck rooms; crew deck rooms; corridors +
+   lobbies; audio; atmosphere/post. Each reported what was built, measured stats, tests and core-change
+   requests; the lead merged each branch and applied the requests (see "Integration fixes").
+5. **Mobile / touch mode** (user request mid-run): virtual joystick, drag-look, on-screen buttons, pinch
+   orbit, tappable menus, lighter render profile; `tools/mobiletest.mjs` 11/11 on an emulated Pixel 5.
+6. **Review round** — three independent visual critics (exterior; bridge/hangar/tower; engineering/crew/
+   corridors) and a technical validator, report-only (`reviews/`), followed by a fix pass (see below).
+
+## Integration fixes made while merging (all reproduced in screenshots first)
+
+- Light-strip diffusers were buried inside their housings and never rendered (every room's light band):
+  recess rebuilt as a U-channel (`frame.js`).
+- Interior haze fog blacked out the hull seen through the bridge glazing: hull materials exempt from fog.
+- Glazing sill lowered to deck level — the bow is only 9° below a standing eye 1.3 km away.
+- Reactor bulb sphere (r 82 at y −62) cut through the engineering deck: moved to y −100, r 80.
+- Door openings snapped to the nearest wall face (reactor airlock, hangar arches were filed on the far wall).
+- Hologram material became a clone-safe `ShaderMaterial` subclass after the lounge's recoloured clone
+  crashed the crew cluster.
+- Exterior peek: glazed tower rooms render from outside only within 360 m; space environment restored on
+  exit; shadow maps only for the current room; rooms behind arches farther than 75 m switch off.
+- Rotated railings collide per 0.6 m segment; prompts are occluded by walls; step-height boundary; decal
+  vertex tint; white default colour on instanced prototypes; `ctx.windows(side)`; `panelGrid stripEvery`.
+
+## Measurements after integration (`perf/integrated_v1.md`, 1280×720, software GL, all four clusters built)
+
+| view | calls | tris | lights | JS heap MB |
+|---|---|---|---|---|
+| ext_far (2.6 km) | 87 | 356k | 2 | 103 |
+| ext_mid | 195 | 551k | 2 | 104 |
+| ext_tower / ext_close (tower rooms resident) | 538 / 515 | 1.24 M / 1.21 M | 16 | 84 |
+| ext_belly | 247 | 628k | 2 | 84 |
+| bridge / bridge_window / bridge_pit | 411 / 383 / 397 | 1.14 M | 16 | 87 |
+| cmd_corridor | 468 | 1.13 M | 16 | 88 |
+| tactical / comms | 214 / 187 | 509k / 553k | 7 / 10 | 92 |
+| hangar / hangar_well (after arch culling + shadow scoping) | 270 / 337 | 1.18 M / 1.69 M | 10 / 16 | 141 |
+| shuttle_bay | 183 | 1.02 M | 10 | 146 |
+| reactor / engineering / hyperdrive / life_support | 176 / 197 / 188 / 138 | 903k / 908k / 720k / 688k | 14 / 14 / 9 / 9 | 192 |
+| crew_corridor | 380 | 928k | 12 | 245 |
+| crew rooms (quarters, mess, lounge, medbay, armory, detention, pods) | 169–247 | 515k–758k | 10 | 247 |
+
+Boot (desktop profile): materials 4.3 s (hull plating 2.4 s), sky 1.0 s, exterior 0.14 s, total 5.6 s to
+the first frame. Cluster builds: hangar 658 ms, engineering 548 ms, crew 614 ms (streamed one room per
+frame during turbolift rides). Heap after all clusters: 247 MB (`trimClusters(2)` releases old clusters).
+Tests on the integrated branch: `navtest` 11/11, `traffic_test` 19/19, `mobiletest` 11/11,
+`audio_test` 40/40, `atmo_test` 20/20; `vite build` clean; zero page errors in every view.
+
+Real-GPU frame rate remains unmeasured on this machine (software GL only). Budget accounting: every
+ordinary interior view is ≤ 250 calls and ≤ 1.2 M triangles; the bridge (+ corridor through the open
+blast door), the command corridor and the hangar well exceed 250 calls; the hangar well's 1.69 M
+triangles includes its shadow pass. Adaptive quality (pixel ratio + AO/bloom level) is the safety net.
+
 ---
 
 ## Iteration 1 — first full build
