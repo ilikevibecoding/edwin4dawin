@@ -70,16 +70,16 @@ async function init() {
   await nextFrame();
   exterior = buildExterior(scene, materials);
 
-  hud.setLoading(0.6, "Pressurising decks…");
-  await nextFrame();
-  player = new Player(camera, canvas, []);
-  interior = createInterior({ scene, materials, player, hud, audio });
-  interior.ensureDeckBuilt("bridge");
-
-  hud.setLoading(0.8, "Fuelling the fighter wing…");
+  hud.setLoading(0.55, "Fuelling the fighter wing…");
   await nextFrame();
   traffic = createTraffic({ scene, materials, audio, count: 8 });
   systems = createReservedSystems(traffic);
+
+  hud.setLoading(0.65, "Pressurising decks…");
+  await nextFrame();
+  player = new Player(camera, canvas, []);
+  interior = createInterior({ scene, materials, player, hud, audio, traffic, exterior });
+  interior.ensureDeckBuilt("bridge");
 
   hud.setLoading(0.9, "Powering post-processing…");
   await nextFrame();
@@ -231,15 +231,28 @@ const debugAPI = {
     player.headBob = false;
     post.finalPass.uniforms.seed.value = 0.37;
     debugAPI.freezeGrain = true;
-    if (exterior.stations[name]) {
+    if (name.startsWith("ext@")) {
+      // ad-hoc exterior camera: ext@px,py,pz,lx,ly,lz
+      const n = name.slice(4).split(",").map(Number);
+      await director.toExterior("exterior_medium", true);
+      exterior.stations.__adhoc = { pos: [n[0], n[1], n[2]], look: [n[3], n[4], n[5]] };
+      director.goToStation("__adhoc", true);
+      hud.fadeOut(0);
+    } else if (exterior.stations[name]) {
       await director.toExterior(name, true);
       director.goToStation(name, true);
       hud.fadeOut(0);
     } else {
-      const v = INTERIOR_VIEWS[name];
+      // ad-hoc interior camera: <sectorId>@x,z,yaw,pitch[,y]  (deck-local metres / degrees)
+      let v = INTERIOR_VIEWS[name];
+      if (!v && name.includes("@")) {
+        const [sector, rest] = name.split("@");
+        const n = rest.split(",").map(Number);
+        v = { sector, x: n[0], z: n[1], yaw: n[2] || 0, pitch: n[3] || 0, y: n.length > 4 ? n[4] : undefined };
+      }
       if (!v) throw new Error("unknown view " + name);
       await director.toInterior(v.sector, true);
-      interior.teleport(v.sector, { x: v.x, z: v.z, yaw: v.yaw, pitch: v.pitch });
+      interior.teleport(v.sector, { x: v.x, z: v.z, yaw: v.yaw, pitch: v.pitch, y: v.y });
       player.frozen = true;
       hud.fadeOut(0);
     }

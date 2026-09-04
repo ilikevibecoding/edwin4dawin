@@ -10,7 +10,7 @@ import { buildCorridor, buildLobby } from "./corridor.js";
 import { buildLiftCab, Turbolift } from "./turbolift.js";
 import { getBuilder } from "./rooms/index.js";
 
-export function createInterior({ scene, materials, player, hud, audio }) {
+export function createInterior({ scene, materials, player, hud, audio, traffic = null, exterior = null }) {
   const group = new THREE.Group();
   group.name = "interior";
   scene.add(group);
@@ -29,6 +29,9 @@ export function createInterior({ scene, materials, player, hud, audio }) {
     decks,
     sectors,
     materials,
+    traffic,
+    exterior,
+    audio,
     get currentSector() {
       return currentSector;
     },

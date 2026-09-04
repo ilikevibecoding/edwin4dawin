@@ -58,6 +58,8 @@ export class Sector {
       deck: this.deck,
       bounds: this.def.bounds,
       doors: interior.doorDefsFor(this.id),
+      traffic: interior.traffic,
+      audio: interior.audio,
       floorY: this.def.floor ?? 0,
       seed: 7 + this.def.id.length * 13 + this.deck.index * 101,
       light(l) {
