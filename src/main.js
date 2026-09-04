@@ -438,6 +438,7 @@ const debugAPI = {
       player.frozen = true;
       player.setPose(p.x, p.z, p.yaw, p.pitch, p.y);
       cells.setCurrent(KESTREL_VIEWS[name].y ? "hangar" : "kestrel");
+      space.setPlanetYaw(0);
       cells.update(player.position, 0, 0);
       return true;
     }
