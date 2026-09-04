@@ -434,7 +434,7 @@ export function build(ctx) {
 
   // ---- lights: shadowed spot on the shuttle, cool fill over the apron and the well, amber wash in the
   // mouth, engine glow, warm pallets, pump station
-  ctx.spot(0xf0f4ff, 2600, 46, 0.5, [SX + 2, C - 1.6, SZ - 2], [SX, PT, SZ], { penumbra: 0.5, shadow: true, mapSize: 1024 });
+  ctx.spot(0xf0f4ff, 1800, 46, 0.5, [SX + 2, C - 1.6, SZ - 2], [SX, PT, SZ], { penumbra: 0.5, shadow: true, mapSize: 1024 });
   workLight(ctx, [10, C, 88], { drop: 10, size: 2.6, intensity: 3000, distance: 76 });
   workLight(ctx, [0, C, 120], { drop: 10, size: 2.6, intensity: 3000, distance: 76 });
   workLight(ctx, [0, C, 152], { drop: 10, size: 2.6, intensity: 2800, distance: 76 });

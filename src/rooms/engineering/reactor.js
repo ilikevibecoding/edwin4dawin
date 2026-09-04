@@ -164,12 +164,12 @@ export function build(ctx) {
     i = CW.i;
   catwalk(kit, [CX - o, CZ - o], [CX + o, CZ - i], y0, { rails: ["zmax", "zmin"], gaps: [{ side: "zmin", from: CX - 1.6, to: CX + 1.6 }] }); // N
   catwalk(kit, [CX - o, CZ + i], [CX + o, CZ + o], y0, { rails: ["zmin", "zmax"], gaps: [{ side: "zmax", from: CX - 1.6, to: CX + 1.6 }] }); // S
-  catwalk(kit, [CX - o, CZ - i], [CX - i, CZ + i], y0, { rails: ["xmin", "xmax"], gaps: [{ side: "xmin", from: CZ - 1.6, to: CZ + 1.6 }] }); // W
+  // the W / E decks' outer rails open at z CZ+5.6..CZ+8 where the stair bridges join
+  catwalk(kit, [CX - o, CZ - i], [CX - i, CZ + i], y0, { rails: ["xmin", "xmax"], gaps: [{ side: "xmin", from: CZ - 1.6, to: CZ + 1.6 }, { side: "xmin", from: CZ + 5.6, to: CZ + 8 }] }); // W
   catwalk(kit, [CX + i, CZ - i], [CX + o, CZ + i], y0, { rails: ["xmin", "xmax"], gaps: [{ side: "xmax", from: CZ - 1.6, to: CZ + 1.6 }, { side: "xmax", from: CZ + 5.6, to: CZ + 8 }] }); // E
-  // outer-edge rails of the corner squares (the N/S decks already span the full width); the west stair
-  // bridge joins the S deck's west end at z CZ+8..CZ+10.4
+  // outer-edge rails of the corner squares (the N/S decks already span the full width)
   railing(kit, { from: [CX - o + 0.1, CZ - i], to: [CX - o + 0.1, CZ - o + 0.1], y: y0 });
-  railing(kit, { from: [CX - o + 0.1, CZ + o - 0.1], to: [CX - o + 0.1, CZ + i + 2.5], y: y0, posts: 2 });
+  railing(kit, { from: [CX - o + 0.1, CZ + o - 0.1], to: [CX - o + 0.1, CZ + i], y: y0 });
   railing(kit, { from: [CX + o - 0.1, CZ - o + 0.1], to: [CX + o - 0.1, CZ - i], y: y0 });
   railing(kit, { from: [CX + o - 0.1, CZ + i], to: [CX + o - 0.1, CZ + o - 0.1], y: y0 });
   // hazard edge along the inner rim + support columns
@@ -224,15 +224,17 @@ export function build(ctx) {
     ledCluster(kit, { pos: [x1 - 0.3, y0 + 1.6, CZ + s * 1.2], yaw: Math.PI / 2, w: 0.7, h: 0.3, index: 9 + s, accent: "emitCyan" });
   }
 
-  // ---- switchback stairs from the floor to the ring (west arrives moving +z, east moving −z) + bridges
-  const sw = stairSwitchback(kit, { pos: [-19.5, F, CZ + i], yaw: 0, rise: y0 - F, width: 2.2 });
+  // ---- switchback stairs from the floor to the ring: both flights 1 run aft (+z) from z CZ+i beside the
+  // ring, the landings sit at z CZ+i+7.5..+10.1 and flights 2 (on the inner side, x ±17) return to short
+  // bridges at z CZ+5.6..CZ+8 that join the W / E decks (mirror-symmetric, clear of the side gantries)
+  const sw = stairSwitchback(kit, { pos: [-14.5, F, CZ + i], yaw: Math.PI, rise: y0 - F, width: 2.2 });
   const se = stairSwitchback(kit, { pos: [19.5, F, CZ + i], yaw: Math.PI, rise: y0 - F, width: 2.2 });
-  catwalk(kit, [sw.top.x - 1.15, CZ + i], [CX - o, CZ + i + 2.4], y0, { rails: ["zmax", "xmin"], gaps: [] });
-  railing(kit, { from: [sw.top.x + 1.1, CZ + i + 0.1], to: [CX - o, CZ + i + 0.1], y: y0 });
+  catwalk(kit, [sw.top.x - 1.15, CZ + i - 2.4], [CX - o, CZ + i], y0, { rails: ["zmin", "xmin"], gaps: [] });
+  railing(kit, { from: [sw.top.x + 1.1, CZ + i - 0.1], to: [CX - o, CZ + i - 0.1], y: y0 });
   catwalk(kit, [CX + o, CZ + i - 2.4], [se.top.x + 1.15, CZ + i], y0, { rails: ["zmin", "xmax"], gaps: [] });
   railing(kit, { from: [CX + o, CZ + i - 0.1], to: [se.top.x - 1.1, CZ + i - 0.1], y: y0 });
-  hazardBay(kit, [-22.8, CZ + i - 0.4], [-17.8, CZ + i + 10.6], F, { w: 0.25 });
-  hazardBay(kit, [17.8, CZ + i - 0.4], [22.8, CZ + i + 10.6], F, { w: 0.25 });
+  hazardBay(kit, [-18.6, CZ + i - 0.4], [-12.9, CZ + i + 10.6], F, { w: 0.25 });
+  hazardBay(kit, [15.4, CZ + i - 0.4], [21.1, CZ + i + 10.6], F, { w: 0.25 });
 
   // ---- massive coolant pipes: side risers to the y 12 ring, aft feeds to the y 22 ring, ceiling drops
   for (const s of [-1, 1]) {
@@ -255,9 +257,9 @@ export function build(ctx) {
   pipeRun(kit, { points: [[x1 - 0.5, F + 2.3, z0 + 0.4], [9.5, F + 2.3, z0 + 0.4], [9.5, F + 5.2, z0 + 0.4]], r: 0.12, color: IMP.steel, clamps: 3 });
 
   // ---- floor stencils and lane markings toward the stairs
-  floorDecal(kit, [CX, F, z0 + 6], F, 3.0, DECAL.RESTRICTED, 0);
-  floorDecal(kit, [-20, F, CZ + 18], F, 2.0, DECAL.ARROW, Math.PI / 2);
-  floorDecal(kit, [20, F, CZ + 18], F, 2.0, DECAL.ARROW, -Math.PI / 2);
+  floorDecal(kit, [CX, z0 + 6], F, 3.0, DECAL.RESTRICTED, 0);
+  floorDecal(kit, [-14.5, CZ + i - 3.5], F, 2.0, DECAL.ARROW, Math.PI); // toward the west stair foot (z CZ+i, flight runs +z)
+  floorDecal(kit, [19.5, CZ + i - 3.5], F, 2.0, DECAL.ARROW, Math.PI); // toward the east stair foot
   pillar(kit, { pos: [x0 + 1.2, F, z0 + 1.2], h: 12, w: 1.0 });
   pillar(kit, { pos: [x1 - 1.2, F, z0 + 1.2], h: 12, w: 1.0 });
 
