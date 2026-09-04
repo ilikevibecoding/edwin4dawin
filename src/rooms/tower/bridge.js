@@ -537,7 +537,7 @@ function buildDais(ctx) {
   }
   for (const s of [-1, 1]) kit.boxMM("metal", [Math.min(s * WALK_X - s * 0.05, s * WALK_X + s * 0.07), y - 0.06, DAIS.z0], [Math.max(s * WALK_X - s * 0.05, s * WALK_X + s * 0.07), y + 0.02, DAIS.z1], { color: IMP.steelDark });
   // inlaid emblem on the dais deck
-  kit.add("decal", new THREE.PlaneGeometry(2.2, 2.2), { pos: [0, y + 0.003, 178.8], rot: [-Math.PI / 2, 0, 0], uv: "keep", uvRect: decalRect(DECAL.EMBLEM) });
+  kit.add("decal", new THREE.PlaneGeometry(1.8, 1.8), { pos: [0, y + 0.003, 178.8], rot: [-Math.PI / 2, 0, 0], uv: "keep", uvRect: decalRect(DECAL.EMBLEM) });
   // commander's station (starboard, facing the glazing) with its seat
   props.consoleStation(kit, { pos: [2.45, y, 177.05], yaw: 0, w: 2.1, d: 0.85, h: 1.0, screens: 3, accent: "emitBlue", seed: 41, screenSet: [1, 0, 4] });
   props.chair(kit, { pos: [2.45, y, 177.75], yaw: 0 });
@@ -659,12 +659,13 @@ function buildStations(ctx) {
 function buildLights(ctx) {
   ctx.spot(0xe4ecff, 120, 18, 0.58, [0, CEIL - 0.5, 179.6], [0, FLOOR + DAIS.h, 178.0], { shadow: true, mapSize: 1024, penumbra: 0.55 });
   ctx.light(0xa9c6ff, 62, 24, [0, CEIL - 1.4, 176.8]); // cool fill over the dais / glazing side
-  ctx.light(0xdfe8ff, 60, 22, [0, CEIL - 0.9, 190.5]);
-  ctx.light(0xdfe8ff, 55, 20, [0, CEIL - 0.9, 203.2]);
+  // walkway fills hang below the trough so they also reach the pit console rows
+  ctx.light(0xdfe8ff, 60, 22, [0, CEIL - 2.4, 190.5]);
+  ctx.light(0xdfe8ff, 55, 20, [0, CEIL - 2.0, 203.2]);
   // pit practicals hang low over the console rows so they light desks and pit walls, not the ceiling
   for (const s of [-1, 1]) {
-    ctx.light(0xff6a55, 20, 10, [s * 8.0, PIT_Y + 1.9, 182.5]);
-    ctx.light(0xffb868, 15, 10, [s * 8.0, PIT_Y + 1.9, 195.5]);
+    ctx.light(0xff6a55, 24, 10, [s * 8.0, PIT_Y + 1.9, 182.5]);
+    ctx.light(0xffb868, 20, 10, [s * 8.0, PIT_Y + 1.9, 195.5]);
   }
 }
 
