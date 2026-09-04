@@ -3,7 +3,7 @@
 // the turbolift, TIE traffic and screen animations advance exactly 1/FPS s between captures however
 // long the software renderer takes per frame. Writes <outDir>/frames/NNNNN.png, <outDir>/tour.json
 // (per-segment stats) and, when ffmpeg is on PATH, <outDir>/tour.mp4.
-//   TOUR_FPS (default 12)   TOUR_W / TOUR_H (default 960x540)   TOUR_SEGMENTS=a,b  limit to these
+//   TOUR_FPS (default 12; the mp4 plays at 2x that rate with duplicated frames)   TOUR_W / TOUR_H (default 960x540)   TOUR_SEGMENTS=a,b  limit to these
 import { chromium } from "playwright-core";
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -63,7 +63,8 @@ const CAPTIONS = {
   bridge_int: "BRIDGE DECK \u2014 main bridge, command walkway to the viewports",
   blast_door: "BRIDGE DECK \u2014 corridor: the blast door opens on approach",
   turbolift: "TURBOLIFT \u2014 bridge deck to hangar deck",
-  hangar: "HANGAR DECK \u2014 main bay, TIE taxiing out to launch",
+  hangar: "HANGAR DECK \u2014 main bay from the entry",
+  hangar_launch: "HANGAR DECK \u2014 a TIE leaves its rack and drops into the launch throat",
   depart: "EXTERIOR \u2014 departing",
 };
 
@@ -95,25 +96,43 @@ await segment("approach", 6, null, (k) => extView(lerp([-1750, 680, -1950], [-11
 await segment("tower", 4, null, (k) => extView(lerp([-420, 260, 560], [-260, 240, 330], ease(k)), lerp([-80, 120, 520], [0, 185, 620], ease(k))));
 // 3. bridge module push-in
 await segment("bridge_ext", 3, null, (k) => extView(lerp([40, 196, 470], [22, 192, 505], ease(k)), [0, 184, 592]));
-// 4. a TIE launching from the ventral hangar, seen from below the mouth
+// page-side helpers: pick a launching fighter once (by id) and read its world position each frame
+await page.evaluate(() => {
+  window.__tourPick = (pred) => {
+    const f = window.debugAPI.trafficSnapshot().fighters.filter((f) => f.s === "launching" && pred(f))[0];
+    window.__tourId = f ? f.id : null;
+    return f || null;
+  };
+  window.__tourTie = () => {
+    const f = window.debugAPI.trafficSnapshot().fighters.find((f) => f.id === window.__tourId);
+    return f ? f.p : null;
+  };
+});
+// 4. a TIE launching from the ventral hangar: a fixed camera ~85 m off the mouth tracks the fighter
+//    from the throat out into space
 await segment(
   "launch_ext",
-  5,
+  6,
   async () => {
-    await extView([-70, -150, 70], [0, -60, -5]);
+    await extView([-55, -85, -50], [0, -48, 5]);
     await page.evaluate(() => {
       const api = window.debugAPI;
-      api.requestLaunch(2);
-      const youngest = () => api.trafficSnapshot().fighters.filter((f) => f.s === "launching").sort((x, y) => x.st - y.st)[0] || null;
-      // step until the first fighter has entered the throat below the bay deck (world y -30)
+      api.requestLaunch(1);
+      // step until a fighter has entered the throat below the bay deck (world y -30), then follow it
       for (let i = 0; i < 600; i++) {
         api.advanceTraffic(0.1, 0.05);
-        const f = youngest();
-        if (f && f.p[1] < -34) break;
+        if (window.__tourPick((f) => f.p[1] < -33 && f.p[1] > -46)) break;
       }
+      window.__tourLook = [0, -48, 5];
     });
   },
-  (k) => extView(lerp([-70, -150, 70], [-95, -165, 55], k), [0, -60, -5])
+  () =>
+    page.evaluate(async () => {
+      const p = window.__tourTie();
+      if (p) window.__tourLook = p;
+      await window.debugAPI.setView(`ext@-55,-85,-50,${window.__tourLook.join(",")}`);
+      return false;
+    })
 );
 // 5. bridge: walk the command walkway from the dais to the forward viewports
 await segment("bridge_int", 5, null, (k) => intView("d1_bridge", 0, -17 - 24 * ease(k), 0, -4 + 3 * ease(k)));
@@ -173,24 +192,36 @@ await segment(
       { i, fps: FPS }
     )
 );
-// 8. hangar bay: from the lobby-side entry, sweeping over the deck toward the racks while a TIE launches
+// 8. hangar bay: the bay from the entry, then a deck-level camera beside the launch lane that tracks a
+//    TIE off its rack, across the lane and down into the throat (deck origin world (0, -30, 95); the
+//    camera stands left of the lane just short of the field edge so the BAY 05 gantry is behind it)
+await segment("hangar", 3, null, (k) => intView("d5_hangar", -8 * ease(k), -37 - 6 * ease(k), 12 * ease(k), -4 + 6 * ease(k)));
 await segment(
-  "hangar",
-  6,
+  "hangar_launch",
+  7,
   async () => {
-    await intView("d5_hangar", 0, -37, 0, -4);
     await page.evaluate(() => {
       const api = window.debugAPI;
       api.requestLaunch(1);
-      const youngest = () => api.trafficSnapshot().fighters.filter((f) => f.s === "launching").sort((x, y) => x.st - y.st)[0] || null;
+      // follow the fighter that is off its rack and into the faster half of its eased 10 s taxi
       for (let i = 0; i < 400; i++) {
         api.advanceTraffic(0.1, 0.05);
-        const f = youngest();
-        if (f && f.st > 4) break; // the fighter is off its rack and taxiing over the lane
+        if (window.__tourPick((f) => f.st > 5.5 && f.st < 9 && f.p[1] > -30)) break;
       }
+      window.__tourLocal = [-10, 12, -106];
     });
   },
-  (k) => intView("d5_hangar", -20 * ease(k), -37 - 19 * ease(k), 30 * ease(k), -4 + 16 * ease(k))
+  () =>
+    page.evaluate(async () => {
+      const cam = [-12, -57];
+      const p = window.__tourTie();
+      if (p) window.__tourLocal = [p[0], p[1] + 30, p[2] - 95];
+      const [lx, ly, lz] = window.__tourLocal;
+      const yaw = (Math.atan2(-(lx - cam[0]), -(lz - cam[1])) * 180) / Math.PI;
+      const pitch = (Math.atan2(ly - 1.6, Math.hypot(lx - cam[0], lz - cam[1])) * 180) / Math.PI;
+      await window.debugAPI.setView(`d5_hangar@${cam[0]},${cam[1]},${yaw.toFixed(2)},${pitch.toFixed(2)}`);
+      return false;
+    })
 );
 // 9. back outside: pull away from the hangar mouth to the far station
 await segment("depart", 6, null, (k) => extView(lerp([-110, -200, -90], [-1750, 680, -1950], ease(k)), lerp([0, -46, 0], [0, 60, 0], ease(k))));
@@ -206,7 +237,7 @@ const draw = report.segments
   .map((s) => `drawtext=fontfile=${font}:text='${esc(CAPTIONS[s.name])}':x=24:y=h-44:fontsize=18:fontcolor=0xdfe6f2@0.92:box=1:boxcolor=0x08090c@0.6:boxborderw=8:enable='between(n\\,${s.first}\\,${s.first + s.frames - 1})'`)
   .join(",");
 const vf = ["scale=trunc(iw/2)*2:trunc(ih/2)*2", font ? draw : ""].filter(Boolean).join(",");
-const ff = spawnSync("ffmpeg", ["-y", "-framerate", String(FPS), "-i", resolve(outDir, "frames", "%05d.png"), "-vf", vf, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "24", "-crf", "20", "-movflags", "+faststart", resolve(outDir, "tour.mp4")], { encoding: "utf8" });
+const ff = spawnSync("ffmpeg", ["-y", "-framerate", String(FPS), "-i", resolve(outDir, "frames", "%05d.png"), "-vf", vf, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", String(FPS * 2), "-crf", "20", "-movflags", "+faststart", resolve(outDir, "tour.mp4")], { encoding: "utf8" });
 if (ff.status === 0) console.log("video ->", resolve(outDir, "tour.mp4"));
 else console.log("ffmpeg failed:", (ff.stderr || "").slice(-400));
 console.log(`done: ${frameNo} frames, ${errors.length} page errors`);
