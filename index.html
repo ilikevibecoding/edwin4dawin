@@ -24,7 +24,9 @@
       .hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
       .hud-corner { position: absolute; padding: 22px 26px; }
       .hud-tl { top: 0; left: 0; }
-      .hud-bl { bottom: 0; left: 0; }
+      /* Stops short of the speed block, so at 640 px the key strip wraps instead
+         of running under the readout and the build stamp. */
+      .hud-bl { bottom: 0; left: 0; max-width: calc(100% - 250px); }
       .hud-br { bottom: 0; right: 0; text-align: right; }
 
       .hud-title {
