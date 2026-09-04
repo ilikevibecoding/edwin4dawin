@@ -47,11 +47,12 @@ export class Input {
 
   requestLock() {
     if (this.locked) return;
+    const quiet = (p) => { if (p && p.catch) p.catch(() => { /* no user gesture / unsupported */ }); };
     try {
       const p = this.canvas.requestPointerLock({ unadjustedMovement: true });
-      if (p && p.catch) p.catch(() => { try { this.canvas.requestPointerLock(); } catch (e2) { /* ignore */ } });
+      if (p && p.catch) p.catch(() => { try { quiet(this.canvas.requestPointerLock()); } catch (e2) { /* ignore */ } });
     } catch (e) {
-      try { this.canvas.requestPointerLock(); } catch (e2) { /* ignore */ }
+      try { quiet(this.canvas.requestPointerLock()); } catch (e2) { /* ignore */ }
     }
   }
   releaseLock() { if (this.locked) document.exitPointerLock(); }
