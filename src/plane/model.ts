@@ -371,18 +371,20 @@ export class PlaneModel {
             float sunNdh = saturate(dot(glassN, normalize(sunL + glassV)));
             filmSheen = directionalLights[0].color * pow(sunNdh, 8.0) * (0.10 + dirt * 0.9) * saturate(dot(glassN, sunL) * 4.0) * (1.0 - 0.7 * inner);
           #endif
-          vec3 glassSpec = reflectedLight.directSpecular * (1.0 + dirt * 2.0) + filmSheen + reflectedLight.indirectSpecular * uEnvGain;
+          // the film only shows where it scatters light (sun sheen, a little of the sky reflection): as a diffuse
+          // haze it would frost the panes and make them glow at night
+          vec3 glassSpec = reflectedLight.directSpecular * (1.0 + dirt * 2.0) + filmSheen + reflectedLight.indirectSpecular * uEnvGain * (1.0 + dirt * 1.5);
           // soft knee: the sun's mirror image stays bright but never clips to white
           glassSpec = 1.0 - exp(-glassSpec);
-          float glassA = clamp(diffuseColor.a + glassF * 0.85 + vig * 0.14 + dirt * 0.5, 0.0, 1.0);
-          vec3 glassCol = totalDiffuse * (diffuseColor.a + dirt * 0.5) + glassSpec * (1.0 - 0.5 * vig);
+          float glassA = clamp(diffuseColor.a + glassF * 0.85 + vig * 0.14 + dirt * 0.08, 0.0, 1.0);
+          vec3 glassCol = totalDiffuse * (diffuseColor.a + dirt * 0.08) + glassSpec * (1.0 - 0.5 * vig);
           glassCol = mix(glassCol, totalDiffuse * 0.10, seal);
           glassA = mix(glassA, 1.0, seal);
           gl_FragColor = vec4(glassCol, glassA);
         `)
         .replace('#include <premultiplied_alpha_fragment>', '');
     };
-    glass.customProgramCacheKey = () => 'cockpit-glass-v6';
+    glass.customProgramCacheKey = () => 'cockpit-glass-v7';
     const plainPaint = new THREE.MeshPhysicalMaterial({ color: LIVERY.upper, roughness: 0.4, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.15 });
     const parts = partsMaterial();
     const panelTex = panelTexture();
