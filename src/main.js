@@ -8,6 +8,10 @@ import { configureRenderer, createPost } from './post.js';
 import { createDustMotes, createLightShafts, createSky } from './sky.js';
 import { createTerrain } from './terrain.js';
 import { initNoise, noiseBackend } from './textures/core.js';
+import { createCampground } from './campground/index.js';
+import { createFleet } from './vehicles/index.js';
+import { createWildlife } from './wildlife/index.js';
+import { createAudio } from './audio.js';
 import { createVehicle } from './vehicle/index.js';
 import { setVehicleEnv } from './vehicle/materials.js';
 import { createHud } from './hud.js';
@@ -106,9 +110,20 @@ async function boot() {
   );
   scene.add(forest.group);
 
-  const vehicle = await step('Assembling the truck', 78, () => createVehicle({ env: skyRig.env }));
+  const vehicle = await step('Assembling the truck', 70, () => createVehicle({ env: skyRig.env }));
   setVehicleEnv(skyRig.env);
   scene.add(vehicle.root);
+
+  // --- the safari ------------------------------------------------------------
+  const camp = await step('Pitching camp', 76, () => createCampground({ terrain, env: skyRig.env, quality }));
+  scene.add(camp.group);
+  const fleet = await step('Parking the fleet', 80, () =>
+    createFleet({ env: skyRig.env, quality, placements: camp.parking, terrain }),
+  );
+  scene.add(fleet.group);
+  const wildlife = await step('Finding the pride', 84, () => createWildlife({ terrain, env: skyRig.env, quality }));
+  scene.add(wildlife.group);
+  const audio = createAudio();
 
   const shafts = createLightShafts(skyRig.sunDir, { count: TIER.shafts });
   scene.add(shafts.group);
@@ -140,6 +155,14 @@ async function boot() {
   vehicle.setLights(startTime !== 'day');
 
   // --- input ---------------------------------------------------------------
+  // Browsers will not start audio before a gesture, so the first one of any
+  // kind wakes it; nothing else in here cares which.
+  const wake = () => {
+    if (!audio.enabled) audio.setEnabled(true);
+  };
+  window.addEventListener('pointerdown', wake, { once: false });
+  window.addEventListener('keydown', wake);
+
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyC') {
       rig.cycle();
@@ -265,6 +288,24 @@ async function boot() {
       contacts,
       speed: driver.state.speed,
       heading: driver.state.heading,
+    });
+
+    camp.update(dt, simTime, { vehiclePos: vehicle.root.position });
+    fleet.update(dt, simTime);
+    wildlife.update(dt, simTime, {
+      vehiclePos: vehicle.root.position,
+      vehicleSpeed: driver.state.speed,
+      throttle: driver.input.throttle,
+      camera,
+    });
+    audio.update(dt, {
+      speed: driver.state.speed,
+      throttle: driver.input.throttle,
+      rpm: driver.state.rpm,
+      surface: driver.state.route,
+      timeOfDay,
+      camera,
+      vehiclePos: vehicle.root.position,
     });
 
     skyRig.follow(vehicle.root.position);
@@ -426,7 +467,8 @@ async function boot() {
       if (v !== undefined) renderer.toneMappingExposure = v;
       return renderer.toneMappingExposure;
     },
-    objects: { scene, camera, renderer, terrain, forest, vehicle, skyRig, post, driver, rig },
+    objects: { scene, camera, renderer, terrain, forest, vehicle, skyRig, post, driver, rig, camp, fleet, wildlife, audio },
+    build: { rev: __BUILD_REV__, stamp: __BUILD_STAMP__ },
   };
   window.__READY__ = true;
 }

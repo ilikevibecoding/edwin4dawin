@@ -14,6 +14,7 @@ export function createHud() {
     <div class="hud-corner hud-br">
       <div class="hud-speed"><span id="hud-speed">0</span><em>km/h</em></div>
       <div class="hud-sub" id="hud-cam">Chase cam</div>
+      <div class="hud-rev" id="hud-rev"></div>
     </div>
     <div class="hud-corner hud-bl">
       <div class="hud-keys">
@@ -33,6 +34,9 @@ export function createHud() {
   const elCam = root.querySelector('#hud-cam');
   const elStatus = root.querySelector('#hud-status');
   const elFade = root.querySelector('#hud-fade');
+  // The live preview follows a branch tip, so the only way to know which build
+  // is on screen is for the build to say so.
+  root.querySelector('#hud-rev').textContent = `build ${__BUILD_REV__} · ${__BUILD_STAMP__}`;
 
   let statusTimer = 0;
 

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { WORLD } from './world.js';
 
 // ---------------------------------------------------------------------------
 // Arcade truck handling. A bicycle model with a low-pass on everything, which
@@ -174,8 +175,10 @@ export function createDriver({ terrain, vehicle, startT = 0.42 }) {
       // decided by whichever direction the truck is already pointing, so it
       // swings onto the road rather than spinning round on the apron.
       if (junction && !state.turned && state.route === 'trail' && state.autoT >= junction.trailT) {
-        const tg = terrain.mainTangent(junction.mainT);
-        state.autoDir = Math.sin(state.heading) * tg.x + Math.cos(state.heading) * tg.z >= 0 ? 1 : -1;
+        // Toward the camp, always. The route is the point of the drive — spur,
+        // junction, campground, savanna, the pride — so the direction along the
+        // mainline is not a coin toss on heading, it is wherever the camp is.
+        state.autoDir = WORLD.camp.t >= junction.mainT ? 1 : -1;
         state.route = 'main';
         state.autoT = junction.mainT;
         state.turned = true;
