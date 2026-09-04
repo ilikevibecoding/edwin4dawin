@@ -7,7 +7,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { PALETTE } from "../materials.js";
-import { impRoomShell, impWall, wallFrame, impConsole, impChair, impRailing, impWallGear } from "./imperial_kit.js";
+import { impRoomShell, impWall, wallFrame, impConsole, impChair, impRailing, impWallGear, lux } from "./imperial_kit.js";
 import { rng } from "../kit.js";
 import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
 import { Placer, compound, B, C, DECK_C, ceilingPanel, cameraHousing, cableRun, wallSign, statusUnit, hoodLamp, crateStack, rifleRack, floorStripe, keyLight, ring } from "./deck_c_kit.js";
@@ -54,7 +54,7 @@ function buildCell(kit, ctx, cx, cz, yaw, number, opts = {}) {
     const Bp = p.pos(b[0], 0, b[1]);
     return wallFrame(kit, [A.x, A.z], [Bp.x, Bp.z]);
   };
-  const wallOpts = { panelW: 1.5, kickH: 0.28, corniceH: 0.3, depth: 0.16, features: { vent: 0.15, equipment: 0, conduit: 0.08, light: 0, screen: 0 }, panelColor: GD, panelColorAlt: CHR, altChance: 0.3, accent: PALETTE.impRed, accentKey: ACCENT, corniceLight: false, collide: false, tag: "cell" };
+  const wallOpts = { panelW: 1.5, kickH: 0.28, corniceH: 0.3, depth: 0.16, features: { vent: 0.15, equipment: 0, conduit: 0.08, light: 0, screen: 0 }, panelColor: GREY, panelColorAlt: GD, altChance: 0.3, accent: PALETTE.impRed, accentKey: ACCENT, corniceLight: false, collide: false, tag: "cell" };
   const back = mk([-half, -half], [half, -half]);
   const left = mk([-half, half], [-half, -half]);
   const right = mk([half, -half], [half, half]);
@@ -84,8 +84,8 @@ function buildCell(kit, ctx, cx, cz, yaw, number, opts = {}) {
     p.sphere("impPanel1", -0.5, 0.75, -half + 0.6, 0.13, { color: GREY, segments: 12 });
   }
   // ceiling light (red) + a lens; call panel on the side wall; number stencil over the doorway
-  p.box("impTrim", 0, h - 0.1, 0, 0.6, 0.2, 0.6, { color: BLK });
-  p.box(ACCENT, 0, h - 0.21, 0, 0.44, 0.02, 0.44, { uv: "keep" });
+  p.box("impTrim", 0, h - 0.1, 0, 1.0, 0.2, 0.7, { color: BLK });
+  p.box(ACCENT, 0, h - 0.21, 0, 0.84, 0.02, 0.54, { uv: "keep" });
   p.box("impTrim", half - 0.09, 1.3, 0.6, 0.06, 0.3, 0.22, { color: BLK });
   p.box("emitRedImp", half - 0.115, 1.38, 0.6, 0.005, 0.03, 0.08);
   p.box("impMetal", half - 0.115, 1.25, 0.6, 0.005, 0.08, 0.14, { color: STEEL });
@@ -112,9 +112,9 @@ function buildCell(kit, ctx, cx, cz, yaw, number, opts = {}) {
   return p;
 }
 
-/** Restraint chair: heavy pedestal, seat, high back, arm and ankle clamps, head brace. Faces local -z. */
-function restraintChair(kit, x, z, yaw) {
-  const p = new Placer(kit, x, 0, z, yaw);
+/** Restraint chair: heavy pedestal, seat, high back, arm and ankle clamps, head brace. Faces local -z; base at y0. */
+function restraintChair(kit, x, z, yaw, y0 = 0) {
+  const p = new Placer(kit, x, y0, z, yaw);
   p.box("impTrim", 0, 0.06, 0, 0.9, 0.12, 0.9, { color: BLK, texel: 1 });
   p.box("impMetal", 0, 0.3, 0.05, 0.4, 0.36, 0.4, { color: CHR, texel: 1 });
   p.box("impTrim", 0, 0.52, 0.0, 0.64, 0.08, 0.6, { color: BLK });
@@ -126,22 +126,24 @@ function restraintChair(kit, x, z, yaw) {
   for (const s of [-1, 1]) {
     p.box("impTrim", s * 0.36, 0.72, 0.05, 0.08, 0.06, 0.5, { color: BLK });
     p.box("impTrim", s * 0.36, 0.62, 0.05, 0.06, 0.16, 0.06, { color: BLK });
-    ring(kit, "impMetal", ...[p.pos(s * 0.36, 0.78, -0.1).x, 0.78, p.pos(s * 0.36, 0.78, -0.1).z], 0.06, 0.012, { axis: "x", color: STEEL, segments: 16 });
-    ring(kit, "impMetal", ...[p.pos(s * 0.16, 0.2, -0.3).x, 0.2, p.pos(s * 0.16, 0.2, -0.3).z], 0.06, 0.012, { axis: "x", color: STEEL, segments: 16 });
+    const wrist = p.pos(s * 0.36, 0.78, -0.1);
+    const ankle = p.pos(s * 0.16, 0.2, -0.3);
+    ring(kit, "impMetal", wrist.x, wrist.y, wrist.z, 0.06, 0.012, { axis: "x", color: STEEL, segments: 16 });
+    ring(kit, "impMetal", ankle.x, ankle.y, ankle.z, 0.06, 0.012, { axis: "x", color: STEEL, segments: 16 });
     p.box("impMetal", s * 0.36, 0.76, -0.1, 0.05, 0.02, 0.06, { color: STEEL });
   }
   p.box("impTrim", 0, 0.22, -0.32, 0.5, 0.06, 0.24, { color: BLK });
   p.collider(-0.48, 0, -0.5, 0.48, 1.7, 0.42, "chair");
 }
 
-/** Interrogation droid: matte black sphere on a stand with a red eye, needle arms and a syringe. */
-function interrogationDroid(kit, x, z, yaw) {
-  const p = new Placer(kit, x, 0, z, yaw);
+/** Interrogation droid: matte black sphere on a stand with a red eye, needle arms and a syringe. Base at y0. */
+function interrogationDroid(kit, x, z, yaw, y0 = 0) {
+  const p = new Placer(kit, x, y0, z, yaw);
   p.cyl("impTrim", 0, 0.03, 0, 0.3, 0.06, "y", { color: BLK, segments: 16 });
   p.cyl("impMetal", 0, 0.6, 0, 0.03, 1.1, "y", { color: GD, segments: 8 });
   p.cyl("impTrim", 0, 1.16, 0, 0.1, 0.04, "y", { color: BLK, segments: 12 });
   p.sphere("impGloss", 0, 1.48, 0, 0.3, { segments: 20 });
-  ring(kit, "impMetal", x, 1.48, z, 0.3, 0.014, { color: STEEL, segments: 32 });
+  ring(kit, "impMetal", x, y0 + 1.48, z, 0.3, 0.014, { color: STEEL, segments: 32 });
   p.cyl("impMetal", 0, 1.48, -0.3, 0.06, 0.06, "z", { color: CHR, segments: 12 });
   p.box("emitRedImp", 0, 1.48, -0.335, 0.05, 0.05, 0.01);
   for (const [a, len] of [[-0.6, 0.26], [0.2, 0.3], [1.1, 0.22], [2.4, 0.28], [3.6, 0.24]]) {
@@ -175,20 +177,22 @@ export function buildDetention(kit, ctx, room) {
   const cctx = { fieldGeos: [] };
   const fieldMat = ctx.materials.holo.clone();
   fieldMat.color.set(DECK_C.redField.getHex());
-  fieldMat.opacity = 0.3;
+  fieldMat.opacity = 0.22;
 
   // ---------------------------------------------------------------- red edge lighting along the long walls + red floor lines beside the aisle
   for (const s of [-1, 1]) {
     kit.boxMM(accentKey, [-hx + 0.6, 0.002, s * (hz - 0.28) - 0.03], [hx - 0.6, 0.012, s * (hz - 0.28) + 0.03]);
-    kit.boxMM(accentKey, [s * 1.55 - 0.02, 0.014, -hz + 1.0], [s * 1.55 + 0.02, 0.022, hz - 1.6]);
+    kit.boxMM(accentKey, [s * 1.55 - 0.02, 0.002, -hz + 1.0], [s * 1.55 + 0.02, 0.02, hz - 1.6]);
   }
 
   // ---------------------------------------------------------------- security desk facing the door: U of consoles, monitor bank, chairs, railing
   {
     const dz = -4.6;
-    impConsole(kit, 0, 0, dz, 3.4, 1.0, { yaw: Math.PI, seed: 85, screens: ["scrRed0", "scrWhite0"], accentKey });
-    impConsole(kit, -2.7, 0, dz + 1.0, 1.6, 0.9, { yaw: Math.PI - 0.6, seed: 86, screens: ["scrRed1", "scrRed0"], accentKey });
-    impConsole(kit, 2.7, 0, dz + 1.0, 1.6, 0.9, { yaw: Math.PI + 0.6, seed: 87, screens: ["scrWhite0", "scrRed1"], accentKey });
+    // guards sit on the south side (console operator side = local +z, yaw 0) facing the blast door;
+    // the two wings are angled so their operator sides face the centre seats
+    impConsole(kit, 0, 0, dz, 3.4, 1.0, { yaw: 0, seed: 85, screens: ["scrRed0", "scrWhite0"], accentKey });
+    impConsole(kit, -2.7, 0, dz + 0.6, 1.6, 0.9, { yaw: 1.2, seed: 86, screens: ["scrRed1", "scrRed0"], accentKey });
+    impConsole(kit, 2.7, 0, dz + 0.6, 1.6, 0.9, { yaw: -1.2, seed: 87, screens: ["scrWhite0", "scrRed1"], accentKey });
     impChair(kit, -0.7, 0, dz + 1.15, 0);
     impChair(kit, 0.8, 0, dz + 1.15, 0.1);
     // monitor bank on a frame over the desk: 6 screens in two rows on a black spine, hanging from the ceiling
@@ -224,7 +228,7 @@ export function buildDetention(kit, ctx, room) {
     impRailing(kit, [-5.5, dz - 2.3], [-5.5, dz + 2.6], 0, { h: 1.0 });
     impRailing(kit, [5.5, dz - 2.3], [5.5, dz + 2.6], 0, { h: 1.0 });
     floorDecal(kit, IMP_DECAL.restricted, 0, dz - 3.2, 0.8, Math.PI);
-    kit.boxMM("rubber", [-5.3, 0.002, dz - 2.1], [5.3, 0.014, dz + 2.5], { color: CHR, texel: 1 });
+    kit.boxMM("rubber", [-5.3, 0.002, dz - 2.1], [5.3, 0.02, dz + 2.5], { color: CHR, texel: 1 });
     ceilingPanel(kit, 0, dz + 0.4, h, 3.0, 1.0, "emitWhiteSoft");
   }
 
@@ -241,14 +245,14 @@ export function buildDetention(kit, ctx, room) {
     }
     // walkway plate in front of the row, red chevron line, bay stencils on the deck
     const wx = s * (cellX - 1.5 - 0.5);
-    kit.boxMM("impMetalRough", [Math.min(wx - 0.5, wx + 0.5), 0.002, cellZ[0] - 1.7], [Math.max(wx - 0.5, wx + 0.5), 0.014, cellZ[3] + 1.7], { color: GD, texel: 1 });
-    floorStripe(kit, s * (cellX - 1.7 - 0.9), cellZ[0] - 1.7, s * (cellX - 1.7 - 0.9), cellZ[3] + 1.7, 0.1, "chevronR", 0.018);
-    for (const z of cellZ) floorDecal(kit, IMP_DECAL.arrowRight, s * (cellX - 2.6), z, 0.4, s > 0 ? 0 : Math.PI, 0.02);
+    kit.boxMM("impMetalRough", [Math.min(wx - 0.5, wx + 0.5), 0.002, cellZ[0] - 1.7], [Math.max(wx - 0.5, wx + 0.5), 0.016, cellZ[3] + 1.7], { color: GD, texel: 1 });
+    floorStripe(kit, s * (cellX - 1.7 - 0.9), cellZ[0] - 1.7, s * (cellX - 1.7 - 0.9), cellZ[3] + 1.7, 0.1, "chevronR", 0.02);
+    for (const z of cellZ) floorDecal(kit, IMP_DECAL.arrowRight, s * (cellX - 3.4), z, 0.4, s > 0 ? 0 : Math.PI, 0.02);
   }
   // force fields: one mesh for all eight doorways; shimmer = opacity flicker on the shared material (allocation-free)
   kit.attach(new THREE.Mesh(mergeGeometries(cctx.fieldGeos, false), fieldMat));
   kit.onUpdate((dt, t) => {
-    fieldMat.opacity = 0.26 + 0.06 * Math.sin(t * 9.0) + 0.03 * Math.sin(t * 23.0);
+    fieldMat.opacity = 0.2 + 0.05 * Math.sin(t * 9.0) + 0.03 * Math.sin(t * 23.0);
   });
   // pillars between cell pairs carrying beacons; cable runs over the cell roofs
   for (const s of [-1, 1]) {
@@ -265,7 +269,9 @@ export function buildDetention(kit, ctx, room) {
       kit.onUpdate((dt) => {
         lens.rotation.y += dt * 3.2;
       });
-      kit.light({ type: "point", pos: [px, h - 0.76, z], color: 0xff3020, intensity: 2.2, decay: 1, distance: 7, priority: 0.36, dim: (t) => 0.55 + 0.45 * Math.sin(t * 3.2 + phase) });
+      // one pulsing red pool per cell pair: lights the cell fronts / walkway and spills through the doorways
+      const ly = h - 0.76;
+      kit.light({ type: "point", pos: [px, ly, z], color: 0xff3a28, intensity: lux(ly, 2.8) / ly, decay: 1, distance: 12, priority: 0.44, dim: (t) => 0.7 + 0.3 * Math.sin(t * 3.2 + phase) });
     }
   }
 
@@ -285,8 +291,9 @@ export function buildDetention(kit, ctx, room) {
       kit.box(accentKey, s * 3.4, 2.03, iz - 1.4, 0.06, 0.02, 2.0);
       kit.collider([s * 3.4 - 0.1, 0, iz - 2.5], [s * 3.4 + 0.1, 2.0, iz - 0.3], "partition");
     }
-    restraintChair(kit, 0.4, iz + 0.6, Math.PI);
-    interrogationDroid(kit, -1.3, iz - 0.4, -0.5);
+    // chair faces the room (its occupant looks north toward the desk); droid hovers front-left of it
+    restraintChair(kit, 0.4, iz + 0.6, 0, 0.18);
+    interrogationDroid(kit, -1.3, iz - 0.4, -2.1, 0.18);
     // spot rig: ceiling boom with a white lamp head over the chair + white key light
     kit.cyl("impTrim", 0.4, h - 0.06, iz + 0.2, 0.22, 0.12, "y", { color: BLK, segments: 14 });
     kit.cyl("impMetal", 0.4, h - 0.5, iz + 0.2, 0.04, 0.8, "y", { color: GD, segments: 8 });
@@ -311,7 +318,7 @@ export function buildDetention(kit, ctx, room) {
     kit.collider([-2.72, 0, iz + 1.33], [-2.08, 1.1, iz + 1.87], "cart");
     wallSign(S, hx - 3.0, 2.7, IMP_DECAL.restricted, 0.5, accentKey);
     S.decal(IMP_DECAL.glyphs3, hx + 3.0, 2.7, 0.03, 0.44);
-    keyLight(kit, 0.4, h - 1.1, iz + 0.2, { color: 0xffffff, k: 3.4, distance: 9, priority: 0.46 });
+    keyLight(kit, 0.4, h - 1.1, iz + 0.2, { color: 0xffffff, k: 6.0, distance: 9, priority: 0.46 });
   }
 
   // ---------------------------------------------------------------- weapon-locker cage in the NW corner, guard post + crates NE
@@ -347,7 +354,7 @@ export function buildDetention(kit, ctx, room) {
     W.decal(IMP_DECAL.restricted, hz + 5.0, 2.5, 0.03, 0.44);
     hoodLamp(W, hz + 7.2, 2.6, ACCENT, 0.8);
     // guard post NE: stool, standing console, wall board
-    impConsole(kit, hx - 2.2, 0, -hz + 1.6, 1.4, 0.8, { yaw: Math.PI, seed: 88, screens: ["scrRed0", "scrRed1"], accentKey, tall: true });
+    impConsole(kit, hx - 2.2, 0, -hz + 1.6, 1.4, 0.8, { yaw: 0, seed: 88, screens: ["scrRed0", "scrRed1"], accentKey, tall: true });
     impChair(kit, hx - 2.2, 0, -hz + 2.6, 0);
     E.box("impTrim", 1.6, 1.8, 0.06, 1.6, 0.9, 0.12, { color: BLK, texel: 1 });
     E.screen("scrRed1", 1.6, 1.85, 0.125, 1.4, 0.6);
@@ -378,8 +385,9 @@ export function buildDetention(kit, ctx, room) {
   cameraHousing(kit, -hx + 0.3, h - 0.55, hz - 0.3, -Math.PI * 0.25);
   cameraHousing(kit, 0.9, h - 0.55, -4.6 - 3.0, Math.PI);
 
-  // ---------------------------------------------------------------- lights (8): 4 red beacons (above), interrogation white (above), desk white, 2 red aisle
-  keyLight(kit, 0, h - 0.5, -4.4, { color: 0xf4f6ff, k: 3.2, distance: 13, priority: 0.5 });
-  kit.light({ type: "point", pos: [0, h - 0.6, 0.0], color: 0xff5a48, intensity: 5.0, decay: 1, distance: 14, priority: 0.44 });
-  kit.light({ type: "point", pos: [0, h - 0.6, 5.5], color: 0xff5a48, intensity: 4.0, decay: 1, distance: 12, priority: 0.43 });
+  // ---------------------------------------------------------------- lights (8): 4 pulsing red beacons (above), interrogation spot (above),
+  // harsh white desk key, cool white over the entrance and the aisle so the block stays readable
+  keyLight(kit, 0, h - 1.0, -4.4, { color: 0xf4f6ff, k: 2.8, distance: 13, priority: 0.5 });
+  keyLight(kit, 0, h - 1.0, -9.6, { color: 0xdfe8ff, k: 2.0, distance: 12, priority: 0.47 });
+  keyLight(kit, 0, h - 1.0, 1.5, { color: 0xdfe8ff, k: 2.0, distance: 13, priority: 0.48 });
 }

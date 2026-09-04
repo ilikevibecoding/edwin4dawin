@@ -39,7 +39,7 @@ function bunkSoftGeo() {
   const parts = [];
   for (const y of SHELF_Y) {
     const top = y + 0.025;
-    parts.push(B(1.95, 0.1, 0.82, [0, top + 0.05, 0], DECK_C.fabricGrey));
+    parts.push(B(1.95, 0.1, 0.82, [0, top + 0.05, 0], 0x5c6068));
     parts.push(B(0.42, 0.09, 0.3, [-0.7, top + 0.145, -0.05], 0xc8ccd4));
     parts.push(B(1.1, 0.03, 0.84, [0.35, top + 0.115, 0], DECK_C.fabricBlue));
   }
@@ -51,7 +51,6 @@ export function buildCrewQuarters(kit, ctx, room) {
   const hx = w / 2;
   const hz = d / 2;
   const accentKey = ctx.accentKey ? ctx.accentKey(room) : "emitBlue";
-  const accent = new THREE.Color(room.accent || "#9fb0c8").getHex();
   const rand = rng(4101);
   const walls = impRoomShell(kit, room, ctx.doors, {
     seed: 4101,
@@ -366,16 +365,15 @@ export function buildCrewQuarters(kit, ctx, room) {
     });
   }
 
-  // ---------------------------------------------------------------- lights (8 total: 5 keys + refresher + 2 blue night fills)
+  // ---------------------------------------------------------------- lights (8 total: one per bunk bay + refresher (above) + east key)
+  // A bay light sits just inside each bay front under the header beam: the bunks are lit head-on instead of
+  // at a grazing angle from the room keys, and their overlap carries the common area between the rows.
   const keyCol = 0xdfe6f5;
-  // keys sit over the bay fronts (z = ±7) so the bunks get direct light; the common area is lit by their overlap
-  const keys = [
-    [-10, -7],
-    [-10, 7],
-    [0, -7],
-    [0, 7],
-    [10, 0],
-  ];
-  for (const [i, [x, z]] of keys.entries()) keyLight(kit, x, h - 0.6, z, { color: keyCol, k: 1.9, distance: 15, priority: 0.5 - i * 0.01 });
-  for (const z of [-9, 9]) kit.light({ type: "point", pos: [-9.4, 0.4, z], color: accent, intensity: 3.0, decay: 1, distance: 12, priority: 0.32 });
+  let li = 0;
+  for (const side of [-1, 1]) {
+    for (let b = 0; b < 3; b++, li++) {
+      keyLight(kit, bayX0 + (b + 0.5) * bayW, 2.3, side * (hz - bayDepth + 0.3), { color: keyCol, k: 2.0, distance: 10, priority: 0.5 - li * 0.01 });
+    }
+  }
+  keyLight(kit, 7, h - 0.6, 0, { color: keyCol, k: 2.4, distance: 18, priority: 0.46 });
 }

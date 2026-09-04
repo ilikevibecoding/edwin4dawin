@@ -348,7 +348,8 @@ export function buildArmory(kit, ctx, room) {
     kit.add("decalImp", new THREE.PlaneGeometry(0.4, 0.4), { pos: [cx + 1.0, 2.3, bz0 + 0.035], uv: "keep", uvRect: impDecalRect(IMP_DECAL.restricted) });
     kit.light({ type: "point", pos: [cx, 2.7, bz0 + 0.6], color: 0xff3020, intensity: 1.8, decay: 1, distance: 5, priority: 0.42 });
     // inside: quartermaster console facing the window, chair, rifle rack, shelving, wall board
-    impConsole(kit, cx, 0, -4.6, 2.2, 0.9, { yaw: 0, seed: 74, screens: ["scrAmber0", "scrAmber1"], accentKey });
+    // operator side (console local +z) toward the north, where the quartermaster sits facing the window
+    impConsole(kit, cx, 0, -4.6, 2.2, 0.9, { yaw: Math.PI, seed: 74, screens: ["scrAmber0", "scrAmber1"], accentKey });
     impChair(kit, cx, 0, -5.7, Math.PI);
     rifleRack(kit, -12.1, -10.7, 0, 4, { accentKey, seed: 21 });
     partsShelf(kit, -14.2, -7.4, Math.PI / 2, 31);
@@ -467,10 +468,10 @@ export function buildArmory(kit, ctx, room) {
   for (const x of [-4.5, 3.0, 10.5]) ceilingPanel(kit, x, 0, h, 2.4, 0.9, "emitWarmSoft");
 
   // ---------------------------------------------------------------- lights (8): vestibule white, booth amber (above), red beacon (above), 3 amber aisle, bench white, armour amber
-  keyLight(kit, -12.2, 3.4, 0, { color: 0xe8eeff, k: 1.6, distance: 12, priority: 0.5 });
-  keyLight(kit, -4.5, 3.4, 0, { color: 0xffc38a, k: 1.7, distance: 13, priority: 0.49 });
-  keyLight(kit, 3.0, 3.4, 0, { color: 0xffc38a, k: 1.7, distance: 13, priority: 0.48 });
-  keyLight(kit, 10.5, 3.4, 0, { color: 0xffc38a, k: 1.7, distance: 13, priority: 0.47 });
-  keyLight(kit, 13.2, 2.8, 5.6, { color: 0xf0f4ff, k: 1.8, distance: 8, priority: 0.44 });
-  keyLight(kit, 2.6, 3.2, 8.4, { color: 0xffb060, k: 1.5, distance: 11, priority: 0.43 });
+  keyLight(kit, -12.2, 3.4, 0, { color: 0xe8eeff, k: 2.0, distance: 12, priority: 0.5 });
+  keyLight(kit, -4.5, 3.4, 0, { color: 0xffc38a, k: 2.2, distance: 13, priority: 0.49 });
+  keyLight(kit, 3.0, 3.4, 0, { color: 0xffc38a, k: 2.2, distance: 13, priority: 0.48 });
+  keyLight(kit, 10.5, 3.4, 0, { color: 0xffc38a, k: 2.2, distance: 13, priority: 0.47 });
+  keyLight(kit, 13.2, 2.8, 5.6, { color: 0xf0f4ff, k: 2.2, distance: 8, priority: 0.44 });
+  keyLight(kit, 2.6, 3.2, 8.4, { color: 0xffb060, k: 2.0, distance: 11, priority: 0.43 });
 }

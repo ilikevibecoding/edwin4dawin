@@ -202,7 +202,8 @@ export function buildMedbay(kit, ctx, room) {
   hoodLamp(N, hx + 7.5, 2.6, "emitWhiteSoft", 0.8);
 
   // ---------------------------------------------------------------- diagnostic console facing the ward
-  impConsole(kit, 8.6, 0, -4.6, 2.6, 1.0, { yaw: Math.PI, seed: 63, screens: ["scrGreen0", "scrGreen1"], accentKey });
+  // (impConsole's operator side is local +z: yaw 0 puts the operator on the south side, where the chair is)
+  impConsole(kit, 8.6, 0, -4.6, 2.6, 1.0, { yaw: 0, seed: 63, screens: ["scrGreen0", "scrGreen1"], accentKey });
   impChair(kit, 8.6, 0, -3.4, 0);
 
   // ---------------------------------------------------------------- bacta tank on a railed platform (W end)
