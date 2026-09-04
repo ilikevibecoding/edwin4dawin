@@ -368,7 +368,19 @@ function flipUVs(geo) {
 }
 
 // Convenience: a straight rail (top tube + posts) between two world points at floor level.
-export function rail(kit, PALETTE, a, b, floorY, { h = 1.02, post = 1.6, color } = {}) {
+// `gap: [t0, t1]` leaves an opening between t0 and t1 metres from `a` (stair landings, bridge ends).
+export function rail(kit, PALETTE, a, b, floorY, opts = {}) {
+  if (opts.gap) {
+    const { gap, ...rest } = opts;
+    const dx = b[0] - a[0];
+    const dz = b[2] - a[2];
+    const len = Math.hypot(dx, dz);
+    const at = (t) => [a[0] + (dx * t) / len, a[1], a[2] + (dz * t) / len];
+    if (gap[0] > 0.3) rail(kit, PALETTE, a, at(gap[0]), floorY, rest);
+    if (len - gap[1] > 0.3) rail(kit, PALETTE, at(gap[1]), b, floorY, rest);
+    return;
+  }
+  const { h = 1.02, post = 1.6, color } = opts;
   const dx = b[0] - a[0];
   const dz = b[2] - a[2];
   const len = Math.hypot(dx, dz);

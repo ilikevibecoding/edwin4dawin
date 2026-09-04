@@ -63,7 +63,7 @@ export function indicatorField(P, lx, ly, lz, w, h, seed = 1, { density = 1, wei
 
 // Console: matte-black body, sloped upper face with screens, indicator field, key strip, kick.
 // Local footprint: width w along X, depth d along Z (front at +d/2), height h at the back.
-export function console(kit, PALETTE, pos, yaw, { w = 2.4, d = 0.9, h = 1.15, screens = 2, seed = 3, screenMat = null, sit = false } = {}) {
+export function console(kit, PALETTE, pos, yaw, { w = 2.4, d = 0.9, h = 1.15, screens = 2, seed = 3, screenMat = null, sit = false, stool = false } = {}) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
   const black = col(PALETTE, "impBlack");
@@ -98,18 +98,20 @@ export function console(kit, PALETTE, pos, yaw, { w = 2.4, d = 0.9, h = 1.15, sc
   P.box("emitBlue", 0, deskH - 0.03, d / 2 + 0.006, w - 0.3, 0.012, 0.01);
   P.collider([-w / 2, 0, -d / 2], [w / 2, h, d / 2], "console");
   if (sit) chair(kit, PALETTE, P.world(0, 0, d / 2 + 0.55), yaw + Math.PI);
+  else if (stool) chair(kit, PALETTE, P.world(0, 0, d / 2 + 0.55), yaw + Math.PI, { seatMat: "paintedMetal", back: false });
   return P;
 }
 
-// Simple pedestal chair facing local +Z
-export function chair(kit, PALETTE, pos, yaw) {
+// Simple pedestal chair facing local +Z. `seatMat` lets control rooms avoid spending a draw call on
+// `fabric` (e.g. "paintedMetal"); `back: false` makes it a stool.
+export function chair(kit, PALETTE, pos, yaw, { seatMat = "fabric", back = true } = {}) {
   const P = placer(kit, pos, yaw);
   const dark = col(PALETTE, "impDark");
   P.cyl("metal", 0, 0.02, 0, 0.26, 0.04, "y", { color: dark, segments: 16 });
   P.cyl("metal", 0, 0.25, 0, 0.04, 0.42, "y", { color: col(PALETTE, "steel"), segments: 10 });
-  P.box("fabric", 0, 0.49, 0, 0.5, 0.08, 0.5, { color: col(PALETTE, "impDark"), texel: 2 });
-  P.box("fabric", 0, 0.78, -0.22, 0.48, 0.5, 0.06, { color: col(PALETTE, "impDark"), texel: 2 });
-  P.collider([-0.26, 0, -0.26], [0.26, 1.0, 0.26], "chair");
+  P.box(seatMat, 0, 0.49, 0, 0.5, 0.08, 0.5, { color: col(PALETTE, "impDark"), texel: 2 });
+  if (back) P.box(seatMat, 0, 0.78, -0.22, 0.48, 0.5, 0.06, { color: col(PALETTE, "impDark"), texel: 2 });
+  P.collider([-0.26, 0, -0.26], [0.26, back ? 1.0 : 0.55, 0.26], "chair");
 }
 
 // Wall-mounted screen with bezel. Face key: which way the screen faces (world dir as yaw).
@@ -202,7 +204,7 @@ export function table(kit, PALETTE, pos, yaw, { len = 4.0, w = 0.9, h = 0.78, be
 }
 
 // Pipe run between two world points with brackets every `bracket` metres.
-export function pipe(kit, PALETTE, a, b, r = 0.08, { color, bracket = 2.5, mat = "metal" } = {}) {
+export function pipe(kit, PALETTE, a, b, r = 0.08, { color, bracket = 2.5, mat = "metal", segments = 12 } = {}) {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const dz = b[2] - a[2];
@@ -210,11 +212,11 @@ export function pipe(kit, PALETTE, a, b, r = 0.08, { color, bracket = 2.5, mat =
   const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
   const dir = new THREE.Vector3(dx, dy, dz).normalize();
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-  kit.add(mat, new THREE.CylinderGeometry(r, r, len, 12), { pos: mid, quat: q, uv: "scale", uvScale: [2 * Math.PI * r, len], color: color || col(PALETTE, "steel") });
+  kit.add(mat, new THREE.CylinderGeometry(r, r, len, segments), { pos: mid, quat: q, uv: "scale", uvScale: [2 * Math.PI * r, len], color: color || col(PALETTE, "steel") });
   const n = Math.floor(len / bracket);
   for (let i = 1; i <= n; i++) {
     const t = i / (n + 1);
-    kit.add("paintedMetal", new THREE.CylinderGeometry(r + 0.04, r + 0.04, 0.12, 12), { pos: [a[0] + dx * t, a[1] + dy * t, a[2] + dz * t], quat: q, color: col(PALETTE, "impDark") });
+    kit.add("paintedMetal", new THREE.CylinderGeometry(r + 0.04, r + 0.04, 0.12, segments), { pos: [a[0] + dx * t, a[1] + dy * t, a[2] + dz * t], quat: q, color: col(PALETTE, "impDark") });
   }
 }
 
