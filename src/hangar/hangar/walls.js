@@ -306,8 +306,9 @@ class Wall {
       this.box("paintedMetal", this.P.impMid, u - RIB_W / 2 - 0.3, u + RIB_W / 2 + 0.3, cv1, cv1 + 0.4, 0.02, D + 0.1, { texel: 0.5 });
       housedLamp(this.B, "emitWhite", this.pos(u, cv1 - 0.001, P1 + 0.6), [0, -1, 0], [0.5, 0.14, 0.3], { inset: 0.04 });
       if (vStart === 0) {
+        // foot block with a steel toe strip (no hazard paint: that is reserved for the doors and the aperture lip)
         this.box("paintedMetal", this.P.impDark, u - RIB_W / 2 - 0.35, u + RIB_W / 2 + 0.35, 0, 1.6, 0.02, D + 0.3, { texel: 0.5 });
-        this.box("hgHazard", 0xffffff, u - RIB_W / 2 - 0.35, u + RIB_W / 2 + 0.35, 0.05, 0.55, D + 0.3, D + 0.32, { texel: 1 });
+        this.box("metal", HG.steel, u - RIB_W / 2 - 0.35, u + RIB_W / 2 + 0.35, 0.05, 0.15, D + 0.3, D + 0.32);
         const [mn, mx] = this.aabb(u - RIB_W / 2 - 0.35, u + RIB_W / 2 + 0.35, 0, 4, 0, D + 0.3);
         this.kit.collider(mn, mx, "rib");
       } else {
@@ -374,10 +375,15 @@ class Wall {
     const m = FRAME_W; // reveal the doors system needs
     const hv0 = h.v1 + m + 1.1, hv1 = hv0 + 1.4;
     if (kind === "bay") {
+      // plain dark steel surround: the leaves the doors system hangs in the hole carry the hazard band,
+      // so the frame adds none of its own
       const bw = 0.6;
-      this.box("hgHazard", 0xffffff, h.u0 - m - bw, h.u0 - m, 0, h.v1 + m + bw, P0, P0 + 0.08, { texel: 0.5 });
-      this.box("hgHazard", 0xffffff, h.u1 + m, h.u1 + m + bw, 0, h.v1 + m + bw, P0, P0 + 0.08, { texel: 0.5 });
-      this.box("hgHazard", 0xffffff, h.u0 - m, h.u1 + m, h.v1 + m, h.v1 + m + bw, P0, P0 + 0.08, { texel: 0.5 });
+      this.box("paintedMetal", this.P.impDark, h.u0 - m - bw, h.u0 - m, 0, h.v1 + m + bw, P0, P0 + 0.3, { texel: 0.5 });
+      this.box("paintedMetal", this.P.impDark, h.u1 + m, h.u1 + m + bw, 0, h.v1 + m + bw, P0, P0 + 0.3, { texel: 0.5 });
+      this.box("paintedMetal", this.P.impDark, h.u0 - m, h.u1 + m, h.v1 + m, h.v1 + m + bw, P0, P0 + 0.3, { texel: 0.5 });
+      this.box("metal", HG.steel, h.u0 - m - 0.08, h.u0 - m, 0, h.v1 + m + 0.08, P0 + 0.3, P0 + 0.36);
+      this.box("metal", HG.steel, h.u1 + m, h.u1 + m + 0.08, 0, h.v1 + m + 0.08, P0 + 0.3, P0 + 0.36);
+      this.box("metal", HG.steel, h.u0 - m, h.u1 + m, h.v1 + m, h.v1 + m + 0.08, P0 + 0.3, P0 + 0.36);
     } else {
       const bw = 1.0;
       this.box("paintedMetal", this.P.impDark, h.u0 - m - bw, h.u0 - m, 0, h.v1 + m + bw, P0, P0 + 0.5, { texel: 0.5 });

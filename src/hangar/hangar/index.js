@@ -33,7 +33,8 @@ function addLights(ctx) {
   L.push({ type: "point", pos: [0, FLOOR + 6, 164], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.4 });
   L.push({ type: "point", pos: [0, FLOOR + 6, -64], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.3 });
   // the two bar gaps in the aperture rail: lifts the chevron, rails and bar posts where people stand
-  for (const z of [HOLE.z0 - 3.5, HOLE.z1 + 3.5]) L.push({ type: "point", pos: [0, FLOOR + 4.5, z], color: 0xf4f7ff, intensity: 60, distance: 26, decay: 1.8, priority: 0.35 });
+  // (over the lip itself and dim, so its reflection in the plating stays under the viewer's feet)
+  for (const z of [HOLE.z0 - 1.5, HOLE.z1 + 1.5]) L.push({ type: "point", pos: [0, FLOOR + 5, z], color: 0xf4f7ff, intensity: 40, distance: 24, decay: 1.8, priority: 0.35 });
   for (const s of [-1, 1]) {
     L.push({ type: "point", pos: [s * 74, FLOOR + 7, 15], color: 0xfff0e0, intensity: 70, distance: 32, priority: 0.3 });
     L.push({ type: "point", pos: [s * 74, FLOOR + 6, 120], color: 0xfff0e0, intensity: 70, distance: 32, priority: 0.3 });
