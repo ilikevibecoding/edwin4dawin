@@ -26,13 +26,13 @@ export function buildMess(kit, ctx) {
   });
 
   // ------------------------------------------------------------------ lights (6)
-  const warm = 0xffd9a8;
+  const warm = 0xffcf98;
   for (const [x, z] of [
     [8.6, -24.5],
     [8.6, -13.2],
     [15.6, -24.5],
     [15.6, -13.2],
-  ]) ctx.light(pointLight(warm, 15, 15, [x, H - 0.7, z]));
+  ]) ctx.light(pointLight(warm, 17, 15, [x, H - 0.7, z]));
   ctx.light(pointLight(0xffc48a, 9, 11, [20.9, 2.7, -20.0]));
   ctx.light(pointLight(0xeaf0ff, 12, 14, [26.2, H - 0.5, -19.5]));
   // warm square ceiling fixtures over the table columns (the real lights hang under these)

@@ -129,11 +129,11 @@ export function buildDetention(kit, ctx) {
 
   // ------------------------------------------------------------------ lights (6)
   ctx.light(pointLight(0xff3a2a, 12, 13, [52.2, H - 0.5, -36.0]));
-  ctx.light(pointLight(0xe8eeff, 16, 13, [45.4, H - 0.5, -36.0]));
+  ctx.light(pointLight(0xe8eeff, 20, 14, [45.4, H - 0.5, -36.0]));
   ctx.light(pointLight(0xdfe8ff, 12, 9, [59.0, H - 0.6, -36.0]));
   ctx.light(pointLight(0xff3020, 6, 10, [55.0, H - 0.6, -43.8]));
   ctx.light(pointLight(0xff3020, 6, 10, [55.0, H - 0.6, -28.2]));
-  ctx.light(pointLight(0xe0e8ff, 9, 9, [45.4, H - 0.6, -29.6]));
+  ctx.light(pointLight(0xe0e8ff, 13, 10, [45.4, H - 0.6, -29.6]));
 
   // ------------------------------------------------------------------ cell block: corridor walls with field openings, cells
   const fieldW = cellW - 0.7;

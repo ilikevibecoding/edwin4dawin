@@ -429,10 +429,16 @@ export function messTable(kit, ctx, { x, z, yaw = 0, len = 3.6, seed = 1, props 
         add("paintedMetal", new THREE.BoxGeometry(0.42, 0.03, 0.3), tx, h + 0.03, tz, { color: PALETTE.impMid, texel: 3 });
         add("darkGloss", new THREE.BoxGeometry(0.16, 0.016, 0.2), tx - 0.1, h + 0.05, tz);
         add("darkGloss", new THREE.BoxGeometry(0.14, 0.016, 0.2), tx + 0.11, h + 0.05, tz);
-      } else {
-        // cup
+      } else if (rand() < 0.75) {
+        // cup: issue steel, or a coloured ration-drink beaker
         const p = local(tx, h + 0.06, tz);
-        kit.cyl("metal", p.x, p.y, p.z, 0.04, 0.1, "y", { color: rand() < 0.5 ? PALETTE.steel : PALETTE.impDark, segments: 10 });
+        const r = rand();
+        const col = r < 0.4 ? PALETTE.steel : r < 0.6 ? PALETTE.impDark : r < 0.8 ? PALETTE.impRed : PALETTE.impAmber;
+        kit.cyl(r < 0.6 ? "metal" : "paintedMetal", p.x, p.y, p.z, 0.04, 0.1, "y", { color: col, segments: 10, texel: 3 });
+      } else {
+        // datapad left face-up on the table, screen lit
+        add("paintedMetal", new THREE.BoxGeometry(0.22, 0.014, 0.16), tx, h + 0.02, tz, { color: PALETTE.impBlack, texel: 3 });
+        add(rand() < 0.5 ? "impScreen1" : "impScreen4", new THREE.BoxGeometry(0.18, 0.004, 0.12), tx, h + 0.03, tz, { uv: "keep" });
       }
     }
   }
