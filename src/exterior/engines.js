@@ -66,9 +66,12 @@ export function buildEngines(ctx) {
   {
     const b = [V(-H.hw, H.y0, e.z), V(H.hw, H.y0, e.z), V(H.hw, H.y1, e.z), V(-H.hw, H.y1, e.z)];
     const t = [V(-H.hw + 5, H.y0 + 4, zF), V(H.hw - 5, H.y0 + 4, zF), V(H.hw - 5, H.y1 - 3, zF), V(-H.hw + 5, H.y1 - 3, zF)];
-    const far = at("far", "hullGreeble");
-    hexa(far, b, t, mixC(D, T, 0.3), TEXEL, { skipBottom: true, skipTop: true });
-    far.grid(t[0], t[1], t[2], t[3], 28, 6, (p) => shade(D, 1 - 0.55 * engineSoot(p.x, p.y)), TEXEL, Z);
+    // plated housing in the hull's mid tone so the soot blooms around the nozzles actually read:
+    // the wash blackens the face to ~30 % of its albedo at the lips and fades out over ~75 m
+    const far = at("far", "hullPlate1");
+    const M = PALETTE.hullMid;
+    hexa(far, b, t, mixC(M, D, 0.35), TEXEL, { skipBottom: true, skipTop: true });
+    far.grid(t[0], t[1], t[2], t[3], 56, 10, (p) => shade(mixC(M, PALETTE.hullLight, 0.2), 1 - 0.72 * engineSoot(p.x, p.y)), TEXEL, Z);
     const trim = at("far", "hullTrim");
     trim.box(0, H.y1 - 4.5, zF + 0.6, (H.hw - 5) * 2 + 1, 3, 1.4, T, TEXEL * 3, { skip: new Set(["-z"]) });
     trim.box(0, H.y0 + 5.5, zF + 0.6, (H.hw - 5) * 2 + 1, 3, 1.4, T, TEXEL * 3, { skip: new Set(["-z"]) });

@@ -72,13 +72,17 @@ const hash2 = (x, z) => {
   n = Math.imul(n ^ (n >>> 13), 1274126177);
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 };
-/** Skin tint: large-scale paint variation, a few replaced (darker) plates, soot toward the stern. */
+/**
+ * Skin tint: two low-frequency paint layers (150 m and 380 m, ±4 % each) so the plating has a slow
+ * tonal drift rather than a per-tile quilt, a few replaced plates one step darker, and soot toward
+ * the stern (the engine wash reaches ~100 m forward along the dorsal and ventral plates).
+ */
 const paint = (base, alt, seed) => (x, y, z) => {
-  let c = shade(base, 0.94 + fieldNoise(x, z, 150, seed) * 0.12);
+  let c = shade(base, (0.96 + fieldNoise(x, z, 150, seed) * 0.08) * (0.97 + fieldNoise(x + 3000, z, 380, seed + 1) * 0.06));
   const h = hash2(x, z);
-  if (h < 0.1) c = mixC(c, alt, 0.6);
-  else if (h > 0.95) c = shade(c, 1.05);
-  return shade(c, 1 - 0.3 * smooth(500, 600, z));
+  if (h < 0.06) c = mixC(c, alt, 0.35);
+  else if (h > 0.96) c = shade(c, 1.04);
+  return shade(c, 1 - 0.38 * smooth(480, 600, z) * (0.7 + 0.3 * fieldNoise(x, z, 40, seed + 2)));
 };
 const slabTint = (r, base) => mixC(plateTone(r), base, 0.5);
 const nearBelt = (z) => z < CAP_Z + 4 || BELTS.some(([bz, , len]) => Math.abs(z - bz) < len / 2 + 3.5);
@@ -417,12 +421,14 @@ function buildStern(ctx) {
   const s = hullSection(z);
   const { hullDark: D, hullMid: M, hullLight: L } = PALETTE;
   const far = chunks.batch(z - 1, "far", "hullPlate1");
-  const soot = (p) => shade(mixC(D, M, 0.3), 1 - 0.55 * engineSoot(p.x, p.y));
+  // stern face in the hull's mid tone with real soot: the wash from each nozzle blackens the plating
+  // to ~30 % of its albedo at the lips and fades over ~75 m (secondaries ~32 m)
+  const soot = (p) => shade(mixC(M, L, 0.25), 1 - 0.72 * engineSoot(p.x, p.y));
   const H = HOUSING;
   const xUpper = (y) => s[1].x + (s[2].x - s[1].x) * ((s[1].y - y) / (s[1].y - s[2].y));
   const xLower = (y) => s[6].x + (s[5].x - s[6].x) * ((y - s[6].y) / (s[5].y - s[6].y));
-  far.grid(V(-xUpper(H.y1), H.y1, z), V(xUpper(H.y1), H.y1, z), V(s[1].x, s[1].y, z), V(-s[1].x, s[1].y, z), 20, 2, soot, TEXEL, Z);
-  far.grid(V(-xLower(H.y0), H.y0, z), V(xLower(H.y0), H.y0, z), V(s[6].x, s[6].y, z), V(-s[6].x, s[6].y, z), 20, 2, soot, TEXEL, Z);
+  far.grid(V(-xUpper(H.y1), H.y1, z), V(xUpper(H.y1), H.y1, z), V(s[1].x, s[1].y, z), V(-s[1].x, s[1].y, z), 48, 4, soot, TEXEL, Z);
+  far.grid(V(-xLower(H.y0), H.y0, z), V(xLower(H.y0), H.y0, z), V(s[6].x, s[6].y, z), V(-s[6].x, s[6].y, z), 48, 4, soot, TEXEL, Z);
   for (const side of [1, -1]) {
     const X = (x) => side * x;
     const pts = [V(X(H.hw), -8, z), V(X(H.hw), H.y1, z), V(X(xUpper(H.y1)), H.y1, z), V(X(s[2].x), s[2].y, z), V(X(s[3].x), s[3].y, z), V(X(s[4].x), s[4].y, z), V(X(s[5].x), s[5].y, z), V(X(xLower(H.y0)), H.y0, z), V(X(H.hw), H.y0, z)];
