@@ -232,7 +232,8 @@ for (const id of [...interior.roomIds, ...interior.corridorIds]) {
   const v = interior.viewFor(id);
   if (v) VIEWS["room:" + id] = { ...v, kind: "interior", planet: 0, planetOffset: 0, time: 40 };
 }
-// hand-placed interior views
+// hand-placed interior views (the reactor door view looks up the 30 m column)
+if (VIEWS["room:reactor"]) VIEWS["room:reactor"].pitch = 14;
 VIEWS.bridge = { x: 0, z: 490.5, y: 265, yaw: 0, pitch: -3, zone: "tower", kind: "interior", planet: 0, planetOffset: -10, time: 40 };
 VIEWS.bridgeAft = { x: 0, z: 474, y: 265, yaw: 180, pitch: -4, zone: "tower", kind: "interior", planet: 0, planetOffset: 0, time: 40 };
 VIEWS.hangarDeck = { x: -26, z: 465, y: -80, yaw: -70, pitch: 4, zone: "hangar", kind: "interior", planet: 0, planetOffset: 0, time: 40 };
