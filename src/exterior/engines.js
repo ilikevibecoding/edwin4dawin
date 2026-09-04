@@ -1,7 +1,8 @@
 // Ion engines: three main + four auxiliary nozzles on the stern wall. Each is a lathe bell with depth
-// (throat well inside the hull), inner rings and radial vanes, a hot blue-white core disc (vertex colours
-// above 1.0 so bloom picks it up) and an additive haze cone inside the bell. The stern wall around the
-// engines is heat-discoloured through vertex colours; exhaust duct greebles fill the wall between them.
+// (stepped throat well inside the hull with hoops on its lands), a hot core disc with a radial gradient
+// (only the centre crosses the bloom threshold), an additive haze cone inside the bell, a glow across the
+// mouth and nested plume cones trailing aft. The stern wall around the engines is heat-discoloured
+// through vertex colours; exhaust duct greebles fill the wall between them.
 import * as THREE from "three";
 import { ENGINES } from "../config/shipSpec.js";
 import { dorsal, ventral, merge, box, cylZ, atlasBox, layerMesh, worldUV, macroColor } from "./util.js";
@@ -29,16 +30,25 @@ export function sternHeatTint(x, y, z, col) {
   return col;
 }
 
-// bell: throat well inside the hull, flaring to a thick rounded lip at the mouth, outer shell back to the wall
+// bell: throat well inside the hull, flaring to a thick rounded lip at the mouth, outer shell back to the
+// wall. The throat is stepped (short cylindrical lands between the flaring sections) so the liner reads
+// as concentric rings with depth rather than one smooth cone.
 function bellProfile(R) {
   const pts = [
     [0.26, -0.66],
     [0.3, -0.62],
     [0.42, -0.6],
-    [0.52, -0.52],
-    [0.66, -0.38],
-    [0.8, -0.22],
-    [0.92, -0.06],
+    [0.42, -0.55],
+    [0.52, -0.5],
+    [0.56, -0.46],
+    [0.56, -0.41],
+    [0.66, -0.34],
+    [0.7, -0.31],
+    [0.7, -0.26],
+    [0.8, -0.18],
+    [0.84, -0.15],
+    [0.84, -0.11],
+    [0.92, -0.04],
     [0.985, 0.08],
     [1.0, 0.15],
     [1.025, 0.2],
@@ -111,11 +121,12 @@ export function buildEngines(ctx) {
     const boltRing = new THREE.TorusGeometry(R + 9, 0.45, 6, seg);
     boltRing.translate(x, y, z0 + 0.6);
     metal.push(boltRing);
-    // inner rings step down the bell; two outer hoops give the shell depth and shading
+    // hoops on the lands of the stepped liner, plus two outer hoops that give the shell depth and shading
     for (const [rr, a, tube] of [
-      [0.72, -0.3, 0.022],
-      [0.86, -0.12, 0.02],
-      [0.58, -0.46, 0.02],
+      [0.44, -0.575, 0.022],
+      [0.58, -0.435, 0.024],
+      [0.72, -0.285, 0.026],
+      [0.86, -0.13, 0.028],
       [1.125, -0.12, 0.025],
       [1.115, -0.36, 0.022],
     ]) {
@@ -123,17 +134,14 @@ export function buildEngines(ctx) {
       ring.translate(x, y, z0 + a * R);
       metal.push(ring);
     }
-    // small hub deep in the throat
-    const hub = cylZ(0.1 * R, 0.13 * R, 0.1 * R, 16);
-    hub.translate(x, y, z0 - 0.6 * R);
-    metal.push(hub);
-    // hot core: smooth radial gradient, white-blue centre falling to a deep blue rim (bloom-friendly)
+    // hot core filling the throat at the first land: a radial gradient from a white-hot centre (only the
+    // inner quarter crosses the bloom threshold, so it glows without clipping the disc) to a deep blue rim
     cores.push(
-      gradientDisc(x, y, z0 - 0.5 * R, 0.6 * R, seg, 6, (t, c) => {
-        const k = Math.pow(1 - t, 1.6);
-        c[0] = 0.12 + 1.3 * k;
-        c[1] = 0.22 + 1.6 * k;
-        c[2] = 0.7 + 1.55 * k;
+      gradientDisc(x, y, z0 - 0.565 * R, 0.43 * R, seg, 10, (t, c) => {
+        const k = Math.pow(1 - t, 2.6);
+        c[0] = 0.08 + 1.6 * k;
+        c[1] = 0.16 + 1.75 * k;
+        c[2] = 0.48 + 1.75 * k;
       }),
     );
     // additive haze inside the bell (fades toward the lip)
@@ -172,19 +180,44 @@ export function buildEngines(ctx) {
       [0.93, 0.05, 0.03],
       [0.97, 0.14, 0.0],
     ]);
-    // soft plume: an additive cone trailing aft of the mouth, brightest at the axis and the mouth
+    // soft plume: three nested additive cones trailing aft of the mouth (the outer one 4 radii long), each
+    // faint on its own and edge-faded by the glow material so no shell silhouette reads as an outline;
+    // together they give the plume a bright axis that fades slowly along its length
     haze([
-      [0.9, 0.12, 0.0],
-      [0.82, 0.3, 0.14],
-      [0.66, 0.7, 0.09],
-      [0.46, 1.2, 0.045],
-      [0.22, 1.75, 0.012],
-      [0.0, 2.05, 0.0],
+      [0.92, 0.12, 0.0],
+      [0.86, 0.35, 0.09],
+      [0.76, 0.85, 0.065],
+      [0.6, 1.5, 0.04],
+      [0.42, 2.4, 0.02],
+      [0.22, 3.3, 0.008],
+      [0.0, 4.0, 0.0],
     ]);
-    // faint halo disc just behind the lip
+    haze([
+      [0.7, 0.1, 0.0],
+      [0.64, 0.4, 0.1],
+      [0.5, 1.05, 0.065],
+      [0.3, 1.9, 0.026],
+      [0.0, 2.9, 0.0],
+    ]);
+    haze([
+      [0.46, 0.08, 0.0],
+      [0.42, 0.4, 0.13],
+      [0.3, 1.0, 0.08],
+      [0.16, 1.7, 0.026],
+      [0.0, 2.3, 0.0],
+    ]);
+    // glow across the mouth (reads from every angle the plume shells do not) and a faint halo behind the lip
+    glows.push(
+      gradientDisc(x, y, z0 + 0.1 * R, 0.95 * R, seg, 6, (t, c) => {
+        const k = 0.22 * Math.pow(1 - t, 2.0);
+        c[0] = 0.45 * k;
+        c[1] = 0.68 * k;
+        c[2] = 1.0 * k;
+      }),
+    );
     glows.push(
       gradientDisc(x, y, z0 + 0.25 * R, 1.18 * R, seg, 4, (t, c) => {
-        const k = 0.1 * Math.pow(1 - t, 2.2);
+        const k = 0.14 * Math.pow(1 - t, 2.2);
         c[0] = 0.45 * k;
         c[1] = 0.68 * k;
         c[2] = 1.0 * k;
@@ -198,12 +231,16 @@ export function buildEngines(ctx) {
     let best = null;
     for (const e of ALL_ENGINES) {
       const d = Math.hypot(x - e[0], y - e[1]) / e[2];
-      if (!best || d < best.d) best = { d, R: e[2] };
+      if (!best || d < best.d) best = { d, x: e[0], y: e[1], R: e[2] };
     }
     const a = (z - z0) / best.R;
     const heat = THREE.MathUtils.clamp((-0.1 - a) / 0.5, 0, 1);
     _t.setRGB(0.66 + heat * 0.2, 0.68 + heat * 0.26, 0.72 + heat * 0.42);
     col.lerp(_t, 0.7);
+    // the mid-vertex of each flaring liner section goes dark, so the throat reads as stacked rings
+    // (lands light, flares shaded) rather than one smooth cone
+    const r = Math.hypot(x - best.x, y - best.y) / best.R;
+    if (r < 1.0 && (Math.abs(a + 0.5) < 0.015 || Math.abs(a + 0.34) < 0.015 || Math.abs(a + 0.18) < 0.015)) col.multiplyScalar(0.55);
     return col;
   };
   macroColor(metalGeo, { base: 0.95, tint: bellTint });

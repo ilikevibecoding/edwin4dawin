@@ -19,7 +19,7 @@ import { TRENCH_HALF, TRENCH_DEPTH, dorsal, ventral, merge, box, boxMM, worldUV,
 import { SPINE, terraceDescriptors, buildHullPlates, buildHullFittings, buildDockingPads, padRects, buildSuperstructure, buildTrench } from "./greebles.js";
 import { buildTurrets, turretRects } from "./turrets.js";
 import { buildEngines, sternHeatTint } from "./engines.js";
-import { buildVentral } from "./ventral.js";
+import { buildVentral, buildVentralSurface } from "./ventral.js";
 import { createWindowRows, buildRunningLights } from "./exteriorLights.js";
 
 export { sunPatch };
@@ -33,7 +33,6 @@ function buildWedge() {
   const z0 = HULL.bowZ + 6;
   const L = HULL.sternZ - z0;
   const top = new Soup();
-  const bottom = new Soup();
   for (let zi = 0; zi < NZ; zi++) {
     const za = z0 + (zi / NZ) * L;
     const zb = z0 + ((zi + 1) / NZ) * L;
@@ -47,7 +46,6 @@ function buildWedge() {
       const C = [sb * hwb, 0, zb];
       const D = [sa * hwb, 0, zb];
       top.quad([A[0], dorsal(A[0], za), za], [D[0], dorsal(D[0], zb), zb], [C[0], dorsal(C[0], zb), zb], [B[0], dorsal(B[0], za), za]);
-      bottom.quad([A[0], ventral(A[0], za), za], [B[0], ventral(B[0], za), za], [C[0], ventral(C[0], zb), zb], [D[0], ventral(D[0], zb), zb]);
     }
   }
   // stern wall (faces +Z), finely tessellated so the heat discolouration reads as smooth gradients; cells
@@ -93,7 +91,7 @@ function buildWedge() {
       q([ia, -TRENCH_HALF, za], [ea, -TRENCH_HALF, za], [eb, -TRENCH_HALF, zb], [ib, -TRENCH_HALF, zb]);
     }
   }
-  return { top: top.geometry(), bottom: bottom.geometry(), stern: stern.geometry(), trench: trench.geometry(), lips: lips.geometry() };
+  return { top: top.geometry(), stern: stern.geometry(), trench: trench.geometry(), lips: lips.geometry() };
 }
 
 // Dorsal spine ridge: a low trapezoidal rib along the centreline from near the bow to the first terrace,
@@ -189,6 +187,11 @@ export function buildExterior(scene) {
   const hullMat = exteriorPatch(new THREE.MeshStandardMaterial(platingParams()), sun, { worldTexel: 1 / 24, detail: detailLayer });
   const plateMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...platingParams(), color: 0xf6f6f6 }), sun, { worldTexel: 1 / 24, detail: detailLayer });
   const hullUvMat = exteriorPatch(new THREE.MeshStandardMaterial(platingParams()), sun, { detail: detailLayer });
+  // belly: the same plating at a coarser 32 m tile with its seams and relief softened, so from 600 m the
+  // underside reads as large plate groups with value variation instead of a hard uniform grid
+  const bellyOpts = { worldTexel: 1 / 32, detail: { ...detailLayer, strength: 0.35 }, contrast: 0.4 };
+  const bellyParams = () => ({ ...platingParams(), normalScale: new THREE.Vector2(0.35, 0.35) });
+  const hullBottomMat = exteriorPatch(new THREE.MeshStandardMaterial(bellyParams()), sun, bellyOpts);
   const machineryParams = () => ({
     map: machinery.map,
     roughnessMap: machinery.roughnessMap,
@@ -214,15 +217,29 @@ export function buildExterior(scene) {
   // channels take two more depth units than the paint plates, so where they cross the channel wins.
   const flat = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 };
   const flatDeep = { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 };
-  const paintMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...platingParams(), ...flat, color: 0xf4f4f4 }), sun, { worldTexel: 1 / 24, detail: detailLayer });
+  const paintMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...bellyParams(), ...flat, color: 0xf4f4f4 }), sun, bellyOpts);
   // the machinery map is trench-dark; lifted here so recessed channels read as dark grey, not black
   const darkFlatMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...machineryParams(), ...flatDeep, color: new THREE.Color(1.9, 1.9, 1.9) }), sun, { worldTexel: 1 / 12 });
   const atlasFlatMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...atlasParams(), ...flatDeep }), sun);
-  const rimLightMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.15, 1.4, 1.75), fog: false });
+  const rimLightMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.35, 1.65, 2.05), fog: false });
   const engineCore = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
   const engineGlow = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  // the plume shells fade where they are seen edge-on, so the nested cones read as a soft volume without a
+  // polygonal outline (the mouth discs face the stern camera and keep their full value)
+  engineGlow.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying float vFacing;")
+      .replace(
+        "#include <begin_vertex>",
+        "#include <begin_vertex>\n  vec3 glowN = normalize( normalMatrix * normal );\n  vec3 glowP = ( modelViewMatrix * vec4( position, 1.0 ) ).xyz;\n  vFacing = abs( dot( glowN, normalize( -glowP ) ) );",
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying float vFacing;")
+      .replace("#include <color_fragment>", "#include <color_fragment>\n  diffuseColor.rgb *= smoothstep( 0.0, 0.7, vFacing );");
+  };
+  engineGlow.customProgramCacheKey = () => "engineGlowSoft";
   const tractorMat = new THREE.MeshBasicMaterial({ color: 0x4d9dff, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.FrontSide, fog: false });
-  const materials = { hullMat, darkMat, greebleMat, greebleDark, plateMat, paintMat, darkFlatMat, atlasFlatMat, rimLightMat, windowMat, engineGlow, engineCore, hullUvMat, engineMat, atlasMat };
+  const materials = { hullMat, hullBottomMat, darkMat, greebleMat, greebleDark, plateMat, paintMat, darkFlatMat, atlasFlatMat, rimLightMat, windowMat, engineGlow, engineCore, hullUvMat, engineMat, atlasMat };
   const mats = { hull: hullMat, plate: plateMat, paint: paintMat, hullUv: hullUvMat, dark: darkMat, darkFlat: darkFlatMat, engine: engineMat, greeble: greebleMat, greebleDark, atlas: atlasMat, atlasFlat: atlasFlatMat, rimLight: rimLightMat, windows: windowMat, engineCore, engineGlow };
 
   const rand = rng(4242);
@@ -237,10 +254,12 @@ export function buildExterior(scene) {
   // ---------------- base hull (always visible): both planes, the trench lips and the dorsal spine ridge
   const wedge = buildWedge();
   addMesh(merge([finish(wedge.top), finish(wedge.lips), finish(buildSpine(), 1 / 12)]), hullMat, "hull");
-  // The ventral surface runs through the keel block (inside the closed block, never visible from outside),
-  // so it is its own chunk that the belly windows leave out: from the hangar deck it read as a low
-  // light-grey ceiling hiding the racks, girders and the real ceiling.
-  addMesh(finish(wedge.bottom), hullMat, "hullBottom");
+  // The ventral plane (built in ventral.js with its recessed channels and the reactor recess) runs through
+  // the keel block (inside the closed block, never visible from outside), so it is its own chunk that the
+  // belly windows leave out: from the hangar deck it read as a low light-grey ceiling hiding the racks,
+  // girders and the real ceiling. Its recess walls and floors go to the keel's dark mesh via ctx.
+  const ventralSurface = buildVentralSurface();
+  addMesh(finish(ventralSurface.surface, 1 / 32), hullBottomMat, "hullBottom");
   addMesh(finish(wedge.stern, 1 / 12, { base: 0.72, tint: sternHeatTint }), darkMat, "sternWall");
   addMesh(finish(wedge.trench, 1 / 12, { trench: true }), darkMat, "trenchWall");
 
@@ -405,7 +424,8 @@ export function buildExterior(scene) {
     skirt.rotateZ(sx * 0.35);
     keelGeos.push(skirt);
   }
-  addMesh(finish(merge(keelGeos)), hullMat, "keelBlock");
+  // a shade darker than the plane so its sunlit flanks stay plated grey rather than blowing out
+  addMesh(finish(merge(keelGeos), 1 / 24, { base: 0.84 }), hullMat, "keelBlock");
   // the keel's dark fittings (secondary bay frame, well throat, well collar with its lit rim, decals) are
   // built by buildVentral
   // faint field sheet across the mouth, facing down: read from below the ship, invisible from the deck
@@ -431,6 +451,7 @@ export function buildExterior(scene) {
     openings,
     exclude: { top: [...turretRects(), ...padRects()], bottom: [] },
     windowQuad: (w, h, pos, rot) => windowRows.add(w, h, pos, rot),
+    ventralChannels: ventralSurface.channels,
   };
 
   buildEngines(ctx);
