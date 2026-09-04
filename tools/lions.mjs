@@ -65,8 +65,15 @@ const FRAMINGS = {
   medium: { pos: [6.2, 1.7, 4.6], look: [0.0, 0.55, 0.0], fov: 36 },
   side: { pos: [7.5, 1.4, 0.4], look: [0.0, 0.6, 0.0], fov: 32 },
   rear: { pos: [-4.5, 1.6, -6.0], look: [0.0, 0.6, 0.0], fov: 36 },
-  far: { pos: [28, 4.5, 28], look: [0.0, 0.5, 0.0], fov: 30 },
-  pride: { pos: [-12, 7, 18], look: [2.0, 0.4, 2.0], fov: 46, anchor: true },
+  // Road-relative: on the line from the truck to the pride's anchor, `dist`
+  // metres short of the anchor and `height` above the ground there. The road
+  // side is where the player is and the one direction guaranteed clear of the
+  // acacias the pride lies under — the old anchor-relative `far` sat inside a
+  // canopy, and `pride` had the animals at fifteen pixels.
+  // 22 m: the truck stands 26 m out, and a camera clamped onto it sat in the rack
+  far: { road: { dist: 22, height: 2.1 }, fov: 30 },
+  pride: { road: { dist: 11, height: 1.6 }, fov: 40 },
+  // the eye at whichever window faces the animals
   seat: { seat: true },
 };
 
@@ -243,14 +250,36 @@ async function capture(name, framing, frameIdx = -1) {
         camera.position.set(f.world.pos[0], f.world.pos[1], f.world.pos[2]);
         camera.fov = f.fov;
         camera.lookAt(f.world.look[0], f.world.look[1], f.world.look[2]);
+      } else if (f.road) {
+        const a = wildlife.anchor;
+        const tp = vehicle.root.position;
+        const dx = tp.x - a.x;
+        const dz = tp.z - a.z;
+        const d = Math.hypot(dx, dz) || 1;
+        const k = Math.min(f.road.dist, d) / d;
+        const cx = a.x + dx * k;
+        const cz = a.z + dz * k;
+        const { terrain } = api.objects;
+        camera.position.set(cx, terrain.heightAt(cx, cz) + f.road.height, cz);
+        camera.fov = f.fov;
+        camera.lookAt(a.x, a.y + 0.5, a.z);
       } else if (f.seat) {
-        // driver's eye, turned toward the lion
+        // an eye at the window that faces the lion — the driver's if the pride
+        // is on the driver's side, the passenger's otherwise; the first cut
+        // always sat on the right and looked across two seats at animals on
+        // the left
         const e = vehicle.root.matrixWorld.elements;
         const xf = (v) => [e[0] * v[0] + e[4] * v[1] + e[8] * v[2] + e[12], e[1] * v[0] + e[5] * v[1] + e[9] * v[2] + e[13], e[2] * v[0] + e[6] * v[1] + e[10] * v[2] + e[14]];
-        const p = xf([0.38, 1.62, 0.02]);
-        camera.position.set(p[0], p[1], p[2]);
-        camera.fov = 50;
         const lp = lion.root.position;
+        // lion in truck-local x: dot with the truck's local +X axis
+        const rx = lp.x - e[12];
+        const rz = lp.z - e[14];
+        const side = rx * e[0] + rz * e[2] >= 0 ? 1 : -1;
+        // forward of the seat, so the view is through the front of the door
+        // glass rather than centred on the B-pillar
+        const p = xf([0.38 * side, 1.6, 0.3]);
+        camera.position.set(p[0], p[1], p[2]);
+        camera.fov = 46;
         camera.lookAt(lp.x, lp.y + 0.7, lp.z);
       } else {
         const origin = f.anchor ? { x: wildlife.anchor.x, y: wildlife.anchor.y, z: wildlife.anchor.z, yaw: 0 } : { x: lion.root.position.x, y: lion.root.position.y, z: lion.root.position.z, yaw: lion.brain.yaw };

@@ -36,9 +36,15 @@ const noForest = argv.includes('--noforest');
 // [u, y, v] positions; `truckU` is where the truck sits along the road.
 const FRAMINGS = {
   // Coming along the mainline, camp opening up ahead-right.
-  arrive: { pos: [-64, 3.6, -33.5], target: [-6, 1.8, -12], fov: 50, truckU: -46 },
-  // From the driver's eye, through the passenger side, as the truck passes the gate.
-  interior: { eye: [0.3, 1.6, -0.16], target: [-2, 1.8, 6], fov: 64, truckU: -4 },
+  // Closer and lower than the first cut (64 m out, 3.6 m up had the camp as a
+  // strip a third of the way up the frame and the truck a speck).
+  // From the far verge, across the road: between the road and the camp the
+  // camera stood behind the gate signs.
+  arrive: { pos: [-52, 3.4, -36], target: [-6, 2.0, -14], fov: 46, truckU: -30 },
+  // From inside the cab, through the passenger side, as the truck passes the
+  // gate. Eye between the seats and a little forward, aim lower: from the
+  // driver's seat the header and the A-pillar were sixty per cent of the frame.
+  interior: { eye: [0.0, 1.55, 0.15], target: [-2, 1.3, 6], fov: 60, truckU: -4 },
   // Straight down, high enough to hold the whole clearing and the road.
   overhead: { pos: [-4, 78, -18], target: [0, 0, 4], fov: 50, truckU: -4 },
   // From the road beyond the camp looking back.
