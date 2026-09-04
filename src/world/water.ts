@@ -194,20 +194,21 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR;
   vec2 bedP = wp + refr.xz / max(-refr.y, 0.25) * depth;
   float grainFade = 1.0 - smoothstep(3.0, 10.0, foot);
   float grain = mix(0.5, fbm2o(bedP * 0.045), grainFade);
-  vec3 sand = vec3(0.64, 0.60, 0.50) * (0.88 + 0.24 * grain);
+  // bed albedo is physical (neutral sun+sky irradiance since the lighting rebalance): coral sand
+  vec3 sand = vec3(0.56, 0.51, 0.41) * (0.88 + 0.24 * grain);
   float sgN = fbm3(bedP * 0.012 + 3.0);
   float sg = smoothstep(0.54, 0.68, sgN + 0.12 * (grain - 0.5)) * smoothstep(0.5, 1.6, depth) * (1.0 - smoothstep(5.0, 9.0, depth));
-  vec3 bed = mix(sand, vec3(0.10, 0.15, 0.08), sg);
+  vec3 bed = mix(sand, vec3(0.07, 0.11, 0.05), sg);
   // wet sand at the waterline (mirrors the terrain's wet band above it)
   bed *= mix(0.72, 1.0, smoothstep(0.0, 0.45, depth));
-  // deep-water reflectance: turbid teal bay water; clearer, bluer ocean beyond the shelf. Values are
-  // tuned against the scene's (blue-heavy) horizontal irradiance rather than being pure-water numbers.
-  vec3 Rinf = mix(vec3(0.110, 0.190, 0.175), vec3(0.040, 0.110, 0.145), smoothstep(8.0, 22.0, depth));
+  // deep-water reflectance under neutral irradiance: turbid teal bay water; clearer, bluer ocean beyond
+  // the shelf (irradiance-reflectance of coastal water is a few percent, peaking in the green/cyan)
+  vec3 Rinf = mix(vec3(0.015, 0.046, 0.070), vec3(0.006, 0.026, 0.062), smoothstep(8.0, 22.0, depth));
   vec3 R = bed * T + Rinf * (1.0 - T);
   // suspended sediment: milky, pale turquoise over the flats and along the shore
   float milkN = fbm2o(wp * 0.004 + 9.0);
   float milk = (1.0 - smoothstep(0.3, 2.5, depth)) * (0.35 + 0.65 * smoothstep(0.35, 0.8, milkN));
-  R += vec3(0.22, 0.24, 0.21) * milk * (1.0 - exp(-path * 0.9));
+  R += vec3(0.045, 0.062, 0.078) * milk * (1.0 - exp(-path * 0.9));
 
   // ---- foam: shore wash driven by exposure to the incoming waves, surf lines, whitecaps, wakes
   float foam = 0.0;
@@ -240,7 +241,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR;
     foam = shore + surf * 0.5;
     // silt stirred up over very gentle muddy bottoms (mangrove shores)
     float mud = (1.0 - smoothstep(0.004, 0.012, slope)) * (1.0 - smoothstep(0.3, 2.0, depth)) * coastGate;
-    R = mix(R, vec3(0.27, 0.27, 0.20), mud * 0.4 * (1.0 - exp(-path)));
+    R = mix(R, vec3(0.055, 0.062, 0.070), mud * 0.4 * (1.0 - exp(-path)));
   }
   float whitecap = smoothstep(0.74, 0.86, val0) * smoothstep(7.0, 14.0, uWindSpeed) * smoothstep(2.0, 6.0, depth) * open * w0;
   foam = clamp(foam + wake.r * 1.2 + whitecap, 0.0, 1.0);
@@ -289,7 +290,8 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   float Fg = 1.0 - 0.5 * rSky * rSky; // rougher water reflects less of the horizon
   float F = 0.02 + (Fg - 0.02) * pow(1.0 - cosV, 5.0);
   vec3 body = wBodyR * Ediff;
-  vec3 glitter = sunCol * shadow * sunGlitter(wN, wV, uSunDirW, wMss);
+  // the CSM sun now carries physical irradiance (x6); the glitter BRDF was tuned for the old scale
+  vec3 glitter = sunCol * 0.25 * shadow * sunGlitter(wN, wV, uSunDirW, wMss);
   vec3 col = mix(body, sky, F) + glitter * (1.0 - wFoam);
   vec3 foamCol = vec3(0.86, 0.88, 0.88) * Ediff;
   col = mix(col, foamCol, wFoam);
