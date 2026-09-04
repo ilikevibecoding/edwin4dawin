@@ -16,18 +16,19 @@ export function buildCargo(kit, ctx) {
   const rand = rng(ctx.seed + 23);
 
   roomShell(kit, ctx, {
-    ceiling: { lights: false, paints: ENG_CEIL_PAINTS, panelW: 2.4, rowH: 2.4, along: "x", spacing: 12, styles: { panel: 0.74, greeble: 0.1, vent: 0.16 } },
-    walls: { paints: ENG_PAINTS, styles: ENG_STYLES, theme: ENG_THEME, rows: [0, 0.5, 1.7, 3.0, 4.6, 6.6, H] },
+    ceiling: { lights: false, paints: ENG_CEIL_PAINTS, panelW: 3.0, rowH: 3.0, along: "x", spacing: 12, styles: { panel: 0.78, greeble: 0.08, vent: 0.14 } },
+    walls: { paints: ENG_PAINTS, styles: ENG_STYLES, theme: ENG_THEME, rows: [0, 0.5, 1.7, 3.2, 5.2, 7.2, H], panelW: 2.4 },
   });
-  emitMat(ctx, "cargo_lane", 0xfff0c8, 0.9, "emitAmber");
+  emitMat(ctx, "cargo_lane", 0xffc46a, 0.8, "emitAmber");
   // wall-frame u coordinates (see wallSegment): xmax runs +z from zmin, xmin runs -z from zmax
   const uXmax = (z) => z - min[2];
   const uXmin = (z) => max[2] - z;
 
   // container without its own collider (the racking frame already blocks the whole row)
+  const binCols = [null, null, null, null, PALETTE.hullDark, PALETTE.impAmber.clone().multiplyScalar(0.55), PALETTE.hullGrey, PALETTE.impRed.clone().multiplyScalar(0.45)];
   const bin = (x, y, z, sx, sy, sz, seed, yaw = 0) => {
     const n = kit.colliders.length;
-    crate(kit, ctx, { x, y, z, sx, sy, sz, yaw, seed });
+    crate(kit, ctx, { x, y, z, sx, sy, sz, yaw, seed, color: binCols[seed % binCols.length] });
     kit.colliders.length = n;
   };
 

@@ -17,7 +17,7 @@ export function buildHyperdrive(kit, ctx) {
 
   roomShell(kit, ctx, {
     ceiling: { lights: false, paints: ENG_CEIL_PAINTS, panelW: 2.0, rowH: 2.0, along: "x", spacing: 10, styles: { panel: 0.72, greeble: 0.1, vent: 0.18 } },
-    walls: { paints: ENG_PAINTS, styles: ENG_STYLES, theme: ENG_THEME, rows: [0, 0.5, 1.7, 3.0, 4.6, 6.4, H] },
+    walls: { paints: ENG_PAINTS, styles: ENG_STYLES, theme: ENG_THEME, rows: [0, 0.5, 1.7, 3.2, 5.4, H], panelW: 2.0 },
   });
 
   // ---------------------------------------------------------------- the motivator
