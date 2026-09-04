@@ -14,10 +14,11 @@ function finish(set) {
 
 // ---------------------------------------------------------------------------
 // Armour plating (the hull's skin, three seeds / rhythms): plates 3–9 m in an irregular staggered
-// grid at texel 1/26, per-plate tone variance ±5 % with rare darker replacement plates, seams as
-// 0.3 m dark gaps (no rivet dots), faint fore–aft scouring streaks, grime pooled toward the seams,
-// per-plate roughness 0.45–0.7, a few plates with an inset panel or a small raised hatch, bare-metal
-// scratches. The mean albedo is the same for every variant so mixed materials never read as a quilt.
+// grid at texel 1/26, per-plate tone variance ±12 % with darker replacement plates, seams as 0.3 m
+// dark gaps (no rivet dots), faint fore–aft scouring streaks, weathering smears trailing 2–6 m from
+// the seams, grime pooled toward the seams, per-plate roughness 0.4–0.75 and metalness 0.1–0.3, a few
+// plates with an inset panel or a small raised hatch, bare-metal scratches. The mean albedo is the
+// same for every variant so mixed materials never read as a quilt.
 // ---------------------------------------------------------------------------
 export function makeArmourPlating(size = 1024, seed = 211, { cols = 4, rowsMin = 4, rowsMax = 8, streak: streakAmt = 0.1 } = {}) {
   const t = new TexGen(size, size);
@@ -28,6 +29,8 @@ export function makeArmourPlating(size = 1024, seed = 211, { cols = 4, rowsMin =
   const rows = [];
   const tone = [];
   const rough = [];
+  const metalP = [];
+  const streakLen = [];
   const kind = [];
   const hatchAt = [];
   for (let c = 0; c < cols; c++) {
@@ -36,8 +39,12 @@ export function makeArmourPlating(size = 1024, seed = 211, { cols = 4, rowsMin =
     for (let r = 1; r < n; r++) e.push(r / n + (rand() - 0.5) * 0.05);
     e.push(1);
     rows.push(e);
-    tone.push(e.map(() => (rand() < 0.04 ? 0.79 : 0.88 + (rand() - 0.5) * 0.1)));
-    rough.push(e.map(() => 0.45 + rand() * 0.25));
+    // per-plate tone ±12 % with one plate in ten a darker replacement, per-plate roughness 0.4–0.75
+    // and metalness 0.1–0.3 (hash per tile): neighbouring plates differ in both albedo and specular
+    tone.push(e.map(() => (rand() < 0.1 ? 0.72 : 0.89 + (rand() - 0.5) * 0.24)));
+    rough.push(e.map(() => 0.4 + rand() * 0.35));
+    metalP.push(e.map(() => 0.1 + rand() * 0.2));
+    streakLen.push(e.map(() => (2 + rand() * 4) / 26));
     kind.push(
       e.map(() => {
         const k = rand();
@@ -62,7 +69,7 @@ export function makeArmourPlating(size = 1024, seed = 211, { cols = 4, rowsMin =
     const n2 = fbm(u, v, { octaves: 3, freq: 36, seed: seed + 11 });
     let lum = tone[c][r] * (0.985 + (n1 - 0.5) * 0.05 + (n2 - 0.5) * 0.02);
     let rg = rough[c][r] + (n1 - 0.5) * 0.08;
-    let metal = 0.1;
+    let metal = metalP[c][r];
     let hgt = 0.5 + bevel * 0.16;
     // faint directional scouring along v (fore–aft on the horizontal plates)
     const streak = Math.pow(vnoise2(u, v, 70, 5, seed + 21) * 0.6 + vnoise2(u, v, 130, 9, seed + 23) * 0.4, 2.4);
@@ -72,6 +79,15 @@ export function makeArmourPlating(size = 1024, seed = 211, { cols = 4, rowsMin =
     const grime = clamp01(1 - ed / 0.03) * fbm(u, v, { octaves: 3, freq: 18, seed: seed + 5 });
     lum *= 1 - grime * 0.2;
     rg += grime * 0.15;
+    // fore–aft weathering streaks trailing 2–6 m from the plate's leading seam: −5..−8 % in a few
+    // narrow lanes per plate (masked by a fine noise across u) so each plate carries its own smears
+    const dv0 = v - re[r];
+    if (dv0 < streakLen[c][r]) {
+      const lane = clamp01((vnoise2(u, 0.37, 220, 3, seed + 31) - 0.62) * 4);
+      const fade = 1 - dv0 / streakLen[c][r];
+      lum *= 1 - lane * fade * fade * 0.08;
+      rg += lane * fade * 0.08;
+    }
     // plate features
     const pw = colEdges[c + 1] - colEdges[c];
     const ph = re[r + 1] - re[r];

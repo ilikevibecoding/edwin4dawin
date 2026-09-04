@@ -416,14 +416,18 @@ export const DECK_SPOTS = [
 // hull so the belly plane keys at ~0.55 and the reactor bulb carries a terminator.
 // ---------------------------------------------------------------------------
 export const EXTERIOR_VIEWS = {
-  ext_hero: { pos: [-1000, 620, -1150], look: [0, 90, -60], fov: 42, time: 136, sunElev: 30 },
-  ext_bow: { pos: [-280, -40, -1300], look: [0, 30, -560], fov: 45, time: 252, sunElev: 24 },
+  ext_hero: { pos: [-1000, 620, -1150], look: [0, 90, -60], fov: 42, time: 122, sunElev: 30 },
+  // from just under the bow plane the visible faces are ventral: key from port-aft-below so the
+  // lower slope / belly / terrace flanks carry the light and the deck goes to fill
+  ext_bow: { pos: [-240, -60, -1220], look: [0, 20, -620], fov: 48, time: 252, sunElev: -18 },
   ext_stern: { pos: [850, 240, 1250], look: [0, 10, 350], fov: 50, time: 244, sunElev: 26 },
   ext_tower: { pos: [-330, 300, 40], look: [0, 235, 300], fov: 45, time: 154, sunElev: 35 },
   ext_bridge_close: { pos: [-50, 250, 125], look: [0, 249, 215], fov: 50, time: 181, sunElev: 35 },
   ext_belly: { pos: [-650, -560, -450], look: [0, -40, -50], fov: 55, time: 147, sunElev: -32 },
   ext_hangar_mouth: { pos: [-120, -160, 160], look: [0, -40, 10], fov: 60, time: 66, sunElev: -32 },
-  ext_trench: { pos: [-430, -12, -260], look: [-306, -12, 120], fov: 50, time: 158, sunElev: 12 },
+  // below the lip looking aft along the canyon with the terraces and tower stacked above it; the key
+  // comes from 12° up dead ahead so it rakes along the inner wall (key ≈ 0.2 → 30–40 %)
+  ext_trench: { pos: [-430, -12, -260], look: [-250, 36, 120], fov: 50, time: 158, sunElev: 12 },
   ext_far: { pos: [-2300, 500, -2000], look: [0, 60, -100], fov: 30, time: 166, sunElev: 30 },
   ext_top: { pos: [0, 2600, -200], look: [0, 0, -200], fov: 45, time: 215.4, sunElev: 30 },
 };

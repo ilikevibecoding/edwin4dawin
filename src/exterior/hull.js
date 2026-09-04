@@ -73,14 +73,22 @@ const hash2 = (x, z) => {
   n = Math.imul(n ^ (n >>> 13), 1274126177);
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 };
+/** Hard-edged paint regions: 110–260 m panels of the hull repainted in slightly different greys. */
+const region = (x, z, seed) => {
+  const s = 110 + 150 * fieldNoise(x + 900 * seed, z - 700 * seed, 900, seed + 40);
+  let n = (Math.floor(x / s + 41) * 374761393 + Math.floor(z / s + 17) * 668265263 + seed * 2246822519) | 0;
+  n = Math.imul(n ^ (n >>> 13), 1274126177);
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+};
 /**
- * Skin tint: two low-frequency paint layers (150 m at ±10 % and 380 m at ±8 %) so the plating has a
- * slow tonal drift — repainted sections, weathering — rather than a per-tile quilt, a few replaced
- * plates one step darker, and soot toward the stern (the engine wash reaches ~100 m forward along the
- * dorsal and ventral plates).
+ * Skin tint: two low-frequency paint layers (150 m at ±14 % and 380 m at ±10 %) plus a hard-edged
+ * patchwork of 110–260 m regions at ±7 % (studio-model style: whole sections of the hull in a slightly
+ * different grey) so the plating has a slow tonal drift — repainted sections, weathering — rather than
+ * a per-tile quilt; a few replaced plates one step darker; soot toward the stern (the engine wash
+ * reaches ~100 m forward along the dorsal and ventral plates).
  */
 const paint = (base, alt, seed) => (x, y, z) => {
-  let c = shade(base, (0.9 + fieldNoise(x, z, 150, seed) * 0.2) * (0.92 + fieldNoise(x + 3000, z, 380, seed + 1) * 0.16));
+  let c = shade(base, (0.86 + fieldNoise(x, z, 150, seed) * 0.28) * (0.9 + fieldNoise(x + 3000, z, 380, seed + 1) * 0.2) * (0.93 + region(x, z, seed) * 0.14));
   const h = hash2(x, z);
   if (h < 0.06) c = mixC(c, alt, 0.35);
   else if (h > 0.96) c = shade(c, 1.04);
