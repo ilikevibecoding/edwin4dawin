@@ -140,9 +140,9 @@ export function build(kit, ctx, room, lib) {
     const xm = (bay.xa + bay.xb) / 2;
     ctx.lights.warm.push(pointLight(0xffc48c, 6.0, 10, [xm - 2.8, yTop - 0.5, wz]));
     ctx.lights.warm.push(pointLight(0xffc48c, 6.0, 10, [xm + 2.8, yTop - 0.5, wz]));
-    ctx.lights.warm.push(pointLight(0xffd2a8, 6.5, 10, [xm, yTop - 0.5, lz]));
+    ctx.lights.warm.push(pointLight(0xffd2a8, 7.0, 10, [xm, yTop - 0.5, lz]));
   }
-  for (const x of [-21.5, -15.5, -9.5, -4]) ctx.lights.cool.push(pointLight(0xe9dfd2, 7.0, 11, [x, yTop - 0.5, 494]));
+  for (const x of [-21.5, -15.5, -9.5, -4]) ctx.lights.cool.push(pointLight(0xe9dfd2, 8.0, 12, [x, yTop - 0.5, 494]));
 
   // ------------------------------------------------------------ the interactable bunk
   if (restBunk) {

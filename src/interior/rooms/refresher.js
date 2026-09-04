@@ -21,7 +21,7 @@ export function build(kit, ctx, room, lib) {
   });
   const { y0, yTop, frames } = shell;
   const rand = rng(4411);
-  const frosted = new Frosted(ctx, { opacity: 0.38, color: 0xb9c7d0 });
+  const frosted = new Frosted(ctx, { opacity: 0.26, color: 0xa9bccb, roughness: 0.4 });
 
   // ------------------------------------------------------------ forward wall: sink counter, mirrors, linen rack
   {
