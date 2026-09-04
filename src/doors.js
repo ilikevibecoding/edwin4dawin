@@ -78,7 +78,7 @@ export class Door {
     for (const s of [-1, 1]) {
       const x0 = s * (w / 2);
       const x1 = s * (w / 2 + trim + wallT);
-      kit.boxMM(big ? "impMetalRough" : "impPanel1", [Math.min(x0, x1), 0, z0], [Math.max(x0, x1), h + 0.01, z1], { color: big ? PALETTE.impGreyDark : PALETTE.impGrey, uv: "world", texel: big ? 0.25 : 1 });
+      kit.boxMM("impPanel1", [Math.min(x0, x1), 0, z0], [Math.max(x0, x1), h + 0.01, z1], { color: big ? PALETTE.impGreyDark : PALETTE.impGrey, uv: "world", texel: big ? 0.25 : 1 });
       kit.collider([Math.min(x0, x1) - 0.02, 0, z0 - 0.02], [Math.max(x0, x1) + 0.02, h + trim, z1 + 0.02], "jamb");
     }
     // threshold plate
@@ -94,7 +94,7 @@ export class Door {
     for (const s of [-1, 1]) {
       const zf = s * (fd / 2 + 0.01);
       kit.boxMM("impMetal", [-w / 2 + 0.2, h + t * 0.25, Math.min(zf, zf + s * 0.05)], [w / 2 - 0.2, h + t * 0.75, Math.max(zf, zf + s * 0.05)], { color: PALETTE.impCharcoal, texel: 2 });
-      kit.boxMM("emitWhiteSoft", [-w / 2 + 0.3, h + t * 0.35, Math.min(zf + s * 0.05, zf + s * 0.07)], [w / 2 - 0.3, h + t * 0.65, Math.max(zf + s * 0.05, zf + s * 0.07)], { uv: "keep" });
+      kit.boxMM("emitWhiteDim", [-w / 2 + 0.3, h + t * 0.35, Math.min(zf + s * 0.05, zf + s * 0.07)], [w / 2 - 0.3, h + t * 0.65, Math.max(zf + s * 0.05, zf + s * 0.07)], { uv: "keep" });
       // door class decal on the frame post
       const g = new THREE.PlaneGeometry(Math.min(0.3, t * 0.9), Math.min(0.3, t * 0.9));
       if (s < 0) g.rotateY(Math.PI);
@@ -142,7 +142,8 @@ export class Door {
       const x0 = s > 0 ? 0 : -leafW;
       const x1 = s > 0 ? leafW : 0;
       if (blast) {
-        lk.boxMM("impMetalRough", [x0, 0.02, -leafT / 2], [x1, h - 0.02, leafT / 2], { color: PALETTE.impGreyDark, uv: "world", texel: big ? 0.25 : 1 });
+        // painted armour (dielectric): a bare-metal leaf only mirrors the dark room and reads as a hole
+        lk.boxMM("impPanel1", [x0, 0.02, -leafT / 2], [x1, h - 0.02, leafT / 2], { color: PALETTE.impGrey, uv: "world", texel: big ? 0.25 : 1 });
         // raised armour bands
         for (const yy of big ? [h * 0.2, h * 0.5, h * 0.8] : [h * 0.3, h * 0.7]) {
           lk.boxMM("impTrim", [x0 + 0.05, yy - (big ? 0.5 : 0.12), -leafT / 2 - 0.03], [x1 - 0.05, yy + (big ? 0.5 : 0.12), leafT / 2 + 0.03], { color: PALETTE.impBlack, texel: 1 });

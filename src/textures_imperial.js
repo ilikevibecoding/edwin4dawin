@@ -185,7 +185,7 @@ export function makeDeckGrid(size = 1024, seed = 77) {
     const seam = clamp01(1 - ed / 0.02);
     const knurl = vnoise(u, v, 256, seed + 1);
     const n1 = fbm(u, v, { octaves: 4, freq: 6, seed });
-    let lum = 0.62 + (n1 - 0.5) * 0.12 + (knurl - 0.5) * 0.06;
+    let lum = 0.62 + (n1 - 0.5) * 0.05 + (knurl - 0.5) * 0.03;
     lum *= 1 - seam * 0.45;
     // worn lane down the middle of each plate row
     const lane = Math.exp(-Math.pow((fv - 0.5) / 0.25, 2));
@@ -240,7 +240,7 @@ export function makeHexPanel(size = 512, seed = 41) {
 // Console UI: dark screen with a coloured scheme (blue "tactical", red "alert", amber "systems",
 // green "sensor"). Static pattern; the material animates via emissive intensity / offset.
 // ---------------------------------------------------------------------------
-export function makeImperialScreen(w = 512, h = 256, seed = 5, scheme = "blue") {
+export function makeImperialScreen(w = 512, h = 256, seed = 5, scheme = "blue", layout = null) {
   const c = makeCanvas(w, h);
   const ctx = c.getContext("2d");
   const rand = mulberry32(seed);
@@ -268,7 +268,7 @@ export function makeImperialScreen(w = 512, h = 256, seed = 5, scheme = "blue") 
     ctx.stroke();
   }
   const pad = 12;
-  const kind = Math.floor(rand() * 4);
+  const kind = layout === null ? Math.floor(rand() * 4) : layout % 4;
   // header
   ctx.fillStyle = accent;
   ctx.fillRect(pad, pad, w - pad * 2, 2);
@@ -558,44 +558,48 @@ export function makeImperialDecals(size = 1024, seed = 19) {
     ctx.restore();
     erode(cx, cy);
   };
-  // cog emblem (original: 8-tooth wheel, inner ring, six spokes)
+  // crest (original mark in the Imperial spirit): a heavy outer ring with eight notches, a thinner inner
+  // ring, six wedge spokes narrowing toward the hub, and a solid hub disc
   at(IMP_DECAL.cog, (s) => {
     const c0 = s / 2;
-    ctx.fillStyle = white();
-    ctx.beginPath();
-    ctx.arc(c0, c0, s * 0.36, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = ink(0);
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.beginPath();
-    ctx.arc(c0, c0, s * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalCompositeOperation = "source-over";
-    for (let k = 0; k < 8; k++) {
-      const a = (k / 8) * Math.PI * 2;
-      ctx.save();
-      ctx.translate(c0, c0);
-      ctx.rotate(a);
+    const ring = (r0, r1) => {
       ctx.fillStyle = white();
-      ctx.fillRect(-s * 0.05, -s * 0.44, s * 0.1, s * 0.1);
-      ctx.restore();
-    }
-    ctx.fillStyle = white();
-    ctx.beginPath();
-    ctx.arc(c0, c0, s * 0.19, 0, Math.PI * 2);
-    ctx.fill();
+      ctx.beginPath();
+      ctx.arc(c0, c0, r1, 0, Math.PI * 2);
+      ctx.arc(c0, c0, r0, 0, Math.PI * 2, true);
+      ctx.fill();
+    };
+    ring(s * 0.36, s * 0.46);
+    // eight notches cut into the outer ring
     ctx.globalCompositeOperation = "destination-out";
-    for (let k = 0; k < 6; k++) {
-      const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
       ctx.save();
       ctx.translate(c0, c0);
       ctx.rotate(a);
-      ctx.fillRect(-s * 0.03, -s * 0.3, s * 0.06, s * 0.12);
+      ctx.fillRect(-s * 0.035, -s * 0.47, s * 0.07, s * 0.06);
       ctx.restore();
     }
     ctx.globalCompositeOperation = "source-over";
+    ring(s * 0.255, s * 0.29);
+    // six wedge spokes from the inner ring to the hub
+    ctx.fillStyle = white();
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      ctx.save();
+      ctx.translate(c0, c0);
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(-s * 0.06, -s * 0.27);
+      ctx.lineTo(s * 0.06, -s * 0.27);
+      ctx.lineTo(s * 0.025, -s * 0.11);
+      ctx.lineTo(-s * 0.025, -s * 0.11);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
     ctx.beginPath();
-    ctx.arc(c0, c0, s * 0.09, 0, Math.PI * 2);
+    ctx.arc(c0, c0, s * 0.1, 0, Math.PI * 2);
     ctx.fill();
   });
   const bayNumber = (index, txt) =>

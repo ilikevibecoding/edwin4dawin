@@ -33,10 +33,11 @@ export class Cell {
   /** Run the builder in room-local coordinates, then bake everything to world space. */
   build(builder, ctx) {
     const kit = this.kit;
-    // default walkable floor: the whole clear footprint at floor level
-    const [w, , d] = this.room.size;
-    kit.floor(-w / 2 - 0.5, -d / 2 - 0.5, w / 2 + 0.5, d / 2 + 0.5, 0, "roomfloor");
     builder(kit, ctx, this.room);
+    // default walkable floor: the whole clear footprint at floor level, unless the builder declares
+    // its own floors (pits, multi-level rooms) with kit.skipDefaultFloor = true
+    const [w, , d] = this.room.size;
+    if (!kit.skipDefaultFloor) kit.floor(-w / 2 - 0.5, -d / 2 - 0.5, w / 2 + 0.5, d / 2 + 0.5, 0, "roomfloor");
     kit.build(this.group);
     const o = this.group.position;
     for (const c of kit.colliders) {

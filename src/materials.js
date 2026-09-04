@@ -179,6 +179,11 @@ export function buildMaterials() {
     emitAmber: emit(PALETTE.impAmber, 2.4),
     emitWhite: emit("#e8f0ff", 2.2),
     emitWhiteSoft: emit("#e8f0ff", 2.6, { emissiveMap: diffuser }),
+    // recessed ceiling / cornice slots: a dim, warm-white fixture that never becomes the brightest surface
+    emitWhiteDim: emit("#dfe6f4", 0.85, { emissiveMap: diffuser }),
+    emitAmberDim: emit(PALETTE.impAmber, 0.9),
+    emitBlueDim: emit(PALETTE.impBlue, 0.7),
+    emitRedDim: emit(PALETTE.impRed, 0.8),
     emitGreen: emit(PALETTE.impGreen, 2.2),
     emitCyan: emit(PALETTE.impCyan, 2.4),
     // hologram: additive, translucent
@@ -214,11 +219,12 @@ export function buildMaterials() {
   mats.screens = screenTex.map((tex) => screenMat(tex));
   mats.leds = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: makeLedStrip(256, 32, 9), emissiveIntensity: 2.0, roughness: 0.3, metalness: 0 });
 
-  // Imperial screens: scheme × 2 variants each. Keys: scrBlue0, scrBlue1, scrRed0, scrRed1, scrAmber0, ...
+  // Imperial screens: scheme × 4 variants, each variant a different layout (tactical plot, systems
+  // bars, star chart, status grid). Keys: scrBlue0..3, scrRed0..3, scrAmber0..3, scrGreen0..3, scrWhite0..3
   mats.impScreens = [];
   for (const scheme of ["blue", "red", "amber", "green", "white"]) {
-    for (let v = 0; v < 2; v++) {
-      const m = screenMat(makeImperialScreen(512, 256, 100 + v * 7 + scheme.length * 13, scheme), 1.5);
+    for (let v = 0; v < 4; v++) {
+      const m = screenMat(makeImperialScreen(512, 256, 100 + v * 7 + scheme.length * 13, scheme, v), 1.5);
       m.name = `scr${scheme[0].toUpperCase()}${scheme.slice(1)}${v}`;
       mats[m.name] = m;
       mats.impScreens.push(m);

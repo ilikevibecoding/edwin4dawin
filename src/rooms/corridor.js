@@ -2,7 +2,7 @@
 // metres, recessed ceiling light troughs, wall equipment clusters and a blue floor-edge glow.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
-import { impRoomShell, impWallGear, impWallLight, lux } from "./imperial_kit.js";
+import { impRoomShell, impWallGear, impWallLight, lux, Frame } from "./imperial_kit.js";
 import { rng } from "../kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 
@@ -12,10 +12,26 @@ export function buildCorridor(kit, ctx, room) {
   const rand = rng(room.id.length * 31 + 7);
   const walls = impRoomShell(kit, room, ctx.doors, {
     accentKey,
-    wall: { panelW: 2.2, features: { vent: 0.08, equipment: 0.08, conduit: 0.05, light: 0.1, screen: 0.03 }, corniceLight: true },
-    floor: { laneW: Math.min(2.4, w * 0.45), edgeLight: accentKey },
-    ceiling: { troughs: 1, troughW: 0.6, beamStep: 4.0 },
+    wall: { panelW: 2.2, features: { vent: 0.08, equipment: 0.08, conduit: 0.05, light: 0.1, screen: 0.03 }, corniceLight: false, corniceH: 0.2 },
+    floor: { laneW: Math.min(1.8, w * 0.45), edgeLight: "emitBlueDim" },
+    ceiling: { troughs: 1, troughW: 0.5, beamStep: 4.0, lightKey: "emitWhiteSoft" },
   });
+  // angled upper walls: 45° chamfer strips between the wall tops and the (narrower) ceiling spine, with a
+  // recessed dim light slot along each — the classic Imperial corridor section
+  {
+    const chH = 0.85;
+    for (const s of [-1, 1]) {
+      const o = new THREE.Vector3(s * (w / 2 - 0.08), h - chH - 0.2, s > 0 ? d / 2 : -d / 2);
+      const U = new THREE.Vector3(0, 0, s > 0 ? -1 : 1);
+      const V = new THREE.Vector3(-s * chH, chH, 0);
+      const f = new Frame(kit, o, U, V);
+      const L = V.length();
+      f.box("impPanel2", d / 2, L / 2, -0.03, d, L, 0.06, { color: PALETTE.impGrey, uv: "world", texel: 1 });
+      f.box("impTrim", d / 2, L * 0.5, 0.005, d, 0.16, 0.03, { color: PALETTE.impBlack });
+      f.box("emitWhiteDim", d / 2, L * 0.5, 0.012, d - 0.6, 0.06, 0.012, { uv: "keep" });
+      for (let z = -d / 2 + 4; z < d / 2; z += 8) f.box("impTrim", z + d / 2, L / 2, 0.02, 0.24, L + 0.02, 0.05, { color: PALETTE.impBlack });
+    }
+  }
   // structural ribs every 8 m: black frames around the section with a lit inset
   const doorsZ = ctx.doors.map((dd) => dd.lz);
   for (let z = -d / 2 + 4; z < d / 2 - 2; z += 8) {
@@ -27,7 +43,7 @@ export function buildCorridor(kit, ctx, room) {
       kit.collider([s > 0 ? w / 2 - 0.26 : -w / 2, 0, z - 0.25], [s > 0 ? w / 2 : -w / 2 + 0.26, h, z + 0.25], "rib");
     }
     kit.box("impTrim", 0, h - 0.14, z, w, 0.28, 0.5, { color: PALETTE.impBlack, texel: 1 });
-    kit.box("chevronY", 0, 0.004, z, w - 0.6, 0.008, 0.5, { texel: 1.5 });
+    kit.box("chevronY", 0, 0.004, z, w - 1.0, 0.008, 0.4, { texel: 1.5 });
   }
   // wall gear + stencils between the doors
   let k = 0;

@@ -209,8 +209,9 @@ export function impWall(frame, length, height, opts = {}) {
     // cornice with a light channel along its lower edge
     frame.box("impTrim", cu, height - corniceH / 2, 0.01, cw - trimW, corniceH, 0.06, { color: PALETTE.impBlack, texel: 1 });
     if (corniceLight && cw > 0.6) {
+      // recessed slot at the wall / ceiling junction: dim, so walls and screens carry the light
       frame.box("impMetal", cu, height - corniceH * 0.55, 0.05, cw - trimW - 0.16, 0.12, 0.02, { color: PALETTE.impCharcoal });
-      frame.box("emitWhiteSoft", cu, height - corniceH * 0.55, 0.065, cw - trimW - 0.3, 0.05, 0.012, { uv: "keep" });
+      frame.box("emitWhiteDim", cu, height - corniceH * 0.55, 0.065, cw - trimW - 0.3, 0.05, 0.012, { uv: "keep" });
     }
     // panel field: split into 1–2 horizontal bands
     const vCuts = bands ? [fieldV0, ...bands.filter((b) => b > fieldV0 + 0.3 && b < fieldV1 - 0.3), fieldV1] : rand() < 0.35 && fieldV1 - fieldV0 > 2.4 ? [fieldV0, fieldV0 + 0.9 + rand() * 0.5, fieldV1] : [fieldV0, fieldV1];
@@ -316,7 +317,7 @@ export function impWall(frame, length, height, opts = {}) {
 // Ceiling: charcoal coffers between black beams, recessed white light troughs along the room axis
 // ---------------------------------------------------------------------------
 export function impCeiling(kit, x0, z0, x1, z1, y, opts = {}) {
-  const { beamStep = 3.2, troughs = 1, troughW = 0.5, seed = 7, accentKey = "emitBlue", withLights = true, dark = PALETTE.impCharcoal } = opts;
+  const { beamStep = 3.2, troughs = 1, troughW = 0.36, seed = 7, accentKey = "emitBlue", withLights = true, dark = PALETTE.impBlack, lightKey = "emitWhiteDim" } = opts;
   const rand = rng(seed);
   const w = x1 - x0;
   const d = z1 - z0;
@@ -336,10 +337,16 @@ export function impCeiling(kit, x0, z0, x1, z1, y, opts = {}) {
       const zb = z0 + ((i + 1) / nB) * d - 0.3;
       if (zb - za < 0.6) continue;
       kit.boxMM("impMetal", [x - troughW / 2, y - 0.09, za], [x + troughW / 2, y - 0.03, zb], { color: PALETTE.impCharcoal, texel: 1 });
-      if (withLights) kit.boxMM("emitWhiteSoft", [x - troughW / 2 + 0.1, y - 0.1, za + 0.1], [x + troughW / 2 - 0.1, y - 0.08, zb - 0.1], { uv: "keep" });
-      // louvre fins
+      // narrow recessed emitter behind louvre fins: a fixture with a shape, never a glowing slab
+      if (withLights) kit.boxMM(lightKey, [x - troughW / 2 + 0.1, y - 0.1, za + 0.1], [x + troughW / 2 - 0.1, y - 0.08, zb - 0.1], { uv: "keep" });
       for (let f = za + 0.3; f < zb - 0.2; f += 0.3) kit.boxMM("impTrim", [x - troughW / 2 + 0.05, y - 0.13, f], [x + troughW / 2 - 0.05, y - 0.1, f + 0.02], { color: PALETTE.impBlack });
     }
+  }
+  // ribs along z inside every coffer (dark relief that catches the room's lights)
+  const nR = Math.max(2, Math.round(w / 1.1));
+  for (let i = 0; i <= nR; i++) {
+    const x = x0 + (i / nR) * w;
+    kit.boxMM("impTrim", [x - 0.04, y - 0.08, z0 + 0.15], [x + 0.04, y + 0.01, z1 - 0.15], { color: PALETTE.impCharcoal, texel: 1 });
   }
   // coffers: small vents / accent strips in some cells
   const nC = Math.max(1, Math.round(w / 3.2));
@@ -363,16 +370,16 @@ export function impCeiling(kit, x0, z0, x1, z1, y, opts = {}) {
 // Floor: dark grid deck with a lighter walkway lane and edge trim strips
 // ---------------------------------------------------------------------------
 export function impFloor(kit, x0, z0, x1, z1, opts = {}) {
-  const { lane = true, laneW = 2.2, laneAxis = "z", edgeLight = null, texel = 0.5, y = 0 } = opts;
+  const { lane = true, laneW = 1.8, laneAxis = "z", edgeLight = null, texel = 0.5, y = 0 } = opts;
   kit.boxMM("impDeck", [x0, y - 0.14, z0], [x1, y, z1], { color: PALETTE.impGrey, texel });
   if (lane) {
     const cx = (x0 + x1) / 2;
     const cz = (z0 + z1) / 2;
     if (laneAxis === "z") {
-      kit.boxMM("impMetalRough", [cx - laneW / 2, y, z0 + 0.3], [cx + laneW / 2, y + 0.012, z1 - 0.3], { color: PALETTE.impGreyDark, texel: 0.7 });
+      kit.boxMM("impDeck", [cx - laneW / 2, y, z0 + 0.3], [cx + laneW / 2, y + 0.012, z1 - 0.3], { color: PALETTE.impGreyDark, texel: 0.7 });
       for (const s of [-1, 1]) kit.boxMM("impTrim", [cx + s * (laneW / 2) - 0.03, y, z0 + 0.3], [cx + s * (laneW / 2) + 0.03, y + 0.014, z1 - 0.3], { color: PALETTE.impBlack });
     } else {
-      kit.boxMM("impMetalRough", [x0 + 0.3, y, cz - laneW / 2], [x1 - 0.3, y + 0.012, cz + laneW / 2], { color: PALETTE.impGreyDark, texel: 0.7 });
+      kit.boxMM("impDeck", [x0 + 0.3, y, cz - laneW / 2], [x1 - 0.3, y + 0.012, cz + laneW / 2], { color: PALETTE.impGreyDark, texel: 0.7 });
       for (const s of [-1, 1]) kit.boxMM("impTrim", [x0 + 0.3, y, cz + s * (laneW / 2) - 0.03], [x1 - 0.3, y + 0.014, cz + s * (laneW / 2) + 0.03], { color: PALETTE.impBlack });
     }
   }
@@ -587,7 +594,7 @@ export function lux(drop, k = 1.4) {
 /** Default light rig for a room: one white key per ~6.5 m of length in the ceiling trough(s). */
 export function impDefaultLights(kit, room, opts = {}) {
   const [w, h, d] = room.size;
-  const { color = 0xdfe8ff, k = 1.4, step = 6.5, priority = 0.5, accent = null } = opts;
+  const { color = 0xdfe8ff, k = 1.6, step = 6.5, priority = 0.5, accent = null } = opts;
   const long = Math.max(w, d);
   const short = Math.min(w, d);
   const nL = Math.max(1, Math.round(long / step));

@@ -87,7 +87,8 @@ export const TOWER = {
   // bridge viewport strip on the forward face (world y, half-width in x)
   viewports: { y0: 247.6, y1: 251.4, hw: 34, count: 9, pillar: 1.1 },
   // lower observation gallery viewports (deck B), two runs left and right of the centreline
-  galleryViewports: { y0: 233.2, y1: 235.4, x0: 8, x1: 46, count: 6 },
+  // three wide viewport bays per side with 0.9 m mullions (was six letterbox slots)
+  galleryViewports: { y0: 233.0, y1: 235.6, x0: 8, x1: 46, count: 3 },
   domes: [
     { x: -62, z: 330, r: 30, yCenter: 282 },
     { x: 62, z: 330, r: 30, yCenter: 282 },
@@ -184,7 +185,7 @@ function door(a, b, pos, axis, opts = {}) {
   const y = DECKS.A.y;
   room({ id: "bridge", name: "Command Bridge", deck: "A", origin: [0, y, 231], size: [64, 12, 30], accent: "#6fa8ff", kind: "room", fog: 0.012, spawn: { x: 0, z: 13.5, yaw: 0, pitch: -3 }, tags: ["key"] });
   room({ id: "lobby_a", name: "Bridge Turbolift Lobby", deck: "A", origin: [0, y, 253], size: [24, 4.2, 12], accent: "#6fa8ff", kind: "lobby" });
-  room({ id: "corridor_a", name: "Command Corridor", deck: "A", origin: [0, y, 285.5], size: [6, 3.6, 51], accent: "#6fa8ff", kind: "corridor", spawn: { x: 0, z: 24, yaw: 0, pitch: -2 } });
+  room({ id: "corridor_a", name: "Command Corridor", deck: "A", origin: [0, y, 285.5], size: [4, 3.6, 51], accent: "#6fa8ff", kind: "corridor", spawn: { x: 0, z: 24, yaw: 0, pitch: -2 } });
   room({ id: "intel", name: "Restricted Intelligence Room", deck: "A", origin: [-15.4, y, 272], size: [24, 4.2, 16], accent: "#ff4a3a", spawn: { x: 11, z: 0, yaw: 90, pitch: -4 } });
   room({ id: "ready_room", name: "Officers' Ready Room", deck: "A", origin: [13.4, y, 272], size: [20, 4.0, 16], accent: "#c8b482", spawn: { x: -9, z: 0, yaw: -90, pitch: -4 } });
   room({ id: "comms", name: "Communications & Sensor Control", deck: "A", origin: [-16.4, y, 298], size: [26, 5.0, 22], accent: "#5fd0ff", spawn: { x: 12, z: 0, yaw: 90, pitch: -4 } });
@@ -193,10 +194,10 @@ function door(a, b, pos, axis, opts = {}) {
 
   door("bridge", "lobby_a", [0, y, 246.5], "z", { type: "blast", w: DOOR.blastW, h: DOOR.blastH });
   door("lobby_a", "corridor_a", [0, y, 259.5], "z", { w: 3.0, h: 3.2 });
-  door("corridor_a", "intel", [-3.2, y, 272], "x", { type: "blast", w: 2.4, h: 3.0 });
-  door("corridor_a", "ready_room", [3.2, y, 272], "x");
-  door("corridor_a", "comms", [-3.2, y, 298], "x", { w: 2.6, h: 3.0 });
-  door("corridor_a", "tactical", [3.2, y, 298], "x", { w: 2.6, h: 3.0 });
+  door("corridor_a", "intel", [-2.7, y, 272], "x", { type: "blast", w: 2.4, h: 3.0 });
+  door("corridor_a", "ready_room", [2.7, y, 272], "x");
+  door("corridor_a", "comms", [-2.7, y, 298], "x", { w: 2.6, h: 3.0 });
+  door("corridor_a", "tactical", [2.7, y, 298], "x", { w: 2.6, h: 3.0 });
   door("corridor_a", "navigation", [0, y, 311.5], "z", { w: 3.0, h: 3.2 });
 }
 
@@ -205,7 +206,7 @@ function door(a, b, pos, axis, opts = {}) {
   const y = DECKS.B.y;
   room({ id: "lobby_b", name: "Command Deck Lobby", deck: "B", origin: [0, y, 253], size: [24, 4.2, 12], accent: "#8fb4ff", kind: "lobby" });
   room({ id: "observation", name: "Forward Observation Gallery", deck: "B", origin: [0, y, 226], size: [96, 5.0, 16], accent: "#9fc6ff", fog: 0.015, spawn: { x: 0, z: 6, yaw: 0, pitch: 0 } });
-  room({ id: "corridor_b", name: "Command Deck Corridor", deck: "B", origin: [0, y, 282], size: [6, 3.6, 44], accent: "#8fb4ff", kind: "corridor", spawn: { x: 0, z: 20, yaw: 0, pitch: -2 } });
+  room({ id: "corridor_b", name: "Command Deck Corridor", deck: "B", origin: [0, y, 282], size: [4, 3.6, 44], accent: "#8fb4ff", kind: "corridor", spawn: { x: 0, z: 20, yaw: 0, pitch: -2 } });
   room({ id: "officers_quarters", name: "Officers' Quarters", deck: "B", origin: [-18.4, y, 273], size: [30, 3.6, 24], accent: "#d7b98c", spawn: { x: 13, z: 0, yaw: 90, pitch: -4 } });
   room({ id: "briefing", name: "Crew Briefing Room", deck: "B", origin: [16.4, y, 273], size: [26, 4.5, 22], accent: "#7fc4ff", spawn: { x: -12, z: 0, yaw: -90, pitch: -4 } });
   room({ id: "lounge", name: "Officers' Lounge", deck: "B", origin: [16.4, y, 297], size: [26, 4.0, 20], accent: "#ffb56b", spawn: { x: -12, z: 0, yaw: -90, pitch: -4 } });
@@ -213,17 +214,17 @@ function door(a, b, pos, axis, opts = {}) {
 
   door("lobby_b", "observation", [0, y, 240.5], "z", { w: 3.0, h: 3.2 });
   door("lobby_b", "corridor_b", [0, y, 259.5], "z", { w: 3.0, h: 3.2 });
-  door("corridor_b", "officers_quarters", [-3.2, y, 273], "x");
-  door("corridor_b", "briefing", [3.2, y, 273], "x", { w: 2.6, h: 3.0 });
-  door("corridor_b", "lounge", [3.2, y, 297], "x");
-  door("corridor_b", "escape_pods", [-3.2, y, 297], "x", { type: "blast", w: 2.6, h: 3.0 });
+  door("corridor_b", "officers_quarters", [-2.7, y, 273], "x");
+  door("corridor_b", "briefing", [2.7, y, 273], "x", { w: 2.6, h: 3.0 });
+  door("corridor_b", "lounge", [2.7, y, 297], "x");
+  door("corridor_b", "escape_pods", [-2.7, y, 297], "x", { type: "blast", w: 2.6, h: 3.0 });
 }
 
 // ---- Deck C: crew deck ----------------------------------------------------------------------
 {
   const y = DECKS.C.y;
   room({ id: "lobby_c", name: "Crew Deck Lobby", deck: "C", origin: [0, y, 253], size: [24, 4.2, 12], accent: "#b0b8c8", kind: "lobby" });
-  room({ id: "corridor_c", name: "Crew Deck Corridor", deck: "C", origin: [0, y, 291], size: [6, 3.6, 62], accent: "#b0b8c8", kind: "corridor", spawn: { x: 0, z: 29, yaw: 0, pitch: -2 } });
+  room({ id: "corridor_c", name: "Crew Deck Corridor", deck: "C", origin: [0, y, 291], size: [4, 3.6, 62], accent: "#b0b8c8", kind: "corridor", spawn: { x: 0, z: 29, yaw: 0, pitch: -2 } });
   room({ id: "crew_quarters", name: "Crew Quarters", deck: "C", origin: [-20.4, y, 275], size: [34, 3.6, 24], accent: "#9fb0c8", spawn: { x: 15, z: 0, yaw: 90, pitch: -4 } });
   room({ id: "mess_hall", name: "Mess Hall & Galley", deck: "C", origin: [20.4, y, 275], size: [34, 4.5, 24], accent: "#ffc36b", spawn: { x: -15, z: 0, yaw: -90, pitch: -4 } });
   room({ id: "medbay", name: "Medical Bay", deck: "C", origin: [-20.4, y, 302], size: [34, 4.0, 22], accent: "#7fe0d8", spawn: { x: 15, z: 0, yaw: 90, pitch: -4 } });
@@ -231,10 +232,10 @@ function door(a, b, pos, axis, opts = {}) {
   room({ id: "detention", name: "Security & Detention Block", deck: "C", origin: [0, y, 336], size: [40, 4.0, 24], accent: "#ff3a3a", spawn: { x: 0, z: -10, yaw: 180, pitch: -4 } });
 
   door("lobby_c", "corridor_c", [0, y, 259.5], "z", { w: 3.0, h: 3.2 });
-  door("corridor_c", "crew_quarters", [-3.2, y, 275], "x");
-  door("corridor_c", "mess_hall", [3.2, y, 275], "x", { w: 2.6, h: 3.0 });
-  door("corridor_c", "medbay", [-3.2, y, 302], "x", { w: 2.6, h: 3.0 });
-  door("corridor_c", "armory", [3.2, y, 302], "x", { type: "blast", w: 2.4, h: 3.0 });
+  door("corridor_c", "crew_quarters", [-2.7, y, 275], "x");
+  door("corridor_c", "mess_hall", [2.7, y, 275], "x", { w: 2.6, h: 3.0 });
+  door("corridor_c", "medbay", [-2.7, y, 302], "x", { w: 2.6, h: 3.0 });
+  door("corridor_c", "armory", [2.7, y, 302], "x", { type: "blast", w: 2.4, h: 3.0 });
   door("corridor_c", "detention", [0, y, 323.5], "z", { type: "blast", w: 3.0, h: 3.2 });
 }
 
@@ -242,18 +243,18 @@ function door(a, b, pos, axis, opts = {}) {
 {
   const y = DECKS.D.y;
   room({ id: "lobby_d", name: "Engineering Lobby", deck: "D", origin: [0, y, 253], size: [24, 4.2, 12], accent: "#ffb040", kind: "lobby" });
-  room({ id: "corridor_d", name: "Engineering Corridor", deck: "D", origin: [0, y, 295], size: [6, 3.8, 70], accent: "#ffb040", kind: "corridor", spawn: { x: 0, z: 33, yaw: 0, pitch: -2 } });
+  room({ id: "corridor_d", name: "Engineering Corridor", deck: "D", origin: [0, y, 295], size: [4, 3.8, 70], accent: "#ffb040", kind: "corridor", spawn: { x: 0, z: 33, yaw: 0, pitch: -2 } });
   room({ id: "engineering", name: "Engineering Control", deck: "D", origin: [-20.4, y, 278], size: [34, 5.0, 26], accent: "#ffb040", spawn: { x: 15, z: 0, yaw: 90, pitch: -4 } });
   room({ id: "hyperdrive", name: "Hyperdrive & Propulsion", deck: "D", origin: [20.4, y, 278], size: [34, 8.0, 26], accent: "#7fb0ff", spawn: { x: -15, z: 0, yaw: -90, pitch: -4 } });
   room({ id: "life_support", name: "Life Support: Air / Water / Waste", deck: "D", origin: [-20.4, y, 308], size: [34, 5.0, 24], accent: "#7fe0a0", spawn: { x: 15, z: 0, yaw: 90, pitch: -4 } });
   room({ id: "maintenance", name: "Maintenance & Repair Bay", deck: "D", origin: [20.4, y, 308], size: [34, 6.0, 24], accent: "#ffd060", spawn: { x: -15, z: 0, yaw: -90, pitch: -4 } });
-  room({ id: "reactor", name: "Main Reactor Chamber", deck: "D", origin: [0, y, 362], size: [60, 30, 60], accent: "#fff0c0", fog: 0.012, spawn: { x: 0, z: -27, yaw: 180, pitch: 4 }, tags: ["key"] });
+  room({ id: "reactor", name: "Main Reactor Chamber", deck: "D", origin: [0, y, 362], size: [60, 30, 60], accent: "#fff0c0", fog: 0.007, spawn: { x: 0, z: -27, yaw: 180, pitch: 4 }, tags: ["key"] });
 
   door("lobby_d", "corridor_d", [0, y, 259.5], "z", { w: 3.0, h: 3.2 });
-  door("corridor_d", "engineering", [-3.2, y, 278], "x", { w: 2.6, h: 3.0 });
-  door("corridor_d", "hyperdrive", [3.2, y, 278], "x", { type: "blast", w: 3.0, h: 3.2 });
-  door("corridor_d", "life_support", [-3.2, y, 308], "x");
-  door("corridor_d", "maintenance", [3.2, y, 308], "x", { type: "blast", w: 3.2, h: 3.4 });
+  door("corridor_d", "engineering", [-2.7, y, 278], "x", { w: 2.6, h: 3.0 });
+  door("corridor_d", "hyperdrive", [2.7, y, 278], "x", { type: "blast", w: 3.0, h: 3.2 });
+  door("corridor_d", "life_support", [-2.7, y, 308], "x");
+  door("corridor_d", "maintenance", [2.7, y, 308], "x", { type: "blast", w: 3.2, h: 3.4 });
   door("corridor_d", "reactor", [0, y, 331], "z", { type: "blast", w: DOOR.blastW, h: DOOR.blastH });
 }
 
