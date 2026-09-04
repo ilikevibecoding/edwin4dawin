@@ -79,14 +79,17 @@ export function buildArmory(kit, ctx) {
     kit.box("screen2", cageX - 0.25, y + 0.933, hatch[0] + 0.7, 0.28, 0.004, 0.44, { uv: "keep" });
     kit.box("darkGloss", cageX - 0.32, y + 0.93, hatch[1] - 0.35, 0.22, 0.012, 0.3);
     buildHelmet(kit, [cageX + 0.25, y + 0.92, hatch[1] - 0.45], yawQ(Math.PI / 2 + 0.3));
-    kit.box("impPaintedMetal", cageX - 0.2, y + 0.98, hatch[1] - 1.75, 0.42, 0.12, 0.5, { color: IMP.white, texel: 2 });
-    kit.box("impPaintedMetal", cageX - 0.2, y + 1.07, hatch[1] - 1.75, 0.3, 0.06, 0.34, { color: IMP.black, texel: 2 });
-    kit.box("impPaintedMetal", cageX - 0.2, y + 1.11, hatch[1] - 1.75, 0.2, 0.03, 0.16, { color: IMP.wallMid, texel: 2 });
-    // rifle laid along the counter on the lobby side (grip down, scope up), stock toward the shutter
-    buildRifle(kit, [cageX + 0.12, y + 1.02, hatch[0] + 2.0], yawQ(0.12).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2)));
-    kit.box("impMetal", cageX - 0.3, y + 0.94, hatch[0] + 1.45, 0.3, 0.04, 0.24, { color: IMP.steel, texel: 2 });
-    for (let k = 0; k < 4; k++) kit.add("impMetal", new THREE.CylinderGeometry(0.02, 0.02, 0.14, 8), { pos: [cageX - 0.3, y + 0.985, hatch[0] + 1.36 + k * 0.06], rot: [0, 0, Math.PI / 2], color: k === 2 ? IMP.gunmetal : IMP.steel, uv: "scale", uvScale: [0.2, 0.3] });
-    kit.box("crewEmit", cageX - 0.3, y + 0.965, hatch[0] + 1.62, 0.28, 0.008, 0.02, { color: 0x40ff70 });
+    kit.box("impPaintedMetal", cageX + 0.24, y + 0.98, hatch[1] - 1.05, 0.42, 0.12, 0.5, { color: IMP.white, texel: 2 });
+    kit.box("impPaintedMetal", cageX + 0.24, y + 1.07, hatch[1] - 1.05, 0.3, 0.06, 0.34, { color: IMP.black, texel: 2 });
+    kit.box("impPaintedMetal", cageX + 0.24, y + 1.11, hatch[1] - 1.05, 0.2, 0.03, 0.16, { color: IMP.wallMid, texel: 2 });
+    // rifle laid along the counter behind the kit (grip down, scope up), stock toward the shutter
+    buildRifle(kit, [cageX - 0.28, y + 1.02, hatch[0] + 2.05], yawQ(0.12).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2)));
+    kit.box("impMetal", cageX + 0.3, y + 0.94, hatch[0] + 2.2, 0.3, 0.04, 0.24, { color: IMP.steel, texel: 2 });
+    for (let k = 0; k < 4; k++) kit.add("impMetal", new THREE.CylinderGeometry(0.02, 0.02, 0.14, 8), { pos: [cageX + 0.3, y + 0.985, hatch[0] + 2.11 + k * 0.06], rot: [0, 0, Math.PI / 2], color: k === 2 ? IMP.gunmetal : IMP.steel, uv: "scale", uvScale: [0.2, 0.3] });
+    kit.box("crewEmit", cageX + 0.3, y + 0.965, hatch[0] + 2.31, 0.28, 0.008, 0.02, { color: 0x40ff70 });
+    // requisition slip and stylus by the terminal on the store side
+    kit.box("impPaintedMetal", cageX - 0.3, y + 0.928, hatch[0] + 1.35, 0.22, 0.006, 0.3, { color: IMP.wallLight, texel: 2 });
+    kit.add("impMetal", new THREE.CylinderGeometry(0.006, 0.006, 0.16, 6), { pos: [cageX - 0.22, y + 0.94, hatch[0] + 1.42], rot: [0, 0, Math.PI / 2], color: IMP.steel, uv: "scale", uvScale: [0.1, 0.3] });
     // issue trolley inside the cage beside the counter: a rack of two helmets and a stack of chest plates
     kit.box("impPaintedMetal", cageX - 1.05, y + 0.45, hatch[0] - 0.9, 0.6, 0.06, 0.9, { color: IMP.trim, texel: 1 });
     kit.box("impPaintedMetal", cageX - 1.05, y + 0.9, hatch[0] - 0.9, 0.6, 0.04, 0.9, { color: IMP.trim, texel: 1 });
@@ -314,7 +317,7 @@ export function buildArmory(kit, ctx) {
 
   // ---- views --------------------------------------------------------------------------------------
   ctx.view("armory", xE - 0.7, y + STD.eye, doorZ + 1.4, 42, -4);
-  ctx.view("armory_counter", -10.0, y + STD.eye, 318.0, -146, -10);
+  ctx.view("armory_counter", -4.9, y + STD.eye, 323.4, 72, -14);
   ctx.view("armory_racks", -9.6, y + STD.eye, 326.6, 62, -5);
   ctx.view("armory_helmets", -23.6, y + STD.eye, 320.6, 122, -5);
   ctx.view("armory_range", -4.7, y + STD.eye, 327.4, 180, -4);
