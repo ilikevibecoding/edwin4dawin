@@ -89,6 +89,8 @@ vec3 roofPalette(float k) {
   float v = meters.y;
   float facadeSeed = seed + floor(sideX + 0.5) * 3.7 + step(0.0, vLocalN.x + vLocalN.z) * 11.1;
   bool glassy = style < 0.5 || style == 8.0 || style == 9.0;
+  // thin, tall concrete frusta are the spires / masts on the crowns
+  bool mast = style == 6.0 && vDims.x < 10.0 && vDims.y > 12.0 && vDims.y > vDims.x * 3.0;
   vec3 glassDark = vec3(0.07, 0.10, 0.13);
   vec3 col = wall;
   float rough = 0.75;
@@ -139,11 +141,11 @@ vec3 roofPalette(float k) {
       col *= 0.92 + 0.08 * step(0.5, fract(v / 0.35));
       rough = 0.85;
     } else {
-      // tapered crowns: glass on glass towers, painted metal elsewhere
-      col = style < 0.5 ? vec3(0.08, 0.16, 0.25) : style == 8.0 ? vec3(0.10, 0.25, 0.24) : wall * 0.8;
-      rough = glassy ? 0.15 : 0.5;
-      metal = glassy ? 0.8 : 0.2;
-      emis = vec3(1.0, 0.85, 0.6) * (glassy ? 0.5 : 0.0) * uNight;
+      // tapered crowns: glass on glass towers (lit from inside at night), painted metal elsewhere
+      col = style < 0.5 ? vec3(0.26, 0.36, 0.48) : style == 8.0 ? vec3(0.2, 0.38, 0.36) : wall * 0.8;
+      rough = glassy ? 0.1 : 0.5;
+      metal = glassy ? 0.85 : 0.2;
+      emis = vec3(1.0, 0.85, 0.6) * (glassy ? 0.9 : 0.12) * uNight;
     }
   } else if (vLocalN.y < -0.5) {
     col = wall * 0.5;
@@ -166,17 +168,25 @@ vec3 roofPalette(float k) {
     float lit = mix(step(thr, wHash), max(step(thr + 0.12, fHash) * step(0.2, wHash), step(thr + 0.5, wHash)), office);
     lit = min(lit, 1.0) * nightOn;
     vec3 litCol = mix(vec3(0.78, 0.87, 1.0), vec3(1.0, 0.74, 0.42), step(1.0 - warmMix, hash11(wHash * 17.0 + seed)));
-    if (style < 0.5) {
-      // blue curtain wall: glass with thin mullions and a spandrel band per floor
+    if (mast) {
+      // slender painted spires / masts: pale paint, a red beacon at the tip and a floodlit glow at night
+      col = wall * (0.94 + 0.08 * vnoise(vWorldPosF.xz * 3.0 + v * 2.0));
+      rough = 0.45; metal = 0.15;
+      float tip = smoothstep(vDims.y - 2.5, vDims.y - 1.0, v);
+      emis = vec3(1.0, 0.1, 0.05) * tip * 4.0 * uNight + vec3(0.95, 0.8, 0.55) * 0.35 * uNight;
+    } else if (style < 0.5) {
+      // blue curtain wall: reflective panes between dark spandrels. The pane colour is a pale cool grey-blue with
+      // high metalness so the environment map (sky above, haze toward the horizon) reads as a gradient on the tower;
+      // panes stay well below the masonry families in brightness so the two read as different materials.
       float mull = step(fx, 0.05) + step(0.95, fx) + step(fy, 0.05);
       float spandrel = step(fy, 0.16 + 0.12 * variant);
       float glass = 1.0 - clamp(mull + spandrel, 0.0, 1.0);
-      vec3 tint = mix(vec3(0.08, 0.17, 0.27), vec3(0.05, 0.10, 0.19), variant);
-      vec3 spandrelCol = mix(wall * 0.55, tint * 0.7, step(0.5, hash11(seed * 5.3)));
-      col = mix(mix(spandrelCol, wall * 0.35, clamp(mull, 0.0, 1.0)), tint, glass);
-      col = mix(col, mix(spandrelCol, tint, 0.75), lod);
-      rough = mix(0.5, 0.08, glass);
-      metal = glass * 0.9 * (1.0 - 0.3 * lod);
+      vec3 tint = mix(vec3(0.34, 0.44, 0.56), vec3(0.22, 0.32, 0.46), variant);
+      vec3 spandrelCol = mix(wall * 0.42, vec3(0.06, 0.08, 0.12), step(0.5, hash11(seed * 5.3)));
+      col = mix(mix(spandrelCol, wall * 0.3, clamp(mull, 0.0, 1.0)), tint, glass);
+      col = mix(col, mix(spandrelCol, tint, 0.72), lod);
+      rough = mix(0.5, 0.06, glass);
+      metal = glass * 0.88 * (1.0 - 0.25 * lod);
       emis = litCol * lit * glass * 1.4;
     } else if (style < 1.5 || style > 6.5 && style < 7.5) {
       // punched windows on plaster / hotel slab with balconies
@@ -254,11 +264,11 @@ vec3 roofPalette(float k) {
       float band = step(0.26, fy) * step(fy, 0.97);
       float mull = step(fract(u / 6.0), 0.03);
       float glass = band * (1.0 - mull);
-      vec3 tint = mix(vec3(0.10, 0.26, 0.24), vec3(0.14, 0.30, 0.30), variant);
+      vec3 tint = mix(vec3(0.18, 0.36, 0.34), vec3(0.24, 0.42, 0.42), variant);
       col = mix(wall, tint, glass);
       col = mix(col, mix(wall, tint, 0.68), lod);
-      rough = mix(0.6, 0.1, glass);
-      metal = glass * 0.85 * (1.0 - 0.3 * lod);
+      rough = mix(0.6, 0.08, glass);
+      metal = glass * 0.88 * (1.0 - 0.3 * lod);
       emis = litCol * lit * glass * 1.3;
     } else if (style < 9.5) {
       // dark stone piers with bronze vertical strip windows
@@ -310,11 +320,13 @@ vec3 roofPalette(float k) {
     // ground floor: darker plinth / shopfronts, streaks of grime under sills
     col *= 1.0 - 0.18 * smoothstep(0.55, 0.85, grime) * (1.0 - smoothstep(2.0, 12.0, v));
     col = mix(col, col * 0.8, step(v, 0.8));
-    // crown lighting on tall towers at night: a lit band just below the roof line
-    if (vDims.y > 110.0) {
-      float crown = smoothstep(vDims.y - 6.0, vDims.y - 4.5, v) * (1.0 - smoothstep(vDims.y - 1.0, vDims.y, v));
-      vec3 crownCol = mix(vec3(1.0, 0.85, 0.6), vec3(0.4, 0.8, 1.0), step(0.5, hash11(seed * 2.7)));
-      emis += crownCol * crown * 6.0 * uNight;
+    // crown lighting on about two thirds of the tall towers at night: a lit band just below the roof line, warm,
+    // cool or (rarely) magenta, brighter than the windows so the skyline keeps its hierarchy after dark
+    if (vDims.y > 110.0 && hash11(seed * 1.9 + 3.1) < 0.66) {
+      float crown = smoothstep(vDims.y - 7.0, vDims.y - 5.0, v) * (1.0 - smoothstep(vDims.y - 1.0, vDims.y, v));
+      float pick = hash11(seed * 2.7);
+      vec3 crownCol = pick < 0.5 ? vec3(1.0, 0.85, 0.6) : pick < 0.88 ? vec3(0.4, 0.8, 1.0) : vec3(1.0, 0.35, 0.7);
+      emis += crownCol * crown * 8.0 * uNight;
     }
   }
   diffuseColor.rgb = col;
@@ -323,6 +335,6 @@ vec3 roofPalette(float k) {
   totalEmissiveRadiance += emis;
 }`);
   };
-  mat.customProgramCacheKey = () => 'facade-v2';
+  mat.customProgramCacheKey = () => 'facade-v3';
   return mat;
 }

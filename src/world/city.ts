@@ -203,6 +203,8 @@ const STONES = ['#3a3633', '#4a4440', '#2f2d2c', '#5a504a', '#40372f', '#4d4a48'
 const BRICKS = ['#b98f6a', '#a87e5c', '#c49a74', '#9c6f52', '#c8a680', '#b07b5b', '#8e5e46'];
 const GREYS = ['#b9b9b4', '#a7a9a8', '#c6c6c1', '#9da3a6', '#b5b8ba'];
 const HOUSE_WALLS = [...WHITES, ...WHITES, ...CREAMS, ...PEACHES, ...PINKS, ...MINTS, ...YELLOWS, ...PALE_BLUES, '#e6d2b8', '#e8c9a0', '#dfc7a6'];
+/** outer suburbs: fewer whites, more tan / ochre / sage so the far sprawl is mottled from the air */
+const FAR_HOUSE_WALLS = [...WHITES.slice(0, 3), ...CREAMS, ...PEACHES, ...YELLOWS, ...MINTS, '#e6d2b8', '#e8c9a0', '#dfc7a6', '#d9b98f', '#c9a97c', '#b9b28a', '#cdbfa3', '#d6c2a2', '#a9b59a'];
 
 const FAM: Record<'glassBlue' | 'glassGreen' | 'punched' | 'balcony' | 'deco' | 'stone' | 'brick' | 'grid' | 'hotel' | 'concrete' | 'industrial' | 'house', Family> = {
   glassBlue: { style: S.GLASS_BLUE, floorH: 3.9, tints: ['#9fb6c8', '#8fa9bd', '#b0c4d2', '#a7bccb', '#8898a8', '#c2d0da'], lit: [0.25, 0.7], warm: [0.15, 0.5] },
@@ -314,8 +316,13 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     return true;
   };
 
-  /** Per-building appearance drawn from a facade family. */
-  const look = (fam: Family, r: Rng) => ({ tint: r.pick(fam.tints), lit: r.range(fam.lit[0], fam.lit[1]), warm: r.range(fam.warm[0], fam.warm[1]), variant: r.next() });
+  /** Per-building appearance drawn from a facade family. Roughly one building in six is dark at night (empty offices,
+   *  unsold condos) and the rest sit toward the low end of the family's lit range so the lit towers stand out. */
+  const look = (fam: Family, r: Rng) => {
+    const u = r.next();
+    const lit = u < 0.16 ? r.range(0.0, 0.04) : lerp(fam.lit[0], fam.lit[1], Math.pow(r.next(), 1.6));
+    return { tint: r.pick(fam.tints), lit, warm: r.range(fam.warm[0], fam.warm[1]), variant: r.next() };
+  };
 
   // rooftop equipment: penthouses, tanks, helipads, masts and spires
   const addRoofDetail = (r: Rng, x: number, z: number, tw: number, td: number, top: number, rot: number, h: number, fam: Family) => {
@@ -444,46 +451,72 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     landmarkPositions.push({ x, z, h, name });
     markOccupied(x, z, 46);
   };
+  // Crowns are sized to survive 3-5 km: spires start 8-10 m wide at the base, lanterns are 12-18 m glass boxes.
   landmark('Meridian Tower', 120, -80, (x, z, g) => {
-    const o = { lit: 0.6, warm: 0.3, variant: 0.2 };
+    const o = { lit: 0.5, warm: 0.3, variant: 0.2 };
     place('box', x, z, 46, 150, 46, 0.1, '#9fb6c8', S.GLASS_BLUE, 3.9, o);
     place('box', x, z, 38, 230, 38, 0.1, '#9fb6c8', S.GLASS_BLUE, 3.9, o);
     place('box', x, z, 28, 285, 28, 0.1, '#b0c4d2', S.GLASS_BLUE, 3.9, o);
-    place('frustum', x, z, 5, 45, 5, 0.1, '#e8eef2', S.CONCRETE, 3, { yBase: g + 285, margin: -1 });
-    return 330;
+    place('box', x, z, 18, 12, 18, 0.1, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 285, lit: 0.9, warm: 0.2, variant: 0.5, margin: -1 });
+    place('frustum', x, z, 9, 64, 9, 0.1, '#e8eef2', S.CONCRETE, 3, { yBase: g + 297, margin: -1 });
+    return 361;
   });
   landmark('Bahía One', -40, 70, (x, z, g) => {
-    const o = { lit: 0.65, warm: 0.25, variant: 0.8 };
+    const o = { lit: 0.55, warm: 0.25, variant: 0.8 };
     place('oct', x, z, 46, 262, 46, 0.05, '#8898a8', S.GLASS_BLUE, 3.9, o);
-    place('box', x, z, 16, 8, 14, 0.05, '#8d9296', S.CONCRETE, 3, { yBase: g + 262, margin: -1 });
-    place('cyl', x + 10, z + 9, 16, 0.5, 16, 0, '#444444', S.HELIPAD, 3, { yBase: g + 262, margin: -1 });
-    place('frustum', x - 8, z - 6, 1.8, 30, 1.8, 0, '#cfd8dc', S.CONCRETE, 3, { yBase: g + 262, margin: -1 });
-    return 292;
+    // pyramidal glass crown with a mast
+    place('frustum', x, z, 42, 36, 42, 0.05, '#8898a8', S.GLASS_BLUE, 3.9, { ...o, yBase: g + 262, margin: -1 });
+    place('frustum', x, z, 4, 38, 4, 0.05, '#cfd8dc', S.CONCRETE, 3, { yBase: g + 297, margin: -1 });
+    return 335;
   });
   landmark('Faro Bahía', -180, 40, (x, z, g) => {
-    place('cyl', x, z, 40, 240, 40, 0, '#e8ebe4', S.GLASS_GREEN, 3.8, { lit: 0.55, warm: 0.4, variant: 0.6 });
-    place('cyl', x, z, 48, 12, 48, 0, '#e8eef2', S.CONCRETE, 3, { yBase: g + 232, margin: -1 });
-    place('cyl', x, z, 20, 4, 20, 0, '#dfe4e8', S.CONCRETE, 3, { yBase: g + 244, margin: -1 });
-    return 248;
+    place('cyl', x, z, 40, 240, 40, 0, '#e8ebe4', S.GLASS_GREEN, 3.8, { lit: 0.45, warm: 0.4, variant: 0.6 });
+    // lighthouse brim, glass lantern, conical roof and mast
+    place('cyl', x, z, 50, 10, 50, 0, '#e8eef2', S.CONCRETE, 3, { yBase: g + 232, margin: -1 });
+    place('cyl', x, z, 24, 16, 24, 0, '#cfe0ec', S.GLASS_BLUE, 3.9, { yBase: g + 242, lit: 0.95, warm: 0.3, variant: 0.4, margin: -1 });
+    place('frustum', x, z, 28, 18, 28, 0.4, '#dfe4e8', S.CONCRETE, 3, { yBase: g + 258, margin: -1 });
+    place('frustum', x, z, 3, 30, 3, 0, '#cfd8dc', S.CONCRETE, 3, { yBase: g + 275, margin: -1 });
+    return 305;
   });
-  landmark('Twin Palms A', 40, 210, (x, z) => { place('box', x, z, 30, 182, 56, 0.05, '#efe4cf', S.BALCONY, 3.3, { lit: 0.35, warm: 0.85, variant: 0.4 }); return 182; });
+  landmark('Twin Palms A', 40, 210, (x, z) => { place('box', x, z, 30, 182, 56, 0.05, '#efe4cf', S.BALCONY, 3.3, { lit: 0.3, warm: 0.85, variant: 0.4 }); return 182; });
   landmark('Twin Palms B', 110, 210, (x, z, g) => {
-    place('box', x, z, 30, 182, 56, 0.05, '#efe4cf', S.BALCONY, 3.3, { lit: 0.4, warm: 0.85, variant: 0.4 });
+    place('box', x, z, 30, 182, 56, 0.05, '#efe4cf', S.BALCONY, 3.3, { lit: 0.35, warm: 0.85, variant: 0.4 });
     place('box', x - 35, z, 44, 6, 12, 0.05, '#dfe4e8', S.CONCRETE, 3.3, { yBase: g + 118, margin: -1 });
     return 182;
   });
-  landmark('The Sail', -60, -250, (x, z) => { place('shear', x, z, 60, 205, 44, 0.9, '#b0c4d2', S.GLASS_BLUE, 3.9, { lit: 0.5, warm: 0.3, variant: 0.9 }); return 205; });
+  landmark('The Sail', -60, -250, (x, z, g) => {
+    place('shear', x, z, 60, 205, 44, 0.9, '#b0c4d2', S.GLASS_BLUE, 3.9, { lit: 0.45, warm: 0.3, variant: 0.9 });
+    // the mast-like blade above the leaning body
+    place('box', x, z, 3.5, 42, 24, 0.9, '#e8eef2', S.CONCRETE, 3, { yBase: g + 204, margin: -1 });
+    return 247;
+  });
   landmark('Terraces', 260, 120, (x, z) => {
-    for (let i = 0; i < 5; i++) place('box', x + i * 6, z - i * 4, 60 - i * 8, 45 + i * 28, 40, 0.0, '#f7f5f0', S.GRID, 3.5, { lit: 0.4, warm: 0.5, variant: 0.3 });
+    for (let i = 0; i < 5; i++) place('box', x + i * 6, z - i * 4, 60 - i * 8, 45 + i * 28, 40, 0.0, '#f7f5f0', S.GRID, 3.5, { lit: 0.35, warm: 0.5, variant: 0.3 });
     return 160;
   });
   landmark('Crown Plaza', -300, -180, (x, z, g) => {
-    place('box', x, z, 42, 200, 42, 0.2, '#3a3633', S.STONE, 3.8, { lit: 0.6, warm: 0.4, variant: 0.5 });
+    place('box', x, z, 42, 200, 42, 0.2, '#3a3633', S.STONE, 3.8, { lit: 0.55, warm: 0.4, variant: 0.5 });
+    place('box', x, z, 20, 10, 20, 0.2, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 200, lit: 0.9, warm: 0.6, variant: 0.5, margin: -1 });
     for (let i = 0; i < 4; i++) {
       const a = 0.2 + (i * Math.PI) / 2;
-      place('box', x + Math.cos(a) * 14, z + Math.sin(a) * 14, 3, 30, 14, a, '#e8eef2', S.CONCRETE, 3, { yBase: g + 198, margin: -1 });
+      place('box', x + Math.cos(a) * 14, z + Math.sin(a) * 14, 3, 44, 14, a, '#e8eef2', S.CONCRETE, 3, { yBase: g + 198, margin: -1 });
     }
-    return 230;
+    return 244;
+  });
+  landmark('The Needle', 210, -380, (x, z, g) => {
+    // slender residential point tower with a tall mast: the thin vertical accent of the skyline
+    place('box', x, z, 22, 212, 22, 0.1, '#dfe6e0', S.GLASS_GREEN, 3.8, { lit: 0.4, warm: 0.5, variant: 0.3 });
+    place('frustum', x, z, 16, 14, 16, 0.1, '#dfe6e0', S.GLASS_GREEN, 3.8, { yBase: g + 212, lit: 0.9, warm: 0.5, variant: 0.3, margin: -1 });
+    place('frustum', x, z, 5, 70, 5, 0.1, '#e8eef2', S.CONCRETE, 3, { yBase: g + 224, margin: -1 });
+    return 294;
+  });
+  landmark('Gateway', -230, -430, (x, z, g) => {
+    // two slabs joined by a top storey: reads as a portal against the sky
+    const o = { lit: 0.45, warm: 0.8, variant: 0.6 };
+    place('box', x - 26, z, 22, 156, 44, 0.02, '#f2efe6', S.PUNCHED, 3.3, o);
+    place('box', x + 26, z, 22, 156, 44, 0.02, '#f2efe6', S.PUNCHED, 3.3, o);
+    place('box', x, z, 76, 14, 40, 0.02, '#e9e6df', S.GRID, 3.5, { yBase: g + 156, lit: 0.6, warm: 0.5, variant: 0.6, margin: -1 });
+    return 170;
   });
   landmark('Helix', 330, -240, (x, z, g) => {
     for (let i = 0; i < 12; i++) place('box', x, z, 34, 16.5, 34, i * 0.1, '#e6e2d6', S.GLASS_GREEN, 3.9, { yBase: g + i * 16, lit: 0.5, warm: 0.3, variant: 0.2 });
@@ -529,12 +562,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         const core = 1 - smoothstep(0.2, 1.0, distToCentre);
         const nTowers = bw > 80 && bd > 70 ? 2 : 1;
         for (let t = 0; t < nTowers; t++) {
-          const fw = drng.range(22, Math.min(48, bw * 0.55)), fd = drng.range(22, Math.min(48, bd * 0.6));
-          const lx = nTowers === 1 ? (bx0 + bx1) / 2 + drng.range(-bw * 0.1, bw * 0.1) : lerp(bx0 + fw / 2 + 4, bx1 - fw / 2 - 4, t);
-          const lz = (bz0 + bz1) / 2 + drng.range(-bd * 0.15, bd * 0.15);
-          const [x, z] = toWorld(lx, lz);
-          if (!landOK(x, z, fw, fd, d.rot) || !areaFree(x, z, fw + 6, fd + 6, d.rot)) continue;
-          // height hierarchy: many 40-100 m, a cluster of 120-200 m near the core (landmarks own 250-330 m)
+          // height hierarchy: many 40-100 m, a cluster of 120-200 m near the core (landmarks own 250-360 m)
           const u = drng.next();
           let h: number;
           if (u < 0.07 + 0.22 * core) h = drng.range(120, 205);
@@ -542,6 +570,16 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           else h = drng.range(36, 72);
           h *= lerp(0.6, 1.0, core);
           h = Math.max(28, h);
+          // footprint classes so the skyline mixes widths: slender point towers, standard plates, wide slabs
+          const wr = drng.next();
+          let fw: number, fd: number;
+          if (wr < (h > 110 ? 0.34 : 0.22)) { fw = drng.range(16, 24); fd = drng.range(18, 30); }
+          else if (wr < 0.82) { fw = drng.range(24, Math.min(46, bw * 0.55)); fd = drng.range(22, Math.min(46, bd * 0.6)); }
+          else { fw = drng.range(Math.min(44, bw * 0.5), Math.min(74, bw * 0.75)); fd = drng.range(18, Math.min(30, bd * 0.4)); if (h > 150) h *= 0.7; }
+          const lx = nTowers === 1 ? (bx0 + bx1) / 2 + drng.range(-bw * 0.1, bw * 0.1) : lerp(bx0 + fw / 2 + 4, bx1 - fw / 2 - 4, t);
+          const lz = (bz0 + bz1) / 2 + drng.range(-bd * 0.15, bd * 0.15);
+          const [x, z] = toWorld(lx, lz);
+          if (!landOK(x, z, fw, fd, d.rot) || !areaFree(x, z, fw + 6, fd + 6, d.rot)) continue;
           const fam: Family = h > 110
             ? pickWeighted(drng, [[FAM.glassBlue, 0.34], [FAM.glassGreen, 0.16], [FAM.punched, 0.1], [FAM.balcony, 0.08], [FAM.deco, 0.08], [FAM.stone, 0.14], [FAM.grid, 0.1]] as const)
             : h > 60
@@ -562,17 +600,34 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           else recipe = rr < 0.25 ? 3 : rr < 0.35 ? 2 : 0;
           buildTower(drng, x, z, d.rot, fw, fd, h, fam, recipe);
         }
-        // street-wall infill: low buildings in the leftover corners of the block
-        const lw = drng.range(14, 26), ld = drng.range(14, 26);
-        const spots: [number, number][] = [[bx0 + lw / 2, bz0 + ld / 2], [bx1 - lw / 2, bz0 + ld / 2], [bx1 - lw / 2, bz1 - ld / 2], [bx0 + lw / 2, bz1 - ld / 2]];
-        for (const [lx, lz] of spots) {
-          if (drng.next() > 0.6) continue;
-          const [x, z] = toWorld(lx, lz);
-          if (!landOK(x, z, lw, ld, d.rot) || !areaFree(x, z, lw + 4, ld + 4, d.rot)) continue;
-          const fam = pickWeighted(drng, [[FAM.brick, 0.35], [FAM.punched, 0.3], [FAM.deco, 0.25], [FAM.concrete, 0.1]] as const);
-          const lk = look(fam, drng);
-          place('box', x, z, lw, drng.range(8, 24), ld, d.rot, lk.tint, fam.style, fam.floorH, { lit: lk.lit, warm: lk.warm, variant: lk.variant });
-        }
+        // mid-rise street wall: 4-12 storey buildings shoulder to shoulder along the block edges wherever the
+        // towers left room, so the skyline has a body between the towers instead of bare lots
+        const fillEdge = (along: 'x' | 'z', fixed: number, from: number, to: number) => {
+          let cursor = from;
+          while (cursor < to - 10) {
+            const front = drng.range(14, 30);
+            const depth = Math.min(drng.range(12, 22), (along === 'x' ? bd : bw) * 0.4);
+            if (cursor + front > to) break;
+            const mid = cursor + front / 2;
+            cursor += front + drng.range(0, 3);
+            if (drng.next() > 0.55 + 0.35 * core) continue;
+            const inward = fixed === (along === 'x' ? bz0 : bx0) ? 1 : -1;
+            const lx = along === 'x' ? mid : fixed + inward * depth / 2;
+            const lz = along === 'x' ? fixed + inward * depth / 2 : mid;
+            const w = along === 'x' ? front : depth, dd = along === 'x' ? depth : front;
+            const [x, z] = toWorld(lx, lz);
+            if (!landOK(x, z, w, dd, d.rot) || !areaFree(x, z, w + 3, dd + 3, d.rot)) continue;
+            const fam = pickWeighted(drng, [[FAM.brick, 0.24], [FAM.punched, 0.28], [FAM.deco, 0.2], [FAM.balcony, 0.12], [FAM.grid, 0.06], [FAM.concrete, 0.1]] as const);
+            const lk = look(fam, drng);
+            const hh = drng.range(12, 40) * lerp(0.7, 1.1, core);
+            const top = place('box', x, z, w, hh, dd, d.rot, lk.tint, fam.style, fam.floorH, { lit: lk.lit, warm: lk.warm, variant: lk.variant });
+            if (top !== null && hh > 20 && drng.chance(0.4)) place('box', x, z, w * 0.4, drng.range(2.5, 4), dd * 0.45, d.rot, drng.pick(GREYS), S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+          }
+        };
+        fillEdge('x', bz0, bx0, bx1);
+        fillEdge('x', bz1, bx0, bx1);
+        fillEdge('z', bx0, bz0, bz1);
+        fillEdge('z', bx1, bz0, bz1);
       }
 
       function fillMidrise(): void {
@@ -619,10 +674,14 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       }
 
       function fillHouses(): void {
-        // lots around the block perimeter along the two long sides; each block has a dominant roof colour
+        // lots around the block perimeter along the two long sides; each block has a dominant roof colour. Far from
+        // downtown the palette leans to terracotta / dark tile / brown so the sprawl reads as a mottled field, not
+        // a pale strip, and the pale membrane and gravel roofs stay near the core.
         const frontage = drng.range(16, 24);
         const depth = Math.min(30, bd / 2 - 2);
-        const blockRoof = pickWeighted(drng, [[0, 0.3], [2, 0.14], [5, 0.16], [6, 0.14], [1, 0.12], [7, 0.1], [3, 0.04]] as const);
+        const far = smoothstep(2200, 5500, distToDowntown);
+        const blockRoof = pickWeighted(drng, [[0, 0.3], [2, lerp(0.14, 0.03, far)], [5, lerp(0.16, 0.05, far)], [6, 0.13], [1, lerp(0.12, 0.17, far)], [7, lerp(0.1, 0.17, far)], [3, lerp(0.04, 0.1, far)], [4, lerp(0.01, 0.05, far)]] as const);
+        const wallPalette = far > 0.5 ? FAR_HOUSE_WALLS : HOUSE_WALLS;
         // the two rows face away from each other; lots never overlap, so only landmarks/other districts are checked
         const sides: [number, number][] = bd >= 40 ? [[bz0 + depth / 2, 0], [bz1 - depth / 2, Math.PI]] : [[(bz0 + bz1) / 2, 0]];
         for (const [lz, face] of sides) {
@@ -650,8 +709,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
             const formRoll = drng.next();
             const form = formRoll < 0.42 ? 0 : formRoll < 0.78 ? 1 : 2;
             const h = form === 2 ? floors * 3.1 + 0.6 : (floors * 3.1) / 0.68;
-            const roof = drng.chance(0.65) ? blockRoof : drng.pick([0, 1, 2, 3, 4, 5, 6, 7]);
+            const roof = drng.chance(0.65) ? blockRoof : drng.pick(far > 0.5 ? [0, 1, 3, 4, 6, 7, 7, 1] : [0, 1, 2, 3, 4, 5, 6, 7]);
             const lk = look(FAM.house, drng);
+            lk.tint = drng.pick(wallPalette);
             place('house', x, z, hw, h, hd, rot, lk.tint, S.HOUSE, 3.0, { roof, form, lit: lk.lit, warm: lk.warm, variant: lk.variant, margin: 1 });
             const cr = Math.cos(rot), sr = Math.sin(rot);
             // garage / shed beside the house
