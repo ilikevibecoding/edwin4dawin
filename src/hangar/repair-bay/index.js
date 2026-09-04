@@ -246,6 +246,7 @@ function weldStall(kit, P, z0, z1, opts = {}) {
   stripFixture(kit, P, -138.9, FLOOR + 2.3, zc, 1.4, "z", "emitAmber", { w: 0.2 });
   kit.cyl("metal", -139.35, FLOOR + 3.55, zc, 0.18, 1.3, "y", { color: P.impGrey, segments: 12 });
   kit.cyl("paintedMetal", -139.35, FLOOR + 2.94, zc, 0.24, 0.1, "y", { color: P.impDark, segments: 12 });
+  kit.boxMM("paintedMetal", [WEST_FACE - 0.02, FLOOR + 4.15, zc - 0.32], [-139.05, FLOOR + 4.55, zc + 0.32], { color: P.impBlack, texel: 2 }); // extraction collar into the wall
   wallScreen(new Placer(kit, [WEST_FACE + 0.06, FLOOR, zc], -90), P, { w: 1.1, h: 0.7, y: 1.6, mat: live ? "screenImp1" : "screenImp0" });
   // gas cart south of the table: two grey bottles with blue / amber collars
   const gz = zc + 1.4;
@@ -412,7 +413,7 @@ export default {
     }
     const westRack = (zc, h = 2.8) => partsRack(new Placer(kit, [WEST_FACE + 0.42, FLOOR, zc], -90), P, rand, { w: 3.0, h, tiers: 4, d: 0.8 });
     for (const zc of [129.0, 135.0, 138.4, 141.4, 147.2, 150.6, 154.0, 160.0, 163.4]) westRack(zc);
-    toolChest(new Placer(kit, [-139.2, FLOOR, 155.9], -90), P);
+    toolChest(new Placer(kit, [-139.2, FLOOR, 156.2], -90), P);
     lockerBank(new Placer(kit, [WEST_FACE + 0.3, FLOOR, 167.2], -90), P, 4);
     emergencyCabinet(new Placer(kit, [WEST_FACE + 0.32, FLOOR, 80.0], -90), P);
 

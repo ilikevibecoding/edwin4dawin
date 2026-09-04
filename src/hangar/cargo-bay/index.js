@@ -7,7 +7,7 @@
 // harsh white key spots pooling on the racking and the receiving station, an amber strobe at the door.
 import * as THREE from "three";
 import { rng } from "../../kit.js";
-import { buildShell, floorMark, floorRect, floorDashes, floorCorners, wallJunction, crewHatch, WALL_T, YELLOW } from "../bays-shared/shell.js";
+import { buildShell, floorMark, floorRect, floorCorners, wallJunction, crewHatch, WALL_T, YELLOW } from "../bays-shared/shell.js";
 import { bayMaterials } from "../bays-shared/materials.js";
 import { Placer, consoleUnit, wallScreen, palletRack, partsRack, lockerBank, crateGeometry, crateLabelGeometry, drumGeometry, instanced, loader, conveyor, chainHoist, handrail, beaconLamp, statusPost, pointLight, spotLight } from "../bays-shared/props.js";
 
@@ -111,7 +111,7 @@ export default {
       seed: 37,
       floor: { color: 0x3c4046, plate: 5 },
       // racking covers the east wall; the west wall carries the lower racking + the sorter cabinet
-      services: { perWall: { east: false } },
+      services: { perWall: { east: false, west: { v: 3.2 } } }, // no tray behind the tall racking; west tray clears the 2.9 m sorter cabinet
       panelsPerWall: {
         east: { stripCuts: EAST_RUNS.map((zc) => [zc - 18.9, zc + 18.9]) },
         west: { stripCuts: [[WEST_RUN.zc - 7.0, WEST_RUN.zc + 7.0], [BELT_Z - 1.7, BELT_Z + 1.7], [160.3, 167.1]] },
@@ -171,11 +171,12 @@ export default {
     floorRect(kit, 81.6, 156.4, 86.0, 160.0, FLOOR, P.impWhite, 0.12);
     for (const z of [162.0, 165.4]) partsRack(new Placer(kit, [80 + WALL_T + 0.06 + 0.42, FLOOR, z], -90), P, rand, { w: 3.0, h: 2.6, tiers: 4, d: 0.8 });
 
-    // ---- hangar-door lane: yellow edges, white centre dashes, a yellow end bar; scan gate across it
+    // ---- hangar-door lane: yellow edges, a white hold bar before the scan gate, a yellow end bar (no
+    //      centre dashes — a dashed centreline reads as a road)
     floorMark(kit, 80 + WALL_T + 1.0, LANE.z0 - 0.2, LANE.xEnd, LANE.z0, FLOOR, YELLOW);
     floorMark(kit, 80 + WALL_T + 1.0, LANE.z1, LANE.xEnd, LANE.z1 + 0.2, FLOOR, YELLOW);
     floorMark(kit, LANE.xEnd - 0.2, LANE.z0 - 0.2, LANE.xEnd + 0.2, LANE.z1 + 0.2, FLOOR, YELLOW, { h: 0.017 });
-    floorDashes(kit, 82.5, 120, LANE.xEnd - 0.6, 120, FLOOR, P.impWhite, { w: 0.2, dash: 1.4, gapLen: 0.9 });
+    floorMark(kit, 93.2, LANE.z0 + 0.4, 93.6, LANE.z1 - 0.4, FLOOR, P.impWhite, { h: 0.017 });
     scanGate(kit, P, 96, LANE.z0 - 1.4, LANE.z1 + 1.4, 6.8);
 
     // ---- marshalling squares either side of the lane: crate stacks with white corner brackets that
@@ -202,12 +203,13 @@ export default {
     wallScreen(new Placer(kit, [80 + WALL_T + 0.1, FLOOR, 130.5], -90), P, { w: 2.0, h: 1.2, mat: "screenImp1" });
     statusPost(kit, P, 98.6, FLOOR, 112.6, { face: 180, lens: "emitBlue" });
 
-    // ---- loader in the main aisle facing the racking, a pallet on its forks, staged pallets in a box
-    loader(new Placer(kit, [130.5, FLOOR, 104], -70), P, { liftH: 0.9 });
+    // ---- loader crossing from the racking toward the marshalling squares (mast + forks + pallet toward
+    //      the loader view), staged pallets in a box
+    loader(new Placer(kit, [130.5, FLOOR, 104], 90), P, { liftH: 0.9 });
     {
-      const pl = new Placer(kit, [130.5, FLOOR, 104], -70);
+      const pl = new Placer(kit, [130.5, FLOOR, 104], 90);
       pl.box("paintedMetal", 0, 0.98, -2.2, 1.4, 0.16, 1.4, { color: P.impDark, texel: 2 });
-      crate(pl.point(0, 1.06, -2.2), -70, 1, P.impGrey);
+      crate(pl.point(0, 1.06, -2.2), 90, 1, P.impGrey);
     }
     for (const [z, kind] of [[94.6, "c2"], [97.3, "d"], [100.0, "c1"]]) {
       kit.box("paintedMetal", 127.4, FLOOR + 0.08, z, 1.5, 0.16, 1.5, { color: P.impDark, texel: 2 });
@@ -262,7 +264,7 @@ export default {
     consoleUnit(new Placer(kit, [123.8, FLOOR, 164.2], 90), P, { w: 1.6, screens: ["screenImp1"] });
     wallScreen(new Placer(kit, [121.5, FLOOR, 170 - WALL_T - 0.08], 0), P, { w: 2.6, h: 1.2, mat: "screenImp0" });
     lockerBank(new Placer(kit, [125.8, FLOOR, 170 - WALL_T - 0.06 - 0.3], 0), P, 4);
-    handrail(kit, P, [117.2, 161.5], [117.2, 170 - WALL_T - 0.1], FLOOR);
+    handrail(kit, P, [117.2, 161.5], [117.2, 170 - WALL_T - 0.3], FLOOR);
     handrail(kit, P, [117.2, 161.5], [127.4, 161.5], FLOOR);
     statusPost(kit, P, 114.6, FLOOR, 167.6, { face: 0, lens: "emitBlue" });
 
@@ -304,7 +306,7 @@ export default {
     for (const [x, z] of [[97, 85], [125, 85], [97, 120], [125, 120], [97, 155], [125, 155]]) L.push(pointLight([x, FLOOR + 11, z], 0xdde8ff, 240, 40, 0.5));
     const strobeLight = pointLight([sx + 0.8, FLOOR + 11.2, 120], 0xffa028, 60, 22, 0.7);
     L.push(strobeLight);
-    L.push(pointLight([116, CEIL - 6, 136], 0xdde8ff, 80, 20, 0.5)); // hoist zone
+    L.push(pointLight([116, CEIL - 7, 140.5], 0xdde8ff, 80, 20, 0.5)); // hoist zone (off the chain line so the hoist body is not blown out)
     for (const zc of EAST_RUNS) L.push(spotLight([RACK_FRONT - 8, CEIL - 2.5, zc], [RACK_FRONT - 0.5, FLOOR, zc], 0xf2f6ff, 800, 44, 0.5, 0.5, 0.9));
     L.push(spotLight([BELT_X1 - 4, CEIL - 2.5, BELT_Z - 2], [BELT_X1 + 1.5, FLOOR, BELT_Z], 0xf2f6ff, 600, 40, 0.42, 0.5, 0.85));
     L.push(spotLight([84, CEIL - 3, 120], [96, FLOOR, 120], 0xf2f6ff, 450, 40, 0.5, 0.5, 0.6));

@@ -446,7 +446,9 @@ export function stairs(pl, P, opts = {}) {
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
   for (const sx of [-1, 1]) {
     const x = (sx * (w + 0.08)) / 2;
-    pl.add("paintedMetal", new THREE.BoxGeometry(0.08, 0.32, L + 0.2), x, H / 2 - 0.1, R / 2, { color: P.impDark, texel: 1, quat: q });
+    // stringer: long axis on y so the same quaternion lays it along the slope (z becomes the slope normal);
+    // 0.3 m short at both ends so its corners stay above the floor and below the top tread
+    pl.add("paintedMetal", new THREE.BoxGeometry(0.08, L - 0.6, 0.32), x, H / 2, R / 2, { color: P.impDark, texel: 1, quat: q });
     if (rails) {
       pl.add("metal", new THREE.CylinderGeometry(0.03, 0.03, L, 10), x, H / 2 + 1.0, R / 2, { color: P.impGrey, uv: "scale", uvScale: [0.2, L], quat: q });
       for (const t of [0.08, 0.5, 0.92]) pl.box("paintedMetal", x, H * t + 0.5, R * t, 0.06, 1.0, 0.06, { color: P.impBlack, texel: 2 });

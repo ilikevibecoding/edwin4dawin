@@ -54,25 +54,20 @@ function octagonPad(kit, P) {
     for (const t of [-0.5, 0.5]) {
       const px = cx + nx * d3 - nz * (half * t);
       const pz = cz + nz * d3 + nx * (half * t);
-      kit.add("paintedMetal", new THREE.BoxGeometry(0.7, 0.08, 0.7), { pos: [px, top + 0.04, pz], rot: [0, a, 0], color: P.impBlack, texel: 2 });
-      kit.add("padLight", new THREE.BoxGeometry(0.5, 0.03, 0.5), { pos: [px, top + 0.085, pz], rot: [0, a, 0], uv: "keep" });
+      kit.add("paintedMetal", new THREE.BoxGeometry(0.6, 0.08, 0.6), { pos: [px, top + 0.04, pz], rot: [0, a, 0], color: P.impBlack, texel: 2 });
+      kit.add("padLight", new THREE.BoxGeometry(0.42, 0.03, 0.42), { pos: [px, top + 0.085, pz], rot: [0, a, 0], uv: "keep" });
     }
-    // tie-down rings at r 8.5 on the edge normals
-    const d4 = 8.5;
-    kit.add("paintedMetal", new THREE.CylinderGeometry(0.42, 0.42, 0.02, 16), { pos: [cx + nx * d4, top + 0.005, cz + nz * d4], color: P.impBlack, uv: "world", texel: 1 });
-    kit.add("metal", new THREE.TorusGeometry(0.22, 0.035, 6, 16), { pos: [cx + nx * d4, top + 0.035, cz + nz * d4], rot: [Math.PI / 2, 0, 0], color: P.impGrey, uv: "scale", uvScale: [4, 1] });
+    // tie-down rings on the four cardinal edges only (r 8.5), so the plate does not read as a field of pucks
+    if (i % 2 === 0) {
+      const d4 = 8.5;
+      kit.add("paintedMetal", new THREE.CylinderGeometry(0.42, 0.42, 0.02, 16), { pos: [cx + nx * d4, top + 0.005, cz + nz * d4], color: P.impBlack, uv: "world", texel: 1 });
+      kit.add("metal", new THREE.TorusGeometry(0.22, 0.035, 6, 16), { pos: [cx + nx * d4, top + 0.035, cz + nz * d4], rot: [Math.PI / 2, 0, 0], color: P.impGrey, uv: "scale", uvScale: [4, 1] });
+    }
   }
-  // Imperial pad markings: white skid box, approach centreline along x with touchdown bars, inner lamps
+  // Imperial pad markings: white skid box, approach centreline along x with touchdown bars
   floorRect(kit, cx - 7.5, cz - 4.5, cx + 7.5, cz + 4.5, top, P.impWhite, 0.2);
   for (const [x0, x1] of [[cx - 10.4, cx - 2.2], [cx + 2.2, cx + 10.4]]) floorMark(kit, x0, cz - 0.12, x1, cz + 0.12, top, P.impWhite, { h: 0.012 });
   for (const x of [cx - 3.0, cx + 3.0]) floorMark(kit, x - 0.12, cz - 2.6, x + 0.12, cz + 2.6, top, P.impWhite, { h: 0.012 });
-  for (let i = 0; i < 8; i++) {
-    const a = (i * Math.PI) / 4 + Math.PI / 8;
-    const px = cx + Math.sin(a) * 6.8;
-    const pz = cz + Math.cos(a) * 6.8;
-    kit.add("paintedMetal", new THREE.BoxGeometry(0.5, 0.08, 0.5), { pos: [px, top + 0.04, pz], rot: [0, a, 0], color: P.impBlack, texel: 2 });
-    kit.add("emitAmber", new THREE.BoxGeometry(0.34, 0.03, 0.34), { pos: [px, top + 0.085, pz], rot: [0, a, 0], uv: "keep" });
-  }
   // colliders approximating the octagon (three overlapping AABBs)
   const s = PAD_APOTHEM + 0.1;
   const k = 7.05; // half-width of the flats

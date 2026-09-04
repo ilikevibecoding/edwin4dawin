@@ -355,9 +355,14 @@ export function doorSurrounds(kit, wall, holes, P, opts = {}) {
       const band = 0.7;
       const n1 = WALL_T + 0.16;
       const bandTop = h.v1 + inner + band;
-      wallBox(kit, "hazardImp", wall, h.u0 - inner - band, h.u0 - inner, y0, bandTop, WALL_T, n1, { texel: 0.4 });
-      wallBox(kit, "hazardImp", wall, h.u1 + inner, h.u1 + inner + band, y0, bandTop, WALL_T, n1, { texel: 0.4 });
-      wallBox(kit, "hazardImp", wall, h.u0 - inner, h.u1 + inner, h.v1 + inner, bandTop, WALL_T, n1, { texel: 0.4 });
+      // dark jambs + header; black/yellow only on the lower 2.4 m of each jamb (sparse, at eye level)
+      const hz = 2.4;
+      for (const [ja, jb] of [[h.u0 - inner - band, h.u0 - inner], [h.u1 + inner, h.u1 + inner + band]]) {
+        wallBox(kit, "hazardImp", wall, ja, jb, y0, y0 + hz, WALL_T, n1, { texel: 0.4 });
+        wallBox(kit, "paintedMetal", wall, ja, jb, y0 + hz, bandTop, WALL_T, n1, { color: P.impDark, texel: 1 });
+      }
+      wallBox(kit, "paintedMetal", wall, h.u0 - inner, h.u1 + inner, h.v1 + inner, bandTop, WALL_T, n1, { color: P.impDark, texel: 1 });
+      wallBox(kit, "emitAmber", wall, h.u0 - inner + 0.3, h.u1 + inner - 0.3, h.v1 + inner + 0.3, h.v1 + inner + 0.38, n1, n1 + 0.02, { uv: "keep" });
       // heavy lintel above the band + pylons either side (proud 0.55), a lit strip runs up and over
       const pu0 = h.u0 - inner - band - 0.6;
       const pu1 = h.u1 + inner + band + 0.6;
@@ -418,7 +423,8 @@ export function doorSurrounds(kit, wall, holes, P, opts = {}) {
 // interrupted by door surrounds (terminating in junction boxes) and by the frame ribs.
 // ---------------------------------------------------------------------------
 export function wallServices(kit, wall, holes, P, opts = {}) {
-  const { v = TRAY_Y, margin = 1.2, pilasters = [], endBoxes = true } = opts;
+  const { v: trayH = TRAY_Y, margin = 1.2, pilasters = [], endBoxes = true } = opts;
+  const v = wall.y0 + trayH; // opts.v is the tray height above the room floor
   let spans = [[wall.a0 + margin, wall.a1 - margin]];
   const cut = (c0, c1) => {
     const next = [];
