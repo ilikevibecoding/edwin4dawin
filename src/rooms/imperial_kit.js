@@ -424,7 +424,7 @@ export function impConsole(kit, cx, cy, cz, w, d, opts = {}) {
   for (let i = 0; i < nb; i++) {
     const bx = -w / 2 + 0.2 + i * 0.11;
     const r = rand();
-    const mat = r < 0.22 ? accentKey : r < 0.32 ? "emitRedImp" : r < 0.4 ? "emitWhite" : "impGloss";
+    const mat = r < 0.22 ? accentKey : r < 0.32 ? "emitRedImp" : r < 0.36 ? "emitWhiteSoft" : "impGloss";
     const p = place(bx, height + 0.085 - 0.03, d * 0.24);
     const qq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, tilt));
     kit.add(mat, new THREE.BoxGeometry(0.07, 0.03, 0.07), { pos: [p.x, p.y, p.z], quat: qq });
