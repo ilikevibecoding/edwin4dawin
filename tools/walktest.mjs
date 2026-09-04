@@ -8,6 +8,7 @@
 //   - stairs: bridge pit flights, hangar stair tower → flight control, reactor switchbacks → catwalk ring,
 //     briefing tiers
 // Usage: node tools/walktest.mjs [url] [--out=shots/validator] [--json=/tmp/walktest.json] [--only=doors|lifts|stairs]
+//        [--doors=hg_cargo,hg_lobby]  (restrict the door sweep to these door ids)
 import { chromium } from "playwright-core";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -430,13 +431,14 @@ await ev(() => {
     return out;
   }
 
-  window.__wt = { doorTest, frontBlockers, liftTest, pathTest, doors: [...d.doors.doors.keys()], lobbies: ["lift_lobby_tower", "crew_lobby", "hangar_lobby", "eng_lobby"] };
+  window.__wt = { doorTest, frontBlockers, laneScan, liftTest, pathTest, doors: [...d.doors.doors.keys()], lobbies: ["lift_lobby_tower", "crew_lobby", "hangar_lobby", "eng_lobby"] };
 });
 
 // ---------------------------------------------------------------------------------------------------
 // 1. doors (both directions) + spawn walks
 // ---------------------------------------------------------------------------------------------------
-const doorSpecs = await ev(() => [...window.debugAPI.doors.doors.values()].map((r) => ({ id: r.spec.id, a: r.spec.a, b: r.spec.b, kind: r.spec.kind })));
+const doorFilter = flags.doors ? flags.doors.split(",") : null;
+const doorSpecs = (await ev(() => [...window.debugAPI.doors.doors.values()].map((r) => ({ id: r.spec.id, a: r.spec.a, b: r.spec.b, kind: r.spec.kind })))).filter((s) => !doorFilter || doorFilter.includes(s.id));
 if (only.includes("doors")) {
   console.log(`\n== doors: ${doorSpecs.length} × 2 directions`);
   for (const s of doorSpecs) {
@@ -447,6 +449,12 @@ if (only.includes("doors")) {
       const status = r.reached ? "PASS" : "FAIL";
       console.log(`${status} ${s.id.padEnd(16)} ${(r.kind + "").padEnd(6)} ${from.padEnd(18)}→ ${r.to.padEnd(18)} ${r.reached ? `through in ${r.travelled} m (door open at ${r.openAt ?? "-"} m, unblocked at ${r.unblockedAt ?? "-"} m)` : JSON.stringify(r.stuck || r.fell)}${r.gap ? ` GAP ${JSON.stringify(r.gap)}` : ""}${r.warn ? ` WARN ${r.warn}` : ""}${r.override ? ` [override: ${r.override}]` : ""} | ${spawn}`);
       if (!r.reached || r.fell || (r.toSpawn && (r.toSpawn.fell || r.toSpawn.gap))) r.shot = await shot(`door_${s.id}_from_${from}`);
+      // a blocked (not fallen) doorway: which 1 m lanes across the span are passable at all?
+      if (!r.reached && !r.fell && !r.gap) {
+        const ls = await ev(([id, f]) => window.__wt.laneScan(id, f), [s.id, from]);
+        r.laneScan = ls;
+        console.log(`     lane scan ${s.id} from ${from}: span ${ls.axisAcross} ${ls.span[0]}..${ls.span[1]} → passable lanes ${ls.passable.length ? ls.passable.join(", ") : "none"}; blocked lanes ${ls.blockedLanes.join(", ") || "none"}`);
+      }
     }
   }
   // overridden doors without the override: is the generic "3 m in front of the door centre" approach passable?
@@ -455,7 +463,7 @@ if (only.includes("doors")) {
     ["hg_fc", "flight_control"],
     ["br_tac", "bridge"],
     ["br_nav", "bridge"],
-  ]) {
+  ].filter(([id]) => !doorFilter || doorFilter.includes(id))) {
     const r = await ev(([i, f]) => window.__wt.doorTest(i, f, false), [id, from]);
     results.doors.push({ ...r, note: "door-centre approach without override" });
     console.log(`${r.reached ? "PASS" : "INFO"} ${id} generic door-centre approach from ${from} (no override): ${r.reached ? `passable (${r.travelled} m)` : "blocked: " + JSON.stringify(r.stuck || r.fell)}`);
@@ -582,7 +590,7 @@ if (only.includes("stairs")) {
 // ---------------------------------------------------------------------------------------------------
 const nd = results.doors.filter((r) => !r.note);
 const summary = {
-  doors: { total: nd.length, passed: nd.filter((r) => r.reached).length, failed: nd.filter((r) => !r.reached).map((r) => `${r.door} from ${r.from}`), gaps: nd.filter((r) => r.gap).map((r) => `${r.door} from ${r.from}`), spawnBlocked: nd.filter((r) => r.toSpawn && !r.toSpawn.ok).map((r) => `${r.to} via ${r.door}: ${r.toSpawn.leftRoom ? "left room → " + r.toSpawn.leftRoom : r.toSpawn.fell ? "FELL" : `${r.toSpawn.remaining} m short`}`) },
+  doors: { total: nd.length, passed: nd.filter((r) => r.reached).length, failed: nd.filter((r) => !r.reached).map((r) => `${r.door} from ${r.from}`), gaps: nd.filter((r) => r.gap).map((r) => `${r.door} from ${r.from}`), spawnBlocked: nd.filter((r) => r.toSpawn && !r.toSpawn.ok).map((r) => `${r.to} via ${r.door}: ${r.toSpawn.leftRoom ? "left room → " + r.toSpawn.leftRoom : r.toSpawn.fell ? "FELL" : `${r.toSpawn.blockedAt ? "blocked" : "deflected"} ${r.toSpawn.remaining ?? (r.toSpawn.notReached && r.toSpawn.notReached.remaining)} m short`}`) },
   blockers: results.blockers.filter((b) => b.hits && b.hits.length).map((b) => `${b.door}/${b.room}: ${b.hits.map((h) => h.tag).join(",")}`),
   lifts: { total: results.lifts.length, passed: results.lifts.filter((r) => r.ok).length, failed: results.lifts.filter((r) => !r.ok).map((r) => `${r.lobby}:${r.cab}→${r.dest}`) },
   stairs: { total: results.stairs.length, passed: results.stairs.filter((r) => r.ok).length, failed: results.stairs.filter((r) => !r.ok).map((r) => r.name) },

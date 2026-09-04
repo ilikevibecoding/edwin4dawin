@@ -38,6 +38,26 @@ async function openPage() {
   const t0 = Date.now();
   await page.goto(url, { waitUntil: "load", timeout: 120000 });
   await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 600000 });
+  // rAF gate (same as walktest): sections that compare simulated clocks across pages freeze the app's own
+  // frame loop so only `simulate` advances time; pending callbacks are replayed on resume
+  await page.evaluate(() => {
+    const orig = window.requestAnimationFrame.bind(window);
+    const R = (window.__raf = { orig, pending: [], paused: false });
+    window.requestAnimationFrame = (cb) => {
+      if (R.paused) {
+        R.pending.push(cb);
+        return 0;
+      }
+      return orig(cb);
+    };
+    window.__pause = () => {
+      R.paused = true;
+    };
+    window.__resume = () => {
+      R.paused = false;
+      for (const cb of R.pending.splice(0)) orig(cb);
+    };
+  });
   return { page, readyMs: Date.now() - t0 };
 }
 const { page, readyMs } = await openPage();
@@ -382,6 +402,10 @@ if (only.includes("fighters")) {
 // ---------------------------------------------------------------------------------------------------
 if (only.includes("sync")) {
   log(`\n== sync`);
+  // freeze page 1's own frame loop: from here on only `simulate` advances doors / traffic, so the two pages
+  // can be compared at identical clocks (a live loop would add ~0.1 s of real time per rendered frame)
+  await ev(() => window.__pause());
+  await new Promise((r) => setTimeout(r, 6000)); // let an in-flight frame finish
   const s1 = await ev(() => {
     const d = window.debugAPI;
     // put a few doors in motion: bridge blast door + tactical side door
@@ -398,6 +422,8 @@ if (only.includes("sync")) {
   });
   log(`snapshot: ${s1.bytes} bytes; doors ${JSON.stringify(s1.doors)}; lift ${JSON.stringify(s1.snap.lift)}; traffic fighters ${s1.snap.traffic ? s1.snap.traffic.fighters.length : 0}; alert ${s1.alert}`);
   const { page: p2, readyMs: ready2 } = await openPage();
+  await p2.evaluate(() => window.__pause());
+  await new Promise((r) => setTimeout(r, 6000));
   const s2 = await p2.evaluate((s1) => {
     const d = window.debugAPI;
     d.setView("bridge"); // build the tower so the bridge doors exist
@@ -435,21 +461,28 @@ if (only.includes("sync")) {
     maxPosErr = Math.max(maxPosErr, Math.hypot(a.pos[0] - b.pos[0], a.pos[1] - b.pos[1], a.pos[2] - b.pos[2]));
   }
   // determinism after more simulated time on both pages
-  const [a5, b5] = await Promise.all([
-    ev(() => {
-      window.debugAPI.simulate(5);
-      return window.debugAPI.traffic.fighters.map((f) => f.pos.toArray().map((v) => +v.toFixed(3)));
-    }),
-    p2.evaluate(() => {
-      window.debugAPI.simulate(5);
-      return window.debugAPI.traffic.fighters.map((f) => f.pos.toArray().map((v) => +v.toFixed(3)));
-    }),
-  ]);
+  const step5 = () => {
+    const d = window.debugAPI;
+    d.simulate(5);
+    return { clock: d.traffic.clock, states: d.traffic.fighters.map((f) => f.state), pos: d.traffic.fighters.map((f) => f.pos.toArray().map((v) => +v.toFixed(3))) };
+  };
+  const [A5, B5] = await Promise.all([ev(step5), p2.evaluate(step5)]);
+  const a5 = A5.pos;
+  const b5 = B5.pos;
   let maxErr5 = 0;
-  for (let i = 0; i < a5.length; i++) maxErr5 = Math.max(maxErr5, Math.hypot(a5[i][0] - b5[i][0], a5[i][1] - b5[i][1], a5[i][2] - b5[i][2]));
+  let stateMismatch5 = 0;
+  for (let i = 0; i < a5.length; i++) {
+    maxErr5 = Math.max(maxErr5, Math.hypot(a5[i][0] - b5[i][0], a5[i][1] - b5[i][1], a5[i][2] - b5[i][2]));
+    if (A5.states[i] !== B5.states[i]) stateMismatch5++;
+  }
+  await ev(() => window.__resume());
   const stale = Object.entries(s2.slabState).filter(([, v]) => v && typeof v === "object" && v.openness > 0.8 && (v.slabMoved === 0 || v.colliderEnabled === true)).map(([id]) => id);
-  R.sync = { bytes: s1.bytes, readyMs2: ready2, doorMatch, doorsA: s1.doors, doorsB: s2.doors, doorsBeforeApply: s2.before, fighterStateMismatch: stateMismatch, maxPosErr: +maxPosErr.toFixed(4), maxPosErrAfter5s: +maxErr5.toFixed(4), clockA: s1.clock, clockB: s2.clock, alertA: s1.alert, alertB: s2.alert, liftInSnapshot: s1.snap.lift, slabState: s2.slabState, slabAfterTick: s2.slabAfterTick, staleDoorVisuals: stale, ok: doorMatch && stateMismatch === 0 && maxPosErr < 0.01 && maxErr5 < 0.01 && Math.abs(s1.alert - s2.alert) < 1e-6 };
-  log(`${R.sync.ok ? "PASS" : "FAIL"} sync apply on a fresh page: doors match=${doorMatch}, fighter state mismatches ${stateMismatch}, max pos error ${maxPosErr.toFixed(4)} m (after +5 s: ${maxErr5.toFixed(4)} m), clock ${s1.clock.toFixed(3)} → ${s2.clock.toFixed(3)}, alert ${s1.alert} → ${s2.alert}`);
+  // page 2 ran one 1/60 s tick after apply, so its clock leads by ≤ 1/60 s: allow the distance a fighter
+  // covers in that time (≤ 60 m/s) plus a little
+  const clockGap = Math.abs(A5.clock - B5.clock);
+  const tol5 = 0.01 + clockGap * 60;
+  R.sync = { bytes: s1.bytes, readyMs2: ready2, doorMatch, doorsA: s1.doors, doorsB: s2.doors, doorsBeforeApply: s2.before, fighterStateMismatch: stateMismatch, maxPosErr: +maxPosErr.toFixed(4), maxPosErrAfter5s: +maxErr5.toFixed(4), stateMismatchAfter5s: stateMismatch5, clockA: s1.clock, clockB: s2.clock, clockA5: A5.clock, clockB5: B5.clock, alertA: s1.alert, alertB: s2.alert, liftInSnapshot: s1.snap.lift, slabState: s2.slabState, slabAfterTick: s2.slabAfterTick, staleDoorVisuals: stale, ok: doorMatch && stateMismatch === 0 && maxPosErr < 0.01 && maxErr5 < tol5 && stateMismatch5 === 0 && Math.abs(s1.alert - s2.alert) < 1e-6 };
+  log(`${R.sync.ok ? "PASS" : "FAIL"} sync apply on a fresh page: doors match=${doorMatch}, fighter state mismatches ${stateMismatch}, max pos error ${maxPosErr.toFixed(4)} m (after +5 s: ${maxErr5.toFixed(4)} m, clocks ${A5.clock.toFixed(3)} vs ${B5.clock.toFixed(3)}, tolerance ${tol5.toFixed(2)} m, state mismatches ${stateMismatch5}), clock ${s1.clock.toFixed(3)} → ${s2.clock.toFixed(3)}, alert ${s1.alert} → ${s2.alert}`);
   log(`   applied door records (before any tick): ${JSON.stringify(s2.slabState)}`);
   log(`   after one tick: ${JSON.stringify(s2.slabAfterTick)}`);
   if (stale.length) log(`   WARN doors logically open but slabs unmoved / collider still enabled after apply: ${stale.join(", ")}`);
