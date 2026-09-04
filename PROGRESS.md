@@ -121,6 +121,15 @@ Fixes made (each reproduced first with the reviewer's own view or probe, then re
   (was "07" on all four decks); lit turbolift cabs (data light registered with the lobby room); default camera
   positions for `hangar`, `briefing`, `comms`, `fighter_maint`, `repair_bay`, `cargo_bay` now frame the hero content.
 
+Re-measured after the fix pass (`perf/fixpass_v1.md`, same views and resolution): shader programs now 47 → 131
+across the whole tour (was 43 → 343); heap 84–241 MB; exterior 94 / 202 / 252 calls (far / mid / belly), bridge 419,
+command corridor 432, engineering 276, crew corridor 385, ordinary rooms 179–274 calls. The one regression is the
+flagship `hangar` view, which the critic asked to move to the forward end looking aft: it now sees the whole bay
+plus four neighbouring rooms through their arches — 489 calls, 2.34 M triangles including the shadow pass (it was
+270 / 1.18 M from the old wall-facing corner). Boot to first frame 5.1 s (hull plating 2.0 s). Regression suites
+after the fix pass: `navtest` 11/11, `traffic_test` 19/19, `audio_test` 40/40, `atmo_test` 20/20,
+`walktest --only=doors` 66 checks and zero floor gaps, `mobiletest` 11/11, `vite build` clean, no page errors.
+
 Not addressed in this pass (design work, listed as limitations): landmark variation along the 124–144 m corridors,
 mid-floor dressing in the large engineering/medbay/armory/lounge rooms, identical bunks/tanks/racks, the sub-900 m
 exterior plating variety the exterior critic asked for, and the reactor/hyperdrive pulse being too subtle.
