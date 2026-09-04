@@ -11,7 +11,7 @@ import { wallFrame } from "../../../core/frame.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { console as impConsole, pipeRun, pointLightDesc, spotLightDesc, walkable, lockers, wallScreen, bench, railing } from "../../impKit.js";
-import { bayWall, bayCeiling, gallery, pillar, openStairs, deckMark, laneMarks, hatchBand, padLights, taxiLights, floorStencil, hoseReel, bowser, toolCart, wallLadder, fireStation, fuelTank, crateStack, partsRack, statusBoard, floodMast, serviceGantry, deckTractor, cargoSled, generator, rollingLadder } from "../../../hangar/hangarKit.js";
+import { bayWall, bayCeiling, gallery, pillar, openStairs, deckMark, laneMarks, hatchBand, chevrons, padLights, taxiLights, floorStencil, hoseReel, bowser, toolCart, wallLadder, fireStation, fuelTank, crateStack, partsRack, statusBoard, floodMast, serviceGantry, deckTractor, cargoSled, generator, rollingLadder } from "../../../hangar/hangarKit.js";
 import { addShuttle } from "../../../hangar/shuttle.js";
 
 const RIB = "impPaintedMetal";
@@ -154,7 +154,9 @@ export function buildShuttleBay(kit, ctx) {
   walkable(ctx, px0, pz0, px1, pz1, pY, "pad");
   // landing markings on the pad and the approach lanes on the deck
   deckMark(kit, cx, cz, pY, 20, 20, 1);
-  for (const sz of [-1, 1]) deckMark(kit, cx, cz + sz * 19, pY, 6, 6, 3);
+  // approach chevrons at both pad ends as painted geometry (the numeral decal smeared into red/yellow
+  // noise from the apron: the atlas cells bleed into each other at grazing mips)
+  for (const sz of [-1, 1]) chevrons(kit, cx, cz + sz * 17, pY, [0, -sz], { n: 3, w: 5, pitch: 1.6, stripe: 0.45 });
   // keep-clear squares at the pad corners: a bold painted frame with two wide diagonals (fine stripes
   // aliased into red noise from across the bay)
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) hatchBand(kit, [cx + sx * 15 - 3, cz + sz * 19 - 3, cx + sx * 15 + 3, cz + sz * 19 + 3], pY, { pitch: 2.2, stripe: 0.6, border: 0.35, margin: 0.5, frame: true });
@@ -307,7 +309,7 @@ export function buildShuttleBay(kit, ctx) {
 
   // ---- views -------------------------------------------------------------------------------------
   ctx.view("shuttleBay", 0, y + STD.eye, 293.5, 180, -2);
-  ctx.view("shuttleBay_ramp", -13, y + STD.eye, 318, 236, 4);
+  ctx.view("shuttleBay_ramp", -13, y + STD.eye, 318, 224, 4);
   ctx.view("shuttleBay_apron", 42, y + STD.eye, 350, 72, 2);
   // gallery view: not a ROOMS id on purpose, so the debug harness takes the floor from y (gallery level)
   ctx.views.shuttleBay_gallery = { x: 20, y: gy + STD.eye, z: z1 - t - 1.5, yaw: 20, pitch: -12, room: "shuttleBay:gallery" };

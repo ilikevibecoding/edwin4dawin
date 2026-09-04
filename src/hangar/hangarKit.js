@@ -502,6 +502,29 @@ export function padLights(kit, box, y, opts = {}) {
     put(x1 - inset, z, false);
   }
 }
+// Painted approach chevrons as geometry: n chevrons of width w pointing along dir ([x,z] unit-ish),
+// stacked every `pitch` from (x, z) backwards. Crisp at any angle, unlike the atlas decal whose
+// neighbouring cells bleed into it at low mips.
+export function chevrons(kit, x, z, y, dir, opts = {}) {
+  const { n = 3, w = 4, pitch = 1.4, stripe = 0.4, color = IMP.hazardYellow, mat = RIB } = opts;
+  const L = Math.hypot(dir[0], dir[1]) || 1;
+  const ux = dir[0] / L;
+  const uz = dir[1] / L;
+  const yaw = Math.atan2(ux, uz); // rotation about y taking +z to (ux, uz)
+  const arm = Math.hypot(w / 2, w / 2);
+  for (let i = 0; i < n; i++) {
+    // tip at distance -i * pitch along dir; the two arms run back and out at 45°
+    const tx = x - ux * i * pitch;
+    const tz = z - uz * i * pitch;
+    for (const s of [-1, 1]) {
+      const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw - s * (Math.PI / 4));
+      // arm centre: half-way from the tip back along the arm direction (dir rotated by ±135°)
+      const ax = -ux * Math.SQRT1_2 + s * uz * Math.SQRT1_2;
+      const az = -uz * Math.SQRT1_2 - s * ux * Math.SQRT1_2;
+      kit.add(mat, new THREE.BoxGeometry(stripe, 0.012, arm), { pos: [tx + ax * arm / 2, y + 0.01, tz + az * arm / 2], quat: q, color, texel: 1 });
+    }
+  }
+}
 // Stencil decal on the floor
 export function floorStencil(kit, x, y, z, s, idx, yaw = 0) {
   const g = new THREE.PlaneGeometry(s, s);

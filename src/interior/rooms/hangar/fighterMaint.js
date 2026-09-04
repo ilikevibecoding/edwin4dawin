@@ -206,11 +206,14 @@ export function buildFighterMaint(kit, ctx) {
 
   // ---- lights ------------------------------------------------------------------------------------
   for (const b of bays) spotLightDesc(ctx, 0xdfe8ff, 900, 40, [b.cx, yC - 1.2, b.cz], [b.cx, y, b.cz], { angle: 0.8, penumbra: 0.5, shadow: true, priority: 2 });
-  pointLightDesc(ctx, 0xcfd9ff, 40, 30, [66, y + 8, 190], 1);
-  pointLightDesc(ctx, 0xcfd9ff, 36, 28, [72, y + 9, 160], 1);
-  pointLightDesc(ctx, 0xcfd9ff, 36, 28, [72, y + 9, 222], 0);
-  pointLightDesc(ctx, 0xcfd9ff, 36, 28, [94, y + 9, 170], 0);
-  pointLightDesc(ctx, 0xcfd9ff, 36, 28, [94, y + 9, 212], 0);
+  // fills raised after the framework dimmed the emissive fixtures: the deck between the bays is lit
+  // by these alone (the two spots sit on the cradles)
+  pointLightDesc(ctx, 0xcfd9ff, 90, 34, [66, y + 8, 190], 1);
+  pointLightDesc(ctx, 0xcfd9ff, 60, 30, [72, y + 9, 160], 1);
+  pointLightDesc(ctx, 0xcfd9ff, 60, 30, [72, y + 9, 222], 0);
+  pointLightDesc(ctx, 0xcfd9ff, 60, 30, [94, y + 9, 170], 0);
+  pointLightDesc(ctx, 0xcfd9ff, 60, 30, [94, y + 9, 212], 0);
+  pointLightDesc(ctx, 0xcfd9ff, 70, 30, [84, y + 9, 191], 0);
   pointLightDesc(ctx, IMP.amber, 14, 14, [92, y + 3, 196], 0);
 
   // ---- views -------------------------------------------------------------------------------------

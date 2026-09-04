@@ -740,11 +740,12 @@ export function buildHangar(kit, ctx) {
   amberS.dim = 0.15;
   // fill lights over the parking pads and the entrance deck (20 descriptors in total for the room)
   for (const p of [pads[0], pads[3]]) pointLightDesc(ctx, 0xcfd9ff, 55, 40, [p.x, y + 9, p.z], 0);
-  pointLightDesc(ctx, 0xcfd9ff, 55, 40, [0, y + 8, 116], 1);
-  // apron fills over the well's north and south coamings: only the two nearest floods are live, so
-  // from the lobby end the kerb and its hazard band sat in the dark after the fixture dimming
-  pointLightDesc(ctx, 0xcfd9ff, 70, 46, [0, y + 9, W.z0 - kerb - 6], 0);
-  pointLightDesc(ctx, 0xcfd9ff, 70, 46, [0, y + 9, W.z1 + kerb + 6], 0);
+  pointLightDesc(ctx, 0xcfd9ff, 90, 40, [0, y + 8, 116], 1);
+  // apron fills over the well's north and south coamings: only the two nearest floods are live and
+  // the centre lane sits in the penumbra of both, so from the lobby end the kerb and its hazard band
+  // sat in the dark after the fixture dimming
+  pointLightDesc(ctx, 0xcfd9ff, 150, 50, [0, y + 9, W.z0 - kerb - 6], 0);
+  pointLightDesc(ctx, 0xcfd9ff, 150, 50, [0, y + 9, W.z1 + kerb + 6], 0);
   // cool work lights inside the shaft so the lining and the blast doors read from the deck edge
   for (const z of [wellCZ - 32, wellCZ + 32]) pointLightDesc(ctx, 0xbfd0ff, 900, 80, [wellCX, y - 13, z], 0);
 
