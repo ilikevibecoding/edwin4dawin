@@ -65,8 +65,10 @@ export interface BridgeBuild {
 const CHUNK_LEN = 1000;
 /** chunks farther than this stop casting (the city tiles use the same range) */
 const SHADOW_DISTANCE = 3200;
-/** beyond this the railings / posts / cables are under a pixel wide and only the lamp heads stay drawn */
+/** beyond this the railings / posts are under a pixel wide and only the lamp heads stay drawn; beyond HEAD_DISTANCE
+ *  the heads go too (they are 45 m apart and merge into the deck line) */
 const THIN_DISTANCE = 2500;
+const HEAD_DISTANCE = 5000;
 /** peak radiance of the lamp heads (props' street lamps glow at 8 x night) */
 const LAMP_GLOW = 6.0;
 /** girder depth below the deck top (m), parapet height above it, kerb step of the shoulders */
@@ -436,7 +438,10 @@ class BridgeCuller {
         m.mesh.visible = m.inView || m.cast;
         m.mesh.layers.mask = layerMask(m.cls, m.inView);
       }
-      if (c.steel) c.steel.geometry.setDrawRange(0, c.dist > THIN_DISTANCE ? c.headIndices : Infinity);
+      if (c.steel) {
+        c.steel.geometry.setDrawRange(0, c.dist > THIN_DISTANCE ? c.headIndices : Infinity);
+        if (c.dist > HEAD_DISTANCE) c.steel.visible = false;
+      }
     }
   }
 
