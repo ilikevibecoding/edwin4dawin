@@ -203,6 +203,7 @@ export class DisasterManager {
   _finishRestore() {
     this.restoreIter = null;
     this.journal.clear();
+    if (this.game.save) this.game.save.clearDisasterCells();
     this.state = 'idle';
     if (this.game.npcs) this.game.npcs.clearAlert();
     if (this.game.animals) this.game.animals.clearAlert();

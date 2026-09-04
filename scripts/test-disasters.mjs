@@ -56,6 +56,8 @@ for (const type of types) {
   const hAfter = await worldHash();
   check(`${type} reset restores the sampled world region`, restored && hAfter === pristine, `restored=${restored} hash=${hAfter} pristine=${pristine}`);
   check(`${type} journal cleared after reset`, (await status()).journal === 0);
+  const saveInfo = JSON.parse(await page.evaluate(`JSON.stringify({ cells: game.save ? game.save.disasterCells.size : 0, count: game.save ? game.save.count : 0 })`));
+  check(`${type} save no longer excludes the restored cells`, saveInfo.cells === 0 && saveInfo.count === 0, `disasterCells=${saveInfo.cells} saved=${saveInfo.count}`);
   // run 2 with the same seed -> same journal hash at the same tick
   await page.evaluate(`game.disasters.pauseAtTick = ${t1}`);
   await page.evaluate(startCmd);
