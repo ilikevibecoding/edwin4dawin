@@ -24,7 +24,8 @@ export class FlightCamera {
   private time = 0;
   private initialised = false;
   baseFov = 50;
-  shakeScale = 1.0;
+  /** 0 = rock steady, 1 = full turbulence/buffet sway; toggled with V in play mode */
+  shakeScale = 0.5;
   /** external orbit offsets (mouse) */
   orbitYaw = 0;
   orbitPitch = 0;
@@ -44,7 +45,8 @@ export class FlightCamera {
     // read as nausea, not motion; total positional amplitude now stays within ~0.1 m.
     const sway = t.gustLevel * this.shakeScale;
     const buffet = t.buffet * this.shakeScale;
-    const hum = smoothstep(60, 100, t.airspeed) * this.shakeScale;
+    // no speed "hum": a 12-15 Hz jitter read as blur on the aircraft against the background in chase view
+    const hum = 0.0 * this.shakeScale;
     const shakeX = perlin2(this.time * 2.3, 0.3) * 0.10 * sway + perlin2(this.time * 9.5, 1.3) * 0.06 * buffet + perlin2(this.time * 13.0, 2.2) * 0.015 * hum;
     const shakeY = perlin2(this.time * 2.9, 4.3) * 0.10 * sway + perlin2(this.time * 11.0, 5.7) * 0.06 * buffet + perlin2(this.time * 15.0, 6.1) * 0.015 * hum;
     const shakeZ = perlin2(this.time * 2.1, 8.3) * 0.10 * sway + perlin2(this.time * 10.2, 9.1) * 0.06 * buffet + perlin2(this.time * 12.0, 7.7) * 0.015 * hum;

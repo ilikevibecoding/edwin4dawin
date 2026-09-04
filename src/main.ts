@@ -75,7 +75,8 @@ async function boot(): Promise<void> {
     started = true;
     startEl.classList.add('hidden');
     hud.show(true);
-    hud.flash('Full throttle (Shift) to take off. S pulls the nose up once above 55 KIAS.', 6);
+    input.flight.flaps = 1; // takeoff flaps: shorter run and lower liftoff speed
+    hud.flash('Takeoff: hold Shift for full throttle, keep the nose straight with A/D, and at 50 KIAS hold S to lift off. F toggles flaps, V camera shake.', 9);
     game.aircraft.inputs.throttle = 0;
     game.flightCamera.mode = 'chase';
     game.flightCamera.snap();
@@ -97,11 +98,11 @@ async function boot(): Promise<void> {
       const a = game.aircraft.inputs;
       a.throttle = f.throttle; a.pitch = f.pitch; a.roll = f.roll; a.yaw = f.yaw; a.flaps = f.flaps; a.brake = f.brake;
       if (input.consume('KeyC')) { game.flightCamera.mode = game.flightCamera.mode === 'chase' ? 'cockpit' : 'chase'; game.flightCamera.snap(); }
-      if (input.consume('KeyV')) { game.flightCamera.mode = 'cockpit'; game.flightCamera.snap(); }
+      if (input.consume('KeyV')) { const fc = game.flightCamera; fc.shakeScale = fc.shakeScale > 0.25 ? 0 : 0.5; hud.flash(fc.shakeScale > 0 ? 'Camera shake on' : 'Camera shake off'); }
       if (input.consume('KeyH')) hud.toggle();
       if (input.consume('KeyT')) { game.atmos.hour = (game.atmos.hour + 2) % 24; hud.flash(`Time ${Math.floor(game.atmos.hour)}:00`); }
       if (input.consume('KeyY')) { const w = ['clear', 'scattered', 'cloudy', 'storm'] as const; const i = (w.indexOf(game.atmos.weather) + 1) % w.length; game.atmos.setWeather(w[i]); hud.flash(`Weather: ${w[i]}`); }
-      if (input.consume('KeyR')) { const base = game.map.pois.find((p) => p.kind === 'seaplane')!; game.aircraft.place(base.x + 120, 1.6, base.z + 60, Math.PI * 0.5, 0, 0, 0, 0); f.throttle = 0; game.flightCamera.snap(); hud.flash('Reset to the seaplane base'); }
+      if (input.consume('KeyR')) { const base = game.map.pois.find((p) => p.kind === 'seaplane')!; game.aircraft.place(base.x + 120, 1.6, base.z + 60, 0, 0, 0, 0, 0); f.throttle = 0; game.flightCamera.snap(); hud.flash('Reset to the seaplane base'); }
       if (input.consume('KeyG')) { game.aircraft.place(game.aircraft.flight.position.x, 350, game.aircraft.flight.position.z, Math.PI * 0.5, 0, 0, 55, 0.7); f.throttle = 0.7; hud.flash('Airborne at 350 m'); }
       game.flightCamera.orbitYaw = input.orbitYaw;
       game.flightCamera.orbitPitch = input.orbitPitch;
