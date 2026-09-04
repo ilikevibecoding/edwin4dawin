@@ -85,8 +85,7 @@ export function buildBriefing(kit, ctx) {
     kit.add("darkGloss", new THREE.BoxGeometry(0.02, 0.36, 0.7), { pos: [lx - 0.56, y + 1.32, lz], rot: [0, 0, -0.55] });
     const sg = new THREE.PlaneGeometry(0.6, 0.26);
     sg.rotateY(-Math.PI / 2);
-    sg.rotateZ(0);
-    kit.add("screen2", sg, { pos: [lx - 0.575, y + 1.33, lz], rot: [0, 0, -0.55], uv: "keep" });
+    kit.add("screen2", sg, { pos: [lx - 0.56 - 0.0136, y + 1.32 + 0.0083, lz], rot: [0, 0, -0.55], uv: "keep" });
     kit.box("blinkSparse", lx - 0.66, y + 1.2, lz, 0.01, 0.08, 0.7, { uv: "keep" });
     // emitter disc and hologram: wireframe target planet with a reticle ring and a wedge (the strike group)
     kit.cyl("darkGloss", lx, y + 1.235, lz, 0.32, 0.03, "y", { segments: 24 });

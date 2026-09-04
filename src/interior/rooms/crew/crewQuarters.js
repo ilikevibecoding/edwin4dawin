@@ -147,13 +147,13 @@ export function buildCrewQuarters(kit, ctx) {
     const { frame } = wallFrame(kit, w.from, w.to, y);
     // duty roster: big screen with a header plate and the deck code
     wallScreen(frame, w.u(414), 1.75, 2.4, 1.15, 1);
-    frame.box("impPaintedMetal", w.u(414), 2.5, 0.05, 2.6, 0.22, 0.04, { color: IMP.trim, texel: 1 });
-    frame.quad("impDecal", w.u(414) - 0.9, 2.5, 0.075, 0.2, 0.2, { uvRect: impDecalRect(0) });
-    frame.quad("impDecal", w.u(414) + 0.3, 2.5, 0.075, 0.2, 0.2, { uvRect: impDecalRect(15) });
-    frame.box("emitBlue", w.u(414) + 1.0, 2.5, 0.075, 0.24, 0.04, 0.01);
+    frame.box("impPaintedMetal", w.u(414), 2.5, 0.08, 2.6, 0.22, 0.04, { color: IMP.trim, texel: 1 });
+    frame.quad("impDecal", w.u(414) - 0.9, 2.5, 0.102, 0.2, 0.2, { uvRect: impDecalRect(0) });
+    frame.quad("impDecal", w.u(414) + 0.3, 2.5, 0.102, 0.2, 0.2, { uvRect: impDecalRect(15) });
+    frame.box("emitBlue", w.u(414) + 1.0, 2.5, 0.102, 0.24, 0.04, 0.01);
     // notice board: dark plate with stencils
-    frame.box("impPaintedMetal", w.u(410.5), 1.6, 0.04, 1.4, 1.0, 0.03, { color: IMP.consoleDark, texel: 1 });
-    for (let i = 0; i < 4; i++) frame.quad("impDecal", w.u(410.5) - 0.48 + (i % 2) * 0.62, 1.86 - Math.floor(i / 2) * 0.5, 0.06, 0.4, 0.4, { uvRect: impDecalRect([3, 9, 15, 6][i]) });
+    frame.box("impPaintedMetal", w.u(410.5), 1.6, 0.075, 1.4, 1.0, 0.03, { color: IMP.consoleDark, texel: 1 });
+    for (let i = 0; i < 4; i++) frame.quad("impDecal", w.u(410.5) - 0.48 + (i % 2) * 0.62, 1.86 - Math.floor(i / 2) * 0.5, 0.092, 0.4, 0.4, { uvRect: impDecalRect([3, 9, 15, 6][i]) });
     lockers(frame, w.u(409), w.u(401), 2.1, { seed: 21, tone: IMP.wallMid });
     namePlate(frame, w.u(417.2), 1.55, { decal: 0, led: "emitBlue" });
   }
@@ -169,7 +169,9 @@ export function buildCrewQuarters(kit, ctx) {
   crate(kit, [7.9, y, 401.4], [1.0, 0.7, 0.8], { seed: 4, tone: IMP.wallMid });
   crate(kit, [7.9, y + 0.7, 401.4], [0.8, 0.5, 0.7], { seed: 5, tone: IMP.gunmetal, collide: false });
   crate(kit, [6.6, y, 401.4], [0.9, 0.5, 0.8], { seed: 6, tone: IMP.consoleDark });
-  ceilingLight(kit, ctx, [5.8, y + h, 409.5], 7, "z", { intensity: 6, distance: 11, priority: 1, color: 0xdfe8ff });
+  ceilingLight(kit, ctx, [5.8, y + h, 409.5], 7, "z", { intensity: 8, distance: 12, priority: 1, color: 0xdfe8ff });
+  floorDecal(kit, 6.0, y, 408.2, 0.9, 9, 0);
+  floorDecal(kit, 4.2, y, 418.6, 0.6, 13, -90);
 
   // ---- washroom (south of the door) ------------------------------------------------------------
   const wx1 = 8.7;
