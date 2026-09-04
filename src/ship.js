@@ -336,9 +336,10 @@ function buildCorridor(kit, ctx) {
       frame.box("metal", hw + 0.25, 1.15, -0.08, 0.06, 0.4, 0.1, { color: PALETTE.orange });
       kit.collider([-hw, 0, zAft - 0.3], [hw, h, zAft + 0.2], "aftdoor");
     } else {
-      // wall colliders either side of the open doorway
-      kit.collider([-hw, 0, zAft - 0.3], [-0.85, h, zAft + 0.2], "aftwall");
-      kit.collider([0.85, 0, zAft - 0.3], [hw, h, zAft + 0.2], "aftwall");
+      // wall colliders either side of the open doorway; they stop at the bulkhead face so the corner
+      // does not snag a player sliding along the cross corridor's wall toward the opening
+      kit.collider([-hw, 0, zAft - 0.3], [-0.85, h, zAft + 0.02], "aftwall");
+      kit.collider([0.85, 0, zAft - 0.3], [hw, h, zAft + 0.02], "aftwall");
     }
     frame.box("metal", hw, 2.0, -0.1, 0.5, 0.25, 0.08, { color: PALETTE.darkMetal });
     frame.box("emitRed", hw, 2.0, -0.055, 0.3, 0.06, 0.02);

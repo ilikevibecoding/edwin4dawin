@@ -64,6 +64,7 @@ export function buildInterior({ scene, materials }) {
       zone: zone.id,
       group,
       dynamic: [],
+      markers: [], // seats / stations / idle points for future crew systems
       neighbors: new Set(),
       windows: spec.windows || [],
       floorY: kind === "room" ? roomFloorY(spec) : DECKS[spec.deck].floorY,
@@ -74,6 +75,7 @@ export function buildInterior({ scene, materials }) {
     if (kit) {
       zone.colliders.push(...kit.colliders);
       zone.floors.push(...kit.floors);
+      if (kit.markers) for (const m of kit.markers) sp.markers.push({ ...m, space: spec.id });
     }
     if (ctx) {
       for (const fam of ["warm", "cool", "teal"]) for (const l of ctx.lights[fam]) {
@@ -218,6 +220,7 @@ export function buildInterior({ scene, materials }) {
         const sp = spaces[room.id];
         zone.colliders.push(...kit.colliders);
         zone.floors.push(...kit.floors);
+        for (const m of kit.markers) sp.markers.push({ ...m, space: room.id });
         for (const fam of ["warm", "cool", "teal"]) for (const l of ctx.lights[fam]) {
           l.userData.baseIntensity = l.intensity;
           l.userData.baseColor = l.color.clone();
@@ -284,6 +287,7 @@ export function buildInterior({ scene, materials }) {
     state.zone = zoneId;
     state.space = null;
     state.visible = new Set();
+    for (const sp of zones[zoneId].spaces) sp.group.visible = true; // until the first update resolves a space
     if (api.onZoneChange) api.onZoneChange(zoneId);
   }
 
@@ -299,7 +303,7 @@ export function buildInterior({ scene, materials }) {
     for (const sp of zone.spaces) sp.group.visible = spaceIds.includes(sp.id);
     lifts.group.visible = false;
   }
-  function unpeek(rootVisible) {
+  function unpeek(rootVisible = root.visible) {
     if (!peeked) return;
     const zone = zones[peeked.zone];
     for (const sp of zone.spaces) sp.group.visible = true;
@@ -346,7 +350,28 @@ export function buildInterior({ scene, materials }) {
   function applyVisibility(vis) {
     const zone = zones[state.zone];
     if (!zone) return;
-    for (const sp of zone.spaces) sp.group.visible = vis.size === 0 || vis.has(sp.id);
+    for (const sp of zone.spaces) sp.group.visible = vis.has(sp.id);
+  }
+
+  // Nearest space to a point in the active zone (by AABB distance): used while the player is in a lift
+  // shaft or otherwise between spaces so culling never falls back to "draw everything".
+  function nearestSpace(pos) {
+    const zone = zones[state.zone];
+    if (!zone) return null;
+    let best = null;
+    let bestD = Infinity;
+    for (const sp of zone.spaces) {
+      const b = sp.spec;
+      const dx = Math.max(b.x0 - pos.x, 0, pos.x - b.x1);
+      const dz = Math.max(b.z0 - pos.z, 0, pos.z - b.z1);
+      const dy = Math.max(sp.floorY - pos.y, 0, pos.y - (sp.floorY + sp.height));
+      const d = dx * dx + dz * dz + dy * dy * 0.25;
+      if (d < bestD) {
+        bestD = d;
+        best = sp;
+      }
+    }
+    return best;
   }
 
   const api = {
@@ -409,12 +434,14 @@ export function buildInterior({ scene, materials }) {
       lifts.update(dt);
       const zone = zones[state.zone];
       if (zone) for (const sp of zone.spaces) if (sp.group.visible) for (const dyn of sp.dynamic) dyn.update && dyn.update(dt);
+      if (peeked && peeked.zone !== state.zone) for (const sp of zones[peeked.zone].spaces) if (sp.group.visible) for (const dyn of sp.dynamic) dyn.update && dyn.update(dt);
       const sp = spaceAt(player.position);
       const id = sp ? sp.id : null;
       if (id !== state.space) {
         state.space = id;
-        state.visible = computeVisible(sp);
-        applyVisibility(state.visible);
+        // between spaces (lift shaft, doorway gap): cull from the nearest space instead of drawing all
+        state.visible = computeVisible(sp || nearestSpace(player.position));
+        if (!peeked) applyVisibility(state.visible);
         if (api.onSpaceChange) api.onSpaceChange(sp);
       }
     },
@@ -439,6 +466,12 @@ export function buildInterior({ scene, materials }) {
       }
       const yaw = THREE.MathUtils.radToDeg(Math.atan2(-(cx - x), -(cz - z)));
       return { x, z, y, yaw, pitch: -4, zone: DECKS[r.deck].zone, space: r.id };
+    },
+    // Navigation / crew data for future phases: walkable floors and colliders per zone, markers per space
+    navData(zoneId = state.zone) {
+      const z = zones[zoneId];
+      if (!z) return null;
+      return { floors: z.floors, colliders: z.colliders, markers: z.spaces.flatMap((sp) => sp.markers) };
     },
     roomIds: ROOMS.map((r) => r.id),
     corridorIds: CORRIDORS.map((c) => c.id),
@@ -473,7 +506,8 @@ export function buildInterior({ scene, materials }) {
     },
   };
 
-  // lifts switch zones halfway through a ride
+  // lifts build the destination zone while their doors close and switch zones halfway through a ride
+  lifts.onPrepareZone = (zoneId) => buildZone(zoneId);
   lifts.onZoneChange = (zoneId) => setActiveZone(zoneId);
   setActiveZone(startZone);
   return api;
