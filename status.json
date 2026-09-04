@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-04T07:49:15.531Z",
+  "updated": "2026-09-04T07:56:03.200Z",
   "phase": "Phase 3 of 5: parallel builders finishing, merging + verifying into the integration branch",
   "summary": "Plan: (1) baseline measured, (2) shared disaster foundation built, (3) 7 builder agents in isolated worktrees, (4) independent critics + verification agents, (5) final baseline comparison, changelog, PR. Nothing counts as done until it is merged, tested and measured in the actual game.",
   "links": [
@@ -45,8 +45,8 @@
     },
     {
       "name": "Tsunami & flood",
-      "status": "in progress",
-      "detail": "Builder committed the wave front + journaled flood fill + crest destruction + drain; tuning and measuring."
+      "status": "merged",
+      "detail": "Wave front, journaled rising water, crest destruction with buoyant debris, drain; 12/12 lifecycle checks pass on the integration branch; replay hash 415f9ebc:70177 reproduced. Perf re-measurement pending once the VM is quiet."
     },
     {
       "name": "Tornado",
@@ -90,6 +90,14 @@
     }
   ],
   "screenshots": [
+    {
+      "src": "img/tsunami_aerial.png",
+      "caption": "Aerial view of the flooded town (07:56 UTC)"
+    },
+    {
+      "src": "img/tsunami_street.png",
+      "caption": "Flooded main street: swimming NPCs, floating debris (07:56 UTC)"
+    },
     {
       "src": "img/back_store.png",
       "caption": "Back of the general store after the shelves fix (07:49 UTC)"
@@ -139,6 +147,10 @@
     {
       "time": "2026-09-04 07:25 UTC",
       "text": "Independent eye critic: narrow reject (brow/iris fusion, dark-coat horse eyes invisible). Fixes sent back to the eyes builder; animals no longer spawn on roofs; deputies got their own posts."
+    },
+    {
+      "time": "2026-09-04 07:56 UTC",
+      "text": "Tsunami merged: 12/12 lifecycle/replay/restore checks pass; engine relight coalescing + border-aware neighbour remesh added to cut flood frame cost."
     }
   ],
   "issues": [
