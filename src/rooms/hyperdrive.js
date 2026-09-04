@@ -289,11 +289,13 @@ export function buildHyperdrive(kit, ctx, room) {
     for (const [i, x] of [-3.0, -1.6, -0.2].entries()) equipmentRack(kit, x, -(hz - 0.45), 1.2, 2.4, 0.7, "+z", { seed: 700 + i, accentKey, screens: false });
     breakerBoard(F, wallU(room, "N", 2.6), 0.3, 1.6, 2.2, { seed: 41, accentKey: "emitAmber" });
     hazardBorder(kit, -3.8, -(hz - 0.1), 3.6, -(hz - 1.25), 0, 0.2, "chevronY", 3.0);
-    // engineering-style amber-lit cabinet run W of the racks, a pipe manifold E of the breaker board:
-    // the pale wall carries equipment along its whole lower band
-    cabinetRow(kit, -9.7, -5.5, -(hz - 0.04), "+z", { seed: 731, h: 2.4, bay: 1.4 });
+    // engineering-style amber-lit cabinet runs either side of the N stair (its foot at z -11.6 needs the
+    // wall strip x -10.5..-8.9 clear, with a channel of 1.3 m+ each side), a pipe manifold E of the
+    // breaker board: the pale wall carries equipment along its whole lower band
+    cabinetRow(kit, -16.3, -12.0, -(hz - 0.04), "+z", { seed: 731, h: 2.4, bay: 1.43 });
+    cabinetRow(kit, -7.6, -4.2, -(hz - 0.04), "+z", { seed: 733, h: 2.4, bay: 1.13 });
     wallManifold(kit, 4.9, 9.3, -(hz - 0.04), 1, { yLo: 1.3, yHi: 3.5, yTop: 6.4, risers: 4, seed: 741 });
-    junctionBox(F, wallU(room, "N", -13.5), 2.2, 0.8, 1.0, { seed: 599, accentKey });
+    junctionBox(F, wallU(room, "N", -13.5), 3.7, 0.8, 1.0, { seed: 599, accentKey, drops: 0 });
     junctionBox(F, wallU(room, "N", 12.3), 2.4, 0.7, 0.9, { seed: 609, accentKey, drops: 1 });
     impWallGear(F, wallU(room, "N", 11.0), 1.5, { seed: 619, accentKey });
     F.decal(IMP_DECAL.keepClear, wallU(room, "N", -9.7), 3.9, 0.03, 0.6);
@@ -327,8 +329,8 @@ export function buildHyperdrive(kit, ctx, room) {
     kit.collider([-6.4, 0, hz - 0.85], [12.4, 1.9, hz], "manifold");
     decalD(kit, DECK_D_DECAL.grime, [1.0, 0.018, hz - 1.4], "up", 3.0);
     decalD(kit, DECK_D_DECAL.oil, [6.5, 0.018, hz - 1.5], "up", 2.6);
-    // cabinet run between the door wall and the manifold (the junction box above it moves up the wall)
-    cabinetRow(kit, -16.0, -8.8, hz - 0.04, "-z", { seed: 751, h: 2.4, bay: 1.44 });
+    // cabinet run in the SW corner, W of the S stair's foot strip (x -10.5..-8.9 stays clear, 1.5 m channel)
+    cabinetRow(kit, -16.3, -12.0, hz - 0.04, "-z", { seed: 751, h: 2.4, bay: 1.43 });
     junctionBox(F, wallU(room, "S", -13.5), 3.7, 0.8, 1.0, { seed: 601, accentKey, drops: 0 });
     junctionBox(F, wallU(room, "S", 3.2), 3.1, 0.7, 0.9, { seed: 611, accentKey, drops: 1 });
     impWallGear(F, wallU(room, "S", -7.6), 2.6, { seed: 621, accentKey });
@@ -382,11 +384,11 @@ export function buildHyperdrive(kit, ctx, room) {
     const lamp = [x, 5.7, z];
     const aim = [x + 1.0, cy - 0.4, 0];
     shroudLamp(kit, [x, yT, z], lamp, aim, { key: "emitWhiteDim", size: 0.55 });
-    if (x < 0) kit.light({ type: "spot", pos: lamp, target: aim, color: work, intensity: lux(5.5, 3.8), distance: 22, angle: 0.82, penumbra: 0.55, priority: 0.8 - i * 0.01 });
-    else kit.light({ type: "point", pos: [lamp[0] + 0.15, lamp[1] - 0.45, lamp[2] - Math.sign(z) * 0.35], color: work, intensity: 2.8 * 5.5, decay: 1, distance: 18, priority: 0.6 - i * 0.01 });
+    if (x < 0) kit.light({ type: "spot", pos: lamp, target: aim, color: work, intensity: lux(5.5, 4.4), distance: 22, angle: 0.82, penumbra: 0.55, priority: 0.8 - i * 0.01 });
+    else kit.light({ type: "point", pos: [lamp[0] + 0.15, lamp[1] - 0.45, lamp[2] - Math.sign(z) * 0.35], color: work, intensity: 3.2 * 5.5, decay: 1, distance: 18, priority: 0.6 - i * 0.01 });
   }
   // pulpit / entry lamp: hung between the door and the pulpit so the entry lane is lit as well
   shroudLamp(kit, [-13, yT, 2.6], [-13.2, 5.3, 2.6], [-13.6, 0.9, 3.4], { key: "emitWhiteDim", size: 0.45 });
-  kit.light({ type: "point", pos: [-13.3, 4.9, 2.6], color: 0xeef2ff, intensity: 3.8 * 5.0, decay: 1, distance: 17, priority: 0.55 });
+  kit.light({ type: "point", pos: [-13.3, 4.9, 2.6], color: 0xeef2ff, intensity: 4.3 * 5.0, decay: 1, distance: 17, priority: 0.55 });
   void rand;
 }
