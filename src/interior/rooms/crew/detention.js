@@ -13,7 +13,7 @@ import { lockers, chair, table, ceilingLight, pointLightDesc, spotLightDesc, wal
 import { IMP, NO_SHADOW_KEYS } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
-import { ensureCrewMaterials, instancedProp, partition, counter, shelfUnit, floorDecal, floorLine, namePlate, cameraPod, ceilingStrip, medConsole, dispenser, yawQ, rng } from "./crewKit.js";
+import { ensureCrewMaterials, instancedProp, partition, counter, shelfUnit, wallCabinet, floorDecal, floorLine, namePlate, cameraPod, ceilingStrip, medConsole, dispenser, yawQ, rng, boardMaterial, wallBoard } from "./crewKit.js";
 import { buildRifle, rifleRack } from "./armory.js";
 
 const RED = 0xff2a2a;
@@ -58,8 +58,10 @@ export function buildDetention(kit, ctx) {
     for (const s of [-1, 1]) {
       kit.box("impPaintedMetal", s * 1.4, y + 1.2, archZ, 0.34, 2.4, 0.34, { color: IMP.trim, texel: 1 });
       kit.box("crewEmit", s * 1.4 - s * 0.175, y + 1.3, archZ, 0.006, 1.8, 0.06, { color: FIELD });
-      kit.box("blinkSparse", s * 1.4, y + 2.15, archZ - 0.175, 0.2, 0.1, 0.006, { uv: "keep" });
-      kit.add("impDecal", new THREE.PlaneGeometry(0.24, 0.24), { pos: [s * 1.4, y + 0.9, archZ - 0.171], rot: [0, Math.PI, 0], uv: "keep", uvRect: impDecalRect(13) });
+      // scanner state lamps (clear / field / alarm) in a dark inset, a restricted roundel lower down
+      kit.box("darkGloss", s * 1.4, y + 2.15, archZ - 0.173, 0.26, 0.12, 0.006);
+      for (const [k, c] of [0x40ff70, FIELD, 0x3a1010].entries()) kit.box("crewEmit", s * 1.4 - 0.075 + k * 0.075, y + 2.15, archZ - 0.177, 0.045, 0.045, 0.006, { color: c });
+      kit.add("impDecal", new THREE.PlaneGeometry(0.26, 0.26), { pos: [s * 1.4, y + 0.9, archZ - 0.171], rot: [0, Math.PI, 0], uv: "keep", uvRect: impDecalRect(12) });
       kit.collider([s * 1.4 - 0.2, y, archZ - 0.2], [s * 1.4 + 0.2, y + 2.6, archZ + 0.2], "scannerPylon");
     }
     kit.box("impPaintedMetal", 0, y + 2.5, archZ, 3.14, 0.2, 0.34, { color: IMP.trim, texel: 1 });
@@ -75,9 +77,12 @@ export function buildDetention(kit, ctx) {
       medConsole(kit, ctx, [s * 1.25, y, 458.3], 0);
       chair(kit, [s * 1.25, y, 459.0], 0);
     }
-    kit.box("impPaintedMetal", 0, y + 1.24, 456.55, 0.36, 0.44, 0.06, { color: IMP.consoleDark, texel: 1 }); // desk-top status pillar
-    kit.box("blink", 0, y + 1.26, 456.515, 0.3, 0.3, 0.006, { uv: "keep" });
-    kit.box("crewEmit", 0, y + 1.44, 456.515, 0.3, 0.02, 0.006, { color: RED });
+    // desk-top status pillar facing the door: a small status display over a keypad row, red header strip
+    kit.box("impPaintedMetal", 0, y + 1.24, 456.55, 0.44, 0.44, 0.06, { color: IMP.consoleDark, texel: 1 });
+    kit.box("darkGloss", 0, y + 1.24, 456.515, 0.38, 0.24, 0.006);
+    kit.box("screen2", 0, y + 1.24, 456.511, 0.34, 0.17, 0.004, { uv: "keep" });
+    kit.box("crewEmit", 0, y + 1.42, 456.515, 0.3, 0.02, 0.006, { color: RED });
+    kit.box("leds", 0, y + 1.07, 456.515, 0.3, 0.03, 0.006, { uv: "keep" });
     ceilingLight(kit, ctx, [0, y + h, 456.4], 5.0, "x", { mat: "lightBand", color: WHITE, intensity: 7, distance: 10, priority: 2, drop: 0.5 });
     floorDecal(kit, -3.4, y, 457.6, 0.6, 15, 90);
     floorDecal(kit, 3.4, y, 457.6, 0.6, 15, -90);
@@ -87,8 +92,7 @@ export function buildDetention(kit, ctx) {
     doorSign(frame, w.u(0), 2.75, { color: "emitRed", decal: 13 });
     frame.quad("impDecal", w.u(-1.9), 1.7, 0.062, 0.5, 0.5, { uvRect: impDecalRect(13) });
     frame.quad("impDecal", w.u(1.9), 1.7, 0.062, 0.5, 0.5, { uvRect: impDecalRect(15) });
-    frame.box("impPaintedMetal", w.u(2.8), 1.3, 0.09, 0.24, 0.36, 0.12, { color: IMP.consoleDark, texel: 1 });
-    frame.box("blinkSparse", w.u(2.8), 1.36, 0.152, 0.18, 0.12, 0.006, { uv: "keep" });
+    commsPanel(frame, w.u(2.8), 1.3, 0.03);
     wallScreen(frame, w.u(-4.6), 2.1, 1.6, 0.9, 1);
     wallScreen(frame, w.u(4.6), 2.1, 1.6, 0.9, 2);
     cameraPod(kit, [-2.6, y + h - 0.3, zN + 0.3], 160, -35);
@@ -152,8 +156,12 @@ export function buildDetention(kit, ctx) {
     kit.box("crewEmit", 0, y + 2.56, blockZ0 - 0.155, 2.6, 0.05, 0.01, { color: RED });
     kit.box("crewEmit", 0, y + 2.56, blockZ0 + 0.155, 2.6, 0.05, 0.01, { color: RED });
     kit.box("impPaintedMetal", 0, y + 2.9, blockZ0 - 0.16, 1.4, 0.3, 0.02, { color: IMP.consoleDark, texel: 1 });
-    kit.add("impDecal", new THREE.PlaneGeometry(0.26, 0.26), { pos: [-0.4, y + 2.9, blockZ0 - 0.175], rot: [0, Math.PI, 0], uv: "keep", uvRect: impDecalRect(13) });
-    kit.box("blinkSparse", 0.25, y + 2.9, blockZ0 - 0.175, 0.5, 0.14, 0.006, { uv: "keep" });
+    kit.add("impDecal", new THREE.PlaneGeometry(0.26, 0.26), { pos: [-0.45, y + 2.9, blockZ0 - 0.175], rot: [0, Math.PI, 0], uv: "keep", uvRect: impDecalRect(13) });
+    // one lamp per cell on the header plate: red = field up, green = the open cell
+    for (let k = 0; k < cells * 2; k++) {
+      const open = k === OPEN_CELL.k + (OPEN_CELL.s > 0 ? cells : 0);
+      kit.box("crewEmit", -0.14 + k * 0.08, y + 2.9, blockZ0 - 0.175, 0.05, 0.05, 0.006, { color: open ? 0x40ff70 : RED });
+    }
     kit.box("crewEmit", 0, y + 0.12, blockZ0, corrX * 2 - 0.2, 0.006, 0.08, { color: FIELD }); // gate field floor emitter
     // monitor banks flanking the gate on the block's north face (facing the guard station)
     for (const s of [-1, 1]) {
@@ -165,16 +173,32 @@ export function buildDetention(kit, ctx) {
     }
     cameraPod(kit, [-corrX + 0.35, y + h - 0.3, blockZ0 + 0.4], 150, -30);
     cameraPod(kit, [corrX - 0.35, y + h - 0.3, blockZ1 - 0.4], -30, -30);
-    // passage faces of the block's back walls: red band, cell stencils, LED strips, a comms panel
+    // passage faces of the block's back walls: red band, lit cell number plates, a comms panel; the
+    // west (holding) passage also gets fold-down wall benches, the detainee regulations board, rules
+    // plates and restricted roundels over the benches
     for (const s of [-1, 1]) {
       const xf = s * (blockX + 0.136);
       const bf = s < 0 ? wallFrame(kit, [xf, blockZ0], [xf, blockZ1], y).frame : wallFrame(kit, [xf, blockZ1], [xf, blockZ0], y).frame;
       const L = blockZ1 - blockZ0;
       bf.box("crewPaintRed", L / 2, 1.15, 0.004, L - 0.4, 0.1, 0.004);
-      for (let k = 0; k < cells; k++) bf.quad("impDecal", (k + 0.5) * cellPitch, 1.75, 0.004, 0.4, 0.4, { uvRect: impDecalRect(s < 0 ? [0, 3, 6, 9][k] : [15, 11, 5, 2][cells - 1 - k]) });
-      bf.box("leds", L / 2, 2.3, 0.004, 1.2, 0.05, 0.01, { uv: "keep" });
-      bf.box("impPaintedMetal", 1.6, 1.55, 0.03, 0.24, 0.36, 0.06, { color: IMP.consoleDark, texel: 1 });
-      bf.box("blinkSparse", 1.6, 1.61, 0.062, 0.18, 0.12, 0.006, { uv: "keep" });
+      for (let k = 0; k < cells; k++) {
+        const cu = (k + 0.5) * cellPitch;
+        bf.box("impPaintedMetal", cu, 1.75, 0.008, 0.5, 0.5, 0.016, { color: IMP.wallLight, texel: 2 });
+        bf.quad("impDecal", cu, 1.75, 0.018, 0.4, 0.4, { uvRect: impDecalRect(s < 0 ? [0, 3, 6, 9][k] : [15, 11, 5, 2][cells - 1 - k]) });
+        bf.box("crewEmit", cu, 2.08, 0.008, 0.2, 0.03, 0.006, { color: RED });
+      }
+      commsPanel(bf, 0.8, 1.55, 0);
+      if (s < 0) {
+        for (const bu of [3.7, 11.1]) {
+          wallBench(bf, bu, 2.2);
+          bf.box("impPaintedMetal", bu, 1.62, 0.008, 0.7, 0.5, 0.016, { color: IMP.wallLight, texel: 2 });
+          bf.quad("impDecal", bu, 1.62, 0.018, 0.44, 0.44, { uvRect: impDecalRect(3) });
+          bf.quad("impDecal", bu, 2.3, 0.006, 0.6, 0.6, { uvRect: impDecalRect(12) });
+        }
+        wallBoard(bf, L / 2, 1.95, 1.3, 0.8, boardMaterial(ctx.mats, "crewBoardRules", { seed: 23, accent: "#ff3b2a", rows: 8, values: false }));
+      } else {
+        bf.box("leds", L / 2, 2.3, 0.004, 1.2, 0.05, 0.01, { uv: "keep" });
+      }
     }
     // south end of the block: the corridor opens onto the rear passage through a second gate frame
     for (const s of [-1, 1]) kit.box("impPaintedMetal", s * (corrX + 0.05), y + wallH / 2, blockZ1, 0.3, wallH, 0.3, { color: IMP.trim, texel: 1 });
@@ -204,7 +228,8 @@ export function buildDetention(kit, ctx) {
     kit.box("impMetal", -9.2, y + 1.2, 456.0, 0.04, 0.36, 0.04, { color: IMP.gunmetal });
     kit.box("darkGloss", -9.18, y + 1.5, 456.0, 0.03, 0.4, 0.62, { texel: 1 });
     kit.box("screen2", -9.195, y + 1.5, 456.0, 0.004, 0.34, 0.56, { uv: "keep" });
-    kit.box("blink", -9.45, y + 1.015, 456.9, 0.28, 0.008, 0.5, { uv: "keep" });
+    deskPad(kit, [-9.5, y + 1.01, 456.9], -Math.PI / 2, 0.44, 0.24, "screen1");
+    kit.box("leds", -9.5, y + 1.015, 457.25, 0.04, 0.004, 0.3, { uv: "keep" }); // keypad row
     kit.box("impPaintedMetal", -9.1, y + 1.06, 457.4, 0.24, 0.12, 0.3, { color: IMP.wallDark, texel: 2 }); // hand scanner
     kit.box("crewEmit", -9.1, y + 1.125, 457.4, 0.16, 0.004, 0.2, { color: FIELD });
     chair(kit, [-10.4, y, 456.6], -Math.PI / 2);
@@ -236,8 +261,11 @@ export function buildDetention(kit, ctx) {
     steelBench(kit, [xW + 0.5, y, (pen.z0 + pen.z1) / 2], 3.2, Math.PI / 2);
     steelBench(kit, [-12.2, y, pen.z1 - 0.5], 2.4, 0);
     kit.add("impMetal", new THREE.CylinderGeometry(0.2, 0.2, 0.01, 12), { pos: [-12.6, y + 0.005, 463.4], color: IMP.black, uv: "scale", uvScale: [1, 0.1] });
+    // holding-pen sign hung from the ceiling inside the pen: restricted roundel, glyph plate, red strip
     kit.box("impPaintedMetal", pen.x1 - 0.7, y + 2.95, pen.z0 + 1.6, 1.2, 0.3, 0.02, { color: IMP.consoleDark, texel: 1 });
-    kit.box("blinkSparse", pen.x1 - 0.7, y + 2.95, pen.z0 + 1.6 + 0.012, 0.6, 0.14, 0.006, { uv: "keep" });
+    kit.add("impDecal", new THREE.PlaneGeometry(0.24, 0.24), { pos: [pen.x1 - 1.1, y + 2.94, pen.z0 + 1.6 + 0.012], uv: "keep", uvRect: impDecalRect(12) });
+    kit.box("impPaintedMetal", pen.x1 - 0.5, y + 2.94, pen.z0 + 1.6 + 0.012, 0.6, 0.2, 0.006, { color: IMP.wallLight, texel: 2 });
+    kit.add("impDecal", new THREE.PlaneGeometry(0.2, 0.2), { pos: [pen.x1 - 0.5, y + 2.94, pen.z0 + 1.6 + 0.017], uv: "keep", uvRect: impDecalRect(15) });
     kit.box("crewEmit", pen.x1 - 0.7, y + 3.12, pen.z0 + 1.6 + 0.012, 1.0, 0.03, 0.006, { color: RED });
     frame.quad("impDecal", w.u(464.1), 2.5, 0.062, 0.5, 0.5, { uvRect: impDecalRect(13) });
     frame.box("crewPaintRed", w.u(464.1), 2.0, 0.062, 4.0, 0.1, 0.004);
@@ -281,9 +309,11 @@ export function buildDetention(kit, ctx) {
     partition(kit, [8.4, intZ0], [8.4, zS - 3.6], y, wallH, { t: 0.16, ...dark, seed: 66, tag: "intWall", pitch: 4.5 });
     partition(kit, [8.4, zS - 3.6], [8.4, zS], y, wallH, { t: 0.16, ...dark, seed: 67, tag: "intWall", pitch: 3, openings: [{ u0: 0.5, u1: 2.1, h: 2.5, locked: true }] });
     counter(kit, [12.1, y, intZ0 - 0.75], 6.0, Math.PI, { d: 0.7, h: 0.9, doors: false, tone: IMP.consoleDark, top: "impPaintedMetal", topTone: IMP.wallDark, tag: "obsDesk" });
-    for (const x of [10.4, 13.8]) {
-      kit.box("darkGloss", x, y + 0.91, intZ0 - 0.75, 0.6, 0.012, 0.36);
-      kit.box("blink", x, y + 0.918, intZ0 - 0.75, 0.5, 0.004, 0.28, { uv: "keep" });
+    for (const [k, x] of [10.4, 13.8].entries()) {
+      // angled monitor pad with a keypad strip in front of it, an operator chair
+      deskPad(kit, [x, y + 0.9, intZ0 - 0.72], Math.PI, 0.56, 0.3, k ? "screen2" : "screen1");
+      kit.box("darkGloss", x, y + 0.906, intZ0 - 1.02, 0.5, 0.012, 0.12);
+      kit.box("leds", x, y + 0.914, intZ0 - 1.02, 0.42, 0.004, 0.05, { uv: "keep" });
       chair(kit, [x, y, intZ0 - 1.6], Math.PI);
     }
     kit.box("impPaintedMetal", 12.1, y + 1.02, intZ0 - 0.75, 0.3, 0.24, 0.2, { color: IMP.consoleDark, texel: 1 });
@@ -303,10 +333,10 @@ export function buildDetention(kit, ctx) {
     kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.28, 0.32, 0.18, 16), { pos: [cx, y + h - 0.12, cz], color: IMP.consoleDark, uv: "scale", uvScale: [2, 0.3] });
     kit.add("crewEmit", new THREE.CylinderGeometry(0.2, 0.2, 0.01, 16), { pos: [cx, y + h - 0.215, cz], color: 0xfff2e0, uv: "scale", uvScale: [1, 0.1] });
     pointLightDesc(ctx, RED, 2.0, 7, [xE - 0.6, y + 0.35, zS - 0.6], 0);
-    floorLine(kit, [cx - 1.6, cz - 1.6], [cx + 1.6, cz - 1.6], y, 0.08);
-    floorLine(kit, [cx - 1.6, cz + 1.6], [cx + 1.6, cz + 1.6], y, 0.08);
-    floorLine(kit, [cx - 1.6, cz - 1.6], [cx - 1.6, cz + 1.6], y, 0.08);
-    floorLine(kit, [cx + 1.6, cz - 1.6], [cx + 1.6, cz + 1.6], y, 0.08);
+    floorLine(kit, [cx - 1.6, cz - 1.6], [cx + 1.6, cz - 1.6], y + 0.008, 0.08);
+    floorLine(kit, [cx - 1.6, cz + 1.6], [cx + 1.6, cz + 1.6], y + 0.008, 0.08);
+    floorLine(kit, [cx - 1.6, cz - 1.6], [cx - 1.6, cz + 1.6], y + 0.008, 0.08);
+    floorLine(kit, [cx + 1.6, cz - 1.6], [cx + 1.6, cz + 1.6], y + 0.008, 0.08);
     // tool cart, wall rings, red skirting glow strips along the chamber walls, a drain
     toolCart(kit, [14.4, y, 476.6], 0.4);
     for (const z of [470.0, 471.0, 472.0]) kit.add("impMetal", new THREE.TorusGeometry(0.08, 0.015, 6, 16), { pos: [xE - 0.1, y + 1.2, z], rot: [0, Math.PI / 2, 0], color: IMP.steel, uv: "scale", uvScale: [1, 1] });
@@ -314,7 +344,34 @@ export function buildDetention(kit, ctx) {
     kit.box("crewEmit", (8.6 + xE) / 2, y + 0.16, zS - 0.09, xE - 8.6 - 0.6, 0.02, 0.006, { color: RED });
     kit.box("crewEmit", xE - 0.09, y + 0.16, (intZ0 + zS) / 2, 0.006, 0.02, zS - intZ0 - 0.6, { color: RED });
     kit.box("crewEmit", 8.6 + 0.104, y + 0.16, (intZ0 + zS) / 2, 0.006, 0.02, zS - intZ0 - 0.6, { color: RED });
-    kit.add("impMetal", new THREE.CylinderGeometry(0.2, 0.2, 0.012, 12), { pos: [cx, y + 0.008, cz + 1.0], color: IMP.black, uv: "scale", uvScale: [1, 0.1] });
+    // west wall of the chamber (the partition's chamber face, u = zS - z): restraint rack, glass-fronted
+    // instrument cabinet, red band, restricted roundel, and the junction box that feeds the chair
+    const lf = wallFrame(kit, [8.4 + 0.084, zS], [8.4 + 0.084, intZ0], y).frame;
+    restraintRack(lf, zS - 471.4, 1.5);
+    wallCabinet(lf, zS - 475.3, zS - 473.9, 1.05, 1.95, { glass: true, glassMat: "glassDark", tone: IMP.wallDark, seed: 71, shelves: 2 });
+    lf.box("crewPaintRed", zS - 472.4, 2.3, 0.006, 5.8, 0.08, 0.004);
+    lf.quad("impDecal", zS - 469.3, 1.5, 0.006, 0.5, 0.5, { uvRect: impDecalRect(12) });
+    lf.box("impPaintedMetal", zS - 472.9, 0.45, 0.08, 0.3, 0.36, 0.16, { color: IMP.consoleDark, texel: 1 });
+    lf.box("crewEmit", zS - 472.9, 0.56, 0.162, 0.08, 0.02, 0.006, { color: RED });
+    // deck: power cable from the junction box to the chair pedestal, a drain grate, the interrogator's
+    // chair with a side table and datapad facing the restraint chair, a restricted roundel by the glass
+    pipeRun(kit, [[8.62, y + 0.043, 472.9], [10.2, y + 0.043, 473.05], [11.85, y + 0.043, 473.1]], 0.035, { color: IMP.black, mat: "impRubber", clamps: true, clampPitch: 1.0 });
+    floorGrate(kit, [11.4, y + 0.008, 475.0], 0.7);
+    chair(kit, [10.3, y, 474.2], -1.1);
+    table(kit, [9.5, y, 474.9], 0.7, 0.5, { h: 0.74, yaw: -1.1, tone: IMP.consoleDark });
+    kit.box("darkGloss", 9.5, y + 0.75, 474.9, 0.26, 0.012, 0.18);
+    kit.box("screen1", 9.5, y + 0.758, 474.9, 0.22, 0.004, 0.14, { uv: "keep" });
+    floorDecal(kit, 10.4, y + 0.008, 470.2, 1.0, 12, 90);
+    floorDecal(kit, 14.2, y + 0.008, 476.8, 0.8, 1, 0);
+    // holo-recorder on a tripod east of the chair, aimed at it, with its own cable back to the east wall
+    kit.add("impMetal", new THREE.CylinderGeometry(0.03, 0.03, 1.5, 8), { pos: [14.3, y + 0.75, 471.0], color: IMP.gunmetal, uv: "scale", uvScale: [0.2, 1] });
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + 0.4;
+      kit.add("impMetal", new THREE.CylinderGeometry(0.015, 0.015, 0.7, 6), { pos: [14.3 + Math.cos(a) * 0.2, y + 0.3, 471.0 + Math.sin(a) * 0.2], rot: [Math.sin(a) * 0.55, 0, -Math.cos(a) * 0.55], color: IMP.gunmetal, uv: "scale", uvScale: [0.1, 0.5] });
+    }
+    cameraPod(kit, [14.3, y + 1.55, 471.0], 138, -12, { bracket: "ceiling" });
+    kit.collider([14.0, y, 470.7], [14.6, y + 1.7, 471.3], "tripod");
+    pipeRun(kit, [[xE - 0.12, y + 0.043, 470.2], [14.3, y + 0.043, 470.85]], 0.03, { color: IMP.black, mat: "impRubber", clamps: false });
     frame.quad("impDecal", w.u(474.6), 2.2, 0.062, 0.5, 0.5, { uvRect: impDecalRect(13) });
     frame.quad("impDecal", w.u(477.8), 1.6, 0.062, 0.5, 0.5, { uvRect: impDecalRect(15) });
     cameraPod(kit, [xE - 0.3, y + h - 0.3, intZ0 + 0.4], -135, -35);
@@ -333,10 +390,17 @@ export function buildDetention(kit, ctx) {
     pipeRun(kit, [[-15.4, y + 3.0, zS - 0.35], [7.6, y + 3.0, zS - 0.35]], 0.09, { color: IMP.gunmetal });
     pipeRun(kit, [[-15.4, y + 2.75, zS - 0.3], [7.6, y + 2.75, zS - 0.3]], 0.06, { color: IMP.steel });
     frame.box("crewPaintRed", w.u(-4.0), 1.15, 0.062, 22.0, 0.1, 0.004);
-    for (const x of [-11.0, -5.5, 3.5]) {
+    for (const [i, x] of [-11.0, -5.5, 3.5].entries()) {
+      // utility panel: breaker levers with state lamps over a dark inset, an LED row, a hazard stencil
       frame.box("impPaintedMetal", w.u(x), 1.7, 0.07, 1.0, 0.7, 0.05, { color: IMP.consoleDark, texel: 1 });
-      frame.box("blinkSparse", w.u(x), 1.8, 0.1, 0.8, 0.2, 0.006, { uv: "keep" });
+      frame.box("darkGloss", w.u(x), 1.82, 0.097, 0.8, 0.22, 0.006);
+      for (let k = 0; k < 6; k++) {
+        const off = (k + i) % 4 === 3;
+        frame.box("impMetal", w.u(x) - 0.3 + k * 0.12, off ? 1.78 : 1.85, 0.11, 0.05, 0.11, 0.02, { color: off ? IMP.gunmetal : IMP.steel });
+        frame.box("crewEmit", w.u(x) - 0.3 + k * 0.12, 1.96, 0.1, 0.03, 0.02, 0.006, { color: off ? RED : 0x40ff70 });
+      }
       frame.box("leds", w.u(x), 1.5, 0.1, 0.6, 0.05, 0.006, { uv: "keep" });
+      frame.quad("impDecal", w.u(x) + 0.38, 1.5, 0.098, 0.18, 0.18, { uvRect: impDecalRect(1) });
     }
     wallScreen(frame, w.u(0), 2.1, 1.4, 0.9, 1);
     frame.quad("impDecal", w.u(-8.2), 2.2, 0.062, 0.5, 0.5, { uvRect: impDecalRect(9) });
@@ -409,7 +473,8 @@ function cell(kit, ctx, side, zc, num, g) {
   kit.box("impPaintedMetal", xf, y + 2.5 + (wallH - 2.5) / 2, zc, 0.26, wallH - 2.5, doorW + 0.3, { color: IMP.trim, texel: 1 });
   kit.box("crewEmit", xf - s * 0.135, y + 2.56, zc, 0.006, 0.04, 0.6, { color: lampColor });
   kit.box("impPaintedMetal", xf - s * 0.135, y + 2.9, zc, 0.006, 0.28, 0.9, { color: IMP.consoleDark, texel: 1 });
-  kit.box("blinkSparse", xf - s * 0.14, y + 2.9, zc + 0.2, 0.006, 0.12, 0.4, { uv: "keep" });
+  // cell state lamps beside the number: occupied / field / lock (the open cell shows only a green lock lamp)
+  for (const [k, c] of (open ? [0x1c2228, 0x1c2228, 0x40ff70] : [RED, FIELD, 0xffb454]).entries()) kit.box("crewEmit", xf - s * 0.14, y + 2.9, zc + 0.08 + k * 0.11, 0.006, 0.055, 0.055, { color: c });
   kit.add("impDecal", new THREE.PlaneGeometry(0.22, 0.22), { pos: [xf - s * 0.14, y + 2.9, zc - 0.25], rot: [0, s > 0 ? -Math.PI / 2 : Math.PI / 2, 0], uv: "keep", uvRect: impDecalRect([0, 3, 6, 9, 15, 11, 5, 2][num - 1]) });
   kit.collider([xf - 0.14, y, zc - half], [xf + 0.14, y + wallH, zc - doorW / 2], "cellFront");
   kit.collider([xf - 0.14, y, zc + doorW / 2], [xf + 0.14, y + wallH, zc + half], "cellFront");
@@ -476,6 +541,84 @@ function barLeaf(kit, hinge, angle, w, h, y) {
   frame.box("crewEmit", length - 0.2, 1.12, 0.085, 0.14, 0.03, 0.006, { color: 0x40ff70 });
   kit.add("impMetal", new THREE.CylinderGeometry(0.05, 0.05, h + 0.05, 10), { pos: [hinge[0], y + h / 2, hinge[1]], color: IMP.gunmetal, uv: "scale", uvScale: [0.3, 2] });
   kit.collider([Math.min(hinge[0], end[0]) - 0.06, y, Math.min(hinge[1], end[1]) - 0.06], [Math.max(hinge[0], end[0]) + 0.06, y + h, Math.max(hinge[1], end[1]) + 0.06], "gateLeaf");
+}
+
+// Wall comms / call panel on a frame: dark housing (n0 .. n0 + 0.12) with two state lamps in a gloss
+// inset, speaker slots and a call bar — replaces the old indicator-grid squares.
+function commsPanel(frame, u, v, n0 = 0) {
+  frame.box("impPaintedMetal", u, v, n0 + 0.06, 0.24, 0.36, 0.12, { color: IMP.consoleDark, texel: 1 });
+  frame.box("darkGloss", u, v + 0.09, n0 + 0.122, 0.18, 0.09, 0.006);
+  frame.box("crewEmit", u - 0.05, v + 0.09, n0 + 0.126, 0.03, 0.03, 0.006, { color: 0x40ff70 });
+  frame.box("crewEmit", u + 0.05, v + 0.09, n0 + 0.126, 0.03, 0.03, 0.006, { color: RED });
+  for (let k = 0; k < 4; k++) frame.box("impPaintedMetal", u, v - 0.02 - k * 0.03, n0 + 0.122, 0.16, 0.012, 0.006, { color: IMP.black, texel: 2 });
+  frame.box("impMetal", u, v - 0.14, n0 + 0.128, 0.1, 0.02, 0.016, { color: IMP.steel });
+}
+
+// Fold-down wall bench on a frame face: steel slab on two brackets under a wall rail, one collider.
+function wallBench(frame, u, len) {
+  frame.box("impMetal", u, 0.47, 0.22, len, 0.05, 0.42, { color: IMP.steel, texel: 1 });
+  frame.box("impPaintedMetal", u, 0.5, 0.22, len - 0.1, 0.02, 0.38, { color: IMP.wallDark, texel: 1 });
+  for (const s of [-1, 1]) {
+    frame.box("impPaintedMetal", u + s * (len / 2 - 0.2), 0.3, 0.2, 0.06, 0.3, 0.38, { color: IMP.trim, texel: 1 });
+    frame.box("impPaintedMetal", u + s * (len / 2 - 0.2), 0.16, 0.03, 0.08, 0.32, 0.06, { color: IMP.trim, texel: 1 });
+  }
+  frame.box("impPaintedMetal", u, 0.62, 0.02, len, 0.06, 0.04, { color: IMP.trim, texel: 1 });
+  frame.collider(u - len / 2, u + len / 2, 0, 0.55, 0, 0.45, "wallBench");
+}
+
+// Angled console pad on a desk top: dark base, gloss wedge and a lit display tilted toward the operator.
+// pos = desk-top point under the pad centre; yaw as for a chair sat at the pad (yaw 0: operator at +Z).
+function deskPad(kit, pos, yaw, w, h, mat, tilt = 0.32) {
+  const q = yawQ(yaw);
+  const o = new THREE.Vector3(...pos);
+  const L = (x, y, z) => o.clone().add(new THREE.Vector3(x, y, z).applyQuaternion(q));
+  const rise = (Math.sin(tilt) * h) / 2;
+  const tq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tilt));
+  kit.add("impPaintedMetal", new THREE.BoxGeometry(w + 0.1, 0.03, h + 0.1), { pos: L(0, 0.015, 0).toArray(), quat: q, color: IMP.consoleDark, texel: 2 });
+  kit.add("darkGloss", new THREE.BoxGeometry(w + 0.06, 0.02, h + 0.06), { pos: L(0, 0.03 + rise, 0).toArray(), quat: tq });
+  const g = new THREE.PlaneGeometry(w, h);
+  g.rotateX(-Math.PI / 2 + tilt);
+  kit.add(mat, g, { pos: L(0, 0.045 + rise, 0).toArray(), quat: q, uv: "keep" });
+}
+
+// Wall-mounted restraint rack on a frame: framed back plate with a red stripe, two steel bars, hanging
+// binder pairs, shackle bars with ankle rings, a collar, a coiled cable, a control box with a lamp.
+function restraintRack(frame, u, v) {
+  frame.box("impPaintedMetal", u, v, 0.03, 1.9, 1.4, 0.06, { color: IMP.consoleDark, texel: 1 });
+  frame.box("impPanel", u, v, 0.062, 1.8, 1.3, 0.004, { color: IMP.wallDark, uv: "keep" });
+  frame.box("crewPaintRed", u, v + 0.6, 0.066, 1.7, 0.05, 0.004);
+  for (const dv of [0.4, -0.15]) {
+    frame.cylU("impMetal", u, v + dv, 0.12, 0.018, 1.7, { color: IMP.steel, segments: 8 });
+    for (const du of [-0.8, 0.8]) frame.box("impPaintedMetal", u + du, v + dv, 0.08, 0.06, 0.08, 0.1, { color: IMP.trim, texel: 2 });
+  }
+  const ring = (cu, cv, cn, r, tube = 0.012) => frame.add("impMetal", new THREE.TorusGeometry(r, tube, 6, 16), cu, cv, cn, { color: IMP.steel, uv: "scale", uvScale: [1, 1] });
+  for (let k = 0; k < 3; k++) {
+    const bu = u - 0.62 + k * 0.32;
+    ring(bu - 0.05, v + 0.3, 0.12, 0.045);
+    ring(bu + 0.05, v + 0.3, 0.12, 0.045);
+    frame.box("impMetal", bu, v + 0.3, 0.12, 0.1, 0.02, 0.02, { color: IMP.gunmetal });
+  }
+  for (const du of [0.35, 0.55]) {
+    frame.cylV("impMetal", u + du, v + 0.05, 0.12, 0.014, 0.7, { color: IMP.steel, segments: 8 });
+    ring(u + du, v - 0.32, 0.12, 0.05);
+  }
+  ring(u - 0.55, v - 0.3, 0.12, 0.09, 0.016);
+  for (let k = 0; k < 4; k++) ring(u + 0.1 + k * 0.01, v - 0.3, 0.1 + k * 0.014, 0.13, 0.01);
+  frame.box("impPaintedMetal", u + 0.75, v - 0.36, 0.09, 0.22, 0.28, 0.12, { color: IMP.consoleDark, texel: 1 });
+  frame.box("crewEmit", u + 0.75, v - 0.27, 0.152, 0.12, 0.03, 0.006, { color: RED });
+  frame.box("leds", u + 0.75, v - 0.42, 0.152, 0.14, 0.05, 0.006, { uv: "keep" });
+}
+
+// Square deck drain: dark recess under a steel frame with bars. pos = [x, deck top y, z], s = size.
+function floorGrate(kit, pos, s = 0.7) {
+  const [x, y, z] = pos;
+  kit.box("impPaintedMetal", x, y + 0.002, z, s, 0.004, s, { color: IMP.black, texel: 2 });
+  for (const d of [-1, 1]) {
+    kit.box("impMetal", x + d * (s / 2 - 0.02), y + 0.008, z, 0.04, 0.012, s, { color: IMP.steel, texel: 2 });
+    kit.box("impMetal", x, y + 0.008, z + d * (s / 2 - 0.02), s, 0.012, 0.04, { color: IMP.steel, texel: 2 });
+  }
+  const n = Math.round(s / 0.08);
+  for (let i = 1; i < n; i++) kit.box("impMetal", x - s / 2 + i * (s / n), y + 0.007, z, 0.02, 0.008, s - 0.08, { color: IMP.gunmetal, texel: 2 });
 }
 
 // Steel bench (no upholstery): slab on two pedestals with a boot rail. pos = floor centre, len along

@@ -417,7 +417,7 @@ export function shelfUnit(frame, u0, u1, h, opts = {}) {
 // Wall cabinet with closed doors (glass or panel) at height v0..v1 on a frame; the doors show shelves
 // of small items behind glass.
 export function wallCabinet(frame, u0, u1, v0, v1, opts = {}) {
-  const { d = 0.35, glass = true, tone = IMP.wallMid, seed = 5, shelves = 2 } = opts;
+  const { d = 0.35, glass = true, glassMat = "glass", tone = IMP.wallMid, seed = 5, shelves = 2 } = opts;
   const h = v1 - v0;
   const cu = (u0 + u1) / 2;
   const len = u1 - u0;
@@ -441,7 +441,7 @@ export function wallCabinet(frame, u0, u1, v0, v1, opts = {}) {
   const dw = len / nd;
   for (let i = 0; i < nd; i++) {
     const du = u0 + dw * (i + 0.5);
-    if (glass) frame.quad("glass", du, (v0 + v1) / 2, d + 0.004, dw - 0.08, h - 0.1);
+    if (glass) frame.quad(glassMat, du, (v0 + v1) / 2, d + 0.004, dw - 0.08, h - 0.1);
     else frame.box("impPanel", du, (v0 + v1) / 2, d + 0.008, dw - 0.05, h - 0.08, 0.016, { color: tone, uv: "keep" });
     frame.box("impMetal", du + dw * 0.35, (v0 + v1) / 2, d + 0.02, 0.025, 0.14, 0.02, { color: IMP.steel });
   }
