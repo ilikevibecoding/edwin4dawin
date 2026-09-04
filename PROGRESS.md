@@ -439,3 +439,58 @@ Second consecutive all-pass → stopping condition met at iteration 9.
 5. Window-shot lighting: a small warm practical over the porthole (a reading lamp on the bezel) so
    the darkest rubric view lifts to the others' exposure without adding a global fill; cockpit mat
    gets an under-console teal strip on its aft edge for the foreground floor.
+
+---
+---
+
+# PART II — ISD *Vigilance*: Imperial Star Destroyer conversion
+
+The Kestrel freighter (Part I above) is the engine baseline. Everything below transforms the ship
+into a 1,600 m Imperial-class Star Destroyer with a full exterior and a five-deck explorable interior.
+Plan and scene hierarchy: `PLAN.md`. Parallel workstream contract: `docs/WORKSTREAMS.md`.
+
+Environment note (unchanged): this VM has no GPU. All frame times below are SwiftShader software GL
+and only meaningful relative to each other; draw calls, triangles, lights, programs, texture memory
+and load time are exact.
+
+Rubric for Part II: 1 exterior silhouette/scale · 2 exterior detail at far/medium/close · 3 interior
+structure (≥ 10 connected distinct rooms) · 4 bridge · 5 hangar + fighter traffic · 6 design language
+coherence · 7 navigation (doors, lift, stairs, colliders) · 8 camera / transitions · 9 performance
+budgets · 10 extensibility (hooks for NPCs, flight, landing).
+
+## SD iteration 0 — baseline (Kestrel, `shots/iter_baseline/`)
+
+110–124 draw calls, 226–251k triangles, 22 lights, 25 m ship, five rooms, fixed floor height.
+
+## SD iteration 1 — framework (`shots/sd_iter_test/`, `/tmp/navtest_v1.json`)
+
+Built: dimension model (`exterior/dims.js`), hull skins + trench + stern + ventral hangar module +
+reactor bulb, 9,209 instanced plates and 3,245 greebles in 8 z-chunks with distance LOD, stepped
+superstructure with lit windows, tower / bridge module / domes / mast, 8 heavy + 26 light turrets,
+7 engines with glow; 5 decks / 31 sectors as data, lazy deck streaming, room-graph visibility,
+sliding / blast / secure / lift doors, turbolift rides, corridor / lobby / cab builders, Imperial
+toolkit, player gravity + pits + ramps + sprint, orbit / fly exterior camera with fades, instanced
+TIE traffic with bay-door state and pilot / network hooks, metrics, audio hooks, reserved systems.
+
+Measured (960×540 unless noted):
+
+| View | Calls | Tris | Lights | Note |
+|------|-------|------|--------|------|
+| exterior_medium | 141 | 353k | 3 | after batching (was 491 / 848k) |
+| exterior_tower | 133 | 347k | 3 | |
+| exterior_hangar (bay deck streamed in) | 182 | 2,570k | 9 | placeholder hangar; real builder replaces it |
+| bridge_aft (placeholder bridge, hull visible through no windows yet) | 230–250 | 909–996k | 11–19 | exterior counted (seesExterior) |
+| corridor_bridge | 357 | 1,035k | 20 | 6 sectors + exterior |
+| comms (no exterior) | 73 | 59k | 16 | pool = 16 lights always |
+
+Fixes in this iteration: placeholder ceiling lights exploded to 430 in the 72×120 m hangar and lost
+the GL context → budgeted light grids (≤ 6 per room) and a **fixed pool of 14 point + 2 spot lights**
+fed from the visible sectors (nearest first), so the compiled program set is constant while moving
+between rooms (programs stayed at 53 across four rooms; before the pool they grew 62 → 89 → 196 over a
+full walk). Interior hidden in exterior mode except the hangar bay (seen through its opening).
+Superstructure / engines batched per material (491 → 141 draw calls).
+
+Navigation validation (`tools/navtest.mjs`): 74 door traversals in both directions, 73 pass (the one
+failure is a placeholder crate blocking a straight-line walk in the briefing placeholder — the walk
+tool now side-steps when stuck); 5/5 turbolift rides arrive on the right deck at the right height
+(180 / 150 / 60 / 10 / -30); traffic launches and recovers (3 aloft → 1 returning after 45 s).
