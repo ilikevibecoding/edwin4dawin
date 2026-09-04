@@ -56,7 +56,8 @@ const tMats = performance.now() - tBuild0;
 const space = buildSpace(scene);
 
 // Sun: one directional light following the far-field sun, shadow frustum fitted per camera mode
-const sun = new THREE.DirectionalLight(0xfff1dc, 3.8);
+const SUN_INTENSITY = 3.8;
+const sun = new THREE.DirectionalLight(0xfff1dc, SUN_INTENSITY);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.bias = -0.0006;
@@ -78,6 +79,10 @@ scene.add(exterior.group);
 const greebles = buildGreebles(mats);
 exterior.group.add(greebles.group);
 const tExt = performance.now() - tExt0;
+
+// Which rooms can see outside: "all" = hull + greebles + fighters + sun, "traffic" = fighters and
+// space through an opening only (the hangar well), everything else is fully enclosed.
+const EXTERIOR_VIEW = { bridge: "all", observation: "all", lounge: "all", hangar: "traffic", flightControl: "traffic" };
 
 // Interior: rooms, lifts, doors
 const zone = new ZoneManager(scene, mats);
@@ -485,6 +490,15 @@ function frame() {
     interactions.update();
   } else {
     interactions.setItems([]);
+  }
+  // exterior culling: enclosed rooms cannot see the hull, the greebles, the fighters or the sun
+  {
+    const room = modes.mode === "interior" ? zone.current : null;
+    const ev = room ? EXTERIOR_VIEW[room.id] || "none" : "all";
+    exterior.group.visible = ev !== "none";
+    greebles.group.visible = ev === "all";
+    traffic.group.visible = ev !== "none";
+    sun.intensity = ev === "none" ? 0 : SUN_INTENSITY;
   }
   lightPool.assign(zone.lightDescs(), modes.mode === "interior" ? player.position : camera.position);
   lightPool.update(dt);

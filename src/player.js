@@ -115,11 +115,17 @@ export class Player {
     this.velocity.lerp(wish, t);
     if (this.velocity.lengthSq() < 1e-6) this.velocity.set(0, 0, 0);
 
-    const step = this.velocity.clone().multiplyScalar(dt);
-    this.position.x += step.x;
-    this.resolveCollisions("x");
-    this.position.z += step.z;
-    this.resolveCollisions("z");
+    // substep so a single frame never moves more than ~0.12 m: at the loop's 0.1 s dt clamp a sprint
+    // step is 0.65 m, enough to tunnel through a thin partition
+    const move = this.velocity.length() * dt;
+    const n = Math.max(1, Math.ceil(move / 0.12));
+    const step = this.velocity.clone().multiplyScalar(dt / n);
+    for (let i = 0; i < n; i++) {
+      this.position.x += step.x;
+      this.resolveCollisions("x");
+      this.position.z += step.z;
+      this.resolveCollisions("z");
+    }
 
     // ground: highest walkable under the feet within step height; otherwise fall
     const ground = this.groundHeight(this.position.x, this.position.z, this.position.y + STEP_UP);
