@@ -1,11 +1,12 @@
 // Security & Detention Block (Deck C): a central security desk with a bank of monitors facing the blast
-// door, two rows of four 3×3 m cells (three walls, bunk slab, red force-field doorway with a framed
-// emitter strip, cell number stencils, red overhead light), an interrogation room at the far end
-// (restraint chair, interrogation droid on a stand, bright white spot), a weapon-locker cage, camera
-// housings in every corner, rotating red beacons and red floor edge lighting.
+// door, two rows of four 3×3 m cells (three walls, bunk slab, a barred containment grid with a lock box and
+// occupancy lamp over a faint red field, framed emitter pillars, cell number stencils, red overhead light),
+// an interrogation room at the far end (restraint chair, interrogation droid on a stand, bright white spot),
+// a weapon-locker cage, camera housings in every corner, rotating red beacons.
 // Dark ribbed wall variant (grey-dark / charcoal panels, conduit-heavy, banded), the cells darker still.
 // Red accent; dim red slots over the desk, red pools everywhere else, cool fill at the door and the aisle,
-// one harsh white spot in the interrogation room. The no-entry roundel appears once (facing the door).
+// one harsh white spot in the interrogation room. Rails are dark with a single dim indicator per gate post;
+// the aisle edges are painted red lines, not light strips. The no-entry roundel appears once (facing the door).
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { PALETTE } from "../materials.js";
@@ -104,9 +105,16 @@ function buildCell(kit, ctx, cx, cz, yaw, number, opts = {}) {
   p.box("scrRed1", 0.9, h - 0.2, half + 0.205, 0.4, 0.16, 0.01, { uv: "keep" });
   p.box(occupied ? "emitRedImp" : "emitGreen", -0.9, h - 0.2, half + 0.205, 0.08, 0.08, 0.01);
   p.box("impTrim", 0, 0.03, half + 0.02, size - 0.6, 0.06, 0.36, { color: BLK, texel: 1 });
-  p.box(ACCENT, 0, 0.062, half + 0.02, size - 0.66, 0.006, 0.06);
+  p.box("emitRedDim", 0, 0.062, half + 0.02, size - 0.66, 0.006, 0.06);
+  // containment grid across the doorway: three steel rails and a centre bar with a lock box, so from the
+  // aisle the opening reads as a barred cell door with a faint field behind it, not a red slab
+  const gw = size - 0.64;
+  for (const gy of [0.9, 1.6, 2.3]) p.cyl("impMetal", 0, gy, half + 0.02, 0.022, gw, "x", { color: GD, segments: 8 });
+  p.cyl("impMetal", 0, (h - 0.46) / 2 + 0.06, half + 0.02, 0.022, h - 0.5, "y", { color: GD, segments: 8 });
+  p.box("impTrim", 0, 1.25, half + 0.02, 0.22, 0.3, 0.1, { color: BLK });
+  p.box(occupied ? "emitRedDim" : "emitGreen", 0, 1.3, half + 0.075, 0.06, 0.03, 0.01);
   // force field plane, baked into room space; all eight fields become one attached mesh (shared tinted holo)
-  const fp = p.pos(0, (h - 0.46) / 2 + 0.06, half + 0.02);
+  const fp = p.pos(0, (h - 0.46) / 2 + 0.06, half - 0.02);
   ctx.fieldGeos.push(new THREE.PlaneGeometry(size - 0.64, h - 0.46).applyQuaternion(p.quat()).translate(fp.x, fp.y, fp.z));
   p.collider(-half + 0.3, 0, half - 0.1, half - 0.3, h, half + 0.16, "field");
   p.collider(-half - 0.2, 0, half - 0.16, -half + 0.32, h, half + 0.2, "pillar");
@@ -169,8 +177,7 @@ export function buildDetention(kit, ctx, room) {
     accentKey,
     // wall variant: dark ribbed — grey-dark / charcoal panels cut by two bands, conduit-heavy, no bare wall light slots
     wall: { panelW: 1.4, bands: [1.05, 2.25], features: { vent: 0.1, equipment: 0.06, conduit: 0.22, light: 0, screen: 0.03 }, altChance: 0.3, panelColor: GD, panelColorAlt: GREY, accent: PALETTE.impRed },
-    floor: { laneW: 2.6, laneAxis: "z" },
-    floorEdgeLight: accentKey,
+    floor: { lane: false },
     ceiling: { troughs: 2, troughW: 0.5, beamStep: 4.8 },
   });
   const N = walls.N.frame; // u = x + hx
@@ -180,13 +187,11 @@ export function buildDetention(kit, ctx, room) {
   const cctx = { fieldGeos: [] };
   const fieldMat = ctx.materials.holo.clone();
   fieldMat.color.set(DECK_C.redField.getHex());
-  fieldMat.opacity = 0.22;
+  fieldMat.opacity = 0.1;
 
-  // ---------------------------------------------------------------- red edge lighting along the long walls + red floor lines beside the aisle
-  for (const s of [-1, 1]) {
-    kit.boxMM(accentKey, [-hx + 0.6, 0.002, s * (hz - 0.28) - 0.03], [hx - 0.6, 0.012, s * (hz - 0.28) + 0.03]);
-    kit.boxMM(accentKey, [s * 1.55 - 0.02, 0.002, -hz + 1.0], [s * 1.55 + 0.02, 0.02, hz - 1.6]);
-  }
+  // ---------------------------------------------------------------- painted red edge lines beside the aisle (no glow: the red is in the cells, beacons and slots)
+  const PAINT_RED = new THREE.Color("#7a1f1c");
+  for (const s of [-1, 1]) kit.boxMM("impPanel1", [s * 1.55 - 0.025, 0.002, -hz + 1.0], [s * 1.55 + 0.025, 0.012, hz - 1.6], { color: PAINT_RED, uv: "world", texel: 1 });
 
   // ---------------------------------------------------------------- security desk facing the door: U of consoles, monitor bank, chairs, railing
   {
@@ -240,11 +245,16 @@ export function buildDetention(kit, ctx, room) {
       map.rotation.y += dt * 0.5;
       map.position.y = 1.1 + Math.sin(t * 1.5) * 0.02;
     });
-    // low railing separating the desk from the entry, with a gate gap on the lane
-    impRailing(kit, [-5.5, dz - 2.3], [-1.5, dz - 2.3], 0, { h: 1.0, light: accentKey });
-    impRailing(kit, [1.5, dz - 2.3], [5.5, dz - 2.3], 0, { h: 1.0, light: accentKey });
-    impRailing(kit, [-5.5, dz - 2.3], [-5.5, dz + 2.6], 0, { h: 1.0 });
-    impRailing(kit, [5.5, dz - 2.3], [5.5, dz + 2.6], 0, { h: 1.0 });
+    // low dark railing separating the desk from the entry, with a gate gap on the lane; one dim red indicator
+    // on each gate post (no lit rail strips)
+    impRailing(kit, [-5.5, dz - 2.3], [-1.5, dz - 2.3], 0, { h: 1.0, color: CHR });
+    impRailing(kit, [1.5, dz - 2.3], [5.5, dz - 2.3], 0, { h: 1.0, color: CHR });
+    impRailing(kit, [-5.5, dz - 2.3], [-5.5, dz + 2.6], 0, { h: 1.0, color: CHR });
+    impRailing(kit, [5.5, dz - 2.3], [5.5, dz + 2.6], 0, { h: 1.0, color: CHR });
+    for (const s of [-1, 1]) {
+      kit.box("impTrim", s * 1.5, 1.08, dz - 2.3, 0.1, 0.1, 0.1, { color: BLK });
+      kit.box("emitRedDim", s * 1.5, 1.08, dz - 2.3 - 0.052, 0.04, 0.03, 0.006);
+    }
     floorDecal(kit, IMP_DECAL.keepClear, 0, dz - 3.2, 0.8, Math.PI);
     kit.boxMM("rubber", [-5.3, 0.002, dz - 2.1], [5.3, 0.02, dz + 2.5], { color: GD, texel: 1 });
     // over the desk: a pair of dim red louvred slots in one black housing (the old white panel killed the red mood)
@@ -301,7 +311,7 @@ export function buildDetention(kit, ctx, room) {
     const iz = hz - 3.2;
     kit.box("impTrim", 0, 0.08, iz, 7.0, 0.16, 5.0, { color: BLK, texel: 1 });
     kit.box("impMetalRough", 0, 0.17, iz, 6.8, 0.02, 4.8, { color: CHR, texel: 1 });
-    kit.boxMM(accentKey, [-3.4, 0.16, iz - 2.5], [3.4, 0.19, iz - 2.46]);
+    kit.boxMM("emitRedDim", [-3.4, 0.16, iz - 2.5], [3.4, 0.19, iz - 2.46]);
     kit.floor(-3.5, iz - 2.5, 3.5, iz + 2.5, 0.18, "dais");
     kit.box("impTrim", 0, 0.04, iz - 2.75, 3.0, 0.08, 0.5, { color: BLK, texel: 1 });
     kit.box("chevronR", 0, 0.085, iz - 2.75, 2.8, 0.01, 0.4, { texel: 3 });
