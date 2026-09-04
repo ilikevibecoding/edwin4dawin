@@ -365,6 +365,105 @@ export function dispenser(kit, pos, yaw = 0, opts = {}) {
   return { keypad: kp, quat: q };
 }
 
+/**
+ * One interactable made of several small plates (e.g. the keypads of a bank of dispensers): the
+ * plates are merged into a single mesh with its own material so the hover highlight can tint it,
+ * and one entry is pushed onto ctx.interactables. plates: [{ pos, quat, size:[w,h,d] }].
+ * onActivate(api, item) gets the interaction API (api.hud.setStatus(...)).
+ */
+export function interactPlates(ctx, plates, { id, label, color = 0x9ab4d8, emissive = 0x1a3a6a, onActivate }) {
+  const geos = [];
+  for (const p of plates) {
+    const g = new THREE.BoxGeometry(...p.size);
+    g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(...p.pos), p.quat || new THREE.Quaternion(), new THREE.Vector3(1, 1, 1)));
+    geos.push(g);
+  }
+  const merged = mergeGeometries(geos, false);
+  const material = new THREE.MeshStandardMaterial({ color, emissive, emissiveIntensity: 0.9, roughness: 0.45, metalness: 0.2 });
+  const mesh = new THREE.Mesh(merged, material);
+  mesh.name = "interact_" + id;
+  ctx.add(mesh);
+  ctx.interactables.push({ object: mesh, material, id, label, key: "E", onActivate });
+  return mesh;
+}
+
+// Tray rack: open steel rack with stacked trays on its shelves. pos = floor centre, yaw 0 => open
+// face toward +Z. w x d footprint, `levels` shelves.
+export function trayRack(kit, pos, yaw = 0, opts = {}) {
+  const { w = 1.1, d = 0.6, h = 1.7, levels = 4, trays = 5, tone = IMP.gunmetal, trayColor = IMP.wallMid, collide = true, seed = 3 } = opts;
+  const rand = rng(seed);
+  const q = yawQ(yaw);
+  const o = new THREE.Vector3(...pos);
+  const L = (x, y, z) => o.clone().add(new THREE.Vector3(x, y, z).applyQuaternion(q));
+  const box = (mat, x, y, z, sx, sy, sz, extra = {}) => {
+    const p = L(x, y, z);
+    return kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box("impMetal", sx * (w / 2 - 0.025), h / 2, sz * (d / 2 - 0.025), 0.05, h, 0.05, { color: tone });
+  box("impPaintedMetal", 0, h - 0.02, 0, w, 0.04, d, { color: IMP.trim, texel: 1 });
+  for (let l = 0; l < levels; l++) {
+    const v = 0.12 + (l * (h - 0.3)) / levels;
+    box("impMetal", 0, v, 0, w - 0.06, 0.025, d - 0.06, { color: tone, texel: 1 });
+    const n = Math.max(1, Math.round(trays * (0.5 + rand() * 0.7)));
+    for (let t = 0; t < n; t++) box("impPaintedMetal", (rand() - 0.5) * 0.04, v + 0.0125 + 0.015 + t * 0.03, (rand() - 0.5) * 0.03, w - 0.3, 0.03, d - 0.2, { color: t % 2 ? trayColor : IMP.wallDark, texel: 2 });
+  }
+  box("impPaintedMetal", 0, h * 0.5, -d / 2 + 0.01, w - 0.1, h - 0.3, 0.02, { color: IMP.wallDark, texel: 1 });
+  const dq = L(0, h - 0.1, d / 2 + 0.001);
+  kit.add("impDecal", new THREE.PlaneGeometry(0.16, 0.16), { pos: [dq.x, dq.y, dq.z], quat: q, uv: "keep", uvRect: impDecalRect(6) });
+  if (collide) {
+    const a = L(-w / 2, 0, -d / 2);
+    const b = L(w / 2, 0, d / 2);
+    kit.collider([Math.min(a.x, b.x), pos[1], Math.min(a.z, b.z)], [Math.max(a.x, b.x), pos[1] + h, Math.max(a.z, b.z)], "trayRack");
+  }
+}
+
+/**
+ * Galley heater / oven unit. pos = floor centre, yaw 0 => front toward +Z. Dark body, glass door with
+ * an amber glow inside, cooktop rings, control panel with knobs. glow: material key for the interior.
+ */
+export function oven(kit, pos, yaw = 0, opts = {}) {
+  const { w = 1.3, d = 0.9, h = 1.25, tone = IMP.consoleDark, glow = "emitAmber", glowColor = null, rings = 2, collide = true } = opts;
+  const q = yawQ(yaw);
+  const o = new THREE.Vector3(...pos);
+  const L = (x, y, z) => o.clone().add(new THREE.Vector3(x, y, z).applyQuaternion(q));
+  const box = (mat, x, y, z, sx, sy, sz, extra = {}) => {
+    const p = L(x, y, z);
+    return kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  box("impPaintedMetal", 0, 0.05, 0, w - 0.1, 0.1, d - 0.1, { color: IMP.trim, texel: 1 });
+  box("impPaintedMetal", 0, h / 2, 0, w, h, d, { color: tone, texel: 1 });
+  box("impMetal", 0, h - 0.02, 0, w + 0.04, 0.04, d + 0.04, { color: IMP.steel, texel: 1 });
+  // oven door: recessed dark cavity, amber glow, glass pane, handle bar
+  const dv0 = 0.28;
+  const dv1 = 0.88;
+  box("impPaintedMetal", 0, (dv0 + dv1) / 2, d / 2 - 0.12, w - 0.36, dv1 - dv0 - 0.06, 0.02, { color: IMP.black, texel: 1 });
+  box(glow, 0, dv0 + 0.1, d / 2 - 0.1, w - 0.5, 0.06, 0.06, glowColor ? { color: glowColor } : {});
+  box(glow, 0, (dv0 + dv1) / 2, d / 2 - 0.115, w - 0.6, dv1 - dv0 - 0.3, 0.005, glowColor ? { color: glowColor } : {});
+  box("impMetal", 0, (dv0 + dv1) / 2, d / 2 + 0.005, w - 0.3, dv1 - dv0, 0.02, { color: IMP.gunmetal, texel: 1 });
+  box("glass", 0, (dv0 + dv1) / 2, d / 2 + 0.016, w - 0.42, dv1 - dv0 - 0.12, 0.004);
+  box("impMetal", 0, dv1 + 0.06, d / 2 + 0.06, w - 0.4, 0.035, 0.035, { color: IMP.steel });
+  for (const s of [-1, 1]) box("impMetal", s * (w / 2 - 0.21), dv1 + 0.06, d / 2 + 0.035, 0.03, 0.03, 0.06, { color: IMP.steel });
+  // control panel above the door
+  box("impPaintedMetal", 0, h - 0.14, d / 2 + 0.006, w - 0.3, 0.14, 0.012, { color: IMP.wallDark, texel: 1 });
+  box("blinkSparse", -w * 0.22, h - 0.14, d / 2 + 0.014, w * 0.3, 0.06, 0.004, { uv: "keep" });
+  for (let k = 0; k < 3; k++) {
+    const kp = L(w * 0.1 + k * 0.12, h - 0.14, d / 2 + 0.03);
+    kit.add("impMetal", new THREE.CylinderGeometry(0.03, 0.03, 0.04, 10), { pos: [kp.x, kp.y, kp.z], quat: q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2)), color: IMP.steel, uv: "scale", uvScale: [0.3, 0.2] });
+  }
+  // cooktop rings
+  for (let r = 0; r < rings; r++) {
+    const rx = rings === 1 ? 0 : -w / 4 + (r * w) / 2 / (rings - 1);
+    const rp = L(rx, h + 0.015, 0);
+    kit.add("impMetal", new THREE.CylinderGeometry(0.2, 0.2, 0.03, 16), { pos: [rp.x, rp.y, rp.z], color: IMP.gunmetal, uv: "scale", uvScale: [1, 0.1] });
+    kit.add(glow, new THREE.TorusGeometry(0.13, 0.012, 6, 20), { pos: [rp.x, rp.y + 0.016, rp.z], rot: [Math.PI / 2, 0, 0], ...(glowColor ? { color: glowColor } : {}) });
+  }
+  if (collide) {
+    const a = L(-w / 2, 0, -d / 2);
+    const b = L(w / 2, 0, d / 2);
+    kit.collider([Math.min(a.x, b.x), pos[1], Math.min(a.z, b.z)], [Math.max(a.x, b.x), pos[1] + h, Math.max(a.z, b.z)], "oven");
+  }
+}
+
 // Security camera pod on a wall or ceiling bracket. pos = mount point, yaw/pitch (deg) of the lens.
 export function cameraPod(kit, pos, yawDeg, pitchDeg = -25, opts = {}) {
   const { bracket = "wall", led = "emitRed" } = opts;
