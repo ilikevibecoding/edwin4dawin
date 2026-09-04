@@ -1,7 +1,8 @@
-// Main reactor chamber (deck C, 30 m tall). The core is the hero: a 24 m pulsing blue-white containment
-// column rises from a low plinth to the ceiling socket inside glass sleeves, broken only by three thin
-// steel collars with magnetic containment rings; field rings, cage struts and faint light cones carry
-// the glow up the chamber. An octagonal grated catwalk ring at +6 m (two flanking stair runs) carries
+// Main reactor chamber (deck C, 30 m tall). The core is the hero: a 27 m contained beam rises from a low
+// plinth to the ceiling socket: a bright banded white-blue beam (bands drift upward) inside a translucent
+// blue sleeve ringed by white field rings and dark clamped hoops, all inside glass, broken only by three
+// thin steel collars with magnetic containment rings; cage struts and faint light cones carry the glow
+// up the chamber. An octagonal grated catwalk ring at +6 m (two flanking stair runs) carries
 // control pulpits, amber post lamps and warning beacons; an upper inspection gallery at +18 m with two
 // bridges to the side walls and two tiers of radial coolant mains make the full height read. A grated
 // maintenance pit surrounds the plinth (stair at the side, centreline railing closed), capacitor banks
@@ -37,9 +38,13 @@ import {
   paintStrip,
   beaconSet,
   wallBaseTube,
+  bandTexture,
+  beamGeometry,
+  beamMaterial,
 } from "./deckCProps.js";
 
-const CORE_R = 4.4; // emissive containment column
+const CORE_R = 4.4; // translucent containment sleeve
+const BEAM_R = 2.9; // the bright banded beam inside it
 const GLASS_R = 4.85;
 const COLLAR_R = 6.4;
 const PLINTH_A = 8.0; // octagon apothem of the base plinth
@@ -259,13 +264,22 @@ export function build(kit, ctx, room, lib) {
   kit.add("paintedMetal", new THREE.CylinderGeometry(COLLAR_R + 1.4, COLLAR_R + 0.2, h - TOP_Y, 48), { pos: [cx, y0 + (TOP_Y + h) / 2, cz], color: PALETTE.slate, uv: "world", texel: 0.5 });
   kit.cyl("emitBlueSoft", cx, y0 + TOP_Y + 0.1, cz, COLLAR_R + 0.3, 0.1, "y", { segments: 48, uv: "keep" });
   kit.add("metal", new THREE.TorusGeometry(COLLAR_R + 1.3, 0.25, 6, 48), { pos: [cx, y0 + h - 0.3, cz], rot: [Math.PI / 2, 0, 0], color: PALETTE.steel, uv: "world", texel: 1 });
-  // glass sleeves + bright field rings inside every glow gap
+  // glass sleeves, and inside every glow gap the field structure that makes the column read as a
+  // contained beam: bright white field rings with dark clamped hoops between them
   for (const [a, b] of GAPS) {
     kit.cyl("glass", cx, y0 + (a + b) / 2, cz, GLASS_R, b - a, "y", { segments: 48, open: true });
     const n = Math.max(1, Math.round((b - a) / 1.8));
     for (let i = 0; i < n; i++) {
       const y = y0 + a + ((i + 0.5) / n) * (b - a);
-      kit.add("emitWhiteSoft", new THREE.TorusGeometry(CORE_R + 0.08, 0.05, 4, 48), { pos: [cx, y, cz], rot: [Math.PI / 2, 0, 0], uv: "keep" });
+      kit.add("emitWhite", new THREE.TorusGeometry(CORE_R + 0.12, 0.09, 6, 48), { pos: [cx, y, cz], rot: [Math.PI / 2, 0, 0], uv: "keep" });
+      if (i + 1 < n) {
+        const yh = y0 + a + ((i + 1) / n) * (b - a);
+        kit.add("metal", new THREE.TorusGeometry(CORE_R + 0.14, 0.11, 6, 48), { pos: [cx, yh, cz], rot: [Math.PI / 2, 0, 0], color: PALETTE.gunmetal, uv: "world", texel: 1 });
+        for (let k = 0; k < 8; k++) {
+          const ang = Math.PI / 8 + (k * Math.PI) / 4;
+          kit.add("metal", new THREE.BoxGeometry(0.4, 0.34, 0.3), { pos: [cx + Math.cos(ang) * (CORE_R + 0.14), yh, cz + Math.sin(ang) * (CORE_R + 0.14)], rot: [0, Math.PI / 2 - ang, 0], color: PALETTE.darkMetal, texel: 2 });
+        }
+      }
     }
   }
   // eight vertical struts of the containment cage with blue running lights
@@ -278,25 +292,26 @@ export function build(kit, ctx, room, lib) {
     kit.add("paintedMetal", new THREE.BoxGeometry(0.5, ey - sy, 0.5), { pos: [cx + Math.cos(ang) * r, (sy + ey) / 2, cz + Math.sin(ang) * r], rot, color: PALETTE.darkMetal, texel: 1 });
     kit.add("emitBlue", new THREE.BoxGeometry(0.08, ey - sy - 1.0, 0.03), { pos: [cx + Math.cos(ang) * (r + 0.26), (sy + ey) / 2, cz + Math.sin(ang) * (r + 0.26)], rot, uv: "keep" });
   }
-  // the containment column: one mesh with a cloned material so its glow can breathe; the chamber is lit
-  // by the column itself (strong blue-white sources on the axis at five heights, 40 m reach)
+  // the containment column: a bright banded beam inside a translucent blue sleeve, so the centre reads as
+  // a contained beam with brighter bands drifting slowly upward instead of a flat white bar; the chamber
+  // is lit by the column itself (strong blue-white sources on the axis at five heights, 40 m reach)
   {
-    const parts = [];
-    for (const [a, b] of GAPS) {
-      const g = new THREE.CylinderGeometry(CORE_R, CORE_R, b - a + 0.4, 48, 1, true);
-      const uv = g.attributes.uv;
-      for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5, uv.getY(i));
-      g.translate(cx, y0 + (a + b) / 2, cz);
-      parts.push(g);
-    }
-    const merged = mergeGeometries(parts, false);
-    const mat = ctx.materials.emitBlueSoft.clone();
-    mat.emissive = new THREE.Color("#86bcff");
-    mat.emissiveIntensity = 1.45;
-    const core = new THREE.Mesh(merged, mat);
+    const period = 10.5;
+    const origin = y0 + PLINTH_TOP;
+    const beamMat = beamMaterial(ctx, "#dbe9ff", 1.55, bandTexture(7, 0.3, 1.0, 0.15), period, 0.9);
+    const beam = new THREE.Mesh(beamGeometry(cx, origin, cz, BEAM_R, TOP_Y - PLINTH_TOP, period, 40), beamMat);
+    beam.name = "reactorBeam";
+    beam.castShadow = false;
+    beam.receiveShadow = false;
+    const sleeveMat = beamMaterial(ctx, "#78b4ff", 0.7, bandTexture(2, 0.7, 1.0, 0.5), period * 2, 0.35, { opacity: 0.36 });
+    const sleeve = new THREE.Mesh(mergeGeometries(GAPS.map(([a, b]) => beamGeometry(cx, y0 + a - 0.2, cz, CORE_R, b - a + 0.4, period * 2, 48, origin)), false), sleeveMat);
+    sleeve.name = "reactorSleeve";
+    sleeve.renderOrder = 1;
+    sleeve.castShadow = false;
+    sleeve.receiveShadow = false;
+    const core = new THREE.Group();
     core.name = "reactorCore";
-    core.castShadow = false;
-    core.receiveShadow = false;
+    core.add(beam, sleeve);
     const coreLights = [];
     for (const [k, y] of [4.6, 10.6, 16.6, 22.6, 28.0].entries()) {
       const l = pointLight(0xa8d4ff, [340, 360, 360, 320, 260][k], 40, [cx, y0 + y, cz]);
@@ -323,13 +338,15 @@ export function build(kit, ctx, room, lib) {
     coneMesh.renderOrder = 2;
     core.add(coneMesh);
     let t = 0;
-    const base = mat.emissiveIntensity;
     ctx.dynamic.push({
       object: core,
       update(dt) {
         t += dt;
         const p = 0.86 + 0.1 * Math.sin(t * 1.3) + 0.04 * Math.sin(t * 4.7);
-        mat.emissiveIntensity = base * p;
+        beamMat.emissiveIntensity = beamMat.userData.base * p;
+        sleeveMat.emissiveIntensity = sleeveMat.userData.base * (0.5 + 0.5 * p);
+        beamMat.userData.scroll(dt);
+        sleeveMat.userData.scroll(dt);
         coneMat.opacity = 0.045 * (0.8 + 0.25 * p);
         for (const l of coreLights) l.intensity = (l.userData.baseIntensity ?? l.intensity) * (0.9 + 0.1 * p);
       },

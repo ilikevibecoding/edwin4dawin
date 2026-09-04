@@ -1,13 +1,14 @@
-// Hyperdrive room (deck C, 6 m): two rows of five stacked motivator banks flank a central inspection
-// aisle whose floor grates cover an amber-lit coolant trench. The banks are satin-black two-tier units
-// with steel spines, dark louvre bays and amber glow slits that breathe; four variants (standard, one
-// with its service panel off showing the coils, a ring-emitter face, an offline unit under lockout).
-// The hero motivator closes the aisle: a 5 m coil stack around a pulsing blue-white core on an
-// octagonal plinth, flanked by two diagnostic pulpits. Coolant reservoirs line the port wall, power
-// conditioning cabinets (three variants) the starboard wall, a wall of pressure gauges flanks the door,
-// the coolant trunk runs along the forward wall and an overhead crane rail spans the aisle. Warm-white
-// working light, amber from the slits and trench, blue-white from the hero; hazard paint only at the
-// grate edges; lane lines are paint.
+// Hyperdrive room (deck C, 6 m): the room is about the drive. A 5.6 m octagonal drive housing stands
+// mid-aisle on the door sightline, straddling the amber-lit coolant trench: ribbed glass chamber with
+// clamped steel bands, six coils on tie rods around a banded blue-white core whose bands climb as it
+// breathes, frost rings in the gaps, a heavy cap feeding the ceiling and the row cable trays, two
+// diagnostic pulpits ahead of it. Two rows of five stacked motivator banks frame it: satin-black
+// two-tier units with steel spines, dark louvre bays and amber glow slits (four variants: standard,
+// service panel off showing the coils, ring-emitter face, offline unit under lockout). Coolant
+// reservoirs line the port wall, power-conditioning cabinets (three variants) the starboard wall, a wall
+// of pressure gauges flanks the door, the coolant trunk and a trench-head manifold close the forward
+// end, and a coil-lift rail with a parked hoist runs behind the housing. Warm-white working light, amber
+// from the slits and trench, blue-white from the drive; hazard paint only at the grate edges.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { roomShell, wallLightBar, wallConsole } from "../shell.js";
@@ -16,7 +17,6 @@ import { PALETTE } from "../../materials.js";
 import { decalRect } from "../../textures.js";
 import {
   yawFrame,
-  yawToward,
   cylBetween,
   pipeRun,
   framePipe,
@@ -34,6 +34,9 @@ import {
   toolCart,
   wallBaseTube,
   tubeFixture,
+  bandTexture,
+  beamGeometry,
+  beamMaterial,
 } from "./deckCProps.js";
 
 const UNIT_W = 3.6; // along the row
@@ -46,7 +49,10 @@ const WEST_FACE = 50.0;
 const EAST_FACE = 58.0;
 const TRENCH = { x0: 52.8, x1: 55.2, z0: 484.6, z1: 501.4, depth: 0.75 };
 const TANK_Z = [487.5, 494.0, 500.5];
-const HERO = { x: 54, z: 503.7, r: 1.9 };
+// the hero drive housing stands mid-aisle on the door sightline, straddling the trench
+const HERO = { x: 54, z: 492.6 };
+const PLINTH_R = 2.15; // octagon circumradius of the plinth (1.35 m path to the unit fronts either side)
+const RIB_R = 1.85; // chamber rib radius
 // unit variants per row position: 0 standard, 1 service panel off, 2 ring emitter, 3 offline
 const WEST_VAR = [0, 1, 0, 2, 3];
 const EAST_VAR = [2, 0, 3, 0, 1];
@@ -260,10 +266,18 @@ export function build(kit, ctx, room, lib) {
     pipeClamp(kit, 54.55, tb + 0.13, z, 0.11, { axis: "z" });
     flange(kit, [53.45, tb + 0.17, z + 1.2], [0, 0, 1], 0.21);
   }
-  const nSec = 7;
-  const secL = (T.z1 - T.z0) / nSec;
-  for (let i = 0; i < nSec; i++) grateDeck(kit, T.x0, T.z0 + i * secL, T.x1, T.z0 + (i + 1) * secL, y0, { bearerStep: 1.2 });
-  for (const z of [488.0, 493.0, 498.0]) ctx.lights.warm.push(pointLight(0xffa040, 12, 8, [54, tb + 0.4, z]));
+  // grates in two runs that end under the hero plinth; between them a feed block the trench pipes enter
+  for (const [ga, gb] of [[T.z0, HERO.z - 1.9], [HERO.z + 1.9, T.z1]]) {
+    const nSec = Math.max(1, Math.round((gb - ga) / 1.15));
+    const secL = (gb - ga) / nSec;
+    for (let i = 0; i < nSec; i++) grateDeck(kit, T.x0, ga + i * secL, T.x1, ga + (i + 1) * secL, y0, { bearerStep: 1.2 });
+  }
+  kit.boxMM("satinBlack", [T.x0, tb, HERO.z - 1.9], [T.x1, y0, HERO.z + 1.9]);
+  for (const s of [-1, 1]) {
+    kit.boxMM("metal", [T.x0 + 0.05, tb + 0.1, HERO.z + s * 1.9 - 0.03], [T.x1 - 0.05, y0 - 0.05, HERO.z + s * 1.9 + 0.03], { color: PALETTE.steel, texel: 2 });
+    kit.boxMM("emitCoolSoft", [T.x0 + 0.3, tb + 0.45, HERO.z + s * 1.94 - 0.01], [T.x1 - 0.3, tb + 0.5, HERO.z + s * 1.94 + 0.01], { uv: "keep" });
+  }
+  for (const z of [487.2, 489.8, 496.8]) ctx.lights.warm.push(pointLight(0xffa040, 12, 8, [54, tb + 0.4, z]));
 
   // ---------------------------------------------------------------- the two rows of motivator banks
   const glow = [];
@@ -290,9 +304,9 @@ export function build(kit, ctx, room, lib) {
   const glowMat = ctx.materials.emitAmber.clone();
   glowMat.emissive = new THREE.Color("#ffb860");
   glowMat.emissiveIntensity = 1.25;
-  const heroMat = ctx.materials.emitCoolSoft.clone();
-  heroMat.emissive = new THREE.Color("#9cc8ff");
-  heroMat.emissiveIntensity = 1.8;
+  // the drive core: a banded blue-white beam whose bands climb slowly while the whole core breathes
+  const CORE_PERIOD = 2.6;
+  const heroMat = beamMaterial(ctx, "#a8ccff", 1.75, bandTexture(2, 0.34, 1.0, 0.2), CORE_PERIOD, 0.55);
   const heroLights = [];
   {
     const glowMesh = new THREE.Mesh(mergeGeometries(glow, false), glowMat);
@@ -304,84 +318,133 @@ export function build(kit, ctx, room, lib) {
         t += dt;
         glowMat.emissiveIntensity = 1.25 * (0.9 + 0.07 * Math.sin(t * 2.1) + 0.03 * Math.sin(t * 9.3));
         const p = 0.85 + 0.15 * Math.sin(t * 0.9);
-        heroMat.emissiveIntensity = 1.8 * p;
+        heroMat.emissiveIntensity = heroMat.userData.base * p;
+        heroMat.userData.scroll(dt);
         for (const l of heroLights) l.intensity = (l.userData.baseIntensity ?? l.intensity) * (0.85 + 0.15 * p);
       },
     });
   }
 
-  // ---------------------------------------------------------------- hero motivator at the head of the aisle
+  // ---------------------------------------------------------------- hero motivator: the drive housing mid-aisle on the door sightline
+  // A 5.6 m octagonal housing straddling the trench: two-step plinth, eight ribs with blue running lights
+  // and three clamped steel bands around a glass chamber; inside, six clamped coils on tie rods around
+  // the banded core with frost rings in the gaps; a heavy cap with four feeds and a centre conduit into
+  // the ceiling, two feed mains out to the row cable trays. Two pulpits face the door in front of it.
   {
-    const { x: HX, z: HZ, r: HR } = HERO;
+    const { x: HX, z: HZ } = HERO;
     const oct = (r, hgt, y, mat, opts = {}) => kit.add(mat, new THREE.CylinderGeometry(r, r, hgt, 8), { pos: [HX, y, HZ], rot: [0, Math.PI / 8, 0], ...opts });
-    oct(HR + 0.3, 0.16, y0 + 0.08, "metal", { color: PALETTE.darkMetal, texel: 1 });
-    oct(HR, 0.5, y0 + 0.41, "satinBlack");
-    oct(HR - 0.25, 0.12, y0 + 0.72, "metal", { color: PALETTE.steel, texel: 1 });
-    kit.add("emitCoolSoft", new THREE.CylinderGeometry(HR + 0.02, HR + 0.02, 0.05, 8), { pos: [HX, y0 + 0.62, HZ], rot: [0, Math.PI / 8, 0], uv: "keep" });
-    // the core: pulsing blue-white column inside a glass sleeve
-    const coreGeo = new THREE.CylinderGeometry(0.62, 0.62, 4.2, 24, 1, true);
-    const uv = coreGeo.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5, uv.getY(i));
-    coreGeo.translate(HX, y0 + 2.9, HZ);
-    const core = new THREE.Mesh(coreGeo, heroMat);
+    const ring = (mat, r, tube, y, opts = {}) => {
+      const { tubeSeg = 8, ...rest } = opts;
+      kit.add(mat, new THREE.TorusGeometry(r, tube, tubeSeg, 40), { pos: [HX, y, HZ], rot: [Math.PI / 2, 0, 0], ...rest });
+    };
+    const radial = (mat, r, a, y, sx, sy, sz, opts = {}) => kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [HX + Math.cos(a) * r, y, HZ + Math.sin(a) * r], rot: [0, Math.PI / 2 - a, 0], ...opts });
+    // plinth: two octagonal steps with a recessed frost-blue light line, steel top ring, chamber floor
+    oct(PLINTH_R, 0.22, y0 + 0.11, "metal", { color: PALETTE.darkMetal, texel: 1 });
+    oct(PLINTH_R - 0.2, 0.34, y0 + 0.39, "satinBlack");
+    oct(PLINTH_R - 0.18, 0.04, y0 + 0.3, "emitCoolSoft", { uv: "keep" });
+    oct(PLINTH_R - 0.25, 0.1, y0 + 0.61, "metal", { color: PALETTE.steel, texel: 1 });
+    kit.cyl("metal", HX, y0 + 0.69, HZ, RIB_R - 0.1, 0.06, "y", { color: PALETTE.darkMetal, segments: 32 });
+    const stepFace = (PLINTH_R - 0.2) * Math.cos(Math.PI / 8) + 0.006; // the octagon flats sit at the apothem
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      const d = new THREE.PlaneGeometry(0.5, 0.26);
+      d.rotateY(Math.PI / 2 - a);
+      kit.add("decal", d, { pos: [HX + Math.cos(a) * stepFace, y0 + 0.45, HZ + Math.sin(a) * stepFace], uv: "keep", uvRect: decalRect(k % 2 ? 9 : 13) });
+    }
+    // chamber: eight ribs with blue running lights, three clamped steel bands, the glass wall
+    const CH0 = y0 + 0.72;
+    const CH1 = y0 + 4.9;
+    const chH = CH1 - CH0;
+    const chC = (CH0 + CH1) / 2;
+    for (let k = 0; k < 8; k++) {
+      const a = Math.PI / 8 + (k * Math.PI) / 4;
+      radial("paintedMetal", RIB_R, a, chC, 0.3, chH, 0.34, { color: PALETTE.gunmetal, texel: 1.5 });
+      radial("emitBlue", RIB_R + 0.18, a, chC, 0.05, chH - 0.9, 0.02, { uv: "keep" });
+    }
+    for (const y of [CH0 + 0.14, chC, CH1 - 0.14]) {
+      ring("metal", RIB_R + 0.02, 0.09, y, { color: PALETTE.steel, uv: "world", texel: 1 });
+      for (let k = 0; k < 8; k++) radial("metal", RIB_R, Math.PI / 8 + (k * Math.PI) / 4, y, 0.42, 0.3, 0.46, { color: PALETTE.darkMetal, texel: 2 });
+    }
+    kit.cyl("glass", HX, chC, HZ, RIB_R - 0.18, chH - 0.3, "y", { segments: 32, open: true });
+    // inside: six clamped steel coils on four tie rods around the core, frost rings in the gaps
+    const COIL_R = 1.2;
+    for (let k = 0; k < 6; k++) {
+      const y = CH0 + 0.45 + k * 0.7;
+      ring("metal", COIL_R, 0.15, y, { color: PALETTE.steel, uv: "world", texel: 1 });
+      for (let i = 0; i < 8; i++) radial("satinBlack", COIL_R + 0.1, (i / 8) * Math.PI * 2, y, 0.3, 0.38, 0.42);
+      if (k < 5) ring("emitCoolSoft", 0.88, 0.045, y + 0.35, { tubeSeg: 5, uv: "keep" });
+    }
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      kit.cyl("metal", HX + Math.cos(a) * (COIL_R + 0.22), chC, HZ + Math.sin(a) * (COIL_R + 0.22), 0.05, chH - 0.4, "y", { color: PALETTE.gunmetal, segments: 8 });
+    }
+    // the core: banded blue-white beam between two dark end sockets
+    const core = new THREE.Mesh(beamGeometry(HX, CH0 + 0.1, HZ, 0.55, chH - 0.2, CORE_PERIOD, 28), heroMat);
     core.name = "heroCore";
+    core.castShadow = false;
+    core.receiveShadow = false;
     ctx.dynamic.push({ object: core });
-    kit.cyl("glass", HX, y0 + 2.9, HZ, 0.82, 4.2, "y", { segments: 24, open: true });
-    // coil stack: five open-spaced steel tori with clamp blocks so the core shows between them, frost
-    // rings in the gaps
-    for (let k = 0; k < 5; k++) {
-      const y = y0 + 1.25 + k * 0.78;
-      kit.add("metal", new THREE.TorusGeometry(1.35, 0.17, 8, 40), { pos: [HX, y, HZ], rot: [Math.PI / 2, 0, 0], color: PALETTE.steel, uv: "world", texel: 1 });
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-        kit.add("satinBlack", new THREE.BoxGeometry(0.34, 0.42, 0.5), { pos: [HX + Math.cos(a) * 1.5, y, HZ + Math.sin(a) * 1.5], rot: [0, Math.PI / 2 - a, 0] });
-      }
-      if (k < 4) kit.add("emitCoolSoft", new THREE.TorusGeometry(1.0, 0.045, 5, 36), { pos: [HX, y + 0.39, HZ], rot: [Math.PI / 2, 0, 0], uv: "keep" });
+    kit.cyl("metal", HX, CH0 + 0.08, HZ, 0.64, 0.16, "y", { color: PALETTE.darkMetal, segments: 20 });
+    kit.cyl("metal", HX, CH1 - 0.08, HZ, 0.64, 0.16, "y", { color: PALETTE.darkMetal, segments: 20 });
+    // cap: octagonal block, satin crown with a light line, steel collar, centre conduit and four feeds
+    // into a ceiling plate
+    oct(PLINTH_R - 0.1, 0.36, CH1 + 0.18, "metal", { color: PALETTE.darkMetal, texel: 1 });
+    oct(PLINTH_R - 0.4, 0.24, CH1 + 0.48, "satinBlack");
+    oct(PLINTH_R - 0.38, 0.04, CH1 + 0.5, "emitCoolSoft", { uv: "keep" });
+    kit.cyl("metal", HX, CH1 + 0.67, HZ, 0.95, 0.14, "y", { color: PALETTE.steel, segments: 32 });
+    kit.cyl("metal", HX, (CH1 + 0.7 + yTop) / 2, HZ, 0.4, yTop - CH1 - 0.7, "y", { color: PALETTE.darkMetal, segments: 20 });
+    oct(1.35, 0.12, yTop - 0.06, "metal", { color: PALETTE.gunmetal, texel: 1 });
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + (i * Math.PI) / 2;
+      const px = HX + Math.cos(a) * 1.15;
+      const pz = HZ + Math.sin(a) * 1.15;
+      kit.cyl("metal", px, (CH1 + 0.6 + yTop) / 2, pz, 0.12, yTop - CH1 - 0.6, "y", { color: i % 2 ? PALETTE.steel : PALETTE.orange, segments: 10 });
+      flange(kit, [px, CH1 + 0.78, pz], [0, 1, 0], 0.19);
     }
-    // six struts and the top cap with its feeds into the ceiling
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2;
-      kit.add("paintedMetal", new THREE.BoxGeometry(0.22, 4.3, 0.22), { pos: [HX + Math.cos(a) * 1.75, y0 + 2.85, HZ + Math.sin(a) * 1.75], rot: [0, -a, 0], color: PALETTE.gunmetal, texel: 1.5 });
+    // feed mains from the cap out over the side paths to the row cable trays
+    for (const [fx, inw] of [[WEST_FACE, -1], [EAST_FACE, 1]]) {
+      const tx = fx - inw * 0.9;
+      pipeRun(kit, "metal", [[HX + inw * 1.6, CH1 + 0.12, HZ], [tx, CH1 + 0.12, HZ], [tx, yTop - 0.28, HZ]], 0.2, { color: PALETTE.steel, segments: 14 });
+      flange(kit, [HX + inw * 2.0, CH1 + 0.12, HZ], [1, 0, 0], 0.3, { t: 0.1 });
+      flange(kit, [tx, yTop - 0.48, HZ], [0, 1, 0], 0.3, { t: 0.1 });
     }
-    oct(HR - 0.2, 0.45, y0 + 5.2, "metal", { color: PALETTE.darkMetal, texel: 1 });
-    kit.cyl("metal", HX, y0 + 5.5, HZ, 0.9, 0.16, "y", { color: PALETTE.steel, segments: 24 });
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * Math.PI * 2 + 0.5;
-      const px = HX + Math.cos(a) * 0.55;
-      const pz = HZ + Math.sin(a) * 0.55;
-      kit.cyl("metal", px, (y0 + 5.55 + yTop) / 2, pz, 0.13, yTop - y0 - 5.55, "y", { color: i ? PALETTE.steel : PALETTE.orange, segments: 10 });
-      flange(kit, [px, y0 + 5.8, pz], [0, 1, 0], 0.2);
-    }
-    // heavy feeds: from the plinth down through the deck, and from the stack to the trunk halves
+    kit.collider([HX - PLINTH_R, y0, HZ - PLINTH_R], [HX + PLINTH_R, y0 + 5.8, HZ + PLINTH_R], "hero");
+    // diagnostic pulpits ahead of the housing, screens toward the door: the operator faces the drive
     for (const s of [-1, 1]) {
-      pipeRun(kit, "metal", [[HX + s * 1.0, y0 + 0.7, HZ - HR + 0.2], [HX + s * 1.0, y0 + 0.7, HZ - HR - 0.3], [HX + s * 1.0, y0 - 0.3, HZ - HR - 0.3]], 0.14, { color: PALETTE.steel, segments: 12 });
-      flange(kit, [HX + s * 1.0, y0 + 0.04, HZ - HR - 0.3], [0, 1, 0], 0.24, { t: 0.08 });
-      pipeRun(kit, "metal", [[HX + s * (HR - 0.3), y0 + 3.6, HZ + 0.6], [HX + s * 3.2, y0 + 3.6, HZ + 0.6], [HX + s * 3.2, y0 + 3.6, z1 - 1.05]], 0.22, { color: PALETTE.steel, segments: 14 });
-    }
-    kit.collider([HX - HR - 0.3, y0, HZ - HR - 0.3], [HX + HR + 0.3, y0 + 5.8, HZ + HR + 0.3], "hero");
-    // diagnostic pulpits either side of the aisle head: the operator stands between pulpit and core
-    for (const s of [-1, 1]) {
-      const px = HX + s * 2.6;
-      const pz = 501.0;
-      const f = yawFrame(kit, px, y0, pz, yawToward(HX, HZ, px, pz));
+      const px = HX + s * 2.4;
+      const pz = HZ - 3.9;
+      const f = yawFrame(kit, px, y0, pz, Math.PI);
       wallConsole(f, 0, 1.2, s < 0 ? "screen4" : "screen6");
       f.box("emitBlue", 0, 0.5, 0.56, 1.0, 0.03, 0.01, { uv: "keep" });
+      // front kick panel: gloss plate with two gauges, a readout strip and a stencil
+      f.box("darkGloss", 0, 0.82, 0.565, 1.0, 0.4, 0.03);
+      f.box("leds", 0, 0.96, 0.585, 0.7, 0.04, 0.01, { uv: "keep" });
+      const pf = yawFrame(kit, px, y0, pz - 0.58, Math.PI);
+      gauge(pf, -0.33, 0.78, 0.1, { needle: 0.35 + (s + 1) * 0.15 });
+      gauge(pf, 0.33, 0.78, 0.1, { mat: "emitWhite", needle: 0.6 });
+      pf.add("decal", new THREE.PlaneGeometry(0.22, 0.22), 0, 0.76, 0.006, { uv: "keep", uvRect: decalRect(s < 0 ? 9 : 5) });
+      // nameplate on the back, seen from the drive side
+      f.box("metal", 0, 0.8, -0.02, 0.9, 0.4, 0.04, { color: PALETTE.darkMetal, texel: 2 });
+      const d = new THREE.PlaneGeometry(0.34, 0.34);
+      d.rotateY(Math.PI);
+      f.add("decal", d, 0, 0.8, -0.045, { uv: "keep", uvRect: decalRect(s < 0 ? 6 : 12) });
     }
-    const hl = pointLight(0xcfe4ff, 150, 22, [HX, y0 + 3.2, HZ]);
+    const hl = pointLight(0xcfe4ff, 160, 24, [HX, chC - 0.35, HZ]);
     ctx.lights.cool.push(hl);
     heroLights.push(hl);
-    ctx.lights.cool.push(pointLight(0xcfe4ff, 28, 12, [HX, y0 + 0.9, HZ - HR - 1.4]));
+    for (const s of [-1, 1]) ctx.lights.cool.push(pointLight(0xcfe4ff, 18, 8, [HX, y0 + 0.75, HZ + s * 2.9]));
   }
 
-  // ---------------------------------------------------------------- overhead crane rail with a parked hoist
+  // ---------------------------------------------------------------- coil-lift crane rail behind the drive housing, hoist parked
+  const RAIL_Z0 = HERO.z + 3.8;
   for (const rx of [52.0, 56.0]) {
-    kit.boxMM("paintedMetal", [rx - 0.15, yTop - 0.75, 483.6], [rx + 0.15, yTop - 0.45, 505.2], { color: PALETTE.gunmetal, texel: 1 });
-    kit.boxMM("metal", [rx - 0.22, yTop - 0.8, 483.6], [rx + 0.22, yTop - 0.74, 505.2], { color: PALETTE.steel, texel: 2 });
-    for (let z = 484.5; z < 505; z += 4.0) kit.box("metal", rx, yTop - 0.22, z, 0.14, 0.45, 0.14, { color: PALETTE.darkMetal, texel: 2 });
-    for (const ze of [483.75, 505.05]) kit.box("painted", rx, yTop - 0.6, ze, 0.5, 0.36, 0.2, { color: PALETTE.orange, uv: "keep" });
+    kit.boxMM("paintedMetal", [rx - 0.15, yTop - 0.75, RAIL_Z0], [rx + 0.15, yTop - 0.45, 505.2], { color: PALETTE.gunmetal, texel: 1 });
+    kit.boxMM("metal", [rx - 0.22, yTop - 0.8, RAIL_Z0], [rx + 0.22, yTop - 0.74, 505.2], { color: PALETTE.steel, texel: 2 });
+    for (let z = RAIL_Z0 + 0.9; z < 505; z += 4.0) kit.box("metal", rx, yTop - 0.22, z, 0.14, 0.45, 0.14, { color: PALETTE.darkMetal, texel: 2 });
+    for (const ze of [RAIL_Z0 + 0.15, 505.05]) kit.box("painted", rx, yTop - 0.6, ze, 0.5, 0.36, 0.2, { color: PALETTE.orange, uv: "keep" });
   }
   {
-    const bz = 496.4;
+    const bz = 498.6;
     kit.box("paintedMetal", 54, yTop - 1.0, bz, 4.9, 0.36, 0.4, { color: PALETTE.gunmetal, texel: 1 });
     for (const rx of [52.0, 56.0]) kit.box("metal", rx, yTop - 0.9, bz, 0.5, 0.36, 0.7, { color: PALETTE.darkMetal, texel: 2 });
     kit.box("paintedMetal", 54.6, yTop - 1.42, bz, 0.8, 0.5, 0.7, { color: PALETTE.slate, texel: 1.5 });
@@ -552,13 +615,31 @@ export function build(kit, ctx, room, lib) {
   {
     const trunkY = y0 + 3.6;
     const tz = z1 - 1.05;
-    for (const [ta, tb2] of [[x0 + 1.5, HERO.x - 3.2], [HERO.x + 3.2, x1 - 1.5]]) {
-      kit.cyl("metal", (ta + tb2) / 2, trunkY, tz, 0.8, tb2 - ta, "x", { color: PALETTE.steel, segments: 28, texel: 0.7 });
-      flange(kit, [ta + 0.1, trunkY, tz], [1, 0, 0], 0.95, { t: 0.2 });
-      flange(kit, [tb2 - 0.1, trunkY, tz], [1, 0, 0], 0.95, { t: 0.2 });
-    }
-    for (const fx of [39.5, 45.5, 62.5, 68.5]) flange(kit, [fx, trunkY, tz], [1, 0, 0], 0.95, { t: 0.2 });
+    kit.cyl("metal", (x0 + x1) / 2, trunkY, tz, 0.8, x1 - x0 - 3.0, "x", { color: PALETTE.steel, segments: 28, texel: 0.7 });
+    for (const fx of [x0 + 1.6, 39.5, 45.5, 50.8, 57.2, 62.5, 68.5, x1 - 1.6]) flange(kit, [fx, trunkY, tz], [1, 0, 0], 0.95, { t: 0.2 });
     for (const fx of [38.5, 47.0, 61.0, 69.5]) kit.box("paintedMetal", fx, trunkY, z1 - 0.45, 0.5, 1.9, 0.7, { color: PALETTE.gunmetal, texel: 1 });
+    // coolant manifold at the head of the trench: the trench loop rises into it, two risers feed the trunk
+    {
+      const mz = T.z1 + 0.62;
+      kit.boxMM("satinBlack", [52.7, y0 + 0.2, T.z1 + 0.18], [55.3, y0 + 1.7, mz + 0.45]);
+      kit.boxMM("metal", [52.6, y0, T.z1 + 0.1], [55.4, y0 + 0.2, mz + 0.55], { color: PALETTE.darkMetal, texel: 2 });
+      kit.boxMM("metal", [52.6, y0 + 1.7, T.z1 + 0.1], [55.4, y0 + 1.78, mz + 0.55], { color: PALETTE.gunmetal, texel: 2 });
+      const mf = yawFrame(kit, 54, y0, T.z1 + 0.18, Math.PI);
+      for (const [k, u] of [-0.8, 0, 0.8].entries()) {
+        mf.cylN("metal", u, 1.2, 0.0, 0.16, 0.16, { color: PALETTE.gunmetal, segments: 14 });
+        valveWheel(kit, 54 - u, y0 + 1.2, T.z1 - 0.02, "z", 0.2, { stem: 0.02, color: k === 1 ? PALETTE.orange : PALETTE.slate });
+        gauge(mf, u, 0.7, 0.13, { mat: k === 1 ? "emitWhite" : "emitAmber", needle: 0.3 + k * 0.2 });
+      }
+      mf.box("leds", 0, 1.55, 0.005, 1.6, 0.04, 0.01, { uv: "keep" });
+      mf.add("decal", new THREE.PlaneGeometry(0.4, 0.4), 1.05, 1.5, 0.005, { uv: "keep", uvRect: decalRect(9) });
+      for (const [mx, col] of [[53.45, PALETTE.steel], [54.55, PALETTE.orange]]) {
+        pipeRun(kit, "metal", [[mx, y0 + 1.6, mz], [mx, trunkY, mz], [mx, trunkY, tz - 0.6]], 0.15, { color: col, segments: 12 });
+        flange(kit, [mx, y0 + 1.95, mz], [0, 1, 0], 0.22);
+        flange(kit, [mx, trunkY, tz - 0.75], [0, 0, 1], 0.22);
+      }
+      kit.collider([52.55, y0, T.z1 + 0.05], [55.45, y0 + 1.85, mz + 0.6], "manifold");
+      ctx.lights.warm.push(pointLight(0xffe2c0, 20, 9, [54, y0 + 2.7, T.z1 - 0.6]));
+    }
     for (const [i, px] of [39.6, 42.0, 66.0, 68.4].entries()) {
       pipeRun(kit, "metal", [[px, trunkY, tz], [px, y0 + 1.5, tz], [px, y0 + 1.5, z1 - 1.6]], 0.3, { color: i % 2 ? PALETTE.orange : PALETTE.steel, segments: 14 });
       kit.box("paintedMetal", px, y0 + 0.65, z1 - 1.9, 1.8, 1.3, 1.4, { color: PALETTE.gunmetal, texel: 1.2 });
@@ -575,7 +656,7 @@ export function build(kit, ctx, room, lib) {
       kit.collider([px - 0.95, y0, z1 - 2.75], [px + 0.95, y0 + 1.5, z1], "pump");
     }
     for (const [ua, ub] of [[1.0, 5.0], [7.2, 10.8], [25.2, 28.8], [31.0, 35.0]]) wallLightBar(N, ua, ub, 2.5);
-    // dark plate behind the hero (its glow, not a lit wall, is what reads at the end of the aisle)
+    // dark plate at the end of the sightline so the drive housing reads against black, not a lit wall
     N.box("satinBlack", 18.0, 2.9, 0.05, 7.4, 5.4, 0.1);
     for (const s of [-1, 1]) N.box("metal", 18.0 + s * 3.6, 2.9, 0.1, 0.16, 5.4, 0.16, { color: PALETTE.steel, texel: 2 });
     N.box("emitBlue", 18.0, 5.5, 0.11, 6.4, 0.04, 0.01, { uv: "keep" });
@@ -589,10 +670,11 @@ export function build(kit, ctx, room, lib) {
 
   // ---------------------------------------------------------------- aisle lighting: warm-white tube fittings over the aisle
   // (the pool keeps the 14 best-scoring fixtures, so the aisle carries the room with few strong lights
-  // whose reach covers the whole 24 m from the door; the amber comes from the slits and the trench)
-  // (two fittings only: the third sat against the parked hoist beam and blew it out to a white patch at
-  // the vanishing point; the far end belongs to the hero's own glow)
-  for (const z of [487.0, 492.5]) tubeFixture(kit, ctx, 54, yTop, z, 3.2, "x", { drop: 1.0, intensity: 90, distance: 22, color: 0xfff0dc });
+  // whose reach covers the whole 24 m from the door; the amber comes from the slits and the trench; one
+  // fitting ahead of the drive housing and one behind it, so the housing's own glow owns the middle and
+  // nothing sits at the vanishing point to blow out)
+  tubeFixture(kit, ctx, 54, yTop, 486.5, 3.2, "x", { drop: 1.0, intensity: 80, distance: 20, color: 0xfff0dc });
+  tubeFixture(kit, ctx, 54, yTop, 499.5, 3.2, "x", { drop: 1.0, intensity: 55, distance: 18, color: 0xfff0dc });
   ctx.lights.warm.push(pointLight(0xfff0dc, 30, 12, [54, yTop - 0.9, 483.3]));
   // low fill in the aisle at the unit bases
   for (const z of [489.0, 497.0]) ctx.lights.warm.push(pointLight(0xffe2c0, 16, 9, [51.2, y0 + 0.7, z]));
