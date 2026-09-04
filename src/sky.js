@@ -594,6 +594,14 @@ const SOURCE_TAN = 0.019;
 
 let pcssInstalled = false;
 
+// First line of the cascade body `installCascade` splices into the shadowmap
+// chunk. The PCSS installer runs after it and replaces the stock `getShadow`
+// variants up to the point-light block; the cascade body sits in exactly that
+// span, so without this marker to stop at, PCSS deleted `getDirShadowCascade`
+// and every lit program at high and ultra failed to compile against the call
+// the cascade had left in `lights_fragment_begin`.
+const CASCADE_MARK = '// csc: two-cascade directional shadow (sky.js)';
+
 function installPcss(renderer, pcss, extent) {
   if (!pcss || pcssInstalled || pcssOff()) return false;
   // The whole `getShadow` cascade — the PCF, VSM and basic variants and the
@@ -606,7 +614,9 @@ function installPcss(renderer, pcss, extent) {
   const chunk = THREE.ShaderChunk.shadowmap_pars_fragment;
   const decl = chunk.indexOf('float getShadow(');
   const head = decl < 0 ? -1 : chunk.lastIndexOf('#if defined( SHADOWMAP_TYPE_PCF )', decl);
-  const tail = head < 0 ? -1 : chunk.indexOf('#if NUM_POINT_LIGHT_SHADOWS > 0', decl);
+  const point = head < 0 ? -1 : chunk.indexOf('#if NUM_POINT_LIGHT_SHADOWS > 0', decl);
+  const csc = head < 0 ? -1 : chunk.indexOf(CASCADE_MARK, decl);
+  const tail = csc >= 0 && csc < point ? csc : point;
   if (head < 0 || tail < 0) {
     console.warn('sky: PCSS anchors not found in shadowmap chunk, keeping stock PCF');
     return false;
@@ -762,6 +772,7 @@ function installCascade(pcss, extent) {
 
   const span = (SHADOW_FAR - SHADOW_NEAR) / (2 * extent);
   const body = /* glsl */ `
+	${CASCADE_MARK}
 	#if NUM_DIR_LIGHT_SHADOWS > 0
 		#if defined( SHADOWMAP_TYPE_PCF )
 			#define CSC_SAMPLER sampler2DShadow
