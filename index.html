@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Bahía Vista — an original tropical coastal metropolis explored from a seaplane. Built with Three.js." />
+    <title>Bahía Vista — Seaplane</title>
+    <link rel="stylesheet" href="./src/ui/style.css" />
+  </head>
+  <body>
+    <div id="stage">
+      <canvas id="view"></canvas>
+
+      <div id="hud" class="hud hidden" aria-live="off">
+        <div class="hud-tl">
+          <div class="tape" id="hud-speed"><span class="lbl">KIAS</span><span class="val" id="hud-speed-val">0</span></div>
+          <div class="tape" id="hud-alt"><span class="lbl">ALT FT</span><span class="val" id="hud-alt-val">0</span></div>
+          <div class="tape" id="hud-vs"><span class="lbl">V/S</span><span class="val" id="hud-vs-val">0</span></div>
+        </div>
+        <div class="hud-tc">
+          <div class="heading" id="hud-heading"><span class="val" id="hud-heading-val">000</span><span class="lbl" id="hud-heading-card">N</span></div>
+        </div>
+        <div class="hud-tr">
+          <div class="throttle" id="hud-throttle"><span class="lbl">THR</span><div class="bar"><i id="hud-throttle-fill"></i></div><span class="val" id="hud-throttle-val">0%</span></div>
+          <div class="rpm" id="hud-rpm"><span class="lbl">RPM</span><span class="val" id="hud-rpm-val">0</span></div>
+        </div>
+        <div class="hud-bc">
+          <div class="warn hidden" id="hud-stall">STALL</div>
+          <div class="msg" id="hud-msg"></div>
+        </div>
+        <div class="hud-br">
+          <div class="cam" id="hud-cam">CHASE</div>
+          <div class="time" id="hud-time">12:00</div>
+        </div>
+      </div>
+
+      <div id="start" class="start">
+        <div class="start-card">
+          <h1>BAHÍA VISTA</h1>
+          <p class="tag">A tropical coastal metropolis, from the cockpit of a seaplane.</p>
+          <div class="controls">
+            <div><b>W / S</b> pitch (S pulls up) &nbsp; <b>A / D</b> roll &nbsp; <b>Q / E</b> rudder &nbsp; <b>F</b> flaps &nbsp; <b>B</b> brakes</div>
+            <div><b>Shift / Ctrl</b> throttle &nbsp; <b>C</b> camera &nbsp; <b>V</b> cockpit &nbsp; <b>T</b> time of day &nbsp; <b>R</b> reset</div>
+            <div><b>Mouse drag</b> orbit chase camera &nbsp; <b>H</b> hide HUD</div>
+          </div>
+          <button id="start-btn" type="button">START ENGINE</button>
+          <p class="small" id="start-status">Building the world…</p>
+        </div>
+      </div>
+
+      <div id="benchtag" class="benchtag hidden"></div>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

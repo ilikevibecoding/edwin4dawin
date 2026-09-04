@@ -1,0 +1,140 @@
+import * as THREE from 'three';
+import type { Weather } from '../core/params';
+import { clamp, lerp, smoothstep } from '../core/noise';
+
+/** Colours & sun state for a time of day; all colours are linear-space HDR. */
+export interface AtmosState {
+  sunDir: THREE.Vector3;
+  sunElevation: number; // degrees
+  sunColor: THREE.Color;
+  sunIntensity: number;
+  zenith: THREE.Color;
+  horizon: THREE.Color;
+  haze: THREE.Color;
+  sunHaze: THREE.Color;
+  ambientIntensity: number;
+  night: number;
+}
+
+interface Key { el: number; sun: [number, number, number]; sunI: number; zen: [number, number, number]; hor: [number, number, number]; haze: [number, number, number]; sunHaze: [number, number, number]; amb: number; }
+
+const KEYS: Key[] = [
+  { el: -18, sun: [0.02, 0.03, 0.06], sunI: 0.0, zen: [0.0025, 0.0045, 0.012], hor: [0.010, 0.014, 0.026], haze: [0.008, 0.011, 0.02], sunHaze: [0.01, 0.012, 0.02], amb: 0.06 },
+  { el: -8, sun: [0.05, 0.05, 0.1], sunI: 0.0, zen: [0.004, 0.008, 0.022], hor: [0.03, 0.03, 0.06], haze: [0.02, 0.022, 0.04], sunHaze: [0.06, 0.03, 0.03], amb: 0.1 },
+  { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.047, zen: [0.02, 0.04, 0.11], hor: [0.42, 0.22, 0.2], haze: [0.22, 0.16, 0.2], sunHaze: [0.9, 0.35, 0.18], amb: 0.25 },
+  { el: 4, sun: [1.0, 0.5, 0.22], sunI: 0.437, zen: [0.08, 0.17, 0.42], hor: [0.9, 0.5, 0.35], haze: [0.55, 0.42, 0.42], sunHaze: [1.0, 0.55, 0.3], amb: 0.5 },
+  { el: 14, sun: [1.0, 0.72, 0.42], sunI: 0.75, zen: [0.14, 0.3, 0.68], hor: [0.85, 0.7, 0.6], haze: [0.62, 0.6, 0.62], sunHaze: [1.0, 0.75, 0.5], amb: 0.75 },
+  { el: 30, sun: [1.0, 0.92, 0.8], sunI: 0.938, zen: [0.2, 0.42, 0.85], hor: [0.72, 0.8, 0.9], haze: [0.6, 0.7, 0.84], sunHaze: [0.95, 0.88, 0.78], amb: 0.95 },
+  { el: 90, sun: [1.0, 0.97, 0.92], sunI: 1.0, zen: [0.22, 0.44, 0.88], hor: [0.7, 0.8, 0.92], haze: [0.58, 0.7, 0.86], sunHaze: [0.92, 0.9, 0.85], amb: 1.0 },
+];
+
+function mixKey(el: number): Key {
+  let a = KEYS[0], b = KEYS[KEYS.length - 1];
+  for (let i = 0; i < KEYS.length - 1; i++) {
+    if (el >= KEYS[i].el && el <= KEYS[i + 1].el) { a = KEYS[i]; b = KEYS[i + 1]; break; }
+  }
+  const t = smoothstep(a.el, b.el, clamp(el, a.el, b.el));
+  const m3 = (p: [number, number, number], q: [number, number, number]): [number, number, number] => [lerp(p[0], q[0], t), lerp(p[1], q[1], t), lerp(p[2], q[2], t)];
+  return { el, sun: m3(a.sun, b.sun), sunI: lerp(a.sunI, b.sunI, t), zen: m3(a.zen, b.zen), hor: m3(a.hor, b.hor), haze: m3(a.haze, b.haze), sunHaze: m3(a.sunHaze, b.sunHaze), amb: lerp(a.amb, b.amb, t) };
+}
+
+export interface WeatherPreset { coverage: number; hazeDensity: number; hazeHeight: number; windSpeed: number; turbulence: number; cloudBase: number; cloudTop: number; rain: number; sunDim: number; }
+
+export const WEATHER: Record<Weather, WeatherPreset> = {
+  clear: { coverage: 0.22, hazeDensity: 2.6e-5, hazeHeight: 1400, windSpeed: 5, turbulence: 0.25, cloudBase: 1500, cloudTop: 2500, rain: 0, sunDim: 1 },
+  scattered: { coverage: 0.42, hazeDensity: 3.4e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 2700, rain: 0, sunDim: 0.97 },
+  cloudy: { coverage: 0.72, hazeDensity: 5.5e-5, hazeHeight: 1100, windSpeed: 10, turbulence: 0.7, cloudBase: 1000, cloudTop: 2500, rain: 0, sunDim: 0.72 },
+  storm: { coverage: 0.94, hazeDensity: 9.0e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 2600, rain: 1, sunDim: 0.4 },
+};
+
+/** Sun position for Bahía Vista (latitude 25.8N, declination +10). */
+export function sunDirection(hour: number): { dir: THREE.Vector3; elevation: number; azimuth: number } {
+  const lat = (25.8 * Math.PI) / 180, dec = (10 * Math.PI) / 180;
+  const ha = ((hour - 12) * 15 * Math.PI) / 180;
+  const sinEl = Math.sin(lat) * Math.sin(dec) + Math.cos(lat) * Math.cos(dec) * Math.cos(ha);
+  const el = Math.asin(clamp(sinEl, -1, 1));
+  const cosAz = (Math.sin(dec) - Math.sin(el) * Math.sin(lat)) / (Math.cos(el) * Math.cos(lat) || 1e-6);
+  let az = Math.acos(clamp(cosAz, -1, 1));
+  if (ha > 0) az = 2 * Math.PI - az; // afternoon: west
+  // north = -Z, east = +X
+  const dir = new THREE.Vector3(Math.cos(el) * Math.sin(az), Math.sin(el), -Math.cos(el) * Math.cos(az)).normalize();
+  return { dir, elevation: (el * 180) / Math.PI, azimuth: (az * 180) / Math.PI };
+}
+
+export class Atmosphere {
+  hour = 14.5;
+  weather: Weather = 'clear';
+  preset: WeatherPreset = WEATHER.clear;
+  state: AtmosState = {
+    sunDir: new THREE.Vector3(0, 1, 0), sunElevation: 60, sunColor: new THREE.Color(), sunIntensity: 3, zenith: new THREE.Color(), horizon: new THREE.Color(),
+    haze: new THREE.Color(), sunHaze: new THREE.Color(), ambientIntensity: 1, night: 0,
+  };
+  /** Shared uniforms referenced by every atmosphere-aware material. */
+  uniforms = {
+    uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    uSunColor: { value: new THREE.Color(1, 1, 1) },
+    uZenithColor: { value: new THREE.Color() },
+    uHorizonColor: { value: new THREE.Color() },
+    uHazeColor: { value: new THREE.Color() },
+    uSunHazeColor: { value: new THREE.Color() },
+    uHazeDensity: { value: 3e-5 },
+    uHazeHeight: { value: 1300 },
+    uCloudCoverage: { value: 0.3 },
+    uCloudBase: { value: 1500 },
+    uCloudTop: { value: 2600 },
+    uCloudWind: { value: new THREE.Vector2(0, 0) },
+    uCloudSeed: { value: 0 },
+    uNight: { value: 0 },
+    uTime: { value: 0 },
+  };
+  cloudOffset = new THREE.Vector2();
+  windDir = new THREE.Vector2(1, 0.35).normalize();
+  time = 0;
+
+  constructor(seed: number) {
+    this.uniforms.uCloudSeed.value = ((seed % 1000) / 1000) * 37.7;
+  }
+
+  setWeather(w: Weather): void {
+    this.weather = w;
+    this.preset = WEATHER[w];
+  }
+
+  update(dt: number): void {
+    this.time += dt;
+    const p = this.preset;
+    this.cloudOffset.addScaledVector(this.windDir, p.windSpeed * 2.2 * dt);
+    const { dir, elevation } = sunDirection(this.hour);
+    const k = mixKey(elevation);
+    const s = this.state;
+    s.sunDir.copy(dir);
+    s.sunElevation = elevation;
+    s.sunColor.setRGB(k.sun[0], k.sun[1], k.sun[2]);
+    s.sunIntensity = k.sunI * p.sunDim;
+    s.zenith.setRGB(k.zen[0], k.zen[1], k.zen[2]);
+    s.horizon.setRGB(k.hor[0], k.hor[1], k.hor[2]);
+    s.haze.setRGB(k.haze[0], k.haze[1], k.haze[2]);
+    s.sunHaze.setRGB(k.sunHaze[0], k.sunHaze[1], k.sunHaze[2]);
+    s.ambientIntensity = k.amb * lerp(1, 0.75, p.coverage);
+    s.night = 1 - smoothstep(-12, -1, elevation);
+    // overcast: flatter sky, greyer haze
+    const grey = smoothstep(0.45, 0.95, p.coverage);
+    const zl = s.zenith.clone().lerp(s.horizon, grey * 0.6).multiplyScalar(lerp(1, 0.7, grey));
+    const hl = s.horizon.clone().multiplyScalar(lerp(1, 0.8, grey));
+    const u = this.uniforms;
+    u.uSunDir.value.copy(dir);
+    u.uSunColor.value.copy(s.sunColor).multiplyScalar(s.sunIntensity);
+    u.uZenithColor.value.copy(zl);
+    u.uHorizonColor.value.copy(hl);
+    u.uHazeColor.value.copy(s.haze).multiplyScalar(lerp(1, 0.85, grey));
+    u.uSunHazeColor.value.copy(s.sunHaze).multiplyScalar(lerp(1, 0.6, grey));
+    u.uHazeDensity.value = p.hazeDensity;
+    u.uHazeHeight.value = p.hazeHeight;
+    u.uCloudCoverage.value = p.coverage;
+    u.uCloudBase.value = p.cloudBase;
+    u.uCloudTop.value = p.cloudTop;
+    u.uCloudWind.value.copy(this.cloudOffset);
+    u.uNight.value = s.night;
+    u.uTime.value = this.time;
+  }
+}

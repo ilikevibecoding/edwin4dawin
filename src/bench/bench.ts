@@ -1,0 +1,148 @@
+import * as THREE from 'three';
+import type { Game } from '../game';
+import { BENCH_VIEWS, findView, type BenchView } from './views';
+
+/**
+ * Deterministic benchmark driver exposed as window.__bench. Frames are only advanced when the
+ * capture script asks, with a fixed timestep, so every capture of a view is reproducible.
+ */
+export class Bench {
+  view: BenchView | null = null;
+  readonly fixedDt = 1 / 30;
+  frame = 0;
+  private flying = false;
+
+  constructor(private game: Game) {}
+
+  list(): { id: string; name: string; description: string }[] {
+    return BENCH_VIEWS.map((v) => ({ id: v.id, name: v.name, description: v.description }));
+  }
+
+  /** Configure the world for a view and pre-simulate it. Returns when the frame is stable. */
+  setup(id: string): boolean {
+    const v = findView(id);
+    if (!v) return false;
+    this.view = v;
+    const g = this.game;
+    g.atmos.hour = v.time;
+    g.atmos.setWeather(v.weather);
+    g.time = 0;
+    // pre-simulate the environment (boats, cars, clouds, sky) with the plane frozen
+    this.placePlane(v);
+    for (let i = 0; i < Math.round(v.presim / this.fixedDt); i++) g.update(this.fixedDt, false);
+    this.placePlane(v);
+    this.setupCamera(v);
+    g.aircraft.inputs.throttle = v.plane.throttle;
+    g.aircraft.inputs.flaps = v.plane.flaps ?? 0;
+    g.aircraft.inputs.pitch = v.clipInputs.pitch;
+    g.aircraft.inputs.roll = v.clipInputs.roll;
+    g.aircraft.inputs.yaw = v.clipInputs.yaw;
+    // settle: one environment update with the plane static, camera follows
+    g.update(this.fixedDt, false);
+    this.updateCamera(this.fixedDt);
+    this.flying = false;
+    this.frame = 0;
+    g.metrics.reset();
+    return true;
+  }
+
+  private placePlane(v: BenchView): void {
+    const g = this.game;
+    const p = v.plane;
+    let pos: [number, number, number];
+    if (p.fromCamera && v.camera.pos) {
+      const cam = this.fixedCamera(v);
+      const ndcX = p.fromCamera.screenX * 2 - 1, ndcY = 1 - p.fromCamera.screenY * 2;
+      const dir = new THREE.Vector3(ndcX, ndcY, 0.5).unproject(cam).sub(cam.position).normalize();
+      const world = cam.position.clone().addScaledVector(dir, p.fromCamera.distance);
+      pos = [world.x, world.y, world.z];
+    } else {
+      pos = p.pos!;
+    }
+    const rad = (d: number) => (d * Math.PI) / 180;
+    g.aircraft.place(pos[0], pos[1], pos[2], rad(p.headingDeg), rad(p.pitchDeg), rad(p.bankDeg), p.speed, p.throttle);
+  }
+
+  private fixedCamera(v: BenchView): THREE.PerspectiveCamera {
+    const cam = new THREE.PerspectiveCamera(v.camera.fov, this.game.camera.aspect, 0.4, 60000);
+    const [x, y, z] = v.camera.pos!;
+    cam.position.set(x, y, z);
+    const h = ((v.camera.headingDeg ?? 0) * Math.PI) / 180, pch = ((v.camera.pitchDeg ?? 0) * Math.PI) / 180;
+    // heading 0 = north (-Z); camera looks down -Z by default, yaw about Y positive turns toward -X (west)
+    cam.rotation.set(0, 0, 0);
+    cam.rotation.order = 'YXZ';
+    cam.rotation.y = -h;
+    cam.rotation.x = pch;
+    cam.updateMatrixWorld();
+    cam.updateProjectionMatrix();
+    return cam;
+  }
+
+  private setupCamera(v: BenchView): void {
+    const g = this.game;
+    const fc = g.flightCamera;
+    fc.baseFov = v.camera.fov;
+    fc.orbitPitch = 0; fc.orbitYaw = 0;
+    if (v.camera.mode === 'fixed') {
+      fc.mode = 'fixed';
+      const c = this.fixedCamera(v);
+      g.camera.position.copy(c.position);
+      g.camera.quaternion.copy(c.quaternion);
+      g.camera.fov = v.camera.fov;
+      g.camera.updateProjectionMatrix();
+    } else {
+      fc.mode = v.camera.mode;
+      fc.snap();
+      // run the camera to rest at a fixed timestep
+      for (let i = 0; i < 120; i++) fc.update(g.aircraft.flight, g.aircraft.model, this.fixedDt);
+    }
+  }
+
+  private updateCamera(dt: number): void {
+    this.game.flightCamera.update(this.game.aircraft.flight, this.game.aircraft.model, dt);
+  }
+
+  /** Advance the simulation by n fixed frames (flight enabled) and render the last one. */
+  step(n = 1): void {
+    const g = this.game;
+    for (let i = 0; i < n; i++) {
+      g.update(this.fixedDt, true);
+      this.updateCamera(this.fixedDt);
+      this.frame++;
+    }
+    this.flying = true;
+    g.render();
+  }
+
+  /** Render the current (frozen) state again without advancing. */
+  render(): void { this.game.render(); }
+
+  metrics(): unknown {
+    const m = this.game.metrics.snapshot();
+    const t = this.game.aircraft.flight.telemetry;
+    return { ...m, frame: this.frame, flying: this.flying, telemetry: { airspeed: t.airspeed, altitude: t.altitude, heading: t.heading, alpha: t.alpha, stalled: t.stalled, onWater: t.onWater }, build: window.__build, view: this.view?.id ?? null, camera: { pos: this.game.camera.position.toArray(), quat: this.game.camera.quaternion.toArray(), fov: this.game.camera.fov } };
+  }
+
+  /** Project world point to screen-normalised coordinates (for objective landmark metrics). */
+  project(x: number, y: number, z: number): [number, number] | null {
+    const v = new THREE.Vector3(x, y, z).project(this.game.camera);
+    if (v.z > 1) return null;
+    return [(v.x + 1) / 2, (1 - v.y) / 2];
+  }
+
+  /** Landmarks used by the objective metrics script. */
+  landmarks(): Record<string, [number, number] | null> {
+    const g = this.game;
+    const b = g.map.bridges.find((x) => x.id === 'garza-bridge')!;
+    const first = b.pts[0], last = b.pts[b.pts.length - 1];
+    const plane = g.aircraft.flight.position;
+    const lm: Record<string, [number, number] | null> = {
+      planeCentroid: this.project(plane.x, plane.y, plane.z),
+      bridgeStart: this.project(first[0], 7, first[1]),
+      bridgeEnd: this.project(last[0], 7, last[1]),
+    };
+    for (const l of g.city.landmarkPositions) lm[`landmark:${l.name}`] = this.project(l.x, l.h, l.z);
+    lm.horizonCentre = this.project(g.camera.position.x + Math.sin(0) * 50000, 0, g.camera.position.z - 50000);
+    return lm;
+  }
+}

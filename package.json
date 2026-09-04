@@ -1,0 +1,26 @@
+{
+  "name": "vice-city-aerial",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bahía Vista: an original tropical coastal metropolis explored from a seaplane (Three.js).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json",
+    "bench:capture": "node bench/scripts/capture.mjs",
+    "bench:metrics": "python3 bench/scripts/metrics.py",
+    "bench:smoke": "node bench/scripts/smoke.mjs",
+    "publish:pages": "bash tools/publish-pages.sh"
+  },
+  "dependencies": {
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.170.0",
+    "puppeteer-core": "23.10.4",
+    "typescript": "5.7.2",
+    "vite": "6.0.3"
+  }
+}
