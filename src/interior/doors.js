@@ -271,9 +271,9 @@ export class Door {
     return { id: this.id, s: this.state, p: +this.progress.toFixed(3), l: this.locked };
   }
   applyState(st) {
-    this.state = st.s;
-    this.progress = st.p;
     this.locked = st.l;
+    this.progress = st.p;
+    if (st.s !== this.state) this.setState(st.s); // status light + listeners follow the replicated state
     this.apply();
   }
 }

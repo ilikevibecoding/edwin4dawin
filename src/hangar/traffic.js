@@ -745,7 +745,10 @@ export function createTraffic({ mats, audio, zone } = {}) {
         }
       }
       api.stats.airborne = airborne;
-      updateInstances(cameraPos);
+      // the simulation always runs (determinism); the instance buffers only need uploading when the
+      // fighters can be seen, plus once on the hidden -> visible edge
+      if (group.visible || api._wasHidden) updateInstances(cameraPos);
+      api._wasHidden = !group.visible;
     },
     setPilot(id, controller) {
       const f = fighters[id];

@@ -80,15 +80,30 @@ const greebles = buildGreebles(mats);
 exterior.group.add(greebles.group);
 const tExt = performance.now() - tExt0;
 
-// Which rooms can see outside: "all" = hull + greebles + fighters + sun, "traffic" = fighters and
-// space through an opening only (the hangar well), everything else is fully enclosed.
-const EXTERIOR_VIEW = { bridge: "all", observation: "all", lounge: "all", hangar: "traffic", flightControl: "traffic" };
+// Which rooms can see outside (from the layout's `exterior` flag): "all" = hull + greebles + fighters +
+// sun + sky, "traffic" = fighters and space through an opening only (the hangar well); everything else
+// is fully enclosed and culls the exterior.
+const EXTERIOR_VIEW = Object.fromEntries(Object.entries(ROOMS).filter(([, r]) => r.exterior).map(([id, r]) => [id, r.exterior]));
 
 // Interior: rooms, lifts, doors
 const zone = new ZoneManager(scene, mats);
 zone.exteriorVisible = new Set(Object.keys(EXTERIOR_VIEW));
 const player = new Player(camera, canvas, [], []);
-const lifts = new LiftSystem({ zone, mats, player, hud, audio, onArrive: (cluster) => audio.setZone(cluster) });
+const lifts = new LiftSystem({
+  zone,
+  mats,
+  player,
+  hud,
+  audio,
+  onArrive: (cluster) => {
+    audio.setZone(cluster);
+    // the teleport happens after this frame's zone update: refresh visibility and lights now so the
+    // first frame in the destination cab is not the departure deck / black
+    zone.update(0, player.position, camera.position, "interior");
+    lightPool.assign(zone.lightDescs(), player.position);
+    lightPool.snap();
+  },
+});
 const tInt0 = performance.now();
 const roomBuild = {};
 for (const id of buildableRoomIds()) {
@@ -97,24 +112,6 @@ for (const id of buildableRoomIds()) {
 }
 zone.finalize();
 const tInt = performance.now() - tInt0;
-
-// Precompile every interior material now (in parallel via KHR_parallel_shader_compile) instead of
-// stalling the frame the first time each room comes into view. compile() traverses the given object
-// regardless of visibility, so the hidden rooms are covered; the light pool is constant, so the
-// programs stay valid.
-const precompile = { started: performance.now(), done: false, ms: 0 };
-requestAnimationFrame(() => {
-  renderer
-    .compileAsync(zone.root, camera, scene)
-    .then(() => {
-      precompile.done = true;
-      precompile.ms = Math.round(performance.now() - precompile.started);
-    })
-    .catch(() => {
-      precompile.done = true;
-      precompile.ms = -1;
-    });
-});
 
 // Fighter traffic
 const traffic = createTraffic({ mats, audio, zone });
@@ -163,7 +160,13 @@ for (const d of zone.doors) {
 sync.register("doors", { getState: () => zone.doors.map((d) => d.getState()), applyState: (s) => s.forEach((st) => zone.doorById(st.id)?.applyState(st)) });
 sync.register("lifts", lifts);
 sync.register("traffic", traffic);
-sync.register("player", { getState: () => ({ x: +player.position.x.toFixed(2), y: +player.position.y.toFixed(2), z: +player.position.z.toFixed(2), yaw: +player.yaw.toFixed(3) }) });
+sync.register("player", {
+  getState: () => ({ x: +player.position.x.toFixed(2), y: +player.position.y.toFixed(2), z: +player.position.z.toFixed(2), yaw: +player.yaw.toFixed(3), pitch: +player.pitch.toFixed(3) }),
+  applyState: (s) => {
+    player.teleport(s.x, s.y, s.z, s.yaw);
+    if (s.pitch !== undefined) player.pitch = s.pitch;
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Cameras
@@ -205,6 +208,31 @@ document.addEventListener("keydown", () => audio.start(), { once: true });
 // Post
 // ---------------------------------------------------------------------------
 const post = createPost(renderer, scene, camera);
+
+// Precompile every interior material now (in parallel via KHR_parallel_shader_compile) instead of
+// stalling the frame the first time each room comes into view. compile() traverses the given object
+// regardless of visibility, so the hidden rooms are covered; the light pool is constant, so the
+// programs stay valid.
+const precompile = { started: performance.now(), done: false, ms: 0 };
+requestAnimationFrame(() => {
+  // the beauty pass is rendered by N8AO into its own target (no tone mapping, linear output), and those
+  // settings are part of the program cache key: compile with that target bound or every room compiles
+  // again on first sight
+  const target = post.ao.beautyRenderTarget || null;
+  renderer.setRenderTarget(target);
+  const p = Promise.all([renderer.compileAsync(zone.root, camera, scene), renderer.compileAsync(traffic.group, camera, scene)]);
+  renderer.setRenderTarget(null);
+  p
+    .then(() => {
+      precompile.done = true;
+      precompile.ms = Math.round(performance.now() - precompile.started);
+    })
+    .catch(() => {
+      precompile.done = true;
+      precompile.ms = -1;
+    });
+});
+
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -500,7 +528,6 @@ function frame() {
     if (debugWalk.remaining <= 0) debugWalk.done();
   }
   space.update(dt);
-  sun.position.copy(space.sunWorld).multiplyScalar(1000);
   exteriorCam.update(dt);
   if (modes.mode === "interior") player.update(dt);
   const vis = zone.update(dt, modes.mode === "interior" ? player.position : null, camera.position, modes.mode);
@@ -523,6 +550,9 @@ function frame() {
     traffic.group.visible = ev !== "none";
     space.root.visible = ev !== "none";
     sun.intensity = ev === "none" ? 0 : SUN_INTENSITY;
+    const sunOn = ev !== "none";
+    if (sunOn && !sun.shadow.autoUpdate) sun.shadow.needsUpdate = true;
+    sun.shadow.autoUpdate = sunOn;
   }
   lightPool.assign(zone.lightDescs(), modes.mode === "interior" ? player.position : camera.position);
   lightPool.update(dt);

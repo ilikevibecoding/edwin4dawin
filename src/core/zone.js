@@ -85,6 +85,9 @@ export class Room {
     if (this.visible === v) return;
     this.visible = v;
     this.group.visible = v;
+    // hidden rooms drop out of the per-frame matrix walk entirely
+    this.group.matrixWorldAutoUpdate = v;
+    if (v) this.group.updateMatrixWorld(true);
   }
 }
 

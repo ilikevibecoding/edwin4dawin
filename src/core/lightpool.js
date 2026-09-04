@@ -88,7 +88,7 @@ export class LightPool {
             l.target.position.set(d.target[0], d.target[1], d.target[2]);
             l.angle = d.angle;
             l.penumbra = d.penumbra;
-            l.castShadow = d.shadow !== false;
+            // castShadow is part of every program's cache key: pool spots always cast, never toggle
             l.shadow.camera.far = Math.max(5, d.distance);
           }
         }
@@ -98,6 +98,33 @@ export class LightPool {
       l.intensity += (target - l.intensity) * k;
       if (!d && l.intensity < 0.01) l.intensity = 0;
       if (d && d.color && !l.color.equals(d.color)) l.color.lerp(d.color, k);
+      // an unbound spot still renders a 1024² depth pass unless its shadow map is frozen
+      if (l.isSpotLight) {
+        const on = !!d && l.intensity > 0.001;
+        if (on && !l.shadow.autoUpdate) l.shadow.needsUpdate = true;
+        l.shadow.autoUpdate = on;
+      }
+    }
+  }
+
+  // Jump straight to the target intensities (turbolift arrivals, boarding): no fade-in from black
+  snap() {
+    for (const l of [...this.points, ...this.spots]) {
+      const slot = l.userData.slot;
+      const d = slot.desc;
+      if (slot.fresh && d) {
+        slot.fresh = false;
+        l.position.set(d.pos[0], d.pos[1], d.pos[2]);
+        l.color.copy(d.color);
+        l.distance = d.distance;
+        if (l.isSpotLight) {
+          l.target.position.set(d.target[0], d.target[1], d.target[2]);
+          l.angle = d.angle;
+          l.penumbra = d.penumbra;
+          l.shadow.camera.far = Math.max(5, d.distance);
+        }
+      }
+      l.intensity = d ? d.intensity * this.scale * this.dim * (d.dim === undefined ? 1 : d.dim) : 0;
     }
   }
 

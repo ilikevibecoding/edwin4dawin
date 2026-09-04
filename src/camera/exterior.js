@@ -86,10 +86,17 @@ export class ExteriorCamera {
       if (!this.enabled) return;
       this.keys.add(e.code);
       const idx = PRESET_KEYS.indexOf(PRESET_KEYS[parseInt(e.key, 10) - 1]);
-      if (idx >= 0 && !e.repeat) this.setPreset(PRESET_KEYS[idx]);
+      if (idx >= 0 && !e.repeat && !this.flight && !this.locked) this.setPreset(PRESET_KEYS[idx]);
     });
     document.addEventListener("keyup", (e) => this.keys.delete(e.code));
     window.addEventListener("blur", () => this.keys.clear());
+  }
+
+  // a superseded flight must still settle its promise or the mode manager waits forever
+  _endFlight(ok) {
+    const f = this.flight;
+    this.flight = null;
+    if (f && f.resolve) f.resolve(ok);
   }
 
   setPreset(name, instant = false) {
@@ -99,7 +106,7 @@ export class ExteriorCamera {
     this.theta = p.theta;
     this.phi = p.phi;
     this.radius = p.radius;
-    this.flight = null;
+    this._endFlight(false);
     if (instant) this.snap();
     this.idle = 0;
     this.preset = name;
@@ -123,11 +130,13 @@ export class ExteriorCamera {
     this.radius = Math.max(MIN_R, d.length());
     this.theta = Math.atan2(d.x, d.z);
     this.phi = Math.acos(THREE.MathUtils.clamp(d.y / d.length(), -1, 1));
+    this._endFlight(false);
     this.snap();
   }
 
   // Cinematic flight: interpolate the orbit parameters toward a pose over `duration` seconds
   flyTo(pos, look, duration = 2.5) {
+    this._endFlight(false);
     const p = new THREE.Vector3(...pos);
     const l = new THREE.Vector3(...look);
     const d = p.clone().sub(l);
@@ -161,7 +170,7 @@ export class ExteriorCamera {
       this.apply();
       if (f.t >= f.duration) {
         this.flight = null;
-        if (f.resolve) f.resolve();
+        if (f.resolve) f.resolve(true);
       }
       return;
     }

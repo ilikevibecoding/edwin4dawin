@@ -137,6 +137,8 @@ export class Kit {
       mesh.name = "kit_" + key;
       mesh.castShadow = castShadow && !skipShadow(key);
       mesh.receiveShadow = receiveShadow && key !== "glass" && key !== "decal" && key !== "impDecal";
+      // merged geometry is baked in world space: the mesh never moves
+      mesh.matrixAutoUpdate = false;
       parent.add(mesh);
       this.meshes.push(mesh);
     }

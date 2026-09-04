@@ -21,8 +21,10 @@ export class SyncRegistry {
       if (src && src.applyState) src.applyState(st);
     }
   }
-  // Byte estimate of one snapshot (for budgeting)
+  // Byte estimate of one snapshot (for budgeting); does not advance the sequence number
   size() {
-    return JSON.stringify(this.snapshot()).length;
+    const s = {};
+    for (const [name, src] of this.sources) s[name] = src.getState();
+    return JSON.stringify({ seq: this.seq, s }).length;
   }
 }

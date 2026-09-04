@@ -115,14 +115,16 @@ export const CLUSTERS = {
 export const ROOMS = {
   // ---- tower ---------------------------------------------------------------------------------
   // the bridge's forward wall IS the bridge module's front face: the exterior leaves the window band open
-  bridge: { cluster: "tower", name: "Main Bridge", box: [-21, 548, 21, 600], h: 9, hero: true, frontIsHullFace: true, windowBand: { y0: 190.8, y1: 198.6, x0: -20, x1: 20 } },
+  // `exterior`: what the room can see outside — "all" (hull, greebles, fighters, sun, sky) or "traffic"
+  // (fighters + sky through an opening only). Rooms without it are fully enclosed and cull everything.
+  bridge: { cluster: "tower", name: "Main Bridge", box: [-21, 548, 21, 600], h: 9, hero: true, frontIsHullFace: true, windowBand: { y0: 190.8, y1: 198.6, x0: -20, x1: 20 }, exterior: "all" },
   corridorT: { cluster: "tower", name: "Bridge Deck Corridor", box: [-82, 600, 82, 604], h: 3.4, corridor: true },
   holo: { cluster: "tower", name: "Tactical Operations / Holo Planning", box: [-48, 604, -22, 634], h: 5.2 },
   comms: { cluster: "tower", name: "Communications & Sensor Control", box: [22, 604, 48, 634], h: 5.2 },
   intel: { cluster: "tower", name: "Restricted Intelligence Room", box: [-82, 604, -52, 628], h: 4.2, restricted: true },
   briefing: { cluster: "tower", name: "Crew Briefing Room", box: [52, 604, 82, 628], h: 4.6 },
   liftLobbyT: { cluster: "tower", name: "Turbolift Lobby — Bridge Deck", box: [-8, 604, 8, 620], h: 3.6, lobby: true },
-  observation: { cluster: "tower", name: "Aft Observation Deck", box: [-20, 620, 20, 650], h: 5.6 },
+  observation: { cluster: "tower", name: "Aft Observation Deck", box: [-20, 620, 20, 650], h: 5.6, exterior: "all" },
 
   // ---- crew deck -----------------------------------------------------------------------------
   spineC: { cluster: "crew", name: "Deck 7 Spine Corridor", box: [-2.5, 306, 2.5, 440], h: 3.4, corridor: true },
@@ -132,7 +134,7 @@ export const ROOMS = {
   officersQuarters: { cluster: "crew", name: "Officers' Quarters", box: [-34, 400, -2.5, 436], h: 3.6 },
   mess: { cluster: "crew", name: "Mess Hall & Galley", box: [2.5, 336, 40, 378], h: 4.4 },
   // west wall sits 1 m inside the T1 terrace's sloped flank: its slanted viewports look out over the dorsal hull
-  lounge: { cluster: "crew", name: "Recreation Lounge", box: [-78, 346, -52, 384], h: 4.2, viewport: true },
+  lounge: { cluster: "crew", name: "Recreation Lounge", box: [-78, 346, -52, 384], h: 4.2, viewport: true, exterior: "all" },
   medbay: { cluster: "crew", name: "Medical Bay", box: [2.5, 306, 30, 334], h: 3.8 },
   armory: { cluster: "crew", name: "Armory & Equipment Storage", box: [-30, 306, -2.5, 338], h: 3.8 },
   detention: { cluster: "crew", name: "Security & Detention Block", box: [-16, 452, 16, 480], h: 3.6 },
@@ -151,9 +153,9 @@ export const ROOMS = {
 
   // ---- hangar --------------------------------------------------------------------------------
   liftLobbyH: { cluster: "hangar", name: "Turbolift Lobby — Deck 19", box: [-8, 86, 8, 100], h: 3.6, lobby: true },
-  hangar: { cluster: "hangar", name: "Main Hangar Bay", box: [-60, 100, 60, 290], h: 42, hero: true },
+  hangar: { cluster: "hangar", name: "Main Hangar Bay", box: [-60, 100, 60, 290], h: 42, hero: true, exterior: "traffic" },
   // raised booth inside the hangar volume (built by the hangar module, no separate shell / doors)
-  flightControl: { cluster: "hangar", name: "Hangar Flight Control", box: [-12, 100, 12, 108], h: 3.2, floorY: -8, booth: true, sub: "hangar" },
+  flightControl: { cluster: "hangar", name: "Hangar Flight Control", box: [-12, 100, 12, 108], h: 3.2, floorY: -8, booth: true, sub: "hangar", exterior: "traffic" },
   fighterMaint: { cluster: "hangar", name: "Fighter Maintenance & Refuelling", box: [60, 150, 100, 230], h: 14 },
   shuttleBay: { cluster: "hangar", name: "Shuttle Docking Bay", box: [-50, 290, 50, 380], h: 22 },
   escapePods: { cluster: "hangar", name: "Emergency Escape Pod Bay", box: [-100, 120, -60, 160], h: 4 },

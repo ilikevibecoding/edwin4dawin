@@ -1942,6 +1942,7 @@ export function buildGreebles(mats, opts = {}) {
     stats.trianglesVisible = COUNTER.tris;
     COUNTER.calls = 0;
     COUNTER.tris = 0;
+    if (!group.visible) return; // enclosed room: no LOD flips, no turret slews, no buffer uploads
     refreshSun();
     let changed = false;
     for (const ch of chunks) {

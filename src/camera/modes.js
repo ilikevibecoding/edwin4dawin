@@ -94,6 +94,7 @@ export class CameraModes {
   async board(clusterId = null) {
     if (this.busy || this.mode !== "exterior") return false;
     this.busy = true;
+    this.exterior.locked = true;
     const target = clusterId || this.boardingTarget();
     // cinematic approach: fly to the bridge windows / the hangar well, then fade
     if (target === "hangar") {
@@ -111,6 +112,7 @@ export class CameraModes {
     await this.hud.fadeOut(700);
     this.hud.setStatus("Welcome aboard. F returns to the exterior view.");
     this.player.requestLock();
+    this.exterior.locked = false;
     this.busy = false;
     return true;
   }
