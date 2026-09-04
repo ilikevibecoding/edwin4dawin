@@ -247,7 +247,7 @@ def analyse(path):
         'aircraftYellow': dominant(small, yellow),
     }
     if os.environ.get('REFANALYSIS_DEBUG'):
-        # mask overlay for tuning the detectors: green = island canopy, blue = water, yellow = aircraft, red = horizon
+        # mask overlay for tuning the detectors: green = island canopy, blue = water, pale = skyline structures, red = horizon
         dbg = small.copy() * 0.5
         if island_mask is not None:
             dbg[island_mask] = [40, 220, 40]
