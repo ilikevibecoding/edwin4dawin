@@ -1,0 +1,33 @@
+{
+  "name": "spaceship-interior-demo",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview",
+    "shots": "node tools/shots.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ilikevibecoding/edwin4dawin.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ilikevibecoding/edwin4dawin/issues"
+  },
+  "homepage": "https://github.com/ilikevibecoding/edwin4dawin#readme",
+  "type": "module",
+  "dependencies": {
+    "n8ao": "^2.0.1",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.62.1",
+    "vite": "^8.2.2"
+  }
+}

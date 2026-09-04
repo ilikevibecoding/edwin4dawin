@@ -1,0 +1,163 @@
+{
+  "iter": "9",
+  "views": {
+    "cockpit": {
+      "frameMs": 2412.67,
+      "fps": 0.4,
+      "calls": 112,
+      "triangles": 249606,
+      "geometries": 68,
+      "textures": 76,
+      "programs": 49,
+      "colliders": 69,
+      "lights": 22,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "corridor": {
+      "frameMs": 2770.89,
+      "fps": 0.4,
+      "calls": 124,
+      "triangles": 226260,
+      "geometries": 68,
+      "textures": 76,
+      "programs": 49,
+      "colliders": 69,
+      "lights": 22,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "quarters": {
+      "frameMs": 2114.1,
+      "fps": 0.5,
+      "calls": 113,
+      "triangles": 226166,
+      "geometries": 68,
+      "textures": 76,
+      "programs": 49,
+      "colliders": 69,
+      "lights": 22,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "window": {
+      "frameMs": 2024.93,
+      "fps": 0.5,
+      "calls": 116,
+      "triangles": 251372,
+      "geometries": 68,
+      "textures": 76,
+      "programs": 49,
+      "colliders": 69,
+      "lights": 22,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "windshield": {
+      "frameMs": 2174.11,
+      "fps": 0.5,
+      "calls": 110,
+      "triangles": 249484,
+      "geometries": 68,
+      "textures": 76,
+      "programs": 49,
+      "colliders": 69,
+      "lights": 22,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "galley": {
+      "frameMs": 2027.76,
+      "fps": 0.5,
+      "calls": 119,
+      "triangles": 249646,
+      "geometries": 68,
+      "textures": 76,
+      "programs": 49,
+      "colliders": 69,
+      "lights": 22,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "bathroom": {
+      "frameMs": 2320.41,
+      "fps": 0.4,
+      "calls": 171,
+      "triangles": 343238,
+      "geometries": 70,
+      "textures": 78,
+      "programs": 49,
+      "colliders": 69,
+      "lights": 22,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    },
+    "aft": {
+      "frameMs": 2336.54,
+      "fps": 0.4,
+      "calls": 161,
+      "triangles": 365954,
+      "geometries": 70,
+      "textures": 78,
+      "programs": 49,
+      "colliders": 69,
+      "lights": 22,
+      "qualityLevel": 3,
+      "pixelRatio": 1
+    }
+  },
+  "interactions": {
+    "bed": {
+      "hovered": true,
+      "promptVisible": true,
+      "promptText": "ESleep",
+      "status": "You slept 8 hours. Rest cycle lighting engaged.",
+      "restLevel": 0.8239999999999998
+    },
+    "galley": {
+      "hovered": true,
+      "promptVisible": true,
+      "promptText": "EEat",
+      "status": "You eat. Energy restored.",
+      "restLevel": 0
+    },
+    "bathroom": {
+      "hovered": true,
+      "promptVisible": true,
+      "promptText": "EWash up",
+      "status": "Refreshed.",
+      "restLevel": 0
+    }
+  },
+  "stats": {
+    "frameMs": 2079.04,
+    "fps": 0.5,
+    "calls": 161,
+    "triangles": 294858,
+    "geometries": 70,
+    "textures": 78,
+    "programs": 49,
+    "colliders": 69,
+    "lights": 22,
+    "qualityLevel": 3,
+    "pixelRatio": 1
+  },
+  "logs": [
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected.",
+    "[warning] [.WebGL-0x307400104e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[warning] [.WebGL-0x307400104e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[warning] [.WebGL-0x307400104e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[warning] [.WebGL-0x307400104e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
+  ],
+  "drift": {
+    "skyRegion": {
+      "meanAbsDiff": 44.5,
+      "changedFraction": 0.71
+    },
+    "interiorControl": {
+      "meanAbsDiff": 0,
+      "changedFraction": 0
+    }
+  }
+}
