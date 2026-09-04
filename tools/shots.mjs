@@ -15,6 +15,7 @@ const base = process.argv[3] || "http://127.0.0.1:5173/";
 const outDir = resolve("shots", `iter_${iter}`);
 mkdirSync(outDir, { recursive: true });
 const QUICK = !!process.env.SHOT_QUICK;
+const NO_HUD = !!process.env.SHOT_NOHUD; // beauty renders without the overlay
 const [VW, VH] = (process.env.SHOT_SIZE || "1280x720").split("x").map(Number);
 
 const executablePath = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/local/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].find((p) => existsSync(p));
@@ -50,6 +51,7 @@ async function settle(minFrames = 3, minMs = 800, timeout = 240000) {
   if (elapsed < minMs) await page.waitForTimeout(minMs - elapsed);
 }
 
+if (NO_HUD) await page.evaluate(() => window.debugAPI.setHUD(false));
 const allViews = await page.evaluate(() => window.debugAPI.views);
 const family = process.env.SHOT_SET || "all";
 let views = allViews.filter((v) => {

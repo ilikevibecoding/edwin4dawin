@@ -50,7 +50,8 @@ const planetFrag = /* glsl */ `
     // atmosphere seen through a thickening column toward the limb: wide, bright and blue-shifted
     float fres = pow(1.0 - ndv, 3.5);
     // faint night-side ambient so the dark hemisphere still reads as a sphere
-    vec3 col = alb * (day * brightness + 0.035 * vec3(0.55, 0.65, 1.0));
+    // night-side floor: a backlit moon must still read as a sphere, not a hole in the star field
+    vec3 col = alb * (day * brightness + 0.075 * vec3(0.6, 0.68, 1.0));
     // terminator warmth
     float term = smoothstep(-0.2, 0.15, ndl) * (1.0 - smoothstep(0.15, 0.55, ndl));
     col += vec3(0.9, 0.45, 0.2) * term * 0.12;

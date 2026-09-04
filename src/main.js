@@ -66,7 +66,7 @@ sun.shadow.camera.far = 6000;
 scene.add(sun);
 scene.add(sun.target);
 // faint "planet-shine" fill so the shadow side of the hull is not pure black
-const hemi = new THREE.HemisphereLight(0x3a4a66, 0x2a2e38, 0.45);
+const hemi = new THREE.HemisphereLight(0x6a86b8, 0x1a1c22, 0.8);
 scene.add(hemi);
 
 const exterior = buildExteriorAll(scene, materials, camera);
@@ -579,6 +579,11 @@ const debugAPI = {
   landing,
   cameraState: () => rig.getState(),
   audioLog: () => audio.recent(),
+  /** Hide / show the DOM overlay (beauty renders). */
+  setHUD(visible) {
+    document.getElementById("hud").style.display = visible ? "" : "none";
+    return visible;
+  },
   getStats() {
     return perf.snapshot({
       ...cells.getStats(),
