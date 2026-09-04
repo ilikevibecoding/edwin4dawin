@@ -174,12 +174,13 @@ export function build(kit, ctx, room) {
   L.warm.push(pointLight(0xff7a60, 8, 9, [cx, yTop - 0.6, cz]));
   L.warm.push(pointLight(0xffb347, 2.5, 4, [x0 + 0.6, y0 + 1.6, z1 - lu]));
   // cool: desk lamps, table lamps, the blue counter screens, the map wall
-  for (const ax of [5.6, 12.4]) L.cool.push(pointLight(0xbfd4ff, 4.5, 4.5, [ax + 0.5, y0 + 1.25, z1 - 2.2]));
-  L.cool.push(pointLight(0xa8c8ff, 5, 5, [cx, y0 + 1.5, cz]));
-  L.cool.push(pointLight(0x8fb4ff, 6, 6, [x1 - 1.2, y0 + 1.7, cz]));
-  L.cool.push(pointLight(0xa8c8ff, 6, 6, [cx, y0 + 2.2, z1 - 1.2]));
-  // neutral fill so the dark panels and chairs keep their material read
-  L.cool.push(pointLight(0xd8dcf0, 9, 10, [x0 + 3.0, yTop - 0.6, cz]));
+  for (const ax of [5.6, 12.4]) L.cool.push(pointLight(0xbfd4ff, 7, 6, [ax + 0.5, y0 + 1.25, z1 - 2.2]));
+  L.cool.push(pointLight(0xa8c8ff, 9, 7, [cx, y0 + 1.5, cz]));
+  L.cool.push(pointLight(0x8fb4ff, 10, 8, [x1 - 1.2, y0 + 1.7, cz]));
+  L.cool.push(pointLight(0xa8c8ff, 10, 8, [cx, y0 + 2.2, z1 - 1.2]));
+  // neutral fill (door end and far end) so the dark panels and chairs keep their material read
+  L.cool.push(pointLight(0xd8dcf0, 13, 12, [x0 + 3.0, yTop - 0.6, cz]));
+  L.cool.push(pointLight(0xd8dcf0, 9, 10, [x1 - 3.0, yTop - 0.6, cz]));
   return shell;
 }
 

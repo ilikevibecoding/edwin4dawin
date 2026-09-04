@@ -8,7 +8,7 @@
 import { roomShell, wallLightBar } from "../shell.js";
 import { pointLight } from "../lib.js";
 import { PALETTE as P } from "../../materials.js";
-import { nicheWall, cabinet, bench, wallScreen, stencil, commPanel, pipe, downlight, flatCeiling, floorStencil, handrail } from "./commandKit.js";
+import { nicheWall, cabinet, bench, wallScreen, stencil, commPanel, callPanel, pipe, downlight, flatCeiling, floorStencil, handrail } from "./commandKit.js";
 
 export function build(kit, ctx, room) {
   const shell = roomShell(kit, ctx, room, { style: "dark", skipWalls: ["+x"], ceiling: false, lights: false, seed: 67 });
@@ -42,20 +42,25 @@ export function build(kit, ctx, room) {
 
   // ------------------------------------------------------------ aft wall: portal surround, indicator strip, deck plate + directory, rails
   const A = shell.frames["+z"].frame; // u = x1 - x; portal u 3..5 (x 1..-1), lift call panel at u 2.65
-  for (const u of [2.3, 5.7]) {
+  // bands sit just outside the shaft's own wall slab (|x| <= 1.66, 0.16 m proud of the room wall); the
+  // lintel and the indicator strip stand further out than that slab so they are not buried in it
+  for (const u of [2.1, 5.9]) {
     A.box("satinBlack", u, 1.2, 0.05, 0.3, 2.4, 0.1);
     A.box("hazard", u, 0.5, 0.101, 0.26, 0.9, 0.01, { texel: 3 });
-    A.box("emitAmber", u, 1.6, 0.102, 0.05, 1.3, 0.008);
   }
-  A.box("satinBlack", 4, 2.58, 0.05, 3.7, 0.36, 0.1);
-  A.box("hazard", 4, 2.42, 0.101, 3.4, 0.08, 0.01, { texel: 3 });
-  stencil(A, 4, 2.62, 0.3, 7, { n: 0.102 });
+  A.box("emitAmber", 5.9, 1.6, 0.102, 0.05, 1.3, 0.008);
+  A.box("emitAmber", 2.1, 2.0, 0.102, 0.05, 0.5, 0.008);
+  callPanel(A, 2.1, 1.35, "emitAmber");
+  A.box("satinBlack", 4, 2.58, 0.14, 4.1, 0.36, 0.28);
+  A.box("hazard", 4, 2.42, 0.281, 3.8, 0.08, 0.01, { texel: 3 });
+  stencil(A, 4, 2.62, 0.3, 7, { n: 0.282 });
+  A.box("emitWarmSoft", 4, 2.41, 0.14, 3.6, 0.008, 0.24, { uv: "keep" });
   // deck indicator strip: amber deck lamps, deck B lit white, LED readout, deck stencil
-  A.box("satinBlack", 4, 2.9, 0.04, 2.6, 0.22, 0.08);
-  A.box("painted", 4, 2.9, 0.082, 2.5, 0.16, 0.006, { color: P.gunmetal, uv: "keep" });
-  for (let i = 0; i < 6; i++) A.box(i === 2 ? "emitWhite" : "emitAmber", 3.35 + i * 0.26, 2.9, 0.086, 0.14, 0.06, 0.006);
-  A.box("leds", 5.35, 2.9, 0.086, 0.6, 0.04, 0.006, { uv: "keep" });
-  stencil(A, 2.95, 2.9, 0.18, 14, { n: 0.086 });
+  A.box("satinBlack", 4, 2.9, 0.13, 2.6, 0.22, 0.26);
+  A.box("painted", 4, 2.9, 0.262, 2.5, 0.16, 0.006, { color: P.gunmetal, uv: "keep" });
+  for (let i = 0; i < 6; i++) A.box(i === 2 ? "emitWhite" : "emitAmber", 3.35 + i * 0.26, 2.9, 0.266, 0.14, 0.06, 0.006);
+  A.box("leds", 5.35, 2.9, 0.266, 0.6, 0.04, 0.006, { uv: "keep" });
+  stencil(A, 2.95, 2.9, 0.18, 14, { n: 0.266 });
   A.collider(1.7, 6.3, 0, 2.75, 0, 0.12, "surround");
   // deck plate + directory (raised so the rail passes under it)
   const du = 6.85;
@@ -120,9 +125,10 @@ export function build(kit, ctx, room) {
 
   // ------------------------------------------------------------ ceiling accent and light
   downlight(kit, cx, yTop, z1 - 1.0, 1.6, 0.3, "emitWarmSoft");
-  ctx.lights.cool.push(pointLight(0xe0dcd0, 12, 10, [cx, yTop - 0.7, z0 + 1.9]));
-  ctx.lights.warm.push(pointLight(0xffb454, 11, 8, [cx - 2.2, yTop - 0.7, z1 - 0.8]));
-  ctx.lights.warm.push(pointLight(0xffb454, 8, 6, [cx + 1.6, yTop - 0.7, z0 + 3.9]));
+  ctx.lights.cool.push(pointLight(0xe0dcd0, 15, 11, [cx, yTop - 0.7, z0 + 1.9]));
+  ctx.lights.warm.push(pointLight(0xffb454, 14, 9, [cx - 2.2, yTop - 0.7, z1 - 0.8]));
+  ctx.lights.warm.push(pointLight(0xffb454, 10, 7, [cx + 1.6, yTop - 0.7, z0 + 3.9]));
+  ctx.lights.warm.push(pointLight(0xffc070, 5, 5, [x0 + 1.2, y0 + 1.4, z0 + 2.6]));
   return shell;
 }
 

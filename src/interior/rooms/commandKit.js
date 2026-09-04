@@ -12,6 +12,13 @@ import { decalRect } from "../../textures.js";
 const P = PALETTE;
 
 export const OPPOSITE = { "+x": "-x", "-x": "+x", "+z": "-z", "-z": "+z" };
+// Player / crew yaw (radians, three.js convention: yaw 0 looks down -z) for a facing direction.
+export const YAW = { "+x": -Math.PI / 2, "-x": Math.PI / 2, "+z": Math.PI, "-z": 0 };
+
+// Crew hook: register a seat / station marker for future NPC systems (no-op on kits without markers).
+export function marker(kit, kind, pos, facing, extra = {}) {
+  if (kit.marker) kit.marker(kind, [pos.x, pos.y, pos.z], YAW[facing] ?? 0, extra);
+}
 
 // Frame standing on the floor at (cx, y, cz) whose normal points along `facing` (toward the person
 // using the object). u runs to that person's right, v is up, n comes out of the object toward them.
@@ -69,6 +76,7 @@ export function chair(kit, cx, y, cz, facing, opts = {}) {
     }
   }
   f.collider(-0.28, 0.28, 0, 0.98, -0.3, 0.28, tag);
+  marker(kit, "seat", f.pos(0, 0, 0), facing, { id: tag });
 }
 
 // Writing desk with a drawer block and a small reclined monitor.
@@ -169,6 +177,7 @@ export function podium(kit, cx, y, cz, facing, opts = {}) {
     }
   }
   f.collider(-w / 2 - 0.02, w / 2 + 0.02, 0, h + 0.25, -d / 2 - 0.02, d / 2 + 0.06, tag);
+  marker(kit, "station", f.pos(0, 0, d / 2 + 0.45), OPPOSITE[facing], { id: tag });
   return f;
 }
 
@@ -283,6 +292,13 @@ export function bench(kit, cx, y, cz, facing, opts = {}) {
     f.box("fabric", 0, 0.74, -0.245, len - 0.1, 0.42, 0.04, { color, tilt: -0.15, uv: "world", texel: 2 });
   }
   f.collider(-len / 2, len / 2, 0, back ? 1.0 : 0.5, -0.32, 0.28, tag);
+  benchSeats(kit, f, len, facing, tag);
+}
+
+// One seat marker per ~0.6 m of bench, centred along u.
+function benchSeats(kit, f, len, facing, tag) {
+  const n = Math.max(1, Math.floor(len / 0.6));
+  for (let i = 0; i < n; i++) marker(kit, "seat", f.pos(-((n - 1) * 0.6) / 2 + i * 0.6, 0, 0.02), facing, { id: tag });
 }
 
 // Gallery / theatre bench: steel pedestal legs under a floating black seat frame with a fabric cushion,
@@ -312,6 +328,7 @@ export function theatreBench(kit, cx, y, cz, facing, opts = {}) {
     f.box("satinBlack", s * (len / 2 - 0.03), 0.57, -0.2, 0.06, 0.2, 0.05);
   }
   f.collider(-len / 2, len / 2, 0, 1.08, -0.38, 0.3, tag);
+  benchSeats(kit, f, len, facing, tag);
 }
 
 // Steel handrail on black posts between two floor points (axis-aligned).
@@ -479,21 +496,34 @@ export function commPanel(frame, u, v, opts = {}) {
   frame.cylN("metal", u - w / 2 + 0.07, v - 0.2, 0.086, 0.025, 0.012, { color: P.steel, segments: 12 });
 }
 
+// Turbolift call panel on a portal surround band (which sits at n 0..0.1): a black box proud of the band
+// with a small LED readout, two lit call buttons and a steel key switch.
+export function callPanel(frame, u, v, accent = "emitBlue") {
+  frame.box("satinBlack", u, v, 0.16, 0.24, 0.5, 0.12);
+  frame.box("darkGloss", u, v + 0.16, 0.222, 0.18, 0.1, 0.006);
+  frame.box("leds", u, v + 0.16, 0.226, 0.15, 0.03, 0.004, { uv: "keep" });
+  for (const [dv, mat] of [[0.02, accent], [-0.08, "emitWhite"]]) {
+    frame.box("rubber", u, v + dv, 0.225, 0.08, 0.07, 0.01, { color: P.rubber });
+    frame.box(mat, u, v + dv, 0.232, 0.05, 0.03, 0.004);
+  }
+  frame.cylN("metal", u, v - 0.18, 0.222, 0.025, 0.012, { color: P.steel, segments: 12 });
+}
+
 // Cabin / station nameplate: black plate, cream text plate carrying a spec-text decal, a lit rule under
 // it and an occupancy lamp. (u, v) is the plate centre on a wall frame.
 export function nameplate(frame, u, v, opts = {}) {
-  const { w = 0.46, h = 0.18, bar = "emitAmber", lamp = "emitBlue", label = 9, label2 = null, n = 0 } = opts;
+  const { w = 0.64, h = 0.24, bar = "emitAmber", lamp = "emitBlue", label = 9, label2 = null, n = 0 } = opts;
   frame.box("satinBlack", u, v, n + 0.02, w, h, 0.04);
-  const tw = w - 0.16;
-  frame.box("painted", u + 0.04, v + 0.012, n + 0.043, tw, h - 0.07, 0.006, { color: P.cream, uv: "keep" });
-  const d = h - 0.085;
-  if (label2 === null) frame.add("decal", new THREE.PlaneGeometry(d, d), u + 0.04, v + 0.012, n + 0.048, { uv: "keep", uvRect: decalRect(label) });
+  const tw = w - 0.18;
+  frame.box("painted", u + 0.05, v + 0.014, n + 0.043, tw, h - 0.08, 0.006, { color: P.cream, uv: "keep" });
+  const d = h - 0.095;
+  if (label2 === null) frame.add("decal", new THREE.PlaneGeometry(d, d), u + 0.05, v + 0.014, n + 0.048, { uv: "keep", uvRect: decalRect(label) });
   else {
-    frame.add("decal", new THREE.PlaneGeometry(d, d), u + 0.04 - tw / 4, v + 0.012, n + 0.048, { uv: "keep", uvRect: decalRect(label) });
-    frame.add("decal", new THREE.PlaneGeometry(d, d), u + 0.04 + tw / 4, v + 0.012, n + 0.048, { uv: "keep", uvRect: decalRect(label2) });
+    frame.add("decal", new THREE.PlaneGeometry(d, d), u + 0.05 - tw / 4, v + 0.014, n + 0.048, { uv: "keep", uvRect: decalRect(label) });
+    frame.add("decal", new THREE.PlaneGeometry(d, d), u + 0.05 + tw / 4, v + 0.014, n + 0.048, { uv: "keep", uvRect: decalRect(label2) });
   }
-  frame.box(bar, u, v - h / 2 + 0.022, n + 0.043, w - 0.08, 0.014, 0.006);
-  frame.box(lamp, u - w / 2 + 0.06, v + 0.012, n + 0.043, 0.04, 0.04, 0.006);
+  frame.box(bar, u, v - h / 2 + 0.024, n + 0.043, w - 0.08, 0.016, 0.006);
+  frame.box(lamp, u - w / 2 + 0.065, v + 0.014, n + 0.043, 0.05, 0.05, 0.006);
 }
 
 // Two-sided interior partition (both faces panelled) with optional door openings, capped on top.

@@ -8,14 +8,14 @@
 import { roomShell, wallLightBar } from "../shell.js";
 import { pointLight } from "../lib.js";
 import { PALETTE as P } from "../../materials.js";
-import { nicheWall, cabinet, theatreBench, wallScreen, stencil, commPanel, floorStrip, downlight, flatCeiling, floorStencil, handrail } from "./commandKit.js";
+import { nicheWall, cabinet, theatreBench, wallScreen, stencil, commPanel, callPanel, floorStrip, downlight, flatCeiling, floorStencil, handrail } from "./commandKit.js";
 
 export function build(kit, ctx, room) {
   const shell = roomShell(kit, ctx, room, { style: "light", skipWalls: ["+x"], ceiling: false, lights: false, seed: 61 });
   const y0 = shell.y0;
   const { x0, x1, z0, z1 } = room;
   const cx = (x0 + x1) / 2;
-  const yTop = flatCeiling(kit, room, y0, { beams: [z0 + 2.0, z0 + 4.0], channels: [z0 + 1.0, z0 + 3.0], channelMat: "emitWhiteSoft" });
+  const yTop = flatCeiling(kit, room, y0, { beams: [z0 + 2.0, z0 + 4.0], channels: [z0 + 1.0, z0 + 3.0, z0 + 4.5], channelMat: "emitWhiteSoft", plate: P.slate });
 
   // ------------------------------------------------------------ starboard wall with the emergency niche
   const niche = nicheWall(kit, room, y0, z0 + 3.0, z0 + 4.6, { seed: 63 });
@@ -35,20 +35,24 @@ export function build(kit, ctx, room) {
 
   // ------------------------------------------------------------ aft wall: portal surround, indicator strip, directory, rails
   const A = shell.frames["+z"].frame; // u = x1 - x; portal u 3..5 (x 1..-1), lift call panel at u 2.65
-  // surround: two black bands with lit slots outside the call panel, a header over the whole unit
-  for (const u of [2.3, 5.7]) {
-    A.box("satinBlack", u, 1.2, 0.05, 0.3, 2.4, 0.1);
-    A.box("emitBlue", u, 1.25, 0.102, 0.05, 1.9, 0.008);
-  }
-  A.box("satinBlack", 4, 2.58, 0.05, 3.7, 0.36, 0.1);
-  A.box("emitBlueSoft", 4, 2.42, 0.102, 3.4, 0.03, 0.008, { uv: "keep" });
-  stencil(A, 4, 2.6, 0.3, 7, { n: 0.102 });
+  // surround: two black bands with lit slots just outside the shaft's own wall slab (|x| <= 1.66, which
+  // stands 0.16 m proud of the room wall), the call panel on the right-hand band, and a lintel over the
+  // whole unit deep enough to clear that slab
+  for (const u of [2.1, 5.9]) A.box("satinBlack", u, 1.2, 0.05, 0.3, 2.4, 0.1);
+  A.box("emitBlue", 5.9, 1.25, 0.102, 0.05, 1.9, 0.008);
+  A.box("emitBlue", 2.1, 1.95, 0.102, 0.05, 0.5, 0.008);
+  A.box("emitBlue", 2.1, 0.65, 0.102, 0.05, 0.7, 0.008);
+  callPanel(A, 2.1, 1.35, "emitBlue");
+  A.box("satinBlack", 4, 2.58, 0.14, 4.1, 0.36, 0.28);
+  A.box("emitBlueSoft", 4, 2.42, 0.282, 3.8, 0.03, 0.008, { uv: "keep" });
+  stencil(A, 4, 2.6, 0.3, 7, { n: 0.282 });
+  A.box("emitBlueSoft", 4, 2.41, 0.14, 3.6, 0.008, 0.24, { uv: "keep" });
   // deck indicator: a row of deck lamps, the current deck lit white, LED readout, deck stencil
-  A.box("satinBlack", 4, 2.9, 0.04, 2.6, 0.22, 0.08);
-  A.box("darkGloss", 4, 2.9, 0.082, 2.5, 0.16, 0.006);
-  for (let i = 0; i < 6; i++) A.box(i === 1 ? "emitWhite" : "emitBlue", 3.35 + i * 0.26, 2.9, 0.086, 0.14, 0.06, 0.006);
-  A.box("leds", 5.35, 2.9, 0.086, 0.6, 0.04, 0.006, { uv: "keep" });
-  stencil(A, 2.95, 2.9, 0.18, 0, { n: 0.086 });
+  A.box("satinBlack", 4, 2.9, 0.13, 2.6, 0.22, 0.26);
+  A.box("darkGloss", 4, 2.9, 0.262, 2.5, 0.16, 0.006);
+  for (let i = 0; i < 6; i++) A.box(i === 1 ? "emitWhite" : "emitBlue", 3.35 + i * 0.26, 2.9, 0.266, 0.14, 0.06, 0.006);
+  A.box("leds", 5.35, 2.9, 0.266, 0.6, 0.04, 0.006, { uv: "keep" });
+  stencil(A, 2.95, 2.9, 0.18, 0, { n: 0.266 });
   A.collider(1.7, 6.3, 0, 2.75, 0, 0.12, "surround");
   // directory board (raised so the rail passes under it)
   const du = 6.85;
@@ -97,8 +101,8 @@ export function build(kit, ctx, room) {
   // ------------------------------------------------------------ floor guides, portal downlight, light
   for (const gx of [cx - 1.15, cx + 1.15]) floorStrip(kit, [gx, z0 + 0.7], [gx, z1 - 1.5], y0, "emitBlueSoft", { w: 0.05 });
   downlight(kit, cx, yTop, z1 - 0.9, 1.6, 0.3, "emitBlueSoft");
-  ctx.lights.cool.push(pointLight(0xe8f0ff, 14, 10, [cx, yTop - 0.7, z0 + 1.6]));
-  ctx.lights.cool.push(pointLight(0xe8f0ff, 9, 8, [cx, yTop - 0.7, z0 + 3.8]));
-  ctx.lights.teal.push(pointLight(0x6fb4ff, 6, 6, [cx - 2.0, yTop - 0.6, z1 - 0.6]));
+  ctx.lights.cool.push(pointLight(0xe8f0ff, 16, 11, [cx, yTop - 0.7, z0 + 1.6]));
+  ctx.lights.cool.push(pointLight(0xe8f0ff, 13, 9, [cx, yTop - 0.7, z0 + 3.8]));
+  ctx.lights.teal.push(pointLight(0x6fb4ff, 8, 7, [cx - 2.0, yTop - 0.6, z1 - 0.6]));
   return shell;
 }

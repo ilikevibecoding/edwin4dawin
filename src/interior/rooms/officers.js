@@ -8,7 +8,7 @@
 import { roomShell, wallLightBar } from "../shell.js";
 import { pointLight, wallFrame, WALL_T } from "../lib.js";
 import { PALETTE as P } from "../../materials.js";
-import { partition, cabinet, chair, desk, bench, table, wallScreen, stencil, effects, commPanel, downlight, nameplate } from "./commandKit.js";
+import { partition, cabinet, chair, desk, bench, table, wallScreen, stencil, effects, commPanel, downlight, nameplate, flatCeiling } from "./commandKit.js";
 
 const WARD_X = -9; // wardroom / front-cabin wall (centre plane)
 const MID_X = -15.6; // front / back cabin wall (centre plane); the passage ends here
@@ -18,10 +18,12 @@ const BACK_Z = 535; // divider between the two back cabins
 const T = WALL_T;
 
 export function build(kit, ctx, room) {
-  const shell = roomShell(kit, ctx, room, { style: "light", lightRows: 0, lights: false, seed: 53 });
+  const shell = roomShell(kit, ctx, room, { style: "light", ceiling: false, lights: false, seed: 53 });
   const y0 = shell.y0;
   const { x0, x1, z0, z1, height: h } = room;
-  const yTop = y0 + h;
+  // lighter slate ceiling than the shell's gunmetal so the quarters read as a lit space; beams sit on the
+  // shell's rib pitch (every 3.67 m) so the pendants and downlights below stay clear of them
+  const yTop = flatCeiling(kit, room, y0, { beams: [1, 2, 3, 4, 5].map((i) => x0 + ((x1 - x0) * i) / 6), along: "x", plate: P.slate });
   const quiet = { panel: 0.9, strip: 0.04, greeble: 0.04, screen: 0.02 };
   const hallPaints = [[P.cream, 0.72], [P.creamDark, 0.28]];
   const cabinPaints = [[P.creamDark, 0.6], [P.cream, 0.3], [P.tealPaint, 0.1]];
@@ -45,8 +47,8 @@ export function build(kit, ctx, room) {
   // ------------------------------------------------------------ wardroom west wall: nameplates, booths, lockers
   const AN = westN.A.frame; // u = 533.24 - z
   const AS = westS.A.frame; // u = 544 - z
-  nameplate(AN, 2.08, 1.55, { label: 9, label2: 14 });
-  nameplate(AS, 5.16, 1.55, { label: 14, label2: 9 });
+  nameplate(AN, 2.22, 1.55, { label: 9, label2: 14 });
+  nameplate(AS, 5.02, 1.55, { label: 14, label2: 9 });
   wallLightBar(AN, 2.5, 6.9, 2.52, "emitWarmSoft");
   wallLightBar(AS, 0.4, 4.8, 2.52, "emitWarmSoft");
   booth(kit, WARD_X + T, 528.9, y0, P.fabricTeal, "screen3");
