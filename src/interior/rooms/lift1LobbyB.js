@@ -88,8 +88,8 @@ export function build(kit, ctx, room) {
 
   // ------------------------------------------------------------ ceiling accent and light
   downlight(kit, cx, yTop, z1 - 0.9, 1.6, 0.3, "emitWarmSoft");
-  ctx.lights.cool.push(pointLight(0xe0dcd0, 9, 10, [cx, yTop - 0.4, z0 + 2.4]));
-  ctx.lights.warm.push(pointLight(0xffb454, 8, 7, [cx - 2.2, yTop - 0.5, z1 - 0.8]));
-  ctx.lights.warm.push(pointLight(0xffb454, 6, 6, [cx + 1.6, yTop - 0.5, z0 + 3.5]));
+  ctx.lights.cool.push(pointLight(0xe0dcd0, 11, 10, [cx, yTop - 0.4, z0 + 2.4]));
+  ctx.lights.warm.push(pointLight(0xffb454, 10, 8, [cx - 2.2, yTop - 0.5, z1 - 0.8]));
+  ctx.lights.warm.push(pointLight(0xffb454, 7, 6, [cx + 1.6, yTop - 0.5, z0 + 3.5]));
   return shell;
 }
