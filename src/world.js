@@ -160,11 +160,13 @@ export class World {
     return true;
   }
 
-  // Full lighting recompute for one chunk (used after bulk edits). Also refreshes neighbours' border light.
-  relightChunk(c) {
+  // Full lighting recompute for one chunk (used after bulk edits). With markNeighbors the 8 neighbours are
+  // flagged for remeshing too (the caller may instead compare border light itself and flag selectively).
+  relightChunk(c, markNeighbors = true) {
     if (!c || !c.generated) return;
     this.lightChunk(c);
     c.needsRelight = false;
+    if (!markNeighbors) return;
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
       const n = this.getChunk(c.cx + dx, c.cz + dz);
       if (n) n.dirty = true;

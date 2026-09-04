@@ -241,16 +241,61 @@ export class DisasterManager {
   }
 
   // Relight + remesh chunks touched by bulk edits, within per-frame budgets.
+  // - a chunk that keeps receiving edits is relit once it has been quiet for 2 frames (or when the queue is long),
+  //   not every frame;
+  // - after a relight only the neighbours whose shared border light actually changed are remeshed
+  //   (a full relight used to dirty all 8 neighbours = up to 9 remeshes per touched chunk);
+  // - the relight budget adapts to the last frame time.
   _flushChunks() {
-    if (this.touched.size) { for (const k of this.touched) if (!this.relightQueue.includes(k)) this.relightQueue.push(k); this.touched.clear(); }
+    this.frameNo = (this.frameNo || 0) + 1;
+    if (!this.pendingRelight) this.pendingRelight = new Map();
+    for (const k of this.touched) this.pendingRelight.set(k, this.frameNo);
+    this.touched.clear();
+    const slow = this.game.perf && this.game.perf.frameMs[(this.game.perf.idx + this.game.perf.frameMs.length - 1) % this.game.perf.frameMs.length] > 30;
+    const budget = slow ? 1 : BUDGET.relightPerFrame;
+    const urgent = this.pendingRelight.size > 12;
     let n = 0;
-    while (this.relightQueue.length && n < BUDGET.relightPerFrame) {
-      const key = this.relightQueue.shift();
+    for (const [key, lastTouch] of this.pendingRelight) {
+      if (n >= budget) break;
+      if (!urgent && this.frameNo - lastTouch < 2) continue; // still being edited: coalesce
+      this.pendingRelight.delete(key);
       const c = this.world.chunks.get(key);
-      if (c && c.generated) { this.world.relightChunk(c); n++; }
+      if (!c || !c.generated) continue;
+      const before = this._borderSnapshot(c);
+      this.world.relightChunk(c, false);
+      this._dirtyChangedNeighbors(c, before);
+      n++;
     }
-    if (n > 0 || this.relightQueue.length === 0) this.game.terrain.remeshDirty(BUDGET.remeshPerFrame, this.game.player.pos.x, this.game.player.pos.z);
+    if (n > 0 || this.pendingRelight.size === 0) this.game.terrain.remeshDirty(BUDGET.remeshPerFrame, this.game.player.pos.x, this.game.player.pos.z);
     if (n > 0 && this.game.npcs) this.game.npcs.onBulkWorldChange();
+  }
+
+  // Copies the four border columns of sky+block light (used to detect which neighbours need a remesh)
+  _borderSnapshot(c) {
+    const H = c.sky.length / (CS * CS);
+    const grab = (arr, lx, lz) => arr.slice((lx * CS + lz) * H, (lx * CS + lz) * H + H);
+    const snap = { west: [], east: [], north: [], south: [] };
+    for (let k = 0; k < CS; k++) {
+      snap.west.push(grab(c.sky, 0, k), grab(c.light, 0, k)); snap.east.push(grab(c.sky, CS - 1, k), grab(c.light, CS - 1, k));
+      snap.north.push(grab(c.sky, k, 0), grab(c.light, k, 0)); snap.south.push(grab(c.sky, k, CS - 1), grab(c.light, k, CS - 1));
+    }
+    return snap;
+  }
+  _dirtyChangedNeighbors(c, before) {
+    const H = c.sky.length / (CS * CS);
+    const same = (a, arr, lx, lz) => { const o = (lx * CS + lz) * H; for (let i = 0; i < H; i++) if (a[i] !== arr[o + i]) return false; return true; };
+    const changed = { west: false, east: false, north: false, south: false };
+    for (let k = 0; k < CS && !(changed.west && changed.east && changed.north && changed.south); k++) {
+      if (!changed.west && (!same(before.west[k * 2], c.sky, 0, k) || !same(before.west[k * 2 + 1], c.light, 0, k))) changed.west = true;
+      if (!changed.east && (!same(before.east[k * 2], c.sky, CS - 1, k) || !same(before.east[k * 2 + 1], c.light, CS - 1, k))) changed.east = true;
+      if (!changed.north && (!same(before.north[k * 2], c.sky, k, 0) || !same(before.north[k * 2 + 1], c.light, k, 0))) changed.north = true;
+      if (!changed.south && (!same(before.south[k * 2], c.sky, k, CS - 1) || !same(before.south[k * 2 + 1], c.light, k, CS - 1))) changed.south = true;
+    }
+    const mark = (dx, dz) => { const n = this.world.getChunk(c.cx + dx, c.cz + dz); if (n) n.dirty = true; };
+    if (changed.west) { mark(-1, 0); if (changed.north) mark(-1, -1); if (changed.south) mark(-1, 1); }
+    if (changed.east) { mark(1, 0); if (changed.north) mark(1, -1); if (changed.south) mark(1, 1); }
+    if (changed.north) mark(0, -1);
+    if (changed.south) mark(0, 1);
   }
 
   // Convenience for disasters: iterate blocks in a disc at a y range calling fn(x,y,z,id)

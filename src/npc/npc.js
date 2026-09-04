@@ -292,6 +292,10 @@ export class NPCManager {
     if (npc.shoutCooldown > 0 || npc.rng.next() > chance) return;
     const p = this.game ? this.game.player.pos : null;
     if (p && Math.hypot(npc.pos.x - p.x, npc.pos.z - p.z) > 28) return;
+    // town-wide throttle so a crowd does not flood the chat log
+    const now = performance.now();
+    if (now - (this.lastShoutAt || 0) < 1800) return;
+    this.lastShoutAt = now;
     npc.shoutCooldown = npc.rng.range(6, 14);
     this.hud.addMessage(`<${npc.name}> ${npc.say(kind)}`);
     this.audio.npcGrunt(npc.pos, npc.female ? 1.6 : 1.1);
