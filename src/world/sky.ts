@@ -161,7 +161,7 @@ float lightOD(vec3 p, vec3 L) {
 }
 
 // Beer-Lambert with a cheap multiple-scattering approximation (3 octaves of attenuated extinction)
-float beer(float od) { return 0.48 * exp(-od) + 0.3 * exp(-0.25 * od) + 0.22 * exp(-0.06 * od); }
+float beer(float od) { return 0.5 * exp(-od) + 0.32 * exp(-0.25 * od) + 0.18 * exp(-0.06 * od); }
 // Henyey-Greenstein phase normalised so that isotropic = 1
 float hgN(float c, float g) { float g2 = g * g; return (1.0 - g2) / pow(1.0 + g2 - 2.0 * g * c, 1.5); }
 
