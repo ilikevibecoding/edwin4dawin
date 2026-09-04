@@ -11,7 +11,7 @@ import { wallScreen, ceilingLight, pointLightDesc, lockers, chair, table, bench 
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
-import { ensureCrewMaterials, partition, fauxDoor, counter, wallCabinet, shelfUnit, floorDecal, ceilingStrip, namePlate, bed, loungeChair, sideTable, yawQ } from "./crewKit.js";
+import { ensureCrewMaterials, partition, fauxDoor, counter, wallCabinet, shelfUnit, floorDecal, ceilingStrip, namePlate, bed, loungeChair, sideTable, yawQ, boardMaterial, wallBoard } from "./crewKit.js";
 
 const CARPET = 0x2b3140;
 const RUG = 0x4a1c1c;
@@ -26,7 +26,7 @@ export function buildOfficersQuarters(kit, ctx) {
   const ph = h - 0.05; // partitions stop just under the ceiling panels
 
   buildShell(kit, ctx, ctx.id, room, {
-    wall: { pitch: 3.6, tone: IMP.wallLight, toneAlt: IMP.wallMid, styles: { plain: 0.6, vent: 0.12, hatch: 0.12, pipes: 0.06, control: 0.1 } },
+    wall: { pitch: 3.6, tone: IMP.wallLight, toneAlt: IMP.wallMid, styles: { plain: 0.7, vent: 0.12, hatch: 0.12, pipes: 0.06 } },
     floor: { mat: "impGloss", tone: IMP.wallDark, texel: 0.35 },
     ceiling: { lights: false, panelW: 1.8 },
   });
@@ -48,17 +48,20 @@ export function buildOfficersQuarters(kit, ctx) {
   // ---- corridors: carpet runners, lights, strips, stencils ---------------------------------------
   const carpet = (ax0, az0, ax1, az1) => kit.boxMM("impFabric", [ax0, y + 0.004, az0], [ax1, y + 0.012, az1], { color: CARPET, uv: "world", texel: 1.5 });
   carpet(suiteX + 0.15, corrC - 0.9, xE - 0.2, corrC + 0.9);
-  carpet(linkX + 0.75, rowFront[0] + 0.15, linkX + 2.25, rowFront[3] - 0.15);
+  carpet(linkX + 0.4, rowFront[0] + 0.15, linkX + 2.6, rowFront[3] - 0.15);
+  // the link's gloss margins mirrored the wall bands as blown streaks: soft-gloss borders either side of the runner
+  kit.boxMM("impGlossSoft", [linkX + 0.05, y + 0.002, rowFront[0] + 0.1], [linkX + 0.4, y + 0.006, rowFront[3] - 0.1], { color: IMP.wallDark, texel: 0.3 });
+  kit.boxMM("impGlossSoft", [linkX + 2.6, y + 0.002, rowFront[0] + 0.1], [xE - 0.05, y + 0.006, rowFront[3] - 0.1], { color: IMP.wallDark, texel: 0.3 });
   for (const lx of [-6.6, -13.6, -20.6]) ceilingLight(kit, ctx, [lx, y + h, corrC], 2.6, "x", { intensity: 6, distance: 11, priority: 1, color: WARM, mat: "lightBandWarm" });
   for (const lz of [409.5, 426.5]) ceilingLight(kit, ctx, [linkX + 1.5, y + h, lz], 2.6, "z", { intensity: 5, distance: 10, priority: 1, color: WARM, mat: "lightBandWarm" });
   for (const cz of [(zN + rowFront[0]) / 2, (rowFront[3] + zS) / 2]) {
     for (let k = 0; k < 4; k++) ceilingStrip(kit, [xW + 3.9 + k * 7.6, y + h, cz], 6.4, "x", { mat: "lightBandWarm", w: 0.22 });
     pointLightDesc(ctx, WARM, 5, 16, [-16.5, y + h - 0.4, cz], 0);
   }
-  floorDecal(kit, xE - 1.2, y, corrC, 0.9, 7, 90);
-  floorDecal(kit, linkX + 1.5, y, rowFront[0] + 1.0, 0.7, 2, 0);
-  floorDecal(kit, linkX + 1.5, y, rowFront[3] - 1.0, 0.7, 2, 180);
-  floorDecal(kit, suiteX + 1.0, y, corrC, 0.8, 15, 90);
+  floorDecal(kit, xE - 1.2, y + 0.01, corrC, 0.9, 7, 90);
+  floorDecal(kit, linkX + 1.5, y + 0.01, rowFront[0] + 1.0, 0.7, 2, 0);
+  floorDecal(kit, linkX + 1.5, y + 0.01, rowFront[3] - 1.0, 0.7, 2, 180);
+  floorDecal(kit, suiteX + 1.0, y + 0.01, corrC, 0.8, 15, 90);
   // outer-corridor west ends and the east link: screens, placards, an emergency locker
   {
     const w = walls.west;
@@ -67,6 +70,12 @@ export function buildOfficersQuarters(kit, ctx) {
     wallScreen(frame, w.u(434.4), 1.75, 1.4, 0.8, 2);
     frame.quad("impDecal", w.u(401.6) - 1.1, 1.7, 0.062, 0.45, 0.45, { uvRect: impDecalRect(2) });
     frame.quad("impDecal", w.u(434.4) + 1.1, 1.7, 0.062, 0.45, 0.45, { uvRect: impDecalRect(3) });
+  }
+  // the link corridor ends on authored displays: a holo-map to the south, a status board to the north
+  for (const [w, idx] of [[walls.south, 2], [walls.north, 0]]) {
+    const { frame } = wallFrame(kit, w.from, w.to, y);
+    wallScreen(frame, w.u(linkX + 1.5), 1.75, 1.6, 0.9, idx);
+    frame.quad("impDecal", w.u(linkX + 1.5) - 1.25, 1.75, 0.062, 0.45, 0.45, { uvRect: impDecalRect(idx === 2 ? 7 : 14) });
   }
   {
     const w = walls.east;
@@ -131,7 +140,7 @@ export function buildOfficersQuarters(kit, ctx) {
 
   // ---- views -----------------------------------------------------------------------------------
   ctx.view("officersQuarters", xE - 0.9, y + STD.eye, corrC + 0.3, 92, -3);
-  ctx.view("officersQuarters_cabin", suiteX + 4 * cabW + 1.25, y + STD.eye, rowFront[1] - 0.5, 12, -6);
+  ctx.view("officersQuarters_cabin", suiteX + 4 * cabW + 1.7, y + STD.eye, rowFront[1] - 0.25, 10, -6);
   ctx.view("officersQuarters_suite", suiteX - 0.9, y + STD.eye, 422.6, 52, -4);
   ctx.view("officersQuarters_link", linkX + 1.5, y + STD.eye, 404.0, 180, -3);
 }
@@ -202,15 +211,21 @@ function officerCabin(kit, ctx, xL, zFront, dir, W, D, opts = {}) {
       u += bw + 0.03;
     }
   }
-  // rug, uniform jacket on a hook by the door, ceiling strip (+ a real light for the featured cabin)
+  // rug; a slim uniform locker by the door (framed door leaf, handle, vent slats, id plate) and a
+  // mirror beside it; ceiling strip (+ a real light for the featured cabin)
   box("impFabric", 2.1, 0.006, 3.3, 1.6, 0.012, 2.4, { color: RUG, uv: "world", texel: 1.5 });
-  box("impMetal", 0.04, 1.86, 1.2, 0.05, 0.03, 0.03, { color: IMP.steel });
-  box("impMetal", 0.06, 1.82, 1.2, 0.02, 0.015, 0.4, { color: IMP.steel });
-  box("impFabric", 0.07, 1.46, 1.2, 0.06, 0.7, 0.42, { color: IMP.fabricBlack, uv: "world", texel: 2 });
-  box("impFabric", 0.1, 1.76, 1.2, 0.05, 0.1, 0.16, { color: IMP.fabricBlack, uv: "world", texel: 2 });
-  box("impPaintedMetal", 0.102, 1.62, 1.09, 0.006, 0.06, 0.16, { color: IMP.consoleDark });
-  box("crewEmit", 0.106, 1.62, 1.09, 0.004, 0.02, 0.12, { color: 0x3a86ff });
-  // mirror by the wardrobe
+  box("impPaintedMetal", 0.2, 1.0, 1.2, 0.4, 2.0, 0.6, { color: IMP.trim, texel: 1 });
+  box("impPanel", 0.405, 1.02, 1.2, 0.012, 1.84, 0.5, { color: IMP.wallMid, uv: "keep" });
+  box("impMetal", 0.418, 1.05, 1.02, 0.014, 0.16, 0.024, { color: IMP.steel });
+  for (let k = 0; k < 4; k++) box("impPaintedMetal", 0.412, 1.68 + k * 0.05, 1.2, 0.004, 0.012, 0.3, { color: IMP.consoleDark, texel: 1 });
+  box("impPaintedMetal", 0.412, 0.42, 1.2, 0.004, 0.1, 0.24, { color: IMP.consoleDark, texel: 1 });
+  {
+    const g = new THREE.PlaneGeometry(0.14, 0.14);
+    g.rotateY(Math.PI / 2);
+    kit.add("impDecal", g, { pos: P(0.416, 0.42, 1.2), uv: "keep", uvRect: impDecalRect(6) });
+  }
+  box("crewEmit", 0.414, 1.9, 1.2, 0.004, 0.02, 0.1, { color: 0x3a86ff });
+  col([0.0, 0, 0.9], [0.4, 2.0, 1.5], "locker");
   box("impMetal", 0.035, 1.6, 1.85, 0.02, 0.62, 0.42, { color: IMP.steel });
   box("crewMirror", 0.05, 1.6, 1.85, 0.01, 0.56, 0.36);
   ceilingStrip(kit, P(w / 2, h, 3.2), 1.8, "z", { mat: "lightBandWarm", w: 0.24 });
@@ -236,9 +251,23 @@ function buildSuite(kit, ctx, { xW, xE, zN, zS, y, h, walls, doorZ }) {
   floorDecal(kit, xE - 0.8, y, doorZ, 0.8, 15, 90);
 
   // --- lounge (between the half partitions) ---
-  wallScreen(westF, west.u(doorZ), 1.85, 2.8, 1.5, 0);
-  westF.quad("impDecal", west.u(doorZ) - 1.9, 1.85, 0.062, 0.5, 0.5, { uvRect: impDecalRect(0) });
-  westF.quad("impDecal", west.u(doorZ) + 1.9, 1.85, 0.062, 0.5, 0.5, { uvRect: impDecalRect(15) });
+  wallScreen(westF, west.u(doorZ), 1.75, 2.8, 1.5, 0);
+  westF.quad("impDecal", west.u(doorZ) - 1.9, 1.75, 0.062, 0.5, 0.5, { uvRect: impDecalRect(0) });
+  westF.quad("impDecal", west.u(doorZ) + 1.9, 1.75, 0.062, 0.5, 0.5, { uvRect: impDecalRect(15) });
+  // the metre of panel above the band: a raised Imperial cog roundel over the viewscreen between a lit
+  // fleet status board and a holo-map, glyph plaques over the sideboard and the office wall
+  {
+    const cu = west.u(doorZ);
+    westF.cylN("impPaintedMetal", cu, 3.0, 0.1, 0.44, 0.08, { color: IMP.trim, segments: 28 });
+    westF.cylN("impPaintedMetal", cu, 3.0, 0.155, 0.37, 0.03, { color: IMP.wallMid, segments: 28 });
+    westF.quad("impDecal", cu, 3.0, 0.172, 0.7, 0.7, { uvRect: impDecalRect(4) });
+    for (const s of [-1, 1]) westF.box("impPaintedMetal", cu + s * 0.6, 3.0, 0.08, 0.2, 0.06, 0.04, { color: IMP.trim, texel: 1 });
+    wallBoard(westF, cu - 2.15, 3.0, 1.6, 0.62, boardMaterial(ctx.mats, "crewBoardOfficers", { seed: 61, accent: "#5d8fe0", rows: 5, warnEvery: 4 }), { leds: false });
+    wallScreen(westF, cu + 2.15, 3.0, 1.6, 0.62, 2, { leds: false });
+    for (const [u, c] of [[cu - 5.2, 3], [cu + 5.2, 15]]) westF.quad("impDecal", u, 3.0, 0.062, 0.6, 0.6, { uvRect: impDecalRect(c) });
+    eastF.quad("impDecal", doorZ + 3.6 - zN, 3.0, 0.062, 0.6, 0.6, { uvRect: impDecalRect(0) });
+    eastF.quad("impDecal", doorZ - 3.6 - zN, 3.0, 0.062, 0.6, 0.6, { uvRect: impDecalRect(3) });
+  }
   counter(kit, [xW + 0.36, y, 413.6], 2.2, -Math.PI / 2, { d: 0.5, h: 0.85, tone: IMP.consoleDark, tag: "sideboard" });
   wallCabinet(westF, west.u(414.7), west.u(412.5), 1.15, 1.95, { glass: true, seed: 8 });
   // bottles on the sideboard

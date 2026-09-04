@@ -42,8 +42,10 @@ export function ensureCrewMaterials(mats) {
   // matte painted signage red (medical crosses, restricted lines) — not an emitter
   mats.crewPaintRed = new THREE.MeshStandardMaterial({ color: 0xb8231c, roughness: 0.75, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   mats.crewPaintWhite = new THREE.MeshStandardMaterial({ color: 0xdfe3e8, roughness: 0.6, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
-  // polished mirror / chrome: fully metallic, reflects the environment map
-  mats.crewMirror = new THREE.MeshStandardMaterial({ color: 0xdde4ee, roughness: 0.03, metalness: 1.0, envMapIntensity: 1.6 });
+  // polished mirror: fully metallic with its own environment cube. The scene environment is a flat
+  // studio room, which a metal reflects as one grey tone, so the mirrors get a painted cube of the
+  // washroom they hang in (panelled wall, light band, counter, tiled deck) and read as glass.
+  mats.crewMirror = new THREE.MeshStandardMaterial({ color: 0xf2f4f8, roughness: 0.04, metalness: 1.0, envMap: makeMirrorEnv(), envMapIntensity: 1.5 });
   // pale hygienic gloss deck (medbay): the gloss deck's seams / smear maps over a light dielectric base
   // instead of its charcoal colour map, vertex-tinted like the other floors
   const g = mats.impGloss;
@@ -56,6 +58,126 @@ export function ensureCrewMaterials(mats) {
   mats.crewGlass.envMapIntensity = 0.1;
   for (const k of ["bactaFluid", "crewEmit", "crewEmitSoft", "crewGlass"]) NO_SHADOW_KEYS.add(k);
   return mats;
+}
+
+// The mirror's reflection cube: a stylised Imperial washroom painted on six small canvases (light
+// grey panels with dark seams under a bright light band, a dark counter, a tiled deck, a dark
+// ceiling with two lit strips). Sampled in world space, so any mirror on any wall shows a plausible
+// horizon of wall / band / counter / deck that shifts with the viewing angle.
+function makeMirrorEnv() {
+  const S = 256;
+  const faces = [];
+  // a face spans 90 deg; row t maps to elevation atan(1 - 2t), so a mirror seen at eye height shows
+  // rows ~0.4 (band, 9 deg up) to ~0.75 (counter / deck, 26 deg down) and the structure lives there
+  const side = () => {
+    const c = document.createElement("canvas");
+    c.width = c.height = S;
+    const g = c.getContext("2d");
+    const band = (t0, t1, fill) => {
+      g.fillStyle = fill;
+      g.fillRect(0, S * t0, S, S * (t1 - t0));
+    };
+    band(0, 0.385, "#1c1f23"); // ceiling
+    band(0.27, 0.3, "#b9c3d6"); // ceiling trough light
+    band(0.385, 0.4, "#111315"); // band trim
+    band(0.4, 0.44, "#f4f7ff"); // light band
+    band(0.44, 0.465, "#111315");
+    band(0.465, 0.565, "#666b72"); // upper wall panels (eye level in the reflection)
+    band(0.565, 0.582, "#1e2226"); // mid rail
+    band(0.582, 0.66, "#474c53"); // lower panels
+    g.fillStyle = "#111315";
+    for (let x = S * 0.05; x < S; x += S * 0.125) g.fillRect(x, S * 0.465, S * 0.02, S * 0.195); // black ribs
+    g.fillStyle = "#2c3036";
+    for (const x of [0.22, 0.6]) g.fillRect(S * x, S * 0.465, S * 0.11, S * 0.195); // dark doors / cabinets
+    g.fillStyle = "#c3ccda";
+    for (const x of [0.36, 0.86]) g.fillRect(S * x, S * 0.48, S * 0.01, S * 0.09); // lit seams
+    band(0.66, 0.685, "#1e2226"); // skirting
+    band(0.685, 0.695, "#4d525a"); // counter nosing
+    band(0.695, 0.75, "#33373d"); // counter front
+    band(0.75, 1.0, "#24272c"); // deck
+    g.fillStyle = "#141619";
+    for (let x = 0; x < S; x += S * 0.2) g.fillRect(x, S * 0.75, S * 0.01, S * 0.25); // tile seams
+    band(0.87, 0.878, "#141619");
+    return c;
+  };
+  const flat = (fill, strips) => {
+    const c = document.createElement("canvas");
+    c.width = c.height = S;
+    const g = c.getContext("2d");
+    g.fillStyle = fill;
+    g.fillRect(0, 0, S, S);
+    if (strips) {
+      g.fillStyle = "#e6eefc";
+      g.fillRect(S * 0.3, 0, S * 0.06, S);
+      g.fillRect(S * 0.64, 0, S * 0.06, S);
+    }
+    return c;
+  };
+  faces.push(side(), side(), flat("#1a1d21", true), flat("#22252a", false), side(), side());
+  const tex = new THREE.CubeTexture(faces);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/**
+ * A lit notice / menu / status board texture: a dark panel with an accent header, rows of
+ * Aurebesh-like glyph blocks and a right-hand value column. Registers mats[key] once (each key is
+ * one material, so one draw call per room that uses it) and returns the key.
+ */
+export function boardMaterial(mats, key, opts = {}) {
+  if (mats[key]) return key;
+  const { seed = 7, accent = "#ffb454", text = "#d8dde6", dim = "#6f7682", rows = 7, w = 512, h = 256, title = true, values = true, warnEvery = 0 } = opts;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const g = c.getContext("2d");
+  const rand = rng(seed);
+  g.fillStyle = "#05070a";
+  g.fillRect(0, 0, w, h);
+  const pad = w * 0.04;
+  const glyphs = (x, y, n, s, color) => {
+    g.fillStyle = color;
+    let cx = x;
+    for (let k = 0; k < n; k++) {
+      const gw = s * (0.45 + rand() * 0.55);
+      g.fillRect(cx, y, gw, s * 0.85);
+      if (rand() < 0.5) g.fillRect(cx + gw * 0.2, y - s * 0.22, gw * 0.6, s * 0.15);
+      cx += gw + s * 0.32;
+      if (rand() < 0.18) cx += s * 0.6;
+    }
+    return cx;
+  };
+  let y = pad;
+  if (title) {
+    g.fillStyle = accent;
+    g.fillRect(pad, y, w - pad * 2, h * 0.11);
+    glyphs(pad + w * 0.03, y + h * 0.03, 5 + Math.floor(rand() * 3), h * 0.055, "#0a0b0d");
+    y += h * 0.15;
+  }
+  const rowH = (h - y - pad) / rows;
+  for (let r = 0; r < rows; r++) {
+    const ry = y + r * rowH;
+    const warn = warnEvery && (r + 1) % warnEvery === 0;
+    glyphs(pad, ry + rowH * 0.3, 4 + Math.floor(rand() * 6), rowH * 0.42, warn ? accent : text);
+    if (values) glyphs(w - pad - rowH * 1.6, ry + rowH * 0.3, 2 + Math.floor(rand() * 2), rowH * 0.42, warn ? accent : dim);
+    g.fillStyle = "rgba(255,255,255,0.07)";
+    g.fillRect(pad, ry + rowH - 1, w - pad * 2, 1);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  mats[key] = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.1, roughness: 0.2, metalness: 0 });
+  NO_SHADOW_KEYS.add(key);
+  return key;
+}
+
+// impKit.wallScreen with an arbitrary lit material (a boardMaterial key): bezel, gloss, face, led row
+export function wallBoard(frame, u, v, w, h, mat, opts = {}) {
+  frame.box("impPaintedMetal", u, v, 0.05, w + 0.14, h + 0.14, 0.06, { color: IMP.consoleDark, texel: 1 });
+  frame.box("darkGloss", u, v, 0.083, w + 0.04, h + 0.04, 0.01);
+  frame.box(mat, u, v, 0.09, w, h, 0.004, { uv: "keep" });
+  if (opts.leds !== false) frame.box("leds", u, v - h / 2 - 0.11, 0.07, Math.min(w * 0.6, 1.2), 0.05, 0.01, { uv: "keep" });
 }
 
 // ---------------------------------------------------------------------------
@@ -346,23 +468,49 @@ export function dispenser(kit, pos, yaw = 0, opts = {}) {
   box("impPaintedMetal", 0, 0.05, 0, w - 0.1, 0.1, d - 0.1, { color: IMP.trim, texel: 1 });
   box("impPaintedMetal", 0, h / 2, 0, w, h, d, { color: tone, texel: 1 });
   box("impPaintedMetal", 0, h / 2, d / 2 + 0.005, w - 0.1, h - 0.1, 0.01, { color: IMP.consoleDark, texel: 1 });
-  // alcove (recessed) with tray and nozzle
+  // delivery alcove (recessed, offset left of the keypad column) with tray, nozzle and a lit lip
   const av0 = 0.75;
   const av1 = 1.35;
-  box("impPaintedMetal", 0, (av0 + av1) / 2, d / 2 - 0.14, w - 0.3, av1 - av0, 0.02, { color: IMP.black, texel: 1 });
-  box("impMetal", 0, av0 + 0.02, d / 2 - 0.08, w - 0.32, 0.03, 0.22, { color: IMP.steel });
-  box("impMetal", 0, av1 - 0.02, d / 2 - 0.08, w - 0.32, 0.03, 0.22, { color: IMP.gunmetal });
-  for (const s of [-1, 1]) box("impMetal", s * (w / 2 - 0.16), (av0 + av1) / 2, d / 2 - 0.08, 0.03, av1 - av0, 0.22, { color: IMP.gunmetal });
-  box(accent, 0, av1 - 0.045, d / 2 - 0.05, w - 0.4, 0.012, 0.15);
-  const np = L(0, av1 - 0.16, d / 2 - 0.1);
+  const ax = -0.06;
+  const aw = w - 0.42;
+  box("impPaintedMetal", ax, (av0 + av1) / 2, d / 2 - 0.14, aw, av1 - av0, 0.02, { color: IMP.black, texel: 1 });
+  box("impMetal", ax, av0 + 0.02, d / 2 - 0.08, aw + 0.02, 0.03, 0.22, { color: IMP.steel });
+  box("impMetal", ax, av1 - 0.02, d / 2 - 0.08, aw + 0.02, 0.03, 0.22, { color: IMP.gunmetal });
+  for (const s of [-1, 1]) box("impMetal", ax + s * (aw / 2 + 0.005), (av0 + av1) / 2, d / 2 - 0.08, 0.03, av1 - av0, 0.22, { color: IMP.gunmetal });
+  box(accent, ax, av1 - 0.045, d / 2 - 0.05, aw - 0.08, 0.012, 0.15);
+  const np = L(ax, av1 - 0.16, d / 2 - 0.1);
   kit.add("impMetal", new THREE.CylinderGeometry(0.035, 0.05, 0.2, 10), { pos: [np.x, np.y, np.z], quat: q, color: IMP.steel, uv: "scale", uvScale: [0.3, 0.2] });
-  box("impMetal", 0, av0 + 0.06, d / 2 - 0.06, 0.34, 0.04, 0.24, { color: IMP.steel, texel: 2 }); // tray
-  // screen + keypad + leds
-  box("darkGloss", 0, 1.68, d / 2 + 0.012, w - 0.34, 0.34, 0.01);
-  box("screen" + screen, 0, 1.68, d / 2 + 0.018, w - 0.4, 0.28, 0.004, { uv: "keep" });
-  box("blink", 0, 0.5, d / 2 + 0.012, w - 0.4, 0.12, 0.008, { uv: "keep" });
-  box("leds", 0, 0.32, d / 2 + 0.012, w - 0.5, 0.04, 0.008, { uv: "keep" });
-  box("impPaintedMetal", w * 0.28, 1.46, d / 2 + 0.012, 0.16, 0.1, 0.02, { color: IMP.consoleDark, texel: 1 });
+  box("impMetal", ax, av0 + 0.06, d / 2 - 0.06, 0.3, 0.04, 0.24, { color: IMP.steel, texel: 2 }); // tray
+  // selection keypad beside the alcove: a 2 x 3 button grid under a ready lamp (the interaction plate goes here)
+  const kx = w / 2 - 0.13;
+  box("impPaintedMetal", kx, 1.05, d / 2 + 0.008, 0.16, 0.6, 0.016, { color: IMP.consoleDark, texel: 1 });
+  box(accent, kx, 1.3, d / 2 + 0.018, 0.08, 0.02, 0.006);
+  for (let r = 0; r < 3; r++) for (const s of [-1, 1]) box("impPaintedMetal", kx + s * 0.035, 1.2 - r * 0.075, d / 2 + 0.02, 0.05, 0.05, 0.01, { color: IMP.trim, texel: 2 });
+  box("impMetal", kx, 0.86, d / 2 + 0.02, 0.1, 0.012, 0.01, { color: IMP.black }); // card slot
+  // lit product window above the alcove: two shelves of packs / cups under a bright strip
+  const pv0 = 1.42;
+  const pv1 = 1.74;
+  box("impPaintedMetal", 0, (pv0 + pv1) / 2, d / 2 - 0.06, w - 0.26, pv1 - pv0, 0.02, { color: IMP.black, texel: 1 });
+  for (const s of [-1, 1]) box("impMetal", s * (w / 2 - 0.13), (pv0 + pv1) / 2, d / 2 - 0.03, 0.02, pv1 - pv0, 0.08, { color: IMP.gunmetal });
+  box("impMetal", 0, pv0 + 0.008, d / 2 - 0.03, w - 0.26, 0.016, 0.08, { color: IMP.gunmetal });
+  box("impMetal", 0, (pv0 + pv1) / 2, d / 2 - 0.03, w - 0.26, 0.012, 0.08, { color: IMP.gunmetal });
+  box(accent, 0, pv1 - 0.012, d / 2 - 0.03, w - 0.32, 0.01, 0.06);
+  const tones = [IMP.wallMid, IMP.consoleDark, 0x7a5a3a, IMP.steel];
+  for (let r = 0; r < 2; r++) {
+    const shelf = r ? (pv0 + pv1) / 2 + 0.006 : pv0 + 0.016;
+    for (let k = 0; k < 3; k++) {
+      const px = (k - 1) * ((w - 0.3) / 3);
+      if (r) kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.035, 0.03, 0.1, 10), { pos: L(px, shelf + 0.05, d / 2 - 0.03).toArray(), quat: q, color: tones[(k + 1) % 4], uv: "scale", uvScale: [0.4, 0.3] });
+      else box("impPaintedMetal", px, shelf + 0.05, d / 2 - 0.03, 0.12, 0.1, 0.07, { color: tones[(k + r * 2) % 4], texel: 2 });
+    }
+  }
+  // readout screen under the header, service panel + status leds at the base
+  box("darkGloss", 0, 1.86, d / 2 + 0.012, w - 0.34, 0.18, 0.01);
+  box("screen" + screen, 0, 1.86, d / 2 + 0.018, w - 0.4, 0.13, 0.004, { uv: "keep" });
+  box("impPaintedMetal", 0, 0.42, d / 2 + 0.012, w - 0.36, 0.22, 0.012, { color: IMP.consoleDark, texel: 1 });
+  box("leds", 0, 0.5, d / 2 + 0.02, w - 0.5, 0.035, 0.006, { uv: "keep" });
+  const bq = L(-w * 0.12, 0.38, d / 2 + 0.02);
+  kit.add("impDecal", new THREE.PlaneGeometry(0.26, 0.09), { pos: [bq.x, bq.y, bq.z], quat: q, uv: "keep", uvRect: impDecalRect(6) });
   box("impPaintedMetal", 0, h - 0.06, d / 2 + 0.012, w - 0.3, 0.06, 0.012, { color: IMP.trim, texel: 1 });
   const dq = L(-w * 0.25, h - 0.06, d / 2 + 0.02);
   kit.add("impDecal", new THREE.PlaneGeometry(0.3, 0.3), { pos: [dq.x, dq.y, dq.z], quat: q, uv: "keep", uvRect: impDecalRect(opts.decal === undefined ? 15 : opts.decal) });
@@ -371,7 +519,7 @@ export function dispenser(kit, pos, yaw = 0, opts = {}) {
     const b = L(w / 2, 0, d / 2);
     kit.collider([Math.min(a.x, b.x), pos[1], Math.min(a.z, b.z)], [Math.max(a.x, b.x), pos[1] + h, Math.max(a.z, b.z)], "dispenser");
   }
-  const kp = L(w * 0.28, 1.46, d / 2 + 0.03);
+  const kp = L(kx, 1.05, d / 2 + 0.03);
   return { keypad: kp, quat: q };
 }
 
@@ -580,19 +728,24 @@ export function namePlate(frame, u, v, opts = {}) {
 // Mirror + basin: a wash station on a wall frame at u (sink counter continuous from u0..u1 is the
 // caller's job via counter()); this adds the basin recess, tap, mirror and shelf light.
 export function washStation(frame, u, opts = {}) {
-  const { counterH = 0.88, counterD = 0.55, mirror = true, light = "lightBand" } = opts;
+  const { counterH = 0.88, counterD = 0.55, mirror = true, light = "lightBand", lightColor = null } = opts;
   frame.box("darkGloss", u, counterH + 0.002, counterD / 2, 0.42, 0.01, 0.34);
   frame.box("impMetal", u, counterH - 0.06, counterD / 2, 0.36, 0.12, 0.28, { color: IMP.steel, texel: 2 });
   frame.cylV("impMetal", u, counterH + 0.12, 0.08, 0.018, 0.24, { color: IMP.steel, segments: 8 });
   frame.box("impMetal", u, counterH + 0.23, 0.15, 0.036, 0.03, 0.16, { color: IMP.steel });
   frame.box("impPaintedMetal", u, counterH + 0.1, 0.03, 0.1, 0.06, 0.06, { color: IMP.consoleDark });
   frame.box("emitBlue", u - 0.03, counterH + 0.1, 0.061, 0.02, 0.02, 0.006);
-  // the mirror sits proud of the shell's wall panels (their face is at n = 0.06) and under the light band
+  // the mirror sits proud of the shell's wall panels (their face is at n = 0.06) under a vanity light:
+  // a projecting hood with a wide lit strip on its underside face, plus two thin side strips
   if (mirror) {
     frame.box("impMetal", u, 1.55, 0.07, 0.56, 0.7, 0.02, { color: IMP.steel });
     frame.box("crewMirror", u, 1.55, 0.085, 0.5, 0.64, 0.01);
-    frame.box("impPaintedMetal", u, 1.925, 0.08, 0.56, 0.07, 0.04, { color: IMP.trim, texel: 1 });
-    frame.box(light, u, 1.925, 0.102, 0.5, 0.04, 0.006, { uv: "keep" });
+    const lit = lightColor ? { color: lightColor } : { uv: "keep" };
+    frame.box("impPaintedMetal", u, 1.95, 0.11, 0.6, 0.1, 0.1, { color: IMP.trim, texel: 1 });
+    frame.box(light, u, 1.925, 0.165, 0.54, 0.05, 0.006, lit);
+    frame.box(light, u, 1.895, 0.11, 0.54, 0.006, 0.09, lit);
+    for (const s of [-1, 1]) frame.box(light, u + s * 0.27, 1.55, 0.082, 0.02, 0.6, 0.004, lit);
+    frame.box("impPaintedMetal", u, 1.19, 0.08, 0.56, 0.04, 0.05, { color: IMP.trim, texel: 1 });
   }
 }
 

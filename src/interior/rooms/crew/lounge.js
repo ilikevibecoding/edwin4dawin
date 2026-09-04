@@ -44,13 +44,23 @@ export function buildLounge(kit, ctx) {
   // ---- window gallery: carpet, chairs facing the glass, soffit with a blue cove --------------------------
   kit.boxMM("impFabric", [xW + 0.3, y + 0.004, zN + 1.4], [xW + 5.2, y + 0.014, zS - 1.4], { color: CARPET, uv: "world", texel: 1.5 });
   kit.boxMM("impMetal", [xW + 5.2, y + 0.004, zN + 1.4], [xW + 5.3, y + 0.012, zS - 1.4], { color: IMP.steel });
-  for (const zc of bayZ) {
-    loungeChair(kit, [xW + 3.9, y, zc - 1.15], Math.PI / 2);
-    loungeChair(kit, [xW + 3.9, y, zc + 1.15], Math.PI / 2);
-    sideTable(kit, [xW + 3.9, y, zc], 0.3, 0.5, { tone: IMP.consoleDark });
-    // a drink and a datapad on the table
-    kit.add("impMetal", new THREE.CylinderGeometry(0.04, 0.035, 0.12, 10), { pos: [xW + 3.8, y + 0.56, zc + 0.08], color: IMP.steel, uv: "scale", uvScale: [0.3, 0.2] });
-    kit.box("darkGloss", xW + 4.0, y + 0.51, zc - 0.1, 0.18, 0.012, 0.12);
+  // each bay: a pair of chairs pulled up to the glass with a low table between them, so the gallery
+  // reads as window seating rather than a carpet runway (the pairs used to sit 4 m back from the sill)
+  for (const [i, zc] of bayZ.entries()) {
+    loungeChair(kit, [xW + 2.3, y, zc - 1.1], Math.PI / 2);
+    loungeChair(kit, [xW + 2.3, y, zc + 1.1], Math.PI / 2);
+    table(kit, [xW + 1.75, y, zc], 0.6, 1.1, { h: 0.42, tone: IMP.consoleDark, top: "darkGloss" });
+    // a drink, a datapad and a dish on the table
+    kit.add("impMetal", new THREE.CylinderGeometry(0.04, 0.035, 0.12, 10), { pos: [xW + 1.65, y + 0.48, zc + 0.3], color: IMP.steel, uv: "scale", uvScale: [0.3, 0.2] });
+    kit.box("darkGloss", xW + 1.85, y + 0.43, zc - 0.28, 0.18, 0.012, 0.12);
+    kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.11, 0.08, 0.03, 12), { pos: [xW + 1.8, y + 0.435, zc + 0.02], color: IMP.steel, uv: "scale", uvScale: [1, 0.2] });
+    // a standing lamp beside the pair (alternating sides): thin post with a small amber shade
+    const lz = zc + (i % 2 ? -1.95 : 1.95);
+    kit.box("impMetal", xW + 2.4, y + 0.7, lz, 0.04, 1.4, 0.04, { color: IMP.gunmetal });
+    kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.16, 0.16, 0.03, 12), { pos: [xW + 2.4, y + 0.015, lz], color: IMP.trim, uv: "scale", uvScale: [1, 0.2] });
+    kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.06, 0.13, 0.16, 12, 1, true), { pos: [xW + 2.4, y + 1.46, lz], color: IMP.consoleDark, uv: "scale", uvScale: [1, 0.3] });
+    kit.add("crewEmit", new THREE.CylinderGeometry(0.1, 0.1, 0.01, 12), { pos: [xW + 2.4, y + 1.385, lz], color: AMBER });
+    kit.collider([xW + 2.24, y, lz - 0.16], [xW + 2.56, y + 1.5, lz + 0.16], "lamp");
   }
   // soffit over the gallery with a blue cove line; two dim space-glow fills by the glass
   kit.boxMM("impPaintedMetal", [xW - 0.1, y + h - 0.55, zN], [xW + 3.0, y + h, zS], { color: IMP.trim, texel: 1 });
@@ -59,8 +69,8 @@ export function buildLounge(kit, ctx) {
   // faint starlight spill from outboard of the glass (no shadows, so it reaches the gallery through the slab)
   pointLightDesc(ctx, SPACE, 1.3, 12, [xW - 1.6, y + 2.6, 357], 0);
   pointLightDesc(ctx, SPACE, 1.3, 12, [xW - 1.6, y + 2.6, 373], 0);
-  pointLightDesc(ctx, AMBER, 4, 9, [xW + 3.9, y + 3.2, 357], 1);
-  pointLightDesc(ctx, AMBER, 4, 9, [xW + 3.9, y + 3.2, 373], 1);
+  pointLightDesc(ctx, AMBER, 4, 9, [xW + 2.8, y + 3.2, 357], 1);
+  pointLightDesc(ctx, AMBER, 4, 9, [xW + 2.8, y + 3.2, 373], 1);
 
   // ---- holo-game table with a ring of seats -----------------------------------------------------------
   const hx = -64.0;
@@ -203,7 +213,7 @@ export function buildLounge(kit, ctx) {
 
   // ---- views -------------------------------------------------------------------------------------------
   ctx.view("lounge", xE - 1.0, y + STD.eye, 380, 78, -3);
-  ctx.view("lounge_viewport", xW + 4.6, y + STD.eye, 361.6, 90, -8);
+  ctx.view("lounge_viewport", xW + 5.7, y + STD.eye, 361.3, 90, -10);
   ctx.view("lounge_holo", -60.8, y + STD.eye, 364.8, 34, -5);
   ctx.view("lounge_bar", -64.0, y + STD.eye, 377.6, 180, -4);
 }

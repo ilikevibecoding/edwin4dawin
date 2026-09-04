@@ -12,7 +12,7 @@ import { impCeiling, table, bench, wallScreen, ceilingLight, pointLightDesc, cra
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
-import { ensureCrewMaterials, instancedProp, partition, fauxDoor, counter, shelfUnit, dispenser, washStation, floorDecal, ceilingStrip, namePlate, trayRack, oven, interactPlates, rng } from "./crewKit.js";
+import { ensureCrewMaterials, instancedProp, partition, fauxDoor, counter, shelfUnit, dispenser, washStation, floorDecal, ceilingStrip, namePlate, trayRack, oven, interactPlates, rng, boardMaterial, wallBoard, yawQ } from "./crewKit.js";
 
 const WARM = 0xffe6c8; // dining light
 const COOL = 0xe8f0ff; // galley light
@@ -37,6 +37,8 @@ export function buildMess(kit, ctx) {
   impCeiling(ceilingFrame(kit, x0, z0, y + h), x1 - x0, z1 - z0, { lights: false, panelW: 2.1, seed: 51 });
 
   // ---- plan ------------------------------------------------------------------------------------
+  // the menu board: dark panel, amber header, rows of glyph names with a value column (one material, one draw)
+  const menu = boardMaterial(ctx.mats, "crewBoardMenu", { seed: 53, accent: "#ffb454", rows: 7, warnEvery: 0 });
   const partX = 31.7; // dining | galley partition plane
   const aisleZ0 = 352.4; // cross aisle from the west door
   const aisleZ1 = 358.6;
@@ -56,11 +58,11 @@ export function buildMess(kit, ctx) {
   worn(midX0 + 0.3, zN + 0.4, midX1 - 0.3, zS - 0.3);
   for (const z of [aisleC - 1.9, aisleC + 1.9 - 0.1]) kit.boxMM("impMetal", [xW + 0.3, y + 0.004, z], [partX - 3.4, y + 0.01, z + 0.1], { color: IMP.steel });
   for (const x of [midX0 + 0.3, midX1 - 0.4]) kit.boxMM("impMetal", [x, y + 0.004, zN + 0.4], [x + 0.1, y + 0.01, zS - 0.3], { color: IMP.steel });
-  floorDecal(kit, xW + 1.6, y, aisleC, 1.1, 7, -90);
-  floorDecal(kit, xW + 3.4, y, aisleC + 1.3, 0.7, 9, 0);
-  floorDecal(kit, 20, y, zS - 1.6, 1.0, 2, 0);
-  floorDecal(kit, 20, y, zN + 1.4, 0.8, 2, 180);
-  floorDecal(kit, 27.4, y, aisleC, 0.9, 13, -90);
+  floorDecal(kit, xW + 1.6, y + 0.006, aisleC, 1.1, 7, -90);
+  floorDecal(kit, xW + 3.4, y + 0.006, aisleC + 1.3, 0.7, 9, 0);
+  floorDecal(kit, 20, y + 0.006, zS - 1.6, 1.0, 2, 0);
+  floorDecal(kit, 20, y + 0.006, zN + 1.4, 0.8, 2, 180);
+  floorDecal(kit, 27.4, y + 0.006, aisleC, 0.9, 13, -90);
 
   // ---- dining hall: instanced table sets ---------------------------------------------------------
   const sets = [];
@@ -83,20 +85,33 @@ export function buildMess(kit, ctx) {
     sets,
   );
   for (const s of sets) kit.collider([s.pos[0] - 2.45, y, s.pos[2] - 1.0], [s.pos[0] + 2.45, y + 1.2, s.pos[2] + 1.0], "tableSet");
-  // trays with food left on some tables (merged, so they vary), ceiling strip over every table
+  // the tables are not all cleared: trays with food, caf cups, datapads, a kit bag or jacket on some
+  // benches (merged, so every set differs); ceiling strip over every table
   const rand = rng(17);
   for (const s of sets) {
     const [cx, , cz] = s.pos;
     ceilingStrip(kit, [cx, y + h, cz], 4.4, "x", { mat: "lightBandWarm", w: 0.22 });
-    const n = Math.floor(rand() * 3);
+    const n = 1 + Math.floor(rand() * 3);
     for (let t = 0; t < n; t++) {
       const tx = cx + (rand() - 0.5) * 4.0;
-      const tz = cz + (rand() < 0.5 ? -0.2 : 0.2);
-      kit.box("impPaintedMetal", tx, y + 0.775, tz, 0.44, 0.03, 0.3, { color: IMP.wallMid, texel: 2 });
+      const side = rand() < 0.5 ? -1 : 1;
+      const tz = cz + side * 0.2;
+      kit.box("impPaintedMetal", tx, y + 0.775, tz, 0.44, 0.03, 0.3, { color: [IMP.wallMid, IMP.gunmetal, 0x4a5a6a][Math.floor(rand() * 3)], texel: 2 });
       kit.add("impMetal", new THREE.CylinderGeometry(0.07, 0.06, 0.05, 10), { pos: [tx - 0.1, y + 0.815, tz], color: IMP.steel, uv: "scale", uvScale: [0.3, 0.1] });
       kit.box("impPaintedMetal", tx + 0.1, y + 0.805, tz, 0.14, 0.03, 0.14, { color: [0x8a5a2a, 0x556b2f, 0xc8a050][Math.floor(rand() * 3)], texel: 2 });
+      kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.04, 0.035, 0.1, 10), { pos: [tx + 0.32, y + 0.81, tz + side * 0.12], color: [IMP.steel, IMP.white, IMP.gunmetal][Math.floor(rand() * 3)], uv: "scale", uvScale: [0.4, 0.3] });
     }
+    const m = Math.floor(rand() * 4);
+    if (m === 0) kit.box("darkGloss", cx + (rand() - 0.5) * 3.6, y + 0.767, cz - 0.15, 0.2, 0.012, 0.14);
+    if (m === 1) kit.box("impFabric", cx + (rand() - 0.5) * 3.6, y + 0.58, cz + 0.72, 0.42, 0.2, 0.34, { color: IMP.fabricOlive, uv: "world", texel: 2 });
+    if (m === 2) kit.box("impFabric", cx + (rand() - 0.5) * 3.6, y + 0.6, cz - 0.72, 0.5, 0.06, 0.36, { color: IMP.fabricBlack, uv: "world", texel: 2 });
   }
+  // the cross aisle is where the traffic is: a condiment / caf station island between the door and
+  // the serving line, and service trolleys parked at the row ends
+  condimentStation(kit, [16.4, y, aisleC], 0);
+  trolley(kit, [18.0, y, aisleC - 2.55], Math.PI / 2, { load: "trays" });
+  trolley(kit, [24.6, y, aisleC + 2.55], -Math.PI / 2, { load: "jugs" });
+  trolley(kit, [21.0, y, 366.0], 0, { load: "trays" });
 
   // ---- lighting: cross-aisle fixtures + fills (dining), serving + galley -------------------------
   for (const [i, x] of cols.entries()) ceilingLight(kit, ctx, [x, y + h, aisleC], 5.0, "x", { mat: "lightBandWarm", color: WARM, intensity: 12, distance: 18, priority: i === 1 ? 2 : 1 });
@@ -139,7 +154,7 @@ export function buildMess(kit, ctx) {
   {
     const w = walls.north;
     const { frame } = wallFrame(kit, w.from, w.to, y);
-    wallScreen(frame, w.u(10.45), 2.4, 2.6, 1.2, 1);
+    wallBoard(frame, w.u(10.45), 2.4, 2.6, 1.2, menu);
     wallScreen(frame, w.u(23.85), 2.4, 2.6, 1.2, 2);
     for (const [x, i] of [[6.2, 0], [14.2, 15], [28.2, 3]]) frame.quad("impDecal", w.u(x), 2.5, 0.062, 0.55, 0.55, { uvRect: impDecalRect(i) });
     // deck chrono over the north–south aisle
@@ -246,7 +261,7 @@ export function buildMess(kit, ctx) {
       kit.box("impPaintedMetal", partX - 0.1, y + 1.065, z, 0.3, 0.03, 0.3, { color: IMP.wallMid, texel: 2 });
       kit.add("impMetal", new THREE.CylinderGeometry(0.1, 0.1, 0.05, 10), { pos: [partX - 0.1, y + 1.105, z], color: IMP.steel, uv: "scale", uvScale: [0.5, 0.1] });
     }
-    wallScreen(pf, pu((a + b) / 2), 3.15, 2.4, 0.9, 1, { leds: false });
+    wallBoard(pf, pu((a + b) / 2), 3.15, 2.4, 0.9, menu, { leds: false });
     pf.box("crewEmit", pu((a + b) / 2), 2.62, 0.13, 2.8, 0.03, 0.01, { color: 0xffb020 });
   }
   const pN = 0.08 + 0.024; // partition face offset
@@ -340,6 +355,26 @@ export function buildMess(kit, ctx) {
     for (let k = 0; k < 5; k++) gf.box("impMetal", zS - 358.4 - k * 0.22, 1.7, 0.024 + 0.045, 0.03, 0.5 + (k % 2) * 0.2, 0.02, { color: [IMP.steel, IMP.gunmetal][k % 2] });
     gf.box("impPaintedMetal", zS - 352.9, 1.7, 0.024 + 0.02, 1.2, 0.9, 0.03, { color: IMP.consoleDark, texel: 1 });
     gf.quad("impDecal", zS - 352.9, 1.7, 0.024 + 0.04, 0.7, 0.7, { uvRect: impDecalRect(11) });
+    // north end of the galley face (bare before): container shelving under a utensil rail with
+    // hanging tools, and a square extraction duct along the top of the wall with grilles and drops
+    shelfUnit(gf, zS - 347.6, zS - 340.4, 1.7, { d: 0.45, shelves: 3, seed: 65, items: "mixed", tone: IMP.wallDark });
+    gf.box("impMetal", zS - 344.0, 2.15, 0.024 + 0.08, 7.0, 0.03, 0.03, { color: IMP.steel });
+    for (const du of [-3.3, 3.3]) gf.box("impMetal", zS - 344.0 + du, 2.15, 0.024 + 0.045, 0.03, 0.03, 0.09, { color: IMP.steel });
+    for (let k = 0; k < 9; k++) {
+      const u = zS - 347.2 + k * 0.78;
+      gf.box("impMetal", u, 2.05, 0.024 + 0.1, 0.02, 0.2, 0.02, { color: IMP.gunmetal });
+      if (k % 3 === 0) gf.cylN("impMetal", u, 1.86, 0.024 + 0.06, 0.09, 0.05, { color: IMP.steel, segments: 12 });
+      else if (k % 3 === 1) gf.box("impMetal", u, 1.82, 0.024 + 0.1, 0.06, 0.28, 0.015, { color: IMP.steel });
+      else gf.box("impPaintedMetal", u, 1.84, 0.024 + 0.1, 0.1, 0.24, 0.02, { color: IMP.consoleDark, texel: 2 });
+    }
+    gf.box("impMetal", zS - 356.5, h - 0.5, 0.024 + 0.3, zS - zN - 1.2, 0.42, 0.5, { color: IMP.gunmetal, texel: 0.5 });
+    for (const z of [341.5, 350.0, 358.5, 367.0, 375.0]) {
+      gf.box("impPaintedMetal", zS - z, h - 0.5, 0.024 + 0.56, 0.7, 0.3, 0.02, { color: IMP.trim, texel: 1 });
+      for (let s = 0; s < 5; s++) gf.box("impMetal", zS - z, h - 0.62 + s * 0.06, 0.024 + 0.575, 0.6, 0.02, 0.01, { color: IMP.black });
+    }
+    gf.box("impMetal", zS - 344.0, (h - 0.71 + 2.4) / 2, 0.024 + 0.3, 0.42, h - 0.71 - 2.4, 0.42, { color: IMP.gunmetal, texel: 0.5 });
+    gf.box("impPaintedMetal", zS - 344.0, 2.45, 0.024 + 0.3, 0.6, 0.12, 0.6, { color: IMP.trim, texel: 1 });
+    gf.box("impMetal", zS - 344.0, 2.38, 0.024 + 0.3, 0.5, 0.02, 0.5, { color: IMP.black });
   }
   // dry store: shelving on the north and south walls, crates in the south-east corner
   {
@@ -387,4 +422,63 @@ export function buildMess(kit, ctx) {
   ctx.view("mess_serving", 27.2, y + STD.eye, 349.8, -52, -4);
   ctx.view("mess_galley", 33.4, y + STD.eye, 345.2, 165, -5);
   ctx.view("mess_south", 20, y + STD.eye, zS - 1.0, 0, -3);
+}
+
+/** Steel service trolley: two shelves on four posts with castors and a push handle, loaded with
+ * stacked trays or jugs. pos = floor centre; the long axis runs along local x. */
+function trolley(kit, pos, yaw = 0, opts = {}) {
+  const { load = "trays", collide = true } = opts;
+  const q = yawQ(yaw);
+  const o = new THREE.Vector3(...pos);
+  const L = (x, y, z) => o.clone().add(new THREE.Vector3(x, y, z).applyQuaternion(q));
+  const box = (mat, x, y, z, sx, sy, sz, extra = {}) => kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: L(x, y, z).toArray(), quat: q, ...extra });
+  const cyl = (mat, x, y, z, r, hh, extra = {}) => kit.add(mat, new THREE.CylinderGeometry(r, r, hh, 10), { pos: L(x, y, z).toArray(), quat: q, uv: "scale", uvScale: [0.4, 0.3], ...extra });
+  for (const sy of [0.32, 0.92]) box("impMetal", 0, sy, 0, 0.9, 0.03, 0.55, { color: IMP.steel, texel: 2 });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box("impMetal", sx * 0.42, 0.55, sz * 0.24, 0.03, 0.9, 0.03, { color: IMP.gunmetal });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) cyl("impRubber", sx * 0.42, 0.06, sz * 0.24, 0.05, 0.03, { color: IMP.rubber });
+  box("impMetal", 0.47, 1.0, 0, 0.02, 0.2, 0.55, { color: IMP.steel });
+  box("impMetal", 0.47, 1.1, 0, 0.03, 0.03, 0.6, { color: IMP.gunmetal });
+  if (load === "trays") {
+    for (let t = 0; t < 6; t++) box("impPaintedMetal", -0.15, 0.95 + t * 0.03, 0, 0.44, 0.03, 0.3, { color: t % 2 ? IMP.wallMid : IMP.wallDark, texel: 2 });
+    for (let t = 0; t < 3; t++) cyl("impMetal", 0.25, 0.97 + t * 0.045, 0.1, 0.07, 0.04, { color: IMP.steel });
+    box("impPaintedMetal", 0.0, 0.42, 0, 0.6, 0.18, 0.4, { color: IMP.consoleDark, texel: 2 });
+  } else {
+    for (let k = 0; k < 4; k++) cyl("impMetal", -0.3 + k * 0.2, 1.06, (k % 2 ? 0.12 : -0.12), 0.07, 0.24, { color: [IMP.steel, IMP.white, IMP.gunmetal, 0x6fa0ff][k] });
+    for (let k = 0; k < 2; k++) box("impPaintedMetal", -0.1 + k * 0.4, 0.44, 0, 0.3, 0.2, 0.4, { color: [IMP.wallMid, IMP.gunmetal][k], texel: 2 });
+  }
+  if (collide) {
+    const a = L(-0.5, 0, -0.32);
+    const b = L(0.5, 0, 0.32);
+    kit.collider([Math.min(a.x, b.x), pos[1], Math.min(a.z, b.z)], [Math.max(a.x, b.x), pos[1] + 1.15, Math.max(a.z, b.z)], "trolley");
+  }
+}
+
+/** Condiment / caf island in the cross aisle: a counter with pump dispensers, sauce bottles, napkin
+ * and cup stacks, a lit label plate, and a rubbish chute at one end. */
+function condimentStation(kit, pos, yaw = 0) {
+  const [x, y, z] = pos;
+  counter(kit, [x, y, z], 1.8, yaw, { d: 0.7, h: 0.95, doors: true, tone: IMP.consoleDark, tag: "condiments" });
+  const top = y + 0.95;
+  // three pump dispensers in a steel tray, sauce bottles, napkins, two cup stacks
+  kit.box("impMetal", x - 0.5, top + 0.02, z, 0.5, 0.04, 0.34, { color: IMP.steel, texel: 2 });
+  for (let k = 0; k < 3; k++) {
+    const px = x - 0.66 + k * 0.16;
+    kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.055, 0.06, 0.2, 10), { pos: [px, top + 0.14, z], color: [0xb8231c, 0xc8a050, 0x556b2f][k], uv: "scale", uvScale: [0.4, 0.3] });
+    kit.add("impMetal", new THREE.CylinderGeometry(0.015, 0.015, 0.1, 6), { pos: [px, top + 0.29, z], color: IMP.steel, uv: "scale", uvScale: [0.1, 0.1] });
+    kit.box("impMetal", px, top + 0.33, z + 0.04, 0.03, 0.02, 0.1, { color: IMP.steel });
+  }
+  for (let k = 0; k < 4; k++) kit.add("impMetal", new THREE.CylinderGeometry(0.03, 0.035, 0.16, 8), { pos: [x - 0.1 + k * 0.08, top + 0.08, z + 0.2], color: [IMP.white, IMP.gunmetal, 0xb8231c, IMP.steel][k], uv: "scale", uvScale: [0.2, 0.2] });
+  kit.box("impPaintedMetal", x + 0.05, top + 0.06, z - 0.15, 0.24, 0.12, 0.24, { color: IMP.white, texel: 2 });
+  kit.box("impMetal", x + 0.05, top + 0.125, z - 0.15, 0.26, 0.01, 0.26, { color: IMP.steel });
+  for (const dz of [-0.15, 0.15]) kit.add("impMetal", new THREE.CylinderGeometry(0.05, 0.045, 0.3, 10), { pos: [x + 0.5, top + 0.15, z + dz], color: IMP.steel, uv: "scale", uvScale: [0.3, 0.3] });
+  // lit label plate on a short post and a waste slot at the east end
+  kit.box("impMetal", x + 0.75, top + 0.22, z, 0.03, 0.44, 0.03, { color: IMP.gunmetal });
+  kit.box("impPaintedMetal", x + 0.75, top + 0.5, z, 0.04, 0.16, 0.36, { color: IMP.consoleDark, texel: 1 });
+  kit.box("crewEmit", x + 0.73, top + 0.5, z, 0.006, 0.08, 0.28, { color: 0xffb454 });
+  kit.box("impPaintedMetal", x + 0.86, y + 0.5, z, 0.12, 0.98, 0.5, { color: IMP.gunmetal, texel: 1 });
+  kit.box("impPaintedMetal", x + 0.925, y + 0.82, z, 0.01, 0.12, 0.3, { color: IMP.black });
+  const g = new THREE.PlaneGeometry(0.2, 0.2);
+  g.rotateY(Math.PI / 2);
+  kit.add("impDecal", g, { pos: [x + 0.928, y + 0.6, z], uv: "keep", uvRect: impDecalRect(6) });
+  kit.collider([x + 0.8, y, z - 0.25], [x + 0.92, y + 1.0, z + 0.25], "chute");
 }

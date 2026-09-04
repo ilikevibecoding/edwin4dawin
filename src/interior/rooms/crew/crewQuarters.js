@@ -10,7 +10,7 @@ import { impCeiling, bunk, lockers, wallScreen, ceilingLight, pointLightDesc, ta
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
-import { ensureCrewMaterials, instancedProp, partition, counter, dispenser, washStation, floorDecal, ceilingStrip, namePlate } from "./crewKit.js";
+import { ensureCrewMaterials, instancedProp, partition, counter, dispenser, washStation, floorDecal, ceilingStrip, namePlate, boardMaterial, wallBoard } from "./crewKit.js";
 
 export function buildCrewQuarters(kit, ctx) {
   ensureCrewMaterials(ctx.mats);
@@ -37,8 +37,8 @@ export function buildCrewQuarters(kit, ctx) {
   kit.boxMM("impMetal", [x0 + 0.3, y + 0.004, aisleZ1 - 0.2], [x1 - 0.3, y + 0.01, aisleZ1 - 0.1], { color: IMP.steel });
   for (const [i, lx] of [8, 17, 26].entries()) ceilingLight(kit, ctx, [lx, y + h, aisleC], 7.5, "x", { intensity: 7, distance: 13, priority: i === 1 ? 2 : 1, color: 0xdfe8ff });
   ceilingLight(kit, ctx, [31.6, y + h, aisleC], 3.2, "x", { intensity: 4, distance: 9, priority: 0, color: 0xdfe8ff });
-  floorDecal(kit, 4.6, y, aisleC, 1.1, 7, -90);
-  floorDecal(kit, 6.2, y, aisleC + 1.1, 0.7, 0, 0);
+  floorDecal(kit, 4.6, y + 0.006, aisleC, 1.1, 7, -90);
+  floorDecal(kit, 6.2, y + 0.006, aisleC + 1.1, 0.7, 0, 0);
 
   // ---- berthing modules -----------------------------------------------------------------------
   const modules = 7;
@@ -67,13 +67,17 @@ export function buildCrewQuarters(kit, ctx) {
         const tint = 0.92 + ((i * 7 + b * 3) % 5) * 0.02;
         bunkTransforms.push({ pos: [xA, y, zc], rot: [0, 0, 0], color: new THREE.Color(tint, tint, tint) });
         bunkTransforms.push({ pos: [xB, y, zc], rot: [0, Math.PI, 0], color: new THREE.Color(tint, tint, tint) });
-        // footlockers under the bottom tier, latch toward the passage
-        lockerTransforms.push({ pos: [xs + 0.72, y, zc + 0.62], rot: [0, 0, 0] });
-        lockerTransforms.push({ pos: [xs + 2.68, y, zc - 0.62], rot: [0, Math.PI, 0] });
+        // one footlocker per stack, standing in the 0.45 m gap between this stack and the next toward
+        // the aisle (the last stack's sits at the aisle end), latch toward the passage
+        const zl = zc + side.sign * 1.225;
+        lockerTransforms.push({ pos: [xA + 0.12, y, zl], rot: [0, 0, 0] });
+        lockerTransforms.push({ pos: [xB - 0.12, y, zl], rot: [0, Math.PI, 0] });
+        zMin = Math.min(zMin, zl - 0.22);
+        zMax = Math.max(zMax, zl + 0.22);
       }
-      // one collider per bank
-      kit.collider([xs, y, zMin], [xs + 0.9, y + 3.3, zMax], "bunks");
-      kit.collider([xs + 2.5, y, zMin], [xs + 3.4, y + 3.3, zMax], "bunks");
+      // one collider per bank (the ladders stand 6 cm proud of the frames on the passage side)
+      kit.collider([xs, y, zMin], [xs + 0.96, y + 3.3, zMax], "bunks");
+      kit.collider([xs + 2.44, y, zMin], [xs + 3.4, y + 3.3, zMax], "bunks");
       // passage light strip + bay number on the deck at the aisle end
       ceilingStrip(kit, [passX, y + h, side.zc], 16.6, "z", { mat: "lightBand", w: 0.22 });
       floorDecal(kit, passX, y, side.sign > 0 ? aisleZ0 - 0.6 : aisleZ1 + 0.6, 0.7, 2, side.sign > 0 ? 0 : 180);
@@ -120,24 +124,35 @@ export function buildCrewQuarters(kit, ctx) {
       // kit bag on the middle tier's shelf and a folded blanket stack on the top one
       k.box("impFabric", -0.2, 0.45 + 0.95 + 0.26, 0.55, 0.36, 0.22, 0.5, { color: IMP.fabricOlive, uv: "world", texel: 2 });
       k.box("impFabric", 0.1, 0.45 + 1.9 + 0.22, 0.6, 0.4, 0.14, 0.4, { color: IMP.fabricGrey, uv: "world", texel: 2 });
+      // ladder up the passage face at the foot end: two rails proud of the frames, rungs to the top tier
+      for (const z of [0.6, 0.9]) k.box("impPaintedMetal", 0.48, 1.35, z, 0.04, 2.5, 0.04, { color: IMP.trim, texel: 1 });
+      for (let r = 0; r < 6; r++) k.box("impPaintedMetal", 0.48, 0.4 + r * 0.4, 0.75, 0.03, 0.03, 0.28, { color: IMP.steel, texel: 2 });
+      // privacy curtains: a track under each tier's ceiling and the curtain bunched at the foot end
+      for (let t = 0; t < 3; t++) {
+        const by = 0.45 + t * 0.95;
+        k.box("impPaintedMetal", 0.47, by + 0.82, -0.08, 0.03, 0.03, 1.72, { color: IMP.gunmetal, texel: 2 });
+        k.box("impFabric", 0.47, by + 0.46, 0.4, 0.05, 0.68, 0.28, { color: t === 1 ? IMP.fabricBlack : 0x2c3442, uv: "world", texel: 2 });
+      }
     },
     bunkTransforms,
   );
   instancedProp(
     kit,
     (k) => {
-      k.box("impPaintedMetal", 0, 0.13, 0, 0.42, 0.26, 0.6, { color: IMP.gunmetal, texel: 2 });
-      k.box("impPaintedMetal", 0, 0.2, 0, 0.44, 0.016, 0.62, { color: IMP.trim, texel: 2 });
-      k.box("impPaintedMetal", 0.222, 0.12, 0, 0.012, 0.06, 0.14, { color: IMP.steel, texel: 2 });
-      const dg = new THREE.PlaneGeometry(0.14, 0.14);
+      // footlocker: lid with a steel latch plate toward the passage (+x) and a stencilled id
+      k.box("impPaintedMetal", 0, 0.14, 0, 0.58, 0.28, 0.4, { color: IMP.wallMid, texel: 2 });
+      k.box("impPaintedMetal", 0, 0.29, 0, 0.6, 0.02, 0.42, { color: IMP.trim, texel: 2 });
+      k.box("impPaintedMetal", 0, 0.03, 0, 0.6, 0.06, 0.42, { color: IMP.trim, texel: 2 });
+      k.box("impPaintedMetal", 0.295, 0.16, 0, 0.012, 0.07, 0.12, { color: IMP.steel, texel: 2 });
+      const dg = new THREE.PlaneGeometry(0.12, 0.12);
       dg.rotateY(Math.PI / 2);
-      k.add("impDecal", dg, { pos: [0.226, 0.14, 0.2], uv: "keep", uvRect: impDecalRect(6) });
+      k.add("impDecal", dg, { pos: [0.298, 0.16, 0.12], uv: "keep", uvRect: impDecalRect(6) });
     },
     lockerTransforms,
   );
   // fill for the berthing bays: cool from the passage strips, a warm pool mid-way at bunk height
   for (const side of sides) {
-    for (const lx of [xStart(1) + 1.7, xStart(5) + 1.7]) pointLightDesc(ctx, 0xdfe8ff, 14, 20, [lx, y + 3.1, side.zc], 0);
+    for (const lx of [xStart(1) + 1.7, xStart(5) + 1.7]) pointLightDesc(ctx, 0xdfe8ff, 18, 22, [lx, y + 3.1, side.zc], 0);
     pointLightDesc(ctx, 0xffc890, 4, 12, [xStart(3) + 1.7, y + 2.2, side.zc], 0);
   }
 
@@ -145,8 +160,8 @@ export function buildCrewQuarters(kit, ctx) {
   {
     const w = walls.west;
     const { frame } = wallFrame(kit, w.from, w.to, y);
-    // duty roster: big screen with a header plate and the deck code
-    wallScreen(frame, w.u(414), 1.75, 2.4, 1.15, 1);
+    // duty roster: a big lit board of watch-bill rows (glyph names, times) with a header plate and the deck code
+    wallBoard(frame, w.u(414), 1.75, 2.4, 1.15, boardMaterial(ctx.mats, "crewBoardRoster", { seed: 41, accent: "#5d8fe0", rows: 8, warnEvery: 3 }));
     frame.box("impPaintedMetal", w.u(414), 2.5, 0.08, 2.6, 0.22, 0.04, { color: IMP.trim, texel: 1 });
     frame.quad("impDecal", w.u(414) - 0.9, 2.5, 0.102, 0.2, 0.2, { uvRect: impDecalRect(0) });
     frame.quad("impDecal", w.u(414) + 0.3, 2.5, 0.102, 0.2, 0.2, { uvRect: impDecalRect(15) });
@@ -162,16 +177,34 @@ export function buildCrewQuarters(kit, ctx) {
     const { frame } = wallFrame(kit, w.from, w.to, y);
     lockers(frame, w.u(3.1), w.u(8.6), 2.1, { seed: 23, tone: IMP.wallMid });
   }
+  // the day zone stands on a lighter wipe-clean deck patch with steel edging, which also carries a
+  // large cog roundel and the deck code in the open floor north of the table; a chevron mat in front
+  // of the dispenser
+  kit.boxMM("impGlossSoft", [3.6, y + 0.002, 404.4], [8.4, y + 0.008, 415.6], { color: IMP.wallMid, texel: 0.25 });
+  kit.boxMM("impMetal", [3.6, y + 0.004, 404.3], [8.4, y + 0.01, 404.4], { color: IMP.steel });
+  kit.boxMM("impMetal", [3.6, y + 0.004, 415.6], [8.4, y + 0.01, 415.7], { color: IMP.steel });
+  kit.boxMM("impMetal", [8.4, y + 0.004, 404.3], [8.5, y + 0.01, 415.7], { color: IMP.steel });
+  floorDecal(kit, 6.0, y + 0.006, 406.8, 1.8, 4, 0);
+  floorDecal(kit, 4.6, y + 0.006, 409.2, 0.7, 0, -90);
+  floorDecal(kit, 4.1, y, 416.6, 0.9, 10, 90);
   table(kit, [6.0, y, 412.6], 0.9, 4.4, { tone: IMP.wallDark });
   bench(kit, [4.95, y, 412.6], 4.0, -Math.PI / 2);
   bench(kit, [7.05, y, 412.6], 4.0, Math.PI / 2);
+  // caf cups, a datapad and a ration tray left on the table
+  for (const [tx, tz] of [[5.75, 411.1], [6.3, 413.6], [5.8, 414.3]]) kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.04, 0.035, 0.1, 10), { pos: [tx, y + 0.81, tz], color: IMP.steel, uv: "scale", uvScale: [0.4, 0.3] });
+  kit.box("darkGloss", 6.2, y + 0.767, 411.6, 0.16, 0.012, 0.22);
+  kit.box("impPaintedMetal", 5.9, y + 0.77, 412.6, 0.3, 0.02, 0.42, { color: IMP.gunmetal, texel: 2 });
+  kit.box("impPaintedMetal", 5.9, y + 0.795, 412.6, 0.24, 0.03, 0.14, { color: 0x6d5a43, texel: 2 });
   dispenser(kit, [3.25, y, 416.6], Math.PI / 2, { accent: "emitAmber", screen: 1, decal: 15 });
   crate(kit, [7.9, y, 401.4], [1.0, 0.7, 0.8], { seed: 4, tone: IMP.wallMid });
   crate(kit, [7.9, y + 0.7, 401.4], [0.8, 0.5, 0.7], { seed: 5, tone: IMP.gunmetal, collide: false });
   crate(kit, [6.6, y, 401.4], [0.9, 0.5, 0.8], { seed: 6, tone: IMP.consoleDark });
-  ceilingLight(kit, ctx, [5.8, y + h, 409.5], 7, "z", { intensity: 8, distance: 12, priority: 1, color: 0xdfe8ff });
-  floorDecal(kit, 6.0, y, 408.2, 0.9, 9, 0);
-  floorDecal(kit, 4.2, y, 418.6, 0.6, 13, -90);
+  ceilingLight(kit, ctx, [5.6, y + h, 411.5], 7, "z", { intensity: 14, distance: 15, priority: 1, color: 0xdfe8ff });
+  // two more cool strips over the day zone: the glossy patch mirrors them and reads lit
+  ceilingStrip(kit, [4.2, y + h, 410.0], 10.4, "z", { mat: "lightBand", w: 0.2 });
+  ceilingStrip(kit, [7.4, y + h, 410.0], 10.4, "z", { mat: "lightBand", w: 0.2 });
+  floorDecal(kit, 6.0, y + 0.006, 408.2, 0.9, 9, 0);
+  floorDecal(kit, 4.2, y + 0.006, 418.6, 0.6, 13, -90);
 
   // ---- washroom (south of the door) ------------------------------------------------------------
   const wx1 = 8.7;
@@ -185,7 +218,7 @@ export function buildCrewQuarters(kit, ctx) {
     const w = walls.west;
     const { frame } = wallFrame(kit, w.from, w.to, y);
     counter(kit, [3.09, y, 428.9], 7.4, Math.PI / 2, { d: 0.56, h: 0.88, doors: false, tone: IMP.wallDark, tag: "basins" });
-    for (let k = 0; k < 6; k++) washStation(frame, w.u(425.9 + k * 1.2), { counterH: 0.88, counterD: 0.68 });
+    for (let k = 0; k < 6; k++) washStation(frame, w.u(425.9 + k * 1.2), { counterH: 0.88, counterD: 0.68, light: "crewEmit", lightColor: 0xffe2bc });
     // hand dryers + towel rail + waste bin beyond the basins
     frame.box("impPaintedMetal", w.u(433.4), 1.25, 0.12, 0.3, 0.42, 0.22, { color: IMP.consoleDark, texel: 1 });
     frame.box("emitBlue", w.u(433.4), 1.1, 0.235, 0.14, 0.02, 0.01);
