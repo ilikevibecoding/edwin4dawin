@@ -86,7 +86,8 @@ console.log("warmup stats", JSON.stringify(stats0));
 const results = { iter, views: {}, checks: {}, stats: null, logs: [] };
 for (const name of views) {
   const label = await applyView(name);
-  await settle(3, 600);
+  // free cameras land in a new cell: give the light pool cross-fade a few more frames
+  await settle(name.startsWith("cam:") ? 8 : 4, 600);
   const file = resolve(outDir, `${label}.png`);
   await page.screenshot({ path: file, timeout: 150000 });
   const stats = await page.evaluate(() => window.debugAPI.getStats());
