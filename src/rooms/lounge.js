@@ -11,8 +11,8 @@ import { IMP_DECAL } from "../textures_imperial.js";
 import { bench, table, roundTable, stool, wallScreen, locker, fakeDoor, cableRun, lightBox, holoFigure, holoFigureStatic, rod, floorStrip } from "./deck_b_props.js";
 
 const CARPET = new THREE.Color("#2b2a2e");
-const PAD = new THREE.Color("#4a3a30");
-const PAD_ALT = new THREE.Color("#33383f");
+const PAD = new THREE.Color("#7a5a44");
+const PAD_ALT = new THREE.Color("#4f5868");
 
 export function buildLounge(kit, ctx, room) {
   const [w, h, d] = room.size;
@@ -153,15 +153,16 @@ export function buildLounge(kit, ctx, room) {
     marker.visible = Math.sin(tt * 6) > -0.4;
   });
 
-  // --- lights (8): warm low keys, a back-bar wash, blue holo glow under the game table, amber under the bar
+  // --- lights (8): warm keys over the bar, floor and door, two over the booth row, a back-bar wash,
+  // a cooler key on the chart seating, blue holo glow under the game table
   kit.light({ type: "point", pos: [11.2, 2.7, 0], color: 0xffc98a, intensity: lux(2.4, 2.6), distance: 10, priority: 0.5 });
-  kit.light({ type: "point", pos: [8.2, h - 0.6, 0], color: 0xffe2c0, intensity: lux(h - 0.6, 1.6), distance: 12, priority: 0.48 });
-  kit.light({ type: "point", pos: [-4.0, h - 0.6, -2.0], color: 0xffe2c0, intensity: lux(h - 0.6, 1.6), distance: 12, priority: 0.46 });
-  kit.light({ type: "point", pos: [-3.0, h - 0.6, -7.5], color: 0xffd9b0, intensity: lux(h - 0.6, 1.7), distance: 12, priority: 0.42 });
-  kit.light({ type: "point", pos: [0, h - 0.6, 5.5], color: 0xe6ecff, intensity: lux(h - 0.6, 1.4), distance: 11, priority: 0.44 });
-  kit.light({ type: "point", pos: [-10.5, h - 0.6, 0], color: 0xffe2c0, intensity: lux(h - 0.6, 1.4), distance: 11, priority: 0.4 });
+  kit.light({ type: "point", pos: [bar.frontX - 1.0, h - 1.0, 0], color: 0xffe2c0, intensity: lux(h - 1.0, 1.8), distance: 12, priority: 0.48 });
+  kit.light({ type: "point", pos: [-4.0, h - 1.0, -1.0], color: 0xffe2c0, intensity: lux(h - 1.0, 1.8), distance: 12, priority: 0.46 });
+  kit.light({ type: "point", pos: [-7.5, h - 1.0, -7.0], color: 0xffd9b0, intensity: lux(h - 1.0, 2.2), distance: 12, priority: 0.42 });
+  kit.light({ type: "point", pos: [1.5, h - 1.0, -7.0], color: 0xffd9b0, intensity: lux(h - 1.0, 2.2), distance: 12, priority: 0.41 });
+  kit.light({ type: "point", pos: [0, h - 1.0, 5.5], color: 0xe6ecff, intensity: lux(h - 1.0, 1.6), distance: 11, priority: 0.44 });
+  kit.light({ type: "point", pos: [-10.5, h - 1.0, 0], color: 0xffe2c0, intensity: lux(h - 1.0, 1.6), distance: 11, priority: 0.4 });
   kit.light({ type: "point", pos: [gameX, 1.5, gameZ], color: 0x5fa8ff, intensity: 2.2, distance: 5, priority: 0.3 });
-  kit.light({ type: "point", pos: [bar.frontX - 0.4, 0.4, 0], color: new THREE.Color(room.accent).getHex(), intensity: 3.0, distance: 8, priority: 0.28 });
 }
 
 /**

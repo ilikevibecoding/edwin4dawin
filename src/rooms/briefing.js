@@ -133,10 +133,10 @@ export function buildBriefing(kit, ctx, room) {
   for (const s of [-1, 1]) floorStrip(kit, accentKey, -hx + 0.6, s * (aisle - 0.06), tiers[0].x0 - 0.75, s * (aisle - 0.02));
 
   // --- lights
-  kit.light({ type: "point", pos: [-9.6, h - 0.5, -4.6], color: 0xdfe8ff, intensity: lux(h - 0.6, 1.6), distance: 12, priority: 0.55 });
-  kit.light({ type: "point", pos: [-8.5, h - 0.5, 4.0], color: 0xdfe8ff, intensity: lux(h - 0.6, 1.6), distance: 12, priority: 0.5 });
-  for (const s of [-1, 1]) kit.light({ type: "point", pos: [3.0, h - 0.5, s * 5.5], color: 0xdfe8ff, intensity: lux(h - 0.6, 2.2), distance: 13, priority: 0.45 });
-  kit.light({ type: "point", pos: [11.0, h - 0.5, 0], color: 0xdfe8ff, intensity: lux(h - 1.0, 2.0), distance: 11, priority: 0.4 });
+  kit.light({ type: "point", pos: [-9.6, h - 1.0, -4.6], color: 0xdfe8ff, intensity: lux(h - 1.0, 1.6), distance: 12, priority: 0.55 });
+  kit.light({ type: "point", pos: [-8.5, h - 1.0, 4.0], color: 0xdfe8ff, intensity: lux(h - 1.0, 1.6), distance: 12, priority: 0.5 });
+  for (const s of [-1, 1]) kit.light({ type: "point", pos: [3.0, h - 1.0, s * 5.5], color: 0xdfe8ff, intensity: lux(h - 1.0, 2.2), distance: 13, priority: 0.45 });
+  for (const s of [-1, 1]) kit.light({ type: "point", pos: [11.0, h - 1.0, s * 4.5], color: 0xdfe8ff, intensity: lux(h - 1.0, 1.6), distance: 10, priority: 0.4 - (s + 1) * 0.005 });
   kit.light({ type: "point", pos: [2.0, 1.2, 0], color: new THREE.Color(room.accent).getHex(), intensity: 3.0, distance: 9, priority: 0.3 });
   kit.light({ type: "spot", pos: [-5.2, h - 0.6, -5.0], target: [holoPos[0], dy, holoPos[2]], color: 0x9fd0ff, intensity: lux(4.2, 1.1), distance: 10, angle: 0.42, penumbra: 0.6, priority: 0.48 });
 }

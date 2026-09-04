@@ -137,7 +137,7 @@ export function buildObservation(kit, ctx, room) {
 
   // --- lights: dim whites (low priority) so the viewports dominate, blue floor fills, emblem spot
   const whites = [-38, -19, 0, 19, 38];
-  whites.forEach((x, i) => kit.light({ type: "point", pos: [x, h - 0.9, -1.0], color: 0xd8e4ff, intensity: lux(4.2), distance: 22, priority: 0.4 - Math.abs(i - 2) * 0.01 }));
+  whites.forEach((x, i) => kit.light({ type: "point", pos: [x, h - 1.3, -1.0], color: 0xd8e4ff, intensity: lux(3.8), distance: 22, priority: 0.4 - Math.abs(i - 2) * 0.01 }));
   for (const s of [-1, 1]) kit.light({ type: "point", pos: [s * 28, 0.6, -hz + 2.4], color: new THREE.Color(room.accent).getHex(), intensity: 8, distance: 18, priority: 0.32 });
   kit.light({ type: "spot", pos: [0, h - 0.35, -hz + 3.2], target: [0, 2.7, -hz], color: 0xe8f0ff, intensity: lux(4.2), distance: 12, angle: 0.5, penumbra: 0.5, priority: 0.42 });
 }

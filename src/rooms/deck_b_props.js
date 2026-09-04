@@ -8,8 +8,6 @@ import { Frame, UP } from "./imperial_kit.js";
 import { rng, worldUVs, setVertexColor } from "../kit.js";
 import { impDecalRect } from "../textures_imperial.js";
 
-const X_AXIS = new THREE.Vector3(1, 0, 0);
-
 /** Local frame for a free-standing prop: U = local x, V = up, N = local +z; props face -N. */
 export function propFrame(kit, x, y, z, yaw = 0) {
   return new Frame(kit, new THREE.Vector3(x, y, z), new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)), UP);
@@ -333,18 +331,3 @@ export function holoFigureStatic(kit, x, y, z, h = 0.22, bright = false) {
   kit.cyl(key, x, y + h * 0.35, z, h * 0.28, h * 0.7, "y", { r2: h * 0.12, segments: 10, uv: "keep" });
   kit.add(key, new THREE.SphereGeometry(h * 0.16, 10, 8), { pos: [x, y + h * 0.86, z], uv: "keep" });
 }
-
-/** Rotating holo emitter puck with a floating hologram group above it; returns the animated group. */
-export function holoPuck(kit, materials, x, y, z, content, opts = {}) {
-  const { accentKey = "emitBlue", r = 0.22, lift = 0.25 } = opts;
-  kit.cyl("impTrim", x, y + 0.03, z, r, 0.06, "y", { color: PALETTE.impBlack, segments: 20 });
-  kit.cyl("impGloss", x, y + 0.07, z, r - 0.04, 0.02, "y", { segments: 20 });
-  kit.cyl(accentKey, x, y + 0.055, z, r + 0.004, 0.02, "y", { segments: 20 });
-  // faint beam
-  kit.add("holo", new THREE.CylinderGeometry(r * 0.9, r * 0.5, lift, 16, 1, true), { pos: [x, y + 0.08 + lift / 2, z], uv: "keep" });
-  content.position.set(x, y + 0.08 + lift, z);
-  kit.attach(content);
-  return content;
-}
-
-export { X_AXIS };

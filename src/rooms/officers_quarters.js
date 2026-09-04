@@ -79,7 +79,7 @@ export function buildOfficersQuarters(kit, ctx, room) {
     if (a.x0 === -hx) impWallGear(walls.W.frame, hz - t(2.6), 1.5, { seed: 12 + a.idx, accentKey });
     else cableRun(parts[`${a.side}:${a.x0}`].east.frame, 0.4, 5.6, 2.9, { n: 2, seed: 20 + a.idx, r: 0.03 });
     // soft warm key per cabin
-    kit.light({ type: "point", pos: [cx, h - 0.5, t(3.0)], color: 0xffd2a8, intensity: lux(h - 0.5, 2.0), distance: 9, priority: 0.36 - a.idx * 0.005 });
+    kit.light({ type: "point", pos: [cx, h - 0.9, t(3.0)], color: 0xffd2a8, intensity: lux(h - 0.9, 2.0), distance: 9, priority: 0.36 - a.idx * 0.005 });
   }
   // rotating comm hologram in one cabin's holo frame
   if (holo) {
@@ -137,8 +137,8 @@ export function buildOfficersQuarters(kit, ctx, room) {
   E.decal(IMP_DECAL.glyphs2, hz + 3.2, 2.2, 0.034, 0.5);
 
   // --- lights: lounge key, vestibule key, amber low accent under the media wall screen
-  kit.light({ type: "point", pos: [5.2, h - 0.5, 0], color: 0xfff1de, intensity: lux(h - 0.5, 1.9), distance: 11, priority: 0.5 });
-  kit.light({ type: "point", pos: [11.5, h - 0.5, 0], color: 0xf4ecff, intensity: lux(h - 0.5, 1.7), distance: 10, priority: 0.45 });
+  kit.light({ type: "point", pos: [5.2, h - 0.9, 2.6], color: 0xfff1de, intensity: lux(h - 0.9, 1.9), distance: 11, priority: 0.5 });
+  kit.light({ type: "point", pos: [11.5, h - 0.9, 0], color: 0xf4ecff, intensity: lux(h - 0.9, 1.7), distance: 10, priority: 0.45 });
   kit.light({ type: "point", pos: [2.2, 0.6, 0], color: new THREE.Color(room.accent).getHex(), intensity: 3.5, distance: 7, priority: 0.3 });
 }
 
