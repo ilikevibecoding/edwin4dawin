@@ -40,7 +40,7 @@ export class FlightModel {
   telemetry: FlightTelemetry = { airspeed: 0, groundSpeed: 0, altitude: 0, agl: 0, verticalSpeed: 0, heading: 0, alpha: 0, beta: 0, stalled: false, onWater: false, onGround: false, rpm: 0, gForce: 1, gearDown: true, shake: 0, bank: 0, pitchAngle: 0 };
   // parameters
   mass = 2350;
-  wingArea = 23.2;
+  wingArea = 26.0;
   span = 14.6;
   chord = 1.65;
   maxThrust = 7400;
@@ -54,8 +54,10 @@ export class FlightModel {
   private readonly tmpV = new THREE.Vector3();
   private readonly tmpV2 = new THREE.Vector3();
   private readonly invQ = new THREE.Quaternion();
+  /** float bows, float steps, float sterns (water) and the amphibious wheels (land, lowest points) */
   private readonly contactPoints = [
     new THREE.Vector3(2.6, -2.2, -1.25), new THREE.Vector3(2.6, -2.2, 1.25),
+    new THREE.Vector3(-0.35, -2.24, -1.25), new THREE.Vector3(-0.35, -2.24, 1.25),
     new THREE.Vector3(-2.3, -2.15, -1.25), new THREE.Vector3(-2.3, -2.15, 1.25),
     new THREE.Vector3(-0.9, -2.35, -1.25), new THREE.Vector3(-0.9, -2.35, 1.25),
   ];
@@ -110,7 +112,7 @@ export class FlightModel {
     const flaps = clamp(inp.flaps, 0, 1);
     const alphaStall = 0.27 - flaps * 0.03;
     let cl = 0.32 + flaps * 0.55 + 5.4 * alpha;
-    const clMax = 1.55 + flaps * 0.45;
+    const clMax = 1.7 + flaps * 0.5;
     let stalled = false;
     if (alpha > alphaStall) {
       const over = alpha - alphaStall;
@@ -136,7 +138,7 @@ export class FlightModel {
     fBody.addScaledVector(liftDir, lift);
     fBody.z += side;
     // thrust falls off with airspeed (fixed-pitch prop) and altitude
-    const thrust = this.maxThrust * clamp((this.rpm - 0.08) / 0.92, 0, 1) * clamp(1 - V / 95, 0.25, 1) * (rho / 1.2);
+    const thrust = this.maxThrust * clamp((this.rpm - 0.08) / 0.92, 0, 1) * clamp(1 - V / 120, 0.2, 1) * (rho / 1.2);
     fBody.x += thrust;
 
     // moments (body frame): x roll, y yaw, z pitch
@@ -144,7 +146,7 @@ export class FlightModel {
     const b = this.span, c = this.chord;
     const twoV = 2 * Math.max(V, 3);
     const elev = clamp(inp.pitch, -1, 1), ail = clamp(inp.roll, -1, 1), rud = clamp(inp.yaw, -1, 1);
-    const cm = 0.02 - 1.15 * alpha - 16.0 * (qq * c / twoV) + 0.95 * elev * (1 - 0.35 * flaps) - 0.08 * flaps;
+    const cm = 0.04 - 1.3 * alpha - 18.0 * (qq * c / twoV) + 0.8 * elev * (1 - 0.3 * flaps) - 0.08 * flaps;
     // sign conventions: +roll = right wing down, +yaw rate = nose left, +pitch = nose up
     const clRoll = -0.45 * (p * b / twoV) + 0.14 * ail - 0.08 * beta - 0.08 * (r * b / twoV);
     const cn = -0.10 * beta - 0.16 * (r * b / twoV) - 0.075 * rud + 0.012 * ail - 0.02 * (p * b / twoV);
@@ -180,14 +182,19 @@ export class FlightModel {
       let fy: number, fh: number;
       if (isWater) {
         onWater = true;
-        const buoyK = cp.x < 0 ? 26000 : 19000; // sterns carry more so the floats trim slightly bow-up
-        fy = buoyK * Math.min(depth, 0.9) - 2600 * vPoint.y;
-        // hydrodynamic drag with planing relief; the step reduces wetted area at speed
         const vh = Math.hypot(vPoint.x, vPoint.z);
-        const planing = smoothstep(9, 24, vh);
-        fh = -(55 * vh * vh * (1 - planing * 0.82) + 900 * vh) * Math.min(depth / 0.3, 1) / 6;
-        // planing lift keeps the floats on the surface
-        fy += 1800 * planing * Math.min(depth / 0.3, 1);
+        const planing = smoothstep(6, 20, vh);
+        // hydrostatic stiffness: sterns carry more at rest; once planing only the step area is wetted, so the
+        // bow buoyancy fades and the elevator can rotate the aircraft onto the step
+        const isBow = cp.x > 1, isStern = cp.x < -1;
+        // at rest all three stations float the aircraft; when planing the afterbody runs dry and the
+        // aircraft rides on the step with the forebody generating dynamic lift
+        const buoyK = (isStern ? 16000 : isBow ? 12000 : 18000) * (isStern ? 1 - 0.9 * planing : isBow ? 1 - 0.7 * planing : 1 - 0.3 * planing);
+        // buoyancy stiffens sharply once a float is pushed deep (the flared bow resists nosing over)
+        fy = buoyK * Math.min(depth, 0.9) + 40000 * Math.max(depth - 0.35, 0) ** 2 - 1800 * vPoint.y * (1 - 0.5 * planing);
+        fh = -(22 * vh * vh * (1 - planing * 0.9) + 90 * vh) * Math.min(depth / 0.3, 1) / 6;
+        // planing lift acts on the forebody (bow and step stations), trimming the aircraft nose-up on the step
+        if (!isStern) fy += 2600 * planing * Math.min(depth / 0.3, 1);
       } else {
         onGround = true;
         const k = 52000;
