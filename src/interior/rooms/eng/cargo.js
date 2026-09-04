@@ -92,7 +92,8 @@ export function buildCargo(kit, ctx) {
 
   // ------------------------------------------------------------ container blocks (instanced)
   const palette = [IMP.wallMid, IMP.gunmetal, IMP.wallMid, IMP.steel, 0x7a3a2c, 0x8a8440, IMP.wallDark, IMP.fabricOlive];
-  const pf = containerPrefab(ctx.mats, [2.4, 2.4, 2.4], { label: 3, label2: 9 });
+  // (no per-container status lamp: at 146 instances it was an instanced batch of its own)
+  const pf = containerPrefab(ctx.mats, [2.4, 2.4, 2.4], { label: 3, label2: 9, light: false });
   const xf = [];
   const C = 2.4;
   const G = 0.18;
@@ -240,7 +241,7 @@ export function buildCargo(kit, ctx) {
   const CRY = y + h - 1.6;
   craneRails(kit, z0 + 3, z1 - 3, -CRX, CRX, CRY, "z", { brackets: false, h: 0.8, w: 0.4 });
   for (const sx of [-1, 1]) for (const cz of [672, 686, 698, 714, 726, 736]) column(kit, sx * CRX, cz, y, CRY - 0.4, { w: 0.7, d: 0.7, lit: true });
-  craneBridge(kit, CRX * 2, CRY + 0.7, 690, { cx: 0, tx: -12, drop: 4.2, girder: 1.0 });
+  craneBridge(kit, CRX * 2, CRY + 0.7, 690, { cx: 0, tx: -12, drop: 4.2, girder: 1.0, mat: "impMatte" });
   {
     // slung container under the hook: spreader beam and four chains, the box itself joins the instances
     const cx = -12;
