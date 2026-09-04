@@ -43,7 +43,7 @@ export function makeBridgeScreens() {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
   tex.anisotropy = 4;
-  const material = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.4, roughness: 0.18, metalness: 0, envMapIntensity: 0.8 });
+  const material = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.4, roughness: 0.42, metalness: 0, envMapIntensity: 0.4 }); // anti-glare: 0.18 mirrored the pool spots as white blobs on the sill screens
 
   function cell(i, fn, t) {
     g.save();

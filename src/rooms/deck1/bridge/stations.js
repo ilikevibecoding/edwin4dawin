@@ -6,39 +6,47 @@
 import * as THREE from "three";
 import { FLOOR, PIT_FLOOR } from "../shared/plan.js";
 import { IMP } from "../shared/palette.js";
-import { Frame, shade, onTilt, IND, SCUFF, bridgeConsole, bridgeSeat, commandChair, readoutBar, wallDisplay, cabinet, junctionBox, conduitRun, dataPillar } from "./props.js";
+import { Frame, shade, onTilt, IND, SCUFF, POLISH, bridgeConsole, bridgeSeat, commandChair, readoutBar, wallDisplay, cabinet, junctionBox, conduitRun, dataPillar, bridgeRail, controlPillar } from "./props.js";
 import { CELL, CELLS } from "./screens.js";
 import { pickScreen } from "./pits.js";
 import { buildHolo } from "./holo.js";
 
 const S = (i) => "screenImp" + (((i % 4) + 4) % 4);
 const live = (cell) => ({ mat: "bridgeScreen", rect: cell });
+const SEAT_YAW = [-0.35, 0.2, 0.35, -0.2, 0.0, 0.3]; // operators turn up to ±20° off the console axis
+
+export const DAIS_H = 0.45; // commander's dais top over the aft deck
 
 // Returns the holo controller ({ update(t) }) so index.js can animate it.
 export function buildStations(kit, ctx, manifest, L) {
   const xi = L.xIn;
   let seed = 3;
-  // one console + its operator seat(s); doubles (w ≥ 2.6) get two screens, two seats and a centre divider
+  // one console + its operator seat(s). o.variant: 0 single | 1 dual with hood + task light | 2 standing (no seat)
+  // o.service: open service panel, o.dim: sill unit, o.pushBack: index of a seat rolled 0.4 m back from the desk
   const unit = (x, z, yaw, w, o = {}) => {
     seed++;
     const y = o.y ?? FLOOR;
     const dbl = w >= 2.6;
-    const screens = o.screens || (dbl ? [S(seed), seed % 3 === 0 ? live(CELLS[seed % 4]) : S(seed + 1)] : [seed % 4 === 0 ? live(CELLS[(seed >> 2) % 4]) : S(seed)]);
-    bridgeConsole(kit, { x, y, z, yaw, w, seed, screens, ends: !!o.ends, back: !!o.back, divider: dbl });
-    if (o.seats === false) return;
+    const variant = o.variant ?? 0;
+    const screens = o.screens || (dbl || variant ? [S(seed), seed % 3 === 0 ? live(CELLS[seed % 4]) : S(seed + 1)] : [seed % 4 === 0 ? live(CELLS[(seed >> 2) % 4]) : S(seed)]);
+    // standing units sit on a 0.15 m plinth so the desk comes to 1.05
+    if (variant === 2) new Frame(kit, x, y, z, yaw).box("paintedMetal", 0, 0.075, 0, w - 0.02, 0.15, 0.81, { color: SCUFF, texel: 1 });
+    bridgeConsole(kit, { x, y: variant === 2 ? y + 0.15 : y, z, yaw, w, seed, screens, ends: !!o.ends, back: !!o.back, divider: dbl, variant, service: !!o.service, dim: !!o.dim });
+    if (o.seats === false || variant === 2) return;
     const f = new Frame(kit, x, y, z, yaw);
     const n = dbl ? 2 : 1;
     for (let i = 0; i < n; i++) {
-      const p = f.pos((i - (n - 1) / 2) * 1.5, 0, 0.92);
-      bridgeSeat(kit, p[0], p[1], p[2], yaw);
+      const back = o.pushBack === i ? 1.32 : 0.92;
+      const p = f.pos((i - (n - 1) / 2) * 1.5, 0, back);
+      bridgeSeat(kit, p[0], p[1], p[2], yaw + SEAT_YAW[(seed + i) % SEAT_YAW.length]);
     }
   };
 
   // ---------------------------------------------------------------- fore platform (z 458.3..464)
   // sill bank: three doubles per side directly under the glass with instrument bars showing between them,
-  // operators facing the window
+  // operators facing the window (dim: bezelled buttons, every other one unlit)
   for (const s of [-1, 1]) {
-    for (const ax of [5.4, 10.4, 15.4]) unit(s * ax, 459.35, 0, 3.2, { ends: ax === 5.4 });
+    [5.4, 10.4, 15.4].forEach((ax, k) => unit(s * ax, 459.35, 0, 3.2, { ends: ax === 5.4, dim: true, variant: k === 1 ? 0 : 1, pushBack: k === 2 && s > 0 ? 1 : -1 }));
     // side-wall dressing: cabinets, a display and a junction box on the fore platform's side walls
     const yawRoom = s < 0 ? Math.PI / 2 : -Math.PI / 2;
     cabinet(kit, { x: s * xi, y: FLOOR, z: 459.6, yaw: yawRoom, w: 0.9, h: 1.1, d: 0.5, seed: 61 + s });
@@ -48,7 +56,7 @@ export function buildStations(kit, ctx, manifest, L) {
   }
   // nav table at the sill centre, helm pair behind it angled inward so both helmsmen look past the table to the glass
   navTable(kit, 0, FLOOR, 459.7);
-  for (const s of [-1, 1]) unit(s * 2.15, 461.75, s * 0.3, 2.2, { ends: true, back: true, screens: [live(s < 0 ? CELL.ship : CELL.tactical)] });
+  for (const s of [-1, 1]) unit(s * 2.15, 461.75, s * 0.3, 2.2, { ends: true, back: true, variant: 1, screens: [live(s < 0 ? CELL.ship : CELL.tactical), S(s + 1)] });
 
   // ---------------------------------------------------------------- crew pits (z 464..500, floor 237.6)
   for (const s of [-1, 1]) {
@@ -56,36 +64,43 @@ export function buildStations(kit, ctx, manifest, L) {
     const yawIn = -yawOut; // console faces the walkway face
     const xo = s * 17.3;
     const xin = s * 8.0;
+    // [z, width, variant]: hooded doubles under the readout bars, a standing unit, a single with its service panel open
     const outer = [
-      [468.6, 3.2],
-      [474.0, 2.2],
-      [479.4, 3.2],
-      [484.8, 2.2],
-      [490.2, 3.2],
+      [468.6, 3.2, 1],
+      [474.0, 2.2, 2],
+      [479.4, 3.2, 1],
+      [484.8, 2.2, 0],
+      [490.2, 3.2, 1],
     ];
-    outer.forEach(([z, w], k) => {
+    outer.forEach(([z, w, variant], k) => {
       // back: true — the housing backs of this row face the walkway and the pit aisle
-      unit(xo, z, yawOut, w, { y: PIT_FLOOR, ends: k === 0, back: true });
+      unit(xo, z, yawOut, w, { y: PIT_FLOOR, ends: k === 0 || k === 3, back: true, variant, service: k === 3 && s < 0, pushBack: k === 3 ? 0 : -1 });
       if (w >= 2.6) readoutBar(kit, xo, PIT_FLOOR, z, yawOut, w, { h: 2.15, ...(k === 2 ? { screen: "bridgeScreen", rect: CELL.wave } : { screen: S(k + (s < 0 ? 0 : 1)) }) });
     });
-    for (let k = 0; k < 3; k++) unit(xin, 470.0 + k * 8.4, yawIn, 2.2, { y: PIT_FLOOR, back: true, ends: k === 0 });
+    [0, 2, 0].forEach((variant, k) => unit(xin, 470.0 + k * 8.4, yawIn, 2.2, { y: PIT_FLOOR, back: true, ends: k !== 1, variant, service: k === 2 && s > 0, pushBack: k === 2 ? 0 : -1 }));
   }
 
   // ---------------------------------------------------------------- aft command deck (z 500..511.7)
   const dz = L.daisZ;
   buildDais(kit, dz);
-  commandChair(kit, 0, FLOOR + 0.22, dz + 0.5, 0, { screen: "screenImp2" });
-  for (const s of [-1, 1]) aidePedestal(kit, s * 1.75, FLOOR + 0.22, dz - 0.5, -s * 0.5, S(s + 2));
-  const holo = holoPlinth(kit, ctx, 0, FLOOR, 501.6);
-  // officers' stations overlooking the pits from the aft deck (one double per side, facing forward) + data pillars
+  commandChair(kit, 0, FLOOR + DAIS_H, dz + 0.55, 0, { screen: "screenImp2" });
+  for (const s of [-1, 1]) lectern(kit, s * 1.75, FLOOR + DAIS_H, dz - 0.55, -s * 0.5, S(s + 2));
+  const holo = holoPlinth(kit, ctx, 0, FLOOR, 501.2);
+  // officers' stations overlooking the pits from the aft deck (one hooded double per side, facing forward) + data pillars
   for (const s of [-1, 1]) {
-    unit(s * 10.5, 503.4, 0, 3.2, { ends: true, back: true, screens: [S(s + 5), live(s < 0 ? CELL.text : CELL.wave)] });
+    unit(s * 10.5, 503.4, 0, 3.2, { ends: true, back: true, variant: 1, screens: [S(s + 5), live(s < 0 ? CELL.text : CELL.wave)] });
     dataPillar(kit, s * 16.0, FLOOR, 503.0, { seed: 21 + (s < 0 ? 0 : 3), screen: "screenImp0" });
+  }
+  // control pillars at the walkway rail heads (fore and aft ends, just inside the rails)
+  for (const s of [-1, 1]) {
+    // local +z (screen side) toward the walkway centre
+    controlPillar(kit, s * 2.85, FLOOR, 464.7, s < 0 ? Math.PI / 2 : -Math.PI / 2, { seed: 5 + (s < 0 ? 0 : 1), screen: "screenImp1" });
+    controlPillar(kit, s * 2.85, FLOOR, 499.3, s < 0 ? Math.PI / 2 : -Math.PI / 2, { seed: 7 + (s < 0 ? 0 : 1), screen: "screenImp3" });
   }
 
   // aft station bank either side of the blast door, wall displays + cabinets further out, side-wall dressing
   for (const s of [-1, 1]) {
-    for (const ax of [4.35, 7.85]) unit(s * ax, 511.15, Math.PI, 3.2, { ends: ax > 5 });
+    for (const ax of [4.35, 7.85]) unit(s * ax, 511.15, Math.PI, 3.2, { ends: ax > 5, variant: ax < 5 ? 1 : 0, service: ax > 5 && s > 0, pushBack: ax > 5 && s < 0 ? 1 : -1 });
     wallDisplay(kit, { x: s * 12.6, y: FLOOR + 2.15, z: 511.69, yaw: Math.PI, w: 3.0, h: 1.2, ...pickScreen(6 + (s < 0 ? 0 : 3)), label: 12 });
     wallDisplay(kit, { x: s * 16.5, y: FLOOR + 2.15, z: 511.69, yaw: Math.PI, w: 2.4, h: 1.2, ...pickScreen(8 + (s < 0 ? 0 : 3)) });
     for (const [ax, w, h] of [
@@ -138,46 +153,78 @@ function navTable(kit, x, y, z) {
   f.collider(0, 0, 1.3, 0, W + 0.04, D + 0.04, "nav-table");
 }
 
-// Standing aide pedestal on the dais: black column, sloped top with a screen and indicators, red side lamp.
-function aidePedestal(kit, x, y, z, yaw, screen) {
+// Aide's lectern on the dais: black column with a front plate and lamp row, sloped top (0.9 m at the operator
+// edge, 1.1 m at the far edge) carrying a 0.5 m display, a bezelled 3×4 button cluster and a polished grab rail.
+// No floor light. Faces local -z; the aide stands at +z.
+function lectern(kit, x, y, z, yaw, screen) {
   const f = new Frame(kit, x, y, z, yaw);
-  f.box("paintedMetal", 0, 0.03, 0, 0.6, 0.06, 0.6, { color: SCUFF, texel: 1 });
-  f.box("paintedMetal", 0, 0.56, 0, 0.44, 1.0, 0.44, { color: IMP.black, texel: 1 });
-  for (let k = 0; k < 5; k++) f.box(k === 2 ? "emitRedImp" : "emitBlue", -0.16, 0.5 + k * 0.08, 0.222, 0.03, 0.02, 0.006);
-  const a = 0.5;
-  const c = [0, 1.1, 0.02];
-  f.box("paintedMetal", c[0], c[1], c[2], 0.52, 0.06, 0.5, { color: IMP.dark, texel: 1, tilt: a });
-  let p = onTilt(c, a, 0, 0.06, 0.034);
-  f.box(screen, p[0], p[1], p[2], 0.4, 0.006, 0.24, { tilt: a, uv: "keep" });
-  for (let i = 0; i < 6; i++) {
-    p = onTilt(c, a, -0.175 + i * 0.07, -0.17, 0.034);
-    f.box(IND[(i * 7 + 3) % IND.length], p[0], p[1], p[2], 0.05, 0.008, 0.04, { tilt: a });
+  f.box("paintedMetal", 0, 0.025, 0.02, 0.56, 0.05, 0.5, { color: SCUFF, texel: 1 });
+  f.box("paintedMetal", 0, 0.47, 0, 0.36, 0.84, 0.34, { color: IMP.black, texel: 1 });
+  f.box("paintedMetal", 0, 0.5, 0.176, 0.24, 0.6, 0.012, { color: shade(IMP.dark, 0.9), texel: 1 });
+  for (let k = 0; k < 4; k++) f.box(k === 1 ? "emitRedImp" : "emitBlue", -0.08 + k * 0.055, 0.3, 0.184, 0.03, 0.02, 0.006);
+  const a = 0.35;
+  const c = [0, 1.0, 0.0];
+  f.box("paintedMetal", c[0], c[1], c[2], 0.6, 0.05, 0.56, { color: IMP.dark, texel: 1, tilt: a });
+  let p = onTilt(c, a, 0, -0.13, 0.03);
+  f.box("darkGloss", p[0], p[1], p[2], 0.54, 0.008, 0.26, { tilt: a });
+  p = onTilt(c, a, 0, -0.13, 0.036);
+  f.box(screen, p[0], p[1], p[2], 0.5, 0.006, 0.22, { tilt: a, uv: "keep" });
+  p = onTilt(c, a, 0, 0.14, 0.03);
+  f.box("darkGloss", p[0], p[1], p[2], 0.32, 0.008, 0.2, { tilt: a });
+  for (let r = 0; r < 3; r++) {
+    for (let k = 0; k < 4; k++) {
+      p = onTilt(c, a, -0.105 + k * 0.07, 0.08 + r * 0.06, 0.037);
+      f.box(IND[(r * 4 + k + 2) % IND.length], p[0], p[1], p[2], 0.05, 0.005, 0.04, { tilt: a });
+    }
   }
-  f.box("emitRedImp", 0.222, 1.0, 0, 0.006, 0.03, 0.06);
-  f.collider(0, 0, 1.25, 0, 0.62, 0.62, "pedestal");
+  p = onTilt(c, a, 0, -0.27, 0.05);
+  f.box("metal", p[0], p[1], p[2], 0.56, 0.025, 0.025, { color: POLISH, texel: 2, tilt: a });
+  f.box("emitRedImp", 0.182, 0.8, 0, 0.006, 0.03, 0.06);
+  f.add("paintedMetal", new THREE.CylinderGeometry(0.02, 0.02, 0.3, 6), 0.1, 0.15, -0.2, { color: IMP.black, texel: 2 });
+  f.collider(0, 0, 1.15, 0, 0.66, 0.62, "lectern");
 }
 
-// Commander's dais: 0.22 m black-gloss step on an inset scuffed base with a lit reveal, metal nosing, floor apron.
+// Commander's dais: 0.45 m black-gloss platform on an inset scuffed base, painted nosings, a three-step flight
+// (lit nosings) down toward the walkway with cheek walls, and rail returns along the front corners and sides.
 function buildDais(kit, dz) {
   const y = FLOOR;
   const hx = 2.6;
-  const hz = 2.2;
-  kit.boxMM("blackGloss", [-hx, y + 0.1, dz - hz], [hx, y + 0.22, dz + hz], { color: IMP.black, texel: 0.5 });
-  kit.boxMM("paintedMetal", [-hx + 0.06, y, dz - hz + 0.06], [hx - 0.06, y + 0.1, dz + hz - 0.06], { color: SCUFF, texel: 1 });
-  kit.boxMM("emitWhite", [-hx + 0.3, y + 0.04, dz - hz + 0.055], [hx - 0.3, y + 0.075, dz - hz + 0.065]);
+  const hz = 2.0;
+  const H = DAIS_H;
+  const nose = shade(IMP.mid, 1.2);
+  kit.boxMM("bridgeFloor", [-hx, y + 0.06, dz - hz], [hx, y + H, dz + hz], { color: IMP.black, texel: 0.5 });
+  kit.boxMM("paintedMetal", [-hx + 0.06, y, dz - hz + 0.06], [hx - 0.06, y + 0.06, dz + hz - 0.06], { color: SCUFF, texel: 1 });
+  // nosings along the top edges (front, sides, back) + a blue lit reveal just under the front nosing
+  kit.boxMM("paintedMetal", [-hx - 0.02, y + H - 0.03, dz - hz - 0.02], [hx + 0.02, y + H + 0.012, dz - hz + 0.1], { color: nose, texel: 2 });
+  kit.boxMM("paintedMetal", [-hx - 0.02, y + H - 0.03, dz + hz - 0.1], [hx + 0.02, y + H + 0.012, dz + hz + 0.02], { color: nose, texel: 2 });
   for (const s of [-1, 1]) {
-    const x0 = Math.min(s * (hx - 0.065), s * (hx - 0.055));
-    const x1 = Math.max(s * (hx - 0.065), s * (hx - 0.055));
-    kit.boxMM("emitWhite", [x0, y + 0.04, dz - hz + 0.3], [x1, y + 0.075, dz + hz - 0.3]);
-    const n0 = Math.min(s * (hx + 0.02), s * (hx - 0.08));
-    const n1 = Math.max(s * (hx + 0.02), s * (hx - 0.08));
-    kit.boxMM("paintedMetal", [n0, y + 0.2, dz - hz], [n1, y + 0.235, dz + hz + 0.02], { color: shade(IMP.mid, 1.2), texel: 2 });
+    const n0 = Math.min(s * (hx + 0.02), s * (hx - 0.1));
+    const n1 = Math.max(s * (hx + 0.02), s * (hx - 0.1));
+    kit.boxMM("paintedMetal", [n0, y + H - 0.03, dz - hz], [n1, y + H + 0.012, dz + hz], { color: nose, texel: 2 });
   }
-  kit.boxMM("paintedMetal", [-hx - 0.02, y + 0.2, dz - hz - 0.02], [hx + 0.02, y + 0.235, dz - hz + 0.08], { color: shade(IMP.mid, 1.2), texel: 2 });
-  kit.boxMM("paintedMetal", [-1.2, y + 0.22, dz - hz + 0.12], [1.2, y + 0.226, dz - hz + 0.7], { color: IMP.mid, texel: 2 });
-  kit.boxMM("paintedMetal", [-3.6, y, dz - 3.2], [3.6, y + 0.004, dz + 3.2], { color: IMP.dark, texel: 0.5 });
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box("emitRedImp", sx * 3.3, y + 0.007, dz + sz * 2.9, 0.12, 0.005, 0.12);
-  kit.collider([-hx, y, dz - hz], [hx, y + 0.22, dz + hz], "dais");
+  kit.boxMM("emitBlue", [-1.4, y + H - 0.06, dz - hz - 0.012], [1.4, y + H - 0.045, dz - hz - 0.002]);
+  // three steps down to the walkway side (rise 0.1125, tread 0.3), each with a painted nosing + lit strip
+  const sw = 1.2;
+  for (let i = 0; i < 3; i++) {
+    const top = y + H - (H / 4) * (i + 1);
+    const z1 = dz - hz - 0.3 * i;
+    const z0 = z1 - 0.3;
+    kit.boxMM("paintedMetal", [-sw, y, z0], [sw, top, z1], { color: shade(IMP.black, 1.2), texel: 1 });
+    kit.boxMM("paintedMetal", [-sw + 0.02, top, z0], [sw - 0.02, top + 0.008, z0 + 0.05], { color: nose, texel: 2 });
+    kit.boxMM("emitBlue", [-sw + 0.15, top - 0.04, z0 - 0.006], [sw - 0.15, top - 0.015, z0 + 0.002]);
+  }
+  // cheek walls flanking the flight, capped with short polished rails that meet the dais rail returns
+  for (const s of [-1, 1]) {
+    const c0 = Math.min(s * (sw + 0.02), s * (sw + 0.1));
+    const c1 = Math.max(s * (sw + 0.02), s * (sw + 0.1));
+    kit.boxMM("paintedMetal", [c0, y, dz - hz - 0.92], [c1, y + H, dz - hz + 0.02], { color: IMP.dark, texel: 1 });
+    kit.boxMM("paintedMetal", [c0 - 0.01, y + H, dz - hz - 0.92], [c1 + 0.01, y + H + 0.03, dz - hz + 0.02], { color: nose, texel: 2 });
+    // rail returns: along the front edge from the flight to the corner, then 1.4 m back along each side
+    bridgeRail(kit, [s * (sw + 0.06), dz - hz + 0.06], [s * (hx - 0.06), dz - hz + 0.06], y + H, { postEvery: 1.4, markers: false, tag: "dais-rail" });
+    bridgeRail(kit, [s * (hx - 0.06), dz - hz + 0.06], [s * (hx - 0.06), dz - hz + 1.5], y + H, { postEvery: 1.5, markers: false, tag: "dais-rail" });
+  }
+  kit.collider([-hx, y, dz - hz], [hx, y + H, dz + hz], "dais");
+  kit.collider([-sw - 0.1, y, dz - hz - 0.92], [sw + 0.1, y + H, dz - hz], "dais-steps");
 }
 
 // Holo plinth at the walkway head: tapered black drum, scuffed base ring, polished rim, blue emitter ring,
@@ -212,8 +259,8 @@ function holoPlinth(kit, ctx, x, y, z) {
   const p = onTilt(c, 0.55, 0, -0.06, 0.03);
   f.box("screenImp3", p[0], p[1], p[2], 0.5, 0.006, 0.14, { tilt: 0.55, uv: "keep" });
   f.box("metal", 0, 0.9, 0.3, 0.5, 0.025, 0.025, { color: 0xc9cdd3, texel: 2 });
-  // cable trunk from the drum to the deck duct
-  kit.box("paintedMetal", x, y + 0.02, z + 1.3, 0.3, 0.04, 0.5, { color: IMP.black, texel: 2 });
+  // cable trunk from the drum toward the dais steps
+  kit.box("paintedMetal", x, y + 0.02, z + 1.15, 0.3, 0.04, 0.3, { color: IMP.black, texel: 2 });
   kit.collider([x - 1.16, y, z - 1.16], [x + 1.16, y + 1.05, z + 1.24], "holo");
   return buildHolo(ctx, { x, y: y + 0.95, z, scale: 1 / 1000, hover: 0.5 });
 }

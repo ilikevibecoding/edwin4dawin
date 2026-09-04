@@ -25,36 +25,42 @@ export function buildWindowWall(kit, ctx, manifest) {
   kit.boxMM("paintedMetal", [A.x0, A.y1 - t, A.zOut], [A.x1, A.y1, zRoom], { color: IMP.mid, texel: 1 }); // head
   kit.boxMM("paintedMetal", [A.x0, A.y0, A.zOut], [A.x0 + t, A.y1, zRoom], { color: IMP.mid, texel: 1 });
   kit.boxMM("paintedMetal", [A.x1 - t, A.y0, A.zOut], [A.x1, A.y1, zRoom], { color: IMP.mid, texel: 1 });
-  // structural mullions: deep blades running the reveal depth, a chamfered hexagonal cap on the room side,
-  // a red status lamp in a small housing at the foot of each interior mullion
+  // structural mullions: deep blades running the reveal depth; on the room side a stepped profile — a wide base
+  // plate flush with the wall, a 0.05 m dark reveal line, then a chamfered front blade standing 0.3 m proud
+  // between the sill shelf and the head beam, with a lit hairline down its nose, bolt pairs and a red status
+  // lamp housing at the foot of each interior mullion
+  const yBlade0 = A.y0 + 0.05; // sill shelf top
+  const yBlade1 = A.y1 - 0.1; // head beam underside
   for (let i = 0; i <= MULLIONS; i++) {
     const x = A.x0 + i * paneW;
     const hw = i === 0 || i === MULLIONS ? 0.2 : 0.16;
     kit.boxMM("paintedMetal", [x - hw, A.y0, A.zOut + 0.05], [x + hw, A.y1, zRoom - 0.22], { color: IMP.dark, texel: 1 });
+    kit.boxMM("paintedMetal", [x - hw - 0.1, yBlade0, zRoom - 0.3], [x + hw + 0.1, yBlade1, zRoom + 0.02], { color: FRAME, texel: 1 });
+    kit.boxMM("paintedMetal", [x - hw - 0.02, yBlade0, zRoom + 0.02], [x + hw + 0.02, yBlade1, zRoom + 0.07], { color: IMP.black, texel: 1 });
     prismY(
       kit,
       "paintedMetal",
       [
-        [x - hw - 0.04, zRoom - 0.26],
-        [x + hw + 0.04, zRoom - 0.26],
-        [x + hw + 0.04, zRoom - 0.05],
-        [x + hw - 0.06, zRoom + 0.06],
-        [x - hw + 0.06, zRoom + 0.06],
-        [x - hw - 0.04, zRoom - 0.05],
+        [x - hw, zRoom + 0.07],
+        [x + hw, zRoom + 0.07],
+        [x + hw, zRoom + 0.24],
+        [x + hw - 0.08, zRoom + 0.32],
+        [x - hw + 0.08, zRoom + 0.32],
+        [x - hw, zRoom + 0.24],
       ],
-      A.y0 + t,
-      A.y1 - t,
+      yBlade0,
+      yBlade1,
       { color: FRAME, texel: 1 }
     );
-    // dark seam down the cap face + a lit hairline (thin frame lighting)
-    kit.boxMM("paintedMetal", [x - 0.012, A.y0 + 0.3, zRoom + 0.055], [x + 0.012, A.y1 - 0.3, zRoom + 0.07], { color: IMP.black, texel: 2 });
-    kit.boxMM("emitCoolSoft", [x - 0.004, A.y0 + 0.4, zRoom + 0.062], [x + 0.004, A.y1 - 0.4, zRoom + 0.072], { uv: "keep" });
+    // dark seam down the nose + a lit hairline (thin frame lighting)
+    kit.boxMM("paintedMetal", [x - 0.012, yBlade0 + 0.25, zRoom + 0.315], [x + 0.012, yBlade1 - 0.25, zRoom + 0.33], { color: IMP.black, texel: 2 });
+    kit.boxMM("emitWhite", [x - 0.004, yBlade0 + 0.35, zRoom + 0.322], [x + 0.004, yBlade1 - 0.35, zRoom + 0.332], { uv: "keep" });
     if (i > 0 && i < MULLIONS) {
-      kit.box("paintedMetal", x, A.y0 + t + 0.06, zRoom + 0.02, 0.14, 0.1, 0.1, { color: FRAME, texel: 2 });
-      kit.box("emitRedImp", x, A.y0 + t + 0.075, zRoom + 0.072, 0.05, 0.035, 0.01);
+      kit.box("paintedMetal", x, yBlade0 + 0.07, zRoom + 0.35, 0.16, 0.12, 0.1, { color: FRAME, texel: 2 });
+      kit.box("emitRedImp", x, yBlade0 + 0.085, zRoom + 0.402, 0.05, 0.035, 0.01);
     }
-    // bolt pair on the cap at sill and head height (scale cue on the 4.2 m blades)
-    for (const yy of [A.y0 + 0.55, A.y1 - 0.55]) for (const s of [-1, 1]) kit.box("metal", x + s * (hw - 0.11), yy, zRoom + 0.068, 0.04, 0.04, 0.01, { color: IMP.steel, texel: 2 });
+    // bolt pair on the nose at sill and head height (scale cue on the 4 m blades)
+    for (const yy of [yBlade0 + 0.55, yBlade1 - 0.55]) for (const s of [-1, 1]) kit.box("metal", x + s * (hw - 0.105), yy, zRoom + 0.325, 0.035, 0.035, 0.01, { color: IMP.steel, texel: 2 });
   }
   // transom: one horizontal member at 2/3 height with a lighter room-side cap
   const yT = A.y0 + (A.y1 - A.y0) * 0.68;
@@ -69,27 +75,35 @@ export function buildWindowWall(kit, ctx, manifest) {
     kit.add("glass", g, { pos: [x, (A.y0 + A.y1) / 2, zGlass], uv: "keep" });
   }
 
-  // head channel over the band: black housing with a cool diffuser strip per pane (thin frame lighting)
-  kit.boxMM("paintedMetal", [A.x0 - 0.4, A.y1 - 0.02, zRoom - 0.02], [A.x1 + 0.4, A.y1 + 0.18, zRoom + 0.16], { color: IMP.black, texel: 1 });
-  for (let i = 0; i < MULLIONS; i++) {
-    const x = A.x0 + (i + 0.5) * paneW;
-    kit.box("emitCoolSoft", x, A.y1 - 0.025, zRoom + 0.1, paneW - 0.9, 0.012, 0.03, { uv: "keep" });
+  // head beam over the band: heavy painted member 0.6 m tall and 0.36 m proud, a dark shadow line under its
+  // nose and one continuous blue strip along its underside, bolt heads over every mullion
+  const beamTone = shade(IMP.mid, 0.9);
+  kit.boxMM("paintedMetal", [A.x0 - 0.4, A.y1 - 0.1, zRoom - 0.02], [A.x1 + 0.4, A.y1 + 0.5, zRoom + 0.36], { color: beamTone, texel: 1 });
+  kit.boxMM("paintedMetal", [A.x0 - 0.4, A.y1 - 0.1, zRoom + 0.36], [A.x1 + 0.4, A.y1 - 0.02, zRoom + 0.4], { color: IMP.black, texel: 1 });
+  kit.boxMM("paintedMetal", [A.x0 - 0.4, A.y1 + 0.42, zRoom + 0.36], [A.x1 + 0.4, A.y1 + 0.5, zRoom + 0.4], { color: shade(IMP.mid, 1.1), texel: 1 });
+  kit.boxMM("emitBlue", [A.x0 - 0.2, A.y1 - 0.11, zRoom + 0.2], [A.x1 + 0.2, A.y1 - 0.1, zRoom + 0.32], { uv: "keep" });
+  for (let i = 0; i <= MULLIONS; i++) {
+    const x = A.x0 + i * paneW;
+    for (const s of [-1, 1]) kit.box("metal", x + s * 0.12, A.y1 + 0.2, zRoom + 0.365, 0.05, 0.05, 0.012, { color: IMP.steel, texel: 2 });
   }
 
-  // interior sill ledge + kick below the window band
-  kit.boxMM("paintedMetal", [A.x0 - 0.4, A.y0 - 0.02, zRoom - 0.02], [A.x1 + 0.4, A.y0 + 0.05, zRoom + 0.35], { color: FRAME, texel: 1 });
-  kit.boxMM("paintedMetal", [A.x0 - 0.4, A.y0 - 0.3, zRoom], [A.x1 + 0.4, A.y0 - 0.02, zRoom + 0.32], { color: IMP.black, texel: 1 });
-  kit.boxMM("paintedMetal", [A.x0 - 0.4, A.y0 - 0.3, zRoom + 0.3], [A.x1 + 0.4, A.y0 - 0.06, zRoom + 0.34], { color: SCUFF, texel: 1 });
+  // interior sill: 0.4 m shelf at 1.2 m with a 0.1 m lip carrying a white hairline (1.2 cm: the 2 cm band at 1.7
+  // emissive bloomed into a 6 px bar from 5 m), black kick recess below
+  kit.boxMM("paintedMetal", [A.x0 - 0.4, A.y0 - 0.02, zRoom - 0.02], [A.x1 + 0.4, A.y0 + 0.05, zRoom + 0.4], { color: FRAME, texel: 1 });
+  kit.boxMM("paintedMetal", [A.x0 - 0.4, A.y0 - 0.1, zRoom + 0.35], [A.x1 + 0.4, A.y0 - 0.02, zRoom + 0.4], { color: FRAME, texel: 1 });
+  kit.boxMM("emitWhite", [A.x0 - 0.2, A.y0 - 0.066, zRoom + 0.4], [A.x1 + 0.2, A.y0 - 0.054, zRoom + 0.406], { uv: "keep" });
+  kit.boxMM("paintedMetal", [A.x0 - 0.4, A.y0 - 0.3, zRoom], [A.x1 + 0.4, A.y0 - 0.1, zRoom + 0.3], { color: IMP.black, texel: 1 });
+  kit.boxMM("paintedMetal", [A.x0 - 0.4, A.y0 - 0.3, zRoom + 0.28], [A.x1 + 0.4, A.y0 - 0.12, zRoom + 0.32], { color: SCUFF, texel: 1 });
 
-  // sill instrument bar per pane: black bar standing proud of the console housings, five indicators, a readout
-  // strip and a red status lamp at each end, facing the room
+  // sill instrument bar per pane on the shelf: black bar, four small indicators, a readout strip and a red
+  // status lamp at each end, facing the room
   for (let i = 0; i < MULLIONS; i++) {
     const x = A.x0 + (i + 0.5) * paneW;
-    const bw = paneW - 0.7;
+    const bw = paneW - 0.9;
     kit.box("paintedMetal", x, A.y0 + 0.15, zRoom + 0.16, bw, 0.2, 0.16, { color: IMP.black, texel: 1 });
-    for (let k = 0; k < 4; k++) kit.box(IND[(k * 5 + i * 3) % IND.length], x - 0.9 + k * 0.2, A.y0 + 0.205, zRoom + 0.25, 0.12, 0.03, 0.006);
-    kit.box("screenImp" + (i % 4), x + 0.55, A.y0 + 0.16, zRoom + 0.25, 1.1, 0.1, 0.006, { uv: "keep" });
+    for (let k = 0; k < 4; k++) kit.box(IND[(k * 5 + i * 3) % IND.length], x - 0.85 + k * 0.2, A.y0 + 0.205, zRoom + 0.25, 0.06, 0.03, 0.006);
+    kit.box("screenImp" + (i % 4), x + 0.5, A.y0 + 0.16, zRoom + 0.25, 1.0, 0.1, 0.006, { uv: "keep" });
     for (const s of [-1, 1]) kit.box("emitRedImp", x + s * (bw / 2 - 0.08), A.y0 + 0.15, zRoom + 0.245, 0.04, 0.06, 0.006);
   }
-  kit.collider([A.x0 - 0.4, 240, A.zOut], [A.x1 + 0.4, A.y1, zRoom + 0.35], "sill");
+  kit.collider([A.x0 - 0.4, 240, A.zOut], [A.x1 + 0.4, A.y1 + 0.5, zRoom + 0.41], "sill");
 }

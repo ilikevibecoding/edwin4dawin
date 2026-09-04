@@ -5,7 +5,7 @@
 import { IMP } from "../shared/palette.js";
 import { shade } from "./props.js";
 
-export function buildCeiling(kit, { xIn, z0, z1, ceilY, beamsZ, walkwayLightsZ, pendantDrop = 1.9, platformLights, daisZ }) {
+export function buildCeiling(kit, { xIn, z0, z1, ceilY, beamsZ, walkwayLightsZ, aftPendants, pendantDrop = 1.9, platformLights, daisZ }) {
   const xo = xIn + 0.05; // into the wall backing so no slit can open at the cornice
   const top = ceilY + 0.24;
   const near = shade(IMP.black, 0.9);
@@ -17,8 +17,8 @@ export function buildCeiling(kit, { xIn, z0, z1, ceilY, beamsZ, walkwayLightsZ, 
   kit.boxMM("paintedMetal", [-xo, top, z0 - 0.05], [xo, top + 0.14, z1 + 0.05], { color: IMP.black, texel: 0.5 });
   const chans = [
     { at: -11.5, w: 0.5, emit: "emitBlue", ew: 0.1 },
-    { at: -1.9, w: 0.42, emit: "emitCoolSoft", ew: 0.14 },
-    { at: 1.9, w: 0.42, emit: "emitCoolSoft", ew: 0.14 },
+    { at: -1.9, w: 0.42, emit: "emitWhite", ew: 0.1 },
+    { at: 1.9, w: 0.42, emit: "emitWhite", ew: 0.1 },
     { at: 11.5, w: 0.5, emit: "emitBlue", ew: 0.1 },
   ];
   let cur = -xo;
@@ -59,25 +59,43 @@ export function buildCeiling(kit, { xIn, z0, z1, ceilY, beamsZ, walkwayLightsZ, 
     kit.boxMM("paintedMetal", [s * 3.9 - 0.22, ceilY - 0.45, z0], [s * 3.9 + 0.22, ceilY - 0.4, z1], { color: flange, texel: 1 });
   }
 
-  // downlight housings: dark box, metal bezel ring, bright diffuser disc (the pool itself is a descriptor)
-  const housing = (x, z, w = 0.7) => {
-    kit.box("paintedMetal", x, ceilY - 0.16, z, w, 0.28, w, { color: shade(IMP.dark, 0.7), texel: 1 });
-    kit.box("metal", x, ceilY - 0.315, z, w - 0.08, 0.03, w - 0.08, { color: IMP.mid, texel: 2 });
-    kit.box("emitWhite", x, ceilY - 0.33, z, w - 0.22, 0.012, w - 0.22, { uv: "keep" });
+  // Fixtures. There is no shadowing, so any surface within ~0.5 m of a 30–60 cd point that faces it renders
+  // white (E ≥ 200 even on black paint), which is why the first fixtures — open housings and louvres around
+  // their own light — read as clipped white blobs from anywhere in the room. Every fixture here is a CLOSED dark
+  // box with the pool light descriptor INSIDE it, just under its top (index.js): every outer face then points
+  // away from the light (N·L < 0, unlit), the lit interior is sealed, and the only lit geometry is the lamp on the
+  // underside: a flat emitWhite diffuser (1.7 ≈ 1.3× the screens, no falloff-map hot centre) in a black 6 cm
+  // lip, split by a black egg-crate 0.3 m under the light (E ≈ 150 on black paint → 0.2, dark grey fins). From
+  // below the fixture reads as a louvred lamp in a dark housing; from across the room as a small lit square.
+  const dark = shade(IMP.dark, 0.7);
+  // lamp on the underside of a closed housing whose bottom face is at yb: `w` × `d` diffuser, black lip, fins
+  const lamp = (x, yb, z, w, d, nx = 3, nz = 3) => {
+    kit.box("emitWhite", x, yb - 0.006, z, w, 0.012, d, { uv: "keep" });
+    for (const s of [-1, 1]) {
+      kit.box("paintedMetal", x + s * (w / 2 + 0.02), yb - 0.03, z, 0.04, 0.06, d + 0.08, { color: IMP.black, texel: 1 });
+      kit.box("paintedMetal", x, yb - 0.03, z + s * (d / 2 + 0.02), w, 0.06, 0.04, { color: IMP.black, texel: 1 });
+    }
+    for (let k = 1; k < nx; k++) kit.box("paintedMetal", x - w / 2 + (w / nx) * k, yb - 0.037, z, 0.012, 0.05, d, { color: IMP.black, texel: 1 });
+    for (let k = 1; k < nz; k++) kit.box("paintedMetal", x, yb - 0.037, z - d / 2 + (d / nz) * k, w, 0.05, 0.012, { color: IMP.black, texel: 1 });
   };
-  // walkway pendants: housing hung `pendantDrop` below the ceiling on two rods from a canopy plate, so the
-  // pool descriptor sits 6 m over the deck instead of washing the ceiling
+  // recessed downlight housing on the ceiling: closed 0.3 m box under the slab with the lamp on its underside
+  const housing = (x, z, w = 0.9) => {
+    kit.box("paintedMetal", x, ceilY - 0.17, z, w, 0.3, w, { color: dark, texel: 1 });
+    lamp(x, ceilY - 0.32, z, w - 0.4, w - 0.4);
+  };
+  // walkway / aft pendants: closed 0.9 × 0.3 × 0.9 housing hung `pendantDrop` below the ceiling on two rods
+  // from a canopy plate, red side lamps, 0.5 m lamp on the underside
   const pendant = (x, z) => {
     const y = ceilY - pendantDrop;
-    kit.box("metal", x, ceilY - 0.03, z, 0.5, 0.06, 0.5, { color: IMP.mid, texel: 2 });
-    for (const s of [-1, 1]) kit.box("metal", x + s * 0.28, (y + 0.15 + ceilY - 0.06) / 2, z, 0.03, ceilY - 0.06 - (y + 0.15), 0.03, { color: IMP.mid, texel: 2 });
-    kit.box("paintedMetal", x, y, z, 0.9, 0.3, 0.9, { color: shade(IMP.dark, 0.7), texel: 1 });
-    kit.box("metal", x, y - 0.165, z, 0.82, 0.03, 0.82, { color: IMP.mid, texel: 2 });
-    kit.box("emitWhite", x, y - 0.185, z, 0.66, 0.012, 0.66, { uv: "keep" });
-    for (const s of [-1, 1]) kit.box("emitRedImp", x + s * 0.4, y + 0.1, z, 0.06, 0.03, 0.12);
+    kit.box("paintedMetal", x, ceilY - 0.03, z, 0.5, 0.06, 0.5, { color: IMP.dark, texel: 2 });
+    for (const s of [-1, 1]) kit.box("paintedMetal", x + s * 0.28, (y + 0.15 + ceilY - 0.06) / 2, z, 0.03, ceilY - 0.06 - (y + 0.15), 0.03, { color: IMP.black, texel: 2 });
+    kit.box("paintedMetal", x, y, z, 0.9, 0.3, 0.9, { color: dark, texel: 1 });
+    for (const s of [-1, 1]) kit.box("emitRedImp", x + s * 0.453, y + 0.06, z, 0.012, 0.03, 0.12);
+    lamp(x, y - 0.15, z, 0.5, 0.5);
   };
   for (const z of walkwayLightsZ) pendant(0, z);
-  for (const [x, z] of platformLights) housing(x, z, 0.6);
+  for (const [x, z] of aftPendants) pendant(x, z);
+  for (const [x, z] of platformLights) housing(x, z, 0.9);
 
   // cable trays over the pits: tray, lips, three cable bundles, hangers at every beam
   for (const x of [-15.2, -8.4, 8.4, 15.2]) {
@@ -109,13 +127,13 @@ export function buildCeiling(kit, { xIn, z0, z1, ceilY, beamsZ, walkwayLightsZ, 
     kit.box("paintedMetal", x, ceilY - 0.06, z, 1.4, 0.08, 0.7, { color: shade(IMP.dark, 0.7), texel: 1 });
     for (let k = 0; k < 4; k++) kit.box("metal", x, ceilY - 0.105, z - 0.24 + k * 0.16, 1.25, 0.015, 0.05, { color: IMP.mid, texel: 2 });
   }
-  // canopy frame over the dais: a lit square ring
+  // canopy frame over the dais: a square ring with thin blue strips on its inner faces (instrument blue, not a lamp)
   const cz = daisZ;
   const half = 1.7;
   for (const s of [-1, 1]) {
     kit.boxMM("paintedMetal", [-half, ceilY - 0.6, cz + s * half - 0.08], [half, ceilY - 0.34, cz + s * half + 0.08], { color: beam, texel: 1 });
     kit.boxMM("paintedMetal", [s * half - 0.08, ceilY - 0.6, cz - half], [s * half + 0.08, ceilY - 0.34, cz + half], { color: beam, texel: 1 });
-    kit.boxMM("emitWhite", [-half + 0.2, ceilY - 0.52, cz + s * (half - 0.085) - 0.006], [half - 0.2, ceilY - 0.42, cz + s * (half - 0.085) + 0.006], { uv: "keep" });
-    kit.boxMM("emitWhite", [s * (half - 0.085) - 0.006, ceilY - 0.52, cz - half + 0.2], [s * (half - 0.085) + 0.006, ceilY - 0.42, cz + half - 0.2], { uv: "keep" });
+    kit.boxMM("emitBlue", [-half + 0.2, ceilY - 0.5, cz + s * (half - 0.085) - 0.006], [half - 0.2, ceilY - 0.46, cz + s * (half - 0.085) + 0.006], { uv: "keep" });
+    kit.boxMM("emitBlue", [s * (half - 0.085) - 0.006, ceilY - 0.5, cz - half + 0.2], [s * (half - 0.085) + 0.006, ceilY - 0.46, cz + half - 0.2], { uv: "keep" });
   }
 }

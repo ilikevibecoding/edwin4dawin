@@ -8,14 +8,15 @@
 // props), screens.js (module-local animated display atlas) and holo.js (additive wireframe of the ship).
 import * as THREE from "three";
 import { BOUNDS, CEIL, FLOOR, PIT_FLOOR, doorsFor } from "../shared/plan.js";
-import { wall, stairs, doorOpenings, doorReveal, WALL_T } from "../shared/imperial.js";
+import { wall, doorOpenings, doorReveal, WALL_T } from "../shared/imperial.js";
 import { IMP, LIGHT } from "../shared/palette.js";
 import { buildWindowWall } from "./window.js";
 import { buildStations } from "./stations.js";
 import { buildCeiling } from "./ceiling.js";
-import { buildPits, buildPlatforms } from "./pits.js";
+import { buildPits, buildPlatforms, buildStairs } from "./pits.js";
 import { bridgeRail } from "./props.js";
 import { makeBridgeScreens } from "./screens.js";
+import { DAIS_H } from "./stations.js";
 
 const ID = "d1-bridge";
 const B = BOUNDS[ID];
@@ -35,9 +36,14 @@ export const L = {
   stairZ: [496, 500],
   ceilY: CEILY,
   beamsZ: [464.3, 470, 476, 482, 488, 494, 499.7, 509],
-  walkwayLightsZ: [470, 482, 494],
+  walkwayLightsZ: [467.2, 479, 491], // bay centres: a pendant under a beam lit its flange white and its rods cut the web
   pendantDrop: 1.9, // walkway pendant housings hang this far below the ceiling
   daisZ: 505.5,
+  aftPendantZ: 508.2, // warm pendant over the aft station bank, between the 499.7 and 509 beams
+  aftCornerPendants: [
+    [-14, 507],
+    [14, 507],
+  ], // warm pendants over the outer aft bank, inboard of the ±15.2 cable trays (0.5 m clear) and 5.7 m off the side walls
   raftX: 11.5,
   raftY: 244.2,
   raftZ: [467.5, 481.2, 494.9], // ~13.7 m pitch, 3.5 / 5.1 m from the pit end faces so the fore bay racks are lit; rods clear the beams
@@ -45,6 +51,42 @@ export const L = {
 
 // module-local animated screen atlas (one 1024×512 canvas); created in materials(), redrawn in update()
 let screens = null;
+
+// Black gloss deck for the walkway, fore/aft platforms and the dais top. The shared blackGloss (roughness 0.18)
+// mirrors every pool light as a clipped white disc (peak specular ≈ 6–10 × irradiance) that then blooms; at
+// roughness 0.55 the overhead pools read as soft sheen (peak ≈ 0.1–0.3) and the grazing reflection of the window
+// key becomes a cold streak toward the window (GGX peak ≈ 0.7 at the aft cameras, under the 1.15 bloom threshold —
+// at 0.45 and 600 cd the same streak peaked ≈ 5, the clipped white blob on the walkway at z ≈ 480). +1 draw call.
+function makeBridgeFloor() {
+  return new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.55, metalness: 0.15, envMapIntensity: 1.0 });
+}
+// Deck-plate joints on that floor: the same lobe (roughness 0.55) so the seam never inverts against the deck's
+// sheen, but a dielectric with specularIntensity 0.25 (F0 0.01, grazing Fresnel capped at 0.25 instead of 1) and
+// 0.3 env: a joint in a groove reflects less than the plate. Any other roughness read as a light line under the
+// key's grazing specular in the centreline views (darkGloss → sharp streak, paintedMetal 1.15 → haze). +1 draw call.
+function makeBridgeSeam() {
+  return new THREE.MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.55, metalness: 0, specularIntensity: 0.25, envMapIntensity: 0.3 });
+}
+// Pit floors: the shared paintedMetal's worn-plating maps (same texel scale) as a dielectric with specularIntensity
+// 0.3. From the walkway cameras the pit floors are seen at grazing angles with the 100 cd rafts above the eye
+// line, and a MeshStandardMaterial (F90 = 1 whatever the roughness) turned both pits into bright blue planes
+// brighter than the consoles standing on them; capping the grazing Fresnel at 0.3 keeps them as dark wells with
+// the raft pools on them. Falls back to plain plating when the registry passes no shared set. +1 draw call.
+function makePitFloor(shared) {
+  const pm = shared && shared.paintedMetal;
+  // No albedo/roughness map: paintedMetal's worn-metal chips read as spilled-fluid blotches on a floor this large
+  // (critic round 1). The normal map alone keeps a faint plating grain; 0xa0a0a0 stands in for the map's mean.
+  return new THREE.MeshPhysicalMaterial({
+    normalMap: (pm && pm.normalMap) || null,
+    normalScale: new THREE.Vector2(0.35, 0.35),
+    color: 0xa0a0a0,
+    vertexColors: true,
+    roughness: 0.9,
+    metalness: 0,
+    specularIntensity: 0.3,
+    envMapIntensity: 0.5,
+  });
+}
 
 const manifest = {
   id: ID,
@@ -64,21 +106,28 @@ const manifest = {
     "d1-bridge-aft": { pos: [0, FLOOR, 467.5], yaw: 180, pitch: -2 },
     "d1-bridge-command": { pos: [-14, FLOOR, 510], yaw: -28, pitch: -4 },
     "d1-bridge-pit-stbd": { pos: [14.8, PIT_FLOOR, 466.2], yaw: 168, pitch: 8 },
-    "d1-bridge-dais": { pos: [2.3, FLOOR, 509.6], yaw: 4, pitch: -3 },
-    "d1-bridge-sill": { pos: [8.6, FLOOR, 462.7], yaw: 22, pitch: 6 },
+    // money shot: standing on the dais at the commander's right shoulder (eye 0.1 m over the 1.4 m back), so the
+    // chair is a left-foreground silhouette and the walkway runs to the window; from the aft deck the back hid the walkway
+    "d1-bridge-dais": { pos: [0.9, FLOOR + DAIS_H, 507.4], yaw: 0, pitch: -3 },
+    // low camera (eye 0.7 m over the platform) 1.1 m back so the sill shelf, the console row and the floor share
+    // the frame; 3 m back would put the fore platform rail (z 464) across the middle of the shot
+    "d1-bridge-sill": { pos: [8.6, FLOOR - 1.0, 463.8], yaw: 22, pitch: 8 },
   },
-  materials() {
+  materials(shared) {
     screens = makeBridgeScreens();
-    return { bridgeScreen: screens.material };
+    return { bridgeScreen: screens.material, bridgeFloor: makeBridgeFloor(), bridgeSeam: makeBridgeSeam(), bridgePitFloor: makePitFloor(shared) };
   },
   build(ctx) {
     const { kit } = ctx;
     const xi = L.xIn;
     if (!ctx.materials.bridgeScreen) {
-      // registry without a materials() hook: create the local material on demand
+      // registry without a materials() hook: create the local materials on demand
       screens = makeBridgeScreens();
       ctx.materials.bridgeScreen = screens.material;
     }
+    if (!ctx.materials.bridgeFloor) ctx.materials.bridgeFloor = makeBridgeFloor();
+    if (!ctx.materials.bridgeSeam) ctx.materials.bridgeSeam = makeBridgeSeam();
+    if (!ctx.materials.bridgePitFloor) ctx.materials.bridgePitFloor = makePitFloor(ctx.materials);
 
     // --- walls. Port/starboard walls drop to the pit floor so the pits are panelled; fore/aft walls sit on +240.
     const winOpening = { a0: -19, a1: 19, y0: 241.2, y1: 245.4, kind: "window" };
@@ -93,62 +142,93 @@ const manifest = {
 
     // --- floors: fore platform, walkway, aft command deck (thick slabs so their sides form the pit walls), pit floors
     const xs = xi + 0.05; // overlap into the wall backing (no floor/wall slit)
-    kit.boxMM("blackGloss", [-xs, PIT_FLOOR - 0.2, 458.05], [xs, FLOOR, L.foreZ[1]], { color: IMP.black, texel: 0.5 });
-    kit.boxMM("blackGloss", [-L.walkHalf, PIT_FLOOR - 0.2, L.pitZ[0]], [L.walkHalf, FLOOR, L.pitZ[1]], { color: IMP.black, texel: 0.5 });
-    kit.boxMM("blackGloss", [-xs, PIT_FLOOR - 0.2, L.aftZ[0]], [xs, FLOOR, 511.95], { color: IMP.black, texel: 0.5 });
-    // pit floors: matte painted deck plating (impFloor's metalness 0.6 on a near-black tint read as a void)
+    kit.boxMM("bridgeFloor", [-xs, PIT_FLOOR - 0.2, 458.05], [xs, FLOOR, L.foreZ[1]], { color: IMP.black, texel: 0.5 });
+    kit.boxMM("bridgeFloor", [-L.walkHalf, PIT_FLOOR - 0.2, L.pitZ[0]], [L.walkHalf, FLOOR, L.pitZ[1]], { color: IMP.black, texel: 0.5 });
+    kit.boxMM("bridgeFloor", [-xs, PIT_FLOOR - 0.2, L.aftZ[0]], [xs, FLOOR, 511.95], { color: IMP.black, texel: 0.5 });
+    // pit floors: matte painted deck plating in the low-Fresnel bridgePitFloor (impFloor's metalness 0.6 on a
+    // near-black tint read as a void; IMP.grey paintedMetal read as bright planes from the walkway) — IMP.mid
+    // keeps the pits as wells with mid-grey pools under the rafts
     for (const s of [-1, 1]) {
       const x0 = s < 0 ? -xs : L.walkHalf;
       const x1 = s < 0 ? -L.walkHalf : xs;
-      kit.boxMM("paintedMetal", [x0, PIT_FLOOR - 0.2, L.pitZ[0]], [x1, PIT_FLOOR, L.pitZ[1]], { color: IMP.grey, texel: 0.5 });
+      kit.boxMM("bridgePitFloor", [x0, PIT_FLOOR - 0.2, L.pitZ[0]], [x1, PIT_FLOOR, L.pitZ[1]], { color: IMP.mid, texel: 0.5 });
     }
 
     // --- ceiling, pits (faces, wall band, rafts, floor), platform edges
-    buildCeiling(kit, { xIn: xi, z0: L.foreZ[0], z1: L.aftZ[1], ceilY: CEILY, beamsZ: L.beamsZ, walkwayLightsZ: L.walkwayLightsZ, pendantDrop: L.pendantDrop, platformLights: [[-9.5, 462.4], [9.5, 462.4]], daisZ: L.daisZ });
+    buildCeiling(kit, { xIn: xi, z0: L.foreZ[0], z1: L.aftZ[1], ceilY: CEILY, beamsZ: L.beamsZ, walkwayLightsZ: L.walkwayLightsZ, aftPendants: [[0, L.aftPendantZ], ...L.aftCornerPendants], pendantDrop: L.pendantDrop, platformLights: [[-9.5, 462.4], [9.5, 462.4]], daisZ: L.daisZ });
     buildPits(kit, ctx, L);
     buildPlatforms(kit, L);
 
-    // --- railings (hand-polished top rail, blue post markers): walkway both sides, fore platform edge, aft deck edge
+    // --- railings (hand-polished top rail, blue post markers): walkway both sides, fore platform edge (split at
+    // the fore stair heads, x ±4.7..5.9), aft deck edge (split at the aft stair heads); both stair pairs with their
+    // lit nosings, sloped handrails and chevrons come from buildStairs
     for (const s of [-1, 1]) bridgeRail(kit, [s * L.walkHalf, L.pitZ[0]], [s * L.walkHalf, L.pitZ[1]], FLOOR);
-    for (const s of [-1, 1]) bridgeRail(kit, [s * L.walkHalf, L.foreZ[1]], [s * xi, L.foreZ[1]], FLOOR);
+    for (const s of [-1, 1]) {
+      bridgeRail(kit, [s * L.walkHalf, L.foreZ[1]], [s * 4.58, L.foreZ[1]], FLOOR, { postEvery: 1.1 });
+      bridgeRail(kit, [s * 6.02, L.foreZ[1]], [s * xi, L.foreZ[1]], FLOOR);
+    }
     for (const s of [-1, 1]) {
       const [sx0, sx1] = s < 0 ? L.stairX[0] : L.stairX[1];
       const inner = s * L.walkHalf;
       const outer = s * xi;
       bridgeRail(kit, [inner, L.aftZ[0]], [s < 0 ? sx1 : sx0, L.aftZ[0]], FLOOR);
       bridgeRail(kit, [s < 0 ? sx0 : sx1, L.aftZ[0]], [outer, L.aftZ[0]], FLOOR);
-      stairs(kit, { x0: Math.min(sx0, sx1), x1: Math.max(sx0, sx1), z0: L.stairZ[0], z1: L.stairZ[1], yTop: FLOOR, yBottom: PIT_FLOOR, dir: "-z", mat: "paintedMetal", color: IMP.grey });
-      // stair side rails (no collider: the stairs-pending blocker from stairs() already closes the head)
-      bridgeRail(kit, [s < 0 ? sx0 : sx1, L.stairZ[0]], [s < 0 ? sx0 : sx1, L.stairZ[1]], PIT_FLOOR, { collide: false, markers: false });
     }
+    buildStairs(kit, L);
 
     // --- window wall (reveal lining, mullions, glass, sill instruments) and the stations (holo returned for update)
     buildWindowWall(kit, ctx, manifest);
     const holo = buildStations(kit, ctx, manifest, L);
 
-    // --- lights (descriptors, §9.4). Pool renders 12 points + 4 spots sorted by priority then distance:
-    // walkway pendants and the key are always on, then the holo glow and fore platform, then the pit rafts,
-    // wall washes and low pit accents which only win slots when the camera is in / near a pit.
+    // --- lights (descriptors, §9.4). Pool renders 12 points + 4 spots sorted by priority then distance.
+    // The window is the key: a cold key over the window head raking the walkway from the fore end, two wide
+    // cold fills parked inside the reveal head over the fore platform / pit fronts, and every ceiling pool ramps
+    // from 100 % at the window end to ~40 % aft. Spots: key + 2 fills + the dais spot fill the 4 slots. Points:
+    // 3 pendants + 2 fore + 6 rafts + 3 aft + 4 pit accents = 18 candidates for the 12 point slots (score =
+    // priority − d/120, six dropped per camera): the aft walkway cameras drop the two fore rafts and the four
+    // accents, the fore cameras drop the two aft-corner pendants and the accents; down in a pit the accents of that
+    // pit come in and displace the far side's rafts and corner pendant.
+    // Every point sits INSIDE its closed fixture housing, just under the housing top (ceiling.js / pits.js): there
+    // is no shadowing, so a point in an open housing lit the housing's own walls and louvre to E ≈ 300–1500 and
+    // every fixture read as a white blob; inside a closed box every outer face has N·L < 0 and stays dark.
+    // The harness gives the first spot in sort order a shadow map: the dais spot (priority 1, a narrow
+    // near-vertical cone) keeps it from every camera — the grazing key would show shadow acne along the walkway.
     const lights = ctx.lights;
     const COOL = LIGHT.coolWhite;
     const PIT = 0xaac6ff; // colder blue-white over the pits
     const WARM = 0xffe6cc; // slightly warmer aft deck
-    // key: cold star-light through the band, parked low in the reveal under the transom so no reveal face sits in
-    // the cone; aimed flat down the walkway (floor from z ≈ 461 on)
-    lights.push({ type: "spot", pos: [0, 243.5, 456.8], target: [0, 239.6, 482], color: COOL, intensity: 240, distance: 60, angle: 0.5, penumbra: 0.7, priority: 1 });
-    lights.push({ type: "spot", pos: [0, CEILY - 0.7, L.daisZ], target: [0, FLOOR + 0.2, L.daisZ + 0.3], color: WARM, intensity: 70, distance: 14, angle: 0.45, penumbra: 0.5, priority: 0.95 });
-    lights.push({ type: "spot", pos: [0, CEILY - 0.6, 508.6], target: [0, FLOOR, 511.2], color: WARM, intensity: 62, distance: 16, angle: 0.95, penumbra: 0.6, priority: 0.8 });
-    lights.push({ type: "spot", pos: [0, CEILY - 0.6, 461.8], target: [0, FLOOR, 461.0], color: COOL, intensity: 74, distance: 16, angle: 0.8, penumbra: 0.7, priority: 0.8 });
-    for (const z of L.walkwayLightsZ) lights.push({ type: "point", pos: [0, CEILY - L.pendantDrop - 0.35, z], color: COOL, intensity: 46, distance: 18, priority: 1 });
-    lights.push({ type: "point", pos: [0, FLOOR + 1.5, 501.6], color: LIGHT.blue, intensity: 4, distance: 8, priority: 0.9 });
+    // key: at the ceiling just inside the window head, aimed down the walkway (cone's near edge lands at the pit
+    // fronts, z ≈ 467.5). Its job is the cold sheen on the floor, rails and console faces toward the window: on
+    // the roughness-0.55 floor its grazing specular peaks ≈ 0.7 at the aft cameras (600 cd on 0.45 gave ≈ 5, a
+    // clipped white streak); the diffuse key work near the window is done by the two fills.
+    lights.push({ type: "spot", pos: [0, CEILY - 0.6, 458.6], target: [0, FLOOR, 480], color: COOL, intensity: 170, distance: 70, angle: 0.36, penumbra: 0.6, priority: 0.5 });
+    // fills: inside the reveal at the pane centres (x ±9.5, between the 7.6 and 11.4 mullions), just over the
+    // transom (y 244.14), 40° half-angle aimed straight down the pane. At head height (245.0) each fill sat 0.28 m
+    // under the head lining and its grazing specular on the lining read as a white blob at the window head from
+    // every aft camera; with a 51.6° cone at x ±9 the near mullion blade (1.4 m away, ~29° off-axis) blew out the
+    // same way in the sill view. Now the lining (0.98 m up) and both blades (1.7 m away, ~39° off-axis, ≈ 3 %
+    // attenuation) are outside the lit cone, and the transom top it grazes is invisible from every eye height.
+    for (const s of [-1, 1]) lights.push({ type: "spot", pos: [s * 9.5, 244.3, 456.6], target: [s * 9.5, PIT_FLOOR + 1.0, 472], color: COOL, intensity: 80, distance: 30, angle: 0.7, penumbra: 0.5, priority: 0.45 });
+    lights.push({ type: "spot", pos: [0, CEILY - 0.7, L.daisZ - 0.5], target: [0, FLOOR + 0.9, L.daisZ + 0.6], color: WARM, intensity: 50, distance: 14, angle: 0.4, penumbra: 0.5, priority: 1 });
+    // walkway pendants 100 / 70 / 40 %, the point just under the housing top (6.2 m over the deck)
+    const pendantY = CEILY - L.pendantDrop + 0.13;
+    L.walkwayLightsZ.forEach((z, i) => lights.push({ type: "point", pos: [0, pendantY, z], color: COOL, intensity: [75, 52, 30][i], distance: 18, priority: 1 }));
+    // aft deck: one warm pendant pool over the aft station bank (60 %) and two 60 % pools over the outer aft
+    // bank at x ±14: with the centre pendant alone the 40 × 12 m aft deck was a black void from the command
+    // camera (E ≈ 0.13 in its corners) — everything on the aft deck is matte black, so the walls (5.7 m from
+    // these pendants, E ≈ 0.6) are what carries the brightness. Same priority as the rafts, so the distance term
+    // swaps them in for the aft cameras (they take the slots of the 40 m-away fore rafts) and out again forward.
+    lights.push({ type: "point", pos: [0, pendantY, L.aftPendantZ], color: WARM, intensity: 45, distance: 16, priority: 0.85 });
+    for (const [x, z] of L.aftCornerPendants) lights.push({ type: "point", pos: [x, pendantY, z], color: WARM, intensity: 45, distance: 14, priority: 0.75 });
     for (const s of [-1, 1]) {
-      lights.push({ type: "point", pos: [s * 9.5, CEILY - 1.4, 462.4], color: COOL, intensity: 64, distance: 18, priority: 0.85 });
-      for (const z of L.raftZ) lights.push({ type: "point", pos: [s * L.raftX, L.raftY - 0.45, z], color: PIT, intensity: 62, distance: 22, priority: 0.72 });
-      for (const z of [476, 490]) lights.push({ type: "point", pos: [s * 16.8, 246.2, z], color: COOL, intensity: 28, distance: 16, priority: 0.68 });
-      // low pit accents (blue fore bay, red aft bay): the pool's distance term lets them win slots only from
-      // inside that pit, where they colour the console kicks and the aisle floor
-      lights.push({ type: "point", pos: [s * 12.5, PIT_FLOOR + 1.4, 468.5], color: LIGHT.blue, intensity: 6, distance: 10, priority: 0.6 });
-      lights.push({ type: "point", pos: [s * 12.5, PIT_FLOOR + 1.4, 490.5], color: LIGHT.red, intensity: 5, distance: 10, priority: 0.6 });
+      // fore platform downlights, inside the recessed ceiling housings (0.3 m boxes under the slab)
+      lights.push({ type: "point", pos: [s * 9.5, CEILY - 0.05, 462.4], color: COOL, intensity: 80, distance: 18, priority: 0.85 });
+      // pit rafts, inside the closed raft housings just under their tops (6.7 m over the pit floor); 100 / 70 / 50 %:
+      // at 40 % the aft bay's console rows were unreadable silhouettes from the walkway cameras
+      L.raftZ.forEach((z, i) => lights.push({ type: "point", pos: [s * L.raftX, L.raftY + 0.13, z], color: PIT, intensity: [100, 70, 50][i], distance: 22, priority: 0.75 }));
+      // low pit accents (blue fore bay, red aft bay) colour the console kicks and the aisle floor from inside the pit
+      lights.push({ type: "point", pos: [s * 12.5, PIT_FLOOR + 1.4, 468.5], color: LIGHT.blue, intensity: 8, distance: 10, priority: 0.6 });
+      lights.push({ type: "point", pos: [s * 12.5, PIT_FLOOR + 1.4, 490.5], color: LIGHT.red, intensity: 7, distance: 10, priority: 0.6 });
     }
 
     const scr = screens;

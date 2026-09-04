@@ -52,7 +52,7 @@ export function addStandins(PALETTE, mats) {
   if (!mats.screenImp0) {
     const texes = [makeScreen(512, 256, 201, "#3a7bff", "#ff2a1a"), makeScreen(512, 256, 211, "#ff2a1a", "#ffa028"), makeScreen(512, 256, 223, "#3a7bff", "#38d67a"), makeScreen(512, 256, 233, "#ffa028", "#3a7bff")];
     texes.forEach((tex, i) => {
-      mats["screenImp" + i] = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.3, roughness: 0.15, metalness: 0, envMapIntensity: 1.0 });
+      mats["screenImp" + i] = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.3, roughness: 0.42, metalness: 0, envMapIntensity: 0.4 }); // anti-glare (0.15 mirrored pool spots as white blobs)
     });
   }
   if (!mats.holo) mats.holo = new THREE.MeshBasicMaterial({ color: 0x4fd8ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });

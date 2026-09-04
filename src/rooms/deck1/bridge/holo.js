@@ -7,9 +7,11 @@ export function buildHolo(ctx, { x, y, z, scale = 1 / 1000, hover = 0.55 }) {
   const S = scale;
   const pts = [];
   const cols = [];
-  const C_HULL = [0.55, 0.78, 1.0];
-  const C_DET = [0.42, 0.62, 1.0];
-  const C_GRID = [0.25, 0.45, 0.9];
+  // kept under the 1.15 bloom threshold even where the additive lines overlap, so the wedge stays a blue wireframe
+  // rather than a white shape
+  const C_HULL = [0.38, 0.62, 0.9];
+  const C_DET = [0.3, 0.5, 0.85];
+  const C_GRID = [0.2, 0.38, 0.8];
   const seg = (a, b, c, k = 1) => {
     pts.push(a[0], a[1], a[2], b[0], b[1], b[2]);
     for (let i = 0; i < 2; i++) cols.push(c[0] * k, c[1] * k, c[2] * k);
@@ -91,7 +93,7 @@ export function buildHolo(ctx, { x, y, z, scale = 1 / 1000, hover = 0.55 }) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
   geo.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3));
-  const lineMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+  const lineMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
   const lines = new THREE.LineSegments(geo, lineMat);
   lines.name = "holo-wedge";
   lines.frustumCulled = false;
@@ -119,7 +121,7 @@ export function buildHolo(ctx, { x, y, z, scale = 1 / 1000, hover = 0.55 }) {
     const tri = ph < 0.5 ? ph * 2 : 2 - ph * 2;
     sweep.position.y = 0.32 + tri * 0.6;
     sweepMat.opacity = 0.12 + 0.06 * Math.sin(t * 3);
-    lineMat.opacity = 0.9 + 0.05 * Math.sin(t * 7.3);
+    lineMat.opacity = 0.76 + 0.05 * Math.sin(t * 7.3);
   }
   update(ctx.time ? ctx.time() : 0);
   return { group, update };

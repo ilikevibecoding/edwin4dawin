@@ -77,8 +77,13 @@ space.root.traverse((o) => {
   slab([-470, -6, -800], [470, 0, 800]); // upper hull plane (flat stand-in for the shallow pyramid)
   slab([-110, 0, 120], [110, 135, 760]); // superstructure block
   slab([-38, 135, 480], [38, 232, 560]); // tower neck
-  // bridge head as a hollow shell around Deck 1 (floor, roof, sides, back)
-  slab([-90, 232, 455], [90, 239.5, 545]);
+  // bridge head as a hollow shell around Deck 1 (floor, roof, sides, back). The floor stops at 236 under the bridge
+  // footprint (x ±20, z 458..512): its pits go down to 237.6 and a 239.5 top filled them from every above-deck view.
+  slab([-90, 232, 455], [90, 236, 545]);
+  slab([-90, 236, 455], [-20, 239.5, 545]);
+  slab([20, 236, 455], [90, 239.5, 545]);
+  slab([-20, 236, 455], [20, 239.5, 458]);
+  slab([-20, 236, 512], [20, 239.5, 545]);
   slab([-90, 264.5, 455], [90, 268, 545]);
   slab([-90, 232, 455], [-88.2, 268, 545]);
   slab([88.2, 232, 455], [90, 268, 545]);
