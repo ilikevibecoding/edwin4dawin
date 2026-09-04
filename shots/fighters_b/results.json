@@ -1,0 +1,296 @@
+{
+  "tag": "b",
+  "views": {
+    "wing": {
+      "stats": {
+        "frameMs": 7709.44,
+        "fps": 0.1,
+        "p95Ms": 8637.4,
+        "jsMs": 3.86,
+        "calls": 135,
+        "triangles": 1290624,
+        "points": 14800,
+        "lines": 0,
+        "geometries": 285,
+        "textures": 118,
+        "textureMB": 0,
+        "programs": 58,
+        "shaderCompiles": 58,
+        "longTasks": 37,
+        "longTaskMs": 208008,
+        "loadMs": 31130,
+        "pixelRatio": 1,
+        "jsHeapMB": 196.2,
+        "visibleCells": 7,
+        "activeLights": 19,
+        "current": "hangar",
+        "cells": 46,
+        "colliders": 622,
+        "floors": 47,
+        "mode": "interior",
+        "exteriorTriangles": 16312,
+        "poolLights": 19,
+        "qualityLevel": 3
+      },
+      "traffic": {
+        "airborne": 4,
+        "parts": 6,
+        "triPerFighter": 4764,
+        "phases": {
+          "docked": 17,
+          "release": 1,
+          "patrol": 3,
+          "parked": 3
+        }
+      },
+      "info": null
+    },
+    "descend": {
+      "stats": {
+        "frameMs": 7599.6,
+        "fps": 0.1,
+        "p95Ms": 5604,
+        "jsMs": 1.7,
+        "calls": 544,
+        "triangles": 1609084,
+        "points": 14800,
+        "lines": 0,
+        "geometries": 701,
+        "textures": 118,
+        "textureMB": 0,
+        "programs": 62,
+        "shaderCompiles": 62,
+        "longTasks": 49,
+        "longTaskMs": 299016,
+        "loadMs": 31130,
+        "pixelRatio": 1,
+        "jsHeapMB": 197.3,
+        "visibleCells": 7,
+        "activeLights": 19,
+        "current": "hangar",
+        "cells": 46,
+        "colliders": 622,
+        "floors": 47,
+        "mode": "interior",
+        "exteriorTriangles": 16312,
+        "poolLights": 19,
+        "qualityLevel": 3
+      },
+      "traffic": {
+        "airborne": 4,
+        "parts": 6,
+        "triPerFighter": 4764,
+        "phases": {
+          "docked": 17,
+          "descend": 1,
+          "patrol": 3,
+          "parked": 3
+        }
+      },
+      "info": {
+        "id": 17,
+        "phase": "descend",
+        "u": 0.45,
+        "pos": [
+          17.4,
+          -16.6,
+          12.9
+        ],
+        "speed": 7,
+        "cam": [
+          15.6,
+          -14.6,
+          -9
+        ],
+        "airborne": 4
+      }
+    },
+    "dock": {
+      "stats": {
+        "frameMs": 4923.84,
+        "fps": 0.2,
+        "p95Ms": 4323.5,
+        "jsMs": 0.78,
+        "calls": 130,
+        "triangles": 1266468,
+        "points": 14800,
+        "lines": 0,
+        "geometries": 704,
+        "textures": 118,
+        "textureMB": 0,
+        "programs": 63,
+        "shaderCompiles": 63,
+        "longTasks": 61,
+        "longTaskMs": 347611,
+        "loadMs": 31130,
+        "pixelRatio": 1,
+        "jsHeapMB": 197.9,
+        "visibleCells": 7,
+        "activeLights": 19,
+        "current": "hangar",
+        "cells": 46,
+        "colliders": 622,
+        "floors": 47,
+        "mode": "interior",
+        "exteriorTriangles": 16312,
+        "poolLights": 19,
+        "qualityLevel": 3
+      },
+      "traffic": {
+        "airborne": 4,
+        "parts": 6,
+        "triPerFighter": 4764,
+        "phases": {
+          "docked": 17,
+          "patrol": 2,
+          "approach": 1,
+          "dock": 1,
+          "parked": 3
+        }
+      },
+      "info": {
+        "id": 20,
+        "phase": "dock",
+        "u": 0.25,
+        "pos": [
+          50,
+          -7.1,
+          -56.3
+        ],
+        "speed": 0,
+        "cam": [
+          50,
+          -11.1,
+          -56.3
+        ],
+        "airborne": 4
+      }
+    },
+    "exit_ext": {
+      "stats": {
+        "frameMs": 5236.65,
+        "fps": 0.2,
+        "p95Ms": 8578.1,
+        "jsMs": 2.51,
+        "calls": 194,
+        "triangles": 1754088,
+        "points": 14800,
+        "lines": 260,
+        "geometries": 705,
+        "textures": 118,
+        "textureMB": 0,
+        "programs": 64,
+        "shaderCompiles": 64,
+        "longTasks": 73,
+        "longTaskMs": 407371,
+        "loadMs": 31130,
+        "pixelRatio": 1,
+        "jsHeapMB": 197.7,
+        "visibleCells": 7,
+        "activeLights": 19,
+        "current": "hangar",
+        "cells": 46,
+        "colliders": 622,
+        "floors": 47,
+        "mode": "orbit",
+        "exteriorTriangles": 16312,
+        "poolLights": 19,
+        "qualityLevel": 3
+      },
+      "traffic": {
+        "airborne": 4,
+        "parts": 6,
+        "triPerFighter": 4764,
+        "phases": {
+          "docked": 17,
+          "release": 1,
+          "patrol": 2,
+          "enter": 1,
+          "parked": 3
+        }
+      },
+      "info": {
+        "id": 16,
+        "phase": "patrol",
+        "u": 0,
+        "pos": [
+          -14.9,
+          -95.2,
+          31.9
+        ],
+        "speed": 24.6,
+        "cam": [
+          45.1,
+          -105.2,
+          31.6
+        ],
+        "airborne": 3
+      }
+    },
+    "patrol_ext": {
+      "stats": {
+        "frameMs": 4518.63,
+        "fps": 0.2,
+        "p95Ms": 5881.5,
+        "jsMs": 1.03,
+        "calls": 170,
+        "triangles": 1312950,
+        "points": 14800,
+        "lines": 260,
+        "geometries": 705,
+        "textures": 118,
+        "textureMB": 0,
+        "programs": 64,
+        "shaderCompiles": 64,
+        "longTasks": 85,
+        "longTaskMs": 459034,
+        "loadMs": 31130,
+        "pixelRatio": 1,
+        "jsHeapMB": 197.7,
+        "visibleCells": 7,
+        "activeLights": 19,
+        "current": "hangar",
+        "cells": 46,
+        "colliders": 622,
+        "floors": 47,
+        "mode": "orbit",
+        "exteriorTriangles": 16312,
+        "poolLights": 19,
+        "qualityLevel": 3
+      },
+      "traffic": {
+        "airborne": 4,
+        "parts": 6,
+        "triPerFighter": 4764,
+        "phases": {
+          "docked": 17,
+          "descend": 1,
+          "patrol": 2,
+          "enter": 1,
+          "parked": 3
+        }
+      },
+      "info": {
+        "id": 16,
+        "phase": "patrol",
+        "u": 0.03,
+        "pos": [
+          -22.7,
+          -154,
+          -504.2
+        ],
+        "speed": 146.7,
+        "cam": [
+          67.3,
+          -179,
+          -506.7
+        ],
+        "airborne": 4
+      }
+    }
+  },
+  "logs": [
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected."
+  ]
+}
