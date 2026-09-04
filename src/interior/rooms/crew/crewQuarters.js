@@ -179,7 +179,8 @@ export function buildCrewQuarters(kit, ctx) {
   partition(kit, [x0 + 0.25, wz0], [wx1, wz0], y, h - 0.05, { openings: [{ u0: 6.55 - x0 - 0.25, u1: 8.4 - x0 - 0.25, h: 2.3 }], tone: IMP.wallLight, seed: 31, tag: "washroom" });
   partition(kit, [wx1, wz0], [wx1, z1 - 0.25], y, h - 0.05, { tone: IMP.wallLight, seed: 32, tag: "washroom" });
   // hygienic gloss floor inside
-  kit.boxMM("impGloss", [x0 + 0.4, y + 0.001, wz0 + 0.1], [wx1 - 0.1, y + 0.006, z1 - 0.4], { color: IMP.wallMid, texel: 0.25 });
+  // soft gloss: plain gloss mirrored the ceiling bands into a blown-out pool along the washroom floor
+  kit.boxMM("impGlossSoft", [x0 + 0.4, y + 0.001, wz0 + 0.1], [wx1 - 0.1, y + 0.006, z1 - 0.4], { color: IMP.wallMid, texel: 0.25 });
   {
     const w = walls.west;
     const { frame } = wallFrame(kit, w.from, w.to, y);

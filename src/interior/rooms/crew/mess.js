@@ -289,7 +289,8 @@ export function buildMess(kit, ctx) {
 
   // ---- galley -------------------------------------------------------------------------------------
   const gx0 = partX + 0.16;
-  kit.boxMM("impGloss", [gx0, y + 0.001, zN + 0.12], [xE - 0.12, y + 0.006, zS - 0.12], { color: IMP.wallDark, texel: 0.3 });
+  // soft gloss: the plain gloss deck mirrored the aisle light bands into a blown-out pool down the galley
+  kit.boxMM("impGlossSoft", [gx0, y + 0.001, zN + 0.12], [xE - 0.12, y + 0.006, zS - 0.12], { color: IMP.wallDark, texel: 0.3 });
   // heater row on the east wall under an extraction hood
   const ovZ = [348.2, 351.0, 353.8, 356.6, 359.4, 362.2];
   for (const [i, z] of ovZ.entries()) oven(kit, [xE - 0.47, y, z], -Math.PI / 2, { rings: i % 2 ? 1 : 2 });
