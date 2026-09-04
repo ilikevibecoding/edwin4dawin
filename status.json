@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-04T08:59:32.096Z",
+  "updated": "2026-09-04T09:02:13.774Z",
   "phase": "Phase 3 of 5: parallel builders finishing, merging + verifying into the integration branch",
   "summary": "Plan: (1) baseline measured, (2) shared disaster foundation built, (3) 7 builder agents in isolated worktrees, (4) independent critics + verification agents, (5) final baseline comparison, changelog, PR. Nothing counts as done until it is merged, tested and measured in the actual game.",
   "links": [
@@ -87,6 +87,15 @@
       "heap": "96",
       "longTasks": "4 (702 ms)",
       "notes": "39 NPCs, 43 animals"
+    },
+    {
+      "scenario": "Tornado in town (integration, loaded VM)",
+      "load": "-",
+      "js": "-",
+      "draws": "359 -> 164 with far-entity LOD",
+      "heap": "-",
+      "longTasks": "-",
+      "notes": "draw-call attribution: NPC parts were ~225 of 359 calls; debris is 1 instanced draw"
     }
   ],
   "screenshots": [
@@ -179,6 +188,10 @@
     {
       "time": "2026-09-04 08:59 UTC",
       "text": "Tornado integrated: 12/12 checks pass. Draw-call analysis: ~225 of ~360 calls are NPC body parts (debris is one instanced draw) -> far-NPC LOD planned."
+    },
+    {
+      "time": "2026-09-04 09:02 UTC",
+      "text": "Far-entity LOD added: draw calls during a tornado in town 359 -> 164 (-54%), visuals unchanged at distance."
     }
   ],
   "issues": [
