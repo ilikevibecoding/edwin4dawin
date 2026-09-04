@@ -17,6 +17,12 @@ export function createHUD() {
     exterior: "drag orbit · right-drag pan · wheel zoom · WASD/QE fly · B board",
     transition: "",
   };
+  const TOUCH_HINTS = {
+    interior: "left: move · right: look",
+    exterior: "drag: orbit · pinch: zoom · two fingers: pan",
+    transition: "",
+  };
+  let touch = false;
 
   return {
     showPrompt(key, label) {
@@ -76,9 +82,17 @@ export function createHUD() {
       location.textContent = text || "";
     },
     setMode(mode) {
-      modehint.textContent = HINTS[mode] || "";
+      modehint.textContent = (touch ? TOUCH_HINTS : HINTS)[mode] || "";
       if (mode !== "interior") start.classList.add("hidden");
       crosshair.style.display = mode === "interior" ? "" : "none";
+    },
+    setTouch(on) {
+      touch = on;
+      document.body.classList.toggle("touch", on);
+      const keys = start.querySelector(".keys");
+      const hint = start.querySelector(".hint");
+      if (on && keys) keys.textContent = "left half: move · right half: look · buttons: interact / exterior view";
+      if (on && hint) hint.textContent = "Tap to take the deck";
     },
     toggleStats(force) {
       stats.classList.toggle("hidden", force === undefined ? undefined : !force);

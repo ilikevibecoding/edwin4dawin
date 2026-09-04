@@ -16,14 +16,16 @@ import { ModeManager, BOARD_POSE } from "./camera/modes.js";
 import { createReservedSystems } from "./systems/reserved.js";
 import { createAudio } from "./audio/ambience.js";
 import { PerfMonitor } from "./perf.js";
+import { createTouchControls, isTouchDevice } from "./touch.js";
 import { LEGACY_WING, ROOMS } from "./config/shipSpec.js";
 
 // ---------------------------------------------------------------------------
 // Renderer / scene
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById("view");
+const TOUCH = isTouchDevice();
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, TOUCH ? 1.0 : 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -74,17 +76,23 @@ player.onLockChange = (locked) => {
   if (locked) {
     hud.hideStart();
     audio.resume();
-  } else if (!debugMode && modes.mode === "interior") hud.showStart();
+  } else if (!debugMode && modes.mode === "interior" && !TOUCH) hud.showStart();
 };
-hud.startEl.addEventListener("click", () => player.requestLock());
+hud.startEl.addEventListener("click", () => {
+  audio.resume();
+  if (TOUCH) hud.hideStart();
+  else player.requestLock();
+});
 canvas.addEventListener("click", () => {
   audio.resume();
-  if (modes.mode === "interior" && !player.locked) player.requestLock();
+  if (modes.mode === "interior" && !player.locked && !TOUCH) player.requestLock();
 });
 
 const interactions = new Interactions({ camera, interactables: interior.interactables, lighting, space, player, hud });
 const orbit = new OrbitCamera(camera, canvas);
 const modes = new ModeManager({ camera, player, orbit, interior, exterior, hud, space, traffic });
+const touch = TOUCH ? createTouchControls({ canvas, player, orbit, modes, interactions, hud }) : null;
+if (TOUCH) hud.setTouch(true);
 const reserved = createReservedSystems();
 reserved.attach({ scene, interior, exterior, traffic, camera, player });
 
@@ -104,7 +112,7 @@ modes.onModeChange = (mode) => {
   if (mode === "exterior") exterior.group.visible = true;
   else {
     exterior.setInteriorView(interior.exteriorWindows());
-    if (!player.locked && !debugMode) hud.showStart();
+    if (!player.locked && !debugMode && !TOUCH) hud.showStart();
   }
 };
 refreshZone(interior.state.zone);
@@ -168,9 +176,10 @@ const QUALITY_LEVELS = [
   { ratio: 0.66, ao: "Low" },
   { ratio: 0.8, ao: "Low" },
   { ratio: 1.0, ao: "Medium" },
-  { ratio: Math.min(window.devicePixelRatio, 1.5), ao: "Medium" },
+  { ratio: Math.min(window.devicePixelRatio, TOUCH ? 1.0 : 1.5), ao: "Medium" },
 ];
-const quality = { level: QUALITY_LEVELS.length - 1, slow: 0, fast: 0, enabled: true };
+// phones start low and climb only if they keep up
+const quality = { level: TOUCH ? 0 : QUALITY_LEVELS.length - 1, slow: 0, fast: 0, enabled: true };
 function applyQuality() {
   const q = QUALITY_LEVELS[quality.level];
   renderer.setPixelRatio(q.ratio);
@@ -178,6 +187,7 @@ function applyQuality() {
   post.setSize(window.innerWidth, window.innerHeight);
   post.ao.setQualityMode(q.ao);
 }
+if (TOUCH) applyQuality();
 function updateQuality(dt) {
   if (!quality.enabled) return;
   if (dt > 1 / 52) {
@@ -493,6 +503,7 @@ function frame() {
   reserved.update(dt);
   audio.setListener(camera.position);
   if (framesRendered > 60) updateQuality(dt);
+  if (touch) touch.update();
 
   if (debugAPI.directRender) renderer.render(scene, camera);
   else post.render(debugAPI.freezeGrain ? 0.37 : t);

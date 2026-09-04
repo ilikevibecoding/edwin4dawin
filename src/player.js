@@ -36,6 +36,10 @@ export class Player {
     this.headBob = true;
     this.frozen = false;
     this.onLockChange = null;
+    // touch devices: no pointer lock; a virtual joystick feeds touchMove and touchMode gates input
+    this.touchMode = false;
+    this.touchMove = null;
+    this.touchRun = false;
 
     this._onMouseMove = (e) => {
       if (!this.locked || this.frozen) return;
@@ -88,16 +92,23 @@ export class Player {
       return;
     }
     const k = this.keys;
-    const fwd = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
-    const strafe = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
+    let fwd = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
+    let strafe = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
+    let run = k.has("ShiftLeft") || k.has("ShiftRight");
+    if (this.touchMove && this.touchMove.lengthSq() > 0.01) {
+      fwd += this.touchMove.y;
+      strafe += this.touchMove.x;
+      run = run || this.touchRun;
+    }
     const wish = new THREE.Vector3();
-    if (this.locked && (fwd || strafe)) {
+    if ((this.locked || this.touchMode) && (fwd || strafe)) {
       // camera forward / right on the XZ plane for the current yaw
       const fx = -Math.sin(this.yaw);
       const fz = -Math.cos(this.yaw);
       const rx = Math.cos(this.yaw);
       const rz = -Math.sin(this.yaw);
-      const speed = k.has("ShiftLeft") || k.has("ShiftRight") ? RUN_SPEED : SPEED;
+      const mag = Math.min(1, Math.hypot(fwd, strafe));
+      const speed = (run ? RUN_SPEED : SPEED) * mag;
       wish.set(fx * fwd + rx * strafe, 0, fz * fwd + rz * strafe).normalize().multiplyScalar(speed);
     }
     // smooth acceleration

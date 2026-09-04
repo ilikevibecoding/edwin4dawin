@@ -73,7 +73,7 @@ export class Interactions {
   activate(id = null) {
     const item = id ? this.items.find((i) => i.id === id) : this.hovered;
     if (!item || this.busy) return false;
-    if (!id && !this.player.locked) return false;
+    if (!id && !this.player.locked && !this.player.touchMode) return false;
     this.run(item.id);
     return true;
   }
