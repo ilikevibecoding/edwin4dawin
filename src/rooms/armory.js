@@ -468,10 +468,11 @@ export function buildArmory(kit, ctx, room) {
   for (const x of [-4.5, 3.0, 10.5]) ceilingPanel(kit, x, 0, h, 2.4, 0.9, "emitWarmSoft");
 
   // ---------------------------------------------------------------- lights (8): vestibule white, booth amber (above), red beacon (above), 3 amber aisle, bench white, armour amber
-  keyLight(kit, -12.2, 3.4, 0, { color: 0xe8eeff, k: 2.0, distance: 12, priority: 0.5 });
-  keyLight(kit, -4.5, 3.4, 0, { color: 0xffc38a, k: 2.2, distance: 13, priority: 0.49 });
-  keyLight(kit, 3.0, 3.4, 0, { color: 0xffc38a, k: 2.2, distance: 13, priority: 0.48 });
-  keyLight(kit, 10.5, 3.4, 0, { color: 0xffc38a, k: 2.2, distance: 13, priority: 0.47 });
-  keyLight(kit, 13.2, 2.8, 5.6, { color: 0xf0f4ff, k: 2.2, distance: 8, priority: 0.44 });
-  keyLight(kit, 2.6, 3.2, 8.4, { color: 0xffb060, k: 2.0, distance: 11, priority: 0.43 });
+  keyLight(kit, -12.2, 3.4, 0, { color: 0xe8eeff, k: 2.4, distance: 12, priority: 0.5 });
+  // the two outer aisle keys sit north of the aisle so the rifle racks / cell cages get direct light
+  keyLight(kit, -4.5, 3.4, -3.5, { color: 0xffc38a, k: 2.6, distance: 13, priority: 0.49 });
+  keyLight(kit, 3.0, 3.4, 0, { color: 0xffc38a, k: 2.6, distance: 13, priority: 0.48 });
+  keyLight(kit, 10.5, 3.4, -3.5, { color: 0xffc38a, k: 2.6, distance: 13, priority: 0.47 });
+  keyLight(kit, 13.2, 2.8, 5.6, { color: 0xf0f4ff, k: 2.6, distance: 8, priority: 0.44 });
+  keyLight(kit, 2.6, 3.2, 8.4, { color: 0xffb060, k: 2.4, distance: 11, priority: 0.43 });
 }

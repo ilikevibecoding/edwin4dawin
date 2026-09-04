@@ -372,8 +372,8 @@ export function buildCrewQuarters(kit, ctx, room) {
   let li = 0;
   for (const side of [-1, 1]) {
     for (let b = 0; b < 3; b++, li++) {
-      keyLight(kit, bayX0 + (b + 0.5) * bayW, 2.3, side * (hz - bayDepth + 0.3), { color: keyCol, k: 2.6, distance: 12, priority: 0.5 - li * 0.01 });
+      keyLight(kit, bayX0 + (b + 0.5) * bayW, 2.3, side * (hz - bayDepth + 0.3), { color: keyCol, k: 4.0, distance: 12, priority: 0.5 - li * 0.01 });
     }
   }
-  keyLight(kit, 7, h - 0.6, 0, { color: keyCol, k: 3.2, distance: 20, priority: 0.46 });
+  keyLight(kit, 7, h - 0.6, 0, { color: keyCol, k: 3.6, distance: 20, priority: 0.46 });
 }

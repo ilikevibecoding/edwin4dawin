@@ -360,15 +360,16 @@ export function buildDetention(kit, ctx, room) {
     kit.box("impTrim", cx + 0.2, 2.86, cz + 1.6, 1.0, 0.3, 0.2, { color: BLK });
     kit.box("scrRed0", cx + 0.2, 2.86, cz + 1.71, 0.8, 0.14, 0.01, { uv: "keep" });
     crateStack(kit, cx - 1.2, cz + 0.6, 0.2, { seed: 46, decal: IMP_DECAL.hazard, n: 2 });
-    W.decal(IMP_DECAL.restricted, hz + 5.0, 2.5, 0.03, 0.44);
-    hoodLamp(W, hz + 7.2, 2.6, ACCENT, 0.8);
+    // above the cage top rail (the wall further south is hidden behind the cell row)
+    W.decal(IMP_DECAL.restricted, hz + 9.0, 3.3, 0.03, 0.44);
+    hoodLamp(W, hz + 10.6, 3.3, ACCENT, 0.8);
     // guard post NE: stool, standing console, wall board
     impConsole(kit, hx - 2.2, 0, -hz + 1.6, 1.4, 0.8, { yaw: 0, seed: 88, screens: ["scrRed0", "scrRed1"], accentKey, tall: true });
     impChair(kit, hx - 2.2, 0, -hz + 2.6, 0);
     E.box("impTrim", 1.6, 1.8, 0.06, 1.6, 0.9, 0.12, { color: BLK, texel: 1 });
     E.screen("scrRed1", 1.6, 1.85, 0.125, 1.4, 0.6);
     E.box("leds", 1.6, 1.4, 0.125, 1.2, 0.04, 0.01, { uv: "keep" });
-    crateStack(kit, hx - 1.3, -hz + 4.2, -0.2, { seed: 47, decal: IMP_DECAL.glyphs1, n: 3 });
+    crateStack(kit, hx - 1.3, -hz + 3.2, -0.2, { seed: 47, decal: IMP_DECAL.glyphs1, n: 3 });
   }
 
   // ---------------------------------------------------------------- door wall (N): signage, status units, blast stripes on the deck
@@ -381,8 +382,8 @@ export function buildDetention(kit, ctx, room) {
   impWallGear(N, hx + 10.5, 1.6, { seed: 89, accentKey });
   cableRun(N, hx + 6.5, hx + 16.0, 2.95, { n: 3, seed: 14, accentKey });
   cableRun(N, hx - 16.0, hx - 6.5, 2.95, { n: 2, seed: 15, accentKey });
-  floorStripe(kit, -1.6, -hz + 0.5, -1.6, -hz + 3.4, 0.12, "chevronR", 0.018);
-  floorStripe(kit, 1.6, -hz + 0.5, 1.6, -hz + 3.4, 0.12, "chevronR", 0.018);
+  floorStripe(kit, -1.95, -hz + 0.5, -1.95, -hz + 3.4, 0.12, "chevronR", 0.018);
+  floorStripe(kit, 1.95, -hz + 0.5, 1.95, -hz + 3.4, 0.12, "chevronR", 0.018);
   floorDecal(kit, IMP_DECAL.keepClear, 0, -hz + 2.0, 0.8, Math.PI, 0.02);
   // E/W wall detail above the cell roofs
   for (const [F, u0] of [[E, hz - 8.0], [W, hz - 8.0]]) {

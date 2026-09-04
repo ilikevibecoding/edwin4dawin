@@ -357,12 +357,13 @@ export function rifleRack(kit, cx, cz, yaw, n, opts = {}) {
   const pitch = 0.42;
   const len = n * pitch + 0.2;
   p.box("impTrim", 0, 1.1, -0.15, len, 2.2, 0.1, { color: PALETTE.impBlack, texel: 1 });
-  p.box("impPanel2", 0, 1.1, -0.09, len - 0.12, 2.0, 0.02, { color: PALETTE.impGreyDark, uv: "world", texel: 1 });
+  // light backboard so the dark rifle silhouettes read from across the room
+  p.box("impPanel1", 0, 1.1, -0.09, len - 0.12, 2.0, 0.02, { color: PALETTE.impGrey, uv: "world", texel: 1 });
   p.box("impMetal", 0, 0.12, 0.15, len, 0.06, 0.5, { color: PALETTE.impCharcoal, texel: 1 });
   p.box("impTrim", 0, 0.05, 0.15, len, 0.1, 0.5, { color: PALETTE.impBlack });
   p.box("impMetal", 0, 1.35, 0.14, len - 0.1, 0.05, 0.05, { color: PALETTE.impGreyDark });
   p.box("impTrim", 0, 2.1, 0.02, len - 0.1, 0.12, 0.3, { color: PALETTE.impBlack });
-  p.box(accentKey, 0, 2.06, 0.1, len - 0.3, 0.02, 0.03);
+  p.box(accentKey, 0, 2.05, 0.12, len - 0.3, 0.03, 0.05);
   const rand = rng(seed);
   for (let i = 0; i < n; i++) {
     const lx = -len / 2 + 0.1 + (i + 0.5) * pitch;
