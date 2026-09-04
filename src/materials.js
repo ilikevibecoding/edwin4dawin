@@ -205,6 +205,8 @@ export function buildMaterials() {
     extEmitWhite: emit("#ffffff", 3.0, { fog: false }),
     extEmitRed: emit("#ff3020", 3.0, { fog: false }),
     extEmitBlue: emit("#6fa8ff", 3.0, { fog: false }),
+    // dimmer warm strips for window / door bands so bloom does not swallow them at distance
+    extEmitWarm: emit("#ffe2b0", 1.6, { fog: false }),
   };
   // Console screens (Kestrel): black diffuse, emissive UI
   const screenTex = [makeScreen(512, 256, 5), makeScreen(512, 256, 17), makeScreen(512, 256, 29, "#f08a3c", "#4fd8cc"), makeScreen(512, 256, 41)];
@@ -224,7 +226,7 @@ export function buildMaterials() {
   }
 
   // Light domains: everything lit is interior unless listed here
-  const exteriorKeys = ["hullPlate", "hullPlate1", "hullGreeble", "hullTrim", "cityLights", "extEmitWhite", "extEmitRed", "extEmitBlue"];
+  const exteriorKeys = ["hullPlate", "hullPlate1", "hullGreeble", "hullTrim", "cityLights", "extEmitWhite", "extEmitRed", "extEmitBlue", "extEmitWarm"];
   for (const [k, m] of Object.entries(mats)) {
     if (Array.isArray(m)) continue;
     if (!m.isMaterial) continue;

@@ -38,7 +38,7 @@ page.on("pageerror", (e) => {
 
 console.log(`loading ${base}`);
 const tLoad = Date.now();
-await page.goto(base, { waitUntil: "load" });
+await page.goto(base, { waitUntil: "commit", timeout: 180000 });
 await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 300000 });
 console.log(`app ready in ${((Date.now() - tLoad) / 1000).toFixed(1)} s`);
 
@@ -88,7 +88,7 @@ for (const name of views) {
   const label = await applyView(name);
   await settle(3, 600);
   const file = resolve(outDir, `${label}.png`);
-  await page.screenshot({ path: file });
+  await page.screenshot({ path: file, timeout: 150000 });
   const stats = await page.evaluate(() => window.debugAPI.getStats());
   results.views[name] = stats;
   console.log(`shot ${name}: ${stats.calls} calls, ${(stats.triangles / 1000).toFixed(0)}k tris, ${stats.poolLights} lights, cells ${stats.visibleCells}, ${stats.frameMs} ms/frame (software GL)`);

@@ -22,7 +22,7 @@ page.on("console", (m) => {
 });
 page.on("pageerror", (e) => errors.push("PAGEERROR " + e.message + "\n" + (e.stack || "").split("\n").slice(0, 6).join("\n")));
 const t0 = Date.now();
-await page.goto(base, { waitUntil: "load" });
+await page.goto(base, { waitUntil: "commit", timeout: 180000 });
 try {
   await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 300000 });
 } catch (e) {
@@ -36,7 +36,7 @@ if (view) {
   const f0 = await page.evaluate(() => window.debugAPI.frames());
   await page.waitForFunction((t) => window.debugAPI.frames() >= t, f0 + 3, { timeout: 240000 });
   mkdirSync("shots/smoke", { recursive: true });
-  await page.screenshot({ path: resolve("shots/smoke", `${view.replace(":", "_")}.png`) });
+  await page.screenshot({ path: resolve("shots/smoke", `${view.replace(":", "_")}.png`), timeout: 150000 });
   console.log("shot ->", `shots/smoke/${view.replace(":", "_")}.png`);
 }
 const stats = await page.evaluate(() => window.debugAPI.getStats());
