@@ -89,6 +89,10 @@ export function buildBridge(kit, ctx) {
     gloss.envMapIntensity = 0.9;
     mats.bridgeGloss = gloss;
   }
+  // window glass under a room-owned key: unlike "glass" it is not in NO_SHADOW_KEYS, so the panes cast
+  // shadows and keep the exterior sun (exposed for the hull, it blows out the sill consoles whenever
+  // the sky brings it round to the bow) out of the room while staying see-through
+  if (!mats.bridgeGlass) mats.bridgeGlass = mats.glass.clone();
 
   // ---------------------------------------------------------------------------------------------
   // Walls: three impWalls in two lifts each (lower with the door openings, upper with a second band)
@@ -262,10 +266,11 @@ export function buildBridge(kit, ctx) {
   // ---------------------------------------------------------------------------------------------
   // Lights (descriptors)
   // ---------------------------------------------------------------------------------------------
-  // cool "space light" from outside the windows; its axis passes just under the glass head so the
-  // fan reaches the aft wall while the frame slab shadows everything around the banks. It sits 20 m
-  // out from the glass so the near/far irradiance gradient stays under 10:1 (no hot spot at the sill)
-  spotLightDesc(ctx, 0xc4d6ff, 190, 95, [5, ceilY + 3.0, 528], [0, y + 0.6, 585], { angle: 0.5, penumbra: 0.55, shadow: true, priority: 2 });
+  // cool "space light": the glow of space through the windows, cast down the room from just inside
+  // the glass head (the panes block shadow-casting light, so it cannot sit outside). Its upper edge
+  // runs level under the ceiling and its lower edge lands just aft of the captain's step, so neither
+  // the ceiling above it nor the sill consoles get a hot spot.
+  spotLightDesc(ctx, 0xc4d6ff, 110, 60, [2.5, ceilY - 0.9, SILL_Z + 0.6], [0, y + 0.6, 565], { angle: 0.45, penumbra: 0.55, shadow: true, priority: 2 });
   for (const z of [562, 578, 594]) {
     const d = pointLightDesc(ctx, 0xffe0c0, 5.5, 12, [0, ceilY - 1.0, z], 1);
     d.baseColor = d.color.clone();
@@ -741,7 +746,7 @@ function buildWindows(kit, ctx, { xi0, xi1, y, ceilY, wb }) {
     const b = bank(s);
     // glass: one pane per bank in the slab's mid-plane
     const shape = new THREE.Shape(b.map(([px, py]) => new THREE.Vector2(px, py)));
-    kit.add("glass", new THREE.ShapeGeometry(shape), { pos: [0, 0, zc], uv: "keep" });
+    kit.add("bridgeGlass", new THREE.ShapeGeometry(shape), { pos: [0, 0, zc], uv: "keep" });
     // stepped rings on both faces of the slab
     for (const [zr, dr] of [
       [FRAME_Z + FRAME_D + 0.06, 0.12],
