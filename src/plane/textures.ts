@@ -664,8 +664,10 @@ export const INSTRUMENT_ATLAS = {
   size: 512,
   ball: { x: 0, y: 0, s: 256 },
   card: { x: 256, y: 0, s: 256 },
-  /** degrees of pitch covered by the ball's radius (the ball disc is 1.3 apertures wide) */
-  ballDegPerRadius: 39,
+  /** the ball disc is this many apertures wide (it shifts up to 25 deg = 0.83 apertures and must still fill the window) */
+  ballRadius: 1.9,
+  /** degrees of pitch covered by the ball's radius: 30 deg per aperture radius */
+  ballDegPerRadius: 57,
   patches: { white: [16, 300], black: [80, 300], orange: [144, 300], red: [208, 300], bezel: [272, 300], grey: [336, 300], yellow: [400, 300], glass: [464, 300] } as Record<string, [number, number]>,
 };
 
@@ -690,11 +692,7 @@ export function instrumentAtlas(): THREE.CanvasTexture {
         if (deg % 10 === 0) { ctx.font = `bold ${Math.round(r * 0.11)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(deg), cx - len / 2 - r * 0.09, yy); ctx.fillText(String(deg), cx + len / 2 + r * 0.09, yy); }
       }
     }
-    ctx.restore();
-    // bank scale (rotates with the ball): pointer at the top, marks at 10/20/30/60
-    ctx.fillStyle = '#f4f4f4';
-    for (const d of [-60, -30, -20, -10, 10, 20, 30, 60]) { const a = ((d - 90) * Math.PI) / 180, l = Math.abs(d) % 30 ? r * 0.05 : r * 0.10; ctx.save(); ctx.translate(cx + Math.cos(a) * r * 0.9, cy + Math.sin(a) * r * 0.9); ctx.rotate(a + Math.PI / 2); ctx.fillRect(-1.5, -l, 3, l); ctx.restore(); }
-    ctx.beginPath(); ctx.moveTo(cx, cy - r * 0.78); ctx.lineTo(cx - r * 0.05, cy - r * 0.9); ctx.lineTo(cx + r * 0.05, cy - r * 0.9); ctx.closePath(); ctx.fill(); }
+    ctx.restore(); }
   // ---- heading card: compass rose, N in orange
   { const { x, y, s } = INSTRUMENT_ATLAS.card; const cx = x + s / 2, cy = y + s / 2, r = s / 2;
     ctx.fillStyle = '#101214'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
@@ -733,12 +731,12 @@ export class GpsScreen {
     const key = `${gs}|${trk}|${alt}|${vs}`;
     if (key === this.last) return false;
     this.last = key;
-    const ctx = this.ctx, w = this.w, h = this.h;
+    const ctx = this.ctx, w = this.w, h = this.h, mapW = 206;
     ctx.fillStyle = '#071a2e'; ctx.fillRect(0, 0, w, h);
     // moving map, track-up: bay water, the barrier island and the causeway, own-ship fixed at the lower centre
     ctx.save();
-    ctx.beginPath(); ctx.rect(0, 26, w, h - 52); ctx.clip();
-    ctx.translate(w / 2, h * 0.62); ctx.rotate((-trk * Math.PI) / 180);
+    ctx.beginPath(); ctx.rect(0, 0, mapW, h); ctx.clip();
+    ctx.translate(mapW / 2, h * 0.62); ctx.rotate((-trk * Math.PI) / 180);
     ctx.fillStyle = '#12508a'; ctx.fillRect(-400, -400, 800, 800);
     ctx.fillStyle = '#5c9e4a'; ctx.beginPath(); ctx.ellipse(40, -110, 160, 46, 0.35, 0, 7); ctx.fill();
     ctx.fillStyle = '#7fb56a'; ctx.beginPath(); ctx.ellipse(-120, 60, 70, 34, -0.2, 0, 7); ctx.fill();
@@ -746,19 +744,22 @@ export class GpsScreen {
     ctx.strokeStyle = '#e6e6e6'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-160, 20); ctx.lineTo(60, -90); ctx.stroke();
     ctx.strokeStyle = '#ff5fb0'; ctx.lineWidth = 3; ctx.setLineDash([10, 6]); ctx.beginPath(); ctx.moveTo(0, 60); ctx.lineTo(0, -320); ctx.stroke(); ctx.setLineDash([]);
     ctx.restore();
-    // range ring + own ship (white aircraft symbol)
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(w / 2, h * 0.62, 62, 0, 7); ctx.stroke();
-    ctx.fillStyle = '#ffffff'; ctx.save(); ctx.translate(w / 2, h * 0.62);
+    // range ring + own ship (white aircraft symbol) + track-up label
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(mapW / 2, h * 0.62, 62, 0, 7); ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.save(); ctx.translate(mapW / 2, h * 0.62);
     ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(3, -2); ctx.lineTo(12, 2); ctx.lineTo(12, 5); ctx.lineTo(3, 3); ctx.lineTo(3, 9); ctx.lineTo(6, 11); ctx.lineTo(-6, 11); ctx.lineTo(-3, 9); ctx.lineTo(-3, 3); ctx.lineTo(-12, 5); ctx.lineTo(-12, 2); ctx.lineTo(-3, -2); ctx.closePath(); ctx.fill(); ctx.restore();
-    // data fields (top and bottom bars)
-    ctx.fillStyle = '#04101c'; ctx.fillRect(0, 0, w, 26); ctx.fillRect(0, h - 26, w, 26);
-    ctx.fillStyle = '#20364d'; ctx.fillRect(0, 25, w, 1); ctx.fillRect(0, h - 26, w, 1);
-    const field = (x: number, y: number, k: string, v: string) => {
-      ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#8fb3d9'; ctx.fillText(k, x, y);
-      ctx.font = 'bold 15px monospace'; ctx.fillStyle = '#f4f4f4'; ctx.fillText(v, x + ctx.measureText(k).width * 0.75 + 4, y);
-    };
-    field(6, 13, 'GS', `${gs.toString().padStart(3, ' ')}kt`); field(112, 13, 'TRK', `${trk.toString().padStart(3, '0')}°`); field(222, 13, 'ALT', `${alt}ft`);
-    field(6, h - 13, 'VS', `${vs > 0 ? '+' : ''}${vs}fpm`); field(150, h - 13, 'DTK', '090°'); field(222, h - 13, 'WPT', 'RWY09');
+    ctx.font = 'bold 10px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = '#dfe8f2'; ctx.fillText('TRK UP  2NM', 5, 4); ctx.fillText('DTK 090  RWY09', 5, h - 15);
+    // data column: large live numbers the pilot can read from the seat
+    ctx.fillStyle = '#04101c'; ctx.fillRect(mapW, 0, w - mapW, h);
+    ctx.fillStyle = '#20364d'; ctx.fillRect(mapW, 0, 1, h);
+    const rows: [string, string, string][] = [['GS', `${gs}`, 'kt'], ['TRK', `${trk.toString().padStart(3, '0')}`, '°'], ['ALT', `${alt}`, 'ft'], ['VS', `${vs > 0 ? '+' : ''}${vs}`, 'fpm']];
+    rows.forEach(([k, v, unit], i) => {
+      const y0 = i * (h / 4);
+      ctx.fillStyle = '#20364d'; if (i) ctx.fillRect(mapW, y0, w - mapW, 1);
+      ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = '#8fb3d9'; ctx.fillText(k, mapW + 6, y0 + 4);
+      ctx.textAlign = 'right'; ctx.fillText(unit, w - 5, y0 + 4);
+      ctx.font = 'bold 30px monospace'; ctx.textBaseline = 'bottom'; ctx.fillStyle = i === 1 ? '#ff5fb0' : '#f4f4f4'; ctx.fillText(v, w - 5, y0 + h / 4 - 2);
+    });
     this.texture.needsUpdate = true;
     return true;
   }

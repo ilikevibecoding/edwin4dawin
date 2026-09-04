@@ -23,8 +23,8 @@ const FLOOR = -0.25;
 const PANEL_X = 2.05, PANEL_TILT = 0.3;
 const WING_POS = new THREE.Vector3(0.55, 1.285, 0);
 /** live instrument channels (index into the needle shader's angle/shift arrays) */
-const CH = { fixed: 0, asi: 1, adi: 2, alt100: 3, alt1000: 4, tc: 5, tcBall: 6, hdg: 7, vsi: 8, rpm: 9, map: 10, oilp: 11, oilt: 12, egt: 13, fuell: 14, fuelr: 15 } as const;
-const N_CHANNELS = 16;
+const CH = { fixed: 0, asi: 1, adi: 2, alt100: 3, alt1000: 4, tc: 5, tcBall: 6, hdg: 7, vsi: 8, rpm: 9, map: 10, oilp: 11, oilt: 12, egt: 13, fuell: 14, fuelr: 15, adiBank: 16 } as const;
+const N_CHANNELS = 17;
 /** instrument canvases (GPS screen) are redrawn at most this often (simulated seconds) */
 const CANVAS_PERIOD = 1 / 15;
 
@@ -76,11 +76,21 @@ class InstrumentKit {
   private readonly uv: number[] = [];
   private readonly pivot: number[] = [];
   private readonly chan: number[] = [];
+  private readonly clip: number[] = [];
   private readonly idx: number[] = [];
 
-  private vertex(px: number, py: number, x: number, y: number, z: number, u: number, v: number, ch: number): number {
-    this.pos.push(x, y, z); this.nrm.push(0, 0, 1); this.uv.push(u, v); this.pivot.push(px, py, 0); this.chan.push(ch);
+  /** `clipR` > 0: the fragment shader discards the part outside that radius about the pivot (dial aperture) */
+  private vertex(px: number, py: number, x: number, y: number, z: number, u: number, v: number, ch: number, clipR = 0): number {
+    this.pos.push(x, y, z); this.nrm.push(0, 0, 1); this.uv.push(u, v); this.pivot.push(px, py, 0); this.chan.push(ch); this.clip.push(clipR);
     return this.pos.length / 3 - 1;
+  }
+
+  /** radial tick mark at `deg` clockwise from 12 o'clock, from radius r0 to r1 (fractions of the aperture) */
+  tick(g: GaugeDef, deg: number, r0: number, r1: number, w: number, z: number, ch: number, patch: string): void {
+    const a = (90 - deg) * DEG, c = Math.cos(a), s = Math.sin(a), R0 = g.r * r0, R1 = g.r * r1;
+    // rectangle along the radial direction, half-width w across it
+    const nx = -s * w / 2, ny = c * w / 2;
+    this.poly(g, [[c * R0 - nx, s * R0 - ny], [c * R0 + nx, s * R0 + ny], [c * R1 + nx, s * R1 + ny], [c * R1 - nx, s * R1 - ny]], z, ch, patch);
   }
 
   private patchUv(key: string): [number, number] {
@@ -107,7 +117,7 @@ class InstrumentKit {
     this.disc(g, r, z, ch, patch, 14);
   }
 
-  disc(g: GaugeDef, r: number, z: number, ch: number, patch: string, segs = 40, region?: { x: number; y: number; s: number }): void {
+  disc(g: GaugeDef, r: number, z: number, ch: number, patch: string, segs = 40, region?: { x: number; y: number; s: number }, clipR = 0): void {
     const S = INSTRUMENT_ATLAS.size;
     const [pu, pv] = this.patchUv(patch);
     const base = this.pos.length / 3;
@@ -116,11 +126,11 @@ class InstrumentKit {
       return [(region.x + region.s / 2 + (lx / r) * (region.s / 2)) / S, 1 - (region.y + region.s / 2 - (ly / r) * (region.s / 2)) / S];
     };
     const [cu, cv] = uvOf(0, 0);
-    this.vertex(g.x, g.y, 0, 0, z, cu, cv, ch);
+    this.vertex(g.x, g.y, 0, 0, z, cu, cv, ch, clipR);
     for (let i = 0; i <= segs; i++) {
       const a = (i / segs) * Math.PI * 2, lx = Math.cos(a) * r, ly = Math.sin(a) * r;
       const [u, v] = uvOf(lx, ly);
-      this.vertex(g.x, g.y, lx, ly, z, u, v, ch);
+      this.vertex(g.x, g.y, lx, ly, z, u, v, ch, clipR);
     }
     for (let i = 0; i < segs; i++) this.idx.push(base, base + 1 + i, base + 2 + i);
   }
@@ -148,6 +158,7 @@ class InstrumentKit {
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     geo.setAttribute('aPivot', new THREE.Float32BufferAttribute(this.pivot, 3));
     geo.setAttribute('aChan', new THREE.Float32BufferAttribute(this.chan, 1));
+    geo.setAttribute('aClip', new THREE.Float32BufferAttribute(this.clip, 1));
     geo.setIndex(this.idx);
     return geo;
   }
@@ -382,15 +393,21 @@ export class PlaneModel {
       shader.uniforms.uInstAngle = this.instAngle;
       shader.uniforms.uInstShift = this.instShift;
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', `#include <common>\nattribute vec3 aPivot;\nattribute float aChan;\nuniform float uInstAngle[${N_CHANNELS}];\nuniform vec2 uInstShift[${N_CHANNELS}];`)
+        .replace('#include <common>', `#include <common>\nattribute vec3 aPivot;\nattribute float aChan;\nattribute float aClip;\nvarying vec2 vInstLocal;\nvarying float vInstClip;\nuniform float uInstAngle[${N_CHANNELS}];\nuniform vec2 uInstShift[${N_CHANNELS}];`)
         .replace('#include <begin_vertex>', /* glsl */ `
           int instCh = int(aChan + 0.5);
           float instC = cos(uInstAngle[instCh]), instS = sin(uInstAngle[instCh]);
           vec2 instQ = position.xy + uInstShift[instCh];
           vec3 transformed = vec3(aPivot.x + instC * instQ.x - instS * instQ.y, aPivot.y + instS * instQ.x + instC * instQ.y, aPivot.z + position.z);
+          vInstLocal = transformed.xy - aPivot.xy;
+          vInstClip = aClip;
         `);
+      // dial aperture: the attitude ball is larger than its window so it can shift for pitch; clip it to the bezel
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying vec2 vInstLocal;\nvarying float vInstClip;')
+        .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (vInstClip > 0.0 && dot(vInstLocal, vInstLocal) > vInstClip * vInstClip) discard;');
     };
-    instMat.customProgramCacheKey = () => 'cockpit-instruments-v1';
+    instMat.customProgramCacheKey = () => 'cockpit-instruments-v2';
     const gpsMat = new THREE.MeshStandardMaterial({ map: this.gps.texture, emissiveMap: this.gps.texture, emissive: 0xffffff, emissiveIntensity: 0.55, roughness: 0.25, metalness: 0.0 });
     this.materials.push(paint, wingPaint, floatPaint, glass, plainPaint, parts, panelMat, instMat, gpsMat);
     this.glassMaterial = glass;
@@ -726,12 +743,14 @@ export class PlaneModel {
     kit.needle(G.asi, 0.86, 0.004, Z3, CH.asi); kit.cap(G.asi, 0.005, Z4, CH.asi);
     // attitude: ball (1.3 apertures wide, so it stays behind the bezel when shifted for pitch), bezel mask ring,
     // fixed orange aircraft symbol
-    kit.disc(G.adi, G.adi.r * 1.3, Z1, CH.adi, 'white', 48, INSTRUMENT_ATLAS.ball);
-    kit.ring(G.adi, G.adi.r * 0.98, G.adi.r * 1.5, Z2, CH.fixed, 'bezel');
+    kit.disc(G.adi, G.adi.r * INSTRUMENT_ATLAS.ballRadius, Z1, CH.adi, 'white', 48, INSTRUMENT_ATLAS.ball, G.adi.r * 0.995);
+    // fixed bank scale at the rim (10/20/30/60 deg) and the sky pointer that rolls with the ball (no pitch shift)
+    for (const d of [-60, -30, -20, -10, 10, 20, 30, 60]) kit.tick(G.adi, d, Math.abs(d) % 30 ? 0.9 : 0.84, 0.98, 0.0022, Z2, CH.fixed, 'white');
+    kit.poly(G.adi, [[-0.055 * G.adi.r, 0.98 * G.adi.r], [0.055 * G.adi.r, 0.98 * G.adi.r], [0, 0.82 * G.adi.r]], Z2, CH.fixed, 'white');
+    kit.poly(G.adi, [[-0.05 * G.adi.r, 0.66 * G.adi.r], [0.05 * G.adi.r, 0.66 * G.adi.r], [0, 0.80 * G.adi.r]], Z2, CH.adiBank, 'orange');
     kit.bar(G.adi, -0.40 * G.adi.r, 0, 0.42 * G.adi.r, 0.004, Z3, CH.fixed, 'orange'); kit.bar(G.adi, 0.40 * G.adi.r, 0, 0.42 * G.adi.r, 0.004, Z3, CH.fixed, 'orange');
     kit.bar(G.adi, -0.19 * G.adi.r, -0.05 * G.adi.r, 0.004, 0.10 * G.adi.r, Z3, CH.fixed, 'orange'); kit.bar(G.adi, 0.19 * G.adi.r, -0.05 * G.adi.r, 0.004, 0.10 * G.adi.r, Z3, CH.fixed, 'orange');
     kit.disc(G.adi, 0.003, Z3, CH.fixed, 'orange', 10);
-    kit.poly(G.adi, [[-0.05 * G.adi.r, 0.78 * G.adi.r], [0.05 * G.adi.r, 0.78 * G.adi.r], [0, 0.9 * G.adi.r]], Z3, CH.fixed, 'white');
     // altimeter: long hundreds hand, short thousands hand
     kit.needle(G.alt, 0.62, 0.007, Z3, CH.alt1000, 'white', 0.12);
     kit.needle(G.alt, 0.86, 0.0035, Z3, CH.alt100); kit.cap(G.alt, 0.005, Z4, CH.alt100);
@@ -900,10 +919,11 @@ export class PlaneModel {
       const bowGrid = loftGrid(bowSections, (s) => ring(s));
       cabinFixed.add(gridGeometry(bowGrid, { flip: true, quad: (_i, j) => j < jA || j >= R - jA }), undefined, SURF.bow);
     }
-    // eyeball vents: flush housings let into the headliner (roof inner surface ~1.126 at z 0.30), dark ball inside
+    // eyeball vents: flush housings let into the headliner outboard of each front seat (roof inner surface ~1.09 at
+    // z 0.50), dark ball inside; they protrude about a centimetre
     for (const s of [-1, 1]) {
-      cabinKit.add(new THREE.CylinderGeometry(0.03, 0.03, 0.03, 12), at([1.55, 1.118, s * 0.30]), SURF.lightPlastic);
-      cabinKit.add(new THREE.CylinderGeometry(0.017, 0.017, 0.034, 10), at([1.55, 1.117, s * 0.30]), SURF.plastic);
+      cabinKit.add(new THREE.CylinderGeometry(0.028, 0.028, 0.024, 12), at([1.60, 1.092, s * 0.50]), SURF.lightPlastic);
+      cabinKit.add(new THREE.CylinderGeometry(0.015, 0.015, 0.028, 10), at([1.60, 1.091, s * 0.50]), SURF.plastic);
     }
     cabinKit.add(new THREE.CylinderGeometry(0.045, 0.045, 0.26, 10), at([0.55, FLOOR + 0.14, 0.62], [0, 0, 0.1]), SURF.extinguisher);
     cabinKit.add(new THREE.BoxGeometry(0.06, 0.08, 0.04), at([0.55, FLOOR + 0.06, 0.66]), SURF.darkMetal);
@@ -974,7 +994,7 @@ export class PlaneModel {
     s.kt = kt; s.ft = ft; s.fpm = fpm; s.hdg = hdg; s.bankDeg = bank / DEG; s.pitchDeg = pitch / DEG; s.rpm = rpmVal; s.map = map; s.turnRateDps = turnRate; s.slip = beta;
     A[CH.fixed] = 0;
     A[CH.asi] = -DIAL.asi(kt) * DEG;
-    A[CH.adi] = bank;
+    A[CH.adi] = bank; A[CH.adiBank] = bank;
     S[CH.adi * 2] = 0; S[CH.adi * 2 + 1] = -THREE.MathUtils.clamp(pitch / DEG, -25, 25) * (G.adi.r / 30);
     A[CH.alt100] = -DIAL.alt100(ft) * DEG;
     A[CH.alt1000] = -DIAL.alt1000(ft) * DEG;
