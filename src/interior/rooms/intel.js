@@ -9,7 +9,8 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { PALETTE } from "../../materials.js";
-import { roomShell, equipmentRack, wallScreen, hologram, pipeRun, wallSegment, IMP_STYLES_TECH, IMP_THEME } from "../imperial.js";
+import { roomShell, equipmentRack, wallScreen, pipeRun, wallSegment, IMP_STYLES_TECH, IMP_THEME } from "../imperial.js";
+import { pitStation } from "./bridge.js";
 import { pointLight, wallFrame, ceilingFrame, panelGrid, X_AXIS } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect, makeCanvas, toTexture } from "../../textures.js";
@@ -52,11 +53,13 @@ export function buildIntel(kit, ctx) {
   // the commander's chair sits off the door-table axis (locker side) turned toward the table, so from
   // the door it is silhouetted against the lit briefing screen instead of hiding behind the hologram
   commandChair(kit, CHAIR.x, CHAIR.z, CHAIR.yaw);
+  buildCentre(kit, ctx);
   buildFloorDetail(kit, ctx, B);
   buildProps(kit, ctx);
-  // 4 of 6 lights: the cold fixture over the table, one soft red source inside each ceiling trough,
-  // a faint cool fill over the command chair so it reads against the briefing wall
-  ctx.light(pointLight(0xc8dcff, 5.5, 9, [TABLE.x, CEIL - 0.3, TABLE.z]));
+  // 4 of 6 lights: the cold fixture over the table (wide and soft: the table top must not clip), one
+  // soft red source inside each ceiling trough, a faint cool fill over the command chair so it reads
+  // against the briefing wall
+  ctx.light(pointLight(0xc8dcff, 3.0, 12, [TABLE.x, CEIL - 0.25, TABLE.z]));
   for (const z of TROUGH_Z) ctx.light(pointLight(0xff3a2a, 3.0, 8, [-9.6, CEIL - 0.2, z]));
   ctx.light(pointLight(0xc8dcff, 2.0, 6, [CHAIR.x - 0.6, 2.5, CHAIR.z]));
   ctx.anim((dt, t) => {
@@ -87,12 +90,23 @@ function ensureMaterials(ctx) {
     m.int_holoRed.opacity = 0.75;
     m.int_faint = m.holo.clone();
     m.int_faint.opacity = 0.12;
-    // brighter planet body than the shared holo material so the globe carries the room
-    m.int_planet = m.holo.clone();
-    m.int_planet.color = new THREE.Color("#6fb6ff");
-    m.int_planet.opacity = 0.85;
-    // untextured additive blue for the planet's wire graticule (reads at distance where the grid
-    // texture averages out to nothing)
+    // the globe: additive world map (continents, coasts, graticule painted on a canvas); front faces
+    // only so the far hemisphere does not print through the near one
+    m.int_globe = new THREE.MeshBasicMaterial({
+      map: makeGlobeMap(ctx.seed + 404),
+      color: new THREE.Color("#9fd0ff"),
+      transparent: true,
+      opacity: 0.92,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.FrontSide,
+    });
+    m.int_globe.name = "int_globe";
+    // the single flat equatorial ring: the shared holo grid, dimmer than the globe
+    m.int_ring = m.holo.clone();
+    m.int_ring.color = new THREE.Color("#5aa0ff");
+    m.int_ring.opacity = 0.32;
+    // untextured additive blue for small wire elements
     m.int_holoBright = m.holo.clone();
     m.int_holoBright.map = null;
     m.int_holoBright.color = new THREE.Color("#8cc8ff");
@@ -111,7 +125,7 @@ function ensureMaterials(ctx) {
     });
     m.int_stencil.name = "int_stencil";
   }
-  return { pulse: m.int_pulse, lamp: m.int_lamp, holoRed: m.int_holoRed, faint: m.int_faint, bright: m.int_holoBright, planet: m.int_planet };
+  return { pulse: m.int_pulse, lamp: m.int_lamp, holoRed: m.int_holoRed, faint: m.int_faint, bright: m.int_holoBright, globe: m.int_globe, ring: m.int_ring };
 }
 
 /** uv rect of stencil cell i (2 columns x 2 rows; cells are 2:1). */
@@ -227,7 +241,8 @@ function buildCeiling(kit, ctx, B) {
     kit.boxMM("paintedMetal", [x + s * 0.6 - 0.025, CEIL - 0.14, z - 0.3], [x + s * 0.6 + 0.025, CEIL, z + 0.3], BLACK);
     kit.box("emitRedSoft", x + s * 0.635, CEIL - 0.12, z, 0.02, 0.01, 0.5, { uv: "keep" });
   }
-  kit.boxMM("emitWhiteDim", [x - 0.5, CEIL - 0.1, z - 0.2], [x + 0.5, CEIL - 0.09, z + 0.2], { uv: "keep" });
+  // faint diffuser: the fixture must read as a lit slot, not clip to a white blob over the table
+  kit.boxMM("emitWhiteFaint", [x - 0.5, CEIL - 0.1, z - 0.2], [x + 0.5, CEIL - 0.09, z + 0.2], { uv: "keep" });
   for (let i = 0; i < 6; i++) kit.box("paintedMetal", x - 0.4 + i * 0.16, CEIL - 0.085, z, 0.02, 0.11, 0.55, BLACK);
   for (const side of ["xmin", "xmax", "zmin", "zmax"]) {
     const seg = wallSegment(B, side);
@@ -474,61 +489,36 @@ function holoTable(kit, ctx, mats, x, z) {
   }
   kit.box("leds", x + 0.86, 0.3, z, 0.01, 0.04, 0.8, { uv: "keep" });
   kit.collider([x - 1.0, 0, z - 1.0], [x + 1.0, top + 0.3, z + 1.0], "holotable");
-  // planet with its ring (helper, grid-textured, swapped to the brighter planet material), spinning
-  // slowly; a bright wire graticule follows it so the globe reads from the door; red targeting
-  // reticle and orbit markers on a second group
+  // the globe: a lat/long world map painted on a canvas (dim oceans, brighter continents with lit
+  // coasts, a faint 15° graticule) wrapped on a sphere in an additive blue material, spinning slowly
+  // on a slightly tilted axis; one flat equatorial ring is the only orbit. Red targeting brackets and
+  // a data column sit on a second group that stays put beside it.
   const hy = top + 1.0;
-  const scale = 0.9;
-  const R = 0.8 * scale;
-  const planet = hologram(kit, ctx, { x, y: hy, z, kind: "planet", scale });
-  mergeGroupMeshes(planet, mats.planet);
-  const grat = [];
-  const torus = (r, tube, rx, ry = 0) => {
-    const tg = new THREE.TorusGeometry(r, tube, 5, 64);
-    tg.rotateX(rx);
-    if (ry) tg.rotateY(ry);
-    return tg;
-  };
-  grat.push(torus(R * 1.005, 0.009, Math.PI / 2)); // equator
-  for (const lat of [-0.7, 0.7]) {
-    const rr = R * Math.cos(lat);
-    const tg = torus(rr, 0.006, Math.PI / 2);
-    tg.translate(0, R * Math.sin(lat), 0);
-    grat.push(tg);
-  }
-  grat.push(torus(R * 1.005, 0.006, 0), torus(R * 1.005, 0.006, 0, Math.PI / 2)); // meridians
-  grat.push(torus(1.5 * scale, 0.007, Math.PI / 2 - 0.3)); // outer edge of the ring
-  const pole = new THREE.CylinderGeometry(0.007, 0.007, R * 2.6, 6);
-  grat.push(pole);
-  const gm = new THREE.Mesh(mergeGeometries(grat.map((q) => (q.index ? q.toNonIndexed() : q)), false), mats.bright);
-  planet.add(gm);
+  const R = 0.72;
+  const planet = new THREE.Group();
+  planet.position.set(x, hy, z);
+  const globeMesh = new THREE.Mesh(new THREE.SphereGeometry(R, 40, 28), mats.globe);
+  planet.add(globeMesh);
+  const ringGeo = new THREE.RingGeometry(R * 1.35, R * 1.75, 64);
+  ringGeo.rotateX(-Math.PI / 2);
+  planet.add(new THREE.Mesh(ringGeo, mats.ring));
+  planet.rotation.z = 0.2;
+  ctx.mesh(planet);
   const g = new THREE.Group();
   g.position.set(x, hy, z);
   const reticle = [];
-  reticle.push(torus(R + 0.12, 0.011, Math.PI / 2));
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2;
     const tick = new THREE.BoxGeometry(0.22, 0.016, 0.016);
     tick.rotateY(a);
-    tick.translate(Math.cos(a) * (R + 0.3), 0, Math.sin(a) * (R + 0.3));
+    tick.translate(Math.cos(a) * (R + 0.34), 0, Math.sin(a) * (R + 0.34));
     reticle.push(tick);
+    const bracket = new THREE.BoxGeometry(0.016, 0.16, 0.016);
+    bracket.translate(Math.cos(a) * (R + 0.44), 0, Math.sin(a) * (R + 0.44));
+    reticle.push(bracket);
   }
-  const arc = new THREE.TorusGeometry(R + 0.38, 0.009, 5, 40, Math.PI * 0.6);
-  arc.rotateX(Math.PI / 2);
-  reticle.push(arc);
   const rm = new THREE.Mesh(mergeGeometries(reticle.map((q) => (q.index ? q.toNonIndexed() : q)), false), mats.holoRed);
   g.add(rm);
-  // orbit markers: two small satellites on tilted orbits
-  const orb = [];
-  for (const [r, tilt] of [[R + 0.22, 0.35], [R + 0.32, -0.5]]) {
-    const ring = torus(r, 0.005, Math.PI / 2 + tilt);
-    orb.push(ring);
-    const sat = new THREE.OctahedronGeometry(0.045);
-    sat.translate(r * Math.cos(tilt), r * Math.sin(tilt) * 0.5, 0);
-    orb.push(sat);
-  }
-  const om = new THREE.Mesh(mergeGeometries(orb.map((q) => (q.index ? q.toNonIndexed() : q)), false), mats.bright);
-  g.add(om);
   // data column: a stack of red readout bars beside the globe (on its +Z side: left of it as seen
   // from the door)
   const bars = [];
@@ -555,11 +545,141 @@ function holoTable(kit, ctx, mats, x, z) {
     });
   }
   ctx.anim((dt, t) => {
+    globeMesh.rotation.y = t * 0.22;
+    planet.position.y = hy + Math.sin(t * 0.8) * 0.03;
     g.rotation.y = -t * 0.4;
     g.position.y = hy + Math.sin(t * 0.8) * 0.03;
     rm.rotation.z = Math.sin(t * 0.5) * 0.12;
     bm.rotation.y = t * 0.4; // cancels the group's spin: the readouts stay put beside the globe
   });
+}
+
+/**
+ * Equirectangular world map for the globe hologram: dim ocean, brighter continents built from
+ * clustered blobs with a lit coastline, polar caps, a faint 15° graticule with a stronger equator.
+ * Additive material: black is invisible, so the ocean is a dim body and the land the bright read.
+ */
+function makeGlobeMap(seed) {
+  const w = 512;
+  const h = 256;
+  const c = makeCanvas(w, h);
+  const g = c.getContext("2d");
+  const rand = rng(seed);
+  g.fillStyle = "#0b2450";
+  g.fillRect(0, 0, w, h);
+  // continents: a handful of clusters, each a cloud of overlapping ellipses drifting from its seed;
+  // drawn twice — a slightly larger pale pass (the lit coastline) under the land body
+  const land = [
+    [70, 95, 46, 34, 9, 1.6],
+    [120, 170, 30, 40, 7, 1.4],
+    [262, 88, 70, 32, 10, 1.5],
+    [300, 150, 34, 38, 8, 1.3],
+    [400, 105, 42, 30, 8, 1.6],
+    [440, 190, 24, 14, 5, 1.4],
+    [190, 60, 22, 14, 4, 1.4],
+  ];
+  const ellipses = [];
+  for (const [cx, cy, rx, ry, n, spread] of land) {
+    for (let i = 0; i < n; i++) {
+      ellipses.push([cx + (rand() - 0.5) * spread * rx, cy + (rand() - 0.5) * spread * ry, rx * (0.35 + rand() * 0.6), ry * (0.35 + rand() * 0.6), rand() * Math.PI]);
+    }
+  }
+  const pass = (grow) => {
+    for (const [ex, ey, sx, sy, a] of ellipses) {
+      g.beginPath();
+      g.ellipse(ex, ey, sx * grow, sy * grow, a, 0, Math.PI * 2);
+      g.fill();
+    }
+  };
+  g.fillStyle = "rgba(120,190,255,0.85)";
+  pass(1.12);
+  g.fillStyle = "#2f7fe0";
+  pass(0.98);
+  // polar caps
+  g.fillStyle = "#6fb0f0";
+  g.fillRect(0, 0, w, 14);
+  g.fillRect(0, h - 12, w, 12);
+  // graticule: every 15°, equator stronger
+  g.strokeStyle = "rgba(140,200,255,0.28)";
+  g.lineWidth = 1;
+  for (let i = 1; i < 24; i++) {
+    const xx = (i / 24) * w;
+    g.beginPath();
+    g.moveTo(xx, 0);
+    g.lineTo(xx, h);
+    g.stroke();
+  }
+  for (let i = 1; i < 12; i++) {
+    const yy = (i / 12) * h;
+    g.beginPath();
+    g.moveTo(0, yy);
+    g.lineTo(w, yy);
+    g.stroke();
+  }
+  g.strokeStyle = "rgba(160,215,255,0.7)";
+  g.lineWidth = 2;
+  g.beginPath();
+  g.moveTo(0, h / 2);
+  g.lineTo(w, h / 2);
+  g.stroke();
+  return toTexture(c, { anisotropy: 4 });
+}
+
+// ---------------------------------------------------------------------------
+// The room's middle: an analysis station on the vault side of the table (its operator faces the
+// globe) and three secure data pillars standing around the table — two flanking the door-table axis
+// in the foreground, one behind the table on the vault side. All clear of the spawn (x -9, z -8.5),
+// the walking line from the door, the chair and the props.
+// ---------------------------------------------------------------------------
+function buildCentre(kit, ctx) {
+  pitStation(kit, ctx, { x: TABLE.x, z: TABLE.z - 2.55, yaw: Math.PI, variant: 2, screens: [3, 4], seed: ctx.seed + 811, lampMat: "emitRed", pulse: "int_pulse", trunk: false });
+  dataPillar(kit, -8.6, -10.7, 0.35, ctx.seed + 821);
+  dataPillar(kit, -8.6, -6.3, Math.PI - 0.35, ctx.seed + 822);
+  dataPillar(kit, -12.9, -10.4, 0.7, ctx.seed + 823);
+}
+
+/**
+ * Secure data pillar: a 1.75 m black column on a plinth with a recessed front slot carrying a
+ * stack of red core indicators, a small amber readout, a keypad and a stencil; red status lamp in
+ * the cap, hazard band at the base. `yaw` turns the slot face (local +Z) toward the walking line.
+ */
+function dataPillar(kit, x, z, yaw, seed) {
+  const q = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw);
+  const P = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const p = P(lx, ly, lz);
+    return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  const rand = rng(seed);
+  const h = 1.75;
+  const w = 0.56;
+  add("paintedMetal", new THREE.BoxGeometry(w + 0.16, 0.08, w + 0.16), 0, 0.04, 0, BLACK);
+  add("hazard", new THREE.BoxGeometry(w + 0.1, 0.05, w + 0.1), 0, 0.105, 0, { texel: 3 });
+  add("paintedMetal", new THREE.BoxGeometry(w, h - 0.2, w), 0, 0.13 + (h - 0.2) / 2, 0, DARK);
+  add("paintedMetal", new THREE.BoxGeometry(w + 0.08, 0.08, w + 0.08), 0, h - 0.03, 0, BLACK);
+  add("int_lamp", new THREE.BoxGeometry(w - 0.2, 0.02, 0.02), 0, h + 0.02, w / 2 - 0.06);
+  // recessed slot on the face: a black well with a stack of lit core indicators
+  add("paintedMetal", new THREE.BoxGeometry(0.3, 0.9, 0.06), 0, 1.1, w / 2 - 0.02, BLACK);
+  for (let i = 0; i < 7; i++) {
+    const lit = rand() < 0.8;
+    add(lit ? (i === 3 ? "emitAmber" : "emitRedSoft") : "rubber", new THREE.BoxGeometry(0.2, 0.05, 0.01), 0, 0.74 + i * 0.12, w / 2 + 0.015, { color: PALETTE.rubber });
+  }
+  // amber readout and keypad under the slot, stencil above, vent slats on the sides
+  add("darkGloss", new THREE.BoxGeometry(0.34, 0.12, 0.01), 0, 0.52, w / 2 + 0.006);
+  add("impScreen4", new THREE.PlaneGeometry(0.3, 0.09), 0, 0.52, w / 2 + 0.012, { uv: "keep" });
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) add(rand() < 0.3 ? "emitRedDim" : "rubber", new THREE.BoxGeometry(0.07, 0.05, 0.012), -0.09 + c * 0.09, 0.32 + r * 0.08, w / 2 + 0.006, { color: PALETTE.rubber });
+  add("decal", new THREE.PlaneGeometry(0.22, 0.22), 0, h - 0.24, w / 2 + 0.007, { uv: "keep", uvRect: decalRect([1, 5, 9, 12][seed % 4]) });
+  for (const s of [-1, 1]) {
+    const qs = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(Y_AXIS, (s * Math.PI) / 2));
+    for (let i = 0; i < 5; i++) {
+      const p = P(s * (w / 2 + 0.008), 1.2 + i * 0.07, 0);
+      kit.add("paintedMetal", new THREE.BoxGeometry(0.34, 0.02, 0.016), { pos: [p.x, p.y, p.z], quat: qs, color: PALETTE.impBlack, texel: 2 });
+    }
+    const p2 = P(s * (w / 2 + 0.004), 0.7, 0);
+    kit.add("leds", new THREE.BoxGeometry(0.3, 0.03, 0.008), { pos: [p2.x, p2.y, p2.z], quat: qs, uv: "keep" });
+  }
+  const r = (w + 0.16) / 2 + 0.02;
+  kit.collider([x - r, 0, z - r], [x + r, h + 0.05, z + r], "pillar");
 }
 
 /** High-backed command chair on a pedestal: black rubber and fabric, red status lamp on the headrest. */
@@ -646,30 +766,6 @@ function slabConsole(kit, { x, y, z, yaw, w = 0.8, d = 0.5, h = 1.15, screens = 
   const ex = (w * c + slabD * s) / 2;
   const ez = (w * s + slabD * c) / 2;
   kit.collider([x - ex, y, z - ez], [x + ex, y + h, z + ez], "console");
-}
-
-/** Collapse a group's meshes into one draw call (the hologram helper spawns several meshes); an
- *  optional replacement material is applied to the merged mesh. */
-function mergeGroupMeshes(group, material = null) {
-  const geos = [];
-  let mat = null;
-  for (const c of [...group.children]) {
-    if (!c.isMesh) continue;
-    c.updateMatrix();
-    const g = c.geometry.clone().applyMatrix4(c.matrix);
-    const ng = g.index ? g.toNonIndexed() : g;
-    for (const key of Object.keys(ng.attributes)) if (!["position", "normal", "uv"].includes(key)) ng.deleteAttribute(key);
-    if (!ng.attributes.normal) ng.computeVertexNormals();
-    geos.push(ng);
-    mat = c.material;
-    group.remove(c);
-  }
-  if (geos.length) {
-    const m = new THREE.Mesh(mergeGeometries(geos, false), material || mat);
-    m.castShadow = false;
-    m.receiveShadow = false;
-    group.add(m);
-  }
 }
 
 // ---------------------------------------------------------------------------
