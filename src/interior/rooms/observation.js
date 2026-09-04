@@ -111,7 +111,7 @@ export function buildObservation(kit, ctx) {
   // --- benches facing the windows, light bollards between them, a viewing pedestal at the centre
   const bz = -38.4;
   for (const x of [-9.5, -3.6, 3.6, 9.5]) bench(kit, x, bz, 2.4, rand);
-  for (const x of [-12.8, -6.55, 0, 6.55, 12.8]) bollard(kit, x, bz + 0.2);
+  for (const x of [-12.8, -6.55, 6.55, 12.8]) bollard(kit, x, bz + 0.2); // centre aisle (the spawn) stays clear
   pedestal(kit, ctx, labels, 0, -40.0);
   // macrobinocular stands at the rail
   for (const x of [-7.3, 7.3]) binoculars(kit, x, railZ + 0.55);
@@ -190,9 +190,11 @@ export function buildObservation(kit, ctx) {
 // ---------------------------------------------------------------------------
 /** Backless gallery bench (long axis along x) with a warm light under the seat lip and something left on it. */
 function bench(kit, x, z, len, rand) {
-  kit.box("rubber", x, 0.2, z, len - 0.3, 0.4, 0.5, { color: PALETTE.rubber, texel: 1.5 });
-  for (const s of [-1, 1]) kit.box("paintedMetal", x + s * (len / 2 - 0.1), 0.24, z, 0.08, 0.48, 0.62, { color: PALETTE.impMid, texel: 2 });
-  kit.box("rubber", x, 0.47, z, len - 0.2, 0.1, 0.6, { color: PALETTE.rubber, texel: 2 });
+  // matte, near-black finishes: the exterior sun reaches in through the glass and lifts anything glossy
+  kit.box("rubber", x, 0.2, z, len - 0.3, 0.4, 0.5, { color: PALETTE.impDark, texel: 1.5 });
+  for (const s of [-1, 1]) kit.box("rubber", x + s * (len / 2 - 0.1), 0.24, z, 0.08, 0.48, 0.62, { color: PALETTE.impDark, texel: 2 });
+  for (const s of [-1, 1]) kit.box("emitWhiteSoft", x + s * (len / 2 - 0.055), 0.44, z, 0.006, 0.006, 0.4, { uv: "keep" });
+  kit.box("rubber", x, 0.47, z, len - 0.2, 0.1, 0.6, { color: PALETTE.impBlack, texel: 2 });
   kit.box("obs_warm", x, 0.06, z - 0.255, len - 0.5, 0.015, 0.01, { uv: "keep" });
   kit.box("obs_warm", x, 0.06, z + 0.255, len - 0.5, 0.015, 0.01, { uv: "keep" });
   kit.collider([x - len / 2, 0, z - 0.32], [x + len / 2, 0.52, z + 0.32], "bench");

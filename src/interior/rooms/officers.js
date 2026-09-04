@@ -94,12 +94,13 @@ export function buildOfficers(kit, ctx) {
   }
 
   // door frames + plates
-  doorFrame(kit, ctx, labels, cab1.doorX, ZS, DOOR_W, DOOR_H, +1, 1);
-  doorFrame(kit, ctx, labels, cab2.doorX, ZS, DOOR_W, DOOR_H, +1, 2);
-  doorFrame(kit, ctx, labels, cab3.doorX, -ZS, DOOR_W, DOOR_H, -1, 3);
-  doorFrame(kit, ctx, labels, cab4.doorX, -ZS, DOOR_W, DOOR_H, -1, 4);
-  doorFrame(kit, ctx, labels, wash.doorX, ZS, wash.doorW, DOOR_H, +1, 5);
-  doorFrame(kit, ctx, labels, ward.doorX, -ZS, ward.doorW, 2.5 - 0.12, -1, 6, { wide: true });
+  // the spine corridor lies at -z of the north wall (+ZS) and at +z of the south wall (-ZS)
+  doorFrame(kit, ctx, labels, cab1.doorX, ZS, DOOR_W, DOOR_H, -1, 1);
+  doorFrame(kit, ctx, labels, cab2.doorX, ZS, DOOR_W, DOOR_H, -1, 2);
+  doorFrame(kit, ctx, labels, cab3.doorX, -ZS, DOOR_W, DOOR_H, +1, 3);
+  doorFrame(kit, ctx, labels, cab4.doorX, -ZS, DOOR_W, DOOR_H, +1, 4);
+  doorFrame(kit, ctx, labels, wash.doorX, ZS, wash.doorW, DOOR_H, -1, 5);
+  doorFrame(kit, ctx, labels, ward.doorX, -ZS, ward.doorW, 2.5 - 0.12, +1, 6, { wide: true });
   // spine mouth header: beam with a white strip and the quarters' directory sign
   kit.boxMM("paintedMetal", [XE - half - 0.02, 2.7, -1.35], [XE + half + 0.02, 2.95, 1.35], { color: PALETTE.impDark, texel: 1.5 });
   kit.boxMM("emitWhiteSoft", [XE + half + 0.021, 2.74, -1.2], [XE + half + 0.035, 2.78, 1.2], { uv: "keep" });
@@ -135,8 +136,8 @@ export function buildOfficers(kit, ctx) {
     for (const c of [cab1, cab2, cab3, cab4]) {
       const cx = (c.xa + c.xb) / 2;
       const cz = (c.za + c.zb) / 2;
-      kit.box("paintedMetal", cx, H - 0.08, cz, 1.1, 0.16, 1.1, { color: PALETTE.impBlack, texel: 2 });
-      kit.box("officers_warm", cx, H - 0.165, cz, 0.9, 0.01, 0.9, { uv: "keep" });
+      kit.box("paintedMetal", cx, H - 0.08, cz, 1.5, 0.16, 1.5, { color: PALETTE.impBlack, texel: 2 });
+      kit.box("officers_warm", cx, H - 0.165, cz, 1.3, 0.01, 1.3, { uv: "keep" });
     }
     // washroom: cool strip; wardroom: two warm panels
     strip(wash.xa + 0.6, (wash.za + wash.zb) / 2 - 0.06, wash.xb - 0.6, (wash.za + wash.zb) / 2 + 0.06);
@@ -332,6 +333,15 @@ function cabin(kit, ctx, labels, c, variant) {
     datapad(kit, (dxA + dxB) / 2, 0.775, sz > 0 ? dzA + 0.25 : dzB - 0.25, 0.5, variant % 5);
     if (variant !== 1) mug(kit, sx > 0 ? dxA + 0.15 : dxB - 0.15, 0.775, sz > 0 ? dzB - 0.15 : dzA + 0.15, PALETTE.impLight);
     if (variant === 1) crateSmall(kit, sx > 0 ? dxA + 0.2 : dxB - 0.2, 0.775, sz > 0 ? dzB - 0.2 : dzA + 0.2);
+    // desk lamp on the far end of the desk: steel stem, angled warm shade
+    {
+      const lx = sx > 0 ? dxB - 0.2 : dxA + 0.2;
+      const lz = sz > 0 ? dzB - 0.14 : dzA + 0.14;
+      kit.cyl("paintedMetal", lx, 0.79, lz, 0.07, 0.03, "y", { color: PALETTE.impBlack, segments: 12 });
+      kit.cyl("metal", lx, 1.0, lz, 0.01, 0.4, "y", { color: PALETTE.steel, segments: 8 });
+      kit.box("paintedMetal", lx - sx * 0.08, 1.22, lz, 0.22, 0.05, 0.14, { color: PALETTE.impBlack, texel: 3 });
+      kit.box("officers_warm", lx - sx * 0.08, 1.19, lz, 0.18, 0.012, 0.1, { uv: "keep" });
+    }
     impChair(kit, ctx, { x: sx > 0 ? dxA - 0.45 : dxB + 0.45, z: scz + (rand() - 0.5) * 0.3, yaw: -sx * Math.PI / 2 + (rand() - 0.5) * 0.5 });
     wallScreen(kit, ctx, { side: eastWest, u: sx > 0 ? scz - c.za : c.zb - scz, v: 1.85, w: 1.0, h: 0.6, screen: (variant + 2) % 5, bounds });
   }
@@ -360,10 +370,14 @@ function cabin(kit, ctx, labels, c, variant) {
       const ux = lx + sx * 1.15;
       const uz = mz(0.16);
       kit.box("metal", ux, 1.98, mz(0.18), 0.04, 0.08, 0.06, { color: PALETTE.steel });
-      kit.add("fabric", new RoundedBoxGeometry(0.44, 0.72, 0.14, 2, 0.04), { pos: [ux, 1.58, uz + sz * 0.09], color: variant % 2 ? OLIVE : PALETTE.impMid, uv: "world", texel: 2 });
-      kit.box("rubber", ux, 1.32, uz + sz * 0.09, 0.45, 0.06, 0.15, { color: PALETTE.impBlack });
+      const cloth = variant % 2 ? OLIVE : PALETTE.impMid;
+      // shoulders / torso taper, a hanger bar showing at the neck, belt with a buckle, rank plaque
+      kit.add("fabric", new RoundedBoxGeometry(0.5, 0.26, 0.15, 2, 0.05), { pos: [ux, 1.8, uz + sz * 0.09], color: cloth, uv: "world", texel: 2 });
+      kit.add("fabric", new RoundedBoxGeometry(0.42, 0.5, 0.12, 2, 0.04), { pos: [ux, 1.46, uz + sz * 0.085], color: cloth, uv: "world", texel: 2 });
+      kit.box("paintedMetal", ux, 1.9, uz + sz * 0.09, 0.14, 0.05, 0.16, { color: PALETTE.impBlack, texel: 3 });
+      kit.box("rubber", ux, 1.32, uz + sz * 0.09, 0.44, 0.06, 0.14, { color: PALETTE.impBlack });
       kit.box("metal", ux, 1.32, uz + sz * 0.165, 0.06, 0.04, 0.01, { color: PALETTE.steel });
-      for (let k = 0; k < 4; k++) kit.box(k < 2 ? "emitBlue" : "emitRed", ux - sx * 0.12 + k * 0.03, 1.84, uz + sz * 0.165, 0.024, 0.02, 0.004);
+      for (let k = 0; k < 4; k++) kit.box(k < 2 ? "emitBlue" : "emitRed", ux - sx * 0.12 + k * 0.03, 1.8, uz + sz * 0.17, 0.024, 0.02, 0.004);
       // cap on the second peg
       kit.box("metal", ux + sx * 0.4, 1.98, mz(0.18), 0.04, 0.08, 0.06, { color: PALETTE.steel });
       kit.add("fabric", new RoundedBoxGeometry(0.26, 0.12, 0.2, 2, 0.04), { pos: [ux + sx * 0.4, 1.9, uz + sz * 0.1], rot: [0.3 * sz, 0, 0], color: PALETTE.impDark, uv: "world", texel: 2 });
@@ -483,7 +497,8 @@ function wardroom(kit, ctx, labels, sheets, r) {
   kit.box("darkGloss", cx, 0.515, cz + 0.2, 1.56, 0.03, 0.86);
   kit.box("emitAmber", cx, 0.12, cz + 0.2 - 0.405, 1.3, 0.015, 0.01);
   kit.collider([cx - 0.78, 0, cz - 0.23], [cx + 0.78, 0.53, cz + 0.63], "table");
-  for (const [dx, dz, yaw] of [[-1.15, 0.1, -Math.PI / 2 + 0.2], [1.15, 0.3, Math.PI / 2 - 0.15], [-0.4, 1.05, Math.PI + 0.1], [0.45, 1.05, Math.PI - 0.2]]) impChair(kit, ctx, { x: cx + dx, z: cz + 0.2 + dz, yaw });
+  // chairs at the ends and on the sofa side only, so the walk in from the door to the table stays clear
+  for (const [dx, dz, yaw] of [[-1.15, 0.1, -Math.PI / 2 + 0.2], [1.15, 0.3, Math.PI / 2 - 0.15], [-0.4, -1.05, 0.1], [0.45, -1.05, -0.2]]) impChair(kit, ctx, { x: cx + dx, z: cz + 0.2 + dz, yaw });
   mug(kit, cx - 0.4, 0.53, cz + 0.1, PALETTE.impLight);
   mug(kit, cx + 0.35, 0.53, cz + 0.35, PALETTE.impGrey);
   datapad(kit, cx + 0.1, 0.53, cz + 0.05, -0.3, 1);
