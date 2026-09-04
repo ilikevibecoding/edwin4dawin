@@ -268,8 +268,10 @@ export class Game {
     for (const l of this.csm.lights) {
       const sc = l.shadow.camera;
       const texel = (sc.right - sc.left) / l.shadow.mapSize.width;
-      l.shadow.normalBias = texel * 1.5;
-      l.shadow.bias = -0.0002;
+      // normal bias proportional to the texel keeps flat terrain free of acne; 1.5 texels (0.8-4.9 m) was
+      // detaching every contact shadow, 0.6 keeps the aircraft/pier/tree shadows attached
+      l.shadow.normalBias = texel * 0.6;
+      l.shadow.bias = -0.0003;
     }
     this.sky.render(this.renderer, cam, this.post.width, this.post.height);
     this.renderer.setRenderTarget(this.post.target);
