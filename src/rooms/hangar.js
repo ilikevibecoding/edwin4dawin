@@ -74,7 +74,10 @@ export function buildHangar(kit, ctx, room) {
   const spots = DECK_SPOTS.map((s) => ({ x: s.x - OX, z: s.z - OZ, yaw: s.yaw }));
 
   // ---- opening rim geometry
-  const cH = 0.6; // coaming height
+  // coaming height: just under the player's STEP_UP (0.55) so the spec spawn (local -20, 90 = on the aft
+  // coaming) lands ON the rim instead of jamming the player between the rim and the field colliders;
+  // the field collider, not the rim height, is what keeps the player off the well
+  const cH = 0.5;
   const cIn = 0.4; // coaming overlap inside the opening edge (covers the well-wall tops built by hull.js)
   const cOut = 1.2; // coaming width on the deck side
   const CX0 = op.x0 - cOut;

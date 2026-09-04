@@ -261,6 +261,25 @@ export function buildShuttleBay(kit, ctx, room) {
     line([-12.5, cz], [-9.5, cz]);
     line([-2.5, cz], [1, cz]);
     line([1, cz], [4.5, cz]);
+    // arrivals side (S of the line, where the room spawn is): queue lane to the arch, waiting benches,
+    // an arrivals desk, impounded cargo waiting for inspection
+    dashedLine(kit, [-9.5, 36], [-9.5, cz + 4], { dash: 1.4, gap: 1.0, w: 0.16 });
+    dashedLine(kit, [-2.5, 36], [-2.5, cz + 4], { dash: 1.4, gap: 1.0, w: 0.16 });
+    deckDecalImp(kit, IMP_DECAL.arrowRight, -6, 33.5, 1.6, Math.PI, 0.0068);
+    for (const bx of [-17.5, -13.5]) {
+      kit.box("impMetal", bx, 0.46, 36.5, 2.4, 0.08, 0.55, { color: PALETTE.impGreyDark });
+      kit.box("impMetal", bx, 0.78, 36.78, 2.4, 0.5, 0.06, { color: PALETTE.impGreyDark, rot: [-0.15, 0, 0] });
+      for (const lx of [bx - 1.0, bx + 1.0]) kit.box("impTrim", lx, 0.22, 36.5, 0.08, 0.44, 0.5, { color: PALETTE.impBlack });
+      kit.collider([bx - 1.25, 0, 36.2], [bx + 1.25, 1.0, 36.85], "bench");
+    }
+    hgDiagConsole(kit, -20.5, 36.5, 0, { seed: 52, screens: ["scrBlue1", "scrGreen0"], accentKey });
+    hgPallet(kit, 1.5, 33.5, 0.2, { seed: 68, kind: 1 });
+    hgCrateStack(kit, 5.5, 35, -0.15, [["b", 0, 0, 0], ["c", 1.4, 0, 0.1, 0.5], ["a", 0.1, 1.2, 0.1, 0.3]], { seed: 73 });
+    hgPowerBox(kit, -24, 37.6, Math.PI / 2, { on: true });
+    for (const z of [26, 32]) {
+      hgDeckLamp(kit, -10.5, z, "emitBlue");
+      hgDeckLamp(kit, -1.5, z, "emitBlue");
+    }
   }
 
   // ---- soffit boxing in the flight-control booth's volume (only where it intrudes)
