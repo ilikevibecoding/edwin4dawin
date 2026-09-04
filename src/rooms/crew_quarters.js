@@ -440,7 +440,7 @@ export function buildCrewQuarters(kit, ctx, room) {
   const shadeDrop = 0.6;
   const shadeBottom = h - shadeDrop - 0.2;
   const spotY = shadeBottom - 0.03;
-  const spot = (x, z, k, priority, extra = {}) => kit.light({ type: "spot", pos: [x, spotY, z], target: [x, 0, z], color: warm, intensity: lux(spotY, k), distance: 14, angle: 1.2, penumbra: 0.5, priority, ...extra });
+  const spot = (x, z, k, priority, extra = {}) => kit.light({ type: "spot", pos: [x, spotY, z], target: [x, 0, z], color: warm, intensity: lux(spotY, k), distance: 14, angle: 1.2, penumbra: 0.35, priority, ...extra });
   const rig = [
     [5.6, -5.9],
     [5.6, 5.9],
@@ -454,11 +454,11 @@ export function buildCrewQuarters(kit, ctx, room) {
   for (const [x, z] of rig) slotLight(kit, x, z, h, 1.6, "z", "emitWhiteDim", { drop: shadeDrop });
   spot(5.6, -5.9, 12.5, 0.6, { shadow: true });
   spot(5.6, 5.9, 12.5, 0.58);
-  spot(12.5, 0, 7.0, 0.56, { color: 0xe6ecfa });
+  spot(12.5, 0, 7.5, 0.56, { color: 0xe6ecfa });
   const ky = 1.5;
-  keyLight(kit, -1.4, ky, -5.9, { color: warm, k: 10.0, distance: 13, priority: 0.5 });
-  keyLight(kit, -1.4, ky, 5.9, { color: warm, k: 10.0, distance: 13, priority: 0.49 });
-  keyLight(kit, -8.4, ky, -5.9, { color: warm, k: 9.5, distance: 12, priority: 0.48 });
-  keyLight(kit, -8.4, ky, 5.9, { color: warm, k: 9.5, distance: 12, priority: 0.47 });
-  keyLight(kit, -14.6, ky, 0, { color: warm, k: 10.5, distance: 14, priority: 0.46 });
+  keyLight(kit, -1.4, ky, -5.9, { color: warm, k: 11.5, distance: 13, priority: 0.5 });
+  keyLight(kit, -1.4, ky, 5.9, { color: warm, k: 11.5, distance: 13, priority: 0.49 });
+  keyLight(kit, -8.4, ky, -5.9, { color: warm, k: 11.0, distance: 12, priority: 0.48 });
+  keyLight(kit, -8.4, ky, 5.9, { color: warm, k: 11.0, distance: 12, priority: 0.47 });
+  keyLight(kit, -14.6, ky, 0, { color: warm, k: 12.0, distance: 14, priority: 0.46 });
 }

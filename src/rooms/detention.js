@@ -3,7 +3,8 @@
 // occupancy lamp over a faint red field, framed emitter pillars, cell number stencils, red overhead light),
 // an interrogation room at the far end (restraint chair, interrogation droid on a stand, bright white spot),
 // a weapon-locker cage, camera housings in every corner, rotating red beacons.
-// Dark ribbed wall variant (grey-dark / charcoal panels, conduit-heavy, banded), the cells darker still.
+// Dark ribbed wall variant (grey-dark / charcoal panels, conduit-heavy, banded); the cells are plain grey so
+// they read through their steel bars from the aisle.
 // Red accent carried by emissive strips, beacons and painted lines; the lights themselves are pale (dim red
 // slots over the desk, salmon pools on the cell rows so the cells read grey through their bars, cool fill at
 // the door and the aisle), one harsh white spot in the interrogation room. Rails are dark with a single dim indicator per gate post;
@@ -58,7 +59,7 @@ function buildCell(kit, ctx, cx, cz, yaw, number, opts = {}) {
     const Bp = p.pos(b[0], 0, b[1]);
     return wallFrame(kit, [A.x, A.z], [Bp.x, Bp.z]);
   };
-  const wallOpts = { panelW: 1.5, kickH: 0.28, corniceH: 0.3, depth: 0.16, features: { vent: 0.15, equipment: 0, conduit: 0.08, light: 0, screen: 0 }, panelColor: GD, panelColorAlt: CHR, altChance: 0.3, accent: PALETTE.impRed, accentKey: ACCENT, corniceLight: false, collide: false, tag: "cell" };
+  const wallOpts = { panelW: 1.5, kickH: 0.28, corniceH: 0.3, depth: 0.16, features: { vent: 0.15, equipment: 0, conduit: 0.08, light: 0, screen: 0 }, panelColor: GREY, panelColorAlt: GD, altChance: 0.3, accent: PALETTE.impRed, accentKey: ACCENT, corniceLight: false, collide: false, tag: "cell" };
   const back = mk([-half, -half], [half, -half]);
   const left = mk([-half, half], [-half, -half]);
   const right = mk([half, -half], [half, half]);
@@ -110,8 +111,8 @@ function buildCell(kit, ctx, cx, cz, yaw, number, opts = {}) {
   // containment grid across the doorway: three steel rails and a centre bar with a lock box, so from the
   // aisle the opening reads as a barred cell door with a faint field behind it, not a red slab
   const gw = size - 0.64;
-  for (const gy of [0.9, 1.6, 2.3]) p.cyl("impMetal", 0, gy, half + 0.02, 0.022, gw, "x", { color: GD, segments: 8 });
-  p.cyl("impMetal", 0, (h - 0.46) / 2 + 0.06, half + 0.02, 0.022, h - 0.5, "y", { color: GD, segments: 8 });
+  for (const gy of [0.9, 1.6, 2.3]) p.cyl("impMetal", 0, gy, half + 0.02, 0.026, gw, "x", { color: STEEL, segments: 8 });
+  p.cyl("impMetal", 0, (h - 0.46) / 2 + 0.06, half + 0.02, 0.026, h - 0.5, "y", { color: STEEL, segments: 8 });
   p.box("impTrim", 0, 1.25, half + 0.02, 0.22, 0.3, 0.1, { color: BLK });
   p.box(occupied ? "emitRedDim" : "emitGreen", 0, 1.3, half + 0.075, 0.06, 0.03, 0.01);
   // force field plane, baked into room space; all eight fields become one attached mesh (shared tinted holo)
@@ -187,8 +188,8 @@ export function buildDetention(kit, ctx, room) {
   const W = walls.W.frame; // u = hz - z
   const cctx = { fieldGeos: [] };
   const fieldMat = ctx.materials.holo.clone();
-  fieldMat.color.set(DECK_C.redField.getHex());
-  fieldMat.opacity = 0.03;
+  fieldMat.color.set(0xff8a70); // paler than the accent red: the additive haze must tint the cell, not paint it
+  fieldMat.opacity = 0.022;
 
   // ---------------------------------------------------------------- painted red edge lines beside the aisle (no glow: the red is in the cells, beacons and slots)
   const PAINT_RED = new THREE.Color("#7a1f1c");
@@ -285,7 +286,7 @@ export function buildDetention(kit, ctx, room) {
   kit.onUpdate((dt, t) => {
     // faint: the field is ADDITIVE, and the scene sits at low radiance, so even 0.085 of pure red summed over a
     // doorway painted it a uniform red slab; at ~0.03 it is a red haze the bars, lock box and grey cell read through
-    fieldMat.opacity = 0.03 + 0.008 * Math.sin(t * 9.0) + 0.005 * Math.sin(t * 23.0);
+    fieldMat.opacity = 0.022 + 0.006 * Math.sin(t * 9.0) + 0.004 * Math.sin(t * 23.0);
   });
   // pillars between cell pairs carrying beacons; cable runs over the cell roofs
   for (const s of [-1, 1]) {
