@@ -85,23 +85,25 @@ export function buildBridge(kit, ctx, room) {
     const hwT = vw / 2;
     const hwBr = hwB + 0.15; // room-face opening half-widths: splayed reveals, stronger trapezoid
     const hwTr = hwT + 0.3;
-    // bulkhead slabs (z -15 .. -14.6) below the sills and above the heads
-    kit.boxMM("impTrim", [-hx - 0.4, -0.2, -hz], [hx + 0.4, YBr, NF], { color: BLACK, texel: 0.5 });
-    kit.boxMM("impTrim", [-hx - 0.4, YTr, -hz], [hx + 0.4, CEIL + 0.4, NF], { color: BLACK, texel: 0.5 });
+    // bulkhead slabs (z -15 .. -14.6) below the sills and above the heads: pale Imperial panels, so the
+    // viewports read as dark trapezoid openings between pale mullions (the film's silhouette)
+    kit.boxMM("impPanel1", [-hx - 0.4, -0.2, -hz], [hx + 0.4, YBr, NF], { color: GREY, texel: 1 });
+    kit.boxMM("impPanel1", [-hx - 0.4, YTr, -hz], [hx + 0.4, CEIL + 0.4, NF], { color: GREY, texel: 1 });
+    kit.boxMM("impTrim", [-hx - 0.4, YTr - 0.02, NF - 0.01], [hx + 0.4, YTr + 0.5, NF + 0.01], { color: BLACK, texel: 1 }); // black head band
     // wedge pillars between the viewports: wide at the sill, narrow at the head (film silhouette)
     const pitch = vw + vp.pillar;
     for (let i = 0; i < vp.count - 1; i++) {
       const xp = (winX(i) + winX(i + 1)) / 2;
       const bw = pitch / 2 - hwBr;
       const tw = pitch / 2 - hwTr;
-      kit.add("impTrim", prism([[-bw, YBr - 0.02], [bw, YBr - 0.02], [tw, YTr + 0.02], [-tw, YTr + 0.02]], 0.4), { pos: [xp, 0, NF - 0.2], color: BLACK, texel: 1 });
-      kit.add("impMetal", prism([[-bw + 0.14, YBr + 0.3], [bw - 0.14, YBr + 0.3], [tw - 0.1, YTr - 0.4], [-tw + 0.1, YTr - 0.4]], 0.04), { pos: [xp, 0, NF + 0.02], color: CHAR, texel: 1 });
+      kit.add("impPanel1", prism([[-bw, YBr - 0.02], [bw, YBr - 0.02], [tw, YTr + 0.02], [-tw, YTr + 0.02]], 0.4), { pos: [xp, 0, NF - 0.2], color: GREY, texel: 1 });
+      kit.add("impTrim", prism([[-bw + 0.16, YBr + 0.3], [bw - 0.16, YBr + 0.3], [tw - 0.12, YTr - 0.4], [-tw + 0.12, YTr - 0.4]], 0.03), { pos: [xp, 0, NF + 0.015], color: BLACK, texel: 1 });
       // narrow dim lamp, brackets, glyph plate, status lamp at the head
-      nf.box("impTrim", xp + hx, 3.3, 0.06, 0.12, 1.2, 0.02, { color: BLACK });
-      nf.box("emitBlueDim", xp + hx, 3.3, 0.072, 0.03, 1.1, 0.01, { uv: "keep" });
+      nf.box("impMetal", xp + hx, 3.3, 0.05, 0.14, 1.24, 0.02, { color: CHAR });
+      nf.box("emitBlueDim", xp + hx, 3.3, 0.062, 0.03, 1.1, 0.01, { uv: "keep" });
       for (const v of [2.2, 4.6]) nf.box("impMetal", xp + hx, v, 0.06, bw * 1.2, 0.06, 0.02, { color: GREYD });
-      nf.decal(IMP_DECAL.glyphs1, xp + hx, YBr + 0.62, 0.062, 0.3);
-      const p = nf.pos(xp + hx, YTr - 0.62, 0.065);
+      nf.decal(IMP_DECAL.glyphs1, xp + hx, YBr + 0.62, 0.052, 0.3);
+      const p = nf.pos(xp + hx, YTr - 0.62, 0.055);
       fx.lamp(i % 2 ? "red" : "amber", p.x, p.y, p.z, 0.05, 0.05, 0.02);
     }
     // splayed reveals (room face -> exterior cut-out), tunnel lining through the exterior slab
@@ -151,10 +153,12 @@ export function buildBridge(kit, ctx, room) {
       const b = Math.min(hx - 0.4, xc + hwBr - 0.1);
       if (b - a < 2) continue;
       const c = (a + b) / 2 + hx;
-      nf.box("impPanel1", c, 0.76, 0.02, b - a, 0.78, 0.04, { color: GREY, uv: "world", texel: 1 });
-      nf.box("impTrim", c, 0.76, 0.045, 0.06, 0.62, 0.01, { color: BLACK });
-      nf.box("leds", c - (b - a) / 4, 0.98, 0.045, Math.min(1.6, (b - a) / 2 - 0.5), 0.05, 0.006, { uv: "keep" });
-      nf.decal([IMP_DECAL.glyphs1, IMP_DECAL.bay02, IMP_DECAL.power][i % 3], c + (b - a) / 4, 0.7, 0.045, 0.34);
+      // dark instrument module set into the pale wall: black frame, charcoal panel, readouts
+      nf.box("impTrim", c, 0.76, 0.015, b - a + 0.1, 0.9, 0.03, { color: BLACK, texel: 1 });
+      nf.box("impPanel1", c, 0.76, 0.035, b - a, 0.78, 0.03, { color: GREYD, uv: "world", texel: 1 });
+      nf.box("impTrim", c, 0.76, 0.055, 0.06, 0.62, 0.01, { color: BLACK });
+      nf.box("leds", c - (b - a) / 4, 0.98, 0.056, Math.min(1.6, (b - a) / 2 - 0.5), 0.05, 0.006, { uv: "keep" });
+      nf.decal([IMP_DECAL.glyphs1, IMP_DECAL.bay02, IMP_DECAL.power][i % 3], c + (b - a) / 4, 0.7, 0.056, 0.34);
     }
     nf.box("impMetal", hx, YBr - 0.07, 0.05, W, 0.1, 0.1, { color: CHAR, texel: 1 });
     nf.box("emitWhiteDim", hx, YBr - 0.08, 0.1, W - 1.0, 0.03, 0.01, { uv: "keep" });
@@ -297,6 +301,16 @@ export function buildBridge(kit, ctx, room) {
     kit.boxMM("impTrim", [wa, PIT_Y - 0.14, STAIR.zBot - 0.02], [wb, 0.0, STAIR.zTop + 0.02], { color: BLACK, texel: 1 });
     kit.collider([Math.min(s * (PIT.x0 - 0.5), s * PIT.x0), PIT_Y, STAIR.zBot], [Math.max(s * (PIT.x0 - 0.5), s * PIT.x0), 0, STAIR.zTop], "stairwall");
     slopedRail(s * (PIT.x0 + 0.12), s, STAIR.zBot + 0.1, STAIR.zTop - 0.1, PIT_Y, 0);
+    // one sloped guide light in the wall-side backing, 0.3 m over the treads (no lit nosings)
+    {
+      const a = new THREE.Vector3(s * (PIT.x0 + 0.09), PIT_Y + 0.3, STAIR.zBot + 0.3);
+      const b = new THREE.Vector3(s * (PIT.x0 + 0.09), 0.3 - 0.18, STAIR.zTop - 0.3);
+      const d = b.clone().sub(a);
+      const q = new THREE.Quaternion().setFromUnitVectors(Z_AXIS, d.clone().normalize());
+      const mid = a.clone().add(b).multiplyScalar(0.5);
+      kit.add("impTrim", new THREE.BoxGeometry(0.06, 0.08, d.length() + 0.1), { pos: [mid.x, mid.y, mid.z], quat: q, color: BLACK });
+      kit.add("emitWhiteDim", new THREE.BoxGeometry(0.02, 0.03, d.length()), { pos: [mid.x + s * 0.03, mid.y, mid.z], quat: q, uv: "keep" });
+    }
     // open side: sloped handrail on posts + a thin collider wall the full height of the run
     const ox = s * (STAIR.x1 - 0.06);
     slopedRail(ox, 0, STAIR.zBot + 0.1, STAIR.zTop - 0.1, PIT_Y, 0);
@@ -521,12 +535,14 @@ export function buildBridge(kit, ctx, room) {
   const alertDim = (t) => (state.alert ? 0.7 + 0.3 * Math.sin(t * 5) : 1);
   // starlight key: sits inside the centre viewport tunnel, so the sill, head and jambs clip its cone to the
   // window shape; it rakes the command platform and the walkway and throws the railing shadows aft
-  kit.light({ type: "spot", pos: [0, 4.2, -hz - 0.25], target: [0, 0, 3], color: 0xd8e6ff, intensity: 240, distance: 40, angle: 0.95, penumbra: 0.5, shadow: true, priority: 1.0, dim: alertDim });
-  // aft wall: the crest plate's underlight washes the door, the guard posts and the floor crest
-  kit.light({ type: "point", pos: [0, 3.9, hz - 0.8], color: 0xe6ecff, intensity: lux(3.9, 0.9), distance: 16, priority: 0.8 });
+  kit.light({ type: "spot", pos: [0, 4.0, -hz - 0.25], target: [0, 0, 1], color: 0xd8e6ff, intensity: 240, distance: 40, angle: 0.95, penumbra: 0.55, shadow: true, priority: 1.0, dim: alertDim });
+  // aft deck: a cool fill over the floor crest that also reaches the door, the guard posts and the crest
+  // plate (kept 2 m off the wall so the plate does not blow out)
+  kit.light({ type: "point", pos: [0, 3.4, hz - 2.6], color: 0xe6ecff, intensity: lux(3.4, 1.0), distance: 16, priority: 0.8 });
   for (const s of [-1, 1]) {
-    // pit fill: blue-white from the console banks, low
-    kit.light({ type: "point", pos: [s * 9, 1.6, -1.0], color: 0xa8c8ff, intensity: 28, distance: 24, priority: 0.85 - (s > 0 ? 0.01 : 0) });
+    // pit fill: blue-white from the console banks, low; set aft of centre because the key spills into the
+    // pits' forward ends through the viewports
+    kit.light({ type: "point", pos: [s * 9, 1.6, 1.5], color: 0xa8c8ff, intensity: 28, distance: 24, priority: 0.85 - (s > 0 ? 0.01 : 0) });
     // one red practical per guard alcove
     kit.light({ type: "point", pos: [s * 12.5, 2.6, hz - 0.8], color: 0xff4030, intensity: lux(2.6, 0.9), distance: 9, priority: 0.6 - (s > 0 ? 0.01 : 0) });
     // outer decks: dim white from the ceiling slots
