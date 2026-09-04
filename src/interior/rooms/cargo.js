@@ -8,41 +8,74 @@ import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
 import { roomShell, impConsole, wallScreen, equipmentRack, crate, pipeRun, wallSegment } from "../imperial.js";
 import { wallFrame, pointLight } from "../builders.js";
-import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, hazardBorder, floorBorder, oilStain, workLight, warningLamp, craneRail, cabinet, shelfFrame, loader, palletJack, emitMat, container } from "./engProps.js";
+import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, hazardBorder, floorBorder, oilStain, workLight, warningLamp, craneRail, cabinet, shelfFrame, loader, palletJack, emitMat, container, bannerMat } from "./engProps.js";
 
 export function buildCargo(kit, ctx) {
   const [min, max] = ctx.bounds; // [-48, 0, -64] .. [-2.9, 9, -36]
   const H = max[1];
   const rand = rng(ctx.seed + 23);
 
+  // high-bay shell: big bulkhead plates (the racks hide most of the walls; the shell was half the
+  // sector's triangles at 2.4 m panels) and the two ceiling strips on the dim emitter
   roomShell(kit, ctx, {
-    ceiling: { lights: false, paints: ENG_CEIL_PAINTS, panelW: 3.0, rowH: 3.0, along: "x", spacing: 12, styles: { panel: 0.78, greeble: 0.08, vent: 0.14 } },
-    walls: { paints: ENG_PAINTS, styles: ENG_STYLES, theme: ENG_THEME, rows: [0, 0.5, 1.7, 3.2, 5.2, 7.2, H], panelW: 2.4 },
+    ceiling: { lights: false, stripMat: "emitWhiteDim", paints: ENG_CEIL_PAINTS, panelW: 4.5, rowH: 4.6, along: "x", spacing: 12, styles: { panel: 0.8, greeble: 0.06, vent: 0.14 } },
+    walls: { paints: ENG_PAINTS, styles: { panel: 0.64, vent: 0.08, greeble: 0.07, strip: 0.08, screen: 0.05, conduit: 0.08 }, theme: ENG_THEME, rows: [0, 0.5, 2.4, 4.8, 7.0, H], panelW: 3.6 },
   });
   emitMat(ctx, "cargo_lane", 0xffc46a, 0.8, "emitAmber");
   // wall-frame u coordinates (see wallSegment): xmax runs +z from zmin, xmin runs -z from zmax
   const uXmax = (z) => z - min[2];
   const uXmin = (z) => max[2] - z;
 
-  // shipping container (ribbed flanks, door end with latch bars and handles, label plate, lamp,
-  // placard on some; 2–3 paint tones per rack) without its own collider — the racking frame
-  // already blocks the whole row. `face` is the side the doors are on (toward the aisle).
-  const bin = (x, y, z, sx, sy, sz, seed, face, tones) => container(kit, { x, y, z, sx, sy, sz, seed, face, tone: tones[seed % tones.length], ribs: false });
+  // shipping container (door end with latch bars, label plate, lamp, placard on some; 2–3 paint
+  // tones per rack) without its own collider — the racking frame already blocks the whole row.
+  // `face` is the side the doors are on (toward the aisle). Bins on the upper tiers and in rows that
+  // face a wall are the lite body-and-rails variant: nobody reads a door 4 m up or behind a rack.
+  const bin = (x, y, z, sx, sy, sz, seed, face, tones, lite) => container(kit, { x, y, z, sx, sy, sz, seed, face, tone: tones[seed % tones.length], ribs: false, detail: lite ? "lite" : "full" });
 
   // ---------------------------------------------------------------- racking: four rows along x, each a different build
-  const rack = (x0, z0, x1, z1, seed, { rows = 1, fill = 0.82, levels = 3, levelH = 1.7, color = PALETTE.impAmber, tones = [0, 1, 5], wide = 0.22 } = {}) => {
+  // `drums` / `stock` list the tiers (0 = deck) that hold coolant drums or long bar stock instead of
+  // containers, so the four rows do not share one rhythm.
+  const rack = (x0, z0, x1, z1, seed, { rows = 1, fill = 0.82, levels = 3, levelH = 1.7, color = PALETTE.impAmber, tones = [0, 1, 5], wide = 0.22, drums = [], stock = [] } = {}) => {
     const heights = shelfFrame(kit, x0, z0, x1, z1, { levels, levelH, color });
     const r = rng(seed);
     const depth = (z1 - z0) / rows;
     const ys = [0, ...heights.map((h) => h + 0.01)];
     const south = (z0 + z1) / 2 < -50;
+    const drumCols = [PALETTE.impMid, PALETTE.impDark, PALETTE.impAmber.clone().multiplyScalar(0.5), PALETTE.hullDark];
     for (let row = 0; row < rows; row++) {
       const cz = z0 + depth * (row + 0.5);
       // doors face the walkway: outer rows toward the wall aisle, inner rows toward the main lane
-      const face = south ? (row === rows - 1 ? 1 : -1) : row === 0 ? -1 : 1;
+      const laneSide = south ? row === rows - 1 : row === 0;
+      const face = laneSide ? (south ? 1 : -1) : south ? -1 : 1;
       for (let li = 0; li < ys.length; li++) {
-        let x = x0 + 0.75;
         const yy = ys[li];
+        const lite = li >= 3 || !laneSide;
+        if (drums.includes(li)) {
+          // coolant drums two deep, a band on each, the odd one missing
+          for (let x = x0 + 0.85; x < x1 - 0.6; x += 0.78) {
+            for (const dz of [-0.33, 0.33]) {
+              if (r() < 0.12) continue;
+              const rr = 0.3 + r() * 0.05;
+              const col = drumCols[Math.floor(r() * drumCols.length)];
+              kit.cyl("paintedMetal", x, yy + 0.46, cz + dz, rr, 0.92, "y", { color: col, segments: 12, texel: 1.5 });
+              kit.cyl("paintedMetal", x, yy + 0.7, cz + dz, rr + 0.012, 0.06, "y", { color: PALETTE.impBlack, segments: 12, texel: 2 });
+            }
+          }
+          continue;
+        }
+        if (stock.includes(li)) {
+          // long bar / pipe stock in bundles across two bays, strapped down
+          for (let x = x0 + 0.6; x < x1 - 5.6; x += 5.8) {
+            const len = 5.2 + r() * 0.4;
+            for (let k = 0; k < 4; k++) {
+              const rr = 0.05 + r() * 0.05;
+              kit.cyl("metal", x + len / 2 + (r() - 0.5) * 0.3, yy + rr + (k > 1 ? 0.2 : 0), cz - 0.3 + (k % 2) * 0.5 + (r() - 0.5) * 0.1, rr, len, "x", { color: k % 2 ? PALETTE.steel : PALETTE.gunmetal, segments: 8 });
+            }
+            for (const sx of [1.2, len - 1.2]) kit.box("rubber", x + sx, yy + 0.16, cz, 0.08, 0.32, depth - 0.2, { color: PALETTE.rubber });
+          }
+          continue;
+        }
+        let x = x0 + 0.75;
         while (x < x1 - 0.7) {
           const isWide = r() < wide;
           const sx = isWide ? 2.2 : 1.05 + r() * 0.25;
@@ -51,8 +84,8 @@ export function buildCargo(kit, ctx) {
           if (r() > gapChance) {
             const sy = li === 0 ? 1.1 + r() * 0.4 : 0.8 + r() * 0.75;
             const sz = Math.min(depth - 0.12, 1.1 + r() * 0.2);
-            bin(x + sx / 2, yy, cz, sx, Math.min(sy, levelH - 0.16), sz, seed + li * 31 + Math.floor(x * 7), face, tones);
-            if (li > 0 && r() < 0.25 && sy < levelH - 0.75) bin(x + sx / 2, yy + Math.min(sy, levelH - 0.16), cz, sx * 0.8, 0.45, sz * 0.8, seed + 3 + Math.floor(x * 5), face, tones);
+            bin(x + sx / 2, yy, cz, sx, Math.min(sy, levelH - 0.16), sz, seed + li * 31 + Math.floor(x * 7), face, tones, lite);
+            if (li > 0 && r() < 0.25 && sy < levelH - 0.75) bin(x + sx / 2, yy + Math.min(sy, levelH - 0.16), cz, sx * 0.8, 0.45, sz * 0.8, seed + 3 + Math.floor(x * 5), face, tones, lite);
           }
           x += sx + 0.12;
         }
@@ -62,26 +95,35 @@ export function buildCargo(kit, ctx) {
     const nb = Math.round((x1 - x0) / 2.8);
     for (let i = 0; i < nb; i++) floorStencil(kit, x0 + ((i + 0.5) / nb) * (x1 - x0), z1 + 0.55, 0.7, 8 + (i % 4), 0);
   };
-  // south side (zmin): a tall four-level grey wall rack of small bins, a double amber row in the middle
-  rack(-45, -63.5, -11, -62.1, ctx.seed + 1, { levels: 4, levelH: 1.4, color: PALETTE.impMid, tones: [0, 2, 5], wide: 0.1, fill: 0.9 });
+  // south side (zmin): a tall four-level grey wall rack of small bins with bar stock on top, a double
+  // amber row in the middle
+  rack(-45, -63.5, -11, -62.1, ctx.seed + 1, { levels: 4, levelH: 1.4, color: PALETTE.impMid, tones: [0, 2, 5], wide: 0.1, fill: 0.9, stock: [4] });
   rack(-43, -58.8, -13, -56.0, ctx.seed + 2, { rows: 2, tones: [0, 1, 3] });
-  // north side (zmax): a heavy two-level double row (big containers), then a standard three-level wall rack
+  // north side (zmax): a heavy two-level double row (big containers), then a three-level wall rack
+  // whose middle tiers hold coolant drums
   rack(-43, -44.0, -13, -41.2, ctx.seed + 3, { rows: 2, levels: 2, levelH: 2.3, tones: [1, 2, 4], wide: 0.45, fill: 0.86 });
-  rack(-45, -37.9, -11, -36.5, ctx.seed + 4, { tones: [0, 3, 5] });
-  // rack-end guards (hazard bumpers) and end-of-row lit labels
-  for (const [x, z0, z1] of [
-    [-45, -63.5, -62.1],
-    [-11, -63.5, -62.1],
-    [-43, -58.8, -56.0],
-    [-13, -58.8, -56.0],
-    [-43, -44.0, -41.2],
-    [-13, -44.0, -41.2],
-    [-45, -37.9, -36.5],
-    [-11, -37.9, -36.5],
+  rack(-45, -37.9, -11, -36.5, ctx.seed + 4, { tones: [0, 3, 5], drums: [1, 2] });
+  // rack-end guards (hazard bumpers) and lit row labels: a text plate in a housing under a small
+  // lamp bar — the bare amber plates that were here read as glowing cream crates from the door
+  const rowSubs = ["Bins · Stock", "Containers", "Heavy Cargo", "Coolant Drums"];
+  for (const [x, z0, z1, row] of [
+    [-45, -63.5, -62.1, 1],
+    [-11, -63.5, -62.1, 1],
+    [-43, -58.8, -56.0, 2],
+    [-13, -58.8, -56.0, 2],
+    [-43, -44.0, -41.2, 3],
+    [-13, -44.0, -41.2, 3],
+    [-45, -37.9, -36.5, 4],
+    [-11, -37.9, -36.5, 4],
   ]) {
-    kit.box("hazard", x, 0.2, (z0 + z1) / 2, 0.16, 0.4, z1 - z0 + 0.3, { texel: HAZARD_TEXEL });
-    kit.box("paintedMetal", x, 2.4, (z0 + z1) / 2, 0.06, 0.5, 0.9, { color: PALETTE.impBlack, texel: 2 });
-    kit.box("emitAmber", x + (x < -20 ? -0.035 : 0.035), 2.4, (z0 + z1) / 2, 0.01, 0.34, 0.7, { uv: "keep" });
+    const zc = (z0 + z1) / 2;
+    const s = x < -20 ? -1 : 1;
+    kit.box("hazard", x, 0.2, zc, 0.16, 0.4, z1 - z0 + 0.3, { texel: HAZARD_TEXEL });
+    bannerMat(ctx, "cargo_row" + row, { text: "Row " + row, sub: rowSubs[row - 1], accent: "#ffb347", ratio: 2.6, width: 512, intensity: 1.1 });
+    kit.box("paintedMetal", x, 2.4, zc, 0.08, 0.5, 0.96, { color: PALETTE.impBlack, texel: 2 });
+    kit.add("cargo_row" + row, new THREE.PlaneGeometry(0.78, 0.3), { pos: [x + s * 0.045, 2.4, zc], rot: [0, (s * Math.PI) / 2, 0], uv: "keep" });
+    kit.box("paintedMetal", x + s * 0.06, 2.72, zc, 0.16, 0.06, 0.9, { color: PALETTE.impDark, texel: 2 });
+    kit.box("emitAmberDim", x + s * 0.06, 2.685, zc, 0.12, 0.01, 0.8, { uv: "keep" });
   }
 
   // ---------------------------------------------------------------- floor markings

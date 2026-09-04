@@ -9,7 +9,7 @@ import { roomShell, impConsole, wallScreen, equipmentRack, stairs, platform, rai
 import { wallFrame, pointLight } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect, GRATE_TILE } from "../../textures.js";
-import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, AMBER_DEEP, COOL, BLUE, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, floorBorder, cabinet, barGauges, spotLight, statusBoardMat, pipeManifold, workbench, toolChest, hose, railScreen } from "./engProps.js";
+import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, AMBER_DEEP, COOL, BLUE, HAZARD_TEXEL, cableTray, wallVent, wallStencil, floorStencil, floorLine, floorBorder, cabinet, barGauges, spotLight, statusBoardMat, readoutMat, pipeManifold, workbench, toolChest, hose, railScreen } from "./engProps.js";
 
 export function buildEngineering(kit, ctx) {
   const [min, max] = ctx.bounds; // [-32, 0, -30] .. [-2.9, 4, -8]
@@ -100,8 +100,39 @@ export function buildEngineering(kit, ctx) {
     g.rotateX(-Math.PI / 2);
     kit.add("grate", g, { pos: [px0 + 1.1, py + 0.01, pz1 - 0.85], uv: "scale", uvScale: [1.1 / GRATE_TILE[0], 1.0 / GRATE_TILE[1]] });
   }
-  // (standard height: a rear riser here would hide the status board from the door)
-  impConsole(kit, ctx, { x: px0 + 1.35, z: az, y: py, yaw: Math.PI / 2, w: 3.0, d: 0.95, screens: [1, 4, 1], chair: true, seed: ctx.seed + 99, lampMat: "emitAmber" });
+  // (standard height: a rear riser here would hide the status board from the door). A standing
+  // station: where the chair back used to face the door (it read as a blank monitor) a pedestal
+  // readout now faces the room with the deck status on it.
+  impConsole(kit, ctx, { x: px0 + 1.35, z: az, y: py, yaw: Math.PI / 2, w: 3.0, d: 0.95, screens: [1, 4, 1], chair: false, seed: ctx.seed + 99, lampMat: "emitAmber" });
+  // the console's door-side face is all the door camera sees of it (its slab tilts away), so it
+  // carries a readout strip — three sub-displays in a dark recess over a lamp row — instead of 3 m
+  // of plain housing
+  {
+    const fx0 = px0 + 1.35 + 0.425;
+    kit.box("paintedMetal", fx0 + 0.006, py + 0.46, az, 0.012, 0.34, 2.7, { color: PALETTE.impBlack, texel: 2 });
+    for (const [dz, scr] of [[-0.9, 3], [0, 1], [0.9, 4]]) {
+      kit.box("darkGloss", fx0 + 0.013, py + 0.47, az + dz, 0.006, 0.28, 0.76);
+      kit.add("impScreen" + scr, new THREE.PlaneGeometry(0.72, 0.24), { pos: [fx0 + 0.018, py + 0.47, az + dz], rot: [0, Math.PI / 2, 0], uv: "keep" });
+    }
+    const lr = rng(ctx.seed + 17);
+    for (let i = 0; i < 14; i++) {
+      const k = lr();
+      const m = k < 0.45 ? "emitAmberDim" : k < 0.65 ? "emitBlueDim" : "rubber";
+      kit.box(m, fx0 + 0.008, py + 0.24, az - 1.17 + i * 0.18, 0.012, 0.035, 0.09, m === "rubber" ? { color: PALETTE.rubber } : {});
+    }
+  }
+  {
+    const mx = px0 + 2.95;
+    readoutMat(ctx, "eng_readout", { title: "DECK STATUS  ·  ENGINEERING", seed: ctx.seed + 5 });
+    kit.cyl("paintedMetal", mx, py + 0.02, az, 0.3, 0.04, "y", { color: PALETTE.impBlack, segments: 16 });
+    kit.cyl("paintedMetal", mx, py + 0.55, az, 0.06, 1.06, "y", { color: PALETTE.impDark, segments: 10 });
+    kit.box("paintedMetal", mx, py + 1.38, az, 0.08, 0.7, 1.1, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("darkGloss", mx + 0.045, py + 1.38, az, 0.01, 0.64, 1.04);
+    kit.add("eng_readout", new THREE.PlaneGeometry(1.0, 0.62), { pos: [mx + 0.052, py + 1.38, az], rot: [0, Math.PI / 2, 0], uv: "keep" });
+    kit.box("emitAmberDim", mx + 0.045, py + 1.0, az - 0.4, 0.01, 0.03, 0.12);
+    kit.box("emitBlueDim", mx + 0.045, py + 1.0, az + 0.4, 0.01, 0.03, 0.12);
+    kit.collider([mx - 0.3, py, az - 0.55], [mx + 0.3, py + 1.75, az + 0.55], "readout");
+  }
   // side station on the north edge (operator faces the wall screens on zmax)
   impConsole(kit, ctx, { x: px1 - 2.0, z: pz1 - 0.55, y: py, yaw: Math.PI, w: 1.8, d: 0.75, screens: [4, 1], chair: true, seed: ctx.seed + 98, lampMat: "emitBlue" });
   // damage-control hologram of the ship on a pedestal (south-east corner, clear of the stair landing)
@@ -112,6 +143,20 @@ export function buildEngineering(kit, ctx) {
   kit.cyl("emitBlue", hx, py + 0.965, hz, 0.36, 0.01, "y", { segments: 20 });
   kit.collider([hx - 0.5, py, hz - 0.5], [hx + 0.5, py + 1.0, hz + 0.5], "holo");
   hologram(kit, ctx, { x: hx, y: py + 1.55, z: hz, kind: "ship", scale: 0.55 });
+  // the projector drum is plumbed in: a control panel on its door-side face, a coolant stub with a
+  // valve, and its data trunk running over the deck edge, down the skirt and along the floor into the
+  // breaker cabinet on the zmin wall
+  kit.box("paintedMetal", hx + 0.42, py + 0.5, hz, 0.06, 0.42, 0.34, { color: PALETTE.impBlack, texel: 2 });
+  kit.add("impScreen4", new THREE.PlaneGeometry(0.26, 0.16), { pos: [hx + 0.455, py + 0.57, hz], rot: [0, Math.PI / 2, 0], uv: "keep" });
+  kit.box("emitBlueDim", hx + 0.455, py + 0.36, hz - 0.1, 0.01, 0.03, 0.08);
+  kit.box("emitAmberDim", hx + 0.455, py + 0.36, hz + 0.08, 0.01, 0.03, 0.06);
+  pipeRun(kit, [[hx - 0.2, py + 0.25, hz - 0.35], [hx - 0.2, py + 0.25, hz - 0.7], [hx - 0.2, py + 0.03, hz - 0.7], [hx - 0.2, py + 0.03, pz0 + 0.05]], 0.045, PALETTE.steel);
+  kit.add("metal", new THREE.TorusGeometry(0.1, 0.018, 8, 16), { pos: [hx - 0.2, py + 0.25, hz - 0.55], rot: [0, Math.PI / 2, 0], color: PALETTE.impRed });
+  hose(kit, [[hx + 0.15, hz - 0.4], [hx + 0.3, hz - 0.8], [hx + 0.25, pz0 + 0.1]], { r: 0.035, y: py, color: PALETTE.impBlack });
+  pipeRun(kit, [[hx + 0.25, py + 0.02, pz0 - 0.05], [hx + 0.25, 0.08, pz0 - 0.05], [hx + 0.25, 0.08, pz0 - 0.4], [hx + 0.25, 0.08, min[2] + 0.75]], 0.035, PALETTE.rubber, "rubber");
+  pipeRun(kit, [[hx - 0.2, py + 0.02, pz0 - 0.05], [hx - 0.2, 0.08, pz0 - 0.05], [hx - 0.2, 0.08, pz0 - 0.4], [hx - 0.2, 0.08, min[2] + 0.75]], 0.045, PALETTE.steel);
+  kit.box("paintedMetal", hx, 0.1, pz0 - 0.4, 1.0, 0.2, 0.4, { color: PALETTE.impDark, texel: 2 });
+  kit.box("emitAmberDim", hx, 0.16, pz0 - 0.61, 0.3, 0.03, 0.01);
   // railing screens on the posts (tilted down toward the deck) and a comms pillar
   railScreen(kit, px0 + 1.5, py + 1.1, pz0, 0, { screen: 1 });
   railScreen(kit, px0 + 3.0, py + 1.1, pz0, 0, { screen: 4 });
@@ -211,16 +256,17 @@ export function buildEngineering(kit, ctx) {
   // approach lane from the door to the platform stairs (lit guide strips), a status kiosk on the north side
   floorLine(kit, max[0] - 0.4, az - 1.15, px1 + 1.4, az - 1.15, { w: 0.06, mat: "emitAmber", y: 0.006 });
   floorLine(kit, max[0] - 0.4, az + 1.15, px1 + 1.4, az + 1.15, { w: 0.06, mat: "emitAmber", y: 0.006 });
-  // amber cove line along the top of every wall (the room's signature colour)
+  // amber cove line along the top of every wall (the room's signature colour; the dim emitter so the
+  // far wall's line does not outshine the board under it)
   const cv = H - 0.16;
   kit.boxMM("paintedMetal", [min[0], cv - 0.06, min[2]], [max[0], cv + 0.06, min[2] + 0.1], { color: PALETTE.impBlack, texel: 2 });
   kit.boxMM("paintedMetal", [min[0], cv - 0.06, max[2] - 0.1], [max[0], cv + 0.06, max[2]], { color: PALETTE.impBlack, texel: 2 });
   kit.boxMM("paintedMetal", [min[0], cv - 0.06, min[2]], [min[0] + 0.1, cv + 0.06, max[2]], { color: PALETTE.impBlack, texel: 2 });
   kit.boxMM("paintedMetal", [max[0] - 0.1, cv - 0.06, min[2]], [max[0], cv + 0.06, max[2]], { color: PALETTE.impBlack, texel: 2 });
-  kit.boxMM("emitAmber", [min[0] + 0.2, cv - 0.02, min[2] + 0.1], [max[0] - 0.2, cv + 0.02, min[2] + 0.13]);
-  kit.boxMM("emitAmber", [min[0] + 0.2, cv - 0.02, max[2] - 0.13], [max[0] - 0.2, cv + 0.02, max[2] - 0.1]);
-  kit.boxMM("emitAmber", [min[0] + 0.1, cv - 0.02, min[2] + 0.2], [min[0] + 0.13, cv + 0.02, max[2] - 0.2]);
-  kit.boxMM("emitAmber", [max[0] - 0.13, cv - 0.02, min[2] + 0.2], [max[0] - 0.1, cv + 0.02, max[2] - 0.2]);
+  kit.boxMM("emitAmberDim", [min[0] + 0.2, cv - 0.02, min[2] + 0.1], [max[0] - 0.2, cv + 0.02, min[2] + 0.13]);
+  kit.boxMM("emitAmberDim", [min[0] + 0.2, cv - 0.02, max[2] - 0.13], [max[0] - 0.2, cv + 0.02, max[2] - 0.1]);
+  kit.boxMM("emitAmberDim", [min[0] + 0.1, cv - 0.02, min[2] + 0.2], [min[0] + 0.13, cv + 0.02, max[2] - 0.2]);
+  kit.boxMM("emitAmberDim", [max[0] - 0.13, cv - 0.02, min[2] + 0.2], [max[0] - 0.1, cv + 0.02, max[2] - 0.2]);
   floorStencil(kit, max[0] - 2.2, az - 2.2, 0.8, 5);
   impConsole(kit, ctx, { x: max[0] - 4.2, z: az + 4.2, yaw: Math.PI, w: 1.4, d: 0.7, h: 1.05, screens: [4], seed: ctx.seed + 61, lampMat: "emitAmber" });
   // south side: a spares cabinet and a second tool chest parked by the manifold
@@ -234,6 +280,8 @@ export function buildEngineering(kit, ctx) {
   cableTray(kit, [min[0] + 0.8, -24.8], [max[0] - 0.8, -24.8], H - 0.45, { w: 0.55, ceil: H, cables: 4, seed: 4 });
   cableTray(kit, [-9.2, min[2] + 0.8], [-9.2, max[2] - 0.8], H - 0.62, { w: 0.4, ceil: H, cables: 3, seed: 5 });
   cableTray(kit, [-20.5, -24.8], [-20.5, -11.0], H - 0.62, { w: 0.4, ceil: H, cables: 3, seed: 6 });
+  // dark spine down the room axis: the centre ceiling run reads as structure instead of lit panels
+  cableTray(kit, [max[0] - 0.8, az], [min[0] + 0.8, az], H - 0.4, { w: 0.5, ceil: H, cables: 4, seed: 7 });
   pipeRun(kit, [[min[0] + 0.5, H - 0.3, min[2] + 0.6], [max[0] - 0.5, H - 0.3, min[2] + 0.6]], 0.12, PALETTE.impMid);
   pipeRun(kit, [[min[0] + 0.5, H - 0.3, min[2] + 0.95], [max[0] - 0.5, H - 0.3, min[2] + 0.95]], 0.07, PALETTE.impAmber);
   // amber down-lights over the arc (fixtures) and the real lights
@@ -243,9 +291,10 @@ export function buildEngineering(kit, ctx) {
   }
   ctx.light(spotLight(AMBER, 44, 18, [-24, H - 0.2, az], [-25.5, 0, az], { angle: 1.05, penumbra: 0.55, shadow: true }));
   ctx.light(pointLight(BLUE, 7, 11, [min[0] + 2.2, 2.7, az]));
-  // (cool fills kept ≥1.3 m under the ceiling: hugging it puts a white specular blob on the panels)
-  ctx.light(pointLight(COOL, 7, 10, [-14, 2.6, az]));
+  // (cool fills kept ≥1.5 m under the ceiling and off the room axis: on the axis they lit the centre
+  // ceiling run into a bright band down the middle of the door view)
+  ctx.light(pointLight(COOL, 5, 10, [-14, 2.4, az - 3.6]));
   ctx.light(pointLight(AMBER_DEEP, 8, 10, [-21, 2.9, min[2] + 2.2]));
   ctx.light(pointLight(COOL, 6, 10, [-18, 2.7, max[2] - 2.5]));
-  ctx.light(pointLight(COOL, 6, 10, [-6, 2.7, az]));
+  ctx.light(pointLight(COOL, 5, 10, [-6, 2.4, az + 3.6]));
 }

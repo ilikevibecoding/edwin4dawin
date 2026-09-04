@@ -9,7 +9,7 @@ import { PALETTE } from "../../materials.js";
 import { rng } from "../../kit.js";
 import { decalRect, GRATE_TILE, makeCanvas, toTexture } from "../../textures.js";
 import { wallFrame, pointLight } from "../builders.js";
-import { wallSegment } from "../imperial.js";
+import { wallSegment, pipeRun } from "../imperial.js";
 
 // hazard stripes: one tile per metre (texel 1). Finer tilings alias into orange dots at distance.
 export const HAZARD_TEXEL = 1;
@@ -274,7 +274,7 @@ export function statusBoardMat(ctx, key = "eng_board", { accent = "#ffb347", coo
 }
 
 /** Work-order / job board: amber header, rows of order ids, description bars and status squares. */
-export function jobBoardMat(ctx, key = "eng_jobs", { title = "WORK ORDERS  ·  BAY 04", accent = "#ffb347", seed = 3, intensity = 1.2 } = {}) {
+export function jobBoardMat(ctx, key = "eng_jobs", { title = "WORK ORDERS  ·  BAY 04", accent = "#ffb347", seed = 3, intensity = 1.5 } = {}) {
   return canvasEmitMat(
     ctx,
     key,
@@ -313,6 +313,145 @@ export function jobBoardMat(ctx, key = "eng_jobs", { title = "WORK ORDERS  ·  B
     },
     { intensity },
   );
+}
+
+/**
+ * Big-text banner (bay names, hatch labels): one line of large text with an accent bar either side
+ * and an optional smaller second line. `ratio` is w/h of the canvas (match the plate it goes on);
+ * `width` is the canvas width in texels (2048 for a 5 m sign, 512 for a small label).
+ */
+export function bannerMat(ctx, key, { text, sub = null, accent = "#ffb347", fg = "#e8edf5", bg = "#05070b", ratio = 8, intensity = 1.5, width = 2048 } = {}) {
+  const w = width;
+  const h = Math.round(w / ratio);
+  return canvasEmitMat(
+    ctx,
+    key,
+    w,
+    h,
+    (g) => {
+      g.fillStyle = bg;
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = accent;
+      g.fillRect(0, 0, w, Math.max(4, h * 0.05));
+      g.fillRect(0, h - Math.max(4, h * 0.05), w, Math.max(4, h * 0.05));
+      g.fillRect(h * 0.2, h * 0.18, h * 0.08, h * 0.64);
+      g.fillRect(w - h * 0.28, h * 0.18, h * 0.08, h * 0.64);
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      const main = sub ? h * 0.46 : h * 0.62;
+      g.font = `bold ${Math.round(main)}px 'Helvetica Neue', Arial, sans-serif`;
+      g.fillStyle = fg;
+      g.fillText(text.toUpperCase(), w / 2, sub ? h * 0.38 : h * 0.52);
+      if (sub) {
+        g.font = `bold ${Math.round(h * 0.24)}px ${MONO}`;
+        g.fillStyle = accent;
+        g.fillText(sub.toUpperCase(), w / 2, h * 0.76);
+      }
+    },
+    { intensity },
+  );
+}
+
+/**
+ * Compact supervisor readout (a 1.6:1 monitor): title bar, three ring gauges with values, a live
+ * trace and a column of subsystem lines with status squares.
+ */
+export function readoutMat(ctx, key, { title = "DECK STATUS  ·  ENGINEERING", accent = "#ffb347", cool = "#4a9dff", warn = "#ff4136", seed = 5, intensity = 1.35 } = {}) {
+  return canvasEmitMat(
+    ctx,
+    key,
+    1024,
+    640,
+    (g, w, h) => {
+      const rand = rng(seed);
+      g.fillStyle = "#04070c";
+      g.fillRect(0, 0, w, h);
+      g.fillStyle = accent;
+      g.fillRect(0, 0, w, 44);
+      g.fillStyle = "#04070c";
+      g.font = `bold 26px ${MONO}`;
+      g.textBaseline = "middle";
+      g.textAlign = "left";
+      g.fillText(title, 24, 22);
+      g.textAlign = "right";
+      g.fillText("0417.3", w - 24, 22);
+      // three ring gauges
+      const labels = ["REACTOR", "HYPERDRIVE", "POWER GRID"];
+      for (let i = 0; i < 3; i++) {
+        const cx = 130 + i * 250;
+        const cy = 170;
+        const v = 0.45 + rand() * 0.5;
+        g.lineWidth = 18;
+        g.strokeStyle = rgba(accent, 0.22);
+        g.beginPath();
+        g.arc(cx, cy, 78, Math.PI * 0.75, Math.PI * 2.25);
+        g.stroke();
+        g.strokeStyle = i === 1 ? cool : v > 0.9 ? warn : accent;
+        g.beginPath();
+        g.arc(cx, cy, 78, Math.PI * 0.75, Math.PI * 0.75 + v * Math.PI * 1.5);
+        g.stroke();
+        g.fillStyle = "#e8edf5";
+        g.font = `bold 40px ${MONO}`;
+        g.textAlign = "center";
+        g.fillText(Math.round(v * 100) + "%", cx, cy + 4);
+        g.fillStyle = rgba(accent, 0.8);
+        g.font = `bold 20px ${MONO}`;
+        g.fillText(labels[i], cx, cy + 108);
+      }
+      // subsystem list on the right
+      g.textAlign = "left";
+      const subs = ["COOLANT LOOP A", "COOLANT LOOP B", "FIELD COILS", "SHIELD BUS", "LIFE SUPPORT", "SUBLIGHT FEED"];
+      for (let i = 0; i < subs.length; i++) {
+        const y = 86 + i * 38;
+        g.fillStyle = rgba(accent, 0.85);
+        g.font = `bold 20px ${MONO}`;
+        g.fillText(subs[i], 790, y);
+        const st = rand();
+        g.fillStyle = st < 0.7 ? "#4cff88" : st < 0.9 ? accent : warn;
+        g.fillRect(990, y - 9, 18, 18);
+      }
+      // trace
+      g.fillStyle = rgba(cool, 0.12);
+      g.fillRect(24, 330, w - 48, 270);
+      g.strokeStyle = rgba(cool, 0.35);
+      g.lineWidth = 2;
+      for (let x = 24; x < w - 24; x += 60) {
+        g.beginPath();
+        g.moveTo(x, 330);
+        g.lineTo(x, 600);
+        g.stroke();
+      }
+      g.strokeStyle = cool;
+      g.lineWidth = 4;
+      g.beginPath();
+      for (let x = 24; x <= w - 24; x += 8) {
+        const t = (x - 24) / (w - 48);
+        const y = 465 - Math.sin(t * 19) * 60 * Math.sin(t * 3.1) - Math.sin(t * 47) * 18;
+        if (x === 24) g.moveTo(x, y);
+        else g.lineTo(x, y);
+      }
+      g.stroke();
+      g.fillStyle = rgba(accent, 0.9);
+      g.font = `bold 20px ${MONO}`;
+      g.fillText("MAIN BUS LOAD  ·  1.4 GW", 40, 352);
+      g.fillStyle = "rgba(0,0,0,0.25)";
+      for (let yy = 0; yy < h; yy += 3) g.fillRect(0, yy, w, 1);
+    },
+    { intensity },
+  );
+}
+
+/**
+ * Wall sign standing proud of the wall on a housing `depth` deep (so wall pilasters and conduits can
+ * never cut through it): black housing, the emissive plate on its face, a bracket top and bottom.
+ */
+export function wallSign(kit, ctx, side, u, v, mat, { w = 5.2, h = 0.7, depth = 0.35, bounds = ctx.bounds } = {}) {
+  const seg = wallSegment(bounds, side);
+  const { frame } = wallFrame(kit, seg.from, seg.to, bounds[0][1]);
+  frame.box("paintedMetal", u, v, depth / 2, w + 0.16, h + 0.16, depth, { color: PALETTE.impBlack, texel: 2 });
+  frame.box("paintedMetal", u, v, depth + 0.012, w + 0.04, h + 0.04, 0.024, { color: PALETTE.impDark, texel: 2 });
+  frame.add(mat, new THREE.PlaneGeometry(w, h), u, v, depth + 0.03, { uv: "keep" });
+  for (const s of [-1, 1]) frame.box("metal", u, v + s * (h / 2 + 0.14), depth * 0.45, w * 0.5, 0.06, depth * 0.9, { color: PALETTE.gunmetal });
 }
 
 /**
@@ -618,22 +757,26 @@ export function cabinet(kit, x, z, { yaw = 0, w = 1.2, h = 2.2, d = 0.6, y = 0, 
   kit.collider([x - ex, y, z - ez], [x + ex, y + h, z + ez], "cabinet");
 }
 
-// container paint tones: [body, trim] — grey, dark, blue-grey, amber-brown, rust-red
+// container paint tones: [body, trim] — grey, dark, blue-grey, amber-brown, rust-red, olive drab
+// (no light tone: a pale bin under a warm work light reads as a glowing box from the lane)
 export const CONTAINER_TONES = [
   [PALETTE.impMid, PALETTE.impDark],
   [PALETTE.impDark, PALETTE.impBlack],
   [PALETTE.hullDark, PALETTE.impDark],
   [PALETTE.impAmber.clone().multiplyScalar(0.5), PALETTE.impAmber.clone().multiplyScalar(0.3)],
   [PALETTE.impRed.clone().multiplyScalar(0.42), PALETTE.impRed.clone().multiplyScalar(0.22)],
-  [PALETTE.impGrey, PALETTE.impMid],
+  [new THREE.Color("#5a5c48"), new THREE.Color("#33352a")],
 ];
 
 /**
- * Shipping container: ribbed flanks, corner posts, a door end (two leaves, centre seam, latch bars
- * and handles) on the `face` (+1: +z, -1: -z) side, a label plate, a status lamp and — on some —
- * a hazard placard. `tone` indexes CONTAINER_TONES; no collider by default (racks carry their own).
+ * Shipping container. `detail: "full"` (default): a door end (two leaves, centre seam, latch bars
+ * that double as the handles) on the `face` (+1: +z, -1: -z) side, a label plate, a status lamp
+ * and — on some — a hazard placard; `ribs` adds corrugation ribs and corner posts on the flanks
+ * (off for bins packed side by side in racks, whose flanks nobody sees). `detail: "lite"` is the
+ * body and its two rails only (≈36 triangles) for upper rack levels and rows that face a wall.
+ * `tone` indexes CONTAINER_TONES; no collider by default (racks carry their own).
  */
-export function container(kit, { x, y = 0, z, sx = 1.2, sy = 1.0, sz = 1.2, yaw = 0, seed = 1, tone = null, face = 1, collide = false, ribs = true }) {
+export function container(kit, { x, y = 0, z, sx = 1.2, sy = 1.0, sz = 1.2, yaw = 0, seed = 1, tone = null, face = 1, collide = false, ribs = true, detail = "full" }) {
   const rand = rng(seed);
   const [body, trim] = CONTAINER_TONES[tone ?? Math.floor(rand() * CONTAINER_TONES.length)];
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
@@ -641,25 +784,29 @@ export function container(kit, { x, y = 0, z, sx = 1.2, sy = 1.0, sz = 1.2, yaw 
     const p = new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
     return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: q, ...extra });
   };
+  if (collide) {
+    const c = Math.abs(Math.cos(yaw));
+    const s = Math.abs(Math.sin(yaw));
+    kit.collider([x - (sx * c + sz * s) / 2, y, z - (sx * s + sz * c) / 2], [x + (sx * c + sz * s) / 2, y + sy, z + (sx * s + sz * c) / 2], "container");
+  }
   add("impPanel1", new THREE.BoxGeometry(sx, sy, sz), 0, sy / 2, 0, { color: body, uv: "keep" });
-  // top / bottom rails and corner posts
+  // top / bottom rails
   add("paintedMetal", new THREE.BoxGeometry(sx + 0.03, sy * 0.1, sz + 0.03), 0, sy * 0.05, 0, { color: PALETTE.impBlack, texel: 2 });
   add("paintedMetal", new THREE.BoxGeometry(sx + 0.03, sy * 0.08, sz + 0.03), 0, sy - sy * 0.04, 0, { color: PALETTE.impBlack, texel: 2 });
-  for (const cx of [-1, 1]) for (const cz of [-1, 1]) add("paintedMetal", new THREE.BoxGeometry(0.07, sy, 0.07), cx * (sx / 2 - 0.02), sy / 2, cz * (sz / 2 - 0.02), { color: PALETTE.impBlack, texel: 2 });
-  // corrugation ribs on the long flanks (±x faces) — skipped for bins packed side by side in racks
+  if (detail === "lite") return;
+  // corner posts + corrugation ribs on the long flanks (±x faces): free-standing containers only
   if (ribs) {
+    for (const cx of [-1, 1]) for (const cz of [-1, 1]) add("paintedMetal", new THREE.BoxGeometry(0.07, sy, 0.07), cx * (sx / 2 - 0.02), sy / 2, cz * (sz / 2 - 0.02), { color: PALETTE.impBlack, texel: 2 });
     const nr = Math.max(2, Math.floor((sz - 0.3) / 0.3));
     for (const s of [-1, 1]) for (let i = 0; i < nr; i++) add("paintedMetal", new THREE.BoxGeometry(0.02, sy * 0.72, 0.06), s * (sx / 2 + 0.005), sy * 0.5, -sz / 2 + 0.2 + (i + 0.5) * ((sz - 0.4) / nr), { color: trim, texel: 2 });
   }
-  // door end: two leaves with a centre seam, latch bars, handles, a sill
+  // door end: two leaves with a centre seam, one latch bar per leaf (the bar is the handle), a sill
   const f = face;
   const dz = f * (sz / 2 + 0.006);
   add("paintedMetal", new THREE.BoxGeometry(0.03, sy * 0.78, 0.012), 0, sy * 0.5, dz, { color: PALETTE.impBlack, texel: 2 });
   for (const s of [-1, 1]) {
     add("paintedMetal", new THREE.BoxGeometry(sx * 0.42, sy * 0.72, 0.008), s * sx * 0.24, sy * 0.5, dz, { color: trim, texel: 2 });
-    add("metal", new THREE.BoxGeometry(0.035, sy * 0.66, 0.03), s * sx * 0.16, sy * 0.5, dz + f * 0.02, { color: PALETTE.steel });
-    add("metal", new THREE.BoxGeometry(0.12, 0.04, 0.05), s * sx * 0.16, sy * 0.42, dz + f * 0.03, { color: PALETTE.gunmetal });
-    add("metal", new THREE.BoxGeometry(0.12, 0.04, 0.05), s * sx * 0.16, sy * 0.66, dz + f * 0.03, { color: PALETTE.gunmetal });
+    add("metal", new THREE.BoxGeometry(0.05, sy * 0.66, 0.04), s * sx * 0.16, sy * 0.5, dz + f * 0.024, { color: PALETTE.steel });
   }
   add("paintedMetal", new THREE.BoxGeometry(sx * 0.9, 0.05, 0.03), 0, sy * 0.1, dz + f * 0.01, { color: PALETTE.impBlack, texel: 2 });
   // label plate + stencil, status lamp
@@ -674,11 +821,6 @@ export function container(kit, { x, y = 0, z, sx = 1.2, sy = 1.0, sz = 1.2, yaw 
     const p = new THREE.Vector3(sx * 0.3, sy * 0.28, dz + f * 0.008).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
     kit.add("paintedMetal", new THREE.BoxGeometry(pw, pw, 0.01), { pos: [p.x, p.y, p.z], quat: dq, color: PALETTE.impAmber, texel: 2 });
     add("decal", new THREE.PlaneGeometry(pw * 0.7, pw * 0.7), sx * 0.3, sy * 0.28, dz + f * 0.016, { uv: "keep", uvRect: decalRect(rand() < 0.5 ? 5 : 13) });
-  }
-  if (collide) {
-    const c = Math.abs(Math.cos(yaw));
-    const s = Math.abs(Math.sin(yaw));
-    kit.collider([x - (sx * c + sz * s) / 2, y, z - (sx * s + sz * c) / 2], [x + (sx * c + sz * s) / 2, y + sy, z + (sx * s + sz * c) / 2], "container");
   }
 }
 
@@ -1068,6 +1210,113 @@ export function palletJack(kit, x, z, yaw = 0) {
   add("metal", new THREE.CylinderGeometry(0.04, 0.04, 0.9, 8), 0, 0.7, 0.42, { color: PALETTE.steel, rot: null });
   add("rubber", new THREE.BoxGeometry(0.4, 0.05, 0.05), 0, 1.15, 0.42, { color: PALETTE.rubber });
   kit.collider([x - 0.45, 0, z - 1.2], [x + 0.45, 0.4, z + 0.5], "jack");
+}
+
+/**
+ * Wheeled service cart: two trays on a tube frame, castors, a push bar, a diagnostic unit with a
+ * small screen on the top tray and loose parts on the lower one. Faces +Z before yaw (push bar at -Z).
+ */
+export function workCart(kit, x, z, { yaw = 0, seed = 3, color = PALETTE.impMid } = {}) {
+  const rand = rng(seed);
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const p = new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
+    return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  for (const yy of [0.32, 0.86]) {
+    add("paintedMetal", new THREE.BoxGeometry(1.2, 0.05, 0.7), 0, yy, 0, { color, texel: 2 });
+    add("paintedMetal", new THREE.BoxGeometry(1.22, 0.08, 0.04), 0, yy + 0.06, 0.33, { color: PALETTE.impBlack, texel: 2 });
+    add("paintedMetal", new THREE.BoxGeometry(1.22, 0.08, 0.04), 0, yy + 0.06, -0.33, { color: PALETTE.impBlack, texel: 2 });
+  }
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    add("metal", new THREE.CylinderGeometry(0.02, 0.02, 0.9, 6), sx * 0.56, 0.55, sz * 0.31, { color: PALETTE.steel });
+    add("rubber", new THREE.CylinderGeometry(0.07, 0.07, 0.05, 10).rotateZ(Math.PI / 2), sx * 0.5, 0.07, sz * 0.28, { color: PALETTE.rubber });
+  }
+  // push bar
+  add("metal", new THREE.CylinderGeometry(0.02, 0.02, 1.1, 6).rotateZ(Math.PI / 2), 0, 1.02, -0.36, { color: PALETTE.steel });
+  for (const sx of [-1, 1]) add("metal", new THREE.CylinderGeometry(0.02, 0.02, 0.2, 6), sx * 0.54, 0.95, -0.34, { color: PALETTE.steel });
+  // diagnostic unit + parts
+  add("paintedMetal", new THREE.BoxGeometry(0.5, 0.26, 0.4), -0.28, 1.02, 0.05, { color: PALETTE.impDark, texel: 2 });
+  add("impScreen4", new THREE.PlaneGeometry(0.3, 0.14), -0.28, 1.06, 0.256, { uv: "keep" });
+  add("emitAmberDim", new THREE.BoxGeometry(0.06, 0.03, 0.01), -0.08, 1.12, 0.256);
+  add("emitGreen", new THREE.BoxGeometry(0.03, 0.03, 0.01), -0.02, 1.12, 0.256);
+  add("rubber", new THREE.BoxGeometry(0.34, 0.12, 0.22), 0.3, 0.95, -0.1, { color: PALETTE.rubber });
+  add("metal", new THREE.CylinderGeometry(0.05, 0.05, 0.36, 10).rotateZ(Math.PI / 2), 0.28, 0.94, 0.2, { color: PALETTE.brass });
+  for (let i = 0; i < 3; i++) add("metal", new THREE.BoxGeometry(0.16 + rand() * 0.2, 0.1 + rand() * 0.1, 0.16 + rand() * 0.14), -0.4 + i * 0.4, 0.42, (rand() - 0.5) * 0.3, { color: [PALETTE.steel, PALETTE.gunmetal, PALETTE.impRed][i] });
+  // cable hanging off the lower tray to the deck
+  const c0 = new THREE.Vector3(0.55, 0.3, 0.2).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
+  const c1 = new THREE.Vector3(0.9, 0.02, 0.6).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
+  pipeRun(kit, [[c0.x, c0.y, c0.z], [c1.x, c1.y, c1.z]], 0.02, PALETTE.rubber, "rubber");
+  const c = Math.abs(Math.cos(yaw));
+  const s = Math.abs(Math.sin(yaw));
+  kit.collider([x - (1.3 * c + 0.8 * s) / 2, 0, z - (1.3 * s + 0.8 * c) / 2], [x + (1.3 * c + 0.8 * s) / 2, 1.1, z + (1.3 * s + 0.8 * c) / 2], "cart");
+}
+
+/**
+ * Hose reel on a two-wheel stand: side discs, a drum wound with hose, a stand with a handle, and
+ * a length of hose run out along the deck through `out` (deck-local [x,z] points, from the reel).
+ */
+export function hoseReel(kit, x, z, { yaw = 0, color = PALETTE.impAmber, hose: hoseCol = PALETTE.impAmber, out = null } = {}) {
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const p = new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
+    return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  const ay = 0.62;
+  for (const s of [-1, 1]) {
+    add("paintedMetal", new THREE.CylinderGeometry(0.42, 0.42, 0.03, 20).rotateZ(Math.PI / 2), s * 0.24, ay, 0, { color, texel: 2 });
+    add("paintedMetal", new THREE.BoxGeometry(0.06, 0.7, 0.06), s * 0.34, 0.36, -0.12, { color: PALETTE.impDark, texel: 2 });
+    add("rubber", new THREE.CylinderGeometry(0.12, 0.12, 0.06, 12).rotateZ(Math.PI / 2), s * 0.4, 0.12, -0.25, { color: PALETTE.rubber });
+  }
+  add("rubber", new THREE.CylinderGeometry(0.3, 0.3, 0.44, 16).rotateZ(Math.PI / 2), 0, ay, 0, { color: hoseCol });
+  add("metal", new THREE.CylinderGeometry(0.03, 0.03, 0.7, 8).rotateZ(Math.PI / 2), 0, ay, 0, { color: PALETTE.steel });
+  add("metal", new THREE.BoxGeometry(0.05, 0.05, 0.18), 0.37, ay, 0.12, { color: PALETTE.steel });
+  add("paintedMetal", new THREE.BoxGeometry(0.72, 0.05, 0.3), 0, 0.1, -0.14, { color: PALETTE.impDark, texel: 2 });
+  add("metal", new THREE.CylinderGeometry(0.02, 0.02, 0.72, 6).rotateZ(Math.PI / 2), 0, 1.05, -0.32, { color: PALETTE.steel });
+  for (const s of [-1, 1]) add("metal", new THREE.CylinderGeometry(0.02, 0.02, 0.5, 6), s * 0.34, 0.85, -0.32, { color: PALETTE.steel, rot: [0.35, 0, 0] });
+  if (out) {
+    const p0 = new THREE.Vector3(0, ay - 0.3, 0.32).applyQuaternion(q).add(new THREE.Vector3(x, 0, z));
+    hose(kit, [[p0.x, p0.z], ...out], { r: 0.035, color: hoseCol });
+  }
+  const c = Math.abs(Math.cos(yaw));
+  const s = Math.abs(Math.sin(yaw));
+  kit.collider([x - (0.9 * c + 0.9 * s) / 2, 0, z - (0.9 * s + 0.9 * c) / 2], [x + (0.9 * c + 0.9 * s) / 2, 1.1, z + (0.9 * s + 0.9 * c) / 2], "reel");
+}
+
+/**
+ * Large closed roll-up hatch on a wall: recessed jambs and a drum housing at the top, horizontal
+ * slats with a hazard sill, a lit banner over the lintel, a control pedestal with lamps beside it
+ * and a keep-clear box on the deck in front. Decorative — the wall collider stays.
+ */
+export function rollupHatch(kit, ctx, side, u, { w = 6.4, h = 4.8, bounds = ctx.bounds, label = "Hatch 04", sub = "Cargo Transfer · Closed", key = "hatch_" + side + Math.round(u) } = {}) {
+  const seg = wallSegment(bounds, side);
+  const { frame } = wallFrame(kit, seg.from, seg.to, bounds[0][1]);
+  const d = 0.42;
+  for (const s of [-1, 1]) frame.box("paintedMetal", u + s * (w / 2 + 0.3), h / 2 + 0.3, d / 2, 0.6, h + 0.6, d, { color: PALETTE.impDark, texel: 1.5 });
+  frame.box("paintedMetal", u, h + 0.55, d / 2 + 0.1, w + 1.2, 0.9, d + 0.2, { color: PALETTE.impDark, texel: 1.5 });
+  frame.box("paintedMetal", u, h + 0.55, d + 0.21, w + 0.6, 0.5, 0.02, { color: PALETTE.impBlack, texel: 2 });
+  // slats
+  const n = Math.round(h / 0.4);
+  for (let i = 0; i < n; i++) {
+    const v = 0.2 + i * (h / n) + h / n / 2;
+    frame.box("paintedMetal", u, v, 0.12, w, h / n - 0.03, 0.14, { color: i % 5 === 2 ? PALETTE.hullDark : PALETTE.impGrey, texel: 1.2 });
+  }
+  frame.box("hazard", u, 0.32, 0.2, w, 0.24, 0.02, { texel: HAZARD_TEXEL });
+  frame.box("paintedMetal", u, 0.1, 0.15, w + 0.6, 0.2, 0.3, { color: PALETTE.impBlack, texel: 2 });
+  for (const s of [-1, 1]) frame.box("metal", u + s * (w / 2 - 0.5), 0.9, 0.2, 0.5, 0.06, 0.03, { color: PALETTE.steel });
+  frame.add("decal", new THREE.PlaneGeometry(1.4, 1.4), u - w * 0.28, h * 0.5, 0.2, { uv: "keep", uvRect: decalRect(3) });
+  frame.add("decal", new THREE.PlaneGeometry(1.4, 1.4), u + w * 0.28, h * 0.5, 0.2, { uv: "keep", uvRect: decalRect(4) });
+  // banner over the lintel, beacons, control pedestal
+  bannerMat(ctx, key, { text: label, sub, accent: "#ffb347", ratio: 9 });
+  frame.box("paintedMetal", u, h + 1.45, 0.06, w * 0.6 + 0.12, 0.62, 0.12, { color: PALETTE.impBlack, texel: 2 });
+  frame.add(key, new THREE.PlaneGeometry(w * 0.6, 0.5), u, h + 1.45, 0.125, { uv: "keep" });
+  for (const s of [-1, 1]) frame.box("emitRed", u + s * (w / 2 + 0.3), h + 1.3, d + 0.02, 0.16, 0.16, 0.03);
+  frame.box("paintedMetal", u + w / 2 + 0.95, 0.65, 0.2, 0.36, 1.3, 0.36, { color: PALETTE.impDark, texel: 2 });
+  frame.box("paintedMetal", u + w / 2 + 0.95, 1.36, 0.22, 0.4, 0.18, 0.4, { color: PALETTE.impBlack, texel: 2 });
+  frame.box("emitAmberDim", u + w / 2 + 0.95, 1.05, 0.385, 0.16, 0.05, 0.01);
+  frame.box("emitRedDim", u + w / 2 + 0.95, 0.95, 0.385, 0.05, 0.05, 0.01);
+  frame.box("emitGreen", u + w / 2 + 0.85, 0.95, 0.385, 0.05, 0.05, 0.01);
+  frame.collider(u + w / 2 + 0.75, u + w / 2 + 1.15, 0, 1.5, 0, 0.42, "hatchctl");
 }
 
 /** Spot light helper (deck-local position + target). */

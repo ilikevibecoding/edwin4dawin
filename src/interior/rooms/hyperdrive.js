@@ -10,16 +10,17 @@ import { roomShell, impConsole, wallScreen, equipmentRack, stairs, platform, rai
 import { wallFrame, pointLight } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
-import { signPlate } from "../corridor.js";
-import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, AMBER_DEEP, COOL, BLUE, cableTray, wallVent, wallStencil, floorStencil, floorBorder, cabinet, tank, warningLamp, pulseSet, emitMat } from "./engProps.js";
+import { ENG_PAINTS, ENG_CEIL_PAINTS, ENG_STYLES, ENG_THEME, AMBER, AMBER_DEEP, COOL, BLUE, cableTray, wallVent, wallStencil, floorStencil, floorLine, floorBorder, cabinet, tank, warningLamp, pulseSet, emitMat, bannerMat, wallSign } from "./engProps.js";
 
 export function buildHyperdrive(kit, ctx) {
   const [min, max] = ctx.bounds; // [2.9, 0, -32] .. [36, 8, -6]
   const H = max[1];
   const rand = rng(ctx.seed + 9);
 
+  // two ceiling strips on the dim emitter, neither on the door axis: the standard strip down the
+  // middle outshone the motivator from the door
   roomShell(kit, ctx, {
-    ceiling: { lights: false, paints: ENG_CEIL_PAINTS, panelW: 2.0, rowH: 2.0, along: "x", spacing: 10, styles: { panel: 0.72, greeble: 0.1, vent: 0.18 } },
+    ceiling: { lights: false, stripMat: "emitWhiteDim", paints: ENG_CEIL_PAINTS, panelW: 2.0, rowH: 2.0, along: "x", spacing: 13, styles: { panel: 0.72, greeble: 0.1, vent: 0.18 } },
     walls: { paints: ENG_PAINTS, styles: ENG_STYLES, theme: { ...ENG_THEME, accent: "emitBlue", accent2: "emitAmber", screenMats: ["impScreen0", "impScreen2", "impScreen1"] }, rows: [0, 0.5, 1.7, 3.2, 5.4, H], panelW: 2.0 },
   });
 
@@ -241,8 +242,10 @@ export function buildHyperdrive(kit, ctx) {
   wallVent(kit, ctx, "xmax", 22.6, 4.4, 2.2, 0.8);
   wallVent(kit, ctx, "xmax", 5.0, 5.4, 2.2, 0.8);
   wallStencil(kit, ctx, "xmax", 18.6, 4.4, 0.8, 5);
-  // lit bay sign on the far wall, the anchor of the 31 m view from the door
-  signPlate(kit, ctx, { side: "xmax", u: -19 - min[2], v: 6.6, w: 5.2, h: 0.72, text: "Hyperdrive Motivator", sub: "Bay 04 · Class 2 · Standby", accent: "#4a9dff" });
+  // lit bay sign on the far wall, the anchor of the 31 m view from the door — on a housing that
+  // stands proud of the wall, clear of the panel conduits that cut through a flush plate
+  bannerMat(ctx, "hyp_sign", { text: "Hyperdrive Motivator", sub: "Bay 04 · Class 2 · Standby", accent: "#4a9dff", ratio: 7.2 });
+  wallSign(kit, ctx, "xmax", -19 - min[2], 6.5, "hyp_sign", { w: 5.2, h: 0.72, depth: 0.35 });
 
   // ---------------------------------------------------------------- door wall (xmin) and zmax details
   const du = max[2] - -19; // door u along the xmin wall
@@ -267,7 +270,12 @@ export function buildHyperdrive(kit, ctx) {
   wallVent(kit, ctx, "zmin", 8.0, 5.8, 2.4, 0.9);
   wallVent(kit, ctx, "zmin", 24.0, 5.8, 2.4, 0.9);
 
-  // floor markings (stencils only where they read as paint, never as light blocks on the deck)
+  // floor markings (stencils only where they read as paint, never as light blocks on the deck) and
+  // the blue light channels along the machine's near flank: the reactor-blue spill on the deck
+  emitMat(ctx, "hyp_floor", 0x3d8bff, 1.1, "emitBlue");
+  floorLine(kit, X0 - 0.5, zn1 + 0.25, X1 + 0.5, zn1 + 0.25, { w: 0.14, mat: "hyp_floor", y: 0.006 });
+  floorLine(kit, X0 - 0.5, zn1 + 0.6, X1 + 0.5, zn1 + 0.6, { w: 0.06, mat: "emitBlueDim", y: 0.006 });
+  for (let x = X0; x <= X1; x += 4.4) kit.box("paintedMetal", x, 0.004, zn1 + 0.42, 0.5, 0.008, 0.6, { color: PALETTE.impBlack, texel: 2 });
   floorStencil(kit, 6.2, -22.2, 1.0, 5, Math.PI / 2);
   floorStencil(kit, 7.4, -16.2, 1.0, 14, 0);
   for (let i = 0; i < 6; i++) floorStencil(kit, 11 + i * 4.2, -18.2, 0.5, 2, Math.PI / 2, 0.006);
@@ -287,8 +295,11 @@ export function buildHyperdrive(kit, ctx) {
   // lights (8): two blue floods, blue under-machine and under-gantry, amber consoles / tanks, cool door and far fill
   ctx.light(pointLight(0x9fc4ff, 18, 22, [14, H - 1.6, FZ]));
   ctx.light(pointLight(0x9fc4ff, 18, 22, [27, H - 1.6, FZ]));
-  ctx.light(pointLight(BLUE, 12, 14, [20.5, 0.9, CZ]));
-  ctx.light(pointLight(BLUE, 9, 11, [12.5, 2.4, zn1 - 1.0]));
+  // (both blue fills sit low on the near flank so the deck between the machine and the consoles
+  // carries the blue, not the underside of the drum — but at 1.6 m, midway between columns and just
+  // behind the column line: at 0.45 m the floor under the light blew out to a white blob)
+  ctx.light(pointLight(BLUE, 11, 15, [22.1, 1.6, zn1 - 0.5]));
+  ctx.light(pointLight(BLUE, 9, 12, [13.7, 1.6, zn1 - 0.6]));
   ctx.light(pointLight(AMBER, 7, 11, [19, 4.6, -13.5]));
   ctx.light(pointLight(AMBER_DEEP, 6, 10, [20, 5.0, max[2] - 2.4]));
   ctx.light(pointLight(COOL, 7, 11, [7.0, 4.5, -20.5]));
