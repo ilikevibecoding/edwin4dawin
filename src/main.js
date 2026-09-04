@@ -1,13 +1,25 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { buildMaterials } from "./materials.js";
-import { buildShip } from "./ship.js";
+import { buildImperialMaterials, IMP_TIME, IMP } from "./materials/imperial.js";
 import { buildSpace } from "./space.js";
+import { buildExterior } from "./exterior/hull.js";
+import { buildGreebles } from "./exterior/greebles.js";
+import { createTraffic } from "./hangar/traffic.js";
 import { Player } from "./player.js";
 import { Interactions } from "./interact.js";
 import { createPost } from "./post.js";
-import { createLightingController } from "./lighting.js";
 import { createHUD } from "./hud.js";
+import { ZoneManager } from "./core/zone.js";
+import { LightPool } from "./core/lightpool.js";
+import { Perf } from "./core/perf.js";
+import { AudioBus } from "./core/audio.js";
+import { SyncRegistry } from "./core/sync.js";
+import { LiftSystem } from "./interior/lifts.js";
+import { builderFor, buildableRoomIds, isDedicated } from "./interior/rooms/index.js";
+import { ExteriorCamera, EXTERIOR_PRESETS, PRESET_KEYS } from "./camera/exterior.js";
+import { CameraModes } from "./camera/modes.js";
+import { createFlightSystems } from "./systems/flight.js";
+import { ROOMS, CLUSTERS, SPAWNS, roomFloorY, roomCenter, HULL } from "./config/layout.js";
 
 // ---------------------------------------------------------------------------
 // Renderer / scene
@@ -25,68 +37,147 @@ renderer.info.autoReset = false;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
-scene.fog = new THREE.FogExp2(0x0a0c10, 0.03);
+scene.fog = null;
 
-const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 7000);
+const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 2, 260000);
 scene.add(camera);
 
 const hud = createHUD();
+const perf = new Perf(renderer);
+const audio = new AudioBus();
+const sync = new SyncRegistry();
 
 // ---------------------------------------------------------------------------
 // World
 // ---------------------------------------------------------------------------
-const materials = buildMaterials();
-const ship = buildShip(scene, materials);
+const tBuild0 = performance.now();
+const mats = buildImperialMaterials();
+const tMats = performance.now() - tBuild0;
 const space = buildSpace(scene);
 
-const hemi = new THREE.HemisphereLight(0x5a6f86, 0x3a2f26, 0.16);
+// Sun: one directional light following the far-field sun, shadow frustum fitted per camera mode
+const sun = new THREE.DirectionalLight(0xfff1dc, 3.2);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.0006;
+sun.shadow.normalBias = 0.6;
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 4000;
+scene.add(sun);
+scene.add(sun.target);
+const hemi = new THREE.HemisphereLight(0x6a7890, 0x1a1c22, 0.22);
 scene.add(hemi);
 
-// Bootstrap environment (neutral room), replaced by a capture of the actual interior below.
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.2;
+scene.environmentIntensity = 0.28;
 
-const lighting = createLightingController({ lights: ship.lights, materials, hemi });
+const tExt0 = performance.now();
+const exterior = buildExterior(mats);
+scene.add(exterior.group);
+const greebles = buildGreebles(mats);
+exterior.group.add(greebles.group);
+const tExt = performance.now() - tExt0;
 
-const player = new Player(camera, canvas, ship.colliders);
-player.setPose(0, -1.6, 0, 0);
-player.onLockChange = (locked) => {
-  if (locked) hud.hideStart();
-  else if (!debugMode) hud.showStart();
-};
-hud.startEl.addEventListener("click", () => player.requestLock());
-
-const interactions = new Interactions({ camera, interactables: ship.interactables, lighting, space, player, hud });
-
-// Capture the finished interior into the environment map so metals reflect the real corridor.
-function captureEnvironment() {
-  const cubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType, generateMipmaps: false });
-  const cubeCam = new THREE.CubeCamera(0.1, 60, cubeRT);
-  cubeCam.position.set(0, 1.5, -8);
-  const savedFog = scene.fog;
-  scene.fog = null;
-  space.root.visible = false;
-  // keep the light fixtures from turning every metal into a blown-out mirror of them
-  const emissives = [materials.emitTeal, materials.emitWarm, materials.emitOrange, materials.emitRed, materials.emitCool, materials.emitWarmSoft, materials.emitCoolSoft, materials.leds, ...materials.screens];
-  const saved = emissives.map((m) => m.emissiveIntensity);
-  emissives.forEach((m) => (m.emissiveIntensity *= 0.25));
-  cubeCam.update(renderer, scene);
-  emissives.forEach((m, i) => (m.emissiveIntensity = saved[i]));
-  space.root.visible = true;
-  scene.fog = savedFog;
-  const env = pmrem.fromCubemap(cubeRT.texture).texture;
-  scene.environment = env;
-  // metals have no diffuse term: this is the only thing that keeps gunmetal from reading as black
-  scene.environmentIntensity = 0.45;
-  cubeRT.dispose();
+// Interior: rooms, lifts, doors
+const zone = new ZoneManager(scene, mats);
+const player = new Player(camera, canvas, [], []);
+const lifts = new LiftSystem({ zone, mats, player, hud, audio, onArrive: (cluster) => audio.setZone(cluster) });
+const tInt0 = performance.now();
+const roomBuild = {};
+for (const id of buildableRoomIds()) {
+  const room = zone.addRoom(id, builderFor(id, { lifts }));
+  roomBuild[id] = { ms: +room.buildMs.toFixed(1), dedicated: isDedicated(id) || ROOMS[id].corridor || ROOMS[id].lobby };
 }
+zone.finalize();
+const tInt = performance.now() - tInt0;
+
+// Fighter traffic
+const traffic = createTraffic({ mats, audio, zone });
+scene.add(traffic.group);
+const flightSystems = createFlightSystems(traffic);
+
+const lightPool = new LightPool(scene, { points: 12, spots: 2 });
+const interactions = new Interactions({ camera, player, hud });
+
+// Locked doors get an "Authorize" keypad interaction (both sides)
+for (const d of zone.doors) {
+  if (!d.spec.locked) continue;
+  const rooms = d.rooms.map((id) => zone.rooms.get(id)).filter(Boolean);
+  d.keypads.forEach((p, i) => {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x1a1d22, emissive: IMP.red, emissiveIntensity: 0.5, roughness: 0.4 });
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.24, 0.06), mat);
+    pad.position.copy(p);
+    if (d.spec.axis === "x") pad.rotation.y = Math.PI / 2;
+    d.group.add(pad);
+    const item = {
+      object: pad,
+      material: mat,
+      id: "keypad:" + d.id + ":" + i,
+      key: "E",
+      label: () => (d.locked ? `Authorize — ${d.lockLabel}` : "Authorized"),
+      onActivate: () => {
+        if (!d.locked) return false;
+        d.unlock();
+        mat.emissive.copy(IMP.green);
+        audio.play("unlock");
+        hud.setStatus(`${d.lockLabel} clearance accepted.`);
+        return true;
+      },
+    };
+    for (const r of rooms) r.interactables.push(item);
+  });
+}
+// door sounds
+for (const d of zone.doors) {
+  d.onChange((door, s) => {
+    if (s === "opening") audio.play(door.style === "blast" ? "blast_door" : "door_open");
+    else if (s === "closing") audio.play(door.style === "blast" ? "blast_door" : "door_close");
+  });
+}
+
+sync.register("doors", { getState: () => zone.doors.map((d) => d.getState()), applyState: (s) => s.forEach((st) => zone.doorById(st.id)?.applyState(st)) });
+sync.register("lifts", lifts);
+sync.register("traffic", traffic);
+sync.register("player", { getState: () => ({ x: +player.position.x.toFixed(2), y: +player.position.y.toFixed(2), z: +player.position.z.toFixed(2), yaw: +player.yaw.toFixed(3) }) });
+
+// ---------------------------------------------------------------------------
+// Cameras
+// ---------------------------------------------------------------------------
+const exteriorCam = new ExteriorCamera(camera, canvas);
+exteriorCam.autoOrbit = 0.03;
+const modes = new CameraModes({ camera, player, exterior: exteriorCam, hud, zone, audio });
+modes.onChange((mode) => {
+  audio.setZone(mode === "exterior" ? "exterior" : zone.currentCluster || "tower");
+  post.ao.configuration.aoRadius = mode === "exterior" ? 6 : 0.9;
+  post.ao.configuration.intensity = mode === "exterior" ? 1.6 : 2.6;
+  perf.extra.mode = mode;
+});
+zone.onRoomChange = (room) => {
+  if (room) hud.setLocation(room.spec.name);
+  perf.extra.room = room ? room.id : null;
+};
+zone.onClusterChange = (cl) => {
+  if (cl && modes.mode === "interior") audio.setZone(cl === "tower" && zone.current && zone.current.id === "bridge" ? "bridge" : cl);
+};
+
+player.onLockChange = (locked) => {
+  if (!locked && modes.mode === "interior" && !debugMode && !modes.busy) hud.showHint("Pointer released — click to resume", 3000);
+};
+canvas.addEventListener("click", () => {
+  if (modes.mode === "interior" && !player.locked && !debugMode) player.requestLock();
+});
+hud.startEl.addEventListener("click", () => {
+  audio.start();
+  hud.hideStart();
+  hud.setStatus("Exterior view. Drag to orbit, wheel to zoom, 1–8 presets, F to board.");
+});
+document.addEventListener("keydown", () => audio.start(), { once: true });
 
 // ---------------------------------------------------------------------------
 // Post
 // ---------------------------------------------------------------------------
 const post = createPost(renderer, scene, camera);
-
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -94,10 +185,7 @@ window.addEventListener("resize", () => {
   post.setSize(window.innerWidth, window.innerHeight);
 });
 
-// ---------------------------------------------------------------------------
-// Adaptive quality: hold 60 fps on mid-range GPUs by stepping render resolution and AO quality,
-// never by removing content. Steps down after ~0.5 s of slow frames, back up after ~10 s of headroom.
-// ---------------------------------------------------------------------------
+// Adaptive quality: step render resolution / AO quality, never content
 const QUALITY_LEVELS = [
   { ratio: 0.66, ao: "Low" },
   { ratio: 0.8, ao: "Low" },
@@ -132,128 +220,175 @@ function updateQuality(dt) {
   }
 }
 
+// Shadow frustum follows the point of interest
+const shadowTmp = new THREE.Vector3();
+function fitSunShadow() {
+  const dir = space.sunWorld;
+  const cam = sun.shadow.camera;
+  let focus;
+  let half;
+  if (modes.mode === "interior") {
+    focus = player.position;
+    half = 70;
+  } else {
+    focus = exteriorCam.sTarget;
+    half = THREE.MathUtils.clamp(exteriorCam.distance * 0.9, 160, 1250);
+  }
+  sun.target.position.copy(focus);
+  shadowTmp.copy(dir).multiplyScalar(half * 2.2).add(focus);
+  sun.position.copy(shadowTmp);
+  cam.left = -half;
+  cam.right = half;
+  cam.top = half;
+  cam.bottom = -half;
+  cam.near = 1;
+  cam.far = half * 4.6;
+  cam.updateProjectionMatrix();
+  sun.shadow.normalBias = half > 200 ? 2.5 : 0.12;
+}
+
 // ---------------------------------------------------------------------------
-// Debug API (deterministic camera placement for screenshots)
+// Debug API (deterministic camera placement for the screenshot harness)
 // ---------------------------------------------------------------------------
 let debugMode = false;
-const VIEWS = {
-  // just inside the cockpit doorway looking over the seats and consoles at the windshield
-  cockpit: { x: 0.0, z: -17.1, yaw: 0, pitch: -4, planet: 0, planetOffset: -12, time: 40 },
-  // aft end of the corridor looking forward; the ocean world's limb sits in the near port porthole
-  corridor: { x: 0.4, z: -1.3, yaw: 12, pitch: -2, planet: 1, planetOffset: 51, time: 40 },
-  // inside the crew quarters looking at the bunk; ocean world limb in the porthole above the bed
-  quarters: { x: -2.3, z: -6.3, yaw: 52, pitch: -8, planet: 1, planetOffset: 26, time: 40 },
-  // nose to the port corridor porthole
-  window: { x: -0.55, z: -12.55, yaw: 90, pitch: 2, planet: 0, planetOffset: -12, time: 40 },
-  // extra QA views
-  windshield: { x: 0.0, z: -18.3, yaw: 0, pitch: 2, planet: 0, planetOffset: -10, time: 40 },
-  galley: { x: 2.3, z: -10.4, yaw: -70, pitch: -6, planet: 0, planetOffset: 0, time: 40 },
-  bathroom: { x: 2.1, z: -3.9, yaw: -100, pitch: -4, planet: 0, planetOffset: 0, time: 40 },
-  aft: { x: 0.2, z: -6.5, yaw: 180, pitch: -3, planet: 0, planetOffset: 0, time: 40 },
-};
-
 let framesRendered = 0;
-let frameMs = 16;
 let pendingCapture = null;
 const debugAPI = {
   ready: false,
-  views: Object.keys(VIEWS),
+  get views() {
+    return Object.keys(zone.allViews());
+  },
+  get exteriorViews() {
+    return PRESET_KEYS;
+  },
+  // interior room view (name from any room's ctx.view)
   setView(name) {
-    const v = VIEWS[name];
+    const v = zone.allViews()[name];
     if (!v) throw new Error("unknown view " + name);
     debugMode = true;
-    quality.enabled = false; // deterministic resolution for screenshots
+    quality.enabled = false;
     hud.hideStart();
+    if (modes.mode !== "interior") modes.setInteriorImmediate("tower");
     player.headBob = false;
     player.frozen = true;
-    player.setPose(v.x, v.z, v.yaw, v.pitch);
-    const yaw = THREE.MathUtils.degToRad(v.yaw + (v.planetOffset || 0));
-    space.setTime(v.time ?? 40);
-    space.framePlanet(v.planet ?? 0, new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)));
+    const floor = ROOMS[v.room] ? roomFloorY(v.room) : v.y - 1.7;
+    player.teleport(v.x, floor, v.z, THREE.MathUtils.degToRad(v.yaw));
+    player.pitch = THREE.MathUtils.degToRad(v.pitch);
+    player.updateCamera(0);
+    zone.update(0, player.position, camera.position, "interior");
     post.finalPass.uniforms.seed.value = 0.37;
     debugAPI.freezeGrain = true;
     framesRendered = 0;
     return true;
   },
-  // Advance only the sky (stars / planets / dust) by dt seconds; interior stays put. For drift measurement.
+  setExteriorView(name) {
+    if (!EXTERIOR_PRESETS[name]) throw new Error("unknown exterior view " + name);
+    debugMode = true;
+    quality.enabled = false;
+    hud.hideStart();
+    if (modes.mode !== "exterior") modes.setExteriorImmediate(name);
+    exteriorCam.autoOrbit = 0;
+    exteriorCam.setPreset(name, true);
+    debugAPI.freezeGrain = true;
+    framesRendered = 0;
+    return true;
+  },
+  // free exterior pose
+  setExteriorPose(pos, look) {
+    debugMode = true;
+    quality.enabled = false;
+    hud.hideStart();
+    if (modes.mode !== "exterior") modes.setExteriorImmediate("reveal");
+    exteriorCam.autoOrbit = 0;
+    exteriorCam.setPose(pos, look);
+    framesRendered = 0;
+    return true;
+  },
+  // place the player at an arbitrary interior pose (feet x,z, floor from room, yaw/pitch deg)
+  setPose(x, z, yawDeg, pitchDeg, y = null) {
+    debugMode = true;
+    quality.enabled = false;
+    hud.hideStart();
+    if (modes.mode !== "interior") modes.setInteriorImmediate("tower");
+    player.headBob = false;
+    player.frozen = true;
+    const room = y === null ? zone.roomAt(new THREE.Vector3(x, player.position.y, z)) : null;
+    player.teleport(x, y === null ? (room ? room.floorY : player.position.y) : y, z, THREE.MathUtils.degToRad(yawDeg));
+    player.pitch = THREE.MathUtils.degToRad(pitchDeg);
+    player.updateCamera(0);
+    framesRendered = 0;
+    return true;
+  },
+  // walk the player (debug): unfreezes and simulates key presses for `seconds`
+  walk(keyCodes, seconds) {
+    player.frozen = false;
+    player.locked = true;
+    for (const k of keyCodes) player.keys.add(k);
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        for (const k of keyCodes) player.keys.delete(k);
+        resolve({ x: player.position.x, y: player.position.y, z: player.position.z });
+      }, seconds * 1000);
+    });
+  },
+  unfreeze() {
+    player.frozen = false;
+    player.locked = true;
+  },
+  board: (cluster) => modes.board(cluster),
+  leave: () => modes.leave(),
+  ride: (lobbyId, cluster) => lifts.rideFrom(lobbyId, cluster),
+  openDoor(id) {
+    const d = zone.doorById(id);
+    if (!d) return false;
+    d.locked = false;
+    d.setState("opening");
+    return true;
+  },
+  unlockAll() {
+    for (const d of zone.doors) d.unlock();
+  },
+  currentRoom: () => (zone.current ? zone.current.id : null),
+  rooms: () => [...zone.rooms.keys()],
+  roomInfo: () => roomBuild,
+  doors: () => zone.doors.map((d) => d.getState()),
   advanceSky(dt) {
     space.setTime(space.state.time + dt);
     space.update(0);
     framesRendered = 0;
   },
-  // Resolve with RGBA bytes of a screen region (CSS px) from the next rendered frame.
   capturePixels(x, y, w, h) {
     return new Promise((resolve) => {
       pendingCapture = { x, y, w, h, resolve };
     });
   },
   freezeGrain: false,
-  // PNG data URL of a material's albedo canvas (texture QA)
-  textureDataURL(name) {
-    const m = materials[name];
-    const img = m && m.map && m.map.image;
-    return img && img.toDataURL ? img.toDataURL("image/png") : null;
-  },
-  // Place the player in front of an interactable, looking at it (for prompt / interaction tests)
-  lookAt(id) {
-    const poses = {
-      bed: { x: -3.0, z: -7.6, yaw: 76, pitch: -40 },
-      galley: { x: 3.4, z: -10.6, yaw: -78, pitch: -22 },
-      bathroom: { x: 2.5, z: -3.7, yaw: -90, pitch: -43 },
-    };
-    const p = poses[id];
-    if (!p) throw new Error("unknown interactable " + id);
-    debugMode = true;
-    quality.enabled = false;
-    hud.hideStart();
-    player.headBob = false;
-    player.frozen = false;
-    player.locked = true; // simulate pointer lock for the interaction gate
-    player.setPose(p.x, p.z, p.yaw, p.pitch);
-    interactions.update();
-    framesRendered = 0;
-    return !!interactions.hovered;
-  },
-  hovered() {
-    return interactions.hovered ? interactions.hovered.id : null;
-  },
-  interact(id) {
-    return interactions.activate(id);
-  },
-  pressE() {
-    document.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyE" }));
-  },
-  status() {
-    return hud.statusText();
-  },
-  fadeOpacity() {
-    return hud.fadeOpacity();
-  },
-  setRest(t) {
-    lighting.setRest(t, true);
-  },
-  restLevel() {
-    return lighting.rest;
-  },
-  frames() {
-    return framesRendered;
-  },
+  lookAt: null,
+  hovered: () => (interactions.hovered ? interactions.hovered.id : null),
+  interact: (id) => interactions.activate(id),
+  pressE: () => document.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyE" })),
+  pressKey: (code, key) => document.dispatchEvent(new KeyboardEvent("keydown", { code, key })),
+  status: () => hud.statusText(),
+  fadeOpacity: () => hud.fadeOpacity(),
+  frames: () => framesRendered,
   getStats() {
-    const info = renderer.info;
-    return {
-      frameMs: +frameMs.toFixed(2),
-      fps: +(1000 / frameMs).toFixed(1),
-      calls: info.render.calls,
-      triangles: info.render.triangles,
-      geometries: info.memory.geometries,
-      textures: info.memory.textures,
-      programs: info.programs ? info.programs.length : 0,
-      colliders: ship.colliders.length,
-      lights: ship.lights.warm.length + ship.lights.cool.length + ship.lights.teal.length + ship.lights.spots.length,
+    return perf.stats({
+      visibleRooms: zone.stats.visibleRooms,
+      colliders: zone.stats.colliders,
+      lightDescs: zone.stats.lightDescs,
+      lights: lightPool.count + 2,
+      mode: modes.mode,
+      room: zone.current ? zone.current.id : null,
       qualityLevel: quality.level,
       pixelRatio: renderer.getPixelRatio(),
-    };
+      buildMs: { materials: Math.round(tMats), exterior: Math.round(tExt), interior: Math.round(tInt) },
+      exteriorTris: exterior.stats.triangles,
+      greebles: greebles.stats,
+      traffic: traffic.stats,
+      syncBytes: sync.size(),
+    });
   },
+  snapshot: () => sync.snapshot(),
   setPixelRatio(r) {
     renderer.setPixelRatio(r);
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -261,10 +396,16 @@ const debugAPI = {
   },
   player,
   space,
-  lighting,
   post,
   scene,
   renderer,
+  zone,
+  lifts,
+  modes,
+  exteriorCam,
+  traffic,
+  flightSystems,
+  layout: { ROOMS, CLUSTERS, SPAWNS, HULL },
 };
 window.debugAPI = debugAPI;
 
@@ -274,41 +415,58 @@ window.debugAPI = debugAPI;
 let showStats = false;
 document.addEventListener("keydown", (e) => {
   if (e.code === "F3") {
+    e.preventDefault();
     showStats = !showStats;
     hud.toggleStats(showStats);
   }
 });
 
 const timer = new THREE.Timer();
-let envCaptured = false;
 let last = performance.now();
+modes.setExteriorImmediate("reveal");
+hud.setStartInfo(`build ${__BUILD_TIME__}`);
 
 function frame() {
   requestAnimationFrame(frame);
   const now = performance.now();
-  frameMs += (now - last - frameMs) * 0.1;
+  perf.frame(now - last);
   last = now;
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.1);
   const t = timer.getElapsed();
   renderer.info.reset();
+  IMP_TIME.value = t;
 
-  if (!envCaptured && framesRendered >= 2) {
-    captureEnvironment();
-    envCaptured = true;
-  }
-
-  player.update(dt);
   space.update(dt);
-  lighting.update(dt);
-  interactions.update();
+  sun.position.copy(space.sunWorld).multiplyScalar(1000);
+  exteriorCam.update(dt);
+  if (modes.mode === "interior") player.update(dt);
+  const vis = zone.update(dt, modes.mode === "interior" ? player.position : null, camera.position, modes.mode);
+  if (modes.mode === "interior") {
+    const sets = zone.collisionSets();
+    player.colliders = sets.colliders;
+    player.walkables = sets.walkables;
+    interactions.setItems(zone.interactables());
+    interactions.enabled = !modes.busy;
+    interactions.update();
+  } else {
+    interactions.setItems([]);
+  }
+  lightPool.assign(zone.lightDescs(), modes.mode === "interior" ? player.position : camera.position);
+  lightPool.update(dt);
+  zone.runAnimators(dt, t);
+  lifts.update(dt, t);
+  traffic.update(dt, t, camera.position);
+  greebles.update(camera.position);
+  exterior.update(dt, camera.position);
+  fitSunShadow();
   if (framesRendered > 60) updateQuality(dt);
 
   if (debugAPI.directRender) renderer.render(scene, camera);
   else post.render(debugAPI.freezeGrain ? 0.37 : t);
   framesRendered++;
+  if (framesRendered === 3) perf.markLoaded();
   if (pendingCapture) {
-    // copy the freshly presented frame synchronously (valid without preserveDrawingBuffer)
     const { x, y, w, h, resolve } = pendingCapture;
     pendingCapture = null;
     const c2 = document.createElement("canvas");
@@ -319,10 +477,7 @@ function frame() {
     ctx.drawImage(canvas, x * pr, y * pr, w * pr, h * pr, 0, 0, w, h);
     resolve(Array.from(ctx.getImageData(0, 0, w, h).data));
   }
-  if (showStats) {
-    const s = debugAPI.getStats();
-    hud.setStats(`${s.fps} fps  ${s.frameMs} ms\n${s.calls} calls  ${(s.triangles / 1000).toFixed(1)}k tris\n${s.lights} lights`);
-  }
+  if (showStats) hud.setStats(perf.overlayText(debugAPI.getStats()));
 }
 
 debugAPI.ready = true;

@@ -67,26 +67,188 @@ export class Kit {
   }
 
   collider(min, max, tag = "") {
-    this.colliders.push({ min: new THREE.Vector3(...min), max: new THREE.Vector3(...max), tag });
+    const c = { min: new THREE.Vector3(...min), max: new THREE.Vector3(...max), tag };
+    this.colliders.push(c);
+    return c;
   }
 
-  build(parent, { castShadow = true, receiveShadow = true } = {}) {
+  // Register a ready-made Object3D (dynamic / animated / instanced) to be parented at build time.
+  object(obj) {
+    if (!this.objects) this.objects = [];
+    this.objects.push(obj);
+    return obj;
+  }
+
+  /**
+   * Instanced copies of one geometry: transforms is an array of { pos, rot | quat, scale, color }.
+   * One draw call regardless of count. Returns the InstancedMesh (added at build()).
+   */
+  instanced(mat, geo, transforms, opts = {}) {
+    const material = this.materials[mat];
+    if (!material) throw new Error("Unknown material " + mat);
+    if (opts.uv === "world") worldUVs(geo, opts.texel || 1);
+    else if (opts.uv === "scale" && opts.uvScale) scaleUVs(geo, opts.uvScale[0], opts.uvScale[1]);
+    if (!geo.attributes.normal) geo.computeVertexNormals();
+    // instanced meshes can't use per-vertex colour attributes from the merge path; give them a
+    // uniform white vertex colour so materials with vertexColors:true still shade correctly
+    if (material.vertexColors && !geo.attributes.color) setVertexColor(geo, 0xffffff);
+    const mesh = new THREE.InstancedMesh(geo, material, transforms.length);
+    const m = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const p = new THREE.Vector3();
+    const s = new THREE.Vector3();
+    const col = new THREE.Color();
+    let hasColor = false;
+    transforms.forEach((t, i) => {
+      p.set(...(t.pos || [0, 0, 0]));
+      if (t.quat) q.copy(t.quat);
+      else if (t.rot) q.setFromEuler(new THREE.Euler(t.rot[0], t.rot[1], t.rot[2]));
+      else q.identity();
+      const sc = t.scale === undefined ? 1 : t.scale;
+      if (Array.isArray(sc)) s.set(sc[0], sc[1], sc[2]);
+      else s.setScalar(sc);
+      m.compose(p, q, s);
+      mesh.setMatrixAt(i, m);
+      if (t.color !== undefined) {
+        hasColor = true;
+        mesh.setColorAt(i, col.set(t.color));
+      }
+    });
+    if (hasColor && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.name = "inst_" + mat;
+    mesh.castShadow = opts.castShadow !== false;
+    mesh.receiveShadow = opts.receiveShadow !== false;
+    mesh.frustumCulled = opts.frustumCulled !== false;
+    mesh.computeBoundingSphere();
+    return this.object(mesh);
+  }
+
+  build(parent, { castShadow = true, receiveShadow = true, noShadow = null } = {}) {
+    const skipShadow = (key) => (noShadow ? noShadow.has(key) : key.startsWith("emit") || key === "glass" || key === "decal" || key === "grate");
     for (const [key, geos] of this.groups) {
       const merged = mergeGeometries(geos, false);
       if (!merged) continue;
       merged.computeBoundingSphere();
+      merged.computeBoundingBox();
       const material = this.materials[key];
       if (!material) throw new Error("Unknown material " + key);
       const mesh = new THREE.Mesh(merged, material);
       mesh.name = "kit_" + key;
-      mesh.castShadow = castShadow && !key.startsWith("emit") && key !== "glass" && key !== "decal" && key !== "grate";
-      mesh.receiveShadow = receiveShadow && key !== "glass" && key !== "decal";
+      mesh.castShadow = castShadow && !skipShadow(key);
+      mesh.receiveShadow = receiveShadow && key !== "glass" && key !== "decal" && key !== "impDecal";
       parent.add(mesh);
       this.meshes.push(mesh);
+    }
+    if (this.objects) {
+      for (const o of this.objects) {
+        parent.add(o);
+        this.meshes.push(o);
+      }
+      this.objects = null;
     }
     this.groups.clear();
     return this.meshes;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Lofted hull geometry: stations are { z, points: [[x, y], ...] } with the same point count, listed
+// counter-clockwise as seen from +Z (looking toward -Z), z increasing station to station. Consecutive
+// stations are joined by quads with outward normals; optional caps close the ends.
+// Output is non-indexed with flat face normals (hard-edged armour facets).
+// ---------------------------------------------------------------------------
+export function loft(stations, { capStart = false, capEnd = false, flip = false, open = false } = {}) {
+  const n = stations[0].points.length;
+  const pos = [];
+  const push = (a, b, c) => {
+    if (flip) pos.push(...a, ...c, ...b);
+    else pos.push(...a, ...b, ...c);
+  };
+  const P = (s, i) => {
+    const p = s.points[((i % n) + n) % n];
+    return [p[0], p[1], s.z];
+  };
+  const segs = open ? n - 1 : n;
+  for (let k = 0; k < stations.length - 1; k++) {
+    const a = stations[k];
+    const b = stations[k + 1];
+    for (let i = 0; i < segs; i++) {
+      const a0 = P(a, i);
+      const a1 = P(a, i + 1);
+      const b0 = P(b, i);
+      const b1 = P(b, i + 1);
+      push(a0, b1, b0);
+      push(a0, a1, b1);
+    }
+  }
+  const cap = (s, towardMinusZ) => {
+    const c = [0, 0, s.z];
+    for (const p of s.points) {
+      c[0] += p[0] / n;
+      c[1] += p[1] / n;
+    }
+    for (let i = 0; i < n; i++) {
+      const p0 = P(s, i);
+      const p1 = P(s, i + 1);
+      if (towardMinusZ) push(c, p1, p0);
+      else push(c, p0, p1);
+    }
+  };
+  if (capStart) cap(stations[0], true);
+  if (capEnd) cap(stations[stations.length - 1], false);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Extrude a closed 2D outline ([[x,y],...]) along +Z by depth, centred on z = 0. Flat normals.
+export function prism(outline, depth, { holes = [] } = {}) {
+  const shape = new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y)));
+  for (const h of holes) shape.holes.push(new THREE.Path(h.map(([x, y]) => new THREE.Vector2(x, y))));
+  const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+  geo.translate(0, 0, -depth / 2);
+  return geo;
+}
+
+// Frustum-like box: bottom rectangle (bw x bd) to top rectangle (tw x td), height h, centred on the
+// bottom face at the origin. Sloped-sided blocks are the basic vocabulary of the superstructure.
+export function taperedBox(bw, bd, tw, td, h, { shearX = 0, shearZ = 0 } = {}) {
+  const stations = [
+    { z: -bd / 2, points: [[-bw / 2, 0], [bw / 2, 0], [tw / 2 + shearX, h], [-tw / 2 + shearX, h]] },
+    { z: bd / 2, points: [[-bw / 2, 0], [bw / 2, 0], [tw / 2 + shearX, h], [-tw / 2 + shearX, h]] },
+  ];
+  // the loft runs along z; for a differing top depth build it as a generic 8-vertex hull instead
+  if (Math.abs(td - bd) > 1e-6) {
+    const g = new THREE.BufferGeometry();
+    const v = [
+      [-bw / 2, 0, -bd / 2],
+      [bw / 2, 0, -bd / 2],
+      [bw / 2, 0, bd / 2],
+      [-bw / 2, 0, bd / 2],
+      [-tw / 2 + shearX, h, -td / 2 + shearZ],
+      [tw / 2 + shearX, h, -td / 2 + shearZ],
+      [tw / 2 + shearX, h, td / 2 + shearZ],
+      [-tw / 2 + shearX, h, td / 2 + shearZ],
+    ];
+    const faces = [
+      [0, 1, 5, 4], // front (-z)
+      [1, 2, 6, 5], // right
+      [2, 3, 7, 6], // back
+      [3, 0, 4, 7], // left
+      [4, 5, 6, 7], // top
+      [3, 2, 1, 0], // bottom
+    ];
+    const pos = [];
+    for (const [a, b, c, d] of faces) {
+      pos.push(...v[a], ...v[c], ...v[b], ...v[a], ...v[d], ...v[c]);
+    }
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    return g;
+  }
+  return loft(stations, { capStart: true, capEnd: true });
 }
 
 // World-space planar UVs picked by dominant normal axis => uniform texel density.

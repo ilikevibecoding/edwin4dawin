@@ -3,7 +3,10 @@
 import * as THREE from "three";
 import { makeStarSprite, makeNebula, makeGasGiant, makeOceanWorld, makeMoon, makeClouds, mulberry32 } from "./textures.js";
 
-const TURN_RATE = THREE.MathUtils.degToRad(1.3); // ship slowly banking: the sky slides past at 1.3 deg/s (a planet crosses the windshield in ~80 s)
+// A 1,600 m warship turns slowly: the sky slides past at 0.08 deg/s (a planet crosses the bridge windows in ~20 min)
+const TURN_RATE = THREE.MathUtils.degToRad(0.08);
+// The far field sits well beyond the exterior camera's 12 km orbit range so it never shows parallax
+export const SPACE_SCALE = 25;
 
 const planetVert = /* glsl */ `
   varying vec3 vN;
@@ -148,11 +151,11 @@ export function buildSpace(scene) {
     return (s - 2) / Math.sqrt(4 / 12);
   };
   const layerCfg = [
-    { n: 9000, r: 4400, size: 1.35, rate: 0.6, tint: 0.7, band: 0.16 },
-    { n: 3200, r: 4200, size: 1.9, rate: 0.7, tint: 0.95, band: 0 },
-    { n: 1900, r: 3600, size: 2.7, rate: 1.0, tint: 1.05, band: 0 },
-    { n: 640, r: 3000, size: 3.9, rate: 1.55, tint: 1.25, band: 0 },
-    { n: 60, r: 2800, size: 6.5, rate: 1.7, tint: 1.6, band: 0 },
+    { n: 9000, r: 4400 * SPACE_SCALE, size: 1.35, rate: 0.6, tint: 0.7, band: 0.16 },
+    { n: 3200, r: 4200 * SPACE_SCALE, size: 1.9, rate: 0.7, tint: 0.95, band: 0 },
+    { n: 1900, r: 3600 * SPACE_SCALE, size: 2.7, rate: 1.0, tint: 1.05, band: 0 },
+    { n: 640, r: 3000 * SPACE_SCALE, size: 3.9, rate: 1.55, tint: 1.25, band: 0 },
+    { n: 60, r: 2800 * SPACE_SCALE, size: 6.5, rate: 1.7, tint: 1.6, band: 0 },
   ];
   for (const cfg of layerCfg) {
     const pos = new Float32Array(cfg.n * 3);
@@ -219,12 +222,12 @@ export function buildSpace(scene) {
   const sunDirLocal = new THREE.Vector3(-0.464, 0.375, 0.803).normalize();
   const sunTex = makeStarSprite(128);
   const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xfff1d6, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
-  sun.position.copy(sunDirLocal).multiplyScalar(4400);
-  sun.scale.setScalar(520);
+  sun.position.copy(sunDirLocal).multiplyScalar(4400 * SPACE_SCALE);
+  sun.scale.setScalar(520 * SPACE_SCALE);
   root.add(sun);
   const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, color: 0xffb070, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
   sunHalo.position.copy(sun.position);
-  sunHalo.scale.setScalar(1600);
+  sunHalo.scale.setScalar(1600 * SPACE_SCALE);
   root.add(sunHalo);
 
   // --- nebulae
@@ -238,8 +241,8 @@ export function buildSpace(scene) {
     { tex: nebTexB, dir: [0.1, -0.6, 0.75], size: 2000, op: 0.45 },
   ]) {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: cfg.tex, transparent: true, opacity: cfg.op, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, rotation: rand() * Math.PI * 2 }));
-    sp.position.set(cfg.dir[0], cfg.dir[1], cfg.dir[2]).normalize().multiplyScalar(4000);
-    sp.scale.set(cfg.size, cfg.size, 1);
+    sp.position.set(cfg.dir[0], cfg.dir[1], cfg.dir[2]).normalize().multiplyScalar(4000 * SPACE_SCALE);
+    sp.scale.set(cfg.size * SPACE_SCALE, cfg.size * SPACE_SCALE, 1);
     root.add(sp);
     nebulae.push(sp);
   }
@@ -252,8 +255,8 @@ export function buildSpace(scene) {
       const lat = gauss() * 0.06;
       p.copy(bandE1).multiplyScalar(Math.cos(phi) * Math.cos(lat)).addScaledVector(bandE2, Math.sin(phi) * Math.cos(lat)).addScaledVector(bandN, Math.sin(lat));
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0.07 + rand() * 0.05, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, rotation: rand() * Math.PI * 2 }));
-      sp.position.copy(p).multiplyScalar(4500);
-      const s = 1100 + rand() * 700;
+      sp.position.copy(p).multiplyScalar(4500 * SPACE_SCALE);
+      const s = (1100 + rand() * 700) * SPACE_SCALE;
       sp.scale.set(s, s * 0.6, 1);
       root.add(sp);
     }
@@ -262,6 +265,9 @@ export function buildSpace(scene) {
   // --- planets
   const planets = [];
   function addPlanet({ tex, clouds = null, radius, dist, bearingDeg, elevation, atmo, atmoStrength = 1.2, brightness = 1.5, spin = 0.012, tilt = 0.2, ring = null }) {
+    radius *= SPACE_SCALE;
+    dist *= SPACE_SCALE;
+    elevation *= SPACE_SCALE;
     const g = new THREE.Group();
     const b = THREE.MathUtils.degToRad(bearingDeg);
     g.position.set(Math.sin(b) * dist, elevation, -Math.cos(b) * dist);
@@ -405,6 +411,7 @@ export function buildSpace(scene) {
   const dustLines = new THREE.LineSegments(dustGeo, dustMat);
   dustLines.frustumCulled = false;
   dustLines.name = "dust";
+  dustLines.visible = false; // kept for the small-ship mode; a Star Destroyer sells motion with its own bulk
   scene.add(dustLines);
   const updateDust = (dt) => {
     const speed = 34;
@@ -450,7 +457,7 @@ export function buildSpace(scene) {
   function update(dt) {
     state.time += dt;
     apply();
-    updateDust(dt);
+    if (dustLines.visible) updateDust(dt);
   }
 
   function setTime(t) {
@@ -467,5 +474,5 @@ export function buildSpace(scene) {
   }
 
   apply();
-  return { root, planets, layers, update, setTime, framePlanet, sunDirLocal, state };
+  return { root, planets, layers, update, setTime, framePlanet, sunDirLocal, sunWorld, state, dustLines };
 }

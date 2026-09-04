@@ -1,7 +1,8 @@
 :root {
-  --teal: #4fd8cc;
-  --orange: #f08a3c;
-  --cream: #e8e0d0;
+  --blue: #4d8dff;
+  --red: #ff3b2a;
+  --amber: #ffb020;
+  --grey: #c9ced6;
   --hud-font: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --mono: "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
 }
@@ -15,7 +16,7 @@ body {
   overflow: hidden;
   background: #000;
   font-family: var(--hud-font);
-  color: var(--cream);
+  color: var(--grey);
   user-select: none;
 }
 
@@ -41,13 +42,13 @@ body {
   height: 6px;
   margin: -3px 0 0 -3px;
   border-radius: 50%;
-  background: rgba(232, 224, 208, 0.75);
+  background: rgba(201, 206, 214, 0.75);
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.7);
   transition: transform 120ms ease, background 120ms ease;
 }
 #crosshair.active {
   transform: scale(1.5);
-  background: var(--teal);
+  background: var(--blue);
 }
 
 #prompt {
@@ -56,14 +57,14 @@ body {
   top: 56%;
   transform: translateX(-50%);
   padding: 6px 14px;
-  border: 1px solid rgba(79, 216, 204, 0.6);
-  border-radius: 3px;
-  background: rgba(8, 14, 18, 0.7);
+  border: 1px solid rgba(77, 141, 255, 0.6);
+  border-radius: 2px;
+  background: rgba(6, 10, 18, 0.72);
   font-family: var(--mono);
   font-size: 14px;
   letter-spacing: 0.08em;
-  color: var(--teal);
-  text-shadow: 0 0 8px rgba(79, 216, 204, 0.6);
+  color: var(--blue);
+  text-shadow: 0 0 8px rgba(77, 141, 255, 0.6);
   transition: opacity 120ms ease;
 }
 #prompt.hidden {
@@ -75,10 +76,57 @@ body {
   padding: 0 5px;
   margin-right: 8px;
   border-radius: 2px;
-  background: var(--teal);
-  color: #061012;
+  background: var(--blue);
+  color: #06101a;
   text-align: center;
   font-weight: 700;
+}
+
+#mode {
+  position: absolute;
+  left: 50%;
+  top: 22px;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  color: rgba(201, 206, 214, 0.7);
+  padding: 4px 14px;
+  border: 1px solid rgba(201, 206, 214, 0.25);
+  border-radius: 2px;
+  background: rgba(6, 10, 18, 0.45);
+}
+#mode.hidden,
+#deck.hidden,
+#hint.hidden,
+#menu.hidden {
+  display: none;
+}
+
+#deck {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 34px;
+  letter-spacing: 0.4em;
+  color: var(--amber);
+  text-shadow: 0 0 18px rgba(255, 176, 32, 0.6);
+}
+
+#hint {
+  position: absolute;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  color: rgba(201, 206, 214, 0.85);
+  background: rgba(6, 10, 18, 0.6);
+  padding: 6px 14px;
+  border-radius: 2px;
 }
 
 #status {
@@ -91,15 +139,18 @@ body {
   font-family: var(--mono);
   font-size: 13px;
   letter-spacing: 0.06em;
-  color: rgba(232, 224, 208, 0.85);
+  color: rgba(201, 206, 214, 0.85);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 #status-tag {
   padding: 2px 8px;
   border-radius: 2px;
-  background: rgba(240, 138, 60, 0.9);
-  color: #1a0d04;
+  background: rgba(77, 141, 255, 0.9);
+  color: #06101a;
   font-weight: 700;
+}
+#location {
+  color: var(--amber);
 }
 #status-text {
   transition: opacity 200ms ease;
@@ -111,13 +162,66 @@ body {
   top: 12px;
   font-family: var(--mono);
   font-size: 12px;
-  color: rgba(232, 224, 208, 0.8);
+  color: rgba(201, 206, 214, 0.85);
   text-align: right;
   white-space: pre;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  background: rgba(6, 10, 18, 0.5);
+  padding: 6px 10px;
+  border-radius: 2px;
 }
 #stats.hidden {
   display: none;
+}
+
+#menu {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 380px;
+  padding: 18px 26px;
+  border: 1px solid rgba(77, 141, 255, 0.5);
+  border-radius: 2px;
+  background: rgba(6, 10, 18, 0.85);
+  font-family: var(--mono);
+  box-shadow: 0 0 40px rgba(77, 141, 255, 0.15);
+}
+#menu-title {
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  color: var(--blue);
+  margin-bottom: 12px;
+}
+#menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#menu-list li {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  color: var(--grey);
+  border-top: 1px solid rgba(201, 206, 214, 0.08);
+}
+#menu-list li b {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 6px;
+  text-align: center;
+  background: var(--amber);
+  color: #1a0d04;
+  border-radius: 2px;
+}
+#menu-hint {
+  margin-top: 12px;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: rgba(201, 206, 214, 0.5);
 }
 
 #fade {
@@ -134,7 +238,7 @@ body {
   font-family: var(--mono);
   font-size: 22px;
   letter-spacing: 0.3em;
-  color: var(--cream);
+  color: var(--grey);
   opacity: 0;
   transition: opacity 400ms ease;
 }
@@ -145,7 +249,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at center, rgba(10, 16, 20, 0.55), rgba(0, 0, 0, 0.85));
+  background: radial-gradient(ellipse at center, rgba(8, 12, 20, 0.5), rgba(0, 0, 0, 0.85));
   cursor: pointer;
   transition: opacity 300ms ease;
 }
@@ -156,10 +260,10 @@ body {
 #start .card {
   text-align: center;
   padding: 36px 56px;
-  border: 1px solid rgba(79, 216, 204, 0.35);
-  border-radius: 4px;
-  background: rgba(6, 10, 14, 0.75);
-  box-shadow: 0 0 40px rgba(79, 216, 204, 0.12);
+  border: 1px solid rgba(77, 141, 255, 0.35);
+  border-radius: 2px;
+  background: rgba(6, 10, 16, 0.78);
+  box-shadow: 0 0 40px rgba(77, 141, 255, 0.12);
 }
 #start h1 {
   margin: 0;
@@ -167,23 +271,23 @@ body {
   font-weight: 700;
   font-size: 40px;
   letter-spacing: 0.35em;
-  color: var(--cream);
+  color: var(--grey);
 }
 #start .sub {
   margin: 6px 0 22px;
   font-family: var(--mono);
   font-size: 13px;
   letter-spacing: 0.2em;
-  color: var(--orange);
+  color: var(--red);
 }
 #start .hint {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   font-size: 18px;
-  color: var(--teal);
+  color: var(--blue);
 }
 #start .keys {
-  margin: 0;
+  margin: 2px 0;
   font-family: var(--mono);
   font-size: 12px;
-  color: rgba(232, 224, 208, 0.6);
+  color: rgba(201, 206, 214, 0.6);
 }

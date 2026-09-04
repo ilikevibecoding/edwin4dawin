@@ -1,44 +1,51 @@
-// Raycast interactions: hover highlight + prompt, and the three scripted actions
-// (sleep / eat / wash up) with fades, status text and the rest-cycle lighting shift.
+// Raycast interactions: hover highlight + prompt for whatever interactable is under the crosshair,
+// and generic activation. Interactables are { object, material, id, label, key, onActivate(api) } —
+// each with its own material instance so the highlight tint never leaks into merged geometry.
 import * as THREE from "three";
 
-const REACH = 2.6;
-const HIGHLIGHT = new THREE.Color("#4fd8cc");
-
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const REACH = 3.2;
+const HIGHLIGHT = new THREE.Color("#4d8dff");
 
 export class Interactions {
-  constructor({ camera, interactables, lighting, space, player, hud }) {
+  constructor({ camera, player, hud }) {
     this.camera = camera;
-    this.items = interactables;
-    this.lighting = lighting;
-    this.space = space;
     this.player = player;
     this.hud = hud;
     this.ray = new THREE.Raycaster();
     this.ray.far = REACH;
     this.hovered = null;
     this.busy = false;
-    this.restTimer = null;
+    this.items = [];
     this.targets = [];
-    for (const it of this.items) {
-      it.object.traverse((o) => {
-        if (o.isMesh) {
-          o.userData.interactable = it;
-          this.targets.push(o);
-        }
-      });
-      it.baseEmissive = it.material.emissive ? it.material.emissive.clone() : new THREE.Color(0, 0, 0);
-      it.baseEmissiveIntensity = it.material.emissiveIntensity;
-    }
+    this.enabled = true;
     this._onKey = (e) => {
       if (e.code === "KeyE" && !e.repeat) this.activate();
     };
     document.addEventListener("keydown", this._onKey);
   }
 
+  // Replace the active set (the zone manager hands over the visible rooms' interactables)
+  setItems(items) {
+    if (items.length === this.items.length && items.every((it, i) => it === this.items[i])) return;
+    if (this.hovered && !items.includes(this.hovered)) this.setHovered(null);
+    this.items = items;
+    this.targets = [];
+    for (const it of items) {
+      if (!it.baseEmissive) {
+        it.baseEmissive = it.material.emissive ? it.material.emissive.clone() : new THREE.Color(0, 0, 0);
+        it.baseEmissiveIntensity = it.material.emissiveIntensity;
+      }
+      it.object.traverse((o) => {
+        if (o.isMesh) {
+          o.userData.interactable = it;
+          this.targets.push(o);
+        }
+      });
+    }
+  }
+
   update() {
-    if (this.busy) {
+    if (this.busy || !this.enabled) {
       this.setHovered(null);
       return;
     }
@@ -46,8 +53,7 @@ export class Interactions {
     const hits = this.ray.intersectObjects(this.targets, false);
     const hit = hits.length ? hits[0].object.userData.interactable : null;
     this.setHovered(hit);
-    if (this.hovered) {
-      // slow pulse, kept low so the object's own shading still reads under the tint
+    if (this.hovered && this.hovered.material.emissive) {
       const k = 0.1 + 0.05 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004));
       this.hovered.material.emissive.copy(HIGHLIGHT).multiplyScalar(k);
     }
@@ -55,15 +61,17 @@ export class Interactions {
 
   setHovered(item) {
     if (item === this.hovered) return;
-    if (this.hovered) {
+    if (this.hovered && this.hovered.material.emissive) {
       this.hovered.material.emissive.copy(this.hovered.baseEmissive);
       this.hovered.material.emissiveIntensity = this.hovered.baseEmissiveIntensity;
     }
     this.hovered = item;
     if (item) {
-      item.material.emissive.copy(HIGHLIGHT).multiplyScalar(0.12);
-      item.material.emissiveIntensity = 1;
-      this.hud.showPrompt(item.key, item.label);
+      if (item.material.emissive) {
+        item.material.emissive.copy(HIGHLIGHT).multiplyScalar(0.12);
+        item.material.emissiveIntensity = 1;
+      }
+      this.hud.showPrompt(item.key || "E", typeof item.label === "function" ? item.label() : item.label);
     } else {
       this.hud.hidePrompt();
     }
@@ -74,52 +82,14 @@ export class Interactions {
     const item = id ? this.items.find((i) => i.id === id) : this.hovered;
     if (!item || this.busy) return false;
     if (!id && !this.player.locked) return false;
-    this.run(item.id);
-    return true;
-  }
-
-  async run(id) {
-    this.busy = true;
-    this.player.frozen = true;
-    this.setHovered(null);
-    try {
-      if (id === "bed") await this.sleep();
-      else if (id === "galley") await this.eat();
-      else if (id === "bathroom") await this.wash();
-    } finally {
-      this.player.frozen = false;
-      this.busy = false;
+    if (this.hud.menuVisible && this.hud.menuVisible() && !id) return false;
+    const result = item.onActivate ? item.onActivate(this, item) : false;
+    if (result && result.then) {
+      this.busy = true;
+      result.finally(() => (this.busy = false));
     }
-  }
-
-  async sleep() {
-    this.hud.setStatus("Lying down...");
-    await this.hud.fadeIn(900);
-    await this.hud.showFadeText("8 HOURS PASS", 2000);
-    // the ship kept flying: jump the far field ahead and switch to the night watch lighting
-    this.space.setTime(this.space.state.time + 240);
-    this.lighting.setRest(1, true);
-    await this.hud.fadeOut(1200);
-    this.hud.setStatus("You slept 8 hours. Rest cycle lighting engaged.");
-    if (this.restTimer) clearTimeout(this.restTimer);
-    this.restTimer = setTimeout(() => {
-      this.lighting.state.speed = 0.22;
-      this.lighting.setRest(0);
-      this.hud.setStatus("Day cycle resumed. Systems nominal. Cruising.");
-    }, 9000);
-  }
-
-  async eat() {
-    this.hud.setStatus("Dispensing ration...");
-    await wait(700);
-    this.hud.setStatus("You eat. Energy restored.");
-    await wait(300);
-  }
-
-  async wash() {
-    await this.hud.fadeIn(700);
-    await this.hud.showFadeText("REFRESHED", 1300);
-    await this.hud.fadeOut(900);
-    this.hud.setStatus("Refreshed.");
+    // a changed label (e.g. "Authorize" -> "Locked") should refresh immediately
+    if (this.hovered === item) this.hud.showPrompt(item.key || "E", typeof item.label === "function" ? item.label() : item.label);
+    return true;
   }
 }
