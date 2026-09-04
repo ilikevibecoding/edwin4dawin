@@ -32,9 +32,31 @@ export const VIEWS = {
   // capture: every other framing here is relative to a truck sitting on the
   // spur, and no camera placement can show a road the truck is not on.
   mainroad: { pos: [4.6, 2.5, -8.4], target: [-0.4, 1.1, 9.0], fov: 44, place: 'main', t: 0.06 },
+
+  // The glass gauntlet. Its own family so the default capture and the digit
+  // keys never see it: nine conditions (close, medium, interior, sun, shade,
+  // dusk, night, dust, moving) from six fixed cameras run at three hours. The
+  // truck sits on the spur heading the same way every time, so +X is the
+  // sunlit flank by day and -X the shaded one; the two side views are the
+  // sun/shade pair. Every frame is taken at 8.6 m/s after the pre-roll, so
+  // the wheel dust is up in all of them, and `glass_moving` is the one that
+  // looks back through it.
+  glass_screen: { pos: [1.4, 1.95, 3.2], target: [0.0, 1.68, 0.68], fov: 30, family: 'glass' },
+  glass_side: { pos: [2.6, 1.75, 0.9], target: [0.88, 1.66, 0.05], fov: 28, family: 'glass' },
+  glass_shade: { pos: [-2.6, 1.75, 0.9], target: [-0.88, 1.66, 0.05], fov: 28, family: 'glass' },
+  // Lower and further back than the first try: from 1.9 m up the rear pane was
+  // behind the rack ladder, and the frame was a picture of the roof rack.
+  glass_rear: { pos: [-2.3, 1.72, -3.4], target: [-0.25, 1.62, -0.86], fov: 28, family: 'glass' },
+  // Ahead of the mirror rather than beside it, so the frame is the mirror face
+  // and not the snorkel that stands between the two.
+  glass_mirror: { pos: [2.0, 1.86, 2.5], target: [0.78, 1.74, 0.83], fov: 20, family: 'glass' },
+  glass_inside: { pos: [-0.3, 1.55, -0.1], target: [1.4, 1.5, 1.5], fov: 60, family: 'glass', inside: true },
+  glass_moving: { pos: [3.0, 1.2, -2.5], target: [0.4, 1.5, 0.6], fov: 34, family: 'glass' },
 };
 
-export const VIEW_NAMES = Object.keys(VIEWS);
+/** The views a plain capture and the digit keys walk: everything unfamilied. */
+export const VIEW_NAMES = Object.keys(VIEWS).filter((k) => !VIEWS[k].family);
+export const GLASS_VIEWS = Object.keys(VIEWS).filter((k) => VIEWS[k].family === 'glass');
 
 /**
  * What a click walks through. Deliberately shorter than VIEW_NAMES — clicking
@@ -302,7 +324,7 @@ export function createCameraRig(camera, { vehicle, terrain }) {
       localToWorld(v.pos, _p);
       localToWorld(v.target, _t);
       camera.fov = v.fov;
-      if (viewName !== 'interior') clampToGround(_p, 0.16);
+      if (viewName !== 'interior' && !v.inside) clampToGround(_p, 0.16);
       snap = true;
     } else if (mode === 'orbit') {
       if (orbitAuto) orbitAz += dt * 0.14;
@@ -375,7 +397,7 @@ export function createCameraRig(camera, { vehicle, terrain }) {
     localToWorld(v.pos, _p);
     localToWorld(v.target, _t);
     // keep any exterior view above the dirt
-    if (name !== 'interior') {
+    if (name !== 'interior' && !v.inside) {
       const groundY = terrain.heightAt(_p.x, _p.z) + 0.16;
       if (_p.y < groundY) _p.y = groundY;
     }
