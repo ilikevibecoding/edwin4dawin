@@ -64,6 +64,22 @@ export function pendant(kit, ctx, x, yTop, z, opts = {}) {
   ctx.lights[family].push(pointLight(color, intensity, distance, [x, yShade - 0.3, z]));
 }
 
+// Industrial cage lamp hung from a duct or the ceiling: stem, conical hood, guard bars and the practical.
+export function workLamp(kit, ctx, x, yMount, z, opts = {}) {
+  const { drop = 0.5, color = 0xdfe8ff, intensity = 10, distance = 9, mat = "emitCoolSoft", family = "cool" } = opts;
+  const yHood = yMount - drop;
+  kit.cyl("metal", x, yMount - 0.02, z, 0.07, 0.04, "y", { color: PALETTE.darkMetal, segments: 10 });
+  kit.cyl("metal", x, yMount - drop / 2, z, 0.014, drop, "y", { color: PALETTE.gunmetal, segments: 6 });
+  kit.add("metal", new THREE.CylinderGeometry(0.07, 0.21, 0.18, 14), { pos: [x, yHood + 0.09, z], color: PALETTE.darkMetal, uv: "scale", uvScale: [2, 0.3] });
+  kit.cyl(mat, x, yHood - 0.002, z, 0.17, 0.012, "y", { segments: 14, uv: "keep" });
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2;
+    kit.cyl("satinBlack", x + Math.cos(a) * 0.18, yHood - 0.1, z + Math.sin(a) * 0.18, 0.006, 0.2, "y", { segments: 4 });
+  }
+  kit.add("satinBlack", new THREE.TorusGeometry(0.18, 0.007, 4, 14), { pos: [x, yHood - 0.2, z], rot: [Math.PI / 2, 0, 0], uv: "scale", uvScale: [4, 1] });
+  ctx.lights[family].push(pointLight(color, intensity, distance, [x, yHood - 0.28, z]));
+}
+
 // Free-standing column lamp: cast base, slim stem, a tall drum diffuser and the practical inside it.
 export function floorLamp(kit, ctx, x, y, z, opts = {}) {
   const { h = 1.7, color = 0xffb070, intensity = 6, distance = 9, mat = "emitWarmSoft", family = "warm" } = opts;

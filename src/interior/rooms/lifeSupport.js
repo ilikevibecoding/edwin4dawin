@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { roomShell, wallLightBar, wallConsole } from "../shell.js";
 import { PALETTE } from "../../materials.js";
 import { pointLight, Frame, WALL_T } from "../lib.js";
-import { stencil, floorStencil, gratedTrench, grateQuad, pipeRun, valveWheel, gauge, crate, locker, standFrame, UP } from "./aftProps.js";
+import { stencil, floorStencil, gratedTrench, grateQuad, pipeRun, valveWheel, gauge, crate, locker, standFrame, workLamp, UP } from "./aftProps.js";
 
 export function build(kit, ctx, room, lib) {
   const shell = roomShell(kit, ctx, room, { style: "dark", lights: false, floor: false, lightRows: 2, lightMat: "emitCoolSoft", seed: 71 });
@@ -23,13 +23,15 @@ export function build(kit, ctx, room, lib) {
   const deckOpts = { color: PALETTE.impGreyDark, uv: "world", texel: 1 };
 
   // ------------------------------------------------------------ lights: cold white mains, cyan accents
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 9, 13, [4.6, yTop - 0.5, 546.0]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 9, 13, [4.6, yTop - 0.5, 552.5]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 9, 13, [9.5, yTop - 0.5, 549.0]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 9, 13, [14.5, yTop - 0.5, 549.0]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 9, 13, [19.5, yTop - 0.5, 549.0]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 7, 11, [22.4, yTop - 0.5, 545.0]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 7, 11, [22.4, yTop - 0.5, 553.0]));
+  // The dark shell swallows light, so the mains are strong and low work lamps hang over the machinery
+  // (added further down with the ducts they hang from).
+  ctx.lights.cool.push(pointLight(0xd8e4ff, 18, 16, [4.6, yTop - 0.5, 546.0]));
+  ctx.lights.cool.push(pointLight(0xd8e4ff, 18, 16, [4.6, yTop - 0.5, 552.5]));
+  ctx.lights.cool.push(pointLight(0xd8e4ff, 18, 16, [9.5, yTop - 0.5, 549.0]));
+  ctx.lights.cool.push(pointLight(0xd8e4ff, 18, 16, [14.5, yTop - 0.5, 549.0]));
+  ctx.lights.cool.push(pointLight(0xd8e4ff, 18, 16, [19.5, yTop - 0.5, 549.0]));
+  ctx.lights.cool.push(pointLight(0xd8e4ff, 14, 14, [22.4, yTop - 0.5, 545.0]));
+  ctx.lights.cool.push(pointLight(0xd8e4ff, 14, 14, [22.4, yTop - 0.5, 553.0]));
   ctx.lights.teal.push(pointLight(0x5fe0ff, 4, 8, [7.0, y0 + 2.2, 551.6]));
   ctx.lights.teal.push(pointLight(0x5fe0ff, 4, 8, [13.0, y0 + 1.4, 546.0]));
   ctx.lights.teal.push(pointLight(0x5fe0ff, 4, 8, [18.2, y0 + 1.2, 552.0]));
@@ -145,8 +147,16 @@ export function build(kit, ctx, room, lib) {
   for (const [tx] of tanks) {
     kit.cyl("metal", tx, y0 + 2.6, 546.6, 0.22, 0.4, "y", { color: PALETTE.gunmetal, segments: 14 });
     kit.add("metal", new THREE.CylinderGeometry(0.22, 0.36, 0.3, 14), { pos: [tx, y0 + 2.25, 546.6], color: PALETTE.darkMetal, uv: "scale", uvScale: [2, 0.3] });
-    kit.cyl("emitTeal", tx, y0 + 2.095, 546.6, 0.3, 0.012, "y", { segments: 14, uv: "keep" });
+    const g = new THREE.CircleGeometry(0.3, 14);
+    g.rotateX(Math.PI / 2);
+    grateQuad(kit, g, [tx, y0 + 2.094, 546.6], 0.6, 0.6);
+    kit.add("emitTeal", new THREE.TorusGeometry(0.32, 0.01, 4, 20), { pos: [tx, y0 + 2.1, 546.6], rot: [Math.PI / 2, 0, 0], uv: "keep" });
   }
+  // cage work lamps hung from the ducts and the ceiling over the machinery
+  workLamp(kit, ctx, 13.4, yTop, 545.0, { drop: 0.95, intensity: 12, distance: 10 });
+  workLamp(kit, ctx, 8.2, y0 + 2.8, 551.4, { drop: 0.4, intensity: 12, distance: 10 });
+  workLamp(kit, ctx, 13.6, y0 + 2.8, 551.4, { drop: 0.4, intensity: 12, distance: 10 });
+  workLamp(kit, ctx, 20.6, yTop, 553.2, { drop: 0.95, intensity: 12, distance: 10 });
   pipeRun(kit, "z", 542.2, 555.8, 12.6, y0 + 2.5, 0.28, { color: PALETTE.gunmetal, step: 2.4 });
   for (const z of [545.0, 553.0]) {
     kit.cyl("metal", 12.6, y0 + 2.5, z, 0.34, 0.5, "z", { color: PALETTE.darkMetal, segments: 12 });

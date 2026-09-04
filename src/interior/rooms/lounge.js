@@ -33,7 +33,6 @@ export function build(kit, ctx, room, lib) {
   kit.boxMM("emitWarmSoft", [x1 - 0.7, yTop - sof, z0 + 0.7], [x1 - 0.6, yTop - sof + 0.05, z1 - 0.7], { uv: "keep" });
   for (const x of [5, 9, 13, 17]) for (const z of [514.5, 519.5]) downlight(kit, x, yTop, z, "emitWarmSoft");
   ctx.lights.warm.push(pointLight(0xffc48c, 14, 14, [6.5, yTop - 0.35, 517]));
-  ctx.lights.warm.push(pointLight(0xffc48c, 14, 14, [12.5, yTop - 0.35, 520.5]));
   ctx.lights.warm.push(pointLight(0xffc48c, 14, 14, [14.5, yTop - 0.35, 514]));
   ctx.lights.cool.push(pointLight(0xdfe8ff, 6.0, 10, [3.6, yTop - 0.4, 518]));
 
@@ -77,6 +76,18 @@ export function build(kit, ctx, room, lib) {
   // column lamps at both ends of the sofa light its back so the group reads from the door
   floorLamp(kit, ctx, 16.0, y0, 515.35, { intensity: 7, distance: 9 });
   floorLamp(kit, ctx, 16.0, y0, 520.65, { intensity: 7, distance: 9 });
+
+  // ------------------------------------------------------------ second group mid-room: sofa facing two armchairs across a low table
+  kit.boxMM("fabric", [9.4, y0, 519.3], [13.8, y0 + 0.012, 523.1], { color: PALETTE.fabricOrange, uv: "world", texel: 1.5 });
+  kit.boxMM("fabric", [9.55, y0 + 0.012, 519.45], [13.65, y0 + 0.016, 522.95], { color: PALETTE.fabricTeal, uv: "world", texel: 1.5 });
+  sofa(kit, "x", 11.6, 522.35, y0, 3.4, { facing: -1, color: PALETTE.fabricCream, cushion: PALETTE.fabricTeal });
+  armchair(kit, 10.3, y0, 519.95, 0.3);
+  armchair(kit, 12.9, y0, 519.95, -0.3);
+  table(kit, 11.6, y0, 521.05, 1.3, 0.6, { h: 0.42 });
+  cup(kit, 11.25, y0 + 0.42, 520.9, PALETTE.cream);
+  cup(kit, 11.95, y0 + 0.42, 521.2, PALETTE.tealPaint);
+  kit.box("painted", 11.65, y0 + 0.44, 520.95, 0.3, 0.04, 0.22, { color: PALETTE.orange, uv: "keep" });
+  pendant(kit, ctx, 11.6, yTop, 521.0, { drop: 0.9, r: 0.42, intensity: 14, distance: 15, color: 0xffb070 });
 
   // ------------------------------------------------------------ holo-game table with stools
   const tx = 10.5;
