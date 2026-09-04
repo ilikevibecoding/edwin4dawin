@@ -85,13 +85,6 @@ float smithBeckmann(float cosT, float alpha) {
   float a = 1.0 / max(alpha * tanT, 1e-4);
   return a >= 1.6 ? 1.0 : (3.535 * a + 2.181 * a * a) / (1.0 + 2.276 * a + 2.577 * a * a);
 }
-// Two independent standard normal deviates from a 2D hash (Box-Muller).
-vec2 gauss2(vec2 p) {
-  vec2 u = hash22(p);
-  float r = sqrt(-2.0 * log(max(u.x, 1e-4)));
-  float a = 6.2831853 * u.y;
-  return r * vec2(cos(a), sin(a));
-}
 // Anisotropic Gaussian slope density (Cox-Munk style) of facets around the resolved normal, evaluated at
 // slope offset 'sh' with total variance 'mss'; elongated along the view azimuth (stretch 'st') so the
 // highlight forms a streak toward the sun. Integrates to 1 over slope space.
@@ -99,13 +92,25 @@ float slopePdf(vec2 sh, vec2 va, float st, float mss) {
   float along = dot(sh, va), across = dot(sh, vec2(-va.y, va.x));
   return exp(-(along * along / (mss * st) + across * across * st / mss)) / (PI * mss);
 }
-// Sun glitter. The unresolved slope variance is split in two: a smooth part rendered with the analytic
-// distribution, and a part carried by a world-anchored field of facet cells (five octaves from 0.7 m to
-// 180 m, each active while its cell covers several pixels) whose random slopes make individual glints
-// resolve as sparkles up close and as the streaky wave-group texture of a distant sun path. The
-// expectation over the facet field equals the analytic term with the full variance, so the glitter
-// energy is the same whether a stretch of water is near (sparkling) or far (smooth).
-float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, float foot, float t) {
+// Measured sea-slope distributions are peaked (positive kurtosis): a narrow core over a wider skirt of the
+// same total variance, which gives glints a sharp centre with a soft halo and the sun path a tighter core.
+float slopePdfPeaked(vec2 sh, vec2 va, float st, float mss) {
+  return 0.75 * slopePdf(sh, va, st, mss * 0.7) + 0.25 * slopePdf(sh, va, st, mss * 1.9);
+}
+// Sun glitter as a resolvable sparkle field. The unresolved slope variance is carried by a world-anchored
+// random slope field of five octaves (0.7 m to 180 m cells; each octave only takes part while its cell
+// spans a few pixels, and the variance of the octaves too fine for the current footprint is handed to the
+// finest resolvable one), plus a small residual lobe (~13 %) for the facets no octave resolves. Wherever
+// the field's slope hits the specular slope a glint lights up: dense in the centre of the path, sparse at
+// its edges, of a few pixels at any distance. The expectation over the field equals the analytic
+// distribution with the full variance, so the glitter energy does not depend on the distance; the field
+// evolves as a slow Gaussian process in time and drifts with the wind, so glints wax and wane rather than
+// flicker, and camera motion only moves them with the water they sit on.
+// Glitter is seen looking toward the light at a grazing angle close to its elevation, which foreshortens
+// the water along the light's azimuth; the cells are stretched along that (world-fixed) azimuth by the
+// same factor so a glint stays a few pixels in both screen directions instead of a wide horizontal blob.
+// dx, dy: world-space extent of the pixel (screen derivatives of the surface position).
+float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, float t) {
   float NdotL = dot(N, L);
   float NdotV = dot(N, V);
   if (NdotL <= 0.002 || NdotV <= 0.002) return 0.0;
@@ -115,37 +120,47 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, float foot, float t
   vec2 va = V.xz;
   float vl = length(va);
   va = vl > 1e-4 ? va / vl : vec2(1.0, 0.0);
-  float st = 1.0 + 0.45 * (1.0 - clamp(V.y, 0.0, 1.0));
-  float P = slopePdf(sh, va, st, mss);
-  // facet field only where the analytic highlight (widened to catch the tails of the facet slopes) is visible
+  vec2 vc = vec2(-va.y, va.x);
+  float st = 1.0 + 0.3 * (1.0 - clamp(V.y, 0.0, 1.0));
+  float P;
+  // the field is only evaluated where the highlight (widened to catch the field's tails) is visible
   if (slopePdf(sh, va, st, mss * 4.0) * mss > 1e-4) {
-    float share = 0.62; // fraction of the variance carried by the facets
-    float mssS = mss * (1.0 - share);
-    float sig = sqrt(mss * share);
-    float wsum = 0.0, glint = 0.0;
-    vec2 gp = wp + vec2(0.37, 0.61) * t; // the facet pattern drifts slowly like the water it rides on
+    vec2 sa = L.xz;
+    float sl = length(sa);
+    sa = sl > 1e-3 ? sa / sl : va;
+    vec2 sc = vec2(-sa.y, sa.x);
+    // half the foreshortening at the path's centre: dashes out there, round glints on the steeper near path
+    float stretch = sqrt(clamp(1.0 / max(L.y, 0.12), 1.0, 8.0));
+    // pixel footprint along / across the light's azimuth, in the stretched metric of the cells
+    float footEff = max((abs(dot(dx, sa)) + abs(dot(dy, sa))) / stretch, abs(dot(dx, sc)) + abs(dot(dy, sc)));
+    vec2 s = vec2(0.0);   // slope offset of the resolved facets
+    float resolved = 0.0; // fraction of the variance they carry
+    float carry = 0.0;    // variance share of the octaves too fine to resolve, passed up to the next
+    vec2 gp = wp + uWindDir * (0.9 * t);
+    vec2 gq = vec2(dot(gp, sa) / stretch, dot(gp, sc));
     float cell = 0.7;
     for (int o = 0; o < 5; o++, cell *= 4.0) {
-      // active while the cell spans ~4..16 pixels; hands over to the neighbouring octave outside that
-      float w = smoothstep(cell / 3.0, cell / 4.5, foot) * (1.0 - smoothstep(cell / 12.0, cell / 18.0, foot));
+      float fo = float(o);
+      float f = 0.45 * exp2(-fo) + carry;
+      // resolved while the cell spans more than ~3.5 px (fully above ~6 px)
+      float w = 1.0 - smoothstep(cell / 6.0, cell / 3.5, footEff);
+      carry = f * (1.0 - w * w);
       if (w < 0.003) continue;
-      vec2 q = gp / cell;
-      vec2 id = floor(q);
-      vec2 f = q - id;
-      // one glint candidate per cell: a point well inside the cell so the falloff disk is never clipped
-      vec2 h = hash22(id + 17.3 * float(o));
-      vec2 pt = 0.28 + 0.44 * h;
-      float d = length(f - pt) / 0.27;
-      float disk = 1.0 - smoothstep(0.55, 1.0, d);
-      // the facet slope is a Gaussian process in time: two independent draws rotated by a slow phase
-      float ph = 1.7 * t + 6.2831853 * h.x;
-      vec2 s = sig * (gauss2(id + 3.1 + 41.7 * float(o)) * cos(ph) + gauss2(id + 9.7 + 41.7 * float(o)) * sin(ph));
-      // the disk covers ~0.14 of the cell: renormalise so the octave's mean matches the analytic term
-      glint += w * disk * 7.15 * slopePdf(sh - s, va, st, mssS);
-      wsum += w;
+      vec2 q = gq / cell;
+      // two independent value-noise vectors (0.214 rms per component) rotated by a slow phase: a unit-variance
+      // Gaussian-like process whose rate follows the wave period of the cell size
+      float ph = 1.6 * t * inversesqrt(cell) + 0.7 * fo;
+      vec2 n1 = vec2(vnoise(q + 3.1 + 17.0 * fo), vnoise(q * 1.07 + 9.7 + 17.0 * fo)) - 0.5;
+      vec2 n2 = vec2(vnoise(q * 0.93 + 5.3 + 17.0 * fo), vnoise(q * 1.11 + 12.9 + 17.0 * fo)) - 0.5;
+      vec2 n = (n1 * cos(ph) + n2 * sin(ph)) * 4.67;
+      s += (sqrt(0.5 * mss * f) * w) * n;
+      resolved += f * w * w;
     }
-    wsum = min(wsum, 1.0);
-    P = mix(P, glint / max(wsum, 1e-3), wsum);
+    // the facets share the anisotropy of the analytic distribution
+    s = va * (dot(s, va) * sqrt(st)) + vc * (dot(s, vc) * inversesqrt(st));
+    P = slopePdfPeaked(sh - s, va, st, mss * (1.0 - resolved));
+  } else {
+    P = slopePdfPeaked(sh, va, st, mss);
   }
   float D = P / (NdotH * NdotH * NdotH * NdotH);
   float alpha = sqrt(mss);
@@ -158,10 +173,11 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, float foot, float t
 
 /** Runs after normal_fragment_begin: wave normal, body reflectance, foam. Leaves w* variables in main scope. */
 const WATER_FRAG_SURFACE = /* glsl */ `
-vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; float wFoot; vec3 wDbg;
+vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3 wDbg;
 {
   vec2 wp = vWorldPos.xz;
-  float foot = length(fwidth(wp)); // metres of water per pixel
+  vec2 dxw = dFdx(wp), dyw = dFdy(wp);
+  float foot = length(abs(dxw) + abs(dyw)); // metres of water per pixel
   float terrainH = terrainHeightW(wp);
   float depth = -terrainH;
   if (depth < -0.05) discard;
@@ -250,7 +266,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; float wFoot; vec3 wDbg;
   float cosSunR = sqrt(1.0 - (1.0 - sunUp * sunUp) / 1.77);
   float path = depth * (1.0 / cosSunR + 1.0 / max(cosR, 0.2));
   // clear tropical shelf water: red is gone within a metre, green within a few, blue reaches the deep bed
-  vec3 K = vec3(0.9, 0.245, 0.19);
+  vec3 K = vec3(0.9, 0.23, 0.18);
   vec3 T = exp(-K * path);
   vec3 refr = refract(-V, N, 0.75);
   vec2 bedP = wp + refr.xz / max(-refr.y, 0.25) * depth;
@@ -271,12 +287,12 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; float wFoot; vec3 wDbg;
   bed *= 1.0 + caustic * (1.0 - smoothstep(1.0, 3.5, depth)) * smoothstep(0.05, 0.3, depth);
   // deep-water reflectance under neutral irradiance: blue-teal bay water carrying some suspended matter,
   // clearer and bluer ocean beyond the shelf (a few percent, peaking in the blue)
-  vec3 Rinf = mix(vec3(0.03, 0.072, 0.13), vec3(0.01, 0.038, 0.105), smoothstep(8.0, 22.0, depth));
+  vec3 Rinf = mix(vec3(0.038, 0.094, 0.168), vec3(0.013, 0.048, 0.128), smoothstep(8.0, 22.0, depth));
   vec3 R = bed * T + Rinf * (1.0 - T);
   // suspended sediment: milky, pale turquoise over the flats and along the shore
   float milkN = fbm2o(wp * 0.004 + 9.0);
   float milk = (1.0 - smoothstep(0.3, 3.5, depth)) * (0.3 + 0.7 * smoothstep(0.35, 0.8, milkN));
-  R += vec3(0.04, 0.068, 0.095) * milk * (1.0 - exp(-path * 0.9));
+  R += vec3(0.045, 0.075, 0.105) * milk * (1.0 - exp(-path * 0.9));
 
   // ---- foam: shore wash driven by exposure to the incoming waves, surf lines, whitecaps, wakes
   float foam = 0.0;
@@ -319,7 +335,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; float wFoot; vec3 wDbg;
   float whitecap = smoothstep(0.74, 0.86, val0) * smoothstep(7.0, 14.0, uWindSpeed) * smoothstep(2.0, 6.0, depth) * open * w0;
   foam = clamp(foam + wake.r * 1.3 + whitecap, 0.0, 1.0);
 
-  wN = N; wV = V; wFoam = foam; wMss = mss; wFoot = foot;
+  wN = N; wV = V; wFoam = foam; wMss = mss; wDx = dxw; wDy = dyw;
   wBodyR = R;
   wDbg = vec3(depth, milk, open);
   normal = normalize((viewMatrix * vec4(N, 0.0)).xyz);
@@ -375,7 +391,7 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   float F = 0.02 + (Fg - 0.02) * pow(1.0 - cosV, 5.0);
   vec3 body = wBodyR * Ediff;
   // the CSM sun now carries physical irradiance (x6); the glitter BRDF was tuned for the old scale
-  vec3 glitter = sunCol * 0.25 * shadow * sunGlitter(wN, wV, uSunDirW, wMss, vWorldPos.xz, wFoot, uWaveTime);
+  vec3 glitter = sunCol * 0.25 * shadow * sunGlitter(wN, wV, uSunDirW, wMss, vWorldPos.xz, wDx, wDy, uWaveTime);
   vec3 col = mix(body, sky, F) + glitter * (1.0 - wFoam);
   vec3 foamCol = vec3(0.9, 0.91, 0.91) * Ediff;
   col = mix(col, foamCol, wFoam);
