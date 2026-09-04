@@ -31,10 +31,19 @@ export function buildLiftCab(kit, ctx) {
   kit.box("paintedMetal", cx, h - 0.05, cz, 1.8, 0.1, 1.8, { color: PALETTE.impBlack, texel: 2 });
   kit.box("emitWhiteSoft", cx, h - 0.1, cz, 1.5, 0.03, 1.5, { uv: "keep" });
   ctx.light(pointLight(0xe8f0ff, 5, 6, [cx, h - 0.6, cz]));
-  // vertical light bars in the rear corners (they streak during the ride)
+  // vertical light bars in the rear corners and along the side walls: a dedicated material so the
+  // lift can streak them during the ride
+  if (!ctx.materials.lift_streak) {
+    ctx.materials.lift_streak = ctx.materials.emitBlue.clone();
+    ctx.materials.lift_streak.emissiveMap = ctx.materials.leds.emissiveMap.clone();
+    ctx.materials.lift_streak.emissiveMap.needsUpdate = true;
+  }
   for (const s of [-1, 1]) {
     kit.box("paintedMetal", cx + s * (max[0] - min[0]) * 0.42, h / 2, max[2] - 0.1, 0.12, h - 0.4, 0.1, { color: PALETTE.impBlack, texel: 2 });
-    kit.box("emitBlue", cx + s * (max[0] - min[0]) * 0.42, h / 2, max[2] - 0.152, 0.05, h - 0.6, 0.01);
+    kit.box("lift_streak", cx + s * (max[0] - min[0]) * 0.42, h / 2, max[2] - 0.152, 0.05, h - 0.6, 0.01, { uv: "keep" });
+    const x = s < 0 ? min[0] + 0.03 : max[0] - 0.03;
+    kit.box("paintedMetal", x, h / 2, cz, 0.06, h - 0.5, 0.16, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("lift_streak", x + (s < 0 ? 0.035 : -0.035), h / 2, cz, 0.01, h - 0.7, 0.06, { uv: "keep" });
   }
   // control panel + deck readout on the rear wall
   wallScreen(kit, ctx, { side: "zmax", u: (max[0] - min[0]) / 2, v: 1.9, w: 1.0, h: 0.4, screen: 2 });
@@ -153,6 +162,12 @@ export class Turbolift {
       // rumble: tiny camera shake through the player's bob channel
       const k = Math.sin(this.timer * 40) * 0.006 * Math.min(1, this.timer * 2) * Math.min(1, Math.max(0, this.rideTime - this.timer));
       this.player.camera.position.y += k;
+      // light bars streak: the LED texture scrolls fast along the bars and brightens
+      const streak = interior.materials.lift_streak;
+      if (streak) {
+        streak.emissiveIntensity = 2.6 + 1.6 * Math.min(1, this.timer * 1.5);
+        streak.emissiveMap.offset.y -= dt * 6;
+      }
       interior.streamDeck(this.to);
       if (this.timer >= this.rideTime && interior.deckBuilt(this.to)) {
         // teleport: keep the player's offset inside the cab
@@ -167,6 +182,7 @@ export class Turbolift {
         this.state = "opening";
         this.timer = 0;
         this.liftDoor(this.to).setOpen(true);
+        if (interior.materials.lift_streak) interior.materials.lift_streak.emissiveIntensity = 2.6;
         this.audio.event("lift_arrive", dest);
         this.hud.setStatus(`${interior.deckById(this.to).def.name}.`);
         if (this.onArrive) this.onArrive(this.to);
