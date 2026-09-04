@@ -175,9 +175,35 @@ export function buildComms(kit, ctx) {
     pointLightDesc(ctx, IMP.holo, 1.6, 6, [px, y + 1.6, pz], 0);
     impConsole(kit, ctx, [26.55, y, pz], Math.PI / 2, { kind: "station", width: 1.4, screens: 2, seed: 71, light: false });
     chair(kit, [27.3, y, pz], Math.PI / 2);
-    wallScreen(frame, w.u(pz), 2.7, 1.8, 1.1, 1);
+    // signal-analysis display: a 2 m screen on a plate carried 0.32 m off the wall by four bracket arms
+    // (bolt plates on the wall), its feed conduit clamped up the wall into the ceiling. It sits north of
+    // the projector so it never shares a silhouette with the cone.
+    {
+      const du = w.u(629.2);
+      const dv = 2.8;
+      const N = 0.32;
+      for (const [au, av] of [[-0.75, -0.5], [0.75, -0.5], [-0.75, 0.5], [0.75, 0.5]]) {
+        frame.box("impMetal", du + au, dv + av, 0.012, 0.3, 0.3, 0.024, { color: IMP.steel });
+        frame.box("impPaintedMetal", du + au, dv + av, N / 2, 0.16, 0.2, N, { color: IMP.trim, texel: 1 });
+      }
+      frame.box("impPaintedMetal", du, dv, N + 0.05, 2.36, 1.56, 0.1, { color: IMP.trim, texel: 1 });
+      frame.box("impPaintedMetal", du, dv, N + 0.13, 2.16, 1.36, 0.06, { color: IMP.consoleDark, texel: 1 });
+      frame.box("darkGloss", du, dv, N + 0.163, 2.06, 1.26, 0.01);
+      frame.box("screen1", du, dv, N + 0.17, 2.0, 1.2, 0.004, { uv: "keep" });
+      frame.box("leds", du, dv - 0.78, N + 0.11, 1.2, 0.05, 0.01, { uv: "keep" });
+      frame.quad("impDecal", du - 0.9, dv - 0.78, N + 0.11, 0.14, 0.14, { uvRect: impDecalRect(11) });
+      const c0 = frame.pos(du, dv + 0.78, N + 0.02);
+      const c1 = frame.pos(du, dv + 1.1, 0.12);
+      const c2 = frame.pos(du, h - 0.3, 0.12);
+      pipeRun(kit, [[c0.x, c0.y, c0.z], [c1.x, c1.y, c1.z], [c2.x, c2.y, c2.z]], 0.045, { color: IMP.gunmetal, clampPitch: 0.7 });
+      for (const s of [-1, 1]) {
+        const a = frame.pos(du + s * 1.0, dv + 0.72, N + 0.04);
+        const b = frame.pos(du + s * 1.0, dv + 1.3, 0.03);
+        pipeRun(kit, [[a.x, a.y, a.z], [b.x, b.y, b.z]], 0.025, { color: IMP.steel, clamps: false });
+      }
+    }
     placard(frame, w.u(pz) - 1.6, 2.9, 0.5, 6);
-    frame.quad("impDecal", w.u(pz) + 1.6, 2.9, 0.062, 0.5, 0.5, { uvRect: impDecalRect(11) });
+    frame.quad("impDecal", w.u(pz) + 0.2, 2.9, 0.062, 0.5, 0.5, { uvRect: impDecalRect(11) });
   }
 
   // ---- east wall: readouts, antenna-control station with a tracking sensor dish in the SE corner ------------
@@ -192,39 +218,65 @@ export function buildComms(kit, ctx) {
     const px = x1 - t - 0.62;
     impConsole(kit, ctx, [px, y, 631.4], -Math.PI / 2, { kind: "wall", width: 2.6, seed: 81, light: false });
     screenArray(frame, w.u(631.4), 3.45, 4, 1, 1.0, 0.6, { seed: 83, variants: [1, 0, 2] });
-    placard(frame, w.u(628.6), 3.0, 0.6, 14);
+    placard(frame, w.u(629.0), 4.2, 0.6, 14);
     impConsole(kit, ctx, [px, y, 626.8], -Math.PI / 2, { kind: "wall", width: 1.6, seed: 85, light: false });
-    // sensor dish: yoke on a pedestal, dish + feed horn rotate slowly (one dynamic mesh)
-    const dx = 44.6;
-    const dz = 631.2;
-    kit.cyl("impPaintedMetal", dx, y + 0.08, dz, 0.55, 0.16, "y", { color: IMP.trim, segments: 20, texel: 1 });
-    kit.cyl("impPaintedMetal", dx, y + 0.7, dz, 0.16, 1.1, "y", { color: IMP.consoleDark, segments: 14, texel: 1 });
-    kit.box("blinkSparse", dx, y + 0.6, dz + 0.163, 0.14, 0.5, 0.006, { uv: "keep" });
-    kit.collider([dx - 0.6, y, dz - 0.6], [dx + 0.6, y + 2.4, dz + 0.6], "dish");
+    // sensor dish: hangs from a wall bracket above head height in the bay between the two stations (bolt
+    // plate, arm, knee brace, azimuth yoke), so it never stands in front of a screen; dish + feed horn
+    // rotate slowly (one dynamic mesh)
+    const dz = 629.0;
+    const ARM = 1.5;
+    const dx = px + 0.62 - ARM; // arm tip, 1.5 m off the wall face
+    const ay = y + 3.6;
+    kit.box("impPaintedMetal", px + 0.62 - 0.04, ay, dz, 0.08, 0.36, 0.5, { color: IMP.trim, texel: 1 });
+    kit.box("impPaintedMetal", px + 0.62 - ARM / 2, ay, dz, ARM, 0.18, 0.18, { color: IMP.trim, texel: 1 });
+    pipeRun(kit, [[dx + 0.1, ay - 0.1, dz], [px + 0.6, ay - 0.75, dz]], 0.03, { color: IMP.gunmetal, clamps: false });
+    kit.cyl("impPaintedMetal", dx, ay - 0.09 - 0.05, dz, 0.14, 0.1, "y", { color: IMP.consoleDark, segments: 14, texel: 1 });
+    kit.cyl("impMetal", dx, y + 3.1, dz, 0.05, 0.8, "y", { color: IMP.gunmetal, segments: 10 });
+    kit.box("blinkSparse", dx + 0.45, ay, dz - 0.093, 0.5, 0.06, 0.006, { uv: "keep" });
     const dishGeo = (() => {
-      // open cone flipped so the wide mouth faces +Y (the dish axis), drive housing behind it, feed horn in front
-      const dish = new THREE.ConeGeometry(0.62, 0.22, 20, 1, true);
-      dish.rotateX(Math.PI);
-      const back = new THREE.CylinderGeometry(0.28, 0.12, 0.2, 12);
-      back.translate(0, -0.21, 0);
+      // parabolic reflector (lathe, mouth toward +Y = the dish axis) with a rim ring, drive housing
+      // behind it, feed horn on three struts in front
+      const prof = [];
+      for (let i = 0; i <= 8; i++) {
+        const rr = 0.04 + (i / 8) * 0.6;
+        prof.push(new THREE.Vector2(rr, rr * rr * 0.62));
+      }
+      const dish = new THREE.LatheGeometry(prof, 24).toNonIndexed();
+      const inner = dish.clone();
+      inner.scale(-1, 1, 1); // mirrored copy = reversed winding, so the concave face renders too (single-sided material)
+      const rim = new THREE.TorusGeometry(0.64, 0.022, 6, 24);
+      rim.rotateX(Math.PI / 2);
+      rim.translate(0, 0.64 * 0.64 * 0.62, 0);
+      const back = new THREE.CylinderGeometry(0.26, 0.14, 0.22, 12);
+      back.translate(0, -0.1, 0);
       const horn = new THREE.CylinderGeometry(0.015, 0.015, 0.5, 6);
-      horn.translate(0, 0.14, 0);
+      horn.translate(0, 0.25, 0);
       const feed = new THREE.ConeGeometry(0.06, 0.1, 8);
       feed.rotateX(Math.PI);
-      feed.translate(0, 0.42, 0);
-      const g = mergeGeometries([dish.toNonIndexed(), back.toNonIndexed(), horn.toNonIndexed(), feed.toNonIndexed()], false);
+      feed.translate(0, 0.53, 0);
+      const parts = [dish, inner, rim.toNonIndexed(), back.toNonIndexed(), horn.toNonIndexed(), feed.toNonIndexed()];
+      for (let i = 0; i < 3; i++) {
+        // rim (r 0.6, y 0.22) -> feed (r 0, y 0.5)
+        const strut = new THREE.CylinderGeometry(0.008, 0.008, 0.66, 4);
+        strut.rotateX(-1.13);
+        strut.translate(0, 0.36, 0.3);
+        strut.rotateY((i / 3) * Math.PI * 2);
+        parts.push(strut.toNonIndexed());
+      }
+      const g = mergeGeometries(parts, false);
       g.rotateX(-Math.PI / 2 + 0.55); // axis tilted 31 degrees above the horizon; yaw animates
       g.computeVertexNormals();
-      setVertexColor(g, IMP.steel);
+      setVertexColor(g, IMP.wallLight);
       return g;
     })();
-    const dish = new THREE.Mesh(dishGeo, mats.impMetal);
-    dish.position.set(dx, y + 1.5, dz);
+    // painted, not bare metal: a metal dish only mirrors the dim room environment and hangs as a dark blob
+    const dish = new THREE.Mesh(dishGeo, mats.impPaintedMetal);
+    dish.position.set(dx, y + 2.7, dz);
     ctx.add(dish);
     ctx.animate((dt, tm) => {
       dish.rotation.y = tm * 0.25;
     });
-    kit.cyl("impMetal", dx, y + 1.36, dz, 0.07, 0.26, "y", { color: IMP.gunmetal, segments: 10 });
+    kit.cyl("impPaintedMetal", dx, y + 2.76, dz, 0.09, 0.14, "y", { color: IMP.consoleDark, segments: 10, texel: 1 });
   }
 
   // ---- ceiling: troughs over each row (two halves each, own light), beams over the tier edges, conduits -----
@@ -253,5 +305,5 @@ export function buildComms(kit, ctx) {
   ctx.view("comms_wall", cx - 1.2, eye, Z_MID[0] + 1.6, 172, -5);
   ctx.view("comms_racks", cx - 1.2, eye, 607.6, 92, -4);
   ctx.view("comms_holocomm", 30.2, eye, 629.6, 112, -4);
-  ctx.view("comms_antenna", 39.6, eye, 629.0, -112, -3);
+  ctx.view("comms_antenna", 43.0, eye, 626.4, -128, 8);
 }
