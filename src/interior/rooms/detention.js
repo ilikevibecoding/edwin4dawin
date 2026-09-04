@@ -9,7 +9,7 @@ import { roomShell, impWall, wallScreen, impConsole, impChair, crate, pipeRun, w
 import { pointLight, wallFrame } from "../builders.js";
 import { Kit } from "../../kit.js";
 import { decalRect } from "../../textures.js";
-import { ensureCrewMaterials, SIGN, signRect, wallSign, signQuad, floorSign, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, intercom, lockerBank, propFrame } from "./crewProps.js";
+import { ensureCrewMaterials, SIGN, signRect, wallSign, signQuad, floorSign, floorGrime, wallGrime, cableTray, ventGrille, intercom, lockerBank, propFrame } from "./crewProps.js";
 
 const DET_PAINTS = [
   [PALETTE.impGrey, 0.4],
@@ -139,6 +139,8 @@ export function buildDetention(kit, ctx) {
   strip("emitRedSoft", guardX1 + 0.6, -43.84, max[0] - 0.6, -43.76);
   strip("emitRedSoft", guardX1 + 0.6, -28.24, max[0] - 0.6, -28.16);
   for (const z of [-30.0, -33.0, -39.0, -42.0]) strip("emitStrip", 43.4, z - 0.07, 47.6, z + 0.07);
+  // lighter deck in the guard anteroom (the white zone) against the black rubber deck of the block
+  kit.boxMM("floorGloss", [min[0] + 0.18, 0, min[2] + 0.18], [guardX1 - 0.2, 0.006, max[2] - 0.18], { color: 0x8c8c94, texel: 0.33 });
   // black rubber deck in the corridor and the chamber, dim red light channels along the corridor edges
   kit.boxMM("rubber", [guardX1, 0, corrZ0], [chamberX0, 0.012, corrZ1], { color: PALETTE.rubber });
   kit.boxMM("rubber", [chamberX0, 0, cellBackS], [max[0] - 0.2, 0.012, cellBackN], { color: PALETTE.rubber });
@@ -314,8 +316,7 @@ export function buildDetention(kit, ctx) {
     kit.collider([chamberX0 - 0.3, 0, -36 + dw / 2], [chamberX0 + 0.3, H, -36 + dw / 2 + 0.24], "jamb");
     cableTray(kit, ctx, "zmin", 0.3, chamberX0 - guardX1 - 0.3, 3.15, [[guardX1, 0, corrZ0], [chamberX0, H, corrZ1]]);
     cableTray(kit, ctx, "zmax", 0.3, chamberX0 - guardX1 - 0.3, 3.15, [[guardX1, 0, corrZ0], [chamberX0, H, corrZ1]]);
-    // (no scuff run on the threshold: the speckle read as noise from the fixed view)
-    floorSign(kit, SIGN.DETENTION, guardX1 + 1.4, -36, 1.8, Math.PI / 2, false);
+    // (no scuff run or floor stencil on the threshold: both read as speckle noise from the fixed view)
   }
 
   // ------------------------------------------------------------------ interrogation chamber

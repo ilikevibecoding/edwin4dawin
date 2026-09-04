@@ -11,10 +11,11 @@ import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
 import { ensureCrewMaterials, SIGN, signRect, numeralRect, wallSign, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, gauge, intercom, valveWheel, propFrame } from "./crewProps.js";
 
+// light plate mix (the mid/dark mix read as murky racks under the neutral light)
 const LS_PAINTS = [
-  [PALETTE.impMid, 0.4],
-  [PALETTE.impGrey, 0.3],
-  [PALETTE.impDark, 0.3],
+  [PALETTE.impGrey, 0.4],
+  [PALETTE.impLight, 0.3],
+  [PALETTE.impMid, 0.3],
 ];
 const LS_STYLES = { panel: 0.5, vent: 0.16, greeble: 0.12, strip: 0.05, screen: 0.02, conduit: 0.15 };
 
@@ -27,13 +28,26 @@ function tank(kit, ctx, { x, z, r, h, color, label, accent, facing, seed, ladder
   const y0 = 0.3;
   kit.cyl("paintedMetal", x, 0.15, z, r + 0.18, 0.3, "y", { color: PALETTE.impBlack, segments: 32, texel: 2 });
   kit.cyl("paintedMetal", x, y0 + h / 2, z, r, h, "y", { color, segments: 40, texel: 0.6 });
-  // light mid band between the seams so the drums read as more than dark cylinders
-  kit.cyl("paintedMetal", x, y0 + h * 0.5, z, r + 0.015, 0.5, "y", { color: PALETTE.impLight, segments: 40, texel: 0.6 });
-  for (const k of [0.22, 0.5, 0.78]) kit.add("paintedMetal", new THREE.TorusGeometry(r + 0.02, 0.05, 8, 48), { pos: [x, y0 + h * k, z], rot: [Math.PI / 2, 0, 0], color: PALETTE.impDark, texel: 2 });
+  // wide light mid band (1 m) between the seams: the drums read as more than dark cylinders and it
+  // carries the big black tank numeral toward the door
+  const bandY = y0 + h * 0.5;
+  kit.cyl("paintedMetal", x, bandY, z, r + 0.015, 1.0, "y", { color: PALETTE.impLight, segments: 40, texel: 0.6 });
+  for (const k of [0.22, 0.78]) kit.add("paintedMetal", new THREE.TorusGeometry(r + 0.02, 0.05, 8, 48), { pos: [x, y0 + h * k, z], rot: [Math.PI / 2, 0, 0], color: PALETTE.impDark, texel: 2 });
+  for (const dy of [-0.5, 0.5]) kit.add("paintedMetal", new THREE.TorusGeometry(r + 0.02, 0.035, 8, 48), { pos: [x, bandY + dy, z], rot: [Math.PI / 2, 0, 0], color: PALETTE.impBlack, texel: 2 });
   kit.add("paintedMetal", new THREE.TorusGeometry(r + 0.04, 0.07, 8, 48), { pos: [x, y0 + 0.08, z], rot: [Math.PI / 2, 0, 0], color: PALETTE.impBlack, texel: 2 });
-  for (let i = 0; i < 6; i++) {
-    const a = (i / 6) * Math.PI * 2 + 0.2;
+  // four plate seams on the diagonals so the door face and the trench face stay clear for the numerals
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
     kit.box("paintedMetal", x + Math.cos(a) * r, y0 + h / 2, z + Math.sin(a) * r, 0.05, h - 0.1, 0.09, { color: PALETTE.impDark, texel: 2, rot: [0, -a, 0] });
+  }
+  // big black tank numeral on the band, on the face toward the door (+x): the fixed view looks along
+  // the trench, so a numeral on the trench face alone is seen edge-on
+  {
+    const nr = r + 0.035;
+    const size = 0.86;
+    const th = size / nr;
+    const g = new THREE.CylinderGeometry(nr, nr, size, 14, 1, true, Math.PI / 2 - th / 2, th);
+    kit.add("crew_numeral", g, { pos: [x, bandY, z], uv: "keep", uvRect: numeralRect(number), color: PALETTE.impBlack });
   }
   const dome = new THREE.SphereGeometry(r, 36, 10, 0, Math.PI * 2, 0, Math.PI / 2);
   dome.scale(1, 0.38, 1);
@@ -50,13 +64,13 @@ function tank(kit, ctx, { x, z, r, h, color, label, accent, facing, seed, ladder
   F.add("crew_signLit", new THREE.PlaneGeometry(1.6, 0.4), 0, 2.05, 0.085, { uv: "keep", uvRect: signRect(label) });
   F.box("darkGloss", 0.35, 1.6, 0.082, 0.5, 0.1, 0.006);
   F.box("leds", -0.3, 1.6, 0.082, 0.5, 0.05, 0.006, { uv: "keep" });
-  // stencilled tank number curved onto the drum above the plate
+  // small stencilled tank number above the plate on the trench face (the big one faces the door)
   {
     const nr = r + 0.012;
-    const size = 0.6;
+    const size = 0.42;
     const th = size / nr;
     const g = new THREE.CylinderGeometry(nr, nr, size, 12, 1, true, (facing > 0 ? 0 : Math.PI) - th / 2, th);
-    kit.add("crew_numeral", g, { pos: [x, 2.68, z], uv: "keep", uvRect: numeralRect(number), color: numeralColor });
+    kit.add("crew_numeral", g, { pos: [x, y0 + h * 0.78 + 0.32, z], uv: "keep", uvRect: numeralRect(number), color: numeralColor });
   }
   // vertical sight gauge: dark slot with the liquid/gas column part-filled
   const fill = 0.35 + rand() * 0.55;
@@ -67,10 +81,11 @@ function tank(kit, ctx, { x, z, r, h, color, label, accent, facing, seed, ladder
   F.add("decal", new THREE.PlaneGeometry(0.35, 0.35), -0.45, 0.75, 0.084, { uv: "keep", uvRect: decalRect(label === SIGN.O2 ? 4 : 9) });
   // ladder rungs up one side, a manway hatch low down
   if (ladder) {
-    const lx = x + r + 0.12;
+    // on the far (-x) side, so the door face keeps its numeral
+    const lx = x - r - 0.12;
     for (let k = 0; k < 11; k++) kit.cyl("metal", lx, 0.6 + k * 0.32, z, 0.014, 0.4, "z", { color: PALETTE.steel, segments: 6 });
     for (const dz of [-0.2, 0.2]) kit.box("metal", lx, y0 + h * 0.45, z + dz, 0.03, h * 0.9, 0.03, { color: PALETTE.steel });
-    for (const yy of [1.0, 2.6]) kit.box("paintedMetal", lx - 0.06, yy, z, 0.12, 0.04, 0.5, { color: PALETTE.impDark, texel: 2 });
+    for (const yy of [1.0, 2.6]) kit.box("paintedMetal", lx + 0.06, yy, z, 0.12, 0.04, 0.5, { color: PALETTE.impDark, texel: 2 });
   }
   kit.cyl("paintedMetal", x, 0.9, z - facing * (r - 0.05), 0.3, 0.14, "z", { color: PALETTE.impDark, segments: 20, texel: 2 });
   for (let k = 0; k < 8; k++) {
@@ -262,15 +277,16 @@ export function buildLifesupport(kit, ctx) {
   }
 
   // ------------------------------------------------------------------ lights (6)
-  // pale mint over the trench (not a green filter): the metal keeps its own colour and the green
-  // identity comes from the trench edge channels and the gauges
-  const mint = 0xbfe9d0;
-  ctx.light(pointLight(mint, 10, 16, [-23.5, H - 0.6, 0]));
-  ctx.light(pointLight(mint, 9, 16, [-15.5, H - 0.6, 0]));
-  ctx.light(pointLight(0xe6f0ff, 12, 13, [-8.5, H - 0.6, -1.5]));
-  ctx.light(pointLight(0xd8f0ff, 7, 9, [-22, H - 0.7, -4.6]));
-  ctx.light(pointLight(0xe6f0ff, 7, 9, [-19, H - 0.7, 5.6]));
-  ctx.light(pointLight(0xff4030, 6, 7, [-9.3, 3.6, 5.8]));
+  // neutral white throughout (the mint pair tinted every metal green): the green identity comes from
+  // the trench edge channels, the gauges and the indicator dots only. Two white downlights sit over
+  // the tank rows so the drums and the wall racks read.
+  const neutral = 0xf2f4f8;
+  ctx.light(pointLight(neutral, 16, 16, [-23.5, H - 0.6, 0]));
+  ctx.light(pointLight(neutral, 15, 16, [-15.5, H - 0.6, 0]));
+  ctx.light(pointLight(0xeef2ff, 16, 13, [-8.5, H - 0.6, -1.5]));
+  ctx.light(pointLight(0xffffff, 13, 12, [-21.5, H - 0.7, -4.2]));
+  ctx.light(pointLight(0xfafcff, 12, 11, [-19.5, H - 0.7, 5.4]));
+  ctx.light(pointLight(0xff4030, 5, 7, [-9.3, 3.6, 5.8]));
 
   // ------------------------------------------------------------------ trench with grating
   {
@@ -300,21 +316,20 @@ export function buildLifesupport(kit, ctx) {
     kit.boxMM("paintedMetal", [x0 - 0.02, -0.08, z0 - 0.2], [x1 + 0.02, 0.0, z0 - 0.02], { color: PALETTE.impBlack, texel: 2 });
     kit.boxMM("paintedMetal", [x0 - 0.02, -0.08, z1 + 0.02], [x1 + 0.02, 0.0, z1 + 0.2], { color: PALETTE.impBlack, texel: 2 });
     // plain black kick rails with a thin green lip toward the grating (the room's identity colour lives
-    // on the trench edges); hazard only on the last 1.5 m at either end, where the trench starts
+    // on the trench edges); hazard only on the two end pads across the trench, never along the sides
     for (const s of [-1, 1]) {
       const zz = s < 0 ? z0 - 0.1 : z1 + 0.1;
       kit.boxMM("paintedMetal", [x0, 0, zz - 0.08], [x1, 0.06, zz + 0.08], { color: PALETTE.impBlack, texel: 2 });
       const lip = zz - s * 0.08; // inner face of the rail; the strip sits proud of it toward the grating
       const out = lip - s * 0.015;
-      kit.boxMM("emitGreen", [x0 + 1.5, 0.025, Math.min(lip, out)], [x1 - 1.5, 0.045, Math.max(lip, out)]);
-      for (const [ha, hb] of [[x0, x0 + 1.5], [x1 - 1.5, x1]]) kit.boxMM("hazard", [ha, 0.06, zz - 0.07], [hb, 0.072, zz + 0.07], { texel: 4 });
+      kit.boxMM("emitGreen", [x0 + 0.3, 0.025, Math.min(lip, out)], [x1 - 0.3, 0.045, Math.max(lip, out)]);
     }
-    for (const [ha, hb] of [[x0 - 0.36, x0 - 0.06], [x1 + 0.06, x1 + 0.36]]) kit.boxMM("hazard", [ha, 0, z0 - 0.2], [hb, 0.012, z1 + 0.2], { texel: 4 });
+    for (const [ha, hb] of [[x0 - 0.4, x0 - 0.06], [x1 + 0.06, x1 + 0.4]]) kit.boxMM("hazard", [ha, 0, z0 - 0.18], [hb, 0.012, z1 + 0.18], { texel: 4 });
   }
 
   // ------------------------------------------------------------------ tanks
-  const water = new THREE.Color("#5f6a78");
-  const air = new THREE.Color("#7b8390");
+  const water = new THREE.Color("#6a7684");
+  const air = new THREE.Color("#868e9a");
   // tanks numbered 1-3 (water) and 4-5 (O2); the middle water tank is a newer light-grey unit
   for (const [i, x] of [-26.4, -22.0, -17.6].entries()) {
     const grey = i === 1;

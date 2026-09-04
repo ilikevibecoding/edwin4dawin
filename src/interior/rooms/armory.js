@@ -184,7 +184,7 @@ function cageWall(kit, x, z0, z1, gaps, H) {
     kit.box("paintedMetal", x, 0.06, zc, 0.1, 0.12, len, { color: PALETTE.impBlack, texel: 2 });
     kit.box("paintedMetal", x, CAGE_H - 0.05, zc, 0.1, 0.1, len, { color: PALETTE.impBlack, texel: 2 });
     kit.box("paintedMetal", x, 1.1, zc, 0.06, 0.05, len, { color: PALETTE.impMid, texel: 2 });
-    const n = Math.max(1, Math.round(len / 0.28));
+    const n = Math.max(1, Math.round(len / 0.34));
     const barH = CAGE_H - 0.22;
     for (let i = 0; i <= n; i++) {
       const z = a + (i / n) * len;

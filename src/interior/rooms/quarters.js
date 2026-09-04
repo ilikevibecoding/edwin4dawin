@@ -186,14 +186,14 @@ export function buildQuarters(kit, ctx) {
     // not read as one bright bar the full depth of the frame
     const L = max[0] - min[0] - 1.2;
     kit.box("paintedMetal", (min[0] + max[0]) / 2, H - 0.06, aisleZ, L + 0.2, 0.1, 0.42, { color: PALETTE.impDark, texel: 2 });
-    kit.box("crew_nightBlue", (min[0] + max[0]) / 2, H - 0.1, aisleZ, L, 0.03, 0.05, { uv: "keep" });
+    kit.box("crew_nightBlue", (min[0] + max[0]) / 2, H - 0.1, aisleZ, L, 0.03, 0.08, { uv: "keep" });
     for (let x = min[0] + 2.4; x < max[0] - 1.0; x += 3.6) kit.box("paintedMetal", x, H - 0.1, aisleZ, 0.16, 0.05, 0.12, { color: PALETTE.impBlack, texel: 2 });
   }
 
   // ------------------------------------------------------------------ lights (6): 2 blue night + 3 amber bays + 1 wash
   // the night blue is a greyed, low-intensity pair (the earlier three saturated lights turned the
   // aisle into a cyan runway); the amber bay lamps carry the warmth out to the aisle edge
-  for (const x of [-12.5, -25.5]) ctx.light(pointLight(0x5a78d2, 7, 17, [x, H - 0.5, aisleZ]));
+  for (const x of [-9.5, -22.0]) ctx.light(pointLight(0x5a78d2, 8, 17, [x, H - 0.5, aisleZ]));
   ctx.light(pointLight(0xffb060, 4.5, 7.5, [-7.85, 2.2, -21.8]));
   ctx.light(pointLight(0xffb060, 4.5, 7.5, [-15.05, 2.2, -16.2]));
   ctx.light(pointLight(0xffb060, 4.5, 7.5, [-22.25, 2.2, -21.8]));
@@ -202,7 +202,7 @@ export function buildQuarters(kit, ctx) {
   // navy floor kick channels along both aisle edges (a quiet edge line, not a runway)
   for (const z of [aisleZ - 1.3, aisleZ + 1.3]) {
     kit.boxMM("paintedMetal", [-33.6, 0, z - 0.04], [-3.6, 0.02, z + 0.04], { color: PALETTE.impBlack, texel: 2 });
-    kit.boxMM("crew_nightBlue", [-33.4, 0.02, z - 0.0125], [-3.8, 0.03, z + 0.0125]);
+    kit.boxMM("crew_nightBlue", [-33.4, 0.02, z - 0.02], [-3.8, 0.03, z + 0.02]);
   }
   // ceiling: dim navy strip lights over each bay lane
   const bayX0 = -31.0;

@@ -238,7 +238,7 @@ export function ensureCrewMaterials(ctx) {
   m.crew_warmBand.emissiveIntensity = 1.1;
   // quarters night blue: a muted navy emitter (not the azure of emitBlue) at about half strength, for
   // the aisle kick strips, the ceiling spine and the bay-lane strips
-  m.crew_nightBlue = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: new THREE.Color("#3a5a9a"), emissiveIntensity: 1.25, roughness: 0.5, metalness: 0 });
+  m.crew_nightBlue = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: new THREE.Color("#3a5a9a"), emissiveIntensity: 1.5, roughness: 0.5, metalness: 0 });
   // pulsing amber beacon emitter (escape pod bay) and red alert domes (armoury), animated by the rooms
   m.crew_beacon = m.emitAmber.clone();
   m.crew_alert = m.emitRed.clone();
@@ -310,8 +310,9 @@ export function ensureCrewMaterials(ctx) {
       for (let x = 0; x < c.width; x++) {
         const k = (y * c.width + x) * 4;
         if (d[k + 3] === 0) continue;
+        // light wear only: the glyphs have to stay solid enough to read as tank / hatch numbers
         const n = fbm(x / c.width, y / c.height, { octaves: 3, freq: 40, seed: 431 });
-        d[k + 3] *= Math.min(1, Math.max(0, (n - 0.24) * 4));
+        d[k + 3] *= Math.min(1, Math.max(0.55, (n - 0.1) * 7));
       }
     }
     g.putImageData(img, 0, 0);
