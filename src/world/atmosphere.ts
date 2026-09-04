@@ -25,11 +25,11 @@ interface Key { el: number; sun: [number, number, number]; sunI: number; zen: [n
  * Radiometric balance. The sky colours below are the radiance of the visible dome (what the camera and the
  * water reflections see). The image-based light integrates that dome over the hemisphere, so for the sun to
  * dominate on sunlit surfaces the way it does outdoors (direct : sky diffuse ≈ 4 : 1 on a horizontal white
- * at midday) its irradiance has to be about 15x the zenith radiance. `sunI` in the keys is the normalised
+ * at midday) its irradiance has to be about 18x the zenith radiance. `sunI` in the keys is the normalised
  * 0..1 strength that the cloud raymarch and the sun disc were tuned against; the CSM light receives
  * `sunI * SUN_IRRADIANCE`. Moonlight keeps a 1:1 scale (the night exposure boost does the rest).
  */
-export const SUN_IRRADIANCE = 5.5;
+export const SUN_IRRADIANCE = 6.0;
 const MOON_IRRADIANCE = 1.0;
 /** Mean albedo of the sunlit world below the horizon (water, sand, roads, canopy): warm neutral. */
 const GROUND_ALBEDO = new THREE.Color(0.26, 0.24, 0.20);
