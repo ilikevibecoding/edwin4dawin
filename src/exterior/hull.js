@@ -12,7 +12,7 @@
 import * as THREE from "three";
 import { Kit, rng } from "../kit.js";
 import { PALETTE } from "../materials.js";
-import { HULL, hullSection, hullTopY, hullBottomY, hullHalfWidth, TERRACES, VENTRAL, HANGAR } from "../spec.js";
+import { HULL, TRENCH, hullSection, hullTopY, hullBottomY, hullHalfWidth, TERRACES, VENTRAL, HANGAR } from "../spec.js";
 import { ChunkSet, plateField, channel, ensureExtMaterials, C, shade, mixC, jitter, plateTone, fieldNoise, TEXEL, EMIT } from "./hull_util.js";
 import { buildSuperstructure, terraceBaseHalfWidth, tierLevels, tierWallX, hexa } from "./superstructure.js";
 import { buildTower } from "./tower.js";
@@ -35,18 +35,19 @@ const smooth = (a, b, x) => {
 const w = hullHalfWidth;
 const yT = hullTopY;
 const yB = hullBottomY;
-const lipY = (z) => yB(z) + 0.5 * (yT(z) - yB(z)); // trench ceiling
-const floorY = (z) => yB(z) + 0.3 * (yT(z) - yB(z)); // trench floor
-const wallX = (z) => 0.965 * w(z); // trench back wall
+const lipY = (z) => yB(z) + TRENCH.lipV * (yT(z) - yB(z)); // trench ceiling
+const floorY = (z) => yB(z) + TRENCH.floorV * (yT(z) - yB(z)); // trench floor
+const wallX = (z) => TRENCH.wallU * w(z); // trench back wall
+const trenchDepth = (z) => TRENCH.depthU * w(z);
 const topX = (z) => 0.72 * w(z); // dorsal plate edge
 const botX = (z) => 0.62 * w(z); // ventral plate edge
 const T0 = TERRACES[0];
 const footprint = (z) => (z >= T0.zFront ? terraceBaseHalfWidth(T0, z) : 0);
 const perp = (dx, dy) => V(-dy, dx, 0).normalize();
-const UPPER_N = perp(0.28 * HULL.halfWidthStern, -0.5 * HULL.thicknessStern); // outward normal of the upper slope
-const LOWER_N = perp(-0.38 * HULL.halfWidthStern, -0.3 * HULL.thicknessStern); // outward normal of the lower slope
-const UPPER_T = V(0.28 * HULL.halfWidthStern, -0.5 * HULL.thicknessStern, 0).normalize(); // along the upper slope, outward-down
-const LOWER_T = V(0.38 * HULL.halfWidthStern, 0.3 * HULL.thicknessStern, 0).normalize(); // along the lower slope from the bottom edge, outward-up
+const UPPER_N = perp(0.28 * HULL.halfWidthStern, -(1 - TRENCH.lipV) * HULL.thicknessStern); // outward normal of the upper slope
+const LOWER_N = perp(-0.38 * HULL.halfWidthStern, -TRENCH.floorV * HULL.thicknessStern); // outward normal of the lower slope
+const UPPER_T = V(0.28 * HULL.halfWidthStern, -(1 - TRENCH.lipV) * HULL.thicknessStern, 0).normalize(); // along the upper slope, outward-down
+const LOWER_T = V(0.38 * HULL.halfWidthStern, TRENCH.floorV * HULL.thicknessStern, 0).normalize(); // along the lower slope from the bottom edge, outward-up
 
 const CAP_Z = -958; // hardened bow tip cap ends here
 const BELTS = [
@@ -72,13 +73,17 @@ const hash2 = (x, z) => {
   n = Math.imul(n ^ (n >>> 13), 1274126177);
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 };
-/** Skin tint: large-scale paint variation, a few replaced (darker) plates, soot toward the stern. */
+/**
+ * Skin tint: two low-frequency paint layers (150 m and 380 m, ±4 % each) so the plating has a slow
+ * tonal drift rather than a per-tile quilt, a few replaced plates one step darker, and soot toward
+ * the stern (the engine wash reaches ~100 m forward along the dorsal and ventral plates).
+ */
 const paint = (base, alt, seed) => (x, y, z) => {
-  let c = shade(base, 0.94 + fieldNoise(x, z, 150, seed) * 0.12);
+  let c = shade(base, (0.96 + fieldNoise(x, z, 150, seed) * 0.08) * (0.97 + fieldNoise(x + 3000, z, 380, seed + 1) * 0.06));
   const h = hash2(x, z);
-  if (h < 0.1) c = mixC(c, alt, 0.6);
-  else if (h > 0.95) c = shade(c, 1.05);
-  return shade(c, 1 - 0.3 * smooth(500, 600, z));
+  if (h < 0.06) c = mixC(c, alt, 0.35);
+  else if (h > 0.96) c = shade(c, 1.04);
+  return shade(c, 1 - 0.38 * smooth(480, 600, z) * (0.7 + 0.3 * fieldNoise(x, z, 40, seed + 2)));
 };
 const slabTint = (r, base) => mixC(plateTone(r), base, 0.5);
 const nearBelt = (z) => z < CAP_Z + 4 || BELTS.some(([bz, , len]) => Math.abs(z - bz) < len / 2 + 3.5);
@@ -195,8 +200,9 @@ function buildSkins(ctx) {
   const trench = (point, normal, key, tint, texel) =>
     plateField(chunks, rand, { zStart, zEnd, rowLen: [16, 32], strips: bare, point, normal, cellW: 40, skinKey: key, slabKeys: [key], tint: () => tint, texel });
   trench((z, s) => V(w(z) + s * (wallX(z) - w(z)), lipY(z), z), DOWN, "hullGreeble", shade(D, 0.9), TEXEL * 2);
-  trench((z, s) => V(wallX(z), lipY(z) + s * (floorY(z) - lipY(z)), z), V(1, 0, 0), "exta_machinery", mixC(D, M, 0.7), MACH);
-  trench((z, s) => V(wallX(z) + s * (w(z) - wallX(z)), floorY(z), z), UP, "hullGreeble", mixC(T, D, 0.6), TEXEL * 2);
+  // wall and floor at ~0.35 albedo: the canyon reads as a dark band even where the sun reaches in
+  trench((z, s) => V(wallX(z), lipY(z) + s * (floorY(z) - lipY(z)), z), V(1, 0, 0), "exta_machinery", mixC(D, M, 0.3), MACH);
+  trench((z, s) => V(wallX(z) + s * (w(z) - wallX(z)), floorY(z), z), UP, "hullGreeble", mixC(T, D, 0.3), TEXEL * 2);
   // lower slope
   plateField(chunks, rand, {
     zStart,
@@ -417,12 +423,14 @@ function buildStern(ctx) {
   const s = hullSection(z);
   const { hullDark: D, hullMid: M, hullLight: L } = PALETTE;
   const far = chunks.batch(z - 1, "far", "hullPlate1");
-  const soot = (p) => shade(mixC(D, M, 0.3), 1 - 0.55 * engineSoot(p.x, p.y));
+  // stern face in the hull's mid tone with real soot: the wash from each nozzle blackens the plating
+  // to ~30 % of its albedo at the lips and fades over ~75 m (secondaries ~32 m)
+  const soot = (p) => shade(mixC(M, L, 0.25), 1 - 0.72 * engineSoot(p.x, p.y));
   const H = HOUSING;
   const xUpper = (y) => s[1].x + (s[2].x - s[1].x) * ((s[1].y - y) / (s[1].y - s[2].y));
   const xLower = (y) => s[6].x + (s[5].x - s[6].x) * ((y - s[6].y) / (s[5].y - s[6].y));
-  far.grid(V(-xUpper(H.y1), H.y1, z), V(xUpper(H.y1), H.y1, z), V(s[1].x, s[1].y, z), V(-s[1].x, s[1].y, z), 20, 2, soot, TEXEL, Z);
-  far.grid(V(-xLower(H.y0), H.y0, z), V(xLower(H.y0), H.y0, z), V(s[6].x, s[6].y, z), V(-s[6].x, s[6].y, z), 20, 2, soot, TEXEL, Z);
+  far.grid(V(-xUpper(H.y1), H.y1, z), V(xUpper(H.y1), H.y1, z), V(s[1].x, s[1].y, z), V(-s[1].x, s[1].y, z), 48, 4, soot, TEXEL, Z);
+  far.grid(V(-xLower(H.y0), H.y0, z), V(xLower(H.y0), H.y0, z), V(s[6].x, s[6].y, z), V(-s[6].x, s[6].y, z), 48, 4, soot, TEXEL, Z);
   for (const side of [1, -1]) {
     const X = (x) => side * x;
     const pts = [V(X(H.hw), -8, z), V(X(H.hw), H.y1, z), V(X(xUpper(H.y1)), H.y1, z), V(X(s[2].x), s[2].y, z), V(X(s[3].x), s[3].y, z), V(X(s[4].x), s[4].y, z), V(X(s[5].x), s[5].y, z), V(X(xLower(H.y0)), H.y0, z), V(X(H.hw), H.y0, z)];
@@ -453,21 +461,6 @@ function buildStern(ctx) {
 // ---------------------------------------------------------------------------
 // ventral features: hangar mouth well, docking recess, reactor bulb
 // ---------------------------------------------------------------------------
-/**
- * Additive floodlight pool on the ventral plate: a fan that follows yB (the plate is sloped in z),
- * bright centre fading to black at the rim, hung just under the tallest slab so no plate cuts it.
- */
-function ventralPool(batch, cx, cz, R, color, { dy = 0.95, segs = 20 } = {}) {
-  const black = new THREE.Color(0x000000);
-  const c0 = batch.vertex(cx, yB(cz) - dy, cz, 0, -1, 0, 0, 0, C(color));
-  const rim = [];
-  for (let s = 0; s <= segs; s++) {
-    const a = (s / segs) * Math.PI * 2;
-    const z = cz + R * Math.sin(a);
-    rim.push(batch.vertex(cx + R * Math.cos(a), yB(z) - dy, z, 0, -1, 0, 0, 0, black));
-  }
-  for (let s = 0; s < segs; s++) batch.face(c0, rim[s + 1], rim[s]);
-}
 /**
  * Additive wash strip along the edge a→b (each [x, z]), spreading in direction (nx, nz): black at the
  * edge, `color` at `peak` m, black again at `end` m — no hard line anywhere. Follows yB.
@@ -521,6 +514,19 @@ function buildHangarMouth(ctx) {
     hexa(wall, b, b.map((p) => V(p.x, yF, p.z)), mixC(D, M, 0.3), MACH, { skipTop: true });
   }
   ventralFrame(chunks, o.x1 + th, o.z0 - th, o.z1 + th, 3.2, 0.9, mixC(PALETTE.hullDark, PALETTE.hullMid, 0.3));
+  // containment field across the mouth just inside the well (the hangar builder's own field sits at
+  // the floor above): an additive 0x4f8fff sheet at ~0.15, a touch brighter mid-span, with the shared
+  // scrolling hex-lattice material laid over it, read from below as a blue film closing the opening
+  {
+    const yF = (z) => yB(z) - 0.3;
+    const sheet = chunks.batch(zm, "far", "exta_pool");
+    const fc = C(0x4f8fff);
+    const cx = (o.x0 + o.x1) / 2;
+    const dome = (p) => clamp01(1 - Math.pow((2 * (p.x - cx)) / (o.x1 - o.x0), 2)) * clamp01(1 - Math.pow((2 * (p.z - zm)) / (o.z1 - o.z0), 2));
+    sheet.grid(V(o.x0, yF(o.z0), o.z0), V(o.x1, yF(o.z0), o.z0), V(o.x1, yF(o.z1), o.z1), V(o.x0, yF(o.z1), o.z1), 4, 6, (p) => fc.clone().multiplyScalar(0.12 + 0.06 * dome(p)), 1, DOWN);
+    const fld = chunks.batch(zm, "far", "field");
+    fld.quad(V(o.x0, yF(o.z0) - 0.08, o.z0), V(o.x1, yF(o.z0) - 0.08, o.z0), V(o.x1, yF(o.z1) - 0.08, o.z1), V(o.x0, yF(o.z1) - 0.08, o.z1), 0xffffff, 1 / 12, DOWN);
+  }
   // approach lights: white pairs along the sides, red across the fore / aft bars
   const em = chunks.batch(zm, "far", "exta_emit");
   for (let z = o.z0 + 5; z < o.z1; z += 10) for (const s of [-1, 1]) em.box(s * (o.x1 + th + 1.7), yB(z) - 1.25, z, 1.2, 0.6, 1.2, EMIT.white, 1);
@@ -573,9 +579,12 @@ function buildReactorBulb(ctx) {
   const { hullLight: L, hullMid: M, hullDark: D } = PALETTE;
   const yPlate = yB(r.z);
   const far = chunks.batch(r.z, "far", "hullPlate");
-  // only the part below the plate: theta from the cut latitude to the lower pole
+  // only the part below the plate: theta from the cut latitude to the lower pole. Albedo in the
+  // ventral plate's own tone (the plate paints from mixC(L, M, 0.5)) so the bulb is part of the belly,
+  // not a brighter ball hung under it.
   const theta0 = Math.acos((yPlate - r.yCenter) / r.r) - 0.08;
-  far.addGeometry(new THREE.SphereGeometry(r.r, 64, 40, 0, Math.PI * 2, theta0, Math.PI - theta0), { pos: [r.x, r.yCenter, r.z], colorFn: (x, y) => shade(L, 0.88 + 0.12 * clamp01((yPlate - y) / r.r)) });
+  const bulbTone = mixC(L, M, 0.5);
+  far.addGeometry(new THREE.SphereGeometry(r.r, 64, 40, 0, Math.PI * 2, theta0, Math.PI - theta0), { pos: [r.x, r.yCenter, r.z], colorFn: (x, y) => shade(bulbTone, 0.86 + 0.14 * clamp01((yPlate - y) / r.r)) });
   // collar following the sloped plate
   const collar = chunks.batch(r.z, "far", "hullPlate1");
   const R0 = BULB_R + 2.8;
@@ -612,15 +621,15 @@ function buildReactorBulb(ctx) {
   trim.tube(V(r.x, yPole + 1.5, r.z), V(r.x, yPole - 3.5, r.z), 7, 5.5, 24, D, TEXEL * 3, { cap1: true });
   const em = chunks.batch(r.z, "far", "exta_emit");
   em.box(r.x, yPole - 4.0, r.z, 1.4, 1.0, 1.4, EMIT.red, 1);
-  // floodlights on the collar's underside ring the bulb so it reads against the unlit belly
-  const pool = chunks.batch(r.z, "mid", "exta_pool");
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2 + Math.PI / 12;
-    const R = (R0 + R1) / 2;
-    em.box(r.x + R * Math.cos(a), yB(r.z + R * Math.sin(a)) - 3.6 - 0.3, r.z + R * Math.sin(a), 1.2, 0.6, 1.2, EMIT.white, 1, { skip: new Set(["+y"]) });
-    // and the pool each one throws on the plating outboard of the collar
-    const Rp = R0 + 7;
-    ventralPool(pool, r.x + Rp * Math.cos(a), r.z + Rp * Math.sin(a), 12, C(0xfff2dc).multiplyScalar(0.16));
+  // dim emissive collar strip (dashed, two lit segments in four) instead of a ring of floodlights:
+  // it reads as a lit service gallery around the bulb without the "UFO" pools on the plating
+  const strip = C(0xfff1dc).multiplyScalar(0.9);
+  for (let i = 0; i < nSeg; i++) {
+    if (i % 4 >= 2) continue;
+    const a0 = (i / nSeg) * Math.PI * 2 + 0.004;
+    const a1 = ((i + 1) / nSeg) * Math.PI * 2 - 0.004;
+    const nrm = V(Math.cos((a0 + a1) / 2), 0, Math.sin((a0 + a1) / 2));
+    em.quad(pt(a0, R0 + 0.12, 1.3), pt(a1, R0 + 0.12, 1.3), pt(a1, R0 + 0.12, 2.0), pt(a0, R0 + 0.12, 2.0), strip, 1, nrm);
   }
   // four gusset fins between the plate and the sphere
   for (let i = 0; i < 4; i++) {
@@ -639,7 +648,7 @@ function buildReactorBulb(ctx) {
 function buildTrenchCity(ctx) {
   const { chunks, rand, kit } = ctx;
   const { hullDark: D, hullMid: M, hullTrench: T } = PALETTE;
-  const k = (0.965 * HULL.halfWidthStern) / HULL.length; // dx/dz of the trench wall
+  const k = (TRENCH.wallU * HULL.halfWidthStern) / HULL.length; // dx/dz of the trench wall
   const phi = Math.atan(k);
   const nrmLen = Math.hypot(1, k);
   const subGeo = () => new THREE.BoxGeometry(1, 1, 1);
@@ -661,11 +670,13 @@ function buildTrenchCity(ctx) {
     const z1 = Math.min(z + len, 597);
     if (z1 - z < 6) break;
     const zm = (z + z1) / 2;
-    const depthN = 0.035 * w(zm);
+    const depthN = trenchDepth(zm);
     const hN = lipY(zm) - floorY(zm);
     const d = 1.5 + rand() * Math.max(0.5, depthN - 3.2);
     const hang = rand() < 0.28;
-    const hFrac = 0.35 + rand() * 0.5;
+    // building heights vary from squat plant (a quarter of the canyon) to full-height towers
+    const hr = rand();
+    const hFrac = hr < 0.18 ? 0.97 : hr < 0.5 ? 0.25 + rand() * 0.25 : 0.5 + rand() * 0.42;
     const lvl = z1 - z >= 16 ? "far" : "mid";
     const light = rand() < 0.3;
     // the machinery texture is itself dark, so its tint stays in the mid range
@@ -678,18 +689,26 @@ function buildTrenchCity(ctx) {
       const b = [P(z, 0, yLo(z)), P(z, d, yLo(z)), P(z1, d, yLo(z1)), P(z1, 0, yLo(z1))];
       const t = [P(z, 0, yHi(z)), P(z, d, yHi(z)), P(z1, d, yHi(z1)), P(z1, 0, yHi(z1))];
       hexa(chunks.batch(zm, lvl, key), b, t, tint, key === "exta_machinery" ? MACH : TEXEL, { skipBottom: !hang, skipTop: hang, skipSides: new Set([3]) });
-      // lit band on the block's outer face
-      if (rand() < 0.55 && z1 - z > 9) {
-        const yw = (yLo(zm) + yHi(zm)) / 2 + (rand() - 0.5) * (yHi(zm) - yLo(zm)) * 0.4;
-        win(chunks.batch(zm, "mid", "cityLights"), side, z, z1, side * (wallX(z) - 0.3 + d), side * (wallX(z1) - 0.3 + d), yw, 1.6);
+      // lit bands on the block's outer face: one for squat blocks, two or three storeys on towers
+      if (rand() < 0.65 && z1 - z > 9) {
+        const bh = yHi(zm) - yLo(zm);
+        const rows = bh > 18 ? 3 : bh > 9 ? 2 : 1;
+        for (let r = 0; r < rows; r++) {
+          if (r > 0 && rand() < 0.3) continue;
+          const yw = yLo(zm) + bh * ((r + 0.5) / rows) + (rand() - 0.5) * (bh / rows) * 0.3;
+          win(chunks.batch(zm, "mid", "cityLights"), side, z, z1, side * (wallX(z) - 0.3 + d), side * (wallX(z1) - 0.3 + d), yw, 1.6);
+        }
       }
-      // window band on the back wall in the gap before this block
+      // window rows on the back wall in the gap before this block (two heights on the tall canyon wall)
       const pe = prevEnd[side];
       if (pe !== null && z - pe > 7) {
         const zg0 = pe + 1.2;
         const zg1 = z - 1.2;
         const zgm = (zg0 + zg1) / 2;
-        win(chunks.batch(zgm, "mid", "cityLights"), side, zg0, zg1, side * wallX(zg0), side * wallX(zg1), floorY(zgm) + hN * 0.62, 1.8);
+        for (const f of hN > 14 ? [0.3, 0.62] : [0.55]) {
+          if (rand() < 0.2) continue;
+          win(chunks.batch(zgm, "mid", "cityLights"), side, zg0, zg1, side * wallX(zg0), side * wallX(zg1), floorY(zgm) + hN * f, 1.8);
+        }
       }
       prevEnd[side] = z1;
       // instanced sub-blocks on the outer face
@@ -724,14 +743,14 @@ function buildTrenchCity(ctx) {
       const r = Math.min(1.1, 0.02 * w((z0 + z1) / 2));
       mid.tube(V(X(z0, 1.6 + r), yP(z0), z0), V(X(z1, 1.6 + r), yP(z1), z1), r, r, 10, D, TEXEL * 4);
       for (let zz = z0 + 12 + rand() * 10; zz < z1 - 4; zz += 24 + rand() * 14) {
-        const dN = 0.035 * w(zz);
+        const dN = trenchDepth(zz);
         mid.box(X(zz, dN * 0.55), (floorY(zz) + lipY(zz)) / 2, zz, 1.4, lipY(zz) - floorY(zz) - 0.2, 1.4, mixC(D, T, 0.5), TEXEL * 4, { skip: new Set(["+y", "-y"]) });
       }
       // amber work lights along the lip underside: the trench is in the lip's shadow most of the
       // time, so this row is what draws the trench line at medium range
       const em = chunks.batch((z0 + z1) / 2, "mid", "exta_emit");
       for (let zz = z0 + 6 + rand() * 6; zz < z1 - 3; zz += 26 + rand() * 10) {
-        em.box(X(zz, 0.035 * w(zz) * 0.8), lipY(zz) - 0.3, zz, 0.9, 0.5, 0.9, EMIT.amber, 1, { skip: new Set(["+y"]) });
+        em.box(X(zz, trenchDepth(zz) * 0.8), lipY(zz) - 0.3, zz, 0.9, 0.5, 0.9, EMIT.amber, 1, { skip: new Set(["+y"]) });
       }
     }
   }

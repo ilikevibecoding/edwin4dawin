@@ -13,92 +13,114 @@ function finish(set) {
 }
 
 // ---------------------------------------------------------------------------
-// Armour plating, variant 2: three long plate columns per tile with independently staggered rows
-// (plates ~8 m wide × 3–6 m tall at texel 1/26), deeper seams, a few darker replacement plates,
-// directional micrometeorite scouring along v, seam grime, edge rivets and bright scratches.
+// Armour plating (the hull's skin, three seeds / rhythms): plates 3–9 m in an irregular staggered
+// grid at texel 1/26, per-plate tone variance ±5 % with rare darker replacement plates, seams as
+// 0.3 m dark gaps (no rivet dots), faint fore–aft scouring streaks, grime pooled toward the seams,
+// per-plate roughness 0.45–0.7, a few plates with an inset panel or a small raised hatch, bare-metal
+// scratches. The mean albedo is the same for every variant so mixed materials never read as a quilt.
 // ---------------------------------------------------------------------------
-export function makeHullPlating2(size = 1024, seed = 173) {
+export function makeArmourPlating(size = 1024, seed = 211, { cols = 4, rowsMin = 4, rowsMax = 8, streak: streakAmt = 0.1 } = {}) {
   const t = new TexGen(size, size);
   const rand = mulberry32(seed);
-  const cols = 3;
   const colEdges = [0];
-  for (let c = 1; c < cols; c++) colEdges.push(c / cols + (rand() - 0.5) * 0.05);
+  for (let c = 1; c < cols; c++) colEdges.push(c / cols + (rand() - 0.5) * 0.06);
   colEdges.push(1);
-  const rowsPerCol = [];
+  const rows = [];
   const tone = [];
-  const replaced = [];
+  const rough = [];
+  const kind = [];
+  const hatchAt = [];
   for (let c = 0; c < cols; c++) {
-    const n = 5 + Math.floor(rand() * 4);
+    const n = rowsMin + Math.floor(rand() * (rowsMax - rowsMin + 1));
     const e = [0];
-    for (let r = 1; r < n; r++) e.push(r / n + (rand() - 0.5) * 0.04);
+    for (let r = 1; r < n; r++) e.push(r / n + (rand() - 0.5) * 0.05);
     e.push(1);
-    rowsPerCol.push(e);
-    tone.push(e.map(() => 0.88 + (rand() - 0.5) * 0.2));
-    replaced.push(e.map(() => rand() < 0.12));
+    rows.push(e);
+    tone.push(e.map(() => (rand() < 0.04 ? 0.79 : 0.88 + (rand() - 0.5) * 0.1)));
+    rough.push(e.map(() => 0.45 + rand() * 0.25));
+    kind.push(
+      e.map(() => {
+        const k = rand();
+        return k < 0.14 ? "inset" : k < 0.24 ? "hatch" : "plain";
+      }),
+    );
+    hatchAt.push(e.map(() => [0.2 + rand() * 0.6, 0.2 + rand() * 0.6]));
   }
-  const soot = [];
-  for (let i = 0; i < 4; i++) soot.push([rand(), rand(), 0.08 + rand() * 0.16, rand()]);
+  const gapHalf = 0.15 / 26; // half of a 0.3 m seam gap on a 26 m tile
   t.each((u, v, i) => {
     let c = 0;
     while (c < cols - 1 && u > colEdges[c + 1]) c++;
-    const re = rowsPerCol[c];
+    const re = rows[c];
     let r = 0;
     while (r < re.length - 2 && v > re[r + 1]) r++;
     const du = Math.min(u - colEdges[c], colEdges[c + 1] - u);
     const dv = Math.min(v - re[r], re[r + 1] - v);
     const ed = Math.min(du, dv);
-    const seam = clamp01(1 - ed / 0.005);
-    const bevel = clamp01((ed - 0.005) / 0.016);
+    const seam = smooth(clamp01(1 - ed / gapHalf));
+    const bevel = clamp01((ed - gapHalf) / 0.012);
     const n1 = fbm(u, v, { octaves: 4, freq: 6, seed });
     const n2 = fbm(u, v, { octaves: 3, freq: 36, seed: seed + 11 });
-    let lum = tone[c][r] * (0.97 + (n1 - 0.5) * 0.1 + (n2 - 0.5) * 0.04);
-    let rough = 0.6 + (n1 - 0.5) * 0.2 + seam * 0.25;
-    let metal = 0.14;
-    if (replaced[c][r]) {
-      // a newer, darker, smoother plate that has not weathered with its neighbours
-      lum *= 0.78;
-      rough -= 0.12;
-      metal = 0.3;
-    }
-    // directional scouring: long streaks along v
-    const streak = Math.pow(vnoise2(u, v, 90, 4, seed + 21) * 0.6 + vnoise2(u, v, 160, 7, seed + 23) * 0.4, 2.2);
-    lum *= 1 - streak * 0.16;
-    rough += streak * 0.12;
-    // grime pooling along seams
+    let lum = tone[c][r] * (0.985 + (n1 - 0.5) * 0.05 + (n2 - 0.5) * 0.02);
+    let rg = rough[c][r] + (n1 - 0.5) * 0.08;
+    let metal = 0.1;
+    let hgt = 0.5 + bevel * 0.16;
+    // faint directional scouring along v (fore–aft on the horizontal plates)
+    const streak = Math.pow(vnoise2(u, v, 70, 5, seed + 21) * 0.6 + vnoise2(u, v, 130, 9, seed + 23) * 0.4, 2.4);
+    lum *= 1 - streak * streakAmt;
+    rg += streak * 0.1;
+    // grime pooled toward the seams
     const grime = clamp01(1 - ed / 0.03) * fbm(u, v, { octaves: 3, freq: 18, seed: seed + 5 });
-    lum *= 1 - grime * 0.22;
-    rough += grime * 0.2;
-    for (const [sx, sy, sr, sk] of soot) {
-      const d = Math.hypot((u - sx) * 1.3, v - sy);
-      if (d < sr) lum *= 1 - smooth(1 - d / sr) * sk * 0.28;
+    lum *= 1 - grime * 0.2;
+    rg += grime * 0.15;
+    // plate features
+    const pw = colEdges[c + 1] - colEdges[c];
+    const ph = re[r + 1] - re[r];
+    const pu = (u - colEdges[c]) / pw;
+    const pv = (v - re[r]) / ph;
+    if (kind[c][r] === "inset") {
+      // recessed inner panel with a dark rim line 0.25 m wide, ~0.8 m in from the plate edge
+      const m = 0.8 / 26;
+      const rd = Math.min(u - colEdges[c] - m, colEdges[c + 1] - m - u, v - re[r] - m, re[r + 1] - m - v);
+      if (rd > 0 && rd < 0.25 / 26) {
+        lum *= 0.7;
+        hgt -= 0.16;
+        rg += 0.1;
+      } else if (rd >= 0.25 / 26) {
+        lum *= 0.965;
+        hgt -= 0.07;
+      }
+    } else if (kind[c][r] === "hatch") {
+      // small raised hatch (~1.2 m) with a darker border
+      const [hu, hv] = hatchAt[c][r];
+      const ax = Math.abs(pu - hu) * pw * 26;
+      const ay = Math.abs(pv - hv) * ph * 26;
+      const d = Math.max(ax, ay);
+      if (d < 0.6) {
+        hgt += 0.12;
+        lum *= 1.02;
+      } else if (d < 0.78) {
+        hgt += 0.04;
+        lum *= 0.72;
+      }
     }
-    let hgt = 0.5 + bevel * 0.22 - seam * 0.34;
-    // rivet rows inside the plate edges
-    const pitch = 0.025;
-    const ru = (u - colEdges[c]) / pitch;
-    const rv = (v - re[r]) / pitch;
-    const nearU = du < 0.016 && du > 0.009;
-    const nearV = dv < 0.016 && dv > 0.009;
-    if ((nearU && Math.abs(rv - Math.round(rv)) < 0.16) || (nearV && Math.abs(ru - Math.round(ru)) < 0.16)) {
-      hgt += 0.1;
-      lum *= 0.82;
-      metal = 0.65;
-      rough = 0.42;
-    }
+    // seam gap: dark, deep, rough
+    lum *= 1 - seam * 0.55;
+    hgt -= seam * 0.36;
+    rg += seam * 0.2;
     // bright scratches (bare metal showing through)
     const sc = worley(u, v, 11, seed + 7);
-    if (sc < 0.005) {
-      const k = 1 - sc / 0.005;
-      lum += k * 0.16;
-      hgt -= k * 0.03;
-      metal = lerp(metal, 0.6, k);
+    if (sc < 0.004) {
+      const k = 1 - sc / 0.004;
+      lum += k * 0.12;
+      hgt -= k * 0.02;
+      metal = lerp(metal, 0.55, k);
     }
     t.setColor(i, lum * 0.99, lum, lum * 1.035);
-    t.rough[i] = clamp01(rough);
+    t.rough[i] = clamp01(rg);
     t.metal[i] = clamp01(metal);
     t.height[i] = hgt;
   });
-  return finish(t.bake({ normalStrength: 2.4 }));
+  return finish(t.bake({ normalStrength: 2.2 }));
 }
 
 // ---------------------------------------------------------------------------

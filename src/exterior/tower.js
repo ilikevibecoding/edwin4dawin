@@ -1,18 +1,22 @@
-// Command tower (workstream EXT-A): neck storeys with recessed window bands and pilasters, gusset
-// buttresses under the bridge module, the bridge module itself (forward face split into plated and
-// recessed dark bands, viewport cut-outs and viewGlass planes exactly where spec.TOWER puts them),
-// brow / sill, side window bands, roof plating, stepped underside, aft docking port, sensor blisters,
-// the two shield generator domes with plinths / rings / ribs and the lattice comms mast.
+// Command tower (workstream EXT-A, massing revised by EXT-C): neck storeys with recessed window
+// bands and pilasters, a two-step plinth and solid sloped fairings carrying the neck out to the
+// bridge module, the bridge module itself (forward face split into plated and recessed dark bands,
+// viewport cut-outs and viewGlass planes exactly where spec.TOWER puts them), layered frame steps
+// and brow around the viewport strip, side window bands, roof plating, stepped underside, aft docking
+// port, sensor blisters, the two shield generator domes with plinths / rings / ribs and the comms mast.
 import * as THREE from "three";
 import { panelWithHoles } from "../kit.js";
 import { PALETTE } from "../materials.js";
 import { TOWER } from "../spec.js";
-import { plateField, shade, mixC, plateTone, fieldNoise, TEXEL, EMIT } from "./hull_util.js";
+import { plateField, shade, mixC, C, plateTone, fieldNoise, TEXEL, EMIT } from "./hull_util.js";
 import { hexa } from "./superstructure.js";
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const Q = (from, to) => new THREE.Quaternion().setFromUnitVectors(from, to);
 const Z = V(0, 0, 1);
+// gradient helpers must never feed pow() a negative base: one NaN vertex colour in an additive mesh
+// gets into the scene env-map capture and PMREM spreads it over every reflective surface
+const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 
 export function buildTower(ctx) {
   const { chunks, rand } = ctx;
@@ -28,10 +32,18 @@ export function buildTower(ctx) {
   const hl = (y) => (n.z1 - n.z0) / 2 + n.draft * (n.yTop - y) * 0.5;
   const at = (lvl, key) => chunks.batch(zc, lvl, key);
 
+  // stepped plinth under the head: the neck storeys stop at PLINTH[0].y0 and two wider slabs carry
+  // the load up to the module underside (neck hw 60 → 80 → 97 → head 105)
+  const PLINTH = [
+    { y0: 202, y1: 216, hw: 80, z0: 236, z1: 384 },
+    { y0: 216, y1: b.y0, hw: b.hw - 8, z0: b.z0 + 12, z1: b.z1 - 6 },
+  ];
+  const yNeckTop = PLINTH[0].y0;
+
   // ------------------------------------------------------------------ neck: storeys + pilasters
   {
-    const storeys = 8;
-    const sh = (n.yTop - n.yBase) / storeys;
+    const storeys = 7;
+    const sh = (yNeckTop - n.yBase) / storeys;
     const bandH = 2.6;
     const rec = 0.9;
     const pil = 1.3; // half-width of pilasters
@@ -77,7 +89,7 @@ export function buildTower(ctx) {
       // intermediate pilasters (inclined hexahedra), full height
       for (const fr of pilFr) {
         const y0 = n.yBase - 0.5;
-        const y1 = n.yTop + 0.5;
+        const y1 = yNeckTop + 0.5;
         const rect = (y) => {
           const c = f.P(y, fr);
           const t = f.nrm.z !== 0 ? V(1, 0, 0) : V(0, 0, 1); // along the face
@@ -97,14 +109,14 @@ export function buildTower(ctx) {
           const h = pil * 1.3;
           return [V(cx - h, y, czz - h), V(cx + h, y, czz - h), V(cx + h, y, czz + h), V(cx - h, y, czz + h)];
         };
-        hexa(at("far", "hullPlate1"), rect(n.yBase - 0.5), rect(n.yTop + 0.5), mixC(M, D, 0.25), TEXEL, { skipBottom: true });
+        hexa(at("far", "hullPlate1"), rect(n.yBase - 0.5), rect(yNeckTop + 0.5), mixC(M, D, 0.25), TEXEL, { skipBottom: true });
       }
     }
     // base skirt and top collar
     const far = at("far", "hullPlate1");
     for (const [yc, hgt, proud, tint] of [
       [n.yBase + 1.25, 2.5, 2.0, D],
-      [n.yTop - 1.5, 3.0, 1.6, mixC(M, D, 0.5)],
+      [yNeckTop - 1.5, 3.0, 1.6, mixC(M, D, 0.5)],
     ]) {
       const w = hw(yc) + proud;
       const l = hl(yc) + proud;
@@ -113,34 +125,59 @@ export function buildTower(ctx) {
       far.box(0, yc, zc + l - proud / 2, w * 2, hgt, proud, tint, TEXEL, { skip: new Set(["-z"]) });
       far.box(0, yc, zc - l + proud / 2, w * 2, hgt, proud, tint, TEXEL, { skip: new Set(["+z"]) });
     }
-    // gusset buttresses from the neck faces up to the module underside
-    const gus = at("far", "hullPlate1");
-    const yg0 = 176;
-    const yg1 = b.y0 - 0.2;
-    const gusset = (pA, pB, pC, thick, axis) => {
-      // triangle A (low, on the neck), B (outer, under the module), C (high, on the neck) extruded ±thick/2 along axis
-      const off = axis.clone().multiplyScalar(thick / 2);
-      const A0 = pA.clone().sub(off);
-      const B0 = pB.clone().sub(off);
-      const C0 = pC.clone().sub(off);
-      const A1 = pA.clone().add(off);
-      const B1 = pB.clone().add(off);
-      const C1 = pC.clone().add(off);
-      const tint = mixC(M, D, 0.35);
-      gus.tri(A0, B0, C0, tint, TEXEL, axis.clone().negate());
-      gus.tri(A1, B1, C1, tint, TEXEL, axis);
-      const mid = pB.clone().sub(pA);
-      const out = new THREE.Vector3().crossVectors(mid, axis);
-      if (out.dot(pB.clone().sub(pC)) < 0) out.negate();
-      gus.quad(A0, B0, B1, A1, tint, TEXEL, out);
-    };
+    // plinth steps: plated slabs with a dark recessed reveal at each step's foot and a window band
+    // on the lower step's flanks
+    PLINTH.forEach((p, i) => {
+      const pf = at("far", "hullPlate1");
+      const zcP = (p.z0 + p.z1) / 2;
+      const tint = tintFor(i === 0 ? mixC(L, M, 0.5) : mixC(L, M, 0.25), 0, p.y0);
+      pf.box(0, (p.y0 + p.y1) / 2, zcP, p.hw * 2, p.y1 - p.y0, p.z1 - p.z0, tint, TEXEL, { skip: new Set(i === 1 ? ["+y"] : []) });
+      // reveal: a dark 1.2 m band set 0.6 m in at the foot (reads as a shadow line between the steps)
+      const dk = at("far", "hullGreeble");
+      const yr0 = p.y0 + 0.05;
+      const yr1 = p.y0 + 1.4;
+      for (const s of [-1, 1]) {
+        dk.quad(V(s * (p.hw + 0.05), yr0, p.z0), V(s * (p.hw + 0.05), yr0, p.z1), V(s * (p.hw + 0.05), yr1, p.z1), V(s * (p.hw + 0.05), yr1, p.z0), T, TEXEL * 2, V(s, 0, 0));
+        dk.quad(V(-p.hw, yr0, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), V(p.hw, yr0, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), V(p.hw, yr1, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), V(-p.hw, yr1, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), T, TEXEL * 2, V(0, 0, s));
+      }
+      if (i === 0) {
+        const yw = (p.y0 + p.y1) / 2 + 1.5;
+        for (const s of [-1, 1]) {
+          const g = new THREE.PlaneGeometry(p.z1 - p.z0 - 24, 2.2);
+          at("far", "cityLights").addGeometry(g, { pos: [s * (p.hw + 0.12), yw, zcP], quat: Q(Z, V(s, 0, 0)), uv: "scale", uvScale: [(p.z1 - p.z0 - 24) / 40, 0.34] });
+          const g2 = new THREE.PlaneGeometry(p.hw * 2 - 30, 2.2);
+          at("far", "cityLights").addGeometry(g2, { pos: [0, yw, zcP + s * ((p.z1 - p.z0) / 2 + 0.12)], quat: Q(Z, V(0, 0, s)), uv: "scale", uvScale: [(p.hw * 2 - 30) / 40, 0.34] });
+        }
+      }
+    });
+    // solid sloped fairings from the neck faces up to the head underside (they pass outside the
+    // plinth steps): a hexahedron whose outer face slopes from the neck at y 160 to the module edge
+    const fair = at("far", "hullPlate1");
+    const fTint = mixC(L, M, 0.6);
+    const yf0 = 160;
+    const yf1 = b.y0 - 0.1;
     for (const sx of [1, -1]) {
-      for (const zg of [272, 348]) {
-        gusset(V(sx * (hw(yg0) - 0.3), yg0, zg), V(sx * (b.hw - 2), yg1, zg), V(sx * (hw(yg1) - 0.3), yg1, zg), 10, Z);
+      for (const zg of [271, 349]) {
+        const th = 15;
+        const xi0 = sx * (hw(yf0) - 0.3);
+        const xi1 = sx * (hw(yf1) - 0.3);
+        const xo = sx * (b.hw - 2.5);
+        const bot = [V(xi0, yf0, zg - th), V(xi0 + sx * 0.6, yf0, zg - th), V(xi0 + sx * 0.6, yf0, zg + th), V(xi0, yf0, zg + th)];
+        const top = [V(xi1, yf1, zg - th), V(xo, yf1, zg - th), V(xo, yf1, zg + th), V(xi1, yf1, zg + th)];
+        hexa(fair, bot, top, fTint, TEXEL, { skipBottom: true, skipTop: true, skipSides: new Set([3]) });
       }
     }
-    gusset(V(0, 190, zc + hl(190) - 0.3), V(0, yg1, b.z1 - 3), V(0, yg1, zc + hl(yg1) - 0.3), 16, V(1, 0, 0));
-    gusset(V(0, 190, zc - hl(190) + 0.3), V(0, yg1, b.z0 + 9), V(0, yg1, zc - hl(yg1) + 0.3), 16, V(1, 0, 0));
+    // fore and aft fairings along the centreline (wider, from y 185)
+    for (const sz of [1, -1]) {
+      const th = 20;
+      const yA = 185;
+      const zi0 = zc + sz * (hl(yA) - 0.3);
+      const zi1 = zc + sz * (hl(yf1) - 0.3);
+      const zo = sz > 0 ? b.z1 - 3 : b.z0 + 6;
+      const bot = [V(-th, yA, zi0), V(th, yA, zi0), V(th, yA, zi0 + sz * 0.6), V(-th, yA, zi0 + sz * 0.6)];
+      const top = [V(-th, yf1, zi1), V(th, yf1, zi1), V(th, yf1, zo), V(-th, yf1, zo)];
+      hexa(fair, bot, top, fTint, TEXEL, { skipBottom: true, skipTop: true, skipSides: new Set([0]) });
+    }
   }
 
   // ------------------------------------------------------------------ bridge module
@@ -190,11 +227,62 @@ export function buildTower(ctx) {
     // viewport glass 1 m inside the face (shared with the bridge / observation interiors)
     at("far", "viewGlass").addGeometry(new THREE.PlaneGeometry(vp.hw * 2 + 1, vp.y1 - vp.y0 + 0.4), { pos: [0, (vp.y0 + vp.y1) / 2, b.z0 + FACE_T / 2], uv: "keep" });
     for (const s of [-1, 1]) at("far", "viewGlass").addGeometry(new THREE.PlaneGeometry(gv.x1 - gv.x0, gv.y1 - gv.y0 + 0.2), { pos: [(s * (gv.x0 + gv.x1)) / 2, (gv.y0 + gv.y1) / 2, b.z0 + FACE_T / 2], uv: "keep" });
-    // proud plates on the light bands of the face (mid), brow and sill (far)
+    // lit-interior panes between the glass (z0 + 0.5) and the interior walls (z0 + 1): one additive,
+    // front-facing plane per window, cool white brighter at the ceiling line, each window a little
+    // different. Additive, so the rooms' own consoles and lights still show through the glow; front
+    // side only, so from inside the bridge / gallery they are culled and the view out stays open.
+    {
+      const glowZ = b.z0 + 0.75;
+      const fwd = V(0, 0, -1);
+      const pane = at("far", "exta_pane");
+      const litPane = (x0, x1, y0, y1, tone, top, bottom) => {
+        const c = C(tone);
+        pane.grid(V(x1, y0, glowZ), V(x0, y0, glowZ), V(x0, y1, glowZ), V(x1, y1, glowZ), 1, 2, (p) => c.clone().multiplyScalar(bottom + (top - bottom) * Math.pow(clamp01((p.y - y0) / (y1 - y0)), 1.6)), 1, fwd);
+      };
+      for (let i = 0; i < vp.count; i++) {
+        const x = -vp.hw + vw / 2 + i * (vw + vp.pillar);
+        const k = 0.85 + 0.3 * rand();
+        litPane(x - vw / 2 - 0.15, x + vw / 2 + 0.15, vp.y0 - 0.15, vp.y1 + 0.15, 0xdce8ff, 1.15 * k, 0.5 * k);
+      }
+      for (const s of [-1, 1]) {
+        for (let i = 0; i < gv.count; i++) {
+          const x = s * (gv.x0 + gw * (i + 0.5));
+          const k = 0.8 + 0.35 * rand();
+          litPane(x - gw / 2 + 0.3, x + gw / 2 - 0.3, gv.y0 - 0.1, gv.y1 + 0.1, 0xffe6c4, 0.85 * k, 0.4 * k);
+        }
+      }
+    }
+    // corner pilasters, layered plate steps framing the viewport strip, proud plates on the outer
+    // light bands, brow (to the pilasters) and sill
     {
       const mid = at("mid", "hullPlate1");
-      const cols = 5;
-      for (const [y0, y1] of [[bandA[1] + 0.6, b.y1 - 0.8], [bandB[1] + 0.6, bandA[0] - 0.6]]) {
+      const farP = at("far", "hullPlate1");
+      const pilW = 3.2;
+      const xPil = b.hw - pilW / 2 - 0.4;
+      for (const s of [-1, 1]) farP.box(s * xPil, (b.y0 + b.y1) / 2, b.z0 - 0.6, pilW, b.y1 - b.y0, 1.2, mixC(M, D, 0.25), TEXEL, { skip: new Set(["+z"]) });
+      // three frame layers around the viewport band, each wider and shallower than the last, built
+      // as top / bottom bars and side blocks so the band itself and the gallery band stay open
+      const frame = [
+        { dy: 3.0, hx: vp.hw + 12, proud: 0.75, tint: mixC(L, M, 0.2) },
+        { dy: 6.5, hx: vp.hw + 26, proud: 0.45, tint: mixC(L, M, 0.4) },
+        { dy: 9.0, hx: xPil - pilW / 2 - 0.8, proud: 0.25, tint: mixC(L, M, 0.55) },
+      ];
+      let prev = { dy: 0, hx: vp.hw + 7 };
+      for (const f of frame) {
+        const yLo = bandA[0] - f.dy;
+        const yHi = bandA[1] + f.dy;
+        const yLoP = bandA[0] - prev.dy;
+        const yHiP = bandA[1] + prev.dy;
+        const zc2 = b.z0 - f.proud / 2;
+        mid.box(0, (yHiP + yHi) / 2, zc2, f.hx * 2, yHi - yHiP, f.proud, tintFor(f.tint, 0, yHi), TEXEL, { skip: new Set(["+z"]) });
+        mid.box(0, (yLo + yLoP) / 2, zc2, f.hx * 2, yLoP - yLo, f.proud, tintFor(f.tint, 0, yLo), TEXEL, { skip: new Set(["+z"]) });
+        for (const s of [-1, 1]) mid.box(s * ((prev.hx + f.hx) / 2), (yLo + yHi) / 2, zc2, f.hx - prev.hx, yHi - yLo, f.proud, tintFor(f.tint, s * f.hx, 0), TEXEL, { skip: new Set(["+z"]) });
+        prev = f;
+      }
+      // proud plates on the light bands above the frame and above the gallery band
+      for (const [y0, y1] of [[bandA[1] + frame[2].dy + 0.6, b.y1 - 0.8], [bandB[1] + 0.6, bandA[0] - frame[2].dy - 0.6]]) {
+        if (y1 - y0 < 1.6) continue;
+        const cols = 5;
         for (let i = 0; i < cols; i++) {
           const x0 = -b.hw + 1.2 + (i * (w - 2.4)) / cols + 0.7;
           const x1 = -b.hw + 1.2 + ((i + 1) * (w - 2.4)) / cols - 0.7;
@@ -202,14 +290,44 @@ export function buildTower(ctx) {
         }
       }
       const far = at("far", "hullTrim");
-      far.box(0, bandA[1] + 1.5, b.z0 - 1.8, vp.hw * 2 + 14, 3.0, 3.6, D, TEXEL * 3, { skip: new Set(["+z"]) });
-      far.box(0, bandA[0] - 0.6, b.z0 - 0.75, vp.hw * 2 + 14, 1.2, 1.5, D, TEXEL * 3, { skip: new Set(["+z"]) });
-      // floodlights under the brow and on the sill wash the viewport band when the face is in shadow
+      // brow runs pilaster to pilaster; the sill stays on the frame
+      far.box(0, bandA[1] + 1.5, b.z0 - 1.8, (xPil - pilW / 2) * 2 - 0.4, 3.0, 3.6, D, TEXEL * 3, { skip: new Set(["+z"]) });
+      far.box(0, bandA[0] - 0.6, b.z0 - 0.9, frame[0].hx * 2 + 2, 1.2, 1.8, D, TEXEL * 3, { skip: new Set(["+z"]) });
+      // four recessed floods per row — housings let into the brow underside / sill top with a cool
+      // lens — each throwing an additive wash down (up) the dark band so the strip reads lit when the
+      // face is in shadow, without the LED-strip rows of point lights
       const em = at("far", "exta_emit");
-      const dim = EMIT.white.clone().multiplyScalar(0.45);
-      for (let x = -vp.hw - 4; x <= vp.hw + 4; x += 5.5) {
-        em.box(x, bandA[1] - 0.25, b.z0 - 2.9, 0.7, 0.5, 0.9, dim, 1, { skip: new Set(["+y"]) });
-        em.box(x, bandA[0] + 0.25, b.z0 - 1.2, 0.7, 0.5, 0.7, dim, 1, { skip: new Set(["-y"]) });
+      const rec = at("mid", "hullGreeble");
+      const wash = at("far", "exta_pool");
+      const lens = C(0xdce8ff).multiplyScalar(2.2);
+      const washC = C(0xdce8ff).multiplyScalar(0.09);
+      const zWash = b.z0 - 0.12;
+      const fan = (x, yFrom, yTo, w0, w1) => {
+        // soft pool on the band face from the flood (width w0) to yTo (width w1): the colour falls off
+        // both along the throw and towards the sides, and is black on every edge, so it reads as
+        // light on the plating rather than as a shape
+        const span = yTo - yFrom;
+        const wAt = (y) => w0 + (w1 - w0) * Math.abs((y - yFrom) / span);
+        const col = (p) => {
+          const t = clamp01(Math.abs((p.y - yFrom) / span));
+          const along = t < 0.1 ? t / 0.1 : Math.pow(clamp01(1 - (t - 0.1) / 0.9), 1.8);
+          const side = clamp01(1 - Math.pow((2 * Math.abs(p.x - x)) / wAt(p.y), 2));
+          return washC.clone().multiplyScalar(along * side);
+        };
+        const ya = yFrom;
+        const yb = yTo;
+        wash.grid(V(x - wAt(ya) / 2, ya, zWash), V(x + wAt(ya) / 2, ya, zWash), V(x + wAt(yb) / 2, yb, zWash), V(x - wAt(yb) / 2, yb, zWash), 6, 5, col, 1, V(0, 0, -1));
+      };
+      for (const fx of [-0.78, -0.26, 0.26, 0.78]) {
+        const x = fx * vp.hw;
+        // brow row: housing hangs 0.5 m below the brow underside, lens on its lower face
+        rec.box(x, bandA[1] - 0.25, b.z0 - 2.3, 2.8, 0.5, 1.9, T, TEXEL * 2, { skip: new Set(["+y"]) });
+        em.box(x, bandA[1] - 0.5, b.z0 - 2.3, 1.7, 0.16, 0.9, lens, 1, { skip: new Set(["+y"]) });
+        fan(x, bandA[1] - 0.5, bandA[0] + 1.6, 2.4, 11);
+        // sill row: housing stands on the sill, lens on its upper face
+        rec.box(x, bandA[0] + 0.25, b.z0 - 1.05, 2.8, 0.5, 1.5, T, TEXEL * 2, { skip: new Set(["-y"]) });
+        em.box(x, bandA[0] + 0.5, b.z0 - 1.05, 1.7, 0.16, 0.8, lens, 1, { skip: new Set(["-y"]) });
+        fan(x, bandA[0] + 0.5, bandA[1] - 1.6, 2.4, 11);
       }
       // gallery deck: a light at each end of the observation windows
       for (const s of [-1, 1]) em.box(s * (gv.x1 + 3), (gv.y0 + gv.y1) / 2, b.z0 - 0.4, 0.8, 0.8, 0.8, EMIT.amber, 1, { skip: new Set(["+z"]) });
@@ -285,11 +403,9 @@ export function buildTower(ctx) {
       const nb = at("near", "hullGreeble");
       for (let z = b.z0 + 14; z < m.z - 16; z += 9) nb.box(0, b.y1 + 4.5, z, 6, 1.0, 4, T, TEXEL * 3, { skip: new Set(["-y"]) });
     }
-    // underside steps + visible strips of the module bottom
+    // visible strips of the module bottom around the upper plinth step
     {
       const far = at("far", "hullPlate1");
-      far.box(0, b.y0 - 3, (b.z0 + 12 + b.z1 - 6) / 2, (b.hw - 8) * 2, 6, b.z1 - 6 - (b.z0 + 12), M, TEXEL, { skip: new Set(["+y"]) });
-      far.box(0, b.y0 - 8.25, (b.z0 + 25 + b.z1 - 13) / 2, (b.hw - 24) * 2, 4.5, b.z1 - 13 - (b.z0 + 25), mixC(M, D, 0.4), TEXEL, { skip: new Set(["+y"]) });
       const down = V(0, -1, 0);
       far.quad(V(-b.hw, b.y0, b.z0 + FACE_T), V(b.hw, b.y0, b.z0 + FACE_T), V(b.hw, b.y0, b.z0 + 12), V(-b.hw, b.y0, b.z0 + 12), M, TEXEL, down);
       far.quad(V(-b.hw, b.y0, b.z1 - 6), V(b.hw, b.y0, b.z1 - 6), V(b.hw, b.y0, b.z1), V(-b.hw, b.y0, b.z1), M, TEXEL, down);

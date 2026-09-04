@@ -31,11 +31,14 @@ const barrel = (rTip, rBase, len, x, y, z, color, seg = 12) => ({ geo: new THREE
 // ---------------------------------------------------------------------------
 // Geometry factories (metres; local origin on the mount point, barrels along -z)
 // ---------------------------------------------------------------------------
+// Heavy turbolaser battery: r 18 base ring stack (dark rings so the hull-tone housing sits in a shadow
+// gap), 22 m wide housing with a glacis, twin 30 m barrels. Everything in the plate tones; black only
+// for the ring gap, the muzzle throats and the rangefinder slit.
 function heavyBase() {
-  const parts = [cylY(11.2, 1.2, 0, 0.6, 0, TINT.dark, 28), cylY(9.8, 1.1, 0, 1.75, 0, TINT.mid, 28), cylY(8.6, 0.8, 0, 2.7, 0, TINT.black, 28)];
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    parts.push(box(2.2, 0.5, 1.6, Math.cos(a) * 10.1, 1.45, Math.sin(a) * 10.1, TINT.light, [0, -a, 0]));
+  const parts = [cylY(18, 1.4, 0, 0.7, 0, TINT.dark, 32), cylY(16.2, 1.2, 0, 2.0, 0, TINT.mid, 32), cylY(14.4, 0.9, 0, 3.05, 0, TINT.black, 32)];
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 + Math.PI / 10;
+    parts.push(box(3.0, 0.7, 2.2, Math.cos(a) * 16.4, 1.75, Math.sin(a) * 16.4, TINT.light, [0, -a, 0]));
   }
   return bash(parts, { texel: 1 / 10 });
 }
@@ -43,112 +46,141 @@ function heavyHousing() {
   // side profile (z, y) extruded across x; sloped glacis toward the barrels (-z)
   const body = prism(
     [
-      [6.8, 0],
-      [-7.4, 0],
-      [-6.0, 3.4],
-      [-2.5, 5.0],
-      [5.6, 5.0],
-      [6.8, 3.6],
+      [10.0, 0],
+      [-11.0, 0],
+      [-9.0, 5.0],
+      [-4.0, 7.5],
+      [8.4, 7.5],
+      [10.0, 5.4],
     ],
-    15.0,
+    22.0,
   ).rotateY(-Math.PI / 2);
   return bash(
     [
       { geo: body, color: TINT.light },
-      box(15.6, 1.0, 3.0, 0, 2.6, 6.4, TINT.dark),
-      box(3.0, 3.4, 4.6, -8.8, 2.6, -2.8, TINT.mid),
-      box(3.0, 3.4, 4.6, 8.8, 2.6, -2.8, TINT.mid),
-      box(2.2, 0.6, 2.2, -8.8, 4.6, -2.8, TINT.black),
-      box(2.2, 0.6, 2.2, 8.8, 4.6, -2.8, TINT.black),
-      box(3.4, 0.5, 3.4, -4.2, 5.2, 2.2, TINT.dark),
-      box(3.4, 0.5, 3.4, 4.2, 5.2, 2.2, TINT.dark),
-      box(2.0, 1.6, 2.6, 0, 5.8, 3.6, TINT.dark),
-      { geo: new THREE.CylinderGeometry(0.45, 0.45, 3.2, 10, 1, false).rotateX(Math.PI / 2), pos: [0, 6.5, 3.4], color: TINT.black },
-      box(1.2, 0.7, 6.0, 0, 5.3, -1.0, TINT.black),
-      box(0.8, 1.2, 0.8, -6.5, 5.6, 4.8, TINT.black),
-      box(0.8, 1.2, 0.8, 6.5, 5.6, 4.8, TINT.black),
+      box(22.8, 1.4, 4.4, 0, 3.8, 9.4, TINT.mid),
+      box(4.2, 5.0, 7.0, -13.0, 3.6, -4.0, TINT.light),
+      box(4.2, 5.0, 7.0, 13.0, 3.6, -4.0, TINT.light),
+      box(3.2, 0.8, 3.2, -13.0, 6.5, -4.0, TINT.dark),
+      box(3.2, 0.8, 3.2, 13.0, 6.5, -4.0, TINT.dark),
+      box(5.0, 0.7, 5.0, -6.0, 7.8, 3.2, TINT.mid),
+      box(5.0, 0.7, 5.0, 6.0, 7.8, 3.2, TINT.mid),
+      box(3.0, 2.4, 3.8, 0, 8.6, 5.2, TINT.mid),
+      { geo: new THREE.CylinderGeometry(0.65, 0.65, 4.6, 10, 1, false).rotateX(Math.PI / 2), pos: [0, 9.6, 5.0], color: TINT.dark },
+      box(1.8, 1.0, 9.0, 0, 7.9, -1.5, TINT.dark),
+      box(6.0, 0.4, 0.9, 0, 6.6, -9.3, TINT.black),
+      box(1.2, 1.8, 1.2, -9.5, 8.3, 7.0, TINT.dark),
+      box(1.2, 1.8, 1.2, 9.5, 8.3, 7.0, TINT.dark),
     ],
     { texel: 1 / 10 },
   );
 }
 function heavyBarrels() {
-  const parts = [box(9.8, 2.4, 2.6, 0, 0, 1.8, TINT.dark)];
-  for (const x of [-3.2, 3.2]) {
-    parts.push(barrel(0.72, 1.25, 22, x, 0, -9, TINT.light));
-    parts.push(barrel(1.4, 1.4, 1.8, x, 0, -19.2, TINT.dark));
-    parts.push(barrel(1.15, 1.15, 1.2, x, 0, -13.6, TINT.dark));
-    parts.push(barrel(1.5, 1.5, 2.6, x, 0, -1.2, TINT.mid));
-    parts.push(box(2.8, 2.8, 4.4, x, 0, 1.0, TINT.mid));
-    parts.push(barrel(0.38, 0.38, 7.5, x, 1.7, -5.2, TINT.black, 8));
+  const parts = [box(14.0, 3.4, 3.6, 0, 0, 2.4, TINT.mid)];
+  for (const x of [-4.6, 4.6]) {
+    parts.push(barrel(1.05, 1.8, 30, x, 0, -13, TINT.light));
+    parts.push(barrel(2.0, 2.0, 2.6, x, 0, -26.8, TINT.mid));
+    parts.push(barrel(1.25, 1.25, 0.6, x, 0, -28.2, TINT.black));
+    parts.push(barrel(1.65, 1.65, 1.6, x, 0, -18.6, TINT.mid));
+    parts.push(barrel(2.2, 2.2, 4.0, x, 0, -1.6, TINT.mid));
+    parts.push(box(4.0, 4.0, 6.4, x, 0, 1.6, TINT.light));
+    parts.push(barrel(0.5, 0.5, 10.5, x, 2.4, -7.5, TINT.dark, 8));
   }
   return bash(parts, { texel: 1 / 10 });
 }
 function heavyProxy() {
-  return bash([box(16, 5.2, 14.4, 0, 2.6, 0, TINT.light), box(9, 2.8, 20, 0, 3.2, -7, TINT.mid)], { texel: 1 / 10 });
+  return bash([box(22, 7.5, 21, 0, 3.75, -0.5, TINT.light), box(13, 4.0, 30, 0, 4.4, -13, TINT.light)], { texel: 1 / 10 });
 }
 
 function ionBase() {
-  return bash([cylY(7.6, 1.0, 0, 0.5, 0, TINT.dark, 24), cylY(6.5, 0.9, 0, 1.45, 0, TINT.mid, 24), cylY(5.7, 0.7, 0, 2.25, 0, TINT.black, 24), box(1.6, 0.5, 1.2, 0, 1.15, 7.0, TINT.light), box(1.6, 0.5, 1.2, 0, 1.15, -7.0, TINT.light)], { texel: 1 / 10 });
+  return bash([cylY(9.2, 1.2, 0, 0.6, 0, TINT.dark, 28), cylY(7.8, 1.0, 0, 1.7, 0, TINT.mid, 28), cylY(6.8, 0.8, 0, 2.6, 0, TINT.black, 28), box(2.0, 0.6, 1.4, 0, 1.4, 8.5, TINT.light), box(2.0, 0.6, 1.4, 0, 1.4, -8.5, TINT.light)], { texel: 1 / 10 });
 }
 function ionHousing() {
   return bash(
     [
-      cylY(5.4, 3.2, 0, 1.6, 0, TINT.light, 24),
-      { geo: new THREE.SphereGeometry(5.0, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), pos: [0, 3.2, 0], color: TINT.light },
-      box(2.6, 2.8, 4.0, -5.6, 2.2, -1.5, TINT.mid),
-      box(2.6, 2.8, 4.0, 5.6, 2.2, -1.5, TINT.mid),
-      box(4.6, 1.4, 2.6, 0, 2.8, 5.6, TINT.dark),
-      box(1.4, 1.2, 1.4, 0, 8.4, 0.5, TINT.dark),
-      { geo: new THREE.CylinderGeometry(0.3, 0.3, 2.4, 8, 1, false).rotateX(Math.PI / 2), pos: [0, 9.0, 0.5], color: TINT.black },
-      box(0.6, 0.6, 5.0, 0, 6.5, -2.0, TINT.black),
+      cylY(6.5, 3.8, 0, 1.9, 0, TINT.light, 28),
+      { geo: new THREE.SphereGeometry(6.0, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), pos: [0, 3.8, 0], color: TINT.light },
+      box(3.2, 3.4, 4.8, -6.8, 2.6, -1.8, TINT.light),
+      box(3.2, 3.4, 4.8, 6.8, 2.6, -1.8, TINT.light),
+      box(5.5, 1.7, 3.2, 0, 3.4, 6.8, TINT.mid),
+      box(1.7, 1.4, 1.7, 0, 10.0, 0.6, TINT.mid),
+      { geo: new THREE.CylinderGeometry(0.36, 0.36, 2.9, 8, 1, false).rotateX(Math.PI / 2), pos: [0, 10.8, 0.6], color: TINT.dark },
+      box(0.7, 0.7, 6.0, 0, 7.8, -2.4, TINT.dark),
     ],
     { texel: 1 / 10 },
   );
 }
 function ionBarrel() {
-  return bash([barrel(0.85, 1.4, 18, 0, 0, -7, TINT.light), barrel(1.75, 1.75, 2.0, 0, 0, -15.2, TINT.dark), barrel(2.1, 2.1, 0.8, 0, 0, -16.5, TINT.black), barrel(1.3, 1.3, 1.4, 0, 0, -10.5, TINT.dark), box(3.2, 3.2, 4.4, 0, 0, 0.8, TINT.mid), barrel(0.35, 0.35, 6, 0.9, 1.6, -4.5, TINT.black, 8), barrel(0.35, 0.35, 6, -0.9, 1.6, -4.5, TINT.black, 8)], { texel: 1 / 10 });
+  return bash([barrel(1.0, 1.7, 24, 0, 0, -9.5, TINT.light), barrel(2.1, 2.1, 2.4, 0, 0, -20.4, TINT.mid), barrel(1.3, 1.3, 0.6, 0, 0, -21.8, TINT.black), barrel(1.55, 1.55, 1.7, 0, 0, -14.0, TINT.mid), box(3.8, 3.8, 5.3, 0, 0, 1.0, TINT.light), barrel(0.42, 0.42, 7.2, 1.1, 1.9, -5.4, TINT.dark, 8), barrel(0.42, 0.42, 7.2, -1.1, 1.9, -5.4, TINT.dark, 8)], { texel: 1 / 10 });
 }
 function ionProxy() {
-  return bash([box(11, 6.5, 11, 0, 3.2, 0, TINT.light), box(3.2, 3.2, 18, 0, 2.8, -6.5, TINT.mid)], { texel: 1 / 10 });
+  return bash([box(13.2, 7.8, 13.2, 0, 3.9, 0, TINT.light), box(3.8, 3.8, 24, 0, 3.4, -8.5, TINT.light)], { texel: 1 / 10 });
 }
 
-/** Dish head (yaw-animated): yoke, double-sided spherical dish facing -z tilted up 35°, feed horn. size = radius */
+/**
+ * Dish head (yaw-animated): a wide spherical dish (rim ≈ 0.78·size) on a forked yoke, facing -z tilted
+ * up 35°, with a feed horn on a tripod, four back-struts to a counterweight box and a lattice boom —
+ * the silhouette reads as a dish from any angle. size = sphere radius
+ */
 function dishHead(size) {
-  const tilt = -(Math.PI / 2 - THREE.MathUtils.degToRad(35));
-  const cap = new THREE.SphereGeometry(size, 24, 8, 0, Math.PI * 2, 0, 0.62);
-  cap.translate(0, -size * Math.cos(0.62), 0); // rim on the equator plane of the pivot
+  const el = THREE.MathUtils.degToRad(35);
+  const tilt = -(Math.PI / 2 - el);
+  const half = 0.9; // cap half-angle
+  const cap = new THREE.SphereGeometry(size, 28, 10, 0, Math.PI * 2, 0, half);
+  cap.translate(0, -size * Math.cos(half), 0); // rim on the equator plane of the pivot
   // the cap's pole points away from the target so the concave side faces -z
   cap.rotateX(tilt + Math.PI);
   const back = cap.clone();
   const front = insideOut(cap.clone());
-  const axis = new THREE.Vector3(0, Math.sin(THREE.MathUtils.degToRad(35)), -Math.cos(THREE.MathUtils.degToRad(35)));
-  const focus = axis.clone().multiplyScalar(size * 0.55);
+  const axis = new THREE.Vector3(0, Math.sin(el), -Math.cos(el));
+  const focus = axis.clone().multiplyScalar(size * 0.62);
+  const rear = axis.clone().multiplyScalar(-size * 0.55);
+  const yokeY = size * 0.95;
   const parts = [
-    box(1.6, 2.6, 1.6, 0, 1.3, 0, TINT.dark),
-    box(4.0, 0.8, 0.8, 0, 2.6, 0, TINT.mid),
-    { geo: back, pos: [0, 2.6, 0], color: TINT.light },
-    { geo: front, pos: [0, 2.6, 0], color: TINT.mid },
+    // forked yoke: two arms from the pivot up to the dish trunnions
+    box(1.8, yokeY, 2.2, -size * 0.55, yokeY / 2, 0, TINT.light),
+    box(1.8, yokeY, 2.2, size * 0.55, yokeY / 2, 0, TINT.light),
+    box(size * 1.3, 1.4, 1.4, 0, yokeY - 0.2, 0, TINT.mid),
+    { geo: back, pos: [0, yokeY, 0], color: TINT.light },
+    { geo: front, pos: [0, yokeY, 0], color: TINT.mid },
     // feed horn at the focus, apex toward the dish
-    { geo: new THREE.ConeGeometry(0.45, 1.2, 8, 1, false).rotateX(tilt + Math.PI), pos: [focus.x, 2.6 + focus.y, focus.z], color: TINT.black },
+    { geo: new THREE.ConeGeometry(size * 0.09, size * 0.24, 8, 1, false).rotateX(tilt + Math.PI), pos: [focus.x, yokeY + focus.y, focus.z], color: TINT.dark },
+    // counterweight / receiver box behind the dish, on a short boom
+    box(size * 0.36, size * 0.3, size * 0.4, rear.x, yokeY + rear.y, rear.z, TINT.light),
+    { geo: new THREE.CylinderGeometry(size * 0.06, size * 0.06, size * 0.5, 8, 1, false).rotateX(Math.PI / 2 - el), pos: [rear.x * 0.5, yokeY + rear.y * 0.5, rear.z * 0.5], color: TINT.mid },
   ];
-  const rimR = size * Math.sin(0.62);
+  const rimR = size * Math.sin(half);
+  const strut = (from, to, r, color) => {
+    const mid = from.clone().add(to).multiplyScalar(0.5);
+    const len = from.distanceTo(to);
+    const dir = to.clone().sub(from).normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    const e = new THREE.Euler().setFromQuaternion(q);
+    parts.push({ geo: new THREE.CylinderGeometry(r, r, len, 5, 1, true), pos: [mid.x, yokeY + mid.y, mid.z], rot: [e.x, e.y, e.z], color });
+  };
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
     const rim = new THREE.Vector3(Math.cos(a) * rimR, Math.sin(a) * rimR, 0).applyAxisAngle(new THREE.Vector3(1, 0, 0), tilt + Math.PI / 2);
-    const mid = rim.clone().add(focus).multiplyScalar(0.5);
-    const len = rim.distanceTo(focus);
-    const dir = focus.clone().sub(rim).normalize();
-    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-    const e = new THREE.Euler().setFromQuaternion(q);
-    parts.push({ geo: new THREE.CylinderGeometry(0.08, 0.08, len, 5, 1, true), pos: [mid.x, 2.6 + mid.y, mid.z], rot: [e.x, e.y, e.z], color: TINT.black });
+    strut(rim, focus, 0.1, TINT.dark);
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const rim = new THREE.Vector3(Math.cos(a) * rimR * 0.8, Math.sin(a) * rimR * 0.8, 0).applyAxisAngle(new THREE.Vector3(1, 0, 0), tilt + Math.PI / 2);
+    strut(rim, rear, 0.14, TINT.mid);
   }
   return bash(parts, { texel: 1 / 8 });
 }
+/** Dish pedestal: wide dark base ring, a stepped drum and a lattice of four posts to the turntable. */
 function dishPedestal() {
-  return bash([cylY(2.6, 0.5, 0, 0.25, 0, TINT.dark, 16), cylY(1.5, 2.6, 0, 1.8, 0, TINT.mid, 12), cylY(1.9, 0.4, 0, 3.0, 0, TINT.black, 12)], { texel: 1 / 8 });
+  const parts = [cylY(4.6, 0.7, 0, 0.35, 0, TINT.dark, 20), cylY(3.4, 1.6, 0, 1.5, 0, TINT.light, 16), cylY(2.4, 3.6, 0, 4.1, 0, TINT.mid, 12), cylY(3.0, 0.5, 0, 6.15, 0, TINT.black, 16)];
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    parts.push(box(0.5, 4.2, 0.5, Math.cos(a) * 2.9, 4.0, Math.sin(a) * 2.9, TINT.light));
+  }
+  return bash(parts, { texel: 1 / 8 });
 }
 function dishProxy(size) {
-  return bash([box(size * 2, size * 1.3, size * 1.4, 0, 3.0 + size * 0.4, -size * 0.3, TINT.light)], { texel: 1 / 8 });
+  return bash([box(size * 1.7, size * 1.5, size * 1.4, 0, 6.4 + size * 0.7, -size * 0.2, TINT.light), box(2.4, 6.4, 2.4, 0, 3.2, 0, TINT.mid)], { texel: 1 / 8 });
 }
 
 /** Static lattice sensor array: four posts, beams, platform, antenna rods, tilted panel. size ≈ height */
@@ -161,7 +193,7 @@ function sensorArray(size, rand) {
     [2.6, 2.6],
     [-2.6, 2.6],
   ])
-    parts.push(box(0.5 * s, 6 * s, 0.5 * s, x * s, 3 * s, z * s, TINT.black));
+    parts.push(box(0.5 * s, 6 * s, 0.5 * s, x * s, 3 * s, z * s, TINT.mid));
   for (const y of [2.2, 4.4]) {
     parts.push(box(5.7 * s, 0.25 * s, 0.25 * s, 0, y * s, -2.6 * s, TINT.mid), box(5.7 * s, 0.25 * s, 0.25 * s, 0, y * s, 2.6 * s, TINT.mid));
     parts.push(box(0.25 * s, 0.25 * s, 5.7 * s, -2.6 * s, y * s, 0, TINT.mid), box(0.25 * s, 0.25 * s, 5.7 * s, 2.6 * s, y * s, 0, TINT.mid));
@@ -173,7 +205,7 @@ function sensorArray(size, rand) {
     const x = (rand() - 0.5) * 5 * s;
     const z = (rand() - 0.5) * 5 * s;
     const h = (2 + rand() * 3) * s;
-    parts.push({ geo: new THREE.CylinderGeometry(0.06, 0.1, h, 5, 1, true), pos: [x, 6.3 * s + h / 2, z], color: TINT.black });
+    parts.push({ geo: new THREE.CylinderGeometry(0.06, 0.1, h, 5, 1, true), pos: [x, 6.3 * s + h / 2, z], color: TINT.dark });
   }
   return bash(parts, { texel: 1 / 8 });
 }
@@ -185,21 +217,21 @@ function pointDefence() {
       cylY(2.1, 0.5, 0, 0.25, 0, TINT.dark, 14),
       cylY(1.45, 1.1, 0, 1.05, 0, TINT.mid, 14),
       box(2.4, 1.5, 2.8, 0, 2.3, 0.2, TINT.light),
-      box(0.8, 0.8, 0.8, 0, 3.3, 0.6, TINT.black),
-      barrel(0.22, 0.26, 3.8, -0.6, 2.35, -2.4, TINT.black, 8),
-      barrel(0.22, 0.26, 3.8, 0.6, 2.35, -2.4, TINT.black, 8),
-      barrel(0.34, 0.34, 0.5, -0.6, 2.35, -3.9, TINT.dark, 8),
-      barrel(0.34, 0.34, 0.5, 0.6, 2.35, -3.9, TINT.dark, 8),
+      box(0.8, 0.8, 0.8, 0, 3.3, 0.6, TINT.dark),
+      barrel(0.22, 0.26, 3.8, -0.6, 2.35, -2.4, TINT.mid, 8),
+      barrel(0.22, 0.26, 3.8, 0.6, 2.35, -2.4, TINT.mid, 8),
+      barrel(0.34, 0.34, 0.5, -0.6, 2.35, -3.9, TINT.black, 8),
+      barrel(0.34, 0.34, 0.5, 0.6, 2.35, -3.9, TINT.black, 8),
     ],
     { texel: 1 / 6 },
   );
 }
 /** Tractor-beam projector: pedestal, collar, dome, ring; built with +y away from the hull (flipped on placement). */
 function tractorBody() {
-  const parts = [cylY(7.6, 2.0, 0, 1.0, 0, TINT.dark, 28), cylY(6.4, 1.4, 0, 2.7, 0, TINT.mid, 28), { geo: new THREE.SphereGeometry(6, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), pos: [0, 3.4, 0], color: TINT.light }, { geo: new THREE.TorusGeometry(6.1, 0.5, 8, 40).rotateX(Math.PI / 2), pos: [0, 3.9, 0], color: TINT.black }];
+  const parts = [cylY(7.6, 2.0, 0, 1.0, 0, TINT.dark, 28), cylY(6.4, 1.4, 0, 2.7, 0, TINT.mid, 28), { geo: new THREE.SphereGeometry(6, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), pos: [0, 3.4, 0], color: TINT.light }, { geo: new THREE.TorusGeometry(6.1, 0.5, 8, 40).rotateX(Math.PI / 2), pos: [0, 3.9, 0], color: TINT.dark }];
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2;
-    parts.push(box(1.2, 1.2, 1.2, Math.cos(a) * 4.6, 7.3, Math.sin(a) * 4.6, TINT.black, [0, -a, 0]));
+    parts.push(box(1.2, 1.2, 1.2, Math.cos(a) * 4.6, 7.3, Math.sin(a) * 4.6, TINT.dark, [0, -a, 0]));
   }
   return bash(parts, { texel: 1 / 10 });
 }
@@ -246,15 +278,16 @@ export function buildWeapons({ group, materials }) {
 
   // ---- animated turrets: per-kind instanced sets
   const kinds = {
-    heavy: { sites: heavyTurretSites(), base: heavyBase(), housing: heavyHousing(), barrels: heavyBarrels(), proxy: heavyProxy(), pivotY: 3.1, trunnion: new THREE.Vector3(0, 3.0, -3.0), pitchRest: 0.14, pitchAmp: 0.06, up: upTop, lights: 10.4 },
-    ion: { sites: ionTurretSites(), base: ionBase(), housing: ionHousing(), barrels: ionBarrel(), proxy: ionProxy(), pivotY: 2.6, trunnion: new THREE.Vector3(0, 2.6, -1.5), pitchRest: 0.12, pitchAmp: 0.05, up: upTop, lights: 7.0 },
+    heavy: { sites: heavyTurretSites(), base: heavyBase(), housing: heavyHousing(), barrels: heavyBarrels(), proxy: heavyProxy(), pivotY: 3.5, trunnion: new THREE.Vector3(0, 4.4, -4.0), pitchRest: 0.14, pitchAmp: 0.06, up: upTop, lights: 17.0 },
+    ion: { sites: ionTurretSites(), base: ionBase(), housing: ionHousing(), barrels: ionBarrel(), proxy: ionProxy(), pivotY: 3.0, trunnion: new THREE.Vector3(0, 3.1, -1.8), pitchRest: 0.12, pitchAmp: 0.05, up: upTop, lights: 8.4 },
   };
   const turrets = [];
   const animated = []; // { housingIM, barrelsIM, proxyIM, list }
   for (const [kind, k] of Object.entries(kinds)) {
     const n = k.sites.length;
+    // housings in the plating set, barrels / breeches in the painted equipment set: both hull tone
     const housingIM = new THREE.InstancedMesh(k.housing, materials.hullPlate1, n);
-    const barrelsIM = new THREE.InstancedMesh(k.barrels, materials.hullGreeble, n);
+    const barrelsIM = new THREE.InstancedMesh(k.barrels, materials.exta_greeble, n);
     const proxyIM = new THREE.InstancedMesh(k.proxy, materials.hullPlate1, n);
     housingIM.name = `weapons_${kind}_housing`;
     barrelsIM.name = `weapons_${kind}_barrels`;
@@ -314,12 +347,12 @@ export function buildWeapons({ group, materials }) {
         list.push({ index: i, pos: P.clone(), yawRest: s.yaw, yawPhase: rand() * Math.PI * 2, yawRate: (Math.PI * 2) / (34 + rand() * 20), siteFrame: M.clone(), near: true });
       });
       dishes.push(...list);
-      dishSets.push({ headIM, proxyIM, list, pivotY: 3.2 });
+      dishSets.push({ headIM, proxyIM, list, pivotY: 6.4 });
     }
     for (const s of sensors.filter((x) => x.kind === "array")) {
       P.set(s.x, s.y, s.z);
       frameUp(upRoof, s.yaw, P, M);
-      addStatic("hullGreeble", sensorArray(s.size, rand), M);
+      addStatic("exta_greeble", sensorArray(s.size, rand), M);
       _tmp.makeTranslation(0, s.size * 1.35, 0);
       addStatic("extEmitRed", lightGeo, new THREE.Matrix4().multiplyMatrices(M, _tmp));
     }
@@ -327,6 +360,7 @@ export function buildWeapons({ group, materials }) {
 
   // ---- point defence on the trench floors (scaled to the local trench depth)
   const pdGeo = pointDefence();
+  const pdLightGeo = new THREE.BoxGeometry(0.5, 0.4, 0.5).toNonIndexed();
   const pdSites = pointDefenceSites();
   for (const s of pdSites) {
     const depth = trenchBand(s.z).depth;
@@ -334,7 +368,10 @@ export function buildWeapons({ group, materials }) {
     P.set(s.x, s.y, s.z);
     frameUp(upFloor, s.yaw, P, M);
     M.scale(new THREE.Vector3(sc, sc, sc));
+    // point defence sits in the canyon: dark worn metal with a single red marker, not white dots
     addStatic("hullGreeble", pdGeo, M);
+    _tmp.makeTranslation(0, 3.9, 0.6);
+    addStatic("extEmitRed", pdLightGeo, new THREE.Matrix4().multiplyMatrices(M, _tmp));
   }
 
   // ---- tractor-beam projectors under the ventral plate (frame flipped: local +y points down)

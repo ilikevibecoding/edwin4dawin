@@ -41,13 +41,16 @@ export function hullBottomY(z) {
  * centreline. Returned as [x, y] pairs; mirror x for port. Segments carry a `tag` so builders can pick
  * materials per face: top, upperSlope, trenchLip, trenchWall, trenchFloor, lowerSlope, bottom.
  */
+// The side trench is a real canyon: lip at 62 % of the section height, floor at 28 %, back wall
+// 9 % of the half-width in from the widest line (≈ 27 m deep, 29 m tall at midships).
+export const TRENCH = { lipV: 0.62, floorV: 0.28, wallU: 0.91, depthU: 0.09 };
 export const SECTION_PROFILE = [
   { u: 0.0, v: 1.0, tag: "top" },
   { u: 0.72, v: 1.0, tag: "upperSlope" },
-  { u: 1.0, v: 0.5, tag: "trenchLip" },
-  { u: 0.965, v: 0.5, tag: "trenchWall" },
-  { u: 0.965, v: 0.3, tag: "trenchFloor" },
-  { u: 1.0, v: 0.3, tag: "lowerSlope" },
+  { u: 1.0, v: TRENCH.lipV, tag: "trenchLip" },
+  { u: TRENCH.wallU, v: TRENCH.lipV, tag: "trenchWall" },
+  { u: TRENCH.wallU, v: TRENCH.floorV, tag: "trenchFloor" },
+  { u: 1.0, v: TRENCH.floorV, tag: "lowerSlope" },
   { u: 0.62, v: 0.0, tag: "bottom" },
   { u: 0.0, v: 0.0, tag: "bottom" },
 ];
@@ -61,7 +64,7 @@ export function hullSection(z) {
 export function trenchBand(z) {
   const yT = hullTopY(z);
   const yB = hullBottomY(z);
-  return { yTop: yB + 0.5 * (yT - yB), yBottom: yB + 0.3 * (yT - yB), depth: 0.035 * hullHalfWidth(z) };
+  return { yTop: yB + TRENCH.lipV * (yT - yB), yBottom: yB + TRENCH.floorV * (yT - yB), depth: TRENCH.depthU * hullHalfWidth(z) };
 }
 
 // ---------------------------------------------------------------------------
@@ -80,8 +83,10 @@ export function terraceHalfWidth(t, z) {
 }
 
 export const TOWER = {
-  // the slimmer neck between terrace 2 and the bridge module
-  neck: { z0: 250, z1: 370, hw: 40, yBase: 138, yTop: 230, draft: 0.06 },
+  // the neck between terrace 2 and the bridge module: hw 60 with a 0.10 draft (69 at its foot, inside
+  // the 71 m terrace-2 roof at z = 250); tower.js stops its storeys at y ≈ 202 and stacks the two
+  // plinth steps (hw 80 / 97) under the head above that
+  neck: { z0: 250, z1: 370, hw: 60, yBase: 138, yTop: 230, draft: 0.1 },
   // the wide "T" head that carries the bridge; the forward face holds the bridge viewports
   bridge: { z0: 215, z1: 395, hw: 105, y0: 230, y1: 268 },
   // bridge viewport strip on the forward face (world y, half-width in x)
@@ -395,19 +400,23 @@ export const DECK_SPOTS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Exterior camera presets (world positions and look-at targets)
+// Exterior camera presets (world positions and look-at targets).
+// `time` is the far-field clock (seconds) main.js applies with space.setTime(): the sun bearing is
+// -30° + 1.3°·time (measured from +z toward +x, 22° elevation), so each preset gets a 3/4 key light
+// 45–60° off the camera's back axis with a readable shadow side, the sun sprite out of frame and the
+// planets behind the ship rather than beside it.
 // ---------------------------------------------------------------------------
 export const EXTERIOR_VIEWS = {
-  ext_hero: { pos: [-1700, 380, -1750], look: [0, 40, -150], fov: 50 },
-  ext_bow: { pos: [-250, 90, -1550], look: [0, 30, -300], fov: 55 },
-  ext_stern: { pos: [700, 220, 1500], look: [0, 60, 300], fov: 55 },
-  ext_tower: { pos: [-330, 300, 40], look: [0, 235, 300], fov: 45 },
-  ext_bridge_close: { pos: [-60, 262, 150], look: [0, 249, 215], fov: 50 },
-  ext_belly: { pos: [-380, -420, -300], look: [0, -60, 0], fov: 60 },
-  ext_hangar_mouth: { pos: [-120, -160, 160], look: [0, -40, 10], fov: 60 },
-  ext_trench: { pos: [-520, 14, -120], look: [-400, 4, 60], fov: 55 },
-  ext_far: { pos: [-4200, 1400, -3800], look: [0, 60, -100], fov: 40 },
-  ext_top: { pos: [0, 2600, -200], look: [0, 0, -200], fov: 45 },
+  ext_hero: { pos: [-1150, 260, -1250], look: [0, 60, -100], fov: 45, time: 250 },
+  ext_bow: { pos: [-300, -10, -1450], look: [0, 40, -350], fov: 55, time: 107.7 },
+  ext_stern: { pos: [850, 240, 1250], look: [0, 10, 350], fov: 50, time: 250 },
+  ext_tower: { pos: [-330, 300, 40], look: [0, 235, 300], fov: 45, time: 107.7 },
+  ext_bridge_close: { pos: [-50, 250, 125], look: [0, 249, 215], fov: 50, time: 215.4 },
+  ext_belly: { pos: [-650, -480, -450], look: [0, -60, -50], fov: 55, time: 275.4 },
+  ext_hangar_mouth: { pos: [-120, -160, 160], look: [0, -40, 10], fov: 60, time: 67.7 },
+  ext_trench: { pos: [-430, 12, -260], look: [-320, -2, 120], fov: 50, time: 107.7 },
+  ext_far: { pos: [-3000, 1000, -2600], look: [0, 60, -100], fov: 30, time: 250 },
+  ext_top: { pos: [0, 2600, -200], look: [0, 0, -200], fov: 45, time: 215.4 },
 };
 
 export const SHIP_NAME = "VINDICATOR";

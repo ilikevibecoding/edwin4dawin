@@ -10,7 +10,8 @@
 //  * ensureExtMaterials — registers the exta_* materials (exterior light domain, fog off).
 import * as THREE from "three";
 import { PALETTE, setDomain } from "../materials.js";
-import { makeHullPlating2, makeMachineryPanel, makeHeatRamp } from "../textures_hull.js";
+import { makeArmourPlating, makeMachineryPanel, makeHeatRamp } from "../textures_hull.js";
+import { makeGreeblePanel } from "../textures_greeble.js";
 
 export const TEXEL = 1 / 26; // one plating tile per 26 m (plates 3–8 m in the texture)
 // Depth precision at distance d with near = 1.2 m is ~d²·5e-8 m: 0.4 m plate steps stop being
@@ -19,7 +20,7 @@ export const TEXEL = 1 / 26; // one plating tile per 26 m (plates 3–8 m in the
 export const LOD_NEAR = 1000;
 export const LOD_MID = 3000;
 
-const NO_SHADOW = new Set(["engineGlow", "engineCore", "glowDisc", "cityLights", "viewGlass", "exta_glow", "exta_emit", "exta_pool"]);
+const NO_SHADOW = new Set(["engineGlow", "engineCore", "glowDisc", "cityLights", "viewGlass", "field", "exta_glow", "exta_emit", "exta_pool", "exta_pane"]);
 const isEmitKey = (k) => k.startsWith("extEmit") || k.startsWith("emit");
 /** Vertex colours for the exta_emit material (unlit, HDR: same output as the extEmit* emissives). */
 export const EMIT = {
@@ -78,10 +79,14 @@ export const C = (c) => (c && c.isColor ? c : new THREE.Color(c));
 export const shade = (c, k) => C(c).clone().multiplyScalar(k);
 export const mixC = (a, b, t) => C(a).clone().lerp(C(b), t);
 export const jitter = (c, rand, amt = 0.05) => shade(c, 1 + (rand() - 0.5) * 2 * amt);
-/** Weighted pick of the three hull tones for raised plates. */
+/**
+ * Weighted pick of the hull tones for raised plates: almost all in the light tone (±5 %), one in four
+ * a shade down, one in thirty a genuinely darker replacement plate — enough for a studio-model
+ * "patched armour" read without the quilt of light / dark squares.
+ */
 export function plateTone(rand) {
   const r = rand();
-  const base = r < 0.52 ? PALETTE.hullLight : r < 0.88 ? PALETTE.hullMid : PALETTE.hullDark;
+  const base = r < 0.72 ? PALETTE.hullLight : r < 0.97 ? PALETTE.hullMid : PALETTE.hullDark;
   return jitter(base, rand, 0.05);
 }
 /** Smooth 2D value noise on world coordinates (large-scale paint / weathering variation). */
@@ -723,8 +728,9 @@ export function channel(chunks, rand, { zA, zB, xc, halfW, depth, yAt, up = true
  * normal turns downward: emissive × albedo × vertex tint, so plating seams and paint variation stay
  * readable on the belly without touching the sunlit side.
  */
-// halved from 0x585d66 now that the scene hemisphere light carries part of the belly fill
-const SHINE = new THREE.Color(0x2c2f33);
+// tuned with the scene hemisphere fill at 0.8 so the belly plating sits at ~15–20 % grey after ACES
+// (never below 8 %): ext_belly / ext_hangar_mouth are the reference frames
+const SHINE = new THREE.Color(0x636972);
 const SHINE_CHUNK = /* glsl */ `
 #include <emissivemap_fragment>
 {
@@ -768,15 +774,29 @@ export function ensureExtMaterials(materials) {
       fog: false,
       ...extra,
     });
-  const plate2 = makeHullPlating2(1024, 173);
-  const machinery = makeMachineryPanel(512, 57);
+  // hull textures are seen at grazing angles across a 1.6 km object: full anisotropy (three clamps
+  // to the device maximum) so the seam grid does not moiré at the far LOD
+  const aniso = (set) => {
+    for (const t of [set.map, set.roughnessMap, set.normalMap]) if (t) t.anisotropy = 16;
+    return set;
+  };
+  // three plate rhythms with the same mean albedo: the exterior never uses the shared interior
+  // hullPlate textures (rivet-dot seams, high per-tile contrast) — its twins get these instead
+  const plateA = aniso(makeArmourPlating(1024, 101, { cols: 4, rowsMin: 4, rowsMax: 7, streak: 0.1 }));
+  const plateB = aniso(makeArmourPlating(1024, 137, { cols: 3, rowsMin: 5, rowsMax: 9, streak: 0.14 }));
+  const plate2 = aniso(makeArmourPlating(1024, 173, { cols: 5, rowsMin: 3, rowsMax: 6, streak: 0.08 }));
+  const machinery = aniso(makeMachineryPanel(512, 57));
+  const greeblePanel = aniso(makeGreeblePanel(512, 311));
   materials.exta_plate2 = addPlanetShine(setDomain(std(plate2, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.5 }), "exterior"));
   materials.exta_machinery = addPlanetShine(setDomain(std(machinery, { normalScale: new THREE.Vector2(0.9, 0.9), envMapIntensity: 0.6 }), "exterior"));
-  // twins of the shared hull materials (textures reused, only the shader differs)
+  // hull-tone equipment panels for greebles / weapons: read by shadow, not by albedo
+  materials.exta_greeble = addPlanetShine(setDomain(std(greeblePanel, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.5 }), "exterior"));
+  // twins of the shared hull materials (same shader family; the plating twins get the armour textures)
+  const twinTex = { hullPlate: plateA, hullPlate1: plateB };
   for (const [src, dst] of Object.entries(SHINE_VARIANT)) {
     const s = materials[src];
     if (!s) throw new Error(`exterior: missing shared material ${src}`);
-    materials[dst] = addPlanetShine(setDomain(std(s, { normalScale: s.normalScale.clone(), envMapIntensity: s.envMapIntensity, roughness: s.roughness, metalness: s.metalness }), "exterior"));
+    materials[dst] = addPlanetShine(setDomain(std(twinTex[src] || s, { normalScale: s.normalScale.clone(), envMapIntensity: s.envMapIntensity, roughness: s.roughness, metalness: s.metalness }), "exterior"));
   }
   // engine bell outer skin: heat-tempering ramp along the axis (u), vertex colour modulates
   materials.exta_heat = setDomain(new THREE.MeshStandardMaterial({ map: makeHeatRamp(256, 16), roughness: 0.5, metalness: 0.55, vertexColors: true, color: 0xffffff, fog: false, envMapIntensity: 0.7 }), "exterior");
@@ -786,5 +806,8 @@ export function ensureExtMaterials(materials) {
   materials.exta_emit = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
   // additive, steady (no engine flicker): floodlight pools washing the belly plating
   materials.exta_pool = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
-  for (const k of ["exta_plate2", "exta_machinery", "exta_heat", ...Object.values(SHINE_VARIANT)]) if (!materials.exteriorKeys.includes(k)) materials.exteriorKeys.push(k);
+  // additive, front side only: lit-interior panes behind the bridge glass (they brighten the view into
+  // the rooms from outside and are back-face culled from inside, so the view out stays open)
+  materials.exta_pane = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.FrontSide });
+  for (const k of ["exta_plate2", "exta_machinery", "exta_greeble", "exta_heat", ...Object.values(SHINE_VARIANT)]) if (!materials.exteriorKeys.includes(k)) materials.exteriorKeys.push(k);
 }

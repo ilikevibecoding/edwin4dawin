@@ -5,9 +5,10 @@
 // Signature: buildGreebles({ group, materials, camera }) -> { update(camera, dt, t), stats }
 import * as THREE from "three";
 import { rng } from "../kit.js";
-import { hullTopY, hullBottomY, hullHalfWidth, trenchBand, TERRACES, terraceHalfWidth, TOWER, ENGINES, VENTRAL, HANGAR } from "../spec.js";
+import { hullTopY, hullBottomY, hullHalfWidth, trenchBand, TRENCH, TERRACES, terraceHalfWidth, TOWER, ENGINES, VENTRAL, HANGAR } from "../spec.js";
 import { SHAPES, TINT, bash, triCount } from "./greebles_shapes.js";
 import { weaponExclusions, terraceBaseHalfWidth } from "./weapons_layout.js";
+import { terraceRoofZStart } from "./superstructure.js";
 
 /** Ship AABB used for the camera-distance LOD (metres, world). */
 export const SHIP_BOX = new THREE.Box3(new THREE.Vector3(-480, -160, -1000), new THREE.Vector3(480, 345, 660));
@@ -15,7 +16,7 @@ export const SHIP_BOX = new THREE.Box3(new THREE.Vector3(-480, -160, -1000), new
 export const LOD_RANGES = { large: Infinity, medium: 2500, small: 900 };
 
 // Hull slopes (from spec.js linear functions): dx/dz of the side, dy/dz of the plates.
-const SIDE_SLOPE = (0.965 * 480) / 1600; // trench wall x per z
+const SIDE_SLOPE = (TRENCH.wallU * 480) / 1600; // trench wall x per z
 const TOP_SLOPE = (0.4 * 130) / 1600;
 const BOTTOM_SLOPE = (0.6 * 130) / 1600;
 const FLOOR_SLOPE = (0.3 * 130) / 1600;
@@ -24,7 +25,15 @@ const FLOOR_SLOPE = (0.3 * 130) / 1600;
 // Extra geometry: a pipe run lying on the surface, and a lit window band (cityLights quad)
 // ---------------------------------------------------------------------------
 function pipeRun() {
-  return bash([{ geo: new THREE.CylinderGeometry(0.35, 0.35, 1, 8, 1, true), pos: [0, 0.38, 0], rot: [Math.PI / 2, 0, 0], color: TINT.mid }]);
+  // light on top, dark underside (the only "dark" a pipe run shows is its own shadow line)
+  const g = bash([{ geo: new THREE.CylinderGeometry(0.35, 0.35, 1, 8, 1, true), pos: [0, 0.38, 0], rot: [Math.PI / 2, 0, 0], color: TINT.light }], { gradient: false });
+  const pos = g.attributes.position;
+  const col = g.attributes.color;
+  for (let i = 0; i < pos.count; i++) {
+    const k = 0.45 + 0.55 * Math.min(1, Math.max(0, (pos.getY(i) - 0.03) / 0.6));
+    col.setXYZ(i, col.getX(i) * k, col.getY(i) * k, col.getZ(i) * k);
+  }
+  return g;
 }
 /** Unit quad in the local xz plane facing +y: x = up the wall, z = along. UVs pick one window row. */
 function windowBand() {
@@ -47,33 +56,63 @@ function windowBand() {
   g.computeBoundingSphere();
   return g;
 }
+/**
+ * Additive glow fan for a running light (exta_pool, vertex colours): unit radius in the local xz
+ * plane, hung just past the lamp's top so it draws over it, `color` × k at the centre, black at the rim.
+ */
+function glowFan(color, k, segs = 12) {
+  const g = new THREE.BufferGeometry();
+  const c = new THREE.Color(color).multiplyScalar(k);
+  const pos = [];
+  const col = [];
+  const nor = [];
+  const y = 0.95;
+  for (let s = 0; s < segs; s++) {
+    const a0 = (s / segs) * Math.PI * 2;
+    const a1 = ((s + 1) / segs) * Math.PI * 2;
+    pos.push(0, y, 0, Math.cos(a1), y, Math.sin(a1), Math.cos(a0), y, Math.sin(a0));
+    col.push(c.r, c.g, c.b, 0, 0, 0, 0, 0, 0);
+    nor.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+  }
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(new Array(segs * 6).fill(0), 2));
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  return g;
+}
 
-// One InstancedMesh per entry (25). band = LOD tier; plain = no per-instance colour (emissive / lights).
+// One InstancedMesh per entry (27). band = LOD tier; plain = no per-instance colour (emissive / lights).
+// Machinery uses exta_greeble (a light painted equipment-panel set in the plate tone) so it reads by
+// its shadow; only the vents keep the dark worn-metal hullGreeble (throats / recesses may be dark).
 const SET_DEFS = [
   { key: "bayPlate", geo: SHAPES.bayPlate, mat: "hullPlate1", band: "large" },
   { key: "hatchLarge", geo: SHAPES.hatchLarge, mat: "hullPlate1", band: "large" },
-  { key: "tankLarge", geo: SHAPES.tankLarge, mat: "hullGreeble", band: "large" },
-  { key: "gantry", geo: SHAPES.gantry, mat: "hullGreeble", band: "large" },
+  { key: "tankLarge", geo: SHAPES.tankLarge, mat: "exta_greeble", band: "large" },
+  { key: "gantry", geo: SHAPES.gantry, mat: "exta_greeble", band: "large" },
   { key: "domeLarge", geo: SHAPES.domeLarge, mat: "hullPlate1", band: "large" },
   { key: "landingPad", geo: SHAPES.landingPad, mat: "hullPlate1", band: "large" },
   { key: "dockRecess", geo: SHAPES.dockRecess, mat: "hullGreeble", band: "large" },
   { key: "seam", geo: SHAPES.seamStrip, mat: "hullPlate1", band: "large", shadow: false },
   { key: "lightW", geo: SHAPES.lightSmall, mat: "extEmitWhite", band: "large", plain: true, shadow: false },
   { key: "lightR", geo: SHAPES.lightSmall, mat: "extEmitRed", band: "large", plain: true, shadow: false },
-  { key: "boxStack", geo: SHAPES.boxStack, mat: "hullGreeble", band: "medium" },
-  { key: "tankH", geo: SHAPES.tankH, mat: "hullGreeble", band: "medium" },
-  { key: "tankV", geo: SHAPES.tankV, mat: "hullGreeble", band: "medium" },
+  { key: "glowW", geo: () => glowFan(0xfff1dc, 0.6), mat: "exta_pool", band: "large", plain: true, shadow: false },
+  { key: "glowR", geo: () => glowFan(0xff4a30, 0.5), mat: "exta_pool", band: "large", plain: true, shadow: false },
+  { key: "boxStack", geo: SHAPES.boxStack, mat: "exta_greeble", band: "medium" },
+  { key: "tankH", geo: SHAPES.tankH, mat: "exta_greeble", band: "medium" },
+  { key: "tankV", geo: SHAPES.tankV, mat: "exta_greeble", band: "medium" },
   { key: "ventLarge", geo: SHAPES.ventLarge, mat: "hullGreeble", band: "medium" },
-  { key: "radiator", geo: SHAPES.radiator, mat: "hullGreeble", band: "medium" },
-  { key: "mast", geo: SHAPES.mast, mat: "hullGreeble", band: "medium" },
-  { key: "sensorCluster", geo: SHAPES.sensorCluster, mat: "hullGreeble", band: "medium" },
+  { key: "radiator", geo: SHAPES.radiator, mat: "exta_greeble", band: "medium" },
+  { key: "mast", geo: SHAPES.mast, mat: "exta_greeble", band: "medium" },
+  { key: "sensorCluster", geo: SHAPES.sensorCluster, mat: "exta_greeble", band: "medium" },
   { key: "cityBlock", geo: SHAPES.cityBlock, mat: "hullPlate1", band: "medium" },
-  { key: "doorFrame", geo: SHAPES.doorFrame, mat: "hullGreeble", band: "medium" },
+  { key: "doorFrame", geo: SHAPES.doorFrame, mat: "exta_greeble", band: "medium" },
   { key: "windows", geo: windowBand, mat: "cityLights", band: "medium", plain: true, shadow: false },
   { key: "hatchSmall", geo: SHAPES.hatchSmall, mat: "hullPlate1", band: "small" },
   { key: "vent", geo: SHAPES.vent, mat: "hullGreeble", band: "small" },
-  { key: "pipe", geo: pipeRun, mat: "hullGreeble", band: "small" },
-  { key: "cabinet", geo: SHAPES.cabinet, mat: "hullGreeble", band: "small" },
+  { key: "pipe", geo: pipeRun, mat: "exta_greeble", band: "small" },
+  { key: "cabinet", geo: SHAPES.cabinet, mat: "exta_greeble", band: "small" },
   { key: "dome", geo: SHAPES.dome, mat: "hullPlate1", band: "small" },
 ];
 
@@ -171,6 +210,11 @@ function basisWall(n, out) {
 
 const lerp = (a, b, t) => a + (b - a) * t;
 const rr = (rand, a, b) => a + (b - a) * rand();
+/** smoothstep(0, 1, t) */
+const smooth01 = (t) => {
+  const x = t < 0 ? 0 : t > 1 ? 1 : t;
+  return x * x * (3 - 2 * x);
+};
 function pickWeighted(rand, table) {
   let sum = 0;
   for (const e of table) sum += e[0];
@@ -181,11 +225,11 @@ function pickWeighted(rand, table) {
   }
   return table[table.length - 1][1];
 }
-/** Per-instance grey tint: light / mid / dark families with a little jitter (multiplies the baked part tints). */
+/** Per-instance tint: plate tone ±10 % (multiplies the baked part tints); one in twelve a shade down. */
 function tintOf(rand) {
   const r = rand();
-  const base = r < 0.36 ? 1.16 : r < 0.8 ? 1.0 : 0.62;
-  return base * (0.92 + 0.16 * rand());
+  const base = r < 0.3 ? 1.08 : r < 0.92 ? 1.0 : 0.86;
+  return base * (0.95 + 0.1 * rand());
 }
 // smooth value noise for density clustering (deterministic, no rng consumption)
 function hash2(i, j) {
@@ -256,9 +300,21 @@ function put(ctx, surf, key, u, v, opts = {}) {
   _q.setFromRotationMatrix(_r);
   if (yaw) _q.multiply(_qy.setFromAxisAngle(Y_AXIS, yaw));
   _m.compose(_p, _q, _s.set(sx, sy, sz));
-  acc.push(_m, opts.tint === undefined ? tintOf(ctx.rand) : opts.tint);
+  // surf.tintScale: the ventral plate is lit only by planet-shine / fill, where any face that is not
+  // flat-on reads brighter than the plating; the belly fittings are pulled down to match
+  acc.push(_m, (opts.tint === undefined ? tintOf(ctx.rand) : opts.tint) * (acc.def.plain ? 1 : surf.tintScale || 1));
   if (opts.register !== false) surf.occ.add(u - du, v - dv, u + du, v + dv);
   return true;
+}
+
+/**
+ * District clustering: a contrasty low-frequency mask (mean ≈ 1) so detail gathers in patches with
+ * open plating between them, times the surface's own density(u, v) hint (terrace bases, seams, lips).
+ */
+function clusterMask(surf, u, v, noiseScale) {
+  const n = vnoise(u / noiseScale + 7.3, v / noiseScale + 2.1);
+  const districts = 0.25 + 2.25 * n * n;
+  return districts * (surf.density ? surf.density(u, v) : 1);
 }
 
 /** Jittered-grid scatter with a low-frequency density modulation. pick(rand, u, v) -> item | null */
@@ -269,7 +325,7 @@ function scatterGrid(ctx, surf, { cell, prob, pick, jitter = 0.85, noiseScale = 
     const ur = surf.uRange(v);
     if (!ur) continue;
     for (let u = ur[0] + cell / 2; u < ur[1]; u += cell) {
-      const density = prob * (0.5 + 1.0 * vnoise(u / noiseScale + 7.3, v / noiseScale + 2.1));
+      const density = prob * clusterMask(surf, u, v, noiseScale);
       if (rand() > density) continue;
       const uu = u + (rand() - 0.5) * cell * jitter;
       const vv = v + (rand() - 0.5) * cell * jitter;
@@ -289,6 +345,8 @@ function rowsProgram(ctx, surf, { count, key, n, spacing, scale = 1, yaw = 0, al
     const ur = surf.uRange(v);
     if (!ur) continue;
     const u = lerp(ur[0], ur[1], rand());
+    // rows follow the same districts as the scatter (rejection against the cluster mask)
+    if (rand() > Math.min(1, 0.55 * clusterMask(surf, u, v, 90))) continue;
     const num = Math.round(rr(rand, n[0], n[1]));
     const sp = rr(rand, spacing[0], spacing[1]);
     const sc = Array.isArray(scale) ? rr(rand, scale[0], scale[1]) : scale;
@@ -372,13 +430,42 @@ function seamLanes(ctx, surf, { along, spacing, len, gap, prob, tint = [0.42, 0.
   }
 }
 
-/** Warning / marker lights along a line u = uFn(v) every `step` metres; every `redEvery`-th is red. */
-function edgeLights(ctx, surf, { uFn, step, redEvery = 3, scale = 1.25, lift = 0, v0 = surf.v0, v1 = surf.v1 }) {
+/**
+ * Warning / marker lights along a line u = uFn(v): nominally every `step` metres but with the spacing
+ * jittered and a share of stations skipped, so the row never reads as a metronome; every `redEvery`-th
+ * placed light is red.
+ */
+function edgeLights(ctx, surf, { uFn, step, redEvery = 3, scale = 1.25, lift = 0, v0 = surf.v0, v1 = surf.v1, prob = 0.7 }) {
   let k = 0;
-  for (let v = v0 + step / 2; v < v1; v += step, k++) {
+  const rand = ctx.rand;
+  for (let v = v0 + step * rr(rand, 0.2, 0.8); v < v1; v += step * rr(rand, 0.55, 1.6)) {
+    if (rand() > prob) continue;
     const u = uFn(v);
     if (u === null) continue;
-    put(ctx, surf, k % redEvery === redEvery - 1 ? "lightR" : "lightW", u, v, { scale, lift, pad: 0.2, tint: 1 });
+    if (put(ctx, surf, k % redEvery === redEvery - 1 ? "lightR" : "lightW", u, v, { scale: scale * rr(rand, 0.8, 1.15), lift, pad: 0.2, tint: 1 })) k++;
+  }
+}
+/**
+ * Running lights in pairs along a rail u = uFn(v) (ventral plate): two lamps `gap` metres apart across
+ * the rail at each station, every `redEvery`-th station red, each lamp under a 2–3 m additive glow fan
+ * so the belly reads as lit navigation rails instead of random white pinpoints.
+ */
+function railLights(ctx, surf, { uFn, step, gap = 3.2, redEvery = 4, glowR = 2.6, v0 = surf.v0, v1 = surf.v1, prob = 0.85 }) {
+  let k = 0;
+  const rand = ctx.rand;
+  for (let v = v0 + step * rr(rand, 0.3, 0.7); v < v1; v += step * rr(rand, 0.75, 1.3)) {
+    if (rand() > prob) continue;
+    const u = uFn(v);
+    if (u === null) continue;
+    const red = k % redEvery === redEvery - 1;
+    let placed = 0;
+    for (const s of [-1, 1]) {
+      const uu = u + (s * gap) / 2;
+      if (!put(ctx, surf, red ? "lightR" : "lightW", uu, v, { scale: 1.2, pad: 0.3, tint: 1 })) continue;
+      put(ctx, surf, red ? "glowR" : "glowW", uu, v, { scale: [glowR, 1.2, glowR], tint: 1, check: false, register: false });
+      placed++;
+    }
+    if (placed) k++;
   }
 }
 
@@ -514,8 +601,18 @@ function topPlate(ctx) {
       }
       return discsHit(discs, u, v, du, dv);
     },
+    // machinery gathers in a "street" along the terrace-0 base and along the trench lip; the open
+    // plating between them stays mostly clean
+    density(u, v) {
+      let k = 1;
+      const t = TERRACES[0];
+      if (v > t.zFront - 3 && v < t.zBack) k += 2.4 * (1 - smooth01((Math.abs(u) - terraceBaseHalfWidth(t, v) - 4) / 30));
+      else if (v <= t.zFront - 3) k += 1.6 * (1 - smooth01(Math.hypot(Math.abs(u) - 30, v - t.zFront) / 60));
+      k += 1.0 * (1 - smooth01((0.72 * hullHalfWidth(v) - Math.abs(u)) / 20));
+      return k;
+    },
   };
-  plateDetail(ctx, surf, { seamLane: 28, seamCross: 44, seamProb: 0.8, large: 0.24, medium: 0.42, small: 0.4, rows: 90 });
+  plateDetail(ctx, surf, { seamLane: 28, seamCross: 44, seamProb: 0.8, large: 0.12, medium: 0.2, small: 0.2, rows: 45 });
   // marker lights along the plate edges (white, every third red)
   edgeLights(ctx, surf, { uFn: (v) => 0.72 * hullHalfWidth(v) - 5, step: 42, v0: -880 });
   edgeLights(ctx, surf, { uFn: (v) => -(0.72 * hullHalfWidth(v) - 5), step: 42, v0: -880 });
@@ -531,6 +628,7 @@ function bottomPlate(ctx) {
     v0: -930,
     v1: 597,
     occ: new Occupancy(16),
+    tintScale: 0.7,
     uRange(v) {
       const e = 0.62 * hullHalfWidth(v) - 2.5;
       return e > 3 ? [-e, e] : null;
@@ -549,14 +647,25 @@ function bottomPlate(ctx) {
       if (dx * dx + dz * dz < (rb.r + 8) * (rb.r + 8)) return true;
       return discsHit(discs, u, v, du, dv);
     },
+    // ventral machinery districts: around the hangar mouth / docking recess / reactor bulb and the plate edge
+    density(u, v) {
+      let k = 1;
+      k += 1.6 * (1 - smooth01((Math.hypot(u, v - (o.z0 + o.z1) / 2) - 60) / 70));
+      k += 1.2 * (1 - smooth01((Math.hypot(u - rb.x, v - rb.z) - rb.r - 8) / 50));
+      k += 0.8 * (1 - smooth01((0.62 * hullHalfWidth(v) - Math.abs(u)) / 20));
+      return k;
+    },
   };
-  plateDetail(ctx, surf, { seamLane: 40, seamCross: 56, seamProb: 0.7, large: 0.18, medium: 0.3, small: 0.28, rows: 50 });
-  edgeLights(ctx, surf, { uFn: (v) => 0.62 * hullHalfWidth(v) - 5, step: 60, v0: -860 });
-  edgeLights(ctx, surf, { uFn: (v) => -(0.62 * hullHalfWidth(v) - 5), step: 60, v0: -860 });
+  plateDetail(ctx, surf, { seamLane: 40, seamCross: 56, seamProb: 0.7, large: 0.09, medium: 0.15, small: 0.14, rows: 25 });
+  // navigation rails: paired running lights with glow fans along the plate edges and two inboard lines
+  for (const s of [-1, 1]) {
+    railLights(ctx, surf, { uFn: (v) => s * (0.62 * hullHalfWidth(v) - 9), step: 70, v0: -840 });
+    railLights(ctx, surf, { uFn: (v) => s * 0.3 * hullHalfWidth(v), step: 95, v0: -700, prob: 0.75 });
+  }
   return surf;
 }
 
-/** Side trench: dense machinery city on the wall (x = ±0.965 w) and the floor strip (0.965 w .. w). */
+/** Side trench: dense machinery city on the wall (x = ±wallU·w) and the floor strip (wallU·w .. w). */
 function trench(ctx, s) {
   const rand = ctx.rand;
   const pd = weaponDiscs(ctx, (w) => w.kind === "pd" && Math.sign(w.x) === s);
@@ -570,7 +679,7 @@ function trench(ctx, s) {
       return [b.yBottom + 0.4, b.yTop - 0.4];
     },
     point(u, v, out) {
-      out.set(s * 0.965 * hullHalfWidth(v), u, v);
+      out.set(s * TRENCH.wallU * hullHalfWidth(v), u, v);
     },
     normal(u, v, out) {
       out.set(s, 0, -SIDE_SLOPE);
@@ -585,7 +694,7 @@ function trench(ctx, s) {
     occ: new Occupancy(16),
     uRange(v) {
       const w = hullHalfWidth(v);
-      const a = 0.965 * w + 0.9;
+      const a = TRENCH.wallU * w + 0.9;
       const b = w - 0.9;
       return s > 0 ? [a, b] : [-b, -a];
     },
@@ -697,8 +806,8 @@ function trench(ctx, s) {
       }
     },
   });
-  // --- floor lip: alternating red / white runway beacons along the outer edge
-  edgeLights(ctx, floor, { uFn: (v) => s * (hullHalfWidth(v) - 0.9), step: 36, redEvery: 2, scale: 1.2, v0: -620 });
+  // --- floor lip: a few sparse red beacons only (no metronomic white dots along the canyon)
+  edgeLights(ctx, floor, { uFn: (v) => s * (hullHalfWidth(v) - 0.9), step: 90, redEvery: 1, scale: 1.2, v0: -620, prob: 0.5 });
   return { wall, floor };
 }
 
@@ -708,7 +817,7 @@ function terraceRoofs(ctx) {
   TERRACES.forEach((t, i) => {
     const next = TERRACES[i + 1];
     const surf = {
-      v0: t.zFront + 4,
+      v0: terraceRoofZStart(t) + 4,
       v1: t.zBack - 3,
       occ: new Occupancy(16),
       uRange(v) {
@@ -729,8 +838,15 @@ function terraceRoofs(ctx) {
         if (t.id === "t2" && rectHit(u, v, du, dv, -50, 243, 50, 377)) return true;
         return discsHit(discs, u, v, du, dv);
       },
+      // roofs: a machinery street along the next terrace's base and the roof edge, thinner in between
+      density(u, v) {
+        let k = 0.75;
+        if (next && v > next.zFront - 3 && v < next.zBack) k += 2.2 * (1 - smooth01((Math.abs(u) - terraceHalfWidth(next, v) - next.draft * (next.yTop - t.yTop) - 4) / 22));
+        k += 0.9 * (1 - smooth01((terraceHalfWidth(t, v) - 3 - Math.abs(u)) / 14));
+        return k;
+      },
     };
-    plateDetail(ctx, surf, { seamLane: 24, seamCross: 40, seamProb: 0.75, large: 0.22, medium: 0.42, small: 0.4, rows: 32 });
+    plateDetail(ctx, surf, { seamLane: 24, seamCross: 40, seamProb: 0.75, large: 0.14, medium: 0.26, small: 0.25, rows: 22 });
     edgeLights(ctx, surf, { uFn: (v) => terraceHalfWidth(t, v) - 1.6, step: 44, redEvery: 2, scale: 1.25 });
     edgeLights(ctx, surf, { uFn: (v) => -(terraceHalfWidth(t, v) - 1.6), step: 44, redEvery: 2, scale: 1.25 });
     out.push(surf);
@@ -753,7 +869,7 @@ function towerNeck(ctx) {
       v0: n.z0 + 3,
       v1: n.z1 - 3,
       occ: new Occupancy(16),
-      uRange: () => [n.yBase + 3, n.yTop - 3],
+      uRange: () => [n.yBase + 3, n.yTop - 31],
       point(u, v, out) {
         out.set(s * hw(u), u, v);
       },
@@ -767,7 +883,7 @@ function towerNeck(ctx) {
       v0: -(n.hw - 3),
       v1: n.hw - 3,
       occ: new Occupancy(16),
-      uRange: () => [n.yBase + 3, n.yTop - 3],
+      uRange: () => [n.yBase + 3, n.yTop - 31],
       point(u, v, out) {
         out.set(v, u, zc + s * hl(u));
       },
@@ -792,7 +908,7 @@ function towerNeck(ctx) {
       }
     }
     scatterGrid(ctx, f, { cell: 5.5, prob: 0.42, noiseScale: 40, pick: pickWallSmall });
-    edgeLights(ctx, f, { uFn: () => n.yTop - 4.5, step: 30, redEvery: 2, scale: 1.25 });
+    edgeLights(ctx, f, { uFn: () => n.yTop - 32, step: 30, redEvery: 2, scale: 1.25 });
   }
   return faces;
 }
