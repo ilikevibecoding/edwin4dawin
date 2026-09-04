@@ -418,25 +418,32 @@ export function partition(kit, { axis, at, from, to, floorY, ceilY, wt = 0.15, o
  * channel, wall strips at 2.05 m, ribs every 4 m). Replaced by D's corridorSegment() when it lands.
  * Runs along the longer bounds axis.
  */
-export function corridorDressing(kit, manifest, floorY, ceilY, { ribEvery = 4, wallT = WALL_T, stripEmit = "emitWhite" } = {}) {
+export function corridorDressing(kit, manifest, floorY, ceilY, { ribEvery = 4, ribs = true, wallT = WALL_T, stripEmit = "emitWhite", segment = 6 } = {}) {
   const b = manifest.bounds;
   const alongZ = b.max[2] - b.min[2] > b.max[0] - b.min[0];
   const x0 = b.min[0] + wallT;
   const x1 = b.max[0] - wallT;
   const z0 = b.min[2] + wallT;
   const z1 = b.max[2] - wallT;
+  // Long thin boxes are split into ≤ `segment` m pieces: a single 160 m × 1 cm triangle straddling the camera plane
+  // leaks through walls under software GL (depth interpolation precision), and segments cull better anyway.
+  const run = (mat, lo, hi, place, opts) => {
+    const n = Math.max(1, Math.ceil((hi - lo) / segment));
+    for (let i = 0; i < n; i++) place(mat, lo + ((hi - lo) * i) / n, lo + ((hi - lo) * (i + 1)) / n, opts);
+  };
   // centre floor strip (slightly proud, lit edge lines)
   if (alongZ) {
     const cx = (x0 + x1) / 2;
-    kit.boxMM("paintedMetal", [cx - 0.5, floorY, z0], [cx + 0.5, floorY + 0.012, z1], { color: IMP.black, texel: 1 });
-    kit.boxMM("emitBlue", [cx - 0.53, floorY, z0 + 0.4], [cx - 0.5, floorY + 0.01, z1 - 0.4]);
-    kit.boxMM("emitBlue", [cx + 0.5, floorY, z0 + 0.4], [cx + 0.53, floorY + 0.01, z1 - 0.4]);
+    run("paintedMetal", z0, z1, (m, a, c, o) => kit.boxMM(m, [cx - 0.5, floorY, a], [cx + 0.5, floorY + 0.012, c], o), { color: IMP.black, texel: 1 });
+    run("emitBlue", z0 + 0.4, z1 - 0.4, (m, a, c) => kit.boxMM(m, [cx - 0.53, floorY, a], [cx - 0.5, floorY + 0.01, c]));
+    run("emitBlue", z0 + 0.4, z1 - 0.4, (m, a, c) => kit.boxMM(m, [cx + 0.5, floorY, a], [cx + 0.53, floorY + 0.01, c]));
   } else {
     const cz = (z0 + z1) / 2;
-    kit.boxMM("paintedMetal", [x0, floorY, cz - 0.5], [x1, floorY + 0.012, cz + 0.5], { color: IMP.black, texel: 1 });
-    kit.boxMM("emitBlue", [x0 + 0.4, floorY, cz - 0.53], [x1 - 0.4, floorY + 0.01, cz - 0.5]);
-    kit.boxMM("emitBlue", [x0 + 0.4, floorY, cz + 0.5], [x1 - 0.4, floorY + 0.01, cz + 0.53]);
+    run("paintedMetal", x0, x1, (m, a, c, o) => kit.boxMM(m, [a, floorY, cz - 0.5], [c, floorY + 0.012, cz + 0.5], o), { color: IMP.black, texel: 1 });
+    run("emitBlue", x0 + 0.4, x1 - 0.4, (m, a, c) => kit.boxMM(m, [a, floorY, cz - 0.53], [c, floorY + 0.01, cz - 0.5]));
+    run("emitBlue", x0 + 0.4, x1 - 0.4, (m, a, c) => kit.boxMM(m, [a, floorY, cz + 0.5], [c, floorY + 0.01, cz + 0.53]));
   }
+  if (!ribs) return;
   // ribs: shallow frames around the section every ribEvery m, skipping door positions
   const doorsAlong = (manifest.doors || []).map((d) => (alongZ ? d.pos[2] : d.pos[0]));
   const a0 = alongZ ? z0 : x0;
