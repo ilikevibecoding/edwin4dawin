@@ -94,9 +94,9 @@ function ensureMaterials(ctx) {
     // only so the far hemisphere does not print through the near one
     m.int_globe = new THREE.MeshBasicMaterial({
       map: makeGlobeMap(ctx.seed + 404),
-      color: new THREE.Color("#9fd0ff"),
+      color: new THREE.Color("#b4dcff"),
       transparent: true,
-      opacity: 0.92,
+      opacity: 0.96,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.FrontSide,
@@ -104,8 +104,8 @@ function ensureMaterials(ctx) {
     m.int_globe.name = "int_globe";
     // the single flat equatorial ring: the shared holo grid, dimmer than the globe
     m.int_ring = m.holo.clone();
-    m.int_ring.color = new THREE.Color("#5aa0ff");
-    m.int_ring.opacity = 0.32;
+    m.int_ring.color = new THREE.Color("#6aacff");
+    m.int_ring.opacity = 0.42;
     // untextured additive blue for small wire elements
     m.int_holoBright = m.holo.clone();
     m.int_holoBright.map = null;

@@ -382,24 +382,16 @@ function buildWindowWall(kit, ctx) {
     const shape = new THREE.Shape([new THREE.Vector2(-hw, -hl), new THREE.Vector2(hw, -hl), new THREE.Vector2(hw, hl + 0.1), new THREE.Vector2(-hw, hl + 0.1)]);
     shape.holes.push(new THREE.Path([new THREE.Vector2(-1.3, vFoot), new THREE.Vector2(1.3, vFoot), new THREE.Vector2(1.1, vTop), new THREE.Vector2(-1.1, vTop)]));
     const maskGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.1, bevelEnabled: false });
-    // reveal hairlines: a dim lit seam along the hood's top edge and both tapered sides on the room
-    // face of every mask, so the trapezoid viewports read as built architecture against black space
-    const edgeL = Math.hypot(0.2, vTop - vFoot);
-    const edgeA = Math.atan2(0.2, vTop - vFoot);
-    const edgeGeo = new THREE.BoxGeometry(0.02, edgeL - 0.06, 0.012);
+    // hood lamp: a dim lit seam along the top edge of every hood on the room face of the mask (the
+    // recessed fixture line over the viewports), so the hoods read as built architecture from the
+    // walkway. The tapered sides stay dark: lit side seams read as white stripes on the mullions.
     const topGeo = new THREE.BoxGeometry(2.16, 0.02, 0.012);
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(tilt);
     for (let k = 0; k < PANES; k++) {
       const c = new THREE.Vector3(paneX(k), yMid, zMid).addScaledVector(nIn, 0.19);
       kit.add("brg_frame", maskGeo.clone(), { pos: [c.x, c.y, c.z], quat: tilt });
       const face = c.clone().addScaledVector(nIn, 0.106);
-      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(tilt);
-      const rt = new THREE.Vector3(1, 0, 0);
       kit.add("brg_hair", topGeo.clone(), { pos: face.clone().addScaledVector(up, vTop + 0.02).toArray(), quat: tilt });
-      for (const s of [-1, 1]) {
-        const q = tilt.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), s * edgeA));
-        const p = face.clone().addScaledVector(rt, s * 1.22).addScaledVector(up, (vFoot + vTop) / 2);
-        kit.add("brg_hair", edgeGeo.clone(), { pos: p.toArray(), quat: q });
-      }
     }
   }
 
@@ -819,6 +811,13 @@ function buildWalkway(kit, ctx) {
   }
   kit.boxMM("paintedMetal", [-hw + 0.3, y, z0 + 0.1], [hw - 0.3, y + 0.012, z0 + 0.24], BLACK);
   kit.boxMM("brg_ring", [-hw + 0.5, y + 0.012, z0 + 0.15], [hw - 0.5, y + 0.02, z0 + 0.19], {});
+  // the edge channels continue at deck level from the step to the sill apron, past the helm pair
+  for (const s of [-1, 1]) {
+    const xa = Math.min(s * (hw - 0.11), s * (hw + 0.01));
+    const xb = Math.max(s * (hw - 0.11), s * (hw + 0.01));
+    kit.boxMM("paintedMetal", [xa, 0, Z0 + 1.45], [xb, 0.012, z0 - 0.05], BLACK);
+    kit.boxMM("brg_ring", [xa + 0.035, 0.012, Z0 + 1.6], [xb - 0.035, 0.02, z0 - 0.25], {});
+  }
   for (const z of [-39.5, -28.5]) for (const s of [-1, 1]) spinePost(kit, s * (hw - 0.34), y, z, s > 0 ? -Math.PI / 2 : Math.PI / 2, ctx.seed + 700 + z + s);
   kit.boxMM("paintedMetal", [-2.9, 0, Z0 + 1.2], [2.9, 0.012, Z0 + 1.4], BLACK); // threshold plate at the apron
 }
@@ -1032,7 +1031,7 @@ function shipHologram(ctx, mats, x, y, z, scale) {
  * `screens` are material names. h < 0.6 builds just the slab on a short block (dais rim consoles).
  * `riser` > 0 adds a vertical screen bank standing on the slab's far edge, with a detailed rear plate.
  */
-function slabConsole(kit, { x, y, z, yaw, w = 0.8, d = 0.5, h = 1.15, screens = ["impScreen0"], tilt = 0.5, lampMat = "emitBlue", pulse = null, seed = 1, collide = true, riser = 0, riserScreens = null }) {
+function slabConsole(kit, { x, y, z, yaw, w = 0.8, d = 0.5, h = 1.15, screens = ["impScreen0"], tilt = 0.5, lampMat = "emitBlue", pulse = null, seed = 1, collide = true, riser = 0, riserScreens = null, panelCol = PALETTE.impMid }) {
   const q = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw);
   const qs = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, tilt)); // +Z (operator) edge lower
   const P = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
@@ -1046,7 +1045,7 @@ function slabConsole(kit, { x, y, z, yaw, w = 0.8, d = 0.5, h = 1.15, screens = 
   if (bodyH > 0.4) {
     add("paintedMetal", new THREE.BoxGeometry(w, 0.08, d), 0, 0.04, 0, BLACK);
     add("paintedMetal", new THREE.BoxGeometry(w - 0.08, bodyH - 0.08, d - 0.1), 0, 0.08 + (bodyH - 0.08) / 2, -0.02, DARK);
-    add("impPanel", new THREE.BoxGeometry(w - 0.2, bodyH - 0.34, 0.012), 0, 0.14 + (bodyH - 0.34) / 2, d / 2 - 0.07 + 0.006, { color: PALETTE.impMid, uv: "keep" });
+    add("impPanel", new THREE.BoxGeometry(w - 0.2, bodyH - 0.34, 0.012), 0, 0.14 + (bodyH - 0.34) / 2, d / 2 - 0.07 + 0.006, { color: panelCol, uv: "keep" });
     add(lampMat, new THREE.BoxGeometry(w - 0.3, 0.02, 0.01), 0, 0.11, d / 2 - 0.06);
     add("leds", new THREE.BoxGeometry(w * 0.45, 0.03, 0.01), -w * 0.12, bodyH - 0.3, d / 2 - 0.058, { uv: "keep" });
     add("decal", new THREE.PlaneGeometry(0.2, 0.2), w * 0.28, bodyH - 0.3, d / 2 - 0.057, { uv: "keep", uvRect: decalRect((seed + 3) % 16) });
@@ -1173,6 +1172,7 @@ function buildForward(kit, ctx) {
       pulse: s > 0 ? "brg_pulse" : null,
       lampMat: "emitBlue",
       seed: ctx.seed + 410 + s,
+      panelCol: PALETTE.impBlack, // this face takes the exterior sun through the glass: mid grey rendered as a white slab
     });
   }
   for (const s of [-1, 1]) {
