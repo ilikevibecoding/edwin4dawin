@@ -91,7 +91,7 @@ function panels(hctx: CanvasRenderingContext2D, actx: CanvasRenderingContext2D, 
 
 export const LIVERY = {
   upper: '#f4f0e6',
-  lower: '#f0b42a',
+  lower: '#f6c236',
   cheat: '#0f5c6e',
   pin: '#ff6f61',
   registration: 'N726BV',
@@ -290,6 +290,7 @@ export function panelTexture(): { map: THREE.CanvasTexture; emissive: THREE.Canv
   ctx.fillStyle = '#c0392b'; ctx.fillRect(560, 250, 40, 40); ctx.fillStyle = '#fff'; ctx.font = '11px Arial'; ctx.textAlign = 'center'; ctx.fillText('FUEL', 580, 300); ctx.fillText('CUTOFF', 580, 312);
   ctx.fillStyle = '#e8e8e8'; ctx.font = '12px Arial'; ctx.fillText('MASTER   AVIONICS   PITOT HEAT   NAV   STROBE   BEACON   LDG   TAXI   FUEL PUMP', 300, 372);
   const map = toTexture(c, true, 4);
+  map.flipY = true; // panel canvas is drawn top-down like a normal image
   // emissive: only gauges and screen glow
   const [e, ectx] = canvas(w, h);
   ectx.fillStyle = '#000'; ectx.fillRect(0, 0, w, h);
@@ -299,6 +300,7 @@ export function panelTexture(): { map: THREE.CanvasTexture; emissive: THREE.Canv
   ectx.globalCompositeOperation = 'source-over';
   ectx.fillStyle = 'rgba(0,0,0,0.85)'; ectx.fillRect(0, 320, w, 64);
   const emissive = toTexture(e, true, 4);
+  emissive.flipY = true;
   return { map, emissive };
 }
 

@@ -246,9 +246,9 @@ export class Vegetation {
     const mangroveVariants = [0, 1, 2].map(() => mangroveGeometry(rng));
 
     const palms: Plant[] = [], trees: Plant[] = [], mangroves: Plant[] = [], shrubs: Plant[] = [];
-    const palmTints = ['#6f9c42', '#5f8f36', '#7fae4a', '#557f30', '#86ad4f'];
-    const treeTints = ['#35682a', '#3f7a2e', '#2c5a22', '#4d8a34', '#4a7d33', '#2f6127', '#5e8f3c', '#365f2c'];
-    const mangroveTints = ['#2e5a26', '#35672c', '#294f22', '#3d6f31'];
+    const palmTints = ['#5e8a3a', '#527f31', '#6c9a42', '#4a7229', '#739c46'];
+    const treeTints = ['#2f5427', '#38652b', '#274a20', '#41702f', '#3d6a2e', '#2b5224', '#4a7434', '#30542a'];
+    const mangroveTints = ['#284d22', '#2f5a27', '#23451e', '#35602b'];
 
     // jittered-grid sampling per zone
     const step = 11;

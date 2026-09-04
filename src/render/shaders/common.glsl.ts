@@ -73,7 +73,7 @@ vec3 skyRadiance(vec3 dir) {
   vec3 col = mix(uZenithColor, uHorizonColor, clamp(horizonMix + midMix, 0.0, 1.0));
   // slight brightening of the sky toward the sun (mie forward scatter), strongest near horizon
   float cosSun = dot(dir, uSunDir);
-  float mie = pow(max(cosSun, 0.0), 6.0) * (0.12 + 0.55 * horizonMix);
+  float mie = pow(max(cosSun, 0.0), 8.0) * (0.08 + 0.5 * horizonMix);
   col += uSunHazeColor * mie * smoothstep(-0.1, 0.15, uSunDir.y);
   // sunset band
   float band = exp(-abs(y) * 9.0) * pow(max(cosSun, 0.0), 2.0);

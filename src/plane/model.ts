@@ -37,7 +37,7 @@ export class PlaneModel {
   readonly floatBowR = new THREE.Vector3(2.6, -2.0, 1.25);
   readonly wingTipL = new THREE.Vector3(0.2, 1.35, -7.3);
   readonly wingTipR = new THREE.Vector3(0.2, 1.35, 7.3);
-  readonly cockpitEye = new THREE.Vector3(1.0, 0.9, -0.36);
+  readonly cockpitEye = new THREE.Vector3(1.05, 0.86, -0.36);
   readonly exteriorMeshes: THREE.Mesh[] = [];
   readonly interiorMeshes: THREE.Object3D[] = [];
   readonly spanHalf = 7.3;
@@ -60,11 +60,12 @@ export class PlaneModel {
       color: 0x9fbdd0, transparent: true, opacity: 0.32, roughness: 0.03, metalness: 0.0, envMapIntensity: 1.4,
       side: THREE.DoubleSide, depthWrite: false, specularIntensity: 1.0, ior: 1.5, clearcoat: 1.0, clearcoatRoughness: 0.02,
     });
+    const plainPaint = new THREE.MeshPhysicalMaterial({ color: 0xf4f0e6, roughness: 0.4, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.15 });
     const metal = new THREE.MeshStandardMaterial({ color: 0x8e949a, roughness: 0.38, metalness: 0.9 });
     const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2c2f33, roughness: 0.45, metalness: 0.8 });
     const exhaust = new THREE.MeshStandardMaterial({ color: 0x5a4a3c, roughness: 0.6, metalness: 0.9 });
     const rubber = new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.92, metalness: 0.0 });
-    const interior = new THREE.MeshStandardMaterial({ color: 0x6a6d72, roughness: 0.85, metalness: 0.0, side: THREE.BackSide, envMapIntensity: 2.2 });
+    const interior = new THREE.MeshStandardMaterial({ color: 0x8a8c90, roughness: 0.85, metalness: 0.0, envMapIntensity: 2.0 });
     const interiorPlastic = new THREE.MeshStandardMaterial({ color: 0x3a3d42, roughness: 0.7, envMapIntensity: 2.0 });
     const seatLeather = new THREE.MeshStandardMaterial({ color: 0x7a5535, roughness: 0.55 });
     const carpet = new THREE.MeshStandardMaterial({ color: 0x35302b, roughness: 0.95 });
@@ -72,7 +73,7 @@ export class PlaneModel {
     const panelMat = new THREE.MeshStandardMaterial({ map: panelTex.map, emissiveMap: panelTex.emissive, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 0.7 });
     const propMat = new THREE.MeshStandardMaterial({ color: 0x1e1f22, roughness: 0.5, metalness: 0.6 });
     const propTipMat = new THREE.MeshStandardMaterial({ color: 0xf2c230, roughness: 0.5 });
-    this.materials.push(paint, wingPaint, floatPaint, glass, metal, darkMetal, exhaust, rubber, interior, interiorPlastic, seatLeather, carpet, panelMat, propMat, propTipMat);
+    this.materials.push(paint, wingPaint, floatPaint, glass, plainPaint, metal, darkMetal, exhaust, rubber, interior, interiorPlastic, seatLeather, carpet, panelMat, propMat, propTipMat);
     this.glassMaterial = glass;
     this.paintMaterial = paint;
 
@@ -118,11 +119,27 @@ export class PlaneModel {
     const glassMesh = add(glassGeo, glass);
     glassMesh.renderOrder = 20;
     glassMesh.castShadow = false;
-    // interior liner (back faces) and floor
-    const liner = loft(sections.map((s) => ({ ...s, w: s.w * 0.94, top: s.top * 0.94, bot: s.bot * 0.94 })), 24);
-    add(liner, interior, this.root, false).castShadow = false;
-    const floor = add(new THREE.BoxGeometry(3.6, 0.06, 1.35), carpet, this.root, false);
-    floor.position.set(0.6, -0.52, 0);
+    // cabin interior: an explicit room (walls below the window sill, ceiling, bulkheads, floor) so the view
+    // from the pilot seat is bounded by lit interior surfaces instead of the exterior shell
+    const floor = add(new THREE.BoxGeometry(3.6, 0.06, 1.5), carpet, this.root, false);
+    floor.position.set(0.35, -0.55, 0);
+    const wallMat = interior;
+    for (const side of [-1, 1]) {
+      const wall = add(new THREE.BoxGeometry(3.5, 1.0, 0.05), wallMat, this.root, false);
+      wall.position.set(0.3, -0.12, side * 0.77);
+      // upper cabin wall between the window band and the ceiling
+      const upper = add(new THREE.BoxGeometry(3.3, 0.1, 0.05), wallMat, this.root, false);
+      upper.position.set(0.15, 1.02, side * 0.72);
+    }
+    const ceiling = add(new THREE.BoxGeometry(3.3, 0.05, 1.5), wallMat, this.root, false);
+    ceiling.position.set(0.15, 1.08, 0);
+    const firewall = add(new THREE.BoxGeometry(0.06, 1.3, 1.6), wallMat, this.root, false);
+    firewall.position.set(2.12, 0.03, 0);
+    const rearWall = add(new THREE.BoxGeometry(0.06, 1.55, 1.5), wallMat, this.root, false);
+    rearWall.position.set(-1.5, 0.28, 0);
+    // engine cowl behind the windshield seen from inside: a dark deck so the view over the nose reads correctly
+    const cowlDeck = add(new THREE.BoxGeometry(0.5, 0.05, 1.5), interiorPlastic, this.root, false);
+    cowlDeck.position.set(2.4, 0.66, 0);
     // window posts
     for (const px of [1.72, 0.85, -0.45, -1.45]) {
       for (const side of [-1, 1]) {
@@ -131,8 +148,8 @@ export class PlaneModel {
       }
     }
     // windshield centre post and frame
-    const centrePost = add(new THREE.BoxGeometry(0.9, 0.05, 0.05), interiorPlastic);
-    centrePost.position.set(2.16, 0.9, 0); centrePost.rotation.z = 0.5;
+    const centrePost = add(new THREE.BoxGeometry(0.94, 0.035, 0.035), interiorPlastic);
+    centrePost.position.set(2.17, 0.92, 0); centrePost.rotation.z = -0.44;
     // door handles / steps / fuel filler
     for (const side of [-1, 1]) {
       const step = add(new THREE.BoxGeometry(0.35, 0.04, 0.25), darkMetal);
@@ -146,10 +163,10 @@ export class PlaneModel {
       pipe.rotation.set(0.6, 0, 1.2);
     }
     // intake scoop on the cowl top and cowl flaps
-    const scoop = add(new THREE.BoxGeometry(0.5, 0.12, 0.28), paint);
+    const scoop = add(new THREE.BoxGeometry(0.5, 0.12, 0.28), plainPaint);
     scoop.position.set(3.7, 0.72, 0);
     for (let i = 0; i < 2; i++) {
-      const flap = add(new THREE.BoxGeometry(0.28, 0.04, 0.22), paint);
+      const flap = add(new THREE.BoxGeometry(0.28, 0.04, 0.22), plainPaint);
       flap.position.set(3.0, -0.62, (i === 0 ? -1 : 1) * 0.35);
       flap.rotation.x = (i === 0 ? -1 : 1) * 0.35;
     }
@@ -190,7 +207,7 @@ export class PlaneModel {
     wingL.position.set(0.55, 1.22, 0.0);
     wingL.scale.z = -1;
     // wing centre section fairing over the cabin
-    const fairing = add(new THREE.BoxGeometry(2.0, 0.22, 1.7), paint);
+    const fairing = add(new THREE.BoxGeometry(2.0, 0.22, 1.7), plainPaint);
     fairing.position.set(0.55, 1.2, 0);
     // control surfaces: flaps (inboard) and ailerons (outboard) hinged at the trailing edge
     const mkSurface = (spanZ: number, chordRoot: number, chordTip: number, zStart: number, side: number, mat: THREE.Material): THREE.Group => {
@@ -314,7 +331,7 @@ export class PlaneModel {
     const panel = add(new THREE.BoxGeometry(0.16, 0.42, 1.36), interiorPlastic, this.root, false);
     panel.position.set(2.0, 0.55, 0);
     const face = add(new THREE.PlaneGeometry(1.34, 0.4), panelMat, this.root, false);
-    face.position.set(1.915, 0.56, 0); face.rotation.y = Math.PI / 2;
+    face.position.set(1.915, 0.56, 0); face.rotation.y = -Math.PI / 2;
     const glareShield = add(new THREE.BoxGeometry(0.5, 0.04, 1.4), interiorPlastic, this.root, false);
     glareShield.position.set(2.15, 0.78, 0);
     const pedestal = add(new THREE.BoxGeometry(0.7, 0.32, 0.22), interiorPlastic, this.root, false);
