@@ -131,6 +131,12 @@ export class Poser {
     // hips and shoulders yaw against each other a little when walking
     _q2.setFromAxisAngle(Y, (anim.sway || 0) * 0.05);
     this.bodyQ.premultiply(_q2);
+    // and the trunk rolls about its own axis toward the side whose foreleg is
+    // bearing weight: the shoulder roll of a walking cat
+    if (anim.roll) {
+      _q2.setFromAxisAngle(bodyDir, anim.roll);
+      this.bodyQ.premultiply(_q2);
+    }
     // rotation that carries a rest-frame direction into the current body frame
     const delta = this.delta.copy(this.bodyQ).multiply(this.restBodyInv);
     const right = this.right.copy(X).applyQuaternion(delta);
@@ -260,7 +266,9 @@ export class Poser {
       }
       let lowP = pawP.clone().addScaledVector(lowDir, leg.L3);
       const reach = (leg.L1 + leg.L2) * 0.985;
-      const give = 0.06 * s;
+      // the scapula slides on the ribcage, so a foreleg reaches further than
+      // its bones: most of a lion's forward reach at a walk is shoulder
+      const give = (leg.front ? 0.09 : 0.06) * s;
       // what is out of reach even with the give spent, as a vertical drop of
       // the trunk end this leg hangs from; measured before the give so the
       // answer does not change once the trunk comes down. A swinging foot

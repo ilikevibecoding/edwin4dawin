@@ -130,5 +130,11 @@ export function createWildlife({ terrain, env = null, quality = 'high' } = {}) {
     quality,
     update,
     stats,
+    /**
+     * Where paws and lying bodies meet the ground, world space, one
+     * Float32Array of (x, z, radius, weight) per lion (see Lion.contactPoints),
+     * for the vegetation to cull or push grass around.
+     */
+    contactPoints: () => lions.map((l) => l.contactPoints()),
   };
 }

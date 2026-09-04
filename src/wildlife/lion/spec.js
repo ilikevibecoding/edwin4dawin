@@ -13,10 +13,19 @@
 
 export const KINDS = {
   male: { scale: 1.0, mane: true, head: 1.06, bulk: 1.0, leg: 1.0, tuft: 1.0, spots: false, walk: 0.95 },
-  lioness: { scale: 0.83, mane: false, head: 1.0, bulk: 0.93, leg: 0.98, tuft: 0.9, spots: false, walk: 1.0 },
-  // a cub is squat: legs short for its body, so heights are scaled down on their own
-  cub: { scale: 0.46, mane: false, head: 1.3, bulk: 1.05, leg: 1.25, tuft: 0.7, spots: true, walk: 1.05, squat: 0.86 },
+  lioness: { scale: 0.83, mane: false, head: 1.0, bulk: 0.95, leg: 1.0, tuft: 0.9, spots: false, walk: 1.0 },
+  // a cub is not a small lion: the head is near half the length of the trunk,
+  // the legs are short and thick for the body, and the belly is round. `squat`
+  // scales heights on their own, `leg` the limb thickness, `bulk` the trunk.
+  cub: { scale: 0.46, mane: false, head: 1.5, bulk: 1.22, leg: 1.55, tuft: 0.7, spots: true, walk: 1.05, squat: 0.78 },
 };
+
+/**
+ * The head children (jaw, ears, lids) are laid out for a skull based here.
+ * Moving the head joint itself moves them with it, so the neck can be
+ * shortened or lengthened without re-deriving every feature position.
+ */
+export const HEAD_REF = [0, 1.2, 0.91];
 
 /**
  * Rest-pose joints. `dir` overrides the bone's pointing direction where the
@@ -28,10 +37,12 @@ export const JOINTS = [
   { name: 'spine1', parent: 'pelvis', pos: [0, 1.105, -0.27], to: 'spine2' },
   { name: 'spine2', parent: 'spine1', pos: [0, 1.125, 0.06], to: 'chest' },
   { name: 'chest', parent: 'spine2', pos: [0, 1.14, 0.42], to: 'neck1' },
-  { name: 'neck1', parent: 'chest', pos: [0, 1.155, 0.61], to: 'neck2' },
-  { name: 'neck2', parent: 'neck1', pos: [0, 1.18, 0.77], to: 'head' },
-  // a short, heavy neck: the skull sits close over the shoulders
-  { name: 'head', parent: 'neck2', pos: [0, 1.2, 0.91], dir: [0, 0, 1] },
+  { name: 'neck1', parent: 'chest', pos: [0, 1.155, 0.56], to: 'neck2' },
+  { name: 'neck2', parent: 'neck1', pos: [0, 1.18, 0.70], to: 'head' },
+  // a short, heavy neck: the skull sits close over the shoulders, the occiput
+  // about a head's length ahead of the withers (the children below are laid
+  // out for HEAD_REF and follow this joint)
+  { name: 'head', parent: 'neck2', pos: [0, 1.2, 0.82], dir: [0, 0, 1] },
   // head children are laid out for a unit head and scaled by the kind's head factor
   { name: 'jaw', parent: 'head', pos: [0, 1.14, 1.0], dir: [0, -0.12, 1] },
   // ears root on the upper-back corners of the skull and stand up and out
@@ -52,30 +63,39 @@ export const JOINTS = [
   { name: 'tail5', parent: 'tail4', pos: [0, 0.43, -1.0], to: 'tailTip' },
   { name: 'tailTip', parent: 'tail5', pos: [0, 0.25, -0.99], end: true },
   // front legs: shoulder joint (humerus head), elbow, wrist, paw
-  { name: 'shoulderL', parent: 'chest', pos: [0.16, 0.86, 0.42], to: 'elbowL' },
-  { name: 'elbowL', parent: 'shoulderL', pos: [0.17, 0.58, 0.35], to: 'wristL' },
-  { name: 'wristL', parent: 'elbowL', pos: [0.17, 0.22, 0.42], to: 'pawFL' },
-  { name: 'pawFL', parent: 'wristL', pos: [0.17, 0.05, 0.48], to: 'toeFL' },
-  { name: 'toeFL', parent: 'pawFL', pos: [0.17, 0.02, 0.6], end: true },
-  { name: 'shoulderR', parent: 'chest', pos: [-0.16, 0.86, 0.42], to: 'elbowR' },
-  { name: 'elbowR', parent: 'shoulderR', pos: [-0.17, 0.58, 0.35], to: 'wristR' },
-  { name: 'wristR', parent: 'elbowR', pos: [-0.17, 0.22, 0.42], to: 'pawFR' },
-  { name: 'pawFR', parent: 'wristR', pos: [-0.17, 0.05, 0.48], to: 'toeFR' },
-  { name: 'toeFR', parent: 'pawFR', pos: [-0.17, 0.02, 0.6], end: true },
+  { name: 'shoulderL', parent: 'chest', pos: [0.17, 0.86, 0.42], to: 'elbowL' },
+  { name: 'elbowL', parent: 'shoulderL', pos: [0.18, 0.58, 0.35], to: 'wristL' },
+  { name: 'wristL', parent: 'elbowL', pos: [0.175, 0.22, 0.42], to: 'pawFL' },
+  { name: 'pawFL', parent: 'wristL', pos: [0.175, 0.05, 0.48], to: 'toeFL' },
+  { name: 'toeFL', parent: 'pawFL', pos: [0.175, 0.02, 0.6], end: true },
+  { name: 'shoulderR', parent: 'chest', pos: [-0.17, 0.86, 0.42], to: 'elbowR' },
+  { name: 'elbowR', parent: 'shoulderR', pos: [-0.18, 0.58, 0.35], to: 'wristR' },
+  { name: 'wristR', parent: 'elbowR', pos: [-0.175, 0.22, 0.42], to: 'pawFR' },
+  { name: 'pawFR', parent: 'wristR', pos: [-0.175, 0.05, 0.48], to: 'toeFR' },
+  { name: 'toeFR', parent: 'pawFR', pos: [-0.175, 0.02, 0.6], end: true },
   // hind legs: hip, knee (stifle), hock, paw
   // the stifle sits a little ahead of the hip, the hock well behind it, so the
-  // leg zigzags the way a cat's does instead of standing as a column
-  { name: 'hipL', parent: 'pelvis', pos: [0.15, 0.95, -0.6], to: 'kneeL' },
-  { name: 'kneeL', parent: 'hipL', pos: [0.16, 0.6, -0.49], to: 'hockL' },
-  { name: 'hockL', parent: 'kneeL', pos: [0.16, 0.3, -0.73], to: 'pawHL' },
-  { name: 'pawHL', parent: 'hockL', pos: [0.16, 0.05, -0.65], to: 'toeHL' },
-  { name: 'toeHL', parent: 'pawHL', pos: [0.16, 0.02, -0.53], end: true },
-  { name: 'hipR', parent: 'pelvis', pos: [-0.15, 0.95, -0.6], to: 'kneeR' },
-  { name: 'kneeR', parent: 'hipR', pos: [-0.16, 0.6, -0.49], to: 'hockR' },
-  { name: 'hockR', parent: 'kneeR', pos: [-0.16, 0.3, -0.73], to: 'pawHR' },
-  { name: 'pawHR', parent: 'hockR', pos: [-0.16, 0.05, -0.65], to: 'toeHR' },
-  { name: 'toeHR', parent: 'pawHR', pos: [-0.16, 0.02, -0.53], end: true },
+  // leg zigzags the way a cat's does instead of standing as a column. The hips
+  // are set wide (0.4 m across on a male) so the hind legs pass one another
+  // with daylight between them instead of crossing in a side view.
+  { name: 'hipL', parent: 'pelvis', pos: [0.2, 0.95, -0.6], to: 'kneeL' },
+  { name: 'kneeL', parent: 'hipL', pos: [0.2, 0.6, -0.49], to: 'hockL' },
+  { name: 'hockL', parent: 'kneeL', pos: [0.19, 0.3, -0.73], to: 'pawHL' },
+  { name: 'pawHL', parent: 'hockL', pos: [0.185, 0.05, -0.65], to: 'toeHL' },
+  { name: 'toeHL', parent: 'pawHL', pos: [0.185, 0.02, -0.53], end: true },
+  { name: 'hipR', parent: 'pelvis', pos: [-0.2, 0.95, -0.6], to: 'kneeR' },
+  { name: 'kneeR', parent: 'hipR', pos: [-0.2, 0.6, -0.49], to: 'hockR' },
+  { name: 'hockR', parent: 'kneeR', pos: [-0.19, 0.3, -0.73], to: 'pawHR' },
+  { name: 'pawHR', parent: 'hockR', pos: [-0.185, 0.05, -0.65], to: 'toeHR' },
+  { name: 'toeHR', parent: 'pawHR', pos: [-0.185, 0.02, -0.53], end: true },
 ];
+
+/**
+ * A hind foot never lands closer to the sagittal plane than this fraction of
+ * its rest lateral offset, and the poser keeps the stifle and hock outside it
+ * too, so the hind legs cannot cross into an X under the hips.
+ */
+export const HIND_LATERAL_MIN = 0.55;
 
 export const LEGS = [
   { name: 'FL', side: 1, front: true, root: 'shoulderL', mid: 'elbowL', low: 'wristL', paw: 'pawFL', toe: 'toeFL' },
@@ -91,12 +111,51 @@ export const LEGS = [
 export const EYE = { r: 0.0195, lidUp: 0.46, lidDown: 0.46 };
 
 /**
+ * The lower lid's rim below the gaze when the eye is open, read by head.js: a
+ * little further down than EYE.lidDown so the almond opens to a lion's
+ * proportion (about half the ball's height). The blink still turns the upper
+ * lid through EYE.lidUp + EYE.lidDown, so at full shut a 0.08 rad sliver
+ * (under 2 mm) sits between the rims, hidden by the lids' thickness.
+ */
+export const EYE_LIDS = { down: 0.54 };
+
+/**
+ * Head-child joints re-placed for the head in head.js, laid out like JOINTS
+ * for HEAD_REF and applied over the JOINTS entry of the same name by
+ * scaledJoints: the ears lean a little further back, the eyes face a little
+ * more forward.
+ */
+export const HEAD_JOINTS = {
+  earL: { pos: [0.088, 1.288, 0.925], dir: [0.6, 1, -0.25] },
+  earR: { pos: [-0.088, 1.288, 0.925], dir: [-0.6, 1, -0.25] },
+  // eyes set out on the face (the ball's centre 14 mm under the skin along its
+  // gaze) so the cornea stands proud between brow and cheek, forward-facing
+  // with about 24 degrees of divergence; headspec.js FACE.eye is this offset
+  lidL: { pos: [0.058, 1.26, 1.075], dir: [0.4, 0.12, 1] },
+  lidR: { pos: [-0.058, 1.26, 1.075], dir: [-0.4, 0.12, 1] },
+};
+
+/**
+ * Head shape by kind, read by head.js: `muzzle` scales the face ahead of the
+ * stop (a cub's muzzle is short for its skull). Keyed by KINDS name.
+ */
+export const HEAD_KINDS = {
+  male: { muzzle: 1.0 },
+  lioness: { muzzle: 1.0 },
+  cub: { muzzle: 0.8 },
+};
+
+/**
  * How far the underside hangs below the spine at each trunk joint, for a unit
  * male (the torso loft's lower half-heights). The poser will not put a joint
  * closer to the ground than this, so a lying animal rests on its belly instead
  * of sinking through it. `bulkFactor` is how a kind's bulk scales the depth.
  */
-export const BELLY = { pelvis: 0.34, spine1: 0.49, spine2: 0.57, chest: 0.58, drop: 0.04 };
+// A lion is barrel-bodied: the underline runs nearly level from the brisket at
+// the elbow back past the middle of the trunk, sags a little at the mid-belly,
+// and only rises to the groin in the last third. Chest depth is about 1.2× the
+// depth at the groin, not twice it.
+export const BELLY = { pelvis: 0.44, spine1: 0.57, spine2: 0.61, chest: 0.6, drop: 0.04 };
 export const bellyFactor = (bulk) => 0.45 + 0.55 * bulk;
 
 /** Where the pad meets the ground, in the paw bone's frame (+Y along the bone, toward the toes). */
@@ -114,9 +173,12 @@ export function scaledJoints(kind) {
   const head = JOINTS.find((j) => j.name === 'head').pos;
   return JOINTS.map((j) => {
     if (j.parent === 'head') {
-      // ears, lids and jaw ride on the head's own scale so a cub's big head keeps its features
+      // ears, lids and jaw ride on the head's own scale so a cub's big head
+      // keeps its features; their offsets are taken from HEAD_REF and hung on
+      // the head joint wherever the neck puts it
       const hs = s * k.head;
-      return { ...j, pos: [head[0] * s + (j.pos[0] - head[0]) * hs, head[1] * sy + (j.pos[1] - head[1]) * hs, head[2] * s + (j.pos[2] - head[2]) * hs] };
+      const o = HEAD_JOINTS[j.name] || j;
+      return { ...j, dir: o.dir || j.dir, pos: [head[0] * s + (o.pos[0] - HEAD_REF[0]) * hs, head[1] * sy + (o.pos[1] - HEAD_REF[1]) * hs, head[2] * s + (o.pos[2] - HEAD_REF[2]) * hs] };
     }
     return { ...j, pos: [j.pos[0] * s, j.pos[1] * sy, j.pos[2] * s] };
   });

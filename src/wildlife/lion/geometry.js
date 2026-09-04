@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { BELLY, EYE, KINDS, bellyFactor } from './spec.js';
 import { chainWeights } from './rig.js';
+import { addHead } from './head.js';
 import { ATLAS, SKULL_MAP, uvIn } from './textures.js';
 import { clamp, lerp, smoothstep } from '../../textures/core.js';
 
@@ -363,19 +364,19 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
   // shoulder, the widest the hips and the shoulders, and the neck stays heavy
   // right up to the skull
   const torsoRows = [
-    [arcAt(0), 0.05, 0.03, 0.1, 0.06],
-    [arcAt(0, 0.4), 0.17, 0.05, 0.22, 0.05],
-    [arcAt(1), 0.23, 0.09, BELLY.pelvis, 0.04], // pelvis: mass on top, the groin tucked up so the thigh shows below it
-    [arcAt(1, 0.5), 0.205, 0.08, 0.42, 0.04],
-    [arcAt(2), 0.19, 0.07, BELLY.spine1, 0.04], // spine1: waist, narrower than either end; a lion's belly is full
+    [arcAt(0), 0.06, 0.035, 0.12, 0.06],
+    [arcAt(0, 0.4), 0.19, 0.06, 0.26, 0.05],
+    [arcAt(1), 0.245, 0.09, BELLY.pelvis, 0.04], // pelvis: broad across the hips, the groin tucked up so the thigh shows below it
+    [arcAt(1, 0.5), 0.235, 0.085, 0.53, 0.04],
+    [arcAt(2), 0.225, 0.08, BELLY.spine1, 0.04], // spine1: the loin, barely narrower than the ribs; a lion's belly is full
     // the ribcage is long and deep: the underline stays down from the elbow
-    // back past the middle of the trunk before it rises to the groin
-    [arcAt(3), 0.23, 0.075, BELLY.spine2, 0.04], // spine2
-    [arcAt(3, 0.6), 0.26, 0.08, BELLY.chest + 0.005, 0.04],
-    [arcAt(4), 0.265, 0.08, BELLY.chest, 0.035], // chest / shoulders: the widest point, the brisket down at the elbow
-    [arcAt(4, 0.5), 0.235, 0.08, 0.48, 0.03], // point of the shoulder: broad, the upper arm buried in it
-    [arcAt(5), 0.15, 0.08, 0.34, 0.02], // neck1: the neck proper starts, no wider than the head is long
-    [arcAt(6), 0.118, 0.075, 0.2, 0.01], // neck2: throat rising to the jaw, narrower than the skull
+    // back past the middle of the trunk, sagging a little, before it rises to the groin
+    [arcAt(3), 0.25, 0.085, BELLY.spine2, 0.04], // spine2: the barrel
+    [arcAt(3, 0.6), 0.265, 0.1, BELLY.chest + 0.01, 0.04], // behind the shoulder blades: the withers rise
+    [arcAt(4), 0.27, 0.105, BELLY.chest, 0.035], // chest / shoulders: the widest point, the brisket down at the elbow
+    [arcAt(4, 0.5), 0.245, 0.1, 0.5, 0.03], // point of the shoulder: broad, the upper arm buried in it
+    [arcAt(5), 0.175, 0.09, 0.37, 0.02], // neck1: the neck proper starts, as wide as the skull and deeper than it
+    [arcAt(6), 0.135, 0.08, 0.22, 0.01], // neck2: throat rising to the jaw, as wide as the skull
     [arcAt(7), 0.1, 0.07, 0.15, 0.0], // head: inside the skull; the throat runs on under the jaw
     [arcAt(8), 0.075, 0.05, 0.115, 0.0],
   ];
@@ -401,12 +402,16 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
   };
   const muscle = (p, u) => {
     const lateral = smoothstep(0.1 * s, 0.22 * s, Math.abs(p.x));
-    let o = bulge(p, 0.22 * s, 0.88 * s, 0.4 * s, 0.24 * s, 0.04 * s) * lateral;
+    // the shoulder: triceps and the point of the shoulder low down, and the
+    // scapula with its muscle riding up over the forelegs to the withers, the
+    // heavy-shouldered read a lion has and a dog does not
+    let o = bulge(p, 0.23 * s, 0.88 * s, 0.4 * s, 0.24 * s, 0.055 * s) * lateral;
+    o += bulge(p, 0.2 * s, 1.04 * s, 0.34 * s, 0.2 * s, 0.038 * s) * lateral;
     // the haunch: gluteals over the hip and the thigh mass below and behind it,
     // swelling the trunk around the hip so the leg grows out of it
-    o += bulge(p, 0.22 * s, 0.86 * s, -0.56 * s, 0.27 * s, 0.045 * s) * lateral;
-    o += bulge(p, 0.2 * s, 0.76 * s, -0.6 * s, 0.2 * s, 0.035 * s) * lateral;
-    o -= bulge(p, 0.22 * s, 0.85 * s, -0.2 * s, 0.22 * s, 0.014 * s) * lateral;
+    o += bulge(p, 0.24 * s, 0.88 * s, -0.56 * s, 0.27 * s, 0.05 * s) * lateral;
+    o += bulge(p, 0.22 * s, 0.76 * s, -0.6 * s, 0.2 * s, 0.04 * s) * lateral;
+    o -= bulge(p, 0.22 * s, 0.85 * s, -0.2 * s, 0.22 * s, 0.01 * s) * lateral;
     return o;
   };
   body.loft(torsoStations, D.around, { uvRect: ATLAS.body, capStart: true, colorFn: torsoBelly, offsetFn: muscle });
@@ -445,34 +450,36 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
       // it is wide, and the cannon is nearly round.
       const rows = front
         ? [
-            [0.0, 0.088, 0.125, 0.165],
-            [0.15, 0.086, 0.118, 0.145],
-            [0.3, 0.09, 0.114, 0.12], // elbow: the point of the elbow and the triceps behind it
-            [0.45, 0.076, 0.098, 0.088],
-            [0.6, 0.064, 0.078, 0.068],
-            [0.72, 0.058, 0.062, 0.057],
-            [0.82, 0.055, 0.052, 0.05],
+            [0.0, 0.1, 0.13, 0.175],
+            [0.15, 0.096, 0.122, 0.155],
+            [0.28, 0.092, 0.112, 0.14], // elbow: the point of the elbow behind it, the triceps above
+            [0.38, 0.094, 0.114, 0.108], // top of the forearm: the thickest part of the lower leg
+            [0.52, 0.083, 0.096, 0.086],
+            [0.66, 0.07, 0.075, 0.069],
+            [0.78, 0.062, 0.062, 0.06],
+            [0.86, 0.068, 0.062, 0.072], // wrist: the carpus is a knob, the accessory pad behind it
             // the pastern flattens toward the paw: lying, it rests along the
             // ground, so its depth here must be less than the paw joint's height
-            [0.92, 0.068, 0.046, 0.044],
-            [1.0, 0.064, 0.036, 0.034],
+            [0.93, 0.072, 0.047, 0.044],
+            [1.0, 0.084, 0.044, 0.03], // paw: wide and flat, the toes protruding past it
           ]
         : [
             // the thigh's mass hangs behind the femur; ahead of it the flank
             // fold runs down and forward to the stifle, which is the leg's
             // front-most point, so the leg zigzags in silhouette
-            [0.0, 0.14, 0.14, 0.24],
-            [0.15, 0.14, 0.13, 0.2],
-            [0.3, 0.1, 0.12, 0.12], // stifle
-            [0.42, 0.08, 0.102, 0.092], // gaskin
-            [0.56, 0.062, 0.074, 0.072],
-            [0.66, 0.05, 0.058, 0.062], // hock: the narrowest point, still a heavy joint
-            [0.78, 0.05, 0.052, 0.052],
-            [0.9, 0.062, 0.046, 0.044],
-            [1.0, 0.062, 0.036, 0.034],
+            [0.0, 0.15, 0.15, 0.25],
+            [0.15, 0.148, 0.14, 0.21],
+            [0.3, 0.11, 0.14, 0.128], // stifle: the patella out front
+            [0.42, 0.098, 0.12, 0.112], // gaskin: the calf muscle, nearly as thick as the forearm
+            [0.56, 0.076, 0.086, 0.088],
+            [0.66, 0.064, 0.064, 0.094], // hock: the point of the hock stands out behind
+            [0.78, 0.058, 0.057, 0.06],
+            [0.9, 0.066, 0.047, 0.044],
+            [1.0, 0.08, 0.044, 0.03],
           ];
       const [rx, ryF, ryB] = table(rows, Math.max(0, f));
-      const thick = lerp(bulk, legR, smoothstep(0.2, 0.5, f));
+      // the paw end tracks the pad's width (see addPaw), the limb the leg factor
+      const thick = lerp(lerp(bulk, legR, smoothstep(0.2, 0.5, f)), Math.sqrt(legR), smoothstep(0.75, 1.0, f));
       // inside the trunk the section shrinks toward the start so the loft closes into it
       const inner = f < 0 ? lerp(0.35, 1, d / rootArc) : 1;
       return { rx: rx * s * thick * inner, ryTop: ryF * s * thick * inner, ryBot: ryB * s * thick * inner, drop: 0 };
@@ -601,29 +608,36 @@ function addPaw(b, skel, leg, K, D) {
     _m.compose(new THREE.Vector3(x, y, z), rot ? _q.setFromEuler(new THREE.Euler(rot[0], rot[1], rot[2])) : _q.identity(), scale || new THREE.Vector3(1, 1, 1));
     return new THREE.Matrix4().multiplyMatrices(frame, _m);
   };
-  const w = K.leg * s;
-  // pad: flattened ellipsoid whose underside is exactly the contact point
+  // paw width follows the leg's thickness factor but only by its square root:
+  // a cub's paws are big for its legs, a male's are not out of scale with his
+  const w = Math.sqrt(K.leg) * s;
+  // a hind paw is a little narrower and longer than a fore paw
+  const pw = leg.front ? 1.0 : 0.92;
+  // pad: flattened ellipsoid whose underside is exactly the contact point.
+  // Its width is about 1.6× the pastern's, so the paw reads as a paw and not
+  // as the leg tapering to a point.
   const padGeo = new THREE.SphereGeometry(1, D.sphere[0] * 0.6 | 0 || 8, D.sphere[1] * 0.6 | 0 || 5);
   // The paw bone pitches 14 degrees toward the toes, so the pad's lowest point is
   // not its -z extreme: with the pad centred here its underside just kisses the
   // contact point, and the toes further along the bone are raised to match.
   b.addGeometry(padGeo, {
-    matrix: local(0, 0.056 * s, 0.0125 * s, null, new THREE.Vector3(0.06 * w, 0.062 * s, 0.019 * s)),
+    matrix: local(0, 0.056 * s, 0.0125 * s, null, new THREE.Vector3(0.076 * w * pw, 0.07 * s, 0.019 * s)),
     uvRect: ATLAS.pad,
     bones,
     color: [0.9, 0.86, 0.82],
   });
   if (!D.toes) return;
   const toeGeo = new THREE.SphereGeometry(1, D.sphere[0] * 0.5 | 0 || 6, D.sphere[1] * 0.5 | 0 || 4);
-  const clawGeo = D.claws ? new THREE.CylinderGeometry(0.0, 0.006 * s, 0.024 * s, 6) : null;
-  const xs = [-0.046, -0.016, 0.016, 0.046];
+  const clawGeo = D.claws ? new THREE.CylinderGeometry(0.0, 0.0065 * s, 0.026 * s, 6) : null;
+  // four toes, the middle pair leading, each a lump the size of a walnut
+  const xs = [-0.057, -0.019, 0.019, 0.057];
   for (let i = 0; i < 4; i++) {
-    const x = xs[i] * w;
+    const x = xs[i] * w * pw;
     const outer = Math.abs(xs[i]) > 0.03;
-    const y = (L4 * 0.86 - (outer ? 0.012 * s : 0)) ;
+    const y = L4 * 0.9 - (outer ? 0.016 * s : 0);
     const spread = xs[i] * 3.0;
     b.addGeometry(toeGeo, {
-      matrix: local(x, y, 0.003 * s, [0, 0, -spread * 0.4], new THREE.Vector3(0.02 * w, 0.034 * s, 0.021 * s)),
+      matrix: local(x, y, -0.002 * s, [0, 0, -spread * 0.4], new THREE.Vector3(0.025 * w, 0.042 * s, 0.03 * s)),
       uvRect: ATLAS.leg,
       uvFn: (u, v) => [0.2 + u * 0.1, 0.05 + v * 0.1],
       bones,
@@ -631,271 +645,38 @@ function addPaw(b, skel, leg, K, D) {
     });
     if (clawGeo) {
       b.addGeometry(clawGeo, {
-        matrix: local(x + spread * 0.006 * s, y + 0.034 * s, 0.0, [-0.55, 0, -spread * 0.5], new THREE.Vector3(1, 1, 1)),
+        matrix: local(x + spread * 0.006 * s, y + 0.04 * s, 0.0, [-0.55, 0, -spread * 0.5], new THREE.Vector3(1, 1, 1)),
         uvRect: ATLAS.claw,
         bones,
       });
     }
   }
-}
-
-/** Skull, brow, cheeks, muzzle, nose, jaw, ears, eyes, lids and whiskers. */
-function addHead(b, alpha, skel, K, D) {
-  const s = K.scale * K.head;
-  const rest = skel.rest;
-  const headIdx = skel.index.get('head');
-  const headBones = [[headIdx, 1]];
-  const hr = rest.get('head');
-  const frame = new THREE.Matrix4().compose(hr.pos, hr.quat, new THREE.Vector3(1, 1, 1));
-  // head bone +Y is forward, +Z is down; work in a forward = +Z, up = +Y frame instead
-  const headFrame = new THREE.Matrix4().multiplyMatrices(frame, new THREE.Matrix4().makeRotationX(-Math.PI / 2));
-  const local = (x, y, z, rot, scale) => {
-    _m.compose(new THREE.Vector3(x, y, z), rot ? _q.setFromEuler(new THREE.Euler(rot[0], rot[1], rot[2])) : _q.identity(), scale || new THREE.Vector3(1, 1, 1));
-    return new THREE.Matrix4().multiplyMatrices(headFrame, _m);
-  };
-  const ws = D.sphere[0];
-  const hs = D.sphere[1];
-  // the braincase: a lion's head is nearly as tall as it is long (about 1.4:1
-  // nose to occiput over crown to chin), so the skull is a short, deep, wide
-  // ellipsoid and the muzzle a stub in front of it, not a snout
-  const skullC = new THREE.Vector3(0, 0.026 * s, 0.06 * s);
-  const skullR = new THREE.Vector3(0.116 * s, 0.112 * s, 0.122 * s);
-  // the crown is flat between the ears, not domed: press the top of the
-  // ellipsoid down and let the sides carry the width. The features are then
-  // sculpted into the one surface rather than stacked on it as separate
-  // shapes, so there are no seams: a brow ridge over each socket, the
-  // zygomatic arch and the masseter making the cheek the widest part of the
-  // face, and a shallow socket around each eye.
-  const skull = ellipsoid(skullR.x, skullR.y, skullR.z, ws, hs);
-  {
-    const ap = skull.attributes.position;
-    for (let i = 0; i < ap.count; i++) {
-      // a cat's skull is boxy, not egg-shaped: full in the cheeks and the jaw,
-      // flat across the forehead. Push the ellipsoid out toward a rounded box
-      // (a superellipsoid of exponent 2.5), more so below the eye line where
-      // the masseter and the jaw fill it out.
-      const nx = ap.getX(i) / skullR.x;
-      const ny = ap.getY(i) / skullR.y;
-      const nz = ap.getZ(i) / skullR.z;
-      const n = ny < 0 ? 2.7 : 2.4;
-      const k = 1 / Math.pow(Math.pow(Math.abs(nx), n) + Math.pow(Math.abs(ny), n) + Math.pow(Math.abs(nz), n), 1 / n);
-      let x = ap.getX(i) * k;
-      let y = ap.getY(i) * k;
-      const z = ap.getZ(i) * k;
-      if (y > 0) {
-        const t = y / skullR.y;
-        y *= lerp(1, 0.82, t * t);
-        x *= lerp(1, 1.06, t);
-      }
-      ap.setXYZ(i, x, y, z);
-    }
-    skull.computeVertexNormals();
-    // [cx, cy, cz, rx, ry, rz, amount], mirrored in x, in skull-local unit-head metres
-    const bumps = [
-      [0.05, 0.048, 0.088, 0.036, 0.022, 0.036, 0.011], // brow ridge
-      [0.104, -0.028, 0.03, 0.03, 0.05, 0.065, 0.014], // zygomatic arch
-      [0.088, -0.062, 0.07, 0.035, 0.045, 0.055, 0.012], // masseter / jowl
-      [0.056, 0.02, 0.1, 0.03, 0.03, 0.03, -0.007], // eye socket
-      [0.0, 0.045, 0.11, 0.03, 0.03, 0.04, 0.008], // frontal boss between the eyes
-    ];
-    const an = skull.attributes.normal;
-    for (let i = 0; i < ap.count; i++) {
-      const x = ap.getX(i);
-      const y = ap.getY(i);
-      const z = ap.getZ(i);
-      let o = 0;
-      for (const [cx, cy, cz, rx, ry, rz, amt] of bumps) {
-        const dx = (Math.abs(x) - cx * s) / (rx * s);
-        const dy = (y - cy * s) / (ry * s);
-        const dz = (z - cz * s) / (rz * s);
-        o += amt * s * Math.exp(-(dx * dx + dy * dy + dz * dz) * 1.6);
-      }
-      if (o !== 0) ap.setXYZ(i, x + an.getX(i) * o, y + an.getY(i) * o, z + an.getZ(i) * o);
-    }
-    skull.computeVertexNormals();
-  }
-  const toHead = new THREE.Matrix4().copy(headFrame).invert();
-  // skull uv is cylindrical about the skull centre, evaluated in head space
-  const suvHead = skullUV(s);
-  const suv = (u, v, p) => {
-    _c.copy(p).applyMatrix4(toHead);
-    return suvHead(_c);
-  };
-
-  b.addGeometry(skull, { matrix: local(skullC.x, skullC.y, skullC.z), uvRect: ATLAS.skull, uvFn: suv, bones: headBones });
-  // nasal bridge: from the forehead between the eyes down onto the root of the
-  // muzzle; narrower than the gap between the sockets so it never covers an eye
-  b.addGeometry(ellipsoid(0.034 * s, 0.026 * s, 0.085 * s, ws * 0.7 | 0, hs * 0.7 | 0), {
-    matrix: local(0, 0.058 * s, 0.118 * s, [0.42, 0, 0]),
-    uvRect: ATLAS.skull,
-    uvFn: suv,
-    bones: headBones,
-  });
-
-  // muzzle: broad and blunt, a short loft forward from the skull, bottom seam at u = 0
-  // a cat's muzzle is a box, not a snout: it keeps its width and depth almost
-  // to the nose and ends bluntly, the nose leather on the front face. Eye to
-  // nose tip is about 40% of the head's length. It is narrower than the skull
-  // (the cheeks stand out beside it) and its top runs below the eyes, so the
-  // eye sits on the corner of the face, above and outside the muzzle.
-  const mz = [
-    { z: 0.13, w: 0.072, t: 0.048, bt: 0.068, y: -0.01 },
-    { z: 0.19, w: 0.07, t: 0.045, bt: 0.066, y: -0.011 },
-    { z: 0.245, w: 0.066, t: 0.042, bt: 0.06, y: -0.012 },
-    { z: 0.278, w: 0.058, t: 0.037, bt: 0.05, y: -0.013 },
-    { z: 0.295, w: 0.042, t: 0.027, bt: 0.036, y: -0.014 },
-    { z: 0.302, w: 0.022, t: 0.013, bt: 0.018, y: -0.015 },
-  ];
-  const mzStations = mz.map((m, i) => ({
-    c: new THREE.Vector3(0, m.y * s, m.z * s).applyMatrix4(headFrame),
-    ax: new THREE.Vector3(1, 0, 0).transformDirection(headFrame),
-    ay: new THREE.Vector3(0, 1, 0).transformDirection(headFrame),
-    rx: m.w * s,
-    ryTop: m.t * s,
-    ryBot: m.bt * s,
-    v: i / (mz.length - 1),
-    bones: headBones,
-  }));
-  b.loft(mzStations, Math.max(8, Math.round(D.around * 0.5)), { uvRect: ATLAS.muzzle, capEnd: true });
-
-  // nose leather, front projected
-  if (D.head >= 1) {
-    // an inverted triangle, wide across the top and nearly flat on the front
-    const nose = new THREE.SphereGeometry(1, ws * 0.6 | 0, hs * 0.6 | 0);
-    const np = nose.attributes.position;
-    for (let i = 0; i < np.count; i++) {
-      const y = np.getY(i);
-      // narrower toward the bottom, flatter toward the front
-      np.setX(i, np.getX(i) * lerp(0.55, 1.0, smoothstep(-1, 1, y)));
-      if (np.getZ(i) > 0) np.setZ(i, np.getZ(i) * 0.55);
-    }
-    nose.computeVertexNormals();
-    nose.scale(0.032 * s, 0.023 * s, 0.02 * s);
-    b.addGeometry(nose, {
-      matrix: local(0, 0.008 * s, 0.298 * s, [0.45, 0, 0]),
-      uvRect: ATLAS.nose,
-      uvFn: (u, v, p) => {
-        _c.copy(p).applyMatrix4(toHead);
-        return [clamp(_c.x / (0.064 * s) + 0.5), clamp((_c.y - 0.008 * s) / (0.046 * s) + 0.5)];
-      },
-      bones: headBones,
-    });
-  }
-
-  // lower jaw on the jaw bone
-  const jr = rest.get('jaw');
-  const jawIdx = skel.index.get('jaw');
-  // the lower jaw tucks under the upper lip: narrower and shallower than the
-  // muzzle, deepest at the angle of the jaw and shrinking to a small chin
-  const jawStations = [
-    { z: 0.04, w: 0.068, t: 0.034, bt: 0.036, y: -0.066 },
-    { z: 0.13, w: 0.065, t: 0.032, bt: 0.03, y: -0.068 },
-    { z: 0.19, w: 0.062, t: 0.03, bt: 0.026, y: -0.068 },
-    { z: 0.24, w: 0.052, t: 0.026, bt: 0.02, y: -0.066 },
-    { z: 0.266, w: 0.032, t: 0.018, bt: 0.012, y: -0.062 },
-  ].map((m, i, arr) => ({
-    c: new THREE.Vector3(0, m.y * s, m.z * s).applyMatrix4(headFrame),
-    ax: new THREE.Vector3(1, 0, 0).transformDirection(headFrame),
-    ay: new THREE.Vector3(0, 1, 0).transformDirection(headFrame),
-    rx: m.w * s,
-    ryTop: m.t * s,
-    ryBot: m.bt * s,
-    v: i / (arr.length - 1),
-    bones: [[jawIdx, 1]],
-  }));
-  b.loft(jawStations, Math.max(8, Math.round(D.around * 0.4)), { uvRect: ATLAS.jaw, capStart: true, capEnd: true });
-
-  // ears: a cup on each ear bone, outer shell and inner lining
-  for (const side of ['earL', 'earR']) {
-    const er = rest.get(side);
-    const ei = skel.index.get(side);
-    const ef = new THREE.Matrix4().compose(er.pos, er.quat, new THREE.Vector3(1, 1, 1));
-    const cup = (scale, inner) => {
-      // a rounded cup about as wide as it is tall, rooted at the skull surface
-      const g = new THREE.SphereGeometry(1, Math.max(8, ws * 0.6 | 0), Math.max(5, hs * 0.6 | 0), 0, Math.PI * 2, 0, Math.PI * 0.6);
-      g.scale(0.046 * s * scale, 0.027 * s * scale, 0.053 * s * scale);
-      g.rotateX(-Math.PI / 2);
-      g.translate(0, 0.038 * s, inner ? 0.004 * s : 0);
-      const vRim = 1 - 0.6;
-      b.addGeometry(g, {
-        matrix: ef,
-        uvRect: inner ? ATLAS.earIn : ATLAS.earOut,
-        uvFn: (u, v) => [u, clamp((v - vRim) / (1 - vRim))],
-        bones: [[ei, 1]],
-        flip: inner,
-        color: inner ? [0.9, 0.86, 0.84] : [1, 1, 1],
-      });
+  // dew claw: forelegs only, on the inside of the pastern a hand above the
+  // paw, a small toe with its claw turned in and a little back
+  if (leg.front) {
+    const wr = skel.rest.get(leg.low);
+    const wristIdx = skel.index.get(leg.low);
+    const wf = new THREE.Matrix4().compose(wr.pos, wr.quat, new THREE.Vector3(1, 1, 1));
+    const wlocal = (x, y, z, rot, scale) => {
+      _m.compose(new THREE.Vector3(x, y, z), rot ? _q.setFromEuler(new THREE.Euler(rot[0], rot[1], rot[2])) : _q.identity(), scale || new THREE.Vector3(1, 1, 1));
+      return new THREE.Matrix4().multiplyMatrices(wf, _m);
     };
-    cup(1, false);
-    if (D.head >= 1) cup(0.9, true);
-  }
-
-  // eyes on the head bone, lids on their own bones
-  if (D.eyes) {
-    const eyeR = EYE_R * s;
-    for (const side of ['lidL', 'lidR']) {
-      const lr = rest.get(side);
-      const li = skel.index.get(side);
-      const lf = new THREE.Matrix4().compose(lr.pos, lr.quat, new THREE.Vector3(1, 1, 1));
-      const eye = new THREE.SphereGeometry(eyeR, ws, hs);
-      b.addGeometry(eye, { matrix: lf, uvRect: ATLAS.eye, bones: headBones, color: [1, 1, 1] });
-      if (D.lids) {
-        // Each lid is a hemisphere a little larger than the ball, its rim a great
-        // circle through the eye's lateral axis. The upper one is pitched back
-        // so its edge sits LID_UP above the gaze, the lower one LID_DOWN below;
-        // what shows between two such rims is an almond that pinches to the
-        // corners, which is the shape of a cat's eye. Up is -Z in lid space.
-        const cap = (pitch, bones, rimSign) => {
-          const g = new THREE.SphereGeometry(eyeR * 1.09, ws, Math.max(6, hs * 0.6 | 0), 0, Math.PI * 2, 0, Math.PI * 0.5);
-          const vRim = 0.5;
-          // pole to -Z (up) for the upper lid, +Z (down) for the lower, then tilt
-          // back about X so the rim sits at the stated angle off the gaze
-          g.rotateX(rimSign * -Math.PI / 2);
-          g.rotateX(pitch);
-          b.addGeometry(g, {
-            matrix: lf,
-            uvRect: ATLAS.lid,
-            uvFn: (u, v) => [u, clamp((v - vRim) / (1 - vRim))],
-            bones,
-          });
-        };
-        cap(-LID_UP, [[li, 1]], 1);
-        cap(LID_DOWN, headBones, -1);
-      }
-    }
-  }
-
-  // whiskers: strand quads fanning from the whisker pads
-  if (D.whiskers && alpha) {
-    for (const sd of [-1, 1]) {
-      for (let i = 0; i < 6; i++) {
-        const row = i % 3;
-        const col = (i / 3) | 0;
-        const baseP = new THREE.Vector3(sd * (0.062 + row * 0.004) * s, (-0.032 - row * 0.012) * s, (0.21 + col * 0.03) * s);
-        const len = (0.15 + (i % 2) * 0.04 + row * 0.015) * s;
-        // whiskers sweep out and back, nearly level, the lower rows drooping a little
-        const dir = new THREE.Vector3(sd * (0.8 + row * 0.1), -0.08 - row * 0.1 + col * 0.1, 0.3 - col * 0.2).normalize();
-        const sag = new THREE.Vector3(0, -0.12, 0);
-        strandQuad(alpha, headFrame, baseP, dir, len, 0.002 * s, sag, headBones, 3);
-      }
-    }
-  }
-  // tail tuft: three crossed cards hanging from the last tail bone
-  if (alpha) {
-    const tr = rest.get('tail5');
-    const ti = skel.index.get('tail5');
-    const tf = new THREE.Matrix4().compose(tr.pos, tr.quat, new THREE.Vector3(1, 1, 1));
-    const L = tr.len;
-    const tuft = K.tuft * K.scale;
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * Math.PI;
-      const g = new THREE.PlaneGeometry(0.11 * tuft, 0.2 * tuft);
-      // hang from the tip: plane centre below the bone end along +Y (the bone axis)
-      g.translate(0, 0.1 * tuft, 0);
-      g.rotateY(a);
-      g.translate(0, L * 0.7, 0);
-      // left half of the alpha atlas is the tuft, strands rooted at the top
-      alpha.addGeometry(g, { matrix: tf, uvRect: [0, 0, 0.5, 1], uvFn: (u, v) => [u, 1 - v], bones: [[ti, 1]], tag: 1 });
+    const inner = -leg.side;
+    const dx = inner * 0.052 * w;
+    const dy = wr.len - 0.065 * s;
+    b.addGeometry(toeGeo, {
+      matrix: wlocal(dx, dy, -0.004 * s, [0, 0, inner * 0.5], new THREE.Vector3(0.018 * w, 0.03 * s, 0.022 * s)),
+      uvRect: ATLAS.leg,
+      uvFn: (u, v) => [0.2 + u * 0.1, 0.05 + v * 0.1],
+      bones: [[wristIdx, 1]],
+      color: [0.82, 0.78, 0.74],
+    });
+    if (clawGeo) {
+      b.addGeometry(clawGeo, {
+        matrix: wlocal(dx + inner * 0.012 * s, dy + 0.02 * s, -0.012 * s, [-0.9, 0, inner * 0.9], new THREE.Vector3(0.8, 0.8, 0.8)),
+        uvRect: ATLAS.claw,
+        bones: [[wristIdx, 1]],
+      });
     }
   }
 }

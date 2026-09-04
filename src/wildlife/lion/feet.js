@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { HIND_LATERAL_MIN } from './spec.js';
 
 // ---------------------------------------------------------------------------
 // Foot placement.
@@ -20,13 +21,21 @@ const _c = new THREE.Vector3();
 
 const PHASE = { HL: 0.0, FL: 0.25, HR: 0.5, FR: 0.75 };
 const DUTY = 0.6;
+// A forefoot lands a little ahead of its anchor and leaves well behind it; a
+// hind foot's stance is centred. The fraction of the stance travel spent ahead
+// of the anchor, per pair.
+const STANCE_AHEAD = { front: 0.42, hind: 0.5 };
 
 export class Feet {
-  constructor(skel, scale, terrain) {
+  constructor(skel, scale, terrain, { phase = 0 } = {}) {
     this.terrain = terrain;
     this.s = scale;
-    this.stride = 0.74 * scale;
-    this.phase = 0;
+    // distance the body covers in one full cycle: about 1.1× the shoulder
+    // height at a walk (a 1.2 m male strides 1.3 m, a lioness about 1.1 m),
+    // so the cadence follows from the speed and the legs never treadmill
+    this.stride = 1.15 * scale;
+    this.phase0 = phase;
+    this.phase = phase;
     this.moving = false;
     this.legs = skel.legs.map((l) => ({
       spec: l,
@@ -67,7 +76,7 @@ export class Feet {
   /** Drop every foot straight onto the ground under its anchor. */
   reset(root) {
     Object.assign(this.root, root);
-    this.phase = 0;
+    this.phase = this.phase0;
     for (const l of this.legs) {
       this.toWorld(l.anchor, l.pos);
       this.plant(l, l.pos);
@@ -123,7 +132,7 @@ export class Feet {
       // two-second stride planned off a speed that is still ramping up. A
       // turn moves the feet too, so it counts toward the tempo.
       const vEff = speed + Math.abs(yawRate) * 0.55 * s;
-      const T = THREE.MathUtils.clamp(this.stride / Math.max(0.05, vEff), 0.85, 1.5);
+      const T = THREE.MathUtils.clamp(this.stride / Math.max(0.05, vEff), 0.7, 1.5);
       this.T = T;
       this.phase = (this.phase + dt / T) % 1;
       const swingDur = (1 - DUTY) * T;
@@ -177,9 +186,16 @@ export class Feet {
     const aheadYaw = this.root.yaw + this.yawRate * ahead;
     const c = Math.cos(aheadYaw);
     const sn = Math.sin(aheadYaw);
-    const travel = this.moving ? DUTY * (this.T || 1) * 0.5 : 0;
-    const ax = this.root.x + vel.x * ahead + l.anchor.x * c + l.anchor.z * sn;
-    const az = this.root.z + vel.z * ahead - l.anchor.x * sn + l.anchor.z * c;
+    const travel = this.moving ? DUTY * (this.T || 1) * STANCE_AHEAD[l.spec.front ? 'front' : 'hind'] : 0;
+    // a hind foot's lateral offset is kept on its own side of the body: the
+    // stifle and hock follow the paw, so this is what stops the X under the hips
+    let lx = l.anchor.x;
+    if (!l.spec.front) {
+      const min = Math.abs(l.rest.x) * HIND_LATERAL_MIN;
+      lx = l.spec.side > 0 ? Math.max(lx, min) : Math.min(lx, -min);
+    }
+    const ax = this.root.x + vel.x * ahead + lx * c + l.anchor.z * sn;
+    const az = this.root.z + vel.z * ahead - lx * sn + l.anchor.z * c;
     out.x = ax + vel.x * travel;
     out.z = az + vel.z * travel;
     out.y = this.height(out.x, out.z);

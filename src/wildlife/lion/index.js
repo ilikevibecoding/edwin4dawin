@@ -6,6 +6,7 @@ import { alphaAtlas, coatAtlas, coatNormal, farCard, fuzzStrands, maneStrands, A
 import { Poser, STAND } from './pose.js';
 import { Feet } from './feet.js';
 import { Brain } from './behaviour.js';
+import { ContactShadows, contactMaterial } from './contact.js';
 
 // ---------------------------------------------------------------------------
 // One lion: skeleton, three skinned detail tiers and a far card, materials,
@@ -169,7 +170,7 @@ export function lionMaterials({ env, quality }) {
   });
   const card = (mane) =>
     new THREE.MeshStandardMaterial({ map: farCard(mane), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1, metalness: 0, name: 'lion-card' });
-  return { coat, coatCub, mane, maneShell, fuzz, alpha, cornea, cardMale: card(true), cardOther: card(false) };
+  return { coat, coatCub, mane, maneShell, fuzz, alpha, cornea, cardMale: card(true), cardOther: card(false), contact: contactMaterial() };
 }
 
 /** Per-lion tint: a copy of a shared material with the colour nudged. */
@@ -198,7 +199,9 @@ export class Lion {
     this.skel = buildSkeleton(kind);
     this.root.add(this.skel.root);
     this.poser = new Poser(this.skel, this.s, this.K.squat ?? 1, this.K.bulk, this.K.leg);
-    this.feet = new Feet(this.skel, this.s, terrain);
+    // each animal starts its gait at its own point in the cycle, so two that
+    // set off together do not walk in lockstep
+    this.feet = new Feet(this.skel, this.s, terrain, { phase: ((seed ?? 0) * 0.6180339887) % 1 });
     this.brain = new Brain({ kind, scale: this.s, seed, home, spread, pride });
     this.brain.terrainOk = (x, z) => {
       const e = 0.6;
@@ -274,6 +277,8 @@ export class Lion {
     this.tiers.push(card);
     this.stats.tiers.push(2);
     this.stats.calls.push(1);
+    // contact shadows under the paws and the lying trunk, for the near tiers
+    this.contact = new ContactShadows(this, materials.contact);
 
     // drop it in place
     this.brain.pos.y = terrain.heightAt(home.x, home.z);
@@ -349,6 +354,8 @@ export class Lion {
       stepDur: P.hipH < 0.7 ? 0.55 : 0.42,
     });
     if (force) this.feet.reset({ x: b.pos.x, y: b.pos.y, z: b.pos.z, yaw: b.yaw });
+    // the gait period, for the tail and anything else that keeps time with the legs
+    b.gaitT = this.feet.T || 1;
 
     // the pose the poser sees: the state's pose plus the gaze and the gait layers
     const pose = this.pose;
@@ -358,14 +365,22 @@ export class Lion {
     pose.headPitch += out.gaze.pitch;
     const walk = out.anim.walkAmt;
     const ph = this.feet.phase * Math.PI * 2;
+    // Gait layers. The trunk rises twice a cycle, highest as each diagonal
+    // pair passes under the body; the head nods in counter-phase to it (down as
+    // the shoulders come up); the shoulders roll toward the planted foreleg;
+    // hips and shoulders yaw against one another.
+    const bob = Math.sin(ph * 2);
     out.anim.sway = Math.sin(ph) * walk;
-    out.anim.headBob = Math.sin(ph * 2) * 0.03 * walk;
+    out.anim.roll = Math.sin(ph + 0.6) * 0.04 * walk;
+    out.anim.headBob = -bob * 0.07 * walk;
     // body fit: the trunk comes down to whatever its planted feet can reach,
     // quickly, and eases back up once the legs are under it again
     const fit = this.fit;
+    const bobHip = 0.024 * s * walk;
+    const bobChest = 0.026 * s * walk;
     const ground = {
-      hip: this.ground.hip + Math.sin(ph * 2 + 0.4) * 0.012 * s * walk - fit.hip,
-      chest: this.ground.chest + Math.sin(ph * 2) * 0.014 * s * walk - fit.chest,
+      hip: this.ground.hip + Math.sin(ph * 2 + 0.5) * bobHip - fit.hip,
+      chest: this.ground.chest + bob * bobChest - fit.chest,
     };
     const contacts = this.feet.contacts();
     this.poser.solve(pose, ground, contacts, out.anim);
@@ -381,12 +396,23 @@ export class Lion {
       const k = pass === 0 ? 1.5 : 1.2;
       fit.hip = Math.min(fit.hip + over.hind * k, 0.3 * s);
       fit.chest = Math.min(fit.chest + over.front * k, 0.3 * s);
-      ground.hip = this.ground.hip + Math.sin(ph * 2 + 0.4) * 0.012 * s * walk - fit.hip;
-      ground.chest = this.ground.chest + Math.sin(ph * 2) * 0.014 * s * walk - fit.chest;
+      ground.hip = this.ground.hip + Math.sin(ph * 2 + 0.5) * bobHip - fit.hip;
+      ground.chest = this.ground.chest + bob * bobChest - fit.chest;
       this.poser.solve(pose, ground, contacts, out.anim);
     }
+    if (this.contact.mesh.visible) this.contact.update();
     this.state = out.state;
     this.alarm = out.alarm;
+  }
+
+  /**
+   * World-space contact points for the vegetation: a Float32Array of
+   * (x, z, radius, weight) for each paw and one for the trunk. Grass within
+   * `radius` of a point with weight > 0 is standing where a paw or a belly is,
+   * and should be culled or pushed aside; weight fades as the paw lifts.
+   */
+  contactPoints() {
+    return this.contact.points;
   }
 
   /** Choose the tier by camera distance; returns whether this frame animates. */
@@ -396,6 +422,7 @@ export class Lion {
     const tier = d < D[0] ? 0 : d < D[1] ? 1 : d < D[2] ? 2 : 3;
     if (tier !== this.tier) {
       for (let i = 0; i < this.tiers.length; i++) this.tiers[i].visible = i === tier;
+      this.contact.mesh.visible = tier < 2;
       this.tier = tier;
     }
     if (tier === 3) {

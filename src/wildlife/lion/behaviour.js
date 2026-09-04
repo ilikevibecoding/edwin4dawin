@@ -20,7 +20,9 @@ import { mulberry32 } from '../../textures/core.js';
 export const POSES = {
   stand: { ...STAND },
   alert: { ...STAND, neckPitch: 0.3, headPitch: -0.08, earAlert: 1.0, tailLift: 0.12 },
-  walk: { ...STAND, hipH: 1.06, chestH: 1.11, neckPitch: -0.1, tailLift: -0.08, earAlert: 0.55 },
+  // walking, the trunk comes down a little on bent legs and the head is
+  // carried level with the back, face forward
+  walk: { ...STAND, hipH: 1.03, chestH: 1.08, neckPitch: -0.26, headPitch: 0.14, tailLift: -0.1, earAlert: 0.55 },
   sit: {
     ...STAND,
     hipH: 0.5,
@@ -107,7 +109,11 @@ export class Brain {
     this.speed = 0;
     this.yawRate = 0;
     this.dest = null;
-    this.walkSpeed = 0.72 * scale * (kind === 'cub' ? 1.15 : 1);
+    // a lion's walk is 1.0–1.3 m/s; a cub hurries to keep up
+    this.walkSpeed = 1.15 * scale * (kind === 'cub' ? 1.15 : 1);
+    // the gait period, written back by the feet each frame, so the tail and
+    // the head can move in time with the legs
+    this.gaitT = 1;
 
     this.state = 'lie';
     this.timer = 0;
@@ -193,6 +199,43 @@ export class Brain {
   }
 
   /**
+   * Repulsion from another animal, treated as a capsule from its rump to its
+   * nose. Returns { x, z, w } — a push away from the nearest point of the
+   * capsule, of length up to ~1.5 at contact, and the raw closeness `w` — or
+   * null when clear.
+   */
+  separation(o) {
+    const os = o.s;
+    const fx = Math.sin(o.yaw);
+    const fz = Math.cos(o.yaw);
+    // the capsule axis: rump 0.8 behind the root, nose 1.0 ahead (unit lion)
+    const ax = o.pos.x - fx * 0.8 * os;
+    const az = o.pos.z - fz * 0.8 * os;
+    const bx = o.pos.x + fx * 1.0 * os;
+    const bz = o.pos.z + fz * 1.0 * os;
+    const abx = bx - ax;
+    const abz = bz - az;
+    const t = THREE.MathUtils.clamp(((this.pos.x - ax) * abx + (this.pos.z - az) * abz) / (abx * abx + abz * abz), 0, 1);
+    const cx = ax + abx * t;
+    const cz = az + abz * t;
+    let dx = this.pos.x - cx;
+    let dz = this.pos.z - cz;
+    let d = Math.hypot(dx, dz);
+    // clearance: 0.8 m from the capsule surface, plus this animal's own half-width
+    const R = 0.8 + 0.3 * os + 0.3 * this.s;
+    if (d >= R) return null;
+    if (d < 1e-4) {
+      // dead on the axis: push out sideways
+      dx = fz;
+      dz = -fx;
+      d = 1;
+    }
+    const w = 1 - d / R;
+    const k = (w * 1.5) / d;
+    return { x: dx * k, z: dz * k, w };
+  }
+
+  /**
    * Advance one frame. `truck` is { x, z, speed, throttle } in world space.
    * Returns everything the poser and the feet need.
    */
@@ -250,14 +293,34 @@ export class Brain {
       const ddx = this.dest.x - this.pos.x;
       const ddz = this.dest.z - this.pos.z;
       const d = Math.hypot(ddx, ddz);
-      const wantYaw = Math.atan2(ddx, ddz);
+      // separation: every other animal is a capsule along its heading, and
+      // this one steers to stay 0.8 m clear of it — a cub does not walk
+      // through its mother's hind legs — and slows when the way is blocked
+      let sx = ddx / Math.max(1e-6, d);
+      let sz = ddz / Math.max(1e-6, d);
+      let block = 0;
+      for (const o of this.pride) {
+        if (o === this) continue;
+        const sep = this.separation(o);
+        if (!sep) continue;
+        sx += sep.x;
+        sz += sep.z;
+        // how squarely the obstacle sits in the way
+        block = Math.max(block, sep.w * Math.max(0, -(sep.x * Math.sin(this.yaw) + sep.z * Math.cos(this.yaw)) / Math.max(1e-6, Math.hypot(sep.x, sep.z))));
+      }
+      const wantYaw = Math.atan2(sx, sz);
       let e = wantYaw - this.yaw;
       while (e > Math.PI) e -= Math.PI * 2;
       while (e < -Math.PI) e += Math.PI * 2;
       const maxTurn = 0.9;
       this.yawRate = THREE.MathUtils.clamp(e * 2.2, -maxTurn, maxTurn);
-      // slow down for the turn and for the arrival
-      targetSpeed = this.walkSpeed * (this.state === 'pace' ? 1.3 : 1) * THREE.MathUtils.clamp(1.2 - Math.abs(e) * 0.9, 0.25, 1) * THREE.MathUtils.clamp(d / (1.2 * s), 0.3, 1);
+      // slow down for the turn, for the arrival, and for whoever is in the way
+      targetSpeed =
+        this.walkSpeed *
+        (this.state === 'pace' ? 1.3 : 1) *
+        THREE.MathUtils.clamp(1.2 - Math.abs(e) * 0.9, 0.25, 1) *
+        THREE.MathUtils.clamp(d / (1.2 * s), 0.3, 1) *
+        THREE.MathUtils.clamp(1 - block * 1.2, 0.15, 1);
     } else {
       this.yawRate = 0;
     }
@@ -327,7 +390,10 @@ export class Brain {
     for (let i = 0; i < 2; i++) if (this.ear[i] > 0) this.ear[i] -= dt;
     const earFlick = this.ear.map((e) => (e > 0 ? Math.sin((e / 0.35) * Math.PI) : 0));
 
-    this.tailPhase += dt * (restful ? 1.2 : 2.0 + this.speed * 2);
+    // walking, the tail swings once per stride, in time with the legs; at
+    // rest it moves on its own slow beat
+    const walkAmt = THREE.MathUtils.clamp(this.speed / (0.4 * s), 0, 1);
+    this.tailPhase += dt * THREE.MathUtils.lerp(restful ? 1.2 : 2.0, (Math.PI * 2) / Math.max(0.5, this.gaitT), walkAmt);
     this.flickT -= dt;
     if (this.flickT <= 0) {
       this.flick = 0.9;
@@ -336,9 +402,6 @@ export class Brain {
     if (this.flick > 0) this.flick -= dt;
     const flick = this.flick > 0 ? Math.sin((this.flick / 0.9) * Math.PI) : 0;
     const tailSway = (restful ? 0.25 : 0.45 + this.speed * 0.4) + flick * 1.1 + this.alarm * 0.4;
-
-    // walking gait layers: body sway and head bob, timed off the tail phase proxy
-    const walkAmt = THREE.MathUtils.clamp(this.speed / (0.4 * s), 0, 1);
 
     return {
       pose: this.pose,

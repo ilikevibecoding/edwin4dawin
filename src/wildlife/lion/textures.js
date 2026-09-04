@@ -12,6 +12,7 @@ import {
   smoothstep,
   worley,
 } from '../../textures/core.js';
+import { FACE, HEAD_SPLIT, HEAD_Z0, HEAD_Z1, headPoint } from './headspec.js';
 
 // ---------------------------------------------------------------------------
 // Every texture a lion wears, drawn on canvases.
@@ -178,6 +179,106 @@ function coatShade(u, v, seed, { spots, su = u, sv = v }) {
   return c;
 }
 
+/** Distance from a point to a segment, all in head metres. */
+function segDist(x, y, z, a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const dz = b[2] - a[2];
+  const l2 = dx * dx + dy * dy + dz * dz;
+  const t = clamp(((x - a[0]) * dx + (y - a[1]) * dy + (z - a[2]) * dz) / l2);
+  return Math.hypot(x - a[0] - dx * t, y - a[1] - dy * t, z - a[2] - dz * t);
+}
+
+/**
+ * The face, shaded at a point on the upper-head loft (head metres, x ≥ 0 —
+ * the loft's texture is mirrored). `a` is the angle around the section from
+ * under the lip; (nu, nv) are noise coordinates continuous across the two
+ * regions. Colour is written to `o`.
+ *
+ * Tawny over the crown and the nose bridge, cream on the muzzle, under the
+ * eye and along the jaw; the eye set in a soft dark ring with the tear line
+ * running from its inner corner down the muzzle; whisker spots in rows on the
+ * pads; a dark lip line under the upper lip that drops at the mouth corner,
+ * the philtrum splitting the lip under the nose, and the nose leather painted
+ * on the front for the tiers that carry no nose geometry.
+ */
+function faceShade(hx, hy, hz, a, nu, nv, o) {
+  const [ex, ey, ez] = FACE.eye;
+  // crown and back of the head: darker; the temples and the nose bridge warm tawny
+  // the forehead, temples and the bridge are the darkest of the face, the
+  // ground the pale markings are read against
+  const crown = smoothstep(0.02, 0.07, hy) * smoothstep(0.24, 0.1, hz);
+  let c = mixRgb(COAT.side, COAT.back, crown * 0.6 + smoothstep(0.0, -0.06, hz) * 0.3);
+  const bridge = smoothstep(0.045, 0.02, hx) * smoothstep(0.17, 0.22, hz) * smoothstep(0.35, 0.33, hz) * smoothstep(0.02, 0.04, hy);
+  c = mixRgb(c, COAT.noseBridge, bridge * 0.4);
+  // the muzzle and the lip are cream up to the nose bridge; the whisker pads whitest
+  const muzzlePale = smoothstep(0.19, 0.24, hz) * smoothstep(0.04, 0.0, hy);
+  c = mixRgb(c, COAT.cream, muzzlePale * 0.55);
+  const [wx, wy, wz] = FACE.whiskerPad;
+  const pad = Math.hypot((hy - wy) * 1.2, hz - wz);
+  c = mixRgb(c, COAT.cream, smoothstep(0.045, 0.02, pad) * smoothstep(0.03, 0.045, hx) * 0.5);
+  // the cheek and jowl below the eye line, and the jaw edge, go pale
+  const cheekPale = smoothstep(0.0, -0.035, hy) * smoothstep(0.02, 0.09, hz) * smoothstep(0.24, 0.16, hz);
+  c = mixRgb(c, COAT.cream, cheekPale * 0.3);
+  // the bold pale patch under the eye that frames a cat's eye
+  const pu = Math.hypot((hx - ex) * 1.1, (hy - ey + 0.036) * 1.5, hz - ez - 0.012);
+  c = mixRgb(c, COAT.cream, smoothstep(0.034, 0.018, pu));
+  // a pale brow spot
+  const bu = Math.hypot(hx - ex + 0.004, (hy - ey - 0.042) * 1.5, hz - ez + 0.012);
+  c = mixRgb(c, COAT.cream, smoothstep(0.026, 0.012, bu) * 0.45);
+  // the eye: a soft dark ring outside the lids, darkest at the inner corner
+  const de = Math.hypot(hx - ex, hy - ey, hz - ez);
+  const inner = smoothstep(0.06, 0.03, hx);
+  c = mixRgb(c, COAT.lip, smoothstep(0.036, 0.026, de) * (0.35 + 0.35 * inner));
+  // the black eyeline on the skin around the almond, where the socket's
+  // recess meets the lid rims: it hides the facets of that edge and draws the
+  // eye's outline from two metres
+  c = mixRgb(c, COAT.black, smoothstep(0.028, 0.0235, de) * 0.9);
+  // the dark line at the outer corner, back toward the temple
+  const wing = segDist(hx, hy, hz, [ex + 0.018, ey - 0.002, ez - 0.006], [ex + 0.034, ey + 0.004, ez - 0.03]);
+  c = mixRgb(c, COAT.lip, smoothstep(0.007, 0.0025, wing) * 0.7);
+  // tear line from the inner corner down the side of the muzzle
+  const tear = segDist(hx, hy, hz, [ex - 0.02, ey - 0.008, ez + 0.012], [ex - 0.012, ey - 0.052, ez + 0.085]);
+  c = mixRgb(c, COAT.lip, smoothstep(0.009, 0.0035, tear) * 0.85 * smoothstep(0.26, 0.21, hz));
+  // whisker spots: four rows of follicles on the pad, a few millimetres each
+  if (hx > 0.04 && hz > 0.25) {
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 6; col++) {
+        const sy = 0.014 - row * 0.0125;
+        const sz = 0.255 + col * 0.013 + (row % 2) * 0.006;
+        const d = Math.hypot(hy - sy, hz - sz);
+        c = mixRgb(c, COAT.lip, smoothstep(0.0038, 0.0018, d) * 0.7);
+      }
+    }
+  }
+  // the lip: a dark line along the seam under the upper lip, dropping at the
+  // corner of the mouth into the jowl
+  const [cx, cy, cz] = FACE.mouthCorner;
+  const arc = a * 0.06; // arc distance from the seam, roughly
+  const lip = smoothstep(0.0085, 0.0025, arc) * smoothstep(cz - 0.01, cz + 0.02, hz);
+  c = mixRgb(c, COAT.lip, lip * 0.95);
+  const corner = segDist(hx, hy, hz, [cx - 0.004, cy + 0.008, cz + 0.01], [cx + 0.01, cy - 0.02, cz - 0.03]);
+  c = mixRgb(c, COAT.lip, smoothstep(0.009, 0.003, corner) * 0.7);
+  // philtrum: the split of the upper lip under the nose
+  const [nx, ny, nz] = FACE.nose;
+  const phil = smoothstep(0.0045, 0.0015, hx) * smoothstep(nz - 0.03, nz - 0.01, hz) * smoothstep(ny - 0.02, ny - 0.03, hy);
+  c = mixRgb(c, COAT.lip, phil * 0.6);
+  // nose leather on the loft itself, for the tiers without the nose part
+  const leather = smoothstep(nz - 0.018, nz - 0.008, hz) * smoothstep(ny - 0.03, ny - 0.02, hy) * smoothstep(FACE.noseW * 0.55, FACE.noseW * 0.42, hx);
+  c = mixRgb(c, COAT.noseLeather, leather);
+  // the lioness's ruff: a faint pale, streaky band along the jaw and cheek,
+  // the hair there longer and lighter than the face
+  const ruffBand = smoothstep(-0.03, -0.06, hy) * smoothstep(0.16, 0.1, hz) * smoothstep(-0.02, 0.02, hz) * smoothstep(0.06, 0.09, hx);
+  const streak = fbm(nu * 3, nv * 40, { octaves: 2, period: 8, seed: 457 });
+  c = mixRgb(c, COAT.cream, ruffBand * (0.2 + 0.4 * smoothstep(0.45, 0.7, streak)));
+  // breakup
+  const m = fbm(nu * 4, nv * 4, { octaves: 3, period: 16, seed: 451 });
+  const l = 1 + (m - 0.5) * 0.16;
+  o[0] = c[0] * l;
+  o[1] = c[1] * l;
+  o[2] = c[2] * l;
+}
+
 /**
  * The atlas. `spots` selects the cub coat. Everything an adult and a cub share
  * is drawn the same way, so the two read as the same species.
@@ -228,104 +329,52 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
         });
         hairStrokes(ctx, ATLAS.tail, S, rnd, { count: 5000, len: [5, 12] });
 
-        // --- skull: cylindrical, face at u = 0.5, v up ------------------------
-        // painted in head metres through SKULL_MAP, so the marks sit where the
-        // eyes and brows actually are
-        const SM = SKULL_MAP;
+        // --- the face: skull region behind the stop, muzzle region ahead -------
+        // Both regions are painted through the same head-space shader
+        // (faceShade), inverting the mapping head.js gives the head loft, so a
+        // mark placed in head metres lands on the animal in head metres and the
+        // two regions meet without a step. Skull: u along the head from the
+        // occiput to the stop, v around from under the lip (0) to the crown (1).
+        // Muzzle: u around the same way, v from the stop to the nose.
+        const hp = [0, 0, 0];
         fillRegion(ctx, ATLAS.skull, S, (u, v, o) => {
-          const a = (u - 0.5) * Math.PI * 2;
-          const hx = SM.r * Math.sin(a);
-          const hz = SM.cz + SM.r * Math.cos(a);
-          const hy = SM.cy + (v - 0.5) * SM.vSpan;
-          // darker over the crown and down the back of the head
-          let c = mixRgb(COAT.side, COAT.back, smoothstep(0.06, 0.12, hy) * 0.55 + smoothstep(0.06, -0.02, hz) * 0.3);
-          // the lower face is pale: cheeks, chin, throat
-          const lower = smoothstep(-0.01, -0.06, hy) * smoothstep(0.03, 0.12, hz);
-          c = mixRgb(c, COAT.cream, lower * 0.55);
-          c = mixRgb(c, COAT.cream, smoothstep(-0.05, -0.1, hy) * 0.7);
-          for (const s of [-1, 1]) {
-            const ex = hx - s * 0.058;
-            const ey = hy - 0.058;
-            const ez = hz - 0.156;
-            const d = Math.hypot(ex, ey, ez);
-            // a dark socket around the ball, soft and thin; the lids carry the
-            // black liner, and too much dark here reads as a shut eye in shadow
-            c = mixRgb(c, COAT.lip, smoothstep(0.036, 0.027, d) * 0.4);
-            // the pale patch under the eye, bold: it is what frames a cat's eye
-            const pu = Math.hypot(hx - s * 0.058, (hy - 0.024) * 1.2, hz - 0.162);
-            c = mixRgb(c, COAT.cream, smoothstep(0.034, 0.016, pu) * 0.95);
-            // a pale brow spot over each eye
-            const bu = Math.hypot(hx - s * 0.052, (hy - 0.098) * 1.4, hz - 0.128);
-            c = mixRgb(c, COAT.cream, smoothstep(0.03, 0.012, bu) * 0.5);
-          }
-          // forehead breakup
-          const m = fbm(u * 14, v * 14, { octaves: 3, period: 16, seed: 451 });
-          const l = 1 + (m - 0.5) * 0.18;
-          o[0] = c[0] * l;
-          o[1] = c[1] * l;
-          o[2] = c[2] * l;
+          const z = lerp(HEAD_Z0, HEAD_SPLIT, u);
+          const a = v * Math.PI;
+          headPoint(z, a, hp);
+          faceShade(hp[0], hp[1], hp[2], a, u * 3.1, v * 2.3, o);
         });
-        hairStrokes(ctx, ATLAS.skull, S, rnd, { count: 6000, len: [3, 8], light: 0.08 });
-
-        // --- muzzle: u around, 0 at the lip seam, 0.5 on top; v toward the nose
+        hairStrokes(ctx, ATLAS.skull, S, rnd, { count: 7000, len: [3, 8], light: 0.08, dir: Math.PI / 2 });
         fillRegion(ctx, ATLAS.muzzle, S, (u, v, o) => {
-          const top = 1 - Math.abs(2 * u - 1); // 1 on the bridge, 0 at the lip
-          // the bridge and the upper sides keep the coat colour; the whisker pads
-          // and the lip, the lower two fifths, are cream
-          let c = mixRgb(mixRgb(COAT.cream, COAT.belly, 0.4), COAT.side, smoothstep(0.34, 0.6, top) * 0.92);
-          const m = fbm(u * 10, v * 10, { octaves: 3, period: 16, seed: 461 });
-          c = mixRgb(c, COAT.belly, (m - 0.5) * 0.4);
-          // whisker pads: rows of small dark follicles either side, and the
-          // pad itself a shade paler than the bridge
-          for (const s of [-1, 1]) {
-            const padU = Math.abs(u - (0.5 + s * 0.3));
-            c = mixRgb(c, COAT.cream, smoothstep(0.14, 0.05, padU) * smoothstep(0.1, 0.35, v) * 0.35);
-            // follicles are pinpricks a few millimetres across, not spots
-            for (let row = 0; row < 4; row++) {
-              for (let col = 0; col < 6; col++) {
-                const su = 0.5 + s * (0.24 + row * 0.04);
-                const sv = 0.2 + col * 0.12 + (row % 2) * 0.04;
-                const d = Math.hypot((u - su) * 90, (v - sv) * 70);
-                c = mixRgb(c, COAT.lip, smoothstep(0.7, 0.25, d) * 0.5);
-              }
-            }
-            // the pad is a cushion: a soft shade along its upper edge and below the nose
-            c = mixRgb(c, COAT.dust, smoothstep(0.08, 0.02, Math.abs(padU - 0.15)) * smoothstep(0.1, 0.4, v) * 0.22);
-            // tear line: from the inner corner of the eye down the side of the muzzle
-            const tu = u - (0.5 + s * (0.16 + v * 0.12));
-            const tear = smoothstep(0.02, 0.006, Math.abs(tu)) * smoothstep(0.42, 0.25, v) * smoothstep(-0.02, 0.06, v);
-            c = mixRgb(c, COAT.lip, tear * 0.7);
-          }
-          // lip line along the seam and the philtrum up the front
-          const lip = smoothstep(0.03, 0.0, Math.min(u, 1 - u));
-          c = mixRgb(c, COAT.lip, lip * 0.95);
-          const phil = smoothstep(0.02, 0.006, Math.min(u, 1 - u)) * smoothstep(0.7, 0.86, v);
-          c = mixRgb(c, COAT.lip, phil * 0.45);
-          o[0] = c[0];
-          o[1] = c[1];
-          o[2] = c[2];
+          const z = lerp(HEAD_SPLIT, HEAD_Z1, v);
+          const a = u * Math.PI;
+          headPoint(z, a, hp);
+          faceShade(hp[0], hp[1], hp[2], a, 3.1 + v * 1.1, u * 2.3, o);
         });
-        hairStrokes(ctx, ATLAS.muzzle, S, rnd, { count: 1400, len: [2, 5], light: 0.07 });
+        hairStrokes(ctx, ATLAS.muzzle, S, rnd, { count: 1600, len: [2, 4], light: 0.06 });
 
         // --- nose leather: front projected, nostrils and philtrum ------------
         fillRegion(ctx, ATLAS.nose, S, (u, v, o) => {
-          let c = mixRgb(COAT.noseLeather, COAT.noseBridge, smoothstep(0.78, 1.0, v) * 0.7);
+          // the leather is dark and matte-grained; its top edge fades into the
+          // haired bridge, so the part has no hard outline against the muzzle
+          let c = mixRgb(COAT.noseLeather, COAT.noseBridge, smoothstep(0.72, 0.98, v) * 0.75);
           const grain = fbm(u * 30, v * 30, { octaves: 3, period: 64, seed: 471 });
-          c = mixRgb(c, [90, 74, 70], (grain - 0.5) * 0.5);
+          c = mixRgb(c, [92, 76, 72], (grain - 0.5) * 0.45);
           for (const s of [-1, 1]) {
-            // nostril: a comma opening outward and down
-            const dx = (u - (0.5 + s * 0.24)) * 4.2;
-            const dy = (v - 0.42) * 3.4 + dx * s * 0.35;
+            // nostril: a comma opening outward and down, the wing above it a little lighter
+            const dx = (u - (0.5 + s * 0.27)) * 3.8;
+            const dy = (v - 0.4) * 3.0 + dx * s * 0.45;
             const d = Math.hypot(dx, dy);
-            c = mixRgb(c, [8, 6, 6], smoothstep(0.42, 0.2, d));
-            // wing of the nostril catches light
-            c = mixRgb(c, [110, 88, 84], smoothstep(0.58, 0.44, d) * smoothstep(0.42, 0.5, d) * 0.5);
+            c = mixRgb(c, [8, 6, 6], smoothstep(0.46, 0.22, d));
+            c = mixRgb(c, [112, 90, 86], smoothstep(0.64, 0.48, d) * smoothstep(0.46, 0.54, d) * 0.45);
           }
-          const phil = smoothstep(0.05, 0.015, Math.abs(u - 0.5)) * smoothstep(0.52, 0.3, v);
+          // philtrum: the groove from between the nostrils down to the lip
+          const phil = smoothstep(0.06, 0.015, Math.abs(u - 0.5)) * smoothstep(0.5, 0.28, v);
           c = mixRgb(c, [10, 8, 8], phil * 0.85);
-          // moist highlight speckle
+          // the lower edge of the leather is pale skin toward the lip
+          c = mixRgb(c, [120, 96, 90], smoothstep(0.18, 0.04, v) * (1 - phil) * 0.5);
+          // moist highlight speckle across the top of the leather
           const sp = fbm(u * 60, v * 60, { octaves: 2, period: 64, seed: 479 });
-          c = mixRgb(c, [150, 130, 128], smoothstep(0.62, 0.75, sp) * 0.5 * smoothstep(0.3, 0.7, v));
+          c = mixRgb(c, [156, 136, 134], smoothstep(0.6, 0.75, sp) * 0.55 * smoothstep(0.3, 0.6, v) * smoothstep(0.95, 0.8, v));
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
@@ -342,12 +391,12 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           // iris with radial fibres; a lion's iris fills most of the opening
           const fib = fbm(u * 24, v * 3, { octaves: 4, period: 24, seed: 497 });
           // the iris fills the almond between the lids; sclera shows at the corners
-          const irisT = smoothstep(36, 12, deg);
+          const irisT = smoothstep(40, 12, deg);
           let iris = mixRgb(COAT.irisOuter, COAT.irisInner, irisT);
           iris = [iris[0] * (0.8 + 0.4 * fib), iris[1] * (0.8 + 0.4 * fib), iris[2] * (0.8 + 0.35 * fib)];
-          c = mixRgb(c, iris, smoothstep(38, 35, deg));
+          c = mixRgb(c, iris, smoothstep(42, 39, deg));
           // limbal ring
-          c = mixRgb(c, [40, 26, 12], smoothstep(41, 37, deg) * smoothstep(32, 36, deg) * 0.85);
+          c = mixRgb(c, [40, 26, 12], smoothstep(45, 41, deg) * smoothstep(36, 40, deg) * 0.85);
           // pupil, soft edged, round the way a lion's is
           c = mixRgb(c, [6, 4, 4], smoothstep(13, 10.5, deg));
           o[0] = c[0];
@@ -359,10 +408,14 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
         // ear caps are polar: v = 1 at the centre of the cup, 0 at the rim; the
         // tip of the ear is at u = 0.25 and the base, toward the head, at 0.75
         fillRegion(ctx, ATLAS.earOut, S, (u, v, o) => {
-          // black back with a tawny rim, paler toward the base
-          let c = mixRgb(COAT.side, COAT.earBack, smoothstep(0.12, 0.4, v));
-          const base = smoothstep(0.35, 0.1, Math.abs(u - 0.75)) * smoothstep(0.45, 0.05, v);
+          // the back of a lion's ear is black over most of its height, with a
+          // tawny band at the base and a thin pale rim; the tip stays dark
+          const tip = smoothstep(0.35, 0.05, Math.abs(u - 0.25));
+          let c = mixRgb(COAT.side, COAT.earBack, smoothstep(0.03, 0.14, v) * (0.75 + 0.25 * tip));
+          c = mixRgb(c, COAT.earBack, smoothstep(0.4, 0.9, v) * 0.2);
+          const base = smoothstep(0.35, 0.1, Math.abs(u - 0.75)) * smoothstep(0.55, 0.1, v);
           c = mixRgb(c, COAT.side, base * 0.9);
+          c = mixRgb(c, COAT.cream, smoothstep(0.05, 0.0, v) * (1 - tip * 0.6) * 0.5);
           const m = fbm(u * 10, v * 10, { octaves: 3, period: 16, seed: 503 });
           const l = 1 + (m - 0.5) * 0.3;
           o[0] = c[0] * l;
@@ -370,18 +423,23 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           o[2] = c[2] * l;
         });
         fillRegion(ctx, ATLAS.earIn, S, (u, v, o) => {
-          let c = mixRgb(COAT.earIn, COAT.earPink, smoothstep(0.45, 0.9, v));
-          // dark hair fringing the edges of the cup, a pale tuft in the base
+          // pale lining, pink-grey skin deep in the cup, a pale rim, and long
+          // pale hairs fringing the inner edge with a dark fringe behind them
+          let c = mixRgb(COAT.earIn, COAT.earPink, smoothstep(0.5, 0.95, v));
+          c = mixRgb(c, COAT.cream, smoothstep(0.12, 0.0, v) * 0.7);
           const streak = fbm(u * 26, v * 4, { octaves: 3, period: 32, seed: 509 });
-          const edge = smoothstep(0.55, 0.15, v);
-          c = mixRgb(c, COAT.lip, smoothstep(0.55, 0.75, streak) * edge * 0.75);
+          const edge = smoothstep(0.55, 0.15, v) * smoothstep(0.02, 0.1, v);
+          c = mixRgb(c, COAT.lip, smoothstep(0.55, 0.75, streak) * edge * 0.7);
+          c = mixRgb(c, COAT.cream, smoothstep(0.3, 0.5, streak) * smoothstep(0.7, 0.75, streak) * edge * 0.6);
           const base = smoothstep(0.3, 0.08, Math.abs(u - 0.75)) * smoothstep(0.7, 0.2, v);
           c = mixRgb(c, COAT.cream, base * 0.85);
+          // the fold of the ear canal, darker
+          c = mixRgb(c, COAT.lip, smoothstep(0.82, 0.97, v) * 0.35);
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
         });
-        hairStrokes(ctx, ATLAS.earIn, S, rnd, { count: 700, len: [4, 10], light: 0.14 });
+        hairStrokes(ctx, ATLAS.earIn, S, rnd, { count: 900, len: [4, 10], light: 0.16 });
 
         // --- pads and claws --------------------------------------------------
         fillRegion(ctx, ATLAS.pad, S, (u, v, o) => {
@@ -404,18 +462,24 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
 
         // --- chin, lids --------------------------------------------------------
         fillRegion(ctx, ATLAS.jaw, S, (u, v, o) => {
-          // no brighter than the whisker pads above it, or the chin reads as a grin
-          let c = mixRgb(COAT.cream, COAT.belly, 0.45);
+          // the jaw is coat coloured on its sides, no brighter than the lip
+          // above it (a pale jaw under a darker lip reads as bared teeth from
+          // two metres); only the chin and the underside go cream
+          let c = mixRgb(COAT.side, COAT.belly, 0.45);
           const m = fbm(u * 8, v * 8, { octaves: 3, period: 16, seed: 531 });
           c = mixRgb(c, COAT.belly, (m - 0.5) * 0.5);
-          // the sides of the jaw toward its angle carry the coat colour; the
-          // chin and the underside are cream
-          const side = smoothstep(0.42, 0.22, Math.abs(u - 0.5)) * smoothstep(0.12, 0.38, Math.abs(u - 0.5));
-          c = mixRgb(c, COAT.side, side * smoothstep(0.7, 0.2, v) * 0.75);
+          const under = smoothstep(0.35, 0.48, Math.abs(u - 0.5));
+          c = mixRgb(c, COAT.cream, under * 0.5);
           // lower lip runs along the top of the jaw loft (u = 0.5): a thin dark
           // line, most of the jaw the cream of the chin
           c = mixRgb(c, COAT.lip, smoothstep(0.05, 0.015, Math.abs(u - 0.5)) * 0.85);
           c = mixRgb(c, COAT.lip, smoothstep(0.86, 0.97, v) * smoothstep(0.3, 0.12, Math.abs(u - 0.5)) * 0.3);
+          // the mouth corner: the dark lip line drops down the side of the jaw
+          // just behind the middle of its length, into the jowl
+          const drop = smoothstep(0.05, 0.015, Math.abs(Math.abs(u - 0.5) - 0.17 - (v - 0.5) * 0.25)) * smoothstep(0.62, 0.55, v) * smoothstep(0.3, 0.42, v);
+          c = mixRgb(c, COAT.lip, drop * 0.6);
+          // the chin itself is the whitest part of the face
+          c = mixRgb(c, COAT.cream, smoothstep(0.7, 0.92, v) * 0.6);
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
@@ -424,8 +488,11 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
         fillRegion(ctx, ATLAS.lid, S, (u, v, o) => {
           // the lid is coat coloured with a thin black rim, the way the eye is
           // lined; u < 0.5 is the outer half, which carries a touch of the pale ring
-          let c = mixRgb(COAT.side, COAT.cream, smoothstep(0.35, 0.05, v) * 0.35);
-          c = mixRgb(c, COAT.black, smoothstep(0.07, 0.015, v));
+          // a shade darker than the coat so the almond reads from two metres
+          let c = mixRgb(COAT.side, COAT.back, 0.3);
+          c = mixRgb(c, COAT.cream, smoothstep(0.4, 0.2, v) * 0.25);
+          // the rim: a 3 mm black eyeline, the rest of the lid under the skin
+          c = mixRgb(c, COAT.black, smoothstep(0.13, 0.05, v));
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
@@ -477,37 +544,57 @@ export function maneStrands(size = 512) {
     return cutoutTexture(
       size,
       (ctx, S) => {
-        ctx.clearRect(0, 0, S, S);
-        const n = Math.round(S * S * 0.11);
-        const dark = [52, 36, 24];
-        const brown = [118, 80, 46];
-        const tawny = [176, 128, 74];
-        const blond = [214, 176, 118];
+        // Rasterised by hand so a texel's alpha is the length of the LONGEST
+        // hair over it, not the sum: canvas compositing would pile short
+        // hairs up to full alpha and every shell would be a second skin.
+        const img = ctx.createImageData(S, S);
+        const px = img.data;
+        const n = Math.round(S * S * 0.14);
+        const dark = [58, 40, 26];
+        const brown = [124, 86, 50];
+        const tawny = [182, 134, 80];
+        const blond = [218, 182, 126];
         for (let i = 0; i < n; i++) {
           const x = rnd() * S;
           const y = rnd() * S;
           const u = x / S;
           const top = 1 - Math.abs(2 * u - 1);
-          // hair length: mostly long, so the mane reads full and not moth-eaten
-          const len = 0.18 + 0.82 * Math.pow(rnd(), 0.6);
-          // tawny over the crown and shoulders, darkening down the throat and chest
+          // hair length: the mane is solid to about half its depth, then a
+          // fringe — half the hairs reach three quarters out, a few per cent
+          // the outermost shell — so the body of the mane reads as one mass
+          // and only its edge breaks into strands against the sky
+          const len = rnd() < 0.7 ? 0.6 + 0.4 * Math.pow(rnd(), 2) : 0.1 + 0.5 * rnd();
+          // tawny over the crown and shoulders, darkening down the throat and
+          // chest; the long hairs are the dark ones, so the tips of the mane
+          // are darker than its body
           const t = rnd();
           let c;
-          if (t < 0.14 + (1 - top) * 0.32) c = dark;
+          if (t < 0.1 + (1 - top) * 0.35 + Math.max(0, len - 0.8) * 1.5) c = dark;
           else if (t < 0.5) c = brown;
-          else if (t < 0.84) c = tawny;
+          else if (t < 0.86) c = tawny;
           else c = blond;
-          const shade = 0.8 + rnd() * 0.4;
-          ctx.fillStyle = rgba([c[0] * shade, c[1] * shade, c[2] * shade], len);
-          const r = (0.9 + rnd() * 1.3) * (S / 512);
-          const l = r * (2.2 + rnd() * 2.5);
-          const a = (rnd() - 0.5) * 0.6;
-          ctx.save();
-          ctx.translate(x, y);
-          ctx.rotate(a);
-          ctx.fillRect(-r * 0.5, -l * 0.5, r, l);
-          ctx.restore();
+          const shade = (0.8 + rnd() * 0.4) * lerp(1.1, 0.85, len);
+          const a8 = Math.round(len * 255);
+          // long thin streaks, lying around the neck (the canvas vertical is
+          // along the animal), the way the hair hangs down the sides
+          // mostly short marks with some long hairs among them, so a shell
+          // seen edge-on breaks into dashes rather than reading as a ribbon
+          const l = (rnd() < 0.6 ? 3 + rnd() * 6 : 9 + rnd() * 14) * (S / 256);
+          const ang = Math.PI / 2 + (rnd() - 0.5) * 0.7;
+          const dx = Math.cos(ang);
+          const dy = Math.sin(ang);
+          for (let k = -l / 2; k < l / 2; k += 0.7) {
+            const xi = ((Math.round(x + dx * k) % S) + S) % S;
+            const yi = ((Math.round(y + dy * k) % S) + S) % S;
+            const o = (yi * S + xi) * 4;
+            if (px[o + 3] >= a8) continue;
+            px[o] = c[0] * shade;
+            px[o + 1] = c[1] * shade;
+            px[o + 2] = c[2] * shade;
+            px[o + 3] = a8;
+          }
         }
+        ctx.putImageData(img, 0, 0);
       },
       { aniso: 4 },
     );
@@ -542,11 +629,15 @@ export function fuzzStrands(size = 256) {
 }
 
 /**
- * Cutout atlas for the strands: the tail tuft in the left half, a fan of dark
- * hairs hanging from the top edge; a single pale whisker in the right half,
- * rooted at the top, tapering to nothing at the bottom.
+ * Cutout atlas for the strands, in columns (head.js STRANDS): the tail tuft in
+ * [0, 0.25], a fan of dark hairs hanging from the top edge; two mane cards in
+ * [0.26, 0.55] and [0.56, 0.85], bundles of hair rooted solid at the top and
+ * separating into strands that darken toward their tips; a single pale
+ * whisker at 0.93, rooted at the top, tapering to nothing at the bottom.
+ * Never below 512: the mane cards are looked at from two metres.
  */
 export function alphaAtlas(size = 256) {
+  size = Math.max(size, 512);
   return cached(`lion-alpha-${size}`, () => {
     const rnd = mulberry32(2211);
     return cutoutTexture(
@@ -554,9 +645,10 @@ export function alphaAtlas(size = 256) {
       (ctx, S) => {
         ctx.clearRect(0, 0, S, S);
         ctx.lineCap = 'round';
-        for (let i = 0; i < 90; i++) {
-          const x0 = S * (0.25 + (rnd() - 0.5) * 0.2);
-          const spread = (rnd() - 0.5) * 0.5;
+        // --- tail tuft ---------------------------------------------------------
+        for (let i = 0; i < 110; i++) {
+          const x0 = S * (0.125 + (rnd() - 0.5) * 0.11);
+          const spread = (rnd() - 0.5) * 0.28;
           const len = S * (0.5 + rnd() * 0.45);
           const shade = 16 + rnd() * 44;
           ctx.strokeStyle = rgba([shade * 1.35, shade, shade * 0.72], 0.95);
@@ -566,21 +658,92 @@ export function alphaAtlas(size = 256) {
           ctx.quadraticCurveTo(x0 + spread * S * 0.3, S * 0.45, x0 + spread * S * 0.5, S * 0.02 + len);
           ctx.stroke();
         }
+        // --- mane cards ----------------------------------------------------------
+        const dark = [46, 32, 22];
+        const brown = [112, 76, 44];
+        const tawny = [172, 126, 74];
+        const blond = [210, 172, 116];
+        const maneCard = (x0, x1, seed) => {
+          const r = mulberry32(seed);
+          const w = x1 - x0;
+          const xc = (x0 + x1) / 2;
+          // A card is a bundle of narrow locks with daylight between them, so
+          // the silhouette of the card is hair and not a paddle: each lock a
+          // tapered ribbon a few millimetres wide, brown at the root and dark
+          // at the tip, ending at its own length; the roots merge in a short
+          // dense band at the top so the bundle grows out of the shells.
+          const lock = (cx, len, wTop, lean, cols) => {
+            const g = ctx.createLinearGradient(0, 0, 0, len);
+            g.addColorStop(0, rgba(cols[0], 1));
+            g.addColorStop(0.5, rgba(cols[1], 1));
+            g.addColorStop(1, rgba(cols[2], 1));
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.moveTo(cx - wTop, 0);
+            ctx.lineTo(cx + wTop, 0);
+            ctx.quadraticCurveTo(cx + wTop * 0.7 + lean * 0.4, len * 0.55, cx + lean + wTop * 0.1, len);
+            ctx.lineTo(cx + lean - wTop * 0.1, len);
+            ctx.quadraticCurveTo(cx - wTop * 0.7 + lean * 0.4, len * 0.55, cx - wTop, 0);
+            ctx.closePath();
+            ctx.fill();
+          };
+          const nLocks = 5;
+          for (let i = 0; i < nLocks; i++) {
+            const cx = x0 + w * (0.1 + 0.8 * ((i + 0.5) / nLocks) + (r() - 0.5) * 0.08);
+            const centre = 1 - Math.abs(2 * ((i + 0.5) / nLocks) - 1);
+            const len = S * (0.4 + 0.55 * Math.pow(r(), 0.7) * (0.6 + 0.4 * centre));
+            const wTop = w * (0.03 + r() * 0.02);
+            const lean = (r() - 0.5) * w * 0.35;
+            const t = r();
+            const root = t < 0.15 ? tawny : t < 0.6 ? brown : mixRgb(brown, tawny, 0.5);
+            const mid = t < 0.15 ? mixRgb(tawny, brown, 0.5) : t < 0.6 ? mixRgb(brown, dark, 0.35) : brown;
+            const tip = t < 0.25 ? mixRgb(brown, dark, 0.7) : dark;
+            lock(cx, len, wTop, lean, [root, mid, tip]);
+          }
+          // the root band: short broad hair that fills between the locks
+          const rg = ctx.createLinearGradient(0, 0, 0, S * 0.08);
+          rg.addColorStop(0, rgba(brown, 1));
+          rg.addColorStop(0.6, rgba(mixRgb(brown, tawny, 0.3), 0.9));
+          rg.addColorStop(1, rgba(brown, 0));
+          ctx.fillStyle = rg;
+          ctx.fillRect(x0 + w * 0.08, 0, w * 0.84, S * 0.08);
+          // pale and dark hairs over the locks, only where there is already hair
+          ctx.save();
+          ctx.globalCompositeOperation = 'source-atop';
+          for (let i = 0; i < 60; i++) {
+            const xs = x0 + w * (0.08 + r() * 0.84);
+            const lean = (r() - 0.5) * w * 0.25;
+            const len = S * (0.3 + r() * 0.65);
+            const t = r();
+            const col = t < 0.45 ? dark : t < 0.75 ? brown : t < 0.92 ? tawny : blond;
+            ctx.strokeStyle = rgba(col, 0.5 + r() * 0.45);
+            ctx.lineWidth = (0.7 + r() * 1.2) * (S / 512);
+            ctx.beginPath();
+            ctx.moveTo(xs, 0);
+            ctx.quadraticCurveTo(xs + lean * 0.4, len * 0.5, xs + lean, len);
+            ctx.stroke();
+          }
+          ctx.restore();
+        };
+        maneCard(S * 0.26, S * 0.55, 8801);
+        maneCard(S * 0.56, S * 0.85, 8807);
+        // --- whisker -------------------------------------------------------------
         const g = ctx.createLinearGradient(0, 0, 0, S);
         const c = [236, 228, 214];
         g.addColorStop(0, rgba(c, 1));
         g.addColorStop(0.75, rgba(c, 0.85));
         g.addColorStop(1, rgba(c, 0));
         ctx.fillStyle = g;
+        const wx = S * 0.93;
         ctx.beginPath();
-        ctx.moveTo(S * 0.75 - S * 0.03, 0);
-        ctx.lineTo(S * 0.75 + S * 0.03, 0);
-        ctx.lineTo(S * 0.75 + S * 0.004, S);
-        ctx.lineTo(S * 0.75 - S * 0.004, S);
+        ctx.moveTo(wx - S * 0.02, 0);
+        ctx.lineTo(wx + S * 0.02, 0);
+        ctx.lineTo(wx + S * 0.003, S);
+        ctx.lineTo(wx - S * 0.003, S);
         ctx.closePath();
         ctx.fill();
       },
-      { aniso: 2 },
+      { aniso: 4 },
     );
   });
 }
