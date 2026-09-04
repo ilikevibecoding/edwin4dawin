@@ -167,7 +167,11 @@ function ensureMaterials(ctx) {
   }
   if (!m.hg_beaconRed) m.hg_beaconRed = m.emitRed.clone();
   if (!m.hg_beaconAmber) m.hg_beaconAmber = m.emitAmber.clone();
-  if (!m.hg_seam) m.hg_seam = m.emitAmber.clone();
+  if (!m.hg_seam) {
+    // door seam lamps: 60 m of strip seen at grazing angles from the deck, so keep it just over the bloom threshold
+    m.hg_seam = m.emitAmber.clone();
+    m.hg_seam.emissiveIntensity = 1.35;
+  }
   if (!m.hg_rim) {
     m.hg_rim = m.emitBlue.clone();
     m.hg_rim.emissiveIntensity = 3.4;
