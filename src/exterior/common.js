@@ -30,6 +30,25 @@ const _c = new THREE.Color();
 // Materials: the exterior is seen from inside through the bridge glazing, so nothing here may take the
 // interior fog. Shared hull materials are cloned (textures shared), emissives are exterior-specific.
 // ---------------------------------------------------------------------------------------------------
+
+// Faux ambient for the armour. main.js gives the hull materials a space capture as env map (near black apart
+// from the planet), so image-based fill is gone and the 0.35 hemisphere alone leaves the shadow side black.
+// This adds a flat albedo-weighted term (~ what a neutral room environment at 0.25 × envMapIntensity gave)
+// to the exterior clones only. Exposed as `exterior.fill`; set it to 0 if the global fill is raised instead.
+export const EXT_FILL = { value: new THREE.Vector3(0.13, 0.14, 0.165) };
+
+function withFill(mat, scale) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uExtFill = EXT_FILL;
+    shader.uniforms.uExtFillScale = { value: scale };
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform vec3 uExtFill;\nuniform float uExtFillScale;")
+      .replace("#include <lights_fragment_end>", "#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse += uExtFill * uExtFillScale * diffuseColor.rgb;");
+  };
+  mat.customProgramCacheKey = () => `extfill:${scale}`;
+  return mat;
+}
+
 export function makeExteriorMaterials(materials) {
   const clone = (m, extra = {}) => {
     const c = m.clone();
@@ -40,8 +59,8 @@ export function makeExteriorMaterials(materials) {
   const emit = (color, intensity, extra = {}) => new THREE.MeshStandardMaterial({ color: 0x06070a, emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 0.55, metalness: 0, fog: false, ...extra });
   const M = {
     ...materials,
-    hull: clone(materials.hull),
-    hullDark: clone(materials.hullDark),
+    hull: withFill(clone(materials.hull), 1.0),
+    hullDark: withFill(clone(materials.hullDark), 0.7),
     glass: clone(materials.glass),
     // window rows: dim, slightly cold; a few warm decks
     emitWin: emit("#d6e2ff", 0.7),

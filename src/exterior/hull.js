@@ -13,7 +13,7 @@
 import * as THREE from "three";
 import { SYSTEMS } from "../core/systems.js";
 import { tOf } from "../core/layout.js";
-import { rng, ExtKit, Tier, LodSets, LOD_NEAR, LOD_MID, makeExteriorMaterials, syncSharedMaterials, insideRooms } from "./common.js";
+import { rng, ExtKit, Tier, LodSets, LOD_NEAR, LOD_MID, EXT_FILL, makeExteriorMaterials, syncSharedMaterials, insideRooms } from "./common.js";
 import { PROTOS, dressPlates } from "./greebles.js";
 import { buildBaseSurfaces, buildDorsalPlates, buildVentralPlates, buildTrenchWalls, buildSternFace } from "./plating.js";
 import { buildTrench } from "./trench.js";
@@ -87,7 +87,7 @@ export function buildExterior(scene, materials) {
 
   const stats = () => ({ buildMs: +buildMs.toFixed(0), plates: plates.length, lodSets: lod.sets.length, nearVisible: lod.stats.near, midVisible: lod.stats.mid, meshes: meshes.length });
 
-  return { group, meshes, update, fields, runLights, triangles, materials: M, lod, stats };
+  return { group, meshes, update, fields, runLights, triangles, materials: M, lod, stats, fill: EXT_FILL.value };
 }
 
 export { tOf };
