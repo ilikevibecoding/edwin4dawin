@@ -700,10 +700,25 @@ scripted drive peaks at 0.73 with the compressor never pulling more than 3.9 dB.
 `shots/iter_16/` (day: hero, mainroad, forest, front, interior), `shots/iter_16d/`
 (dusk), `shots/iter_16n/` (night), `shots/camp_16/` and `shots/camp_16n/`.
 
+### The pride
+
+Landed last, and the feet are the only thing on this project measured to
+machine precision: over 1,200 walk frames and 268 steps the probe reports max
+penetration 2.3e-14 m, max planted-foot slide 8.5e-14 m and max float 4.4e-15 m,
+re-run independently on the integrated build. A planting-and-swing gait that
+samples terrain, predicts the landing, shortens steps downhill and holds a
+planted foot where it landed while the body moves over it.
+
+The body is right; the face is not yet. At two metres the head is small for the
+body, the muzzle boxy, the mouth line reads as a grin, and the fur as suede. At
+eight metres in the grass under an acacia it is unmistakably a lion. Build
+`2f0f5ba`, live.
+
 ### Still open, carried into round one of the gauntlets
 
-- The pride is still in flight (lion agent). Wildlife camera and cue hooks are
-  wired and waiting.
+- Lion face and head fur; a jaw that opens; a chest fringe on the mane; shorter
+  grass in a 15 m radius around the anchor so lying lions are visible at 40 m;
+  the midday key plus laterite bounce pushing tawny toward orange.
 - A pale band and a thin dark line at the far skyline: the vegetation's
   `forestSkirt` at 420 m fogged to airlight, plus the sky's `ridge_*` cards that
   were authored for the forest ridge. Three agents saw it from three sides.

@@ -19,7 +19,15 @@ numbers the targets are about.
 
 ## Safari, iteration 16 — the biome change
 
-**Build `34d3fc8`** — live, smoke-tested (page boots, HUD reads `build 34d3fc8 · 2026-09-04 11:28Z`, zero page errors).
+**Build `2f0f5ba`** — live, smoke-tested (page boots, HUD reads `build 2f0f5ba · 2026-09-04 12:07Z`, zero page errors). Supersedes `34d3fc8`, which lacked the lions.
+
+- **The pride landed**: a maned male, three lionesses, two cubs on a 34-bone
+  skeleton with three detail tiers. Feet are solved, not approximated —
+  independently re-run: 1,200 frames, 268 steps, max penetration 2.3e-14 m,
+  max planted-foot slide 8.5e-14 m. Frames in `shots/lion_16/`. Round-one
+  inventory for the lion gauntlet: the face is the weak point (small head,
+  boxy muzzle, a mouth line that reads as a grin, fur as smooth suede), the jaw
+  never opens, and the mane has no chest fringe.
 
 ### What changed
 
