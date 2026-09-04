@@ -240,15 +240,60 @@ export function buildHolo(kit, ctx) {
     impConsole(kit, ctx, [cx - 3.6, yD, z1 - t - 0.62], Math.PI, { kind: "wall", width: 1.8, seed: 63, light: false });
     impConsole(kit, ctx, [cx + 3.6, yD, z1 - t - 0.62], Math.PI, { kind: "wall", width: 1.8, seed: 65, light: false });
     pointLightDesc(ctx, IMP.amber, 4.0, 8, [cx, yD + 2.3, 632], 1);
-    pointLightDesc(ctx, 0xffc46a, 2.0, 5, [cx, yD + 0.6, 630.6], 0);
+    // cool wash down the wall behind the commander: the roundel, screen bank and wall consoles have to
+    // read from the door, 30 m away behind the hologram (took the slot of the low amber fill at the rail)
+    pointLightDesc(ctx, 0xa8c4ff, 3.2, 7, [cx, y + h - 1.2, z1 - t - 1.0], 1);
     const w = walls.south;
     const { frame } = wallFrame(kit, w.from, w.to, y);
-    // Imperial roundel on a light insignia plate over the commander's seat
-    placard(frame, w.u(cx), 3.5, 1.9, 4);
-    placard(frame, w.u(cx) - 2.2, 3.45, 0.7, 15);
-    frame.quad("impDecal", w.u(cx) + 2.2, 3.45, 0.062, 0.7, 0.7, { uvRect: impDecalRect(11) });
-    wallScreen(frame, w.u(cx) - 8.5, 2.7, 1.5, 0.85, 1);
-    wallScreen(frame, w.u(cx) + 8.5, 2.7, 1.5, 0.85, 2);
+    const uc = w.u(cx);
+    // command wall behind the commander, sized to read from the door 27 m away, over the console and
+    // either side of the hologram: the Imperial roundel in a lit surround on the axis, a 2 x 2 bank of
+    // tactical screens each side of it on plates that stand proud of the wall ribs (ribs land 1 m and
+    // 3 m off the axis), conduit drops from the ceiling into the top of each bank with a header run
+    // between them. Everything sits above the 2.6 m wall consoles standing on the dais below.
+    const N0 = 0.15; // plate stand-off: clears the 0.14 m ribs
+    const VW = 3.6; // centre height of the command wall
+    const [sw, sh, gap] = [1.3, 0.72, 0.12];
+    const W = 2 * sw + gap;
+    const H = 2 * sh + gap;
+    const UB = 2.85; // bank centres either side of the axis
+    for (const s of [-1, 1]) {
+      const ub = uc + s * UB;
+      frame.box("impPaintedMetal", ub, VW, N0 + 0.04, W + 0.3, H + 0.3, 0.08, { color: IMP.consoleDark, texel: 1 });
+      for (let i = 0; i < 2; i++) {
+        for (let j = 0; j < 2; j++) {
+          const cu = ub - W / 2 + sw / 2 + i * (sw + gap);
+          const cv = VW - H / 2 + sh / 2 + j * (sh + gap);
+          frame.box("darkGloss", cu, cv, N0 + 0.085, sw + 0.03, sh + 0.03, 0.01);
+          frame.box("screen" + ((i + j + (s > 0 ? 1 : 0)) % 3), cu, cv, N0 + 0.092, sw, sh, 0.004, { uv: "keep" });
+        }
+      }
+      frame.box("leds", ub, VW - H / 2 - 0.1, N0 + 0.085, 2.0, 0.05, 0.01, { uv: "keep" });
+    }
+    placard(frame, uc, VW, 1.8, 4, { n: N0 });
+    for (const s of [-1, 1]) {
+      frame.box("emitBlue", uc + s * 1.1, VW, N0 + 0.03, 0.03, 2.26, 0.02);
+      frame.box("emitBlue", uc, VW + s * 1.1, N0 + 0.03, 2.26, 0.03, 0.02);
+    }
+    {
+      const zf = z1 - t;
+      const yc = y + h;
+      const yTop = y + VW + H / 2 + 0.15; // top edge of the bank plates
+      for (const s of [-1, 1]) {
+        const x = cx + s * UB;
+        pipeRun(kit, [[x, yc - 0.05, zf - 0.2], [x, yTop + 0.1, zf - 0.2]], 0.06, { color: IMP.gunmetal, clampPitch: 1.2 });
+        pipeRun(kit, [[x + s * 0.2, yc - 0.05, zf - 0.19], [x + s * 0.2, yTop + 0.1, zf - 0.19]], 0.035, { color: IMP.steel, clamps: false });
+        kit.box("impPaintedMetal", x + s * 0.1, yTop + 0.1, zf - 0.2, 0.5, 0.2, 0.4, { color: IMP.consoleDark, texel: 1 });
+      }
+      pipeRun(kit, [[cx - UB, yc - 0.3, zf - 0.2], [cx + UB, yc - 0.3, zf - 0.2]], 0.06, { color: IMP.gunmetal, clampPitch: 1.8 });
+    }
+    // flanking readouts and stencils clear of the ribs (u 8 and 20 carry ribs), over the data-core cabinets
+    placard(frame, uc - 5.5, 3.8, 0.7, 15);
+    frame.quad("impDecal", uc + 5.5, 3.8, 0.062, 0.7, 0.7, { uvRect: impDecalRect(11) });
+    wallScreen(frame, uc - 6.0, 2.7, 1.5, 0.85, 1);
+    wallScreen(frame, uc + 6.0, 2.7, 1.5, 0.85, 2);
+    frame.quad("impDecal", uc - 9.5, 2.1, 0.062, 0.5, 0.5, { uvRect: impDecalRect(1) });
+    frame.quad("impDecal", uc + 9.5, 2.1, 0.062, 0.5, 0.5, { uvRect: impDecalRect(13) });
     // crates of data cores under the flanking screens: painted cabinets with a lit seam
     for (const s of [-1, 1]) {
       const bx = cx + s * 8.5;
