@@ -12,7 +12,7 @@ import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
 import { addEngMaterials } from "./engMaterials.js";
-import { platform, cableTray, cableDrop, screenBank, relayCabinet, floorDecal, hazardKerb } from "./engKit.js";
+import { platform, cableTray, cableDrop, screenBank, relayCabinet, floorDecal, hazardKerb, statusBoard, holoReactor, gaugeCluster } from "./engKit.js";
 
 export function buildEngControl(kit, ctx) {
   addEngMaterials(ctx.mats);
@@ -30,6 +30,13 @@ export function buildEngControl(kit, ctx) {
     extraOpenings: { east: [{ type: "window", u0: 4, u1: 30, v0: 1.0, v1: 4.0 }] },
   });
   const walls = roomWalls(room);
+  {
+    // a smoked pane inside the window frame: the core is a 30 m emitter and read blown white through
+    // clear glass; glassDark keeps it a readable blue-white plasma column from the watch floor
+    const w = walls.east;
+    const { frame } = wallFrame(kit, w.from, w.to, y);
+    frame.quad("glassDark", 17, 2.5, 0.0, 26, 3.0);
+  }
 
   // ------------------------------------------------------------ upper tier platform + stairs
   const P = { x0: x0 + 2.5, z0: 561, x1: x0 + 12.5, z1: 591 };
@@ -53,7 +60,7 @@ export function buildEngControl(kit, ctx) {
   kit.boxMM("impPaintedMetal", [P.x0 + 1.2, PY, 571.6], [P.x0 + 6.0, PY + 0.12, 576.4], { color: IMP.trim, texel: 1 });
   kit.boxMM("impGloss", [P.x0 + 1.3, PY + 0.12, 571.7], [P.x0 + 5.9, PY + 0.126, 576.3], { color: IMP.white, texel: 0.25 });
   walkable(ctx, P.x0 + 1.2, 571.6, P.x0 + 6.0, 576.4, PY + 0.12, "dais");
-  impConsole(kit, ctx, [P.x0 + 5.0, PY + 0.12, 574], -Math.PI / 2, { kind: "wide", width: 3.4, screens: 4, seed: 7, light: true });
+  impConsole(kit, ctx, [P.x0 + 5.0, PY + 0.12, 574], -Math.PI / 2, { kind: "wide", width: 3.4, screens: 4, seed: 7, light: false });
   chair(kit, [P.x0 + 4.0, PY + 0.12, 574], -Math.PI / 2, { color: IMP.fabricGrey });
   for (const dz of [-2.2, 2.2]) {
     kit.box("impPaintedMetal", P.x0 + 4.6, PY + 0.75, 574 + dz, 0.5, 1.5, 0.5, { color: IMP.consoleDark, texel: 1 });
@@ -83,12 +90,14 @@ export function buildEngControl(kit, ctx) {
     // two larger displays, cable tray above with a drop to the lower row
     const w = walls.north;
     const { frame } = wallFrame(kit, w.from, w.to, y);
-    screenBank(frame, w.u(x0 + 15), 2.7, 8, 3, 1.55, 0.86, 5);
-    wallScreen(frame, w.u(x0 + 4.6), 2.4, 1.8, 1.0, 2);
-    wallScreen(frame, w.u(x0 + 24.2), 2.4, 1.6, 0.9, 0);
+    screenBank(frame, w.u(x0 + 15), 2.6, 8, 3, 1.55, 0.86, 5, { variants: [0, 1, 2, 3, 4, 0, 1, 2], dark: 0.1, wide: [[1, 1], [5, 2], [3, 0]], header: true });
+    wallScreen(frame, w.u(x0 + 4.6), 2.4, 1.8, 1.0, "Bars");
+    wallScreen(frame, w.u(x0 + 24.2), 2.4, 1.6, 0.9, "Gauges");
+    statusBoard(frame, w.u(x0 + 4.6), 3.95, 3.0, 1.1, 3, { displays: ["screen2", "screenBars"] });
+    statusBoard(frame, w.u(x0 + 24.2), 3.95, 3.0, 1.1, 4, { displays: ["screenGauges", "screen0"] });
     frame.quad("impDecal", w.u(x0 + 6.8), 1.2, 0.064, 0.7, 0.7, { uvRect: impDecalRect(11) });
-    cableTray(frame, 1.0, w.length - 1.0, h - 0.6, { n: 0.4, cables: 4 });
-    cableDrop(frame, w.u(x0 + 19), 0.9, h - 0.65, { n: 0.12 });
+    cableTray(frame, 1.0, w.length - 1.0, h - 0.3, { n: 0.4, cables: 4 });
+    cableDrop(frame, w.u(x0 + 19), 0.9, h - 0.35, { n: 0.12 });
   }
   {
     // west wall behind the upper tier: reactor schematic (emissive line diagram) between two status
@@ -100,7 +109,14 @@ export function buildEngControl(kit, ctx) {
     frame.quad("impDecal", w.u(590), 1.5, 0.064, 0.9, 0.9, { uvRect: impDecalRect(0) });
     frame.quad("impDecal", w.u(562), 1.5, 0.064, 0.9, 0.9, { uvRect: impDecalRect(4) });
     wallScreen(frame, w.u(566), 2.4, 1.8, 1.0, 2);
-    wallScreen(frame, w.u(586), 2.4, 1.8, 1.0, 0);
+    wallScreen(frame, w.u(586), 2.4, 1.8, 1.0, 4);
+    // status boards along the upper wall over the screens and cabinets
+    statusBoard(frame, w.u(566), 3.9, 3.4, 1.2, 11, { displays: ["screenBars", "screen0"] });
+    statusBoard(frame, w.u(586), 3.9, 3.4, 1.2, 12, { displays: ["screen3", "screenGauges"] });
+    statusBoard(frame, w.u(594.5), 3.9, 2.8, 1.1, 13, { displays: ["screen1"] });
+    statusBoard(frame, w.u(557.5), 3.9, 2.8, 1.1, 14, { displays: ["screenBarsAmber"] });
+    gaugeCluster(frame, w.u(560.0), 1.9, { n: 3, seed: 15 });
+    gaugeCluster(frame, w.u(592.2), 1.9, { n: 3, seed: 16 });
     const cu = w.u(576);
     frame.box("impPaintedMetal", cu, 2.6, 0.05, 7.0, 3.0, 0.08, { color: IMP.consoleDark, texel: 1 });
     frame.box("darkGloss", cu, 2.6, 0.095, 6.8, 2.8, 0.01);
@@ -121,9 +137,13 @@ export function buildEngControl(kit, ctx) {
     const w = walls.south;
     const { frame } = wallFrame(kit, w.from, w.to, y);
     lockers(frame, 1.5, 7.5, 2.1, { seed: 9 });
-    cableTray(frame, 1.0, w.length - 1.0, h - 0.6, { n: 0.4, cables: 4 });
+    cableTray(frame, 1.0, w.length - 1.0, h - 0.3, { n: 0.4, cables: 4 });
     wallScreen(frame, w.u(x0 + 6), 2.3, 1.6, 0.9, 1);
     frame.quad("impDecal", w.u(x0 + 9), 1.8, 0.064, 0.7, 0.7, { uvRect: impDecalRect(7) });
+    statusBoard(frame, w.u(x0 + 4.5), 3.85, 3.6, 1.2, 17, { displays: ["screenBars", "screen2"] });
+    statusBoard(frame, w.u(x0 + 19.5), 3.85, 4.2, 1.2, 18, { displays: ["screen1", "screenGauges", "screenBarsAmber"] });
+    wallScreen(frame, w.u(x0 + 19.5), 2.3, 1.8, 1.0, 0);
+    gaugeCluster(frame, w.u(x0 + 23.2), 1.9, { n: 2, seed: 19 });
   }
   // overhead trays from the west wall to both console rows, with drops to the lower row
   for (const tz of [566, 582]) {
@@ -135,32 +155,48 @@ export function buildEngControl(kit, ctx) {
     kit.cyl("impRubber", x0 + 18.9, y + (h - 0.7 + 0.9) / 2, tz, 0.05, h - 1.6, "y", { color: IMP.rubber, segments: 8 });
     kit.cyl("impRubber", x0 + 6.6 + 0.4, y + (h - 0.7 + PY - y + 0.9) / 2, tz, 0.05, h - 0.7 - (PY - y) - 0.9, "y", { color: IMP.gunmetal, segments: 8 });
   }
-  // shift-briefing table west of the corridor door, under the south wall screen
+  // shift-briefing holo station west of the corridor door: a projector table throwing a wireframe
+  // schematic of the reactor, two station consoles flanking it and four seats
   {
     const bx = x0 + 6.5;
     const bz = z1 - 5.2;
-    table(kit, [bx, y, bz], 2.8, 1.3, { h: 0.8, tone: IMP.consoleDark, top: "impPaintedMetal" });
-    kit.box("emitBlue", bx, y + 0.815, bz, 1.8, 0.01, 0.7, { color: IMP.blue });
-    kit.box("darkGloss", bx, y + 0.812, bz, 1.9, 0.004, 0.8);
-    for (const s of [-1, 1]) kit.box("blinkSparse", bx + s * 1.1, y + 0.815, bz, 0.4, 0.004, 0.6, { uv: "keep" });
-    chair(kit, [bx - 0.6, y, bz + 1.3], 0);
-    chair(kit, [bx + 0.6, y, bz + 1.3], 0);
-    chair(kit, [bx - 0.6, y, bz - 1.3], Math.PI);
-    chair(kit, [bx + 0.6, y, bz - 1.3], Math.PI);
-    floorDecal(kit, bx, y, bz + 2.6, 0.9, 11);
+    table(kit, [bx, y, bz], 3.0, 1.7, { h: 0.82, tone: IMP.consoleDark, top: "impPaintedMetal" });
+    kit.box("impMetal", bx, y + 0.84, bz, 2.4, 0.03, 1.2, { color: IMP.steel });
+    kit.box("darkGloss", bx, y + 0.86, bz, 2.2, 0.012, 1.0);
+    kit.add("emitBlue", new THREE.TorusGeometry(0.56, 0.02, 6, 40), { pos: [bx, y + 0.87, bz], rot: [Math.PI / 2, 0, 0] });
+    kit.cyl("impMetal", bx, y + 0.88, bz, 0.5, 0.02, "y", { color: IMP.black, segments: 32 });
+    for (const s of [-1, 1]) {
+      kit.box("impPaintedMetal", bx + s * 1.25, y + 0.85, bz, 0.4, 0.03, 1.4, { color: IMP.consoleDark, texel: 1 });
+      kit.box("leds", bx + s * 1.25, y + 0.868, bz, 0.3, 0.004, 1.0, { uv: "keep" });
+      kit.box("emitAmber", bx + s * 1.25, y + 0.868, bz + 0.62, 0.2, 0.004, 0.06);
+    }
+    holoReactor(kit, ctx, [bx, y + 0.86, bz], { lift: 1.2, scale: 0.85 });
+    impConsole(kit, ctx, [bx - 2.9, y, bz], -Math.PI / 2, { kind: "station", width: 1.4, screens: 2, seed: 91, light: false });
+    impConsole(kit, ctx, [bx + 2.9, y, bz], Math.PI / 2, { kind: "station", width: 1.4, screens: 2, seed: 92, light: false });
+    chair(kit, [bx - 3.8, y, bz], -Math.PI / 2, { color: IMP.fabricGrey });
+    chair(kit, [bx + 3.8, y, bz], Math.PI / 2, { color: IMP.fabricGrey });
+    chair(kit, [bx - 0.7, y, bz + 1.5], 0, { color: IMP.fabricGrey });
+    chair(kit, [bx + 0.7, y, bz + 1.5], 0, { color: IMP.fabricGrey });
+    chair(kit, [bx - 0.7, y, bz - 1.5], Math.PI, { color: IMP.fabricGrey });
+    chair(kit, [bx + 0.7, y, bz - 1.5], Math.PI, { color: IMP.fabricGrey });
+    floorDecal(kit, bx, y, bz + 2.8, 0.9, 11);
   }
   // deck stencils
   floorDecal(kit, x0 + 21.5, y, z1 - 6.5, 1.2, 0);
   floorDecal(kit, x0 + 15.5, y, z0 + 3, 1.0, 15);
 
   // ------------------------------------------------------------ lights
-  for (const [lz, pri] of [[566, 1], [576, 2], [586, 1]]) ceilingLight(kit, ctx, [x0 + 16, y + h, lz], 6, "x", { intensity: 8, distance: 13, color: 0xd6e2ff, priority: pri });
-  ceilingLight(kit, ctx, [x0 + 7.5, y + h, 576], 8, "z", { intensity: 6, distance: 12, color: 0xd6e2ff, priority: 1 });
-  ceilingLight(kit, ctx, [x0 + 12, y + h, 594.5], 7, "x", { intensity: 7, distance: 12, color: 0xd6e2ff, priority: 1 }); // entrance bay
-  pointLightDesc(ctx, 0x8fb8ff, 4.5, 16, [x1 - 1.6, y + 3.4, 573], 1); // core spill through the window
-  pointLightDesc(ctx, 0x6fa0ff, 5.0, 12, [x0 + 15, y + 3.0, z0 + 1.6], 1); // status wall glow
-  pointLightDesc(ctx, IMP.blue, 1.4, 6, [P.x1 + 0.4, y + 0.3, 576], 0); // platform kick glow
-  pointLightDesc(ctx, 0xdfe8ff, 6.0, 9, [x0 + 13, y + h - 0.6, z1 - 2], 1); // door
+  // A 5 m ceiling over a 26 x 44 m watch room: two rows of recessed bars (over the upper tier and over
+  // the deck stations) with their point sources dropped to 3.6 m so the dark deck reads at ~2 lux, the
+  // entrance bay and the holo station lit on their own. Priority 2 keeps them ahead of the reactor's
+  // descriptors (visible through the window) in the shared pool.
+  for (const lz of [566, 576, 586]) ceilingLight(kit, ctx, [x0 + 7.5, y + h, lz], 6, "z", { intensity: 30, distance: 16, color: 0xd6e2ff, priority: 2, drop: 1.4 });
+  for (const lz of [563, 573, 583]) ceilingLight(kit, ctx, [x0 + 17, y + h, lz], 6, "x", { intensity: 40, distance: 16, color: 0xd6e2ff, priority: 2, drop: 1.4 });
+  ceilingLight(kit, ctx, [x0 + 14, y + h, 594.5], 7, "x", { intensity: 40, distance: 16, color: 0xd6e2ff, priority: 2, drop: 1.4 }); // entrance bay
+  ceilingLight(kit, ctx, [x0 + 4.5, y + h, 594.5], 4, "x", { intensity: 22, distance: 12, color: 0xd6e2ff, priority: 1, drop: 1.4 }); // holo station
+  ceilingLight(kit, ctx, [x0 + 15, y + h, z0 + 3.2], 8, "x", { intensity: 30, distance: 14, color: 0xd6e2ff, priority: 1, drop: 1.4 }); // status wall
+  pointLightDesc(ctx, 0x8fb8ff, 12, 16, [x1 - 1.6, y + 3.4, 573], 1); // core spill through the window
+  pointLightDesc(ctx, 0xdfe8ff, 12, 9, [x0 + 13, y + h - 0.8, z1 - 2], 1); // door
 
   // ------------------------------------------------------------ views
   ctx.view("engControl", x0 + 13, y + STD.eye, z1 - 2.2, 28, -3);

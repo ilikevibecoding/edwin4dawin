@@ -78,21 +78,42 @@ export function containerPrefab(mats, size = [2.4, 2.4, 2.4], opts = {}) {
   const [w, h, d] = size;
   return prefab(mats, (k) => {
     k.box("impPaintedMetal", 0, h / 2, 0, w, h, d, { color: 0xffffff, texel: 1 });
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.box("impMetal", sx * (w / 2 - 0.06), h / 2, sz * (d / 2 - 0.06), 0.12, h + 0.02, 0.12, { color: IMP.trim });
-    k.box("impMetal", 0, h * 0.25, 0, w + 0.02, 0.08, d + 0.02, { color: IMP.trim });
-    k.box("impMetal", 0, h * 0.75, 0, w + 0.02, 0.08, d + 0.02, { color: IMP.trim });
+    // steel corner posts with gusset plates top and bottom (steel reads on dark and light bodies alike)
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        k.box("impMetal", sx * (w / 2 - 0.07), h / 2, sz * (d / 2 - 0.07), 0.16, h + 0.02, 0.16, { color: IMP.steel });
+        for (const sy of [0.2, h - 0.2]) k.box("impMetal", sx * (w / 2 - 0.19), sy, sz * (d / 2 - 0.19), 0.4, 0.26, 0.4, { color: IMP.gunmetal });
+      }
+    }
+    k.box("impMetal", 0, h * 0.25, 0, w + 0.03, 0.1, d + 0.03, { color: IMP.steel });
+    k.box("impMetal", 0, h * 0.75, 0, w + 0.03, 0.1, d + 0.03, { color: IMP.steel });
     k.box("impMetal", 0, h - 0.06, 0, w - 0.3, 0.06, d - 0.3, { color: IMP.trim });
+    // door end (+z): two leaves with a dark seam, hinge straps, vertical latch rods with keepers and
+    // yellow handles
+    k.box("impPaintedMetal", 0, h * 0.5, d / 2 + 0.008, 0.03, h * 0.78, 0.012, { color: IMP.black, texel: 1 });
+    for (const s of [-1, 1]) {
+      k.box("impMetal", s * w * 0.16, h * 0.5, d / 2 + 0.03, 0.05, h * 0.74, 0.05, { color: IMP.steel });
+      for (const ky of [0.1, 0.9]) k.box("impMetal", s * w * 0.16, h * ky, d / 2 + 0.03, 0.12, 0.06, 0.06, { color: IMP.gunmetal });
+      k.box("impMetal", s * (w * 0.16 + 0.1), h * 0.5, d / 2 + 0.045, 0.18, 0.05, 0.04, { color: IMP.hazardYellow });
+      for (const hy of [0.2, 0.8]) k.box("impMetal", s * (w / 2 - 0.22), h * hy, d / 2 + 0.02, 0.2, 0.08, 0.03, { color: IMP.gunmetal });
+    }
     // recessed side panels and lift pockets
     for (const s of [-1, 1]) {
       k.box("impPaintedMetal", s * (w / 2 + 0.005), h * 0.5, 0, 0.01, h * 0.34, d * 0.6, { color: 0xffffff, texel: 1 });
       k.box("impPaintedMetal", 0, 0.28, s * (d / 2 + 0.006), w * 0.7, 0.16, 0.012, { color: IMP.black, texel: 1 });
     }
-    // handles on the ends
-    for (const s of [-1, 1]) k.box("impMetal", s * (w / 2 + 0.03), h * 0.55, 0, 0.04, 0.1, Math.min(0.5, d * 0.35), { color: IMP.steel });
-    k.add("impDecal", new THREE.PlaneGeometry(0.7, 0.7), { pos: [-w * 0.22, h * 0.55, d / 2 + 0.012], uv: "keep", uvRect: impDecalRect(label) });
-    k.add("impDecal", new THREE.PlaneGeometry(0.7, 0.7), { pos: [w * 0.22, h * 0.55, -d / 2 - 0.012], rot: [0, Math.PI, 0], uv: "keep", uvRect: impDecalRect(label2) });
-    k.box(light, w * 0.32, h * 0.86, d / 2 + 0.012, 0.1, 0.04, 0.01);
-    k.box("impMetal", w * 0.32, h * 0.72, d / 2 + 0.01, 0.4, 0.12, 0.01, { color: IMP.black });
+    // handles on the sides, stencils on all four faces (large unit mark + small class mark)
+    for (const s of [-1, 1]) {
+      k.box("impMetal", s * (w / 2 + 0.03), h * 0.55, d * 0.36, 0.04, 0.1, Math.min(0.4, d * 0.25), { color: IMP.steel });
+      k.add("impDecal", new THREE.PlaneGeometry(1.0, 1.0), { pos: [s * (w / 2 + 0.016), h * 0.5, -d * 0.16], rot: [0, (s * Math.PI) / 2, 0], uv: "keep", uvRect: impDecalRect(label) });
+      k.add("impDecal", new THREE.PlaneGeometry(0.45, 0.45), { pos: [s * (w / 2 + 0.016), h * 0.78, d * 0.3], rot: [0, (s * Math.PI) / 2, 0], uv: "keep", uvRect: impDecalRect(label2) });
+    }
+    k.add("impDecal", new THREE.PlaneGeometry(0.4, 0.4), { pos: [-w * 0.34, h * 0.55, d / 2 + 0.012], uv: "keep", uvRect: impDecalRect(label) });
+    k.add("impDecal", new THREE.PlaneGeometry(0.9, 0.9), { pos: [w * 0.2, h * 0.55, -d / 2 - 0.012], rot: [0, Math.PI, 0], uv: "keep", uvRect: impDecalRect(label2) });
+    k.add("impDecal", new THREE.PlaneGeometry(0.5, 0.5), { pos: [-w * 0.28, h * 0.55, -d / 2 - 0.012], rot: [0, Math.PI, 0], uv: "keep", uvRect: impDecalRect(label) });
+    // status light + data plate by the door
+    k.box(light, w * 0.33, h * 0.86, d / 2 + 0.012, 0.1, 0.04, 0.01);
+    k.box("impMetal", w * 0.33, h * 0.76, d / 2 + 0.01, 0.4, 0.12, 0.01, { color: IMP.black });
   });
 }
 
@@ -280,7 +301,8 @@ export function stain(kit, pos, size, opts = {}) {
 
 // Handwheel valve on a pipe: pos = wheel centre, normal axis 'x'|'y'|'z' (axis of the wheel), r radius.
 export function valve(kit, pos, r = 0.22, axis = "y", opts = {}) {
-  const { color = IMP.red, stem = 0.25 } = opts;
+  // dir: which way the stem leaves the wheel along the axis (+1 = toward -axis, the default)
+  const { color = IMP.red, stem = 0.25, dir = 1 } = opts;
   const rot = axis === "y" ? [Math.PI / 2, 0, 0] : axis === "x" ? [0, Math.PI / 2, 0] : [0, 0, 0];
   kit.add("impPaintedMetal", new THREE.TorusGeometry(r, 0.03, 8, 20), { pos, rot, color, uv: "scale", uvScale: [4, 1] });
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rot[0], rot[1], rot[2]));
@@ -292,7 +314,8 @@ export function valve(kit, pos, r = 0.22, axis = "y", opts = {}) {
   const stemLen = stem;
   const cAxis = axis;
   kit.cyl("impMetal", pos[0], pos[1], pos[2], 0.06, 0.08, cAxis, { color: IMP.steel, segments: 10 });
-  const off = axis === "y" ? [0, -stemLen / 2, 0] : axis === "x" ? [-stemLen / 2, 0, 0] : [0, 0, -stemLen / 2];
+  const so = (-dir * stemLen) / 2;
+  const off = axis === "y" ? [0, so, 0] : axis === "x" ? [so, 0, 0] : [0, 0, so];
   kit.cyl("impMetal", pos[0] + off[0], pos[1] + off[1], pos[2] + off[2], 0.035, stemLen, cAxis, { color: IMP.gunmetal, segments: 8 });
 }
 
@@ -521,10 +544,10 @@ export function toolCart(kit, pos, yaw = 0, opts = {}) {
 
 // Overhead crane runway rails: two I-beams along `axis` at height y on wall brackets.
 export function craneRails(kit, a0, a1, side0, side1, y, axis = "z", opts = {}) {
-  const { h = 0.7, w = 0.36, brackets = true, bracketPitch = 8, toWall = 0 } = opts;
+  const { h = 0.7, w = 0.36, brackets = true, bracketPitch = 8, toWall = 0, mat = "impPaintedMetal", color = IMP.trim } = opts;
   for (const s of [side0, side1]) {
-    if (axis === "z") ibeam(kit, [s, y, a0], [s, y, a1], { h, w });
-    else ibeam(kit, [a0, y, s], [a1, y, s], { h, w });
+    if (axis === "z") ibeam(kit, [s, y, a0], [s, y, a1], { h, w, mat, color });
+    else ibeam(kit, [a0, y, s], [a1, y, s], { h, w, mat, color });
     if (brackets) {
       const dir = s === side0 ? -1 : 1;
       for (let t = a0 + 1; t < a1; t += bracketPitch) {
@@ -541,10 +564,12 @@ export function craneRails(kit, a0, a1, side0, side1, y, axis = "z", opts = {}) 
 // Crane bridge assembly built in local coordinates (span along local x, centred), trolley at x = tx,
 // hook hanging `drop` below the bridge. `k` is any Kit (room kit with offsets baked, or a mini kit).
 export function craneBridge(k, span, y, z, opts = {}) {
-  const { tx = 0, drop = 3, girder = 0.9, color = IMP.hazardYellow, cx = 0, lamp = true, bands = true } = opts;
+  // mat: girder material; the painted yellow reads cleanest on the map-less impMatte (the worn-metal
+  // albedo of impPaintedMetal shows through bright paint as a mottle)
+  const { tx = 0, drop = 3, girder = 0.9, color = IMP.hazardYellow, cx = 0, lamp = true, bands = true, mat = "impPaintedMetal" } = opts;
   const X = (x) => cx + x;
-  ibeam(k, [X(-span / 2), y, z - 0.6], [X(span / 2), y, z - 0.6], { h: girder, w: 0.4, color });
-  ibeam(k, [X(-span / 2), y, z + 0.6], [X(span / 2), y, z + 0.6], { h: girder, w: 0.4, color });
+  ibeam(k, [X(-span / 2), y, z - 0.6], [X(span / 2), y, z - 0.6], { h: girder, w: 0.4, color, mat });
+  ibeam(k, [X(-span / 2), y, z + 0.6], [X(span / 2), y, z + 0.6], { h: girder, w: 0.4, color, mat });
   for (const s of [-1, 1]) {
     k.box("impPaintedMetal", X((s * span) / 2), y - 0.15, z, 0.6, girder + 0.3, 1.9, { color: IMP.trim, texel: 1 });
     k.cyl("impMetal", X((s * span) / 2 + (s > 0 ? 0.35 : -0.35)), y - girder / 2 - 0.35, z - 0.6, 0.25, 0.3, "x", { color: IMP.gunmetal, segments: 12 });
@@ -723,22 +748,36 @@ export function cableDrop(frame, u, v0, v1, opts = {}) {
   for (let v = v0 + 0.5; v < v1; v += 1.2) frame.box("impPaintedMetal", u, v, n, 0.06 * count + 0.08, 0.06, 0.06, { color: IMP.trim });
 }
 
-// Grid of wall screens with a shared bezel plate (frame coords: centre u,v; cols x rows)
-export function screenBank(frame, u, v, cols, rows, sw, sh, seed = 1) {
+// Grid of wall screens with a shared bezel plate (frame coords: centre u,v; cols x rows).
+// opts.variants: screen indices to draw from (default the three blue layouts); opts.dark: fraction of
+// cells left as switched-off glass; opts.wide: [[col,row], ...] cells that merge with their right-hand
+// neighbour into one double-width display; opts.header: stencil + light strip across the top.
+export function screenBank(frame, u, v, cols, rows, sw, sh, seed = 1, opts = {}) {
+  const { variants = [0, 1, 2], dark = 0, wide = [], header = false } = opts;
   const rand = rng(seed);
   const gap = 0.12;
   const W = cols * sw + (cols + 1) * gap;
   const H = rows * sh + (rows + 1) * gap;
   frame.box("impPaintedMetal", u, v, 0.05, W, H, 0.08, { color: IMP.consoleDark, texel: 1 });
+  const skip = new Set(wide.map(([c, r]) => (c + 1) + ":" + r));
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
-      const cu = u - W / 2 + gap + sw / 2 + i * (sw + gap);
+      if (skip.has(i + ":" + j)) continue;
+      const isWide = wide.some(([c, r]) => c === i && r === j) && i + 1 < cols;
+      const cw = isWide ? sw * 2 + gap : sw;
+      const cu = u - W / 2 + gap + cw / 2 + i * (sw + gap);
       const cv = v - H / 2 + gap + sh / 2 + j * (sh + gap);
-      frame.box("darkGloss", cu, cv, 0.093, sw, sh, 0.01);
-      frame.box("screen" + Math.floor(rand() * 3), cu, cv, 0.1, sw - 0.04, sh - 0.04, 0.004, { uv: "keep" });
+      frame.box("darkGloss", cu, cv, 0.093, cw, sh, 0.01);
+      if (rand() < dark) continue;
+      frame.box("screen" + variants[Math.floor(rand() * variants.length)], cu, cv, 0.1, cw - 0.04, sh - 0.04, 0.004, { uv: "keep" });
     }
   }
   frame.box("leds", u, v - H / 2 - 0.1, 0.07, Math.min(W * 0.6, 2.4), 0.05, 0.01, { uv: "keep" });
+  if (header) {
+    frame.box("impPaintedMetal", u, v + H / 2 + 0.16, 0.05, W, 0.24, 0.08, { color: IMP.trim, texel: 1 });
+    frame.box("lightBand", u, v + H / 2 + 0.16, 0.095, W - 0.6, 0.06, 0.01, { uv: "keep" });
+    frame.quad("impDecal", u - W / 2 + 0.6, v + H / 2 + 0.16, 0.1, 0.36, 0.36, { uvRect: impDecalRect(11) });
+  }
 }
 
 // Panel of dark boxes with tiny indicator lights standing off a wall frame (breaker / relay cabinet)
@@ -756,6 +795,360 @@ export function relayCabinet(frame, u, v0, v1, w, seed = 1) {
   }
   frame.quad("impDecal", u + w * 0.25, v1 - 0.3, 0.472, 0.3, 0.3, { uvRect: impDecalRect(Math.floor(rand() * 16)) });
   frame.collider(u - w / 2, u + w / 2, v0, v1, 0, 0.5, "relay");
+}
+
+// ===========================================================================
+// Review round 1 additions: guard rails for drops, cradle saddles, conduit collars, floor junction
+// boxes, wall gauge clusters / valve manifolds / pipe trunks, upper-wall status boards, crisp hazard
+// zones, field-generator cabinets and the holographic reactor schematic.
+// ===========================================================================
+
+// Guard rail for a drop: steel top rail, mid rail and a kick plate on painted posts with base plates
+// and caps. Same segment interface as impKit.railing (from/to are [x,z] at floor y).
+export function guardRail(kit, from, to, y, opts = {}) {
+  const { h = 1.1, postPitch = 2.0, collide = true, tag = "rail", lit = false, kick = 0.15 } = opts;
+  const dx = to[0] - from[0];
+  const dz = to[1] - from[1];
+  const L = Math.hypot(dx, dz);
+  if (L < 0.05) return;
+  const yaw = Math.atan2(-dz, dx);
+  const q = yawQ(yaw);
+  const mid = [from[0] + dx / 2, from[1] + dz / 2];
+  const bar = (mat, yy, sy, sz, color) => kit.add(mat, new THREE.BoxGeometry(L, sy, sz), { pos: [mid[0], y + yy, mid[1]], quat: q, color, texel: 1 });
+  bar("impMetal", h, 0.06, 0.09, IMP.steel);
+  bar("impMetal", h * 0.52, 0.05, 0.06, IMP.steel);
+  bar("impPaintedMetal", kick / 2 + 0.01, kick, 0.03, IMP.trim);
+  bar("impMetal", kick + 0.02, 0.02, 0.05, IMP.steel);
+  if (lit) kit.add("emitBlue", new THREE.BoxGeometry(L - 0.2, 0.012, 0.03), { pos: [mid[0], y + h - 0.04, mid[1]], quat: q });
+  const n = Math.max(2, Math.round(L / postPitch) + 1);
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1);
+    const px = from[0] + dx * t;
+    const pz = from[1] + dz * t;
+    kit.add("impPaintedMetal", new THREE.BoxGeometry(0.08, h, 0.08), { pos: [px, y + h / 2, pz], quat: q, color: IMP.trim, texel: 1 });
+    kit.add("impMetal", new THREE.BoxGeometry(0.18, 0.02, 0.18), { pos: [px, y + 0.01, pz], quat: q, color: IMP.gunmetal });
+    kit.add("impMetal", new THREE.BoxGeometry(0.11, 0.04, 0.11), { pos: [px, y + h + 0.02, pz], quat: q, color: IMP.steel });
+  }
+  if (collide) {
+    const pad = 0.12;
+    kit.collider([Math.min(from[0], to[0]) - pad, y, Math.min(from[1], to[1]) - pad], [Math.max(from[0], to[0]) + pad, y + h + 0.1, Math.max(from[1], to[1]) + pad], tag);
+  }
+}
+
+// Cradle saddle for a horizontal drum of radius r whose axis runs along `axis` ('x'|'z') at height
+// cy: a hazard-banded plinth on the deck, a pedestal and a thick saddle band hugging the underside of
+// the drum, with bolt lugs closing the ends of the arc. pos = [x, floorY, z] under the axis.
+export function saddle(kit, pos, r, cy, axis = "z", opts = {}) {
+  const { w = 1.0, t = 0.28, arc = Math.PI * 0.72, plinth = [3.6, 0.3, 1.6], color = IMP.trim, hazard = true } = opts;
+  const [x, y, z] = pos;
+  const R = r + t;
+  const bottom = cy - R;
+  const along = (across, len) => (axis === "z" ? [across, len] : [len, across]);
+  const [pw, ph, pd] = plinth;
+  const [sx, sz] = along(pw, pd);
+  kit.box("impPaintedMetal", x, y + ph / 2, z, sx, ph, sz, { color: IMP.wallDark, texel: 1 });
+  kit.box("impMetal", x, y + ph + 0.02, z, sx + 0.04, 0.04, sz + 0.04, { color: IMP.steel });
+  if (hazard) {
+    if (axis === "z") {
+      hazardBand(kit, [x, y + ph / 2, z + sz / 2 + 0.006], 0, sx - 0.2, ph - 0.06);
+      hazardBand(kit, [x, y + ph / 2, z - sz / 2 - 0.006], Math.PI, sx - 0.2, ph - 0.06);
+    } else {
+      hazardBand(kit, [x + sx / 2 + 0.006, y + ph / 2, z], -Math.PI / 2, sz - 0.2, ph - 0.06);
+      hazardBand(kit, [x - sx / 2 - 0.006, y + ph / 2, z], Math.PI / 2, sz - 0.2, ph - 0.06);
+    }
+  }
+  const chord = 2 * R * Math.sin(arc / 2);
+  const [px, pz] = along(chord * 0.7, w);
+  const pedTop = bottom + t * 0.5;
+  kit.box("impPaintedMetal", x, (y + ph + pedTop) / 2, z, px, pedTop - (y + ph), pz, { color, texel: 1 });
+  // the band: a capped partial cylinder centred on the bottom of the drum (its inner faces lie inside it)
+  const rot = axis === "z" ? [Math.PI / 2, 0, 0] : [0, 0, Math.PI / 2];
+  const thetaC = axis === "z" ? 0 : -Math.PI / 2;
+  kit.add("impPaintedMetal", new THREE.CylinderGeometry(R, R, w, 20, 1, false, thetaC - arc / 2, arc), { pos: [x, cy, z], rot, color, uv: "scale", uvScale: [4, 1] });
+  for (const s of [-1, 1]) {
+    const a = arc / 2;
+    const off = s * (r + t * 0.5) * Math.sin(a);
+    const yy = cy - (r + t * 0.5) * Math.cos(a);
+    const [lx, lz] = along(0.3, w + 0.1);
+    if (axis === "z") kit.box("impMetal", x + off, yy, z, lx, 0.3, lz, { color: IMP.gunmetal, rot: [0, 0, -s * (Math.PI / 2 - a)] });
+    else kit.box("impMetal", x, yy, z + off, lx, 0.3, lz, { color: IMP.gunmetal, rot: [s * (Math.PI / 2 - a), 0, 0] });
+  }
+}
+
+// Torus collar with a bolted flange disc where a conduit or pipe of radius r meets a surface. axis is
+// the conduit's axis at pos; the ring lies in the plane perpendicular to it.
+export function collar(kit, pos, r, axis = "z", opts = {}) {
+  const { color = IMP.trim, ring = 0.1, flange: fl = 0.08 } = opts;
+  const rot = axis === "y" ? [Math.PI / 2, 0, 0] : axis === "x" ? [0, Math.PI / 2, 0] : [0, 0, 0];
+  kit.add("impPaintedMetal", new THREE.TorusGeometry(r + ring, ring, 8, 24), { pos, rot, color, uv: "scale", uvScale: [6, 1] });
+  if (fl > 0) kit.cyl("impMetal", pos[0], pos[1], pos[2], r + ring * 2.2, fl, axis, { color: IMP.steel, segments: 24 });
+}
+
+// Floor-standing junction / distribution box: plinth, housing with a hinged louvred door, handle, a
+// small instrument display and indicator strip, conduit stubs out of the top. yaw 0 => door faces +z.
+export function junctionBox(kit, pos, yaw = 0, opts = {}) {
+  const { w = 0.9, h = 1.5, d = 0.5, tone = IMP.consoleDark, seed = 1, stubs = 2, display = "screenBars" } = opts;
+  const rand = rng(seed);
+  const { box, cyl, collider, L } = local(kit, pos, yaw);
+  box("impPaintedMetal", 0, 0.06, 0, w - 0.06, 0.12, d - 0.06, { color: IMP.trim, texel: 1 });
+  box("impPaintedMetal", 0, 0.12 + (h - 0.12) / 2, 0, w, h - 0.12, d, { color: tone, texel: 1 });
+  box("impMetal", 0, h + 0.02, 0, w + 0.04, 0.04, d + 0.04, { color: IMP.trim });
+  box("impPanel1", 0, h * 0.52, d / 2 + 0.008, w - 0.16, h - 0.4, 0.016, { color: IMP.wallMid, uv: "keep" });
+  box("impMetal", -w / 2 + 0.1, h * 0.52, d / 2 + 0.02, 0.03, h - 0.5, 0.02, { color: IMP.steel });
+  box("impMetal", w / 2 - 0.16, h * 0.5, d / 2 + 0.035, 0.04, 0.16, 0.03, { color: IMP.steel });
+  for (let k = 0; k < 4; k++) box("impPaintedMetal", -w * 0.15, 0.4 + k * 0.06, d / 2 + 0.02, w * 0.4, 0.015, 0.01, { color: IMP.trim });
+  box("darkGloss", 0, h - 0.32, d / 2 + 0.02, w - 0.3, 0.26, 0.01);
+  box(display, 0, h - 0.32, d / 2 + 0.027, w - 0.34, 0.22, 0.004, { uv: "keep" });
+  box("leds", -w * 0.1, h - 0.52, d / 2 + 0.022, w * 0.5, 0.04, 0.004, { uv: "keep" });
+  box(rand() < 0.6 ? "emitGreen" : "emitAmber", w * 0.3, h - 0.52, d / 2 + 0.022, 0.06, 0.04, 0.004);
+  const lp = L(w * 0.25, 0.75, d / 2 + 0.025);
+  kit.add("impDecal", new THREE.PlaneGeometry(0.3, 0.3), { pos: [lp.x, lp.y, lp.z], quat: yawQ(yaw), uv: "keep", uvRect: impDecalRect([1, 10, 13, 5][Math.floor(rand() * 4)]) });
+  for (let i = 0; i < stubs; i++) {
+    const sx = -w / 2 + ((i + 0.5) / stubs) * w;
+    cyl("impMetal", sx, h + 0.3, -d * 0.15, 0.06, 0.6, "y", { color: IMP.gunmetal, segments: 8 });
+    cyl("impPaintedMetal", sx, h + 0.06, -d * 0.15, 0.1, 0.08, "y", { color: IMP.trim, segments: 10 });
+  }
+  collider(-w / 2, 0, -d / 2, w / 2, h, d / 2, "junction");
+}
+
+// Wall-mounted gauge cluster: a backing plate with a row of round dials (steel bezel, dark face, white
+// scale ticks, red band, amber needle) fed by a small pipe manifold underneath, plus a stencil.
+export function gaugeCluster(frame, u, v, opts = {}) {
+  const { n = 3, r = 0.22, seed = 1, manifold = true } = opts;
+  const rand = rng(seed);
+  const pitch = r * 2 + 0.16;
+  const W = n * pitch + 0.2;
+  const H = r * 2 + 0.36;
+  frame.box("impPaintedMetal", u, v, 0.04, W, H, 0.08, { color: IMP.consoleDark, texel: 1 });
+  frame.box("impMetal", u, v + H / 2 - 0.02, 0.085, W, 0.03, 0.01, { color: IMP.steel });
+  for (let i = 0; i < n; i++) {
+    const cu = u - W / 2 + 0.1 + pitch * (i + 0.5);
+    const cv = v + 0.06;
+    frame.cylN("impMetal", cu, cv, 0.1, r, 0.06, { color: IMP.steel, segments: 20 });
+    frame.cylN("darkGloss", cu, cv, 0.135, r - 0.03, 0.01, { segments: 20 });
+    for (let k = 0; k < 5; k++) {
+      const a = Math.PI * 1.25 - (k / 4) * Math.PI * 1.5;
+      frame.box("impMetal", cu + Math.cos(a) * (r - 0.07), cv + Math.sin(a) * (r - 0.07), 0.142, 0.025, 0.05, 0.004, { color: IMP.white, spin: a - Math.PI / 2 });
+    }
+    const ra = -Math.PI * 0.2;
+    frame.box("emitRed", cu + Math.cos(ra) * (r - 0.07), cv + Math.sin(ra) * (r - 0.07), 0.142, 0.03, 0.07, 0.004, { spin: ra - Math.PI / 2 });
+    const na = Math.PI * 1.25 - rand() * Math.PI * 1.3;
+    frame.box("emitAmber", cu + Math.cos(na) * (r - 0.1) * 0.5, cv + Math.sin(na) * (r - 0.1) * 0.5, 0.145, r - 0.1, 0.02, 0.004, { spin: na });
+    frame.cylN("impMetal", cu, cv, 0.146, 0.025, 0.02, { color: IMP.steel, segments: 8 });
+  }
+  if (manifold) {
+    const mv = v - H / 2 - 0.12;
+    frame.cylU("impMetal", u, mv, 0.12, 0.05, W - 0.1, { color: IMP.steel, segments: 10 });
+    for (let i = 0; i < n; i++) {
+      const cu = u - W / 2 + 0.1 + pitch * (i + 0.5);
+      frame.cylV("impMetal", cu, mv + 0.1, 0.12, 0.025, 0.24, { color: IMP.gunmetal, segments: 8 });
+    }
+    frame.cylV("impMetal", u - W / 2 + 0.1, mv - 0.3, 0.12, 0.05, 0.6, { color: IMP.steel, segments: 10 });
+    frame.box("impPaintedMetal", u + W * 0.3, mv, 0.12, 0.14, 0.14, 0.14, { color: IMP.red, texel: 1 });
+  }
+  frame.quad("impDecal", u + W / 2 - 0.22, v - H / 2 + 0.14, 0.085, 0.22, 0.22, { uvRect: impDecalRect([1, 4, 10][Math.floor(rand() * 3)]) });
+}
+
+// Wall pipe manifold between u0 and u1 at height v: a header with n valved branches dropping to a
+// lower header, flanges and wall brackets at the ends and a pressure gauge; handwheels face the room.
+export function valveManifold(frame, u0, u1, v, opts = {}) {
+  const { n = 3, r = 0.14, drop = 1.2, color = IMP.steel, seed = 1 } = opts;
+  const rand = rng(seed);
+  const len = u1 - u0;
+  const cu = (u0 + u1) / 2;
+  const N = 0.3;
+  frame.cylU("impMetal", cu, v, N, r, len, { color, segments: 14 });
+  frame.cylU("impMetal", cu, v - drop, N, r * 0.8, len, { color: IMP.gunmetal, segments: 12 });
+  for (const e of [u0 + 0.1, u1 - 0.1]) {
+    frame.cylU("impPaintedMetal", e, v, N, r + 0.06, 0.1, { color: IMP.trim, segments: 14 });
+    frame.box("impPaintedMetal", e, v - drop / 2, N * 0.5, 0.16, drop + 0.6, N, { color: IMP.trim, texel: 1 });
+  }
+  const kit = frame.kit;
+  const axis = Math.abs(frame.N.x) > 0.5 ? "x" : "z";
+  const dir = frame.N[axis] > 0 ? 1 : -1;
+  for (let i = 0; i < n; i++) {
+    const bu = u0 + ((i + 0.5) / n) * len;
+    frame.cylV("impMetal", bu, v - drop / 2, N, r * 0.6, drop - r, { color, segments: 10 });
+    const p = frame.pos(bu, v - drop * 0.45, N + r * 0.6 + 0.16);
+    valve(kit, [p.x, p.y, p.z], 0.16, axis, { color: rand() < 0.7 ? IMP.red : IMP.hazardYellow, stem: 0.2, dir });
+  }
+  const gu = u0 + len * 0.2;
+  frame.cylN("impMetal", gu, v + r + 0.16, N + 0.02, 0.09, 0.05, { color: IMP.steel, segments: 14 });
+  frame.cylN("darkGloss", gu, v + r + 0.16, N + 0.05, 0.07, 0.01, { segments: 14 });
+  frame.box("emitAmber", gu + 0.02, v + r + 0.18, N + 0.056, 0.05, 0.012, 0.004, { spin: 0.6 });
+  frame.cylV("impMetal", gu, v + r * 0.5 + 0.04, N, 0.02, r + 0.08, { color: IMP.steel, segments: 6 });
+}
+
+// Service trunk: 3-4 parallel pipes of mixed radius along a wall on shared brackets, flanges every few
+// metres and handwheel valves on the main line.
+export function pipeTrunk(frame, u0, u1, v, opts = {}) {
+  const { n = 3, seed = 1, N = 0.4, valves = 2 } = opts;
+  const rand = rng(seed);
+  const len = u1 - u0;
+  const cu = (u0 + u1) / 2;
+  const radii = [0.22, 0.14, 0.18, 0.1];
+  const colors = [IMP.steel, IMP.gunmetal, IMP.steel, IMP.darkMetal];
+  let vv = v;
+  const lines = [];
+  for (let i = 0; i < n; i++) {
+    const r = radii[i % 4];
+    lines.push({ v: vv, r });
+    frame.cylU("impMetal", cu, vv, N, r, len, { color: colors[i % 4], segments: 12 });
+    for (let u = u0 + 3 + i * 1.3; u < u1 - 1; u += 7) frame.cylU("impPaintedMetal", u, vv, N, r + 0.05, 0.14, { color: IMP.trim, segments: 12 });
+    vv += r + radii[(i + 1) % 4] + 0.16;
+  }
+  const H = vv - v;
+  for (let u = u0 + 1; u < u1; u += 4) {
+    frame.box("impPaintedMetal", u, v + H / 2 - 0.2, N / 2, 0.12, H + 0.4, N + 0.3, { color: IMP.trim, texel: 1 });
+    frame.box("impMetal", u, v + H / 2 - 0.2, N + 0.28, 0.1, H + 0.2, 0.06, { color: IMP.steel });
+  }
+  // handwheels on the room side of the main line (the lines stack vertically, so nothing sits on top)
+  const kit = frame.kit;
+  const axis = Math.abs(frame.N.x) > 0.5 ? "x" : "z";
+  const dir = frame.N[axis] > 0 ? 1 : -1;
+  for (let k = 0; k < valves; k++) {
+    const u = u0 + len * (0.25 + 0.5 * (valves > 1 ? k / (valves - 1) : 0.5)) + (rand() - 0.5);
+    const p = frame.pos(u, lines[0].v, N + lines[0].r + 0.22);
+    valve(kit, [p.x, p.y, p.z], 0.2, axis, { stem: 0.3, dir });
+  }
+}
+
+// Upper-wall status board: header strip with a stencil and light band, authored displays, a lamp row
+// and a short indicator strip. Sized w x h, centred at u, v.
+export function statusBoard(frame, u, v, w, h, seed = 1, opts = {}) {
+  const { displays = ["screenBars", "screen1"], header = true } = opts;
+  const rand = rng(seed);
+  frame.box("impPaintedMetal", u, v, 0.05, w, h, 0.1, { color: IMP.consoleDark, texel: 1 });
+  frame.box("impMetal", u, v, 0.1, w - 0.1, h - 0.1, 0.01, { color: IMP.gunmetal });
+  if (header) {
+    frame.box("impPaintedMetal", u, v + h / 2 - 0.15, 0.09, w, 0.26, 0.08, { color: IMP.trim, texel: 1 });
+    frame.box("lightBand", u + 0.3, v + h / 2 - 0.15, 0.135, w - 1.2, 0.06, 0.01, { uv: "keep" });
+    frame.quad("impDecal", u - w / 2 + 0.35, v + h / 2 - 0.15, 0.14, 0.3, 0.3, { uvRect: impDecalRect(Math.floor(rand() * 16)) });
+  }
+  const dh = h - 0.7;
+  const dw = (w - 0.5) / displays.length;
+  displays.forEach((d, i) => {
+    const cu = u - w / 2 + 0.25 + dw * (i + 0.5);
+    frame.box("darkGloss", cu, v - 0.05, 0.11, dw - 0.16, dh * 0.62, 0.01);
+    frame.box(d, cu, v - 0.05, 0.117, dw - 0.2, dh * 0.62 - 0.04, 0.004, { uv: "keep" });
+  });
+  const lv = v - h / 2 + 0.22;
+  for (let i = 0; i < 6; i++) {
+    const cu = u - w / 2 + 0.4 + i * 0.3;
+    const on = rand();
+    frame.box(on < 0.5 ? "emitGreen" : on < 0.8 ? "emitAmber" : "darkGloss", cu, lv, 0.115, 0.14, 0.1, 0.01);
+  }
+  frame.box("leds", u + w * 0.22, lv, 0.115, w * 0.4, 0.05, 0.004, { uv: "keep" });
+}
+
+// Crisp red / black hazard-striped work zone on the deck with a steel edge line. With `border` > 0
+// only a striped band of that width is painted around the zone (a keep-clear outline), with a second
+// edge line on its inner side.
+export function hazardZone(kit, x0, z0, x1, z1, y, opts = {}) {
+  const { edge = true, pitch = 0.9, border = 0 } = opts;
+  const strip = (ax0, az0, ax1, az1) => {
+    const g = new THREE.PlaneGeometry(ax1 - ax0, az1 - az0);
+    g.rotateX(-Math.PI / 2);
+    kit.add("hazardRed", g, { pos: [(ax0 + ax1) / 2, y + 0.006, (az0 + az1) / 2], uv: "scale", uvScale: [(ax1 - ax0) / pitch, (az1 - az0) / pitch] });
+  };
+  const outline = (ax0, az0, ax1, az1) => {
+    kit.boxMM("impMetal", [ax0 - 0.04, y + 0.004, az0 - 0.04], [ax1 + 0.04, y + 0.012, az0 + 0.02], { color: IMP.steel });
+    kit.boxMM("impMetal", [ax0 - 0.04, y + 0.004, az1 - 0.02], [ax1 + 0.04, y + 0.012, az1 + 0.04], { color: IMP.steel });
+    kit.boxMM("impMetal", [ax0 - 0.04, y + 0.004, az0], [ax0 + 0.02, y + 0.012, az1], { color: IMP.steel });
+    kit.boxMM("impMetal", [ax1 - 0.02, y + 0.004, az0], [ax1 + 0.04, y + 0.012, az1], { color: IMP.steel });
+  };
+  if (border > 0 && border * 2 < Math.min(x1 - x0, z1 - z0)) {
+    strip(x0, z0, x1, z0 + border);
+    strip(x0, z1 - border, x1, z1);
+    strip(x0, z0 + border, x0 + border, z1 - border);
+    strip(x1 - border, z0 + border, x1, z1 - border);
+    if (edge) outline(x0 + border, z0 + border, x1 - border, z1 - border);
+  } else strip(x0, z0, x1, z1);
+  if (edge) outline(x0, z0, x1, z1);
+}
+
+// Field-generator cabinet on a wall frame: tall housing with a louvred coil window glowing blue, an
+// insulator stack and bus bar on top, side vents, an instrument display, stencil and plinth band.
+export function generatorCabinet(frame, u, w, h, d, seed = 1, opts = {}) {
+  const { glow = "emitBlue", display = "screenBars" } = opts;
+  const rand = rng(seed);
+  frame.box("impPaintedMetal", u, 0.1, d / 2, w - 0.1, 0.2, d - 0.1, { color: IMP.trim, texel: 1 });
+  frame.box("impPaintedMetal", u, h / 2 + 0.1, d / 2, w, h - 0.2, d, { color: IMP.wallDark, texel: 1 });
+  frame.box("impMetal", u, h + 0.03, d / 2, w + 0.06, 0.08, d + 0.06, { color: IMP.trim });
+  const ww = w * 0.6;
+  const wh = h * 0.42;
+  const wv = h * 0.5;
+  frame.box("impPaintedMetal", u, wv, d + 0.005, ww + 0.24, wh + 0.24, 0.06, { color: IMP.consoleDark, texel: 1 });
+  frame.box(glow, u, wv, d + 0.02, ww, wh, 0.01);
+  const slats = 7;
+  for (let k = 0; k < slats; k++) frame.box("impMetal", u, wv - wh / 2 + (k + 0.5) * (wh / slats), d + 0.05, ww + 0.1, (wh / slats) * 0.55, 0.06, { color: IMP.gunmetal, tilt: 0.4 });
+  for (const s of [-1, 1]) frame.box("impMetal", u + s * (ww / 2 + 0.08), wv, d + 0.05, 0.06, wh + 0.2, 0.06, { color: IMP.steel });
+  // insulator stack + bus bar sit toward the wall so a conduit can drop into the outer half of the top
+  const inN = d * 0.25;
+  for (let i = 0; i < 3; i++) {
+    const iu = u - w / 2 + ((i + 0.5) / 3) * w;
+    for (let k = 0; k < 3; k++) frame.cylV("impPaintedMetal", iu, h + 0.2 + k * 0.2, inN, 0.14 - k * 0.02, 0.1, { color: IMP.consoleDark, segments: 12 });
+    frame.cylV("impMetal", iu, h + 0.45, inN, 0.05, 0.9, { color: IMP.steel, segments: 8 });
+  }
+  frame.box("impMetal", u, h + 0.92, inN, w - 0.4, 0.06, 0.2, { color: IMP.steel });
+  for (const s of [-1, 1]) for (let k = 0; k < 4; k++) frame.box("impMetal", u + s * (w / 2 + 0.03), h * 0.6 + k * 0.3, d / 2, 0.06, 0.05, d * 0.6, { color: IMP.gunmetal });
+  frame.box("darkGloss", u - w * 0.25, h - 0.55, d + 0.01, 0.7, 0.4, 0.01);
+  frame.box(display, u - w * 0.25, h - 0.55, d + 0.017, 0.66, 0.36, 0.004, { uv: "keep" });
+  frame.box("leds", u + w * 0.25, h - 0.45, d + 0.012, 0.6, 0.05, 0.004, { uv: "keep" });
+  frame.box("emitAmber", u + w * 0.25, h - 0.62, d + 0.012, 0.1, 0.06, 0.004);
+  frame.quad("impDecal", u + w * 0.3, 0.9, d + 0.01, 0.6, 0.6, { uvRect: impDecalRect([13, 1, 10][Math.floor(rand() * 3)]) });
+  frame.add("hazard", new THREE.PlaneGeometry(w - 0.3, 0.14), u, 0.1, d + 0.006, { uv: "scale", uvScale: [(w - 0.3) / 0.6, 1] });
+  frame.collider(u - w / 2, u + w / 2, 0, h + 1, 0, d + 0.1, "generator");
+}
+
+// Holographic reactor schematic: wireframe core column with armour rings, field rings, transformer
+// blocks and a base collar (one holoWire + one holo draw call), a light cone from the projector and a
+// slow spin with a bob. pos = [x, y, z] of the projector surface. Returns the group.
+export function holoReactor(kit, ctx, pos, opts = {}) {
+  const { lift = 1.25, scale = 1.0, light = true } = opts;
+  const [x, y, z] = pos;
+  const mats = ctx.mats;
+  const nonIdx = (g) => (g.index ? g.toNonIndexed() : g);
+  const wire = [];
+  wire.push(new THREE.CylinderGeometry(0.28, 0.28, 2.0, 16, 6, true));
+  for (const ry of [-0.7, -0.1, 0.5]) {
+    const t = new THREE.TorusGeometry(0.5, 0.03, 6, 32);
+    t.rotateX(Math.PI / 2);
+    t.translate(0, ry, 0);
+    wire.push(t);
+  }
+  for (const ry of [-0.4, 0.2]) {
+    const t = new THREE.TorusGeometry(0.34, 0.02, 4, 24);
+    t.rotateX(Math.PI / 2);
+    t.translate(0, ry, 0);
+    wire.push(t);
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const b = new THREE.BoxGeometry(0.22, 0.2, 0.22);
+    b.translate(Math.cos(a) * 0.75, -0.9, Math.sin(a) * 0.75);
+    wire.push(b);
+  }
+  const base = new THREE.CylinderGeometry(0.95, 0.95, 0.1, 32, 1, true);
+  base.translate(0, -0.95, 0);
+  wire.push(base);
+  const group = new THREE.Group();
+  group.position.set(x, y + lift, z);
+  group.scale.setScalar(scale);
+  group.add(new THREE.Mesh(mergeGeometries(wire.map(nonIdx), false), mats.holoWire));
+  const fill = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 2.0, 16, 1, true), mats.holo);
+  group.add(fill);
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(1.0 * scale, 0.5, lift + 0.9 * scale, 32, 1, true), mats.beam);
+  cone.position.set(x, y + (lift + 0.9 * scale) / 2, z);
+  kit.object(cone);
+  kit.object(group);
+  ctx.animate((dt, t) => {
+    group.rotation.y += dt * 0.22;
+    group.position.y = y + lift + Math.sin(t * 0.7) * 0.04;
+    fill.material.opacity = 0.28 + 0.06 * Math.sin(t * 4.0);
+  });
+  if (light) pointLightDesc(ctx, IMP.holo, 3.0, 7, [x, y + lift + 0.4, z], 2);
+  return group;
 }
 
 export { yawQ, Y_AXIS };

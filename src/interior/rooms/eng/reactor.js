@@ -7,12 +7,12 @@
 import * as THREE from "three";
 import { roomWalls, wallOpenings } from "../../shell.js";
 import { wallFrame, ceilingFrame } from "../../../core/frame.js";
-import { impWall, impCeiling, impFloor, doorSign, walkable, railing, pipeRun, console as impConsole, chair, pointLightDesc, wallScreen, rng } from "../../impKit.js";
+import { impWall, impCeiling, impFloor, doorSign, walkable, pipeRun, console as impConsole, chair, pointLightDesc, wallScreen, rng } from "../../impKit.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
 import { addEngMaterials } from "./engMaterials.js";
-import { ibeam, hazardKerb, hazardBand, floorDecal, deckMark, beacon, transformer, pump, valve, flange, industrialStair, landing, craneRails, craneBridge, miniKit, relayCabinet, ladder } from "./engKit.js";
+import { ibeam, hazardKerb, floorDecal, deckMark, beacon, transformer, pump, valve, flange, industrialStair, landing, craneRails, craneBridge, miniKit, relayCabinet, ladder, guardRail, gaugeCluster, valveManifold } from "./engKit.js";
 
 const LOWER_H = 5.2; // panelled wall height at gallery level; industrial structure above
 
@@ -29,6 +29,7 @@ export function buildReactor(kit, ctx) {
   const RING_Y = y - 14; // -6
   const PIT_Y = y - room.floorDrop; // -18
   const CORE_R = 9;
+  const stairW = 2.6;
   const rand = rng(77);
 
   // ---------------------------------------------------------------- gallery floor (4 bands)
@@ -38,14 +39,33 @@ export function buildReactor(kit, ctx) {
     [x0, PIT.z0, PIT.x0, PIT.z1],
     [PIT.x1, PIT.z0, x1, PIT.z1],
   ];
+  // matte engDeck: the core's lights used to mirror into white pools on the smooth plates
   for (const b of bands) {
-    impFloor(kit, b, y, { tone: IMP.wallDark, trim: false, texel: 0.5 });
+    impFloor(kit, b, y, { mat: "engDeck", tone: IMP.wallDark, trim: false, texel: 0.5 });
     walkable(ctx, b[0], b[1], b[2], b[3], y, id);
   }
   // glossy circulation strips from the doors to the pit edge
-  kit.boxMM("impGloss", [CX - 1.4, y - 0.001, PIT.z1 + 0.6], [CX + 1.4, y + 0.006, z1], { color: IMP.white, texel: 0.25 });
-  kit.boxMM("impGloss", [x0, y - 0.001, 590.8], [PIT.x0 - 0.6, y + 0.006, 593.2], { color: IMP.white, texel: 0.25 });
-  kit.boxMM("impGloss", [PIT.x1 + 0.6, y - 0.001, 590.8], [x1, y + 0.006, 593.2], { color: IMP.white, texel: 0.25 });
+  kit.boxMM("impGloss", [CX - 1.4, y - 0.001, PIT.z1 + 2.2], [CX + 1.4, y + 0.006, z1], { color: IMP.white, texel: 0.25 });
+  kit.boxMM("impGloss", [x0, y - 0.001, 590.8], [PIT.x0 - 2.2, y + 0.006, 593.2], { color: IMP.white, texel: 0.25 });
+  kit.boxMM("impGloss", [PIT.x1 + 2.2, y - 0.001, 590.8], [x1, y + 0.006, 593.2], { color: IMP.white, texel: 0.25 });
+  // grating service strip around the pit behind the kerb (drainage for the coolant galleries), with a
+  // steel edge angle on the room side, and hazard kerbs marking the pump bay and the capacitor bank
+  const grateStrip = (gx0, gz0, gx1, gz1) => {
+    const g = new THREE.PlaneGeometry(gx1 - gx0, gz1 - gz0);
+    g.rotateX(-Math.PI / 2);
+    kit.add("impGrate", g, { pos: [(gx0 + gx1) / 2, y + 0.008, (gz0 + gz1) / 2], uv: "scale", uvScale: [(gx1 - gx0) / 1.24, (gz1 - gz0) / 0.9], color: 0xffffff });
+  };
+  grateStrip(PIT.x0 - 1.8, PIT.z0 - 1.8, PIT.x1 + 1.8, PIT.z0 - 0.4);
+  grateStrip(PIT.x0 - 1.8, PIT.z0 - 0.4, PIT.x0 - 0.4, PIT.z1 + 0.4);
+  grateStrip(PIT.x1 + 0.4, PIT.z0 - 0.4, PIT.x1 + 1.8, PIT.z1 + 0.4);
+  grateStrip(PIT.x0 - 1.8, PIT.z1 + 0.4, PIT.x0 + stairW + 0.4, PIT.z1 + 1.8);
+  grateStrip(PIT.x1 - stairW - 0.4, PIT.z1 + 0.4, PIT.x1 + 1.8, PIT.z1 + 1.8);
+  grateStrip(PIT.x0 + stairW + 3.4, PIT.z1 + 0.4, PIT.x1 - stairW - 3.4, PIT.z1 + 1.8);
+  kit.boxMM("impMetal", [PIT.x0 - 1.9, y + 0.004, PIT.z0 - 1.9], [PIT.x1 + 1.9, y + 0.016, PIT.z0 - 1.8], { color: IMP.steel });
+  kit.boxMM("impMetal", [PIT.x0 - 1.9, y + 0.004, PIT.z0 - 1.9], [PIT.x0 - 1.8, y + 0.016, PIT.z1 + 1.9], { color: IMP.steel });
+  kit.boxMM("impMetal", [PIT.x1 + 1.8, y + 0.004, PIT.z0 - 1.9], [PIT.x1 + 1.9, y + 0.016, PIT.z1 + 1.9], { color: IMP.steel });
+  hazardKerb(kit, [-17.5, 550.05], [17.5, 550.05], y, { w: 0.2, h: 0.08 });
+  hazardKerb(kit, [x1 - 5.5, 555.5], [x1 - 5.5, 584.5], y, { w: 0.2, h: 0.08 });
 
   // ---------------------------------------------------------------- outer walls
   const walls = roomWalls(room);
@@ -137,10 +157,10 @@ export function buildReactor(kit, ctx) {
   kit.collider([PIT.x0 - 0.5, RING_Y, PIT.z0], [PIT.x0, y - 0.1, PIT.z1], "pitWall");
   kit.collider([PIT.x1, RING_Y, PIT.z0], [PIT.x1 + 0.5, y - 0.1, PIT.z1], "pitWall");
 
-  // gallery edge: fascia, hazard kerb, railing (gaps at the two stair heads)
-  const stairW = 2.6;
+  // gallery edge: hazard kerb and a full guard rail (top rail, mid rail, kick plate) over the 26 m drop,
+  // gaps at the two stair heads
   const stairX = [PIT.x0 + stairW / 2, PIT.x1 - stairW / 2]; // stair centre x (west, east)
-  const edgeRail = (a, b) => railing(kit, a, b, y, { h: 1.1, postPitch: 2.5, lit: true });
+  const edgeRail = (a, b) => guardRail(kit, a, b, y, { h: 1.1, postPitch: 2.5, lit: true, kick: 0.18 });
   edgeRail([PIT.x0, PIT.z0], [PIT.x1, PIT.z0]);
   edgeRail([PIT.x0, PIT.z0], [PIT.x0, PIT.z1]);
   edgeRail([PIT.x1, PIT.z0], [PIT.x1, PIT.z1]);
@@ -167,7 +187,7 @@ export function buildReactor(kit, ctx) {
     walkable(ctx, s[0], s[1], s[2], s[3], RING_Y, "ring");
   }
   // grate strip along the inner edge + kerb + railing all round the deep pit
-  const innerRail = (a, b) => railing(kit, a, b, RING_Y, { h: 1.1, postPitch: 2.5 });
+  const innerRail = (a, b) => guardRail(kit, a, b, RING_Y, { h: 1.1, postPitch: 2.5, kick: 0.18 });
   innerRail([INNER.x0, INNER.z0], [INNER.x1, INNER.z0]);
   innerRail([INNER.x0, INNER.z1], [INNER.x1, INNER.z1]);
   innerRail([INNER.x0, INNER.z0], [INNER.x0, INNER.z1]);
@@ -349,7 +369,7 @@ export function buildReactor(kit, ctx) {
   }
   pipeRun(kit, [[x1 - 2.2, y + 5.2, 556], [x1 - 2.2, y + 5.2, 583.5]], 0.28, { color: IMP.steel, clampPitch: 5.2 });
   pipeRun(kit, [[x1 - 2.2, y + 5.2, 583.5], [x1 - 2.2, y + 5.2, 586], [x1 - 0.6, y + 5.2, 586]], 0.28, { color: IMP.steel, clamps: false });
-  deckMark(kit, x1 - 4.2, y, 570, 2.2, 30, 0, Math.PI / 2);
+  deckMark(kit, x1 - 4.2, y, 570, 30, 2.2, 0, Math.PI / 2);
   // west gallery: low monitoring stations facing the core (kept low so Engineering Control sees over them)
   for (const cz of [563, 570, 577]) {
     impConsole(kit, ctx, [x0 + 8.4, y, cz], -Math.PI / 2, { kind: "wide", width: 2.4, screens: 3, seed: 20 + cz, light: false });
@@ -378,15 +398,16 @@ export function buildReactor(kit, ctx) {
   pointLightDesc(ctx, core, 7, 32, [CX + 13, PIT_Y + 6, CZ], 1);
   pointLightDesc(ctx, core, 6, 34, [CX - 13, top - 8, CZ], 0);
   pointLightDesc(ctx, core, 6, 34, [CX + 13, top - 8, CZ], 0);
+  // amber work lights over the galleries (raised after the fixture dimming so the deck keeps a warm key)
   const amber = 0xffb35c;
-  pointLightDesc(ctx, amber, 5, 16, [0, y + 4.2, 594.5], 1);
-  pointLightDesc(ctx, amber, 5, 16, [0, y + 4.2, 546], 1);
-  pointLightDesc(ctx, amber, 4.5, 15, [x0 + 5, y + 4.2, CZ], 1);
-  pointLightDesc(ctx, amber, 4.5, 15, [x1 - 5, y + 4.2, CZ], 1);
-  pointLightDesc(ctx, 0xdfe8ff, 3.5, 9, [CX, y + 3.2, z1 - 2.5], 1);
+  pointLightDesc(ctx, amber, 9, 18, [0, y + 4.2, 594.5], 1);
+  pointLightDesc(ctx, amber, 9, 18, [0, y + 4.2, 546], 1);
+  pointLightDesc(ctx, amber, 8, 17, [x0 + 5, y + 4.2, CZ], 1);
+  pointLightDesc(ctx, amber, 8, 17, [x1 - 5, y + 4.2, CZ], 1);
+  pointLightDesc(ctx, 0xdfe8ff, 6, 10, [CX, y + 3.2, z1 - 2.5], 1);
 
   // ---------------------------------------------------------------- views
-  ctx.view("reactor", CX, y + STD.eye, z1 - 2.2, 0, -4);
+  ctx.view("reactor", CX, y + STD.eye, z1 - 2.2, 0, 16); // pitched up: the column runs into the ceiling collar with headroom
   ctx.view("reactor_core", x0 + 6.5, y + STD.eye, CZ + 6, -70, 8);
   ctx.view("reactor_pit", PIT.x0 + 2.0, RING_Y + STD.eye, INNER.z0 + 3, -100, 24);
   ctx.view("reactor_north", 24.5, y + STD.eye, 549.5, 140, -4);
@@ -434,9 +455,12 @@ function pitWall(frame, L, h, opts = {}) {
         frame.box("impPaintedMetal", cu, 2.6, 0.25, bw * 0.7, 0.2, 0.5, { color: IMP.trim, texel: 1 });
         frame.box("impPaintedMetal", cu, h - 3.0, 0.25, bw * 0.7, 0.2, 0.5, { color: IMP.trim, texel: 1 });
       } else if (r < 0.6) {
+        // coolant-flow readout: an authored bar display over a mostly dark indicator strip
         frame.box("impPaintedMetal", cu, h * 0.45, 0.06, bw * 0.55, 2.2, 0.08, { color: IMP.consoleDark, texel: 1 });
-        frame.box("blink", cu, h * 0.45 + 0.4, 0.105, bw * 0.45, 0.8, 0.01, { uv: "keep" });
-        frame.box("leds", cu, h * 0.45 - 0.6, 0.105, bw * 0.4, 0.06, 0.01, { uv: "keep" });
+        frame.box("darkGloss", cu, h * 0.45 + 0.4, 0.105, bw * 0.45, 0.85, 0.01);
+        frame.box(rand() < 0.5 ? "screenBars" : "screenBarsAmber", cu, h * 0.45 + 0.4, 0.112, bw * 0.45 - 0.06, 0.79, 0.004, { uv: "keep" });
+        frame.box("blinkSparse", cu, h * 0.45 - 0.45, 0.105, bw * 0.4, 0.22, 0.01, { uv: "keep" });
+        frame.box("leds", cu, h * 0.45 - 0.75, 0.105, bw * 0.4, 0.06, 0.01, { uv: "keep" });
       } else frame.quad("impDecal", cu, h * 0.5, 0.045, 1.6, 1.6, { uvRect: impDecalRect([3, 6, 15, 0][Math.floor(rand() * 4)]) });
     }
   }
@@ -474,21 +498,46 @@ function upperWall(frame, L, v0, v1, seed) {
     const r = rand();
     const lc = (v0 + g1 - 0.3) / 2;
     const lh = g1 - 0.3 - v0 - 0.4;
+    const axis = Math.abs(frame.N.x) > 0.5 ? "x" : "z";
+    const dir = frame.N[axis] > 0 ? 1 : -1;
     if (r < 0.3) {
-      frame.box("impPaintedMetal", cu, lc, 0.06, bw * 0.8, lh * 0.8, 0.08, { color: IMP.consoleDark, texel: 1 });
+      // louvred vent with a gauge pair above its header
+      const vc = lc - lh * 0.05;
+      frame.box("impPaintedMetal", cu, vc, 0.06, bw * 0.8, lh * 0.7, 0.08, { color: IMP.consoleDark, texel: 1 });
       const slats = 5;
-      for (let s = 0; s < slats; s++) frame.box("impMetal", cu, lc - lh * 0.34 + (s / (slats - 1)) * lh * 0.68, 0.11, bw * 0.8 - 0.3, 0.07, 0.12, { color: IMP.gunmetal, tilt: 0.5 });
+      for (let s = 0; s < slats; s++) frame.box("impMetal", cu, vc - lh * 0.29 + (s / (slats - 1)) * lh * 0.58, 0.11, bw * 0.8 - 0.3, 0.07, 0.12, { color: IMP.gunmetal, tilt: 0.5 });
+      gaugeCluster(frame, cu, g1 - 1.1, { n: 2, r: 0.3, seed: seed + i, manifold: false });
     } else if (r < 0.55) {
+      // riser triple with flanged headers and handwheel isolation valves facing the gallery
       for (const du of [-0.3, 0, 0.3]) frame.cylV("impMetal", cu + du * bw, lc, 0.32, 0.18, lh, { color: du === 0 ? IMP.gunmetal : IMP.steel, segments: 10 });
       frame.box("impPaintedMetal", cu, v0 + 0.7, 0.3, bw * 0.75, 0.24, 0.6, { color: IMP.trim, texel: 1 });
       frame.box("impPaintedMetal", cu, g1 - 0.75, 0.3, bw * 0.75, 0.24, 0.6, { color: IMP.trim, texel: 1 });
+      for (const du of [-0.3, 0.3]) {
+        frame.cylV("impPaintedMetal", cu + du * bw, v0 + 2.4, 0.32, 0.24, 0.16, { color: IMP.trim, segments: 12 });
+        const p = frame.pos(cu + du * bw, v0 + 2.4, 0.32 + 0.18 + 0.16);
+        valve(frame.kit, [p.x, p.y, p.z], 0.26, axis, { color: du < 0 ? IMP.red : IMP.hazardYellow, stem: 0.3, dir });
+      }
+      frame.cylV("impPaintedMetal", cu, v0 + 3.6, 0.32, 0.24, 0.16, { color: IMP.trim, segments: 12 });
+      frame.box("impPaintedMetal", cu, v0 + 4.4, 0.32, 0.5, 0.5, 0.5, { color: IMP.consoleDark, texel: 1 });
+      frame.box("emitAmber", cu, v0 + 4.4, 0.58, 0.3, 0.12, 0.01);
     } else if (r < 0.75) {
+      // reactor-output status wall: two authored displays over a wide tactical screen, a mostly dark
+      // indicator strip and a lamp row (replaces the confetti indicator grid)
       frame.box("impPaintedMetal", cu, lc, 0.08, bw * 0.7, lh * 0.7, 0.12, { color: IMP.consoleDark, texel: 1 });
-      frame.box("blinkDense", cu, lc + lh * 0.1, 0.145, bw * 0.6, lh * 0.35, 0.01, { uv: "keep" });
-      frame.box("screen" + Math.floor(rand() * 3), cu, lc - lh * 0.22, 0.145, bw * 0.5, lh * 0.2, 0.004, { uv: "keep" });
+      const dw = bw * 0.6;
+      frame.box("darkGloss", cu, lc + lh * 0.19, 0.145, dw, dw * 0.27 + 0.1, 0.01);
+      for (const s of [-1, 1]) frame.box(s < 0 ? "screenBars" : rand() < 0.5 ? "screenGauges" : "screenBarsAmber", cu + s * (dw / 4 + 0.02), lc + lh * 0.19, 0.152, dw / 2 - 0.16, dw * 0.27 - 0.08, 0.004, { uv: "keep" });
+      frame.box("darkGloss", cu, lc - lh * 0.08, 0.145, dw, dw * 0.5 + 0.1, 0.01);
+      frame.box("screen" + Math.floor(rand() * 3), cu, lc - lh * 0.08, 0.152, dw - 0.12, dw * 0.5 - 0.06, 0.004, { uv: "keep" });
+      frame.box("blinkSparse", cu, lc - lh * 0.29, 0.145, dw, 0.32, 0.01, { uv: "keep" });
+      for (let k = 0; k < 6; k++) frame.box(k % 3 === 1 ? "emitAmber" : "emitGreen", cu - dw / 2 + 0.25 + k * 0.32, lc + lh * 0.32, 0.145, 0.24, 0.12, 0.01);
+      frame.box("leds", cu + dw * 0.3, lc + lh * 0.32, 0.145, dw * 0.3, 0.06, 0.004, { uv: "keep" });
     } else {
+      // instrument bay: gauge cluster under a valved pipe manifold, stencil to the side
       frame.box("impPanel1", cu, lc, 0.03, bw, lh, 0.06, { color: IMP.wallMid, uv: "keep" });
-      frame.quad("impDecal", cu, lc, 0.065, Math.min(2.4, bw * 0.6), Math.min(2.4, bw * 0.6), { uvRect: impDecalRect([2, 4, 11, 15][Math.floor(rand() * 4)]) });
+      gaugeCluster(frame, cu, v0 + 2.1, { n: 4, r: 0.32, seed: seed + i * 3 });
+      valveManifold(frame, cu - bw * 0.42, cu + bw * 0.42, g1 - 1.4, { n: 3, r: 0.2, drop: 1.7, seed: seed + i });
+      frame.quad("impDecal", cu + bw * 0.34, v0 + 1.0, 0.065, 0.9, 0.9, { uvRect: impDecalRect([2, 4, 11, 15][Math.floor(rand() * 4)]) });
     }
     // middle bay (g1 .. g2): recessed panel + a thin vertical light slit
     const mc = (g1 + g2) / 2;

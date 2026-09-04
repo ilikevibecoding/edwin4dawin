@@ -7,12 +7,12 @@
 import * as THREE from "three";
 import { buildShell, roomWalls } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
-import { console as impConsole, ceilingLight, pointLightDesc, spotLightDesc, railing, catwalk, wallScreen, lockers, walkable, pipeRun, column, crate, rng } from "../../impKit.js";
+import { console as impConsole, ceilingLight, pointLightDesc, spotLightDesc, catwalk, wallScreen, lockers, walkable, pipeRun, column, crate, rng } from "../../impKit.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
 import { addEngMaterials } from "./engMaterials.js";
-import { containerPrefab, instancePrefab, platform, industrialStair, craneRails, craneBridge, hazardKerb, hazardBand, floorDecal, deckMark, relayCabinet, cableTray, screenBank, beacon, toolCart, yawQ } from "./engKit.js";
+import { containerPrefab, instancePrefab, platform, industrialStair, craneRails, craneBridge, hazardKerb, hazardBand, floorDecal, deckMark, relayCabinet, cableTray, screenBank, beacon, toolCart, yawQ, guardRail, pipeTrunk, gasCylinder } from "./engKit.js";
 
 export function buildCargo(kit, ctx) {
   addEngMaterials(ctx.mats);
@@ -205,6 +205,35 @@ export function buildCargo(kit, ctx) {
   kit.collider([-13.3, y, 675.5], [-7.8, y + 2.2, 679.1], "sorting");
   toolCart(kit, [-9.2, y, 680.6], 1.25, { seed: 13 });
   deckMark(kit, -10.4, y, 677.4, 6.0, 4.0, 2, 0);
+  // staged along the lane between the door and the lift (the 3 m centre of the lane stays clear): a
+  // pallet of crates west of the lane, a pallet of drums and a set-down container east of it, and a
+  // second loader nosing in to collect the crates
+  const pallet = (px, pz, yaw, w, d) => {
+    const q = yawQ(yaw);
+    kit.add("impPaintedMetal", new THREE.BoxGeometry(w, 0.22, d), { pos: [px, y + 0.11, pz], quat: q, color: IMP.hazardYellow, texel: 1 });
+    kit.add("impPaintedMetal", new THREE.BoxGeometry(w - 0.2, 0.04, d - 0.2), { pos: [px, y + 0.24, pz], quat: q, color: IMP.trim, texel: 1 });
+    for (const s of [-1, 1]) kit.add("impPaintedMetal", new THREE.BoxGeometry(w - 0.3, 0.1, 0.18), { pos: [px + Math.sin(yaw) * s * (d / 2 - 0.35), y + 0.05, pz + Math.cos(yaw) * s * (d / 2 - 0.35)], quat: q, color: IMP.black, texel: 1 });
+    hazardBand(kit, [px - Math.sin(yaw) * (d / 2 + 0.006), y + 0.11, pz - Math.cos(yaw) * (d / 2 + 0.006)], yaw + Math.PI, w - 0.3, 0.14); // door side
+  };
+  pallet(-4.3, 672.0, 0.1, 2.4, 1.8);
+  crate(kit, [-4.7, y + 0.26, 671.8], [1.3, 1.0, 1.2], { seed: 65, yaw: 0.1 });
+  crate(kit, [-3.5, y + 0.26, 672.3], [0.9, 0.8, 0.9], { seed: 66, yaw: 0.35 });
+  crate(kit, [-4.6, y + 1.26, 671.9], [1.0, 0.8, 0.9], { seed: 67, yaw: -0.1 });
+  kit.collider([-5.6, y, 670.9], [-3.0, y + 2.2, 673.1], "pallet");
+  pallet(4.5, 681.0, -0.08, 2.4, 1.8);
+  for (const [dx, dz] of [[3.9, 680.6], [5.1, 680.6], [3.9, 681.5], [5.1, 681.5]]) {
+    kit.cyl("impMetal", dx, y + 0.26 + 0.45, dz, 0.4, 0.9, "y", { color: IMP.gunmetal, segments: 16, texel: 0.5 });
+    kit.cyl("impPaintedMetal", dx, y + 0.26 + 0.9, dz, 0.38, 0.04, "y", { color: IMP.trim, segments: 16 });
+    kit.cyl("impPaintedMetal", dx, y + 0.26 + 0.45, dz, 0.41, 0.12, "y", { color: dx < 4.5 ? IMP.amber : IMP.red, segments: 16 });
+  }
+  kit.collider([3.3, y, 680.1], [5.7, y + 1.3, 682.0], "pallet");
+  gasCylinder(kit, [6.1, y, 680.3], { color: IMP.red });
+  gasCylinder(kit, [6.1, y, 681.0], { color: IMP.steel, h: 1.5 });
+  xf.push({ pos: [4.8, y, 692.5], quat: yawQ(0.14), color: IMP.wallMid });
+  kit.collider([3.4, y, 691.1], [6.2, y + 2.4, 693.9], "container");
+  deckMark(kit, 4.8, y, 692.5, 3.6, 3.6, 2, 0.14);
+  sled([-6.2, y, 688.5], -Math.PI / 2 - 0.25, { color: IMP.red, seed: 5 });
+  floorDecal(kit, -4.0, y, 675.2, 1.0, 9, 0.2);
 
   // ------------------------------------------------------------ gantry crane on columns, carrying a container
   const CRX = 24;
@@ -217,9 +246,16 @@ export function buildCargo(kit, ctx) {
     const cx = -12;
     const cz = 690;
     const top = CRY + 0.7 - 4.2 - 1.0;
-    kit.box("impPaintedMetal", cx, top - 0.15, cz, 2.8, 0.3, 0.4, { color: IMP.hazardYellow, texel: 1 });
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.cyl("impMetal", cx + sx * 1.15, top - 0.3 - 0.4, cz + sz * 1.0, 0.02, 0.8, "y", { color: IMP.steel, segments: 6 });
-    xf.push({ pos: [cx, top - 1.1 - 2.4, cz], quat: yawQ(0.08), color: IMP.gunmetal });
+    kit.box("impPaintedMetal", cx, top - 0.15, cz, 3.2, 0.36, 0.5, { color: IMP.hazardYellow, texel: 1 });
+    hazardBand(kit, [cx, top - 0.15, cz - 0.256], Math.PI, 3.0, 0.3);
+    kit.box("emitAmber", cx, top - 0.15, cz + 0.256, 0.6, 0.08, 0.01);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      kit.cyl("impMetal", cx + sx * 1.15, top - 0.33 - 0.4, cz + sz * 1.0, 0.035, 0.8, "y", { color: IMP.steel, segments: 6 });
+      kit.box("impMetal", cx + sx * 1.15, top - 0.33 - 0.8, cz + sz * 1.0, 0.16, 0.12, 0.16, { color: IMP.gunmetal }); // twist lock
+    }
+    // the load itself: a light-grey container so it reads against the far blocks, its own beacon on top
+    xf.push({ pos: [cx, top - 1.1 - 2.4, cz], quat: yawQ(0.08), color: IMP.wallLight });
+    kit.box("emitAmber", cx, top - 1.1 + 0.05, cz + 0.6, 0.16, 0.1, 0.16);
   }
   instancePrefab(kit, pf, xf, { colorKeys });
 
@@ -231,7 +267,7 @@ export function buildCargo(kit, ctx) {
     const zA = 677.2;
     const zB = 727.0;
     catwalk(kit, ctx, [cx, zA], [cx, zB], 2.0, CY, { rails: false });
-    railing(kit, [cx - s * 1.0, zA], [cx - s * 1.0, zB], CY, { lit: true });
+    guardRail(kit, [cx - s * 1.0, zA], [cx - s * 1.0, zB], CY, { h: 1.1, postPitch: 2.5, lit: true, kick: 0.18 }); // top + mid rail, kick plate over the 6 m drop
     for (let bz = zA + 2; bz < zB; bz += 4) kit.box("impPaintedMetal", wx - s * 0.6, CY - 0.5, bz, 1.2, 0.7, 0.3, { color: IMP.trim, texel: 1 });
     // stairs down at both ends (ascend toward the catwalk)
     industrialStair(kit, ctx, [cx, zA - 8.4], [0, 1], 1.6, y, CY, { riser: 0.2, tread: 0.28 });
@@ -311,13 +347,23 @@ export function buildCargo(kit, ctx) {
     cableTray(frame, 1.0, w.u(30), 4.6, { n: 0.5, cables: 4 });
   }
   {
+    // back wall: two long service trunks (coolant / atmosphere mains feeding the lift machinery) above
+    // the cabinets, stencils moved up above them
     const w = walls.south;
     const { frame } = wallFrame(kit, w.from, w.to, y);
-    for (const dx of [-30, -10, 10, 30]) frame.quad("impDecal", w.u(dx), 6.5, 0.064, 2.4, 2.4, { uvRect: impDecalRect(dx < 0 ? 3 : 9) });
+    for (const dx of [-30, -10, 10, 30]) frame.quad("impDecal", w.u(dx), 8.6, 0.064, 2.4, 2.4, { uvRect: impDecalRect(dx < 0 ? 3 : 9) });
     relayCabinet(frame, w.u(0), 0, 3.0, 3.6, 322);
     wallScreen(frame, w.u(-20), 2.6, 1.8, 1.0, 2);
     wallScreen(frame, w.u(20), 2.6, 1.8, 1.0, 1);
     lockers(frame, w.u(14), w.u(8), 2.1, { seed: 45 });
+    pipeTrunk(frame, w.u(x1 - T - 3.5), w.u(2.4), 4.2, { n: 4, seed: 47, valves: 3 });
+    pipeTrunk(frame, w.u(-2.4), w.u(x0 + T + 3.5), 4.2, { n: 4, seed: 48, valves: 3 });
+    for (const s of [-1, 1]) {
+      // the trunks drop into the lift machinery pipe runs either side of the relay cabinet
+      frame.cylV("impMetal", w.u(s * 2.4), 2.6, 0.4, 0.22, 3.2, { color: IMP.steel, segments: 12 });
+      frame.cylU("impPaintedMetal", w.u(s * 2.4), 4.2, 0.4, 0.28, 0.16, { color: IMP.trim, segments: 12 });
+      frame.cylV("impPaintedMetal", w.u(s * 2.4), 1.1, 0.4, 0.28, 0.16, { color: IMP.trim, segments: 12 });
+    }
   }
 
   // ------------------------------------------------------------ lights: amber work light on long drops

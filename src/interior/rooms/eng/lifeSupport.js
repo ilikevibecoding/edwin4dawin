@@ -12,7 +12,7 @@ import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
 import { addEngMaterials } from "./engMaterials.js";
-import { cabinet, tank, pump, hopper, valve, flange, stain, floorDecal, deckMark, hazardKerb, hazardBand, relayCabinet, cableTray, cutFloor, trench, screenBank, toolCart } from "./engKit.js";
+import { cabinet, tank, pump, hopper, valve, flange, stain, floorDecal, deckMark, hazardKerb, hazardBand, relayCabinet, cableTray, cutFloor, trench, screenBank, toolCart, gaugeCluster, valveManifold, pipeTrunk, statusBoard } from "./engKit.js";
 
 export function buildLifeSupport(kit, ctx) {
   addEngMaterials(ctx.mats);
@@ -23,7 +23,7 @@ export function buildLifeSupport(kit, ctx) {
   const T = STD.wallT;
 
   buildShell(kit, ctx, id, room, {
-    wall: { slabHoles: true, pitch: 4, tone: IMP.wallDark, toneAlt: IMP.wallMid, bandMat: "lightBandCool", styles: { plain: 0.25, control: 0.1, vent: 0.3, hatch: 0.1, pipes: 0.25 } },
+    wall: { slabHoles: true, pitch: 4, tone: IMP.wallDark, toneAlt: IMP.wallMid, bandMat: "lightBandCool", styles: { plain: 0.3, control: 0.04, vent: 0.3, hatch: 0.1, pipes: 0.26 } },
     ceiling: { lights: false, panelW: 2.5, tone: IMP.wallDark },
     skip: ["floor"],
   });
@@ -223,26 +223,38 @@ export function buildLifeSupport(kit, ctx) {
   {
     const w = walls.east;
     const { frame } = wallFrame(kit, w.from, w.to, y);
-    screenBank(frame, w.u(640.6), 2.9, 3, 2, 1.3, 0.8, 9);
+    screenBank(frame, w.u(640.6), 2.9, 3, 2, 1.3, 0.8, 9, { variants: [0, 1, 2, 4], dark: 0.15, wide: [[0, 1]] });
+    statusBoard(frame, w.u(640.6), 4.6, 3.6, 1.1, 27, { displays: ["screenGauges", "screenBars"] });
     lockers(frame, w.u(645.0), w.u(650.0), 2.1, { seed: 23 });
     relayCabinet(frame, w.u(652.8), 0, 2.6, 2.4, 101);
-    cableTray(frame, w.u(637.5), w.u(z1 - T - 1.0), 4.4, { n: 0.45, cables: 4 });
+    cableTray(frame, w.u(643.5), w.u(z1 - T - 1.0), 4.4, { n: 0.45, cables: 4 });
   }
   {
+    // south wall by the tank row: gauge cluster and a valved manifold within reach of the tanks, an
+    // authored flow display next to them, a pipe trunk overhead
     const w = walls.south;
     const { frame } = wallFrame(kit, w.from, w.to, y);
     wallScreen(frame, w.u(-31), 2.4, 1.6, 0.9, 1);
     relayCabinet(frame, w.u(-26.5), 0, 2.4, 2.0, 102);
-    frame.quad("impDecal", w.u(-34.5), 2.0, 0.064, 0.9, 0.9, { uvRect: impDecalRect(11) });
+    gaugeCluster(frame, w.u(-36.8), 1.75, { n: 3, r: 0.24, seed: 41 });
+    valveManifold(frame, w.u(-32.6), w.u(-35.6), 3.2, { n: 3, r: 0.13, drop: 1.2, seed: 42 });
+    wallScreen(frame, w.u(-39.6), 1.7, 1.4, 0.8, "Bars");
+    pipeTrunk(frame, w.u(-29.2), w.u(-38.6), 4.4, { n: 3, seed: 43, valves: 2 });
+    frame.quad("impDecal", w.u(-38.6), 3.3, 0.064, 0.9, 0.9, { uvRect: impDecalRect(11) });
     frame.quad("impDecal", w.u(-4.5), 2.0, 0.064, 0.9, 0.9, { uvRect: impDecalRect(2) });
     stain(kit, [-23, y + 1.4, z1 - T], 2.2, { normal: [0, 0, -1], aspect: 1.6 });
   }
   {
+    // west wall behind the tanks: gauge pairs in the gaps between the tanks, a two-line trunk above them
     const w = walls.west;
     const { frame } = wallFrame(kit, w.from, w.to, y);
     wallScreen(frame, w.u(630.5), 2.2, 1.4, 0.8, 2);
     frame.quad("impDecal", w.u(634.5), 2.0, 0.064, 1.0, 1.0, { uvRect: impDecalRect(9) });
     cableTray(frame, w.u(632), w.u(616), 4.6, { n: 0.45, cables: 3 });
+    gaugeCluster(frame, w.u(642.75), 1.5, { n: 2, r: 0.2, seed: 45 });
+    gaugeCluster(frame, w.u(649.05), 1.5, { n: 2, r: 0.2, seed: 46 });
+    pipeTrunk(frame, w.u(654.5), w.u(634.0), 5.5, { n: 2, seed: 44, valves: 1 });
+    frame.quad("impDecal", w.u(637.0), 3.4, 0.064, 0.9, 0.9, { uvRect: impDecalRect(15) });
   }
   {
     const w = walls.north;
@@ -312,9 +324,11 @@ export function buildLifeSupport(kit, ctx) {
   floorDecal(kit, -16, y, 631.8, 1.0, 8, -Math.PI / 2);
 
   // ------------------------------------------------------------ lights: mint-green service light, damp and cool
-  for (const lx of [-35, -24.5, -14]) for (const lz of [619.5, 633.5, 648]) ceilingLight(kit, ctx, [lx, y + h, lz], 6, "x", { mat: "lightBandCool", color: 0xb8ffe6, intensity: 4.8, distance: 13, priority: lz === 633.5 ? 2 : 1 });
-  pointLightDesc(ctx, 0x7fffc0, 2.2, 9, [HX + 0.6, y + 2.6, 646], 0); // tank gauges
-  pointLightDesc(ctx, 0xdfe8ff, 2.6, 8, [x1 - T - 2.2, y + 3.0, 634], 1); // door
+  // nine recessed bars under a 7 m ceiling; the point sources hang 2.2 m below the fixtures so the deck
+  // between the machines reads at ~1.5 lux of mint light (the fixture emissive itself stays soft)
+  for (const lx of [-35, -24.5, -14]) for (const lz of [619.5, 633.5, 648]) ceilingLight(kit, ctx, [lx, y + h, lz], 6, "x", { mat: "lightBandCool", color: 0xb8ffe6, intensity: 36, distance: 17, priority: lz === 633.5 ? 2 : 1, drop: 2.2 });
+  pointLightDesc(ctx, 0x7fffc0, 5.0, 10, [HX + 0.6, y + 2.6, 646], 0); // tank gauges
+  pointLightDesc(ctx, 0xdfe8ff, 7.0, 9, [x1 - T - 2.2, y + 3.0, 634], 1); // door
 
   // ------------------------------------------------------------ views
   ctx.view("lifeSupport", x1 - T - 1.6, y + STD.eye, 634, 90, -2);

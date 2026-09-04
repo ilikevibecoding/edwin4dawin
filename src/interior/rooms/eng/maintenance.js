@@ -12,7 +12,7 @@ import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
 import { addEngMaterials } from "./engMaterials.js";
-import { miniKit, partsRackPrefab, instancePrefab, workbench, droid, gasCylinder, toolCart, craneRails, craneBridge, ibeam, hazardKerb, hazardBand, floorDecal, deckMark, relayCabinet, cableTray, screenBank, valve, yawQ } from "./engKit.js";
+import { miniKit, partsRackPrefab, instancePrefab, workbench, droid, gasCylinder, toolCart, craneRails, craneBridge, ibeam, hazardKerb, hazardBand, floorDecal, deckMark, relayCabinet, cableTray, screenBank, valve, yawQ, hazardZone, gaugeCluster } from "./engKit.js";
 
 export function buildMaintenance(kit, ctx) {
   addEngMaterials(ctx.mats);
@@ -59,7 +59,8 @@ export function buildMaintenance(kit, ctx) {
     const cy = y + 1.0 + R;
     const X0 = ax - 3.5;
     const X1 = ax + 3.5;
-    deckMark(kit, ax, y, az, 10.5, 6.2, 2, 0);
+    // keep-clear outline around the work zone: crisp red / black stripes with a faint grime mask
+    hazardZone(kit, ax - 5.25, az - 3.1, ax + 5.25, az + 3.1, y, { border: 0.7, pitch: 0.8 });
     for (const tx of [X0 + 1.0, X1 - 1.0]) {
       kit.box("impPaintedMetal", tx, y + 0.55, az, 0.5, 0.9, 3.2, { color: IMP.hazardYellow, texel: 1 });
       for (const s of [-1, 1]) kit.box("impPaintedMetal", tx, y + 0.1, az + s * 1.3, 1.1, 0.2, 0.5, { color: IMP.trim, texel: 1 });
@@ -84,8 +85,16 @@ export function buildMaintenance(kit, ctx) {
     }
     for (let rx = xm + 0.5; rx < X1 - 0.3; rx += 0.45) kit.add("impMetal", new THREE.TorusGeometry(0.72, 0.06, 6, 24), { pos: [rx, cy, az], rot: [0, Math.PI / 2, 0], color: IMP.amber, uv: "scale", uvScale: [4, 1] });
     kit.cyl("impPaintedMetal", X1 + 0.1, cy, az, R, 0.2, "x", { color: IMP.wallDark, segments: 26 });
-    kit.box("blinkSparse", X1 + 0.21, cy + 0.3, az, 0.004, 0.3, 0.8, { uv: "keep" });
-    kit.box("emitAmber", X1 + 0.21, cy - 0.4, az, 0.004, 0.06, 0.6);
+    // end cap: bolt ring, a unit stencil and a small test readout (no indicator grid)
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2;
+      kit.cyl("impMetal", X1 + 0.22, cy + Math.cos(a) * (R - 0.16), az + Math.sin(a) * (R - 0.16), 0.05, 0.05, "x", { color: IMP.steel, segments: 8 });
+    }
+    kit.add("impDecal", new THREE.PlaneGeometry(0.8, 0.8), { pos: [X1 + 0.206, cy + 0.32, az], rot: [0, Math.PI / 2, 0], uv: "keep", uvRect: impDecalRect(13) });
+    kit.box("impPaintedMetal", X1 + 0.23, cy - 0.5, az, 0.06, 0.34, 0.66, { color: IMP.consoleDark, texel: 1 });
+    kit.box("darkGloss", X1 + 0.262, cy - 0.5, az, 0.004, 0.28, 0.58);
+    kit.box("screenBars", X1 + 0.266, cy - 0.5, az, 0.004, 0.24, 0.5, { uv: "keep" });
+    kit.box("emitAmber", X1 + 0.266, cy - 0.72, az, 0.004, 0.04, 0.4);
     // removed housing shells leaning on the far trestle, ring segments and fasteners on the deck
     for (const s of [-1, 1]) {
       const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, s * 0.25 + Math.PI / 2));
@@ -147,7 +156,8 @@ export function buildMaintenance(kit, ctx) {
     wallScreen(frame, w.u(29), 2.6, 1.8, 1.0, 1);
     relayCabinet(frame, w.u(32.5), 0, 2.4, 2.2, 220);
     lockers(frame, w.u(35), w.u(41), 2.1, { seed: 27 });
-    frame.quad("impDecal", w.u(26), 2.2, 0.064, 0.9, 0.9, { uvRect: impDecalRect(14) });
+    gaugeCluster(frame, w.u(26.4), 1.8, { n: 3, r: 0.22, seed: 51 });
+    frame.quad("impDecal", w.u(24.6), 2.2, 0.064, 0.9, 0.9, { uvRect: impDecalRect(14) });
   }
 
   // ------------------------------------------------------------ east side: instanced parts racks
@@ -173,7 +183,7 @@ export function buildMaintenance(kit, ctx) {
     deckMark(kit, (dx + rx) / 2, y, 623, 12, 3.4, 0, Math.PI / 2);
     crate(kit, [dx + 3.4, y, 628.8], [1.4, 1.0, 1.1], { seed: 40 });
     crate(kit, [dx + 3.4, y + 1.0, 628.8], [1.1, 0.7, 0.9], { seed: 41, yaw: 0.2 });
-    crate(kit, [dx - 3.2, y, 628.6], [1.2, 0.9, 1.0], { seed: 42, yaw: -0.15 });
+    crate(kit, [dx + 1.9, y, 628.6], [1.2, 0.9, 1.0], { seed: 42, yaw: -0.15 }); // beside the pallet crates, out of the bay view's right edge
   }
   {
     const w = walls.east;
@@ -191,7 +201,7 @@ export function buildMaintenance(kit, ctx) {
     const bx1 = x0 + T + 9.6;
     const bz0 = 642.0;
     const bz1 = z1 - T - 0.6;
-    deckMark(kit, (bx0 + bx1) / 2, y, (bz0 + bz1) / 2, bx1 - bx0, bz1 - bz0, 2, 0);
+    hazardZone(kit, bx0, bz0, bx1, bz1, y, { border: 0.6, pitch: 0.8 });
     hazardKerb(kit, [bx0, bz0], [bx1, bz0], y, { w: 0.3, h: 0.08 });
     hazardKerb(kit, [bx1, bz0], [bx1, bz1], y, { w: 0.3, h: 0.08 });
     // welding screens: dark glass panels in steel frames along the north and east edges, gap at the NE
@@ -312,10 +322,12 @@ export function buildMaintenance(kit, ctx) {
   pipeRun(kit, [[30.5, y + 0.3, z0 + T + 0.35], [30.5, y + 3.2, z0 + T + 0.35], [30.5, y + h - 1.0, z0 + T + 0.35], [30.5, y + h - 1.0, z0 + T + 2.4]], 0.16, { color: IMP.steel, clampPitch: 2 });
 
   // ------------------------------------------------------------ lights: bright, even work light
-  for (const lx of [14, 32]) for (const lz of [620, 634, 648]) ceilingLight(kit, ctx, [lx, y + h, lz], 7, "x", { color: 0xf0f4ff, intensity: 5.5, distance: 14, priority: lz === 634 ? 2 : 1 });
-  spotLightDesc(ctx, 0xffffff, 6, 14, [ACT.x, y + h - 0.6, ACT.z], [ACT.x, y + 1, ACT.z], { angle: 0.55, penumbra: 0.5, priority: 2 });
-  pointLightDesc(ctx, 0xdfe8ff, 2.4, 8, [x0 + T + 2.0, y + 3.0, 634], 1); // door
-  pointLightDesc(ctx, IMP.blue, 1.6, 7, [21.75, y + 1.2, z1 - T - 1.0], 0); // charging alcoves
+  // six bars under an 8 m ceiling with their sources dropped to 5.4 m (~1.4 lux on the deck under each,
+  // 2+ where they overlap) plus a real work spot on the actuator: the bay must read bright and even
+  for (const lx of [14, 32]) for (const lz of [620, 634, 648]) ceilingLight(kit, ctx, [lx, y + h, lz], 7, "x", { color: 0xf0f4ff, intensity: 50, distance: 20, priority: lz === 634 ? 2 : 1, drop: 2.6 });
+  spotLightDesc(ctx, 0xffffff, 220, 16, [ACT.x, y + h - 0.6, ACT.z], [ACT.x, y + 1, ACT.z], { angle: 0.55, penumbra: 0.5, priority: 2 });
+  pointLightDesc(ctx, 0xdfe8ff, 7.0, 9, [x0 + T + 2.0, y + 3.0, 634], 1); // door
+  pointLightDesc(ctx, IMP.blue, 3.0, 7, [21.75, y + 1.2, z1 - T - 1.0], 0); // charging alcoves
 
   // ------------------------------------------------------------ views
   ctx.view("maintenance", x0 + T + 1.6, y + STD.eye, 634, -90, -2);
