@@ -173,7 +173,7 @@ vec3 roofPalette(float k) {
       col = wall * (0.94 + 0.08 * vnoise(vWorldPosF.xz * 3.0 + v * 2.0));
       rough = 0.45; metal = 0.15;
       float tip = smoothstep(vDims.y - 2.5, vDims.y - 1.0, v);
-      emis = vec3(1.0, 0.1, 0.05) * tip * 4.0 * uNight + vec3(0.95, 0.8, 0.55) * 0.35 * uNight;
+      emis = vec3(1.0, 0.1, 0.05) * tip * 4.0 * uNight + vec3(1.0, 0.78, 0.5) * 0.2 * uNight;
     } else if (style < 0.5) {
       // blue curtain wall: reflective panes between dark spandrels. The pane colour is a pale cool grey-blue with
       // high metalness so the environment map (sky above, haze toward the horizon) reads as a gradient on the tower;

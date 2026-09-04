@@ -199,7 +199,7 @@ const PINKS = ['#efc0c6', '#f3cfd4', '#e9b7c0', '#f7d5dc', '#e8a9b3'];
 const MINTS = ['#cfe6dc', '#bfe0d2', '#d8ece2', '#b6dccf'];
 const YELLOWS = ['#f5e6b3', '#f2dfa1', '#f8ecc4', '#efd68e'];
 const PALE_BLUES = ['#cfe0ec', '#dbe8f0', '#c3d7e6', '#b9d3e3'];
-const STONES = ['#3a3633', '#4a4440', '#2f2d2c', '#5a504a', '#40372f', '#4d4a48'];
+const STONES = ['#4a4541', '#57504a', '#3f3b38', '#6a605a', '#4d443c', '#5d5955'];
 const BRICKS = ['#b98f6a', '#a87e5c', '#c49a74', '#9c6f52', '#c8a680', '#b07b5b', '#8e5e46'];
 const GREYS = ['#b9b9b4', '#a7a9a8', '#c6c6c1', '#9da3a6', '#b5b8ba'];
 const HOUSE_WALLS = [...WHITES, ...WHITES, ...CREAMS, ...PEACHES, ...PINKS, ...MINTS, ...YELLOWS, ...PALE_BLUES, '#e6d2b8', '#e8c9a0', '#dfc7a6'];
@@ -207,8 +207,8 @@ const HOUSE_WALLS = [...WHITES, ...WHITES, ...CREAMS, ...PEACHES, ...PINKS, ...M
 const FAR_HOUSE_WALLS = [...WHITES.slice(0, 3), ...CREAMS, ...PEACHES, ...YELLOWS, ...MINTS, '#e6d2b8', '#e8c9a0', '#dfc7a6', '#d9b98f', '#c9a97c', '#b9b28a', '#cdbfa3', '#d6c2a2', '#a9b59a'];
 
 const FAM: Record<'glassBlue' | 'glassGreen' | 'punched' | 'balcony' | 'deco' | 'stone' | 'brick' | 'grid' | 'hotel' | 'concrete' | 'industrial' | 'house', Family> = {
-  glassBlue: { style: S.GLASS_BLUE, floorH: 3.9, tints: ['#9fb6c8', '#8fa9bd', '#b0c4d2', '#a7bccb', '#8898a8', '#c2d0da'], lit: [0.25, 0.7], warm: [0.15, 0.5] },
-  glassGreen: { style: S.GLASS_GREEN, floorH: 3.8, tints: ['#f2f2ee', '#e8ebe4', '#ffffff', '#dfe6e0', '#e6e2d6', '#d9dfd9'], lit: [0.25, 0.65], warm: [0.2, 0.5] },
+  glassBlue: { style: S.GLASS_BLUE, floorH: 3.9, tints: ['#9fb6c8', '#8fa9bd', '#b0c4d2', '#a7bccb', '#8898a8', '#c2d0da'], lit: [0.18, 0.62], warm: [0.15, 0.5] },
+  glassGreen: { style: S.GLASS_GREEN, floorH: 3.8, tints: ['#f2f2ee', '#e8ebe4', '#ffffff', '#dfe6e0', '#e6e2d6', '#d9dfd9'], lit: [0.18, 0.58], warm: [0.2, 0.5] },
   punched: { style: S.PUNCHED, floorH: 3.3, tints: [...WHITES, ...CREAMS], lit: [0.2, 0.55], warm: [0.6, 0.95] },
   balcony: { style: S.BALCONY, floorH: 3.2, tints: [...CREAMS, ...WHITES, '#efe0d3', '#f0d9c2'], lit: [0.2, 0.5], warm: [0.7, 0.95] },
   deco: { style: S.DECO, floorH: 3.4, tints: [...PEACHES, ...PINKS, ...YELLOWS, ...MINTS], lit: [0.15, 0.5], warm: [0.6, 0.9] },

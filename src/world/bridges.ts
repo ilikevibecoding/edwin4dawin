@@ -366,13 +366,15 @@ const _up = new THREE.Vector3(0, 1, 0);
 
 /** One mesh of a chunk with its own world bounds: the deck box stops at the parapets, the railing box at the lamp
  *  heads and the pylons / cables have their own, so looking up from the deck draws none of them. */
-interface ChunkMesh { mesh: THREE.Mesh; cls: CasterClass; box: THREE.Box3; height: number; }
+interface ChunkMesh { mesh: THREE.Mesh; cls: CasterClass; box: THREE.Box3; height: number; inView: boolean; cast: boolean; }
 interface Chunk {
   meshes: ChunkMesh[];
   /** the thin steel mesh and the index count of its lamp-head prefix (drawn alone beyond THIN_DISTANCE) */
   steel: THREE.Mesh | null;
   headIndices: number;
   center: THREE.Vector3; r: number;
+  /** horizontal distance from the nearest camera to the chunk's sphere (this frame) */
+  dist: number;
 }
 
 /**
@@ -384,13 +386,20 @@ interface Chunk {
  * the sun taken from the scene's shadow-casting directional light, which also dims / lights the lamps.
  */
 class BridgeCuller {
-  camera: THREE.Camera | null = null;
   readonly chunks: Chunk[] = [];
   private sun: THREE.DirectionalLight | null = null;
   private readonly cull = new ViewCull();
   private readonly sunDir = new THREE.Vector3(0, 1, 0);
+  /** cameras that drew a chunk since the last update (more than one when a reflection pass renders the scene
+   *  too); visibility is the union over them so no pass ever misses a chunk */
+  private readonly seen = new Set<THREE.PerspectiveCamera>();
+  private cameras: THREE.PerspectiveCamera[] = [];
 
   constructor(private readonly steel: THREE.MeshStandardMaterial) {}
+
+  observe(camera: THREE.Camera): void {
+    if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) this.seen.add(camera as THREE.PerspectiveCamera);
+  }
 
   update(scene: THREE.Object3D | null): void {
     if (!this.sun && scene) this.sun = (scene.children.find((o) => (o as THREE.DirectionalLight).isDirectionalLight && o.castShadow) as THREE.DirectionalLight | undefined) ?? null;
@@ -405,21 +414,29 @@ class BridgeCuller {
     const glow = Math.max(1 - smoothstep(2, 10, elevation), 1 - smoothstep(0.15, 0.6, keyIntensity));
     this.steel.emissiveIntensity = LAMP_GLOW * glow;
 
-    const cam = this.camera as THREE.PerspectiveCamera | null;
-    if (!cam || !cam.isPerspectiveCamera) return; // until a chunk has been drawn the renderer's frustum test alone applies
-    const camX = cam.position.x, camZ = cam.position.z;
-    // shadow range: the game grows the CSM far plane with altitude (see game.ts); a superset is safe here
-    this.cull.update(cam, clamp(cam.position.y * 9, 5000, 12000), this.sunDir);
-    for (const c of this.chunks) {
-      const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
-      for (const m of c.meshes) {
-        const inView = this.cull.boxInView(m.box);
-        const cast = d < SHADOW_DISTANCE && this.casterInView(m);
-        m.mesh.castShadow = cast;
-        m.mesh.visible = inView || cast;
-        m.mesh.layers.mask = layerMask(m.cls, inView);
+    if (this.seen.size) { this.cameras = [...this.seen]; this.seen.clear(); }
+    if (!this.cameras.length) return; // until a chunk has been drawn the renderer's frustum test alone applies
+    for (const c of this.chunks) { c.dist = Infinity; for (const m of c.meshes) { m.inView = false; m.cast = false; } }
+    for (const cam of this.cameras) {
+      const camX = cam.position.x, camZ = cam.position.z;
+      // shadow range: the game grows the CSM far plane with altitude (see game.ts); a superset is safe here
+      this.cull.update(cam, clamp(cam.position.y * 9, 5000, 12000), this.sunDir);
+      for (const c of this.chunks) {
+        const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
+        c.dist = Math.min(c.dist, d);
+        for (const m of c.meshes) {
+          if (!m.inView && this.cull.boxInView(m.box)) m.inView = true;
+          if (!m.cast && d < SHADOW_DISTANCE && this.casterInView(m)) m.cast = true;
+        }
       }
-      if (c.steel) c.steel.geometry.setDrawRange(0, d > THIN_DISTANCE ? c.headIndices : Infinity);
+    }
+    for (const c of this.chunks) {
+      for (const m of c.meshes) {
+        m.mesh.castShadow = m.cast;
+        m.mesh.visible = m.inView || m.cast;
+        m.mesh.layers.mask = layerMask(m.cls, m.inView);
+      }
+      if (c.steel) c.steel.geometry.setDrawRange(0, c.dist > THIN_DISTANCE ? c.headIndices : Infinity);
     }
   }
 
@@ -714,15 +731,15 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     for (let k = 0; k < nChunks; k++) {
       const P = parts[k];
       allDecks.append(P.deck);
-      const chunk: Chunk = { meshes: [], steel: null, headIndices: 0, center: new THREE.Vector3(), r: 0 };
+      const chunk: Chunk = { meshes: [], steel: null, headIndices: 0, center: new THREE.Vector3(), r: 0, dist: Infinity };
       const chunkBox = new THREE.Box3();
       const attach = (mesh: THREE.Mesh, cls: CasterClass) => {
         mesh.name = `${spec.id}#${k}`;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        mesh.onBeforeRender = (_r, _s, camera) => { culler.camera = camera; };
+        mesh.onBeforeRender = (_r, _s, camera) => { culler.observe(camera); };
         const box = mesh.geometry.boundingBox!;
-        chunk.meshes.push({ mesh, cls, box, height: box.max.y - box.min.y });
+        chunk.meshes.push({ mesh, cls, box, height: box.max.y - box.min.y, inView: true, cast: true });
         chunkBox.union(box);
         group.add(mesh);
       };
@@ -731,7 +748,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
       const structTris = P.struct.idx.length;
       P.struct.append(P.deck);
       const cMesh = new THREE.Mesh(P.struct.build([['aRoadUv', 2], ['aRoadInfo', 3]]), concreteMat);
-      cMesh.onBeforeShadow = (_r, _o, camera) => { culler.camera = camera; cMesh.geometry.setDrawRange(0, structTris); };
+      cMesh.onBeforeShadow = (_r, _o, camera) => { culler.observe(camera); cMesh.geometry.setDrawRange(0, structTris); };
       cMesh.onAfterShadow = () => { cMesh.geometry.setDrawRange(0, Infinity); };
       attach(cMesh, 'all');
       // thin steel: lamp heads first so the far LOD can draw them alone
