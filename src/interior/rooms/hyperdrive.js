@@ -292,7 +292,7 @@ export function build(kit, ctx, room, lib) {
   glowMat.emissiveIntensity = 1.25;
   const heroMat = ctx.materials.emitCoolSoft.clone();
   heroMat.emissive = new THREE.Color("#9cc8ff");
-  heroMat.emissiveIntensity = 1.5;
+  heroMat.emissiveIntensity = 1.8;
   const heroLights = [];
   {
     const glowMesh = new THREE.Mesh(mergeGeometries(glow, false), glowMat);
@@ -304,7 +304,7 @@ export function build(kit, ctx, room, lib) {
         t += dt;
         glowMat.emissiveIntensity = 1.25 * (0.9 + 0.07 * Math.sin(t * 2.1) + 0.03 * Math.sin(t * 9.3));
         const p = 0.85 + 0.15 * Math.sin(t * 0.9);
-        heroMat.emissiveIntensity = 1.5 * p;
+        heroMat.emissiveIntensity = 1.8 * p;
         for (const l of heroLights) l.intensity = (l.userData.baseIntensity ?? l.intensity) * (0.85 + 0.15 * p);
       },
     });
@@ -319,23 +319,24 @@ export function build(kit, ctx, room, lib) {
     oct(HR - 0.25, 0.12, y0 + 0.72, "metal", { color: PALETTE.steel, texel: 1 });
     kit.add("emitCoolSoft", new THREE.CylinderGeometry(HR + 0.02, HR + 0.02, 0.05, 8), { pos: [HX, y0 + 0.62, HZ], rot: [0, Math.PI / 8, 0], uv: "keep" });
     // the core: pulsing blue-white column inside a glass sleeve
-    const coreGeo = new THREE.CylinderGeometry(0.5, 0.5, 4.2, 24, 1, true);
+    const coreGeo = new THREE.CylinderGeometry(0.62, 0.62, 4.2, 24, 1, true);
     const uv = coreGeo.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5, uv.getY(i));
     coreGeo.translate(HX, y0 + 2.9, HZ);
     const core = new THREE.Mesh(coreGeo, heroMat);
     core.name = "heroCore";
     ctx.dynamic.push({ object: core });
-    kit.cyl("glass", HX, y0 + 2.9, HZ, 0.72, 4.2, "y", { segments: 24, open: true });
-    // coil stack: steel tori with clamp blocks, thin frost rings between them
-    for (let k = 0; k < 6; k++) {
-      const y = y0 + 1.15 + k * 0.66;
-      kit.add("metal", new THREE.TorusGeometry(1.35, 0.24, 8, 40), { pos: [HX, y, HZ], rot: [Math.PI / 2, 0, 0], color: PALETTE.steel, uv: "world", texel: 1 });
+    kit.cyl("glass", HX, y0 + 2.9, HZ, 0.82, 4.2, "y", { segments: 24, open: true });
+    // coil stack: five open-spaced steel tori with clamp blocks so the core shows between them, frost
+    // rings in the gaps
+    for (let k = 0; k < 5; k++) {
+      const y = y0 + 1.25 + k * 0.78;
+      kit.add("metal", new THREE.TorusGeometry(1.35, 0.17, 8, 40), { pos: [HX, y, HZ], rot: [Math.PI / 2, 0, 0], color: PALETTE.steel, uv: "world", texel: 1 });
       for (let i = 0; i < 8; i++) {
         const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-        kit.add("satinBlack", new THREE.BoxGeometry(0.34, 0.56, 0.5), { pos: [HX + Math.cos(a) * 1.5, y, HZ + Math.sin(a) * 1.5], rot: [0, Math.PI / 2 - a, 0] });
+        kit.add("satinBlack", new THREE.BoxGeometry(0.34, 0.42, 0.5), { pos: [HX + Math.cos(a) * 1.5, y, HZ + Math.sin(a) * 1.5], rot: [0, Math.PI / 2 - a, 0] });
       }
-      if (k < 5) kit.add("emitCoolSoft", new THREE.TorusGeometry(0.95, 0.03, 4, 32), { pos: [HX, y + 0.33, HZ], rot: [Math.PI / 2, 0, 0], uv: "keep" });
+      if (k < 4) kit.add("emitCoolSoft", new THREE.TorusGeometry(1.0, 0.045, 5, 36), { pos: [HX, y + 0.39, HZ], rot: [Math.PI / 2, 0, 0], uv: "keep" });
     }
     // six struts and the top cap with its feeds into the ceiling
     for (let i = 0; i < 6; i++) {
@@ -366,7 +367,7 @@ export function build(kit, ctx, room, lib) {
       wallConsole(f, 0, 1.2, s < 0 ? "screen4" : "screen6");
       f.box("emitBlue", 0, 0.5, 0.56, 1.0, 0.03, 0.01, { uv: "keep" });
     }
-    const hl = pointLight(0xcfe4ff, 110, 20, [HX, y0 + 3.2, HZ]);
+    const hl = pointLight(0xcfe4ff, 150, 22, [HX, y0 + 3.2, HZ]);
     ctx.lights.cool.push(hl);
     heroLights.push(hl);
     ctx.lights.cool.push(pointLight(0xcfe4ff, 28, 12, [HX, y0 + 0.9, HZ - HR - 1.4]));
@@ -589,7 +590,9 @@ export function build(kit, ctx, room, lib) {
   // ---------------------------------------------------------------- aisle lighting: warm-white tube fittings over the aisle
   // (the pool keeps the 14 best-scoring fixtures, so the aisle carries the room with few strong lights
   // whose reach covers the whole 24 m from the door; the amber comes from the slits and the trench)
-  for (const z of [486.5, 491.5, 496.5]) tubeFixture(kit, ctx, 54, yTop, z, 3.2, "x", { drop: 1.0, intensity: 95, distance: 22, color: 0xfff0dc });
+  // (two fittings only: the third sat against the parked hoist beam and blew it out to a white patch at
+  // the vanishing point; the far end belongs to the hero's own glow)
+  for (const z of [487.0, 492.5]) tubeFixture(kit, ctx, 54, yTop, z, 3.2, "x", { drop: 1.0, intensity: 90, distance: 22, color: 0xfff0dc });
   ctx.lights.warm.push(pointLight(0xfff0dc, 30, 12, [54, yTop - 0.9, 483.3]));
   // low fill in the aisle at the unit bases
   for (const z of [489.0, 497.0]) ctx.lights.warm.push(pointLight(0xffe2c0, 16, 9, [51.2, y0 + 0.7, z]));

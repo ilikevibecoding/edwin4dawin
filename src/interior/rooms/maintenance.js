@@ -3,8 +3,9 @@
 // underhung trolley, hoist drum, two-fall hook block and festoon cabling. Two workpieces sit under it: a
 // disassembled turbolaser barrel and breech on cradles, and an ion-engine nacelle on a transport dolly
 // with a rolling access platform, an opened coil bay and a diagnostics cart. A deflector-generator test
-// rig, container stacks, parts trays, cable reels, welding screens and a pallet jack fill the rest of the
-// floor; workbenches with pegboards line the port wall, racks with open-front bins the starboard wall;
+// rig, container stacks, parts trays, cable reels, welding screens, portable light masts and a pallet
+// jack fill the rest of the floor; workbenches with pegboards line the port wall, racks with open-front
+// bins the starboard wall;
 // welding bay, droid recharge alcove and a caged parts lift take the aft wall. Tool boards and hanging
 // cable drops sit at eye level; floor markings are paint, and base tubes wash the wall feet.
 import * as THREE from "three";
@@ -15,6 +16,7 @@ import { PALETTE } from "../../materials.js";
 import { decalRect } from "../../textures.js";
 import {
   yawFrame,
+  yawToward,
   beamBetween,
   cylBetween,
   pipeRun,
@@ -413,6 +415,39 @@ function tripodLamp(kit, ctx, x, y0, z, yaw, opts = {}) {
   kit.collider([x - 0.55, y0, z - 0.55], [x + 0.55, hubY + 1.1, z + 0.55], "lamp");
 }
 
+// Portable light mast: wheeled base, two-stage mast, crossbar with a pair of flood heads tilted down
+// toward yaw, control box and trailing cable. The bay's strong work light comes from these because a
+// fixture hung under the ceiling (the crane sweeps everything below 7 m) blows a white disc onto it;
+// a head 3 m up is far from every surface and still under the hook.
+function lightMast(kit, ctx, x, y0, z, yaw, opts = {}) {
+  const { intensity = 60, distance = 16, color = 0xffd8ae, H = 3.0, mat = "emitWarmSoft", family = "warm" } = opts;
+  const f = yawFrame(kit, x, y0, z, yaw);
+  f.box("paintedMetal", 0, 0.14, 0, 0.7, 0.16, 0.7, { color: PALETTE.gunmetal, texel: 2 });
+  f.box("hazard", 0, 0.14, 0, 0.72, 0.06, 0.72, { texel: 3 });
+  for (const [u, n] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3]]) f.cylU("rubber", u, 0.07, n, 0.07, 0.06, { color: PALETTE.rubber, segments: 10 });
+  for (const s of [-1, 1]) f.box("metal", 0, 0.06, s * 0.52, 0.5, 0.06, 0.34, { color: PALETTE.darkMetal, texel: 2 });
+  const lower = H * 0.55;
+  f.cylV("metal", 0, 0.22 + lower / 2, 0, 0.055, lower, { color: PALETTE.gunmetal, segments: 10 });
+  f.cylV("metal", 0, 0.22 + lower + (H - lower - 0.3) / 2, 0, 0.038, H - lower - 0.3, { color: PALETTE.steel, segments: 10 });
+  f.cylV("metal", 0, 0.22 + lower, 0, 0.08, 0.14, { color: PALETTE.darkMetal, segments: 10 });
+  f.box("satinBlack", 0, 1.2, 0.09, 0.22, 0.3, 0.12);
+  f.box("leds", 0, 1.28, 0.152, 0.14, 0.03, 0.004, { uv: "keep" });
+  f.box("emitOrange", 0.06, 1.14, 0.152, 0.03, 0.03, 0.004, { uv: "keep" });
+  const top = 0.22 + H - 0.1;
+  f.cylU("metal", 0, top, 0, 0.03, 1.2, { color: PALETTE.gunmetal, segments: 8 });
+  const tilt = 0.75;
+  for (const u of [-0.42, 0.42]) {
+    f.box("metal", u, top - 0.1, 0, 0.06, 0.2, 0.06, { color: PALETTE.steel });
+    f.box("satinBlack", u, top - 0.28, 0.06, 0.46, 0.34, 0.2, { tilt });
+    f.box(mat, u, top - 0.28 - Math.sin(tilt) * 0.101, 0.06 + Math.cos(tilt) * 0.101, 0.4, 0.28, 0.01, { tilt, uv: "keep" });
+  }
+  pipeRun(kit, "rubber", [f.pos(0, 1.05, 0.1).toArray(), f.pos(0.08, 0.3, 0.12).toArray(), f.pos(0.2, 0.03, -0.45).toArray(), f.pos(0.3, 0.03, -1.1).toArray()], 0.014, { color: PALETTE.rubber, segments: 6 });
+  // the point sits a metre below and in front of the heads: any closer and it blows the housings white
+  const lp = f.pos(0, top - 1.2, 0.8);
+  ctx.lights[family].push(pointLight(color, intensity, distance, [lp.x, lp.y, lp.z]));
+  f.collider(-0.45, 0.45, 0, 1.6, -0.45, 0.45, "lightMast");
+}
+
 // Hand pallet jack.
 function palletJack(kit, x, y0, z, yaw) {
   const f = yawFrame(kit, x, y0, z, yaw);
@@ -597,9 +632,11 @@ export function build(kit, ctx, room, lib) {
     partsTray(kit, 60.6, y0, 453.4, 0.3, 2);
     stencil(kit, 68.5, y0 + 0.009, 461.2, 0.6, 7, "up");
     stencil(kit, 64.0, y0 + 0.009, 455.8, 0.6, 15, "up");
-    // caged work lights over the barrel hang short so the crane passes under them
-    for (const x of [62.0, 65.0, 72.0]) cageLight(kit, ctx, x, yTop, bz, 0.6, { intensity: 120, distance: 24 });
-    cageLight(kit, ctx, 75.6, yTop, 461.8, 0.6, { intensity: 70, distance: 18 });
+    // caged lights over the barrel hang short so the crane passes under them, and stay modest: a strong
+    // point a metre under the ceiling blows a disc onto it. The work light comes from two masts.
+    for (const x of [62.0, 66.5, 71.0]) cageLight(kit, ctx, x, yTop, bz, 0.6, { intensity: 50, distance: 20 });
+    lightMast(kit, ctx, 64.5, y0, 461.0, yawToward(64.5, 461.0, 65.0, bz), { intensity: 100, distance: 20 });
+    lightMast(kit, ctx, 70.0, y0, 455.3, yawToward(70.0, 455.3, 69.5, bz), { intensity: 100, distance: 20 });
     boomDrop(kit, 73.6, y0, 462.6, Math.PI, 1.2, y0 + 1.75, { head: "plug", yaw: 0.4 });
   }
 
@@ -625,8 +662,7 @@ export function build(kit, ctx, room, lib) {
     toolCart(kit, 67.0, y0, 464.3, 0.5, 3);
     boomDrop(kit, 62.2, y0, 471.9, Math.PI, 1.0, y0 + 1.8, { head: "gun", yaw: 0.3 });
     boomDrop(kit, 67.5, y0, 472.0, -Math.PI / 2, 1.3, y0 + 1.9, { head: "plug", yaw: -0.5 });
-    tubeFixture(kit, ctx, 63.0, yTop, 466.4, 3.0, "x", { drop: 0.55, intensity: 60, distance: 18, color: 0xffe2c0 });
-    tubeFixture(kit, ctx, 63.0, yTop, 472.2, 3.0, "x", { drop: 0.55, intensity: 60, distance: 18, color: 0xffe2c0 });
+    lightMast(kit, ctx, 64.2, y0, 472.6, yawToward(64.2, 472.6, 64.6, ez), { intensity: 80, distance: 18 });
   }
 
   // ---------------------------------------------------------------- starboard-forward: deflector test rig, containers, trays, reels, pallet jack
@@ -641,8 +677,9 @@ export function build(kit, ctx, room, lib) {
     palletJack(kit, 79.2, y0, 471.0, 0.3);
     tripodLamp(kit, ctx, 80.8, y0, 470.6, Math.PI * 1.25, { intensity: 40, distance: 12 });
     boomDrop(kit, 76.2, y0, 468.4, Math.PI / 2, 1.4, y0 + 1.8, { head: "plug", yaw: 0.2 });
-    tubeFixture(kit, ctx, 77.5, yTop, 466.0, 3.0, "x", { drop: 0.55, intensity: 60, distance: 18, color: 0xffe2c0 });
-    tubeFixture(kit, ctx, 77.5, yTop, 471.4, 3.0, "x", { drop: 0.55, intensity: 60, distance: 18, color: 0xffe2c0 });
+    // screen between the rig and the entry lane, light mast on the lane side aimed at the rig
+    weldingScreen(kit, 73.5, y0, 468.6, Math.PI / 2 + 0.25);
+    lightMast(kit, ctx, 73.0, y0, 471.2, yawToward(73.0, 471.2, 77.6, 465.2), { intensity: 80, distance: 18 });
     // aft-starboard stock between the breech and the racks
     container(kit, 82.6, y0, 454.6, 0.05, 1.6, 1.1, 1.0, 6);
     container(kit, 82.6, y0 + 1.1, 454.6, -0.08, 1.2, 0.7, 0.8, 7);
@@ -661,7 +698,7 @@ export function build(kit, ctx, room, lib) {
     kit.collider([x0, y0, z - 0.5], [x0 + WT + 0.65, y0 + 2.1, z + 0.5], "cabinet");
   }
   const W = shell.frames["-x"].frame; // u = z1 - z
-  for (const z of [449.5, 454.5, 459.5, 464.5]) armLight(kit, ctx, W, z1 - z, 3.4, 1.4, { intensity: 40, distance: 15 });
+  for (const z of [449.5, 454.5, 459.5, 464.5]) armLight(kit, ctx, W, z1 - z, 3.4, 1.4, { intensity: 45, distance: 15 });
   wallLightBar(W, 1.0, z1 - 466.5, 3.0);
   wallLightBar(W, z1 - 447.5, z1 - z0 - 1.0, 3.0);
   W.add("decal", new THREE.PlaneGeometry(0.6, 0.6), z1 - 467.2, 2.6, 0.005, { uv: "keep", uvRect: decalRect(13) });
@@ -676,7 +713,7 @@ export function build(kit, ctx, room, lib) {
   // ---------------------------------------------------------------- starboard wall: parts racks with labelled bins, rolling ladder, tool board
   for (const [i, z] of [451.5, 454.5, 457.5, 460.5, 463.5].entries()) partsRack(yawFrame(kit, x1 - WT - 0.52, y0, z, -Math.PI / 2), i);
   const E = shell.frames["+x"].frame; // u = z - z0
-  for (const z of [453.0, 459.0, 465.0]) armLight(kit, ctx, E, z - z0, 4.4, 2.2, { intensity: 60, distance: 17 });
+  for (const z of [453.0, 459.0, 465.0]) armLight(kit, ctx, E, z - z0, 4.4, 2.4, { intensity: 90, distance: 18 });
   {
     const lx = x1 - 2.3;
     const lz = 466.6;
@@ -733,8 +770,8 @@ export function build(kit, ctx, room, lib) {
     kit.box("metal", 57.1, y0 + 0.05, 448.8, 0.9, 0.1, 0.5, { color: PALETTE.darkMetal, texel: 2 });
     kit.box("metal", 57.1, y0 + 1.0, 449.06, 0.9, 0.04, 0.04, { color: PALETTE.gunmetal });
     kit.collider([56.6, y0, 448.5], [57.6, y0 + 1.5, 449.1], "gasCart");
-    cageLight(kit, ctx, 59.5, yTop, 447.5, 4.2, { intensity: 45, distance: 14 });
-    cableDrop(kit, 58.6, yTop, 446.6, y0 + 1.8, { head: "gun", yaw: 0.6 });
+    cageLight(kit, ctx, 58.2, yTop, 446.4, 4.2, { intensity: 30, distance: 10 });
+    cableDrop(kit, 60.4, yTop, 446.2, y0 + 1.8, { head: "gun", yaw: 0.6 });
 
     // droid recharge alcove (four bays)
     const ax0 = 64.0;
@@ -923,10 +960,13 @@ export function build(kit, ctx, room, lib) {
     kit.add("grate", g, { pos: [x, yTop - 1.16, 447.6], uv: "scale", uvScale: [0.8 / 0.62, 0.8 / 0.45], color: 0xffffff });
   }
 
-  // ---------------------------------------------------------------- lights: cool fill from the ceiling corners, warm-white over the door
-  // (a 34 x 33 m bay with a 14-light pool: four long-reach fill lights plus the caged work lights above)
-  for (const [lx, lz] of [[62.0, 451.0], [80.0, 451.0], [62.0, 469.5], [80.0, 469.5]]) cageLight(kit, ctx, lx, yTop, lz, 0.6, { intensity: 130, distance: 30, color: 0xdfe8ff, mat: "emitCoolSoft" });
-  tubeFixture(kit, ctx, 70.0, yTop, 474.2, 3.2, "x", { drop: 1.2, intensity: 70, distance: 18, color: 0xffe2c0 });
-  ctx.lights.warm.push(pointLight(0xffc080, 30, 12, [72.5, y0 + 2.4, 470.0]));
+  // ---------------------------------------------------------------- lights: cool fill, warm-white over the door
+  // Four long-reach cool fixtures hang 2.4 m down in the two strips the crane never sweeps (aft of the
+  // duct, forward of the runway buffers): that far below the ceiling they wash it instead of blowing a
+  // disc onto it. The pool scores by intensity over distance, so the aft pair is stronger than the pair
+  // by the door or the far half of the bay goes dark from the entry. The strong warm work light is on
+  // the floor masts, well away from every surface.
+  for (const [lx, lz, i, d] of [[59.5, 449.2, 200, 34], [84.6, 449.2, 200, 34], [60.0, 475.6, 110, 26], [82.0, 475.6, 110, 26]]) cageLight(kit, ctx, lx, yTop, lz, 2.4, { intensity: i, distance: d, color: 0xdfe8ff, mat: "emitCoolSoft" });
+  tubeFixture(kit, ctx, 70.0, yTop, 474.2, 3.2, "x", { drop: 1.2, intensity: 55, distance: 18, color: 0xffe2c0 });
   return shell;
 }
