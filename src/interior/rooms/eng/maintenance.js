@@ -7,7 +7,7 @@
 import * as THREE from "three";
 import { buildShell, roomWalls } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
-import { console as impConsole, chair, ceilingLight, pointLightDesc, spotLightDesc, pipeRun, wallScreen, lockers, table, crate, column, rng } from "../../impKit.js";
+import { console as impConsole, ceilingLight, pointLightDesc, spotLightDesc, pipeRun, wallScreen, lockers, table, crate, column, rng } from "../../impKit.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
@@ -39,7 +39,7 @@ export function buildMaintenance(kit, ctx) {
   {
     const tx = 18.2 - (RX0 + RX1) / 2; // trolley parked west of the actuator's breech
     const bridge = miniKit(ctx.mats, (k) => {
-      craneBridge(k, RX1 - RX0, RY + 0.6, 0, { cx: 0, tx, drop: 1.3, girder: 0.7, lamp: false, bands: false });
+      craneBridge(k, RX1 - RX0, RY + 0.6, 0, { cx: 0, tx, drop: 1.3, girder: 0.7, lamp: false, bands: false, mat: "impMatte" });
       // the removed armour ring, slung from the hook (bottom stays above head height)
       const hy = RY + 0.6 - 1.3 - 0.75;
       k.add("impMetal", new THREE.TorusGeometry(1.15, 0.14, 8, 28), { pos: [tx, hy - 0.3 - 1.15, 0], rot: [0, Math.PI / 2, 0], color: IMP.gunmetal, uv: "scale", uvScale: [6, 1] });
@@ -93,7 +93,7 @@ export function buildMaintenance(kit, ctx) {
     kit.add("impDecal", new THREE.PlaneGeometry(0.8, 0.8), { pos: [X1 + 0.206, cy + 0.32, az], rot: [0, Math.PI / 2, 0], uv: "keep", uvRect: impDecalRect(13) });
     kit.box("impPaintedMetal", X1 + 0.23, cy - 0.5, az, 0.06, 0.34, 0.66, { color: IMP.consoleDark, texel: 1 });
     kit.box("darkGloss", X1 + 0.262, cy - 0.5, az, 0.004, 0.28, 0.58);
-    kit.box("screenBars", X1 + 0.266, cy - 0.5, az, 0.004, 0.24, 0.5, { uv: "keep" });
+    kit.box("screen0", X1 + 0.266, cy - 0.5, az, 0.004, 0.24, 0.5, { uv: "keep" });
     kit.box("emitAmber", X1 + 0.266, cy - 0.72, az, 0.004, 0.04, 0.4);
     // removed housing shells leaning on the far trestle, ring segments and fasteners on the deck
     for (const s of [-1, 1]) {
@@ -109,7 +109,6 @@ export function buildMaintenance(kit, ctx) {
       impConsole(kit, ctx, [X0 - 4.6, y, cz], -Math.PI / 2, { kind: "station", width: 1.5, screens: 2, seed: 200 + cz, light: false });
       pipeRun(kit, [[X0 - 3.9, y + 0.15, cz], [X0 - 1.4, y + 0.15, cz], [X0 - 1.4, y + 0.15, az], [X0 - 0.9, cy - 0.6, az]], 0.04, { mat: "impRubber", color: IMP.rubber, clamps: false });
     }
-    chair(kit, [X0 - 5.5, y, az - 1.6], -Math.PI / 2);
     toolCart(kit, [X0 - 1.6, y, az + 2.6], -0.4, { seed: 9 });
     toolCart(kit, [X1 + 2.4, y, az - 1.8], 1.2, { seed: 10 });
     floorDecal(kit, X0 - 4.6, y, az + 3.4, 1.2, 3, Math.PI / 2);
@@ -310,21 +309,22 @@ export function buildMaintenance(kit, ctx) {
     for (const rx of [9.9, 12.7]) kit.cyl("impPaintedMetal", rx, y + 1.15, cz, 0.42, 0.28, "x", { color: IMP.trim, segments: 18 });
     kit.cyl("impMetal", 13.75, y + 1.15, cz, 0.16, 0.5, "x", { color: IMP.gunmetal, segments: 12 });
     kit.collider([8.9, y, cz - 0.9], [14.0, y + 1.6, cz + 0.9], "ramCylinder");
-    for (const [dx, dz] of [[7.4, 637.6], [7.4, 638.8]]) {
+    // (kept inside ~45 deg of the door view so neither drum is sliced by the frame edge)
+    for (const [dx, dz] of [[8.5, 636.9], [8.5, 638.1]]) {
       kit.cyl("impMetal", dx, y + 0.5, dz, 0.42, 1.0, "y", { color: IMP.gunmetal, segments: 16, texel: 0.5 });
       kit.cyl("impPaintedMetal", dx, y + 0.98, dz, 0.4, 0.04, "y", { color: IMP.trim, segments: 16 });
       kit.cyl("impPaintedMetal", dx, y + 0.5, dz, 0.43, 0.12, "y", { color: IMP.amber, segments: 16 });
     }
-    kit.collider([6.9, y, 637.1], [7.9, y + 1.0, 639.3], "drums");
+    kit.collider([8.0, y, 636.4], [9.0, y + 1.0, 638.6], "drums");
     floorDecal(kit, 11.3, y, 640.4, 0.9, 6, Math.PI);
   }
   valve(kit, [30.5, y + 3.2, z0 + T + 0.35], 0.3, "z", { stem: 0.3 });
   pipeRun(kit, [[30.5, y + 0.3, z0 + T + 0.35], [30.5, y + 3.2, z0 + T + 0.35], [30.5, y + h - 1.0, z0 + T + 0.35], [30.5, y + h - 1.0, z0 + T + 2.4]], 0.16, { color: IMP.steel, clampPitch: 2 });
 
   // ------------------------------------------------------------ lights: bright, even work light
-  // six bars under an 8 m ceiling with their sources dropped to 5.4 m (~1.4 lux on the deck under each,
-  // 2+ where they overlap) plus a real work spot on the actuator: the bay must read bright and even
-  for (const lx of [14, 32]) for (const lz of [620, 634, 648]) ceilingLight(kit, ctx, [lx, y + h, lz], 7, "x", { color: 0xf0f4ff, intensity: 50, distance: 20, priority: lz === 634 ? 2 : 1, drop: 2.6 });
+  // six bars under an 8 m ceiling with their sources dropped to 5 m (~2.9 lux on the deck under each,
+  // 4+ where they overlap) plus a real work spot on the actuator: the bay must read bright and even
+  for (const lx of [14, 32]) for (const lz of [620, 634, 648]) ceilingLight(kit, ctx, [lx, y + h, lz], 7, "x", { color: 0xf0f4ff, intensity: 90, distance: 24, priority: lz === 634 ? 2 : 1, drop: 3.0 });
   spotLightDesc(ctx, 0xffffff, 220, 16, [ACT.x, y + h - 0.6, ACT.z], [ACT.x, y + 1, ACT.z], { angle: 0.55, penumbra: 0.5, priority: 2 });
   pointLightDesc(ctx, 0xdfe8ff, 7.0, 9, [x0 + T + 2.0, y + 3.0, 634], 1); // door
   pointLightDesc(ctx, IMP.blue, 3.0, 7, [21.75, y + 1.2, z1 - T - 1.0], 0); // charging alcoves
