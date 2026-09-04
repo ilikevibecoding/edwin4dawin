@@ -65,7 +65,7 @@ export function drawLiftDisplays(materials, state) {
     g.fillText(state.moving ? `IN TRANSIT  \u2192  DECK ${state.target}` : `DECK ${state.deck}`, 512, 70);
     g.font = "bold 44px 'Helvetica Neue', Arial, sans-serif";
     g.fillStyle = state.moving ? BLUE : ACCENT;
-    g.fillText((state.moving ? `PASSING DECK ${state.lit}` : state.name || "").toUpperCase(), 512, 146);
+    g.fillText((state.moving ? (state.lit === state.target ? "ARRIVING" : `PASSING DECK ${state.lit}`) : state.name || "").toUpperCase(), 512, 146);
     sign.userData.tex.needsUpdate = true;
   }
   // call panel: header, then one row per deck (lamp square, numeral, name)
