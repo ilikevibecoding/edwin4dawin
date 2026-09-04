@@ -191,6 +191,21 @@ export function buildExterior(mats, opts = {}) {
       kit.add("hullDark", inner, { pos: [e.x, e.y, HULL.sternZ + L / 2], color: IMP.trench, uv: "scale", uvScale: [12, 2] });
       const glow = new THREE.CircleGeometry(e.r * 0.88, 40);
       kit.add("emitEngine", glow, { pos: [e.x, e.y, HULL.sternZ + L * 0.12], uv: "keep" });
+      // glowing lining from the throat to just short of the mouth, so the ion glow reads from oblique
+      // angles too (the throat disc alone is hidden behind the narrowing inner wall). UVs are remapped
+      // so the glow shader's radial falloff runs along the bell: bright at the throat, fading aft.
+      {
+        const Lg = L * 0.72;
+        const lining = insideOut(new THREE.CylinderGeometry(e.r * 0.8, e.r * 0.875, Lg, 40, 1, true));
+        lining.rotateX(Math.PI / 2);
+        const pos = lining.attributes.position;
+        const uv = lining.attributes.uv;
+        for (let i = 0; i < pos.count; i++) {
+          const t = (pos.getZ(i) + Lg / 2) / Lg; // 0 at the throat end, 1 toward the mouth
+          uv.setXY(i, 0.5 + 0.5 * t, 0.5);
+        }
+        kit.add("emitEngine", lining, { pos: [e.x, e.y, HULL.sternZ + L * 0.13 + Lg / 2], uv: "keep" });
+      }
       // ring vanes around the mouth
       for (let k = 0; k < 3; k++) {
         const ring = new THREE.TorusGeometry(e.r * (0.95 + k * 0.04), e.r * 0.02, 8, 48);

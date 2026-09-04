@@ -663,6 +663,16 @@ export function buildGreebles(mats, opts = {}) {
     [tBase(T1, 720) + (wt(720) - tBase(T1, 720)) / 2, 720],
   ];
   for (const [x, z] of pads) blockers.push({ x, z, r: 12 });
+  // sensor clusters (dish, whip antennas, cabinets) at a few hull positions, kept clear of scatter
+  const clusters = [
+    { p: [0, dorsalY(-560), -560], r: 7 },
+    { p: [-(tTop(T1, 205) - 10), t1TopY(205), 205], r: 8 },
+    { p: [tTop(T1, 205) - 10, t1TopY(205), 205], r: 8 },
+    { p: [-(wt(776) - 16), dorsalY(776), 776], r: 9 },
+    { p: [wt(776) - 16, dorsalY(776), 776], r: 9 },
+    { p: [0, keelY(-420), -420], r: 8, down: true },
+  ];
+  for (const c of clusters) blockers.push({ x: c.p[0], z: c.p[2], r: c.r + 3 });
 
   // ---- city: terrace tops -----------------------------------------------------------------------
   const CITY_L = [["box", 0.34], ["step2", 0.14], ["step3", 0.08], ["taper", 0.1], ["tank", 0.08], ["tankH", 0.06], ["dome", 0.04], ["tower", 0.06], ["ridge", 0.05], ["vent", 0.05]];
@@ -917,7 +927,8 @@ export function buildGreebles(mats, opts = {}) {
       for (const z of seq(-700, 792, 4.6)) {
         if (r() < 0.22) continue;
         const f = frameAt(surf, z + (r() - 0.5) * 1.2, v);
-        winStrip(region, f, 1.0 + r() * 0.5, 0.42, r() < 0.1 ? LIGHT.warm : LIGHT.cool, 0.06);
+        // hull.js lays a dark strip 5 cm proud of the trench wall; stay clear of it
+        winStrip(region, f, 1.0 + r() * 0.5, 0.42, r() < 0.1 ? LIGHT.warm : LIGHT.cool, 0.22);
       }
     }
     // exposed hull frames bridging the notch every ~28 m (plates from the inner wall out to the lip)
@@ -973,7 +984,7 @@ export function buildGreebles(mats, opts = {}) {
       margin: 6,
       palette: PAL.slope,
       passes: [
-        { tier: "L", cell: 26, fill: 0.22, shapes: [["hatch", 0.5], ["box", 0.25], ["port", 0.1], ["vent", 0.1], ["grille", 0.05]], heightScale: 0.3, spin90: 0.15 },
+        { tier: "L", cell: 20, fill: 0.24, shapes: [["hatch", 0.5], ["box", 0.25], ["port", 0.1], ["vent", 0.1], ["grille", 0.05]], heightScale: 0.3, spin90: 0.15 },
         { tier: "M", cell: 11, fill: 0.24, shapes: [["hatch", 0.45], ["box", 0.25], ["vent", 0.15], ["wedge", 0.15]], heightScale: 0.45 },
         { tier: "S", cell: 5, fill: 0.06, shapes: PLAT_S, palette: PAL.small },
       ],
@@ -1046,7 +1057,7 @@ export function buildGreebles(mats, opts = {}) {
       margin: 6,
       palette: PAL.slope,
       passes: [
-        { tier: "L", cell: 28, fill: 0.16, shapes: [["hatch", 0.5], ["box", 0.3], ["port", 0.1], ["vent", 0.1]], heightScale: 0.3, spin90: 0.15 },
+        { tier: "L", cell: 22, fill: 0.17, shapes: [["hatch", 0.5], ["box", 0.3], ["port", 0.1], ["vent", 0.1]], heightScale: 0.3, spin90: 0.15 },
         { tier: "M", cell: 12, fill: 0.16, shapes: [["hatch", 0.45], ["box", 0.25], ["vent", 0.15], ["wedge", 0.15]], heightScale: 0.45 },
         { tier: "S", cell: 5.5, fill: 0.04, shapes: PLAT_S, palette: PAL.small },
       ],
@@ -1135,6 +1146,44 @@ export function buildGreebles(mats, opts = {}) {
       }
     }
     lamp("keel", [b.x, b.y - b.r - 0.7, b.z], 1.2, LIGHT.red);
+  }
+
+  // ---- sensor clusters and the comms mast ------------------------------------------------------
+  {
+    const r = rng(351);
+    for (const c of clusters) {
+      const n = c.down ? [0, -1, 0] : [0, 1, 0];
+      const region = c.down ? "keel" : "dorsal";
+      const at = (dx, dz) => ({ p: [c.p[0] + dx, c.p[1], c.p[2] + dz], n });
+      const a0 = r() * Math.PI * 2;
+      // dish on one side of the cluster, the main sensor block opposite, whips and cabinets around
+      put(region, "L", "dish", at(Math.cos(a0) * c.r * 0.45, Math.sin(a0) * c.r * 0.45), [6, 6.5, 6], r() * Math.PI * 2, jitterTint(r, TINT.light));
+      put(region, "M", "sensor", at(-Math.cos(a0) * c.r * 0.45, -Math.sin(a0) * c.r * 0.45), [3, 4.5, 3], a0, jitterTint(r, TINT.gun));
+      for (let k = 0; k < 3; k++) {
+        const a = a0 + ((k + 1) / 4) * Math.PI * 2 + (r() - 0.5) * 0.5;
+        const h = 7 + r() * 8;
+        put(region, "M", "mast", at(Math.cos(a) * c.r * 0.85, Math.sin(a) * c.r * 0.85), [h * 0.35, h, h * 0.35], 0, jitterTint(r, TINT.steel));
+      }
+      for (let k = 0; k < 3; k++) {
+        const a = a0 + (k / 3) * Math.PI * 2 + 1.1;
+        put(region, "M", k === 1 ? "tank" : "box", at(Math.cos(a) * c.r * 0.7, Math.sin(a) * c.r * 0.7), k === 1 ? [2.2, 3, 2.2] : [3 + r() * 1.5, 1.8 + r() * 1.2, 2.4], r() * Math.PI * 2, jitterTint(r, TINT.dark));
+      }
+      lamp(region, [c.p[0] - Math.cos(a0) * c.r * 0.45, c.p[1] + (c.down ? -4.8 : 4.8), c.p[2] - Math.sin(a0) * c.r * 0.45], 0.5, LIGHT.red);
+    }
+    // comms mast: rings of sensor boxes around the tapering column and two shoulder dishes
+    const m = TOWER.mast;
+    const rad = (y) => m.r * 1.6 - m.r * 0.6 * ((y - m.y0) / (m.y1 - m.y0));
+    for (const [y, k0] of [
+      [m.y0 + 14, 0],
+      [m.y0 + 28, 0.4],
+      [m.y0 + 42, 0.8],
+    ]) {
+      for (let k = 0; k < 4; k++) {
+        const a = k0 + (k / 4) * Math.PI * 2;
+        put("tower", "M", "sensorUp", { p: [m.x + Math.cos(a) * (rad(y) - 0.2), y, m.z + Math.sin(a) * (rad(y) - 0.2)], n: [Math.cos(a), 0, Math.sin(a)] }, [1.8, 1.3, 2.6], 0, jitterTint(r, TINT.gun));
+      }
+    }
+    for (const s of [-1, 1]) put("tower", "M", "dish", { p: [m.x + s * (rad(m.y0 + 36) - 0.2), m.y0 + 36, m.z], n: [s, 0, 0] }, [3.6, 3.6, 3.6], 0, jitterTint(r, TINT.light));
   }
 
   // ---- stern engine block -------------------------------------------------------------------
