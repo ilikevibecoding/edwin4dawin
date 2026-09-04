@@ -10,6 +10,7 @@ import { insideOut, rng } from "../kit.js";
 import { ENGINES, HULL, dorsalH, ventralH, halfWidth } from "./dims.js";
 import { Batcher, gradientColor, grey } from "./batch.js";
 import { radiatorGeometry } from "./details.js";
+import { trenchWallX } from "./hull.js";
 import { ensureExtMaterials } from "./exttex.js";
 
 const smoothstep = (a, b, x) => {
@@ -33,7 +34,6 @@ export function buildEngines(materials) {
   const batch = new Batcher(materials);
   const glowBatch = new Batcher(materials);
   const sternZ = HULL.sternZ;
-  const w = halfWidth(sternZ) - HULL.trenchInset;
   const topY = dorsalH(sternZ);
   const botY = -ventralH(sternZ);
   const all = [...ENGINES.main.map((e) => ({ ...e, kind: 0 })), ...ENGINES.secondary.map((e) => ({ ...e, kind: 1 })), ...VERNIERS.map((e) => ({ ...e, kind: 2 }))];
@@ -42,10 +42,82 @@ export function buildEngines(materials) {
   const plateTone = grey(0.62, 1.01);
   const midTone = grey(0.5, 1.01);
   const darkTone = grey(0.36, 1.02);
-  // distance along a ray from (x, y) in direction (dx, dy) until it leaves the stern face rectangle
+
+  // --- stern cross-section (the same hexagon hull.js caps the wedge with: flat plateaus, 45°-ish
+  // bevels down to the trench lips, vertical trench walls). Everything mounted on the face is clipped
+  // to it, so no beam / block / streak pokes out past the bevels at the outer corners.
+  const T = HULL.trenchHalf;
+  const wFull = halfWidth(sternZ);
+  const tx = trenchWallX(sternZ);
+  const xdP = HULL.plateauDorsal * wFull;
+  const xvP = HULL.plateauVentral * wFull;
+  const secTop = (x) => {
+    const ax = Math.abs(x);
+    if (ax <= xdP) return topY;
+    if (ax >= tx) return T;
+    return topY - ((topY - T) * (ax - xdP)) / (tx - xdP);
+  };
+  const secBot = (x) => {
+    const ax = Math.abs(x);
+    if (ax <= xvP) return botY;
+    if (ax >= tx) return -T;
+    return botY + ((-botY - T) * (ax - xvP)) / (tx - xvP);
+  };
+  const secHalfW = (y) => {
+    if (Math.abs(y) <= T) return tx;
+    if (y > 0) return y >= topY ? 0 : xdP + ((tx - xdP) * (topY - y)) / (topY - T);
+    return y <= botY ? 0 : xvP + ((tx - xvP) * (y - botY)) / (-botY - T);
+  };
+  const inside = (x, y, m) => Math.abs(x) <= secHalfW(y) - m && y <= secTop(x) - m && y >= secBot(x) + m;
+  // clip the rectangle [x0,x1]×[y0,y1] into the section with margin m: the section is convex, so
+  // clipping x by the half-width at the y edges (or y by the top / bottom at the outer x) is enough.
+  // Both orders are tried and the larger result kept (wide beams want the first, tall ones the second).
+  const fitXY = (x0, x1, y0, y1, m) => {
+    const hw = Math.min(secHalfW(y0), secHalfW(y1)) - m;
+    const nx0 = Math.max(x0, -hw);
+    const nx1 = Math.min(x1, hw);
+    if (nx1 - nx0 < 1) return null;
+    const xo = Math.max(Math.abs(nx0), Math.abs(nx1));
+    const ny0 = Math.max(y0, secBot(xo) + m);
+    const ny1 = Math.min(y1, secTop(xo) - m);
+    if (ny1 - ny0 < 1) return null;
+    return [nx0, nx1, ny0, ny1];
+  };
+  const fitYX = (x0, x1, y0, y1, m) => {
+    const xo = Math.max(Math.abs(x0), Math.abs(x1));
+    const ny0 = Math.max(y0, secBot(xo) + m);
+    const ny1 = Math.min(y1, secTop(xo) - m);
+    if (ny1 - ny0 < 1) return null;
+    const hw = Math.min(secHalfW(ny0), secHalfW(ny1)) - m;
+    const nx0 = Math.max(x0, -hw);
+    const nx1 = Math.min(x1, hw);
+    if (nx1 - nx0 < 1) return null;
+    return [nx0, nx1, ny0, ny1];
+  };
+  const fit = (x0, x1, y0, y1, m = 3) => {
+    const a = fitXY(x0, x1, y0, y1, m);
+    const b = fitYX(x0, x1, y0, y1, m);
+    if (!a || !b) return a || b;
+    return (a[1] - a[0]) * (a[3] - a[2]) >= (b[1] - b[0]) * (b[3] - b[2]) ? a : b;
+  };
+  /** Box on the stern face clipped to the section; dropped when less than `min` m survives either way. */
+  const faceBox = (mat, x, y, zc, bw, bh, bd, tone, uv, min = 3) => {
+    const f = fit(x - bw / 2, x + bw / 2, y - bh / 2, y + bh / 2);
+    if (!f || f[1] - f[0] < min || f[3] - f[2] < min) return false;
+    batch.box(mat, (f[0] + f[1]) / 2, (f[2] + f[3]) / 2, zc, f[1] - f[0], f[3] - f[2], bd, tone, uv);
+    return true;
+  };
+  // distance along a ray from (x, y) in direction (dx, dy) until it leaves the section (3 m margin)
   const faceLimit = (x, y, dx, dy) => {
-    const lim = (v, lo, hi, d) => (d > 1e-6 ? (hi - v) / d : d < -1e-6 ? (lo - v) / d : Infinity);
-    return Math.min(lim(x, -(w - 6), w - 6, dx), lim(y, botY + 3, topY - 3, dy));
+    if (!inside(x, y, 3)) return 0;
+    let a = 0;
+    let b = 1200;
+    for (let i = 0; i < 40; i++) {
+      const mid = (a + b) / 2;
+      if (inside(x + dx * mid, y + dy * mid, 3)) a = mid;
+      else b = mid;
+    }
+    return a;
   };
   for (const e of all) {
     const main = e.kind === 0;
@@ -87,11 +159,12 @@ export function buildEngines(materials) {
     if (e.kind < 2) {
       for (let k = 0; k < 4; k++) {
         const a = Math.PI / 4 + (k / 4) * Math.PI * 2;
+        const px = e.x + Math.cos(a) * e.r * 1.16;
         const py = e.y + Math.sin(a) * e.r * 1.16;
-        if (py > topY - 4 || py < botY + 4) continue; // would stick out above / below the stern face
+        if (!inside(px, py, e.r * 0.16)) continue; // would stick out past the stern face outline
         const pl = new THREE.BoxGeometry(e.r * 0.28, e.r * 0.12, 22);
         pl.rotateZ(a);
-        pl.translate(e.x + Math.cos(a) * e.r * 1.16, e.y + Math.sin(a) * e.r * 1.16, sternZ + 11);
+        pl.translate(px, py, sternZ + 11);
         batch.add("hullDark", pl, midTone, 0.1);
       }
     }
@@ -175,13 +248,24 @@ export function buildEngines(materials) {
     }
     return ivs.filter(([a, b]) => b - a > 6);
   };
-  for (const y of [-57, -30, 30, 48]) for (const [a, b] of freeSpans(y, -(w - 8), w - 8, true)) batch.box("hullDark", (a + b) / 2, y, sternZ + 1.2, b - a, 2.2, 2.4, frameTone, 0.05);
-  for (const x of [-390, -330, -250, -120, -60, 60, 120, 250, 330, 390]) for (const [a, b] of freeSpans(x, botY + 4, topY - 4, false)) batch.box("hullDark", x, (a + b) / 2, sternZ + 1.2, 2.2, b - a, 2.4, frameTone, 0.05);
-  // lit machinery band along the ventral edge, side blocks at the outer corners
-  batch.box("cityDense", 0, botY + 8.5, sternZ + 4, w * 0.84, 7, 8, darkTone, 0.012);
+  // horizontal beams run out to the bevel at their own height; vertical beams span the section's
+  // height at their own x (so the outer ones are short, following the hexagon)
+  for (const y of [-57, -30, 30, 48]) {
+    const hw = Math.min(secHalfW(y - 1.1), secHalfW(y + 1.1)) - 6;
+    for (const [a, b] of freeSpans(y, -hw, hw, true)) batch.box("hullDark", (a + b) / 2, y, sternZ + 1.2, b - a, 2.2, 2.4, frameTone, 0.05);
+  }
+  for (const x of [-390, -330, -250, -120, -60, 60, 120, 250, 330, 390]) {
+    const xo = Math.abs(x) + 1.1;
+    for (const [a, b] of freeSpans(x, secBot(xo) + 4, secTop(xo) - 4, false)) batch.box("hullDark", x, (a + b) / 2, sternZ + 1.2, 2.2, b - a, 2.4, frameTone, 0.05);
+  }
+  // lit machinery band along the ventral edge, side blocks at the outer corners (sized to the section
+  // height at their outer edge, with a smaller lit block stepping up the bevel inboard of them)
+  faceBox("cityDense", 0, botY + 8.5, sternZ + 4, xvP * 1.26, 7, 8, darkTone, 0.012);
   for (const s of [-1, 1]) {
-    batch.box("cityDense", s * 400, 20, sternZ + 6, 50, 40, 12, midTone, 0.012);
-    batch.box("hullDark", s * 400, 44, sternZ + 4, 30, 8, 8, plateTone, 0.05);
+    faceBox("cityDense", s * 400, 0, sternZ + 6, 40, 34, 12, midTone, 0.012);
+    faceBox("hullDark", s * 400, 0, sternZ + 12.5, 24, 8, 1.2, darkTone, 0.05);
+    faceBox("cityDense", s * 362, 24, sternZ + 5, 26, 14, 10, midTone, 0.012);
+    faceBox("hullDark", s * 372, -34, sternZ + 4, 30, 8, 8, plateTone, 0.05);
     // vertical pipe bundles between the centre and side engines
     for (const dx of [-4, 0, 4]) batch.cyl("hullDark", s * (126 + dx), 6, sternZ + 5, 1.4, 1.4, 88, "y", grey(0.58, 1.0), 10);
     for (const yy of [-30, 12, 44]) batch.box("hullDark", s * 126, yy, sternZ + 5, 11, 2.2, 5, darkTone);
@@ -198,27 +282,32 @@ export function buildEngines(materials) {
   }
   // horizontal conduits along the stern face, under the main engines
   for (const y of [-53, -55]) batch.cyl("hullDark", 0, y, sternZ + 3.5, 1.1, 1.1, 320, "x", grey(0.54, 1.0), 10);
-  // thrust-frame blocks below the inner secondaries, pods along the dorsal / ventral edges, spines
-  // between the engine groups and panel plates inside the frame cells
+  // thrust-frame blocks below the inner secondaries, pods along the dorsal / ventral edges (the dorsal
+  // ones step down the bevel with the section top), spines between the engine groups
+  const occupied = (x, y, pad = 4) => all.some((e) => Math.hypot(x - e.x, y - e.y) < e.r * 1.25 + pad);
   for (const s of [-1, 1]) {
-    batch.box("hullDark", s * 89, -26, sternZ + 4, 44, 20, 8, plateTone, 0.05);
-    batch.box("cityDense", s * 89, -26, sternZ + 8.5, 30, 6, 1.2, darkTone, 0.012);
-    batch.box("hullDark", s * 243, 2, sternZ + 4, 6, 76, 6, midTone, 0.05);
-    for (let k = 0; k < 4; k++) {
-      batch.box("hullDark", s * (250 + k * 44), topY - 11, sternZ + 4, 10 + (k % 2) * 4, 7, 6, k % 2 ? plateTone : darkTone, 0.05);
-      batch.box("hullDark", s * (60 + k * 50), botY + 12.5, sternZ + 4, 12, 6, 6, k % 2 ? darkTone : plateTone, 0.05);
+    faceBox("hullDark", s * 89, -26, sternZ + 4, 44, 20, 8, plateTone, 0.05);
+    faceBox("cityDense", s * 89, -26, sternZ + 8.5, 30, 6, 1.2, darkTone, 0.012);
+    faceBox("hullDark", s * 243, 2, sternZ + 4, 6, 76, 6, midTone, 0.05);
+    for (let k = 0; k < 5; k++) {
+      const px = s * (162 + k * 44);
+      const pw = 10 + (k % 2) * 4;
+      const py = secTop(Math.abs(px) + pw / 2) - 11;
+      if (!occupied(px, py, 6)) faceBox("hullDark", px, py, sternZ + 4, pw, 7, 6, k % 2 ? plateTone : darkTone, 0.05);
+      if (k < 4) faceBox("hullDark", s * (60 + k * 50), botY + 12.5, sternZ + 4, 12, 6, 6, k % 2 ? darkTone : plateTone, 0.05);
     }
     // feed lines from the pipe bundle across to the side main
     for (const yy of [-8, 4, 16]) batch.cyl("hullDark", s * 146, yy, sternZ + 5, 0.8, 0.8, 26, "x", grey(0.56, 1.0), 8);
   }
-  // panel plates inside the frame cells: mostly plate grey with a few dark and a few light ones
-  const occupied = (x, y) => all.some((e) => Math.hypot(x - e.x, y - e.y) < e.r * 1.25 + 4);
-  for (let k = 0; k < 150; k++) {
-    const x = (rand() - 0.5) * 2 * (w - 30);
+  // panel plates inside the frame cells: mostly plate grey with a few dark and a few light ones,
+  // only where the whole plate fits inside the section
+  for (let k = 0; k < 170; k++) {
+    const x = (rand() - 0.5) * 2 * (tx - 20);
     const y = botY + 8 + rand() * (topY - botY - 16);
     if (occupied(x, y)) continue;
     const bw = 4 + rand() * 9;
     const bh = 2.5 + rand() * 6;
+    if (!inside(x - bw / 2, y - bh / 2, 3) || !inside(x + bw / 2, y - bh / 2, 3) || !inside(x - bw / 2, y + bh / 2, 3) || !inside(x + bw / 2, y + bh / 2, 3)) continue;
     const t = rand();
     batch.box("hullDark", x, y, sternZ + 0.9, bw, bh, 1.8, t < 0.14 ? grey(0.2, 1.04) : t < 0.5 ? midTone : t < 0.85 ? plateTone : grey(0.72, 1.0), 0.05);
     greebles++;

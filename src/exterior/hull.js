@@ -285,23 +285,26 @@ export function regionTone(x, z, side, isPlateau, u) {
 }
 
 /**
- * Heat discolouration 0..1 at (x, z): the last ~60 m of both plateaus aft of the engine block, and a
- * scorched ring around the reactor collar on the ventral plateau. Noisy so it reads as blotches.
+ * Heat discolouration 0..1 at (x, z): blotches over the last ~45 m of both plateaus directly aft of
+ * the engine bells (the outer corners stay clean), and a scorched ring around the reactor collar on
+ * the ventral plateau. Thresholded noise, so it reads as separate scorch patches, not a tinted band.
  */
 export function heatAt(x, z, side, isPlateau) {
-  let h = smoothstep(688, 752, z) * (0.5 + 0.5 * vnoise((z + 800) / 300, (x + 500) / 300, 9, 91));
+  const band = smoothstep(708, 752, z) * smoothstep(330, 240, Math.abs(x));
+  const n = vnoise2((z + 800) / 1600, (x + 500) / 1000, 64, 40, 91); // ~25 m cells
+  let h = band * smoothstep(0.34, 0.74, n);
   if (side < 0 && isPlateau) {
     const d = Math.hypot(x - REACTOR.x, z - REACTOR.z);
-    h = Math.max(h, (1 - smoothstep(REACTOR.r * 0.85, REACTOR.r * 1.6, d)) * (0.45 + 0.55 * vnoise((z + 800) / 140, (x + 500) / 140, 11, 93)));
+    h = Math.max(h, (1 - smoothstep(REACTOR.r * 0.85, REACTOR.r * 1.45, d)) * smoothstep(0.3, 0.75, vnoise2((z + 800) / 1600, (x + 500) / 1000, 100, 64, 93)));
   }
   return h;
 }
 
-/** Plate paint colour from a grey tone k: warm-dark scorch where heatAt() says so. */
+/** Plate paint colour from a grey tone k: dark, slightly warm scorch where heatAt() says so. */
 export function plateColor(x, z, side, isPlateau, k) {
   const h = heatAt(x, z, side, isPlateau);
   if (h <= 0) return grey(k, 1.02);
-  return [k * (1 - 0.2 * h), k * (1 - 0.3 * h), k * 1.02 * (1 - 0.42 * h)];
+  return [k * (1 - 0.34 * h), k * (1 - 0.39 * h), k * 1.02 * (1 - 0.46 * h)];
 }
 
 /**
