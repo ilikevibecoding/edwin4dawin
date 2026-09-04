@@ -1,15 +1,15 @@
 // Main Reactor Chamber (deck D): the showpiece. A 7 m radius reactor column rises from a dark pit
-// (y = -6, coolant pools glowing cyan) through the chamber to the 30 m ceiling: stacked armour bands,
+// (y = -6, coolant pools glowing a deep ember) through the chamber to the 30 m ceiling: stacked armour bands,
 // slotted plate sections with the white-hot core showing through the slots, pulsing containment rings,
 // a conduit collar with eight energy conduits radiating to junction blocks on the walls. The walkable
 // deck at y = 0 is the entrance bridge from the N blast door and the main catwalk ring around the
 // column; everything else at that level is grating (0.6 m lower) over the pit. Two switchback stair
 // towers (E / W) climb to the upper catwalk ring at y = 9 with control alcoves N / S. Wall buttresses
-// with recessed slots, huge stencils, blinking warning lamps.
-// Light hierarchy: the column core is the only strong warm emissive and the key light; everything
-// else (handrail LEDs, pillar slots, buttress slots, conduit tracers, the coolant pit) is a dim
-// practical at roughly a fifth of the kit's emitters, so the chamber reads as a dark void with one
-// glowing source.
+// with one recessed slit each, huge stencils, blinking warning lamps.
+// Palette discipline: two accents only. The core's warm white (and the amber-low practicals that are
+// its dim relatives: handrail LEDs, slits, conduit tracers, the coolant pit) and yellow/black hazard
+// tape; the walls are uniform dark-grey panels so the chamber reads as a dark void with one glowing
+// source. No blue, no red edging, no cyan.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impConsole, impChair, impRailing, wallFrame, lux } from "./imperial_kit.js";
@@ -18,20 +18,18 @@ import { rng, panelWithHoles, insideOut } from "../kit.js";
 import { ensureDeckDMaterials, shellNoFloor, grateQuad, pipe, pipePath, gauge, junctionBox, screenBank, decalImp, decalD, DECK_D_DECAL, wallU, pulseRings, blinkerField, ringDeck, ringRail, solidStairs, catwalk, assembly, valveWheel, cable, hexBolt } from "./deck_d_kit.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
-// practical emitters (all ~20% of the kit's full emitters)
+// practical emitters (all ~20% of the kit's full emitters), one family: the core's warm white and amber
 const RAIL = "roomsd_amberLow"; // handrail LED strips
-const RAIL_IN = "emitRedDim"; // inner (column-side) rails: red warning edge
-const SLOT = "roomsd_slot"; // recessed white slots (buttresses, landing lamps, beam downlights)
-const TRACER = "roomsd_blueLow"; // coolant / conduit tracer lines
-const WARM = RAIL; // dim warm accents on the column plates (same mesh as the rail LEDs)
+const SLOT = "roomsd_warmLow"; // recessed warm slits (buttresses, landing lamps, beam downlights)
+const TRACER = RAIL; // coolant / conduit tracer lines (same mesh as the rail LEDs)
+const WARM = RAIL; // dim warm accents on the column plates
 
 export function buildReactor(kit, ctx, room) {
   const [w, h, d] = room.size;
   const hx = w / 2;
   const hz = d / 2;
   const hot = 0xfff0c0;
-  const cyan = 0x7fd8ff;
-  const pool = 0x3a7fb0; // coolant pool glow tint (additive planes): deep, not neon
+  const pool = 0x5a3c14; // coolant pool glow tint (additive planes): a deep ember under the grating, not neon
   ensureDeckDMaterials(kit);
   const rand = rng(9901);
   const yG = -0.6; // grating level
@@ -42,12 +40,14 @@ export function buildReactor(kit, ctx, room) {
   const R2_IN = 8.7;
   const R2_OUT = 10.6;
 
-  // --- shell: 30 m walls cut into 5 m bands, dark ceiling; the deck below is all ours. No "light"
-  // feature cells: the walls carry only equipment LEDs; the buttress slots below are the wall practicals.
+  // --- shell: 30 m walls cut into 5 m bands, dark ceiling; the deck below is all ours. Uniform
+  // dark-grey panels (no alternate tone: the old grey / dark-grey mix read as a checkerboard), no
+  // "light" or "screen" cells and no cornice channel: the walls carry only sparse equipment LEDs; the
+  // buttress slits below are the wall practicals.
   const walls = shellNoFloor(kit, room, ctx.doors, {
     accentKey: "emitAmberDim",
     seed: 5150,
-    wall: { panelW: 2.5, kickH: 0.9, corniceH: 1.3, bands: [5, 10, 15, 20, 25], features: { vent: 0.12, equipment: 0.05, conduit: 0.1, light: 0.0, screen: 0.02 }, altChance: 0.3, panelColor: PALETTE.impGrey, panelColorAlt: PALETTE.impGreyDark },
+    wall: { panelW: 2.5, kickH: 0.9, corniceH: 1.3, bands: [5, 10, 15, 20, 25], features: { vent: 0.12, equipment: 0.04, conduit: 0.1, light: 0.0, screen: 0.0 }, altChance: 0, panelColor: PALETTE.impGreyDark, panelColorAlt: PALETTE.impGreyDark, corniceLight: false },
     ceiling: { troughs: 2, troughW: 0.9, beamStep: 6, withLights: false, dark: PALETTE.impBlack },
   });
 
@@ -89,13 +89,8 @@ export function buildReactor(kit, ctx, room) {
     const a = (i / 12) * Math.PI * 2;
     kit.add("roomsd_glow", new THREE.PlaneGeometry(3.5, 3.5), { pos: [Math.cos(a) * 8.9, yP + 0.02, Math.sin(a) * 8.9], rot: [-Math.PI / 2, 0, 0], color: pool, uv: "keep" });
   }
-  // dashed guide ring on the pit floor at r = 20 (between the mains)
-  for (let i = 0; i < 48; i++) {
-    const a = (i / 48) * Math.PI * 2;
-    if (i % 6 === 0) continue;
-    kit.add(TRACER, new THREE.BoxGeometry(1.2, 0.03, 0.1), { pos: [Math.cos(a) * 20, yP + 0.02, Math.sin(a) * 20], rot: [0, -a, 0] });
-  }
-  // slow coolant pulses in the pit: below the bloom threshold, a breathing glow under the grating
+  // slow coolant pulses in the pit: below the bloom threshold, a breathing ember glow under the grating
+  // (the core's own warm white, so the pit is the same source seen from below, not a second colour)
   pulseRings(
     kit,
     [
@@ -103,7 +98,7 @@ export function buildReactor(kit, ctx, room) {
       { pos: [0, yP + 0.25, 0], axis: "y", R: 10.4, tube: 0.1, phase: 1.2 },
       { pos: [0, -1.0, 0], axis: "y", R: 7.75, tube: 0.1, phase: 2.4 },
     ],
-    { color: cyan, intensity: 0.9, speed: 0.7, floor: 0.35, segments: [8, 96] },
+    { color: hot, intensity: 0.7, speed: 0.7, floor: 0.35, segments: [8, 96] },
   );
 
   // --- grating at y = -0.6 everywhere outside the main ring
@@ -118,7 +113,7 @@ export function buildReactor(kit, ctx, room) {
   }
 
   // --- the column
-  reactorColumn(kit, { yP, h, hot, cyan });
+  reactorColumn(kit, { yP, h, hot });
 
   // --- main catwalk ring at y = 0 and the entrance bridge from the N door
   ringDeck(kit, "impDeck", R_IN, R_OUT, 0, { segments: 96, color: PALETTE.impGrey, texel: 0.5 });
@@ -126,22 +121,22 @@ export function buildReactor(kit, ctx, room) {
   kit.add("impTrim", insideOut(new THREE.CylinderGeometry(R_IN, R_IN, 0.7, 96, 1, true)), { pos: [0, -0.35, 0], color: PALETTE.impBlack, uv: "scale", uvScale: [30, 1] });
   ringDeck(kit, "impTrim", R_IN, R_OUT, -0.7, { segments: 96, faceDown: true, color: PALETTE.impBlack });
   ringDeck(kit, "chevronY", R_OUT - 0.5, R_OUT - 0.1, 0.006, { segments: 96, texel: 1.2 });
-  ringDeck(kit, "chevronR", R_IN + 0.1, R_IN + 0.5, 0.006, { segments: 96, texel: 1.2 });
-  ringDeck(kit, "impMetalRough", R_IN + 1.3, R_OUT - 1.3, 0.008, { segments: 96, color: PALETTE.impGreyDark, texel: 0.7 });
-  // radial deck seams + floor stencils
+  ringDeck(kit, "chevronY", R_IN + 0.1, R_IN + 0.5, 0.006, { segments: 96, texel: 1.2 });
+  // radial deck seams + floor stencils (plain tile between the hazard edges: no dark lane)
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * Math.PI * 2;
     kit.add("impTrim", new THREE.BoxGeometry(R_OUT - R_IN - 0.3, 0.012, 0.05), { pos: [Math.cos(a) * (R_IN + R_OUT) / 2, 0.004, Math.sin(a) * (R_IN + R_OUT) / 2], rot: [0, -a, 0], color: PALETTE.impBlack });
   }
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    decalImp(kit, [IMP_DECAL.hazard, IMP_DECAL.restricted, IMP_DECAL.power, IMP_DECAL.glyphs3][i], [Math.cos(a) * 10.4, 0.016, Math.sin(a) * 10.4], "up", 1.2, { spin: -a - Math.PI / 2 });
+    decalImp(kit, [IMP_DECAL.hazard, IMP_DECAL.keepClear, IMP_DECAL.power, IMP_DECAL.glyphs1][i], [Math.cos(a) * 10.4, 0.016, Math.sin(a) * 10.4], "up", 1.2, { spin: -a - Math.PI / 2 });
   }
   const stairGapLo = [-0.12, 0.32];
   const stairGapLoW = [Math.PI - 0.32, -(Math.PI - 0.12)];
   const entryGap = [-Math.PI / 2 - 0.2, -Math.PI / 2 + 0.2];
   ringRail(kit, R_OUT - 0.15, 0, { segments: 96, gaps: [entryGap, stairGapLo, stairGapLoW], light: RAIL });
-  ringRail(kit, R_IN + 0.15, 0, { segments: 80, gaps: [], light: RAIL_IN });
+  // inner (column-side) rail: dark, the yellow deck edge under it is the warning (no red edging)
+  ringRail(kit, R_IN + 0.15, 0, { segments: 80, gaps: [] });
   // entrance bridge (slab top 1.5 cm under the ring deck where the two overlap)
   {
     const z0 = -hz;
@@ -155,21 +150,23 @@ export function buildReactor(kit, ctx, room) {
       // scanner posts by the door
       kit.box("impTrim", s * 1.8, 0.7, z0 + 1.6, 0.3, 1.4, 0.3, { color: PALETTE.impBlack, texel: 1 });
       kit.box("impMetal", s * 1.8, 1.42, z0 + 1.6, 0.34, 0.06, 0.34, { color: PALETTE.impCharcoal });
-      kit.box("emitRedImp", s * 1.8 - s * 0.16, 1.1, z0 + 1.6, 0.012, 0.06, 0.16);
+      kit.box("emitAmberDim", s * 1.8 - s * 0.16, 1.1, z0 + 1.6, 0.012, 0.06, 0.16);
       kit.box("emitWhiteDim", s * 1.8, 1.1, z0 + 1.76, 0.16, 0.04, 0.012);
       kit.collider([s * 1.8 - 0.17, 0, z0 + 1.43], [s * 1.8 + 0.17, 1.5, z0 + 1.77], "scanner");
     }
-    kit.boxMM("impMetalRough", [-1.0, -0.003, z0 + 0.4], [1.0, 0.012, z1 - 0.2], { color: PALETTE.impGreyDark, texel: 0.7 });
+    // plain tile down the bridge (the dark lane is gone): stencils on the centreline, wear only at the
+    // edges where the deck meets the ring and by the scanner posts
     decalImp(kit, IMP_DECAL.arrowUp, [0, 0.016, -25.5], "up", 1.6, { spin: Math.PI });
-    decalImp(kit, IMP_DECAL.restricted, [0, 0.016, -21.0], "up", 1.6);
+    decalImp(kit, IMP_DECAL.keepClear, [0, 0.016, -21.0], "up", 1.6);
     decalImp(kit, IMP_DECAL.power, [0, 0.016, -16.5], "up", 1.6);
-    decalD(kit, DECK_D_DECAL.grime, [1.2, 0.018, -13.5], "up", 1.6);
+    decalD(kit, DECK_D_DECAL.grime, [1.4, 0.018, -12.6], "up", 3.0, { spin: 0.6 });
+    decalD(kit, DECK_D_DECAL.grime, [-1.5, 0.018, z0 + 2.4], "up", 2.6, { spin: 2.2 });
     // overhead sign frame at the bridge start (readable from both sides)
     kit.box("impTrim", 0, 4.6, z0 + 3.0, 5.0, 0.6, 0.2, { color: PALETTE.impBlack, texel: 1 });
     for (const s of [-1, 1]) kit.box("impTrim", s * 2.4, (yG + 4.6) / 2, z0 + 3.0, 0.16, 4.6 - yG, 0.16, { color: PALETTE.impBlack });
-    kit.add("scrRed0", new THREE.PlaneGeometry(4.4, 0.4), { pos: [0, 4.6, z0 + 3.11], uv: "keep" });
-    kit.add("scrRed0", new THREE.PlaneGeometry(4.4, 0.4), { pos: [0, 4.6, z0 + 2.89], rot: [0, Math.PI, 0], uv: "keep" });
-    kit.box("emitRedDim", 0, 4.95, z0 + 3.0, 4.6, 0.04, 0.22);
+    kit.add("scrAmber0", new THREE.PlaneGeometry(4.4, 0.4), { pos: [0, 4.6, z0 + 3.11], uv: "keep" });
+    kit.add("scrAmber0", new THREE.PlaneGeometry(4.4, 0.4), { pos: [0, 4.6, z0 + 2.89], rot: [0, Math.PI, 0], uv: "keep" });
+    kit.box("emitAmberDim", 0, 4.95, z0 + 3.0, 4.6, 0.04, 0.22);
     for (const s of [-1, 1]) kit.collider([s * 2.4 - 0.1, 0, z0 + 2.9], [s * 2.4 + 0.1, 4.6, z0 + 3.1], "signPost");
   }
 
@@ -185,7 +182,7 @@ export function buildReactor(kit, ctx, room) {
   const alcoveN = [-Math.PI / 2 - 0.27, -Math.PI / 2 + 0.27];
   const alcoveS = [Math.PI / 2 - 0.27, Math.PI / 2 + 0.27];
   ringRail(kit, R2_OUT - 0.15, Y2, { segments: 88, gaps: [stairGapHi, stairGapHiW, alcoveN, alcoveS], light: RAIL });
-  ringRail(kit, R2_IN + 0.15, Y2, { segments: 72, gaps: [], light: RAIL_IN, kick: "chevronR" });
+  ringRail(kit, R2_IN + 0.15, Y2, { segments: 72, gaps: [], kick: "chevronY" });
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     const cx = Math.cos(a) * 9.65;
@@ -266,25 +263,27 @@ export function buildReactor(kit, ctx, room) {
       const u = L / 2 + off;
       f.box("impTrim", u, (yP + 28.7) / 2, 0.7, 2.4, 28.7 - yP, 1.4, { color: PALETTE.impBlack, texel: 0.5 });
       f.box("impMetal", u, 0.2, 0.72, 2.6, 0.5, 1.5, { color: PALETTE.impCharcoal, texel: 1 });
-      // recessed slot: one dim fixture per band between the collar rings, in a black channel
+      // recessed channel with ONE dim slit per buttress (the band alternates along the wall, so the
+      // slits are sparse and staggered rather than a lit grid); the other bands stay black
       f.box("impTrim", u, 14.5, 1.405, 0.36, 22, 0.02, { color: PALETTE.impCharcoal });
-      for (const [v0, v1] of [[4.6, 11.7], [12.9, 19.9], [21.1, 27.4]]) {
+      const litBand = (k + (side === "E" || side === "W" ? 1 : 0)) % 3;
+      for (const [bi, [v0, v1]] of [[4.6, 11.7], [12.9, 19.9], [21.1, 27.4]].entries()) {
         f.box("impTrim", u, (v0 + v1) / 2, 1.41, 0.2, v1 - v0, 0.03, { color: PALETTE.impBlack });
-        f.box(SLOT, u, (v0 + v1) / 2, 1.425, 0.09, v1 - v0 - 0.3, 0.012, { uv: "keep" });
+        if (bi === litBand) f.box(SLOT, u, (v0 + v1) / 2, 1.425, 0.07, v1 - v0 - 0.3, 0.012, { uv: "keep" });
       }
       for (const v of [4.0, 12.3, 20.5]) f.box("impMetal", u, v, 0.72, 2.6, 0.5, 1.5, { color: PALETTE.impCharcoal, texel: 1 });
       f.decal([IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03, IMP_DECAL.cog][k], u, 7.0, 1.42, 1.8);
-      f.box("chevronR", u, 1.3, 1.41, 2.0, 0.3, 0.012, { texel: 2 });
+      f.box("chevronY", u, 1.3, 1.41, 2.0, 0.3, 0.012, { texel: 2 });
       const lp = f.pos(u, 3.6, 1.52);
       f.box("impTrim", u, 3.6, 1.46, 0.3, 0.3, 0.12, { color: PALETTE.impBlack });
-      lamps.push({ pos: [lp.x, lp.y, lp.z], size: [0.14, 0.14, 0.14], color: 0xff3b2e, period: 1.4 + k * 0.15, duty: 0.45, phase: k * 0.35 + (side === "N" ? 0.2 : 0) });
+      lamps.push({ pos: [lp.x, lp.y, lp.z], size: [0.14, 0.14, 0.14], color: 0xffb040, period: 1.4 + k * 0.15, duty: 0.45, phase: k * 0.35 + (side === "N" ? 0.2 : 0) });
       f.collider(u - 1.3, u + 1.3, 0, 28.7, 0, 1.5, "buttress");
     }
     // huge stencilled numbers between the buttresses, hazard tags low
-    f.decal([IMP_DECAL.glyphs1, IMP_DECAL.glyphs2, IMP_DECAL.glyphs3, IMP_DECAL.cog][side.charCodeAt(0) % 4], L / 2 - 14.5, 17, 0.04, 6);
+    f.decal([IMP_DECAL.glyphs1, IMP_DECAL.glyphs2, IMP_DECAL.glyphs1, IMP_DECAL.cog][side.charCodeAt(0) % 4], L / 2 - 14.5, 17, 0.04, 6);
     f.decal([IMP_DECAL.bay03, IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.glyphs2][side.charCodeAt(0) % 4], L / 2 + 14.5, 17, 0.04, 6);
     if (side !== "N") f.decal(IMP_DECAL.hazard, L / 2, 3.2, 0.04, 2.4);
-    f.decal(IMP_DECAL.restricted, L / 2 - 26.5, 3.4, 0.04, 2.2);
+    f.decal(IMP_DECAL.hazard, L / 2 - 26.5, 3.4, 0.04, 2.2);
     f.decal(IMP_DECAL.keepClear, L / 2 + 26.5, 3.4, 0.04, 2.2);
     junctionBox(f, L / 2 - 4.5, 2.6, 1.2, 1.4, { seed: 300 + side.charCodeAt(0), accentKey: "emitAmberDim" });
     junctionBox(f, L / 2 + 4.5, 2.6, 1.2, 1.4, { seed: 310 + side.charCodeAt(0), accentKey: TRACER });
@@ -322,21 +321,21 @@ export function buildReactor(kit, ctx, room) {
   kit.add("impTrim", new THREE.TorusGeometry(9.0, 0.5, 8, 64), { pos: [0, h - 0.5, 0], rot: [Math.PI / 2, 0, 0], color: PALETTE.impBlack, uv: "scale", uvScale: [40, 1] });
 
   // --- lights: the column is the key (white-hot at y 6.5 and 16); everything else is weak so the
-  // walls fall away into the dark: faint cool fills in the quadrants, a low warm entrance light, a
-  // deep blue pit light under the grating
+  // walls fall away into the dark: faint neutral fills in the quadrants (the same warm white, far
+  // dimmer), a low warm entrance light, an ember pit light under the grating
   kit.light({ type: "point", pos: [0, 6.5, 0], color: hot, intensity: lux(12, 2.6), distance: 52, priority: 0.95 });
   kit.light({ type: "point", pos: [0, 16, 0], color: hot, intensity: lux(14, 2.2), distance: 58, priority: 0.9 });
-  kit.light({ type: "point", pos: [-17, 13, -17], color: 0x9fb2d0, intensity: lux(13, 0.62), distance: 36, priority: 0.62 });
-  kit.light({ type: "point", pos: [17, 13, -17], color: 0x9fb2d0, intensity: lux(13, 0.62), distance: 36, priority: 0.61 });
-  kit.light({ type: "point", pos: [-17, 13, 17], color: 0x9fb2d0, intensity: lux(13, 0.62), distance: 36, priority: 0.6 });
-  kit.light({ type: "point", pos: [17, 13, 17], color: 0x9fb2d0, intensity: lux(13, 0.62), distance: 36, priority: 0.59 });
-  kit.light({ type: "point", pos: [0, 5.5, -23], color: 0xfff4e0, intensity: lux(5.5, 2.0), distance: 20, priority: 0.7 });
-  kit.light({ type: "point", pos: [0, -2.6, 0], color: 0x3f8fd0, intensity: lux(10, 0.9), distance: 40, priority: 0.5 });
+  kit.light({ type: "point", pos: [-17, 13, -17], color: 0xd8cdbc, intensity: lux(13, 0.7), distance: 36, priority: 0.62 });
+  kit.light({ type: "point", pos: [17, 13, -17], color: 0xd8cdbc, intensity: lux(13, 0.7), distance: 36, priority: 0.61 });
+  kit.light({ type: "point", pos: [-17, 13, 17], color: 0xd8cdbc, intensity: lux(13, 0.7), distance: 36, priority: 0.6 });
+  kit.light({ type: "point", pos: [17, 13, 17], color: 0xd8cdbc, intensity: lux(13, 0.7), distance: 36, priority: 0.59 });
+  kit.light({ type: "point", pos: [0, 5.5, -23], color: 0xfff4e0, intensity: lux(5.5, 2.3), distance: 20, priority: 0.7 });
+  kit.light({ type: "point", pos: [0, -2.6, 0], color: 0xd08a3f, intensity: lux(10, 0.8), distance: 40, priority: 0.5 });
 }
 
 // ---------------------------------------------------------------------------
 /** The reactor column: base in the pit, stacked bands / slotted plate sections / containment rings, core, flare. */
-function reactorColumn(kit, { yP, h, hot, cyan }) {
+function reactorColumn(kit, { yP, h, hot }) {
   const RC = 7.2;
   // base and lower shaft
   kit.cyl("impTrim", 0, (yP - 2.0) / 2, 0, 8.0, -2.0 - yP, "y", { color: PALETTE.impCharcoal, segments: 64, texel: 0.3 });
@@ -418,12 +417,11 @@ function reactorColumn(kit, { yP, h, hot, cyan }) {
   // flare + top collar
   kit.cyl("impTrim", 0, h - 0.5, 0, RC, 1.0, "y", { color: PALETTE.impBlack, segments: 64, r2: 8.5, texel: 0.5 });
   kit.cyl("impMetal", 0, h - 0.15, 0, 8.7, 0.3, "y", { color: PALETTE.impCharcoal, segments: 64 });
-  // containment rings: thin hot lines in the dark bands between the tiers, breathing just across the
-  // bloom threshold at their peak (same warm as the core: still one glowing source, not cream hoops)
-  pulseRings(kit, rings, { color: hot, intensity: 1.35, speed: 0.8, floor: 0.25, segments: [10, 96] });
+  // containment rings: thin warm lines in the dark bands between the tiers, breathing well under the
+  // bloom threshold (half the old peak: the core is the one strong emissive, the rings only mark the tiers)
+  pulseRings(kit, rings, { color: hot, intensity: 0.68, speed: 0.8, floor: 0.25, segments: [10, 96] });
   // unreachable, but a collider for the shaft anyway (well inside the inner railing)
   kit.collider([-5, -2, -5], [5, h, 5], "column");
-  void cyan;
 }
 
 /** Switchback stair tower on the E (s = 1) or W (s = -1) side: foot platform, two runs, landings, posts. */
@@ -502,11 +500,12 @@ function controlAlcove(kit, sz, { yG, Y2, rand, holo = false }) {
   const B = bf.frame;
   B.box("impTrim", 2.8, 1.25, -0.12, 5.6, 2.5, 0.24, { color: PALETTE.impBlack, texel: 1 });
   B.box("impMetal", 2.8, 1.25, 0.006, 5.4, 2.3, 0.012, { color: PALETTE.impCharcoal, texel: 1.5 });
-  // N alcove: white/blue telemetry (layouts 0–2); S alcove: amber/white diagnostics (layouts 0–2).
-  // Every distinct screen key is one more mesh in the cell, so the room draws from seven keys in total.
-  const bankKeys = sz > 0 ? ["scrAmber0", "scrWhite2", "scrAmber1", "scrWhite2"] : ["scrWhite1", "scrBlue2", "scrWhite1", "scrBlue0"];
+  // N alcove: white telemetry (layouts 1, 3); S alcove: amber/white diagnostics (layouts 0–2). Warm
+  // and white only (no blue screens in a room whose palette is core-white + amber + yellow). Every
+  // distinct screen key is one more mesh in the cell, so the room draws from six keys in total.
+  const bankKeys = sz > 0 ? ["scrAmber0", "scrWhite2", "scrAmber1", "scrWhite2"] : ["scrWhite1", "scrWhite3", "scrWhite1", "scrAmber2"];
   screenBank(B, 0.4, 1.0, 4, 2, 1.1, 0.55, 0.08, bankKeys, { seed: 400 + sz });
-  B.screen("scrRed0", 2.8, 0.7, 0.03, 4.4, 0.46);
+  B.screen("scrAmber3", 2.8, 0.7, 0.03, 4.4, 0.46);
   // recessed dim cornice slot over the screen wall, in a black channel
   B.box("impTrim", 2.8, 2.42, 0.02, 5.2, 0.1, 0.03, { color: PALETTE.impBlack });
   B.box(SLOT, 2.8, 2.42, 0.036, 5.0, 0.04, 0.012, { uv: "keep" });
@@ -517,7 +516,7 @@ function controlAlcove(kit, sz, { yG, Y2, rand, holo = false }) {
   const yaw = sz > 0 ? 0 : Math.PI;
   const cz = zInner + sz * 2.6;
   for (const s of [-1, 1]) {
-    const scr = sz > 0 ? (s < 0 ? ["scrAmber1", "scrWhite2", "scrAmber0"] : ["scrWhite2", "scrAmber0", "scrRed0"]) : s < 0 ? ["scrBlue0", "scrWhite1", "scrBlue2"] : ["scrWhite1", "scrBlue2", "scrBlue0"];
+    const scr = sz > 0 ? (s < 0 ? ["scrAmber1", "scrWhite2", "scrAmber0"] : ["scrWhite2", "scrAmber0", "scrAmber3"]) : s < 0 ? ["scrWhite3", "scrWhite1", "scrAmber2"] : ["scrWhite1", "scrAmber2", "scrWhite3"];
     impConsole(kit, s * 1.45, yD, cz, 2.3, 0.9, { yaw, seed: 410 + s + sz * 3, screens: scr, accentKey: "emitWhiteDim" });
     impChair(kit, s * 1.45, yD, cz + sz * 1.0, yaw);
   }

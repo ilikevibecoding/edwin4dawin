@@ -3,7 +3,8 @@
 // under a menu board, and behind the half-height counter the galley annex: range with amber hotplates,
 // louvred extractor hood with ducts, pot rack, prep island, sinks, walk-in cooler with frost and blue light,
 // drink dispensers, pale-grey tiled galley deck. Glyph-stencilled pillars and cog roundels keep it Imperial.
-// Amber accent: cool white keys, amber slots / kick strips / hood lamps as the accent, blue cooler spill.
+// Amber accent: cool white keys, amber slots / screens / hood lamps as the accent, blue cooler spill. No lit
+// strips under tables or counters (a mess, not a restaurant); the queue line from the door is a thin grey stripe.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRoomShell, impWallGear } from "./imperial_kit.js";
@@ -61,8 +62,9 @@ export function buildMessHall(kit, ctx, room) {
   kit.boxMM("impPanel2", [-hx + 0.3, 0, -hz + 0.3], [hx - 0.3, 0.012, zCounter + 0.5], { color: 0xc9cdd3, texel: 1 / 0.3 });
   kit.boxMM("impTrim", [-hx + 0.3, 0, zCounter + 0.5], [hx - 0.3, 0.014, zCounter + 0.56], { color: PALETTE.impBlack });
   // serving line: x -12..4, staff gap 4..6, drinks counter 6.5..15.5 — black shell, dark grey front, grey top
-  counter(kit, -4, zCounter, 0, 16, { accentKey, top: steel, front: PALETTE.impGreyDark, tag: "serving" });
-  counter(kit, 11, zCounter, 0, 9, { accentKey, top: steel, front: PALETTE.impGreyDark, tag: "drinks" });
+  // (no lit kick strips under the counters or tables: the amber lives in the slots, screens and signage)
+  counter(kit, -4, zCounter, 0, 16, { accentKey, top: steel, front: PALETTE.impGreyDark, tag: "serving", kickLight: false });
+  counter(kit, 11, zCounter, 0, 9, { accentKey, top: steel, front: PALETTE.impGreyDark, tag: "drinks", kickLight: false });
   // cog roundel + glyph strips stencilled on the serving front
   kit.add("decalImp", new THREE.PlaneGeometry(0.5, 0.5), { pos: [-4, 0.55, zCounter + 0.38], uv: "keep", uvRect: impDecalRect(IMP_DECAL.cog) });
   kit.add("decalImp", new THREE.PlaneGeometry(0.44, 0.3), { pos: [-9, 0.55, zCounter + 0.38], uv: "keep", uvRect: impDecalRect(IMP_DECAL.glyphs2) });
@@ -106,7 +108,8 @@ export function buildMessHall(kit, ctx, room) {
   kit.box("impPanel1", 5.0, 0.6, zCounter, 1.7, 0.7, 0.03, { color: PALETTE.impGreyDark, uv: "world", texel: 1 });
   kit.box("chevronY", 5.0, 0.62, zCounter + 0.02, 1.6, 0.08, 0.01, { texel: 3 });
   kit.collider([4.05, 0, zCounter - 0.05], [5.95, 1.1, zCounter + 0.05], "gate");
-  floorStripe(kit, 5.0, zCounter - 0.9, 5.0, zCounter + 0.9, 1.8, "chevronY");
+  // staff-only threshold: one narrow chevron strip across the gate (not a hazard mat)
+  floorStripe(kit, 4.15, zCounter + 0.7, 5.85, zCounter + 0.7, 0.18, "chevronY");
 
   // ---------------------------------------------------------------- galley: range + hood + ducts
   {
@@ -236,7 +239,6 @@ export function buildMessHall(kit, ctx, room) {
     p.box("impMetal", 0, 0.92, 0, 4.06, 0.04, 1.06, { color: steel, texel: 1 });
     p.box("impMetal", 0, 0.3, 0, 3.8, 0.04, 0.9, { color: PALETTE.impGreyDark });
     for (const sx of [-1.7, 1.7]) for (const sz of [-0.4, 0.4]) p.box("impMetal", sx, 0.44, sz, 0.08, 0.86, 0.08, { color: PALETTE.impGreyDark });
-    p.box(accentKey, 0, 0.1, 0.51, 3.6, 0.02, 0.01);
     // boards, containers, a knife block
     p.box("impPanel1", -1.2, 0.955, 0.1, 0.6, 0.03, 0.4, { color: PALETTE.impWhite, uv: "world", texel: 2 });
     for (let k = 0; k < 4; k++) p.cyl("impPanel1", -0.2 + k * 0.32, 1.02, -0.25, 0.1, 0.16, "y", { color: k % 2 ? PALETTE.impGrey : PALETTE.impWhite, segments: 12 });
@@ -331,7 +333,7 @@ export function buildMessHall(kit, ctx, room) {
   let ti = 0;
   for (const z of rows) {
     for (const x of cols) {
-      longTable(kit, x, z, 6.0, 0, { accentKey, items: 5 + (ti % 3), seed: 31 + ti, topColor: PALETTE.impGrey });
+      longTable(kit, x, z, 6.0, 0, { accentKey, items: 5 + (ti % 3), seed: 31 + ti, topColor: PALETTE.impGrey, legLight: false });
       // two slots per table, offset off the ceiling beam line at |z| = 4 and the trough at x = ±8.5
       const sx = x > 8 ? 10.6 : x;
       for (const dz of [-0.55, 0.55]) slotLight(kit, sx, z + dz, h, 3.2, "x", "emitAmberDim", { w: 0.34, bar: 0.1 });
@@ -340,9 +342,9 @@ export function buildMessHall(kit, ctx, room) {
   }
   stencilPillar(kit, -1.25, -7.0, h, accentKey);
   stencilPillar(kit, -1.25, 7.6, h, accentKey);
-  // floor arrows from the door to the serving line
-  floorStripe(kit, -14.5, 0.9, -14.5, -6.6, 0.22, "chevronY");
-  for (let z = -1.0; z > -6.4; z -= 1.8) floorStripe(kit, -14.5, z, -14.5, z - 0.8, 0.5, "chevronY");
+  // queue guide from the door to the serving line: a thin painted grey line with a glyph stencil at the head
+  kit.box("impPanel1", -14.5, 0.006, -3.0, 0.05, 0.012, 8.0, { color: 0x6a6f77, uv: "world", texel: 1 });
+  kit.add("decalImp", new THREE.PlaneGeometry(0.5, 0.5).rotateX(-Math.PI / 2), { pos: [-14.5, 0.013, -7.3], uv: "keep", uvRect: impDecalRect(IMP_DECAL.arrowUp) });
 
   // ---------------------------------------------------------------- south zone: tray return, standing tables, insignia
   {
@@ -359,7 +361,6 @@ export function buildMessHall(kit, ctx, room) {
       p.box("impMetal", tx, 0.97, 0, 0.42, 0.025, 0.3, { color: steel });
       p.cyl("impMetal", tx + 0.12, 1.02, 0.06, 0.035, 0.09, "y", { color: PALETTE.impGreyDark, segments: 8 });
     }
-    p.box(accentKey, 0, 0.1, 0.51, 4.6, 0.02, 0.01);
     // slot into the wall (dark opening with a lit lintel)
     S.box("impTrim", hx + 1, 1.3, 0.08, 5.2, 0.9, 0.16, { color: PALETTE.impBlack, texel: 1 });
     S.box("impGloss", hx + 1, 1.25, 0.165, 4.7, 0.62, 0.01);

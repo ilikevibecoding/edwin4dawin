@@ -26,7 +26,9 @@ const _q = new THREE.Quaternion();
 let deckDMaterials = null;
 export function ensureDeckDMaterials(kit) {
   if (!deckDMaterials) {
-    const decal = new THREE.MeshStandardMaterial({ map: makeDeckDDecals(512, 71), transparent: true, depthWrite: false, roughness: 0.55, metalness: 0.1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.4 });
+    // wear decals are faint by design (opacity 0.28): a smudge the eye reads as a stain in passing, never
+    // a spatter pattern that competes with the equipment
+    const decal = new THREE.MeshStandardMaterial({ map: makeDeckDDecals(512, 71), transparent: true, opacity: 0.28, depthWrite: false, roughness: 0.55, metalness: 0.1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.4 });
     setDomain(decal, "interior");
     // unlit colour carrier for animated emitters: instanceColor / vertex colour × intensity, blooms above white
     const pulse = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -35,16 +37,25 @@ export function ensureDeckDMaterials(kit) {
     const core = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff0c0).multiplyScalar(2.4) });
     // low emitters for practicals (handrail LEDs, pillar slots, tracer lines): ~20% of the kit's
     // emitBlue / emitAmber so they read as fixtures beside the room's key light, never as neon
-    const emit = (color, intensity, extra = {}) => setDomain(new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.08), emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 0.45, metalness: 0, ...extra }), "interior");
+    // dim emitters are purely emissive (black diffuse): a lens or slit reads at exactly its own level
+    // whatever lamp sits next to it, instead of picking up the bulb it hoods and going white-hot
+    const emit = (color, intensity, extra = {}) => setDomain(new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 0.45, metalness: 0, ...extra }), "interior");
     const diffuser = makeDiffuser(256, 13);
     const slot = emit("#dfe6f4", 0.42, { emissiveMap: diffuser });
+    // the deck's one fixture colour temperature: amber-white slots for engineering / maintenance ceilings
+    const slotWarm = emit("#f6e6cc", 0.42, { emissiveMap: diffuser });
     const amberLow = emit(PALETTE.impAmber, 0.5);
     const warmLow = emit(0xfff0c0, 0.5);
     const blueLow = emit(PALETTE.impBlue, 0.45);
     const greenLow = emit(PALETTE.impGreen, 0.5);
     // hyperdrive core: unlit blue, colour animated (pulse) by the room's updater
     const coreBlue = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9fd0ff).multiplyScalar(1.6) });
-    deckDMaterials = { roomsd_decal: decal, roomsd_pulse: pulse, roomsd_glow: glow, roomsd_core: core, roomsd_slot: slot, roomsd_amberLow: amberLow, roomsd_warmLow: warmLow, roomsd_blueLow: blueLow, roomsd_greenLow: greenLow, roomsd_coreBlue: coreBlue };
+    // deck stencils: the Imperial decal atlas in dark paint (a grey cog on grey tile, never a white blaze)
+    const stencil = kit.materials.decalImp.clone();
+    stencil.color = new THREE.Color(0x3e4249);
+    stencil.opacity = 0.92;
+    setDomain(stencil, "interior");
+    deckDMaterials = { roomsd_decal: decal, roomsd_pulse: pulse, roomsd_glow: glow, roomsd_core: core, roomsd_slot: slot, roomsd_slotWarm: slotWarm, roomsd_amberLow: amberLow, roomsd_warmLow: warmLow, roomsd_blueLow: blueLow, roomsd_greenLow: greenLow, roomsd_coreBlue: coreBlue, roomsd_stencil: stencil };
   }
   for (const [k, m] of Object.entries(deckDMaterials)) if (!kit.materials[k]) kit.materials[k] = m;
   return deckDMaterials;
@@ -58,12 +69,12 @@ export function decalD(kit, index, pos, facing, size, opts = {}) {
   return kit.add("roomsd_decal", g, { pos, rot, quat: opts.quat || null, uv: "keep", uvRect: deckDDecalRect(index) });
 }
 
-/** Imperial decal quad facing a cardinal direction (for props, not walls); opts.quat overrides. */
+/** Imperial decal quad facing a cardinal direction (for props, not walls); opts.quat overrides; opts.mat = "roomsd_stencil" for dark deck paint. */
 export function decalImp(kit, index, pos, facing, size, opts = {}) {
   const g = new THREE.PlaneGeometry(size, opts.h || size);
   if (opts.spin) g.rotateZ(opts.spin);
   const rot = facing === "up" ? [-Math.PI / 2, 0, 0] : facing === "-z" ? [0, Math.PI, 0] : facing === "+x" ? [0, Math.PI / 2, 0] : facing === "-x" ? [0, -Math.PI / 2, 0] : [0, 0, 0];
-  return kit.add("decalImp", g, { pos, rot, quat: opts.quat || null, uv: "keep", uvRect: impDecalRect(index) });
+  return kit.add(opts.mat || "decalImp", g, { pos, rot, quat: opts.quat || null, uv: "keep", uvRect: impDecalRect(index) });
 }
 
 // ---------------------------------------------------------------------------
@@ -198,12 +209,20 @@ export function warningLamp(kit, pos, key = "emitRedImp", opts = {}) {
   return m;
 }
 
-/** Yellow/black hazard border (four thin strips) around a floor rectangle. texel = chevron repeats per metre. */
+/**
+ * Yellow/black hazard border (four strips) around a floor rectangle, built as GEOMETRY bars
+ * (hazardBars): every stripe edge is a mesh edge the anti-aliasing pass smooths, where the chevron
+ * texture stair-stepped and shimmered at grazing angles. mat "chevronR" = red/black. (texel is kept
+ * for the old signature and ignored.)
+ */
 export function hazardBorder(kit, x0, z0, x1, z1, y = 0, w = 0.28, mat = "chevronY", texel = 1.2) {
-  kit.boxMM(mat, [x0, y + 0.002, z0], [x1, y + 0.008, z0 + w], { texel });
-  kit.boxMM(mat, [x0, y + 0.002, z1 - w], [x1, y + 0.008, z1], { texel });
-  kit.boxMM(mat, [x0, y + 0.002, z0 + w], [x0 + w, y + 0.008, z1 - w], { texel });
-  kit.boxMM(mat, [x1 - w, y + 0.002, z0 + w], [x1, y + 0.008, z1 - w], { texel });
+  void texel;
+  const color = mat === "chevronR" ? PALETTE.impRed : PALETTE.yellow;
+  const bar = Math.max(0.24, Math.min(0.4, w * 1.15));
+  hazardBars(kit, x0, z0 + w / 2, x1, z0 + w / 2, { w, bar, color, y });
+  hazardBars(kit, x0, z1 - w / 2, x1, z1 - w / 2, { w, bar, color, y });
+  hazardBars(kit, x0 + w / 2, z0 + w, x0 + w / 2, z1 - w, { w, bar, color, y });
+  hazardBars(kit, x1 - w / 2, z0 + w, x1 - w / 2, z1 - w, { w, bar, color, y });
 }
 
 /**
@@ -265,14 +284,17 @@ export function cableTray(kit, points, opts = {}) {
  * light itself (a spot from `pos` toward `target`, or a point at `pos`).
  */
 export function shroudLamp(kit, mount, pos, target, opts = {}) {
-  const { key = "emitWhiteDim", size = 0.5 } = opts;
+  const { key = "emitWhiteDim", size = 0.5, reflector = PALETTE.impCharcoal } = opts;
   const m = v3(mount);
   const p = v3(pos);
   const t = v3(target);
   // stem from the mount to the lamp body
   pipe(kit, m, p, 0.03, { color: PALETTE.impGreyDark, segments: 8 });
   kit.box("impTrim", m.x, m.y - 0.05, m.z, 0.3, 0.1, 0.3, { color: PALETTE.impBlack, texel: 1 });
-  // shroud: a box whose local -Z points at the target (open face), lens 8 cm inside
+  // shroud: a box whose local -Z points at the target (open face), lens 8 cm inside. The hood is deep
+  // (its own size), matte powder-black (rubber: roughness 0.86, no metalness, so the bulb outside its
+  // mouth raises no specular sheen on the inner walls) and the reflector dark, so the mouth reads as a
+  // dim lens in a dark box from any angle a player can reach.
   const dir = t.clone().sub(p).normalize();
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
   const place = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(p);
@@ -280,17 +302,156 @@ export function shroudLamp(kit, mount, pos, target, opts = {}) {
     const c = place(lx, ly, lz);
     kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [c.x, c.y, c.z], quat: q, color: col, texel: 1 });
   };
-  const d = size * 0.8; // hood depth
-  add("impTrim", 0, 0, d / 2, size + 0.12, size + 0.12, 0.06, PALETTE.impBlack); // back
-  add("impTrim", -(size + 0.06) / 2, 0, 0, 0.06, size + 0.12, d, PALETTE.impBlack);
-  add("impTrim", (size + 0.06) / 2, 0, 0, 0.06, size + 0.12, d, PALETTE.impBlack);
-  add("impTrim", 0, (size + 0.06) / 2, 0, size + 0.12, 0.06, d, PALETTE.impBlack);
-  add("impTrim", 0, -(size + 0.06) / 2, 0, size + 0.12, 0.06, d, PALETTE.impBlack);
-  add("impMetal", 0, 0, d / 2 - 0.04, size, size, 0.01, PALETTE.impGrey); // reflector
+  const d = size; // hood depth
+  add("rubber", 0, 0, d / 2, size + 0.12, size + 0.12, 0.06, PALETTE.impBlack); // back
+  add("rubber", -(size + 0.06) / 2, 0, 0, 0.06, size + 0.12, d, PALETTE.impBlack);
+  add("rubber", (size + 0.06) / 2, 0, 0, 0.06, size + 0.12, d, PALETTE.impBlack);
+  add("rubber", 0, (size + 0.06) / 2, 0, size + 0.12, 0.06, d, PALETTE.impBlack);
+  add("rubber", 0, -(size + 0.06) / 2, 0, size + 0.12, 0.06, d, PALETTE.impBlack);
+  add("impMetalRough", 0, 0, d / 2 - 0.04, size, size, 0.01, reflector); // reflector (matte, dark)
   const lens = place(0, 0, d / 2 - 0.06);
-  kit.add(key, new THREE.BoxGeometry(size * 0.8, size * 0.8, 0.02), { pos: [lens.x, lens.y, lens.z], quat: q, uv: "keep" });
+  kit.add(key, new THREE.BoxGeometry(size * 0.7, size * 0.7, 0.02), { pos: [lens.x, lens.y, lens.z], quat: q, uv: "keep" });
   // louvre fins across the mouth
   for (let k = -1; k <= 1; k++) add("impTrim", 0, (k * size) / 3, -d / 2 + 0.05, size, 0.02, 0.08, PALETTE.impBlack);
+  // mouth centre (where a point light belongs: inside the rim, so the hood's outside faces away from it)
+  const mouth = place(0, 0, -d / 2 + 0.1);
+  return [mouth.x, mouth.y, mouth.z];
+}
+
+/**
+ * Painted dashed deck line (geometry, no texture: no stair-stepped stripe edges at grazing angles).
+ * From (x0,z0) to (x1,z1), axis-aligned. opts: w (line width), dash, gap, color, y.
+ */
+export function dashedLine(kit, x0, z0, x1, z1, opts = {}) {
+  const { w = 0.12, dash = 0.7, gap = 0.5, color = PALETTE.yellow, y = 0 } = opts;
+  const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+  const lo = alongX ? Math.min(x0, x1) : Math.min(z0, z1);
+  const hi = alongX ? Math.max(x0, x1) : Math.max(z0, z1);
+  const c = alongX ? z0 : x0;
+  for (let a = lo; a < hi - 0.05; a += dash + gap) {
+    const b = Math.min(hi, a + dash);
+    if (alongX) kit.boxMM("impPanel1", [a, y + 0.002, c - w / 2], [b, y + 0.01, c + w / 2], { color, uv: "world", texel: 1 });
+    else kit.boxMM("impPanel1", [c - w / 2, y + 0.002, a], [c + w / 2, y + 0.01, b], { color, uv: "world", texel: 1 });
+  }
+}
+
+/**
+ * Hazard stripe as geometry: alternating yellow / black bars across a strip from (x0,z0) to (x1,z1)
+ * (axis-aligned, `w` wide). Reads as the chevron texture from a distance, but every edge is a mesh
+ * edge the anti-aliasing pass smooths, so it never shimmers or stair-steps close up.
+ */
+export function hazardBars(kit, x0, z0, x1, z1, opts = {}) {
+  const { w = 0.28, bar = 0.32, color = PALETTE.yellow, dark = PALETTE.impBlack, y = 0 } = opts;
+  const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+  const lo = alongX ? Math.min(x0, x1) : Math.min(z0, z1);
+  const hi = alongX ? Math.max(x0, x1) : Math.max(z0, z1);
+  const c = alongX ? z0 : x0;
+  let k = 0;
+  for (let a = lo; a < hi - 0.02; a += bar, k++) {
+    const b = Math.min(hi, a + bar);
+    const col = k % 2 ? dark : color;
+    if (alongX) kit.boxMM("impPanel1", [a, y + 0.002, c - w / 2], [b, y + 0.01, c + w / 2], { color: col, uv: "world", texel: 1 });
+    else kit.boxMM("impPanel1", [c - w / 2, y + 0.002, a], [c + w / 2, y + 0.01, b], { color: col, uv: "world", texel: 1 });
+  }
+}
+
+/**
+ * Engineering-style equipment cabinet run against a wall: black shells with grey enamel fronts, drawer
+ * fronts / vent grilles / amber readouts per bay, a dim amber strip along the top edge of every bay and
+ * a status LED. facing: '+z' (back to the N wall), '-z', '+x', '-x'. Adds one collider for the run.
+ */
+export function cabinetRow(kit, x0, x1, zBack, facing, opts = {}) {
+  const { h = 2.4, depth = 0.7, bay = 1.25, seed = 1, accentKey = "emitAmber", strip = "emitAmberDim", front = PALETTE.impGreyDark, screens = ["scrAmber0", "scrAmber1", "scrAmber2", "scrAmber3"] } = opts;
+  const rand = rng(seed);
+  const n = [0, 0, 0];
+  if (facing === "+z") n[2] = 1;
+  else if (facing === "-z") n[2] = -1;
+  else if (facing === "+x") n[0] = 1;
+  else n[0] = -1;
+  const along = n[0] ? [0, 0, 1] : [1, 0, 0];
+  // run centre line (back face at zBack, along the run's axis from x0 to x1)
+  const L = Math.abs(x1 - x0);
+  const mid = (x0 + x1) / 2;
+  const cx = n[0] ? zBack + n[0] * (depth / 2) : mid;
+  const cz = n[2] ? zBack + n[2] * (depth / 2) : mid;
+  kit.box("impTrim", cx, h / 2, cz, n[0] ? depth : L, h, n[2] ? depth : L, { color: PALETTE.impBlack, texel: 1 });
+  kit.box("impMetal", cx, 0.06, cz, (n[0] ? depth : L) + 0.06, 0.12, (n[2] ? depth : L) + 0.06, { color: PALETTE.impCharcoal, texel: 1 });
+  kit.box("impMetal", cx, h - 0.04, cz, (n[0] ? depth : L) + 0.04, 0.08, (n[2] ? depth : L) + 0.04, { color: PALETTE.impCharcoal, texel: 1 });
+  const fx = cx + n[0] * (depth / 2 + 0.006);
+  const fz = cz + n[2] * (depth / 2 + 0.006);
+  const nB = Math.max(1, Math.round(L / bay));
+  const bw = L / nB;
+  const rot = n[0] > 0 ? [0, Math.PI / 2, 0] : n[0] < 0 ? [0, -Math.PI / 2, 0] : n[2] < 0 ? [0, Math.PI, 0] : [0, 0, 0];
+  for (let i = 0; i < nB; i++) {
+    const o = Math.min(x0, x1) - mid + (i + 0.5) * bw;
+    const bx = fx + along[0] * o;
+    const bz = fz + along[2] * o;
+    const at = (dn, dy, off = 0) => [bx + n[0] * dn + along[0] * off, dy, bz + n[2] * dn + along[2] * off];
+    const sz = (thick, wide) => (n[0] ? [thick, wide] : [wide, thick]);
+    const face = (mat, dn, y, thick, wide, hgt, col, off = 0) => {
+      const [sx, szz] = sz(thick, wide);
+      const p = at(dn, y, off);
+      kit.box(mat, p[0], p[1], p[2], sx, hgt, szz, col !== undefined ? { color: col, texel: 1.5 } : { uv: "keep" });
+    };
+    face("impPanel1", 0.0, h / 2, 0.012, bw - 0.1, h - 0.3, front); // enamel front (responds to the room's light, unlike bare metal)
+    // top: amber strip in a shallow black channel + status LED
+    face("impTrim", 0.012, h - 0.32, 0.03, bw - 0.3, 0.1, PALETTE.impBlack);
+    face(strip, 0.03, h - 0.32, 0.012, bw - 0.5, 0.03);
+    face(rand() < 0.8 ? accentKey : "emitRedImp", 0.03, h - 0.5, 0.012, 0.05, 0.05, undefined, -bw / 2 + 0.2);
+    const kind = rand();
+    if (kind < 0.4) {
+      // readout + a row of gloss switches
+      const g = new THREE.PlaneGeometry(Math.min(0.7, bw - 0.4), 0.3);
+      const p = at(0.03, h * 0.62);
+      kit.add(screens[Math.floor(rand() * screens.length)], g, { pos: p, rot, uv: "keep" });
+      for (let k = -1; k <= 1; k++) face("impGloss", 0.03, h * 0.62 - 0.32, 0.012, 0.14, 0.06, undefined, k * 0.2);
+      face("impMetal", 0.03, 0.9, 0.012, bw - 0.4, 0.04, PALETTE.impGrey);
+    } else if (kind < 0.7) {
+      // drawer fronts with handles
+      for (let k = 0; k < 4; k++) {
+        face("impGloss", 0.03, 0.5 + k * 0.42, 0.012, bw - 0.4, 0.3);
+        face("impMetal", 0.05, 0.5 + k * 0.42, 0.03, 0.3, 0.03, PALETTE.impGrey);
+      }
+    } else {
+      // louvre grilles top and bottom, a gauge-like dial box between
+      for (let k = 0; k < 6; k++) face("impMetal", 0.03, 0.5 + k * 0.07, 0.02, bw - 0.4, 0.015, PALETTE.impGreyDark);
+      for (let k = 0; k < 6; k++) face("impMetal", 0.03, h - 1.0 + k * 0.07, 0.02, bw - 0.4, 0.015, PALETTE.impGreyDark);
+      face("impTrim", 0.03, h * 0.55, 0.06, 0.5, 0.36, PALETTE.impBlack);
+      face("impGloss", 0.065, h * 0.55, 0.01, 0.42, 0.28);
+    }
+    decalImp(kit, [IMP_DECAL.glyphs1, IMP_DECAL.glyphs2, IMP_DECAL.glyphs3, IMP_DECAL.power][Math.floor(rand() * 4)], at(0.04, 0.3), facing, 0.22);
+    // bay seam
+    if (i > 0) face("impTrim", 0.02, h / 2, 0.02, 0.04, h - 0.2, PALETTE.impBlack);
+  }
+  kit.collider([cx - (n[0] ? depth : L) / 2 - 0.05, 0, cz - (n[2] ? depth : L) / 2 - 0.05], [cx + (n[0] ? depth : L) / 2 + 0.05, h, cz + (n[2] ? depth : L) / 2 + 0.05], "cabinets");
+}
+
+/**
+ * Wall pipe manifold: two headers along a wall (low and high) joined by risers with valve wheels and
+ * gauges, end blocks, and clamped drops from the high header up into the ceiling mains. Runs along x
+ * at zWall (the wall face), room side toward `side` (-1 = toward -z, +1 = toward +z).
+ */
+export function wallManifold(kit, x0, x1, zWall, side, opts = {}) {
+  const { yLo = 1.3, yHi = 3.6, yTop = null, risers = 5, seed = 1, rLo = 0.16, rHi = 0.12 } = opts;
+  const rand = rng(seed);
+  const z = zWall + side * 0.55;
+  pipe(kit, [x0 - 0.3, yLo, z], [x1 + 0.3, yLo, z], rLo, { color: PALETTE.impGreyDark, flanges: true, clampStep: 1.8 });
+  pipe(kit, [x0 - 0.3, yHi, z], [x1 + 0.3, yHi, z], rHi, { color: PALETTE.impGrey, flanges: true, clampStep: 2.2 });
+  for (let k = 0; k < risers; k++) {
+    const x = x0 + ((x1 - x0) * k) / Math.max(1, risers - 1);
+    pipe(kit, [x, yLo, z], [x, yHi, z], 0.07, { color: [PALETTE.impGrey, PALETTE.impGreyDark][k % 2] });
+    valveWheel(kit, [x, (yLo + yHi) / 2, z + side * 0.36], "z", 0.17, { color: k % 3 === 2 ? PALETTE.impAmber : PALETTE.impRed, stem: 0.22 });
+    if (k % 2 === 0) gauge(kit, [x + 0.32, yHi - 0.55, z + side * 0.14], side < 0 ? "-z" : "+z", 0.09, { seed: seed + k, warn: rand() < 0.25 });
+    kit.box("impTrim", x, yLo, z, 0.3, 0.42, 0.42, { color: PALETTE.impBlack });
+  }
+  for (const x of [x0 - 0.3, x1 + 0.3]) {
+    kit.box("impTrim", x, (yLo + yHi) / 2, zWall + side * 0.3, 0.7, yHi - yLo + 0.9, 0.6, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("impMetal", x, yHi + 0.5, zWall + side * 0.3, 0.8, 0.1, 0.7, { color: PALETTE.impCharcoal, texel: 1 });
+    if (yTop) pipe(kit, [x, yHi + 0.55, zWall + side * 0.3], [x, yTop, zWall + side * 0.3], 0.11, { color: PALETTE.impGreyDark, clampStep: 2.0 });
+  }
+  // drip tray along the base
+  kit.boxMM("impMetal", [x0 - 0.5, 0.0, Math.min(zWall, z + side * 0.5)], [x1 + 0.5, 0.1, Math.max(zWall, z + side * 0.5)], { color: PALETTE.impCharcoal, texel: 1 });
+  kit.collider([x0 - 0.7, 0, Math.min(zWall, z + side * 0.6)], [x1 + 0.7, yHi + 0.6, Math.max(zWall, z + side * 0.6)], "manifold");
 }
 
 /** Grate quad (cut-out texture) over [x0,z0]-[x1,z1] at height y, with real rail bars proud of it along `axis`. */

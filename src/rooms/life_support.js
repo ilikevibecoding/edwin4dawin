@@ -3,24 +3,28 @@
 // grilles on the S wall (the middle fan turns), filter banks with instanced removable cartridges on
 // the W wall, a waste processing hopper with hazard marking in the SE corner, a pump manifold rack
 // through the middle of the room, a monitoring console by the door, a grated service trench with
-// lit pipes below, condensation streaks low on the walls; in the E half a chemical dosing skid under
-// the N-wall gauges and a CO2 processor column with its air-quality screen bank on the S wall.
-// Light: green pendants over the tanks / scrubbers are the status practicals; hooded white lamps pool
-// light on the pump rack and the door lane; the ceiling slots are dim recessed lines, never the key.
+// lit pipes below, condensation streaks low on the walls; in the E half a run of engineering-style
+// equipment cabinets and a chemical dosing skid under the N-wall gauges, and a CO2 processor column
+// with its air-quality screen bank on the S wall.
+// Light: the ship's cool white — three hooded spots (pump rack, door approach) and low pendants over
+// the tanks, the scrubbers, the filter banks and the waste unit; green is reserved for the one status
+// light / level gauge on each tank; wall and equipment accents are the ship's blue; the ceiling slots
+// are dim recessed lines, never the key. The deck is plain tile (nothing drives through here).
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impConsole, impChair, impWallGear, impWallLight, impCrate, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { rng } from "../kit.js";
-import { ensureDeckDMaterials, shellNoFloor, deckFloor, grateTrench, pipe, pipePath, valveWheel, gauge, junctionBox, tank, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, assembly, blinkers, equipmentRack, screenBank, instGeo, pendantLamp, shroudLamp, hexBolt } from "./deck_d_kit.js";
+import { ensureDeckDMaterials, shellNoFloor, deckFloor, grateTrench, pipe, pipePath, valveWheel, gauge, junctionBox, tank, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, assembly, blinkers, equipmentRack, screenBank, instGeo, shroudLamp, hexBolt, cabinetRow } from "./deck_d_kit.js";
 
 export function buildLifeSupport(kit, ctx, room) {
   const [w, h, d] = room.size;
   const hx = w / 2;
   const hz = d / 2;
-  const accentKey = "emitGreen";
-  const DIM = "roomsd_greenLow"; // green practicals (strips, lamp lenses, ceiling coffer accents)
-  const green = 0x4fe08a;
+  const accentKey = "emitBlue"; // wall / equipment LEDs: the ship's blue
+  const TANK = "emitGreen"; // one green status light + level gauge per tank, the room's only green
+  const DIM = "roomsd_blueLow"; // dim blue practicals (strips, ceiling coffer accents)
+  const LENS = "emitWhiteDim"; // hooded lamp lenses
   ensureDeckDMaterials(kit);
   const rand = rng(6103);
 
@@ -34,18 +38,16 @@ export function buildLifeSupport(kit, ctx, room) {
   const trench = { x0: -14.0, z0: 2.6, x1: 11.0, z1: 4.0 };
   deckFloor(kit, -hx, -hz, hx, hz, [trench]);
   grateTrench(kit, trench.x0, trench.z0, trench.x1, trench.z1, { depth: 0.7, seed: 44, cables: 4, accentKey });
-  // walk lane from the door, floor stencils
-  kit.boxMM("impMetalRough", [-6.0, 0.0, -1.1], [hx - 0.3, 0.012, 1.1], { color: PALETTE.impGreyDark, texel: 0.7 });
-  for (const s of [-1, 1]) kit.boxMM("impTrim", [-6.0, 0, s * 1.1 - 0.03], [hx - 0.3, 0.014, s * 1.1 + 0.03], { color: PALETTE.impBlack });
-  decalImp(kit, IMP_DECAL.arrowRight, [13.0, 0.016, 0], "up", 0.9, { spin: Math.PI });
-  decalImp(kit, IMP_DECAL.vacuum, [-8.0, 0.016, -6.6], "up", 0.9);
+  // plain tile from the door (no lane, no mat); section stencils in dark deck paint
+  decalImp(kit, IMP_DECAL.vacuum, [-8.0, 0.016, -6.6], "up", 1.2, { mat: "roomsd_stencil" });
+  decalImp(kit, IMP_DECAL.cog, [11.0, 0.016, 0], "up", 1.6, { mat: "roomsd_stencil" });
 
   // --- water tanks along the N wall + header / collector pipes + hazard border
   const tankXs = [-13.4, -9.6, -5.8, -2.0, 1.8];
   const tz = -hz + 1.45;
   const tr = 1.0;
   const th = 3.9;
-  tankXs.forEach((x, i) => tank(kit, x, tz, tr, th, { color: i % 2 ? PALETTE.impGrey : PALETTE.impWhite, accentKey, seed: 700 + i, level: 0.35 + rand() * 0.55, bands: 3, facing: "+z", label: [IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03][i % 3] }));
+  tankXs.forEach((x, i) => tank(kit, x, tz, tr, th, { color: i % 2 ? PALETTE.impGrey : PALETTE.impWhite, accentKey: TANK, seed: 700 + i, level: 0.35 + rand() * 0.55, bands: 3, facing: "+z", label: [IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03][i % 3] }));
   const topY = th - 0.3 + tr;
   pipe(kit, [tankXs[0] - 0.6, topY + 0.02, tz], [tankXs[4] + 0.6, topY + 0.02, tz], 0.11, { color: PALETTE.impGrey, clampStep: 1.9, flanges: true });
   for (const x of tankXs) pipe(kit, [x, topY - 0.25, tz], [x, topY + 0.02, tz], 0.08, { color: PALETTE.impGreyDark });
@@ -70,7 +72,7 @@ export function buildLifeSupport(kit, ctx, room) {
     // discharge riser to the ceiling main (keeps the walk lane clear)
     pipePath(kit, [[px + 1.4, 0.85, cz], [px + 1.9, 0.85, cz], [px + 1.9, h - 0.3, cz]], 0.1, { color: PALETTE.impGreyDark, clampStep: 1.4 });
     kit.collider([px - 0.75, 0, cz - 0.65], [px + 2.1, 1.5, cz + 0.65], "pump");
-    decalD(kit, DECK_D_DECAL.oil, [px + 0.6, 0.018, cz + 1.1], "up", 1.1);
+    decalD(kit, DECK_D_DECAL.oil, [px + 0.4, 0.018, cz + 1.0], "up", 2.4);
   }
   // condensation streaks on the N wall behind / between the tanks and a damp band along the kick
   for (let i = 0; i < 4; i++) decalD(kit, DECK_D_DECAL.streak, [(tankXs[i] + tankXs[i + 1]) / 2, 1.0, -hz + 0.075], "+z", 1.4, { h: 1.3 });
@@ -118,7 +120,7 @@ export function buildLifeSupport(kit, ctx, room) {
       kit.box("impMetal", x - 0.9 + k * 1.8, 2.72, fz - 0.03, 0.4, 0.03, 0.03, { color: PALETTE.impGrey });
     }
     for (let k = 0; k < 6; k++) kit.box(k === 4 && i === 2 ? "emitRedImp" : accentKey, x - 1.5 + k * 0.22, 0.5, fz - 0.005, 0.06, 0.06, 0.01);
-    kit.add(["scrGreen2", "scrGreen0", "scrGreen3"][i], new THREE.PlaneGeometry(0.7, 0.3), { pos: [x + 1.2, 0.5, fz - 0.006], rot: [0, Math.PI, 0], uv: "keep" });
+    kit.add(["scrBlue2", "scrWhite0", "scrGreen3"][i], new THREE.PlaneGeometry(0.7, 0.3), { pos: [x + 1.2, 0.5, fz - 0.006], rot: [0, Math.PI, 0], uv: "keep" });
     decalImp(kit, IMP_DECAL.glyphs1, [x - 1.3, 2.4, fz - 0.005], "-z", 0.3);
     kit.box("impMetal", x, H + (h - H) / 2, zc + 0.2, 0.9, h - H, 0.9, { color: PALETTE.impGreyDark, texel: 1 });
     for (let k = 0; k < 3; k++) kit.box("impTrim", x, H + 0.3 + k * 0.6, zc + 0.2, 0.98, 0.06, 0.98, { color: PALETTE.impBlack });
@@ -207,7 +209,7 @@ export function buildLifeSupport(kit, ctx, room) {
     kit.collider([x - 2.6, 0, z - 2.35], [x + 0.2, 0.7, z - 1.3], "wastePipe");
     kit.collider([x - 2.6, 0, trench.z1 - 0.5], [x - 2.2, 0.7, z - 2.2], "wastePipe");
     hazardBorder(kit, x - 4.0, z - 1.7, x + 2.2, hz - 0.05, 0, 0.26, "chevronR");
-    decalD(kit, DECK_D_DECAL.grime, [x - 1.0, 0.018, z - 2.6], "up", 1.6);
+    decalD(kit, DECK_D_DECAL.grime, [x - 1.0, 0.018, z - 2.4], "up", 3.0);
     decalD(kit, DECK_D_DECAL.streak, [x, 3.6, hz - 0.075], "-z", 2.2, { h: 1.3 });
   }
 
@@ -244,7 +246,7 @@ export function buildLifeSupport(kit, ctx, room) {
       kit.box(accentKey, px + 0.15, 0.9, zr + 0.2, 0.05, 0.04, 0.05);
       pipe(kit, [px - 0.42, 0.85, zr - 0.55], [px - 0.42, 0.62, zr - 0.2], 0.06, { color: PALETTE.impGreyDark });
       pipe(kit, [px + 0.5, 0.85, zr + 0.55], [px + 0.5, 0.62, zr + 0.2], 0.06, { color: PALETTE.impGreyDark });
-      decalD(kit, DECK_D_DECAL.oil, [px + 0.4, 0.018, zr + 1.0], "up", 0.9);
+      decalD(kit, DECK_D_DECAL.oil, [px + 0.4, 0.018, zr + 0.9], "up", 2.0);
     }
     kit.collider([x0 - 0.2, 0, zr - 1.1], [x1 + 0.2, 1.9, zr + 1.1], "manifold");
     // feed drops from the ceiling into the rack at both ends
@@ -253,11 +255,11 @@ export function buildLifeSupport(kit, ctx, room) {
   }
 
   // --- monitoring console by the door, wall screens, deck gear on the E wall, crates
-  impConsole(kit, 12.4, 0, -4.2, 2.6, 0.9, { yaw: Math.PI / 2, seed: 770, screens: ["scrGreen2", "scrGreen1", "scrWhite0"], accentKey });
+  impConsole(kit, 12.4, 0, -4.2, 2.6, 0.9, { yaw: Math.PI / 2, seed: 770, screens: ["scrBlue1", "scrGreen1", "scrWhite0"], accentKey });
   impChair(kit, 13.45, 0, -4.2, Math.PI / 2);
   {
     const E = walls.E.frame;
-    screenBank(E, wallU(room, "E", -6.4), 1.5, 3, 2, 0.9, 0.5, 0.08, ["scrGreen0", "scrGreen3", "scrWhite1", "scrGreen1"], { seed: 780 });
+    screenBank(E, wallU(room, "E", -6.4), 1.5, 3, 2, 0.9, 0.5, 0.08, ["scrBlue0", "scrGreen3", "scrWhite1", "scrBlue1"], { seed: 780 });
     E.decal(IMP_DECAL.glyphs3, wallU(room, "E", -4.9), 3.2, 0.03, 0.5);
     impWallGear(E, wallU(room, "E", 4.0), 1.5, { seed: 781, accentKey });
     E.decal(IMP_DECAL.medical, wallU(room, "E", -2.3), 3.5, 0.03, 0.45);
@@ -293,8 +295,11 @@ export function buildLifeSupport(kit, ctx, room) {
     pipePath(kit, [[sx0 + 3.6, 0.5, sz + 0.75], [sx0 + 3.6, 0.5, sz + 1.2], [7.75, 0.5, sz + 1.2], [7.75, 0.5, cz - 0.05]], 0.045, { color: PALETTE.impGreyDark, clampStep: 1.6 });
     hazardBorder(kit, sx0 - 0.4, -hz + 0.05, sx0 + 4.3, sz + 1.0, 0, 0.24);
     kit.collider([sx0 - 0.25, 0, -hz], [sx0 + 4.05, 1.6, sz + 0.9], "dosing");
-    decalD(kit, DECK_D_DECAL.grime, [sx0 + 1.6, 0.018, sz + 1.5], "up", 1.3);
+    decalD(kit, DECK_D_DECAL.grime, [sx0 + 1.6, 0.018, sz + 1.3], "up", 2.6);
   }
+  // --- engineering-style equipment cabinets on the N wall between the last tank and the dosing skid (four
+  // bays: amber top strips, blue status LEDs, readouts in the room's blue / white)
+  cabinetRow(kit, 3.4, 7.8, -hz + 0.05, "+z", { seed: 840, accentKey, strip: "emitAmberDim", screens: ["scrBlue0", "scrWhite1", "scrBlue1", "scrWhite0"] });
   // --- CO2 processor column on the S wall between the scrubbers and the waste unit, with an air-quality
   // screen bank beside it: tall drum, bolted band flanges, sight glass, valve cluster, riser into the ceiling
   {
@@ -308,7 +313,7 @@ export function buildLifeSupport(kit, ctx, room) {
     }
     kit.cyl("impMetal", px, 3.75, pz, 0.95, 0.3, "y", { r2: 0.45, color: PALETTE.impCharcoal, segments: 28 });
     pipe(kit, [px, 3.9, pz], [px, h - 0.3, pz], 0.22, { color: PALETTE.impGreyDark, flanges: true, clampStep: 1.0 });
-    // sight glass (dim green) and a gauge pair on the room-facing side, valve cluster at the base
+    // sight glass (dim blue) and a gauge pair on the room-facing side, valve cluster at the base
     kit.box("impTrim", px, 2.25, pz - 0.98, 0.3, 0.9, 0.06, { color: PALETTE.impBlack });
     kit.box(DIM, px, 2.25, pz - 1.0, 0.16, 0.76, 0.01, { uv: "keep" });
     gauge(kit, [px - 0.45, 2.5, pz - 0.86], "-z", 0.1, { seed: 820 });
@@ -325,7 +330,7 @@ export function buildLifeSupport(kit, ctx, room) {
     kit.collider([px - 2.5, 0, pz - 0.5], [px - 1.0, 1.5, pz + 0.3], "processorValve");
     kit.collider([px + 2.1, 0, pz - 0.35], [px + 2.7, 1.9, pz + 0.35], "processorBox");
     const S = walls.S.frame;
-    screenBank(S, wallU(room, "S", px + 3.6) - 1.0, 1.6, 2, 2, 0.9, 0.5, 0.08, ["scrGreen1", "scrWhite0", "scrGreen3", "scrGreen2"], { seed: 830 });
+    screenBank(S, wallU(room, "S", px + 3.6) - 1.0, 1.6, 2, 2, 0.9, 0.5, 0.08, ["scrBlue1", "scrWhite0", "scrGreen3", "scrBlue2"], { seed: 830 });
     S.decal(IMP_DECAL.vacuum, wallU(room, "S", px + 3.6), 3.1, 0.03, 0.5);
     decalD(kit, DECK_D_DECAL.streak, [px + 1.4, 3.8, hz - 0.075], "-z", 1.4, { h: 1.2 });
   }
@@ -344,23 +349,25 @@ export function buildLifeSupport(kit, ctx, room) {
     N.decal(IMP_DECAL.keepClear, wallU(room, "N", 6.4), 3.6, 0.03, 0.55);
   }
 
-  // --- lights (8). Work light: three hooded white lamps hung from the ceiling over the pump rack (two)
-  // and the door lane (one), all aimed down at ~3.7 m, so the light pools on the equipment and the
-  // black ceiling stays dark. Status practicals: green pendants over the tanks and the scrubbers, an
-  // amber pendant over the waste unit, the lit trench, and a dim pendant over the filter banks.
+  // --- lights (8), one colour temperature: the ship's cool white. Three hooded SPOTS (two over the pump
+  // rack, one over the door approach) whose cones light the equipment and the deck and never the ceiling
+  // above the hood; four low hooded pendants (tank row, scrubbers, filter banks, waste unit) with linear
+  // falloff — source 30 cm under the hood mouth, so the hood is dark inside and the ceiling over it gets
+  // no more than the deck below; a cool blue point in the trench under the grate. No bare ceiling lamps.
   const work = 0xe4ecff;
-  for (const [i, [x, z]] of [[-8.0, -3.4], [2.0, -3.4], [10.0, 0.6]].entries()) {
-    shroudLamp(kit, [x, h - 0.08, z], [x, 3.95, z], [x, 0.8, z], { key: "emitWhiteDim", size: 0.55 });
-    kit.light({ type: "point", pos: [x, 3.7, z], color: work, intensity: lux(3.4, 3.5), distance: 15, priority: 0.6 - i * 0.01 });
+  // (the E pump-rack spot is tilted 27° toward the N wall so its cone also carries the cabinet run and the
+  // dosing skid; its upper edge stays 6° below the horizontal, so it puts nothing on the ceiling)
+  for (const [i, [x, z, tx, tz]] of [[-8.0, -3.4, -8.0, -3.4], [4.0, -5.5, 4.5, -7.5], [10.0, 0.6, 10.0, 0.6]].entries()) {
+    const mouth = shroudLamp(kit, [x, h - 0.08, z], [x, 3.95, z], [tx, 0, tz], { key: LENS, size: 0.55 });
+    kit.light({ type: "spot", pos: [mouth[0], mouth[1] - 0.1, mouth[2]], target: [tx, 0, tz], color: work, intensity: lux(3.8, 5.8), distance: 15, angle: 1.2, penumbra: 0.5, priority: 0.6 - i * 0.01 });
   }
-  pendantLamp(kit, -6.0, 3.4, -8.6, h, DIM);
-  pendantLamp(kit, -7.4, 3.6, 9.2, h, DIM);
-  pendantLamp(kit, 11.5, 3.2, 6.0, h, "emitAmberDim");
-  pendantLamp(kit, -14.2, 4.0, -3.6, h, "emitWhiteDim");
-  kit.light({ type: "point", pos: [-6.0, 3.4, -8.6], color: green, intensity: lux(3.4, 1.6), distance: 12, priority: 0.5 });
-  kit.light({ type: "point", pos: [-7.4, 3.6, 9.2], color: green, intensity: lux(3.6, 1.6), distance: 12, priority: 0.49 });
-  kit.light({ type: "point", pos: [11.5, 3.2, 6.0], color: 0xffb040, intensity: lux(3.2, 1.2), distance: 10, priority: 0.42 });
-  kit.light({ type: "point", pos: [-2.0, -0.35, 3.3], color: green, intensity: 6, distance: 9, priority: 0.35 });
-  // fill for the filter banks on the W wall
-  kit.light({ type: "point", pos: [-14.2, 4.0, -3.6], color: 0xdfe8ff, intensity: lux(4.0, 2.0), distance: 12, priority: 0.45 });
+  const pendant = (x, z, y, target, k, priority) => {
+    const mouth = shroudLamp(kit, [x, h - 0.08, z], [x, y, z], target, { key: LENS, size: 0.5 });
+    kit.light({ type: "point", pos: [mouth[0], mouth[1] - 0.3, mouth[2]], color: work, intensity: k * (y - 0.4), decay: 1, distance: 14, priority });
+  };
+  pendant(-6.0, -8.6, 3.5, [-6.0, 1.5, -8.6], 4.6, 0.5);
+  pendant(-7.4, 9.2, 3.5, [-7.4, 1.5, 9.4], 4.6, 0.49);
+  pendant(11.5, 6.0, 3.4, [11.5, 1.2, 7.0], 3.5, 0.42);
+  pendant(-14.2, -3.6, 3.6, [-15.5, 1.5, -3.6], 3.7, 0.45);
+  kit.light({ type: "point", pos: [-2.0, -0.35, 3.3], color: 0x8fb8ff, intensity: 6, distance: 9, priority: 0.35 });
 }

@@ -5,10 +5,27 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { setVertexColor, worldUVs, rng } from "../kit.js";
-import { PALETTE } from "../materials.js";
+import { PALETTE, setDomain } from "../materials.js";
 import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
-import { GRATE_TILE } from "../textures.js";
+import { GRATE_TILE, makeDiffuser } from "../textures.js";
 import { lux } from "./imperial_kit.js";
+
+// ---------------------------------------------------------------------------
+// Materials owned by this workstream (keys prefixed roomsc_), created once and shared by the crew-deck cells
+// ---------------------------------------------------------------------------
+let deckCMaterials = null;
+export function ensureDeckCMaterials(kit) {
+  if (!deckCMaterials) {
+    const emit = (color, intensity, extra = {}) => setDomain(new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.08), emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 0.45, metalness: 0, ...extra }), "interior");
+    const diffuser = makeDiffuser(256, 29);
+    // half of the kit's emitWhiteDim: a louvred ceiling slot that reads as a fixture beside the room's keys
+    // without ever being the brightest surface in frame (medbay troughs / slots, sterile white rooms)
+    const slot = emit("#dfe6f4", 0.4, { emissiveMap: diffuser });
+    deckCMaterials = { roomsc_slot: slot };
+  }
+  for (const [k, m] of Object.entries(deckCMaterials)) if (!kit.materials[k]) kit.materials[k] = m;
+  return deckCMaterials;
+}
 
 /**
  * Key light for the big crew-deck rooms (30 m+ across, 8 fixtures): the level directly below the
@@ -186,7 +203,7 @@ export function ring(kit, mat, x, y, z, r, tubeR, opts = {}) {
 
 /** Long mess/common table with a bench each side; length along local x, operator seats at ±z. */
 export function longTable(kit, cx, cz, len, yaw = 0, opts = {}) {
-  const { topColor = PALETTE.impGrey, benches = true, y = 0, tag = "table", items = null, seed = 1 } = opts;
+  const { topColor = PALETTE.impGrey, benches = true, y = 0, tag = "table", items = null, seed = 1, legLight = true } = opts;
   const p = new Placer(kit, cx, y, cz, yaw);
   const w = 0.9;
   // top: grey enamel slab on a black frame, two pedestal legs
@@ -196,7 +213,9 @@ export function longTable(kit, cx, cz, len, yaw = 0, opts = {}) {
   for (const s of [-1, 1]) {
     p.box("impTrim", s * (len / 2 - 0.5), 0.36, 0, 0.12, 0.7, 0.6, { color: PALETTE.impBlack, texel: 1 });
     p.box("impMetal", s * (len / 2 - 0.5), 0.04, 0, 0.5, 0.08, 0.8, { color: PALETTE.impCharcoal, texel: 1 });
-    p.box(opts.accentKey || "emitBlue", s * (len / 2 - 0.5), 0.36, 0, 0.13, 0.35, 0.03);
+    // pedestal face: a lit strip (barracks night marker) or a plain brushed inset (mess hall: no under-table LEDs)
+    if (legLight) p.box(opts.accentKey || "emitBlue", s * (len / 2 - 0.5), 0.36, 0, 0.13, 0.35, 0.03);
+    else p.box("impMetal", s * (len / 2 - 0.5), 0.36, 0, 0.13, 0.35, 0.03, { color: PALETTE.impGreyDark });
   }
   // under-top cable tray + power socket strip
   p.box("impMetal", 0, 0.66, 0, len - 0.6, 0.04, 0.2, { color: PALETTE.impGreyDark });
@@ -280,18 +299,36 @@ export function ceilingPanel(kit, cx, cz, y, w, d, key = "emitWhiteSoft") {
  * `axis` is the slot's long direction ("x" | "z"); `key` should be one of the *Dim emitters.
  */
 export function slotLight(kit, cx, cz, y, len, axis = "x", key = "emitWhiteDim", opts = {}) {
-  const { w = 0.36, h = 0.2, finStep = 0.25, bar = 0.07, tag = null } = opts;
+  const { w = 0.36, h = 0.2, finStep = 0.25, bar = 0.07, tag = null, drop = 0 } = opts;
   const along = axis === "x";
-  const sx = along ? len : w;
-  const sz = along ? w : len;
-  kit.box("impTrim", cx, y - h / 2, cz, sx + 0.1, h, sz + 0.1, { color: PALETTE.impBlack, texel: 1 });
-  kit.box("impMetal", cx, y - h + 0.05, cz, sx - 0.08, 0.02, sz - 0.08, { color: PALETTE.impCharcoal });
-  kit.box(key, cx, y - h + 0.045, cz, along ? len - 0.3 : bar, 0.012, along ? bar : len - 0.3, { uv: "keep" });
-  for (let f = -len / 2 + 0.2; f < len / 2 - 0.1; f += finStep) {
-    if (along) kit.box("impTrim", cx + f, y - h + 0.01, cz, 0.02, 0.03, w - 0.04, { color: PALETTE.impBlack });
-    else kit.box("impTrim", cx, y - h + 0.01, cz + f, w - 0.04, 0.03, 0.02, { color: PALETTE.impBlack });
+  const sx = (along ? len : w) + 0.1;
+  const sz = (along ? w : len) + 0.1;
+  const top = y - drop; // top face of the housing (drop > 0: suspended on two stems)
+  const bot = top - h;
+  if (drop > 0) {
+    for (const e of [-1, 1]) {
+      const px = along ? cx + e * (len / 2 - 0.3) : cx;
+      const pz = along ? cz : cz + e * (len / 2 - 0.3);
+      kit.cyl("impMetal", px, y - drop / 2, pz, 0.015, drop, "y", { color: PALETTE.impGreyDark, segments: 6 });
+      kit.cyl("impTrim", px, y - 0.03, pz, 0.06, 0.06, "y", { color: PALETTE.impBlack, segments: 10 });
+    }
   }
-  if (tag) kit.collider([cx - sx / 2, y - h, cz - sz / 2], [cx + sx / 2, y, cz + sz / 2], tag);
+  // hollow housing (top plate + four walls, open toward the floor) so the bar really is recessed inside it.
+  // Matte powder-black (rubber: no metalness) rather than trim metal: a key light hung under the shade
+  // otherwise paints a broad specular blob across the louvres, which reads as a hot fixture from the door.
+  kit.box("rubber", cx, top - 0.02, cz, sx, 0.04, sz, { color: PALETTE.impBlack, texel: 1 });
+  for (const e of [-1, 1]) {
+    kit.box("rubber", cx + e * (sx / 2 - 0.015), top - h / 2, cz, 0.03, h, sz, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("rubber", cx, top - h / 2, cz + e * (sz / 2 - 0.015), sx, h, 0.03, { color: PALETTE.impBlack, texel: 1 });
+  }
+  kit.box("rubber", cx, top - 0.06, cz, sx - 0.08, 0.02, sz - 0.08, { color: PALETTE.impCharcoal });
+  kit.box(key, cx, top - 0.075, cz, along ? len - 0.3 : bar, 0.012, along ? bar : len - 0.3, { uv: "keep" });
+  for (let f = -len / 2 + 0.2; f < len / 2 - 0.1; f += finStep) {
+    if (along) kit.box("rubber", cx + f, bot + 0.02, cz, 0.02, 0.04, w - 0.04, { color: PALETTE.impBlack });
+    else kit.box("rubber", cx, bot + 0.02, cz + f, w - 0.04, 0.04, 0.02, { color: PALETTE.impBlack });
+  }
+  if (tag) kit.collider([cx - sx / 2, bot, cz - sz / 2], [cx + sx / 2, y, cz + sz / 2], tag);
+  return bot;
 }
 
 /** Pendant lamp over a table: rod, conical housing, warm diffuser. */
