@@ -29,6 +29,7 @@ uniform float uFogFar;
 uniform float uAlphaTest;
 uniform float uOpacity;
 uniform float uTime;
+uniform float uFlash;
 varying vec2 vUv;
 varying vec2 vLight;
 varying float vShade;
@@ -47,7 +48,7 @@ void main() {
   float sky = lightCurve(vLight.x) * uSkyLight;
   float blk = blockCurve(vLight.y);
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
-  light = max(light, vec3(0.035));
+  light = max(light, vec3(0.035)) + vec3(uFlash);
   vec3 col = tex.rgb * light * vShade;
   float f = smoothstep(uFogNear, uFogFar, vDist);
   col = mix(col, uFogColor, f);
@@ -66,6 +67,7 @@ export function makeWorldMaterial(atlas, opts = {}) {
       uAlphaTest: { value: opts.alphaTest ?? 0.5 },
       uOpacity: { value: opts.opacity ?? 1 },
       uTime: { value: 0 },
+      uFlash: { value: 0 },
     },
     vertexShader: VERT,
     fragmentShader: FRAG,
@@ -109,8 +111,9 @@ export class Terrain {
     this.lastCx = null;
   }
 
-  setLighting(skyLight, skyTint, fogColor, fogNear, fogFar) {
+  setLighting(skyLight, skyTint, fogColor, fogNear, fogFar, flash = 0) {
     for (const m of [this.material, this.waterMaterial]) {
+      m.uniforms.uFlash.value = flash;
       m.uniforms.uSkyLight.value = skyLight;
       m.uniforms.uSkyTint.value.copy(skyTint);
       m.uniforms.uFogColor.value.copy(fogColor);
@@ -125,6 +128,7 @@ export class Terrain {
     if (!c.generated) {
       const t0 = performance.now();
       this.world.gen.generateChunk(c);
+      if (this.onChunkGenerated) this.onChunkGenerated(c); // saved player edits overlay
       c.generated = true;
       this.world.lightChunk(c);
       this.stats.genTimeMs += performance.now() - t0;
@@ -229,7 +233,7 @@ export class Terrain {
     for (const [dx, dz, d] of this.offsets) {
       if (d > R + 0.5) break;
       const c = this.world.getChunk(pcx + dx, pcz + dz);
-      if (!c || !c.generated || !c.dirty) continue;
+      if (!c || !c.generated || !c.dirty || c.needsRelight) continue;
       if (!this.neighborsReady(c.cx, c.cz)) continue;
       this.meshChunk(c);
       meshedNow++;
@@ -257,6 +261,18 @@ export class Terrain {
     }
     this.stats.chunks = this.world.chunks.size;
     this.stats.meshed = this.group.children.length;
+  }
+
+  // Remesh up to maxCount dirty chunks anywhere within render distance (nearest first). Used after bulk edits.
+  remeshDirty(maxCount, px, pz) {
+    const pcx = Math.floor(px / CS), pcz = Math.floor(pz / CS);
+    let n = 0;
+    for (const [dx, dz, d] of this.offsets) {
+      if (d > this.renderDistance + 0.5) break;
+      const c = this.world.getChunk(pcx + dx, pcz + dz);
+      if (c && c.generated && c.dirty && !c.needsRelight && this.neighborsReady(c.cx, c.cz)) { this.meshChunk(c); if (++n >= maxCount) break; }
+    }
+    return n;
   }
 
   // Dirty-chunk remesh for immediate edits (called after block edits so the change shows this frame)

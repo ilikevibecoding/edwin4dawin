@@ -27,7 +27,7 @@ void main() {
 }`;
 const FRAG = /* glsl */ `
 uniform sampler2D map;
-uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar;
+uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
 varying vec4 vUV; varying vec3 vColor; varying float vAlpha; varying vec2 vLight; varying float vDist;
 float lightCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.4); }
 float blockCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.6); }
@@ -44,7 +44,7 @@ void main() {
   float sky = lightCurve(vLight.x) * uSkyLight;
   float blk = blockCurve(vLight.y);
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
-  light = max(light, vec3(0.035));
+  light = max(light, vec3(0.035)) + vec3(uFlash);
   col *= light;
   float f = smoothstep(uFogNear, uFogFar, vDist);
   col = mix(col, uFogColor, f);
@@ -75,7 +75,7 @@ export class Particles {
     g.setDrawRange(0, 0);
     this.geo = g;
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { map: { value: atlas }, uScale: { value: 500 }, uSkyLight: SHARED.uSkyLight, uSkyTint: SHARED.uSkyTint, uFogColor: SHARED.uFogColor, uFogNear: SHARED.uFogNear, uFogFar: SHARED.uFogFar },
+      uniforms: { map: { value: atlas }, uScale: { value: 500 }, uSkyLight: SHARED.uSkyLight, uSkyTint: SHARED.uSkyTint, uFogColor: SHARED.uFogColor, uFogNear: SHARED.uFogNear, uFogFar: SHARED.uFogFar, uFlash: SHARED.uFlash },
       vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false,
     });
     this.points = new THREE.Points(g, this.mat);

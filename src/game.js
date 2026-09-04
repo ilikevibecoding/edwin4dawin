@@ -20,6 +20,17 @@ import { GameAudio } from './audio.js';
 import { Hand } from './hand.js';
 import { SHARED, makeEntityMaterial } from './entityMaterial.js';
 import { TICK_DT, REACH, PLAYER_EYE } from './constants.js';
+import { PerfMonitor } from './perf.js';
+import { Permissions } from './permissions.js';
+import { SaveManager } from './save.js';
+import { DisasterManager } from './disasters/manager.js';
+import { Tsunami } from './disasters/tsunami.js';
+import { Tornado } from './disasters/tornado.js';
+import { OrbitalBeam } from './disasters/orbitalBeam.js';
+import { AdminPanel } from './ui/adminPanel.js';
+import { NetClient } from './net/client.js';
+
+const WORLD_SEED = 1337;
 
 const MOUSE_SENS = 0.15 * Math.PI / 180; // radians per pixel (Minecraft default sensitivity)
 
@@ -57,6 +68,8 @@ export class Game {
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
     renderer.autoClear = false;
     this.renderer = renderer;
+    this.perf = new PerfMonitor(renderer);
+    this.startedAt = performance.now();
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.05, 1000);
@@ -64,14 +77,18 @@ export class Game {
 
     const atlas = buildAtlas();
     initBlocks();
+    this.permissions = new Permissions();
+    this.save = new SaveManager(WORLD_SEED);
     this.setLoading('Planning the frontier town...', 0.02);
     await this.nextFrame();
 
-    this.gen = new WorldGen(1337);
+    this.gen = new WorldGen(WORLD_SEED);
     await this.setupTown();
     this.world = new World(this.gen);
     for (const [x, y, z, tile] of this.signAssignments) this.world.signTiles.set(World.posKey(x, y, z), tile);
+    this.atlas = atlasTexture;
     this.terrain = new Terrain(this.world, this.scene, atlasTexture);
+    this.terrain.onChunkGenerated = (c) => this.save.applyToChunk(c);
     this.terrain.pinRegion(this.town.bounds.x0, this.town.bounds.z0, this.town.bounds.x1, this.town.bounds.z1);
     this.sky = new Sky(this.scene, this.camera);
     this.player = new Player(this.world);
@@ -118,6 +135,7 @@ export class Game {
 
     this.bindEvents();
     this.loading = false;
+    this.perf.loadTimeMs = performance.now() - this.startedAt;
     document.getElementById('loading').style.display = 'none';
     this.hud.addMessage('Welcome to the frontier. Click to grab the mouse.');
     this.hud.addMessage('WASD to move, Space to jump, double-tap W to sprint, E for blocks.');
@@ -143,9 +161,24 @@ export class Game {
 
   async setupEntities() {
     this.npcs = new NPCManager(this.scene, this.world, this.town, this.audio, this.hud);
+    this.npcs.game = this;
     await this.nextFrame();
     this.animals = new AnimalManager(this.scene, this.world, this.town, this.audio);
     this.train = new Train(this.scene, this.world, this.audio, this.particles);
+    // disasters: deterministic, journaled, admin-controlled
+    this.disasters = new DisasterManager(this);
+    this.disasters.register(Tsunami);
+    this.disasters.register(Tornado);
+    this.disasters.register(OrbitalBeam);
+    this.adminPanel = new AdminPanel(this);
+    // multiplayer (optional): ?server=ws://host:port
+    const params = new URLSearchParams(location.search);
+    const serverUrl = params.get('server');
+    if (serverUrl) {
+      this.net = new NetClient(this, serverUrl);
+      this.disasters.net = this.net;
+      this.net.connect();
+    }
   }
 
   nextFrame() { return new Promise((r) => requestAnimationFrame(r)); }
@@ -174,9 +207,17 @@ export class Game {
     this.input.onKeyDown = (e) => {
       if (this.loading) return;
       if (e.code === 'Escape') {
+        if (this.hud.screen === 'admin') { this.closeScreen(); return; }
         if (this.hud.screen === 'pause' || this.hud.screen === 'inventory') this.closeScreen();
         return;
       }
+      if (e.code === 'F4' || e.code === 'Backquote') {
+        e.preventDefault();
+        if (this.hud.screen === 'admin') this.closeScreen();
+        else if (!this.hud.screen || this.hud.screen === 'pause') { if (this.permissions.isAdmin()) this.openScreen('admin'); else this.hud.addMessage('Disaster controls require administrator permission.'); }
+        return;
+      }
+      if (this.hud.screen === 'admin') return;
       if (this.hud.screen === 'death') return;
       if (e.code === 'KeyE') { if (this.hud.screen === 'inventory') this.closeScreen(); else if (!this.hud.screen) this.openScreen('inventory'); }
       if (this.hud.screen) return;
@@ -195,8 +236,10 @@ export class Game {
     this.hud.screen = name;
     this.input.releaseLock();
     this.hudCanvas.style.cursor = 'default';
+    if (name === 'admin' && this.adminPanel) { this.adminPanel.open(); this.hudCanvas.style.pointerEvents = 'none'; }
   }
   closeScreen() {
+    if (this.hud.screen === 'admin' && this.adminPanel) { this.adminPanel.close(); this.hudCanvas.style.pointerEvents = ''; }
     this.hud.screen = null;
     this.hud.cursorItem = null;
     this.input.requestLock();
@@ -215,6 +258,7 @@ export class Game {
   // ---------------------------------------------------------------------------
   loop(now) {
     requestAnimationFrame((t) => this.loop(t));
+    this.perf.beginFrame(now);
     const frameStart = performance.now();
     let dt = (now - this.lastTime) / 1000;
     this.lastTime = now;
@@ -261,6 +305,12 @@ export class Game {
       this.camera.rotation.z = bob.roll;
       this.camera.rotation.x += bob.pitch;
     }
+    // disasters: visuals, debris, chunk relight/remesh, camera shake
+    if (this.disasters) {
+      this.disasters.update(dt, alpha, this.camera);
+      const fx = this.disasters.effects;
+      if (fx.shakeAmp > 0.001) { this.camera.position.add(fx.shakeOffset); this.camera.rotation.z += fx.shakeRot; }
+    }
     const targetFov = this.player.sprinting ? 70 * 1.15 : this.player.sneaking ? 70 * 0.97 : 70;
     this.fovCurrent += (targetFov - this.fovCurrent) * Math.min(1, dt * 10);
     if (Math.abs(this.camera.fov - this.fovCurrent) > 0.01) { this.camera.fov = this.fovCurrent; this.camera.updateProjectionMatrix(); this.hand.setFov(this.fovCurrent); }
@@ -268,16 +318,30 @@ export class Game {
     // world streaming
     this.terrain.update(this.player.pos.x, this.player.pos.z, 7);
 
-    // sky & lighting
+    // sky & lighting (+ disaster overrides: darkening, dust tint, flashes, denser fog)
     this.sky.update(dt, this.camera.position, this.terrain.renderDistance, this.player.eyeUnderwater);
-    const fogCol = new THREE.Vector3(this.sky.fogColor.r, this.sky.fogColor.g, this.sky.fogColor.b);
-    this.terrain.setLighting(this.sky.skyLight, this.sky.skyTint, fogCol, this.sky.fogNear, this.sky.fogFar);
-    SHARED.uSkyLight.value = this.sky.skyLight;
-    SHARED.uSkyTint.value.copy(this.sky.skyTint);
+    let skyLight = this.sky.skyLight, fogNear = this.sky.fogNear, fogFar = this.sky.fogFar, flash = 0;
+    const skyTint = new THREE.Vector3().copy(this.sky.skyTint);
+    const fogColor = this.sky.fogColor.clone();
+    if (this.disasters) {
+      const ov = this.disasters.effects.override;
+      skyLight *= ov.skyLightMul;
+      skyTint.multiply(ov.tint);
+      fogNear *= ov.fogNearMul; fogFar *= ov.fogFarMul;
+      if (ov.fogColor) fogColor.lerp(ov.fogColor, 1 - ov.fogFarMul * 0.5 > 0.2 ? 0.8 : 0.5);
+      flash = ov.flash;
+      if (flash > 0) fogColor.lerp(new THREE.Color(ov.flashColor.x, ov.flashColor.y, ov.flashColor.z), Math.min(1, flash));
+      if (Math.abs(ov.skyLightMul - 1) > 0.01) fogColor.multiplyScalar(0.55 + 0.45 * ov.skyLightMul);
+    }
+    const fogCol = new THREE.Vector3(fogColor.r, fogColor.g, fogColor.b);
+    this.terrain.setLighting(skyLight, skyTint, fogCol, fogNear, fogFar, flash);
+    SHARED.uSkyLight.value = skyLight;
+    SHARED.uSkyTint.value.copy(skyTint);
     SHARED.uFogColor.value.copy(fogCol);
-    SHARED.uFogNear.value = this.sky.fogNear;
-    SHARED.uFogFar.value = this.sky.fogFar;
-    this.renderer.setClearColor(this.sky.fogColor);
+    SHARED.uFogNear.value = fogNear;
+    SHARED.uFogFar.value = fogFar;
+    SHARED.uFlash.value = flash;
+    this.renderer.setClearColor(fogColor);
 
     // entities
     this.particles.update(dt);
@@ -298,15 +362,23 @@ export class Game {
     // render
     this.renderer.clear();
     this.renderer.render(this.scene, this.camera);
-    if (!this.player.eyeUnderwater || true) {
-      this.renderer.clearDepth();
-      this.renderer.render(this.hand.scene, this.hand.camera);
-    }
+    this.renderer.clearDepth();
+    this.renderer.render(this.hand.scene, this.hand.camera);
+    this.perf.endRender();
     this.hud.fps = this.fps;
     this.hud.render(this);
     this.input.endFrame();
     this.jsAccum = (this.jsAccum || 0) + (performance.now() - frameStart);
     this.jsFrames = (this.jsFrames || 0) + 1;
+    this.perf.setCounters({
+      npcs: this.npcs ? this.npcs.list.length : 0, animals: this.animals ? this.animals.list.length : 0,
+      particles: this.particles.count, drops: this.drops.items.length, chunks: this.terrain.stats.chunks, meshes: this.terrain.stats.meshed,
+      debris: this.disasters ? this.disasters.debris.count : 0, journal: this.disasters ? this.disasters.journal.size : 0,
+      disaster: this.disasters ? `${this.disasters.state}${this.disasters.activeType ? ':' + this.disasters.activeType : ''}` : 'n/a',
+      remotePlayers: this.net ? this.net.stats.players : 0,
+    });
+    if (this.net) Object.assign(this.perf.net, { bytesIn: this.net.stats.bytesIn, bytesOut: this.net.stats.bytesOut, msgsIn: this.net.stats.msgsIn, msgsOut: this.net.stats.msgsOut });
+    this.perf.endFrame();
     if (this.debugLog) this.logDebug(dt);
   }
 
@@ -331,6 +403,8 @@ export class Game {
     if (this.npcs) this.npcs.render(alpha, dt, this.camera);
     if (this.animals) this.animals.render(alpha, dt, this.camera);
     if (this.train) this.train.render(alpha, dt);
+    if (this.net) this.net.update(dt, alpha);
+    if (this.adminPanel && this.adminPanel.isOpen) this.adminPanel.update();
   }
 
   updateSmoke(dt) {
@@ -379,6 +453,8 @@ export class Game {
     if (this.npcs) this.npcs.tick(this.player, this.sky);
     if (this.animals) this.animals.tick(this.player, this.sky);
     if (this.train) this.train.tick(this.player);
+    if (this.disasters) this.disasters.simTick();
+    if (this.net) this.net.tick();
     if (this.breakCooldown > 0) this.breakCooldown -= TICK_DT;
     if (this.placeCooldown > 0) this.placeCooldown -= TICK_DT;
   }
@@ -478,6 +554,13 @@ export class Game {
     this.breakCooldown = 0.25;
     this.hud.xp = Math.min(1, this.hud.xp + 0.004);
     if (this.npcs) this.npcs.onWorldChanged(hit.x, hit.y, hit.z);
+    this.onPlayerEdit(hit.x, hit.y, hit.z, B.AIR);
+  }
+
+  // Player edits persist to the save (unless the cell belongs to an active disaster) and replicate online.
+  onPlayerEdit(x, y, z, id) {
+    if (this.save) this.save.recordEdit(x, y, z, id);
+    if (this.net && this.net.connected) this.net.sendBlock(x, y, z, id);
   }
 
   placeBlock(hit) {
@@ -525,6 +608,8 @@ export class Game {
     this.hand.startSwing();
     this.terrain.remeshDirtyNear(this.player.pos.x, this.player.pos.z);
     if (this.npcs) this.npcs.onWorldChanged(x, y, z);
+    this.onPlayerEdit(x, y, z, this.world.getBlock(x, y, z));
+    if (def.shape === SHAPE.DOOR) this.onPlayerEdit(x, y + 1, z, this.world.getBlock(x, y + 1, z));
   }
 
   debugLines() {
@@ -540,6 +625,7 @@ export class Game {
       `Speed: ${(Math.hypot(this.player.vel.x, this.player.vel.z) * 20).toFixed(2)} m/s  ground ${this.player.onGround} sprint ${this.player.sprinting}`,
     ];
     if (this.npcs) lines.push(`NPCs: ${this.npcs.list.length}  Animals: ${this.animals ? this.animals.list.length : 0}  Particles: ${this.particles.count}`);
+    lines.push(...this.perf.lines());
     return lines;
   }
 }

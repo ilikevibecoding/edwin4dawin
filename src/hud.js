@@ -402,6 +402,12 @@ export class HUD {
     if (this.screen === 'inventory') { this.drawInventory(game.inventory); this.mouse.clicked = false; return; }
     if (this.screen === 'pause') { this.drawPause(game); this.mouse.clicked = false; return; }
     if (this.screen === 'death') { this.drawDeath(game); this.mouse.clicked = false; return; }
+    if (this.screen === 'admin') { // DOM panel is on top; keep the world visible and show a hint
+      this.drawChat();
+      this.text('Disaster controls open  (F4 / Esc to close)', 6 * s, 6 * s, '#ffd080');
+      if (this.debug) this.drawDebug(game.debugLines());
+      this.mouse.clicked = false; return;
+    }
 
     this.drawCrosshair();
     const hotbarY = this.drawHotbar(game.inventory);

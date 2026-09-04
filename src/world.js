@@ -143,6 +143,34 @@ export class World {
     return true;
   }
 
+  chunkKeyAt(x, z) { return World.key(Math.floor(x / CS), Math.floor(z / CS)); }
+
+  // Bulk edit without incremental lighting: the caller relights touched chunks afterwards (relightChunk).
+  setBlockRaw(x, y, z, id) {
+    if (y < 0 || y >= CH) return false;
+    const c = this.chunkAt(x, z);
+    if (!c || !c.generated) return false;
+    const i = ((x & 15) * CS + (z & 15)) * CH + y;
+    const old = c.blocks[i];
+    if (old === id) return false;
+    c.blocks[i] = id;
+    if (old === B.WALL_SIGN) this.signTiles.delete(World.posKey(x, y, z));
+    c.needsRelight = true;
+    this.markDirty(x, y, z);
+    return true;
+  }
+
+  // Full lighting recompute for one chunk (used after bulk edits). Also refreshes neighbours' border light.
+  relightChunk(c) {
+    if (!c || !c.generated) return;
+    this.lightChunk(c);
+    c.needsRelight = false;
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+      const n = this.getChunk(c.cx + dx, c.cz + dz);
+      if (n) n.dirty = true;
+    }
+  }
+
   updateLight(x, y, z, oldId, newId) {
     const oldB = BLOCKS[oldId], newB = BLOCKS[newId];
     for (let ch = 0; ch < 2; ch++) {

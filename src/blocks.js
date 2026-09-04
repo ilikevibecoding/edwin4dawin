@@ -19,6 +19,7 @@ export const B = {
   SMOOTH_STONE: 61, COAL_ORE: 62, IRON_ORE: 63, GOLD_ORE: 64, WHEAT: 65, FARMLAND: 66, GRAVESTONE: 67,
   GOLD_BLOCK: 68, IRON_BLOCK: 69, PLASTER: 70, WHITE_PLANKS: 71, SNOW: 72, PUMPKIN: 73, TROUGH: 74, TABLE: 75,
   STONE_BRICK_SLAB_TOP: 76, SPRUCE_DOOR: 77,
+  SCORCHED_STONE: 78, ASH: 79, MAGMA: 80, CHARRED_PLANKS: 81,
 };
 
 export const BLOCKS = new Array(256);
@@ -132,6 +133,11 @@ export function initBlocks() {
   def(B.PUMPKIN, 'pumpkin', { tex: column('pumpkin_side', 'pumpkin_top'), sound: 'wood', hardness: 0.6 });
   def(B.TROUGH, 'trough', { displayName: 'Water Trough', shape: SHAPE.TROUGH, tex: column('spruce_planks', 'trough', 'spruce_planks'), sound: 'wood', hardness: 1.0, icon: 'slab', boxes: [[0, 0, 0, 1, 0.5, 1]] });
   def(B.TABLE, 'table', { shape: SHAPE.TABLE, tex: same('spruce_planks'), sound: 'wood', hardness: 1.0, boxes: [[0, 0.75, 0, 1, 1, 1], [0.375, 0, 0.375, 0.625, 0.75, 0.625]] });
+  // disaster aftermath blocks
+  def(B.SCORCHED_STONE, 'scorched_stone', { tex: same('scorched_stone'), hardness: 1.5, drop: B.COBBLESTONE });
+  def(B.ASH, 'ash', { tex: same('ash'), sound: 'sand', hardness: 0.4 });
+  def(B.MAGMA, 'magma_block', { tex: same('magma'), emit: 9, hardness: 1.5 });
+  def(B.CHARRED_PLANKS, 'charred_planks', { tex: same('charred_planks'), sound: 'wood', hardness: 0.6 });
 
   for (let i = 0; i < 256; i++) if (!BLOCKS[i]) BLOCKS[i] = BLOCKS[B.AIR];
 }
@@ -148,5 +154,5 @@ export const PALETTE = [
   B.IRON_BARS, B.OAK_DOOR, B.SALOON_DOOR, B.WALL_SIGN, B.BED_HEAD, B.TABLE, B.CHEST, B.ANVIL, B.FURNACE,
   B.PIANO, B.WHITE_WOOL, B.RED_WOOL, B.BLUE_WOOL, B.GREEN_WOOL, B.PLASTER, B.DIRT_PATH, B.MUD, B.COARSE_DIRT,
   B.FARMLAND, B.CACTUS, B.DEAD_BUSH, B.TALL_GRASS, B.DANDELION, B.POPPY, B.PUMPKIN, B.TROUGH, B.GRAVESTONE,
-  B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.GOLD_BLOCK, B.IRON_BLOCK, B.SNOW,
+  B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.GOLD_BLOCK, B.IRON_BLOCK, B.SNOW, B.SCORCHED_STONE, B.ASH, B.MAGMA, B.CHARRED_PLANKS,
 ];

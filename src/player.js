@@ -130,7 +130,14 @@ export class Player {
     this.autoJump = true;
     this.jumpCooldown = 0;
     this.lastGroundBlock = B.GRASS;
+    this.force = new THREE.Vector3(); // external acceleration (blocks/s^2) applied at the next tick
+    this.lastImpact = 0;
   }
+
+  // External forces from disasters (wind, water flow, blast). Accumulated and applied once per tick.
+  addForce(fx, fy, fz) { this.force.x += fx; this.force.y += fy; this.force.z += fz; }
+  // Instant velocity change in blocks/s
+  impulse(vx, vy, vz) { this.vel.x += vx / 20; this.vel.y += vy / 20; this.vel.z += vz / 20; }
 
   get box() {
     const hw = PLAYER_WIDTH / 2;
@@ -213,6 +220,13 @@ export class Player {
     if (ctrl.jump) {
       if (this.inWater) this.vel.y += 0.04;
       else if (this.onGround && this.jumpCooldown === 0) this.jump();
+    }
+    // external forces (blocks/s^2 -> blocks/tick over one 0.05 s tick)
+    if (this.force.x || this.force.y || this.force.z) {
+      this.vel.x += this.force.x * 0.0025; this.vel.y += this.force.y * 0.0025; this.vel.z += this.force.z * 0.0025;
+      const sp = Math.hypot(this.vel.x, this.vel.y, this.vel.z);
+      if (sp > 1.6) { const k = 1.6 / sp; this.vel.x *= k; this.vel.y *= k; this.vel.z *= k; } // cap at 32 blocks/s
+      this.force.set(0, 0, 0);
     }
 
     // sneaking edge protection

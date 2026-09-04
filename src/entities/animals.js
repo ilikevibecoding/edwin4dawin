@@ -4,6 +4,9 @@ import { buildBoxModel, PX } from '../npc/model.js';
 import { standHeight } from '../npc/pathfinding.js';
 import { RNG } from '../rng.js';
 import { AABB } from '../player.js';
+import { BLOCKS, B } from '../blocks.js';
+
+const BLOCKS_SOLID = (world, x, y, z) => BLOCKS[world.getBlock(Math.floor(x), Math.floor(y), Math.floor(z))].solid;
 
 // 32x32 texture with 4 regions: coat (0,0), dark (16,0), accent (0,16), light (16,16)
 function animalTexture(coat, dark, accent, light, rng, patches = 0) {
@@ -110,6 +113,7 @@ export class AnimalManager {
       pos: new THREE.Vector3(sp.x, 0, sp.z), prevPos: new THREE.Vector3(), yaw: sp.yaw ?? rng.range(0, Math.PI * 2), targetYaw: 0,
       tie: !!sp.tie, pen: sp.pen || null, state: 'idle', timer: rng.range(2, 10), target: null, walkTime: 0, grazeT: 0, graze: false,
       soundTimer: rng.range(spec.soundGap[0], spec.soundGap[1]), lightTimer: 0, name: sp.type === 'horse' ? 'Horse' : sp.type === 'cow' ? 'Cow' : sp.type === 'pig' ? 'Pig' : 'Chicken',
+      panic: false, panicUntil: 0, air: null, stunned: 0, swimming: false, airSpin: 0,
     };
     a.targetYaw = a.yaw;
     this.list.push(a);
@@ -128,15 +132,70 @@ export class AnimalManager {
     return false;
   }
 
+  // ---------------------------------------------------------------- disaster reactions (public API)
+  alert(info) {
+    this.alertInfo = info;
+    const r2 = (info.radius || 80) ** 2;
+    for (const a of this.list) {
+      const dx = a.pos.x - info.x, dz = a.pos.z - info.z;
+      if (dx * dx + dz * dz > r2) continue;
+      a.panic = true; a.panicUntil = performance.now() + 120000;
+      a.tie = a.tie && info.kind !== 'tornado'; // tornado rips tethers loose
+      a.timer = a.rng.range(0, 0.5);
+      if (a.soundTimer > 4) a.soundTimer = a.rng.range(0.5, 4);
+    }
+  }
+  clearAlert() { this.alertInfo = null; for (const a of this.list) { a.panic = false; a.air = null; a.stunned = 0; } }
+  applyImpulse(a, vx, vy, vz) {
+    if (!a.air) a.air = { vx: 0, vy: 0, vz: 0, spin: a.rng.range(-5, 5) };
+    a.air.vx += vx; a.air.vy += vy; a.air.vz += vz;
+    const sp = Math.hypot(a.air.vx, a.air.vy, a.air.vz);
+    if (sp > 26) { const k = 26 / sp; a.air.vx *= k; a.air.vy *= k; a.air.vz *= k; }
+    a.state = 'idle'; a.tie = false;
+  }
+  eachNear(x, z, r, fn) { const r2 = r * r; for (const a of this.list) { const dx = a.pos.x - x, dz = a.pos.z - z; if (dx * dx + dz * dz <= r2) fn(a, Math.sqrt(dx * dx + dz * dz)); } }
+
+  updateAirborne(a, dt) {
+    const air = a.air;
+    air.vy -= 22 * dt;
+    const w = this.world;
+    const solidAt = (x, y, z) => BLOCKS_SOLID(w, x, y, z);
+    const nx = a.pos.x + air.vx * dt, ny = a.pos.y + air.vy * dt, nz = a.pos.z + air.vz * dt;
+    if (!solidAt(nx, a.pos.y + 0.5, a.pos.z)) a.pos.x = nx; else air.vx *= -0.3;
+    if (!solidAt(a.pos.x, a.pos.y + 0.5, nz)) a.pos.z = nz; else air.vz *= -0.3;
+    if (air.vy < 0 && (solidAt(a.pos.x, ny, a.pos.z) || ny < 1)) {
+      const h = standHeight(w, Math.floor(a.pos.x), Math.floor(a.pos.y + 0.01), Math.floor(a.pos.z));
+      a.pos.y = h !== null ? h : Math.ceil(ny);
+      a.air = null; a.airSpin = 0; a.stunned = 2 + a.rng.range(0, 2);
+      if (a.spec.sound) this.audio[a.spec.sound](a.pos);
+      return;
+    }
+    a.pos.y = ny;
+    a.airSpin = (a.airSpin || 0) + air.spin * dt;
+    air.vx *= 1 - 0.4 * dt; air.vz *= 1 - 0.4 * dt;
+  }
+
   tick(player, sky) {
     const pp = player.pos;
     for (const a of this.list) {
       a.prevPos.copy(a.pos);
       const dx = a.pos.x - pp.x, dz = a.pos.z - pp.z;
       const d2 = dx * dx + dz * dz;
-      if (d2 > 90 * 90) continue;
+      if (d2 > 90 * 90 && !a.air) continue;
       const dt = 0.05;
-      a.soundTimer -= dt;
+      if (a.air) { this.updateAirborne(a, dt); continue; }
+      if (a.stunned > 0) { a.stunned -= dt; continue; }
+      if (a.panic && performance.now() > a.panicUntil) a.panic = false;
+      // float in water
+      const feet = this.world.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y + 0.2), Math.floor(a.pos.z));
+      a.swimming = feet === B.WATER;
+      if (a.swimming) {
+        let top = Math.floor(a.pos.y + 0.2);
+        while (this.world.getBlock(Math.floor(a.pos.x), top + 1, Math.floor(a.pos.z)) === B.WATER && top < a.pos.y + 6) top++;
+        a.pos.y += (top + 0.9 - a.spec.height * 0.55 - a.pos.y) * Math.min(1, dt * 4);
+        if (this.alertInfo && this.alertInfo.flowFn) { const f = this.alertInfo.flowFn(a.pos.x, a.pos.z); if (f && !BLOCKS_SOLID(this.world, a.pos.x + f[0] * dt, a.pos.y + 0.5, a.pos.z + f[1] * dt)) { a.pos.x += f[0] * dt; a.pos.z += f[1] * dt; } }
+      }
+      a.soundTimer -= dt * (a.panic ? 3 : 1);
       if (a.soundTimer <= 0) { a.soundTimer = a.rng.range(a.spec.soundGap[0], a.spec.soundGap[1]); if (d2 < 40 * 40) this.audio[a.spec.sound](a.pos); }
       // gravity when the ground under the animal is removed
       if (d2 < 48 * 48 && this.world.isLoaded(Math.floor(a.pos.x), Math.floor(a.pos.z))) {
@@ -154,7 +213,16 @@ export class AnimalManager {
       if (a.state === 'idle') {
         a.timer -= dt;
         if (a.timer <= 0) {
-          if (a.rng.chance(0.35) && a.pen) {
+          if (a.panic) {
+            // bolt in a random direction (away from the threat when known), staying inside the pen if any
+            const info = this.alertInfo;
+            let ang = a.rng.range(0, Math.PI * 2);
+            if (info) { const ax = a.pos.x - info.x, az = a.pos.z - info.z; const base = Math.atan2(ax, az); ang = base + a.rng.range(-0.9, 0.9); }
+            const dist = a.rng.range(4, 10);
+            let tx = a.pos.x + Math.sin(ang) * dist, tz = a.pos.z + Math.cos(ang) * dist;
+            if (a.pen) { tx = Math.min(a.pen.x1 + 0.4, Math.max(a.pen.x0 + 0.6, tx)); tz = Math.min(a.pen.z1 + 0.4, Math.max(a.pen.z0 + 0.6, tz)); }
+            a.target = { x: tx, z: tz }; a.state = 'walk'; a.graze = false;
+          } else if (a.rng.chance(0.35) && a.pen) {
             const tx = a.rng.range(a.pen.x0 + 0.6, a.pen.x1 + 0.4), tz = a.rng.range(a.pen.z0 + 0.6, a.pen.z1 + 0.4);
             a.target = { x: tx, z: tz }; a.state = 'walk'; a.graze = false;
           } else { a.timer = a.rng.range(3, 12); a.graze = a.rng.chance(0.5); }
@@ -162,13 +230,13 @@ export class AnimalManager {
       } else if (a.state === 'walk') {
         const tdx = a.target.x - a.pos.x, tdz = a.target.z - a.pos.z;
         const dist = Math.hypot(tdx, tdz);
-        const step = a.spec.speed * dt;
+        const step = a.spec.speed * (a.panic ? 2.2 : 1) * dt;
         if (dist < 0.3) { a.state = 'idle'; a.timer = a.rng.range(3, 12); continue; }
         const nx = a.pos.x + (tdx / dist) * step, nz = a.pos.z + (tdz / dist) * step;
         const cell = standHeight(this.world, Math.floor(nx), Math.floor(a.pos.y + 0.01), Math.floor(nz));
         let h = cell;
         if (h === null) { const up = standHeight(this.world, Math.floor(nx), Math.floor(a.pos.y + 0.01) + 1, Math.floor(nz)); const down = standHeight(this.world, Math.floor(nx), Math.floor(a.pos.y + 0.01) - 1, Math.floor(nz)); h = up !== null && up - a.pos.y <= 1.05 ? up : down; }
-        if (h === null || Math.abs(h - a.pos.y) > 1.05 || (a.pen && (nx < a.pen.x0 + 0.5 || nx > a.pen.x1 + 0.5 || nz < a.pen.z0 + 0.5 || nz > a.pen.z1 + 0.5))) { a.state = 'idle'; a.timer = a.rng.range(1, 4); continue; }
+        if (h === null || Math.abs(h - a.pos.y) > 1.05 || (a.pen && (nx < a.pen.x0 + 0.5 || nx > a.pen.x1 + 0.5 || nz < a.pen.z0 + 0.5 || nz > a.pen.z1 + 0.5))) { a.state = 'idle'; a.timer = a.panic ? a.rng.range(0.1, 0.6) : a.rng.range(1, 4); continue; }
         a.pos.x = nx; a.pos.z = nz; a.pos.y += (h - a.pos.y) * 0.5;
         a.targetYaw = Math.atan2(tdx, tdz);
         a.walkTime += step;
@@ -189,10 +257,13 @@ export class AnimalManager {
       let dy = a.targetYaw - a.yaw; while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2;
       a.yaw += dy * Math.min(1, dt * 6);
       a.root.rotation.y = a.yaw;
+      if (a.air) { a.root.rotation.x = (a.airSpin || 0) * 0.8; a.root.rotation.z = (a.airSpin || 0) * 0.5; }
+      else if (a.stunned > 0) { a.root.rotation.z += (1.3 - a.root.rotation.z) * Math.min(1, dt * 5); a.root.rotation.x *= 0.9; }
+      else { a.root.rotation.x *= 0.85; a.root.rotation.z *= 0.85; }
       if (d2 > 60 * 60) continue;
       const P = a.model.parts;
-      if (a.state === 'walk') {
-        const s = Math.sin(a.walkTime * 4) * 0.6;
+      if (a.state === 'walk' || a.air) {
+        const s = Math.sin(a.walkTime * 4 + (a.air ? performance.now() * 0.01 : 0)) * (a.panic || a.air ? 0.9 : 0.6);
         if (P.legFL) { P.legFL.rotation.x = s; P.legBR.rotation.x = s; P.legFR.rotation.x = -s; P.legBL.rotation.x = -s; }
         if (P.legL) { P.legL.rotation.x = s; P.legR.rotation.x = -s; }
       } else {

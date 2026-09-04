@@ -103,22 +103,18 @@ export function saloon(fr, F) {
   const rec = shell(fr, F, { w, d, floors: 2, wall: PLANKS, trim: B.SPRUCE_LOG, roof: 'flat', sign: 'SALOON', doorU: 13, doorId: B.SALOON_DOOR, doubleDoor: false, name: 'Saloon', kind: 'saloon', windowsU: [3, 6, 9, 17, 20, 23], backDoorU: 4 });
   // extra: big double saloon door opening
   fr.door(13, F + 1, 0, B.SALOON_DOOR);
-  // bar along the back wall
-  fr.fill(8, F + 1, d - 3, 22, F + 1, d - 3, DARK);
-  fr.fill(8, F + 2, d - 3, 22, F + 2, d - 3, B.SPRUCE_SLAB);
+  // bar along the back: counter (d-4), bartender walkway (d-3), bottle shelves against the intact back wall (d-2)
+  fr.fill(8, F + 1, d - 4, 22, F + 1, d - 4, DARK);
+  fr.fill(8, F + 2, d - 4, 22, F + 2, d - 4, B.SPRUCE_SLAB);
   fr.fill(8, F + 1, d - 2, 22, F + 3, d - 2, B.SHELF);
   fr.fill(9, F + 4, d - 2, 21, F + 4, d - 2, DARK);
-  for (let u = 9; u <= 21; u += 3) fr.lantern(u, F + 4, d - 4);
-  // bartender spot behind the bar
-  addSpot(fr, rec, 12, d - 2 + 0, F + 1, 'work'); addSpot(fr, rec, 18, d - 2, F + 1, 'work');
-  // but behind bar cell must be walkable: clear cells between bar and shelf row -> the bar is at d-3, shelf at d-2; make the bartender stand in front? Instead keep a gap: move shelves onto the wall
-  fr.fill(8, F + 1, d - 2, 22, F + 3, d - 2, B.AIR);
-  fr.fill(8, F + 1, d - 1, 22, F + 3, d - 1, B.SHELF);
-  fr.fill(9, F + 4, d - 1, 21, F + 4, d - 1, DARK);
+  for (let u = 9; u <= 21; u += 3) fr.lantern(u, F + 4, d - 5);
+  // bartender spots behind the bar
+  addSpot(fr, rec, 12, d - 3, F + 1, 'work'); addSpot(fr, rec, 18, d - 3, F + 1, 'work');
   // bar stools/spots in front of bar
-  for (let u = 8; u <= 22; u += 2) addSpot(fr, rec, u, d - 4, F + 1);
+  for (let u = 8; u <= 22; u += 2) addSpot(fr, rec, u, d - 5, F + 1);
   // tables with chairs
-  for (const [u, v] of [[4, 4], [4, 9], [9, 6], [17, 6], [22, 4], [22, 9], [9, 11], [17, 11]]) {
+  for (const [u, v] of [[4, 4], [4, 9], [9, 6], [17, 6], [22, 4], [22, 9], [9, 9], [17, 9]]) {
     fr.set(u, F + 1, v, B.TABLE);
     fr.set(u - 1, F + 1, v, B.SPRUCE_SLAB); fr.set(u + 1, F + 1, v, B.SPRUCE_SLAB);
     addSpot(fr, rec, u - 1, v, F + 1); addSpot(fr, rec, u + 1, v, F + 1);
@@ -183,15 +179,14 @@ export function sheriff(fr, F) {
 export function generalStore(fr, F) {
   const w = 15, d = 13;
   const rec = shell(fr, F, { w, d, floors: 1, wall: PLANKS, trim: B.SPRUCE_LOG, roof: 'flat', sign: 'GENERAL STORE', doorU: 7, name: 'General Store', kind: 'store', windowsU: [2, 4, 10, 12], falseFrontH: 3 });
-  fr.fill(2, F + 1, d - 3, w - 3, F + 1, d - 3, DARK); fr.fill(2, F + 2, d - 3, w - 3, F + 2, d - 3, B.SPRUCE_SLAB); // counter
-  fr.fill(1, F + 1, d - 2, w - 2, F + 3, d - 2, B.AIR);
-  fr.fill(1, F + 1, d - 1, w - 2, F + 3, d - 1, B.SHELF);
-  fr.fill(1, F + 1, 2, 1, F + 3, d - 5, B.BOOKSHELF); fr.fill(w - 2, F + 1, 2, w - 2, F + 3, d - 5, B.SHELF);
+  fr.fill(2, F + 1, d - 4, w - 3, F + 1, d - 4, DARK); fr.fill(2, F + 2, d - 4, w - 3, F + 2, d - 4, B.SPRUCE_SLAB); // counter
+  fr.fill(1, F + 1, d - 2, w - 2, F + 3, d - 2, B.SHELF); // goods against the (intact) back wall
+  fr.fill(1, F + 1, 2, 1, F + 3, d - 6, B.BOOKSHELF); fr.fill(w - 2, F + 1, 2, w - 2, F + 3, d - 6, B.SHELF);
   for (const [u, v] of [[4, 4], [5, 4], [9, 5], [10, 5], [4, 8]]) fr.set(u, F + 1, v, u % 2 ? B.CRATE : B.BARREL);
-  fr.set(9, F + 1, 8, B.HAY_BALE); fr.set(10, F + 2, 5, B.CRATE);
-  addSpot(fr, rec, 7, d - 2, F + 1, 'work');
-  for (const [u, v] of [[3, 6], [7, 6], [11, 7], [7, 9]]) addSpot(fr, rec, u, v, F + 1);
-  fr.lantern(4, F + 4, 5); fr.lantern(10, F + 4, 5); fr.lantern(7, F + 4, 9);
+  fr.set(10, F + 2, 5, B.CRATE);
+  addSpot(fr, rec, 7, d - 3, F + 1, 'work');
+  for (const [u, v] of [[3, 6], [7, 6], [11, 7], [7, 8]]) addSpot(fr, rec, u, v, F + 1);
+  fr.lantern(4, F + 4, 5); fr.lantern(10, F + 4, 5); fr.lantern(7, F + 4, 8);
   // goods outside on the boardwalk
   fr.set(1, F + 1, -1, B.BARREL); fr.set(2, F + 1, -1, B.CRATE); fr.set(w - 2, F + 1, -1, B.BARREL); fr.set(w - 2, F + 2, -1, B.BARREL);
   return rec;
@@ -200,11 +195,12 @@ export function generalStore(fr, F) {
 export function shop(fr, F, name, kind, w = 11, d = 10, opts = {}) {
   const rec = shell(fr, F, { w, d, floors: 1, wall: opts.wall ?? PLANKS, trim: opts.trim ?? B.STRIPPED_OAK, roof: opts.roof || 'flat', sign: name.toUpperCase(), doorU: Math.floor(w / 2), name, kind, ...opts });
   const cu = Math.floor(w / 2);
-  fr.fill(2, F + 1, d - 3, w - 3, F + 1, d - 3, DARK); fr.fill(2, F + 2, d - 3, w - 3, F + 2, d - 3, B.SPRUCE_SLAB);
-  fr.fill(1, F + 1, d - 1, w - 2, F + 3, d - 1, opts.shelf ?? B.SHELF);
-  addSpot(fr, rec, cu, d - 2, F + 1, 'work');
-  addSpot(fr, rec, cu - 2, 4, F + 1); addSpot(fr, rec, cu + 2, 5, F + 1); addSpot(fr, rec, cu, d - 4, F + 1);
-  fr.lantern(cu, F + 4, 3); fr.lantern(cu, F + 4, d - 4);
+  // counter (d-4), keeper walkway (d-3), goods shelves inside against the back wall (d-2). The wall stays intact.
+  fr.fill(2, F + 1, d - 4, w - 3, F + 1, d - 4, DARK); fr.fill(2, F + 2, d - 4, w - 3, F + 2, d - 4, B.SPRUCE_SLAB);
+  fr.fill(1, F + 1, d - 2, w - 2, F + 3, d - 2, opts.shelf ?? B.SHELF);
+  addSpot(fr, rec, cu, d - 3, F + 1, 'work');
+  addSpot(fr, rec, cu - 2, 3, F + 1); addSpot(fr, rec, cu + 2, 3, F + 1); addSpot(fr, rec, cu, d - 5, F + 1);
+  fr.lantern(cu, F + 4, 2); fr.lantern(cu, F + 4, d - 5);
   if (opts.furnish) opts.furnish(fr, F, rec, w, d);
   return rec;
 }
@@ -231,10 +227,10 @@ export function gunsmith(fr, F) {
 export function hotel(fr, F) {
   const w = 21, d = 14;
   const rec = shell(fr, F, { w, d, floors: 2, wall: B.PLASTER, trim: B.SPRUCE_LOG, roof: 'flat', sign: 'HOTEL', doorU: 10, name: 'Grand Hotel', kind: 'hotel', windowsU: [3, 6, 14, 17], backDoorU: 3 });
-  // lobby: reception desk, seating
-  fr.fill(7, F + 1, d - 3, 13, F + 1, d - 3, DARK); fr.fill(7, F + 2, d - 3, 13, F + 2, d - 3, B.SPRUCE_SLAB);
-  fr.fill(8, F + 1, d - 1, 12, F + 3, d - 1, B.BOOKSHELF);
-  addSpot(fr, rec, 10, d - 2, F + 1, 'work');
+  // lobby: reception desk, key shelves inside against the back wall, seating
+  fr.fill(7, F + 1, d - 4, 13, F + 1, d - 4, DARK); fr.fill(7, F + 2, d - 4, 13, F + 2, d - 4, B.SPRUCE_SLAB);
+  fr.fill(8, F + 1, d - 2, 12, F + 3, d - 2, B.BOOKSHELF);
+  addSpot(fr, rec, 10, d - 3, F + 1, 'work');
   for (const [u, v] of [[3, 4], [17, 4], [3, 8], [17, 8]]) { fr.set(u, F + 1, v, B.TABLE); fr.set(u + 1, F + 1, v, B.SPRUCE_SLAB); fr.set(u - 1, F + 1, v, B.SPRUCE_SLAB); addSpot(fr, rec, u + 1, v, F + 1); addSpot(fr, rec, u - 1, v, F + 1); }
   fr.fill(1, F + 1, 2, 1, F + 1, 3, B.RED_WOOL); fr.fill(w - 2, F + 1, 2, w - 2, F + 1, 3, B.RED_WOOL);
   for (const [u, v] of [[5, 6], [10, 6], [15, 6], [10, 10]]) fr.lantern(u, F + 4, v);

@@ -9,6 +9,7 @@ export const SHARED = {
   uFogColor: { value: new THREE.Vector3(0.7, 0.8, 1) },
   uFogNear: { value: 80 },
   uFogFar: { value: 120 },
+  uFlash: { value: 0 },
 };
 
 const VERT = /* glsl */ `
@@ -35,6 +36,7 @@ uniform vec3 uSkyTint;
 uniform vec3 uFogColor;
 uniform float uFogNear;
 uniform float uFogFar;
+uniform float uFlash;
 uniform vec3 uTint;
 uniform float uOpacity;
 uniform float uHurt;
@@ -49,7 +51,7 @@ void main() {
   float sky = lightCurve(uLight.x) * uSkyLight;
   float blk = blockCurve(uLight.y);
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
-  light = max(light, vec3(0.035));
+  light = max(light, vec3(0.035)) + vec3(uFlash);
   vec3 col = tex.rgb * uTint * light * vShade;
   col = mix(col, vec3(1.0, 0.3, 0.3), uHurt * 0.5);
   float f = smoothstep(uFogNear, uFogFar, vDist);
@@ -67,6 +69,7 @@ export function makeEntityMaterial(texture, opts = {}) {
       uFogColor: SHARED.uFogColor,
       uFogNear: SHARED.uFogNear,
       uFogFar: SHARED.uFogFar,
+      uFlash: SHARED.uFlash,
       uTint: { value: new THREE.Vector3(1, 1, 1) },
       uOpacity: { value: 1 },
       uHurt: { value: 0 },
@@ -85,6 +88,7 @@ export function makeEntityMaterial(texture, opts = {}) {
     c.uniforms.uFogColor = SHARED.uFogColor;
     c.uniforms.uFogNear = SHARED.uFogNear;
     c.uniforms.uFogFar = SHARED.uFogFar;
+    c.uniforms.uFlash = SHARED.uFlash;
     c.clone = m.clone;
     return c;
   };

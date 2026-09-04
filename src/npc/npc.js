@@ -6,7 +6,7 @@ import { findPath, findStand, standHeight } from './pathfinding.js';
 import { RNG } from '../rng.js';
 import { drawText, measureText } from '../font.js';
 import { AABB } from '../player.js';
-import { BLOCKS, SHAPE } from '../blocks.js';
+import { BLOCKS, SHAPE, B } from '../blocks.js';
 
 const TICK = 0.05;
 const WALK_SPEED = 2.6;   // blocks/s
@@ -33,7 +33,14 @@ const LINES = {
   traveler: ["Just passin' through.", 'Long ride from the north.', 'Poker game tonight at the saloon.', 'Nice town. Quiet.'],
   pianist: ['Requests cost a nickel.', 'Music soothes the savage cowboy.'],
   poke: ['Hey! Watch it!', 'Keep your hands to yourself!', "You lookin' for trouble?", 'Easy there, partner.'],
+  flood: ["The river's coming! Get to high ground!", 'Water! Everybody up the stairs!', 'Grab what you can and run!', 'Lord help us, the whole street is flooding!'],
+  tornado: ['Twister! Take cover!', 'Get inside, now!', 'Ring the bell! Tornado!', "Don't look at it, RUN!"],
+  beam: ['What in God\'s name is that light?!', 'The sky is burning! Run!', 'Get away from there!', 'Judgment day, I tell you!'],
+  trapped: ["Help! I can't swim!", 'Somebody get me out of here!', "I'm stuck! Help!", 'Over here! Help!'],
 };
+
+const PANIC_SPEED = 4.2;
+const SWIM_SPEED = 1.3;
 
 function hourOf(time) { return (time * 24) % 24; }
 
@@ -74,6 +81,15 @@ class NPC {
     this.hurt = 0;
     this.talkCooldown = 0;
     this.lastKind = null;
+    // disaster reaction state
+    this.panic = false;
+    this.panicUntil = 0;
+    this.air = null;          // {vx,vy,vz,spin} while thrown by a tornado
+    this.stunned = 0;
+    this.swimming = false;
+    this.trapped = 0;         // seconds spent unable to progress while in water
+    this.shoutCooldown = 0;
+    this.health = 20;
     this.tag = this.makeTag();
     this.root.add(this.tag);
   }
@@ -241,6 +257,70 @@ export class NPCManager {
     return x < 0.3 ? shop() : x < 0.5 ? street() : x < 0.65 ? gather() : x < 0.8 ? church() : x < 0.9 ? stationSpot() : home(r.range(10, 30));
   }
 
+  // ---------------------------------------------------------------- disaster reactions (public API)
+  // info: {kind:'flood'|'tornado'|'beam', x, z, radius, awayRadius, safeY, dir:[dx,dz], untilTick, flowFn}
+  alert(info) {
+    this.alertInfo = { ...info, untilTick: info.untilTick ?? (this.tickCount + 20 * 120) };
+    const r2 = (info.radius || 80) ** 2;
+    for (const npc of this.list) {
+      const dx = npc.pos.x - info.x, dz = npc.pos.z - info.z;
+      if (dx * dx + dz * dz > r2) continue;
+      if (!npc.panic) { npc.panic = true; npc.panicUntil = this.alertInfo.untilTick; this.shout(npc, info.kind, 0.35); }
+      // drop whatever they were doing and evacuate
+      npc.sitting = false;
+      npc.idleTimer = Math.min(npc.idleTimer, npc.rng.range(0.1, 1.2));
+      if (npc.state === 'walk' && npc.target && npc.target.kind !== 'evacuate') { npc.path = null; npc.state = 'idle'; npc.idleTimer = npc.rng.range(0.1, 0.8); npc.target = null; }
+    }
+  }
+  clearAlert() {
+    this.alertInfo = null;
+    for (const npc of this.list) { npc.panic = false; npc.trapped = 0; if (npc.target && npc.target.kind === 'evacuate') { npc.target = null; npc.path = null; npc.state = 'idle'; npc.idleTimer = npc.rng.range(1, 4); } }
+  }
+  // Throw an NPC (tornado). Velocities in blocks/s.
+  applyImpulse(npc, vx, vy, vz) {
+    if (!npc.air) npc.air = { vx: 0, vy: 0, vz: 0, spin: npc.rng.range(-6, 6) };
+    npc.air.vx += vx; npc.air.vy += vy; npc.air.vz += vz;
+    const sp = Math.hypot(npc.air.vx, npc.air.vy, npc.air.vz);
+    if (sp > 28) { const k = 28 / sp; npc.air.vx *= k; npc.air.vy *= k; npc.air.vz *= k; }
+    npc.path = null; npc.state = 'idle'; npc.sitting = false;
+  }
+  eachNear(x, z, r, fn) { const r2 = r * r; for (const npc of this.list) { const dx = npc.pos.x - x, dz = npc.pos.z - z; if (dx * dx + dz * dz <= r2) fn(npc, Math.sqrt(dx * dx + dz * dz)); } }
+  onBulkWorldChange() { /* paths self-validate each step; nothing to do */ }
+  shout(npc, kind, chance = 1) {
+    if (npc.shoutCooldown > 0 || npc.rng.next() > chance) return;
+    const p = this.game ? this.game.player.pos : null;
+    if (p && Math.hypot(npc.pos.x - p.x, npc.pos.z - p.z) > 28) return;
+    npc.shoutCooldown = npc.rng.range(6, 14);
+    this.hud.addMessage(`<${npc.name}> ${npc.say(kind)}`);
+    this.audio.npcGrunt(npc.pos, npc.female ? 1.6 : 1.1);
+  }
+
+  // Choose where a panicking NPC runs to.
+  evacuationTarget(npc) {
+    const info = this.alertInfo, t = this.town, r = npc.rng;
+    if (!info) return null;
+    const cands = [];
+    const push = (p, score, kind = 'evacuate') => { if (p) cands.push({ p, score, kind }); };
+    const away = (p) => { const dx = p.x - info.x, dz = p.z - info.z; return Math.sqrt(dx * dx + dz * dz); };
+    if (info.kind === 'flood') {
+      // high ground first: upper floors (beds/spots above the safe height)
+      for (const b of t.buildings) for (const list of ['beds', 'spots']) for (const p of b[list] || []) if (p.y >= (info.safeY || 62)) push(p, 100 + r.next() * 10);
+      // otherwise run opposite to the wave direction
+      const dir = info.dir || [1, 0];
+      for (const p of t.streetSpots) { const d = -(p.x * dir[0] + p.z * dir[1]); push(p, d + r.next() * 4); }
+    } else if (info.kind === 'tornado') {
+      for (const b of t.buildings) if (b.kind !== 'graveyard' && b.kind !== 'market') for (const p of b.spots) { const d = away(p); if (d > (info.awayRadius || 35)) push(p, d + r.next() * 8); }
+      for (const p of t.streetSpots) { const d = away(p); if (d > (info.awayRadius || 35) + 15) push(p, d * 0.7); }
+    } else {
+      for (const p of t.streetSpots) { const d = away(p); if (d > (info.awayRadius || 40)) push(p, d + r.next() * 6); }
+      for (const b of t.buildings) for (const p of b.spots) { const d = away(p); if (d > (info.awayRadius || 40) + 10) push(p, d * 0.8); }
+    }
+    if (!cands.length) return null;
+    cands.sort((a, b) => b.score - a.score);
+    const pick = cands[Math.floor(r.next() * Math.min(6, cands.length))];
+    return { x: pick.p.x, y: pick.p.y, z: pick.p.z, kind: 'evacuate', dwell: r.range(4, 9) };
+  }
+
   requestPath(npc) {
     if (npc.waitingPath) return;
     npc.waitingPath = true;
@@ -312,9 +392,77 @@ export class NPCManager {
     if (h !== null && Math.abs(h - npc.pos.y) < 0.6) { npc.pos.x = nx; npc.pos.z = nz; }
   }
 
+  // Move through water/air cells (no standing surface needed). Returns true if moved.
+  tryMoveWater(npc, mx, mz) {
+    const nx = npc.pos.x + mx, nz = npc.pos.z + mz;
+    const id = this.world.getBlock(Math.floor(nx), Math.floor(npc.pos.y + 0.6), Math.floor(nz));
+    if (BLOCKS[id].solid) return false;
+    npc.pos.x = nx; npc.pos.z = nz;
+    return true;
+  }
+
+  // Swimming NPCs head straight for their target through the water, flailing when blocked.
+  swimToward(npc, dt) {
+    const t = npc.target;
+    if (!t) { npc.state = 'idle'; npc.idleTimer = 0.5; return; }
+    const dx = t.x + 0.5 - npc.pos.x, dz = t.z + 0.5 - npc.pos.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.7) { this.arrive(npc); return; }
+    const step = SWIM_SPEED * dt;
+    npc.targetYaw = Math.atan2(dx, dz);
+    if (this.tryMoveWater(npc, (dx / dist) * step, (dz / dist) * step)) { npc.trapped = Math.max(0, npc.trapped - dt * 0.5); npc.walkTime += dt * 2; }
+    else if (!this.tryMoveWater(npc, (dz / dist) * step, -(dx / dist) * step)) this.tryMoveWater(npc, -(dz / dist) * step, (dx / dist) * step);
+    // climbed out? snap to a standing height and resume normal pathing
+    const h = standHeight(this.world, Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.01), Math.floor(npc.pos.z));
+    if (h !== null && this.world.getBlock(Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.2), Math.floor(npc.pos.z)) !== B.WATER) { npc.pos.y = h; npc.path = null; this.requestPath(npc); npc.state = 'idle'; npc.idleTimer = 0.1; }
+  }
+
+  // Airborne (thrown) physics: gravity + simple voxel collision, then a stun on landing.
+  updateAirborne(npc, dt) {
+    const a = npc.air;
+    a.vy -= 22 * dt;
+    const nx = npc.pos.x + a.vx * dt, ny = npc.pos.y + a.vy * dt, nz = npc.pos.z + a.vz * dt;
+    const w = this.world;
+    const solidAt = (x, y, z) => BLOCKS[w.getBlock(Math.floor(x), Math.floor(y), Math.floor(z))].solid;
+    if (!solidAt(nx, npc.pos.y + 0.9, npc.pos.z)) npc.pos.x = nx; else a.vx *= -0.3;
+    if (!solidAt(npc.pos.x, npc.pos.y + 0.9, nz)) npc.pos.z = nz; else a.vz *= -0.3;
+    if (a.vy < 0 && (solidAt(npc.pos.x, ny, npc.pos.z) || ny < 1)) {
+      // landed
+      const h = standHeight(w, Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.01), Math.floor(npc.pos.z));
+      npc.pos.y = h !== null ? h : Math.ceil(ny);
+      const impact = Math.min(1, -a.vy / 25);
+      npc.hurt = 0.5; npc.health = Math.max(1, npc.health - Math.round(impact * 8));
+      npc.stunned = 1.5 + impact * 3;
+      npc.air = null;
+      npc.airSpin = 0;
+      this.audio.step('gravel', npc.pos, 1.5);
+      return;
+    }
+    if (a.vy > 0 && solidAt(npc.pos.x, ny + 1.8, npc.pos.z)) a.vy = 0; else npc.pos.y = ny;
+    npc.airSpin = (npc.airSpin || 0) + a.spin * dt;
+    a.vx *= 1 - 0.4 * dt; a.vz *= 1 - 0.4 * dt;
+    npc.targetYaw += a.spin * dt;
+  }
+
   updateNPC(npc, dt, hour, dayFactor, player, d2) {
     if (npc.hurt > 0) npc.hurt -= dt;
     if (npc.talkCooldown > 0) npc.talkCooldown -= dt;
+    if (npc.shoutCooldown > 0) npc.shoutCooldown -= dt;
+    if (npc.air) { this.updateAirborne(npc, dt); return; }
+    if (npc.stunned > 0) { npc.stunned -= dt; npc.state = 'idle'; npc.idleTimer = Math.max(npc.idleTimer, 0.2); return; }
+    if (npc.panic && this.tickCount > npc.panicUntil) { npc.panic = false; npc.trapped = 0; }
+    // water: float at the surface and wade slowly; shout for help when stuck
+    const feet = this.world.getBlock(Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.2), Math.floor(npc.pos.z));
+    npc.swimming = feet === B.WATER;
+    if (npc.swimming) {
+      let top = Math.floor(npc.pos.y + 0.2);
+      while (this.world.getBlock(Math.floor(npc.pos.x), top + 1, Math.floor(npc.pos.z)) === B.WATER && top < npc.pos.y + 6) top++;
+      const surface = top + 0.9 - 1.3; // eyes above the surface
+      npc.pos.y += (surface - npc.pos.y) * Math.min(1, dt * 4);
+      if (this.alertInfo && this.alertInfo.flowFn) { const f = this.alertInfo.flowFn(npc.pos.x, npc.pos.z); if (f) { this.tryMoveWater(npc, f[0] * dt, f[1] * dt); } }
+      npc.trapped += dt;
+      if (npc.trapped > 3 && npc.shoutCooldown <= 0) this.shout(npc, 'trapped', 0.6);
+    } else npc.trapped = Math.max(0, npc.trapped - dt);
     // gravity: if the ground was removed under the NPC, fall until something supports it
     if (d2 < 48 * 48 && (this.tickCount + npc.id) % 2 === 0) {
       const fx = Math.floor(npc.pos.x), fz = Math.floor(npc.pos.z), fy = Math.floor(npc.pos.y + 0.01);
@@ -338,19 +486,23 @@ export class NPCManager {
     if (npc.state === 'idle') {
       npc.idleTimer -= dt;
       if (npc.idleTimer <= 0 && !npc.waitingPath) {
-        const target = this.chooseTarget(npc, hour, dayFactor);
+        const target = npc.panic ? (this.evacuationTarget(npc) || this.chooseTarget(npc, hour, dayFactor)) : this.chooseTarget(npc, hour, dayFactor);
+        if (npc.panic) this.shout(npc, this.alertInfo ? this.alertInfo.kind : 'generic', 0.25);
         if (!target) { npc.idleTimer = 3; return; }
         // already there? just dwell (and face the right way)
         const ddx = target.x + 0.5 - npc.pos.x, ddz = target.z + 0.5 - npc.pos.z;
         if (ddx * ddx + ddz * ddz < 1.5) { npc.idleTimer = target.dwell; this.faceTarget(npc, target); npc.lastKind = target.kind; npc.target = null; return; }
         npc.target = target;
-        npc.speed = target.kind === 'home' && (hour >= 21 || hour < 6) ? HURRY_SPEED : WALK_SPEED;
+        npc.speed = npc.panic ? PANIC_SPEED : target.kind === 'home' && (hour >= 21 || hour < 6) ? HURRY_SPEED : WALK_SPEED;
         this.requestPath(npc);
         npc.sitting = false;
       }
       return;
     }
+    if (npc.swimming && npc.state === 'walk') npc.speed = SWIM_SPEED;
+    else if (npc.panic && npc.state === 'walk') npc.speed = PANIC_SPEED;
     if (npc.state === 'walk') {
+      if (npc.swimming) { this.swimToward(npc, dt); return; }
       if (!npc.path || npc.pathIndex >= npc.path.length) { this.arrive(npc); return; }
       const cell = npc.path[npc.pathIndex];
       // re-validate the next cell (player may have placed/broken blocks)
@@ -421,14 +573,27 @@ export class NPCManager {
       while (dy < -Math.PI) dy += Math.PI * 2;
       npc.yaw += dy * Math.min(1, dt * 10);
       r.rotation.y = npc.yaw;
+      // thrown through the air: tumble
+      if (npc.air) { r.rotation.x = (npc.airSpin || 0) * 0.7; r.rotation.z = (npc.airSpin || 0) * 0.4; }
+      else if (npc.stunned > 0) { r.rotation.x += (-1.4 - r.rotation.x) * Math.min(1, dt * 6); r.rotation.z *= 0.9; r.position.y += 0.15; }
+      else { r.rotation.x *= 0.85; r.rotation.z *= 0.85; }
       if (d2 > 50 * 50) { npc.tag.visible = false; continue; }
       // limbs
       const m = npc.model;
-      if (npc.state === 'walk') {
+      if (npc.air) {
+        const t = performance.now() * 0.01;
+        m.rightArm.rotation.x = -2.6 + Math.sin(t) * 0.5; m.leftArm.rotation.x = -2.6 + Math.cos(t) * 0.5;
+        m.rightLeg.rotation.x = Math.sin(t * 1.3) * 0.8; m.leftLeg.rotation.x = -Math.sin(t * 1.3) * 0.8;
+      } else if (npc.swimming) {
+        const t = performance.now() * 0.006;
+        m.rightArm.rotation.x = -2.8 + Math.sin(t) * 0.4; m.leftArm.rotation.x = -2.8 + Math.cos(t * 1.1) * 0.4;
+        m.rightArm.rotation.z = 0.3; m.leftArm.rotation.z = -0.3;
+        m.rightLeg.rotation.x = Math.sin(t * 2) * 0.5; m.leftLeg.rotation.x = -Math.sin(t * 2) * 0.5;
+      } else if (npc.state === 'walk') {
         const s = Math.sin(npc.walkTime * 3.6) * 0.75;
         m.rightLeg.rotation.x = s; m.leftLeg.rotation.x = -s;
-        m.rightArm.rotation.x = -s * 0.9; m.leftArm.rotation.x = s * 0.9;
-        m.rightArm.rotation.z = 0.05; m.leftArm.rotation.z = -0.05;
+        if (npc.panic) { m.rightArm.rotation.x = -2.2 + s * 0.5; m.leftArm.rotation.x = -2.2 - s * 0.5; m.rightArm.rotation.z = 0.35; m.leftArm.rotation.z = -0.35; }
+        else { m.rightArm.rotation.x = -s * 0.9; m.leftArm.rotation.x = s * 0.9; m.rightArm.rotation.z = 0.05; m.leftArm.rotation.z = -0.05; }
       } else if (npc.sitting) {
         m.rightLeg.rotation.x = m.leftLeg.rotation.x = -Math.PI / 2;
         m.rightArm.rotation.x = m.leftArm.rotation.x = -0.4;

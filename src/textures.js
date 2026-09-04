@@ -497,6 +497,17 @@ P.gold_ore = (t, r) => P.stone_ore(t, r, [250, 232, 80], 7);
 P.pumpkin_side = (t, r) => { t.noisy([214, 122, 24], 8, r); for (const x of [3, 8, 13]) t.vline(x, 0, 15, [170, 92, 16]); };
 P.pumpkin_top = (t, r) => { t.noisy([214, 122, 24], 8, r); t.rect(6, 6, 4, 4, [110, 80, 30]); t.rect(7, 7, 2, 2, [90, 110, 40]); };
 P.trough = (t, r) => { planks(t, r, SPRUCE, SPRUCE_DARK); t.rect(2, 2, 12, 12, [58, 112, 216]); };
+P.scorched_stone = (t, r) => {
+  t.noisy([58, 54, 52], 9, r);
+  for (let i = 0; i < 5; i++) { let x = r.int(0, 15), y = r.int(0, 15); for (let k = 0; k < r.int(3, 7); k++) { t.px(x, y, r.next() < 0.6 ? [150, 60, 20] : [90, 40, 20]); if (r.next() < 0.5) x = (x + 1) & 15; else y = (y + 1) & 15; } }
+  t.speckle([30, 28, 26], 14, r);
+};
+P.ash = (t, r) => { t.noisy([112, 108, 104], 9, r); t.speckle([80, 76, 72], 20, r); t.speckle([140, 136, 130], 10, r); };
+P.magma = (t, r) => {
+  t.noisy([38, 22, 14], 8, r);
+  for (let i = 0; i < 6; i++) { let x = r.int(0, 15), y = r.int(0, 15); for (let k = 0; k < r.int(4, 9); k++) { t.px(x, y, [255, 140 + r.int(0, 60), 30]); if (r.next() < 0.3) t.px((x + 1) & 15, y, [255, 200, 90]); if (r.next() < 0.5) x = (x + 1) & 15; else y = (y + 1) & 15; } }
+};
+P.charred_planks = (t, r) => { planks(t, r, [52, 44, 38], [28, 22, 18]); t.speckle([20, 16, 14], 24, r); t.speckle([120, 60, 20], 4, r); };
 P.missing = (t, r) => { for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) t.px(x, y, ((x >> 3) + (y >> 3)) & 1 ? [255, 0, 255] : [0, 0, 0]); };
 
 function destroyStage(t, r, stage) {
@@ -532,6 +543,7 @@ const TILE_NAMES = [
   'furnace_side', 'furnace_front', 'anvil', 'anvil_top', 'iron_block', 'gold_block', 'chest_side', 'chest_front', 'chest_top',
   'gravestone', 'coarse_dirt', 'farmland', 'smooth_stone', 'plaster', 'white_planks', 'stripped_oak', 'snow',
   'coal_ore', 'iron_ore', 'gold_ore', 'pumpkin_side', 'pumpkin_top', 'trough',
+  'scorched_stone', 'ash', 'magma', 'charred_planks',
 ];
 
 export const TILES = {};
