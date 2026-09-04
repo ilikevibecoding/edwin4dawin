@@ -68,8 +68,9 @@ export function liftOpenings(room, dir, wallLen) {
 
 /**
  * Build floor, ceiling and the four walls of a room.
- * opts: { style: 'light'|'dark', skipWalls: ['-z'], openings: { '-z': [...] }, ceiling: true,
- *         floorMat, floorColor, lightRows, lightMat, lights: true (adds point lights to ctx) }
+ * opts: { style: 'light'|'dark', skipWalls: ['-z'], openings: { '-z': [...] }, ceiling: true, floor: true,
+ *         floorMat, floorColor, lightRows, lightMat, lights: true (adds point lights to ctx),
+ *         panelW (panel pitch, use ~2 for tall halls), styles (panelGrid style mix) }
  */
 export function roomShell(kit, ctx, room, opts = {}) {
   const {
@@ -87,6 +88,8 @@ export function roomShell(kit, ctx, room, opts = {}) {
     kick = true,
     topPipes = false,
     wallDepth = WALL_T,
+    panelW = 1.05,
+    styles = IMPERIAL_STYLES,
   } = opts;
   const y0 = roomFloorY(room);
   const h = room.height;
@@ -111,7 +114,7 @@ export function roomShell(kit, ctx, room, opts = {}) {
     for (const door of room.doors || []) if (door[3] === dir) ops.push(doorOpening(room, door, y0, length, Math.min(h - 0.1, door[4] || DOOR_H)));
     // tall rooms: repeat the standard 3.2 m band so panels stay human-scaled instead of stretching
     const rows = h > 4.2 ? [0, 0.45, 1.55, 2.2, 3.2, ...Array.from({ length: Math.ceil((h - 3.2) / 3) }, (_, i) => Math.min(h, 3.2 + (i + 1) * 3))] : null;
-    panelGrid(frame, length, h, { openings: ops, depth: wallDepth, seed: s++, kick, topPipes, rows, styles: IMPERIAL_STYLES, paints, tag: room.id + dir });
+    panelGrid(frame, length, h, { openings: ops, depth: wallDepth, seed: s++, kick, topPipes, rows, panelW, styles, paints, tag: room.id + dir });
     // black trim band along the top edge
     frame.box("satinBlack", length / 2, h - 0.09, 0.02, length, 0.18, 0.05);
   }
