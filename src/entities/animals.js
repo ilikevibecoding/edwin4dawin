@@ -8,16 +8,86 @@ import { BLOCKS, B } from '../blocks.js';
 
 const BLOCKS_SOLID = (world, x, y, z) => BLOCKS[world.getBlock(Math.floor(x), Math.floor(y), Math.floor(z))].solid;
 
-// 32x32 texture with 4 regions: coat (0,0), dark (16,0), accent (0,16), light (16,16)
-function animalTexture(coat, dark, accent, light, rng, patches = 0) {
-  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+// 64x32 texture. Left half: four noisy solid 16x16 regions - coat (0,0), dark (16,0), accent (0,16), light (16,16).
+// Right half (x >= 32): the species' head atlas with one region per head face (classic box layout, every face
+// drawn as seen from outside) so eyes, lashes and nostrils can be painted at exact pixel positions.
+const TEX_W = 64, TEX_H = 32;
+const HEAD_X = 32, HEAD_Y = 0;
+
+function shade(hex, f) {
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  const cl = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
+  return `rgb(${cl(r)},${cl(g)},${cl(b)})`;
+}
+
+// Regions for a w(x) x h(y) x d(z) head box: top/bottom row above, right|front|left|back row below.
+// Side faces: on the animal's left (+x) face the muzzle end is the region's left column, on the right (-x) face
+// it is the right column (applyUV maps every face as viewed from outside the box).
+function headRegions(w, h, d, x0 = HEAD_X, y0 = HEAD_Y) {
+  return {
+    top: [x0 + d, y0, w, d], bottom: [x0 + d + w, y0, w, d],
+    right: [x0, y0 + d, d, h], front: [x0 + d, y0 + d, w, h], left: [x0 + d + w, y0 + d, d, h], back: [x0 + 2 * d + w, y0 + d, w, h],
+  };
+}
+const HEAD_UV = { horse: headRegions(6, 5, 9), cow: headRegions(8, 8, 6), pig: headRegions(8, 8, 8), chicken: headRegions(4, 6, 3) };
+
+// Paints the head faces: every face starts as a crop of the noisy coat (so it matches the body and costs no RNG
+// draws), then species-specific eyes are placed at real-animal proportions.
+function paintHead(ctx, canvas, type, coat, dark) {
+  const uv = HEAD_UV[type];
+  if (!uv) return;
+  ['top', 'bottom', 'right', 'front', 'left', 'back'].forEach((f, i) => {
+    const r = uv[f];
+    ctx.drawImage(canvas, (i * 3) % 8, (i * 5) % 8, r[2], r[3], r[0], r[1], r[2], r[3]);
+  });
+  const px = (r, x, y, col, w = 1, h = 1) => { ctx.fillStyle = col; ctx.fillRect(r[0] + x, r[1] + y, w, h); };
+  switch (type) {
+    case 'horse': {
+      // side faces (9x5, muzzle toward the region's outer column): 3x2 dark eye high on the rear half of the skull,
+      // a lighter glossy highlight on the front-top pixel and a thin lash line above; two nostrils on the muzzle.
+      const EYE = '#14100c', HI = '#8a7a70', LASH = shade(coat, 0.5), NOSTRIL = shade(coat, 0.6);
+      px(uv.left, 4, 1, EYE, 3, 2); px(uv.left, 4, 1, HI); px(uv.left, 4, 0, LASH, 3, 1);
+      px(uv.right, 2, 1, EYE, 3, 2); px(uv.right, 4, 1, HI); px(uv.right, 2, 0, LASH, 3, 1);
+      px(uv.front, 1, 3, NOSTRIL); px(uv.front, 4, 3, NOSTRIL);
+      break;
+    }
+    case 'cow': {
+      // 2x2 eyes in the upper front corners (above the snout part) with a white highlight, wrapping one pixel
+      // onto each side face so they read from the side as well.
+      const EYE = '#1a1410', HI = '#e8e8e8';
+      px(uv.front, 0, 2, EYE, 2, 2); px(uv.front, 1, 2, HI);
+      px(uv.front, 6, 2, EYE, 2, 2); px(uv.front, 6, 2, HI);
+      px(uv.left, 0, 2, EYE, 1, 2); px(uv.right, 5, 2, EYE, 1, 2);
+      break;
+    }
+    case 'pig': {
+      // two well separated 2x2 eyes high on the face (the snout part covers rows 3.5-6.5), highlight on the inner top pixel
+      const EYE = '#1c1418', HI = '#e6d6d6';
+      px(uv.front, 1, 1, EYE, 2, 2); px(uv.front, 2, 1, HI);
+      px(uv.front, 5, 1, EYE, 2, 2); px(uv.front, 5, 1, HI);
+      break;
+    }
+    case 'chicken': {
+      // one small dark eye on each side of the head (3x6 faces), just behind the beak, none on the front
+      const EYE = '#14100c';
+      px(uv.left, 1, 1, EYE); px(uv.right, 1, 1, EYE);
+      break;
+    }
+    default: break;
+  }
+}
+
+function animalTexture(type, coat, dark, accent, light, rng, patches = 0) {
+  const c = document.createElement('canvas'); c.width = TEX_W; c.height = TEX_H;
   const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
   const fillNoisy = (x0, y0, col) => {
     ctx.fillStyle = col; ctx.fillRect(x0, y0, 16, 16);
     for (let i = 0; i < 70; i++) { ctx.fillStyle = `rgba(0,0,0,${0.06 + rng.next() * 0.08})`; ctx.fillRect(x0 + rng.int(0, 15), y0 + rng.int(0, 15), 1, 1); }
     for (let i = 0; i < 30; i++) { ctx.fillStyle = `rgba(255,255,255,${0.05 + rng.next() * 0.08})`; ctx.fillRect(x0 + rng.int(0, 15), y0 + rng.int(0, 15), 1, 1); }
   };
   fillNoisy(0, 0, coat); fillNoisy(16, 0, dark); fillNoisy(0, 16, accent); fillNoisy(16, 16, light);
+  paintHead(ctx, c, type, coat, dark); // before the patches: heads stay solid-coloured so the eyes read clearly
   for (let i = 0; i < patches; i++) { ctx.fillStyle = light; const x = rng.int(0, 12), y = rng.int(0, 12); ctx.fillRect(x, y, rng.int(2, 5), rng.int(2, 4)); }
   return c;
 }
@@ -30,7 +100,7 @@ function horseParts() {
   return [
     { name: 'body', w: 10, h: 10, d: 22, x: 0, y: 21, z: 0, uv: COAT },
     { name: 'neck', w: 4, h: 13, d: 7, x: 0, y: 26, z: 8, rot: [-0.55, 0, 0], pivot: [0, 5, 0], uv: COAT },
-    { name: 'head', w: 6, h: 5, d: 9, x: 0, y: 35, z: 14, uv: COAT },
+    { name: 'head', w: 6, h: 5, d: 9, x: 0, y: 35, z: 14, uv: HEAD_UV.horse },
     { name: 'mane', w: 2, h: 11, d: 5, x: 0, y: 30, z: 6, rot: [-0.5, 0, 0], uv: DARK },
     { name: 'tail', w: 3, h: 14, d: 3, x: 0, y: 22, z: -12, rot: [0.35, 0, 0], pivot: [0, -6, 0], uv: DARK },
     { name: 'legFL', w: 4, h: 16, d: 4, x: 3, y: 16, z: 8, pivot: [0, -8, 0], uv: COAT },
@@ -43,7 +113,7 @@ function horseParts() {
 function cowParts() {
   return [
     { name: 'body', w: 12, h: 10, d: 18, x: 0, y: 17, z: 0, uv: COAT },
-    { name: 'head', w: 8, h: 8, d: 6, x: 0, y: 20, z: 11, uv: COAT },
+    { name: 'head', w: 8, h: 8, d: 6, x: 0, y: 20, z: 11, uv: HEAD_UV.cow },
     { name: 'snout', w: 6, h: 3, d: 1, x: 0, y: 18, z: 14.5, uv: LIGHT },
     { name: 'hornL', w: 1, h: 3, d: 1, x: 4, y: 25, z: 10, uv: LIGHT },
     { name: 'hornR', w: 1, h: 3, d: 1, x: -4, y: 25, z: 10, uv: LIGHT },
@@ -57,7 +127,7 @@ function cowParts() {
 function pigParts() {
   return [
     { name: 'body', w: 10, h: 8, d: 16, x: 0, y: 10, z: 0, uv: COAT },
-    { name: 'head', w: 8, h: 8, d: 8, x: 0, y: 10, z: 10, uv: COAT },
+    { name: 'head', w: 8, h: 8, d: 8, x: 0, y: 10, z: 10, uv: HEAD_UV.pig },
     { name: 'snout', w: 4, h: 3, d: 1, x: 0, y: 9, z: 14.5, uv: ACCENT },
     { name: 'legFL', w: 4, h: 6, d: 4, x: 3, y: 6, z: 5, pivot: [0, -3, 0], uv: COAT },
     { name: 'legFR', w: 4, h: 6, d: 4, x: -3, y: 6, z: 5, pivot: [0, -3, 0], uv: COAT },
@@ -68,7 +138,7 @@ function pigParts() {
 function chickenParts() {
   return [
     { name: 'body', w: 6, h: 6, d: 8, x: 0, y: 8, z: 0, uv: COAT },
-    { name: 'head', w: 4, h: 6, d: 3, x: 0, y: 13, z: 3, pivot: [0, -2, 0], uv: COAT },
+    { name: 'head', w: 4, h: 6, d: 3, x: 0, y: 13, z: 3, pivot: [0, -2, 0], uv: HEAD_UV.chicken },
     { name: 'beak', w: 4, h: 2, d: 2, x: 0, y: 14, z: 5.5, uv: LIGHT },
     { name: 'wattle', w: 2, h: 2, d: 2, x: 0, y: 12, z: 5.5, uv: ACCENT },
     { name: 'wingL', w: 1, h: 4, d: 6, x: 3.5, y: 9, z: 0, uv: DARK },
@@ -100,10 +170,10 @@ export class AnimalManager {
     const spec = SPECS[sp.type];
     const rng = new RNG(this.rng.int(1, 1e9));
     let tex;
-    if (sp.type === 'horse') { const [c, d] = rng.pick(HORSE_COATS); tex = animalTexture(c, d, '#5a3a22', '#f0f0f0', rng, rng.chance(0.3) ? 3 : 0); }
-    else if (sp.type === 'cow') tex = animalTexture(rng.chance(0.7) ? '#4a3626' : '#8a5a32', '#2b1a0e', '#e8b0a0', '#e8e0d0', rng, 5);
-    else if (sp.type === 'pig') tex = animalTexture('#f0a0a0', '#d08080', '#e07070', '#f0b0b0', rng, 0);
-    else tex = animalTexture('#f0f0f0', '#e0e0e0', '#d02020', '#e0a020', rng, 0);
+    if (sp.type === 'horse') { const [c, d] = rng.pick(HORSE_COATS); tex = animalTexture('horse', c, d, '#5a3a22', '#f0f0f0', rng, rng.chance(0.3) ? 3 : 0); }
+    else if (sp.type === 'cow') tex = animalTexture('cow', rng.chance(0.7) ? '#4a3626' : '#8a5a32', '#2b1a0e', '#e8b0a0', '#e8e0d0', rng, 5);
+    else if (sp.type === 'pig') tex = animalTexture('pig', '#f0a0a0', '#d08080', '#e07070', '#f0b0b0', rng, 0);
+    else tex = animalTexture('chicken', '#f0f0f0', '#e0e0e0', '#d02020', '#e0a020', rng, 0);
     const model = buildBoxModel(spec.parts(), tex);
     model.root.scale.setScalar(spec.scale);
     const st = this.world.gen ? null : null;
