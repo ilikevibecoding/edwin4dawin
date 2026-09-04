@@ -643,3 +643,61 @@ export function toolBoard(frame, u, v, w = 1.6, h = 1.1, seed = 1) {
   }
   frame.add("decal", new THREE.PlaneGeometry(0.24, 0.24), u + w / 2 - 0.2, v - h / 2 + 0.2, 0.06, { uv: "keep", uvRect: decalRect([6, 14, 9][seed % 3]) });
 }
+
+// ---------------------------------------------------------------- contained energy beams (reactor core, drive core)
+// 1 x n greyscale texture: a base level with `bands` soft bright bands per repeat. Periodic, so scrolling
+// its offset moves the bands along the beam without a seam.
+export function bandTexture(bands = 6, base = 0.5, peak = 1.0, width = 0.18, n = 256) {
+  const data = new Uint8Array(n * 4);
+  for (let i = 0; i < n; i++) {
+    const ph = ((i + 0.5) / n) * bands;
+    const d = Math.abs(ph - Math.round(ph)) * 2; // 0 at a band centre, 1 midway between bands
+    const e = base + (peak - base) * Math.exp(-(d * d) / (2 * width * width));
+    const b = Math.round(Math.min(1, Math.max(0, e)) * 255);
+    data[i * 4] = b;
+    data[i * 4 + 1] = b;
+    data[i * 4 + 2] = b;
+    data[i * 4 + 3] = 255;
+  }
+  const tex = new THREE.DataTexture(data, 1, n, THREE.RGBAFormat);
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// Open vertical cylinder whose v coordinate is height above `origin` over `period` metres, so a band
+// texture runs continuously up the beam (and across several stacked pieces) instead of restarting per piece.
+export function beamGeometry(cx, yBottom, cz, r, height, period, segments = 40, origin = yBottom) {
+  const g = new THREE.CylinderGeometry(r, r, height, segments, 1, true);
+  const pos = g.attributes.position;
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.5, (pos.getY(i) + height / 2 + yBottom - origin) / period);
+  g.translate(cx, yBottom + height / 2, cz);
+  return g;
+}
+
+// Emissive material for a beam: `color` at `intensity`, modulated by a band texture that a dynamic
+// updater scrolls upward at `speed` metres per second (call `mat.userData.scroll(dt)`).
+export function beamMaterial(ctx, color, intensity, tex, period, speed, opts = {}) {
+  const mat = ctx.materials.emitWhite.clone();
+  mat.color = new THREE.Color(0x000000);
+  mat.emissive = new THREE.Color(color);
+  mat.emissiveIntensity = intensity;
+  mat.emissiveMap = tex;
+  mat.roughness = 1;
+  if (opts.opacity !== undefined) {
+    mat.transparent = true;
+    mat.opacity = opts.opacity;
+    mat.depthWrite = false;
+  }
+  mat.userData.base = intensity;
+  mat.userData.scroll = (dt) => {
+    tex.offset.y -= (dt * speed) / period;
+    if (tex.offset.y < -1) tex.offset.y += 1;
+  };
+  return mat;
+}
