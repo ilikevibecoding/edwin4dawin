@@ -114,11 +114,15 @@ export function buildComms(kit, ctx) {
     screenArray(frame, w.u(42.5), 3.6, 3, 1, 1.5, 0.8, { seed: 33, variants: [2, 1, 0] });
     placard(frame, w.u(31.8), 3.6, 0.5, 0);
     placard(frame, w.u(38.2), 3.6, 0.5, 15);
-    alertBeacon(frame, ctx, w.u(cx - 2.7), 4.2, { intensity: 0.9, distance: 5 });
+    alertBeacon(frame, ctx, w.u(cx - 2.7), 4.2, { intensity: 0 }); // passive lenses: their slots go to the rack keys
     alertBeacon(frame, ctx, w.u(cx + 2.7), 4.2, { intensity: 0 });
     floorDecal(kit, cx - 2.6, y, z0 + 2.6, 1.0, 13);
     floorDecal(kit, cx + 2.6, y, z0 + 2.6, 1.0, 11, Math.PI);
-    ceilingLight(kit, ctx, [cx, yc, 607.8], 14, "x", { intensity: 2.2, distance: 9, priority: 1 });
+    // vestibule trough with a key over each rack row (one light in the middle reached neither row once the
+    // light bands stopped carrying the walls)
+    ceilingLight(kit, ctx, [cx, yc, 607.8], 14, "x", { intensity: 0 });
+    pointLightDesc(ctx, 0xdfe8ff, 2.8, 9, [27.5, yc - 0.6, 607.2], 1);
+    pointLightDesc(ctx, 0xdfe8ff, 2.8, 9, [42.5, yc - 0.6, 607.2], 1);
   }
 
   // ---- west wall: sensor readouts over the rows; holo-comm alcove in the SW corner -----------------------
