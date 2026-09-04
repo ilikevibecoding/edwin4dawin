@@ -250,17 +250,22 @@ export function build(ctx) {
     for (let k = 0; k < 10; k++) {
       const sx = AX + (k - 4.5) * 0.92;
       const isIt = k === 4;
-      if (!isIt) kit.box("metal", sx, F + 0.86, refZ0 + 0.36, 0.5, 0.14, 0.38, { color: IMP.steel });
+      if (!isIt) {
+        kit.box("metal", sx, F + 0.86, refZ0 + 0.36, 0.5, 0.14, 0.38, { color: IMP.steel });
+        kit.cyl("metal", sx, F + 1.06, refZ0 + 0.14, 0.018, 0.26, "y", { color: IMP.steel, segments: 8 });
+        kit.cyl("metal", sx, F + 1.18, refZ0 + 0.24, 0.016, 0.22, "z", { color: IMP.steel, segments: 8 });
+      }
       kit.box("darkGloss", sx, F + 0.9, refZ0 + 0.36, 0.42, 0.02, 0.3, {});
-      kit.cyl("metal", sx, F + 1.06, refZ0 + 0.14, 0.018, 0.26, "y", { color: IMP.steel, segments: 8 });
-      kit.cyl("metal", sx, F + 1.18, refZ0 + 0.24, 0.016, 0.22, "z", { color: IMP.steel, segments: 8 });
       kit.box("emitBlue", sx + 0.2, F + 0.99, refZ0 + 0.1, 0.05, 0.02, 0.05, {});
       if (isIt) {
+        // the whole sink unit (basin, riser, spout) is one mesh with its own material so the hover tint reads clearly
         const m = ctx.materials.metal.clone();
         m.vertexColors = false;
         m.color.copy(IMP.steel);
-        const g = new THREE.BoxGeometry(0.52, 0.16, 0.4);
-        g.translate(sx, F + 0.86, refZ0 + 0.36);
+        const basin = new THREE.BoxGeometry(0.52, 0.16, 0.4).translate(sx, F + 0.86, refZ0 + 0.36);
+        const riser = new THREE.CylinderGeometry(0.018, 0.018, 0.26, 8).translate(sx, F + 1.06, refZ0 + 0.14);
+        const spout = new THREE.CylinderGeometry(0.016, 0.016, 0.22, 8).rotateX(Math.PI / 2).translate(sx, F + 1.18, refZ0 + 0.24);
+        const g = mergeGeometries([basin, riser, spout], false);
         worldUVs(g, 1);
         sinkMesh = new THREE.Mesh(g, m);
         sinkMesh.castShadow = sinkMesh.receiveShadow = true;
