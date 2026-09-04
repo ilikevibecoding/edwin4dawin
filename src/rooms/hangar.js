@@ -251,14 +251,15 @@ export function buildHangar(kit, ctx, room) {
       amberBlink.push([x, cH + 1.95, z, 0.4, 0.3, 0.4]);
     }
     // well liner: hull.js builds the well walls in pale exterior plate, which reads as a floating slab
-    // from the deck; clad them from the inside in dark plate with light strips and ribs, following the
-    // hull bottom (the well is 6.8 m deep forward and 11.7 m aft)
+    // from the deck; clad them from the inside in dark painted plate with light strips and ribs, following
+    // the hull bottom (the well is 6.8 m deep forward and 11.7 m aft). Painted steel, not pure metal: a
+    // charcoal pure metal mirrored the sky box and the liner read as glowing blue panes from the rim
     {
       const wellY = (lz) => hullBottomY(lz + OZ) - OY + 0.3; // local y of the hull skin under the well, with a margin
       const t = 0.1;
       const yTop = -0.14;
       const strip = (x0, z0, x1, z1, y0) => {
-        kit.boxMM("impMetalRough", [x0, y0, z0], [x1, yTop, z1], { color: PALETTE.impCharcoal, texel: 0.5 });
+        kit.boxMM("paintedMetal", [x0, y0, z0], [x1, yTop, z1], { color: PALETTE.impCharcoal, texel: 0.5 });
       };
       for (let z = op.z0; z < op.z1 - 0.01; z += 10) {
         const z1 = Math.min(op.z1, z + 10);
@@ -502,7 +503,7 @@ export function buildHangar(kit, ctx, room) {
     }
     // catwalk at y = 16 along the E wall: from the tower's level-5 landing (open N face) it runs under the
     // booth's window strip to the raised flight-control door, braced off the wall
-    hgCatwalk(kit, towerE.x0, -2.5, hx, towerE.z0, FC_Y, { rails: { N: true, S: true, E: false, W: true }, gaps: { S: [[towerE.x0, towerE.x1]] }, tag: "fc-catwalk" });
+    hgCatwalk(kit, towerE.x0, -2.5, hx, towerE.z0, FC_Y, { rails: { N: true, S: true, E: false, W: true }, gaps: { S: [[towerE.x0, towerE.x1]] }, tag: "fc-catwalk", light: "emitAmber" });
     for (const z of [-1.9, 2.3, towerE.z0 - 1.0]) tiltedBox(kit, "impTrim", new THREE.Vector3(hx - 0.1, FC_Y - 4.6, z), new THREE.Vector3(towerE.x0 + 0.6, FC_Y - 0.55, z), 0.26, 0.3, { color: PALETTE.impBlack, texel: 1 });
     kit.boxMM("impTrim", [hx - 0.5, FC_Y - 0.62, -2.5], [hx, FC_Y - 0.42, towerE.z0], { color: PALETTE.impBlack, texel: 1 });
     kit.boxMM("impMetal", [hx - 0.35, FC_Y - 0.9, -2.5], [hx - 0.05, FC_Y - 0.62, towerE.z0], { color: PALETTE.impGreyDark });
@@ -665,7 +666,9 @@ export function buildHangar(kit, ctx, room) {
   const walls = roomWalls(kit, room);
   {
     // dark structural bays: charcoal plates, black ribs, no backlit galleries — the only emissives are
-    // the amber lamp points at every gallery level, the sodium flood banks and dim cornice lines
+    // the amber lamp points at every gallery level, the sodium flood banks and dim cornice lines. The
+    // upper plates are painted steel (paintedMetal), not the pure-metal impMetalRough: a trench-grey pure
+    // metal is a black mirror, and the walls of the spawn view stayed at luma ~20 under any fill strength
     const wallOpts = {
       ribPitch: 12.5,
       plateH: 8,
@@ -683,6 +686,7 @@ export function buildHangar(kit, ctx, room) {
       plateColor: PALETTE.hullTrench,
       plateAlt: PALETTE.impGreyDark,
       upperColor: PALETTE.hullTrench,
+      plateKey: "paintedMetal",
       ribAccentKey: "emitAmber",
       features: { gear: 0.22, light: 0.06, vent: 0.14, pipes: 0.14, cabinet: 0.08, stencil: 0.12 },
     };
@@ -757,9 +761,9 @@ export function buildHangar(kit, ctx, room) {
   // Ceiling and lights
   // =====================================================================================
   // ceiling troughs: warm white at ≈ 30 % of the old output, louvred every metre (hgCeiling fins)
-  // slab in trench grey rather than charcoal: the amber fills 13 m below it are what light the far half of
-  // the spawn view, and a charcoal slab swallowed them
-  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 12.5, beamAxis: "x", troughsX: [-35, -20, 20, 35], ductsX: [-62.5, 62.5], lightKey: "hangar_ceilWarm", beamH: 1.4, slabColor: PALETTE.hullTrench });
+  // slab in trench-grey painted steel (diffuse), not the pure-metal impMetalRough: the amber fills 13 m
+  // below it are what light the far half of the spawn view, and a dark pure metal swallowed them
+  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 12.5, beamAxis: "x", troughsX: [-35, -20, 20, 35], ductsX: [-62.5, 62.5], lightKey: "hangar_ceilWarm", beamH: 1.4, slabColor: PALETTE.hullTrench, slabKey: "paintedMetal" });
   {
     // Sodium-amber deck lighting (10 lights: the hangar's budget). Two spots hang under the gantries at
     // rack height (y = 27) aimed at the W berths and the parked Kestrel: the pool has three spot slots, and

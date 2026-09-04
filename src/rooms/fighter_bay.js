@@ -238,7 +238,7 @@ export function buildFighterBay(kit, ctx, room) {
     // umbilical post at the forward cross rail with hoses up to the ball station
     P.box("impTrim", 0, 0.9, -fz - 0.1, 0.8, 1.4, 0.6, { color: PALETTE.impBlack, texel: 1 });
     P.box("impMetal", 0, 1.1, -fz - 0.41, 0.6, 0.7, 0.02, { color: PALETTE.impCharcoal });
-    for (let k = 0; k < 3; k++) P.box([accentKey, "emitGreen", "emitRedImp"][k], -0.18 + k * 0.18, 1.3, -fz - 0.42, 0.07, 0.07, 0.01);
+    for (let k = 0; k < 3; k++) P.box([accentKey, "emitAmber", "emitRedImp"][k], -0.18 + k * 0.18, 1.3, -fz - 0.42, 0.07, 0.07, 0.01);
     hose(kit, "rubber", P.p(0.2, 1.5, -fz - 0.1), P.p(0.3, ballY - 0.4, -tie.ballR + 0.2), 0.9, 0.06, 7, { color: PALETTE.impCharcoal });
     hose(kit, "rubber", P.p(-0.2, 1.5, -fz - 0.1), P.p(-0.4, ballY + 0.3, -tie.ballR + 0.3), 1.1, 0.045, 7, { color: PALETTE.impCharcoal });
     P.collider(-0.4, 0, -fz - 0.4, 0.4, 1.6, -fz + 0.2, "umbilical");
@@ -423,6 +423,7 @@ export function buildFighterBay(kit, ctx, room) {
     plateColor: PALETTE.impCharcoal,
     plateAlt: PALETTE.hullTrench,
     upperColor: PALETTE.hullTrench,
+    plateKey: "paintedMetal", // painted steel takes the amber work lights; the pure-metal plates stayed black
     ribAccentKey: null,
   };
   hgWall(walls.N.frame, W, H, { ...wallOpts, openings: hgWallOpenings(room, ctx.doors, "N"), seed: 201, tag: "fbN", features: { gear: 0.3, light: 0.15, vent: 0.1, pipes: 0.15, stencil: 0.1 } });
@@ -458,7 +459,7 @@ export function buildFighterBay(kit, ctx, room) {
 
   // ---- ceiling: beams across x every 10 m, two light troughs, one round duct along the W side
   // troughs at ≈ 30 % warm white behind louvre fins (hgCeiling), trench-grey slab so the work lights read on it
-  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 10, beamAxis: "x", troughsX: [-18, -8, 14], ductsX: [-22.5], lightKey: "hangar_ceilWarm", beamH: 0.9, slabColor: PALETTE.hullTrench });
+  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 10, beamAxis: "x", troughsX: [-18, -8, 14], ductsX: [-22.5], lightKey: "hangar_ceilWarm", beamH: 0.9, slabColor: PALETTE.hullTrench, slabKey: "paintedMetal" });
   // deck marker lamps on the tow lane and under the hoists
   for (let x = -10; x <= 22; x += 8) {
     hgDeckLamp(kit, x, -5.6, "emitAmber");

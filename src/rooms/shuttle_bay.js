@@ -261,7 +261,7 @@ export function buildShuttleBay(kit, ctx, room) {
     kit.box("impTrim", -6, 3.55, cz, 6.5, 0.3, 0.5, { color: PALETTE.impBlack, texel: 1 });
     kit.box("emitBlueDim", -6, 3.38, cz, 5.4, 0.04, 0.3, { uv: "keep" });
     kit.box("impMetal", -6, 3.9, cz, 1.0, 0.4, 0.6, { color: PALETTE.impGreyDark });
-    for (let k = 0; k < 3; k++) kit.box([accentKey, "emitGreen", "emitRedImp"][k], -6.3 + k * 0.3, 3.9, cz + 0.31, 0.1, 0.1, 0.01);
+    for (let k = 0; k < 3; k++) kit.box([accentKey, "emitWhiteDim", "emitRedImp"][k], -6.3 + k * 0.3, 3.9, cz + 0.31, 0.1, 0.1, 0.01);
     kit.boxMM("chevronY", [-9.3, 0.002, cz - 3.5], [-8.7, 0.011, cz + 3.5], { texel: 0.8 });
     kit.boxMM("chevronY", [-3.3, 0.002, cz - 3.5], [-2.7, 0.011, cz + 3.5], { texel: 0.8 });
     deckDecalImp(kit, IMP_DECAL.arrowRight, -6, cz - 2.2, 1.8, Math.PI, 0.0068);
@@ -343,10 +343,11 @@ export function buildShuttleBay(kit, ctx, room) {
     lampRows: true,
     lampKey: "emitWhiteDim",
     lampStep: 3.4,
-    floodLamp: "emitWhite",
+    floodLamp: "emitWarmSoft", // shares the shuttle hatch pane's key (mesh budget: ≤ 50)
     plateColor: PALETTE.hullTrench,
     plateAlt: PALETTE.impGreyDark,
     upperColor: PALETTE.hullTrench,
+    plateKey: "paintedMetal", // painted steel takes the blue fills; the pure-metal plates stayed black
     ribAccentKey: null,
   };
   const wOpen = hgWallOpenings(room, ctx.doors, "W");
@@ -382,6 +383,7 @@ export function buildShuttleBay(kit, ctx, room) {
     lightKey: "emitWhiteDim",
     beamH: 1.2,
     slabColor: PALETTE.hullTrench,
+    slabKey: "paintedMetal",
     skip: hasSoffit ? { x0: soffit.x0, x1: soffit.x1, z0: soffit.z0, z1: soffit.z1 } : null,
   });
 

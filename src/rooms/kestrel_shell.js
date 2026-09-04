@@ -93,7 +93,7 @@ export function buildKestrelShell(kit) {
     }
   }
   // belly detail: keel strake, vent grilles, a retracted-turret dome, the ventral hatch line
-  kit.boxMM("metal", [-0.9, yB - 0.3, zFwd + 2], [0.9, yB, zAft - 3], { color: PALETTE.darkMetal, uv: "world", texel: 0.5 });
+  kit.boxMM("paintedMetal", [-0.9, yB - 0.3, zFwd + 2], [0.9, yB, zAft - 3], { color: PALETTE.gunmetal, uv: "world", texel: 0.5 });
   for (const z of [-17, -11, -5]) for (const s of [-1, 1]) kit.box("metal", s * 3.6, yB - 0.08, z, 1.6, 0.16, 0.9, { color: PALETTE.steel, uv: "world", texel: 1 });
   kit.add("metal", new THREE.SphereGeometry(0.9, 16, 8, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45), { pos: [2.2, yB, -14], color: PALETTE.gunmetal, uv: "world", texel: 1 });
   // dorsal spine: sensor mast, twin comms dishes, a hatch
@@ -105,8 +105,12 @@ export function buildKestrelShell(kit) {
   // engine pods on the aft quarters (the corridor's z=0 end is the stern)
   for (const s of [-1, 1]) {
     const px = s * (x1 + 1.3);
-    kit.cyl("metal", px, 1.2, -6, 1.35, 12, "z", { color: PALETTE.gunmetal, segments: 20, texel: 0.5 });
+    // pod barrel in painted steel (diffuse): as a gunmetal pure metal it was a featureless black cylinder
+    // from the deck camera; the nozzle, rings and greebles stay bare metal
+    kit.cyl("paintedMetal", px, 1.2, -6, 1.35, 12, "z", { color: PALETTE.gunmetal, segments: 20, texel: 0.5 });
     kit.cyl("metal", px, 1.2, -0.5, 1.45, 1.6, "z", { color: PALETTE.darkMetal, segments: 20, r2: 1.2 });
+    // pod plating seams: three dark rings along the barrel
+    for (const z of [-9.5, -6, -2.5]) kit.cyl("metal", px, 1.2, z, 1.39, 0.12, "z", { color: PALETTE.darkMetal, segments: 20 });
     // idle engines: dim blue glow discs recessed in the nozzles (the old full emitCool disc blew out the deck view)
     kit.add("emitBlueDim", new THREE.CircleGeometry(1.0, 24), { pos: [px, 1.2, 0.2], uv: "keep" });
     kit.add("metal", new THREE.RingGeometry(1.0, 1.25, 24), { pos: [px, 1.2, 0.36], color: PALETTE.darkMetal, uv: "keep" });
@@ -118,7 +122,7 @@ export function buildKestrelShell(kit) {
   // --- landing gear: four legs (oleo strut in a housing, drag brace, scissor link) on wide pads, chocked
   for (const [sx, sz] of [[x0 + 1.6, -19], [x1 - 1.6, -19], [x0 + 1.6, -3.5], [x1 - 1.6, -3.5]]) {
     const s = sx < 0 ? -1 : 1;
-    kit.box("metal", sx, yB - 0.3, sz, 0.9, 0.6, 1.0, { color: PALETTE.gunmetal, uv: "world", texel: 1 }); // housing
+    kit.box("paintedMetal", sx, yB - 0.3, sz, 0.9, 0.6, 1.0, { color: PALETTE.gunmetal, uv: "world", texel: 1 }); // housing
     kit.cyl("metal", sx, (yB - 0.6 + yD + 0.5) / 2, sz, 0.2, yB - 0.6 - (yD + 0.5), "y", { color: PALETTE.steel, segments: 12 }); // strut
     kit.cyl("metal", sx, yD + 0.75, sz, 0.28, 0.5, "y", { color: PALETTE.darkMetal, segments: 12 }); // oleo collar
     tube(kit, "metal", V(sx, yD + 0.55, sz), V(sx, yB - 0.2, sz + 1.6), 0.07, { color: PALETTE.steel, segments: 8 }); // drag brace

@@ -563,7 +563,8 @@ export function hgPowerBox(kit, x, z, yaw, opts = {}) {
     P.box("impMetal", sx, 0.04, 0.02, 0.26, 0.08, 0.34, { color: PALETTE.impCharcoal });
   }
   P.box("impMetal", 0, 0.95, 0.3, 0.6, 0.6, 0.02, { color: PALETTE.impCharcoal });
-  P.box(opts.on === false ? "emitRedImp" : "emitGreen", -0.18, 1.15, 0.315, 0.06, 0.06, 0.01);
+  // status LEDs: red when off, amber when on (no green: a third emissive key is a whole merged mesh per room)
+  P.box(opts.on === false ? "emitRedImp" : "emitAmber", -0.18, 1.15, 0.315, 0.06, 0.06, 0.01);
   P.box("emitAmber", -0.06, 1.15, 0.315, 0.06, 0.06, 0.01);
   P.cyl("impMetal", 0.15, 0.8, 0.32, 0.08, 0.05, "z", { color: PALETTE.impGrey, segments: 10 });
   P.decal(IMP_DECAL.power, 0.15, 1.15, 0.32, 0.22);
@@ -994,6 +995,10 @@ export function hgWall(frame, length, height, opts = {}) {
     ribCapColor = PALETTE.impCharcoal,
     // key of the thin continuous strips (deck-band cornice, top cornice); null omits them
     corniceKey = lightKey,
+    // material of the upper-band plates. impMetalRough is a pure metal (the worn-metal maps carry
+    // metalness 1): tinted dark it is a black mirror that no pooled light can lift, so bays that must read
+    // under a few amber fills pass "paintedMetal" (painted steel, metalness 0.15) and take their tint diffusely
+    plateKey = "impMetalRough",
   } = opts;
   const rand = rng(seed);
   const isQuiet = (u) => quiet.some(([q0, q1]) => u > q0 && u < q1);
@@ -1188,7 +1193,7 @@ export function hgWall(frame, length, height, opts = {}) {
         const cu = (a + b) / 2;
         const cv = (v0 + v1) / 2;
         const rh = v1 - v0;
-        frame.box("impMetalRough", cu, cv, 0.025, w - 0.16, rh - 0.3, 0.05, { color: upperColor, texel: 0.25 });
+        frame.box(plateKey, cu, cv, 0.025, w - 0.16, rh - 0.3, 0.05, { color: upperColor, texel: 0.25 });
         frame.box("impTrim", cu, v1 - 0.12, 0.06, w, 0.24, 0.12, { color: PALETTE.impBlack, texel: 1 });
         if (w > 5) frame.box("impTrim", cu, cv, 0.055, 0.14, rh - 0.3, 0.02, { color: PALETTE.impBlack });
         const last = ri === rows.length - 1;
@@ -1305,7 +1310,9 @@ export function hgWallOpenings(room, doors, side) {
 
 /** Dark industrial ceiling: slab, cross beams, light troughs along z, round ducts. */
 export function hgCeiling(kit, x0, z0, x1, z1, y, opts = {}) {
-  const { beamStep = 12.5, beamAxis = "x", troughsX = [], ductsX = [], lightKey = "emitWhiteSoft", skip = null, beamH = 1.4, slabColor = PALETTE.impCharcoal } = opts;
+  // slabKey: "paintedMetal" makes the slab a diffuse painted plate that the room's own lights reach
+  // (impMetalRough is a pure metal — tinted dark it stays black under any number of fills)
+  const { beamStep = 12.5, beamAxis = "x", troughsX = [], ductsX = [], lightKey = "emitWhiteSoft", skip = null, beamH = 1.4, slabColor = PALETTE.impCharcoal, slabKey = "impMetalRough" } = opts;
   const inSkip = (x, z) => skip && x > skip.x0 && x < skip.x1 && z > skip.z0 && z < skip.z1;
   // boxMM that ignores degenerate pieces (skip rectangles touching the room edge)
   const piece = (mat, min, max, o) => {
@@ -1313,12 +1320,12 @@ export function hgCeiling(kit, x0, z0, x1, z1, y, opts = {}) {
   };
   // slab (split around a skipped rectangle if given)
   const slabOpts = { color: slabColor, texel: 0.2 };
-  if (!skip) kit.boxMM("impMetalRough", [x0, y, z0], [x1, y + 0.4, z1], slabOpts);
+  if (!skip) kit.boxMM(slabKey, [x0, y, z0], [x1, y + 0.4, z1], slabOpts);
   else {
-    piece("impMetalRough", [x0, y, z0], [x1, y + 0.4, skip.z0], slabOpts);
-    piece("impMetalRough", [x0, y, skip.z1], [x1, y + 0.4, z1], slabOpts);
-    piece("impMetalRough", [x0, y, skip.z0], [skip.x0, y + 0.4, skip.z1], slabOpts);
-    piece("impMetalRough", [skip.x1, y, skip.z0], [x1, y + 0.4, skip.z1], slabOpts);
+    piece(slabKey, [x0, y, z0], [x1, y + 0.4, skip.z0], slabOpts);
+    piece(slabKey, [x0, y, skip.z1], [x1, y + 0.4, z1], slabOpts);
+    piece(slabKey, [x0, y, skip.z0], [skip.x0, y + 0.4, skip.z1], slabOpts);
+    piece(slabKey, [skip.x1, y, skip.z0], [x1, y + 0.4, skip.z1], slabOpts);
   }
   const beams = [];
   if (beamAxis === "x") {
@@ -1455,7 +1462,7 @@ export function hgPowerDroid(kit, x, z, yaw, opts = {}) {
     P.box("impMetal", sx, 0.05, 0.04, 0.32, 0.1, 0.48, { color: PALETTE.impCharcoal });
   }
   P.box("impMetal", 0, 1.1, 0.36, 0.72, 0.72, 0.02, { color: PALETTE.impCharcoal });
-  P.box(opts.on === false ? "emitRedImp" : "emitGreen", -0.2, 1.32, 0.375, 0.08, 0.08, 0.01);
+  P.box(opts.on === false ? "emitRedImp" : "emitAmber", -0.2, 1.32, 0.375, 0.08, 0.08, 0.01);
   P.box("emitAmber", -0.05, 1.32, 0.375, 0.08, 0.08, 0.01);
   for (let s = 0; s < 4; s++) P.box("impTrim", 0.15, 0.84 + s * 0.09, 0.375, 0.34, 0.03, 0.01, { color: PALETTE.impBlack });
   P.cyl("impMetal", 0.25, 1.32, 0.37, 0.07, 0.06, "z", { color: PALETTE.impGrey, segments: 10 });
