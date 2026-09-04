@@ -1175,7 +1175,7 @@ export function toolCart(kit, ctx, x, z, yaw) {
  * plate with a stencil and a status lamp. The front face is +z before `yaw`; `tone` picks the body
  * colour, `label` the decal cell (11 cargo, 6 barcode label, 14 B-12, 9 spec plate).
  */
-export function cargoPod(kit, ctx, { x, y = 0, z, sx = 1.4, sy = 1.1, sz = 1.3, yaw = 0, tone = 0, label = 11 }) {
+export function cargoPod(kit, ctx, { x, y = 0, z, sx = 1.4, sy = 1.1, sz = 1.3, yaw = 0, tone = 0, label = 11, collide = true }) {
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   const add = (mat, geo, lx, ly, lz, extra = {}) => {
     const v = new THREE.Vector3(lx, ly, lz).applyQuaternion(q);
@@ -1196,11 +1196,13 @@ export function cargoPod(kit, ctx, { x, y = 0, z, sx = 1.4, sy = 1.1, sz = 1.3, 
   box("impPanel", -sx * 0.2, sy * 0.53, fz + 0.012, lw, lw * 0.7, 0.012, { color: PALETTE.impWhite, uv: "keep" });
   add("decal", new THREE.PlaneGeometry(lw * 0.6, lw * 0.6), -sx * 0.2, sy * 0.53, fz + 0.02, { uv: "keep", uvRect: decalRect(label) });
   box(tone % 2 ? "emitGreen" : "emitAmber", sx * 0.24, sy * 0.53, fz + 0.02, 0.12, 0.04, 0.01);
-  const c = Math.abs(Math.cos(yaw));
-  const s = Math.abs(Math.sin(yaw));
-  const ex = (sx * c + sz * s) / 2;
-  const ez = (sx * s + sz * c) / 2;
-  kit.collider([x - ex, y, z - ez], [x + ex, y + sy, z + ez], "container");
+  if (collide) {
+    const c = Math.abs(Math.cos(yaw));
+    const s = Math.abs(Math.sin(yaw));
+    const ex = (sx * c + sz * s) / 2;
+    const ez = (sx * s + sz * c) / 2;
+    kit.collider([x - ex, y, z - ez], [x + ex, y + sy, z + ez], "container");
+  }
   void ctx;
 }
 
