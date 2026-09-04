@@ -57,9 +57,12 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
   function assignPool() {
     const pts = [];
     const sps = [];
-    for (const id of visibleSet) {
+    // in exterior view only the hangar bay (seen through its opening) needs real lights
+    const ids = api.exteriorView ? (sectors.get("d5_hangar").built ? ["d5_hangar"] : []) : visibleSet;
+    const ref = api.exteriorView ? player.camera.position : player.position;
+    for (const id of ids) {
       for (const l of sectors.get(id).lights) {
-        const d = worldPos(l, _wp).distanceTo(player.position);
+        const d = worldPos(l, _wp).distanceTo(ref);
         // priority: bright lights that can actually reach the player
         const score = d - l.distance * 0.5;
         (l.isSpotLight ? sps : pts).push({ l, score });
@@ -156,11 +159,15 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
         for (const deck of decks) deck.doorGroup.visible = false;
         const hangar = sectors.get("d5_hangar");
         if (hangar && hangar.built) hangar.group.visible = true;
-        api.exteriorView = true;
+        if (!api.exteriorView) {
+          api.exteriorView = true;
+          assignPool();
+        }
       } else if (api.exteriorView) {
         api.exteriorView = false;
         for (const s of sectors.values()) if (s.built) s.group.visible = s.visible;
         for (const deck of decks) deck.doorGroup.visible = deck.sectors.some((s) => visibleSet.has(s.id));
+        assignPool();
       }
     },
     update(dt, t) {

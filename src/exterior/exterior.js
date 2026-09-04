@@ -88,6 +88,16 @@ export function buildExterior(scene, materials) {
     setVisible(v) {
       group.visible = v;
     },
+    /**
+     * "interior": the hull is seen through windows while the player stands in a room — the flat fills
+     * are cut so they do not wash the room out (the sun stays: the hull's own geometry shadows the rooms).
+     */
+    setViewMode(mode) {
+      const inside = mode === "interior";
+      fill.intensity = inside ? 0.12 : 0.55;
+      hemi.intensity = inside ? 0.08 : 0.35;
+      sun.intensity = inside ? 2.6 : 3.2;
+    },
     dims: { TOWER, HANGAR, HULL, ENGINES },
   };
   return api;

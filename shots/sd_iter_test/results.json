@@ -1,0 +1,292 @@
+{
+  "iter": "test",
+  "loadMs": 14171,
+  "viewport": [
+    640,
+    360
+  ],
+  "views": {
+    "bridge_window": {
+      "frameMs": 2050.36,
+      "fps": 0.5,
+      "frameP50": 2038.3,
+      "frameP95": 11992.5,
+      "calls": 248,
+      "triangles": 996278,
+      "geometries": 141,
+      "textures": 73,
+      "programs": 48,
+      "shaderCompiles": 48,
+      "visibleObjects": 262,
+      "visibleInstances": 13836,
+      "textureMB": 92.2,
+      "jsHeapMB": 72,
+      "longTasks": 21,
+      "longTaskMs": 52315,
+      "loadMs": 11991,
+      "mode": "interior",
+      "sector": "d1_bridge",
+      "colliders": 45,
+      "lights": 19,
+      "poolLights": {
+        "used": 8,
+        "overflow": 0
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 9209,
+      "hullGreebles": 3245
+    },
+    "hangar_racks": {
+      "frameMs": 3236.43,
+      "fps": 0.3,
+      "frameP50": 2829.8,
+      "frameP95": 6881,
+      "calls": 304,
+      "triangles": 5156782,
+      "geometries": 240,
+      "textures": 75,
+      "programs": 48,
+      "shaderCompiles": 48,
+      "visibleObjects": 426,
+      "visibleInstances": 14224,
+      "textureMB": 92.2,
+      "jsHeapMB": 321,
+      "longTasks": 32,
+      "longTaskMs": 91394,
+      "loadMs": 11991,
+      "mode": "interior",
+      "sector": "d5_hangar",
+      "colliders": 79,
+      "lights": 19,
+      "poolLights": {
+        "used": 14,
+        "overflow": 8
+      },
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "reverseDepth": true,
+      "hullPlates": 9209,
+      "hullGreebles": 3245
+    }
+  },
+  "dynamic": {
+    "drift": {
+      "skyRegion": {
+        "meanAbsDiff": 0,
+        "changedFraction": 0
+      },
+      "interiorControl": {
+        "meanAbsDiff": 0,
+        "changedFraction": 0
+      }
+    },
+    "door": {
+      "walked": true,
+      "doors": [
+        {
+          "name": "door_d1_corridor_d1_bridge",
+          "state": "opening",
+          "openness": 0.69,
+          "style": "blast"
+        }
+      ]
+    },
+    "lift": {
+      "started": true,
+      "state": "moving",
+      "seconds": 1,
+      "current": {
+        "id": "d5_lift",
+        "deck": "hangar",
+        "visible": [
+          "d5_lift",
+          "d5_lobby",
+          "d5_corridor"
+        ],
+        "colliders": 43
+      }
+    },
+    "traffic": {
+      "counts": {
+        "launching": 3,
+        "parked": 5
+      },
+      "bay": 1,
+      "first": {
+        "id": 0,
+        "s": "launching",
+        "p": [
+          -22.19,
+          -147.55,
+          86.67
+        ],
+        "q": [
+          0.2493,
+          -0.1066,
+          0.027,
+          0.9622
+        ]
+      }
+    },
+    "transition": {
+      "m0": "interior",
+      "m1": "exterior",
+      "cam": [
+        -1100,
+        520,
+        300
+      ],
+      "m2": "interior",
+      "samePlace": true,
+      "sector": "d1_bridge"
+    },
+    "reserved": {
+      "flight": {
+        "state": "idle",
+        "calls": 0
+      },
+      "entry": {
+        "state": "idle",
+        "calls": 0
+      },
+      "gear": {
+        "state": "idle",
+        "calls": 0
+      },
+      "docking": {
+        "state": "idle",
+        "calls": 0
+      },
+      "contact": {
+        "state": "idle",
+        "calls": 0
+      },
+      "hangar": {
+        "state": "idle",
+        "calls": 0
+      },
+      "cameraTransition": {
+        "state": "idle",
+        "calls": 0
+      },
+      "landingZones": {
+        "state": "idle",
+        "calls": 0
+      }
+    },
+    "audio": [
+      {
+        "t": 165013.7999999998,
+        "name": "tie_launch",
+        "pos": {
+          "x": -30,
+          "y": -7.5,
+          "z": -27
+        }
+      },
+      {
+        "t": 165013.7999999998,
+        "name": "tie_launch",
+        "pos": {
+          "x": -30,
+          "y": -7.5,
+          "z": -9
+        }
+      },
+      {
+        "t": 165013.7999999998,
+        "name": "tie_launch",
+        "pos": {
+          "x": -30,
+          "y": -7.5,
+          "z": 9
+        }
+      },
+      {
+        "t": 165017.2999999998,
+        "name": "mode_exterior",
+        "pos": null
+      },
+      {
+        "t": 180787.69999999925,
+        "name": "mode_interior",
+        "pos": null
+      },
+      {
+        "t": 182516.39999999944,
+        "name": "door_close",
+        "pos": {
+          "x": 0,
+          "y": -28.7,
+          "z": 98.2
+        }
+      },
+      {
+        "t": 194668.2999999998,
+        "name": "door_closed",
+        "pos": {
+          "x": 0,
+          "y": -28.7,
+          "z": 98.2
+        }
+      },
+      {
+        "t": 198132,
+        "name": "mode_exterior",
+        "pos": null
+      },
+      {
+        "t": 198132,
+        "name": "mode_interior",
+        "pos": null
+      },
+      {
+        "t": 198132.2999999998,
+        "name": "door_open",
+        "pos": {
+          "x": 0,
+          "y": 181.6,
+          "z": 625.2
+        }
+      }
+    ]
+  },
+  "logs": [
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected."
+  ],
+  "finalStats": {
+    "frameMs": 1458.29,
+    "fps": 0.7,
+    "frameP50": 1734,
+    "frameP95": 4066.9,
+    "calls": 250,
+    "triangles": 996302,
+    "geometries": 308,
+    "textures": 77,
+    "programs": 69,
+    "shaderCompiles": 69,
+    "visibleObjects": 422,
+    "visibleInstances": 13836,
+    "textureMB": 92.2,
+    "jsHeapMB": 323,
+    "longTasks": 109,
+    "longTaskMs": 198665,
+    "loadMs": 11991,
+    "mode": "interior",
+    "sector": "d1_bridge",
+    "colliders": 45,
+    "lights": 19,
+    "poolLights": {
+      "used": 8,
+      "overflow": 0
+    },
+    "qualityLevel": 3,
+    "pixelRatio": 1,
+    "reverseDepth": true,
+    "hullPlates": 9209,
+    "hullGreebles": 3245
+  }
+}

@@ -11,7 +11,8 @@ export function makePlaceholder(name) {
     const [min, max] = ctx.bounds;
     const w = max[0] - min[0];
     const d = max[2] - min[2];
-    roomShell(kit, ctx);
+    // floor at the deck level even when the bounds dip below it (pits / shafts belong to real builders)
+    roomShell(kit, ctx, { floor: { y: 0 }, walls: { base: 0, height: max[1] } });
     const rand = rng(ctx.seed);
     // a couple of racks on the wall opposite the first door, screens beside them
     const door = ctx.doors[0];

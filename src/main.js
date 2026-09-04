@@ -492,6 +492,7 @@ function frame() {
   // visible from outside through its ventral opening
   const showExterior = director.mode === "exterior" || interior.seesExterior();
   exterior.setVisible(showExterior);
+  exterior.setViewMode(director.mode);
   if (showExterior) exterior.updateLOD(camera.position);
   exterior.update(dt, t);
   const hangar = interior.sectors.get("d5_hangar");
