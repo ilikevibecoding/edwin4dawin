@@ -261,8 +261,12 @@ const CABIN_LIGHT = {
     dust: 0.42,
     craze: 1,
     grain: 0.4,
-    sat: 1.0,
-    tint: [0.96, 0.86, 0.72],
+    // Was sat 1.0 with a [0.96, 0.86, 0.72] tint: a tan pad, and the pad is
+    // what every exterior camera sees of the cabin through the screen. A
+    // sun-faded grey vinyl, a touch warm, reads as a dash from outside without
+    // turning the whole glasshouse orange.
+    sat: 0.6,
+    tint: [0.92, 0.9, 0.86],
   },
   interiorPlastic: {
     gain: 7.2,
@@ -290,8 +294,8 @@ const CABIN_LIGHT = {
     dust: 0.35,
     craze: 0.5,
     grain: 0.38,
-    sat: 0.7,
-    tint: [1.0, 0.98, 0.95],
+    sat: 0.5,
+    tint: [0.96, 0.96, 0.95],
   },
   // The only true black in the cabin, and the thing every dark brown in here
   // needed to be dark against: channels, pedal pads, the gaiter, the loom and
@@ -365,7 +369,8 @@ const CABIN_LIGHT = {
     sat: 0.46,
     y0: 0.56,
     y1: 1.2,
-    tint: [1.7, 1.62, 1.5],
+    // khaki cloth is allowed to stay warm; it is the one thing in here that is
+    tint: [1.62, 1.58, 1.48],
   },
   // The pan sits at 0.66, which the default band scores at zero, so the mat was
   // taking the footwell floor on every term at once and measured 0.023 mean
@@ -521,7 +526,13 @@ function applyCabinLight(
     // than uniform because every key already gets its own program.
     y0 = CL_Y0,
     y1 = CL_Y1,
-    color = 0xf7ead0,
+    // Near-neutral. The glass critics read the cabin as amber through every
+    // pane, and with the tint of the glass now near-black the cast was coming
+    // from in here: a cream key (0xf7ead0) and an orange shaft (0xffdc9e) on
+    // top of warm vinyl and a laterite film. Daylight through a screen is white
+    // with a little warmth from the trail bounce, so the key sits just off
+    // white and the shaft is the colour of the sun rather than of a sunset.
+    color = 0xf3f0e8,
     // The screen looks at open sky over a pale trail; the door glass looks at
     // conifer forest 3 m away. Giving the two apertures one colour was what kept
     // the whole cabin on a single khaki hue however the values were pushed —
@@ -529,8 +540,8 @@ function applyCabinLight(
     // *under*. A cool green fill from the sides against a warm key from the
     // front is both what the scene actually is and the cheapest hue separation
     // available.
-    sideColor = 0x7c9071,
-    sunColor = 0xffdc9e,
+    sideColor = 0x86948a,
+    sunColor = 0xfff0d6,
   } = {},
 ) {
   if (!material || material.userData.cabinLit) return material;

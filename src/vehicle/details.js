@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Kit, bend, bolt, profile, rbox, rivet, tube } from '../lib/geo.js';
-import { emitPieces } from './body.js';
+import { emitPieces, hotSpot, lampReady } from './body.js';
 import { SPEC as S } from './spec.js';
 
 // ---------------------------------------------------------------------------
@@ -8,7 +8,7 @@ import { SPEC as S } from './spec.js';
 // drives it hard" reading comes from: rack, light bar, winch, recovery kit.
 // ---------------------------------------------------------------------------
 
-const KEEP_ATTRS = ['position', 'normal', 'uv'];
+const KEEP_ATTRS = ['position', 'normal', 'uv', 'lampHot'];
 
 /**
  * Same accumulation as the shared `Kit`, but it keeps each primitive's own
@@ -21,6 +21,10 @@ const KEEP_ATTRS = ['position', 'normal', 'uv'];
  * is no winding to put back.
  */
 class GearKit extends Kit {
+  add(key, geo, xform) {
+    return super.add(key, lampReady(key, geo), xform);
+  }
+
   build(materials, { castShadow = true, receiveShadow = true, group = new THREE.Group() } = {}) {
     group.name = this.name;
     for (const [key, list] of this.buckets) {
@@ -118,7 +122,56 @@ export function buildDetails() {
   pillarSpot(k);
   swingOut(k);
   fridgeSlide(k);
+  rearLadder(k);
   return k;
+}
+
+/**
+ * Access ladder up the rear of the shaded bedside to the rack. The spare's
+ * swing-out owns the tailgate, so this is a bedside ladder: two rails stood off
+ * the panel above the rear arch flare, hooked over the rack's lower rail at
+ * the top, with the rungs treaded. It is the one thing the rear camera was
+ * missing between the flare and the rack — a straight vertical against the
+ * horizontals of the bed rail and the rack.
+ */
+function rearLadder(k) {
+  const x = -(S.bodyHalfWidth + 0.1);
+  const zA = -2.27;
+  const zB = -1.99;
+  const y0 = 0.98;
+  const y1 = RACK.baseY + 0.04;
+  for (const z of [zA, zB]) {
+    k.add('steelDark', new THREE.CylinderGeometry(0.013, 0.013, y1 - y0, 10), { pos: [x, (y0 + y1) * 0.5, z] });
+    // foot cap, and the hook over the rack rail
+    k.add('steelDark', new THREE.CylinderGeometry(0.016, 0.013, 0.02, 10), { pos: [x, y0 - 0.005, z] });
+    k.add('steelDark', tube(
+      [
+        [x, y1 - 0.01, z],
+        [x + 0.06, y1 + 0.05, z],
+        [RACK.railX * -1 - 0.02, y1 + 0.06, z],
+        [RACK.railX * -1 + 0.02, y1 + 0.02, z],
+      ],
+      0.013,
+      8,
+    ));
+    // standoffs back to the bedside, each on a bolted pad
+    for (const y of [1.14, 1.86]) {
+      k.add('steelDark', gbox(0.1, 0.026, 0.026, 0.005), { pos: [x + 0.05, y, z] });
+      k.add('steelDark', gbox(0.012, 0.07, 0.06, 0.003), { pos: [-(S.bodyHalfWidth + 0.006), y, z] });
+      for (const dz of [-0.02, 0.02]) {
+        k.add('steel', bolt(0.0075, 0.006), { pos: [-(S.bodyHalfWidth + 0.013), y + dz * 1.4, z + dz], rot: [0, 0, Math.PI / 2] });
+      }
+    }
+  }
+  // rungs with a serrated tread on top, spaced a shoe apart
+  for (let i = 0; i < 4; i++) {
+    const y = 1.06 + i * 0.27 + jit(i, 9) * 0.006;
+    k.add('steelDark', new THREE.CylinderGeometry(0.011, 0.011, zB - zA + 0.02, 8), {
+      pos: [x, y, (zA + zB) * 0.5],
+      rot: [Math.PI / 2, 0, 0],
+    });
+    k.add('plate', gbox(0.036, 0.008, zB - zA - 0.03, 0.002), { pos: [x, y + 0.012, (zA + zB) * 0.5] });
+  }
 }
 
 // Rack datums. Everything bolted to the rack reads off these so the gear sits
@@ -735,7 +788,8 @@ function lightBar(k) {
       rot: [Math.PI / 2, 0, 0],
     });
   }
-  k.add('lensClear', gbox(len - 0.02, 0.075, 0.012, 0.006), { pos: [0, y, z + 0.078] });
+  // one cover over nine LEDs: lit along its whole length, not from one centre
+  k.add('lensClear', hotSpot(gbox(len - 0.02, 0.075, 0.012, 0.006), 0.55), { pos: [0, y, z + 0.078] });
   // mounts
   for (const side of [-1, 1]) {
     k.add('steelDark', gbox(0.04, 0.14, 0.05, 0.01), { pos: [side * (len * 0.42), y - 0.1, z + 0.01] });

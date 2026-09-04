@@ -742,7 +742,8 @@ export function applyCabinBounce(
     // against the blue the sky environment still puts in here splits the two ends
     // of the spectrum and the vinyl goes plum; keeping the middle up lands it on
     // khaki, which is the same trick the vinyl albedo itself uses.
-    color = 0xf6eedb,
+    // Nearer white than it was (0xf6eedb): the bounce off grey vinyl is grey.
+    color = 0xf3f1eb,
     gain = 0.5,
     floor = 0.17,
     wrap = 0.6,
@@ -2118,9 +2119,14 @@ export function vinylMaps(kind = 'dark') {
     // The faded set is down a touch from 0x5e5748 / 0x766d5a: with the cabin
     // bounce and the laterite film now both on it, the pad was reading as
     // unglazed clay rather than as sun-bleached vinyl.
-    const base = faded ? rgb(0x554e40) : rgb(0x413c33);
-    const high = faded ? rgb(0x6c6452) : rgb(0x544d41);
-    const grit = rgb(0x8a7d66);
+    // Pulled toward neutral for the glass round: the whole cabin read amber
+    // through the panes, and with the tint near-black and the cabin key now
+    // white, this warm brown was most of what was left. Green still sits a
+    // count under red so the hue stays on the grey-khaki side of neutral
+    // rather than the plum side.
+    const base = faded ? rgb(0x56534c) : rgb(0x3e3c37);
+    const high = faded ? rgb(0x6c6960) : rgb(0x514e48);
+    const grit = rgb(0x847e71);
     const map = pixelTexture(
       n,
       n,
@@ -2131,7 +2137,7 @@ export function vinylMaps(kind = 'dark') {
         // UV fade blotches, stronger on the surfaces that face the screen
         const bleach = smoothstep(0.4, 0.95, fbm(u * 6, v * 6, { octaves: 4, period: 6, seed: 617 }));
         let c = mixRgb(base, high, clamp(h * 1.2));
-        if (faded) c = mixRgb(c, [c[0] * 1.22 + 12, c[1] * 1.2 + 12, c[2] * 1.14 + 10], bleach * 0.5);
+        if (faded) c = mixRgb(c, [c[0] * 1.2 + 12, c[1] * 1.2 + 12, c[2] * 1.17 + 11], bleach * 0.5);
         // grit only in the gutters between the pebbles
         c = mixRgb(c, grit, clamp(1 - h * 2.4) * (faded ? 0.3 : 0.22));
         out[0] = c[0];
@@ -2371,7 +2377,8 @@ export function headlinerMaps() {
     // screen hits this and goes back down onto the dash, so it is deliberately
     // the lightest thing in the cabin. At 0x4a463e it sat at the same value as
     // the pad and the top of the frame read as a black bar.
-    const base = rgb(0x635c4e);
+    // Grey, not beige: it is the largest surface the door glass looks up at.
+    const base = rgb(0x605d56);
     const map = pixelTexture(
       n,
       n,
@@ -2379,7 +2386,7 @@ export function headlinerMaps() {
         const h = hf[y * n + x];
         const stain = smoothstep(0.62, 1.0, fbm((x / n) * 5, (y / n) * 5, { octaves: 4, period: 5, seed: 88 }));
         let c = mixRgb([base[0] * 0.78, base[1] * 0.78, base[2] * 0.8], base, clamp(h * 1.5));
-        c = mixRgb(c, rgb(0x3a332a), stain * 0.5);
+        c = mixRgb(c, rgb(0x38352f), stain * 0.5);
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
@@ -3264,6 +3271,87 @@ export function lensNormal() {
       return bars * 0.7 + flutes * 0.3;
     });
     return normalFromHeight(hf, n, n, 1.6, { repeat: 1 });
+  });
+}
+
+/**
+ * A lamp that is switched on, as opposed to an emissive material.
+ *
+ * `emissive` on its own paints one value across the whole lens, and a lit lamp
+ * is not one value: the filament or LED sits behind the middle of the lens, so
+ * the centre is a hot near-white core and the colour of the lens is only read
+ * toward its rim, where the light reaches the eye at a slant through more
+ * plastic. Two shapes are provided, and both are gated by `uLampOn` so the
+ * daytime lens is exactly what it was:
+ *
+ *  - `lampHot`, a per-vertex attribute the kits write on every lamp part (1 at
+ *    the centre of the part, 0 at its edge; a bulb is 1 all over), lifts and
+ *    bleaches the emissive toward the core;
+ *  - `bowl`, for reflectors: a paraboloid throws the lamp's light straight back
+ *    at whoever is looking into it, so the dish glows by how squarely it faces
+ *    the camera — `pow(n.z, k)` in view space — which is also what makes the
+ *    stepped cone read as a lit reflector rather than a grey one.
+ *
+ * Nothing here can produce a NaN: every input is clamped and no division.
+ */
+export function applyLampGlow(
+  material,
+  { tag = 'lamp', core = 3.0, bleach = 0.7, coreExp = 2.0, bowl = 0, bowlColor = 0xfff1d6, bowlExp = 4.0 } = {},
+) {
+  const u = {
+    uLampOn: { value: 0 },
+    uLampCore: { value: core },
+    uLampBleach: { value: bleach },
+    uLampCoreExp: { value: coreExp },
+    uLampBowl: { value: bowl },
+    uLampBowlColor: { value: new THREE.Color(bowlColor) },
+    uLampBowlExp: { value: bowlExp },
+  };
+  material.userData.lamp = u;
+  return extendMaterial(material, `lamp:${tag}`, (shader) => {
+    Object.assign(shader.uniforms, u);
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        attribute float lampHot;
+        varying float vLampHot;`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vLampHot = lampHot;`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uLampOn;
+        uniform float uLampCore;
+        uniform float uLampBleach;
+        uniform float uLampCoreExp;
+        uniform float uLampBowl;
+        uniform vec3 uLampBowlColor;
+        uniform float uLampBowlExp;
+        varying float vLampHot;`,
+      )
+      .replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+        {
+          float lampOn = clamp(uLampOn, 0.0, 1.0);
+          float hot = pow(clamp(vLampHot, 0.0, 1.0), max(uLampCoreExp, 0.01));
+          vec3 e = totalEmissiveRadiance;
+          float peak = max(max(e.r, e.g), e.b);
+          e = mix(e, vec3(peak), hot * uLampBleach * lampOn);
+          e *= 1.0 + hot * uLampCore * lampOn;
+          // the dish: view-facing normal, before the normal map, so the stepped
+          // cone glows in bands the way a real reflector's facets do
+          float facing = clamp(nonPerturbedNormal.z, 0.0, 1.0);
+          e += uLampBowlColor * (uLampBowl * lampOn * pow(facing, max(uLampBowlExp, 0.01)));
+          totalEmissiveRadiance = e;
+        }`,
+      );
   });
 }
 

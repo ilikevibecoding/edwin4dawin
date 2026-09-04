@@ -5,6 +5,7 @@ import {
   applyCabinBounce,
   applyDirt,
   applyGlassFilm,
+  applyLampGlow,
   applyMirrorHorizon,
   bedLinerMaps,
   brushedMaps,
@@ -802,6 +803,34 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(1.2, 1.2),
     envMapIntensity: 1.6,
   });
+  // The cover lenses are lit from behind once the lamps are on: a clear lens
+  // over a lit reflector scatters some of that light in the plastic, which is
+  // the soft glow round the hot core in any photograph of a lit headlamp. Off,
+  // the emissive is zero and the lens is what it was in daylight.
+  m.lensClear.emissive = new THREE.Color(0xffeccb);
+  m.lensRibbed.emissive = new THREE.Color(0xffeccb);
+  m.lensClear.emissiveIntensity = 0;
+  m.lensRibbed.emissiveIntensity = 0;
+  // Lit-lamp shaping (see `applyLampGlow`): gated by `uLampOn`, which index.js
+  // drives with the lamp state, so none of it touches the daytime lens. The
+  // colour keys bleach less than the clear ones — a red lens stays red to the
+  // edge of its core; a clear one goes to white over most of the aperture.
+  applyLampGlow(m.headlight, { tag: 'headlight', core: 2.5, bleach: 0.6, coreExp: 1.0 });
+  applyLampGlow(m.taillight, { tag: 'taillight', core: 2.0, bleach: 0.25, coreExp: 2.2 });
+  applyLampGlow(m.amber, { tag: 'amber', core: 2.5, bleach: 0.35, coreExp: 2.2 });
+  applyLampGlow(m.reverseLamp, { tag: 'reverseLamp', core: 2.5, bleach: 0.4, coreExp: 2.0 });
+  // The covers carry most of their light in the core term rather than the flat
+  // base: at base 4 and core 5 the whole disc saturated after bloom and the
+  // headlamp read as a white plate, with the light bar brighter than both
+  // headlamps together. A low base with a steep core keeps a warm rim round a
+  // white centre, which is the reading of a lit lamp.
+  applyLampGlow(m.lensClear, { tag: 'lensClear', core: 7.0, bleach: 0.55, coreExp: 2.0 });
+  applyLampGlow(m.lensRibbed, { tag: 'lensRibbed', core: 7.0, bleach: 0.55, coreExp: 2.0 });
+  // The dish behind every clear lens throws the bulb's light straight back at the
+  // camera when it is on: the whole aperture glows, graded by how squarely each
+  // stamped step faces the eye, which is what separates a lit headlamp from a
+  // bright dot in a grey bowl.
+  applyLampGlow(m.reflector, { tag: 'reflector', core: 0, bleach: 0, bowl: 0.6, bowlColor: 0xfff0d2, bowlExp: 3.0 });
 
   // --- decals --------------------------------------------------------------
   // Tinted well off white and left rough. At full white the tailgate wordmark
@@ -857,7 +886,11 @@ export function vehicleMaterials(env = null) {
   // Cabin dust is the same laterite, thinner and paler: it comes in through the
   // windows as airborne fines, not as spatter, so `chroma` sits lower than the
   // exterior's and the dust colours are lifted towards the murram tone.
-  applyDirt(m.fabric, { amount: 0.5, tag: 'seat', color: 0x7a5a40, dust: 0x948473, wet: LATERITE.wet, chroma: 0.35, arch: 0 });
+  // Cabin dust is greyer than the exterior's. It is the same laterite, but a
+  // film of fines on vinyl reads as a grey haze, not as clay: with every cabin
+  // key carrying an orange-brown dust the whole glasshouse read amber from
+  // outside, which the glass round was blamed for.
+  applyDirt(m.fabric, { amount: 0.45, tag: 'seat', color: 0x74625a, dust: 0x8f8880, wet: LATERITE.wet, chroma: 0.2, arch: 0 });
   // Every cabin envMapIntensity in here is roughly half what it was, and the
   // difference has moved to `applyCabinBounce` below. The environment is a PMREM
   // of the sky, and 0x4c7fb5 at the zenith is a saturated blue: leaning on it to
@@ -875,7 +908,7 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.42,
   });
-  applyDirt(m.interiorPlastic, { amount: 0.7, tag: 'cabin', color: 0x785640, dust: 0x958473, wet: LATERITE.wet, chroma: 0.35, arch: 0 });
+  applyDirt(m.interiorPlastic, { amount: 0.6, tag: 'cabin', color: 0x6e625a, dust: 0x8e8a84, wet: LATERITE.wet, chroma: 0.2, arch: 0 });
   // Top surfaces. These are the ones under the screen that the sun bakes, so
   // they are chalkier and a stop or two lighter — and they are what you see of
   // the cabin from outside, which is what keeps the greenhouse from going black.
@@ -891,7 +924,7 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.5,
   });
-  applyDirt(m.interiorFaded, { amount: 0.8, tag: 'cabinTop', color: 0x84603f, dust: 0x9f907a, wet: LATERITE.wet, chroma: 0.35, arch: 0 });
+  applyDirt(m.interiorFaded, { amount: 0.7, tag: 'cabinTop', color: 0x7c6f64, dust: 0x9a948c, wet: LATERITE.wet, chroma: 0.2, arch: 0 });
   // Stitched welt strips down the pad edges and the seat panel seams.
   const stitch = stitchMaps();
   m.stitch = new THREE.MeshStandardMaterial({

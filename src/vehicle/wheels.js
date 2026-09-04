@@ -698,14 +698,17 @@ function wheelMaterials(base) {
     roughness: 1,
     envMapIntensity: 1.4,
   });
+  // Powder-coated, so a dielectric: at metalness 0.45 half of what the caliper
+  // could show was a reflection of a pocket with nothing in it, and it went to
+  // black behind the spokes on every shaded wheel.
   m.caliperM = std({
     name: 'caliper',
     map: cast.map,
     normalMap: cast.normal,
     roughnessMap: cast.rough,
     normalScale: new THREE.Vector2(0.6, 0.6),
-    metalness: 0.45,
-    roughness: 0.85,
+    metalness: 0.12,
+    roughness: 0.7,
     envMapIntensity: 0.9,
   });
   // The rotor and caliper live in the one pocket on the truck that no light
@@ -714,7 +717,7 @@ function wheelMaterials(base) {
   // get the same analytic hemisphere fill the grille and the bumper tubes use
   // — trail bounce coming in through the spoke windows — in units of plain
   // reflectance, so a dark caliper stays dark and a bright disc face lifts.
-  for (const [mat, ambient] of [[m.rotor, 1.5], [m.caliperM, 1.0], [m.cast, 0.4]]) {
+  for (const [mat, ambient] of [[m.rotor, 2.4], [m.caliperM, 1.8], [m.cast, 0.4]]) {
     applyBrightwork(mat, { tag: mat.name, strength: 0.2, band: 0.1, trees: 0.3, fresnel: 0.5, ambient });
   }
   m.mudM = std({
@@ -1674,13 +1677,13 @@ function buildBrakes(k) {
   k.add('caliperM', rbox(0.11, 0.07, 0.148, 0.016, 1), {
     pos: [discX, cy + 0.036, cz],
     rot: [ca, 0, 0],
-    tint: 0xa8431b,
+    tint: 0xd0552a,
   });
   for (const s of [-1, 1]) {
     k.add('caliperM', rbox(0.046, 0.088, 0.16, 0.014, 1), {
       pos: [discX + s * 0.048, cy, cz],
       rot: [ca, 0, 0],
-      tint: s > 0 ? 0x9c3d18 : 0x7c2f13,
+      tint: s > 0 ? 0xc44d22 : 0x9c3a18,
     });
     // guide pin through the bridge
     k.add('machined', new THREE.CylinderGeometry(0.008, 0.008, 0.13, 7), {

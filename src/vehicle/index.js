@@ -5,6 +5,7 @@ import { createGroundContact } from './contact.js';
 import { buildDetails } from './details.js';
 import { buildInterior } from './interior.js';
 import { vehicleMaterials } from './materials.js';
+import { createLiveMirrors, liveMirrorsWanted, pageQuality } from './mirrors.js';
 import { SPEC as S } from './spec.js';
 import { TYRE_SINK, buildAxles, buildWheel } from './wheels.js';
 
@@ -13,7 +14,7 @@ import { TYRE_SINK, buildAxles, buildWheel } from './wheels.js';
 // suspension travel, body pitch/roll and the lamps.
 // ---------------------------------------------------------------------------
 
-export function createVehicle({ env = null, terrain = null } = {}) {
+export function createVehicle({ env = null, terrain = null, quality = pageQuality() } = {}) {
   const materials = vehicleMaterials(env);
 
   const root = new THREE.Group();
@@ -24,7 +25,13 @@ export function createVehicle({ env = null, terrain = null } = {}) {
   sprung.name = 'sprung';
   root.add(sprung);
 
-  sprung.add(buildBody().build(materials));
+  // Live mirrors need a mesh per pane to hang a render target on, which is what
+  // the sort-pieces path of the kit already produces; it costs three draw calls
+  // and is only asked for on the tiers that render the mirrors.
+  if (liveMirrorsWanted(quality)) materials.mirrorGlass.userData.sortPieces = true;
+  const body = buildBody().build(materials);
+  sprung.add(body);
+  const mirrors = createLiveMirrors(body, materials, { quality });
   sprung.add(buildDetails().build(materials));
   const cabin = buildInterior().build(materials, { castShadow: false });
   sprung.add(cabin);
@@ -90,13 +97,30 @@ export function createVehicle({ env = null, terrain = null } = {}) {
     load: [1, 1, 1, 1],
   };
 
+  // Every lamp material carries the lit-lamp shaping from `applyLampGlow`
+  // (hot core, bleached centre, glowing dish); `uLampOn` is the switch for it.
+  const lampKeys = ['headlight', 'taillight', 'amber', 'reverseLamp', 'lensClear', 'lensRibbed', 'reflector'];
+  function setLampGlow(on) {
+    for (const key of lampKeys) {
+      const u = materials[key]?.userData?.lamp;
+      if (u) u.uLampOn.value = on ? 1 : 0;
+    }
+  }
+
   function setLights(on) {
     state.lightsOn = on;
     for (const b of beams) b.intensity = on ? 13 : 0;
     barLight.intensity = on ? 18 : 0;
-    materials.headlight.emissiveIntensity = on ? 6.5 : 1.6;
+    materials.headlight.emissiveIntensity = on ? 9.0 : 1.6;
     materials.amber.emissiveIntensity = on ? 3.2 : 1.1;
     materials.taillight.emissiveIntensity = on ? 4.0 : 1.6;
+    // Cover lenses: lit from behind, so they carry a glow of their own at night.
+    // Blended at their own alpha, so the number is high for what reaches the
+    // frame. The bowls behind them (`reflector`) light through `uLampBowl`.
+    for (const key of ['lensClear', 'lensRibbed']) {
+      if (materials[key]) materials[key].emissiveIntensity = on ? 2.2 : 0;
+    }
+    setLampGlow(on);
   }
   setLights(false);
 
@@ -117,8 +141,19 @@ export function createVehicle({ env = null, terrain = null } = {}) {
     // backwards, both on top of whatever the running lights are doing.
     const braking = finite(drive.brake) > 0.05 && speed > -0.2;
     const tailBase = state.lightsOn ? 4.0 : 1.6;
-    materials.taillight.emissiveIntensity = braking ? Math.max(tailBase, 9.0) : tailBase;
-    if (materials.reverseLamp) materials.reverseLamp.emissiveIntensity = speed < -0.15 ? 7.0 : 0.9;
+    materials.taillight.emissiveIntensity = braking ? Math.max(tailBase, 11.0) : tailBase;
+    // the lit-lamp shaping follows the lamp, not the switch: a brake lamp in
+    // daylight still has a hot core, and a reversing lamp only when reversing
+    const tailGlow = materials.taillight.userData.lamp;
+    if (tailGlow) tailGlow.uLampOn.value = braking || state.lightsOn ? 1 : 0;
+    const reversing = speed < -0.15;
+    if (materials.reverseLamp) {
+      // idle, the white cell is a pale lens in daylight; at night's exposure the
+      // same 0.9 read as a lit lamp, so it drops with the headlamps on
+      materials.reverseLamp.emissiveIntensity = reversing ? 7.0 : state.lightsOn ? 0 : 0.9;
+      const g = materials.reverseLamp.userData.lamp;
+      if (g) g.uLampOn.value = reversing ? 1 : 0;
+    }
 
     state.wheelAngle += (speed / S.wheelRadius) * dt;
     for (const w of wheels) {
@@ -225,6 +260,7 @@ export function createVehicle({ env = null, terrain = null } = {}) {
     materials,
     state,
     ground,
+    mirrors,
     setLights,
     setTerrain,
     update,

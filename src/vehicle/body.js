@@ -66,9 +66,48 @@ const UV_SCALE = {
   decalName: 'keep',
   decalBadge: 'keep',
   decalNumber: 'keep',
+  // the live mirror samples its render target through the pane's own uvs
+  mirrorGlass: 'keep',
 };
 
-const KEEP_ATTRS = ['position', 'normal', 'uv'];
+const KEEP_ATTRS = ['position', 'normal', 'uv', 'lampHot'];
+
+/**
+ * Lamp parts carry a `lampHot` vertex attribute for `applyLampGlow`: 1 where
+ * the bulb sits behind the lens, 0 at the lens rim, so a lit lamp has a hot
+ * core and a coloured edge instead of one flat emissive value. The keys here
+ * get it written automatically as they are added, in the part's own frame
+ * before placement; a bulb (`headlight`) is the source and is hot all over.
+ */
+export const LAMP_HOT = { headlight: 1, taillight: 'z', amber: 'z', reverseLamp: 'z', lensClear: 'z', lensRibbed: 'z' };
+
+export function hotSpot(geo, mode = 'z') {
+  const pos = geo.attributes.position;
+  const n = pos.count;
+  const hot = new Float32Array(n);
+  if (typeof mode === 'number') {
+    hot.fill(mode);
+  } else {
+    const [a, b] = mode === 'x' ? [1, 2] : mode === 'y' ? [0, 2] : [0, 1];
+    let rMax = 1e-6;
+    const r = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const u = pos.array[i * 3 + a];
+      const v = pos.array[i * 3 + b];
+      r[i] = Math.hypot(u, v);
+      if (r[i] > rMax) rMax = r[i];
+    }
+    for (let i = 0; i < n; i++) hot[i] = 1 - Math.min(1, r[i] / rMax);
+  }
+  geo.setAttribute('lampHot', new THREE.BufferAttribute(hot, 1));
+  return geo;
+}
+
+/** Radial hot-spot for a lamp part, if its key wants one and it has none yet. */
+export function lampReady(key, geo, mode = LAMP_HOT[key]) {
+  if (mode === undefined || geo.attributes.lampHot) return geo;
+  return hotSpot(geo.clone(), mode);
+}
 
 // Lamp internals sit at the bottom of a deep bezel, so the shadow map throws a
 // hard-edged black half across every reflector. Taking them out of the shadow
@@ -192,7 +231,7 @@ function boxProjectUV(geo, scale) {
  */
 class BodyKit extends Kit {
   add(key, geo, xform) {
-    super.add(key, geo, xform);
+    super.add(key, lampReady(key, geo), xform);
     const s = xform && xform.scale;
     const det = Array.isArray(s) ? s[0] * s[1] * s[2] : typeof s === 'number' ? s * s * s : 1;
     if (det < 0) {
@@ -3039,11 +3078,10 @@ function bed(k) {
       pos: [lx, 0.815, rz - 0.078],
       rot: [Math.PI / 2, 0, 0],
     });
-    k.add('headlight', new THREE.SphereGeometry(0.012, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.6), {
-      pos: [lx, 0.815, rz - 0.086],
-      rot: [Math.PI / 2, 0, 0],
-    });
-    k.add('lensClear', lensDome(0.043, 0.4, 16), { pos: [lx, 0.815, rz - 0.108], rot: [0, Math.PI, 0] });
+    // A reversing lamp, so it lights when the truck backs up and at no other
+    // time. It was a `headlight` bulb under a clear cover, which came on with
+    // the headlamps and had the truck reversing all night.
+    k.add('reverseLamp', lensDome(0.043, 0.4, 16), { pos: [lx, 0.815, rz - 0.108], rot: [0, Math.PI, 0] });
     k.add('chrome', new THREE.TorusGeometry(0.046, 0.006, 8, 18), { pos: [lx, 0.815, rz - 0.106] });
   }
 
