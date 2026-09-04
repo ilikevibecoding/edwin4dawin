@@ -98,9 +98,10 @@ float slopePdfPeaked(vec2 sh, vec2 va, float st, float mss) {
   return 0.75 * slopePdf(sh, va, st, mss * 0.7) + 0.25 * slopePdf(sh, va, st, mss * 1.9);
 }
 // Sun glitter as a resolvable sparkle field. The unresolved slope variance is carried by a world-anchored
-// random slope field of five octaves (0.7 m to 180 m cells; each octave only takes part while its cell
-// spans a few pixels, and the variance of the octaves too fine for the current footprint is handed to the
-// finest resolvable one), plus a small residual lobe (~13 %) for the facets no octave resolves. Wherever
+// random slope field of nine octaves (0.7 m to 180 m cells, of which a pixel evaluates the five starting
+// at the finest whose cell spans a few pixels; the variance of the octaves too fine for the current
+// footprint is handed to the finest resolvable one), plus a residual lobe (13 %) for the facets no octave
+// resolves. Wherever
 // the field's slope hits the specular slope a glint lights up: dense in the centre of the path, sparse at
 // its edges, of a few pixels at any distance. The expectation over the field equals the analytic
 // distribution with the full variance, so the glitter energy does not depend on the distance; the field
