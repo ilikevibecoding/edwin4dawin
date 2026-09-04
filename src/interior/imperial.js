@@ -385,12 +385,14 @@ export function stairs(kit, ctx, { x, z, y0 = 0, y1, axis = "z", dir = -1, w = 2
 }
 
 /** Raised platform slab (walkable: solid collider ≤ STEP is stepped on, higher ones need stairs). */
-export function platform(kit, ctx, { x0, z0, x1, z1, y, thickness = 0.3, mat = "floorGloss", edge = true }) {
+export function platform(kit, ctx, { x0, z0, x1, z1, y, thickness = 0.3, mat = "floorGloss", edge = true, hazard = false }) {
   kit.boxMM(mat, [x0, y - thickness, z0], [x1, y, z1], { texel: 0.33 });
   if (edge) {
     const e = 0.08;
     kit.boxMM("paintedMetal", [x0 - e, y - thickness, z0 - e], [x1 + e, y - thickness + 0.1, z1 + e], { color: PALETTE.impDark, texel: 2 });
-    kit.boxMM("hazard", [x0 - 0.01, y - 0.06, z0 - 0.01], [x1 + 0.01, y - 0.001, z1 + 0.01], { texel: 3 });
+    // plain light-grey nosing by default; hazard striping is opt-in (it aliases to dots at distance)
+    if (hazard) kit.boxMM("hazard", [x0 - 0.01, y - 0.06, z0 - 0.01], [x1 + 0.01, y - 0.001, z1 + 0.01], { texel: 3 });
+    else kit.boxMM("paintedMetal", [x0 - 0.01, y - 0.06, z0 - 0.01], [x1 + 0.01, y - 0.001, z1 + 0.01], { color: PALETTE.impLight, texel: 2 });
   }
   kit.collider([x0, y - thickness, z0], [x1, y, z1], "platform");
 }
