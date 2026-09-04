@@ -35,7 +35,6 @@ const RAIL_IN = 0.15; // railings stand this far inside a deck edge
 const TRENCH = { x0: 7.4, x1: 8.6, z0: 177.5, z1: 200.5 }; // |x| range of the pit cable trench
 const UP = new THREE.Vector3(0, 1, 0);
 const XAXIS = new THREE.Vector3(1, 0, 0);
-const ZAXIS = new THREE.Vector3(0, 0, 1);
 
 export function build(ctx) {
   buildShell(ctx);
@@ -187,7 +186,8 @@ function buildPits(ctx) {
     // walkway-side wall (faces the outer wall) with the wall carved away behind the step flights
     const uz = s < 0 ? (z) => z - PIT_Z0 : (z) => PIT_Z1 - z;
     const stepOps = STAIR_Z.map((zc) => {
-      const [u0, u1] = [uz(zc - STAIR_W / 2 - 0.05), uz(zc + STAIR_W / 2 + 0.05)].sort((a, b) => a - b);
+      // opening clears the flight and its side rails (which run 0.1 m outside the treads)
+      const [u0, u1] = [uz(zc - STAIR_W / 2 - 0.2), uz(zc + STAIR_W / 2 + 0.2)].sort((a, b) => a - b);
       return { type: "door", u0, u1, v0: 0, v1: H };
     });
     pitWall(ctx, [xi + s * e, PIT_Y, s < 0 ? PIT_Z0 : PIT_Z1], [0, 0, s < 0 ? 1 : -1], PIT_Z1 - PIT_Z0, 211 + s, stepOps);
@@ -220,8 +220,8 @@ function buildPits(ctx) {
     rail([rx, DAIS.z0 + 0.15], [rx, DAIS.z1 - 0.1], FLOOR + DAIS.h, [1]);
     rail([rx, STAIR_Z[0] + STAIR_W / 2 + 0.15], [rx, STAIR_Z[1] - STAIR_W / 2 - 0.15], FLOOR, [0, 1]);
     rail([xo + s * RAIL_IN, PIT_Z0 + 0.15], [xo + s * RAIL_IN, PIT_Z1 - 0.15], FLOOR);
-    rail([xo + s * 0.1, PIT_Z0 - RAIL_IN], [xi - s * 0.3, PIT_Z0 - RAIL_IN], FLOOR);
-    rail([xo + s * 0.1, PIT_Z1 + RAIL_IN], [xi - s * 0.15, PIT_Z1 + RAIL_IN], FLOOR, [1]);
+    rail([xo + s * RAIL_IN, PIT_Z0 - RAIL_IN], [xi - s * 0.3, PIT_Z0 - RAIL_IN], FLOOR);
+    rail([xo + s * RAIL_IN, PIT_Z1 + RAIL_IN], [xi - s * 0.15, PIT_Z1 + RAIL_IN], FLOOR, [1]);
 
     // step flights: bottom edge in the pit at |x| = 4 + run, climbing toward the walkway (every step collides)
     for (const zc of STAIR_Z) {
@@ -649,17 +649,15 @@ function buildStations(ctx) {
     // forward-facing sensor stations at the pit's front end (operators look toward the glazing)
     for (const x of [6.7, 9.5]) station(s * x, 178.7, 0, IMP.plateBlue);
   }
-  // standing officer plotting stations at the ends of the forward gallery, backed onto the sill plinth
-  for (const s of [-1, 1]) props.consoleStation(kit, { pos: [s * 11.6, FLOOR, 174.78], yaw: 0, w: 1.6, d: 0.8, h: 1.05, screens: 2, accent: "emitBlue", seed: 51 + s, screenSet: [8, 10] });
-  // aft gallery: a pair of standing status consoles beside the door approach (facing aft, toward the banks)
-  for (const s of [-1, 1]) props.consoleStation(kit, { pos: [s * 4.2, FLOOR, 203.3], yaw: Math.PI, w: 1.4, d: 0.7, h: 1.0, screens: 2, accent: "emitRed", seed: 61 + s, screenSet: [3, 6] });
+  // the forward and aft galleries stay clear: they are the crew's 2 m circulation routes between the ledges,
+  // the dais and the blast door
 }
 
 // ---------------------------------------------------------------------------------------------------
 // Lights: 1 shadow spot over the dais, cool window fill, walkway lights, red/amber pit practicals (8 total)
 // ---------------------------------------------------------------------------------------------------
 function buildLights(ctx) {
-  ctx.spot(0xe4ecff, 260, 18, 0.62, [0, CEIL - 0.5, 179.6], [0, FLOOR + DAIS.h, 178.0], { shadow: true, mapSize: 1024, penumbra: 0.55 });
+  ctx.spot(0xe4ecff, 120, 18, 0.58, [0, CEIL - 0.5, 179.6], [0, FLOOR + DAIS.h, 178.0], { shadow: true, mapSize: 1024, penumbra: 0.55 });
   ctx.light(0xa9c6ff, 62, 24, [0, CEIL - 1.4, 176.8]); // cool fill over the dais / glazing side
   ctx.light(0xdfe8ff, 60, 22, [0, CEIL - 0.9, 190.5]);
   ctx.light(0xdfe8ff, 55, 20, [0, CEIL - 0.9, 203.2]);
@@ -713,7 +711,7 @@ function buildAnimated(ctx) {
   holo.scale.setScalar(0.9);
   ctx.add(holo);
   const beamMat = M.holo.clone();
-  beamMat.opacity = 0.06;
+  beamMat.opacity = 0.035;
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 0.14, 1.6, 28, 1, true), beamMat);
   beam.position.set(-2.25, FLOOR + DAIS.h + 0.95 + 0.8, 178.0);
   ctx.add(beam);
@@ -755,7 +753,7 @@ function buildAnimated(ctx) {
     holo.rotation.y = t * 0.35;
     holo.position.y = baseY + Math.sin(t * 1.1) * 0.03;
     wire.opacity = 0.4 + 0.08 * Math.sin(t * 17.0) + 0.06 * Math.sin(t * 3.1);
-    beamMat.opacity = 0.05 + 0.015 * Math.sin(t * 5.3);
+    beamMat.opacity = 0.03 + 0.01 * Math.sin(t * 5.3);
     red.emissiveIntensity = redBase * (0.12 + 0.88 * Math.pow(0.5 + 0.5 * Math.sin(t * 2.6), 3));
     amber.emissiveIntensity = amberBase * (Math.sin(t * 7.0) > 0.2 ? 1 : 0.08);
     for (const s of screens) {
