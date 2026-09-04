@@ -282,8 +282,8 @@ const debugAPI = {
     if (modes.mode !== "interior") modes.setInteriorImmediate("tower");
     player.headBob = false;
     player.frozen = true;
-    const floor = ROOMS[v.room] ? roomFloorY(v.room) : v.y - 1.7;
-    player.teleport(v.x, floor, v.z, THREE.MathUtils.degToRad(v.yaw));
+    // views register an eye height; honour it so pit / catwalk / gallery views stand where they say
+    player.teleport(v.x, v.y - 1.7, v.z, THREE.MathUtils.degToRad(v.yaw));
     player.pitch = THREE.MathUtils.degToRad(v.pitch);
     player.updateCamera(0);
     zone.update(0, player.position, camera.position, "interior");
