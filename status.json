@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-04T07:57:43.102Z",
+  "updated": "2026-09-04T08:01:03.997Z",
   "phase": "Phase 3 of 5: parallel builders finishing, merging + verifying into the integration branch",
   "summary": "Plan: (1) baseline measured, (2) shared disaster foundation built, (3) 7 builder agents in isolated worktrees, (4) independent critics + verification agents, (5) final baseline comparison, changelog, PR. Nothing counts as done until it is merged, tested and measured in the actual game.",
   "links": [
@@ -60,8 +60,8 @@
     },
     {
       "name": "Chunk pipeline optimization",
-      "status": "in progress",
-      "detail": "Builder committed packed vertex attributes, cheaper lighting seeds, worldgen shortcuts, chunk culling; awaiting its before/after report and my review."
+      "status": "merged",
+      "detail": "Bit-identical terrain/lighting (hash-verified) and 0 differing pixels; streaming JS roughly halved (walk window js avg 10-16 -> 5-10 ms, 500-640 ms stall frames gone), geometry memory -31.6%, load -25..-51%, 16-bit indices, exact AABB chunk culling. Cherry-picked into the integration branch; tsunami lifecycle still passes."
     },
     {
       "name": "Critics + verification (visuals, tests, replay, multiplayer, perf)",
@@ -163,6 +163,10 @@
     {
       "time": "2026-09-04 07:57 UTC",
       "text": "Eyes round 2 merged into the integration branch; critic re-review started."
+    },
+    {
+      "time": "2026-09-04 08:01 UTC",
+      "text": "Optimization merged: identical visuals verified by pixel diff; streaming JS ~halved; -31% geometry memory; faster load."
     }
   ],
   "issues": [
