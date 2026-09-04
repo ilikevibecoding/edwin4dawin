@@ -150,6 +150,22 @@ export function lightBand(W, { v0 = 1.6, v1 = 1.85, mat = "emitWhiteSoft", n = -
   for (const [a, b] of spans) W.frame.box(mat, (a + b) / 2, (v0 + v1) / 2, n, b - a, v1 - v0 - 0.09, 0.02, { uv: "keep" });
 }
 
+/**
+ * Collision for a thin diagonal element (rail, chord) as `pieces` short AABBs hugging the line from -> to
+ * (floor points), so the walkable space follows the geometry instead of its bounding square.
+ */
+export function diagonalColliders(kit, from, to, y, h, pieces = 4, tag = "rail", half = 0.09) {
+  for (let i = 0; i < pieces; i++) {
+    const t0 = i / pieces;
+    const t1 = (i + 1) / pieces;
+    const ax = from[0] + (to[0] - from[0]) * t0;
+    const az = from[1] + (to[1] - from[1]) * t0;
+    const bx = from[0] + (to[0] - from[0]) * t1;
+    const bz = from[1] + (to[1] - from[1]) * t1;
+    kit.collider([Math.min(ax, bx) - half, y, Math.min(az, bz) - half], [Math.max(ax, bx) + half, y + h, Math.max(az, bz) + half], tag);
+  }
+}
+
 // ---------------------------------------------------------------------------------------------------
 /** Holo table, floor inlay, standing rails, projector ring and the animated hologram. */
 function holoPit(ctx, cx, fy, cz) {
@@ -165,12 +181,16 @@ function holoPit(ctx, cx, fy, cz) {
     else props.floorGrate(kit, [gx - 1.2, gz - 0.6], [gx + 1.2, gz + 0.6], fy + 0.004);
   }
   props.holoTable(kit, { pos: [cx, fy, cz], r: 1.6, h: 0.95, accent: "emitBlue" });
-  // standing rails: four diagonal chords of an octagon, gaps on the axes for access
+  // standing rails: four diagonal chords of an octagon, gaps on the axes for access. A diagonal rail's own
+  // collider is its full AABB (a 2 m square that would wall off the approaches), so collide per sub-segment.
   const R = 3.6;
   for (let k = 0; k < 4; k++) {
     const a0 = THREE.MathUtils.degToRad(22.5 + 90 * k);
     const a1 = THREE.MathUtils.degToRad(67.5 + 90 * k);
-    props.railing(kit, { from: [cx + R * Math.cos(a0), cz + R * Math.sin(a0)], to: [cx + R * Math.cos(a1), cz + R * Math.sin(a1)], y: fy, posts: 3 });
+    const from = [cx + R * Math.cos(a0), cz + R * Math.sin(a0)];
+    const to = [cx + R * Math.cos(a1), cz + R * Math.sin(a1)];
+    props.railing(kit, { from, to, y: fy, posts: 3, collide: false });
+    diagonalColliders(kit, from, to, fy, 1.1, 5, "railing");
   }
   // projector ring overhead: octagonal housing with blue underside strips, hangers, central projector
   const ry = ctx.ceil - 0.42;

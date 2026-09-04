@@ -17,6 +17,19 @@ export function build(ctx) {
   const cx = (x0 + x1) / 2;
   const DAIS = { x0: cx - 4, x1: cx + 4, z0: 191.5, z1: 196.5, h: 0.4 };
 
+  // The bridge door (br_nav) sits on the bridge wall at x = 14, two metres off this room's port wall (x = 16).
+  // RoomManager.doorsFor files an x-door under xmin only when d.at equals box.x0 exactly, so today br_nav is
+  // filed under xmax: the starboard wall gets a phantom opening and the port wall stays solid. Until the core
+  // picks the nearest wall, carve the opening on the port wall here and seal the phantom (no-op once fixed).
+  const wallLen = z1 - z0;
+  const misfiled = ctx.doors.find((d) => d.door.id === "br_nav" && d.side === "xmax");
+  const openingsOf = (side) => {
+    const own = ctx.doors.filter((d) => d.side === side && d !== misfiled).map((d) => ({ type: d.type, u0: d.u0, u1: d.u1, v0: d.v0, v1: d.v1 }));
+    if (misfiled && side === "xmin") own.push({ type: misfiled.type, u0: wallLen - misfiled.u1, u1: wallLen - misfiled.u0, v0: misfiled.v0, v1: misfiled.v1 });
+    return own;
+  };
+  const sideWall = (side) => (misfiled ? { ...ctx.wall(side), openings: openingsOf(side) } : ctx.wall(side));
+
   ctx.shell({
     floorMat: "deckBlack",
     floorColor: IMP.plateLight,
@@ -25,11 +38,12 @@ export function build(ctx) {
     walls: {
       zmin: { styles: { plate: 0.8, panel: 0.1, vent: 0.1 } },
       zmax: { styles: { plate: 0.75, panel: 0.15, hatch: 0.1 } },
-      xmin: { styles: { plate: 0.8, vent: 0.1, pipes: 0.1 } },
-      xmax: { styles: { plate: 0.8, panel: 0.1, vent: 0.1 } },
+      xmin: { styles: { plate: 0.8, vent: 0.1, pipes: 0.1 }, ...(misfiled ? { openings: openingsOf("xmin") } : {}) },
+      xmax: { styles: { plate: 0.8, panel: 0.1, vent: 0.1 }, ...(misfiled ? { openings: openingsOf("xmax") } : {}) },
     },
   });
-  for (const side of ["zmin", "zmax", "xmin", "xmax"]) lightBand(ctx.wall(side));
+  for (const side of ["zmin", "zmax"]) lightBand(ctx.wall(side));
+  for (const side of ["xmin", "xmax"]) lightBand(sideWall(side));
 
   const inst = new Instancer(ctx);
   const chair = chairProto(inst, "nav_chair", { color: IMP.fabricGrey });
