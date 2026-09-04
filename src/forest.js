@@ -17,7 +17,6 @@ import {
   grassSwathAtlas,
   groundLitterAtlas,
   logBarkMaps,
-  ridgeTexture,
   rockMaps,
   savannaBillboardAtlas,
   savannaGrassAtlas,
@@ -2330,11 +2329,6 @@ export function createForest({
     (tint, i) =>
       new THREE.MeshBasicMaterial({ map: treelineTexture(i), color: tint, transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: true }),
   );
-  const ridgeMats = [0, 1].map(
-    (i) =>
-      new THREE.MeshBasicMaterial({ map: ridgeTexture(i), color: i === 0 ? 0xa39c8e : 0xb5aea2, transparent: true, opacity: 0.42 - i * 0.12, depthWrite: false, side: THREE.DoubleSide, fog: false }),
-  );
-
   // --- prototypes -----------------------------------------------------------
   const protos = [];
   const protoSeed = [];
@@ -3376,37 +3370,11 @@ export function createForest({
     group.add(mesh);
   });
 
-  // far hills through the dry-season haze
-  [0, 1].forEach((k) => {
-    const r = 560 + k * 130;
-    const cards = 18;
-    const parts = [];
-    for (let i = 0; i < cards; i++) {
-      const a = (i / cards) * Math.PI * 2;
-      const chord = 2 * r * Math.sin(Math.PI / cards) * 1.12;
-      const h = 44 + k * 22;
-      const g = new THREE.PlaneGeometry(chord, h, 1, 1);
-      const uw = 0.3 + rnd() * 0.12;
-      const u0 = rnd() * (1 - uw);
-      const flip = rnd() < 0.5;
-      const uv = g.attributes.uv;
-      for (let q = 0; q < uv.count; q++) {
-        const t = flip ? 1 - uv.getX(q) : uv.getX(q);
-        uv.setX(q, u0 + t * uw);
-      }
-      g.translate(0, h * 0.42, 0);
-      g.rotateY(-a - Math.PI / 2);
-      g.translate(Math.cos(a) * r, -8 - k * 10, Math.sin(a) * r);
-      parts.push(g);
-    }
-    const mesh = new THREE.Mesh(merge(parts), ridgeMats[k]);
-    mesh.name = `ridge_${k}`;
-    mesh.renderOrder = -900 + k;
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
-    mesh.frustumCulled = false;
-    group.add(mesh);
-  });
+  // No ridge cards. The forest had two rings of 44–66 m ridge silhouettes at
+  // 560 and 690 m, unlit, unfogged and pale grey-beige, and under a savanna sky
+  // they stood among the terrain's far hills as a band brighter than the sky
+  // they were in front of — three specialists saw it from three sides. The
+  // terrain's farHills carry the horizon now, and they take the hour's fog.
 
   // --- wiring ------------------------------------------------------------------
   const allMats = [...Object.values(barkMats), acaciaMat, grassMat, swathMat, scrubMat, forbMat, litterMat, billboardMat, rockMat, earthMat, skirtMat];
