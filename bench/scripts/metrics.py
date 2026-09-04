@@ -85,13 +85,27 @@ def main():
     def add(name, value, score, note=''):
         rows.append({'metric': name, 'value': value, 'score': score, 'note': note})
 
-    dh = abs(cur['horizonY'] - ref['horizonY'])
-    add('horizon displacement (frac of height)', round(dh, 4), pos_score(dh), f"ref {ref['horizonY']:.3f} vs {cur['horizonY']:.3f}")
-    if cur['aircraft']['centroid'] and ref['aircraft']['centroid']:
+    # horizon: the bench projects the exact horizontal ray when available (the image detector is fooled by
+    # cloud bases and haze bands); fall back to the detector otherwise
+    cur_h = lm['horizon'][1] if lm.get('horizon') else cur['horizonY']
+    dh = abs(cur_h - ref['horizonY'])
+    add('horizon displacement (frac of height)', round(dh, 4), pos_score(dh), f"ref {ref['horizonY']:.3f} vs {cur_h:.3f}" + ('' if lm.get('horizon') else ' (image detector)'))
+    # aircraft: compare the projected model bounding box with the whole-aircraft reference measurement
+    # (`aircraftFull`, measured by hand incl. the white wing) rather than the yellow-body-only masks
+    ref_ac = ref.get('aircraftFull') or ref['aircraft']
+    if lm.get('planeBoxMin') and lm.get('planeBoxMax'):
+        bb = [lm['planeBoxMin'][0], lm['planeBoxMin'][1], lm['planeBoxMax'][0], lm['planeBoxMax'][1]]
+        cen = [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2]
+        d = math.dist(cen, ref_ac['centroid'])
+        add('aircraft centroid displacement', round(d, 4), pos_score(d), f"ref {ref_ac['centroid']} vs {[round(v, 3) for v in cen]} (projected model box centre)")
+        dw = abs((bb[2] - bb[0]) - (ref_ac['widthFraction'] or 0))
+        add('aircraft bbox width difference', round(dw, 4), pos_score(dw), f"ref {ref_ac['widthFraction']:.3f} vs {bb[2] - bb[0]:.3f} (projected model box)")
+        add('aircraft bbox IoU', round(iou(bb, ref_ac['bbox']) or 0, 3), overlap_score(iou(bb, ref_ac['bbox'])), f"ref {ref_ac['bbox']} vs {[round(v, 3) for v in bb]}")
+    elif cur['aircraft']['centroid'] and ref['aircraft']['centroid']:
         d = math.dist(cur['aircraft']['centroid'], ref['aircraft']['centroid'])
-        add('aircraft centroid displacement', round(d, 4), pos_score(d), f"ref {ref['aircraft']['centroid']} vs {[round(v, 3) for v in cur['aircraft']['centroid']]}")
+        add('aircraft centroid displacement', round(d, 4), pos_score(d), f"ref {ref['aircraft']['centroid']} vs {[round(v, 3) for v in cur['aircraft']['centroid']]} (yellow mask)")
         dw = abs((cur['aircraft']['widthFraction'] or 0) - (ref['aircraft']['widthFraction'] or 0))
-        add('aircraft bbox width difference', round(dw, 4), pos_score(dw), 'projected span as fraction of frame width')
+        add('aircraft bbox width difference', round(dw, 4), pos_score(dw), 'projected span as fraction of frame width (yellow mask)')
         add('aircraft bbox IoU', round(iou(cur['aircraft']['bbox'], ref['aircraft']['bbox']) or 0, 3), overlap_score(iou(cur['aircraft']['bbox'], ref['aircraft']['bbox'])))
     else:
         add('aircraft centroid displacement', None, 0, 'aircraft not detected')

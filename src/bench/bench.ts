@@ -175,6 +175,27 @@ export class Bench {
     const tb = g.map.bridges.find((x) => x.id === 'tortuga-bridge');
     if (tb) lm.bridge2End = this.project(tb.pts[tb.pts.length - 1][0], 7, tb.pts[tb.pts.length - 1][1]);
     lm.horizonCentre = this.project(g.camera.position.x + Math.sin(0) * 50000, 0, g.camera.position.z - 50000);
+    // exact screen-space bounding box of the aircraft: every exterior vertex projected (a world AABB would
+    // overestimate a yawed/banked aircraft by a wide margin)
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const v = new THREE.Vector3();
+    g.aircraft.model.root.updateMatrixWorld(true);
+    for (const m of g.aircraft.model.exteriorMeshes) {
+      if (!m.visible) continue;
+      const pos = m.geometry.getAttribute('position');
+      if (!pos) continue;
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+        const c = this.project(v.x, v.y, v.z);
+        if (!c) continue;
+        x0 = Math.min(x0, c[0]); y0 = Math.min(y0, c[1]); x1 = Math.max(x1, c[0]); y1 = Math.max(y1, c[1]);
+      }
+    }
+    if (Number.isFinite(x0)) { lm.planeBoxMin = [x0, y0]; lm.planeBoxMax = [x1, y1]; }
+    // true horizon row: the camera ray that is exactly horizontal in the camera's forward azimuth
+    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(g.camera.quaternion);
+    const hz = new THREE.Vector3(fwd.x, 0, fwd.z).normalize().multiplyScalar(30000).add(g.camera.position);
+    lm.horizon = this.project(hz.x, g.camera.position.y, hz.z);
     return lm;
   }
 }

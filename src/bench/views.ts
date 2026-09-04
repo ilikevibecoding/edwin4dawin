@@ -41,7 +41,7 @@ export const BENCH_VIEWS: BenchView[] = [
     // reference (measured on the frame): aircraft bbox x 0.653-0.885, y 0.595-0.885, centroid ~(0.77, 0.74); the
     // aircraft flies toward the camera and to its left, seen from above its starboard bow (spinner visible,
     // far wing upper-left, near wing lower-right), banked toward the near wing
-    plane: { fromCamera: { screenX: 0.77, screenY: 0.73, distance: 44 }, headingDeg: 200, pitchDeg: 2, bankDeg: -14, speed: 52, throttle: 0.75 },
+    plane: { fromCamera: { screenX: 0.76, screenY: 0.74, distance: 50 }, headingDeg: 200, pitchDeg: 2, bankDeg: -24, speed: 52, throttle: 0.75 },
     presim: 40, clipInputs: { pitch: 0.05, roll: -0.05, yaw: 0 },
   },
   {
