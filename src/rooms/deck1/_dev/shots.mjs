@@ -75,6 +75,9 @@ try {
   await browser.close();
   process.exit(1);
 }
+// the HUD crosshair is a white dot at frame centre; on the door-axis views (e.g. d1-bridge-aft) it sits exactly on the
+// doorway and reads as an emissive blob to anyone judging the frame
+await page.addStyleTag({ content: "#crosshair { display: none !important; }" });
 const all = await page.evaluate(() => window.debugAPI.views);
 const warnings = await page.evaluate(() => window.debugAPI.warnings);
 const roomStats = await page.evaluate(() => window.debugAPI.roomStats());

@@ -22,9 +22,14 @@ export function buildCeiling(kit, { xIn, z0, z1, ceilY, beamsZ, walkwayLightsZ, 
     { at: 1.9, w: 0.42, emit: "emitWhite", ew: 0.1 },
     { at: 11.5, w: 0.5, emit: "emitBlue", ew: 0.1 },
   ];
+  // The panel between the two white walkway channels is the bridgeSeam dielectric (F90 capped at 0.25), not the
+  // deck's bridgeFloor: seen from the centreline cameras at 10–20° grazing, that panel mirrored each pendant's
+  // point light as a warm/white patch 1.8 m below its housing (the aft pendant's patch sat right over the aft
+  // door in d1-bridge-aft — critic round 3, "hot lamp above the door"). The side panels keep the sheen.
   let cur = -xo;
   for (const c of chans) {
-    kit.boxMM("bridgeFloor", [cur, ceilY - 0.02, z0 - 0.05], [c.at - c.w / 2, top, z1 + 0.05], { color: near, texel: 0.5 });
+    const centre = Math.abs(cur) < 2 && Math.abs(c.at - c.w / 2) < 2;
+    kit.boxMM(centre ? "bridgeSeam" : "bridgeFloor", [cur, ceilY - 0.02, z0 - 0.05], [c.at - c.w / 2, top, z1 + 0.05], { color: near, texel: 0.5 });
     kit.boxMM("paintedMetal", [c.at - c.w / 2 - 0.05, ceilY - 0.02, z0], [c.at - c.w / 2 + 0.03, top, z1], { color: IMP.mid, texel: 1 });
     kit.boxMM("paintedMetal", [c.at + c.w / 2 - 0.03, ceilY - 0.02, z0], [c.at + c.w / 2 + 0.05, top, z1], { color: IMP.mid, texel: 1 });
     cur = c.at + c.w / 2;
@@ -97,10 +102,12 @@ export function buildCeiling(kit, { xIn, z0, z1, ceilY, beamsZ, walkwayLightsZ, 
     lamp(x, ceilY - 0.32, z, w - 0.4, w - 0.4);
   };
   // walkway / aft pendants: closed 0.9 × 0.3 × 0.9 housing hung `pendantDrop` below the ceiling on two rods
-  // from a canopy plate, red side lamps, 0.5 m lamp on the underside
+  // from a canopy plate, red side lamps, 0.5 m lamp on the underside. The canopy is black, not IMP.dark: its
+  // underside faces the pendant's own point 1.75 m below (E ≈ 23, no shadowing) and at IMP.dark it was a lit
+  // square on the ceiling over every pendant.
   const pendant = (x, z) => {
     const y = ceilY - pendantDrop;
-    kit.box("paintedMetal", x, ceilY - 0.03, z, 0.5, 0.06, 0.5, { color: IMP.dark, texel: 2 });
+    kit.box("paintedMetal", x, ceilY - 0.03, z, 0.5, 0.06, 0.5, { color: IMP.black, texel: 2 });
     for (const s of [-1, 1]) kit.box("paintedMetal", x + s * 0.28, (y + 0.15 + ceilY - 0.06) / 2, z, 0.03, ceilY - 0.06 - (y + 0.15), 0.03, { color: IMP.black, texel: 2 });
     kit.box("paintedMetal", x, y, z, 0.9, 0.3, 0.9, { color: dark, texel: 1 });
     for (const s of [-1, 1]) kit.box("emitRedImp", x + s * 0.453, y + 0.06, z, 0.012, 0.03, 0.12);

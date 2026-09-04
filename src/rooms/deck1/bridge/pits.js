@@ -8,16 +8,23 @@ import { decalRect } from "../../../textures.js";
 import { FLOOR, PIT_FLOOR } from "../shared/plan.js";
 import { stairs } from "../shared/imperial.js";
 import { IMP } from "../shared/palette.js";
-import { SCUFF, shade, wallDisplay, cabinet, hatch, ventPanel, junctionBox, junctionCluster, ventCluster, conduitRun, dataPillar, rack, dropConduit, stairRail, floorHatch, deckSeams, cableCover } from "./props.js";
+import { SCUFF, shade, wallDisplay, cabinet, hatch, ventPanel, junctionBox, junctionCluster, ventCluster, breakerCluster, manifoldPanel, riserBank, conduitRun, dataPillar, rack, dropConduit, stairRail, floorHatch, deckSeams, cableCover } from "./props.js";
 import { CELLS } from "./screens.js";
 
 const SCREENS = ["screenImp0", "screenImp1", "screenImp2", "screenImp3"];
 const NOSING = IMP.grey; // painted edge steel, lighter than the wall tone so every drop edge reads
-const PLATE = IMP.mid; // pit deck plating tint (bridgePitFloor carries the worn-metal map at ~0.4, so mid tints read as dark plating)
-// every third display is a live (animated) bridgeScreen cell, the rest are the shared static Imperial screens
+// pit deck plating tint: bridgePitFloor carries no albedo map (0xa0a0a0 mean), so this is ≈ 0.07 albedo — dark
+// plating that still shows the raft pools and the plate bands from the aft deck (critic round 3: at IMP.mid the
+// starboard pit floor filled the right third of the dais view as "one flat black slab")
+export const PLATE = shade(IMP.grey, 0.72);
+// every third display is a live (animated) bridgeScreen cell, the rest are the shared static Imperial screens,
+// each on its own crop of the texture (critic round 3: adjacent units with the same texture read as one monitor
+// repeated), and a housing style per unit so neighbours never share a template
+const CROPS = [null, [0, 0, 0.72, 0.72], [0.28, 0.28, 1, 1], [0, 0.3, 0.7, 1], [0.3, 0, 1, 0.7], [0.14, 0.14, 0.86, 0.86]];
 export function pickScreen(i) {
-  if (i % 3 === 0) return { screen: "bridgeScreen", rect: CELLS[(i / 3) % 4] };
-  return { screen: SCREENS[i % 4], rect: null };
+  const style = ((i * 5) % 7) % 3;
+  if (i % 3 === 0) return { screen: "bridgeScreen", rect: CELLS[(i / 3) % 4], style };
+  return { screen: SCREENS[i % 4], rect: CROPS[(i * 7 + 1) % CROPS.length], style };
 }
 
 export function buildPits(kit, ctx, L) {
@@ -53,7 +60,7 @@ export function buildPits(kit, ctx, L) {
       else if (k === 5) ventCluster(kit, { x: wx + s * 0.01, y: y0 + 1.6, z, yaw: yawIn, w: 0.9, h: 0.5 });
       else {
         const dy = k % 2 ? -0.12 : 0.08;
-        wallDisplay(kit, { x: wx + s * 0.01, y: y0 + 1.65 + dy, z, yaw: yawIn, w: k % 3 ? 1.4 : 1.6, h: 1.0, ...pickScreen(k + (s < 0 ? 0 : 2)), label: k % 4 === 0 ? 9 : undefined, cableTo: y0 + 0.3 });
+        wallDisplay(kit, { x: wx + s * 0.01, y: y0 + 1.65 + dy, z, yaw: yawIn, w: k % 3 ? 1.4 : 1.6, h: 1.0, ...pickScreen(k + (s < 0 ? 0 : 2)), label: k % 4 === 0 ? 9 : undefined, cableTo: y0 + 0.3, bracket: k % 2 === 1 });
       }
       if (k < 7) {
         junctionBox(kit, { x: wx + s * 0.02, y: y0 + 1.9, z: z + 2.1, yaw: yawIn, w: 0.26, h: 0.3, lamp: k % 2 ? "emitRedImp" : "emitAmber" });
@@ -114,7 +121,7 @@ export function buildPits(kit, ctx, L) {
     // junction-box cluster in the upper band, each cabled down to the tray; conduit run at 7.3 m; base duct.
     const ox = s * xi;
     const lower = [
-      [468.6, "d", 3.0, 1.1, 0.12, 1],
+      [468.6, "d", 3.0, 1.1, 0.06, 1],
       [474.0, "d", 2.4, 1.0, -0.2, 2],
       [476.7, "jb"],
       [479.4, "d", 3.0, 1.1, 0.02, 3],
@@ -124,27 +131,34 @@ export function buildPits(kit, ctx, L) {
     for (const [z, kind, w, h, dy, si] of lower) {
       if (kind === "jb") junctionCluster(kit, { x: ox + s * 0.01, y: y0 + 1.75, z, yaw: yawOut, seed: s < 0 ? 3 : 4 });
       else if (kind === "vent") ventCluster(kit, { x: ox + s * 0.01, y: y0 + 1.75, z, yaw: yawOut, w: 1.0, h: 0.5 });
-      else wallDisplay(kit, { x: ox + s * 0.01, y: y0 + 1.75 + dy, z, yaw: yawOut, w, h, ...pickScreen(si + (s < 0 ? 1 : 0)), label: si === 3 ? 12 : undefined, cableTo: y0 + 3.0, cableOut: 0.1 });
+      else wallDisplay(kit, { x: ox + s * 0.01, y: y0 + 1.75 + dy, z, yaw: yawOut, w, h, ...pickScreen(si + (s < 0 ? 1 : 0)), label: si === 3 ? 12 : undefined, cableTo: y0 + 3.0, cableOut: 0.1, bracket: true });
     }
+    // scuff band along the wall base under the consoles (0.13..0.5 over the pit floor, behind the cabinets)
+    [a, b] = span(ox, ox - s * 0.012);
+    kit.boxMM("paintedMetal", [a, y0 + 0.13, pz0 + 0.3], [b, y0 + 0.5, pz1 - 0.3], { color: SCUFF, texel: 1 });
     [
       [466.5, 0.8, 1.05],
       [471.3, 0.9, 1.05],
       [472.3, 0.7, 1.05],
-      [477.6, 0.8, 1.05],
+      [477.3, 0.8, 1.05],
       [483.0, 0.9, 1.05],
       [487.5, 0.7, 0.95],
-      [488.5, 0.8, 1.05],
+      [488.3, 0.8, 1.05],
       [493.4, 0.9, 1.05],
       [496.6, 0.8, 0.95],
     ].forEach(([z, w, h], k) => cabinet(kit, { x: ox, y: y0, z, yaw: yawOut, w, h, d: 0.5, seed: 100 + k + (s < 0 ? 0 : 20) }));
     [466.8, 472.2, 477.6, 483.0, 488.4].forEach((z, k) => dropConduit(kit, { x: ox, z, yaw: yawOut, y0: y0 + 1.05, y1: y0 + 3.0, boxY: y0 + 1.4, lamp: k % 2 ? "emitRedImp" : "emitAmber" }));
-    // head-height strip in a dark channel housing 2.6 m over the pit floor (0.2 m over the walkway deck)
+    // head-height strip 2.75 m over the pit floor (0.35 m over the walkway deck, clear of the tallest display
+    // bracket at 2.66): two 6 cm lips with a 5 cm emitBlue emitter set 2 cm back between them (critic round 3:
+    // the 2 cm emitWhite at the back of a 4 mm slot read grey-dim from the pit camera; the 3 cm emitBlue that
+    // replaced it was a 3 px line from 6.8 m)
     [a, b] = span(ox, ox - s * 0.06);
-    kit.boxMM("paintedMetal", [a, y0 + 2.57, pz0 + 0.5], [b, y0 + 2.67, pz1 - 0.5], { color: shade(IMP.dark, 0.7), texel: 1 });
-    [a, b] = span(ox - s * 0.06, ox - s * 0.064);
-    kit.boxMM("paintedMetal", [a, y0 + 2.6, pz0 + 0.6], [b, y0 + 2.64, pz1 - 0.6], { color: SCUFF, texel: 2 });
-    [a, b] = span(ox - s * 0.06, ox - s * 0.068);
-    kit.boxMM("emitWhite", [a, y0 + 2.61, pz0 + 0.7], [b, y0 + 2.63, pz1 - 0.7], { uv: "keep" });
+    kit.boxMM("paintedMetal", [a, y0 + 2.78, pz0 + 0.5], [b, y0 + 2.83, pz1 - 0.5], { color: shade(IMP.dark, 0.7), texel: 1 });
+    kit.boxMM("paintedMetal", [a, y0 + 2.67, pz0 + 0.5], [b, y0 + 2.72, pz1 - 0.5], { color: shade(IMP.dark, 0.7), texel: 1 });
+    [a, b] = span(ox, ox - s * 0.034);
+    kit.boxMM("paintedMetal", [a, y0 + 2.72, pz0 + 0.5], [b, y0 + 2.78, pz1 - 0.5], { color: SCUFF, texel: 2 });
+    [a, b] = span(ox - s * 0.034, ox - s * 0.04);
+    kit.boxMM("emitBlue", [a, y0 + 2.725, pz0 + 0.7], [b, y0 + 2.775, pz1 - 0.7], { uv: "keep" });
     // cable tray 3 m over the pit floor: 0.4 m deep, outer lip, three cable bundles
     [a, b] = span(ox, ox - s * 0.4);
     kit.boxMM("paintedMetal", [a, y0 + 3.0, pz0 + 0.4], [b, y0 + 3.04, pz1 - 0.4], { color: IMP.mid, texel: 1 });
@@ -156,20 +170,47 @@ export function buildPits(kit, ctx, L) {
     kit.boxMM("paintedMetal", [a, y0 + 3.04, pz0 + 0.6], [b, y0 + 3.11, pz1 - 0.6], { color: 0x2a2320, texel: 2 });
     [a, b] = span(ox - s * 0.28, ox - s * 0.35);
     kit.boxMM("paintedMetal", [a, y0 + 3.04, pz0 + 0.6], [b, y0 + 3.1, pz1 - 0.6], { color: shade(IMP.dark, 0.6), texel: 2 });
-    // one junction box per beam bay just over the tray, with a stub down into it
-    [468.7, 474.5, 480.5, 486.5, 493.6, 498.3].forEach((z, k) => {
+    // one junction box per beam bay just over the tray, with a stub down into it (off the pilaster centres)
+    [469.4, 475.2, 480.0, 487.2, 493.6, 497.6].forEach((z, k) => {
       junctionBox(kit, { x: ox + s * 0.01, y: y0 + 3.5, z, yaw: yawOut, w: 0.3, h: 0.36, lamp: k % 3 === 1 ? "emitRedImp" : "emitAmber" });
       kit.cyl("metal", ox - s * 0.07, y0 + 3.23, z, 0.022, 0.2, "y", { color: IMP.mid, segments: 8, texel: 2 });
     });
     for (let z = 467; z < pz1 - 1; z += 6) ventPanel(kit, { x: ox + s * 0.01, y: y0 + 3.9, z, yaw: yawOut, w: 1.0, h: 0.5 });
+    // pilasters on every other 3 m panel bay's centre (6 m pitch), tray top to cornice with a gap for the wall's
+    // 4.8 m strip channel, so the upper wall's 3 × 2.8 m grid does not read as wallpaper (critic round 3). At the
+    // 9 m pitch of the first pass the bay the pit camera sees head-on (z 480–484, the left third of that frame)
+    // had no pilaster at all. 0.44 m dark body, 0.1 m lighter fillet, foot and cap plates.
+    for (const z of [468.5, 474.5, 480.5, 486.5, 492.5, 498.5]) {
+      for (const [ya, yb] of [
+        [3.16, 4.72],
+        [5.08, 9.95],
+      ]) {
+        [a, b] = span(ox, ox - s * 0.06);
+        kit.boxMM("paintedMetal", [a, y0 + ya, z - 0.22], [b, y0 + yb, z + 0.22], { color: IMP.dark, texel: 1 });
+        [a, b] = span(ox - s * 0.06, ox - s * 0.08);
+        kit.boxMM("paintedMetal", [a, y0 + ya + 0.05, z - 0.05], [b, y0 + yb - 0.05, z + 0.05], { color: shade(IMP.mid, 1.1), texel: 2 });
+        [a, b] = span(ox, ox - s * 0.09);
+        kit.boxMM("paintedMetal", [a, y0 + ya, z - 0.26], [b, y0 + ya + 0.06, z + 0.26], { color: IMP.black, texel: 2 });
+        kit.boxMM("paintedMetal", [a, y0 + yb - 0.06, z - 0.26], [b, y0 + yb, z + 0.26], { color: IMP.black, texel: 2 });
+      }
+    }
+    // upper band: three bracket-mounted status displays cabled down to a junction box on the tray, a breaker-box
+    // cluster with its vent grille between the first two (critic round 3: "two floating monitors on a bare grid"),
+    // then — in the bay the pit camera faces head-on — a coolant manifold panel in the 1.1 m band between the
+    // tray top and the wall's 4.8 m strip channel (the only part of that bay inside the pit frame), a three-pipe
+    // riser bank from the tray up to the 7.3 m conduit beside it, and a junction-box cluster; all off the 6 m
+    // pilaster centres
     [
-      [468, 0.2, 13],
+      [467.0, 0.2, 13],
       [476, -0.2, 14],
-      [492, 0.1, 16],
-    ].forEach(([z, dy, si]) => wallDisplay(kit, { x: ox + s * 0.01, y: y0 + 6.3 + dy, z, yaw: yawOut, w: 1.6, h: 0.9, ...pickScreen(si + (s < 0 ? 0 : 2)), label: si === 14 ? 12 : undefined, cableTo: y0 + 3.14 }));
-    junctionCluster(kit, { x: ox + s * 0.01, y: y0 + 6.3, z: 484, yaw: yawOut, seed: s < 0 ? 5 : 6 });
-    // service hatches between the 4.8 m wall strip and the status displays, and a heavier pipe run at 8.7 m
-    for (const z of [472, 488]) hatch(kit, { x: ox + s * 0.01, y: y0 + 5.6, z, yaw: yawOut, w: 1.0, h: 0.8, label: z === 472 ? 9 : undefined });
+      [489.6, 0.1, 16],
+    ].forEach(([z, dy, si]) => wallDisplay(kit, { x: ox + s * 0.01, y: y0 + 6.3 + dy, z, yaw: yawOut, w: 1.6, h: 0.9, ...pickScreen(si + (s < 0 ? 0 : 2)), label: si === 14 ? 12 : undefined, cableTo: y0 + 3.3, bracket: true, cableBox: true }));
+    breakerCluster(kit, { x: ox + s * 0.01, y: y0 + 5.9, z: 472, yaw: yawOut, seed: s < 0 ? 1 : 2 });
+    manifoldPanel(kit, { x: ox + s * 0.01, y: y0 + 4.15, z: 482.0, yaw: yawOut, seed: s < 0 ? 1 : 2 });
+    riserBank(kit, { x: ox + s * 0.01, z: 483.6, yaw: yawOut, y0: y0 + 3.14, y1: y0 + 7.22 });
+    junctionCluster(kit, { x: ox + s * 0.01, y: y0 + 6.3, z: 485.0, yaw: yawOut, seed: s < 0 ? 5 : 6 });
+    // service hatch between the 4.8 m wall strip and the status displays, and a heavier pipe run at 8.7 m
+    hatch(kit, { x: ox + s * 0.01, y: y0 + 5.6, z: 487.6, yaw: yawOut, w: 1.0, h: 0.8, label: 9 });
     conduitRun(kit, [ox, pz0 + 1.0], [ox, pz1 - 1.0], y0 + 7.3, [-s, 0], { r: 0.04, out: 0.09, every: 3.0 });
     conduitRun(kit, [ox, pz0 + 0.6], [ox, pz1 - 0.6], y0 + 8.7, [-s, 0], { r: 0.07, out: 0.12, every: 3.0, color: shade(IMP.mid, 1.1) });
     for (const z of [472, 488]) junctionBox(kit, { x: ox + s * 0.01, y: y0 + 7.75, z, yaw: yawOut, w: 0.34, h: 0.4, lamp: "emitBlue" });
@@ -181,6 +222,13 @@ export function buildPits(kit, ctx, L) {
     // --- floor: deck-plate seams, plating variation, cable-cover channels wall → console, aisle duct, data pillars
     // seams and plates in the floor's own material: a paintedMetal strip on the low-Fresnel pit floor reads light at grazing angles
     deckSeams(kit, [Math.min(L.walkHalf * s, ox), pz0], [Math.max(L.walkHalf * s, ox), pz1], y0, { xs: s < 0 ? -18.5 : 4.7, zs: pz0 + 2.4, mat: "bridgePitFloor" });
+    // alternate 2.4 m plate rows across the whole pit width (±18 % tint, 2 mm, under the 3 mm seams): from the aft
+    // deck the pit floor is seen at 20–30 m where 2 cm seams vanish, and the banding is what keeps it from reading
+    // as one flat polygon (critic round 3, dais view)
+    for (let z = pz0, k = 0; z < pz1 - 0.1; z += 2.4, k++) {
+      [a, b] = span(L.walkHalf * s + s * 0.3, ox - s * 0.35);
+      kit.boxMM("bridgePitFloor", [a, y0, z + 0.02], [b, y0 + 0.002, Math.min(z + 2.38, pz1 - 0.02)], { color: shade(PLATE, k % 2 ? 0.82 : 1.18), texel: 0.5 });
+    }
     for (let k = 0; k < 5; k++) {
       const z = 466 + k * 6.4 + rand() * 1.2;
       const x = s * (7.2 + rand() * 5.2);
@@ -190,14 +238,22 @@ export function buildPits(kit, ctx, L) {
     }
     for (const z of [468.6, 474.0, 479.4, 484.8, 490.2]) cableCover(kit, s * 19.4, s * 17.75, y0, z);
     for (const z of [470.0, 478.4, 486.8]) cableCover(kit, s * 3.8, s * 7.55, y0, z);
-    // aisle cable duct down the pit centre with cover plates and amber inspection lamps
-    kit.boxMM("paintedMetal", [s * 11 - 0.14, y0, pz0 + 0.6], [s * 11 + 0.14, y0 + 0.035, pz1 - 4.5], { color: IMP.black, texel: 1 });
-    for (let z = pz0 + 2.4; z < pz1 - 5; z += 3.6) {
+    // aisle cable duct down the pit centre (to 1.2 m short of the aft face) with cover plates and amber inspection
+    // lamps, and amber lane dashes 0.55 m either side of it every 1.8 m
+    kit.boxMM("paintedMetal", [s * 11 - 0.14, y0, pz0 + 0.6], [s * 11 + 0.14, y0 + 0.035, pz1 - 1.2], { color: IMP.black, texel: 1 });
+    for (let z = pz0 + 2.4; z < pz1 - 1.6; z += 3.6) {
       kit.box("paintedMetal", s * 11, y0 + 0.041, z, 0.34, 0.012, 0.5, { color: IMP.mid, texel: 2 });
       kit.box("emitAmber", s * 11 + s * 0.12, y0 + 0.05, z + 0.18, 0.04, 0.008, 0.04);
     }
+    for (let z = pz0 + 1.2; z < pz1 - 1.4; z += 1.8) for (const t of [-1, 1]) kit.box("emitAmber", s * 11 + t * 0.55, y0 + 0.008, z, 0.03, 0.006, 0.45);
     dataPillar(kit, s * 11, y0, 474.5, { seed: 7 + (s < 0 ? 0 : 3), screen: "screenImp3" });
     dataPillar(kit, s * 11, y0, 486.8, { seed: 9 + (s < 0 ? 0 : 3), screen: "screenImp1" });
+    // aft bay (z 490..500) equipment, so the floor the aft deck looks down on carries something: a third data
+    // pillar on the duct, a back-to-back rack island and a floor hatch
+    dataPillar(kit, s * 11, y0, 496.0, { seed: 11 + (s < 0 ? 0 : 3), screen: "screenImp2" });
+    rack(kit, { x: s * 14.0, y: y0, z: 493.2, yaw: 0, seed: 60 + (s < 0 ? 0 : 5), label: 4 });
+    rack(kit, { x: s * 14.0, y: y0, z: 493.2, yaw: Math.PI, seed: 61 + (s < 0 ? 0 : 5) });
+    floorHatch(kit, s * 9.9, y0, 492.6);
 
     // --- hanging light rafts (the pit point lights sit inside each raft, see index.js); the rods run from the
     // housing top up into the recessed blue channel at x ±11.5, ending just under its emitter strip (ceilY + 0.19)
@@ -294,6 +350,25 @@ export function buildPlatforms(kit, L) {
     kit.boxMM("paintedMetal", [a, y - 0.04, pz1 - 0.06], [b, y + 0.02, pz1 + 0.1], { color: NOSING, texel: 2 });
     [a, b] = span(s < 0 ? sx0 : sx1, s * xi);
     kit.boxMM("paintedMetal", [a, y - 0.04, pz1 - 0.06], [b, y + 0.02, pz1 + 0.1], { color: NOSING, texel: 2 });
+    // inset amber edge line 0.3 m back from both pit edges (fore platform and aft deck), split at the stair heads:
+    // a 2 cm emitter in a 0.1 m black inlay — the aft deck floor between the pods and the dais had no read at
+    // all from the command camera (critic round 3: "near-black empty floor")
+    const edgeLine = (x0, x1, z) => {
+      const [p, q] = span(x0, x1);
+      if (q - p < 0.3) return;
+      kit.boxMM("paintedMetal", [p, y, z - 0.05], [q, y + 0.006, z + 0.05], { color: IMP.black, texel: 1 });
+      kit.boxMM("emitAmber", [p + 0.08, y + 0.006, z - 0.01], [q - 0.08, y + 0.012, z + 0.01], { uv: "keep" });
+    };
+    edgeLine(wx - s * 0.3, s * 4.55, pz0 - 0.3);
+    edgeLine(s * 6.05, s * (xi - 0.3), pz0 - 0.3);
+    edgeLine(wx - s * 0.3, s < 0 ? sx1 + 0.15 : sx0 - 0.15, pz1 + 0.3);
+    edgeLine(s < 0 ? sx0 - 0.15 : sx1 + 0.15, s * (xi - 0.3), pz1 + 0.3);
+  }
+  // walkway threshold lines at both ends (blue, in a black inlay between the rail inlays): the 36 m black gloss
+  // between the pit rails read as a void from the aft camera — the two lines mark where the walkway starts and ends
+  for (const z of [pz0 + 0.3, pz1 - 0.3]) {
+    kit.boxMM("paintedMetal", [-L.walkHalf + 0.2, y, z - 0.06], [L.walkHalf - 0.2, y + 0.006, z + 0.06], { color: IMP.black, texel: 1 });
+    kit.boxMM("emitBlue", [-L.walkHalf + 0.3, y + 0.006, z - 0.012], [L.walkHalf - 0.3, y + 0.012, z + 0.012], { uv: "keep" });
   }
   // deck-plate joints: 2 cm seams on the gloss decks (walkway, fore platform, aft deck), no plates, in the
   // module-local bridgeSeam material (index.js: the deck's lobe with a quarter of its Fresnel, so the x = 0 seam

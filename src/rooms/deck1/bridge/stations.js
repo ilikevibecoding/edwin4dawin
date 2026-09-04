@@ -6,8 +6,8 @@
 import * as THREE from "three";
 import { FLOOR, PIT_FLOOR } from "../shared/plan.js";
 import { IMP } from "../shared/palette.js";
-import { Frame, shade, onTilt, IND, SCUFF, POLISH, bridgeConsole, bridgeSeat, commandChair, readoutBar, wallDisplay, cabinet, junctionBox, conduitRun, dataPillar, bridgeRail, controlPillar } from "./props.js";
-import { CELL, CELLS } from "./screens.js";
+import { Frame, shade, onTilt, IND, SCUFF, POLISH, bridgeConsole, bridgeSeat, commandChair, readoutBar, wallDisplay, cabinet, junctionBox, junctionCluster, ventCluster, conduitRun, dataPillar, bridgeRail, controlPillar, floorHatch } from "./props.js";
+import { CELL, CELLS, SIGN } from "./screens.js";
 import { pickScreen } from "./pits.js";
 import { buildHolo } from "./holo.js";
 
@@ -31,7 +31,7 @@ export function buildStations(kit, ctx, manifest, L) {
     const screens = o.screens || (dbl || variant ? [S(seed), seed % 3 === 0 ? live(CELLS[seed % 4]) : S(seed + 1)] : [seed % 4 === 0 ? live(CELLS[(seed >> 2) % 4]) : S(seed)]);
     // standing units sit on a 0.15 m plinth so the desk comes to 1.05
     if (variant === 2) new Frame(kit, x, y, z, yaw).box("paintedMetal", 0, 0.075, 0, w - 0.02, 0.15, 0.81, { color: SCUFF, texel: 1 });
-    bridgeConsole(kit, { x, y: variant === 2 ? y + 0.15 : y, z, yaw, w, seed, screens, ends: !!o.ends, back: !!o.back, divider: dbl, variant, service: !!o.service, dim: !!o.dim });
+    bridgeConsole(kit, { x, y: variant === 2 ? y + 0.15 : y, z, yaw, w, seed, screens, ends: !!o.ends, back: !!o.back, divider: dbl, variant, service: !!o.service, dim: !!o.dim, desk: o.desk });
     if (o.seats === false || variant === 2) return;
     const f = new Frame(kit, x, y, z, yaw);
     const n = dbl ? 2 : 1;
@@ -51,7 +51,7 @@ export function buildStations(kit, ctx, manifest, L) {
     const yawRoom = s < 0 ? Math.PI / 2 : -Math.PI / 2;
     cabinet(kit, { x: s * xi, y: FLOOR, z: 459.6, yaw: yawRoom, w: 0.9, h: 1.1, d: 0.5, seed: 61 + s });
     cabinet(kit, { x: s * xi, y: FLOOR, z: 460.7, yaw: yawRoom, w: 0.8, h: 0.95, d: 0.45, seed: 63 + s });
-    wallDisplay(kit, { x: s * (xi - 0.01), y: FLOOR + 1.7, z: 461.7, yaw: yawRoom, w: 1.8, h: 1.0, ...pickScreen(4 + (s < 0 ? 0 : 1)), label: 9, cableTo: FLOOR + 0.1 });
+    wallDisplay(kit, { x: s * (xi - 0.01), y: FLOOR + 1.7, z: 462.0, yaw: yawRoom, w: 1.8, h: 1.0, ...pickScreen(4 + (s < 0 ? 0 : 1)), label: 9, cableTo: FLOOR + 0.1 });
     junctionBox(kit, { x: s * (xi - 0.01), y: FLOOR + 2.85, z: 460.0, yaw: yawRoom, lamp: "emitRedImp" });
   }
   // nav table at the sill centre, helm pair behind it angled inward so both helmsmen look past the table to the glass
@@ -90,6 +90,17 @@ export function buildStations(kit, ctx, manifest, L) {
   for (const s of [-1, 1]) {
     unit(s * 10.5, 503.4, 0, 3.2, { ends: true, back: true, variant: 1, screens: [S(s + 5), live(s < 0 ? CELL.text : CELL.wave)] });
     dataPillar(kit, s * 16.0, FLOOR, 503.0, { seed: 21 + (s < 0 ? 0 : 3), screen: "screenImp0" });
+    // aide's standing console 1.9 m off each dais flank, facing forward like every other station (operator at
+    // +z, screens toward the dais camera): with the chair and lecterns alone the aft deck read as one console in
+    // a dark hall from the command camera (critic round 3) — these make the dais a command group and sit at
+    // (0.72, 0.50) of that frame. Turned toward the dais (yaw ±90°) the starboard one showed the d1-bridge-dais
+    // camera 3.5 m away nothing but its 2.1 × 1.6 m housing back — the "flat black slab" all over again. Matte
+    // desk (bridgeSeam): from that camera the gloss slab mirrored the starboard aft raft's point (12.6 m away)
+    // as a 25 × 22 px clipped disc (bridge-r4).
+    unit(s * 4.5, 504.0, 0, 2.2, { ends: true, back: true, variant: 2, desk: "bridgeSeam", screens: [live(s < 0 ? CELL.ship : CELL.text), S(s + 9)] });
+    // 1 m floor hatch on the aft deck between the aide and the officers' station: the black gloss between the
+    // pods and the dais had nothing on it from the command camera (critic round 3)
+    floorHatch(kit, s * 7.3, FLOOR, 505.5);
   }
   // control pillars at the walkway rail heads (fore and aft ends, just inside the rails)
   for (const s of [-1, 1]) {
@@ -102,7 +113,7 @@ export function buildStations(kit, ctx, manifest, L) {
   for (const s of [-1, 1]) {
     for (const ax of [4.35, 7.85]) unit(s * ax, 511.15, Math.PI, 3.2, { ends: ax > 5, variant: ax < 5 ? 1 : 0, service: ax > 5 && s > 0, pushBack: ax > 5 && s < 0 ? 1 : -1 });
     wallDisplay(kit, { x: s * 12.6, y: FLOOR + 2.2, z: 511.69, yaw: Math.PI, w: 3.0, h: 1.2, ...pickScreen(6 + (s < 0 ? 0 : 3)), label: 12, cableTo: FLOOR + 3.15 });
-    wallDisplay(kit, { x: s * 16.5, y: FLOOR + 2.05, z: 511.69, yaw: Math.PI, w: 2.4, h: 1.2, ...pickScreen(8 + (s < 0 ? 0 : 3)), cableTo: FLOOR + 3.15 });
+    wallDisplay(kit, { x: s * 16.5, y: FLOOR + 2.05, z: 511.69, yaw: Math.PI, w: 2.4, h: 1.2, ...pickScreen(7 + (s < 0 ? 0 : 3)), cableTo: FLOOR + 3.15, bracket: true });
     for (const [ax, w, h] of [
       [11.6, 1.0, 1.15],
       [13.6, 0.9, 1.05],
@@ -145,11 +156,28 @@ function blastDoorSurround(kit, manifest) {
     kit.box("emitRedImp", (x0 + x1) / 2, y0 + 2.6, zf - proud - 0.006, 0.05, 0.1, 0.012);
     kit.collider([x0, y0, zf - proud], [x1, y0 + 4.95, zf], "door-surround");
   }
-  // lintel: lower lip, upper beam, and the slot between them with a scuffed back plate carrying the blue strip
+  // lintel: lower lip, upper beam, and the slot between them with a scuffed back plate carrying the blue strip.
+  // Critic round 3 ("hot lamp above the door"): the strip is 3 × 0.03 m (a quarter of the 4.6 × 0.06 area), set
+  // 0.3 m behind the lintel face, so from the walkway it is a glow line in the slot, not a bar.
   kit.boxMM("paintedMetal", [dx - 2.67, y0 + 4.06, zf - proud], [dx + 2.67, y0 + 4.3, zf + 0.02], { color: dark, texel: 1 });
   kit.boxMM("paintedMetal", [dx - 2.67, y0 + 4.42, zf - proud], [dx + 2.67, y0 + 4.95, zf + 0.02], { color: dark, texel: 1 });
-  kit.boxMM("paintedMetal", [dx - 2.67, y0 + 4.3, zf - 0.2], [dx + 2.67, y0 + 4.42, zf + 0.02], { color: SCUFF, texel: 1 });
-  kit.boxMM("emitBlue", [dx - 2.3, y0 + 4.33, zf - 0.21], [dx + 2.3, y0 + 4.39, zf - 0.2], { uv: "keep" });
+  kit.boxMM("paintedMetal", [dx - 2.67, y0 + 4.3, zf - 0.08], [dx + 2.67, y0 + 4.42, zf + 0.02], { color: SCUFF, texel: 1 });
+  kit.boxMM("emitBlue", [dx - 1.5, y0 + 4.34, zf - 0.09], [dx + 1.5, y0 + 4.37, zf - 0.08], { uv: "keep" });
+  // header sign on the upper beam: bezel, "AFT LOCK 01" sign cell of the bridge atlas, amber lamp each end
+  kit.boxMM("paintedMetal", [dx - 1.3, y0 + 4.5, zf - proud - 0.03], [dx + 1.3, y0 + 4.88, zf - proud], { color: IMP.black, texel: 1 });
+  kit.boxMM("darkGloss", [dx - 1.24, y0 + 4.54, zf - proud - 0.036], [dx + 1.24, y0 + 4.84, zf - proud - 0.03]);
+  kit.boxMM("bridgeScreen", [dx - 1.2, y0 + 4.56, zf - proud - 0.04], [dx + 1.2, y0 + 4.82, zf - proud - 0.036], { uv: "keep", uvRect: SIGN.aftLock });
+  for (const s of [-1, 1]) kit.box("emitAmber", dx + s * 1.45, y0 + 4.69, zf - proud - 0.006, 0.05, 0.14, 0.012);
+  // Upper aft wall (critic round 3: "bare aft wall" — 3 m of panel grid over the lintel, 8 m of it either side):
+  // a 3.6 × 1.3 m fleet status board (the live ship-schematic cell, the largest display on the bridge) bracketed
+  // over the door with its cable into the lintel beam, a conduit run at 6.3 m each way from the board's brackets,
+  // a vent-grille pair over each aft station bank and a junction-box cluster further out under the run.
+  wallDisplay(kit, { x: dx, y: y0 + 6.1, z: zf - 0.01, yaw: Math.PI, w: 3.6, h: 1.3, screen: "bridgeScreen", rect: CELL.ship, arm: false, bracket: true, cableTo: y0 + 4.95, cableOut: 0.07 });
+  for (const s of [-1, 1]) {
+    conduitRun(kit, [dx + s * 2.3, zf], [dx + s * 18.6, zf], y0 + 6.3, [0, -1], { r: 0.05, out: 0.1, every: 2.4 });
+    ventCluster(kit, { x: dx + s * 6.5, y: y0 + 4.4, z: zf - 0.01, yaw: Math.PI, w: 1.0, h: 0.5 });
+    junctionCluster(kit, { x: dx + s * 9.3, y: y0 + 5.4, z: zf - 0.01, yaw: Math.PI, seed: s < 0 ? 7 : 8 });
+  }
   // control plate on the port pilaster: dark bezel, small screen strip, three lamps
   const cx = dx - 2.37;
   kit.box("darkGloss", cx, y0 + 1.35, zf - proud - 0.006, 0.26, 0.34, 0.012);
@@ -248,6 +276,14 @@ function buildDais(kit, dz) {
     kit.boxMM("paintedMetal", [n0, y + H - 0.03, dz - hz], [n1, y + H + 0.012, dz + hz], { color: nose, texel: 2 });
   }
   kit.boxMM("emitBlue", [-1.4, y + H - 0.06, dz - hz - 0.012], [1.4, y + H - 0.045, dz - hz - 0.002]);
+  // the same lit reveal under the side and back nosings: from the command camera (port aft corner) the dais
+  // showed only its 0.45 m black side face and read as a dark step, not a lit platform (critic round 3)
+  for (const s of [-1, 1]) {
+    const r0 = Math.min(s * (hx + 0.002), s * (hx + 0.012));
+    const r1 = Math.max(s * (hx + 0.002), s * (hx + 0.012));
+    kit.boxMM("emitBlue", [r0, y + H - 0.06, dz - hz + 0.3], [r1, y + H - 0.045, dz + hz - 0.3]);
+  }
+  kit.boxMM("emitBlue", [-1.4, y + H - 0.06, dz + hz + 0.002], [1.4, y + H - 0.045, dz + hz + 0.012]);
   // three steps down to the walkway side (rise 0.1125, tread 0.3), each with a painted nosing + lit strip
   const sw = 1.2;
   for (let i = 0; i < 3; i++) {

@@ -10,14 +10,17 @@ export function buildHolo(ctx, { x, y, z, scale = 1 / 1000, hover = 0.55 }) {
   // Normal (alpha) blending, not additive: seen edge-on from the far end of the walkway (d1-bridge-aft, 34 m) the
   // ~120 segments of the wedge collapse into a few pixel columns, and additive overlap summed them into a
   // clipped white streak in front of the blast door (critic round 2). With alpha blending every overlap
-  // converges on the line colour, so the wedge stays this blue from any distance; the brightest channel stays
-  // ≤ 1.0 so nothing blooms.
-  const C_HULL = [0.4, 0.64, 0.92];
-  const C_DET = [0.32, 0.52, 0.86];
-  const C_GRID = [0.22, 0.4, 0.82];
+  // converges on the line colour, so the wedge stays this blue from any distance. Critic round 3 ("white blob
+  // at the far end"): the hull colour × 1.35–1.5 had clamped to (0.6, 0.96, 1.0) — a near-white core at 34 m —
+  // so every channel is now capped per channel (R ≤ 0.28, G ≤ 0.84, B ≤ 0.95): the brightest line is a saturated
+  // cyan (≈ 0.66 luminance, under the 1.15 bloom threshold) whatever the multiplier.
+  const C_HULL = [0.16, 0.6, 0.86];
+  const C_DET = [0.12, 0.48, 0.78];
+  const C_GRID = [0.08, 0.34, 0.7];
+  const CAP = [0.28, 0.84, 0.95];
   const seg = (a, b, c, k = 1) => {
     pts.push(a[0], a[1], a[2], b[0], b[1], b[2]);
-    for (let i = 0; i < 2; i++) cols.push(Math.min(1, c[0] * k), Math.min(1, c[1] * k), Math.min(1, c[2] * k));
+    for (let i = 0; i < 2; i++) cols.push(Math.min(CAP[0], c[0] * k), Math.min(CAP[1], c[1] * k), Math.min(CAP[2], c[2] * k));
   };
   const box = (mn, mx, c, k) => {
     const p = (i) => [i & 1 ? mx[0] : mn[0], i & 2 ? mx[1] : mn[1], i & 4 ? mx[2] : mn[2]];

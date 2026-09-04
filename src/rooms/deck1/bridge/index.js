@@ -13,7 +13,7 @@ import { IMP, LIGHT } from "../shared/palette.js";
 import { buildWindowWall } from "./window.js";
 import { buildStations } from "./stations.js";
 import { buildCeiling } from "./ceiling.js";
-import { buildPits, buildPlatforms, buildStairs } from "./pits.js";
+import { buildPits, buildPlatforms, buildStairs, PLATE } from "./pits.js";
 import { bridgeRail } from "./props.js";
 import { makeBridgeScreens } from "./screens.js";
 import { DAIS_H } from "./stations.js";
@@ -157,12 +157,13 @@ const manifest = {
     kit.boxMM("bridgeFloor", [-L.walkHalf, PIT_FLOOR - 0.2, L.pitZ[0]], [L.walkHalf, FLOOR, L.pitZ[1]], { color: IMP.black, texel: 0.5 });
     kit.boxMM("bridgeFloor", [-xs, PIT_FLOOR - 0.2, L.aftZ[0]], [xs, FLOOR, 511.95], { color: IMP.black, texel: 0.5 });
     // pit floors: matte painted deck plating in the low-Fresnel bridgePitFloor (impFloor's metalness 0.6 on a
-    // near-black tint read as a void; IMP.grey paintedMetal read as bright planes from the walkway) — IMP.mid
-    // keeps the pits as wells with mid-grey pools under the rafts
+    // near-black tint read as a void; IMP.grey paintedMetal read as bright planes from the walkway). PLATE
+    // (pits.js, ≈ 0.72 × IMP.grey, 1.7 × the previous IMP.mid) keeps the pits as wells with grey pools under the
+    // rafts that still register from the aft deck (critic round 3: the starboard pit floor was "one flat black slab")
     for (const s of [-1, 1]) {
       const x0 = s < 0 ? -xs : L.walkHalf;
       const x1 = s < 0 ? -L.walkHalf : xs;
-      kit.boxMM("bridgePitFloor", [x0, PIT_FLOOR - 0.2, L.pitZ[0]], [x1, PIT_FLOOR, L.pitZ[1]], { color: IMP.mid, texel: 0.5 });
+      kit.boxMM("bridgePitFloor", [x0, PIT_FLOOR - 0.2, L.pitZ[0]], [x1, PIT_FLOOR, L.pitZ[1]], { color: PLATE, texel: 0.5 });
     }
 
     // --- ceiling, pits (faces, wall band, rafts, floor), platform edges
@@ -239,9 +240,10 @@ const manifest = {
     for (const s of [-1, 1]) {
       // fore platform downlights, inside the recessed ceiling housings (0.3 m boxes under the slab)
       lights.push({ type: "point", pos: [s * 9.5, CEILY - 0.05, 462.4], color: COOL, intensity: 80, distance: 18, priority: 0.85 });
-      // pit rafts, inside the closed raft housings just under their tops (6.7 m over the pit floor); 100 / 70 / 50 %:
-      // at 40 % the aft bay's console rows were unreadable silhouettes from the walkway cameras
-      L.raftZ.forEach((z, i) => lights.push({ type: "point", pos: [s * L.raftX, L.raftY + 0.13, z], color: PIT, intensity: [100, 70, 50][i], distance: 22, priority: 0.75 }));
+      // pit rafts, inside the closed raft housings just under their tops (6.7 m over the pit floor); 100 / 70 / 60 %:
+      // at 40 % the aft bay's console rows were unreadable silhouettes from the walkway cameras; the aft raft went
+      // 50 → 60 with the lighter pit plating so its pool reads on the aft bay floor from the dais
+      L.raftZ.forEach((z, i) => lights.push({ type: "point", pos: [s * L.raftX, L.raftY + 0.13, z], color: PIT, intensity: [100, 70, 60][i], distance: 22, priority: 0.75 }));
       // low pit accents (blue fore bay, red aft bay) colour the console kicks and the aisle floor from inside the pit
       lights.push({ type: "point", pos: [s * 12.5, PIT_FLOOR + 1.4, 468.5], color: LIGHT.blue, intensity: 8, distance: 10, priority: 0.6 });
       lights.push({ type: "point", pos: [s * 12.5, PIT_FLOOR + 1.4, 490.5], color: LIGHT.red, intensity: 7, distance: 10, priority: 0.6 });

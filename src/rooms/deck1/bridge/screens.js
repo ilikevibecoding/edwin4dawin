@@ -1,20 +1,27 @@
 // Module-local animated Imperial display material for d1-bridge (manifest.materials → "bridgeScreen").
-// One 1024×512 canvas (the module's single canvas texture) holds four displays in a 2×2 atlas, redrawn in
-// update() at 8 Hz from absolute time only, so the harness's frozen clock gives a deterministic frame:
+// One 1024×640 canvas (the module's single canvas texture) holds four displays in a 2×2 atlas over a 128 px
+// signage row, redrawn in update() at 8 Hz from absolute time only, so the harness's frozen clock gives a
+// deterministic frame:
 //   CELL.tactical  radar sweep + contacts + heading tape + status list
 //   CELL.text      three scrolling text columns + progress stack
 //   CELL.wave      three waveform traces + spectrum bars
 //   CELL.ship      top-view schematic of the ship with section highlights + scan line + readouts
+//   SIGN.aftLock / SIGN.data   static header signs (blast-door lintel, data terminals), text in the canvas font
 import * as THREE from "three";
 
-// uvRect [u0, v0, u1, v1] per cell (canvas rows run top-down, texture v runs bottom-up)
+// uvRect [u0, v0, u1, v1] per cell (canvas rows run top-down, texture v runs bottom-up): displays fill canvas
+// rows 0..512 (v 0.2..1), the two 512 × 128 signs the bottom row (v 0..0.2)
 export const CELL = {
-  tactical: [0, 0.5, 0.5, 1],
-  text: [0.5, 0.5, 1, 1],
-  wave: [0, 0, 0.5, 0.5],
-  ship: [0.5, 0, 1, 0.5],
+  tactical: [0, 0.6, 0.5, 1],
+  text: [0.5, 0.6, 1, 1],
+  wave: [0, 0.2, 0.5, 0.6],
+  ship: [0.5, 0.2, 1, 0.6],
 };
 export const CELLS = [CELL.tactical, CELL.text, CELL.wave, CELL.ship];
+export const SIGN = {
+  aftLock: [0, 0, 0.5, 0.2],
+  data: [0.5, 0, 1, 0.2],
+};
 
 const BLUE = "#3a7bff";
 const RED = "#ff2a1a";
@@ -32,9 +39,10 @@ const h1 = (n) => {
 
 export function makeBridgeScreens() {
   const W = 1024;
-  const H = 512;
+  const H = 640;
   const cw = W / 2;
-  const ch = H / 2;
+  const ch = 256;
+  const SH = 128; // signage row height
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -319,11 +327,43 @@ export function makeBridgeScreens() {
     scan();
   }
 
+  // Static header sign in one 512 × 128 slot of the bottom row: near-black plate with a thin accent border, end
+  // bars, a large title line and a small subtitle. Text at ≤ 0.75 alpha so it lands under the clip level
+  // (emissive 1.4 × 0.75 ≈ 1.05) and never blooms.
+  function sign(i, title, sub, accent) {
+    g.save();
+    g.translate(i * cw, 2 * ch);
+    g.beginPath();
+    g.rect(0, 0, cw, SH);
+    g.clip();
+    g.fillStyle = "#04060b";
+    g.fillRect(0, 0, cw, SH);
+    g.strokeStyle = rgba(accent, 0.7);
+    g.lineWidth = 3;
+    g.strokeRect(8, 8, cw - 16, SH - 16);
+    g.fillStyle = rgba(accent, 0.75);
+    for (const x of [18, cw - 40]) for (let k = 0; k < 4; k++) g.fillRect(x, 20 + k * 24, 22, 14);
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = "bold 58px monospace";
+    g.fillStyle = rgba(accent, 0.75);
+    g.fillText(title, cw / 2, 52);
+    g.font = "bold 26px monospace";
+    g.fillStyle = rgba(WHITE, 0.55);
+    g.fillText(sub, cw / 2, 100);
+    g.strokeStyle = "#000";
+    g.lineWidth = 4;
+    g.strokeRect(0, 0, cw, SH);
+    g.restore();
+  }
+
   function draw(t) {
     cell(0, tactical, t);
     cell(1, textCols, t);
     cell(2, wave, t);
     cell(3, ship, t);
+    sign(0, "AFT LOCK 01", "BRIDGE \u00b7 DECK 1 \u00b7 SPINE ACCESS", AMBER);
+    sign(1, "DATA TERMINAL", "SYSTEMS \u00b7 AUTHORISED CREW", BLUE);
   }
 
   let lastFrame = -1;

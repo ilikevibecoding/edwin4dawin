@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { rng } from "../../../kit.js";
 import { decalRect } from "../../../textures.js";
 import { IMP } from "../shared/palette.js";
+import { SIGN } from "./screens.js";
 
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
@@ -97,16 +98,17 @@ export function prismY(kit, mat, pts, y0, y1, opts = {}) {
  * amber under-lip strip), so the housings keep a silhouette when the pool lights are elsewhere.
  */
 export function bridgeConsole(kit, spec) {
-  const { x, y, z, yaw = 0, w = 2.0, d = 0.85, seed = 1, screens = ["screenImp0"], ends = false, back = false, divider = false, tag = "console", variant = 0, service = false, dim = false } = spec;
+  const { x, y, z, yaw = 0, w = 2.0, d = 0.85, seed = 1, screens = ["screenImp0"], ends = false, back = false, divider = false, tag = "console", variant = 0, service = false, dim = false, desk = "darkGloss" } = spec;
   const f = new Frame(kit, x, y, z, yaw);
   const rand = rng((seed * 7919 + 17) >>> 0);
   const body = shade(IMP.black, 0.8 + rand() * 0.5); // per-unit heat / dust variation
   const hz = -d / 2;
 
-  // kick (scuffed), plinth, desk slab (top 0.88), amber under-lip strip along the operator edge
+  // kick (scuffed), plinth, desk slab (top 0.88), amber under-lip strip along the operator edge. `desk` lets a
+  // unit swap the gloss slab for a matte one (bridgeSeam, F90 0.25) where a camera sees a pool light mirrored in it.
   f.box("paintedMetal", 0, 0.04, 0, w - 0.12, 0.08, d - 0.14, { color: SCUFF, texel: 1 });
   f.box("paintedMetal", 0, 0.44, 0, w - 0.04, 0.72, d - 0.06, { color: body, texel: 1 });
-  f.box("darkGloss", 0, 0.84, 0.02, w, 0.08, d - 0.08);
+  f.box(desk, 0, 0.84, 0.02, w, 0.08, d - 0.08, desk === "darkGloss" ? {} : { color: 0x0b0d10, texel: 1 });
   f.box("emitAmber", 0, 0.795, d / 2 - 0.023, w - 0.4, 0.008, 0.012);
 
   // display housing leaning back 10°, screens on its operator face
@@ -307,9 +309,12 @@ export function commandChair(kit, x, y, z, yaw = 0, { screen = "screenImp2" } = 
   for (const s of [-1, 1]) {
     p = onTilt(bc, bt, s * 0.37, -0.06, 0.06);
     f.box("paintedMetal", p[0], p[1], p[2], 0.06, 0.8, 0.22, { color: IMP.black, texel: 1, tilt: bt });
-    // blue hairline down each wing's rear edge
-    p = onTilt(bc, bt, s * 0.37, 0.052, 0.06);
-    f.box("emitBlue", p[0], p[1], p[2], 0.012, 0.7, 0.008, { tilt: bt });
+    // blue hairline down each wing's rear edge: 8 mm, in five 0.1 m segments (critic round 3: the continuous
+    // 12 mm × 0.7 m bar 0.5 m from the dais camera was the brightest thing in that frame)
+    for (let k = 0; k < 5; k++) {
+      p = onTilt(bc, bt, s * 0.37, 0.052, 0.06 + (k - 2) * 0.15);
+      f.box("emitBlue", p[0], p[1], p[2], 0.008, 0.1, 0.008, { tilt: bt });
+    }
   }
   // rear face (fills the left third of the dais view, so it is detailed like a cabinet): painted spine, polished
   // top rail, a seam grid of 6 mm ridges, a slatted vent grille high on each half, two readout panels with a
@@ -398,19 +403,44 @@ export function readoutBar(kit, x, y, z, yaw, w, { screen = "screenImp1", rect =
 // round 2): a wall plate with a 0.1 m mounting arm carries the unit, a matte black bezel frames a dark-gloss
 // inner bezel and the screen, two lamps + optional stencil under the screen, and `cableTo` (world y) runs a
 // conduit from the unit's back down/up the wall to a tray or box, with clamps at both ends.
-export function wallDisplay(kit, { x, y, z, yaw, w = 1.5, h = 1.1, screen = "screenImp0", rect = null, label, arm = true, cableTo = null, cableOut = 0.05 }) {
+// Critic round 3 ("monitors still float"): `bracket` swaps the hidden arm for two 6 cm struts that run past the
+// bezel top and bottom on a wall rail, a 3 cm cable and, with `cableBox`, a junction box where the cable ends.
+// `style` varies the housing so a row is not one template: 1 = control ledge under the screen (key row + wheel),
+// 2 = lamp column down the right of the bezel; 0 = plain.
+export function wallDisplay(kit, { x, y, z, yaw, w = 1.5, h = 1.1, screen = "screenImp0", rect = null, label, arm = true, cableTo = null, cableOut = 0.05, bracket = false, cableBox = false, style = 0 }) {
   const f = new Frame(kit, x, y, z, yaw);
-  const o = arm ? 0.1 : 0;
-  if (arm) {
+  const o = arm || bracket ? 0.1 : 0;
+  if (bracket) {
+    const sx = Math.max(0.2, w / 2 - 0.3);
+    f.box("paintedMetal", 0, h / 2 + 0.22, 0.02, w + 0.4, 0.08, 0.04, { color: IMP.mid, texel: 2 });
+    f.box("paintedMetal", 0, -h / 2 - 0.22, 0.02, w + 0.4, 0.08, 0.04, { color: IMP.mid, texel: 2 });
+    for (const s of [-1, 1]) {
+      f.box("paintedMetal", s * sx, 0, o / 2, 0.06, h + 0.6, o, { color: shade(IMP.mid, 1.15), texel: 2 });
+      for (const sy of [-1, 1]) f.box("metal", s * sx, sy * (h / 2 + 0.22), 0.045, 0.03, 0.03, 0.012, { color: IMP.steel, texel: 2 });
+    }
+  } else if (arm) {
     f.box("paintedMetal", 0, 0, 0.012, 0.36, 0.3, 0.024, { color: IMP.mid, texel: 2 });
     f.box("paintedMetal", 0, 0, 0.024 + (o - 0.024) / 2, 0.14, 0.14, o - 0.024, { color: shade(IMP.dark, 0.8), texel: 2 });
     for (const s of [-1, 1]) f.box("metal", s * 0.14, 0.1, 0.03, 0.03, 0.03, 0.012, { color: IMP.steel, texel: 2 });
   }
-  f.box("paintedMetal", 0, 0, o + 0.03, w + 0.16, h + 0.18, 0.06, { color: IMP.black, texel: 1 });
+  const bw = w + 0.16 + (style === 2 ? 0.2 : 0);
+  const bx = style === 2 ? 0.1 : 0;
+  const bh = h + 0.18 + (style === 1 ? 0.22 : 0);
+  const by = style === 1 ? -0.11 : 0;
+  f.box("paintedMetal", bx, by, o + 0.03, bw, bh, 0.06, { color: IMP.black, texel: 1 });
   f.box("darkGloss", 0, 0.01, o + 0.07, w + 0.06, h + 0.06, 0.02);
   f.box(screen, 0, 0.01, o + 0.083, w, h, 0.006, { uv: "keep", ...(rect ? { uvRect: rect } : {}) });
   for (let i = 0; i < 2; i++) f.box(["emitBlue", "emitRedImp"][i], -w / 2 + 0.12 + i * 0.14, -h / 2 - 0.05, o + 0.065, 0.07, 0.02, 0.012);
   if (label !== undefined) f.decal(label, w / 2 - 0.14, -h / 2 - 0.05, o + 0.064, 0.12);
+  if (style === 1) {
+    // control ledge: dark key well with six 2 cm keys (two lit) and a thumb wheel, under the screen
+    f.box("paintedMetal", 0, -h / 2 - 0.19, o + 0.062, w * 0.5, 0.07, 0.008, { color: SCUFF, texel: 2 });
+    for (let k = 0; k < 6; k++) f.box(k === 1 ? "emitBlue" : k === 4 ? "emitAmber" : "paintedMetal", -w * 0.25 + 0.06 + k * 0.07, -h / 2 - 0.19, o + 0.068, 0.02, 0.02, 0.006, k === 1 || k === 4 ? {} : { color: 0x1c1e22, texel: 2 });
+    f.add("metal", new THREE.CylinderGeometry(0.03, 0.03, 0.02, 10), w * 0.25 + 0.1, -h / 2 - 0.19, o + 0.07, { color: IMP.steel, texel: 2, tilt: Math.PI / 2 });
+  } else if (style === 2) {
+    // lamp column down the widened right side of the bezel
+    for (let k = 0; k < 5; k++) f.box(k === 2 ? "emitRedImp" : k % 2 ? "emitBlue" : "emitAmber", w / 2 + 0.15, h / 2 - 0.1 - k * 0.12, o + 0.062, 0.05, 0.02, 0.006);
+  }
   if (cableTo !== null) {
     // conduit from the unit's back edge (behind the bezel) to the tray/box height, hugging the wall
     const yb = cableTo > y ? h / 2 + 0.06 : -h / 2 - 0.06;
@@ -418,10 +448,93 @@ export function wallDisplay(kit, { x, y, z, yaw, w = 1.5, h = 1.1, screen = "scr
     const y0 = Math.min(yb, dy);
     const y1 = Math.max(yb, dy);
     if (y1 - y0 > 0.2) {
-      f.add("metal", new THREE.CylinderGeometry(0.022, 0.022, y1 - y0, 8), 0.3, (y0 + y1) / 2, cableOut, { color: IMP.mid, texel: 2 });
+      const r = bracket ? 0.03 : 0.022;
+      f.add("metal", new THREE.CylinderGeometry(r, r, y1 - y0, 8), 0.3, (y0 + y1) / 2, cableOut, { color: IMP.mid, texel: 2 });
       for (const yy of [y0 + 0.12, y1 - 0.12]) f.box("paintedMetal", 0.3, yy, (cableOut + 0.02) / 2, 0.08, 0.06, cableOut + 0.02, { color: IMP.dark, texel: 2 });
+      if (cableBox) {
+        // junction box centred on the cable's far end (the cable runs into it)
+        const p = f.pos(0.3, dy, 0);
+        junctionBox(kit, { x: p[0], y: p[1], z: p[2], yaw, w: 0.22, h: 0.24, lamp: "emitAmber" });
+      }
     }
   }
+}
+
+// Breaker-box cluster for a bare upper wall (critic round 3, pit view: "flat-lit bare panel grid"): a 2 × 1.4 m
+// backing plate carrying six breaker boxes in two rows with lamps and lid seams, a manifold pipe with stubs into
+// each box, a slotted vent grille across the top and a red status lamp. Local +z faces the room.
+export function breakerCluster(kit, { x, y, z, yaw, seed = 1 }) {
+  const f = new Frame(kit, x, y, z, yaw);
+  const lamps = ["emitAmber", "emitRedImp", "emitBlue"];
+  f.box("paintedMetal", 0, 0, 0.012, 2.0, 1.4, 0.024, { color: shade(IMP.dark, 0.9), texel: 1 });
+  f.box("paintedMetal", 0, 0, 0.03, 1.9, 1.3, 0.012, { color: SCUFF, texel: 1 });
+  for (let r = 0; r < 2; r++) {
+    for (let c = 0; c < 3; c++) {
+      const p = f.pos(-0.6 + c * 0.6, -0.42 + r * 0.5, 0.036);
+      junctionBox(kit, { x: p[0], y: p[1], z: p[2], yaw, w: 0.44, h: 0.38, lamp: lamps[(seed + r * 3 + c) % 3] });
+      // stub from the manifold into each box
+      f.add("metal", new THREE.CylinderGeometry(0.025, 0.025, 0.2, 8), -0.6 + c * 0.6 - 0.12, -0.42 + r * 0.5 + 0.28, 0.08, { color: IMP.mid, texel: 2 });
+    }
+    f.box("metal", 0, -0.42 + r * 0.5 + 0.37, 0.08, 1.7, 0.05, 0.05, { color: IMP.mid, texel: 2 });
+  }
+  // vent grille across the top with slats over a dark recess
+  f.box("paintedMetal", 0, 0.5, 0.04, 1.7, 0.3, 0.02, { color: SCUFF, texel: 1 });
+  for (let k = 0; k < 5; k++) f.box("metal", 0, 0.39 + k * 0.055, 0.056, 1.6, 0.018, 0.012, { color: IMP.mid, texel: 2 });
+  f.box("emitRedImp", 0.9, 0.62, 0.04, 0.04, 0.04, 0.012);
+  f.decal(11, -0.85, 0.62, 0.037, 0.14);
+}
+
+// Coolant manifold panel for a bare upper wall (critic round 3, pit view, second pass: the wall bay at z 480–484
+// fills the left third of the pit camera head-on and carried one junction box): a 1.8 × 1.1 m backing plate
+// with two horizontal pipes on wall saddles, end flanges, two vertical links, three valve wheels on the upper
+// pipe, two gauge boxes with lit readings on the lower one, status lamps and a stencil. Local +z faces the room.
+export function manifoldPanel(kit, { x, y, z, yaw, seed = 1 }) {
+  const f = new Frame(kit, x, y, z, yaw);
+  const pipe = shade(IMP.mid, 1.05);
+  const flange = shade(IMP.mid, 1.2);
+  f.box("paintedMetal", 0, 0, 0.012, 1.8, 1.1, 0.024, { color: shade(IMP.dark, 0.9), texel: 1 });
+  f.box("paintedMetal", 0, 0, 0.03, 1.7, 1.0, 0.012, { color: SCUFF, texel: 1 });
+  for (const py of [-0.2, 0.24]) {
+    f.add("metal", new THREE.CylinderGeometry(0.05, 0.05, 1.66, 10).rotateZ(Math.PI / 2), 0, py, 0.13, { color: pipe, texel: 2 });
+    for (const s of [-1, 1]) f.add("metal", new THREE.CylinderGeometry(0.08, 0.08, 0.06, 10).rotateZ(Math.PI / 2), s * 0.78, py, 0.13, { color: flange, texel: 2 });
+  }
+  for (const s of [-1, 1]) {
+    f.add("metal", new THREE.CylinderGeometry(0.04, 0.04, 0.44, 8), s * 0.62, 0.02, 0.13, { color: pipe, texel: 2 });
+    f.box("paintedMetal", s * 0.62, 0.02, 0.06, 0.12, 0.08, 0.12, { color: IMP.dark, texel: 2 });
+  }
+  // valve wheels off the upper pipe: stem, torus rim, hub, two spokes
+  for (const vx of [-0.42, 0, 0.42]) {
+    f.add("metal", new THREE.CylinderGeometry(0.02, 0.02, 0.16, 6).rotateX(Math.PI / 2), vx, 0.24, 0.24, { color: IMP.steel, texel: 2 });
+    f.add("metal", new THREE.TorusGeometry(0.1, 0.012, 6, 16), vx, 0.24, 0.33, { color: IMP.steel, texel: 2 });
+    f.add("metal", new THREE.CylinderGeometry(0.035, 0.035, 0.05, 8).rotateX(Math.PI / 2), vx, 0.24, 0.33, { color: shade(IMP.mid, 0.8), texel: 2 });
+    f.box("metal", vx, 0.24, 0.33, 0.19, 0.014, 0.01, { color: IMP.steel, texel: 2 });
+    f.box("metal", vx, 0.24, 0.33, 0.014, 0.19, 0.01, { color: IMP.steel, texel: 2 });
+  }
+  for (const s of [-1, 1]) {
+    f.box("paintedMetal", s * 0.3, -0.2, 0.2, 0.18, 0.18, 0.08, { color: IMP.mid, texel: 2 });
+    f.box("darkGloss", s * 0.3, -0.2, 0.243, 0.13, 0.13, 0.006);
+    f.box(s < 0 ? "emitAmber" : "emitBlue", s * 0.3, -0.2, 0.247, 0.06, 0.012, 0.004);
+  }
+  f.box("emitRedImp", -0.78, 0.47, 0.04, 0.04, 0.04, 0.012);
+  f.box("emitAmber", 0.78, 0.47, 0.04, 0.04, 0.04, 0.012);
+  f.decal(seed % 2 ? 11 : 7, 0.62, -0.42, 0.037, 0.14);
+}
+
+// Riser bank: n vertical pipes up a wall face between world heights y0 and y1, `out` off the wall, spread along
+// the wall at `pitch`, with a flange at both ends and a wall clamp every ~1.3 m. (x, z) is the bank centre on
+// the wall face; local +z faces the room.
+export function riserBank(kit, { x, z, yaw, y0, y1, n = 3, pitch = 0.3, r = 0.045, out = 0.13 }) {
+  const f = new Frame(kit, x, (y0 + y1) / 2, z, yaw);
+  const h = y1 - y0;
+  const clamps = Math.max(2, Math.round(h / 1.3));
+  const flange = shade(IMP.mid, 1.2);
+  for (let i = 0; i < n; i++) {
+    const px = (i - (n - 1) / 2) * pitch;
+    f.add("metal", new THREE.CylinderGeometry(r, r, h, 8), px, 0, out, { color: i === 1 ? shade(IMP.mid, 1.12) : IMP.mid, texel: 2 });
+    for (const e of [-1, 1]) f.add("metal", new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.05, 8), px, e * (h / 2 - 0.05), out, { color: flange, texel: 2 });
+  }
+  const w = (n - 1) * pitch + 2 * r + 0.1;
+  for (let k = 1; k < clamps; k++) f.box("paintedMetal", 0, -h / 2 + (h / clamps) * k, (out + r) / 2, w, 0.08, out + r, { color: IMP.dark, texel: 2 });
 }
 
 // Floor cabinet against a wall; local +z faces the room, body spans z 0..d. Door panel, handle, LED column, slats.
@@ -546,19 +659,30 @@ export function bridgeRail(kit, from, to, y, { postEvery = 2.4, collide = true, 
   }
 }
 
-// Free-standing data pillar (pit aisles): black body, corner posts, LED columns, a small screen strip, red top lamp.
+// Free-standing data pillar (pit aisles, aft deck): black body on a scuffed kick, four corner posts, LED columns,
+// a small screen strip on each x face, and a header cap carrying the "DATA TERMINAL" sign cell on all four faces
+// with a red top lamp (critic round 3: the aft-deck pillar's lit screen under a wall display read as "a random
+// lit hole in the wall" — the header names it and the posts frame it).
 export function dataPillar(kit, x, y, z, { seed = 1, screen = "screenImp3", h = 2.2 } = {}) {
   const rand = rng(seed);
+  kit.box("paintedMetal", x, y + 0.04, z, 0.7, 0.08, 0.7, { color: SCUFF, texel: 1 });
   kit.box("paintedMetal", x, y + h / 2, z, 0.6, h, 0.6, { color: shade(IMP.black, 0.9 + rand() * 0.3), texel: 1 });
   kit.box("paintedMetal", x, y + h / 2, z, 0.64, h - 0.3, 0.16, { color: IMP.mid, texel: 2 });
-  kit.box("paintedMetal", x, y + h + 0.025, z, 0.7, 0.05, 0.7, { color: IMP.mid, texel: 2 });
-  kit.box("emitRedImp", x, y + h + 0.08, z, 0.08, 0.06, 0.08);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.box("paintedMetal", x + sx * 0.3, y + h / 2, z + sz * 0.3, 0.05, h, 0.05, { color: shade(IMP.dark, 0.9), texel: 2 });
+  // header cap: dark band with the sign strip on every face, mid-grey top plate, red lamp
+  kit.box("paintedMetal", x, y + h + 0.13, z, 0.72, 0.26, 0.72, { color: IMP.black, texel: 1 });
+  for (const sx of [-1, 1]) {
+    kit.box("bridgeScreen", x + sx * 0.362, y + h + 0.13, z, 0.006, 0.14, 0.56, { uv: "keep", uvRect: SIGN.data });
+    kit.box("bridgeScreen", x, y + h + 0.13, z + sx * 0.362, 0.56, 0.14, 0.006, { uv: "keep", uvRect: SIGN.data });
+  }
+  kit.box("paintedMetal", x, y + h + 0.275, z, 0.76, 0.03, 0.76, { color: IMP.mid, texel: 2 });
+  kit.box("emitRedImp", x, y + h + 0.32, z, 0.08, 0.06, 0.08);
   for (const sx of [-1, 1]) {
     for (let k = 0; k < 4; k++) kit.box(rand() < 0.2 ? "emitRedImp" : rand() < 0.5 ? "emitBlue" : "emitAmber", x + sx * 0.31, y + 0.6 + k * 0.16, z - 0.15, 0.01, 0.04, 0.07);
     kit.box("darkGloss", x + sx * 0.308, y + 1.55, z + 0.08, 0.01, 0.3, 0.3);
     kit.box(screen, x + sx * 0.317, y + 1.55, z + 0.08, 0.006, 0.24, 0.24, { uv: "keep" });
   }
-  kit.collider([x - 0.35, y, z - 0.35], [x + 0.35, y + h + 0.1, z + 0.35], "pillar");
+  kit.collider([x - 0.36, y, z - 0.36], [x + 0.36, y + h + 0.35, z + 0.36], "pillar");
 }
 
 // Tall equipment rack against a wall; local +z faces the room, body spans z 0..d. Four bay plates with
