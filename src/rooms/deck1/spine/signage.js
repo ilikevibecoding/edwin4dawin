@@ -53,6 +53,7 @@ export const LABELS = [
   ["LIFT STATUS", RED],
   ["PRESSURE · NOMINAL", AMBER],
   ["CALL PANEL", WHITE],
+  ["STAND CLEAR", YELLOW],
 ];
 if (LABELS.length > LEFT_ROWS + RIGHT_ROWS) throw new Error("signage atlas: too many labels");
 export const LABEL_ASPECT = CELL_W / CELL_H; // ≈ 9.14 : 1 — sign quads must use this w/h ratio
@@ -441,13 +442,16 @@ function canvasTexture(canvas) {
   tex.needsUpdate = true;
   return tex;
 }
+// Backlit: the glyphs are emissive; the diffuse base is kept near black so a pool light falling on a panel cannot
+// add to the emissive and push white text over the bloom threshold (critic round 3: the 1.5 m "01" numerals and the
+// lift header clipped with a halo). 0.95 × #e8ecf3 text ≈ 0.78 HDR → ≈ 220/255 after ACES, no bloom.
 const backlit = (tex) =>
   new THREE.MeshStandardMaterial({
-    color: 0xffffff,
+    color: 0x2a2c30,
     map: tex,
     emissive: 0xffffff,
     emissiveMap: tex,
-    emissiveIntensity: 1.0,
+    emissiveIntensity: 0.95,
     roughness: 0.32,
     metalness: 0.05,
     envMapIntensity: 0.6,

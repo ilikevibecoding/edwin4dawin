@@ -185,11 +185,14 @@ export function cutSpans(spanList, blocks, pad, minLen = 0.3) {
   return spanList.flatMap(([s0, s1]) => spans(s0, s1, blocks, pad, minLen));
 }
 
-// Flat textured quad on the floor: `long` runs along longAxis and carries the atlas cell's u axis.
-export function floorQuad(kit, mat, center, long, short, rect, longAxis = "x") {
+// Flat textured quad on the floor: `long` runs along longAxis and carries the atlas cell's u axis. By default the
+// cell's "up" points to -z (readable by someone facing -z / forward); `flip` turns it 180° so it reads for a viewer
+// facing +z (aft — e.g. walking from the spine toward the lift).
+export function floorQuad(kit, mat, center, long, short, rect, longAxis = "x", { flip = false } = {}) {
   const g = new THREE.PlaneGeometry(long, short);
   g.rotateX(-Math.PI / 2);
-  if (longAxis === "z") g.rotateY(Math.PI / 2);
+  const turn = (longAxis === "z" ? Math.PI / 2 : 0) + (flip ? Math.PI : 0);
+  if (turn) g.rotateY(turn);
   kit.add(mat, g, { pos: center, uv: "keep", uvRect: rect });
 }
 
@@ -706,24 +709,75 @@ export function alcove(kit, wf, a, floorY, { w = 1.2, h = 1.9, depth = 0.16 } = 
 // Furniture (lobby)
 // ---------------------------------------------------------------------------
 
-/** Wall bench over [a0,a1]: 8 cm hull-grey seat slab with a dark inset pad and a steel nosing, a 12 cm apron, two
- *  solid pedestals on a black plinth, optional backrest rail on the wall. Reads as furniture from across the room. */
-export function bench(kit, wf, a0, a1, floorY, { depth = 0.55, seatY = 0.44, backrest = true } = {}) {
+export const BENCH_FABRIC = new THREE.Color("#6b7280"); // mid blue-grey upholstery: reads as a seat next to the black floor
+
+// Rounded-rectangle outline in shape space, centred on the origin.
+function roundedRect(w, h, r) {
+  const s = new THREE.Shape();
+  const x = -w / 2;
+  const y = -h / 2;
+  s.moveTo(x + r, y);
+  s.lineTo(x + w - r, y);
+  s.quadraticCurveTo(x + w, y, x + w, y + r);
+  s.lineTo(x + w, y + h - r);
+  s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  s.lineTo(x + r, y + h);
+  s.quadraticCurveTo(x, y + h, x, y + h - r);
+  s.lineTo(x, y + r);
+  s.quadraticCurveTo(x, y, x + r, y);
+  return s;
+}
+
+/** Upholstered cushion over a∈[a0,a1] × d∈[d0,d1], `h` thick, resting on `yBottom`: a rounded-rectangle plan with a
+ *  bevelled (chamfered) edge all round, so it reads as a padded seat rather than a slab (~190 tris). */
+export function cushion(kit, wf, a0, a1, yBottom, h, d0, d1, color = BENCH_FABRIC, { bevel = 0.015, r = 0.035 } = {}) {
+  const w = Math.abs(a1 - a0) - 2 * bevel;
+  const dp = Math.abs(d1 - d0) - 2 * bevel;
+  const geo = new THREE.ExtrudeGeometry(roundedRect(w, dp, r), { depth: h - 2 * bevel, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 3 });
+  geo.rotateX(-Math.PI / 2); // extrusion → up, shape height → depth into the room
+  geo.translate(0, bevel, 0); // the lower bevel hangs below z = 0: lift so the underside sits on yBottom
+  kit.add("fabric", geo, { pos: wf.pt((a0 + a1) / 2, yBottom, (d0 + d1) / 2), rot: [0, wf.yaw, 0], color, texel: 2 });
+}
+
+/** Wall bench over [a0,a1]: an open steel frame on four square-tube legs with foot plates and stretchers (a clear
+ *  gap underneath — furniture, not a plinth), a dark rail with a steel nosing, `n` separate bevelled fabric cushions
+ *  and a matching split backrest pad on a wall rail. Reads as seating from across the room. */
+export function bench(kit, wf, a0, a1, floorY, { depth = 0.55, seatY = 0.44, backrest = true, cushions = null, fabric = BENCH_FABRIC } = {}) {
   const lo = Math.min(a0, a1);
   const hi = Math.max(a0, a1);
-  const ys = floorY + seatY;
-  wf.box(kit, "metalRough", lo, hi, ys - 0.08, ys, 0.02, depth, { color: IMP.hullDark, texel: 1 });
-  wf.box(kit, "paintedMetal", lo + 0.06, hi - 0.06, ys - 0.004, ys + 0.02, 0.08, depth - 0.08, { color: IMP.dark, texel: 1 });
-  wf.box(kit, "metal", lo, hi, ys - 0.03, ys + 0.005, depth - 0.005, depth + 0.02, { color: IMP.steel, texel: 2 });
-  wf.box(kit, "paintedMetal", lo, hi, ys - 0.2, ys - 0.08, depth - 0.06, depth, { color: IMP.dark, texel: 1 });
-  for (const ba of [lo + 0.22, hi - 0.22]) {
-    wf.box(kit, "paintedMetal", ba - 0.07, ba + 0.07, floorY + 0.08, ys - 0.08, 0.04, depth - 0.1, { color: IMP.dark, texel: 1 });
-    wf.box(kit, "metal", ba - 0.07, ba + 0.07, floorY + 0.08, floorY + 0.12, 0.04, depth - 0.1, { color: IMP.steel, texel: 2 });
+  const L = hi - lo;
+  const ys = floorY + seatY; // cushion top
+  const ch = 0.06; // cushion thickness
+  const yr = ys - ch; // rail top
+  // frame rail + steel nosing on the front edge
+  wf.box(kit, "paintedMetal", lo, hi, yr - 0.04, yr, 0.04, depth, { color: IMP.dark, texel: 1 });
+  wf.box(kit, "metal", lo, hi, yr - 0.04, yr + 0.008, depth - 0.008, depth + 0.015, { color: IMP.steel, texel: 2 });
+  // legs: square tubes at both ends, front and back, on steel foot plates; a stretcher joins each pair near the floor
+  const dLegs = [0.14, depth - 0.12];
+  for (const la of [lo + 0.2, hi - 0.2]) {
+    for (const ld of dLegs) {
+      wf.box(kit, "paintedMetal", la - 0.025, la + 0.025, floorY + 0.012, yr - 0.04, ld - 0.025, ld + 0.025, { color: IMP.black, texel: 2 });
+      wf.box(kit, "metal", la - 0.035, la + 0.035, floorY, floorY + 0.012, ld - 0.035, ld + 0.035, { color: IMP.steel, texel: 2 });
+    }
+    wf.box(kit, "paintedMetal", la - 0.015, la + 0.015, floorY + 0.1, floorY + 0.13, dLegs[0], dLegs[1], { color: IMP.black, texel: 2 });
   }
-  wf.box(kit, "paintedMetal", lo + 0.08, hi - 0.08, floorY, floorY + 0.08, 0, depth - 0.14, { color: IMP.black, texel: 1 });
+  wf.box(kit, "paintedMetal", lo + 0.2, hi - 0.2, floorY + 0.1, floorY + 0.13, dLegs[1] - 0.015, dLegs[1] + 0.015, { color: IMP.black, texel: 2 });
+  // cushions: ~0.65 m seats with a 3 cm gap, bevelled all round
+  const n = cushions || Math.max(2, Math.round(L / 0.68));
+  const gap = 0.03;
+  const cw = (L - 0.08 - gap * (n - 1)) / n;
+  for (let i = 0; i < n; i++) {
+    const c0 = lo + 0.04 + i * (cw + gap);
+    cushion(kit, wf, c0, c0 + cw, yr, ch, 0.05, depth - 0.02, fabric);
+  }
   if (backrest) {
-    wf.box(kit, "metalRough", lo + 0.05, hi - 0.05, ys + 0.28, ys + 0.5, -0.01, 0.05, { color: IMP.hullDark, texel: 1 });
-    wf.box(kit, "paintedMetal", lo + 0.1, hi - 0.1, ys + 0.31, ys + 0.47, 0.05, 0.062, { color: IMP.dark, texel: 1 });
+    // wall rail with one stepped fabric pad per cushion
+    wf.box(kit, "metalRough", lo + 0.05, hi - 0.05, ys + 0.26, ys + 0.5, -0.01, 0.04, { color: IMP.hullDark, texel: 1 });
+    for (let i = 0; i < n; i++) {
+      const c0 = lo + 0.04 + i * (cw + gap);
+      wf.box(kit, "fabric", c0 + 0.02, c0 + cw - 0.02, ys + 0.29, ys + 0.47, 0.04, 0.06, { color: fabric, texel: 2 });
+      wf.box(kit, "fabric", c0 + 0.045, c0 + cw - 0.045, ys + 0.315, ys + 0.445, 0.06, 0.072, { color: fabric, texel: 2 });
+    }
   }
   wf.collider(kit, lo, hi, floorY, ys + 0.05, 0, depth + 0.02, "bench");
 }
@@ -1003,6 +1057,7 @@ export function dressCorridor(kit, cf, opts = {}) {
     features = true,
     bayKit = true,
     majorEvery = 3,
+    emit = "emitWhite", // rib light-line lens material (the transit rooms pass their under-bloom strip emitter)
   } = opts;
   const { floorY, ceilY } = cf;
   const rand = rng(seed);
@@ -1015,7 +1070,7 @@ export function dressCorridor(kit, cf, opts = {}) {
     if (noRibs.some(([s0, s1]) => a > s0 && a < s1)) continue;
     ribPos.push(+a.toFixed(3));
   }
-  ribs(kit, cf, ribPos);
+  ribs(kit, cf, ribPos, { emit });
 
   // bays between ribs (and the corridor ends) → conduit clamp positions
   const edges = [cf.a0, ...ribPos, cf.a1];

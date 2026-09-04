@@ -232,7 +232,10 @@ const manifest = {
     // reach 20 m so the two pools overlap on the aft wall cabinets. Same priority as the rafts, so the distance
     // term swaps them in for the aft cameras (they take the slots of the 40 m-away fore rafts) and out forward.
     lights.push({ type: "point", pos: [0, pendantY, L.aftPendantZ], color: WARM, intensity: 70, distance: 20, priority: 0.85 });
-    for (const [x, z] of L.aftCornerPendants) lights.push({ type: "point", pos: [x, pendantY, z], color: WARM, intensity: 85, distance: 20, priority: 0.75 });
+    // distance 10, not 20: at 20 the port pendant reached the port passage's west wall through the door wall (no
+    // shadows in the pool) at E ≈ 0.6 — as much as the passage's own pools — and the passage could not be dimmed.
+    // 10 keeps ≈ 0.9 of the reach on the aft wall (5 m) and ≈ 0.75 on the side walls (6 m), 0.4 in the passage.
+    for (const [x, z] of L.aftCornerPendants) lights.push({ type: "point", pos: [x, pendantY, z], color: WARM, intensity: 85, distance: 10, priority: 0.75 });
     for (const s of [-1, 1]) {
       // fore platform downlights, inside the recessed ceiling housings (0.3 m boxes under the slab)
       lights.push({ type: "point", pos: [s * 9.5, CEILY - 0.05, 462.4], color: COOL, intensity: 80, distance: 18, priority: 0.85 });

@@ -6,6 +6,7 @@ import { roomShell, corridorDressing, doorReveal } from "../shared/imperial.js";
 import { LIGHT } from "../shared/palette.js";
 import { rng } from "../../../kit.js";
 import { signMaterials, boardMaterials } from "../spine/signage.js";
+import { STRIP, stripMaterials } from "../spine/strip.js";
 import { corridorFrame, dressCorridor, doorSigns, signPanel, sealedBulkhead, chevronBand, chevronThreshold, SIGN_TOP } from "../spine/dressing.js";
 
 const ID = "d1-corridor-stbd";
@@ -29,18 +30,20 @@ const manifest = {
     "d1-corridor-stbd-bulkhead": { pos: [21.8, FLOOR, 471.5], yaw: 0, pitch: 2 }, // the sealed maintenance bulkhead at the forward dead end
   },
   materials() {
-    return { ...signMaterials(), ...boardMaterials() }; // `board` carries the bulkhead's sealed plate + readout
+    return { ...signMaterials(), ...boardMaterials(), ...stripMaterials() }; // `board` carries the bulkhead's sealed plate + readout
   },
   build(ctx) {
     const { kit } = ctx;
     const ceilY = CEIL[ID];
-    roomShell(kit, manifest, { floorY: FLOOR, ceilY, seed: 37, panelW: 2.0, strip: "emitWhite", ceiling: { axis: "z", inset: 0.25, channels: [{ at: 21.8, w: 0.5, emit: "emitWhite", emitW: 0.16 }] } });
+    // all white strips / lenses use the under-bloom STRIP emitter (no emitWhite in this room: same draw-call count)
+    roomShell(kit, manifest, { floorY: FLOOR, ceilY, seed: 37, panelW: 2.0, strip: STRIP, ceiling: { axis: "z", inset: 0.25, channels: [{ at: 21.8, w: 0.5, emit: STRIP, emitW: 0.08 }] } });
     corridorDressing(kit, manifest, FLOOR, ceilY, { ribEvery: Infinity });
     for (const d of manifest.doors) doorReveal(kit, manifest, d, FLOOR);
 
     const cf = corridorFrame(manifest, FLOOR, ceilY);
     dressCorridor(kit, cf, {
       seed: 3701,
+      emit: STRIP,
       ribEvery: 4,
       ribPhase: 1.7,
       pipeFaces: ["w"],
@@ -71,8 +74,11 @@ const manifest = {
     sealedBulkhead(kit, cf, "n", { rand: rng(3702) });
     signPanel(kit, cf.walls.w, 470, 0, [{ label: "MAINTENANCE" }, { label: "AUTHORISED PERSONNEL ONLY" }], { top: FLOOR + SIGN_TOP });
 
-    for (let z = 469; z <= 509; z += 8) ctx.lights.push({ type: "point", pos: [21.8, ceilY - 0.5, z], color: LIGHT.coolWhite, intensity: 4.5, distance: 11, priority: 0.5 });
-    ctx.lights.push({ type: "point", pos: [21.8, FLOOR + 2.7, 467.0], color: LIGHT.red, intensity: 1.3, distance: 3.5, priority: 0.4 });
+    // 7 descriptors: one pool every 8 m at 2.8 (round 2: 7, round 3: 4.5, round 4: 3.2 — critic round 3: "passage
+    // brighter than the bridge", target mean ≤ 32; the bulkhead frame measured 59 in round 3 and 31.5 in round 4, too
+    // close to the line) plus the red status wash in front of the sealed bulkhead, scaled with them.
+    for (let z = 469; z <= 509; z += 8) ctx.lights.push({ type: "point", pos: [21.8, ceilY - 0.5, z], color: LIGHT.coolWhite, intensity: 2.8, distance: 11, priority: 0.5 });
+    ctx.lights.push({ type: "point", pos: [21.8, FLOOR + 2.7, 467.0], color: LIGHT.red, intensity: 1.1, distance: 3.5, priority: 0.4 });
     return {};
   },
 };

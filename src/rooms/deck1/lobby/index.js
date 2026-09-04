@@ -8,16 +8,14 @@ import { BOUNDS, CEIL, FLOOR, LIFT, doorsFor } from "../shared/plan.js";
 import { roomShell, wall, doorReveal } from "../shared/imperial.js";
 import { LIFT_DOOR } from "../shared/doors.js";
 import { IMP, LIGHT } from "../shared/palette.js";
-import { signMaterials, boardMaterials, labelRect, numeralRect, chevronRect, LABEL_ASPECT } from "../spine/signage.js";
+import { signMaterials, boardMaterials, labelRect, numeralRect, chevronRect, arrowRect, LABEL_ASPECT } from "../spine/signage.js";
+import { STRIP, stripMaterials } from "../spine/strip.js";
 import {
   wallFrame,
   signPanel,
   boardPanel,
   chevronBand,
   floorQuad,
-  floorInlay,
-  inlayCorner,
-  floorPlates,
   ceilingFixture,
   downlight,
   lensStrip,
@@ -38,6 +36,8 @@ import {
 const ID = "d1-lobby";
 const B = BOUNDS[ID];
 const TICKS = [0.6, 0.2, -0.2, -0.6]; // deck 1..4 marks on the position indicator, left to right for a viewer facing the lift (+x is their left)
+const LANE_PAINT = new THREE.Color("#c9a227"); // matte yellow floor paint (lift-queue lane), worn by paintedMetal's map
+const LUMINAIRE_R = 0.5; // central ceiling drum that houses the main pool point (its lens ring is the visible source)
 
 const manifest = {
   id: ID,
@@ -57,19 +57,22 @@ const manifest = {
     "d1-lobby-indicator": { pos: [0, FLOOR, 519.7], yaw: 180, pitch: 24 },
   },
   materials() {
-    return { ...signMaterials(), ...boardMaterials() };
+    return { ...signMaterials(), ...boardMaterials(), ...stripMaterials() };
   },
   build(ctx) {
     const { kit } = ctx;
     const ceilY = CEIL[ID];
-    roomShell(kit, manifest, { floorY: FLOOR, ceilY, seed: 43, panelW: 2.0, strip: "emitWhite", ceiling: { axis: "x", inset: 0.25, channels: [{ at: 519, w: 0.6, emit: "emitWhite", emitW: 0.2 }] } });
+    // every white strip / lens in the lobby is the under-bloom STRIP emitter (no emitWhite here: same draw-call count).
+    // No corridor light channel across this ceiling: the lit square + drum below is the lobby's ceiling composition,
+    // and a channel through its centre put the pool point right under the channel's steel lips (lit to ~190/255).
+    roomShell(kit, manifest, { floorY: FLOOR, ceilY, seed: 43, panelW: 2.0, strip: STRIP, ceiling: { axis: "x", inset: 0.25, channels: [] } });
     for (const d of manifest.doors) doorReveal(kit, manifest, d, FLOOR);
 
     // lift wall at z 521.7..522 (inner face toward the lobby), hole LIFT_DOOR centred on the anchor
     const lz = LIFT.pos[2];
     const lb = { min: [B.min[0], FLOOR, lz - 0.3], max: [B.max[0], ceilY, lz] };
     const hole = { a0: LIFT.pos[0] - LIFT_DOOR.w / 2, a1: LIFT.pos[0] + LIFT_DOOR.w / 2, y0: FLOOR, y1: FLOOR + LIFT_DOOR.h, kind: "door" };
-    wall(kit, { face: "s", bounds: lb, floorY: FLOOR, ceilY, wallT: 0.3, openings: [hole], seed: 47, panelW: 2.0, strip: "emitWhite", tag: "lift-wall" });
+    wall(kit, { face: "s", bounds: lb, floorY: FLOOR, ceilY, wallT: 0.3, openings: [hole], seed: 47, panelW: 2.0, strip: STRIP, tag: "lift-wall" });
     // lift shaft side walls behind the lift wall, hugging the reserved cabin box (x ±2 → walls at ±2.4..2.7)
     for (const s of [-1, 1]) {
       const x0 = s < 0 ? -2.7 : 2.4;
@@ -103,7 +106,7 @@ const manifest = {
     }
     lw.box(kit, "paintedMetal", -fx, fx, top, top + 0.3, -0.02, 0.15, { color: IMP.dark, texel: 1 });
     lw.box(kit, "paintedMetal", -0.95, 0.95, top + 0.09, top + 0.25, 0.14, 0.165, { color: IMP.black, texel: 1 });
-    for (const x of TICKS) lw.box(kit, "emitWhite", x - 0.005, x + 0.005, top + 0.13, top + 0.21, 0.165, 0.169);
+    for (const x of TICKS) lw.box(kit, STRIP, x - 0.005, x + 0.005, top + 0.13, top + 0.21, 0.165, 0.169);
     lensStrip(kit, lw, -0.95, 0.95, top + 0.05, { d: 0.19, lip: 0.02, gap: 0.04, lens: 0.01, recess: 0.012, emit: "emitAmber" });
     lw.box(kit, "metalRough", -fx, fx, top + 0.32, ceilY - 0.02, -0.02, 0.06, { color: IMP.dark, texel: 1 });
     lw.box(kit, "paintedMetal", -fx + 0.03, fx - 0.03, top + 0.35, ceilY - 0.05, 0.06, 0.07, { color: IMP.black, texel: 1 });
@@ -210,34 +213,69 @@ const manifest = {
     }
     crates(kit, ew, 517.05, FLOOR, { w: 1.2, depth: 0.8, h: 0.6, n: 2 });
 
-    // --- floor: dark gloss field; a raised walkway of bolted mid-grey deck plates from the blast door to the lift,
-    //     edged by steel inlays — the two long sides carry a flush 2 cm blue guide groove (the corridor centre-strip
-    //     language), the end members are plain seamed steel so the platform reads as a plate, not an outline
+    // --- floor: dark gloss field with a painted lift-queue lane from the blast door to the lift (critic round 3: the
+    //     raised plate pad with blue grooves read as an ambiguous central pad): two worn yellow lane lines, a TURBOLIFT
+    //     stencil with an arrow toward the car for people arriving from the spine, a STAND CLEAR line and stencil ahead
+    //     of the door chevrons. Paint only — nothing raised, nothing lit.
     kit.boxMM("blackGloss", [-7.4, FLOOR + 0.002, 516.6], [7.4, FLOOR + 0.009, 521.45]);
-    const wz0 = 517.0;
-    const wz1 = 521.05;
-    floorPlates(kit, FLOOR, -1.53, 1.53, wz0 + 0.09, wz1 - 0.09, { plate: 0.99, color: IMP.mid });
-    for (const x of [-1.62, 1.62]) floorInlay(kit, FLOOR, [x, wz0], [x, wz1], "emitBlue");
-    for (const z of [wz0, wz1]) floorInlay(kit, FLOOR, [-1.62, z], [1.62, z], "emitBlue", { lit: false });
-    for (const x of [-1.62, 1.62]) for (const z of [wz0, wz1]) inlayCorner(kit, FLOOR, x, z);
+    const laneX = 1.3;
+    const lz0 = 517.0;
+    const lz1 = 520.75; // the STAND CLEAR line closes the lane 0.4 m before the door chevrons
+    const paint = { color: LANE_PAINT, texel: 2 };
+    const pY0 = FLOOR + 0.009;
+    const pY1 = FLOOR + 0.013;
+    for (const x of [-laneX, laneX]) kit.boxMM("paintedMetal", [x - 0.03, pY0, lz0], [x + 0.03, pY1, lz1], paint);
+    kit.boxMM("paintedMetal", [-laneX - 0.03, pY0, lz1 - 0.06], [laneX + 0.03, pY1, lz1], paint);
+    for (const x of [-laneX, laneX]) kit.boxMM("paintedMetal", [x - 0.03, pY0, lz0], [x + 0.03, pY1, lz0 + 0.06], paint); // open end: short return ticks
+    const aft = { flip: true }; // stencils read for a viewer walking +z (from the spine toward the lift)
+    floorQuad(kit, "signPaint", [0, FLOOR + 0.014, 517.95], 1.7, 1.7 / LABEL_ASPECT, labelRect("TURBOLIFT"), "x", aft);
+    floorQuad(kit, "signPaint", [0, FLOOR + 0.014, 518.55], 0.42, 0.42, arrowRect("up"), "x", aft);
+    floorQuad(kit, "signPaint", [0, FLOOR + 0.014, 520.42], 1.7, 1.7 / LABEL_ASPECT, labelRect("STAND CLEAR"), "x", aft);
     floorQuad(kit, "signPaint", [0, FLOOR + 0.014, lz - 0.3 - 0.385], LIFT_DOOR.w, LIFT_DOOR.w / LABEL_ASPECT, chevronRect(), "x");
     floorQuad(kit, "signPaint", [0, FLOOR + 0.014, B.min[2] + 0.3 + 0.02 + 4.0 / LABEL_ASPECT / 2], 4.0, 4.0 / LABEL_ASPECT, chevronRect(), "x");
 
-    // --- ceiling feature: four recessed linear fixtures on a square with a square downlight at each corner
+    // --- ceiling feature: four recessed linear fixtures on a square with a square downlight at each corner, and a
+    //     central drum luminaire flush with the ceiling (chamfered bezel disc, 6 cm annular lens in its opening, dark
+    //     centre cap). The main pool point sits INSIDE the drum (§9.4: no shadows — a bare point 0.5 m under the ceiling lit
+    //     the panels above it to a grey patch and had no visible source): every face of the drum, bezel and lens points
+    //     away from it, so nothing of the fixture can blow out.
     const half = 1.7;
     const cz = 519;
     const g = 0.3; // gap between a fixture's end and the corner downlight
-    ceilingFixture(kit, ceilY, [-half + g, cz - half], [half - g, cz - half]);
-    ceilingFixture(kit, ceilY, [-half + g, cz + half], [half - g, cz + half]);
-    ceilingFixture(kit, ceilY, [-half, cz - half + g], [-half, cz + half - g]);
-    ceilingFixture(kit, ceilY, [half, cz - half + g], [half, cz + half - g]);
-    for (const x of [-half, half]) for (const z of [cz - half, cz + half]) downlight(kit, ceilY, x, z, { s: 0.34, h: 0.11, lens: 0.16 });
+    const lin = { emit: STRIP };
+    ceilingFixture(kit, ceilY, [-half + g, cz - half], [half - g, cz - half], lin);
+    ceilingFixture(kit, ceilY, [-half + g, cz + half], [half - g, cz + half], lin);
+    ceilingFixture(kit, ceilY, [-half, cz - half + g], [-half, cz + half - g], lin);
+    ceilingFixture(kit, ceilY, [half, cz - half + g], [half, cz + half - g], lin);
+    for (const x of [-half, half]) for (const z of [cz - half, cz + half]) downlight(kit, ceilY, x, z, { s: 0.34, h: 0.11, lens: 0.16, emit: STRIP });
+    // The drum runs from 14 cm below the ceiling to 15 cm up inside the ceiling panels, and the pool point sits ABOVE
+    // the ceiling plane (ceilY + 0.08): every ceiling face looks down, away from it, so the panels get no direct light
+    // and no glint. 7 cm below the plane (round 4) the semi-gloss panels mirrored the point as a white ring around
+    // the drum: E ≈ 2 at grazing incidence through a GGX peak of ~5 clips even a near-black surface.
+    const lumY = ceilY + 0.08;
+    kit.cyl("metalRough", 0, ceilY + 0.005, cz, LUMINAIRE_R, 0.29, "y", { color: IMP.mid, segments: 24, texel: 1 });
+    kit.cyl("paintedMetal", 0, ceilY - 0.155, cz, 0.4, 0.03, "y", { color: IMP.black, segments: 24, texel: 1 });
+    // bezel: a chamfered lathe disc whose faces all look down or outward (a torus's inner wall faces the axis and the
+    // point above would light it to a bright arc), with the lens ring flush in its opening and a dark centre cap
+    const yb0 = ceilY - 0.178;
+    const bezel = new THREE.LatheGeometry([new THREE.Vector2(0.265, yb0), new THREE.Vector2(0.36, yb0), new THREE.Vector2(0.4, yb0 + 0.012), new THREE.Vector2(0.4, yb0 + 0.03)], 32);
+    kit.add("metalRough", bezel, { pos: [0, 0, cz], color: IMP.dark, texel: 1 });
+    const lens = new THREE.RingGeometry(0.2, 0.26, 32, 1);
+    lens.rotateX(Math.PI / 2); // faces down
+    kit.add(STRIP, lens, { pos: [0, ceilY - 0.177, cz] });
+    kit.cyl("paintedMetal", 0, ceilY - 0.18, cz, 0.18, 0.02, "y", { color: IMP.black, segments: 24, texel: 1 });
 
-    // 5 descriptors (budget 14)
-    ctx.lights.push({ type: "point", pos: [0, ceilY - 0.5, 519], color: LIGHT.coolWhite, intensity: 10, distance: 15, priority: 0.8 });
-    ctx.lights.push({ type: "point", pos: [0, FLOOR + 3.2, lz - 0.7], color: LIGHT.amber, intensity: 3, distance: 6, priority: 0.5 });
-    for (const x of [-6.3, 6.3]) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.8, 518.7], color: LIGHT.coolWhite, intensity: 3.2, distance: 8, priority: 0.4 });
-    ctx.lights.push({ type: "point", pos: [4.6, FLOOR + 2.55, lz - 0.65], color: LIGHT.red, intensity: 1.2, distance: 3.5, priority: 0.3 }); // from the beacon
+    // 5 descriptors (budget 14). Main pool inside the drum (9 at 3.93 m ≈ 7 at the old 3.5 m: ~0.5 EV under round 3's
+    // 10, ~1.2 EV under round 2's 16 — critic round 3: lobby brighter than the bridge, target mean ≤ 32); the amber
+    // header wash, two corner fills and the beacon's red wash scaled with it. The amber point sits INSIDE the solid
+    // lift header block (x ±1.5, y top..top + 0.3, d -0.02..0.15), level with the black indicator band: floating 0.25 m
+    // in front of the header (round 4) it lit the band and the lens channel to a white-amber blob (E ≈ 38 at 25 cm).
+    // Inside, every face of the header, band, ticks, marker and lens channel points away from it; what it reaches is
+    // the door jambs, the threshold chevrons and the lane below — the amber lens strip reads as its source.
+    ctx.lights.push({ type: "point", pos: [0, lumY, cz], color: LIGHT.coolWhite, intensity: 9, distance: 15, priority: 0.8 });
+    ctx.lights.push({ type: "point", pos: lw.pt(0, top + 0.15, 0.065), color: LIGHT.amber, intensity: 2.4, distance: 6, priority: 0.5 });
+    for (const x of [-6.3, 6.3]) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.8, 518.7], color: LIGHT.coolWhite, intensity: 2.5, distance: 8, priority: 0.4 });
+    ctx.lights.push({ type: "point", pos: [4.6, FLOOR + 2.55, lz - 0.65], color: LIGHT.red, intensity: 1.0, distance: 3.5, priority: 0.3 }); // from the beacon
 
     // indicator: demo sweep between the deck marks until a lift system drives it (u = 0 → deck 1 … 1 → deck 4)
     let driven = false;

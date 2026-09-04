@@ -4,6 +4,7 @@ import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
 import { roomShell, corridorDressing, doorReveal } from "../shared/imperial.js";
 import { LIGHT } from "../shared/palette.js";
 import { signMaterials } from "../spine/signage.js";
+import { STRIP, stripMaterials } from "../spine/strip.js";
 import { corridorFrame, dressCorridor, doorSigns, signPanel, arrowToward, SIGN_TOP } from "../spine/dressing.js";
 
 const ID = "d1-corridor-port";
@@ -26,18 +27,20 @@ const manifest = {
     "d1-corridor-port-nav-door": { pos: [-20.8, FLOOR, 481.5], yaw: 55, pitch: -3 },
   },
   materials() {
-    return signMaterials();
+    return { ...signMaterials(), ...stripMaterials() };
   },
   build(ctx) {
     const { kit } = ctx;
     const ceilY = CEIL[ID];
-    roomShell(kit, manifest, { floorY: FLOOR, ceilY, seed: 31, panelW: 2.0, strip: "emitWhite", ceiling: { axis: "z", inset: 0.25, channels: [{ at: -21.8, w: 0.5, emit: "emitWhite", emitW: 0.16 }] } });
+    // all white strips / lenses use the under-bloom STRIP emitter (no emitWhite in this room: same draw-call count)
+    roomShell(kit, manifest, { floorY: FLOOR, ceilY, seed: 31, panelW: 2.0, strip: STRIP, ceiling: { axis: "z", inset: 0.25, channels: [{ at: -21.8, w: 0.5, emit: STRIP, emitW: 0.08 }] } });
     corridorDressing(kit, manifest, FLOOR, ceilY, { ribEvery: Infinity });
     for (const d of manifest.doors) doorReveal(kit, manifest, d, FLOOR);
 
     const cf = corridorFrame(manifest, FLOOR, ceilY);
     dressCorridor(kit, cf, {
       seed: 3101,
+      emit: STRIP,
       ribEvery: 4,
       ribPhase: 1.7, // ribs at z = 468, 472, … (minus the door bays)
       pipeFaces: ["e"],
@@ -61,7 +64,15 @@ const manifest = {
     const { e } = cf.walls;
     signPanel(kit, e, 470, 0, [{ label: "OBSERVATION GALLERY", arrow: arrowToward(e, 470, 466) }], { top: FLOOR + SIGN_TOP });
 
-    for (let z = 469; z <= 509; z += 8) ctx.lights.push({ type: "point", pos: [-21.8, ceilY - 0.5, z], color: LIGHT.coolWhite, intensity: 4.5, distance: 11, priority: 0.5 });
+    // 6 descriptors: one pool every 8 m (every second rib bay), leaving half the point pool for the rooms seen through
+    // the open doors. 1.5 (round 2: 7, round 3: 4.5, round 4: 3.2, round 5: 2.2): the passage must land under the bridge
+    // it leads to (critic round 3: "passage brighter than the bridge", target mean ≤ 32 — the north frame measured 60 at
+    // 7, 36.8 at 3.2 and 32.9 at 2.2; the same 0.69× step again projects it to ≈ 29). This side runs 0.9 EV under the
+    // starboard passage's 2.8 because its north half is lit as much by the bridge as by these pools: no shadows, so the
+    // bridge's aft-port point (-14, 246.2, 507 · 85 cd · distance 20) reaches the west-wall panels at E ≈ 0.6 through
+    // the bridge door wall — the same as a pool of ours 0.5 m away — and the north view stands 1 m from the pool over
+    // the bridge door, so those light-grey panels fill its left third. The starboard bulkhead frame gets no such spill.
+    for (let z = 469; z <= 509; z += 8) ctx.lights.push({ type: "point", pos: [-21.8, ceilY - 0.5, z], color: LIGHT.coolWhite, intensity: 2.2, distance: 11, priority: 0.5 });
     return {};
   },
 };
