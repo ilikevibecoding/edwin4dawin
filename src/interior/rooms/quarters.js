@@ -9,7 +9,7 @@ import { roomShell, wallScreen, impConsole, wallSegment, IMP_THEME } from "../im
 import { pointLight, wallFrame, ceilingFrame, panelGrid } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect, GRATE_TILE } from "../../textures.js";
-import { ensureCrewMaterials, SIGN, signRect, wallSign, lockerBank, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, intercom, stool, wallShelf } from "./crewProps.js";
+import { ensureCrewMaterials, SIGN, baySign, signRect, wallSign, lockerBank, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, intercom, stool, wallShelf } from "./crewProps.js";
 
 const BUNK_W = 0.9;
 const BUNK_L = 2.0;
@@ -87,7 +87,7 @@ function bunkStack(kit, ctx, { x0, z0, open, aisleEnd, seed, bay, privacy = true
     if (bay !== undefined) {
       const g = new THREE.PlaneGeometry(0.7, 0.175);
       g.rotateY(aisleEnd === "zmax" ? 0 : Math.PI);
-      kit.add("crew_signLit", g, { pos: [xc, 2.25, pz + (aisleEnd === "zmax" ? 0.025 : -0.025)], uv: "keep", uvRect: signRect(SIGN.BAY1 + (bay % 4)) });
+      kit.add("crew_signLit", g, { pos: [xc, 2.25, pz + (aisleEnd === "zmax" ? 0.025 : -0.025)], uv: "keep", uvRect: signRect(baySign(bay)) });
       const d = new THREE.PlaneGeometry(0.3, 0.3);
       d.rotateY(aisleEnd === "zmax" ? 0 : Math.PI);
       kit.add("decal", d, { pos: [xc, 1.3, pz + (aisleEnd === "zmax" ? 0.022 : -0.022)], uv: "keep", uvRect: decalRect(seed % 2 ? 9 : 6) });
@@ -203,7 +203,7 @@ export function buildQuarters(kit, ctx) {
       kit.box("paintedMetal", alc, 2.75, lz, 3.3, 0.2, 0.12, { color: PALETTE.impDark, texel: 2 });
       const g = new THREE.PlaneGeometry(0.9, 0.225);
       g.rotateY(s < 0 ? 0 : Math.PI);
-      kit.add("crew_signLit", g, { pos: [alc, 2.75, lz + (s < 0 ? 0.065 : -0.065)], uv: "keep", uvRect: signRect(SIGN.BAY1 + (i % 4)) });
+      kit.add("crew_signLit", g, { pos: [alc, 2.75, lz + (s < 0 ? 0.065 : -0.065)], uv: "keep", uvRect: signRect(baySign(nBays - i)) });
     }
     for (const s of [-1, 1]) {
       // pair 1 (aisle end) and pair 2 (deeper), heads away from the aisle
@@ -211,8 +211,8 @@ export function buildQuarters(kit, ctx) {
       const p1z0 = s < 0 ? aisleZ - 1.4 - BUNK_L : aisleZ + 1.4;
       const p2z0 = s < 0 ? p1z0 - 3.6 : p1z0 + 3.6;
       const seedBase = ctx.seed * 7 + i * 31 + (s < 0 ? 0 : 500);
-      bunkStack(kit, ctx, { x0: bunkA, z0: p1z0, open: 1, aisleEnd, seed: seedBase + 1, bay: i });
-      bunkStack(kit, ctx, { x0: bunkB, z0: p1z0, open: -1, aisleEnd, seed: seedBase + 2, bay: i });
+      bunkStack(kit, ctx, { x0: bunkA, z0: p1z0, open: 1, aisleEnd, seed: seedBase + 1, bay: nBays - i });
+      bunkStack(kit, ctx, { x0: bunkB, z0: p1z0, open: -1, aisleEnd, seed: seedBase + 2, bay: nBays - i });
       bunkStack(kit, ctx, { x0: bunkA, z0: p2z0, open: 1, aisleEnd, seed: seedBase + 3, privacy: false });
       bunkStack(kit, ctx, { x0: bunkB, z0: p2z0, open: -1, aisleEnd, seed: seedBase + 4, privacy: false });
       // footlockers at the head ends of pair 1 (in the cross lane) and pair 2

@@ -24,9 +24,12 @@ export const SIGN = {
   O2: 28, WASTE: 29, BIOHAZARD: 30, WASH: 31,
   POD1: 32, POD2: 33, POD3: 34, POD4: 35,
   POD5: 36, POD6: 37, EVAC_L: 38, MENU: 39,
+  BAY5: 40, BAY6: 41, BAY7: 42, GUARD: 43,
 };
+/** Sign cell for quarters bay `n` (1-based). */
+export const baySign = (n) => (n <= 4 ? SIGN.BAY1 + n - 1 : SIGN.BAY5 + Math.min(n - 5, 2));
 const SIGN_COLS = 4;
-const SIGN_ROWS = 10;
+const SIGN_ROWS = 11;
 const SIGN_TEXT = [
   "MESS HALL", "GALLEY", "RATIONS", "CREW QUARTERS",
   "BAY 1", "BAY 2", "BAY 3", "BAY 4",
@@ -38,6 +41,7 @@ const SIGN_TEXT = [
   "O2", "WASTE", "BIOHAZARD", "WASH",
   "POD 1", "POD 2", "POD 3", "POD 4",
   "POD 5", "POD 6", "\u2190 EVAC", "MENU  CYCLE 04",
+  "BAY 5", "BAY 6", "BAY 7", "GUARD STATION",
 ];
 // lit colours per cell family
 const LIT_COL = (i) => {
@@ -58,7 +62,7 @@ const INK_COL = (i) => {
 
 function drawSignSheet(lit, seed) {
   const w = 1024;
-  const h = 640;
+  const h = 64 * SIGN_ROWS;
   const c = makeCanvas(w, h);
   const ctx = c.getContext("2d");
   const cw = w / SIGN_COLS;
