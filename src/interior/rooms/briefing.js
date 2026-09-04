@@ -54,8 +54,8 @@ export function buildBriefing(kit, ctx) {
   for (const t of tiers) {
     for (const z of [tierZ0, tierZ1]) kit.boxMM("paintedMetal", [t.x0 - (t === tiers[1] ? 0.05 : 0), t.y - 0.07, z - 0.05], [t.x1 + 0.05, t.y + 0.005, z + 0.05], { color: PALETTE.impBlack, texel: 2 });
   }
-  // seats: 5 per row, facing +x
-  const seatZ = [-2, -1, 0, 1, 2].map((i) => cz + i * 1.06);
+  // seats: 5 per row, facing +x; the 0.94 m pitch leaves a 0.9 m aisle along each side wall
+  const seatZ = [-2, -1, 0, 1, 2].map((i) => cz + i * 0.94);
   rowsX.forEach((x, r) => benchRow(kit, x, r === 0 ? 0 : tiers[r - 1].y, seatZ, r));
 
   // --- forward wall (xmax): segmented mission display, lectern under the backlit emblem
@@ -244,8 +244,9 @@ export function buildBriefing(kit, ctx) {
 // ---------------------------------------------------------------------------
 /** Row of `zs.length` bench seats on a shared plinth at floor level `y`, facing +x. */
 function benchRow(kit, x, y, zs, row) {
-  const z0 = zs[0] - 0.62;
-  const z1 = zs[zs.length - 1] + 0.62;
+  const pitch = zs[1] - zs[0];
+  const z0 = zs[0] - 0.6;
+  const z1 = zs[zs.length - 1] + 0.6;
   const rand = rng(row * 13 + 5);
   // plinth and the continuous seat beam; a white strip on the plinth's back face reads from the door
   kit.boxMM("paintedMetal", [x - 0.42, y, z0 - 0.1], [x + 0.3, y + 0.08, z1 + 0.1], { color: PALETTE.impBlack, texel: 2 });
@@ -266,9 +267,9 @@ function benchRow(kit, x, y, zs, row) {
     // a datapad left on a couple of seats
     if (rand() < 0.3) datapad(kit, x + 0.04, y + 0.505, z + (rand() - 0.5) * 0.2, (rand() - 0.5) * 0.8, Math.floor(rand() * 5));
   }
-  // armrests between and outside the seats with a tiny status LED
+  // armrests midway between the seats (and outside the end seats) with a tiny status LED
   for (let i = 0; i <= zs.length; i++) {
-    const z = i < zs.length ? zs[i] - 0.53 : zs[zs.length - 1] + 0.53;
+    const z = i < zs.length ? zs[i] - pitch / 2 : zs[zs.length - 1] + pitch / 2;
     kit.box("paintedMetal", x - 0.06, y + 0.66, z, 0.42, 0.05, 0.07, { color: PALETTE.impGrey, texel: 2 });
     kit.box("paintedMetal", x - 0.06, y + 0.5, z, 0.08, 0.3, 0.05, { color: PALETTE.impDark, texel: 2 });
     kit.box(i % 2 ? "emitBlue" : "emitAmber", x + 0.1, y + 0.686, z, 0.05, 0.005, 0.03);
