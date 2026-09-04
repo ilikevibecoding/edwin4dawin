@@ -8,14 +8,14 @@
 // Phases (FIGHTER_STATES):
 //   parked   hanging in the rack, pod centre at HANGAR.rackY
 //   release  clamps open: vertical drop through the well with a small drift toward the well centre, ends
-//            6 m below the keel (y = -92) at ~14 m/s straight down
+//            10 m below the keel block (y = -92) at ~14 m/s straight down
 //   launch   Hermite track from the well exit: pitch over, accelerate forward, bank out to the patrol
 //            circuit; joins it with matching position, tangent and speed
 //   patrol   closed circuit (belt below the ship, trench run along the far flank, overflight of the
 //            superstructure, high belt, or a formation pair on offset belts); laps until the pilot asks to
 //            return, then leaves the circuit at its exit node
 //   approach curved approach from aft / below into the lane under the keel, flare to vertical under the
-//            well, arriving 6 m below the keel at 5 m/s straight up
+//            well, arriving 10 m below the keel block at 5 m/s straight up
 //   capture  tractor lift straight up through the well onto the rack, decelerating to rest
 // Velocity is continuous across every boundary (tangents and speeds match), heading comes from a lookAt
 // along the aim vector, and bank is derived from the heading rate (path curvature) over a short window.
@@ -459,13 +459,25 @@ export function checkClearance(fighters, minClear = 60) {
       if (min < 0) ok = false;
       worst.push({ fighter: f.id, track: name, margin: +min.toFixed(1), ...at });
     }
-    // the drop / rise must stay inside the well rectangle with a 3 m margin
+    // the drop / rise must keep the whole craft inside the well rectangle with a 3 m margin from the moment
+    // any part of it is below the deck plane
     const w = HANGAR.well;
-    const hx = TIE.halfExtents.x;
-    const hz = TIE.halfExtents.z;
-    const wellOk = f.xE - hx >= w.x0 + 3 && f.xE + hx <= w.x1 - 3 && f.zE - hz >= w.z0 + 3 && f.zE + hz <= w.z1 - 3;
-    if (!wellOk) ok = false;
-    worst.push({ fighter: f.id, track: "well", margin: wellOk ? 3 : -1, x: f.xE, z: f.zE });
+    const { x: hx, y: hy, z: hz } = TIE.halfExtents;
+    let wellMargin = Infinity;
+    let wellAt = null;
+    for (const phase of ["release", "capture"]) {
+      for (let t = 0; t <= 1.0001; t += 0.01) {
+        f.kinematics(phase, t, p, _v);
+        if (p.y - hy > HANGAR.deckY) continue;
+        const m = Math.min(p.x - hx - w.x0, w.x1 - (p.x + hx), p.z - hz - w.z0, w.z1 - (p.z + hz));
+        if (m < wellMargin) {
+          wellMargin = m;
+          wellAt = { x: +p.x.toFixed(1), y: +p.y.toFixed(1), z: +p.z.toFixed(1) };
+        }
+      }
+    }
+    if (wellMargin < 3) ok = false;
+    worst.push({ fighter: f.id, track: "well", margin: +(wellMargin - 3).toFixed(1), clearance: +wellMargin.toFixed(1), need: 3, ...wellAt });
   }
   return { ok, worst };
 }
