@@ -220,6 +220,8 @@ export class DisasterManager {
       this.active.tick = this.tick;
       try { this.active.simulate(); } catch (e) { console.error('disaster tick failed', e); this.active.stop(); this.state = 'finished'; }
       if (this.active.done) { this.state = 'finished'; this.say(`${this.active.constructor.label} ended.`); this._notify(); }
+      // deterministic testing aid: pause exactly at a given tick
+      if (this.pauseAtTick && this.tick >= this.pauseAtTick && this.state === 'running') { this.state = 'paused'; this.pauseAtTick = null; this._notify(); }
       if ((this.tick & 15) === 0) this._notify();
     } else if (this.state === 'finished' && this.active) {
       // let visuals wind down; the disaster sets done when quiet
