@@ -39,7 +39,15 @@ export class FlightCamera {
     this.time += dt;
     const cam = this.camera;
     const t = flight.telemetry;
-    const shake = t.shake * this.shakeScale;
+    // shake is composed from what the airframe is actually doing: low-frequency sway from turbulence, a
+    // 9-11 Hz shudder from stall buffet, and a faint hum at high speed. The old single 0.35 m / 13 Hz jitter
+    // read as nausea, not motion; total positional amplitude now stays within ~0.1 m.
+    const sway = t.gustLevel * this.shakeScale;
+    const buffet = t.buffet * this.shakeScale;
+    const hum = smoothstep(60, 100, t.airspeed) * this.shakeScale;
+    const shakeX = perlin2(this.time * 2.3, 0.3) * 0.10 * sway + perlin2(this.time * 9.5, 1.3) * 0.06 * buffet + perlin2(this.time * 13.0, 2.2) * 0.015 * hum;
+    const shakeY = perlin2(this.time * 2.9, 4.3) * 0.10 * sway + perlin2(this.time * 11.0, 5.7) * 0.06 * buffet + perlin2(this.time * 15.0, 6.1) * 0.015 * hum;
+    const shakeZ = perlin2(this.time * 2.1, 8.3) * 0.10 * sway + perlin2(this.time * 10.2, 9.1) * 0.06 * buffet + perlin2(this.time * 12.0, 7.7) * 0.015 * hum;
     if (this.mode === 'fixed') return;
     if (this.mode === 'cockpit') {
       // eye position rides with the airframe; a little lag on orientation reads as head inertia
@@ -53,10 +61,10 @@ export class FlightCamera {
       // mouse look inside the cockpit
       const look = new THREE.Quaternion().setFromEuler(new THREE.Euler(-this.orbitPitch * 0.6, this.orbitYaw * 1.2, 0, 'YXZ'));
       cam.quaternion.multiply(look);
-      const jitter = shake * 0.012;
-      eye.x += perlin2(this.time * 9.1, 1.1) * jitter;
-      eye.y += perlin2(this.time * 11.3, 2.7) * jitter;
-      eye.z += perlin2(this.time * 8.7, 5.3) * jitter;
+      // head motion: a fraction of the airframe's own shake (the pilot is strapped in)
+      eye.x += shakeX * 0.15;
+      eye.y += shakeY * 0.15;
+      eye.z += shakeZ * 0.15;
       cam.position.copy(eye);
       cam.fov = this.baseFov + 12;
       cam.updateProjectionMatrix();
@@ -85,11 +93,9 @@ export class FlightCamera {
     if (this.pos.y < floor) { this.pos.y = floor; if (this.vel.y < 0) this.vel.y = 0; }
     const look = this.lookTarget.copy(flight.position).addScaledVector(fwd, 6).add(this.lookLift);
     cam.position.copy(this.pos);
-    // shake: turbulence / stall buffet / high speed
-    const s = shake * 0.35;
-    cam.position.x += perlin2(this.time * 13.0, 0.3) * s;
-    cam.position.y += perlin2(this.time * 15.0, 4.3) * s;
-    cam.position.z += perlin2(this.time * 12.0, 8.3) * s;
+    cam.position.x += shakeX;
+    cam.position.y += shakeY;
+    cam.position.z += shakeZ;
     cam.up.set(0, 1, 0);
     cam.lookAt(look);
     const bank = t.bank;
