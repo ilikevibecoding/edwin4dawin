@@ -1,5 +1,5 @@
 // Original TIE/ln-style starfighter, generated in code. Local space: cockpit ball centred on the
-// origin, forward = -Z, wings on ±X. Two detail levels: lod 0 (~3k triangles: cut-away cockpit ball
+// origin, forward = -Z, wings on ±X. Two detail levels: lod 0 (~3.2k triangles: cut-away cockpit ball
 // with an octagonal viewport frame and dark-red glass, hexagonal solar wings with frame beams and
 // radial spokes, pylons, twin ion emitters, chin cannons, hatches) and lod 1 (~600 triangles).
 //
@@ -103,7 +103,7 @@ function wingParts(P, lod, side) {
   }
   // hub boss (pylon socket) on the inner face, and a smaller boss on the outer face
   P.box("impPaintedMetal", IMP.gunmetal, side * -0.22, 0, 0, 0.5, 1.7, 1.7);
-  P.box("impPaintedMetal", IMP.gunmetal, side * 0.16, 0, 0, 0.2, 1.2, 1.2);
+  if (!lod) P.box("impPaintedMetal", IMP.gunmetal, side * 0.16, 0, 0, 0.2, 1.2, 1.2);
   if (!lod) {
     // corner clips on the hub
     for (const sy of [-1, 1]) for (const sz of [-1, 1]) P.box("impPaintedMetal", DARK, side * -0.47, sy * 0.62, sz * 0.62, 0.06, 0.28, 0.28);
@@ -115,8 +115,8 @@ function wingParts(P, lod, side) {
 // Body + everything except the wings, at the origin.
 function bodyParts(P, lod) {
   const R = TIE.radius;
-  const ws = lod ? 12 : 30;
-  const hs = lod ? 8 : 20;
+  const ws = lod ? 10 : 28;
+  const hs = lod ? 7 : 18;
   const cap = 0.56; // angular radius of the removed front / rear caps
   const sph = new THREE.SphereGeometry(R, ws, hs, 0, Math.PI * 2, cap, Math.PI - 2 * cap);
   sph.rotateX(-Math.PI / 2); // +Y pole -> -Z (viewport end)
@@ -127,7 +127,7 @@ function bodyParts(P, lod) {
   // --- viewport (front) --------------------------------------------------------------------
   const zf = -capZ;
   // collar where the frame meets the hull
-  P.add("impPaintedMetal", DARK, new THREE.TorusGeometry(capR + 0.02, 0.09, lod ? 6 : 8, lod ? 12 : 28), { pos: [0, 0, zf + 0.02] });
+  P.add("impPaintedMetal", DARK, new THREE.TorusGeometry(capR + 0.02, 0.09, lod ? 4 : 6, lod ? 8 : 24), { pos: [0, 0, zf + 0.02] });
   if (!lod) {
     const rO = capR + 0.02;
     const apo = rO * Math.cos(Math.PI / 8);
@@ -164,7 +164,7 @@ function bodyParts(P, lod) {
   const zr = capZ;
   const rear = new THREE.CircleGeometry(capR + 0.01, lod ? 8 : 16);
   P.add("impPaintedMetal", IMP.gunmetal, rear, { pos: [0, 0, zr - 0.01] });
-  P.add("impPaintedMetal", DARK, new THREE.TorusGeometry(capR + 0.02, 0.08, lod ? 6 : 8, lod ? 12 : 28), { pos: [0, 0, zr - 0.02] });
+  P.add("impPaintedMetal", DARK, new THREE.TorusGeometry(capR + 0.02, 0.08, lod ? 4 : 6, lod ? 8 : 24), { pos: [0, 0, zr - 0.02] });
   if (!lod) {
     const hatch = new THREE.CylinderGeometry(0.5, 0.56, 0.16, 16);
     hatch.rotateX(Math.PI / 2);
@@ -186,7 +186,7 @@ function bodyParts(P, lod) {
     P.add("impPaintedMetal", BODY, py, { pos: [sx * 2.6, 0, 0] });
     // flange at the hull and the wing root
     P.box("impPaintedMetal", IMP.gunmetal, sx * 2.02, 0, 0, 0.3, 1.3, 1.3);
-    P.box("impPaintedMetal", IMP.gunmetal, sx * 3.08, 0, 0, 0.16, 1.5, 1.5);
+    if (!lod) P.box("impPaintedMetal", IMP.gunmetal, sx * 3.08, 0, 0, 0.16, 1.5, 1.5);
     if (!lod) {
       P.box("impPaintedMetal", DARK, sx * 2.6, 0.56, 0, 0.9, 0.08, 0.3);
       P.box("impPaintedMetal", DARK, sx * 2.6, -0.56, 0, 0.9, 0.08, 0.3);
@@ -197,7 +197,7 @@ function bodyParts(P, lod) {
     // top hatch
     const th = new THREE.CylinderGeometry(0.6, 0.66, 0.14, 20);
     P.add("impPaintedMetal", BODY, th, { pos: [0, R - 0.04, 0.1] });
-    P.add("impPaintedMetal", DARK, new THREE.TorusGeometry(0.62, 0.05, 6, 20), { pos: [0, R + 0.02, 0.1], rot: [Math.PI / 2, 0, 0] });
+    P.add("impPaintedMetal", DARK, new THREE.TorusGeometry(0.62, 0.05, 5, 16), { pos: [0, R + 0.02, 0.1], rot: [Math.PI / 2, 0, 0] });
     P.box("impPaintedMetal", DARK, 0, R + 0.06, 0.1, 0.36, 0.05, 0.08);
     // chin laser cannons
     for (const sx of [-1, 1]) {

@@ -633,7 +633,10 @@ export function createTraffic({ mats, audio, zone } = {}) {
       f.lod = d > T.hide ? -1 : d > T.lod1 ? 1 : 0;
       _m.compose(f.pos, f.quat, _s.set(1, 1, 1));
       for (const lod of [0, 1]) for (const im of lodSets[lod]) im.setMatrixAt(f.id, f.lod === lod ? _m : _zero);
-      const throttle = f.s === "docked" || f.s === "lowering" || f.s === "raising" ? 0.35 : THREE.MathUtils.clamp(0.9 + f.speed / 60, 0.9, 2.2);
+      // exhaust flares grow with distance beyond 350 m so a patrolling fighter still reads as a pair of
+      // glowing specks from the exterior presets (a 9 m craft is a few pixels at 1.7 km)
+      const far = Math.min(6, Math.max(1, d / 350));
+      const throttle = (f.s === "docked" || f.s === "lowering" || f.s === "raising" ? 0.35 : THREE.MathUtils.clamp(0.9 + f.speed / 60, 0.9, 2.2)) * far;
       for (let k = 0; k < 4; k++) {
         if (f.lod < 0) {
           flare.setMatrixAt(f.id * 4 + k, _zero);

@@ -8,7 +8,7 @@
 // North wall carries the lobby door and the raised flight-control booth (ROOMS.flightControl, floor
 // y = -8, a `sub` room of the hangar handled by the zone manager; we just build it here).
 import * as THREE from "three";
-import { ROOMS, HANGAR_WELL, HANGAR_RACKS, STD } from "../../../config/layout.js";
+import { ROOMS, HANGAR_WELL, SHUTTLE_WELL, HANGAR_RACKS, STD } from "../../../config/layout.js";
 import { wallOpenings } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
 import { IMP } from "../../../materials/imperial.js";
@@ -192,7 +192,18 @@ export function buildHangar(kit, ctx) {
     k.boxMM(RIB, [0, -doorT / 2 - 0.5, -halfD], [1.0, -doorT / 2, halfD], { color: IMP.trench, texel: 0.5 });
     for (let z = -halfD + 6; z < halfD; z += 12) k.box("emitRed", 3.0, -doorT / 2 - 0.2, z, 0.6, 0.06, 0.6);
   });
-  const doors = instancedSet(kit, mats, doorParts, 2);
+  // instances 0/1: the hangar's sliding halves. 2/3: the shuttle well's permanently closed halves (same
+  // parts, scaled to SHUTTLE_WELL). They live in this hero room rather than the shuttle bay so the
+  // exterior camera, which streams the hangar from much further out, never sees an open shaft there.
+  const doors = instancedSet(kit, mats, doorParts, 4);
+  {
+    const S = SHUTTLE_WELL;
+    const sx = (S.x1 - S.x0) / 2 / halfW;
+    const sz = (S.z1 - S.z0) / 2 / halfD;
+    _p.set((S.x0 + S.x1) / 2, S.yKeel, (S.z0 + S.z1) / 2);
+    doors.set(2, _m.compose(_p, _q.identity(), _s.set(sx, 1, sz)));
+    doors.set(3, _m.compose(_p, _q.setFromAxisAngle(UP, Math.PI), _s.set(sx, 1, sz)));
+  }
   const doorPose = (k) => {
     const shift = halfW * smooth(k);
     _p.set(wellCX + shift, W.yKeel, wellCZ);
@@ -262,8 +273,19 @@ export function buildHangar(kit, ctx) {
     kit.cyl("emitBlue", e.pos.x, e.pos.y - 0.15, e.pos.z, 0.55, 0.1, "y", { segments: 16 });
     kit.box("blinkSparse", e.pos.x + (e.pos.x > 0 ? -1.21 : 1.21), e.pos.y + 0.9, e.pos.z, 0.01, 0.4, 1.2, { uv: "keep" });
   }
-  const coneGeo = new THREE.CylinderGeometry(4.5, 0.4, 1, 20, 1, true);
+  const coneGeo = new THREE.CylinderGeometry(3.0, 0.4, 1, 20, 1, true);
   coneGeo.translate(0, -0.5, 0); // apex at the origin, opening along -y
+  // additive beam: bright at the emitter, fading toward the shaft (vertex colour ramps to near black)
+  {
+    const pos = coneGeo.attributes.position;
+    const col = new Float32Array(pos.count * 3);
+    for (let i = 0; i < pos.count; i++) {
+      const k = 1 + pos.getY(i) * 0.85; // y: 0 at the apex .. -1 at the base
+      col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = k;
+    }
+    coneGeo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    tractorMat.vertexColors = true;
+  }
   const cones = new THREE.InstancedMesh(coneGeo, tractorMat, emitters.length);
   cones.name = "tractor_cones";
   cones.frustumCulled = true;
@@ -685,7 +707,7 @@ export function buildHangar(kit, ctx) {
     anim.tractorHold = Math.max(0, anim.tractorHold - dt);
     const want = anim.tractorHold > 0 ? 1 : 0;
     anim.tractorLevel = snap ? want : anim.tractorLevel + (want - anim.tractorLevel) * Math.min(1, dt * 2.5);
-    tractorMat.opacity = 0.22 * anim.tractorLevel * (0.85 + 0.15 * Math.sin(tNow * 9));
+    tractorMat.opacity = 0.09 * anim.tractorLevel * (0.85 + 0.15 * Math.sin(tNow * 9));
     cones.visible = anim.tractorLevel > 0.01;
     // rack rams / jaws
     for (const st of rackState) {
