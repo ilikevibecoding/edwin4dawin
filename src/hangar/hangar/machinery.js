@@ -1,10 +1,12 @@
 // d4-hangar machinery: the ceiling crane (two full-length gantry rails at y -16 hung from the ceiling
-// ribs, an underslung bridge with maintenance walkway, trolley, hoist and hook block, all driven by t),
-// and the deck-level utility clutter clustered under the racks, along the end walls and by the spawn:
-// fuel bowsers, ground-power carts, tool carts, crate stacks, cable reels, mobile access platforms,
-// drums. Nothing stands on a landing pad, taxi lane or door approach.
+// ribs with a lit strip under each, an underslung bridge with light-grey flanges, lit under-girder
+// strips and a maintenance walkway, a trolley with amber beacons, hoist and hook block, driven by t on
+// a park-travel-park schedule that leaves it over the aft apron with the hook down at t = 40), and the
+// deck-level utility clutter clustered under the racks, along the end walls and by the spawn: fuel
+// bowsers, ground-power carts, tool carts, crate stacks, cable reels, mobile access platforms, drums.
+// Nothing stands on a landing pad, taxi lane or door approach.
 import * as THREE from "three";
-import { Batch, Batcher } from "./batch.js";
+import { Batch, Batcher, sharedCylinder } from "./batch.js";
 import { FLOOR, CEIL, WALL_T, HALL, RIB_Z, RIB_D, RAIL_H, HG } from "./layout.js";
 import { label, railRun } from "./util.js";
 
@@ -16,6 +18,14 @@ const RAIL_TOP = -16;
 const RIB_BOTTOM = CEIL - WALL_T - RIB_D; // underside of the transverse ceiling ribs
 const GIRDER_Z = 1.4; // half distance between the two bridge girders
 const DRUM_Y = -20.75; // hoist drum axis (trolley local)
+// schedule (module clock, 200 s cycle, offset so t = 40 lands mid-dwell over the apron): dwell forward
+// over pad 05 with the hook part-lowered, 40 s travel aft, 60 s dwell over the aft apron (bridge z 112,
+// trolley x 10) with the hook block down at y -42, travel back
+const PARK_AFT = { z: 112, x: 10, hook: -42 };
+const PARK_FWD = { z: -52, x: -20, hook: -30 };
+const HOOK_TRAVEL = -22;
+const smooth = (k) => k * k * (3 - 2 * k);
+const seg = (u, a, b) => smooth(Math.min(1, Math.max(0, (u - a) / (b - a))));
 
 /** static rails + hangers (kit) and the moving bridge/trolley/hook (meshes on ctx.group). Returns {update}. */
 export function buildCrane(ctx) {
@@ -26,10 +36,13 @@ export function buildCrane(ctx) {
   for (const s of [-1, 1]) {
     const x = s * RAIL_X;
     const mm = (a, b) => [Math.min(x + s * a, x + s * b), Math.max(x + s * a, x + s * b)];
-    // I-beam rail: top flange, web, bottom flange (the trucks ride the bottom flange)
+    // I-beam rail: top flange, web, light-grey bottom flange (the trucks ride it), then a black channel
+    // under the flange with a continuous lit strip: the two rails read as lit lines along the roof
     B.boxMM("paintedMetal", impDark, [x - 0.32, RAIL_TOP - 0.12, z0], [x + 0.32, RAIL_TOP, z1], { texel: 0.5 });
     B.boxMM("paintedMetal", impDark, [x - 0.07, RAIL_TOP - 0.9, z0 + 0.02], [x + 0.07, RAIL_TOP - 0.12, z1 - 0.02], { texel: 0.5 });
     B.boxMM("metal", HG.steel, [x - 0.32, RAIL_TOP - 1.02, z0], [x + 0.32, RAIL_TOP - 0.9, z1]);
+    B.boxMM("paintedMetal", PALETTE.impBlack, [x - 0.16, RAIL_TOP - 1.12, z0 + 0.3], [x + 0.16, RAIL_TOP - 1.02, z1 - 0.3]);
+    B.boxMM("emitWhite", 0xffffff, [x - 0.1, RAIL_TOP - 1.125, z0 + 0.5], [x + 0.1, RAIL_TOP - 1.11, z1 - 0.5]);
     // hangers to the transverse ceiling ribs with foot plates and a knee gusset toward the wall
     for (const z of RIB_Z) {
       B.boxMM("paintedMetal", impDark, [x - 0.25, RAIL_TOP + 0.1, z - 0.25], [x + 0.25, RIB_BOTTOM, z + 0.25], { texel: 0.5 });
@@ -43,8 +56,8 @@ export function buildCrane(ctx) {
     B.boxMM("rubber", HG.rubber, [a, RAIL_TOP - 0.42, z0 + 0.1], [b, RAIL_TOP - 0.28, z1 - 0.1]);
     [a, b] = mm(0.3, 2.0);
     for (let z = z0 + 6; z < z1 - 2; z += 12) B.boxMM("metal", HG.gunmetal, [a, RAIL_TOP - 0.1, z - 0.06], [b, RAIL_TOP, z + 0.06]);
-    // end stops in the truck path
-    for (const z of [z0 + 0.6, z1 - 0.6]) B.boxMM("hgHazard", 0xffffff, [x - 0.6, RAIL_TOP - 2.5, z - 0.2], [x + 0.6, RAIL_TOP - 1.05, z + 0.2], { texel: 1 });
+    // end stops in the truck path (black/yellow chevron)
+    for (const z of [z0 + 0.6, z1 - 0.6]) B.boxMM("hazard", 0xffffff, [x - 0.6, RAIL_TOP - 2.5, z - 0.2], [x + 0.6, RAIL_TOP - 1.15, z + 0.2], { texel: 1 });
   }
   B.flush();
 
@@ -63,7 +76,10 @@ export function buildCrane(ctx) {
   for (const zs of [-GIRDER_Z, GIRDER_Z]) {
     bb.box(0, -17.6, zs, L, 1.4, 0.7, { color: impDark, texel: 0.5 });
     bb.box(0, -16.84, zs, L, 0.12, 0.9, { color: impMid, texel: 0.5 });
-    bb.box(0, -18.36, zs, L, 0.12, 0.9, { color: impMid, texel: 0.5 });
+    // light-grey bottom flange (the underside is what the deck sees) with a lit strip in a black channel
+    bb.box(0, -18.36, zs, L, 0.12, 0.9, { color: HG.steel });
+    bb.box(0, -18.45, zs, L - 3, 0.06, 0.24, { color: PALETTE.impBlack });
+    be.box(0, -18.475, zs, L - 3.4, 0.01, 0.14);
     // stiffener plates every 6 m on the outer face
     for (let x = -60; x <= 60; x += 6) bb.box(x, -17.6, zs + Math.sign(zs) * 0.36, 0.25, 1.3, 0.04, { color: impMid });
   }
@@ -76,8 +92,13 @@ export function buildCrane(ctx) {
   bb.box(0, -16.9 + RAIL_H, wz + 0.78, L - 2, 0.05, 0.06, { color: HG.steel });
   bb.box(0, -16.9 + RAIL_H * 0.55, wz + 0.78, L - 2, 0.04, 0.05, { color: HG.steel });
   bb.box(0, -16.8, wz + 0.78, L - 2, 0.2, 0.03, { color: HG.gunmetal });
-  // work lights under both girders every 10 m
-  for (let x = -55; x <= 55; x += 10) for (const zs of [-GIRDER_Z, GIRDER_Z]) be.box(x, -18.48, zs, 0.8, 0.1, 0.5);
+  // housed work lights under both girders every 10 m (housing in the body batch, lens in the emitter batch)
+  for (let x = -55; x <= 55; x += 10) {
+    for (const zs of [-GIRDER_Z, GIRDER_Z]) {
+      bb.box(x, -18.56, zs, 0.9, 0.16, 0.6, { color: impDark });
+      be.box(x, -18.645, zs, 0.8, 0.02, 0.5);
+    }
+  }
   const meshB = new THREE.Mesh(bb.geometry(), materials.paintedMetal);
   const meshE = new THREE.Mesh(be.geometry(0xffffff), materials.emitWhite);
   const meshP = new THREE.Mesh(bp.geometry(0xffffff), materials.hgPulse);
@@ -93,11 +114,16 @@ export function buildCrane(ctx) {
   for (const sx of [-1, 1]) tb.box(sx * 1.0, -20.1, 0, 0.2, 0.9, 0.6, { color: impDark }); // drum mounts
   tb.addGeometry(new THREE.CylinderGeometry(0.45, 0.45, 1.8, 14), { pos: [0, DRUM_Y, 0], quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2), color: HG.gunmetal });
   tb.addGeometry(new THREE.CylinderGeometry(0.2, 0.2, 0.4, 10), { pos: [0, -19.1, -1.9], quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2), color: HG.steel }); // motor stub
+  // amber beacon housings on the four corners of the hoist body (lenses in the amber batch below)
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) tb.box(sx * 1.0, -18.4, sz * 1.5, 0.36, 0.3, 0.36, { color: HG.gunmetal });
   const meshT = new THREE.Mesh(tb.geometry(), materials.paintedMetal);
   const te = new Batch();
   for (const sx of [-1, 1]) te.box(sx * 0.8, -19.68, 1.2, 0.5, 0.06, 0.3);
   te.box(0, -18.75, -1.72, 0.9, 0.08, 0.02);
   const meshTE = new THREE.Mesh(te.geometry(0xffffff), materials.emitWhite);
+  const ta = new Batch();
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) ta.box(sx * 1.0, -18.19, sz * 1.5, 0.26, 0.12, 0.26);
+  const meshTA = new THREE.Mesh(ta.geometry(0xffffff), materials.emitAmber);
   // two hoist cables: unit-height boxes hanging from the drum, scaled to the hook height each frame
   const cb = new Batch();
   for (const sx of [-0.45, 0.45]) cb.box(sx, -0.5, 0, 0.07, 1, 0.07, { color: HG.steel });
@@ -112,21 +138,64 @@ export function buildCrane(ctx) {
   hb.box(0, -0.85, 0, 0.16, 0.5, 0.16, { color: HG.steel });
   // J hook: half torus whose upper end meets the shank at (0, -1.1), curving down and round on +x
   hb.addGeometry(new THREE.TorusGeometry(0.34, 0.09, 8, 18, Math.PI), { pos: [0, -1.44, 0], quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2), color: HG.steel });
-  const hazard = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.3, 0.52), materials.hgHazard);
+  const hazard = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.3, 0.52), materials.hazard);
   hazard.position.y = -0.4;
-  hook.add(new THREE.Mesh(hb.geometry(), materials.paintedMetal), hazard);
-  trolley.add(meshT, meshTE, cables, hook);
+  // housed amber lamp on the block's top (the lowered hook reads as a lit point from the deck)
+  const hookLamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.3), materials.emitAmber);
+  hookLamp.position.set(0, 0.64, 0);
+  // slung load: a spreader bar on two slings from the hook, a 2.4 m cargo container on four slings under
+  // it (recessed side panels, corner posts, dark lid) - the crane is at work, not a bare hook 50 m up
+  const lb = new Batch(), lp = new Batch();
+  const sling = (batch, a, b, r) => {
+    const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    const len = d.length();
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+    batch.addGeometry(sharedCylinder(1, 1, 6), { pos: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], quat: q, scale: [r, len, r], color: HG.steel });
+  };
+  lb.box(0, -2.3, 0, 3.2, 0.16, 0.16, { color: HG.steel });
+  for (const sx of [-1, 1]) {
+    lb.box(sx * 1.5, -2.3, 0, 0.2, 0.3, 0.3, { color: impDark });
+    sling(lb, [0, -1.55, 0], [sx * 1.5, -2.2, 0], 0.03);
+  }
+  const C = 2.4, cTop = -3.3, cy = cTop - 1.1;
+  lp.box(0, cy, 0, C, 2.2, C, { color: impMid, texel: 1 });
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const vy of [-0.55, 0.55]) lp.box(dx * (C / 2 + 0.01), cy + vy, dz * (C / 2 + 0.01), dx ? 0.02 : 1.7, 0.7, dz ? 0.02 : 1.7, { color: PALETTE.impBlack, texel: 1 });
+  for (const dx of [-1, 1]) for (const dz of [-1, 1]) lb.box((dx * C) / 2, cy, (dz * C) / 2, 0.1, 2.24, 0.1, { color: HG.gunmetal });
+  lp.box(0, cTop + 0.05, 0, C - 0.1, 0.1, C - 0.1, { color: impDark, texel: 1 });
+  lb.box(0, cy, 0, C + 0.03, 0.06, C + 0.03, { color: HG.gunmetal });
+  for (const dx of [-1, 1]) for (const dz of [-1, 1]) sling(lb, [dx * 1.5, -2.38, 0], [dx * 1.1, cTop, dz * 1.1], 0.025);
+  hook.add(new THREE.Mesh(hb.geometry(), materials.paintedMetal), hazard, hookLamp, new THREE.Mesh(lb.geometry(), materials.paintedMetal), new THREE.Mesh(lp.geometry(), materials.impPanel));
+  trolley.add(meshT, meshTE, meshTA, cables, hook);
   bridge.add(trolley);
   group.add(bridge);
 
   // moving work light under the trolley (descriptor pos is re-read every frame by the pool)
-  const light = { type: "point", pos: [0, -22, 32], color: 0xf4f7ff, intensity: 90, distance: 45, priority: 0.35 };
+  const light = { type: "point", pos: [PARK_AFT.x, -22, PARK_AFT.z], color: 0xfff1dc, intensity: 130, distance: 48, priority: 0.35 };
   ctx.lights.push(light);
 
   const update = (t) => {
-    const zc = 32 + 40 * Math.sin((t * Math.PI * 2) / 120);
-    const xt = 30 * Math.sin((t * Math.PI * 2) / 75 + 1.2);
-    const yH = -35 + 3 * Math.sin((t * Math.PI * 2) / 50 + 0.5);
+    const u = (t + 50) % 200; // t = 40 -> u = 90: mid-dwell over the aft apron, hook down
+    let zc, xt;
+    if (u < 20 || u >= 160) {
+      zc = PARK_FWD.z;
+      xt = PARK_FWD.x;
+    } else if (u < 60) {
+      const k = seg(u, 20, 60);
+      zc = PARK_FWD.z + (PARK_AFT.z - PARK_FWD.z) * k;
+      xt = PARK_FWD.x + (PARK_AFT.x - PARK_FWD.x) * k;
+    } else if (u < 120) {
+      zc = PARK_AFT.z;
+      xt = PARK_AFT.x;
+    } else {
+      const k = seg(u, 120, 160);
+      zc = PARK_AFT.z + (PARK_FWD.z - PARK_AFT.z) * k;
+      xt = PARK_AFT.x + (PARK_FWD.x - PARK_AFT.x) * k;
+    }
+    // hook: at travel height while moving, lowered over 12 s after each arrival and raised in the 12 s
+    // before each departure
+    const aft = u >= 60 && u < 120 ? seg(u, 60, 72) * (1 - seg(u, 108, 120)) : 0;
+    const fwd = u < 20 ? 1 - seg(u, 8, 20) : u >= 160 ? seg(u, 160, 172) : 0;
+    const yH = HOOK_TRAVEL + (PARK_AFT.hook - HOOK_TRAVEL) * aft + (PARK_FWD.hook - HOOK_TRAVEL) * fwd;
     bridge.position.z = zc;
     trolley.position.x = xt;
     hook.position.y = yH;
@@ -209,26 +278,47 @@ class Placer {
 }
 
 const F = FLOOR;
+const CRATE_TEXT = ["CAUTION", "DECK 4", "SEALED", "FUEL", "KEEP CLEAR"];
+let crateSeq = 0;
 
 /**
- * 1.2 m (default) crate on skids: painted-panel body, recessed dark side panels, corner posts, lid
- * frame, mid band, optional stencil; level stacks them
+ * Cargo crate (s m cube) whose skids stand at `base`: painted-panel body, recessed dark side panels split
+ * by a steel mid band, steel corner posts with caps, a proud dark lid with a steel rim plate, two latch
+ * plates on the front and back faces, a stencil on the front (every crate gets one; the text cycles when
+ * none is given).
  */
-function crate(P, lx, lz, s = 1.2, tone = "mid", level = 0, text = null) {
-  const y0 = F + level * (s + 0.11);
+function crateAt(P, lx, lz, s, tone, base, text) {
   const color = tone === "dark" ? P.P.impDark : tone === "grey" ? P.P.impGrey : P.P.impMid;
-  const cy = y0 + 0.08 + s / 2;
+  const cy = base + 0.08 + s / 2, top = base + 0.08 + s;
   P.box("impPanel", color, lx, cy, lz, s, s, s, { texel: 1 });
-  // recessed panels on the four sides (upper and lower halves, split by the band)
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const w = s * 0.72, h = s * 0.32;
     for (const vy of [-s * 0.24, s * 0.24]) P.box("paintedMetal", P.P.impBlack, lx + dx * (s / 2 + 0.01), cy + vy, lz + dz * (s / 2 + 0.01), dx ? 0.02 : w, h, dz ? 0.02 : w, { texel: 1 });
   }
-  for (const d of [-1, 1]) P.box("metal", HG.gunmetal, lx + d * s * 0.35, y0 + 0.04, lz, 0.12, 0.08, s * 0.9);
-  for (const dx of [-1, 1]) for (const dz of [-1, 1]) P.box("metal", HG.gunmetal, lx + (dx * s) / 2, cy, lz + (dz * s) / 2, 0.09, s + 0.02, 0.09);
-  P.box("paintedMetal", P.P.impDark, lx, y0 + 0.08 + s + 0.02, lz, s - 0.24, 0.04, s - 0.24, { texel: 1 });
+  for (const d of [-1, 1]) P.box("metal", HG.gunmetal, lx + d * s * 0.35, base + 0.04, lz, 0.12, 0.08, s * 0.9);
+  for (const dx of [-1, 1]) for (const dz of [-1, 1]) {
+    P.box("metal", HG.gunmetal, lx + (dx * s) / 2, cy, lz + (dz * s) / 2, 0.09, s + 0.02, 0.09);
+    P.box("metal", HG.steel, lx + dx * (s / 2 - 0.03), top + 0.07, lz + dz * (s / 2 - 0.03), 0.17, 0.14, 0.17);
+  }
   P.box("metal", HG.gunmetal, lx, cy, lz, s + 0.03, 0.06, s + 0.03);
-  if (text) P.label("hgDecal", text, [lx, cy - s * 0.24, lz - s / 2 - 0.03], [0, 0, -1], s * 0.5, { color: HG.white });
+  // lid: proud slab, steel rim plate, a dark grip recess across the middle
+  P.box("paintedMetal", P.P.impDark, lx, top + 0.05, lz, s - 0.12, 0.1, s - 0.12, { texel: 1 });
+  P.box("metal", HG.steel, lx, top + 0.11, lz, s - 0.3, 0.02, s - 0.3);
+  P.box("paintedMetal", P.P.impBlack, lx, top + 0.125, lz, s * 0.3, 0.01, 0.08, { texel: 1 });
+  // latch plates (steel with a dark keeper slot) under the top edge of the front and back faces
+  for (const dz of [-1, 1]) {
+    for (const dx of [-0.3, 0.3]) {
+      P.box("metal", HG.steel, lx + dx * s, top - 0.16, lz + dz * (s / 2 + 0.02), 0.14, 0.2, 0.04);
+      P.box("paintedMetal", P.P.impBlack, lx + dx * s, top - 0.18, lz + dz * (s / 2 + 0.045), 0.06, 0.08, 0.01, { texel: 1 });
+    }
+  }
+  const txt = text || CRATE_TEXT[crateSeq++ % CRATE_TEXT.length];
+  P.label("hgDecal", txt, [lx, cy - s * 0.24, lz - s / 2 - 0.03], [0, 0, -1], s * 0.5, { color: HG.white });
+}
+
+/** crate on the deck; `level` stacks it on a same-size crate below (skids resting on its corner caps) */
+function crate(P, lx, lz, s = 1.2, tone = "mid", level = 0, text = null) {
+  crateAt(P, lx, lz, s, tone, F + level * (s + 0.22), text);
 }
 
 /** deck tug: low cab with a canopy, four wheels, headlights, beacon, tow hitch at +lz */
@@ -256,7 +346,7 @@ function tug(P, lx, lz) {
 /** flatbed trailer (4.4 x 2.4) on four wheels with a draw bar toward -lz and a load of crates */
 function trailer(P, lx, lz, load = "crates") {
   P.box("paintedMetal", P.P.impDark, lx, F + 0.72, lz, 2.4, 0.16, 4.4, { texel: 0.5 });
-  P.box("hgHazard", 0xffffff, lx, F + 0.72, lz + 2.21, 2.4, 0.17, 0.02, { texel: 1 });
+  P.box("hazard", 0xffffff, lx, F + 0.72, lz + 2.21, 2.4, 0.17, 0.02, { texel: 1 });
   for (const dx of [-1.1, 1.1]) for (const dz of [-1.4, 1.4]) {
     P.cyl("rubber", HG.rubber, lx + dx, F + 0.4, lz + dz, 0.4, 0.3, "x", { segments: 14 });
     P.cyl("metal", HG.steel, lx + dx, F + 0.4, lz + dz, 0.18, 0.32, "x", { segments: 10 });
@@ -274,23 +364,15 @@ function trailer(P, lx, lz, load = "crates") {
     P.kcyl("paintedMetal", P.P.impGrey, lx, F + 1.7, lz, 0.85, 3.8, "z", { segments: 18, texel: 0.5 });
     for (const dz of [-1.6, 1.6]) P.cyl("metal", HG.gunmetal, lx, F + 1.7, lz + dz, 0.7, 0.16, "z", { segments: 18 });
     for (const dz of [-1.2, 1.2]) P.box("metal", HG.gunmetal, lx, F + 1.0, lz + dz, 1.8, 0.4, 0.2);
-    P.kcyl("hgHazard", 0xffffff, lx, F + 1.7, lz, 0.865, 0.3, "z", { segments: 18, texel: 1 });
+    P.kcyl("hazard", 0xffffff, lx, F + 1.7, lz, 0.865, 0.3, "z", { segments: 18, texel: 1 });
     P.label("hgDecal", "FUEL", [lx - 0.855, F + 1.75, lz + 1.0], [-1, 0, 0], 1.2, { color: HG.red });
     P.label("hgDecal", "FUEL", [lx + 0.855, F + 1.75, lz + 1.0], [1, 0, 0], 1.2, { color: HG.red });
   }
 }
 
-/** crate whose base sits `lift` above the deck (trailer loads) */
+/** crate whose skids sit `lift` above the deck (trailer loads) */
 function crateOn(P, lx, lz, s, tone, lift, text = null) {
-  const color = tone === "dark" ? P.P.impDark : tone === "grey" ? P.P.impGrey : P.P.impMid;
-  const cy = F + lift + s / 2;
-  P.box("impPanel", color, lx, cy, lz, s, s, s, { texel: 1 });
-  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-    for (const vy of [-s * 0.24, s * 0.24]) P.box("paintedMetal", P.P.impBlack, lx + dx * (s / 2 + 0.01), cy + vy, lz + dz * (s / 2 + 0.01), dx ? 0.02 : s * 0.72, s * 0.32, dz ? 0.02 : s * 0.72, { texel: 1 });
-  }
-  for (const dx of [-1, 1]) for (const dz of [-1, 1]) P.box("metal", HG.gunmetal, lx + (dx * s) / 2, cy, lz + (dz * s) / 2, 0.09, s + 0.02, 0.09);
-  P.box("metal", HG.gunmetal, lx, cy, lz, s + 0.03, 0.06, s + 0.03);
-  if (text) P.label("hgDecal", text, [lx, cy - s * 0.24, lz - s / 2 - 0.03], [0, 0, -1], s * 0.5, { color: HG.white });
+  crateAt(P, lx, lz, s, tone, F + lift - 0.08, text);
 }
 
 /** tug + two trailers in a train along +lz (tug at the -lz end) */
@@ -311,7 +393,7 @@ function tallGantry(P, lx, lz) {
     P.cyl("rubber", HG.rubber, lx + dx, F + 0.22, lz + dz, 0.22, 0.2, "x", { segments: 12 });
     P.box("metal", HG.gunmetal, lx + dx, F + 0.4, lz + dz, 0.4, 0.14, 0.4);
   }
-  for (const dz of [-D / 2, D / 2]) P.box("hgHazard", 0xffffff, lx, F + 0.35, lz + dz, W + 0.02, 0.26, 0.03, { texel: 1 });
+  for (const dz of [-D / 2, D / 2]) P.box("hazard", 0xffffff, lx, F + 0.35, lz + dz, W + 0.02, 0.26, 0.03, { texel: 1 });
   for (const dx of [-W / 2 + 0.15, W / 2 - 0.15]) for (const dz of [-D / 2 + 0.15, D / 2 - 0.15]) P.box("paintedMetal", P.P.impMid, lx + dx, F + 0.47 + (Ht + 0.6) / 2, lz + dz, 0.22, Ht + 0.6, 0.22, { texel: 0.5 });
   // cross bracing on the long faces, two bays
   for (const dz of [-D / 2 + 0.15, D / 2 - 0.15]) {
@@ -357,19 +439,38 @@ function drum(P, lx, lz, color) {
   for (const y of [0.28, 0.62]) P.cyl("metal", HG.steel, lx, F + y, lz, 0.315, 0.05, "y", { segments: 14 });
 }
 
+/**
+ * tool cart: red drawer cabinet on a dark chassis with four visible castors, four drawer fronts with
+ * steel pulls, a rubber mat top carrying a tray and a toolbox, a push handle at +lx and a hose reel on
+ * the -lx end with its hose trailing onto the deck
+ */
 function toolCart(P, lx, lz) {
-  P.box("paintedMetal", HG.red, lx, F + 0.575, lz, 1.1, 0.85, 0.6, { texel: 1 });
-  for (const dx of [-0.45, 0.45]) for (const dz of [-0.22, 0.22]) P.cyl("metal", HG.gunmetal, lx + dx, F + 0.075, lz + dz, 0.075, 0.05, "x", { segments: 8 });
+  P.box("paintedMetal", P.P.impBlack, lx, F + 0.21, lz, 1.04, 0.06, 0.54, { texel: 1 });
+  for (const dx of [-0.4, 0.4]) for (const dz of [-0.2, 0.2]) {
+    P.cyl("rubber", HG.rubber, lx + dx, F + 0.11, lz + dz, 0.11, 0.07, "x", { segments: 10 });
+    P.box("metal", HG.gunmetal, lx + dx, F + 0.17, lz + dz, 0.05, 0.14, 0.1);
+  }
+  P.box("paintedMetal", HG.red, lx, F + 0.63, lz, 1.1, 0.78, 0.6, { texel: 1 });
   for (let i = 0; i < 4; i++) {
-    const y = F + 0.25 + i * 0.19;
-    P.box("paintedMetal", P.P.impMid, lx, y, lz - 0.31, 1.0, 0.15, 0.02, { texel: 1 });
+    const y = F + 0.33 + i * 0.17;
+    P.box("paintedMetal", P.P.impMid, lx, y, lz - 0.31, 1.0, 0.13, 0.02, { texel: 1 });
     P.box("metal", HG.steel, lx, y, lz - 0.335, 0.34, 0.03, 0.03);
   }
-  P.box("metal", HG.gunmetal, lx, F + 1.02, lz, 1.14, 0.04, 0.64);
-  P.box("metal", HG.steel, lx - 0.25, F + 1.08, lz + 0.05, 0.4, 0.08, 0.25);
-  P.box("metal", HG.gunmetal, lx + 0.25, F + 1.07, lz - 0.1, 0.25, 0.06, 0.18);
-  P.tube("metal", HG.steel, [lx + 0.6, F + 0.4, lz], [lx + 0.6, F + 1.0, lz], 0.025, { segments: 8 });
-  P.tube("metal", HG.steel, [lx + 0.6, F + 1.0, lz - 0.28], [lx + 0.6, F + 1.0, lz + 0.28], 0.025, { segments: 8 });
+  P.box("metal", HG.gunmetal, lx, F + 1.03, lz, 1.14, 0.04, 0.64);
+  P.box("rubber", HG.rubber, lx, F + 1.06, lz, 1.06, 0.02, 0.56);
+  P.box("metal", HG.steel, lx - 0.25, F + 1.11, lz + 0.05, 0.4, 0.08, 0.25);
+  P.box("paintedMetal", P.P.impDark, lx + 0.25, F + 1.14, lz - 0.1, 0.3, 0.14, 0.2, { texel: 1 });
+  P.box("metal", HG.steel, lx + 0.25, F + 1.22, lz - 0.1, 0.12, 0.02, 0.04);
+  // push handle: two uprights and a cross bar with a rubber grip
+  for (const dz of [-0.24, 0.24]) P.tube("metal", HG.steel, [lx + 0.6, F + 0.45, lz + dz], [lx + 0.6, F + 1.12, lz + dz], 0.02, { segments: 8 });
+  P.tube("metal", HG.steel, [lx + 0.6, F + 1.12, lz - 0.26], [lx + 0.6, F + 1.12, lz + 0.26], 0.025, { segments: 8 });
+  P.box("rubber", HG.rubber, lx + 0.6, F + 1.12, lz, 0.07, 0.07, 0.3);
+  // hose reel on the -lx end (axis along lx): two flanges, the hose wound between, bracket, hose to the deck
+  P.box("metal", HG.gunmetal, lx - 0.6, F + 0.72, lz, 0.1, 0.06, 0.5);
+  for (const dx of [-0.64, -0.82]) P.cyl("metal", HG.gunmetal, lx + dx, F + 0.72, lz, 0.22, 0.04, "x", { segments: 14 });
+  P.cyl("rubber", HG.rubber, lx - 0.73, F + 0.72, lz, 0.17, 0.15, "x", { segments: 12 });
+  P.cyl("metal", HG.steel, lx - 0.73, F + 0.72, lz, 0.03, 0.3, "x", { segments: 8 });
+  P.tube("rubber", HG.rubber, [lx - 0.76, F + 0.56, lz + 0.12], [lx - 1.15, F + 0.05, lz + 0.45], 0.03, { segments: 8 });
 }
 
 /** ground power unit: dark cabinet on wheels, vents, indicator panel, a heavy cable on the deck */
@@ -398,7 +499,7 @@ function bowser(P, lx, lz) {
   }
   P.kcyl("paintedMetal", P.P.impGrey, lx, F + 1.75, lz - 0.3, 0.95, 3.4, "z", { segments: 20, texel: 0.5 });
   for (const dz of [-2.05, 1.45]) P.cyl("metal", HG.gunmetal, lx, F + 1.75, lz + dz, 0.8, 0.14, "z", { segments: 20 });
-  P.kcyl("hgHazard", 0xffffff, lx, F + 1.75, lz + 0.6, 0.965, 0.3, "z", { segments: 20, texel: 1 });
+  P.kcyl("hazard", 0xffffff, lx, F + 1.75, lz + 0.6, 0.965, 0.3, "z", { segments: 20, texel: 1 });
   for (const dx of [-0.92, 0.92]) for (const dz of [-1.2, 0.6]) P.box("metal", HG.gunmetal, lx + dx, F + 1.25, lz + dz, 0.12, 0.9, 0.16);
   P.cyl("metal", HG.gunmetal, lx, F + 2.72, lz - 0.3, 0.3, 0.24, "y", { segments: 14 });
   P.box("paintedMetal", P.P.impMid, lx, F + 1.36, lz + 2.0, 1.6, 1.1, 0.8, { texel: 1 });
@@ -431,7 +532,7 @@ function cableReel(P, lx, lz) {
 function accessPlatform(P, lx, lz) {
   P.box("paintedMetal", P.P.impDark, lx, F + 0.28, lz, 1.6, 0.12, 2.4, { texel: 0.5 });
   for (const dx of [-0.65, 0.65]) for (const dz of [-1.05, 1.05]) P.cyl("metal", HG.gunmetal, lx + dx, F + 0.11, lz + dz, 0.11, 0.08, "x", { segments: 10 });
-  for (const dz of [-1.2, 1.2]) P.box("hgHazard", 0xffffff, lx, F + 0.28, lz + dz, 1.62, 0.13, 0.03, { texel: 1 });
+  for (const dz of [-1.2, 1.2]) P.box("hazard", 0xffffff, lx, F + 0.28, lz + dz, 1.62, 0.13, 0.03, { texel: 1 });
   for (const dx of [-0.72, 0.72]) for (const dz of [-1.12, 1.12]) P.box("metal", HG.gunmetal, lx + dx, F + 1.84, lz + dz, 0.08, 3.0, 0.08);
   for (const dx of [-0.72, 0.72]) {
     P.tube("metal", HG.steel, [lx + dx, F + 0.4, lz - 1.1], [lx + dx, F + 2.8, lz + 1.1], 0.025, { segments: 6 });

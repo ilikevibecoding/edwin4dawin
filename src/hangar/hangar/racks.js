@@ -2,14 +2,16 @@
 // fighter centres at (+-70, -62 | -46, z 30..90) - clear of both bay doors, 16 m between tiers). Each
 // slot: overhead beam from the wall, two hinged clamp arms (closed: hanging 8 m apart on the fighter's
 // wing panels; open: swung up clear of the traffic system's approach along the slot's x axis), carriage
-// + winch, umbilical reel + hose, housed slot lamp + label. Service platforms (1.4 m wide) with rails run
-// along the wall at each tier, detouring around the frame ribs, with a two-railed stair from the deck to
-// tier 1 and caged ladders to tier 2. Exposes the slot list for the traffic system; the arms follow each
-// slot's `occupied` flag, which that system writes.
+// + winch, umbilical reel + hose, housed amber slot lamps (one on the beam end toward the hall, one under
+// the beam onto the fighter) + label. Service platforms (1.4 m wide) with lit rails run along the wall at
+// each tier behind a deep fascia carrying a blue-white work-light strip (the tiers read as lit galleries
+// from the deck), detouring around the frame ribs, with a two-railed stair from the deck to tier 1 and
+// caged ladders to tier 2. Exposes the slot list for the traffic system; the arms follow each slot's
+// `occupied` flag, which that system writes.
 import * as THREE from "three";
 import { Batch, Batcher, sharedCylinder, axisQuat } from "./batch.js";
 import { FLOOR, HALL, WALL_T, DOORS, RACK, RIB_Z, RIB_W, RIB_D, STAIRS, LADDER_Z, RAIL_H, RAIL_MID, HG } from "./layout.js";
-import { label, railRun, ladder, housedLamp } from "./util.js";
+import { label, railRun, ladder, housedLamp, hazardBlocks } from "./util.js";
 
 const WALL_FACE = HALL.x1 - WALL_T - 0.12; // 79.72: wall panel front
 const RIB_FACE = HALL.x1 - WALL_T - RIB_D; // 78.64: rib front
@@ -167,11 +169,20 @@ function buildPlatform(ctx, B, s, tier) {
     for (const [a, b] of pieces) {
       let [xa, xb] = mm(xIn, xOut);
       B.boxMM("grate", 0xffffff, [xa, py - PLATE_T, a], [xb, py, b], { texel: 0.8 });
-      // edge trim + edge light bar under the trim (outside the grate, which is see-through) + wall strip
-      [xa, xb] = mm(xIn - 0.02, xIn + 0.12);
-      B.boxMM("paintedMetal", PALETTE.impDark, [xa, py - PLATE_T - 0.05, a], [xb, py + 0.02, b], { texel: 0.5 });
-      [xa, xb] = mm(xIn - 0.02, xIn + 0.12);
-      B.boxMM("emitWhite", 0xffffff, [xa, py - PLATE_T - 0.11, a + 0.3], [xb, py - PLATE_T - 0.05, b - 0.3]);
+      // deep fascia beam along the inner edge (0.6 m, dark) with a steel top lip, a 10 cm blue-white
+      // work-light strip recessed in a black channel on its hall face and a downlight strip under it:
+      // from the deck each tier reads as a lit gallery edge, not a dark line
+      [xa, xb] = mm(xIn - 0.02, xIn + 0.14);
+      B.boxMM("paintedMetal", PALETTE.impDark, [xa, py - PLATE_T - 0.6, a], [xb, py - 0.02, b], { texel: 0.5 });
+      [xa, xb] = mm(xIn - 0.03, xIn + 0.16);
+      B.boxMM("metal", HG.steel, [xa, py - 0.02, a], [xb, py + 0.03, b]);
+      [xa, xb] = mm(xIn - 0.05, xIn - 0.02);
+      B.boxMM("paintedMetal", PALETTE.impBlack, [xa, py - PLATE_T - 0.42, a + 0.2], [xb, py - PLATE_T - 0.22, b - 0.2]);
+      [xa, xb] = mm(xIn - 0.055, xIn - 0.045);
+      B.boxMM("emitWhite", 0xffffff, [xa, py - PLATE_T - 0.4, a + 0.25], [xb, py - PLATE_T - 0.24, b - 0.25]);
+      [xa, xb] = mm(xIn, xIn + 0.12);
+      B.boxMM("emitWhite", 0xffffff, [xa, py - PLATE_T - 0.61, a + 0.3], [xb, py - PLATE_T - 0.6, b - 0.3]);
+      // wall strip at knee height along the back of the platform
       [xa, xb] = mm(xOut - 0.12, xOut);
       B.boxMM("paintedMetal", PALETTE.impBlack, [xa, py + 0.82, a + 0.15], [xb, py + 0.96, b - 0.15]);
       [xa, xb] = mm(xOut - 0.13, xOut - 0.12);
@@ -193,9 +204,9 @@ function buildPlatform(ctx, B, s, tier) {
       path.push([s * (xIn + 0.1), z - 1.6], [s * (detourX + 0.1), z - 1.6], [s * (detourX + 0.1), z + 1.6], [s * (xIn + 0.1), z + 1.6]);
     }
     path.push([s * (xIn + 0.1), z1]);
-    for (let i = 0; i < path.length - 1; i++) railRun(B, kit, path[i], path[i + 1], py, { collide: false, kick: true });
-    if (openEnd !== "z0") railRun(B, kit, [s * (xIn + 0.1), z0], [s * (xOut - 0.05), z0], py, { collide: false, kick: true });
-    if (openEnd !== "z1") railRun(B, kit, [s * (xIn + 0.1), z1], [s * (xOut - 0.05), z1], py, { collide: false, kick: true });
+    for (let i = 0; i < path.length - 1; i++) railRun(B, kit, path[i], path[i + 1], py, { collide: false, kick: true, lit: true });
+    if (openEnd !== "z0") railRun(B, kit, [s * (xIn + 0.1), z0], [s * (xOut - 0.05), z0], py, { collide: false, kick: true, lit: true });
+    if (openEnd !== "z1") railRun(B, kit, [s * (xIn + 0.1), z1], [s * (xOut - 0.05), z1], py, { collide: false, kick: true, lit: true });
     // detour plates around the ribs + a filler in front of the rib face between the main plate ends
     for (const z of ribs) {
       if (z <= z0 || z >= z1) continue;
@@ -216,7 +227,8 @@ function buildPlatform(ctx, B, s, tier) {
       if (tier.tier === 1) {
         const [fa, fb] = mm(xIn, xIn + 0.7);
         B.boxMM("metal", HG.gunmetal, [fa, FLOOR, z - 0.35], [fb, FLOOR + 0.12, z + 0.35]);
-        B.boxMM("hgHazard", 0xffffff, [Math.min(xa, xb) - 0.01, FLOOR + 0.12, z - 0.21], [Math.max(xa, xb) + 0.01, FLOOR + 1.3, z + 0.21], { texel: 1 });
+        // black/yellow bands round the column foot (piano-key blocks, no texture)
+        hazardBlocks(B, [Math.min(xa, xb) - 0.01, FLOOR + 0.12, z - 0.21], [Math.max(xa, xb) + 0.01, FLOOR + 1.32, z + 0.21], "y", { block: 0.2 });
         kit.collider([Math.min(fa, fb), FLOOR, z - 0.35], [Math.max(fa, fb), FLOOR + 3, z + 0.35], "rack-column");
       }
     }
@@ -276,12 +288,15 @@ function buildCradle(ctx, B, s, tier, z, id, arms) {
   box("rubber", HG.rubber, X0 + 4.47, WALL_FACE - 0.42, hy - 0.08, hy + 0.08, z + 0.67, z + 0.83);
   box("rubber", HG.rubber, X0 + 4.47, X0 + 4.63, ty - 0.5, hy + 0.08, z + 0.67, z + 0.83);
   box("metal", HG.steel, X0 + 4.4, X0 + 4.85, ty - 0.75, ty - 0.45, z + 0.58, z + 0.92, {}, true);
-  // housed amber slot lamp + lit label on the beam's hall-facing end, slot stencil + status panel on the
-  // wall behind (not where a tier-1 slot's wall strip is taken by a bay door hole and its surround)
-  housedLamp(B, "emitAmber", [s * (X0 - 5.0), beamB + 0.32, z], [-s, 0, 0], [0.9, 0.16, 0.3], { inset: 0.04 });
+  // housed amber slot lamps: a wide one on the beam's hall-facing end (the slot reads as a lit cradle
+  // from the deck) and one under the beam between the hinges shining down onto the fighter's spine;
+  // lit label over the end lamp, slot stencil + status panel on the wall behind (not where a tier-1
+  // slot's wall strip is taken by a bay door hole and its surround)
+  housedLamp(B, "emitAmber", [s * (X0 - 5.0), beamB + 0.34, z], [-s, 0, 0], [1.5, 0.2, 0.42], { inset: 0.04 });
+  housedLamp(B, "emitAmber", [s * X0, beamB - 0.001, z], [0, -1, 0], [1.4, 0.16, 0.5], { inset: 0.04 });
   const lab = id.slice(2); // "P1-03"
-  box("paintedMetal", PALETTE.impBlack, X0 - 5.02, X0 - 5.0, beamB + 0.62, beamB + 1.12, z - 0.9, z + 0.9);
-  label(kit, "hgSign", lab, [s * (X0 - 5.03), beamB + 0.87, z], [-s, 0, 0], 1.6);
+  box("paintedMetal", PALETTE.impBlack, X0 - 5.02, X0 - 5.0, beamB + 0.66, beamB + 1.16, z - 0.9, z + 0.9);
+  label(kit, "hgSign", lab, [s * (X0 - 5.03), beamB + 0.91, z], [-s, 0, 0], 1.6);
   const inDoorZone = tier.tier === 1 && DOORS.some((d) => d.kind === "bay" && Math.sign(d.dir[0]) === s && z - 3.9 < d.pos[2] + d.w / 2 + 2.6 && z - 2.1 > d.pos[2] - d.w / 2 - 2.6);
   if (!inDoorZone) {
     label(kit, "hgSign", lab, [s * (WALL_FACE - 0.02), tier.platformY + 2.6, z - 3.0], [-s, 0, 0], 1.8);
@@ -306,9 +321,9 @@ function buildStairs(ctx, B, s, { foot, top }) {
   for (let i = 1; i <= n; i++) {
     const yt = y0 + (rise * i) / n, zc = foot + (dir * run * (i - 0.5)) / n;
     B.boxMM("grate", 0xffffff, [xa, yt - 0.12, zc - 0.22], [xb, yt, zc + 0.22], { texel: 0.8 });
-    // hazard nosing on the leading (downhill) edge
+    // yellow nosing on the leading (downhill) edge
     const ze = zc - dir * 0.2;
-    B.boxMM("hgHazard", 0xffffff, [xa, yt - 0.04, ze - 0.04], [xb, yt + 0.005, ze + 0.04], { texel: 1 });
+    B.boxMM("painted", HG.yellow, [xa, yt - 0.04, ze - 0.04], [xb, yt + 0.005, ze + 0.04]);
   }
   // stringers: the treads embed 4 cm into their top edge; the upper end stays flush with the landing plate
   const ang = Math.atan2(rise, run);

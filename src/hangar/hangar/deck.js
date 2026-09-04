@@ -1,22 +1,29 @@
-// d4-hangar deck: dark reflective plating (4 m plates on a black seam bed) around the floor aperture,
-// the shaft we own down to the keel (y -85) with the retracted bay-door mechanism, the aperture lip
-// (thin chevron + non-slip band + proper rails + housed beacons), landing pads, taxi lines, tie-downs,
-// cable covers, deck stencils, the containment field over the hole and the four tractor emitters.
+// d4-hangar deck: dark semi-gloss plating (4 m plates on a black seam bed, the plate sheet carrying the
+// seams, rivets, tie-down rings and wear) around the floor aperture, the shaft we own down to the keel
+// (y -85) with the retracted bay-door mechanism and its lit lining, the aperture lip (steel lip, sparse
+// black/yellow dashes, non-slip band, lit rails, housed beacons), landing pads, the apron taxi lane from
+// the aft door with hold-short bars, taxi lines, cable covers, deck stencils, contact shadows, the
+// containment field over the hole and the four tractor emitters.
 import * as THREE from "three";
 import { Batcher, sharedTorus, PY } from "./batch.js";
 import { FLOOR, SHAFT_BOTTOM, HOLE, HALL, PADS, TAXI_X, RACK, RAIL_H, HG, TRACTOR_POINTS, RIB_Z, RIB_X } from "./layout.js";
-import { tube, label, railRun, housedLamp, redBeacon } from "./util.js";
+import { DECK_TILE, LABELS } from "./materials.js";
+import { tube, label, railRun, housedLamp, redBeacon, hazardBlocks } from "./util.js";
 
-const Y_MARK = FLOOR + 0.02; // painted markings are 2 cm proud of the plating (no coplanar faces)
+export const Y_MARK = FLOOR + 0.02; // painted markings are 2 cm proud of the plating (no coplanar faces)
 const FLAT_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)); // XY -> XZ plane
 const SEAM_Y = FLOOR - 0.06; // black seam bed under the plates
-const LIP = { chevron: 0.4, band: 1.6 }; // metres from the hole edge: chevron 0..0.4, non-slip band 0.4..1.6
-const RAIL_OFF = 0.55; // rail line from the hole edge
+const LIP = { steel: 0.3, dash: 0.7, band: 1.6 }; // from the hole edge: steel lip 0..0.3, dashes 0.3..0.7, band ..1.6
+const RAIL_OFF = 0.9; // rail line from the hole edge (inside it: lip + hazard dashes)
 const PAINT_WHITE = new THREE.Color(0xbfc3c9);
 
 export function buildDeck(ctx) {
-  const { kit, PALETTE } = ctx;
+  const { kit, PALETTE, materials } = ctx;
   const B = new Batcher(kit);
+  // the plate sheet repeats every DECK_TILE m; the 4 m grid starts at z -70, so the sheet is shifted by
+  // 2 m along z to put its seams on the plate joints (the x grid starts at -80, already on the tile)
+  const sheet = materials.hgDeck.map;
+  sheet.offset.set(0, ((HALL.z0 % DECK_TILE) + DECK_TILE) % DECK_TILE / DECK_TILE);
 
   // ---- seam bed: 4 black slabs round the hole (their top is the bottom of every seam)
   const bed = { color: PALETTE.impBlack, texel: 0.5 };
@@ -39,9 +46,10 @@ export function buildDeck(ctx) {
 }
 
 // ---------------------------------------------------------------------------
-// Plates: 4 m semi-gloss plates (hgDeck, mid-dark tint) with 6 cm black seams, wider section joints on
-// the rib lines, a darker plate band under each taxi lane and round the aperture, recessed tie-down
-// points on the aprons.
+// Plates: 4 m semi-gloss plates (hgDeck; the sheet draws seams, rivets and tie-down rings, the vertex tone
+// sets the plate colour) with 6 cm gaps to the black bed, wider section joints on the rib lines, a darker
+// plate band under each taxi lane and round the aperture, a small per-plate tone step so the tiled sheet
+// never reads as one repeated image.
 // ---------------------------------------------------------------------------
 function buildPlates(ctx, B) {
   const { PALETTE } = ctx;
@@ -49,14 +57,19 @@ function buildPlates(ctx, B) {
   // lip band rect (grown by half a seam so the plates keep a seam to the band)
   const cut = { x0: HOLE.x0 - LIP.band - seam / 2, x1: HOLE.x1 + LIP.band + seam / 2, z0: HOLE.z0 - LIP.band - seam / 2, z1: HOLE.z1 + LIP.band + seam / 2 };
   const onJoint = (v, lines) => lines.some((l) => Math.abs(l - v) < 1.01);
+  const steps = (c) => [c.clone().multiplyScalar(0.93), c, c.clone().multiplyScalar(1.07)];
+  const tones = { mid: steps(PALETTE.impMid), dark: steps(PALETTE.impDark) };
   const tone = (cx, cz) => {
     const nearHole = cx > HOLE.x0 - 8 && cx < HOLE.x1 + 8 && cz > HOLE.z0 - 8 && cz < HOLE.z1 + 8;
     const lane = Math.abs(Math.abs(cx) - TAXI_X) < G;
-    return nearHole || lane ? PALETTE.impDark : PALETTE.impMid;
+    const set = nearHole || lane ? tones.dark : tones.mid;
+    // deterministic per-plate step (integer hash of the plate cell)
+    const h = (Math.round(cx / G) * 73856093) ^ (Math.round(cz / G) * 19349663);
+    return set[((h >>> 0) % 3 + 3) % 3];
   };
   const plate = (x0, x1, z0, z1) => {
     if (x1 - x0 < 0.3 || z1 - z0 < 0.3) return;
-    B.boxMM("hgDeck", tone((x0 + x1) / 2, (z0 + z1) / 2), [x0, SEAM_Y, z0], [x1, FLOOR, z1], { faces: PY });
+    B.boxMM("hgDeck", tone((x0 + x1) / 2, (z0 + z1) / 2), [x0, SEAM_Y, z0], [x1, FLOOR, z1], { faces: PY, texel: 1 / DECK_TILE });
   };
   for (let x = HALL.x0; x < HALL.x1 - 0.01; x += G) {
     for (let z = HALL.z0; z < HALL.z1 - 0.01; z += G) {
@@ -78,53 +91,57 @@ function buildPlates(ctx, B) {
       plate(x0, x1, z0, z1);
     }
   }
-  // tie-down points every 8 m on both aprons (not on the pads or under the stencils): recessed dark
-  // square with a steel bar across it
-  const pads = PADS;
-  const tieDown = (x, z) => {
-    if (pads.some((p) => Math.hypot(p.x - x, p.z - z) < p.r + 1.5)) return;
-    if (Math.abs(x) < 8 && (Math.abs(z - 150) < 3 || Math.abs(z + 62) < 3)) return;
-    B.box("paintedMetal", PALETTE.impBlack, x, FLOOR + 0.004, z, 0.44, 0.008, 0.44, { faces: PY });
-    B.box("metal", HG.steel, x, FLOOR + 0.03, z, 0.3, 0.05, 0.06);
-  };
-  for (let x = -76; x <= 76; x += 8) {
-    for (let z = 98; z <= 166; z += 8) tieDown(x, z);
-    for (let z = -66; z <= -34; z += 8) tieDown(x, z);
-  }
 }
 
 // ---------------------------------------------------------------------------
-// Aperture lip: 0.4 m black/yellow chevron at the edge, 1.2 m plain non-slip band outside it (dark
-// rubber), housed white edge lights in the band every 6 m, the deck-edge trim over the shaft lip.
+// Aperture lip, from the hole edge outward: a 0.3 m light steel lip (its face turning 0.3 m down into
+// the hole), a sparse black/yellow dash strip (2 m dashes, 1 m gaps, 0.4 m wide) on a dark rubber
+// non-slip band that runs out to 1.6 m, housed white edge lights in the band every 6 m.
 // ---------------------------------------------------------------------------
 function buildLip(ctx, B) {
   const { PALETTE } = ctx;
-  const c = LIP.chevron, b = LIP.band;
-  const hz = { texel: 0.5 };
-  // chevron strip (2 cm proud like the paint) round the hole
-  B.boxMM("hgHazard", 0xffffff, [HOLE.x0 - c, SEAM_Y, HOLE.z0 - c], [HOLE.x1 + c, Y_MARK, HOLE.z0], hz);
-  B.boxMM("hgHazard", 0xffffff, [HOLE.x0 - c, SEAM_Y, HOLE.z1], [HOLE.x1 + c, Y_MARK, HOLE.z1 + c], hz);
-  B.boxMM("hgHazard", 0xffffff, [HOLE.x0 - c, SEAM_Y, HOLE.z0], [HOLE.x0, Y_MARK, HOLE.z1], hz);
-  B.boxMM("hgHazard", 0xffffff, [HOLE.x1, SEAM_Y, HOLE.z0], [HOLE.x1 + c, Y_MARK, HOLE.z1], hz);
-  // non-slip band (flush with the plates)
+  const s = LIP.steel, d = LIP.dash, b = LIP.band;
+  const yT = FLOOR + 0.03; // lip top, a hair over the paint
+  const steel = (mn, mx) => B.boxMM("metal", HG.steel, mn, mx);
+  // steel lip: top plate round the hole + inner face 0.3 m down
+  steel([HOLE.x0 - s, FLOOR - 0.3, HOLE.z0 - s], [HOLE.x1 + s, yT, HOLE.z0]);
+  steel([HOLE.x0 - s, FLOOR - 0.3, HOLE.z1], [HOLE.x1 + s, yT, HOLE.z1 + s]);
+  steel([HOLE.x0 - s, FLOOR - 0.3, HOLE.z0], [HOLE.x0, yT, HOLE.z1]);
+  steel([HOLE.x1, FLOOR - 0.3, HOLE.z0], [HOLE.x1 + s, yT, HOLE.z1]);
+  // non-slip band (flush with the plates) from the lip to 1.6 m
   const nb = { texel: 1 };
-  B.boxMM("rubber", PALETTE.impDark, [HOLE.x0 - b, SEAM_Y, HOLE.z0 - b], [HOLE.x1 + b, FLOOR, HOLE.z0 - c], nb);
-  B.boxMM("rubber", PALETTE.impDark, [HOLE.x0 - b, SEAM_Y, HOLE.z1 + c], [HOLE.x1 + b, FLOOR, HOLE.z1 + b], nb);
-  B.boxMM("rubber", PALETTE.impDark, [HOLE.x0 - b, SEAM_Y, HOLE.z0 - c], [HOLE.x0 - c, FLOOR, HOLE.z1 + c], nb);
-  B.boxMM("rubber", PALETTE.impDark, [HOLE.x1 + c, SEAM_Y, HOLE.z0 - c], [HOLE.x1 + b, FLOOR, HOLE.z1 + c], nb);
-  // housed edge lights in the band (skipping the bar gaps and the emitter housings)
-  const d = 1.15;
+  B.boxMM("rubber", PALETTE.impDark, [HOLE.x0 - b, SEAM_Y, HOLE.z0 - b], [HOLE.x1 + b, FLOOR, HOLE.z0 - s], nb);
+  B.boxMM("rubber", PALETTE.impDark, [HOLE.x0 - b, SEAM_Y, HOLE.z1 + s], [HOLE.x1 + b, FLOOR, HOLE.z1 + b], nb);
+  B.boxMM("rubber", PALETTE.impDark, [HOLE.x0 - b, SEAM_Y, HOLE.z0 - s], [HOLE.x0 - s, FLOOR, HOLE.z1 + s], nb);
+  B.boxMM("rubber", PALETTE.impDark, [HOLE.x1 + s, SEAM_Y, HOLE.z0 - s], [HOLE.x1 + b, FLOOR, HOLE.z1 + s], nb);
+  // hazard dashes: 2 m on, 1 m off, along every edge (skipping the bar gaps and the emitter corners)
+  const dashLen = 2, gapLen = 1;
+  for (const sx of [-1, 1]) {
+    const x0 = Math.min(sx * (HOLE.x1 + s), sx * (HOLE.x1 + d)), x1 = Math.max(sx * (HOLE.x1 + s), sx * (HOLE.x1 + d));
+    for (let z = HOLE.z0 + 2.5; z + dashLen <= HOLE.z1 - 2.5; z += dashLen + gapLen) hazardBlocks(B, [x0, FLOOR - 0.01, z], [x1, Y_MARK, z + dashLen], "z", { faces: PY });
+  }
+  for (const sz of [-1, 1]) {
+    const zc = sz < 0 ? HOLE.z0 : HOLE.z1;
+    const z0 = Math.min(zc + sz * s, zc + sz * d), z1 = Math.max(zc + sz * s, zc + sz * d);
+    for (let x = -33.5; x + dashLen <= 33.5; x += dashLen + gapLen) {
+      if (x + dashLen > -4.5 && x < 4.5) continue;
+      hazardBlocks(B, [x, FLOOR - 0.01, z0], [x + dashLen, Y_MARK, z1], "x", { faces: PY });
+    }
+  }
+  // housed edge lights in the band, outside the rail line
+  const e = 1.2;
   const edgeLight = (x, z) => housedLamp(B, "emitWhite", [x, FLOOR + 0.12, z], [0, 1, 0], [0.34, 0.12, 0.34], { housing: HG.gunmetal, inset: 0.05 });
-  for (let z = HOLE.z0 + 6; z <= HOLE.z1 - 6; z += 6) for (const s of [-1, 1]) edgeLight(s * (HOLE.x1 + d), z);
+  for (let z = HOLE.z0 + 6; z <= HOLE.z1 - 6; z += 6) for (const sx of [-1, 1]) edgeLight(sx * (HOLE.x1 + e), z);
   for (let x = -30; x <= 30; x += 6) {
     if (Math.abs(x) < 5) continue;
-    for (const z of [HOLE.z0 - d, HOLE.z1 + d]) edgeLight(x, z);
+    for (const z of [HOLE.z0 - e, HOLE.z1 + e]) edgeLight(x, z);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Shaft y -85..-72: walls, heavy ribs + mid ledge, housed beacon rows, conduit runs, keel lip, and the
-// parked bay-door leaves in recesses under the deck on the +-x sides (tracks, guide blocks, rams).
+// Shaft y -85..-72: walls, heavy ribs + mid ledge, two rows of housed white strips down the lining
+// (y -76 and -82), housed red beacon rows, conduit runs, keel lip, and the parked bay-door leaves in
+// recesses under the deck on the +-x sides (tracks, guide blocks, rams, lit leaf edges).
 // ---------------------------------------------------------------------------
 function buildShaft(ctx, B) {
   const { PALETTE } = ctx;
@@ -136,28 +153,33 @@ function buildShaft(ctx, B) {
   const M = "paintedMetal";
   const leafY = [-83.05, -79.95, -76.85]; // leaf centres (2 m thick), bottom one riding the floor track
   const ramY = [-81.5, -78.4, -74.9]; // gaps between / above the leaves
+  const stripRows = [-76, -82.3]; // the lit lining rows (top leaf / bottom leaf faces on the +-x sides)
 
   for (const s of [-1, 1]) {
     const xo = (a) => s * a;
     const mm = (x0, x1) => [Math.min(xo(x0), xo(x1)), Math.max(xo(x0), xo(x1))];
     let a, b;
-    // deck-edge strip (the lip you see from the deck) and recess ceiling / back wall / floor
+    // deck-edge strip under the steel lip, recess ceiling / back wall / floor
     [a, b] = mm(36, 36.6);
-    B.boxMM(M, impDark, [a, FLOOR - 1.6, zA], [b, FLOOR, zB]);
+    B.boxMM(M, impDark, [a, FLOOR - 1.6, zA], [b, FLOOR - 0.3, zB]);
     [a, b] = mm(36.6, recessX1);
     B.boxMM(M, impBlack, [a, FLOOR - 1.6, zA], [b, yDeckB, zB]);
     [a, b] = mm(recessX1, recessX1 + 0.6);
     B.boxMM(M, impDark, [a, SHAFT_BOTTOM, zA], [b, yDeckB, zB]);
     [a, b] = mm(36, 52);
     B.boxMM(M, impDark, [a, SHAFT_BOTTOM, zA - 3.6], [b, floorTop, zB + 3.6]);
-    // lip edge trim (lighter, so the hole outline reads from below) + a heavy lip beam under the deck edge
+    // keel lip trim (lighter, so the hole outline reads from below) + a heavy lip beam proud of the deck
+    // edge, carrying a lit strip on its inner face the full length of the edge (the far lip reads as a
+    // lit line from across the hole)
     [a, b] = mm(35.9, 36.5);
     B.boxMM("metal", HG.steel, [a, floorTop, zA], [b, floorTop + 0.3, zB]);
-    [a, b] = mm(36, 36.9);
+    [a, b] = mm(35.4, 36.0);
     B.boxMM(M, impMid, [a, FLOOR - 1.0, zA - 0.6], [b, FLOOR - 0.6, zB + 0.6], { texel: 0.5 });
+    [a, b] = mm(35.37, 35.4);
+    B.boxMM("emitWhite", 0xffffff, [a, FLOOR - 0.94, zA - 0.4], [b, FLOOR - 0.66, zB + 0.4]);
 
-    // three parked door leaves: dark leading-edge face, guide blocks, edge lights; only the top leaf (the
-    // one that closes last, level with the deck) carries a hazard stripe, the others a steel edge
+    // three parked door leaves: dark leading-edge face, guide blocks; the top and bottom leaves carry the
+    // two lit lining rows (housed white strips every 6 m), the middle one the red beacon row
     for (let k = 0; k < 3; k++) {
       const yc = leafY[k];
       [a, b] = mm(37.3, recessX1 - 0.6);
@@ -165,15 +187,15 @@ function buildShaft(ctx, B) {
       [a, b] = mm(37.0, 37.3);
       B.boxMM(M, impDark, [a, yc - 1.0, zA + 1], [b, yc + 1.0, zB - 1], { texel: 0.5 });
       [a, b] = mm(36.98, 37.0);
-      if (k === 2) B.boxMM("hgHazard", 0xffffff, [a, yc - 0.3, zA + 1.2], [b, yc + 0.3, zB - 1.2], { texel: 0.5 });
-      else B.boxMM("metal", HG.steel, [a, yc - 0.08, zA + 1.2], [b, yc + 0.08, zB - 1.2]);
+      B.boxMM("metal", HG.steel, [a, yc - 0.1, zA + 1.2], [b, yc + 0.1, zB - 1.2]);
       for (let z = zA + 5; z < zB - 3; z += 8) {
         [a, b] = mm(36.8, 37.0);
-        B.boxMM("metal", HG.gunmetal, [a, yc - 0.7, z - 0.45], [b, yc + 0.7, z + 0.45]);
-        const n = Math.round((z - zA - 5) / 8);
-        // lamps midway between the guide blocks: pulsing red on the middle leaf, white on the others
-        if (k === 1 && n % 3 === 0) redBeacon(B, [xo(36.8), yc, z + 4], [-s, 0, 0], 0.4);
-        if (k !== 1 && n % 2 === 1) housedLamp(B, "emitWhite", [xo(36.8), yc, z + 4], [-s, 0, 0], [0.5, 0.2, 0.24], { inset: 0.04 });
+        B.boxMM("metal", HG.gunmetal, [a, yc - 0.55, z - 0.45], [b, yc + 0.55, z + 0.45]);
+      }
+      if (k === 1) for (let z = zA + 4; z <= zB - 4; z += 8) redBeacon(B, [xo(36.8), yc + 0.5, z], [-s, 0, 0], 0.5);
+      else {
+        const y = k === 2 ? stripRows[0] : stripRows[1];
+        for (let z = zA + 4; z <= zB - 4; z += 6) housedLamp(B, "emitWhite", [xo(36.8), y, z], [-s, 0, 0], [2.4, 0.2, 0.3], { inset: 0.04 });
       }
     }
     // tracks on the recess floor and under its ceiling
@@ -191,19 +213,19 @@ function buildShaft(ctx, B) {
       }
     }
     // housed red beacons under the lip beam every 12 m, facing into the hole (housing 16 cm proud)
-    for (let z = zA + 4; z < zB; z += 12) redBeacon(B, [xo(35.84), FLOOR - 1.3, z], [-s, 0, 0], 0.36);
+    for (let z = zA + 4; z < zB; z += 12) redBeacon(B, [xo(35.84), FLOOR - 1.3, z], [-s, 0, 0], 0.44);
   }
 
   // +-z shaft walls (spanning under the deck to close the recess ends), deck-edge strips, ribs, ledge,
-  // conduits, beacons
+  // conduits, the two lit lining rows, beacons
   for (const [z0, z1, dirIn] of [
     [zA - 0.6, zA, 1],
     [zB, zB + 0.6, -1],
   ]) {
     B.boxMM(M, impDark, [-48.6, SHAFT_BOTTOM, z0], [48.6, yDeckB, z1]);
-    // deck-edge strip, inner face 2 cm proud of the wall so nothing is coplanar
-    if (dirIn > 0) B.boxMM(M, impDark, [-36.6, FLOOR - 1.6, z0], [36.6, FLOOR, z1 + 0.02]);
-    else B.boxMM(M, impDark, [-36.6, FLOOR - 1.6, z0 - 0.02], [36.6, FLOOR, z1]);
+    // deck-edge strip under the steel lip, inner face 2 cm proud of the wall so nothing is coplanar
+    if (dirIn > 0) B.boxMM(M, impDark, [-36.6, FLOOR - 1.6, z0], [36.6, FLOOR - 0.3, z1 + 0.02]);
+    else B.boxMM(M, impDark, [-36.6, FLOOR - 1.6, z0 - 0.02], [36.6, FLOOR - 0.3, z1]);
     const zf = dirIn > 0 ? z1 : z0; // wall inner face
     const proud = (d0, d1) => [Math.min(zf + dirIn * d0, zf + dirIn * d1), Math.max(zf + dirIn * d0, zf + dirIn * d1)];
     const rib = (y0, y1, x0, x1, depth = 0.7) => {
@@ -215,15 +237,27 @@ function buildShaft(ctx, B) {
     rib(-78.9, -78.3, -36, 36, 0.9);
     rib(-83.6, -83.0, -36, 36, 0.6);
     for (let x = -33; x <= 33; x += 6) rib(floorTop, FLOOR - 1.6, x - 0.4, x + 0.4, 0.7);
+    // lit strip on the lip beam's inner face across the whole edge
+    {
+      const [e0, e1] = proud(0.9, 0.93);
+      B.boxMM("emitWhite", 0xffffff, [-36.3, FLOOR - 0.94, e0], [36.3, FLOOR - 0.66, e1]);
+    }
     // two conduit runs on the wall between the ribs
-    for (const y of [-76.6, -81.2]) {
+    for (const y of [-77.2, -81.2]) {
       const [p0] = proud(0.22, 0.22);
       B.tube("metal", HG.gunmetal, [-35.5, y, p0], [35.5, y, p0], 0.12, 10);
+    }
+    // the two lit lining rows: housed white strips between the ribs at y -76 and -82.4
+    for (const y of stripRows) {
+      for (let x = -30; x <= 30; x += 6) {
+        const [p0] = proud(0.24, 0.24);
+        housedLamp(B, "emitWhite", [x, y, p0], [0, 0, dirIn], [2.4, 0.24, 0.3], { inset: 0.04 });
+      }
     }
     // housed red beacons on the ledge every 8 m + white keel lights under the ledge every 12 m
     for (let x = -32; x <= 32; x += 8) {
       const [p0] = proud(0.9, 0.9);
-      redBeacon(B, [x, -78.16, p0], [0, 0, dirIn], 0.36); // standing on the ledge's outer edge
+      redBeacon(B, [x, -78.1, p0], [0, 0, dirIn], 0.5); // standing on the ledge's outer edge
     }
     for (let x = -30; x <= 30; x += 12) {
       const [p0] = proud(0.72, 0.72);
@@ -238,24 +272,24 @@ function buildShaft(ctx, B) {
 }
 
 // ---------------------------------------------------------------------------
-// Rails round the hole (1.02 / 0.55 / kick, dark with a light top rail) with two lowerable dark bars
-// across the +-z gaps on pivot posts carrying housed red beacons.
+// Rails round the hole (1.02 / 0.55 / kick, dark with a light top rail and a lit strip under it) with
+// two lowerable dark bars across the +-z gaps on pivot posts carrying housed red beacons.
 // ---------------------------------------------------------------------------
 function buildRails(ctx, B) {
   const { kit, PALETTE } = ctx;
   const off = RAIL_OFF;
   const rx = HOLE.x1 + off, rz0 = HOLE.z0 - off, rz1 = HOLE.z1 + off;
   const gap = 3.15; // half width of the bar gap at x = 0
-  const end = 35.3; // rails stop short of the emitter housings at the corners
+  const end = 35.5; // rails stop just short of the emitter housings at the corners (gaps < a player width)
   for (const s of [-1, 1]) {
-    railRun(B, kit, [s * rx, HOLE.z0 + 0.7], [s * rx, HOLE.z1 - 0.7], FLOOR, { tag: "aperture-rail" });
-    for (const z of [rz0, rz1]) railRun(B, kit, [s * end, z], [s * gap, z], FLOOR, { tag: "aperture-rail" });
+    railRun(B, kit, [s * rx, HOLE.z0 + 0.6], [s * rx, HOLE.z1 - 0.6], FLOOR, { tag: "aperture-rail", lit: true });
+    for (const z of [rz0, rz1]) railRun(B, kit, [s * end, z], [s * gap, z], FLOOR, { tag: "aperture-rail", lit: true });
   }
   for (const z of [rz0, rz1]) {
     // bar (lowered = closed): dark box with a light top edge and a small yellow centre tag
     B.box("paintedMetal", PALETTE.impDark, 0, FLOOR + 0.98, z, gap * 2 + 0.1, 0.16, 0.14);
     B.box("metal", HG.steel, 0, FLOOR + 1.07, z, gap * 2 + 0.1, 0.03, 0.15);
-    B.box("hgHazard", 0xffffff, 0, FLOOR + 0.98, z, 0.6, 0.17, 0.15, { texel: 1 });
+    hazardBlocks(B, [-0.45, FLOOR + 0.9, z - 0.075], [0.45, FLOOR + 1.06, z + 0.075], "x", { block: 0.15 });
     for (const s of [-1, 1]) {
       const px = s * (gap + 0.18);
       B.box("paintedMetal", PALETTE.impDark, px, FLOOR + 0.71, z, 0.3, 1.42, 0.3);
@@ -271,7 +305,8 @@ function buildRails(ctx, B) {
 }
 
 // ---------------------------------------------------------------------------
-// Landing pads, taxi lines, slot ticks, cable covers, deck stencils
+// Landing pads, the apron taxi lane from the aft door with hold-short bars, taxi lines, slot ticks,
+// cable covers, deck stencils, threshold wear
 // ---------------------------------------------------------------------------
 function buildMarkings(ctx, B) {
   const { kit, PALETTE } = ctx;
@@ -279,7 +314,7 @@ function buildMarkings(ctx, B) {
   const white = PAINT_WHITE, yellow = HG.yellow;
   const ring = (x, z, r0, r1, color) => kit.add("painted", new THREE.RingGeometry(r0, r1, 72), { pos: [x, Y_MARK + 0.005, z], quat: FLAT_Q, color, uv: "scale", uvScale: [4, 1] });
   // painted stripe from SEAM_Y to Y_MARK (sits on the plates, sinks into the seams)
-  const mark = (color, x0, x1, z0, z1) => B.boxMM("painted", color, [Math.min(x0, x1), FLOOR - 0.01, Math.min(z0, z1)], [Math.max(x0, x1), Y_MARK, Math.max(z0, z1)]);
+  const mark = (color, x0, x1, z0, z1) => B.boxMM("painted", color, [Math.min(x0, x1), FLOOR - 0.01, Math.min(z0, z1)], [Math.max(x0, x1), Y_MARK, Math.max(z0, z1)], { faces: PY });
 
   for (const p of PADS) {
     // thin outer ring, four corner brackets, centre box, lit number on the aft side: a fighter pad, not a helipad
@@ -292,7 +327,7 @@ function buildMarkings(ctx, B) {
     }
     for (const sx of [-1, 1]) mark(white, p.x + sx * 0.9, p.x + sx * (0.9 + w), p.z - 1.05, p.z + 1.05);
     for (const sz of [-1, 1]) mark(white, p.x - 1.05, p.x + 1.05, p.z + sz * 0.9, p.z + sz * (0.9 + w));
-    label(kit, "hgSign", p.n, [p.x, Y_MARK + 0.01, p.z + p.r - 2.4], [0, 1, 0], 3.8);
+    label(kit, "hgSign", p.n, [p.x, Y_MARK + 0.01, p.z + p.r - 2.4], [0, 1, 0], 3.2);
     // 12 housed edge lights just outside the ring
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + Math.PI / 12;
@@ -302,8 +337,8 @@ function buildMarkings(ctx, B) {
   }
 
   // taxi lanes: yellow dashed centreline, white edge lines at +-3.5 m on the long lanes
-  const dashZ = (x, z0, z1) => {
-    for (let z = z0 + 1; z + 3 <= z1; z += 5) mark(yellow, x - 0.15, x + 0.15, z, z + 3);
+  const dashZ = (x, z0, z1, color = yellow, w = 0.15) => {
+    for (let z = z0 + 1; z + 3 <= z1; z += 5) mark(color, x - w, x + w, z, z + 3);
   };
   const dashX = (z, x0, x1) => {
     for (let x = x0 + 1; x + 3 <= x1; x += 5) mark(yellow, x, x + 3, z - 0.15, z + 0.15);
@@ -324,10 +359,29 @@ function buildMarkings(ctx, B) {
       label(kit, "hgDecal", id, [s * 58, Y_MARK + 0.01, z + 1.4], [0, 1, 0], 2.6, { color: yellow });
     }
   }
+  // the apron taxi lane: from the aft blast door forward to the aperture bar gap, 6 m wide with solid
+  // yellow edges, a dashed white centreline, hold-short bars (double bar + ladder) before the aperture
+  // rail and before the door, "HOLD SHORT" stencils, the deck identification inside the lane
+  {
+    const x0 = -3.0, x1 = 3.0, zNear = 168.0, zFar = 98.4;
+    for (const x of [x0, x1]) mark(yellow, x - 0.12, x + 0.12, zFar, zNear);
+    dashZ(0, zFar + 5, zNear - 12, white, 0.1);
+    const holdShort = (z, dir) => {
+      // dir: +1 = the bar faces traffic coming from +z (toward the aperture), -1 = from -z (toward the door)
+      mark(yellow, x0, x1, z - 0.15, z + 0.15);
+      mark(yellow, x0, x1, z - dir * 0.55 - 0.15, z - dir * 0.55 + 0.15);
+      for (let x = x0 + 0.5; x < x1; x += 1.0) mark(yellow, x, x + 0.5, z + dir * 0.3, z + dir * 1.3);
+      label(kit, "hgDecal", "HOLD SHORT", [0, Y_MARK + 0.01, z - dir * 2.6], [0, 1, 0], 4.6, { color: yellow, spin: dir > 0 ? 0 : Math.PI });
+    };
+    holdShort(101.5, 1);
+    holdShort(160.5, -1);
+    label(kit, "hgDecal", "FLIGHT DECK 4", [0, Y_MARK + 0.01, 152.5], [0, 1, 0], 5.6, { color: white });
+  }
   // cross lanes between the pads (aft apron) and on the forward apron
   for (const z of [118, 142, -52]) {
     dashX(z, -TAXI_X, -29);
-    dashX(z, -15, 15);
+    dashX(z, -15, -4.5);
+    dashX(z, 4.5, 15);
     dashX(z, 29, TAXI_X);
   }
   // apron outline: white box round the aft apron parking area with corner chevrons
@@ -347,7 +401,7 @@ function buildMarkings(ctx, B) {
     for (const e of [0, 1]) {
       const cx = alongX ? (e ? mx[0] - 0.3 : mn[0] + 0.3) : (mn[0] + mx[0]) / 2;
       const cz = alongX ? (mn[2] + mx[2]) / 2 : e ? mx[2] - 0.3 : mn[2] + 0.3;
-      B.box("hgHazard", 0xffffff, cx, FLOOR + 0.115, cz, alongX ? 0.5 : 0.64, 0.01, alongX ? 0.64 : 0.5, { texel: 1 });
+      B.box("painted", HG.yellow, cx, FLOOR + 0.115, cz, alongX ? 0.5 : 0.64, 0.01, alongX ? 0.64 : 0.5, { faces: PY });
     }
   };
   for (const s of [-1, 1]) {
@@ -355,9 +409,29 @@ function buildMarkings(ctx, B) {
     cover(s * 34, 151, s * 12, 151);
     cover(s * 62, 169.5, s * 62, 146);
   }
-  // deck identification near the spawn + forward
-  label(kit, "hgDecal", "FLIGHT DECK 4", [0, Y_MARK + 0.01, 150], [0, 1, 0], 12, { color: white });
+  // deck identification forward
   label(kit, "hgDecal", "DECK 4", [0, Y_MARK + 0.01, -62], [0, 1, 0], 8, { color: white });
+  // threshold wear: soft dark blobs in front of the blast doors and the bay doors (the paint is worn
+  // where everything rolls in and out)
+  contactShadow(kit, 0, 165.5, 9, 6);
+  contactShadow(kit, 0, -65.5, 9, 6);
+  for (const s of [-1, 1]) {
+    contactShadow(kit, s * 74, 15, 10, 18);
+    contactShadow(kit, s * 74.5, 120, 9, 14);
+  }
+}
+
+const SHADOW_BLACK = new THREE.Color(0x000000);
+/**
+ * Soft dark blob on the deck (contact darkening under props, threshold wear): the atlas blob (5:3, alpha
+ * falling off to the edge) painted black over the plating. w along x, d along z; a footprint that is not
+ * 5:3 gets a second, crossed blob so the union covers the prop.
+ */
+export function contactShadow(kit, x, z, w, d) {
+  const bd = w / LABELS.SHADOW.aspect; // one blob's depth at width w
+  const n = Math.max(1, Math.ceil(d / bd));
+  const step = n > 1 ? (d - bd) / (n - 1) : 0;
+  for (let i = 0; i < n; i++) label(kit, "hgDecal", "SHADOW", [x, Y_MARK + 0.012, z - d / 2 + bd / 2 + i * step], [0, 1, 0], w, { color: SHADOW_BLACK });
 }
 
 // ---------------------------------------------------------------------------
@@ -409,8 +483,9 @@ function buildTractorHousing(ctx, B, p) {
   kit.add("emitBlue", new THREE.TorusGeometry(0.6, 0.06, 6, 24), { pos: along(len - 0.35), quat: q, uv: "scale", uvScale: [4, 0.5] });
   // cut plate where the barrel passes through the deck lip
   B.box("paintedMetal", PALETTE.impBlack, p[0] + sx * 0.9, Y_MARK + 0.015, p[2] + sz * 0.9, 2.4, 0.03, 2.4);
-  // deck stencil + collider (generous AABB so the corner between the rail ends is closed)
+  // deck stencil + contact shadow + collider (generous AABB so the corner between the rail ends is closed)
   label(kit, "hgDecal", "TRACTOR EMITTER", [cx + sx * 0.4, Y_MARK + 0.01, cz + sz * 3.0], [0, 1, 0], 3.6, { color: HG.yellow, spin: sz > 0 ? 0 : Math.PI });
+  contactShadow(kit, cx, cz, 5.2, 5.2);
   kit.collider(
     [Math.min(cx - 1.8, p[0] - sx * 0.2), FLOOR, Math.min(cz - 1.8, p[2] - sz * 0.2)],
     [Math.max(cx + 1.8, p[0] - sx * 0.2), top + 1, Math.max(cz + 1.8, p[2] - sz * 0.2)],

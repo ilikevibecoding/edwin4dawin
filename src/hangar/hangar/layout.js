@@ -68,6 +68,28 @@ export const LADDER_Z = [45, 75];
 // maintenance catwalk ring round all four walls (plate top), 1.0 m wide, standing on the third
 // structural band (top y -35.6); openingH = clear height of its pass-through in each frame rib
 export const CATWALK = { y: -35.46, w: 1.0, openingH: 2.8 };
+// service gallery at y -60 (12 m up, on the first structural band): the whole bow and aft walls (either
+// side of the balcony), and the side walls outside the rack zone and clear of the bay-door surrounds
+export const GALLERY = { y: -60, w: 1.2, openingH: 2.8 };
+export const GALLERY_SPANS = {
+  aft: [[-78.5, BALCONY.x0 - 0.5], [BALCONY.x1 + 0.5, 78.5]],
+  bow: [[-78.5, 78.5]],
+  starboard: [[-68.5, 3], [131, 168.5]],
+  port: [[-68.5, 3], [131, 168.5]],
+};
+
+// the four spot descriptors of the light plan: each is a real ceiling flood fixture with a lit lens
+// (walls.js builds the housing at `pos`, index.js lights it toward `target`). Two pools on the aft apron
+// flanking the taxi lane 13 m ahead of the spawn (full-intensity radius 8 m: x 8..24, z 139..155, so
+// the two spawn-side clutter clusters at (+-8.5, 149.5) stand inside them and the pads 03/04 take the
+// fade; from eye height a pool further out than ~20 m is a thin band hidden behind that clutter), two
+// key lights on the port rack tiers for the racks view's nearest slots. The first one casts the shadows.
+export const FLOODS = [
+  { pos: [-16, -17, 148], target: [-16, FLOOR, 147], angle: 0.24, intensity: 1150 },
+  { pos: [16, -17, 148], target: [16, FLOOR, 147], angle: 0.24, intensity: 1150 },
+  { pos: [-44, -17, 36], target: [-70, -62, 34], angle: 0.3, intensity: 820 },
+  { pos: [-44, -17, 58], target: [-70, -46, 50], angle: 0.3, intensity: 760 },
+];
 
 // landing pads (centre x,z, radius) and their numbers
 export const PADS = [
@@ -101,4 +123,5 @@ export const HG = {
   steel: new THREE.Color("#9ea3aa"),
   gunmetal: new THREE.Color("#4a4e55"),
   rubber: new THREE.Color("#ffffff"),
+  black: new THREE.Color("#111214"),
 };

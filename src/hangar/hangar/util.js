@@ -32,6 +32,26 @@ export function housedLamp(B, emitMat, center, normal, [w, depth, d], { housing 
   B.box(emitMat, lampColor, fc[0], fc[1], fc[2], fs[0], fs[1], fs[2]);
 }
 
+/**
+ * Black/yellow hazard marking as alternating painted blocks (no texture): the box [min, max] is split
+ * along `axis` ("x" | "z" | "y") into `block`-long yellow and black pieces, starting with yellow.
+ * Emits only the faces given (default all), like Batch.box.
+ */
+export function hazardBlocks(B, min, max, axis = "x", { block = 0.3, faces, texel } = {}) {
+  const ai = axis === "x" ? 0 : axis === "y" ? 1 : 2;
+  const L = max[ai] - min[ai];
+  const n = Math.max(1, Math.round(L / block));
+  const step = L / n;
+  const opts = faces !== undefined || texel !== undefined ? { faces, texel } : undefined;
+  for (let i = 0; i < n; i++) {
+    const a = [...min], b = [...max];
+    a[ai] = min[ai] + i * step;
+    b[ai] = min[ai] + (i + 1) * step;
+    if (i % 2 === 0) B.boxMM("painted", HG.yellow, a, b, opts);
+    else B.boxMM("paintedMetal", HG.black, a, b, opts);
+  }
+}
+
 /** Red beacon: dark housing, pulsing red lens on the open side, a steel guard bar across the lens. */
 export function redBeacon(B, center, normal, w = 0.34) {
   const depth = 0.22;
@@ -94,9 +114,10 @@ export function label(kit, mat, name, center, normal, width, { color = 0xffffff,
 /**
  * Safety rail from [x,z] to [x,z] at floor y0: dark posts every <= 2.5 m, a thin light-grey top rail at
  * 1.02 m, a dark mid rail at 0.55 m and a 0.15 m kick plate, plus a 1.02 m tall blocking collider along
- * it. Uses the Batcher for everything (boxes only).
+ * it. `lit` adds a 1 cm light strip under the top rail and (unless `caps` is false) a lit cap lens on
+ * every post, so the rail still reads at night and from 70 m. Uses the Batcher for everything (boxes only).
  */
-export function railRun(B, kit, from, to, y0, { tag = "rail", collide = true, kick = true, foot = true, postEvery = 2.5, colors = {} } = {}) {
+export function railRun(B, kit, from, to, y0, { tag = "rail", collide = true, kick = true, foot = true, lit = false, caps = true, postEvery = 2.5, colors = {} } = {}) {
   const dx = to[0] - from[0], dz = to[1] - from[1];
   const L = Math.hypot(dx, dz);
   if (L < 0.2) return;
@@ -111,10 +132,12 @@ export function railRun(B, kit, from, to, y0, { tag = "rail", collide = true, ki
     B.box("paintedMetal", post, x, y0 + RAIL_H / 2, z, 0.09, RAIL_H, 0.09);
     // foot plate (skipped on rails nobody gets near, e.g. the catwalk ring 36 m up)
     if (foot) B.box("paintedMetal", post, x, y0 + 0.015, z, 0.22, 0.03, 0.22);
+    if (lit && caps) B.box("emitWhite", 0xffffff, x, y0 + RAIL_H + 0.015, z, 0.07, 0.03, 0.07);
   }
   const cx = (from[0] + to[0]) / 2, cz = (from[1] + to[1]) / 2;
   const sx = alongX ? L : 0.05, sz = alongX ? 0.05 : L;
   B.box("metal", rail, cx, y0 + RAIL_H - 0.03, cz, alongX ? L + 0.09 : 0.07, 0.06, alongX ? 0.07 : L + 0.09);
+  if (lit) B.box("emitWhite", 0xffffff, cx, y0 + RAIL_H - 0.065, cz, alongX ? L - 0.1 : 0.03, 0.01, alongX ? 0.03 : L - 0.1);
   B.box("paintedMetal", post, cx, y0 + RAIL_MID, cz, sx, 0.05, sz);
   if (kick) B.box("paintedMetal", colors.kick || post, cx, y0 + 0.02 + RAIL_KICK / 2, cz, alongX ? L : 0.03, RAIL_KICK, alongX ? 0.03 : L);
   if (collide) {
@@ -148,7 +171,7 @@ export function ladder(B, kit, wall, along, y0, y1, n, { cage = true, collide = 
   // wall brackets every 2 m
   for (let y = y0 + 1; y < y1; y += 2) for (const s of [-0.25, 0.25]) box("metal", HG.gunmetal, wall + (n * stileOff) / 2, y, along + s, stileOff, 0.05, 0.05);
   if (cage && h > 3.5) {
-    const hoop = sharedTorus(0.45, 0.025, 5, 16, Math.PI);
+    const hoop = sharedTorus(0.45, 0.025, 4, 10, Math.PI);
     const q = HOOP_Q[plane][n > 0 ? 1 : -1];
     for (let y = y0 + 2.4; y < y1 - 0.5; y += 3.0) {
       const [x, z] = P(lw + n * 0.15, along);

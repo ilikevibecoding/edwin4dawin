@@ -1,24 +1,30 @@
 // d4-hangar walls + ceiling: giant Imperial panelling (4 m light-grey panels with black recessed seams,
-// one darker row per 12 m bay, structural bands every 12 m, frame ribs every 20 m hugging wall +
-// ceiling), a maintenance catwalk ring at 36 m with rails and caged ladders, housed wall floods, cable
-// trays at 2.6 m, human-scale dressing along the wall bases (consoles, lockers, hose reels, maintenance
-// hatches), door holes cut exactly with doorOpening() with one hazard treatment per door, the
-// control-tower window bezel + sign + tower base, the balcony with its bracket structure, fire stations,
-// and a ceiling of long dark light channels with diffuser segments + louvred flood fixtures.
+// one darker row per 12 m bay, recessed structural channels with steel lips every 12 m, frame ribs every
+// 20 m hugging wall + ceiling with housed red beacons at y -45 and y -20), a service gallery ring at
+// y -60 (bow/aft walls and the side walls outside the rack zone), a maintenance catwalk ring at 36 m
+// with rails and caged ladders, housed wall floods, cable trays at 2.6 m with detailed junction boxes,
+// human-scale dressing along the wall bases (consoles, lockers, hose reels, maintenance hatches, a crew
+// hatch + console/locker group beside every bay door), giant wall stencils, door holes cut exactly with
+// doorOpening() (bay doors: plain steel surround; blast doors: a 7 m portal), the control-tower window
+// bezel + sign + tower base, the balcony with lit rail, fascia and soffit, fire stations, and a ceiling
+// of faintly self-lit cells, long dark light channels with diffuser segments, louvred fixtures and the
+// four flood fixtures that the light plan's spot descriptors shine from.
 import * as THREE from "three";
 import { Batcher, PX, NX, PY, NY, PZ, NZ, ALL, sharedBox } from "./batch.js";
 import { doorOpening, FRAME_W } from "../../systems/doors/helper.js";
 import { rng } from "../../kit.js";
-import { FLOOR, CEIL, WALL_T, HALL, DOORS, DOOR_LABELS, WINDOW, BALCONY, RACK, STAIRS, LADDER_Z, CATWALK, RIB_Z, RIB_X, RIB_W, RIB_D, PANEL_W, SEAM, HG } from "./layout.js";
+import { FLOOR, CEIL, WALL_T, HALL, DOORS, DOOR_LABELS, WINDOW, BALCONY, RACK, STAIRS, LADDER_Z, CATWALK, GALLERY, GALLERY_SPANS, FLOODS, RIB_Z, RIB_X, RIB_W, RIB_D, PANEL_W, SEAM, HG } from "./layout.js";
 import { LABELS } from "./materials.js";
-import { label, railRun, ladder, housedLamp, redBeacon } from "./util.js";
+import { label, railRun, ladder, housedLamp, redBeacon, hazardBlocks } from "./util.js";
 
 const H = CEIL - FLOOR; // 60
 const P0 = WALL_T; // panel back (on the black backing)
 const P1 = WALL_T + 0.12; // panel front
-const CAT_T = 0.12; // catwalk plate thickness
-const CAT_V = CATWALK.y - FLOOR; // plate top, wall-local v (36.52)
+const CAT_T = 0.12; // catwalk / gallery plate thickness
+const CAT_V = CATWALK.y - FLOOR; // plate top, wall-local v (36.54)
+const GAL_V = GALLERY.y - FLOOR; // gallery plate top, wall-local v (12)
 const END_LADDER_X = { bow: 50, aft: -50 }; // deck -> catwalk ladders on the end walls
+const BEACON_V = [27, 52]; // housed red beacons on every rib (y -45 and y -20)
 
 // rows of the 60 m wall: [v0, v1, type]
 const ROWS = [];
@@ -116,6 +122,7 @@ class Wall {
     this.baseCuts = []; // wall-base dressing keeps out of these (fire stations, rack columns)
     this.plainRects = []; // panels here get no greebles (racks / platforms hang in front)
     this.levels = [[FLOOR, CEIL]];
+    this.gallery = (GALLERY_SPANS[name] || []).map(([a, b]) => [this.u(a), this.u(b)]); // u spans of the gallery
     this.dressSeq = 0;
   }
   pos(u, v, d) {
@@ -135,6 +142,10 @@ class Wall {
   /** local u for a world across-axis coordinate */
   u(worldAcross) {
     return worldAcross - this.uw0;
+  }
+  /** is local u inside one of this wall's gallery spans */
+  inGallery(u) {
+    return this.gallery.some(([a, b]) => u > a && u < b);
   }
   addHole(rect) {
     this.holes.push(rect);
@@ -188,13 +199,19 @@ class Wall {
     const nCols = Math.round(this.L / PANEL_W);
     for (const [v0, v1, type] of ROWS) {
       if (type === "band" || type === "kick" || type === "cornice") {
-        // continuous, merged across columns
-        const depth = type === "band" ? 0.6 : type === "kick" ? 0.34 : 0.5;
         for (const r of subtract({ u0: 0, u1: this.L, v0, v1 }, cuts)) {
-          this.box("paintedMetal", this.P.impDark, r.u0, r.u1, r.v0, r.v1, P0, depth, { texel: 0.5 });
           if (type === "band") {
-            for (let u = r.u0 + 1; u < r.u1 - 0.5; u += 2) this.box("metal", HG.steel, u - 0.08, u + 0.08, v0 + 0.16, v0 + 0.32, depth, depth + 0.05);
+            // recessed structural channel: black back behind the panel plane, steel lips top and bottom
+            // standing proud of the panels, dark bolt blocks inside every 4 m on the two lower bands (the
+            // ones 36 m and 48 m up are too far for a 20 cm block to read)
+            this.box("paintedMetal", this.P.impBlack, r.u0, r.u1, r.v0, r.v1, P0, P0 + 0.02, { texel: 0.5 });
+            this.box("metal", HG.steel, r.u0, r.u1, v0, v0 + 0.12, P0, P1 + 0.14);
+            this.box("metal", HG.steel, r.u0, r.u1, v1 - 0.12, v1, P0, P1 + 0.14);
+            if (v0 < 30) for (let u = r.u0 + 2; u < r.u1 - 1; u += 4) this.box("metal", HG.gunmetal, u - 0.1, u + 0.1, v0 + 0.24, v1 - 0.24, P0 + 0.02, P0 + 0.1);
+            continue;
           }
+          const depth = type === "kick" ? 0.34 : 0.5;
+          this.box("paintedMetal", this.P.impDark, r.u0, r.u1, r.v0, r.v1, P0, depth, { texel: 0.5 });
           if (type === "kick") {
             // waist-height light strip in a black channel just above the kick band
             this.box("paintedMetal", this.P.impBlack, r.u0 + 0.25, r.u1 - 0.25, 0.96, 1.14, P1, P1 + 0.08);
@@ -229,34 +246,52 @@ class Wall {
     // one tone for the field; the darker tone only in its own row (a band, never a checkerboard)
     const dark = r.v0 >= DARK_ROW[0] - 0.05 && r.v1 <= DARK_ROW[1] + 0.05;
     const color = heightTint(dark ? this.P.impMid : this.P.impGrey, r.v0);
+    const faces = r.v0 >= 24 ? this.facesHigh : this.faces;
     let style = "plain";
     const plain = this.plainRects.some((p) => intersects(r, p));
     if (full && w > 1.5 && h > 2) {
       const s = this.rand();
       if (plain) style = s < 0.3 ? "seam" : "plain";
+      else if (dark) style = s < 0.34 ? "vent" : s < 0.42 ? "hatch" : s < 0.6 ? "seam" : "plain"; // the dark row is the service row
       else if (detailed) {
-        if (s < 0.06) style = "vent";
-        else if (s < 0.11) style = "greeble";
-        else if (s < 0.24) style = "seam";
-        else if (s < 0.29) style = "inset";
-      } else if (s < 0.05) style = "vent";
-      else if (s < 0.17) style = "seam"; // upper storeys: enough grooves + bolt heads that they are not blank sheets
+        if (s < 0.05) style = "vent";
+        else if (s < 0.1) style = "greeble";
+        else if (s < 0.23) style = "seam";
+        else if (s < 0.27) style = "hatch";
+      } else if (r.v0 < 36 && s < 0.14) style = "seam"; // upper storeys: a few grooves; above 36 m plain sheets (nobody sees bolts there)
     }
-    this.box("impPanel", color, u0, u1, v0, v1, P0, P1, { faces: r.v0 >= 24 ? this.facesHigh : this.faces, fit: true });
     const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2;
-    switch (style) {
-      case "vent": {
-        const gw = Math.min(w - 1.0, 2.6), gh = h - 1.2;
-        this.box("paintedMetal", this.P.impBlack, cu - gw / 2, cu + gw / 2, cv - gh / 2, cv + gh / 2, P1, P1 + 0.02);
+    if (style === "vent" || style === "hatch") {
+      // a real opening: the panel becomes a frame round a recess that goes back to the black backing
+      const gw = style === "vent" ? Math.min(w - 1.0, 2.6) : Math.min(w - 1.2, 2.2), gh = style === "vent" ? h - 1.2 : Math.min(h - 1.0, 3.0);
+      const ou0 = cu - gw / 2, ou1 = cu + gw / 2, ov0 = style === "vent" ? cv - gh / 2 : v0 + 0.5, ov1 = ov0 + gh;
+      this.box("impPanel", color, u0, ou0, v0, v1, P0, P1, { faces, fit: true });
+      this.box("impPanel", color, ou1, u1, v0, v1, P0, P1, { faces, fit: true });
+      this.box("impPanel", color, ou0, ou1, v0, ov0, P0, P1, { faces, fit: true });
+      this.box("impPanel", color, ou0, ou1, ov1, v1, P0, P1, { faces, fit: true });
+      // steel frame lip proud of the panel, black recess back
+      this.box("metal", HG.steel, ou0 - 0.1, ou1 + 0.1, ov0 - 0.1, ov0, P1 - 0.02, P1 + 0.08);
+      this.box("metal", HG.steel, ou0 - 0.1, ou1 + 0.1, ov1, ov1 + 0.1, P1 - 0.02, P1 + 0.08);
+      this.box("metal", HG.steel, ou0 - 0.1, ou0, ov0, ov1, P1 - 0.02, P1 + 0.08);
+      this.box("metal", HG.steel, ou1, ou1 + 0.1, ov0, ov1, P1 - 0.02, P1 + 0.08);
+      this.box("paintedMetal", this.P.impBlack, ou0, ou1, ov0, ov1, P0 - 0.01, P0 + 0.01, { faces: this.frontBit });
+      if (style === "vent") {
+        // louvre slats inside the recess
         const n = Math.floor(gh / 0.34);
         for (let i = 0; i < n; i++) {
-          const y = cv - gh / 2 + 0.17 + i * 0.34;
-          this.box("metal", HG.gunmetal, cu - gw / 2 + 0.1, cu + gw / 2 - 0.1, y - 0.06, y + 0.06, P1 + 0.02, P1 + 0.1);
+          const y = ov0 + 0.17 + i * 0.34;
+          this.box("metal", HG.gunmetal, ou0 + 0.05, ou1 - 0.05, y - 0.05, y + 0.05, P0 + 0.01, P0 + 0.1);
         }
-        this.box("metal", HG.gunmetal, cu - gw / 2 - 0.08, cu + gw / 2 + 0.08, cv - gh / 2 - 0.08, cv - gh / 2, P1, P1 + 0.1);
-        this.box("metal", HG.gunmetal, cu - gw / 2 - 0.08, cu + gw / 2 + 0.08, cv + gh / 2, cv + gh / 2 + 0.08, P1, P1 + 0.1);
-        break;
+      } else {
+        // recessed service hatch: dark leaf set 6 cm into the opening, handle, housed amber lamp on the lip
+        this.box("paintedMetal", this.P.impDark, ou0 + 0.05, ou1 - 0.05, ov0 + 0.05, ov1 - 0.05, P0 + 0.01, P0 + 0.06, { texel: 0.5 });
+        this.box("metal", HG.steel, cu + 0.45, cu + 0.55, ov0 + 0.9, ov0 + 1.3, P0 + 0.06, P0 + 0.1);
+        housedLamp(this.B, "emitAmber", this.pos(cu, ov1 + 0.3, P1 + 0.08), this.N.toArray(), [0.4, 0.12, 0.16], { inset: 0.04 });
       }
+      return;
+    }
+    this.box("impPanel", color, u0, u1, v0, v1, P0, P1, { faces, fit: true });
+    switch (style) {
       case "greeble": {
         this.box("impPanel", color, u0 + 0.5, u1 - 0.5, v0 + 0.5, v1 - 0.5, P1, P1 + 0.06, { faces: this.faces, fit: true });
         const bx = cu - 0.6, by = cv + 0.4;
@@ -271,16 +306,13 @@ class Wall {
       }
       case "seam": {
         const gy = v0 + h * (0.35 + this.rand() * 0.3);
-        this.box("paintedMetal", this.P.impBlack, u0 + 0.25, u1 - 0.25, gy - 0.035, gy + 0.035, P1, P1 + 0.02);
-        for (const [su, sv] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-          const bu = cu + su * (w / 2 - 0.35), bv = cv + sv * (h / 2 - 0.35);
-          this.box("metal", HG.steel, bu - 0.06, bu + 0.06, bv - 0.06, bv + 0.06, P1, P1 + 0.04);
+        this.box("paintedMetal", this.P.impBlack, u0 + 0.25, u1 - 0.25, gy - 0.035, gy + 0.035, P1, P1 + 0.02, { faces: this.frontBit });
+        if (r.v0 < 12) {
+          for (const [su, sv] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+            const bu = cu + su * (w / 2 - 0.35), bv = cv + sv * (h / 2 - 0.35);
+            this.box("metal", HG.steel, bu - 0.06, bu + 0.06, bv - 0.06, bv + 0.06, P1, P1 + 0.04);
+          }
         }
-        break;
-      }
-      case "inset": {
-        this.box("darkGloss", 0x101214, u0 + 0.45, u1 - 0.45, v0 + 0.45, v1 - 0.45, P1, P1 + 0.03);
-        this.box("emitAmber", 0xffffff, u1 - 0.9, u1 - 0.6, v0 + 0.55, v0 + 0.62, P1 + 0.03, P1 + 0.05);
         break;
       }
       default:
@@ -288,23 +320,42 @@ class Wall {
     }
   }
 
-  // ---- frame ribs (wall part). Interrupted by doors (restart above the header) and by the catwalk
-  // (a 2.8 m opening with a lintel where the walkway passes through the rib).
+  // ---- frame ribs (wall part). Interrupted by doors (restart above the header), by the gallery and by
+  // the catwalk (2.8 m openings with a lintel where the walkway passes through the rib). Housed red
+  // beacons on the rib front at y -45 and y -20.
   ribsBuild() {
     const D = P0 + RIB_D;
-    const cv0 = CAT_V - CAT_T - 0.02, cv1 = CAT_V + CATWALK.openingH;
+    const openings = [[CAT_V - CAT_T - 0.02, CAT_V + CATWALK.openingH]];
     for (const u of this.ribs) {
       let vStart = 0;
       for (const h of this.holes) if (h.door && h.u1 + 2.5 > u - RIB_W / 2 && h.u0 - 2.5 < u + RIB_W / 2 && h.v0 < 1) vStart = Math.max(vStart, h.v1 + 3.6);
-      for (const [a, b] of [[vStart, cv0], [cv1, H]]) {
-        this.box("paintedMetal", this.P.impDark, u - RIB_W / 2, u + RIB_W / 2, a, b, 0.02, D, { texel: 0.5 });
-        this.box("impPanel", this.P.impMid, u - RIB_W / 2 + 0.2, u + RIB_W / 2 - 0.2, a + 0.4, b - 0.4, D, D + 0.06, { texel: 0.5 });
-        // side flanges (lighter) so the rib reads as a profile, not a slab
-        for (const s of [-1, 1]) this.box("paintedMetal", this.P.impMid, u + s * (RIB_W / 2 + 0.12) - 0.12, u + s * (RIB_W / 2 + 0.12) + 0.12, a, b, P1, D - 0.3, { texel: 0.5 });
+      const ops = this.inGallery(u) ? [[GAL_V - CAT_T - 0.02, GAL_V + GALLERY.openingH], ...openings] : openings;
+      const segs = [];
+      let a = vStart;
+      for (const [o0, o1] of ops) {
+        if (o0 > a) segs.push([a, o0]);
+        a = Math.max(a, o1);
       }
-      // catwalk opening lintel + a housed lamp under it lighting the walkway
-      this.box("paintedMetal", this.P.impMid, u - RIB_W / 2 - 0.3, u + RIB_W / 2 + 0.3, cv1, cv1 + 0.4, 0.02, D + 0.1, { texel: 0.5 });
-      housedLamp(this.B, "emitWhite", this.pos(u, cv1 - 0.001, P1 + 0.6), [0, -1, 0], [0.5, 0.14, 0.3], { inset: 0.04 });
+      segs.push([a, H]);
+      for (const [s0, s1] of segs) {
+        if (s1 - s0 < 0.5) continue;
+        this.box("paintedMetal", this.P.impDark, u - RIB_W / 2, u + RIB_W / 2, s0, s1, 0.02, D, { texel: 0.5 });
+        this.box("impPanel", this.P.impMid, u - RIB_W / 2 + 0.2, u + RIB_W / 2 - 0.2, s0 + 0.4, s1 - 0.4, D, D + 0.06, { texel: 0.5 });
+        // side flanges (lighter) so the rib reads as a profile, not a slab
+        for (const s of [-1, 1]) this.box("paintedMetal", this.P.impMid, u + s * (RIB_W / 2 + 0.12) - 0.12, u + s * (RIB_W / 2 + 0.12) + 0.12, s0, s1, P1, D - 0.3, { texel: 0.5 });
+      }
+      // opening lintels + a housed lamp under each lighting the walkway
+      for (const [, o1] of ops) {
+        if (o1 < vStart) continue;
+        this.box("paintedMetal", this.P.impMid, u - RIB_W / 2 - 0.3, u + RIB_W / 2 + 0.3, o1, o1 + 0.4, 0.02, D + 0.1, { texel: 0.5 });
+        housedLamp(this.B, "emitWhite", this.pos(u, o1 - 0.001, P1 + 0.6), [0, -1, 0], [0.5, 0.14, 0.3], { inset: 0.04 });
+      }
+      // housed red beacons on the rib front (pulsing), a steel ledge under each
+      for (const v of BEACON_V) {
+        if (v < vStart + 1) continue;
+        this.box("metal", HG.steel, u - 0.5, u + 0.5, v - 0.42, v - 0.36, D, D + 0.4);
+        redBeacon(this.B, this.pos(u, v, D + 0.24), this.N.toArray(), 0.7);
+      }
       if (vStart === 0) {
         // foot block with a steel toe strip (no hazard paint: that is reserved for the doors and the aperture lip)
         this.box("paintedMetal", this.P.impDark, u - RIB_W / 2 - 0.35, u + RIB_W / 2 + 0.35, 0, 1.6, 0.02, D + 0.3, { texel: 0.5 });
@@ -317,14 +368,19 @@ class Wall {
     }
   }
 
-  // ---- wall floods: one row at y -20 (the catwalk downlights take the lower row), skipping ribs and holes
+  // ---- wall floods at y -20: a louvred flood every 16 m, a smaller housed lamp between, skipping ribs and holes
   floods() {
     const cuts = this.cuts();
     const v = H - 8;
-    for (let u = 4; u < this.L - 1; u += 8) {
+    let k = 0;
+    for (let u = 4; u < this.L - 1; u += 8, k++) {
       if (this.ribs.some((r) => Math.abs(r - u) < 2.2)) continue;
       if (cuts.some((c) => u + 1.2 > c.u0 && u - 1.2 < c.u1 && v + 0.6 > c.v0 && v - 0.6 < c.v1)) continue;
-      this.flood(u, v);
+      if (k % 2 === 0) this.flood(u, v);
+      else {
+        this.box("paintedMetal", this.P.impDark, u - 0.2, u + 0.2, v - 0.5, v + 0.1, P1, P1 + 0.3, { texel: 0.5 });
+        housedLamp(this.B, "emitWhite", this.pos(u, v - 0.5, P1 + 0.3), [0, -1, 0], [0.9, 0.16, 0.3], { inset: 0.04 });
+      }
     }
   }
   /** louvred flood: dark housing tilted 35 deg down, the lens set back behind three slats, on a stem */
@@ -347,9 +403,11 @@ class Wall {
     this.B.tube("metal", HG.gunmetal, this.pos(u, v, 0.95), c.clone().addScaledVector(fr, -0.55).toArray(), 0.09, 8);
   }
 
-  // ---- cable trays + pipes at v 2.6 .. 3.5 along hole-free spans (they run into the ribs)
+  // ---- cable trays + pipes at v 2.6 .. 3.5 along hole-free spans (they run into the ribs), with a
+  // junction box every 16 m (louvres, cable drop, indicator lamps, stencil)
   trays() {
     const spans = subtract({ u0: 0.6, u1: this.L - 0.6, v0: 2.6, v1: 3.5 }, [...this.cuts(), ...this.trayCuts]);
+    const N = this.N.toArray();
     for (const r of spans) {
       if (r.v1 - r.v0 < 0.8) continue;
       this.box("paintedMetal", this.P.impDark, r.u0, r.u1, 2.6, 2.72, P1, P1 + 0.5, { texel: 0.5 });
@@ -360,67 +418,89 @@ class Wall {
       for (let u = r.u0 + 6; u < r.u1 - 2; u += 16) {
         if (this.ribs.some((rb) => Math.abs(rb - u) < 1.6)) continue;
         this.box("paintedMetal", this.P.impDark, u - 0.4, u + 0.4, 3.7, 4.6, P1, P1 + 0.35, { texel: 0.5 });
+        for (let i = 0; i < 3; i++) this.box("metal", HG.gunmetal, u - 0.3, u + 0.3, 3.8 + i * 0.14, 3.84 + i * 0.14, P1 + 0.35, P1 + 0.39);
         this.box("emitGreen", 0xffffff, u - 0.25, u - 0.15, 4.35, 4.45, P1 + 0.35, P1 + 0.37);
         this.box("emitRedImp", 0xffffff, u - 0.05, u + 0.05, 4.35, 4.45, P1 + 0.35, P1 + 0.37);
+        this.B.tube("rubber", HG.rubber, this.pos(u + 0.2, 3.7, P1 + 0.2), this.pos(u + 0.3, 2.95, P1 + 0.3), 0.04, 8);
+        this.B.tube("metal", HG.steel, this.pos(u - 0.2, 3.7, P1 + 0.18), this.pos(u - 0.2, 2.92, P1 + 0.18), 0.04, 8);
+        label(this.kit, "hgDecal", "HIGH VOLTAGE", this.pos(u, 4.22, P1 + 0.355), N, 0.6, { color: HG.yellow });
       }
     }
   }
 
-  // ---- door surrounds. One hazard treatment per door: bay doors get the chevron border, blast doors
-  // get the floor stripes (and a heavy dark surround). Both get a header plate with the name and two
-  // housed red lamps, and dark jamb columns with a thin light strip.
+  // ---- door surrounds. Bay doors: plain steel surround (the leaves the doors system hangs carry the
+  // hazard band). Blast doors: a 7 m portal (1.4 m columns, lintel with the name plate, threshold blocks).
+  // Both get housed red lamps and lit jamb strips.
   doorSurround(h) {
     const kind = h.door.kind;
     if (kind !== "bay" && kind !== "blast") return;
     const m = FRAME_W; // reveal the doors system needs
-    const hv0 = h.v1 + m + 1.1, hv1 = hv0 + 1.4;
+    const N = this.N.toArray();
+    const txt = DOOR_LABELS[h.door.id];
+    const red = h.door.to === null;
     if (kind === "bay") {
-      // plain dark steel surround: the leaves the doors system hangs in the hole carry the hazard band,
-      // so the frame adds none of its own
       const bw = 0.6;
+      const hv0 = h.v1 + m + 1.1, hv1 = hv0 + 1.4;
       this.box("paintedMetal", this.P.impDark, h.u0 - m - bw, h.u0 - m, 0, h.v1 + m + bw, P0, P0 + 0.3, { texel: 0.5 });
       this.box("paintedMetal", this.P.impDark, h.u1 + m, h.u1 + m + bw, 0, h.v1 + m + bw, P0, P0 + 0.3, { texel: 0.5 });
       this.box("paintedMetal", this.P.impDark, h.u0 - m, h.u1 + m, h.v1 + m, h.v1 + m + bw, P0, P0 + 0.3, { texel: 0.5 });
       this.box("metal", HG.steel, h.u0 - m - 0.08, h.u0 - m, 0, h.v1 + m + 0.08, P0 + 0.3, P0 + 0.36);
       this.box("metal", HG.steel, h.u1 + m, h.u1 + m + 0.08, 0, h.v1 + m + 0.08, P0 + 0.3, P0 + 0.36);
       this.box("metal", HG.steel, h.u0 - m, h.u1 + m, h.v1 + m, h.v1 + m + 0.08, P0 + 0.3, P0 + 0.36);
-    } else {
-      const bw = 1.0;
-      this.box("paintedMetal", this.P.impDark, h.u0 - m - bw, h.u0 - m, 0, h.v1 + m + bw, P0, P0 + 0.5, { texel: 0.5 });
-      this.box("paintedMetal", this.P.impDark, h.u1 + m, h.u1 + m + bw, 0, h.v1 + m + bw, P0, P0 + 0.5, { texel: 0.5 });
-      this.box("paintedMetal", this.P.impDark, h.u0 - m, h.u1 + m, h.v1 + m, h.v1 + m + bw, P0, P0 + 0.5, { texel: 0.5 });
-      // steel inner lip round the reveal
-      this.box("metal", HG.steel, h.u0 - m - 0.08, h.u0 - m, 0, h.v1 + m + 0.08, P0 + 0.5, P0 + 0.56);
-      this.box("metal", HG.steel, h.u1 + m, h.u1 + m + 0.08, 0, h.v1 + m + 0.08, P0 + 0.5, P0 + 0.56);
-      this.box("metal", HG.steel, h.u0 - m, h.u1 + m, h.v1 + m, h.v1 + m + 0.08, P0 + 0.5, P0 + 0.56);
-      // the hazard treatment: floor stripes across the threshold
-      if (h.v0 === 0) {
-        const [mn, mx] = this.aabb(h.u0 - 1.0, h.u1 + 1.0, 0, 0.02, P1, P1 + 1.4);
-        this.B.boxMM("hgHazard", 0xffffff, mn, mx, { texel: 0.5 });
+      // header plate (recessed name panel) + housed red lamps standing on it
+      this.box("paintedMetal", this.P.impDark, h.u0 - 2.2, h.u1 + 2.2, hv0, hv1, 0.02, 0.9, { texel: 0.5 });
+      this.box("paintedMetal", this.P.impBlack, h.u0 - 1.6, h.u1 + 1.6, hv0 + 0.2, hv1 - 0.2, 0.9, 0.92, { texel: 0.5 });
+      for (const u of [h.u0 - 1.9, h.u1 + 1.9]) {
+        this.box("paintedMetal", this.P.impDark, u - 0.25, u + 0.25, hv1, hv1 + 0.12, 0.3, 0.7);
+        redBeacon(this.B, this.pos(u, hv1 + 0.3, 0.7), N, 0.44);
       }
+      if (txt) label(this.kit, "hgSign", txt, this.pos((h.u0 + h.u1) / 2, (hv0 + hv1) / 2, 0.925), N, Math.min(0.8 * LABELS[txt].aspect, h.u1 - h.u0 + 3.0));
+      // jamb columns either side of the surround, each with a thin light strip in a black channel
+      for (const [a, b] of [[h.u0 - m - bw - 0.9, h.u0 - m - bw - 0.15], [h.u1 + m + bw + 0.15, h.u1 + m + bw + 0.9]]) {
+        this.box("paintedMetal", this.P.impDark, a, b, 0, hv0, 0.02, 0.9, { texel: 0.5 });
+        this.box("paintedMetal", this.P.impBlack, (a + b) / 2 - 0.1, (a + b) / 2 + 0.1, 0.4, hv0 - 0.4, 0.9, 0.96);
+        this.box("emitWhite", 0xffffff, (a + b) / 2 - 0.04, (a + b) / 2 + 0.04, 0.5, hv0 - 0.5, 0.96, 0.97);
+        const [mn, mx] = this.aabb(a, b, 0, 4, 0, 0.9);
+        this.kit.collider(mn, mx, "jamb");
+      }
+      // giant bay stencil above the header (reads from the deck; the 10 m door gets its scale from it)
+      if (txt) label(this.kit, "hgDecal", txt, this.pos((h.u0 + h.u1) / 2, 18.4, P1 + 0.015), N, 4.6 * LABELS[txt].aspect, { color: HG.white });
+      return;
     }
-    // header plate (recessed name panel) + housed red lamps standing on it
-    this.box("paintedMetal", this.P.impDark, h.u0 - 2.2, h.u1 + 2.2, hv0, hv1, 0.02, 0.9, { texel: 0.5 });
-    this.box("paintedMetal", this.P.impBlack, h.u0 - 1.6, h.u1 + 1.6, hv0 + 0.2, hv1 - 0.2, 0.9, 0.92, { texel: 0.5 });
-    for (const u of [h.u0 - 1.9, h.u1 + 1.9]) {
-      this.box("paintedMetal", this.P.impDark, u - 0.25, u + 0.25, hv1, hv1 + 0.12, 0.3, 0.7);
-      redBeacon(this.B, this.pos(u, hv1 + 0.3, 0.7), this.N.toArray(), 0.44);
-    }
-    const txt = DOOR_LABELS[h.door.id];
-    if (txt) {
-      const red = h.door.to === null;
-      const width = Math.min(0.8 * LABELS[txt].aspect, h.u1 - h.u0 + 3.0);
-      label(this.kit, red ? "hgSignRed" : "hgSign", txt, this.pos((h.u0 + h.u1) / 2, (hv0 + hv1) / 2, 0.925), this.N.toArray(), width);
-      if (red) label(this.kit, "hgSignRed", "SEALED", this.pos((h.u0 + h.u1) / 2, h.v1 + m + 0.5, P0 + 0.565), this.N.toArray(), 2.4);
-    }
-    // jamb columns either side of the surround, each with a thin light strip in a black channel
-    const bw = kind === "bay" ? 0.6 : 1.0;
-    for (const [a, b] of [[h.u0 - m - bw - 0.9, h.u0 - m - bw - 0.15], [h.u1 + m + bw + 0.15, h.u1 + m + bw + 0.9]]) {
-      this.box("paintedMetal", this.P.impDark, a, b, 0, hv0, 0.02, 0.9, { texel: 0.5 });
-      this.box("paintedMetal", this.P.impBlack, (a + b) / 2 - 0.1, (a + b) / 2 + 0.1, 0.4, hv0 - 0.4, 0.9, 0.96);
-      this.box("emitWhite", 0xffffff, (a + b) / 2 - 0.04, (a + b) / 2 + 0.04, 0.5, hv0 - 0.5, 0.96, 0.97);
-      const [mn, mx] = this.aabb(a, b, 0, 4, 0, 0.9);
+    // blast door: inner surround (1.0 m, steel lip), then the portal: 1.4 m columns 1.1 m deep up to the
+    // lintel (v 6.0 .. 7.4) carrying the name plate, red lamps on top, lit strips down the column insides
+    const bw = 1.0, cw = 1.4, pd = 1.1;
+    this.box("paintedMetal", this.P.impDark, h.u0 - m - bw, h.u0 - m, 0, h.v1 + m + bw, P0, P0 + 0.5, { texel: 0.5 });
+    this.box("paintedMetal", this.P.impDark, h.u1 + m, h.u1 + m + bw, 0, h.v1 + m + bw, P0, P0 + 0.5, { texel: 0.5 });
+    this.box("paintedMetal", this.P.impDark, h.u0 - m, h.u1 + m, h.v1 + m, h.v1 + m + bw, P0, P0 + 0.5, { texel: 0.5 });
+    this.box("metal", HG.steel, h.u0 - m - 0.08, h.u0 - m, 0, h.v1 + m + 0.08, P0 + 0.5, P0 + 0.56);
+    this.box("metal", HG.steel, h.u1 + m, h.u1 + m + 0.08, 0, h.v1 + m + 0.08, P0 + 0.5, P0 + 0.56);
+    this.box("metal", HG.steel, h.u0 - m, h.u1 + m, h.v1 + m, h.v1 + m + 0.08, P0 + 0.5, P0 + 0.56);
+    const c0 = h.u0 - m - bw - cw, c1 = h.u1 + m + bw + cw; // portal outer edges
+    const lv0 = h.v1 + m + bw + 0.3, lv1 = lv0 + 1.4; // lintel
+    for (const [a, b] of [[c0, c0 + cw], [c1 - cw, c1]]) {
+      this.box("paintedMetal", this.P.impDark, a, b, 0, lv0, 0.02, pd, { texel: 0.5 });
+      this.box("paintedMetal", this.P.impMid, a + 0.2, b - 0.2, 0.4, lv0 - 0.4, pd, pd + 0.06, { texel: 0.5 });
+      // lit strip down the column's inner face
+      const inner = a === c0 ? b : a, dir = a === c0 ? -1 : 1;
+      this.box("paintedMetal", this.P.impBlack, inner + dir * 0.02, inner + dir * 0.2, 0.5, lv0 - 0.5, P0 + 0.6, pd - 0.1);
+      this.box("emitWhite", 0xffffff, inner + dir * 0.05, inner + dir * 0.17, 0.6, lv0 - 0.6, pd - 0.11, pd - 0.1);
+      this.box("metal", HG.steel, a, b, 0.05, 0.2, pd, pd + 0.03);
+      const [mn, mx] = this.aabb(a, b, 0, 4, 0, pd);
       this.kit.collider(mn, mx, "jamb");
+    }
+    this.box("paintedMetal", this.P.impDark, c0, c1, lv0, lv1, 0.02, pd, { texel: 0.5 });
+    this.box("paintedMetal", this.P.impBlack, h.u0 - 1.8, h.u1 + 1.8, lv0 + 0.2, lv1 - 0.2, pd, pd + 0.02, { texel: 0.5 });
+    this.box("metal", HG.steel, c0, c1, lv1, lv1 + 0.12, 0.02, pd + 0.1);
+    for (const u of [c0 + cw / 2, c1 - cw / 2]) redBeacon(this.B, this.pos(u, lv1 + 0.45, pd - 0.3), N, 0.5);
+    if (txt) {
+      label(this.kit, red ? "hgSignRed" : "hgSign", txt, this.pos((h.u0 + h.u1) / 2, (lv0 + lv1) / 2, pd + 0.025), N, Math.min(0.8 * LABELS[txt].aspect, h.u1 - h.u0 + 3.4));
+      if (red) label(this.kit, "hgSignRed", "SEALED", this.pos((h.u0 + h.u1) / 2, h.v1 + m + 0.5, P0 + 0.565), N, 2.4);
+    }
+    // threshold: black/yellow blocks across the portal on the deck
+    if (h.v0 === 0) {
+      const [mn, mx] = this.aabb(h.u0 - 0.8, h.u1 + 0.8, 0, 0.02, pd, pd + 1.2);
+      hazardBlocks(this.B, mn, mx, this.plane === "x" ? "z" : "x", { block: 0.4, faces: PY });
     }
   }
 
@@ -439,7 +519,7 @@ class Wall {
       }
     }
   }
-  dress(kind, u) {
+  dress(kind, u, text = null) {
     const P = this.P, N = this.N.toArray();
     switch (kind) {
       case "console": {
@@ -486,16 +566,17 @@ class Wall {
         break;
       }
       case "hatch": {
-        // standard-door-sized maintenance hatch (2.4 x 3.0), decorative: heavy frame, two dark leaves
-        // with a centre seam, a housed blue lamp on the header, stencil
+        // standard-door-sized hatch (2.4 x 3.0), decorative: heavy frame, two dark leaves with a centre
+        // seam, a housed blue lamp on the header, stencil; a lit strip down both jambs so it reads at night
         this.box("paintedMetal", P.impDark, u - 1.5, u + 1.5, 0, 3.3, P0, P0 + 0.3, { texel: 0.5 });
         this.box("paintedMetal", P.impBlack, u - 1.2, u + 1.2, 0.04, 3.0, P0, P0 + 0.31, { texel: 0.5 });
         for (const [a, b] of [[u - 1.17, u - 0.03], [u + 0.03, u + 1.17]]) this.box("paintedMetal", P.impMid, a, b, 0.1, 2.94, P0 + 0.31, P0 + 0.37, { texel: 0.5 });
         this.box("metal", HG.steel, u - 1.24, u + 1.24, 3.0, 3.06, P0 + 0.3, P0 + 0.36);
         this.box("metal", HG.steel, u - 0.2, u - 0.14, 1.0, 1.25, P0 + 0.37, P0 + 0.41);
         this.box("metal", HG.steel, u + 0.14, u + 0.2, 1.0, 1.25, P0 + 0.37, P0 + 0.41);
+        for (const s of [-1, 1]) this.box("emitWhite", 0xffffff, u + s * 1.33 - 0.02, u + s * 1.33 + 0.02, 0.3, 2.9, P0 + 0.3, P0 + 0.315);
         housedLamp(this.B, "emitBlue", this.pos(u, 3.45, P0 + 0.3), N, [0.36, 0.14, 0.18], { inset: 0.04 });
-        label(this.kit, "hgDecal", "MAINT ACCESS", this.pos(u, 3.17, P0 + 0.305), N, 1.9, { color: HG.white });
+        label(this.kit, "hgDecal", text || "MAINT ACCESS", this.pos(u, 3.17, P0 + 0.305), N, 1.9, { color: HG.white });
         label(this.kit, "hgDecal", "AUTHORISED ONLY", this.pos(u, 2.7, P0 + 0.375), N, 1.6, { color: HG.yellow });
         break;
       }
@@ -506,8 +587,8 @@ class Wall {
 }
 
 // ---------------------------------------------------------------------------
-// Ceiling: backing, rib grid, panels (crane bays darker), long light channels with diffuser segments,
-// louvred flood fixtures (fewer, two sizes)
+// Ceiling: backing, rib grid, faintly self-lit cell panels (crane bays darker), long light channels with
+// diffuser segments, louvred flood fixtures (two sizes), and the four flood fixtures of the light plan
 // ---------------------------------------------------------------------------
 function buildCeiling(ctx, B) {
   const { PALETTE } = ctx;
@@ -534,19 +615,20 @@ function buildCeiling(ctx, B) {
         const seg = (z1 - z0 - 2 * 1.4) / 3;
         for (let k = 0; k < 3; k++) {
           const a = z0 + k * (seg + 1.4);
-          B.boxMM("paintedMetal", PALETTE.impBlack, [cx - 0.36, yB - 0.28, a - 0.05], [cx + 0.36, yB - 0.02, a + seg + 0.05]);
+          B.boxMM("paintedMetal", PALETTE.impBlack, [cx - 0.36, yB - 0.28, a - 0.05], [cx + 0.36, yB - 0.02, a + seg + 0.05], { faces: ALL & ~PY });
           // one diffuser in three is dark (staggered per channel and bay) so the channels read as a
           // rhythm of long lit runs rather than an unbroken grid of identical strips
           const lit = (i + k + ci) % 3 !== 0;
-          B.boxMM(lit ? "emitWhite" : "paintedMetal", lit ? 0xffffff : PALETTE.impMid, [cx - 0.3, yB - 0.34, a], [cx + 0.3, yB - 0.28, a + seg], lit ? undefined : { faces: NY });
+          B.boxMM(lit ? "emitWhite" : "paintedMetal", lit ? 0xffffff : PALETTE.impMid, [cx - 0.3, yB - 0.34, a], [cx + 0.3, yB - 0.28, a + seg], lit ? { faces: ALL & ~PY } : { faces: NY });
         }
       }
     }
   }
-  // panels in the cells between ribs: one light tone, the outer cells (crane bays) dark
+  // cell panels between the ribs: faintly self-lit (hgCeil), the outer cells (crane bays) dark
   const xEdges = [HALL.x0 + P1, ...RIB_X.flatMap((x) => [x - w / 2, x + w / 2]), HALL.x1 - P1];
   const zEdges = [HALL.z0 + P1, ...RIB_Z.flatMap((z) => [z - w / 2, z + w / 2]), HALL.z1 - P1];
   const chan = RIB_X.flatMap((x) => [x - chanOff, x + chanOff]);
+  const cellTone = tinted(PALETTE.impGrey, 0.6), craneTone = tinted(PALETTE.impGrey, 0.4);
   for (let i = 0; i < xEdges.length - 1; i += 2) {
     const x0 = xEdges[i], x1 = xEdges[i + 1];
     const craneBay = x0 < HALL.x0 + 1 || x1 > HALL.x1 - 1;
@@ -566,20 +648,21 @@ function buildCeiling(ctx, B) {
           }
           if (ax1 - ax0 < 0.5) continue;
           // 60 m up only the underside is ever seen: the 12 cm edges are dropped (the black backing in the gaps is the seam)
-          B.boxMM("impPanel", craneBay ? PALETTE.impDark : tinted(PALETTE.impGrey, 0.55), [ax0, yB - 0.12, az0], [ax1, yB, az1], { faces: NY, fit: true });
+          B.boxMM("hgCeil", craneBay ? craneTone : cellTone, [ax0, yB - 0.12, az0], [ax1, yB, az1], { faces: NY });
         }
       }
     }
   }
   // louvred flood fixtures hanging from the transverse ribs: big ones over the pads/aprons (x +-22),
   // small ones over the taxi lanes every other rib
-  const fixture = (x, z, big) => {
+  const fixture = (x, z, big, lensY = null) => {
     const W = big ? 3.2 : 2.2, D = big ? 2.0 : 1.4, Hh = big ? 1.0 : 0.7;
     const top = yB - ribD;
-    B.boxMM("paintedMetal", PALETTE.impDark, [x - 0.22, top - 0.6, z - 0.22], [x + 0.22, top, z + 0.22], { texel: 0.5 });
-    B.boxMM("paintedMetal", PALETTE.impMid, [x - W / 2 - 0.1, top - 0.75, z - 0.2], [x + W / 2 + 0.1, top - 0.6, z + 0.2], { texel: 0.5 });
-    const y1 = top - 0.75, y0 = y1 - Hh;
-    // top plate + four side slabs (open bottom), lens set 0.3 up inside, three slats across the mouth
+    const y1 = lensY === null ? top - 0.75 : lensY + Hh - 0.3, y0 = y1 - Hh;
+    // stem (long when the lens height is given) + yoke, top plate + four side slabs (open bottom), lens
+    // set 0.3 up inside, three slats across the mouth
+    B.boxMM("paintedMetal", PALETTE.impDark, [x - 0.22, y1 + 0.15, z - 0.22], [x + 0.22, top, z + 0.22], { texel: 0.5 });
+    B.boxMM("paintedMetal", PALETTE.impMid, [x - W / 2 - 0.1, y1, z - 0.2], [x + W / 2 + 0.1, y1 + 0.15, z + 0.2], { texel: 0.5 });
     B.boxMM("paintedMetal", PALETTE.impDark, [x - W / 2, y1 - 0.08, z - D / 2], [x + W / 2, y1, z + D / 2], { texel: 0.5 });
     for (const s of [-1, 1]) {
       B.boxMM("paintedMetal", PALETTE.impDark, [x + s * W / 2 - 0.04, y0, z - D / 2], [x + s * W / 2 + 0.04, y1, z + D / 2], { texel: 0.5 });
@@ -594,6 +677,31 @@ function buildCeiling(ctx, B) {
       if (i % 2 === 1) fixture(s * 58, z, false);
     }
   });
+  // the light plan's four floods: real fixtures at the spot positions. Nearly vertical ones are big
+  // louvred boxes on a long stem off a cross-arm from the nearest longitudinal rib; tilted ones (the rack
+  // key lights) are a housing aimed along the spot axis with the lens in its mouth.
+  for (const f of FLOODS) {
+    const [x, y, z] = f.pos;
+    const dir = new THREE.Vector3(f.target[0] - x, f.target[1] - y, f.target[2] - z).normalize();
+    const ribX = RIB_X.reduce((best, r) => (Math.abs(r - x) < Math.abs(best - x) ? r : best), RIB_X[0]);
+    const armY = yB - ribD - 0.2;
+    B.boxMM("paintedMetal", PALETTE.impDark, [Math.min(x, ribX) - 0.2, armY - 0.4, z - 0.25], [Math.max(x, ribX) + 0.2, armY, z + 0.25], { texel: 0.5 });
+    if (dir.y < -0.9) {
+      fixture(x, z, true, y);
+      continue;
+    }
+    // tilted housing: local +z along the spot axis
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+    const c = new THREE.Vector3(x, y, z);
+    const up = new THREE.Vector3(0, 1, 0).sub(dir.clone().multiplyScalar(dir.y)).normalize(); // housing "up" (perpendicular to the axis)
+    B.boxMM("paintedMetal", PALETTE.impDark, [x - 0.2, y + 0.8, z - 0.2], [x + 0.2, armY - 0.4, z + 0.2], { texel: 0.5 });
+    B.geo("paintedMetal", PALETTE.impMid, sharedBox(0.9, 0.5, 0.9), [x, y + 0.75, z], null);
+    B.geo("paintedMetal", PALETTE.impDark, sharedBox(2.4, 1.6, 1.1), c.clone().addScaledVector(dir, -0.4).toArray(), q);
+    for (const s of [-1, 1]) B.geo("paintedMetal", PALETTE.impDark, sharedBox(2.4, 0.08, 0.7), c.clone().addScaledVector(up, s * 0.84).addScaledVector(dir, 0.45).toArray(), q);
+    B.geo("emitWhite", 0xffffff, sharedBox(2.1, 1.3, 0.04), c.clone().addScaledVector(dir, 0.17).toArray(), q);
+    for (const k of [-0.45, 0, 0.45]) B.geo("paintedMetal", PALETTE.impMid, sharedBox(2.3, 0.05, 0.3), c.clone().addScaledVector(up, k).addScaledVector(dir, 0.6).toArray(), q);
+    B.geo("paintedMetal", PALETTE.impMid, sharedBox(0.3, 0.3, 1.2), c.clone().addScaledVector(up, 0.95).addScaledVector(dir, -0.2).toArray(), q);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -623,9 +731,9 @@ function fireStation(W, u) {
 }
 
 // ---------------------------------------------------------------------------
-// Balcony for the control-tower hatch (y -60): grate plate into the wall slot, rails on the three open
-// sides, a fascia beam with a recessed lit soffit, three heavy brackets (arm + wall plate + box strut),
-// a small standing console. Reached only through the hatch (no stair).
+// Balcony for the control-tower hatch (y -60): grate plate into the wall slot, lit rails on the three
+// open sides, a fascia beam with a lit front strip and a recessed lit soffit, three heavy brackets (arm +
+// wall plate + box strut), a small standing console. Reached only through the hatch (no stair).
 // ---------------------------------------------------------------------------
 function buildBalcony(ctx, B) {
   const { kit, PALETTE } = ctx;
@@ -637,7 +745,11 @@ function buildBalcony(ctx, B) {
   for (const [a, b] of [[x0 - 0.14, x0], [x1, x1 + 0.14]]) B.boxMM("paintedMetal", PALETTE.impDark, [a, y - T - 0.06, z0], [b, y + 0.02, zWall], { texel: 0.5 });
   B.boxMM("paintedMetal", PALETTE.impDark, [x0 - 0.14, y - T - 0.55, z0 - 0.14], [x1 + 0.14, y + 0.02, z0 + 0.3], { texel: 0.5 });
   B.boxMM("metal", HG.steel, [x0 - 0.14, y - T - 0.2, z0 - 0.16], [x1 + 0.14, y - T - 0.14, z0 - 0.14]);
-  housedLamp(B, "emitWhite", [(x0 + x1) / 2, y - T - 0.551, z0 + 0.08], [0, -1, 0], [x1 - x0 - 1.2, 0.16, 0.26], { inset: 0.05 });
+  // lit fascia strip (6 cm, in a black channel on the front face) + four housed soffit lamps underneath
+  // (a thin line and a row of lamps read as a lit balcony from 70 m; one solid bar would just bloom)
+  B.boxMM("paintedMetal", PALETTE.impBlack, [x0 + 0.4, y - T - 0.46, z0 - 0.2], [x1 - 0.4, y - T - 0.3, z0 - 0.14]);
+  B.boxMM("emitWhite", 0xffffff, [x0 + 0.5, y - T - 0.41, z0 - 0.21], [x1 - 0.5, y - T - 0.35, z0 - 0.2]);
+  for (const x of [-9, -3, 3, 9]) housedLamp(B, "emitWhite", [x, y - T - 0.551, z0 + 0.08], [0, -1, 0], [2.4, 0.16, 0.26], { inset: 0.05 });
   // three heavy brackets: arm under the plate, wall plate, square-section strut
   for (const x of [-10.5, 0, 10.5]) {
     B.boxMM("paintedMetal", PALETTE.impDark, [x - 0.25, y - T - 0.5, z0 + 0.3], [x + 0.25, y - T - 0.06, zWall], { texel: 0.5 });
@@ -647,10 +759,12 @@ function buildBalcony(ctx, B) {
     const ang = Math.atan2(b.y - a.y, b.z - a.z); // rotation about x taking +z onto the strut
     kit.add("paintedMetal", new THREE.BoxGeometry(0.28, 0.28, L), { pos: a.clone().add(b).multiplyScalar(0.5).toArray(), rot: [-ang, 0, 0], color: PALETTE.impDark, texel: 0.5 });
   }
-  // rails (1.02 m, blocking)
-  railRun(B, kit, [x0, z0], [x1, z0], y, { tag: "balcony-rail" });
-  railRun(B, kit, [x0, z0], [x0, zWall - 0.1], y, { tag: "balcony-rail" });
-  railRun(B, kit, [x1, z0], [x1, zWall - 0.1], y, { tag: "balcony-rail" });
+  // rails (1.02 m, blocking, lit); the front rail has no post cap lenses: from the balcony view they are
+  // 1.5 m from the eye and bloom into blobs, and the strip under the light-grey top rail is what reads
+  // from the deck 70 m away
+  railRun(B, kit, [x0, z0], [x1, z0], y, { tag: "balcony-rail", lit: true, caps: false, postEvery: 2.2 });
+  railRun(B, kit, [x0, z0], [x0, zWall - 0.1], y, { tag: "balcony-rail", lit: true });
+  railRun(B, kit, [x1, z0], [x1, zWall - 0.1], y, { tag: "balcony-rail", lit: true });
   // standing console at the rail (0.9 m, matte black, tilted screen + indicators)
   const cx = 6.0, cz = z0 + 0.75;
   B.boxMM("paintedMetal", PALETTE.impBlack, [cx - 0.45, y, cz - 0.25], [cx + 0.45, y + 0.78, cz + 0.25], { texel: 1 });
@@ -662,63 +776,64 @@ function buildBalcony(ctx, B) {
 }
 
 // ---------------------------------------------------------------------------
-// Maintenance catwalk ring at y -35.5 round all four walls: grate plate on the third structural band,
-// rails on the inner edge, brackets, housed downlights every 8 m, caged ladders from the deck (side
-// walls: the rack ladders continue up; end walls: one each).
+// Walkway ring helper (catwalk at 36 m, service gallery at 12 m): grate plate on a structural band along
+// a wall span, edge trim, brackets, housed downlights, a rail on the inner edge (lit for the gallery), a
+// continuous lit strip under the inner edge, holes for the ladders that pass through.
 // ---------------------------------------------------------------------------
-function buildCatwalk(ctx, B) {
+function walkway(ctx, B, W, u0, u1, y, w, { lit = false, ladders = [], endRails = false, downlights = true } = {}) {
   const { kit, PALETTE } = ctx;
-  const y = CATWALK.y, w = CATWALK.w;
-  const inX = HALL.x1 - P1 - 0.01, inZ0 = HALL.z0 + P1 + 0.01, inZ1 = HALL.z1 - P1 - 0.01; // wall panel fronts
-  const edgeX = inX - w, edgeZ0 = inZ0 + w, edgeZ1 = inZ1 - w; // inner (rail) edges
-  const grate = (mn, mx) => B.boxMM("grate", 0xffffff, mn, mx, { texel: 0.8 });
-  const trim = (mn, mx) => B.boxMM("paintedMetal", PALETTE.impDark, mn, mx, { texel: 0.5 });
-  // side walls: plate in pieces round the ladder holes (wall-side 0.7 m), inner 0.3 m continuous
-  for (const s of [-1, 1]) {
-    const xa = Math.min(s * inX, s * edgeX), xb = Math.max(s * inX, s * edgeX);
-    const xi0 = Math.min(s * edgeX, s * (edgeX + 0.3)), xi1 = Math.max(s * edgeX, s * (edgeX + 0.3));
-    const xw0 = Math.min(s * (edgeX + 0.3), s * inX), xw1 = Math.max(s * (edgeX + 0.3), s * inX);
-    grate([xi0, y - CAT_T, inZ0], [xi1, y, inZ1]);
-    let cursor = inZ0;
-    for (const lz of [...LADDER_Z].sort((a, b) => a - b)) {
-      grate([xw0, y - CAT_T, cursor], [xw1, y, lz - 0.6]);
-      cursor = lz + 0.6;
-    }
-    grate([xw0, y - CAT_T, cursor], [xw1, y, inZ1]);
-    trim([Math.min(s * edgeX, s * (edgeX - 0.12)), y - CAT_T - 0.05, inZ0], [Math.max(s * edgeX, s * (edgeX - 0.12)), y + 0.02, inZ1]);
-    // brackets + downlights
-    for (let z = HALL.z0 + 3; z < HALL.z1 - 2; z += 4) {
-      if (RIB_Z.some((r) => Math.abs(r - z) < 1.6) || LADDER_Z.some((l) => Math.abs(l - z) < 1.0)) continue;
-      B.boxMM("paintedMetal", PALETTE.impMid, [xa, y - CAT_T - 0.32, z - 0.12], [xb, y - CAT_T, z + 0.12], { texel: 0.5 });
-      if (Math.round((z - HALL.z0 - 3) / 4) % 2 === 0) housedLamp(B, "emitWhite", [s * (edgeX + 0.5), y - CAT_T - 0.16, z], [0, -1, 0], [0.5, 0.16, 0.36], { inset: 0.04 });
-    }
-    // rail along the inner edge
-    railRun(B, kit, [s * (edgeX + 0.05), inZ0 + 0.05], [s * (edgeX + 0.05), inZ1 - 0.05], y, { collide: false, foot: false, postEvery: 3 });
-    // the rack ladders continue from the tier-2 platform up to the catwalk
-    for (const z of LADDER_Z) ladder(B, kit, s * (HALL.x1 - P1), z, RACK.tiers[1].platformY, y, -s, { cage: true, collide: false });
+  const plate = (a, b, d0, d1) => {
+    const [mn, mx] = W.aabb(a, b, y - FLOOR - CAT_T, y - FLOOR, d0, d1);
+    B.boxMM("grate", 0xffffff, mn, mx, { texel: 0.8 });
+  };
+  const wallD = P1 + 0.01, edgeD = wallD + w;
+  // inner 0.3 m continuous, wall-side pieces round the ladder holes
+  plate(u0, u1, edgeD - 0.3, edgeD);
+  let cursor = u0;
+  for (const lu of [...ladders].sort((a, b) => a - b)) {
+    if (lu - 0.6 > cursor) plate(cursor, lu - 0.6, wallD, edgeD - 0.3);
+    cursor = lu + 0.6;
   }
-  // end walls: plate between the side plates, with the ladder hole
-  for (const [zIn, zEdge, sgn, name] of [
-    [inZ0, edgeZ0, 1, "bow"],
-    [inZ1, edgeZ1, -1, "aft"],
-  ]) {
-    const za = Math.min(zIn, zEdge), zb = Math.max(zIn, zEdge);
-    const lx = END_LADDER_X[name];
-    const tw = -sgn; // from the inner edge toward the wall
-    const zi0 = Math.min(zEdge, zEdge + tw * 0.3), zi1 = Math.max(zEdge, zEdge + tw * 0.3);
-    const zw0 = Math.min(zEdge + tw * 0.3, zIn), zw1 = Math.max(zEdge + tw * 0.3, zIn);
-    grate([-edgeX + 0.02, y - CAT_T, zi0], [edgeX - 0.02, y, zi1]);
-    grate([-edgeX + 0.02, y - CAT_T, zw0], [lx - 0.6, y, zw1]);
-    grate([lx + 0.6, y - CAT_T, zw0], [edgeX - 0.02, y, zw1]);
-    trim([-edgeX + 0.02, y - CAT_T - 0.05, Math.min(zEdge, zEdge + sgn * 0.12)], [edgeX - 0.02, y + 0.02, Math.max(zEdge, zEdge + sgn * 0.12)]);
-    for (let x = HALL.x0 + 3; x < HALL.x1 - 2; x += 4) {
-      if (RIB_X.some((r) => Math.abs(r - x) < 1.6) || Math.abs(x - lx) < 1.0) continue;
-      B.boxMM("paintedMetal", PALETTE.impMid, [x - 0.12, y - CAT_T - 0.32, za], [x + 0.12, y - CAT_T, zb], { texel: 0.5 });
-      if (Math.round((x - HALL.x0 - 3) / 4) % 2 === 0) housedLamp(B, "emitWhite", [x, y - CAT_T - 0.16, zEdge + tw * 0.5], [0, -1, 0], [0.5, 0.16, 0.36], { inset: 0.04 });
-    }
-    railRun(B, kit, [-edgeX + 0.05, zEdge + sgn * 0.05], [edgeX - 0.05, zEdge + sgn * 0.05], y, { collide: false, foot: false, postEvery: 3 });
-    ladder(B, kit, zIn + sgn * 0.01, lx, FLOOR, y, sgn, { cage: true, plane: "z" });
+  if (u1 > cursor) plate(cursor, u1, wallD, edgeD - 0.3);
+  // edge trim + a lit strip under it
+  W.box("paintedMetal", PALETTE.impDark, u0, u1, y - FLOOR - CAT_T - 0.05, y - FLOOR + 0.02, edgeD - 0.12, edgeD, { texel: 0.5 });
+  if (lit) W.box("emitWhite", 0xffffff, u0 + 0.2, u1 - 0.2, y - FLOOR - CAT_T - 0.05, y - FLOOR - CAT_T - 0.01, edgeD - 0.1, edgeD + 0.005);
+  // brackets + downlights
+  for (let u = Math.ceil(u0 / 4) * 4 + 1; u < u1 - 1; u += 4) {
+    if (W.ribs.some((r) => Math.abs(r - u) < 1.6) || ladders.some((l) => Math.abs(l - u) < 1.0)) continue;
+    W.box("paintedMetal", PALETTE.impMid, u - 0.12, u + 0.12, y - FLOOR - CAT_T - 0.32, y - FLOOR - CAT_T, wallD, edgeD, { texel: 0.5 });
+    if (downlights && Math.round(u / 4) % 2 === 0) housedLamp(B, "emitWhite", W.pos(u, y - FLOOR - CAT_T - 0.16, edgeD - 0.5), [0, -1, 0], [0.5, 0.16, 0.36], { inset: 0.04 });
   }
+  // rail along the inner edge (+ end rails across the plate)
+  const p = (u, d) => {
+    const q = W.pos(u, 0, d);
+    return [q[0], q[2]];
+  };
+  railRun(B, kit, p(u0 + 0.05, edgeD - 0.05), p(u1 - 0.05, edgeD - 0.05), y, { collide: false, foot: false, postEvery: 3, lit });
+  if (endRails) for (const u of [u0 + 0.05, u1 - 0.05]) railRun(B, kit, p(u, wallD + 0.05), p(u, edgeD - 0.1), y, { collide: false, foot: false, lit });
+}
+
+// ---------------------------------------------------------------------------
+// Maintenance catwalk ring at y -35.5 round all four walls (on the third structural band) with caged
+// ladders from the deck (side walls: the rack ladders continue up; end walls: one each), and the service
+// gallery at y -60 on the first band (bow + aft walls either side of the balcony, side walls outside the
+// rack zone and the bay-door surrounds).
+// ---------------------------------------------------------------------------
+function buildWalkways(ctx, B, byName) {
+  const { kit } = ctx;
+  const inX = HALL.x1 - P1 - 0.01; // wall panel fronts
+  for (const W of Object.values(byName)) {
+    const end = W.plane === "z";
+    const ladders = end ? [W.u(END_LADDER_X[W.name])] : LADDER_Z.map((z) => W.u(z));
+    // catwalk: the side walls run the full length; the end walls stop short of the side plates
+    const margin = end ? CATWALK.w : 0;
+    walkway(ctx, B, W, margin + 0.02, W.L - margin - 0.02, CATWALK.y, CATWALK.w, { ladders });
+    for (const [a, b] of W.gallery) walkway(ctx, B, W, a, b, GALLERY.y, GALLERY.w, { lit: true, ladders: ladders.filter((l) => l > a && l < b), endRails: true, downlights: false });
+  }
+  // ladders: side walls from the tier-2 platform up to the catwalk (the rack ladders continue), end walls from the deck
+  for (const s of [-1, 1]) for (const z of LADDER_Z) ladder(B, kit, s * inX, z, RACK.tiers[1].platformY, CATWALK.y, -s, { cage: true, collide: false });
+  ladder(B, kit, HALL.z0 + P1 + 0.02, END_LADDER_X.bow, FLOOR, CATWALK.y, 1, { cage: true, plane: "z" });
+  ladder(B, kit, HALL.z1 - P1 - 0.02, END_LADDER_X.aft, FLOOR, CATWALK.y, -1, { cage: true, plane: "z" });
 }
 
 // ---------------------------------------------------------------------------
@@ -733,20 +848,21 @@ export function buildWalls(ctx) {
   ];
   const byName = Object.fromEntries(walls.map((w) => [w.name, w]));
 
-  // door holes (exact) on their faces; panels keep clear of the surround (jambs 2.1 m, header + lamps 3.4 m)
+  // door holes (exact) on their faces; panels keep clear of the surround (bay: jambs 2.1 m, header + lamps
+  // 3.4 m; blast: the 7 m portal)
   for (const d of DOORS) {
     const o = doorOpening(d);
     const wall = d.dir[0] > 0 ? byName.starboard : d.dir[0] < 0 ? byName.port : d.dir[2] > 0 ? byName.aft : byName.bow;
-    const hatch = d.kind === "hatch";
-    wall.addHole({ u0: wall.u(o.u0), u1: wall.u(o.u1), v0: o.v0 - FLOOR, v1: o.v1 - FLOOR, door: d, mu: hatch ? 0.3 : 2.5, mv: hatch ? 0.3 : 3.7 });
+    const hatch = d.kind === "hatch", blast = d.kind === "blast";
+    wall.addHole({ u0: wall.u(o.u0), u1: wall.u(o.u1), v0: o.v0 - FLOOR, v1: o.v1 - FLOOR, door: d, mu: hatch ? 0.3 : blast ? 3.0 : 2.5, mv: hatch ? 0.3 : blast ? 4.3 : 3.7 });
   }
   // control window (aft wall): bezel is 0.6 wide, panels stay 0.3 beyond it
   const aft = byName.aft;
   aft.addHole({ u0: aft.u(WINDOW.x0), u1: aft.u(WINDOW.x1), v0: WINDOW.y0 - FLOOR, v1: WINDOW.y1 - FLOOR, window: true, mu: 0.9, mv: 0.9 });
   aft.levels = [[FLOOR, BALCONY.y - 0.6], [BALCONY.y, CEIL]];
   // the balcony plate meets the wall: keep the band/panels out of its slot; the tower base (dark field
-  // between the blast-door header and the balcony) has its own cut
-  const towerV0 = 4 + FRAME_W + 1.1 + 1.4 + 0.9, towerV1 = BALCONY.y - FLOOR - 0.5;
+  // between the blast-door portal and the balcony) has its own cut
+  const towerV0 = 4 + FRAME_W + 1.0 + 0.3 + 1.4 + 0.9, towerV1 = BALCONY.y - FLOOR - 0.5;
   aft.extraCuts = [
     { u0: aft.u(BALCONY.x0 - 0.3), u1: aft.u(BALCONY.x1 + 0.3), v0: BALCONY.y - FLOOR - 0.5, v1: BALCONY.y - FLOOR + 0.5 },
     { u0: aft.u(-12.3), u1: aft.u(12.3), v0: towerV0, v1: towerV1 },
@@ -780,6 +896,21 @@ export function buildWalls(ctx) {
     W.baseCuts.push({ u0: u - 2.6, u1: u + 2.6, v0: 0, v1: 3.3 });
   };
   for (const w of walls) for (const a of hatches[w.name]) hatchCut(w, w.u(a));
+  // scale cues beside every bay door: a lit crew hatch, a console and a locker row within 6 m of the jamb
+  // (on the bow side of the z-15 doors, the aft side of the z-120 doors: the rack zone and the stairs
+  // take the other sides)
+  const bayGroups = [];
+  for (const W of [byName.starboard, byName.port]) {
+    for (const h of W.holes) {
+      if (!h.door || h.door.kind !== "bay") continue;
+      const dir = h.door.pos[2] < 60 ? -1 : 1;
+      const jamb = dir < 0 ? h.u0 - FRAME_W - 0.6 - 1.05 : h.u1 + FRAME_W + 0.6 + 1.05;
+      const hatchU = jamb + dir * 1.9, consoleU = jamb + dir * 4.7, lockersU = jamb + dir * 6.9;
+      hatchCut(W, hatchU);
+      W.baseCuts.push({ u0: Math.min(consoleU, lockersU) - 1.4, u1: Math.max(consoleU, lockersU) + 1.4, v0: 0, v1: 3.3 });
+      bayGroups.push([W, hatchU, consoleU, lockersU]);
+    }
+  }
 
   for (const w of walls) {
     w.backing();
@@ -791,6 +922,24 @@ export function buildWalls(ctx) {
     for (const a of hatches[w.name]) w.dress("hatch", w.u(a));
     w.dressBase(w.plane === "x" ? ["lockers", "console", "reel", "console", "lockers", "reel"] : ["console", "lockers", "reel"]);
   }
+  for (const [W, hatchU, consoleU, lockersU] of bayGroups) {
+    W.dress("hatch", hatchU, "CREW ACCESS");
+    W.dress("console", consoleU);
+    W.dress("lockers", lockersU);
+  }
+
+  // giant wall stencils: the deck number on the bow and aft walls (both bays between the 20 m and 60 m
+  // ribs), the side letter over the forward bay of each side wall (between the rib at z -5 and the bay
+  // door surround)
+  for (const W of [byName.bow, byName.aft]) {
+    const N = W.N.toArray();
+    for (const s of [-1, 1]) {
+      label(kit, "hgDecal", "4", W.pos(W.u(s * 30), 18.2, P1 + 0.015), N, 7.4, { color: HG.white });
+      label(kit, "hgDecal", "DECK 4", W.pos(W.u(s * 50), 28.4, P1 + 0.015), N, 12.8, { color: HG.white });
+    }
+  }
+  label(kit, "hgDecal", "P", byName.port.pos(byName.port.u(0.3), 19.2, P1 + 0.015), byName.port.N.toArray(), 6.2, { color: HG.white });
+  label(kit, "hgDecal", "S", byName.starboard.pos(byName.starboard.u(0.3), 19.2, P1 + 0.015), byName.starboard.N.toArray(), 6.2, { color: HG.white });
 
   // window bezel + sign + tower base
   {
@@ -820,7 +969,7 @@ export function buildWalls(ctx) {
       W.box("paintedMetal", PALETTE.impDark, u - 0.12, u + 0.12, sv - 0.85, sv + 0.85, P1, P1 + 0.1);
       W.box("emitWhite", 0xffffff, u - 0.04, u + 0.04, sv - 0.75, sv + 0.75, P1 + 0.1, P1 + 0.11);
     }
-    // tower base: dark recessed field with vertical fins between the blast-door header and the balcony
+    // tower base: dark recessed field with vertical fins between the blast-door portal and the balcony
     const tu0 = W.u(-12.3), tu1 = W.u(12.3);
     W.box("paintedMetal", PALETTE.impBlack, tu0, tu1, towerV0, towerV1, P0, P0 + 0.04, { texel: 0.5 });
     for (let u = tu0 + 0.6; u < tu1; u += 2.4) W.box("paintedMetal", PALETTE.impDark, u - 0.14, u + 0.14, towerV0, towerV1, P0, P0 + 0.5, { texel: 0.5 });
@@ -829,7 +978,7 @@ export function buildWalls(ctx) {
   }
 
   buildBalcony(ctx, B);
-  buildCatwalk(ctx, B);
+  buildWalkways(ctx, B, byName);
   buildCeiling(ctx, B);
   B.flush();
   return walls;

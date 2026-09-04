@@ -4,37 +4,46 @@
 // ceiling (walls.js), the two rack tiers of gantry cradles with platforms and stairs (racks.js), the
 // animated ceiling crane and the deck clutter (machinery.js). Local materials in materials.js.
 // The doors system fills the seven door holes; the traffic system reads api.rackSlots().
-import { FLOOR, BOUNDS, DOORS, HOLE, PADS, BALCONY, TRACTOR_POINTS } from "./layout.js";
+import { FLOOR, BOUNDS, DOORS, HOLE, PADS, BALCONY, TRACTOR_POINTS, FLOODS } from "./layout.js";
 import { makeMaterials, animateMaterials } from "./materials.js";
 import { buildDeck } from "./deck.js";
 import { buildWalls } from "./walls.js";
 import { buildRacks } from "./racks.js";
 import { buildCrane, buildClutter } from "./machinery.js";
 
-// Light descriptors (26 with the four rack-platform points from racks.js and the crane's work light).
+// Light descriptors (27 with the four rack-platform points from racks.js and the crane's work light).
 // The harness pool is 12 points + 4 spots for the whole active set, so the few that matter carry the
-// priority: the four spots are the louvred ceiling floods over the spawn apron and the two nearest pads
-// (0.9, the first of them casts the shadows), the four red beacon points at the aperture corners (0.6),
-// then the rim-spill points under the lip for the exterior view, the balcony, the door approaches, the
-// bay-door pools and the shaft (all <= 0.45). Everything else in the hall is emissive fixtures.
+// priority: the four spots are the ceiling flood fixtures of layout.FLOODS (walls.js builds the housings
+// there) - two pools on the aft apron between the aft door and the aperture rail, taking pads 03/04 with
+// them, and two key lights on the port rack tiers so the fighters in the racks view are lit (0.9; the
+// first casts the shadows) - then the four red beacon points at the aperture corners (0.6), the apron
+// pool under the balcony, the rim-spill points under the lip for the exterior view, the door approaches,
+// the bay-door pools and the shaft (all <= 0.5). Everything else in the hall is emissive fixtures.
 function addLights(ctx) {
   const L = ctx.lights;
-  // tight cones (16 m / 14 m pools on the deck from 56 m up) so the pools have edges and the deck
-  // between them stays dark instead of an even wash
-  const spot = (pos, target, angle) => L.push({ type: "spot", pos, target, color: 0xf6f8ff, intensity: 700, distance: 85, decay: 1.2, angle, penumbra: 0.4, priority: 0.9 });
-  for (const s of [-1, 1]) {
-    spot([s * 9, -15.5, 148], [s * 9, FLOOR, 146], 0.24); // spawn apron: the spawn stands in the penumbra, the stencil in the pool
-    spot([s * 22, -15.5, 140], [s * 22, FLOOR, 142], 0.22); // pads 03 / 04
-  }
+  // tight cones (13 m pools on the deck from 55 m up) with a soft penumbra so the pools have edges and
+  // the deck between them stays dark instead of an even wash
+  for (const f of FLOODS) L.push({ type: "spot", pos: [...f.pos], target: [...f.target], color: 0xf6f8ff, intensity: f.intensity, distance: 95, decay: 1.2, angle: f.angle, penumbra: 0.4, priority: 0.9 });
   for (const p of TRACTOR_POINTS) L.push({ type: "point", pos: [p[0] + Math.sign(p[0]) * 1.6, FLOOR + 3.4, p[2] + Math.sign(p[2] - 32) * 1.6], color: 0xff2a1a, intensity: 55, distance: 28, decay: 1.6, priority: 0.6 });
+  // apron pool below the balcony / in front of the blast door: the aft-wall view's far apron, and a low
+  // fill on the deck view's foreground (kept well under the flood pools so those still read as pools;
+  // from 9 m up so its reflection stays out of both frames)
+  L.push({ type: "point", pos: [0, FLOOR + 9, 158], color: 0xf4f7ff, intensity: 60, distance: 34, decay: 1.5, priority: 0.5 });
   // rim spill under the deck edge: lights the shaft lining and the deck lip from below (exterior view)
   for (const z of [2, 62]) L.push({ type: "point", pos: [0, FLOOR - 2.5, z], color: 0xffe9c8, intensity: 320, distance: 60, decay: 1.4, priority: 0.45 });
   L.push({ type: "point", pos: [0, BALCONY.y + 2.5, 167], color: 0xd6e4ff, intensity: 40, distance: 22, priority: 0.4 });
-  L.push({ type: "point", pos: [0, FLOOR + 6, 164], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.4 });
   L.push({ type: "point", pos: [0, FLOOR + 6, -64], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.3 });
-  // the two bar gaps in the aperture rail: lifts the chevron, rails and bar posts where people stand
-  // (over the lip itself and dim, so its reflection in the plating stays under the viewer's feet)
-  for (const z of [HOLE.z0 - 1.5, HOLE.z1 + 1.5]) L.push({ type: "point", pos: [0, FLOOR + 5, z], color: 0xf4f7ff, intensity: 40, distance: 24, decay: 1.8, priority: 0.35 });
+  // the two bar gaps in the aperture rail: lifts the dashes, rails and bar posts where people stand, and
+  // the aft one is the aft-wall view's foreground deck (behind that camera, so no reflection in frame).
+  // The forward one is the aperture view's foreground: it has no flood pool, so this carries the plate
+  // seams, the non-slip band and the bar (its deck reflection falls below that frame)
+  L.push({ type: "point", pos: [0, FLOOR + 5, HOLE.z0 - 1.5], color: 0xf4f7ff, intensity: 120, distance: 26, decay: 1.6, priority: 0.4 });
+  L.push({ type: "point", pos: [0, FLOOR + 7, HOLE.z1 + 3], color: 0xf4f7ff, intensity: 110, distance: 32, decay: 1.6, priority: 0.4 });
+  // port taxi lane beside the rack zone: the racks view's foreground deck (its camera stands at x -40
+  // looking at the wall; the rack key spots stop at the wall base, so without this the plate seams and
+  // lane edges in the bottom third of that frame are IBL-only). Priority 0.1: the harness's distance
+  // term brings it in only for a viewer within ~20 m, so no other view loses a pool light to it
+  L.push({ type: "point", pos: [-50, FLOOR + 7, 30], color: 0xf6f8ff, intensity: 110, distance: 30, decay: 1.6, priority: 0.1 });
   for (const s of [-1, 1]) {
     L.push({ type: "point", pos: [s * 74, FLOOR + 7, 15], color: 0xfff0e0, intensity: 70, distance: 32, priority: 0.3 });
     L.push({ type: "point", pos: [s * 74, FLOOR + 6, 120], color: 0xfff0e0, intensity: 70, distance: 32, priority: 0.3 });
