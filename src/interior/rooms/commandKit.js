@@ -12,6 +12,13 @@ import { decalRect } from "../../textures.js";
 const P = PALETTE;
 
 export const OPPOSITE = { "+x": "-x", "-x": "+x", "+z": "-z", "-z": "+z" };
+// Player / crew yaw (radians, three.js convention: yaw 0 looks down -z) for a facing direction.
+export const YAW = { "+x": -Math.PI / 2, "-x": Math.PI / 2, "+z": Math.PI, "-z": 0 };
+
+// Crew hook: register a seat / station marker for future NPC systems (no-op on kits without markers).
+export function marker(kit, kind, pos, facing, extra = {}) {
+  if (kit.marker) kit.marker(kind, [pos.x, pos.y, pos.z], YAW[facing] ?? 0, extra);
+}
 
 // Frame standing on the floor at (cx, y, cz) whose normal points along `facing` (toward the person
 // using the object). u runs to that person's right, v is up, n comes out of the object toward them.
@@ -69,6 +76,7 @@ export function chair(kit, cx, y, cz, facing, opts = {}) {
     }
   }
   f.collider(-0.28, 0.28, 0, 0.98, -0.3, 0.28, tag);
+  marker(kit, "seat", f.pos(0, 0, 0), facing, { id: tag });
 }
 
 // Writing desk with a drawer block and a small reclined monitor.
@@ -128,9 +136,11 @@ export function station(kit, cx, y, cz, facing, opts = {}) {
   return f;
 }
 
-// Standing console: chest-high black podium with a sloped instrument face and a lit kick.
+// Standing console: chest-high black podium with a sloped instrument face. Edge-lit so it reads from
+// every side: a lit kick all round, a vertical light slot on each flank, an accent line along the top
+// edge of the face and a rear readout (`rear`, a screen material) on the side away from the operator.
 export function podium(kit, cx, y, cz, facing, opts = {}) {
-  const { w = 1.2, d = 0.6, h = 0.95, screen = "screen4", accent = "emitBlue", tag = "podium" } = opts;
+  const { w = 1.2, d = 0.6, h = 0.95, screen = "screen4", accent = "emitBlue", rear = "screen9", edgeLit = true, tag = "podium" } = opts;
   const f = facingFrame(kit, cx, y, cz, facing);
   f.box("metal", 0, 0.05, 0, w - 0.3, 0.1, d - 0.3, { color: P.darkMetal });
   f.box(accent, 0, 0.05, d / 2 - 0.14, w - 0.5, 0.02, 0.01);
@@ -144,7 +154,30 @@ export function podium(kit, cx, y, cz, facing, opts = {}) {
   f.box("leds", -0.1, kv, kn, w * 0.45, 0.035, 0.006, { tilt, uv: "keep" });
   f.box(accent, w / 2 - 0.14, kv, kn, 0.06, 0.035, 0.006, { tilt });
   f.box("rubber", w / 2 - 0.26, kv, kn + 0.01, 0.05, 0.035, 0.02, { color: P.rubber, tilt });
+  if (edgeLit) {
+    // kick light on the other three sides
+    f.box(accent, 0, 0.05, -d / 2 + 0.14, w - 0.5, 0.02, 0.01);
+    for (const s of [-1, 1]) {
+      f.box(accent, s * (w / 2 - 0.14), 0.05, 0, 0.01, 0.02, d - 0.5);
+      // flank slot: black channel with a lit core
+      f.box("satinBlack", s * (w / 2 + 0.005), 0.1 + (h - 0.1) / 2, 0, 0.012, h - 0.34, 0.09);
+      f.box(accent, s * (w / 2 + 0.014), 0.1 + (h - 0.1) / 2, 0, 0.006, h - 0.4, 0.035);
+    }
+    // top edge line of the face
+    const [tv, tn] = lean.at(d * 0.95, 0.004);
+    f.box(accent, 0, tv, tn, w - 0.2, 0.014, 0.006, { tilt });
+    // front readout on the vertical face under the slope (what a viewer at eye height actually sees)
+    f.box("darkGloss", 0, h - 0.42, d / 2 + 0.006, w * 0.62, 0.26, 0.012);
+    f.box(rear || screen, 0, h - 0.42, d / 2 + 0.014, w * 0.56, 0.2, 0.004, { uv: "keep" });
+    f.box("leds", w * 0.05, h - 0.62, d / 2 + 0.01, w * 0.4, 0.03, 0.006, { uv: "keep" });
+    if (rear) {
+      f.box("darkGloss", 0, h - 0.34, -d / 2 - 0.006, w * 0.62, 0.3, 0.012);
+      f.box(rear, 0, h - 0.34, -d / 2 - 0.014, w * 0.56, 0.24, 0.004, { uv: "keep" });
+      f.box("leds", -w * 0.1, h - 0.58, -d / 2 - 0.01, w * 0.4, 0.03, 0.006, { uv: "keep" });
+    }
+  }
   f.collider(-w / 2 - 0.02, w / 2 + 0.02, 0, h + 0.25, -d / 2 - 0.02, d / 2 + 0.06, tag);
+  marker(kit, "station", f.pos(0, 0, d / 2 + 0.45), OPPOSITE[facing], { id: tag });
   return f;
 }
 
@@ -259,6 +292,43 @@ export function bench(kit, cx, y, cz, facing, opts = {}) {
     f.box("fabric", 0, 0.74, -0.245, len - 0.1, 0.42, 0.04, { color, tilt: -0.15, uv: "world", texel: 2 });
   }
   f.collider(-len / 2, len / 2, 0, back ? 1.0 : 0.5, -0.32, 0.28, tag);
+  benchSeats(kit, f, len, facing, tag);
+}
+
+// One seat marker per ~0.6 m of bench, centred along u.
+function benchSeats(kit, f, len, facing, tag) {
+  const n = Math.max(1, Math.floor(len / 0.6));
+  for (let i = 0; i < n; i++) marker(kit, "seat", f.pos(-((n - 1) * 0.6) / 2 + i * 0.6, 0, 0.02), facing, { id: tag });
+}
+
+// Gallery / theatre bench: steel pedestal legs under a floating black seat frame with a fabric cushion,
+// a reclined back on two posts with a fabric pad in front and a painted rear panel under a steel top
+// rail, end armrests, a soft light strip under the seat front and a row plate on the rear. Reads from
+// behind (rear panel, rail, legs) as well as from the front. `len` runs along u.
+export function theatreBench(kit, cx, y, cz, facing, opts = {}) {
+  const { len = 3.0, color = P.fabricTeal, rear = P.creamDark, strip = "emitCoolSoft", tag = "bench" } = opts;
+  const f = facingFrame(kit, cx, y, cz, facing);
+  for (const s of [-1, 1]) {
+    f.box("metal", s * (len / 2 - 0.45), 0.03, -0.02, 0.5, 0.06, 0.5, { color: P.darkMetal });
+    f.box("metal", s * (len / 2 - 0.45), 0.22, -0.02, 0.12, 0.34, 0.3, { color: P.steel });
+  }
+  f.box("metal", 0, 0.34, -0.1, len - 0.9, 0.06, 0.1, { color: P.gunmetal });
+  f.box("satinBlack", 0, 0.42, 0, len, 0.06, 0.56);
+  f.box("fabric", 0, 0.5, 0.02, len - 0.08, 0.1, 0.5, { color, uv: "world", texel: 2 });
+  f.box(strip, 0, 0.387, 0.2, len - 0.5, 0.006, 0.03, { uv: "keep" });
+  const tilt = -0.12;
+  for (const s of [-1, 1]) f.box("metal", s * (len / 2 - 0.1), 0.74, -0.27, 0.05, 0.62, 0.05, { color: P.steel, tilt });
+  f.box("fabric", 0, 0.8, -0.24, len - 0.3, 0.44, 0.05, { color, tilt, uv: "world", texel: 2 });
+  f.box("painted", 0, 0.8, -0.3, len - 0.22, 0.52, 0.03, { color: rear, tilt, uv: "keep" });
+  f.box("metal", 0, 1.06, -0.33, len, 0.04, 0.08, { color: P.steel, tilt });
+  f.box("satinBlack", 0, 0.88, -0.33, 0.5, 0.12, 0.02, { tilt });
+  f.box("leds", 0, 0.88, -0.345, 0.4, 0.05, 0.006, { tilt, uv: "keep" });
+  for (const s of [-1, 1]) {
+    f.box("satinBlack", s * (len / 2 - 0.03), 0.67, -0.02, 0.06, 0.04, 0.44);
+    f.box("satinBlack", s * (len / 2 - 0.03), 0.57, -0.2, 0.06, 0.2, 0.05);
+  }
+  f.collider(-len / 2, len / 2, 0, 1.08, -0.38, 0.3, tag);
+  benchSeats(kit, f, len, facing, tag);
 }
 
 // Steel handrail on black posts between two floor points (axis-aligned).
@@ -372,6 +442,42 @@ export function pilaster(kit, x, z, y, h, facing, opts = {}) {
   f.collider(-w / 2, w / 2, 0, h, 0, d + 0.03, tag);
 }
 
+// Room ceiling without the shell's centre-line rib: matte plate, cross beams and light channels that run
+// across the room (perpendicular to `along`, the axis the viewer looks down), so nothing reads as a bar
+// hanging into the far wall from the doorway.
+export function flatCeiling(kit, room, y0, opts = {}) {
+  const { beams = [], channels = [], channelMat = "emitWhiteSoft", channelW = 0.34, plate = P.gunmetal, along = "z" } = opts;
+  const { x0, x1, z0, z1, height: h } = room;
+  const yTop = y0 + h;
+  kit.boxMM("painted", [x0 - WALL_T, yTop, z0 - WALL_T], [x1 + WALL_T, yTop + 0.12, z1 + WALL_T], { color: plate, uv: "world", texel: 0.5 });
+  const acrossX = along === "z";
+  const len = acrossX ? x1 - x0 : z1 - z0;
+  const cx = (x0 + x1) / 2;
+  const cz = (z0 + z1) / 2;
+  for (const p of beams) {
+    if (acrossX) kit.box("paintedMetal", cx, yTop - 0.1, p, len, 0.2, 0.22, { color: P.darkMetal, texel: 1.2 });
+    else kit.box("paintedMetal", p, yTop - 0.1, cz, 0.22, 0.2, len, { color: P.darkMetal, texel: 1.2 });
+  }
+  for (const p of channels) {
+    if (acrossX) {
+      kit.box("satinBlack", cx, yTop - 0.03, p, len - 1.2, 0.06, channelW + 0.12);
+      kit.box(channelMat, cx, yTop - 0.06, p, len - 1.4, 0.02, channelW, { uv: "keep" });
+    } else {
+      kit.box("satinBlack", p, yTop - 0.03, cz, channelW + 0.12, 0.06, len - 1.2);
+      kit.box(channelMat, p, yTop - 0.06, cz, channelW, 0.02, len - 1.4, { uv: "keep" });
+    }
+  }
+  return yTop;
+}
+
+// Stencil decal laid flat on the deck at (x, z), readable by someone looking along `facing`.
+export function floorStencil(kit, x, y, z, size, index, facing = "+z") {
+  const g = new THREE.PlaneGeometry(size, size).rotateX(-Math.PI / 2);
+  const yaw = { "+z": Math.PI, "-z": 0, "+x": -Math.PI / 2, "-x": Math.PI / 2 }[facing];
+  g.rotateY(yaw);
+  kit.add("decal", g, { pos: [x, y + 0.008, z], uv: "keep", uvRect: decalRect(index) });
+}
+
 // Recessed ceiling downlight: black housing with a soft emitter.
 export function downlight(kit, cx, yTop, cz, sx, sz, mat = "emitCoolSoft") {
   kit.box("satinBlack", cx, yTop - 0.03, cz, sx + 0.1, 0.06, sz + 0.1);
@@ -388,6 +494,36 @@ export function commPanel(frame, u, v, opts = {}) {
   frame.box("rubber", u + w / 2 - 0.08, v - 0.13, 0.09, 0.05, 0.05, 0.02, { color: P.rubber });
   frame.box(accent, u + w / 2 - 0.08, v - 0.2, 0.084, 0.05, 0.015, 0.006);
   frame.cylN("metal", u - w / 2 + 0.07, v - 0.2, 0.086, 0.025, 0.012, { color: P.steel, segments: 12 });
+}
+
+// Turbolift call panel on a portal surround band (which sits at n 0..0.1): a black box proud of the band
+// with a small LED readout, two lit call buttons and a steel key switch.
+export function callPanel(frame, u, v, accent = "emitBlue") {
+  frame.box("satinBlack", u, v, 0.16, 0.24, 0.5, 0.12);
+  frame.box("darkGloss", u, v + 0.16, 0.222, 0.18, 0.1, 0.006);
+  frame.box("leds", u, v + 0.16, 0.226, 0.15, 0.03, 0.004, { uv: "keep" });
+  for (const [dv, mat] of [[0.02, accent], [-0.08, "emitWhite"]]) {
+    frame.box("rubber", u, v + dv, 0.225, 0.08, 0.07, 0.01, { color: P.rubber });
+    frame.box(mat, u, v + dv, 0.232, 0.05, 0.03, 0.004);
+  }
+  frame.cylN("metal", u, v - 0.18, 0.222, 0.025, 0.012, { color: P.steel, segments: 12 });
+}
+
+// Cabin / station nameplate: black plate, cream text plate carrying a spec-text decal, a lit rule under
+// it and an occupancy lamp. (u, v) is the plate centre on a wall frame.
+export function nameplate(frame, u, v, opts = {}) {
+  const { w = 0.64, h = 0.24, bar = "emitAmber", lamp = "emitBlue", label = 9, label2 = null, n = 0 } = opts;
+  frame.box("satinBlack", u, v, n + 0.02, w, h, 0.04);
+  const tw = w - 0.18;
+  frame.box("painted", u + 0.05, v + 0.014, n + 0.043, tw, h - 0.08, 0.006, { color: P.cream, uv: "keep" });
+  const d = h - 0.095;
+  if (label2 === null) frame.add("decal", new THREE.PlaneGeometry(d, d), u + 0.05, v + 0.014, n + 0.048, { uv: "keep", uvRect: decalRect(label) });
+  else {
+    frame.add("decal", new THREE.PlaneGeometry(d, d), u + 0.05 - tw / 4, v + 0.014, n + 0.048, { uv: "keep", uvRect: decalRect(label) });
+    frame.add("decal", new THREE.PlaneGeometry(d, d), u + 0.05 + tw / 4, v + 0.014, n + 0.048, { uv: "keep", uvRect: decalRect(label2) });
+  }
+  frame.box(bar, u, v - h / 2 + 0.024, n + 0.043, w - 0.08, 0.016, 0.006);
+  frame.box(lamp, u - w / 2 + 0.065, v + 0.014, n + 0.043, 0.05, 0.05, 0.006);
 }
 
 // Two-sided interior partition (both faces panelled) with optional door openings, capped on top.
@@ -412,26 +548,28 @@ export function partition(kit, a, b, y, h, opts = {}) {
   panelGrid(B.frame, L, h, { ...base, openings: opsB, seed: seed + 1, paints: paintsB || undefined });
   A.frame.box("satinBlack", L / 2, h - 0.09, 0.02, L, 0.18, 0.05);
   B.frame.box("satinBlack", L / 2, h - 0.09, 0.02, L, 0.18, 0.05);
-  // sliding door dressing per opening: black jambs + header, a track above and a leaf edge peeking
-  // out of its wall pocket, a door control by the jamb
+  // sliding door dressing per door opening: black jambs + header, a track above and a leaf edge peeking
+  // out of its wall pocket, a door control by the jamb. `pocket: -1` parks the leaf on the -u side (side A).
   for (const o of openings) {
+    if (o.type && o.type !== "door") continue;
     const uc = (o.u0 + o.u1) / 2;
     const w = o.u1 - o.u0;
     const dh = o.v1;
+    const pk = o.pocket === -1 ? -1 : 1;
     for (const F of [A.frame, B.frame]) {
       const sideA = F === A.frame;
       const c = sideA ? uc : L - uc;
-      const sgn = sideA ? 1 : -1;
+      const sgn = (sideA ? 1 : -1) * pk;
       F.box("satinBlack", c - w / 2 - 0.06, dh / 2, -depth / 2, 0.12, dh, depth + 0.06, { uv: "world" });
       F.box("satinBlack", c + w / 2 + 0.06, dh / 2, -depth / 2, 0.12, dh, depth + 0.06, { uv: "world" });
       F.box("satinBlack", c, dh + 0.08, -depth / 2, w + 0.24, 0.16, depth + 0.06, { uv: "world" });
       F.box("satinBlack", c + sgn * w * 0.25, dh + 0.2, 0.0, w * 1.5 + 0.2, 0.08, 0.06);
       F.box("emitBlue", c - sgn * (w / 2 + 0.06), 1.15, 0.035, 0.03, 0.4, 0.01);
     }
-    // the leaf: retracted into the pocket on the +u side (side A), its leading edge left in the opening
-    A.frame.box("painted", uc + w / 2 - 0.1, dh / 2, -depth, 0.2, dh - 0.04, 0.05, { color: P.impGrey, uv: "keep" });
-    A.frame.box("darkGloss", uc + w / 2 - 0.19, dh / 2, -depth, 0.02, dh - 0.3, 0.06);
-    A.frame.collider(uc + w / 2 - 0.2, uc + w / 2, 0, dh, -depth - 0.03, -depth + 0.03, "leaf");
+    // the leaf: retracted into its pocket, the leading edge left in the opening
+    A.frame.box("painted", uc + pk * (w / 2 - 0.1), dh / 2, -depth, 0.2, dh - 0.04, 0.05, { color: P.impGrey, uv: "keep" });
+    A.frame.box("darkGloss", uc + pk * (w / 2 - 0.19), dh / 2, -depth, 0.02, dh - 0.3, 0.06);
+    A.frame.collider(uc + Math.min(pk * (w / 2 - 0.2), pk * (w / 2)), uc + Math.max(pk * (w / 2 - 0.2), pk * (w / 2)), 0, dh, -depth - 0.03, -depth + 0.03, "leaf");
   }
   return { A, B, length: L };
 }
@@ -516,6 +654,26 @@ export function effects(kit, x, y, z, kind, rot = 0) {
       f.cylV("metal", 0.03, 0.2, 0, 0.012, 0.38, { color: P.steel, segments: 8 });
       f.box("metal", -0.04, 0.4, 0.04, 0.2, 0.06, 0.12, { color: P.gunmetal, tilt: 0.3 });
       f.box("emitWarm", -0.04, 0.37, 0.05, 0.16, 0.012, 0.08, { tilt: 0.3 });
+      break;
+    case "coolLamp":
+      f.cylV("metal", 0, 0.01, 0, 0.07, 0.02, { color: P.darkMetal, segments: 12 });
+      f.cylV("metal", 0.03, 0.2, 0, 0.012, 0.38, { color: P.steel, segments: 8 });
+      f.box("metal", -0.04, 0.4, 0.04, 0.2, 0.06, 0.12, { color: P.gunmetal, tilt: 0.3 });
+      f.box("emitCool", -0.04, 0.37, 0.05, 0.16, 0.012, 0.08, { tilt: 0.3 });
+      break;
+    case "case":
+      // classified document case: black shell, steel latches, red seal stripe and a lock lamp
+      f.box("satinBlack", 0, 0.06, 0, 0.44, 0.12, 0.32);
+      f.box("metal", 0, 0.125, 0, 0.4, 0.01, 0.28, { color: P.gunmetal });
+      for (const s of [-1, 1]) f.box("metal", s * 0.12, 0.07, 0.165, 0.06, 0.04, 0.012, { color: P.steel });
+      f.box("painted", 0, 0.06, 0.165, 0.44, 0.03, 0.004, { color: P.orange, uv: "keep" });
+      f.box("emitRed", 0.18, 0.1, 0.165, 0.02, 0.012, 0.004);
+      break;
+    case "folder":
+      // flimsi folder with a red classification band
+      f.box("painted", 0, 0.012, 0, 0.32, 0.024, 0.24, { color: P.cream, uv: "keep" });
+      f.box("painted", 0, 0.026, 0, 0.32, 0.004, 0.06, { color: P.orange, uv: "keep" });
+      f.box("painted", 0.02, 0.036, 0.01, 0.28, 0.014, 0.2, { color: P.creamDark, uv: "keep" });
       break;
     default:
       break;
