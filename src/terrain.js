@@ -1,19 +1,24 @@
 import * as THREE from 'three';
 import { FOG, PALETTE, SUN } from './palette.js';
 import { clamp as clamp01, fbm, lerp, mulberry32, smoothstep } from './textures/core.js';
+import { WORLD } from './world.js';
 import {
-  canopyReflection,
   detailNormal,
+  farGroundMap,
   grainMaps,
   GRAVEL_TILE,
   gravelMaps,
-  litterMaps,
+  horizonReflection,
   macroVariation,
   RELIEF_DEPTH,
   RELIEF_TILE,
   reliefMaps,
   rippleMap,
+  sandMaps,
+  savannaMaps,
   trackMaps,
+  TRACKS_TILE,
+  trackStamps,
   treadImprint,
   vergeMaps,
 } from './textures/ground.js';
@@ -136,16 +141,207 @@ function sunVector() {
   return new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
 }
 
+// ---------------------------------------------------------------------------
+// The savanna landform.
+//
+// Everything that is *somewhere* — the camp pad, the overlook, the dry river,
+// the water hole — is placed in road parameters off the same anchors world.js
+// hands the other modules, and resolved against the mainline curve once at
+// module load. The base height field reads these, so the ground under each
+// feature is shaped for it (a site graded on ground that happened to be flat,
+// a road that crests where the ridge is) rather than the feature being pressed
+// into ground that ignores it.
+// ---------------------------------------------------------------------------
+
+/** Mainline t of the scenic overlook: the crest the road tops before the basin. */
+const OVERLOOK_T = 0.77;
+/** Mainline t where the dry river crosses under the road. */
+const RIVER_T = 0.68;
+/** The water hole: past the pride, on the open side, at the bottom of the basin. */
+const HOLE_T = 0.83;
+const HOLE_OFFSET = 46;
+// Camp pad. An ellipse rather than the layout's 40 m disc, because 40 m from an
+// anchor 34 m off the road is the road: the pad stops short of the ditch on the
+// road side and runs out further behind, where a site has room.
+const PAD_R_ROAD = 21;
+const PAD_R_FAR = 30;
+const PAD_R_SIDE = 27;
+/** Crossfall of the pad, up and away from the road so it drains into the ditch. */
+const PAD_SLOPE = 0.011;
+/** Natural level the site was chosen for, metres. */
+const CAMP_LEVEL = 1.7;
+// The dry river: half width of the sandy floor, width of each bank, depth.
+const RIVER_HALF = 3.4;
+const RIVER_BANK = 2.6;
+const RIVER_DEPTH = 1.45;
+// The water hole: radius of the trampled dish, and how deep the middle is.
+const HOLE_BASIN = 13;
+const HOLE_DEPTH = 1.25;
+/** Natural level of the ground round the hole, metres, before the dish is cut. */
+const HOLE_LEVEL = 0.9;
+
+function layoutLandform() {
+  const mc = createMainCurve();
+  const at = (t, side, off) => {
+    const p = mc.getPoint(t);
+    const tg = mc.getTangent(t).normalize();
+    return { x: p.x - tg.z * off * side, z: p.z + tg.x * off * side, rx: p.x, rz: p.z, tx: tg.x, tz: tg.z };
+  };
+  const camp = at(WORLD.camp.t, WORLD.camp.side, WORLD.camp.offset);
+  // access axis: from the road out to the pad centre, and its perpendicular
+  const al = Math.hypot(camp.x - camp.rx, camp.z - camp.rz) || 1;
+  camp.ax = (camp.x - camp.rx) / al;
+  camp.az = (camp.z - camp.rz) / al;
+  camp.bx = -camp.az;
+  camp.bz = camp.ax;
+  const look = at(OVERLOOK_T, 1, 0);
+  // The turnout and the board are on the pride's side: the view is of them.
+  look.side = WORLD.lions.side;
+  const hole = at(HOLE_T, WORLD.lions.side, HOLE_OFFSET);
+  hole.side = WORLD.lions.side;
+  const rx = at(RIVER_T, 1, 0);
+  // The river in the road's frame at the crossing: meanders down from the
+  // north, crosses at about seventy degrees, and wanders off south. The
+  // polyline is what everything measures its distance to.
+  const rl = -rx.tz; // lateral left
+  const rlz = rx.tx;
+  const river = [
+    [-14, 68],
+    [-9, 38],
+    [-3, 14],
+    [0, 0],
+    [4, -16],
+    [9, -34],
+    [5, -62],
+    [14, -96],
+  ].map(([u, v]) => ({ x: rx.x + rx.tx * u + rl * v, z: rx.z + rx.tz * u + rlz * v }));
+  return { camp, look, hole, river, riverCross: rx };
+}
+
+const LAND = layoutLandform();
+
+/**
+ * Distance to the river polyline and the arc length along it. Eight points, so
+ * this is cheaper than one fbm and runs everywhere baseHeight does.
+ */
+function riverDistance(x, z, out) {
+  const pts = LAND.river;
+  let best = 1e9;
+  let along = 0;
+  let acc = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const len2 = dx * dx + dz * dz;
+    let t = ((x - a.x) * dx + (z - a.z) * dz) / len2;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const px = a.x + dx * t - x;
+    const pz = a.z + dz * t - z;
+    const d = px * px + pz * pz;
+    if (d < best) {
+      best = d;
+      along = acc + Math.sqrt(len2) * t;
+    }
+    acc += Math.sqrt(len2);
+  }
+  out.d = Math.sqrt(best);
+  out.along = along;
+  out.total = acc;
+  return out;
+}
+const _riv = { d: 0, along: 0, total: 0 };
+
 function baseHeight(x, z) {
   const hills = fbm(x * 0.0052 + 40, z * 0.0052 + 12, { octaves: 4, period: 64, seed: 71 });
   const ridges = fbm(x * 0.0135 + 7, z * 0.0135 + 21, { octaves: 3, period: 64, seed: 51 });
   const medium = fbm(x * 0.021 + 3, z * 0.021 + 9, { octaves: 4, period: 64, seed: 12 });
   const fine = fbm(x * 0.075, z * 0.075, { octaves: 3, period: 64, seed: 33 });
-  let y = (hills - 0.5) * 18 + (ridges - 0.5) * 6.5 + (medium - 0.5) * 2.6 + (fine - 0.5) * 0.7;
-  // the ground keeps rising past the last trees, so the mesh boundary never
-  // shows as a straight edge against the sky
+  // The relief that makes the drive is worth nothing past the terrain edge:
+  // out there the same nine-metre swells, carried on the forest's straw skirt
+  // and seen from two metres up, were a range of dunes a few hundred metres
+  // off, in front of the real hills. The savanna is a plain; it flattens out
+  // past the square so the eye runs straight to the escarpment.
   const r = Math.hypot(x, z);
-  y += smoothstep(86, 152, r) * 11;
+  const plain = smoothstep(150, 330, r);
+  let y =
+    (hills - 0.5) * 18 * (1 - plain * 0.82) +
+    (ridges - 0.5) * 6.5 * (1 - plain * 0.7) +
+    (medium - 0.5) * 2.6 +
+    (fine - 0.5) * 0.7;
+
+  // The camp was graded on ground that was already nearly level — nobody sites
+  // a camp on a slope and then moves five metres of earth to fix it. Most of
+  // the natural relief is taken out over a wide soft footprint; what is left is
+  // what the pad's cut and fill has to absorb, and it is about a metre.
+  const cdx = x - LAND.camp.x;
+  const cdz = z - LAND.camp.z;
+  y = lerp(y, CAMP_LEVEL, (1 - smoothstep(20, 58, Math.hypot(cdx, cdz))) * 0.62);
+
+  // Two rises on the mainline, both as ridges running *across* the road so it
+  // genuinely climbs over them rather than along them. The second is the
+  // overlook: 3.2 m over a 33 m half width is a 7% pull at the steepest, which
+  // the grader's blur softens to about 5 — a real climb in a 6 kph truck, not a
+  // speed bump. The crests are what the ride budget is spent on: the vertical
+  // acceleration over a crest is speed squared times its curvature, and at
+  // 3.6 m over 28 m that came to 0.8 m/s² at cruise, most of the mainline's
+  // whole figure. These widths halve it and the view from the top is the same.
+  {
+    const L = LAND.look;
+    const u = (x - L.rx) * L.tx + (z - L.rz) * L.tz;
+    const v = -(x - L.rx) * L.tz + (z - L.rz) * L.tx;
+    y += 3.2 * Math.exp(-(u * u) / (33 * 33)) * (1 - smoothstep(48, 110, Math.abs(v)));
+  }
+  {
+    const u = (x - 7.0) * 0.966 + (z - 20.3) * -0.259;
+    const v = -(x - 7.0) * -0.259 + (z - 20.3) * 0.966;
+    y += 1.5 * Math.exp(-(u * u) / (26 * 26)) * (1 - smoothstep(30, 80, Math.abs(v)));
+  }
+
+  // The basin past the overlook: the ground falls away toward the water hole,
+  // which is at the bottom of it because that is where water goes. The ground
+  // immediately round the hole is pulled toward one level first — the open
+  // slope down to the east would otherwise run straight through the dish and
+  // the water would stand on a hillside.
+  const hdx = x - LAND.hole.x;
+  const hdz = z - LAND.hole.z;
+  const hd = Math.hypot(hdx, hdz);
+  y = lerp(y, HOLE_LEVEL, (1 - smoothstep(12, 46, hd)) * 0.85);
+  y -= 1.6 * Math.exp(-(hd * hd) / (48 * 48));
+
+  // A shallow drainage line the dry river runs down. The channel itself is cut
+  // in surfaceInfo — it is not part of the base the road grades against, or the
+  // road would drop into it instead of crossing on a fill.
+  const rv = riverDistance(x, z, _riv);
+  y -= 1.2 * (1 - smoothstep(4, 32, rv.d)) * (1 - smoothstep(rv.total - 24, rv.total, rv.along)) * smoothstep(0, 22, rv.along);
+
+  // The ground used to rise into a rim past 86 m all the way round, so the mesh
+  // boundary never showed as a straight edge. It still does behind the start
+  // and along the forested west, where trees hide it anyway; toward the east
+  // and south-east — where the savanna opens out below the overlook — the rim
+  // is all but gone and the far hills mesh carries the horizon instead.
+  const open = smoothstep(-0.35, 0.55, (x * 0.78 - z * 0.62) / Math.max(r, 1));
+  // A ridge, not a plateau: past 200 m it falls back to the plain, so what
+  // stands behind the start is a low rise with the escarpment showing over it.
+  y += smoothstep(86, 152, r) * (1 - smoothstep(190, 320, r) * 0.72) * 11 * (1 - open * 0.92);
+
+  // Distant hills, for the far mesh. They start past 400 m: the forest's own
+  // ground skirt runs to 420 m on this same function with a straw plain tile
+  // on it, and hills inside that range rendered on that tile as bright dunes
+  // fifty metres off. Out here they stand on the far mesh, inside the haze
+  // layer, and read as what they are — an escarpment a kilometre away. The
+  // camera's far plane is 900 m and the fog takes the ground to sky by 830,
+  // so the rise is complete by 720 and the crests sit in the last blue band.
+  const far = smoothstep(390, 720, r);
+  if (far > 0) {
+    const h1 = fbm(x * 0.0016 + 3, z * 0.0016 + 8, { octaves: 4, period: 64, seed: 401 });
+    const h2 = fbm(x * 0.0046 + 1, z * 0.0046 + 5, { octaves: 3, period: 64, seed: 409 });
+    // A flat-topped rise to the east — the one silhouette that says this is
+    // not the Cascades — and rolling hills elsewhere.
+    const mesa = smoothstep(0.62, 0.8, fbm(x * 0.0011 + 9, z * 0.0011 + 2, { octaves: 2, period: 64, seed: 419 }));
+    y += far * (Math.max(0, h1 - 0.4) * 300 + (h2 - 0.5) * 56 + mesa * 90);
+  }
   return y;
 }
 
@@ -405,13 +601,24 @@ export function createTerrain({ env = null } = {}) {
     const dz = z - cz[bi];
     out.dist = Math.sqrt(d2);
     out.lat = dx * ctz[bi] - dz * ctx[bi];
-    out.y = cy[bi];
     out.t = (bi - off) / (n - 1);
     // Arc length projected onto the segment, not the sample's own arc length.
     // The samples are 0.37 m apart and which one is nearest flips about as you
     // move sideways, so the raw value jitters by more than a tyre lug pitch —
     // enough to turn the road-space tread print into noise.
-    out.s = cs[bi] + dx * ctx[bi] + dz * ctz[bi];
+    const along = dx * ctx[bi] + dz * ctz[bi];
+    out.s = cs[bi] + along;
+    // The grade line, projected the same way. Reading the nearest sample's
+    // height alone made the profile a staircase with a tread of one sample:
+    // nothing on a road that never climbed more than a percent, and a 4 cm
+    // riser every 0.4 m — a 20 Hz chop at cruising speed — once the mainline
+    // had a rise worth the name. One central difference per lookup.
+    const lo = Math.max(off, bi - 1);
+    const hi = Math.min(off + n - 1, bi + 1);
+    const ds = cs[hi] - cs[lo];
+    // clamped to the sample pitch: past either end of a road the projection
+    // runs on for metres, and the grade must not run on with it
+    out.y = cy[bi] + (ds > 1e-6 ? ((cy[hi] - cy[lo]) / ds) * Math.max(-0.4, Math.min(0.4, along)) : 0);
     out.k = ckn[bi];
     out.tx = ctx[bi];
     out.tz = ctz[bi];
@@ -557,6 +764,146 @@ export function createTerrain({ env = null } = {}) {
     return 1 - smoothstep(3.2, 6.5, Math.abs(s - JUNC_M));
   }
 
+  // --- the savanna features, in the mainline's frame --------------------------
+  // Arc length along the mainline of the camp access, the overlook and the river
+  // crossing, found by nearest sample the same way the junction is.
+  function mainArcAt(px, pz) {
+    let best = 1e9;
+    let bj = SAMPLES;
+    for (let j = SAMPLES; j < TOTAL; j++) {
+      const d = (cx[j] - px) ** 2 + (cz[j] - pz) ** 2;
+      if (d < best) {
+        best = d;
+        bj = j;
+      }
+    }
+    return bj;
+  }
+  const jAccess = mainArcAt(LAND.camp.rx, LAND.camp.rz);
+  const jLook = mainArcAt(LAND.look.rx, LAND.look.rz);
+  const jRiver = mainArcAt(LAND.riverCross.rx, LAND.riverCross.rz);
+  const ACCESS_M = cs[jAccess];
+  const LOOK_M = cs[jLook];
+  const RIVER_M = cs[jRiver];
+  // The pad plane meets the road at the platform's outer edge — crown and
+  // shoulder crossfall already taken off — so a truck turns off onto it without
+  // a step, and rises away from the road from there.
+  const PAD_Y0 = cy[jAccess] - MAIN_CROWN - MAIN_SHOULDER * MAIN_SHED - 0.02;
+  // Where, in the pad's own axis, the plane starts: just inside the road's
+  // ditch bank, so the apron and the road's batter overlap and the road wins.
+  const PAD_A0 = -(WORLD.camp.offset - MAIN_EDGE) - 1.5;
+
+  /** The camp access, culverting the ditch on the pad's side of the road. */
+  function access(s) {
+    return 1 - smoothstep(6.5, 9.5, Math.abs(s - ACCESS_M));
+  }
+  /** The overlook turnout: the platform widens on the view side over the crest. */
+  function turnout(s) {
+    return 1 - smoothstep(7, 15, Math.abs(s - LOOK_M));
+  }
+
+  /**
+   * The graded camp site: a plane with a cut-and-fill batter round it, an access
+   * apron joining it to the road, and the churn where vehicles turn in.
+   *
+   * `g` is the mask (1 on the pad), `y` the plane, `apron` the strip to the
+   * road, `churn` the turned-over ground at the mouth. Written into `out` and
+   * only evaluated inside 50 m of the centre — beyond that the whole thing is
+   * zero and the fbm below is not worth calling.
+   */
+  const _site = { g: 0, y: 0, apron: 0, churn: 0, edge: 1e3 };
+  function siteAt(x, z, base) {
+    const C = LAND.camp;
+    const dx = x - C.x;
+    const dz = z - C.z;
+    if (dx * dx + dz * dz > 62 * 62) {
+      _site.g = 0;
+      _site.apron = 0;
+      _site.churn = 0;
+      _site.edge = 1e3;
+      _site.y = base;
+      return _site;
+    }
+    const a = dx * C.ax + dz * C.az;
+    const b = dx * C.bx + dz * C.bz;
+    const ra = a < 0 ? PAD_R_ROAD : PAD_R_FAR;
+    const qn = Math.sqrt((a * a) / (ra * ra) + (b * b) / (PAD_R_SIDE * PAD_R_SIDE));
+    // The grader stopped where it stopped: the edge wanders by a metre or so.
+    const wob = (fbm(x * 0.09 + 3, z * 0.09 + 5, { octaves: 2, period: 64, seed: 501 }) - 0.5) * 2.4;
+    const edge = (qn - 1) * PAD_R_SIDE + wob;
+    const yPad = PAD_Y0 + PAD_SLOPE * Math.max(0, a - PAD_A0);
+    const cut = base - yPad;
+    // A cut face stands at about one to one and a fill lies down at one and a
+    // half, the same asymmetry the road's batter has — it is the one thing that
+    // says a machine made this edge.
+    const bw = 1.1 + Math.min(2.6, Math.abs(cut) * (cut > 0 ? 0.9 : 1.4));
+    let g = 1 - smoothstep(0, bw, edge);
+    // The apron: a strip along the access axis, flared where it meets the road
+    // because trucks swing wide turning off.
+    const flare = smoothstep(-22, -28, a) * 3.0;
+    const ap =
+      (1 - smoothstep(4.4 + flare, 6.4 + flare, Math.abs(b))) *
+      smoothstep(PAD_A0 - 2.5, PAD_A0 + 0.5, a) *
+      (1 - smoothstep(-PAD_R_ROAD + 1.5, -PAD_R_ROAD + 5, a));
+    g = Math.max(g, ap);
+    _site.g = g;
+    _site.y = yPad;
+    _site.apron = ap;
+    _site.edge = edge;
+    // Churned where everything drives in: the apron itself, and a fan inside
+    // the mouth where vehicles spread out onto the pad.
+    _site.churn = g * Math.max(ap * 0.9, (1 - smoothstep(5, 16, Math.hypot(a + PAD_R_ROAD, b * 0.8))) * 0.9);
+    return _site;
+  }
+
+  /**
+   * The dry river channel, cut into the base before the roads grade over it —
+   * so the mainline crosses it on a fill, which is the embankment the culvert
+   * headwalls stand on. `chan` runs 1 on the sandy floor to 0 past the top of
+   * the bank; `carve` is the depth in metres.
+   */
+  const _chan = { chan: 0, carve: 0, floor: 0 };
+  function riverAt(x, z, rv) {
+    if (rv.d > RIVER_HALF + RIVER_BANK + 3.5) {
+      _chan.chan = 0;
+      _chan.carve = 0;
+      _chan.floor = 0;
+      return _chan;
+    }
+    // Shallows out at both ends rather than stopping, and the banks wander.
+    const taper = smoothstep(0, 22, rv.along) * (1 - smoothstep(rv.total - 24, rv.total, rv.along));
+    const hw = RIVER_HALF + (fbm(rv.along * 0.045 + 2, 1.3, { octaves: 3, period: 64, seed: 521 }) - 0.5) * 1.6;
+    const rd = rv.d + (fbm(x * 0.21, z * 0.21, { octaves: 2, period: 64, seed: 523 }) - 0.5) * 0.8;
+    const floor = (1 - smoothstep(hw, hw + RIVER_BANK, rd)) * taper;
+    // a dished floor: the last flow scoured the middle
+    _chan.carve = RIVER_DEPTH * floor + 0.18 * (1 - smoothstep(0, hw, rd)) * taper;
+    _chan.chan = (1 - smoothstep(hw - 0.6, hw + RIVER_BANK + 2.2, rd)) * taper;
+    _chan.floor = floor;
+    return _chan;
+  }
+
+  /** The water hole: a trampled dish with the water sitting in the bottom half of it. */
+  const _hole = { dish: 0, mud: 0, tramp: 0 };
+  function holeAt(x, z) {
+    const H = LAND.hole;
+    const hd = Math.hypot(x - H.x, z - H.z);
+    if (hd > HOLE_BASIN + 14) {
+      _hole.dish = 0;
+      _hole.mud = 0;
+      _hole.tramp = 0;
+      return _hole;
+    }
+    // the shore is irregular: where a hippo path comes down, where a bank
+    // has slumped
+    const hdj = hd + (fbm(x * 0.17 + 1, z * 0.17 + 4, { octaves: 2, period: 64, seed: 531 }) - 0.5) * 2.2;
+    _hole.dish = 1 - smoothstep(0, HOLE_BASIN, hdj);
+    // Mud: saturated at the waterline, drying out over the margin.
+    _hole.mud = 1 - smoothstep(HOLE_BASIN * 0.5, HOLE_BASIN + 6, hdj);
+    // Trampled bare ground, wider again: every animal for miles walks in here.
+    _hole.tramp = 1 - smoothstep(HOLE_BASIN * 0.4, HOLE_BASIN + 12, hdj);
+    return _hole;
+  }
+
   /**
    * Wobble on the corridor edge, so the boundary is never a clean ribbon.
    *
@@ -606,7 +953,19 @@ export function createTerrain({ env = null } = {}) {
     const nr = nearestRoad(x, z, out.near);
     const nt = nr.t;
     const nm = nr.m;
-    const base = baseHeight(x, z);
+    let base = baseHeight(x, z);
+
+    // --- the features, cut into the base before the roads grade it ----------
+    // Order matters: the river and the water hole are cut first, then the pad
+    // is laid over the result, so the pad is a plane whatever was under it and
+    // the road — blended in below by authority — crosses the channel on a fill.
+    const rv = riverDistance(x, z, _riv);
+    const river = riverAt(x, z, rv);
+    base -= river.carve;
+    const hole = holeAt(x, z);
+    base -= HOLE_DEPTH * hole.dish;
+    const site = siteAt(x, z, base);
+    base = lerp(base, site.y, site.g);
 
     // --- mainline cross-section ---------------------------------------------
     // Everything here is zero past thirteen metres — the batter is the last
@@ -620,10 +979,21 @@ export function createTerrain({ env = null } = {}) {
     let apM = 0;
     let gM = 0;
     let mDrop = 0;
+    let tOut = 0;
     if (mNear) {
       mSide -= mainShift(nm.s);
       const mAx0 = Math.abs(mSide);
       apM = apronMain(nm.s, mAx0);
+      // Which side of the road this is, softened across the crown so nothing
+      // keyed off it steps at the centreline. world.js's side +1 is the left
+      // driving with t, which is *negative* lateral in the sample frame.
+      const sideP = smoothstep(-0.6, 0.6, -mSide);
+      const sideN = 1 - sideP;
+      // The overlook turnout: the platform widens on the view side over the
+      // crest, and the ditch is left out there — a turnout on a crest drains
+      // off the crest. The camp access culverts the ditch on the pad's side.
+      const tO = turnout(nm.s) * (LAND.look.side > 0 ? sideP : sideN);
+      const cA = access(nm.s) * (WORLD.camp.side > 0 ? sideP : sideN);
       // Trucks swing wide off a mainline, so the platform is wider at the
       // junction and the ditch is culverted through it. 2.4 m, not 3.4: at the
       // wider figure the flare plus the trail's own and the forest's clearance
@@ -631,15 +1001,16 @@ export function createTerrain({ env = null } = {}) {
       // rather than as a junction. A crossing is legible because two roads of
       // different widths meet, so the flare has to stay small enough that both
       // of them still have a width.
-      const mHalf = MAIN_HALF + apM * 2.4;
+      const mHalf = MAIN_HALF + apM * 2.4 + tO * 3.4;
       const mPlat = mHalf + MAIN_SHOULDER;
       // The edge wobble is tapered in from the middle of the running surface,
       // for the same reason the trail's is: applied flat it slides the
       // wheel-path masks across the crown.
       const mEdge = mAx0 - mainWobble(nm.s) * smoothstep(mHalf * 0.5, mHalf + 1.0, mAx0);
       const cM = culvert(nm.s);
+      const cAny = Math.max(cM, cA, tO);
       const mDitchC = mPlat + MAIN_DITCH * 0.55;
-      const mOuter = mPlat + MAIN_DITCH * (1 - cM * 0.5) * 1.25;
+      const mOuter = mPlat + MAIN_DITCH * (1 - cAny * 0.5) * 1.25;
       const mCut = base - nm.y;
       // A cut face stands up at about one to one and a fill slope lies down at
       // one and a half, which is the one asymmetry that says a machine built
@@ -647,7 +1018,18 @@ export function createTerrain({ env = null } = {}) {
       // inside MAIN_CORRIDOR — the grade line is smoothed only as far as that
       // allows.
       const mBatter = 0.95 + Math.min(2.2, Math.abs(mCut) * (mCut > 0 ? 0.75 : 1.15));
-      gM = 1 - smoothstep(mOuter, mOuter + mBatter, mEdge);
+      // The culvert crossing. Over the river floor the fill is retained by
+      // the headwalls, so it ends in a face rather than lying down at one and
+      // a half: the batter is pulled in to a hand's width at the wall line and
+      // the channel floor runs right up to it. Keyed off the floor mask, so
+      // the banks either side of the wall still carry the ordinary slope that
+      // wraps round a headwall's wing walls. Laid out to the same figure as the
+      // headwalls in roadside.js: MAIN_EDGE + 1.1 m from the centreline.
+      const wallK = river.floor;
+      const bOuter = lerp(mOuter, MAIN_EDGE + 1.1 - 0.2, wallK);
+      const bBatter = lerp(mBatter, 0.3, wallK);
+      // the wall line does not wobble with the grader's edge
+      gM = 1 - smoothstep(bOuter, bOuter + bBatter, lerp(mEdge, mAx0, wallK));
 
       // 4% parabolic crown over the running surface, flattened across the apron
       // so a vehicle can cross the road rather than climb over its middle.
@@ -659,7 +1041,7 @@ export function createTerrain({ env = null } = {}) {
       // rather than running to a constant section.
       const mSilt = 0.62 + fbm(nm.s * 0.035 + 3.3, 7.7, { octaves: 3, period: 64, seed: 355 }) * 0.62;
       const mDitch = Math.exp(-((mEdge - mDitchC) ** 2) / (2 * (MAIN_DITCH * 0.5) ** 2));
-      mDrop -= mDitch * MAIN_DITCH_D * clamp01(mSilt) * (1 - cM);
+      mDrop -= mDitch * MAIN_DITCH_D * clamp01(mSilt) * (1 - cAny);
       // A centimetre and a half of wheel path. Any more and it is a rut, which
       // is the trail's job; any less and the road has no travelled way in it.
       const mRut =
@@ -671,7 +1053,8 @@ export function createTerrain({ env = null } = {}) {
       // that reads as "maintained" from a distance.
       const mWind = Math.exp(-((mEdge - (mPlat + 0.12)) ** 2) / (2 * 0.3 ** 2));
       mDrop +=
-        mWind * 0.055 * clamp01(0.3 + fbm(nm.s * 0.19 + 8, 1.4, { octaves: 2, period: 64, seed: 373 }) * 1.3) * (1 - cM);
+        mWind * 0.055 * clamp01(0.3 + fbm(nm.s * 0.19 + 8, 1.4, { octaves: 2, period: 64, seed: 373 }) * 1.3) * (1 - cAny);
+      tOut = tO;
     }
     const mAx = Math.abs(mSide);
 
@@ -766,13 +1149,23 @@ export function createTerrain({ env = null } = {}) {
     // a puddle sits in a dish, not on a flat floor. A crowned road with a ditch
     // either side does not hold water — that is what the crown is for — so the
     // wetness field is the mainline's share taken back out of it.
-    const wet = wetnessAt(ax, nt.s, gT * (1 - m) * (1 - apT * 0.7));
+    // Dry season: the trail's puddles are gone. The field is kept, at a third,
+    // as the damp hollows where the last rain sat longest — the mud is at the
+    // water hole now, and it arrives through `hole.mud` below.
+    const wet = wetnessAt(ax, nt.s, gT * (1 - m) * (1 - apT * 0.7)) * 0.3;
     y -= wet * 0.026;
 
-    // lumpy forest floor, flattened out on the compacted surface. The fine
-    // chop only exists where the dense corridor mesh can carry it.
-    const smoothOut = 1 - gAny * 0.86;
+    // Lumpy ground, flattened out on the compacted surfaces: the roads, the
+    // graded pad, the trampled mud round the water hole and the sandy floor of
+    // the river. The fine chop only exists where the dense corridor mesh can
+    // carry it.
+    const smoothOut = (1 - gAny * 0.86) * (1 - site.g * 0.92) * (1 - hole.mud * 0.85) * (1 - river.floor * 0.7);
     y += (fbm(x * 0.128, z * 0.128, { octaves: 3, period: 64, seed: 29 }) - 0.5) * 0.5 * smoothOut;
+    // The pad has settled since it was graded, and the mouth is churned.
+    y += (fbm(x * 0.07 + 2, z * 0.07 + 6, { octaves: 2, period: 64, seed: 541 }) - 0.5) * 0.07 * site.g * (1 - gM);
+    y += (fbm(x * 0.8 + 1, z * 0.8 + 3, { octaves: 2, period: 64, seed: 543 }) - 0.5) * 0.05 * site.churn * (1 - gM);
+    // Hoof-pocked mud, at a wavelength the refined ring can carry.
+    y += (fbm(x * 0.7 + 5, z * 0.7 + 2, { octaves: 2, period: 64, seed: 547 }) - 0.5) * 0.06 * hole.mud * (1 - hole.dish * 0.9);
     // A graded surface is not flat, it is a plane a machine last passed over
     // some months ago: long soft undulations from settlement and re-grading,
     // and nothing shorter than the blade is wide.
@@ -829,6 +1222,14 @@ export function createTerrain({ env = null } = {}) {
     out.wet = wet;
     out.grade = gAny;
     out.outside = outside;
+    // The zone masks the shader draws its other surfaces from. The pad and the
+    // churn give way to the road where the road has authority — the apron is
+    // pad material running up to gravel, not over it.
+    out.pad = site.g * (1 - gM * m);
+    out.chan = river.chan * (1 - gM * m);
+    out.mud = hole.mud;
+    out.churn = Math.max(site.churn * (1 - gM * m), hole.tramp * 0.8);
+    out.dish = hole.dish;
     // Which surface the shader should draw, on a wider and softer boundary than
     // the geometry's: the graded platform's *material* runs a little past the
     // ground it graded, because a truck throws gravel off the shoulder. Weighted
@@ -847,8 +1248,11 @@ export function createTerrain({ env = null } = {}) {
     // maintains its road *through* a junction, so the platform is continuous
     // and what a spur puts on it is mud lying on gravel, which the drag term
     // below already draws. The dirt starts where the gravel stops.
-    const plat = MAIN_HALF + apM * 2.4 + MAIN_SHOULDER;
+    const plat = MAIN_HALF + apM * 2.4 + tOut * 3.4 + MAIN_SHOULDER;
     share = Math.max(share, 1 - smoothstep(plat - 0.5, plat + 1.1, mAx));
+    // Gravel does not lie in the river: where the channel floor runs out from
+    // under the embankment the sand takes over.
+    share *= 1 - river.floor * (1 - gM);
     out.share = share;
     out.mSide = THREE.MathUtils.clamp(mSide, -24, 24);
     out.mAlong = nm.s;
@@ -880,6 +1284,11 @@ export function createTerrain({ env = null } = {}) {
     share: 0,
     mSide: 0,
     mAlong: 0,
+    pad: 0,
+    chan: 0,
+    mud: 0,
+    churn: 0,
+    dish: 0,
   });
   const _hInfo = makeInfo();
   const _vInfo = makeInfo();
@@ -908,15 +1317,28 @@ export function createTerrain({ env = null } = {}) {
       const mz = gx(j) + cell * 0.5;
       const nr = nearestRoad(mx, mz);
       let lv = 1;
-      if (nr.m.dist < MAIN_CORRIDOR + 3.4 * apronMain(nr.m.s, Math.abs(nr.m.lat)) + cell) {
+      if (nr.m.dist < MAIN_CORRIDOR + 3.4 * apronMain(nr.m.s, Math.abs(nr.m.lat)) + 3.4 * turnout(nr.m.s) + cell) {
         lv = FINE_MAIN;
-        mainCells++;
       }
-      if (nr.t.dist < CORRIDOR + cell) {
-        if (lv === FINE_MAIN) mainCells--;
-        lv = FINE;
-        fineCells++;
+      // The features get the mainline's rate: the river banks are a metre and a
+      // half over two and a half, the pad's batter is a metre over one to three,
+      // and the water hole's shore is where the sheet has to meet the mud. The
+      // pad's flat interior is a plane and the coarse grid carries a plane
+      // exactly, so only its edge ring, the apron and the churned mouth are
+      // refined.
+      const rv = riverDistance(mx, mz, _riv);
+      if (rv.d < RIVER_HALF + RIVER_BANK + 3.4 + cell && rv.along > 6 && rv.along < rv.total - 6) {
+        lv = FINE_MAIN;
+        // the culvert: the fill ends in a face at the headwall line, and a
+        // 0.6 m grid smears a 0.3 m face out past the wall that hides it
+        if (nr.m.dist < MAIN_EDGE + 4 + cell) lv = FINE;
       }
+      if (Math.hypot(mx - LAND.hole.x, mz - LAND.hole.z) < HOLE_BASIN + 7 + cell) lv = FINE_MAIN;
+      const st = siteAt(mx, mz, baseHeight(mx, mz));
+      if ((Math.abs(st.edge) < 4.5 + cell && st.edge < 4.5) || st.apron > 0.01 || st.churn > 0.15) lv = FINE_MAIN;
+      if (nr.t.dist < CORRIDOR + cell) lv = FINE;
+      if (lv === FINE) fineCells++;
+      else if (lv === FINE_MAIN) mainCells++;
       cellLevel[j * COARSE + i] = lv;
     }
   }
@@ -945,6 +1367,10 @@ export function createTerrain({ env = null } = {}) {
   // the trail can have a grain to it — which is most of why the ruts read as a
   // pair of soft channels rather than as something a wheel dragged through.
   const aTan = new Float32Array(vertCount * 2);
+  // The savanna zones: pad, river channel (1 floor, 0 bank top), water-hole
+  // mud, churned or trampled ground. Baked like the wetness, so the shader's
+  // surfaces and the mesh's shaping come out of the same numbers.
+  const aZone = new Float32Array(vertCount * 4);
   const index = vertCount > 65535 ? new Uint32Array(triCount * 3) : new Uint16Array(triCount * 3);
 
   /**
@@ -960,7 +1386,13 @@ export function createTerrain({ env = null } = {}) {
    */
   function writeVertex(k, x, z, yOverride) {
     const info = surfaceInfo(x, z, _vInfo);
-    const e = lerp(1.15, 0.13, 1 - smoothstep(CORRIDOR * NEAR_IN, CORRIDOR * NEAR_OUT, info.dist));
+    // Tighter on the river banks and the water hole's shore, which are the
+    // only steep things off the road: at 1.15 m a 1.5 m bank over 2.6 m
+    // differenced into a soft swell. Still a function of position alone, so
+    // the shared-edge argument holds.
+    const e =
+      lerp(1.15, 0.13, 1 - smoothstep(CORRIDOR * NEAR_IN, CORRIDOR * NEAR_OUT, info.dist)) *
+      (1 - 0.62 * Math.max(info.chan, info.mud));
     const y = yOverride === undefined ? info.y : yOverride;
     const side = info.side;
     const edge = info.edge;
@@ -989,6 +1421,10 @@ export function createTerrain({ env = null } = {}) {
     aMain[k * 3 + 2] = info.mAlong;
     aTan[k * 2] = info.tanX;
     aTan[k * 2 + 1] = info.tanZ;
+    aZone[k * 4] = info.pad;
+    aZone[k * 4 + 1] = info.chan;
+    aZone[k * 4 + 2] = info.mud;
+    aZone[k * 4 + 3] = info.churn;
   }
 
   /**
@@ -1108,6 +1544,7 @@ export function createTerrain({ env = null } = {}) {
   geo.setAttribute('aWet', new THREE.BufferAttribute(aWet, 1));
   geo.setAttribute('aMain', new THREE.BufferAttribute(aMain, 3));
   geo.setAttribute('aTan', new THREE.BufferAttribute(aTan, 2));
+  geo.setAttribute('aZone', new THREE.BufferAttribute(aZone, 4));
   geo.setIndex(new THREE.BufferAttribute(index, 1));
   geo.computeBoundingSphere();
 
@@ -1115,7 +1552,9 @@ export function createTerrain({ env = null } = {}) {
   const track = trackMaps();
   const gravel = gravelMaps();
   const verge = vergeMaps();
-  const litter = litterMaps();
+  const litter = savannaMaps();
+  const sand = sandMaps();
+  const tracks = trackStamps();
   const tread = treadImprint();
   const detail = detailNormal();
   const grain = grainMaps();
@@ -1155,6 +1594,14 @@ export function createTerrain({ env = null } = {}) {
     uGravelNrm: { value: gravel.normal },
     uLitterMap: { value: litter.map },
     uLitterNrm: { value: litter.normal },
+    uSandMap: { value: sand.map },
+    uSandNrm: { value: sand.normal },
+    uTracks: { value: tracks.normal },
+    uTracksScale: { value: 1 / TRACKS_TILE },
+    // The overlook turnout in the mainline's frame: arc length, half-width
+    // gain, and which sign of lateral offset it is on.
+    uLook: { value: new THREE.Vector4(LOOK_M, 3.4, LAND.look.side > 0 ? -1 : 1, 0) },
+    uAccess: { value: new THREE.Vector2(ACCESS_M, WORLD.camp.side > 0 ? -1 : 1) },
     uDetailNrm: { value: detail },
     uGrain: { value: grain },
     uMacro: { value: macro },
@@ -1185,7 +1632,12 @@ export function createTerrain({ env = null } = {}) {
     uJitterScale: { value: 1 / 5.2 },
     uTreadPitch: { value: tread.pitch },
     uMean: {
-      value: new THREE.Vector3(Math.max(track.mean, 0.01), Math.max(litter.mean, 0.01), Math.max(gravel.mean, 0.01)),
+      value: new THREE.Vector4(
+        Math.max(track.mean, 0.01),
+        Math.max(litter.mean, 0.01),
+        Math.max(gravel.mean, 0.01),
+        Math.max(sand.mean, 0.01),
+      ),
     },
     uRoad: { value: new THREE.Vector4(ROAD_HALF, SHOULDER, RUT_C, RUT_W) },
     // The mainline's cross-section, so the shader places its surfaces off the
@@ -1196,8 +1648,11 @@ export function createTerrain({ env = null } = {}) {
     // outer edge of the graded platform.
     uJunc: { value: new THREE.Vector4(JUNC_M, JUNC_T, MAIN_DITCH, MAIN_EDGE) },
     uGravelScale: { value: 1 / GRAVEL_TILE },
-    // global weather dial: 0 is a dry summer track, 1 is soaked
-    uWet: { value: 0.8 },
+    // Global weather dial: 0 is a dry-season track, 1 is soaked. It was 0.8 for
+    // the forest; the savanna is at the end of the dry season, and everything
+    // keyed off this — the damp patches, the polished rut floors, the puddle
+    // sheets — has to be nearly gone so the dust can be what is left.
+    uWet: { value: 0.12 },
     uContacts: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
     // 1 shows the surface masks, 2 the unlit albedo, 3 the road-space masks
     // unlit, 4 the water mask. Everything here is one surface blended from
@@ -1221,12 +1676,14 @@ export function createTerrain({ env = null } = {}) {
         attribute float aWet;
         attribute vec3 aMain;
         attribute vec2 aTan;
+        attribute vec4 aZone;
         varying float vSide;
         varying float vEdge;
         varying float vAlong;
         varying float vWet;
         varying vec3 vMain;
         varying vec2 vTan;
+        varying vec4 vZone;
         varying vec2 vTile;
         varying vec3 vWorld;`,
       )
@@ -1239,6 +1696,7 @@ export function createTerrain({ env = null } = {}) {
         vWet = aWet;
         vMain = aMain;
         vTan = aTan;
+        vZone = aZone;
         vec4 wp = modelMatrix * vec4( transformed, 1.0 );
         vWorld = wp.xyz;
         vTile = wp.xz;`,
@@ -1250,6 +1708,7 @@ export function createTerrain({ env = null } = {}) {
         `#include <common>
         uniform sampler2D uVergeMap, uVergeNrm, uLitterMap, uLitterNrm;
         uniform sampler2D uGravelMap, uGravelNrm;
+        uniform sampler2D uSandMap, uSandNrm, uTracks;
         uniform sampler2D uDetailNrm, uGrain, uMacro, uTread;
         uniform sampler2D uReliefH, uReliefN;
         uniform vec3 uScale;
@@ -1258,19 +1717,22 @@ export function createTerrain({ env = null } = {}) {
         uniform vec4 uRoad;
         uniform vec4 uMain;
         uniform vec4 uJunc;
+        uniform vec4 uLook;
+        uniform vec2 uAccess;
         uniform vec4 uNearAmt;
         uniform vec4 uContacts[ 4 ];
         uniform float uReliefScale, uReliefDepth, uReliefAmt;
         uniform float uDetailScale, uMacroScale, uJitterScale, uTreadPitch, uWet;
-        uniform float uGravelScale;
+        uniform float uGravelScale, uTracksScale;
         uniform float uDebug;
-        uniform vec3 uMean;
+        uniform vec4 uMean;
         varying float vSide;
         varying float vEdge;
         varying float vAlong;
         varying float vWet;
         varying vec3 vMain;
         varying vec2 vTan;
+        varying vec4 vZone;
         varying vec2 vTile;
         varying vec3 vWorld;
 
@@ -1489,6 +1951,30 @@ export function createTerrain({ env = null } = {}) {
         vec4 nTrack = texture2D( normalMap, uvT );
         vec4 nVerge = texture2D( uVergeNrm, uvV );
         vec4 nLit = texture2D( uLitterNrm, uvL );
+        // The zones. Sand on the river floor, eroded bank above it, the graded
+        // pad, the mud round the water hole and the churn where things drive or
+        // walk in. Only fetched where a zone is live: most of the world is none
+        // of them and the branch is coherent across whole cells.
+        float zPad = vZone.x;
+        float zSand = smoothstep( 0.58, 0.9, vZone.y );
+        float zBank = smoothstep( 0.04, 0.5, vZone.y ) * ( 1.0 - zSand );
+        float zMud = vZone.z;
+        float zChurn = vZone.w;
+        float zAny = max( max( zPad, vZone.y ), max( zMud, zChurn ) );
+        vec4 tSand = vec4( 0.0 );
+        vec4 nSand = vec4( 0.5, 0.5, 1.0, 1.0 );
+        vec4 trk = vec4( 0.5, 0.5, 1.0, 0.6 );
+        float trkHi = 0.6;
+        if ( zAny > 0.002 ) {
+          vec2 uvS = vTile * uGravelScale * 1.15;
+          tSand = texture2D( uSandMap, uvS );
+          vec4 tSand2 = texture2D( uSandMap, uvS * 0.31 + 0.19 );
+          tSand.rgb = breakUp( tSand.rgb, tSand2.rgb, uMean.w );
+          nSand = texture2D( uSandNrm, uvS );
+          vec2 uvK = vTile * uTracksScale + ( mid.gb - 0.5 ) * 0.2;
+          trk = texture2D( uTracks, uvK );
+          trkHi = texture2D( uTracks, uvK + uSunStep * 0.02 * uTracksScale ).w;
+        }
         vec4 nDetail4 = texture2D( uDetailNrm, ( vTile + pWorld ) * uDetailScale );
         // Second tier of the same grit at four times the frequency, faded in
         // over the last few metres. The wheel and contact framings sit 30 cm
@@ -1559,7 +2045,15 @@ export function createTerrain({ env = null } = {}) {
         // are carried through the junction and interrupted only where the spur
         // actually crosses.
         float cM = 1.0 - smoothstep( 3.2, 6.5, abs( vMain.z - uJunc.x ) );
-        float mHalf = uMain.x + apM * 2.4;
+        // The overlook turnout and the camp access, matching turnout() and
+        // access() in the profile: the platform widens on the view side over
+        // the crest, and the ditch is culverted at both.
+        float sideL = smoothstep( -0.6, 0.6, vMain.y * uLook.z );
+        float tO = ( 1.0 - smoothstep( 7.0, 15.0, abs( vMain.z - uLook.x ) ) ) * sideL;
+        float sideC = smoothstep( -0.6, 0.6, vMain.y * uAccess.y );
+        float cA = ( 1.0 - smoothstep( 6.5, 9.5, abs( vMain.z - uAccess.x ) ) ) * sideC;
+        cM = max( cM, max( tO, cA ) );
+        float mHalf = uMain.x + apM * 2.4 + tO * uLook.y;
         float mPlat = mHalf + uMain.y;
         float mRun = 1.0 - smoothstep( mHalf - 0.35, mHalf + 0.3, mAxj );
         // The travelled way. Two strips where every wheel that has been down
@@ -1705,7 +2199,9 @@ export function createTerrain({ env = null } = {}) {
         // and the integrated foreground showed the result: the troughs read as
         // near-black channels rather than as damp compacted earth. 2.4:1 still puts
         // the ruts clearly under the crown, which is all this term is for.
-        vec3 rutTint = mix( vec3( 0.42, 0.37, 0.34 ), vec3( 0.66, 0.62, 0.55 ), dusty );
+        // Redder at the dark end than the forest's: a compacted laterite floor is
+        // the iron showing through where the dust has been pressed off it.
+        vec3 rutTint = mix( vec3( 0.5, 0.4, 0.33 ), vec3( 0.7, 0.62, 0.52 ), dusty );
         albedo *= mix( vec3( 1.0 ), rutTint, sweep );
         float dry = mCrown * ( 0.3 + mac.a * 0.5 ) * ( 1.0 - damp * 0.7 );
 
@@ -1763,8 +2259,11 @@ export function createTerrain({ env = null } = {}) {
         // the ruts either side, which is what makes a two-track legible at
         // distance, but a tenth is enough for that: the rut tint below is a 2.4:1
         // darkening and it does most of the work.
-        albedo *= mix( vec3( 1.0 ), vec3( 1.05, 1.07, 1.1 ), mLoose * 0.8 );
-        albedo *= mix( vec3( 1.0 ), vec3( 1.1, 1.1, 1.08 ), mCrown * 0.8 );
+        // Khaki, not blue-grey: the loose material on a laterite track is the
+        // same earth ground to flour, and flour is paler and *warmer* than the
+        // packed surface, never cooler.
+        albedo *= mix( vec3( 1.0 ), vec3( 1.1, 1.07, 1.0 ), mLoose * 0.8 );
+        albedo *= mix( vec3( 1.0 ), vec3( 1.12, 1.09, 1.02 ), mCrown * 0.8 );
 
         // Vegetation surviving down the middle of the two-track. Clumped along
         // the road and shot through with the litter tile's own detail, or it
@@ -1783,7 +2282,10 @@ export function createTerrain({ env = null } = {}) {
         // Weeds grow in clumps, so the mask has to be a clump.
         float mVeg = ( 1.0 - smoothstep( 0.1, 0.52, ax + jit * 0.3 ) ) * mTrack *
                      smoothstep( 0.34, 0.72, rsp.b ) * smoothstep( 0.28, 0.66, streak.g );
-        vec3 veg = mix( vec3( 0.046, 0.056, 0.026 ), vec3( 0.1, 0.088, 0.042 ), mac.b );
+        // Straw, not weed: what survives down the middle of a dry-season
+        // two-track is last year's grass, bleached, with a little grey-green at
+        // the base of it.
+        vec3 veg = mix( vec3( 0.09, 0.08, 0.042 ), vec3( 0.17, 0.15, 0.085 ), mac.b );
         // lum runs to about two, so the old 0.5 + lum * 0.9 put the bright end
         // of the litter tile out at 2.3 times a fairly warm olive. Capped, and
         // used only inside the colour now rather than in the mask.
@@ -1816,6 +2318,14 @@ export function createTerrain({ env = null } = {}) {
         float pool = vWet * weather;
         float soak = smoothstep( 0.02, 0.3, pool );
         float water = smoothstep( 0.17, 0.44, pool ) * ( 0.62 + 0.38 * smoothstep( 0.3, 0.75, 1.0 - abs( jit ) * 2.0 ) );
+        // The water hole's margin does not go through the weather dial: it is
+        // wet in the dry season, that is the whole point of it. Saturated mud
+        // at the waterline, drying out over the trampled margin in patches —
+        // a hoof-pocked shore dries where it is trodden thin and stays dark
+        // where it is deep.
+        float mudWet = zMud * ( 0.55 + 0.45 * smoothstep( 0.3, 0.7, mac.g * 0.5 + mid.b * 0.5 + zMud * 0.4 ) );
+        soak = max( soak, smoothstep( 0.05, 0.6, mudWet ) * 0.85 );
+        water = max( water, smoothstep( 0.8, 0.97, zMud ) );
         // A soaked rim, several times wider than the water itself. This is most
         // of the cue: a hard-edged dark patch reads as a stain, a dark halo
         // fading out around a smooth centre reads as standing water.
@@ -1886,7 +2396,7 @@ export function createTerrain({ env = null } = {}) {
           // top, not the rock. Two warm-dark strips on a cool grey platform is
           // the whole read of a gravel road at any distance past ten metres,
           // and it is the mainline's equivalent of the trail's ruts.
-          gAlb *= mix( vec3( 1.0 ), vec3( 0.58, 0.54, 0.5 ), mWheel * 0.92 );
+          gAlb *= mix( vec3( 1.0 ), vec3( 0.54, 0.47, 0.41 ), mWheel * 0.96 );
           // The wheel path is also the only part of this road that holds water,
           // and it holds it because compaction is what made it impermeable —
           // everything either side drains through the voids between the pieces
@@ -1900,20 +2410,29 @@ export function createTerrain({ env = null } = {}) {
           // gaining chroma, which is what separates it from the trail's pale
           // dry crown.
           float mLooseG = mRun * ( 1.0 - mWheel * 0.9 ) * ( 0.45 + 0.55 * mMid );
-          gAlb *= mix( vec3( 1.0 ), vec3( 1.2, 1.2, 1.19 ), mLooseG * 0.9 );
+          gAlb *= mix( vec3( 1.0 ), vec3( 1.14, 1.12, 1.08 ), mLooseG * 0.9 );
+          // Murram. The running surface measured on screen at a red-to-green
+          // ratio of 1.2 — a pale tan, the colour of a granite road — and this
+          // is laterite: the fines that bind the surface are iron-red, and the
+          // whole road carries their cast. A gentle pull over the platform only;
+          // the verge and the grassland beyond keep their own hue.
+          gAlb *= mix( vec3( 1.0 ), vec3( 1.02, 0.93, 0.85 ), mRun );
           // Shoulder: the oversize the grader pushed off, breaking down into
           // the verge. Coarse tap on its own, then part way to verge material.
           gAlb = mix( gAlb, mix( tGrav2.rgb * 1.08, tVerge.rgb, 0.45 ), mShld * 0.9 );
-          gAlb = mix( gAlb, tGrav2.rgb * 1.14, mWind * 0.7 );
+          gAlb = mix( gAlb, tGrav2.rgb * 1.2, mWind * 0.85 );
           // Ditch. The one part of this road that is wet, and it is wet because
           // the crown put the water there — which is the argument the whole
           // cross-section is making. Silt, dark, with weed taking hold in it.
-          vec3 silt = mix( cLit * 0.72, vec3( 0.055, 0.06, 0.042 ), 0.4 );
-          gAlb = mix( gAlb, silt, mDitch * ( 0.55 + 0.35 * mid.b ) );
+          // Dry season: the ditch is silted with fines and blown straw, not wet.
+          // Darker than the platform because it is in its own shadow and the
+          // fines are the red fraction, but nothing in it is damp.
+          vec3 silt = mix( cLit * 0.78, cTrack * 0.7, 0.45 );
+          gAlb = mix( gAlb, silt, mDitch * ( 0.5 + 0.35 * mid.b ) );
           // Grass and moss down the middle where nothing runs. Sparse — a road
           // still in use, not an abandoned one.
           float mGrass = mMid * smoothstep( 0.55, 0.85, mrs.a ) * ( 1.0 - apM );
-          gAlb = mix( gAlb, mix( vec3( 0.05, 0.058, 0.028 ), vec3( 0.09, 0.082, 0.04 ), mac.b ), mGrass * 0.42 );
+          gAlb = mix( gAlb, mix( vec3( 0.1, 0.09, 0.05 ), vec3( 0.16, 0.14, 0.08 ), mac.b ), mGrass * 0.42 );
           // Dust film. A gravel road in use is coated in its own grindings and
           // that film is what makes it read as a road rather than as a quarry
           // stockpile; it lies thickest where nothing has swept it off.
@@ -1922,7 +2441,9 @@ export function createTerrain({ env = null } = {}) {
           // business doing the same, and a warm film over the whole running
           // surface was a measurable part of why the mainline kept measuring
           // at the trail's hue however cool the tile under it was authored.
-          gAlb *= mix( vec3( 1.0 ), vec3( 1.08, 1.08, 1.075 ), mRun * ( 1.0 - mWheel ) * ( 1.0 - damp ) * mac.a * 0.5 );
+          // (Laterite now: the dust on a murram road is the road's own red
+          // fines, so the film lifts value and pulls a shade warmer with it.)
+          gAlb *= mix( vec3( 1.0 ), vec3( 1.09, 1.06, 1.0 ), mRun * ( 1.0 - mWheel ) * ( 1.0 - damp ) * mac.a * 0.5 );
 
           // --- what a gravel road actually looks like from twenty metres --------
           // Everything above is either a 1.9 m tile, which has mipped to its mean
@@ -2022,6 +2543,46 @@ export function createTerrain({ env = null } = {}) {
           // trail, so it takes more occlusion, not less.
           gAlb *= mix( 1.0, clamp( nGrav.w, 0.0, 1.3 ), 0.62 );
           albedo = mix( albedo, gAlb, share );
+        }
+
+        // --- the savanna zones -----------------------------------------------
+        // Each is a surface in its own right, blended in over whatever the roads
+        // left, and the order is the order they lie in: the river's bank and
+        // floor, then the pad over the top of any of it, then the mud, which is
+        // a condition rather than a material and darkens whatever it is on.
+        float trkMask = 0.0;
+        if ( zAny > 0.002 ) {
+          // The bank: the grass stripped off and the laterite subsoil showing,
+          // with the stones the flow left standing out of it. Same earth as the
+          // track, a little darker, no dust film.
+          vec3 bankAlb = mix( cTrack * 0.86, cLit * 0.8, 0.3 ) * mix( 0.88, 1.06, clod.g );
+          albedo = mix( albedo, bankAlb, zBank * 0.85 );
+          // The floor: sand. Pale, and the one surface here that is not red.
+          albedo = mix( albedo, tSand.rgb, zSand );
+          // The pad: compacted laterite with murram worked into it, graded flat
+          // and driven over for a season. Between the track and the gravel —
+          // dirt with stone in it — and dustier than either, because nothing
+          // sheds the dust off a pad.
+          float padStone = smoothstep( 0.35, 0.75, mid.g * 0.6 + clod.r * 0.5 );
+          vec3 padAlb = mix( cTrack * 1.02, cGrav * 0.84, 0.3 + padStone * 0.4 );
+          padAlb *= mix( vec3( 1.0 ), vec3( 1.12, 1.09, 1.02 ), smoothstep( 0.3, 0.8, mac.a ) * 0.6 );
+          // Grass creeping back over the parts nobody parks on.
+          float padGrass = smoothstep( 0.62, 0.9, mrs.a * 0.5 + mac.b * 0.6 ) * ( 1.0 - zChurn );
+          padAlb = mix( padAlb, cLit * 0.95, padGrass * 0.55 );
+          albedo = mix( albedo, padAlb, zPad * ( 1.0 - share ) );
+          // Churn: turned-over earth. The dust film is gone off it, the clods
+          // are up, and it is darker and rougher than the surface beside it.
+          float clods = smoothstep( 0.3, 0.75, clod.r );
+          albedo *= mix( vec3( 1.0 ), mix( vec3( 0.62, 0.55, 0.5 ), vec3( 1.0, 0.97, 0.94 ), clods ), zChurn * 0.9 );
+          // Mud. Water in the pores: darker, more saturated, redder still.
+          albedo = mix( albedo, albedo * vec3( 0.5, 0.42, 0.37 ), smoothstep( 0.02, 0.6, mudWet ) * 0.85 );
+          // Tracks pressed into anything soft: the mud round the water hole and
+          // the churned apron. Shaded like the tyre print — a hollow, a lip, and
+          // a wall that shadows toward the sun.
+          trkMask = clamp( smoothstep( 0.1, 0.6, zMud ) * 1.0 + zChurn * 0.55, 0.0, 1.0 ) * ( 1.0 - water );
+          float trkAo = mix( 1.0, 0.7 + trk.w * 0.36, trkMask );
+          float trkWall = clamp( ( trkHi - trk.w ) * 2.4, 0.0, 1.0 );
+          albedo *= trkAo * ( 1.0 - trkWall * trkMask * 0.24 );
         }
         // Grain in the albedo up close, so nothing within reach is ever flat.
         // The tint tiers carry hue as well as value — a pebble that is only
@@ -2180,7 +2741,9 @@ export function createTerrain({ env = null } = {}) {
         // unlit below. A mask drawn through the light rig is a mask multiplied
         // by an 8-intensity key, and every one of these came back at 1.0.
         if ( uDebug > 4.5 && uDebug < 5.5 ) albedo = vec3( share, mWheel, mShld + mDitch );
-        if ( uDebug > 5.5 ) albedo = vec3( mRun, apM, apT );`,
+        if ( uDebug > 5.5 && uDebug < 6.5 ) albedo = vec3( mRun, apM, apT );
+        // 7 is the savanna zones: pad, river floor and bank, mud and churn.
+        if ( uDebug > 6.5 ) albedo = vec3( zPad, zSand + zBank * 0.5, zMud + zChurn * 0.5 );`,
       )
       .replace(
         '#include <roughnessmap_fragment>',
@@ -2264,13 +2827,27 @@ export function createTerrain({ env = null } = {}) {
           // A pothole holds what the rest of the road sheds.
           gRough = mix( gRough, 0.7, gPot * 0.5 );
           roughnessFactor = mix( roughnessFactor, clamp( gRough, 0.46, 1.0 ), share );
-        }`,
+        }
+        // Sand is matte whatever the light does; the pad is the track's finish;
+        // saturated mud is the one broad sheen in the savanna, and it is broad —
+        // a step toward mid roughness, not a mirror, for the reason the damp
+        // term above is.
+        roughnessFactor = mix( roughnessFactor, max( tSand.a, 0.86 ), zSand );
+        roughnessFactor = mix( roughnessFactor, 0.58, smoothstep( 0.3, 0.9, mudWet ) * 0.8 );`,
       )
       .replace(
         '#include <normal_fragment_maps>',
         `vec3 mapN = mix( nLit.xyz, nVerge.xyz, mVerge );
         mapN = mix( mapN, nTrack.xyz, mTrack );
-        mapN = mix( mapN, nGrav.xyz, share ) * 2.0 - 1.0;
+        mapN = mix( mapN, nGrav.xyz, share );
+        // Sand ripples on the river floor; the pad takes the track's tile; mud
+        // is smooth under the prints, which are added as their own slope below.
+        mapN = mix( mapN, nSand.xyz, zSand );
+        mapN = mix( mapN, nTrack.xyz, zPad * ( 1.0 - share ) * 0.7 );
+        mapN = mix( mapN, vec3( 0.5, 0.5, 1.0 ), smoothstep( 0.3, 0.9, mudWet ) * 0.7 ) * 2.0 - 1.0;
+        // Prints: a hollow with a lip round it, about a centimetre deep, at
+        // full strength wherever the ground was soft enough to take one.
+        mapN.xy += ( trk.xy * 2.0 - 1.0 ) * 0.9 * trkMask * fpFade;
         // Aggregate standing proud is what this surface is, so its tile keeps
         // more of its own relief than the trail's does — but the wheel paths
         // are compacted flat and the pieces in them are bedded down, so the
@@ -2443,6 +3020,10 @@ export function createTerrain({ env = null } = {}) {
         // and the lip squeezed up either side shades it further
         ambientOcclusion *= mix( 1.0, 0.72, mRut );
         ambientOcclusion *= mix( 1.0, 0.85, soak );
+        // a print is a hollow, and the sand between the pebbles on the river
+        // floor sees less sky than the pebbles do
+        ambientOcclusion *= mix( 1.0, 0.72 + trk.w * 0.3, trkMask * 0.8 );
+        ambientOcclusion *= mix( 1.0, clamp( nSand.w, 0.5, 1.1 ), zSand * 0.6 );
         // A drainage ditch is a half-metre trench with a bank on one side and a
         // road embankment on the other, so it sees a fraction of the sky the
         // running surface does. This is what draws the road's edge from a
@@ -2473,7 +3054,7 @@ export function createTerrain({ env = null } = {}) {
         // carrying its albedo twice, so ambient-lit dirt is warmer and more
         // saturated than a single-bounce diffuse term makes it. Without this
         // the shaded ground is lit by sky alone and reads as cool grey.
-        reflectedLight.indirectDiffuse *= ambientOcclusion * vec3( 1.06, 1.0, 0.93 );
+        reflectedLight.indirectDiffuse *= ambientOcclusion * vec3( 1.09, 1.0, 0.9 );
         // Ground bounce. The canopy shades most of the road, so the only light
         // reaching the dirt there has come off the dirt itself and there is no
         // term in the standard model for it. It used to be 0.42, which on its
@@ -2549,14 +3130,63 @@ export function createTerrain({ env = null } = {}) {
   mesh.add(scatter.shadows);
   const water = buildWater(curve, surfaceInfo, surfaceHeight, sunV);
   mesh.add(water);
+  const farHills = buildFarHills(env);
+  mesh.add(farHills);
 
   contactSink = uniforms.uContacts.value;
+
+  // --- the features, resolved for everyone else -----------------------------
+  const holeFloor = surfaceHeight(LAND.hole.x, LAND.hole.z);
+  const lookP = new THREE.Vector3(cx[jLook], cy[jLook], cz[jLook]);
+  const lookLat = { x: -ctz[jLook] * LAND.look.side, z: ctx[jLook] * LAND.look.side };
+  const boardOff = MAIN_HALF + 3.4 + MAIN_SHOULDER + 0.7;
+  const board = { x: lookP.x + lookLat.x * boardOff, z: lookP.z + lookLat.z * boardOff };
+  board.y = surfaceHeight(board.x, board.z);
+  const riverP = { x: cx[jRiver], y: cy[jRiver], z: cz[jRiver] };
+  const riverLat = { x: -ctz[jRiver], z: ctx[jRiver] };
+  // Headwalls: on the fill slope either side of the road, at the channel
+  // centreline, facing out along the river.
+  // The river meets the road off square, so the wall is slid along the road
+  // until it sits on the channel's own centreline.
+  const headwalls = [1, -1].map((sgn) => {
+    const off = MAIN_EDGE + 1.1;
+    const ox = riverP.x + riverLat.x * off * sgn;
+    const oz = riverP.z + riverLat.z * off * sgn;
+    let best = 0;
+    let bestD = Infinity;
+    for (let u = -6; u <= 6; u += 0.25) {
+      const d = riverDistance(ox + ctx[jRiver] * u, oz + ctz[jRiver] * u, _riv).d;
+      if (d < bestD) {
+        bestD = d;
+        best = u;
+      }
+    }
+    const hx = ox + ctx[jRiver] * best;
+    const hz = oz + ctz[jRiver] * best;
+    return { x: hx, y: surfaceHeight(hx, hz), z: hz, nx: riverLat.x * sgn, nz: riverLat.z * sgn, side: -sgn };
+  });
+  const campAccess = {
+    x: cx[jAccess],
+    y: cy[jAccess],
+    z: cz[jAccess],
+    t: (jAccess - SAMPLES) / (MSAMPLES - 1),
+    tx: ctx[jAccess],
+    tz: ctz[jAccess],
+    side: WORLD.camp.side,
+    // the mouth of the apron: where a gate would stand
+    mouth: {
+      x: LAND.camp.x - LAND.camp.ax * (PAD_R_ROAD + 4),
+      z: LAND.camp.z - LAND.camp.az * (PAD_R_ROAD + 4),
+    },
+  };
+  campAccess.mouth.y = surfaceHeight(campAccess.mouth.x, campAccess.mouth.z);
 
   return {
     mesh,
     stones: scatter.stones,
     shadows: scatter.shadows,
     water,
+    farHills,
     material,
     curve,
     mainCurve,
@@ -2570,14 +3200,84 @@ export function createTerrain({ env = null } = {}) {
      * surface ends at 6.6, so what comes back for it is the distance to its
      * *edge* shifted into the same frame. Reporting the raw distance would put
      * a stand of firs down the middle of it.
+     *
+     * The graded pad, the river channel and the water hole are folded in on
+     * the same footing — as the distance past their edge, shifted so a tree
+     * needs to be about a metre clear of the edge and undergrowth stays off
+     * the pad, the sand and the mud. Trees are welcome on the river banks.
      */
     roadDistance: (x, z) => {
       const nr = nearestRoad(x, z);
-      return Math.min(nr.t.dist, Math.max(0, nr.m.dist - MAIN_DIST_BIAS));
+      let d = Math.min(nr.t.dist, Math.max(0, nr.m.dist - MAIN_DIST_BIAS));
+      const st = siteAt(x, z, 0);
+      if (st.g > 0 || st.edge < 6) d = Math.min(d, Math.max(0, st.edge + 6.2));
+      const rv = riverDistance(x, z, _riv);
+      if (rv.d < 20 && rv.along > 10 && rv.along < rv.total - 10) {
+        d = Math.min(d, Math.max(0, rv.d - (RIVER_HALF + RIVER_BANK) + 6.4));
+      }
+      const hd = Math.hypot(x - LAND.hole.x, z - LAND.hole.z);
+      if (hd < HOLE_BASIN + 30) d = Math.min(d, Math.max(0, hd - HOLE_BASIN - 4 + 6.2));
+      return d;
+    },
+    /**
+     * The graded campground pad: centre, level at the centre, and the radius
+     * inside which the ground is the graded plane. The pad is an ellipse —
+     * `radii` gives it toward the road, away from it and sideways, and `axis`
+     * is the unit vector from the road to the centre — but `radius` is a
+     * safe disc for anyone who only wants one number.
+     */
+    campPad: {
+      x: LAND.camp.x,
+      z: LAND.camp.z,
+      y: surfaceHeight(LAND.camp.x, LAND.camp.z),
+      radius: PAD_R_ROAD,
+      radii: { road: PAD_R_ROAD, far: PAD_R_FAR, side: PAD_R_SIDE },
+      axis: { x: LAND.camp.ax, z: LAND.camp.az },
+      slope: PAD_SLOPE,
+      access: campAccess,
+    },
+    /** The scenic overlook: mainline t at the crest, the turnout side, and where the board stands. */
+    overlook: {
+      t: (jLook - SAMPLES) / (MSAMPLES - 1),
+      x: lookP.x,
+      y: lookP.y,
+      z: lookP.z,
+      tx: ctx[jLook],
+      tz: ctz[jLook],
+      side: LAND.look.side,
+      widen: 3.4,
+      board,
+    },
+    /** The water hole: centre, the water level, the radius of the sheet and of the mud round it. */
+    waterHole: {
+      x: LAND.hole.x,
+      z: LAND.hole.z,
+      y: holeFloor + HOLE_DEPTH * 0.5,
+      floor: holeFloor,
+      radius: water.userData.holeRadius,
+      mudRadius: HOLE_BASIN + 6,
+      basinRadius: HOLE_BASIN + 12,
+    },
+    /** The dry river: its polyline, its section, where it crosses the mainline and where the headwalls go. */
+    riverbed: {
+      points: LAND.river.map((p) => ({ x: p.x, z: p.z })),
+      halfWidth: RIVER_HALF,
+      bankWidth: RIVER_BANK,
+      depth: RIVER_DEPTH,
+      crossing: { ...riverP, t: (jRiver - SAMPLES) / (MSAMPLES - 1), tx: ctx[jRiver], tz: ctz[jRiver] },
+      headwalls,
+      /** Distance to the channel centreline, and how far along it. */
+      distance: (x, z) => {
+        const rv = riverDistance(x, z, _riv);
+        return { d: rv.d, along: rv.along, total: rv.total };
+      },
     },
     roadHalf: ROAD_HALF,
     shoulder: SHOULDER,
     mainHalf: MAIN_HALF,
+    /** Outer edge of the graded platform: the far bank of the ditch. Signs stand past it. */
+    mainEdge: MAIN_EDGE,
+    mainShoulder: MAIN_SHOULDER,
     size: SIZE,
     /** Centreline arc length in metres, so anything following it can move at a real speed. */
     roadLength: cs[SAMPLES - 1],
@@ -2601,6 +3301,7 @@ export function createTerrain({ env = null } = {}) {
       stoneTris: scatter.stones.geometry.attributes.position.count / 3,
       shadowTris: scatter.shadows.geometry.index.count / 3,
       waterTris: water.geometry.index.count / 3,
+      farTris: farHills.geometry.index.count / 3,
       puddles: water.userData.count,
     },
     /** Position + tangent on the graded centreline at curve parameter t. */
@@ -2666,8 +3367,16 @@ const GRAVEL_COUNT = 6400;
 // cast shadow on a surface the shadow map cannot resolve.
 const MAIN_CHIP_COUNT = 5200;
 const MAIN_ROCK_COUNT = 900;
-const TWIG_COUNT = 520;
-const ROOT_COUNT = 20;
+// Half what the forest had: there is no canopy dropping bark on a savanna track,
+// and what there is is bleached grey. No roots at all — nothing here has them
+// across a road.
+const TWIG_COUNT = 240;
+const ROOT_COUNT = 0;
+// Cobbles in the dry river, stones round the water hole and along the pad's
+// batter: the loose material the features shed.
+const RIVER_COBBLES = 640;
+const HOLE_STONES = 140;
+const PAD_STONES = 260;
 const ROOT_SEGS = 11;
 
 // The same level scale the terrain shader applies to its own albedo. These are
@@ -2725,6 +3434,11 @@ const makeScatterInfo = () => ({
   share: 0,
   mSide: 0,
   mAlong: 0,
+  pad: 0,
+  chan: 0,
+  mud: 0,
+  churn: 0,
+  dish: 0,
 });
 
 /**
@@ -2837,7 +3551,10 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
   // shares, for the difference between a graded road and a smooth ribbon. The
   // cap has to have headroom or `emit` silently drops whatever is at the end of
   // the list, which here is the twigs and the roots.
-  const MAX_TRIS = 215000;
+  // Raised again for the savanna's own material: six hundred river cobbles, a
+  // ring of stones round the water hole and the murram along the pad's edge
+  // are another 30 k between them.
+  const MAX_TRIS = 250000;
   const pos = new Float32Array(MAX_TRIS * 9);
   const nrm = new Float32Array(MAX_TRIS * 9);
   const col = new Float32Array(MAX_TRIS * 9);
@@ -3029,10 +3746,12 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
     // and the 0.44 low end of the seat gradient, 0.024 renders at 0.007 — which
     // at two pixels across is not a dark stone, it is a dead pixel, and the close
     // crops came back peppered with them.
+    // Ironstone and laterite gravel: redder than the forest's basalt family,
+    // because it is the same iron that colours the earth round it.
     const v = rnd() ** 1.7;
     const shade = 0.042 + v * vBias * 1.3;
     const grey = rnd() ** 1.6;
-    return [shade, shade * (0.76 + grey * 0.16), shade * (0.5 + grey * 0.26)];
+    return [shade, shade * (0.68 + grey * 0.18), shade * (0.44 + grey * 0.26)];
   }
 
   let placed = 0;
@@ -3300,11 +4019,90 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
     e.set(Math.PI * 0.5 + (rnd() - 0.5) * 0.34, rnd() * 6.283, (rnd() - 0.5) * 0.5);
     q.setFromEuler(e);
     m.compose(new THREE.Vector3(x, info.y + rad * (0.35 + rnd() * 0.5), z), q, s);
+    // sun-bleached: grey wood, not bark brown
     const v = rnd();
-    const shade = 0.034 + v * 0.026;
-    emit(sticks[(rnd() * sticks.length) | 0], m, shade, shade * (0.78 + v * 0.1), shade * (0.55 + v * 0.16), 0.3, twigs);
+    const shade = 0.04 + v * 0.03;
+    emit(sticks[(rnd() * sticks.length) | 0], m, shade, shade * (0.9 + v * 0.06), shade * (0.76 + v * 0.12), 0.3, twigs);
     decal(x, info.y, z, len * 0.26, rad * 1.4, 0.45);
     twigs++;
+  }
+
+  // --- the features' own loose material -------------------------------------
+  // One placer for all three: a world position, a size range, a colour family,
+  // and how far the stone is sunk. Water-worn cobbles in the river are rounder
+  // and paler than anything on the road, and they sit *on* the sand rather
+  // than pressed into it.
+  function placeStone(x, z, rMin, rMax, sink, cc, upLean, seed, rounded) {
+    surfaceInfo(x, z, info);
+    const r = rMin + rnd() * (rMax - rMin);
+    s.set(r * (0.85 + rnd() * 0.35), r * (rounded ? 0.7 + rnd() * 0.3 : 0.5 + rnd() * 0.4), r * (0.85 + rnd() * 0.35));
+    e.set(rnd() * 6.283, rnd() * 6.283, rnd() * 6.283);
+    q.setFromEuler(e);
+    m.compose(new THREE.Vector3(x, info.y - s.y * sink, z), q, s);
+    const big = r > 0.07;
+    const proto = big ? boulders[(rnd() * boulders.length) | 0] : lumps[(rnd() * lumps.length) | 0];
+    emit(proto, m, cc[0], cc[1], cc[2], upLean, seed);
+    if (s.y * (1 - sink) > 0.007) decal(x, info.y, z, r * 0.85, s.y * (1 - sink), big ? 0.85 : 0.6);
+  }
+  /** Water-worn quartzite and granite: pale, grey, a little warm. */
+  function cobbleColour() {
+    const v = 0.055 + rnd() ** 1.3 * 0.05;
+    const warm = rnd() * 0.12;
+    return [v * (0.98 + warm), v * 0.96, v * (0.86 - warm * 0.5)];
+  }
+
+  // Cobbles: along the channel, mostly on the floor, gathered into bars.
+  {
+    const pts = LAND.river;
+    let done = 0;
+    for (let guard = 0; guard < RIVER_COBBLES * 6 && done < RIVER_COBBLES; guard++) {
+      const seg = 1 + ((rnd() * (pts.length - 3)) | 0);
+      const f = rnd();
+      const ax0 = pts[seg].x + (pts[seg + 1].x - pts[seg].x) * f;
+      const az0 = pts[seg].z + (pts[seg + 1].z - pts[seg].z) * f;
+      const lat = (rnd() - 0.5) * 2 * (RIVER_HALF + 1.2);
+      const dx = pts[seg + 1].x - pts[seg].x;
+      const dz = pts[seg + 1].z - pts[seg].z;
+      const l = Math.hypot(dx, dz) || 1;
+      const x = ax0 - (dz / l) * lat;
+      const z = az0 + (dx / l) * lat;
+      // bars: the stones gather where the flow dropped them
+      if (fbm(x * 0.11, z * 0.11, { octaves: 2, period: 64, seed: 561 }) < 0.42 && rnd() < 0.7) continue;
+      surfaceInfo(x, z, info);
+      // not under the embankment, not where the channel has run out
+      if (info.chan < 0.3 || info.share > 0.05) continue;
+      const big = rnd() < 0.22;
+      placeStone(x, z, big ? 0.08 : 0.03, big ? 0.16 : 0.07, 0.3 + rnd() * 0.25, cobbleColour(), 0.3, 900 + done, true);
+      done++;
+    }
+  }
+  // The water hole's margin: stones the animals have kicked clear of the mud,
+  // lying on the trampled ring outside it.
+  for (let i = 0; i < HOLE_STONES; i++) {
+    const ang = rnd() * 6.283;
+    const rr = HOLE_BASIN * 0.7 + rnd() ** 0.7 * 12;
+    const x = LAND.hole.x + Math.cos(ang) * rr;
+    const z = LAND.hole.z + Math.sin(ang) * rr;
+    surfaceInfo(x, z, info);
+    if (info.mud > 0.85) continue;
+    placeStone(x, z, 0.03, 0.11, 0.4 + rnd() * 0.3, aggColour(0.04), 0.34, 1600 + i, false);
+  }
+  // Murram the grader pushed to the pad's edge, and the odd stone left on it.
+  for (let i = 0; i < PAD_STONES; i++) {
+    const C = LAND.camp;
+    const ang = rnd() * 6.283;
+    const onEdge = rnd() < 0.72;
+    const ca = Math.cos(ang);
+    const sa = Math.sin(ang);
+    const ra = ca < 0 ? PAD_R_ROAD : PAD_R_FAR;
+    const scale = onEdge ? 1 + (rnd() - 0.3) * 0.12 : rnd() ** 0.5 * 0.92;
+    const a = ca * ra * scale;
+    const b = sa * PAD_R_SIDE * scale;
+    const x = C.x + C.ax * a + C.bx * b;
+    const z = C.z + C.az * a + C.bz * b;
+    surfaceInfo(x, z, info);
+    if (info.share > 0.05 || info.pad < 0.05) continue;
+    placeStone(x, z, 0.03, onEdge ? 0.12 : 0.06, 0.4 + rnd() * 0.3, aggColour(0.042), 0.34, 2000 + i, false);
   }
 
   // --- surface roots crossing the trail -------------------------------------
@@ -3571,36 +4369,66 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
     }
   }
 
-  const maxV = sites.length * (PUDDLE_RING * 2 + 1);
+  // The water hole. Same machinery as a puddle — a sheet at one level, its
+  // edge found by marching the ground — at forty times the radius, so the
+  // march steps are coarser, the ring has more spokes, and the fade band at
+  // the shore is a hand's width rather than a fifth of the radius.
+  {
+    const floor = heightAt(LAND.hole.x, LAND.hole.z);
+    sites.push({
+      x: LAND.hole.x,
+      z: LAND.hole.z,
+      y: floor,
+      wet: 1,
+      cap: HOLE_BASIN,
+      level: floor + HOLE_DEPTH * 0.5,
+      ring: 80,
+      step: 0.1,
+      innerF: 0.88,
+      hole: true,
+    });
+  }
+
+  let maxV = 0;
+  let maxI = 0;
+  for (const s of sites) {
+    const ring = s.ring ?? PUDDLE_RING;
+    maxV += ring * 2 + 1;
+    maxI += ring * 9;
+  }
   const pos = new Float32Array(maxV * 3);
   const alpha = new Float32Array(maxV);
   const depth = new Float32Array(maxV);
-  const idx = new Uint32Array(sites.length * PUDDLE_RING * 3 * 3);
+  const holeF = new Float32Array(maxV);
+  const idx = new Uint32Array(maxI);
   let vw = 0;
   let iw = 0;
   let puddles = 0;
+  let holeRadius = 0;
 
   for (const site of sites) {
+    const RING = site.ring ?? PUDDLE_RING;
+    const step = site.step ?? 0.035;
     // The dish the wetness field cut into the mesh is 2.6 cm at its deepest, so
     // filling to 1.6 cm above the low point leaves a millimetre of margin at
     // the rim and about a centimetre of water in the middle.
-    const wy = site.y + 0.016;
-    const rim = new Float32Array(PUDDLE_RING);
-    for (let k = 0; k < PUDDLE_RING; k++) {
-      const ang = (k / PUDDLE_RING) * Math.PI * 2;
+    const wy = site.level ?? site.y + 0.016;
+    const rim = new Float32Array(RING);
+    for (let k = 0; k < RING; k++) {
+      const ang = (k / RING) * Math.PI * 2;
       const dx = Math.cos(ang);
       const dz = Math.sin(ang);
       // Capped at 70 cm. A rut holds water along its whole length, so a ray
       // fired down the trough finds no rising ground for metres and the pool
       // stretches into a ribbon — which from a low framing is a shiny slug
       // lying on the road, not standing water.
-      let r = 0.04;
+      let r = step;
       while (r < site.cap) {
-        if (heightAt(site.x + dx * (r + 0.035), site.z + dz * (r + 0.035)) > wy - 0.001) break;
-        r += 0.035;
+        if (heightAt(site.x + dx * (r + step), site.z + dz * (r + step)) > wy - 0.001) break;
+        r += step;
       }
       // pulled in slightly and roughened, so the waterline is not a clean curve
-      rim[k] = Math.max(0.03, r * (0.86 + rnd() * 0.13));
+      rim[k] = Math.max(0.03, r * (site.hole ? 0.97 + rnd() * 0.02 : 0.86 + rnd() * 0.13));
     }
     // Smoothed around the ring. The ray march quantises in 3.5 cm steps, so two
     // neighbouring spokes routinely differ by a whole step and the outline came
@@ -3608,21 +4436,23 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
     // reads as a torn piece of paper lying on the trail rather than as a water
     // line. A puddle edge is a contour of a smooth surface: it wanders, but it
     // does not have corners. Three-tap circular mean keeps the wander.
-    const sm = new Float32Array(PUDDLE_RING);
-    for (let k = 0; k < PUDDLE_RING; k++) {
-      const a0 = rim[(k + PUDDLE_RING - 1) % PUDDLE_RING];
-      const a2 = rim[(k + 1) % PUDDLE_RING];
+    const sm = new Float32Array(RING);
+    for (let k = 0; k < RING; k++) {
+      const a0 = rim[(k + RING - 1) % RING];
+      const a2 = rim[(k + 1) % RING];
       sm[k] = rim[k] * 0.5 + (a0 + a2) * 0.25;
     }
     let sum = 0;
-    for (let k = 0; k < PUDDLE_RING; k++) {
+    for (let k = 0; k < RING; k++) {
       rim[k] = sm[k];
       sum += rim[k];
     }
-    const mean = sum / PUDDLE_RING;
+    const mean = sum / RING;
     // anything smaller than this is a wet speck, and a wet speck with a mirror
     // finish on it is a bright fleck rather than a puddle
     if (mean < 0.13) continue;
+    if (site.hole) holeRadius = mean;
+    if (site.hole) holeF.fill(1, vw, vw + RING * 2 + 1);
 
     const centre = vw;
     pos[vw * 3] = site.x;
@@ -3632,11 +4462,12 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
     depth[vw] = wy - site.y;
     vw++;
     const inner = vw;
-    for (let k = 0; k < PUDDLE_RING; k++) {
-      const ang = (k / PUDDLE_RING) * Math.PI * 2;
+    const innerF = site.innerF ?? 0.78;
+    for (let k = 0; k < RING; k++) {
+      const ang = (k / RING) * Math.PI * 2;
       const dx = Math.cos(ang);
       const dz = Math.sin(ang);
-      const ri = rim[k] * 0.78;
+      const ri = rim[k] * innerF;
       pos[vw * 3] = site.x + dx * ri;
       pos[vw * 3 + 1] = wy;
       pos[vw * 3 + 2] = site.z + dz * ri;
@@ -3645,8 +4476,8 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
       vw++;
     }
     const outer = vw;
-    for (let k = 0; k < PUDDLE_RING; k++) {
-      const ang = (k / PUDDLE_RING) * Math.PI * 2;
+    for (let k = 0; k < RING; k++) {
+      const ang = (k / RING) * Math.PI * 2;
       const dx = Math.cos(ang);
       const dz = Math.sin(ang);
       pos[vw * 3] = site.x + dx * rim[k];
@@ -3663,8 +4494,8 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
     // buffer, a correct bounding sphere, a compiled program, and not one pixel.
     // Flat opaque magenta with the depth test off still rendered nothing, which
     // is what finally pinned it. Same trap as the shadow quads below.
-    for (let k = 0; k < PUDDLE_RING; k++) {
-      const k1 = (k + 1) % PUDDLE_RING;
+    for (let k = 0; k < RING; k++) {
+      const k1 = (k + 1) % RING;
       idx[iw++] = centre;
       idx[iw++] = inner + k1;
       idx[iw++] = inner + k;
@@ -3682,6 +4513,7 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
   g.setAttribute('position', new THREE.BufferAttribute(pos.subarray(0, vw * 3), 3));
   g.setAttribute('aAlpha', new THREE.BufferAttribute(alpha.subarray(0, vw), 1));
   g.setAttribute('aDepth', new THREE.BufferAttribute(depth.subarray(0, vw), 1));
+  g.setAttribute('aHole', new THREE.BufferAttribute(holeF.subarray(0, vw), 1));
   g.setIndex(new THREE.BufferAttribute(idx.subarray(0, iw), 1));
   // computeBoundingSphere on an empty attribute leaves a NaN centre behind,
   // which poisons frustum culling for the whole subtree
@@ -3691,7 +4523,7 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uRipple: { value: rippleMap() },
-      uCanopy: { value: canopyReflection() },
+      uCanopy: { value: horizonReflection() },
       uSunDir: { value: sunV.clone() },
       uSunCol: { value: new THREE.Color(0xffe2c6) },
       uSkyTop: { value: new THREE.Color(0x4c7fb5) },
@@ -3699,7 +4531,9 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
       // Silt, not water: what a shallow puddle on a dirt track shows where the
       // reflection is weak is the mud at the bottom of it.
       // Silt under the sheet, down with the dirt it is silt from.
-      uBody: { value: new THREE.Color(0.016, 0.0135, 0.0098) },
+      // Laterite clay in suspension: what a water hole shows where the
+      // reflection is weak is murky red-brown, not the forest's black silt.
+      uBody: { value: new THREE.Color(0.03, 0.021, 0.013) },
       // Off the palette, not a copy of it. This was a hardcoded 0x97a69c, which
       // is the value the airlight had before it was halved in linear — so the
       // puddles were fogging toward a colour half a stop brighter than everything
@@ -3711,14 +4545,17 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
     vertexShader: /* glsl */ `
       attribute float aAlpha;
       attribute float aDepth;
+      attribute float aHole;
       varying vec3 vWorld;
       varying float vAlpha;
       varying float vDepth;
+      varying float vHole;
       void main() {
         vec4 wp = modelMatrix * vec4( position, 1.0 );
         vWorld = wp.xyz;
         vAlpha = aAlpha;
         vDepth = aDepth;
+        vHole = aHole;
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
     fragmentShader: /* glsl */ `
@@ -3728,6 +4565,7 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
       varying vec3 vWorld;
       varying float vAlpha;
       varying float vDepth;
+      varying float vHole;
       void main() {
         vec3 toCam = cameraPosition - vWorld;
         float dist = length( toCam ) + 1e-4;
@@ -3743,7 +4581,13 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
         // glitter, not water. A puddle in still air under trees is very nearly a
         // mirror; the ripple is here to give the sheen an edge to catch on, not
         // to disturb the image.
-        vec2 slope = ( r1 * 0.7 + r2 * 0.3 ) * 0.03;
+        // The water hole is flagged per vertex — keying it off depth left the
+        // shore, where the depth runs out, as a ring of puddle-mirror round a
+        // murky pool. Open water in a wind carries real ripples, and a mirror
+        // the size of a tennis court with nothing to break it read as a blue
+        // enamel disc.
+        float hole = vHole;
+        vec2 slope = ( r1 * 0.7 + r2 * 0.3 ) * mix( 0.03, 0.11, hole );
         vec3 N = normalize( vec3( slope.x, 1.0, slope.y ) );
 
         vec3 R = reflect( -V, N );
@@ -3788,6 +4632,16 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
         // suggests.
         float fres = clamp( 0.42 + 0.58 * pow( 1.0 - f, 3.0 ), 0.0, 1.0 );
         vec3 body = uBody * ( 0.35 + clamp( 1.0 - vDepth * 26.0, 0.0, 1.0 ) * 1.3 );
+        // The water hole is half a metre of laterite clay in suspension: what
+        // shows through is the murk itself, khaki-brown and fairly bright, not
+        // the black silt floor a puddle has a centimetre down. It takes less of
+        // the reflection — turbid water scatters most of what goes in straight
+        // back out, unpolarised — and what it does reflect is the sky through
+        // dust, so the saturated zenith blue is pulled toward the horizon grey.
+        vec3 murk = mix( vec3( 0.135, 0.105, 0.062 ), vec3( 0.095, 0.082, 0.05 ), smoothstep( 0.1, 0.5, vDepth ) );
+        body = mix( body, murk, hole );
+        refl = mix( refl, mix( mix( refl, uSkyLow * 0.9, 0.55 ), murk * 2.2, 0.22 ), hole );
+        fres = mix( fres, clamp( 0.16 + 0.74 * pow( 1.0 - f, 4.0 ), 0.0, 1.0 ), hole );
         vec3 col = mix( body, refl, fres );
         // Waterline. Where the sheet thins to nothing the reflection goes with
         // it and what is left is saturated mud, so the darkest ring of a puddle
@@ -3799,7 +4653,7 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
 
         float fogFactor = 1.0 - exp( -uFogDensity * uFogDensity * dist * dist );
         col = mix( col, uFog, fogFactor );
-        float a = clamp( vAlpha * ( 0.62 + fres * 0.5 ), 0.0, 1.0 );
+        float a = clamp( vAlpha * mix( 0.62 + fres * 0.5, 0.97, hole ), 0.0, 1.0 );
         gl_FragColor = vec4( max( col, 0.0 ), a );
       }`,
     transparent: true,
@@ -3813,9 +4667,138 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
   mesh.castShadow = false;
   mesh.receiveShadow = false;
   mesh.userData.count = puddles;
+  mesh.userData.holeRadius = holeRadius;
   skipAoPrepass(mesh, () => {
     mat.uniforms.uTime.value = performance.now() * 0.001;
   });
+  return mesh;
+}
+
+// ---------------------------------------------------------------------------
+// The far hills.
+//
+// A square annulus from the terrain's edge out to a kilometre and a half, on
+// the same height function, so the horizon is the same ground carried on
+// rather than a painted ring. Geometric spacing: 18 m cells against the inner
+// edge, 160 m at the outside, where the fog has most of the pixel anyway. Two
+// thousand vertices and one draw call.
+//
+// It sits 0.6 m under the surface out to 400 m. The forest's own skirt covers
+// that range at the moment and two meshes on one height field a metre apart
+// interleave; if the skirt goes, the drop is hidden behind the terrain's lip
+// from any camera inside the square.
+// ---------------------------------------------------------------------------
+
+function buildFarHills(env) {
+  const INNER = 146;
+  const OUTER = 1500;
+  const STEPS = 22;
+  const coords = [];
+  for (let i = STEPS; i >= 0; i--) coords.push(-INNER * Math.pow(OUTER / INNER, i / STEPS));
+  for (let i = 0; i <= STEPS; i++) coords.push(INNER * Math.pow(OUTER / INNER, i / STEPS));
+  const N = coords.length;
+  const pos = new Float32Array(N * N * 3);
+  const uv = new Float32Array(N * N * 2);
+  for (let j = 0; j < N; j++) {
+    for (let i = 0; i < N; i++) {
+      const x = coords[i];
+      const z = coords[j];
+      const r = Math.hypot(x, z);
+      const drop = 0.6 * (1 - smoothstep(400, 620, r));
+      const k = j * N + i;
+      pos[k * 3] = x;
+      pos[k * 3 + 1] = baseHeight(x, z) - drop;
+      pos[k * 3 + 2] = z;
+      uv[k * 2] = x / 90;
+      uv[k * 2 + 1] = z / 90;
+    }
+  }
+  const idx = [];
+  for (let j = 0; j < N - 1; j++) {
+    for (let i = 0; i < N - 1; i++) {
+      // the one cell the terrain itself fills
+      if (i === STEPS && j === STEPS) continue;
+      const a = j * N + i;
+      const b = a + 1;
+      const c = a + N + 1;
+      const d = a + N;
+      idx.push(a, d, b, b, d, c);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  // Two tones, by height. The plain carries on at the near ground's level so
+  // the forest's straw skirt runs into it without a line; the hills go dark.
+  // Under a 9.4 sun through ACES any albedo above about a sixth tone-maps to
+  // the same pale sand — measured: a 0.16–0.28 crest tint rendered the exact
+  // gold of the haze band, a 0.02 tint rendered a grey-brown escarpment in
+  // haze, which is the picture. Isolated by ablation: not the environment
+  // map, not the fog, not the ridge cards — the albedo. So the scrub slopes
+  // sit at a twentieth, which is what dark bush seen edge-on at a kilometre
+  // is, and the haze mix below is what lifts them.
+  //
+  // The tone is keyed off height *per fragment*, not per vertex: the cells out
+  // here are 60–160 m across, and a vertex tint interpolated over one of them
+  // put a golden skirt a hundred metres tall under every hill — the plain's
+  // colour smeared up the flank. Off the interpolated world height the band is
+  // the fifteen metres it is written as.
+  const mat = new THREE.MeshStandardMaterial({
+    map: farGroundMap(),
+    roughness: 1.0,
+    metalness: 0.0,
+    envMapIntensity: 0.5,
+    dithering: true,
+  });
+  if (env) mat.envMap = env;
+  // The scene fog is authored for the plain — a sand-coloured airlight at a
+  // density that has the ground three quarters gone by six hundred metres,
+  // which is right for a flat horizon and wrong for anything standing above
+  // it: fogged to the haze band's own colour with a hard silhouette against
+  // the blue over it, the hills were dunes whatever they were made of. So they
+  // take the scene's fog *colour*, which follows the hour, at their own rate:
+  // never more than a third of the way in by the crests, and then straight to
+  // the airlight over the last seventy metres before the far plane, where the
+  // stock fog would otherwise have cut them off with a wall. A third, not
+  // three fifths: the airlight is bright and the tone curve is already on its
+  // shoulder there, so a 58% blend of near-black into it measured on screen
+  // as brighter than the sky above the crests — which is the dune read again,
+  // from the other side. Hills in haze are lighter than they are; they are
+  // never lighter than the sky they stand against.
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vHillY;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHillY = position.y;');
+    // the sky's patched fog chunk carries the view vector; stock fog only the depth
+    const dist = THREE.ShaderChunk.fog_pars_fragment.includes('vFogView') ? 'length( vFogView )' : 'vFogDepth';
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vHillY;')
+      .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+      diffuseColor.rgb *= mix( vec3( 0.74, 0.70, 0.60 ), vec3( 0.048, 0.05, 0.044 ), smoothstep( 2.5, 15.0, vHillY ) );`,
+      )
+      .replace(
+        '#include <fog_fragment>',
+        `#ifdef USE_FOG
+      float hillDist = ${dist};
+      float hillFog = smoothstep( 150.0, 700.0, hillDist ) * 0.34;
+      float hillWall = smoothstep( 780.0, 850.0, hillDist );
+      // the air in front of a dark hill scatters blue; the airlight colour is
+      // the plain's, sand-warm, so the haze over the scrub is cooled a little
+      vec3 hillAir = mix( fogColor * vec3( 0.82, 0.9, 1.02 ), fogColor, hillWall );
+      gl_FragColor.rgb = mix( gl_FragColor.rgb, hillAir, max( hillFog, hillWall ) );
+#endif`,
+      );
+  };
+  const mesh = new THREE.Mesh(g, mat);
+  mesh.name = 'farHills';
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  mesh.frustumCulled = false;
   return mesh;
 }
 

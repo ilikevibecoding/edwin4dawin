@@ -9,6 +9,7 @@ import { createDustMotes, createLightShafts, createSky } from './sky.js';
 import { createTerrain } from './terrain.js';
 import { initNoise, noiseBackend } from './textures/core.js';
 import { createCampground } from './campground/index.js';
+import { createRoadside } from './roadside.js';
 import { createFleet } from './vehicles/index.js';
 import { createWildlife } from './wildlife/index.js';
 import { createAudio } from './audio.js';
@@ -128,6 +129,8 @@ async function boot() {
   scene.add(fleet.group);
   const wildlife = await step('Finding the pride', 84, () => createWildlife({ terrain, env: skyRig.env, quality }));
   scene.add(wildlife.group);
+  const roadside = await step('Posting the signs', 87, () => createRoadside({ terrain, env: skyRig.env, quality }));
+  scene.add(roadside.group);
   const audio = createAudio();
 
   const shafts = createLightShafts(skyRig.sunDir, { count: TIER.shafts });
@@ -405,6 +408,7 @@ async function boot() {
 
     camp.update(dt, simTime, { vehiclePos: vehicle.root.position });
     fleet.update(dt, simTime);
+    roadside.update(dt);
     wildlife.update(dt, simTime, {
       vehiclePos: vehicle.root.position,
       vehicleSpeed: driver.state.speed,

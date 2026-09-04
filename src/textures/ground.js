@@ -38,62 +38,68 @@ const rgb = (hex) => [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
 const N = 512;
 const M = 384;
 
-// Damp compacted earth, keyed off the palette's ground range and never above
-// it. The whole surface used to sit two stops brighter than this "so it would
-// survive the tone map", which is what made the trail read as beach sand: at
-// exposure 1.34 under a 7.6 sun, an albedo near 0.5 linear is already at the
-// top of the ACES shoulder and every bit of aggregate in it clips flat.
+// East-African laterite, keyed off the palette's ground range and never above
+// it. The old Pacific-Northwest set sat here at a red/blue ratio of about 1.7
+// and was desaturated at source to keep the warm key from pushing it into
+// terracotta; this set *is* terracotta. Murram is iron oxide, it measures a
+// red/blue ratio of 2.2 to 2.8 in the field, and the one thing that has to
+// come out of every ground framing now is that this dirt is red.
+//
+// The value discipline stands, and matters more, not less: red earth in
+// equatorial sun is a *dark* surface with a pale dust skin on it, and an albedo
+// near 0.5 linear is already at the top of the ACES shoulder. So the base dirt
+// stays mid-dark and the khaki is a dust film and a straw layer, never the
+// earth itself.
 //
 // Value order, darkest first, so the histogram is easy to keep honest:
-//   wet 0.013 · damp 0.021 · dirtDark 0.032 · dirt 0.071 · dirtLight 0.105
-//   dustLight 0.156 · dustPale 0.21   (linear luminance)
+//   wet 0.012 · damp 0.028 · dirtDark 0.045 · dirt 0.085 · dirtLight 0.14
+//   dustLight 0.24 · dustPale 0.36   (linear luminance)
 // Anything at dustPale is a rare dry crown patch, not the base value.
 const EARTH = {
-  dustPale: 0x99805f,
-  dustLight: 0x84694c, // PALETTE.dirtLight — the *lightest* common dirt
-  dirtLight: 0x6e5740,
-  dirt: 0x5c4936, // PALETTE.dirt
-  dirtDark: 0x3b3025,
-  // The damp end goes olive-grey, not darker brown. Wet forest soil is full of
-  // decayed organics and its chroma collapses as it soaks; keeping the warm hue
-  // all the way down was a large part of why the trail read as terracotta under
-  // a golden-hour key.
-  damp: 0x2a2822,
-  wet: 0x1b1a17, // the polished floor of a rut
-  clay: 0x74502f, // PALETTE.clay
-  // Aggregate. Dirt-road stones are wet, half-buried and coated in the same
-  // fines as the matrix, so they are mostly *darker* than it. Near-white
-  // quartz exists but at a few per cent of the stones, never as a field of
-  // speckle — that speckle was reading as salt over the whole trail.
-  stone: 0x8a8478, // top few per cent only
-  stoneMid: 0x5d5749,
-  stoneDark: 0x3d382e,
-  stoneWet: 0x231f1a,
-  // The forest floor has to be a different *hue* from the trail, not just a
-  // different value. At a red/blue ratio of 1.7 it was as brown as the road, so
-  // the trail had no edge to read against and the whole frame was one expanse of
-  // dirt. Needle litter over damp humus is a cool olive.
-  litter: 0x4d4735,
-  litterDark: 0x27261e,
-  leafDry: 0x7d6539,
-  twig: 0x4b3c28,
-  chip: 0x2a2119, // bark chip / needle fragment pressed into the dirt
-  moss: 0x53663a,
-  grassDry: 0x8d7d49,
-  grass: 0x5c6b34,
-  // Forest floor, by material rather than by "light litter / dark litter". A
-  // duff mat is four substances lying on top of each other and they are
-  // different colours, not one colour at four brightnesses — which is what the
-  // old two-stop ramp between litter and litterDark was.
-  needleFresh: 0x6d4a26, // this autumn's fall, still rust
-  needleOld: 0x3a3227, // last year's, grey-brown and matted
-  humus: 0x1d1a15, // black soil where the mat has worn through
-  leafOchre: 0x8a6a33,
-  leafRot: 0x453521,
-  mossLit: 0x71853f,
-  mossDeep: 0x2f4423,
-  coneBrown: 0x4f3a24,
-  barkFlake: 0x36291d,
+  dustPale: 0xc9a97c,
+  dustLight: 0xb08a5c,
+  dirtLight: 0x9f6a40,
+  dirt: 0x8b5230, // laterite: iron-red earth, the base value of the trail
+  dirtDark: 0x62391f,
+  // The damp end stays red. Wet forest loam went olive because of the organics
+  // in it; a laterite soil has almost none, so soaked murram is the same iron
+  // red two stops down, which is the colour of the mud round a water hole.
+  damp: 0x4c2c1a,
+  wet: 0x2f1c14, // the polished floor of a rut
+  clay: 0xa8482a, // the bright oxide streaks where the subsoil shows
+  // Aggregate. Savanna stone is quartzite and weathered granite, so it is
+  // *paler* and greyer than the matrix rather than darker — the opposite of the
+  // forest's coated basalt. Still keyed under the dust film, because a field of
+  // pale speckle over red earth reads as salt.
+  stone: 0xb0a48f,
+  stoneMid: 0x857868,
+  stoneDark: 0x5a4e40,
+  stoneWet: 0x3a3028,
+  // Grassland soil between the roads. The hue separation from the trail is the
+  // *straw*, not the earth: the earth is the same laterite showing through,
+  // and the pale dry grass litter lying on it is what makes the open ground read
+  // as a different surface from the bare wheel tracks.
+  litter: 0x7a4a2c, // bare earth between the tufts
+  litterDark: 0x4a2c19,
+  leafDry: 0xb59f62,
+  twig: 0x5a4530,
+  chip: 0x3b2c20, // bark chip / seed pod pressed into the dirt
+  moss: 0x6f7038, // the only green left: the base of a tuft that found water
+  grassDry: 0xb59f62,
+  grass: 0x7c8140, // grey-green, end of the dry season
+  // Straw and litter, by material. Dry grass is four things: this season's
+  // stems still standing in colour, last season's bleached to near-white,
+  // trampled straw gone grey, and the dark rot at the base of the tuft.
+  strawPale: 0xd6c48e,
+  straw: 0xb59f62,
+  strawGrey: 0x8d8060,
+  strawDark: 0x6a5836,
+  tuftBase: 0x3a2a1c,
+  humus: 0x2a1c12, // the black of a burned patch or a dung pat
+  ash: 0x7a6f62, // grey ash where a fire went through
+  termite: 0xa2603a, // worked subsoil, brighter and oranger than the topsoil
+  dung: 0x3d2d1e,
+  barkFlake: 0x4a3222,
 };
 
 /**
@@ -106,19 +112,18 @@ const skewDark = (t, k = 2.4) => t ** k;
 /**
  * Pull an sRGB triple toward its own luminance.
  *
- * The palette's browns sit at a red/blue ratio near 1.75, the key light is
- * 0xffd2a1 and the grade warms the frame again on top of that. Multiplied
- * through, the trail came out as red laterite. Forest loam is a low-chroma
- * grey-brown — the organic content in it kills the saturation — so the base
- * earth tones get desaturated at source rather than fought further downstream.
+ * Under the forest this ran at 0.3 to 0.4 on every earth tone, because the
+ * warm key and the grade were pushing loam into laterite. Laterite is now the
+ * brief, so the pull is a tenth or so: enough to keep the oxide from reading
+ * as paint, not enough to take the red out of it.
  */
 const desat = (c, t) => {
   const l = c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11;
   return mixRgb(c, [l, l, l], t);
 };
 
-/** Palette hex to desaturated sRGB bytes. */
-const earth = (hex, t = 0.3) => desat(rgb(hex), t);
+/** Palette hex to lightly desaturated sRGB bytes. */
+const earth = (hex, t = 0.12) => desat(rgb(hex), t);
 
 const srgbToLinear = (v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
 
@@ -246,14 +251,19 @@ function trackFields(seed) {
       // Every close framing read as rubber stamped into lino because of it, and
       // for two rounds the tyre imprint took the blame. Narrower, rarer and much
       // shallower: this is a damp road, it should show hairlines and nothing more.
-      const crackPatch = smoothstep(0.82, 0.97, fbm(u * 4 + 9, v * 4 + 2, { octaves: 3, period: 4, seed: seed + 41 }));
-      crack[i] = smoothstep(0.032, 0.006, c.f2 - c.f1) * crackPatch * (0.5 + c.id * 0.5);
-      // damp is the *base* condition of this surface, not an accent: two thirds
-      // of the tile sits somewhere in it
-      damp[i] = smoothstep(0.3, 0.72, fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: seed + 12 }));
+      // Dry season: the clay does crack here, into plates a hand across, and
+      // the net is what says "baked" rather than "damp". Still hairline in
+      // width — the close framings magnify this tile eightfold and a wide crack
+      // net at that scale is the rubber-stamped-lino read all over again.
+      const crackPatch = smoothstep(0.5, 0.86, fbm(u * 4 + 9, v * 4 + 2, { octaves: 3, period: 4, seed: seed + 41 }));
+      crack[i] = smoothstep(0.036, 0.007, c.f2 - c.f1) * crackPatch * (0.5 + c.id * 0.5);
+      // Damp is the accent now, not the base: a fifth of the tile at most, and
+      // only where the shader's wetness field puts a hollow.
+      damp[i] = smoothstep(0.6, 0.9, fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: seed + 12 }));
       clayMask[i] = smoothstep(0.44, 0.8, fbm(u * 3, v * 3, { octaves: 3, period: 3, seed: seed + 30 }));
-      // dry powdered fines: the only light thing here, so it stays rare
-      dust[i] = smoothstep(0.62, 0.9, fbm(u * 6 + 4, v * 6 + 7, { octaves: 3, period: 6, seed: seed + 55 }));
+      // Powdered fines lie over most of a dry-season track; the *absence* of
+      // dust is what marks the travelled way.
+      dust[i] = smoothstep(0.42, 0.8, fbm(u * 6 + 4, v * 6 + 7, { octaves: 3, period: 6, seed: seed + 55 }));
       height[i] = clamp(
         0.12 +
           clods * 0.44 +
@@ -290,21 +300,21 @@ export function trackMaps(seed = 17) {
   return cached('gnd.track.' + seed, () => {
     const f = trackFields(seed);
     const hf = f.height;
-    const pale = earth(EARTH.dustPale, 0.4);
-    const dustLight = earth(EARTH.dustLight, 0.4);
-    const light = earth(EARTH.dirtLight, 0.4);
-    const mid = earth(EARTH.dirt, 0.4);
-    const dark = earth(EARTH.dirtDark, 0.4);
-    const damp = earth(EARTH.damp, 0.2);
-    const wet = earth(EARTH.wet, 0.2);
-    const clay = earth(EARTH.clay, 0.28);
+    const pale = earth(EARTH.dustPale, 0.2);
+    const dustLight = earth(EARTH.dustLight, 0.18);
+    const light = earth(EARTH.dirtLight, 0.12);
+    const mid = earth(EARTH.dirt, 0.1);
+    const dark = earth(EARTH.dirtDark, 0.1);
+    const damp = earth(EARTH.damp, 0.1);
+    const wet = earth(EARTH.wet, 0.1);
+    const clay = earth(EARTH.clay, 0.12);
     const chip = rgb(EARTH.chip);
     const twig = rgb(EARTH.twig);
     const agg = {
-      wet: earth(EARTH.stoneWet, 0.4),
-      dark: earth(EARTH.stoneDark, 0.4),
-      mid: earth(EARTH.stoneMid, 0.4),
-      pale: earth(EARTH.stone, 0.4),
+      wet: earth(EARTH.stoneWet, 0.3),
+      dark: earth(EARTH.stoneDark, 0.3),
+      mid: earth(EARTH.stoneMid, 0.3),
+      pale: earth(EARTH.stone, 0.3),
       clay,
     };
     const mean = meanTracker();
@@ -322,24 +332,24 @@ export function trackMaps(seed = 17) {
         // the low frequencies of it read as airbrushed cloud.
         let c = mixRgb(dark, mid, smoothstep(0.04, 0.5, f.clod[i]));
         c = mixRgb(c, light, smoothstep(0.4, 0.9, f.clod[i]) * 0.9);
-        // Clay is the most saturated thing in the earth range and it stacks with
-        // the warm bounce and the warm macro tint in the shader; at 0.5 the three
-        // together took the trail to red laterite.
-        c = mixRgb(c, clay, f.clayMask[i] * 0.26);
-        // Damp first, and hard: this is the base condition of the surface, and
-        // it is what separates dirt from sand. Everything after it is aggregate
-        // sitting in damp earth rather than tint layered on dry dust.
-        c = mixRgb(c, damp, dampness * 0.56);
-        c = mixRgb(c, wet, smoothstep(0.78, 1.0, dampness) * 0.45);
+        // The oxide streaks. Laterite is red because of these, so they carry
+        // more of the tile than the forest's clay did — but still as patches,
+        // because uniform saturation reads as a painted plane.
+        c = mixRgb(c, clay, f.clayMask[i] * 0.42);
+        // Damp as an accent: the hollows that still hold a little moisture, a
+        // stop and a half down and no less red.
+        c = mixRgb(c, damp, dampness * 0.5);
+        c = mixRgb(c, wet, smoothstep(0.78, 1.0, dampness) * 0.4);
         // Grain in the albedo, not only in the normal map. Most of this surface
         // is in shade in most shots, and a normal map does nothing under flat
         // ambient light — the detail has to be in the colour to survive.
         const grain = fbm(u * 72, v * 72, { octaves: 3, period: 72, seed: seed + 88 });
         const sparkle = tex1(x, y, seed + 90);
-        // dry fines are the only light thing on the surface, so they are gated
-        // on the *absence* of damp as well as on their own mask
-        c = mixRgb(c, pale, f.dust[i] * (1 - dampness) * (0.24 + grain * 0.4));
-        c = mixRgb(c, dustLight, f.dust[i] * (1 - dampness) * 0.3);
+        // The dust skin. Khaki over red: it is what the sun bleaches the top
+        // millimetre to, it lies where nothing has disturbed it, and it is the
+        // whole reason a laterite track is two colours rather than one.
+        c = mixRgb(c, pale, f.dust[i] * (1 - dampness) * (0.28 + grain * 0.4));
+        c = mixRgb(c, dustLight, f.dust[i] * (1 - dampness) * 0.34);
         c = mixRgb(c, aggregateColour(f.stoneId[i], dampness, agg), f.stone[i] * 0.72);
         c = mixRgb(c, aggregateColour(f.gritId[i] + 0.31, dampness * 0.6, agg), f.grit[i] * 0.5);
         // dirt banked up against the stone, and the shadow line where it meets
@@ -585,28 +595,35 @@ export function gravelMaps(seed = 53) {
     // the trail's own hue, and the second road came back as the first one in a
     // wider format. Authored at 0.95 it renders near 1.3, which is where
     // quarried rock actually sits.
-    const basalt = desat(rgb(0x22282e), 0.16);
-    const basaltPale = desat(rgb(0x3d444c), 0.16);
-    const granite = desat(rgb(0x555c64), 0.14);
-    const granitePale = desat(rgb(0x6f767e), 0.14);
-    // The warm minority. Iron staining is what stops a grey aggregate reading
-    // as concrete, and it is the only warm thing in the tile.
-    const iron = desat(rgb(0x5c4831), 0.18);
-    const fines = desat(rgb(0x41464c), 0.18);
-    // PALETTE.gravel is a warm buff and this is the one place it lands on the
-    // running surface in quantity, so it is taken most of the way to neutral.
-    // Rock flour is the colour of the rock it came off.
-    const finesPale = desat(rgb(PALETTE.gravel), 0.78);
-    const finesDamp = desat(rgb(0x262a2d), 0.12);
-    const wetRock = desat(rgb(0x16181b), 0.14);
+    // Murram. A graded park road in East Africa is surfaced with laterite
+    // gravel out of a borrow pit: ironstone nodules in a matrix of their own
+    // dust, buff to brick, with quartz pebbles through it. The hue separation
+    // from the trail is now *saturation and value* rather than direction — the
+    // trail is deep oxide red, this is the same iron washed out to khaki-buff
+    // with grey stone in it — so the murram is authored a little cooler and a
+    // good deal paler than it will read, for the reason the basalt was: the key
+    // adds about 0.4 of red/blue on the way through.
+    const basalt = desat(rgb(0x5a4d40), 0.12);
+    const basaltPale = desat(rgb(0x7a6b5a), 0.12);
+    const granite = desat(rgb(0x8c8172), 0.1);
+    const granitePale = desat(rgb(0xb0a690), 0.1);
+    // Ironstone nodules, the murram's own rock: the warm fraction is a third of
+    // the pieces here rather than a minority accent.
+    const iron = desat(rgb(0x8a5636), 0.1);
+    const fines = desat(rgb(0x8a7458), 0.1);
+    // Rock flour is the colour of the rock it came off, and here the rock is
+    // laterite, so the fines are khaki.
+    const finesPale = desat(rgb(0xb59d78), 0.1);
+    const finesDamp = desat(rgb(0x5a4638), 0.1);
+    const wetRock = desat(rgb(0x3a2e26), 0.1);
 
     /** Colour of one aggregate particle from its cell id. */
     const mineral = (id, wetBias) => {
       const v = skewDark((id * 5.437) % 1, 1.7);
       const kind = (id * 17.31) % 1;
       let c;
-      if (kind > 0.82) c = mixRgb(granite, granitePale, v);
-      else if (kind > 0.74) c = mixRgb(iron, granite, v * 0.5);
+      if (kind > 0.8) c = mixRgb(granite, granitePale, v);
+      else if (kind > 0.46) c = mixRgb(iron, basaltPale, v * 0.7);
       else c = mixRgb(basalt, basaltPale, v);
       return mixRgb(c, wetRock, wetBias * 0.45);
     };
@@ -733,22 +750,25 @@ export function vergeMaps(seed = 23) {
     // Greyer, though, not brighter: pale pebbles at full strength here were the
     // single largest source of the salt-speckle over the whole shot.
     const agg = {
-      wet: earth(EARTH.stoneWet, 0.44),
-      dark: earth(EARTH.stoneDark, 0.44),
-      mid: earth(EARTH.stoneMid, 0.44),
-      pale: earth(EARTH.stone, 0.44),
-      clay: earth(EARTH.clay, 0.3),
+      wet: earth(EARTH.stoneWet, 0.3),
+      dark: earth(EARTH.stoneDark, 0.3),
+      mid: earth(EARTH.stoneMid, 0.3),
+      pale: earth(EARTH.stone, 0.3),
+      clay: earth(EARTH.clay, 0.2),
     };
-    const dirt = earth(EARTH.dirt, 0.4);
-    const dirtLight = earth(EARTH.dirtLight, 0.4);
-    const dark = earth(EARTH.dirtDark, 0.4);
-    const damp = earth(EARTH.damp, 0.2);
-    const grass = rgb(EARTH.grass);
-    const dry = rgb(EARTH.grassDry);
+    // The verge is the khaki end of the road: the dust the tyres throw off
+    // settles here and nothing disturbs it, so it is the palest dirt in the
+    // world and the least red. The straw is the grassland reaching in.
+    const dirt = earth(EARTH.dustLight, 0.16);
+    const dirtLight = earth(EARTH.dustPale, 0.18);
+    const dark = earth(EARTH.dirt, 0.12);
+    const damp = earth(EARTH.dirtDark, 0.1);
+    const grass = rgb(EARTH.strawGrey);
+    const dry = rgb(EARTH.strawPale);
     const twig = rgb(EARTH.twig);
     const chip = rgb(EARTH.chip);
-    const moss = rgb(EARTH.moss);
-    const pine = rgb(PALETTE.pineNeedle);
+    const moss = rgb(EARTH.grass);
+    const pine = rgb(EARTH.moss);
     const mean = meanTracker();
     const map = pixelTexture(
       M,
@@ -763,8 +783,10 @@ export function vergeMaps(seed = 23) {
         const pid = pebId[i];
         c = mixRgb(c, aggregateColour(pid, 0.18, agg), peb[i] * 0.8);
         c = mixRgb(c, aggregateColour(pid + 0.53, 0.35, agg), grit[i] * 0.5);
-        c = mixRgb(c, mixRgb(grass, dry, pid), veg[i] * (0.26 + blade[i] * 0.5));
-        c = mixRgb(c, mixRgb(moss, pine, 0.45), mossMask[i] * (1 - peb[i]) * 0.5);
+        c = mixRgb(c, mixRgb(grass, dry, pid), veg[i] * (0.3 + blade[i] * 0.6));
+        // A tuft that found water at the ditch line: the only green on the road
+        // margin, and rare.
+        c = mixRgb(c, mixRgb(moss, pine, 0.45), mossMask[i] * (1 - peb[i]) * 0.28);
         c = mixRgb(c, mixRgb(twig, chip, pid), stick[i] * 0.85);
         const g =
           (0.88 + fbm(u * 66, v * 66, { octaves: 2, period: 66, seed: seed + 71 }) * 0.24) *
@@ -788,176 +810,183 @@ export function vergeMaps(seed = 23) {
 }
 
 // ---------------------------------------------------------------------------
-// Forest floor: needle litter, dry leaves, moss, twigs, soil showing through.
+// Grassland soil: the ground between the roads. Bare laterite showing through
+// a litter of dry straw, with tuft bases, quartz pebbles, dung and ash.
 // ---------------------------------------------------------------------------
 
 /**
- * The forest floor.
+ * The savanna floor.
  *
- * Rebuilt from four *substances* rather than from one value ramp. Dumping the
- * old tile settled the argument: it was a soft green-brown cloud with a
- * scattering of tan dots, no structure at any scale, and the reason is that
- * every term in it was a smooth fbm blend between two colours a stop apart.
- * A duff mat has needle litter over rotted leaf over black humus with moss
- * growing across the whole thing, and those are four different hues with
- * hard boundaries where one ends.
+ * Built from substances, as the forest floor before it was, and for the same
+ * reason: a tile that is one smooth blend between two browns reads as a cloud.
+ * The substances here are bare red earth, a litter of dry grass stems lying on
+ * it, the dark rotted base of each tuft, pale quartz pebbles, and the odd dung
+ * pat and burn scar. Five hues, hard boundaries.
  *
- * Detail at three scales, deliberately, because the tile is seen at 2.4 m and
- * the camera works it from 30 cm to 30 m:
+ * The straw is *stamped*, not thresholded. A ridged noise field makes long
+ * flowing filaments that all curve the same way, which reads as combed hair; a
+ * fall of dry grass is thousands of short straight stems lying in drifts, each
+ * one with its own direction, and only a stamp gives that. About nine hundred
+ * of them, placed where the litter mask is thick, so the earth between the
+ * drifts is genuinely bare.
  *
- *   0.4-1.2 m  which substance owns this patch, plus buried roots
- *   3-25 cm    cones, bark flakes, stones, leaf plates, moss cushions, twigs
- *   0.5-3 cm   needle grain, each cluster its own colour out of a wide ramp
+ * Detail at three scales, because the tile is seen at 2.4 m and the camera
+ * works it from 30 cm to 30 m:
  *
- * The 3-25 cm tier is the one that was missing entirely, and it is the tier a
- * standing camera actually reads a floor by.
+ *   0.4-1.2 m  bare earth or straw litter, burn scars, trampled patches
+ *   3-25 cm    tuft bases, stones, dung pats, termite-worked soil
+ *   0.5-3 cm   the stems themselves, each its own shade off a pale-to-grey ramp
  */
-export function litterMaps(seed = 41) {
-  return cached('gnd.litter.' + seed, () => {
+export function savannaMaps(seed = 41) {
+  return cached('gnd.savanna.' + seed, () => {
     const n = M * M;
+    const PX = M / 2.4; // texels per metre
     const hf = new Float32Array(n);
-    const leaf = new Float32Array(n);
-    const leafId = new Float32Array(n);
-    const mossMask = new Float32Array(n);
-    const mossBump = new Float32Array(n);
-    const twig = new Float32Array(n);
-    const twigLit = new Float32Array(n);
-    const debris = new Float32Array(n); // cone / bark flake / stone sitting proud
-    const debrisId = new Float32Array(n);
-    const debrisAo = new Float32Array(n); // the hollow it sits in
-    const needle = new Float32Array(n);
-    const needleId = new Float32Array(n);
-    const bare = new Float32Array(n); // mat worn through to mineral soil
-    const root = new Float32Array(n);
-    const damp = new Float32Array(n);
+    const strawH = new Float32Array(n); // stamped stems, height
+    const strawId = new Float32Array(n); // which stem, for its colour
+    const tuft = new Float32Array(n); // the dark ring at the base of a grass tuft
+    const tuftId = new Float32Array(n);
+    const stone = new Float32Array(n);
+    const stoneId = new Float32Array(n);
+    const stoneAo = new Float32Array(n);
+    const dung = new Float32Array(n);
+    const cover = new Float32Array(n); // how much straw lies here
+    const burn = new Float32Array(n); // ash and char where a fire went through
+    const worn = new Float32Array(n); // trampled to bare compacted earth
+    const termite = new Float32Array(n); // worked subsoil, brighter and oranger
+    const crack = new Float32Array(n);
+    const rnd = mulberry32(seed * 131 + 7);
+
+    // --- macro fields first, because the stems are placed off one of them -----
+    for (let y = 0; y < M; y++) {
+      for (let x = 0; x < M; x++) {
+        const i = y * M + x;
+        const u = x / M;
+        const v = y / M;
+        // Litter cover. Two thirds of the tile carries some straw and a third
+        // is bare earth — measured coverage, not a threshold guessed at, because
+        // fbm piles up around 0.5 and a cut placed carelessly leaves the
+        // substance covering nothing.
+        const cov = fbm(u * 4.5 + 3, v * 4.5 + 8, { octaves: 4, period: 5, seed: seed + 15 });
+        cover[i] = smoothstep(0.36, 0.64, cov);
+        const wearF = fbm(u * 6 + 21, v * 6 + 2, { octaves: 3, period: 6, seed: seed + 18 });
+        worn[i] = smoothstep(0.6, 0.8, wearF) * (1 - cover[i] * 0.7);
+        // Burn scars: a dry-season savanna carries last year's fire in patches.
+        // Rare on the tile, but nothing else puts a grey in this palette.
+        burn[i] = smoothstep(0.7, 0.86, fbm(u * 3 + 44, v * 3 + 17, { octaves: 3, period: 3, seed: seed + 21 }));
+        termite[i] = smoothstep(0.74, 0.9, fbm(u * 5 + 61, v * 5 + 33, { octaves: 3, period: 5, seed: seed + 24 }));
+      }
+    }
+
+    // --- the stems --------------------------------------------------------------
+    // Direction is a slow field plus jitter: wind lays a drift of grass down the
+    // same way, and stems scattered at pure random angles read as pick-up sticks.
+    let placed = 0;
+    for (let guard = 0; guard < 9000 && placed < 900; guard++) {
+      const cx = rnd() * M;
+      const cy = rnd() * M;
+      const i = ((cy | 0) % M) * M + ((cx | 0) % M);
+      if (rnd() > cover[i] * 1.2) continue;
+      const lay = fbm(cx / M * 3 + 7, cy / M * 3 + 2, { octaves: 2, period: 3, seed: seed + 9 });
+      const ang = lay * 6.283 + (rnd() - 0.5) * 1.3;
+      // 6-28 cm long, 4-9 mm thick, tapered to a tip
+      stampSeg(strawH, M, cx, cy, ang, (0.06 + rnd() ** 1.5 * 0.22) * PX, (0.002 + rnd() * 0.0025) * PX, 0.5 + rnd() * 0.5, 0.35);
+      placed++;
+    }
+    // A second pass of short broken pieces where the litter is thickest, so a
+    // drift has a mat under its long stems rather than earth showing through.
+    for (let guard = 0; guard < 6000 && placed < 1500; guard++) {
+      const cx = rnd() * M;
+      const cy = rnd() * M;
+      const i = ((cy | 0) % M) * M + ((cx | 0) % M);
+      if (cover[i] < 0.7) continue;
+      stampSeg(strawH, M, cx, cy, rnd() * 6.283, (0.02 + rnd() * 0.06) * PX, (0.0015 + rnd() * 0.002) * PX, 0.3 + rnd() * 0.4, 0.2);
+      placed++;
+    }
+    // Which stem a texel belongs to, for colour: a cheap hash on the stamped
+    // height's own neighbourhood, so one stem is one shade along its length.
+    for (let y = 0; y < M; y++) {
+      for (let x = 0; x < M; x++) {
+        const i = y * M + x;
+        strawId[i] = worley(x / M * 30, y / M * 30, 30, seed + 5).id;
+      }
+    }
+
     for (let y = 0; y < M; y++) {
       for (let x = 0; x < M; x++) {
         const i = y * M + x;
         const u = x / M;
         const v = y / M;
 
-        // --- macro: which substance owns this patch ---------------------------
-        // Two independent fields rather than one, so moss and bare soil are not
-        // simply the two ends of the same ramp — a floor whose every variation
-        // lies on one axis is describable in one sentence, which is the tell.
-        const wetF = fbm(u * 4.5 + 3, v * 4.5 + 8, { octaves: 4, period: 5, seed: seed + 15 });
-        const wearF = fbm(u * 7 + 21, v * 7 + 2, { octaves: 3, period: 7, seed: seed + 18 });
-        // Both thresholds sit inside fbm's own distribution, which piles up hard
-        // around 0.5 — a cut at 0.52 leaves a couple of per cent of the tile and
-        // the substance may as well not exist. These are set from the measured
-        // coverage instead: about a third moss, about a sixth worn through.
-        mossMask[i] = smoothstep(0.4, 0.66, wetF);
-        bare[i] = smoothstep(0.46, 0.7, wearF) * (1 - mossMask[i] * 0.8);
-        damp[i] = wetF;
-        // A root arch crossing the tile: one long low ridge is the only feature
-        // at a scale bigger than a hand, and without something at that scale the
-        // floor has no landmarks and tiles visibly.
-        root[i] = Math.pow(clamp(ridged(u * 2.4 + v * 2.4, v * 3.1, { octaves: 2, period: 3, seed: seed + 88 })), 7) * 1.4;
-
         // --- meso: discrete objects ------------------------------------------
-        // Fewer and raggeder than the first pass. This is a conifer stand, so
-        // broadleaf fall is a minority material; at a 0.34 id cut it covered a
-        // third of the floor in near-circular ochre plates and the tile read as
-        // polka dots. The lump term is most of what stops a Worley cell looking
-        // like a coin, so it runs at nearly twice the cell radius jitter.
-        const l = worley(u * 15, v * 15, 15, seed + 31);
-        const lump = fbm(u * 44, v * 44, { octaves: 2, period: 44, seed: seed + 33 }) - 0.5;
-        const rad = 0.13 + ((l.id * 61.7) % 1) * 0.17 + lump * 0.3;
-        leaf[i] = smoothstep(rad, rad - 0.07, l.f1) * smoothstep(0.5, 0.62, l.id);
-        leafId[i] = l.id;
+        // Tuft bases: a dark rotted ring 8-16 cm across with a little raised
+        // collar of dead stems round it. The vegetation puts the standing grass
+        // on top; this is what the ground looks like where it grows.
+        const tc = worley(u * 9, v * 9, 9, seed + 31);
+        const tr = 0.16 + ((tc.id * 61.7) % 1) * 0.12;
+        tuft[i] = smoothstep(tr, tr - 0.08, tc.f1) * smoothstep(0.3, 0.42, tc.id);
+        tuftId[i] = tc.id;
 
-        // Cones, bark flakes and half-buried stones share one cell field and
-        // split on id, which costs one Worley instead of three. `f1` also gives
-        // the hollow of shade each one sits in for free — a chip lying on duff
-        // with no dark under it is a sticker, and that is most of what "nothing
-        // stands proud of it" was describing.
-        const dcell = worley(u * 11, v * 11, 11, seed + 41);
-        const dr = 0.1 + ((dcell.id * 37.3) % 1) * 0.16;
-        debris[i] = smoothstep(dr, dr * 0.55, dcell.f1) * smoothstep(0.42, 0.56, dcell.id);
-        debrisId[i] = (dcell.id * 91.7) % 1;
-        debrisAo[i] = smoothstep(dr * 2.4, dr * 0.9, dcell.f1) * smoothstep(0.42, 0.56, dcell.id);
+        // Quartz pebbles: 2-7 cm, lying on the surface, a hollow of shade
+        // beside each one.
+        const sc = worley(u * 16, v * 16, 16, seed + 41);
+        const lump = fbm(u * 48, v * 48, { octaves: 2, period: 48, seed: seed + 33 }) - 0.5;
+        const sr = 0.1 + ((sc.id * 37.3) % 1) * 0.14 + lump * 0.12;
+        stone[i] = smoothstep(sr, sr * 0.6, sc.f1) * smoothstep(0.5, 0.6, sc.id);
+        stoneId[i] = (sc.id * 91.7) % 1;
+        stoneAo[i] = smoothstep(sr * 2.2, sr * 0.9, sc.f1) * smoothstep(0.5, 0.6, sc.id);
 
-        // Moss grows in cushions, not as a wash. Each cushion is its own dome,
-        // so a mossy patch has 8 cm bumps in it rather than being a green stain.
-        const mc = worley(u * 22, v * 22, 22, seed + 47);
-        mossBump[i] = Math.pow(clamp(1 - mc.f1 * 2.6), 1.6) * smoothstep(0.25, 0.5, mc.id);
+        // Dung pats: a flat dark disc 20-30 cm across, cracked, rare.
+        const dc = worley(u * 5, v * 5, 5, seed + 47);
+        const dr = 0.22 + ((dc.id * 13.3) % 1) * 0.1 + lump * 0.14;
+        dung[i] = smoothstep(dr, dr - 0.06, dc.f1) * smoothstep(0.88, 0.93, dc.id);
 
-        // --- twigs: long, dark, and lit along the top ------------------------
-        // Gated to a sparse field, because a ridged network *is* a network: left
-        // ungated it lays a continuous mesh of sticks over the whole tile, which
-        // is a wicker mat rather than a floor with the odd twig on it. The gate
-        // cuts the net into a dozen separate lengths.
-        const twGate = smoothstep(0.5, 0.78, fbm(u * 5 + 44, v * 5 + 71, { octaves: 3, period: 5, seed: seed + 57 }));
-        const t1 = ridged(u * 17 + v * 34, v * 9, { octaves: 2, period: 34, seed: seed + 51 });
-        const t2 = ridged(v * 19 - u * 38, u * 11, { octaves: 2, period: 38, seed: seed + 53 });
-        const tw = Math.max(t1, t2) * twGate;
-        twig[i] = smoothstep(0.86, 0.965, tw);
-        // the sliver just off the crest, which is what makes a stick read as
-        // round rather than as a painted line
-        twigLit[i] = smoothstep(0.8, 0.865, tw) * (1 - twig[i]);
-
-        // --- micro: needle grain ---------------------------------------------
-        // Two sheared fields at opposing angles, warped by a common low-frequency
-        // offset and *selected* between rather than max'd. Taking the max of two
-        // fixed directions weaves them into a basket: the crossings land on a
-        // regular lattice and the whole tile reads as canvas. Letting one
-        // direction win over a 30 cm field gives local drifts of needles all
-        // lying the same way, which is what a fall of them actually does, and the
-        // warp bends each drift so no line runs straight across the tile.
-        const swirl = fbm(u * 3.5 + 13, v * 3.5 + 29, { octaves: 2, period: 4, seed: seed + 7 });
-        const wu = (swirl - 0.5) * 9;
-        const wv = (wearF - 0.5) * 9;
-        const n1 = ridged(u * 62 + v * 16 + wu, v * 26 + wv, { octaves: 2, period: 62, seed: seed + 1 });
-        const n2 = ridged(v * 62 - u * 14 + wv, u * 26 - wu, { octaves: 2, period: 62, seed: seed + 2 });
-        // One direction is suppressed hard rather than both being max'd at full
-        // strength: two directional fields taken at face value cross on a regular
-        // lattice and the tile reads as woven canvas, which is a worse artefact
-        // than the flatness it was meant to cure.
-        //
-        // The selector's edges are 6% apart, not 30%. fbm piles up so hard around
-        // 0.5 that a wide ramp never saturates — the first attempt at this held
-        // `sel` near 0.5 over essentially the whole tile, so both layers ran at
-        // 60% and the weave came back untouched.
-        const sel = smoothstep(0.47, 0.53, swirl);
-        const nd = Math.max(n1 * (1 - sel * 0.85), n2 * (0.15 + sel * 0.85));
-        needle[i] = smoothstep(0.5, 0.93, nd);
-        // Needles fall in clusters off one branch, so the colour id runs at the
-        // cluster scale rather than per needle. One Worley buys the whole
-        // fresh-rust to grey-matted range, which is the range that was missing:
-        // the old tile painted every needle the same brown.
-        needleId[i] = worley(u * 34, v * 34, 34, seed + 5).id;
+        // Shrinkage cracks in the bare earth, warped so the net does not read
+        // as a honeycomb.
+        const wx = fbm(u * 5 + 2, v * 5 + 5, { octaves: 2, period: 5, seed: seed + 63 }) - 0.5;
+        const cw = worley(u * 12 + wx * 2.4, v * 12 - wx * 2.0, 12, seed + 17);
+        crack[i] = smoothstep(0.03, 0.006, cw.f2 - cw.f1) * (1 - cover[i]) * smoothstep(0.4, 0.7, fbm(u * 4 + 7, v * 4 + 1, { octaves: 3, period: 4, seed: seed + 18 }));
 
         const sand = tex1(x, y, seed + 52) * 0.6 + tex1(x >> 1, y >> 1, seed + 53) * 0.4;
+        const clod = fbm(u * 14, v * 14, { octaves: 3, period: 14, seed: seed + 2 });
         hf[i] = clamp(
           0.3 +
-            (wetF - 0.5) * 0.3 +
-            root[i] * 0.3 +
-            needle[i] * 0.14 +
-            leaf[i] * 0.18 +
-            debris[i] * 0.4 +
-            mossBump[i] * mossMask[i] * 0.3 +
-            twig[i] * 0.3 +
-            (sand - 0.5) * 0.12 -
-            bare[i] * 0.16 -
-            debrisAo[i] * 0.08,
+            (clod - 0.5) * 0.24 +
+            strawH[i] * 0.16 +
+            tuft[i] * 0.12 +
+            stone[i] * 0.42 +
+            dung[i] * 0.14 +
+            termite[i] * 0.1 +
+            (sand - 0.5) * 0.1 -
+            worn[i] * 0.08 -
+            crack[i] * 0.16 -
+            stoneAo[i] * 0.06,
         );
       }
     }
-    const litter = rgb(EARTH.litter);
-    const litterDark = rgb(EARTH.litterDark);
-    const leafDry = rgb(EARTH.leafDry);
-    const leafOchre = rgb(EARTH.leafOchre);
-    const leafRot = rgb(EARTH.leafRot);
-    const twigCol = rgb(EARTH.twig);
-    const mossLit = rgb(EARTH.mossLit);
-    const mossDeep = rgb(EARTH.mossDeep);
-    const needleFresh = rgb(EARTH.needleFresh);
-    const needleOld = rgb(EARTH.needleOld);
+
+    const earthMid = earth(EARTH.litter, 0.1);
+    const earthDark = earth(EARTH.litterDark, 0.1);
+    const earthDust = earth(EARTH.dustLight, 0.16);
+    const earthPale = earth(EARTH.dustPale, 0.2);
+    const clay = earth(EARTH.clay, 0.12);
+    const strawPale = rgb(EARTH.strawPale);
+    const straw = rgb(EARTH.straw);
+    const strawGrey = rgb(EARTH.strawGrey);
+    const strawDark = rgb(EARTH.strawDark);
+    const tuftBase = rgb(EARTH.tuftBase);
+    const green = rgb(EARTH.grass);
     const humus = rgb(EARTH.humus);
-    const coneBrown = rgb(EARTH.coneBrown);
-    const barkFlake = rgb(EARTH.barkFlake);
-    const stoneCol = earth(EARTH.stoneMid, 0.5);
-    const pine = rgb(PALETTE.pineNeedle);
+    const ash = rgb(EARTH.ash);
+    const termiteCol = earth(EARTH.termite, 0.1);
+    const dungCol = rgb(EARTH.dung);
+    const agg = {
+      wet: earth(EARTH.stoneWet, 0.3),
+      dark: earth(EARTH.stoneDark, 0.3),
+      mid: earth(EARTH.stoneMid, 0.3),
+      pale: earth(EARTH.stone, 0.3),
+      clay,
+    };
     const mean = meanTracker();
     const map = pixelTexture(
       M,
@@ -967,75 +996,236 @@ export function litterMaps(seed = 41) {
         const u = x / M;
         const v = y / M;
         const h = hf[i];
-        // Base mat: last year's grey-brown needles, going black in the hollows.
-        let c = mixRgb(needleOld, litter, smoothstep(0.2, 0.7, h));
-        c = mixRgb(c, litterDark, (1 - smoothstep(0.05, 0.42, h)) * 0.58);
-        // Damp ground is darker and cooler; a dry crown is warmer and a touch
-        // lighter. Carried at the metre scale, which is the one the eye uses to
-        // decide whether a floor is a surface or a texture — the 3-25 cm tier
-        // below can be as busy as it likes and still read as wallpaper without
-        // something slower under it.
-        c = mixRgb(c, mixRgb(humus, mossDeep, 0.35), smoothstep(0.5, 0.9, damp[i]) * 0.38);
-        c = mixRgb(c, mixRgb(litter, leafDry, 0.4), smoothstep(0.5, 0.12, damp[i]) * 0.42);
-        // Where the mat has worn through, mineral soil — a genuinely different
-        // hue, near-black and cool, not the same brown darkened.
-        c = mixRgb(c, humus, bare[i] * 0.7);
-        // Needle grain over the top, each cluster its own point on a rust-to-grey
-        // ramp. This is the tier that carries chroma at 30 cm.
+        // Bare earth: laterite, darker in the hollows, with a dust skin on the
+        // crowns of the clods and the oxide showing through where it is worn.
+        let c = mixRgb(earthDark, earthMid, smoothstep(0.15, 0.55, h));
+        c = mixRgb(c, earthDust, smoothstep(0.42, 0.7, h) * 0.6);
+        c = mixRgb(c, clay, worn[i] * 0.5);
+        c = mixRgb(c, earthPale, worn[i] * smoothstep(0.5, 0.75, h) * 0.5);
+        c = mixRgb(c, termiteCol, termite[i] * 0.7);
+        c = mixRgb(c, mixRgb(earthDark, humus, 0.5), crack[i] * 0.6);
+        // Burn: ash over char, and the straw gone from it.
+        c = mixRgb(c, mixRgb(humus, ash, smoothstep(0.3, 0.7, h)), burn[i] * 0.75);
+        // Straw. Each stem its own shade off a pale-to-grey ramp, because a
+        // drift of one colour is a painted patch. Pale stems lie on top.
         {
-          const nid = needleId[i];
-          const nc = nid < 0.34 ? mixRgb(needleOld, needleFresh, nid * 2.4) : mixRgb(needleOld, litterDark, (nid - 0.34) * 0.9);
-          c = mixRgb(c, nc, needle[i] * (0.5 + nid * 0.4) * (1 - bare[i] * 0.6));
+          const sid = strawId[i];
+          const sc = sid < 0.4 ? mixRgb(strawPale, straw, sid * 2.5) : sid < 0.75 ? mixRgb(straw, strawGrey, (sid - 0.4) * 2.8) : mixRgb(strawGrey, strawDark, (sid - 0.75) * 4);
+          const s = smoothstep(0.08, 0.5, strawH[i]) * (1 - burn[i] * 0.85);
+          c = mixRgb(c, sc, s * 0.92);
+          // the mat under a thick drift, where the stems are too many to resolve
+          c = mixRgb(c, mixRgb(strawGrey, strawDark, 0.4), smoothstep(0.75, 1.0, cover[i]) * (1 - s) * 0.35 * (1 - burn[i]));
         }
-        // Fallen broadleaf: ochre in the middle of the plate, rotted at its rim,
-        // so a leaf has a light side and a dark side instead of being a tan dot.
+        // Tuft base: dark ring, a little green at the very centre where the
+        // crown still lives, bleached collar round it.
         {
-          const lid = (leafId[i] * 17.9) % 1;
-          const lc = mixRgb(mixRgb(leafOchre, leafDry, lid), leafRot, Math.pow(1 - leaf[i], 2) * 0.8);
-          c = mixRgb(c, lc, leaf[i] * 0.7);
+          const t = tuft[i];
+          c = mixRgb(c, tuftBase, t * 0.8);
+          c = mixRgb(c, mixRgb(green, strawDark, 0.5), smoothstep(0.7, 1.0, t) * 0.5);
+          c = mixRgb(c, strawPale, smoothstep(0.1, 0.4, t) * (1 - smoothstep(0.4, 0.75, t)) * 0.3);
         }
-        // Cones, bark flakes and stones. Their hollow of shade goes on first so
-        // the object sits *in* the mat rather than on it.
-        c = mixRgb(c, mixRgb(c, humus, 0.7), debrisAo[i] * 0.55);
-        {
-          const did = debrisId[i];
-          const dc = did < 0.5 ? coneBrown : did < 0.82 ? barkFlake : stoneCol;
-          c = mixRgb(c, dc, debris[i] * 0.9);
-        }
-        // Moss, as cushions with a lit crown and a dark base rather than a stain.
-        {
-          const mv = mossMask[i] * clamp(0.35 + mossBump[i] * 1.1);
-          c = mixRgb(c, mixRgb(mossDeep, mixRgb(pine, mossLit, 0.55), clamp(mossBump[i] * 1.5)), mv * 0.85);
-        }
-        c = mixRgb(c, twigCol, twig[i] * 0.9);
-        c = mixRgb(c, mixRgb(twigCol, leafDry, 0.45), twigLit[i] * 0.5);
-        // A root running under the mat lifts and thins it: less needle, more bare
-        // wood-brown, and the crest catches what light gets down here.
-        c = mixRgb(c, mixRgb(twigCol, litter, 0.4), clamp(root[i]) * 0.4);
+        // Stones sit in a hollow of shade.
+        c = mixRgb(c, mixRgb(c, humus, 0.6), stoneAo[i] * (1 - stone[i]) * 0.5);
+        c = mixRgb(c, aggregateColour(stoneId[i], 0.05, agg), stone[i] * 0.92);
+        c = mixRgb(c, dungCol, dung[i] * 0.85);
         const g =
-          (0.86 + fbm(u * 70, v * 70, { octaves: 2, period: 70, seed: seed + 77 }) * 0.28) *
-          (0.88 + skewDark(tex1(x, y, seed + 79), 0.8) * 0.22);
+          (0.88 + fbm(u * 70, v * 70, { octaves: 2, period: 70, seed: seed + 77 }) * 0.24) *
+          (0.9 + skewDark(tex1(x, y, seed + 79), 0.8) * 0.18);
         c = [c[0] * g, c[1] * g, c[2] * g];
         mean.add(c);
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
-        // Roughness: moss and duff drink light, a wet stone and a bark flake do
-        // not. Constant roughness over a floor is half of why it read as one
-        // material.
-        out[3] =
-          clamp(0.95 - mossMask[i] * 0.1 + bare[i] * 0.04 - debris[i] * 0.3 * (debrisId[i] > 0.82 ? 1 : 0.35) - twig[i] * 0.16) *
-          255;
+        // Roughness: dust and straw drink light; a quartz pebble and a dung crust
+        // do not.
+        out[3] = clamp(0.96 - stone[i] * 0.3 - dung[i] * 0.12 - smoothstep(0.3, 0.8, strawH[i]) * 0.06 + worn[i] * 0.03) * 255;
       },
       { srgb: true, repeat: 1, aniso: ANISO },
     );
     const normal = normalAoTexture(hf, M, M, 4.6, (x, y) => {
       const i = y * M + x;
-      // Cavity occlusion, not a height ramp: the mat is deepest where nothing
-      // stands in it, and every proud object drags a dark ring around itself.
-      return 0.42 + hf[i] * 0.6 - debrisAo[i] * 0.34 - twig[i] * 0.12 - mossMask[i] * (1 - mossBump[i]) * 0.12;
+      // Cavity occlusion: a stone drags a dark ring round itself, a tuft base is
+      // a hollow, the straw mat is open to the sky.
+      return 0.46 + hf[i] * 0.56 - stoneAo[i] * 0.3 - tuft[i] * 0.16 - crack[i] * 0.1;
     });
     return { map, normal, height: hf, mean: mean.value };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Riverbed sand: the floor of the dry watercourse. Pale, rippled, with a
+// scatter of stones where the last flow left them.
+// ---------------------------------------------------------------------------
+
+export function sandMaps(seed = 67) {
+  return cached('gnd.sand.' + seed, () => {
+    const n = M * M;
+    const hf = new Float32Array(n);
+    const peb = new Float32Array(n);
+    const pebId = new Float32Array(n);
+    const pebAo = new Float32Array(n);
+    const ripple = new Float32Array(n);
+    const wetF = new Float32Array(n);
+    const crust = new Float32Array(n);
+    for (let y = 0; y < M; y++) {
+      for (let x = 0; x < M; x++) {
+        const i = y * M + x;
+        const u = x / M;
+        const v = y / M;
+        // Current ripples: a warped sine across the flow, 6-9 cm pitch, that
+        // comes and goes in patches. The one thing that says "water was here".
+        const warp = fbm(u * 3 + 5, v * 3 + 1, { octaves: 3, period: 3, seed: seed + 3 }) - 0.5;
+        const patch = smoothstep(0.38, 0.62, fbm(u * 4 + 9, v * 4 + 4, { octaves: 3, period: 4, seed: seed + 5 }));
+        ripple[i] = (Math.sin((v + warp * 0.12) * 6.283 * 30 + u * 2.5) * 0.5 + 0.5) * patch;
+        // Pebble bars: stones collect in the lees, so the stone mask is gated by
+        // a slow field rather than scattered evenly.
+        const bar = smoothstep(0.5, 0.75, fbm(u * 3 + 17, v * 3 + 8, { octaves: 3, period: 3, seed: seed + 11 }));
+        const pc = worley(u * 20, v * 20, 20, seed + 13);
+        const lump = fbm(u * 50, v * 50, { octaves: 2, period: 50, seed: seed + 15 }) - 0.5;
+        const pr = 0.12 + ((pc.id * 43.1) % 1) * 0.16 + lump * 0.12;
+        peb[i] = smoothstep(pr, pr * 0.6, pc.f1) * smoothstep(0.3, 0.45, pc.id) * (0.35 + bar * 0.65);
+        pebId[i] = (pc.id * 71.3) % 1;
+        pebAo[i] = smoothstep(pr * 2.2, pr * 0.9, pc.f1) * smoothstep(0.3, 0.45, pc.id) * (0.35 + bar * 0.65);
+        // Where the sand is still damp under the top layer, and the dried mud
+        // crust that curls up at the edge of a pool that has gone.
+        wetF[i] = smoothstep(0.56, 0.82, fbm(u * 2.5 + 31, v * 2.5 + 12, { octaves: 3, period: 3, seed: seed + 21 }));
+        const cwx = fbm(u * 5 + 2, v * 5 + 5, { octaves: 2, period: 5, seed: seed + 63 }) - 0.5;
+        const cw = worley(u * 10 + cwx * 2.4, v * 10 - cwx * 2.0, 10, seed + 17);
+        crust[i] = smoothstep(0.04, 0.008, cw.f2 - cw.f1) * wetF[i];
+        const sand = tex1(x, y, seed + 52) * 0.6 + tex1(x >> 1, y >> 1, seed + 53) * 0.4;
+        hf[i] = clamp(
+          0.34 +
+            ripple[i] * 0.16 +
+            (fbm(u * 8, v * 8, { octaves: 3, period: 8, seed: seed + 2 }) - 0.5) * 0.16 +
+            peb[i] * 0.4 +
+            (sand - 0.5) * 0.08 -
+            pebAo[i] * 0.05 -
+            crust[i] * 0.12,
+        );
+      }
+    }
+    // Sand off the same laterite the country is made of, washed: the iron is
+    // mostly gone out of it, so it is the palest and least red ground there is.
+    const sandPale = desat(rgb(0xd2bd97), 0.06);
+    const sandMid = desat(rgb(0xb9a37c), 0.06);
+    const sandDark = desat(rgb(0x8f7a5a), 0.08);
+    const sandDamp = desat(rgb(0x6e5a44), 0.08);
+    const mudCrust = desat(rgb(0x7d6146), 0.1);
+    const agg = {
+      wet: earth(EARTH.stoneWet, 0.3),
+      dark: earth(EARTH.stoneDark, 0.3),
+      mid: earth(EARTH.stoneMid, 0.3),
+      pale: earth(EARTH.stone, 0.3),
+      clay: earth(EARTH.clay, 0.2),
+    };
+    const mean = meanTracker();
+    const map = pixelTexture(
+      M,
+      M,
+      (x, y, out) => {
+        const i = y * M + x;
+        const u = x / M;
+        const v = y / M;
+        const h = hf[i];
+        let c = mixRgb(sandDark, sandMid, smoothstep(0.2, 0.5, h));
+        c = mixRgb(c, sandPale, smoothstep(0.45, 0.7, h) * 0.8);
+        // the lee of each ripple holds a line of darker, coarser grains
+        c = mixRgb(c, sandDark, (1 - ripple[i]) * smoothstep(0.2, 0.6, ripple[i] + 0.3) * 0.2);
+        c = mixRgb(c, sandDamp, wetF[i] * 0.55);
+        c = mixRgb(c, mudCrust, crust[i] * 0.7);
+        c = mixRgb(c, mixRgb(c, sandDamp, 0.7), pebAo[i] * (1 - peb[i]) * 0.5);
+        c = mixRgb(c, aggregateColour(pebId[i], 0.1, agg), peb[i] * 0.92);
+        const g =
+          (0.9 + fbm(u * 66, v * 66, { octaves: 2, period: 66, seed: seed + 77 }) * 0.2) *
+          (0.9 + skewDark(tex1(x, y, seed + 79), 0.8) * 0.18);
+        c = [c[0] * g, c[1] * g, c[2] * g];
+        mean.add(c);
+        out[0] = c[0];
+        out[1] = c[1];
+        out[2] = c[2];
+        out[3] = clamp(0.97 - peb[i] * 0.3 - wetF[i] * 0.12) * 255;
+      },
+      { srgb: true, repeat: 1, aniso: ANISO },
+    );
+    const normal = normalAoTexture(hf, M, M, 4.2, (x, y) => {
+      const i = y * M + x;
+      return 0.5 + hf[i] * 0.5 - pebAo[i] * 0.28;
+    });
+    return { map, normal, height: hf, mean: mean.value };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Animal and boot tracks. Sampled in world space wherever the ground is soft —
+// the mud round the water hole, the churned apron at the camp — as a height
+// field the terrain shader shades the same way it shades the tyre print.
+//
+// One tile is 1.6 m. Hoof prints in pairs (a cloven print is two crescents),
+// a few big round paw prints with four toes, and a couple of boot soles. All
+// stamped at random headings, but hoofed animals walk in lines, so each hoof
+// pair belongs to a short trail of three or four.
+// ---------------------------------------------------------------------------
+
+export const TRACKS_TILE = 1.6;
+
+export function trackStamps(seed = 211) {
+  return cached('gnd.tracks.' + seed, () => {
+    const s = 256;
+    const n = s * s;
+    const PX = s / TRACKS_TILE;
+    const press = new Float32Array(n);
+    const rnd = mulberry32(seed);
+    const stampPrint = (cx, cy, ang, kind) => {
+      const ca = Math.cos(ang);
+      const sa = Math.sin(ang);
+      const at = (dx, dy, rx, ry, a2, add, lobe) =>
+        stampDome(press, s, Math.round(cx + dx * ca - dy * sa), Math.round(cy + dx * sa + dy * ca), rx, ry, ang + a2, add, lobe, rnd() * 6.28);
+      if (kind === 0) {
+        // cloven hoof: two crescents 3 cm apart, 6 cm long
+        at(0, -0.017 * PX, 0.032 * PX, 0.014 * PX, -0.25, 0.85, 0.2);
+        at(0, 0.017 * PX, 0.032 * PX, 0.014 * PX, 0.25, 0.85, 0.2);
+      } else if (kind === 1) {
+        // big cat: round pad and four toes, 11 cm across
+        at(-0.015 * PX, 0, 0.032 * PX, 0.036 * PX, 0, 0.75, 0.15);
+        for (let k = 0; k < 4; k++) {
+          const a = -0.9 + k * 0.6;
+          at(0.03 * PX + Math.cos(a) * 0.018 * PX, Math.sin(a) * 0.04 * PX, 0.013 * PX, 0.011 * PX, a, 0.7, 0.15);
+        }
+      } else {
+        // boot: sole and heel, 29 cm
+        at(0.05 * PX, 0, 0.09 * PX, 0.048 * PX, 0, 0.7, 0.08);
+        at(-0.09 * PX, 0, 0.04 * PX, 0.042 * PX, 0, 0.75, 0.08);
+      }
+    };
+    // Hoof trails: three or four prints in a line, alternating left and right.
+    for (let t = 0; t < 9; t++) {
+      const ang = rnd() * 6.283;
+      let cx = rnd() * s;
+      let cy = rnd() * s;
+      const nn = 3 + ((rnd() * 2) | 0);
+      for (let k = 0; k < nn; k++) {
+        const side = k % 2 === 0 ? -1 : 1;
+        stampPrint(cx + Math.cos(ang + 1.5708) * side * 0.06 * PX, cy + Math.sin(ang + 1.5708) * side * 0.06 * PX, ang + (rnd() - 0.5) * 0.3, 0);
+        cx += Math.cos(ang) * 0.42 * PX;
+        cy += Math.sin(ang) * 0.42 * PX;
+      }
+    }
+    for (let k = 0; k < 5; k++) stampPrint(rnd() * s, rnd() * s, rnd() * 6.283, 1);
+    for (let k = 0; k < 3; k++) stampPrint(rnd() * s, rnd() * s, rnd() * 6.283, 2);
+
+    // A print is a hollow with a lip of displaced mud round it.
+    const hf = new Float32Array(n);
+    const at = (x, y) => press[(((y % s) + s) % s) * s + (((x % s) + s) % s)];
+    for (let y = 0; y < s; y++) {
+      for (let x = 0; x < s; x++) {
+        let mx = 0;
+        for (let oy = -3; oy <= 3; oy++) for (let ox = -3; ox <= 3; ox++) mx = Math.max(mx, at(x + ox, y + oy));
+        const p = press[y * s + x];
+        hf[y * s + x] = clamp(0.6 - p * 0.6 + Math.max(0, mx - p) * 0.22);
+      }
+    }
+    const normal = normalAoTexture(hf, s, s, 4.0, (x, y) => 0.36 + hf[y * s + x] * 1.0);
+    return { normal, height: hf };
   });
 }
 
@@ -1466,8 +1656,10 @@ export function reliefMaps(seed = 137) {
         0.4 + rnd() * 0.4,
       );
     }
-    // needles: 2-5 cm, hair thin, in fallen clusters of three to six
-    for (let c = 0; c < 26; c++) {
+    // Broken grass stems: 2-5 cm, hair thin, in fallen clusters of three to
+    // six. A third of the count the needle litter had — this is open ground
+    // with grass blown onto it, not a floor under a canopy.
+    for (let c = 0; c < 9; c++) {
       const cx = rnd() * s;
       const cy = rnd() * s;
       const dir = rnd() * 6.28;
@@ -1615,181 +1807,140 @@ export function rippleMap() {
 }
 
 /**
- * The treeline as it appears in a puddle, indexed by the reflected ray's
- * azimuth (u) and elevation (v). A puddle seen from standing height reflects
- * almost horizontally, so what is actually in it is trunks and the underside of
- * the canopy — the sky only shows up in the last few degrees. Baked rather than
- * derived in the shader so the trunk spacing is irregular and the canopy edge
- * is ragged.
+ * The savanna skyline as it appears in standing water, indexed by the
+ * reflected ray's azimuth (u) and elevation (v).
+ *
+ * The forest version of this card was nearly all trunk and canopy, because a
+ * puddle under a closed stand reflects wood up to sixty degrees. Open country
+ * is the other way round: a water hole seen from standing height reflects sky
+ * almost everywhere, and what puts an edge on the reflection is the thin band
+ * along the bottom — distant hills in haze, the grass line, and a handful of
+ * flat-topped acacias standing against the sky at irregular spacing. That band
+ * lives in the first quarter of v, which is exactly the range a pool three to
+ * ten metres from a standing camera actually samples.
  */
-export function canopyReflection() {
-  return cached('gnd.canopyrefl', () => {
+export function horizonReflection() {
+  return cached('gnd.horizonrefl', () => {
     const w = 512;
     const h = 96;
-    // A reflection only reads as sharp if the thing being reflected has hard
-    // edges and a wide value range. The first pass ran everything between
-    // 0x16 and 0x6f, so the puddle came back as a uniform blue-grey smear
-    // whatever the roughness was — the reflection was sharp, there was just
-    // nothing in it. Near-black trunks against a bright horizon gap is the
-    // whole cue.
-    // Trunks stay near-black: they are the contrast, and near-black against a
-    // mid value is what the eye reads as a sharp edge.
-    const trunk = rgb(0x0d1109);
-    const trunkLit = rgb(0x4a3e2f);
-    // The canopy and understorey are keyed to what the forest in this scene
-    // actually renders at, not to what a canopy underside measures in isolation.
-    //
-    // A puddle reflects lit things, so it is *brighter* than the shaded dirt
-    // around it — that value inversion is a large part of why the eye reads it as
-    // a surface rather than as a hole. At 0x090c07 and 0x18220f the pools came
-    // back darker than the trail they sat in and read as tar: correct for the
-    // underside of a canopy in a vacuum, wrong against a frame where the
-    // undergrowth thirty metres away is rendering at half white. Between these
-    // and the near-black trunks there is still four stops of range for the
-    // reflection to be sharp with.
-    // Desaturated hard. At 0x2f3d1e / 0x74883f the pools came back a flat
-    // saturated green — antifreeze, not water — because a puddle at a glance is
-    // nine tenths reflection, so whatever chroma this card carries is the whole
-    // colour of the pool. Foliage seen as a reflection off a dielectric is
-    // washed toward neutral by the specular tint anyway; what a real forest
-    // puddle shows is olive-grey with near-black bars in it.
-    // Every foliage element on this card came down by a third in linear when the
-    // scene's airlight was halved and the foliage materials picked up their own
-    // aerial perspective. This is a picture of that forest; if it does not track
-    // it, the pools reflect a brighter wood than the one standing over them. The
-    // scale is uniform across the four, so the four stops of range between these
-    // and the near-black trunks — which is what makes the reflection read as sharp
-    // — is exactly preserved. The sky pair below is untouched: the sky did not move.
-    const canopy = rgb(0x2a301f);
-    const canopySun = rgb(0x656944);
-    const understorey = rgb(0x1d1e16);
-    // The bright element, and the reason the pools had no range in them: looking
-    // into a stand at eye level, the gaps between the near trunks are filled with
-    // haze off the trunks further in, which is much brighter than any leaf.
-    const gapHaze = rgb(0x8c8e7e);
-    const skyLow = rgb(0xd8c3a6);
-    const skyHigh = rgb(0x7ba3cb);
-    // Trunk positions drawn once so the spacing is genuinely irregular rather
-    // than a thresholded noise field, which always lands on a near-lattice.
-    const rnd = mulberry32(5501);
-    const trunks = [];
-    // A hundred and sixty, not fifty.
-    //
-    // The card is a full 360 degree panorama and a puddle is a mirror, so the
-    // slice of it a pool can show is exactly the angle the pool subtends — about
-    // twenty degrees, a sixteenth of the card. At fifty trunks that is three on
-    // average and the distribution is Poisson, so a good third of the pools in
-    // the corridor reflected a gap and came back as one flat olive plate: which
-    // is exactly what the first pass measured, and no amount of contrast inside
-    // the trunks could fix it because there were no trunks in shot. A conifer
-    // stand seen from ground level layers near trunks over far ones and there is
-    // never a twenty degree window without wood in it, so the density has to be
-    // high enough that the *worst* window still has structure, not the mean one.
-    for (let k = 0; k < 160; k++) {
+    const skyLow = rgb(PALETTE.skyHorizon);
+    const skyHigh = rgb(PALETTE.skyTop);
+    // Hills sit in the haze: a fraction darker and bluer than the horizon sky,
+    // never a hard silhouette.
+    const hillFar = rgb(0x9aa2a6);
+    const hillNear = rgb(0x7d8580);
+    // The grass line is the brightest thing on the ground and it is the one
+    // warm element in the reflection.
+    const grassLine = rgb(0xc9b07a);
+    const grassShade = rgb(0x8a7b52);
+    const crown = rgb(0x2e3a22);
+    const crownLit = rgb(0x5c6a38);
+    const trunk = rgb(0x1a150f);
+    const rnd = mulberry32(7703);
+    const trees = [];
+    // Forty trees round the panorama. A pool shows a sixteenth of it, so that
+    // is two or three trees in any one reflection — a savanna, not a wood, and
+    // every pool still has something standing in it.
+    for (let k = 0; k < 40; k++) {
       const far = rnd();
-      trunks.push({
+      trees.push({
         u: rnd(),
-        // near trunks are wide and tall, far ones narrow and short
-        wid: 0.0012 + far ** 2.6 * 0.014,
-        // Every trunk reaches most of the way up. The card is indexed by the
-        // *elevation* of the reflected ray and a puddle is only ever seen at a
-        // glance, so the band that actually gets sampled is the bottom half —
-        // trunks that stopped at v = 0.3 put their tops inside the one region
-        // that matters and left the rest of it as flat canopy wash.
-        top: 0.5 + rnd() ** 0.9 * 0.48,
-        // The far ones are hazed toward the canopy behind them, or a hundred and
-        // sixty hard black bars is a picket fence rather than a wood.
-        haze: 1 - far * 0.55,
+        // acacia: a wide flat crown on a thin trunk, the crown three to five
+        // times wider than it is tall
+        top: 0.06 + (1 - far) ** 1.6 * 0.2,
+        wid: 0.004 + (1 - far) ** 1.6 * 0.03,
+        haze: 0.35 + (1 - far) * 0.65,
         lit: rnd(),
+        seed: rnd() * 10,
       });
     }
-    const tex = pixelTexture(
+    return pixelTexture(
       w,
       h,
       (x, y, out) => {
         const u = x / w;
         const v = y / h; // 0 at the horizon, 1 at the zenith
-        // Ragged canopy edge, and it belongs near the top. v is sin(elevation)
-        // of the reflected ray, so the whole range a puddle is ever seen at —
-        // a 0.5 to 1.8 m eye, one to four metres back — is v = 0.1 to 0.6. With
-        // the sky starting at 0.46 every pool in the frame was reflecting open
-        // sky through a hard-edged boundary, and the average of near-black
-        // canopy against a bright warm horizon gap is the flat pale grey the
-        // pools actually rendered as. Twenty metre conifers eight metres away
-        // subtend sixty-eight degrees, so sin puts their tops at 0.93: the sky
-        // is a sliver at the very top of this card and nothing else.
-        const top = 0.84 + fbm(u * 9, 3.1, { octaves: 4, period: 9, seed: 12 }) * 0.15;
-        const sky = smoothstep(top - 0.012, top + 0.012, v);
-        const skyC = mixRgb(skyLow, skyHigh, smoothstep(0.35, 1.0, v));
-        // Slow azimuthal openness. A pool is a mirror and shows about twenty
-        // degrees of this card, so a card that is statistically uniform hands
-        // every pool in the corridor the same mean — which is why they all read as
-        // one dark olive stain however much structure was inside them. A stand has
-        // dense stretches and thin ones, and the track itself is a linear clearing
-        // with sky down it; five and a half cycles of noise across the panorama
-        // gives a pool the chance of facing into either.
-        const open = smoothstep(0.42, 0.74, fbm(u * 5.5 + 11, 2.2, { octaves: 3, period: 6, seed: 133 }));
-        let c = mixRgb(understorey, canopy, smoothstep(0.02, 0.55, v));
-        c = mixRgb(c, gapHaze, open * 0.34 * (1 - smoothstep(0.42, 0.8, v)));
-        // Sunlit foliage on the side the key comes from, in blobs not a gradient,
-        // and at full strength. At 0.55 against a near-black canopy the whole
-        // card measured as one dark value and the puddles reflected a uniform
-        // grey-green plate — the reflection was sharp, there was simply nothing
-        // in it to be sharp about.
-        // Frequency raised from 17 to 54 across u for the same reason the trunk
-        // count went up: a pool shows a sixteenth of this card, and at 17 cycles
-        // over the full panorama a twenty degree window contains about one blob,
-        // so whichever way the blob fell the pool was a single flat value.
-        const sunlit = smoothstep(0.4, 0.72, fbm(u * 54 + 4, v * 6 + 2, { octaves: 3, period: 54, seed: 71 }));
-        // Pushed up the card. Backlit needles are a thing you see looking *up*
-        // through a canopy, so they belong near the zenith; ramping them in from
-        // v = 0.12 put them right through the band a puddle actually samples.
-        c = mixRgb(c, canopySun, sunlit * smoothstep(0.26, 0.9, v) * 0.85);
-        // Holes that let the sky through: hard-edged, because a soft hole is
-        // indistinguishable from the canopy being lighter there. Kept out of the
-        // bottom third — a gap at eye level is a gap between the trunks, not a
-        // piece of sky, and putting bright warm sky down there is what averaged
-        // the sampled band to grey.
-        const hole = smoothstep(0.72, 0.78, fbm(u * 62 + 2, v * 7 + 9, { octaves: 4, period: 62, seed: 44 }));
-        c = mixRgb(c, skyC, hole * smoothstep(0.34, 0.7, v));
-        // Haze slivers deep in the stand, in the band a puddle actually samples.
-        // Narrow and hard-edged on purpose: the earlier attempt at range down
-        // here was a broad warm sky wash, which averaged the whole sampled band
-        // to one grey. Eighty-odd slivers across the panorama is a degree and a
-        // half apiece, and the trunk pass draws over them — so what the pool gets
-        // is bright/black alternation at the frequency of a wood rather than a
-        // lighter plate.
-        const gap = smoothstep(0.5, 0.63, fbm(u * 84 + 7, v * 3 + 5, { octaves: 3, period: 84, seed: 96 }));
-        c = mixRgb(c, gapHaze, gap * (1 - smoothstep(0.3, 0.62, v)) * (0.35 + open * 0.65));
-        for (const t of trunks) {
-          let du = Math.abs(u - t.u);
-          if (du > 0.5) du = 1 - du;
-          if (du > t.wid) continue;
-          const k =
-            (1 - smoothstep(t.top - 0.02, t.top, v)) *
-            (1 - smoothstep(t.wid * 0.72, t.wid, du)) *
-            t.haze *
-            (1 - open * 0.45);
-          // a trunk facing the low sun has a bright rim on one side of it, and
-          // that bright-next-to-black pair is what the eye reads as sharp
-          const rim = smoothstep(t.wid * 0.4, t.wid * 0.95, u - t.u) * t.lit;
-          c = mixRgb(c, mixRgb(trunk, trunkLit, rim * 0.8), k);
+        let c = mixRgb(skyLow, skyHigh, smoothstep(0.02, 0.85, v));
+        // Distant hills: two ridgelines in haze, the nearer one darker.
+        const ridgeFar = 0.035 + fbm(u * 5 + 3, 1.7, { octaves: 3, period: 5, seed: 31 }) * 0.045;
+        const ridgeNear = 0.012 + fbm(u * 8 + 9, 4.1, { octaves: 3, period: 8, seed: 37 }) * 0.03;
+        c = mixRgb(c, hillFar, 1 - smoothstep(ridgeFar - 0.006, ridgeFar + 0.006, v));
+        c = mixRgb(c, hillNear, 1 - smoothstep(ridgeNear - 0.004, ridgeNear + 0.004, v));
+        // The grass line at the very bottom: a sliver, lit.
+        const grassTop = 0.006 + fbm(u * 40, 2.2, { octaves: 2, period: 40, seed: 41 }) * 0.008;
+        c = mixRgb(c, mixRgb(grassShade, grassLine, fbm(u * 24, 0.5, { octaves: 2, period: 24, seed: 43 })), 1 - smoothstep(grassTop - 0.003, grassTop + 0.003, v));
+        for (const t of trees) {
+          let du = u - t.u;
+          if (du > 0.5) du -= 1;
+          if (du < -0.5) du += 1;
+          const adu = Math.abs(du);
+          if (adu > t.wid * 1.2) continue;
+          // crown: a flattened dome, ragged along its underside, sitting on the
+          // top third of the trunk
+          const crownBase = t.top * 0.62;
+          const edge = 1 - (adu / t.wid) ** 2;
+          const rag = fbm(du * 60 + t.seed, v * 30, { octaves: 2, period: 60, seed: 47 }) - 0.5;
+          const crownTop = crownBase + (t.top - crownBase) * Math.max(0, edge + rag * 0.25);
+          const inCrown = v > crownBase - 0.01 + rag * 0.02 && v < crownTop ? 1 : 0;
+          const trunkW = t.wid * 0.06;
+          const inTrunk = adu < trunkW && v < crownBase + 0.01 ? 1 : 0;
+          const k = Math.max(inCrown, inTrunk) * t.haze;
+          const lit = smoothstep(-t.wid * 0.2, t.wid * 0.7, du) * t.lit * inCrown;
+          c = mixRgb(c, mixRgb(inTrunk ? trunk : crown, crownLit, lit * 0.7), k);
         }
-        c = mixRgb(c, skyC, sky);
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
         out[3] = 255;
       },
-      // No mip chain. A puddle samples a band about a tenth of this card tall and
-      // stretches it over a couple of hundred pixels, so the fetch is magnified in
-      // v and roughly 1:1 in u — but the *ripple* perturbs the lookup enough for
-      // the hardware to pick a coarse level, and every level down averages the
-      // trunks into the canopy behind them. A reflection that has been mip-filtered
-      // into its own mean is the definition of the flat plate these pools were.
+      // No mip chain, for the reason the forest card had none: the tree band is
+      // a tenth of the card tall and a mip-filtered reflection is a flat plate.
       { srgb: true, repeat: [1, 1], aniso: 1, mips: false },
     );
-    return tex;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The far hills. Tiled at about 90 m over a mesh that runs out to a kilometre
+// and a half, so all it has to carry is the two things that read at that
+// range through the haze: dry grass, and the dark speckle of bush and scattered
+// trees on it, thicker in the drainage lines.
+// ---------------------------------------------------------------------------
+
+export function farGroundMap() {
+  return cached('gnd.far', () => {
+    const s = 256;
+    const grassPale = rgb(0xc4ad78);
+    const grass = rgb(0xa8905c);
+    const grassDark = rgb(0x7f6d46);
+    const bush = rgb(0x3f4428);
+    const bushLit = rgb(0x66683a);
+    const bare = rgb(0x8f5f3c);
+    return pixelTexture(
+      s,
+      s,
+      (x, y, out) => {
+        const u = x / s;
+        const v = y / s;
+        const big = fbm(u * 3 + 2, v * 3 + 7, { octaves: 3, period: 3, seed: 601 });
+        const mid = fbm(u * 9 + 4, v * 9 + 1, { octaves: 3, period: 9, seed: 603 });
+        let c = mixRgb(grassDark, grass, smoothstep(0.3, 0.6, big));
+        c = mixRgb(c, grassPale, smoothstep(0.5, 0.8, mid) * 0.6);
+        // bare red earth where the grass has gone
+        c = mixRgb(c, bare, smoothstep(0.62, 0.8, fbm(u * 6 + 11, v * 6 + 3, { octaves: 3, period: 6, seed: 605 })) * 0.5);
+        // bush: worley cells as individual crowns, gated by a slow field so
+        // they gather along the lines a drainage would follow
+        const w = worley(u * 48, v * 48, 48, 607);
+        const gather = smoothstep(0.42, 0.7, fbm(u * 4 + 1, v * 4 + 9, { octaves: 3, period: 4, seed: 609 }));
+        const crown = smoothstep(0.34, 0.18, w.f1) * smoothstep(0.55, 0.75, w.id + gather * 0.3) * (0.4 + gather * 0.6);
+        c = mixRgb(c, mixRgb(bush, bushLit, w.id), crown);
+        out[0] = c[0];
+        out[1] = c[1];
+        out[2] = c[2];
+        out[3] = 255;
+      },
+      { srgb: true, repeat: 1, aniso: 4 },
+    );
   });
 }
 
