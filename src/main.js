@@ -102,7 +102,10 @@ interior.onSpaceChange = (sp) => {
 modes.onModeChange = (mode) => {
   audio.setZone(mode === "exterior" ? "exterior" : interior.state.zone);
   if (mode === "exterior") exterior.group.visible = true;
-  else exterior.setInteriorView(interior.exteriorWindows());
+  else {
+    exterior.setInteriorView(interior.exteriorWindows());
+    if (!player.locked && !debugMode) hud.showStart();
+  }
 };
 refreshZone(interior.state.zone);
 
@@ -515,3 +518,13 @@ modes.setExterior();
 perf.markReady();
 debugAPI.ready = true;
 frame();
+
+// stream the other zones in while the player looks at the exterior, so lift rides never build on arrival
+const prebuild = ["engineering", "hangar"];
+function prebuildNext() {
+  const z = prebuild.shift();
+  if (!z) return;
+  interior.buildZone(z);
+  setTimeout(prebuildNext, 1500);
+}
+setTimeout(prebuildNext, 2500);
