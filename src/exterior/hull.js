@@ -224,6 +224,20 @@ export function buildExterior(scene) {
   const rimLightMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.35, 1.65, 2.05), fog: false });
   const engineCore = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
   const engineGlow = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  // the plume shells fade where they are seen edge-on, so the nested cones read as a soft volume without a
+  // polygonal outline (the mouth discs face the stern camera and keep their full value)
+  engineGlow.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying float vFacing;")
+      .replace(
+        "#include <begin_vertex>",
+        "#include <begin_vertex>\n  vec3 glowN = normalize( normalMatrix * normal );\n  vec3 glowP = ( modelViewMatrix * vec4( position, 1.0 ) ).xyz;\n  vFacing = abs( dot( glowN, normalize( -glowP ) ) );",
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying float vFacing;")
+      .replace("#include <color_fragment>", "#include <color_fragment>\n  diffuseColor.rgb *= smoothstep( 0.0, 0.7, vFacing );");
+  };
+  engineGlow.customProgramCacheKey = () => "engineGlowSoft";
   const tractorMat = new THREE.MeshBasicMaterial({ color: 0x4d9dff, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.FrontSide, fog: false });
   const materials = { hullMat, hullBottomMat, darkMat, greebleMat, greebleDark, plateMat, paintMat, darkFlatMat, atlasFlatMat, rimLightMat, windowMat, engineGlow, engineCore, hullUvMat, engineMat, atlasMat };
   const mats = { hull: hullMat, plate: plateMat, paint: paintMat, hullUv: hullUvMat, dark: darkMat, darkFlat: darkFlatMat, engine: engineMat, greeble: greebleMat, greebleDark, atlas: atlasMat, atlasFlat: atlasFlatMat, rimLight: rimLightMat, windows: windowMat, engineCore, engineGlow };

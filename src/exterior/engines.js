@@ -180,31 +180,31 @@ export function buildEngines(ctx) {
       [0.93, 0.05, 0.03],
       [0.97, 0.14, 0.0],
     ]);
-    // soft plume: three nested additive cones trailing aft of the mouth (the outer one 3.5 radii long),
-    // each faint on its own so no single shell edge reads as an outline; together they give the plume a
-    // bright axis that fades slowly along its length
+    // soft plume: three nested additive cones trailing aft of the mouth (the outer one 4 radii long), each
+    // faint on its own and edge-faded by the glow material so no shell silhouette reads as an outline;
+    // together they give the plume a bright axis that fades slowly along its length
     haze([
       [0.92, 0.12, 0.0],
-      [0.86, 0.35, 0.07],
-      [0.76, 0.8, 0.05],
-      [0.6, 1.4, 0.03],
-      [0.42, 2.2, 0.016],
-      [0.22, 3.0, 0.006],
-      [0.0, 3.5, 0.0],
+      [0.86, 0.35, 0.09],
+      [0.76, 0.85, 0.065],
+      [0.6, 1.5, 0.04],
+      [0.42, 2.4, 0.02],
+      [0.22, 3.3, 0.008],
+      [0.0, 4.0, 0.0],
     ]);
     haze([
       [0.7, 0.1, 0.0],
-      [0.64, 0.4, 0.08],
-      [0.5, 1.0, 0.05],
-      [0.3, 1.8, 0.02],
-      [0.0, 2.7, 0.0],
+      [0.64, 0.4, 0.1],
+      [0.5, 1.05, 0.065],
+      [0.3, 1.9, 0.026],
+      [0.0, 2.9, 0.0],
     ]);
     haze([
       [0.46, 0.08, 0.0],
-      [0.42, 0.4, 0.1],
-      [0.3, 1.0, 0.06],
-      [0.16, 1.6, 0.02],
-      [0.0, 2.1, 0.0],
+      [0.42, 0.4, 0.13],
+      [0.3, 1.0, 0.08],
+      [0.16, 1.7, 0.026],
+      [0.0, 2.3, 0.0],
     ]);
     // glow across the mouth (reads from every angle the plume shells do not) and a faint halo behind the lip
     glows.push(
