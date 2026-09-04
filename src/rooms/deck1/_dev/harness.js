@@ -12,6 +12,7 @@ import { createPost } from "../../../post.js";
 import { createHUD } from "../../../hud.js";
 import { buildSpace } from "../../../space.js";
 import { addStandins } from "./standins.js";
+import { DOOR_KINDS } from "../shared/doors.js";
 
 const params = new URLSearchParams(location.search);
 const onlyRooms = params.get("rooms") ? params.get("rooms").split(",") : null;
@@ -246,7 +247,30 @@ function pairDoors() {
     if (dot > -0.99) warn(`door ${id}: dirs are not opposite (${a.room} vs ${b.room})`);
     if (a.d.kind !== b.d.kind) warn(`door ${id}: kinds differ (${a.d.kind} vs ${b.d.kind})`);
     if (a.d.to !== b.room || b.d.to !== a.room) warn(`door ${id}: 'to' mismatch (${a.room}→${a.d.to}, ${b.room}→${b.d.to})`);
+    if (params.get("leaves") !== "0") doorLeafStandin(a.d);
   }
+  if (params.get("leaves") !== "0") for (const r of rooms.values()) if (r.manifest.lift) doorLeafStandin({ ...r.manifest.lift, kind: "standard" });
+}
+
+// Closed door leaves for every paired door (and the lift door), so the shots show doors at rest the way D's doors
+// system will (closed until approached) instead of open holes: without them a corridor luminaire 40 m away reads as
+// a white blob inside the bridge's aft doorway, and neighbour pool light spills through every opening. `?leaves=0`.
+const leafGroup = new THREE.Group();
+leafGroup.name = "door-leaf-standins";
+scene.add(leafGroup);
+const leafMat = new THREE.MeshStandardMaterial({ color: 0x2a2d33, roughness: 0.8, metalness: 0.2 });
+const leafSeamMat = new THREE.MeshStandardMaterial({ color: 0x0c0d10, roughness: 0.9, metalness: 0.1 });
+function doorLeafStandin(d) {
+  const k = DOOR_KINDS[d.kind] || DOOR_KINDS.standard;
+  const alongX = Math.abs(d.dir[2]) > 0.5; // door in a wall that runs along x (normal ±z)
+  const geo = alongX ? new THREE.BoxGeometry(k.w, k.h, 0.2) : new THREE.BoxGeometry(0.2, k.h, k.w);
+  const m = new THREE.Mesh(geo, leafMat);
+  m.position.set(d.pos[0], d.pos[1] + k.h / 2, d.pos[2]);
+  leafGroup.add(m);
+  // centre seam so the leaf reads as a pair
+  const seam = new THREE.Mesh(alongX ? new THREE.BoxGeometry(0.04, k.h - 0.1, 0.22) : new THREE.BoxGeometry(0.22, k.h - 0.1, 0.04), leafSeamMat);
+  seam.position.copy(m.position);
+  leafGroup.add(seam);
 }
 
 async function loadModules() {

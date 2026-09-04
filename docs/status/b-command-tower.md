@@ -66,7 +66,11 @@ lining x ±19, y 241.2..245.4, z 455.5..458.3). `d1-observation` → `["observat
 | 4 | Officers' quarters (private corridor + cabins + wardroom) | `src/rooms/deck1/officers/**` | done (f0a80c75) |
 | 5 | Observation gallery (window band) | `src/rooms/deck1/observation/**` | done (f4120da1) |
 | 6 | Deck 1 corridors + lift lobby (spine, port/stbd passages, lobby) | `src/rooms/deck1/spine/**`, `src/rooms/deck1/corridor-port/**`, `src/rooms/deck1/corridor-stbd/**`, `src/rooms/deck1/lobby/**` | done (27f6d314) |
-| C | Blind visual critic (screenshots + §11 brief only) | none (report only) | running on 22 final shots |
+| C | Blind visual critic (screenshots + §11 brief only) | none (report only) | round 1: two critics on 22 shots (done) · round 2: one critic on 24 shots (done) · round 3: final pass (below) |
+| 1b | Bridge critic rounds 1 + 2 (same owner, resumed) | `src/rooms/deck1/bridge/**` | done (942b4a63, 9ef7ce24) |
+| 2b | Nav + tactical + comms + intel critic round 2 | those four folders | done (c07fad9e) |
+| 3b | Officers + observation critic round 2 | those two folders | done (583ebb25) |
+| 4b | Spine + passages + lobby critic round 2 | those four folders | done (2a8514d5) |
 
 Shared Deck-1 helpers (mine, not copies of ship.js): `src/rooms/deck1/shared/` — `imperial.js` (wall with openings,
 floor, ceiling with recessed channels, light strip, railing, stairs, partition, corridor dressing, door reveal),
@@ -74,6 +78,40 @@ floor, ceiling with recessed channels, light strip, railing, stairs, partition, 
 the scaffold adds `PALETTE.imp*`), `plan.js`. Dev harness: `src/rooms/deck1/_dev/` (no `index.js` inside).
 
 ## Done
+Critic round 2 fixes (pushed; each verified with a fresh harness run, 0 registry-shim warnings):
+- Shared (f67b912a): ceilings and officers' plates off the chip-mapped `paintedMetal`; transit pool lights −0.7 EV;
+  stand-in emissive cap 1.35–1.6, `blackGloss` roughness 0.3, `impPanel` dents/grime flattened (see Tested).
+- `d1-bridge` (9ef7ce24): wall displays on arms with cable drops at varied heights/widths, every third swapped for a
+  junction or vent cluster, different screen cell per neighbour; housed head-height strips + 3 m cable tray + conduit
+  drops + junction boxes on the pit walls; raft louvres 0.12 m deep with 0.14 m diffusers; blast-door surround with a
+  lit lintel (holo lines normal-blended — the 34 m white streak is gone); 18×13 mm keycaps in scuffed wells, chair
+  back with seam grid/vents/readout, lecterns re-keyed; aft pendants 70/85 cd with two hooded console pods in the
+  command camera's foreground; sill task lights hooded; beam flanges and holo plinth top off the mirror materials;
+  module-local `bridgeLamp` diffuser (paid for by dropping `fabric`). 84.7k tris / 23 calls / 22 desc / 169 colliders /
+  188 ms; clipped px per view 0–39 (all inside lamp diffusers).
+- `d1-nav`, `d1-tactical`, `d1-comms`, `d1-intel` (c07fad9e): nav light canopy over the dais with the key spot
+  housed in its channel, lockers with seams/hinges/handles/LEDs/plates (one ajar); tactical 0.22 m louvred downlight
+  cans, pedestal + lectern readouts, `H-2` floor hatch with bolts/markers/stencils, west-row `distance` 9.5 (plot-table
+  mirror streak); comms linear luminaires with housed points, sensor towers with control housing/screen/plates,
+  per-seed rack LED fill + one open door + one pulled tray, dais plinth seams/toe strip/readout, aisle plate off
+  paintedMetal; intel guard post (sign, intercom, reader, glazed door, monitor cluster), red floor strips both sides,
+  checkpoint destination lighting, CLEAR / INNER GATE OPEN indicators, screen roughness 0.7. Nav 43.1k / 16 / 11;
+  tactical 52.5k / 16 / 13; comms 74.6k / 15 / 14; intel 35.2k / 13 / 14.
+- `d1-officers`, `d1-observation` (583ebb25): impPanel on every officers' surface above knee height, 1.5 cm recessed
+  floor strips, hanging louvred cabin luminaires with the spot inside, beds with frame/bedding/pillow/blanket, bordered
+  rugs, wardrobe recess, mirror + shelf, desk chairs, wardroom pendant shades (no ceiling wash), amber wainscot strip,
+  locker-bay wash, trays/cups/plates, dark baize table top, intensities −0.45 EV, shadow-slot cones ≤ 1.35 rad;
+  observation benches on legs with split fabric cushions, mid-grey apron, segmented fascia hairline, binocular viewer
+  on the sill, soffit cans + under-sill fill, neutral pendants, module-local `obsScreen` atlas (star charts, hull cam,
+  schedule) on bezelled displays. Officers 68.8k / 16 / 14 / 113; observation 29.5k / 15 / 13 / 42.
+- `d1-spine`, passages, `d1-lobby` (2a8514d5): module-local non-specular `emitStrip` for every white strip/lens (the
+  "blobs" were the channel strips mirroring the pool points, not emission); junction point inside the closed top slab
+  off the channel axis, lathe bezel, blue floor accent removed; lobby bench on legs with split cushions, painted
+  lift-queue lane instead of the raised pad, drum luminaire, header point inside its block, backlit numerals tamed;
+  pools spine 5.8/8, stbd 2.8, port 2.2, lobby 9/2.5/2.4/1; the bridge's aft corner pendants reach 10 m instead of 20
+  (they lit the port passage through the door wall at E ≈ 0.6). Transit views mean luminance 18–30 (was 42–60), 0
+  clipped px.
+
 Phase 2 detail (pushed; each verified with a fresh harness run, 0 registry-shim warnings):
 - `d1-bridge` (51dcfe07): 24 descriptors (key spot parked in the reveal aimed at the walkway, 3 pendants, dais spot,
   6 pit light rafts, 4 wall washes, 4 low pit accents, holo glow); bridge console family with 23–26 emissives per unit
@@ -238,6 +276,17 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   with `envMapIntensity` ≤ 0.4 keeps a faint sheen and no blob; bridge, nav, tactical, intel and the harness stand-ins
   all use that now. Please set the real `screenImp*` the same way, or every room that used the shared screens
   inherits the blobs back the moment the stand-ins are deleted.
+- **`paintedMetal` (and the worn `metal` set) must not cover room-scale surfaces.** Its chip/blotch map reads as
+  dirt specks on ceilings, mould blotches on wall plates and spilled fluid on floors — that was critic round 2's
+  systemic finding #3 after round 1 had already moved it off the floors. Deck 1 now uses it only for trim, kick bands
+  and housings < 0.5 m²; ceilings, plates and pit floors are clean panel/deck materials with tint compensation. For
+  §10: `impPanel`/`impFloor`/ceiling panels should carry wear only at kick height, and a clean "painted steel" for
+  beams/trays would let rooms stop tinting the worn map.
+- **Shadow-casting slot 0 needs a bias / cone rule (§9.4).** The pool's one shadow-casting spot renders a shadow map
+  whose frustum is 2× the descriptor's `angle`; a 1.5 rad pool that lands in slot 0 becomes a 172° shadow camera with
+  ~8 cm texels and stripes every lit wall near the player with acne (officers' corridor, round 2). A `shadow.bias`
+  / `normalBias` on the slot-0 light in the pool, or clamping shadow casters to ≤ 1.3 rad, removes it; until then my
+  rooms keep pools at ≤ 1.35 rad and give the tight fixtures the higher priority.
 - **Pool lights leak through shared walls (found by the intel round, matters for every deck).** Pool lights cast no
   shadows, so a neighbour room's descriptors light every surface in the current room that faces them. Repro:
   `d1-intel-vestibule` with `d1-corridor-stbd` active — the corridor's two nearest cool-white points (5 m away, behind
