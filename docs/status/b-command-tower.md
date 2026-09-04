@@ -244,8 +244,29 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   roughness 0.3, `impPanel` dents/grime flattened. Room lists (items 4–6 + every FAIL/MARGINAL line) dispatched to
   four owners: bridge, officers + observation, nav/tactical/comms/intel, corridors + lobby.
 
+- Full-deck run `p3-final` after the round-2 fixes: **55 views, 0 registry-shim warnings**, every room inside budget
+  (bridge 84.7k tris / 23 calls / 22 desc / 169 colliders / 169 ms; spine 109k / 14 / 13 / 201 / 148 ms; comms
+  74.6k / 15 / 14; officers 68.8k / 16 / 14; tactical 52.5k / 16 / 13; nav 43.1k / 16 / 11; intel 35.2k / 13 / 14;
+  observation 29.5k / 15 / 13; passages 27k / 14–15; lobby 13.8k / 16 / 5). Whole frame 82–202 calls, 106k–661k tris,
+  12–16 pool lights. Mean luminance per view: bridge 18–27, transit 18–29, lobby 24, nav 20–25, tactical 26–28, comms
+  22–32, officers 22–30, observation 29–38, intel 13–19 — the ladder is no longer inverted. Clipped pixels: 0 in 13 of
+  the 24 critic views, ≤ 40 in the bridge views (lamp diffusers), ≤ 260 elsewhere (holo cores, screen highlights,
+  cabin lens).
+- Critic round 3 (one blind critic, the same 24 views from `p3-final`): PASS 9 (`d1-bridge-walkway`,
+  `d1-bridge-window`, `d1-nav-holo`, `d1-comms-station`, `d1-intel-gate`, `d1-intel-vestibule`,
+  `d1-observation-window`, `d1-spine-junction`, `d1-corridor-stbd-bulkhead`), MARGINAL 14, FAIL 1
+  (`d1-officers-wardroom`: "table isolated in a black hall"). Round 1 → 2 → 3: FAIL 17 → 4 → 1, PASS 5 → 7 → 9.
+  Its ranked list: (1) destination rooms crush to black away from the emissives (floors/ceilings pure black — see the
+  per-room ambient request); (2) bare, evenly lit panel grid above console height; (3) a few emissives still clip
+  (channels, comms downlights, holo cores, the tactical table's mirror blob); (4) one stock locker prop recurs in nav,
+  tactical and the wardroom; slab furniture; (5) footprints sized for the bridge, not the function (cabin, wardroom);
+  (6) functional wear absent or misreading. DoD words still attached to 10 views (bridge pit/dais/command, nav dais,
+  tactical overview, observation lounge, officers corridor/cabin/wardroom, spine bay). Round-3 lists dispatched to
+  the four owners (running); the harness now closes every paired door with a leaf stand-in (4e8d0d39) so a corridor
+  luminaire 40 m away no longer reads as a white blob inside the bridge's aft doorway.
+
 ## Remaining
-1. Critic round 2 room fixes (four owners running) → verify each with a harness run → push → final full-deck run.
+1. Critic round 3 room fixes (four owners running) → verify each with a harness run → push → final full-deck run.
 2. Replace corridor greybox with D's `corridorSegment` when it lands; switch `doorHole` import to D's helper.
 3. Delete `_dev/` and re-test on the real registry when `SCAFFOLD READY`.
 4. Phase 3 budgets/warnings/status.
