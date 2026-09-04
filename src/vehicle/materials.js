@@ -5,6 +5,7 @@ import {
   applyCabinBounce,
   applyDirt,
   applyGlassFilm,
+  applyMirrorHorizon,
   bedLinerMaps,
   brushedMaps,
   cabinAtlas,
@@ -269,27 +270,21 @@ export function vehicleMaterials(env = null) {
   // of sky. The forest grade returned one khaki value across the whole glass
   // — a painted plate, not a mirror — so this one carries the real PMREM at
   // near full strength for the sky half and grades the ground half itself.
+  //
+  // A mirror, not brightwork. The brushed roughness map and the steel normal
+  // map it inherited from `chrome` smeared the reflection into a soft blur, and
+  // the analytic skyline on top of that was a second, mismatched horizon: the
+  // face read as an orange-beige gradient. It is a flat metal at roughness 0.02
+  // on the scene PMREM at full strength — sky and acacia line above the horizon
+  // are the real environment — and `applyMirrorHorizon` grades only what is
+  // below the horizon, where the PMREM's straw plain is one tan value.
   m.mirrorGlass = new THREE.MeshStandardMaterial({
-    color: 0xd6dcdf,
+    color: 0xf4f6f7,
     metalness: 1.0,
-    roughness: 0.04,
-    roughnessMap: brushed.rough,
-    normalMap: metal.normal,
-    normalScale: new THREE.Vector2(0.04, 0.04),
-    envMapIntensity: 0.7,
+    roughness: 0.02,
+    envMapIntensity: 1.0,
   });
-  applyBrightwork(m.mirrorGlass, {
-    tag: 'mirrorGlass',
-    strength: 0.75,
-    lobe: 0.35,
-    flat: 0,
-    band: 0.5,
-    trees: 0.6,
-    line: 0.1,
-    ground: 0x5e4632,
-    wall: 0x50442f,
-    rim: 0xfff0d8,
-  });
+  applyMirrorHorizon(m.mirrorGlass, { tag: 'mirrorGlass' });
   m.alu = new THREE.MeshStandardMaterial({
     // Brighter than the steel and cooler: bare aluminium is the light metal in
     // the frame and its identity is value, not gloss. With the steel map now
@@ -535,85 +530,93 @@ export function vehicleMaterials(env = null) {
   // itself against a dark cab — the milky read. Now it takes the pane's own
   // irradiance, so it is bright where the sun lands and goes quiet in shade.
   //
-  // The reflection is Fresnel-weighted analytic sky, which means the pane
-  // mirrors hard at grazing angles — the read from outside — and stays clear
-  // looking straight through it from the driver's seat.
+  // The reflection is the scene's own PMREM — the same `envMap` the paint
+  // carries, handed to every material here by `vehicleMaterials(env)` and
+  // rescaled per hour by the sky — through the BRDF's Fresnel at ior 1.5, with
+  // the analytic skyline of `applyBrightwork` only as break-up under it. The
+  // material is premultiplied so the reflection is added over the scene at full
+  // strength rather than scaled by the pane's opacity; see the `pane` path in
+  // `applyBrightwork` for the compositing. `opacity` here is therefore the
+  // tint alone — the fraction of the cabin the glass absorbs face-on — and the
+  // Fresnel close is added to it in the shader.
+  //
+  // No clearcoat: the pane *is* the dielectric interface, and a coat on top of
+  // it was a second 4 per cent layer doubling every reflection.
   const pane = (key, { kind, color, opacity, roughness, film, bw }) => {
     const mat = new THREE.MeshPhysicalMaterial({
+      // Near-black. Glass has no diffuse of its own, and whatever albedo the
+      // pane carries is lit by the sun and laid over the cabin as a wash — the
+      // old 0x33474f at 0.26 opacity was most of the "tan film" the sunlit door
+      // glass read as. The tint is the alpha; the colour only names its hue.
       color,
       map: glassTintMap(),
       metalness: 0.0,
       roughness,
       roughnessMap: kind === 'screen' ? glassRoughness() : null,
-      // Enough tint to read as glass, but the pane has to stay see-through: at
-      // a higher env intensity it just mirrors the forest and goes opaque black.
+      ior: 1.5,
       opacity,
       transparent: true,
-      // The BRDF's own Fresnel takes this to a full sky mirror at grazing
-      // angles, which from the driver's seat is a pale wedge across the bottom
-      // of the screen. Kept as a glare, with the graded reflection doing the
-      // rest.
-      envMapIntensity: 1.0,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.03,
+      premultipliedAlpha: true,
+      // Above unity on purpose. The PMREM is rendered without the sun's
+      // aureole (a hot disc fireflies its mips) and the hour rescales it
+      // downward, so at 1.0 a four per cent Fresnel of it over a lit cabin was
+      // measured invisible in every view under 45 degrees. The sky a real
+      // screen mirrors is one to two stops brighter than the ground it is
+      // parked on; this puts that ratio back.
+      envMapIntensity: 1.8,
       side: THREE.DoubleSide,
       depthWrite: false,
     });
-    // `pane` is the important flag: it adds the graded reflection again after
-    // the lighting and lifts the alpha with it, because a 0.28-opacity blend
-    // and the BRDF's own 4 per cent Fresnel between them were scaling the
-    // windscreen's reflection down by about a hundred. With it the screen
-    // mirrors the tree line at the angles `detail` and `hero` see it at, and
-    // stays see-through from the driver's seat.
     applyBrightwork(mat, {
       tag: key,
-      strength: 1.25,
-      band: 0.55,
-      // the pane is what most obviously ought to be mirroring the world, so it
-      // gets the strongest break-up of anything on the truck
+      // Break-up under the PMREM: this puts the acacia line and the horizon
+      // streak into a sky that would otherwise grade smoothly, so a pane
+      // visibly mirrors *something*. It goes into `radiance`, so it is scaled
+      // by the same Fresnel as the environment and is invisible face-on.
+      strength: 0.9,
+      band: 0.5,
       trees: 1.15,
       line: 0.3,
-      pane: 1.2,
-      clearcoat: true,
-      ground: 0x141712,
-      wall: 0x1c2117,
+      pane: 1.0,
+      ground: 0x3a2618,
+      wall: 0x2a2a1c,
       rim: 0xfff0d2,
-      // A window mirrors the sky more directly than anything else on the
-      // truck, so it has the least excuse for using a bluer one than the scene
-      // has. Inherits REFLECTED_SKY.
       ...bw,
     });
     applyGlassFilm(mat, { tag: key, kind, ...film });
     m[key] = mat;
     return mat;
   };
-  // Windscreen: wiped, so the least dusty, with the factory shade band.
+  // Windscreen: wiped, so the least dusty, with the factory shade band. A
+  // laminated screen is the clearest glass on the truck — about ten per cent.
   pane('glass', {
     kind: 'screen',
-    color: 0x33474f,
-    opacity: 0.26,
-    roughness: 0.07,
-    film: { dustAmount: 0.9, dustAlpha: 0.5, band: 0.5 },
+    color: 0x141c1c,
+    opacity: 0.1,
+    roughness: 0.05,
+    film: { dustAmount: 0.9, dustAlpha: 0.3, band: 0.55, dust: 0x9c8468 },
   });
-  // Door glass: same tint, nothing ever wipes it. `glassDark` used to stand in
-  // for both this and the rear glass and the door panes carried the
-  // windscreen's wiper arcs, which is why the two never agreed.
+  // Door glass: a light grey-green, nothing ever wipes it. `glassDark` used to
+  // stand in for both this and the rear glass and the door panes carried the
+  // windscreen's wiper arcs, which is why the two never agreed. The dust is
+  // held well down from the screen's: the film was lit by the sun on the
+  // sunlit flank and the whole cabin behind it read as one amber wash.
   pane('glassSide', {
     kind: 'side',
-    color: 0x33474f,
-    opacity: 0.26,
-    roughness: 0.08,
-    film: { dustAmount: 1.0, dustAlpha: 0.42, band: 0 },
+    color: 0x16201e,
+    opacity: 0.14,
+    roughness: 0.05,
+    film: { dustAmount: 1.0, dustAlpha: 0.22, band: 0, dust: 0x9c8468 },
   });
   // Rear cab glass: sits in the plume the truck drags behind it.
   pane('glassDark', {
     kind: 'rear',
-    color: 0x2c3d44,
-    opacity: 0.3,
-    roughness: 0.1,
+    color: 0x141c1c,
+    opacity: 0.16,
+    roughness: 0.06,
     // in the cab's own shadow all day, so the film takes more skylight
-    film: { dustAmount: 1.0, dustAlpha: 0.7, band: 0, dustAmbient: 0.42 },
-    bw: { strength: 1.1, band: 0.45, trees: 1.0, pane: 1.1, wall: 0x1b2016, rim: 0xfbecce, sky: reflectedSky(1.2) },
+    film: { dustAmount: 1.0, dustAlpha: 0.42, band: 0, dustAmbient: 0.3, dust: 0x9c8468 },
+    bw: { wall: 0x2a2a1c, rim: 0xfbecce, sky: reflectedSky(1.1) },
   });
   // The cut edge of a pane. Glass is 5 mm of green-tinted solid, and the one
   // place that shows is the edge: light pipes along the sheet and comes out of
@@ -626,13 +629,19 @@ export function vehicleMaterials(env = null) {
   // metres. Most of the edge's brightness now comes from the graded
   // reflection, which only fires where the frame faces the sky, so the top
   // edges glint and the bottom edges stay a dark bottle-green.
+  //
+  // It is a 6 mm rim now, standing a few millimetres proud of the pane so it
+  // is seen edge-on from the outside as a thin bright line where the sheet
+  // meets the gasket, and most of its length is under the rubber lip. Polished
+  // rather than satin: a cut and seamed edge is glossy, and the highlight is
+  // what says "thickness" from three metres.
   m.glassEdge = new THREE.MeshStandardMaterial({
     color: 0x1e4038,
     emissive: 0x0c2a22,
-    emissiveIntensity: 0.4,
+    emissiveIntensity: 0.12,
     metalness: 0.0,
-    roughness: 0.16,
-    envMapIntensity: 0.7,
+    roughness: 0.08,
+    envMapIntensity: 0.9,
   });
   applyBrightwork(m.glassEdge, {
     tag: 'glassEdge',
@@ -646,6 +655,24 @@ export function vehicleMaterials(env = null) {
     rim: 0xd8f5d8,
     sky: 0x8cc4b4,
   });
+  // The rubber round every pane: an EPDM channel, 16 mm wide, holding the sheet
+  // and the frame apart. Its own material rather than `trim` or `gap`, because
+  // it is read from both sides — from outside it is the dark surround that
+  // gives a pane an edge against the paint, and from the seats it is the sill
+  // of the window, which used to be the bare cut face of the glass: a
+  // bottle-green box with no cabin light on it, i.e. the hard black band along
+  // the bottom of the door glass in every interior frame. Matte, with a little
+  // sheen along the top where the extrusion's radius catches the sky, and the
+  // cabin bounce so it reads as rubber in the cab rather than as a hole.
+  m.gasket = new THREE.MeshStandardMaterial({
+    color: 0x232423,
+    normalMap: rubber.normal,
+    normalScale: new THREE.Vector2(0.35, 0.35),
+    metalness: 0.0,
+    roughness: 0.6,
+    envMapIntensity: 0.35,
+  });
+  applyBrightwork(m.gasket, { tag: 'gasket', strength: 0.35, band: 0.3, trees: 0.3, fresnel: 0.5, ambient: 0.45 });
 
   // --- lights --------------------------------------------------------------
   // Reflector bowls are concave, so they are read from the inside: double-sided
@@ -1092,6 +1119,9 @@ export function vehicleMaterials(env = null) {
     trim: { gain: 0.75, floor: 0.3 },
     trimGloss: { gain: 0.68, floor: 0.28, spec: 0.55 },
     steelDark: { gain: 0.7, floor: 0.3, spec: 1.4 },
+    // the window rubbers: seen from the seats as the sill of every window,
+    // so they take the door cards' floor and stay a shade under them
+    gasket: { gain: 0.7, floor: 0.34 },
     // shadow gaps stay the darkest thing in the cabin, just not pure black
     gap: { gain: 0.16, floor: 0.07 },
   };

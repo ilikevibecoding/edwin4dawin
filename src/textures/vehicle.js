@@ -572,10 +572,10 @@ export function applyBrightwork(
           // hard-edged sheet of pale sage lying on the cowl. What it should be
           // mirroring at that angle is the dash, 400 mm below it. There is no way
           // to tell three that, so on the cabin side the sky mirror is cut to a
-          // fifth and the graded reflection above carries the pane instead.
-          radiance *= mix( 0.2, 1.0, bwOut );
+          // sixth and the graded reflection above carries the pane instead.
+          radiance *= mix( 0.16, 1.0, bwOut );
           #ifdef USE_CLEARCOAT
-            clearcoatRadiance *= mix( 0.2, 1.0, bwOut );
+            clearcoatRadiance *= mix( 0.16, 1.0, bwOut );
           #endif`
               : ''
           }
@@ -584,29 +584,124 @@ export function applyBrightwork(
         #endif`,
       );
 
-    // A blended pane multiplies everything it computes by its own opacity, and
-    // the specular BRDF has already multiplied the reflection by a Fresnel term
-    // of a few per cent. Between them a windscreen reflection comes out around a
-    // hundredth of the radiance it should carry, which is why the glass had no
-    // read at all. So for panes the graded reflection is added again after the
-    // lighting, weighted by one Fresnel term only, and the alpha is lifted by the
-    // same amount: glass goes mirror-opaque at grazing angles and stays
-    // see-through face-on, which is the behaviour a windscreen actually has. From
-    // the cabin side both terms are cut to a quarter, so the screen keeps a dim
-    // reflection of the dash without turning the view out of it into a wall.
+    // Glass over a *premultiplied* blend.
+    //
+    // A straight alpha blend multiplies everything the pane computes by its own
+    // opacity, so a 26 per cent windscreen carried 26 per cent of its reflection
+    // — and the BRDF had already scaled that reflection by Fresnel, a few per
+    // cent face-on. The old fix added the graded sky again after the lighting
+    // and lifted the alpha with it; the PMREM itself never reached the frame,
+    // which is why no pane at any angle showed the actual sky.
+    //
+    // The physically right split is: what the surface *reflects* (the specular
+    // lobe — sky environment, sun, the graded break-up) is added over the scene
+    // at full strength, and what the pane *blocks* (its tint plus the fraction
+    // it reflected) is what closes the alpha. The material is flagged
+    // `premultipliedAlpha`, so three blends ONE / ONE_MINUS_SRC_ALPHA and
+    // multiplies rgb by alpha at the very end of the shader; writing
+    // `diffuse + specular / alpha` here lands as `diffuse * alpha + specular`
+    // after that multiply. Fog and dust (both applied later in the chain) stay
+    // correct because they were already written against `diffuseColor.a`.
+    //
+    // Alpha is Schlick at ior 1.5 (4 per cent head-on, 1 at grazing) on top of
+    // the tint: the pane darkens the cabin by its tint face-on and goes to a
+    // mirror of the sky along the roof edge and in the raked views, which is
+    // what a windscreen does. From the cabin side the Fresnel close is cut,
+    // since the sky mirror is the wrong reflection to see from a seat.
     if (pane) {
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <opaque_fragment>',
-        `outgoingLight += bwPaneRefl * ( uBwStrength * bwPaneF * uBwPane );
-        diffuseColor.a = clamp( diffuseColor.a + bwPaneF * uBwPane * 0.95, 0.0, 1.0 );
-        // The dust film is carried on emissive, so it is the one channel that a
-        // reflection cut cannot reach — and emissive does not care which way the
-        // face points. Dust does veil a screen from inside, so it is not removed,
-        // only taken to a third.
-        totalEmissiveRadiance *= mix( 0.32, 1.0, bwPaneOut );
+        `{
+          float gzNV = clamp( dot( normal, geometryViewDir ), 0.0, 1.0 );
+          float gzE = 1.0 - gzNV;
+          float gzE2 = gzE * gzE;
+          float gzF = 0.04 + 0.96 * gzE2 * gzE2 * gzE;
+          gzF *= mix( 0.2, 1.0, bwPaneOut ) * uBwPane;
+          float gzA = clamp( diffuseColor.a + gzF * ( 1.0 - diffuseColor.a ), 0.02, 1.0 );
+          vec3 gzD = totalDiffuse + totalEmissiveRadiance * mix( 0.32, 1.0, bwPaneOut );
+          vec3 gzS = max( outgoingLight - totalDiffuse - totalEmissiveRadiance, vec3( 0.0 ) );
+          outgoingLight = gzD + gzS / gzA;
+          diffuseColor.a = gzA;
+        }
         #include <opaque_fragment>`,
       );
     }
+  });
+}
+
+/**
+ * What a door mirror shows below the horizon.
+ *
+ * The mirror pane is a metal at roughness 0.02 over the scene PMREM, so the sky
+ * half of it is the real sky. The ground half of the PMREM is the lit straw
+ * plain the environment is authored as — one even tan from the horizon down,
+ * which on a 140 mm pane read as a painted beige plate. Under this truck is red
+ * laterite, and the skyline of a savanna is a low band of scrub: so below the
+ * horizon the reflected ray is graded itself — scrub band under the skyline,
+ * laterite, darker in the truck's own shadow straight down — with the horizon
+ * itself left as a hard line, which is the one feature that says "mirror".
+ */
+export function applyMirrorHorizon(
+  material,
+  {
+    tag = 'mh',
+    // Laterite in sun near the skyline, the truck's own shadow straight down.
+    // The first pass at 0xa2603c came back as a saturated orange plate; a
+    // reflection of the plain is duller than the plain, and darker than the
+    // sky above it by a stop or more.
+    ground = 0x7d5238,
+    groundNear = 0x3a2217,
+    scrub = 0x33301c,
+    // the PMREM's sky is held a touch above unity so the sky half reads bright
+    // against the ground, the way a mirror does against the shell round it
+    sky = 1.15,
+  } = {},
+) {
+  const u = {
+    uMhGround: { value: new THREE.Color(ground) },
+    uMhNear: { value: new THREE.Color(groundNear) },
+    uMhScrub: { value: new THREE.Color(scrub) },
+    uMhSky: { value: sky },
+  };
+  material.userData.mh = u;
+  return extendMaterial(material, `mh:${tag}`, (shader) => {
+    Object.assign(shader.uniforms, u);
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform vec3 uMhGround;
+        uniform vec3 uMhNear;
+        uniform vec3 uMhScrub;
+        uniform float uMhSky;`,
+      )
+      .replace(
+        '#include <lights_fragment_maps>',
+        `#include <lights_fragment_maps>
+        #if defined( RE_IndirectSpecular )
+        {
+          vec3 mhN = inverseTransformDirection( geometryNormal, viewMatrix );
+          vec3 mhV = inverseTransformDirection( geometryViewDir, viewMatrix );
+          vec3 mhR = reflect( -mhV, mhN );
+          float mhUp = mhR.y;
+          float mhAz = atan( mhR.x, mhR.z );
+          // scrub line: a few degrees deep, broken along the horizon so it is a
+          // treeline and not a rule
+          float mhTr = 0.5 + 0.5 * sin( mhAz * 9.0 ) * sin( mhAz * 23.0 + 1.3 );
+          float mhBand = ( 1.0 - smoothstep( -0.06 - 0.04 * mhTr, -0.02, mhUp ) ) * smoothstep( -0.12, -0.07, mhUp );
+          vec3 mhG = mix( uMhNear, uMhGround, smoothstep( -0.75, -0.05, mhUp ) );
+          mhG = mix( mhG, uMhScrub, mhBand * 0.85 );
+          // Exposed by the hour through the PMREM itself: the ground colours
+          // are authored for the day plain (luma 0.26 in the map), and the
+          // same ray at dusk or night returns a fraction of that, so the
+          // laterite dims with the sky instead of glowing orange after dark.
+          float mhLum = dot( radiance, vec3( 0.2126, 0.7152, 0.0722 ) );
+          mhG *= clamp( mhLum / 0.26, 0.0, 1.3 );
+          float mhBelow = 1.0 - smoothstep( -0.012, 0.004, mhUp );
+          radiance = mix( radiance * uMhSky, mhG, mhBelow );
+        }
+        #endif`,
+      );
   });
 }
 
@@ -1588,6 +1683,26 @@ export function glassRoughness() {
  * opacity changes nothing you can see, because the blend only mixes that much
  * of it in — a darker band on glass is more glass, not darker glass.
  */
+/**
+ * Ceramic frit round a bonded pane: a solid band `bu` / `bv` wide (in uv units,
+ * so sized per pane from its real dimensions), then a fade of shrinking dots
+ * `fu` / `fv` deep on the inner edge. The dots are on a fixed 6-texel grid, and
+ * their radius runs from touching at the band to nothing at the clear glass —
+ * which is exactly how a screen-printed frit is dithered out.
+ */
+function fritBand(u, v, bu, bv, fu, fv, x, y) {
+  const du = 0.5 - Math.abs(u - 0.5);
+  const dv = 0.5 - Math.abs(v - 0.5);
+  if (du < bu || dv < bv) return 1;
+  // how far into the fade, 1 at the band edge and 0 at the clear glass
+  const t = Math.max(1 - (du - bu) / fu, 1 - (dv - bv) / fv);
+  if (t <= 0) return 0;
+  const gx = (x % 6) - 2.5;
+  const gy = (y % 6) - 2.5;
+  const r = Math.hypot(gx, gy);
+  return r < 3.2 * t ? 1 : 0;
+}
+
 export function glassLayerMap(kind = 'screen') {
   return cached(`veh.glassLayer.${kind}`, () =>
     pixelTexture(
@@ -1633,8 +1748,15 @@ export function glassLayerMap(kind = 'screen') {
           const corner = smoothstep(0.3, 0.5, Math.abs(cx)) * 0.6 + smoothstep(0.78, 1.0, v) * 0.6;
           const ledge = (1 - smoothstep(0.0, 0.1, v)) * 0.45;
           dust = clamp((0.3 + blotch * 0.3 + corner + ledge) * (1 - swept * 0.88) + grit * 0.14 * (1 - swept * 0.6));
-          band = smoothstep(0.7, 1.0, v) * (0.85 + 0.15 * fbm(u * 6, v * 6, { octaves: 2, period: 6, seed: 3 }));
-          frit = Math.max(smoothstep(0.455, 0.49, Math.abs(cx)), smoothstep(0.44, 0.485, Math.abs(v - 0.5)));
+          // Factory shade band: about 120 mm of the 810 mm pane, graded out.
+          // The first cut ran from 70 per cent height, a 270 mm band, which is
+          // a third of the screen and read as a separate darker pane.
+          band = smoothstep(0.84, 1.0, v) * (0.85 + 0.15 * fbm(u * 6, v * 6, { octaves: 2, period: 6, seed: 3 }));
+          // Ceramic frit: a solid 45 mm band round the perimeter (the 1.54 m
+          // screen puts that at 2.9 per cent of u, the 0.81 m height at 5.5 per
+          // cent of v) with the dot fade a real screen has on its inner edge,
+          // 15 mm of dots shrinking towards the clear glass.
+          frit = fritBand(u, v, 0.029, 0.055, 0.01, 0.019, x, y);
         } else if (kind === 'side') {
           // Door glass. Nothing wipes it, so the film is the wind's: streaks
           // trailing aft and down from the leading edge, the whole lower rear
@@ -1648,7 +1770,9 @@ export function glassLayerMap(kind = 'screen') {
           const wipe = 1 - smoothstep(0.18, 0.32, Math.hypot((u - 0.42) * 0.8, v - 0.55));
           const drips = smoothstep(0.55, 0.9, streak) * (1 - smoothstep(0.0, 0.7, v));
           dust = clamp((0.16 + blotch * 0.3 + streak * 0.2 + rearLow * 0.45 + drips * 0.18) * (1 - wipe * 0.65));
-          frit = Math.max(smoothstep(0.45, 0.49, Math.abs(cx)), smoothstep(0.44, 0.485, Math.abs(v - 0.5)));
+          // Door glass is not bonded, so it has no frit; what it has is the edge
+          // of the sheet disappearing into the channel, a centimetre of dark.
+          frit = Math.max(smoothstep(0.478, 0.495, Math.abs(cx)), smoothstep(0.472, 0.492, Math.abs(v - 0.5)));
         } else {
           // Rear glass. Lives inside the plume the truck drags behind it, so
           // it is the dustiest pane by a wide margin, with a single finger
@@ -1656,7 +1780,8 @@ export function glassLayerMap(kind = 'screen') {
           const blotch = fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: 209 });
           const finger = 1 - smoothstep(0.03, 0.05, Math.abs(v - 0.5 - (u - 0.5) * 0.12)) * smoothstep(0.2, 0.3, u);
           dust = clamp(0.55 + blotch * 0.45 - finger * 0.5 * smoothstep(0.55, 0.9, u));
-          frit = Math.max(smoothstep(0.44, 0.49, Math.abs(cx)), smoothstep(0.43, 0.485, Math.abs(v - 0.5)));
+          // bonded rear glass: a 40 mm frit on a 1.26 x 0.44 m pane
+          frit = fritBand(u, v, 0.032, 0.09, 0.008, 0.02, x, y);
         }
         out[0] = dust * 255;
         out[1] = band * 255;
@@ -1822,8 +1947,8 @@ export function glassTintMap() {
       (x, y, out) => {
         const u = x / S;
         const v = y / S;
-        // factory shade band across the top, fading out by two-thirds height
-        const band = smoothstep(0.62, 1.0, v);
+        // factory shade band across the top, the same 120 mm the layer map has
+        const band = smoothstep(0.84, 1.0, v);
         // frit + seal round the perimeter
         const border = Math.max(smoothstep(0.44, 0.5, Math.abs(u - 0.5)), smoothstep(0.44, 0.5, Math.abs(v - 0.5)));
         const dust = fbm(u * 11, v * 11, { octaves: 5, period: 11, seed: 205 });

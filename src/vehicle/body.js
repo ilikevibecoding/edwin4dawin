@@ -54,6 +54,7 @@ const UV_SCALE = {
   glassSide: 'keep',
   glassDark: 'keep',
   glassEdge: 2,
+  gasket: 3,
   reflector: 'keep',
   lensClear: 'keep',
   lensRibbed: 'keep',
@@ -834,8 +835,12 @@ function floorAndRockers(k) {
     pos: [0, S.floorY - 0.03, floorZ],
   });
 
-  // structure behind the shut lines, so a gap shows darkness rather than sky
-  k.addMirrored('gap', rbox(0.05, 0.82, 3.14, 0.01), { pos: [HW - 0.145, 1.03, 0.67] });
+  // Structure behind the shut lines, so a gap shows darkness rather than sky.
+  // Capped at the beltline: it used to run 110 mm past it, inboard of the door
+  // glass, and from the seats that was a solid black band across the bottom of
+  // every side window (raycast from the interior frame: `body_gap` at 0.91 m,
+  // in front of `body_glassSide`).
+  k.addMirrored('gap', rbox(0.05, S.beltlineY - 0.62, 3.14, 0.01), { pos: [HW - 0.145, (S.beltlineY + 0.62) * 0.5, 0.67] });
 
   // sun-faded plastic rocker cladding under the doors
   const rockerL = S.cabFrontZ - S.cabRearZ + 0.42;
@@ -2324,6 +2329,18 @@ function doorMirror(k, sd, beltY) {
   for (const dv of [-0.0715, 0.0715]) {
     k.add('alu', gbox(0.008, 0.256, 0.009, 0.002), { pos: put(0.004, dv, 0), rot: BOX });
   }
+  // The bezel lip proper: 4 mm of dark rubber between the bright retaining lip
+  // and the glass, lapping the pane's edge. A pane set straight into bright
+  // metal reads as a decal on it; the dark line is the depth of the aperture,
+  // and the alu lip outside it is the bevel that catches the highlight. Sized
+  // over the main pane and the spot pane together, with a run each side of the
+  // divider bar so both apertures are lipped.
+  for (const dw of [-0.1185, -0.0565, -0.0395, 0.1185]) {
+    k.add('gasket', gbox(0.006, 0.004, 0.142, 0.0015), { pos: put(0.006, 0, dw), rot: BOX });
+  }
+  for (const dv of [-0.0665, 0.0665]) {
+    k.add('gasket', gbox(0.006, 0.246, 0.004, 0.0015), { pos: put(0.006, dv, 0), rot: BOX });
+  }
   // The aperture is split, which is both what a truck mirror looks like and the
   // only way this object gets a value range across its front: the main pane is
   // aimed level and grades trail-to-sky, the spot pane under it is aimed down
@@ -2370,26 +2387,52 @@ function doorMirror(k, sd, beltY) {
 }
 
 /**
- * A pane with an edge. The glass itself is one quad; round it runs a 5 mm
- * frame in `glassEdge`, which is the cut face of the sheet — the only part of
- * a window that has thickness to show, and the part that pipes light and reads
- * as a bright green line against the seal. Sized `inset` inside the quad so the
- * frame's front face stands 2.5 mm proud of the pane and nothing is coplanar.
+ * A pane in its rubber.
+ *
+ * Three parts, from the glass outwards:
+ *
+ *  - the sheet itself, one quad in the pane material;
+ *  - its cut edge, a 7 mm rim in `glassEdge` the thickness of the sheet
+ *    (6 mm), standing 2.5 mm proud of the outer face — the one line on a
+ *    window that catches a highlight. It used to be a 14 mm frame flush with
+ *    the quad, which read from outside as a green rule and from the seats as a
+ *    black band along the sill, since nothing in the cab lights the cut face;
+ *  - the gasket, a 16 mm EPDM channel with a 5 mm radius, lapping the outer
+ *    3 mm of the sheet and standing 7 mm proud on both faces. It is
+ *    what separates glass from paint in every exterior view and is the sill
+ *    seen from inside. Corners are lapped rather than mitred: the two long
+ *    runs go full width and the short ones sit between them, which is also
+ *    how a real channel is fitted.
+ *
  * `mirror` adds the pane on both sides, the far one with its uvs mirrored too,
  * so the film reads the same way round on both doors.
  */
 function pane(k, key, w, h, { pos, rot, mirror = false }) {
-  const T = 0.005;
-  const B = 0.014;
+  const T = 0.006; // sheet thickness
+  const E = 0.007; // rim width
+  const G = 0.016; // gasket width
+  const GD = 0.02; // gasket depth (proud on both faces)
+  const LAP = 0.003; // how far the gasket lips over the glass
   const add = mirror ? (key2, g, x) => k.addMirrored(key2, g, x) : (key2, g, x) => k.add(key2, g, x);
   add(key, new THREE.PlaneGeometry(w, h), { pos, rot });
+  // the rim sits mostly behind the outer face, 2.5 mm proud of it
   for (const [bw, bh, x, y] of [
-    [w, B, 0, h * 0.5 - B * 0.5],
-    [w, B, 0, -(h * 0.5 - B * 0.5)],
-    [B, h - B * 2, w * 0.5 - B * 0.5, 0],
-    [B, h - B * 2, -(w * 0.5 - B * 0.5), 0],
+    [w, E, 0, h * 0.5 - E * 0.5],
+    [w, E, 0, -(h * 0.5 - E * 0.5)],
+    [E, h - E * 2, w * 0.5 - E * 0.5, 0],
+    [E, h - E * 2, -(w * 0.5 - E * 0.5), 0],
   ]) {
-    add('glassEdge', new THREE.BoxGeometry(bw, bh, T).translate(x, y, 0), { pos, rot });
+    add('glassEdge', new THREE.BoxGeometry(bw, bh, T).translate(x, y, 0.0025 - T * 0.5), { pos, rot });
+  }
+  const gw = w + 2 * (G - LAP);
+  const gh = h + 2 * (G - LAP);
+  for (const [bw, bh, x, y] of [
+    [gw, G, 0, gh * 0.5 - G * 0.5],
+    [gw, G, 0, -(gh * 0.5 - G * 0.5)],
+    [G, gh - G * 2, gw * 0.5 - G * 0.5, 0],
+    [G, gh - G * 2, -(gw * 0.5 - G * 0.5), 0],
+  ]) {
+    add('gasket', rbox(bw, bh, GD, 0.005, 2).translate(x, y, 0), { pos, rot });
   }
 }
 
@@ -2507,11 +2550,14 @@ function cab(k) {
       [0.02, S.cabRearZ + 0.07],
     ]) {
       const len = zf - zr;
+      // Header and belt mouldings, butted to the gasket rather than crossing
+      // the glass: the belt moulding used to sit 45 mm up the pane, so from the
+      // seats it was a black bar across the bottom of every door window.
       k.add('trim', rbox(0.05, 0.028, len + 0.02, 0.008), {
-        pos: [side * (HW - 0.03), paneTop - 0.022, (zf + zr) * 0.5],
+        pos: [side * (HW - 0.03), paneTop - 0.032, (zf + zr) * 0.5],
       });
       k.add('trim', rbox(0.05, 0.026, len, 0.008), {
-        pos: [side * (HW - 0.03), beltY + 0.05, (zf + zr) * 0.5],
+        pos: [side * (HW - 0.03), beltY - 0.012, (zf + zr) * 0.5],
       });
     }
     k.add('trim', rbox(0.055, paneTop - beltY, 0.03, 0.01), {
