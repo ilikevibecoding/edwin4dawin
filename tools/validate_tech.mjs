@@ -3,10 +3,11 @@
 //   transitions board() from the default view and from ext_far; exitToExterior() from each cluster (camera ≥ 60 m
 //               from every room box, then board again); per-frame camera NaN / black-canvas sampling
 //   streaming   ensureCluster timing per cluster, heap / geometries / textures after all four, trimClusters(2)
+//   leak        build → render → release each cluster twice; renderer.info.memory and heap must return to baseline
 //   fighters    120 s simulated traffic: no patrolling fighter inside a room box or the hull; shaft states stay
 //               inside the well footprint
 //   sync        snapshot size; apply on a fresh page; doors / traffic / alert compared within tolerance
-// Usage: node tools/validate_tech.mjs [url] [--json=path] [--out=shots/validator] [--only=boot,transitions,streaming,fighters,sync]
+// Usage: node tools/validate_tech.mjs [url] [--json=path] [--out=shots/validator] [--only=boot,transitions,streaming,leak,fighters,sync]
 import { chromium } from "playwright-core";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -18,7 +19,7 @@ const pos = args.filter((a) => !a.startsWith("--"));
 const url = pos[0] || "http://127.0.0.1:5173/";
 const outDir = resolve(flags.out || "shots/validator");
 const jsonPath = flags.json ? resolve(flags.json) : null;
-const only = flags.only ? flags.only.split(",") : ["boot", "transitions", "streaming", "fighters", "sync"];
+const only = flags.only ? flags.only.split(",") : ["boot", "transitions", "streaming", "leak", "fighters", "sync"];
 mkdirSync(outDir, { recursive: true });
 
 const executablePath = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].find((p) => existsSync(p));
@@ -267,6 +268,61 @@ if (only.includes("streaming")) {
   log(`rooms over the 400 ms build budget: ${slow.map(([id, r]) => `${id} ${r.buildMs} ms`).join(", ") || "none"}`);
   const heavy = Object.entries(s.rooms).filter(([id, r]) => r.triangles > (["bridge", "hangar", "reactor"].includes(id) ? 400000 : 150000));
   log(`rooms over the triangle budget: ${heavy.map(([id, r]) => `${id} ${(r.triangles / 1000).toFixed(0)}k`).join(", ") || "none"}`);
+}
+
+// ---------------------------------------------------------------------------------------------------
+// leak check: render a cluster, release it, compare renderer.info.memory + heap (twice, to see growth)
+// ---------------------------------------------------------------------------------------------------
+if (only.includes("leak")) {
+  log(`\n== leak check (build → render → release, per cluster)`);
+  const info = () =>
+    ev(() => {
+      if (window.gc) window.gc();
+      const s = window.debugAPI.getStats();
+      return { geometries: s.geometries, textures: s.textures, programs: s.programs, heapMB: s.jsHeapMB, built: s.rooms.built };
+    });
+  await ev(() => {
+    const d = window.debugAPI;
+    d.setView("bridge");
+    for (const c of [...d.rooms.builtClusters]) if (c !== "tower") d.rooms.releaseCluster(c);
+  });
+  await settle(2);
+  R.leak = {};
+  for (const [cluster, view] of [
+    ["hangar", "hangar"],
+    ["engineering", "reactor"],
+    ["crew", "crew_corridor"],
+  ]) {
+    const rounds = [];
+    const before = await info();
+    for (let k = 0; k < 2; k++) {
+      await ev((v) => window.debugAPI.setView(v), view);
+      await settle(2);
+      const built = await info();
+      await ev((c) => {
+        const d = window.debugAPI;
+        d.setView("bridge");
+        d.rooms.releaseCluster(c);
+      }, cluster);
+      await settle(2);
+      const after = await info();
+      rounds.push({ built, after });
+    }
+    const leaked = rounds.map((r) => r.after.geometries - before.geometries);
+    const heap = rounds.map((r) => +(r.after.heapMB - before.heapMB).toFixed(1));
+    R.leak[cluster] = { before, rounds, leakedGeometriesPerRound: leaked, heapDeltaMBPerRound: heap };
+    log(`${leaked[1] <= leaked[0] && leaked[0] <= 2 ? "PASS" : "WARN"} ${cluster}: geometries before ${before.geometries} → built ${rounds[0].built.geometries} → released ${rounds[0].after.geometries} → built ${rounds[1].built.geometries} → released ${rounds[1].after.geometries} (leaked ${leaked.join(", ")}); textures ${before.textures}→${rounds[1].after.textures}; heap ${before.heapMB}→${rounds[0].after.heapMB}→${rounds[1].after.heapMB} MB`);
+  }
+  // scene-graph orphans: objects still parented under the interior group after the releases
+  const orphans = await ev(() => {
+    const d = window.debugAPI;
+    const g = d.rooms.group;
+    const names = [];
+    for (const c of g.children) names.push(c.name + ":" + c.children.length);
+    return names;
+  });
+  log(`   interior group children after releases: ${orphans.join(" ")}`);
+  R.leak.interiorChildren = orphans;
 }
 
 // ---------------------------------------------------------------------------------------------------

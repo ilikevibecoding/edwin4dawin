@@ -37,17 +37,39 @@ const settle = async (n = 2) => {
   const f0 = await ev(() => window.debugAPI.frames());
   await page.waitForFunction((t) => window.debugAPI.frames() >= t, f0 + n, { timeout: 300000 });
 };
-// small frames while walking; screenshots switch back to full resolution
-await ev(() => window.debugAPI.setPixelRatio(0.5));
+// The walking simulation needs no frames (nudge / simulate drive doors, lifts and rooms directly), and on
+// software GL every frame costs seconds: gate requestAnimationFrame so the app's render loop is paused while
+// tests run in-page and resumed only for screenshots (pending callbacks are replayed on resume).
+await ev(() => {
+  const orig = window.requestAnimationFrame.bind(window);
+  const R = (window.__raf = { orig, pending: [], paused: false });
+  window.requestAnimationFrame = (cb) => {
+    if (R.paused) {
+      R.pending.push(cb);
+      return 0;
+    }
+    return orig(cb);
+  };
+  window.__pause = () => {
+    R.paused = true;
+  };
+  window.__resume = () => {
+    R.paused = false;
+    for (const cb of R.pending.splice(0)) orig(cb);
+  };
+});
+const pause = () => ev(() => window.__pause());
+const resume = () => ev(() => window.__resume());
+await pause();
 
 const results = { doors: [], blockers: [], lifts: [], stairs: [], errors };
 let shotN = 0;
 async function shot(name) {
-  await ev(() => window.debugAPI.setPixelRatio(1));
+  await resume();
   await settle(2);
   const file = resolve(outDir, `${String(++shotN).padStart(2, "0")}_${name}.png`);
   await page.screenshot({ path: file, timeout: 300000 });
-  await ev(() => window.debugAPI.setPixelRatio(0.5));
+  await pause();
   return file;
 }
 
@@ -122,6 +144,10 @@ await ev(() => {
     // hg_fc: the declared 20 m "open" front of the booth is glass; only the 1.2 m gap at z -11.2..-10 passes
     "hg_fc:hangar": { start: [37, -22, -10.6], note: "gap in the glass front (z -11.2..-10), gallery level y -22" },
     "hg_fc:flight_control": { start: [43, -22, -10.6], note: "gap in the glass front (z -11.2..-10)" },
+    // bridge side doors open onto the 2 m outer ledge between the wall and the crew pit railing: 3 m in front
+    // of the door is inside the pit, so start on the ledge 1 m from the door
+    "br_tac:bridge": { start: [-13, 210, 187.5], note: "outer ledge x -14..-12 (3 m in front is the crew pit)" },
+    "br_nav:bridge": { start: [13, 210, 187.5], note: "outer ledge x 12..14 (3 m in front is the crew pit)" },
   };
 
   function doorTest(doorId, fromId, useOverride = true) {
@@ -219,12 +245,45 @@ await ev(() => {
           }
         } else st = 0;
       }
+      if (!res.ok && !res.fell && !res.leftRoom && !res.blockedAt) res.notReached = { at: arr(p), remaining: round(Math.hypot(s[0] - p.x, s[2] - p.z)), note: "deflected along obstacles; spawn not reached on a straight line" };
       res.walked = round(walked);
       res.y = round(p.y);
       out.toSpawn = res;
     }
     out.ms = Math.round(performance.now() - t0);
     return out;
+  }
+
+  /** Lane scan for a failed door: try the walk at 1 m lateral offsets across the span; returns passable lanes. */
+  function laneScan(doorId, fromId) {
+    const spec = d.doors.doors.get(doorId).spec;
+    const ap = approach(spec, fromId);
+    const toId = ap.toId;
+    const [ux, uz] = ap.dir;
+    const lanes = [];
+    for (let u = spec.from + 0.5; u <= spec.to - 0.5 + 1e-6; u += 1) {
+      const start = spec.axis === "z" ? [u, ap.y, ap.start[2]] : [ap.start[0], ap.y, u];
+      place(start, ap.yaw);
+      let ok = false;
+      let last = [...start];
+      let stuck = 0;
+      for (let travelled = 0; travelled < 12; travelled += 0.5) {
+        const r = walk(ux * 0.5, uz * 0.5, 0.1);
+        const p = r.pos;
+        const moved = Math.hypot(p[0] - last[0], p[2] - last[2]);
+        last = p;
+        if (moved < 0.05 && ++stuck > 30) break;
+        if (moved >= 0.05) stuck = 0;
+        const past = spec.axis === "z" ? (p[2] - spec.at) * uz : (p[0] - spec.at) * ux;
+        if (r.room === toId && past >= 1.0) {
+          ok = true;
+          break;
+        }
+      }
+      lanes.push({ u: round(u), ok, end: last });
+    }
+    const passable = lanes.filter((l) => l.ok).map((l) => l.u);
+    return { door: doorId, from: fromId, axisAcross: spec.axis === "z" ? "x" : "z", span: [spec.from, spec.to], passable, blockedLanes: lanes.filter((l) => !l.ok).map((l) => l.u) };
   }
 
   /** Static: colliders in the 2 m in front of the door on the `roomId` side (above step height, below head). */
@@ -384,17 +443,22 @@ if (only.includes("doors")) {
     for (const from of [s.a, s.b]) {
       const r = await ev(([id, f]) => window.__wt.doorTest(id, f), [s.id, from]);
       results.doors.push(r);
-      const spawn = r.toSpawn ? (r.toSpawn.ok ? `spawn ok (${r.toSpawn.walked} m)` : r.toSpawn.fell ? `SPAWN WALK FELL ${JSON.stringify(r.toSpawn)}` : r.toSpawn.leftRoom ? `spawn walk left room → ${r.toSpawn.leftRoom} at ${r.toSpawn.at}` : `spawn walk blocked ${r.toSpawn.remaining} m short at ${r.toSpawn.blockedAt} by ${(r.toSpawn.hits || []).join("; ")}`) : "";
+      const spawn = r.toSpawn ? (r.toSpawn.ok ? `spawn ok (${r.toSpawn.walked} m)` : r.toSpawn.fell ? `SPAWN WALK FELL ${JSON.stringify(r.toSpawn)}` : r.toSpawn.leftRoom ? `spawn walk left room → ${r.toSpawn.leftRoom} at ${r.toSpawn.at}` : r.toSpawn.blockedAt ? `spawn walk blocked ${r.toSpawn.remaining} m short at ${r.toSpawn.blockedAt} by ${(r.toSpawn.hits || []).join("; ")}` : `spawn walk deflected, ${r.toSpawn.notReached.remaining} m short at ${r.toSpawn.notReached.at}`) : "";
       const status = r.reached ? "PASS" : "FAIL";
       console.log(`${status} ${s.id.padEnd(16)} ${(r.kind + "").padEnd(6)} ${from.padEnd(18)}→ ${r.to.padEnd(18)} ${r.reached ? `through in ${r.travelled} m (door open at ${r.openAt ?? "-"} m, unblocked at ${r.unblockedAt ?? "-"} m)` : JSON.stringify(r.stuck || r.fell)}${r.gap ? ` GAP ${JSON.stringify(r.gap)}` : ""}${r.warn ? ` WARN ${r.warn}` : ""}${r.override ? ` [override: ${r.override}]` : ""} | ${spawn}`);
       if (!r.reached || r.fell || (r.toSpawn && (r.toSpawn.fell || r.toSpawn.gap))) r.shot = await shot(`door_${s.id}_from_${from}`);
     }
   }
-  // hg_fc without the override: is the declared door centre passable?
-  {
-    const r = await ev(() => window.__wt.doorTest("hg_fc", "hangar", false));
+  // overridden doors without the override: is the generic "3 m in front of the door centre" approach passable?
+  for (const [id, from] of [
+    ["hg_fc", "hangar"],
+    ["hg_fc", "flight_control"],
+    ["br_tac", "bridge"],
+    ["br_nav", "bridge"],
+  ]) {
+    const r = await ev(([i, f]) => window.__wt.doorTest(i, f, false), [id, from]);
     results.doors.push({ ...r, note: "door-centre approach without override" });
-    console.log(`${r.reached ? "PASS" : "INFO"} hg_fc door-centre approach from hangar (no override): ${r.reached ? "passable" : "blocked: " + JSON.stringify(r.stuck)}`);
+    console.log(`${r.reached ? "PASS" : "INFO"} ${id} generic door-centre approach from ${from} (no override): ${r.reached ? `passable (${r.travelled} m)` : "blocked: " + JSON.stringify(r.stuck || r.fell)}`);
   }
   console.log(`\n== static: geometry within 2 m in front of each door (both sides)`);
   for (const s of doorSpecs) {
