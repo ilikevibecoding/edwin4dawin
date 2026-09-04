@@ -35,8 +35,8 @@ export function makeLiftLobbyBuilder(lifts) {
       frame.quad("impDecal", u - 1.4, 1.7, 0.062, 0.7, 0.7, { uvRect: impDecalRect(14) });
       frame.quad("impDecal", u + 1.4, 1.7, 0.062, 0.7, 0.7, { uvRect: impDecalRect(3) });
     }
-    // bench along the north wall (away from the lift doors on the side walls)
-    if (z1 - z0 > 10) bench(kit, [(x0 + x1) / 2, y, z0 + 0.7], 2.4, 0, { back: true });
+    // benches flanking the north wall door (only in the deeper lobbies, clear of every doorway)
+    if (z1 - z0 >= 14) for (const s of [-1, 1]) bench(kit, [(x0 + x1) / 2 + s * 5.2, y, z0 + 0.6], 1.8, 0, { back: true });
     // ceiling light bars
     const cz = (z0 + z1) / 2;
     ceilingLight(kit, ctx, [(x0 + x1) / 2, y + room.h, cz], Math.min(x1 - x0 - 2, 8), "x", { intensity: 6, distance: 10, priority: 2 });

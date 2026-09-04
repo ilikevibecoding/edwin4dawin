@@ -163,10 +163,21 @@ export function buildExterior(mats, opts = {}) {
       blk.translate(0, 0, HULL.sternZ - 0.2);
       worldUVs(blk, TEXEL * 6);
       kit.add("hullDark", blk, { uv: "keep", color: IMP.trench });
-      const lip = new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x * 0.9, cy + (y - cy) * 0.86))), { depth: 2.6, bevelEnabled: false });
+      // armoured rim around the recessed engine block: a frame (the inset plate outline is the hole),
+      // so the dark block reads as a 2 m deep recess with the bells emerging from it
+      const lipShape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x * 0.9, cy + (y - cy) * 0.86)));
+      lipShape.holes.push(new THREE.Path(inset.slice().reverse()));
+      const lip = new THREE.ExtrudeGeometry(lipShape, { depth: 2.6, bevelEnabled: false });
       lip.translate(0, 0, HULL.sternZ - 0.1);
       worldUVs(lip, TEXEL);
       kit.add("hullPlate", lip, { uv: "keep", color: IMP.hullLight });
+      // inner step of the recess wall (a second, thinner frame) so the rim has a stepped profile
+      const lip2Shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x * 0.88, cy + (y - cy) * 0.83)));
+      lip2Shape.holes.push(new THREE.Path(inset.slice().reverse()));
+      const lip2 = new THREE.ExtrudeGeometry(lip2Shape, { depth: 1.2, bevelEnabled: false });
+      lip2.translate(0, 0, HULL.sternZ - 0.1);
+      worldUVs(lip2, TEXEL * 4);
+      kit.add("hullDark", lip2, { uv: "keep", color: IMP.hullDark });
     }
     for (const e of [...ENGINES.main, ...ENGINES.secondary]) {
       const L = e.r > 30 ? ENGINES.bellLength : ENGINES.bellLength * 0.6;
@@ -232,6 +243,10 @@ export function buildExterior(mats, opts = {}) {
     const g3 = taperedBox((tb.halfTop + tb.slopeRun) * 2, tb.z1 - tb.z0, tb.halfTop * 2, tb.z1 - tb.z0 - 16, tb.rise + 0.3, { shearZ: 4 });
     worldUVs(g3, TEXEL);
     kit.add("hullPlate", g3, { pos: [0, yb, (tb.z0 + tb.z1) / 2], uv: "keep", color: hullCol });
+    // plinth: T2's top rises with z, so the block's flat base would float ~3.6 m above it at the front
+    // and its base is wider than T2's top everywhere. A vertical foundation slab, sunk deep enough to
+    // meet T2's flanks, carries the block; the buried part is hidden inside the terrace.
+    kit.boxMM("hullPlate", [-(tb.halfTop + tb.slopeRun) + 1.5, yb - 22, tb.z0 + 0.4], [tb.halfTop + tb.slopeRun - 1.5, yb + 0.4, tb.z1 - 0.4], { color: IMP.hullDark, texel: TEXEL });
   }
   // ---- command tower ------------------------------------------------------------------------
   {
@@ -241,15 +256,23 @@ export function buildExterior(mats, opts = {}) {
     const neck = taperedBox(nk.halfBase * 2, nk.z1 - nk.z0, nk.halfTop * 2, nk.z1 - nk.z0 - 12, h, { shearZ: 2 });
     worldUVs(neck, TEXEL);
     kit.add("hullPlate", neck, { pos: [0, y0, (nk.z0 + nk.z1) / 2], uv: "keep", color: hullCol });
-    // neck detail: vertical spine ribs and window rows
+    // neck detail: spine ribs on the front face and window rows on the flanks. The front face recedes
+    // 8 m and the flanks taper 6 m over the neck's height, so both follow the tapered faces instead
+    // of standing vertical (which left the rib tops and upper window rows floating in front of them).
+    const neckFrontZ = (y) => nk.z0 + 8 * ((y - y0) / h); // front face z at height y (shearZ 2 + taper)
+    const neckHalfX = (y) => nk.halfBase - (nk.halfBase - nk.halfTop) * ((y - y0) / h);
     for (const s of [-1, 1]) {
       for (let k = 0; k < 4; k++) {
         const x = s * (nk.halfBase - 6 - k * 7);
-        kit.boxMM("hullPlate", [x - 1.2, y0 + 4, nk.z0 - 1.5], [x + 1.2, nk.yTop - 3, nk.z0 + 1.5], { color: IMP.hullLight, texel: TEXEL * 4 });
+        const ry0 = y0 + 4;
+        const ry1 = nk.yTop - 3;
+        const rib = taperedBox(2.4, 3, 2.4, 3.0001, ry1 - ry0, { shearZ: neckFrontZ(ry1) - neckFrontZ(ry0) });
+        worldUVs(rib, TEXEL * 4);
+        kit.add("hullPlate", rib, { pos: [x, ry0, neckFrontZ(ry0)], uv: "keep", color: IMP.hullLight });
       }
       for (let row = 0; row < 5; row++) {
         const y = y0 + 12 + row * 11;
-        for (let k = 0; k < 6; k++) kit.box("emitWhite", s * (nk.halfBase - 0.2 - (row * 0.3)), y, nk.z0 + 10 + k * 9, 0.4, 1.4, 3.2);
+        for (let k = 0; k < 6; k++) kit.box("emitWhite", s * (neckHalfX(y) + 0.05), y, nk.z0 + 10 + k * 9, 0.4, 1.4, 3.2);
       }
     }
     // bridge module: box with the window band opening cut out of the front face

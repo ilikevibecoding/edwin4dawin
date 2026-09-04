@@ -766,3 +766,229 @@ export function holoTable(kit, ctx, pos, r = 1.4, opts = {}) {
   kit.collider([x - r, y, z - r], [x + r, y + h, z + r], "holoTable");
   return holo;
 }
+
+// ===========================================================================
+// Secondary-room props (command tower workstream). Additive block: tiers, instanced equipment racks,
+// cable trays, glass partitions, screen arrays, alert beacons, floor stencils.
+// ===========================================================================
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { Kit } from "../kit.js";
+
+// Thin blocking colliders around a footprint's four sides (for tiers too tall to step onto), leaving
+// `gaps` ([side, a, b] along that side, side in n|s|w|e) open where stairs land.
+export function sideColliders(kit, box, y, h, gaps = [], tag = "edge") {
+  const [x0, z0, x1, z1] = box;
+  const t = 0.05;
+  const segs = { n: [[x0, x1]], s: [[x0, x1]], w: [[z0, z1]], e: [[z0, z1]] };
+  for (const [side, a, b] of gaps) {
+    const next = [];
+    for (const [s0, s1] of segs[side]) {
+      if (b <= s0 || a >= s1) next.push([s0, s1]);
+      else {
+        if (a > s0) next.push([s0, a]);
+        if (b < s1) next.push([b, s1]);
+      }
+    }
+    segs[side] = next;
+  }
+  for (const [s0, s1] of segs.n) kit.collider([s0, y, z0 - t], [s1, y + h, z0 + t], tag);
+  for (const [s0, s1] of segs.s) kit.collider([s0, y, z1 - t], [s1, y + h, z1 + t], tag);
+  for (const [s0, s1] of segs.w) kit.collider([x0 - t, y, s0], [x0 + t, y + h, s1], tag);
+  for (const [s0, s1] of segs.e) kit.collider([x1 - t, y, s0], [x1 + t, y + h, s1], tag);
+}
+
+// Raised deck tier. box = [x0, z0, x1, z1], from floor y up by `rise`: painted-steel body, dark deck
+// top, steel nosing and a light strip under the lip on the sides listed in `lit`. Registers a walkable.
+// Tiers up to 0.6 m need no colliders (the player steps up); taller ones pass collide: true and `gaps`
+// (see sideColliders) where their stairs land.
+export function platform(kit, ctx, box, y, rise, opts = {}) {
+  const { tone = IMP.wallDark, top = "impDeck", strip = "emitBlue", lit = ["n", "s", "w", "e"], collide = false, gaps = [], tag = "platform", texel = 0.5, nosing = true } = opts;
+  const [x0, z0, x1, z1] = box;
+  kit.boxMM("impPaintedMetal", [x0, y, z0], [x1, y + rise - 0.04, z1], { color: IMP.trim, texel: 1 });
+  kit.boxMM(top, [x0 + 0.03, y + rise - 0.08, z0 + 0.03], [x1 - 0.03, y + rise, z1 - 0.03], { color: tone, texel });
+  const sides = {
+    n: { c: [(x0 + x1) / 2, z0], out: [0, -1], len: x1 - x0 },
+    s: { c: [(x0 + x1) / 2, z1], out: [0, 1], len: x1 - x0 },
+    w: { c: [x0, (z0 + z1) / 2], out: [-1, 0], len: z1 - z0 },
+    e: { c: [x1, (z0 + z1) / 2], out: [1, 0], len: z1 - z0 },
+  };
+  for (const [key, s] of Object.entries(sides)) {
+    const horiz = key === "n" || key === "s";
+    if (nosing) kit.box("impMetal", s.c[0] - s.out[0] * 0.05, y + rise + 0.006, s.c[1] - s.out[1] * 0.05, horiz ? s.len : 0.1, 0.012, horiz ? 0.1 : s.len, { color: IMP.steel });
+    if (strip && lit.includes(key) && rise > 0.12) kit.box(strip, s.c[0] + s.out[0] * 0.006, y + rise - 0.1, s.c[1] + s.out[1] * 0.006, horiz ? s.len - 0.2 : 0.012, 0.02, horiz ? 0.012 : s.len - 0.2);
+  }
+  walkable(ctx, x0, z0, x1, z1, y + rise, tag);
+  if (collide) sideColliders(kit, box, y, rise, gaps, tag);
+}
+
+// Equipment rack (signal-analysis / data cabinet) geometry, pre-merged per material: `body` for
+// impPaintedMetal (vertex-coloured), `face` for blinkDense (indicator grid + status strip). Front is
+// local +Z, origin at the floor centre. Feed both to kit.instanced so any number of racks is two draws.
+export function rackGeometry(mats, opts = {}) {
+  const { w = 0.8, h = 2.2, d = 0.9 } = opts;
+  const k = new Kit(mats);
+  k.box("impPaintedMetal", 0, h / 2, 0, w, h, d, { color: IMP.consoleDark, texel: 1 });
+  k.box("impPaintedMetal", 0, 0.06, 0, w + 0.04, 0.12, d + 0.04, { color: IMP.trim, texel: 1 });
+  k.box("impPaintedMetal", 0, h + 0.03, 0, w + 0.04, 0.06, d + 0.04, { color: IMP.trim, texel: 1 });
+  // door surround, side vent slats, handle, label plate
+  k.box("impPaintedMetal", 0, h / 2, d / 2 + 0.01, w - 0.06, h - 0.24, 0.02, { color: IMP.trim, texel: 1 });
+  k.box("impPaintedMetal", 0, h * 0.3, d / 2 + 0.025, w - 0.2, h * 0.24, 0.01, { color: IMP.wallDark, texel: 1 });
+  for (const s of [-1, 1]) for (let i = 0; i < 6; i++) k.box("impPaintedMetal", s * (w / 2 + 0.006), h * 0.55 + i * 0.1, 0, 0.012, 0.03, d * 0.6, { color: IMP.gunmetal, texel: 1 });
+  k.box("impPaintedMetal", w * 0.3, h * 0.42, d / 2 + 0.045, 0.03, 0.34, 0.03, { color: IMP.steel, texel: 1 });
+  k.box("impPaintedMetal", -w * 0.12, h - 0.3, d / 2 + 0.03, w * 0.5, 0.12, 0.01, { color: IMP.wallMid, texel: 1 });
+  k.box("blinkDense", 0, h * 0.66, d / 2 + 0.032, w - 0.26, h * 0.3, 0.008, { uv: "keep" });
+  k.box("blinkDense", 0, h * 0.14, d / 2 + 0.032, w - 0.3, 0.05, 0.008, { uv: "keep" });
+  const body = mergeGeometries(k.groups.get("impPaintedMetal"), false);
+  const face = mergeGeometries(k.groups.get("blinkDense"), false);
+  return { body, face, w, h, d };
+}
+
+// Rows of instanced racks. rows: [{ from: [x,z], to: [x,z], count, yaw }] — racks spaced evenly between
+// the two centres, fronts facing local +Z rotated by yaw (0 faces +Z, PI faces -Z, PI/2 faces +X).
+// One collider per row. Two draw calls total, however many racks.
+export function rackRows(kit, ctx, y, rows, opts = {}) {
+  const g = rackGeometry(kit.materials, opts);
+  const transforms = [];
+  for (const row of rows) {
+    const n = Math.max(1, row.count);
+    const xs = [];
+    const zs = [];
+    for (let i = 0; i < n; i++) {
+      const t = n === 1 ? 0.5 : i / (n - 1);
+      const x = row.from[0] + (row.to[0] - row.from[0]) * t;
+      const z = row.from[1] + (row.to[1] - row.from[1]) * t;
+      transforms.push({ pos: [x, y, z], rot: [0, row.yaw || 0, 0] });
+      xs.push(x);
+      zs.push(z);
+    }
+    const along = Math.abs(Math.sin(row.yaw || 0)) > 0.5 ? [g.d / 2, g.w / 2] : [g.w / 2, g.d / 2];
+    kit.collider([Math.min(...xs) - along[0], y, Math.min(...zs) - along[1]], [Math.max(...xs) + along[0], y + g.h + 0.1, Math.max(...zs) + along[1]], "rack");
+  }
+  kit.instanced("impPaintedMetal", g.body, transforms);
+  kit.instanced("blinkDense", g.face, transforms);
+  return transforms.length;
+}
+
+// Overhead cable tray between two [x,z] points at height y: painted rails, steel rungs, cable runs and
+// optional drop rods up to `hang` (ceiling y).
+export function cableTray(kit, from, to, y, opts = {}) {
+  const { w = 0.6, cables = 3, hang = null, seed = 1, rungPitch = 0.8 } = opts;
+  const rand = rng(seed);
+  const dx = to[0] - from[0];
+  const dz = to[1] - from[1];
+  const L = Math.hypot(dx, dz);
+  if (L < 0.1) return;
+  const ux = dx / L;
+  const uz = dz / L;
+  const yaw = Math.atan2(-uz, ux);
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const at = (along, side, dy) => [from[0] + ux * along - uz * side, y + dy, from[1] + uz * along + ux * side];
+  for (const s of [-1, 1]) {
+    const p = at(L / 2, s * (w / 2), 0);
+    kit.add("impPaintedMetal", new THREE.BoxGeometry(L, 0.1, 0.05), { pos: p, quat: q, color: IMP.trim, texel: 1 });
+  }
+  for (let a = rungPitch / 2; a < L; a += rungPitch) {
+    const p = at(a, 0, -0.03);
+    kit.add("impMetal", new THREE.BoxGeometry(0.04, 0.03, w), { pos: p, quat: q, color: IMP.gunmetal });
+  }
+  for (let c = 0; c < cables; c++) {
+    const side = (rand() - 0.5) * (w - 0.16);
+    const r = 0.025 + rand() * 0.02;
+    const p = at(L / 2, side, r);
+    kit.add("impRubber", new THREE.BoxGeometry(L - 0.1, r * 2, r * 2), { pos: p, quat: q, color: IMP.rubber, texel: 2 });
+  }
+  if (hang !== null && hang > y + 0.2) {
+    for (let a = 1; a < L; a += 3) {
+      for (const s of [-1, 1]) {
+        const p = at(a, s * (w / 2), (hang - y) / 2 + 0.05);
+        kit.add("impPaintedMetal", new THREE.BoxGeometry(0.04, hang - y - 0.1, 0.04), { pos: p, quat: q, color: IMP.trim, texel: 1 });
+      }
+    }
+  }
+}
+
+// Dark glass partition from -> to ([x,z]) at floor y, height h: painted frame, pane, collider.
+export function glassWall(kit, from, to, y, h, opts = {}) {
+  const { mat = "glassDark", sill = 0.1, frameW = 0.1, collide = true, mullions = 0, tag = "glassWall" } = opts;
+  const dx = to[0] - from[0];
+  const dz = to[1] - from[1];
+  const L = Math.hypot(dx, dz);
+  if (L < 0.1) return;
+  const ux = dx / L;
+  const uz = dz / L;
+  const yaw = Math.atan2(-uz, ux);
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const at = (along, dy) => [from[0] + ux * along, y + dy, from[1] + uz * along];
+  kit.add("impPaintedMetal", new THREE.BoxGeometry(L, Math.max(sill, 0.06), 0.16), { pos: at(L / 2, Math.max(sill, 0.06) / 2), quat: q, color: IMP.trim, texel: 1 });
+  kit.add("impPaintedMetal", new THREE.BoxGeometry(L, 0.1, 0.16), { pos: at(L / 2, h - 0.05), quat: q, color: IMP.trim, texel: 1 });
+  for (const a of [frameW / 2, L - frameW / 2]) kit.add("impPaintedMetal", new THREE.BoxGeometry(frameW, h, 0.14), { pos: at(a, h / 2), quat: q, color: IMP.trim, texel: 1 });
+  for (let m = 1; m <= mullions; m++) kit.add("impMetal", new THREE.BoxGeometry(0.05, h - sill - 0.1, 0.1), { pos: at((L * m) / (mullions + 1), (h + sill) / 2 - 0.05), quat: q, color: IMP.gunmetal });
+  const pane = new THREE.PlaneGeometry(L - frameW * 2, h - sill - 0.1);
+  kit.add(mat, pane, { pos: at(L / 2, (h + sill) / 2 - 0.05), quat: q, uv: "keep" });
+  if (collide) {
+    const pad = 0.1;
+    kit.collider([Math.min(from[0], to[0]) - pad, y, Math.min(from[1], to[1]) - pad], [Math.max(from[0], to[0]) + pad, y + h, Math.max(from[1], to[1]) + pad], tag);
+  }
+}
+
+// Grid of tactical screens on a wall frame, centred at (u, v): cols x rows displays of sw x sh with a
+// shared backing plate. variants picks from screen0..4.
+export function screenArray(frame, u, v, cols, rows, sw, sh, opts = {}) {
+  const { gap = 0.12, seed = 1, variants = [0, 1, 2], leds = false } = opts;
+  const rand = rng(seed);
+  const W = cols * sw + (cols - 1) * gap;
+  const H = rows * sh + (rows - 1) * gap;
+  frame.box("impPaintedMetal", u, v, 0.04, W + 0.3, H + 0.3, 0.06, { color: IMP.consoleDark, texel: 1 });
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      const cu = u - W / 2 + sw / 2 + i * (sw + gap);
+      const cv = v - H / 2 + sh / 2 + j * (sh + gap);
+      frame.box("darkGloss", cu, cv, 0.08, sw + 0.03, sh + 0.03, 0.01);
+      frame.box("screen" + variants[Math.floor(rand() * variants.length)], cu, cv, 0.087, sw, sh, 0.004, { uv: "keep" });
+    }
+  }
+  if (leds) frame.box("leds", u, v - H / 2 - 0.24, 0.06, Math.min(W * 0.7, 3), 0.05, 0.01, { uv: "keep" });
+  return { W, H };
+}
+
+// Alert beacon on a wall frame at (u, v): housing, coloured lens, louvre, and a low light descriptor.
+export function alertBeacon(frame, ctx, u, v, opts = {}) {
+  const { mat = "emitAmber", color = 0xffb020, intensity = 0.8, distance = 4, priority = 0 } = opts;
+  frame.box("impPaintedMetal", u, v, 0.08, 0.36, 0.22, 0.16, { color: IMP.trim, texel: 1 });
+  frame.box(mat, u, v, 0.165, 0.28, 0.13, 0.01);
+  frame.box("impPaintedMetal", u, v, 0.175, 0.3, 0.02, 0.02, { color: IMP.trim, texel: 1 });
+  if (ctx && intensity > 0) {
+    const p = frame.pos(u, v, 0.5);
+    pointLightDesc(ctx, color, intensity, distance, [p.x, p.y, p.z], priority);
+  }
+}
+
+// Dark riser plates with a light seam under each nosing, for a stairs() run built with the same
+// from/dir/w/y0 and n steps of stepH x tread: makes low, wide steps read as steps from the front.
+export function stairRisers(kit, from, dir, w, y0, n, stepH, tread, opts = {}) {
+  const { strip = "emitBlue", tone = IMP.trim } = opts;
+  const horiz = Math.abs(dir[0]) > 0.5;
+  for (let i = 0; i < n; i++) {
+    const along = i * tread - 0.006;
+    const px = from[0] + dir[0] * along;
+    const pz = from[1] + dir[1] * along;
+    kit.box("impPaintedMetal", px, y0 + i * stepH + stepH / 2, pz, horiz ? 0.012 : w - 0.1, stepH - 0.02, horiz ? w - 0.1 : 0.012, { color: tone, texel: 1 });
+    kit.box(strip, px - dir[0] * 0.006, y0 + (i + 1) * stepH - 0.05, pz - dir[1] * 0.006, horiz ? 0.012 : w - 0.3, 0.02, horiz ? w - 0.3 : 0.012);
+  }
+}
+
+// Stencil on a light placard plate with a dark surround, so ink glyphs read on dark wall panels.
+export function placard(frame, u, v, s, idx, opts = {}) {
+  const { tone = IMP.wallLight } = opts;
+  frame.box("impPaintedMetal", u, v, 0.02, s + 0.24, s + 0.24, 0.03, { color: IMP.trim, texel: 1 });
+  frame.box("impPanel", u, v, 0.03, s + 0.16, s + 0.16, 0.04, { color: tone, uv: "keep" });
+  frame.quad("impDecal", u, v, 0.056, s, s, { uvRect: impDecalRect(idx) });
+}
+
+// Floor stencil: decal cell `idx`, size s, at (x, z) on floor y, rotated by yaw about the vertical.
+export function floorDecal(kit, x, y, z, s, idx, yaw = 0) {
+  const g = new THREE.PlaneGeometry(s, s);
+  g.rotateX(-Math.PI / 2);
+  g.rotateY(yaw);
+  kit.add("impDecal", g, { pos: [x, y + 0.008, z], uv: "keep", uvRect: impDecalRect(idx) });
+}

@@ -8,7 +8,9 @@ import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const label = process.argv[2] || "0";
-const base = process.argv[3] || "http://127.0.0.1:5173/";
+// default: the production preview server (`npm run build && npx vite preview --port 5174`) — no HMR
+// reloads mid-run, and it measures what players actually get
+const base = process.argv[3] || process.env.REVIEW_URL || "http://127.0.0.1:5174/";
 const outDir = resolve("shots", `review_${label}`);
 mkdirSync(outDir, { recursive: true });
 const only = process.env.REVIEW_ONLY ? new Set(process.env.REVIEW_ONLY.split(",")) : null; // views|exterior|nav
@@ -33,10 +35,25 @@ page.on("pageerror", (e) => {
   console.log("PAGE ERROR:", e.message);
 });
 const t0 = Date.now();
-await page.goto(base, { waitUntil: "load" });
+await page.goto(base, { waitUntil: "domcontentloaded", timeout: 180000 });
 await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 240000 });
 const readyMs = Date.now() - t0;
+// a dev server may reload once after optimizing dependencies; give it a moment and re-check
+await page.waitForTimeout(2500);
+const ensureReady0 = async () => {
+  const ok = await page.evaluate(() => !!(window.debugAPI && window.debugAPI.ready)).catch(() => false);
+  if (!ok) await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 240000 });
+};
+await ensureReady0();
+const ensureReady = async () => {
+  const ok = await page.evaluate(() => !!(window.debugAPI && window.debugAPI.ready)).catch(() => false);
+  if (!ok) {
+    console.log("WARNING: page reloaded; waiting for the app again");
+    await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 240000 });
+  }
+};
 const settle = async (n = 3, ms = 900) => {
+  await ensureReady();
   const f0 = await page.evaluate(() => window.debugAPI.frames());
   await page.waitForFunction((t) => window.debugAPI.frames() >= t, f0 + n, { timeout: 180000 });
   await page.waitForTimeout(ms);
@@ -52,7 +69,7 @@ if (want("exterior")) {
   for (const name of presets) {
     await page.evaluate((n) => window.debugAPI.setExteriorView(n), name);
     await settle(3);
-    await page.screenshot({ path: resolve(outDir, `ext_${name}.png`) });
+    await page.screenshot({ timeout: 120000, path: resolve(outDir, `ext_${name}.png`) });
     const s = await stats();
     results.exterior[name] = s;
     console.log(`ext ${name}: ${s.calls} calls ${(s.triangles / 1000).toFixed(0)}k tris`);
@@ -70,7 +87,7 @@ if (want("exterior")) {
   for (const [name, p] of Object.entries(poses)) {
     await page.evaluate((a) => window.debugAPI.setExteriorPose(a.slice(0, 3), a.slice(3, 6)), p);
     await settle(3);
-    await page.screenshot({ path: resolve(outDir, `ext_${name}.png`) });
+    await page.screenshot({ timeout: 120000, path: resolve(outDir, `ext_${name}.png`) });
     const s = await stats();
     results.exterior[name] = s;
     console.log(`ext ${name}: ${s.calls} calls ${(s.triangles / 1000).toFixed(0)}k tris`);
@@ -88,7 +105,7 @@ if (want("views")) {
       continue;
     }
     await settle(3);
-    await page.screenshot({ path: resolve(outDir, `int_${name}.png`) });
+    await page.screenshot({ timeout: 120000, path: resolve(outDir, `int_${name}.png`) });
     const s = await stats();
     results.views[name] = s;
     console.log(`int ${name}: room=${s.room} rooms=${s.visibleRooms} ${s.calls} calls ${(s.triangles / 1000).toFixed(0)}k tris lights=${s.lightDescs}`);
@@ -97,7 +114,10 @@ if (want("views")) {
 
 // --- navigation tests -------------------------------------------------------------------------
 if (want("nav")) {
-  const layout = await page.evaluate(() => ({ ROOMS: window.debugAPI.layout.ROOMS, doors: window.debugAPI.doors() }));
+  // software GL: render tiny so simulated time advances at a sane rate during walks
+  await page.evaluate(() => window.debugAPI.setPixelRatio(0.25));
+  const layout = await page.evaluate(() => ({ ROOMS: window.debugAPI.layout.ROOMS, CLUSTERS: window.debugAPI.layout.CLUSTERS, doors: window.debugAPI.doors() }));
+  const floorOf = (id) => (layout.ROOMS[id].floorY !== undefined ? layout.ROOMS[id].floorY : layout.CLUSTERS[layout.ROOMS[id].cluster].floorY);
   const DOORS = await page.evaluate(() => window.debugAPI.zone.doors.map((d) => ({ id: d.id, a: d.spec.a, b: d.spec.b, axis: d.spec.axis, at: d.spec.at, c: d.spec.c, style: d.style, locked: d.locked })));
   const center = (id) => {
     const r = layout.ROOMS[id];
@@ -105,8 +125,10 @@ if (want("nav")) {
   };
   results.nav.doors = {};
   let pass = 0;
+  const doorFilter = process.env.REVIEW_DOORS ? new Set(process.env.REVIEW_DOORS.split(",")) : null;
   for (const d of DOORS) {
     if (d.a === d.b) continue; // lift cab doors
+    if (doorFilter && !doorFilter.has(d.id)) continue;
     const ca = center(d.a);
     // which side of the plane is room a?
     const side = d.axis === "z" ? Math.sign(ca[1] - d.at) : Math.sign(ca[0] - d.at);
@@ -114,19 +136,18 @@ if (want("nav")) {
     const start = d.axis === "z" ? [d.c, d.at + side * back] : [d.at + side * back, d.c];
     // face the door: forward -z is yaw 0; +z is 180; -x is 90; +x is -90
     const yaw = d.axis === "z" ? (side > 0 ? 0 : 180) : side > 0 ? 90 : -90;
-    await page.evaluate((a) => window.debugAPI.setPose(a.x, a.z, a.yaw, 0), { x: start[0], z: start[1], yaw });
+    await page.evaluate((a) => window.debugAPI.setPose(a.x, a.z, a.yaw, 0, a.y), { x: start[0], z: start[1], yaw, y: floorOf(d.a) });
     await settle(2, 200);
     if (d.locked) await page.evaluate((id) => window.debugAPI.openDoor(id), d.id);
-    const secs = d.style === "blast" ? 7 : 4.5;
+    const secs = d.style === "blast" ? 8 : 5;
     const end = await page.evaluate(([s]) => window.debugAPI.walk(["KeyW"], s), [secs]);
-    await page.waitForTimeout(secs * 1000 + 300);
     await page.evaluate(() => (window.debugAPI.player.frozen = true));
     const room = await page.evaluate(() => window.debugAPI.currentRoom());
     const ok = room === d.b || (room !== d.a && room !== null);
     if (ok) pass++;
     results.nav.doors[d.id] = { from: d.a, to: d.b, endedIn: room, ok, end: end && [+end.x.toFixed(1), +end.y.toFixed(1), +end.z.toFixed(1)] };
     console.log(`door ${d.id}: ${d.a} -> ${d.b} ended in ${room} ${ok ? "OK" : "FAIL"}`);
-    if (!ok) await page.screenshot({ path: resolve(outDir, `nav_fail_${d.id}.png`) });
+    if (!ok) await page.screenshot({ timeout: 120000, path: resolve(outDir, `nav_fail_${d.id}.png`) });
   }
   results.nav.doorsPassed = `${pass}/${Object.keys(results.nav.doors).length}`;
   console.log("doors passed", results.nav.doorsPassed);
@@ -136,22 +157,21 @@ if (want("nav")) {
     await page.evaluate(() => window.debugAPI.setView("lift_lift_T1"));
     await settle(2, 200);
     await page.evaluate(() => window.debugAPI.walk(["KeyW"], 3));
-    await page.waitForTimeout(3400);
     const inCab = await page.evaluate(() => ({ x: window.debugAPI.player.position.x, z: window.debugAPI.player.position.z }));
     const started = await page.evaluate(() => window.debugAPI.ride("liftLobbyT", "hangar"));
     await page.waitForTimeout(1500);
-    await page.screenshot({ path: resolve(outDir, `nav_lift_sealing.png`) });
+    await page.screenshot({ timeout: 120000, path: resolve(outDir, `nav_lift_sealing.png`) });
     await page.waitForTimeout(4500);
-    await page.screenshot({ path: resolve(outDir, `nav_lift_moving.png`) });
+    await page.screenshot({ timeout: 120000, path: resolve(outDir, `nav_lift_moving.png`) });
     let room = null;
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 240; i++) {
       await page.waitForTimeout(500);
       room = await page.evaluate(() => window.debugAPI.currentRoom());
       const riding = await page.evaluate(() => !!window.debugAPI.lifts.riding);
       if (!riding && room) break;
     }
     await settle(2, 500);
-    await page.screenshot({ path: resolve(outDir, `nav_lift_arrived.png`) });
+    await page.screenshot({ timeout: 120000, path: resolve(outDir, `nav_lift_arrived.png`) });
     results.nav.lift = { started, inCab, arrivedRoom: room, ok: room === "liftLobbyH" };
     console.log(`lift ride tower->hangar: started=${started} arrived in ${room} ${results.nav.lift.ok ? "OK" : "FAIL"}`);
   }
@@ -161,21 +181,22 @@ if (want("nav")) {
     await settle(2, 300);
     const boardP = page.evaluate(() => window.debugAPI.board("tower"));
     await page.waitForTimeout(1800);
-    await page.screenshot({ path: resolve(outDir, `nav_board_flyin.png`) });
+    await page.screenshot({ timeout: 120000, path: resolve(outDir, `nav_board_flyin.png`) });
     await boardP;
     await settle(3, 600);
-    await page.screenshot({ path: resolve(outDir, `nav_board_arrived.png`) });
+    await page.screenshot({ timeout: 120000, path: resolve(outDir, `nav_board_arrived.png`) });
     const afterBoard = await stats();
     const leaveP = page.evaluate(() => window.debugAPI.leave());
     await leaveP;
     await settle(3, 600);
-    await page.screenshot({ path: resolve(outDir, `nav_leave_exterior.png`) });
+    await page.screenshot({ timeout: 120000, path: resolve(outDir, `nav_leave_exterior.png`) });
     const afterLeave = await stats();
     results.nav.transitions = { boardMode: afterBoard.mode, boardRoom: afterBoard.room, leaveMode: afterLeave.mode, ok: afterBoard.mode === "interior" && afterLeave.mode === "exterior" };
     console.log(`board -> ${afterBoard.mode}/${afterBoard.room}; leave -> ${afterLeave.mode} ${results.nav.transitions.ok ? "OK" : "FAIL"}`);
   }
 }
 
+await page.evaluate(() => window.debugAPI.setPixelRatio(1)).catch(() => {});
 // --- summary ---------------------------------------------------------------------------------
 const all = [...Object.values(results.exterior), ...Object.values(results.views)].filter((s) => s && s.calls !== undefined);
 results.summary = {

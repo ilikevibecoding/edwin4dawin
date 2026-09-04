@@ -48,7 +48,7 @@ page.on("pageerror", (e) => {
   console.log("PAGE ERROR:", e.message, (e.stack || "").split("\n").slice(1, 4).join(" | "));
 });
 const t0 = Date.now();
-await page.goto(opt.url, { waitUntil: "load" });
+await page.goto(opt.url, { waitUntil: "domcontentloaded", timeout: 180000 });
 try {
   await Promise.race([
     page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 240000 }),
@@ -92,7 +92,7 @@ const shot = async (name, setup) => {
   }
   await settle(3);
   const file = resolve(opt.out, `${name}.png`);
-  await page.screenshot({ path: file });
+  await page.screenshot({ path: file, timeout: 120000 });
   const s = await stats();
   results.push({ name, ...s });
   console.log(`shot ${name}: room=${s.room} rooms=${s.visibleRooms} ${s.calls} calls ${(s.triangles / 1000).toFixed(0)}k tris colliders=${s.colliders} lightDescs=${s.lightDescs} -> ${file}`);

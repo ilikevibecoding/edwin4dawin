@@ -262,6 +262,41 @@ export function buildImperialMaterials() {
     mats.hazard = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6, metalness: 0.2, envMapIntensity: 0.5 });
   }
 
+  // --- fighter / hangar additions (hangar workstream)
+  // TIE solar panel: near-black cells with a fine lighter lattice, low-gloss dielectric
+  {
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#1c1e23";
+    ctx.fillRect(0, 0, 256, 256);
+    const cells = 8;
+    const cw = 256 / cells;
+    for (let i = 0; i < cells; i++) {
+      for (let j = 0; j < cells; j++) {
+        const k = 0.9 + ((i * 7 + j * 13) % 5) * 0.035;
+        ctx.fillStyle = `rgb(${Math.round(22 * k)},${Math.round(24 * k)},${Math.round(30 * k)})`;
+        ctx.fillRect(i * cw + 1.5, j * cw + 1.5, cw - 3, cw - 3);
+      }
+    }
+    ctx.fillStyle = "#3a3f48";
+    for (let i = 0; i <= cells; i++) {
+      ctx.fillRect(i * cw - 1, 0, 2, 256);
+      ctx.fillRect(0, i * cw - 1, 256, 2);
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    mats.tiePanel = new THREE.MeshStandardMaterial({ map: tex, color: 0xffffff, roughness: 0.42, metalness: 0.55, envMapIntensity: 0.9, side: THREE.DoubleSide });
+  }
+  // dark-red-tinted cockpit glass (TIE viewport)
+  mats.tieGlass = new THREE.MeshPhysicalMaterial({ color: 0x4a0f0f, roughness: 0.12, metalness: 0, transparent: true, opacity: 0.62, depthWrite: false, envMapIntensity: 1.1, side: THREE.DoubleSide });
+  // ion-engine exhaust flare (additive, red-orange); the diffuser map gives it a soft round core
+  mats.exhaustGlow = new THREE.MeshBasicMaterial({ color: 0xff6a3a, map: diffuser, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  // rotating warning-beacon lobe (additive amber, no depth write so it never z-fights the housing)
+  mats.beaconGlow = new THREE.MeshBasicMaterial({ color: 0xffb020, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+
   // indicator grids (three densities) with the blink shader
   mats.blink = blinkPatch(
     new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: makeIndicatorGrid(512, 256, 351), emissiveIntensity: 2.2, roughness: 0.3, metalness: 0 }),
@@ -308,8 +343,8 @@ function emitTintPatch(material) {
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <emissivemap_fragment>",
       `#include <emissivemap_fragment>
-      #ifdef USE_COLOR
-        totalEmissiveRadiance *= vColor;
+      #if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
+        totalEmissiveRadiance *= vColor.rgb;
       #endif`,
     );
   };
@@ -403,11 +438,12 @@ function makeWeatheringAtlas(size = 1024, seed = 4021) {
           lum = 0.7;
         }
       } else if (cell === 2) {
-        // soft patch: an irregular cloud, meant to be tinted per decal and used at low alpha
-        const dx = u - 0.5;
-        const dy = v - 0.5;
-        const rr = Math.hypot(dx, dy) / (0.42 + 0.08 * fbm(u * 2, v * 2, 5));
-        a = Math.max(0, 1 - rr * rr) * (0.6 + 0.4 * fbm(u, v, 9)) * 0.5;
+        // repainted panel: a rectangle with a short soft edge and a mottled interior, tinted per decal
+        // (vertex colour carries the paint tone, vertex alpha the coverage) so it reads as a plate that
+        // was resprayed a slightly different grey, not as a cloud
+        const edge = Math.min(u - 0.06, 0.94 - u, v - 0.06, 0.94 - v);
+        const mask = Math.max(0, Math.min(1, edge / 0.025));
+        a = mask * (0.72 + 0.28 * fbm(u, v, 7)) * (0.88 + 0.12 * fbm(u, v, 33));
         lum = 1.0;
       } else {
         // fine grime: many hairline streaks running along v from small sources
@@ -443,27 +479,30 @@ function makeWeatheringAtlas(size = 1024, seed = 4021) {
 // Adds the exterior-detail keys to a material set built by buildImperialMaterials(). Idempotent.
 export function addExteriorDetailMaterials(mats) {
   if (mats.hullGreeble) return mats;
-  const metal = mats.impMetal.map ? { map: mats.impMetal.map, roughnessMap: mats.impMetal.roughnessMap, metalnessMap: mats.impMetal.metalnessMap, normalMap: mats.impMetal.normalMap } : makeWornMetal(1024, 23);
-  // painted hull machinery: light grey (tinted per instance), slightly rougher and less metallic than
-  // bare steel so it reads as armour plate rather than chrome under the sun
+  // shares the worn-metal texture set already loaded for impMetal
+  const metal = mats.impMetal;
+  // painted hull machinery (tinted per instance): matte dielectric like the hull plating, so it takes
+  // the sun as diffuse shading and sits in shadow as dark as the armour it stands on (a half-metal
+  // finish mirrored the neutral environment and floated bright over the shadowed keel). The worn-metal
+  // roughness map averages ~0.36, so the factor lifts it to ~0.6 like the hull texture.
   mats.hullGreeble = new THREE.MeshStandardMaterial({
     map: metal.map,
     roughnessMap: metal.roughnessMap,
     metalnessMap: metal.metalnessMap,
     normalMap: metal.normalMap,
     normalScale: new THREE.Vector2(0.45, 0.45),
-    roughness: 0.95,
-    metalness: 0.42,
+    roughness: 1.7,
+    metalness: 0.14,
     vertexColors: true,
     color: 0xffffff,
-    envMapIntensity: 0.65,
+    envMapIntensity: 0.6,
   });
   mats.emitTint = makeEmitTint(2.4);
   // anti-collision strobes: greebles.js toggles emissiveIntensity between 0 and this every flash
   mats.emitStrobe = makeEmitTint(6.0);
   mats.emitStrobe.userData.onIntensity = 6.0;
   mats.weathering = new THREE.MeshStandardMaterial({
-    map: makeWeatheringAtlas(1024, 4021),
+    map: makeWeatheringAtlas(512, 4021),
     transparent: true,
     depthWrite: false,
     roughness: 0.92,
@@ -479,5 +518,5 @@ export function addExteriorDetailMaterials(mats) {
 }
 
 // Keys whose meshes should not cast shadows (emitters, glass, decals, grates)
-export const NO_SHADOW_KEYS = new Set(["glass", "glassDark", "holo", "holoWire", "beam", "impDecal", "deckMarks", "impGrate", "lightBand", "lightBandWarm", "lightBandRed", "lightSoft", "leds", "blink", "blinkSparse", "blinkDense", "emitTint", "emitStrobe", "weathering"]);
+export const NO_SHADOW_KEYS = new Set(["glass", "glassDark", "holo", "holoWire", "beam", "impDecal", "deckMarks", "impGrate", "lightBand", "lightBandWarm", "lightBandRed", "lightSoft", "leds", "blink", "blinkSparse", "blinkDense", "emitTint", "emitStrobe", "weathering", "tieGlass", "exhaustGlow", "beaconGlow"]);
 export const isEmissiveKey = (k) => k.startsWith("emit") || k.startsWith("screen") || k.startsWith("blink") || k.startsWith("lightBand") || k === "lightSoft" || k === "leds";

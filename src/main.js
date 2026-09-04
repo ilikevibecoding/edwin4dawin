@@ -253,6 +253,7 @@ function fitSunShadow() {
 let debugMode = false;
 let framesRendered = 0;
 let pendingCapture = null;
+let debugWalk = null;
 const debugAPI = {
   ready: false,
   get views() {
@@ -312,23 +313,42 @@ const debugAPI = {
     if (modes.mode !== "interior") modes.setInteriorImmediate("tower");
     player.headBob = false;
     player.frozen = true;
-    const room = y === null ? zone.roomAt(new THREE.Vector3(x, player.position.y, z)) : null;
-    player.teleport(x, y === null ? (room ? room.floorY : player.position.y) : y, z, THREE.MathUtils.degToRad(yawDeg));
+    let floor = y;
+    if (floor === null) {
+      // rooms of different decks overlap in plan: prefer the current deck, else the nearest floor
+      const here = zone.roomAt(new THREE.Vector3(x, player.position.y, z));
+      if (here) floor = here.floorY;
+      else {
+        let best = null;
+        for (const r of zone.rooms.values()) {
+          const [x0, z0, x1, z1] = r.spec.box;
+          if (x < x0 || x > x1 || z < z0 || z > z1) continue;
+          if (!best || Math.abs(r.floorY - player.position.y) < Math.abs(best.floorY - player.position.y)) best = r;
+        }
+        floor = best ? best.floorY : player.position.y;
+      }
+    }
+    player.teleport(x, floor, z, THREE.MathUtils.degToRad(yawDeg));
     player.pitch = THREE.MathUtils.degToRad(pitchDeg);
     player.updateCamera(0);
     framesRendered = 0;
     return true;
   },
-  // walk the player (debug): unfreezes and simulates key presses for `seconds`
+  // walk the player (debug): unfreezes and holds keys for `seconds` of SIMULATED time (dt-summed), so
+  // the result does not depend on the frame rate of the machine running the harness
   walk(keyCodes, seconds) {
     player.frozen = false;
     player.locked = true;
     for (const k of keyCodes) player.keys.add(k);
     return new Promise((resolve) => {
-      setTimeout(() => {
-        for (const k of keyCodes) player.keys.delete(k);
-        resolve({ x: player.position.x, y: player.position.y, z: player.position.z });
-      }, seconds * 1000);
+      debugWalk = {
+        remaining: seconds,
+        done: () => {
+          for (const k of keyCodes) player.keys.delete(k);
+          debugWalk = null;
+          resolve({ x: player.position.x, y: player.position.y, z: player.position.z });
+        },
+      };
     });
   },
   unfreeze() {
@@ -437,6 +457,10 @@ function frame() {
   renderer.info.reset();
   IMP_TIME.value = t;
 
+  if (debugWalk) {
+    debugWalk.remaining -= dt;
+    if (debugWalk.remaining <= 0) debugWalk.done();
+  }
   space.update(dt);
   sun.position.copy(space.sunWorld).multiplyScalar(1000);
   exteriorCam.update(dt);
