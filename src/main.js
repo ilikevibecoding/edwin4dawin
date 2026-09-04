@@ -209,7 +209,7 @@ const INTERIOR_VIEWS = {
   cargo: { sector: "d4_cargo", x: -5, z: -50, yaw: 90, pitch: -4 },
   reactor: { sector: "d4_reactor", x: 0, z: -67, yaw: 0, pitch: -2 },
   hangar_entry: { sector: "d5_hangar", x: 0, z: -37, yaw: 0, pitch: -4 },
-  hangar_deck: { sector: "d5_hangar", x: -20, z: -60, yaw: 40, pitch: -2 },
+  hangar_deck: { sector: "d5_hangar", x: -28, z: -57, yaw: -35, pitch: -6 },
   hangar_racks: { sector: "d5_hangar", x: 10, z: -95, yaw: -110, pitch: 10 },
   fighterbay: { sector: "d5_fighterbay", x: 38, z: -100, yaw: -90, pitch: -4 },
   shuttlebay: { sector: "d5_shuttlebay", x: -38, z: -105, yaw: 90, pitch: -4 },
@@ -497,7 +497,7 @@ function frame() {
   const showExterior = director.mode === "exterior" || interior.seesExterior();
   exterior.setVisible(showExterior);
   exterior.setViewMode(director.mode);
-  if (showExterior) exterior.updateLOD(camera.position);
+  if (showExterior) exterior.updateLOD(camera.position, director.mode === "interior" ? 0.55 : 1);
   exterior.update(dt, t);
   const hangar = interior.sectors.get("d5_hangar");
   if (director.mode === "exterior") {

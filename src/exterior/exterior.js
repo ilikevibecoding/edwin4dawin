@@ -87,16 +87,20 @@ export function buildExterior(scene, materials) {
     stations,
     stats: hull.stats,
     /** Distance-based LOD: toggles per-chunk plates / greebles and the fine-detail groups. */
-    updateLOD(cameraPos) {
+    /**
+     * Distance LOD per hull chunk and fine-detail group. `scale` < 1 tightens every threshold — used
+     * while the hull is only seen through a room's windows, where the room itself is the priority.
+     */
+    updateLOD(cameraPos, scale = 1) {
       for (const cg of chunkGroups) {
         tmp.set(0, 0, cg.userData.centerZ);
         const d = tmp.distanceTo(cameraPos);
         for (const child of cg.children) {
-          if (child.userData.lod === 0) child.visible = d < LOD_DISTANCES.greebles;
-          else if (child.userData.lod === 1) child.visible = d < LOD_DISTANCES.plates;
+          if (child.userData.lod === 0) child.visible = d < LOD_DISTANCES.greebles * scale;
+          else if (child.userData.lod === 1) child.visible = d < LOD_DISTANCES.plates * scale;
         }
       }
-      for (const f of fineGroups) f.group.visible = f.center.distanceTo(cameraPos) < LOD_DISTANCES.fine;
+      for (const f of fineGroups) f.group.visible = f.center.distanceTo(cameraPos) < LOD_DISTANCES.fine * scale;
     },
     update(dt, t) {
       eng.update(t);
