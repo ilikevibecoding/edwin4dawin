@@ -881,15 +881,65 @@ function acaciaTile(ctx, w, h, opts) {
   };
 
   for (const t of sites) {
-    // each cluster casts into the one behind it; fringe clusters stay thin
-    if (!t.edge) cluster(t.x + t.r * 0.18, t.y + t.r * 0.3 * yGain, t.r * 0.9, t.ang, deep, 0.9, 1.35);
+    // each cluster casts into the one behind it; fringe clusters stay thin.
+    // The cast used to be drawn at 1.35x the cluster and near-opaque, and at
+    // arm's length that halo filled every gap between clusters, so a card
+    // was a solid camouflage plate with no sky through it. At the cluster's
+    // own size and a third transparent the gaps stay open: a spray shows its
+    // structure and the card edge is leaf clusters, not a shape.
+    if (!t.edge) cluster(t.x + t.r * 0.18, t.y + t.r * 0.3 * yGain, t.r * 0.8, t.ang, deep, 0.7, 1.1);
     for (let k = 0; k < 2; k++) {
       const sub = clamp(t.tone + (k === 0 ? -0.15 : 0.13) * contrast);
       cluster(t.x, t.y, t.r * (k === 0 ? 1 : 0.84), t.ang + (k ? 0.4 : 0), rampAt(ramp, sub), 1, k === 0 ? 1.0 : 0.85);
     }
   }
 
+  raggedEdge(ctx, w, h, seed);
   bakeSprayShading(ctx, w, h, { dark: [8, 10, 4], ...bake });
+}
+
+/**
+ * Cut the painting back from the tile boundary along a noisy line.
+ *
+ * The rachis runs almost the full width of the cell and the shoots overshoot
+ * it, so wherever the painting met the tile it was clipped dead straight — and
+ * a straight alpha edge on a card is a straight edge on the tree. At mid
+ * distance the mip-fill compensation then closes the fringe up to that line and
+ * the crown reads as three or four planar slabs with ruled edges, which is what
+ * every critic saw. This eats the outer 4-13% of the cell along a closed noise
+ * curve, so a card ends in leaf clusters torn off at random and never in a line.
+ * (Depth 0.13: the first cut at 0.10 still left one straight run per card.)
+ * `destination-out` respects the atlas transform, which `getImageData` would not.
+ */
+function raggedEdge(ctx, w, h, seed, { inset = 0.035, depth = 0.13, freq = 3.2 } = {}) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.rect(-4, -4, w + 8, h + 8);
+  const N = 240;
+  for (let i = 0; i <= N; i++) {
+    const t = (i % N) / N;
+    const s = t * 4;
+    const side = Math.floor(s) % 4;
+    const f = s - Math.floor(s);
+    let px;
+    let py;
+    let nx;
+    let ny;
+    if (side === 0) [px, py, nx, ny] = [f * w, 0, 0, 1];
+    else if (side === 1) [px, py, nx, ny] = [w, f * h, -1, 0];
+    else if (side === 2) [px, py, nx, ny] = [(1 - f) * w, h, 0, -1];
+    else [px, py, nx, ny] = [0, (1 - f) * h, 1, 0];
+    // sampled on a circle so the curve closes on itself at t = 1
+    const a = t * Math.PI * 2;
+    const n = fbm(Math.cos(a) * freq + 5.5, Math.sin(a) * freq + 2.5, { octaves: 3, period: 4, seed: (seed * 7) & 255 });
+    const d = (inset + depth * Math.pow(n, 1.4) * 2.2) * w;
+    if (i === 0) ctx.moveTo(px + nx * d, py + ny * d);
+    else ctx.lineTo(px + nx * d, py + ny * d);
+  }
+  ctx.closePath();
+  ctx.fill('evenodd');
+  ctx.restore();
 }
 
 export function acaciaAtlas() {
@@ -917,7 +967,10 @@ export function acaciaAtlas() {
           shoots: 7,
           sweep: 0.5,
           thorns: 1.0,
-          contrast: 1.0,
+          // eased from 1.0: with the crown mosaic now putting three stops
+          // between sprays per tree, the two-population tone inside each card
+          // on top of that read as camouflage blotches at arm's length
+          contrast: 0.85,
           bake: { root: 0.32, axis: 0.2, rim: 0.18 },
         }),
       // 1 round-crowned tree (marula, shepherd's tree): small oval leaves in
@@ -2114,24 +2167,30 @@ export function treelineTexture(variant = 0) {
         // the strip high: the grass plain runs right up to the horizon and the
         // scrub is what breaks the line of it
         const scrubCol = (d) => mixRgb(deep, haze, d);
+        // Gated hard: at a ring card's scale (a quarter of this strip is a
+        // thirty-metre card) a scrub line that ran the whole width was a
+        // continuous dark wall under the trees, and the wall is what the
+        // skyline read as. Now it is patches, and mostly absent.
         for (let layer = 0; layer < 3; layer++) {
           const d = 0.6 - layer * 0.22;
-          ctx.fillStyle = rgbStr(scrubCol(d), 1, 0.9);
+          ctx.fillStyle = rgbStr(scrubCol(d), 1, 0.8);
           for (let x = 0; x < cw; x += 3) {
             const n = fbm(x * 0.012 + layer * 9.1, variant * 3.3 + layer, { octaves: 3, period: 12, seed: 55 + layer });
-            const gate = smoothstep(0.42, 0.6, fbm(x * 0.004 + layer * 3, variant * 1.7, { octaves: 2, period: 8, seed: 66 + layer }));
-            const hh = ch * (0.02 + n * 0.07) * gate;
+            const gate = smoothstep(0.52, 0.66, fbm(x * 0.004 + layer * 3, variant * 1.7, { octaves: 2, period: 8, seed: 66 + layer }));
+            const hh = ch * (0.015 + n * 0.045) * gate;
             if (hh < 1) continue;
             ctx.fillRect(x, ch * 0.985 - hh, 3.5, hh + 1);
           }
         }
 
-        // trees: a handful per layer, umbrella shapes wide and low, the far
-        // layer smallest and closest to the haze
+        // trees: a few per layer, umbrella shapes wide and low, the far layer
+        // smallest and closest to the haze. Twenty-three per strip was a tree
+        // every six metres on the ring — woodland; a savanna skyline is open
+        // ground with a crown standing on it every twenty or thirty.
         const layers = [
-          { n: 9, d: 0.62, hi: [0.14, 0.24], wid: [1.3, 2.0] },
-          { n: 8, d: 0.4, hi: [0.2, 0.34], wid: [1.2, 1.9] },
-          { n: 6, d: 0.18, hi: [0.28, 0.46], wid: [1.1, 1.8] },
+          { n: 4, d: 0.62, hi: [0.14, 0.24], wid: [1.3, 2.0] },
+          { n: 4, d: 0.4, hi: [0.2, 0.34], wid: [1.2, 1.9] },
+          { n: 3, d: 0.18, hi: [0.28, 0.46], wid: [1.1, 1.8] },
         ];
         for (const L of layers) {
           for (let i = 0; i < L.n; i++) {
