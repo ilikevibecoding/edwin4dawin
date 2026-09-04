@@ -232,11 +232,13 @@ export function holoMaterial(ctx, key = "cmd_holo", { size = 512, seed = 5, hue 
     g.fillRect(32, 0, 28, 28);
     g.fillStyle = col(1, 0.26);
     g.fillRect(64, 0, 28, 28);
+    g.fillStyle = "rgba(255,179,71,1)";
+    g.fillRect(96, 0, 28, 28);
     const tex = toTexture(c, { srgb: true, wrap: false });
     ctx.materials[key] = new THREE.MeshBasicMaterial({ color: 0xffffff, map: tex, transparent: true, opacity: 1.0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
   }
   const p = 14 / size;
-  return { key, bright: [p, 1 - p], mid: [46 / size, 1 - p], dim: [78 / size, 1 - p] };
+  return { key, bright: [p, 1 - p], mid: [46 / size, 1 - p], dim: [78 / size, 1 - p], amber: [110 / size, 1 - p] };
 }
 
 /** Open projection cone (additive) from a lens of radius r0 at y0 up to radius r1 at y1. */
