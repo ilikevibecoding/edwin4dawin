@@ -41,6 +41,12 @@ import {
   hgWall,
   hgWallOpenings,
   hgCeiling,
+  hgBollard,
+  hgBerthOutline,
+  hgPowerDroid,
+  hgLadder,
+  hgDeckCable,
+  hgChocks,
 } from "./hangar_kit.js";
 
 /** Mobile boarding stairs: wheeled chassis, solid-sided flight rising toward -x, top platform. */
@@ -92,7 +98,7 @@ function boardingStairs(kit, ux, uz, opts = {}) {
   }
   // top platform (walkable) with railings on three sides; the pad-side end is open
   kit.boxMM("impMetalRough", [px0, top - 0.12, z0], [px1, top - 0.02, z1], { color: PALETTE.impCharcoal, texel: 0.5 });
-  kit.boxMM("hangar_grate", [px0 + 0.02, top - 0.02, z0 + 0.02], [px1 - 0.02, top, z1 - 0.02], { texel: 1 });
+  kit.boxMM("impMetalRough", [px0 + 0.02, top - 0.02, z0 + 0.02], [px1 - 0.02, top, z1 - 0.02], { color: PALETTE.impGreyDark, texel: 2 });
   kit.floor(px0, z0, px1, z1, top, "boarding-platform");
   kit.collider([px0, 0.5, z0], [px1, top - 0.02, z1], "boarding-slab");
   kit.colliders[kit.colliders.length - 1].walkable = true;
@@ -142,12 +148,14 @@ export function buildShuttleBay(kit, ctx, room) {
   const [OX, OY, OZ] = room.origin;
   const accentKey = "emitBlue";
   const rand = rng(9090);
-  const blueBlink = [];
   const redBlink = [];
-  const amberBlink = [];
   const PAD = { x: 0, z: -5, r: 12 };
   // the parked shuttle (fighters workstream): nose toward +z, wings folded, ramp down on the pad
   buildShuttle(kit, new THREE.Vector3(PAD.x, 0, PAD.z), Math.PI);
+  // ground kit under the parked shuttle: chocks at the three gear pads (nose leg at ship z -5.6 -> room
+  // z = PAD.z + 5.6; mains at ship z 5.6, x ±1.6 -> room z = PAD.z - 5.6), power cable to the main gear bay
+  hgChocks(kit, PAD.x, PAD.z + 5.6, 0, 1.05);
+  for (const sx of [-1.6, 1.6]) hgChocks(kit, PAD.x + sx, PAD.z - 5.6, 0, 1.05);
 
   // ---- flight-control intrusion (room-local box) -> soffit + wall notch + ceiling skip
   const fc = ROOM_BY_ID.flight_control;
@@ -171,7 +179,7 @@ export function buildShuttleBay(kit, ctx, room) {
   deckDecal(kit, hgNumber(7), PAD.x, PAD.z + PAD.r + 2.6, 3.2, Math.PI, 0.007);
   for (let i = 0; i < 20; i++) {
     const a = (i / 20) * Math.PI * 2;
-    hgDeckLamp(kit, PAD.x + Math.cos(a) * (PAD.r + 1.0), PAD.z + Math.sin(a) * (PAD.r + 1.0), i % 2 ? "emitWhite" : "emitBlue");
+    hgDeckLamp(kit, PAD.x + Math.cos(a) * (PAD.r + 1.0), PAD.z + Math.sin(a) * (PAD.r + 1.0), "emitBlue");
   }
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
@@ -189,16 +197,33 @@ export function buildShuttleBay(kit, ctx, room) {
   kit.boxMM("chevronY", [-24.9, 0.002, -11.5], [-23.6, 0.012, 11.5], { texel: 0.6 });
   deckDecalImp(kit, IMP_DECAL.keepClear, PAD.x, PAD.z + PAD.r * 0.55, 3.0, 0, 0.0072);
   deckDecalImp(kit, IMP_DECAL.keepClear, PAD.x, PAD.z - PAD.r * 0.55, 3.0, Math.PI, 0.0072);
+  // painted exclusion outline around the parked shuttle's footprint (hull + folded wings), hazard bollards
+  // on the door side where the ground crew cross, and a lit lane from the door to the ramp foot
+  hgBerthOutline(kit, PAD.x, PAD.z, 0, 6.2, 12.6);
+  for (const [bx, bz] of [[-8.5, -18.5], [-8.5, 8.5], [8.5, -18.5]]) hgBollard(kit, bx, bz, "emitAmber");
+  dashedLine(kit, [-PAD.r - 4.8, -3.6], [-3.2, 3.2], { dash: 1.6, gap: 1.2, w: 0.2 });
 
   // ---- refuelling boom (NW of the pad), fuel bowser and hose reels along the N wall
-  refuelBoom(kit, -15.5, -23, [-9.2, 8.3, -14.8], amberBlink, accentKey);
-  hgFuelBowser(kit, -19.5, -33, Math.PI / 2 - 0.15, { seed: 4 });
+  refuelBoom(kit, -15.5, -23, [-9.2, 8.3, -14.8], redBlink, accentKey);
+  hgFuelBowser(kit, -19.5, -33, Math.PI / 2 - 0.15, { seed: 4, screen: "scrBlue0" });
   hgHoseReel(kit, -10, -37.2, Math.PI, { hoseOut: true });
   hgPowerBox(kit, -13.5, -37.6, 0);
   hgPowerBox(kit, 14, -18.5, -Math.PI / 2, { on: false });
   hgFloorDrain(kit, -8, -30, 1.4, 1.4);
   hgFloorDrain(kit, 8, 14, 1.4, 1.4);
   hgFloorDrain(kit, PAD.x - 15, PAD.z + 12, 1.2, 1.2);
+  // ground crew working the shuttle: power droid cabled to the main gear bay, a fuel line from a second
+  // bowser to the port wing root, a maintenance ladder at the hinge, tool carts, crate stacks by the walls
+  hgPowerDroid(kit, -7.2, -12.5, Math.PI / 2 + 0.3, { cableTo: [-2.6, -10.2], on: true });
+  hgFuelBowser(kit, -9.5, 2.5, -0.4, { seed: 9, screen: "scrBlue0" });
+  hose(kit, "rubber", new THREE.Vector3(-8.2, 0.75, 1.4), new THREE.Vector3(-2.5, 2.8, -3.5), 0.6, 0.07, 6, { color: PALETTE.impCharcoal });
+  hgLadder(kit, 7.0, -8.5, -Math.PI / 2 + 0.2, 3.2);
+  hgDeckCable(kit, [[-7.2, -13.6], [-5.5, -16.2], [-1.0, -17.5]]);
+  hgToolCart(kit, -18.5, 12.5, 1.9, { seed: 18 });
+  hgToolCart(kit, 5.5, -30.5, -0.6, { seed: 19 });
+  hgCrateStack(kit, -20.5, -12, 0.15, [["b", 0, 0, 0], ["a", 1.6, 0, 0.1, 0.2], ["c", 0.2, 1.2, 0, 0.6], ["c", 1.7, 1.0, 0.1, 0.4]], { seed: 74 });
+  hgCrateStack(kit, -21, 22, -0.2, [["a", 0, 0, 0], ["a", 0, 1.0, 0.05, 0.1], ["b", 1.6, 0, 0, 0.3]], { seed: 75 });
+  hgCrateStack(kit, 15, -37, 0.1, [["b", 0, 0, 0], ["b", 0.1, 1.2, 0.05, 0.2], ["a", 1.7, 0, 0.1, 0.6]], { seed: 76 });
 
   // ---- boarding stairs (E of the pad, top toward the pad), tool cart, ground crew console
   boardingStairs(kit, 12.6, -1.5, { accentKey });
@@ -234,36 +259,24 @@ export function buildShuttleBay(kit, ctx, room) {
       kit.collider([ax - 0.4, 0, cz - 0.4], [ax + 0.4, 3.6, cz + 0.4], "arch");
     }
     kit.box("impTrim", -6, 3.55, cz, 6.5, 0.3, 0.5, { color: PALETTE.impBlack, texel: 1 });
-    kit.box("emitBlueSoft", -6, 3.38, cz, 5.4, 0.04, 0.3, { uv: "keep" });
+    kit.box("emitBlueDim", -6, 3.38, cz, 5.4, 0.04, 0.3, { uv: "keep" });
     kit.box("impMetal", -6, 3.9, cz, 1.0, 0.4, 0.6, { color: PALETTE.impGreyDark });
     for (let k = 0; k < 3; k++) kit.box([accentKey, "emitGreen", "emitRedImp"][k], -6.3 + k * 0.3, 3.9, cz + 0.31, 0.1, 0.1, 0.01);
     kit.boxMM("chevronY", [-9.3, 0.002, cz - 3.5], [-8.7, 0.011, cz + 3.5], { texel: 0.8 });
     kit.boxMM("chevronY", [-3.3, 0.002, cz - 3.5], [-2.7, 0.011, cz + 3.5], { texel: 0.8 });
     deckDecalImp(kit, IMP_DECAL.arrowRight, -6, cz - 2.2, 1.8, Math.PI, 0.0068);
     deckDecalImp(kit, IMP_DECAL.glyphs3, -6, cz + 2.4, 1.6, Math.PI, 0.0068);
-    // inspection console (operator S side, facing the arrivals) and a chair, holo emblem post
-    impConsole(kit, -6, 0, cz + 5.5, 2.6, 0.9, { yaw: Math.PI, seed: 55, screens: ["scrBlue0", "scrBlue1", "scrGreen0"], accentKey, tall: true });
+    // inspection console (operator S side, facing the arrivals) and a chair
+    impConsole(kit, -6, 0, cz + 5.5, 2.6, 0.9, { yaw: Math.PI, seed: 55, screens: ["scrBlue0", "scrBlue1", "scrBlue0"], accentKey, tall: true });
     impChair(kit, -6, 0, cz + 6.9, Math.PI);
-    kit.cyl("impTrim", -13, 0.6, cz + 2, 0.45, 1.2, "y", { color: PALETTE.impBlack, segments: 14 });
-    kit.cyl("holo", -13, 1.75, cz + 2, 0.7, 1.1, "y", { segments: 16, open: true });
-    kit.cyl("holoBright", -13, 1.3, cz + 2, 0.5, 0.06, "y", { segments: 16 });
-    kit.collider([-13.5, 0, cz + 1.5], [-12.5, 1.3, cz + 2.5], "holo");
-    // stanchions + chain line closing the customs zone except through the arch
-    const stan = (x, z) => {
-      kit.cyl("impMetal", x, 0.5, z, 0.03, 1.0, "y", { color: PALETTE.impGrey, segments: 8 });
-      kit.cyl("impTrim", x, 0.03, z, 0.18, 0.06, "y", { color: PALETTE.impBlack, segments: 10 });
-      kit.cyl("impTrim", x, 1.02, z, 0.06, 0.06, "y", { color: PALETTE.impBlack, segments: 8 });
-    };
-    const line = (a, b) => {
-      stan(a[0], a[1]);
-      stan(b[0], b[1]);
-      hose(kit, "impMetal", new THREE.Vector3(a[0], 0.95, a[1]), new THREE.Vector3(b[0], 0.95, b[1]), 0.15, 0.02, 5, { color: PALETTE.impGrey });
-      kit.collider([Math.min(a[0], b[0]) - 0.1, 0, Math.min(a[1], b[1]) - 0.1], [Math.max(a[0], b[0]) + 0.1, 1.05, Math.max(a[1], b[1]) + 0.1], "chain");
-    };
-    line([-16, cz], [-12.5, cz]);
-    line([-12.5, cz], [-9.5, cz]);
-    line([-2.5, cz], [1, cz]);
-    line([1, cz], [4.5, cz]);
+    // the customs line is painted, not roped: a solid yellow control line either side of the arch with
+    // hazard bollards at its ends, and a dark-trimmed impound square with a sealed crate awaiting inspection
+    deckLine(kit, [-16, cz], [-9.5, cz], 0.3);
+    deckLine(kit, [-2.5, cz], [4.5, cz], 0.3);
+    for (const bx of [-16, 4.5]) hgBollard(kit, bx, cz, "emitAmber");
+    hgHazardBorder(kit, -16.5, cz - 1.0, -11.5, cz + 4.0, 0.3);
+    hgCrateStack(kit, -14, cz + 1.5, 0.3, [["a", 0, 0, 0]], { seed: 77 });
+    deckDecalImp(kit, IMP_DECAL.glyphs1, -14, cz + 4.6, 1.2, Math.PI, 0.0068);
     // arrivals side (S of the line, where the room spawn is): queue lane to the arch, waiting benches,
     // an arrivals desk, impounded cargo waiting for inspection
     dashedLine(kit, [-9.5, 36], [-9.5, cz + 4], { dash: 1.4, gap: 1.0, w: 0.16 });
@@ -275,7 +288,7 @@ export function buildShuttleBay(kit, ctx, room) {
       for (const lx of [bx - 1.0, bx + 1.0]) kit.box("impTrim", lx, 0.22, 36.5, 0.08, 0.44, 0.5, { color: PALETTE.impBlack });
       kit.collider([bx - 1.25, 0, 36.2], [bx + 1.25, 1.0, 36.85], "bench");
     }
-    hgDiagConsole(kit, -20.5, 36.5, 0, { seed: 52, screens: ["scrBlue1", "scrGreen0"], accentKey });
+    hgDiagConsole(kit, -20.5, 36.5, 0, { seed: 52, screens: ["scrBlue1", "scrBlue0"], accentKey });
     hgPallet(kit, 1.5, 33.5, 0.2, { seed: 68, kind: 1 });
     hgCrateStack(kit, 5.5, 35, -0.15, [["b", 0, 0, 0], ["c", 1.4, 0, 0.1, 0.5], ["a", 0.1, 1.2, 0.1, 0.3]], { seed: 73 });
     hgPowerBox(kit, -24, 37.6, Math.PI / 2, { on: true });
@@ -296,9 +309,9 @@ export function buildShuttleBay(kit, ctx, room) {
     kit.boxMM("impTrim", [s.x0, s.y0 - 0.45, s.z0 - 0.05], [s.x1 + 0.05, s.y0 + 0.02, s.z0 + 0.45], { color: PALETTE.impBlack, texel: 1 });
     kit.boxMM("impTrim", [s.x0, s.y0 - 0.45, s.z1 - 0.45], [s.x1 + 0.05, s.y0 + 0.02, s.z1 + 0.05], { color: PALETTE.impBlack, texel: 1 });
     kit.boxMM("impTrim", [s.x1 - 0.45, s.y0 - 0.45, s.z0], [s.x1 + 0.05, s.y0 + 0.02, s.z1], { color: PALETTE.impBlack, texel: 1 });
-    kit.boxMM("emitBlueSoft", [s.x0 + 0.3, s.y0 - 0.46, s.z0 + 0.5], [s.x1 - 0.5, s.y0 - 0.42, s.z0 + 0.58], { uv: "keep" });
-    kit.boxMM("emitBlueSoft", [s.x0 + 0.3, s.y0 - 0.46, s.z1 - 0.58], [s.x1 - 0.5, s.y0 - 0.42, s.z1 - 0.5], { uv: "keep" });
-    kit.boxMM("emitBlueSoft", [s.x1 - 0.58, s.y0 - 0.46, s.z0 + 0.5], [s.x1 - 0.5, s.y0 - 0.42, s.z1 - 0.5], { uv: "keep" });
+    kit.boxMM("emitBlueDim", [s.x0 + 0.3, s.y0 - 0.46, s.z0 + 0.5], [s.x1 - 0.5, s.y0 - 0.42, s.z0 + 0.58], { uv: "keep" });
+    kit.boxMM("emitBlueDim", [s.x0 + 0.3, s.y0 - 0.46, s.z1 - 0.58], [s.x1 - 0.5, s.y0 - 0.42, s.z1 - 0.5], { uv: "keep" });
+    kit.boxMM("emitBlueDim", [s.x1 - 0.58, s.y0 - 0.46, s.z0 + 0.5], [s.x1 - 0.5, s.y0 - 0.42, s.z1 - 0.5], { uv: "keep" });
     for (let x = s.x0 + 4; x < s.x1 - 3; x += 5) {
       kit.box("impTrim", x, s.y0 - 0.12, (s.z0 + s.z1) / 2, 2.4, 0.24, 1.6, { color: PALETTE.impCharcoal, texel: 1 });
       for (let f = 0; f < 6; f++) kit.box("impMetal", x, s.y0 - 0.26, (s.z0 + s.z1) / 2 - 0.65 + f * 0.26, 2.2, 0.03, 0.2, { color: PALETTE.impGreyDark });
@@ -308,12 +321,34 @@ export function buildShuttleBay(kit, ctx, room) {
     kit.box("impTrim", s.x1 + 0.2, (s.y0 + H) / 2 - 1.0, (s.z0 + s.z1) / 2 + 4.5, 0.4, 0.4, 0.4, { color: PALETTE.impBlack });
     redBlink.push([s.x1 + 0.41, (s.y0 + H) / 2 - 1.0, (s.z0 + s.z1) / 2 + 4.5, 0.05, 0.25, 0.25]);
     kit.box("impTrim", s.x1 + 0.2, (s.y0 + H) / 2 - 1.0, (s.z0 + s.z1) / 2 - 4.5, 0.4, 0.4, 0.4, { color: PALETTE.impBlack });
-    blueBlink.push([s.x1 + 0.41, (s.y0 + H) / 2 - 1.0, (s.z0 + s.z1) / 2 - 4.5, 0.05, 0.25, 0.25]);
+    redBlink.push([s.x1 + 0.41, (s.y0 + H) / 2 - 1.0, (s.z0 + s.z1) / 2 - 4.5, 0.05, 0.25, 0.25]);
   }
 
   // ---- walls: 18 m industrial; blast door on the W wall (+ the notch for the booth volume)
   const walls = roomWalls(kit, room);
-  const wallOpts = { ribPitch: 10, plateH: 6, rowH: 4, floodV: 14.5, floodAim: 15, accentKey, bigDecals: false, ducts: false, lightKey: "emitWhiteSoft" };
+  // dark structural bays (no backlit galleries): charcoal plates with trench-grey alternates, cool-white
+  // lamp points per level, dim blue cornice, cool flood banks; the shuttle is the only bright thing here
+  const wallOpts = {
+    ribPitch: 10,
+    plateH: 6,
+    rowH: 4,
+    floodV: 14.5,
+    floodAim: 15,
+    accentKey,
+    bigDecals: false,
+    ducts: false,
+    lightKey: "emitWhiteDim",
+    corniceKey: "emitBlueDim",
+    lightBays: false,
+    lampRows: true,
+    lampKey: "emitWhiteDim",
+    lampStep: 3.4,
+    floodLamp: "emitWhite",
+    plateColor: PALETTE.hullTrench,
+    plateAlt: PALETTE.impGreyDark,
+    upperColor: PALETTE.hullTrench,
+    ribAccentKey: null,
+  };
   const wOpen = hgWallOpenings(room, ctx.doors, "W");
   const notch = hasSoffit ? [{ u0: hz - soffit.z1, u1: hz - soffit.z0, v0: soffit.y0, v1: H }] : [];
   hgWall(walls.N.frame, W, H, { ...wallOpts, openings: hgWallOpenings(room, ctx.doors, "N"), seed: 301, tag: "sbN" });
@@ -335,30 +370,34 @@ export function buildShuttleBay(kit, ctx, room) {
   walls.E.frame.decal(IMP_DECAL.bay03, 40, 11.6, 0.08, 5.0);
   walls.S.frame.decal(IMP_DECAL.glyphs3, 16, 11.4, 0.08, 4.0);
   // tool wall + bench on the N wall (u = lx + 25), manifold along the E wall at 4 m
-  hgToolWall(walls.N.frame, 26, 3.6, { seed: 35, accentKey, tag: "bench" }); // lx 1
+  hgToolWall(walls.N.frame, 26, 3.6, { seed: 35, accentKey, tag: "bench", lampKey: "emitWhiteDim" }); // lx 1
   hgManifold(kit, [hx - 0.9, -34], [hx - 0.9, 14], 4.0, { r: 0.2, step: 12, accentKey, bracket: 1.0 });
 
-  // ---- ceiling with the booth volume skipped; troughs either side of the pad
+  // ---- ceiling with the booth volume skipped; troughs either side of the pad, dim (0.85) behind louvre fins
   hgCeiling(kit, -hx, -hz, hx, hz, H, {
     beamStep: 10,
     beamAxis: "x",
     troughsX: [-12, 12],
     ductsX: [22.5],
-    lightKey: "emitWhiteSoft",
+    lightKey: "emitWhiteDim",
     beamH: 1.2,
+    slabColor: PALETTE.hullTrench,
     skip: hasSoffit ? { x0: soffit.x0, x1: soffit.x1, z0: soffit.z0, z1: soffit.z1 } : null,
   });
 
-  // ---- lights: blue-white around the pad, cool key over customs, red at the blast door
-  const blue = 0xa0c8ff;
-  // four pad floods carry the room (≈2.5× the default per-fixture output), one white over the customs point
-  for (const [x, z] of [[-13, -17], [13, -17], [-13, 7], [13, 7]]) kit.light({ type: "point", pos: [x, 16, z], color: blue, intensity: lux(16, 2.8), distance: 80, priority: 0.62 });
-  kit.light({ type: "point", pos: [-6, 13, 26], color: 0xdfe8ff, intensity: lux(13, 2.2), distance: 56, priority: 0.55 });
+  // ---- lights: two cool-white floods keyed on the shuttle (the pool's spot slots; slot 0 casts its shadow
+  //      onto the pad), two dim blue fills for the marshalling areas, a white over customs, red at the door
+  const cool = 0xdfe8ff;
+  const flood = (pos, target, k, extra = {}) => kit.light({ type: "spot", pos, target, color: cool, intensity: lux(pos[1], k), distance: 60, decay: 2, angle: 0.62, penumbra: 0.45, ...extra });
+  flood([-15, 16.2, -22], [PAD.x - 1, 4, PAD.z - 2], 3.4, { priority: 2.06, shadow: true }); // from the NW, over the nose and the port wing
+  flood([15, 16.2, 10], [PAD.x + 1, 4, PAD.z + 1], 3.0, { priority: 2.04 }); // from the SE, ramp side
+  const blue = 0x7fa6e0;
+  kit.light({ type: "point", pos: [16, 15, -22], color: blue, intensity: lux(15, 2.0), distance: 60, priority: 0.62 });
+  kit.light({ type: "point", pos: [-14, 15, 14], color: blue, intensity: lux(15, 2.0), distance: 60, priority: 0.6 });
+  kit.light({ type: "point", pos: [-6, 13, 26], color: cool, intensity: lux(13, 2.2), distance: 56, priority: 0.55 });
   kit.light({ type: "point", pos: [-22, 12, 0], color: 0xff3b2e, intensity: lux(12, 0.4), distance: 24, priority: 0.3 });
 
   // ---- animated beacons
   hgBeacons(kit, materials, "emitRedImp", redBlink, { period: 1.5, duty: 0.42, min: 0.15, max: 3.6 });
-  hgBeacons(kit, materials, "emitBlue", blueBlink, { period: 1.5, duty: 0.42, phase: 0.5, min: 0.2, max: 3.2 });
-  hgBeacons(kit, materials, "emitAmber", amberBlink, { period: 2.4, duty: 0.5, phase: 0.2, min: 0.2, max: 3.2 });
   void rand;
 }

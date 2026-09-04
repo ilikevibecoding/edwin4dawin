@@ -499,7 +499,7 @@ export function hgFuelBowser(kit, x, z, yaw, opts = {}) {
   // pump cabinet at the rear
   P.box("impTrim", 0, 1.1, 2.35, 1.3, 1.15, 0.6, { color: PALETTE.impBlack, texel: 1 });
   P.box("impMetal", 0, 1.1, 2.66, 1.1, 0.95, 0.02, { color: PALETTE.impCharcoal });
-  P.plane("scrAmber0", -0.25, 1.25, 2.68, 0.5, 0.3);
+  P.plane(opts.screen || "scrAmber0", -0.25, 1.25, 2.68, 0.5, 0.3);
   for (let k = 0; k < 3; k++) P.box(k === 1 ? "emitRedImp" : "emitAmber", 0.3 + k * 0.14, 1.4, 2.68, 0.08, 0.08, 0.01);
   P.cyl("impMetal", 0.35, 0.85, 2.68, 0.12, 0.06, "z", { color: PALETTE.impGrey, segments: 10 });
   P.box("emitRedImp", 0.35, 0.85, 2.72, 0.05, 0.16, 0.02);
@@ -798,7 +798,7 @@ export function hgHoist(kit, axis, a, b, fixed, y, at, hookY, opts = {}) {
  * `u` = centre along the wall, `w` = width. Adds the bench collider.
  */
 export function hgToolWall(frame, u, w, opts = {}) {
-  const { seed = 3, accentKey = "emitAmber", bench = true, tag = "bench" } = opts;
+  const { seed = 3, accentKey = "emitAmber", bench = true, tag = "bench", lampKey = "emitWhiteSoft" } = opts;
   const rand = rng(seed);
   frame.box("impTrim", u, 2.15, 0.08, w, 2.3, 0.16, { color: PALETTE.impBlack, texel: 1 });
   frame.box("impPanel2", u, 2.15, 0.165, w - 0.2, 2.1, 0.01, { color: PALETTE.impGreyDark, uv: "world", texel: 1 });
@@ -821,7 +821,7 @@ export function hgToolWall(frame, u, w, opts = {}) {
   frame.box("impMetal", u, 1.2, 0.25, w - 0.2, 0.03, 0.4, { color: PALETTE.impGrey });
   // strip lamp over the board
   frame.box("impTrim", u, 3.4, 0.2, w - 0.4, 0.12, 0.3, { color: PALETTE.impBlack });
-  frame.box("emitWhiteSoft", u, 3.34, 0.25, w - 0.7, 0.02, 0.16, { uv: "keep" });
+  frame.box(lampKey, u, 3.34, 0.25, w - 0.7, 0.02, 0.16, { uv: "keep" });
   if (bench) {
     const bd = 0.9;
     frame.box("impTrim", u, 0.42, 0.16 + bd / 2, w - 0.3, 0.84, bd - 0.12, { color: PALETTE.impBlack, texel: 1 });

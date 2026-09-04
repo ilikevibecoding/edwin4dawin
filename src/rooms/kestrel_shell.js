@@ -55,19 +55,26 @@ export function buildKestrelShell(kit) {
   }
   kit.box("metal", 0, 2.75, zAft + 0.12, 3.1, 0.6, 0.24, { color: PALETTE.darkMetal, uv: "world", texel: 0.5 });
   kit.box("metal", 0, -0.12, zAft + 0.14, 2.6, 0.24, 0.28, { color: PALETTE.steel, uv: "world", texel: 0.5 });
-  // hood: the roof carries on 2 m over the ramp head with cheek plates and a warm soffit lamp
-  const hz1 = zAft + 2.0;
-  kit.boxMM("painted2", [-2.7, yT - 0.45, zAft], [2.7, yT, hz1], { color: PALETTE.cream, uv: "world", texel: 0.35 });
-  kit.boxMM("metal", [-2.7, yT - 0.5, hz1 - 0.3], [2.7, yT - 0.4, hz1], { color: PALETTE.darkMetal, uv: "world", texel: 0.5 });
+  // hood: the upper hull carries on 3.6 m over the ramp head (a cantilevered tail with a dark chamfered lip,
+  // cheek plates either side and a warm soffit lamp) — long enough that its lip and cheeks are in frame
+  // from the door camera looking down the ramp, so the ramp view reads as leaving a ship
+  const hz1 = zAft + 3.6;
+  const hw = 3.2;
+  kit.boxMM("painted2", [-hw, yT - 0.45, zAft], [hw, yT, hz1], { color: PALETTE.cream, uv: "world", texel: 0.35 });
+  kit.boxMM("metal", [-hw, yT - 0.55, hz1 - 0.5], [hw, yT - 0.4, hz1], { color: PALETTE.darkMetal, uv: "world", texel: 0.5 });
+  kit.box("painted2", 0, yT - 0.22, hz1 - 0.02, hw * 2, 0.3, 0.3, { color: PALETTE.creamDark, uv: "world", texel: 0.35, rot: [Math.PI / 4, 0, 0] }); // chamfered lip
+  kit.boxMM("painted", [-hw + 0.4, yT - 0.35, hz1 - 0.28], [hw - 0.4, yT - 0.05, hz1 - 0.24], { color: PALETTE.orange, uv: "keep" }); // cheat line across the lip
   for (const s of [-1, 1]) {
-    kit.boxMM("painted1", [Math.min(s * 2.7, s * 2.55), 2.0, zAft], [Math.max(s * 2.7, s * 2.55), yT - 0.4, hz1 - 0.2], { color: PALETTE.creamDark, uv: "world", texel: 0.35 });
-    kit.box("emitAmber", s * 2.62, 2.15, hz1 - 0.3, 0.02, 0.1, 0.3);
+    kit.boxMM("painted1", [Math.min(s * hw, s * (hw - 0.15)), 2.0, zAft], [Math.max(s * hw, s * (hw - 0.15)), yT - 0.4, hz1 - 0.2], { color: PALETTE.creamDark, uv: "world", texel: 0.35 });
+    kit.boxMM("metal", [Math.min(s * hw, s * (hw - 0.2)), 1.85, zAft], [Math.max(s * hw, s * (hw - 0.2)), 2.05, hz1 - 0.2], { color: PALETTE.darkMetal, uv: "world", texel: 0.5 }); // cheek bottom rail
+    kit.box("emitAmber", s * (hw - 0.08), 2.25, hz1 - 0.5, 0.02, 0.1, 0.4);
+    kit.box("hazard", s * (hw - 0.09), 2.6, zAft + 0.7, 0.02, 0.5, 0.5, { texel: 3 });
   }
-  kit.box("metal", 0, yT - 0.52, zAft + 1.1, 1.9, 0.14, 0.5, { color: PALETTE.darkMetal });
-  kit.box("hangar_spillWarm", 0, yT - 0.6, zAft + 1.1, 1.7, 0.02, 0.36, { uv: "keep" });
-  for (let i = 0; i < 5; i++) kit.box("metal", -0.68 + i * 0.34, yT - 0.63, zAft + 1.1, 0.02, 0.08, 0.4, { color: PALETTE.darkMetal }); // louvres
-  kit.collider([-2.7, 2.0, zAft], [-2.55, yT, hz1], "hoodCheek");
-  kit.collider([2.55, 2.0, zAft], [2.7, yT, hz1], "hoodCheek");
+  kit.box("metal", 0, yT - 0.52, zAft + 1.6, 1.9, 0.14, 0.5, { color: PALETTE.darkMetal });
+  kit.box("hangar_spillWarm", 0, yT - 0.6, zAft + 1.6, 1.7, 0.02, 0.36, { uv: "keep" });
+  for (let i = 0; i < 5; i++) kit.box("metal", -0.68 + i * 0.34, yT - 0.63, zAft + 1.6, 0.02, 0.08, 0.4, { color: PALETTE.darkMetal }); // louvres
+  kit.collider([-hw, 1.85, zAft], [-hw + 0.2, yT, hz1], "hoodCheek");
+  kit.collider([hw - 0.2, 1.85, zAft], [hw, yT, hz1], "hoodCheek");
   // orange cheat line and hull number
   kit.boxMM("painted", [x0 - 0.01, 1.6, zFwd + 1], [x0 + t + 0.01, 1.9, zAft - 0.5], { color: PALETTE.orange, uv: "keep" });
   kit.boxMM("painted", [x1 - t - 0.01, 1.6, zFwd + 1], [x1 + 0.01, 1.9, zAft - 0.5], { color: PALETTE.orange, uv: "keep" });
@@ -155,6 +162,16 @@ export function buildKestrelShell(kit) {
     tube(kit, "metal", hard, mid, 0.11, { color: PALETTE.darkMetal, segments: 10 });
     tube(kit, "metal", mid, foot, 0.06, { color: PALETTE.steel, segments: 8 });
     kit.box("metal", s * 1.15, yB - 0.15, rz0 + 0.3, 0.4, 0.3, 0.5, { color: PALETTE.gunmetal });
+    // upper rams outside the rails: from a jamb hardpoint down to an outrigger bracket at the ramp's
+    // mid-length (these are the ones in frame from the door camera)
+    const uHard = V(s * 1.62, 1.45, rz0 + 0.35);
+    const uFoot = V(s * (rw / 2 + 0.32), -clr * 0.45 - 0.05, rz0 + rl * 0.45);
+    const uMid = uHard.clone().lerp(uFoot, 0.5);
+    kit.box("metal", uHard.x, uHard.y, uHard.z - 0.05, 0.34, 0.5, 0.4, { color: PALETTE.gunmetal });
+    tube(kit, "metal", uHard, uMid, 0.1, { color: PALETTE.darkMetal, segments: 10 });
+    tube(kit, "metal", uMid, uFoot, 0.055, { color: PALETTE.steel, segments: 8 });
+    kit.box("metal", uFoot.x, uFoot.y - 0.02, uFoot.z, 0.28, 0.2, 0.36, { color: PALETTE.darkMetal });
+    kit.box("hazard", uFoot.x + s * 0.145, uFoot.y - 0.02, uFoot.z, 0.01, 0.18, 0.34, { texel: 3 });
   }
   // deck foot plate where the ramp lands, and its two amber deck lamps
   kit.box("metal", 0, yD + 0.03, rz1 + 0.15, rw + 0.4, 0.06, 0.7, { color: PALETTE.darkMetal, uv: "world", texel: 1 });

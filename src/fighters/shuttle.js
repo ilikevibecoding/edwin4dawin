@@ -10,12 +10,13 @@
 //   SHUTTLE                           dimensions (for the room builder: footprint, folded height)
 //
 // Shuttle frame: metres, y up from the deck, nose along -z, x to starboard. The body is ~21 m long and sits
-// 1.6 m above the deck on three landing legs; the folded wings reach 14.4 m, the dorsal fin 13.7 m (the
-// shuttle bay is 18 m tall, the pad clear radius is 12 m).
+// 1.6 m above the deck on three landing legs; the folded wings reach 15.4 m (≈ 2.3 × the 4.9 m body incl.
+// the canopy), the dorsal fin 14.9 m (the shuttle bay is 18 m tall, the pad clear radius is 12 m).
 //
 // Materials: interior-domain keys only (the shuttle lives inside the bay): impPanel1 tinted PALETTE.impWhite /
-// impGrey for the hull, impTrim for frames / edges, impMetal for machinery, impGloss for the windows,
-// emitBlue for lights and the idling engines. hullPlate* would ignore the bay's lights.
+// impGrey for the hull, paintedMetal (matte, seamless) for the solid wing and fin plates, impTrim for frames /
+// edges / seams, impMetal for machinery, impGloss for the windows, emitBlue for lights and the idling engines,
+// emitWarmSoft for the interior spill in the open hatch. hullPlate* would ignore the bay's lights.
 import * as THREE from "three";
 import { Kit, prism } from "../kit.js";
 import { PALETTE } from "../materials.js";
@@ -24,10 +25,11 @@ export const SHUTTLE = {
   length: 21.2, // z extent (nose tip to engine face)
   bodyWidth: 4.8,
   footprintRadius: 11.7, // everything (wings folded) within this radius of `position` (engine face corners)
-  heightFolded: 14.8, // wing tip pods
-  finHeight: 13.7,
+  heightFolded: 15.4, // folded wing tips
+  finHeight: 14.9,
   bellyY: 1.6, // hull underside above the deck
   wingTilt: 0.21, // rad off vertical when folded
+  wingSpan: 11.4, // hinge to tip
 };
 
 const WHITE = PALETTE.impWhite;
@@ -35,6 +37,7 @@ const GREY = PALETTE.impGrey;
 const GREY_DARK = PALETTE.impGreyDark;
 const BLACK = PALETTE.impBlack;
 const CHARCOAL = PALETTE.impCharcoal;
+const PLATE = new THREE.Color("#c9ccd2"); // solid pale wing / fin plate
 const UP = new THREE.Vector3(0, 1, 0);
 
 // ---------------------------------------------------------------------------
@@ -233,29 +236,34 @@ function cockpit(F) {
 }
 
 function fin(F) {
-  // swept trapezoid in the (u = -z, v = y) plane, rotated so u -> -z
+  // swept trapezoid in the (u = -z, v = y) plane, rotated so u -> -z: a thin (0.3 m) solid plate, taller than
+  // the folded wings' hinge line reaches, with three dark seams instead of framed inset panels
+  const FH = SHUTTLE.finHeight;
   const outline = [
     [1.0, TOP - 0.1],
     [-6.7, TOP - 0.1],
-    [-6.3, SHUTTLE.finHeight],
-    [-3.5, SHUTTLE.finHeight],
+    [-6.2, FH],
+    [-4.0, FH],
   ];
   const rot = [0, Math.PI / 2, 0];
-  F.add("impPanel1", prism(outline, 0.36), { rot, color: WHITE, texel: 1 });
+  F.add("paintedMetal", prism(outline, 0.3), { rot, color: PLATE, texel: 1 });
   // frame: leading edge, tip cap, trailing edge, root fairing (bars drawn in the fin's own frame)
   const fin = F.sub(new THREE.Matrix4().makeRotationY(Math.PI / 2));
-  fin.bar("impTrim", 1.0, TOP - 0.1, -3.5, SHUTTLE.finHeight, 0, 0.3, 0.5, { color: BLACK, extend: 0.2, texel: 1 });
-  fin.bar("impTrim", -3.5, SHUTTLE.finHeight, -6.3, SHUTTLE.finHeight, 0, 0.3, 0.5, { color: BLACK, extend: 0.2, texel: 1 });
-  fin.bar("impTrim", -6.7, TOP - 0.1, -6.3, SHUTTLE.finHeight, 0, 0.28, 0.5, { color: BLACK, extend: 0.2, texel: 1 });
-  fin.bar("impTrim", 1.2, TOP + 0.35, -6.9, TOP + 0.35, 0, 0.9, 0.9, { color: BLACK, texel: 1 });
-  // panel ribs and a grey inset panel on both faces
+  fin.bar("impTrim", 1.0, TOP - 0.1, -4.0, FH, 0, 0.22, 0.34, { color: BLACK, extend: 0.2, texel: 1 });
+  fin.bar("impTrim", -4.0, FH, -6.2, FH, 0, 0.22, 0.34, { color: BLACK, extend: 0.2, texel: 1 });
+  fin.bar("impTrim", -6.7, TOP - 0.1, -6.2, FH, 0, 0.2, 0.34, { color: BLACK, extend: 0.2, texel: 1 });
+  fin.bar("impTrim", 1.2, TOP + 0.35, -6.9, TOP + 0.35, 0, 0.9, 0.8, { color: BLACK, texel: 1 });
+  // three dark seams per face, following the sweep
   for (const f of [-1, 1]) {
-    fin.bar("impTrim", -1.5, TOP + 0.9, -4.6, SHUTTLE.finHeight - 0.5, f * 0.2, 0.12, 0.05, { color: BLACK, texel: 1 });
-    fin.bar("impTrim", -4.2, TOP + 0.9, -5.7, SHUTTLE.finHeight - 0.5, f * 0.2, 0.12, 0.05, { color: BLACK, texel: 1 });
-    fin.add("impPanel1", prism([[-2.0, 7.2], [-5.2, 7.2], [-5.4, 9.6], [-3.0, 9.6]], 0.05), { pos: [0, 0, f * 0.2], color: GREY, texel: 1 });
+    for (const k of [0.3, 0.55, 0.78]) {
+      const x0 = 1.0 + (-6.7 - 1.0) * k;
+      const x1 = -4.0 + (-6.2 + 4.0) * k;
+      fin.bar("impTrim", x0, TOP + 0.5, x1, FH - 0.4, f * 0.155, 0.07, 0.02, { color: BLACK, texel: 1 });
+    }
+    fin.bar("impTrim", -0.9, TOP + 3.6, -5.6, TOP + 3.6, f * 0.155, 0.07, 0.02, { color: BLACK, texel: 1 });
   }
   // nav light on the tip trailing corner
-  fin.add("emitBlue", new THREE.SphereGeometry(0.1, 8, 6), { pos: [-6.1, SHUTTLE.finHeight + 0.05, 0], color: 0xffffff, uv: "keep" });
+  fin.add("emitBlue", new THREE.SphereGeometry(0.1, 8, 6), { pos: [-6.0, FH + 0.05, 0], color: 0xffffff, uv: "keep" });
 }
 
 /** One folded wing; s = -1 port, +1 starboard. Wing frame: x = chord (forward), y = span from the hinge, z = normal. */
@@ -266,62 +274,64 @@ function wing(F, s) {
   const Z = new THREE.Vector3().crossVectors(X, Y);
   const m = new THREE.Matrix4().makeBasis(X, Y, Z).setPosition(s * 2.45, 4.15, 0);
   const W = F.sub(m);
-  const span = 10.4;
+  const span = SHUTTLE.wingSpan;
+  // one solid pale plate tapering to a 2.3 m tip chord (root chord 8.8 m); only the edges are framed
   const outline = [
     [1.4, 0.45],
     [-7.4, 0.45],
-    [-6.4, span],
-    [-2.1, span],
+    [-5.9, span],
+    [-3.6, span],
   ];
-  W.add("impPanel1", prism(outline, 0.42), { color: GREY, texel: 1 });
-  // rim bars along the four edges, spanning the thickness
+  W.add("paintedMetal", prism(outline, 0.42), { color: PLATE, texel: 1 });
   for (let i = 0; i < 4; i++) {
     const [x0, y0] = outline[i];
     const [x1, y1] = outline[(i + 1) % 4];
-    W.bar("impTrim", x0, y0, x1, y1, 0, 0.3, 0.56, { color: BLACK, extend: 0.24, texel: 1 });
+    W.bar("impTrim", x0, y0, x1, y1, 0, 0.2, 0.5, { color: BLACK, extend: 0.18, texel: 1 });
   }
-  // spars and ribs on both faces, a lighter inset panel per bay
+  // four dark seams per face: three spanwise (converging with the taper), one chordwise at mid-span
   for (const f of [-1, 1]) {
-    const z = f * 0.24;
-    W.bar("impTrim", -1.1, 0.7, -2.9, span - 0.3, z, 0.16, 0.06, { color: BLACK, texel: 1 });
-    W.bar("impTrim", -5.9, 0.7, -5.6, span - 0.3, z, 0.16, 0.06, { color: BLACK, texel: 1 });
-    for (const v of [3.2, 6.1, 9.0]) {
-      const k = (v - 0.45) / (span - 0.45);
-      const le = 1.4 + (-2.1 - 1.4) * k;
-      const te = -7.4 + (-6.4 + 7.4) * k;
-      W.bar("impTrim", le, v, te, v, z, 0.12, 0.06, { color: BLACK, texel: 1 });
+    const z = f * 0.225;
+    for (const k of [0.22, 0.5, 0.78]) {
+      const x0 = 1.4 + (-7.4 - 1.4) * k;
+      const x1 = -3.6 + (-5.9 + 3.6) * k;
+      W.bar("impTrim", x0, 0.8, x1, span - 0.5, z, 0.08, 0.025, { color: BLACK, texel: 1 });
     }
-    W.add("impPanel1", prism([[-3.4, 1.0], [-5.4, 1.0], [-5.3, 2.9], [-3.6, 2.9]], 0.04), { pos: [0, 0, z], color: WHITE, texel: 1 });
-    W.add("impPanel1", prism([[-3.6, 6.4], [-5.5, 6.4], [-5.5, 8.7], [-3.9, 8.7]], 0.04), { pos: [0, 0, z], color: WHITE, texel: 1 });
+    const v = span * 0.5;
+    const kk = (v - 0.45) / (span - 0.45);
+    W.bar("impTrim", 1.4 + (-3.6 - 1.4) * kk - 0.3, v, -7.4 + (-5.9 + 7.4) * kk + 0.3, v, z, 0.08, 0.025, { color: BLACK, texel: 1 });
   }
-  // hinge barrel with brackets, actuator strut to the hull
+  // hinge barrel with brackets, actuator struts to the hull
   W.cyl("impMetal", -3.0, 0.0, 0, 0.5, 8.6, "x", { color: CHARCOAL, segments: 16, texel: 1 });
   for (const x of [-6.6, -3.0, 0.6]) W.box("impTrim", x, 0.1, 0, 0.5, 0.9, 1.1, { color: BLACK, texel: 1 });
   W.rod("impMetal", [-3.0, 2.6, s * -0.4], [-3.0, 0.9, s * -1.5], 0.08, { color: GREY_DARK });
   W.rod("impMetal", [-5.6, 2.6, s * -0.4], [-5.6, 0.9, s * -1.5], 0.08, { color: GREY_DARK });
-  // wingtip pod with a nav light
-  W.cyl("impMetal", -4.25, span + 0.15, 0, 0.32, 3.4, "x", { color: CHARCOAL, segments: 12, r2: 0.24 });
-  W.add("emitBlue", new THREE.SphereGeometry(0.11, 8, 6), { pos: [-2.5, span + 0.15, 0], color: 0xffffff, uv: "keep" });
+  // slim tip fairing with a nav light
+  W.cyl("impMetal", -4.75, span + 0.12, 0, 0.2, 2.5, "x", { color: CHARCOAL, segments: 10, r2: 0.12 });
+  W.add("emitBlue", new THREE.SphereGeometry(0.11, 8, 6), { pos: [-3.5, span + 0.12, 0], color: 0xffffff, uv: "keep" });
 }
 
 function gear(F) {
-  const leg = (x, z, yTop) => {
-    const yPad = 0.14;
-    F.cyl("impMetal", x, (yTop + yPad) / 2 + 0.2, z, 0.21, yTop - yPad - 0.4, "y", { color: CHARCOAL, segments: 12 });
-    F.cyl("impMetal", x, (yTop + yPad) / 2 - 0.3, z, 0.12, yTop - yPad - 0.5, "y", { color: GREY, segments: 10 });
-    F.box("impMetal", x, yPad / 2 + 0.06, z, 1.0, yPad, 1.4, { color: CHARCOAL, texel: 1 });
-    F.box("impTrim", x, yPad + 0.1, z, 0.6, 0.1, 0.9, { color: BLACK, texel: 1 });
-    // gear well doors
-    F.box("impPanel1", x - 0.75, yTop - 0.5, z, 0.06, 1.0, 1.7, { color: GREY, rot: [0, 0, 0.35], texel: 1 });
-    F.box("impPanel1", x + 0.75, yTop - 0.5, z, 0.06, 1.0, 1.7, { color: GREY, rot: [0, 0, -0.35], texel: 1 });
+  // three legs: heavy grey oleo strut in a charcoal housing, drag brace, wide pad with a black shoe
+  const leg = (x, z, yTop, braceDir) => {
+    const yPad = 0.16;
+    const h = yTop - yPad;
+    F.cyl("impMetal", x, yTop - h * 0.3, z, 0.3, h * 0.6, "y", { color: CHARCOAL, segments: 12 });
+    F.cyl("impMetal", x, yPad + h * 0.35, z, 0.17, h * 0.7, "y", { color: GREY, segments: 10 });
+    F.cyl("impTrim", x, yPad + 0.42, z, 0.26, 0.24, "y", { color: BLACK, segments: 12 }); // axle collar
+    F.box("impMetal", x, yPad / 2 + 0.06, z, 1.4, yPad, 1.8, { color: CHARCOAL, texel: 1 });
+    F.box("impTrim", x, yPad + 0.1, z, 0.9, 0.1, 1.2, { color: BLACK, texel: 1 });
+    F.rod("impMetal", [x, yTop - 0.2, z + braceDir * 1.3], [x, yPad + 0.5, z + braceDir * 0.15], 0.07, { color: GREY_DARK });
+    // gear well doors hanging open either side
+    F.box("impPanel1", x - 0.8, yTop - 0.55, z, 0.06, 1.1, 1.9, { color: GREY, rot: [0, 0, 0.35], texel: 1 });
+    F.box("impPanel1", x + 0.8, yTop - 0.55, z, 0.06, 1.1, 1.9, { color: GREY, rot: [0, 0, -0.35], texel: 1 });
   };
-  leg(0, -5.6, 2.22);
-  leg(-1.5, 5.6, BELLY + 0.02);
-  leg(1.5, 5.6, BELLY + 0.02);
+  leg(0, -5.6, 2.22, 1);
+  leg(-1.6, 5.6, BELLY + 0.02, -1);
+  leg(1.6, 5.6, BELLY + 0.02, -1);
 }
 
 function ramp(F) {
-  // hinged under the forward hull, lowered to the deck, edge-lit
+  // hinged under the forward hull, lowered to the deck, edge-lit; the open hatch above it glows warm
   const hinge = [1.66, -3.3];
   const foot = [0.06, -7.5];
   const dz = foot[1] - hinge[1];
@@ -336,8 +346,12 @@ function ramp(F) {
     F.box("impTrim", s * 1.0, cy + 0.12, cz, 0.08, 0.16, len, { color: BLACK, rot: [a, 0, 0], texel: 1 });
     F.box("emitBlue", s * 0.92, cy + 0.15, cz, 0.05, 0.03, len - 0.4, { color: 0xffffff, rot: [a, 0, 0], uv: "keep" });
   }
-  // hatch well in the belly aft of the hinge (the opening the raised ramp closes)
-  F.box("impTrim", 0, BELLY - 0.03, hinge[1] + 1.0, 2.2, 0.06, 2.0, { color: BLACK, texel: 1 });
+  // hatch: a black surround hanging under the belly with a warm lit pane (the cabin behind the open hatch);
+  // the hull loft is solid, so the doorway is built proud of the belly rather than cut into it
+  const hz = hinge[1] + 1.1;
+  F.box("impTrim", 0, BELLY - 0.14, hz, 2.4, 0.28, 2.4, { color: BLACK, texel: 1 });
+  F.box("emitWarmSoft", 0, BELLY - 0.29, hz, 1.9, 0.02, 1.9, { uv: "keep" });
+  for (const s of [-1, 1]) F.box("impTrim", s * 0.62, BELLY - 0.3, hz, 0.06, 0.04, 1.9, { color: BLACK }); // door tracks
   // hydraulic rams
   for (const s of [-1, 1]) F.rod("impMetal", [s * 1.05, hinge[0] + 0.1, hinge[1] + 0.6], [s * 1.05, foot[0] + 0.45, foot[1] + 2.0], 0.06, { color: GREY });
 }
@@ -376,8 +390,9 @@ export function buildShuttle(kit, position, yaw = 0) {
   // one hull collider (covers the legs and the ramp too; the folded wings are above head height)
   root.collider([-2.6, 0, Z_TIP - 0.3], [2.6, TOP + 1.2, Z_ENG + 0.8], "shuttle");
   if (typeof kit.light === "function") {
-    const l = root.point(0, BELLY - 0.4, 0.5);
-    kit.light({ type: "point", pos: [l.x, l.y, l.z], color: 0x9fc4ff, intensity: 7, distance: 16, decay: 2, priority: 0.35 });
+    // warm interior spill out of the open hatch, down the ramp onto the deck
+    const l = root.point(0, BELLY - 0.6, -2.4);
+    kit.light({ type: "point", pos: [l.x, l.y, l.z], color: 0xffd9a8, intensity: 9, distance: 14, decay: 2, priority: 0.5 });
   }
   return SHUTTLE;
 }
