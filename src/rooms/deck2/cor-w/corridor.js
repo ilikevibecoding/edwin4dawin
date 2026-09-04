@@ -3,15 +3,17 @@
 // (paired ribs + ceiling beam + numbered markers), one housed centre fixture per bay, ceiling-corner
 // conduit runs, kick-level light strips, hazard strips + status panels at every door hole and a
 // terminal bulkhead on dead-end walls. What sits in the bays is shuffled by the corridor seed —
-// service bays (cabinet / crate pair / lockers / rest bench) alternate sides, the small bays draw
-// from junction box, screen, tool board, wall cabinet or vent sets — so no two corridors read as the
-// same kit in the same order. The centre 3 m stays clear; nothing goes inside or within 1 m of a hole.
+// service bays (cabinet / crate pair / locker row with door states / rest bench with seat items,
+// plus workbench and drum-pair kinds a manifest can order explicitly) alternate sides, the small
+// bays draw from junction box, screen, tool board, wall cabinet or vent sets — so no two corridors
+// read as the same kit in the same order. The centre 3 m stays clear; nothing goes inside or within
+// 1 m of a hole.
 import * as THREE from "three";
 import { rng } from "../../../kit.js";
 import { col } from "../_shared/palette.js";
 import { WALL_T } from "../_shared/shell.js";
-import { pipe, wallScreen, hazardStrip, lockerBank } from "../_shared/props.js";
-import { faceYaw, statusPanel, bulkheadMarker, junctionBox, wallVent, serviceBay, tiltedScreen, housedStrip, toolBoard, wallCabinet, dressedCrate, dressedCabinet, bench, cableTray } from "../lobby/props.js";
+import { pipe, wallScreen, hazardStrip } from "../_shared/props.js";
+import { faceYaw, statusPanel, bulkheadMarker, junctionBox, wallVent, serviceBay, tiltedScreen, housedStrip, toolBoard, wallCabinet, dressedCrate, dressedCabinet, bench, cableTray, lockerRow, drumPair, workbench } from "../lobby/props.js";
 
 const FRAME = 4;
 const TRAY_Y = 3.0; // wall cable tray height (junction conduits rise into it)
@@ -35,12 +37,14 @@ function fixtureSpan(p, q, i, last, clearMin, clearMax) {
  * @param opts { axis: "x"|"z", lobbyEnd: "min"|"max" (frames count from the lobby door),
  *   accent: emit key for status/floor accents, engineering: heavier pipes + amber kick strips,
  *   seed: shuffles bay kinds/sides, screens: screen keys cycled through the bay screens,
- *   deadEnd: { screen, kit: "cabinet"|"lockers" }, fill: { color, intensity, distance, drop } }
+ *   bigKinds: explicit service-bay kit order (default: the seed shuffles cabinet / crates / lockers /
+ *   bench; "workbench" and "drums" are the extra kinds), deadEnd: { screen, kit: "cabinet"|"lockers" },
+ *   fill: { color, intensity, distance, drop }, farSpot: { intensity, distance } (flood at the far end) }
  * The corridor pushes its own fill descriptors (set `shell.lights: false` in the manifest).
  */
 export function corridorDetail(ctx, shell, room, opts = {}) {
   const { kit, PALETTE } = ctx;
-  const { axis = "x", lobbyEnd = "max", accent = "emitBlue", engineering = false, seed = 1, screens = ["screenImp0"], deadEnd = {}, fill = {} } = opts;
+  const { axis = "x", lobbyEnd = "max", accent = "emitBlue", engineering = false, seed = 1, screens = ["screenImp0"], deadEnd = {}, fill = {}, farSpot = null } = opts;
   const rand = rng(seed * 131 + 7);
   const F = shell.faces;
   const H = shell.H;
@@ -135,9 +139,37 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
       priority: Math.min(1, 0.5 + 0.125 * k),
     });
   }
+  if (farSpot) {
+    // Far-end flood. Seen from the lobby door the last bays still went black: with the lobby's own
+    // lights 5–15 m from the player, the far fills (40 m out) lose the point pool whatever their
+    // priority ≤ 1. Spots have their own 4-slot pool with almost no competition in the hub rooms, so
+    // one flood on the far bulkhead beam, aimed 8 m back down the corridor at the deck, keeps the
+    // far bays readable from either end without another point descriptor.
+    const dir = lobbyEnd === "min" ? -1 : 1;
+    const farA = lobbyEnd === "min" ? clearMax - 0.4 : clearMin + 0.4;
+    ctx.lights.push({
+      type: "spot",
+      pos: pt(farA, C - 0.5, cc),
+      target: pt(farA + dir * 8, Y, cc),
+      color: fill.color ?? 0xd6e2ff,
+      intensity: farSpot.intensity ?? 55,
+      distance: farSpot.distance ?? 20,
+      angle: 0.6,
+      penumbra: 0.6,
+      priority: 1,
+    });
+    // its fixture (every light needs a visible source): a bracketed flood box under the far beam,
+    // dark rim and a small emitter on the face toward the lobby — a lit dot at 40 m, a floodlight
+    // up close (spots cast no shadow here, so the box does not occlude its own light)
+    const sz = (sa, sy, sc) => (axis === "x" ? [sa, sy, sc] : [sc, sy, sa]);
+    kit.add("paintedMetal", new THREE.BoxGeometry(...sz(0.08, 0.26, 0.08)), { pos: pt(farA, C - 0.13, cc), color: black });
+    kit.add("impPanel", new THREE.BoxGeometry(...sz(0.5, 0.3, 0.44)), { pos: pt(farA, C - 0.41, cc), color: dark, uv: "keep" });
+    kit.add("paintedMetal", new THREE.BoxGeometry(...sz(0.04, 0.2, 0.34)), { pos: pt(farA + dir * 0.25, C - 0.43, cc), color: black });
+    kit.add("emitWhite", new THREE.BoxGeometry(...sz(0.02, 0.1, 0.26)), { pos: pt(farA + dir * 0.265, C - 0.43, cc) });
+  }
 
-  // ---- bay kinds, shuffled by the corridor seed ------------------------------------------------
-  const bigKinds = shuffle(["cabinet", "crates", "lockers", "bench"]);
+  // ---- bay kinds, shuffled by the corridor seed (or in the order the manifest gives) ------------
+  const bigKinds = opts.bigKinds ? opts.bigKinds.slice() : shuffle(["cabinet", "crates", "lockers", "bench"]);
   const smallKinds = shuffle(["junction", "screen", "toolboard", "wallcab", "vents"]);
   const phase = Math.floor(rand() * 2);
   let screenIdx = 0;
@@ -253,9 +285,20 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
           dressedCrate(kit, PALETTE, f.world(uc + 0.43, 0, back + 0.3), yaw, { w: 0.8, h: 1.0, d: 0.6, seed: seed + i + 1 });
           if (rand() < 0.7) dressedCrate(kit, PALETTE, f.world(uc - 0.43, 1.0, back + 0.3), yaw, { w: 0.8, h: 0.6, d: 0.6, seed: seed + i + 2 });
         } else if (kind === "lockers") {
-          lockerBank(kit, PALETTE, f.world(uc, 0, back + 0.25), yaw, { count: 3, unit: 0.58, h: 2.0, d: 0.5, color: rand() < 0.5 ? mid : P("impGrey") });
+          // the open unit is the one farthest from the lobby door: every corridor camera but the
+          // pod-end looks away from the lobby, so that unit is the one seen face-on rather than the
+          // one foreshortened or cut by the frame edge (the placer's +x runs along the face)
+          const xAlong = axis === "x" ? Math.cos(yaw) : -Math.sin(yaw);
+          const openIndex = xAlong * (lobbyEnd === "min" ? 1 : -1) > 0 ? 2 : 0;
+          lockerRow(kit, PALETTE, f.world(uc, 0, back + 0.25), yaw, { count: 3, unit: 0.58, h: 2.0, d: 0.5, color: rand() < 0.5 ? mid : P("impGrey"), seed: seed + i * 11, accent, open: "doorless", openIndex });
+        } else if (kind === "workbench") {
+          workbench(kit, PALETTE, f.world(uc, 0, back), yaw, { len: 1.7, depth: 0.58, accent, seed: seed + i * 5 });
+          toolBoard(kit, PALETTE, f.world(uc, 1.95, back), yaw, { w: 1.3, h: 0.7, seed: seed + i * 7, accent });
+        } else if (kind === "drums") {
+          drumPair(kit, PALETTE, f.world(uc, 0, back), yaw, { seed: seed + i, accent });
+          wallCabinet(kit, PALETTE, f.world(uc, 1.8, back), yaw, { w: 0.9, h: 0.7, d: 0.3, accent, seed: seed + i * 7, color: rand() < 0.5 ? mid : P("impGrey") });
         } else {
-          bench(kit, PALETTE, f.world(uc, 0, back), yaw, { len: 1.7, accent });
+          bench(kit, PALETTE, f.world(uc, 0, back), yaw, { len: 1.7, accent, items: { seed: seed + i, screenMat: screens[0] } });
           if (screensPlaced < 3) {
             wallScreen(kit, f.world(uc, 2.05, back + 0.08), yaw, 1.2, 0.7, nextScreen(), { accent, tilt: 0.2 });
             screensPlaced++;
@@ -289,10 +332,19 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
         wallCabinet(kit, PALETTE, f.world(uc, 1.5, WALL_T), yaw, { w: 0.9, h: 0.8, d: 0.3, accent, seed: seed + i * 7, color: rand() < 0.5 ? mid : P("impGrey") });
         junctionBox(kit, PALETTE, f.world(uc, 2.4, WALL_T), yaw, { w: 0.5, h: 0.4, seed: seed + i + 4, accent, conduitUp: bigSide ? H - 0.05 - 2.6 : trayTop - 2.6 });
         occupied.push([uc - 0.45, uc + 0.45]);
-      } else {
+      } else if (q - p >= 3.4) {
+        // vent bay: status panel + hazard line with a wall cabinet and its feed conduit beside them,
+        // so the 3 × 3 m panel does not read as bare wall with one keypad
         wallVent(kit, PALETTE, f.world(uc, 3.4, WALL_T), yaw, { w: 1.4, h: 0.6 });
+        statusPanel(kit, PALETTE, f.world(uc - 0.55, 1.45, WALL_T), yaw, { accent });
+        wallCabinet(kit, PALETTE, f.world(uc + 0.4, 1.5, WALL_T), yaw, { w: 0.8, h: 0.8, d: 0.28, accent, seed: seed + i * 7, color: rand() < 0.5 ? mid : P("impGrey") });
+        junctionBox(kit, PALETTE, f.world(uc + 0.4, 2.35, WALL_T), yaw, { w: 0.44, h: 0.4, seed: seed + i + 4, accent, conduitUp: bigSide ? H - 0.05 - 2.55 : trayTop - 2.55 });
+        box(f, "hazard", uc, 0.62, WALL_T + 0.012, 1.4, 0.08, 0.008, { texel: 2 });
+        occupied.push([uc - 0.75, uc + 0.85]);
+      } else {
+        wallVent(kit, PALETTE, f.world(uc, 3.4, WALL_T), yaw, { w: Math.min(1.4, q - p - 1.0), h: 0.6 });
         statusPanel(kit, PALETTE, f.world(uc, 1.45, WALL_T), yaw, { accent });
-        box(f, "hazard", uc, 0.62, WALL_T + 0.012, 1.0, 0.08, 0.008, { texel: 2 });
+        box(f, "hazard", uc, 0.62, WALL_T + 0.012, Math.min(1.0, q - p - 1.0), 0.08, 0.008, { texel: 2 });
         occupied.push([uc - 0.2, uc + 0.2]);
       }
     }
@@ -422,7 +474,9 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
     const lockers = deadEnd.kit === "lockers";
     tiltedScreen(kit, PALETTE, f.world(uc, 2.3, WALL_T + 0.1), yaw, { w: lockers ? 1.4 : 1.6, h: 1.0, accent, tilt: 0.35, mat: deadEnd.screen || screens[screens.length - 1] });
     if (lockers) {
-      lockerBank(kit, PALETTE, f.world(uc - 1.2, 0, WALL_T + 0.11 + 0.25), yaw, { count: 2, unit: 0.6, h: 2.0, d: 0.5 });
+      // seen head-on from the dead-end view: the door swings 72° so the lit interior shows past it
+      // (at 35° the door hid the whole recess and the pair read as two identical closed lockers)
+      lockerRow(kit, PALETTE, f.world(uc - 1.2, 0, WALL_T + 0.11 + 0.25), yaw, { count: 2, unit: 0.6, h: 2.0, d: 0.5, seed: seed + 45, accent, openAngle: 1.25 });
       dressedCrate(kit, PALETTE, f.world(uc + 1.15, 0, WALL_T + 0.11 + 0.35), yaw, { w: 0.9, h: 0.9, d: 0.7, seed: seed + 42 });
       toolBoard(kit, PALETTE, f.world(uc + 1.2, 1.6, WALL_T + 0.12), yaw, { w: 0.9, h: 0.7, seed: seed + 44, accent });
     } else {

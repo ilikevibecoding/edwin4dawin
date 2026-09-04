@@ -31,7 +31,9 @@ export default defineRoom({
     "d2-lobby-lift": { pos: [0.8, Y, 372.4], yaw: 176, pitch: -2 },
     // west + comms framed so the bare T2 lift hole (D's door, undressed by contract) stays out of shot
     "d2-lobby-west": { pos: [4.0, Y, 375.0], yaw: 98, pitch: -1 },
-    "d2-lobby-north": { pos: [0.6, Y, 383.6], yaw: 3, pitch: 2 },
+    // north: 2 m forward and up 3°, standing at the starboard-aft pillar so it frames the right edge
+    // and the hub ring fills the foreground (the old pose was 45 % bare deck)
+    "d2-lobby-north": { pos: [2.6, Y, 381.8], yaw: 3, pitch: 5 },
     "d2-lobby-comms": { pos: [2.0, Y, 380.5], yaw: -132, pitch: -2 },
   },
   shell: {
@@ -97,7 +99,7 @@ export default defineRoom({
       junctionBox(kit, PALETTE, [x, Y + 1.35, 371.2], yaw, { w: 0.5, h: 0.7, seed: 13 + s, accent, conduitUp: BAND - 1.7 });
       wallVent(kit, PALETTE, [x, Y + 4.8, 371.4], yaw, { w: 0.9, h: 0.45 });
       directoryBoard(kit, PALETTE, [x, Y + 2.2, 379.0], yaw, { w: 1.4, h: 1.2, rows: 5, accent, seed: 15 + s });
-      bench(kit, PALETTE, [x, Y, 381.4], yaw, { len: 2.2, accent });
+      bench(kit, PALETTE, [x, Y, 381.4], yaw, { len: 2.2, accent, items: { seed: 26 + s, screenMat: "screenImp2" } });
       wallScreen(kit, [x - s * 0.08, Y + 2.85, 381.4], yaw, 1.6, 0.9, s < 0 ? "screenImp1" : "screenImp2", { accent });
       wallVent(kit, PALETTE, [x, Y + 4.8, 381.4], yaw, { w: 1.2, h: 0.5 });
     }

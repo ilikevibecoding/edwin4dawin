@@ -18,7 +18,7 @@ export default defineRoom({
   spawn: { pos: [-11, Y, 375], yaw: 90 },
   views: {
     "d2-cor-w-lobby-end": { pos: [-10.5, Y, 375], yaw: 90, pitch: 0 },
-    "d2-cor-w-mid": { pos: [-36, Y, 374.2], yaw: 82, pitch: -1 },
+    "d2-cor-w-mid": { pos: [-36.8, Y, 374.5], yaw: 82, pitch: -1 },
     "d2-cor-w-medbay-door": { pos: [-47, Y, 376.6], yaw: 12, pitch: 2 },
     "d2-cor-w-dead-end": { pos: [-56, Y, 375], yaw: 88, pitch: 3 },
   },

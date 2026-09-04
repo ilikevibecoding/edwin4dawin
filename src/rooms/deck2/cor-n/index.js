@@ -28,6 +28,9 @@ export default defineRoom({
     lights: false, // the corridor generator pushes its own fills (under every second housed fixture)
   },
   detail(ctx, shell, room) {
-    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "max", accent: "emitBlue", seed: 23, screens: ["screenImp1", "screenImp2"] });
+    // explicit bay order so the arm shares no service-bay kit position with cor-w / cor-e: seen from
+    // the lobby door the first port alcove is a workbench (cor-w opens on a crate stack), the mid
+    // bays are drums / cabinet / workbench rather than the three-locker row cor-e shows there
+    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "max", accent: "emitBlue", seed: 23, screens: ["screenImp1", "screenImp2"], bigKinds: ["lockers", "drums", "cabinet", "workbench", "crates", "bench"] });
   },
 });

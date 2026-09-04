@@ -12,8 +12,8 @@
 import { defineRoom } from "../../deck2/_shared/room.js";
 import { IMP } from "../../deck2/_shared/palette.js";
 import { WALL_T } from "../../deck2/_shared/shell.js";
-import { pillar, wallScreen, duct, tank, console as consoleProp, floorLine } from "../../deck2/_shared/props.js";
-import { coffer, lightChannel, floorLane, hubRing, directoryBoard, bench, firePoint, junctionBox, wallVent, wallConduits, kickStrips, commsPedestal, serviceRun, workbench, toolBoard, wallCabinet, dressedCrate, dressedCabinet, statusPanel } from "../../deck2/lobby/props.js";
+import { pillar, wallScreen, duct, console as consoleProp, floorLine } from "../../deck2/_shared/props.js";
+import { coffer, lightChannel, floorLane, hubRing, directoryBoard, bench, firePoint, junctionBox, wallVent, wallConduits, kickStrips, commsPedestal, serviceRun, workbench, toolBoard, wallCabinet, dressedCrate, dressedCabinet, statusPanel, engTank } from "../../deck2/lobby/props.js";
 
 const Y = 12;
 const CEIL = 17;
@@ -32,7 +32,9 @@ export default defineRoom({
   views: {
     "d3-lobby-lift": { pos: [0.8, Y, 551.4], yaw: 176, pitch: -2 },
     "d3-lobby-cor-door": { pos: [8.6, Y, 557.0], yaw: 165, pitch: -1 },
-    "d3-lobby-forward": { pos: [2, Y, 563], yaw: 10, pitch: 0 },
+    // forward: up 6° beside the starboard-aft pillar (right frame edge), hub ring in the foreground;
+    // the old pose was 40 % bare deck with the nearest coffer strip at the top centre
+    "d3-lobby-forward": { pos: [3.0, Y, 562.2], yaw: 5, pitch: 6 },
     "d3-lobby-west": { pos: [-3.0, Y, 557.2], yaw: 82, pitch: -3 },
   },
   shell: {
@@ -40,7 +42,7 @@ export default defineRoom({
     wallColor: IMP.impGrey,
     wallAlt: IMP.impMid,
     stripMat: "emitAmber",
-    floor: { color: IMP.impDark },
+    floor: { color: IMP.impMid }, // one step up from impDark: at impDark the deck fell to ~12 % grey under the strips
     ceiling: { channels: 0 },
     lights: false,
     doorDressing: { accent: "emitAmber" },
@@ -61,7 +63,9 @@ export default defineRoom({
     const PX = 5.2;
     const PZ = [552.6, 559.4];
     for (const sx of [-1, 1]) for (const z of PZ) pillar(kit, PALETTE, [sx * PX, Y, z], 0.8, H);
-    coffer(kit, PALETTE, [-PX - 0.4, PZ[0] - 0.4], [PX + 0.4, PZ[1] + 0.4], CEIL, { drop: 0.7, beam: 0.5, strips: 4, axis: "x" });
+    // narrower coffer emitters than Deck 2 (0.10 m): under this lower ceiling the nearest strip sat
+    // at the clipping limit from the forward view
+    coffer(kit, PALETTE, [-PX - 0.4, PZ[0] - 0.4], [PX + 0.4, PZ[1] + 0.4], CEIL, { drop: 0.7, beam: 0.5, strips: 4, axis: "x", emitW: 0.1 });
     lightChannel(kit, PALETTE, [x0 + 0.3, 0, 562.6], [x1 - 0.3, 0, 562.6], CEIL);
     for (const sx of [-1, 1]) lightChannel(kit, PALETTE, [sx * 7.8, 0, z0 + 1.2], [sx * 7.8, 0, 561.4], CEIL);
 
@@ -92,7 +96,7 @@ export default defineRoom({
     for (const sx of [-1, 1]) {
       wallScreen(kit, [sx * 3.8, Y + 2.6, z0 + 0.08], yawN, 1.6, 0.9, sx < 0 ? "screenImp1" : "screenImp2", { accent });
       junctionBox(kit, PALETTE, [sx * 6.3, Y + 1.4, z0], yawN, { w: 0.6, h: 0.8, seed: 32 + sx, accent, conduitUp: BAND - 1.8 });
-      tank(kit, PALETTE, [sx * 8.3, Y, 550.7], 0, { r: 0.8, h: 3.0, color: IMP.impMid, bands: 3, emit: accent });
+      engTank(kit, PALETTE, [sx * 8.3, Y, 550.7], sx < 0 ? 0.5 : -0.5, { r: 0.8, h: 3.0, color: IMP.impMid, bands: 3, emit: accent, seed: 50 + sx });
     }
 
     // ---- port wall: maintenance work station --------------------------------------------------------
@@ -116,7 +120,7 @@ export default defineRoom({
     // ---- starboard wall: cabinet, bench + schematic screen, junction with conduits, directory board --
     const yawE = -Math.PI / 2;
     dressedCabinet(kit, PALETTE, [x1 - 0.26, Y, 552.9], yawE, { w: 1.2, h: 1.8, d: 0.5, color: IMP.impGrey, emit: accent, seed: 40 });
-    bench(kit, PALETTE, [x1, Y, 555.0], yawE, { len: 2.2, accent });
+    bench(kit, PALETTE, [x1, Y, 555.0], yawE, { len: 2.2, accent, items: { seed: 53, screenMat: "screenImp2" } });
     wallScreen(kit, [x1 - 0.08, Y + 2.85, 555.0], yawE, 1.6, 0.9, "screenImp2", { accent });
     wallCabinet(kit, PALETTE, [x1, Y + 1.55, 558.6], yawE, { w: 0.9, h: 0.9, d: 0.3, color: IMP.impGrey, accent, seed: 41 });
     statusPanel(kit, PALETTE, [x1, Y + 2.55, 558.6], yawE, { accent });
@@ -130,13 +134,19 @@ export default defineRoom({
     wallVent(kit, PALETTE, [-7.4, Y + 4.3, z1], yawS, { w: 1.0, h: 0.45 });
 
     // ---- lights: warm coffer fills 1.7 m under the ceiling (1.4 m under the coffer field), lift
-    //      approach, door glow, forward wall, work station
+    //      approach, door glow, forward wall, work station, two low deck fills (10 descriptors)
     const warm = 0xffd8b0;
     for (const sx of [-1, 1]) for (const z of [554.4, 557.6]) ctx.lights.push({ type: "point", pos: [sx * 2.8, CEIL - 1.7, z], color: warm, intensity: 19, distance: 11, priority: 0.6 });
     ctx.lights.push({ type: "point", pos: [0, CEIL - 1.5, 562.4], color: warm, intensity: 16, distance: 10, priority: 0.5 });
     ctx.lights.push({ type: "point", pos: [6.5, Y + 3.6, 563.2], color: 0xffc890, intensity: 10, distance: 7, priority: 0.4 });
-    ctx.lights.push({ type: "point", pos: [0, Y + 3.8, 550.6], color: warm, intensity: 12, distance: 8, priority: 0.4 });
+    ctx.lights.push({ type: "point", pos: [0, Y + 3.4, 551.8], color: warm, intensity: 10, distance: 8, priority: 0.4 }); // 2.5 m off the forward wall: closer it drew a specular disc on the panel
     ctx.lights.push({ type: "point", pos: [x0 + 1.6, Y + 2.9, 555.0], color: 0xffc890, intensity: 8, distance: 6, priority: 0.4 });
+    // low deck fills over the port half of the deck (the strips and screens carried the exposure
+    // there and the deck fell off to ~12 % grey; one 7-cd fill lifted it to 16 %): one inside the
+    // amber work-area border, one under the port light channel over the open deck the west view
+    // looks across, both low enough to miss the screens' mirror direction
+    ctx.lights.push({ type: "point", pos: [x0 + 2.0, Y + 1.6, 554.8], color: 0xffd8b0, intensity: 10, distance: 8, priority: 0.4 });
+    ctx.lights.push({ type: "point", pos: [-6.2, Y + 2.0, 559.2], color: 0xffd8b0, intensity: 10, distance: 7, priority: 0.4 });
     return {};
   },
 });

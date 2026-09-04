@@ -30,9 +30,9 @@ export default defineRoom({
     stripMat: "emitAmber",
     floor: { color: IMP.impMid, strip: { axis: "z", width: 1.0, mat: "impFloor", color: IMP.impBlack } },
     ceiling: { channels: 0 },
-    lights: false, // the corridor generator pushes its own (warm) fills under every second fixture
+    lights: false, // the corridor generator pushes its own (warm) fills under every second fixture + a far-end flood
   },
   detail(ctx, shell, room) {
-    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "min", accent: "emitAmber", engineering: true, seed: 31, screens: ["screenImp3", "screenImp0"], fill: { color: 0xffd9b8 } });
+    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "min", accent: "emitAmber", engineering: true, seed: 31, screens: ["screenImp3", "screenImp0"], fill: { color: 0xffd9b8 }, farSpot: {} });
   },
 });

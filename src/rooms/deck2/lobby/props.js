@@ -91,8 +91,9 @@ export function directoryBoard(kit, PALETTE, pos, yaw, { w = 1.6, h = 1.2, rows 
 }
 
 // Wall bench: dark back plate on the wall, grey seat slab on two black pedestals, accent underline.
-// Back at local z = 0 (the wall face), seat reaches z 0.55.
-export function bench(kit, PALETTE, pos, yaw, { len = 2.2, accent = "emitBlue" } = {}) {
+// Back at local z = 0 (the wall face), seat reaches z 0.55. `items` ({ seed, screenMat }) leaves
+// one or two seeded objects on the seat so the top does not read as an empty slab.
+export function bench(kit, PALETTE, pos, yaw, { len = 2.2, accent = "emitBlue", items = null } = {}) {
   const P = placer(kit, pos, yaw);
   const dark = col(PALETTE, "impDark");
   P.box("paintedMetal", 0, 0.76, 0.025, len, 0.5, 0.04, { color: dark, texel: 2.5 });
@@ -100,7 +101,210 @@ export function bench(kit, PALETTE, pos, yaw, { len = 2.2, accent = "emitBlue" }
   P.box("paintedMetal", 0, 0.505, 0.295, len - 0.12, 0.01, 0.42, { color: col(PALETTE, "impGrey"), texel: 2.5 });
   for (const x of [-len / 2 + 0.3, len / 2 - 0.3]) P.box("paintedMetal", x, 0.21, 0.29, 0.12, 0.42, 0.4, { color: col(PALETTE, "impBlack") });
   P.box(accent, 0, 0.43, 0.551, len - 0.4, 0.012, 0.01);
+  if (items) seatItems(P, PALETTE, len, { accent, ...items });
   P.collider([-len / 2, 0, 0], [len / 2, 0.5, 0.56], "bench");
+}
+
+// Seat clutter (seat top at 0.51, wall at z 0): a datapad (dark slate with a lit face), a
+// helmet-sized kit box (lid seam, latches, handle, label, lit tab) or a flat tool case (latches,
+// hazard tape, amber tab). Two different items, one near each end, on any bench of 1.6 m or more
+// (one of them is always the kit box or the tool case, the two that read at frame scale; a lone
+// datapad on a 1.7 m corridor bench vanished when its end sat at the frame edge); a single item on
+// shorter seats. The middle stays sit-able.
+function seatItems(P, PALETTE, len, { seed = 1, screenMat = null, accent = "emitBlue" } = {}) {
+  const rand = rng(seed * 29 + 11);
+  const black = col(PALETTE, "impBlack");
+  const dark = col(PALETTE, "impDark");
+  const steel = col(PALETTE, "steel");
+  const top = 0.51;
+  const first = Math.floor(rand() * 3);
+  const picks = [first];
+  if (len >= 1.6) picks.push(first === 0 ? 1 + Math.floor(rand() * 2) : rand() < 0.5 ? 0 : 3 - first);
+  const sides = picks.length === 1 ? [rand() < 0.5 ? -1 : 1] : [-1, 1];
+  picks.forEach((kind, i) => {
+    const x = sides[i] * (len / 2 - 0.42);
+    const z = 0.28;
+    if (kind === 0) {
+      P.box("darkGloss", x, top + 0.008, z, 0.24, 0.016, 0.17);
+      P.box("paintedMetal", x, top + 0.017, z, 0.22, 0.002, 0.15, { color: black });
+      if (screenMat) P.box(screenMat, x, top + 0.02, z, 0.19, 0.002, 0.12, { uv: "keep" });
+      else P.box(accent, x, top + 0.02, z, 0.19, 0.002, 0.12);
+      P.box(accent, x + 0.1, top + 0.02, z - 0.06, 0.012, 0.002, 0.03);
+    } else if (kind === 1) {
+      const c = rand() < 0.5 ? col(PALETTE, "impGrey") : col(PALETTE, "impMid");
+      P.box("paintedMetal", x, top + 0.15, z, 0.34, 0.3, 0.3, { color: c, texel: 2.5 });
+      P.box("paintedMetal", x, top + 0.2, z, 0.35, 0.012, 0.31, { color: black });
+      for (const s of [-1, 1]) P.box("metal", x + s * 0.1, top + 0.19, z + 0.155, 0.05, 0.07, 0.02, { color: steel });
+      P.box("metal", x, top + 0.32, z, 0.14, 0.03, 0.03, { color: steel });
+      P.box(accent, x - 0.09, top + 0.26, z + 0.152, 0.05, 0.02, 0.006);
+      P.box("paintedMetal", x + 0.07, top + 0.1, z + 0.152, 0.12, 0.06, 0.006, { color: col(PALETTE, "impWhite") });
+      P.box("paintedMetal", x + 0.07, top + 0.11, z + 0.156, 0.08, 0.012, 0.004, { color: black });
+    } else {
+      P.box("paintedMetal", x, top + 0.065, z, 0.5, 0.13, 0.3, { color: black, texel: 2.5 });
+      P.box("paintedMetal", x, top + 0.075, z, 0.51, 0.01, 0.31, { color: dark });
+      for (const s of [-1, 1]) P.box("metal", x + s * 0.15, top + 0.07, z + 0.155, 0.06, 0.05, 0.02, { color: steel });
+      P.box("hazard", x, top + 0.11, z + 0.153, 0.3, 0.03, 0.006, { texel: 2 });
+      P.box("emitAmber", x + 0.2, top + 0.1, z + 0.153, 0.04, 0.02, 0.006);
+      P.box("metal", x, top + 0.14, z, 0.16, 0.025, 0.03, { color: steel });
+    }
+  });
+}
+
+// Locker row with door states, replacing the shared lockerBank's identical doors: closed doors carry
+// the vents/handle/LED, one locker in every row is open (`open: "swing"` — door ajar at `openAngle`
+// rad over the interior; `open: "doorless"` — no door at all, for corridor bays where a swung door
+// would break the 0.7 m wall zone), one carries a painted colour band and a red LED, longer rows add
+// a white label plate. The open unit is a real hollow (thin back / sides / top instead of the solid
+// body) with a light interior plate, a lamp strip under its header, a shelf with a kit box and a
+// helmet, a hung jacket on a rail and boots on the floor, so it reads as "open" from any angle and
+// distance instead of a flat black plate. `openIndex` pins which unit is open (callers pick the one
+// their cameras see best); otherwise the seed chooses. Body centred at pos (w × d), doors toward +Z.
+export function lockerRow(kit, PALETTE, pos, yaw, { count = 3, unit = 0.6, h = 2.0, d = 0.5, color, seed = 1, accent = "emitBlue", open = "swing", openIndex = null, openAngle = 0.6 } = {}) {
+  const P = placer(kit, pos, yaw);
+  const rand = rng(seed * 23 + 9);
+  const w = count * unit;
+  const body = color || col(PALETTE, "impMid");
+  const black = col(PALETTE, "impBlack");
+  const dark = col(PALETTE, "impDark");
+  const grey = col(PALETTE, "impGrey");
+  const steel = col(PALETTE, "steel");
+  const white = col(PALETTE, "impWhite");
+  P.box("paintedMetal", 0, 0.05, 0, w, 0.1, d, { color: black });
+  const order = [...Array(count).keys()];
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  const oi = openIndex == null ? order[0] : Math.max(0, Math.min(count - 1, openIndex));
+  // the banded door sits next to the open unit, so the two closed doors a corridor camera sees side
+  // by side never match (seeded, the band landed on the unit the frame edge or the HUD badge covered)
+  const rest = order.filter((i) => i !== oi).sort((p, q) => Math.abs(p - oi) - Math.abs(q - oi));
+  const states = new Array(count).fill("closed");
+  if (count >= 2) states[oi] = "open";
+  if (count >= 2) states[rest[0]] = "banded";
+  if (count >= 4) states[rest[1]] = "labelled";
+  const dw = unit - 0.04;
+  const dh = h - 0.1;
+  for (let i = 0; i < count; i++) {
+    const x = -w / 2 + (i + 0.5) * unit;
+    const st = states[i];
+    if (st === "open") {
+      // hollow unit: back, sides, top and floor plates; light interior plate; lamp strip under the header
+      P.box("paintedMetal", x, h / 2, -d / 2 + 0.015, unit, h, 0.03, { color: body, texel: 2.5 });
+      P.box("impPanel", x, h / 2 + 0.05, -d / 2 + 0.036, unit - 0.04, h - 0.2, 0.012, { color: grey, uv: "keep" });
+      for (const s of [-1, 1]) P.box("paintedMetal", x + s * (unit / 2 - 0.01), h / 2, 0, 0.02, h, d, { color: body, texel: 2.5 });
+      P.box("paintedMetal", x, h - 0.02, 0, unit, 0.04, d, { color: body, texel: 2.5 });
+      P.box("paintedMetal", x, 0.115, 0, unit, 0.03, d, { color: dark });
+      P.box("paintedMetal", x, h - 0.1, d / 2 - 0.02, unit, 0.12, 0.04, { color: body, texel: 2.5 });
+      P.box("emitWhite", x, h - 0.17, d / 2 - 0.09, unit - 0.2, 0.012, 0.03);
+      // shelf with a kit box and a helmet, rail with a hung jacket, boots on the floor
+      P.box("paintedMetal", x, h - 0.5, -0.03, unit - 0.06, 0.02, d - 0.14, { color: dark });
+      P.box("paintedMetal", x - 0.11, h - 0.41, -0.06, 0.18, 0.16, 0.18, { color: grey, texel: 2.5 });
+      P.box("paintedMetal", x - 0.11, h - 0.41, 0.034, 0.1, 0.014, 0.004, { color: black });
+      P.box("paintedMetal", x + 0.12, h - 0.4, -0.06, 0.17, 0.18, 0.17, { color: white, texel: 2.5 });
+      P.box("paintedMetal", x + 0.12, h - 0.43, 0.026, 0.12, 0.05, 0.004, { color: black });
+      P.box("metal", x, h - 0.6, -0.06, unit - 0.12, 0.015, 0.015, { color: steel });
+      P.box("paintedMetal", x + 0.04, h - 0.62, -0.06, 0.03, 0.05, 0.03, { color: steel });
+      P.box("paintedMetal", x + 0.04, h - 0.98, -0.06, 0.22, 0.68, 0.06, { color: dark, texel: 2.5 });
+      P.box("paintedMetal", x + 0.04, h - 0.98, -0.026, 0.02, 0.6, 0.004, { color: black });
+      for (const s of [-1, 1]) P.box("paintedMetal", x + s * 0.08, 0.23, 0.06, 0.1, 0.2, 0.26, { color: black });
+      if (open === "doorless") {
+        // door gone: bare hinge pins on the frame edge and a lit tab left on the header
+        for (const y of [0.5, h - 0.5]) P.box("metal", x - unit / 2 + 0.03, y, d / 2 + 0.012, 0.02, 0.08, 0.02, { color: steel });
+        P.box("emitRedImp", x - unit / 2 + 0.1, h - 0.06, d / 2 + 0.005, 0.05, 0.02, 0.006);
+        continue;
+      }
+      const a = openAngle;
+      const hx = x - unit / 2 + 0.02;
+      const cx = hx + (dw / 2) * Math.cos(a);
+      const cz = d / 2 + 0.012 + (dw / 2) * Math.sin(a);
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, P.yaw - a, 0));
+      P.add("impPanel", new THREE.BoxGeometry(dw, dh, 0.02), cx, h / 2, cz, { quat: q, color: grey, uv: "keep" });
+      P.add("paintedMetal", new THREE.BoxGeometry(dw - 0.16, 0.012, 0.03), cx, h - 0.3, cz, { quat: q, color: dark });
+      P.collider([hx, 0, d / 2], [hx + dw * Math.cos(a), h, d / 2 + dw * Math.sin(a)], "locker-door");
+      continue;
+    }
+    P.box("paintedMetal", x, h / 2, 0, unit, h, d, { color: body, texel: 2.5 });
+    P.box("impPanel", x, h / 2, d / 2 + 0.012, dw, dh, 0.02, { color: grey, uv: "keep" });
+    P.box("metal", x + unit / 2 - 0.08, h * 0.55, d / 2 + 0.03, 0.02, 0.18, 0.02, { color: steel });
+    for (let v = 0; v < 4; v++) P.box("paintedMetal", x, h - 0.3 - v * 0.05, d / 2 + 0.026, unit - 0.2, 0.012, 0.01, { color: dark });
+    if (st === "banded") {
+      P.box("paintedMetal", x, h * 0.42, d / 2 + 0.026, dw, 0.12, 0.006, { color: rand() < 0.5 ? col(PALETTE, "impAmber") : col(PALETTE, "impRed") });
+      P.box("emitRedImp", x - unit / 2 + 0.1, h - 0.15, d / 2 + 0.025, 0.05, 0.02, 0.006);
+    } else {
+      if (st === "labelled") {
+        P.box("paintedMetal", x, h * 0.62, d / 2 + 0.026, 0.2, 0.12, 0.006, { color: col(PALETTE, "impWhite") });
+        P.box("paintedMetal", x, h * 0.62 + 0.025, d / 2 + 0.03, 0.14, 0.014, 0.004, { color: black });
+        P.box("paintedMetal", x - 0.02, h * 0.62 - 0.02, d / 2 + 0.03, 0.1, 0.014, 0.004, { color: black });
+      }
+      P.box(i % 2 === 0 ? accent : "emitAmber", x - unit / 2 + 0.1, h - 0.15, d / 2 + 0.025, 0.05, 0.02, 0.006);
+    }
+  }
+  P.collider([-w / 2, 0, -d / 2], [w / 2, h, d / 2], "lockers");
+}
+
+// Pair of upright storage drums (r 0.3, h 0.95) side by side against a wall (back tangent at local
+// z = 0): rolling hoops, black lid with a steel bung, hazard band, white label and a lit tab; the
+// second drum is sometimes red.
+export function drumPair(kit, PALETTE, pos, yaw, { seed = 1, accent = "emitBlue" } = {}) {
+  const P = placer(kit, pos, yaw);
+  const rand = rng(seed * 31 + 5);
+  const r = 0.3;
+  const h = 0.95;
+  const black = col(PALETTE, "impBlack");
+  const dark = col(PALETTE, "impDark");
+  const steel = col(PALETTE, "steel");
+  const bodies = [col(PALETTE, "impMid"), col(PALETTE, "impGrey"), col(PALETTE, "impDark")];
+  [-0.36, 0.36].forEach((x, i) => {
+    const c = i === 1 && rand() < 0.4 ? col(PALETTE, "impRed") : bodies[Math.floor(rand() * bodies.length)];
+    const z = r + 0.05;
+    P.cyl("paintedMetal", x, h / 2, z, r, h, "y", { color: c, segments: 20, uvScale: [2 * Math.PI * r * 2.5, h * 2.5] });
+    for (const y of [0.22, h - 0.22]) P.cyl("paintedMetal", x, y, z, r + 0.015, 0.05, "y", { color: dark, segments: 20 });
+    P.cyl("paintedMetal", x, h + 0.02, z, r - 0.03, 0.04, "y", { color: black, segments: 20 });
+    P.cyl("metal", x + 0.1, h + 0.06, z, 0.04, 0.05, "y", { color: steel, segments: 10 });
+    P.cyl("hazard", x, h * 0.55, z, r + 0.008, 0.07, "y", { segments: 20, uvScale: [2 * Math.PI * r * 2, 0.14] });
+    P.box("paintedMetal", x, h * 0.36, z + r + 0.012, 0.2, 0.12, 0.03, { color: col(PALETTE, "impWhite") });
+    P.box("paintedMetal", x, h * 0.36 + 0.025, z + r + 0.03, 0.14, 0.014, 0.004, { color: black });
+    P.box("paintedMetal", x - 0.02, h * 0.36 - 0.02, z + r + 0.03, 0.1, 0.014, 0.004, { color: black });
+    P.box(accent, x, h * 0.36 + 0.1, z + r + 0.012, 0.08, 0.02, 0.03);
+    P.collider([x - r, 0, z - r], [x + r, h + 0.06, z + r], "drum");
+  });
+}
+
+// Engineering coolant tank: dark core cylinder clad in twelve clean panel staves (the shared tank's
+// worn-metal body reads as blotch noise on a dark cylinder), black plinth, hoops and cap, valve
+// stack, gauge plate with indicator field and lit bar, red hand-wheel, hazard band.
+export function engTank(kit, PALETTE, pos, yaw, { r = 0.8, h = 3.0, color, bands = 3, emit = "emitAmber", seed = 1 } = {}) {
+  const P = placer(kit, pos, yaw);
+  const black = col(PALETTE, "impBlack");
+  const dark = col(PALETTE, "impDark");
+  const steel = col(PALETTE, "steel");
+  const body = color || col(PALETTE, "impMid");
+  const wrap = (rr, len) => ({ uvScale: [2 * Math.PI * rr * 4, len * 4] });
+  P.cyl("paintedMetal", 0, 0.15, 0, r + 0.15, 0.3, "y", { color: black, segments: 24, ...wrap(r + 0.15, 0.3) });
+  const rc = r - 0.03;
+  P.cyl("paintedMetal", 0, h / 2 + 0.3, 0, rc, h, "y", { color: dark, segments: 24, ...wrap(rc, h) });
+  const n = 12;
+  const sw = 2 * rc * Math.sin(Math.PI / n) - 0.03;
+  const rs = rc * Math.cos(Math.PI / n) + 0.02;
+  for (let k = 0; k < n; k++) {
+    const a = (k / n) * Math.PI * 2;
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, P.yaw + a, 0));
+    P.add("impPanel", new THREE.BoxGeometry(sw, h - 0.5, 0.04), Math.sin(a) * rs, h / 2 + 0.3, Math.cos(a) * rs, { quat: q, color: body, uv: "keep" });
+  }
+  for (let i = 1; i <= bands; i++) P.cyl("paintedMetal", 0, 0.3 + (h * i) / (bands + 1), 0, r + 0.03, 0.16, "y", { color: black, segments: 28, ...wrap(r + 0.03, 0.16) });
+  P.cyl("paintedMetal", 0, h + 0.3 + 0.15, 0, r * 0.85, 0.3, "y", { color: black, segments: 24, ...wrap(r * 0.85, 0.3) });
+  P.cyl("paintedMetal", 0, h + 0.3 + 0.33, 0, r * 0.5, 0.06, "y", { color: dark, segments: 20, ...wrap(r * 0.5, 0.06) });
+  P.cyl("metal", 0, h + 0.85, 0, 0.12, 0.6, "y", { color: steel, segments: 10 });
+  P.cyl("metal", 0.3, h + 0.7, 0, 0.05, 0.6, "x", { color: steel, segments: 8 });
+  P.cyl("metal", 0, h + 1.12, 0, 0.16, 0.06, "y", { color: dark, segments: 12 });
+  P.box("darkGloss", 0, 1.45, r + 0.06, 0.42, 0.36, 0.06);
+  indicatorField(P, 0, 1.53, r + 0.092, 0.34, 0.12, seed);
+  P.box(emit, 0, 1.36, r + 0.092, 0.26, 0.05, 0.01);
+  P.cyl("metal", 0, 1.0, r + 0.15, 0.16, 0.05, "z", { color: col(PALETTE, "impRed"), segments: 16 });
+  P.cyl("metal", 0, 1.0, r + 0.06, 0.025, 0.18, "z", { color: steel, segments: 8 });
+  P.cyl("hazard", 0, 0.42, 0, r + 0.012, 0.08, "y", { segments: 28, uvScale: [2 * Math.PI * r * 2, 0.16] });
+  P.collider([-r - 0.15, 0, -r - 0.15], [r + 0.15, h + 0.3, r + 0.15], "tank");
 }
 
 // Fire point: floor-standing red cabinet (0.7 × 1.4 × 0.35) with a black door recess, white/red
@@ -183,7 +387,7 @@ export function housedStrip(kit, PALETTE, a, b, top, { w = 0.6, depth = 0.16, em
 
 // Recessed ceiling coffer over a hub crossing: four dark beams (outer rectangle min..max in [x, z]),
 // a black recessed field and parallel light strips inside. Beams drop `drop` below the ceiling.
-export function coffer(kit, PALETTE, min, max, ceilY, { drop = 0.7, beam = 0.5, stripMat = "emitWhite", strips = 4, axis = "x" } = {}) {
+export function coffer(kit, PALETTE, min, max, ceilY, { drop = 0.7, beam = 0.5, stripMat = "emitWhite", strips = 4, axis = "x", emitW = 0.14 } = {}) {
   const [x0, z0] = min;
   const [x1, z1] = max;
   const yb0 = ceilY - drop;
@@ -213,10 +417,10 @@ export function coffer(kit, PALETTE, min, max, ceilY, { drop = 0.7, beam = 0.5, 
   for (let i = 0; i < strips; i++) {
     if (axis === "x") {
       const z = iz0 + ((i + 0.5) / strips) * (iz1 - iz0);
-      housedStrip(kit, PALETTE, [ix0 + 0.25, 0, z], [ix1 - 0.25, 0, z], ceilY - 0.32, { w: 0.46, depth: 0.16, emitW: 0.14, mat: stripMat, louvre: 0.4, seg: 2.2 });
+      housedStrip(kit, PALETTE, [ix0 + 0.25, 0, z], [ix1 - 0.25, 0, z], ceilY - 0.32, { w: 0.46, depth: 0.16, emitW, mat: stripMat, louvre: 0.4, seg: 2.2 });
     } else {
       const x = ix0 + ((i + 0.5) / strips) * (ix1 - ix0);
-      housedStrip(kit, PALETTE, [x, 0, iz0 + 0.25], [x, 0, iz1 - 0.25], ceilY - 0.32, { w: 0.46, depth: 0.16, emitW: 0.14, mat: stripMat, louvre: 0.4, seg: 2.2 });
+      housedStrip(kit, PALETTE, [x, 0, iz0 + 0.25], [x, 0, iz1 - 0.25], ceilY - 0.32, { w: 0.46, depth: 0.16, emitW, mat: stripMat, louvre: 0.4, seg: 2.2 });
     }
   }
 }
