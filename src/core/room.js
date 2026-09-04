@@ -141,7 +141,7 @@ export class BuildContext {
     return l;
   }
 
-  spot(color, intensity, distance, angle, pos, target, { penumbra = 0.6, decay = 1.6, shadow = false, mapSize = 1024 } = {}) {
+  spot(color, intensity, distance, angle, pos, target, { penumbra = 0.6, decay = 1.6, shadow = false, mapSize = 1024, shadowFar = null } = {}) {
     const s = new THREE.SpotLight(color, intensity * LIGHT_SCALE, distance, angle, penumbra, decay);
     s.position.set(pos[0], pos[1], pos[2]);
     s.target.position.set(target[0], target[1], target[2]);
@@ -151,7 +151,8 @@ export class BuildContext {
       s.shadow.bias = -0.0003;
       s.shadow.normalBias = 0.03;
       s.shadow.camera.near = 0.5;
-      s.shadow.camera.far = distance;
+      // shadowFar: a tight far plane keeps neighbour rooms out of the shadow pass (halves its triangle count)
+      s.shadow.camera.far = shadowFar || distance;
     }
     this.group.add(s);
     this.group.add(s.target);

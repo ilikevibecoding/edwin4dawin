@@ -75,9 +75,13 @@ export function buildBelly(kit, tiers, rand, materials) {
     ]) {
       kit.boxMM("emitBay", [x0, b.bellyY - 1.9, z0], [x1, b.bellyY - 1.5, z1]);
     }
-    for (let y = b.bellyY + 4; y < b.deckY - 2; y += 6) {
-      kit.boxMM("emitWin", [b.x0 - 0.05, y, b.z0 + 2], [b.x0 + 0.1, y + 0.4, b.z1 - 2]);
-      kit.boxMM("emitWin", [b.x1 - 0.1, y, b.z0 + 2], [b.x1 + 0.05, y + 0.4, b.z1 - 2]);
+    // shaft guidance lights: two dashed amber rows in the lower half of the well, so nothing blooms across the
+    // well when seen from the hangar deck
+    for (let y = b.bellyY + 4; y < b.bellyY + 14; y += 6) {
+      for (let z = b.z0 + 2; z < b.z1 - 4; z += 8) {
+        kit.boxMM("emitBay", [b.x0 - 0.05, y, z], [b.x0 + 0.1, y + 0.3, z + 4]);
+        kit.boxMM("emitBay", [b.x1 - 0.1, y, z], [b.x1 + 0.05, y + 0.3, z + 4]);
+      }
     }
     // guidance lights + machinery clusters around the mouth
     for (let z = b.z0 - 2; z <= b.z1 + 2; z += 8) {

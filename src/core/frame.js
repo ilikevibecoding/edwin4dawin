@@ -152,10 +152,12 @@ export function panelGrid(frame, length, height, opts = {}) {
     tag = "wall",
     accent = "emitBlue",
     stripMat = "emitWhiteSoft",
+    stripEvery = 1,
     kick = true,
     cornice = true,
     detail = 1,
   } = opts;
+  let stripIndex = 0;
   const rand = rng(seed);
   const gap = 0.03;
   const baseRows = rows || imperialRows(height);
@@ -254,7 +256,9 @@ export function panelGrid(frame, length, height, opts = {}) {
           frame.box("paintedMetal", cu, cv, -0.14, cw, ch, 0.04, { color: IMP.black, texel: 1 });
           frame.box("metal", cu, v1 - 0.012, -0.08, cw, 0.024, 0.16, { color: IMP.steelDark });
           frame.box("metal", cu, v0 + 0.012, -0.08, cw, 0.024, 0.16, { color: IMP.steelDark });
-          frame.box(m, cu, cv, -0.1, cw - 0.02, ch - 0.06, 0.02, { uv: "keep" });
+          // stripEvery > 1 leaves every Nth cell as a dark housing (broken runs on long industrial walls)
+          if (stripEvery <= 1 || stripIndex++ % stripEvery !== stripEvery - 1) frame.box(m, cu, cv, -0.1, cw - 0.02, ch - 0.06, 0.02, { uv: "keep" });
+          else frame.box("darkGloss", cu, cv, -0.1, cw - 0.02, ch - 0.06, 0.02);
           break;
         }
         case "panel": {

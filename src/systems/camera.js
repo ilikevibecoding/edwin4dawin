@@ -2,7 +2,7 @@
 // smooth damping and a scripted flight helper used by the boarding transition.
 import * as THREE from "three";
 
-const MIN_DIST = 120;
+let MIN_DIST = 120;
 const MAX_DIST = 6000;
 
 export class CameraRig {
@@ -69,6 +69,11 @@ export class CameraRig {
     document.addEventListener("pointerlockchange", () => {
       this.locked = document.pointerLockElement === dom;
     });
+  }
+
+  /** Debug / tooling: relax the orbit distance clamp (e.g. to frame a fighter close-up). */
+  setMinDistance(d) {
+    MIN_DIST = Math.max(1, d);
   }
 
   /** Enter orbit mode around `target` from `pos` (camera position). */
