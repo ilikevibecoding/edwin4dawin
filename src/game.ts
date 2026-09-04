@@ -17,6 +17,7 @@ import { Traffic } from './world/traffic';
 import { Aircraft } from './plane/aircraft';
 import { FlightCamera } from './plane/camera';
 import { Metrics } from './core/metrics';
+import { ViewCull, configureMainCamera, installCascadeRouting } from './world/culling';
 
 export interface QualitySettings {
   samples: number;
@@ -59,7 +60,7 @@ export class Game {
   traffic!: Traffic;
   aircraft!: Aircraft;
   flightCamera!: FlightCamera;
-  lampMesh!: THREE.InstancedMesh;
+  readonly cull = new ViewCull();
   width = 1;
   height = 1;
   time = 0;
@@ -78,6 +79,7 @@ export class Game {
     this.renderer.autoClear = true;
     this.renderer.info.autoReset = false;
     this.camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.4, 60000);
+    configureMainCamera(this.camera);
     this.atmos = new Atmosphere(params.seed);
     if (params.time !== null) this.atmos.hour = params.time;
     if (params.weather) this.atmos.setWeather(params.weather);
@@ -125,6 +127,8 @@ export class Game {
       lightDirection: new THREE.Vector3(0.3, -1, 0.2).normalize(), lightIntensity: 1, shadowBias: -0.0002, lightMargin: 300,
     });
     this.csm.fade = true;
+    // route casters per cascade: thin / small objects only reach the near cascades (see culling.ts)
+    installCascadeRouting(this.renderer, (l) => this.csm.lights.indexOf(l as THREE.DirectionalLight));
 
     this.sky = new Sky(this.atmos, this.renderer, { cloudSteps: q.cloudSteps, scale: q.skyScale });
     this.sky.dome.name = 'sky';
@@ -172,15 +176,6 @@ export class Game {
     for (const m of this.props.materials) this.registerLit(m);
     this.props.group.name = 'props';
     this.scene.add(this.props.group);
-    // lamp heads (emissive at night)
-    const lampGeo = new THREE.SphereGeometry(0.22, 6, 4);
-    const lampMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffd9a0, emissiveIntensity: 0 });
-    this.lampMesh = new THREE.InstancedMesh(lampGeo, lampMat, this.props.lampPositions.length);
-    const m4 = new THREE.Matrix4();
-    this.props.lampPositions.forEach((p, i) => this.lampMesh.setMatrixAt(i, m4.makeTranslation(p.x, p.y + 9.05, p.z)));
-    this.lampMesh.frustumCulled = false;
-    this.lampMesh.name = 'lamps';
-    this.scene.add(this.lampMesh);
 
     await this.tick(progress, 'Planting palms and mangroves', 0.74);
     this.vegetation = new Vegetation(this.map, this.city.occupied);
@@ -247,7 +242,7 @@ export class Game {
     this.windVec.set(this.atmos.windDir.x, 0, this.atmos.windDir.y).multiplyScalar(p.windSpeed);
     this.vegetation.update(this.time, p.windSpeed);
     this.traffic.update(dt, this.time, s.night);
-    (this.lampMesh.material as THREE.MeshStandardMaterial).emissiveIntensity = 8 * s.night;
+    this.props.setNight(s.night);
     this.aircraft.update(dt, this.time, s.night, this.windVec, p.turbulence, this.height, simulatePlane);
   }
 
@@ -257,14 +252,18 @@ export class Game {
     const cam = this.camera;
     cam.updateMatrixWorld();
     const cx = cam.position.x, cz = cam.position.z;
-    this.terrain.update(cx, cz);
-    this.vegetation.updateLod(cx, cz);
-    this.city.batches.updateLod(cx, cz);
-    this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size);
-    this.wakes.render(this.renderer, cx, cz);
     // shadow range grows with altitude so a high aerial still shows building shadows
     const wantFar = Math.min(12000, Math.max(this.quality.shadowFar, cam.position.y * 9));
     if (Math.abs(wantFar - this.csm.maxFar) > 200) { this.csm.maxFar = wantFar; this.csm.updateFrustums(); }
+    // view / shadow-caster culling shared by the chunked world systems
+    this.cull.update(cam, this.csm.maxFar, this.atmos.state.sunDir);
+    this.terrain.update(cx, cz);
+    this.vegetation.updateLod(cx, cz, this.cull);
+    this.city.batches.updateLod(cx, cz, this.cull);
+    this.props.updateLod(cx, cz, this.cull);
+    this.traffic.updateCulling(this.cull);
+    this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size);
+    this.wakes.render(this.renderer, cx, cz);
     this.csm.update();
     for (const l of this.csm.lights) {
       const sc = l.shadow.camera;
