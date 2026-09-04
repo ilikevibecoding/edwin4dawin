@@ -481,6 +481,116 @@ function makeWeatheringAtlas(size = 1024, seed = 4021) {
   return tex;
 }
 
+// Second weathering atlas (2x2 cells, same layout as weatherRect): 0 soot fan trailing from a block
+// (wide at v=0, breaking up toward v=1), 1 bundle of broad streaks, 2 grime halo around a fitting,
+// 3 drip stains running down a wall. The first atlas' plumes are hairlines meant for 80 m heat
+// streaks; these are the metre-wide marks that read behind a 5 m hatch at 100 m.
+function makeWeatheringAtlas2(size = 512, seed = 5107) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+  const half = size / 2;
+  let s = seed >>> 0;
+  const rnd = () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  const lat = 64;
+  const grid = new Float32Array(lat * lat);
+  for (let i = 0; i < grid.length; i++) grid[i] = rnd();
+  const smooth = (t) => t * t * (3 - 2 * t);
+  const noise = (u, v, f) => {
+    const x = u * f;
+    const y = v * f;
+    const x0 = Math.floor(x);
+    const y0 = Math.floor(y);
+    const fx = smooth(x - x0);
+    const fy = smooth(y - y0);
+    const g = (a, b) => grid[(((b % lat) + lat) % lat) * lat + (((a % lat) + lat) % lat)];
+    return (g(x0, y0) * (1 - fx) + g(x0 + 1, y0) * fx) * (1 - fy) + (g(x0, y0 + 1) * (1 - fx) + g(x0 + 1, y0 + 1) * fx) * fy;
+  };
+  const fbm = (u, v, f, oct = 4) => {
+    let a = 0;
+    let amp = 0.5;
+    let sum = 0;
+    for (let o = 0; o < oct; o++) {
+      a += noise(u, v, f) * amp;
+      sum += amp;
+      f *= 2.03;
+      amp *= 0.5;
+    }
+    return a / sum;
+  };
+  const bundle = [];
+  for (let k = 0; k < 6; k++) bundle.push([0.12 + rnd() * 0.76, rnd() * 0.15, 0.05 + rnd() * 0.07, 0.55 + rnd() * 0.45]);
+  const drips = [];
+  for (let k = 0; k < 9; k++) drips.push([0.08 + rnd() * 0.84, rnd() * 0.1, 0.012 + rnd() * 0.03, 0.3 + rnd() * 0.7]);
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      const cell = (px < half ? 0 : 1) + (py < half ? 0 : 2);
+      const u = ((px % half) + 0.5) / half;
+      const v = ((py % half) + 0.5) / half;
+      let a = 0;
+      let lum = 0.06;
+      if (cell === 0) {
+        // fan: full width at the source, thinning and breaking into wisps along v
+        const halfW = 0.3 + 0.16 * v;
+        const wob = (fbm(u * 2 + 3, v * 3, 5) - 0.5) * 0.12 * v;
+        const lat = Math.max(0, 1 - Math.pow(Math.abs(u - 0.5 - wob) / halfW, 2.2));
+        const along = Math.pow(Math.max(0, 1 - v), 1.5);
+        const tex = 0.55 + 0.45 * fbm(u * 1.5, v, 9);
+        const wisps = 0.7 + 0.3 * fbm(u * 6, v * 1.2, 14);
+        a = lat * along * tex * wisps * 0.9;
+        lum = 0.05 + 0.05 * fbm(u, v, 30);
+      } else if (cell === 1) {
+        for (const [sx, sy, sw, sl] of bundle) {
+          const dv = v - sy;
+          if (dv < 0 || dv > sl) continue;
+          const t = dv / sl;
+          const wob = (fbm(u * 3 + sx * 5, v * 2, 5) - 0.5) * 0.05 * t;
+          const dx = Math.abs(u - sx - wob) / (sw * (1 + 0.8 * t));
+          if (dx < 1) a += (1 - dx * dx) * (1 - t * t) * (0.6 + 0.4 * fbm(u, v, 20));
+        }
+        a = Math.min(1, a) * 0.85;
+        lum = 0.05 + 0.05 * fbm(u, v, 40);
+      } else if (cell === 2) {
+        const rr = Math.hypot(u - 0.5, v - 0.5) / (0.42 + 0.06 * fbm(u, v, 6));
+        a = Math.pow(Math.max(0, 1 - rr), 1.3) * (0.7 + 0.3 * fbm(u, v, 25)) * 0.8;
+        lum = 0.05 + 0.06 * fbm(u, v, 35);
+      } else {
+        for (const [sx, sy, sw, sl] of drips) {
+          const dv = v - sy;
+          if (dv < 0 || dv > sl) continue;
+          const t = dv / sl;
+          const dx = Math.abs(u - sx) / (sw * (1 + 0.3 * t));
+          if (dx < 1) a += (1 - dx) * (1 - t) * 0.8;
+          // a wider stain at the source
+          const head = Math.hypot((u - sx) / (sw * 3), dv / 0.06);
+          if (head < 1) a += (1 - head) * 0.5;
+        }
+        a = Math.min(1, a) * (0.75 + 0.25 * fbm(u, v, 30));
+        lum = 0.06 + 0.06 * fbm(u, v, 35);
+      }
+      const border = Math.min(u, 1 - u, v, 1 - v);
+      if (border < 0.02) a *= border / 0.02;
+      const i = (py * size + px) * 4;
+      const l8 = Math.round(Math.min(1, lum) * 255);
+      d[i] = l8;
+      d[i + 1] = l8;
+      d[i + 2] = Math.min(255, l8 + 2);
+      d[i + 3] = Math.round(Math.min(1, a) * 255);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.anisotropy = 8;
+  return tex;
+}
+
 // Sun direction (world) shared by the exterior detail shaders. Initialised to the far field's sun at
 // t = 0 (space.js sunDirLocal); greebles.js keeps it current from the scene's directional light.
 export const EXT_SUN = { value: new THREE.Vector3(-0.78, 0.42, -0.46).normalize() };
@@ -521,12 +631,20 @@ function engineBorePatch(material) {
         "#include <emissivemap_fragment>",
         `#include <emissivemap_fragment>
         {
-          float t = clamp( vEmissiveMapUv.x, 0.0, 1.0 );
+          // uv.x: -1 at the centre of the throat plate, 0 where the plate meets the bore, 1 at the lip.
+          // Brightness peaks at the centre (a hot spot, not a flat disc), is already down to 55% where
+          // the plate meets the bore and fades to 20% at the lip; the colour runs white -> pale blue ->
+          // deep blue along the same path.
+          float s = vEmissiveMapUv.x;
+          float tb = clamp( s, 0.0, 1.0 );
+          float core = clamp( -s, 0.0, 1.0 );
           float ang = vEmissiveMapUv.y * 6.2831853;
-          float pulse = 0.94 + 0.06 * sin( uTime * 2.1 + t * 5.0 );
-          float streaks = 0.9 + 0.1 * sin( ang * 22.0 + uTime * 0.6 + t * 3.0 );
-          float fall = mix( 1.0, 0.14, smoothstep( 0.0, 0.9, t ) );
-          vec3 col = mix( vec3( 0.86, 0.92, 1.0 ), vec3( 0.2, 0.42, 1.0 ), smoothstep( 0.05, 0.75, t ) );
+          float pulse = 0.94 + 0.06 * sin( uTime * 2.1 + tb * 5.0 );
+          // streaks fade out toward the throat so the plate's fan seam carries none
+          float streaks = 1.0 - 0.1 * smoothstep( 0.0, 0.25, tb ) * ( 0.5 + 0.5 * sin( ang * 22.0 + uTime * 0.6 + tb * 3.0 ) );
+          float fall = mix( 0.55, 0.2, smoothstep( 0.0, 0.9, tb ) ) + 0.65 * core * sqrt( core );
+          vec3 colMid = vec3( 0.58, 0.74, 1.0 );
+          vec3 col = s < 0.0 ? mix( colMid, vec3( 0.88, 0.93, 1.0 ), core * core ) : mix( colMid, vec3( 0.2, 0.42, 1.0 ), smoothstep( 0.05, 0.75, tb ) );
           totalEmissiveRadiance = emissive * col * fall * pulse * streaks;
         }`,
       );
@@ -563,7 +681,7 @@ export function addExteriorDetailMaterials(mats) {
   {
     const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
     white.needsUpdate = true;
-    mats.emitEngineBore = engineBorePatch(new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveIntensity: 1.15, emissiveMap: white, roughness: 0.6, metalness: 0 }));
+    mats.emitEngineBore = engineBorePatch(new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveIntensity: 1.05, emissiveMap: white, roughness: 0.6, metalness: 0 }));
   }
   mats.emitTint = makeEmitTint(2.4);
   // anti-collision strobes: greebles.js toggles emissiveIntensity between 0 and this every flash
@@ -578,7 +696,21 @@ export function addExteriorDetailMaterials(mats) {
     vertexColors: true,
     color: 0xffffff,
     polygonOffset: true,
-    polygonOffsetFactor: -3,
+    polygonOffsetFactor: -1.5,
+    polygonOffsetUnits: -3,
+    envMapIntensity: 0.2,
+  });
+  // metre-scale marks (soot fans, streak bundles, grime halos, drips); same cell layout as weatherRect
+  mats.weathering2 = new THREE.MeshStandardMaterial({
+    map: makeWeatheringAtlas2(512, 5107),
+    transparent: true,
+    depthWrite: false,
+    roughness: 0.92,
+    metalness: 0.05,
+    vertexColors: true,
+    color: 0xffffff,
+    polygonOffset: true,
+    polygonOffsetFactor: -1.5,
     polygonOffsetUnits: -3,
     envMapIntensity: 0.2,
   });
@@ -586,5 +718,5 @@ export function addExteriorDetailMaterials(mats) {
 }
 
 // Keys whose meshes should not cast shadows (emitters, glass, decals, grates)
-export const NO_SHADOW_KEYS = new Set(["glass", "glassDark", "holo", "holoWire", "beam", "impDecal", "deckMarks", "impGrate", "lightBand", "lightBandWarm", "lightBandRed", "lightSoft", "leds", "blink", "blinkSparse", "blinkDense", "emitTint", "emitStrobe", "emitEngineBore", "weathering", "tieGlass", "exhaustGlow", "beaconGlow"]);
+export const NO_SHADOW_KEYS = new Set(["glass", "glassDark", "holo", "holoWire", "beam", "impDecal", "deckMarks", "impGrate", "lightBand", "lightBandWarm", "lightBandRed", "lightSoft", "leds", "blink", "blinkSparse", "blinkDense", "emitTint", "emitStrobe", "emitEngineBore", "weathering", "weathering2", "tieGlass", "exhaustGlow", "beaconGlow"]);
 export const isEmissiveKey = (k) => k.startsWith("emit") || k.startsWith("screen") || k.startsWith("blink") || k.startsWith("lightBand") || k === "lightSoft" || k === "leds";

@@ -347,7 +347,8 @@ export function buildExterior(mats, opts = {}) {
       const blk = new THREE.ExtrudeGeometry(new THREE.Shape(inset), { depth: 0.8, bevelEnabled: false });
       blk.translate(0, 0, HULL.sternZ - 0.2);
       worldUVs(blk, TEXEL * 6);
-      kit.add("hullDark", blk, { uv: "keep", color: IMP.trench });
+      // dark armour, but not black: the soot decals radiating from the bells have to read against it
+      kit.add("hullDark", blk, { uv: "keep", color: IMP.hullDark.clone().multiplyScalar(0.8) });
       // armoured rim around the recessed engine block: a frame (the inset plate outline is the hole),
       // so the dark block reads as a 2 m deep recess with the bells emerging from it
       const lipShape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x * 0.9, cy + (y - cy) * 0.86)));
@@ -373,8 +374,12 @@ export function buildExterior(mats, opts = {}) {
       // the bore: one emissive frustum from the throat to the lip, so the ion glow fills the whole
       // mouth from any angle (a dark inner wall used to hide the glow off-axis and leave a blown
       // crescent). The bore shader runs its gradient along uv.x: 0 at the throat, 1 at the lip.
+      // The throat sits 12% of the bell length clear of the engine block plate: the soot decals on
+      // that plate use a polygon offset, and 0.3 m behind the throat they leaked through it at
+      // oblique angles as a grey, ragged-edged crescent across the core.
       {
-        const Lb = L * 0.96;
+        const z0 = Math.max(4.5, 0.12 * L);
+        const Lb = L * 0.98 - z0;
         const bore = insideOut(new THREE.CylinderGeometry(e.r * 0.99, e.r * 0.74, Lb, 48, 1, true));
         bore.rotateX(Math.PI / 2);
         const pos = bore.attributes.position;
@@ -384,17 +389,18 @@ export function buildExterior(mats, opts = {}) {
           const ang = Math.atan2(pos.getY(i), pos.getX(i)) / (Math.PI * 2) + 0.5;
           uv.setXY(i, t, ang);
         }
-        kit.add("emitEngineBore", bore, { pos: [e.x, e.y, HULL.sternZ + 0.02 * L + Lb / 2], uv: "keep" });
-        // throat plate (uv.x = 0: the core)
+        kit.add("emitEngineBore", bore, { pos: [e.x, e.y, HULL.sternZ + z0 + Lb / 2], uv: "keep" });
+        // throat plate: uv.x runs from -1 at the centre (the hot spot) to 0 at the rim where it meets
+        // the frustum's throat; uv.y is the angle, from the fan index so the seam is monotonic
         const throat = new THREE.CircleGeometry(e.r * 0.745, 48);
         const tuv = throat.attributes.uv;
-        for (let i = 0; i < tuv.count; i++) tuv.setXY(i, 0, tuv.getY(i));
-        kit.add("emitEngineBore", throat, { pos: [e.x, e.y, HULL.sternZ + 0.025 * L], uv: "keep" });
+        for (let i = 0; i < tuv.count; i++) tuv.setXY(i, i === 0 ? -1 : 0, i === 0 ? 0 : (i - 1) / 48);
+        kit.add("emitEngineBore", throat, { pos: [e.x, e.y, HULL.sternZ + z0 + 0.005 * L], uv: "keep" });
         // two dark baffle rings inside the bore break the glow into stages
         for (const f of [0.42, 0.72]) {
           const rb = e.r * (0.74 + (0.99 - 0.74) * f);
           const ring = new THREE.TorusGeometry(rb, e.r * 0.018, 6, 48);
-          kit.add("hullDark", ring, { pos: [e.x, e.y, HULL.sternZ + 0.02 * L + f * Lb], color: IMP.trench, uv: "scale", uvScale: [8, 1] });
+          kit.add("hullDark", ring, { pos: [e.x, e.y, HULL.sternZ + z0 + f * Lb], color: IMP.trench, uv: "scale", uvScale: [8, 1] });
         }
       }
       // lip ring closing the gap between the bore mouth and the bell's outer edge

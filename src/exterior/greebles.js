@@ -234,22 +234,23 @@ const lenB = (surf, a) => {
 };
 
 // ---------------------------------------------------------------------------
-// Palette: instance tints. The hull plating is hull-texture (~0.64 linear) x IMP.hull; greebles are
-// worn-metal (~0.39 linear) x tint, so x1.65 puts `mid` at the hull's own brightness and light / dark
-// bracket it, which is what makes plates read as manufactured-differently rather than as a
-// different material.
+// Palette: instance tints. The hull plating is the plating texture (~0.39 linear, 59% metallic) x
+// IMP.hull; greebles are worn-metal (~0.39 linear, near-dielectric) x tint. Measured on the T1 top
+// under the sun, x1.2 puts `mid` at the plating's own brightness (the diffuse-heavy greeble material
+// picks up more of the sun than the half-metal armour), light / dark bracket it, which is what makes
+// plates read as manufactured-differently rather than as a different, lighter material.
 // ---------------------------------------------------------------------------
 const tint = (c, k) => c.clone().multiplyScalar(k);
 const TINT = {
-  light: tint(IMP.hullLight, 1.65),
-  mid: tint(IMP.hull, 1.65),
-  dark: tint(IMP.hullDark, 1.55),
-  gun: tint(IMP.gunmetal, 1.4),
-  trench: tint(IMP.trench, 1.6),
-  steel: tint(IMP.steel, 1.4),
-  white: tint(IMP.white, 1.1),
+  light: tint(IMP.hullLight, 1.28),
+  mid: tint(IMP.hull, 1.2),
+  dark: tint(IMP.hullDark, 1.12),
+  gun: tint(IMP.gunmetal, 1.05),
+  trench: tint(IMP.trench, 1.2),
+  steel: tint(IMP.steel, 1.05),
+  white: tint(IMP.white, 0.85),
   // grille / vent / intake faces and shadow skirts: ~0.01 linear after the worn-metal map, near-black
-  black: tint(IMP.trench, 1.1),
+  black: tint(IMP.trench, 0.85),
 };
 // roughly one greeble in eight is a dark intake / grille so the surface has real blacks in it
 const PAL = {
@@ -515,8 +516,10 @@ export function buildGreebles(mats, opts = {}) {
       winStrip(region, f, Math.min(3.2, d / n - 1.2), rr(r, 0.6, 0.8), r() < 0.2 ? WIN.warm : WIN.cool, 0);
     }
   };
-  // aft weathering streak requests from dress() (built into the decal mesh later): [frame, q, w, d]
+  // weathering requests from dress(), built into the decal meshes later: aft streaks on the horizontal
+  // surfaces [frame, q, w, d, h, spin] and drips below fittings on the vertical faces [frame, w, d, h, spin]
   const streakReqs = [];
+  const dripReqs = [];
 
   function dress(region, surf, cfg) {
     for (const pass of cfg.passes) {
@@ -559,7 +562,9 @@ export function buildGreebles(mats, opts = {}) {
           // put() returns the shared quaternion; anything that re-orients needs a copy
           if (wantSkirt && !NO_SKIRT.has(shape) && Math.max(w, dd) >= 2 && hh >= 0.5) skirt(region, f, q.clone(), w, dd, Math.min(2, hh / 3));
           if (pass.windows && (shape === "box" || shape === "step2" || shape === "taper" || shape === "tower" || shape === "step3")) faceWindows(region, f.p, q.clone(), [w, hh, dd], r);
-          if (cfg.streaks && pass.tier !== "S" && hh >= 0.35 && r() < cfg.streaks) streakReqs.push([f, q.clone(), w, dd, hh, spin]);
+          if (cfg.streaks && pass.tier !== "S" && hh >= 0.35 && r() < cfg.streaks) streakReqs.push([f, q.clone(), w, dd, hh, spin, r() < 0.5]);
+          else if (cfg.streaks && pass.tier !== "S" && Math.max(w, dd) >= 3.5 && r() < 0.35) streakReqs.push([f, q.clone(), w, dd, hh, spin, "halo"]);
+          if (cfg.drips && pass.tier !== "S" && hh >= 0.3 && r() < cfg.drips) dripReqs.push([f, w, dd, hh, spin]);
         }
       }
     }
@@ -735,7 +740,7 @@ export function buildGreebles(mats, opts = {}) {
   dress("city", SURF.t1Top, {
     seed: 11,
     blocked: t2Footprint,
-    streaks: 0.22,
+    streaks: 0.32,
     passes: [
       { tier: "L", cell: 13, fill: 0.5, shapes: CITY_L, windows: true, stagger: true },
       { tier: "M", cell: 6, fill: 0.5, shapes: CITY_M, stagger: true },
@@ -746,7 +751,7 @@ export function buildGreebles(mats, opts = {}) {
   dress("city", SURF.t2Top, {
     seed: 12,
     blocked: towerFootprint,
-    streaks: 0.22,
+    streaks: 0.32,
     passes: [
       { tier: "L", cell: 14, fill: 0.55, shapes: CITY_L, windows: true, stagger: true },
       { tier: "M", cell: 6, fill: 0.5, shapes: CITY_M, stagger: true },
@@ -767,6 +772,7 @@ export function buildGreebles(mats, opts = {}) {
         seed,
         margin: 2.2,
         blocked: side < 0 ? loungePorts : undefined,
+        drips: 0.22,
         passes: [
           { tier: "M", cell: 6.5, fill: 0.55, shapes: FLANK_M, heightScale: 0.6, stagger: true },
           { tier: "S", cell: 2.4, fill: 0.3, shapes: FLANK_S, palette: PAL.small, heightScale: 0.7 },
@@ -793,6 +799,7 @@ export function buildGreebles(mats, opts = {}) {
       seed,
       margin: 2,
       palette: PAL.machinery,
+      drips: 0.25,
       passes: [
         { tier: "M", cell: 5.5, fill: 0.5, shapes: [["box", 0.3], ["vent", 0.25], ["hatch", 0.2], ["sensorUp", 0.15], ["pipe", 0.1]], heightScale: 0.7 },
         { tier: "S", cell: 2.4, fill: 0.3, shapes: FLANK_S, palette: PAL.small, heightScale: 0.7 },
@@ -813,7 +820,7 @@ export function buildGreebles(mats, opts = {}) {
   dress("tower", SURF.tbTop, {
     seed: 71,
     blocked: neckFootprint,
-    streaks: 0.2,
+    streaks: 0.3,
     passes: [
       { tier: "L", cell: 11, fill: 0.5, shapes: [["box", 0.25], ["tank", 0.15], ["step2", 0.12], ["sensor", 0.12], ["dome", 0.08], ["tower", 0.08], ["dish", 0.08], ["tankH", 0.06], ["mast", 0.06]], windows: true },
       { tier: "M", cell: 5, fill: 0.5, shapes: CITY_M, stagger: true },
@@ -822,7 +829,7 @@ export function buildGreebles(mats, opts = {}) {
   });
   for (const side of [-1, 1]) {
     const surf = SURF.tbFlank(side);
-    dress("tower", surf, { seed: 81 + side, margin: 2, passes: [{ tier: "M", cell: 5.5, fill: 0.5, shapes: FLANK_M, heightScale: 0.6, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: FLANK_S, palette: PAL.small, heightScale: 0.7 }] });
+    dress("tower", surf, { seed: 81 + side, margin: 2, drips: 0.2, passes: [{ tier: "M", cell: 5.5, fill: 0.5, shapes: FLANK_M, heightScale: 0.6, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: FLANK_S, palette: PAL.small, heightScale: 0.7 }] });
     const r = rng(91 + side);
     const pts = [];
     for (const a of seq(508, 692, 13)) pts.push([a + (r() - 0.5) * 3, r() < 0.5 ? 0.34 : 0.64]);
@@ -832,7 +839,7 @@ export function buildGreebles(mats, opts = {}) {
     [SURF.tbFront, 101],
     [SURF.tbBack, 102],
   ]) {
-    dress("tower", surf, { seed, margin: 2, passes: [{ tier: "M", cell: 5.5, fill: 0.5, shapes: FLANK_M, heightScale: 0.6, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: FLANK_S, palette: PAL.small, heightScale: 0.7 }] });
+    dress("tower", surf, { seed, margin: 2, drips: 0.2, passes: [{ tier: "M", cell: 5.5, fill: 0.5, shapes: FLANK_M, heightScale: 0.6, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: FLANK_S, palette: PAL.small, heightScale: 0.7 }] });
     const r = rng(seed + 7);
     const pts = [];
     {
@@ -846,7 +853,7 @@ export function buildGreebles(mats, opts = {}) {
   {
     const t2SurfaceY = (x) => (Math.abs(x) <= tTop(T2, 500) ? t2TopY(500) : t2TopY(500) - ((Math.abs(x) - tTop(T2, 500)) / T2.slopeRun) * T2.rise);
     const surf = SURF.plinthFront;
-    dress("tower", surf, { seed: 111, margin: 2, blocked: (x, y) => y < t2SurfaceY(x) + 1.2, palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.5, shapes: [["box", 0.3], ["vent", 0.25], ["hatch", 0.2], ["sensorUp", 0.15], ["pipe", 0.1]], heightScale: 0.7 }, { tier: "S", cell: 2.2, fill: 0.3, shapes: FLANK_S, palette: PAL.small, heightScale: 0.7 }] });
+    dress("tower", surf, { seed: 111, margin: 2, drips: 0.2, blocked: (x, y) => y < t2SurfaceY(x) + 1.2, palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.5, shapes: [["box", 0.3], ["vent", 0.25], ["hatch", 0.2], ["sensorUp", 0.15], ["pipe", 0.1]], heightScale: 0.7 }, { tier: "S", cell: 2.2, fill: 0.3, shapes: FLANK_S, palette: PAL.small, heightScale: 0.7 }] });
     const r = rng(113);
     const pts = [];
     for (const y of [TB.yb - 6, TB.yb - 14]) for (const d of seq(5, 2 * TB.plinthHalf - 5, 13)) {
@@ -882,7 +889,7 @@ export function buildGreebles(mats, opts = {}) {
   };
   for (const side of [-1, 1]) {
     const surf = SURF.neckSide(side);
-    dress("tower", surf, { seed: 121 + side, margin: 2.5, blocked: nkFlankBlocked, palette: PAL.machinery, passes: [{ tier: "M", cell: 4.2, fill: 0.5, shapes: WALL_M, heightScale: 0.5, stagger: true }, { tier: "S", cell: 2.0, fill: 0.35, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
+    dress("tower", surf, { seed: 121 + side, margin: 2.5, drips: 0.2, blocked: nkFlankBlocked, palette: PAL.machinery, passes: [{ tier: "M", cell: 4.2, fill: 0.5, shapes: WALL_M, heightScale: 0.5, stagger: true }, { tier: "S", cell: 2.0, fill: 0.35, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
     const r = rng(131 + side);
     // vertical conduits on the flat strips, in three runs between the armour bands
     const runs = [
@@ -906,8 +913,8 @@ export function buildGreebles(mats, opts = {}) {
   }
   {
     const ribBlocked = (x, y, z, size) => nkBandBlocked(y, size) || [7, 14, 21, 28].some((rx) => Math.abs(Math.abs(x) - rx) < 2 + size * 0.4);
-    dress("tower", SURF.neckFront, { seed: 141, margin: 2.5, blocked: ribBlocked, palette: PAL.machinery, passes: [{ tier: "M", cell: 4.5, fill: 0.4, shapes: WALL_M, heightScale: 0.55 }, { tier: "S", cell: 2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
-    dress("tower", SURF.neckBack, { seed: 142, margin: 2.5, blocked: (x, y, z, size) => nkBandBlocked(y, size), palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.45, shapes: WALL_M, heightScale: 0.55, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
+    dress("tower", SURF.neckFront, { seed: 141, margin: 2.5, drips: 0.2, blocked: ribBlocked, palette: PAL.machinery, passes: [{ tier: "M", cell: 4.5, fill: 0.4, shapes: WALL_M, heightScale: 0.55 }, { tier: "S", cell: 2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
+    dress("tower", SURF.neckBack, { seed: 142, margin: 2.5, drips: 0.2, blocked: (x, y, z, size) => nkBandBlocked(y, size), palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.45, shapes: WALL_M, heightScale: 0.55, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
     const r = rng(143);
     const pts = [];
     for (const y of [NK.y0 + 20, NK.y0 + 40, NK.yTop - 16]) {
@@ -925,7 +932,7 @@ export function buildGreebles(mats, opts = {}) {
     dress("tower", SURF.roof, {
       seed: 151,
       blocked: roofBlocked,
-      streaks: 0.2,
+      streaks: 0.3,
       passes: [
         { tier: "L", cell: 8.5, fill: 0.5, shapes: [["box", 0.22], ["sensor", 0.16], ["tank", 0.12], ["dish", 0.1], ["dome", 0.08], ["step2", 0.1], ["mast", 0.1], ["tankH", 0.06], ["vent", 0.06]], heightScale: 0.7 },
         { tier: "M", cell: 4.2, fill: 0.5, shapes: CITY_M, stagger: true },
@@ -971,7 +978,7 @@ export function buildGreebles(mats, opts = {}) {
     // sides: one sparse window row, sensor blocks, vents
     for (const side of [-1, 1]) {
       const surf = SURF.bmSide(side);
-      dress("tower", surf, { seed: 171 + side, margin: 2, palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.45, shapes: WALL_M, heightScale: 0.55, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
+      dress("tower", surf, { seed: 171 + side, margin: 2, drips: 0.2, palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.45, shapes: WALL_M, heightScale: 0.55, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
       const pts = [];
       for (const d of seq(7, BM.z1 - BM.z0 - 7, 12)) pts.push([BM.y0 + 9 + (r() - 0.5) * 3, d / (BM.z1 - BM.z0 - 1)]);
       for (const d of seq(13, BM.z1 - BM.z0 - 7, 24)) pts.push([BM.y0 + 21 + (r() - 0.5) * 3, d / (BM.z1 - BM.z0 - 1)]);
@@ -980,7 +987,7 @@ export function buildGreebles(mats, opts = {}) {
     // back face
     // keep the observation deck's aft viewport band (ROOMS.observation south wall, y 190.4..195) clear
     const obsPorts = (x, y, z, size = 0) => Math.abs(x) < 21 + size * 0.5 && y > 188.8 - size * 0.5 && y < 197.2 + size * 0.5;
-    dress("tower", SURF.bmBack, { seed: 181, margin: 2, blocked: obsPorts, palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.45, shapes: WALL_M, heightScale: 0.55, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
+    dress("tower", SURF.bmBack, { seed: 181, margin: 2, drips: 0.2, blocked: obsPorts, palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.45, shapes: WALL_M, heightScale: 0.55, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.6 }] });
     {
       const pts = [];
       for (const y of [BM.y0 + 8, BM.y0 + 22]) for (const d of seq(7, 2 * BM.halfX - 7, 12)) if (!obsPorts(d - BM.halfX, y, 0, 4)) pts.push([y + (r() - 0.5) * 3, -1 + d / BM.halfX]);
@@ -993,7 +1000,7 @@ export function buildGreebles(mats, opts = {}) {
       const casY0 = wb.y0 - 2.4;
       const casY1 = wb.y1 + 2.4;
       const casement = (x, y, z, size = 0) => Math.abs(x) < 49.5 + size * 0.5 && y > casY0 - 3.6 - size * 0.5 && y < casY1 + 3.6 + size * 0.5;
-      dress("tower", SURF.bmFront, { seed: 191, margin: 2, blocked: casement, palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.4, shapes: [["sensorUp", 0.35], ["hatch", 0.25], ["box", 0.2], ["vent", 0.2]], heightScale: 0.5, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.55 }] });
+      dress("tower", SURF.bmFront, { seed: 191, margin: 2, drips: 0.2, blocked: casement, palette: PAL.machinery, passes: [{ tier: "M", cell: 5, fill: 0.4, shapes: [["sensorUp", 0.35], ["hatch", 0.25], ["box", 0.2], ["vent", 0.2]], heightScale: 0.5, stagger: true }, { tier: "S", cell: 2.2, fill: 0.3, shapes: WALL_S, palette: PAL.small, heightScale: 0.55 }] });
       for (let k = 0; k < 15; k++) {
         const x = -BM.halfX + 8 + k * 12.8;
         put("tower", "M", "sensorUp", { p: [x, BM.y1 - 2.6, BM.z0], n: [0, 0, -1] }, [4.2, 1.4, 2.6], 0, jitterTint(r, TINT.gun));
@@ -1631,17 +1638,22 @@ export function buildGreebles(mats, opts = {}) {
 
   // ---- weathering decals --------------------------------------------------------------------
   let weatherMesh = null;
+  let weatherMesh2 = null;
   {
     const r = rng(341);
     const decals = [];
-    // quad of w x h at p facing n, with its v axis (texture bottom -> top) along `dir`. `tone` is the
-    // linear grey the decal is lit with (the plating itself is ~0.185 linear), `alpha` its coverage;
-    // both ride in an RGBA vertex colour so one mesh carries every decal
-    const decal = (p, n, w, h, cell, tone, dir, lift = 0.12, alpha = 1) => {
+    const decals2 = [];
+    // quad of w x h centred at p facing n. The streak cells have their source at the texture's top
+    // row (v = 1, the quad's local +y), so the quad is built with +y along -dir: a streak starts at
+    // the -dir end of the quad and trails toward +dir, i.e. `dir` is the direction the mark trails
+    // (aft, downhill, away from a bell). `tone` is the linear grey the decal is lit with (the plating
+    // itself is ~0.185 linear), `alpha` its coverage; both ride in an RGBA vertex colour so one mesh
+    // carries every decal of an atlas
+    const decalInto = (list) => (p, n, w, h, cell, tone, dir, lift = 0.12, alpha = 1) => {
       const g = new THREE.PlaneGeometry(w, h);
       rectUVs(g, weatherRect(cell));
       _z.set(n[0], n[1], n[2]).normalize();
-      _ta.set(dir[0], dir[1], dir[2]);
+      _ta.set(-dir[0], -dir[1], -dir[2]);
       _y.copy(_ta).addScaledVector(_z, -_z.dot(_ta)).normalize();
       _x.crossVectors(_y, _z);
       _m.makeBasis(_x, _y, _z);
@@ -1656,8 +1668,10 @@ export function buildGreebles(mats, opts = {}) {
         col[i * 4 + 3] = alpha;
       }
       g.setAttribute("color", new THREE.BufferAttribute(col, 4));
-      decals.push(g.index ? g.toNonIndexed() : g);
+      list.push(g.index ? g.toNonIndexed() : g);
     };
+    const decal = decalInto(decals); // atlas 1: 0 hairline soot plume, 1 scorch blot, 2 repaint, 3 fine grime
+    const decal2 = decalInto(decals2); // atlas 2: 0 soot fan, 1 broad streak bundle, 2 grime halo, 3 drips
     const HULL_LIN = 0.185; // mean linear albedo of the lit hull plating
     // soot around every engine bell on the recessed block face: a wide blot plus streaks radiating
     // from the collar, clipped to the block plate so nothing floats in front of the rim
@@ -1684,17 +1698,46 @@ export function buildGreebles(mats, opts = {}) {
         }
       }
     }
-    // aft streaks trailing from hatches and block bases on the terraces, tower top and plateau
+    // aft streaks trailing from hatches and block bases on the terraces, tower top and plateau: a
+    // soot fan or a bundle of broad streaks as wide as the block, starting under its aft edge, plus a
+    // grime halo around the foot of the bigger blocks (soft contact darkening outside the hard skirt)
     {
       const aft = new THREE.Vector3();
-      for (const [f, q, w, dd, hh, spin] of streakReqs) {
-        aft.set(-Math.sin(spin), 0, Math.cos(spin)).applyQuaternion(q);
+      const nrm = new THREE.Vector3();
+      for (const [f, , w, dd, hh, spin, kind] of streakReqs) {
+        nrm.set(f.n[0], f.n[1], f.n[2]);
+        aft.set(0, 0, 1).addScaledVector(nrm, -nrm.z);
+        if (aft.lengthSq() < 0.05) continue;
+        aft.normalize();
         const along = Math.abs(Math.cos(spin)) * dd + Math.abs(Math.sin(spin)) * w;
         const across = Math.abs(Math.cos(spin)) * w + Math.abs(Math.sin(spin)) * dd;
-        const L = along * rr(r, 1.4, 2.6) + 2.5 + hh * 1.2;
-        const c = along / 2 + L / 2 - 0.4;
+        if (kind === "halo" || (Math.max(w, dd) >= 3.5 && r() < 0.5)) {
+          const s = Math.max(w, dd) * rr(r, 1.8, 2.4);
+          decal2(f.p, f.n, s, s, 2, 0.7, [aft.x, aft.y, aft.z], 0.09, rr(r, 0.55, 0.85));
+        }
+        if (kind === "halo") continue;
+        const fan = kind === true;
+        const L = along * rr(r, 1.1, 2.0) + 3 + hh * 1.6;
+        const c = along / 2 + L / 2 - 0.6;
         const p = [f.p[0] + aft.x * c, f.p[1] + aft.y * c, f.p[2] + aft.z * c];
-        decal(p, f.n, across * rr(r, 0.6, 0.95), L, r() < 0.6 ? 0.0 : 3, 0.7, [aft.x, aft.y, aft.z], 0.1, rr(r, 0.6, 0.95));
+        decal2(p, f.n, across * (fan ? rr(r, 1.3, 1.7) : rr(r, 0.9, 1.2)), L, fan ? 0 : 1, 0.7, [aft.x, aft.y, aft.z], 0.1, rr(r, 0.7, 1.0));
+      }
+    }
+    // drip stains running down the walls from hatches and fittings on the vertical faces
+    {
+      const down = new THREE.Vector3();
+      const nrm = new THREE.Vector3();
+      for (const [f, w, dd, hh, spin] of dripReqs) {
+        nrm.set(f.n[0], f.n[1], f.n[2]);
+        down.set(0, -1, 0).addScaledVector(nrm, nrm.y);
+        if (down.lengthSq() < 0.3) continue;
+        down.normalize();
+        const along = Math.abs(Math.cos(spin)) * dd + Math.abs(Math.sin(spin)) * w;
+        const across = Math.abs(Math.cos(spin)) * w + Math.abs(Math.sin(spin)) * dd;
+        const L = rr(r, 3.5, 8) + hh * 2;
+        const c = along / 2 + L / 2 - 0.4;
+        const p = [f.p[0] + down.x * c, f.p[1] + down.y * c, f.p[2] + down.z * c];
+        decal2(p, f.n, across * rr(r, 1.0, 1.4), L, 3, 0.7, [down.x, down.y, down.z], 0.1, rr(r, 0.6, 0.9));
       }
     }
     // turbolaser muzzle scorch: a burn and a soot fan on the hull where the barrels point (the fan
@@ -1816,17 +1859,22 @@ export function buildGreebles(mats, opts = {}) {
       const p0 = surf.P(z, surf.b0);
       decal(f.p, f.n, 6 + r() * 10, 18 + r() * 26, 3, 0.75, [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]]);
     }
-    const merged = mergeGeometries(decals, false);
-    const mesh = new THREE.Mesh(merged, mats.weathering);
-    mesh.name = "weathering";
-    mesh.castShadow = false;
-    mesh.receiveShadow = true;
-    mesh.userData.tris = merged.attributes.position.count / 3;
-    mesh.onBeforeRender = countDraw;
-    mesh.geometry.computeBoundingSphere();
-    group.add(mesh);
-    stats.decals = decals.length;
-    weatherMesh = mesh;
+    const buildDecalMesh = (list, mat, name) => {
+      const merged = mergeGeometries(list, false);
+      const mesh = new THREE.Mesh(merged, mat);
+      mesh.name = name;
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      mesh.userData.tris = merged.attributes.position.count / 3;
+      mesh.onBeforeRender = countDraw;
+      mesh.geometry.computeBoundingSphere();
+      group.add(mesh);
+      return mesh;
+    };
+    weatherMesh = buildDecalMesh(decals, mats.weathering, "weathering");
+    weatherMesh2 = buildDecalMesh(decals2, mats.weathering2, "weathering2");
+    stats.decals = decals.length + decals2.length;
+    stats.decals2 = decals2.length;
   }
 
   // ---- stats ---------------------------------------------------------------------------------
@@ -1837,8 +1885,8 @@ export function buildGreebles(mats, opts = {}) {
   stats.skirts = col.skirts;
   stats.turrets = { heavy: heavy.length, pointDefence: pd.length };
   stats.chunks = chunks.length;
-  stats.batches += 4; // turrets x2, strobes, weathering
-  const fixedTris = trisE + heavyMesh.userData.tris + pdMesh.userData.tris + strobeMesh.userData.tris + weatherMesh.userData.tris;
+  stats.batches += 5; // turrets x2, strobes, weathering x2
+  const fixedTris = trisE + heavyMesh.userData.tris + pdMesh.userData.tris + strobeMesh.userData.tris + weatherMesh.userData.tris + weatherMesh2.userData.tris;
   // triangles inside LOD range (before frustum culling); trianglesVisible below is what was drawn
   const recomputeTris = () => {
     let t = fixedTris;
