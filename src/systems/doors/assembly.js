@@ -2,8 +2,9 @@
 //
 // Every door is described in a local (u, v, n) frame: n = unit normal from room A toward room B
 // (= room A's door `dir`), v = up, u = v × n across the opening. The opening centre at floor level
-// is the origin. Room A's inner wall face is at n = -WALL_T, room B's at n = +WALL_T; the leaves live
-// in the middle of that gap. Everything here is axis-aligned so boxes are placed with min/max corners.
+// is the origin. Room A's inner wall face is at n = -wallT(A), room B's at n = +wallT(B) (each room's
+// declared thickness, default WALL_T); the leaves live on the shared plane n = 0 inside that gap.
+// Everything here is axis-aligned so boxes are placed with min/max corners.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { Kit } from "../../kit.js";
@@ -314,7 +315,8 @@ function decalPlane(name, w, h) {
  * @param {Kit} kit module kit
  * @param {object} C colours from doorColours()
  * @param {object} d { pos:[x,y,z], U:Vector3, N:Vector3, w, h, kind, spec, split, paired, leafN,
- *                     faces:[{ s:-1|1, top, ceil, avail:[neg,plus], sealed, bay, stairs }] }
+ *                     wallT:[tA, tB], faces:[{ s:-1|1, top, ceil, avail:[neg,plus], sealed, bay, stairs }] }
+ *                   wallT = wall thickness of room A (n < 0) and room B (n > 0), default WALL_T each,
  *                   top = frame top (v) already clamped to the room, avail = wall beside the hole (m),
  *                   sealed = `to: null` door (red bar + SEALED plate), bay = leads into a bay (hazard
  *                   apron), stairs = leads to the stairs (pictogram plate)
@@ -325,7 +327,8 @@ export function buildStatic(kit, C, d) {
   const hw = w / 2;
   const LJ = spec.lining;
   const PR = spec.proud;
-  const T = WALL_T;
+  const TA = d.wallT && d.wallT[0] > 0 ? d.wallT[0] : WALL_T; // room A's wall (n < 0)
+  const TB = d.wallT && d.wallT[1] > 0 ? d.wallT[1] : TA; // room B's wall (n > 0)
   const F = FRAME_W;
   const P = (uu, vv, nn) => [d.pos[0] + d.U.x * uu + d.N.x * nn, d.pos[1] + vv, d.pos[2] + d.U.z * uu + d.N.z * nn];
   const mm = (u0, u1, v0, v1, n0, n1) => {
@@ -359,8 +362,8 @@ export function buildStatic(kit, C, d) {
   const OBmax = Math.max(0, ...d.faces.map(outerBand));
 
   // ---- tunnel lining between the two inner faces (unpaired: the declaring wall, capped behind)
-  const nA = -T + 0.01;
-  const nB = paired ? T - 0.01 : T - 0.03;
+  const nA = -TA + 0.01;
+  const nB = paired ? TB - 0.01 : TA - 0.03;
   const zc = d.leafN; // leaf plane centre along n (0 when paired; pulled toward room A when capped)
   const slot = slotHalf(kind, split);
   const s0 = zc - slot;
@@ -395,8 +398,8 @@ export function buildStatic(kit, C, d) {
 
   // ---- sill: raised dark plate spanning the whole visible frame on both faces, lighter nosing
   // along each edge (steel; yellow line on blast / bay — the leaf band is their hazard element)
-  const nT0 = -(T + PR);
-  const nT1 = paired ? T + PR : nB;
+  const nT0 = -(TA + PR);
+  const nT1 = paired ? TB + PR : nB;
   const sillU = hw + F + OBmax;
   bx("metal", -sillU, sillU, -0.04, 0.012, nT0, nT1, lipOpts);
   const noseMat = spec.hazard ? "paintedMetal" : "metal";
@@ -434,6 +437,7 @@ export function buildStatic(kit, C, d) {
   // ---- per room face: reveal frame, outer band, header track + housed status bar, panel, variants
   for (const f of d.faces) {
     const s = f.s;
+    const T = s < 0 ? TA : TB; // this room's wall thickness: its inner face is at |n| = T
     const top = f.top;
     const OB = outerBand(f);
     const embedN = T - 0.02;
@@ -546,8 +550,8 @@ export function buildStatic(kit, C, d) {
   }
 
   // ---- static colliders: jambs + lintel (the leaves are dynamic, returned by the system)
-  const cn0 = -(T + PR);
-  const cn1 = paired ? T + PR : T;
+  const cn0 = -(TA + PR);
+  const cn1 = paired ? TB + PR : TA;
   for (const sgn of [-1, 1]) coll(sgn * (hw - LJ), sgn * (hw + F + OBmax), 0, h + F, cn0, cn1, "door-jamb");
   coll(-(hw + F + OBmax), hw + F + OBmax, h - LJ, h + F, cn0, cn1, "door-lintel");
 

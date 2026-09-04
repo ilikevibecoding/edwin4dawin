@@ -5,7 +5,7 @@
 // two sliding leaves (instanced, animated here), lintel status light + jamb control panel. Unpaired
 // doors are built locked with a sealed slab behind the leaves. See README.md in this folder.
 import * as THREE from "three";
-import { doorHole, WALL_T, FRAME_W } from "./helper.js";
+import { doorHole, wallThickness, FRAME_W } from "./helper.js";
 import { doorMaterials } from "./materials.js";
 import { KIND_SPEC, BAY_REF, OPEN_CLEAR, doorColours, leafLayout, leafGeometry, leafSeam, slotHalf, buildStatic, sidePocketNeeded } from "./assembly.js";
 
@@ -143,8 +143,10 @@ export default {
         }
       }
       const paired = !!B;
+      // wall thickness on each side of the shared plane (rooms declare `wallT`, default 0.16)
+      const wallT = [wallThickness(A.room), B ? wallThickness(B.room) : wallThickness(A.room)];
       // unpaired: pull the leaf plane toward the declaring room so the sealed cap fits behind the slot
-      const leafN = paired ? 0 : Math.min(0, WALL_T - 0.03 - 0.03 - slotHalf(kind, split));
+      const leafN = paired ? 0 : Math.min(0, wallT[0] - 0.03 - 0.03 - slotHalf(kind, split));
       const faces = [];
       const ceilOf = (room) => (room.bounds ? room.bounds.max[1] - pos[1] : Infinity);
       // frame top: FRAME_W above the hole, but never inside a room's ceiling slab (rooms hang their
@@ -162,7 +164,7 @@ export default {
       });
       faces.push(face(-1, A, B, B ? B.room.id : A.door.to));
       if (B) faces.push(face(1, B, A, A.room.id));
-      const { lights } = buildStatic(kit, C, { pos, U, N, w: hole.w, h: hole.h, kind, spec, split, paired, leafN, faces });
+      const { lights } = buildStatic(kit, C, { pos, U, N, w: hole.w, h: hole.h, kind, spec, split, paired, leafN, wallT, faces });
 
       const rot = new THREE.Matrix4().makeBasis(U, UP, N);
       const Mdoor = rot.clone().setPosition(pos[0], pos[1], pos[2]);

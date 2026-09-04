@@ -4,11 +4,14 @@
 //   u  up
 //   d  depth INTO the cabin from the lobby wall's outer face (d = 0 at the door plane, 4.0 at the back)
 // so one builder serves every lobby whatever way its lift faces. The lobby wall slab itself occupies
-// d ∈ [-WALL_T, 0]; the lobby is at d < -WALL_T.
+// d ∈ [-wallT, 0] (the lobby manifest's `wallT`, default WALL_T 0.16); the lobby is at d < -wallT. All
+// lobby-side dressing (jambs, header, lintel, hood, sill front, call panel) is laid out for a 0.16 wall
+// and shifted outward by cab.wallShift = wallT - 0.16 so it stands on the lobby's real wall face.
 import * as THREE from "three";
 import { rng } from "../../kit.js";
 import { Frame } from "./frame.js";
 import { LIFT_DOOR, LIFT_VOLUME } from "./helper.js";
+import { wallThickness } from "../doors/helper.js";
 import { labelRect, labelAspect } from "./labels.js";
 
 export const G = {
@@ -64,12 +67,15 @@ export function makeCabin(ctx, manifest, roomId) {
   const D = F.clone().negate(); // into the cabin
   let deck = manifest.deck;
   if (!(deck >= 1)) deck = parseInt(String(lift.id).replace(/\D/g, ""), 10) || 0;
+  const wallT = wallThickness(manifest);
   const cab = {
     id: String(lift.id),
     deck,
     name: manifest.name || roomId,
     roomId,
     lift,
+    wallT, // lobby wall thickness (bounds face → inner face)
+    wallShift: wallT - G.wallT, // how far the lobby-side dressing moves out from its 0.16 layout
     pos,
     F,
     R,
@@ -96,7 +102,7 @@ export function makeCabin(ctx, manifest, roomId) {
   const kit = ctx.kit;
   const UxF = new THREE.Vector3().crossVectors(U, F); // viewer's right when standing in the lobby facing the door
   cab.frames = {
-    lobby: new Frame(kit, cab.P(0, 0, -G.wallT), UxF, U), // n → into the lobby
+    lobby: new Frame(kit, cab.P(0, 0, -wallT), UxF, U), // origin on the lobby's inner wall face, n → into the lobby
     rWall: new Frame(kit, cab.P(G.halfIn, 0, 0), D, U), // a = depth, n → into the cabin
     lWall: new Frame(kit, cab.P(-G.halfIn, 0, 0), D.clone().negate(), U),
     back: new Frame(kit, cab.P(0, 0, G.inD1), R.clone().negate(), U), // n → toward the doors
@@ -301,10 +307,12 @@ export function buildCabinStatic(ctx, cab, seed = 1) {
   B("paintedMetal", [-HI, fb, G.inD1 - 0.12], [HI, fb + 0.012, G.inD1], { color: C.impMid, texel: 1.5 });
   B("paintedMetal", [-HI, fb, 0.26], [-G.clearHW, fb + 0.012, 0.38], { color: C.impMid, texel: 1.5 });
   B("paintedMetal", [G.clearHW, fb, 0.26], [HI, fb + 0.012, 0.38], { color: C.impMid, texel: 1.5 });
-  // sill: mid-grey gloss plate 4 cm high spanning from 0.38 m into the lobby to the inner reveal
-  // (reads against both dark floors), light edge lines on both long edges, black leaf guide slot
-  B("blackGloss", [-1.32, 0, -0.38], [1.32, 0.04, 0.26], { color: C.impMid, texel: 1 });
-  B("impPanel", [-1.32, 0.04, -0.38], [1.32, 0.047, -0.35], { color: C.impWhite, texel: 2 });
+  // sill: mid-grey gloss plate 4 cm high spanning from 0.38 m into the lobby (past its wall face) to
+  // the inner reveal (reads against both dark floors), light edge lines on both long edges, black leaf
+  // guide slot
+  const WS = cab.wallShift || 0; // lobby-side depths below are laid out for a 0.16 wall
+  B("blackGloss", [-1.32, 0, -0.38 - WS], [1.32, 0.04, 0.26], { color: C.impMid, texel: 1 });
+  B("impPanel", [-1.32, 0.04, -0.38 - WS], [1.32, 0.047, -0.35 - WS], { color: C.impWhite, texel: 2 });
   B("impPanel", [-1.32, 0.04, 0.23], [1.32, 0.047, 0.26], { color: C.impWhite, texel: 2 });
   B("paintedMetal", [-1.2, 0.04, G.leafD - 0.06], [1.2, 0.046, G.leafD + 0.06], { color: C.impBlack, texel: 2 });
 
@@ -413,8 +421,9 @@ export function buildCabinStatic(ctx, cab, seed = 1) {
   {
     const f = cab.frames.lobby;
     const PO = G.postOuter;
-    const fd0 = -0.27; // inner jamb band front (11 cm proud of the lobby wall face at -0.16)
-    const fd1 = -0.24; // outer band front
+    const WT = cab.wallT; // lobby inner wall face at -WT (0.16 unless the lobby declares `wallT`)
+    const fd0 = -0.27 - WS; // inner jamb band front (11 cm proud of the lobby wall face)
+    const fd1 = -0.24 - WS; // outer band front (8 cm proud)
     const grooveU = [1.0, 1.9, 2.8]; // horizontal panel lines across both bands
     const grooveH = 0.025;
     const segs = (u0, u1, fn) => {
@@ -433,38 +442,38 @@ export function buildCabinStatic(ctx, cab, seed = 1) {
       const R2 = s * 1.45;
       const R3 = s * PO;
       // groove backings, each 1.5 cm behind its band's face (the vertical groove floor carries the strip)
-      B("paintedMetal", [R0, 0.32, fd0 + 0.015], [R1, G.doorH, -G.wallT], { color: C.impBlack, texel: 1 });
-      B("paintedMetal", [R1, 0.32, fd1 - 0.005], [R2, G.doorH, -G.wallT], { color: C.impBlack, texel: 1 });
-      B("paintedMetal", [R2, 0.32, fd1 + 0.015], [R3, G.doorH, -G.wallT], { color: C.impBlack, texel: 1 });
+      B("paintedMetal", [R0, 0.32, fd0 + 0.015], [R1, G.doorH, -WT], { color: C.impBlack, texel: 1 });
+      B("paintedMetal", [R1, 0.32, fd1 - 0.005], [R2, G.doorH, -WT], { color: C.impBlack, texel: 1 });
+      B("paintedMetal", [R2, 0.32, fd1 + 0.015], [R3, G.doorH, -WT], { color: C.impBlack, texel: 1 });
       segs(0.32, G.doorH, (u0, u1) => {
-        B("blackGloss", [R0, u0, fd0], [R1, u1, -G.wallT], { color: C.impMid, texel: 1.5 }); // inner band (gloss)
-        B("impPanel", [R2, u0, fd1], [R3, u1, -G.wallT], { color: C.impMid, texel: 1.5 }); // outer band (matte)
+        B("blackGloss", [R0, u0, fd0], [R1, u1, -WT], { color: C.impMid, texel: 1.5 }); // inner band (gloss)
+        B("impPanel", [R2, u0, fd1], [R3, u1, -WT], { color: C.impMid, texel: 1.5 }); // outer band (matte)
       });
       // vertical groove between the bands carries the frame light strip (diffuser-mapped emitter)
       B("emitCoolSoft", [s * 1.407, 0.4, fd1 - 0.017], [s * 1.433, 2.9, fd1 - 0.005], { uv: "keep" });
       // lit reveal: a thin white strip on the jamb's inner face so the reveal is never a black slit
-      B("emitWhite", [s * (G.clearHW - 0.008), 0.35, -0.205], [R0, 2.85, -0.175], {});
+      B("emitWhite", [s * (G.clearHW - 0.008), 0.35, -0.205 - WS], [R0, 2.85, -0.175 - WS], {});
       // foot block with a light cap line
-      B("blackGloss", [R0, 0, -0.29], [R3, 0.3, -G.wallT], { color: C.impDark, texel: 1.5 });
-      B("paintedMetal", [R0, 0.3, -0.292], [R3, 0.32, -G.wallT], { color: C.impHullLight, texel: 2 });
+      B("blackGloss", [R0, 0, -0.29 - WS], [R3, 0.3, -WT], { color: C.impDark, texel: 1.5 });
+      B("paintedMetal", [R0, 0.3, -0.292 - WS], [R3, 0.32, -WT], { color: C.impHullLight, texel: 2 });
     }
     // header track across the opening: black channel with a lighter running rail on its lower lip
-    B("blackGloss", [-G.clearHW, 2.9, -0.22], [G.clearHW, G.doorH + 0.001, -G.wallT], { color: C.impBlack });
-    B("paintedMetal", [-G.clearHW, 2.885, -0.225], [G.clearHW, 2.905, -0.2], { color: C.impMid, texel: 2 });
+    B("blackGloss", [-G.clearHW, 2.9, -0.22 - WS], [G.clearHW, G.doorH + 0.001, -WT], { color: C.impBlack });
+    B("paintedMetal", [-G.clearHW, 2.885, -0.225 - WS], [G.clearHW, 2.905, -0.2 - WS], { color: C.impMid, texel: 2 });
     // lintel: two bands (mid over the door, dark above) with a groove between, TURBOLIFT plate on the dark band
-    B("blackGloss", [-PO, G.doorH, fd0], [PO, 3.12, -G.wallT], { color: C.impMid, texel: 1.5 });
-    B("paintedMetal", [-PO, 3.12, fd1 - 0.01], [PO, 3.145, -G.wallT], { color: C.impBlack, texel: 1 }); // groove floor
-    B("impPanel", [-PO, 3.145, fd1], [PO, G.lintelU, -G.wallT], { color: C.impMid, texel: 1.5 });
-    decal(f, "turbolift", 0, 3.2225, -fd1 - G.wallT + 0.002, 0.56);
+    B("blackGloss", [-PO, G.doorH, fd0], [PO, 3.12, -WT], { color: C.impMid, texel: 1.5 });
+    B("paintedMetal", [-PO, 3.12, fd1 - 0.01], [PO, 3.145, -WT], { color: C.impBlack, texel: 1 }); // groove floor
+    B("impPanel", [-PO, 3.145, fd1], [PO, G.lintelU, -WT], { color: C.impMid, texel: 1.5 });
+    decal(f, "turbolift", 0, 3.2225, -fd1 - WT + 0.002, 0.56);
     // indicator hood above the lintel: projects G.hoodD off the wall (9 cm beyond the jamb face) so the
     // readout stays in front of any lobby-side trim; matte black face (a glossy one only mirrors the lobby)
-    const hd = -G.hoodD;
-    B("blackGloss", [-0.6, G.lintelU, hd + 0.01], [0.6, G.lintelU + 0.3, -G.wallT], { color: C.impBlack, texel: 2 });
+    const hd = -G.hoodD - WS;
+    B("blackGloss", [-0.6, G.lintelU, hd + 0.01], [0.6, G.lintelU + 0.3, -WT], { color: C.impBlack, texel: 2 });
     B("liftMatte", [-0.56, G.lintelU + 0.03, hd + 0.002], [0.56, G.lintelU + 0.27, hd + 0.01], { color: C.impDark });
     B("liftMatte", [-0.54, G.lintelU + 0.05, hd - 0.001], [0.54, G.lintelU + 0.25, hd + 0.002], { color: C.impBlack });
-    B("blackGloss", [-0.62, G.lintelU + 0.28, hd - 0.012], [0.62, G.lintelU + 0.3, -G.wallT], { color: C.impDark }); // cap (keeps the 3.6 m clearance)
-    B("blackGloss", [-0.62, G.lintelU - 0.01, hd - 0.012], [0.62, G.lintelU + 0.01, -G.wallT], { color: C.impDark }); // sill
-    for (const s of [-1, 1]) B("blackGloss", [s * 0.6, G.lintelU + 0.01, hd - 0.006], [s * 0.62, G.lintelU + 0.28, -G.wallT], { color: C.impDark }); // cheeks
+    B("blackGloss", [-0.62, G.lintelU + 0.28, hd - 0.012], [0.62, G.lintelU + 0.3, -WT], { color: C.impDark }); // cap (keeps the 3.6 m clearance)
+    B("blackGloss", [-0.62, G.lintelU - 0.01, hd - 0.012], [0.62, G.lintelU + 0.01, -WT], { color: C.impDark }); // sill
+    for (const s of [-1, 1]) B("blackGloss", [s * 0.6, G.lintelU + 0.01, hd - 0.006], [s * 0.62, G.lintelU + 0.28, -WT], { color: C.impDark }); // cheeks
 
     // call panel: heavy housing on the wall, 0.35 m clear of the jamb, recessed lit call button
     // housing n 0..0.07, bezel to 0.075, interactable face mesh 0.075..0.083 (network.js), details ≥ 0.084
@@ -488,8 +497,8 @@ export function buildCabinStatic(ctx, cab, seed = 1) {
   COL([-HB, 0, G.inD1], [HB, G.boxH, G.depth], "lift-wall");
   COL([G.clearHW, 0, 0], [HB, G.boxH, G.inD0 + 0.06], "lift-wall");
   COL([-HB, 0, 0], [-G.clearHW, G.boxH, G.inD0 + 0.06], "lift-wall");
-  COL([G.clearHW, 0, -0.29], [G.postOuter, G.lintelU, -G.wallT], "lift-frame");
-  COL([-G.postOuter, 0, -0.29], [-G.clearHW, G.lintelU, -G.wallT], "lift-frame");
+  COL([G.clearHW, 0, -0.29 - WS], [G.postOuter, G.lintelU, -cab.wallT], "lift-frame");
+  COL([-G.postOuter, 0, -0.29 - WS], [-G.clearHW, G.lintelU, -cab.wallT], "lift-frame");
 
   // ---- light: one point deep and low in the cabin (never reaches the lobby floor); the ride animates it
   const lp = cab.P(0, G.lightU, G.lightD);

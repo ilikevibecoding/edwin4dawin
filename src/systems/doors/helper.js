@@ -1,7 +1,7 @@
 // Door opening geometry shared by every room author and the doors system (COORDINATION.md §9.1).
 // Rooms leave a clean rectangular hole of exactly this size on their bounds face; the doors system
 // builds the frame, leaves and tunnel lining into it. Import from any deck:
-//   import { doorHole, doorOpening, WALL_T } from "../../systems/doors/helper.js";
+//   import { doorHole, doorOpening, WALL_T, wallThickness } from "../../systems/doors/helper.js";
 
 // Clear opening sizes (metres) per door kind. "bay" doors carry their own {w, h} on the manifest entry.
 export const DOOR_KINDS = {
@@ -10,9 +10,17 @@ export const DOOR_KINDS = {
   hatch: { w: 1.2, h: 2.0 },
 };
 
-// Wall thickness the doors system assumes per room (Kestrel's WALL_T). Two rooms sharing a face have
-// their inner wall surfaces 2 * WALL_T apart; the tunnel lining spans that gap.
+// Default wall thickness per room (Kestrel's WALL_T): a room's inner wall face sits WALL_T inside its
+// bounds face. Rooms built with thicker walls declare it on the manifest (`wallT: 0.30`); the doors and
+// lifts systems read it through wallThickness() so their linings reach that room's inner face and the
+// frames stand on it. Two rooms sharing a face have their inner surfaces wallT(A) + wallT(B) apart.
 export const WALL_T = 0.16;
+
+/** Wall thickness a room manifest declares (`wallT`), else WALL_T. */
+export function wallThickness(manifest) {
+  const t = manifest && manifest.wallT;
+  return typeof t === "number" && t > 0.02 && t < 2 ? t : WALL_T;
+}
 
 // Frame reveal the doors system adds around the clear opening on each face (rooms may keep panels
 // this far from the hole edge without being overlapped by the frame).

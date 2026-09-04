@@ -26,18 +26,21 @@ export function liftCabinBox(lift) {
 
 // What the lifts system builds ON THE LOBBY SIDE of the wall (jambs 1.6 m either side of the door
 // centre, indicator hood to 3.6 m, call panel to the viewer's right out to 2.31 m, sill plate 0.38 m
-// onto the lobby floor, all ≤ 0.4 m proud of the bounds face). Keep this footprint free of props so
-// nothing intersects the frame or the call panel.
+// onto the lobby floor, all ≤ 0.4 m proud of the bounds face for a 0.16 m wall). Keep this footprint
+// free of props so nothing intersects the frame or the call panel.
 export const LIFT_LOBBY_CLEARANCE = { left: 1.7, right: 2.4, high: 3.6, proud: 0.4 };
 
 /**
  * AABB {min,max} in the lobby that the lifts system occupies (frame, lintel indicator, call panel).
- * "right" is the viewer's right when standing in the lobby facing the lift door.
+ * "right" is the viewer's right when standing in the lobby facing the lift door. `wallT` is the lobby's
+ * wall thickness (the manifest's `wallT`, default 0.16): the frame stands on the inner wall face, so a
+ * thicker wall pushes the footprint further into the lobby by the difference.
  */
-export function liftLobbyClearance(lift) {
+export function liftLobbyClearance(lift, wallT = 0.16) {
   const [px, py, pz] = lift.pos;
   const [dx, , dz] = lift.dir;
-  const { left, right, high, proud } = LIFT_LOBBY_CLEARANCE;
+  const { left, right, high } = LIFT_LOBBY_CLEARANCE;
+  const proud = LIFT_LOBBY_CLEARANCE.proud + Math.max(0, (wallT || 0.16) - 0.16);
   // viewer's right when facing the door (looking along -dir) = (-dir) × up = (dz, 0, -dx)
   const rx = dz;
   const rz = -dx;

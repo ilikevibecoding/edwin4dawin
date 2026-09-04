@@ -30,9 +30,12 @@ export default {
 
 1. **Cut the door hole.** Leave a clean `LIFT_DOOR` hole (`liftDoorHole()` → 2.4 w × 3.0 h) through
    the wall, centred on `pos`, exactly like a standard door hole (`doorAsWallOpening`-style
-   `{u0,u1,v0,v1}` from `pos ± 1.2`, `0..3.0`). The wall slab is `WALL_T` = 0.16 thick just inside the
-   bounds face, as for doors. Do **not** build a frame — the lifts system builds it. The open leaves
-   slide into the wall slab either side of the hole, so keep the slab solid for 1.3 m each side.
+   `{u0,u1,v0,v1}` from `pos ± 1.2`, `0..3.0`). The wall slab is assumed `WALL_T` = 0.16 thick just
+   inside the bounds face, as for doors; a lobby with thicker walls declares `wallT: 0.30` on its
+   manifest and the whole lobby-side frame (jambs, header, lintel, hood, sill front, call panel) moves
+   out to stand on that face (`liftLobbyClearance(lift, 0.30)` grows by the same amount). Do **not** build a
+   frame — the lifts system builds it. The open leaves slide into the wall slab either side of the
+   hole, so keep the slab solid for 1.3 m each side.
 2. **Reserve the cabin volume.** `liftCabinBox(lift)` = the 4.0 across × 4.0 deep × 3.6 high AABB
    behind the wall (it starts at the bounds face and extends 4 m away from the lobby). Nothing else may
    occupy it — no room bounds, no geometry, no colliders. The cabin shell fills it completely, so no

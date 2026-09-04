@@ -31,6 +31,11 @@ export default {
   band on your face (a plate 5–14 cm proud of the wall, embedded 2 cm into it). A second, stepped-back
   surround band extends another 0.2 m beyond FRAME_W where your wall has room (clamped to your bounds;
   it sits 2–7 cm proud, so anything you build outside FRAME_W and further proud simply covers it).
+- **Wall thickness.** The system assumes your inner wall face is `WALL_T` = 0.16 m inside your bounds
+  face. If your walls are thicker, declare it once on the room manifest — `wallT: 0.30` — and the
+  lining, frames, header, status lights and colliders on your face move out to your real face
+  (`wallThickness(manifest)` in `helper.js`; each side of a shared door uses its own room's value, so a
+  0.30 room can pair with a 0.16 room). Without it a thick wall buries the frame inside the slab.
 - Leave room beside the hole for the leaves of standard / hatch doors to slide into the wall: at least
   `w/2 − 2·lining − 0.034` m of wall on each side (standard 1.05 m, hatch 0.47 m). When a room is too
   narrow the system automatically splits that door's leaves top / bottom instead (an info log names the
@@ -53,8 +58,8 @@ Unpaired doors are built **locked** (red light, never open) with a sealed slab b
 ## What gets built (per door)
 
 Everything is in a local frame: n = room A's `dir`, u across the opening, v up; the opening centre at
-floor level is the origin. Room A's inner wall face is at n = −WALL_T, room B's at +WALL_T, the leaves
-live in the middle of the gap (n = 0).
+floor level is the origin. Room A's inner wall face is at n = −wallT(A), room B's at +wallT(B) (each
+room's `wallT`, default WALL_T 0.16), the leaves live on the shared plane (n = 0) inside the gap.
 
 - **Tunnel lining** (`metal`, mid grey): two jambs and a soffit spanning the gap between the two inner
   faces so the raw wall edges are never visible. Standard / hatch: 2 cm black pocket slots in the jambs;
@@ -87,7 +92,7 @@ live in the middle of the gap (n = 0).
   decal (module material `doorDecal`, canvas atlas) and a red line, on top of the red header/seams/LEDs;
   far room `*-bay` (standard / hatch kinds) → black/yellow apron 0.55 m into the room (`doorHazard`);
   far room `d4-stairs` → stair pictogram plate on the −u jamb.
-- **Unpaired**: the lining spans just the declaring wall (2·WALL_T deep) and is capped with a sealed
+- **Unpaired**: the lining spans just the declaring wall (2·wallT deep) and is capped with a sealed
   black slab, X-brace and red seal bar behind the leaves.
 - **Colliders**: jambs (incl. outer band) + lintel + sealed bar static via `ctx.kit.collider`; leaves
   dynamic in `result.colliders` (`{min, max, tag: "door-leaf:<id>"}`, mutated in place every frame —
