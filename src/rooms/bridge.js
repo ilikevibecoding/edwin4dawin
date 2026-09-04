@@ -542,7 +542,8 @@ export function buildBridge(kit, ctx, room) {
   const alertDim = (t) => (state.alert ? 0.7 + 0.3 * Math.sin(t * 5) : 1);
   // starlight key: sits inside the centre viewport tunnel, so the sill, head and jambs clip its cone to the
   // window shape; it rakes the command platform and the walkway and throws the railing shadows aft
-  kit.light({ type: "spot", pos: [0, 4.0, -hz - 0.25], target: [0, 0, 1], color: 0xd8e6ff, intensity: 300, distance: 40, angle: 0.95, penumbra: 0.55, shadow: true, priority: 1.0, dim: alertDim });
+  // (throw from the window head to the mid-walkway floor is ~15.8 m; k 1.2 -> ~300 cd)
+  kit.light({ type: "spot", pos: [0, 4.0, -hz - 0.25], target: [0, 0, 1], color: 0xd8e6ff, intensity: lux(15.8, 1.2), distance: 40, angle: 0.95, penumbra: 0.55, shadow: true, priority: 1.0, dim: alertDim });
   // aft deck: a cool fill over the floor crest that also reaches the door, the guard posts and the crest
   // plate (kept 2 m off the wall so the plate does not blow out)
   kit.light({ type: "point", pos: [0, 3.6, hz - 2.6], color: 0xe6ecff, intensity: lux(3.6, 2.0), distance: 18, priority: 0.8 });
