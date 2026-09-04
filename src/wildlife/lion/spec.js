@@ -11,9 +11,11 @@
 // shoulder male.
 // ---------------------------------------------------------------------------
 
+// (round 4: the head is 8 % larger on the adults — it read small against the
+// round-2 trunk in the walk strip; the cub keeps its own proportion)
 export const KINDS = {
-  male: { scale: 1.0, mane: true, head: 1.06, bulk: 1.0, leg: 1.0, tuft: 1.0, spots: false, walk: 0.95 },
-  lioness: { scale: 0.83, mane: false, head: 1.0, bulk: 0.95, leg: 1.0, tuft: 0.9, spots: false, walk: 1.0 },
+  male: { scale: 1.0, mane: true, head: 1.14, bulk: 1.0, leg: 1.0, tuft: 1.0, spots: false, walk: 0.95 },
+  lioness: { scale: 0.83, mane: false, head: 1.08, bulk: 0.95, leg: 1.0, tuft: 0.9, spots: false, walk: 1.0 },
   // a cub is not a small lion: the head is near half the length of the trunk,
   // the legs are short and thick for the body, and the belly is round. `squat`
   // scales heights on their own, `leg` the limb thickness, `bulk` the trunk.
@@ -119,7 +121,10 @@ export const EYE = { r: 0.0195, lidUp: 0.46, lidDown: 0.46 };
  * for its head); index.js's cornea takes the same scale so the wet highlight
  * sits on the ball rather than inside it.
  */
-export const EYE_LIDS = { up: 0.6, down: 0.6, scale: 1.35 };
+// Round 4: opened from 0.6/0.6 (34 degrees, which with the dark lid rims and
+// the painted eyeline read as a slit in every gauntlet frame) to 39/34
+// degrees, so the almond shows about 80 % of the iris disc from the front.
+export const EYE_LIDS = { up: 0.68, down: 0.6, scale: 1.4 };
 
 /**
  * Head-child joints re-placed for the head in head.js, laid out like JOINTS
@@ -131,14 +136,16 @@ export const HEAD_JOINTS = {
   // ears on the sides of the skull at brow level, over the zygomatic arch (a
   // hand behind the eye, not on the occiput), leaning well out, so from the
   // front they stand beyond the skull's outline
-  earL: { pos: [0.094, 1.284, 0.98], dir: [0.75, 1.0, -0.3] },
-  earR: { pos: [-0.094, 1.284, 0.98], dir: [-0.75, 1.0, -0.3] },
-  // eyes close set on the face, the ball's centre a radius under the skin
-  // along its gaze so the cornea stands just proud between brow and cheek,
-  // forward-facing with about 20 degrees of divergence; headspec.js FACE.eye
-  // is this offset
-  lidL: { pos: [0.05, 1.256, 1.085], dir: [0.34, 0.1, 1] },
-  lidR: { pos: [-0.05, 1.256, 1.085], dir: [-0.34, 0.1, 1] },
+  earL: { pos: [0.09, 1.28, 0.975], dir: [0.7, 1.0, -0.3] },
+  earR: { pos: [-0.09, 1.28, 0.975], dir: [-0.7, 1.0, -0.3] },
+  // eyes close set on the face, under the brow ridge and at the root of the
+  // muzzle (round 4: down 1 cm, in 6 mm and forward 5 mm from round 3, where
+  // they sat on the top corners of the skull), the ball's centre about a
+  // radius under the skin along its gaze so the cornea stands just proud
+  // between brow and cheek, forward-facing with about 17 degrees of
+  // divergence; headspec.js FACE.eye is this offset
+  lidL: { pos: [0.047, 1.258, 1.1], dir: [0.3, 0.08, 1] },
+  lidR: { pos: [-0.047, 1.258, 1.1], dir: [-0.3, 0.08, 1] },
 };
 
 /**

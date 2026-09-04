@@ -3,6 +3,7 @@ import { BELLY, EYE, KINDS, bellyFactor } from './spec.js';
 import { chainWeights } from './rig.js';
 import { addHead } from './head.js';
 import { ATLAS, SKULL_MAP, uvIn } from './textures.js';
+import { rowsAt } from './headspec.js';
 import { clamp, lerp, smoothstep } from '../../textures/core.js';
 
 // ---------------------------------------------------------------------------
@@ -226,18 +227,28 @@ function smoothSeams(g) {
   }
 }
 
-/** Piecewise-linear lookup in a table of [key, ...values]. */
+/**
+ * Smooth lookup in a table of [key, ...values]: a Catmull-Rom through the rows
+ * (headspec.js rowsAt), each value clamped between its two bracketing rows so
+ * the curve never overshoots a stated radius — the belly rows are contracts
+ * with the poser. Round 3 interpolated these tables piecewise-linearly, and
+ * every row was a crease in the trunk's silhouette: the "step where the neck
+ * joins the chest" the critics saw was the kink at the neck1 row.
+ */
 function table(rows, k) {
   if (k <= rows[0][0]) return rows[0].slice(1);
-  for (let i = 0; i < rows.length - 1; i++) {
-    const a = rows[i];
-    const b = rows[i + 1];
-    if (k <= b[0]) {
-      const t = (k - a[0]) / (b[0] - a[0]);
-      return a.slice(1).map((v, j) => lerp(v, b[j + 1], t));
-    }
+  if (k >= rows[rows.length - 1][0]) return rows[rows.length - 1].slice(1);
+  const out = rowsAt(rows, k);
+  let i = 0;
+  while (i < rows.length - 2 && k > rows[i + 1][0]) i++;
+  const a = rows[i];
+  const b = rows[i + 1];
+  for (let j = 0; j < out.length; j++) {
+    const lo = Math.min(a[j + 1], b[j + 1]);
+    const hi = Math.max(a[j + 1], b[j + 1]);
+    out[j] = clamp(out[j], lo, hi);
   }
-  return rows[rows.length - 1].slice(1);
+  return out;
 }
 
 /** Catmull-Rom through joint positions, with arc lengths of each joint. */
@@ -335,21 +346,23 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
   const alpha = new SkinBuilder();
 
   const dustColor = (p) => {
-    // AO where the legs meet the body, dust low down
+    // AO where the legs meet the body, a little dust low down (the paws are
+    // the leg's colour, not boots: the dust here is a tint, not a sock)
     let ao = 1;
     for (const n of ['shoulderL', 'shoulderR', 'hipL', 'hipR']) {
       const d = p.distanceTo(P(n)) / s;
       ao *= 1 - 0.32 * smoothstep(0.26, 0.05, d);
     }
     ao *= 1 - 0.22 * smoothstep(0.64, 0.42, p.y / s);
-    const dust = smoothstep(0.3, 0.04, p.y / s) * 0.38;
-    return [ao * lerp(1, 0.8, dust), ao * lerp(1, 0.76, dust), ao * lerp(1, 0.7, dust)];
+    const dust = smoothstep(0.3, 0.04, p.y / s) * 0.22;
+    return [ao * lerp(1, 0.86, dust), ao * lerp(1, 0.83, dust), ao * lerp(1, 0.78, dust)];
   };
 
   // --- torso and neck -------------------------------------------------------
   const spineNames = ['pelvis', 'spine1', 'spine2', 'chest', 'neck1', 'neck2', 'head'];
-  // the rump ends just behind the hip joints, the croup sloping down to the tail root
-  const rumpTip = P('pelvis').clone().add(new THREE.Vector3(0, -0.05 * s, -0.17 * s));
+  // the rump ends just behind the hip joints, the croup sloping down to the
+  // tail root (round 4: pulled in 4 cm — the trunk read long)
+  const rumpTip = P('pelvis').clone().add(new THREE.Vector3(0, -0.05 * s, -0.13 * s));
   const noseWard = P('head').clone().add(new THREE.Vector3(0, 0.015 * s, 0.1 * s));
   const spinePts = [rumpTip, ...spineNames.map((n) => P(n).clone()), noseWard];
   const torso = chainCurve(spinePts);
@@ -369,22 +382,34 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
   const arcAt = (i, f = 0) => THREE.MathUtils.lerp(torso.arcs[i], torso.arcs[Math.min(i + 1, torso.arcs.length - 1)], f);
   // [arc, rx, ryTop, ryBot, drop]: the deepest section is the chest at the
   // shoulder, the widest the hips and the shoulders, and the neck stays heavy
-  // right up to the skull
+  // right up to the skull.
+  //
+  // Round 4: the section is a deep oval, not a slab. Round 3 put the spine
+  // curve at the top of a 0.1-high, 0.27-wide upper half — a flat lit back
+  // meeting near-vertical flanks with a hard shading break along the whole
+  // trunk (the "painted highlight stripe" was that flat top catching the
+  // sun). The centre now sits `drop` well under the spine with an upper half
+  // about 0.7 of the width, so the light rolls off the back into the flank;
+  // the back line and the belly line are where they were (drop + ryTop and
+  // drop + ryBot are unchanged per row, the belly rows expressed against
+  // BELLY so the poser's floor still holds), and the trunk is a tenth
+  // narrower — a lion is deep, not broad.
+  const D0 = BELLY.drop;
   const torsoRows = [
-    [arcAt(0), 0.06, 0.035, 0.12, 0.06],
-    [arcAt(0, 0.4), 0.19, 0.06, 0.26, 0.05],
-    [arcAt(1), 0.245, 0.09, BELLY.pelvis, 0.04], // pelvis: broad across the hips, the groin tucked up so the thigh shows below it
-    [arcAt(1, 0.5), 0.235, 0.085, 0.53, 0.04],
-    [arcAt(2), 0.225, 0.08, BELLY.spine1, 0.04], // spine1: the loin, barely narrower than the ribs; a lion's belly is full
+    [arcAt(0), 0.06, 0.05, 0.1, 0.075],
+    [arcAt(0, 0.4), 0.17, 0.11, 0.2, 0.1],
+    [arcAt(1), 0.215, 0.15, BELLY.pelvis - (0.1 - D0), 0.1], // pelvis: broad across the hips, the groin tucked up so the thigh shows below it
+    [arcAt(1, 0.5), 0.21, 0.15, 0.465, 0.105],
+    [arcAt(2), 0.2, 0.15, BELLY.spine1 - (0.11 - D0), 0.11], // spine1: the loin, barely narrower than the ribs; a lion's belly is full
     // the ribcage is long and deep: the underline stays down from the elbow
     // back past the middle of the trunk, sagging a little, before it rises to the groin
-    [arcAt(3), 0.25, 0.085, BELLY.spine2, 0.04], // spine2: the barrel
-    [arcAt(3, 0.6), 0.265, 0.1, BELLY.chest + 0.01, 0.04], // behind the shoulder blades: the withers rise
-    [arcAt(4), 0.27, 0.105, BELLY.chest, 0.035], // chest / shoulders: the widest point, the brisket down at the elbow
-    [arcAt(4, 0.5), 0.245, 0.1, 0.5, 0.03], // point of the shoulder: broad, the upper arm buried in it
-    [arcAt(5), 0.175, 0.09, 0.37, 0.02], // neck1: the neck proper starts, as wide as the skull and deeper than it
-    [arcAt(6), 0.135, 0.08, 0.22, 0.01], // neck2: throat rising to the jaw, as wide as the skull
-    [arcAt(7), 0.1, 0.07, 0.15, 0.0], // head: inside the skull; the throat runs on under the jaw
+    [arcAt(3), 0.215, 0.16, BELLY.spine2 - (0.115 - D0), 0.115], // spine2: the barrel
+    [arcAt(3, 0.6), 0.23, 0.175, BELLY.chest + 0.01 - (0.115 - D0), 0.115], // behind the shoulder blades: the withers rise
+    [arcAt(4), 0.235, 0.18, BELLY.chest - (0.11 - D0), 0.11], // chest / shoulders: the widest point, the brisket down at the elbow
+    [arcAt(4, 0.5), 0.215, 0.16, 0.44, 0.09], // point of the shoulder: broad, the upper arm buried in it
+    [arcAt(5), 0.175, 0.13, 0.33, 0.06], // neck1: the neck proper starts, as wide as the skull and deeper than it
+    [arcAt(6), 0.135, 0.1, 0.21, 0.03], // neck2: throat rising to the jaw, as wide as the skull
+    [arcAt(7), 0.1, 0.075, 0.145, 0.01], // head: inside the skull; the throat runs on under the jaw
     [arcAt(8), 0.075, 0.05, 0.115, 0.0],
   ];
   const torsoProfile = (d) => {
@@ -412,13 +437,18 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
     // the shoulder: triceps and the point of the shoulder low down, and the
     // scapula with its muscle riding up over the forelegs to the withers, the
     // heavy-shouldered read a lion has and a dog does not
-    let o = bulge(p, 0.23 * s, 0.88 * s, 0.4 * s, 0.24 * s, 0.055 * s) * lateral;
-    o += bulge(p, 0.2 * s, 1.04 * s, 0.34 * s, 0.2 * s, 0.038 * s) * lateral;
+    let o = bulge(p, 0.22 * s, 0.88 * s, 0.4 * s, 0.24 * s, 0.06 * s) * lateral;
+    // the shoulder blade: a broad plate riding high on the side of the
+    // ribcage behind the withers, +8 % on the section there (round 4)
+    o += bulge(p, 0.19 * s, 1.04 * s, 0.32 * s, 0.22 * s, 0.05 * s) * lateral;
     // the haunch: gluteals over the hip and the thigh mass below and behind it,
-    // swelling the trunk around the hip so the leg grows out of it
-    o += bulge(p, 0.24 * s, 0.88 * s, -0.56 * s, 0.27 * s, 0.05 * s) * lateral;
-    o += bulge(p, 0.22 * s, 0.76 * s, -0.6 * s, 0.2 * s, 0.04 * s) * lateral;
-    o -= bulge(p, 0.22 * s, 0.85 * s, -0.2 * s, 0.22 * s, 0.01 * s) * lateral;
+    // swelling the trunk around the hip so the leg grows out of it, and the
+    // hip bone itself, a knuckle high on the pelvis over the joint (round 4)
+    o += bulge(p, 0.22 * s, 0.88 * s, -0.56 * s, 0.27 * s, 0.05 * s) * lateral;
+    o += bulge(p, 0.2 * s, 0.76 * s, -0.6 * s, 0.2 * s, 0.04 * s) * lateral;
+    o += bulge(p, 0.16 * s, 1.03 * s, -0.58 * s, 0.16 * s, 0.035 * s) * lateral;
+    // and the waist tucks in ahead of the hips
+    o -= bulge(p, 0.2 * s, 0.85 * s, -0.22 * s, 0.22 * s, 0.012 * s) * lateral;
     return o;
   };
   body.loft(torsoStations, D.around, { uvRect: ATLAS.body, capStart: true, colorFn: torsoBelly, offsetFn: muscle });
@@ -455,35 +485,39 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
       // so ryTop is the depth ahead of the bone and ryBot behind it. Triceps
       // and hamstrings hang behind the upper bones, the forearm is deeper than
       // it is wide, and the cannon is nearly round.
+      // Round 4: the limbs are a fifth to a quarter thicker from the elbow
+      // and stifle down to the wrist and hock (critics read the round-3 legs
+      // as sticks at 60 % of a lion's); the pastern and paw rows are held, so
+      // the paw bones' soles and the pad geometry are where the gait expects.
       const rows = front
         ? [
-            [0.0, 0.1, 0.13, 0.175],
-            [0.15, 0.096, 0.122, 0.155],
-            [0.28, 0.092, 0.112, 0.14], // elbow: the point of the elbow behind it, the triceps above
-            [0.38, 0.094, 0.114, 0.108], // top of the forearm: the thickest part of the lower leg
-            [0.52, 0.083, 0.096, 0.086],
-            [0.66, 0.07, 0.075, 0.069],
-            [0.78, 0.062, 0.062, 0.06],
-            [0.86, 0.066, 0.06, 0.07], // wrist: the carpus is a knob, the accessory pad behind it
+            [0.0, 0.11, 0.14, 0.19],
+            [0.15, 0.108, 0.135, 0.17],
+            [0.28, 0.106, 0.128, 0.16], // elbow: the point of the elbow behind it, the triceps above
+            [0.38, 0.115, 0.14, 0.132], // top of the forearm: the thickest part of the lower leg
+            [0.52, 0.1, 0.116, 0.104],
+            [0.66, 0.084, 0.09, 0.083],
+            [0.78, 0.072, 0.072, 0.07],
+            [0.86, 0.072, 0.066, 0.076], // wrist: the carpus is a knob, the accessory pad behind it
             // the pastern narrows under the wrist and flattens toward the paw:
             // lying, it rests along the ground, so its depth here must be less
             // than the paw joint's height. The paw itself (addPaw) flares out
             // wider than the pastern, so the foot reads as a foot on a leg.
-            [0.93, 0.058, 0.046, 0.042],
+            [0.93, 0.062, 0.048, 0.044],
             [1.0, 0.066, 0.044, 0.03],
           ]
         : [
             // the thigh's mass hangs behind the femur; ahead of it the flank
             // fold runs down and forward to the stifle, which is the leg's
             // front-most point, so the leg zigzags in silhouette
-            [0.0, 0.15, 0.15, 0.25],
-            [0.15, 0.148, 0.14, 0.21],
-            [0.3, 0.11, 0.14, 0.128], // stifle: the patella out front
-            [0.42, 0.098, 0.12, 0.112], // gaskin: the calf muscle, nearly as thick as the forearm
-            [0.56, 0.076, 0.086, 0.088],
-            [0.66, 0.064, 0.064, 0.094], // hock: the point of the hock stands out behind
-            [0.78, 0.058, 0.057, 0.06],
-            [0.9, 0.056, 0.046, 0.042],
+            [0.0, 0.16, 0.16, 0.27],
+            [0.15, 0.16, 0.152, 0.23],
+            [0.3, 0.125, 0.155, 0.145], // stifle: the patella out front
+            [0.42, 0.12, 0.146, 0.137], // gaskin: the calf muscle, nearly as thick as the forearm
+            [0.56, 0.092, 0.104, 0.106],
+            [0.66, 0.074, 0.074, 0.108], // hock: the point of the hock stands out behind
+            [0.78, 0.066, 0.065, 0.068],
+            [0.9, 0.06, 0.05, 0.046],
             [1.0, 0.064, 0.044, 0.03],
           ];
       const [rx, ryF, ryB] = table(rows, Math.max(0, f));

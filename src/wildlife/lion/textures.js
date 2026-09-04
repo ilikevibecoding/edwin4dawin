@@ -70,15 +70,28 @@ const COAT = {
   noseLeather: [48, 36, 32],
   noseBridge: [116, 74, 66],
   earBack: [30, 24, 20],
-  earIn: [201, 173, 140],
-  earPink: [176, 134, 118],
+  // the lining of the ear is the coat gone a little paler, the skin deep in
+  // the cup a muted grey-pink: round 3's cream lining lit to 0.7 luma against
+  // a 0.05 face when the dusk sun shone straight into the cups
+  earIn: [176, 146, 110],
+  earPink: [146, 112, 96],
   pad: [58, 44, 36],
-  clawBase: [206, 190, 164],
-  clawTip: [90, 74, 60],
-  irisOuter: [118, 76, 28],
-  irisInner: [192, 134, 50],
+  // claws are horn: pale sheaths darkening only at the very tip
+  clawBase: [216, 202, 178],
+  clawTip: [150, 128, 100],
+  // a lion's iris is amber, lighter than the coat around it, and reads as the
+  // brightest warm thing on the face even in shade
+  irisOuter: [136, 88, 32],
+  irisInner: [214, 160, 66],
   sclera: [196, 172, 134],
 };
+
+/** The lower jaw's coat, shared by the jaw part and the loft's underside so the two meet without a step. */
+const JAW_COAT = mixRgbConst(COAT.side, COAT.back, 0.22);
+
+function mixRgbConst(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
 
 const rgb = (c) => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
 const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
@@ -227,14 +240,17 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   // colour than the neck it sits on.
   const m0 = fbm(nu * 0.8, nv * 0.8, { octaves: 2, period: 8, seed: 397 });
   const m1 = fbm(nu * 1.6, nv * 1.6, { octaves: 3, period: 16, seed: 401 });
-  let c = mixRgb(COAT.side, COAT.back, 0.45);
+  // (round 4: the cheeks are the flank's tawny — the 0.45 umber base made the
+  // whole side of the face a dark mask against the pale muzzle, with a
+  // boundary at the muzzle root; only the crown, brow and occiput darken)
+  let c = mixRgb(COAT.side, COAT.back, 0.2);
   const crown = smoothstep(0.0, 0.06, hy) * smoothstep(0.22, 0.12, hz);
   const mask = smoothstep(0.03, 0.08, hy) * smoothstep(0.23, 0.15, hz) * smoothstep(0.075, 0.03, hx);
   const occiput = smoothstep(0.02, -0.06, hz);
-  c = mixRgb(c, COAT.back, Math.min(1, crown * 0.5 + mask * 0.45 + occiput * 0.35));
+  c = mixRgb(c, COAT.back, Math.min(1, crown * 0.45 + mask * 0.45 + occiput * 0.35));
   // the bridge a shade darker than the muzzle sides, warm
-  const bridge = smoothstep(0.04, 0.015, hx) * smoothstep(0.19, 0.23, hz) * smoothstep(0.31, 0.29, hz) * smoothstep(0.02, 0.04, hy);
-  c = mixRgb(c, mixRgb(COAT.back, COAT.noseBridge, 0.3), bridge * 0.5);
+  const bridge = smoothstep(0.048, 0.02, hx) * smoothstep(0.17, 0.22, hz) * smoothstep(0.31, 0.29, hz) * smoothstep(0.015, 0.035, hy);
+  c = mixRgb(c, mixRgb(COAT.back, COAT.noseBridge, 0.45), bridge * 0.65);
   // the same cells of parted fur the body has, so the head is not a smoother
   // colour than the neck
   const tuft = worley(nu * 26, nv * 34, 34, 131);
@@ -242,69 +258,78 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   // the pale areas are pale buff, never white: the sides of the muzzle from
   // the tear line down to the lip, and the spot over each eye
   const buff = mixRgb(COAT.side, COAT.cream, 0.45);
-  const muzzleSide = smoothstep(0.205, 0.25, hz) * smoothstep(0.03, -0.005, hy) * smoothstep(0.015, 0.035, hx);
-  c = mixRgb(c, buff, muzzleSide * 0.6);
-  const bu = Math.hypot((hx - ex + 0.002) * 1.1, (hy - ey - 0.046) * 1.5, hz - ez + 0.01);
-  c = mixRgb(c, buff, smoothstep(0.024, 0.011, bu) * 0.75);
-  // the white stroke under the lower lid
-  const stroke = segDist(hx, hy, hz, [ex - 0.016, ey - 0.03, ez + 0.014], [ex + 0.022, ey - 0.028, ez - 0.002]);
-  c = mixRgb(c, COAT.cream, smoothstep(0.0065, 0.0025, stroke) * 0.85);
+  // (a gradual lightening from the cheek over four centimetres, not a mask edge)
+  const muzzleSide = smoothstep(0.17, 0.255, hz) * smoothstep(0.035, 0.0, hy) * smoothstep(0.015, 0.035, hx);
+  c = mixRgb(c, buff, muzzleSide * 0.55);
+  const bu = Math.hypot((hx - ex + 0.002) * 1.1, (hy - ey - 0.044) * 1.5, hz - ez + 0.01);
+  c = mixRgb(c, buff, smoothstep(0.022, 0.009, bu) * 0.45);
+  // the pale "tear line" stroke under the lower lid, the mark that frames a
+  // cat's eye from below
+  const stroke = segDist(hx, hy, hz, [ex - 0.018, ey - 0.03, ez + 0.012], [ex + 0.024, ey - 0.027, ez - 0.004]);
+  c = mixRgb(c, COAT.cream, smoothstep(0.007, 0.003, stroke) * 0.85);
   // the eye: the skin near the ball is laid over the lids by the socket carve
-  // (head.js) and stays face coloured; the black eyeline follows the almond's
-  // edge — where the skin turns in to the ball between the lid rims — and the
-  // dip itself is black in case a facet of it shows beside the iris. Just
-  // outside the eyeline a little darker still, most at the inner corner.
+  // (head.js) and stays face coloured; the lid caps' own rims draw the black
+  // eyeline, so the skin carries only a thin line where it turns in to the
+  // ball (in case a facet of the dip shows beside the iris) and a faint
+  // darkening just outside it, most at the inner corner. Round 3 painted a
+  // 12-degree black band here and the eye read as a dark slit.
   const de = Math.hypot(hx - ex, hy - ey, hz - ez);
   const R = FACE.eyeSkin;
   if (de < R * 1.7) {
     const near = smoothstep(R * 1.7, R * 1.2, de);
-    // the line: the dip and 2-3 mm of skin past the rims; the ring: a further
-    // 5 mm, faint
-    // the line: the dip and 4 mm of skin past the rims, wide enough to read at
-    // two metres; the ring: a further 5 mm, faint
-    const line = almondOpen(hx - ex, hy - ey, hz - ez, 0.16, 0.06);
-    const ring = almondOpen(hx - ex, hy - ey, hz - ez, 0.25, 0.3);
+    const line = almondOpen(hx - ex, hy - ey, hz - ez, 0.07, 0.02);
+    const ring = almondOpen(hx - ex, hy - ey, hz - ez, 0.22, 0.14);
     // (below and inside the eye only: the brow over it carries the pale spot)
     const inner = smoothstep(0.06, 0.03, hx) * smoothstep(ey + 0.01, ey - 0.01, hy);
-    c = mixRgb(c, COAT.lip, ring * near * (0.1 + 0.35 * inner));
-    c = mixRgb(c, COAT.black, line * near * 0.96);
+    c = mixRgb(c, COAT.lip, ring * near * (0.08 + 0.3 * inner));
+    c = mixRgb(c, COAT.black, line * near * 0.9);
   }
   // the dark line at the outer corner, back toward the temple
-  const wing = segDist(hx, hy, hz, [ex + 0.022, ey - 0.002, ez - 0.006], [ex + 0.04, ey + 0.004, ez - 0.03]);
-  c = mixRgb(c, COAT.black, smoothstep(0.007, 0.0025, wing) * 0.8);
-  // tear line from the inner corner down the side of the muzzle
-  const tear = segDist(hx, hy, hz, [ex - 0.024, ey - 0.008, ez + 0.014], [ex - 0.02, ey - 0.048, ez + 0.08]);
-  c = mixRgb(c, COAT.lip, smoothstep(0.0085, 0.003, tear) * 0.85 * smoothstep(0.25, 0.2, hz));
-  // whisker spots: four rows of black follicles on the pad, half a centimetre each
-  if (hx > 0.03 && hz > 0.232) {
-    for (let row = 0; row < 4; row++) {
-      for (let col = 0; col < 6; col++) {
-        const sy = 0.014 - row * 0.009;
-        const sz = 0.24 + col * 0.0115 + (row % 2) * 0.006;
+  const wing = segDist(hx, hy, hz, [ex + 0.024, ey - 0.001, ez - 0.006], [ex + 0.042, ey + 0.005, ez - 0.03]);
+  c = mixRgb(c, COAT.black, smoothstep(0.006, 0.002, wing) * 0.8);
+  // the dark tear line from the inner corner down the side of the muzzle
+  const tear = segDist(hx, hy, hz, [ex - 0.024, ey - 0.006, ez + 0.012], [ex - 0.022, ey - 0.046, ez + 0.075]);
+  c = mixRgb(c, COAT.lip, smoothstep(0.0075, 0.0025, tear) * 0.85 * smoothstep(0.25, 0.2, hz));
+  // whisker follicles: rows of small dark spots on the pad (2 mm, not the
+  // half-centimetre buttons of round 3), each with a fine pale whisker
+  // stroke running back and out from it over the pad
+  if (hx > 0.03 && hz > 0.226) {
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 7; col++) {
+        const sy = 0.016 - row * 0.008;
+        const sz = 0.236 + col * 0.0105 + (row % 2) * 0.005;
         const d = Math.hypot(hy - sy, hz - sz);
-        c = mixRgb(c, COAT.black, smoothstep(0.0045, 0.002, d) * 0.85);
+        c = mixRgb(c, COAT.lip, smoothstep(0.0024, 0.001, d) * 0.7);
+        // the stroke: a hair's width, from the follicle back along the pad
+        const hair = segDist(hx, hy, hz, [hx, sy, sz], [hx, sy + 0.004 - row * 0.002, sz - 0.02]);
+        c = mixRgb(c, COAT.cream, smoothstep(0.0007, 0.0002, hair) * smoothstep(sz - 0.019, sz - 0.004, hz) * 0.35);
       }
     }
   }
-  // the lips are black: a band along the seam under the upper lip from the
-  // philtrum back, ending at the corner of the mouth, where the line turns
-  // down a little into the jowl and stops — under the front corner of the eye
-  // The line runs at FACE.lipY across the lower half of the muzzle loft, so
-  // what hangs below it is the lower jaw: coat coloured, the chin pale buff.
+  // the mouth: a thin dark seam under the upper lip from the philtrum back to
+  // the corner, where it turns a little way down into the jowl and fades out —
+  // under the front corner of the eye. The line runs at FACE.lipY across the
+  // lower half of the muzzle loft, so what hangs below it is the lower jaw,
+  // coat coloured like the jaw part (textures ATLAS.jaw), the chin pale buff.
   const [cx, cy, cz] = FACE.mouthCorner;
   const [nx, ny, nz] = FACE.nose;
   const lipY = lerp(FACE.lipY[0], FACE.lipY[1], clamp((hz - cz) / (nz - cz)));
-  const onLip = smoothstep(cz - 0.004, cz + 0.008, hz);
-  // the black band is the lip's edge and a centimetre of the lower lip under
-  // it, so the jaw's pale never shows at the seam from below
-  const lip = smoothstep(0.009, 0.0035, Math.abs(hy - lipY + 0.003)) * onLip;
-  const jaw = smoothstep(lipY - 0.006, lipY - 0.016, hy) * onLip;
-  c = mixRgb(c, mixRgb(COAT.side, COAT.back, 0.3), jaw * 0.7);
-  // the chin: small, pale buff, only the front of the jaw under the nose
-  c = mixRgb(c, buff, jaw * smoothstep(0.27, 0.3, hz) * smoothstep(-0.022, -0.036, hy) * 0.75);
-  c = mixRgb(c, COAT.black, lip * 0.96);
-  const corner = segDist(hx, hy, hz, [cx - 0.004, cy + 0.002, cz + 0.006], [cx + 0.006, cy - 0.016, cz - 0.012]);
-  c = mixRgb(c, COAT.black, smoothstep(0.009, 0.003, corner) * 0.85);
+  const onLip = smoothstep(cz - 0.002, cz + 0.008, hz);
+  const lip = smoothstep(0.0038, 0.0012, Math.abs(hy - lipY + 0.001)) * onLip;
+  // the lower lip itself a shade darker than the coat for half a centimetre
+  const lowerLip = smoothstep(0.009, 0.004, Math.abs(hy - lipY + 0.006)) * onLip;
+  const jaw = smoothstep(lipY - 0.004, lipY - 0.014, hy) * onLip;
+  // under the mouth line the lower lip and chin are pale at the front of the
+  // face — a lion's chin is near white — and only turn coat coloured back
+  // toward the corner and the jaw angle (round 4: a dark lower jaw under the
+  // pale upper lip read as an open mouth from the front)
+  c = mixRgb(c, mixRgb(JAW_COAT, buff, smoothstep(0.215, 0.265, hz)), jaw * 0.85);
+  c = mixRgb(c, COAT.lip, lowerLip * 0.3);
+  c = mixRgb(c, COAT.black, lip * 0.92);
+  // the corner: the seam follows the hanging jowl down and back a centimetre, thinning out
+  const corner = segDist(hx, hy, hz, [cx - 0.002, cy + 0.001, cz + 0.004], [cx + 0.004, cy - 0.011, cz - 0.008]);
+  const cornerT = clamp((cz + 0.004 - hz) / 0.012);
+  c = mixRgb(c, COAT.black, smoothstep(0.0032 - 0.0012 * cornerT, 0.0008, corner) * 0.85 * (1 - 0.5 * cornerT));
   // philtrum: the split of the upper lip from under the nose down to the line
   const phil = smoothstep(0.005, 0.0015, hx) * smoothstep(nz - 0.035, nz - 0.012, hz) * smoothstep(ny - 0.016, ny - 0.028, hy) * smoothstep(lipY - 0.004, lipY + 0.004, hy);
   c = mixRgb(c, COAT.black, phil * 0.8);
@@ -362,7 +387,7 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           let c = coatShade(0.3 + 0.16 * inner, v, seed + 1, { spots, su: 0.5 + 0.45 * Math.cos(u * Math.PI * 2), sv: v * 1.3 });
           c = mixRgb(c, COAT.belly, inner * 0.55 * smoothstep(0.2, 0.5, v));
           const m = fbm(u * 12, v * 18, { octaves: 3, period: 32, seed: 433 });
-          c = mixRgb(c, COAT.dust, smoothstep(0.4, 0.0, v) * (0.5 + 0.5 * m) * 0.55);
+          c = mixRgb(c, COAT.dust, smoothstep(0.32, 0.0, v) * (0.5 + 0.5 * m) * 0.4);
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
@@ -412,7 +437,7 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           // the leather is dark and matte-grained; its top edge fades into the
           // haired bridge, so the part has no hard outline against the muzzle
           // black leather: only the top edge warms toward the haired bridge
-          let c = mixRgb(COAT.black, COAT.noseLeather, 0.2);
+          let c = mixRgb(COAT.black, COAT.noseLeather, 0.12);
           c = mixRgb(c, COAT.noseBridge, smoothstep(0.86, 0.98, v) * 0.5);
           const grain = fbm(u * 30, v * 30, { octaves: 3, period: 64, seed: 471 });
           c = mixRgb(c, [70, 58, 54], (grain - 0.5) * 0.4);
@@ -428,10 +453,10 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           const phil = smoothstep(0.06, 0.015, Math.abs(u - 0.5)) * smoothstep(0.5, 0.28, v);
           c = mixRgb(c, [10, 8, 8], phil * 0.85);
           // the lower edge of the leather is pale skin toward the lip
-          c = mixRgb(c, [110, 88, 82], smoothstep(0.18, 0.04, v) * (1 - phil) * 0.3);
+          c = mixRgb(c, [110, 88, 82], smoothstep(0.18, 0.04, v) * (1 - phil) * 0.18);
           // moist highlight speckle across the top of the leather
           const sp = fbm(u * 60, v * 60, { octaves: 2, period: 64, seed: 479 });
-          c = mixRgb(c, [120, 104, 100], smoothstep(0.6, 0.75, sp) * 0.4 * smoothstep(0.3, 0.6, v) * smoothstep(0.95, 0.8, v));
+          c = mixRgb(c, [120, 104, 100], smoothstep(0.6, 0.75, sp) * 0.25 * smoothstep(0.3, 0.6, v) * smoothstep(0.95, 0.8, v));
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
@@ -447,15 +472,25 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           const vein = fbm(u * 8, v * 14, { octaves: 3, period: 8, seed: 491 });
           c = mixRgb(c, [120, 70, 40], smoothstep(0.58, 0.75, vein) * 0.5 * smoothstep(30, 60, deg));
           // iris with radial fibres; a lion's iris fills the whole opening
+          // (the lids open to 42 degrees, the iris reaches 52)
           const fib = fbm(u * 24, v * 3, { octaves: 4, period: 24, seed: 497 });
-          const irisT = smoothstep(48, 14, deg);
+          const irisT = smoothstep(50, 14, deg);
           let iris = mixRgb(COAT.irisOuter, COAT.irisInner, irisT);
-          iris = [iris[0] * (0.8 + 0.4 * fib), iris[1] * (0.8 + 0.4 * fib), iris[2] * (0.8 + 0.35 * fib)];
-          c = mixRgb(c, iris, smoothstep(52, 48, deg));
+          iris = [iris[0] * (0.84 + 0.32 * fib), iris[1] * (0.84 + 0.32 * fib), iris[2] * (0.84 + 0.28 * fib)];
+          // the collarette: a paler ring around the pupil
+          iris = mixRgb(iris, [238, 196, 110], smoothstep(34, 26, deg) * smoothstep(22, 25, deg) * 0.4);
+          c = mixRgb(c, iris, smoothstep(56, 52, deg));
           // limbal ring
-          c = mixRgb(c, [40, 26, 12], smoothstep(55, 50, deg) * smoothstep(44, 49, deg) * 0.85);
-          // pupil, soft edged, round the way a lion's is
-          c = mixRgb(c, [6, 4, 4], smoothstep(13, 10.5, deg));
+          c = mixRgb(c, [40, 26, 12], smoothstep(58, 54, deg) * smoothstep(46, 53, deg) * 0.85);
+          // pupil, soft edged, round the way a lion's is: 40 % of the iris
+          // across in daylight (a 17-degree pupil read as a pin in a glass bead)
+          c = mixRgb(c, [6, 4, 4], smoothstep(24, 21, deg));
+          // a wet catchlight high on the cornea, up and a little to the side of
+          // the gaze (u = 0.75 is up in the ball's frame): the sky in the eye,
+          // there whatever the sun is doing, the way a lens sees it
+          const cu = Math.abs(((u - 0.72 + 0.5) % 1) - 0.5) * Math.PI * 2 * Math.sin(th);
+          const cd = Math.hypot(cu, ((th * 180) / Math.PI - 24) / 57.3);
+          c = mixRgb(c, [246, 240, 228], smoothstep(0.13, 0.06, cd) * 0.85);
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
@@ -488,16 +523,18 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
         fillRegion(ctx, ATLAS.earIn, S, (u, v, o) => {
           // pale lining, pink-grey skin deep in the cup, a pale rim, and long
           // pale hairs fringing the inner edge with a dark fringe behind them
-          let c = mixRgb(mixRgb(COAT.side, COAT.earIn, 0.5), COAT.earPink, smoothstep(0.5, 0.95, v) * 0.8);
-          c = mixRgb(c, COAT.cream, smoothstep(0.12, 0.0, v) * 0.5);
+          // (kept near the coat's own value: this tile faces the low sun at dusk
+          // when the face does not, and anything pale here glows)
+          let c = mixRgb(mixRgb(COAT.side, COAT.earIn, 0.5), COAT.earPink, smoothstep(0.5, 0.95, v) * 0.7);
+          c = mixRgb(c, COAT.belly, smoothstep(0.12, 0.0, v) * 0.35);
           const streak = fbm(u * 26, v * 4, { octaves: 3, period: 32, seed: 509 });
           const edge = smoothstep(0.55, 0.15, v) * smoothstep(0.02, 0.1, v);
           c = mixRgb(c, COAT.lip, smoothstep(0.55, 0.75, streak) * edge * 0.7);
-          c = mixRgb(c, COAT.cream, smoothstep(0.3, 0.5, streak) * smoothstep(0.7, 0.75, streak) * edge * 0.6);
+          c = mixRgb(c, COAT.belly, smoothstep(0.3, 0.5, streak) * smoothstep(0.7, 0.75, streak) * edge * 0.5);
           const base = smoothstep(0.3, 0.08, Math.abs(u - 0.75)) * smoothstep(0.7, 0.2, v);
-          c = mixRgb(c, COAT.cream, base * 0.85);
+          c = mixRgb(c, COAT.belly, base * 0.6);
           // the fold of the ear canal, darker
-          c = mixRgb(c, COAT.lip, smoothstep(0.82, 0.97, v) * 0.35);
+          c = mixRgb(c, COAT.lip, smoothstep(0.78, 0.97, v) * 0.45);
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
@@ -512,10 +549,14 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           let c = mixRgb(COAT.pad, [96, 78, 66], (m - 0.4) * 0.8);
           return mixRgb(c, COAT.dust, smoothstep(0.62, 0.8, m) * 0.5);
         };
-        // the fur of the foot: flank colour gone dusty, a shade paler on top
+        // The fur of the foot is the leg's own coat, about 0.85 of it: the
+        // paw is a dusty foot on a tan leg, not a black boot (rounds 2 and 3
+        // put the pad's leather, dust and a dark claw sheath over most of the
+        // foot). Dark stays in the creases and on the pads underneath.
         const footFur = (u, v, m) => {
-          let c = mixRgb(COAT.side, COAT.dust, 0.35 + 0.3 * m);
-          return mixRgb(c, COAT.belly, 0.25 * smoothstep(0.55, 0.85, u));
+          let c = mixRgb(COAT.side, COAT.dust, 0.22 + 0.18 * m);
+          c = [c[0] * 0.9, c[1] * 0.9, c[2] * 0.9];
+          return mixRgb(c, COAT.belly, 0.2 * smoothstep(0.55, 0.85, u));
         };
         fillRegion(ctx, ATLAS.pad, S, (u, v, o) => {
           const m = fbm(u * 24, v * 24, { octaves: 4, period: 64, seed: 521 });
@@ -524,31 +565,31 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
             // the pad: leather across the sole, ringed by the pale skin of its
             // edge, fur over the top of the foot
             const uu = u * 2;
-            const sole = smoothstep(0.24, 0.16, Math.abs(uu - 0.25)) * smoothstep(0.0, 0.08, v) * smoothstep(1.0, 0.9, v);
-            const rim = smoothstep(0.3, 0.24, Math.abs(uu - 0.25)) * smoothstep(0.2, 0.26, Math.abs(uu - 0.25));
-            c = mixRgb(footFur(uu, v, m), [150, 128, 110], rim * 0.7);
+            const sole = smoothstep(0.22, 0.14, Math.abs(uu - 0.25)) * smoothstep(0.0, 0.08, v) * smoothstep(1.0, 0.9, v);
+            const rim = smoothstep(0.28, 0.22, Math.abs(uu - 0.25)) * smoothstep(0.18, 0.24, Math.abs(uu - 0.25));
+            c = mixRgb(footFur(uu, v, m), [150, 128, 110], rim * 0.6);
             c = mixRgb(c, leather(uu, v, m), sole);
           } else {
             // a toe: fur, leather under it, a dark crease down each side where
-            // it meets the next toe (u = 0, 0.5 and 1), and the claw's dark
-            // sheath at the tip
+            // it meets the next toe (u = 0, 0.5 and 1), the skin of the claw
+            // sheath only at the very tip
             const uu = (u - 0.5) * 2;
             c = footFur(uu, v, m);
             const side = Math.min(Math.abs(uu - 0.5), uu, 1 - uu);
-            const crease = smoothstep(0.14, 0.02, side) * smoothstep(0.05, 0.3, v);
-            c = mixRgb(c, COAT.lip, crease * 0.75);
-            const under = smoothstep(0.16, 0.06, Math.abs(uu - 0.25)) * smoothstep(0.15, 0.3, v) * smoothstep(0.9, 0.75, v);
+            const crease = smoothstep(0.09, 0.015, side) * smoothstep(0.05, 0.3, v);
+            c = mixRgb(c, COAT.lip, crease * 0.6);
+            const under = smoothstep(0.14, 0.05, Math.abs(uu - 0.25)) * smoothstep(0.15, 0.3, v) * smoothstep(0.9, 0.75, v);
             c = mixRgb(c, leather(uu, v, m), under);
-            const sheath = smoothstep(0.7, 0.92, v);
-            c = mixRgb(c, COAT.lip, sheath * 0.85);
-            c = mixRgb(c, COAT.clawTip, smoothstep(0.93, 1.0, v) * 0.6);
+            const sheath = smoothstep(0.88, 0.97, v);
+            c = mixRgb(c, COAT.lip, sheath * 0.45);
           }
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
         });
         fillRegion(ctx, ATLAS.claw, S, (u, v, o) => {
-          const c = mixRgb(COAT.clawBase, COAT.clawTip, smoothstep(0.2, 0.9, v));
+          // horn: pale over most of the sheath, darkening only toward the point
+          const c = mixRgb(COAT.clawBase, COAT.clawTip, smoothstep(0.55, 1.0, v));
           const g = fbm(u * 6, v * 30, { octaves: 2, period: 8, seed: 523 });
           const l = 1 + (g - 0.5) * 0.25;
           o[0] = c[0] * l;
@@ -561,14 +602,14 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           // the jaw is coat coloured on its sides, no brighter than the lip
           // above it (a pale jaw under a darker lip reads as bared teeth from
           // two metres); only the chin and the underside go cream
-          let c = mixRgb(COAT.side, COAT.back, 0.15);
+          let c = JAW_COAT;
           const m = fbm(u * 8, v * 8, { octaves: 3, period: 16, seed: 531 });
-          c = mixRgb(c, COAT.belly, (m - 0.5) * 0.4);
+          c = mixRgb(c, COAT.belly, (m - 0.5) * 0.3);
           const under = smoothstep(0.35, 0.48, Math.abs(u - 0.5));
-          c = mixRgb(c, COAT.cream, under * 0.35);
+          c = mixRgb(c, COAT.cream, under * 0.3);
           // the lower lip runs along the top of the jaw loft (u = 0.5) and is
-          // black like the upper; only it and the chin show under the upper lip
-          c = mixRgb(c, COAT.black, smoothstep(0.2, 0.13, Math.abs(u - 0.5)) * smoothstep(0.96, 0.9, v) * 0.85);
+          // dark like the upper; only it and the chin show under the upper lip
+          c = mixRgb(c, COAT.lip, smoothstep(0.16, 0.1, Math.abs(u - 0.5)) * smoothstep(0.96, 0.9, v) * 0.8);
           // the chin: small and pale buff, not white
           c = mixRgb(c, mixRgb(COAT.side, COAT.cream, 0.55), smoothstep(0.8, 0.92, v) * 0.85);
           o[0] = c[0];
@@ -584,10 +625,13 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           // rim, 4 mm wide so it reads at two metres; the upper lid is the
           // brow mask's darker tawny, the lower carries the pale stroke a lion
           // has under the eye, then goes back to the coat.
+          // (round 4: the rim band is 2.5 mm — v 0.05, five degrees of the
+          // cap — where round 3's 4 mm plus the painted skin line made the eye
+          // a dark ring; the lower lid's pale stroke starts right at the rim)
           const upper = u < 0.5;
-          let c = mixRgb(COAT.side, COAT.back, upper ? 0.5 : 0.25);
-          if (!upper) c = mixRgb(c, COAT.cream, smoothstep(0.08, 0.14, v) * smoothstep(0.36, 0.26, v) * 0.95);
-          c = mixRgb(c, COAT.black, smoothstep(0.11, 0.07, v));
+          let c = mixRgb(COAT.side, COAT.back, upper ? 0.45 : 0.2);
+          if (!upper) c = mixRgb(c, COAT.cream, smoothstep(0.04, 0.09, v) * smoothstep(0.34, 0.22, v) * 0.9);
+          c = mixRgb(c, COAT.black, smoothstep(0.058, 0.032, v) * 0.95);
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];

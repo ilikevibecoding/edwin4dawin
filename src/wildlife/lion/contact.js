@@ -8,8 +8,15 @@ import * as THREE from 'three';
 //
 // One mesh per lion, five quads, rebuilt in root space every step: the paw
 // decals sit on the terrain under the contact point (not under a lifted paw's
-// pad) and fade as the paw lifts, the body decal fades in as the trunk comes
-// down onto its belly. Corners sample the terrain so a decal lies on a slope.
+// pad) and fade as the paw lifts; the body decal is a faint pool under the
+// standing trunk that deepens and spreads as the animal comes down onto its
+// belly. Corners sample the terrain so a decal lies on a slope.
+//
+// Round 4: the round-3 decals were the size of the paw and of the lying trunk,
+// which is to say entirely hidden under the paw and the trunk — no critic saw
+// one. What reads is the penumbra beyond the silhouette, so each blob is now
+// the footprint plus about 0.3 m, and the vegetation still gets the footprint
+// (points) rather than the penumbra.
 // ---------------------------------------------------------------------------
 
 const _p = new THREE.Vector3();
@@ -17,15 +24,19 @@ const _f = new THREE.Vector3();
 const _r = new THREE.Vector3();
 const _w = new THREE.Vector3();
 
-/** Radial falloff, white with alpha 1 at the centre to 0 at the rim. */
+/**
+ * Radial falloff, white with alpha 1 at the centre to 0 at the rim: full
+ * under the middle half of the quad, then a smooth penumbra to the edge.
+ */
 export function contactTexture(size = 64) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
   const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
   g.addColorStop(0, 'rgba(255,255,255,1)');
-  g.addColorStop(0.35, 'rgba(255,255,255,0.85)');
-  g.addColorStop(0.7, 'rgba(255,255,255,0.3)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0.92)');
+  g.addColorStop(0.7, 'rgba(255,255,255,0.45)');
+  g.addColorStop(0.88, 'rgba(255,255,255,0.1)');
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
@@ -35,10 +46,15 @@ export function contactTexture(size = 64) {
   return t;
 }
 
-/** Shared material: black, alpha from the texture times the vertex alpha. */
+/**
+ * Shared material: the occlusion colour, alpha from the texture times the
+ * vertex alpha. Not black — what reaches the dirt under an animal is bounce
+ * off its own belly and the soil, warm and dim (the truck's pool uses the
+ * same reasoning).
+ */
 export function contactMaterial() {
   const m = new THREE.MeshBasicMaterial({
-    color: 0x000000,
+    color: new THREE.Color(0.1, 0.085, 0.075),
     map: contactTexture(),
     transparent: true,
     depthWrite: false,
@@ -52,6 +68,9 @@ export function contactMaterial() {
   });
   return m;
 }
+
+/** Where a blob's darkening peaks, as a fraction of unshadowed dirt (1 - alpha at the centre). */
+export const CONTACT = { paw: 0.62, body: 0.62, stand: 0.28, penumbra: 0.3 };
 
 const QUADS = 5; // FL, FR, HL, HR, body
 
@@ -86,13 +105,27 @@ export class ContactShadows {
     this.mesh.receiveShadow = false;
     this.mesh.renderOrder = 1;
     this.mesh.matrixAutoUpdate = true;
+    // the AO prepass swaps every material for a MeshNormalMaterial, which
+    // would draw these as solid quads a centimetre over the dirt and hand the
+    // AO a hard rectangle (the truck's contact mesh has the same guard)
+    this.mesh.onBeforeRender = (renderer, scene, camera, geometry, material) => {
+      if (material.isMeshNormalMaterial) geometry.setDrawRange(0, 0);
+    };
+    this.mesh.onAfterRender = (renderer, scene, camera, geometry, material) => {
+      if (material.isMeshNormalMaterial) geometry.setDrawRange(0, Infinity);
+    };
     lion.root.add(this.mesh);
     // for the vegetation: world-space push points, (x, z, radius, weight) per quad
     this.points = new Float32Array(QUADS * 4);
   }
 
-  /** One quad: centre c (root space, y ignored), axes f (forward) and r (right) already scaled to half-extents, alpha a. */
-  quad(q, c, f, r, a) {
+  /**
+   * One quad: centre c (root space, y ignored), axes f (forward) and r (right)
+   * already scaled to half-extents, alpha a. `push` is the footprint radius
+   * and weight the vegetation sees (the quad itself is the footprint plus
+   * the penumbra).
+   */
+  quad(q, c, f, r, a, push = null) {
     const lion = this.lion;
     const lift = 0.012 * lion.s;
     const b = q * 4;
@@ -118,8 +151,8 @@ export class ContactShadows {
     lion.feet.toWorld(c, _w);
     this.points[q * 4] = _w.x;
     this.points[q * 4 + 1] = _w.z;
-    this.points[q * 4 + 2] = Math.max(f.length(), r.length());
-    this.points[q * 4 + 3] = a;
+    this.points[q * 4 + 2] = push ? push[0] : Math.max(f.length(), r.length());
+    this.points[q * 4 + 3] = push ? push[1] : a;
   }
 
   update() {
@@ -128,6 +161,7 @@ export class ContactShadows {
     const feet = lion.feet;
     const heading = _f.set(0, 0, 1);
     const right = _r.set(1, 0, 0);
+    const pen = CONTACT.penumbra * Math.sqrt(s);
     // paws
     for (let i = 0; i < 4; i++) {
       const l = feet.legs[i];
@@ -135,23 +169,30 @@ export class ContactShadows {
       const h = Math.max(0, _p.y - lion.groundAt(_p.x, _p.z));
       // fades over the first 12 cm of lift and spreads a little as it goes
       const k = THREE.MathUtils.clamp(1 - h / (0.12 * s), 0, 1);
-      const a = 0.5 * k * k;
-      const rad = (l.spec.front ? 0.115 : 0.105) * s * (1 + 0.4 * (1 - k));
+      const a = CONTACT.paw * k * k;
+      const foot = (l.spec.front ? 0.11 : 0.1) * s;
+      const rad = (foot + pen * 0.6) * (1 + 0.3 * (1 - k));
       // in root space the animal faces +z; a paw's own tangent frame is close to that
-      const f = heading.clone().multiplyScalar(rad * 1.15);
+      const f = heading.clone().multiplyScalar(rad * 1.1);
       const r = right.clone().multiplyScalar(rad);
-      this.quad(i, _p, f, r, a);
+      this.quad(i, _p, f, r, a, [foot * 1.2, a]);
     }
-    // body: the trunk between the hips and the shoulders, when it is down
+    // body: a faint pool under the standing trunk (the sun's shadow map is
+    // soft or absent at this range and the belly is half a metre up), which
+    // deepens and spreads to the footprint plus the penumbra as the animal
+    // comes down onto its belly
     const hipH = lion.brain.pose.hipH;
     const lying = THREE.MathUtils.clamp((0.72 - hipH) / 0.22, 0, 1);
     const W = lion.poser.world;
     const pw = W.get('pelvis').p;
     const cw = W.get('chest').p;
     _p.set((pw.x + cw.x) * 0.5, 0, (pw.z + cw.z) * 0.5 + 0.02 * s);
-    const f = heading.clone().multiplyScalar(0.78 * s);
-    const r = right.clone().multiplyScalar(0.34 * s);
-    this.quad(4, _p, f, r, 0.42 * lying * lying);
+    const halfL = 0.62 * s + pen;
+    const halfW = THREE.MathUtils.lerp(0.28 * s, 0.3 * s, lying) + pen;
+    const f = heading.clone().multiplyScalar(halfL);
+    const r = right.clone().multiplyScalar(halfW);
+    const a = THREE.MathUtils.lerp(CONTACT.stand, CONTACT.body, lying * lying);
+    this.quad(4, _p, f, r, a, [0.34 * s, 0.42 * lying * lying]);
     this.posAttr.needsUpdate = true;
     this.colAttr.needsUpdate = true;
   }

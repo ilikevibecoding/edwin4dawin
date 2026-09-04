@@ -82,26 +82,32 @@ function shellMaterial(base, { wind = 0.05, rootShade = 0.45, droop = 0 } = {}) 
 
 export function lionMaterials({ env, quality }) {
   const size = quality === 'fast' ? 512 : 1024;
-  const Physical = quality === 'fast' ? THREE.MeshStandardMaterial : THREE.MeshPhysicalMaterial;
+  // Physical at every quality (round 4): the sheen term is what lets a low
+  // sun wrap the coat — the round-3 lions at dusk were silhouettes with no
+  // rim because `fast` shot them with a Standard material at 0.88 roughness.
+  // Four animals, a few draws each: the heavier shader is not where the
+  // frame time goes.
   const make = (spots) => {
-    const m = new Physical({
+    const m = new THREE.MeshPhysicalMaterial({
       map: coatAtlas({ size, spots }),
       normalMap: coatNormal(256),
       normalScale: new THREE.Vector2(0.35, 0.35),
-      roughness: 0.88,
+      roughness: 0.75,
       metalness: 0,
       vertexColors: true,
       envMap: env,
       // fur scatters sky light into its own shadow side; without this the
       // flank away from the sun goes to black against a lit plain
       envMapIntensity: 0.6,
+      // fur: a soft retro-reflective sheen that catches a back light along
+      // the outline, in the coat's own pale
+      // (0.4: at 0.7 the whole lit side of the trunk bleached to cream and
+      // the terminator into the flank hardened)
+      sheen: 0.4,
+      sheenRoughness: 0.6,
+      sheenColor: new THREE.Color(0xdcb884),
+      specularIntensity: 0.35,
     });
-    if (m.isMeshPhysicalMaterial) {
-      m.sheen = 0.5;
-      m.sheenRoughness = 0.7;
-      m.sheenColor = new THREE.Color(0xd8b078);
-      m.specularIntensity = 0.35;
-    }
     m.name = spots ? 'lion-coat-cub' : 'lion-coat';
     return m;
   };
@@ -162,15 +168,21 @@ export function lionMaterials({ env, quality }) {
     envMapIntensity: 0.2,
     name: 'lion-strands',
   });
+  // The cornea: a wet film over the ball, additive, so what it adds is the
+  // sky's reflection and the sun's glint. Round 4: roughness 0.05 -> 0.16 —
+  // the mirror lobe was a sub-pixel dot at the gauntlet's 512 px and every
+  // critic scored the eye as dry; a slightly broader lobe is a soft highlight
+  // that is there from most angles; the env term is kept moderate so the sky's
+  // reflection does not wash the pupil grey.
   const cornea = new THREE.MeshPhysicalMaterial({
     color: 0x000000,
-    roughness: 0.05,
+    roughness: 0.16,
     metalness: 0,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     envMap: env,
-    envMapIntensity: 1.6,
+    envMapIntensity: 1.2,
     specularIntensity: 1.0,
     name: 'lion-cornea',
   });

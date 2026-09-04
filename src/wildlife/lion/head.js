@@ -34,16 +34,20 @@ const LID_DOWN = EYE_LIDS.down;
 
 /**
  * Eye socket carved into the head loft, head metres from the eye centre: skin
- * nearer than `r` (a millimetre over the lids, so the two never fight; the
- * ball is EYE_R, the lids 1.09 of it) is laid onto that sphere, so the lids
- * are under the skin and show only as rims around the almond, where the
- * surface dips to `floorR`, inside the ball, and the iris shows; the dip fades
- * out between `floor` and `rim`.
+ * nearer than `r` (half a millimetre over the lid caps, so the two never
+ * fight; the ball is EYE_R, the lids LID_R of it) is laid onto that sphere,
+ * so the lids are under the skin and show only as rims around the almond,
+ * where the surface dips to `floorR`, inside the ball, and the iris shows;
+ * the dip fades out between `floor` and `rim`. Skin within `hug` radians of
+ * the almond is eased down onto the same sphere over a wide band, so the lids
+ * are flush with an orbital mound instead of a bead with a crease around it
+ * (round 3's 3 mm draw-in zone), and the skin's opening starts `start`
+ * radians past the lid rims, so the caps' own rims draw the eyeline.
  */
-const SOCKET = { r: EYE_R * 1.04, floor: EYE_R * 1.33, rim: EYE_R * 2.05, floorR: EYE_R * 0.6, soft: 0.2, lidZone: [EYE_R * 1.36, EYE_R * 1.24] };
+const SOCKET = { r: EYE_R * 1.12, floor: EYE_R * 1.45, rim: EYE_R * 2.3, floorR: EYE_R * 0.6, soft: 0.16, start: 0.05, hug: 0.55 };
 /**
- * The lid caps' radius over the ball: a millimetre and a half outside the
- * socket skin and two over the ball, so the lids hug the eye instead of
+ * The lid caps' radius over the ball: just under the socket skin and a
+ * couple of millimetres over the ball, so the lids hug the eye instead of
  * standing off it as a visor with a shadowed gap under the rim.
  */
 const LID_R = 1.1;
@@ -146,25 +150,22 @@ export function addHead(b, alpha, skel, K, D) {
         const de = Math.hypot(dx, dy, dz);
         if (de < SOCKET.rim) {
           const w = smoothstep(SOCKET.rim, SOCKET.floor, de);
-          // skin the ball would break through is laid over it (that is the
-          // lid); skin already clear of it — the brow ledge, the cheek — is
-          // left where it is. Between the lid rims the skin must not wrap the
-          // ball: inside the almond (the lune between the two rim planes,
-          // which both hold the eye's lateral axis) the surface dips well
-          // inside the ball, so what shows there is the iris.
+          // skin the lids would break through is laid just over them; skin
+          // already clear of them — the brow ledge, the cheek — is eased down
+          // toward the same sphere the nearer it lies to the almond, so the
+          // lids sit flush in a soft orbital mound. Between the lid rims the
+          // skin must not wrap the ball: inside the almond (the lune between
+          // the two rim planes, which both hold the eye's lateral axis) the
+          // surface dips well inside the ball, so what shows there is the
+          // iris.
           const id = 1 / Math.max(de, 1e-4);
-          // the skin's opening is a little larger than the lids' (0.1 rad past
+          // the skin's opening is a little larger than the lids' (`start` past
           // the rim planes) and closes over the next `soft` radians, so the
           // step where it turns in toward the ball lies under the lid caps
           // and the smooth rims of the lids draw the almond, not the facets
-          const open = almondOpen(dx, dy, dz, SOCKET.soft, 0.1);
-          // and skin just outside the lids (within lidZone of the centre) is
-          // drawn in onto the socket sphere too, so the lid caps stand a clean
-          // millimetre proud of it; the skin climbs back to the skull over a
-          // short band, a fold where the lid meets the face, so the caps'
-          // edges under it are a crisp line and not a saw of facets
-          const draw = smoothstep(SOCKET.lidZone[0], SOCKET.lidZone[1], de);
-          const r0 = lerp(Math.max(de, SOCKET.r), SOCKET.r, draw);
+          const open = almondOpen(dx, dy, dz, SOCKET.soft, SOCKET.start);
+          const hug = almondOpen(dx, dy, dz, SOCKET.hug, SOCKET.start) * w;
+          const r0 = lerp(Math.max(de, SOCKET.r), SOCKET.r, hug);
           const k = lerp(r0, SOCKET.floorR, open * w) * id;
           hx = sx * (ex + dx * k);
           hy = ey + dy * k;
@@ -317,17 +318,17 @@ export function addHead(b, alpha, skel, K, D) {
   if (D.whiskers && alpha) {
     const [wx, wy, wz] = FACE.whiskerPad;
     for (const sd of [-1, 1]) {
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 12; i++) {
         const row = i % 4;
         const col = (i / 4) | 0;
         // rooted in four rows across the whisker pad, well above the lip
-        const baseP = new THREE.Vector3(sd * (wx + 0.004 + row * 0.002) * s, (wy + 0.03 - row * 0.01) * s, zOf(wz - 0.01 + col * 0.03) * s);
-        const len = (0.1 + (i % 2) * 0.03 + row * 0.01) * s;
+        const baseP = new THREE.Vector3(sd * (wx + 0.004 + row * 0.002) * s, (wy + 0.03 - row * 0.01) * s, zOf(wz - 0.016 + col * 0.018) * s);
+        const len = (0.1 + (i % 2) * 0.03 + row * 0.01 + col * 0.01) * s;
         // whiskers sweep out and back from the pad, the upper rows a little
         // up, the lower ones level and drooping toward the tip
-        const dir = new THREE.Vector3(sd * (0.85 + row * 0.05), 0.12 - row * 0.07 + col * 0.04, -0.1 - col * 0.2 + row * 0.03).normalize();
+        const dir = new THREE.Vector3(sd * (0.85 + row * 0.05), 0.12 - row * 0.07 + col * 0.03, -0.05 - col * 0.14 + row * 0.03).normalize();
         const sag = new THREE.Vector3(0, -0.05, 0);
-        strandQuad(alpha, headFrame, baseP, dir, len, 0.0012 * s, sag, headBones, 3);
+        strandQuad(alpha, headFrame, baseP, dir, len, 0.0009 * s, sag, headBones, 3);
       }
       // superciliary whiskers: three long hairs over each eye
       for (let i = 0; i < 3; i++) {
@@ -371,8 +372,10 @@ export function addHead(b, alpha, skel, K, D) {
 function addEar(b, frame, bones, s, D, sgn) {
   const around = Math.max(8, Math.round(D.around * 0.45));
   const rings = D.head >= 2 ? 5 : 3;
-  const H = 0.112 * s; // base to tip: a lion's ear is a big rounded dish
-  const W = 0.092 * s; // across
+  // base to tip and across: round 4 took a fifth off each (critics measured the
+  // round-3 ear at 1.4 times a lion's relative to the skull)
+  const H = 0.09 * s;
+  const W = 0.074 * s;
   // the bone already leans well out; a touch more so the tip stands clear
   const lean = -sgn * 0.05;
   const cl = Math.cos(lean);
@@ -382,7 +385,7 @@ function addEar(b, frame, bones, s, D, sgn) {
   const yaw = sgn * 0.7;
   const cyw = Math.cos(yaw);
   const syw = Math.sin(yaw);
-  const depth = 0.03 * s;
+  const depth = 0.026 * s;
   const cy = H * 0.5;
   const surface = (inner) => {
     const grid = [];
@@ -393,18 +396,25 @@ function addEar(b, frame, bones, s, D, sgn) {
         const a = (k / around) * Math.PI * 2;
         const ca = Math.cos(a);
         const sa = Math.sin(a);
-        // rim: an ellipse pinched toward the tip and widened at the base, so
-        // the outline is a rounded triangle standing on its wide end
+        // rim: an ovoid, a little narrower toward the tip and fuller at the
+        // base, so the outline is a rounded egg standing on its wide end and
+        // not a disc
         const tipward = Math.max(0, sa);
-        const w = W * 0.5 * (1 - 0.22 * tipward * tipward) * (1 + 0.1 * Math.max(0, -sa));
-        const h = sa >= 0 ? H * 0.5 : H * 0.5;
+        const w = W * 0.5 * (1 - 0.14 * tipward * tipward) * (1 + 0.06 * Math.max(0, -sa));
+        const h = sa >= 0 ? H * 0.5 : H * 0.46;
         // the outer edge of the ear is the straighter one: flatten the lateral side
-        const px0 = rho * w * ca * (ca * sgn > 0 ? 1.0 : 0.94);
+        const lateral = ca * sgn > 0;
+        const px0 = rho * w * ca * (lateral ? 1.0 : 0.94);
         const py0 = cy + rho * h * sa;
         const px1 = px0 * cl - py0 * sl;
         const py = px0 * sl + py0 * cl;
-        // cupped: the centre sits back, the rim forward; the tip leans back a little
+        // cupped: the centre sits back, the rim forward; the tip leans back a
+        // little, and the outer edge folds back on itself along the lower
+        // half of the lateral rim — the marginal pouch a cat's ear has, which
+        // thickens the edge and turns the dark back toward the front
         let pz1 = -depth * (1 - rho * rho) - 0.12 * H * Math.max(0, sa) * rho;
+        const fold = smoothstep(0.7, 1.0, rho) * (lateral ? 1 : 0.25) * (0.35 + 0.65 * smoothstep(0.6, -0.2, sa)) * Math.abs(ca);
+        pz1 -= 0.012 * s * fold;
         if (inner) pz1 += 0.0045 * s * (1 - Math.pow(rho, 6));
         const px = px1 * cyw + pz1 * syw;
         const pz = -px1 * syw + pz1 * cyw;
@@ -412,7 +422,9 @@ function addEar(b, frame, bones, s, D, sgn) {
         // polar UV: v = 1 at the centre of the cup, 0 at the rim; the tip at u = 0.25, the base at 0.75
         const u = ((a / (Math.PI * 2)) + 1) % 1;
         const uv = inner ? ATLAS.earIn : ATLAS.earOut;
-        row.push(b.vertex(_a, [uv[0] + (uv[2] - uv[0]) * u, uv[1] + (uv[3] - uv[1]) * (1 - rho)], bones, inner ? [0.92, 0.88, 0.86] : [1, 1, 1], 0));
+        // the lining is in the cup's own shade; the round-3 near-white tint
+        // was the hot pink ear at dusk
+        row.push(b.vertex(_a, [uv[0] + (uv[2] - uv[0]) * u, uv[1] + (uv[3] - uv[1]) * (1 - rho)], bones, inner ? [0.78, 0.74, 0.7] : [1, 1, 1], 0));
       }
       grid.push(row);
     }
