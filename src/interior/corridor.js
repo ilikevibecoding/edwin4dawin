@@ -97,9 +97,9 @@ export function buildCorridor(kit, ctx) {
   // ceiling: flat centre strip between the leaning panels
   const flatHalf = halfW - lean;
   const cb = alongZ ? [[cx - flatHalf, 0, min[2]], [cx + flatHalf, h, max[2]]] : [[min[0], 0, cz - flatHalf], [max[0], h, cz + flatHalf]];
-  impCeiling(kit, ctx, { bounds: cb, spacing: 100, lights: false, paints: [[PALETTE.impGrey, 0.7], [PALETTE.impMid, 0.3]] });
+  impCeiling(kit, ctx, { bounds: cb, spacing: 100, lights: false, stripMat: "emitWhiteDim", paints: [[PALETTE.impGrey, 0.7], [PALETTE.impMid, 0.3]] });
   // budgeted lights along the run: one every ~9 m, max 8; the emissive strips fill in between
-  const nl = Math.max(1, Math.min(4, Math.round(len / 12)));
+  const nl = Math.max(1, Math.min(3, Math.round(len / 14)));
   for (let i = 0; i < nl; i++) {
     const a = a0 + ((i + 0.5) / nl) * len;
     ctx.light(pointLight(0xe8f0ff, 5.5, 11, alongZ ? [cx, h - 0.6, a] : [a, h - 0.6, cz]));
@@ -136,7 +136,7 @@ function upperPanel(kit, ctx, o, U, V, len, side) {
   const pj = o.clone().addScaledVector(U.clone().normalize(), len / 2).addScaledVector(N, 0.0).add(new THREE.Vector3(0, 0.02, 0));
   const g = new THREE.BoxGeometry(len - 0.2, 0.05, 0.05);
   const qy = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), U.clone().normalize());
-  kit.add("emitWhiteSoft", g, { pos: [pj.x, pj.y, pj.z], quat: qy, uv: "keep" });
+  kit.add("emitStrip", g, { pos: [pj.x, pj.y, pj.z], quat: qy, uv: "keep" });
 }
 
 function rib(kit, ctx, alongZ, a, cx, cz, halfW, lowH, lean, h) {
@@ -168,8 +168,8 @@ function rib(kit, ctx, alongZ, a, cx, cz, halfW, lowH, lean, h) {
   // white inset light line on the frame's inner face, both sides
   for (const s of [-1, 1]) {
     const x = s * (halfW - t - 0.01);
-    if (alongZ) kit.box("emitWhite", cx + x, lowH * 0.5, a, 0.02, lowH * 0.7, 0.05);
-    else kit.box("emitWhite", a, lowH * 0.5, cz + x, 0.05, lowH * 0.7, 0.02);
+    if (alongZ) kit.box("emitWhiteDim", cx + x, lowH * 0.5, a, 0.02, lowH * 0.7, 0.05);
+    else kit.box("emitWhiteDim", a, lowH * 0.5, cz + x, 0.05, lowH * 0.7, 0.02);
   }
   // colliders for the rib's protrusion on both sides
   for (const s of [-1, 1]) {
@@ -188,7 +188,7 @@ export function buildLobby(kit, ctx) {
   const cx = (min[0] + max[0]) / 2;
   const cz = (min[2] + max[2]) / 2;
   kit.box("paintedMetal", cx, h - 0.06, cz, 2.2, 0.1, 2.2, { color: PALETTE.impDark, texel: 2 });
-  kit.box("emitWhiteSoft", cx, h - 0.11, cz, 1.9, 0.03, 1.9, { uv: "keep" });
+  kit.box("emitStrip", cx, h - 0.11, cz, 1.9, 0.03, 1.9, { uv: "keep" });
   ctx.light(pointLight(0xe8f0ff, 7, 10, [cx, h - 0.8, cz]));
   const lobbyPaints = [
     [PALETTE.impLight, 0.45],
