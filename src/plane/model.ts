@@ -339,7 +339,7 @@ export class PlaneModel {
     // size (`aPane`, see paneGeometry) from which the shader draws a rubber seal of constant width, a soft vignette
     // toward the frame and a faint smudge film that only shows where the sun catches it.
     const glass = new THREE.MeshPhysicalMaterial({
-      color: 0x9fc3d2, transparent: true, opacity: 0.10, roughness: 0.2, metalness: 0.0, envMapIntensity: 1.0,
+      color: 0x9fc3d2, transparent: true, opacity: 0.10, roughness: 0.25, metalness: 0.0, envMapIntensity: 1.0,
       side: THREE.FrontSide, depthWrite: false, specularIntensity: 1.0, ior: 1.52, premultipliedAlpha: true,
     });
     const glassUniforms = { uDirt: { value: glassDirtTexture() }, uEnvGain: { value: 3.0 }, uDirtAmount: { value: 0.35 } };
@@ -369,7 +369,7 @@ export class PlaneModel {
           #if NUM_DIR_LIGHTS > 0
             vec3 sunL = directionalLights[0].direction;
             float sunNdh = saturate(dot(glassN, normalize(sunL + glassV)));
-            filmSheen = directionalLights[0].color * pow(sunNdh, 14.0) * (0.10 + dirt * 0.9) * saturate(dot(glassN, sunL) * 4.0) * (1.0 - 0.7 * inner);
+            filmSheen = directionalLights[0].color * pow(sunNdh, 8.0) * (0.10 + dirt * 0.9) * saturate(dot(glassN, sunL) * 4.0) * (1.0 - 0.7 * inner);
           #endif
           vec3 glassSpec = reflectedLight.directSpecular * (1.0 + dirt * 2.0) + filmSheen + reflectedLight.indirectSpecular * uEnvGain;
           // soft knee: the sun's mirror image stays bright but never clips to white
@@ -382,7 +382,7 @@ export class PlaneModel {
         `)
         .replace('#include <premultiplied_alpha_fragment>', '');
     };
-    glass.customProgramCacheKey = () => 'cockpit-glass-v5';
+    glass.customProgramCacheKey = () => 'cockpit-glass-v6';
     const plainPaint = new THREE.MeshPhysicalMaterial({ color: LIVERY.upper, roughness: 0.4, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.15 });
     const parts = partsMaterial();
     const panelTex = panelTexture();
