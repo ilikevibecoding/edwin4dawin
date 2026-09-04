@@ -665,28 +665,27 @@ export function triPlaneRadar(M, r = 1.0, h = 1.6, keys = {}) {
   const blades = new THREE.Group();
   const geos = [];
   const edges = [];
+  // each blade: apex at the emitter, widening to the rim at the top with a slightly concave outer
+  // edge — the three together sweep an upright cone, not a globe
+  const edge = (t) => [(1 - t) * (1 - t) * r * 0.08 + 2 * (1 - t) * t * r * 0.42 + t * t * r, (1 - t) * (1 - t) * 0.04 + 2 * (1 - t) * t * h * 0.42 + t * t * h];
   for (let i = 0; i < 3; i++) {
     const shape = new THREE.Shape();
-    shape.moveTo(0, 0);
+    shape.moveTo(0, 0.04);
     shape.lineTo(0, h);
-    shape.lineTo(r * 0.3, h);
-    shape.quadraticCurveTo(r * 1.02, h * 0.8, r, h * 0.36);
-    shape.lineTo(r * 0.55, 0.04);
-    shape.lineTo(0, 0);
+    shape.lineTo(r, h);
+    shape.quadraticCurveTo(r * 0.42, h * 0.42, r * 0.08, 0.04);
+    shape.lineTo(0, 0.04);
     const g = new THREE.ShapeGeometry(shape, 10).rotateY((i / 3) * Math.PI * 2);
     geos.push(g);
-    // bright outer edge of each blade
+    // bright outer edge of each blade (apex to rim) and the rim itself
     const pts = [];
     const n = 10;
     for (let k = 0; k < n; k++) {
-      const t0 = k / n;
-      const t1 = (k + 1) / n;
-      const q = (t) => [(1 - t) * (1 - t) * r * 0.3 + 2 * (1 - t) * t * r * 1.02 + t * t * r, (1 - t) * (1 - t) * h + 2 * (1 - t) * t * h * 0.8 + t * t * h * 0.36];
-      const [x0, y0] = q(t0);
-      const [x1, y1] = q(t1);
+      const [x0, y0] = edge(k / n);
+      const [x1, y1] = edge((k + 1) / n);
       pts.push(x0, y0, 0, x1, y1, 0);
     }
-    pts.push(r, h * 0.36, 0, r * 0.55, 0.04, 0);
+    pts.push(r, h, 0, 0, h, 0);
     const eg = new THREE.BufferGeometry();
     eg.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
     eg.rotateY((i / 3) * Math.PI * 2);
@@ -694,9 +693,9 @@ export function triPlaneRadar(M, r = 1.0, h = 1.6, keys = {}) {
   }
   blades.add(mergedMesh(geos, M[fill]));
   blades.add(mergedLines(edges, M[line]));
-  // static-ish reference: rings at three heights + a spindle
+  // static-ish reference: the cone's rim ring, two range rings inside the cone, a spindle
   const blips = new THREE.Group();
-  blips.add(mergedLines([wireRingGeometry(r * 0.62, 48, h * 0.55), wireRingGeometry(r * 0.98, 64, h * 0.62), wireRingGeometry(r * 0.3, 32, h * 0.2), wireRingGeometry(r * 0.25, 32, h * 0.98)], M[lineDim]));
+  blips.add(mergedLines([wireRingGeometry(r * 0.99, 64, h * 0.99), wireRingGeometry(r * 0.55, 48, h * 0.6), wireRingGeometry(r * 0.2, 32, h * 0.28)], M[lineDim]));
   const bg = [];
   for (let i = 0; i < 6; i++) {
     const a = i * 1.9;

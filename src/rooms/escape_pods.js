@@ -9,7 +9,7 @@ import { PALETTE } from "../materials.js";
 import { insideOut, panelWithHoles } from "../kit.js";
 import { impRoomShell, impConsole, impWallLight, impWallGear, impCrate, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
-import { wallScreen, locker, cableRun, chairInstance, floorDecal, floorStrip, propFrame } from "./deck_b_props.js";
+import { wallScreen, locker, cableRun, chairInstance, floorDecal, floorStrip, propFrame, bench } from "./deck_b_props.js";
 
 const RED = "emitRedImp";
 const HATCH_X = [-10.5, -6.3, -2.1, 2.1, 6.3, 10.5];
@@ -74,8 +74,26 @@ export function buildEscapePods(kit, ctx, room) {
   impWallGear(W, hz + 6.8, 1.6, { seed: 15, accentKey: RED });
   impWallGear(W, hz + 8.2, 1.6, { seed: 16, accentKey: RED });
 
-  // --- countdown / pod status board on the W wall, flanked by red light slots, pod indicator row below
+  // --- muster points on the S half of the floor: two painted rings with a bay number, a row of low
+  // harness seats facing the route, harness racks between the hatch approaches, supply pallets
+  musterRing(kit, -6.5, 5.4, IMP_DECAL.bay01);
+  musterRing(kit, 3.5, 5.4, IMP_DECAL.bay02);
+  for (const x of [-9.0, -5.0, 1.0, 5.0]) bench(kit, x, 2.7, 3.0, 0, { back: false, pad: "rubber", padColor: PALETTE.impGreyDark, accentKey: RED, tag: "seat" });
+  for (const x of [-8.4, -4.2, 4.2, 8.4]) harnessRack(kit, x, -5.0);
+  pallet(kit, -0.6, 7.5, 0.4, 21);
+  pallet(kit, 7.8, 4.2, -0.3, 22);
+
+  // --- countdown / pod status board on the W wall, flanked by red light slots, pod indicator row below;
+  // a second (pod status grid) board and suit lockers fill the rest of the far wall
   wallScreen(W, hz, 2.35, 3.2, 1.6, "scrRed0", { accentKey: RED, bezel: 0.2, leds: 3 });
+  wallScreen(W, hz - 4.8, 2.3, 2.4, 1.3, "scrRed3", { accentKey: RED, bezel: 0.16, leds: 2 });
+  impWallLight(W, hz - 4.8, 3.3, { key: "emitWhiteSoft", w: 1.0 });
+  W.decal(IMP_DECAL.glyphs2, hz - 4.8, 1.35, 0.034, 1.2, { h: 0.3 });
+  for (const u of [hz + 3.9, hz + 5.0]) locker(W, u, 1.0, 2.1, { accentKey: RED, doors: 1, color: PALETTE.impWhite, decal: IMP_DECAL.vacuum, vents: false });
+  for (const u of [hz - 7.4, hz - 8.5]) locker(W, u, 1.0, 2.1, { accentKey: RED, doors: 1, color: PALETTE.impWhite, decal: IMP_DECAL.vacuum, vents: true });
+  W.box("impTrim", hz + 4.45, 2.35, 0.05, 2.3, 0.26, 0.1, { color: PALETTE.impBlack, texel: 1 });
+  W.box("impPanel1", hz + 4.45, 2.35, 0.105, 2.2, 0.18, 0.012, { color: PALETTE.impRed, uv: "world", texel: 1 });
+  W.decal(IMP_DECAL.glyphs1, hz + 4.45, 2.35, 0.112, 1.2, { h: 0.16 });
   for (const s of [-1, 1]) {
     W.box("impTrim", hz + s * 2.2, 2.35, 0.07, 0.24, 2.4, 0.08, { color: PALETTE.impBlack });
     W.box(RED, hz + s * 2.2, 2.35, 0.115, 0.08, 2.2, 0.012, { uv: "keep" });
@@ -148,6 +166,75 @@ export function buildEscapePods(kit, ctx, room) {
   }
   kit.light({ type: "point", pos: [0, 2.6, -7.6], color: 0xff4a38, intensity: 7.0, distance: 15, priority: 0.42 });
   kit.light({ type: "point", pos: [-12.0, 1.0, 0], color: 0xff5040, intensity: 3.0, distance: 7, priority: 0.3 });
+}
+
+/** Muster-point marking: painted white ring, red inner ring, four ticks, bay number decal in the centre. */
+function musterRing(kit, x, z, label) {
+  kit.add("impPanel1", new THREE.RingGeometry(1.5, 1.66, 48).rotateX(-Math.PI / 2), { pos: [x, 0.004, z], color: PALETTE.impWhite, uv: "world", texel: 1 });
+  kit.add(RED, new THREE.RingGeometry(1.34, 1.4, 48).rotateX(-Math.PI / 2), { pos: [x, 0.005, z], uv: "keep" });
+  for (let k = 0; k < 4; k++) {
+    const a = (k * Math.PI) / 2 + Math.PI / 4;
+    const g = new THREE.BoxGeometry(0.12, 0.004, 0.5);
+    g.rotateY(a);
+    kit.add("impPanel1", g, { pos: [x + Math.sin(a) * 1.1, 0.004, z + Math.cos(a) * 1.1], color: PALETTE.impWhite, uv: "world", texel: 1 });
+  }
+  floorDecal(kit, label, x, z, 1.1, Math.PI / 2, 0.006);
+  floorDecal(kit, IMP_DECAL.keepClear, x, z + 2.0, 0.9, Math.PI / 2, 0.006);
+}
+
+/** Free-standing harness rack: two posts, top bar, three hanging harnesses (straps + buckle), lit label. */
+function harnessRack(kit, x, z) {
+  const w = 1.6;
+  for (const s of [-1, 1]) {
+    kit.box("impTrim", x + s * (w / 2), 1.0, z, 0.1, 2.0, 0.1, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("impMetal", x + s * (w / 2), 0.04, z, 0.4, 0.08, 0.4, { color: PALETTE.impCharcoal, texel: 1 });
+  }
+  kit.cyl("impMetal", x, 1.92, z, 0.03, w, "x", { color: PALETTE.impGrey, segments: 10 });
+  kit.box("impTrim", x, 2.06, z, w + 0.2, 0.12, 0.16, { color: PALETTE.impBlack, texel: 1 });
+  kit.box(RED, x, 2.06, z + 0.085, 0.6, 0.05, 0.012);
+  for (let i = 0; i < 3; i++) {
+    const hx = x - w / 2 + ((i + 0.5) * w) / 3;
+    // hanger hook, shoulder straps to a chest buckle, belt loop
+    kit.cyl("impMetal", hx, 1.85, z, 0.015, 0.14, "y", { color: PALETTE.impGrey, segments: 6 });
+    kit.box("impTrim", hx, 1.76, z, 0.3, 0.05, 0.04, { color: PALETTE.impCharcoal });
+    for (const s of [-1, 1]) {
+      const strap = new THREE.BoxGeometry(0.05, 0.62, 0.015);
+      strap.rotateZ(s * 0.18);
+      kit.add("fabric", strap, { pos: [hx + s * 0.09, 1.44, z], color: PALETTE.impGreyDark, texel: 2 });
+    }
+    kit.box("impMetal", hx, 1.14, z, 0.14, 0.09, 0.03, { color: PALETTE.impGrey });
+    kit.box(i === 1 ? RED : "emitGreen", hx, 1.14, z + 0.02, 0.05, 0.03, 0.01);
+    kit.box("fabric", hx, 0.98, z, 0.34, 0.06, 0.02, { color: PALETTE.impGreyDark, texel: 2 });
+    for (const s of [-1, 1]) kit.box("fabric", hx + s * 0.1, 0.8, z, 0.05, 0.36, 0.015, { color: PALETTE.impGreyDark, texel: 2 });
+  }
+  kit.collider([x - w / 2 - 0.2, 0, z - 0.22], [x + w / 2 + 0.2, 2.1, z + 0.22], "rack");
+}
+
+/** Supply pallet: charcoal base with fork slots, three strapped crates, a hazard decal on the deck. */
+function pallet(kit, x, z, yaw, seed) {
+  const f = propFrame(kit, x, 0, z, yaw);
+  f.box("impMetal", 0, 0.07, 0, 1.6, 0.14, 1.3, { color: PALETTE.impCharcoal, texel: 1 });
+  for (const s of [-1, 1]) f.box("impTrim", s * 0.45, 0.06, 0, 0.36, 0.1, 1.34, { color: PALETTE.impBlack, texel: 1 });
+  f.box("impTrim", 0, 0.16, 0, 1.62, 0.04, 1.32, { color: PALETTE.impBlack, texel: 1 });
+  const crates = [
+    [-0.36, 0.18, -0.2, 0.8, 0.6, 0.8, PALETTE.impGrey, IMP_DECAL.medical],
+    [0.42, 0.18, 0.1, 0.7, 0.5, 0.9, PALETTE.impGreyDark, IMP_DECAL.vacuum],
+    [-0.3, 0.78, -0.15, 0.7, 0.45, 0.7, PALETTE.impGreyDark, IMP_DECAL.power],
+  ];
+  for (let i = 0; i < crates.length; i++) {
+    const [cx, cy, cz, sx, sy, sz, color, decal] = crates[i];
+    f.box("impPanel1", cx, cy + sy / 2, cz, sx, sy, sz, { color, uv: "world", texel: 1 });
+    f.box("impTrim", cx, cy + sy / 2, cz, sx + 0.02, sy * 0.12, sz + 0.02, { color: PALETTE.impBlack });
+    f.box("impTrim", cx, cy + sy - 0.03, cz, sx + 0.02, 0.06, sz + 0.02, { color: PALETTE.impBlack });
+    f.box("impTrim", cx, cy + 0.03, cz, sx + 0.02, 0.06, sz + 0.02, { color: PALETTE.impBlack });
+    f.decal(decal, cx, cy + sy * 0.55, cz + sz / 2 + 0.006, Math.min(0.36, sx * 0.45));
+    f.box(i === 1 ? RED : "emitGreen", cx + sx / 2 - 0.1, cy + sy - 0.1, cz + sz / 2 + 0.006, 0.05, 0.03, 0.01);
+  }
+  // two cargo straps over the stack
+  for (const sx of [-0.62, -0.05]) f.box("fabric", sx, 0.6, -0.18, 0.06, 0.9, 0.86, { color: PALETTE.impBlack, texel: 2 });
+  f.box("impPanel1", 0, 0.002, 0, 2.0, 0.004, 1.7, { color: PALETTE.impRed, uv: "world", texel: 1 });
+  f.box("impMetalRough", 0, 0.003, 0, 1.8, 0.004, 1.5, { color: PALETTE.impGreyDark, texel: 0.7 });
+  f.collider(-0.85, 0.85, 0, 1.3, -0.7, 0.7, "pallet");
 }
 
 /** Row of alternating red / white floor stripe blocks along x at z (2 mm proud, 8 mm tall). */

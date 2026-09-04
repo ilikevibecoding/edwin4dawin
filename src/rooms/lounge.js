@@ -1,20 +1,23 @@
-// Officers' Lounge (Deck B): a long bar with a backlit back-bar along the E wall, booths along
-// the N and S walls, a holo-game table and a second round table in the middle, and a seating
-// group in front of a large nav chart on the S wall. Amber mood lighting: sconces between the
-// booths, slatted light boxes over the bar, warm low keys. Animated: one holo-game piece turns
-// slowly and the nav chart's course marker pulses.
+// Officers' Lounge (Deck B): a long bar with a lit under-counter and a backlit back-bar along the
+// E wall under a black canopy, booths along the N and S walls, four table clusters with stools on
+// the open floor (holo-game table with creature pieces, round table, a low pair, a tall leaner) and
+// a seating group in front of a large nav chart on the S wall. Amber mood lighting: frosted amber
+// sconces between the booths, pendants over the tables, warm low keys under a dark ceiling.
+// Animated: one holo-game creature turns slowly and the nav chart's course marker pulses.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { rng } from "../kit.js";
-import { impRoomShell, impWallLight, impWallGear, lux } from "./imperial_kit.js";
+import { impRoomShell, impWallGear, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
-import { bench, table, roundTable, stool, wallScreen, locker, fakeDoor, cableRun, lightBox, holoFigure, holoFigureStatic, rod, floorStrip } from "./deck_b_props.js";
+import { bench, table, roundTable, stool, wallScreen, locker, fakeDoor, cableRun, holoCreature, holoCreatureStatic, rod, floorStrip, deckBSetup } from "./deck_b_props.js";
 
 const CARPET = new THREE.Color("#2b2a2e");
 const PAD = new THREE.Color("#7a5a44");
 const PAD_ALT = new THREE.Color("#4f5868");
+const SCONCE = "deckB_emitAmberWarm";
 
 export function buildLounge(kit, ctx, room) {
+  deckBSetup(kit);
   const [w, h, d] = room.size;
   const hx = w / 2;
   const hz = d / 2;
@@ -26,7 +29,7 @@ export function buildLounge(kit, ctx, room) {
     wall: { panelW: 1.6, features: { vent: 0.05, screen: 0.03 }, altChance: 0.3 },
     walls: { E: { features: { vent: 0.03 } } },
     floor: { lane: false },
-    ceiling: { troughs: 2, troughW: 0.5, beamStep: 3.2 },
+    ceiling: { troughs: 2, troughW: 0.5, beamStep: 3.2, lightKey: "emitAmberDim" },
   });
   const N = walls.N.frame; // u = x + hx
   const S = walls.S.frame; // u = hx - x
@@ -75,23 +78,29 @@ export function buildLounge(kit, ctx, room) {
     kit.cyl("impMetal", s * 1.75 + 0.2, 0.52, 6.5, 0.04, 0.09, "y", { color: PALETTE.impGrey, segments: 10 });
   }
   kit.boxMM("fabric", [-3.6, 0.002, 3.9], [3.6, 0.014, 7.4], { color: CARPET, texel: 1.5 });
-  for (const s of [-1, 1]) floorStrip(kit, accentKey, s * 3.65, 3.9, s * 3.69, 7.4);
+  for (const s of [-1, 1]) floorStrip(kit, "emitAmberDim", s * 3.65, 3.9, s * 3.69, 7.4);
 
-  // --- holo-game table (S half) and a plain round table (N half) in the middle of the floor
-  const gameX = -5.0;
+  // --- four table clusters on the open floor: the holo-game table (S half), a round table (N half),
+  // a pair of low tables in the middle and a tall leaner table nearer the bar; stools at all of them
+  const gameX = -6.8;
   const gameZ = 5.0;
+  const rtX = -6.8; // round table cluster (N half), mirrored across the entrance axis
+  const rtZ = -5.0;
   roundTable(kit, gameX, gameZ, 0.8, { h: 0.8, accentKey });
   const gameTop = 0.8 + 0.012;
   kit.add("emitBlue", new THREE.TorusGeometry(0.52, 0.008, 6, 48).rotateX(Math.PI / 2), { pos: [gameX, gameTop + 0.008, gameZ], uv: "keep" });
   kit.add("emitBlue", new THREE.TorusGeometry(0.26, 0.006, 6, 32).rotateX(Math.PI / 2), { pos: [gameX, gameTop + 0.008, gameZ], uv: "keep" });
+  // holo-game pieces: two sides (blue / red-orange) of alien creature silhouettes on the two rings
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     const r = i % 2 ? 0.52 : 0.38;
-    kit.box("impGloss", gameX + Math.cos(a) * r, gameTop + 0.006, gameZ + Math.sin(a) * r, 0.1, 0.012, 0.1);
-    kit.box("emitBlue", gameX + Math.cos(a) * r, gameTop + 0.013, gameZ + Math.sin(a) * r, 0.02, 0.006, 0.02);
-    if (i !== 3) holoFigureStatic(kit, gameX + Math.cos(a) * r, gameTop + 0.014, gameZ + Math.sin(a) * r, i % 3 === 0 ? 0.26 : 0.2, i % 2 === 0);
+    const px = gameX + Math.cos(a) * r;
+    const pz = gameZ + Math.sin(a) * r;
+    kit.box("impGloss", px, gameTop + 0.006, pz, 0.1, 0.012, 0.1);
+    kit.box(i % 2 ? "emitRedImp" : "emitBlue", px, gameTop + 0.013, pz, 0.02, 0.006, 0.02);
+    if (i !== 3) holoCreatureStatic(kit, px, gameTop + 0.014, pz, i, i % 3 === 0 ? 0.3 : 0.24, i % 2 ? "deckB_holoRed" : "holo", -a + Math.PI);
   }
-  const piece = holoFigure(ctx.materials, 0.3, true);
+  const piece = holoCreature(kit.materials, 3, 0.3, "deckB_holoRedBright");
   const pa = (3 / 8) * Math.PI * 2 + Math.PI / 8;
   piece.position.set(gameX + Math.cos(pa) * 0.52, gameTop + 0.014, gameZ + Math.sin(pa) * 0.52);
   kit.attach(piece);
@@ -99,14 +108,35 @@ export function buildLounge(kit, ctx, room) {
     const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
     stool(kit, gameX + Math.cos(a) * 1.25, gameZ + Math.sin(a) * 1.25, { h: 0.5, pad: "fabric", padColor: PAD });
   }
-  roundTable(kit, -5.0, -5.0, 0.62, { h: 0.76, accentKey });
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
-    stool(kit, -5.0 + Math.cos(a) * 1.05, -5.0 + Math.sin(a) * 1.05, { h: 0.5, pad: "fabric", padColor: PAD_ALT });
+  kit.cyl("impMetal", gameX, 0.002, gameZ, 1.8, 0.004, "y", { color: PALETTE.impCharcoal, segments: 40 });
+  // round table cluster (N half)
+  roundTable(kit, rtX, rtZ, 0.62, { h: 0.76, accentKey });
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    stool(kit, rtX + Math.cos(a) * 1.05, rtZ + Math.sin(a) * 1.05, { h: 0.5, pad: "fabric", padColor: PAD_ALT });
   }
-  kit.cyl("impMetal", -5.2, 0.822, -4.9, 0.04, 0.1, "y", { color: PALETTE.impGrey, segments: 10 });
-  kit.cyl("impGloss", -4.75, 0.882, -5.15, 0.05, 0.22, "y", { segments: 10 });
-  kit.cyl(accentKey, -4.75, 1.002, -5.15, 0.02, 0.02, "y", { segments: 8 });
+  kit.cyl("impMetal", rtX, 0.002, rtZ, 1.55, 0.004, "y", { color: PALETTE.impCharcoal, segments: 40 });
+  kit.cyl("impMetal", rtX - 0.2, 0.822, rtZ + 0.1, 0.04, 0.1, "y", { color: PALETTE.impGrey, segments: 10 });
+  kit.cyl("impGloss", rtX + 0.25, 0.882, rtZ - 0.15, 0.05, 0.22, "y", { segments: 10 });
+  kit.cyl(accentKey, rtX + 0.25, 1.002, rtZ - 0.15, 0.02, 0.02, "y", { segments: 8 });
+  // middle cluster: two low tables sharing a carpet disc, three stools each
+  for (const [tx, tz, rot] of [[0.6, -3.9, 0.3], [2.3, -2.3, 1.4]]) {
+    roundTable(kit, tx, tz, 0.5, { h: 0.5, accentKey });
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + rot;
+      stool(kit, tx + Math.cos(a) * 0.95, tz + Math.sin(a) * 0.95, { h: 0.46, pad: "fabric", padColor: i % 2 ? PAD : PAD_ALT });
+    }
+    kit.cyl("impMetal", tx + 0.2, 0.522, tz - 0.15, 0.04, 0.09, "y", { color: PALETTE.impGrey, segments: 10 });
+  }
+  kit.cyl("impMetal", 1.45, 0.002, -3.1, 2.4, 0.004, "y", { color: PALETTE.impCharcoal, segments: 48 });
+  // leaner table nearer the bar: tall, three tall stools, a lit rim
+  roundTable(kit, 3.8, 1.6, 0.45, { h: 1.05, accentKey });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.9;
+    stool(kit, 3.8 + Math.cos(a) * 0.9, 1.6 + Math.sin(a) * 0.9, { h: 0.72, pad: "fabric", padColor: PAD });
+  }
+  kit.cyl("impGloss", 3.95, 1.16, 1.5, 0.05, 0.2, "y", { segments: 10 });
+  kit.cyl(accentKey, 3.95, 1.27, 1.5, 0.02, 0.02, "y", { segments: 8 });
 
   // --- W wall: plaques either side of the door, sconces, unit glyphs over the door
   for (const s of [-1, 1]) {
@@ -122,27 +152,29 @@ export function buildLounge(kit, ctx, room) {
       W.decal(plaques[(i + (s > 0 ? 3 : 0)) % 6], pu, pv, 0.164, 0.42);
     }
     W.box(accentKey, u, 1.12, 0.125, 2.2, 0.02, 0.012);
-    impWallLight(W, u, 3.05, { key: accentKey, w: 0.6 });
+    sconce(W, u, 3.1);
     W.collider(u - 1.3, u + 1.3, 1.1, 2.9, 0, 0.18, "plaques");
   }
-  impWallLight(W, 1.6, 2.6, { key: accentKey, w: 0.5 });
-  impWallLight(W, d - 1.6, 2.6, { key: accentKey, w: 0.5 });
-  // runner from the door into the room
-  kit.boxMM("fabric", [-hx + 0.5, 0.002, -1.0], [-8.0, 0.014, 1.0], { color: CARPET, texel: 1.5 });
-  for (const s of [-1, 1]) floorStrip(kit, accentKey, -hx + 0.6, s * 1.03, -8.0, s * 1.07);
+  sconce(W, 1.6, 2.4);
+  sconce(W, d - 1.6, 2.4);
+  // (the amber runner from the door is gone: the floor stays plain deck up to the clusters)
 
   // --- E wall ends beyond the back-bar: supply locker and cable run (N), galley door (S)
   locker(E, 2.0, 1.2, 2.0, { accentKey, doors: 1, color: PALETTE.impGrey, decal: IMP_DECAL.glyphs3 });
   cableRun(E, 0.6, 3.3, 3.0, { n: 3, seed: 41, r: 0.03 });
   impWallGear(E, 3.4, 1.7, { seed: 9, accentKey });
   fakeDoor(E, d - 1.9, 1.2, 2.2, { accentKey, statusKey: "emitGreen", label: IMP_DECAL.glyphs3 });
-  impWallLight(E, d - 0.8, 3.1, { key: accentKey, w: 0.4 });
+  sconce(E, d - 0.9, 2.6);
 
-  // --- ceiling light boxes: three over the bar, one over each round table, one over the lounge group
-  for (const z of [-5.0, -1.67, 1.67, 5.0]) lightBox(kit, 10.0, z, h, 1.2, 2.4, "emitWarmSoft", { slats: 6, axis: "z", accentKey });
-  lightBox(kit, gameX, gameZ, h, 1.8, 1.8, "emitWarmSoft", { slats: 5, axis: "x", accentKey });
-  lightBox(kit, -5.0, -5.0, h, 1.8, 1.8, "emitWarmSoft", { slats: 5, axis: "x", accentKey });
-  lightBox(kit, 0, 5.0, h, 3.2, 1.2, "emitWarmSoft", { slats: 8, axis: "x", accentKey });
+  // --- ceiling: a black canopy over the bar with four amber downlights, amber pendants over the
+  // table clusters and the lounge group (no cool-white light boxes: the room is amber)
+  barCanopy(kit, 9.4, h, accentKey);
+  pendant(kit, gameX, gameZ, h, 0.34, accentKey);
+  pendant(kit, rtX, rtZ, h, 0.3, accentKey);
+  pendant(kit, 0.6, -3.9, h, 0.24, accentKey);
+  pendant(kit, 2.3, -2.3, h, 0.24, accentKey);
+  pendant(kit, 3.8, 1.6, h, 0.22, accentKey);
+  for (const s of [-1, 1]) pendant(kit, s * 1.75, 5.6, h, 0.26, accentKey);
 
   // --- animation: the rotating game piece and the course marker sliding along the chart
   kit.onUpdate((dt, tt) => {
@@ -153,16 +185,54 @@ export function buildLounge(kit, ctx, room) {
     marker.visible = Math.sin(tt * 6) > -0.4;
   });
 
-  // --- lights (8): warm keys over the bar, floor and door, two over the booth row, a back-bar wash,
-  // a cooler key on the chart seating, blue holo glow under the game table
-  kit.light({ type: "point", pos: [11.2, 2.7, 0], color: 0xffc98a, intensity: lux(2.4, 2.6), distance: 10, priority: 0.5 });
-  kit.light({ type: "point", pos: [bar.frontX - 1.0, h - 1.0, 0], color: 0xffe2c0, intensity: lux(h - 1.0, 1.8), distance: 12, priority: 0.48 });
-  kit.light({ type: "point", pos: [-4.0, h - 1.0, -1.0], color: 0xffe2c0, intensity: lux(h - 1.0, 1.8), distance: 12, priority: 0.46 });
-  kit.light({ type: "point", pos: [-7.5, h - 1.0, -7.0], color: 0xffd9b0, intensity: lux(h - 1.0, 2.2), distance: 12, priority: 0.42 });
-  kit.light({ type: "point", pos: [1.5, h - 1.0, -7.0], color: 0xffd9b0, intensity: lux(h - 1.0, 2.2), distance: 12, priority: 0.41 });
-  kit.light({ type: "point", pos: [0, h - 1.0, 5.5], color: 0xe6ecff, intensity: lux(h - 1.0, 1.6), distance: 11, priority: 0.44 });
-  kit.light({ type: "point", pos: [-10.5, h - 1.0, 0], color: 0xffe2c0, intensity: lux(h - 1.0, 1.6), distance: 11, priority: 0.4 });
+  // --- lights (8): amber keys over the bar and its lit under-counter, warm keys over the clusters and
+  // the booth rows, a cooler key on the chart seating, blue holo glow under the game table
+  kit.light({ type: "point", pos: [9.6, h - 0.7, 0], color: 0xffbf80, intensity: lux(h - 0.7, 2.8), distance: 12, priority: 0.5 });
+  kit.light({ type: "point", pos: [bar.frontX - 0.7, 0.5, 0], color: 0xffb56b, intensity: 4.5, distance: 9, priority: 0.47 });
+  kit.light({ type: "point", pos: [1.5, h - 0.8, -3.0], color: 0xffd0a0, intensity: lux(h - 0.8, 3.2), distance: 13, priority: 0.48 });
+  kit.light({ type: "point", pos: [-7.5, h - 1.0, -7.0], color: 0xffc898, intensity: lux(h - 1.0, 2.3), distance: 12, priority: 0.42 });
+  kit.light({ type: "point", pos: [1.5, h - 1.0, -7.0], color: 0xffc898, intensity: lux(h - 1.0, 2.3), distance: 12, priority: 0.41 });
+  kit.light({ type: "point", pos: [0, h - 1.0, 5.5], color: 0xf0e6dc, intensity: lux(h - 1.0, 2.3), distance: 11, priority: 0.44 });
+  kit.light({ type: "point", pos: [-9.0, h - 1.0, 0], color: 0xffd0a0, intensity: lux(h - 1.0, 2.6), distance: 12, priority: 0.4 });
   kit.light({ type: "point", pos: [gameX, 1.5, gameZ], color: 0x5fa8ff, intensity: 2.2, distance: 5, priority: 0.3 });
+}
+
+/** Lounge sconce: black bracket, frosted amber half-shade, charcoal cap, a soft up-wash strip on the wall above. */
+function sconce(frame, u, v) {
+  frame.box("impTrim", u, v - 0.1, 0.06, 0.16, 0.32, 0.12, { color: PALETTE.impBlack, texel: 1 });
+  frame.box("impMetal", u, v + 0.18, 0.13, 0.5, 0.03, 0.26, { color: PALETTE.impCharcoal, texel: 1 });
+  const shade = new THREE.CylinderGeometry(0.15, 0.17, 0.3, 14, 1, true, 0, Math.PI);
+  shade.rotateY(Math.PI / 2);
+  frame.add(SCONCE, shade, u, v, 0.13, { uv: "keep" });
+  frame.box("impMetal", u, v - 0.16, 0.13, 0.38, 0.02, 0.2, { color: PALETTE.impCharcoal });
+  frame.box("emitAmberDim", u, v + 0.34, 0.03, 0.4, 0.5, 0.008, { uv: "keep" });
+}
+
+/** Hanging pendant: thin rod, black cone shade with an amber emitter inside, accent ring on the rim. */
+function pendant(kit, x, z, ceilY, r, accentKey) {
+  const y = ceilY - 1.05;
+  kit.cyl("impTrim", x, ceilY - 0.03, z, 0.1, 0.06, "y", { color: PALETTE.impBlack, segments: 12 });
+  kit.cyl("impMetal", x, (ceilY - 0.06 + y + 0.12) / 2, z, 0.012, ceilY - 0.06 - y - 0.12, "y", { color: PALETTE.impGreyDark, segments: 6 });
+  kit.add("impTrim", new THREE.CylinderGeometry(r * 0.3, r, 0.26, 18, 1, true), { pos: [x, y, z], color: PALETTE.impBlack, uv: "scale", uvScale: [1, 0.3] });
+  kit.cyl("impTrim", x, y + 0.13, z, r * 0.3, 0.02, "y", { color: PALETTE.impBlack, segments: 12 });
+  kit.cyl(SCONCE, x, y - 0.06, z, r * 0.62, 0.012, "y", { segments: 18, uv: "keep" });
+  kit.add(accentKey, new THREE.TorusGeometry(r + 0.01, 0.008, 6, 28).rotateX(Math.PI / 2), { pos: [x, y - 0.12, z], uv: "keep" });
+}
+
+/** Black canopy over the bar with four amber downlights and an accent hairline along its front edge. */
+function barCanopy(kit, x, ceilY, accentKey) {
+  const z0 = -6.2;
+  const z1 = 6.2;
+  kit.boxMM("impTrim", [x - 1.0, ceilY - 0.5, z0], [x + 1.0, ceilY, z1], { color: PALETTE.impBlack, texel: 1 });
+  kit.boxMM("impMetal", [x - 0.9, ceilY - 0.52, z0 + 0.1], [x + 0.9, ceilY - 0.5, z1 - 0.1], { color: PALETTE.impCharcoal, texel: 1 });
+  kit.boxMM(accentKey, [x - 1.006, ceilY - 0.42, z0 + 0.2], [x - 0.994, ceilY - 0.4, z1 - 0.2]);
+  for (const z of [-4.5, -1.5, 1.5, 4.5]) {
+    kit.cyl("impTrim", x - 0.25, ceilY - 0.6, z, 0.2, 0.16, "y", { color: PALETTE.impBlack, segments: 16 });
+    kit.cyl(SCONCE, x - 0.25, ceilY - 0.685, z, 0.15, 0.012, "y", { segments: 16, uv: "keep" });
+  }
+  // glass rack hanging from the canopy's front edge
+  kit.boxMM("impMetal", [x - 0.95, ceilY - 0.9, z0 + 1.0], [x - 0.35, ceilY - 0.86, z1 - 1.0], { color: PALETTE.impGreyDark, texel: 1 });
+  for (let k = 0; k < 18; k++) kit.cyl("impGloss", x - 0.65, ceilY - 0.98, z0 + 1.3 + k * 0.56, 0.04, 0.14, "y", { segments: 8 });
 }
 
 /**
@@ -188,7 +258,7 @@ function booth(kit, frame, bx, wallZ, side, hx, accentKey, idx, partitionAfter) 
   }
   // wall fittings above the booth: sconce, plaque, call button strip
   const u = side < 0 ? bx + hx : hx - bx;
-  impWallLight(frame, u, 2.15, { key: accentKey, w: 0.7 });
+  sconce(frame, u, 2.2);
   frame.box("impTrim", u, 2.85, 0.03, 0.5, 0.5, 0.06, { color: PALETTE.impBlack });
   frame.box("impPanel1", u, 2.85, 0.065, 0.42, 0.42, 0.01, { color: PALETTE.impGrey, uv: "world", texel: 1 });
   frame.decal([IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03, IMP_DECAL.glyphs1, IMP_DECAL.glyphs2, IMP_DECAL.cog][idx % 6], u, 2.85, 0.072, 0.34);
@@ -208,9 +278,11 @@ function buildBar(kit, ctx, E, hx, hz, accentKey) {
   const z0 = -6.0;
   const z1 = 6.0;
   const top = 1.08;
-  // body: black shell, grey inset panels on the front with black frames, kick recess
+  // body: black shell, grey inset panels on the front with black frames, kick recess with the lit
+  // under-counter strip (amber, facing out and down onto the deck)
   kit.boxMM("impTrim", [x0, 0.12, z0], [x1, top - 0.06, z1], { color: PALETTE.impBlack, texel: 1 });
   kit.boxMM("impMetal", [x0 + 0.1, 0.0, z0 + 0.05], [x1, 0.12, z1 - 0.05], { color: PALETTE.impCharcoal, texel: 1 });
+  kit.boxMM("emitAmber", [x0 + 0.02, 0.09, z0 + 0.2], [x0 + 0.1, 0.115, z1 - 0.2], { uv: "keep" });
   const nP = 8;
   for (let i = 0; i < nP; i++) {
     const za = z0 + 0.1 + ((z1 - z0 - 0.2) * i) / nP + 0.05;
@@ -251,8 +323,8 @@ function buildBar(kit, ctx, E, hx, hz, accentKey) {
     stool(kit, x0 - 0.75, z, { h: 0.72, pad: "fabric", padColor: PAD });
     kit.add("impMetal", new THREE.TorusGeometry(0.19, 0.012, 6, 18).rotateX(Math.PI / 2), { pos: [x0 - 0.75, 0.3, z], color: PALETTE.impGrey, uv: "keep" });
   }
-  // amber floor strip along the stool line
-  floorStrip(kit, accentKey, x0 - 1.4, z0, x0 - 1.36, z1);
+  // dark deck inlay under the stools (no floor LED: the under-counter strip does the glowing)
+  kit.boxMM("impMetalRough", [x0 - 1.5, 0.002, z0], [x0 - 0.02, 0.008, z1], { color: PALETTE.impCharcoal, texel: 0.7 });
 
   // back-bar on the E wall: cabinet base, backlit panel, three shelves of bottles, glass rack
   const u0 = z0 + hz;
