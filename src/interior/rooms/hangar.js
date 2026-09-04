@@ -460,8 +460,9 @@ function cradleBay(kit, ctx, lib, y0) {
   deckStrip(kit, "emitAmber", bay[0], bay[3] - 0.12, bay[2], bay[3], y0);
   deckStrip(kit, "emitAmber", bay[0], bay[1], bay[0] + 0.12, bay[3], y0);
   deckStrip(kit, "emitAmber", bay[2] - 0.12, bay[1], bay[2], bay[3], y0);
-  // (the FUEL stencil on the aft edge reads for anyone walking in from the lift corridor, i.e. facing -z)
-  deckLabel(kit, cx, y0, cz + 5.6, 5, 18, 0);
+  // (the FUEL stencil on the aft edge reads for anyone walking in from the lift corridor, i.e. facing -z; it
+  // sits toward the wall so its end clears the DANGER stencil along the well edge at x -23.5)
+  deckLabel(kit, cx - 1.8, y0, cz + 5.6, 5, 18, 0);
   deckDecal(kit, cx + 3.2, y0, cz - 5.6, 1.4, 7, -Math.PI / 2);
   // ground kit. Two viewpoints are fixed: the lift-corridor door at (-30.6, 479.5) looks at the room centre
   // (room:hangar) and the hangarDeck view stands at (-26, 465) looking across the well. The lane from the door
@@ -622,7 +623,9 @@ function dynamics(kit, ctx, mats, y0, yTop, W) {
   yokeLamp.userData.moving = true;
   ctx.lights.cool.push(yokeLamp);
   launchCradle(kit, ctx, mats, { z: RAIL.z, y: RAIL.y, x0: -14.5, x1: 10, xStart: RAIL.x, wallX: 32, variant: 3, labelIdx: 4, heading: 1.22, lamp: yokeLamp });
-  blastLeaves(ctx, mats, { well: W, y: y0 - 0.95, thickness: 0.9, protrude: 1.6, travel: 0.6, period: 34 });
+  // (2.2 m of leaf in the opening: from the railing, the line of sight over the raised lip reaches the outer
+  // 0.7 m of the leaf's hazard top; at 1.6 m the leaves were hidden by the lip from anywhere on the deck)
+  blastLeaves(ctx, mats, { well: W, y: y0 - 0.95, thickness: 0.9, protrude: 2.2, travel: 0.6, period: 34 });
   shimmerSheet(ctx, W, y0 - 0.42);
   tractorEmitters(kit, ctx, { positions: [[-4.5, 445], [4.5, 445], [-4.5, 465], [4.5, 465], [-4.5, 485], [4.5, 485]], yCeil: yTop, yTarget: y0 - 1.6, radius: 4.2 });
   const rx = W.x1 + 2.3;

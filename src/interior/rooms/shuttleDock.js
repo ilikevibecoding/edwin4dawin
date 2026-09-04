@@ -12,13 +12,17 @@ import { roomFloorY } from "../../config/shipSpec.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, bayWalls, crate, toolCart, pedestalConsole, shadowCasters,
   cabinet, compactBank, lightBar, pipeRun, stairTower, stairRun, beacons, bayCeiling, shuttleShape, SHUTTLE, fuelBowser,
-  ladder, doorSurround, displayWall, ensureLabels, ensureDiffuser, deckLabel, cableTray, BLACK,
+  ladder, doorSurround, displayWall, ensureLabels, ensureDiffuser, deckLabel, cableTray, truss, BLACK,
 } from "../../hangar/machinery.js";
 
 const CAT_H = 8; // catwalk height above the deck
 const DOOR = { x0: -10, x1: 10, z0: 364, z1: 396 }; // sealed belly door
 const RECESS = 0.15;
 const SHIP = { x: 0, z: 380 }; // shuttle hull centre on the pad, nose toward +z (the hangar door)
+// pooled high-bay lights and their fixtures: a 3 x 3 grid, rows midway between the bayCeiling ribs (every
+// 3.3 m from z0) and 5 m from the roof trusses, columns clear of the four ceiling light strips (x +-7 / +-21)
+const CEIL_LIGHTS = [];
+for (const z of [358.2, 378, 397.9]) for (const x of [-13, 0, 13]) CEIL_LIGHTS.push([x, z]);
 
 export function build(kit, ctx, room, lib) {
   const P = lib.PALETTE;
@@ -32,7 +36,7 @@ export function build(kit, ctx, room, lib) {
   const shell = lib.roomShell(kit, ctx, room, { style: "dark", floor: false, ceiling: false, lights: false, skipWalls: ["-z", "+z", "-x", "+x"] });
   // light strip row 5.4..11.6 puts a wall light above the catwalk; no kick strip (keeps rubber out of the room)
   bayWalls(kit, room, shell, y0, { rows: [2.4, 5.4, 11.6, 16.8, room.height], lightRow: 1, kick: false, lampMat: "emitBlue", seed: 71, rowStyles: ["bays", null, "plate", "vent"] });
-  bayCeiling(kit, room, y0, { rows: 3 });
+  bayCeiling(kit, room, y0, { rows: 4, gaps: CEIL_LIGHTS.map(([x, z]) => [x, z, 2.6]) });
   shadowCasters(kit, ["paintedMetal"]);
   doorSurround(kit, room, room.doors[0], y0, { label: 0, labelW: 5 });
 
@@ -384,24 +388,21 @@ function catwalk(kit, ctx, lib, room, y0) {
 // ---------------------------------------------------------------- ceiling: light banks, ducts, pipe runs, trusses
 function ceiling(kit, P, room, yTop) {
   const { x0, x1, z0, z1 } = room;
-  // compact high-bay fixtures at the eight pooled point lights (see lights): a 600 cd source blows anything
-  // within a metre of it white, so the housing is small and its plate flush (a 7 m bank read as a 7 m white
-  // slab); z between the bayCeiling ribs (every 3.3 m from z0)
-  for (const sx of [-1, 1]) for (const z of [362, 381.4, 398]) compactBank(kit, sx * 13, yTop, z, "emitDiffuser");
-  for (const z of [355, 405]) compactBank(kit, 0, yTop, z, "emitDiffuser");
+  // compact high-bay fixtures at the nine pooled point lights (see lights): a 600 cd source blows anything
+  // within a metre of it white, so the housing is small and its plate flush (a 7 m bank read as a 7 m white slab)
+  for (const [x, z] of CEIL_LIGHTS) compactBank(kit, x, yTop, z, "emitDiffuser");
   for (const s of [-1, 1]) {
     kit.boxMM("paintedMetal", [s * 24 - 0.7, yTop - 1.6, z0], [s * 24 + 0.7, yTop - 0.4, z1], { color: P.slate, uv: "world", texel: 0.6 });
     pipeRun(kit, s * 26.4, yTop - 1.0, (z0 + z1) / 2, z1 - z0, "z", 0.2, P.steel, 8);
     pipeRun(kit, s * 26.4, yTop - 1.6, (z0 + z1) / 2, z1 - z0, "z", 0.12, P.orange, 8);
     cableTray(kit, s * 20, yTop - 1.9, (z0 + z1) / 2, z1 - z0 - 2, "z", 0.7);
   }
-  pipeRun(kit, 0, yTop - 0.8, z0 + 4, x1 - x0, "x", 0.18, P.steel, 8);
-  pipeRun(kit, 0, yTop - 0.8, z1 - 4, x1 - x0, "x", 0.18, P.gunmetal, 8);
-  // transverse roof trusses (between the light banks)
-  for (const z of [357.5, 366.5, 375.5, 384.5, 393.5, 402.5]) {
-    kit.boxMM("paintedMetal", [-22.5, yTop - 1.4, z - 0.5], [22.5, yTop - 0.1, z + 0.5], { color: P.darkMetal, uv: "world", texel: 0.6 });
-    for (let x = -21; x < 22; x += 6) kit.box("metal", x, yTop - 0.75, z, 0.2, 1.1, 1.1, { color: P.steel, texel: 1.5 });
-  }
+  pipeRun(kit, 0, yTop - 0.8, z0 + 1.5, x1 - x0, "x", 0.18, P.steel, 8);
+  pipeRun(kit, 0, yTop - 0.8, z1 - 1.5, x1 - x0, "x", 0.18, P.gunmetal, 8);
+  // two heavy open Warren roof girders midway between the light rows (9.9 m from any 600 cd source; the
+  // ribs are the secondary structure). Anything with a face toward the door within ~6 m of those lights,
+  // like the six solid beams that stood here, renders as a blown bar that bloom turns into a halo
+  for (const z of [368.1, 387.95]) truss(kit, { axis: "x", from: -22.5, to: 22.5, at: z, yTop: yTop - 0.02, yBot: yTop - 2.0, panel: 3, chord: 0.45, web: 0.22, color: P.darkMetal, chordColor: P.slate });
 }
 
 // ---------------------------------------------------------------- deck props: ground gear along the walls
@@ -433,11 +434,10 @@ function props(kit, lib, room, y0) {
 // ---------------------------------------------------------------- lighting: cool floods, blue accents, amber practicals
 function lights(ctx, lib, y0, yTop) {
   const cool = (i, d, p, c = 0xdfe8ff) => ctx.lights.cool.push(lib.pointLight(c, i, d, p));
-  // (inverse-square: 22 m from the ceiling to the deck). The lights sit in the ceiling plane inside the recessed
-  // bank housings: hung 1.2 m under the plate they lit it into four blown white halos
-  for (const sx of [-1, 1]) for (const z of [362, 381.4, 398]) cool(600, 70, [sx * 13, yTop + 0.04, z]);
-  cool(360, 50, [0, yTop + 0.04, 355]);
-  cool(360, 50, [0, yTop + 0.04, 405]);
+  // (inverse-square: 22 m from the ceiling to the deck). The lights sit in the ceiling plane inside the fixture
+  // housings (hung 1.2 m under the plate they lit it into blown white halos); the centre column over the hull
+  // is a step weaker so the shuttle's top reads as shape, not glare, from the catwalk
+  for (const [x, z] of CEIL_LIGHTS) cool(x === 0 ? 480 : 600, 70, [x, yTop + 0.04, z]);
   // flood-mast heads light the pad ends, blue accents under the hull and at the nose
   for (const sx of [-1, 1]) for (const z of [365.5, 394.5]) cool(140, 30, [sx * 9.4, y0 + 6.2, z], 0xe8f0ff);
   // (the nose accent stands on the deck 3 m ahead of the nose tip: at 60 cd 0.7 m off the tip it blew the

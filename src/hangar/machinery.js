@@ -335,7 +335,7 @@ export function bayWalls(kit, room, shell, y0, opts = {}) {
  * but with the channel housings in BLACK, so the room does not pick up satinBlack for four boxes.
  */
 export function bayCeiling(kit, room, y0, opts = {}) {
-  const { rows = 3, lightMat = "emitWhiteSoft", ribStep = 3.2, ribDepth = 0.4, depth = WALL_T } = opts;
+  const { rows = 3, lightMat = "emitWhiteSoft", ribStep = 3.2, ribDepth = 0.4, depth = WALL_T, gaps = [] } = opts;
   const { x0, x1, z0, z1 } = room;
   const yTop = y0 + room.height;
   const w = x1 - x0;
@@ -343,10 +343,27 @@ export function bayCeiling(kit, room, y0, opts = {}) {
   kit.boxMM("paintedMetal", [x0 - depth, yTop, z0 - depth], [x1 + depth, yTop + 0.12, z1 + depth], { color: PALETTE.gunmetal, uv: "world", texel: 0.7 });
   const longX = w >= d;
   const ribCount = Math.max(1, Math.floor((longX ? w : d) / ribStep));
+  // ribs run across the short axis; `gaps` ([x, z, r]) cut them around ceiling-plane point lights, whose
+  // faces a rib 1.7 m away would otherwise render as a blown bar (several hundred candela at that range)
+  const rib = (across, a0, a1) => {
+    if (a1 - a0 < 0.3) return;
+    if (longX) kit.boxMM("paintedMetal", [across - 0.09, yTop - ribDepth, a0], [across + 0.09, yTop, a1], { color: PALETTE.darkMetal, texel: 1.2 });
+    else kit.boxMM("paintedMetal", [a0, yTop - ribDepth, across - 0.09], [a1, yTop, across + 0.09], { color: PALETTE.darkMetal, texel: 1.2 });
+  };
   for (let i = 1; i < ribCount; i++) {
     const t = i / ribCount;
-    if (longX) kit.box("paintedMetal", x0 + w * t, yTop - ribDepth / 2, (z0 + z1) / 2, 0.18, ribDepth, d, { color: PALETTE.darkMetal, texel: 1.2 });
-    else kit.box("paintedMetal", (x0 + x1) / 2, yTop - ribDepth / 2, z0 + d * t, w, ribDepth, 0.18, { color: PALETTE.darkMetal, texel: 1.2 });
+    const across = longX ? x0 + w * t : z0 + d * t;
+    let a = longX ? z0 : x0;
+    const end = longX ? z1 : x1;
+    const cuts = gaps
+      .filter(([gx, gz, r]) => Math.abs((longX ? gx : gz) - across) < r)
+      .map(([gx, gz, r]) => [(longX ? gz : gx) - r, (longX ? gz : gx) + r])
+      .sort((p, q) => p[0] - q[0]);
+    for (const [c0, c1] of cuts) {
+      rib(across, a, Math.min(c0, end));
+      a = Math.max(a, c1);
+    }
+    rib(across, a, end);
   }
   for (let r = 0; r < rows; r++) {
     const t = (r + 0.5) / rows;
@@ -1081,9 +1098,10 @@ export function blastLeaves(ctx, mats, o) {
   for (const side of [-1, 1]) {
     const leaf = buildGroup(mats, name + (side < 0 ? ".port" : ".stbd"), (k) => {
       k.box("paintedMetal", 0, 0, 0, leafW, thickness, len, { color: PALETTE.darkMetal, texel: 0.5 });
-      // inner edge: amber warning band and tooth blocks
+      // inner edge: hazard-striped face (the one surface of a stowed leaf that faces the far deck across the
+      // well; a plain amber band there read as a dark line) and tooth blocks
       const edge = -side * leafW / 2;
-      k.box("paintedMetal", edge + side * 0.01, 0, 0, 0.02, thickness - 0.1, len - 0.4, { color: PALETTE.impAmber, uv: "world", texel: 1.2 });
+      k.box("hazard", edge + side * 0.01, 0, 0, 0.02, thickness - 0.1, len - 0.4, { uv: "world", texel: 1.2 });
       for (let z = -len / 2 + 2; z < len / 2 - 1; z += 4) k.box("paintedMetal", edge + side * 0.6, thickness * 0.15, z, 1.2, thickness * 0.5, 1.2, { color: PALETTE.gunmetal });
       // the part that shows in the well: hazard chevrons on the top of the protruding strip, so the leaves read
       // as stowed door leaves from the far side of the opening (+1 draw per leaf; the rooms next door see the

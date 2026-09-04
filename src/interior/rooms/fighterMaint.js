@@ -28,7 +28,7 @@ export function build(kit, ctx, room, lib) {
   ensureLabels(mats);
   const shell = lib.roomShell(kit, ctx, room, { style: "dark", ceiling: false, lights: false, skipWalls: ["-z", "+z", "-x", "+x"] });
   bayWalls(kit, room, shell, y0, { rows: [2.4, 5.4, 9.7, room.height], lightRow: 1, lightMat: "emitWarmSoft", seed: 61, rowStyles: ["bays", null, "vent"] });
-  bayCeiling(kit, room, y0, { rows: 3, lightMat: "emitWarmSoft" });
+  bayCeiling(kit, room, y0, { rows: 3, lightMat: "emitWarmSoft", gaps: [[CRADLE.x + 1.2, CRADLE.z + 4.1, 2.2], [JIG.x, JIG.z, 2.0]] });
   // the pod, cradle and structural plates throw the shadows under the cradle spot
   shadowCasters(kit, ["paintedMetal"]);
   doorSurround(kit, room, room.doors[0], y0, { label: 0, labelW: 4.5 });
@@ -59,8 +59,9 @@ function cradleBay(kit, P, tf, y0) {
     tf.add("decal", g, su * 4.6, 0.02, sn * 2.9, { uv: "keep", uvRect: decalRect(7) });
   }
   deckLabel(kit, 41.0, y0, 460, 5, 1, -Math.PI / 2);
-  // approach lane from the door: white centre dashes, stopping short of the bay stencil
-  for (let x = 34.5; x < 38; x += 2) deckStrip(kit, "emitWhiteSoft", x, 459.85, x + 1.1, 460.15, y0);
+  // approach lane from the door: white centre dashes, stopping short of the bay stencil (the first one starts
+  // 2 m in from the door view so it does not fill the bottom of that frame as one blown bar)
+  for (let x = 35.8; x < 39; x += 2) deckStrip(kit, "emitWhiteSoft", x, 459.9, x + 1.1, 460.1, y0);
   // wheel chocks against the skid wheels on the door side
   for (const su of [-3.6, 3.6]) tf.box("hazard", su, 0.12, 2.35, 0.7, 0.24, 0.3, { uv: "world", texel: 1.2 });
 }

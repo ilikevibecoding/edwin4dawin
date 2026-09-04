@@ -163,6 +163,20 @@ await walk("KeyW", 3); // facing +z, into the cradle
 b = await pose();
 check("cradle collider blocks the pod", near(b.y, DECK, 0.05) && b.z > 464.6 && b.z < 465.4, b);
 
+// 10. lift corridor into the hangar: the door-side pilasters narrow the corridor end to 2.3 m but leave the
+// lane open (the door opens on approach), while a pilaster itself blocks the corner
+await teleport(-36.2, 479.5, -90, 2);
+a = await pose();
+check("lift corridor deck height", near(a.y, DECK, 0.05), a);
+await shot("walk_liftPortal");
+await walk("KeyW", 5); // facing +x, through the door
+b = await pose();
+check("corridor portal lets the player into the hangar", near(b.y, DECK, 0.05) && b.x > -31.5, b);
+await teleport(-36.2, 478.4, -90, 2);
+await walk("KeyW", 4);
+c = await pose();
+check("portal pilaster blocks the corridor corner", near(c.y, DECK, 0.05) && c.x < -32.8 && c.x > -33.5, c);
+
 const failed = results.filter((r) => !r.ok);
 writeFileSync(resolve(outDir, "walk.json"), JSON.stringify(results, null, 1));
 console.log(failed.length ? `${failed.length} FAILED` : "all walk checks passed");

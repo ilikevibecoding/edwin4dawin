@@ -20,7 +20,7 @@ const LANE = { x0: -4, x1: 4, z0: 522, z1: 549.5 }; // loader lane from the door
 const CROSS = { z0: 540, z1: 548.5 }; // cross lane under the crane rail
 // pooled ceiling lights and their fixtures: over the loader lane and the forward aisles, then along the cross
 // lane (x between the bayCeiling ribs, which run along z every 3.33 m from x0)
-const CEILING_LIGHTS = [[0, 530], [-15, 530], [15, 530], [0, 547.5], [-18.3, 547.5], [18.3, 547.5]];
+const CEILING_LIGHTS = [[0, 530], [-15, 530], [15, 530], [0, 546.5], [-18.3, 546.5], [18.3, 546.5]];
 const ROWS = [9.6, 12.1, 16.8, 19.3, 24.0, 26.5]; // container row centres (mirrored)
 
 export function build(kit, ctx, room, lib) {
@@ -32,7 +32,7 @@ export function build(kit, ctx, room, lib) {
   const shell = lib.roomShell(kit, ctx, room, { style: "dark", ceiling: false, lights: false, skipWalls: ["-z", "+z", "-x", "+x"] });
   // light strip row 5.4..11.2 puts a wall light above the mezzanine floor; no kick strip (no rubber in the bay)
   bayWalls(kit, room, shell, y0, { rows: [2.4, 5.4, 11.2, room.height], lightRow: 1, kick: false, seed: 81, rowStyles: ["bays", null, "vent"] });
-  bayCeiling(kit, room, y0, { rows: 4 });
+  bayCeiling(kit, room, y0, { rows: 4, gaps: CEILING_LIGHTS.map(([x, z]) => [x, z, 2.4]) });
   shadowCasters(kit, ["paintedMetal"]);
   doorSurround(kit, room, room.doors[0], y0, { label: 0, labelW: 5 });
 
@@ -230,7 +230,9 @@ function lanePoles(kit, ctx, lib, P, y0) {
     floodFixture(kit, hx, y0 + 6.3, z, "emitWhiteSoft", { w: 1.2, lip: 0.2 });
     kit.box("emitBlue", x - sx * 0.125, y0 + 5.6, z, 0.01, 0.4, 0.08, { uv: "keep" });
     kit.collider([x - 0.46, y0, z - 0.46], [x + 0.46, y0 + 6.8, z + 0.46], "lanePole");
-    ctx.lights.cool.push(lib.pointLight(0xdfe8ff, 140, 24, [hx, y0 + 6.0, z]));
+    // the pooled light sits just above the head, outboard of the arm: under the head it lit the housing's
+    // black underside from 0.3 m into a blown blob, above it only the emitter plates show
+    ctx.lights.cool.push(lib.pointLight(0xdfe8ff, 140, 24, [hx + sx * 0.3, y0 + 6.55, z]));
   }
 }
 
@@ -245,7 +247,8 @@ function ceiling(kit, P, room, yTop) {
     pipeRun(kit, s * 28.6, yTop - 1.4, (z0 + z1) / 2, z1 - z0, "z", 0.12, P.orange, 8);
     cableTray(kit, s * 9, yTop - 1.2, (z0 + z1) / 2, z1 - z0 - 2, "z", 0.7);
   }
-  kit.boxMM("paintedMetal", [x0, yTop - 1.5, 550.0], [x1, yTop - 0.4, 551.4], { color: P.slate, uv: "world", texel: 0.6 });
+  // (the duct's 1.1 m face turned into a blown band when it ran 2.5 m from the cross-lane lights)
+  kit.boxMM("paintedMetal", [x0, yTop - 1.5, 556.0], [x1, yTop - 0.4, 557.4], { color: P.slate, uv: "world", texel: 0.6 });
   pipeRun(kit, 0, yTop - 0.7, 525, x1 - x0, "x", 0.2, P.gunmetal, 8);
 }
 
