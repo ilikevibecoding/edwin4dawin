@@ -275,6 +275,8 @@ const debugAPI = {
     player.headBob = false;
     clock.t = v.time ?? 40;
     clock.frozen = true;
+    // no aiming reticle in exterior shots (a blind critic reads the centre dot as a debug marker)
+    document.getElementById("crosshair").style.display = v.mode === "exterior" ? "none" : "";
     if (v.mode === "exterior") applyExteriorView(v);
     else {
       cameraMode = "interior";
