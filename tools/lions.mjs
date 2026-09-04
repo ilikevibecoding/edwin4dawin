@@ -136,6 +136,10 @@ const info = await page.evaluate(
     driver.state.heading = Math.atan2(tan.x, tan.z);
     for (let i = 0; i < 90; i++) driver.update(1 / 60);
     vehicle.root.updateMatrixWorld(true);
+    // the frame loop moves the shadow frustum with the truck; a tool that
+    // teleports the truck has to do the same or the frame shows a world the
+    // player never sees — one with no shadows within a hundred metres
+    api.objects.skyRig?.follow(vehicle.root.position);
     if (flat) {
       // clay render: one matte grey on every skinned part, shells and strands off
       const THREE_Mat = wildlife.lions[0].coat.constructor;

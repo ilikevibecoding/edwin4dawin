@@ -127,6 +127,9 @@ for (const name of names) {
       driver.state.heading = Math.atan2(tan.x, tan.z);
       for (let i = 0; i < 90; i++) driver.update(1 / 60);
       vehicle.root.updateMatrixWorld(true);
+      // the frame loop moves the shadow frustum with the truck; do the same here
+      // or the camp is shot with the shadows still back at the spur
+      window.debugAPI.objects.skyRig?.follow(vehicle.root.position);
       // advance the camp so flames and lamps are mid-motion, not at t = 0
       for (let i = 0; i < 60; i++) camp.update(1 / 60, i / 60, {});
 
