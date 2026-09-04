@@ -1,2 +1,9 @@
 ready in 17527 ms
 boot {"materials":{"imperialPanel":264,"wornMetal":813,"deckBlack":763,"deckGrey":446,"hullPlate":2938,"rubber":24,"fabric":23,"hazard":16,"hazardRed":20,"grate":324,"diffuser":9,"decals":53,"screens":8,"leds":2},"space":1432,"exterior":239,"boot":7730,"totalMs":7730}
+reactor: 177 calls, 903k tris, 14 lights, 186 objs, 5780.19 ms/frame (software GL), rooms reactor|engineering -> /workspace/shots/review_interior_b/reactor.png
+engineering: 198 calls, 908k tris, 14 lights, 186 objs, 7377.25 ms/frame (software GL), rooms engineering|reactor -> /workspace/shots/review_interior_b/engineering.png
+hyperdrive: 189 calls, 720k tris, 9 lights, 200 objs, 5973.13 ms/frame (software GL), rooms hyperdrive -> /workspace/shots/review_interior_b/hyperdrive.png
+room_life_support: 139 calls, 688k tris, 9 lights, 153 objs, 6135.09 ms/frame (software GL), rooms life_support -> /workspace/shots/review_interior_b/room_life_support.png
+room_eng_corridor: 218 calls, 663k tris, 9 lights, 201 objs, 6043.76 ms/frame (software GL), rooms eng_corridor -> /workspace/shots/review_interior_b/room_eng_corridor.png
+room_eng_lobby: 233 calls, 461k tris, 5 lights, 194 objs, 5210.95 ms/frame (software GL), rooms eng_lobby -> /workspace/shots/review_interior_b/room_eng_lobby.png
+no page errors

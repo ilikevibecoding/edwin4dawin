@@ -18,6 +18,7 @@ export class Modes {
     this.onMode = onMode;
     this.mode = "exterior";
     this.busy = false;
+    this.precompile = null; // async fn set by main: renderer.compileAsync(scene, camera)
     this.fogInterior = new THREE.FogExp2(0x0a0c12, 0.012);
   }
 
@@ -44,7 +45,9 @@ export class Modes {
       this.camera.near = 1;
       this.camera.far = 40000;
       this.scene.fog = null;
-      // keep the glazed tower rooms rendering so the bridge glows behind its windows from outside
+      // nobody is inside now: drop the current room so no interior cluster renders inside the closed hull;
+      // the glazed tower rooms alone stay renderable (peek) so the bridge glows behind its windows
+      this.rooms.current = null;
       this.rooms.group.visible = true;
       this.rooms.prefetch("tower");
       this.rooms.setExteriorPeek(true);
@@ -80,6 +83,7 @@ export class Modes {
     await this.hud.fadeIn(500);
     const s = BOARDING.spawn;
     this.enterInterior(s.pos, s.yaw, 0);
+    if (this.precompile) await this.precompile(); // shader variants compile behind the black overlay
     await this.hud.fadeOut(700);
     this.hud.setStatus(`${ROOM_BY_ID.bridge.title} — Imperial I-class Star Destroyer Redoubt`);
     this.busy = false;

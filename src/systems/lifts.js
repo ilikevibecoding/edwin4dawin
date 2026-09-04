@@ -8,6 +8,7 @@ import { Frame, panelGrid, UP } from "../core/frame.js";
 import { IMP } from "../core/palette.js";
 import { ROOM_BY_ID, LIFT_LOBBIES, DECK_NAMES, WALL_T } from "../core/layout.js";
 import { DECAL } from "../textures.js";
+import { SYSTEMS } from "../core/systems.js";
 
 const CAB_H = 3.0;
 const DOOR_W = 2.6;
@@ -230,6 +231,7 @@ export class LiftSystem {
         this.player.position.copy(p);
         this.player.velocity.set(0, 0, 0);
         this.manager.teleport(p);
+        if (SYSTEMS.precompile) SYSTEMS.precompile(); // new cluster's shader variants compile while the doors are still shut
         r.cab.forceClosed = false;
         destCab.forceClosed = false;
         destCab.target = 1;
@@ -245,6 +247,30 @@ export class LiftSystem {
 
   snapshot() {
     return this.ride ? { cab: this.ride.cab.lobby + ":" + this.ride.cab.index, dest: this.ride.dest.id, phase: this.ride.phase, t: +this.ride.t.toFixed(2) } : null;
+  }
+
+  /** Reconstruct a ride from a snapshot (peer sync). null clears any local ride. */
+  apply(snap) {
+    if (!snap) {
+      if (this.ride) {
+        this.ride.cab.forceClosed = false;
+        this.player.shake = 0;
+        this.ride = null;
+      }
+      return;
+    }
+    const cab = this.cabs.get(snap.cab);
+    const dest = ROOM_BY_ID[snap.dest];
+    if (!cab || !dest) return;
+    if (!this.ride || this.ride.cab !== cab || this.ride.dest !== dest) {
+      this.ride = { cab, dest, phase: snap.phase || "closing", t: snap.t || 0, dur: 5.0 };
+      cab.forceClosed = true;
+      cab.target = 0;
+      this.manager.prefetch(dest.cluster);
+    } else {
+      this.ride.phase = snap.phase;
+      this.ride.t = snap.t;
+    }
   }
 }
 

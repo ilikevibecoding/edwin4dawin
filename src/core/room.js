@@ -31,6 +31,8 @@ export class BuildContext {
     this.lights = [];
     this.interactables = [];
     this.animators = [];
+    this.added = [];
+    this.releasers = [];
     this.group = new THREE.Group();
     this.group.name = "room_" + def.id;
     this.doors = manager.doorsOf(def.id); // [{ door, side, u0, u1, v0, v1 }]
@@ -131,11 +133,9 @@ export class BuildContext {
   light(color, intensity, distance, pos, { decay = 2, shadow = false } = {}) {
     const l = new THREE.PointLight(color, intensity * LIGHT_SCALE, distance, decay);
     l.position.set(pos[0], pos[1], pos[2]);
-    l.castShadow = shadow;
-    if (shadow) {
-      l.shadow.mapSize.set(512, 512);
-      l.shadow.bias = -0.0005;
-    }
+    l.castShadow = false; // point-light shadows are not supported by the pool
+    l.visible = false; // data only: rendered through the RoomManager's fixed light pool
+    void shadow;
     this.group.add(l);
     this.lights.push(l);
     return l;
@@ -145,8 +145,9 @@ export class BuildContext {
     const s = new THREE.SpotLight(color, intensity * LIGHT_SCALE, distance, angle, penumbra, decay);
     s.position.set(pos[0], pos[1], pos[2]);
     s.target.position.set(target[0], target[1], target[2]);
-    s.castShadow = shadow;
-    s.userData.shadowCaster = shadow; // the manager only lets the current room's casters render shadow maps
+    s.castShadow = false; // shadows are rendered by the pool's shadow slot when this room is current
+    s.visible = false; // data only: rendered through the RoomManager's fixed light pool
+    s.userData.shadowCaster = shadow;
     if (shadow) {
       s.shadow.mapSize.set(mapSize, mapSize);
       s.shadow.bias = -0.0003;
@@ -177,10 +178,16 @@ export class BuildContext {
     this.animators.push(fn);
   }
 
-  /** Add an arbitrary object to the room group (animated meshes, shader effects…). */
+  /** Add an arbitrary object to the room group (animated meshes, shader effects…); disposed with the room. */
   add(obj) {
     this.group.add(obj);
+    this.added.push(obj);
     return obj;
+  }
+
+  /** Register a cleanup callback (render targets, textures, materials the room created). */
+  onRelease(fn) {
+    this.releasers.push(fn);
   }
 
   /** Room label stencil on a wall (debug / grey-box aid). */
@@ -230,6 +237,10 @@ export class RoomManager {
     this.lightBudget = 14; // max interior lights enabled at once (forward renderer); nearest to the player win
     this._lightTimer = 0;
     this._playerPos = new THREE.Vector3();
+    // fixed light pool: room lights are data; a constant number of scene lights is driven from them, so the
+    // shader program cache never sees a new light-count variant when rooms change
+    this.pool = null;
+    this.spotBudget = 4;
     this.activeColliders = [];
     this.builtClusters = new Set();
     this.clusterVisit = new Map();
@@ -359,6 +370,16 @@ export class RoomManager {
       if (!r.built) continue;
       r.ctx.kit.dispose();
       for (const l of r.ctx.lights) if (l.dispose) l.dispose();
+      // objects the room added itself (holograms, tanks, animated meshes): geometries + non-shared materials
+      const shared = new Set(Object.values(this.materials).filter((m) => m && m.isMaterial));
+      for (const obj of r.ctx.added) {
+        obj.traverse((o) => {
+          if (o.geometry) o.geometry.dispose();
+          const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+          for (const m of mats) if (!shared.has(m) && m.dispose) m.dispose();
+        });
+      }
+      for (const fn of r.ctx.releasers) fn();
       this.group.remove(r.ctx.group);
       this.interactables = this.interactables.filter((it) => !r.ctx.interactables.includes(it));
       r.ctx = null;
@@ -376,7 +397,9 @@ export class RoomManager {
     const visited = [...this.clusterVisit.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]);
     for (const c of [...this.builtClusters]) {
       if (this.current && c === this.current.cluster) continue;
-      if (visited.indexOf(c) >= keep) this.releaseCluster(c);
+      const rank = visited.indexOf(c);
+      // never-visited (prefetched) clusters are the first to go
+      if (rank === -1 || rank >= keep) this.releaseCluster(c);
     }
   }
 
@@ -424,9 +447,10 @@ export class RoomManager {
     this._lightTimer -= dt;
     if (this._lightTimer <= 0) {
       this._lightTimer = 0.5;
-      this.cullLights();
       this.cullDistantNeighbours();
+      this.cullLights();
     }
+    this.syncLightPool();
     this.updateAnimators(dt, t);
   }
 
@@ -448,33 +472,99 @@ export class RoomManager {
     }
   }
 
+  /** Create the fixed pool (called once by main after the budget is set). */
+  createLightPool() {
+    if (this.pool) return this.pool;
+    const points = [];
+    for (let i = 0; i < this.lightBudget; i++) {
+      const l = new THREE.PointLight(0xffffff, 0, 1, 2);
+      l.name = "pool_point_" + i;
+      this.scene.add(l);
+      points.push(l);
+    }
+    const spots = [];
+    for (let i = 0; i < this.spotBudget; i++) {
+      const l = new THREE.SpotLight(0xffffff, 0, 1, 0.5, 0.5, 1.6);
+      l.name = "pool_spot_" + i;
+      if (i === 0) {
+        l.castShadow = true;
+        l.shadow.mapSize.set(1024, 1024);
+        l.shadow.bias = -0.0003;
+        l.shadow.normalBias = 0.03;
+      }
+      this.scene.add(l);
+      this.scene.add(l.target);
+      spots.push(l);
+    }
+    this.pool = { points, spots, assigned: new Map() };
+    return this.pool;
+  }
+
   /**
-   * Light budget: the visible set can span six rooms through the hangar arches (40+ lights); keep only the
-   * `lightBudget` nearest lights on (the current room's lights first), the rest are switched off.
+   * Light budget: the visible set can span six rooms through the hangar arches (40+ lights). Room lights are
+   * never rendered directly; the nearest ones (current room first) are copied onto the fixed pool.
    */
   cullLights() {
     const all = [];
     for (const id of this.visibleIds) {
       const r = this.rooms.get(id);
-      if (!r || !r.built) continue;
+      if (!r || !r.built || !r.ctx.group.visible) continue;
       const own = this.current && id === this.current.id;
       for (const l of r.ctx.lights) {
-        // shadow maps only for the room the player is in: a neighbour's caster would re-render the whole
-        // visible set into its map every frame
-        if (l.userData.shadowCaster) l.castShadow = !!own || this.peek;
-        all.push({ l, d: own ? -1 : l.position.distanceToSquared(this._playerPos) });
+        l.visible = false; // data only
+        all.push({ l, own, d: own ? -1 : l.position.distanceToSquared(this._playerPos) });
       }
     }
-    if (all.length <= this.lightBudget) {
-      for (const e of all) e.l.visible = true;
-      return;
-    }
     all.sort((a, b) => a.d - b.d);
-    all.forEach((e, i) => (e.l.visible = i < this.lightBudget));
+    const pool = this.pool || this.createLightPool();
+    const pts = all.filter((e) => e.l.isPointLight).slice(0, pool.points.length);
+    const spots = all.filter((e) => e.l.isSpotLight);
+    // the shadow slot goes to the current room's caster (or the nearest caster while peeking)
+    const caster = spots.find((e) => e.l.userData.shadowCaster && (e.own || this.peek));
+    const rest = spots.filter((e) => e !== caster).slice(0, pool.spots.length - 1);
+    pool.assigned.clear();
+    pool.points.forEach((pl, i) => pool.assigned.set(pl, pts[i] ? pts[i].l : null));
+    pool.assigned.set(pool.spots[0], caster ? caster.l : null);
+    pool.spots.slice(1).forEach((pl, i) => pool.assigned.set(pl, rest[i] ? rest[i].l : null));
+    pool.spots[0].castShadow = !!caster;
+    this.syncLightPool();
+  }
+
+  /** Copy the assigned room lights' parameters onto the pool every frame (they animate: alert, rest, flicker). */
+  syncLightPool() {
+    if (!this.pool) return;
+    for (const [pl, src] of this.pool.assigned) {
+      if (!src) {
+        pl.intensity = 0;
+        continue;
+      }
+      pl.position.copy(src.position);
+      pl.color.copy(src.color);
+      pl.intensity = src.intensity;
+      pl.distance = src.distance;
+      pl.decay = src.decay;
+      if (pl.isSpotLight) {
+        pl.angle = src.angle;
+        pl.penumbra = src.penumbra;
+        pl.target.position.copy(src.target.position);
+        if (pl.castShadow && src.shadow) {
+          pl.shadow.camera.near = src.shadow.camera.near;
+          pl.shadow.camera.far = src.shadow.camera.far;
+          if (pl.shadow.mapSize.x !== src.shadow.mapSize.x) {
+            pl.shadow.mapSize.copy(src.shadow.mapSize);
+            if (pl.shadow.map) {
+              pl.shadow.map.dispose();
+              pl.shadow.map = null;
+            }
+          }
+        }
+      }
+    }
   }
 
   /** Run the per-frame animators of every visible room (screens, machinery, holograms). */
   updateAnimators(dt, t) {
+    if (this.peek) this.syncLightPool();
     for (const id of this.visibleIds) {
       const r = this.rooms.get(id);
       if (!r.built) continue;

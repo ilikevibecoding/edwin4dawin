@@ -102,9 +102,8 @@ export function buildTower(kit, tiers, rand) {
       const x = w.x0 + pitch * k;
       kit.boxMM("hullDark", [x - 0.13, sillTop, FACE], [x + 0.13, yTopBand, FACE + 0.55], { color: IMP.hullShadow });
     }
-    const back = new THREE.PlaneGeometry(w.x1 - w.x0, yTopBand - sillTop);
-    back.rotateY(Math.PI); // faces −z (outward)
-    kit.add("hullDark", back, { pos: [(w.x0 + w.x1) / 2, (sillTop + yTopBand) / 2, WALL_IN - 0.1], color: new THREE.Color(0x0b0d12), uv: "keep" });
+    // no backdrop behind the panes: the lit bridge / tower rooms render behind the glazing when the camera is
+    // within peek range (RoomManager.setExteriorPeek); beyond that range the slot reads as dark glass
   }
   // shuttered starboard slot (mirrors the observation gallery on the port side)
   {

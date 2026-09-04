@@ -334,7 +334,7 @@ function shipGeometry(L) {
   const bridge = new THREE.BoxGeometry(W * 0.3, T * 1.1, L * 0.07).translate(0, T * 5.0, L * 0.31);
   const eng = [];
   for (const ex of [-W * 0.16, 0, W * 0.16]) eng.push(new THREE.CylinderGeometry(T * 0.9, T * 0.9, L * 0.05, 10).rotateX(Math.PI / 2).translate(ex, -T * 0.1, L * 0.52));
-  const g = mergeGeometries([hull, city1, city2, neck, bridge, ...eng].map((x) => x.toNonIndexed()), false);
+  const g = mergeGeometries([hull, city1, city2, neck, bridge, ...eng].map((x) => (x.index ? x.toNonIndexed() : x)), false);
   g.computeVertexNormals();
   return g;
 }
@@ -421,8 +421,8 @@ export function chairProto(inst, name, { color = IMP.fabricBlack } = {}) {
   }
   box(soft, 0, 0.5, 0, 0.56, 0.11, 0.54);
   box(soft, 0, 0.95, 0.26, 0.5, 0.86, 0.1, -0.18);
-  inst.proto(name + "_frame", "paintedMetal", mergeGeometries(frame.map((g) => g.toNonIndexed()), false), { texel: 1 });
-  inst.proto(name + "_soft", "fabric", mergeGeometries(soft.map((g) => g.toNonIndexed()), false), { texel: 2 });
+  inst.proto(name + "_frame", "paintedMetal", mergeGeometries(frame.map((g) => (g.index ? g.toNonIndexed() : g)), false), { texel: 1 });
+  inst.proto(name + "_soft", "fabric", mergeGeometries(soft.map((g) => (g.index ? g.toNonIndexed() : g)), false), { texel: 2 });
   inst.proto(name + "_post", "metal", new THREE.CylinderGeometry(0.07, 0.07, 0.4, 12).translate(0, 0.2, 0), { texel: 1 });
   const kit = inst.ctx.kit;
   return (x, y, z, yaw = 0) => {

@@ -1,0 +1,9 @@
+ready in 19435 ms
+boot {"materials":{"imperialPanel":354,"wornMetal":1121,"deckBlack":734,"deckGrey":621,"hullPlate":4156,"rubber":29,"fabric":18,"hazard":25,"hazardRed":35,"grate":259,"diffuser":14,"decals":56,"screens":10,"leds":2},"space":1134,"exterior":257,"boot":9159,"totalMs":9159}
+room_lounge: 203 calls, 701k tris, 10 lights, 179 objs, 5288.29 ms/frame (software GL), rooms lounge -> /workspace/shots/review_interior_b/room_lounge.png
+medbay: 248 calls, 740k tris, 10 lights, 198 objs, 5831.88 ms/frame (software GL), rooms medbay -> /workspace/shots/review_interior_b/medbay.png
+room_armory: 205 calls, 758k tris, 10 lights, 170 objs, 6137.35 ms/frame (software GL), rooms armory -> /workspace/shots/review_interior_b/room_armory.png
+detention: 170 calls, 724k tris, 10 lights, 151 objs, 7136.3 ms/frame (software GL), rooms detention -> /workspace/shots/review_interior_b/detention.png
+room_escape_pods: 201 calls, 755k tris, 10 lights, 166 objs, 6934.23 ms/frame (software GL), rooms escape_pods -> /workspace/shots/review_interior_b/room_escape_pods.png
+cmd_corridor: 319 calls, 655k tris, 10 lights, 251 objs, 8697.77 ms/frame (software GL), rooms cmd_corridor -> /workspace/shots/review_interior_b/cmd_corridor.png
+no page errors

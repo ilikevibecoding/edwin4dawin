@@ -1,0 +1,9 @@
+ready in 14082 ms
+boot {"materials":{"imperialPanel":193,"wornMetal":521,"deckBlack":551,"deckGrey":410,"hullPlate":2524,"rubber":21,"fabric":15,"hazard":15,"hazardRed":16,"grate":249,"diffuser":12,"decals":57,"screens":9,"leds":2},"space":1240,"exterior":270,"boot":6459,"totalMs":6459}
+crew_corridor: 381 calls, 928k tris, 12 lights, 294 objs, 4967.7 ms/frame (software GL), rooms crew_corridor|crew_connector|crew_corridor_fwd -> /workspace/shots/review_interior_b/crew_corridor.png
+room_crew_corridor_fwd: 348 calls, 920k tris, 12 lights, 294 objs, 5030.61 ms/frame (software GL), rooms crew_corridor_fwd|crew_connector|crew_corridor -> /workspace/shots/review_interior_b/room_crew_corridor_fwd.png
+room_crew_connector: 344 calls, 909k tris, 12 lights, 294 objs, 5550.79 ms/frame (software GL), rooms crew_connector|crew_corridor|crew_corridor_fwd -> /workspace/shots/review_interior_b/room_crew_connector.png
+room_crew_lobby: 193 calls, 434k tris, 5 lights, 194 objs, 5014.39 ms/frame (software GL), rooms crew_lobby -> /workspace/shots/review_interior_b/room_crew_lobby.png
+crew_quarters: 182 calls, 682k tris, 10 lights, 163 objs, 7026.63 ms/frame (software GL), rooms crew_quarters -> /workspace/shots/review_interior_b/crew_quarters.png
+mess: 172 calls, 515k tris, 10 lights, 158 objs, 6737.13 ms/frame (software GL), rooms mess -> /workspace/shots/review_interior_b/mess.png
+no page errors

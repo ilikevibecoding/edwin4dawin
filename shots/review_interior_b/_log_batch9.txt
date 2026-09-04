@@ -1,0 +1,9 @@
+ready in 14862 ms
+boot {"materials":{"imperialPanel":175,"wornMetal":515,"deckBlack":627,"deckGrey":333,"hullPlate":2463,"rubber":19,"fabric":15,"hazard":14,"hazardRed":15,"grate":236,"diffuser":14,"decals":89,"screens":17,"leds":8},"space":1030,"exterior":215,"boot":6034,"totalMs":6034}
+int_16.2_6_-139.5_90_-14: 180 calls, 699k tris, 10 lights, 179 objs, 3496.11 ms/frame (software GL), rooms lounge -> /workspace/shots/review_interior_b/int_16.2_6_-139.5_90_-14.png
+int_19_6_-150.5_90_-8: 186 calls, 708k tris, 10 lights, 179 objs, 3802 ms/frame (software GL), rooms lounge -> /workspace/shots/review_interior_b/int_19_6_-150.5_90_-8.png
+int_-12.5_6_-200_90_0: 168 calls, 746k tris, 10 lights, 151 objs, 4387.47 ms/frame (software GL), rooms detention -> /workspace/shots/review_interior_b/int_-12.5_6_-200_90_0.png
+int_48.5_6_-152.5_180_4: 235 calls, 753k tris, 10 lights, 198 objs, 4688.9 ms/frame (software GL), rooms medbay -> /workspace/shots/review_interior_b/int_48.5_6_-152.5_180_4.png
+int_-20_6_-136_0_-12: 171 calls, 515k tris, 10 lights, 158 objs, 3730.79 ms/frame (software GL), rooms mess -> /workspace/shots/review_interior_b/int_-20_6_-136_0_-12.png
+int_0_-10_297_0_-6: 225 calls, 918k tris, 14 lights, 186 objs, 5002.62 ms/frame (software GL), rooms engineering|reactor -> /workspace/shots/review_interior_b/int_0_-10_297_0_-6.png
+no page errors

@@ -13,6 +13,7 @@ const browser = await chromium.launch({ headless: true, executablePath, args: ["
 const phone = devices["Pixel 5"];
 const context = await browser.newContext({ ...phone, viewport: { width: 851, height: 393 }, deviceScaleFactor: 1, hasTouch: true, isMobile: true });
 const page = await context.newPage();
+page.setDefaultTimeout(300000);
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => m.type() === "error" && errors.push(m.text().slice(0, 200)));

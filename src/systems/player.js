@@ -35,6 +35,7 @@ export class Player {
     this.shake = 0;
     this.onLockChange = null;
     this.onFall = null;
+    this.floorRef = null;
     this._t = 0;
     // touch mode: no pointer lock; movement from a virtual stick, look from drag deltas
     this.touchMode = false;
@@ -164,7 +165,9 @@ export class Player {
         this.vy = 0;
         this.onGround = true;
       }
-      if (ground === null && this.position.y < -400 && this.onFall) this.onFall();
+      // fall tether: 25 m below the current deck (or 400 m absolute when no room is known)
+      const limit = this.floorRef !== null && this.floorRef !== undefined ? this.floorRef - 25 : -400;
+      if (ground === null && this.position.y < limit && this.onFall) this.onFall();
     }
 
     // head bob

@@ -21,6 +21,7 @@ import { SYSTEMS } from "./core/systems.js";
 import { createFighters } from "./fighters/index.js";
 import { createAtmosphere } from "./systems/atmosphere.js";
 import { TouchControls, isTouchDevice } from "./systems/touch.js";
+import { FlightState } from "./systems/flight.js";
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 const bootT0 = performance.now();
@@ -122,18 +123,22 @@ const rooms = new RoomManager({
     fitSunShadow();
   },
 });
-rooms.lightBudget = MOBILE ? 8 : 14;
+rooms.lightBudget = MOBILE ? 8 : 12;
+rooms.spotBudget = MOBILE ? 2 : 4;
 const player = new Player(camera, canvas, rooms.activeColliders);
 const lifts = new LiftSystem({ scene, materials, player, hud, audio });
 lifts.attach(rooms);
 const rig = new CameraRig(camera, canvas);
 const lighting = createLightingController({ materials, rooms, hemi, audio });
 const modes = new Modes({ camera, player, rig, rooms, hud, scene, sun, space, exterior, onMode: onModeChange });
+modes.precompile = () => renderer.compileAsync(scene, camera).catch(() => {});
+const flight = new FlightState();
 const interactions = new Interactions({ camera, rooms, lighting, space, player, hud, audio });
 const sync = new SyncState({ doors, lifts, lighting, traffic: fighters.traffic });
 const atmosphere = createAtmosphere({ scene, camera, materials, rooms });
-Object.assign(SYSTEMS, { fighters, audio, hud, rooms, doors, lifts, lighting, exterior, space, camera, player });
+Object.assign(SYSTEMS, { fighters, audio, hud, rooms, doors, lifts, lighting, exterior, space, camera, player, flight, precompile: modes.precompile });
 
+player.floorRef = null; // updated each frame from the current room (fall tether is room-relative)
 player.onFall = () => {
   const def = rooms.current || ROOM_BY_ID.bridge;
   const s = def.spawn;
@@ -264,6 +269,7 @@ function updateQuality(dt) {
 // Environment capture of the current cluster (metals reflect their own room)
 // ---------------------------------------------------------------------------
 let envCluster = null;
+let envRT = null;
 function captureEnvironment() {
   if (!modes.isInterior || !rooms.current) return;
   const c = rooms.current;
@@ -284,8 +290,11 @@ function captureEnvironment() {
   em.forEach((m, i) => (m.emissiveIntensity = saved[i]));
   space.root.visible = true;
   scene.fog = savedFog;
-  scene.environment = pmrem.fromCubemap(cubeRT.texture).texture;
+  const rt = pmrem.fromCubemap(cubeRT.texture);
+  scene.environment = rt.texture;
   scene.environmentIntensity = 0.45;
+  if (envRT) envRT.dispose(); // the previous cluster's PMREM (a leak otherwise)
+  envRT = rt;
   cubeRT.dispose();
 }
 
@@ -453,7 +462,7 @@ const debugAPI = {
     let visibleLights = 0;
     scene.traverseVisible((o) => {
       if (o.isMesh || o.isPoints || o.isSprite || o.isLine) visibleObjects++;
-      if (o.isLight) visibleLights++;
+      if (o.isLight && o.intensity > 0) visibleLights++;
     });
     const mem = performance.memory ? { jsHeapMB: +(performance.memory.usedJSHeapSize / 1048576).toFixed(1) } : {};
     return {
@@ -500,6 +509,7 @@ const debugAPI = {
   sync,
   materials,
   exterior,
+  flight,
   fighters,
   traffic: fighters.traffic,
   atmosphere,
@@ -565,6 +575,7 @@ function frame() {
   player.update(dt);
   rig.update(dt);
   if (modes.isInterior) {
+    player.floorRef = rooms.current ? rooms.current.floor : null;
     rooms.update(dt, t, player.position);
     doors.update(dt, player.position);
     lifts.update(dt, player.position);

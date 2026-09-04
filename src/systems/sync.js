@@ -14,6 +14,7 @@ export class SyncState {
   }
   snapshot() {
     return {
+      v: 1,
       t: +this.clock.toFixed(3),
       doors: this.doors.snapshot(),
       lift: this.lifts.snapshot(),
@@ -24,6 +25,7 @@ export class SyncState {
   apply(snap) {
     if (!snap) return;
     if (snap.doors) this.doors.apply(snap.doors);
+    if ("lift" in snap && this.lifts.apply) this.lifts.apply(snap.lift);
     if (snap.traffic && this.traffic && this.traffic.apply) this.traffic.apply(snap.traffic);
     if (this.lighting && typeof snap.alert === "number") this.lighting.setAlert(snap.alert, true);
     if (typeof snap.t === "number") this.clock = snap.t;

@@ -1,0 +1,19 @@
+ext_-1400_700_-1900_0_20_-300: 87 calls, 356k tris, 2 lights, 59 objs, 787.34 ms/frame (software GL), rooms  -> /tmp/restats/ext_-1400_700_-1900_0_20_-300.png
+ext_-2000_500_-300_0_20_-300: 131 calls, 429k tris, 2 lights, 103 objs, 816.02 ms/frame (software GL), rooms  -> /tmp/restats/ext_-2000_500_-300_0_20_-300.png
+ext_-700_300_-900_0_40_-200: 236 calls, 544k tris, 2 lights, 208 objs, 1314.74 ms/frame (software GL), rooms  -> /tmp/restats/ext_-700_300_-900_0_40_-200.png
+ext_0_40_1100_0_0_500: 195 calls, 551k tris, 2 lights, 167 objs, 1838.99 ms/frame (software GL), rooms  -> /tmp/restats/ext_0_40_1100_0_0_500.png
+ext_200_30_720_0_0_520: 238 calls, 613k tris, 2 lights, 211 objs, 2397.11 ms/frame (software GL), rooms  -> /tmp/restats/ext_200_30_720_0_0_520.png
+ext_-300_120_450_-200_60_350: 253 calls, 629k tris, 2 lights, 228 objs, 3639.42 ms/frame (software GL), rooms  -> /tmp/restats/ext_-300_120_450_-200_60_350.png
+no page errors
+ext_250_180_600_0_200_200: 239 calls, 613k tris, 2 lights, 211 objs, 2807.82 ms/frame (software GL), rooms  -> /tmp/restats/ext_250_180_600_0_200_200.png
+ext_-120_80_-400_-60_30_-300: 240 calls, 625k tris, 2 lights, 278 objs, 3409.38 ms/frame (software GL), rooms  -> /tmp/restats/ext_-120_80_-400_-60_30_-300.png
+ext_-140_50_-1240_0_10_-1060: 234 calls, 515k tris, 2 lights, 206 objs, 2360.42 ms/frame (software GL), rooms  -> /tmp/restats/ext_-140_50_-1240_0_10_-1060.png
+ext_-40_70_-1170_0_6_-1080: 244 calls, 546k tris, 2 lights, 224 objs, 2195.3 ms/frame (software GL), rooms  -> /tmp/restats/ext_-40_70_-1170_0_6_-1080.png
+ext_-60_40_-950_0_8_-1000: 117 calls, 356k tris, 2 lights, 260 objs, 1758.77 ms/frame (software GL), rooms  -> /tmp/restats/ext_-60_40_-950_0_8_-1000.png
+ext_-330_5_-150_-260_0_-200: 238 calls, 606k tris, 2 lights, 245 objs, 1647.9 ms/frame (software GL), rooms  -> /tmp/restats/ext_-330_5_-150_-260_0_-200.png
+no page errors
+ext_-140_95_-100_-74_66_-150: 372 calls, 1020k tris, 15 lights, 431 objs, 2492.98 ms/frame (software GL), rooms bridge|tactical|nav_station|observation -> /tmp/restats/ext_-140_95_-100_-74_66_-150.png
+ext_0_214_120_0_214_172: 509 calls, 1202k tris, 15 lights, 431 objs, 4091.57 ms/frame (software GL), rooms bridge|tactical|nav_station|observation -> /tmp/restats/ext_0_214_120_0_214_172.png
+ext_400_-200_200_0_-60_0: 254 calls, 629k tris, 2 lights, 228 objs, 4254.86 ms/frame (software GL), rooms  -> /tmp/restats/ext_400_-200_200_0_-60_0.png
+ext_200_-250_500_0_-100_330: 255 calls, 630k tris, 2 lights, 228 objs, 4044.27 ms/frame (software GL), rooms  -> /tmp/restats/ext_200_-250_500_0_-100_330.png
+no page errors

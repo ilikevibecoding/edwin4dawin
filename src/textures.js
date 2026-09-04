@@ -1073,6 +1073,47 @@ export function makeHullPlate(size = 2048, seed = 31) {
   for (let i = 0; i < 40; i++) streaks.push({ x: rand(), y: rand(), len: 0.05 + rand() * 0.25, w: 0.004 + rand() * 0.01, k: rand() });
   const heat = [];
   for (let i = 0; i < 6; i++) heat.push({ x: rand(), y: rand(), r: 0.06 + rand() * 0.12 });
+  // soot streaks and heat patches are rasterised once with the 2D canvas (R = dark soot, G = bright scour,
+  // B = heat) instead of testing 46 shapes per texel: this alone was half of the material generation time
+  const maskCanvas = makeCanvas(size, size);
+  {
+    const mc = maskCanvas.getContext("2d");
+    mc.fillStyle = "#000000";
+    mc.fillRect(0, 0, size, size);
+    mc.globalCompositeOperation = "lighter";
+    for (const st of streaks) {
+      const x = st.x * size;
+      const w = st.w * size;
+      const y0 = st.y * size;
+      const h = st.len * size;
+      const bright = st.k > 0.7;
+      for (const yy of [y0, y0 - size]) {
+        const g = mc.createLinearGradient(0, yy, 0, yy + h);
+        g.addColorStop(0, bright ? "rgba(0,180,0,1)" : "rgba(180,0,0,1)");
+        g.addColorStop(1, bright ? "rgba(0,180,0,0)" : "rgba(180,0,0,0)");
+        mc.fillStyle = g;
+        mc.beginPath();
+        mc.moveTo(x - w, yy);
+        mc.lineTo(x + w, yy);
+        mc.lineTo(x + w * 0.35, yy + h);
+        mc.lineTo(x - w * 0.35, yy + h);
+        mc.closePath();
+        mc.fill();
+      }
+    }
+    for (const hc of heat) {
+      const cx = hc.x * size;
+      const cy = hc.y * size;
+      const r = hc.r * size;
+      const g = mc.createRadialGradient(cx, cy, 0, cx, cy, r);
+      g.addColorStop(0, "rgba(0,0,128,1)");
+      g.addColorStop(0.6, "rgba(0,0,60,1)");
+      g.addColorStop(1, "rgba(0,0,0,0)");
+      mc.fillStyle = g;
+      mc.fillRect(cx - r, cy - r, r * 2, r * 2);
+    }
+  }
+  const mask = maskCanvas.getContext("2d").getImageData(0, 0, size, size).data;
   t.each((u, v, i) => {
     // find row / plate
     let row = rows[rows.length - 1];
@@ -1138,30 +1179,28 @@ export function makeHullPlate(size = 2048, seed = 31) {
     const grime = clamp01(1 - ed / 0.03) * fbm(u, v, { octaves: 3, freq: 12, seed: seed + 11 });
     lum *= 1 - grime * 0.3;
     rough += grime * 0.15;
-    // soot streaks trailing "aft" (+v)
-    for (const s of streaks) {
-      const dx = u - s.x;
-      let dy = v - s.y;
-      if (dy < 0) dy += 1;
-      if (Math.abs(dx) < s.w && dy < s.len) {
-        const k = (1 - Math.abs(dx) / s.w) * (1 - dy / s.len) * 0.7;
-        lum = lerp(lum, s.k > 0.7 ? 0.85 : 0.3, k);
-        rough = lerp(rough, s.k > 0.7 ? 0.35 : 0.85, k);
-      }
+    // soot streaks trailing "aft" (+v) and bright scoured streaks, from the rasterised mask
+    const mi = i * 4;
+    const soot = (mask[mi] / 255) * 0.7;
+    const scour = (mask[mi + 1] / 255) * 0.7;
+    if (soot > 0) {
+      lum = lerp(lum, 0.3, soot);
+      rough = lerp(rough, 0.85, soot);
+    }
+    if (scour > 0) {
+      lum = lerp(lum, 0.85, scour);
+      rough = lerp(rough, 0.35, scour);
     }
     let r = lum,
       g = lum * 1.0,
       b = lum * 1.03;
-    // heat discolouration: warm-brown to blue-ish tint patches
-    for (const hcirc of heat) {
-      const dd = Math.hypot(u - hcirc.x, v - hcirc.y);
-      if (dd < hcirc.r) {
-        const k = smooth(1 - dd / hcirc.r) * 0.5;
-        r = lerp(r, lum * 0.95, k);
-        g = lerp(g, lum * 0.78, k);
-        b = lerp(b, lum * 0.62, k);
-        rough += k * 0.2;
-      }
+    // heat discolouration: warm-brown tint patches
+    const hk = (mask[mi + 2] / 255) * 0.5;
+    if (hk > 0) {
+      r = lerp(r, lum * 0.95, hk);
+      g = lerp(g, lum * 0.78, hk);
+      b = lerp(b, lum * 0.62, hk);
+      rough += hk * 0.2;
     }
     // fine scratches
     const sc = worley(u, v, 30, seed + 7);

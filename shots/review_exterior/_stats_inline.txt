@@ -1,0 +1,9 @@
+ready in 27265 ms
+boot {"materials":{"imperialPanel":544,"wornMetal":1072,"deckBlack":1017,"deckGrey":392,"hullPlate":5269,"rubber":22,"fabric":19,"hazard":31,"hazardRed":16,"grate":305,"diffuser":9,"decals":64,"screens":9,"leds":2},"space":1422,"exterior":395,"boot":11136,"totalMs":11136}
+ext_500_60_1000_0_0_480: 195 calls, 551k tris, 2 lights, 167 objs, 6282.92 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/ext_500_60_1000_0_0_480.png
+ext_-560_10_-200_-450_0_-200: 271 calls, 647k tris, 2 lights, 245 objs, 6452.5 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/ext_-560_10_-200_-450_0_-200.png
+ext_0_235_-250_0_215_175: 217 calls, 605k tris, 2 lights, 262 objs, 6989.12 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/ext_0_235_-250_0_215_175.png
+ext_-160_70_60_0_200_190: 517 calls, 1209k tris, 16 lights, 431 objs, 9327.81 ms/frame (software GL), rooms bridge|tactical|nav_station|observation -> /workspace/shots/review_exterior/ext_-160_70_60_0_200_190.png
+ext_-45_25_-1150_0_3_-1090: 252 calls, 549k tris, 2 lights, 224 objs, 5883.22 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/ext_-45_25_-1150_0_3_-1090.png
+ext_60_-140_-10_0_-68_-10: 243 calls, 626k tris, 2 lights, 245 objs, 7286.76 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/ext_60_-140_-10_0_-68_-10.png
+no page errors

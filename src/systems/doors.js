@@ -31,6 +31,33 @@ export class DoorSystem {
     this.dirty = false;
     this.manager = null;
     this._tmp = new THREE.Vector3();
+    this.handlers = new Map();
+  }
+
+  /** Event bus: 'door_open' | 'door_close' | 'door_locked' → fn({ id, kind, position }) */
+  on(name, fn) {
+    if (!this.handlers.has(name)) this.handlers.set(name, []);
+    this.handlers.get(name).push(fn);
+  }
+
+  /** Lock / unlock a door (a locked door never opens for proximity; forceOpen still overrides). */
+  setLocked(id, on) {
+    const r = this.doors.get(id);
+    if (!r) return false;
+    r.locked = !!on;
+    if (on && r.target === 1) {
+      r.target = 0;
+      this.emit("door_close", r);
+    }
+    this.emit("door_locked", r);
+    return true;
+  }
+
+  /** Pose slabs + colliders from the record's openness (used by the animation, buildDoor and apply). */
+  pose(r) {
+    const e = easeInOut(r.openness);
+    for (const s of r.slabs) s.group.position.copy(s.base).addScaledVector(s.dir, e * s.travel);
+    for (const c of r.colliders) c.enabled = r.openness < 0.8;
   }
 
   attach(manager) {
@@ -125,6 +152,7 @@ export class DoorSystem {
     r.kind = kind;
     this.group.add(r.group);
     r.built = true;
+    this.pose(r);
   }
 
   disposeDoor(r) {
@@ -158,7 +186,9 @@ export class DoorSystem {
       if (!r.group.visible) continue;
       // local-space distance to the door plane
       this._tmp.copy(playerPos).sub(r.center).applyQuaternion(r.qInv);
-      const near = Math.abs(this._tmp.z) < 3.2 && Math.abs(this._tmp.x) < r.w / 2 + 1.2 && this._tmp.y > -1.5 && this._tmp.y < r.h + 1;
+      // slow, heavy doors start opening earlier so a running crew member never bumps a closed slab
+      const reach = 3.2 * (1.4 / r.kind.speed) + (r.spec.kind === "blast" ? 1.5 : 0);
+      const near = Math.abs(this._tmp.z) < reach && Math.abs(this._tmp.x) < r.w / 2 + 1.2 && this._tmp.y > -1.5 && this._tmp.y < r.h + 1;
       const want = r.forceOpen || (near && !r.locked);
       if (want) {
         r.closeTimer = 1.2;
@@ -180,16 +210,16 @@ export class DoorSystem {
       if (r.openness < r.target) r.openness = Math.min(r.target, r.openness + step);
       else if (r.openness > r.target) r.openness = Math.max(r.target, r.openness - step);
       if (r.openness !== prev) {
-        const e = easeInOut(r.openness);
-        for (const s of r.slabs) s.group.position.copy(s.base).addScaledVector(s.dir, e * s.travel);
-        for (const c of r.colliders) c.enabled = r.openness < 0.8;
+        this.pose(r);
         if ((prev <= 0.02) !== (r.openness <= 0.02)) this.dirty = true;
       }
     }
   }
 
   emit(name, r) {
-    if (this.audio && this.audio.event) this.audio.event(name, { position: r.center, kind: r.spec.kind, id: r.spec.id });
+    const data = { position: r.center, kind: r.spec.kind, id: r.spec.id };
+    if (this.audio && this.audio.event) this.audio.event(name, data);
+    for (const fn of this.handlers.get(name) || []) fn(data);
   }
 
   /** Force a door (e.g. for vehicles) open/closed regardless of proximity. */
@@ -200,7 +230,9 @@ export class DoorSystem {
 
   snapshot() {
     const out = {};
-    for (const [id, r] of this.doors) if (r.openness > 0 || r.target > 0) out[id] = { o: +r.openness.toFixed(3), t: r.target };
+    for (const [id, r] of this.doors) {
+      if (r.openness > 0 || r.target > 0 || r.locked || r.forceOpen) out[id] = { o: +r.openness.toFixed(3), t: r.target, l: r.locked ? 1 : 0, f: r.forceOpen ? 1 : 0 };
+    }
     return out;
   }
 
@@ -210,6 +242,10 @@ export class DoorSystem {
       if (!r) continue;
       r.openness = s.o;
       r.target = s.t;
+      r.locked = !!s.l;
+      r.forceOpen = !!s.f;
+      if (r.target === 1) r.closeTimer = Math.max(r.closeTimer, 1.2);
+      if (r.built) this.pose(r);
       this.dirty = true;
     }
   }

@@ -7,7 +7,7 @@ import { mkdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const args = process.argv.slice(2);
-const flags = Object.fromEntries(args.filter((a) => a.startsWith("--")).map((a) => a.slice(2).split("=")));
+const flags = Object.fromEntries(args.filter((a) => a.startsWith("--")).map((a) => { const [k, v] = a.slice(2).split("="); return [k, v === undefined ? true : v]; }));
 const pos = args.filter((a) => !a.startsWith("--"));
 // named views are comma-separated; inline specs contain commas themselves, so lists mixing them use ';'
 const viewArg = pos[0] || "ext_far";

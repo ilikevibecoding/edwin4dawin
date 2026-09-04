@@ -1,0 +1,5 @@
+ready in 15367 ms
+boot {"materials":{"imperialPanel":269,"wornMetal":523,"deckBlack":616,"deckGrey":318,"hullPlate":2899,"rubber":20,"fabric":14,"hazard":17,"hazardRed":18,"grate":260,"diffuser":12,"decals":60,"screens":9,"leds":2},"space":1330,"exterior":255,"boot":6942,"totalMs":6942}
+int_48.5_6_-153.4_0_6: 242 calls, 736k tris, 10 lights, 198 objs, 3846.56 ms/frame (software GL), rooms medbay -> /workspace/shots/review_interior_b/sim/int_48.5_6_-153.4_0_6.png
+int_18.9_6_-150.5_270_2: 176 calls, 714k tris, 10 lights, 179 objs, 3735.74 ms/frame (software GL), rooms lounge -> /workspace/shots/review_interior_b/sim/int_18.9_6_-150.5_270_2.png
+no page errors

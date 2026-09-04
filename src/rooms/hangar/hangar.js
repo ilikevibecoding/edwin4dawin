@@ -271,12 +271,12 @@ function wellRailings(ctx) {
   }
   if (z > zF + 0.2) rail([xL, z], [xL, zF]);
   // cantilever handling rails over the well at every lane
-  for (const zc of lanes) laneRails(kit, [w.x0, Y, zc], -Math.PI / 2);
-  laneRails(kit, [0, Y, w.z1], 0);
+  for (const zc of lanes) laneRails(kit, [w.x0, Y, zc], -Math.PI / 2, 3.6);
+  laneRails(kit, [0, Y, w.z1], 0, 4.8);
 }
 
 /** Handling rails reaching over the well at a lane (pos = deck edge point; local -Z points over the well). */
-function laneRails(kit, pos, yaw) {
+function laneRails(kit, pos, yaw, halfGap = 3.6) {
   const P = new Placer(kit, pos, yaw);
   for (const s of [-1, 1]) {
     P.box("paintedMetal", s * 2.6, -0.32, -1.2, 0.5, 0.5, 6.4, { color: IMP.gunmetal, texel: 1 });
@@ -286,10 +286,15 @@ function laneRails(kit, pos, yaw) {
   }
   P.box("paintedMetal", 0, -0.6, -3.4, 5.9, 0.36, 0.36, { color: IMP.black, texel: 1 });
   P.box("paintedMetal", 0, -0.6, -1.4, 5.9, 0.36, 0.36, { color: IMP.black, texel: 1 });
-  // wheel stop on the deck with an amber marker strip (steppable)
+  // wheel stop on the deck with an amber marker strip, plus a hazard safety bar at hip height between the rail
+  // posts: fighters pass over it, a crew member cannot walk into the well
   P.box("hazard", 0, 0.1, 1.0, 5.2, 0.2, 0.28, { texel: 2 });
   P.box("emitAmber", 0, 0.205, 1.0, 4.8, 0.012, 0.08);
-  P.collider([-2.6, 0, 0.86], [2.6, 0.2, 1.14], "stop");
+  // the bar spans the whole railing gap (posts at its ends), otherwise the channels beside the handling rails
+  // still lead onto the well edge
+  for (const s of [-1, 1]) P.box("paintedMetal", s * (halfGap - 0.06), 0.45, 1.0, 0.08, 0.9, 0.08, { color: IMP.black });
+  P.box("hazardRed", 0, 0.82, 1.0, halfGap * 2 - 0.1, 0.07, 0.07, { texel: 2 });
+  P.collider([-halfGap, 0, 0.86], [halfGap, 0.9, 1.14], "lanebar");
 }
 
 // ---- ceiling structure -------------------------------------------------------------------------------------

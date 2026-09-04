@@ -180,7 +180,7 @@ export const ROOMS = [
   R("cargo_bay", "hangar", "Cargo Storage & Logistics", -40, 18, [44, 80, -60, -24], { accent: "hangar", spawn: [60, -40, -40, -90] }),
   R("repair_bay", "hangar", "Ship-wide Maintenance & Repair Bay", -40, 14, [44, 80, 30, 90], { accent: "engineering", spawn: [60, -40, 60, -90] }),
   R("shuttle_bay", "hangar", "Shuttle Docking Bay", -40, 26, [-30, 30, 72, 170], { accent: "hangar", spawn: [0, -40, 80, 180], well: BAYS.shuttle }),
-  R("hangar_lobby", "hangar", "Turbolift Lobby — Hangar Deck", -40, 5, [-8, 8, -110, -92], { accent: "corridor", spawn: [0, -40, -100, 180], lift: { cabs: [{ x0: -5, x1: -1 }, { x0: 1, x1: 5 }], wall: "zmin", z0: -113, z1: -110 } }),
+  R("hangar_lobby", "hangar", "Turbolift Lobby — Hangar Deck", -40, 5, [-8, 8, -110, -90], { accent: "corridor", spawn: [0, -40, -100, 180], lift: { cabs: [{ x0: -5, x1: -1 }, { x0: 1, x1: 5 }], wall: "zmin", z0: -113, z1: -110 } }),
   R("flight_control", "hangar", "Hangar Flight Control", -22, 4, [40, 52, -20, 0], { accent: "hangar", spawn: [46, -22, -10, 90] }),
 
   // ---- ENGINEERING (floor -10)
@@ -232,7 +232,7 @@ export const DOORS = [
   D("hg_shuttle", "hangar", "shuttle_bay", "z", 70, -10, 10, 14, "blast"),
   D("hg_maint_a", "hangar", "fighter_maint", "x", -40, -50, -30, 12, "arch"),
   D("hg_maint_b", "hangar", "fighter_maint", "x", -40, 0, 20, 12, "arch"),
-  D("hg_cargo", "hangar", "cargo_bay", "x", 40, -50, -30, 12, "arch"),
+  D("hg_cargo", "hangar", "cargo_bay", "x", 40, -60, -48, 12, "arch"), // clear of the starboard stair tower (z −46..−22)
   D("hg_repair", "hangar", "repair_bay", "x", 40, 40, 56, 10, "arch"),
   D("hg_lobby", "hangar", "hangar_lobby", "z", -90, -3, 3, 4, "blast"),
   D("hg_fc", "hangar", "flight_control", "x", 40, -20, 0, 4, "open"), // glass front; passable via the stair landing

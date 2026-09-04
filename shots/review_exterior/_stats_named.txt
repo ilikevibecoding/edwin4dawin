@@ -1,0 +1,9 @@
+ready in 30991 ms
+boot {"materials":{"imperialPanel":510,"wornMetal":1349,"deckBlack":683,"deckGrey":498,"hullPlate":5814,"rubber":27,"fabric":26,"hazard":30,"hazardRed":28,"grate":689,"diffuser":31,"decals":116,"screens":15,"leds":2},"space":1976,"exterior":188,"boot":12393,"totalMs":12393}
+ext_far: 87 calls, 356k tris, 2 lights, 59 objs, 2441.6 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/ext_far.png
+ext_mid: 195 calls, 551k tris, 2 lights, 167 objs, 4274.79 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/ext_mid.png
+ext_tower: 538 calls, 1239k tris, 16 lights, 431 objs, 7167.2 ms/frame (software GL), rooms bridge|tactical|nav_station|observation -> /workspace/shots/review_exterior/ext_tower.png
+ext_bow: 183 calls, 467k tris, 2 lights, 155 objs, 5558.71 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/ext_bow.png
+ext_stern: 195 calls, 551k tris, 2 lights, 167 objs, 4925.03 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/ext_stern.png
+ext_close: 515 calls, 1207k tris, 16 lights, 431 objs, 8785.89 ms/frame (software GL), rooms bridge|tactical|nav_station|observation -> /workspace/shots/review_exterior/ext_close.png
+no page errors

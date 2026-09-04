@@ -1,0 +1,5 @@
+ready in 28000 ms
+boot {"materials":{"imperialPanel":258,"wornMetal":732,"deckBlack":1178,"deckGrey":617,"hullPlate":5095,"rubber":37,"fabric":29,"hazard":22,"hazardRed":27,"grate":308,"diffuser":17,"decals":125,"screens":33,"leds":2},"space":2165,"exterior":302,"boot":11403,"totalMs":11403}
+ext_belly: 259 calls, 635k tris, 2 lights, 253 objs, 6255 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/sim40/ext_belly.png
+ext_150_-170_-60_0_-120_-80: 261 calls, 646k tris, 2 lights, 261 objs, 5167.07 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/sim40/ext_150_-170_-60_0_-120_-80.png
+no page errors
