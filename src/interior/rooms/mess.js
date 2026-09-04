@@ -9,10 +9,10 @@ import { PALETTE } from "../../materials.js";
 import { roomShell, wallLightBar, IMPERIAL_STYLES, IMPERIAL_PAINTS } from "../shell.js";
 import { panelGrid, pointLight, wallFrame, WALL_T } from "../lib.js";
 import { rng } from "../../kit.js";
-import { counter, grabRail, wallScreen, stencil, grateStrip, pipeRun, bench, pendant, ceilingFixture, hazardBand, Frosted } from "./crewFwdKit.js";
+import { counter, grabRail, wallScreen, stencil, grateStrip, pipeRun, bench, linearPendant, downlight, ceilingFixture, hazardBand, Frosted } from "./crewFwdKit.js";
 
 const PART_X = 20; // galley partition plane
-const HATCH = { z0: 493, z1: 501, top: 2.4 };
+const HATCH = { z0: 492, z1: 502, top: 2.5 };
 
 export function build(kit, ctx, room, lib) {
   const { x0, x1, z0, z1, height: h } = room;
@@ -20,7 +20,7 @@ export function build(kit, ctx, room, lib) {
     style: "light",
     lights: false,
     lightMat: "emitWarmSoft",
-    lightRows: 2,
+    lightRows: 0,
     floorColor: PALETTE.impGrey,
     seed: 83,
   });
@@ -44,31 +44,34 @@ export function build(kit, ctx, room, lib) {
 
   servingCounter(kit, ctx, y0, frosted);
   {
-    // hall face: fascia + menu screens over the hatch, dispensers and signage beside it
+    // hall face: a backlit menu board across the whole hatch (three screens, lit band underneath),
+    // dispensers and signage beside it
     const f = hallFace.frame;
     const uc = (HATCH.z0 + HATCH.z1) / 2 - z0;
-    f.box("satinBlack", uc, 2.75, 0.03, HATCH.z1 - HATCH.z0 + 0.4, 0.5, 0.06);
-    for (const du of [-2.0, 2.0]) {
-      f.box("darkGloss", uc + du, 2.75, 0.062, 1.46, 0.44, 0.006);
-      f.box("screen6", uc + du, 2.75, 0.066, 1.4, 0.38, 0.004, { uv: "keep" });
-    }
-    f.box("leds", uc, 2.75, 0.062, 1.2, 0.04, 0.006, { uv: "keep" });
-    stencil(f, uc, 2.75, 0.34, 11, 0.064);
-    rationDispenser(kit, ctx, f, 5.5, true);
-    rationDispenser(kit, ctx, f, 16.5, false);
-    waterFountain(f, 3.0);
-    stencil(f, 1.2, 1.9, 0.36, 0);
-    stencil(f, 20.6, 1.9, 0.36, 14);
-    wallLightBar(f, 0.4, 6.4, 2.3, "emitWarmSoft");
-    wallLightBar(f, 15.6, 21.6, 2.3, "emitWarmSoft");
-    trayRack(kit, 19.25, y0, 492.3);
-    trayRack(kit, 19.25, y0, 501.7);
+    const bw = HATCH.z1 - HATCH.z0 + 0.4;
+    f.box("satinBlack", uc, 2.85, 0.03, bw, 0.62, 0.06);
+    f.box("metal", uc, 3.17, 0.04, bw + 0.04, 0.03, 0.08, { color: PALETTE.steel, texel: 2 });
+    [["screen6", -3.2], ["screen10", 0], ["screen6", 3.2]].forEach(([mat, du]) => {
+      f.box("darkGloss", uc + du, 2.87, 0.062, 2.36, 0.5, 0.006);
+      f.box(mat, uc + du, 2.87, 0.066, 2.3, 0.44, 0.004, { uv: "keep" });
+    });
+    f.box("emitWarmSoft", uc, 2.56, 0.062, bw - 0.3, 0.05, 0.006, { uv: "keep" });
+    for (const du of [-1.6, 1.6]) stencil(f, uc + du, 2.87, 0.3, 11, 0.064);
+    rationDispenser(kit, ctx, f, 4.5, true);
+    rationDispenser(kit, ctx, f, 17.5, false);
+    waterFountain(f, 2.4);
+    stencil(f, 1.0, 1.9, 0.36, 0);
+    stencil(f, 20.9, 1.9, 0.36, 14);
+    wallLightBar(f, 0.4, 5.4, 2.3, "emitWarmSoft");
+    wallLightBar(f, 16.6, 21.6, 2.3, "emitWarmSoft");
+    trayRack(kit, 19.2, y0, 491.3);
+    trayRack(kit, 19.2, y0, 502.7);
   }
   {
     // galley face: stock shelves, screen, cleaning station
     const f = galleyFace.frame; // u = z1 - z
     shelfUnit(f, 1.0, 6.0, rand);
-    wallScreen(f, 17.5, 2.0, 0.9, 0.45, "screen6");
+    wallScreen(f, 17.5, 2.0, 0.9, 0.45, "screen10");
     stencil(f, 16.2, 1.6, 0.3, 6);
     f.box("metalRough", 19.5, 1.15, 0.05, 0.12, 0.5, 0.1, { color: PALETTE.gunmetal });
     f.cylV("painted", 19.5, 1.1, 0.14, 0.075, 0.5, { color: PALETTE.impRed, uv: "keep", segments: 14 });
@@ -83,10 +86,29 @@ export function build(kit, ctx, room, lib) {
   const rows = [489.6, 493.2, 500.8, 504.4];
   const tableX = [6.75, 13.75];
   for (const z of rows) for (const cx of tableX) messTable(kit, cx, y0, z, 5.5, rand);
-  for (const z of rows) for (const cx of tableX) for (const dx of [-1.5, 1.5]) pendant(kit, cx + dx, yTop, z, 0.75, 0.3, "emitWarmSoft");
-  // light painted runner from the door to the hatch
+  // one long linear pendant per table; its practical hangs under the canopy
+  for (const z of rows) for (const cx of tableX) linearPendant(kit, cx, yTop, z, 3.4, 0.7, "x", "emitWarmSoft");
+  // light painted runner from the door to the hatch, under a dropped light spine with three downlights
   kit.boxMM("painted", [x0 + 0.4, y0, 495.7], [PART_X - 0.9, y0 + 0.01, 498.3], { color: PALETTE.impGrey, texel: 1 });
   for (const z of [495.65, 498.35]) kit.box("satinBlack", (x0 + PART_X) / 2 - 0.2, y0 + 0.006, z, PART_X - x0 - 1.2, 0.012, 0.06);
+  const FILL_X = [5.0, 11.5, 17.5];
+  kit.boxMM("satinBlack", [x0 + 0.6, yTop - 0.18, 496.4], [PART_X - 0.6, yTop, 497.6]);
+  for (const x of [3.4, 8.25, 14.5, 18.5]) kit.box("emitWarmSoft", x, yTop - 0.184, 497, 1.4, 0.012, 0.3, { uv: "keep" });
+  for (const x of FILL_X) downlight(kit, x, yTop - 0.18, 497, 0.14, "emitWarmSoft");
+  // coffered ceiling over the hall: light panels between the shell's ribs so the plate reads as a
+  // finished ceiling rather than bare dirt
+  {
+    const ribs = [];
+    const w = x1 - x0;
+    const n = Math.max(1, Math.floor(w / 3.2));
+    for (let i = 0; i <= n; i++) ribs.push(x0 + (w * i) / n);
+    for (let i = 0; i < ribs.length - 1; i++) {
+      const xa = ribs[i] + 0.22;
+      const xb = ribs[i + 1] - 0.22;
+      if (xa > PART_X - 0.6) continue;
+      for (const [za, zb] of [[z0 + 0.3, 496.2], [497.8, z1 - 0.3]]) kit.boxMM("painted", [xa, yTop - 0.04, za], [Math.min(xb, PART_X - 0.4), yTop - 0.005, zb], { color: PALETTE.impGrey, uv: "world", texel: 0.6 });
+    }
+  }
 
   // ------------------------------------------------------------ hall walls
   {
@@ -102,7 +124,7 @@ export function build(kit, ctx, room, lib) {
       f.box("emitOrange", u - 0.12, 1.22, 0.518, 0.02, 0.02, 0.004);
     }
     for (let k = 0; k < 5; k++) f.cylV("painted", 4.2 - k * 0.09, 0.98 + k * 0.03, 0.4, 0.045, 0.1, { color: PALETTE.cream, uv: "keep", segments: 10 });
-    wallScreen(f, 3.0, 2.0, 1.0, 0.5, "screen6");
+    wallScreen(f, 3.0, 2.0, 1.0, 0.5, "screen7");
     stencil(f, 5.4, 1.8, 0.3, 4);
     ventGrille(f, 8.0, 2.55, 1.6, 0.6);
     ventGrille(f, 14.5, 2.55, 1.6, 0.6);
@@ -136,7 +158,7 @@ export function build(kit, ctx, room, lib) {
     f.box("emitTeal", 11.6, 1.6, 0.041, 0.6, 0.02, 0.006);
     stencil(f, 11.6, 1.36, 0.22, 12, 0.041);
     ventGrille(f, 16.5, 2.55, 1.6, 0.6);
-    wallScreen(f, 15.0, 1.85, 0.8, 0.45, "screen0");
+    wallScreen(f, 15.0, 1.85, 0.8, 0.45, "screen9");
     wallScreen(f, 20.5, 1.85, 0.8, 0.45, "screen6");
     wallLightBar(f, 13.4, 18.4, 2.2, "emitWarmSoft");
     stencil(f, 18.0, 1.6, 0.3, 0);
@@ -152,7 +174,7 @@ export function build(kit, ctx, room, lib) {
     for (const [u, col] of [[6.7, PALETTE.fabricTeal], [7.3, PALETTE.fabricCream], [7.9, PALETTE.fabricTeal]]) f.box("fabric", u, 1.42, 0.06, 0.26, 0.6, 0.08, { color: col, uv: "world", texel: 3 });
     wallLightBar(f, 1.0, 9.2, 2.35, "emitWarmSoft");
     wallLightBar(f, 12.8, 21.0, 2.35, "emitWarmSoft");
-    wallScreen(f, 14.5, 1.9, 0.9, 0.6, "screen0");
+    wallScreen(f, 14.5, 1.9, 0.9, 0.6, "screen8");
     stencil(f, 16.2, 1.8, 0.34, 1);
     // waste / recycling units by the door
     for (const [u, col, idx] of [[17.6, PALETTE.tealPaint, 12], [18.4, PALETTE.creamDark, 11]]) {
@@ -174,15 +196,15 @@ export function build(kit, ctx, room, lib) {
   // ------------------------------------------------------------ lights: warm pendants over the tables, amber hatch, cool galley
   // The light pool only realises 14 fixtures at a time, so the hall uses a few strong, long-reach
   // practicals rather than one per pendant.
-  for (const z of rows) for (const cx of tableX) ctx.lights.warm.push(pointLight(0xffc48c, 10.0, 14, [cx, yTop - 0.9, z]));
-  for (const x of [5.0, 12.0, 17.5]) ctx.lights.warm.push(pointLight(0xffd2a8, 8.0, 12, [x, yTop - 0.6, 497]));
-  for (const z of [495.0, 499.0]) ctx.lights.warm.push(pointLight(0xffb060, 6.5, 9, [PART_X - 0.3, y0 + 1.7, z]));
-  for (const z of [491, 503]) ctx.lights.cool.push(pointLight(0xe0ecff, 7.5, 12, [23.5, yTop - 0.6, z]));
-  ctx.lights.cool.push(pointLight(0xe0ecff, 7.0, 12, [23.5, yTop - 0.6, 497]));
+  for (const z of rows) for (const cx of tableX) ctx.lights.warm.push(pointLight(0xffc48c, 10.0, 14, [cx, yTop - 1.05, z]));
+  for (const x of FILL_X) ctx.lights.warm.push(pointLight(0xffd2a8, 8.0, 12, [x, yTop - 0.55, 497]));
+  for (const z of [493.95, 499.95]) ctx.lights.warm.push(pointLight(0xffa040, 7.0, 8, [PART_X - 0.35, y0 + 1.75, z]));
+  for (const z of [491, 497, 503]) ctx.lights.cool.push(pointLight(0xe0ecff, 7.5, 12, [23.5, yTop - 0.6, z]));
   return shell;
 }
 
-// Long mess table with a bench on both sides, pedestal bases, and a scatter of trays and cups.
+// Long mess table with a bench on both sides, pedestal bases, place settings down both sides (tray,
+// compartment plate with food, cup, utensils), ration cartons and a water jug + condiment caddy mid-table.
 function messTable(kit, cx, y0, cz, len, rand) {
   kit.box("painted", cx, y0 + 0.745, cz, len, 0.05, 0.8, { color: PALETTE.impGrey, uv: "keep" });
   kit.box("satinBlack", cx, y0 + 0.69, cz, len - 0.1, 0.06, 0.7);
@@ -198,57 +220,97 @@ function messTable(kit, cx, y0, cz, len, rand) {
     for (const dx of [-2.2, 0, 2.2]) kit.box("satinBlack", cx + dx, y0 + 0.18, bz, 0.1, 0.36, 0.3);
     kit.collider([cx - len / 2, y0, bz - 0.18], [cx + len / 2, y0 + 0.45, bz + 0.18], "bench");
   }
+  const top = y0 + 0.77;
+  const FOOD = [PALETTE.orange, PALETTE.cream, PALETTE.tealPaint, PALETTE.creamDark, PALETTE.impAmber];
   for (let i = 0; i < 8; i++) {
-    if (rand() > 0.35) continue;
-    const tx = cx - len / 2 + 0.5 + i * ((len - 1.0) / 7) + (rand() - 0.5) * 0.2;
-    const tz = cz + (rand() < 0.5 ? -0.18 : 0.18);
-    kit.box("darkGloss", tx, y0 + 0.777, tz, 0.42, 0.014, 0.3);
-    kit.cyl("painted", tx + 0.14, y0 + 0.83, tz - 0.08, 0.035, 0.09, "y", { color: rand() < 0.5 ? PALETTE.tealPaint : PALETTE.creamDark, uv: "keep", segments: 10 });
-    if (rand() < 0.5) kit.box("painted", tx - 0.08, y0 + 0.8, tz + 0.04, 0.16, 0.03, 0.12, { color: PALETTE.cream, uv: "keep" });
+    if (rand() < 0.3) continue;
+    const s = i % 2 === 0 ? -1 : 1;
+    const tx = cx - len / 2 + 0.55 + i * ((len - 1.1) / 7) + (rand() - 0.5) * 0.15;
+    const tz = cz + s * 0.2;
+    mealTray(kit, tx, top, tz, s, rand, FOOD);
   }
+  // cartons of rations stacked at one end, jug and caddy in the middle
+  const ex = cx + (rand() < 0.5 ? -1 : 1) * (len / 2 - 0.35);
+  for (let k = 0; k < 2 + Math.floor(rand() * 2); k++) {
+    kit.box("painted", ex + (rand() - 0.5) * 0.04, top + 0.055 + k * 0.11, cz + (rand() - 0.5) * 0.04, 0.26, 0.11, 0.18, { color: k % 2 ? PALETTE.creamDark : PALETTE.cream, uv: "keep" });
+    kit.box("painted", ex, top + 0.055 + k * 0.11, cz, 0.262, 0.03, 0.182, { color: PALETTE.tealPaint, uv: "keep" });
+  }
+  kit.cyl("metal", cx + 0.3, top + 0.13, cz, 0.07, 0.26, "y", { color: PALETTE.steel, segments: 14 });
+  kit.cyl("darkGloss", cx + 0.3, top + 0.265, cz, 0.05, 0.01, "y", { segments: 14 });
+  kit.box("metal", cx - 0.3, top + 0.02, cz, 0.3, 0.04, 0.16, { color: PALETTE.gunmetal });
+  for (let k = 0; k < 4; k++) kit.cyl("painted", cx - 0.4 + k * 0.07, top + 0.09, cz, 0.025, 0.1, "y", { color: FOOD[k % FOOD.length], uv: "keep", segments: 8 });
+}
+
+// One place setting: tray, compartment plate with food, cup, utensils; `side` is which bench it faces.
+function mealTray(kit, x, top, z, side, rand, FOOD) {
+  kit.box("darkGloss", x, top + 0.007, z, 0.44, 0.014, 0.32);
+  kit.box("painted", x - 0.06, top + 0.03, z, 0.26, 0.03, 0.2, { color: PALETTE.impWhite, uv: "keep" });
+  const n = 2 + Math.floor(rand() * 2);
+  for (let k = 0; k < n; k++) {
+    const fx = x - 0.14 + k * (0.16 / Math.max(1, n - 1));
+    const col = FOOD[Math.floor(rand() * FOOD.length)];
+    if (rand() < 0.5) kit.box("painted", fx, top + 0.065, z + (rand() - 0.5) * 0.06, 0.07, 0.04, 0.07, { color: col, uv: "keep" });
+    else kit.cyl("painted", fx, top + 0.06, z + (rand() - 0.5) * 0.06, 0.035, 0.03, "y", { color: col, uv: "keep", segments: 10 });
+  }
+  kit.cyl("painted", x + 0.15, top + 0.06, z - side * 0.08, 0.035, 0.1, "y", { color: rand() < 0.5 ? PALETTE.tealPaint : PALETTE.creamDark, uv: "keep", segments: 10 });
+  kit.box("metal", x + 0.15, top + 0.018, z + side * 0.08, 0.012, 0.008, 0.16, { color: PALETTE.steel });
+  if (rand() < 0.6) kit.box("painted", x + 0.06, top + 0.03, z + side * 0.12, 0.12, 0.03, 0.06, { color: PALETTE.cream, uv: "keep" });
 }
 
 // Serving counter set into the hatch: food wells, sneeze guard, tray rail and the heat-lamp gantry.
 function servingCounter(kit, ctx, y0, frosted) {
-  const xa = PART_X - 0.65;
-  const xb = PART_X + 0.65;
+  const xa = PART_X - 1.0;
+  const xb = PART_X + 0.7;
   const za = HATCH.z0 + 0.05;
   const zb = HATCH.z1 - 0.05;
   const zc = (za + zb) / 2;
   const len = zb - za;
+  // white counter with a lit toe line and a backlit band across the hall face
   kit.boxMM("satinBlack", [xa + 0.05, y0, za + 0.05], [xb - 0.05, y0 + 0.08, zb - 0.05]);
-  kit.boxMM("painted", [xa, y0 + 0.08, za], [xb, y0 + 0.86, zb], { color: PALETTE.impWhite, uv: "keep" });
+  kit.boxMM("painted", [xa, y0 + 0.08, za], [xb, y0 + 0.88, zb], { color: PALETTE.impWhite, uv: "keep" });
   kit.box("emitWarm", xa + 0.02, y0 + 0.05, zc, 0.006, 0.02, len - 0.4);
-  for (let z = za + 0.9; z < zb - 0.3; z += 0.9) kit.box("metal", xa - 0.003, y0 + 0.47, z, 0.012, 0.7, 0.012, { color: PALETTE.darkMetal });
-  kit.boxMM("metal", [xa - 0.03, y0 + 0.86, za - 0.03], [xb + 0.03, y0 + 0.92, zb + 0.03], { color: PALETTE.steel, texel: 1.5 });
-  for (let i = 0; i < 6; i++) {
-    const z = za + 0.75 + i * 1.28;
-    kit.box("metal", PART_X + 0.1, y0 + 0.925, z, 0.6, 0.012, 1.0, { color: PALETTE.gunmetal, texel: 2 });
-    kit.box("darkGloss", PART_X + 0.1, y0 + 0.932, z, 0.52, 0.012, 0.92);
-    if (i % 2 === 0) kit.box("metal", PART_X + 0.1, y0 + 0.94, z, 0.5, 0.02, 0.9, { color: PALETTE.steel, texel: 2 });
+  kit.box("satinBlack", xa - 0.004, y0 + 0.62, zc, 0.008, 0.14, len - 0.3);
+  kit.box("emitWarmSoft", xa - 0.01, y0 + 0.62, zc, 0.006, 0.09, len - 0.4, { uv: "keep" });
+  for (let z = za + 0.9; z < zb - 0.3; z += 0.9) kit.box("metal", xa - 0.003, y0 + 0.35, z, 0.012, 0.45, 0.012, { color: PALETTE.darkMetal });
+  kit.boxMM("metal", [xa - 0.03, y0 + 0.88, za - 0.03], [xb + 0.03, y0 + 0.94, zb + 0.03], { color: PALETTE.steel, texel: 1.5 });
+  // food wells (lids on alternate wells), dishes and serving utensils
+  for (let i = 0; i < 8; i++) {
+    const z = za + 0.7 + i * ((len - 1.4) / 7);
+    kit.box("metal", PART_X, y0 + 0.945, z, 0.7, 0.012, 1.0, { color: PALETTE.gunmetal, texel: 2 });
+    kit.box("darkGloss", PART_X, y0 + 0.952, z, 0.62, 0.012, 0.92);
+    if (i % 2 === 0) kit.box("metal", PART_X, y0 + 0.96, z, 0.6, 0.02, 0.9, { color: PALETTE.steel, texel: 2 });
+    else {
+      kit.box("painted", PART_X - 0.1, y0 + 0.975, z - 0.2, 0.34, 0.03, 0.3, { color: [PALETTE.orange, PALETTE.cream, PALETTE.tealPaint, PALETTE.creamDark][i % 4], uv: "keep" });
+      kit.box("metal", PART_X + 0.15, y0 + 0.98, z + 0.25, 0.3, 0.012, 0.04, { color: PALETTE.steel });
+    }
   }
-  for (const z of [za + 0.4, zb - 0.4]) kit.cyl("painted", PART_X - 0.4, y0 + 0.99, z, 0.05, 0.14, "y", { color: PALETTE.tealPaint, uv: "keep", segments: 10 });
+  for (const z of [za + 0.4, zb - 0.4]) kit.cyl("painted", PART_X - 0.6, y0 + 1.01, z, 0.05, 0.14, "y", { color: PALETTE.tealPaint, uv: "keep", segments: 10 });
   // sneeze guard on posts
-  frosted.box(PART_X - 0.42, y0 + 1.36, zc, 0.016, 0.42, len - 0.5);
-  kit.box("metal", PART_X - 0.42, y0 + 1.58, zc, 0.04, 0.03, len - 0.5, { color: PALETTE.steel, texel: 2 });
-  for (const z of [za + 0.3, za + len / 3, zb - len / 3, zb - 0.3]) kit.cyl("metal", PART_X - 0.42, y0 + 1.26, z, 0.015, 0.68, "y", { color: PALETTE.steel, segments: 8 });
+  frosted.box(xa + 0.3, y0 + 1.38, zc, 0.016, 0.42, len - 0.5);
+  kit.box("metal", xa + 0.3, y0 + 1.6, zc, 0.04, 0.03, len - 0.5, { color: PALETTE.steel, texel: 2 });
+  for (const z of [za + 0.3, za + len / 3, zb - len / 3, zb - 0.3]) kit.cyl("metal", xa + 0.3, y0 + 1.28, z, 0.015, 0.68, "y", { color: PALETTE.steel, segments: 8 });
   // tray rail along the hall side
-  kit.cyl("metal", xa - 0.2, y0 + 0.95, zc, 0.02, len - 0.2, "z", { color: PALETTE.steel, segments: 10 });
-  kit.cyl("metal", xa - 0.2, y0 + 0.88, zc, 0.02, len - 0.2, "z", { color: PALETTE.steel, segments: 10 });
-  for (let z = za + 0.4; z < zb; z += 1.9) kit.box("metal", xa - 0.1, y0 + 0.915, z, 0.2, 0.03, 0.04, { color: PALETTE.gunmetal });
+  kit.cyl("metal", xa - 0.2, y0 + 0.97, zc, 0.02, len - 0.2, "z", { color: PALETTE.steel, segments: 10 });
+  kit.cyl("metal", xa - 0.2, y0 + 0.9, zc, 0.02, len - 0.2, "z", { color: PALETTE.steel, segments: 10 });
+  for (let z = za + 0.4; z < zb; z += 1.9) kit.box("metal", xa - 0.1, y0 + 0.935, z, 0.2, 0.03, 0.04, { color: PALETTE.gunmetal });
   kit.collider([xa - 0.25, y0, za], [xb + 0.05, y0 + 1.0, zb], "counter");
-  // heat-lamp gantry hung from the header
-  kit.box("satinBlack", PART_X - 0.1, y0 + 2.12, zc, 0.1, 0.08, len - 0.2);
-  for (const z of [za + 0.5, zc, zb - 0.5]) kit.cyl("metal", PART_X - 0.1, y0 + 2.25, z, 0.015, 0.2, "y", { color: PALETTE.darkMetal, segments: 8 });
-  for (let i = 0; i < 6; i++) {
-    const z = za + 0.75 + i * 1.28;
-    kit.cyl("metal", PART_X - 0.1, y0 + 2.04, z, 0.012, 0.08, "y", { color: PALETTE.darkMetal, segments: 8 });
-    kit.cyl("paintedMetal", PART_X - 0.1, y0 + 1.93, z, 0.2, 0.16, "y", { color: PALETTE.gunmetal, segments: 20 });
-    kit.cyl("emitAmber", PART_X - 0.1, y0 + 1.845, z, 0.17, 0.012, "y", { uv: "keep", segments: 20 });
+  // heat-lamp gantry hung from the header: eight bell shades with glowing rims under a lit rail, so
+  // the lamps read from the far end of the hall and not only from underneath
+  const gx = PART_X - 0.35;
+  kit.box("satinBlack", gx, y0 + 2.2, zc, 0.14, 0.1, len - 0.2);
+  kit.box("emitWarmSoft", gx, y0 + 2.146, zc, 0.08, 0.012, len - 0.4, { uv: "keep" });
+  for (const z of [za + 0.5, zc, zb - 0.5]) kit.cyl("metal", gx, y0 + 2.35, z, 0.015, 0.2, "y", { color: PALETTE.darkMetal, segments: 8 });
+  for (let i = 0; i < 8; i++) {
+    const z = za + 0.7 + i * ((len - 1.4) / 7);
+    kit.cyl("metal", gx, y0 + 2.1, z, 0.012, 0.1, "y", { color: PALETTE.darkMetal, segments: 8 });
+    kit.cyl("paintedMetal", gx, y0 + 1.96, z, 0.22, 0.2, "y", { color: PALETTE.gunmetal, segments: 20 });
+    kit.add("emitAmber", new THREE.TorusGeometry(0.2, 0.025, 8, 28), { pos: [gx, y0 + 1.855, z], rot: [Math.PI / 2, 0, 0], uv: "keep" });
+    kit.cyl("emitAmber", gx, y0 + 1.86, z, 0.17, 0.05, "y", { uv: "keep", segments: 20 });
   }
   // cutlery and napkin station at the hall end of the counter
-  kit.box("metal", xa - 0.12, y0 + 1.0, zb - 0.6, 0.24, 0.02, 0.5, { color: PALETTE.steel });
-  for (const dz of [-0.15, 0, 0.15]) kit.box("darkGloss", xa - 0.12, y0 + 1.06, zb - 0.6 + dz, 0.16, 0.1, 0.12);
+  kit.box("metal", xa - 0.12, y0 + 1.02, zb - 0.6, 0.24, 0.02, 0.5, { color: PALETTE.steel });
+  for (const dz of [-0.15, 0, 0.15]) kit.box("darkGloss", xa - 0.12, y0 + 1.08, zb - 0.6 + dz, 0.16, 0.1, 0.12);
+  void ctx;
 }
 
 // Ration dispenser on the hall face of the partition. The first one is the interactable (separate group).
@@ -442,7 +504,7 @@ function galley(kit, ctx, f, y0, yTop, h, rand) {
   f.collider(20.7, 21.9, 0, 1.25, 0, 0.75, "compactor");
   // wall dressing above the line
   wallScreen(f, 11.0, 2.55, 0.9, 0.45, "screen6");
-  wallScreen(f, 18.5, 2.2, 0.8, 0.42, "screen0");
+  wallScreen(f, 18.5, 2.2, 0.8, 0.42, "screen9");
   pipeRun(f, 0.5, 21.5, 3.0, 0.05, { color: PALETTE.steel });
   pipeRun(f, 0.5, 21.5, 2.86, 0.03, { color: PALETTE.orange, clamps: false });
   stencil(f, 5.7, 1.8, 0.3, 12);
@@ -474,7 +536,6 @@ function galley(kit, ctx, f, y0, yTop, h, rand) {
     kit.cyl("metal", ix + s * 0.28, ry - 0.2, z, 0.1 + (i % 3) * 0.02, 0.16, "y", { color: i % 2 ? PALETTE.gunmetal : PALETTE.steel, segments: 14 });
     kit.cyl("metal", ix + s * 0.28, ry - 0.06, z, 0.008, 0.12, "y", { color: PALETTE.steel, segments: 6 });
   }
-  ceilingFixture(kit, 23.2, yTop, 490.5, 1.6, 0.2, "emitCoolSoft");
-  ceilingFixture(kit, 23.2, yTop, 503.5, 1.6, 0.2, "emitCoolSoft");
+  for (const z of [491, 497, 503]) ceilingFixture(kit, 23.5, yTop, z, 1.6, 0.24, "emitCoolSoft");
   void ctx;
 }
