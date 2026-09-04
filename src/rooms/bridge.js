@@ -32,6 +32,17 @@ function ensureMaterials(M) {
     const m = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: makeStatusBoard(512, 1024, 3), emissiveIntensity: 1.2, roughness: 0.6, metalness: 0 });
     M.bridge_statusBoard = setDomain(m, "interior");
   }
+  if (!M.bridge_railGlow) {
+    // walkway / stair handrail light: half the kit's dim blue (a practical under the rail, not neon)
+    const m = M.emitBlueDim.clone();
+    m.emissiveIntensity = M.emitBlueDim.emissiveIntensity * 0.5;
+    M.bridge_railGlow = setDomain(m, "interior");
+  }
+  if (!M.bridge_consoleGlow) {
+    // cool spill under the pit consoles (the operators' screens lighting the deck plates)
+    const m = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(0x9cc0ff), emissiveIntensity: 0.55, roughness: 0.6, metalness: 0 });
+    M.bridge_consoleGlow = setDomain(m, "interior");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -77,55 +88,83 @@ export function buildBridge(kit, ctx, room) {
     buildCeiling();
   }
 
+  /** Two-triangle quad through four room-local corners (a, b, c, d in order); normals face the room. */
+  function quad(mat, a, b, c, d, opts = {}) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z]), 3));
+    g.computeVertexNormals();
+    kit.add(mat, g, { uv: "world", texel: 1, ...opts });
+  }
+
   function buildForwardWall() {
     const nf = new Frame(kit, new THREE.Vector3(-hx, 0, NF), X_AXIS, UP); // room face, N = +z
     const YBr = WY0 - 0.35; // room-face sill (the sill slopes down 0.35 toward the room)
     const YTr = WY1 + 0.4; // room-face head (the head splays up)
-    const hwB = vw / 2 - 0.25; // exterior cut-out half-widths (bottom / top)
+    const hwB = vw / 2 - 0.25; // exterior cut-out half-widths (bottom / top) — fixed by the hull
     const hwT = vw / 2;
-    const hwBr = hwB + 0.15; // room-face opening half-widths: splayed reveals, stronger trapezoid
-    const hwTr = hwT + 0.3;
+    // room-face opening: a real trapezoid. The frame closes the sill end 0.7 m per side inside the hull
+    // cut-out and sits just inside it at the head, so the silhouette seen from the walkway leans ~11°
+    // per side (bottom 4.7 m, top 6.5 m) instead of the near-rectangle the cut-out alone gives.
+    const hwBr = hwB - 0.7;
+    const hwTr = hwT - 0.06;
+    const FW = 0.24; // black frame surround, proud of the wall face
+    const FD = 0.12;
+    const CL = (x) => Math.max(-hx - 0.4, Math.min(hx + 0.4, x)); // keep frame geometry inside the side walls
+    const V = (x, y, z) => new THREE.Vector3(CL(x), y, z);
     // bulkhead slabs (z -15 .. -14.6) below the sills and above the heads: pale Imperial panels, so the
     // viewports read as dark trapezoid openings between pale mullions (the film's silhouette)
     kit.boxMM("impPanel1", [-hx - 0.4, -0.2, -hz], [hx + 0.4, YBr, NF], { color: GREY, texel: 1 });
     kit.boxMM("impPanel1", [-hx - 0.4, YTr, -hz], [hx + 0.4, CEIL + 0.4, NF], { color: GREY, texel: 1 });
-    kit.boxMM("impTrim", [-hx - 0.4, YTr - 0.02, NF - 0.01], [hx + 0.4, YTr + 0.5, NF + 0.01], { color: BLACK, texel: 1 }); // black head band
-    // wedge pillars between the viewports: wide at the sill, narrow at the head (film silhouette)
+    kit.boxMM("impTrim", [-hx - 0.4, YTr + FW - 0.02, NF - 0.01], [hx + 0.4, YTr + FW + 0.36, NF + 0.01], { color: BLACK, texel: 1 }); // black head band
+    // wedge mullions between the viewports: wide at the sill (3.0 m), narrow at the head (1.2 m)
     const pitch = vw + vp.pillar;
+    const bw = pitch / 2 - hwBr;
+    const tw = pitch / 2 - hwTr;
     for (let i = 0; i < vp.count - 1; i++) {
       const xp = (winX(i) + winX(i + 1)) / 2;
-      const bw = pitch / 2 - hwBr;
-      const tw = pitch / 2 - hwTr;
       kit.add("impPanel1", prism([[-bw, YBr - 0.02], [bw, YBr - 0.02], [tw, YTr + 0.02], [-tw, YTr + 0.02]], 0.4), { pos: [xp, 0, NF - 0.2], color: GREY, texel: 1 });
-      kit.add("impTrim", prism([[-bw + 0.16, YBr + 0.3], [bw - 0.16, YBr + 0.3], [tw - 0.12, YTr - 0.4], [-tw + 0.12, YTr - 0.4]], 0.03), { pos: [xp, 0, NF + 0.015], color: BLACK, texel: 1 });
-      // narrow dim lamp, brackets, glyph plate, status lamp at the head
+      // recessed dark spine up the mullion with the narrow dim lamp, brackets, glyph plate, status lamp
+      kit.add("impTrim", prism([[-bw + FW + 0.2, YBr + 0.5], [bw - FW - 0.2, YBr + 0.5], [tw - FW - 0.12, YTr - 0.5], [-tw + FW + 0.12, YTr - 0.5]], 0.03), { pos: [xp, 0, NF + 0.015], color: BLACK, texel: 1 });
       nf.box("impMetal", xp + hx, 3.3, 0.05, 0.14, 1.24, 0.02, { color: CHAR });
       nf.box("emitBlueDim", xp + hx, 3.3, 0.062, 0.03, 1.1, 0.01, { uv: "keep" });
-      for (const v of [2.2, 4.6]) nf.box("impMetal", xp + hx, v, 0.06, bw * 1.2, 0.06, 0.02, { color: GREYD });
-      nf.decal(IMP_DECAL.glyphs1, xp + hx, YBr + 0.62, 0.052, 0.3);
-      const p = nf.pos(xp + hx, YTr - 0.62, 0.055);
+      for (const v of [2.2, 4.6]) nf.box("impMetal", xp + hx, v, 0.06, Math.max(0.4, (v < 3 ? bw : tw) * 1.2 - FW), 0.06, 0.02, { color: GREYD });
+      nf.decal(IMP_DECAL.glyphs1, xp + hx, YBr + 0.9, 0.052, 0.3);
+      const p = nf.pos(xp + hx, YTr - 0.75, 0.055);
       fx.lamp(i % 2 ? "red" : "amber", p.x, p.y, p.z, 0.05, 0.05, 0.02);
     }
-    // splayed reveals (room face -> exterior cut-out), tunnel lining through the exterior slab
+    // per viewport: black trapezoid frame surround, grey splayed reveals (room face -> hull cut-out),
+    // tunnel lining through the exterior slab
     const ang = Math.atan(0.25 / (WY1 - WY0)); // exterior trapezoid lean
-    const splay = Math.atan(((hwBr - hwB + hwTr - hwT) / 2) / 0.4);
-    const lean = ((hwTr - hwBr) / (YTr - YBr) + (hwT - hwB) / (WY1 - WY0)) / 2;
+    const leanR = Math.atan((hwTr - hwBr) / (YTr - YBr)); // room-face jamb lean (~11°)
+    const jambL = Math.hypot(hwTr - hwBr, YTr - YBr);
     const hwM = (hwB + hwT) / 2;
     for (let i = 0; i < vp.count; i++) {
       const xc = winX(i);
-      // sill: sloped reveal (dark metal) + flat tunnel sill (lighter, catches the starlight) + dim sill groove
-      kit.add("impMetal", new THREE.BoxGeometry(hwB * 2 + 0.1, 0.06, Math.hypot(0.4, WY0 - YBr) + 0.04), { pos: [xc, (YBr + WY0) / 2 - 0.02, NF - 0.2], quat: new THREE.Quaternion().setFromAxisAngle(X_AXIS, Math.atan2(WY0 - YBr, 0.4)), color: CHAR, texel: 1 });
-      kit.boxMM("impMetal", [xc - hwB + 0.02, WY0 - 0.06, -hz - 1.0], [xc + hwB - 0.02, WY0, -hz + 0.02], { color: GREYD, texel: 1 });
-      kit.boxMM("emitWhiteDim", [xc - hwB + 0.3, WY0, -hz - 0.64], [xc + hwB - 0.3, WY0 + 0.012, -hz - 0.58], { uv: "keep" });
-      // head: sloped reveal + flat tunnel head
-      kit.add("impTrim", new THREE.BoxGeometry(hwTr * 2 + 0.04, 0.06, Math.hypot(0.4, YTr - WY1) + 0.04), { pos: [xc, (YTr + WY1) / 2 + 0.02, NF - 0.2], quat: new THREE.Quaternion().setFromAxisAngle(X_AXIS, -Math.atan2(YTr - WY1, 0.4)), color: BLACK, texel: 1 });
-      kit.boxMM("impTrim", [xc - hwT + 0.02, WY1, -hz - 1.0], [xc + hwT - 0.02, WY1 + 0.06, -hz + 0.02], { color: BLACK, texel: 1 });
+      // sill reveal: slopes 0.35 down into the room and flares 0.7 m per side (trapezoid), dark metal;
+      // flat tunnel sill (lighter, catches the starlight) + dim sill groove
+      quad("impMetal", V(xc - hwBr, YBr, NF), V(xc + hwBr, YBr, NF), V(xc + hwB, WY0, -hz), V(xc - hwB, WY0, -hz), { color: CHAR });
+      kit.boxMM("impMetal", [CL(xc - hwB + 0.02), WY0 - 0.06, -hz - 1.0], [CL(xc + hwB - 0.02), WY0, -hz + 0.02], { color: GREYD, texel: 1 });
+      kit.boxMM("emitWhiteDim", [CL(xc - hwB + 0.3), WY0, -hz - 0.64], [CL(xc + hwB - 0.3), WY0 + 0.012, -hz - 0.58], { uv: "keep" });
+      // head reveal (faces down) + flat tunnel head
+      quad("impTrim", V(xc - hwTr, YTr, NF), V(xc - hwT, WY1, -hz), V(xc + hwT, WY1, -hz), V(xc + hwTr, YTr, NF), { color: BLACK });
+      kit.boxMM("impTrim", [CL(xc - hwT + 0.02), WY1, -hz - 1.0], [CL(xc + hwT - 0.02), WY1 + 0.06, -hz + 0.02], { color: BLACK, texel: 1 });
+      // frame surround: sill and head bars (the head bar spans the wider top)
+      kit.boxMM("impTrim", [CL(xc - hwBr - FW), YBr - FW, NF], [CL(xc + hwBr + FW), YBr, NF + FD], { color: BLACK, texel: 1 });
+      kit.boxMM("impTrim", [CL(xc - hwTr - FW), YTr, NF], [CL(xc + hwTr + FW), YTr + FW, NF + FD], { color: BLACK, texel: 1 });
       for (const s of [-1, 1]) {
-        // splayed jamb reveal (room face -> cut-out edge), leaning with the trapezoid
-        const jx = xc + s * ((hwB + hwT + hwBr + hwTr) / 4);
+        const jx = xc + s * ((hwBr + hwTr) / 2 + FW / 2);
         if (Math.abs(jx) > hx + 0.2) continue;
-        const q = new THREE.Quaternion().setFromAxisAngle(UP, s * splay).multiply(new THREE.Quaternion().setFromAxisAngle(Z_AXIS, -s * Math.atan(lean)));
-        kit.add("impMetal", new THREE.BoxGeometry(0.08, YTr - YBr + 0.12, 0.4 / Math.cos(splay) + 0.06), { pos: [jx, (YBr + YTr) / 2, NF - 0.2], quat: q, color: CHAR, texel: 1 });
+        // leaning jamb of the frame surround (black bar following the trapezoid edge)
+        const qj = new THREE.Quaternion().setFromAxisAngle(Z_AXIS, -s * leanR);
+        kit.add("impTrim", new THREE.BoxGeometry(FW, jambL + FW, FD), { pos: [jx, (YBr + YTr) / 2, NF + FD / 2], quat: qj, color: BLACK, texel: 1 });
+        // splayed jamb reveal: from the narrow room-face edge back to the hull cut-out edge (a twisted quad,
+        // 60° to the wall at the sill, nearly square at the head) — lit grey so the depth reads
+        const a = V(xc + s * hwBr, YBr, NF);
+        const b = V(xc + s * hwTr, YTr, NF);
+        const c = V(xc + s * hwT, WY1, -hz);
+        const d = V(xc + s * hwB, WY0, -hz);
+        if (s > 0) quad("impMetal", a, d, c, b, { color: GREYD });
+        else quad("impMetal", a, b, c, d, { color: GREYD });
         // tunnel jamb (exterior slab thickness), bolt row
         const tx = xc + s * (hwM - 0.05);
         const qt = new THREE.Quaternion().setFromAxisAngle(Z_AXIS, -s * ang);
@@ -160,15 +199,15 @@ export function buildBridge(kit, ctx, room) {
       nf.box("leds", c - (b - a) / 4, 0.98, 0.056, Math.min(1.6, (b - a) / 2 - 0.5), 0.05, 0.006, { uv: "keep" });
       nf.decal([IMP_DECAL.glyphs1, IMP_DECAL.bay02, IMP_DECAL.power][i % 3], c + (b - a) / 4, 0.7, 0.056, 0.34);
     }
-    nf.box("impMetal", hx, YBr - 0.07, 0.05, W, 0.1, 0.1, { color: CHAR, texel: 1 });
-    nf.box("emitWhiteDim", hx, YBr - 0.08, 0.1, W - 1.0, 0.03, 0.01, { uv: "keep" });
+    nf.box("impMetal", hx, YBr - FW - 0.07, 0.05, W, 0.1, 0.1, { color: CHAR, texel: 1 });
+    nf.box("emitWhiteDim", hx, YBr - FW - 0.08, 0.1, W - 1.0, 0.03, 0.01, { uv: "keep" });
     // cornice band under the ceiling with a dim slot (matches the kit walls)
     nf.box("impTrim", hx, CEIL - 0.18, 0.02, W, 0.36, 0.06, { color: BLACK, texel: 1 });
     nf.box("impMetal", hx, CEIL - 0.2, 0.05, W - 0.4, 0.12, 0.02, { color: CHAR });
     nf.box("emitWhiteDim", hx, CEIL - 0.2, 0.065, W - 0.8, 0.05, 0.012, { uv: "keep" });
     // the outermost viewports run past the side walls: end jamb at the wall + dark backing in the cut-out
     for (const s of [-1, 1]) {
-      kit.boxMM("impTrim", [Math.min(s * (hx - 0.3), s * (hx + 0.44)), YBr - 0.1, -hz - 1.0], [Math.max(s * (hx - 0.3), s * (hx + 0.44)), YTr + 0.1, NF + 0.02], { color: BLACK, texel: 1 });
+      kit.boxMM("impTrim", [Math.min(s * (hx - 0.3), s * (hx + 0.44)), YBr - FW - 0.1, -hz - 1.0], [Math.max(s * (hx - 0.3), s * (hx + 0.44)), YTr + FW + 0.1, NF + FD + 0.01], { color: BLACK, texel: 1 });
       kit.boxMM("impTrim", [Math.min(s * (hx + 0.44), s * (vp.hw + 0.6)), WY0 - 0.2, -hz - 0.1], [Math.max(s * (hx + 0.44), s * (vp.hw + 0.6)), WY1 + 0.25, -hz], { color: BLACK, texel: 1 });
     }
     kit.collider([-hx - 0.4, 0, -hz - 1.2], [hx + 0.4, CEIL, NF + 0.06], "bridgeN");
@@ -294,7 +333,7 @@ export function buildBridge(kit, ctx, room) {
       const d = b.clone().sub(a);
       const q = new THREE.Quaternion().setFromUnitVectors(Z_AXIS, d.clone().normalize());
       const mid = a.clone().add(b).multiplyScalar(0.5);
-      kit.add("emitBlueDim", new THREE.BoxGeometry(0.03, 0.03, d.length() - 0.2), { pos: [mid.x, mid.y - 0.06, mid.z], quat: q, uv: "keep" });
+      kit.add("bridge_railGlow", new THREE.BoxGeometry(0.03, 0.03, d.length() - 0.2), { pos: [mid.x, mid.y - 0.06, mid.z], quat: q, uv: "keep" });
     }
   }
   for (const s of [-1, 1]) {
@@ -324,8 +363,8 @@ export function buildBridge(kit, ctx, room) {
     kit.collider([ox - 0.05, PIT_Y, STAIR.zBot], [ox + 0.05, 1.0, STAIR.zTop], "stairrail");
   }
 
-  // railings (1.05 m): dim blue rail light along the walkway only; plain rails on the other pit edges
-  const rail = (a, b, lit = false) => impRailing(kit, a, b, 0, { h: 1.05, postStep: 1.6, light: lit ? "emitBlueDim" : null, color: GREYD });
+  // railings (1.05 m): a practical half-dim blue rail light along the walkway only; plain rails elsewhere
+  const rail = (a, b, lit = false) => impRailing(kit, a, b, 0, { h: 1.05, postStep: 1.6, light: lit ? "bridge_railGlow" : null, color: GREYD });
   for (const s of [-1, 1]) {
     rail([s * RAIL_X, PIT.z1 - 0.2], [s * RAIL_X, PIT.z0 + 0.2], true);
     rail([s * RAIL_X, PIT.z0 + 0.2], [s * (PIT.x1 + 0.2), PIT.z0 + 0.2]);
@@ -345,6 +384,12 @@ export function buildBridge(kit, ctx, room) {
     const px = cx + fxv * off;
     const pz = cz + fz * off;
     if (seated) impChair(kit, px, cy, pz, yaw);
+    if (o.glow) {
+      // pit consoles: a cool under-lip strip on the operator side, the screens' spill on the deck plates
+      const { q, place } = placer(cx, cy, cz, yaw);
+      const p = place(0, 0.045, d / 2 + 0.03);
+      kit.add("bridge_consoleGlow", new THREE.BoxGeometry(w - 0.5, 0.02, 0.04), { pos: [p.x, p.y, p.z], quat: q, uv: "keep" });
+    }
     if (o.backPanel) {
       // dressed rear face (service panel with vents, a readout strip and a lamp) for consoles seen from behind
       const { q, place } = placer(cx, cy, cz, yaw);
@@ -376,10 +421,10 @@ export function buildBridge(kit, ctx, room) {
   for (const s of [-1, 1]) {
     const side = s > 0 ? "stbd" : "port";
     // inner row stops at z 3.1 so the stair lands in a clear bay; aft stations sit clear of the stair foot
-    [-10.2, -7.2, -4.2, -1.2, 1.8].forEach((zc, i) => station(s * 4.6, PIT_Y, zc, 2.6, 0.9, s > 0 ? Math.PI / 2 : -Math.PI / 2, { seed: 100 + i + s, screens: [scr.blue, scr.mix, scr.green, scr.blue2, scr.white][i], label: `${side}-pit-inner-${i}` }));
-    [-9.6, -6.4, -3.2, 0, 3.2, 6.4].forEach((zc, i) => station(s * 13.4, PIT_Y, zc, 2.6, 0.9, s > 0 ? -Math.PI / 2 : Math.PI / 2, { seed: 120 + i - s, screens: [scr.mix, scr.blue2, scr.blue, scr.red, scr.amber, scr.blue][i], label: `${side}-pit-outer-${i}` }));
-    for (const [xc, k] of [[7.7, 0], [10.3, 1]]) station(s * xc, PIT_Y, -10.8, 2.4, 0.9, 0, { seed: 140 + k + s, screens: k ? scr.mix : scr.blue2, tall: true, label: `${side}-pit-fwd-${k}` });
-    for (const [xc, k] of [[8.6, 0], [11.2, 1]]) station(s * xc, PIT_Y, 8.4, 2.4, 0.9, Math.PI, { seed: 150 + k - s, screens: k ? scr.blue : scr.green, backPanel: true, label: `${side}-pit-aft-${k}` });
+    [-10.2, -7.2, -4.2, -1.2, 1.8].forEach((zc, i) => station(s * 4.6, PIT_Y, zc, 2.6, 0.9, s > 0 ? Math.PI / 2 : -Math.PI / 2, { seed: 100 + i + s, screens: [scr.blue, scr.mix, scr.green, scr.blue2, scr.white][i], glow: true, label: `${side}-pit-inner-${i}` }));
+    [-9.6, -6.4, -3.2, 0, 3.2, 6.4].forEach((zc, i) => station(s * 13.4, PIT_Y, zc, 2.6, 0.9, s > 0 ? -Math.PI / 2 : Math.PI / 2, { seed: 120 + i - s, screens: [scr.mix, scr.blue2, scr.blue, scr.red, scr.amber, scr.blue][i], glow: true, label: `${side}-pit-outer-${i}` }));
+    for (const [xc, k] of [[7.7, 0], [10.3, 1]]) station(s * xc, PIT_Y, -10.8, 2.4, 0.9, 0, { seed: 140 + k + s, screens: k ? scr.mix : scr.blue2, tall: true, glow: true, label: `${side}-pit-fwd-${k}` });
+    for (const [xc, k] of [[8.6, 0], [11.2, 1]]) station(s * xc, PIT_Y, 8.4, 2.4, 0.9, Math.PI, { seed: 150 + k - s, screens: k ? scr.blue : scr.green, backPanel: true, glow: true, label: `${side}-pit-aft-${k}` });
     plotTable(kit, fx, s * 9.4, PIT_Y, -1.2);
     crewSpots.push({ id: `${side}-pit-supervisor`, x: s * 9.4, y: PIT_Y, z: 0.15, yaw: 0, seated: false });
   }
@@ -542,17 +587,19 @@ export function buildBridge(kit, ctx, room) {
   const alertDim = (t) => (state.alert ? 0.7 + 0.3 * Math.sin(t * 5) : 1);
   // starlight key: sits inside the centre viewport tunnel, so the sill, head and jambs clip its cone to the
   // window shape; it rakes the command platform and the walkway and throws the railing shadows aft
-  // (throw from the window head to the mid-walkway floor is ~15.8 m; k 1.2 -> ~300 cd)
-  kit.light({ type: "spot", pos: [0, 4.0, -hz - 0.25], target: [0, 0, 1], color: 0xd8e6ff, intensity: lux(15.8, 1.2), distance: 40, angle: 0.95, penumbra: 0.55, shadow: true, priority: 1.0, dim: alertDim });
+  // (throw from the window head to the mid-walkway floor is ~15.8 m; k 1.3 -> ~325 cd); a wide penumbra
+  // keeps the pool on the walkway soft
+  kit.light({ type: "spot", pos: [0, 4.0, -hz - 0.25], target: [0, 0, 1], color: 0xc8dcff, intensity: lux(15.8, 1.3), distance: 40, angle: 0.95, penumbra: 0.7, shadow: true, priority: 1.0, dim: alertDim });
   // aft deck: a cool fill over the floor crest that also reaches the door, the guard posts and the crest
   // plate (kept 2 m off the wall so the plate does not blow out)
   kit.light({ type: "point", pos: [0, 3.6, hz - 2.6], color: 0xe6ecff, intensity: lux(3.6, 2.0), distance: 18, priority: 0.8 });
   for (const s of [-1, 1]) {
-    // pit fill: blue-white console glow, set aft of centre because the key spills into the pits' forward
-    // ends through the viewports; high enough to also catch the console tops seen from the walkway
-    kit.light({ type: "point", pos: [s * 9, 2.6, 1.5], color: 0xb4d0ff, intensity: lux(4.4, 3.0), distance: 26, priority: 0.85 - (s > 0 ? 0.01 : 0) });
-    // one red practical per guard alcove
-    kit.light({ type: "point", pos: [s * 12.5, 2.6, hz - 0.8], color: 0xff4030, intensity: lux(2.6, 0.9), distance: 9, priority: 0.6 - (s > 0 ? 0.01 : 0) });
+    // pit fill: the operators' screens' blue-white glow, hung high over the pit centre so the 22 m pit stays
+    // lit end to end (~4:1 centre / ends) and the pit floors sit around 25/255 under the walkway's level
+    kit.light({ type: "point", pos: [s * 9, 4.4, 0.6], color: 0xa8c8ff, intensity: lux(6.2, 2.6), distance: 26, priority: 0.85 - (s > 0 ? 0.01 : 0) });
+    // soft cool starlight bounce from the viewports: over the command platform, it lights the pale
+    // mullions and trapezoid frames, the flag stations and the forward third of the walkway
+    kit.light({ type: "point", pos: [s * 8, 5.6, NF + 4.5], color: 0xc4d6ff, intensity: lux(5.6, 2.2), distance: 30, priority: 0.75 - (s > 0 ? 0.01 : 0) });
     // outer decks: cool white from the ceiling slots over the bank islands
     kit.light({ type: "point", pos: [s * 23, 5.2, -2.5], color: 0xdfe8ff, intensity: lux(5.2, 2.4), distance: 28, priority: 0.7 - (s > 0 ? 0.01 : 0) });
   }

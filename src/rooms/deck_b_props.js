@@ -81,6 +81,42 @@ export function roundTable(kit, x, z, r, opts = {}) {
   kit.collider([x - r, y, z - r], [x + r, y + h + 0.02, z + r], tag);
 }
 
+/**
+ * Low circular seating ring: `segments` padded bench sections around (x, z), radius r to the outer
+ * edge, `gap` sections left out around the bearing `gapYaw` (0 = +z, PI = -z / toward the windows).
+ */
+export function seatRing(kit, x, z, r, opts = {}) {
+  const { segments = 8, gap = 2, gapYaw = Math.PI, pad = "fabric", padColor = PALETTE.impGreyDark, accentKey = null, seatW = 0.62, y = 0, tag = "seatring" } = opts;
+  const rm = r - seatW / 2;
+  const segAng = (2 * Math.PI) / segments;
+  const segLen = 2 * rm * Math.sin(segAng / 2) - 0.08;
+  const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  for (let i = 0; i < segments; i++) {
+    const a = segAng * (i + 0.5);
+    if (Math.abs(wrap(a - gapYaw)) < (gap * segAng) / 2 - 1e-3) continue;
+    const cx = x + Math.sin(a) * rm;
+    const cz = z + Math.cos(a) * rm;
+    const q = new THREE.Quaternion().setFromAxisAngle(UP, a);
+    const add = (mat, ly, sx, sy, sz, extra = {}) => kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [cx, y + ly, cz], quat: q, ...extra });
+    add("impTrim", 0.07, segLen - 0.2, 0.14, seatW - 0.16, { color: PALETTE.impBlack, texel: 1 });
+    add("impMetal", 0.27, segLen, 0.26, seatW, { color: PALETTE.impCharcoal, texel: 1 });
+    add("impTrim", 0.415, segLen + 0.02, 0.03, seatW + 0.02, { color: PALETTE.impBlack });
+    add(pad, 0.475, segLen - 0.06, 0.09, seatW - 0.08, { color: padColor, texel: 2 });
+    if (accentKey) add(accentKey, 0.2, segLen - 0.3, 0.02, 0.012, { pos: [cx + Math.sin(a) * (seatW / 2 + 0.006), y + 0.2, cz + Math.cos(a) * (seatW / 2 + 0.006)] });
+    // collider from the rotated footprint's corners
+    const cs = [[-segLen / 2, -seatW / 2], [segLen / 2, -seatW / 2], [-segLen / 2, seatW / 2], [segLen / 2, seatW / 2]].map(([lx, lz]) => new THREE.Vector3(lx, 0, lz).applyQuaternion(q));
+    const mn = [Infinity, Infinity];
+    const mx = [-Infinity, -Infinity];
+    for (const c of cs) {
+      mn[0] = Math.min(mn[0], cx + c.x);
+      mn[1] = Math.min(mn[1], cz + c.z);
+      mx[0] = Math.max(mx[0], cx + c.x);
+      mx[1] = Math.max(mx[1], cz + c.z);
+    }
+    kit.collider([mn[0], y, mn[1]], [mx[0], y + 0.56, mx[1]], tag);
+  }
+}
+
 /** Simple stool. */
 export function stool(kit, x, z, opts = {}) {
   const { h = 0.48, pad = "rubber", padColor = PALETTE.impGreyDark, y = 0 } = opts;
@@ -183,13 +219,14 @@ export function lightBox(kit, x, z, y, w, d, key = "emitWhiteSoft", opts = {}) {
 
 /** Ceiling-mounted projector housing pointing down at `target` with a faint holo cone. */
 export function projector(kit, x, y, z, target, opts = {}) {
-  const { accentKey = "emitBlue", spread = 0.9 } = opts;
+  const { accentKey = "emitBlue", spread = 0.9, cone = true } = opts;
   kit.box("impTrim", x, y - 0.2, z, 0.9, 0.4, 0.9, { color: PALETTE.impBlack, texel: 1 });
   kit.box("impMetal", x, y - 0.42, z, 0.7, 0.06, 0.7, { color: PALETTE.impCharcoal, texel: 1 });
   kit.cyl("impGloss", x, y - 0.47, z, 0.22, 0.06, "y", { segments: 20 });
   kit.cyl(accentKey, x, y - 0.46, z, 0.25, 0.02, "y", { segments: 20 });
   for (let i = 0; i < 4; i++) kit.box(i % 2 ? "emitRedImp" : accentKey, x - 0.3 + i * 0.2, y - 0.455, z + 0.32, 0.05, 0.02, 0.012);
-  // faint cone from the lens to the target (dim holo: a beam you notice, not a blue wedge)
+  // optional faint cone from the lens to the target (cone: false leaves the beam to the spot light)
+  if (!cone) return;
   ensureDeckBMaterials(kit.materials);
   kit.noShadowKeys.add("deckB_holoDim");
   const a = new THREE.Vector3(x, y - 0.5, z);
@@ -344,16 +381,19 @@ export function ensureDeckBMaterials(materials) {
   materials.deckB_holoMid = holo(0x9fc6ff, 0.32);
   materials.deckB_holoRed = holo(0xff9a70, 0.42);
   materials.deckB_holoRedBright = holo(0xffc8a8, 0.8);
+  // single-sided translucent globe for the gallery's planet holograms (a solid sphere in the additive
+  // double-sided material reads as a white ball)
+  materials.deckB_holoGlobe = new THREE.MeshBasicMaterial({ color: 0x6fa4ff, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.FrontSide });
   materials.deckB_holoLine = new THREE.LineBasicMaterial({ color: 0x9fc6ff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false });
   materials.deckB_emitAmberWarm = new THREE.MeshStandardMaterial({ color: new THREE.Color("#ffb56b").multiplyScalar(0.08), emissive: new THREE.Color("#ffb56b"), emissiveIntensity: 1.3, roughness: 0.45, metalness: 0 });
-  for (const k of ["deckB_holoDim", "deckB_holoMid", "deckB_holoRed", "deckB_holoRedBright", "deckB_holoLine", "deckB_emitAmberWarm"]) materials[k].name = k;
+  for (const k of ["deckB_holoDim", "deckB_holoMid", "deckB_holoRed", "deckB_holoRedBright", "deckB_holoGlobe", "deckB_holoLine", "deckB_emitAmberWarm"]) materials[k].name = k;
   return materials;
 }
 
 /** Register the deckB_* materials on a kit and keep the hologram keys out of the shadow pass. */
 export function deckBSetup(kit) {
   ensureDeckBMaterials(kit.materials);
-  for (const k of ["deckB_holoDim", "deckB_holoMid", "deckB_holoRed", "deckB_holoRedBright", "holo", "holoBright"]) kit.noShadowKeys.add(k);
+  for (const k of ["deckB_holoDim", "deckB_holoMid", "deckB_holoRed", "deckB_holoRedBright", "deckB_holoGlobe", "holo", "holoBright"]) kit.noShadowKeys.add(k);
 }
 
 // ---------------------------------------------------------------------------
@@ -465,10 +505,20 @@ export function holoCreature(materials, kind, h = 0.28, key = "holoBright") {
 // here" blip on this deck). Dim by design (~0.6 of the old table): the view outside is the point.
 // ---------------------------------------------------------------------------
 export function holoTowerMap(materials, h = 1.1) {
+  // one merged mesh per material (dim plates / mid plates / edge lines) + the blip: 4 objects, not ~40
   const g = new THREE.Group();
-  const dim = materials.deckB_holoDim;
-  const mid = materials.deckB_holoMid;
-  const line = materials.deckB_holoLine;
+  const dimParts = [];
+  const midParts = [];
+  const linePos = [];
+  const at = (geo, x, y, z) => {
+    geo.translate(x, y, z);
+    return geo.index ? geo.toNonIndexed() : geo;
+  };
+  const edgesAt = (box, x, y, z) => {
+    const e = new THREE.EdgesGeometry(box);
+    const p = e.attributes.position;
+    for (let i = 0; i < p.count; i++) linePos.push(p.getX(i) + x, p.getY(i) + y, p.getZ(i) + z);
+  };
   const decks = 5;
   for (let i = 0; i < decks; i++) {
     const t = i / (decks - 1);
@@ -476,49 +526,52 @@ export function holoTowerMap(materials, h = 1.1) {
     const dd = 0.62 - t * 0.28;
     const y = 0.08 + t * (h - 0.36);
     const box = new THREE.BoxGeometry(w, 0.035, dd);
-    const plate = new THREE.Mesh(box, i === 1 ? mid : dim);
-    plate.position.y = y;
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box), line);
-    edges.position.y = y;
-    g.add(plate, edges);
+    edgesAt(box, 0, y, 0);
+    (i === 1 ? midParts : dimParts).push(at(box, 0, y, 0));
     // interior detail: a few compartment walls per deck
-    for (let k = -1; k <= 1; k++) {
-      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.11, dd * 0.8), dim);
-      wall.position.set(k * w * 0.28, y + 0.075, 0);
-      g.add(wall);
-    }
-    const spine = new THREE.Mesh(new THREE.BoxGeometry(w * 0.85, 0.11, 0.008), dim);
-    spine.position.set(0, y + 0.075, 0);
-    g.add(spine);
+    for (let k = -1; k <= 1; k++) dimParts.push(at(new THREE.BoxGeometry(0.008, 0.11, dd * 0.8), k * w * 0.28, y + 0.075, 0));
+    dimParts.push(at(new THREE.BoxGeometry(w * 0.85, 0.11, 0.008), 0, y + 0.075, 0));
   }
   // neck columns and the bridge head with two domes
-  for (const s of [-1, 1]) {
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, h - 0.3, 8), dim);
-    col.position.set(s * 0.32, (h - 0.3) / 2 + 0.05, 0.02);
-    g.add(col);
-  }
+  for (const s of [-1, 1]) dimParts.push(at(new THREE.CylinderGeometry(0.03, 0.04, h - 0.3, 8), s * 0.32, (h - 0.3) / 2 + 0.05, 0.02));
   const head = new THREE.BoxGeometry(0.9, 0.09, 0.42);
-  const headM = new THREE.Mesh(head, mid);
-  headM.position.y = h - 0.18;
-  g.add(headM);
-  const headE = new THREE.LineSegments(new THREE.EdgesGeometry(head), line);
-  headE.position.y = h - 0.18;
-  g.add(headE);
-  for (const s of [-1, 1]) {
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), dim);
-    dome.position.set(s * 0.3, h - 0.1, -0.06);
-    g.add(dome);
-  }
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.3, 6), mid);
-  mast.position.set(0, h + 0.02, -0.1);
-  g.add(mast);
+  edgesAt(head, 0, h - 0.18, 0);
+  midParts.push(at(head, 0, h - 0.18, 0));
+  for (const s of [-1, 1]) dimParts.push(at(new THREE.SphereGeometry(0.075, 10, 8), s * 0.3, h - 0.1, -0.06));
+  midParts.push(at(new THREE.CylinderGeometry(0.008, 0.012, 0.3, 6), 0, h + 0.02, -0.1));
   // this deck: a brighter forward gallery strip and the blinking position blip
-  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.012, 0.03), materials.holoBright);
   const yB = 0.08 + 0.25 * (h - 0.36);
-  strip.position.set(0, yB + 0.03, -0.24);
-  g.add(strip);
+  g.add(new THREE.Mesh(mergeGeos(dimParts), materials.deckB_holoDim));
+  g.add(new THREE.Mesh(mergeGeos(midParts), materials.deckB_holoMid));
+  const lines = new THREE.BufferGeometry();
+  lines.setAttribute("position", new THREE.Float32BufferAttribute(linePos, 3));
+  g.add(new THREE.LineSegments(lines, materials.deckB_holoLine));
+  const strip = at(new THREE.BoxGeometry(0.9, 0.012, 0.03), 0, yB + 0.03, -0.24);
   const blip = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), materials.holoBright);
   blip.position.set(0, yB + 0.05, -0.2);
-  g.add(blip);
+  g.add(new THREE.Mesh(strip, materials.holoBright), blip);
   return { group: g, blip };
+}
+
+/**
+ * Small holographic planet for a viewing pedestal: banded globe, a thin ring and a polar axis. Returns a
+ * group (globe rotates about y) for kit.attach; static parts merged, 2 meshes in all.
+ */
+export function holoPlanet(materials, r = 0.32, opts = {}) {
+  const { ring = true } = opts;
+  const g = new THREE.Group();
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 14), materials.deckB_holoGlobe);
+  g.add(globe);
+  const parts = [];
+  const at = (geo, x, y, z, rx = 0) => {
+    if (rx) geo.rotateX(rx);
+    geo.translate(x, y, z);
+    parts.push(geo.index ? geo.toNonIndexed() : geo);
+  };
+  // latitude bands (thin tori) and a polar axis: the dim material so the globe stays the read
+  for (const lat of [-0.5, 0, 0.5]) at(new THREE.TorusGeometry(r * Math.cos(lat) + 0.004, 0.004, 4, 32), 0, r * Math.sin(lat), 0, Math.PI / 2);
+  at(new THREE.CylinderGeometry(0.004, 0.004, r * 2.6, 6), 0, 0, 0);
+  if (ring) at(new THREE.TorusGeometry(r * 1.6, 0.006, 4, 48), 0, 0, 0, Math.PI / 2 + 0.35);
+  g.add(new THREE.Mesh(mergeGeos(parts), materials.deckB_holoDim));
+  return { group: g, globe };
 }

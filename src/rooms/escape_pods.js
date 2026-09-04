@@ -1,15 +1,15 @@
 // Emergency Evacuation Bay (Deck B): six escape-pod hatches along the N wall (circular doors set
 // back in short launch tubes with heavy frames, hinge blocks, status lights and red chevron
 // surrounds), a launch-control console, a countdown board on the W wall, supply lockers and a
-// vac-suit rack along the S wall, crates by the door. Red/white route striping and floor arrows
-// lead from the blast door to the hatches. Bright white emergency keys, red edge lighting and
-// four rotating red beacons (pulsing domes) on the ceiling.
+// vac-suit rack along the S wall, crates by the door. Thin painted red edge lines and floor arrows
+// mark the route from the blast door to the hatches (no glowing lane). Bright white emergency keys
+// and four rotating red beacons (pulsing domes) on the ceiling.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { insideOut, panelWithHoles } from "../kit.js";
 import { impRoomShell, impConsole, impWallLight, impWallGear, impCrate, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
-import { wallScreen, locker, cableRun, chairInstance, floorDecal, floorStrip, propFrame, bench } from "./deck_b_props.js";
+import { wallScreen, locker, cableRun, chairInstance, floorDecal, propFrame, bench } from "./deck_b_props.js";
 
 const RED = "emitRedImp";
 const HATCH_X = [-10.5, -6.3, -2.1, 2.1, 6.3, 10.5];
@@ -26,7 +26,7 @@ export function buildEscapePods(kit, ctx, room) {
     wall: { panelW: 1.7, features: { vent: 0.06, screen: 0.03 }, altChance: 0.35 },
     // the hatch wall and the wall behind the rack/lockers stay flush: the fittings dress them
     walls: { N: { features: { vent: 0.02 } }, S: { features: { vent: 0.05 } } },
-    floor: { lane: false, edgeLight: RED },
+    floor: { lane: false },
     ceiling: { troughs: 3, troughW: 0.5, beamStep: 3.2 },
   });
   const N = walls.N.frame; // u = x + hx
@@ -56,15 +56,18 @@ export function buildEscapePods(kit, ctx, room) {
     kit.box("impTrim", x, h - 0.2, -8.4, 0.12, 0.4, 0.12, { color: PALETTE.impBlack });
     kit.box("impTrim", x, h - 0.55, -8.4, 0.1, 0.7, 0.7, { color: PALETTE.impBlack });
   }
-  // striped band along the hatch row and red edge strips along the N and S walls
+  // striped band along the hatch row; a thin painted red line runs round the deck perimeter
+  // (matte paint, no emissive floor strips)
   stripeRow(kit, -12.5, 12.5, -7.0, 0.16);
-  floorStrip(kit, RED, -hx + 0.5, -hz + 0.25, hx - 0.5, -hz + 0.31);
-  floorStrip(kit, RED, -hx + 0.5, hz - 0.31, hx - 0.5, hz - 0.25);
+  paintLine(kit, -hx + 0.5, -hz + 0.25, hx - 0.5, -hz + 0.3);
+  paintLine(kit, -hx + 0.5, hz - 0.3, hx - 0.5, hz - 0.25);
+  paintLine(kit, -hx + 0.25, -hz + 0.5, -hx + 0.3, hz - 0.5);
+  paintLine(kit, hx - 0.3, -hz + 0.5, hx - 0.25, hz - 0.5);
 
-  // --- evacuation route from the blast door (E) to the hatch row: dark lane, striped edges, arrows
-  kit.boxMM("impMetalRough", [-11.5, 0.002, -1.2], [hx - 0.4, 0.012, 1.2], { color: PALETTE.impGreyDark, texel: 0.7 });
-  stripeRow(kit, -11.5, hx - 0.4, -1.27, 0.12);
-  stripeRow(kit, -11.5, hx - 0.4, 1.27, 0.12);
+  // --- evacuation route from the blast door (E) to the hatch row: thin painted edge lines and arrows
+  // on the plain deck (the dark lane and its red/white stripe blocks are gone)
+  paintLine(kit, -11.5, -1.3, hx - 0.4, -1.25);
+  paintLine(kit, -11.5, 1.25, hx - 0.4, 1.3);
   for (let k = 0; k < 8; k++) floorDecal(kit, IMP_DECAL.arrowRight, 10.5 - k * 3.0, 0, 1.1, Math.PI, 0.014);
   for (const s of [-1, 1]) floorDecal(kit, IMP_DECAL.keepClear, hx - 1.8, s * 2.4, 1.3, 0);
 
@@ -78,7 +81,7 @@ export function buildEscapePods(kit, ctx, room) {
   // harness seats facing the route, harness racks between the hatch approaches, supply pallets
   musterRing(kit, -6.5, 5.4, IMP_DECAL.bay01);
   musterRing(kit, 3.5, 5.4, IMP_DECAL.bay02);
-  for (const x of [-9.0, -5.0, 1.0, 5.0]) bench(kit, x, 2.7, 3.0, 0, { back: false, pad: "rubber", padColor: PALETTE.impGreyDark, accentKey: RED, tag: "seat" });
+  for (const x of [-9.0, -5.0, 1.0, 5.0]) bench(kit, x, 2.7, 3.0, 0, { back: false, pad: "rubber", padColor: PALETTE.impGreyDark, accentKey: null, tag: "seat" });
   for (const x of [-8.4, -4.2, 4.2, 8.4]) harnessRack(kit, x, -5.0);
   pallet(kit, -0.6, 7.5, 0.4, 21);
   pallet(kit, 7.8, 4.2, -0.3, 22);
@@ -171,7 +174,7 @@ export function buildEscapePods(kit, ctx, room) {
 /** Muster-point marking: painted white ring, red inner ring, four ticks, bay number decal in the centre. */
 function musterRing(kit, x, z, label) {
   kit.add("impPanel1", new THREE.RingGeometry(1.5, 1.66, 48).rotateX(-Math.PI / 2), { pos: [x, 0.004, z], color: PALETTE.impWhite, uv: "world", texel: 1 });
-  kit.add(RED, new THREE.RingGeometry(1.34, 1.4, 48).rotateX(-Math.PI / 2), { pos: [x, 0.005, z], uv: "keep" });
+  kit.add("impPanel1", new THREE.RingGeometry(1.34, 1.4, 48).rotateX(-Math.PI / 2), { pos: [x, 0.005, z], color: PALETTE.impRed, uv: "world", texel: 1 });
   for (let k = 0; k < 4; k++) {
     const a = (k * Math.PI) / 2 + Math.PI / 4;
     const g = new THREE.BoxGeometry(0.12, 0.004, 0.5);
@@ -235,6 +238,11 @@ function pallet(kit, x, z, yaw, seed) {
   f.box("impPanel1", 0, 0.002, 0, 2.0, 0.004, 1.7, { color: PALETTE.impRed, uv: "world", texel: 1 });
   f.box("impMetalRough", 0, 0.003, 0, 1.8, 0.004, 1.5, { color: PALETTE.impGreyDark, texel: 0.7 });
   f.collider(-0.85, 0.85, 0, 1.3, -0.7, 0.7, "pallet");
+}
+
+/** Thin painted red floor line between two corners (matte paint, 6 mm proud: the route and edge marking). */
+function paintLine(kit, x0, z0, x1, z1) {
+  kit.boxMM("impPanel1", [Math.min(x0, x1), 0.002, Math.min(z0, z1)], [Math.max(x0, x1), 0.008, Math.max(z0, z1)], { color: PALETTE.impRed, uv: "world", texel: 1 });
 }
 
 /** Row of alternating red / white floor stripe blocks along x at z (2 mm proud, 8 mm tall). */
@@ -307,7 +315,7 @@ function suitRack(kit, ctx, x0, x1, z) {
   const n = 4;
   for (let i = 0; i < n; i++) vacSuit(kit, x0 + ((i + 0.5) * len) / n, z);
   kit.collider([x0 - 0.1, 0, z - 0.45], [x1 + 0.1, 2.6, z + 0.4], "rack");
-  kit.boxMM(RED, [x0, 0.002, z - 0.62], [x1, 0.012, z - 0.58]);
+  paintLine(kit, x0, z - 0.62, x1, z - 0.58);
 }
 
 /** One hanging vac-suit (white enamel body, black joints, gloss visor, red shoulder stripes), facing -z. */

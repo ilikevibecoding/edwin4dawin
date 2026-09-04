@@ -2,9 +2,11 @@
 // cyan hood practicals) facing a raised supervisor platform whose rectangular sensor emitter projects a
 // spinning tri-plane radar cone, a second row of relay stations and free-standing processor racks in
 // the foreground by the door, tall signal towers with blade rows and blinking lamps along the back
-// wall, overhead cable trays, scrolling waveform wall screens. Accent cyan; dark inlay entry lane.
+// wall, overhead cable trays, scrolling waveform wall screens. Accent cyan; one fixture temperature
+// (cyan-tinted cool white) for the recessed slots, the key and the fills; no floor lane — two standing
+// console pods hold the centreline between the door and the platform steps.
 import * as THREE from "three";
-import { PALETTE } from "../materials.js";
+import { PALETTE, setDomain } from "../materials.js";
 import { impRoomShell, impChair, impRailing, impWallGear, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { deckASetup, yawToward, behind, yawFrame, station, dataBank, sealedCabinet, wallScreen, indicatorRow, cableTray, conduitRun, projectorCone, triPlaneRadar, mergedMesh, stepBlock, frameGeo, datapad, cup } from "./deck_a_kit.js";
@@ -18,6 +20,14 @@ export function buildComms(kit, ctx, room) {
   const accentKey = "emitCyan";
   const dimKey = "deckA_emitCyanDim";
   const cyan = new THREE.Color(room.accent || "#5fd0ff").getHex();
+  const COOL = 0xd8ecff; // fixture colour: cyan-tinted cool white
+  if (!M.deckA_commsSlot) {
+    // recessed ceiling slot emitter in the room's cool temperature, a notch under the dim white slot
+    const m = M.emitWhiteDim.clone();
+    m.emissive = new THREE.Color("#cfe6f6");
+    m.emissiveIntensity = 0.75;
+    M.deckA_commsSlot = setDomain(m, "interior");
+  }
 
   // ---- shell: wide panels split by a high band (tall lower fields + a clerestory strip) --------------
   const walls = impRoomShell(kit, room, ctx.doors, {
@@ -26,21 +36,18 @@ export function buildComms(kit, ctx, room) {
     wall: { panelW: 2.15, bands: [2.35], features: { vent: 0.08, equipment: 0.1, conduit: 0.0, light: 0.0, screen: 0.1 }, altChance: 0.2 },
     walls: { W: { features: { vent: 0.1, equipment: 0.0, conduit: 0.0, light: 0.0, screen: 0.0 }, corniceLight: false } },
     floor: { lane: false },
-    ceiling: { troughs: 2, troughW: 0.5, beamStep: 3.6 },
+    ceiling: { troughs: 2, troughW: 0.5, beamStep: 3.6, lightKey: "deckA_commsSlot" },
   });
-  // entry lane from the door to the platform steps: dark deck inlay with a faint cyan hairline edge
-  kit.boxMM("impDeck", [0.7, 0, -1.2], [hx - 0.4, 0.012, 1.2], { color: PALETTE.impGreyDark, texel: 0.7 });
-  for (const s of [-1, 1]) {
-    kit.boxMM("impTrim", [0.7, 0.002, s * 1.24 - 0.04], [hx - 0.4, 0.014, s * 1.24 + 0.04], { color: PALETTE.impBlack });
-    kit.boxMM(dimKey, [0.7, 0.004, s * 1.24 - 0.01], [hx - 0.4, 0.016, s * 1.24 + 0.01]);
-  }
-  kit.box("chevronY", 0.55, 0.005, 0, 0.3, 0.01, 2.6, { texel: 1.5 });
   // floor ring marking the operator arcs' inner boundary (dim)
   kit.add(dimKey, new THREE.RingGeometry(5.62, 5.67, 96).rotateX(-Math.PI / 2), { pos: [-3, 0.006, 0], uv: "keep" });
 
   // ---- supervisor platform --------------------------------------------------------------------------
   const cx = -3;
   const cz = 0;
+  // two standing console pods on the centreline between the door and the platform steps, both worked
+  // from the door side facing the platform (their sloped control surfaces read from the door)
+  station(kit, 8.6, 0, 0, 1.6, 0.85, { yaw: yawToward(8.6, 0, cx, cz), seed: 53, screens: ["scrGreen2", "scrBlue1"], accentKey, hoodKey: dimKey, height: 1.05, conduits: 1 });
+  station(kit, 4.2, 0, 0, 1.6, 0.85, { yaw: yawToward(4.2, 0, cx, cz), seed: 54, screens: ["scrBlue0", "scrGreen3"], accentKey, hoodKey: dimKey, height: 1.05, conduits: 1 });
   const P = { x0: -5.2, x1: -0.8, z0: -2.2, z1: 2.2, y: 0.42 };
   kit.boxMM("impTrim", [P.x0, 0, P.z0], [P.x1, 0.36, P.z1], { color: PALETTE.impBlack, texel: 1 });
   kit.boxMM("impDeck", [P.x0 - 0.05, 0.36, P.z0 - 0.05], [P.x1 + 0.05, P.y, P.z1 + 0.05], { color: PALETTE.impGrey, texel: 0.7 });
@@ -241,13 +248,12 @@ export function buildComms(kit, ctx, room) {
   });
 
   // ---- lights -----------------------------------------------------------------------------------
-  kit.light({ type: "spot", pos: [cx, h - 0.25, cz], target: [cx, P.y + 1.0, cz], color: 0xdfe8ff, intensity: lux(h - 0.25 - P.y - 1.0, 2.0), distance: 12, angle: 0.62, penumbra: 0.5, shadow: true, priority: 0.95 });
-  // white fills over the middle of each arc and over the foreground row (the dark ceiling and the
-  // unlit lane took ~20 luma out of the room, so these run hotter than the deck A default)
-  kit.light({ type: "point", pos: [-6.8, h - 0.6, -6.0], color: 0xe4ecff, intensity: lux(h - 0.6, 2.6), distance: 16, priority: 0.55 });
-  kit.light({ type: "point", pos: [-6.8, h - 0.6, 6.0], color: 0xe4ecff, intensity: lux(h - 0.6, 2.6), distance: 16, priority: 0.54 });
-  kit.light({ type: "point", pos: [8.0, h - 0.6, 0], color: 0xe4ecff, intensity: lux(h - 0.6, 3.0), distance: 16, priority: 0.5 });
-  kit.light({ type: "point", pos: [-11.0, h - 1.2, 0], color: 0xe4ecff, intensity: lux(h - 1.2, 1.6), distance: 12, priority: 0.46 });
+  kit.light({ type: "spot", pos: [cx, h - 0.25, cz], target: [cx, P.y + 1.0, cz], color: COOL, intensity: lux(h - 0.25 - P.y - 1.0, 3.4), distance: 12, angle: 0.62, penumbra: 0.5, shadow: true, priority: 0.95 });
+  // fills (the slots' temperature) over the middle of each arc, the foreground pods and the tower wall
+  kit.light({ type: "point", pos: [-6.8, h - 0.6, -6.0], color: COOL, intensity: lux(h - 0.6, 4.6), distance: 17, priority: 0.55 });
+  kit.light({ type: "point", pos: [-6.8, h - 0.6, 6.0], color: COOL, intensity: lux(h - 0.6, 4.6), distance: 17, priority: 0.54 });
+  kit.light({ type: "point", pos: [7.0, h - 0.6, 0], color: COOL, intensity: lux(h - 0.6, 5.0), distance: 17, priority: 0.5 });
+  kit.light({ type: "point", pos: [-11.0, h - 1.2, 0], color: COOL, intensity: lux(h - 1.2, 3.0), distance: 13, priority: 0.46 });
   kit.light({ type: "point", pos: [cx, P.y + 2.4, cz], color: cyan, intensity: 7.0, distance: 10, priority: 0.62 });
   // cyan console practicals: low over the arcs' middle stations so the grey control surfaces read
   kit.light({ type: "point", pos: [-3.0, 1.7, -5.6], color: cyan, intensity: 7.0, distance: 9, priority: 0.36 });

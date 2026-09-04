@@ -1,221 +1,252 @@
-// Officers' Quarters (Deck B): four cabin alcoves off a central lounge. Each alcove has a bunk,
-// a desk with a chair and a readout, a locker and a shelf of personal effects behind a header beam;
-// the lounge has a low table, two padded benches and a free-standing media wall with a viewscreen.
-// Warm accent (#d7b98c): amber trim lights, warm-white bunk lights, dark carpet runners.
+// Officers' Quarters (Deck B): six sleeping bays off one central aisle (three along the N wall, three
+// along the S wall), separated by 1.2 m dividers. Each bay holds a bunk (dark frame, grey blanket)
+// with a reading light along its W divider, a fold-down desk with a small screen past the bunk's foot,
+// a table corner, and along the back wall a refresher booth, a locker, a shelf of personal effects
+// over a footlocker; a bay number on every divider post and at the threshold. The E end by the door
+// is a short vestibule with the duty roster and a coat rail. Warm accent (#d7b98c): amber trim
+// lights, warm-white bunk and wall lights, dark rugs.
 import * as THREE from "three";
-import { PALETTE } from "../materials.js";
-import { impRoomShell, impWall, wallFrame, impWallLight, impWallGear, lux } from "./imperial_kit.js";
+import { PALETTE, setDomain } from "../materials.js";
+import { impRoomShell, wallFrame, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
-import { bench, table, wallScreen, locker, fakeDoor, cableRun, chairInstance, holoFigure, propFrame } from "./deck_b_props.js";
+import { bench, wallScreen, locker, fakeDoor, chairInstance, holoFigure, propFrame, floorDecal, roundTable } from "./deck_b_props.js";
 
-const CARPET = new THREE.Color("#2a2d34");
-const MATTRESS = new THREE.Color("#3a4150");
-const BLANKET = new THREE.Color("#2b3552");
-const PILLOW = new THREE.Color("#7a7f8a");
+const RUG = new THREE.Color("#2a2d34");
+const MATTRESS = new THREE.Color("#4a4f5a");
+const BLANKET = new THREE.Color("#6d7178");
+const PILLOW = new THREE.Color("#8a8f98");
+const DIV_H = 1.2; // half-height dividers: the bunks and desks stay visible over them from the aisle
 
 export function buildOfficersQuarters(kit, ctx, room) {
   const [w, h, d] = room.size;
   const hx = w / 2;
   const hz = d / 2;
   const accentKey = ctx.accentKey ? ctx.accentKey(room) : "emitAmber";
+  if (!ctx.materials.oq_warmDim) {
+    // recessed ceiling slots at the dim white slots' level but in the deck's warm-white
+    const m = ctx.materials.emitWarmSoft.clone();
+    m.emissiveIntensity = 0.85;
+    ctx.materials.oq_warmDim = setDomain(m, "interior");
+  }
   const walls = impRoomShell(kit, room, ctx.doors, {
     seed: 5203,
     accentKey,
-    wall: { panelW: 1.6, features: { vent: 0.05, equipment: 0.04, conduit: 0.03, light: 0.1, screen: 0.02 }, altChance: 0.25 },
+    wall: { panelW: 1.6, features: { vent: 0.05, equipment: 0.04, conduit: 0.03, light: 0.08, screen: 0.02 }, altChance: 0.25 },
     floor: { lane: false },
-    ceiling: { troughs: 2, troughW: 0.5, beamStep: 3.0 },
+    // one fixture temperature: warm-white recessed slots, matching the bunk and wall lights
+    ceiling: { troughs: 2, troughW: 0.5, beamStep: 3.0, lightKey: "oq_warmDim" },
   });
 
-  // --- alcove layout: two cabins along the N wall, two along the S wall, x from -15 to -2
-  const aX = [-hx, -8.5, -2];
-  const open = hz - 6.4; // z of the alcove opening line (5.6)
-  const alcoves = [];
-  for (const side of [-1, 1]) {
-    for (let i = 0; i < 2; i++) alcoves.push({ x0: aX[i], x1: aX[i + 1], side, idx: alcoves.length });
-  }
-  // partitions: between the two alcoves and at the alcove block's inner edge, both sides
-  const parts = {};
-  for (const side of [-1, 1]) {
-    const zWall = side * hz;
-    const zOpen = side * open;
-    for (const x of [aX[1], aX[2]]) parts[`${side}:${x}`] = partition(kit, x, zWall, zOpen, h, { seed: 61 + x * 3 + side * 7, accentKey });
-    // header beam over the alcove openings with amber underglow and cabin labels
-    kit.boxMM("impTrim", [-hx, h - 0.9, Math.min(zOpen - 0.15, zOpen + 0.15)], [aX[2] + 0.15, h, Math.max(zOpen - 0.15, zOpen + 0.15)], { color: PALETTE.impBlack, texel: 1 });
-    kit.boxMM("impMetal", [-hx + 0.2, h - 0.92, Math.min(zOpen - 0.1, zOpen + 0.1)], [aX[2], h - 0.88, Math.max(zOpen - 0.1, zOpen + 0.1)], { color: PALETTE.impCharcoal });
-    for (let i = 0; i < 2; i++) {
-      const cx = (aX[i] + aX[i + 1]) / 2;
-      kit.box(accentKey, cx, h - 0.935, zOpen, 3.2, 0.012, 0.06);
-      const g = new THREE.PlaneGeometry(0.34, 0.34);
-      if (side > 0) g.rotateY(Math.PI);
-      kit.add("decalImp", g, { pos: [cx + 2.4, h - 0.45, zOpen - side * 0.16], uv: "keep", uvRect: impDecalRect([IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03, IMP_DECAL.glyphs1][i + (side > 0 ? 2 : 0)]) });
-    }
-    kit.collider([-hx, h - 0.9, zOpen - 0.16], [aX[2] + 0.15, h, zOpen + 0.16], "header");
-  }
-
+  // --- bay layout: dividers at these x (the W wall closes the first bay), vestibule east of the last.
+  // Each bay is read from the aisle, so the bunk and the desk sit in its front third along the W
+  // divider (visible over the 1.2 m partitions from the walk); the refresher booth, the locker and the
+  // shelf line the back wall; a table corner on the E side.
+  const divX = [-6.5, 2.0, 10.5];
+  const bayX = [-hx, ...divX];
+  const AISLE = 1.6; // aisle half-width: the bays' open fronts are at z = ±1.6
   let holo = null;
-  for (const a of alcoves) {
-    const back = a.side * hz;
-    const backFrame = a.side < 0 ? walls.N.frame : walls.S.frame;
-    const bu = (x) => (a.side < 0 ? x + hx : hx - x); // wall-u for a room x on the back wall
-    const t = (tt) => back - a.side * tt; // z at depth tt from the back wall
-    const cx = (a.x0 + a.x1) / 2;
-    // bunk along the back wall on the W side of the alcove
-    bunk(kit, a.x0 + 0.35, a.x0 + 2.45, back, a.side, accentKey);
-    impWallLight(backFrame, bu(a.x0 + 1.4), 1.75, { key: "emitWarmSoft", w: 0.9 });
-    backFrame.decal(IMP_DECAL.glyphs2, bu(a.x0 + 0.7), 2.4, 0.034, 0.3);
-    // locker beside the bunk
-    locker(backFrame, bu(a.x1 - 0.85), 0.9, 2.1, { accentKey, color: PALETTE.impGrey, decal: IMP_DECAL.glyphs1, doors: 1 });
-    // desk against the E partition, chair facing it, shelf above
-    const eFace = parts[`${a.side}:${a.x1}`].west; // face of the E partition looking into this alcove
-    const dz = t(3.6);
-    desk(kit, a.x1 - 0.52, dz, a.side, accentKey);
-    chairInstance(kit, a.x1 - 1.3, dz, -Math.PI / 2);
-    const su = eFace.uOf(dz);
-    const fig = shelf(kit, ctx, eFace.frame, su, 1.5, { accentKey, holo: a.idx === 1 });
-    if (fig) holo = fig;
-    // carpet strip from the opening to the bunk
-    kit.boxMM("fabric", [cx - 1.5, 0.002, Math.min(t(1.2), t(6.2))], [cx + 0.3, 0.014, Math.max(t(1.2), t(6.2))], { color: CARPET, texel: 1.5 });
-    // wall gear on the W side (W wall for the outer cabins, partition face for the inner ones)
-    if (a.x0 === -hx) impWallGear(walls.W.frame, hz - t(2.6), 1.5, { seed: 12 + a.idx, accentKey });
-    else cableRun(parts[`${a.side}:${a.x0}`].east.frame, 0.4, 5.6, 2.9, { n: 2, seed: 20 + a.idx, r: 0.03 });
-    // soft warm key per cabin
-    kit.light({ type: "point", pos: [cx, h - 0.9, t(3.0)], color: 0xffd2a8, intensity: lux(h - 0.9, 2.5), distance: 10, priority: 0.36 - a.idx * 0.005 });
+  let idx = 0;
+  for (const s of [-1, 1]) {
+    const back = s * hz; // back wall z
+    const front = s * AISLE;
+    const t = (tt) => back - s * tt; // z at depth tt from the back wall
+    const a = (aa) => s * (AISLE + aa); // z at distance aa in from the aisle line
+    const backFrame = s < 0 ? walls.N.frame : walls.S.frame;
+    const bu = (x) => (s < 0 ? x + hx : hx - x); // wall-u for a room x on the back wall
+    // half-height dividers from the back wall to the aisle line
+    for (const x of divX) divider(kit, x, back, front, { accentKey, label: idx + (s < 0 ? 0 : 3) });
+    for (let i = 0; i < 3; i++) {
+      const x0 = bayX[i];
+      const x1 = bayX[i + 1];
+      const cx = (x0 + x1) / 2;
+      const bayNo = idx++;
+      const wf = x0 + (i === 0 ? 0.12 : 0.13); // W divider (or W wall) face
+      // bunk along the W divider from the aisle in, head at the far end, reading light on the divider
+      bunk(kit, wf, a(0.4), a(2.5), accentKey);
+      kit.box("impTrim", wf + 0.03, 1.0, a(2.1), 0.06, 0.08, 0.6, { color: PALETTE.impBlack });
+      kit.box("emitWarmSoft", wf + 0.062, 0.99, a(2.1), 0.006, 0.03, 0.5);
+      // fold-down desk past the bunk's foot on the same divider, chair facing it, small screen above
+      const dz = a(3.75);
+      foldDesk(kit, wf, dz, s < 0 ? "scrAmber0" : "scrAmber1", accentKey);
+      chairInstance(kit, wf + 1.0, dz, Math.PI / 2);
+      // table corner on the E side of the bay's front: a low round table and two chairs
+      const tx = x1 - 2.2;
+      const tz = a(1.9);
+      roundTable(kit, tx, tz, 0.5, { h: 0.72, accentKey });
+      chairInstance(kit, tx - 0.95, tz, Math.PI / 2, { padColor: MATTRESS });
+      chairInstance(kit, tx, tz + s * 0.95, s < 0 ? 0 : Math.PI, { padColor: MATTRESS });
+      // refresher booth in the back corner on the E side: a full-height closed cubicle with a door
+      booth(kit, x1 - 2.5, x1 - 0.2, back, s, accentKey, bayNo);
+      // locker beside the booth; shelf of personal effects and a warm wall light over a footlocker
+      locker(backFrame, bu(x1 - 3.0), 0.9, 2.1, { accentKey, color: PALETTE.impGrey, decal: IMP_DECAL.glyphs1, doors: 1 });
+      impWallLight(backFrame, bu(x0 + 2.2), 1.95, { key: "emitWarmSoft", w: 0.9 });
+      backFrame.decal(IMP_DECAL.glyphs2, bu(x0 + 0.75), 2.35, 0.034, 0.3);
+      kit.boxMM("impTrim", [x0 + 1.8, 0, Math.min(t(0.1), t(0.7))], [x0 + 2.6, 0.48, Math.max(t(0.1), t(0.7))], { color: PALETTE.impBlack, texel: 1 });
+      kit.boxMM("impMetal", [x0 + 1.85, 0.48, Math.min(t(0.14), t(0.66))], [x0 + 2.55, 0.52, Math.max(t(0.14), t(0.66))], { color: PALETTE.impCharcoal });
+      kit.box(accentKey, x0 + 2.2, 0.3, t(0.7) - s * 0.006, 0.5, 0.02, 0.012);
+      kit.collider([x0 + 1.8, 0, Math.min(t(0.1), t(0.7))], [x0 + 2.6, 0.52, Math.max(t(0.1), t(0.7))], "footlocker");
+      const fig = shelf(kit, ctx, backFrame, bu(x0 + 2.2), 1.35, { accentKey, holo: bayNo === 4 });
+      if (fig) holo = fig;
+      // kit bag and a pair of crates by the locker
+      kit.boxMM("impTrim", [x1 - 4.4, 0, Math.min(t(0.15), t(0.75))], [x1 - 3.7, 0.5, Math.max(t(0.15), t(0.75))], { color: PALETTE.impBlack, texel: 1 });
+      kit.boxMM("impMetal", [x1 - 4.35, 0.5, Math.min(t(0.2), t(0.7))], [x1 - 3.75, 0.9, Math.max(t(0.2), t(0.7))], { color: PALETTE.impGreyDark, texel: 1 });
+      kit.collider([x1 - 4.4, 0, Math.min(t(0.15), t(0.75))], [x1 - 3.7, 0.9, Math.max(t(0.15), t(0.75))], "crates");
+      // rug under the front third, bay number on the floor at the aisle threshold
+      kit.boxMM("fabric", [x0 + 1.5, 0.002, Math.min(a(0.5), a(4.9))], [x1 - 0.5, 0.014, Math.max(a(0.5), a(4.9))], { color: RUG, texel: 1.5 });
+      kit.boxMM("impTrim", [x0 + 0.3, 0.001, front - 0.05], [x1 - 0.3, 0.012, front + 0.05], { color: PALETTE.impBlack });
+      floorDecal(kit, [IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03][i], cx, front - s * 0.9, 0.8, s < 0 ? Math.PI / 2 : -Math.PI / 2, 0.014);
+      // one warm key per bay over the front third, low enough to model the bunk, the desk and the table
+      kit.light({ type: "point", pos: [cx, h - 0.8, a(2.6)], color: 0xffd6b0, intensity: lux(h - 0.8, 4.2), distance: 13, priority: 0.4 - bayNo * 0.005 });
+    }
   }
-  // rotating comm hologram in one cabin's holo frame
   if (holo) {
     kit.onUpdate((dt) => {
       holo.rotation.y += dt * 0.8;
     });
   }
 
-  // --- lounge: media wall, low table, two benches facing each other
-  const media = partition(kit, 1.2, -2.4, 2.4, h, { seed: 77, accentKey, features: {}, bothEnds: true });
-  wallScreen(media.east.frame, 2.4, 1.85, 2.6, 1.45, "scrBlue1", { accentKey });
-  for (const s of [-1, 1]) {
-    media.east.frame.box("impTrim", 2.4 + s * 1.95, 1.9, 0.07, 0.24, 2.4, 0.08, { color: PALETTE.impBlack });
-    media.east.frame.box("emitWarmSoft", 2.4 + s * 1.95, 1.9, 0.115, 0.08, 2.2, 0.012, { uv: "keep" });
-  }
-  media.west.frame.decal(IMP_DECAL.cog, 2.4, 2.0, 0.036, 1.2);
-  media.west.frame.decal(IMP_DECAL.glyphs3, 2.4, 1.1, 0.036, 1.0, { h: 0.3 });
-  table(kit, 5.2, 0, 2.2, 1.0, 0, { h: 0.46, accentKey });
-  bench(kit, 5.2, 1.85, 3.0, 0, { pad: "fabric", padColor: MATTRESS, accentKey });
-  bench(kit, 5.2, -1.85, 3.0, Math.PI, { pad: "fabric", padColor: MATTRESS, accentKey });
-  // side tables with a lamp and a decanter set
-  for (const s of [-1, 1]) {
-    table(kit, 7.4, s * 1.85, 0.6, 0.6, 0, { h: 0.5, accentKey: null });
-    kit.cyl("impTrim", 7.4, 0.54, s * 1.85, 0.08, 0.06, "y", { color: PALETTE.impBlack, segments: 12 });
-    kit.cyl("impMetal", 7.4, 0.72, s * 1.85, 0.02, 0.3, "y", { color: PALETTE.impGrey, segments: 8 });
-    kit.cyl("impTrim", 7.4, 0.9, s * 1.85, 0.12, 0.1, "y", { color: PALETTE.impBlack, segments: 12, r2: 0.07 });
-    kit.cyl("emitWarmSoft", 7.4, 0.86, s * 1.85, 0.09, 0.02, "y", { segments: 12, uv: "keep" });
-  }
-  // lounge carpet and the runner from the door
-  kit.boxMM("fabric", [2.6, 0.002, -2.9], [8.6, 0.014, 2.9], { color: CARPET, texel: 1.5 });
-  kit.boxMM("fabric", [8.6, 0.002, -1.0], [hx - 0.3, 0.014, 1.0], { color: CARPET, texel: 1.5 });
-  kit.boxMM("fabric", [-hx + 0.6, 0.002, -1.0], [1.0, 0.014, 1.0], { color: CARPET, texel: 1.5 });
-  for (const [x0, x1, z] of [[2.6, 8.6, -2.95], [2.6, 8.6, 2.95]]) kit.boxMM(accentKey, [x0, 0.003, z - 0.02], [x1, 0.011, z + 0.02]);
-
-  // --- N and S walls east of the alcoves: refresher doors, locker bank, notice screen
-  const N = walls.N.frame; // u = x + hx
-  const S = walls.S.frame; // u = hx - x
-  const refresher = fakeDoor(N, hx + 5.0, 1.4, 2.4, { accentKey, statusKey: "emitGreen", label: IMP_DECAL.glyphs3 });
-  fakeDoor(S, hx - 5.0, 1.4, 2.4, { accentKey, statusKey: "emitRedImp", label: IMP_DECAL.glyphs3 });
-  locker(N, hx + 10.2, 2.7, 2.1, { accentKey, doors: 3, color: PALETTE.impGrey, vents: true });
-  wallScreen(S, hx - 10.2, 1.8, 1.6, 1.0, "scrAmber0", { accentKey, leds: 2 });
-  bench(kit, 12.5, hz - 0.55, 2.2, 0, { back: false, pad: "fabric", padColor: MATTRESS });
-  // occupied light of the refresher blinks
+  // --- aisle: no centre strip; the dividers' end posts carry the amber bay lamps and the rugs frame it.
+  // The W end wall closes the walk with the duty roster between two warm wall lights.
+  const W = walls.W.frame;
+  wallScreen(W, hz, 1.8, 1.6, 1.0, "scrAmber2", { accentKey, leds: 4 });
+  for (const s of [-1, 1]) impWallLight(W, hz + s * 1.5, 2.3, { key: "emitWarmSoft", w: 0.7 });
+  // --- vestibule (x 10.5..15): duty roster and coat rail on the E wall beside the door, bench, notice
+  const E = walls.E.frame; // u = z + hz
+  wallScreen(E, hz - 3.6, 1.75, 1.4, 0.9, "scrAmber1", { accentKey, leds: 3 });
+  E.box("impTrim", hz + 3.4, 1.7, 0.06, 1.6, 0.08, 0.1, { color: PALETTE.impBlack });
+  for (let i = 0; i < 4; i++) E.box("impMetal", hz + 2.8 + i * 0.4, 1.6, 0.1, 0.05, 0.16, 0.16, { color: PALETTE.impGrey });
+  E.decal(IMP_DECAL.glyphs2, hz + 3.4, 2.2, 0.034, 0.5);
+  bench(kit, 12.8, -hz + 0.55, 2.2, Math.PI, { back: false, pad: "fabric", padColor: MATTRESS });
+  bench(kit, 12.8, hz - 0.55, 2.2, 0, { back: false, pad: "fabric", padColor: MATTRESS });
+  const refresher = fakeDoor(walls.N.frame, hx + 12.8, 1.2, 2.4, { accentKey, statusKey: "emitGreen", label: IMP_DECAL.glyphs3 });
   const blink = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.012), ctx.materials.emitRedImp);
   blink.position.copy(refresher).add(new THREE.Vector3(0, -0.08, 0.004));
   kit.attach(blink);
   kit.onUpdate((dt, tt) => {
     blink.visible = Math.sin(tt * 2.2) > 0.6;
   });
-  // duty roster beside the door on the E wall + a coat rail
-  const E = walls.E.frame; // u = z + hz
-  wallScreen(E, hz - 3.4, 1.75, 1.4, 0.9, "scrAmber1", { accentKey, leds: 3 });
-  E.box("impTrim", hz + 3.2, 1.7, 0.06, 1.6, 0.08, 0.1, { color: PALETTE.impBlack });
-  for (let i = 0; i < 4; i++) E.box("impMetal", hz + 2.6 + i * 0.4, 1.6, 0.1, 0.05, 0.16, 0.16, { color: PALETTE.impGrey });
-  E.decal(IMP_DECAL.glyphs2, hz + 3.2, 2.2, 0.034, 0.5);
 
-  // --- lights: lounge key, vestibule key, amber low accent under the media wall screen
-  // (raised ~50% after the dark ribbed ceiling landed: spawn view mean luma stays above 32)
-  kit.light({ type: "point", pos: [5.2, h - 0.9, 2.6], color: 0xfff1de, intensity: lux(h - 0.9, 3.0), distance: 13, priority: 0.5 });
-  kit.light({ type: "point", pos: [11.5, h - 0.9, 0], color: 0xf4ecff, intensity: lux(h - 0.9, 2.6), distance: 12, priority: 0.45 });
-  kit.light({ type: "point", pos: [2.2, 0.6, 0], color: new THREE.Color(room.accent).getHex(), intensity: 3.5, distance: 7, priority: 0.3 });
+  // --- lights: vestibule key and the W end of the aisle (warm-white, matching the bunk lights); the
+  // aisle's middle is lit by the six bay keys' spill
+  // (the vestibule key sits over the door side so the divider caps are lit at a glancing angle, not
+  // as specular hot spots)
+  kit.light({ type: "point", pos: [13.7, h - 0.7, 0], color: 0xffe2c4, intensity: lux(h - 0.7, 3.0), distance: 13, priority: 0.45 });
+  kit.light({ type: "point", pos: [-10.5, h - 0.7, 0], color: 0xffe2c4, intensity: lux(h - 0.7, 3.0), distance: 15, priority: 0.42 });
 }
 
 /**
- * Free-standing partition along z at x, from zA (at a wall) to zB (open end): two panelled faces
- * back to back, an end post and one collider. Returns { west, east } faces with frame + uOf(z).
+ * Half-height divider along z at x from the back wall (zA) to the aisle line (zB): black frame, grey
+ * panel faces, metal cap, an end post with a bay lamp and a bay number decal on both faces.
  */
-function partition(kit, x, zA, zB, h, opts = {}) {
-  const { seed = 1, accentKey = "emitAmber", features = {}, bothEnds = false } = opts;
-  const t = 0.12; // half thickness (each face slab is 0.12 deep)
+function divider(kit, x, zA, zB, opts = {}) {
+  const { accentKey = "emitAmber", label = 0 } = opts;
   const lo = Math.min(zA, zB);
   const hi = Math.max(zA, zB);
-  // west face (looks toward -x): U must run so that N = -x  =>  from lo to hi
-  const wf = wallFrame(kit, [x - t, lo], [x - t, hi]);
-  impWall(wf.frame, wf.length, h, { seed, accentKey, depth: t, features, panelW: 1.6, tag: "partition", collide: false, altChance: 0.2 });
-  const ef = wallFrame(kit, [x + t, hi], [x + t, lo]);
-  impWall(ef.frame, ef.length, h, { seed: seed + 5, accentKey, depth: t, features, panelW: 1.6, tag: "partition", collide: false, altChance: 0.2 });
-  // end post(s) at the open end(s)
-  const ends = bothEnds ? [zA, zB] : [zB];
-  for (const zEnd of ends) {
-    const out = zEnd > (zA + zB) / 2 ? 1 : -1;
-    kit.box("impTrim", x, h / 2, zEnd, 2 * t + 0.16, h, 0.3, { color: PALETTE.impBlack, texel: 1 });
-    kit.box(accentKey, x, h / 2, zEnd + out * 0.156, 0.06, h - 1.4, 0.012);
+  const t = 0.12;
+  kit.boxMM("impTrim", [x - t, 0, lo], [x + t, DIV_H, hi], { color: PALETTE.impBlack, texel: 1 });
+  kit.boxMM("impMetal", [x - t - 0.02, 0, lo], [x + t + 0.02, 0.12, hi], { color: PALETTE.impCharcoal, texel: 1 });
+  kit.boxMM("impMetal", [x - t - 0.03, DIV_H - 0.05, lo], [x + t + 0.03, DIV_H, hi], { color: PALETTE.impCharcoal, texel: 1 });
+  // panel faces split into 1.6 m plates
+  const n = Math.max(1, Math.round((hi - lo) / 1.6));
+  for (let i = 0; i < n; i++) {
+    const z0 = lo + ((hi - lo) * i) / n + 0.04;
+    const z1 = lo + ((hi - lo) * (i + 1)) / n - 0.04;
+    for (const s of [-1, 1]) kit.boxMM("impPanel1", [Math.min(x + s * (t + 0.001), x + s * (t + 0.03)), 0.16, z0], [Math.max(x + s * (t + 0.001), x + s * (t + 0.03)), DIV_H - 0.1, z1], { color: i % 2 ? PALETTE.impGrey : PALETTE.impWhite, uv: "world", texel: 1 });
   }
-  kit.collider([x - t - 0.08, 0, lo - 0.15], [x + t + 0.08, h, hi + 0.15], "partition");
-  return {
-    west: { frame: wf.frame, uOf: (z) => z - lo },
-    east: { frame: ef.frame, uOf: (z) => hi - z },
-  };
+  // end post at the aisle
+  const out = zB > zA ? 1 : -1;
+  kit.box("impTrim", x, DIV_H / 2 + 0.05, zB, 2 * t + 0.16, DIV_H + 0.1, 0.3, { color: PALETTE.impBlack, texel: 1 });
+  kit.box("impMetalRough", x, DIV_H + 0.12, zB, 2 * t + 0.1, 0.04, 0.24, { color: PALETTE.impGreyDark });
+  kit.box(accentKey, x, DIV_H - 0.2, zB + out * 0.156, 0.14, 0.03, 0.012);
+  for (const s of [-1, 1]) {
+    const g = new THREE.PlaneGeometry(0.26, 0.26);
+    if (s < 0) g.rotateY(Math.PI);
+    kit.add("decalImp", g, { pos: [x + s * (t + 0.081), 0.66, zB], uv: "keep", uvRect: impDecalRect([IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03, IMP_DECAL.glyphs1, IMP_DECAL.glyphs2, IMP_DECAL.glyphs3][label % 6]) });
+  }
+  kit.collider([x - t - 0.08, 0, lo], [x + t + 0.08, DIV_H + 0.1, hi + 0.15 * (out > 0 ? 1 : 0)], "divider");
 }
 
-/** Bunk along a wall at z = back (side -1: N wall, +1: S wall), spanning x0..x1. */
-function bunk(kit, x0, x1, back, side, accentKey) {
-  const depth = 0.95;
-  const z0 = side < 0 ? back + 0.08 : back - 0.08 - depth;
-  const z1 = z0 + depth;
-  const zFront = side < 0 ? z1 : z0;
+/** Refresher booth: closed cubicle x0..x1 against the back wall (2.2 m deep), 2.5 m tall, door facing the bay. */
+function booth(kit, x0, x1, back, s, accentKey, bayNo) {
+  const D = 2.2;
+  const H = 2.5;
+  const zIn = back - s * D; // door face z
+  const lo = Math.min(back, zIn);
+  const hi = Math.max(back, zIn);
+  kit.boxMM("impTrim", [x0, 0, lo], [x1, H, hi], { color: PALETTE.impBlack, texel: 1 });
+  kit.boxMM("impMetal", [x0 - 0.02, H, lo - 0.02], [x1 + 0.02, H + 0.1, hi + 0.02], { color: PALETTE.impCharcoal, texel: 1 });
+  // panelled outer faces (W face into the bay, door face toward the aisle)
+  const wf = wallFrame(kit, [x0 - 0.001, s < 0 ? lo : hi], [x0 - 0.001, s < 0 ? hi : lo]);
+  wf.frame.box("impPanel2", (hi - lo) / 2, H / 2 + 0.1, 0.03, hi - lo - 0.2, H - 0.5, 0.05, { color: PALETTE.impGrey, uv: "world", texel: 1 });
+  const dfz = s < 0 ? hi + 0.001 : lo - 0.001;
+  const df = s < 0 ? wallFrame(kit, [x0, dfz], [x1, dfz]) : wallFrame(kit, [x1, dfz], [x0, dfz]);
+  const cu = (x1 - x0) / 2;
+  df.frame.box("impPanel1", cu, H / 2 + 0.1, 0.03, x1 - x0 - 0.2, H - 0.5, 0.05, { color: PALETTE.impGrey, uv: "world", texel: 1 });
+  fakeDoor(df.frame, cu, 0.9, 2.0, { accentKey, statusKey: bayNo % 2 ? "emitGreen" : "emitRedImp", label: IMP_DECAL.glyphs3 });
+  // vent grille on the door face's upper corner
+  df.frame.box("impTrim", cu + 0.7, H - 0.45, 0.06, 0.5, 0.3, 0.04, { color: PALETTE.impCharcoal });
+  for (let k = 0; k < 4; k++) df.frame.box("impMetal", cu + 0.7, H - 0.55 + k * 0.07, 0.08, 0.4, 0.02, 0.03, { color: PALETTE.impGreyDark });
+  kit.collider([x0, 0, lo], [x1, H + 0.1, hi], "booth");
+}
+
+/**
+ * Bunk against a divider's E face at x = xf, running along z from the aisle end zA to the head end zB
+ * (0.95 m wide, 0.72 m to the blanket): dark frame with two drawers on the open side, grey mattress,
+ * grey blanket over the foot two-thirds with a folded hem, pillow and a head panel at the far end.
+ */
+function bunk(kit, xf, zA, zB, accentKey) {
+  const x0 = xf + 0.06;
+  const x1 = x0 + 0.95;
+  const lo = Math.min(zA, zB);
+  const hi = Math.max(zA, zB);
+  const headHi = zB > zA; // head at the hi end
+  const len = hi - lo;
   const cx = (x0 + x1) / 2;
-  const cz = (z0 + z1) / 2;
-  kit.boxMM("impMetal", [x0, 0, z0 + 0.06], [x1, 0.12, z1 - 0.06], { color: PALETTE.impCharcoal, texel: 1 });
-  kit.boxMM("impTrim", [x0, 0.1, z0], [x1, 0.5, z1], { color: PALETTE.impBlack, texel: 1 });
-  // drawer fronts on the open side
+  kit.boxMM("impMetal", [x0 + 0.06, 0, lo], [x1 - 0.06, 0.12, hi], { color: PALETTE.impCharcoal, texel: 1 });
+  kit.boxMM("impTrim", [x0, 0.1, lo], [x1, 0.5, hi], { color: PALETTE.impBlack, texel: 1 });
+  // drawer fronts on the open (E) side
   for (let i = 0; i < 2; i++) {
-    const fx0 = x0 + 0.12 + i * ((x1 - x0 - 0.24) / 2) + 0.03;
-    const fx1 = fx0 + (x1 - x0 - 0.24) / 2 - 0.06;
-    kit.boxMM("impPanel1", [fx0, 0.16, zFront - (side < 0 ? 0.0 : 0.02)], [fx1, 0.44, zFront + (side < 0 ? 0.02 : 0.0)], { color: PALETTE.impGrey, uv: "world", texel: 1 });
-    kit.box("impMetal", (fx0 + fx1) / 2, 0.3, zFront - side * 0.035, 0.3, 0.03, 0.03, { color: PALETTE.impGreyDark });
+    const z0 = lo + 0.12 + i * ((len - 0.24) / 2) + 0.03;
+    const z1 = z0 + (len - 0.24) / 2 - 0.06;
+    kit.boxMM("impPanel1", [x1, 0.16, z0], [x1 + 0.02, 0.44, z1], { color: PALETTE.impGreyDark, uv: "world", texel: 1 });
+    kit.box("impMetal", x1 + 0.035, 0.3, (z0 + z1) / 2, 0.03, 0.03, 0.3, { color: PALETTE.impGrey });
   }
-  kit.box(accentKey, cx, 0.13, zFront - side * 0.006, x1 - x0 - 0.3, 0.02, 0.012);
-  // mattress, blanket over the foot end, pillow at the head (west end)
-  kit.boxMM("fabric", [x0 + 0.03, 0.5, z0 + 0.03], [x1 - 0.03, 0.68, z1 - 0.03], { color: MATTRESS, texel: 2 });
-  kit.boxMM("fabric", [x0 + 0.85, 0.68, z0 - 0.02], [x1 - 0.02, 0.74, z1 + 0.02], { color: BLANKET, texel: 2 });
-  kit.boxMM("fabric", [x0 + 0.85, 0.6, z0 - 0.03], [x0 + 0.95, 0.75, z1 + 0.03], { color: BLANKET, texel: 2 });
-  kit.box("fabric", x0 + 0.42, 0.74, cz, 0.55, 0.12, 0.42, { color: PILLOW, texel: 2 });
-  kit.collider([x0, 0, z0], [x1, 0.75, z1], "bunk");
+  kit.box(accentKey, x1 + 0.006, 0.13, (lo + hi) / 2, 0.012, 0.02, len - 0.3);
+  // mattress, blanket over the foot two-thirds (folded hem toward the pillow, drop over the open side)
+  kit.boxMM("fabric", [x0 + 0.03, 0.5, lo + 0.03], [x1 - 0.03, 0.66, hi - 0.03], { color: MATTRESS, texel: 2 });
+  const fLo = headHi ? lo + 0.02 : lo + 0.75;
+  const fHi = headHi ? hi - 0.75 : hi - 0.02;
+  const hem = headHi ? fHi : fLo;
+  kit.boxMM("fabric", [x0 - 0.02, 0.66, fLo], [x1 + 0.02, 0.72, fHi], { color: BLANKET, texel: 2 });
+  kit.boxMM("fabric", [x0 - 0.03, 0.6, hem - 0.05], [x1 + 0.03, 0.73, hem + 0.05], { color: BLANKET, texel: 2 });
+  kit.boxMM("fabric", [x1 - 0.02, 0.3, fLo], [x1 + 0.03, 0.66, fHi], { color: BLANKET, texel: 2 });
+  kit.box("fabric", cx, 0.72, headHi ? hi - 0.4 : lo + 0.4, 0.42, 0.12, 0.55, { color: PILLOW, texel: 2 });
+  // head panel
+  const hz0 = headHi ? hi : lo - 0.06;
+  kit.boxMM("impTrim", [x0 - 0.02, 0.5, hz0], [x1 + 0.02, 1.0, hz0 + 0.06], { color: PALETTE.impBlack, texel: 1 });
+  kit.collider([x0, 0, lo - 0.06], [x1 + 0.04, 0.75, hi + 0.06], "bunk");
 }
 
-/** Desk against a partition at x (its face), long along z, with a tilted readout and a drawer. */
-function desk(kit, x, z, side, accentKey) {
+/** Fold-down desk on a divider face at x (face plane), long along z, with a small screen on the divider above it. */
+function foldDesk(kit, x, z, screenKey, accentKey) {
   const f = propFrame(kit, x, 0, z, 0);
-  f.box("impMetal", 0, 0.73, 0, 0.62, 0.05, 1.3, { color: PALETTE.impCharcoal, texel: 1 });
-  f.box("impGloss", 0, 0.758, -0.15, 0.5, 0.012, 0.9);
-  f.box("impTrim", 0.2, 0.36, 0.5, 0.2, 0.72, 0.28, { color: PALETTE.impBlack, texel: 1 });
-  f.box("impTrim", 0.2, 0.36, -0.5, 0.2, 0.72, 0.28, { color: PALETTE.impBlack, texel: 1 });
-  f.box("impTrim", 0.08, 0.5, 0.5, 0.42, 0.34, 0.3, { color: PALETTE.impBlack, texel: 1 });
-  f.box("impMetal", -0.14, 0.5, 0.5, 0.02, 0.04, 0.18, { color: PALETTE.impGrey });
-  // readout on a stand, screen facing -x (the chair)
-  f.box("impTrim", 0.18, 0.86, -0.15, 0.14, 0.2, 0.34, { color: PALETTE.impBlack });
-  const g = new THREE.PlaneGeometry(0.4, 0.26);
-  g.rotateY(-Math.PI / 2);
-  kit.add(side < 0 ? "scrAmber0" : "scrBlue0", g, { pos: [x + 0.1, 0.98, z - 0.15], uv: "keep" });
-  f.box(accentKey, 0.1, 0.83, -0.15, 0.012, 0.02, 0.3);
-  // datapad and a cup on the desk
-  f.box("impGloss", -0.1, 0.766, 0.35, 0.16, 0.012, 0.22);
-  kit.cyl("impMetal", x - 0.12, 0.8, z - 0.5, 0.04, 0.08, "y", { color: PALETTE.impGrey, segments: 10 });
-  kit.collider([x - 0.31, 0, z - 0.65], [x + 0.31, 0.78, z + 0.65], "desk");
+  // hinged leaf (0.5 deep) on two brackets, a drawer box underneath at the wall
+  f.box("impMetal", 0.27, 0.74, 0, 0.54, 0.05, 1.3, { color: PALETTE.impCharcoal, texel: 1 });
+  f.box("impGloss", 0.29, 0.768, -0.1, 0.42, 0.012, 0.9);
+  for (const zz of [-0.55, 0.55]) f.box("impTrim", 0.2, 0.68, zz, 0.36, 0.06, 0.05, { color: PALETTE.impBlack });
+  f.box("impTrim", 0.1, 0.42, 0.45, 0.2, 0.4, 0.34, { color: PALETTE.impBlack, texel: 1 });
+  f.box("impMetal", 0.21, 0.5, 0.45, 0.02, 0.04, 0.18, { color: PALETTE.impGrey });
+  // small screen on a bracket against the divider, facing the chair (+x)
+  f.box("impTrim", 0.06, 1.1, -0.1, 0.1, 0.32, 0.5, { color: PALETTE.impBlack });
+  f.box("impGloss", 0.115, 1.1, -0.1, 0.012, 0.28, 0.44);
+  const g = new THREE.PlaneGeometry(0.4, 0.24);
+  g.rotateY(Math.PI / 2);
+  kit.add(screenKey, g, { pos: [x + 0.125, 1.1, z - 0.1], uv: "keep" });
+  f.box(accentKey, 0.115, 0.92, -0.1, 0.012, 0.02, 0.36);
+  // datapad and a cup
+  f.box("impGloss", 0.3, 0.776, 0.35, 0.16, 0.012, 0.22);
+  kit.cyl("impMetal", x + 0.34, 0.81, z - 0.5, 0.04, 0.08, "y", { color: PALETTE.impGrey, segments: 10 });
+  kit.collider([x, 0, z - 0.65], [x + 0.56, 0.8, z + 0.65], "desk");
 }
 
 /** Shelf on a wall frame with personal effects: datapad, cap, boots, holo frame. Returns the holo figure (or null). */

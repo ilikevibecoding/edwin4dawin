@@ -4,7 +4,7 @@
 // padded bench, a datapad rack. Softer grey panels, dark carpet instead of the deck lane. Accent gold.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { PALETTE } from "../materials.js";
+import { PALETTE, setDomain } from "../materials.js";
 import { impRoomShell, impConsole, impChair, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
 import { deckASetup, wallScreen, wireSphereGeometry, lineSegments, mergedMesh, datapad, cup, datapadRack, indicatorRow, yawToward } from "./deck_a_kit.js";
@@ -73,15 +73,28 @@ export function buildReadyRoom(kit, ctx, room) {
   const accentKey = "emitAmber";
   const warm = 0xffe2c0;
   const panelColor = PALETTE.impWhite.clone().lerp(PALETTE.impGrey, 0.35);
+  // one fixture temperature in here: every wall lamp is a warm-white diffuser (dimmer than the kit's
+  // cool emitWhiteSoft), matching the suspended bar and the warm ceiling fills
+  const WALL = "deckA_readyWarm";
+  const SLOT = "deckA_readyWarmDim";
+  if (!M[WALL]) {
+    const m = M.emitWarmSoft.clone();
+    m.emissiveIntensity = 1.3;
+    M[WALL] = setDomain(m, "interior");
+    const s = M.emitWarmSoft.clone();
+    s.emissiveIntensity = 0.8;
+    M[SLOT] = setDomain(s, "interior");
+  }
 
   // ---- shell: softer panel tint, clean features, two lit troughs ----------------------------------
+  // (the kit's random wall light strips are off: 70 % of them come out cool white)
   const walls = impRoomShell(kit, room, ctx.doors, {
     accentKey,
     seed: 5177,
-    wall: { panelW: 1.8, features: { vent: 0.03, equipment: 0.04, conduit: 0.0, light: 0.12, screen: 0.05 }, panelColor, panelColorAlt: PALETTE.impGrey, altChance: 0.25 },
-    walls: { E: { features: { vent: 0.0, equipment: 0.0, conduit: 0.0, light: 0.16, screen: 0.0 } }, S: { features: { vent: 0.02, equipment: 0.0, conduit: 0.0, light: 0.1, screen: 0.0 } }, N: { features: { vent: 0.04, equipment: 0.0, conduit: 0.0, light: 0.1, screen: 0.06 } } },
+    wall: { panelW: 1.8, features: { vent: 0.03, equipment: 0.04, conduit: 0.0, light: 0.0, screen: 0.05 }, panelColor, panelColorAlt: PALETTE.impGrey, altChance: 0.25 },
+    walls: { E: { features: { vent: 0.0, equipment: 0.0, conduit: 0.0, light: 0.0, screen: 0.0 } }, S: { features: { vent: 0.02, equipment: 0.0, conduit: 0.0, light: 0.0, screen: 0.0 } }, N: { features: { vent: 0.04, equipment: 0.0, conduit: 0.0, light: 0.0, screen: 0.06 } } },
     floor: { lane: false },
-    ceiling: { troughs: 2, troughW: 0.6, beamStep: 4.0 },
+    ceiling: { troughs: 2, troughW: 0.6, beamStep: 4.0, lightKey: SLOT },
   });
   // carpet strip with a brass edge trim replaces the deck lane; a large cog emblem woven in between
   // the door and the table (upright as seen from the door)
@@ -150,7 +163,7 @@ export function buildReadyRoom(kit, ctx, room) {
   // suspended warm light bar over the table
   kit.box("impTrim", tx, 3.2, 0, 4.4, 0.12, 0.5, { color: PALETTE.impBlack, texel: 1 });
   kit.box("impMetal", tx, 3.13, 0, 4.2, 0.03, 0.4, { color: PALETTE.impCharcoal });
-  kit.box("emitWarmSoft", tx, 3.11, 0, 4.0, 0.02, 0.3, { uv: "keep" });
+  kit.box(WALL, tx, 3.11, 0, 4.0, 0.02, 0.3, { uv: "keep" });
   kit.box(GOLD, tx, 3.2, 0.256, 4.2, 0.02, 0.01);
   kit.box(GOLD, tx, 3.2, -0.256, 4.2, 0.02, 0.01);
   for (const x of [tx - 1.6, tx + 1.6]) kit.cyl("impMetal", x, (3.26 + h) / 2, 0, 0.015, h - 3.26, "y", { color: PALETTE.impGreyDark, segments: 8 });
@@ -163,8 +176,8 @@ export function buildReadyRoom(kit, ctx, room) {
     f.decal(IMP_DECAL.cog, hz, 3.35, 0.09, 0.36);
     indicatorRow(f, hz - 2.6, 1.6, 0.1, 6, { accentKey, seed: 21, step: 0.09, size: 0.045 });
     indicatorRow(f, hz + 2.6, 1.6, 0.1, 6, { accentKey, seed: 22, step: 0.09, size: 0.045 });
-    impWallLight(f, hz - 3.6, 2.6, { key: "emitWhiteSoft", w: 0.7 });
-    impWallLight(f, hz + 3.6, 2.6, { key: "emitWhiteSoft", w: 0.7 });
+    impWallLight(f, hz - 3.6, 2.6, { key: WALL, w: 0.7 });
+    impWallLight(f, hz + 3.6, 2.6, { key: WALL, w: 0.7 });
     // podium facing the table
     const pyaw = yawToward(8.3, 2.4, tx, 0);
     impConsole(kit, 8.3, 0, 2.4, 1.0, 0.6, { yaw: pyaw, seed: 41, screens: ["scrAmber1"], accentKey, height: 1.02 });
@@ -217,7 +230,7 @@ export function buildReadyRoom(kit, ctx, room) {
     f.decal(IMP_DECAL.glyphs1, cu - 0.3, 2.2, 0.09, 0.5);
     f.decal(IMP_DECAL.glyphs3, cu + 1.1, 2.2, 0.09, 0.5);
     wallScreen(f, 5.5, 2.0, 1.6, 0.9, "scrWhite1", { accentKey: GOLD, n0: 0.08 });
-    impWallLight(f, 1.6, 2.6, { key: "emitWhiteSoft", w: 0.7 });
+    impWallLight(f, 1.6, 2.6, { key: WALL, w: 0.7 });
     // sideboard under the display with a presentation model of the ship on a brass stand
     {
       const su = 5.5;
@@ -269,8 +282,8 @@ export function buildReadyRoom(kit, ctx, room) {
     f.decal(IMP_DECAL.cog, bu, 2.55, 0.137, 0.32);
     for (let r = 0; r < 5; r++) for (let c = 0; c < 6; c++) f.box("impMetal", bu - 0.85 + c * 0.34, 2.25 - r * 0.2, 0.14, 0.26, 0.09, 0.01, { color: BRASS, texel: 4 });
     f.box(GOLD, bu, 1.3, 0.137, 1.6, 0.012, 0.006);
-    impWallLight(f, bu, 3.0, { key: "emitWhiteSoft", w: 1.2 });
-    impWallLight(f, hx + 1.5, 3.0, { key: "emitWhiteSoft", w: 1.2 });
+    impWallLight(f, bu, 3.0, { key: WALL, w: 1.2 });
+    impWallLight(f, hx + 1.5, 3.0, { key: WALL, w: 1.2 });
   }
 
   // ---- W wall: padded bench south of the door, datapad rack north of it ------------------------
@@ -309,7 +322,7 @@ export function buildReadyRoom(kit, ctx, room) {
   kit.light({ type: "point", pos: [6.0, h - 0.8, -6.4], color: 0xffd9b0, intensity: lux(h - 0.8, 1.4), distance: 9, priority: 0.45 });
   // display-wall fill kept high so its mirror image on the glossy display falls above the screen
   // for anyone standing between the door and the podium
-  kit.light({ type: "point", pos: [8.6, 3.6, 0], color: 0xdfe8ff, intensity: lux(3.6, 1.0), distance: 9, priority: 0.42 });
+  kit.light({ type: "point", pos: [8.6, 3.6, 0], color: warm, intensity: lux(3.6, 1.0), distance: 9, priority: 0.42 });
   kit.light({ type: "point", pos: [-7.0, h - 0.6, 0], color: 0xffcf9a, intensity: lux(h - 0.6, 1.8), distance: 10, priority: 0.5 });
   kit.light({ type: "point", pos: [tx, 0.35, 0], color: 0xe8c98c, intensity: 4.0, distance: 6, priority: 0.3 });
   // small display light over the ship model on the sideboard
