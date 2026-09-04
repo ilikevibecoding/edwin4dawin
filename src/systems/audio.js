@@ -295,6 +295,8 @@ export class AudioSystem {
     const c = this.ctx;
     this.ctx = null;
     this.ambience = null;
+    this.master = null;
+    this.voiceBus = null;
     this.enabled = false;
     this._nodes = 0;
     if (c && !this._offline && typeof c.close === "function") c.close().catch(() => {});
@@ -532,6 +534,7 @@ export class AudioSystem {
 
   /** Fire an audio event. data: { position?: Vector3|[x,y,z], kind?, id?, ... } */
   event(name, data = {}) {
+    data = data || {};
     const entry = { name, t: performance.now(), kind: data.kind, id: data.id, played: false };
     this.log.push(entry);
     if (this.log.length > 200) this.log.shift();
@@ -545,6 +548,7 @@ export class AudioSystem {
   }
 
   _play(name, data, entry) {
+    if (name === "launch") name = "fighter_launch"; // fighter-traffic alias
     const pos = posOf(data);
     const sample = this.samples.get(data.kind ? `${name}:${data.kind}` : name) || this.samples.get(name);
     if (sample) return this._playSample(sample, name, pos, entry);
@@ -574,9 +578,8 @@ export class AudioSystem {
         v = this._voice({ position: pos, gain: EVENT_GAIN[name], range: EVENT_RANGE[name], dur: 1.4, entry });
         if (v) this._liftArrive(v);
         return !!v;
-      case "launch":
       case "fighter_launch":
-        v = this._voice({ position: pos, gain: EVENT_GAIN.fighter_launch * this._bulkhead(), range: EVENT_RANGE.fighter_launch, dur: 1.8, entry });
+        v = this._voice({ position: pos, gain: EVENT_GAIN[name] * this._bulkhead(), range: EVENT_RANGE[name], dur: 1.8, entry });
         if (v) this._scream(v);
         return !!v;
       case "field_pass":
@@ -1080,7 +1083,7 @@ export class AudioSystem {
   }
 
   _applyMaster() {
-    if (!this.master) return;
+    if (!this.master || !this.ctx) return;
     const t = this.ctx.currentTime;
     const g = this.master.gain;
     g.cancelScheduledValues(t);
