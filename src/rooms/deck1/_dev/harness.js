@@ -61,6 +61,10 @@ scene.add(hemi);
 // the §6.2 envelope heights. A's exterior replaces all of this.
 const space = buildSpace(scene);
 space.setTime(40);
+// the Kestrel sun sprite sits on the bridge window's centre axis and blooms into a 60 px blob; hide it (stand-in only)
+space.root.traverse((o) => {
+  if (o.isSprite && o.material && (o.material.color.getHex() === 0xfff1d6 || o.material.color.getHex() === 0xffb070)) o.visible = false;
+});
 {
   const hullMat = new THREE.MeshStandardMaterial({ color: 0x6f747c, roughness: 0.85, metalness: 0.2 });
   const g = new THREE.Group();
