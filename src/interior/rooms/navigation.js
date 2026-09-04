@@ -9,7 +9,7 @@ import { PALETTE } from "../../materials.js";
 import { roomShell, impConsole, impChair, wallScreen, equipmentRack, crate, pipeRun, wallSegment, IMP_STYLES_TECH, IMP_THEME } from "../imperial.js";
 import { pointLight, wallFrame, ceilingFrame, panelGrid } from "../builders.js";
 import { rng } from "../../kit.js";
-import { decalRect } from "../../textures.js";
+import { decalRect, makeCanvas, toTexture } from "../../textures.js";
 import { labelAtlas, signPlate, signAt, holoMaterial, holoCone, ventGrille, cableTray, datapad, mug, floorScuffs } from "./tactical.js";
 
 export function buildNavigation(kit, ctx) {
@@ -24,9 +24,13 @@ export function buildNavigation(kit, ctx) {
     { text: "FLIGHT CONTROL  ·  SECONDARY STATION", accent: "#ffb347", color: "#ffe6c4" },
     "HDG 000 · 000   ·   SUBLIGHT 0.62c   ·   ETA 04:12",
     { text: "AUTHORISED FLIGHT CREW ONLY", accent: "#ff4136", color: "#ffd9d4" },
+    { text: "SECTOR CHART  ·  PROJECTION FIELD", accent: "#4a9dff" },
+    { text: "COURSE PLOT  ·  OPERATOR", accent: "#ffb347", color: "#ffe6c4" },
+    { text: "CHART TAPES  ·  HYPERLANE 1 – 12", accent: "#ffb347", color: "#ffe6c4" },
   ]);
   const hm = holoMaterial(ctx, "cmd_holo");
   const swatch = (s) => [s[0], s[1], s[0], s[1]];
+  const chart = courseChart(ctx);
 
   roomShell(kit, ctx, {
     ceiling: false,
@@ -36,13 +40,15 @@ export function buildNavigation(kit, ctx) {
     // ceiling: panel grid with two off-centre white strips (the pilot row sits under its amber pods)
     const f = ceilingFrame(kit, min[0], min[2], H);
     panelGrid(f, max[0] - min[0], max[2] - min[2], { rowH: 1.4, panelW: 1.4, kick: false, topPipes: false, seed: ctx.seed * 17 + 5, collide: false, styles: { panel: 0.8, greeble: 0.1, vent: 0.1 }, paints: [[PALETTE.impLight, 0.55], [PALETTE.impGrey, 0.35], [PALETTE.impMid, 0.1]], ...IMP_THEME, decals: false });
+    // strip fixtures: dark housing, faint frosted diffuser, narrow dim core (only the core reads bright)
     for (const x of [cx - 4.8, cx + 4.8]) {
       kit.boxMM("paintedMetal", [x - 0.22, H - 0.1, min[2] + 1.0], [x + 0.22, H, max[2] - 1.0], { color: PALETTE.impDark, texel: 2 });
-      kit.boxMM("emitWhiteSoft", [x - 0.08, H - 0.12, min[2] + 1.2], [x + 0.08, H - 0.09, max[2] - 1.2], { uv: "keep" });
+      kit.boxMM("emitWhiteFaint", [x - 0.13, H - 0.105, min[2] + 1.2], [x + 0.13, H - 0.095, max[2] - 1.2], { uv: "keep" });
+      kit.boxMM("emitWhiteDim", [x - 0.03, H - 0.12, min[2] + 1.3], [x + 0.03, H - 0.1, max[2] - 1.3], { uv: "keep" });
     }
     // amber wash strip over the flight director
     kit.boxMM("paintedMetal", [cx - 1.6, H - 0.1, -17.1], [cx + 1.6, H, -16.7], { color: PALETTE.impDark, texel: 2 });
-    kit.boxMM("emitAmber", [cx - 1.4, H - 0.12, -16.96], [cx + 1.4, H - 0.09, -16.84]);
+    kit.boxMM("emitAmberDim", [cx - 1.4, H - 0.12, -16.96], [cx + 1.4, H - 0.09, -16.84]);
   }
 
   // --- pilot row facing the forward arc, flight director's station behind them
@@ -83,18 +89,32 @@ export function buildNavigation(kit, ctx) {
     const seg = wallSegment(ctx.bounds, "xmax");
     const { frame, length } = wallFrame(kit, seg.from, seg.to, 0);
     // u runs from zmin (u=0) to zmax
-    for (const [u, seed, lit] of [[1.0, 1, "emitBlue"], [2.4, 2, "emitAmber"], [3.8, 3, "emitBlue"], [length - 1.0, 4, "emitBlue"]]) {
+    for (const [u, seed, lit] of [[1.0, 1, "emitBlue"], [2.4, 2, "emitAmber"], [3.8, 3, "emitBlue"]]) {
       equipmentRack(kit, ctx, { side: "xmax", u, w: 1.3, h: 2.5, seed: ctx.seed + seed, lit });
     }
     signPlate(frame, labels, 1, { u: 2.4, v: 2.95, h: 0.28 });
-    // astrogation terminal in the middle of the bank: tall console with a vertical display,
-    // facing the wall so its operator sits in the room
-    impConsole(kit, ctx, { x: max[0] - 0.5, z: tz + 0.6, yaw: -Math.PI / 2, w: 2.0, d: 0.85, screens: [2, 2], tall: true, chair: true, seed: ctx.seed + 31 });
+    // sector chart board: a tall near-black projection field on the wall directly behind the
+    // star-chart hologram as seen from the door, so the holo reads against dark instead of grey
+    // panels; a dim blue reveal frames it, readouts sit along its foot
+    {
+      const bu = tz + 0.6 - min[2]; // centred behind the table's holo along the door sightline
+      const bw = 3.6;
+      frame.box("paintedMetal", bu, 2.15, 0.04, bw + 0.2, 2.5, 0.08, { color: PALETTE.impDark, texel: 1.5 });
+      frame.box("paintedMetal", bu, 2.15, 0.085, bw, 2.3, 0.01, { color: PALETTE.impBlack, texel: 2 });
+      frame.box("darkGloss", bu, 2.2, 0.092, bw - 0.16, 2.0, 0.006);
+      frame.box("emitBlueDim", bu, 3.22, 0.094, bw - 0.2, 0.014, 0.004, { uv: "keep" });
+      frame.box("emitBlueDim", bu, 1.08, 0.094, bw - 0.2, 0.014, 0.004, { uv: "keep" });
+      for (const s of [-1, 1]) frame.box("emitBlueDim", bu + s * (bw / 2 - 0.1), 2.15, 0.094, 0.014, 2.16, 0.004, { uv: "keep" });
+      signPlate(frame, labels, 6, { u: bu, v: 3.42, h: 0.16, n: 0.04 });
+      for (let k = 0; k < 4; k++) frame.box("impScreen" + [2, 4, 1, 2][k], bu - 1.35 + k * 0.9, 1.0, 0.094, 0.6, 0.2, 0.004, { uv: "keep" });
+    }
+    // astrogation terminal at the aft end of the board: tall console with a vertical display,
+    // facing the wall so its operator sits in the room (clear of the holo's backdrop)
+    impConsole(kit, ctx, { x: max[0] - 0.5, z: tz + 2.3, yaw: -Math.PI / 2, w: 1.8, d: 0.85, screens: [2, 4], tall: true, chair: true, layout: "main", seed: ctx.seed + 31 });
     wallScreen(kit, ctx, { side: "xmax", u: tz - min[2] - 2.0, v: 2.1, w: 1.2, h: 0.7, screen: 2 });
-    wallScreen(kit, ctx, { side: "xmax", u: tz - min[2] + 3.2, v: 2.1, w: 1.2, h: 0.7, screen: 4 });
     ventGrille(frame, length / 2, 3.25, 1.2, 0.36);
-    // conduit bundle down from the ceiling into the terminal's riser
-    for (const du of [-0.5, -0.3, 0.3]) frame.cylV("metal", tz + 0.6 - min[2] + du, 2.7, 0.07, 0.03, H - 1.8, { color: du < 0 ? PALETTE.impMid : PALETTE.steel, segments: 8 });
+    // conduit bundle down from the ceiling onto the board's head
+    for (const du of [-0.5, -0.3, 0.3]) frame.cylV("metal", tz + 0.6 - min[2] + du, (3.44 + H) / 2, 0.07, 0.03, H - 3.44, { color: du < 0 ? PALETTE.impMid : PALETTE.steel, segments: 8 });
   }
 
   // --- aft wall (zmax): course boards, lockers, a crew bench with a low table
@@ -103,16 +123,17 @@ export function buildNavigation(kit, ctx) {
     const { frame, length } = wallFrame(kit, seg.from, seg.to, 0);
     // u runs from xmax (u=0) to xmin
     const uAt = (x) => max[0] - x;
-    // wide course-plot board
+    // wide course-plot board: the hyperlane route chart (own canvas) as the main pane, a hex course
+    // plot and a systems-gauge pane beside it — three different displays
     const bu = uAt(cx - 1.2);
     frame.box("paintedMetal", bu, 1.95, 0.05, 4.6, 1.5, 0.1, { color: PALETTE.impDark, texel: 1.5 });
     signPlate(frame, labels, 2, { u: bu, v: 2.5, h: 0.24, n: 0.1 });
-    for (let i = 0; i < 3; i++) {
-      const u = bu - 1.45 + i * 1.45;
-      frame.box("darkGloss", u, 1.7, 0.11, 1.34, 0.78, 0.012);
-      frame.add("impScreen" + [2, 2, 4][i], new THREE.PlaneGeometry(1.3, 0.74), u, 1.7, 0.118, { uv: "keep" });
+    frame.box("darkGloss", bu - 1.2, 1.78, 0.11, 1.94, 0.99, 0.012);
+    frame.add(chart, new THREE.PlaneGeometry(1.9, 0.95), bu - 1.2, 1.78, 0.118, { uv: "keep" });
+    for (const [u, idx, vy] of [[bu + 0.4, 2, 2.02], [bu + 1.6, 1, 2.02], [bu + 0.4, 4, 1.46], [bu + 1.6, 3, 1.46]]) {
+      frame.box("darkGloss", u, vy, 0.11, 1.14, 0.54, 0.012);
+      frame.add("impScreen" + idx, new THREE.PlaneGeometry(1.1, 0.5), u, vy, 0.118, { uv: "keep" });
     }
-    frame.box("leds", bu, 1.24, 0.11, 3.8, 0.04, 0.008, { uv: "keep" });
     // lockers toward the starboard corner
     for (let i = 0; i < 3; i++) {
       const u = uAt(max[0] - 1.0 - i * 0.7);
@@ -140,6 +161,11 @@ export function buildNavigation(kit, ctx) {
     kit.collider([bx - 0.48, 0, max[2] - 1.88], [bx + 0.48, 0.64, max[2] - 1.22], "table");
     wallScreen(kit, ctx, { side: "zmax", u: uAt(bx), v: 2.0, w: 1.4, h: 0.8, screen: 0 });
     ventGrille(frame, length - 1.2, 3.2, 1.0, 0.4);
+    // course-plot operator: a standing station facing the board from the deck in front of it, with
+    // the chart-tape cabinet beside it (fills the deck between the entry lane and the aft wall)
+    impConsole(kit, ctx, { x: cx - 1.2, z: max[2] - 2.75, yaw: Math.PI, w: 2.0, d: 0.8, h: 1.0, screens: [2, 1], chair: true, layout: "keypad", seed: ctx.seed + 53, lampMat: "emitAmber" });
+    signAt(kit, labels, 7, { x: cx - 1.2, y: 0.55, z: max[2] - 2.75 - 0.41, yaw: Math.PI, h: 0.08 });
+    chartCabinet(kit, ctx, labels, cx + 1.3, max[2] - 3.4);
   }
 
   // --- door wall (xmin): room sign, hazard threshold, comm panel, scuffs, a crate pair in the corner
@@ -163,10 +189,11 @@ export function buildNavigation(kit, ctx) {
     pipeRun(kit, [[min[0] + 1.6, 0.4, min[2] + 0.14], [cx - 4.3, 0.4, min[2] + 0.14]], 0.03, PALETTE.steel);
   }
 
-  // --- lights (6): amber over the crew, blue over the chart, white at the entry and the aft wall
-  ctx.light(pointLight(0xffb347, 4.0, 7.5, [cx - 1.55, H - 0.9, pz + 0.8]));
-  ctx.light(pointLight(0xffb347, 4.0, 7.5, [cx + 1.55, H - 0.9, pz + 0.8]));
-  ctx.light(pointLight(0x4a9dff, 5.5, 7.5, [tx, 2.8, tz]));
+  // --- lights (6): amber under the pods over the crew (hung 0.45 m below the pod bodies so no skirt
+  // or screen bezel sits close enough to clip), blue over the chart, white at the entry and the aft wall
+  ctx.light(pointLight(0xffb347, 3.0, 7.0, [cx - 1.55, H - 1.6, pz + 0.7]));
+  ctx.light(pointLight(0xffb347, 3.0, 7.0, [cx + 1.55, H - 1.6, pz + 0.7]));
+  ctx.light(pointLight(0x4a9dff, 4.5, 7.5, [tx, 2.4, tz]));
   ctx.light(pointLight(0xdfe8ff, 3.0, 6.5, [min[0] + 2.2, H - 0.6, -18]));
   ctx.light(pointLight(0xffb347, 2.8, 6.5, [max[0] - 1.6, H - 0.8, min[2] + 2.5]));
   ctx.light(pointLight(0xdfe8ff, 3.0, 6.5, [cx - 1.0, H - 0.6, max[2] - 1.6]));
@@ -367,9 +394,10 @@ function instrumentPod(kit, x, z, H) {
     kit.add("darkGloss", new THREE.BoxGeometry(0.36, 0.24, 0.012), { pos: p.toArray(), quat: tilt });
     kit.add("impScreen" + (i === 1 ? 4 : 2), new THREE.PlaneGeometry(0.32, 0.2), { pos: p.clone().add(new THREE.Vector3(0, 0, 0.007).applyQuaternion(tilt)).toArray(), quat: tilt, uv: "keep" });
   }
-  // recessed amber light channel under the body (diffused, in a black trough)
+  // recessed amber light channel under the body (diffused, in a black trough): dim emitter — the
+  // real amber light hangs below the pod, so the channel only needs to read as the source
   kit.box("paintedMetal", x, y - 0.18, z - 0.1, 1.1, 0.03, 0.1, { color: PALETTE.impBlack, texel: 2 });
-  kit.box("emitAmber", x, y - 0.199, z - 0.1, 0.96, 0.008, 0.03);
+  kit.box("emitAmberDim", x, y - 0.199, z - 0.1, 0.96, 0.008, 0.03);
   for (let k = 0; k < 5; k++) kit.box(k % 2 ? "emitRed" : "emitBlue", x - 0.5 + k * 0.25, y - 0.05, z + 0.305, 0.05, 0.02, 0.01);
 }
 
@@ -403,28 +431,36 @@ function hexInlay(kit, cx, cz, R, cell) {
   }
 }
 
-/** Rotating star-chart hologram: gridded planet with a bright core and a tilted ring (own material). */
-function starChart(kit, ctx, x, y, z, hm, swatch) {
+/**
+ * Rotating star-chart hologram: gridded planet with a bright core and a tilted ring (own material).
+ * `s` scales the whole chart (1 = 1.1 m planet).
+ */
+function starChart(kit, ctx, x, y, z, hm, swatch, s = 1) {
   const base = ctx.materials.holo;
   const mat = (ctx.materials.nav_holo ||= Object.assign(base.clone(), { opacity: 1.0, color: new THREE.Color("#8ccaff") }));
   const group = new THREE.Group();
   group.position.set(x, y, z);
-  group.add(new THREE.Mesh(new THREE.SphereGeometry(0.56, 28, 18), mat));
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.78, 1.05, 56), mat);
+  group.add(new THREE.Mesh(new THREE.SphereGeometry(0.56 * s, 32, 20), mat));
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.78 * s, 1.05 * s, 64), mat);
   ring.rotation.x = Math.PI / 2 - 0.3;
   group.add(ring);
-  // meridian and equator hoops so the sphere reads as a globe
-  group.add(new THREE.Mesh(new THREE.TorusGeometry(0.57, 0.008, 6, 64), mat));
-  const eq = new THREE.Mesh(new THREE.TorusGeometry(0.57, 0.008, 6, 64), mat);
+  // meridian and equator hoops so the sphere reads as a globe, plus two tilted orbit tracks
+  group.add(new THREE.Mesh(new THREE.TorusGeometry(0.57 * s, 0.01, 6, 72), mat));
+  const eq = new THREE.Mesh(new THREE.TorusGeometry(0.57 * s, 0.01, 6, 72), mat);
   eq.rotation.x = Math.PI / 2;
   group.add(eq);
+  for (const [r, tx] of [[0.68, 0.9], [0.62, 1.9]]) {
+    const orbit = new THREE.Mesh(new THREE.TorusGeometry(r * s, 0.006, 5, 72), mat);
+    orbit.rotation.set(tx, 0.4, 0);
+    group.add(orbit);
+  }
   ctx.mesh(group);
   ctx.anim((dt, t) => {
     group.rotation.y = t * 0.22;
     group.position.y = y + Math.sin(t * 0.8) * 0.03;
   });
   // static lit core (additive scope material, not part of the spinning group)
-  kit.add(hm.key, new THREE.SphereGeometry(0.36, 20, 14), { pos: [x, y, z], uv: "keep", uvRect: swatch(hm.mid) });
+  kit.add(hm.key, new THREE.SphereGeometry(0.34 * s, 24, 16), { pos: [x, y, z], uv: "keep", uvRect: swatch(hm.dim) });
 }
 
 /** Plotting table with an amber rim, control panels, a scope disc and the star-chart hologram. */
@@ -450,22 +486,25 @@ function plottingTable(kit, ctx, x, z, labels, hm, swatch) {
   kit.cyl("paintedMetal", x, Hh + 0.004, z, 0.62, 0.008, "y", { color: PALETTE.impBlack, segments: 40 });
   kit.add("emitBlue", new THREE.TorusGeometry(0.6, 0.014, 6, 48).rotateX(Math.PI / 2), { pos: [x, Hh + 0.012, z] });
   kit.add(hm.key, new THREE.CircleGeometry(0.58, 40).rotateX(-Math.PI / 2), { pos: [x, Hh + 0.014, z], uv: "keep" });
-  kit.add(hm.key, holoCone(x, Hh + 0.02, z, 0.12, 1.55, 0.62), { uv: "keep", uvRect: swatch(hm.dim) });
-  // the star-chart planet: own opaque clone of the shared holo grid material (the stock one is a ghost
-  // from across the room), a lit core, and a static grid disc under it that the chart sits on
-  starChart(kit, ctx, x, 1.7, z, hm, swatch);
-  kit.add(hm.key, new THREE.CircleGeometry(1.0, 48).rotateX(-Math.PI / 2), { pos: [x, 1.12, z], uv: "keep" });
-  kit.add(hm.key, new THREE.TorusGeometry(1.0, 0.012, 6, 64).rotateX(Math.PI / 2), { pos: [x, 1.12, z], uv: "keep", uvRect: swatch(hm.bright) });
-  kit.add(hm.key, new THREE.TorusGeometry(0.9, 0.012, 6, 64).rotateX(Math.PI / 2 - 0.3), { pos: [x, 1.7, z], uv: "keep", uvRect: swatch(hm.bright) });
+  const S = 1.6;
+  const hy = 2.05;
+  const gy = 1.22; // grid disc height
+  kit.add(hm.key, holoCone(x, Hh + 0.02, z, 0.12, gy, 1.35), { uv: "keep", uvRect: swatch(hm.dim) });
+  // the star-chart planet (1.6× the stock chart so it carries from the door): own opaque clone of the
+  // shared holo grid material, a lit core, and a static grid disc under it that the chart sits on
+  starChart(kit, ctx, x, hy, z, hm, swatch, S);
+  kit.add(hm.key, new THREE.CircleGeometry(1.0 * S, 56).rotateX(-Math.PI / 2), { pos: [x, gy, z], uv: "keep" });
+  kit.add(hm.key, new THREE.TorusGeometry(1.0 * S, 0.014, 6, 72).rotateX(Math.PI / 2), { pos: [x, gy, z], uv: "keep", uvRect: swatch(hm.bright) });
+  kit.add(hm.key, new THREE.TorusGeometry(0.9 * S, 0.014, 6, 72).rotateX(Math.PI / 2 - 0.3), { pos: [x, hy, z], uv: "keep", uvRect: swatch(hm.bright) });
   const wp = rng(ctx.seed + 5);
   for (let i = 0; i < 6; i++) {
     const a = (i / 6) * Math.PI * 2 + wp() * 0.4;
-    const r = 0.95 + wp() * 0.35;
+    const r = (0.95 + wp() * 0.35) * S;
     const px = x + Math.cos(a) * r;
     const pz = z + Math.sin(a) * r * Math.cos(0.3);
-    const py = 1.7 + Math.sin(a) * r * Math.sin(0.3);
-    kit.add(hm.key, new THREE.OctahedronGeometry(0.035), { pos: [px, py, pz], uv: "keep", uvRect: swatch(i === 2 ? hm.amber : hm.bright) });
-    if (i === 2) kit.add(hm.key, new THREE.CylinderGeometry(0.004, 0.004, py - (Hh + 0.02), 4), { pos: [px, (py + Hh + 0.02) / 2, pz], uv: "keep", uvRect: swatch(hm.amber) });
+    const py = hy + Math.sin(a) * r * Math.sin(0.3);
+    kit.add(hm.key, new THREE.OctahedronGeometry(0.05), { pos: [px, py, pz], uv: "keep", uvRect: swatch(i === 2 ? hm.amber : hm.bright) });
+    if (i === 2) kit.add(hm.key, new THREE.CylinderGeometry(0.005, 0.005, py - (Hh + 0.02), 4), { pos: [px, (py + Hh + 0.02) / 2, pz], uv: "keep", uvRect: swatch(hm.amber) });
   }
   // clutter: datapads, a mug, a stylus tray
   datapad(kit, x - 0.95, Hh + 0.003, z - 0.5, 0.25, 2);
@@ -475,4 +514,131 @@ function plottingTable(kit, ctx, x, z, labels, hm, swatch) {
   signAt(kit, labels, 1, { x, y: 0.55, z: z + D / 2 + 0.005, yaw: 0, h: 0.09 });
   signAt(kit, labels, 1, { x, y: 0.55, z: z - D / 2 - 0.005, yaw: Math.PI, h: 0.09 });
   kit.collider([x - W / 2, 0, z - D / 2], [x + W / 2, Hh, z + D / 2], "plottable");
+}
+
+/**
+ * Hyperlane route chart on its own emissive canvas (2:1): star systems as nodes joined by faint lane
+ * lines over a hex field, one lit route with ringed waypoints and system tags, a header with the
+ * lane name / ETA and a footer of readouts. Registered once on ctx.materials; returns the key.
+ */
+function courseChart(ctx, key = "nav_course", { w = 1024, h = 512, seed = 7, intensity = 1.2 } = {}) {
+  if (!ctx.materials[key]) {
+    const c = makeCanvas(w, h);
+    const g = c.getContext("2d");
+    const rand = rng(seed);
+    const blue = (a) => `rgba(120,190,255,${a})`;
+    const amber = (a) => `rgba(255,179,71,${a})`;
+    g.fillStyle = "#03060c";
+    g.fillRect(0, 0, w, h);
+    // hex field
+    const s = 22;
+    g.strokeStyle = blue(0.11);
+    g.lineWidth = 1;
+    for (let gy = 70; gy < h - 44; gy += s * 1.5) {
+      for (let gx = 30; gx < w - 30; gx += s * Math.sqrt(3)) {
+        const ox = ((gy / (s * 1.5)) | 0) % 2 ? (s * Math.sqrt(3)) / 2 : 0;
+        g.beginPath();
+        for (let k = 0; k < 6; k++) {
+          const a = (Math.PI / 3) * k + Math.PI / 6;
+          const px = gx + ox + Math.cos(a) * s * 0.95;
+          const py = gy + Math.sin(a) * s * 0.95;
+          if (k === 0) g.moveTo(px, py);
+          else g.lineTo(px, py);
+        }
+        g.closePath();
+        g.stroke();
+      }
+    }
+    // systems and the lanes between them (each system to its two nearest neighbours)
+    const nodes = [];
+    for (let i = 0; i < 16; i++) nodes.push([70 + rand() * (w - 140), 90 + rand() * (h - 170)]);
+    g.strokeStyle = blue(0.32);
+    g.lineWidth = 1.5;
+    nodes.forEach((a, i) => {
+      const near = nodes
+        .map((b, j) => [Math.hypot(a[0] - b[0], a[1] - b[1]), j])
+        .filter(([, j]) => j !== i)
+        .sort((p, q) => p[0] - q[0])
+        .slice(0, 2);
+      for (const [, j] of near) {
+        g.beginPath();
+        g.moveTo(a[0], a[1]);
+        g.lineTo(nodes[j][0], nodes[j][1]);
+        g.stroke();
+      }
+    });
+    // the locked route: every third system west to east, drawn as a dashed amber lane
+    const route = [...nodes].sort((a, b) => a[0] - b[0]).filter((_, i) => i % 3 === 0).slice(0, 5);
+    g.strokeStyle = amber(0.95);
+    g.lineWidth = 3;
+    g.setLineDash([14, 8]);
+    g.beginPath();
+    route.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+    g.stroke();
+    g.setLineDash([]);
+    g.font = "bold 13px 'DejaVu Sans Mono', 'Liberation Mono', monospace";
+    g.textBaseline = "middle";
+    nodes.forEach((p, i) => {
+      const onRoute = route.includes(p);
+      g.fillStyle = onRoute ? amber(1) : blue(0.9);
+      g.beginPath();
+      g.arc(p[0], p[1], onRoute ? 6 : 4, 0, Math.PI * 2);
+      g.fill();
+      if (onRoute) {
+        g.strokeStyle = amber(0.7);
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.arc(p[0], p[1], 12, 0, Math.PI * 2);
+        g.stroke();
+      }
+      g.fillStyle = onRoute ? amber(0.85) : blue(0.55);
+      g.fillText(`${["KR", "TL", "VN", "OS", "DR", "MB"][i % 6]}-${100 + Math.floor(rand() * 899)}`, p[0] + 11, p[1] - 10);
+    });
+    // header rule, title, ETA and a footer of readout bars
+    g.fillStyle = blue(0.9);
+    g.fillRect(24, 22, w - 48, 2);
+    g.font = "bold 24px 'DejaVu Sans', 'Liberation Sans', Arial, sans-serif";
+    g.fillStyle = "#dfe7f5";
+    g.fillText("HYPERLANE 7   ·   ROUTE LOCKED   ·   5 JUMPS", 24, 48);
+    g.textAlign = "right";
+    g.fillStyle = amber(1);
+    g.fillText("ETA 04:12", w - 24, 48);
+    g.textAlign = "left";
+    for (let k = 0; k < 8; k++) {
+      g.fillStyle = k === 5 ? amber(0.8) : blue(0.45);
+      g.fillRect(24 + k * ((w - 48) / 8), h - 32, ((w - 48) / 8 - 10) * (0.4 + rand() * 0.6), 7);
+    }
+    const tex = toTexture(c, { srgb: true, wrap: false });
+    ctx.materials[key] = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: intensity, roughness: 0.35, metalness: 0 });
+  }
+  return key;
+}
+
+/**
+ * Chart-tape cabinet: two-door dark cabinet with a sloped reader top (chart screen + key row), a
+ * tape slot with a glowing index strip and a name plate; its operator side faces -Z.
+ */
+function chartCabinet(kit, ctx, labels, x, z) {
+  kit.box("paintedMetal", x, 0.05, z, 1.2, 0.1, 0.64, { color: PALETTE.impBlack, texel: 2 });
+  kit.box("paintedMetal", x, 0.6, z, 1.16, 1.0, 0.6, { color: PALETTE.impDark, texel: 1.5 });
+  for (const s of [-1, 1]) {
+    kit.box("impPanel1", x + s * 0.29, 0.55, z - 0.305, 0.52, 0.7, 0.02, { color: PALETTE.impGrey, uv: "keep" });
+    kit.box("metal", x + s * 0.08, 0.55, z - 0.325, 0.03, 0.16, 0.02, { color: PALETTE.steel });
+  }
+  kit.box("paintedMetal", x, 0.55, z - 0.31, 0.02, 0.7, 0.012, { color: PALETTE.impBlack, texel: 3 });
+  kit.box("emitBlue", x - 0.45, 0.96, z - 0.31, 0.05, 0.02, 0.006);
+  kit.box("emitAmberDim", x + 0.45, 0.96, z - 0.31, 0.05, 0.02, 0.006);
+  // tape slot with the index strip glowing inside it
+  kit.box("paintedMetal", x, 0.96, z - 0.31, 0.7, 0.05, 0.012, { color: PALETTE.impBlack, texel: 3 });
+  kit.box("leds", x, 0.96, z - 0.313, 0.62, 0.02, 0.004, { uv: "keep" });
+  // sloped reader top
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.32);
+  const at = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, 1.14, z)).toArray();
+  kit.add("paintedMetal", new THREE.BoxGeometry(1.2, 0.07, 0.64), { pos: at(0, 0, 0), quat: q, color: PALETTE.impBlack, texel: 2 });
+  kit.add("darkGloss", new THREE.BoxGeometry(0.74, 0.012, 0.44), { pos: at(-0.18, 0.04, 0), quat: q });
+  kit.add("impScreen2", new THREE.PlaneGeometry(0.7, 0.4).rotateX(-Math.PI / 2), { pos: at(-0.18, 0.047, 0), quat: q, uv: "keep" });
+  for (let k = 0; k < 6; k++) kit.add(k === 2 ? "emitAmberDim" : k === 4 ? "emitBlueDim" : "rubber", new THREE.BoxGeometry(0.09, 0.02, 0.07), { pos: at(0.34 + (k % 2) * 0.12, 0.045, -0.18 + Math.floor(k / 2) * 0.16), quat: q, color: PALETTE.rubber });
+  signAt(kit, labels, 8, { x, y: 0.16, z: z - 0.325, yaw: Math.PI, h: 0.06 });
+  kit.collider([x - 0.6, 0, z - 0.34], [x + 0.6, 1.25, z + 0.34], "chartcab");
+  void ctx;
 }

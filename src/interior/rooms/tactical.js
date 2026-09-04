@@ -356,10 +356,13 @@ export function buildTactical(kit, ctx) {
   {
     const f = ceilingFrame(kit, min[0], min[2], H);
     panelGrid(f, max[0] - min[0], max[2] - min[2], { rowH: 1.4, panelW: 1.4, kick: false, topPipes: false, seed: ctx.seed * 17 + 3, collide: false, styles: { panel: 0.82, greeble: 0.1, vent: 0.08 }, paints: [[PALETTE.impMid, 0.6], [PALETTE.impDark, 0.3], [PALETTE.impGrey, 0.1]], ...IMP_THEME, decals: false });
-    // recessed white strips over the station rows only (the table stays under the blue ring)
+    // recessed strips over the station rows only (the table stays under the blue ring): dark housing,
+    // a faint diffuser body and a narrow dim core, so the fixture reads as lit without clipping
     const strip = (x0, z0, x1, z1) => {
-      kit.boxMM("paintedMetal", [x0 - 0.12, H - 0.1, z0 - 0.12], [x1 + 0.12, H, z1 + 0.12], { color: PALETTE.impDark, texel: 2 });
-      kit.boxMM("emitWhiteSoft", [x0, H - 0.12, z0], [x1, H - 0.09, z1], { uv: "keep" });
+      const alongX = x1 - x0 > z1 - z0;
+      kit.boxMM("paintedMetal", [x0 - 0.16, H - 0.1, z0 - 0.16], [x1 + 0.16, H, z1 + 0.16], { color: PALETTE.impDark, texel: 2 });
+      kit.boxMM("emitWhiteFaint", [x0 - 0.07, H - 0.115, z0 - 0.07], [x1 + 0.07, H - 0.095, z1 + 0.07], { uv: "keep" });
+      kit.boxMM("emitWhiteDim", [x0 + (alongX ? 0.1 : 0.045), H - 0.125, z0 + (alongX ? 0.045 : 0.1)], [x1 - (alongX ? 0.1 : 0.045), H - 0.11, z1 - (alongX ? 0.045 : 0.1)], { uv: "keep" });
     };
     strip(min[0] + 2.35, min[2] + 1.2, min[0] + 2.5, max[2] - 1.2);
     strip(max[0] - 2.65, min[2] + 1.2, max[0] - 2.5, gz0 - 0.6);
@@ -374,28 +377,22 @@ export function buildTactical(kit, ctx) {
   platform(kit, ctx, { x0: wx1, z0: gz1, x1: max[0], z1: max[2], y: PL, thickness: PL, edge: false });
   platform(kit, ctx, { x0: wx0, z0: min[2], x1: wx1, z1: wz0, y: PL, thickness: PL, edge: false });
   platform(kit, ctx, { x0: wx0, z0: wz1, x1: wx1, z1: max[2], y: PL, thickness: PL, edge: false });
-  // platform noses: black step edge; the edges over the well carry a hazard band on the platform top
-  // (`inward` = unit step from the edge onto the platform); the gangway edges stay plain
-  const nose = (x0, z0, x1, z1, inward = null) => {
+  // platform noses: plain black step edges everywhere (the room's colour stays blue); the only hazard
+  // marking is a thin nosing strip on the riser where a stair meets the platform
+  const nose = (x0, z0, x1, z1) => {
     const alongX = x1 - x0 > z1 - z0;
     if (alongX) kit.boxMM("paintedMetal", [x0, PL - 0.06, z0 - 0.03], [x1, PL + 0.005, z1 + 0.03], { color: PALETTE.impBlack, texel: 2 });
     else kit.boxMM("paintedMetal", [x0 - 0.03, PL - 0.06, z0], [x1 + 0.03, PL + 0.005, z1], { color: PALETTE.impBlack, texel: 2 });
-    if (inward) {
-      const [ix, iz] = inward;
-      const a = [x0 + ix * 0.04 + (alongX ? 0.1 : 0), z0 + iz * 0.04 + (alongX ? 0 : 0.1)];
-      const b = [x1 + ix * 0.2 + (alongX ? -0.1 : 0), z1 + iz * 0.2 + (alongX ? 0 : -0.1)];
-      kit.boxMM("hazard", [Math.min(a[0], b[0]), PL + 0.006, Math.min(a[1], b[1])], [Math.max(a[0], b[0]), PL + 0.014, Math.max(a[1], b[1])], { texel: 3 });
-    }
   };
   nose(wx0, min[2], wx0, wz0);
-  nose(wx0, wz0, wx0, wz1, [-1, 0]);
+  nose(wx0, wz0, wx0, wz1);
   nose(wx0, wz1, wx0, max[2]);
   nose(wx1, min[2], wx1, wz0);
-  nose(wx1, wz0, wx1, gz0, [1, 0]);
-  nose(wx1, gz1, wx1, wz1, [1, 0]);
+  nose(wx1, wz0, wx1, gz0);
+  nose(wx1, gz1, wx1, wz1);
   nose(wx1, wz1, wx1, max[2]);
-  nose(wx0, wz0, wx1, wz0, [0, -1]);
-  nose(wx0, wz1, wx1, wz1, [0, 1]);
+  nose(wx0, wz0, wx1, wz0);
+  nose(wx0, wz1, wx1, wz1);
   nose(wx1, gz0, max[0], gz0);
   nose(wx1, gz1, max[0], gz1);
   // steps down into the well (two on the display side, one each fore / aft)
@@ -403,6 +400,28 @@ export function buildTactical(kit, ctx) {
   stairs(kit, ctx, { x: wx0 + 0.6, z: cz + 3.5, y0: 0, y1: PL, axis: "x", dir: -1, w: 1.6, stringers: false });
   stairs(kit, ctx, { x: cx, z: wz0 + 0.6, y0: 0, y1: PL, axis: "z", dir: -1, w: 1.8, stringers: false });
   stairs(kit, ctx, { x: cx, z: wz1 - 0.6, y0: 0, y1: PL, axis: "z", dir: 1, w: 1.8, stringers: false });
+  // hazard nosing strips on the platform top edge either side of each stair head only
+  for (const [x0, z0, x1, z1] of [
+    [wx0 - 0.12, cz - 3.5 - 1.1, wx0, cz - 3.5 + 1.1],
+    [wx0 - 0.12, cz + 3.5 - 1.1, wx0, cz + 3.5 + 1.1],
+    [cx - 1.2, wz0 - 0.12, cx + 1.2, wz0],
+    [cx - 1.2, wz1, cx + 1.2, wz1 + 0.12],
+  ]) {
+    kit.boxMM("hazard", [x0, PL + 0.006, z0], [x1, PL + 0.014, z1], { texel: 3 });
+  }
+  // recessed floor light channels: two along the gangway edges running from the door into the well,
+  // and a ring channel around the table, so the deck between the door and the hologram reads
+  const channel = (x0, z0, x1, z1) => {
+    kit.boxMM("paintedMetal", [x0, 0.002, z0], [x1, 0.008, z1], { color: PALETTE.impBlack, texel: 2 });
+    const alongX = x1 - x0 > z1 - z0;
+    const c = alongX ? [(z0 + z1) / 2, 0] : [(x0 + x1) / 2, 0];
+    if (alongX) kit.boxMM("emitBlueDim", [x0 + 0.1, 0.006, c[0] - 0.02], [x1 - 0.1, 0.012, c[0] + 0.02]);
+    else kit.boxMM("emitBlueDim", [c[0] - 0.02, 0.006, z0 + 0.1], [c[0] + 0.02, 0.012, z1 - 0.1]);
+  };
+  channel(cx + 3.0, gz0 + 0.3, max[0] - 1.0, gz0 + 0.46);
+  channel(cx + 3.0, gz1 - 0.46, max[0] - 1.0, gz1 - 0.3);
+  kit.add("paintedMetal", new THREE.RingGeometry(2.42, 2.7, 72).rotateX(-Math.PI / 2), { pos: [cx, 0.004, cz], color: PALETTE.impBlack, texel: 2 });
+  kit.add("emitBlueDim", new THREE.RingGeometry(2.54, 2.58, 72).rotateX(-Math.PI / 2), { pos: [cx, 0.009, cz] });
   // blue guide strips on the well floor at the platform bases (the well edge only; the gangway is plain)
   const guide = (x0, z0, x1, z1) => kit.boxMM("emitBlue", [x0, 0.004, z0], [x1, 0.03, z1]);
   guide(wx0 + 0.02, wz0 + 0.02, wx0 + 0.07, cz - 4.4);
@@ -433,16 +452,49 @@ export function buildTactical(kit, ctx) {
     const uz = Math.cos(a);
     pipeRun(kit, [[cx + ux * (r - 0.3), 0.045, cz + uz * (r - 0.3)], [cx + ux * 2.0, 0.045, cz + uz * 2.0]], 0.045, PALETTE.impBlack, "rubber");
   }
+  // low guard ring around the projection (dark posts, steel rail, black kick tube), open toward the gangway
+  {
+    const r = 2.45;
+    const h = 0.46;
+    const degs = [135, 165, 195, 225, 255, 285, 315, 345, 15, 45];
+    const at = (deg) => [cx + Math.sin((deg * Math.PI) / 180) * r, cz + Math.cos((deg * Math.PI) / 180) * r];
+    for (const deg of degs) {
+      const [x, z] = at(deg);
+      kit.box("paintedMetal", x, h / 2, z, 0.06, h, 0.06, { color: PALETTE.impDark, texel: 2 });
+      kit.box("metal", x, 0.03, z, 0.14, 0.06, 0.14, { color: PALETTE.impMid });
+      kit.box("emitBlueDim", x, h - 0.1, z, 0.064, 0.05, 0.064);
+    }
+    for (let i = 0; i < degs.length - 1; i++) {
+      const [x0, z0] = at(degs[i]);
+      const [x1, z1] = at(degs[i + 1]);
+      const len = Math.hypot(x1 - x0, z1 - z0);
+      const ang = Math.atan2(x1 - x0, z1 - z0);
+      for (const [yy, rr, col] of [[h, 0.022, PALETTE.steel], [0.16, 0.016, PALETTE.impBlack]]) {
+        const g = new THREE.CylinderGeometry(rr, rr, len, 8);
+        g.rotateX(Math.PI / 2);
+        kit.add("metal", g, { pos: [(x0 + x1) / 2, yy, (z0 + z1) / 2], rot: [0, ang, 0], color: col, uv: "scale", uvScale: [0.2, len] });
+      }
+      kit.collider([Math.min(x0, x1) - 0.05, 0, Math.min(z0, z1) - 0.05], [Math.max(x0, x1) + 0.05, h, Math.max(z0, z1) + 0.05], "guard");
+    }
+  }
+  // two low seated plotter stations backed against the door-side risers either side of the gangway
+  // mouth, looking past the table at the video wall (an axis-aligned footprint keeps the walk lane
+  // along the well's fore / aft edge and the passage past the 30° / 150° stations clear)
+  for (const [z, seed] of [[gz0 - 1.3, 3], [gz1 + 1.3, 4]]) {
+    const x = wx1 - 1.25;
+    impConsole(kit, ctx, { x, z, yaw: Math.PI / 2, w: 1.3, d: 0.65, h: 0.82, screens: [2, 4], chair: true, seed: ctx.seed + 50 + seed, lampMat: "emitAmber", layout: seed === 3 ? "keypad" : "main" });
+  }
 
   // --- seated analyst stations on the display-side platform (facing the 6 m wall)
   for (const z of [cz - 4.6, cz, cz + 4.6]) {
     impConsole(kit, ctx, { x: min[0] + 1.35, z, y: PL, yaw: Math.PI / 2, w: 2.1, d: 0.8, screens: [2, 0, 2], chair: true, seed: ctx.seed + Math.round(z) });
   }
-  // seated stations fore / aft looking down at the table
-  for (const x of [cx - 3.0, cx + 3.0]) {
-    impConsole(kit, ctx, { x, z: min[2] + 1.6, y: PL, yaw: Math.PI, w: 1.9, d: 0.8, screens: [0, 1], chair: true, seed: ctx.seed + 11 + Math.round(x) });
-    impConsole(kit, ctx, { x, z: max[2] - 1.6, y: PL, yaw: 0, w: 1.9, d: 0.8, screens: [0, 2], chair: true, seed: ctx.seed + 17 + Math.round(x) });
-  }
+  // seated stations fore / aft looking down at the table: the fore pair are sensor stations with a
+  // raised readout, the aft pair wider comms desks with keypads (no two are the same layout)
+  impConsole(kit, ctx, { x: cx - 3.0, z: min[2] + 1.6, y: PL, yaw: Math.PI, w: 1.9, d: 0.8, screens: [0, 1], chair: true, tall: true, seed: ctx.seed + 11, layout: "main" });
+  impConsole(kit, ctx, { x: cx + 3.1, z: min[2] + 1.6, y: PL, yaw: Math.PI, w: 1.7, d: 0.8, h: 1.0, screens: [3, 0], chair: true, seed: ctx.seed + 12, layout: "equal", lampMat: "emitAmber" });
+  impConsole(kit, ctx, { x: cx - 3.1, z: max[2] - 1.6, y: PL, yaw: 0, w: 2.2, d: 0.8, screens: [2, 0], chair: true, seed: ctx.seed + 17, layout: "keypad" });
+  impConsole(kit, ctx, { x: cx + 3.0, z: max[2] - 1.6, y: PL, yaw: 0, w: 1.9, d: 0.8, screens: [1, 2], chair: true, seed: ctx.seed + 18, layout: "main", lampMat: "emitAmber" });
   // door-side platforms: a standing station on each, facing the table (one with the raised readout)
   impConsole(kit, ctx, { x: max[0] - 2.6, z: min[2] + 2.6, y: PL, yaw: faceYaw(max[0] - 2.6, min[2] + 2.6, cx, cz), w: 1.6, d: 0.75, h: 1.0, screens: [1, 0], tall: true, seed: ctx.seed + 23 });
   impConsole(kit, ctx, { x: max[0] - 2.6, z: max[2] - 2.6, y: PL, yaw: faceYaw(max[0] - 2.6, max[2] - 2.6, cx, cz), w: 1.5, d: 0.75, h: 0.92, screens: [0, 4], seed: ctx.seed + 29, lampMat: "emitAmber" });
@@ -458,8 +510,9 @@ export function buildTactical(kit, ctx) {
     const seg = wallSegment(ctx.bounds, "zmin");
     const { frame } = wallFrame(kit, seg.from, seg.to, 0);
     const raised = [[min[0], PL, min[2]], [max[0], H, max[2]]];
-    for (const [x, s] of [[cx - 6.6, 2], [cx, 0], [cx + 6.6, 2]]) wallScreen(kit, ctx, { side: "zmin", u: x - min[0], v: 2.75, w: 1.9, h: 1.0, screen: s });
-    equipmentRack(kit, ctx, { side: "zmin", u: 1.4, w: 1.5, h: 2.5, bounds: raised, seed: ctx.seed + 3 });
+    for (const [x, s, w] of [[cx - 6.6, 1, 1.6], [cx, 0, 1.9], [cx + 6.6, 2, 1.9]]) wallScreen(kit, ctx, { side: "zmin", u: x - min[0], v: 2.75, w, h: 1.0, screen: s });
+    // far corner: a narrow data tower (stacked displays, lamp column) instead of a second rack copy
+    dataTower(kit, frame, 1.3, PL);
     equipmentRack(kit, ctx, { side: "zmin", u: max[0] - min[0] - 1.4, w: 1.5, h: 2.5, bounds: raised, seed: ctx.seed + 4, lit: "emitAmber" });
     signPlate(frame, labels, 5, { u: cx - min[0], v: 3.75, h: 0.26 });
     ventGrille(frame, 4.2, 4.3, 1.0, 0.5);
@@ -479,8 +532,8 @@ export function buildTactical(kit, ctx) {
     signPlate(frame, labels, 4, { u: uDoor, v: 4.25, h: 0.2 });
     equipmentRack(kit, ctx, { side: "xmax", u: 1.2, w: 1.4, h: 2.6, bounds: raised, seed: ctx.seed + 7 });
     equipmentRack(kit, ctx, { side: "xmax", u: max[2] - min[2] - 1.2, w: 1.4, h: 2.6, bounds: raised, seed: ctx.seed + 8 });
-    wallScreen(kit, ctx, { side: "xmax", u: uDoor - 3.4, v: 2.5, w: 1.4, h: 0.8, screen: 1 });
-    wallScreen(kit, ctx, { side: "xmax", u: uDoor + 3.4, v: 2.5, w: 1.4, h: 0.8, screen: 0 });
+    wallScreen(kit, ctx, { side: "xmax", u: uDoor - 3.4, v: 2.5, w: 1.6, h: 0.9, screen: 1 });
+    wallScreen(kit, ctx, { side: "xmax", u: uDoor + 3.4, v: 2.4, w: 1.2, h: 0.7, screen: 4 });
     // comm panel beside the door (on the gangway wall, deck level)
     frame.box("paintedMetal", uDoor + 2.0, 1.35, 0.05, 0.36, 0.5, 0.1, { color: PALETTE.impDark, texel: 2 });
     frame.box("impScreen4", uDoor + 2.0, 1.45, 0.101, 0.28, 0.16, 0.006, { uv: "keep" });
@@ -513,7 +566,7 @@ export function buildTactical(kit, ctx) {
   ceilingStructure(kit, ctx, cx, cz, H);
 
   // --- lights (7 of the 8 allowed): blue key over the table, dim cool fill, amber accents
-  ctx.light(pointLight(0x4a9dff, 10, 12, [cx, 3.0, cz]));
+  ctx.light(pointLight(0x4a9dff, 7.5, 12, [cx, 3.0, cz]));
   ctx.light(pointLight(0xaec4ea, 2.6, 8, [min[0] + 2.4, H - 1.0, cz - 4.2]));
   ctx.light(pointLight(0xaec4ea, 2.6, 8, [min[0] + 2.4, H - 1.0, cz + 4.2]));
   ctx.light(pointLight(0xaec4ea, 2.4, 8, [max[0] - 2.6, H - 1.0, cz - 5.0]));
@@ -551,11 +604,28 @@ function ringStation(kit, ctx, { x, z, yaw, deg, seed }) {
     add("paintedMetal", new THREE.BoxGeometry(0.4, 0.28, 0.04), ax, 1.26, -0.06, { color: PALETTE.impBlack, texel: 3 }, tilt);
     add("impScreen4", new THREE.PlaneGeometry(0.34, 0.22), ax, 1.26 + 0.021 * Math.sin(-tilt), -0.06 + 0.021 * Math.cos(tilt), { uv: "keep" }, tilt);
     add("emitAmber", new THREE.BoxGeometry(0.06, 0.02, 0.01), ax + 0.15, 1.26 - 0.15 + 0.03 * Math.sin(-tilt), -0.06 + 0.03 * Math.cos(tilt), {}, tilt);
-  } else if (deg === 150 || deg === 210) {
-    impConsole(kit, ctx, { x, z, yaw, w: 1.9, d: 0.8, h: 1.08, screens: [3, 0], tall: true, seed, lampMat: "emitBlue" });
-    // blue status bar across the top of the riser and a cable loom down its back
+  } else if (deg === 150) {
+    // fleet control A: the stock tall riser with one large display, a blue status bar and a cable loom
+    impConsole(kit, ctx, { x, z, yaw, w: 1.9, d: 0.8, h: 1.08, screens: [3, 0], tall: true, seed, lampMat: "emitBlue", layout: "main" });
     add("emitBlue", new THREE.BoxGeometry(1.5, 0.02, 0.02), 0, 1.94, -0.34);
     add("rubber", new THREE.CylinderGeometry(0.03, 0.03, 0.9, 8), 0.3, 1.4, -0.47, { color: PALETTE.impBlack });
+  } else if (deg === 210) {
+    // fleet control B: wider, lower body with a keypad slab; an off-centre narrow riser column carrying
+    // two stacked displays, a lamp column up its edge and an amber status bar (not a copy of A)
+    const h = 1.0;
+    impConsole(kit, ctx, { x, z, yaw, w: 2.1, d: 0.8, h, screens: [1, 2], seed, lampMat: "emitAmber", layout: "keypad" });
+    const rx = 0.42;
+    const rz = -0.35;
+    add("paintedMetal", new THREE.BoxGeometry(1.1, 1.1, 0.12), rx, h + 0.58, rz, { color: PALETTE.impDark, texel: 1.5 });
+    add("paintedMetal", new THREE.BoxGeometry(1.16, 0.06, 0.18), rx, h + 1.16, rz, { color: PALETTE.impBlack, texel: 2 });
+    for (const [ly, idx] of [[h + 0.34, 1], [h + 0.82, 2]]) {
+      add("darkGloss", new THREE.BoxGeometry(0.9, 0.4, 0.012), rx + 0.06, ly, rz + 0.065);
+      add("impScreen" + idx, new THREE.PlaneGeometry(0.86, 0.36), rx + 0.06, ly, rz + 0.072, { uv: "keep" });
+    }
+    for (let k = 0; k < 6; k++) add(k === 4 ? "emitRed" : k % 2 ? "emitAmberDim" : "emitBlueDim", new THREE.BoxGeometry(0.05, 0.04, 0.01), rx - 0.47, h + 0.16 + k * 0.16, rz + 0.066);
+    add("emitAmberDim", new THREE.BoxGeometry(1.0, 0.02, 0.02), rx, h + 1.2, rz + 0.08);
+    add("rubber", new THREE.CylinderGeometry(0.03, 0.03, 0.8, 8), -0.7, 0.75, -0.46, { color: PALETTE.impBlack });
+    add("rubber", new THREE.CylinderGeometry(0.02, 0.02, 0.8, 8), -0.62, 0.75, -0.46, { color: PALETTE.impBlack });
   } else {
     impConsole(kit, ctx, { x, z, yaw, w: 2.3, d: 0.8, h: 1.0, screens: [0, 3, 1], seed, lampMat: "emitBlue" });
     // grab rail along the operator edge and a lit strip up each cheek
@@ -565,6 +635,26 @@ function ringStation(kit, ctx, { x, z, yaw, deg, seed }) {
       add("emitBlue", new THREE.BoxGeometry(0.012, 0.5, 0.03), s * 1.16, 0.5, -0.1);
     }
   }
+}
+
+/** Narrow wall-mounted data tower on a wall Frame: stacked displays, a lamp column, vented base (rack alternative). */
+function dataTower(kit, frame, u, y0) {
+  const w = 1.0;
+  const h = 3.0;
+  const d = 0.5;
+  frame.box("paintedMetal", u, y0 + h / 2, d / 2, w, h, d, { color: PALETTE.impDark, texel: 1.5 });
+  frame.box("impPanel", u, y0 + h / 2, d + 0.006, w - 0.1, h - 0.1, 0.012, { color: PALETTE.impBlack, uv: "keep" });
+  frame.box("paintedMetal", u, y0 + 0.08, d / 2, w + 0.04, 0.16, d + 0.04, { color: PALETTE.impBlack, texel: 2 });
+  ventGrille(frame, u, y0 + 0.45, 0.7, 0.3, { n: d + 0.01 });
+  for (const [v, idx, sh] of [[y0 + 1.15, 2, 0.5], [y0 + 1.85, 0, 0.6], [y0 + 2.45, 4, 0.36]]) {
+    frame.box("darkGloss", u + 0.06, v, d + 0.014, 0.66, sh + 0.04, 0.012);
+    frame.add("impScreen" + idx, new THREE.PlaneGeometry(0.62, sh), u + 0.06, v, d + 0.021, { uv: "keep" });
+  }
+  for (let k = 0; k < 9; k++) frame.box(k === 6 ? "emitRed" : k % 3 === 1 ? "emitAmberDim" : "emitBlueDim", u - 0.38, y0 + 0.85 + k * 0.22, d + 0.016, 0.05, 0.05, 0.01);
+  frame.box("emitAmberDim", u, y0 + h - 0.12, d + 0.016, w - 0.3, 0.02, 0.01);
+  frame.box("leds", u + 0.06, y0 + 0.78, d + 0.016, 0.5, 0.03, 0.008, { uv: "keep" });
+  frame.collider(u - w / 2, u + w / 2, y0, y0 + h, 0, d, "tower");
+  void kit;
 }
 
 function holoTable(kit, ctx, cx, cz, labels) {
@@ -587,7 +677,7 @@ function holoTable(kit, ctx, cx, cz, labels) {
   // emitter face: dark glass disc with a holo-grid inlay and a lit centre lens
   kit.cyl("paintedMetal", cx, 0.905, cz, R - 0.25, 0.02, "y", { color: PALETTE.impBlack, segments: 48 });
   kit.add("holo", new THREE.CircleGeometry(R - 0.3, 48).rotateX(-Math.PI / 2), { pos: [cx, 0.92, cz], texel: 2 });
-  kit.cyl("emitWhiteSoft", cx, 0.918, cz, 0.22, 0.01, "y", { segments: 24, uv: "keep" });
+  kit.cyl("emitWhiteDim", cx, 0.918, cz, 0.22, 0.01, "y", { segments: 24, uv: "keep" });
   // eight sloped control panels around the rim (local x = radial / outward, local z = tangential;
   // the panel dips toward the operator standing outside the drum)
   for (let i = 0; i < 8; i++) {
@@ -781,18 +871,20 @@ function ceilingStructure(kit, ctx, cx, cz, H) {
   const ring = new THREE.ExtrudeGeometry(shape, { depth: beamH, bevelEnabled: false });
   ring.rotateX(Math.PI / 2);
   kit.add("paintedMetal", ring, { pos: [cx, yTop, cz], color: PALETTE.impDark, texel: 1.2 });
-  // recessed channel + blue ring light on the underside
+  // recessed channel on the underside: a faint diffuser body carries the ring, a thin blue core is
+  // the only bright element (the old full-width blue + white rings clipped to one white halo)
   kit.add("paintedMetal", new THREE.RingGeometry(3.45, 3.98, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.001, cz], color: PALETTE.impBlack, texel: 2 });
-  kit.add("emitBlue", new THREE.RingGeometry(3.55, 3.75, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.004, cz] });
-  kit.add("emitWhiteSoft", new THREE.RingGeometry(3.86, 3.92, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.004, cz], uv: "keep" });
-  // eight downlight fixtures at the octagon corners
+  kit.add("emitWhiteFaint", new THREE.RingGeometry(3.52, 3.86, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.004, cz], uv: "keep" });
+  kit.add("emitBlue", new THREE.RingGeometry(3.66, 3.72, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.007, cz] });
+  // eight downlight fixtures at the octagon corners: faint pad with a small dim core
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
     const R = 3.7 / Math.cos(Math.PI / 8) - 0.35;
     const x = cx + Math.cos(a) * R;
     const z = cz + Math.sin(a) * R;
     kit.box("paintedMetal", x, yTop - beamH - 0.06, z, 0.3, 0.12, 0.3, { color: PALETTE.impBlack, texel: 2 });
-    kit.box(i % 2 ? "emitWhiteSoft" : "emitBlue", x, yTop - beamH - 0.125, z, 0.2, 0.01, 0.2, { uv: "keep" });
+    kit.box("emitWhiteFaint", x, yTop - beamH - 0.125, z, 0.2, 0.01, 0.2, { uv: "keep" });
+    kit.box(i % 2 ? "emitWhiteDim" : "emitBlueDim", x, yTop - beamH - 0.132, z, 0.08, 0.008, 0.08, { uv: "keep" });
   }
   // radial beams to the four walls, each with a cable tray alongside and a junction box
   const rad = [
@@ -807,7 +899,7 @@ function ceilingStructure(kit, ctx, cx, cz, H) {
     const mx = (x0 + x1) / 2;
     const mz = (z0 + z1) / 2;
     kit.box("paintedMetal", mx, yb, mz, alongX ? L : 0.32, beamH, alongX ? 0.32 : L, { color: PALETTE.impDark, texel: 1.2 });
-    kit.box("emitWhite", mx, yTop - beamH - 0.005, mz, alongX ? L - 0.6 : 0.03, 0.01, alongX ? 0.03 : L - 0.6);
+    kit.box("emitWhiteDim", mx, yTop - beamH - 0.005, mz, alongX ? L - 0.6 : 0.03, 0.01, alongX ? 0.03 : L - 0.6, { uv: "keep" });
     const off = 0.45;
     const a = alongX ? [x0, yTop - 0.12, z0 + off] : [x0 + off, yTop - 0.12, z0];
     const b = alongX ? [x1, yTop - 0.12, z1 + off] : [x1 + off, yTop - 0.12, z1];
@@ -828,7 +920,8 @@ function ceilingStructure(kit, ctx, cx, cz, H) {
     [cx + 3, max[2] - 1.6],
   ]) {
     kit.box("paintedMetal", x, yTop - 0.35, z, 0.7, 0.16, 0.7, { color: PALETTE.impBlack, texel: 2 });
-    kit.box("emitWhiteSoft", x, yTop - 0.435, z, 0.5, 0.01, 0.5, { uv: "keep" });
+    kit.box("emitWhiteFaint", x, yTop - 0.435, z, 0.5, 0.01, 0.5, { uv: "keep" });
+    kit.box("emitWhiteDim", x, yTop - 0.442, z, 0.16, 0.008, 0.16, { uv: "keep" });
     kit.cyl("metal", x, yTop - 0.135, z, 0.03, 0.27, "y", { color: PALETTE.impMid, segments: 8 });
   }
   // service pipes along both long walls, passing through the radial beams, hung from the ceiling
