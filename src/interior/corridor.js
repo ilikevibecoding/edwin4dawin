@@ -76,7 +76,10 @@ export function buildCorridor(kit, ctx) {
   const sides = alongZ ? ["xmin", "xmax"] : ["zmin", "zmax"];
   const ends = alongZ ? ["zmin", "zmax"] : ["xmin", "xmax"];
   for (const side of sides) {
-    impWall(kit, ctx, side, { height: lowH, rows: [0, 0.5, 1.7, lowH], panelW: 1.1, styles: { panel: 0.72, vent: 0.06, greeble: 0.08, strip: 0.08, screen: 0.03, conduit: 0.03 }, seed: ctx.seed + side.length * 7 });
+    // no conduit recesses on the long walls: with the row-coherent panel grid a conduit pick spread
+    // along the whole 1.7-2.5 m row of one side, and the run of dark gunmetal recesses read as a
+    // missing wall segment against the plated far side (crew corridor, upper right)
+    impWall(kit, ctx, side, { height: lowH, rows: [0, 0.5, 1.7, lowH], panelW: 1.1, styles: { panel: 0.75, vent: 0.06, greeble: 0.08, strip: 0.08, screen: 0.03 }, seed: ctx.seed + side.length * 7 });
     // leaning upper panel: a Frame from the wall top to the ceiling edge
     const sign = side === "xmin" || side === "zmin" ? 1 : -1; // toward the corridor centre
     let o, U, V;

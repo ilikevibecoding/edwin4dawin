@@ -23,8 +23,10 @@ const ANTE_PAINTS = [
   [PALETTE.impMid, 0.2],
 ];
 const DET_STYLES = { panel: 0.66, vent: 0.1, greeble: 0.1, strip: 0.05, screen: 0.02, conduit: 0.07 };
-// no procedural red strips in the anteroom: its red accents are placed by hand (one bar + a sign)
-const ANTE_STYLES = { ...DET_STYLES, strip: 0 };
+// no procedural red strips in the anteroom: its red accents are placed by hand (one bar + a sign);
+// conduit recesses held to a trace (a coherent waist-height run of them under the guard monitor read
+// as a row of bars in the white zone)
+const ANTE_STYLES = { ...DET_STYLES, strip: 0, conduit: 0.02, panel: 0.71 };
 const CELL_H = 3.6;
 
 /** Plain dark partition: a panelled slab with a black kick and a top trim, plus its collider. */
@@ -143,26 +145,45 @@ export function buildDetention(kit, ctx) {
   }
   strip("emitRedSoft", guardX1 + 0.6, -43.84, max[0] - 0.6, -43.76);
   strip("emitRedSoft", guardX1 + 0.6, -28.24, max[0] - 0.6, -28.16);
-  for (const z of [-30.0, -33.0, -39.0, -42.0]) strip("emitStrip", 43.4, z - 0.07, 47.6, z + 0.07);
-  // lighter deck in the guard anteroom (the white zone) against the black rubber deck of the block
-  kit.boxMM("floorGloss", [min[0] + 0.18, 0, min[2] + 0.18], [guardX1 - 0.2, 0.006, max[2] - 0.18], { color: 0x8c8c94, texel: 0.33 });
+  // anteroom whites built like the shared ceiling fixture (housing, dim diffuser, narrow bright core)
+  for (const z of [-30.0, -33.0, -39.0, -42.0]) {
+    kit.box("paintedMetal", 45.5, H - 0.06, z, 4.4, 0.1, 0.42, { color: PALETTE.impDark, texel: 2 });
+    kit.box("emitWhiteDim", 45.5, H - 0.095, z, 4.2, 0.02, 0.26, { uv: "keep" });
+    kit.box("emitStrip", 45.5, H - 0.11, z, 4.1, 0.02, 0.07, { uv: "keep" });
+  }
+  // plated deck in the guard anteroom (the white zone) against the black rubber deck of the block: a
+  // matte grey plate floor, so the anteroom whites actually lift it (the tinted gloss slab stayed at
+  // L 16-19 under three lights: the gloss deck only ever returns the lights' specular pools)
+  kit.boxMM("impPanel1", [min[0] + 0.18, 0, min[2] + 0.18], [guardX1 - 0.2, 0.008, max[2] - 0.18], { color: PALETTE.impMid, uv: "world", texel: 0.5 });
   // black rubber deck in the corridor and the chamber, dim red light channels along the corridor edges.
-  // The corridor deck runs out through the scanner arch: the gloss slab there caught the block's red
-  // light at a grazing angle and its roughness speckle read as a grime decal on the threshold
-  kit.boxMM("rubber", [47.0, 0, corrZ0], [chamberX0, 0.012, corrZ1], { color: PALETTE.rubber });
+  // The deck runs out through the scanner arch in the dark floor tone (the full-width natural-rubber
+  // slab there caught the anteroom whites and read as a light rug across the gate); a 0.6 m threshold
+  // plate with thin red edge lines marks the line into the block
+  kit.boxMM("rubber", [47.7, 0, corrZ0], [chamberX0, 0.012, corrZ1], { color: PALETTE.impDark });
+  {
+    const tx0 = 47.1;
+    const tx1 = 47.7;
+    kit.boxMM("rubber", [tx0, 0, corrZ0], [tx1, 0.014, corrZ1], { color: PALETTE.impDark });
+    kit.boxMM("paintedMetal", [tx0 - 0.06, 0, corrZ0], [tx0, 0.016, corrZ1], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("paintedMetal", [tx1, 0, corrZ0], [tx1 + 0.06, 0.016, corrZ1], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("emitRedDim", [tx0 - 0.045, 0.016, corrZ0 + 0.1], [tx0 - 0.015, 0.02, corrZ1 - 0.1]);
+    kit.boxMM("emitRedDim", [tx1 + 0.015, 0.016, corrZ0 + 0.1], [tx1 + 0.045, 0.02, corrZ1 - 0.1]);
+  }
   kit.boxMM("rubber", [chamberX0, 0, cellBackS], [max[0] - 0.2, 0.012, cellBackN], { color: PALETTE.rubber });
   for (const z of [corrZ0 + 0.18, corrZ1 - 0.18]) {
     kit.boxMM("paintedMetal", [guardX1, 0, z - 0.05], [chamberX0, 0.016, z + 0.05], { color: PALETTE.impBlack, texel: 2 });
     kit.boxMM("emitRedDim", [guardX1 + 0.1, 0.016, z - 0.012], [chamberX0 - 0.1, 0.024, z + 0.012]);
   }
 
-  // ------------------------------------------------------------------ lights (6): three whites in the anteroom (one over the
-  // door approach so the white zone reads from the camera side), red in the block, white in the chamber
-  // (hung 1.2 m below the ceiling: at 0.5 m it lit a hot red patch on the corridor ceiling that showed
-  // above the gate as a flare from the fixed view)
+  // ------------------------------------------------------------------ lights (7): three whites in the anteroom (one over the
+  // door approach so the white zone reads from the camera side) plus a low white pool light over the
+  // anteroom centre for the deck itself, red in the block, white in the chamber (the red hung 1.2 m
+  // below the ceiling: at 0.5 m it lit a hot red patch on the corridor ceiling that showed above the
+  // gate as a flare from the fixed view)
   ctx.light(pointLight(0xff3a2a, 12, 13, [52.2, H - 1.2, -36.0]));
   ctx.light(pointLight(0xe8eeff, 18, 14, [46.0, H - 0.5, -36.0]));
   ctx.light(pointLight(0xe8eeff, 15, 10, [44.8, H - 0.5, -36.2]));
+  ctx.light(pointLight(0xf0f4ff, 12, 9, [45.6, 2.8, -36.0]));
   ctx.light(pointLight(0xdfe8ff, 12, 9, [59.0, H - 0.6, -36.0]));
   ctx.light(pointLight(0xff3020, 6, 10, [55.0, H - 0.6, -43.8]));
   ctx.light(pointLight(0xe0e8ff, 13, 10, [45.4, H - 0.6, -29.6]));
@@ -186,7 +207,9 @@ export function buildDetention(kit, ctx) {
   // the block's west face looks onto the guard station: a panelled wall face set just proud of the
   // slab (the slab stays as the cells' west wall), hazard bands and red lamps flanking the entrance
   const faceX = guardX1 - 0.17;
-  const faceOpts = { ...wallOpts, styles: { ...wallOpts.styles, strip: 0 } };
+  // (no strips: dressed by hand below; no conduit recesses: a coherent waist-height run of them on the
+  // south face read as a row of bars under the cell-status panel from the door)
+  const faceOpts = { ...wallOpts, styles: { ...wallOpts.styles, strip: 0, conduit: 0, panel: 0.78 } };
   impWall(kit, ctx, "xmax", { ...faceOpts, from: [faceX, cellBackS - 0.16], to: [faceX, corrZ0 - 0.16], openings: [], seed: ctx.seed + 5, tag: "blockWS" });
   impWall(kit, ctx, "xmax", { ...faceOpts, from: [faceX, corrZ1 + 0.16], to: [faceX, cellBackN + 0.16], openings: [], seed: ctx.seed + 6, tag: "blockWN" });
   {

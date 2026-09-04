@@ -197,7 +197,7 @@ export function buildQuarters(kit, ctx) {
   ctx.light(pointLight(0xffb060, 4.5, 7.5, [-7.85, 2.2, -21.8]));
   ctx.light(pointLight(0xffb060, 4.5, 7.5, [-15.05, 2.2, -16.2]));
   ctx.light(pointLight(0xffb060, 4.5, 7.5, [-22.25, 2.2, -21.8]));
-  ctx.light(pointLight(0xc8d6ff, 5, 7, [-33.0, 2.8, aisleZ]));
+  ctx.light(pointLight(0xd8e2ff, 7, 7.5, [-32.7, 2.5, aisleZ]));
 
   // navy floor kick channels along both aisle edges (a quiet edge line, not a runway)
   for (const z of [aisleZ - 1.3, aisleZ + 1.3]) {
@@ -337,10 +337,16 @@ export function buildQuarters(kit, ctx) {
       frame.box("rubber", tu, 1.26, 0.12, 0.08, 0.02, 0.03, { color: PALETTE.rubber });
       frame.box("impPanel", tu, 0.42, 0.61, 0.7, 0.6, 0.02, { color: PALETTE.impGrey, uv: "keep" });
     }
-    frame.box("darkGloss", u, 1.75, 0.02, 3.0, 0.7, 0.02);
+    // mirror strip as a light plate in a black frame, a proper vanity fixture over it (housing, faint
+    // diffuser, dim core) and the REFRESHER plate above: the alcove sits on the view axis at the far
+    // end of the aisle and its black gloss mirror read as an unlit band closing the room
     frame.box("paintedMetal", u, 1.75, 0.0, 3.1, 0.8, 0.02, { color: PALETTE.impBlack, texel: 2 });
-    frame.box("paintedMetal", u, 2.2, 0.06, 3.1, 0.08, 0.12, { color: PALETTE.impDark, texel: 2 });
-    frame.box("emitWhiteSoft", u, 2.165, 0.1, 2.9, 0.02, 0.06, { uv: "keep" });
+    frame.box("impPanel", u, 1.75, 0.02, 3.0, 0.7, 0.02, { color: PALETTE.impWhite, uv: "keep" });
+    frame.add("crew_glass", new THREE.PlaneGeometry(3.0, 0.7), u, 1.75, 0.032, { uv: "keep" });
+    for (let k = 1; k < 4; k++) frame.box("metal", u - 1.5 + k * 0.75, 1.75, 0.032, 0.012, 0.7, 0.01, { color: PALETTE.steel });
+    frame.box("paintedMetal", u, 2.26, 0.1, 3.2, 0.12, 0.2, { color: PALETTE.impDark, texel: 2 });
+    frame.box("emitWhiteFaint", u, 2.19, 0.1, 3.0, 0.02, 0.14, { uv: "keep" });
+    frame.box("emitWhiteDim", u, 2.175, 0.11, 2.9, 0.02, 0.04, { uv: "keep" });
     frame.collider(u - 1.65, u + 1.65, 0, 1.0, 0, 0.66, "sink");
     // towel hooks with towels
     for (let k = 0; k < 3; k++) {
@@ -348,8 +354,9 @@ export function buildQuarters(kit, ctx) {
       frame.box("metal", tu, 1.35, 0.04, 0.03, 0.03, 0.08, { color: PALETTE.steel });
       frame.box("fabric", tu, 1.05, 0.06, 0.16, 0.6, 0.04, { color: k === 1 ? PALETTE.impMid : PALETTE.impWhite, uv: "world", texel: 3 });
     }
-    // WASH sign + a floor drain grate
-    wallSign(kit, ctx, { side: "xmin", u, v: 2.7, w: 1.0, cell: SIGN.WASH, lit: true });
+    // lit REFRESHER plate over the fixture (wide enough to read from the door end of the aisle) + a
+    // floor drain grate
+    wallSign(kit, ctx, { side: "xmin", u, v: 2.78, w: 1.8, cell: SIGN.REFRESHER, lit: true });
     const g = new THREE.PlaneGeometry(1.24, 0.9);
     g.rotateX(-Math.PI / 2);
     kit.boxMM("paintedMetal", [-33.3, -0.08, aisleZ - 0.45], [-32.06, 0.0, aisleZ + 0.45], { color: PALETTE.impBlack, texel: 2 });

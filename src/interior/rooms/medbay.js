@@ -339,6 +339,18 @@ export function buildMedbay(kit, ctx) {
     // pipe manifold between the tanks feeding both hoods
     frame.cylU("metal", -53.2 - min[2], 3.3, 0.14, 0.06, 7.2, { color: PALETTE.impMid, segments: 10 });
     for (const dz of [-3.6, 0, 3.6]) frame.box("paintedMetal", -53.2 - min[2] + dz, 3.3, 0.1, 0.2, 0.22, 0.2, { color: PALETTE.impDark, texel: 2 });
+    // patient status board on the free wall run beside the patient tank: two large screens in one
+    // bezel under a green header line (from the door the bare panel row here, right of centre on the
+    // far wall, read as a bank of small blank monitors)
+    {
+      const bu = -45.4 - min[2];
+      frame.box("paintedMetal", bu, 2.2, 0.03, 3.6, 1.2, 0.06, { color: PALETTE.impDark, texel: 2 });
+      for (const [du, m] of [[-0.9, "impScreen2"], [0.9, "impScreen1"]]) {
+        frame.box("darkGloss", bu + du, 2.2, 0.062, 1.66, 1.0, 0.006);
+        frame.add(m, new THREE.PlaneGeometry(1.56, 0.9), bu + du, 2.2, 0.067, { uv: "keep" });
+      }
+      frame.box("emitGreen", bu, 2.86, 0.05, 3.4, 0.02, 0.01, { uv: "keep" });
+    }
     floorGrime(kit, 22.2, -49.6, 2.6, 2.6, 0.2);
     floorGrime(kit, 22.2, -56.8, 2.6, 2.6, -0.3);
   }
@@ -425,9 +437,10 @@ export function buildMedbay(kit, ctx) {
       frame.add(m, new THREE.PlaneGeometry(1.5, 0.78), max[0] - gx + dx, 1.95 + dy, 0.067, { uv: "keep" });
     }
     frame.box("leds", max[0] - gx, 0.93, 0.05, 2.4, 0.03, 0.01, { uv: "keep" });
-    // medicine cabinets x 17..25: open-fronted glass cases over drawer units, lit shelves of vials
-    for (let c = 0; c < 4; c++) {
-      const cx = 17.6 + c * 1.9;
+    // medicine cabinets x 17..24: three glass cases over drawer units with white-lit shelves of vials
+    // (four cases at 1.9 m with blue shelf lines read as a dense bank of monitors from the door)
+    for (let c = 0; c < 3; c++) {
+      const cx = 17.6 + c * 2.5;
       const u = max[0] - cx;
       const cw = 1.7;
       const cd = 0.5;
@@ -436,7 +449,7 @@ export function buildMedbay(kit, ctx) {
       for (const s of [-1, 1]) frame.box("paintedMetal", u + s * (cw / 2 - 0.03), 1.2, cd / 2, 0.06, 2.4, cd, { color: PALETTE.impDark, texel: 1.5 });
       frame.box("paintedMetal", u, 2.37, cd / 2, cw + 0.04, 0.08, cd + 0.04, { color: PALETTE.impBlack, texel: 2 });
       frame.box("paintedMetal", u, 2.3, cd / 2, cw - 0.1, 0.08, cd - 0.04, { color: PALETTE.impDark, texel: 2 });
-      frame.box("emitWhiteSoft", u, 2.255, cd / 2, cw - 0.3, 0.012, cd - 0.14, { uv: "keep" });
+      frame.box("emitWhiteDim", u, 2.255, cd / 2, cw - 0.3, 0.012, cd - 0.14, { uv: "keep" });
       // drawer unit below the case (solid white front with pulls)
       frame.box("paintedMetal", u, 0.4, cd / 2, cw - 0.06, 0.8, cd - 0.02, { color: PALETTE.impDark, texel: 1.5 });
       for (let dr = 0; dr < 2; dr++) {
@@ -449,7 +462,7 @@ export function buildMedbay(kit, ctx) {
       for (let s = 0; s < 3; s++) {
         const y = 0.95 + s * 0.44;
         frame.box("impPanel", u, y, cd / 2, cw - 0.14, 0.025, cd - 0.1, { color: PALETTE.impLight, uv: "keep" });
-        frame.box("emitBlue", u, y + 0.4, 0.08, cw - 0.4, 0.008, 0.02);
+        frame.box("emitWhiteFaint", u, y + 0.4, 0.08, cw - 0.4, 0.012, 0.03, { uv: "keep" });
         const nb = 5 + Math.floor(rand() * 4);
         for (let b = 0; b < nb; b++) {
           const bu = u - 0.62 + (b / (nb - 1)) * 1.24;
