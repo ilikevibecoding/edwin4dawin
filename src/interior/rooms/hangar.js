@@ -10,7 +10,7 @@ import { decalRect } from "../../textures.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, grateFloor, grateScreen, bayWalls, containerStack,
   crate, toolCart, fuelBowser, pedestalConsole, cabinet, lightBank, pipeRun, stairTower, gantryCrane, blastLeaves,
-  beacons, tractorEmitters, cargoLift, RAIL_H,
+  beacons, tractorEmitters, cargoLift, loaderVehicle, RAIL_H,
 } from "../../hangar/machinery.js";
 
 const CAT_Y = -62; // service catwalks
@@ -119,9 +119,9 @@ function markings(kit, lib, y0, W, z0, z1) {
   for (let z = W.z1 + 4; z < z1 - 3; z += 3) deckStrip(kit, "emitAmber", -0.15, z, 0.15, z + 1.4, y0);
   deckDecal(kit, -7.4, y0, z1 - 6, 3.2, 14, Math.PI / 2);
   deckDecal(kit, 7.4, y0, z1 - 6, 3.2, 2, -Math.PI / 2);
-  // side-deck walk lanes and rack numbers on the deck below each clamp gantry
+  // side-deck walk lanes (painted) and rack numbers on the deck below each clamp gantry
   for (const sx of [-1, 1]) {
-    deckStrip(kit, "emitWhite", sx * 25.6 - 0.06, W.z0 - 6, sx * 25.6 + 0.06, W.z1 + 6, y0);
+    kit.boxMM("painted", [sx * 25.6 - 0.08, y0, W.z0 - 6], [sx * 25.6 + 0.08, y0 + 0.008, W.z1 + 6], { color: lib.PALETTE.impWhite, uv: "keep" });
     for (const rz of HANGAR.rackZ) deckDecal(kit, sx * 24.2, y0, rz, 2.4, 2, sx > 0 ? -Math.PI / 2 : Math.PI / 2);
   }
 }
@@ -427,22 +427,8 @@ function forwardDeck(kit, lib, y0) {
   toolCart(kit, propFrame(kit, 10.5, y0, 421, 0.3));
   toolCart(kit, propFrame(kit, 18.2, y0, 421.5, -1.2));
   // tug / loader vehicle parked by the lane, clear of the well railing
-  loader(kit, lib, propFrame(kit, 15, y0, 425.4, Math.PI));
+  loaderVehicle(kit, propFrame(kit, 15, y0, 425.4, Math.PI));
   deckDecal(kit, 11.8, y0, 424.5, 1.6, 7, Math.PI);
-}
-
-function loader(kit, lib, f) {
-  const P = lib.PALETTE;
-  f.box("paintedMetal", 0, 0.7, 0, 2.2, 0.6, 3.6, { color: P.orange, texel: 1 });
-  f.box("satinBlack", 0, 1.3, -0.9, 1.6, 0.6, 1.4);
-  f.box("satinBlack", 0, 1.75, -0.6, 1.4, 0.5, 1.2);
-  f.box("paintedMetal", 0, 1.1, 1.2, 1.9, 0.2, 1.2, { color: P.impGreyDark, texel: 1 });
-  for (const su of [-1, 1]) for (const sn of [-1.2, 1.2]) f.cylU("rubber", su * 1.2, 0.45, sn, 0.45, 0.4, { color: P.rubber, segments: 14 });
-  f.box("hazard", 0, 0.45, 1.85, 2.2, 0.3, 0.1, { uv: "world", texel: 1.5 });
-  f.box("emitAmber", 0, 2.05, -0.6, 0.3, 0.12, 0.3);
-  f.box("emitWhite", -0.7, 0.9, 1.82, 0.3, 0.12, 0.02);
-  f.box("emitWhite", 0.7, 0.9, 1.82, 0.3, 0.12, 0.02);
-  f.collider(-1.4, 1.4, 0, 2.1, -1.9, 1.9, "loader");
 }
 
 // ---------------------------------------------------------------- aft deck: control cab, cargo lifts, container stacks
@@ -551,15 +537,16 @@ function lights(ctx, lib, y0) {
   const cool = (i, d, p, c = 0xdfe8ff) => ctx.lights.cool.push(lib.pointLight(c, i, d, p));
   // The bay is 64 x 110 x 38 m and the pool only ever runs ~14 point lights: few, strong, long-reach
   // floods under the side catwalks so the far side of the bay stays lit from wherever the player stands.
-  for (const s of [-1, 1]) for (const z of [424, 452, 480, 508]) cool(260, 90, [s * 25, CAT_Y - 1.0, z]);
-  for (const z of [412.5, 517.5]) cool(160, 70, [0, CAT_Y - 1.0, z]);
+  // (inverse-square: a 17 m drop to the deck needs ~600 cd for a lit deck, so these are big numbers)
+  for (const s of [-1, 1]) for (const z of [424, 452, 480, 508]) cool(760, 110, [s * 25, CAT_Y - 1.0, z]);
+  for (const z of [412.5, 517.5]) cool(440, 80, [0, CAT_Y - 1.0, z]);
   // rack lights on the girder undersides: the parked fighters and the well mouth below them
-  for (const s of [-1, 1]) for (const z of [448, 480]) cool(140, 55, [s * 14, GIRDER.y0 - 0.6, z], 0xe6eeff);
+  for (const s of [-1, 1]) for (const z of [448, 480]) cool(420, 70, [s * 14, GIRDER.y0 - 0.6, z], 0xe6eeff);
   // tractor glow: blue lights hovering in the beams above the well mouth
-  for (const z of [448.5, 470.5, 492.5]) ctx.lights.teal.push(lib.pointLight(0x66b6ff, 90, 60, [0, -70, z]));
+  for (const z of [448.5, 470.5, 492.5]) ctx.lights.teal.push(lib.pointLight(0x66b6ff, 170, 60, [0, -70, z]));
   // two shadowed floods from the girders down onto the side decks (fighter wings throw the shadows)
   for (const s of [-1, 1]) {
-    const sp = new THREE.SpotLight(0xe8f0ff, 420 * lib.LIGHT_SCALE, 60, 0.55, 0.5, 1.8);
+    const sp = new THREE.SpotLight(0xe8f0ff, 1500 * lib.LIGHT_SCALE, 70, 0.6, 0.5, 1.8);
     sp.position.set(s * 13, GIRDER.y0 - 0.4, 465);
     sp.target.position.set(s * 27, y0, 465);
     sp.shadow.camera.near = 2;

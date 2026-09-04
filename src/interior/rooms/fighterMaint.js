@@ -165,12 +165,12 @@ export function build(kit, ctx, room, lib) {
 
   // ---- lighting: amber work light over the bays, white over the cradle
   const warm = (i, d, p, c = 0xffb347) => ctx.lights.warm.push(lib.pointLight(c, i, d, p));
-  for (const z of [432, 448, 476, 492]) for (const x of [39, 54]) warm(70, 34, [x, y0 + 7, z]);
-  ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 110, 40, [cx, yTop - 1.2, cz]));
-  ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 60, 30, [cx - 8, y0 + 5.5, cz]));
-  warm(40, 22, [wx, y0 + 6, wz], 0xffc880);
-  warm(30, 18, [46, y0 + 2.6, z0 + 1.6], 0xffd9a0);
-  const sp = new THREE.SpotLight(0xfff0dd, 260 * lib.LIGHT_SCALE, 30, 0.6, 0.5, 1.8);
+  for (const z of [432, 448, 476, 492]) for (const x of [39, 54]) warm(170, 36, [x, y0 + 7, z]);
+  ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 280, 44, [cx, yTop - 1.2, cz]));
+  ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 120, 30, [cx - 8, y0 + 5.5, cz]));
+  warm(90, 24, [wx, y0 + 6, wz], 0xffc880);
+  warm(60, 20, [46, y0 + 2.6, z0 + 1.6], 0xffd9a0);
+  const sp = new THREE.SpotLight(0xfff0dd, 700 * lib.LIGHT_SCALE, 34, 0.6, 0.5, 1.8);
   sp.position.set(cx + 6, yTop - 1.0, cz - 6);
   sp.target.position.set(cx, y0, cz);
   sp.shadow.camera.near = 1;

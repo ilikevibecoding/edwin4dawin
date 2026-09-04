@@ -322,6 +322,45 @@ export function fuelBowser(kit, f, opts = {}) {
   f.collider(-1.0, 1.0, 0, 2.9, -2.1, 1.75, "bowser");
 }
 
+/** Deck tug / loader vehicle: orange chassis, black cab, forks at the +n end, wheels, work lights. */
+export function loaderVehicle(kit, f) {
+  f.box("paintedMetal", 0, 0.7, 0, 2.2, 0.6, 3.6, { color: PALETTE.orange, texel: 1 });
+  f.box("satinBlack", 0, 1.3, -0.9, 1.6, 0.6, 1.4);
+  f.box("satinBlack", 0, 1.75, -0.6, 1.4, 0.5, 1.2);
+  f.box("paintedMetal", 0, 1.1, 1.2, 1.9, 0.2, 1.2, { color: PALETTE.impGreyDark, texel: 1 });
+  for (const su of [-0.5, 0.5]) f.box("metal", su, 0.35, 2.4, 0.16, 0.06, 1.4, { color: PALETTE.steel });
+  f.box("metal", 0, 1.2, 1.85, 1.6, 1.4, 0.1, { color: PALETTE.gunmetal, texel: 1 });
+  for (const su of [-1, 1]) for (const sn of [-1.2, 1.2]) f.cylU("rubber", su * 1.2, 0.45, sn, 0.45, 0.4, { color: PALETTE.rubber, segments: 14 });
+  f.box("hazard", 0, 0.45, 1.85, 2.2, 0.3, 0.1, { uv: "world", texel: 1.5 });
+  f.box("emitAmber", 0, 2.05, -0.6, 0.3, 0.12, 0.3);
+  f.box("emitWhite", -0.7, 0.9, 1.92, 0.3, 0.12, 0.02);
+  f.box("emitWhite", 0.7, 0.9, 1.92, 0.3, 0.12, 0.02);
+  f.collider(-1.4, 1.4, 0, 2.1, -1.9, 3.1, "loader");
+}
+
+/** Pallet 1.2 x 1.2 with a load of strapped boxes (`tiers` high). */
+export function pallet(kit, f, opts = {}) {
+  const { tiers = 2, tone = PALETTE.impGrey, decal = 11 } = opts;
+  for (const n of [-0.5, 0, 0.5]) f.box("metal", 0, 0.07, n, 1.2, 0.14, 0.12, { color: PALETTE.darkMetal, texel: 2 });
+  f.box("metal", 0, 0.15, 0, 1.2, 0.02, 1.2, { color: PALETTE.gunmetal, texel: 2 });
+  for (let t = 0; t < tiers; t++) {
+    const h = 0.6;
+    const y = 0.16 + t * h;
+    if (t % 2 === 0) {
+      f.box("painted1", -0.3, y + h / 2, 0, 0.56, h - 0.02, 1.16, { color: tone, uv: "world", texel: 1 });
+      f.box("painted", 0.3, y + h / 2, 0, 0.56, h - 0.02, 1.16, { color: tone, uv: "world", texel: 1 });
+    } else {
+      f.box("painted", 0, y + h / 2, -0.3, 1.16, h - 0.02, 0.56, { color: tone, uv: "world", texel: 1 });
+      f.box("painted1", 0, y + h / 2, 0.3, 1.16, h - 0.02, 0.56, { color: tone, uv: "world", texel: 1 });
+    }
+  }
+  const top = 0.16 + tiers * 0.6;
+  // straps
+  for (const u of [-0.35, 0.35]) f.box("satinBlack", u, top / 2 + 0.08, 0, 0.05, top - 0.16, 1.22);
+  f.add("decal", new THREE.PlaneGeometry(0.5, 0.5), 0, top * 0.55, 0.61, { uv: "keep", uvRect: decalRect(decal) });
+  f.collider(-0.62, 0.62, 0, top, -0.62, 0.62, "pallet");
+}
+
 /** Free-standing pedestal console: black desk, slanted screen, key strip. screenMat e.g. "screen4" / "screen6". */
 export function pedestalConsole(kit, f, screenMat = "screen4", opts = {}) {
   const { w = 1.2, h = 1.05, d = 0.55 } = opts;
