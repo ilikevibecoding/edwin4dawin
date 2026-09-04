@@ -78,10 +78,45 @@ seed) in both. `npm run mp-test` automates this with three headless clients incl
 - Deputies no longer stack on one work spot; horses no longer spawn on stable roofs.
 - Player collision floating-point drift (getting blocked by floor blocks when leaving buildings).
 
-### Measured
-(see the table appended after the final verification run below)
+### Measured (independent verification run, `bench/verify_*.json`)
+Machine load during the run was 10-18 on 4 cores (other agents), so absolute numbers are 2-3x worse than the
+quiet-machine baseline taken earlier; the fair comparison is the same-load A/B below, where the pre-disaster tree
+(`aacb7652`, first commit with `perf.js`) and HEAD were alternated under identical load.
+
+| same-load A/B (30 s, 2 rounds) | before: spawn | after: spawn | before: town | after: town |
+| --- | --- | --- | --- | --- |
+| load time (in-page) | 3067 / 1781 ms | 1272 / 1307 ms | 2663 / 1266 ms | 1204 / 1193 ms |
+| fps (SwiftShader) | 4.78 / 4.56 | 5.76 / 6.32 | 3.94 / 3.77 | 4.68 / 4.28 |
+| heap avg | 114.0 / 116.8 MB | 108.1 / 107.6 MB | 95.9 / 95.8 MB | 90.5 / 90.0 MB |
+| draw calls | 257 / 258 | 90 / 90 | 256 / 256 | 145 / 145 |
+| long tasks per 30 s | 3 / 8 | 5 / 5 | 6 / 5 | 9 / 8 |
+| steady-state JS avg / p95 (town, after t=5 s) | 3.78 / 6.4 and 6.12 / 11.3 ms | | 4.63 / 6.7 and 5.44 / 5.2 ms | |
+
+Verdict: no regression in load time, memory or steady-state JS; draw calls 2.8x / 1.8x lower, fps higher.
+
+| scenario (30 s; beam 45 s), load 12-18 | fps | js avg / p95 ms | draw calls avg (max) | tris | heap avg MB | long tasks | particles / debris max | exceptions |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| spawn overlook | 5.4 | 2.2 / 4.9 | 90 (92) | 155k | 108 | 6 | 144 / 0 | 0 |
+| town centre | 4.3 | 4.8 / 15.9 | 145 (156) | 192k | 92 | 8 | 220 / 0 | 0 |
+| town, walking | 3.4 | 17.3 / 31.0 | 120 (178) | 194k | 102 | 7 | 179 / 0 | 0 |
+| town + tornado | 3.6 | 46.6 / 98.0 | 153 (173) | 203k | 100 | 14 | 434 / 105 | 0 |
+| town + tsunami | 3.4 | 40.3 / 73.9 | 165 (212) | 199k | 105 | 15 | 372 / 600 (cap) | 0 |
+| town + orbital beam | 3.3 | 22.5 / 37.3 | 144 (163) | 203k | 98 | 9 | 299 / 600 (cap) | 0 |
+
+Disaster JS time is dominated by the shared relight/remesh pipeline running at its per-frame budgets (a SwiftShader
+relight costs ~10x a real machine's); the disasters' own `simulate`/`render` code measures 0.05-0.3 ms per tick/frame.
+Each disaster start shows one 650-800 ms frame in this VM (material compilation + first relight burst).
+
+Correctness (same run): build + 4/4 unit tests; 39/39 lifecycle checks (preview isolation, pause, deterministic
+replay hash, complete restore to the pristine hash `a1f4d590`, save isolation) for all three disasters; 8/8
+multiplayer checks with 3 clients incl. a late joiner (idle traffic 1.45 KB/s in, 0.01 KB/s out per client, tick
+skew <= 1); identical journal hashes across two independent browser pages per disaster (seed 11, tick 300:
+tsunami `0a49d87c:46894`, tornado `fcb6e0cf:84`, beam `06d55efa:122`); `?admin=0` refuses every command and hides
+the panel; 0 exceptions and 0 console errors across 23 page sessions.
 
 ### Known imperfections
+- Player edits placed on ground a disaster had damaged were dropped from the save for the rest of the session
+  after a reset (the exclusion set was never cleared) - fixed in this round and covered by `test-disasters.mjs`.
 - Frame times in this build VM are dominated by SwiftShader; disaster carving/flooding windows are bounded by the
   manager's relight/remesh budgets (3 relights + ~10 remeshes per frame) rather than by the disaster code itself.
 - Buildings sliced by the beam crater or the tornado leave floating voxel fragments (expected voxel behaviour).
