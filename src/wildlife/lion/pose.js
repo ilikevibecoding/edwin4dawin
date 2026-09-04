@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { basisQuat, solveTwoBone } from './rig.js';
-import { BELLY, EYE, PAD_OFFSET, bellyFactor } from './spec.js';
+import { BELLY, EYE_LIDS, PAD_OFFSET, bellyFactor } from './spec.js';
 
 // ---------------------------------------------------------------------------
 // Pose solver. Takes a blended parameter set, four foot contacts and the ground
@@ -191,7 +191,7 @@ export class Poser {
     const bl = anim.blink ? anim.blink[0] : 0;
     const br = anim.blink ? anim.blink[1] : 0;
     // the upper lid closes through the whole opening onto the lower lid's rim
-    const shut = EYE.lidUp + EYE.lidDown;
+    const shut = EYE_LIDS.up + EYE_LIDS.down;
     childOf('lidL', 'head', eul(bl * shut, 0, 0));
     childOf('lidR', 'head', eul(br * shut, 0, 0));
     childOf('ribs', 'spine2', null);

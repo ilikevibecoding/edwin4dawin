@@ -44,7 +44,13 @@ export const DETAIL = {
  * through here so the parts can be merged into one draw.
  */
 export class SkinBuilder {
-  constructor() {
+  /**
+   * `alpha` makes the colour attribute four wide: three.js then multiplies
+   * the material's alpha by the vertex alpha before the alpha test, which is
+   * how the shell fur thins toward the ends of a loft without a shader edit.
+   */
+  constructor({ alpha = false } = {}) {
+    this.alpha = alpha;
     this.pos = [];
     this.uv = [];
     this.col = [];
@@ -63,6 +69,7 @@ export class SkinBuilder {
     this.pos.push(p.x, p.y, p.z);
     this.uv.push(uv[0], uv[1]);
     this.col.push(color[0], color[1], color[2]);
+    if (this.alpha) this.col.push(color[3] ?? 1);
     const b = bones
       .filter((x) => x[1] > 1e-4)
       .sort((p, q) => q[1] - p[1])
@@ -183,7 +190,7 @@ export class SkinBuilder {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, this.alpha ? 4 : 3));
     g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(this.si, 4));
     g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(this.sw, 4));
     g.setIndex(this.idx);
@@ -457,11 +464,13 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
             [0.52, 0.083, 0.096, 0.086],
             [0.66, 0.07, 0.075, 0.069],
             [0.78, 0.062, 0.062, 0.06],
-            [0.86, 0.068, 0.062, 0.072], // wrist: the carpus is a knob, the accessory pad behind it
-            // the pastern flattens toward the paw: lying, it rests along the
-            // ground, so its depth here must be less than the paw joint's height
-            [0.93, 0.072, 0.047, 0.044],
-            [1.0, 0.084, 0.044, 0.03], // paw: wide and flat, the toes protruding past it
+            [0.86, 0.066, 0.06, 0.07], // wrist: the carpus is a knob, the accessory pad behind it
+            // the pastern narrows under the wrist and flattens toward the paw:
+            // lying, it rests along the ground, so its depth here must be less
+            // than the paw joint's height. The paw itself (addPaw) flares out
+            // wider than the pastern, so the foot reads as a foot on a leg.
+            [0.93, 0.058, 0.046, 0.042],
+            [1.0, 0.066, 0.044, 0.03],
           ]
         : [
             // the thigh's mass hangs behind the femur; ahead of it the flank
@@ -474,8 +483,8 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
             [0.56, 0.076, 0.086, 0.088],
             [0.66, 0.064, 0.064, 0.094], // hock: the point of the hock stands out behind
             [0.78, 0.058, 0.057, 0.06],
-            [0.9, 0.066, 0.047, 0.044],
-            [1.0, 0.08, 0.044, 0.03],
+            [0.9, 0.056, 0.046, 0.042],
+            [1.0, 0.064, 0.044, 0.03],
           ];
       const [rx, ryF, ryB] = table(rows, Math.max(0, f));
       // the paw end tracks the pad's width (see addPaw), the limb the leg factor
@@ -519,31 +528,34 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
 
   // --- mane ------------------------------------------------------------------
   if (K.mane && maneShells > 0) {
-    // the mane runs from the withers to the back of the skull and the cheeks;
-    // the face itself is bare, so the loft stops at the head joint with its
-    // top tucked under the crown and its bottom still deep for the throat ruff
-    const neckNames = ['chest', 'neck1', 'neck2', 'head'];
-    // the last station reaches the cheeks, below and behind the eyes, so the
-    // ruff frames the face at the jaw angle the way it does on a real male
-    const mPts = [P('spine2').clone().add(new THREE.Vector3(0, 0, 0.1 * s)), ...neckNames.map((n) => P(n).clone()), P('head').clone().add(new THREE.Vector3(0, -0.01 * s, 0.13 * s))];
+    // The mane runs from the withers, over the shoulders and up the neck, and
+    // ends at the back of the skull: the face and cheeks are the head's (its
+    // card ruff frames the face). The last station sits inside the skull and
+    // the first inside the trunk, so no open end of the base or of a shell is
+    // ever in view.
+    const neckNames = ['chest', 'neck1', 'neck2'];
+    const mPts = [P('spine2').clone(), ...neckNames.map((n) => P(n).clone()), P('head').clone().add(new THREE.Vector3(0, 0, -0.02 * s))];
     const mane = chainCurve(mPts);
     const mArcs = [0, ...mane.arcs.slice(1, -1), mane.total];
     const mBones = [idx('spine2'), idx('chest'), idx('neck1'), idx('neck2'), idx('head')];
     const mBoneOf = (d) => chainWeights(mArcs, d, 0.1 * s).map((x, i) => [mBones[i], x]);
-    const ml = mane.total / s;
+    const mArcAt = (i, f = 0) => THREE.MathUtils.lerp(mane.arcs[i], mane.arcs[Math.min(i + 1, mane.arcs.length - 1)], f);
+    // The base is the skin of the mane: it hugs the trunk and the neck a few
+    // centimetres out (inside the trunk over the withers and under the
+    // brisket, inside the skull at the end). The shells carry the volume.
     const mProfile = (d) => {
-      const dd = d / s;
       const [rx, ryTop, ryBot, drop] = table(
         [
-          [0.0, 0.15, 0.05, 0.22, 0.1],
-          [0.12, 0.28, 0.13, 0.4, 0.1],
-          [0.3, 0.31, 0.19, 0.42, 0.08],
-          [0.5, 0.29, 0.2, 0.36, 0.06],
-          [0.68, 0.25, 0.18, 0.3, 0.03],
-          [ml * 0.86, 0.2, 0.14, 0.26, 0.0],
-          [ml, 0.15, 0.085, 0.2, 0.0],
+          [mArcAt(0), 0.14, 0.04, 0.2, 0.08],
+          [mArcAt(0, 0.5), 0.27, 0.115, 0.44, 0.06], // withers: the base breaks the surface of the back here
+          [mArcAt(1), 0.3, 0.13, 0.47, 0.05], // chest: the widest, the throat ruff deepest
+          [mArcAt(1, 0.5), 0.26, 0.12, 0.44, 0.04],
+          [mArcAt(2), 0.21, 0.11, 0.41, 0.03], // neck1
+          [mArcAt(2, 0.5), 0.175, 0.098, 0.33, 0.02],
+          [mArcAt(3), 0.14, 0.085, 0.24, 0.012], // neck2: on the neck, just outside the coat
+          [mArcAt(4), 0.09, 0.06, 0.12, 0.0], // inside the back of the skull
         ],
-        dd,
+        d,
       );
       return { rx: rx * s, ryTop: ryTop * s, ryBot: ryBot * s, drop: drop * s };
     };
@@ -553,22 +565,39 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
     const stations = chainStations(mane, count, mProfile, mBoneOf, { vFn: (f) => f * 1.6 });
     base.loft(stations, around, { uvRect: [0, 0, 1, 1], capStart: true, colorFn: () => [0.55, 0.5, 0.45] });
     out.mane = base.build();
-    const shells = new SkinBuilder();
+    // the crown of the neck carries short hair: the hair stands out furthest
+    // under the throat and on the sides, least along the top
+    const top = (u) => Math.max(0, Math.sin(u * Math.PI * 2 - Math.PI / 2));
+    // shell stand-off along the chain: nothing inside the trunk at the start,
+    // full from the withers to the middle of the neck, and tapering to zero
+    // over the front third so the shells lie on the back of the skull
+    // (the last fifth is steep, so from the front the mane is a disc of hair
+    // behind the head and not a cone of edge-on shells); heaviest over the
+    // withers and the chest, where the hair stands out half again as far
+    const standOff = (f, u) => smoothstep(0.0, 0.3, f) * smoothstep(1.0, 0.8, f) * (1 + (0.3 + 0.3 * top(u)) * smoothstep(0.15, 0.32, f) * smoothstep(0.68, 0.5, f));
+    // hair length (the vertex alpha the shells are alpha-tested through):
+    // fades in over the shoulders so the mane's rear edge feathers into the
+    // coat, out toward the skull so a shell's rim never carries hair, and
+    // shortens over the crown of the neck toward the skull
+    const long = (f, u) => smoothstep(0.04, 0.34, f) * smoothstep(1.0, 0.78, f) * (1 - 0.55 * top(u) * smoothstep(0.4, 1.0, f));
+    const shells = new SkinBuilder({ alpha: true });
     const n = maneShells;
     for (let i = 1; i <= n; i++) {
-      const h = i / n;
+      // the alpha threshold sits half a step inside the stand-off, so a tier
+      // with one or two shells still carries hair on them
+      const h = (i - 0.5) / n;
+      const o = i / n;
       const st = chainStations(mane, count, mProfile, mBoneOf, { vFn: (f) => f * 1.6 });
-      // strands get longer toward the throat and shoulders, shorter behind the ears
+      // the hair darkens outward and under the throat: a mane is dark at its
+      // tips and blackest on the chest, tawny only along the crown
+      const shade = lerp(0.85, 0.5, o);
       shells.loft(st, around, {
         uvRect: [0, 0, 1, 1],
-        offset: h * maneLength * s,
         tag: h,
+        offsetFn: (p, u, s2) => o * maneLength * s * standOff(s2.f, u) * (1 - 0.4 * top(u)),
         colorFn: (p, u, s2) => {
-          // strands shorten toward the face, and the crown over the skull is
-          // short hair, not a mane
-          const top = Math.max(0, Math.sin(u * Math.PI * 2 - Math.PI / 2));
-          const long = lerp(0.35, 1.0, smoothstep(0.0, 0.22, s2.f)) * lerp(1.0, 0.45, smoothstep(0.55, 1.0, s2.f)) * lerp(1.0, 0.5, top * smoothstep(0.7, 1.0, s2.f));
-          return [long, long, long];
+          const k = shade * (1 - 0.3 * (1 - top(u)) * smoothstep(0.75, 0.2, s2.f));
+          return [k, k * 0.96, k * 0.9, long(s2.f, u)];
         },
       });
     }
@@ -620,28 +649,33 @@ function addPaw(b, skel, leg, K, D) {
   // The paw bone pitches 14 degrees toward the toes, so the pad's lowest point is
   // not its -z extreme: with the pad centred here its underside just kisses the
   // contact point, and the toes further along the bone are raised to match.
+  // The pad tile is split: its left half wraps the pad (leather on the sole,
+  // fur over the top of the foot), its right half wraps each toe (a dark
+  // crease down either side where it meets its neighbour, leather under it,
+  // the dark sheath of the claw at its tip). Sphere u runs round from -x: the
+  // sole is at u = 0.25, the top at 0.75; v = 1 is the front pole.
   b.addGeometry(padGeo, {
-    matrix: local(0, 0.056 * s, 0.0125 * s, null, new THREE.Vector3(0.076 * w * pw, 0.07 * s, 0.019 * s)),
+    matrix: local(0, 0.056 * s, 0.0125 * s, null, new THREE.Vector3(0.08 * w * pw, 0.07 * s, 0.019 * s)),
     uvRect: ATLAS.pad,
+    uvFn: (u, v) => [u * 0.5, v],
     bones,
-    color: [0.9, 0.86, 0.82],
   });
   if (!D.toes) return;
   const toeGeo = new THREE.SphereGeometry(1, D.sphere[0] * 0.5 | 0 || 6, D.sphere[1] * 0.5 | 0 || 4);
   const clawGeo = D.claws ? new THREE.CylinderGeometry(0.0, 0.0065 * s, 0.026 * s, 6) : null;
-  // four toes, the middle pair leading, each a lump the size of a walnut
-  const xs = [-0.057, -0.019, 0.019, 0.057];
+  // four toes, the middle pair leading, each its own lobe: the lobes just
+  // touch, so the crease between them is a real groove and not a painted one
+  const xs = [-0.063, -0.021, 0.021, 0.063];
   for (let i = 0; i < 4; i++) {
     const x = xs[i] * w * pw;
     const outer = Math.abs(xs[i]) > 0.03;
     const y = L4 * 0.9 - (outer ? 0.016 * s : 0);
     const spread = xs[i] * 3.0;
     b.addGeometry(toeGeo, {
-      matrix: local(x, y, -0.002 * s, [0, 0, -spread * 0.4], new THREE.Vector3(0.025 * w, 0.042 * s, 0.03 * s)),
-      uvRect: ATLAS.leg,
-      uvFn: (u, v) => [0.2 + u * 0.1, 0.05 + v * 0.1],
+      matrix: local(x, y, -0.003 * s, [0, 0, -spread * 0.4], new THREE.Vector3(0.022 * w, 0.044 * s, 0.029 * s)),
+      uvRect: ATLAS.pad,
+      uvFn: (u, v) => [0.5 + u * 0.5, v],
       bones,
-      color: [0.82, 0.78, 0.74],
     });
     if (clawGeo) {
       b.addGeometry(clawGeo, {
@@ -666,10 +700,9 @@ function addPaw(b, skel, leg, K, D) {
     const dy = wr.len - 0.065 * s;
     b.addGeometry(toeGeo, {
       matrix: wlocal(dx, dy, -0.004 * s, [0, 0, inner * 0.5], new THREE.Vector3(0.018 * w, 0.03 * s, 0.022 * s)),
-      uvRect: ATLAS.leg,
-      uvFn: (u, v) => [0.2 + u * 0.1, 0.05 + v * 0.1],
+      uvRect: ATLAS.pad,
+      uvFn: (u, v) => [0.5 + u * 0.5, v],
       bones: [[wristIdx, 1]],
-      color: [0.82, 0.78, 0.74],
     });
     if (clawGeo) {
       b.addGeometry(clawGeo, {

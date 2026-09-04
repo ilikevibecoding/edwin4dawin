@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { EYE, KINDS } from './spec.js';
+import { EYE, EYE_LIDS, KINDS } from './spec.js';
 import { buildSkeleton } from './rig.js';
 import { buildLionGeometry, DETAIL, SkinBuilder } from './geometry.js';
 import { alphaAtlas, coatAtlas, coatNormal, farCard, fuzzStrands, maneStrands, ATLAS } from './textures.js';
@@ -108,8 +108,14 @@ export function lionMaterials({ env, quality }) {
   const coat = make(false);
   const coatCub = make(true);
 
+  // 512 at fast too: at 256 the four shells resolve each strand as one bright
+  // stroke and the mane reads as a straw broom from the front (round 3). One
+  // 1 MB texture shared by the base and the shells; not larger at high, because
+  // the map is rasterised hair by hair and its cost grows with the cube of the
+  // size.
+  const maneMap = maneStrands(512);
   const mane = new THREE.MeshStandardMaterial({
-    map: maneStrands(quality === 'fast' ? 256 : 512),
+    map: maneMap,
     roughness: 0.92,
     metalness: 0,
     envMap: env,
@@ -119,7 +125,7 @@ export function lionMaterials({ env, quality }) {
   });
   const maneShell = shellMaterial(
     new THREE.MeshStandardMaterial({
-      map: maneStrands(quality === 'fast' ? 256 : 512),
+      map: maneMap,
       roughness: 0.9,
       metalness: 0,
       envMap: env,
@@ -290,7 +296,9 @@ export class Lion {
   corneaGeometry(t) {
     const b = new SkinBuilder();
     const headIdx = this.skel.index.get('head');
-    const r = EYE.r * this.s * this.K.head * 1.03;
+    // the ball head.js builds is EYE.r scaled by EYE_LIDS.scale; the cornea has
+    // to sit just outside it or the wet highlight is inside the eye
+    const r = EYE.r * EYE_LIDS.scale * this.s * this.K.head * 1.03;
     for (const side of ['lidL', 'lidR']) {
       const lr = this.skel.rest.get(side);
       const g = new THREE.SphereGeometry(r, DETAIL[t].sphere[0], DETAIL[t].sphere[1]);

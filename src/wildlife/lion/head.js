@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { EYE, EYE_LIDS, HEAD_JOINTS, HEAD_KINDS, KINDS } from './spec.js';
+import { EYE, EYE_LIDS, HEAD_KINDS, KINDS } from './spec.js';
 import { ATLAS } from './textures.js';
-import { FACE, HEAD_ROWS, HEAD_SPLIT, HEAD_Z0, HEAD_Z1, JAW_ROWS, headBump, rowsAt, topTaper } from './headspec.js';
+import { FACE, HEAD_ROWS, HEAD_SPLIT, HEAD_Z0, HEAD_Z1, JAW_ROWS, almondOpen, headBump, rowsAt, topTaper } from './headspec.js';
 import { clamp, lerp, mulberry32, smoothstep } from '../../textures/core.js';
 
 // ---------------------------------------------------------------------------
@@ -26,39 +26,30 @@ const _n = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _m = new THREE.Matrix4();
 const Y = new THREE.Vector3(0, 1, 0);
-const EYE_R = EYE.r;
-const LID_UP = EYE.lidUp;
+// a lion's eye is large for its head: the ball, lids and socket are EYE.r
+// scaled up (EYE_LIDS.scale); the lid angles and the blink are unchanged
+const EYE_R = EYE.r * EYE_LIDS.scale;
+const LID_UP = EYE_LIDS.up ?? EYE.lidUp;
 const LID_DOWN = EYE_LIDS.down;
 
 /**
  * Eye socket carved into the head loft, head metres from the eye centre: skin
  * nearer than `r` (a millimetre over the lids, so the two never fight; the
- * ball is EYE.r, the lids 1.09 of it) is laid onto that sphere, so the lids
+ * ball is EYE_R, the lids 1.09 of it) is laid onto that sphere, so the lids
  * are under the skin and show only as rims around the almond, where the
  * surface dips to `floorR`, inside the ball, and the iris shows; the dip fades
  * out between `floor` and `rim`.
  */
-const SOCKET = { r: 0.0225, floor: 0.026, rim: 0.04, floorR: 0.012 };
-
+const SOCKET = { r: EYE_R * 1.04, floor: EYE_R * 1.33, rim: EYE_R * 2.05, floorR: EYE_R * 0.6, soft: 0.2, lidZone: [EYE_R * 1.36, EYE_R * 1.24] };
 /**
- * The right eye's gaze in head space (forward +z, up +y), from the lid joint's
- * direction in spec.js, and the up vector square to it; the left is mirrored.
+ * The lid caps' radius over the ball: a millimetre and a half outside the
+ * socket skin and two over the ball, so the lids hug the eye instead of
+ * standing off it as a visor with a shadowed gap under the rim.
  */
-const GAZE = (() => {
-  const g = new THREE.Vector3(...HEAD_JOINTS.lidL.dir).normalize();
-  const u = new THREE.Vector3(0, 1, 0).addScaledVector(g, -g.y).normalize();
-  const l = new THREE.Vector3().crossVectors(g, u).normalize();
-  // outward normals of the two lid-rim planes (each holds the lateral axis):
-  // a direction's angle off the upper one is positive under the upper lid,
-  // off the lower one positive under the lower lid
-  const rim = (pitch) => {
-    const r = g.clone().multiplyScalar(Math.cos(pitch)).addScaledVector(u, Math.sin(pitch));
-    const n = new THREE.Vector3().crossVectors(l, r).normalize();
-    if (n.dot(u) * Math.sign(pitch) < 0) n.negate();
-    return [n.x, n.y, n.z];
-  };
-  return { g: [g.x, g.y, g.z], u: [u.x, u.y, u.z], l: [l.x, l.y, l.z], up: rim(LID_UP), down: rim(-LID_DOWN) };
-})();
+const LID_R = 1.1;
+
+/** Head UVs stop this far (fraction of a tile) inside the atlas tile's edges. */
+const UV_INSET = 0.006;
 
 /** Alpha atlas columns (see textures.js alphaAtlas): tuft, two mane cards, the whisker. */
 const STRANDS = {
@@ -121,7 +112,7 @@ export function addHead(b, alpha, skel, K, D) {
     const split = zs.findIndex((z) => z > HEAD_SPLIT);
     zs.splice(split, 0, HEAD_SPLIT, HEAD_SPLIT);
     const ringAt = (z, region) => {
-      const [cy, rx, ryTop, ryBot, n, taper] = rowsAt(HEAD_ROWS, z);
+      const [cy, rx, ryTop, ryBot, n, taper, bot = 0] = rowsAt(HEAD_ROWS, z);
       const e = 2 / n;
       const ring = [];
       for (let k = 0; k <= around; k++) {
@@ -131,7 +122,7 @@ export function addHead(b, alpha, skel, K, D) {
         const ca = Math.sin(a);
         const sa = -Math.cos(a);
         const ry = sa >= 0 ? ryTop : ryBot;
-        const tp = topTaper(sa, taper);
+        const tp = topTaper(sa, taper, bot);
         const px = rx * Math.sign(ca) * Math.pow(Math.abs(ca), e) * tp;
         const py = cy + ry * Math.sign(sa) * Math.pow(Math.abs(sa), e);
         // outward normal of the underlying ellipse, for the sculpt (the taper
@@ -162,14 +153,19 @@ export function addHead(b, alpha, skel, K, D) {
           // which both hold the eye's lateral axis) the surface dips well
           // inside the ball, so what shows there is the iris.
           const id = 1 / Math.max(de, 1e-4);
-          const dg = (dx * GAZE.g[0] + dy * GAZE.g[1] + dz * GAZE.g[2]) * id;
-          const aUp = Math.asin(clamp((dx * GAZE.up[0] + dy * GAZE.up[1] + dz * GAZE.up[2]) * id, -1, 1));
-          const aDn = Math.asin(clamp((dx * GAZE.down[0] + dy * GAZE.down[1] + dz * GAZE.down[2]) * id, -1, 1));
-          // the almond pinches to its corners well short of the lateral axis:
-          // the skin keeps the ball covered beyond about 40 degrees to the side
-          const aL = Math.abs(Math.asin(clamp((dx * GAZE.l[0] + dy * GAZE.l[1] + dz * GAZE.l[2]) * id, -1, 1)));
-          const open = dg > 0 ? smoothstep(0.03, -0.2, aUp) * smoothstep(0.03, -0.2, aDn) * smoothstep(0.85, 0.55, aL) : 0;
-          const k = lerp(Math.max(de, SOCKET.r), SOCKET.floorR, open * w) * id;
+          // the skin's opening is a little larger than the lids' (0.1 rad past
+          // the rim planes) and closes over the next `soft` radians, so the
+          // step where it turns in toward the ball lies under the lid caps
+          // and the smooth rims of the lids draw the almond, not the facets
+          const open = almondOpen(dx, dy, dz, SOCKET.soft, 0.1);
+          // and skin just outside the lids (within lidZone of the centre) is
+          // drawn in onto the socket sphere too, so the lid caps stand a clean
+          // millimetre proud of it; the skin climbs back to the skull over a
+          // short band, a fold where the lid meets the face, so the caps'
+          // edges under it are a crisp line and not a saw of facets
+          const draw = smoothstep(SOCKET.lidZone[0], SOCKET.lidZone[1], de);
+          const r0 = lerp(Math.max(de, SOCKET.r), SOCKET.r, draw);
+          const k = lerp(r0, SOCKET.floorR, open * w) * id;
           hx = sx * (ex + dx * k);
           hy = ey + dy * k;
           hz = ez + dz * k;
@@ -181,7 +177,10 @@ export function addHead(b, alpha, skel, K, D) {
         // muzzle region: around across u, toward the nose up v
         const tu = region === 'skull' ? (z - HEAD_Z0) / (HEAD_SPLIT - HEAD_Z0) : um;
         const tv = region === 'skull' ? um : (z - HEAD_SPLIT) / (HEAD_Z1 - HEAD_SPLIT);
-        ring.push(b.vertex(_a, [uv[0] + (uv[2] - uv[0]) * clamp(tu), uv[1] + (uv[3] - uv[1]) * clamp(tv)], headBones, [1, 1, 1], 0));
+        // a few texels in from the region's edge, so bilinear and mip sampling
+        // never pull the neighbouring tile's colour onto the seams (the mirror
+        // seam along the crown and under the lip, and the ring at the split)
+        ring.push(b.vertex(_a, [uv[0] + (uv[2] - uv[0]) * clamp(tu, UV_INSET, 1 - UV_INSET), uv[1] + (uv[3] - uv[1]) * clamp(tv, UV_INSET, 1 - UV_INSET)], headBones, [1, 1, 1], 0));
       }
       return ring;
     };
@@ -202,7 +201,13 @@ export function addHead(b, alpha, skel, K, D) {
       const [cy] = rowsAt(HEAD_ROWS, z);
       _a.set(0, cy * s, zOf(z) * s).applyMatrix4(headFrame);
       const uv = region === 'skull' ? ATLAS.skull : ATLAS.muzzle;
-      const centre = b.vertex(_a, region === 'skull' ? [uv[0], (uv[1] + uv[3]) / 2] : [(uv[0] + uv[2]) / 2, uv[3]], headBones, [1, 1, 1], 0);
+      const centre = b.vertex(
+        _a,
+        region === 'skull' ? [uv[0] + (uv[2] - uv[0]) * UV_INSET, (uv[1] + uv[3]) / 2] : [(uv[0] + uv[2]) / 2, uv[3] - (uv[3] - uv[1]) * UV_INSET],
+        headBones,
+        [1, 1, 1],
+        0,
+      );
       for (let k = 0; k < around; k++) {
         if (flip) b.tri(centre, ring[k + 1], ring[k]);
         else b.tri(centre, ring[k], ring[k + 1]);
@@ -280,25 +285,30 @@ export function addHead(b, alpha, skel, K, D) {
       const eye = D.lids ? new THREE.SphereGeometry(eyeR, ws, hs) : new THREE.SphereGeometry(eyeR, Math.max(8, Math.round(ws * 0.7)), Math.max(6, Math.round(hs * 0.7)));
       b.addGeometry(eye, { matrix: lf, uvRect: ATLAS.eye, bones: headBones, color: [1, 1, 1] });
       if (D.lids) {
-        // Each lid is a hemisphere a little larger than the ball, its rim a great
-        // circle through the eye's lateral axis. The upper one is pitched back
-        // so its edge sits LID_UP above the gaze, the lower one LID_DOWN below;
-        // what shows between two such rims is an almond that pinches to the
-        // corners, which is the shape of a cat's eye. Up is -Z in lid space.
-        const cap = (pitch, bones, rimSign) => {
-          const g = new THREE.SphereGeometry(eyeR * 1.09, ws, Math.max(6, hs * 0.6 | 0), 0, Math.PI * 2, 0, Math.PI * 0.5);
-          const vRim = 0.5;
+        // Each lid is a hemisphere over the ball and just outside the socket
+        // skin, its rim a great circle through the eye's lateral axis. The
+        // upper one is pitched back so its edge sits LID_UP above the gaze, the
+        // lower one LID_DOWN below; what shows between two such rims is an
+        // almond that pinches to the corners, which is the shape of a cat's
+        // eye. Away from the eye the skull surface is further out than the
+        // caps, so they sink under the skin. Up is -Z in lid space.
+        const cap = (pitch, bones, rimSign, half) => {
+          const g = new THREE.SphereGeometry(eyeR * LID_R, ws, Math.max(6, hs * 0.6 | 0), 0, Math.PI * 2, 0, Math.PI * 0.5);
           g.rotateX(rimSign * -Math.PI / 2);
           g.rotateX(pitch);
+          // a partial sphere's v runs over its own rings: 0 at the rim, 1 at
+          // the pole, which is the lid tile's layout (eyeline at v = 0); the
+          // upper lid reads the left half of the tile, the lower the right
+          // (the pale stroke under the eye)
           b.addGeometry(g, {
             matrix: lf,
             uvRect: ATLAS.lid,
-            uvFn: (u, v) => [u, clamp((v - vRim) / (1 - vRim))],
+            uvFn: (u, v) => [half * 0.5 + u * 0.5, clamp(v)],
             bones,
           });
         };
-        cap(-LID_UP, [[li, 1]], 1);
-        cap(LID_DOWN, headBones, -1);
+        cap(-LID_UP, [[li, 1]], 1, 0);
+        cap(LID_DOWN, headBones, -1, 1);
       }
     }
   }
@@ -311,12 +321,13 @@ export function addHead(b, alpha, skel, K, D) {
         const row = i % 4;
         const col = (i / 4) | 0;
         // rooted in four rows across the whisker pad, well above the lip
-        const baseP = new THREE.Vector3(sd * (wx + 0.006 + row * 0.003) * s, (wy + 0.03 - row * 0.012) * s, zOf(wz - 0.01 + col * 0.03) * s);
-        const len = (0.11 + (i % 2) * 0.03 + row * 0.01) * s;
-        // whiskers sweep out and back, the upper rows rising, the lowest level
-        const dir = new THREE.Vector3(sd * (0.75 + row * 0.1), 0.16 - row * 0.08 + col * 0.06, 0.35 - col * 0.25 - row * 0.05).normalize();
-        const sag = new THREE.Vector3(0, -0.1, 0);
-        strandQuad(alpha, headFrame, baseP, dir, len, 0.0026 * s, sag, headBones, 3);
+        const baseP = new THREE.Vector3(sd * (wx + 0.004 + row * 0.002) * s, (wy + 0.03 - row * 0.01) * s, zOf(wz - 0.01 + col * 0.03) * s);
+        const len = (0.1 + (i % 2) * 0.03 + row * 0.01) * s;
+        // whiskers sweep out and back from the pad, the upper rows a little
+        // up, the lower ones level and drooping toward the tip
+        const dir = new THREE.Vector3(sd * (0.85 + row * 0.05), 0.12 - row * 0.07 + col * 0.04, -0.1 - col * 0.2 + row * 0.03).normalize();
+        const sag = new THREE.Vector3(0, -0.05, 0);
+        strandQuad(alpha, headFrame, baseP, dir, len, 0.0012 * s, sag, headBones, 3);
       }
       // superciliary whiskers: three long hairs over each eye
       for (let i = 0; i < 3; i++) {
@@ -360,17 +371,18 @@ export function addHead(b, alpha, skel, K, D) {
 function addEar(b, frame, bones, s, D, sgn) {
   const around = Math.max(8, Math.round(D.around * 0.45));
   const rings = D.head >= 2 ? 5 : 3;
-  const H = 0.1 * s; // base to tip
-  const W = 0.08 * s; // across
-  // the ear leans out from its bone: tip the shape away from the skull
-  const lean = -sgn * 0.1;
+  const H = 0.112 * s; // base to tip: a lion's ear is a big rounded dish
+  const W = 0.092 * s; // across
+  // the bone already leans well out; a touch more so the tip stands clear
+  const lean = -sgn * 0.05;
   const cl = Math.cos(lean);
   const sl = Math.sin(lean);
-  // and the cup faces forward-and-out, not straight ahead
-  const yaw = sgn * 0.5;
+  // and the cup faces out as much as forward, so from the front the lining
+  // shows obliquely with the dark back along the outer rim
+  const yaw = sgn * 0.7;
   const cyw = Math.cos(yaw);
   const syw = Math.sin(yaw);
-  const depth = 0.026 * s;
+  const depth = 0.03 * s;
   const cy = H * 0.5;
   const surface = (inner) => {
     const grid = [];
@@ -384,8 +396,8 @@ function addEar(b, frame, bones, s, D, sgn) {
         // rim: an ellipse pinched toward the tip and widened at the base, so
         // the outline is a rounded triangle standing on its wide end
         const tipward = Math.max(0, sa);
-        const w = W * 0.5 * (1 - 0.34 * tipward * tipward) * (1 + 0.12 * Math.max(0, -sa));
-        const h = sa >= 0 ? H * 0.52 : H * 0.48;
+        const w = W * 0.5 * (1 - 0.22 * tipward * tipward) * (1 + 0.1 * Math.max(0, -sa));
+        const h = sa >= 0 ? H * 0.5 : H * 0.5;
         // the outer edge of the ear is the straighter one: flatten the lateral side
         const px0 = rho * w * ca * (ca * sgn > 0 ? 1.0 : 0.94);
         const py0 = cy + rho * h * sa;

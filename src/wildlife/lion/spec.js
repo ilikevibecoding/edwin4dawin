@@ -111,13 +111,15 @@ export const LEGS = [
 export const EYE = { r: 0.0195, lidUp: 0.46, lidDown: 0.46 };
 
 /**
- * The lower lid's rim below the gaze when the eye is open, read by head.js: a
- * little further down than EYE.lidDown so the almond opens to a lion's
- * proportion (about half the ball's height). The blink still turns the upper
- * lid through EYE.lidUp + EYE.lidDown, so at full shut a 0.08 rad sliver
- * (under 2 mm) sits between the rims, hidden by the lids' thickness.
+ * The lid rims above and below the gaze when the eye is open, read by head.js:
+ * wider than EYE.lidUp/lidDown so the almond shows a lion's share of the ball
+ * (a cat's opening is about 60 % of the ball's height, not a slit in a dark
+ * ring). pose.js closes the upper lid through up + down for the blink.
+ * `scale` enlarges the ball, lids and socket over EYE.r (a lion's eye is large
+ * for its head); index.js's cornea takes the same scale so the wet highlight
+ * sits on the ball rather than inside it.
  */
-export const EYE_LIDS = { down: 0.54 };
+export const EYE_LIDS = { up: 0.6, down: 0.6, scale: 1.35 };
 
 /**
  * Head-child joints re-placed for the head in head.js, laid out like JOINTS
@@ -126,13 +128,17 @@ export const EYE_LIDS = { down: 0.54 };
  * more forward.
  */
 export const HEAD_JOINTS = {
-  earL: { pos: [0.088, 1.288, 0.925], dir: [0.6, 1, -0.25] },
-  earR: { pos: [-0.088, 1.288, 0.925], dir: [-0.6, 1, -0.25] },
-  // eyes set out on the face (the ball's centre 14 mm under the skin along its
-  // gaze) so the cornea stands proud between brow and cheek, forward-facing
-  // with about 24 degrees of divergence; headspec.js FACE.eye is this offset
-  lidL: { pos: [0.058, 1.26, 1.075], dir: [0.4, 0.12, 1] },
-  lidR: { pos: [-0.058, 1.26, 1.075], dir: [-0.4, 0.12, 1] },
+  // ears on the sides of the skull at brow level, over the zygomatic arch (a
+  // hand behind the eye, not on the occiput), leaning well out, so from the
+  // front they stand beyond the skull's outline
+  earL: { pos: [0.094, 1.284, 0.98], dir: [0.75, 1.0, -0.3] },
+  earR: { pos: [-0.094, 1.284, 0.98], dir: [-0.75, 1.0, -0.3] },
+  // eyes close set on the face, the ball's centre a radius under the skin
+  // along its gaze so the cornea stands just proud between brow and cheek,
+  // forward-facing with about 20 degrees of divergence; headspec.js FACE.eye
+  // is this offset
+  lidL: { pos: [0.05, 1.256, 1.085], dir: [0.34, 0.1, 1] },
+  lidR: { pos: [-0.05, 1.256, 1.085], dir: [-0.34, 0.1, 1] },
 };
 
 /**
