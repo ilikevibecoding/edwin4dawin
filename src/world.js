@@ -4,6 +4,19 @@ import { B, BLOCKS } from './blocks.js';
 
 export const idx = (lx, y, lz) => (lx * CS + lz) * CH + y;
 
+// Block property lookup tables for the lighting hot paths (BLOCKS is filled at startup by initBlocks(),
+// so the tables are refreshed on entry to the lighting routines; 256 entries, negligible).
+const OPQ = new Uint8Array(256), LOP = new Uint8Array(256), EMIT = new Uint8Array(256);
+function refreshTables() {
+  for (let i = 0; i < 256; i++) {
+    const b = BLOCKS[i];
+    if (b) { OPQ[i] = b.opaque ? 1 : 0; LOP[i] = b.lightOpacity; EMIT[i] = b.emit; }
+    else { OPQ[i] = 0; LOP[i] = 0; EMIT[i] = 0; }
+  }
+}
+const DX = new Int8Array(6), DY = new Int8Array(6), DZ = new Int8Array(6);
+for (let d = 0; d < 6; d++) { DX[d] = DIRS[d][0]; DY[d] = DIRS[d][1]; DZ[d] = DIRS[d][2]; }
+
 export class Chunk {
   constructor(cx, cz) {
     this.cx = cx;
@@ -55,6 +68,9 @@ export class World {
     this.removeQueue = new Queue();
     this.signTiles = new Map(); // packed pos -> atlas tile index for sign text
     this.onChunkDirty = null;
+    // lightChunk scratch: per-column top of the non-daylight part, and emitter cell indices
+    this._colTop = new Int16Array(CS * CS);
+    this._emitters = new Int32Array(CS * CS * CH);
   }
 
   static key(cx, cz) { return cx * 100000 + cz; }
@@ -172,6 +188,7 @@ export class World {
   }
 
   updateLight(x, y, z, oldId, newId) {
+    refreshTables();
     const oldB = BLOCKS[oldId], newB = BLOCKS[newId];
     for (let ch = 0; ch < 2; ch++) {
       const c = this.chunkAt(x, z);
@@ -186,7 +203,7 @@ export class World {
         this.runRemoval(ch);
       }
       if (!newB.opaque) {
-        for (let d = 0; d < 6; d++) this.addQueue.push(x + DIRS[d][0], y + DIRS[d][1], z + DIRS[d][2]);
+        for (let d = 0; d < 6; d++) this.addQueue.push(x + DX[d], y + DY[d], z + DZ[d]);
         if (ch === 1 && newB.emit > arr[i]) { arr[i] = newB.emit; this.addQueue.push(x, y, z); }
       }
       this.propagate(ch);
@@ -195,23 +212,23 @@ export class World {
 
   runRemoval(ch) {
     const q = this.removeQueue, aq = this.addQueue;
-    while (!q.empty) {
+    while (q.head < q.tail) {
       const a = q.a, h = q.head;
       const x = a[h], y = a[h + 1], z = a[h + 2], L = a[h + 3];
       q.head = h + 4;
       for (let d = 0; d < 6; d++) {
-        const nx = x + DIRS[d][0], ny = y + DIRS[d][1], nz = z + DIRS[d][2];
+        const nx = x + DX[d], ny = y + DY[d], nz = z + DZ[d];
         if (ny < 0 || ny >= CH) continue;
         const nc = this.chunkAt(nx, nz);
         if (!nc || !nc.lit) continue;
         const ni = ((nx & 15) * CS + (nz & 15)) * CH + ny;
-        const nb = BLOCKS[nc.blocks[ni]];
-        if (nb.opaque) continue;
+        const nid = nc.blocks[ni];
+        if (OPQ[nid]) continue;
         const narr = ch === 0 ? nc.sky : nc.light;
         const nv = narr[ni];
         if (nv === 0) continue;
-        let pv = L - 1 - nb.lightOpacity;
-        if (ch === 0 && d === 3 && L === 15 && nb.lightOpacity === 0) pv = 15;
+        let pv = L - 1 - LOP[nid];
+        if (ch === 0 && d === 3 && L === 15 && LOP[nid] === 0) pv = 15;
         if (nv <= pv) {
           narr[ni] = 0;
           q.push(nx, ny, nz, nv);
@@ -225,31 +242,33 @@ export class World {
 
   propagate(ch) {
     const q = this.addQueue;
+    const chunks = this.chunks;
     let lastC = null, lastKey = null;
-    while (!q.empty) {
+    while (q.head < q.tail) {
       const a = q.a, h = q.head;
       const x = a[h], y = a[h + 1], z = a[h + 2];
       q.head = h + 4;
       if (y < 0 || y >= CH) continue;
-      const cx = Math.floor(x / CS), cz = Math.floor(z / CS);
+      const cx = x >> 4, cz = z >> 4;
       const key = World.key(cx, cz);
       let c;
-      if (key === lastKey) c = lastC; else { c = this.chunks.get(key); lastC = c; lastKey = key; }
+      if (key === lastKey) c = lastC; else { c = chunks.get(key); lastC = c; lastKey = key; }
       if (!c || !c.lit) continue;
       const i = ((x & 15) * CS + (z & 15)) * CH + y;
       const arr = ch === 0 ? c.sky : c.light;
       const L = arr[i];
       if (L <= 1) continue;
       for (let d = 0; d < 6; d++) {
-        const nx = x + DIRS[d][0], ny = y + DIRS[d][1], nz = z + DIRS[d][2];
+        const nx = x + DX[d], ny = y + DY[d], nz = z + DZ[d];
         if (ny < 0 || ny >= CH) continue;
         let nc = c;
-        if ((nx >> 4) !== cx || (nz >> 4) !== cz) { nc = this.chunkAt(nx, nz); if (!nc || !nc.lit) continue; }
+        const ncx = nx >> 4, ncz = nz >> 4;
+        if (ncx !== cx || ncz !== cz) { nc = chunks.get(World.key(ncx, ncz)); if (!nc || !nc.lit) continue; }
         const ni = ((nx & 15) * CS + (nz & 15)) * CH + ny;
-        const nb = BLOCKS[nc.blocks[ni]];
-        if (nb.opaque) continue;
-        let nl = L - 1 - nb.lightOpacity;
-        if (ch === 0 && d === 3 && L === 15 && nb.lightOpacity === 0) nl = 15;
+        const nid = nc.blocks[ni];
+        if (OPQ[nid]) continue;
+        let nl = L - 1 - LOP[nid];
+        if (ch === 0 && d === 3 && L === 15 && LOP[nid] === 0) nl = 15;
         if (nl <= 0) continue;
         const narr = ch === 0 ? nc.sky : nc.light;
         if (narr[ni] < nl) {
@@ -262,44 +281,81 @@ export class World {
     }
   }
 
+  _litChunk(cx, cz) {
+    const c = this.chunks.get(World.key(cx, cz));
+    return c && c.lit ? c : null;
+  }
+
+  // Highest y of a lit column whose sky value is below full daylight (-1 when the whole column is 15).
+  _colTopOf(sky, base) {
+    let y = CH - 1;
+    while (y >= 0 && sky[base + y] === 15) y--;
+    return y;
+  }
+
   // Initial lighting for a freshly generated chunk.
   lightChunk(c) {
+    refreshTables();
     const blocks = c.blocks, sky = c.sky, light = c.light;
     sky.fill(0);
     light.fill(0);
     const wx0 = c.cx * CS, wz0 = c.cz * CS;
-    // vertical sky light scan
+    const tops = this._colTop, emitters = this._emitters;
+    let nEmit = 0;
+    // vertical sky light scan; the pure-air top of each column is full daylight without further checks
     for (let lx = 0; lx < CS; lx++) for (let lz = 0; lz < CS; lz++) {
       const base = (lx * CS + lz) * CH;
-      let L = 15;
-      for (let y = CH - 1; y >= 0; y--) {
-        const b = BLOCKS[blocks[base + y]];
-        if (b.opaque) { L = 0; }
-        else if (L === 15 && b.lightOpacity === 0) { /* full sun */ }
-        else L = Math.max(0, L - 1 - b.lightOpacity);
+      let y = CH - 1;
+      while (y >= 0 && blocks[base + y] === B.AIR) y--;
+      sky.fill(15, base + y + 1, base + CH);
+      let L = 15, top = -1;
+      for (; y >= 0; y--) {
+        const id = blocks[base + y];
+        if (OPQ[id]) { L = 0; }
+        else if (L === 15 && LOP[id] === 0) { /* full sun */ }
+        else { L = L - 1 - LOP[id]; if (L < 0) L = 0; }
         sky[base + y] = L;
-        if (L === 0) { /* remaining cells below are 0 unless BFS lights them */ }
-        if (b.emit > 0) light[base + y] = b.emit;
+        if (top < 0 && L < 15) top = y;
+        const e = EMIT[id];
+        if (e > 0) { light[base + y] = e; emitters[nEmit++] = base + y; }
       }
+      tops[lx * CS + lz] = top;
     }
     c.lit = true;
 
-    // seeds: sky cells adjacent to darker non-opaque cells
+    // Seeds: sky cells that can raise a darker non-opaque horizontal neighbour, in this chunk or in an
+    // already-lit neighbour chunk (a border cell facing an unlit or missing chunk cannot propagate anywhere;
+    // the neighbour seeds it when it gets lit). The cell below never qualifies: the vertical scan already
+    // gave it exactly the value propagation would. Above every involved column's top all cells are 15, so
+    // the scan stops there.
+    const nW = this._litChunk(c.cx - 1, c.cz), nE = this._litChunk(c.cx + 1, c.cz);
+    const nN = this._litChunk(c.cx, c.cz - 1), nS = this._litChunk(c.cx, c.cz + 1);
     const q = this.addQueue;
     q.reset();
     for (let lx = 0; lx < CS; lx++) for (let lz = 0; lz < CS; lz++) {
-      const base = (lx * CS + lz) * CH;
-      for (let y = 1; y < CH; y++) {
+      const col = lx * CS + lz, base = col * CH;
+      const cW = lx > 0 ? c : nW, bW = lx > 0 ? base - CS * CH : ((CS - 1) * CS + lz) * CH;
+      const cE = lx < CS - 1 ? c : nE, bE = lx < CS - 1 ? base + CS * CH : lz * CH;
+      const cN = lz > 0 ? c : nN, bN = lz > 0 ? base - CH : (lx * CS + CS - 1) * CH;
+      const cS = lz < CS - 1 ? c : nS, bS = lz < CS - 1 ? base + CH : lx * CS * CH;
+      const blW = cW ? cW.blocks : null, skW = cW ? cW.sky : null;
+      const blE = cE ? cE.blocks : null, skE = cE ? cE.sky : null;
+      const blN = cN ? cN.blocks : null, skN = cN ? cN.sky : null;
+      const blS = cS ? cS.blocks : null, skS = cS ? cS.sky : null;
+      let yMax = tops[col];
+      if (skW) { const t = lx > 0 ? tops[col - CS] : this._colTopOf(skW, bW); if (t > yMax) yMax = t; }
+      if (skE) { const t = lx < CS - 1 ? tops[col + CS] : this._colTopOf(skE, bE); if (t > yMax) yMax = t; }
+      if (skN) { const t = lz > 0 ? tops[col - 1] : this._colTopOf(skN, bN); if (t > yMax) yMax = t; }
+      if (skS) { const t = lz < CS - 1 ? tops[col + 1] : this._colTopOf(skS, bS); if (t > yMax) yMax = t; }
+      for (let y = 1; y <= yMax; y++) {
         const L = sky[base + y];
         if (L <= 1) continue;
-        // horizontal neighbours within chunk
+        const L1 = L - 1;
         let seed = false;
-        if (lx > 0) { const n = base - CS * CH + y; if (!BLOCKS[blocks[n]].opaque && sky[n] < L - 1) seed = true; }
-        if (!seed && lx < CS - 1) { const n = base + CS * CH + y; if (!BLOCKS[blocks[n]].opaque && sky[n] < L - 1) seed = true; }
-        if (!seed && lz > 0) { const n = base - CH + y; if (!BLOCKS[blocks[n]].opaque && sky[n] < L - 1) seed = true; }
-        if (!seed && lz < CS - 1) { const n = base + CH + y; if (!BLOCKS[blocks[n]].opaque && sky[n] < L - 1) seed = true; }
-        if (!seed && y > 0) { const n = base + y - 1; if (!BLOCKS[blocks[n]].opaque && sky[n] < L - 1) seed = true; }
-        if (!seed && (lx === 0 || lx === CS - 1 || lz === 0 || lz === CS - 1)) seed = true;
+        if (skW && skW[bW + y] < L1) { const n = bW + y, id = blW[n]; if (!OPQ[id] && skW[n] < L1 - LOP[id]) seed = true; }
+        if (!seed && skE && skE[bE + y] < L1) { const n = bE + y, id = blE[n]; if (!OPQ[id] && skE[n] < L1 - LOP[id]) seed = true; }
+        if (!seed && skN && skN[bN + y] < L1) { const n = bN + y, id = blN[n]; if (!OPQ[id] && skN[n] < L1 - LOP[id]) seed = true; }
+        if (!seed && skS && skS[bS + y] < L1) { const n = bS + y, id = blS[n]; if (!OPQ[id] && skS[n] < L1 - LOP[id]) seed = true; }
         if (seed) q.push(wx0 + lx, y, wz0 + lz);
       }
     }
@@ -307,28 +363,43 @@ export class World {
     this.seedFromNeighbors(c, 0);
     this.propagate(0);
 
+    // block light: this chunk's emitters plus neighbours' border light
     q.reset();
-    for (let lx = 0; lx < CS; lx++) for (let lz = 0; lz < CS; lz++) {
-      const base = (lx * CS + lz) * CH;
-      for (let y = 0; y < CH; y++) if (light[base + y] > 0) q.push(wx0 + lx, y, wz0 + lz);
+    for (let k = 0; k < nEmit; k++) {
+      const i = emitters[k];
+      const col = (i / CH) | 0;
+      q.push(wx0 + ((col / CS) | 0), i - col * CH, wz0 + (col % CS));
     }
     this.seedFromNeighbors(c, 1);
     this.propagate(1);
     c.dirty = true;
   }
 
+  // Queues the border cells of lit neighbours that can raise a darker cell of chunk c (channel ch).
   seedFromNeighbors(c, ch) {
     const q = this.addQueue;
-    const wx0 = c.cx * CS, wz0 = c.cz * CS;
-    const sides = [[c.cx - 1, c.cz, 15, -1], [c.cx + 1, c.cz, 0, -1], [c.cx, c.cz - 1, -1, 15], [c.cx, c.cz + 1, -1, 0]];
-    for (const [ncx, ncz, fx, fz] of sides) {
+    const cBlocks = c.blocks, cArr = ch === 0 ? c.sky : c.light;
+    for (let side = 0; side < 4; side++) {
+      // neighbour chunk and the fixed border coordinate on each side (-1 = runs along the border)
+      let ncx = c.cx, ncz = c.cz, nfx = -1, nfz = -1, cfx = -1, cfz = -1;
+      if (side === 0) { ncx--; nfx = CS - 1; cfx = 0; }
+      else if (side === 1) { ncx++; nfx = 0; cfx = CS - 1; }
+      else if (side === 2) { ncz--; nfz = CS - 1; cfz = 0; }
+      else { ncz++; nfz = 0; cfz = CS - 1; }
       const n = this.getChunk(ncx, ncz);
       if (!n || !n.lit) continue;
-      const arr = ch === 0 ? n.sky : n.light;
+      const nArr = ch === 0 ? n.sky : n.light;
       for (let k = 0; k < CS; k++) {
-        const lx = fx >= 0 ? fx : k, lz = fz >= 0 ? fz : k;
-        const base = (lx * CS + lz) * CH;
-        for (let y = 0; y < CH; y++) if (arr[base + y] > 1) q.push(ncx * CS + lx, y, ncz * CS + lz);
+        const nlx = nfx >= 0 ? nfx : k, nlz = nfz >= 0 ? nfz : k;
+        const clx = cfx >= 0 ? cfx : k, clz = cfz >= 0 ? cfz : k;
+        const nb = (nlx * CS + nlz) * CH, cb = (clx * CS + clz) * CH;
+        for (let y = 0; y < CH; y++) {
+          const nv = nArr[nb + y];
+          if (nv <= 1) continue;
+          const cid = cBlocks[cb + y];
+          if (OPQ[cid]) continue;
+          if (cArr[cb + y] < nv - 1 - LOP[cid]) q.push(ncx * CS + nlx, y, ncz * CS + nlz);
+        }
       }
     }
   }

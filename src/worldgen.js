@@ -142,6 +142,9 @@ export class WorldGen {
       if (info.rail > 0.999 && Math.abs(z - RAIL_Z) <= 1) { surface = B.GRAVEL; filler = B.GRAVEL; railHere = z === RAIL_Z; }
 
       blocks[base] = B.BEDROCK;
+      // ore / gravel hashes are constant over 2x2x2 and 4x4x4 cells: evaluate once per cell along the column
+      const hx1 = x >> 1, hz1 = z >> 1, hx2 = x >> 2, hz2 = z >> 2;
+      let oreY = -1, oreH = 0, gravY = -1, gravH = 0;
       for (let y = 1; y <= h; y++) {
         let id;
         if (y === h) id = surface;
@@ -149,12 +152,18 @@ export class WorldGen {
         else {
           id = B.STONE;
           // ores in 2x2x2 clusters
-          const hh = hash3(x >> 1, y >> 1, z >> 1, 31);
+          const y1 = y >> 1;
+          if (y1 !== oreY) { oreY = y1; oreH = hash3(hx1, y1, hz1, 31); }
+          const hh = oreH;
           if (hh < 0.018 && y < 110) id = B.COAL_ORE;
           else if (hh < 0.026 && y < 60) id = B.IRON_ORE;
           else if (hh < 0.0285 && y < 30) id = B.GOLD_ORE;
           else if (y < 5 && hash3(x, y, z, 5) < 0.5) id = B.BEDROCK;
-          else if (hash3(x >> 2, y >> 2, z >> 2, 41) < 0.05) id = B.GRAVEL;
+          else {
+            const y2 = y >> 2;
+            if (y2 !== gravY) { gravY = y2; gravH = hash3(hx2, y2, hz2, 41); }
+            if (gravH < 0.05) id = B.GRAVEL;
+          }
         }
         blocks[base + y] = id;
       }
@@ -162,13 +171,18 @@ export class WorldGen {
       const spawnD2 = (x - SPAWN.x) * (x - SPAWN.x) + (z - SPAWN.z) * (z - SPAWN.z);
       if (info.town < 0.6 && h > SEA_LEVEL + 1 && spawnD2 > 45 * 45) {
         const top = Math.min(h, CH - 2);
+        const cx1 = x * 0.042, cz1 = z * 0.042, cx2 = x * 0.042 + 77, cz2 = z * 0.042 - 77, cx3 = x * 0.021, cz3 = z * 0.021;
+        const nCave1 = this.nCave1, nCave2 = this.nCave2, nCavern = this.nCavern;
         for (let y = 6; y <= top; y++) {
-          const c1 = this.nCave1.noise3(x * 0.042, y * 0.085, z * 0.042);
-          const c2 = this.nCave2.noise3(x * 0.042 + 77, y * 0.085, z * 0.042 - 77);
           let thr = 0.0030;
           if (y > top - 5) thr = 0.0007; // rare cave mouths near the surface
-          if (c1 * c1 + c2 * c2 < thr) { blocks[base + y] = B.AIR; continue; }
-          if (y < 40 && this.nCavern.noise3(x * 0.021, y * 0.035, z * 0.021) > 0.66) blocks[base + y] = B.AIR;
+          // c1*c1 + c2*c2 < thr needs c1*c1 < thr, so the second noise is only evaluated when that holds
+          const c1 = nCave1.noise3(cx1, y * 0.085, cz1);
+          if (c1 * c1 < thr) {
+            const c2 = nCave2.noise3(cx2, y * 0.085, cz2);
+            if (c1 * c1 + c2 * c2 < thr) { blocks[base + y] = B.AIR; continue; }
+          }
+          if (y < 40 && nCavern.noise3(cx3, y * 0.035, cz3) > 0.66) blocks[base + y] = B.AIR;
         }
       }
       // water
