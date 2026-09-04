@@ -14,6 +14,8 @@ const SNAPSHOT_TTL_MS = 1000;
 const HIDE_DISTANCE = 120;
 const TAG_DISTANCE = 32;
 const STALE_MS = 2500;          // no snapshot for this long -> out of interest range, hide
+const TELEPORT_SPEED = 40;      // m/s horizontally between snapshots: faster than this is a teleport, not movement
+const TELEPORT_MIN_DT_MS = 50;
 
 function lerpAngle(a, b, t) {
   let d = b - a;
@@ -104,9 +106,16 @@ class RemotePlayer {
   push(s, t, now) {
     const q = this.snapshots;
     const last = q[q.length - 1];
-    // teleport: drop the history so we do not glide across the map
-    if (last && (Math.abs(last.x - s.x) > 12 || Math.abs(last.z - s.z) > 12 || Math.abs(last.y - s.y) > 12)) q.length = 0;
-    if (last && t <= last.t) { if (t < last.t) return; q.pop(); } // same server tick: keep the newest state
+    if (last && t < last.t) return;
+    if (last) {
+      // teleport (admin tools, respawn): far away, or moving horizontally faster than any legit movement ->
+      // drop the history so we snap instead of gliding, and restart the walk cycle
+      const dx = s.x - last.x, dz = s.z - last.z;
+      const dt = Math.max(TELEPORT_MIN_DT_MS, t - last.t);
+      if (Math.abs(dx) > 12 || Math.abs(dz) > 12 || Math.abs(s.y - last.y) > 12 || Math.hypot(dx, dz) * 1000 / dt > TELEPORT_SPEED) {
+        q.length = 0; this.speed = 0; this.lastPos = null;
+      } else if (t === last.t) q.pop(); // same server tick: keep the newest state
+    }
     q.push({ t, x: s.x, y: s.y, z: s.z, yaw: s.yaw || 0, pitch: s.pitch || 0 });
     while (q.length > 2 && t - q[0].t > SNAPSHOT_TTL_MS) q.shift();
     if (q.length > 20) q.shift();

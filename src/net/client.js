@@ -354,6 +354,7 @@ export class NetClient {
 
   _onTimer() {
     if (!this.connected) return;
+    this.stats.players = this.remote.activeCount(performance.now());
     this._advanceDisasters();
   }
 

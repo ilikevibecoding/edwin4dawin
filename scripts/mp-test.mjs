@@ -1,8 +1,9 @@
 // Multiplayer end-to-end test: starts server/index.mjs, launches headless clients through Vite and verifies
 // replication, permissions, synchronized disasters, late-join replay and traffic.
 //   node scripts/mp-test.mjs [--base http://localhost:5185] [--port 8765] [--idle 20]
-// By default a private Vite dev server with HMR disabled is spawned on port 5187 (so files saved while the
-// test runs cannot reload the test pages); pass --base to use an already running dev server instead.
+// By default a private Vite dev server with HMR disabled is spawned on a free port (so files saved while the
+// test runs cannot reload the test pages); pass --base to use an already running dev server instead. The game
+// server uses port 8765 when it is free, otherwise a free port (or --port).
 // Requires Chrome (see scripts/cdp.mjs).
 import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -94,9 +95,10 @@ try {
     client('A (admin)', `&admin=${ADMIN_TOKEN}&x=-8&z=2`),
     client('B', '&x=-4&z=2'),
   ]);
-  const both = await until(async () => { const [a, b] = await Promise.all([netState(A), netState(B)]); return a.connected && b.connected && a.players >= 1 && b.players >= 1 ? [a, b] : null; }, 30000, 250);
+  // connected, each knows about the other and has rendered at least one frame with the avatar
+  const both = await until(async () => { const [a, b] = await Promise.all([netState(A), netState(B)]); return a.connected && b.connected && a.players >= 1 && b.players >= 1 && a.visible >= 1 && b.visible >= 1 ? [a, b] : null; }, 30000, 250);
   if (!both) throw new Error('clients did not connect / see each other: ' + j(await Promise.all([netState(A), netState(B)])));
-  await sleep(1500); // let the avatars render a few frames
+  await sleep(1500); // let the avatars render a few more frames
   const [a1, b1] = await Promise.all([netState(A), netState(B)]);
   console.log(`A: ${j(a1)}\nB: ${j(b1)}`);
 
