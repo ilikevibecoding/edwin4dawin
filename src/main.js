@@ -238,14 +238,14 @@ VIEWS.bridgeAft = { x: 0, z: 474, y: 265, yaw: 180, pitch: -4, zone: "tower", ki
 VIEWS.hangarDeck = { x: -26, z: 465, y: -80, yaw: -70, pitch: 4, zone: "hangar", kind: "interior", planet: 0, planetOffset: 0, time: 40 };
 VIEWS.hangarWell = { x: -21.5, z: 500, y: -80, yaw: -35, pitch: -18, zone: "hangar", kind: "interior", planet: 1, planetOffset: 0, time: 40 };
 // exterior views (yaw: camera bearing around +Y measured from +Z, so ~2.2 is a forward-starboard quarter)
-VIEWS.ext_far = { kind: "exterior", target: [0, 40, 0], distance: 5200, yaw: 2.3, pitch: 0.22, planet: 0, planetOffset: 40, time: 40 };
-VIEWS.ext_mid = { kind: "exterior", target: [0, 60, 200], distance: 2300, yaw: 1.75, pitch: 0.3, planet: 1, planetOffset: 60, time: 40 };
+VIEWS.ext_far = { kind: "exterior", target: [0, 40, 0], distance: 3600, yaw: 2.3, pitch: 0.22, planet: 0, planetOffset: 40, time: 40 };
+VIEWS.ext_mid = { kind: "exterior", target: [0, 60, 200], distance: 1700, yaw: 1.75, pitch: 0.3, planet: 1, planetOffset: 60, time: 40 };
 VIEWS.ext_close = { kind: "exterior", target: [-200, 80, 300], distance: 320, yaw: 2.0, pitch: 0.35, planet: 0, planetOffset: 0, time: 40 };
 VIEWS.ext_tower = { kind: "exterior", target: [0, 260, 530], distance: 600, yaw: 2.6, pitch: 0.15, planet: 0, planetOffset: 0, time: 40 };
 VIEWS.ext_bridgeFace = { kind: "exterior", target: [0, 268, 470], distance: 140, yaw: Math.PI, pitch: 0.05, planet: 0, planetOffset: 0, time: 40 };
 VIEWS.ext_belly = { kind: "exterior", target: [0, -82, 465], distance: 600, yaw: 2.4, pitch: -0.75, planet: 1, planetOffset: 0, time: 40 };
-VIEWS.ext_stern = { kind: "exterior", target: [0, 20, 800], distance: 1300, yaw: 0.35, pitch: 0.15, planet: 0, planetOffset: 0, time: 40 };
-VIEWS.ext_bow = { kind: "exterior", target: [0, 0, -600], distance: 1500, yaw: 2.9, pitch: 0.3, planet: 0, planetOffset: 0, time: 40 };
+VIEWS.ext_stern = { kind: "exterior", target: [0, 20, 700], distance: 1000, yaw: 0.35, pitch: 0.15, planet: 0, planetOffset: 0, time: 40 };
+VIEWS.ext_bow = { kind: "exterior", target: [0, 10, -450], distance: 700, yaw: 2.75, pitch: 0.12, planet: 0, planetOffset: 0, time: 40 };
 VIEWS.ext_well = { kind: "exterior", target: [0, -95, 465], distance: 160, yaw: 2.2, pitch: -0.9, planet: 1, planetOffset: 0, time: 40 };
 
 let framesRendered = 0;
@@ -513,7 +513,7 @@ function frame() {
     interior.update(dt, player);
   }
   traffic.update(dt);
-  space.update(dt, camera.position);
+  space.update(dt, camera.position, modes.mode === "interior");
   exterior.update(camera.position, space.sunWorld);
   lighting.update(dt);
   pool.update(camera.position, dt);

@@ -251,9 +251,10 @@ export function buildSpace(scene) {
       const phi = (i / 26) * Math.PI * 2 + rand() * 0.2;
       const lat = gauss() * 0.06;
       p.copy(bandE1).multiplyScalar(Math.cos(phi) * Math.cos(lat)).addScaledVector(bandE2, Math.sin(phi) * Math.cos(lat)).addScaledVector(bandN, Math.sin(lat));
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0.07 + rand() * 0.05, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, rotation: rand() * Math.PI * 2 }));
+      // kept very faint and large: on a full-screen exterior sky discrete blobs read as sprites
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0.03 + rand() * 0.02, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, rotation: rand() * Math.PI * 2 }));
       sp.position.copy(p).multiplyScalar(4500);
-      const s = 1100 + rand() * 700;
+      const s = 1800 + rand() * 900;
       sp.scale.set(s, s * 0.6, 1);
       root.add(sp);
     }
@@ -341,8 +342,8 @@ export function buildSpace(scene) {
     elevation: -60,
     // saturated amber: the halo has to differ from the cream disc or it reads as more disc
     atmo: "#ffae5c",
-    atmoStrength: 1.35,
-    brightness: 1.15,
+    atmoStrength: 0.95,
+    brightness: 1.1,
     spin: 0.006,
     tilt: 0.28,
     ring: { inner: 1.35, outer: 2.25, colA: "#c9b393", colB: "#7d6a55", tiltX: 0.42, tiltY: 0.15 },
@@ -447,17 +448,15 @@ export function buildSpace(scene) {
     }
   }
 
-  function update(dt, camPos = null) {
+  function update(dt, camPos = null, showDust = true) {
     state.time += dt;
     apply();
-    updateDust(dt);
-    // the streak field rides along with the viewer so it sells motion from every deck; from far orbit
-    // the streaks would read as hyperspace lines, so they fade out beyond the hull
-    if (camPos) {
-      dustLines.position.copy(camPos);
-      const far = Math.max(0, Math.hypot(camPos.x, camPos.y) - 500) / 800;
-      dustMat.opacity = 0.42 * Math.max(0, 1 - far);
-      dustLines.visible = dustMat.opacity > 0.01;
+    // the streak field rides along with the viewer so it sells motion from every deck; outside the
+    // ship the streaks read as scratches on the sky, so the exterior camera never shows them
+    dustLines.visible = showDust;
+    if (showDust) {
+      updateDust(dt);
+      if (camPos) dustLines.position.copy(camPos);
     }
   }
 
