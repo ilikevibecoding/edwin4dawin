@@ -162,9 +162,11 @@ export function atlasQuad(w, h, rect) {
 // Macro paint variation shared by hull vertex colours and instance colours: slow blotchy tone shifts,
 // soot toward the stern, dust lightening on up-facing surfaces. Writes into `out` (THREE.Color).
 export function macroTint(x, y, z, ny, out, { base = 1.0, trench = false } = {}) {
+  // three scales of paint-batch patchiness (whole-hull, ~300 m, ~80 m) so the plane never reads as one flat value
   const n = fbm((x + 900) / 2400, (z + 900) / 2400, { octaves: 3, freq: 6, gain: 0.55, seed: 17 });
   const n2 = fbm((z + 900) / 1800, (y + 300) / 900, { octaves: 2, freq: 9, gain: 0.5, seed: 29 });
-  let k = base * (0.96 + (n - 0.5) * 0.14 + (n2 - 0.5) * 0.06);
+  const n3 = fbm((x + 900) / 700, (z + 900) / 700, { octaves: 2, freq: 7, gain: 0.5, seed: 41 });
+  let k = base * (0.96 + (n - 0.5) * 0.2 + (n2 - 0.5) * 0.08 + (n3 - 0.5) * 0.09);
   const soot = THREE.MathUtils.smoothstep(z, 380, 800) * 0.2;
   k *= 1 - soot;
   k *= 1 + ny * 0.05;
@@ -255,6 +257,69 @@ export function instancedFromList(geo, mat, list, parent, name) {
     },
     name,
   );
+}
+
+// Bake placements { m: Matrix4, c: Color } of one geometry into a static triangle soup whose vertex
+// colour is the placement colour times the geometry's own colour (white when it has none). Normals go
+// through the proper normal matrix, so non-uniformly scaled boxes shade correctly.
+const _bv = new THREE.Vector3();
+const _bn = new THREE.Matrix3();
+export function bakePlacements(geo, list) {
+  const src = geo.index ? geo.toNonIndexed() : geo;
+  if (!src.attributes.normal) src.computeVertexNormals();
+  const pos = src.attributes.position;
+  const nor = src.attributes.normal;
+  const uv = src.attributes.uv;
+  const col = src.attributes.color;
+  const n = pos.count;
+  const P = new Float32Array(n * 3 * list.length);
+  const N = new Float32Array(n * 3 * list.length);
+  const U = new Float32Array(n * 2 * list.length);
+  const C = new Float32Array(n * 3 * list.length);
+  for (let k = 0; k < list.length; k++) {
+    const { m, c } = list[k];
+    _bn.getNormalMatrix(m);
+    const o3 = k * n * 3;
+    const o2 = k * n * 2;
+    for (let i = 0; i < n; i++) {
+      _bv.fromBufferAttribute(pos, i).applyMatrix4(m);
+      P[o3 + i * 3] = _bv.x;
+      P[o3 + i * 3 + 1] = _bv.y;
+      P[o3 + i * 3 + 2] = _bv.z;
+      _bv.fromBufferAttribute(nor, i).applyMatrix3(_bn).normalize();
+      N[o3 + i * 3] = _bv.x;
+      N[o3 + i * 3 + 1] = _bv.y;
+      N[o3 + i * 3 + 2] = _bv.z;
+      if (uv) {
+        U[o2 + i * 2] = uv.getX(i);
+        U[o2 + i * 2 + 1] = uv.getY(i);
+      }
+      C[o3 + i * 3] = c.r * (col ? col.getX(i) : 1);
+      C[o3 + i * 3 + 1] = c.g * (col ? col.getY(i) : 1);
+      C[o3 + i * 3 + 2] = c.b * (col ? col.getZ(i) : 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(P, 3));
+  g.setAttribute("normal", new THREE.BufferAttribute(N, 3));
+  g.setAttribute("uv", new THREE.BufferAttribute(U, 2));
+  g.setAttribute("color", new THREE.BufferAttribute(C, 3));
+  return g;
+}
+
+// One mesh per detail layer: a single geometry becomes an InstancedMesh, several geometries sharing a
+// material (and a LOD group / interior-culling group) are baked into one static mesh, so a layer costs one
+// draw call either way. layers: [{ geo, list }]. Materials must read vertex colours for the baked path.
+export function layerMesh(layers, mat, parent, name) {
+  const live = layers.filter((l) => l.list.length);
+  if (!live.length) return null;
+  if (live.length === 1) return instancedFromList(live[0].geo, mat, live[0].list, parent, name);
+  const g = merge(live.map((l) => bakePlacements(l.geo, l.list)));
+  g.computeBoundingSphere();
+  const mesh = new THREE.Mesh(g, mat);
+  mesh.name = name;
+  if (parent) parent.add(mesh);
+  return mesh;
 }
 
 export function rectsOverlap(a, b, margin = 0) {
