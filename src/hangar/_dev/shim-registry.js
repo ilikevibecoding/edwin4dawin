@@ -278,13 +278,15 @@ export async function createWorld({ THREE: T, scene, materials, PALETTE, hud, pl
   }
   let poolUsed = 0;
   const _p = new T.Vector3();
-  function assignLights(activeEntries, eye) {
+  function assignLights(activeEntries, eye, currentRoom) {
     const pts = [];
     const sps = [];
     for (const e of activeEntries) {
+      // the room the player stands in keeps its pools; neighbours only get what is left
+      const own = e.manifest.id === currentRoom ? 60 : 0;
       for (const d of e.lights) {
         const dist = Math.hypot(d.pos[0] - eye.x, d.pos[1] - eye.y, d.pos[2] - eye.z);
-        const score = (d.priority ?? 0.5) * 100 - dist * 0.5 + (dist < (d.distance || 10) ? 20 : 0);
+        const score = own + (d.priority ?? 0.5) * 100 - dist * 0.5 + (dist < (d.distance || 10) ? 20 : 0);
         (d.type === "spot" ? sps : pts).push({ d, score });
       }
     }
@@ -378,7 +380,7 @@ export async function createWorld({ THREE: T, scene, materials, PALETTE, hud, pl
       for (const i of e.interactables) interactables.push(i);
     }
     for (const e of act) if (e.result && typeof e.result.update === "function") e.result.update(dt, t);
-    assignLights(act, eye);
+    assignLights(act, eye, state.current);
     return { colliders, interactables };
   }
 
