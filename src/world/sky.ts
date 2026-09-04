@@ -340,7 +340,7 @@ void main() {
   // whitened by aerosol scattering and by sunlight bounced off the ground, so the probe blends toward a
   // neutral haze/ground mix (strongest low in the sky, absent at the zenith). Keeps white surfaces white
   // and shadows cool rather than blue without touching the visible sky.
-  vec3 fill = mix(uHazeColor, uGroundColor, 0.4);
+  vec3 fill = mix(uHazeColor, uGroundColor, 0.25);
   col = mix(col, fill, 0.65 * pow(1.0 - up, 0.3));
   // clouds as a soft neutral brightening band so reflections and the IBL pick up overcast (grey, not blue) light
   float cov = uCloudCoverage;

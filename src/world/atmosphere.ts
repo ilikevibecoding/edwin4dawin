@@ -29,7 +29,7 @@ interface Key { el: number; sun: [number, number, number]; sunI: number; zen: [n
  * 0..1 strength that the cloud raymarch and the sun disc were tuned against; the CSM light receives
  * `sunI * SUN_IRRADIANCE`. Moonlight keeps a 1:1 scale (the night exposure boost does the rest).
  */
-export const SUN_IRRADIANCE = 5.0;
+export const SUN_IRRADIANCE = 5.5;
 const MOON_IRRADIANCE = 1.0;
 /** Mean albedo of the sunlit world below the horizon (water, sand, roads, canopy): warm neutral. */
 const GROUND_ALBEDO = new THREE.Color(0.26, 0.24, 0.20);
@@ -40,8 +40,8 @@ const KEYS: Key[] = [
   { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.06, zen: [0.015, 0.035, 0.10], hor: [0.42, 0.22, 0.2], haze: [0.22, 0.16, 0.2], sunHaze: [0.9, 0.35, 0.18], amb: 0.4 },
   { el: 4, sun: [1.0, 0.5, 0.22], sunI: 0.437, zen: [0.035, 0.10, 0.30], hor: [0.82, 0.48, 0.34], haze: [0.50, 0.40, 0.40], sunHaze: [1.0, 0.55, 0.3], amb: 0.85 },
   { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.75, zen: [0.03, 0.11, 0.34], hor: [0.66, 0.58, 0.54], haze: [0.54, 0.52, 0.54], sunHaze: [1.0, 0.75, 0.5], amb: 1.0 },
-  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.02, 0.095, 0.325], hor: [0.42, 0.51, 0.62], haze: [0.51, 0.55, 0.62], sunHaze: [1.0, 0.92, 0.80], amb: 1.0 },
-  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.018, 0.09, 0.32], hor: [0.40, 0.50, 0.62], haze: [0.50, 0.55, 0.62], sunHaze: [0.98, 0.93, 0.84], amb: 1.0 },
+  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.02, 0.095, 0.325], hor: [0.38, 0.47, 0.60], haze: [0.48, 0.54, 0.64], sunHaze: [1.0, 0.92, 0.80], amb: 1.0 },
+  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.018, 0.09, 0.32], hor: [0.36, 0.46, 0.60], haze: [0.47, 0.54, 0.65], sunHaze: [0.98, 0.93, 0.84], amb: 1.0 },
 ];
 
 function mixKey(el: number): Key {
