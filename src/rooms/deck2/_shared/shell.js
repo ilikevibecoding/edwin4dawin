@@ -373,8 +373,11 @@ export function buildShell(ctx, spec) {
           const q0 = a0 + ((a1 - a0) * j) / nB + SEAM / 2;
           const q1 = a0 + ((a1 - a0) * (j + 1)) / nB - SEAM / 2;
           const [bx0, bz0, bx1, bz1] = axis === "x" ? [p0, q0, p1, q1] : [q0, p0, q1, p1];
-          const g = kit.boxMM(ce.mat || panelMat, [bx0, ceilY - 0.06, bz0], [bx1, ceilY, bz1], { color: rand() < 0.1 ? P("impMid") : cColor, uv: "keep" });
-          if (rand() < 0.5) flipUVs(g);
+          // painted panels (uv keep) show the panel map's edge grime as dirt under close fixtures;
+          // `ceiling.mat: "paintedMetal"` gives clean plated panels with fine world UVs instead
+          const cm = ce.mat || panelMat;
+          const g = kit.boxMM(cm, [bx0, ceilY - 0.06, bz0], [bx1, ceilY, bz1], cm === panelMat ? { color: rand() < 0.1 ? P("impMid") : cColor, uv: "keep" } : { color: rand() < 0.1 ? P("impMid") : cColor, texel: 2.5 });
+          if (cm === panelMat && rand() < 0.5) flipUVs(g);
         }
       }
     }
