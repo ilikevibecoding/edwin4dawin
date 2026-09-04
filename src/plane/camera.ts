@@ -13,7 +13,13 @@ export class FlightCamera {
   private readonly lookTarget = new THREE.Vector3();
   private readonly tmp = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
+  private readonly fwd = new THREE.Vector3();
+  private readonly lookLift = new THREE.Vector3(0, 1.2, 0);
+  private readonly orbitQ = new THREE.Quaternion();
+  private readonly euler = new THREE.Euler();
   private readonly q = new THREE.Quaternion();
+  /** optional terrain/water height query so the chase camera never dips below the ground */
+  groundHeight: ((x: number, z: number) => number) | null = null;
   private readonly smoothQ = new THREE.Quaternion();
   private time = 0;
   private initialised = false;
@@ -57,12 +63,14 @@ export class FlightCamera {
       return;
     }
     // chase: spring-damper toward an offset behind and above the aircraft, in a yaw-only frame
-    const fwd = flight.forward(this.tmp);
+    // `fwd` must not alias `tmp`: the spring acceleration below reuses `tmp`, and the look target needs the
+    // real forward vector (aliasing made the camera look at position + 6 x acceleration and lose the aircraft)
+    const fwd = flight.forward(this.fwd);
     const yaw = Math.atan2(fwd.x, fwd.z);
     const speed = t.airspeed;
     const dist = this.chaseDistance + speed * 0.08;
     const heightOff = this.chaseHeight + speed * 0.012;
-    const orbitQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(this.orbitPitch, yaw + this.orbitYaw, 0, 'YXZ'));
+    const orbitQ = this.orbitQ.setFromEuler(this.euler.set(this.orbitPitch, yaw + this.orbitYaw, 0, 'YXZ'));
     const desired = this.tmp2.set(0, heightOff, -dist).applyQuaternion(orbitQ).add(flight.position);
     // bank the camera slightly with the aircraft so turns feel dynamic
     if (!this.initialised) { this.pos.copy(desired); this.vel.set(0, 0, 0); this.initialised = true; }
@@ -73,8 +81,9 @@ export class FlightCamera {
     this.vel.addScaledVector(acc, dt);
     this.pos.addScaledVector(this.vel, dt);
     // never let the camera go under the terrain/water
-    if (this.pos.y < 1.2) this.pos.y = 1.2;
-    const look = this.lookTarget.copy(flight.position).addScaledVector(fwd, 6).add(new THREE.Vector3(0, 1.2, 0));
+    const floor = Math.max(1.2, this.groundHeight ? this.groundHeight(this.pos.x, this.pos.z) + 2.5 : 1.2);
+    if (this.pos.y < floor) { this.pos.y = floor; if (this.vel.y < 0) this.vel.y = 0; }
+    const look = this.lookTarget.copy(flight.position).addScaledVector(fwd, 6).add(this.lookLift);
     cam.position.copy(this.pos);
     // shake: turbulence / stall buffet / high speed
     const s = shake * 0.35;

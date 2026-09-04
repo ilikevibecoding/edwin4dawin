@@ -199,6 +199,7 @@ export class Game {
     this.aircraft = new Aircraft((x, z) => this.map.heightAt(x, z), this.scene, this.wakes.scene);
     this.registerTree(this.aircraft.model.root);
     this.flightCamera = new FlightCamera(this.camera);
+    this.flightCamera.groundHeight = (x, z) => Math.max(0, this.map.heightAt(x, z));
     // default spawn: on the water at the downtown seaplane base facing east
     const base = this.map.pois.find((p) => p.kind === 'seaplane')!;
     this.aircraft.place(base.x + 120, 1.6, base.z + 60, Math.PI * 0.5, 0, 0, 0, 0);
