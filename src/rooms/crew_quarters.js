@@ -1,12 +1,12 @@
 // Crew Quarters (Deck C): an enlisted barracks. Triple bunk stacks line the far (W) wall and both side
 // walls up to the door zone and stand back-to-back in three centre rows (the nearest 10 m from the spawn),
 // so the berths are the first thing seen from the door; each berth is a made bed (bevelled grey-blue
-// mattress, blanket, turned sheet, pillow) behind a steel privacy rail, with a ladder up the foot end,
-// reading lamps, shelves, part-drawn curtains and a footlocker under a lit black soffit. The door zone keeps
-// the common life: two mess tables at the frame edges, grey locker banks on the door wall behind the spawn, a
-// refresher alcove with sinks and mirrors, a duty roster board (animated scan line) and a holo game table
-// tucked into the recreation corner. Grey-blue accent: warm keys under louvred slot shades, cool door key,
-// blue night strips, two thin grey painted aisle lines instead of hazard chevrons.
+// mattress, blanket, turned sheet, pillow) in a grey Imperial-issue frame behind a steel privacy rail, with a
+// ladder up the foot end, reading lamps, shelves, part-drawn curtains and a footlocker under a lit black
+// soffit. The door zone keeps the common life: two mess tables at the frame edges, grey locker banks on the
+// door wall behind the spawn, a refresher alcove with sinks and mirrors, a duty roster board (animated scan
+// line) and a holo game table tucked into the recreation corner. Grey-blue accent: warm keys under louvred
+// slot shades, cool door key, blue night strips, two thin grey painted aisle lines instead of hazard chevrons.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
@@ -31,17 +31,19 @@ const BED_PILLOW = 0xd4d9e2;
 const R = (sx, sy, sz, pos, color, radius = 0.025) => ({ geo: new RoundedBoxGeometry(sx, sy, sz, 1, Math.min(radius, sy / 2 - 0.001)), pos, color });
 
 function bunkFrameGeo() {
+  // Imperial-issue grey frame (posts, pans, back board), charcoal lips: black steel read as warehouse racking
+  const post = PALETTE.impGreyDark;
   const blk = PALETTE.impBlack;
   const chr = PALETTE.impCharcoal;
   const grey = PALETTE.impGreyDark;
   const steel = DECK_C.steel;
   const parts = [];
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(B(0.07, STACK_H, 0.07, [sx * 1.0, STACK_H / 2, sz * 0.43], blk));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(B(0.07, STACK_H, 0.07, [sx * 1.0, STACK_H / 2, sz * 0.43], post));
   for (const [k, y] of SHELF_Y.entries()) {
-    // berth pan: dark tray with a deep black front lip, so the pale bedding sits *in* a bed, not on a shelf
-    parts.push(B(BUNK_L, 0.06, BUNK_W, [0, y, 0], chr));
-    parts.push(B(BUNK_L, 0.1, 0.03, [0, y + 0.02, 0.445], blk));
-    parts.push(B(BUNK_L, 0.1, 0.03, [0, y + 0.02, -0.445], blk));
+    // berth pan: grey tray with a charcoal front lip, so the bedding sits *in* a bed, not on a shelf
+    parts.push(B(BUNK_L, 0.06, BUNK_W, [0, y, 0], grey));
+    parts.push(B(BUNK_L, 0.1, 0.03, [0, y + 0.02, 0.445], chr));
+    parts.push(B(BUNK_L, 0.1, 0.03, [0, y + 0.02, -0.445], chr));
     // head-end privacy panel (grey-blue) closes the berth at the pillow end
     parts.push(B(0.03, 0.56, BUNK_W - 0.02, [-1.0, y + 0.3, 0], 0x4a5266));
     // privacy / safety rail along the open front (upper berths full length, bottom berth short), steel
@@ -54,9 +56,9 @@ function bunkFrameGeo() {
     parts.push(C(0.012, 2.0, [0, y + 0.64, 0.47], grey, "x", 6));
   }
   // top rails, back board (privacy / lamp mounting)
-  parts.push(B(BUNK_L, 0.06, 0.06, [0, STACK_H - 0.03, 0.43], blk));
-  parts.push(B(BUNK_L, 0.06, 0.06, [0, STACK_H - 0.03, -0.43], blk));
-  parts.push(B(BUNK_L - 0.1, STACK_H - 0.4, 0.03, [0, STACK_H / 2, -0.44], chr));
+  parts.push(B(BUNK_L, 0.06, 0.06, [0, STACK_H - 0.03, 0.43], post));
+  parts.push(B(BUNK_L, 0.06, 0.06, [0, STACK_H - 0.03, -0.43], post));
+  parts.push(B(BUNK_L - 0.1, STACK_H - 0.4, 0.03, [0, STACK_H / 2, -0.44], grey));
   // ladder on the front face at the foot end: steel stiles and rungs
   for (const x of [0.74, 1.0]) parts.push(C(0.02, STACK_H - 0.2, [x, STACK_H / 2 - 0.05, 0.52], steel, "y", 8));
   for (let i = 0; i < 8; i++) parts.push(C(0.016, 0.3, [0.87, 0.22 + i * 0.27, 0.52], steel, "x", 6));

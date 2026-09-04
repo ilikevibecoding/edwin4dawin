@@ -188,7 +188,7 @@ export function buildDetention(kit, ctx, room) {
   const cctx = { fieldGeos: [] };
   const fieldMat = ctx.materials.holo.clone();
   fieldMat.color.set(DECK_C.redField.getHex());
-  fieldMat.opacity = 0.1;
+  fieldMat.opacity = 0.03;
 
   // ---------------------------------------------------------------- painted red edge lines beside the aisle (no glow: the red is in the cells, beacons and slots)
   const PAINT_RED = new THREE.Color("#7a1f1c");
@@ -283,8 +283,9 @@ export function buildDetention(kit, ctx, room) {
   // force fields: one mesh for all eight doorways; shimmer = opacity flicker on the shared material (allocation-free)
   kit.attach(new THREE.Mesh(mergeGeometries(cctx.fieldGeos, false), fieldMat));
   kit.onUpdate((dt, t) => {
-    // faint: the bars, lock box and the cell behind must read through it (a strong field was a red slab)
-    fieldMat.opacity = 0.085 + 0.025 * Math.sin(t * 9.0) + 0.015 * Math.sin(t * 23.0);
+    // faint: the field is ADDITIVE, and the scene sits at low radiance, so even 0.085 of pure red summed over a
+    // doorway painted it a uniform red slab; at ~0.03 it is a red haze the bars, lock box and grey cell read through
+    fieldMat.opacity = 0.03 + 0.008 * Math.sin(t * 9.0) + 0.005 * Math.sin(t * 23.0);
   });
   // pillars between cell pairs carrying beacons; cable runs over the cell roofs
   for (const s of [-1, 1]) {
@@ -306,7 +307,7 @@ export function buildDetention(kit, ctx, room) {
     // (the grey cell behind it saturated to red); with a near-white pool the bars, lock box, lintel strip and
     // readout read as a cell door and the red stays in the emissive strips, beacons and painted lines
     const phase = rand() * 6.28;
-    kit.light({ type: "point", pos: [s * (cellX - 4.0), 3.0, (cellZ[1] + cellZ[2]) / 2], color: 0xffcdb8, intensity: lux(3.0, 4.2) / 3.0, decay: 1, distance: 15, priority: 0.44, dim: (t) => 0.9 + 0.1 * Math.sin(t * 3.2 + phase) });
+    kit.light({ type: "point", pos: [s * (cellX - 4.0), 3.0, (cellZ[1] + cellZ[2]) / 2], color: 0xffcdb8, intensity: lux(3.0, 4.6) / 3.0, decay: 1, distance: 15, priority: 0.44, dim: (t) => 0.9 + 0.1 * Math.sin(t * 3.2 + phase) });
   }
 
   // ---------------------------------------------------------------- interrogation room at the far end (S wall): raised dais, chair, droid, spot, screens
@@ -426,10 +427,10 @@ export function buildDetention(kit, ctx, room) {
   // spawn (over the railing gate, so it lights the desk front and the floor beyond it rather than the deck behind
   // the camera), two side keys over the open floor between the desk wings and the cell rows (that floor read as
   // a black void when the only cool light sat on the centre line), one aisle key behind the desk
-  keyLight(kit, 0, h - 1.0, -4.4, { color: 0xff4a34, k: 3.6, distance: 12, priority: 0.5 });
-  keyLight(kit, 0, h - 1.0, -7.6, { color: 0xdfe8ff, k: 4.6, distance: 13, priority: 0.47 });
+  keyLight(kit, 0, h - 1.0, -4.4, { color: 0xff4a34, k: 3.9, distance: 12, priority: 0.5 });
+  keyLight(kit, 0, h - 1.0, -7.6, { color: 0xdfe8ff, k: 5.0, distance: 13, priority: 0.47 });
   // (the side keys carry a faint rose cast so the block's floor stays in the red family rather than going steel-blue)
-  keyLight(kit, -8.0, h - 1.0, -4.6, { color: 0xf4dcd6, k: 4.4, distance: 14, priority: 0.46 });
-  keyLight(kit, 8.0, h - 1.0, -4.6, { color: 0xf4dcd6, k: 4.4, distance: 14, priority: 0.45 });
-  keyLight(kit, 0, h - 1.0, 2.5, { color: 0xdfe8ff, k: 4.0, distance: 14, priority: 0.43 });
+  keyLight(kit, -8.0, h - 1.0, -4.6, { color: 0xf4dcd6, k: 4.8, distance: 14, priority: 0.46 });
+  keyLight(kit, 8.0, h - 1.0, -4.6, { color: 0xf4dcd6, k: 4.8, distance: 14, priority: 0.45 });
+  keyLight(kit, 0, h - 1.0, 2.5, { color: 0xdfe8ff, k: 4.3, distance: 14, priority: 0.43 });
 }

@@ -166,12 +166,16 @@ export function buildHyperdrive(kit, ctx, room) {
   // pair collected by a black junction slab under the ceiling (between the trusses) with a status strip
   for (const x of [-2.0, 3.0, 8.0]) {
     for (const s of [-1, 1]) {
-      pipe(kit, [x, cy + R - 0.55, s * 1.4], [x, h - 0.5, s * 1.4], 0.42, { color: PALETTE.impBlack, clampStep: 1.1, clampColor: PALETTE.impCharcoal, flanges: true, segments: 14 });
+      // (charcoal with black clamps rather than pure black: the pipe must separate from the black ceiling)
+      pipe(kit, [x, cy + R - 0.55, s * 1.4], [x, h - 0.5, s * 1.4], 0.42, { color: PALETTE.impCharcoal, clampStep: 1.1, clampColor: PALETTE.impBlack, flanges: true, segments: 14 });
       kit.cyl("impTrim", x, cy + R - 0.15, s * 1.4, 0.6, 0.3, "y", { color: PALETTE.impBlack, segments: 14 }); // root collar on the armour
     }
     kit.box("impTrim", x, h - 0.28, 0, 1.5, 0.56, 4.2, { color: PALETTE.impBlack, texel: 1 });
     kit.box("impMetal", x, h - 0.58, 0, 1.3, 0.06, 1.0, { color: PALETTE.impCharcoal, texel: 1 });
     for (let k = 0; k < 3; k++) kit.box(k === 1 ? "emitRedImp" : accentKey, x - 0.3 + k * 0.3, h - 0.62, 0, 0.08, 0.02, 0.08);
+    // dim blue tell-tale strips along the slab's long edges: black pipes on a black ceiling need the slab
+    // they feed to read from the deck, or the run up from the core is lost
+    for (const s of [-1, 1]) kit.box(LOW, x, h - 0.57, s * 1.95, 1.2, 0.02, 0.05, { uv: "keep" });
   }
   // N side: cable trays on the floor from the cradle feet to the equipment bank on the wall
   cableTray(kit, [[-2.3, 0, -3.4], [-4.6, 0, -3.4], [-4.6, 0, -(hz - 0.45)]], { w: 0.5, seed: 21, cables: 4 });

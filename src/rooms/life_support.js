@@ -359,15 +359,15 @@ export function buildLifeSupport(kit, ctx, room) {
   // dosing skid; its upper edge stays 6° below the horizontal, so it puts nothing on the ceiling)
   for (const [i, [x, z, tx, tz]] of [[-8.0, -3.4, -8.0, -3.4], [4.0, -5.5, 4.5, -7.5], [10.0, 0.6, 10.0, 0.6]].entries()) {
     const mouth = shroudLamp(kit, [x, h - 0.08, z], [x, 3.95, z], [tx, 0, tz], { key: LENS, size: 0.55 });
-    kit.light({ type: "spot", pos: [mouth[0], mouth[1] - 0.1, mouth[2]], target: [tx, 0, tz], color: work, intensity: lux(3.8, 4.8), distance: 15, angle: 1.2, penumbra: 0.5, priority: 0.6 - i * 0.01 });
+    kit.light({ type: "spot", pos: [mouth[0], mouth[1] - 0.1, mouth[2]], target: [tx, 0, tz], color: work, intensity: lux(3.8, 5.8), distance: 15, angle: 1.2, penumbra: 0.5, priority: 0.6 - i * 0.01 });
   }
   const pendant = (x, z, y, target, k, priority) => {
     const mouth = shroudLamp(kit, [x, h - 0.08, z], [x, y, z], target, { key: LENS, size: 0.5 });
     kit.light({ type: "point", pos: [mouth[0], mouth[1] - 0.3, mouth[2]], color: work, intensity: k * (y - 0.4), decay: 1, distance: 14, priority });
   };
-  pendant(-6.0, -8.6, 3.5, [-6.0, 1.5, -8.6], 4.0, 0.5);
-  pendant(-7.4, 9.2, 3.5, [-7.4, 1.5, 9.4], 4.0, 0.49);
-  pendant(11.5, 6.0, 3.4, [11.5, 1.2, 7.0], 3.0, 0.42);
-  pendant(-14.2, -3.6, 3.6, [-15.5, 1.5, -3.6], 3.2, 0.45);
-  kit.light({ type: "point", pos: [-2.0, -0.35, 3.3], color: 0x8fb8ff, intensity: 5, distance: 9, priority: 0.35 });
+  pendant(-6.0, -8.6, 3.5, [-6.0, 1.5, -8.6], 4.6, 0.5);
+  pendant(-7.4, 9.2, 3.5, [-7.4, 1.5, 9.4], 4.6, 0.49);
+  pendant(11.5, 6.0, 3.4, [11.5, 1.2, 7.0], 3.5, 0.42);
+  pendant(-14.2, -3.6, 3.6, [-15.5, 1.5, -3.6], 3.7, 0.45);
+  kit.light({ type: "point", pos: [-2.0, -0.35, 3.3], color: 0x8fb8ff, intensity: 6, distance: 9, priority: 0.35 });
 }
