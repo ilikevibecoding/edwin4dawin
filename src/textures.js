@@ -610,14 +610,14 @@ function finish(set) {
 // ---------------------------------------------------------------------------
 // Emissive screens (UI graphics) — used as emissiveMap on console faces
 // ---------------------------------------------------------------------------
-export function makeScreen(w = 512, h = 256, seed = 5, accent = "#4fd8cc", warn = "#f08a3c") {
+export function makeScreen(w = 512, h = 256, seed = 5, accent = "#6fb4ff", warn = "#ffb347") {
   const c = makeCanvas(w, h);
   const ctx = c.getContext("2d");
   const rand = mulberry32(seed);
   ctx.fillStyle = "#04090c";
   ctx.fillRect(0, 0, w, h);
   // faint grid
-  ctx.strokeStyle = "rgba(79,216,204,0.08)";
+  ctx.strokeStyle = "rgba(111,180,255,0.08)";
   ctx.lineWidth = 1;
   for (let x = 0; x < w; x += 16) {
     ctx.beginPath();
@@ -699,7 +699,7 @@ export function makeLedStrip(w = 256, h = 32, seed = 9) {
   const rand = mulberry32(seed);
   ctx.fillStyle = "#050607";
   ctx.fillRect(0, 0, w, h);
-  const colors = ["#4fd8cc", "#4fd8cc", "#f08a3c", "#ffd27a", "#2a6f8f", "#4fd8cc"];
+  const colors = ["#6fb4ff", "#6fb4ff", "#ff3b30", "#ffb347", "#2a4f8f", "#6fb4ff"];
   for (let x = 8; x < w - 8; x += 16) {
     if (rand() < 0.3) continue;
     ctx.fillStyle = colors[Math.floor(rand() * colors.length)];
@@ -752,9 +752,9 @@ export function makeDecalSheet(size = 1024, seed = 19) {
   const rand = mulberry32(seed);
   const cell = size / DECAL_CELLS;
   const INK = "#1d1e21";
-  const ORANGE = "#e9782f";
-  const CREAM = "#e8dfcc";
-  const TEAL = "#4fd8cc";
+  const ORANGE = "#c0392b";
+  const CREAM = "#d8dbe0";
+  const TEAL = "#6fb4ff";
   const font = (px, bold = true) => `${bold ? "bold " : ""}${px}px "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace`;
   const at = (i, fn) => {
     const cx = (i % DECAL_CELLS) * cell;

@@ -78,12 +78,29 @@ export class Interactions {
     return true;
   }
 
+  // Register an interactable at runtime (doors, lift panels, hangar controls). Items may carry their
+  // own `action(ctx)`; the three legacy actions are keyed by id.
+  add(item) {
+    this.items.push(item);
+    item.object.traverse((o) => {
+      if (o.isMesh) {
+        o.userData.interactable = item;
+        this.targets.push(o);
+      }
+    });
+    item.baseEmissive = item.material.emissive ? item.material.emissive.clone() : new THREE.Color(0, 0, 0);
+    item.baseEmissiveIntensity = item.material.emissiveIntensity;
+    return item;
+  }
+
   async run(id) {
+    const item = this.items.find((i) => i.id === id);
     this.busy = true;
-    this.player.frozen = true;
+    if (!item || item.freeze !== false) this.player.frozen = true;
     this.setHovered(null);
     try {
-      if (id === "bed") await this.sleep();
+      if (item && item.action) await item.action({ hud: this.hud, player: this.player, lighting: this.lighting, space: this.space });
+      else if (id === "bed") await this.sleep();
       else if (id === "galley") await this.eat();
       else if (id === "bathroom") await this.wash();
     } finally {

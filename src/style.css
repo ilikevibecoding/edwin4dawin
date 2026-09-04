@@ -1,7 +1,7 @@
 :root {
-  --teal: #4fd8cc;
-  --orange: #f08a3c;
-  --cream: #e8e0d0;
+  --teal: #6fb4ff;
+  --orange: #c0392b;
+  --cream: #dfe3ea;
   --hud-font: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --mono: "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
 }
@@ -103,6 +103,30 @@ body {
 }
 #status-text {
   transition: opacity 200ms ease;
+}
+
+#location {
+  position: absolute;
+  left: 24px;
+  bottom: 50px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(111, 180, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+#modehint {
+  position: absolute;
+  right: 24px;
+  bottom: 22px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: rgba(223, 227, 234, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  text-align: right;
+  white-space: pre;
 }
 
 #stats {

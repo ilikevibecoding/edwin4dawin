@@ -447,10 +447,18 @@ export function buildSpace(scene) {
     }
   }
 
-  function update(dt) {
+  function update(dt, camPos = null) {
     state.time += dt;
     apply();
     updateDust(dt);
+    // the streak field rides along with the viewer so it sells motion from every deck; from far orbit
+    // the streaks would read as hyperspace lines, so they fade out beyond the hull
+    if (camPos) {
+      dustLines.position.copy(camPos);
+      const far = Math.max(0, Math.hypot(camPos.x, camPos.y) - 500) / 800;
+      dustMat.opacity = 0.42 * Math.max(0, 1 - far);
+      dustLines.visible = dustMat.opacity > 0.01;
+    }
   }
 
   function setTime(t) {
@@ -467,5 +475,5 @@ export function buildSpace(scene) {
   }
 
   apply();
-  return { root, planets, layers, update, setTime, framePlanet, sunDirLocal, state };
+  return { root, planets, layers, update, setTime, framePlanet, sunDirLocal, sunWorld, state };
 }

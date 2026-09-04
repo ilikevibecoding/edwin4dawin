@@ -319,19 +319,27 @@ function buildCorridor(kit, ctx) {
     kit.collider([hw - 0.2, 0, z - 0.15], [hw + 0.01, h, z + 0.15], "rib");
   }
 
-  // --- aft blast door at z = 0 (faces -Z into the corridor)
+  // --- aft bulkhead at z = 0 (faces -Z into the corridor). Sealed slab in the stand-alone freighter;
+  // an open doorway (leaves come from the ship's DoorSystem) when the wing is part of the command deck.
   {
     const { frame, length } = wallFrame(kit, [hw, zAft], [-hw, zAft]);
     panelGrid(frame, length, h, { openings: [{ type: "door", u0: 0.55, u1: 2.25, v0: 0, v1: 2.35 }], rows: [0, 0.45, 2.35, h], seed: 707, topPipes: true, collide: false, tag: "aft" });
-    // door slab (recessed), sealed
-    frame.box("metal", hw, 1.175, -0.22, 1.7, 2.35, 0.1, { color: PALETTE.gunmetal, texel: 1 });
-    frame.box("metal", hw - 0.42, 1.175, -0.16, 0.8, 2.3, 0.04, { color: PALETTE.slate, texel: 1 });
-    frame.box("metal", hw + 0.42, 1.175, -0.16, 0.8, 2.3, 0.04, { color: PALETTE.slate, texel: 1 });
-    frame.box("hazard", hw - 0.04, 1.175, -0.13, 0.04, 2.3, 0.03, { texel: 4 });
-    frame.box("hazard", hw, 0.1, -0.13, 1.6, 0.14, 0.03, { texel: 4 });
-    // handles + latch box
-    frame.box("metal", hw - 0.25, 1.15, -0.08, 0.06, 0.4, 0.1, { color: PALETTE.orange });
-    frame.box("metal", hw + 0.25, 1.15, -0.08, 0.06, 0.4, 0.1, { color: PALETTE.orange });
+    if (!ctx.aftOpen) {
+      // door slab (recessed), sealed
+      frame.box("metal", hw, 1.175, -0.22, 1.7, 2.35, 0.1, { color: PALETTE.gunmetal, texel: 1 });
+      frame.box("metal", hw - 0.42, 1.175, -0.16, 0.8, 2.3, 0.04, { color: PALETTE.slate, texel: 1 });
+      frame.box("metal", hw + 0.42, 1.175, -0.16, 0.8, 2.3, 0.04, { color: PALETTE.slate, texel: 1 });
+      frame.box("hazard", hw - 0.04, 1.175, -0.13, 0.04, 2.3, 0.03, { texel: 4 });
+      frame.box("hazard", hw, 0.1, -0.13, 1.6, 0.14, 0.03, { texel: 4 });
+      // handles + latch box
+      frame.box("metal", hw - 0.25, 1.15, -0.08, 0.06, 0.4, 0.1, { color: PALETTE.orange });
+      frame.box("metal", hw + 0.25, 1.15, -0.08, 0.06, 0.4, 0.1, { color: PALETTE.orange });
+      kit.collider([-hw, 0, zAft - 0.3], [hw, h, zAft + 0.2], "aftdoor");
+    } else {
+      // wall colliders either side of the open doorway
+      kit.collider([-hw, 0, zAft - 0.3], [-0.85, h, zAft + 0.2], "aftwall");
+      kit.collider([0.85, 0, zAft - 0.3], [hw, h, zAft + 0.2], "aftwall");
+    }
     frame.box("metal", hw, 2.0, -0.1, 0.5, 0.25, 0.08, { color: PALETTE.darkMetal });
     frame.box("emitRed", hw, 2.0, -0.055, 0.3, 0.06, 0.02);
     // frame
@@ -341,7 +349,6 @@ function buildCorridor(kit, ctx) {
     // door sill: closes the trench where it runs under the slab
     kit.boxMM("hazard", [-0.8, -0.005, zAft - 0.06], [0.8, 0.012, zAft + 0.42], { texel: 3 });
     kit.boxMM("metal", [-0.7, -0.5, zAft - 0.08], [0.7, -0.005, zAft - 0.02], { color: PALETTE.darkMetal, texel: 1 });
-    kit.collider([-hw, 0, zAft - 0.3], [hw, h, zAft + 0.2], "aftdoor");
   }
 
   // --- forward bulkhead at z = zFwd (faces +Z), with cockpit doorway
@@ -1161,16 +1168,20 @@ function buildBathroom(kit, ctx) {
 // ---------------------------------------------------------------------------
 // Public entry
 // ---------------------------------------------------------------------------
-export function buildShip(scene, materials) {
+/**
+ * Build the legacy wing. `parent` receives the meshes and lights (lights are fixtures for the light
+ * pool: created but not rendered directly). opts.aftOpen leaves the aft bulkhead as an open doorway.
+ */
+export function buildShip(parent, materials, opts = {}) {
   const group = new THREE.Group();
-  group.name = "ship";
-  scene.add(group);
+  group.name = "legacyWing";
+  parent.add(group);
   // material aliases for individual screens
   const mats = { ...materials };
   materials.screens.forEach((m, i) => (mats["screen" + i] = m));
   mats.screens = materials.screens[0];
   const kit = new Kit(mats);
-  const ctx = { group, materials, interactables: [], lights: { warm: [], cool: [], teal: [], spots: [] } };
+  const ctx = { group, materials, interactables: [], lights: { warm: [], cool: [], teal: [], spots: [] }, aftOpen: !!opts.aftOpen };
 
   buildCorridor(kit, ctx);
   buildCockpit(kit, ctx);
@@ -1184,6 +1195,7 @@ export function buildShip(scene, materials) {
       if (l.parent) continue;
       group.add(l);
       if (l.target) group.add(l.target);
+      l.visible = false; // fixture only; the LightPool renders the nearest few
     }
   }
   // store base values for the rest-cycle controller
@@ -1192,7 +1204,9 @@ export function buildShip(scene, materials) {
     l.userData.baseIntensity = l.intensity;
     l.userData.baseColor = l.color.clone();
   }
-  return { group, meshes, colliders: kit.colliders, interactables: ctx.interactables, lights: ctx.lights };
+  // walkable: one slab under the whole wing (walls keep the player inside the rooms)
+  kit.floor(-6, -22.5, 6, 0.5, 0);
+  return { group, meshes, colliders: kit.colliders, floors: kit.floors, interactables: ctx.interactables, lights: ctx.lights };
 }
 
 export const SHIP_BOUNDS = COR;

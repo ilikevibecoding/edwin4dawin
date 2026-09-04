@@ -122,8 +122,9 @@ export function panelGrid(frame, length, height, opts = {}) {
     paints = [
       [PALETTE.cream, 0.74],
       [PALETTE.creamDark, 0.08],
-      [PALETTE.orange, 0.11],
-      [PALETTE.tealPaint, 0.07],
+      [PALETTE.gunmetal, 0.09],
+      [PALETTE.tealPaint, 0.05],
+      [PALETTE.orange, 0.04],
     ],
     collide = true,
     tag = "wall",

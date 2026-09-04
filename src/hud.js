@@ -10,6 +10,13 @@ export function createHUD() {
   const fadeText = $("fade-text");
   const start = $("start");
   const stats = $("stats");
+  const location = $("location");
+  const modehint = $("modehint");
+  const HINTS = {
+    interior: "WASD move · Shift run · E interact · V exterior view",
+    exterior: "drag orbit · right-drag pan · wheel zoom · WASD/QE fly · B board",
+    transition: "",
+  };
 
   return {
     showPrompt(key, label) {
@@ -60,6 +67,18 @@ export function createHUD() {
     },
     setStats(text) {
       stats.textContent = text;
+    },
+    setFade(alpha) {
+      fade.style.transition = "none";
+      fade.style.opacity = String(alpha);
+    },
+    setLocation(text) {
+      location.textContent = text || "";
+    },
+    setMode(mode) {
+      modehint.textContent = HINTS[mode] || "";
+      if (mode !== "interior") start.classList.add("hidden");
+      crosshair.style.display = mode === "interior" ? "" : "none";
     },
     toggleStats(force) {
       stats.classList.toggle("hidden", force === undefined ? undefined : !force);
