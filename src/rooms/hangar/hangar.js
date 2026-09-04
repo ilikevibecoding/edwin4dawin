@@ -944,7 +944,7 @@ function lightTowers(ctx) {
 function lights(ctx) {
   // the Imperial plate tints are dark (≈ 7 % albedo): surfaces need ~10 W/m² to read as lit grey
   const decay = 1.1;
-  ctx.spot(0xfff3e0, 520, 130, 0.95, [SPOT_XZ[0], SPOT_Y, SPOT_XZ[1]], [SPOT_XZ[0], -68, SPOT_XZ[1]], { penumbra: 0.45, decay, shadow: true, mapSize: 1024 });
+  ctx.spot(0xfff3e0, 520, 130, 0.95, [SPOT_XZ[0], SPOT_Y, SPOT_XZ[1]], [SPOT_XZ[0], -68, SPOT_XZ[1]], { penumbra: 0.45, decay, shadow: true, mapSize: 1024, shadowFar: 44 }); // shadow map stops at the well floor: side rooms stay out of the shadow pass
   // the amber work lights are wide downward spots: strong pools on the deck strips, no hot spot on the
   // ceiling / upper wall right next to the fixture
   for (const [x, z] of PENDANTS_AMBER) ctx.spot(0xffb25c, 420, 120, 1.3, [x, PENDANT_Y - 0.5, z], [x, Y, z], { penumbra: 0.35, decay });

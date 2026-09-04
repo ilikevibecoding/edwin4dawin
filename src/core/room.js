@@ -146,6 +146,7 @@ export class BuildContext {
     s.position.set(pos[0], pos[1], pos[2]);
     s.target.position.set(target[0], target[1], target[2]);
     s.castShadow = shadow;
+    s.userData.shadowCaster = shadow; // the manager only lets the current room's casters render shadow maps
     if (shadow) {
       s.shadow.mapSize.set(mapSize, mapSize);
       s.shadow.bias = -0.0003;
@@ -424,8 +425,27 @@ export class RoomManager {
     if (this._lightTimer <= 0) {
       this._lightTimer = 0.5;
       this.cullLights();
+      this.cullDistantNeighbours();
     }
     this.updateAnimators(dt, t);
+  }
+
+  /**
+   * Rooms reached through permanent arches (hangar side bays) stay in the visible set for colliders and
+   * lights, but their geometry is switched off when the arch is farther than ARCH_CULL from the player.
+   */
+  cullDistantNeighbours() {
+    if (!this.current || this.peek) return;
+    const ARCH_CULL = 75;
+    for (const id of this.visibleIds) {
+      if (id === this.current.id) continue;
+      const r = this.rooms.get(id);
+      if (!r || !r.built) continue;
+      let show = true;
+      const link = this._archLinks && this._archLinks.get(id);
+      if (link) show = this._playerPos.distanceTo(link) < ARCH_CULL;
+      if (r.ctx.group.visible !== show) r.ctx.group.visible = show;
+    }
   }
 
   /**
@@ -438,7 +458,12 @@ export class RoomManager {
       const r = this.rooms.get(id);
       if (!r || !r.built) continue;
       const own = this.current && id === this.current.id;
-      for (const l of r.ctx.lights) all.push({ l, d: own ? -1 : l.position.distanceToSquared(this._playerPos) });
+      for (const l of r.ctx.lights) {
+        // shadow maps only for the room the player is in: a neighbour's caster would re-render the whole
+        // visible set into its map every frame
+        if (l.userData.shadowCaster) l.castShadow = !!own || this.peek;
+        all.push({ l, d: own ? -1 : l.position.distanceToSquared(this._playerPos) });
+      }
     }
     if (all.length <= this.lightBudget) {
       for (const e of all) e.l.visible = true;
@@ -461,6 +486,13 @@ export class RoomManager {
   refreshVisibility(force = false) {
     this.doorSystem.dirty = false;
     const vis = new Set();
+    this._archLinks = new Map(); // neighbour id -> world centre of the arch it is seen through
+    const centre = (door) => {
+      const mid = (door.from + door.to) / 2;
+      const a = ROOM_BY_ID[door.a];
+      const y = Math.max(a.floor, ROOM_BY_ID[door.b].floor) + door.h / 2;
+      return door.axis === "z" ? new THREE.Vector3(mid, y, door.at) : new THREE.Vector3(door.at, y, mid);
+    };
     if (this.peek) {
       for (const [id, r] of this.rooms) if (r.built && r.def.windows) vis.add(id);
     } else if (this.current) {
@@ -469,9 +501,13 @@ export class RoomManager {
         if (!d.other) continue;
         if (!this.doorSystem.isOpen(d.door)) continue;
         vis.add(d.other);
+        if (d.door.kind === "arch" || d.door.kind === "open") this._archLinks.set(d.other, centre(d.door));
         for (const d2 of this.doorsOf(d.other)) {
-          if (!d2.other) continue;
-          if (d2.door.kind === "arch" || d2.door.kind === "open" || d2.door.kind === "glass") vis.add(d2.other);
+          if (!d2.other || d2.other === this.current.id) continue;
+          if (d2.door.kind === "arch" || d2.door.kind === "open" || d2.door.kind === "glass") {
+            vis.add(d2.other);
+            if (!this._archLinks.has(d2.other)) this._archLinks.set(d2.other, centre(d2.door));
+          }
         }
       }
     }
