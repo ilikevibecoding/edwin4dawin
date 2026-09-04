@@ -58,7 +58,7 @@ const interior = buildInterior({ scene, materials });
 const audio = createAudio();
 interior.doors.audio = audio;
 interior.lifts.audio = audio;
-const traffic = createTraffic({ scene, count: 6, audio });
+const traffic = createTraffic({ scene, count: 6, audio, sun: exterior.sun });
 const pool = new LightPool(scene, { points: 14, spots: 3 });
 
 const hemi = new THREE.HemisphereLight(0x5a6f86, 0x3a2f26, 0.16);
@@ -246,6 +246,7 @@ VIEWS.ext_bridgeFace = { kind: "exterior", target: [0, 268, 470], distance: 140,
 VIEWS.ext_belly = { kind: "exterior", target: [0, -82, 465], distance: 600, yaw: 2.4, pitch: -0.75, planet: 1, planetOffset: 0, time: 40 };
 VIEWS.ext_stern = { kind: "exterior", target: [0, 20, 800], distance: 1300, yaw: 0.35, pitch: 0.15, planet: 0, planetOffset: 0, time: 40 };
 VIEWS.ext_bow = { kind: "exterior", target: [0, 0, -600], distance: 1500, yaw: 2.9, pitch: 0.3, planet: 0, planetOffset: 0, time: 40 };
+VIEWS.ext_well = { kind: "exterior", target: [0, -95, 465], distance: 160, yaw: 2.2, pitch: -0.9, planet: 1, planetOffset: 0, time: 40 };
 
 let framesRendered = 0;
 let pendingCapture = null;
