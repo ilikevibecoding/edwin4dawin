@@ -1,7 +1,7 @@
 // Deck Connector — 40 m longitudinal link between the two crew corridors (x −3..3, z −170..−130, h 4.5).
 // Both ends are permanent 6 m openings ('open' doors build nothing), so this room owns the two angular
 // passage frames that line the wall gap. Two bulkhead rings split it into three bays.
-import { buildCorridor, floorDecal, props, DECAL, IMP } from "./corridor_kit.js";
+import { buildCorridor, floorDecal, props, DECAL } from "./corridor_kit.js";
 import { WALL_T } from "../../core/layout.js";
 
 export const meta = { id: "crew_connector", stream: "corridors" };
@@ -29,5 +29,4 @@ export function build(ctx) {
     // threshold stencils: arrows into the corridors
     floorDecal(ctx, R.C, z + (z > -150 ? -1.6 : 1.6), R.C.mid, 1.2, DECAL.ARROW, { dirA: z > -150 ? 1 : -1 });
   }
-  void IMP;
 }

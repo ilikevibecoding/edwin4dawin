@@ -1,6 +1,6 @@
 // Turbolift Lobby — Engineering (x −6..6, z 252..262, h 4.5). Cabs on the forward wall, blast door aft into the
 // engineering corridor. Shared lobby kit plus a vertical coolant riser cluster and a HIGH ENERGY stencil.
-import { buildLobby, decalOn, props, DECAL, IMP } from "./corridor_kit.js";
+import { buildLobby, decalOn, DECAL, IMP } from "./corridor_kit.js";
 
 export const meta = { id: "eng_lobby", stream: "corridors" };
 
@@ -29,7 +29,6 @@ export function build(ctx) {
       }
       f.collider(len - 1.3, len, 0, ctx.h, 0, 0.45, "risers");
       decalOn(f, len - 1.7, 2.35, 0.06, 0.5, DECAL.WARNING);
-      void props;
     },
   });
 }

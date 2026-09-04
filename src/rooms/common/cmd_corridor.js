@@ -1,7 +1,7 @@
 // Command Deck Corridor — the 144 m transverse spine of the tower (x −84..60, z 206..212, h 4.5).
 // Six 24 m bays separated by octagonal bulkhead rings; recessed computer alcoves, utility cabinets, an open
 // maintenance hatch, emergency lamps, deck signage flanking the blast doors and emblems at the bridge door.
-import { buildCorridor, emblemPanel, signPlate, props, DECAL, IMP } from "./corridor_kit.js";
+import { buildCorridor, emblemPanel, signPlate, props, DECAL } from "./corridor_kit.js";
 
 export const meta = { id: "cmd_corridor", stream: "corridors" };
 
@@ -33,5 +33,4 @@ export function build(ctx) {
     signPlate(frame, length - 0.7, 2.3, { w: 0.5, h: 0.72, top: DECAL.RESTRICTED, bottom: null });
     frame.box("emitWhiteSoft", length / 2, 3.3, 0.04, 3.0, 0.06, 0.02, { uv: "keep" });
   }
-  void IMP;
 }

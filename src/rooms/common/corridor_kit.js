@@ -335,7 +335,6 @@ export function ceilingBay(ctx, C, ba, bb, variant, seed, { stripMat = "emitWhit
   const styles = variant === 2 ? { plate: 0.6, vent: 0.3, pipes: 0.1 } : { plate: 0.86, vent: 0.1, pipes: 0.04 };
   panelGrid(sub, w, d, { rows, panelW: Math.max(0.8, w / Math.max(1, Math.round(w / 1.5))), kick: false, cornice: false, seed, collide: false, styles, bands: [], tints: [[IMP.plateDark, 0.7], [IMP.trim, 0.3]], detail: 0 });
   const y = ctx.ceil;
-  const len = bb - ba;
   if (variant === 1) {
     // central longitudinal light strip
     kit.boxMM("paintedMetal", ...mm(C, ba + 0.6, bb - 0.6, C.mid - 0.32, C.mid + 0.32, y - 0.14, y), { color: IMP.black, texel: 1 });
@@ -359,7 +358,6 @@ export function ceilingBay(ctx, C, ba, bb, variant, seed, { stripMat = "emitWhit
       props.pipeRun(kit, { points: [C.P(ba + 0.2, C.mid + o, y - 0.17), C.P(bb - 0.2, C.mid + o, y - 0.17)], r, color: col, clamps: 3, clampColor: IMP.black });
     }
   }
-  void len;
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -532,7 +530,6 @@ export function lobbyCeiling(ctx, { soffitH = 0.6, depth = 0.7, stripMat = "emit
   const { x0, x1, z0, z1 } = ctx.inner;
   const H = ctx.h;
   const yTop = ctx.ceil;
-  const yBot = yTop - soffitH;
   for (const side of ["zmin", "zmax", "xmin", "xmax"]) {
     const { frame, length, openings } = ctx.wall(side);
     // gaps where a tall door frame reaches into the soffit
@@ -572,7 +569,6 @@ export function lobbyCeiling(ctx, { soffitH = 0.6, depth = 0.7, stripMat = "emit
     kit.boxMM(stripMat, [cx + s / 2 - sw, yTop - 0.232, cz - s / 2 + sw], [cx + s / 2, yTop - 0.22, cz + s / 2 - sw], { uv: "keep" });
     decalOn(new Frame(kit, new THREE.Vector3(cx, yTop - 0.222, cz), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 1)), 0, 0, 0.002, Math.min(1.6, s - 1.0), DECAL.EMBLEM);
   }
-  void yBot;
 }
 
 // ---------------------------------------------------------------------------------------------------
