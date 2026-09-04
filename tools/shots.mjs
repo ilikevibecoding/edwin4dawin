@@ -77,6 +77,8 @@ async function applyView(name) {
     return label;
   }
   await page.evaluate((n) => window.debugAPI.setView(n), name);
+  // beauty stills of the exterior: no near-camera dust streaks (they read as a meteor shower in a frame)
+  if (name.startsWith("ext_") && NO_HUD) await page.evaluate(() => window.debugAPI.setDust && window.debugAPI.setDust(false));
   return name.replace(":", "_");
 }
 // lift cars are not worth a frame each
