@@ -317,8 +317,9 @@ export function revealGeometry(outer: LoftGrid, inner: LoftGrid, b: QuadBlock): 
 
 /**
  * One window pane of a quad block with its own [0,1]^2 UV (u along the body, v along the ring, both by arc length)
- * and an `aPane` attribute carrying the pane's physical size (m) and a centre-seal flag, so the glass shader can
- * draw a rubber seal / edge vignette of constant physical width on every pane.
+ * and an `aPane` attribute carrying the pane's physical size (m), a centre-seal flag and an inner-face flag (`flip`),
+ * so the glass shader can draw a rubber seal / edge vignette of constant physical width on every pane and treat the
+ * cabin side of the glass (cleaner, shaded by the roof) differently from the outside.
  */
 export function paneGeometry(g: LoftGrid, b: QuadBlock, flip: boolean, centreSeal = false): THREE.BufferGeometry {
   const R = g.R;
@@ -345,7 +346,7 @@ export function paneGeometry(g: LoftGrid, b: QuadBlock, flip: boolean, centreSea
       nrm.push(g.normal[k * 3] * f, g.normal[k * 3 + 1] * f, g.normal[k * 3 + 2] * f);
       const [au, tu] = along(ii, jj, true), [av, tv] = along(ii, jj, false);
       uv.push(au / Math.max(tu, 1e-6), av / Math.max(tv, 1e-6));
-      pane.push(width, height, centreSeal ? 1 : 0, 0);
+      pane.push(width, height, centreSeal ? 1 : 0, flip ? 1 : 0);
     }
   }
   for (let ii = 0; ii < ni; ii++) for (let jj = 0; jj < nj; jj++) {
