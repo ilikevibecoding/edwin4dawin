@@ -190,9 +190,21 @@ export class Local {
   }
 }
 
-// Emissive screen material over a canvas texture (same recipe as the shared screens).
+// Emissive screen material over a canvas texture. Rougher than the shared screen recipe (0.15): the point light in
+// front of the signal wall reflected in the 5 m display as a naked white blob at head height.
 export function screenMaterial(tex, intensity = 1.3) {
-  return new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: intensity, roughness: 0.15, metalness: 0, envMapIntensity: 1.0 });
+  return new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: intensity, roughness: 0.45, metalness: 0, envMapIntensity: 0.3 });
+}
+
+// Painted deck-marking colour: floor lines are paint lit by the room, not emitters.
+export const PAINT = new THREE.Color(0x9fb8dc);
+
+// Four walls of a rectangular ring (a recess or trim frame that a solid box cannot express), y from y0 to y1.
+export function ring4(kit, mat, cx, cz, y0, y1, w, d, t, opts = {}) {
+  kit.boxMM(mat, [cx - w / 2, y0, cz - d / 2], [cx - w / 2 + t, y1, cz + d / 2], opts);
+  kit.boxMM(mat, [cx + w / 2 - t, y0, cz - d / 2], [cx + w / 2, y1, cz + d / 2], opts);
+  kit.boxMM(mat, [cx - w / 2 + t, y0, cz - d / 2], [cx + w / 2 - t, y1, cz - d / 2 + t], opts);
+  kit.boxMM(mat, [cx - w / 2 + t, y0, cz + d / 2 - t], [cx + w / 2 - t, y1, cz + d / 2], opts);
 }
 
 // Deterministic picker

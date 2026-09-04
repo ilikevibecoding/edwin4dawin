@@ -355,21 +355,56 @@ function drawWide(g, cell, rand, idx) {
 }
 
 function drawKeys(g, cell, rand) {
-  // keyboard / key-cluster texture: dark keys with lit legends (used on the desk key plates)
+  // keyboard texture (4:1, used on the recessed desk key trays): four staggered rows of bevelled key caps in
+  // black gaps — lit top edge, shadowed bottom edge, a small glyph or legend bar per key, a few amber/red keys and
+  // a wide space bar. Reads as a physical key grid instead of a flat grey slab.
   const [x, y, w, h] = cell;
-  g.fillStyle = "#0b0d11";
+  g.fillStyle = "#05070a";
   g.fillRect(x, y, w, h);
-  const kw = 30;
-  for (let r = 0; r < 4; r++)
-    for (let c = 0; c < 16; c++) {
-      const kx = x + 8 + c * kw + (r % 2) * 8;
-      const ky = y + 8 + r * 30;
-      if (kx + kw - 4 > x + w) continue;
-      g.fillStyle = "#171a20";
-      g.fillRect(kx, ky, kw - 4, 24);
-      g.fillStyle = rand() < 0.12 ? AMBER : BLUE_LO;
-      g.fillRect(kx + 8, ky + 9, 10, 2);
+  const cap = (kx, ky, kw, kh, legend) => {
+    g.fillStyle = "#1a1e25";
+    g.fillRect(kx, ky, kw, kh);
+    g.fillStyle = "#2b3039"; // lit top / left bevel
+    g.fillRect(kx, ky, kw, 2);
+    g.fillRect(kx, ky, 2, kh);
+    g.fillStyle = "#0c0e12"; // shadowed bottom / right bevel
+    g.fillRect(kx, ky + kh - 3, kw, 3);
+    g.fillRect(kx + kw - 2, ky, 2, kh);
+    g.fillStyle = "#22262e"; // cap top plateau
+    g.fillRect(kx + 5, ky + 5, kw - 10, kh - 11);
+    if (legend) legend(kx, ky, kw, kh);
+  };
+  const rowsDef = [
+    { n: 16, kw: 30, kh: 22, ky: 4, stag: 0 },
+    { n: 15, kw: 32, kh: 26, ky: 30, stag: 6 },
+    { n: 14, kw: 32, kh: 26, ky: 60, stag: 14 },
+    { n: 13, kw: 32, kh: 26, ky: 90, stag: 22 },
+  ];
+  rowsDef.forEach((row, r) => {
+    const total = row.n * row.kw;
+    let kx = x + (w - total) / 2 + row.stag;
+    for (let c = 0; c < row.n; c++) {
+      const isBar = r === 3 && c >= 4 && c <= 8;
+      if (isBar && c !== 4) {
+        kx += row.kw;
+        continue;
+      }
+      const kw = isBar ? row.kw * 5 - 4 : row.kw - 4;
+      const v = rand();
+      const col = v < 0.06 ? RED : v < 0.18 ? AMBER : v < 0.3 ? BLUE_HI : BLUE_LO;
+      cap(kx, y + row.ky, kw, row.kh, (a, b, cw, ch) => {
+        g.fillStyle = col;
+        if (r === 0) g.fillRect(a + 6, b + 9, cw - 12, 3);
+        else if (isBar) g.fillRect(a + 20, b + ch / 2 - 1, cw - 40, 2);
+        else if (rand() < 0.5) g.fillRect(a + 8, b + 8, 8, 8);
+        else {
+          g.fillRect(a + 7, b + 8, cw - 14, 2);
+          g.fillRect(a + 7, b + 14, (cw - 14) * 0.6, 2);
+        }
+      });
+      kx += row.kw;
     }
+  });
 }
 
 export function makeCommsAtlas() {
