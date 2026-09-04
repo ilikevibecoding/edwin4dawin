@@ -177,7 +177,11 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   (3ebc2455), nav + tactical (072a96b1: `navtac-c-verify` — blown-pixel scan ≥ 236 lum finds 4 px in `d1-nav-dais`,
   ≤ 348 px in 28 tiny bezel highlights in `d1-tactical-overview`; the run-2 mottled ceiling is gone with the matte
   tinted ceiling; mean luminance 19 (nav-dais) / 25 (nav-holo) / 28–30 (tactical) — nav-dais stays the darkest view
-  on Deck 1 by design of its wall-wash key, see the exposure ladder under Requests). Bridge and intel still running.
+  on Deck 1 by design of its wall-wash key, see the exposure ladder under Requests). Intel (da355adb: `intel-c-verify`
+  + `-verify3` — blown pixels 627 → 0 in `d1-intel-gate`, 0 in table/columns, 7 in the vestibule; mean luminance 13–21
+  = the −1.5 EV room of the ladder; every point is a recessed can 20 cm above the ceiling plane so the ceiling can
+  never blob, which also leaves the ceiling unlit — the per-room ambient under Requests would lift it). Bridge still
+  running.
 
 ## Remaining
 1. Critic findings (two blind critics on 22 shots) → fixes per room → re-shoot → push.
@@ -205,6 +209,20 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   × bloom threshold 1.15; even black paint blows past ~0.5 m through its specular term). Rules that fixed it: every
   point descriptor sits inside a closed dark housing ≥ 1.2 m below the ceiling; anything that must hang near a surface
   is a downward spot whose cone never reaches its own can or the ceiling.
+- **Pool lights leak through shared walls (found by the intel round, matters for every deck).** Pool lights cast no
+  shadows, so a neighbour room's descriptors light every surface in the current room that faces them. Repro:
+  `d1-intel-vestibule` with `d1-corridor-stbd` active — the corridor's two nearest cool-white points (5 m away, behind
+  the 0.3 m wall) turned the guard booth's light-grey back panel pink-white inside a red-only room; with intel alone
+  it is red (`/tmp/sd-shots/intel-c-probe`). I darkened that panel, but the general fix belongs in §9.4: either fill
+  the pool from the current room first and admit neighbour descriptors only within ~3 m of the shared door (where
+  they are visible through it anyway), or let a room set `lights.neighbours: false` in its manifest. Red-only,
+  amber-only and dark rooms (intel, any brig/reactor mood room on other decks) will show this the moment a lit
+  corridor is adjacent.
+- **Blast-door lintels vs 3.2–3.4 m ceilings.** A 4.0 m `blast` opening is taller than the spine (243.2), corridor
+  (243.2) and intel (243.4) ceilings; the top 0.6–0.8 m of the hole sits in the ceiling void and my `doorReveal`
+  lintel ends at 244.05 — which is why intel and spine bounds now end at y 244.2. D's 4 m leaves will be partly hidden
+  above the ceiling on those doors (harmless visually: the opening reads as ceiling-high); if D prefers, its helper
+  could clamp leaf height to the lower of the two rooms' ceilings.
 - **Light intensities.** Practical values to make pools read on dark Imperial surfaces are ~2× the E·h² ≈ 1 rule
   (bridge runs E ≈ 2–3, rafts 62 cd at 4 m). Worth a line in §9.4, together with the pool scoring ratio (in my shim
   0.1 priority ≡ 12 m of distance) so rooms can tune fills deliberately.
