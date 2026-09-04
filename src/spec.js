@@ -404,21 +404,28 @@ export const DECK_SPOTS = [
 // ---------------------------------------------------------------------------
 // Exterior camera presets (world positions and look-at targets).
 // `time` is the far-field clock (seconds) main.js applies with space.setTime(): the sun bearing is
-// -30° + 1.3°·time (measured from +z toward +x, 22° elevation), so each preset gets a 3/4 key light
-// 45–60° off the camera's back axis with a readable shadow side, the sun sprite out of frame and the
-// planets behind the ship rather than beside it.
+// -30° + 1.3°·time (measured from +z toward +x); `sunElev` is the sun's elevation over the hull plane
+// in degrees (main.js calls space.setSunElevation before setTime). The far field turns with the sun,
+// so `time` also decides where the planets sit: every preset below was chosen so the sun is 70–120°
+// off the view axis (a lit face and a shadow face in every frame), the sun sprite is out of frame and
+// no planet limb cuts the hull (hero: the moon above the bow; far: the gas giant behind the bow half;
+// stern: the moon clear of the head; bow / belly / hangar mouth / top: no planet in frame).
+// Sun elevations are moderate (24–35°): the upper slopes are only 20° from horizontal, so a 40° sun
+// lights both the deck and the "shadow" flank; at 30° the port flank keys at ~0.3 against 0.5 on the
+// deck and the terrace / tower side walls go to fill. The ventral presets put the sun 32° below the
+// hull so the belly plane keys at ~0.55 and the reactor bulb carries a terminator.
 // ---------------------------------------------------------------------------
 export const EXTERIOR_VIEWS = {
-  ext_hero: { pos: [-1150, 260, -1250], look: [0, 60, -100], fov: 45, time: 250 },
-  ext_bow: { pos: [-300, -10, -1450], look: [0, 40, -350], fov: 55, time: 107.7 },
-  ext_stern: { pos: [850, 240, 1250], look: [0, 10, 350], fov: 50, time: 250 },
-  ext_tower: { pos: [-330, 300, 40], look: [0, 235, 300], fov: 45, time: 107.7 },
-  ext_bridge_close: { pos: [-50, 250, 125], look: [0, 249, 215], fov: 50, time: 215.4 },
-  ext_belly: { pos: [-650, -480, -450], look: [0, -60, -50], fov: 55, time: 275.4 },
-  ext_hangar_mouth: { pos: [-120, -160, 160], look: [0, -40, 10], fov: 60, time: 67.7 },
-  ext_trench: { pos: [-430, 12, -260], look: [-320, -2, 120], fov: 50, time: 107.7 },
-  ext_far: { pos: [-3000, 1000, -2600], look: [0, 60, -100], fov: 30, time: 250 },
-  ext_top: { pos: [0, 2600, -200], look: [0, 0, -200], fov: 45, time: 215.4 },
+  ext_hero: { pos: [-1000, 620, -1150], look: [0, 90, -60], fov: 42, time: 136, sunElev: 30 },
+  ext_bow: { pos: [-280, -40, -1300], look: [0, 30, -560], fov: 45, time: 252, sunElev: 24 },
+  ext_stern: { pos: [850, 240, 1250], look: [0, 10, 350], fov: 50, time: 244, sunElev: 26 },
+  ext_tower: { pos: [-330, 300, 40], look: [0, 235, 300], fov: 45, time: 154, sunElev: 35 },
+  ext_bridge_close: { pos: [-50, 250, 125], look: [0, 249, 215], fov: 50, time: 181, sunElev: 35 },
+  ext_belly: { pos: [-650, -560, -450], look: [0, -40, -50], fov: 55, time: 147, sunElev: -32 },
+  ext_hangar_mouth: { pos: [-120, -160, 160], look: [0, -40, 10], fov: 60, time: 66, sunElev: -32 },
+  ext_trench: { pos: [-430, -12, -260], look: [-306, -12, 120], fov: 50, time: 158, sunElev: 12 },
+  ext_far: { pos: [-2300, 500, -2000], look: [0, 60, -100], fov: 30, time: 166, sunElev: 30 },
+  ext_top: { pos: [0, 2600, -200], look: [0, 0, -200], fov: 45, time: 215.4, sunElev: 30 },
 };
 
 export const SHIP_NAME = "VINDICATOR";

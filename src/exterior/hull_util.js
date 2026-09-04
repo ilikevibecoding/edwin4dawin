@@ -176,6 +176,28 @@ export class Batch {
     this.face(i0, i1, i2);
     this.face(i0, i2, i3);
   }
+  /** Flat quad like quad(), with one colour per corner (gradients across a face). */
+  quadC(a, b, c, d, colors, texel = TEXEL, hint = null) {
+    _a.set(c.x - a.x, c.y - a.y, c.z - a.z);
+    _b.set(d.x - b.x, d.y - b.y, d.z - b.z);
+    _n.crossVectors(_a, _b);
+    if (_n.lengthSq() < 1e-12) return;
+    _n.normalize();
+    let cols = colors;
+    if (hint && _n.x * hint.x + _n.y * hint.y + _n.z * hint.z < 0) {
+      _n.negate();
+      const t = b;
+      b = d;
+      d = t;
+      cols = [colors[0], colors[3], colors[2], colors[1]];
+    }
+    const i0 = this.vertexW(a, _n, C(cols[0]), texel);
+    const i1 = this.vertexW(b, _n, C(cols[1]), texel);
+    const i2 = this.vertexW(c, _n, C(cols[2]), texel);
+    const i3 = this.vertexW(d, _n, C(cols[3]), texel);
+    this.face(i0, i1, i2);
+    this.face(i0, i2, i3);
+  }
   /** Quad with explicit per-vertex normals + colours: [{p, n, c}] × 4 (smooth shading). */
   quadV(v, texel = TEXEL) {
     const ids = v.map((q) => this.vertexW(q.p, q.n, q.c, texel));
@@ -675,13 +697,21 @@ export function plateField(chunks, rand, spec) {
  * the face looks up (+y, recess goes down). Floor + walls always visible; ribs, pipe and lights
  * are "mid" / "near" layers. Set mirror false for a single channel (xc may then be negative).
  */
-export function channel(chunks, rand, { zA, zB, xc, halfW, depth, yAt, up = true, mirror = true, floorKey = "hullGreeble", wallKey = "hullGreeble", floorTint = PALETTE.hullTrench, wallTint = PALETTE.hullDark, ribs = true, pipe = true, lights = true, ribStep = 14, lightStep = 42 }) {
+// Recess interiors sit at ~0.2 effective albedo (plating one step darker than the deck) with a
+// contact gradient: the walls darken toward the floor and the floor toward the walls over ~0.3 of the
+// depth, so the channel reads as a lit slot with shaded corners instead of a black gutter.
+const RECESS = mixC(PALETTE.hullDark, PALETTE.hullMid, 0.7);
+export function channel(chunks, rand, { zA, zB, xc, halfW, depth, yAt, up = true, mirror = true, floorKey = "hullPlate1", wallKey = "hullPlate1", floorTint = RECESS, wallTint = RECESS, ribs = true, pipe = true, lights = true, ribStep = 14, lightStep = 42 }) {
   const sgn = up ? 1 : -1;
   const yF = (z) => yAt(z) - sgn * depth;
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const nUp = V(0, sgn, 0);
   const sides = mirror ? [1, -1] : [1];
   const zEdges = [zA, ...chunks.edges.filter((z) => z > zA && z < zB), zB];
+  const fT = C(floorTint);
+  const fEdge = shade(fT, 0.62);
+  const wT = C(wallTint);
+  const wBase = shade(wT, 0.6);
   for (let i = 0; i < zEdges.length - 1; i++) {
     const z0 = zEdges[i];
     const z1 = zEdges[i + 1];
@@ -689,11 +719,16 @@ export function channel(chunks, rand, { zA, zB, xc, halfW, depth, yAt, up = true
     for (const side of sides) {
       const X = (z, off) => side * (xc(z) + off);
       const floor = chunks.batch(zm, "far", floorKey);
-      floor.quad(V(X(z0, -halfW), yF(z0), z0), V(X(z0, halfW), yF(z0), z0), V(X(z1, halfW), yF(z1), z1), V(X(z1, -halfW), yF(z1), z1), floorTint, TEXEL * 1.5, nUp);
+      // floor as three strips: a shaded margin against each wall, the lit middle
+      const m = Math.min(halfW * 0.5, Math.max(0.6, depth * 0.3));
+      const F = (z, off) => V(X(z, off), yF(z), z);
+      floor.quadC(F(z0, -halfW), F(z0, -halfW + m), F(z1, -halfW + m), F(z1, -halfW), [fEdge, fT, fT, fEdge], TEXEL * 1.5, nUp);
+      floor.quad(F(z0, -halfW + m), F(z0, halfW - m), F(z1, halfW - m), F(z1, -halfW + m), fT, TEXEL * 1.5, nUp);
+      floor.quadC(F(z0, halfW - m), F(z0, halfW), F(z1, halfW), F(z1, halfW - m), [fT, fEdge, fEdge, fT], TEXEL * 1.5, nUp);
       const wall = chunks.batch(zm, "far", wallKey);
       for (const w of [-1, 1]) {
         const hint = V(-w * side, 0, 0); // faces into the channel
-        wall.quad(V(X(z0, w * halfW), yF(z0), z0), V(X(z0, w * halfW), yAt(z0), z0), V(X(z1, w * halfW), yAt(z1), z1), V(X(z1, w * halfW), yF(z1), z1), wallTint, TEXEL * 2, hint);
+        wall.quadC(V(X(z0, w * halfW), yF(z0), z0), V(X(z0, w * halfW), yAt(z0), z0), V(X(z1, w * halfW), yAt(z1), z1), V(X(z1, w * halfW), yF(z1), z1), [wBase, wT, wT, wBase], TEXEL * 2, hint);
       }
       if (i === 0) wall.quad(V(X(z0, -halfW), yF(z0), z0), V(X(z0, halfW), yF(z0), z0), V(X(z0, halfW), yAt(z0), z0), V(X(z0, -halfW), yAt(z0), z0), wallTint, TEXEL * 2, V(0, 0, 1));
       if (i === zEdges.length - 2) wall.quad(V(X(z1, -halfW), yF(z1), z1), V(X(z1, halfW), yF(z1), z1), V(X(z1, halfW), yAt(z1), z1), V(X(z1, -halfW), yAt(z1), z1), wallTint, TEXEL * 2, V(0, 0, -1));
@@ -722,20 +757,25 @@ export function channel(chunks, rand, { zA, zB, xc, halfW, depth, yAt, up = true
 // exta_* materials
 // ---------------------------------------------------------------------------
 /**
- * Planet-shine. The sun's elevation over the hull is fixed (+22°) and the hemisphere fill's ground
- * colour is near black, so every down-facing surface — the whole ventral half of the ship — would
- * render as a silhouette. These materials carry a faint cool ambient term that fades in as the world
- * normal turns downward: emissive × albedo × vertex tint, so plating seams and paint variation stay
- * readable on the belly without touching the sunlit side.
+ * Planet-shine / space ambient. The scene's hemisphere fill (0.8 × 0x6a86b8 sky, near-black ground)
+ * puts an unlit vertical face at ~9 % grey and an unlit underside at ~3 %, so every shadow face would
+ * read as a silhouette. These materials carry a faint cool ambient term: emissive × albedo texture ×
+ * vertex tint × a normal-dependent gain, so plating seams and paint variation stay readable in
+ * shadow without touching the sunlit side.
+ *
+ * Calibrated against the ACES output (exposure 1) for an effective plating albedo of ~0.37:
+ *  - a vertical face in shadow (terrace / tower sides, trench wall) lands at 14–16 %,
+ *  - an underside in shadow (belly, lip soffit) at 12–13 % — the hemisphere ground adds nothing,
+ *  - an up-facing face in shadow (deck under the tower's shadow) at ~13 %: the sky fill already
+ *    gives 9–10 %, so the gain is lowest there.
+ * Recess interiors (albedo ≈ 0.2) stay at 8–10 %, sunlit plating at 45–55 % (key 0.5).
  */
-// tuned with the scene hemisphere fill at 0.8 so the belly plating sits at ~15–20 % grey after ACES
-// (never below 8 %): ext_belly / ext_hangar_mouth are the reference frames
-const SHINE = new THREE.Color(0x636972);
+const SHINE = new THREE.Color(0x525963);
 const SHINE_CHUNK = /* glsl */ `
 #include <emissivemap_fragment>
 {
 	vec3 shineN = inverseTransformDirection( normal, viewMatrix );
-	float shineK = smoothstep( 0.3, -0.5, shineN.y );
+	float shineK = 1.0 - 0.6 * smoothstep( -0.6, 1.0, shineN.y );
 	#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
 		totalEmissiveRadiance *= vColor.rgb;
 	#endif

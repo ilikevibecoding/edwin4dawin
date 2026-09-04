@@ -1,0 +1,582 @@
+{
+  "iter": "extd1",
+  "views": {
+    "ext_hero": {
+      "frameMs": 2973.63,
+      "fps": 0.3,
+      "p95Ms": 2287.5,
+      "jsMs": 2.99,
+      "calls": 307,
+      "triangles": 1510914,
+      "points": 14800,
+      "lines": 260,
+      "geometries": 395,
+      "textures": 144,
+      "textureMB": 261.6,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "longTasks": 42,
+      "longTaskMs": 102473,
+      "loadMs": 22408,
+      "pixelRatio": 1,
+      "jsHeapMB": 307.3,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 646656,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    },
+    "ext_bow": {
+      "frameMs": 1933.19,
+      "fps": 0.5,
+      "p95Ms": 1956.9,
+      "jsMs": 1.15,
+      "calls": 289,
+      "triangles": 1455606,
+      "points": 14800,
+      "lines": 260,
+      "geometries": 399,
+      "textures": 144,
+      "textureMB": 261.6,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "longTasks": 55,
+      "longTaskMs": 125230,
+      "loadMs": 22408,
+      "pixelRatio": 1,
+      "jsHeapMB": 307.7,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 646656,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    },
+    "ext_stern": {
+      "frameMs": 1162.96,
+      "fps": 0.9,
+      "p95Ms": 959,
+      "jsMs": 0.59,
+      "calls": 346,
+      "triangles": 1759816,
+      "points": 14800,
+      "lines": 260,
+      "geometries": 399,
+      "textures": 144,
+      "textureMB": 261.6,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "longTasks": 68,
+      "longTaskMs": 136819,
+      "loadMs": 22408,
+      "pixelRatio": 1,
+      "jsHeapMB": 308.2,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 646656,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    },
+    "ext_tower": {
+      "frameMs": 1276.19,
+      "fps": 0.8,
+      "p95Ms": 1408,
+      "jsMs": 0.42,
+      "calls": 438,
+      "triangles": 1817508,
+      "points": 14800,
+      "lines": 588,
+      "geometries": 463,
+      "textures": 144,
+      "textureMB": 261.6,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "longTasks": 81,
+      "longTaskMs": 153202,
+      "loadMs": 22408,
+      "pixelRatio": 1,
+      "jsHeapMB": 308.7,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 646656,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    },
+    "ext_bridge_close": {
+      "frameMs": 1565.37,
+      "fps": 0.6,
+      "p95Ms": 1751.4,
+      "jsMs": 0.45,
+      "calls": 488,
+      "triangles": 1960912,
+      "points": 14800,
+      "lines": 588,
+      "geometries": 463,
+      "textures": 144,
+      "textureMB": 261.6,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "longTasks": 95,
+      "longTaskMs": 176003,
+      "loadMs": 22408,
+      "pixelRatio": 1,
+      "jsHeapMB": 308.8,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 646656,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    },
+    "ext_belly": {
+      "frameMs": 1265.3,
+      "fps": 0.8,
+      "p95Ms": 1145.7,
+      "jsMs": 0.37,
+      "calls": 349,
+      "triangles": 1705518,
+      "points": 14800,
+      "lines": 260,
+      "geometries": 463,
+      "textures": 144,
+      "textureMB": 261.6,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "longTasks": 108,
+      "longTaskMs": 191258,
+      "loadMs": 22408,
+      "pixelRatio": 1,
+      "jsHeapMB": 308.6,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 646656,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    },
+    "ext_hangar_mouth": {
+      "frameMs": 1598.53,
+      "fps": 0.6,
+      "p95Ms": 1849,
+      "jsMs": 0.38,
+      "calls": 411,
+      "triangles": 1921742,
+      "points": 14800,
+      "lines": 260,
+      "geometries": 463,
+      "textures": 144,
+      "textureMB": 261.6,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "longTasks": 121,
+      "longTaskMs": 213264,
+      "loadMs": 22408,
+      "pixelRatio": 1,
+      "jsHeapMB": 308.9,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 646656,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    },
+    "ext_trench": {
+      "frameMs": 1403.31,
+      "fps": 0.7,
+      "p95Ms": 1307.3,
+      "jsMs": 0.38,
+      "calls": 349,
+      "triangles": 1860836,
+      "points": 14800,
+      "lines": 260,
+      "geometries": 463,
+      "textures": 144,
+      "textureMB": 261.6,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "longTasks": 133,
+      "longTaskMs": 229537,
+      "loadMs": 22408,
+      "pixelRatio": 1,
+      "jsHeapMB": 309.5,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 646656,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    },
+    "ext_far": {
+      "frameMs": 946.5,
+      "fps": 1.1,
+      "p95Ms": 765.3,
+      "jsMs": 0.29,
+      "calls": 311,
+      "triangles": 1314514,
+      "points": 14800,
+      "lines": 260,
+      "geometries": 463,
+      "textures": 144,
+      "textureMB": 261.6,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "longTasks": 146,
+      "longTaskMs": 240492,
+      "loadMs": 22408,
+      "pixelRatio": 1,
+      "jsHeapMB": 309,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 646656,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    },
+    "ext_top": {
+      "frameMs": 762.62,
+      "fps": 1.3,
+      "p95Ms": 744.5,
+      "jsMs": 0.27,
+      "calls": 333,
+      "triangles": 1356872,
+      "points": 14800,
+      "lines": 260,
+      "geometries": 463,
+      "textures": 144,
+      "textureMB": 261.6,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "longTasks": 159,
+      "longTaskMs": 249604,
+      "loadMs": 22408,
+      "pixelRatio": 1,
+      "jsHeapMB": 309.9,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 646656,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    }
+  },
+  "checks": {},
+  "stats": {
+    "frameMs": 750.87,
+    "fps": 1.3,
+    "p95Ms": 744.5,
+    "jsMs": 0.29,
+    "calls": 333,
+    "triangles": 1356872,
+    "points": 14800,
+    "lines": 260,
+    "geometries": 463,
+    "textures": 144,
+    "textureMB": 261.6,
+    "programs": 81,
+    "shaderCompiles": 81,
+    "longTasks": 161,
+    "longTaskMs": 251001,
+    "loadMs": 22408,
+    "pixelRatio": 1,
+    "jsHeapMB": 309.7,
+    "visibleCells": 2,
+    "activeLights": 13,
+    "current": "bridge",
+    "cells": 46,
+    "colliders": 4263,
+    "floors": 714,
+    "mode": "orbit",
+    "exteriorTriangles": 646656,
+    "poolLights": 13,
+    "qualityLevel": 3
+  },
+  "logs": [
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected.",
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected."
+  ],
+  "buildLog": [
+    {
+      "room": "bridge",
+      "ms": 206.6,
+      "builder": "buildBridge"
+    },
+    {
+      "room": "lobby_a",
+      "ms": 28.8,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_a",
+      "ms": 23.2,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "intel",
+      "ms": 88.3,
+      "builder": "buildIntel"
+    },
+    {
+      "room": "ready_room",
+      "ms": 33.4,
+      "builder": "buildReadyRoom"
+    },
+    {
+      "room": "comms",
+      "ms": 88.6,
+      "builder": "buildComms"
+    },
+    {
+      "room": "tactical",
+      "ms": 70.6,
+      "builder": "buildTactical"
+    },
+    {
+      "room": "navigation",
+      "ms": 45.4,
+      "builder": "buildNavigation"
+    },
+    {
+      "room": "lobby_b",
+      "ms": 15.4,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "observation",
+      "ms": 27.8,
+      "builder": "buildObservation"
+    },
+    {
+      "room": "corridor_b",
+      "ms": 9.7,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "officers_quarters",
+      "ms": 27,
+      "builder": "buildOfficersQuarters"
+    },
+    {
+      "room": "briefing",
+      "ms": 39.7,
+      "builder": "buildBriefing"
+    },
+    {
+      "room": "lounge",
+      "ms": 99.8,
+      "builder": "buildLounge"
+    },
+    {
+      "room": "escape_pods",
+      "ms": 77.9,
+      "builder": "buildEscapePods"
+    },
+    {
+      "room": "lobby_c",
+      "ms": 27,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_c",
+      "ms": 25.5,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "crew_quarters",
+      "ms": 117.6,
+      "builder": "buildCrewQuarters"
+    },
+    {
+      "room": "mess_hall",
+      "ms": 82,
+      "builder": "buildMessHall"
+    },
+    {
+      "room": "medbay",
+      "ms": 91.6,
+      "builder": "buildMedbay"
+    },
+    {
+      "room": "armory",
+      "ms": 60.9,
+      "builder": "buildArmory"
+    },
+    {
+      "room": "detention",
+      "ms": 59.1,
+      "builder": "buildDetention"
+    },
+    {
+      "room": "lobby_d",
+      "ms": 16.9,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_d",
+      "ms": 20.8,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "engineering",
+      "ms": 151.2,
+      "builder": "buildEngineering"
+    },
+    {
+      "room": "hyperdrive",
+      "ms": 98.1,
+      "builder": "buildHyperdrive"
+    },
+    {
+      "room": "life_support",
+      "ms": 53.4,
+      "builder": "buildLifeSupport"
+    },
+    {
+      "room": "maintenance",
+      "ms": 78.6,
+      "builder": "buildMaintenance"
+    },
+    {
+      "room": "reactor",
+      "ms": 252.9,
+      "builder": "buildReactor"
+    },
+    {
+      "room": "hangar",
+      "ms": 325.5,
+      "builder": "buildHangar"
+    },
+    {
+      "room": "fighter_bay",
+      "ms": 78.2,
+      "builder": "buildFighterBay"
+    },
+    {
+      "room": "shuttle_bay",
+      "ms": 98.3,
+      "builder": "buildShuttleBay"
+    },
+    {
+      "room": "cargo",
+      "ms": 74.4,
+      "builder": "buildCargo"
+    },
+    {
+      "room": "lobby_e",
+      "ms": 32.1,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "flight_control",
+      "ms": 34.1,
+      "builder": "buildFlightControl"
+    },
+    {
+      "room": "lift_L1_A",
+      "ms": 2.8,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_A",
+      "ms": 6.5,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_B",
+      "ms": 2,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_B",
+      "ms": 6.1,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_C",
+      "ms": 3,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_C",
+      "ms": 5.1,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_D",
+      "ms": 2,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_D",
+      "ms": 2.1,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_E",
+      "ms": 2.1,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_E",
+      "ms": 2.1,
+      "builder": "buildLift"
+    },
+    {
+      "total": 6973
+    }
+  ]
+}
