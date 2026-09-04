@@ -91,8 +91,9 @@ function floorLamp(kit, x, z, h = 1.75) {
 /** Window to space (a screen) recessed in a wall opening: bevelled frame, star screen, sill light. */
 function starWindow(frame, u, v, w, h) {
   // black back box filling the opening depth, then the screen a little proud of it
-  frame.box("paintedMetal", u, v, -0.1, w + 0.1, h + 0.1, 0.12, { color: PALETTE.impBlack, texel: 2 });
-  frame.add("crew_starScreen", new THREE.PlaneGeometry(w, h), u, v, -0.045, { uv: "keep" });
+  // (the wall panels and the trim plate sit at n <= 0.02, so the screen must be proud of them)
+  frame.box("paintedMetal", u, v, 0.025, w + 0.1, h + 0.1, 0.01, { color: PALETTE.impBlack, texel: 2 });
+  frame.add("crew_starScreen", new THREE.PlaneGeometry(w, h), u, v, 0.032, { uv: "keep" });
   // bevelled frame: four angled slabs from the wall face into the recess
   const t = 0.12;
   for (const [du, dv, su, sv, tilt, spin] of [

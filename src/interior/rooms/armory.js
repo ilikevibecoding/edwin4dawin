@@ -9,7 +9,7 @@ import { roomShell, wallScreen, crate, wallSegment, impChair } from "../imperial
 import { pointLight, wallFrame } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
-import { ensureCrewMaterials, SIGN, wallSign, floorSign, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, intercom, lockerBank, propFrame } from "./crewProps.js";
+import { ensureCrewMaterials, SIGN, wallSign, floorSign, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, intercom, lockerBank, propFrame, stool } from "./crewProps.js";
 
 const ARM_PAINTS = [
   [PALETTE.impLight, 0.45],
@@ -65,7 +65,7 @@ function heavyBlaster(kit, x, y, z, quat) {
 function weaponRack(kit, ctx, { x, z, yaw = 0, n = 7, seed = 1, heavy = false }) {
   const F = propFrame(kit, x, z, yaw);
   const rand = rng(seed);
-  const pitch = heavy ? 0.42 : 0.24;
+  const pitch = heavy ? 0.42 : 0.21;
   const w = n * pitch + 0.2;
   const h = 2.2;
   F.box("paintedMetal", 0, h / 2, 0.05, w, h, 0.1, { color: PALETTE.impDark, texel: 1.5 });
@@ -79,7 +79,7 @@ function weaponRack(kit, ctx, { x, z, yaw = 0, n = 7, seed = 1, heavy = false })
   const up = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
   for (let i = 0; i < n; i++) {
     const lx = -w / 2 + 0.1 + (i + 0.5) * pitch;
-    const filled = rand() > 0.18;
+    const filled = rand() > 0.1;
     F.box(filled ? "emitBlue" : "emitRed", lx, 0.19, 0.4, 0.05, 0.012, 0.03);
     F.box("paintedMetal", lx, 1.35, 0.3, 0.06, 0.09, 0.14, { color: PALETTE.impBlack, texel: 2 });
     if (!filled) continue;
@@ -364,6 +364,59 @@ export function buildArmory(kit, ctx) {
     for (const s of [-1, 1]) kit.cyl("rubber", hx + s * 0.28, 0.1, hz + 0.25, 0.1, 0.06, "x", { color: PALETTE.rubber, segments: 12 });
     kit.box("impPanel1", hx, 0.5, hz - 0.02, 0.44, 0.5, 0.4, { color: PALETTE.impMid, uv: "keep", rot: [0.15, 0, 0] });
     kit.collider([hx - 0.3, 0, hz - 0.35], [hx + 0.3, 1.3, hz + 0.35], "handtruck");
+  }
+  // gun-cleaning bench between the island and the cage: a stripped rifle laid out, vice, lamp, tools
+  {
+    const bx = -49.2;
+    const bz = -38.9;
+    kit.box("paintedMetal", bx, 0.86, bz, 0.8, 0.06, 2.6, { color: PALETTE.impMid, texel: 2 });
+    kit.box("metal", bx, 0.9, bz, 0.78, 0.02, 2.56, { color: PALETTE.steel, texel: 1 });
+    kit.box("paintedMetal", bx, 0.42, bz, 0.7, 0.8, 2.4, { color: PALETTE.impDark, texel: 1.5 });
+    for (const dz of [-0.75, 0.05, 0.85]) {
+      kit.box("impPanel", bx + 0.36, 0.55, bz + dz, 0.02, 0.36, 0.7, { color: PALETTE.impGrey, uv: "keep" });
+      kit.box("paintedMetal", bx + 0.375, 0.55, bz + dz + 0.2, 0.01, 0.03, 0.14, { color: PALETTE.impBlack, texel: 2 });
+    }
+    kit.box("paintedMetal", bx, 0.05, bz, 0.74, 0.1, 2.44, { color: PALETTE.impBlack, texel: 2 });
+    // the stripped rifle: receiver in the vice, barrel, stock and small parts on a cloth
+    kit.box("fabric", bx, 0.915, bz - 0.3, 0.6, 0.01, 1.2, { color: PALETTE.impDark, uv: "world", texel: 2 });
+    kit.box("paintedMetal", bx + 0.15, 1.0, bz + 0.9, 0.24, 0.2, 0.16, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("metal", bx + 0.15, 1.02, bz + 0.9, 0.3, 0.06, 0.04, { color: PALETTE.steel });
+    kit.cyl("metal", bx + 0.32, 1.02, bz + 0.9, 0.015, 0.16, "z", { color: PALETTE.steel, segments: 6 });
+    kit.box("paintedMetal", bx + 0.15, 1.15, bz + 0.9, 0.46, 0.09, 0.05, { color: PALETTE.impBlack, texel: 3, rot: [0, Math.PI / 2, 0] });
+    kit.cyl("metal", bx - 0.15, 0.94, bz - 0.5, 0.013, 0.5, "z", { color: PALETTE.gunmetal, segments: 8 });
+    kit.box("paintedMetal", bx + 0.1, 0.94, bz - 0.7, 0.05, 0.05, 0.28, { color: PALETTE.impDark, texel: 3 });
+    kit.box("paintedMetal", bx - 0.05, 0.94, bz - 0.05, 0.16, 0.045, 0.05, { color: PALETTE.impDark, texel: 3 });
+    for (let i = 0; i < 6; i++) kit.cyl("metal", bx - 0.22 + (i % 3) * 0.08, 0.93, bz - 0.15 + Math.floor(i / 3) * 0.1, 0.012, 0.02, "y", { color: PALETTE.steel, segments: 6 });
+    // tool tray with drivers, an oil can, a rag, and a hooded bench lamp on an arm
+    kit.box("paintedMetal", bx - 0.2, 0.95, bz + 0.4, 0.34, 0.06, 0.5, { color: PALETTE.impBlack, texel: 3 });
+    for (let i = 0; i < 5; i++) kit.cyl("metal", bx - 0.32 + i * 0.06, 1.0, bz + 0.4, 0.008, 0.2, "z", { color: i % 2 ? PALETTE.steel : PALETTE.impRed, segments: 6 });
+    kit.cyl("metal", bx + 0.22, 1.0, bz - 1.05, 0.045, 0.16, "y", { color: PALETTE.steel, segments: 10 });
+    kit.cyl("metal", bx + 0.22, 1.11, bz - 1.05, 0.01, 0.08, "y", { color: PALETTE.gunmetal, segments: 6 });
+    kit.box("fabric", bx - 0.2, 0.93, bz - 1.05, 0.3, 0.03, 0.26, { color: PALETTE.impLight, uv: "world", texel: 2, rot: [0, 0.4, 0] });
+    kit.cyl("metal", bx - 0.35, 1.3, bz + 1.2, 0.015, 0.8, "y", { color: PALETTE.impMid, segments: 8 });
+    kit.cyl("metal", bx - 0.2, 1.7, bz + 0.9, 0.012, 0.7, "z", { color: PALETTE.impMid, segments: 8 });
+    kit.box("paintedMetal", bx - 0.1, 1.62, bz + 0.5, 0.36, 0.1, 0.28, { color: PALETTE.impDark, texel: 2 });
+    kit.box("emitWhiteSoft", bx - 0.1, 1.565, bz + 0.5, 0.3, 0.01, 0.22, { uv: "keep" });
+    kit.collider([bx - 0.42, 0, bz - 1.32], [bx + 0.42, 0.95, bz + 1.32], "bench");
+    stool(kit, bx - 0.85, bz + 0.3);
+    floorGrime(kit, bx - 0.5, bz - 0.4, 1.2, 1.6, 0.2);
+  }
+  // issue cart: wheeled flat rack with rifles laid across it, ready for the counter
+  {
+    const F = propFrame(kit, -49.0, -33.4, 0.12);
+    F.box("paintedMetal", 0, 0.08, 0, 1.4, 0.08, 0.7, { color: PALETTE.impBlack, texel: 2 });
+    F.box("paintedMetal", 0, 0.62, 0, 1.36, 0.05, 0.66, { color: PALETTE.impMid, texel: 2 });
+    F.box("hazard", 0, 0.65, 0, 1.3, 0.012, 0.6, { texel: 3 });
+    for (const [dx, dz] of [[-0.6, -0.28], [0.6, -0.28], [-0.6, 0.28], [0.6, 0.28]]) F.box("paintedMetal", dx, 0.35, dz, 0.06, 0.55, 0.06, { color: PALETTE.impDark, texel: 2 });
+    for (const dx of [-0.62, 0.62]) F.cyl("rubber", dx, 0.09, 0, 0.09, 0.05, "x", { color: PALETTE.rubber, segments: 12 });
+    F.box("metal", 0.72, 0.95, 0, 0.03, 0.03, 0.6, { color: PALETTE.steel });
+    for (const s of [-1, 1]) F.box("metal", 0.72, 0.8, s * 0.3, 0.03, 0.32, 0.03, { color: PALETTE.steel });
+    for (let i = 0; i < 4; i++) {
+      const p = F.at(-0.05, 0, -0.27 + i * 0.18);
+      rifle(kit, p.x, 0.7 + (i % 2) * 0.05, p.z, F.q, ctx.seed + 90 + i);
+    }
+    F.box("darkGloss", 0.5, 0.66, 0.22, 0.2, 0.012, 0.14);
+    F.collider(-0.72, -0.36, 0.78, 0.36, 1.0, "cart");
   }
   floorGrime(kit, -52.0, -42.2, 4.0, 1.6, 0.0);
   floorGrime(kit, -52.0, -29.8, 4.0, 1.6, 0.0);

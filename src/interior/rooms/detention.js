@@ -129,11 +129,11 @@ export function buildDetention(kit, ctx) {
 
   // ------------------------------------------------------------------ lights (6)
   ctx.light(pointLight(0xff3a2a, 12, 13, [52.2, H - 0.5, -36.0]));
-  ctx.light(pointLight(0xff5040, 10, 11, [45.4, H - 0.5, -36.0]));
+  ctx.light(pointLight(0xe8eeff, 16, 13, [45.4, H - 0.5, -36.0]));
   ctx.light(pointLight(0xdfe8ff, 12, 9, [59.0, H - 0.6, -36.0]));
   ctx.light(pointLight(0xff3020, 6, 10, [55.0, H - 0.6, -43.8]));
   ctx.light(pointLight(0xff3020, 6, 10, [55.0, H - 0.6, -28.2]));
-  ctx.light(pointLight(0xe0e8ff, 6, 7, [45.4, H - 0.6, -29.6]));
+  ctx.light(pointLight(0xe0e8ff, 9, 9, [45.4, H - 0.6, -29.6]));
 
   // ------------------------------------------------------------------ cell block: corridor walls with field openings, cells
   const fieldW = cellW - 0.7;
@@ -150,6 +150,14 @@ export function buildDetention(kit, ctx) {
     if (i === 3) continue; // the chamber wall closes the east side
     slabWall(kit, x, cellBackS, x, corrZ0 - 0.16);
     slabWall(kit, x, corrZ1 + 0.16, x, cellBackN);
+  }
+  // the block's west face looks onto the guard station: panelled like a wall, hazard bands at the entrance
+  impWall(kit, ctx, "xmax", { ...wallOpts, from: [guardX1, cellBackS - 0.16], to: [guardX1, corrZ0 - 0.16], openings: [], seed: ctx.seed + 5, tag: "blockWS" });
+  impWall(kit, ctx, "xmax", { ...wallOpts, from: [guardX1, corrZ1 + 0.16], to: [guardX1, cellBackN + 0.16], openings: [], seed: ctx.seed + 6, tag: "blockWN" });
+  for (const z of [corrZ0 - 0.45, corrZ1 + 0.45]) {
+    kit.box("hazard", guardX1 - 0.02, 1.5, z, 0.03, 3.0, 0.3, { texel: 3 });
+    kit.box("paintedMetal", guardX1 - 0.06, 3.2, z, 0.12, 0.2, 0.3, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("emitRed", guardX1 - 0.125, 3.2, z, 0.01, 0.12, 0.2);
   }
   const fieldMat = ctx.materials.crew_cellField;
   const fieldMap = fieldMat.map;
