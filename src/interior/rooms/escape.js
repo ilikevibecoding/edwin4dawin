@@ -235,18 +235,26 @@ export function buildEscape(kit, ctx) {
   // central lane from the blast door toward the pods, then a cross lane along the hatch line
   for (let z = -72.6; z > -82.5; z -= 1.9) chevron(kit, 0, z, [0, -1], 1.0);
   for (const s of [-1, 1]) {
-    for (let x = 2.2; x < 12; x += 2.4) chevron(kit, s * x, -83.2, [s, 0], 0.8);
+    for (let x = 2.2; x < 12; x += 2.4) chevron(kit, s * x, -82.0, [s, 0], 0.8);
+  }
+  // muster boxes: a painted outline in front of each hatch where its crew assembles
+  for (const x of HATCH_X) {
+    const [x0, x1, z0, z1] = [x - 1.3, x + 1.3, -84.3, -82.9];
+    kit.boxMM("hazard", [x0, 0, z0], [x1, 0.01, z0 + 0.1], { texel: 4 });
+    kit.boxMM("hazard", [x0, 0, z1 - 0.1], [x1, 0.01, z1], { texel: 4 });
+    kit.boxMM("hazard", [x0, 0, z0], [x0 + 0.1, 0.01, z1], { texel: 4 });
+    kit.boxMM("hazard", [x1 - 0.1, 0, z0], [x1, 0.01, z1], { texel: 4 });
   }
   // lane edges: hazard stripes along the centre lane and the cross lane
-  kit.boxMM("hazard", [-1.5, 0, -83.9], [-1.32, 0.01, -72.0], { texel: 4 });
-  kit.boxMM("hazard", [1.32, 0, -83.9], [1.5, 0.01, -72.0], { texel: 4 });
-  kit.boxMM("hazard", [-12.5, 0, -82.6], [12.5, 0.01, -82.42], { texel: 4 });
+  kit.boxMM("hazard", [-1.5, 0, -82.7], [-1.32, 0.01, -72.0], { texel: 4 });
+  kit.boxMM("hazard", [1.32, 0, -82.7], [1.5, 0.01, -72.0], { texel: 4 });
+  kit.boxMM("hazard", [-12.5, 0, -81.4], [12.5, 0.01, -81.22], { texel: 4 });
   // emergency stencils on the deck at the lane start and end
   kit.add("decal", (() => { const g = new THREE.PlaneGeometry(1.2, 1.2); g.rotateX(-Math.PI / 2); return g; })(), { pos: [0, 0.006, -84.6], uv: "keep", uvRect: decalRect(13) });
-  for (const s of [-1, 1]) kit.add("decal", (() => { const g = new THREE.PlaneGeometry(1.0, 1.0); g.rotateX(-Math.PI / 2); g.rotateY(s * Math.PI / 2); return g; })(), { pos: [s * 12.6, 0.006, -83.2], uv: "keep", uvRect: decalRect(3) });
+  for (const s of [-1, 1]) kit.add("decal", (() => { const g = new THREE.PlaneGeometry(1.0, 1.0); g.rotateX(-Math.PI / 2); g.rotateY(s * Math.PI / 2); return g; })(), { pos: [s * 12.6, 0.006, -82.0], uv: "keep", uvRect: decalRect(3) });
   scuffRun(kit, 0, -72, 0, -83, 9, ctx.seed + 3, 0.7);
-  scuffRun(kit, -2, -83.2, -11, -83.2, 6, ctx.seed + 4, 0.6);
-  scuffRun(kit, 2, -83.2, 11, -83.2, 6, ctx.seed + 5, 0.6);
+  scuffRun(kit, -2, -82.0, -11, -82.0, 6, ctx.seed + 4, 0.6);
+  scuffRun(kit, 2, -82.0, 11, -82.0, 6, ctx.seed + 5, 0.6);
 
   // ------------------------------------------------------------------ door wall (zmax): status / countdown
   {

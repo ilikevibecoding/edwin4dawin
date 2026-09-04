@@ -151,13 +151,19 @@ export function buildDetention(kit, ctx) {
     slabWall(kit, x, cellBackS, x, corrZ0 - 0.16);
     slabWall(kit, x, corrZ1 + 0.16, x, cellBackN);
   }
-  // the block's west face looks onto the guard station: panelled like a wall, hazard bands at the entrance
-  impWall(kit, ctx, "xmax", { ...wallOpts, from: [guardX1, cellBackS - 0.16], to: [guardX1, corrZ0 - 0.16], openings: [], seed: ctx.seed + 5, tag: "blockWS" });
-  impWall(kit, ctx, "xmax", { ...wallOpts, from: [guardX1, corrZ1 + 0.16], to: [guardX1, cellBackN + 0.16], openings: [], seed: ctx.seed + 6, tag: "blockWN" });
+  // the block's west face looks onto the guard station: a panelled wall face set just proud of the
+  // slab (the slab stays as the cells' west wall), hazard bands and red lamps flanking the entrance
+  const faceX = guardX1 - 0.17;
+  impWall(kit, ctx, "xmax", { ...wallOpts, from: [faceX, cellBackS - 0.16], to: [faceX, corrZ0 - 0.16], openings: [], seed: ctx.seed + 5, tag: "blockWS" });
+  impWall(kit, ctx, "xmax", { ...wallOpts, from: [faceX, corrZ1 + 0.16], to: [faceX, cellBackN + 0.16], openings: [], seed: ctx.seed + 6, tag: "blockWN" });
+  // close the reveal between the face and the slab at all four ends
+  for (const z of [cellBackS - 0.16, corrZ0 - 0.16, corrZ1 + 0.16, cellBackN + 0.16]) {
+    kit.box("paintedMetal", (faceX + guardX1) / 2, H / 2, z, guardX1 - faceX + 0.2, H, 0.05, { color: PALETTE.impBlack, texel: 2 });
+  }
   for (const z of [corrZ0 - 0.45, corrZ1 + 0.45]) {
-    kit.box("hazard", guardX1 - 0.02, 1.5, z, 0.03, 3.0, 0.3, { texel: 3 });
-    kit.box("paintedMetal", guardX1 - 0.06, 3.2, z, 0.12, 0.2, 0.3, { color: PALETTE.impBlack, texel: 2 });
-    kit.box("emitRed", guardX1 - 0.125, 3.2, z, 0.01, 0.12, 0.2);
+    kit.box("hazard", faceX - 0.02, 1.5, z, 0.03, 3.0, 0.3, { texel: 3 });
+    kit.box("paintedMetal", faceX - 0.06, 3.2, z, 0.12, 0.2, 0.3, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("emitRed", faceX - 0.125, 3.2, z, 0.01, 0.12, 0.2);
   }
   const fieldMat = ctx.materials.crew_cellField;
   const fieldMap = fieldMat.map;
