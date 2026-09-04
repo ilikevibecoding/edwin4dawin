@@ -268,20 +268,24 @@ export class AnimalManager {
       a.prevPos.copy(a.pos);
       const dx = a.pos.x - pp.x, dz = a.pos.z - pp.z;
       const d2 = dx * dx + dz * dz;
-      if (d2 > 90 * 90 && !a.air) continue;
+      // far animals are frozen for performance, except that during a disaster they still float in flood water
+      const far = d2 > 90 * 90 && !a.air;
+      if (far && !this.alertInfo) continue;
       const dt = 0.05;
       if (a.air) { this.updateAirborne(a, dt); continue; }
       if (a.stunned > 0) { a.stunned -= dt; continue; }
       if (a.panic && performance.now() > a.panicUntil) a.panic = false;
-      // float in water
+      // float in water (checked at body height too, so animals standing in pens on fence blocks still surface)
       const feet = this.world.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y + 0.2), Math.floor(a.pos.z));
-      a.swimming = feet === B.WATER;
+      const body = this.world.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y + a.spec.height * 0.6), Math.floor(a.pos.z));
+      a.swimming = feet === B.WATER || body === B.WATER;
       if (a.swimming) {
-        let top = Math.floor(a.pos.y + 0.2);
+        let top = feet === B.WATER ? Math.floor(a.pos.y + 0.2) : Math.floor(a.pos.y + a.spec.height * 0.6);
         while (this.world.getBlock(Math.floor(a.pos.x), top + 1, Math.floor(a.pos.z)) === B.WATER && top < a.pos.y + 6) top++;
         a.pos.y += (top + 0.9 - a.spec.height * 0.55 - a.pos.y) * Math.min(1, dt * 4);
         if (this.alertInfo && this.alertInfo.flowFn) { const f = this.alertInfo.flowFn(a.pos.x, a.pos.z); if (f && !BLOCKS_SOLID(this.world, a.pos.x + f[0] * dt, a.pos.y + 0.5, a.pos.z + f[1] * dt)) { a.pos.x += f[0] * dt; a.pos.z += f[1] * dt; } }
       }
+      if (far) continue;
       a.soundTimer -= dt * (a.panic ? 3 : 1);
       if (a.soundTimer <= 0) { a.soundTimer = a.rng.range(a.spec.soundGap[0], a.spec.soundGap[1]); if (d2 < 40 * 40) this.audio[a.spec.sound](a.pos); }
       // gravity when the ground under the animal is removed

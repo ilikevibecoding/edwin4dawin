@@ -62,7 +62,7 @@ void main() {
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
   light = max(light, vec3(0.035)) + vec3(uFlash);
   vec3 col = mix(water, foam, vFoam) * light * vShade;
-  float a = mix(0.82, 0.95, vFoam) * uAlpha;
+  float a = mix(0.82, 0.95, vFoam) * uAlpha * smoothstep(0.9, 2.4, vDist);   // columns at the camera fade out
   col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vDist));
   gl_FragColor = vec4(col, a);
 }`;

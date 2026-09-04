@@ -26,6 +26,7 @@ import { WaveVisuals } from './tsunami/waveMesh.js';
 import { VoxelCrest, CREST_BACK, STEP_DIST, crestDepth } from './tsunami/crestMesh.js';
 
 const TPS = 20;
+const ROOM_DIRS = [1, 0, -1, 0, 0, 1, 0, -1, 1, 1, 1, -1, -1, 1, -1, -1];
 const LEAD = 4.5;                 // max distance the crest may run ahead of the oldest unfilled column (blocks)
 const MAX_DESTROY_PER_TICK = 40;  // block edits reserved for crest destruction (the rest floods)
 const MAX_DRAIN_VISITS = 4000;    // cells inspected per tick while draining
@@ -618,8 +619,8 @@ export class Tsunami extends Disaster {
     let crestAlpha = 0;
     if (this.phase === 'wave') crestAlpha = Math.min(1, this.tick / 20) * clamp(1 - (s - (2 * g.r + 4)) / 8, 0, 1);
     const eyeY = p.pos.y + p.eyeHeight;
-    const inside = ahead < 1.2 && ahead > -(CREST_BACK + 1) && eyeY < g.crestTop + 0.6;
-    const fadeTarget = (inside || p.eyeUnderwater || this._indoors(p.pos.x, eyeY, p.pos.z)) ? 0 : 1;
+    // columns right at the camera fade in the shader; the whole crest only hides under water or in an enclosed room
+    const fadeTarget = (p.eyeUnderwater || this._indoors(p.pos.x, eyeY, p.pos.z)) ? 0 : 1;
     if (!paused) this.crestFade += (fadeTarget - this.crestFade) * Math.min(1, dt * 7);
     const crest = this._ensureCrest();
     crest.update(dt, {
@@ -648,11 +649,20 @@ export class Tsunami extends Disaster {
     this._flushEvents(fp, p, camera);
   }
 
-  // A solid block within 10 blocks above the eye: the camera is under a roof / ceiling.
+  // Enclosed room: a ceiling within 4 blocks above the eye AND walls within 4 blocks in at least 6 of 8 horizontal
+  // directions. Boardwalks, porches and balconies (open on the street side) do not count, so the wave stays
+  // visible from the places people actually watch it from.
   _indoors(x, y, z) {
-    const bx = Math.floor(x), bz = Math.floor(z), y0 = Math.floor(y) + 1;
-    for (let yy = y0; yy < y0 + 10 && yy < CH; yy++) if (BLOCKS[this.world.getBlock(bx, yy, bz)].solid) return true;
-    return false;
+    const bx = Math.floor(x), by = Math.floor(y), bz = Math.floor(z);
+    let roof = false;
+    for (let yy = by + 1; yy <= by + 4 && yy < CH; yy++) if (BLOCKS[this.world.getBlock(bx, yy, bz)].solid) { roof = true; break; }
+    if (!roof) return false;
+    let hits = 0;
+    for (let d = 0; d < 8; d++) {
+      const dx = ROOM_DIRS[d * 2], dz = ROOM_DIRS[d * 2 + 1];
+      for (let i = 1; i <= 4; i++) if (BLOCKS[this.world.getBlock(bx + dx * i, by, bz + dz * i)].solid) { hits++; break; }
+    }
+    return hits >= 6;
   }
 
   // Spray at the lip: small textured chips (snow tile = foam, water tile = drops), never spawned right at the

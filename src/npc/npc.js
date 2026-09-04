@@ -315,6 +315,25 @@ export class NPCManager {
     const bx = Math.floor(npc.pos.x), by = Math.floor(npc.pos.y), bz = Math.floor(npc.pos.z);
     return this.world.getBlock(bx, by - 1, bz) === B.MAGMA || this.world.getBlock(bx, by, bz) === B.MAGMA;
   }
+  // nearest water-surface cell with open sky above it (for swimmers stuck under an awning or ceiling)
+  openWaterTarget(npc, top) {
+    const bx = Math.floor(npc.pos.x), bz = Math.floor(npc.pos.z);
+    for (let r = 2; r <= 10; r += 2) {
+      let best = null, bestD = Infinity;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + npc.rng.range(0, 0.5);
+        const x = bx + Math.round(Math.cos(a) * r), z = bz + Math.round(Math.sin(a) * r);
+        if (BLOCKS[this.world.getBlock(x, top, z)].solid) continue;
+        let open = true;
+        for (let yy = top + 1; yy <= top + 6; yy++) if (BLOCKS[this.world.getBlock(x, yy, z)].solid) { open = false; break; }
+        if (!open) continue;
+        const d = (x - bx) * (x - bx) + (z - bz) * (z - bz);
+        if (d < bestD) { bestD = d; best = { x, z }; }
+      }
+      if (best) return { x: best.x, y: top, z: best.z, kind: 'escape', dwell: 1 };
+    }
+    return null;
+  }
   // nearest standable cell that is not on magma, searched in widening rings
   escapeTarget(npc) {
     const bx = Math.floor(npc.pos.x), by = Math.floor(npc.pos.y), bz = Math.floor(npc.pos.z);
@@ -493,7 +512,16 @@ export class NPCManager {
     if (npc.swimming) {
       let top = feet === B.WATER ? Math.floor(npc.pos.y + 0.2) : Math.floor(npc.pos.y + 1.0);
       while (this.world.getBlock(Math.floor(npc.pos.x), top + 1, Math.floor(npc.pos.z)) === B.WATER && top < npc.pos.y + 6) top++;
-      const surface = top + 0.9 - 1.3; // eyes above the surface
+      let surface = top + 0.9 - 1.3; // eyes above the surface
+      // a ceiling right above the water (porch awning, upper floor): keep the head out of the planks and
+      // swim for open sky instead of treading water under it
+      const bx = Math.floor(npc.pos.x), bz = Math.floor(npc.pos.z);
+      let ceil = -1;
+      for (let yy = top + 1; yy <= top + 3; yy++) if (BLOCKS[this.world.getBlock(bx, yy, bz)].solid) { ceil = yy; break; }
+      if (ceil >= 0) {
+        surface = Math.min(surface, ceil - 1.85);
+        if (!npc.target || npc.target.kind !== 'escape') { const t = this.openWaterTarget(npc, top); if (t) { npc.target = t; npc.path = null; npc.state = 'walk'; npc.speed = SWIM_SPEED; npc.sitting = false; } }
+      }
       npc.pos.y += (surface - npc.pos.y) * Math.min(1, dt * 4);
       if (this.alertInfo && this.alertInfo.flowFn) { const f = this.alertInfo.flowFn(npc.pos.x, npc.pos.z); if (f) { this.tryMoveWater(npc, f[0] * dt, f[1] * dt); } }
       npc.trapped += dt;
