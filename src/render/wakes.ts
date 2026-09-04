@@ -67,15 +67,25 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
 
 /** Contrail ribbon drawn in the main scene: soft white, fading with age, slightly hazy. */
 export const CONTRAIL_MATERIAL = new THREE.ShaderMaterial({
+  // drawn in the main scene: must write/compare log depth like every other material there
   vertexShader: /* glsl */ `
+    #include <common>
+    #include <logdepthbuf_pars_vertex>
     attribute float aAge; attribute float aSide;
     varying float vAge; varying float vSide;
-    void main() { vAge = aAge; vSide = aSide; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+    void main() {
+      vAge = aAge; vSide = aSide;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      #include <logdepthbuf_vertex>
+    }
   `,
   fragmentShader: /* glsl */ `
+    #include <common>
+    #include <logdepthbuf_pars_fragment>
     varying float vAge; varying float vSide;
     uniform float uStrength;
     void main() {
+      #include <logdepthbuf_fragment>
       float edge = 1.0 - smoothstep(0.2, 1.0, abs(vSide));
       float life = (1.0 - vAge);
       float a = edge * life * life * uStrength * smoothstep(0.0, 0.05, vAge);
@@ -87,6 +97,84 @@ export const CONTRAIL_MATERIAL = new THREE.ShaderMaterial({
   depthWrite: false,
   side: THREE.DoubleSide,
 });
+
+/** Hull contact decal: a soft foam/meniscus ring around a floating hull so it never sits on glass. Lives in
+ *  the main scene just above the water surface (see HullStamp). */
+const HULL_STAMP_MATERIAL = new THREE.ShaderMaterial({
+  vertexShader: /* glsl */ `
+    #include <common>
+    #include <logdepthbuf_pars_vertex>
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      #include <logdepthbuf_vertex>
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    #include <common>
+    #include <logdepthbuf_pars_fragment>
+    varying vec2 vUv;
+    uniform vec2 uHull;      // hull half-extents as a fraction of the quad (x along, y across)
+    uniform float uStrength;
+    float hash21(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+    float vnoise(vec2 q) {
+      vec2 i = floor(q), f = fract(q); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash21(i), hash21(i + vec2(1, 0)), f.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), f.x), f.y);
+    }
+    void main() {
+      #include <logdepthbuf_fragment>
+      vec2 p = (vUv - 0.5) * 2.0;
+      // signed distance to the rounded hull outline, in quad units
+      vec2 d = abs(p) / uHull;
+      float r = length(max(d - 0.6, 0.0)) + min(max(d.x - 0.6, d.y - 0.6), 0.0);
+      float outside = max(r - 0.4, 0.0);              // 0 at the hull edge, grows outward
+      float ring = exp(-outside * outside * 40.0);     // thin foam meniscus hugging the hull
+      float halo = exp(-outside * outside * 6.0) * 0.18; // faint disturbed-water patch
+      // break the ring up with two octaves of value noise so it reads as foam, not a glow
+      vec2 np = p * vec2(9.0, 4.0);
+      float nz = 0.5 * vnoise(np) + 0.5 * vnoise(np * 2.3 + 7.1);
+      float foam = (ring * (0.55 + 0.6 * nz) + halo * (0.6 + 0.4 * nz)) * uStrength * smoothstep(1.0, 0.85, max(abs(p.x), abs(p.y)));
+      // drawn as a decal in the main scene (the shared wake map is ~3 m/px, far too coarse for a hull ring):
+      // sky-lit foam, slightly translucent so the water colour shows through the halo
+      gl_FragColor = vec4(vec3(0.90, 0.94, 0.97), clamp(foam, 0.0, 0.85));
+    }
+  `,
+  uniforms: { uHull: { value: new THREE.Vector2(0.72, 0.28) }, uStrength: { value: 1.0 } },
+  transparent: true,
+  depthTest: true,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+});
+
+export class HullStamp {
+  readonly mesh: THREE.Mesh;
+  constructor(length: number, beam: number, strength = 1) {
+    const w = length + 2.6, h = beam + 2.2;
+    const mat = HULL_STAMP_MATERIAL.clone();
+    mat.uniforms.uHull.value = new THREE.Vector2(length / w, beam / h);
+    mat.uniforms.uStrength.value = strength;
+    this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    this.mesh.frustumCulled = false;
+    this.mesh.visible = false;
+    this.mesh.renderOrder = 6; // after the water surface (5)
+  }
+
+  private static readonly flat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+  private readonly spin = new THREE.Quaternion();
+  private static readonly up = new THREE.Vector3(0, 1, 0);
+
+  /** Place the stamp under a hull centre at (x, z); (dx, dz) is the hull's forward direction in the XZ plane. */
+  update(x: number, z: number, dx: number, dz: number, active: boolean, strength = 1): void {
+    this.mesh.visible = active;
+    if (!active) return;
+    this.mesh.position.set(x, 0.07, z);
+    // lay the quad flat, then turn its local X (hull length) onto the forward direction
+    this.spin.setFromAxisAngle(HullStamp.up, Math.atan2(-dz, dx));
+    this.mesh.quaternion.copy(this.spin).multiply(HullStamp.flat);
+    (this.mesh.material as THREE.ShaderMaterial).uniforms.uStrength.value = strength;
+  }
+}
 
 /** Fixed-capacity trail of quads following an emitter. Positions are in world space. */
 export class WakeTrail {

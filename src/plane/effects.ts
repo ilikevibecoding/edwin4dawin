@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CONTRAIL_MATERIAL, WakeTrail } from '../render/wakes';
+import { CONTRAIL_MATERIAL, HullStamp, WakeTrail } from '../render/wakes';
 import type { FlightModel } from './physics';
 import type { PlaneModel } from './model';
 import { clamp, smoothstep } from '../core/noise';
@@ -90,7 +90,11 @@ export class PlaneEffects {
   readonly exhaust: ParticleCloud;
   readonly vortexL: WakeTrail;
   readonly vortexR: WakeTrail;
+  /** static waterline/foam ring under each float while afloat (trails only exist once moving) */
+  readonly stampL: HullStamp;
+  readonly stampR: HullStamp;
   private readonly tmp = new THREE.Vector3();
+  private readonly tmp3 = new THREE.Vector3();
   private readonly tmp2 = new THREE.Vector3();
   private sprayAcc = 0;
   private exhaustAcc = 0;
@@ -99,6 +103,9 @@ export class PlaneEffects {
     this.wakeL = new WakeTrail(70, 1.6, 14, 1.2);
     this.wakeR = new WakeTrail(70, 1.6, 14, 1.2);
     wakeScene.add(this.wakeL.mesh, this.wakeR.mesh);
+    this.stampL = new HullStamp(4.8, 0.9, 0.9);
+    this.stampR = new HullStamp(4.8, 0.9, 0.9);
+    scene.add(this.stampL.mesh, this.stampR.mesh);
     const tex = spriteTexture();
     this.spray = new ParticleCloud(400, new THREE.Color(0.95, 0.98, 1.0), tex, 0.75, THREE.NormalBlending);
     this.exhaust = new ParticleCloud(120, new THREE.Color(0.25, 0.24, 0.23), tex, 0.22, THREE.NormalBlending);
@@ -118,6 +125,14 @@ export class PlaneEffects {
     const wet = t.onWater && speed > 1.5;
     this.wakeL.update(sternL.x, sternL.z, time, wet, speed);
     this.wakeR.update(sternR.x, sternR.z, time, wet, speed);
+    // hull contact stamps at the float centres; fade out as the trails and spray take over when planing
+    const fwdXZ = flight.forward(this.tmp3);
+    const fl = Math.hypot(fwdXZ.x, fwdXZ.z) || 1;
+    const stampStrength = 0.9 * (1 - smoothstep(6, 18, speed));
+    for (const [stamp, bow, stern] of [[this.stampL, model.floatBowL, model.floatSternL], [this.stampR, model.floatBowR, model.floatSternR]] as const) {
+      const c = this.tmp.copy(bow).add(stern).multiplyScalar(0.5).applyQuaternion(q).add(flight.position);
+      stamp.update(c.x, c.z, fwdXZ.x / fl, fwdXZ.z / fl, t.onWater && stampStrength > 0.02, stampStrength);
+    }
     // bow spray: rate grows with speed while on the water, dies once planing cleanly
     if (t.onWater && speed > 4) {
       const rate = 90 * smoothstep(4, 14, speed) * (1 - 0.5 * smoothstep(25, 40, speed));

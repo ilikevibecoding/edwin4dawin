@@ -78,7 +78,7 @@ export class FlightModel {
   up(out: THREE.Vector3): THREE.Vector3 { return out.set(0, 1, 0).applyQuaternion(this.quaternion); }
 
   step(inputs: FlightInputs, dt: number): void {
-    if (dt <= 0) { this.updateTelemetry(inputs); return; }
+    if (dt <= 0) { this.probeContacts(); this.updateTelemetry(inputs); return; }
     const sub = Math.max(1, Math.ceil(dt / (1 / 120)));
     const h = dt / sub;
     for (let i = 0; i < sub; i++) this.substep(inputs, h);
@@ -259,6 +259,21 @@ export class FlightModel {
     this.omega.x += (torque.x / this.inertia.x) * dt;
     this.omega.y += (torque.y / this.inertia.y) * dt;
     this.omega.z += (torque.z / this.inertia.z) * dt;
+  }
+
+  /** Contact state from geometry alone (no forces), for aircraft placed statically by the bench or a spawn. */
+  private probeContacts(): void {
+    let onWater = false, onGround = false;
+    for (const cp of this.contactPoints) {
+      this.tmpV.copy(cp).applyQuaternion(this.quaternion).add(this.position);
+      const ground = this.heightAt(this.tmpV.x, this.tmpV.z);
+      const isWater = ground <= 0.05;
+      const depth = (isWater ? 0 : ground) - this.tmpV.y;
+      if (depth <= 0) continue;
+      if (isWater) onWater = true; else onGround = true;
+    }
+    this.telemetry.onWater = onWater;
+    this.telemetry.onGround = onGround;
   }
 
   private updateTelemetry(inp: FlightInputs): void {
