@@ -41,9 +41,24 @@ export function createHud() {
   root.querySelector('#hud-rev').textContent = `build ${__BUILD_REV__} · ${__BUILD_STAMP__}`;
 
   let statusTimer = 0;
+  let restTimer = 0;
+  const elKeys = root.querySelector('.hud-keys');
 
   return {
     root,
+    /** The hour dims the type at night so the HUD is not the brightest thing on screen. */
+    setHour(name) {
+      root.dataset.hour = name;
+    },
+    /**
+     * The first gesture proves the player has found the controls; ten seconds
+     * later the legend steps back to a reminder instead of a caption competing
+     * with the speed readout. Any later gesture brings it up again briefly.
+     */
+    noteInput() {
+      restTimer = 10;
+      elKeys.classList.remove('hud-keys--rest');
+    },
     setSpeed(kmh) {
       elSpeed.textContent = Math.round(Math.abs(kmh)).toString();
     },
@@ -61,6 +76,10 @@ export function createHud() {
       if (statusTimer > 0) {
         statusTimer -= dt;
         if (statusTimer <= 0 && fallback) elStatus.textContent = fallback;
+      }
+      if (restTimer > 0) {
+        restTimer -= dt;
+        if (restTimer <= 0) elKeys.classList.add('hud-keys--rest');
       }
     },
   };

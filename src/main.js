@@ -182,16 +182,19 @@ async function boot() {
     vehicle.setLights(name === 'dusk' || name === 'night');
     fleet.setTimeOfDay?.(name);
     camp.setTimeOfDay?.(name);
+    hud.setHour(name);
     hud.setStatus(`${name.charAt(0).toUpperCase()}${name.slice(1)}`);
     return timeOfDay;
   }
   vehicle.setLights(startTime === 'dusk' || startTime === 'night');
+  hud.setHour(startTime);
 
   // --- input ---------------------------------------------------------------
   // Browsers will not start audio before a gesture, so the first one of any
   // kind wakes it; nothing else in here cares which.
   const wake = () => {
     if (!audio.enabled) audio.setEnabled(true);
+    hud.noteInput();
   };
   window.addEventListener('pointerdown', wake, { once: false });
   window.addEventListener('keydown', wake);

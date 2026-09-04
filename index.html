@@ -74,6 +74,14 @@
         text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 2px 8px rgba(0, 0, 0, 0.8);
       }
       .hud-keys b { color: var(--ink); font-weight: 600; }
+      .hud-keys { transition: opacity 1.4s ease; }
+      .hud-keys--rest { opacity: 0.42; }
+      /* at night the type would otherwise be the brightest thing in the frame */
+      .hud[data-hour="night"] .hud-title,
+      .hud[data-hour="night"] .hud-sub,
+      .hud[data-hour="night"] .hud-keys { opacity: 0.62; }
+      .hud[data-hour="night"] .hud-keys--rest { opacity: 0.3; }
+      .hud[data-hour="night"] .hud-speed { opacity: 0.8; }
       .hud-rev {
         margin-top: 8px;
         font-size: 9.5px;
