@@ -155,6 +155,7 @@ export function impWall(frame, length, height, opts = {}) {
     tag = "wall",
     lintel = true,
     bands = null, // explicit horizontal band cuts (v values) inside the panel field
+    wallLightKey = "emitWhiteSoft", // emitter used by the "light" feature cells (rooms pick their temperature)
   } = opts;
   const rand = rng(seed);
   const trimW = 0.12;
@@ -271,7 +272,7 @@ export function impWall(frame, length, height, opts = {}) {
           frame.box(pKey, cu, cv, 0.005, pw, ph, 0.05, { color: col, uv: "world", texel: 1 });
           // tall narrow light slot with a black housing
           frame.box("impTrim", cu, cv, 0.05, 0.26, ph - 0.5, 0.08, { color: PALETTE.impBlack });
-          frame.box(rand() < 0.7 ? "emitWhiteSoft" : accentKey, cu, cv, 0.1, 0.1, ph - 0.7, 0.02, { uv: "keep" });
+          frame.box(rand() < 0.7 ? wallLightKey : accentKey, cu, cv, 0.1, 0.1, ph - 0.7, 0.02, { uv: "keep" });
           break;
         }
         case "screen": {

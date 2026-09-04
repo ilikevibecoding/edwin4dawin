@@ -167,7 +167,7 @@ export function buildMaterials() {
     // dark deck grid plates
     impDeck: std(deckGrid, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.9 }),
     // glossy black console tops / screens frames
-    impGloss: new THREE.MeshStandardMaterial({ color: 0x090a0d, roughness: 0.3, metalness: 0.35, envMapIntensity: 1.2 }),
+    impGloss: new THREE.MeshStandardMaterial({ color: 0x090a0d, roughness: 0.3, metalness: 0.35, envMapIntensity: 0.6 }),
     // hexagonal cell panels (TIE wings, some machinery faces)
     hexPanel: std(hex, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.8 }),
     chevronY: std(chevronY, { normalScale: new THREE.Vector2(0.4, 0.4), envMapIntensity: 0.5 }),
