@@ -1,7 +1,7 @@
 # Status — D: hangar + ship systems (Deck 4 + infrastructure)
 
-Branch: `cursor/sd-hangar-systems-c071` · Last push: 3312fa99 · 2026-09-04 18:40 UTC
-Run: `bc-27044d48-9403-4636-af76-59d715aec071` · Phase: 3 (one critic loop done; second critic pass scoring the fixed set)
+Branch: `cursor/sd-hangar-systems-c071` · Last push: 0917da0a · 2026-09-04 21:05 UTC
+Run: `bc-27044d48-9403-4636-af76-59d715aec071` · Phase: 3 (two critic loops done; final hangar round landed; waiting on A's scaffold to merge)
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
 
@@ -18,7 +18,10 @@ emitters/flat light, Kestrel textures reading as grime and cracked concrete, mix
 Earth-depot dressing, lorem placards, rack slots over bay doors, vanishing door leaves, kiosks in the stair
 path). Every finding was mapped to a fix (per-module lists in each fix commit); the global ones landed in the
 harness (clean `impPanel`, dark reflective `impFloor`, black/yellow `hazard`, emitters tuned to bloom, a
-lit-ceiling bootstrap environment). Final full-deck run `full2`: 13 modules, 61 views, 0 warnings.
+lit-ceiling bootstrap environment). A second blind critic scored the fixed set 6.1/10 (from 4.1) and
+ranked the main hangar lowest; its final round (plated deck sheet, stencilled apron, housed floods with
+real pools, dressed bow/aft walls, lit shaft lining, crew hatches beside every bay door) is on the branch.
+Final full-deck run `full-final`: 13 modules, 61 views, 0 warnings, 0 page errors, load 12.1 s.
 
 ## Plan
 
@@ -106,13 +109,13 @@ Dev harness (D only, not a deliverable): `src/hangar/_dev/` — registry shim im
 
 ## Done
 
-Per module, from the final full-deck run `full2` (all 13 modules loaded, 61 views, post-critic). Budgets:
+Per module, from the final full-deck run `full-final` (all 13 modules loaded, 61 views, post-critic). Budgets:
 room ≤ 120k tris / ≤ 16 materials / ≤ 14 descriptors / ≤ 400 colliders / ≤ 250 ms; hangar ≤ 300k / 24 / 28;
 traffic ≤ 40k tris / ≤ 6 draw calls. (Build times are with all 13 modules building back to back.)
 
 | Module | build ms | materials (draw calls) | tris | light descriptors | colliders | views |
 |---|---|---|---|---|---|---|
-| `d4-hangar` | 230 | 20 (+1 field shader) | 278.1k | 26 | 150 | deck, aperture, racks, aft-wall, balcony, bay-door, exterior |
+| `d4-hangar` | 207 (165–184 alone) | 21 (+1 field shader) | 287.2k | 27 | 156 | deck, aperture, racks, aft-wall, balcony, bay-door, exterior |
 | `d4-fighter-bay` | 113 | 13 | 82.2k | 11 | 96 | door, cradles, gantry, racks |
 | `d4-shuttle-bay` | 68 | 15 | 62.7k | 13 | 80 | door, pad, gantry, staging, booth |
 | `d4-cargo-bay` | 111 | 14 | 93.6k | 14 | 72 | door, racking, loader, conveyor |
@@ -127,8 +130,9 @@ traffic ≤ 40k tris / ≤ 6 draw calls. (Build times are with all 13 modules bu
 | `sys-traffic` | 13 | 6 (all instanced/points) | 34.6k | 0 | 0 | approach (exterior), racks, hover, patrol (exterior) |
 
 Whole frame per view (includes post passes and the three systems): 67–200 draw calls, 170k–1.03 M
-triangles (budget 450 / 1.5 M); load 12.2 s on this VM (budget 12 s — the hangar's 230 ms build and the
-canvas atlases are the cost; see Remaining).
+triangles (budget 450 / 1.5 M; heaviest hangar frame after the final round: deck view 162 calls / 986k
+tris); load 12.1 s on this VM (budget 12 s — the hangar's ~200 ms build and the canvas atlases are the
+cost; see Remaining).
 
 What each delivers:
 - **Doors** (§9.1): 15 door ids paired across Deck 4 (3 `to: null` future doors locked red). Frames,
@@ -185,12 +189,31 @@ What each delivers:
   `serialize`→`apply` identical and replay-exact; events fire; 5 draw calls.
 - Aft complex (`/tmp/sd-aft-interact.mjs`, 10/10): stair totems hover/teleport, room becomes
   `d4-control` after the climb. Bays (`/tmp/bays-check.mjs`): 20 collider walks, 0 failures.
-- Hangar (`/tmp/hangar-coll.mjs`, 15/15): aperture rails/hazard bars, walls, balcony rails block; door
-  holes open; 20 of 28 clamps closed matching traffic occupancy; launch re-opens a clamp within 2 s.
+- Hangar (`/tmp/hangar-coll2.mjs`, 21/21): aperture rails/bars, walls, stairs, rack columns, clutter,
+  gantry, balcony rails, crew hatches block; door holes open; maintenance hatch decorative. Traffic
+  cross-check (`/tmp/hangar-traffic.mjs`): 28 slots read, 20 occupied → 18 after launches, clamp state
+  equals occupancy at t ≈ 0 and at the end, 0 mismatches.
+- Hangar final round (critic pass 2 items, harness tag `hangar-final5`, all 7 hangar views): every item
+  mapped to a change — deck: 8 m plate sheet (seams, rivets, tie-down rings, per-plate tone, roughness
+  from the G channel), taxi lane with yellow edges + `HOLD SHORT` bars, `FLIGHT DECK 4` / `DECK 4` /
+  pad `01–06` / `BAY n` stencils, contact shadows under clutter; lighting: four louvred rib floods at
+  `layout.FLOODS` with lit lenses, two apron spot pools (0.24 rad) either side of the lane, two spots
+  re-aimed at the port tiers, lit fascia strips under every tier platform; ceiling: emissive cells + long
+  light channels with diffusers; walls: bow wall dressed like the side walls (catwalk ring, gallery at
+  y −60, housed red beacons on ribs, recessed bands, blast portal), aft wall blast-door portal + service
+  gallery + recessed louvred vents + `HANGAR CONTROL` balcony with rail/lit fascia/soffit lamps; aperture:
+  0.3 m steel lip turning into the hole, two lit lining rows down the shaft, lit rail strip with post caps,
+  2 m dashed hazard band; scale cues: a 2.4 × 3.0 crew hatch + console/locker group within 6 m of every
+  bay door; crane parked over the aft apron at t = 40 with hook down. Foreground deck band in the racks
+  view measured 12 → 57–69/255. Pixel-diffed: bay-door and exterior views unchanged.
+- Full deck after the final round (harness tag `full-final`, port 5100, all 13 modules): **0 registry
+  warnings, 0 page errors**, hangar 287,178 tris / 27 descriptors / 21 materials / 156 colliders /
+  207 ms while the other 12 modules build alongside; hangar views 132–170 calls, 864k–986k tris.
 
 ## Remaining
-1. Second critic pass result → one more targeted fix round on whatever it still ranks lowest.
-2. Load time 12.2 s with all 13 modules is at the §12 limit: the hangar builds in 230 ms (limit 250) and
+1. Third blind critic pass on the final hangar set (the second pass ranked it 4–5/10; every item it
+   named has a change against it — see Tested) and, if it still ranks lowest, one more round.
+2. Load time 12.1 s with all 13 modules is at the §12 limit: the hangar builds in ~200 ms (limit 250) and
    the text/hazard/decal canvas atlases cost ~1 s; candidates are lazy per-room building (A's streaming
    plan already builds in chunks) and sharing one text atlas across modules.
 3. Re-run the full deck once B's `d1-lobby` / C's `d2-lobby`, `d3-lobby` merge, to confirm T1–T3
@@ -227,7 +250,7 @@ None. No scaffold yet — working against the contract text with the local shim.
 - Interactables: modules push `{ id, key, label, object, material, action: async () => {} }`; please
   have the shared `Interactions` call `action()` on E (Kestrel's hardcodes bed/galley/bathroom).
 - Light pool: the room the player stands in should keep its descriptors before neighbours get any
-  (the shim adds a fixed bonus for the current room); with `d4-hangar`'s 26 descriptors active as a
+  (the shim adds a fixed bonus for the current room); with `d4-hangar`'s 27 descriptors active as a
   neighbour, the bays otherwise lose all their pools.
 - Audio placeholder ids used: `door-open`, `door-close`, `lift-arrive`, `lift-ride` (loop, `.stop()`).
 - `ctx.teleport(roomId)` should refresh streaming for the target deck (lifts call it before
