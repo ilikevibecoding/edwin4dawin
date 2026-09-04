@@ -110,9 +110,10 @@ export function buildEngines(ctx) {
     cone(0.25, 0.88, 0.68, 0.9, blue.clone().multiplyScalar(1.1), 2.6);
     cone(0.25, 0.6, 0.4, 0.5, C(0xffffff).multiplyScalar(1.1), 1.6);
     cone(1.0, 1.4, 1.0, 0.55, blue.clone().multiplyScalar(0.26), 2.0);
-    // halo: soft additive disc texture behind the lip + vertex-gradient disc (kept inside ~1.6 r)
-    at("far", "glowDisc").addGeometry(new THREE.PlaneGeometry(r * 1.7, r * 1.7), { pos: [b.x, b.y, e.z + L + 2.5], uv: "keep" });
-    glow.disc(V(b.x, b.y, e.z + L + 1.5), Z, r * 1.25, segs, blue.clone().multiplyScalar(0.35), 1, { colorOut: 0x000000 });
+    // soft additive disc deep in the bell (clipped by the bell walls from oblique angles, so the
+    // inner bell stays legible) + a dim vertex-gradient halo just behind the lip
+    at("far", "glowDisc").addGeometry(new THREE.PlaneGeometry(r * 1.9, r * 1.9), { pos: [b.x, b.y, e.z + 0.42 * L], uv: "keep" });
+    glow.disc(V(b.x, b.y, e.z + L + 1.5), Z, r * 1.25, segs, blue.clone().multiplyScalar(0.28), 1, { colorOut: 0x000000 });
     // lip ring, gimbal collar at the housing face, stiffener rings
     const trim = at("far", "hullTrim");
     trim.addGeometry(new THREE.TorusGeometry(r * 1.035 + 0.15, b.main ? 1.0 : 0.6, 10, segs), { pos: [b.x, b.y, e.z + L], color: T, texel: TEXEL * 3 });

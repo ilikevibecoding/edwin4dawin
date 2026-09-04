@@ -98,12 +98,42 @@ function cutStrips(sMax, cuts) {
   return out;
 }
 const inRange = (z, a, b) => z >= a && z <= b;
-function topCuts(z) {
+function topCutsBase(z) {
   const cuts = [];
   if (z >= T0.zFront) cuts.push([0, footprint(z) - 1]);
   if (inRange(z, MOAT.zA, MOAT.zB)) cuts.push([MOAT.xc(z) - MOAT.halfW, MOAT.xc(z) + MOAT.halfW]);
   if (inRange(z, OUTER.zA, OUTER.zB)) cuts.push([OUTER.xc(z) - OUTER.halfW, OUTER.xc(z) + OUTER.halfW]);
   return cuts;
+}
+// large recessed service hatches on the dorsal plate, in lanes clear of the channels / footprint
+const HATCHES = (() => {
+  const out = [];
+  const r = rng(4242);
+  const zEndCh = Math.min(MOAT.zB, OUTER.zB) - 3;
+  for (let z = -920; z < 540; z += 60 + r() * 70) {
+    const len = 14 + r() * 12;
+    const z1 = z + len;
+    // lanes (centreline xc(z), max half-width): forward plate, between the channels, outboard lane
+    const lanes = [];
+    if (z1 < T0.zFront - 6) for (const k of [0.28, 0.55]) lanes.push({ xc: (zz) => k * topX(zz), hwMax: 8 });
+    if (z > MOAT.zA + 3 && z1 < zEndCh) lanes.push({ xc: (zz) => (MOAT.xc(zz) + MOAT.halfW + OUTER.xc(zz) - OUTER.halfW) / 2, hwMax: 8.5 });
+    if (z > OUTER.zA + 3 && z1 < OUTER.zB - 3) lanes.push({ xc: (zz) => (OUTER.xc(zz) + OUTER.halfW + topX(zz) - 4.5) / 2, hwMax: 4 });
+    if (!lanes.length) continue;
+    const lane = lanes[Math.floor(r() * lanes.length)];
+    const hw = Math.min(lane.hwMax, 4 + r() * 4.5);
+    const ok = [z, z1].every((zz) => {
+      const xc = lane.xc(zz);
+      if (xc + hw > topX(zz) - 4.5 || xc - hw < 3) return false;
+      return topCutsBase(zz).every(([a, b]) => xc + hw + 2.5 < a || xc - hw - 2.5 > b);
+    });
+    if (ok) out.push({ z0: z, z1, xc: lane.xc, hw, depth: 1.4 });
+  }
+  return out;
+})();
+function topCuts(z) {
+  const cuts = topCutsBase(z);
+  for (const h of HATCHES) if (inRange(z, h.z0, h.z1)) cuts.push([h.xc(z) - h.hw, h.xc(z) + h.hw]);
+  return cuts.sort((a, b) => a[0] - b[0]);
 }
 function botCuts(z) {
   const cuts = [];
@@ -122,7 +152,7 @@ function buildSkins(ctx) {
   const { hullLight: L, hullMid: M, hullDark: D, hullTrench: T } = PALETTE;
   const zStart = CAP_Z - 2;
   const zEnd = HULL.zStern;
-  const splits = [T0.zFront, MOAT.zA, MOAT.zB, OUTER.zA, OUTER.zB, VENT.zA, VENT.zB, MOUTH.z0, MOUTH.z1, RB.z - BULB_HALF, RB.z + BULB_HALF, DOCK.z - DOCK.hl, DOCK.z + DOCK.hl];
+  const splits = [T0.zFront, MOAT.zA, MOAT.zB, OUTER.zA, OUTER.zB, VENT.zA, VENT.zB, MOUTH.z0, MOUTH.z1, RB.z - BULB_HALF, RB.z + BULB_HALF, DOCK.z - DOCK.hl, DOCK.z + DOCK.hl, ...HATCHES.flatMap((h) => [h.z0, h.z1])];
   const full = () => [{ s0: 0, s1: 1, kind: "plate" }];
   const bare = () => [{ s0: 0, s1: 1, kind: "bare" }];
 
@@ -142,7 +172,7 @@ function buildSkins(ctx) {
     slabKeys: ["hullPlate", "exta_plate2"],
     tint: paint(L, M, 3),
     slabTint,
-    slabOK: (x, y, z) => !nearBelt(z) && x < topX(z) - 3.6 && !(z >= T0.zFront && x < footprint(z) + 2.6),
+    slabOK: (x, y, z) => !nearBelt(z) && Math.abs(x) < topX(z) - 3.6 && !(z >= T0.zFront && Math.abs(x) < footprint(z) + 2.6) && !HATCHES.some((h) => z > h.z0 - 5 && z < h.z1 + 5 && Math.abs(Math.abs(x) - h.xc(z)) < h.hw + 5),
   });
   // upper slope
   plateField(chunks, rand, {
@@ -201,7 +231,7 @@ function buildSkins(ctx) {
     slabKeys: ["hullPlate", "hullPlate1"],
     tint: paint(mixC(L, M, 0.5), M, 13),
     slabTint,
-    slabOK: (x, y, z) => !nearBelt(z) && x < botX(z) - 3 && !nearFrame(x, z, MOUTH.x1, MOUTH.z0, MOUTH.z1) && !nearFrame(x, z, DOCK.hw, DOCK.z - DOCK.hl, DOCK.z + DOCK.hl) && Math.hypot(x, z - RB.z) > BULB_R + 14,
+    slabOK: (x, y, z) => !nearBelt(z) && Math.abs(x) < botX(z) - 3 && !nearFrame(x, z, MOUTH.x1, MOUTH.z0, MOUTH.z1) && !nearFrame(x, z, DOCK.hw, DOCK.z - DOCK.hl, DOCK.z + DOCK.hl) && Math.hypot(x, z - RB.z) > BULB_R + 14,
   });
 }
 
@@ -213,6 +243,39 @@ function buildChannels(ctx) {
   channel(chunks, rand, { ...MOAT, yAt: yT, up: true, floorKey: "exta_machinery", floorTint: mixC(PALETTE.hullDark, PALETTE.hullMid, 0.2), ribStep: 16, lightStep: 36 });
   channel(chunks, rand, { ...OUTER, yAt: yT, up: true, ribStep: 18, lightStep: 48 });
   channel(chunks, rand, { ...VENT, yAt: yB, up: false, floorKey: "exta_machinery", floorTint: mixC(PALETTE.hullDark, PALETTE.hullMid, 0.2), ribStep: 18, lightStep: 44 });
+}
+/** Recessed dorsal service hatches: cut, raised frame, two bevelled hatch leaves, hinge blocks. */
+function buildHatches(ctx) {
+  const { chunks, rand } = ctx;
+  const { hullDark: D, hullMid: M } = PALETTE;
+  const w = 1.6;
+  for (const h of HATCHES) {
+    const xc = h.xc;
+    channel(chunks, rand, { zA: h.z0, zB: h.z1, xc, halfW: h.hw, depth: h.depth, yAt: yT, up: true, ribs: false, pipe: false, lights: false, floorKey: "exta_machinery", floorTint: mixC(D, M, 0.15), wallTint: D });
+    const zm = (h.z0 + h.z1) / 2;
+    const far = chunks.batch(zm, "far", "hullPlate1");
+    const near = chunks.batch(zm, "near", "hullGreeble");
+    const yF = (z) => yT(z) - h.depth;
+    for (const side of [1, -1]) {
+      const X = (z, off) => side * (xc(z) + off);
+      const bar = (x0f, x1f, za, zb) => {
+        const c = [V(x0f(za), yT(za), za), V(x1f(za), yT(za), za), V(x1f(zb), yT(zb), zb), V(x0f(zb), yT(zb), zb)];
+        hexa(far, c, c.map((p) => V(p.x, p.y + 0.5, p.z)), mixC(D, M, 0.4), TEXEL, { skipBottom: true });
+      };
+      bar((z) => X(z, h.hw + 0.05), (z) => X(z, h.hw + 0.05 + w), h.z0 - w, h.z1 + w);
+      bar((z) => X(z, -h.hw - 0.05 - w), (z) => X(z, -h.hw - 0.05), h.z0 - w, h.z1 + w);
+      bar((z) => X(z, -h.hw - 0.05), (z) => X(z, h.hw + 0.05), h.z0 - w, h.z0 - 0.05);
+      bar((z) => X(z, -h.hw - 0.05), (z) => X(z, h.hw + 0.05), h.z1 + 0.05, h.z1 + w);
+      for (const [za, zb] of [
+        [h.z0 + 0.8, zm - 0.3],
+        [zm + 0.3, h.z1 - 0.8],
+      ]) {
+        const c = [V(X(za, -h.hw + 0.8), yF(za), za), V(X(za, h.hw - 0.8), yF(za), za), V(X(zb, h.hw - 0.8), yF(zb), zb), V(X(zb, -h.hw + 0.8), yF(zb), zb)];
+        near.frustum(c, UP, 0.45, 0.6, mixC(M, D, 0.5), TEXEL);
+      }
+      for (const zz of [h.z0 + 3, h.z1 - 3]) for (const s of [-1, 1]) near.box(X(zz, s * (h.hw - 0.9)), yF(zz) + 0.5, zz, 1.2, 1.0, 2.4, D, TEXEL * 3, { skip: new Set(["-y"]) });
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -638,6 +701,7 @@ export function buildExterior(scene, materials) {
   const ctx = { chunks: hull, rand, kit };
   buildSkins(ctx);
   buildChannels(ctx);
+  buildHatches(ctx);
   buildRails(ctx);
   buildBow(ctx);
   buildStern(ctx);
