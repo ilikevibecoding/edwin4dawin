@@ -295,6 +295,9 @@ export function buildInterior({ scene, materials }) {
     return best;
   }
 
+  // Portal culling. Closed doors block sight, so from a room only the room, its corridors and what those
+  // corridors open onto are drawn; from a corridor its rooms and the corridors it joins, plus corridors
+  // beyond those junctions (open connections), but not the rooms behind further doors.
   function computeVisible(sp) {
     const vis = new Set();
     if (!sp) return vis;
@@ -302,7 +305,11 @@ export function buildInterior({ scene, materials }) {
     for (const n of sp.neighbors) {
       vis.add(n);
       const ns = spaces[n];
-      if (ns) for (const m of ns.neighbors) vis.add(m);
+      if (!ns || ns.kind !== "corridor") continue;
+      for (const m of ns.neighbors) {
+        const ms = spaces[m];
+        if (sp.kind === "room" || (ms && ms.kind === "corridor")) vis.add(m);
+      }
     }
     return vis;
   }
