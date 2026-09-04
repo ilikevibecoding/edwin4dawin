@@ -138,8 +138,8 @@ export function build(ctx) {
 
   // ---- lights: cold red practicals, two pale keys over the table ----
   ctx.light(0xff4a3a, 16, 9, [cx, fy + 3.2, z0 + 1.9], { decay: 1.6 });
-  ctx.light(0xffe2dc, 26, 14, [cx - 1.4, fy + 3.9, TABLE_Z], { decay: 1.5 });
-  ctx.light(0xffe2dc, 26, 14, [cx + 1.4, fy + 3.9, TABLE_Z], { decay: 1.5 });
+  ctx.light(0xffe2dc, 32, 16, [cx - 1.4, fy + 3.9, TABLE_Z], { decay: 1.5 });
+  ctx.light(0xffe2dc, 32, 16, [cx + 1.4, fy + 3.9, TABLE_Z], { decay: 1.5 });
   ctx.light(0xff5545, 22, 14, [x0 + 3.0, fy + 3.8, 218.5], { decay: 1.4 });
   ctx.light(0xff5545, 22, 14, [x1 - 3.0, fy + 3.8, 218.5], { decay: 1.4 });
   ctx.light(0xff5545, 22, 14, [x0 + 3.0, fy + 3.8, 225.5], { decay: 1.4 });
