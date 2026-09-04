@@ -45,10 +45,11 @@ export function build(ctx) {
   // ---- forward window watch ----
   {
     const W = ctx.wall("zmin");
-    // continuous sill ledge under the glazing with a hazard stencil band
-    W.frame.box("paintedMetal", W.length / 2, 0.97, 0.14, W.length - 0.6, 0.07, 0.3, { color: IMP.black, texel: 1 });
-    W.frame.box("metal", W.length / 2, 1.005, 0.2, W.length - 0.6, 0.015, 0.16, { color: IMP.steelDark });
-    for (const u of [2.5, W.length - 2.5]) W.frame.decal(u, 0.6, 0.06, 0.6, 0.6, DECAL.TEXT_A);
+    // continuous sill ledge under the glazing (its bottom edge comes from the room's window record)
+    const sill = ctx.def.windows && ctx.def.windows.length ? ctx.def.windows[0].v0 : 1.0;
+    W.frame.box("paintedMetal", W.length / 2, sill - 0.03, 0.14, W.length - 0.6, 0.07, 0.3, { color: IMP.black, texel: 1 });
+    W.frame.box("metal", W.length / 2, sill + 0.005, 0.2, W.length - 0.6, 0.015, 0.16, { color: IMP.steelDark });
+    for (const u of [2.5, W.length - 2.5]) W.frame.decal(u, sill / 2, 0.06, Math.min(0.6, sill - 0.1), Math.min(0.6, sill - 0.1), DECAL.TEXT_A);
     for (const x of [cx - 4.6, cx + 4.6]) {
       props.consoleStation(kit, { pos: [x, fy, 176.2], yaw: 0, w: 2.6, d: 0.85, h: 1.0, screens: 3, accent: "emitBlue", seed: 11 + Math.round(x), screenSet: [0, 4, 12] });
     }

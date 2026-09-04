@@ -67,10 +67,12 @@ export function build(ctx) {
   // ---- window sill + forward console rows ----
   {
     const W = ctx.wall("zmin");
-    W.frame.box("paintedMetal", W.length / 2, 0.97, 0.14, W.length - 0.6, 0.07, 0.3, { color: IMP.black, texel: 1 });
-    W.frame.box("metal", W.length / 2, 1.005, 0.2, W.length - 0.6, 0.015, 0.16, { color: IMP.steelDark });
-    W.frame.box("leds", W.length / 2, 0.75, 0.03, 6.0, 0.08, 0.01, { uv: "keep", uvRect: ledRect(1) });
-    for (const u of [1.6, W.length - 1.6]) W.frame.decal(u, 0.55, 0.06, 0.55, 0.55, DECAL.NUMBER1);
+    // sill ledge, LED strip and stencils stay under the glazing (bottom edge from the room's window record)
+    const sill = ctx.def.windows && ctx.def.windows.length ? ctx.def.windows[0].v0 : 1.0;
+    W.frame.box("paintedMetal", W.length / 2, sill - 0.03, 0.14, W.length - 0.6, 0.07, 0.3, { color: IMP.black, texel: 1 });
+    W.frame.box("metal", W.length / 2, sill + 0.005, 0.2, W.length - 0.6, 0.015, 0.16, { color: IMP.steelDark });
+    W.frame.box("leds", W.length / 2, sill - 0.2, 0.03, 6.0, 0.08, 0.01, { uv: "keep", uvRect: ledRect(1) });
+    for (const u of [1.6, W.length - 1.6]) W.frame.decal(u, sill / 2, 0.06, Math.min(0.55, sill - 0.1), Math.min(0.55, sill - 0.1), DECAL.NUMBER1);
   }
   const rows = [
     { z: 176.8, xs: [cx - 4.8, cx, cx + 4.8], sets: [[10, 4], [1, 10], [4, 0]] },
