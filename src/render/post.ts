@@ -153,7 +153,8 @@ export class PostPipeline {
       depthTest: false,
       depthWrite: false,
     });
-    this.brightMat = new THREE.ShaderMaterial({ vertexShader: FULLSCREEN_VERT, fragmentShader: BRIGHT_FRAG, uniforms: { tColor: { value: null }, uThreshold: { value: 1.15 } }, depthTest: false, depthWrite: false });
+    // threshold sits above sunlit white (~1.3) so only glitter, lights and cloud tops bloom: no veil over the blue sky
+    this.brightMat = new THREE.ShaderMaterial({ vertexShader: FULLSCREEN_VERT, fragmentShader: BRIGHT_FRAG, uniforms: { tColor: { value: null }, uThreshold: { value: 1.5 } }, depthTest: false, depthWrite: false });
     this.blurMat = new THREE.ShaderMaterial({ vertexShader: FULLSCREEN_VERT, fragmentShader: BLUR_FRAG, uniforms: { tColor: { value: null }, uDir: { value: new THREE.Vector2() } }, depthTest: false, depthWrite: false });
     this.compositeMat = new THREE.ShaderMaterial({
       vertexShader: FULLSCREEN_VERT,
@@ -161,7 +162,7 @@ export class PostPipeline {
       uniforms: {
         tColor: { value: null }, tBloom0: { value: null }, tBloom1: { value: null }, tBloom2: { value: null },
         uBloom: { value: 0.2 }, uExposure: { value: 0.92 }, uSaturation: { value: 1.16 }, uVignette: { value: 0.25 },
-        uLift: { value: new THREE.Vector3(0.0, 0.006, 0.012) }, uGain: { value: new THREE.Vector3(1.03, 1.0, 0.97) },
+        uLift: { value: new THREE.Vector3(0.0, 0.002, 0.004) }, uGain: { value: new THREE.Vector3(1.03, 1.0, 0.97) },
         uResolution: { value: new THREE.Vector2(1, 1) }, uGrain: { value: 0.004 }, uTime: { value: 0 },
       },
       depthTest: false,
@@ -230,7 +231,7 @@ export class PostPipeline {
     c.tBloom0.value = this.bloomRTs[0].texture;
     c.tBloom1.value = this.bloomRTs[1].texture;
     c.tBloom2.value = this.bloomRTs[2].texture;
-    c.uBloom.value = this.opts.bloom ? 0.22 : 0.0;
+    c.uBloom.value = this.opts.bloom ? 0.18 : 0.0;
     c.uExposure.value = this.exposure * (1 + 5.0 * (this.aerialMat.uniforms.uNight.value as number));
     c.uTime.value = time;
     this.blit(this.compositeMat, null);

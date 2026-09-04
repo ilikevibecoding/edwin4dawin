@@ -3,20 +3,12 @@ import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { HALF, MAP_N, WORLD_SIZE, type WorldMap } from './map';
 
 /**
- * Sky-light white balance for the world surfaces (terrain, roads, planting, shoreline props).
- * The sky dome's image-based light delivers about 2.5x the sun's blue irradiance on a horizontal
- * surface (with `scene.environmentIntensity = 0` the beaches render tan, with it they render
- * blue-grey), so every warm albedo takes a blue cast. Desaturating the diffuse sky irradiance keeps
- * its brightness but lets sand read as sand and foliage as green, the way a camera's white balance
- * neutralises skylight. Remove this hook once the atmosphere's ambient is rebalanced globally.
+ * Formerly a per-material white balance of the sky irradiance (the dome's IBL used to deliver ~2.5x the
+ * sun's blue irradiance, so beaches rendered blue-grey). The atmosphere now balances sun and sky globally
+ * (`SUN_IRRADIANCE` in atmosphere.ts, whitened environment probe in sky.ts), so this hook is a no-op kept
+ * only so the callers in roads, vegetation and props keep compiling. Safe to delete along with them.
  */
-export const GROUND_IBL_BALANCE = /* glsl */ `
-#include <lights_fragment_maps>
-iblIrradiance = mix(iblIrradiance, vec3(dot(iblIrradiance, vec3(0.2126, 0.7152, 0.0722))), 0.75) * 0.85;
-`;
-export function balanceGroundIbl(shader: { fragmentShader: string }): void {
-  shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_maps>', GROUND_IBL_BALANCE);
-}
+export function balanceGroundIbl(_shader: { fragmentShader: string }): void {}
 
 /** GPU textures shared by terrain, water and anything that needs to know the ground height. */
 export class MapTextures {
