@@ -210,9 +210,24 @@ What each delivers:
   warnings, 0 page errors**, hangar 287,178 tris / 27 descriptors / 21 materials / 156 colliders /
   207 ms while the other 12 modules build alongside; hangar views 132–170 calls, 864k–986k tris.
 
+- Third blind critic (7 final hangar frames, images + brief only): **mean 5.6/10** (deck 6, aperture
+  5.5, racks 6, aft wall 5, balcony 6, bay door 6.5, exterior 4; the hangar was 4–5 in pass 2). Verdict:
+  "composition, signage and props are now right — the hall feels 240 m long — but surfaces and light are
+  still greybox: flat clean plates, unshadowed walls, a uniform clipped ceiling grid, no grounding
+  shadows". Of the 11 pass-2 items it marked 5 fixed, 5 partly, 1 not (crane not visible in any frame).
+  Two of its findings were not bugs: the "stray white point" at the frame centre in two views was the
+  HUD crosshair (the harness no longer draws it in shots), and the exterior frame's "hull ends in hard
+  edges" is A's hull not being on the branch yet. Its ranked items went to a hangar round 3 (deck wear
+  contrast + contact shadows, fewer housed ceiling floods under clip, rack spot overshoot, apron pools
+  from the balcony, baked AO / gradient / cornice on the aft wall, lit or removed wall rectangles, larger
+  stencils, support towers under the control balcony, thinner lit balcony rail, bow-wall feature,
+  containment-field body ≤ 5 %, rail sign text, housed bay-door bars, hazard-band blotches, lit junction
+  boxes, crane parked in view) and a traffic round 3 (soft tractor-beam cones with length falloff at
+  half opacity; dark blue-grey TIE albedo).
+
 ## Remaining
-1. Third blind critic pass on the final hangar set (the second pass ranked it 4–5/10; every item it
-   named has a change against it — see Tested) and, if it still ranks lowest, one more round.
+1. Hangar round 3 + traffic round 3 in flight (critic pass 3 items above); re-shoot the full deck and
+   re-critic the seven hangar frames afterwards.
 2. Load time 12.1 s with all 13 modules is at the §12 limit: the hangar builds in ~200 ms (limit 250) and
    the text/hazard/decal canvas atlases cost ~1 s; candidates are lazy per-room building (A's streaming
    plan already builds in chunks) and sharing one text atlas across modules.
@@ -252,6 +267,14 @@ None. No scaffold yet — working against the contract text with the local shim.
 - Light pool: the room the player stands in should keep its descriptors before neighbours get any
   (the shim adds a fixed bonus for the current room); with `d4-hangar`'s 27 descriptors active as a
   neighbour, the bays otherwise lose all their pools.
+- **Shadow-casting key light (same ask as B's "shadow slot" and C's `shadow: true` proposal).** Three
+  independent blind critics, on three decks, rank "no contact shadows, unshadowed walls, props floating
+  tonally" as the top remaining item; we are faking it with baked AO bands and contact-shadow decals.
+  Proposal: an optional `shadow: true` on a light descriptor; the pool reserves one spot slot (two on
+  high tier) with a 1024 shadow map for the highest-priority shadow-flagged descriptor of the current
+  room only (never neighbours), `renderer.shadowMap` PCFSoft, kit meshes `receiveShadow`, instanced
+  leaves/craft `castShadow`. One shadowed spot per room is the cheapest change with the largest visual
+  return left in the whole build; the hangar would flag its two apron floods, each bay its key flood.
 - Audio placeholder ids used: `door-open`, `door-close`, `lift-arrive`, `lift-ride` (loop, `.stop()`).
 - `ctx.teleport(roomId)` should refresh streaming for the target deck (lifts call it before
   `teleport({pos, yaw})`).
