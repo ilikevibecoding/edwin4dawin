@@ -67,7 +67,8 @@ export function build(ctx) {
         const bx = rx + s * 0.8;
         kit.place("bench_top", { pos: [bx, F, z], color: IMP.plateDark });
         kit.place("bench_frame", { pos: [bx, F, z], color: IMP.black });
-        kit.collider([bx - 0.18, F, z - TL / 2 + 0.1], [bx + 0.18, F + 0.48, z + TL / 2 - 0.1], "bench");
+        // just above the player's step height so the benches cannot be used as stairs onto the tables
+        kit.collider([bx - 0.18, F, z - TL / 2 + 0.1], [bx + 0.18, F + 0.5, z + TL / 2 - 0.1], "bench");
       }
       for (const dz of [-1.7, 1.7]) {
         kit.place("pend", { pos: [rx, F + 2.75, z + dz], color: IMP.black });
