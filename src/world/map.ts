@@ -186,7 +186,7 @@ function sdVarPolyline(px: number, pz: number, pts: Vec2[], widths: number[]): n
 // ---------------------------------------------------------------- authored geography
 
 /** Isla Garza's main body (the reference hero island): long axis north-south. */
-const G = { cx: 200, cz: 2520, rx: 270, rz: 440, rot: 0.05 } as const;
+const G = { cx: 195, cz: 2520, rx: 262, rz: 440, rot: 0.05 } as const;
 /** Low sandy spit off Garza's north shore that carries the causeway approach; the bridge abutment
  *  sits at its northern end. */
 export const GARZA_SPIT: [Vec2, Vec2] = [[40, 2060], [-5, 1790]];
@@ -194,7 +194,7 @@ const GARZA_SPIT_HW = 42;
 /** Garza's interior lagoon (negative inside the water). Shared by the landmass SDF (which cuts it
  *  out of the land) and the seabed pass (which gives it a proper turquoise depth). */
 export function garzaLagoon(x: number, z: number): number {
-  return sdIsland(x, z, 200, 2380, 85, 55, 0.5, 15, 0.25);
+  return sdIsland(x, z, 200, 2380, 100, 62, 0.5, 15, 0.25);
 }
 
 /** The mainland coast runs north-south along x ≈ -2500 with bays and headlands. */
@@ -278,8 +278,8 @@ export function createLandmasses(): Landmass[] {
       let d = sdIsland(x, z, G.cx, G.cz, G.rx, G.rz, G.rot, 11, 0.14);
       d = smin(d, sdIsland(x, z, 260, 2900, 160, 150, 0.1, 12, 0.2), 110);   // southern tip lobe
       d = smin(d, sdIsland(x, z, -10, 2740, 115, 120, 0.3, 13, 0.25), 100);  // south-west lobe (settlement)
-      d = smin(d, sdIsland(x, z, 410, 2500, 110, 150, 0.0, 17, 0.2), 110);   // east lobe (exposed beach)
-      d = smin(d, sdIsland(x, z, 390, 2150, 130, 120, 0.2, 14, 0.2), 110);   // north-east lobe (park, marina)
+      d = smin(d, sdIsland(x, z, 390, 2500, 100, 150, 0.0, 17, 0.2), 110);   // east lobe (exposed beach)
+      d = smin(d, sdIsland(x, z, 385, 2150, 105, 120, 0.2, 14, 0.2), 110);   // north-east lobe (park, marina)
       d = smin(d, sdIsland(x, z, 110, 2110, 130, 110, -0.1, 16, 0.2), 100);  // north lobe (spit root)
       d = smin(d, sdSegment(x, z, GARZA_SPIT[0][0], GARZA_SPIT[0][1], GARZA_SPIT[1][0], GARZA_SPIT[1][1]) - GARZA_SPIT_HW, 60);
       // interior lagoon; its distance is steepened so only a narrow sandy rim surrounds the pond
@@ -935,11 +935,11 @@ export class WorldMap implements WorldMapData {
                 }
               }
             }
-            // Garza's causeway spit is a flat sand bank (a few palms along the highway) rather than canopy
+            // Garza's causeway spit is a bare sand bank (too low for the planters' dune palms) rather than canopy
             if (lm.id === 'garza' && z < GARZA_SPIT[0][1] + 60 && sdSegment(x, z, GARZA_SPIT[0][0], GARZA_SPIT[0][1], GARZA_SPIT[1][0], GARZA_SPIT[1][1]) < GARZA_SPIT_HW + 40) {
               const spitT = smoothstep(GARZA_SPIT[0][1] + 60, GARZA_SPIT[0][1] - 40, z);
               if (spitT > 0.5) { zone = Zone.BEACH; veg = 15; }
-              const bank = lerp(0.3, 1.15 + 0.15 * perlin2(x / 40, z / 40), smoothstep(0, 16, inland));
+              const bank = lerp(0.3, 0.8 + 0.08 * perlin2(x / 40, z / 40), smoothstep(0, 16, inland));
               h = lerp(h, Math.max(h, bank), spitT);
             }
           }
