@@ -48,6 +48,18 @@ export class LiftSystem {
         this.currentCar = car;
         this.closeTimer = 0.9;
       }
+      // walking up to a closed door from inside reopens it (leaving without riding)
+      if (door && door.target === 0) {
+        const nearDoor = Math.abs(p.z - door.pos.z) < 1.0 && Math.abs(p.x - door.pos.x) < 1.2;
+        if (nearDoor) {
+          door.open();
+          this.closeTimer = 1.0;
+          if (this.menuShown) {
+            this.menuShown = false;
+            this.hud.hideLiftMenu();
+          }
+        }
+      }
       this.closeTimer -= dt;
       if (door && this.closeTimer <= 0 && door.target === 1) door.close();
       if (door && door.openness === 0 && !this.menuShown) {
@@ -123,7 +135,7 @@ export class LiftSystem {
       this.player.setPose(to[0] + lx, to[2] + lz, THREE.MathUtils.radToDeg(this.player.yaw), THREE.MathUtils.radToDeg(this.player.pitch), to[1]);
       this.cells.setCurrent(r.to.id);
       this.currentCar = r.to;
-      this.closeTimer = 0;
+      this.closeTimer = 2.5; // hold the arrival door open long enough to step out
       const door = this.doorFor(r.to);
       if (door) {
         door.open();
@@ -139,6 +151,14 @@ export class LiftSystem {
   }
 
   getState() {
-    return { state: this.state, car: this.currentCar ? this.currentCar.id : null, ride: this.ride ? { to: this.ride.to.id, t: +this.ride.t.toFixed(2) } : null };
+    return { state: this.state, car: this.currentCar ? this.currentCar.id : null, ride: this.ride ? { to: this.ride.to.id, from: this.ride.from.id, t: +this.ride.t.toFixed(2), dur: +this.ride.dur.toFixed(2) } : null };
+  }
+  /** Apply a replicated ride (a remote passenger's lift is in motion): only the animation state matters here. */
+  setState(s) {
+    if (!s || !s.ride) return;
+    const from = ROOM_BY_ID[s.ride.from];
+    const to = ROOM_BY_ID[s.ride.to];
+    if (!from || !to) return;
+    if (this.state !== "riding") this.setCarAnim(from, true, Math.sign(to.origin[1] - from.origin[1]) || 1);
   }
 }

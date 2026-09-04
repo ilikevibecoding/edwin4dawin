@@ -46,6 +46,7 @@ scene.add(camera);
 
 const hud = createHUD();
 const perf = createPerf(renderer);
+perf.attachScene(scene);
 const audio = createAudio(camera);
 
 // ---------------------------------------------------------------------------

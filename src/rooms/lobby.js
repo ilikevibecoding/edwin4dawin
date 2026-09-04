@@ -111,7 +111,10 @@ function liftSurround(kit, F, u, dw, dh, accentKey, indKey) {
   F.box(accentKey, cu, 1.24, 0.095, 0.1, 0.07, 0.014);
   F.box("emitRedImp", cu, 1.1, 0.095, 0.1, 0.07, 0.014);
   F.decal(IMP_DECAL.turbolift, cu, 1.62, 0.09, 0.18);
-  F.collider(u - fw - 0.06 - sideW, cu + 0.2, 0, ringTop + 0.75, 0, 0.12, "liftframe");
+  // collide the side surrounds, the call panel and the header only: the 2.2 m opening must stay clear
+  F.collider(u - fw - 0.06 - sideW, u - fw, 0, ringTop + 0.75, 0, 0.12, "liftframe");
+  F.collider(u + fw, cu + 0.2, 0, ringTop + 0.75, 0, 0.12, "liftframe");
+  F.collider(u - fw, u + fw, ringTop, ringTop + 0.75, 0, 0.12, "liftframe");
 }
 
 /** Free-standing deck directory: plinth, black column, screen listing the decks, lamp per deck, lit cap. */

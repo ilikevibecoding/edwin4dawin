@@ -60,7 +60,7 @@ export function buildBriefing(kit, ctx, room) {
       const za = s * (aisle + 0.3);
       const zb = s * (hz - 0.5);
       desk(kit, t.x0 + 0.9, t.y, Math.min(za, zb), Math.max(za, zb), accentKey, i);
-      for (let k = 0; k < 8; k++) chairInstance(kit, t.x0 + 2.05, t.y, s * (aisle + 0.75 + k * 1.15), Math.PI / 2, { y: t.y });
+      for (let k = 0; k < 8; k++) chairInstance(kit, t.x0 + 2.05, s * (aisle + 0.75 + k * 1.15), Math.PI / 2, { y: t.y });
     }
     yPrev = t.y;
   }

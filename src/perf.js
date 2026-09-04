@@ -24,24 +24,39 @@ export function createPerf(renderer) {
       /* not supported */
     }
   }
+  // estimate GPU texture memory from the textures reachable through the scene's materials
+  // (w*h*4 bytes, ×1.33 for mips); three.js keeps its own upload table private
+  let sceneRef = null;
   function textureBytes() {
-    // estimate from the textures three.js has uploaded: w*h*4 bytes * 1.33 for mips
+    if (!sceneRef) return 0;
+    const seen = new Set();
     let bytes = 0;
-    const props = renderer.properties;
-    if (!props || !props.properties) return 0;
-    for (const [obj] of props.properties) {
-      if (obj && obj.isTexture && obj.image) {
-        const img = obj.image;
-        const w = img.width || (img[0] && img[0].width) || 0;
-        const h = img.height || (img[0] && img[0].height) || 0;
-        const faces = Array.isArray(img) ? img.length : 1;
-        const bpp = obj.type === 1016 || obj.type === 1015 ? 8 : 4; // half / float
-        bytes += w * h * bpp * faces * (obj.generateMipmaps ? 1.333 : 1);
-      }
+    const count = (tex) => {
+      if (!tex || !tex.isTexture || seen.has(tex)) return;
+      seen.add(tex);
+      const img = tex.image;
+      if (!img) return;
+      const w = img.width || (img[0] && img[0].width) || 0;
+      const h = img.height || (img[0] && img[0].height) || 0;
+      const faces = Array.isArray(img) ? img.length : tex.isCubeTexture ? 6 : 1;
+      const bpp = tex.type === 1016 || tex.type === 1015 ? 8 : 4;
+      bytes += w * h * bpp * faces * (tex.generateMipmaps ? 1.333 : 1);
+    };
+    const mats = new Set();
+    sceneRef.traverse((o) => {
+      if (o.material) for (const m of Array.isArray(o.material) ? o.material : [o.material]) mats.add(m);
+    });
+    for (const m of mats) {
+      for (const k of ["map", "emissiveMap", "roughnessMap", "metalnessMap", "normalMap", "alphaMap", "envMap", "aoMap"]) count(m[k]);
+      if (m.uniforms) for (const u of Object.values(m.uniforms)) if (u && u.value && u.value.isTexture) count(u.value);
     }
+    count(sceneRef.environment);
     return bytes;
   }
   return {
+    attachScene(scene) {
+      sceneRef = scene;
+    },
     markReady() {
       readyAt = performance.now() - t0;
     },

@@ -13,6 +13,7 @@ export function createNetAdapter({ doors, lifts, traffic, rig }) {
         if (d) d.setState(ds);
       }
       if (traffic && s.traffic) traffic.setState(s.traffic);
+      if (lifts && s.lift && lifts.setState) lifts.setState(s.lift);
     },
   };
 }

@@ -212,15 +212,16 @@ function door(a, b, pos, axis, opts = {}) {
   room({ id: "lobby_b", name: "Command Deck Lobby", deck: "B", origin: [0, y, 253], size: [24, 4.2, 12], accent: "#8fb4ff", kind: "lobby" });
   room({ id: "observation", name: "Forward Observation Gallery", deck: "B", origin: [0, y, 226], size: [96, 5.0, 16], accent: "#9fc6ff", fog: 0.015, spawn: { x: 0, z: 6, yaw: 0, pitch: 0 } });
   room({ id: "corridor_b", name: "Command Deck Corridor", deck: "B", origin: [0, y, 282], size: [4, 3.6, 44], accent: "#8fb4ff", kind: "corridor", spawn: { x: 0, z: 20, yaw: 0, pitch: -2 } });
-  room({ id: "officers_quarters", name: "Officers' Quarters", deck: "B", origin: [-18.4, y, 273], size: [30, 3.6, 24], accent: "#d7b98c", spawn: { x: 13, z: 0, yaw: 90, pitch: -4 } });
-  room({ id: "briefing", name: "Crew Briefing Room", deck: "B", origin: [16.4, y, 273], size: [26, 4.5, 22], accent: "#7fc4ff", spawn: { x: -12, z: 0, yaw: -90, pitch: -4 } });
+  // deck B rooms start aft of the lift cars (cars occupy z 259.4..262.6 at x ±9.5)
+  room({ id: "officers_quarters", name: "Officers' Quarters", deck: "B", origin: [-18.4, y, 274.6], size: [30, 3.6, 22], accent: "#d7b98c", spawn: { x: 13, z: 0, yaw: 90, pitch: -4 } });
+  room({ id: "briefing", name: "Crew Briefing Room", deck: "B", origin: [16.4, y, 274.4], size: [26, 4.5, 22], accent: "#7fc4ff", spawn: { x: -12, z: 0, yaw: -90, pitch: -4 } });
   room({ id: "lounge", name: "Officers' Lounge", deck: "B", origin: [16.4, y, 297], size: [26, 4.0, 20], accent: "#ffb56b", spawn: { x: -12, z: 0, yaw: -90, pitch: -4 } });
   room({ id: "escape_pods", name: "Emergency Evacuation Bay", deck: "B", origin: [-16.4, y, 297], size: [26, 4.2, 20], accent: "#ff5a3a", spawn: { x: 12, z: 0, yaw: 90, pitch: -4 } });
 
   door("lobby_b", "observation", [0, y, 240.5], "z", { w: 3.0, h: 3.2 });
   door("lobby_b", "corridor_b", [0, y, 259.5], "z", { w: 3.0, h: 3.2 });
-  door("corridor_b", "officers_quarters", [-2.7, y, 273], "x");
-  door("corridor_b", "briefing", [2.7, y, 273], "x", { w: 2.6, h: 3.0 });
+  door("corridor_b", "officers_quarters", [-2.7, y, 274.6], "x");
+  door("corridor_b", "briefing", [2.7, y, 274.4], "x", { w: 2.6, h: 3.0 });
   door("corridor_b", "lounge", [2.7, y, 297], "x");
   door("corridor_b", "escape_pods", [-2.7, y, 297], "x", { type: "blast", w: 2.6, h: 3.0 });
 }
