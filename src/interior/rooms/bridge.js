@@ -84,6 +84,17 @@ function ensureMaterials(ctx) {
     m.brg_glass = m.bridgeGlass.clone();
     m.brg_glass.name = "brg_glass";
     m.brg_glass.color.set(0x0c0f13);
+    // deck gloss with the environment reflection pulled back: the shared RoomEnvironment carries a
+    // 43x area light low on its +Z side, and the stock floor mirrors it as a white flare whenever the
+    // player looks aft along the walkway; the console/lane reflections survive at this level
+    m.brg_floor = m.floorGloss.clone();
+    m.brg_floor.name = "brg_floor";
+    m.brg_floor.envMapIntensity = 0.4;
+    m.brg_floor.roughness = 1.25;
+    m.brg_top = m.darkGloss.clone();
+    m.brg_top.name = "brg_top";
+    m.brg_top.envMapIntensity = 0.3;
+    m.brg_top.roughness = 0.4;
   }
   return { pulse: m.brg_pulse, alert: m.brg_alert, sweep: m.brg_sweep, cone: m.brg_cone, bright: m.brg_holoBright };
 }
@@ -93,7 +104,7 @@ function ensureMaterials(ctx) {
 // ---------------------------------------------------------------------------
 function buildFloor(kit) {
   const pad = 0.4;
-  const F = (x0, z0, x1, z1) => kit.boxMM("floorGloss", [x0, -0.12, z0], [x1, 0, z1], { texel: 0.33 });
+  const F = (x0, z0, x1, z1) => kit.boxMM("brg_floor", [x0, -0.12, z0], [x1, 0, z1], { texel: 0.33 });
   F(-PIT.x0, Z0 - pad, PIT.x0, Z1 + pad); // walkway, full length
   for (const s of [-1, 1]) {
     const xa = Math.min(s * PIT.x0, s * PIT.x1);
@@ -128,15 +139,15 @@ function buildWalls(kit, ctx, B) {
     [X1, H, Z1],
   ];
   const lowPaints = [
-    [PALETTE.impGrey, 0.36],
-    [PALETTE.impMid, 0.34],
-    [PALETTE.impLight, 0.12],
-    [PALETTE.impDark, 0.18],
+    [PALETTE.impMid, 0.4],
+    [PALETTE.impGrey, 0.28],
+    [PALETTE.impDark, 0.26],
+    [PALETTE.impLight, 0.06],
   ];
   const upPaints = [
-    [PALETTE.impMid, 0.5],
-    [PALETTE.impGrey, 0.28],
-    [PALETTE.impDark, 0.22],
+    [PALETTE.impMid, 0.42],
+    [PALETTE.impDark, 0.4],
+    [PALETTE.impGrey, 0.18],
   ];
   const lowStyles = { panel: 0.56, vent: 0.1, greeble: 0.06, strip: 0.1, screen: 0.06, conduit: 0.12 };
   const upStyles = { panel: 0.8, vent: 0.08, strip: 0.06, conduit: 0.06 };
@@ -336,7 +347,7 @@ function buildPit(kit, ctx, s) {
   const x0 = Math.min(s * PIT.x0, s * PIT.x1);
   const x1 = Math.max(s * PIT.x0, s * PIT.x1);
   const stairSide = s > 0 ? "xmin" : "xmax";
-  pit(kit, ctx, { x0, z0: PIT.z0, x1, z1: PIT.z1, depth: PIT.depth, stairs: { side: stairSide, u: STAIR_Z, w: STAIR_W }, seed: ctx.seed + (s > 0 ? 3 : 5) });
+  pit(kit, ctx, { x0, z0: PIT.z0, x1, z1: PIT.z1, depth: PIT.depth, stairs: { side: stairSide, u: STAIR_Z, w: STAIR_W }, floorMat: "brg_floor", seed: ctx.seed + (s > 0 ? 3 : 5) });
   const y = -PIT.depth;
   const yawOut = s > 0 ? -Math.PI / 2 : Math.PI / 2; // operator faces the hull side
   const yawIn = -yawOut; // operator faces the walkway wall
@@ -445,7 +456,7 @@ function buildWalkway(kit) {
 // ---------------------------------------------------------------------------
 function buildCommand(kit, ctx, mats) {
   const { y, hz } = CMD;
-  platform(kit, ctx, { x0: -2.8, z0: CMD.z0, x1: 2.8, z1: CMD.z1, y });
+  platform(kit, ctx, { x0: -2.8, z0: CMD.z0, x1: 2.8, z1: CMD.z1, y, mat: "brg_floor" });
   // amber edge channels along both long sides of the platform
   for (const s of [-1, 1]) {
     kit.boxMM("paintedMetal", [s * 2.6 - 0.07, y, CMD.z0 + 0.25], [s * 2.6 + 0.07, y + 0.014, CMD.z1 - 0.25], BLACK);
@@ -464,7 +475,7 @@ function holoDais(kit, ctx, mats, x, yBase, z) {
   const top = yBase + 0.28;
   kit.cyl("paintedMetal", x, yBase + 0.03, z, 0.95, 0.06, "y", { color: PALETTE.impBlack, segments: 8 });
   kit.cyl("paintedMetal", x, yBase + 0.16, z, 0.9, 0.2, "y", { color: PALETTE.impDark, segments: 8 });
-  kit.cyl("darkGloss", x, top - 0.01, z, 0.92, 0.03, "y", { segments: 8 });
+  kit.cyl("brg_top", x, top - 0.01, z, 0.92, 0.03, "y", { segments: 8 });
   const flat = (geo, yy, mat, opts = {}) => {
     geo.rotateX(-Math.PI / 2);
     kit.add(mat, geo, { pos: [x, yy, z], ...opts });

@@ -17,6 +17,7 @@ const BLACK = { color: PALETTE.impBlack, texel: 2 };
 const DARK = { color: PALETTE.impDark, texel: 1.5 };
 const CEIL = 3.1; // dropped ceiling under the 3.6 m bounds
 const TABLE = { x: -10.6, z: -8.5 }; // the table's 1 m collider stays clear of the sector spawn at x -9
+const CHAIR = { x: -13.1, z: -7.0, yaw: -1.03 }; // faces the table centre (and, beyond it, the door)
 
 export function buildIntel(kit, ctx) {
   const B = ctx.bounds;
@@ -43,13 +44,15 @@ export function buildIntel(kit, ctx) {
   buildLockerWall(kit, ctx, B, mats);
   buildDoorWall(kit, ctx, B, mats);
   holoTable(kit, ctx, mats, TABLE.x, TABLE.z);
-  commandChair(kit, TABLE.x - 2.7, TABLE.z, -Math.PI / 2);
+  // the commander's chair sits off the door-table axis (locker side) turned toward the table, so from
+  // the door it is silhouetted against the lit briefing screen instead of hiding behind the hologram
+  commandChair(kit, CHAIR.x, CHAIR.z, CHAIR.yaw);
   buildFloorDetail(kit, ctx, B);
   // the single cold light over the table, a dim red accent along the vault wall, a faint cool fill
   // over the command chair so it reads against the briefing wall
   ctx.light(pointLight(0xc8dcff, 7, 10, [TABLE.x, CEIL - 0.3, TABLE.z]));
   ctx.light(pointLight(0xff3a2a, 2.2, 6, [-9.2, 2.2, -12.0]));
-  ctx.light(pointLight(0xc8dcff, 2.2, 6, [TABLE.x - 3.2, 2.5, TABLE.z]));
+  ctx.light(pointLight(0xc8dcff, 2.2, 6, [CHAIR.x - 0.6, 2.5, CHAIR.z]));
   ctx.anim((dt, t) => {
     mats.pulse.emissiveIntensity = 1.1 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.4));
     mats.lamp.emissiveIntensity = 1.8 + 0.8 * (0.5 + 0.5 * Math.sin(t * 2.2));
