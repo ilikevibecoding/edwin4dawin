@@ -198,7 +198,7 @@ let debugMode = false;
 // interior views: sector + deck-local x/z + yaw/pitch (deg)
 const INTERIOR_VIEWS = {
   bridge_aft: { sector: "d1_bridge", x: 0, z: -17, yaw: 0, pitch: -4 },
-  bridge_window: { sector: "d1_bridge", x: 0, z: -44, yaw: 0, pitch: -8 },
+  bridge_window: { sector: "d1_bridge", x: 0, z: -41.5, yaw: 0, pitch: -1 },
   bridge_pit: { sector: "d1_bridge", x: 6.5, z: -28, yaw: -90, pitch: -6 },
   bridge_side: { sector: "d1_bridge", x: -18, z: -30, yaw: 70, pitch: -3 },
   lobby: { sector: "d1_lobby", x: 0, z: -1.0, yaw: 180, pitch: 1 },
