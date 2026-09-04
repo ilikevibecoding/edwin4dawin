@@ -8,7 +8,7 @@ import { decalRect } from "../../textures.js";
 import * as THREE from "three";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, bayWalls, containerStack, crate, toolCart, shadowCasters,
-  pedestalConsole, cabinet, lightBank, pipeRun, stairRun, beacons, cargoLift, hoist, loaderVehicle, pallet,
+  pedestalConsole, cabinet, lightBank, pipeRun, stairRun, beacons, cargoLift, hoist, loaderVehicle, pallet, bayCeiling,
 } from "../../hangar/machinery.js";
 
 const MEZZ_H = 6; // storage mezzanine height above the deck
@@ -22,9 +22,10 @@ export function build(kit, ctx, room, lib) {
   const mats = ctx.materials;
   const y0 = roomFloorY(room);
   const yTop = y0 + room.height;
-  const shell = lib.roomShell(kit, ctx, room, { style: "dark", lights: false, lightMat: "emitWarmSoft", lightRows: 4, skipWalls: ["-z", "+z", "-x", "+x"] });
+  const shell = lib.roomShell(kit, ctx, room, { style: "dark", ceiling: false, lights: false, skipWalls: ["-z", "+z", "-x", "+x"] });
   // light strip row 5.4..11.2 puts a wall light above the mezzanine floor; no kick strip (no rubber in the bay)
   bayWalls(kit, room, shell, y0, { rows: [2.4, 5.4, 11.2, room.height], lightRow: 1, kick: false, lightMat: "emitWarmSoft", seed: 81 });
+  bayCeiling(kit, room, y0, { rows: 4, lightMat: "emitWarmSoft" });
   shadowCasters(kit, ["paintedMetal"]);
 
   lanes(kit, P, room, y0);
@@ -171,7 +172,7 @@ function mezzanine(kit, ctx, lib, room, y0, mats) {
     kit.box("emitWarmSoft", dx, my - 0.61, MEZZ_Z + 3.4, 1.8, 0.02, 0.5, { uv: "keep" });
   }
   for (const [px, pz, t] of [[-5, 566.5, 2], [-3.4, 566.2, 1], [4.5, 567, 2], [6.2, 565.6, 1], [-17, 565.8, 2], [17, 565.8, 1]]) pallet(kit, propFrame(kit, px, y0, pz, (px * 3) % 1), { tiers: t, tone: [P.impGrey, P.impGreyDark, P.slate][Math.abs(Math.round(px)) % 3], decal: t === 2 ? 11 : 6 });
-  loaderVehicle(kit, propFrame(kit, -9.5, y0, 560.5, -Math.PI / 2 + 0.15));
+  loaderVehicle(kit, propFrame(kit, -9.5, y0, 560.5, -Math.PI / 2 + 0.15), { workLight: "emitWarmSoft" });
 }
 
 // ---------------------------------------------------------------- overhead crane rail with a travelling hoist
@@ -189,7 +190,7 @@ function props(kit, P, room, y0) {
   const { z0 } = room;
   // near the door: pallets, a parked loader, crates and carts
   for (const [px, pz, t] of [[-6.6, 524.6, 2], [-8.2, 524.3, 1], [6.8, 524.4, 2], [8.4, 525.2, 1]]) pallet(kit, propFrame(kit, px, y0, pz, (px * 3) % 1), { tiers: t, tone: t === 2 ? P.impGrey : P.slate });
-  loaderVehicle(kit, propFrame(kit, 6.5, y0, 545.5, Math.PI / 2 - 0.1));
+  loaderVehicle(kit, propFrame(kit, 6.5, y0, 545.5, Math.PI / 2 - 0.1), { workLight: "emitWarmSoft" });
   toolCart(kit, propFrame(kit, -6.5, y0, 546.8, 0.3));
   toolCart(kit, propFrame(kit, -7.2, y0, 542.2, -1.1));
   for (let i = 0; i < 3; i++) crate(kit, propFrame(kit, -26.5 + i * 1.4, y0, 523, 0.1 * i), { decal: [11, 6, 9][i] });

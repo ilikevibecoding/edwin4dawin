@@ -10,7 +10,7 @@ import { decalRect } from "../../textures.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, grateFloor, grateScreen, bayWalls, containerStack,
   crate, toolCart, fuelBowser, pedestalConsole, cabinet, lightBank, pipeRun, stairTower, gantryCrane, blastLeaves,
-  beacons, tractorEmitters, cargoLift, loaderVehicle, shadowCasters, RAIL_H,
+  beacons, tractorEmitters, cargoLift, loaderVehicle, shadowCasters, RAIL_H, BLACK,
 } from "../../hangar/machinery.js";
 
 const CAT_Y = -62; // service catwalks
@@ -218,7 +218,7 @@ function clampGantry(kit, lib, gx, rz, idx) {
     const ax = gx + s * 4.1;
     kit.boxMM("metal", [ax - 0.21, armBottom, rz - 0.21], [ax + 0.21, beamY, rz + 0.21], { color: P.steel, texel: 1.5 });
     kit.box("paintedMetal", ax, armBottom - 0.05, rz, 1.1, 0.5, 2.3, { color: P.darkMetal, texel: 1 });
-    kit.box("rubber", ax, armBottom - 0.35, rz, 0.95, 0.12, 2.1, { color: P.rubber });
+    kit.box(BLACK, ax, armBottom - 0.35, rz, 0.95, 0.12, 2.1);
     kit.box("emitBlue", ax + s * 0.56, armBottom, rz, 0.02, 0.12, 1.6);
     // hydraulic cylinders alongside the arm
     kit.cyl("metal", ax + s * 0.4, armBottom + 1.4, rz + 0.5, 0.09, 2.6, "y", { color: P.gunmetal, segments: 8 });
@@ -228,9 +228,9 @@ function clampGantry(kit, lib, gx, rz, idx) {
   const spineBottom = HANGAR.rackY + 2.45; // -55.55: pad + rubber end 0.05 above the pod top
   kit.boxMM("metal", [gx - 0.275, spineBottom, rz - 0.275], [gx + 0.275, yC - 1.2, rz + 0.275], { color: P.steel, texel: 1.5 });
   kit.box("paintedMetal", gx, spineBottom - 0.15, rz, 1.5, 0.3, 1.5, { color: P.darkMetal, texel: 1 });
-  kit.box("rubber", gx, spineBottom - 0.35, rz, 1.2, 0.1, 1.2, { color: P.rubber });
+  kit.box(BLACK, gx, spineBottom - 0.35, rz, 1.2, 0.1, 1.2);
   const hoseBottom = HANGAR.rackY + 1.35; // pod surface at (dx 1, dz 0.8) is rackY + 1.17
-  kit.boxMM("rubber", [gx + 0.94, hoseBottom, rz + 0.74], [gx + 1.06, yC - 1.2, rz + 0.86], { color: P.rubber });
+  kit.boxMM(BLACK, [gx + 0.94, hoseBottom, rz + 0.74], [gx + 1.06, yC - 1.2, rz + 0.86]);
   kit.box("metal", gx + 1.0, hoseBottom - 0.1, rz + 0.8, 0.25, 0.3, 0.25, { color: P.gunmetal });
 }
 

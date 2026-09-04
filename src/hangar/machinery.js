@@ -197,6 +197,40 @@ export function bayWalls(kit, room, shell, y0, opts = {}) {
   return upper;
 }
 
+/**
+ * Bay ceiling for the side rooms (use with roomShell ceiling: false): gunmetal plate, deep ribs across the
+ * short axis and `rows` recessed light channels along the long axis. Same layout as the roomShell ceiling
+ * but with the channel housings in BLACK, so the room does not pick up satinBlack for four boxes.
+ */
+export function bayCeiling(kit, room, y0, opts = {}) {
+  const { rows = 3, lightMat = "emitWhiteSoft", ribStep = 3.2, ribDepth = 0.4, depth = WALL_T } = opts;
+  const { x0, x1, z0, z1 } = room;
+  const yTop = y0 + room.height;
+  const w = x1 - x0;
+  const d = z1 - z0;
+  kit.boxMM("paintedMetal", [x0 - depth, yTop, z0 - depth], [x1 + depth, yTop + 0.12, z1 + depth], { color: PALETTE.gunmetal, uv: "world", texel: 0.7 });
+  const longX = w >= d;
+  const ribCount = Math.max(1, Math.floor((longX ? w : d) / ribStep));
+  for (let i = 1; i < ribCount; i++) {
+    const t = i / ribCount;
+    if (longX) kit.box("paintedMetal", x0 + w * t, yTop - ribDepth / 2, (z0 + z1) / 2, 0.18, ribDepth, d, { color: PALETTE.darkMetal, texel: 1.2 });
+    else kit.box("paintedMetal", (x0 + x1) / 2, yTop - ribDepth / 2, z0 + d * t, w, ribDepth, 0.18, { color: PALETTE.darkMetal, texel: 1.2 });
+  }
+  for (let r = 0; r < rows; r++) {
+    const t = (r + 0.5) / rows;
+    const len = (longX ? w : d) - 1.2;
+    if (longX) {
+      const z = z0 + d * t;
+      kit.box(BLACK, (x0 + x1) / 2, yTop - 0.05, z, len + 0.16, 0.1, 0.4);
+      kit.box(lightMat, (x0 + x1) / 2, yTop - 0.105, z, len, 0.02, 0.26, { uv: "keep" });
+    } else {
+      const x = x0 + w * t;
+      kit.box(BLACK, x, yTop - 0.05, (z0 + z1) / 2, 0.4, 0.1, len + 0.16);
+      kit.box(lightMat, x, yTop - 0.105, (z0 + z1) / 2, 0.26, 0.02, len, { uv: "keep" });
+    }
+  }
+}
+
 /** Simple straight stair with two handrails and a landing lip; axis "x" or "z", climbing from (x0,z0) toward (x1,z1). */
 export function stairRun(kit, x0, z0, x1, z1, yA, yB, axis, opts = {}) {
   const { color = PALETTE.gunmetal, rails = true } = opts;
@@ -324,7 +358,7 @@ export function toolCart(kit, f, opts = {}) {
 export function fuelBowser(kit, f, opts = {}) {
   const { hoseTo = [2.2, 0.0, 2.6], color = PALETTE.impGreyDark } = opts;
   f.box("paintedMetal", 0, 0.5, 0, 1.7, 0.3, 3.4, { color: PALETTE.gunmetal, texel: 1 });
-  for (const su of [-1, 1]) for (const sn of [-1.1, 1.1]) f.cylU("rubber", su * 0.9, 0.36, sn, 0.36, 0.28, { color: PALETTE.rubber, segments: 14 });
+  for (const su of [-1, 1]) for (const sn of [-1.1, 1.1]) f.cylU(BLACK, su * 0.9, 0.36, sn, 0.36, 0.28, { segments: 14 });
   f.cylN("painted2", 0, 1.55, 0, 0.85, 3.2, { color, segments: 18, uv: "world", texel: 0.5 });
   f.cylN("hazard", 0, 1.55, 0.9, 0.87, 0.35, { segments: 18, uv: "world", texel: 1 });
   f.cylN("hazard", 0, 1.55, -0.9, 0.87, 0.35, { segments: 18, uv: "world", texel: 1 });
@@ -344,14 +378,15 @@ export function fuelBowser(kit, f, opts = {}) {
   const p2 = f.pos(hoseTo[0] * 0.5 - 0.6, 0.08, hoseTo[2] * 0.5 - 2.9);
   const p3 = f.pos(hoseTo[0], 0.09, hoseTo[2]);
   const curve = new THREE.CatmullRomCurve3([p0, p1, p2, p3], false, "catmullrom", 0.4);
-  kit.add("rubber", new THREE.TubeGeometry(curve, 14, 0.06, 6, false), { color: PALETTE.rubber, uv: "scale", uvScale: [1, 8] });
+  kit.add(BLACK, new THREE.TubeGeometry(curve, 14, 0.06, 6, false), { uv: "scale", uvScale: [1, 8] });
   const nz = f.pos(hoseTo[0], 0.12, hoseTo[2]);
   kit.add("metal", new THREE.CylinderGeometry(0.06, 0.09, 0.5, 8), { pos: [nz.x, nz.y, nz.z], rot: [Math.PI / 2, 0, 0], color: PALETTE.steel, uv: "scale", uvScale: [1, 1] });
   f.collider(-1.0, 1.0, 0, 2.9, -2.1, 1.75, "bowser");
 }
 
 /** Deck tug / loader vehicle: orange chassis, black cab, forks at the +n end, wheels, work lights. */
-export function loaderVehicle(kit, f) {
+export function loaderVehicle(kit, f, opts = {}) {
+  const { workLight = "emitWhiteSoft" } = opts;
   f.box("paintedMetal", 0, 0.7, 0, 2.2, 0.6, 3.6, { color: PALETTE.orange, texel: 1 });
   f.box(BLACK, 0, 1.3, -0.9, 1.6, 0.6, 1.4);
   f.box(BLACK, 0, 1.75, -0.6, 1.4, 0.5, 1.2);
@@ -361,8 +396,8 @@ export function loaderVehicle(kit, f) {
   for (const su of [-1, 1]) for (const sn of [-1.2, 1.2]) f.cylU(BLACK, su * 1.2, 0.45, sn, 0.45, 0.4, { segments: 14 });
   f.box("hazard", 0, 0.45, 1.85, 2.2, 0.3, 0.1, { uv: "world", texel: 1.5 });
   f.box("emitAmber", 0, 2.05, -0.6, 0.3, 0.12, 0.3);
-  f.box("emitWhiteSoft", -0.7, 0.9, 1.92, 0.3, 0.12, 0.02);
-  f.box("emitWhiteSoft", 0.7, 0.9, 1.92, 0.3, 0.12, 0.02);
+  f.box(workLight, -0.7, 0.9, 1.92, 0.3, 0.12, 0.02);
+  f.box(workLight, 0.7, 0.9, 1.92, 0.3, 0.12, 0.02);
   f.collider(-1.4, 1.4, 0, 2.1, -1.9, 3.1, "loader");
 }
 
@@ -621,7 +656,8 @@ export function gantryCrane(ctx, mats, o) {
   const { x0, x1, y, zMin, zMax, trolleyRange = [-8, 8], hookDrop = 7, load = true, speed = 0.7, name = "hangar.crane" } = o;
   const span = x1 - x0;
   const cx = (x0 + x1) / 2;
-  // two materials on the bridge, one on the trolley: each one is a draw call in every deck D view
+  // one material on the bridge and one on the trolley: each one is a draw call in every deck D view, and the
+  // crane runs 30 m above the deck where painted amber marker plates read the same as lit ones
   const bridge = buildGroup(mats, name + ".bridge", (k) => {
     for (const dz of [-1.3, 1.3]) k.box("paintedMetal", 0, 0, dz, span, 1.6, 0.8, { color: PALETTE.gunmetal, texel: 0.7 });
     for (let x = -span / 2 + 3; x < span / 2 - 2; x += 6) k.box("paintedMetal", x, 0.5, 0, 0.3, 0.5, 2.0, { color: PALETTE.darkMetal });
@@ -629,8 +665,8 @@ export function gantryCrane(ctx, mats, o) {
     k.box("paintedMetal", 0, -0.6, 1.71, span - 2, 0.35, 0.02, { color: PALETTE.impAmber, uv: "world", texel: 1.5 });
     for (const sx of [-1, 1]) {
       k.box("paintedMetal", sx * (span / 2 - 0.8), -0.4, 0, 1.6, 2.4, 3.8, { color: PALETTE.darkMetal, texel: 0.7 });
-      k.box("emitAmber", sx * (span / 2 - 0.8), 1.1, 0, 0.5, 0.25, 0.5);
-      k.box("emitAmber", sx * (span / 2 - 1.6), -1.4, 1.95, 0.4, 0.15, 0.02);
+      k.box("paintedMetal", sx * (span / 2 - 0.8), 1.1, 0, 0.5, 0.25, 0.5, { color: PALETTE.impAmber, texel: 2 });
+      k.box("paintedMetal", sx * (span / 2 - 1.6), -1.4, 1.95, 0.4, 0.15, 0.02, { color: PALETTE.impAmber, texel: 2 });
     }
     k.box("paintedMetal", 0, 0.9, 0, span - 4, 0.05, 2.4, { color: PALETTE.darkMetal, texel: 0.7 });
   });
@@ -640,9 +676,9 @@ export function gantryCrane(ctx, mats, o) {
     for (const dx of [-0.5, 0.5]) k.cyl("metal", dx, -2.6 - hookDrop / 2, 0, 0.04, hookDrop, "y", { color: PALETTE.steel, segments: 6 });
     k.box("metal", 0, -2.6 - hookDrop, 0, 1.4, 0.5, 0.7, { color: PALETTE.gunmetal });
     if (load) {
-      // slung cargo pod: painted body, steel corner frame and four slings up to the hook block
+      // slung cargo pod: tinted body, steel corner frame and four slings up to the hook block
       const py = -2.6 - hookDrop - 0.3 - 1.2;
-      k.box("painted", 0, py, 0, 2.4, 2.4, 6, { color: PALETTE.slate, uv: "world", texel: 0.5 });
+      k.box("metal", 0, py, 0, 2.4, 2.4, 6, { color: PALETTE.slate, uv: "world", texel: 0.5 });
       for (const dx of [-1.2, 1.2]) for (const dz of [-3, 3]) k.box("metal", dx, py, dz, 0.16, 2.5, 0.16, { color: PALETTE.gunmetal });
       for (const dz of [-3, 3]) k.box("metal", 0, py + 1.25, dz, 2.5, 0.1, 0.16, { color: PALETTE.gunmetal });
       for (const [dx, dz] of [[-1.1, -2.9], [1.1, -2.9], [-1.1, 2.9], [1.1, 2.9]]) {
@@ -725,9 +761,15 @@ export function blastLeaves(ctx, mats, o) {
 }
 
 /**
- * Rotating amber beacons: one InstancedMesh of lenses that spin and pulse (shared cloned material), posts and
- * housings merged into the room kit. positions: [[x, yBase, z, postHeight], ...]
+ * Rotating amber beacons: posts and housings merged into the room kit, lenses in ONE InstancedMesh shared by
+ * every room built with the same material set (the whole deck): the first room to call this owns the mesh
+ * and its update, later rooms only append lenses. The deck D rooms are all within two portal hops of each
+ * other, so whenever a room is visible the owner's group is too. Beacon lenses are not frustum culled, so
+ * separate per-room meshes would have cost one draw call each in every deck view.
+ * positions: [[x, yBase, z, postHeight], ...]
  */
+const BEACON_CAPACITY = 48;
+const beaconPools = new WeakMap();
 export function beacons(kit, ctx, mats, positions, name = "hangar.beacons") {
   for (const [x, y, z, ph] of positions) {
     if (ph > 0) {
@@ -737,10 +779,20 @@ export function beacons(kit, ctx, mats, positions, name = "hangar.beacons") {
     kit.cyl(BLACK, x, y + ph + 0.06, z, 0.24, 0.12, "y", { segments: 12 });
     kit.cyl(BLACK, x, y + ph + 0.62, z, 0.2, 0.06, "y", { segments: 12 });
   }
+  let pool = beaconPools.get(mats);
+  if (pool && pool.positions.length + positions.length > BEACON_CAPACITY) pool = null;
+  if (pool) {
+    pool.positions.push(...positions);
+    pool.mesh.count = pool.positions.length;
+    pool.entry.update(0);
+    return pool.entry;
+  }
+  const all = [...positions];
   const mat = mats.emitAmber.clone();
   mat.emissiveIntensity = 2.5;
   const geo = new THREE.BoxGeometry(0.36, 0.42, 0.14);
-  const mesh = new THREE.InstancedMesh(geo, mat, positions.length);
+  const mesh = new THREE.InstancedMesh(geo, mat, BEACON_CAPACITY);
+  mesh.count = all.length;
   mesh.name = name;
   mesh.frustumCulled = false;
   const m = new THREE.Matrix4();
@@ -750,8 +802,8 @@ export function beacons(kit, ctx, mats, positions, name = "hangar.beacons") {
   const state = { t: 0 };
   const update = (dt) => {
     state.t += dt;
-    for (let i = 0; i < positions.length; i++) {
-      const [x, y, z, ph] = positions[i];
+    for (let i = 0; i < all.length; i++) {
+      const [x, y, z, ph] = all[i];
       q.setFromAxisAngle(UP, state.t * 3.2 + i * 1.3);
       p.set(x, y + ph + 0.35, z);
       m.compose(p, q, s);
@@ -763,6 +815,7 @@ export function beacons(kit, ctx, mats, positions, name = "hangar.beacons") {
   update(0);
   const entry = { object: mesh, update, name, state };
   ctx.dynamic.push(entry);
+  beaconPools.set(mats, { mesh, positions: all, entry });
   return entry;
 }
 

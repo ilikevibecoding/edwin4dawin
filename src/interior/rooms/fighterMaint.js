@@ -7,7 +7,7 @@ import { roomFloorY } from "../../config/shipSpec.js";
 import { decalRect } from "../../textures.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, bayWalls, crate, toolCart, fuelBowser, pedestalConsole,
-  cabinet, lightBank, lightBar, pipeRun, tieShape, tieWing, hoist, shadowCasters,
+  cabinet, lightBank, lightBar, pipeRun, tieShape, tieWing, hoist, shadowCasters, bayCeiling, BLACK,
 } from "../../hangar/machinery.js";
 
 export function build(kit, ctx, room, lib) {
@@ -16,10 +16,11 @@ export function build(kit, ctx, room, lib) {
   const { x0, x1, z0, z1 } = room;
   const y0 = roomFloorY(room);
   const yTop = y0 + room.height;
-  const shell = lib.roomShell(kit, ctx, room, { style: "dark", lights: false, lightMat: "emitWarmSoft", lightRows: 3, skipWalls: ["-z", "+z", "-x", "+x"] });
+  const shell = lib.roomShell(kit, ctx, room, { style: "dark", ceiling: false, lights: false, skipWalls: ["-z", "+z", "-x", "+x"] });
   bayWalls(kit, room, shell, y0, { rows: [2.4, 5.4, 9.7, room.height], lightRow: 1, lightMat: "emitWarmSoft", seed: 61 });
-  // the pod, cradle and wing panels throw the shadows under the cradle spot
-  shadowCasters(kit, ["paintedMetal", "painted2"]);
+  bayCeiling(kit, room, y0, { rows: 3, lightMat: "emitWarmSoft" });
+  // the pod, cradle and structural plates throw the shadows under the cradle spot
+  shadowCasters(kit, ["paintedMetal"]);
 
   // ---- cradle bay: fighter on its cradle, port wing removed
   const cx = 47;
@@ -38,13 +39,13 @@ export function build(kit, ctx, room, lib) {
   }
   // saddle under the pod (pod bottom at cy - 2 = y0 + 2.5)
   kit.boxMM("paintedMetal", [cx - 1.6, y0 + 1.6, cz - 1.4], [cx + 1.6, y0 + 2.2, cz + 1.4], { color: P.darkMetal, uv: "world", texel: 0.8 });
-  kit.boxMM("rubber", [cx - 1.3, y0 + 2.2, cz - 1.1], [cx + 1.3, y0 + 2.42, cz + 1.1], { color: P.rubber });
+  kit.boxMM(BLACK, [cx - 1.3, y0 + 2.2, cz - 1.1], [cx + 1.3, y0 + 2.42, cz + 1.1]);
   kit.boxMM("paintedMetal", [cx - 0.6, y0, cz - 0.6], [cx + 0.6, y0 + 1.6, cz + 0.6], { color: P.gunmetal, uv: "world", texel: 0.8 });
   kit.collider([cx - 1.6, y0, cz - 1.4], [cx + 1.6, y0 + 2.4, cz + 1.4], "cradle");
   // jack stand under the bare port pylon (collar at x = cx - 3.9)
   kit.boxMM("paintedMetal", [cx - 4.6, y0, cz - 0.6], [cx - 3.4, y0 + 0.3, cz + 0.6], { color: P.gunmetal, texel: 1 });
   kit.cyl("metal", cx - 4.0, y0 + (cy - 0.9 - y0) / 2 + 0.15, cz, 0.16, cy - 0.9 - y0 - 0.3, "y", { color: P.steel, segments: 10 });
-  kit.boxMM("rubber", [cx - 4.7, cy - 0.98, cz - 0.5], [cx - 3.3, cy - 0.86, cz + 0.5], { color: P.rubber });
+  kit.boxMM(BLACK, [cx - 4.7, cy - 0.98, cz - 0.5], [cx - 3.3, cy - 0.86, cz + 0.5]);
   kit.collider([cx - 4.6, y0, cz - 0.6], [cx - 3.4, cy, cz + 0.6], "jack");
   // gantry steps up to the pod hatch on the starboard side
   kit.stairs("paintedMetal", cx + 1.9, cz + 1.6, cx + 1.9 + 3.6, cz + 2.9, y0, y0 + 2.4, "x", { color: P.slate, steps: 12 });
@@ -87,11 +88,11 @@ export function build(kit, ctx, room, lib) {
   reels.forEach(([rx, rz], i) => {
     kit.box("paintedMetal", rx, yTop - 0.7, rz, 1.6, 1.4, 0.6, { color: P.gunmetal, texel: 1 });
     kit.cyl("metal", rx, yTop - 1.9, rz, 0.55, 0.5, "z", { color: P.slate, segments: 16 });
-    kit.cyl("rubber", rx, yTop - 1.9, rz, 0.4, 0.56, "z", { color: P.rubber, segments: 16 });
+    kit.cyl(BLACK, rx, yTop - 1.9, rz, 0.4, 0.56, "z", { segments: 16 });
     kit.box("emitAmber", rx + 0.5, yTop - 0.5, rz + 0.31, 0.2, 0.1, 0.02);
     const [tx, ty, tz] = targets[i];
     const pts = [new THREE.Vector3(rx, yTop - 2.2, rz), new THREE.Vector3(rx + (tx - rx) * 0.3, ty + (yTop - 2.2 - ty) * 0.45, rz + (tz - rz) * 0.3), new THREE.Vector3(tx + (rx - tx) * 0.1, ty + 0.9, tz + (rz - tz) * 0.1), new THREE.Vector3(tx, ty, tz)];
-    kit.add("rubber", new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5), 16, 0.07, 6, false), { color: P.rubber, uv: "scale", uvScale: [1, 10] });
+    kit.add(BLACK, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5), 16, 0.07, 6, false), { uv: "scale", uvScale: [1, 10] });
     kit.box("metal", tx, ty - 0.05, tz, 0.3, 0.3, 0.3, { color: P.gunmetal });
   });
   fuelBowser(kit, propFrame(kit, cx + 8.6, y0, cz + 8.5, Math.PI), { hoseTo: [3.2, 0, 3.6] });

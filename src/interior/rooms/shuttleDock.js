@@ -9,7 +9,7 @@ import { Kit } from "../../kit.js";
 import { roomFloorY } from "../../config/shipSpec.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, bayWalls, crate, toolCart, pedestalConsole, shadowCasters,
-  cabinet, lightBank, lightBar, pipeRun, stairTower, stairRun, beacons,
+  cabinet, lightBank, lightBar, pipeRun, stairTower, stairRun, beacons, bayCeiling,
 } from "../../hangar/machinery.js";
 
 const CAT_H = 8; // catwalk height above the deck
@@ -23,9 +23,10 @@ export function build(kit, ctx, room, lib) {
   const y0 = roomFloorY(room);
   const yTop = y0 + room.height;
   const T = lib.WALL_T;
-  const shell = lib.roomShell(kit, ctx, room, { style: "dark", floor: false, lights: false, lightRows: 3, skipWalls: ["-z", "+z", "-x", "+x"] });
+  const shell = lib.roomShell(kit, ctx, room, { style: "dark", floor: false, ceiling: false, lights: false, skipWalls: ["-z", "+z", "-x", "+x"] });
   // light strip row 5.4..11.6 puts a wall light above the catwalk; no kick strip (keeps rubber out of the room)
   bayWalls(kit, room, shell, y0, { rows: [2.4, 5.4, 11.6, 16.8, room.height], lightRow: 1, kick: false, lampMat: "emitBlue", seed: 71 });
+  bayCeiling(kit, room, y0, { rows: 3 });
   shadowCasters(kit, ["paintedMetal"]);
 
   deck(kit, P, room, y0, T);
@@ -266,7 +267,7 @@ function booth(kit, ctx, lib, y0, z0) {
   kit.box("darkGloss", 16.3, fy + 1.9, bz0 + 0.03, 6.0, 1.2, 0.06);
   kit.box("screen6", 14.9, fy + 1.9, bz0 + 0.065, 2.6, 1.0, 0.01, { uv: "keep" });
   kit.box("screen6", 17.7, fy + 1.9, bz0 + 0.065, 2.6, 1.0, 0.01, { uv: "keep" });
-  cabinet(kit, propFrame(kit, bx0 + 0.42, fy, bz0 + 1.6, Math.PI / 2), { w: 1.4, h: 2.4, d: 0.6, screen: "screen6" });
+  cabinet(kit, propFrame(kit, bx0 + 0.42, fy, bz0 + 1.6, Math.PI / 2), { w: 1.4, h: 2.4, d: 0.6, screen: "screen6", lamp: "emitBlue" });
   ctx.lights.warm.push(lib.pointLight(0xfff0dd, 8, 9, [16.5, roofY - 0.4, bz0 + 2.4]));
   // stair from the deck up to the doorway (climbs toward -x)
   stairRun(kit, bx1, bz0 + 0.1, bx1 + 5.6, bz0 + 1.6, fy, y0, "x");
@@ -304,7 +305,7 @@ function catwalk(kit, ctx, lib, room, y0) {
   }
   // consoles and cabinets along the catwalk wall
   for (const z of [366, 380, 394]) pedestalConsole(kit, propFrame(kit, -25.4, cy, z, -Math.PI / 2), "screen6", { w: 1.4, lamp: "emitBlue" });
-  for (const z of [372, 388]) cabinet(kit, propFrame(kit, x0 + 0.48, cy, z, Math.PI / 2), { w: 1.2, h: 2.0, d: 0.6, screen: null, color: P.slate });
+  for (const z of [372, 388]) cabinet(kit, propFrame(kit, x0 + 0.48, cy, z, Math.PI / 2), { w: 1.2, h: 2.0, d: 0.6, screen: null, color: P.slate, lamp: "emitBlue" });
 }
 
 // ---------------------------------------------------------------- ceiling: light banks, ducts, pipe runs
