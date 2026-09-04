@@ -505,19 +505,22 @@ export function callIndicator(frame, u, v, mat = "emitWhite", { h = 0.7 } = {}) 
 }
 
 /** Wall-mounted bench along a frame: from u0, length len, seat height 0.46. */
-export function bench(kit, frame, u0, len, { fabric = IMP.fabricBlack, tag = "bench" } = {}) {
+export function bench(kit, frame, u0, len, { fabric = IMP.fabricGrey, tag = "bench" } = {}) {
   const cu = u0 + len / 2;
-  frame.box("paintedMetal", cu, 0.43, 0.3, len, 0.06, 0.52, { color: IMP.black, texel: 1 });
-  frame.box("fabric", cu, 0.5, 0.3, len - 0.06, 0.09, 0.48, { color: fabric, uv: "world", texel: 2 });
-  frame.box("paintedMetal", cu, 0.9, 0.09, len, 0.5, 0.06, { color: IMP.plateDark, texel: 1 });
-  frame.box("fabric", cu, 0.9, 0.125, len - 0.1, 0.42, 0.04, { color: fabric, uv: "world", texel: 2 });
-  frame.box("metal", cu, 1.17, 0.11, len, 0.04, 0.1, { color: IMP.steelDark });
+  // light plated shell so the seat reads against the dark kick row; grey pads, a lit toe-kick beneath
+  frame.box("plate", cu, 0.42, 0.3, len, 0.08, 0.54, { color: IMP.plate, uv: "keep" });
+  frame.box("fabric", cu, 0.51, 0.29, len - 0.08, 0.1, 0.46, { color: fabric, uv: "world", texel: 2 });
+  frame.box("plate", cu, 0.9, 0.08, len, 0.5, 0.06, { color: IMP.plate, uv: "keep" });
+  frame.box("fabric", cu, 0.9, 0.125, len - 0.12, 0.4, 0.04, { color: fabric, uv: "world", texel: 2 });
+  frame.box("metal", cu, 1.17, 0.1, len, 0.04, 0.12, { color: IMP.steel });
+  frame.box("metal", cu, 0.47, 0.57, len, 0.03, 0.03, { color: IMP.steel });
   const n = Math.max(2, Math.round(len / 1.5) + 1);
   for (let i = 0; i < n; i++) {
     const u = u0 + 0.12 + (i / (n - 1)) * (len - 0.24);
     frame.box("paintedMetal", u, 0.2, 0.3, 0.08, 0.4, 0.44, { color: IMP.black, texel: 1 });
   }
-  frame.box("emitWhiteSoft", cu, 0.38, 0.05, len - 0.4, 0.02, 0.02, { uv: "keep" });
+  frame.box("paintedMetal", cu, 0.3, 0.08, len - 0.3, 0.16, 0.06, { color: IMP.black, texel: 1 });
+  frame.box("emitWhiteSoft", cu, 0.3, 0.115, len - 0.4, 0.05, 0.01, { uv: "keep" });
   frame.collider(u0, u0 + len, 0, 1.2, 0, 0.58, tag);
 }
 
@@ -799,7 +802,8 @@ export function buildCorridor(ctx, cfg) {
   const n = cfg.lights || 6;
   for (let k = 0; k < n; k++) {
     const a = C.a0 + ((k + 0.5) / n) * (C.a1 - C.a0);
-    ctx.light(cfg.lightColor || 0xdfe8ff, cfg.lightIntensity || 150, cfg.lightDistance || 34, C.P(a, C.mid, ctx.ceil - 0.6));
+    // hung well below the ceiling so the slab above is not blown out by the inverse-square hot spot
+    ctx.light(cfg.lightColor || 0xdfe8ff, cfg.lightIntensity || 150, cfg.lightDistance || 34, C.P(a, C.mid, ctx.ceil - 1.1));
   }
   return { C, bays, rings, walls };
 }
@@ -919,7 +923,7 @@ export function buildLobby(ctx, cfg) {
     // emblem stencil in the centre of the floor
     const cx = (x0 + x1) / 2;
     const cz = (z0 + z1) / 2;
-    const g = new THREE.PlaneGeometry(2.2, 2.2);
+    const g = new THREE.PlaneGeometry(1.8, 1.8);
     g.rotateX(-Math.PI / 2);
     kit.add("decal", g, { pos: [cx, y + 0.016, cz], uv: "keep", uvRect: decalRect(DECAL.EMBLEM) });
   }
@@ -927,13 +931,17 @@ export function buildLobby(ctx, cfg) {
   const n = cfg.lights || 3;
   const cx = (x0 + x1) / 2;
   const cz = (z0 + z1) / 2;
+  const ly = ctx.ceil - 1.4;
   if (n >= 4) {
-    for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) ctx.light(0xdfe8ff, cfg.lightIntensity || 55, 18, [cx + dx * (x1 - x0) * 0.25, ctx.ceil - 0.5, cz + dz * (z1 - z0) * 0.25]);
+    for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) ctx.light(0xdfe8ff, cfg.lightIntensity || 55, 18, [cx + dx * (x1 - x0) * 0.25, ly, cz + dz * (z1 - z0) * 0.25]);
   } else {
-    ctx.light(0xdfe8ff, cfg.lightIntensity || 70, 18, [cx, ctx.ceil - 0.5, cz]);
-    const dz = (z1 - z0) * 0.3;
-    ctx.light(0xdfe8ff, (cfg.lightIntensity || 70) * 0.6, 14, [cx, ctx.ceil - 0.5, cz - dz]);
-    ctx.light(0xdfe8ff, (cfg.lightIntensity || 70) * 0.6, 14, [cx, ctx.ceil - 0.5, cz + dz]);
+    // flank the centre so the floor emblem is not sitting under a light; third light toward the cabs
+    const I = cfg.lightIntensity || 70;
+    const dx = (x1 - x0) * 0.36;
+    ctx.light(0xdfe8ff, I * 0.6, 16, [cx - dx, ly, cz]);
+    ctx.light(0xdfe8ff, I * 0.6, 16, [cx + dx, ly, cz]);
+    const toCabs = cfg.liftSide === "zmax" ? 1 : -1;
+    ctx.light(0xdfe8ff, I * 0.45, 14, [cx, ly, cz + toCabs * (z1 - z0) * 0.32]);
   }
   if (cfg.extras) cfg.extras(ctx, L);
   return L;

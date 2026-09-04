@@ -15,7 +15,7 @@ export function build(ctx) {
     lightIntensity: 130,
     laneW: 2.2,
     pointTo: -130,
-    hatch: { bay: -1 },
+    hatch: { bay: 1, side: "hi" },
     seed: 17,
     patternOffset: 2,
     ceilingOffset: 1,
