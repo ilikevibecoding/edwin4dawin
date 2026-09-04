@@ -3,6 +3,7 @@
 import { FLOOR } from "../shared/plan.js";
 import { IMP } from "../shared/palette.js";
 import { decalRect } from "../../../textures.js";
+import { cellRect, cellSize } from "./atlas.js";
 
 // Cheap deterministic rng (mulberry32) so cabins vary by seed without touching kit.rng
 export function rng(seed) {
@@ -51,6 +52,39 @@ export function amberLamp(kit, p, n, { w = 0.14, h = 0.32, emit = "emitAmber" } 
   mount(kit, "paintedMetal", p, n, w, h, 0, 0.09, { color: IMP.black, texel: 1 });
   mount(kit, emit, p, n, w - 0.04, h - 0.1, 0.09, 0.1);
   mount(kit, emit, [p[0], p[1] + h / 2, p[2]], n, w - 0.04, 0.012, 0.02, 0.08);
+}
+
+// Amber bar lamp (0.15 × 0.4 housing): large emissive face + side slots so the falloff reads on the wall
+export function amberBar(kit, p, n, { w = 0.15, h = 0.4, emit = "emitAmber" } = {}) {
+  mount(kit, "paintedMetal", p, n, w, h, 0, 0.07, { color: IMP.black, texel: 1 });
+  mount(kit, emit, p, n, w - 0.04, h - 0.08, 0.07, 0.08);
+  mount(kit, emit, [p[0], p[1] + h / 2, p[2]], n, w - 0.04, 0.015, 0.01, 0.06);
+  mount(kit, emit, [p[0], p[1] - h / 2, p[2]], n, w - 0.04, 0.015, 0.01, 0.06);
+}
+
+// Atlas display: black housing + the emissive atlas cell; w is the face width, height follows the cell aspect.
+export function display(kit, p, n, name, w, { bezel = 0.035, depth = 0.04, frame = "paintedMetal" } = {}) {
+  const [fw, fh] = cellSize(name, w);
+  mount(kit, frame, p, n, fw + bezel * 2, fh + bezel * 2, 0, depth, { color: IMP.black, texel: 1 });
+  mount(kit, "offScreen", p, n, fw, fh, depth, depth + 0.004, { uv: "keep", uvRect: cellRect(name) });
+  return [fw, fh];
+}
+
+// Clean panel plate (covers the shared panel texture) with 2 cm bolts in rows at its corners only
+export function cleanPlate(kit, p, n, w, h, { color, proud = 0.025, bolts = true, texel = 1 } = {}) {
+  mount(kit, "paintedMetal", p, n, w, h, 0, proud, { color, texel });
+  if (!bolts) return;
+  const alongZ = n === "+x" || n === "-x";
+  const inset = 0.08;
+  for (const sa of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      for (let k = 0; k < 2; k++) {
+        const a = sa * (w / 2 - inset - k * 0.07);
+        const q = alongZ ? [p[0], p[1] + sy * (h / 2 - inset), p[2] + a] : [p[0] + a, p[1] + sy * (h / 2 - inset), p[2]];
+        mount(kit, "paintedMetal", q, n, 0.02, 0.02, proud, proud + 0.006, { color: IMP.black, texel: 1 });
+      }
+    }
+  }
 }
 
 // Dark lower-wall panelling with a chair rail; face runs along `axis` ("x"|"z") at the given fixed coordinate.
@@ -153,6 +187,9 @@ export function makeFrame(x0, x1, z0, z1, side, flip) {
     },
     plate(kit, u, y, v, ln, w, h, cell) {
       plate(kit, P(u, y, v), nrm(ln), w, h, cell);
+    },
+    display(kit, u, y, v, ln, name, w, opts) {
+      return display(kit, P(u, y, v), nrm(ln), name, w, opts);
     },
   };
 }

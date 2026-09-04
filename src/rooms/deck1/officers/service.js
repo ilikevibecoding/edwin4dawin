@@ -2,8 +2,7 @@
 import { FLOOR } from "../shared/plan.js";
 import { seat } from "../shared/props.js";
 import { IMP } from "../shared/palette.js";
-import { amberLamp, junctionBox, luminaire, mount, plate, vent, wainscot } from "./lib.js";
-import { noticeScreen } from "./corridor.js";
+import { amberLamp, display, junctionBox, luminaire, mount, plate, vent, wainscot } from "./lib.js";
 
 const black = { color: IMP.black, texel: 1 };
 const dark = { color: IMP.dark, texel: 1 };
@@ -37,9 +36,9 @@ export function buildDutyOffice(kit, faces, door, ceilY) {
   kit.boxMM("paintedMetal", [dx0 + 0.05, FLOOR, dz0 + 0.05], [dx1 - 0.05, y(0.15), dz1 - 0.05], black);
   kit.collider([dx0 - 0.02, FLOOR, dz0 - 0.02], [dx1 + 0.02, y(0.78), dz1 + 0.02], "desk");
   for (const zc of [dz0 + 0.55, dz1 - 0.55]) {
-    kit.boxMM("paintedMetal", [dx0 + 0.25, y(0.755), zc - 0.3], [dx0 + 0.32, y(1.15), zc + 0.3], black);
-    kit.boxMM("screenImp3", [dx0 + 0.32, y(0.82), zc - 0.26], [dx0 + 0.325, y(1.1), zc + 0.26], { uv: "keep" });
     kit.boxMM("paintedMetal", [dx0 + 0.2, y(0.755), zc - 0.12], [dx0 + 0.4, y(0.77), zc + 0.12], black);
+    kit.boxMM("paintedMetal", [dx0 + 0.27, y(0.77), zc - 0.03], [dx0 + 0.31, y(1.0), zc + 0.03], black);
+    display(kit, [dx0 + 0.29, y(1.14), zc], "+x", "terminal", 0.5, { bezel: 0.03, depth: 0.035 });
   }
   kit.boxMM("paintedMetal", [dx0 + 0.5, y(0.755), dz0 + 0.75], [dx0 + 0.7, y(0.77), dz1 - 0.75], black);
   for (let i = 0; i < 6; i++) kit.boxMM(i % 2 ? "emitRedImp" : "emitBlue", [dx0 + 0.55, y(0.77), dz0 + 0.8 + i * 0.07], [dx0 + 0.65, y(0.775), dz0 + 0.84 + i * 0.07]);
@@ -49,17 +48,13 @@ export function buildDutyOffice(kit, faces, door, ceilY) {
   seat(kit, dx0 - 0.7, FLOOR, dz0 + 0.5, 3);
 
   // duty roster board on the south wall, shelf of data pads under it
-  kit.boxMM("paintedMetal", [69.5, y(1.15), z1 - 0.08], [72.9, y(2.45), z1], black);
-  kit.boxMM("screenImp0", [69.65, y(1.3), z1 - 0.085], [72.75, y(2.3), z1 - 0.08], { uv: "keep" });
-  kit.boxMM("metal", [69.5, y(2.45), z1 - 0.1], [72.9, y(2.48), z1], midM);
-  kit.boxMM("emitWhite", [69.6, y(2.32), z1 - 0.086], [72.8, y(2.34), z1 - 0.08]);
-  for (let i = 0; i < 8; i++) kit.boxMM(i % 4 === 0 ? "emitRedImp" : "emitBlue", [69.65 + i * 0.12, y(1.2), z1 - 0.086], [69.72 + i * 0.12, y(1.24), z1 - 0.08]);
+  const [, rh] = display(kit, [71.2, y(1.6), z1], "-z", "roster", 1.2, { bezel: 0.06, depth: 0.06 });
+  for (let i = 0; i < 6; i++) kit.boxMM(i % 3 === 0 ? "emitRedImp" : "emitAmber", [70.65 + i * 0.1, y(1.6 - rh / 2 - 0.05), z1 - 0.066], [70.71 + i * 0.1, y(1.6 - rh / 2 - 0.02), z1 - 0.06]);
   mount(kit, "metal", [71.2, y(1.0), z1], "-z", 1.8, 0.03, 0, 0.25, midM);
   for (let i = 0; i < 4; i++) kit.boxMM("darkGloss", [70.4 + i * 0.4, y(1.03), z1 - 0.22], [70.7 + i * 0.4, y(1.045), z1 - 0.04]);
-  plate(kit, [73.6, y(1.9), z1], "-z", 0.3, 0.3, 0);
-  junctionBox(kit, [74.4, y(1.5), z1], "-z", "emitRedImp");
-  mount(kit, "paintedMetal", [68.6, y(1.8), z1], "-z", 0.5, 0.7, 0, 0.05, black);
-  mount(kit, "screenImp3", [68.6, y(1.8), z1], "-z", 0.4, 0.6, 0.05, 0.055, { uv: "keep" });
+  display(kit, [73.4, y(1.6), z1], "-z", "status", 0.96, { bezel: 0.04, depth: 0.05 });
+  junctionBox(kit, [74.9, y(1.5), z1], "-z", "emitRedImp");
+  display(kit, [68.75, y(1.8), z1], "-z", "log", 0.6, { bezel: 0.03, depth: 0.04 });
 
   // weapon locker on the east wall: heavy cabinet, two doors, red band, keypad, caution plate
   kit.boxMM("paintedMetal", [x1 - 0.6, FLOOR, 507.6], [x1, y(2.2), 509.4], dark);
@@ -75,12 +70,12 @@ export function buildDutyOffice(kit, faces, door, ceilY) {
   }
   kit.boxMM("paintedMetal", [x1 - 0.66, y(1.05), 508.44], [x1 - 0.615, y(1.35), 508.56], black);
   kit.boxMM("emitRedImp", [x1 - 0.665, y(1.28), 508.47], [x1 - 0.66, y(1.31), 508.53]);
-  kit.boxMM("emitGreen", [x1 - 0.665, y(1.22), 508.47], [x1 - 0.66, y(1.25), 508.53]);
+  kit.boxMM("emitBlue", [x1 - 0.665, y(1.22), 508.47], [x1 - 0.66, y(1.25), 508.53]);
   plate(kit, [x1 - 0.615, y(1.85), 508.08], "-x", 0.26, 0.26, 1);
   plate(kit, [x1 - 0.615, y(1.85), 508.92], "-x", 0.26, 0.26, 13);
   kit.collider([x1 - 0.66, FLOOR, 507.55], [x1, y(2.26), 509.45], "weapon-locker");
   vent(kit, [x1, y(2.7), 508.5], "-x", 0.8, 0.3);
-  amberLamp(kit, [x1, y(2.0), 510.6], "-x", { emit: "emitWhite" });
+  amberLamp(kit, [x1, y(2.0), 510.6], "-x", { emit: "emitWarmSoft" });
   plate(kit, [x1, y(1.9), 506.9], "-x", 0.3, 0.3, 5);
 
   // north wall: file cabinet, bench, deck plan
@@ -94,10 +89,10 @@ export function buildDutyOffice(kit, faces, door, ceilY) {
   kit.boxMM("paintedMetal", [68.7, FLOOR, z0 + 0.05], [70.5, y(0.1), z0 + 0.45], black);
   kit.boxMM("fabric", [68.62, y(0.4), z0 + 0.02], [70.58, y(0.46), z0 + 0.5], { color: IMP.dark, texel: 2 });
   kit.collider([68.6, FLOOR, z0], [70.6, y(0.46), z0 + 0.5], "bench");
-  noticeScreen(kit, [72.2, y(1.8), z0], "+z", 1.4, 0.8, "screenImp3");
+  display(kit, [72.2, y(1.8), z0], "+z", "deckplan", 0.9, { bezel: 0.04, depth: 0.05 });
   plate(kit, [74.0, y(1.9), z0], "+z", 0.3, 0.3, 14);
   junctionBox(kit, [69.4, y(1.5), z0], "+z", "emitBlue");
-  luminaire(kit, 70.5, 73.5, 508.3, 508.9, ceilY, { emit: "emitWhite", drop: 0.05 });
+  luminaire(kit, 70.5, 73.5, 508.3, 508.9, ceilY, { emit: "emitWarmSoft", drop: 0.05 });
 }
 
 /** faces { x0, x1, z0, z1 } (x1 = corridor wall), door { z0, z1 } on the east face */
@@ -119,8 +114,8 @@ export function buildUtility(kit, faces, door, ceilY) {
     kit.boxMM("paintedMetal", [x0 + 0.7, y(0.2), zc - 0.4], [x0 + 0.712, y(1.9), zc + 0.4], { color: IMP.mid, texel: 1 });
     for (let k = 0; k < 5; k++) kit.boxMM("metal", [x0 + 0.712, y(0.35 + k * 0.08), zc - 0.3], [x0 + 0.725, y(0.37 + k * 0.08), zc + 0.3], midM);
     kit.boxMM("paintedMetal", [x0 + 0.712, y(1.35), zc - 0.3], [x0 + 0.75, y(1.75), zc + 0.3], black);
-    kit.boxMM("screenImp3", [x0 + 0.75, y(1.5), zc - 0.25], [x0 + 0.755, y(1.7), zc + 0.25], { uv: "keep" });
-    const leds = ["emitGreen", "emitGreen", "emitAmber", "emitGreen", "emitRedImp", "emitGreen"];
+    display(kit, [x0 + 0.75, y(1.62), zc], "+x", "utility", 0.5, { bezel: 0.01, depth: 0.004 });
+    const leds = ["emitBlue", "emitBlue", "emitAmber", "emitBlue", "emitRedImp", "emitBlue"];
     for (let k = 0; k < 4; k++) kit.boxMM(leds[(k + i) % leds.length], [x0 + 0.75, y(1.4), zc - 0.22 + k * 0.13], [x0 + 0.755, y(1.43), zc - 0.16 + k * 0.13]);
     kit.boxMM("metal", [x0 + 0.712, y(1.0), zc + 0.3], [x0 + 0.75, y(1.25), zc + 0.34], midM);
     plate(kit, [x0 + 0.712, y(1.95), zc], "+x", 0.2, 0.2, [12, 5, 9][i % 3]);
@@ -136,7 +131,7 @@ export function buildUtility(kit, faces, door, ceilY) {
   for (let k = 0; k < 8; k++) kit.boxMM("metal", [x0 + 1.18, y(0.5 + k * 0.14), 508.3], [x0 + 1.2, y(0.54 + k * 0.14), 510.2], midM);
   kit.boxMM("paintedMetal", [x0 + 1.15, y(1.8), 508.4], [x0 + 1.2, y(2.1), 509.2], black);
   kit.boxMM("emitAmber", [x0 + 1.2, y(1.9), 508.5], [x0 + 1.205, y(1.95), 508.7]);
-  kit.boxMM("emitGreen", [x0 + 1.2, y(1.9), 508.8], [x0 + 1.205, y(1.95), 509.0]);
+  kit.boxMM("emitBlue", [x0 + 1.2, y(1.9), 508.8], [x0 + 1.205, y(1.95), 509.0]);
   plate(kit, [x0 + 1.15, y(1.95), 509.9], "+x", 0.3, 0.3, 5);
   kit.cyl("metalRough", x0 + 0.6, y(2.3 + (ceilY - FLOOR - 2.3) / 2), 509.25, 0.28, ceilY - FLOOR - 2.3, "y", midM);
   kit.collider([x0, FLOOR, 507.95], [x0 + 1.2, y(2.3), 510.55], "air-handler");
@@ -196,7 +191,7 @@ export function buildUtility(kit, faces, door, ceilY) {
   kit.boxMM("darkGloss", [59.6, y(0.002), 507.0], [60.4, y(0.008), 507.8]);
   vent(kit, [x1, y(2.6), 504.5], "-x", 0.8, 0.3);
   plate(kit, [x1, y(1.9), 504.5], "-x", 0.3, 0.3, 12);
-  luminaire(kit, 59.2, 61.6, 506.4, 507.0, ceilY, { emit: "emitWhite", drop: 0.05 });
-  luminaire(kit, 59.2, 61.6, 509.4, 510.0, ceilY, { emit: "emitWhite", drop: 0.05 });
-  amberLamp(kit, [x1, y(2.0), 510.6], "-x", { emit: "emitWhite" });
+  luminaire(kit, 59.2, 61.6, 506.4, 507.0, ceilY, { emit: "emitWarmSoft", drop: 0.05 });
+  luminaire(kit, 59.2, 61.6, 509.4, 510.0, ceilY, { emit: "emitWarmSoft", drop: 0.05 });
+  amberLamp(kit, [x1, y(2.0), 510.6], "-x", { emit: "emitWarmSoft" });
 }
