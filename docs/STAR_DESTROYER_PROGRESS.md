@@ -165,4 +165,71 @@ compile on the build machine, JS heap 299 MB in Chromium (procedural texture can
 build 1.3 s / 0.65 s / 0.55 s (tower / engineering / hangar) on the build machine's CPU, ready in ~30 s
 there (software GL; the same page reaches its first frame in a few seconds on a laptop GPU).
 
-Evidence frames: `docs/evidence/wave2/*.jpg`.
+Evidence frames of that stage were superseded by `docs/evidence/final/*.jpg`.
+
+## Final review and wave 3 — integrated at commit 7c1ee93
+
+The final acceptance critic (wave-2 frames) passed the interior outright: 24 purpose-clear finished rooms
+plus the auxiliary flight-control wing and lobbies; bridge and hangar the two richest spaces; fighter
+traffic visible; one coherent Imperial language with deck-coded accents (A cool blue-white, B amber, C
+amber/teal industrial, D hazard orange); ceilings and labels fixed. It asked for one more exterior pass
+and a few room touch-ups, which became wave 3:
+
+- Exterior: ventral wedge rebuilt as geometry with recessed channels and a shaded hemispherical reactor
+  bulb; sun one stop lower with a view-independent lit/shadow side on the roof halves; large patch tint
+  variation; six varied docking pads; engine cores as radial gradients with concentric throats and soft
+  plumes; neck with recessed channels, storeys, window rows, pipes and ladders.
+- Hangar: racked fighters slewed so pods show between the wings from every deck view, a lit TIE always in
+  frame from the well, dressed far deck (hose reels, fuel line, carts, loader), lit cradle TIE, 1.5×
+  shuttle with panelled wings, gear, lit ramp and crew hatch, equipment bays and a status board.
+- Engineering: 5.6 m drive housing with coils around a banded, breathing core in the middle of the
+  hyperdrive room; reactor column as a contained beam with drifting bands, field rings and clamped hoops.
+- Command deck: officers' wardroom composed into the door view with a calm ceiling; comms spine capped;
+  observation rows all different. Shared: light pool scores neighbouring spaces' fixtures at 22 % of the
+  current room's so small rooms beside the hangar keep their own lights; the sky-drift check now uses the
+  bridge windows (the wing's side portholes are shuttered).
+
+`tools/verify.mjs`: 27/27. `tools/shots.mjs sd3_final` (build snapshot, 1280×720, 51 views + checks; sky
+drift through the bridge windows 22 % of pixels changed vs 0 % on the interior control region; all three
+legacy interactions respond; exit/board transitions, a lift ride and traffic advance all pass):
+
+| View | Calls | Triangles | Lights |
+| --- | --- | --- | --- |
+| ext_far | 96 | 451 k | sun |
+| ext_mid | 100 | 461 k | sun |
+| ext_close | 101 | 473 k | sun |
+| ext_tower | 100 | 486 k | sun |
+| ext_belly (incl. hangar seen through the well) | 145 | 634 k | sun |
+| ext_stern | 101 | 486 k | sun |
+| bridge | 131 | 353 k | 14 |
+| bridgeAft | 134 | 348 k | 15 |
+| hangarDeck | 117 | 236 k | 15 |
+| room:reactor | 107 | 249 k | 14 |
+| room:hyperdrive | 114 | 273 k | 14 |
+| room:officers | 137 | 219 k | 14 |
+| room:shuttleDock | 100 | 280 k | 16 |
+| room:B-spine (corridor) | 142 | 139 k | 6 |
+| room:flightControl (legacy wing, heaviest) | 314 | 711 k | 16 |
+
+Every view is within the 360 draw-call / 1.6 M-triangle guard; 46 of 51 views are under 200 calls.
+Totals: 140 MB estimated texture memory (mips included), 131 shader programs, 2.0 s shader compile on
+the build machine, JS heap 307 MB in Chromium (procedural texture canvases included), zone build
+1.36 s / 0.51 s / 0.45 s (tower / engineering / hangar) on the build machine's CPU, page ready in ~30 s
+there under software GL. Evidence frames: `docs/evidence/final/*.jpg`.
+
+### Remaining limitations (honest list)
+
+- Frame rate was never measured on a real GPU here (software WebGL only): draw calls, triangles,
+  texture memory and light counts are the measured proxies; the adaptive scaler and per-view budgets are
+  what protect frame rate on real hardware.
+- The legacy auxiliary flight-control wing keeps its freighter geometry (re-lit and re-palletted) and is
+  the heaviest single space at 314 draw calls.
+- Depth precision: one far plane (60 km, for the far field) with a 5 cm near plane inside; layered hull
+  plates seen through the bridge windows at 500 m+ rely on LOD ranges rather than a reversed depth
+  buffer.
+- Cast shadows exist only in orbit view (directional sun); inside, three pooled shadow spots carry the
+  key lights and the rest of the lighting is unshadowed.
+- Fighters use scripted/formation pilots only; NPC crew, boarding gameplay, flight and landing remain
+  reserved stubs by design of this milestone.
+- The GitHub pull request could not be opened from this agent ("must be a collaborator"); the branch is
+  pushed and up to date.

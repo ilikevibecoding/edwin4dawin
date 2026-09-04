@@ -112,8 +112,9 @@ for (const name of VIEWS) {
 }
 
 if (!QUICK) {
-  // sky drift: the far field must move while the interior stays put
-  await page.evaluate(() => window.debugAPI.setView("window"));
+  // sky drift: the far field must move while the interior stays put (bridge windows; the legacy
+  // wing's side portholes are shuttered now that the wing sits inside the tower)
+  await page.evaluate(() => window.debugAPI.setView("bridge"));
   await settle(4, 1200);
   const before = await page.evaluate(() => window.debugAPI.capturePixels(0, 0, 1280, 720));
   await page.evaluate(() => window.debugAPI.advanceSky(2));
@@ -132,9 +133,9 @@ if (!QUICK) {
     }
     return { meanAbsDiff: +(sum / n / 3).toFixed(1), changedFraction: +(changed / n).toFixed(2) };
   };
-  results.checks.drift = { skyRegion: region(520, 250, 760, 470), interiorControl: region(0, 600, 300, 720) };
+  results.checks.drift = { skyRegion: region(380, 210, 900, 300), interiorControl: region(400, 560, 880, 700) };
   console.log("drift (2 s of sky time):", JSON.stringify(results.checks.drift));
-  await page.screenshot({ path: resolve(outDir, `window_plus2s.${ext}`), ...(PNG ? {} : { type: "jpeg", quality: 84 }) });
+  await page.screenshot({ path: resolve(outDir, `bridge_plus2s.${ext}`), ...(PNG ? {} : { type: "jpeg", quality: 84 }) });
 
   // legacy interactions still work inside the command deck wing
   for (const id of ["bed", "galley", "bathroom"]) {
