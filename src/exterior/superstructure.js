@@ -14,9 +14,12 @@ const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
 export const INCLINE = 0.12;
 /** Ledge heights as fractions of each terrace's height, measured from its base. */
 const LEDGES = { t0: [0.42, 0.74], t1: [0.5], t2: [0.5] };
-/** Front-face setback per tier (m) and slope (horizontal m per vertical m, leaning aft). */
-const SETBACK = { t0: 12, t1: 8, t2: 8 };
-const FRONT_SLOPE = 0.4;
+/**
+ * Front-face setback per tier (m) and draft (horizontal m per vertical m, leaning aft): each terrace
+ * climbs in 2–3 long steps (t0: y ≈ 47 at z = -420, 67 at -350, 84 by -270) instead of one cliff.
+ */
+const SETBACK = { t0: 70, t1: 40, t2: 40 };
+const FRONT_SLOPE = 0.25;
 const BAND_H = 2.8;
 const RECESS = 0.9;
 
@@ -44,6 +47,12 @@ export function terraceBaseHalfWidth(t, z) {
   return tierWallX(t, z, lv[1], lv[0]);
 }
 const setback = (t) => SETBACK[t.id] || 8;
+/** Station where terrace t's flat roof (y = yTop) begins, aft of the stepped front faces. */
+export function terraceRoofZStart(t) {
+  const nTiers = (LEDGES[t.id] || [0.5]).length + 1;
+  const lvF = tierLevels(t, t.zFront);
+  return t.zFront + (nTiers - 1) * setback(t) + (t.yTop - lvF[nTiers - 1]) * FRONT_SLOPE + 0.5;
+}
 
 export function buildSuperstructure(ctx) {
   const { chunks, rand } = ctx;
@@ -150,28 +159,70 @@ export function buildSuperstructure(ctx) {
         const xa = xAt(zF, yA);
         const xb = xAt(zFrontTop, yB);
         const far = chunks.batch(zF + 5, "far", "hullPlate1");
-        far.quad(V(-xa, yA, zF), V(xa, yA, zF), V(xb, yB, zFrontTop), V(-xb, yB, zFrontTop), tintFor(D, 0, zF), TEXEL, V(0, 0.4, -1));
+        const faceTint = tintFor(mixC(L, M, 0.45), 0, zF);
+        far.quad(V(-xa, yA, zF), V(xa, yA, zF), V(xb, yB, zFrontTop), V(-xb, yB, zFrontTop), faceTint, TEXEL, V(0, FRONT_SLOPE, -1));
         const n = new THREE.Vector3().crossVectors(V(0, yB - yA, zFrontTop - zF), V(1, 0, 0)).normalize();
         if (n.z > 0) n.negate();
         const h = yB - yA;
         const P = (u, f) => V(u * (xa + (xb - xa) * f), yA + h * f, zF + (zFrontTop - zF) * f);
+        // the face in hull tone, read by its steps: raised armour plates, window rows, hatch clusters
+        // and horizontal pipe runs (the studio-model "cliff face" detail)
         const plates = chunks.batch(zF + 5, "near", "hullPlate");
         const cols = Math.max(2, Math.round((xa * 2) / 22));
-        for (let row = 0; row < 2; row++) {
-          const f0 = row === 0 ? 0.08 : 0.62;
-          const f1 = row === 0 ? 0.4 : 0.92;
+        const rowsF = h > 16 ? [[0.06, 0.3], [0.7, 0.94]] : [[0.08, 0.36], [0.64, 0.92]];
+        for (const [f0, f1] of rowsF) {
           for (let ci = 0; ci < cols; ci++) {
             if (rand() < 0.3) continue;
             const u0 = -1 + (2 * ci) / cols + 0.03;
             const u1 = -1 + (2 * (ci + 1)) / cols - 0.03;
-            plates.frustum([P(u0, f0), P(u1, f0), P(u1, f1), P(u0, f1)], n, 0.6 + rand() * 0.5, 0.8, mixC(plateTone(rand), D, 0.4), TEXEL);
+            plates.frustum([P(u0, f0), P(u1, f0), P(u1, f1), P(u0, f1)], n, 0.6 + rand() * 0.5, 0.8, mixC(plateTone(rand), faceTint, 0.5), TEXEL);
           }
         }
-        if (h > 14) {
-          const g = new THREE.PlaneGeometry(xa * 1.6, 2.6);
-          const q = new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), n);
-          const c = P(0, 0.5).addScaledVector(n, 0.35);
-          chunks.batch(zF + 5, "far", "cityLights").addGeometry(g, { pos: [c.x, c.y, c.z], quat: q, uv: "scale", uvScale: [(xa * 1.6) / 40, 0.34] });
+        // window rows across the face (one per ~9 m of height)
+        const q = new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), n);
+        const nWin = Math.max(1, Math.min(3, Math.floor(h / 9)));
+        for (let wi = 0; wi < nWin; wi++) {
+          const f = (wi + 0.5) / nWin + (rand() - 0.5) * 0.08;
+          const span = (xa + (xb - xa) * f) * 2 - 6;
+          if (span < 12) continue;
+          const g = new THREE.PlaneGeometry(span, 2.2);
+          const c = P(0, f).addScaledVector(n, 0.4);
+          chunks.batch(zF + 5, "far", "cityLights").addGeometry(g, { pos: [c.x, c.y, c.z], quat: q, uv: "scale", uvScale: [span / 40, 0.34] });
+          // dark recess strip behind the window row
+          const rec = chunks.batch(zF + 5, "far", "hullGreeble");
+          const fr0 = f - 1.4 / h;
+          const fr1 = f + 1.4 / h;
+          rec.quad(P(-0.98, fr0).addScaledVector(n, 0.15), P(0.98, fr0).addScaledVector(n, 0.15), P(0.98, fr1).addScaledVector(n, 0.15), P(-0.98, fr1).addScaledVector(n, 0.15), T, TEXEL * 2, n);
+        }
+        // pipe runs: two or three horizontal conduits between the rows, with clamps
+        const pipes = chunks.batch(zF + 5, "near", "hullGreeble");
+        const nPipe = h > 12 ? 3 : 2;
+        for (let pi = 0; pi < nPipe; pi++) {
+          const f = 0.12 + (0.76 * (pi + rand() * 0.6)) / nPipe;
+          const r = 0.35 + rand() * 0.35;
+          const uMax = 0.9 - rand() * 0.35;
+          const a = P(-uMax, f).addScaledVector(n, r + 0.2);
+          const b2 = P(uMax, f).addScaledVector(n, r + 0.2);
+          pipes.tube(a, b2, r, r, 8, mixC(M, D, 0.3), TEXEL * 4);
+          const dfc = (r + 0.5) / h;
+          for (let cu = -uMax + 0.1; cu < uMax; cu += 0.18 + rand() * 0.1) {
+            const du = 0.6 / xa;
+            pipes.frustum([P(cu - du, f - dfc), P(cu + du, f - dfc), P(cu + du, f + dfc), P(cu - du, f + dfc)], n, r + 0.3, 0.1, D, TEXEL * 4);
+          }
+        }
+        // hatch clusters: 2–4 small raised hatches in a group, a few groups per face
+        const hatches = chunks.batch(zF + 5, "near", "hullPlate1");
+        const nGroups = Math.max(1, Math.round(xa / 18));
+        for (let gi = 0; gi < nGroups; gi++) {
+          const uc = -0.85 + rand() * 1.7;
+          const fc = 0.4 + rand() * 0.25;
+          const cnt = 2 + Math.floor(rand() * 3);
+          const du = 1.2 / xa;
+          const df = 1.2 / h;
+          for (let hi = 0; hi < cnt; hi++) {
+            const u0 = uc + (hi - (cnt - 1) / 2) * (3.6 / xa);
+            hatches.frustum([P(u0 - du, fc - df), P(u0 + du, fc - df), P(u0 + du, fc + df), P(u0 - du, fc + df)], n, 0.5, 0.25, mixC(plateTone(rand), faceTint, 0.4), TEXEL);
+          }
         }
       }
 
@@ -207,8 +258,7 @@ export function buildSuperstructure(ctx) {
     const neckHw = neck.hw + neck.draft * (neck.yTop - neck.yBase) + 0.6;
     {
       const yR = t.yTop;
-      const lvF = tierLevels(t, t.zFront);
-      const zStart = t.zFront + (nTiers - 1) * setback(t) + (t.yTop - lvF[nTiers - 1]) * FRONT_SLOPE + 0.5;
+      const zStart = terraceRoofZStart(t);
       const zSplits = next ? [next.zFront] : [neckZc - neckHalfL, neckZc + neckHalfL];
       plateField(chunks, rand, {
         zStart,
@@ -219,7 +269,7 @@ export function buildSuperstructure(ctx) {
           const e = terraceHalfWidth(t, z);
           let x0 = 0;
           if (next && z >= next.zFront) x0 = terraceBaseHalfWidth(next, z) - 0.4;
-          else if (!next && z > neckZc - neckHalfL && z < neckZc + neckHalfL) x0 = neckHw;
+          else if (!next && z > neckZc - neckHalfL && z < neckZc + neckHalfL) x0 = Math.min(neckHw, e);
           return [
             { s0: 0, s1: x0, kind: "skip" },
             { s0: x0, s1: e, kind: "plate" },
@@ -256,7 +306,7 @@ export function buildSuperstructure(ctx) {
         const nb = chunks.batch(zc, "near", "hullGreeble");
         for (let i = 0; i < vents; i++) nb.box(side * (xc + (rand() - 0.5) * w * 0.5), yR + h + 0.4, zc + (rand() - 0.5) * len * 0.7, 2 + rand() * 2, 0.8, 2 + rand() * 3, T, TEXEL * 3, { skip: new Set(["-y"]) });
       };
-      let z = t.zFront + 50 + rand() * 30;
+      let z = terraceRoofZStart(t) + 10 + rand() * 30;
       while (z < t.zBack - 30) {
         const len = Math.min(18 + rand() * 34, t.zBack - 6 - z);
         const zc = z + len / 2;

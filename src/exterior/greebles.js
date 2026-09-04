@@ -5,9 +5,10 @@
 // Signature: buildGreebles({ group, materials, camera }) -> { update(camera, dt, t), stats }
 import * as THREE from "three";
 import { rng } from "../kit.js";
-import { hullTopY, hullBottomY, hullHalfWidth, trenchBand, TERRACES, terraceHalfWidth, TOWER, ENGINES, VENTRAL, HANGAR } from "../spec.js";
+import { hullTopY, hullBottomY, hullHalfWidth, trenchBand, TRENCH, TERRACES, terraceHalfWidth, TOWER, ENGINES, VENTRAL, HANGAR } from "../spec.js";
 import { SHAPES, TINT, bash, triCount } from "./greebles_shapes.js";
 import { weaponExclusions, terraceBaseHalfWidth } from "./weapons_layout.js";
+import { terraceRoofZStart } from "./superstructure.js";
 
 /** Ship AABB used for the camera-distance LOD (metres, world). */
 export const SHIP_BOX = new THREE.Box3(new THREE.Vector3(-480, -160, -1000), new THREE.Vector3(480, 345, 660));
@@ -15,7 +16,7 @@ export const SHIP_BOX = new THREE.Box3(new THREE.Vector3(-480, -160, -1000), new
 export const LOD_RANGES = { large: Infinity, medium: 2500, small: 900 };
 
 // Hull slopes (from spec.js linear functions): dx/dz of the side, dy/dz of the plates.
-const SIDE_SLOPE = (0.965 * 480) / 1600; // trench wall x per z
+const SIDE_SLOPE = (TRENCH.wallU * 480) / 1600; // trench wall x per z
 const TOP_SLOPE = (0.4 * 130) / 1600;
 const BOTTOM_SLOPE = (0.6 * 130) / 1600;
 const FLOOR_SLOPE = (0.3 * 130) / 1600;
@@ -610,7 +611,7 @@ function bottomPlate(ctx) {
   return surf;
 }
 
-/** Side trench: dense machinery city on the wall (x = ±0.965 w) and the floor strip (0.965 w .. w). */
+/** Side trench: dense machinery city on the wall (x = ±wallU·w) and the floor strip (wallU·w .. w). */
 function trench(ctx, s) {
   const rand = ctx.rand;
   const pd = weaponDiscs(ctx, (w) => w.kind === "pd" && Math.sign(w.x) === s);
@@ -624,7 +625,7 @@ function trench(ctx, s) {
       return [b.yBottom + 0.4, b.yTop - 0.4];
     },
     point(u, v, out) {
-      out.set(s * 0.965 * hullHalfWidth(v), u, v);
+      out.set(s * TRENCH.wallU * hullHalfWidth(v), u, v);
     },
     normal(u, v, out) {
       out.set(s, 0, -SIDE_SLOPE);
@@ -639,7 +640,7 @@ function trench(ctx, s) {
     occ: new Occupancy(16),
     uRange(v) {
       const w = hullHalfWidth(v);
-      const a = 0.965 * w + 0.9;
+      const a = TRENCH.wallU * w + 0.9;
       const b = w - 0.9;
       return s > 0 ? [a, b] : [-b, -a];
     },
@@ -751,8 +752,8 @@ function trench(ctx, s) {
       }
     },
   });
-  // --- floor lip: alternating red / white runway beacons along the outer edge
-  edgeLights(ctx, floor, { uFn: (v) => s * (hullHalfWidth(v) - 0.9), step: 36, redEvery: 2, scale: 1.2, v0: -620 });
+  // --- floor lip: a few sparse red beacons only (no metronomic white dots along the canyon)
+  edgeLights(ctx, floor, { uFn: (v) => s * (hullHalfWidth(v) - 0.9), step: 90, redEvery: 1, scale: 1.2, v0: -620, prob: 0.5 });
   return { wall, floor };
 }
 
@@ -762,7 +763,7 @@ function terraceRoofs(ctx) {
   TERRACES.forEach((t, i) => {
     const next = TERRACES[i + 1];
     const surf = {
-      v0: t.zFront + 4,
+      v0: terraceRoofZStart(t) + 4,
       v1: t.zBack - 3,
       occ: new Occupancy(16),
       uRange(v) {
@@ -814,7 +815,7 @@ function towerNeck(ctx) {
       v0: n.z0 + 3,
       v1: n.z1 - 3,
       occ: new Occupancy(16),
-      uRange: () => [n.yBase + 3, n.yTop - 3],
+      uRange: () => [n.yBase + 3, n.yTop - 31],
       point(u, v, out) {
         out.set(s * hw(u), u, v);
       },
@@ -828,7 +829,7 @@ function towerNeck(ctx) {
       v0: -(n.hw - 3),
       v1: n.hw - 3,
       occ: new Occupancy(16),
-      uRange: () => [n.yBase + 3, n.yTop - 3],
+      uRange: () => [n.yBase + 3, n.yTop - 31],
       point(u, v, out) {
         out.set(v, u, zc + s * hl(u));
       },
@@ -853,7 +854,7 @@ function towerNeck(ctx) {
       }
     }
     scatterGrid(ctx, f, { cell: 5.5, prob: 0.42, noiseScale: 40, pick: pickWallSmall });
-    edgeLights(ctx, f, { uFn: () => n.yTop - 4.5, step: 30, redEvery: 2, scale: 1.25 });
+    edgeLights(ctx, f, { uFn: () => n.yTop - 32, step: 30, redEvery: 2, scale: 1.25 });
   }
   return faces;
 }

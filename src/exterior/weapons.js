@@ -360,6 +360,7 @@ export function buildWeapons({ group, materials }) {
 
   // ---- point defence on the trench floors (scaled to the local trench depth)
   const pdGeo = pointDefence();
+  const pdLightGeo = new THREE.BoxGeometry(0.5, 0.4, 0.5).toNonIndexed();
   const pdSites = pointDefenceSites();
   for (const s of pdSites) {
     const depth = trenchBand(s.z).depth;
@@ -367,7 +368,10 @@ export function buildWeapons({ group, materials }) {
     P.set(s.x, s.y, s.z);
     frameUp(upFloor, s.yaw, P, M);
     M.scale(new THREE.Vector3(sc, sc, sc));
-    addStatic("exta_greeble", pdGeo, M);
+    // point defence sits in the canyon: dark worn metal with a single red marker, not white dots
+    addStatic("hullGreeble", pdGeo, M);
+    _tmp.makeTranslation(0, 3.9, 0.6);
+    addStatic("extEmitRed", pdLightGeo, new THREE.Matrix4().multiplyMatrices(M, _tmp));
   }
 
   // ---- tractor-beam projectors under the ventral plate (frame flipped: local +y points down)

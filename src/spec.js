@@ -41,13 +41,16 @@ export function hullBottomY(z) {
  * centreline. Returned as [x, y] pairs; mirror x for port. Segments carry a `tag` so builders can pick
  * materials per face: top, upperSlope, trenchLip, trenchWall, trenchFloor, lowerSlope, bottom.
  */
+// The side trench is a real canyon: lip at 62 % of the section height, floor at 28 %, back wall
+// 9 % of the half-width in from the widest line (≈ 27 m deep, 29 m tall at midships).
+export const TRENCH = { lipV: 0.62, floorV: 0.28, wallU: 0.91, depthU: 0.09 };
 export const SECTION_PROFILE = [
   { u: 0.0, v: 1.0, tag: "top" },
   { u: 0.72, v: 1.0, tag: "upperSlope" },
-  { u: 1.0, v: 0.5, tag: "trenchLip" },
-  { u: 0.965, v: 0.5, tag: "trenchWall" },
-  { u: 0.965, v: 0.3, tag: "trenchFloor" },
-  { u: 1.0, v: 0.3, tag: "lowerSlope" },
+  { u: 1.0, v: TRENCH.lipV, tag: "trenchLip" },
+  { u: TRENCH.wallU, v: TRENCH.lipV, tag: "trenchWall" },
+  { u: TRENCH.wallU, v: TRENCH.floorV, tag: "trenchFloor" },
+  { u: 1.0, v: TRENCH.floorV, tag: "lowerSlope" },
   { u: 0.62, v: 0.0, tag: "bottom" },
   { u: 0.0, v: 0.0, tag: "bottom" },
 ];
@@ -61,7 +64,7 @@ export function hullSection(z) {
 export function trenchBand(z) {
   const yT = hullTopY(z);
   const yB = hullBottomY(z);
-  return { yTop: yB + 0.5 * (yT - yB), yBottom: yB + 0.3 * (yT - yB), depth: 0.035 * hullHalfWidth(z) };
+  return { yTop: yB + TRENCH.lipV * (yT - yB), yBottom: yB + TRENCH.floorV * (yT - yB), depth: TRENCH.depthU * hullHalfWidth(z) };
 }
 
 // ---------------------------------------------------------------------------
@@ -80,8 +83,10 @@ export function terraceHalfWidth(t, z) {
 }
 
 export const TOWER = {
-  // the slimmer neck between terrace 2 and the bridge module
-  neck: { z0: 250, z1: 370, hw: 40, yBase: 138, yTop: 230, draft: 0.06 },
+  // the neck between terrace 2 and the bridge module: hw 60 with a 0.10 draft (69 at its foot, inside
+  // the 71 m terrace-2 roof at z = 250); tower.js stops its storeys at y ≈ 202 and stacks the two
+  // plinth steps (hw 80 / 97) under the head above that
+  neck: { z0: 250, z1: 370, hw: 60, yBase: 138, yTop: 230, draft: 0.1 },
   // the wide "T" head that carries the bridge; the forward face holds the bridge viewports
   bridge: { z0: 215, z1: 395, hw: 105, y0: 230, y1: 268 },
   // bridge viewport strip on the forward face (world y, half-width in x)

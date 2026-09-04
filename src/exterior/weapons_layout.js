@@ -1,6 +1,6 @@
 // Weapon / sensor emplacement sites (EXT-B). Shared by weapons.js (which builds them) and
 // greebles.js (which keeps surface detail out of their footprints). Everything derives from spec.js.
-import { hullTopY, hullBottomY, hullHalfWidth, trenchBand, TERRACES, terraceHalfWidth, HANGAR } from "../spec.js";
+import { hullTopY, hullBottomY, hullHalfWidth, trenchBand, TRENCH, TERRACES, terraceHalfWidth, HANGAR } from "../spec.js";
 
 /** Half-width of terrace `t`'s base footprint (where its sloped side meets the top plate) at station z. */
 export function terraceBaseHalfWidth(t, z) {
@@ -46,7 +46,7 @@ export function pointDefenceSites() {
   for (let z = -560; z <= 560; z += 80) {
     const w = hullHalfWidth(z);
     const band = trenchBand(z);
-    const x = 0.9825 * w; // middle of the trench floor (0.965 w .. 1.0 w)
+    const x = ((TRENCH.wallU + 1) / 2) * w; // middle of the trench floor (wallU·w .. w)
     for (const s of [-1, 1]) out.push({ kind: "pd", x: s * x, y: band.yBottom, z, yaw: -s * Math.PI / 2, r: 2.6 });
   }
   return out;
@@ -78,7 +78,7 @@ export function sensorSites() {
   // dishes on the terrace-2 roof forward of the neck
   for (const s of [-1, 1]) out.push({ kind: "dish", x: s * (terraceHalfWidth(t2, 150) - 14), y: t2.yTop, z: 150, r: 9, yaw: -s * 0.5, size: 7 });
   // sensor cages on the terrace-0 roof (forward block)
-  for (const s of [-1, 1]) out.push({ kind: "array", x: s * (terraceHalfWidth(t0, -300) - 16), y: t0.yTop, z: -300, r: 7, yaw: 0, size: 6 });
+  for (const s of [-1, 1]) out.push({ kind: "array", x: s * (terraceHalfWidth(t0, -240) - 16), y: t0.yTop, z: -240, r: 7, yaw: 0, size: 6 });
   // long-range array on the terrace-1 roof beside the terrace-2 front face
   for (const s of [-1, 1]) out.push({ kind: "array", x: s * (terraceHalfWidth(t1, 30) - 14), y: t1.yTop, z: 30, r: 7, yaw: s * 0.3, size: 6 });
   return out;

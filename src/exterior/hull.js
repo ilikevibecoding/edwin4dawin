@@ -12,7 +12,7 @@
 import * as THREE from "three";
 import { Kit, rng } from "../kit.js";
 import { PALETTE } from "../materials.js";
-import { HULL, hullSection, hullTopY, hullBottomY, hullHalfWidth, TERRACES, VENTRAL, HANGAR } from "../spec.js";
+import { HULL, TRENCH, hullSection, hullTopY, hullBottomY, hullHalfWidth, TERRACES, VENTRAL, HANGAR } from "../spec.js";
 import { ChunkSet, plateField, channel, ensureExtMaterials, C, shade, mixC, jitter, plateTone, fieldNoise, TEXEL, EMIT } from "./hull_util.js";
 import { buildSuperstructure, terraceBaseHalfWidth, tierLevels, tierWallX, hexa } from "./superstructure.js";
 import { buildTower } from "./tower.js";
@@ -35,18 +35,19 @@ const smooth = (a, b, x) => {
 const w = hullHalfWidth;
 const yT = hullTopY;
 const yB = hullBottomY;
-const lipY = (z) => yB(z) + 0.5 * (yT(z) - yB(z)); // trench ceiling
-const floorY = (z) => yB(z) + 0.3 * (yT(z) - yB(z)); // trench floor
-const wallX = (z) => 0.965 * w(z); // trench back wall
+const lipY = (z) => yB(z) + TRENCH.lipV * (yT(z) - yB(z)); // trench ceiling
+const floorY = (z) => yB(z) + TRENCH.floorV * (yT(z) - yB(z)); // trench floor
+const wallX = (z) => TRENCH.wallU * w(z); // trench back wall
+const trenchDepth = (z) => TRENCH.depthU * w(z);
 const topX = (z) => 0.72 * w(z); // dorsal plate edge
 const botX = (z) => 0.62 * w(z); // ventral plate edge
 const T0 = TERRACES[0];
 const footprint = (z) => (z >= T0.zFront ? terraceBaseHalfWidth(T0, z) : 0);
 const perp = (dx, dy) => V(-dy, dx, 0).normalize();
-const UPPER_N = perp(0.28 * HULL.halfWidthStern, -0.5 * HULL.thicknessStern); // outward normal of the upper slope
-const LOWER_N = perp(-0.38 * HULL.halfWidthStern, -0.3 * HULL.thicknessStern); // outward normal of the lower slope
-const UPPER_T = V(0.28 * HULL.halfWidthStern, -0.5 * HULL.thicknessStern, 0).normalize(); // along the upper slope, outward-down
-const LOWER_T = V(0.38 * HULL.halfWidthStern, 0.3 * HULL.thicknessStern, 0).normalize(); // along the lower slope from the bottom edge, outward-up
+const UPPER_N = perp(0.28 * HULL.halfWidthStern, -(1 - TRENCH.lipV) * HULL.thicknessStern); // outward normal of the upper slope
+const LOWER_N = perp(-0.38 * HULL.halfWidthStern, -TRENCH.floorV * HULL.thicknessStern); // outward normal of the lower slope
+const UPPER_T = V(0.28 * HULL.halfWidthStern, -(1 - TRENCH.lipV) * HULL.thicknessStern, 0).normalize(); // along the upper slope, outward-down
+const LOWER_T = V(0.38 * HULL.halfWidthStern, TRENCH.floorV * HULL.thicknessStern, 0).normalize(); // along the lower slope from the bottom edge, outward-up
 
 const CAP_Z = -958; // hardened bow tip cap ends here
 const BELTS = [
@@ -199,8 +200,9 @@ function buildSkins(ctx) {
   const trench = (point, normal, key, tint, texel) =>
     plateField(chunks, rand, { zStart, zEnd, rowLen: [16, 32], strips: bare, point, normal, cellW: 40, skinKey: key, slabKeys: [key], tint: () => tint, texel });
   trench((z, s) => V(w(z) + s * (wallX(z) - w(z)), lipY(z), z), DOWN, "hullGreeble", shade(D, 0.9), TEXEL * 2);
-  trench((z, s) => V(wallX(z), lipY(z) + s * (floorY(z) - lipY(z)), z), V(1, 0, 0), "exta_machinery", mixC(D, M, 0.7), MACH);
-  trench((z, s) => V(wallX(z) + s * (w(z) - wallX(z)), floorY(z), z), UP, "hullGreeble", mixC(T, D, 0.6), TEXEL * 2);
+  // wall and floor at ~0.35 albedo: the canyon reads as a dark band even where the sun reaches in
+  trench((z, s) => V(wallX(z), lipY(z) + s * (floorY(z) - lipY(z)), z), V(1, 0, 0), "exta_machinery", mixC(D, M, 0.3), MACH);
+  trench((z, s) => V(wallX(z) + s * (w(z) - wallX(z)), floorY(z), z), UP, "hullGreeble", mixC(T, D, 0.3), TEXEL * 2);
   // lower slope
   plateField(chunks, rand, {
     zStart,
@@ -645,7 +647,7 @@ function buildReactorBulb(ctx) {
 function buildTrenchCity(ctx) {
   const { chunks, rand, kit } = ctx;
   const { hullDark: D, hullMid: M, hullTrench: T } = PALETTE;
-  const k = (0.965 * HULL.halfWidthStern) / HULL.length; // dx/dz of the trench wall
+  const k = (TRENCH.wallU * HULL.halfWidthStern) / HULL.length; // dx/dz of the trench wall
   const phi = Math.atan(k);
   const nrmLen = Math.hypot(1, k);
   const subGeo = () => new THREE.BoxGeometry(1, 1, 1);
@@ -667,11 +669,13 @@ function buildTrenchCity(ctx) {
     const z1 = Math.min(z + len, 597);
     if (z1 - z < 6) break;
     const zm = (z + z1) / 2;
-    const depthN = 0.035 * w(zm);
+    const depthN = trenchDepth(zm);
     const hN = lipY(zm) - floorY(zm);
     const d = 1.5 + rand() * Math.max(0.5, depthN - 3.2);
     const hang = rand() < 0.28;
-    const hFrac = 0.35 + rand() * 0.5;
+    // building heights vary from squat plant (a quarter of the canyon) to full-height towers
+    const hr = rand();
+    const hFrac = hr < 0.18 ? 0.97 : hr < 0.5 ? 0.25 + rand() * 0.25 : 0.5 + rand() * 0.42;
     const lvl = z1 - z >= 16 ? "far" : "mid";
     const light = rand() < 0.3;
     // the machinery texture is itself dark, so its tint stays in the mid range
@@ -684,18 +688,26 @@ function buildTrenchCity(ctx) {
       const b = [P(z, 0, yLo(z)), P(z, d, yLo(z)), P(z1, d, yLo(z1)), P(z1, 0, yLo(z1))];
       const t = [P(z, 0, yHi(z)), P(z, d, yHi(z)), P(z1, d, yHi(z1)), P(z1, 0, yHi(z1))];
       hexa(chunks.batch(zm, lvl, key), b, t, tint, key === "exta_machinery" ? MACH : TEXEL, { skipBottom: !hang, skipTop: hang, skipSides: new Set([3]) });
-      // lit band on the block's outer face
-      if (rand() < 0.55 && z1 - z > 9) {
-        const yw = (yLo(zm) + yHi(zm)) / 2 + (rand() - 0.5) * (yHi(zm) - yLo(zm)) * 0.4;
-        win(chunks.batch(zm, "mid", "cityLights"), side, z, z1, side * (wallX(z) - 0.3 + d), side * (wallX(z1) - 0.3 + d), yw, 1.6);
+      // lit bands on the block's outer face: one for squat blocks, two or three storeys on towers
+      if (rand() < 0.65 && z1 - z > 9) {
+        const bh = yHi(zm) - yLo(zm);
+        const rows = bh > 18 ? 3 : bh > 9 ? 2 : 1;
+        for (let r = 0; r < rows; r++) {
+          if (r > 0 && rand() < 0.3) continue;
+          const yw = yLo(zm) + bh * ((r + 0.5) / rows) + (rand() - 0.5) * (bh / rows) * 0.3;
+          win(chunks.batch(zm, "mid", "cityLights"), side, z, z1, side * (wallX(z) - 0.3 + d), side * (wallX(z1) - 0.3 + d), yw, 1.6);
+        }
       }
-      // window band on the back wall in the gap before this block
+      // window rows on the back wall in the gap before this block (two heights on the tall canyon wall)
       const pe = prevEnd[side];
       if (pe !== null && z - pe > 7) {
         const zg0 = pe + 1.2;
         const zg1 = z - 1.2;
         const zgm = (zg0 + zg1) / 2;
-        win(chunks.batch(zgm, "mid", "cityLights"), side, zg0, zg1, side * wallX(zg0), side * wallX(zg1), floorY(zgm) + hN * 0.62, 1.8);
+        for (const f of hN > 14 ? [0.3, 0.62] : [0.55]) {
+          if (rand() < 0.2) continue;
+          win(chunks.batch(zgm, "mid", "cityLights"), side, zg0, zg1, side * wallX(zg0), side * wallX(zg1), floorY(zgm) + hN * f, 1.8);
+        }
       }
       prevEnd[side] = z1;
       // instanced sub-blocks on the outer face
@@ -730,14 +742,14 @@ function buildTrenchCity(ctx) {
       const r = Math.min(1.1, 0.02 * w((z0 + z1) / 2));
       mid.tube(V(X(z0, 1.6 + r), yP(z0), z0), V(X(z1, 1.6 + r), yP(z1), z1), r, r, 10, D, TEXEL * 4);
       for (let zz = z0 + 12 + rand() * 10; zz < z1 - 4; zz += 24 + rand() * 14) {
-        const dN = 0.035 * w(zz);
+        const dN = trenchDepth(zz);
         mid.box(X(zz, dN * 0.55), (floorY(zz) + lipY(zz)) / 2, zz, 1.4, lipY(zz) - floorY(zz) - 0.2, 1.4, mixC(D, T, 0.5), TEXEL * 4, { skip: new Set(["+y", "-y"]) });
       }
       // amber work lights along the lip underside: the trench is in the lip's shadow most of the
       // time, so this row is what draws the trench line at medium range
       const em = chunks.batch((z0 + z1) / 2, "mid", "exta_emit");
       for (let zz = z0 + 6 + rand() * 6; zz < z1 - 3; zz += 26 + rand() * 10) {
-        em.box(X(zz, 0.035 * w(zz) * 0.8), lipY(zz) - 0.3, zz, 0.9, 0.5, 0.9, EMIT.amber, 1, { skip: new Set(["+y"]) });
+        em.box(X(zz, trenchDepth(zz) * 0.8), lipY(zz) - 0.3, zz, 0.9, 0.5, 0.9, EMIT.amber, 1, { skip: new Set(["+y"]) });
       }
     }
   }
