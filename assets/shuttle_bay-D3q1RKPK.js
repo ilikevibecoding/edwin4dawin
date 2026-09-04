@@ -1,0 +1,1 @@
+import{t as e}from"./index-Cld_YCX4.js";function t(t,n,r){return e(t,n,r)}export{t as buildShuttleBay};
