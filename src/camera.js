@@ -411,9 +411,21 @@ export function createCameraRig(camera, { vehicle, terrain }) {
     return true;
   }
 
+  /**
+   * Forget the smoothed position so the next update lands the drive camera
+   * where it belongs instead of easing there. The screenshot tool parks the
+   * camera on a beauty view for its shader warm-up; without this its HUD frame,
+   * two seconds after resume, was the chase camera still a metre off the flank
+   * on its way back — which two critics read as a broken chase cam (round 2).
+   */
+  function snap() {
+    initialised = false;
+  }
+
   return {
     update,
     setView,
+    snap,
     get mode() {
       return mode;
     },

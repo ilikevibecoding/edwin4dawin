@@ -93,8 +93,13 @@ async function main() {
     window.debugAPI.renderFrames(1);
   });
 
-  // a page-level screenshot of the live game, HUD included, for the controls check
-  await page.evaluate(() => window.debugAPI.resume());
+  // a page-level screenshot of the live game, HUD included, for the controls
+  // check. The warm-up left the camera on the hero view; snap the drive camera
+  // home first or the frame catches it easing back across the truck's flank.
+  await page.evaluate(() => {
+    window.debugAPI.objects.rig.snap?.();
+    window.debugAPI.resume();
+  });
   await page.waitForTimeout(settleMs);
   await page.screenshot({ path: path.join(outDir, 'hud.png'), timeout: 0 }).catch(() => {});
   await page.evaluate(() => window.debugAPI.pause());
