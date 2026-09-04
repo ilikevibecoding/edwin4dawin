@@ -689,14 +689,21 @@ export function baked(geo: THREE.BufferGeometry, m?: THREE.Matrix4): THREE.Buffe
 /** Surface parameters of a part inside a batch (see `partsMaterial`): base colour, roughness, metalness. */
 export interface Surf { color: number; roughness: number; metalness: number; }
 
-/** Give every vertex the part's colour (linear, `color` attribute) and roughness/metalness (`aSurf`). */
-export function tagSurface(g: THREE.BufferGeometry, surf: Surf): THREE.BufferGeometry {
-  const n = g.getAttribute('position').count;
-  const c = new THREE.Color(surf.color);
+/**
+ * Give every vertex the part's colour (linear, `color` attribute) and roughness/metalness (`aSurf`). A function
+ * picks the finish per vertex from its local position (e.g. headliner above the windows, trim below).
+ */
+export function tagSurface(g: THREE.BufferGeometry, surf: Surf | ((x: number, y: number, z: number) => Surf)): THREE.BufferGeometry {
+  const pos = g.getAttribute('position');
+  const n = pos.count;
   const col = new Float32Array(n * 3), sf = new Float32Array(n * 2);
+  const c = new THREE.Color();
+  let last: Surf | null = null;
   for (let i = 0; i < n; i++) {
+    const s = typeof surf === 'function' ? surf(pos.getX(i), pos.getY(i), pos.getZ(i)) : surf;
+    if (s !== last) { c.set(s.color); last = s; }
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
-    sf[i * 2] = surf.roughness; sf[i * 2 + 1] = surf.metalness;
+    sf[i * 2] = s.roughness; sf[i * 2 + 1] = s.metalness;
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setAttribute('aSurf', new THREE.BufferAttribute(sf, 2));
@@ -728,7 +735,7 @@ export class Batch {
   private readonly parts: THREE.BufferGeometry[] = [];
   constructor(private readonly defaultSurf?: Surf) {}
 
-  add(geo: THREE.BufferGeometry, m?: THREE.Matrix4, surf: Surf | undefined = this.defaultSurf): this {
+  add(geo: THREE.BufferGeometry, m?: THREE.Matrix4, surf: Surf | ((x: number, y: number, z: number) => Surf) | undefined = this.defaultSurf): this {
     const g = baked(geo, m);
     if (surf) tagSurface(g, surf);
     this.parts.push(g);
