@@ -6,6 +6,7 @@ import { IMP } from "../../deck2/_shared/palette.js";
 import { corridorDetail } from "../../deck2/cor-w/corridor.js";
 
 const Y = 12;
+const CEIL = 16.4;
 
 export default defineRoom({
   id: "d3-cor",
@@ -13,10 +14,12 @@ export default defineRoom({
   deck: 3,
   x: [4, 9],
   z: [565, 612.5],
-  ceil: 16.4,
+  ceil: CEIL,
   spawn: { pos: [6.5, Y, 567.5], yaw: 180 },
   views: {
-    "d3-cor-lobby-end": { pos: [6.5, Y, 567.5], yaw: 180, pitch: 0 },
+    // frame top lands on the bulkhead beam at z 573, so the nearest lamp in shot is the whole bay-2
+    // fixture under it rather than a fixture cut off at the top edge
+    "d3-cor-lobby-end": { pos: [7.1, Y, 568.8], yaw: 177, pitch: -3 },
     "d3-cor-mid": { pos: [7.2, Y, 585], yaw: 174, pitch: -1 },
     "d3-cor-engctl-door": { pos: [8, Y, 589], yaw: 96, pitch: 1 },
     "d3-cor-pipes": { pos: [5.9, Y, 600], yaw: -42, pitch: 12 },
@@ -27,9 +30,9 @@ export default defineRoom({
     stripMat: "emitAmber",
     floor: { color: IMP.impMid, strip: { axis: "z", width: 1.0, mat: "impFloor", color: IMP.impBlack } },
     ceiling: { channels: 0 },
-    lights: { count: 7, color: 0xffd9b8, intensity: 26, distance: 12 },
+    lights: false, // the corridor generator pushes its own (warm) fills under every second fixture
   },
   detail(ctx, shell, room) {
-    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "min", accent: "emitAmber", engineering: true, seed: 31 });
+    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "min", accent: "emitAmber", engineering: true, seed: 31, screens: ["screenImp3", "screenImp0"], fill: { color: 0xffd9b8 } });
   },
 });

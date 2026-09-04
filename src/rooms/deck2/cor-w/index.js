@@ -6,6 +6,7 @@ import { IMP } from "../_shared/palette.js";
 import { corridorDetail } from "./corridor.js";
 
 const Y = 40;
+const CEIL = 44.4;
 
 export default defineRoom({
   id: "d2-cor-w",
@@ -13,7 +14,7 @@ export default defineRoom({
   deck: 2,
   x: [-62, -8],
   z: [372.5, 377.5],
-  ceil: 44.4,
+  ceil: CEIL,
   spawn: { pos: [-11, Y, 375], yaw: 90 },
   views: {
     "d2-cor-w-lobby-end": { pos: [-10.5, Y, 375], yaw: 90, pitch: 0 },
@@ -26,9 +27,9 @@ export default defineRoom({
     ribs: 0,
     floor: { color: IMP.impMid, strip: { axis: "x", width: 1.0, mat: "impFloor", color: IMP.impBlack } },
     ceiling: { channels: 0 },
-    lights: { count: 7, intensity: 26, distance: 12 },
+    lights: false, // the corridor generator pushes its own fills (under every second housed fixture)
   },
   detail(ctx, shell, room) {
-    return corridorDetail(ctx, shell, room, { axis: "x", lobbyEnd: "max", accent: "emitBlue", seed: 21 });
+    return corridorDetail(ctx, shell, room, { axis: "x", lobbyEnd: "max", accent: "emitBlue", seed: 21, screens: ["screenImp0", "screenImp1"], deadEnd: { screen: "screenImp1", kit: "cabinet" } });
   },
 });
