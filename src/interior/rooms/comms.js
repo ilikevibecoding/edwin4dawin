@@ -127,11 +127,12 @@ export function build(kit, ctx, room) {
 
   // ------------------------------------------------------------ ceiling fixtures + lights
   for (const fx of [6.5, 12.5, 18.5]) for (const fz of [505.5, 516.5]) downlight(kit, fx, yTop, fz, 0.5, 0.5, "emitCoolSoft");
+  // a 3x3 grid of strong cool practicals on the downlight lines (11 fixtures so the 14-slot pool holds
+  // the whole room) plus two teal accents washing the rack walls
   const L = ctx.lights;
-  for (const gx of [5.2, 11.4, 17.6, 22.6]) for (const gz of [505.2, 511, 516.8]) L.cool.push(pointLight(0xd8f0ff, gx > 22 ? 5 : 6.5, 14, [gx, yTop - 0.35, gz]));
-  L.teal.push(pointLight(0x62d9c9, 3.5, 7, [x0 + 1.4, y0 + 2.2, z1 - 3.3]));
-  L.teal.push(pointLight(0x62d9c9, 3.5, 7, [x0 + 1.4, y0 + 2.2, z0 + 3.3]));
-  L.teal.push(pointLight(0x62d9c9, 3.0, 7, [11, y0 + 2.2, z0 + 1.2]));
+  for (const gx of [6.5, 12.5, 18.5]) for (const gz of [505.5, 511, 516.5]) L.cool.push(pointLight(0xd8f0ff, 13, 14, [gx, yTop - 0.7, gz]));
+  L.teal.push(pointLight(0x62d9c9, 5, 8, [x0 + 1.4, y0 + 2.2, z1 - 3.3]));
+  L.teal.push(pointLight(0x62d9c9, 5, 8, [x0 + 1.4, y0 + 2.2, z0 + 3.3]));
   blink.finish("commsIndicators");
   return shell;
 }

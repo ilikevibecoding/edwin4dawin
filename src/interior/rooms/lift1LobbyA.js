@@ -72,8 +72,8 @@ export function build(kit, ctx, room) {
   // ------------------------------------------------------------ floor guides, ceiling accents, light
   for (const gx of [cx - 1.15, cx + 1.15]) floorStrip(kit, [gx, z0 + 0.7], [gx, z1 - 0.9], y0, "emitBlueSoft", { w: 0.05 });
   downlight(kit, cx, yTop, z1 - 0.9, 1.6, 0.3, "emitBlueSoft");
-  ctx.lights.cool.push(pointLight(0xe8f0ff, 5.0, 8, [cx, yTop - 0.4, z0 + 2.6]));
-  ctx.lights.teal.push(pointLight(0x6fb4ff, 2.6, 5, [cx - 2.0, yTop - 0.5, z1 - 0.6]));
-  ctx.lights.cool.push(pointLight(0xbcd4ff, 3.0, 5, [cx, y0 + 2.6, z1 - 0.8]));
+  ctx.lights.cool.push(pointLight(0xe8f0ff, 12, 10, [cx, yTop - 0.4, z0 + 2.4]));
+  ctx.lights.teal.push(pointLight(0x6fb4ff, 5, 6, [cx - 2.0, yTop - 0.5, z1 - 0.6]));
+  ctx.lights.cool.push(pointLight(0xbcd4ff, 6, 6, [cx, y0 + 2.6, z1 - 0.8]));
   return shell;
 }

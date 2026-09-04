@@ -12,7 +12,7 @@ const HALL_X = -5.4; // centre plane of the east hall wall
 const CROSS_Z0 = 533.6; // cross-hall walls (centre planes)
 const CROSS_Z1 = 536.4;
 const DIV_X = -14.7; // divider between west and east cabins
-const T = 0.1; // partition half thickness incl. face
+const T = 0.18; // partition half thickness (WALL_T) plus a hair, so cabin furniture clears the faces
 
 export function build(kit, ctx, room) {
   const shell = roomShell(kit, ctx, room, { style: "light", lightRows: 1, lights: false, seed: 53 });
@@ -46,8 +46,8 @@ export function build(kit, ctx, room) {
   partition(kit, [HALL_X, z1], [HALL_X, CROSS_Z1], y0, h, { seed: 911, styles: quiet, paintsA: hallPaints, paintsB: cabinPaints });
   // corner posts where the cross-hall meets the east hall
   for (const pz of [CROSS_Z0, CROSS_Z1]) {
-    kit.box("satinBlack", HALL_X, y0 + h / 2, pz, 0.24, h, 0.24);
-    kit.collider([HALL_X - 0.12, y0, pz - 0.12], [HALL_X + 0.12, y0 + h, pz + 0.12], "post");
+    kit.box("satinBlack", HALL_X, y0 + h / 2, pz, 0.4, h, 0.4);
+    kit.collider([HALL_X - 0.2, y0, pz - 0.2], [HALL_X + 0.2, y0 + h, pz + 0.2], "post");
   }
   // cabin number stencils by the doors (hall side) and light bars between them
   const A1 = p1.A.frame; // u = x - x0
@@ -55,7 +55,7 @@ export function build(kit, ctx, room) {
   stencil(A1, dxW - x0 - 1.0, 1.9, 0.34, 2);
   stencil(A1, dxE - x0 - 1.0, 1.9, 0.34, 0);
   stencil(A2, HALL_X - dxW + 1.0, 1.9, 0.34, 14);
-  stencil(A2, HALL_X - dxE + 1.0, 1.9, 0.34, 2);
+  stencil(A2, HALL_X - dxE + 1.0, 1.9, 0.34, 8);
   for (const F of [A1, A2]) {
     wallLightBar(F, 0.5, 3.6, 2.45, "emitWarmSoft");
     wallLightBar(F, 6.4, 8.2, 2.45, "emitWarmSoft");
@@ -101,7 +101,7 @@ export function build(kit, ctx, room) {
     { blanket: P.fabricTeal, desk: P.creamDark, sofa: P.fabricTeal, label: 2 },
     { blanket: P.fabricTeal, desk: P.tealPaint, sofa: P.fabricCream, label: 0 },
     { blanket: P.fabricOrange, desk: P.creamDark, sofa: P.fabricTeal, label: 14 },
-    { blanket: P.fabricTeal, desk: P.creamDark, sofa: P.fabricOrange, label: 2 },
+    { blanket: P.fabricTeal, desk: P.creamDark, sofa: P.fabricOrange, label: 8 },
   ];
   cabin(kit, ctx, { x0, x1: DIV_X - T, z0, z1: CROSS_Z0 - T }, y0, h, "+z", false, variants[0]);
   cabin(kit, ctx, { x0: DIV_X + T, x1: HALL_X - T, z0, z1: CROSS_Z0 - T }, y0, h, "+z", true, variants[1]);
@@ -109,9 +109,10 @@ export function build(kit, ctx, room) {
   cabin(kit, ctx, { x0: DIV_X + T, x1: HALL_X - T, z0: CROSS_Z1 + T, z1 }, y0, h, "-z", true, variants[3]);
 
   // ------------------------------------------------------------ hall lights (cabins add their own)
-  for (const lx of [-8.5, -13.5, -18.5, -22.6]) ctx.lights.cool.push(pointLight(0xf0e6d8, 4.5, 7, [lx, yTop - 0.3, 535]));
-  for (const lz of [528, 535, 542]) ctx.lights.cool.push(pointLight(0xf0e6d8, 4.5, 7, [-3.7, yTop - 0.3, lz]));
-  ctx.lights.warm.push(pointLight(0xffc48c, 3.0, 6, [x0 + 1.0, y0 + 2.0, 535]));
+  // six long-reach practicals cover both halls evenly; with the cabins' eight this stays inside the
+  // 14-slot light pool from anywhere in the room
+  for (const lx of [-8.5, -14.5, -20.5]) ctx.lights.cool.push(pointLight(0xf6ecdc, 11, 12, [lx, yTop - 0.3, 535]));
+  for (const lz of [529, 535, 541]) ctx.lights.cool.push(pointLight(0xf6ecdc, 11, 12, [-3.7, yTop - 0.3, lz]));
   return shell;
 }
 
@@ -163,7 +164,7 @@ function cabin(kit, ctx, b, y, h, hallSide, mirrorX, v) {
   west.box("metal", wallU(westDir, X(0), Z(0.72)), 1.66, 0.17, 0.34, 0.24, 0.34, { color: P.darkMetal, texel: 1 });
   west.box("emitWarm", wallU(westDir, X(0), Z(0.72)), 1.6, 0.24, 0.26, 0.05, 0.16);
   for (const ly of [1.62, 1.66, 1.7]) west.box("metal", wallU(westDir, X(0), Z(0.72)), ly, 0.33, 0.28, 0.012, 0.05, { color: P.gunmetal });
-  ctx.lights.warm.push(pointLight(0xffb070, 1.6, 3.5, [X(0.7), y + 1.45, Z(0.72)]));
+  ctx.lights.warm.push(pointLight(0xffb070, 2.5, 4, [X(0.7), y + 1.45, Z(0.72)]));
 
   // --- bedside block with a desk lamp
   MM("satinBlack", 2.65, 3.2, 0.0, 0.55, 0.25, 0.85);
@@ -232,7 +233,7 @@ function cabin(kit, ctx, b, y, h, hallSide, mirrorX, v) {
   const pz = Z(3.6);
   kit.box("paintedMetal", px, yTop - 0.06, pz, 1.4, 0.12, 0.5, { color: P.gunmetal });
   kit.box("emitWarmSoft", px, yTop - 0.125, pz, 1.2, 0.01, 0.3, { uv: "keep" });
-  ctx.lights.warm.push(pointLight(0xffc48c, 6.5, 9, [px, yTop - 0.45, pz]));
+  // one strong warm practical per cabin, hung between the sitting corner and the bunk
+  ctx.lights.warm.push(pointLight(0xffc48c, 15, 12, [px, yTop - 0.45, pz]));
   downlight(kit, X(3.2), yTop, Z(1.5), 0.9, 0.3, "emitWarmSoft");
-  ctx.lights.warm.push(pointLight(0xffd2a0, 4.0, 7, [X(3.2), yTop - 0.4, Z(1.5)]));
 }

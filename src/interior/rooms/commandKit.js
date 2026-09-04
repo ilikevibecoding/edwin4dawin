@@ -394,7 +394,9 @@ export function commPanel(frame, u, v, opts = {}) {
 // a -> b as seen from side A (its normal points to the left of a->b, i.e. U x UP); openings are given in
 // side-A u coordinates and mirrored automatically for side B.
 export function partition(kit, a, b, y, h, opts = {}) {
-  const { openings = [], seed = 900, styles = { panel: 0.86, strip: 0.06, greeble: 0.05, screen: 0.03 }, paintsA = null, paintsB = null, depth = 0.08, tag = "partition" } = opts;
+  // depth must stay >= the shell wall thickness: panelGrid's backing plate reaches 0.05 in front of
+  // -depth, so anything thinner puts the plate in front of the painted faces
+  const { openings = [], seed = 900, styles = { panel: 0.86, strip: 0.06, greeble: 0.05, screen: 0.03 }, paintsA = null, paintsB = null, depth = WALL_T, tag = "partition" } = opts;
   // each face's body lies behind its own plane, so the two planes are pushed apart by the depth
   const dx = b[0] - a[0];
   const dz = b[1] - a[1];

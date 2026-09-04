@@ -66,8 +66,12 @@ export function build(kit, ctx, room) {
   wallScreen(Et, uE(z0 + 3.3), 2.15, 1.5, 0.9, "screen1", { leds: false });
 
   // ------------------------------------------------------------ seating facing the view
-  const rows = [z0 + 7.8, z0 + 12.0, z0 + 20.4];
+  // three full rows, then a fourth on the starboard side only: the port half of that row is the
+  // astrogation globe, kept off the door's sightline so the glass owns the view from the entrance
+  const rows = [z0 + 7.8, z0 + 12.0, z0 + 16.2];
   for (const rz of rows) for (const bx of [x0 + 5.3, x0 + 8.6, x1 - 8.6, x1 - 5.3]) bench(kit, bx, y0, rz, "-z", { len: 3.0, color: P.fabricTeal });
+  const gz = z0 + 20.4;
+  for (const bx of [x1 - 8.6, x1 - 5.3]) bench(kit, bx, y0, gz, "-z", { len: 3.0, color: P.fabricTeal });
   // low guide lights along the centre aisle and the side aisles
   for (const gx of [cx - 1.7, cx + 1.7]) floorStrip(kit, [gx, tz1 + 0.6], [gx, z1 - 2.2], y0, "emitCoolSoft", { w: 0.05 });
   for (const gx of [x0 + 0.75, x1 - 0.75]) floorStrip(kit, [gx, tz1 + 0.6], [gx, z1 - 2.4], y0, "emitCoolSoft", { w: 0.05 });
@@ -136,17 +140,17 @@ export function build(kit, ctx, room) {
   cabinet(A, 0.9, 1.2, 2.0, 0.5, { color: P.cream, label: 13, lamp: "emitRed", band: P.orange });
   cabinet(A, 23.1, 1.2, 2.0, 0.5, { color: P.cream, label: 4, lamp: "emitBlue", band: P.tealPaint });
 
-  // ------------------------------------------------------------ astrogation globe and chart lecterns
-  const gz = z0 + 16.6;
-  kit.cyl("metal", cx, y0 + 0.05, gz, 0.72, 0.1, "y", { color: P.darkMetal, segments: 24 });
-  kit.cyl("satinBlack", cx, y0 + 0.5, gz, 0.55, 0.8, "y", { segments: 24 });
-  kit.cyl("metal", cx, y0 + 0.915, gz, 0.58, 0.03, "y", { color: P.steel, segments: 24 });
-  kit.add("emitBlue", new THREE.TorusGeometry(0.46, 0.015, 8, 48).rotateX(Math.PI / 2), { pos: [cx, y0 + 0.935, gz] });
-  kit.add("leds", new THREE.CylinderGeometry(0.56, 0.56, 0.04, 24, 1, true), { pos: [cx, y0 + 0.6, gz], uv: "keep" });
-  kit.collider([cx - 0.72, y0, gz - 0.72], [cx + 0.72, y0 + 0.95, gz + 0.72], "globe");
-  buildGlobe(ctx, cx, y0 + 1.75, gz);
-  podium(kit, cx - 3.4, y0, gz, "+z", { screen: "screen4" });
-  podium(kit, cx + 3.4, y0, gz, "+z", { screen: "screen1" });
+  // ------------------------------------------------------------ astrogation globe and chart lecterns (port side of the last row)
+  const gx = x0 + 7.0;
+  kit.cyl("metal", gx, y0 + 0.05, gz, 0.72, 0.1, "y", { color: P.darkMetal, segments: 24 });
+  kit.cyl("satinBlack", gx, y0 + 0.5, gz, 0.55, 0.8, "y", { segments: 24 });
+  kit.cyl("metal", gx, y0 + 0.915, gz, 0.58, 0.03, "y", { color: P.steel, segments: 24 });
+  kit.add("emitBlue", new THREE.TorusGeometry(0.46, 0.015, 8, 48).rotateX(Math.PI / 2), { pos: [gx, y0 + 0.935, gz] });
+  kit.add("leds", new THREE.CylinderGeometry(0.56, 0.56, 0.04, 24, 1, true), { pos: [gx, y0 + 0.6, gz], uv: "keep" });
+  kit.collider([gx - 0.72, y0, gz - 0.72], [gx + 0.72, y0 + 0.95, gz + 0.72], "globe");
+  buildGlobe(ctx, gx, y0 + 1.75, gz);
+  podium(kit, gx - 3.4, y0, gz, "+z", { screen: "screen4" });
+  podium(kit, gx + 2.4, y0, gz, "+z", { screen: "screen1" });
 
   // ------------------------------------------------------------ ceiling: dark plate, beams on the pilaster lines, downlights
   kit.boxMM("paintedMetal", [x0 - 0.16, yTop, z0 - 0.16], [x1 + 0.16, yTop + 0.12, z1 + 0.16], { color: P.gunmetal, uv: "world", texel: 0.7 });
@@ -157,11 +161,11 @@ export function build(kit, ctx, room) {
   }
 
   // ------------------------------------------------------------ light: dim and cool, keys from outside the glass
-  for (const [lx, lz] of [[cx - 6, z0 + 3.6], [cx + 6, z0 + 3.6]]) ctx.lights.cool.push(pointLight(0x9fc6ff, 3.2, 9, [lx, y0 + 3.8, lz]));
-  for (const lz of sideZ) for (const lx of [cx - 6, cx + 6]) ctx.lights.cool.push(pointLight(0xb8ccff, 3.8, 10, [lx, yTop - 0.5, lz]));
-  ctx.lights.cool.push(pointLight(0xb8ccff, 4.0, 10, [cx, yTop - 0.5, z1 - 2.2]));
-  ctx.lights.teal.push(pointLight(0x6fb4ff, 1.6, 4.5, [cx, y0 + 1.6, gz]));
-  for (const sx of [cx - 6, cx, cx + 6]) ctx.lights.spots.push(windowSpot(0x9fc6ff, 20, [sx, y0 + 3.2, z0 - 4], [sx, y0 + 0.3, z0 + 9], 0.5));
+  // one practical per downlight (ten, so the 14-slot pool holds the whole gallery), strong enough that
+  // the benches and deck read under a 4.5 m ceiling while staying well below the glow of the glass
+  for (const lz of [z0 + 3.6, ...sideZ, z1 - 2.2]) for (const lx of [cx - 6, cx + 6]) ctx.lights.cool.push(pointLight(0xb8ccff, 16, 14, [lx, yTop - 0.8, lz]));
+  ctx.lights.teal.push(pointLight(0x6fb4ff, 3.0, 5, [gx, y0 + 1.6, gz]));
+  for (const sx of [cx - 6, cx, cx + 6]) ctx.lights.spots.push(windowSpot(0x9fc6ff, 30, [sx, y0 + 3.2, z0 - 4], [sx, y0 + 0.3, z0 + 9], 0.55));
   return shell;
 }
 

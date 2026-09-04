@@ -131,8 +131,8 @@ export function build(kit, ctx, room) {
 
   // ------------------------------------------------------------ red lighting
   const L = ctx.lights;
-  for (const [lx, lz] of [[cx - 3.5, cz - 3.5], [cx + 3.5, cz - 3.5], [cx - 3.5, cz + 3.5], [cx + 3.5, cz + 3.5]]) L.warm.push(pointLight(0xff5040, 5.5, 11, [lx, yTop - 0.3, lz]));
-  L.warm.push(pointLight(0xff6a55, 4.5, 8, [cx, yTop - 0.5, cz]));
-  L.warm.push(pointLight(0xffb347, 1.6, 3.5, [x0 + 0.6, y0 + 1.6, z1 - lu]));
+  for (const [lx, lz] of [[cx - 3.5, cz - 3.5], [cx + 3.5, cz - 3.5], [cx - 3.5, cz + 3.5], [cx + 3.5, cz + 3.5]]) L.warm.push(pointLight(0xff5040, 14, 12, [lx, yTop - 0.5, lz]));
+  L.warm.push(pointLight(0xff6a55, 10, 9, [cx, yTop - 0.6, cz]));
+  L.warm.push(pointLight(0xffb347, 2.5, 4, [x0 + 0.6, y0 + 1.6, z1 - lu]));
   return shell;
 }

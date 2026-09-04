@@ -141,13 +141,14 @@ export function build(kit, ctx, room) {
   downlight(kit, cx + 5, yTop, z1 - 1.3, 0.6, 0.25, "emitBlueSoft");
 
   // ------------------------------------------------------------ lights: dim blue with a red accent
-  // a 3x3 grid of blue practicals so the nearest pooled lights are always this room's own
+  // few, strong, long-reach practicals: the pool only runs 14 point lights, and inverse-square falloff
+  // with a short cutoff leaves isolated hot spots, so a 2x3 grid with a 15 m reach lights the whole room
   const L = ctx.lights;
-  for (const gx of [cx - 7.3, cx, cx + 7.3]) for (const gz of [cz - 6, cz, cz + 6]) L.teal.push(pointLight(0x8fbfff, gx === cx && gz === cz ? 5 : 6.5, 14, [gx, y0 + 3.2, gz]));
-  L.teal.push(pointLight(0x4a8dff, 3.0, 5, [cx, y0 + 1.9, cz]));
-  L.cool.push(pointLight(0xdfe8ff, 5, 12, [cx - 6.5, y0 + 3.1, z0 + 1.8]));
-  L.cool.push(pointLight(0xdfe8ff, 5, 12, [cx + 6.5, y0 + 3.1, z0 + 1.8]));
-  L.warm.push(pointLight(0xff4030, 2.5, 6, [x1 - 0.8, y0 + 2.3, z0 + 4]));
+  for (const gx of [cx - 5.5, cx + 5.5]) for (const gz of [cz - 6, cz, cz + 6]) L.teal.push(pointLight(0x8fbfff, 15, 15, [gx, y0 + 2.9, gz]));
+  L.teal.push(pointLight(0x4a8dff, 5.0, 6, [cx, y0 + 1.9, cz]));
+  L.cool.push(pointLight(0xdfe8ff, 9, 12, [cx - 6.5, y0 + 3.1, z0 + 1.8]));
+  L.cool.push(pointLight(0xdfe8ff, 9, 12, [cx + 6.5, y0 + 3.1, z0 + 1.8]));
+  L.warm.push(pointLight(0xff4030, 4, 6, [x1 - 0.8, y0 + 2.3, z0 + 4]));
   return shell;
 }
 
