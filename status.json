@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-04T07:56:03.200Z",
+  "updated": "2026-09-04T07:57:43.102Z",
   "phase": "Phase 3 of 5: parallel builders finishing, merging + verifying into the integration branch",
   "summary": "Plan: (1) baseline measured, (2) shared disaster foundation built, (3) 7 builder agents in isolated worktrees, (4) independent critics + verification agents, (5) final baseline comparison, changelog, PR. Nothing counts as done until it is merged, tested and measured in the actual game.",
   "links": [
@@ -36,7 +36,7 @@
     {
       "name": "NPC + animal eyes and blinking",
       "status": "in review",
-      "detail": "Cyclops fixed, blink verified live; independent critic requested brow/iris contrast and dark-coat horse eye fixes - builder applying them (round 2)."
+      "detail": "Round 2 merged (skin-shadow brows, lighter irises, coat-aware horse eyes, cow side wrap, bonnet brim); independent critic re-reviewing for the final verdict."
     },
     {
       "name": "Multiplayer (server-authoritative, synchronized disasters)",
@@ -90,6 +90,14 @@
     }
   ],
   "screenshots": [
+    {
+      "src": "img/eyes_horse_black.png",
+      "caption": "Black-coat horse eye before/after (round 2) (07:57 UTC)"
+    },
+    {
+      "src": "img/eyes_round2.png",
+      "caption": "Eyes round 2: Abigail before/after in daylight and indoors (07:57 UTC)"
+    },
     {
       "src": "img/tsunami_aerial.png",
       "caption": "Aerial view of the flooded town (07:56 UTC)"
@@ -151,6 +159,10 @@
     {
       "time": "2026-09-04 07:56 UTC",
       "text": "Tsunami merged: 12/12 lifecycle/replay/restore checks pass; engine relight coalescing + border-aware neighbour remesh added to cut flood frame cost."
+    },
+    {
+      "time": "2026-09-04 07:57 UTC",
+      "text": "Eyes round 2 merged into the integration branch; critic re-review started."
     }
   ],
   "issues": [
