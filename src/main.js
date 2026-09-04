@@ -15,8 +15,12 @@ import { CellManager, Cell } from "./cells.js";
 import { buildDoors } from "./doors.js";
 import { LiftSystem } from "./lifts.js";
 import { CameraRig, FAR, NEAR_IN } from "./cameras.js";
-import { buildExterior } from "./exterior/hull.js";
+import { buildExteriorAll } from "./exterior/index.js";
 import { builderFor } from "./rooms/index.js";
+import { createTraffic } from "./fighters/traffic.js";
+import { createFlightControl } from "./systems/flight.js";
+import { createLandingSystem } from "./systems/landing.js";
+import { createNetAdapter } from "./net.js";
 import { ROOMS, ROOM_BY_ID, DOORS, DECKS, DECK_ORDER, KESTREL, EXTERIOR_VIEWS, roomDoors, SHIP_NAME, HULL } from "./spec.js";
 
 // ---------------------------------------------------------------------------
@@ -65,7 +69,7 @@ scene.add(sun.target);
 const hemi = new THREE.HemisphereLight(0x3a4a66, 0x101418, 0.35);
 scene.add(hemi);
 
-const exterior = buildExterior(scene, materials);
+const exterior = buildExteriorAll(scene, materials, camera);
 
 const cells = new CellManager({ scene, materials });
 const ctxBase = { materials, audio, accentKey: (room) => accentKeyFor(room) };
@@ -120,6 +124,10 @@ let rig = null;
 let lifts = null;
 let interactions = null;
 let doors = [];
+let traffic = null;
+let net = null;
+const flight = createFlightControl(space);
+const landing = createLandingSystem();
 
 // ---------------------------------------------------------------------------
 // Environment maps: a synthetic Imperial interior for inside, the real sky for the hull
@@ -261,6 +269,19 @@ async function buildInterior() {
     audio.setZone(zoneFor(cell.room));
     if (prev && cell.room.deck !== prev.room.deck) hud.setStatus(`${DECKS[cell.room.deck].name}.`);
   };
+  // fighter traffic lives in world coordinates but is parented to the hangar cell so it shows / hides with it
+  try {
+    traffic = createTraffic({ materials, audio, camera });
+    const hangarCell = cells.cells.get("hangar");
+    if (hangarCell && traffic.group) {
+      traffic.group.position.set(-hangarCell.room.origin[0], -hangarCell.room.origin[1], -hangarCell.room.origin[2]);
+      hangarCell.group.add(traffic.group);
+    }
+  } catch (e) {
+    console.error("[fighters] traffic failed:", e);
+    traffic = null;
+  }
+  net = createNetAdapter({ doors, lifts, traffic, rig });
   buildInteriorEnvironment();
   // place the player on the bridge by default (spawn views can override)
   teleport("bridge");
@@ -549,6 +570,12 @@ const debugAPI = {
   },
   toExterior: (preset) => rig.toExterior(preset),
   toInterior: () => rig.toInterior(),
+  get traffic() {
+    return traffic;
+  },
+  netState: () => (net ? net.getState() : null),
+  flight,
+  landing,
   cameraState: () => rig.getState(),
   audioLog: () => audio.recent(),
   getStats() {
@@ -647,6 +674,8 @@ function frame() {
     lifts.update(dt, t);
     interactions.update();
     exterior.update(camera, dt, t);
+    if (traffic && (cells.visibleIds.has("hangar") || rig.exterior)) traffic.update(dt, t, camera);
+    flight.update(dt);
     updateSun();
     // fog: per-room density inside, none outside
     const target = rig.exterior || rig.mode === "transition" ? 0.00002 : cells.fogTarget;

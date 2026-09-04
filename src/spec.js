@@ -376,7 +376,22 @@ export const HANGAR = {
     { x: -50, z0: -20, z1: 55, n: 6 },
     { x: 50, z0: -20, z1: 55, n: 6 },
   ],
+  // TIE-style fighter envelope shared by the model, the racks and the traffic paths (metres)
+  tie: { ballR: 1.75, wingHalfSpan: 3.3, wingH: 7.6, wingW: 4.4, clampH: 1.6 },
 };
+/** World position of the centre of the fighter docked in rack row `row`, slot `k`. */
+export function rackSlot(row, k) {
+  const r = HANGAR.rackRows[row];
+  const z = r.z0 + ((r.z1 - r.z0) * (k + 0.5)) / r.n;
+  const y = HANGAR.ceilingY - HANGAR.tie.clampH - HANGAR.tie.wingH / 2 - 0.4;
+  return new THREE.Vector3(r.x, y, z);
+}
+/** Fighter parking spots on the deck (world), used by the hangar builder and the traffic system. */
+export const DECK_SPOTS = [
+  { x: -44, z: 35, yaw: Math.PI * 0.5 },
+  { x: -44, z: 48, yaw: Math.PI * 0.5 },
+  { x: 44, z: -110, yaw: -Math.PI * 0.5 },
+];
 
 // ---------------------------------------------------------------------------
 // Exterior camera presets (world positions and look-at targets)
