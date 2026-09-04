@@ -1,11 +1,14 @@
 // Chunk streaming + rendering: generation/lighting/meshing budgets and the world shader.
 import * as THREE from 'three';
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH, DEFAULT_RENDER_DISTANCE } from './constants.js';
-import { Mesher, SHADE_SCALE } from './mesher.js';
+import { Mesher, LIGHT_TABLE, SHADE_TABLE } from './mesher.js';
 import { World } from './world.js';
 
-// aLight is a normalized uint8 pair holding the light sum k in 0..60 (k/255); aShade is shade * SHADE_SCALE.
+// aLight (uint8 pair: light sums 0..60) and aShade (uint8 table index) are expanded through uniform tables that
+// hold the exact float32 values the old Float32 attributes carried (see the vertex layout note in mesher.js).
 const VERT = /* glsl */ `
+uniform float uLightTable[${LIGHT_TABLE.length}];
+uniform float uShadeTable[${SHADE_TABLE.length}];
 attribute vec2 aLight;
 attribute float aShade;
 varying vec2 vUv;
@@ -14,8 +17,8 @@ varying float vShade;
 varying float vDist;
 void main() {
   vUv = uv;
-  vLight = aLight * (255.0 / 60.0);
-  vShade = aShade / ${SHADE_SCALE.toFixed(1)};
+  vLight = vec2(uLightTable[int(aLight.x)], uLightTable[int(aLight.y)]);
+  vShade = uShadeTable[int(aShade)];
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
   gl_Position = projectionMatrix * mv;
@@ -70,6 +73,8 @@ export function makeWorldMaterial(atlas, opts = {}) {
       uOpacity: { value: opts.opacity ?? 1 },
       uTime: { value: 0 },
       uFlash: { value: 0 },
+      uLightTable: { value: LIGHT_TABLE },
+      uShadeTable: { value: SHADE_TABLE },
     },
     vertexShader: VERT,
     fragmentShader: FRAG,
