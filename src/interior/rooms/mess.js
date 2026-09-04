@@ -176,7 +176,7 @@ export function build(kit, ctx, room, lib) {
   // practicals rather than one per pendant.
   for (const z of rows) for (const cx of tableX) ctx.lights.warm.push(pointLight(0xffc48c, 10.0, 14, [cx, yTop - 0.9, z]));
   for (const x of [5.0, 12.0, 17.5]) ctx.lights.warm.push(pointLight(0xffd2a8, 8.0, 12, [x, yTop - 0.6, 497]));
-  for (const z of [495.0, 499.0]) ctx.lights.warm.push(pointLight(0xffb060, 5.5, 9, [PART_X - 0.3, y0 + 2.2, z]));
+  for (const z of [495.0, 499.0]) ctx.lights.warm.push(pointLight(0xffb060, 6.5, 9, [PART_X - 0.3, y0 + 1.7, z]));
   for (const z of [491, 503]) ctx.lights.cool.push(pointLight(0xe0ecff, 7.5, 12, [23.5, yTop - 0.6, z]));
   ctx.lights.cool.push(pointLight(0xe0ecff, 7.0, 12, [23.5, yTop - 0.6, 497]));
   return shell;
@@ -243,8 +243,8 @@ function servingCounter(kit, ctx, y0, frosted) {
   for (let i = 0; i < 6; i++) {
     const z = za + 0.75 + i * 1.28;
     kit.cyl("metal", PART_X - 0.1, y0 + 2.04, z, 0.012, 0.08, "y", { color: PALETTE.darkMetal, segments: 8 });
-    kit.cyl("paintedMetal", PART_X - 0.1, y0 + 1.93, z, 0.16, 0.16, "y", { color: PALETTE.gunmetal, segments: 20 });
-    kit.cyl("emitAmber", PART_X - 0.1, y0 + 1.845, z, 0.13, 0.012, "y", { uv: "keep", segments: 20 });
+    kit.cyl("paintedMetal", PART_X - 0.1, y0 + 1.93, z, 0.2, 0.16, "y", { color: PALETTE.gunmetal, segments: 20 });
+    kit.cyl("emitAmber", PART_X - 0.1, y0 + 1.845, z, 0.17, 0.012, "y", { uv: "keep", segments: 20 });
   }
   // cutlery and napkin station at the hall end of the counter
   kit.box("metal", xa - 0.12, y0 + 1.0, zb - 0.6, 0.24, 0.02, 0.5, { color: PALETTE.steel });
