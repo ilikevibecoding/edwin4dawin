@@ -1,15 +1,19 @@
 # Status — C: crew-engineering
 
-Branch: `cursor/sd-crew-engineering-f9bd` · Last push: (pending) · 2026-09-04 06:10 UTC
-Run: `bc-5c9df309-dc4c-491e-8f9c-0acd3054f9bd` · Phase: 0
+Branch: `cursor/sd-crew-engineering-f9bd` · Last push: f0785ba2 · 2026-09-04 07:05 UTC
+Run: `bc-5c9df309-dc4c-491e-8f9c-0acd3054f9bd` · Phase: 2
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
 
 Agent C owns Deck 2 (crew + operations, floor y +40) and Deck 3 (engineering, floor y +12):
 13 manifests on Deck 2 (9 rooms + lobby + 3 corridor arms) and 5 on Deck 3 (3 rooms + lobby + 1
-corridor), 18 modules total, all under `src/rooms/deck2/**` and `src/rooms/deck3/**`. Phase 0: branch
-created, plan below, no code yet. Next: greybox every manifest with closed shells at 1:1, then a local
-(uncommitted) registry shim to validate bounds/doors/views and run the harness before the scaffold lands.
+corridor), 18 modules total, all under `src/rooms/deck2/**` and `src/rooms/deck3/**`.
+**Phase 1 is pushed**: every module is a §7 manifest with a closed 1:1 shell (floor slab, panelled
+walls with black seams, kick, light strip, cornice, ceiling with light channels, door holes from the
+shared door table), 54 harness views, 0 registry warnings on a local shim of the §7/§8 contract.
+**Phase 2 in progress**: six subagents detailing rooms in parallel (split below); a shared Imperial
+props library (`_shared/props.js`) is in. Corridors still use my shell; they switch to D's
+`corridorSegment` when `src/systems/corridor/corridor.js` lands.
 
 ## Plan
 
@@ -90,29 +94,76 @@ Views: ≥ 3 per room, named `<roomId>-<what>` (e.g. `d2-mess-hall`, `d2-mess-ga
 ## Subagents
 | # | Deliverable | Files | Status |
 |---|---|---|---|
-| — | Phase 1 greybox of all 18 manifests + local shell helper (done by C directly for consistency) | `src/rooms/deck2/_shared/*`, all `index.js` | pending |
-| 1 | Deck 2 hub: lobby + 3 corridor arms (switch to D's corridor kit when it lands) | `src/rooms/deck2/{lobby,cor-w,cor-e,cor-n}/**` | pending |
-| 2 | Medbay + crew quarters | `src/rooms/deck2/{medbay,quarters}/**` | pending |
-| 3 | Briefing + recreation lounge | `src/rooms/deck2/{briefing,rec}/**` | pending |
-| 4 | Mess hall/galley + armory + security/detention | `src/rooms/deck2/{mess,armory,security}/**` | pending |
-| 5 | Life support + escape-pod bay | `src/rooms/deck2/{lifesupport,escape}/**` | pending |
-| 6 | Deck 3: lobby, corridor, engineering control, reactor, hyperdrive | `src/rooms/deck3/**` | pending |
-| critic | Blind visual critic: sees only screenshots + §1/§11 brief, reports per view | (none) | pending |
+| — | Phase 1 greybox of all 18 manifests + shell/doors/materials/props helpers (C directly, for consistency) | `src/rooms/deck2/_shared/*`, all `index.js` | done (48e88572, f0785ba2) |
+| 1 | Lobbies + corridors, both decks (switch to D's corridor kit when it lands) | `src/rooms/deck2/{lobby,cor-w,cor-e,cor-n}/**`, `src/rooms/deck3/{lobby,cor}/**` | running (port 5101) |
+| 2 | Medbay + crew quarters | `src/rooms/deck2/{medbay,quarters}/**` | running (5102) |
+| 3 | Briefing + recreation lounge | `src/rooms/deck2/{briefing,rec}/**` | running (5103) |
+| 4 | Mess hall/galley + armory + security/detention | `src/rooms/deck2/{mess,armory,security}/**` | running (5104) |
+| 5 | Life support + escape-pod bay | `src/rooms/deck2/{lifesupport,escape}/**` | running (5105) |
+| 6 | Engineering control, reactor chamber, hyperdrive room | `src/rooms/deck3/{engctl,reactor,hyperdrive}/**` | running (5106) |
+| critic | Blind visual critic: sees only screenshots + §1/§11 brief, reports per view | (none) | after subagents report |
 
 Ports: C = 5173, subagents 5101–5106. Harness runs are serialised through `flock /tmp/c-shots.lock`.
 
 ## Done
-- Nothing yet (Phase 0).
+- All 18 manifests (Phase 1 greybox): bounds, doors (from `_shared/doors.js`, one table, both rooms of
+  a pair pull the same entry), spawn, ≥ 3 views each (54 total), closed shells at 1:1 via
+  `_shared/shell.js` (0.30 m walls inside bounds, kick 0.4 m, light strip at 2.05 m, cornice, ceiling
+  light channels, ribs on corridors, door holes cut to §9.1 sizes, window reveals + glass).
+- `d3-reactor`: ring catwalk (8 m) at y 12 around a r 9 core column (y 4.5..98) with amber bands, four
+  radial bridges to a r 13 service platform, rails, pit floor at y 4.
+- `d3-hyperdrive`: 9 m motivator cylinder on three cradles, coil banks along both walls, rails.
+- `d3-engctl` ↔ `d3-reactor` share a window (x −26..−2, y 13.2..17.5) on the z 612.5 plane.
+- `_shared/materials.js`: `imperialExtras(shared)` returns ONLY the §10 Imperial keys the shared
+  library does not provide yet (impPanel, impFloor, blackGloss, emitWhite/Blue/RedImp/Amber/Green,
+  screenImp0..3, holo), so modules render before and after the scaffold; A's keys win when present.
+- `_shared/props.js`: placer + console (sloped screen bank, indicator field), indicators, chair,
+  wall screen, crate, locker bank, 3-tier bunks, table+benches, pipe, duct, tank, pillar, stairs,
+  holo table, floor lines, drop light, cabinet, hazard strip.
+
+Phase 1 numbers (local shim, all 18 modules loaded, streaming = room + door neighbours, light pool
+12 point / 4 spot):
+
+| Module | calls | tris | lights | colliders | build ms |
+|---|---|---|---|---|---|
+| `d2-armory` | 5 | 5,304 | 4 | 5 | 17.5 |
+| `d2-briefing` | 4 | 6,888 | 4 | 5 | 12.2 |
+| `d2-cor-e` | 5 | 6,048 | 6 | 9 | 9 |
+| `d2-cor-n` | 5 | 4,536 | 5 | 6 | 6.8 |
+| `d2-cor-w` | 5 | 5,868 | 6 | 9 | 6.7 |
+| `d2-escape` | 5 | 9,408 | 6 | 5 | 11.9 |
+| `d2-lifesupport` | 5 | 10,200 | 6 | 5 | 13 |
+| `d2-lobby` | 5 | 3,264 | 4 | 8 | 3.9 |
+| `d2-medbay` | 4 | 8,760 | 6 | 5 | 9.5 |
+| `d2-mess` | 4 | 10,704 | 6 | 5 | 11.3 |
+| `d2-quarters` | 4 | 7,464 | 6 | 5 | 7.8 |
+| `d2-rec` | 4 | 7,608 | 6 | 5 | 9.2 |
+| `d2-security` | 5 | 8,760 | 6 | 5 | 8.9 |
+| `d3-cor` | 6 | 5,268 | 6 | 7 | 5.7 |
+| `d3-engctl` | 6 | 11,568 | 6 | 6 | 14.4 |
+| `d3-hyperdrive` | 7 | 19,848 | 7 | 25 | 23.5 |
+| `d3-lobby` | 6 | 3,996 | 4 | 6 | 7.7 |
+| `d3-reactor` | 6 | 24,340 | 9 | 24 | 30.9 |
+
+Whole-frame per view (active set ≤ 6 rooms): 29–51 draw calls, 4k–56k tris, ≤ 12 pool lights.
 
 ## Tested
-- Nothing yet.
+- How: local uncommitted rig `sandbox-c/` (excluded via `.git/info/exclude`) implementing §7 discovery
+  (`import.meta.glob("src/rooms/deck{2,3}/**/index.js")`), §8 ctx, descriptor → light, §9.4 pool
+  (12 point / 4 spot nearest-by-priority), §9.5 active set (room containing the player + door
+  neighbours), and a harness that accepts any registered view name. Screenshots stay in `/tmp/c-shots`.
+- Validation: bounds inside the deck envelope, doors paired by id with identical pos / opposite dir /
+  same kind, pos on a bounds face, no AABB overlaps, unique view names, spawn present, per-module
+  budgets. Result for all 18: **0 warnings**, all 54 views captured (`p1_all`).
+- Not yet: the real registry (A's scaffold not landed), D's doors (holes are visible as dark voids),
+  a critic pass (Phase 2).
 
 ## Remaining
-1. Greybox all 18 manifests (closed shells, doors, spawn, views) — Phase 1.
-2. Local registry/ctx shim (uncommitted) to load manifests, validate, and drive the harness.
-3. Phase 2 detail per room via subagents 1–6 + critic loop; push after each room.
-4. Switch corridors to D's `corridorSegment` once `src/systems/corridor/corridor.js` exists.
-5. Phase 3: budgets table, zero warnings, status complete.
+1. Phase 2 detail per room via subagents 1–6 (running) → commit per room as they report.
+2. Blind critic pass over every view; fix findings; re-shoot; push.
+3. Switch corridors to D's `corridorSegment` once `src/systems/corridor/corridor.js` exists; re-test
+   on the real registry once `src/core/registry.js` lands (drop the shim).
+4. Phase 3: budgets table, zero warnings, status complete.
 
 ## Blockers
 - None. Scaffold (`src/core/registry.js`) not landed yet; I test with a local uncommitted shim that
@@ -128,4 +179,10 @@ Ports: C = 5173, subagents 5101–5106. Harness runs are serialised through `flo
   `src/kit/frame.js` / `src/kit/panels.js` land I will use them for detail passes where useful.
 
 ## Interface notes
-- None. Everything above is inside the §6.3 envelopes with the fixed lift anchors.
+- Corridor widths are 5.0 m (not 4.0) so a 4.0 m blast door between lobby and corridor leaves 0.5 m
+  of wall on each side; door positions in the table above are updated accordingly (rooms north of the
+  spine end at z 372.5, south rooms start at 377.5; `d2-cor-n` is x −2.5..2.5; `d3-cor` is x 4..9).
+- Deck 3 shares helpers from `src/rooms/deck2/_shared/` (imports by relative path) because there is
+  no `src/rooms/shared` in the ownership table; there is no `index.js` in `_shared`, so the registry
+  glob does not pick it up.
+- `d3-reactor` bounds min y = 4 (pit), everything else min y = floor − 0.5.
