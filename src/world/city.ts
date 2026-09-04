@@ -5,18 +5,30 @@ import { Zone, type District, type WorldMap } from './map';
 import type { Block } from './roads';
 import { createFacadeMaterial } from './facade';
 
-/** Unit geometries. All are 1 m wide/deep centred on x/z and span y in [0,1]. */
+// ------------------------------------------------------------------ unit geometries
+// All are 1 m wide/deep centred on x/z and span y in [0,1]. Every geometry carries an `aPart` vertex
+// attribute (0 = rigid); only the house uses it to morph its roof per instance (see facade.ts).
+
+function withPart(g: THREE.BufferGeometry, part: (x: number, y: number, z: number) => number): THREE.BufferGeometry {
+  const p = g.getAttribute('position');
+  const a = new Float32Array(p.count);
+  for (let i = 0; i < p.count; i++) a[i] = part(p.getX(i), p.getY(i), p.getZ(i));
+  g.setAttribute('aPart', new THREE.BufferAttribute(a, 1));
+  if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(p.count * 2), 2));
+  return g;
+}
 function unitBox(): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(1, 1, 1);
   g.translate(0, 0.5, 0);
-  return g;
+  return withPart(g, () => 0);
 }
-function unitCylinder(segments = 20): THREE.BufferGeometry {
-  const g = new THREE.CylinderGeometry(0.5, 0.5, 1, segments);
+function unitPrism(segments: number, rotOffset: number): THREE.BufferGeometry {
+  const g = new THREE.CylinderGeometry(0.5, 0.5, 1, segments, 1, false, rotOffset);
   g.translate(0, 0.5, 0);
-  return g;
+  return withPart(g, () => 0);
 }
-function unitFrustum(topScale = 0.6): THREE.BufferGeometry {
+/** Tapered box (pyramidal crowns, masts): top face scaled to `topScale`. */
+function unitFrustum(topScale = 0.3): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(1, 1, 1);
   const p = g.getAttribute('position') as THREE.BufferAttribute;
   for (let i = 0; i < p.count; i++) {
@@ -25,7 +37,7 @@ function unitFrustum(topScale = 0.6): THREE.BufferGeometry {
   }
   g.translate(0, 0.5, 0);
   g.computeVertexNormals();
-  return g;
+  return withPart(g, () => 0);
 }
 function unitShear(): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(1, 1, 1);
@@ -36,61 +48,30 @@ function unitShear(): THREE.BufferGeometry {
   }
   g.translate(0, 0.5, 0);
   g.computeVertexNormals();
-  return g;
+  return withPart(g, () => 0);
 }
-/** House with a gable roof: walls up to 0.68, ridge at 1.0. */
-function houseGable(): THREE.BufferGeometry {
-  const body = new THREE.BoxGeometry(1, 0.68, 1);
-  body.translate(0, 0.34, 0);
-  const roof = new THREE.BufferGeometry();
-  const o = 0.08; // overhang
-  const verts = new Float32Array([
-    // left slope
-    -0.5 - o, 0.66, -0.5 - o, 0, 1.0, -0.5 - o, 0, 1.0, 0.5 + o,
-    -0.5 - o, 0.66, -0.5 - o, 0, 1.0, 0.5 + o, -0.5 - o, 0.66, 0.5 + o,
-    // right slope
-    0.5 + o, 0.66, -0.5 - o, 0, 1.0, 0.5 + o, 0, 1.0, -0.5 - o,
-    0.5 + o, 0.66, -0.5 - o, 0.5 + o, 0.66, 0.5 + o, 0, 1.0, 0.5 + o,
-    // gable ends
-    -0.5, 0.68, -0.5, 0.5, 0.68, -0.5, 0, 1.0, -0.5,
-    -0.5, 0.68, 0.5, 0, 1.0, 0.5, 0.5, 0.68, 0.5,
-  ]);
-  roof.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-  roof.computeVertexNormals();
-  return mergeSimple([body, roof]);
-}
-function houseHip(): THREE.BufferGeometry {
-  const body = new THREE.BoxGeometry(1, 0.68, 1);
-  body.translate(0, 0.34, 0);
-  const o = 0.08;
-  const a = [-0.5 - o, 0.66, -0.5 - o], b = [0.5 + o, 0.66, -0.5 - o], c = [0.5 + o, 0.66, 0.5 + o], d = [-0.5 - o, 0.66, 0.5 + o];
-  const r1 = [-0.2, 1.0, 0], r2 = [0.2, 1.0, 0];
-  const tri = (p: number[], q: number[], r: number[]) => [...p, ...q, ...r];
-  const verts = new Float32Array([
-    ...tri(a, r1, b), ...tri(b, r1, r2), // hmm front slope split
-    ...tri(b, r2, c),
-    ...tri(c, r2, d), ...tri(d, r2, r1),
-    ...tri(d, r1, a),
-  ]);
-  const roof = new THREE.BufferGeometry();
-  roof.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-  roof.computeVertexNormals();
-  return mergeSimple([body, roof]);
-}
-function houseFlat(): THREE.BufferGeometry {
+/** House: full-height body box (top vertices tagged 1) plus a gable roof prism (eaves tagged 2, ridge tagged 3).
+ *  The vertex shader lowers the body top to 0.68 under a pitched roof, shortens the ridge for hip roofs and
+ *  collapses the prism for flat roofs, so one instanced geometry covers gable / hip / flat houses and pools. */
+function unitHouse(): THREE.BufferGeometry {
   const body = new THREE.BoxGeometry(1, 1, 1);
   body.translate(0, 0.5, 0);
-  const wing = new THREE.BoxGeometry(0.5, 0.65, 0.6);
-  wing.translate(0.55, 0.325, 0.25);
-  return mergeSimple([body, wing]);
-}
-function warehouse(): THREE.BufferGeometry {
-  const body = new THREE.BoxGeometry(1, 0.9, 1);
-  body.translate(0, 0.45, 0);
-  // low pitched roof cap
-  const cap = new THREE.BoxGeometry(1.02, 0.1, 1.02);
-  cap.translate(0, 0.95, 0);
-  return mergeSimple([body, cap]);
+  const o = 0.08; // eave overhang
+  const e = 0.5 + o, ey = 0.66;
+  const A = [-e, ey, -e], B = [e, ey, -e], C = [e, ey, e], D = [-e, ey, e];
+  const R0 = [0, 1.0, -e], R1 = [0, 1.0, e];
+  const tri = (p: number[], q: number[], r: number[]) => [...p, ...q, ...r];
+  const verts = new Float32Array([
+    ...tri(A, R0, R1), ...tri(A, R1, D),   // left slope
+    ...tri(B, C, R1), ...tri(B, R1, R0),   // right slope
+    ...tri(A, B, R0),                      // front end
+    ...tri(D, R1, C),                      // back end
+  ]);
+  const roof = new THREE.BufferGeometry();
+  roof.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+  roof.computeVertexNormals();
+  const merged = mergeSimple([body, roof]);
+  return withPart(merged, (_x, y, _z) => (y > 0.99 ? (Math.abs(_x) < 0.01 ? 3 : 1) : y > 0.6 && y < 0.7 && Math.abs(_x) > 0.55 ? 2 : 0));
 }
 
 function mergeSimple(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
@@ -107,11 +88,16 @@ function mergeSimple(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return g;
 }
 
-export type Kind = 'box' | 'cyl' | 'frustum' | 'shear' | 'gable' | 'hip' | 'flat' | 'warehouse' | 'spire';
+export type Kind = 'box' | 'cyl' | 'oct' | 'frustum' | 'shear' | 'house';
 
-interface Instance { x: number; y: number; z: number; w: number; h: number; d: number; rot: number; color: THREE.Color; style: number; floorH: number; seed: number; roof: number; }
+interface Instance {
+  x: number; y: number; z: number; w: number; h: number; d: number; rot: number; color: THREE.Color;
+  style: number; floorH: number; seed: number; roof: number;
+  /** fraction of windows lit at night, warm/cool mix, facade variant, house roof form (0 gable, 1 hip, 2 flat) */
+  lit: number; warm: number; variant: number; form: number;
+}
 
-/** Spatially tiled instance batches so far tiles can be frustum-culled. */
+/** Spatially tiled instance batches so far tiles can be frustum-culled and stop casting shadows. */
 export class BuildingBatches {
   readonly group = new THREE.Group();
   private readonly lists = new Map<string, Instance[]>();
@@ -119,19 +105,19 @@ export class BuildingBatches {
   readonly material: THREE.MeshStandardMaterial;
   count = 0;
   readonly tileSize = 1500;
+  /** tile grid origin chosen so the downtown district falls inside a single tile */
+  private readonly tileOx = -3400;
+  private readonly tileOz = -4520;
   private readonly tiles: { mesh: THREE.InstancedMesh; cx: number; cz: number; r: number }[] = [];
-  shadowDistance = 2600;
+  shadowDistance = 3200;
 
   constructor(nightUniform: THREE.IUniform<number>) {
     this.material = createFacadeMaterial(nightUniform);
-    this.geos = {
-      box: unitBox(), cyl: unitCylinder(), frustum: unitFrustum(), shear: unitShear(), gable: houseGable(), hip: houseHip(), flat: houseFlat(), warehouse: warehouse(),
-      spire: (() => { const g = new THREE.CylinderGeometry(0.1, 0.5, 1, 6); g.translate(0, 0.5, 0); return g; })(),
-    };
+    this.geos = { box: unitBox(), cyl: unitPrism(16, 0), oct: unitPrism(8, Math.PI / 8), frustum: unitFrustum(0.3), shear: unitShear(), house: unitHouse() };
   }
 
   add(kind: Kind, inst: Instance): void {
-    const tx = Math.floor(inst.x / this.tileSize), tz = Math.floor(inst.z / this.tileSize);
+    const tx = Math.floor((inst.x - this.tileOx) / this.tileSize), tz = Math.floor((inst.z - this.tileOz) / this.tileSize);
     const key = `${kind}|${tx}|${tz}`;
     let list = this.lists.get(key);
     if (!list) { list = []; this.lists.set(key, list); }
@@ -140,35 +126,33 @@ export class BuildingBatches {
   }
 
   build(): void {
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), e = new THREE.Euler();
     for (const [key, list] of this.lists) {
       const kind = key.split('|')[0] as Kind;
-      const geo = this.geos[kind];
+      const geo = this.geos[kind].clone(); // per-mesh copy so the instanced attributes are unique per tile
       const mesh = new THREE.InstancedMesh(geo, this.material, list.length);
       const dims = new Float32Array(list.length * 3);
       const style = new Float32Array(list.length * 4);
+      const style2 = new Float32Array(list.length * 4);
       const box = new THREE.Box3();
       list.forEach((inst, i) => {
         p.set(inst.x, inst.y, inst.z);
-        q.setFromEuler(new THREE.Euler(0, inst.rot, 0));
+        q.setFromEuler(e.set(0, inst.rot, 0));
         s.set(inst.w, inst.h, inst.d);
         mesh.setMatrixAt(i, m.compose(p, q, s));
         mesh.setColorAt(i, inst.color);
         dims[i * 3] = inst.w; dims[i * 3 + 1] = inst.h; dims[i * 3 + 2] = inst.d;
         style[i * 4] = inst.style; style[i * 4 + 1] = inst.floorH; style[i * 4 + 2] = inst.seed; style[i * 4 + 3] = inst.roof;
+        style2[i * 4] = inst.lit; style2[i * 4 + 1] = inst.warm; style2[i * 4 + 2] = inst.variant; style2[i * 4 + 3] = inst.form;
         const r = Math.hypot(inst.w, inst.d) * 0.6;
-        box.expandByPoint(new THREE.Vector3(inst.x - r, inst.y, inst.z - r));
-        box.expandByPoint(new THREE.Vector3(inst.x + r, inst.y + inst.h, inst.z + r));
+        box.expandByPoint(p.set(inst.x - r, inst.y, inst.z - r));
+        box.expandByPoint(p.set(inst.x + r, inst.y + inst.h, inst.z + r));
       });
       geo.setAttribute('aDims', new THREE.InstancedBufferAttribute(dims, 3));
       geo.setAttribute('aStyle', new THREE.InstancedBufferAttribute(style, 4));
-      // per-mesh geometry copy so the instanced attributes are unique per tile
-      const g2 = geo.clone();
-      g2.setAttribute('aDims', new THREE.InstancedBufferAttribute(dims, 3));
-      g2.setAttribute('aStyle', new THREE.InstancedBufferAttribute(style, 4));
-      mesh.geometry = g2;
-      g2.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
-      g2.boundingBox = box;
+      geo.setAttribute('aStyle2', new THREE.InstancedBufferAttribute(style2, 4));
+      geo.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+      geo.boundingBox = box.clone();
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.instanceMatrix.needsUpdate = true;
@@ -187,8 +171,49 @@ export class BuildingBatches {
   }
 }
 
-const PASTELS = ['#f4efe6', '#f7f3ea', '#efe4d2', '#efe0d3', '#f0dccb', '#dfe9e6', '#d9e6ea', '#f3e9c9', '#e9e0ea', '#ecd6d8', '#e2eadb', '#ffffff', '#e8e8e4', '#d6d3cc', '#f2f2ef', '#e6e2da'];
-const TOWER_TINTS = ['#dfe6ea', '#cfd8dc', '#e8e0d4', '#f2f2f0', '#b9c6cf', '#d8cfc2', '#c9d6d9', '#efe9df'];
+// ------------------------------------------------------------------ facade families
+
+/** Shader style ids (see facade.ts). */
+const S = { GLASS_BLUE: 0, PUNCHED: 1, BALCONY: 2, DECO: 3, INDUSTRIAL: 4, HOUSE: 5, CONCRETE: 6, HOTEL: 7, GLASS_GREEN: 8, STONE: 9, BRICK: 10, GRID: 11, POOL: 12, HELIPAD: 13 } as const;
+
+interface Family { style: number; floorH: number; tints: readonly string[]; lit: [number, number]; warm: [number, number]; }
+
+const WHITES = ['#f6f3ec', '#f2efe6', '#ffffff', '#efe9dc', '#f4f1ea', '#e9e6df', '#f8f6f1'];
+const CREAMS = ['#efe4cf', '#f1e6cf', '#e8dcc3', '#f3ead6', '#ecdfc4'];
+const PEACHES = ['#f2c9a8', '#f0bfa0', '#efd1b3', '#f4b8a0', '#f7cdb6', '#eeb497'];
+const PINKS = ['#efc0c6', '#f3cfd4', '#e9b7c0', '#f7d5dc', '#e8a9b3'];
+const MINTS = ['#cfe6dc', '#bfe0d2', '#d8ece2', '#b6dccf'];
+const YELLOWS = ['#f5e6b3', '#f2dfa1', '#f8ecc4', '#efd68e'];
+const PALE_BLUES = ['#cfe0ec', '#dbe8f0', '#c3d7e6', '#b9d3e3'];
+const STONES = ['#3a3633', '#4a4440', '#2f2d2c', '#5a504a', '#40372f', '#4d4a48'];
+const BRICKS = ['#b98f6a', '#a87e5c', '#c49a74', '#9c6f52', '#c8a680', '#b07b5b', '#8e5e46'];
+const GREYS = ['#b9b9b4', '#a7a9a8', '#c6c6c1', '#9da3a6', '#b5b8ba'];
+const HOUSE_WALLS = [...WHITES, ...WHITES, ...CREAMS, ...PEACHES, ...PINKS, ...MINTS, ...YELLOWS, ...PALE_BLUES, '#e6d2b8', '#e8c9a0', '#dfc7a6'];
+
+const FAM: Record<'glassBlue' | 'glassGreen' | 'punched' | 'balcony' | 'deco' | 'stone' | 'brick' | 'grid' | 'hotel' | 'concrete' | 'industrial' | 'house', Family> = {
+  glassBlue: { style: S.GLASS_BLUE, floorH: 3.9, tints: ['#9fb6c8', '#8fa9bd', '#b0c4d2', '#a7bccb', '#8898a8', '#c2d0da'], lit: [0.25, 0.7], warm: [0.15, 0.5] },
+  glassGreen: { style: S.GLASS_GREEN, floorH: 3.8, tints: ['#f2f2ee', '#e8ebe4', '#ffffff', '#dfe6e0', '#e6e2d6', '#d9dfd9'], lit: [0.25, 0.65], warm: [0.2, 0.5] },
+  punched: { style: S.PUNCHED, floorH: 3.3, tints: [...WHITES, ...CREAMS], lit: [0.2, 0.55], warm: [0.6, 0.95] },
+  balcony: { style: S.BALCONY, floorH: 3.2, tints: [...CREAMS, ...WHITES, '#efe0d3', '#f0d9c2'], lit: [0.2, 0.5], warm: [0.7, 0.95] },
+  deco: { style: S.DECO, floorH: 3.4, tints: [...PEACHES, ...PINKS, ...YELLOWS, ...MINTS], lit: [0.15, 0.5], warm: [0.6, 0.9] },
+  stone: { style: S.STONE, floorH: 3.8, tints: STONES, lit: [0.3, 0.7], warm: [0.3, 0.6] },
+  brick: { style: S.BRICK, floorH: 3.4, tints: BRICKS, lit: [0.2, 0.5], warm: [0.7, 0.95] },
+  grid: { style: S.GRID, floorH: 3.5, tints: ['#f7f5f0', '#f1eee6', '#ffffff', '#ece9e1'], lit: [0.25, 0.6], warm: [0.3, 0.7] },
+  hotel: { style: S.HOTEL, floorH: 3.2, tints: [...WHITES, ...PEACHES, ...PALE_BLUES], lit: [0.3, 0.6], warm: [0.6, 0.9] },
+  concrete: { style: S.CONCRETE, floorH: 3.0, tints: GREYS, lit: [0, 0], warm: [0.5, 0.5] },
+  industrial: { style: S.INDUSTRIAL, floorH: 4.0, tints: ['#b8bcc0', '#9aa3a8', '#cfd3d6', '#8e9aa0', '#d8c9a8', '#c4b89a', '#a9b0b5'], lit: [0.05, 0.2], warm: [0.2, 0.4] },
+  house: { style: S.HOUSE, floorH: 3.0, tints: HOUSE_WALLS, lit: [0.2, 0.6], warm: [0.8, 1.0] },
+};
+
+function pickWeighted<T>(rng: Rng, items: readonly (readonly [T, number])[]): T {
+  let total = 0;
+  for (const [, w] of items) total += w;
+  let r = rng.next() * total;
+  for (const [item, w] of items) { r -= w; if (r <= 0) return item; }
+  return items[items.length - 1][0];
+}
+
+// ------------------------------------------------------------------ city
 
 export interface CityBuild {
   batches: BuildingBatches;
@@ -196,6 +221,12 @@ export interface CityBuild {
   /** occupancy grid (10 m cells) marking footprints so vegetation avoids buildings */
   occupied: (x: number, z: number) => boolean;
   markOccupied: (x: number, z: number, r: number) => void;
+}
+
+interface PlaceOpts {
+  roof?: number; yBase?: number; lit?: number; warm?: number; variant?: number; form?: number;
+  /** occupancy margin (m) around the footprint; negative = do not mark (rooftop items) */
+  margin?: number;
 }
 
 export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>, nightUniform: THREE.IUniform<number>): CityBuild {
@@ -214,33 +245,240 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       if (i >= 0) occ[i] = 1;
     }
   };
+  /** Marks only the cells whose centre lies inside the rotated footprint grown by `margin`, so yards between
+   *  houses stay free for vegetation while nothing grows through a wall. */
+  const markFootprint = (x: number, z: number, w: number, d: number, rot: number, margin: number) => {
+    const hx = w / 2 + margin, hz = d / 2 + margin;
+    const r = Math.hypot(hx, hz);
+    const c = Math.cos(rot), s = Math.sin(rot);
+    const ix0 = Math.floor((x - r + 10000) / 10), ix1 = Math.floor((x + r + 10000) / 10);
+    const iz0 = Math.floor((z - r + 10000) / 10), iz1 = Math.floor((z + r + 10000) / 10);
+    for (let iz = iz0; iz <= iz1; iz++) for (let ix = ix0; ix <= ix1; ix++) {
+      if (ix < 0 || iz < 0 || ix >= 2000 || iz >= 2000) continue;
+      const px = ix * 10 + 5 - 10000 - x, pz = iz * 10 + 5 - 10000 - z;
+      const lx = px * c + pz * s, lz = -px * s + pz * c;
+      if (Math.abs(lx) <= hx && Math.abs(lz) <= hz) occ[iz * 2000 + ix] = 1;
+    }
+  };
   const occupied = (x: number, z: number) => { const i = occIndex(x, z); return i >= 0 && occ[i] === 1; };
   const landmarkPositions: { x: number; z: number; h: number; name: string }[] = [];
 
-  const place = (kind: Kind, x: number, z: number, w: number, h: number, d: number, rot: number, color: string | THREE.Color, style: number, floorH: number, roof = 5, yBase?: number) => {
-    // ground height at the four corners; sit the building on the highest so nothing floats
+  const corners = (x: number, z: number, w: number, d: number, rot: number): [number, number][] => {
     const c = Math.cos(rot), s = Math.sin(rot);
-    let y = -Infinity;
-    for (const [lx, lz] of [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2], [0, 0]]) {
-      const px = x + lx * c - lz * s, pz = z + lx * s + lz * c;
-      y = Math.max(y, map.heightAt(px, pz));
+    const out: [number, number][] = [];
+    for (const [lx, lz] of [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2], [0, 0], [0, -d / 2], [0, d / 2], [-w / 2, 0], [w / 2, 0]]) {
+      out.push([x + lx * c - lz * s, z + lx * s + lz * c]);
     }
-    if (yBase !== undefined) y = yBase;
-    if (y < 0.9) return false;
+    return out;
+  };
+
+  /** Places one instance sitting on the highest ground corner (so nothing floats). Returns the roof height or null. */
+  const place = (kind: Kind, x: number, z: number, w: number, h: number, d: number, rot: number, color: string | THREE.Color, style: number, floorH: number, o: PlaceOpts = {}): number | null => {
+    let y = -Infinity;
+    for (const [px, pz] of corners(x, z, w, d, rot)) y = Math.max(y, map.heightAt(px, pz));
+    if (o.yBase !== undefined) y = o.yBase;
+    if (y < 0.9) return null;
     const col = color instanceof THREE.Color ? color : new THREE.Color(color);
-    batches.add(kind, { x, y: y - 0.4, z, w, h: h + 0.4, d, rot, color: col, style, floorH, seed: rng.range(0, 1000), roof });
-    markOccupied(x, z, Math.max(w, d) * 0.5 + 4);
-    return true;
+    batches.add(kind, {
+      x, y: y - 0.4, z, w, h: h + 0.4, d, rot, color: col, style, floorH, seed: rng.range(0, 1000), roof: o.roof ?? 5,
+      lit: o.lit ?? 0.3, warm: o.warm ?? 0.7, variant: o.variant ?? 0.5, form: o.form ?? 0,
+    });
+    const margin = o.margin ?? 3;
+    if (margin >= 0) markFootprint(x, z, w, d, rot, margin);
+    return y + h;
   };
 
   const landOK = (x: number, z: number, w: number, d: number, rot: number) => {
-    const c = Math.cos(rot), s = Math.sin(rot);
-    for (const [lx, lz] of [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2], [0, 0]]) {
-      const px = x + lx * c - lz * s, pz = z + lx * s + lz * c;
-      if (map.heightAt(px, pz) < 1.2) return false;
-    }
+    for (const [px, pz] of corners(x, z, w, d, rot)) if (map.heightAt(px, pz) < 1.2) return false;
     return true;
   };
+  const areaFree = (x: number, z: number, w: number, d: number, rot: number) => {
+    for (const [px, pz] of corners(x, z, w, d, rot)) if (occupied(px, pz)) return false;
+    return true;
+  };
+
+  /** Per-building appearance drawn from a facade family. */
+  const look = (fam: Family, r: Rng) => ({ tint: r.pick(fam.tints), lit: r.range(fam.lit[0], fam.lit[1]), warm: r.range(fam.warm[0], fam.warm[1]), variant: r.next() });
+
+  // rooftop equipment: penthouses, tanks, helipads, masts and spires
+  const addRoofDetail = (r: Rng, x: number, z: number, tw: number, td: number, top: number, rot: number, h: number, fam: Family) => {
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
+    const glassy = fam.style === S.GLASS_BLUE || fam.style === S.GLASS_GREEN || fam.style === S.STONE;
+    const grey = r.pick(GREYS);
+    if (r.chance(0.7)) {
+      // mechanical penthouse
+      const pw = tw * r.range(0.25, 0.45), pd = td * r.range(0.3, 0.5);
+      const [px, pz] = at(r.range(-tw * 0.22, tw * 0.22), r.range(-td * 0.2, td * 0.2));
+      place('box', px, pz, pw, r.range(3, 6), pd, rot, glassy ? '#8d9296' : grey, S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+    }
+    const n = r.int(0, 3);
+    for (let i = 0; i < n; i++) {
+      const [px, pz] = at(r.range(-tw * 0.35, tw * 0.35), r.range(-td * 0.35, td * 0.35));
+      place('box', px, pz, r.range(2, 4.5), r.range(1.5, 3), r.range(2, 4), rot, grey, S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+    }
+    if (h > 40 && r.chance(0.35)) {
+      const [px, pz] = at(tw * 0.25, -td * 0.25);
+      place('cyl', px, pz, 3, 3.5, 3, rot, '#c9c9c4', S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+    }
+    if (h > 100 && r.chance(0.22)) {
+      const dia = Math.min(18, Math.min(tw, td) * 0.5);
+      const [px, pz] = at(-tw * 0.18, td * 0.16);
+      place('cyl', px, pz, dia, 0.5, dia, rot, '#444444', S.HELIPAD, 3, { yBase: top, margin: -1 });
+    }
+    if (h > 120 && r.chance(0.35)) {
+      const [px, pz] = at(tw * 0.3, td * 0.3);
+      place('frustum', px, pz, 1.6, r.range(14, 32), 1.6, rot, '#cfd8dc', S.CONCRETE, 3, { yBase: top, margin: -1 });
+    }
+    if (h > 150 && r.chance(0.3)) {
+      place('frustum', x, z, 4, r.range(25, 50), 4, rot, '#e3e8ec', S.CONCRETE, 3, { yBase: top, margin: -1 });
+    }
+  };
+
+  /** Massing recipes for towers. Returns the roof height of the main body. */
+  const buildTower = (r: Rng, x: number, z: number, rot: number, fw: number, fd: number, h: number, fam: Family, recipe: number, detail = true): number | null => {
+    const lk = look(fam, r);
+    const o = { lit: lk.lit, warm: lk.warm, variant: lk.variant };
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
+    let top: number | null = null;
+    let tw = fw, td = fd;
+    switch (recipe) {
+      case 1: {
+        // setbacks: three tiers
+        const t2 = r.range(0.72, 0.85), t3 = r.range(0.5, 0.65);
+        place('box', x, z, fw, h * r.range(0.5, 0.62), fd, rot, lk.tint, fam.style, fam.floorH, o);
+        place('box', x, z, fw * t2, h * r.range(0.78, 0.88), fd * t2, rot, lk.tint, fam.style, fam.floorH, o);
+        top = place('box', x, z, fw * t3, h, fd * t3, rot, lk.tint, fam.style, fam.floorH, o);
+        tw = fw * t3; td = fd * t3;
+        break;
+      }
+      case 2: {
+        // slab: thin and wide
+        tw = Math.min(fw, fd) * 0.62; td = Math.max(fw, fd) * 1.15;
+        top = place('box', x, z, tw, h, td, rot, lk.tint, fam.style, fam.floorH, o);
+        break;
+      }
+      case 3: {
+        // L-shape: two overlapping bars
+        const a = at(-fw * 0.2, 0), b = at(fw * 0.15, -fd * 0.22);
+        place('box', a[0], a[1], fw * 0.6, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        top = place('box', b[0], b[1], fw * 0.7, h * r.range(0.6, 1.0), fd * 0.56, rot, lk.tint, fam.style, fam.floorH, o);
+        tw = fw * 0.6; td = fd;
+        break;
+      }
+      case 4: {
+        // twin towers on a shared base, joined by a sky bridge
+        const gap = fw * 0.18, tw1 = fw * 0.41;
+        const a = at(-(tw1 + gap) / 2, 0), b = at((tw1 + gap) / 2, 0);
+        place('box', a[0], a[1], tw1, h, fd * 0.8, rot, lk.tint, fam.style, fam.floorH, o);
+        top = place('box', b[0], b[1], tw1, h * r.range(0.85, 1.0), fd * 0.8, rot, lk.tint, fam.style, fam.floorH, o);
+        place('box', x, z, gap + 2, 4, fd * 0.4, rot, '#dfe4e8', S.CONCRETE, 3, { yBase: (top ?? 0) - h * 0.45, margin: -1 });
+        tw = tw1; td = fd * 0.8;
+        break;
+      }
+      case 5: {
+        // glass crown on a concrete body
+        top = place('box', x, z, fw, h * 0.88, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        const g = look(FAM.glassBlue, r);
+        top = place('box', x, z, fw * 0.86, h, fd * 0.86, rot, g.tint, S.GLASS_BLUE, 3.9, { lit: 0.7, warm: 0.3, variant: g.variant });
+        tw = fw * 0.86; td = fd * 0.86;
+        break;
+      }
+      case 6: {
+        // stepped art-deco crown with a spire
+        const tiers = [[1.0, 0.55], [0.86, 0.72], [0.7, 0.88], [0.5, 1.0]];
+        for (const [sc, hh] of tiers) top = place('box', x, z, fw * sc, h * hh, fd * sc, rot, lk.tint, fam.style, fam.floorH, o);
+        if (top !== null) place('frustum', x, z, 3.5, h * 0.18, 3.5, rot, '#e8e4dc', S.CONCRETE, 3, { yBase: top, margin: -1 });
+        tw = fw * 0.5; td = fd * 0.5;
+        break;
+      }
+      case 7: {
+        // round / chamfered prism
+        const kind: Kind = r.chance(0.45) ? 'cyl' : 'oct';
+        tw = td = Math.min(fw, fd);
+        top = place(kind, x, z, tw, h, td, rot, lk.tint, fam.style, fam.floorH, o);
+        break;
+      }
+      case 8: {
+        // pyramidal crown
+        top = place('box', x, z, fw, h * 0.9, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        if (top !== null) { place('frustum', x, z, fw, h * 0.1 + 6, fd, rot, lk.tint, fam.style, fam.floorH, { ...o, yBase: top - 0.1, margin: -1 }); detail = false; }
+        break;
+      }
+      default:
+        top = place('box', x, z, fw, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
+    }
+    if (top !== null && detail) {
+      const [dx, dz] = recipe === 3 ? at(-fw * 0.2, 0) : recipe === 4 ? at((fw * 0.41 + fw * 0.18) / 2, 0) : [x, z];
+      addRoofDetail(r, dx, dz, tw, td, top, rot, h, fam);
+    }
+    return top;
+  };
+
+  // ------------------------------------------------------------- landmark towers (downtown skyline hierarchy)
+  const dt = map.districts.find((x) => x.id === 'downtown')!;
+  const landmark = (name: string, lx: number, lz: number, build: (x: number, z: number, g: number) => number) => {
+    const c = Math.cos(dt.rot), s = Math.sin(dt.rot);
+    const x = dt.cx + lx * c - lz * s, z = dt.cz + lx * s + lz * c;
+    const g = map.heightAt(x, z);
+    if (g < 1) return;
+    const h = build(x, z, g);
+    landmarkPositions.push({ x, z, h, name });
+    markOccupied(x, z, 46);
+  };
+  landmark('Meridian Tower', 120, -80, (x, z, g) => {
+    const o = { lit: 0.6, warm: 0.3, variant: 0.2 };
+    place('box', x, z, 46, 150, 46, 0.1, '#9fb6c8', S.GLASS_BLUE, 3.9, o);
+    place('box', x, z, 38, 230, 38, 0.1, '#9fb6c8', S.GLASS_BLUE, 3.9, o);
+    place('box', x, z, 28, 285, 28, 0.1, '#b0c4d2', S.GLASS_BLUE, 3.9, o);
+    place('frustum', x, z, 5, 45, 5, 0.1, '#e8eef2', S.CONCRETE, 3, { yBase: g + 285, margin: -1 });
+    return 330;
+  });
+  landmark('Bahía One', -40, 70, (x, z, g) => {
+    const o = { lit: 0.65, warm: 0.25, variant: 0.8 };
+    place('oct', x, z, 46, 262, 46, 0.05, '#8898a8', S.GLASS_BLUE, 3.9, o);
+    place('box', x, z, 16, 8, 14, 0.05, '#8d9296', S.CONCRETE, 3, { yBase: g + 262, margin: -1 });
+    place('cyl', x + 10, z + 9, 16, 0.5, 16, 0, '#444444', S.HELIPAD, 3, { yBase: g + 262, margin: -1 });
+    place('frustum', x - 8, z - 6, 1.8, 30, 1.8, 0, '#cfd8dc', S.CONCRETE, 3, { yBase: g + 262, margin: -1 });
+    return 292;
+  });
+  landmark('Faro Bahía', -180, 40, (x, z, g) => {
+    place('cyl', x, z, 40, 240, 40, 0, '#e8ebe4', S.GLASS_GREEN, 3.8, { lit: 0.55, warm: 0.4, variant: 0.6 });
+    place('cyl', x, z, 48, 12, 48, 0, '#e8eef2', S.CONCRETE, 3, { yBase: g + 232, margin: -1 });
+    place('cyl', x, z, 20, 4, 20, 0, '#dfe4e8', S.CONCRETE, 3, { yBase: g + 244, margin: -1 });
+    return 248;
+  });
+  landmark('Twin Palms A', 40, 210, (x, z) => { place('box', x, z, 30, 182, 56, 0.05, '#efe4cf', S.BALCONY, 3.3, { lit: 0.35, warm: 0.85, variant: 0.4 }); return 182; });
+  landmark('Twin Palms B', 110, 210, (x, z, g) => {
+    place('box', x, z, 30, 182, 56, 0.05, '#efe4cf', S.BALCONY, 3.3, { lit: 0.4, warm: 0.85, variant: 0.4 });
+    place('box', x - 35, z, 44, 6, 12, 0.05, '#dfe4e8', S.CONCRETE, 3.3, { yBase: g + 118, margin: -1 });
+    return 182;
+  });
+  landmark('The Sail', -60, -250, (x, z) => { place('shear', x, z, 60, 205, 44, 0.9, '#b0c4d2', S.GLASS_BLUE, 3.9, { lit: 0.5, warm: 0.3, variant: 0.9 }); return 205; });
+  landmark('Terraces', 260, 120, (x, z) => {
+    for (let i = 0; i < 5; i++) place('box', x + i * 6, z - i * 4, 60 - i * 8, 45 + i * 28, 40, 0.0, '#f7f5f0', S.GRID, 3.5, { lit: 0.4, warm: 0.5, variant: 0.3 });
+    return 160;
+  });
+  landmark('Crown Plaza', -300, -180, (x, z, g) => {
+    place('box', x, z, 42, 200, 42, 0.2, '#3a3633', S.STONE, 3.8, { lit: 0.6, warm: 0.4, variant: 0.5 });
+    for (let i = 0; i < 4; i++) {
+      const a = 0.2 + (i * Math.PI) / 2;
+      place('box', x + Math.cos(a) * 14, z + Math.sin(a) * 14, 3, 30, 14, a, '#e8eef2', S.CONCRETE, 3, { yBase: g + 198, margin: -1 });
+    }
+    return 230;
+  });
+  landmark('Helix', 330, -240, (x, z, g) => {
+    for (let i = 0; i < 12; i++) place('box', x, z, 34, 16.5, 34, i * 0.1, '#e6e2d6', S.GLASS_GREEN, 3.9, { yBase: g + i * 16, lit: 0.5, warm: 0.3, variant: 0.2 });
+    return 198;
+  });
+  landmark('Aquamarine', -380, 230, (x, z) => {
+    const o = { lit: 0.55, warm: 0.2, variant: 0.6 };
+    place('box', x, z, 18, 228, 62, 0.0, '#8fa9bd', S.GLASS_BLUE, 3.9, o);
+    place('box', x, z, 62, 228, 18, 0.0, '#8fa9bd', S.GLASS_BLUE, 3.9, o);
+    place('frustum', x, z, 24, 250, 24, 0.0, '#c2d0da', S.GLASS_BLUE, 3.9, o);
+    return 250;
+  });
 
   // ------------------------------------------------------------- district fills
   for (const d of map.districts) {
@@ -254,9 +492,13 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       const bx0 = b.x0 + inset, bx1 = b.x1 - inset, bz0 = b.z0 + inset, bz1 = b.z1 - inset;
       const bw = bx1 - bx0, bd = bz1 - bz0;
       if (bw < 12 || bd < 12) continue;
-      if (drng.next() > d.density) continue; // empty lot / park block
       const [cxw, czw] = toWorld((bx0 + bx1) / 2, (bz0 + bz1) / 2);
       const distToCentre = Math.hypot(cxw - d.cx, czw - d.cz) / Math.max(d.hw, d.hh);
+      const distToDowntown = Math.hypot(cxw - dt.cx, czw - dt.cz);
+      // density and height fall off with distance from downtown so the sprawl thins toward the edges
+      const prox = 1 - smoothstep(600, 4000, distToDowntown);
+      const sprawl = 1 - 0.45 * smoothstep(2500, 8500, distToDowntown);
+      if (drng.next() > d.density * (d.zone === Zone.RES_LOW ? sprawl : 1)) continue; // empty lot / park block
       switch (d.zone) {
         case Zone.DOWNTOWN: fillDowntown(); break;
         case Zone.RES_MID: fillMidrise(); break;
@@ -267,103 +509,143 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       }
 
       function fillDowntown(): void {
-        // tall core, lower toward the edge; 1-2 towers on podiums, low buildings in the leftover
-        const core = 1 - smoothstep(0.25, 1.0, distToCentre);
-        const nTowers = bw > 70 && bd > 70 ? 2 : 1;
+        const core = 1 - smoothstep(0.2, 1.0, distToCentre);
+        const nTowers = bw > 80 && bd > 70 ? 2 : 1;
         for (let t = 0; t < nTowers; t++) {
-          const fw = drng.range(24, Math.min(46, bw * 0.6)), fd = drng.range(24, Math.min(46, bd * 0.6));
-          const lx = nTowers === 1 ? (bx0 + bx1) / 2 : lerp(bx0 + fw / 2, bx1 - fw / 2, t);
-          const lz = (bz0 + bz1) / 2 + drng.range(-bd * 0.2, bd * 0.2);
+          const fw = drng.range(22, Math.min(48, bw * 0.55)), fd = drng.range(22, Math.min(48, bd * 0.6));
+          const lx = nTowers === 1 ? (bx0 + bx1) / 2 + drng.range(-bw * 0.1, bw * 0.1) : lerp(bx0 + fw / 2 + 4, bx1 - fw / 2 - 4, t);
+          const lz = (bz0 + bz1) / 2 + drng.range(-bd * 0.15, bd * 0.15);
           const [x, z] = toWorld(lx, lz);
-          const h = lerp(d.hMin, d.hMax, Math.pow(drng.next(), 1.6) * (0.35 + 0.65 * core)) * (0.6 + 0.6 * core);
-          if (!landOK(x, z, fw, fd, d.rot)) continue;
-          const styleRoll = drng.next();
-          const style = styleRoll < 0.5 ? 0 : styleRoll < 0.8 ? 1 : 3;
-          const tint = style === 0 ? drng.pick(TOWER_TINTS) : drng.pick(PASTELS);
-          const floorH = style === 0 ? 3.9 : 3.4;
-          // podium
-          if (h > 60 && drng.chance(0.7)) {
-            const pw = Math.min(bw * 0.9, fw + drng.range(10, 30)), pd = Math.min(bd * 0.9, fd + drng.range(10, 30));
-            place('box', x, z, pw, drng.range(9, 18), pd, d.rot, drng.pick(TOWER_TINTS), 1, 3.6);
+          if (!landOK(x, z, fw, fd, d.rot) || !areaFree(x, z, fw + 6, fd + 6, d.rot)) continue;
+          // height hierarchy: many 40-100 m, a cluster of 120-200 m near the core (landmarks own 250-330 m)
+          const u = drng.next();
+          let h: number;
+          if (u < 0.07 + 0.22 * core) h = drng.range(120, 205);
+          else if (u < 0.45 + 0.2 * core) h = drng.range(70, 120);
+          else h = drng.range(36, 72);
+          h *= lerp(0.6, 1.0, core);
+          h = Math.max(28, h);
+          const fam: Family = h > 110
+            ? pickWeighted(drng, [[FAM.glassBlue, 0.34], [FAM.glassGreen, 0.16], [FAM.punched, 0.1], [FAM.balcony, 0.08], [FAM.deco, 0.08], [FAM.stone, 0.14], [FAM.grid, 0.1]] as const)
+            : h > 60
+              ? pickWeighted(drng, [[FAM.glassBlue, 0.2], [FAM.glassGreen, 0.12], [FAM.punched, 0.16], [FAM.balcony, 0.14], [FAM.deco, 0.14], [FAM.stone, 0.1], [FAM.grid, 0.1], [FAM.brick, 0.04]] as const)
+              : pickWeighted(drng, [[FAM.glassBlue, 0.1], [FAM.glassGreen, 0.08], [FAM.punched, 0.2], [FAM.balcony, 0.12], [FAM.deco, 0.18], [FAM.stone, 0.06], [FAM.grid, 0.1], [FAM.brick, 0.16]] as const);
+          // podium: parking or retail base filling more of the lot
+          if (h > 55 && drng.chance(0.6)) {
+            const pw = Math.min(bw * 0.92, fw + drng.range(14, 36)), pd = Math.min(bd * 0.92, fd + drng.range(14, 36));
+            const ph = drng.range(8, 18);
+            if (drng.chance(0.45)) place('box', x, z, pw, ph, pd, d.rot, drng.pick(GREYS), S.CONCRETE, 3.4, { lit: 0.1, warm: 0.5 });
+            else { const lk = look(fam.style === S.STONE ? FAM.punched : fam, drng); place('box', x, z, pw, ph, pd, d.rot, lk.tint, fam.style === S.STONE ? S.PUNCHED : fam.style, fam.floorH, { lit: lk.lit, warm: lk.warm, variant: lk.variant }); }
           }
-          const crown = drng.next();
-          if (crown < 0.3 && h > 100) {
-            // setbacks
-            place('box', x, z, fw, h * 0.6, fd, d.rot, tint, style, floorH);
-            place('box', x, z, fw * 0.8, h * 0.85, fd * 0.8, d.rot, tint, style, floorH);
-            place('box', x, z, fw * 0.6, h, fd * 0.6, d.rot, tint, style, floorH);
-          } else if (crown < 0.5 && h > 90) {
-            place('box', x, z, fw, h, fd, d.rot, tint, style, floorH);
-            place('frustum', x, z, fw * 1.02, h + drng.range(10, 25), fd * 1.02, d.rot, tint, 6, floorH);
-          } else if (crown < 0.62 && h > 80) {
-            place('cyl', x, z, Math.min(fw, fd), h, Math.min(fw, fd), d.rot, tint, style, floorH);
-          } else {
-            place('box', x, z, fw, h, fd, d.rot, tint, style, floorH);
-          }
-          if (h > 120 && drng.chance(0.5)) place('spire', x, z, 3, drng.range(15, 40), 3, d.rot, '#cfd8dc', 6, 3, 5, map.heightAt(x, z) + h);
-          addRoofClutter(x, z, fw, fd, h, d.rot);
+          let recipe: number;
+          const rr = drng.next();
+          if (fam.style === S.DECO && h > 60) recipe = rr < 0.55 ? 6 : rr < 0.8 ? 1 : 0;
+          else if (h > 110) recipe = rr < 0.28 ? 1 : rr < 0.4 ? 7 : rr < 0.52 ? 5 : rr < 0.62 ? 8 : rr < 0.72 ? 4 : rr < 0.8 ? 2 : 0;
+          else if (h > 60) recipe = rr < 0.18 ? 1 : rr < 0.3 ? 7 : rr < 0.42 ? 3 : rr < 0.5 ? 2 : rr < 0.58 ? 8 : 0;
+          else recipe = rr < 0.25 ? 3 : rr < 0.35 ? 2 : 0;
+          buildTower(drng, x, z, d.rot, fw, fd, h, fam, recipe);
         }
-        // leftover low-rise along the block edge
-        if (bw > 50) {
-          const lw = drng.range(14, 24), ld = drng.range(14, 24);
-          const [x, z] = toWorld(bx0 + lw / 2, bz1 - ld / 2);
-          if (landOK(x, z, lw, ld, d.rot) && !occupied(x, z)) place('box', x, z, lw, drng.range(8, 20), ld, d.rot, drng.pick(PASTELS), 1, 3.3);
+        // street-wall infill: low buildings in the leftover corners of the block
+        const lw = drng.range(14, 26), ld = drng.range(14, 26);
+        const spots: [number, number][] = [[bx0 + lw / 2, bz0 + ld / 2], [bx1 - lw / 2, bz0 + ld / 2], [bx1 - lw / 2, bz1 - ld / 2], [bx0 + lw / 2, bz1 - ld / 2]];
+        for (const [lx, lz] of spots) {
+          if (drng.next() > 0.6) continue;
+          const [x, z] = toWorld(lx, lz);
+          if (!landOK(x, z, lw, ld, d.rot) || !areaFree(x, z, lw + 4, ld + 4, d.rot)) continue;
+          const fam = pickWeighted(drng, [[FAM.brick, 0.35], [FAM.punched, 0.3], [FAM.deco, 0.25], [FAM.concrete, 0.1]] as const);
+          const lk = look(fam, drng);
+          place('box', x, z, lw, drng.range(8, 24), ld, d.rot, lk.tint, fam.style, fam.floorH, { lit: lk.lit, warm: lk.warm, variant: lk.variant });
         }
       }
 
       function fillMidrise(): void {
-        const n = Math.max(1, Math.round((bw * bd) / 1600));
+        const n = Math.max(1, Math.round((bw * bd) / 1800));
         for (let i = 0; i < n; i++) {
-          const fw = drng.range(18, Math.min(42, bw * 0.8)), fd = drng.range(18, Math.min(42, bd * 0.8));
+          const fw = drng.range(16, Math.min(44, bw * 0.75)), fd = drng.range(16, Math.min(44, bd * 0.75));
           const lx = drng.range(bx0 + fw / 2, bx1 - fw / 2), lz = drng.range(bz0 + fd / 2, bz1 - fd / 2);
           const [x, z] = toWorld(lx, lz);
-          if (!landOK(x, z, fw, fd, d.rot) || occupied(x, z)) continue;
-          const h = lerp(d.hMin, d.hMax, Math.pow(drng.next(), 2.2));
-          const roll = drng.next();
-          const style = roll < 0.35 ? 2 : roll < 0.7 ? 1 : roll < 0.85 ? 3 : 0;
-          place('box', x, z, fw, h, fd, d.rot + drng.range(-0.02, 0.02), drng.pick(PASTELS), style, 3.3);
-          if (h > 20) addRoofClutter(x, z, fw, fd, h, d.rot);
+          if (!landOK(x, z, fw, fd, d.rot) || !areaFree(x, z, fw + 4, fd + 4, d.rot)) continue;
+          let h = lerp(d.hMin, d.hMax, Math.pow(drng.next(), 2.0)) * lerp(0.75, 1.15, prox);
+          h = clamp(h, d.hMin * 0.8, d.hMax);
+          const fam = h > 50
+            ? pickWeighted(drng, [[FAM.balcony, 0.3], [FAM.punched, 0.2], [FAM.grid, 0.15], [FAM.deco, 0.1], [FAM.glassGreen, 0.15], [FAM.glassBlue, 0.1]] as const)
+            : pickWeighted(drng, [[FAM.brick, 0.28], [FAM.punched, 0.24], [FAM.deco, 0.16], [FAM.balcony, 0.16], [FAM.grid, 0.1], [FAM.concrete, 0.06]] as const);
+          const rr = drng.next();
+          const long = Math.max(bw, bd) > 90 && Math.min(fw, fd) > 20;
+          const recipe = h > 45 ? (rr < 0.25 ? 1 : rr < 0.35 ? 7 : rr < 0.5 && long ? 2 : rr < 0.6 ? 3 : 0) : (rr < 0.25 ? 3 : rr < 0.35 && long ? 2 : 0);
+          buildTower(drng, x, z, d.rot + drng.range(-0.03, 0.03), fw, fd, h, fam, recipe, h > 20);
         }
       }
 
       function fillHotel(): void {
         // slabs parallel to the beach (district local x is across the island)
-        const slab = drng.chance(0.7);
+        const slab = drng.chance(0.65);
         const fw = slab ? drng.range(18, 30) : drng.range(24, 40);
         const fd = slab ? Math.min(bd * 0.85, drng.range(50, 95)) : drng.range(24, 40);
         const [x, z] = toWorld((bx0 + bx1) / 2 + drng.range(-6, 6), (bz0 + bz1) / 2);
-        if (!landOK(x, z, fw, fd, d.rot)) return;
+        if (!landOK(x, z, fw, fd, d.rot) || !areaFree(x, z, fw + 4, fd + 4, d.rot)) return;
         const h = lerp(d.hMin, d.hMax, Math.pow(drng.next(), 1.5));
-        const style = drng.chance(0.55) ? 7 : drng.chance(0.5) ? 2 : 0;
-        const tint = style === 0 ? drng.pick(TOWER_TINTS) : drng.pick(PASTELS);
-        place('box', x, z, fw, h, fd, d.rot, tint, style, 3.2);
+        const fam = slab
+          ? pickWeighted(drng, [[FAM.hotel, 0.55], [FAM.balcony, 0.25], [FAM.deco, 0.2]] as const)
+          : pickWeighted(drng, [[FAM.glassGreen, 0.3], [FAM.balcony, 0.25], [FAM.deco, 0.2], [FAM.glassBlue, 0.15], [FAM.punched, 0.1]] as const);
+        const rr = drng.next();
+        const recipe = slab ? 0 : rr < 0.3 ? 7 : rr < 0.5 ? 1 : rr < 0.6 ? 8 : 0;
+        buildTower(drng, x, z, d.rot, fw, fd, h, fam, recipe);
         // pool deck / low wing toward the beach
         const [px, pz] = toWorld((bx0 + bx1) / 2 + fw * 0.5 + 12, (bz0 + bz1) / 2);
-        if (landOK(px, pz, 18, fd * 0.7, d.rot)) place('box', px, pz, 18, drng.range(4, 9), fd * 0.7, d.rot, drng.pick(PASTELS), 1, 3.2);
-        addRoofClutter(x, z, fw, fd, h, d.rot);
+        if (landOK(px, pz, 18, fd * 0.7, d.rot) && areaFree(px, pz, 18, fd * 0.7, d.rot)) {
+          const lk = look(FAM.punched, drng);
+          const top = place('box', px, pz, 18, drng.range(4, 9), fd * 0.7, d.rot, lk.tint, S.PUNCHED, 3.2, { lit: lk.lit, warm: lk.warm });
+          if (top !== null && drng.chance(0.7)) place('house', px, pz, drng.range(6, 10), 0.4, Math.min(fd * 0.4, drng.range(12, 24)), d.rot, '#3fc4de', S.POOL, 3, { yBase: top, form: 2, margin: -1 });
+        }
       }
 
       function fillHouses(): void {
-        // lots around the block perimeter along the two long sides
-        const frontage = drng.range(17, 24);
+        // lots around the block perimeter along the two long sides; each block has a dominant roof colour
+        const frontage = drng.range(16, 24);
         const depth = Math.min(30, bd / 2 - 2);
-        const sides: [number, number][] = [[bz0 + depth / 2, 0], [bz1 - depth / 2, Math.PI]];
+        const blockRoof = pickWeighted(drng, [[0, 0.3], [2, 0.14], [5, 0.16], [6, 0.14], [1, 0.12], [7, 0.1], [3, 0.04]] as const);
+        // the two rows face away from each other; lots never overlap, so only landmarks/other districts are checked
+        const sides: [number, number][] = bd >= 2 * depth + 4 ? [[bz0 + depth / 2, 0], [bz1 - depth / 2, Math.PI]] : [[(bz0 + bz1) / 2, 0]];
         for (const [lz, face] of sides) {
-          for (let lx = bx0 + frontage / 2; lx < bx1 - frontage / 2; lx += frontage * drng.range(0.95, 1.2)) {
-            if (drng.next() > d.density + 0.15) continue;
-            const hw = drng.range(9, 13), hd = drng.range(10, 16);
-            const [x, z] = toWorld(lx, lz + (face === 0 ? -1 : 1) * drng.range(-3, 3));
-            if (!landOK(x, z, hw, hd, d.rot)) continue;
-            const floors = drng.chance(0.35) ? 2 : 1;
-            const h = floors * 3.3 + 1.6;
-            const roll = drng.next();
-            const kind: Kind = roll < 0.45 ? 'gable' : roll < 0.8 ? 'hip' : 'flat';
-            const roof = kind === 'flat' ? 2 : drng.pick([0, 0, 1, 3, 4, 1]);
-            place(kind, x, z, hw, h, hd, d.rot + face + drng.range(-0.06, 0.06), drng.pick(PASTELS), 5, 3.0, roof);
-            // pool in the yard
-            if (drng.chance(0.3)) {
-              const [px, pz] = toWorld(lx, lz + (face === 0 ? 1 : -1) * (hd / 2 + 6));
-              if (landOK(px, pz, 6, 4, d.rot)) batches.add('box', { x: px, y: map.heightAt(px, pz) - 0.3, z: pz, w: drng.range(5, 9), h: 0.35, d: drng.range(3.5, 5), rot: d.rot, color: new THREE.Color('#33b9d6'), style: 6, floorH: 3, seed: drng.range(0, 100), roof: 5 });
+          let lx = bx0 + frontage / 2;
+          while (lx < bx1 - frontage / 2) {
+            const hw = drng.range(8, 14), hd = drng.range(9, 17);
+            const step = Math.max(frontage * drng.range(0.9, 1.25), hw + 6);
+            const cx = lx;
+            lx += step;
+            if (drng.next() > (d.density + 0.15) * sprawl) continue;
+            const inward = face === 0 ? 1 : -1;
+            const rot = d.rot + face + drng.range(-0.12, 0.12);
+            const [x, z] = toWorld(cx + drng.range(-1.5, 1.5), lz - inward * drng.range(-3, 3));
+            if (drng.next() < 0.08 * prox) {
+              // small apartment block near downtown
+              const aw = Math.min(22, step - 4), ad = drng.range(12, 18);
+              if (aw < 12 || !landOK(x, z, aw, ad, rot) || occupied(x, z)) continue;
+              const fam = drng.chance(0.5) ? FAM.brick : FAM.punched;
+              const lk = look(fam, drng);
+              place('house', x, z, aw, drng.range(7, 11), ad, rot, lk.tint, fam.style, 3.1, { lit: lk.lit, warm: lk.warm, variant: lk.variant, form: 2, margin: 1 });
+              continue;
+            }
+            if (!landOK(x, z, hw, hd, rot) || occupied(x, z)) continue;
+            const floors = drng.chance(0.28) ? 2 : 1;
+            const formRoll = drng.next();
+            const form = formRoll < 0.42 ? 0 : formRoll < 0.78 ? 1 : 2;
+            const h = form === 2 ? floors * 3.1 + 0.6 : (floors * 3.1) / 0.68;
+            const roof = drng.chance(0.65) ? blockRoof : drng.pick([0, 1, 2, 3, 4, 5, 6, 7]);
+            const lk = look(FAM.house, drng);
+            place('house', x, z, hw, h, hd, rot, lk.tint, S.HOUSE, 3.0, { roof, form, lit: lk.lit, warm: lk.warm, variant: lk.variant, margin: 1 });
+            const cr = Math.cos(rot), sr = Math.sin(rot);
+            // garage / shed beside the house
+            if (drng.chance(0.3) && step - hw > 9) {
+              const side = drng.chance(0.5) ? 1 : -1;
+              const gx = x + side * (hw / 2 + 3.2) * cr, gz = z + side * (hw / 2 + 3.2) * sr;
+              if (landOK(gx, gz, 5.5, 6, rot)) place('house', gx, gz, 5.5, 2.9, 6, rot, lk.tint, S.HOUSE, 3.0, { roof, form: 2, lit: 0, margin: 0.5 });
+            }
+            // pool in the yard (toward the block interior)
+            if (drng.chance(0.28)) {
+              const [qx, qz] = toWorld(cx, lz + inward * (hd / 2 + 6));
+              if (landOK(qx, qz, 6, 4, d.rot)) place('house', qx, qz, drng.range(5, 9), 0.4, drng.range(3.5, 5), d.rot, '#3fc4de', S.POOL, 3, { form: 2, margin: 0.5, yBase: map.heightAt(qx, qz) });
             }
           }
         }
@@ -375,80 +657,25 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           const fw = drng.range(28, Math.min(80, bw * 0.85)), fd = drng.range(22, Math.min(60, bd * 0.85));
           const lx = drng.range(bx0 + fw / 2, bx1 - fw / 2), lz = drng.range(bz0 + fd / 2, bz1 - fd / 2);
           const [x, z] = toWorld(lx, lz);
-          if (!landOK(x, z, fw, fd, d.rot) || occupied(x, z)) continue;
-          place('warehouse', x, z, fw, drng.range(8, 15), fd, d.rot, drng.pick(['#b8bcc0', '#9aa3a8', '#cfd3d6', '#8e9aa0', '#d8c9a8']), 4, 4.0);
-        }
-      }
-
-      function addRoofClutter(x: number, z: number, fw: number, fd: number, h: number, rot: number): void {
-        const top = map.heightAt(x, z) + h;
-        const n = drng.int(1, 3);
-        for (let i = 0; i < n; i++) {
-          const ox = drng.range(-fw * 0.3, fw * 0.3), oz = drng.range(-fd * 0.3, fd * 0.3);
-          const cr = Math.cos(rot), sr = Math.sin(rot);
-          batches.add('box', { x: x + ox * cr - oz * sr, y: top - 0.2, z: z + ox * sr + oz * cr, w: drng.range(2.5, 5), h: drng.range(1.8, 3.2), d: drng.range(2.5, 4), rot, color: new THREE.Color('#9da3a6'), style: 6, floorH: 3, seed: drng.range(0, 100), roof: 5 });
-        }
-        if (h > 40 && drng.chance(0.4)) {
-          batches.add('cyl', { x: x + fw * 0.25, y: top - 0.2, z: z - fd * 0.25, w: 3, h: 3.5, d: 3, rot, color: new THREE.Color('#c9c9c4'), style: 6, floorH: 3, seed: drng.range(0, 100), roof: 5 });
+          if (!landOK(x, z, fw, fd, d.rot) || !areaFree(x, z, fw, fd, d.rot)) continue;
+          const lk = look(FAM.industrial, drng);
+          const h = drng.range(8, 15);
+          const top = place('box', x, z, fw, h, fd, d.rot, lk.tint, S.INDUSTRIAL, 4.0, { lit: lk.lit, warm: lk.warm, variant: lk.variant });
+          if (top === null) continue;
+          if (drng.chance(0.5)) place('box', x, z, fw + 0.6, 0.5, fd + 0.6, d.rot, '#8f9599', S.CONCRETE, 3, { yBase: top - 0.05, margin: -1 });
+          if (drng.chance(0.3)) {
+            // office block at the front and a couple of storage tanks
+            const [ox, oz] = toWorld(lx - fw / 2 + 8, lz + fd / 2 + 8);
+            if (landOK(ox, oz, 14, 10, d.rot)) place('box', ox, oz, 14, drng.range(6, 10), 10, d.rot, drng.pick(WHITES), S.PUNCHED, 3.2, { lit: 0.3, warm: 0.6 });
+          }
+          if (drng.chance(0.3)) {
+            const [tx, tz] = toWorld(lx + fw / 2 + 9, lz - fd / 2 + 8);
+            if (landOK(tx, tz, 12, 12, d.rot)) place('cyl', tx, tz, drng.range(7, 12), drng.range(7, 13), drng.range(7, 12), 0, '#dcdcd4', S.CONCRETE, 3);
+          }
         }
       }
     }
   }
-
-  // ------------------------------------------------------------- landmark towers (downtown skyline hierarchy)
-  const dt = map.districts.find((x) => x.id === 'downtown')!;
-  const landmark = (name: string, lx: number, lz: number, build: (x: number, z: number, g: number) => number) => {
-    const c = Math.cos(dt.rot), s = Math.sin(dt.rot);
-    const x = dt.cx + lx * c - lz * s, z = dt.cz + lx * s + lz * c;
-    const g = map.heightAt(x, z);
-    if (g < 1) return;
-    const h = build(x, z, g);
-    landmarkPositions.push({ x, z, h, name });
-    markOccupied(x, z, 40);
-  };
-  const lm = rng.fork('landmarks');
-  landmark('Meridian Tower', 120, -80, (x, z) => {
-    place('box', x, z, 46, 150, 46, 0.1, '#d9e2e8', 0, 3.9);
-    place('box', x, z, 38, 230, 38, 0.1, '#d9e2e8', 0, 3.9);
-    place('box', x, z, 28, 285, 28, 0.1, '#e3eaee', 0, 3.9);
-    place('spire', x, z, 4, 45, 4, 0.1, '#e8eef2', 6, 3, 5, map.heightAt(x, z) + 285);
-    return 330;
-  });
-  landmark('Faro Bahía', -180, 40, (x, z) => {
-    place('cyl', x, z, 40, 240, 40, 0, '#cfe0e6', 0, 3.8);
-    place('cyl', x, z, 48, 12, 48, 0, '#e8eef2', 6, 3, 5, map.heightAt(x, z) + 232);
-    return 244;
-  });
-  landmark('Twin Palms A', 40, 210, (x, z) => { place('box', x, z, 30, 182, 56, 0.05, '#e8e0d4', 2, 3.3); return 182; });
-  landmark('Twin Palms B', 110, 210, (x, z) => {
-    place('box', x, z, 30, 182, 56, 0.05, '#e8e0d4', 2, 3.3);
-    place('box', x - 35, z, 44, 6, 12, 0.05, '#d9e2e8', 0, 3.3, 5, map.heightAt(x, z) + 118);
-    return 182;
-  });
-  landmark('The Sail', -60, -250, (x, z) => { place('shear', x, z, 60, 205, 44, 0.9, '#bcd3dc', 0, 3.9); return 205; });
-  landmark('Terraces', 260, 120, (x, z) => {
-    for (let i = 0; i < 5; i++) place('box', x + i * 6, z - i * 4, 60 - i * 8, 45 + i * 28, 40, 0.0, '#f2ede4', 2, 3.3);
-    return 160;
-  });
-  landmark('Crown Plaza', -300, -180, (x, z) => {
-    place('box', x, z, 42, 200, 42, 0.2, '#c9d6d9', 0, 3.9);
-    for (let i = 0; i < 4; i++) {
-      const a = 0.2 + (i * Math.PI) / 2;
-      place('box', x + Math.cos(a) * 14, z + Math.sin(a) * 14, 3, 30, 14, a, '#e8eef2', 6, 3, 5, map.heightAt(x, z) + 198);
-    }
-    return 230;
-  });
-  landmark('Helix', 330, -240, (x, z) => {
-    for (let i = 0; i < 12; i++) place('box', x, z, 34, 16.5, 34, i * 0.1, '#dbe6ea', 0, 3.9, 5, map.heightAt(x, z) + i * 16);
-    return 198;
-  });
-  landmark('Aquamarine', -380, 230, (x, z) => {
-    place('box', x, z, 18, 228, 62, 0.0, '#b9d6d9', 0, 3.9);
-    place('box', x, z, 62, 228, 18, 0.0, '#b9d6d9', 0, 3.9);
-    place('frustum', x, z, 24, 250, 24, 0.0, '#d0e4e6', 6, 3.9);
-    return 250;
-  });
-  void lm;
 
   batches.build();
   return { batches, landmarkPositions, occupied, markOccupied };
