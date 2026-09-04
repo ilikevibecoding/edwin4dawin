@@ -4,6 +4,7 @@ import { perlin2, smoothstep } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { CELL, HALF, Zone, type WorldMap } from './map';
 import { balanceGroundIbl } from './terrain';
+import { layerMask, type ViewCull } from './culling';
 
 /**
  * Procedural planting. Two instanced geometry families cover five archetypes:
@@ -16,7 +17,9 @@ import { balanceGroundIbl } from './terrain';
  * view and a top view with the viewing elevation. Tiles of 900 m switch between the 3D meshes (near
  * the camera, up to an instance budget) and the cards (everything else), so a dense island canopy
  * costs about the same as the sparse planting it replaces. Cards are thinned with distance. Shadows
- * always come from the light-facing cards, which for near tiles are drawn invisibly in the main pass.
+ * always come from the light-facing cards; for near tiles the card mesh sits on the shadow-only layers
+ * so the main pass never touches it. Tiles are culled against the camera frustum with their own
+ * world-space boxes, and cast shadows only when their footprint can shade something in view.
  */
 
 // ---------------------------------------------------------------- procedural textures
@@ -498,7 +501,9 @@ type Archetype = 0 | 1 | 2 | 3 | 4;
 
 interface Plant { x: number; y: number; z: number; s: number; rot: number; tint: THREE.Color; arche: Archetype; seed: number; squash: number; trunk: number; }
 
-interface Tile { near: THREE.InstancedMesh; far: THREE.InstancedMesh; cx: number; cz: number; r: number; n: number; d: number; }
+/** `lodCenter` / `lodR` describe the planted footprint (the LOD distance metric); `box`, `center`, `r`
+ *  and `height` bound the drawn plants and cards and are only used for culling. */
+interface Tile { near: THREE.InstancedMesh; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; }
 
 const TILE = 900;
 const NEAR_DISTANCE = 650;
@@ -519,11 +524,6 @@ export class Vegetation {
   readonly uWind = { value: 0.5 };
   counts = { palms: 0, trees: 0, mangroves: 0, shrubs: 0 };
   private readonly tiles: Tile[] = [];
-  private readonly cardMat: THREE.MeshStandardMaterial;
-  /** Main-pass stand-in for the card mesh of a near tile: draws nothing, but keeps the mesh (and
-   *  its card depth material) in the shadow pass so near trees throw cheap crown-blob shadows
-   *  instead of re-rasterising their 3D geometry into every cascade. */
-  private readonly ghostMat = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false });
   shadowDistance = 1800;
   viewDistance = 9000;
 
@@ -534,7 +534,6 @@ export class Vegetation {
     const crownMat = crownMaterial(this.uTime, this.uWind);
     const palmMat = palmMaterial(frondTex, this.uTime, this.uWind);
     const cardMat = cardMaterial(atlas);
-    this.cardMat = cardMat;
     const cardDepth = cardDepthMaterial(atlas);
     this.materials.push(crownMat, palmMat, cardMat);
     const crownGeo = crownGeometry();
@@ -709,15 +708,21 @@ export class Vegetation {
       far.castShadow = false;
       far.customDepthMaterial = cardDepth;
       far.matrixAutoUpdate = false;
-      const maxS = list.reduce((a, p) => Math.max(a, p.s), 0) * 2.6;
+      // LOD metric: the planted footprint grown by the largest crown radius (2.6 x scale)
+      const maxS = list.reduce((a, p) => Math.max(a, p.s), 0);
+      const lod = box.getBoundingSphere(new THREE.Sphere());
+      lod.radius += maxS * 2.6;
+      // world-space culling bounds: plant positions grown by the largest crown sideways and by
+      // 3.7 x scale up (the card of a plant reaches trunk + crown + half a card above its base)
+      box.min.x -= maxS * 2.6; box.max.x += maxS * 2.6;
+      box.min.z -= maxS * 2.6; box.max.z += maxS * 2.6;
+      box.min.y -= 1; box.max.y += maxS * 3.7;
       const sphere = box.getBoundingSphere(new THREE.Sphere());
-      sphere.radius += maxS;
-      sphere.center.y += maxS * 0.3;
       near.boundingSphere = sphere;
       far.boundingSphere = sphere.clone();
       far.visible = false;
       this.group.add(near, far);
-      this.tiles.push({ near, far, cx: sphere.center.x, cz: sphere.center.z, r: sphere.radius, n: count, d: 0 });
+      this.tiles.push({ near, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0 });
     };
     for (const t of byTile.values()) {
       if (t.crown.length) build(t.crown, crownGeo, crownMat);
@@ -732,19 +737,30 @@ export class Vegetation {
 
   /** Per-tile LOD: the nearest tiles (within NEAR_DISTANCE, up to an instance budget) draw the 3D
    *  meshes; every other tile draws camera-facing cards, thinned with distance. Shadows always come
-   *  from the card mesh (light-facing crown blobs), which for near tiles is otherwise invisible. */
-  updateLod(camX: number, camZ: number): void {
-    for (const t of this.tiles) t.d = Math.max(0, Math.hypot(t.cx - camX, t.cz - camZ) - t.r);
-    const order = this.tiles.slice().sort((a, b) => a.d - b.d);
+   *  from the card mesh (light-facing crown blobs), which for near tiles is kept off the camera layer.
+   *  Tiles outside the view are not drawn; tiles whose shadow cannot reach the view do not cast. */
+  updateLod(camX: number, camZ: number, cull: ViewCull): void {
+    const tiles = this.tiles;
+    for (const t of tiles) t.d = Math.max(0, Math.hypot(t.lodCenter.x - camX, t.lodCenter.z - camZ) - t.lodR);
+    // in-place insertion sort by distance: the order barely changes between frames, so this is
+    // linear and allocation-free (the budget below is spent nearest-first)
+    for (let i = 1; i < tiles.length; i++) {
+      const t = tiles[i];
+      let j = i - 1;
+      while (j >= 0 && tiles[j].d > t.d) { tiles[j + 1] = tiles[j]; j--; }
+      tiles[j + 1] = t;
+    }
     let budget = NEAR_BUDGET;
-    for (const t of order) {
+    for (const t of tiles) {
       const near = t.d < NEAR_DISTANCE && budget >= t.n;
       if (near) budget -= t.n;
-      const shadow = t.d < this.shadowDistance;
-      t.near.visible = near;
-      t.far.visible = near ? shadow : t.d < this.viewDistance;
+      const inView = cull.boxInView(t.box);
+      const shadow = t.d < this.shadowDistance && cull.casterInView(t.center, t.r, t.height);
+      t.near.visible = near && inView;
+      const drawCards = !near && inView && t.d < this.viewDistance;
+      t.far.visible = drawCards || shadow;
       t.far.castShadow = shadow;
-      t.far.material = near ? this.ghostMat : this.cardMat;
+      t.far.layers.mask = layerMask('all', drawCards);
       // far cards: full density to 3 km, half at 5.5 km, a quarter beyond (a crown is ~1 px there)
       const frac = near ? 1 : t.d < 3000 ? 1 : t.d < 5500 ? 0.5 : 0.25;
       t.far.count = Math.max(1, Math.round(t.n * frac));

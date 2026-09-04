@@ -5,6 +5,8 @@ import type { WorldMap, Vec2 } from './map';
 import type { RoadSegment } from './roads';
 import type { BridgeRoute } from './bridges';
 import { CONTRAIL_MATERIAL, WakeTrail } from '../render/wakes';
+import { PbrSoup, cellKey, createBatchedPbrMaterial } from './batching';
+import { layerMask, setCasterClass, type ViewCull } from './culling';
 
 // ------------------------------------------------------------------ boats
 
@@ -147,8 +149,10 @@ export class BoatFactory {
 }
 
 interface MovingBoat {
-  group: THREE.Group;
+  /** instance in the movers batch */
+  id: number;
   route: Vec2[];
+  routeLen: number;
   s: number;
   dir: 1 | -1;
   speed: number;
@@ -177,81 +181,34 @@ function routePoint(pts: Vec2[], s: number, out: { x: number; z: number; dx: num
   }
 }
 
-/** Shared material for baked (vertex-coloured) moving vehicles: one draw call per vehicle. */
-const BAKED_MATERIAL = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.12 });
-
 /**
- * Collapse a group of small meshes into one vertex-coloured mesh in the group's local frame. The group
- * itself is kept (position/rotation are still driven by the traffic update), only its children change.
- * Sail/glass/steel materials become vertex colours; the small loss in material variety is invisible at the
- * distances moving boats are seen from and saves 5-10 draw calls (x cascades) per vehicle.
+ * Bake the meshes of a vehicle group into one vertex-coloured geometry in the group's local frame,
+ * with each part's roughness / metalness carried per vertex (see createBatchedPbrMaterial). Instanced
+ * children (container stacks) are expanded with their instance colours. The source geometries are freed.
  */
-function bakeGroup(g: THREE.Group): void {
+function bakeLocal(g: THREE.Group): THREE.BufferGeometry {
   g.updateMatrixWorld(true);
   const inv = g.matrixWorld.clone().invert();
-  const geos: THREE.BufferGeometry[] = [];
-  const cols: THREE.Color[] = [];
-  const doubleSided: boolean[] = [];
+  const soup = new PbrSoup();
+  const local = new THREE.Matrix4(), inst = new THREE.Matrix4(), col = new THREE.Color();
   g.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh) return;
-    const local = m.matrixWorld.clone().premultiply(inv);
-    const geo = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(local);
-    geos.push(geo);
+    local.multiplyMatrices(inv, m.matrixWorld);
     const mat = m.material as THREE.MeshStandardMaterial;
-    cols.push(mat.color ?? new THREE.Color(0xffffff));
-    doubleSided.push(mat.side === THREE.DoubleSide);
-  });
-  let n = 0;
-  for (let i = 0; i < geos.length; i++) n += geos[i].getAttribute('position').count * (doubleSided[i] ? 2 : 1);
-  const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), col = new Float32Array(n * 3);
-  let o = 0;
-  for (let i = 0; i < geos.length; i++) {
-    const gg = geos[i];
-    const p = gg.getAttribute('position'), nn = gg.getAttribute('normal');
-    const c = cols[i];
-    const put = (flip: boolean) => {
-      for (let k = 0; k < p.count; k++) {
-        const src = flip ? (k - (k % 3)) + (2 - (k % 3)) : k; // reverse winding for the back copy
-        pos[(o + k) * 3] = p.getX(src); pos[(o + k) * 3 + 1] = p.getY(src); pos[(o + k) * 3 + 2] = p.getZ(src);
-        const s = flip ? -1 : 1;
-        nrm[(o + k) * 3] = s * nn.getX(src); nrm[(o + k) * 3 + 1] = s * nn.getY(src); nrm[(o + k) * 3 + 2] = s * nn.getZ(src);
-        col[(o + k) * 3] = c.r; col[(o + k) * 3 + 1] = c.g; col[(o + k) * 3 + 2] = c.b;
+    const im = o as THREE.InstancedMesh;
+    if (im.isInstancedMesh) {
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, inst);
+        if (im.instanceColor) im.getColorAt(i, col);
+        soup.add(m.geometry, inst.premultiply(local), mat, im.instanceColor ? col : undefined);
       }
-      o += p.count;
-    };
-    put(false);
-    if (doubleSided[i]) put(true);
-    gg.dispose();
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
-  out.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  out.computeBoundingSphere();
-  for (const c of [...g.children]) g.remove(c);
-  const mesh = new THREE.Mesh(out, BAKED_MATERIAL);
-  mesh.castShadow = true; mesh.receiveShadow = true;
-  g.add(mesh);
-}
-
-function mergeStatic(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  let n = 0;
-  for (const g of geos) n += g.getAttribute('position').count;
-  const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3);
-  let o = 0;
-  for (const g of geos) {
-    const p = g.getAttribute('position'), nn = g.getAttribute('normal');
-    pos.set(p.array as Float32Array, o * 3);
-    if (nn) nrm.set(nn.array as Float32Array, o * 3);
-    o += p.count;
-    g.dispose();
-  }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
-  out.computeBoundingSphere();
-  return out;
+    } else {
+      soup.add(m.geometry, local, mat);
+    }
+    m.geometry.dispose();
+  });
+  return soup.build();
 }
 
 // ------------------------------------------------------------------ cars
@@ -259,9 +216,66 @@ function mergeStatic(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
 interface CarRoute { pts: THREE.Vector3[]; length: number; lanes: number; width: number; }
 interface Car { route: number; s: number; dir: 1 | -1; lane: number; speed: number; color: THREE.Color; }
 
+/** Cars of one spatial cell: refilled every update with bounds fitted to the cars actually in it, so
+ *  a cell can be frustum-culled and only the cells near the camera cast shadows. */
+interface CarChunk { mesh: THREE.InstancedMesh; capacity: number; n: number; center: THREE.Vector3; r: number; box: THREE.Box3 }
+
+const CAR_CELL = 5000;
+/** half-extent of a car around its position, added to the fitted cell bounds */
+const CAR_MARGIN = 3;
+
+/** Body (part 0), cabin (part 1) and light bar (part 2) of a car in one geometry. */
+function carGeometry(): THREE.BufferGeometry {
+  const parts: [THREE.BoxGeometry, number, number, number, number][] = [
+    [new THREE.BoxGeometry(4.4, 1.0, 1.9), 0, 0, 0.65, 0],
+    [new THREE.BoxGeometry(2.2, 0.75, 1.7), 1, -0.2, 1.5, 0],
+    [new THREE.BoxGeometry(0.2, 0.25, 1.6), 2, 2.2, 0.8, 0],
+  ];
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], part: number[] = [];
+  for (const [box, id, x, y, z] of parts) {
+    const g = box.translate(x, y, z).toNonIndexed();
+    const p = g.getAttribute('position'), n = g.getAttribute('normal'), u = g.getAttribute('uv');
+    for (let i = 0; i < p.count; i++) {
+      pos.push(p.getX(i), p.getY(i), p.getZ(i)); nrm.push(n.getX(i), n.getY(i), n.getZ(i)); uv.push(u.getX(i), u.getY(i)); part.push(id);
+    }
+    g.dispose(); box.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  out.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  out.setAttribute('aPart', new THREE.Float32BufferAttribute(part, 1));
+  out.computeBoundingSphere();
+  return out;
+}
+
+/** One material for the three car parts, reproducing the body / cabin / light materials exactly:
+ *  body = instance colour (rough 0.35, metal 0.4), cabin = dark glass (0.15, 0.8), lights = white with
+ *  the night emissive (1.0, 0.0). */
+function carMaterial(): THREE.MeshStandardMaterial {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2d0, emissiveIntensity: 0 });
+  const cabin = new THREE.Color(0x1a222c);
+  const f = (v: number) => v.toFixed(6);
+  mat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aPart;\nvarying float vPart;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPart = aPart;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vPart;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+if (vPart > 1.5) diffuseColor.rgb = vec3(1.0);
+else if (vPart > 0.5) diffuseColor.rgb = vec3(${f(cabin.r)}, ${f(cabin.g)}, ${f(cabin.b)});`)
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = vPart > 1.5 ? 1.0 : (vPart > 0.5 ? 0.15 : 0.35);')
+      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = vPart > 1.5 ? 0.0 : (vPart > 0.5 ? 0.8 : 0.4);')
+      .replace('#include <emissivemap_fragment>', 'totalEmissiveRadiance *= step(1.5, vPart);');
+  };
+  mat.customProgramCacheKey = () => 'traffic-car-v1';
+  return mat;
+}
+
 // ------------------------------------------------------------------ aircraft
 
-interface DistantAircraft { group: THREE.Group; path: (t: number) => THREE.Vector3; period: number; offset: number; contrail: WakeTrail | null; }
+interface DistantAircraft { id: number; path: (t: number, out: THREE.Vector3) => THREE.Vector3; period: number; offset: number; contrail: WakeTrail | null; }
 
 export class Traffic {
   readonly group = new THREE.Group();
@@ -269,23 +283,33 @@ export class Traffic {
   private boats: MovingBoat[] = [];
   private carRoutes: CarRoute[] = [];
   private cars: Car[] = [];
-  private carBodies!: THREE.InstancedMesh;
-  private carCabins!: THREE.InstancedMesh;
-  private carLights!: THREE.InstancedMesh;
+  private readonly carChunks: CarChunk[] = [];
+  private readonly carCells = new Map<number, CarChunk>();
+  /** catches cars whose lane offset pushed them out of every registered cell (never culled) */
+  private readonly carOverflow: CarChunk;
+  private readonly carMat: THREE.MeshStandardMaterial;
+  /** every moving boat and airliner: one batched draw, per-vehicle matrices and frustum culling */
+  private readonly movers: THREE.BatchedMesh;
   private aircraft: DistantAircraft[] = [];
   private readonly tmp = { x: 0, z: 0, dx: 1, dz: 0 };
   private readonly tmpM = new THREE.Matrix4();
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpP = new THREE.Vector3();
-  private readonly tmpS = new THREE.Vector3();
+  private readonly tmpS = new THREE.Vector3(1, 1, 1);
+  private readonly tmpE = new THREE.Euler(0, 0, 0, 'YXZ');
+  private readonly up = new THREE.Vector3(0, 1, 0);
+  private readonly pos = new THREE.Vector3();
+  private readonly dir = new THREE.Vector3();
+  private readonly side = new THREE.Vector3();
+  private readonly ahead = new THREE.Vector3();
   boatCount = 0;
   carCount = 0;
 
   constructor(private map: WorldMap, roads: RoadSegment[], bridges: BridgeRoute[], private wakeScene: THREE.Scene, seed: number, moored: { x: number; z: number; rot: number; len: number }[]) {
     const rng = new Rng(`traffic-${seed}`);
     const factory = new BoatFactory();
-    this.materials.push(...factory.materials, BAKED_MATERIAL);
-    // moving boats along channels
+    // moving boats along channels: baked in their local frame, batched below
+    const moverGeos: THREE.BufferGeometry[] = [];
     for (const ch of map.channels) {
       const len = routeLength(ch.pts);
       for (let i = 0; i < ch.boats; i++) {
@@ -294,34 +318,20 @@ export class Traffic {
         const speed = kind === 'cargo' ? rng.range(4, 6) : kind === 'ferry' ? 7 : kind === 'sail' ? rng.range(2.5, 4) : kind === 'yacht' ? rng.range(5, 9) : rng.range(9, 16);
         const wake = new WakeTrail(kind === 'cargo' ? 90 : 80, b.wakeWidth, kind === 'cargo' ? 70 : kind === 'sail' ? 20 : 42, kind === 'sail' ? 0.45 : 1.5);
         wakeScene.add(wake.mesh);
-        bakeGroup(b.group);
-        this.group.add(b.group);
-        this.boats.push({ group: b.group, route: ch.pts, s: rng.range(0, len), dir: rng.chance(0.5) ? 1 : -1, speed, len: b.len, draft: b.draft, wake, phase: rng.range(0, 100) });
+        moverGeos.push(bakeLocal(b.group));
+        this.boats.push({ id: moverGeos.length - 1, route: ch.pts, routeLen: len, s: rng.range(0, len), dir: rng.chance(0.5) ? 1 : -1, speed, len: b.len, draft: b.draft, wake, phase: rng.range(0, 100) });
       }
     }
-    // moored boats (static, no wake): merged into one mesh per material
-    const byMat = new Map<THREE.Material, THREE.BufferGeometry[]>();
+    // moored boats (static, no wake) join the same batch with a fixed matrix
+    const mooredInst: { idx: number; m: THREE.Matrix4 }[] = [];
     for (const mb of moored) {
       const b = factory.build(rng.chance(0.4) ? 'sail' : rng.chance(0.5) ? 'speed' : rng.chance(0.5) ? 'console' : 'yacht', rng);
       const scale = clamp(mb.len / b.len, 0.6, 1.4);
       b.group.scale.setScalar(scale);
       b.group.position.set(mb.x, 0.05, mb.z);
       b.group.rotation.y = mb.rot + (rng.chance(0.5) ? Math.PI : 0);
-      b.group.updateMatrixWorld(true);
-      b.group.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (!m.isMesh) return;
-        const g = m.geometry.clone().applyMatrix4(m.matrixWorld);
-        const mat = m.material as THREE.Material;
-        let list = byMat.get(mat); if (!list) { list = []; byMat.set(mat, list); }
-        list.push(g.index ? g.toNonIndexed() : g);
-      });
-    }
-    for (const [mat, geos] of byMat) {
-      const merged = mergeStatic(geos);
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.castShadow = true; mesh.receiveShadow = true;
-      this.group.add(mesh);
+      moverGeos.push(bakeLocal(b.group));
+      mooredInst.push({ idx: moverGeos.length - 1, m: b.group.matrixWorld.clone() });
     }
     this.boatCount = this.boats.length + moored.length;
 
@@ -351,25 +361,56 @@ export class Traffic {
       }
     }
     this.carCount = this.cars.length;
-    const bodyGeo = new THREE.BoxGeometry(4.4, 1.0, 1.9); bodyGeo.translate(0, 0.65, 0);
-    const cabinGeo = new THREE.BoxGeometry(2.2, 0.75, 1.7); cabinGeo.translate(-0.2, 1.5, 0);
-    const lightGeo = new THREE.BoxGeometry(0.2, 0.25, 1.6); lightGeo.translate(2.2, 0.8, 0);
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.4 });
-    const cabinMat = new THREE.MeshStandardMaterial({ color: 0x1a222c, roughness: 0.15, metalness: 0.8 });
-    const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff2d0, emissiveIntensity: 0 });
-    this.materials.push(bodyMat, cabinMat, lightMat);
-    this.carBodies = new THREE.InstancedMesh(bodyGeo, bodyMat, this.cars.length);
-    this.carCabins = new THREE.InstancedMesh(cabinGeo, cabinMat, this.cars.length);
-    this.carLights = new THREE.InstancedMesh(lightGeo, lightMat, this.cars.length);
-    for (const m of [this.carBodies, this.carCabins, this.carLights]) { m.frustumCulled = false; m.castShadow = true; }
-    this.cars.forEach((c, i) => this.carBodies.setColorAt(i, c.color));
-    this.group.add(this.carBodies, this.carCabins, this.carLights);
+    // car cells: every cell a route passes through gets a chunk sized for all cars of those routes
+    const carGeo = carGeometry();
+    this.carMat = carMaterial();
+    this.materials.push(this.carMat);
+    const cellCap = new Map<number, number>();
+    const carsPerRoute = new Array<number>(this.carRoutes.length).fill(0);
+    for (const c of this.cars) carsPerRoute[c.route]++;
+    const seen = new Set<number>();
+    const sample = new THREE.Vector3();
+    for (let ri = 0; ri < this.carRoutes.length; ri++) {
+      if (!carsPerRoute[ri]) continue;
+      const pts = this.carRoutes[ri].pts;
+      seen.clear();
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const steps = Math.max(1, Math.ceil(a.distanceTo(b) / 40));
+        for (let k = 0; k <= steps; k++) {
+          sample.lerpVectors(a, b, k / steps);
+          const key = cellKey(sample.x, sample.z, CAR_CELL);
+          if (!seen.has(key)) { seen.add(key); cellCap.set(key, (cellCap.get(key) ?? 0) + carsPerRoute[ri]); }
+        }
+      }
+    }
+    const makeChunk = (capacity: number, culled: boolean): CarChunk => {
+      const mesh = new THREE.InstancedMesh(carGeo, this.carMat, capacity);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.setColorAt(0, this.cars[0]?.color ?? new THREE.Color(0xffffff));
+      mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
+      mesh.castShadow = true;
+      mesh.count = 0;
+      mesh.visible = false;
+      setCasterClass(mesh, 'mid');
+      // the world-space bound is refitted to the cars in the cell every update
+      if (culled) mesh.boundingSphere = new THREE.Sphere();
+      else mesh.frustumCulled = false;
+      this.group.add(mesh);
+      return { mesh, capacity, n: 0, center: new THREE.Vector3(), r: 0, box: new THREE.Box3() };
+    };
+    for (const [key, cap] of cellCap) {
+      const chunk = makeChunk(cap, true);
+      this.carCells.set(key, chunk);
+      this.carChunks.push(chunk);
+    }
+    this.carOverflow = makeChunk(Math.max(1, this.cars.length), false);
+    this.carChunks.push(this.carOverflow);
 
     // distant aircraft: two airliners on approach / departure, one high cruiser with a contrail
     const airMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.35, metalness: 0.2 });
     const tailMat = new THREE.MeshStandardMaterial({ color: 0x2a6fbf, roughness: 0.4 });
-    this.materials.push(airMat, tailMat);
-    const airliner = (scale: number) => {
+    const airliner = (scale: number): number => {
       const g = new THREE.Group();
       const fus = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 38, 12), airMat); fus.rotation.z = Math.PI / 2; g.add(fus);
       const nose = new THREE.Mesh(new THREE.SphereGeometry(1.9, 12, 8), airMat); nose.position.x = 19; nose.scale.set(1.6, 1, 1); g.add(nose);
@@ -380,32 +421,47 @@ export class Traffic {
       const hstab = new THREE.Mesh(new THREE.BoxGeometry(4, 0.3, 12), airMat); hstab.position.set(-17, 1, 0); g.add(hstab);
       for (const s of [-1, 1]) { const eng = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.0, 4.5, 10), airMat); eng.rotation.z = Math.PI / 2; eng.position.set(3, -2.4, s * 7); g.add(eng); }
       g.scale.setScalar(scale);
-      bakeGroup(g);
-      return g;
+      moverGeos.push(bakeLocal(g));
+      return moverGeos.length - 1;
     };
     const rwy = map.runways[0];
     // approach to runway 09 from the east over the bay: descend from 900 m at x=+3000 to the threshold
-    const approach = (t: number) => {
+    const approach = (t: number, out: THREE.Vector3) => {
       const x = lerp(4000, rwy.a[0], t), z = lerp(rwy.a[1] + 30, rwy.a[1], t);
       const y = lerp(900, 12, Math.pow(t, 0.9));
-      return new THREE.Vector3(x, y, z);
+      return out.set(x, y, z);
     };
-    const a1 = airliner(1.0); this.group.add(a1);
-    this.aircraft.push({ group: a1, path: approach, period: 240, offset: 0, contrail: null });
-    const a2 = airliner(0.9); this.group.add(a2);
-    this.aircraft.push({ group: a2, path: approach, period: 240, offset: 0.5, contrail: null });
+    this.aircraft.push({ id: airliner(1.0), path: approach, period: 240, offset: 0, contrail: null });
+    this.aircraft.push({ id: airliner(0.9), path: approach, period: 240, offset: 0.5, contrail: null });
     // departure climbing west then turning north
-    const departure = (t: number) => {
+    const departure = (t: number, out: THREE.Vector3) => {
       const x = lerp(rwy.b[0], -9000, t), z = rwy.b[1] - 3500 * t * t;
-      return new THREE.Vector3(x, 12 + 2200 * Math.pow(t, 0.8), z);
+      return out.set(x, 12 + 2200 * Math.pow(t, 0.8), z);
     };
-    const a3 = airliner(1.0); this.group.add(a3);
-    this.aircraft.push({ group: a3, path: departure, period: 200, offset: 0.2, contrail: null });
+    this.aircraft.push({ id: airliner(1.0), path: departure, period: 200, offset: 0.2, contrail: null });
     // high cruiser with contrail
-    const cruise = (t: number) => new THREE.Vector3(lerp(-14000, 14000, t), 9500, lerp(-9000, 6000, t));
-    const a4 = airliner(1.0); this.group.add(a4);
+    const cruise = (t: number, out: THREE.Vector3) => out.set(lerp(-14000, 14000, t), 9500, lerp(-9000, 6000, t));
     const contrail = new WakeTrail(180, 25, 90, 0.6, CONTRAIL_MATERIAL);
-    this.aircraft.push({ group: a4, path: cruise, period: 260, offset: 0.4, contrail });
+    this.aircraft.push({ id: airliner(1.0), path: cruise, period: 260, offset: 0.4, contrail });
+
+    // the movers batch: one geometry + instance per vehicle, drawn in a single (multi-draw) call with
+    // per-vehicle frustum culling; the whole-mesh bound is meaningless for vehicles spread over the map
+    let vertexCount = 0;
+    for (const g of moverGeos) vertexCount += g.getAttribute('position').count;
+    const moverMat = createBatchedPbrMaterial('traffic-movers-v1', true);
+    this.materials.push(moverMat);
+    this.movers = new THREE.BatchedMesh(moverGeos.length, vertexCount, vertexCount, moverMat);
+    const ids = moverGeos.map((g) => {
+      const id = this.movers.addInstance(this.movers.addGeometry(g));
+      g.dispose();
+      return id;
+    });
+    for (const b of this.boats) b.id = ids[b.id];
+    for (const a of this.aircraft) a.id = ids[a.id];
+    for (const mi of mooredInst) this.movers.setMatrixAt(ids[mi.idx], mi.m);
+    this.movers.frustumCulled = false;
+    this.movers.castShadow = true; this.movers.receiveShadow = true;
+    this.group.add(this.movers);
   }
 
   private len3(pts: THREE.Vector3[]): number {
@@ -432,24 +488,25 @@ export class Traffic {
   get contrailMeshes(): THREE.Mesh[] { return this.aircraft.filter((a) => a.contrail).map((a) => a.contrail!.mesh); }
 
   update(dt: number, time: number, night: number): void {
+    const { tmpM, tmpQ, tmpP, tmpS, tmpE, movers } = this;
+    tmpS.set(1, 1, 1);
     // boats
     for (const b of this.boats) {
-      const len = routeLength(b.route);
+      const len = b.routeLen;
       b.s += b.speed * dt * b.dir;
       if (b.s > len - 5) { b.s = len - 5; b.dir = -1; }
       if (b.s < 5) { b.s = 5; b.dir = 1; }
       routePoint(b.route, b.s, this.tmp);
       const yaw = Math.atan2(this.tmp.dx * b.dir, this.tmp.dz * b.dir);
-      b.group.position.set(this.tmp.x, -b.draft * 0.15 + 0.12 * Math.sin(time * 1.3 + b.phase) * (b.len < 20 ? 1 : 0.2), this.tmp.z);
-      // hull axis is +x, rotate so +x points along travel direction
-      b.group.rotation.set(0.02 * Math.sin(time * 1.7 + b.phase), yaw - Math.PI / 2, 0.03 * Math.sin(time * 1.1 + b.phase) + (b.speed > 8 ? -0.03 : 0));
-      // planing boats pitch up
-      if (b.speed > 9) b.group.rotation.x += 0.0; 
+      tmpP.set(this.tmp.x, -b.draft * 0.15 + 0.12 * Math.sin(time * 1.3 + b.phase) * (b.len < 20 ? 1 : 0.2), this.tmp.z);
+      // hull axis is +x, rotate so +x points along travel direction; a little roll and pitch with the swell
+      tmpE.set(0.02 * Math.sin(time * 1.7 + b.phase), yaw - Math.PI / 2, 0.03 * Math.sin(time * 1.1 + b.phase) + (b.speed > 8 ? -0.03 : 0), 'XYZ');
+      movers.setMatrixAt(b.id, tmpM.compose(tmpP, tmpQ.setFromEuler(tmpE), tmpS));
       b.wake.update(this.tmp.x - this.tmp.dx * b.dir * b.len * 0.4, this.tmp.z - this.tmp.dz * b.dir * b.len * 0.4, time, true, b.speed);
     }
-    // cars
-    const up = new THREE.Vector3(0, 1, 0);
-    const pos = new THREE.Vector3(), dir = new THREE.Vector3(), side = new THREE.Vector3();
+    // cars: advance, then refill the chunk of the cell each car is in
+    const { pos, dir, side, up } = this;
+    for (const ch of this.carChunks) { ch.n = 0; ch.box.makeEmpty(); }
     for (let i = 0; i < this.cars.length; i++) {
       const c = this.cars[i];
       const r = this.carRoutes[c.route];
@@ -463,33 +520,56 @@ export class Traffic {
       pos.addScaledVector(side, laneOff);
       const yaw = Math.atan2(dir.x, dir.z) - Math.PI / 2;
       const pitch = -Math.asin(clamp(dir.y, -1, 1));
-      this.tmpQ.setFromEuler(new THREE.Euler(0, yaw, pitch, 'YXZ'));
+      this.tmpQ.setFromEuler(this.tmpE.set(0, yaw, pitch, 'YXZ'));
       this.tmpP.copy(pos);
-      this.tmpS.set(1, 1, 1);
       this.tmpM.compose(this.tmpP, this.tmpQ, this.tmpS);
-      this.carBodies.setMatrixAt(i, this.tmpM);
-      this.carCabins.setMatrixAt(i, this.tmpM);
-      this.carLights.setMatrixAt(i, this.tmpM);
+      let chunk = this.carCells.get(cellKey(pos.x, pos.z, CAR_CELL));
+      if (!chunk || chunk.n >= chunk.capacity) chunk = this.carOverflow;
+      const slot = chunk.n++;
+      chunk.mesh.setMatrixAt(slot, this.tmpM);
+      chunk.mesh.setColorAt(slot, c.color);
+      chunk.box.expandByPoint(pos);
     }
-    this.carBodies.instanceMatrix.needsUpdate = true;
-    this.carCabins.instanceMatrix.needsUpdate = true;
-    this.carLights.instanceMatrix.needsUpdate = true;
-    (this.carLights.material as THREE.MeshStandardMaterial).emissiveIntensity = 6 * night;
-    if (this.carBodies.instanceColor) this.carBodies.instanceColor.needsUpdate = true;
+    for (const ch of this.carChunks) {
+      const m = ch.mesh;
+      m.count = ch.n;
+      if (!ch.n) { m.visible = false; continue; }
+      m.visible = true;
+      m.instanceMatrix.clearUpdateRanges(); m.instanceMatrix.addUpdateRange(0, ch.n * 16); m.instanceMatrix.needsUpdate = true;
+      m.instanceColor!.clearUpdateRanges(); m.instanceColor!.addUpdateRange(0, ch.n * 3); m.instanceColor!.needsUpdate = true;
+      ch.box.min.addScalar(-CAR_MARGIN); ch.box.max.addScalar(CAR_MARGIN);
+      if (m.boundingSphere) {
+        ch.box.getBoundingSphere(m.boundingSphere);
+        ch.center.copy(m.boundingSphere.center); ch.r = m.boundingSphere.radius;
+      }
+    }
+    this.carMat.emissiveIntensity = 6 * night;
     // aircraft
     for (const a of this.aircraft) {
       const t = ((time / a.period) + a.offset) % 1;
-      const p = a.path(t), p2 = a.path(Math.min(1, t + 0.002));
-      a.group.position.copy(p);
-      const d = p2.clone().sub(p).normalize();
+      const p = a.path(t, this.pos), d = a.path(Math.min(1, t + 0.002), this.ahead).sub(p).normalize();
       const yaw = Math.atan2(d.x, d.z) - Math.PI / 2;
       const pitch = Math.asin(clamp(d.y, -1, 1));
-      a.group.rotation.set(0, yaw, pitch * 0.6, 'YXZ');
+      tmpE.set(0, yaw, pitch * 0.6, 'YXZ');
+      movers.setMatrixAt(a.id, tmpM.compose(p, tmpQ.setFromEuler(tmpE), tmpS));
       if (a.contrail) {
         a.contrail.update(p.x, p.z, time, true, 250);
         a.contrail.mesh.position.y = p.y - 2;
         a.contrail.mesh.updateMatrix();
       }
+    }
+  }
+
+  /** Per-frame culling of the car cells: a cell casts only when its shadow can reach the view, and
+   *  leaves the camera layer when out of view. (The movers batch culls per vehicle on its own.) */
+  updateCulling(cull: ViewCull): void {
+    for (const ch of this.carChunks) {
+      if (!ch.n || ch === this.carOverflow) continue;
+      const inView = cull.boxInView(ch.box);
+      const cast = cull.casterInView(ch.center, ch.r, 2.5);
+      ch.mesh.visible = inView || cast;
+      ch.mesh.castShadow = cast;
+      ch.mesh.layers.mask = layerMask('mid', inView);
     }
   }
 }

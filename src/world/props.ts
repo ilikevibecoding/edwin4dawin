@@ -1,13 +1,42 @@
 import * as THREE from 'three';
 import { Rng } from '../core/seed';
 import { PORT_ISLAND, type WorldMap } from './map';
-import { mergeGeometries } from './bridges';
 import type { RoadSegment } from './roads';
-import { balanceGroundIbl } from './terrain';
+import { addNeutralVertexAttributes, cellKey, createBatchedPbrMaterial, mergeUnitParts } from './batching';
+import { activeCascade, layerMask, type ViewCull } from './culling';
 
-/** Static world dressing: marinas, port, airport, stadium, lighthouse, construction sites, lamps, seawalls. */
+/** One placed unit shape: transform, source material and thickness (middle dimension, m). */
+interface Placement { m: THREE.Matrix4; mat: string; size: number }
+
+/** Middle of three dimensions: the narrowest width a shadow of the object can have on the ground. */
+function thickness(a: number, b: number, c: number): number {
+  return a + b + c - Math.max(a, b, c) - Math.min(a, b, c);
+}
+
+/** One instanced mesh of a chunk. Instances are ordered large-first, so drawing only the first
+ *  `large` of them leaves out everything thinner than SMALL: that prefix is what the far cascades and
+ *  distant main-pass views render. `lo` is a coarser unit shape for the distance. */
+interface ChunkMesh { mesh: THREE.InstancedMesh; large: number; total: number; mainCount: number; hi: THREE.BufferGeometry; lo: THREE.BufferGeometry | null }
+
+/** Spatial chunk of props: boxes, large cylinders, small cylinders and lamps, one instanced mesh each. */
+interface PropChunk { meshes: ChunkMesh[]; box: THREE.Box3; center: THREE.Vector3; r: number; height: number }
+
+const CHUNK = 2500;
+/** objects thinner than this (pilings, poles, railings) cast into the nearest cascade only: their
+ *  shadows are under a texel wide in every other cascade */
+const SMALL = 1.0;
+/** thin cylinders and lamp poles use a 6-sided prism beyond this (a 30 cm piling is ~1 px there) */
+const LOD_DISTANCE = 350;
+/** objects thinner than SMALL are well under a pixel wide beyond this and leave the main pass */
+const SMALL_DISTANCE = 2500;
+
+/** Static world dressing: marinas, port, airport, stadium, lighthouse, construction sites, lamps, seawalls.
+ *  Everything is drawn from spatial chunks of instanced unit shapes; one material carries the colour,
+ *  roughness and metalness (per instance for boxes and cylinders, per vertex for the composite lamp)
+ *  so a chunk costs at most four draw calls, and thin objects only reach the nearest shadow cascade. */
 export class Props {
   readonly group = new THREE.Group();
+  readonly material: THREE.MeshStandardMaterial;
   readonly materials: THREE.Material[] = [];
   readonly lampPositions: THREE.Vector3[] = [];
   readonly mooredBoatPositions: { x: number; z: number; rot: number; len: number }[] = [];
@@ -15,11 +44,15 @@ export class Props {
   private readonly q = new THREE.Quaternion();
   private readonly p = new THREE.Vector3();
   private readonly s = new THREE.Vector3();
-  private readonly boxes = new Map<string, THREE.Matrix4[]>();
-  private readonly cyls = new Map<string, THREE.Matrix4[]>();
+  private readonly boxes: Placement[] = [];
+  private readonly cyls: Placement[] = [];
+  private readonly lamps: Placement[] = [];
+  private readonly chunks: PropChunk[] = [];
   private readonly mats: Record<string, THREE.MeshStandardMaterial>;
+  counts = { boxes: 0, cylinders: 0, lamps: 0, chunks: 0, meshes: 0 };
 
   constructor(private map: WorldMap, roads: RoadSegment[], bridgeLamps: THREE.Vector3[], private markOccupied: (x: number, z: number, r: number) => void) {
+    // colour / roughness / metalness sources for the batched material (never compiled themselves)
     this.mats = {
       concrete: new THREE.MeshStandardMaterial({ color: 0xb9b6ae, roughness: 0.9 }),
       dark: new THREE.MeshStandardMaterial({ color: 0x3a3d40, roughness: 0.8 }),
@@ -34,13 +67,11 @@ export class Props {
       glass: new THREE.MeshStandardMaterial({ color: 0x9fc4d6, roughness: 0.15, metalness: 0.8 }),
       grass: new THREE.MeshStandardMaterial({ color: 0x3f8a2e, roughness: 0.95 }),
       yellow: new THREE.MeshStandardMaterial({ color: 0xe0b23a, roughness: 0.6 }),
+      lampHead: new THREE.MeshStandardMaterial({ color: 0xffffff }),
     };
-    for (const k in this.mats) {
-      const mat = this.mats[k];
-      mat.onBeforeCompile = (shader) => balanceGroundIbl(shader);
-      mat.customProgramCacheKey = () => 'props-v2';
-      this.materials.push(mat);
-    }
+    // the emissive colour is the lamp heads' glow; `aEmissive` masks it to those vertices
+    this.material = createBatchedPbrMaterial('props-v4', true, 0xffd9a0);
+    this.materials.push(this.material);
     const rng = new Rng('props');
     this.buildMarinas(rng.fork('marinas'));
     this.buildPrivateDocks(rng.fork('docks'));
@@ -87,29 +118,131 @@ export class Props {
     this.p.set(x, y + h / 2, z);
     this.q.setFromEuler(new THREE.Euler(tilt, rot, 0));
     this.s.set(w, h, d);
-    let list = this.boxes.get(mat); if (!list) { list = []; this.boxes.set(mat, list); }
-    list.push(this.m.compose(this.p, this.q, this.s).clone());
+    this.boxes.push({ m: this.m.compose(this.p, this.q, this.s).clone(), mat, size: thickness(w, h, d) });
   }
   private cyl(mat: string, x: number, y: number, z: number, r: number, h: number, rot = 0, tilt = 0): void {
     this.p.set(x, y + h / 2, z);
     this.q.setFromEuler(new THREE.Euler(tilt, rot, 0));
     this.s.set(r * 2, h, r * 2);
-    let list = this.cyls.get(mat); if (!list) { list = []; this.cyls.set(mat, list); }
-    list.push(this.m.compose(this.p, this.q, this.s).clone());
+    this.cyls.push({ m: this.m.compose(this.p, this.q, this.s).clone(), mat, size: thickness(r * 2, h, r * 2) });
   }
+  /** Street lamp standing on the ground at (x, y, z): 9 m steel pole, 2.4 m arm and a glowing head. */
+  private lamp(x: number, y: number, z: number): void {
+    this.lamps.push({ m: new THREE.Matrix4().makeTranslation(x, y, z), mat: 'steel', size: 0.24 });
+  }
+
+  /** Composite lamp unit in metres: pole (`sides`-gon), arm box and emissive head sphere. */
+  private lampGeometry(sides: number): THREE.BufferGeometry {
+    const pole = new THREE.CylinderGeometry(0.12, 0.12, 9, sides).translate(0, 4.5, 0);
+    const arm = new THREE.BoxGeometry(0.2, 0.2, 2.4).translate(0, 9.1, 0);
+    const head = new THREE.SphereGeometry(0.22, 6, 4).translate(0, 9.05, 0);
+    const g = mergeUnitParts([
+      { geometry: pole, material: this.mats.steel },
+      { geometry: arm, material: this.mats.steel },
+      { geometry: head, material: this.mats.lampHead, emissive: true },
+    ]);
+    pole.dispose(); arm.dispose(); head.dispose();
+    return g;
+  }
+
+  /** Build the chunk meshes: placements are bucketed by CHUNK-metre cell and shape family; each bucket
+   *  becomes one InstancedMesh with world-space bounds, its instances ordered large-first. */
   private flush(): void {
-    const boxGeo = new THREE.BoxGeometry(1, 1, 1), cylGeo = new THREE.CylinderGeometry(0.5, 0.5, 1, 14);
-    for (const [mat, list] of this.boxes) {
-      const mesh = new THREE.InstancedMesh(boxGeo, this.mats[mat], list.length);
-      list.forEach((m, i) => mesh.setMatrixAt(i, m));
-      mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
-      this.group.add(mesh);
+    const unitBox = addNeutralVertexAttributes(new THREE.BoxGeometry(1, 1, 1));
+    const cylHi = addNeutralVertexAttributes(new THREE.CylinderGeometry(0.5, 0.5, 1, 14));
+    const cylLo = addNeutralVertexAttributes(new THREE.CylinderGeometry(0.5, 0.5, 1, 6));
+    const lampHi = this.lampGeometry(14), lampLo = this.lampGeometry(6);
+    for (const g of [unitBox, cylHi, cylLo, lampHi, lampLo]) g.computeBoundingSphere();
+    type Bucket = { boxes: Placement[]; cylLarge: Placement[]; cylSmall: Placement[]; lamps: Placement[] };
+    const buckets = new Map<number, Bucket>();
+    const bucketOf = (p: Placement): Bucket => {
+      this.p.setFromMatrixPosition(p.m);
+      const key = cellKey(this.p.x, this.p.z, CHUNK);
+      let b = buckets.get(key);
+      if (!b) { b = { boxes: [], cylLarge: [], cylSmall: [], lamps: [] }; buckets.set(key, b); }
+      return b;
+    };
+    const isLarge = (p: Placement) => p.size > SMALL;
+    for (const p of this.boxes) bucketOf(p).boxes.push(p);
+    for (const p of this.cyls) (isLarge(p) ? bucketOf(p).cylLarge : bucketOf(p).cylSmall).push(p);
+    for (const p of this.lamps) bucketOf(p).lamps.push(p);
+    this.counts.boxes = this.boxes.length; this.counts.cylinders = this.cyls.length; this.counts.lamps = this.lamps.length;
+    const sphere = new THREE.Sphere(), corner = new THREE.Vector3(), white = new THREE.Color(0xffffff);
+    for (const b of buckets.values()) {
+      const chunk: PropChunk = { meshes: [], box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, height: 0 };
+      // large instances first, so the first `large` instances are exactly the objects thicker than SMALL
+      b.boxes.sort((u, v) => Number(isLarge(v)) - Number(isLarge(u)));
+      /** `perVertex`: the unit carries colour / parameters per vertex (lamp) instead of per instance */
+      const make = (list: Placement[], hi: THREE.BufferGeometry, lo: THREE.BufferGeometry | null, perVertex: boolean) => {
+        if (!list.length) return;
+        const geo = hi.clone();
+        const params = perVertex ? null : new THREE.InstancedBufferAttribute(new Float32Array(list.length * 2), 2);
+        if (params) geo.setAttribute('aMatParams', params);
+        const mesh = new THREE.InstancedMesh(geo, this.material, list.length);
+        const bounds = new THREE.Box3();
+        let large = 0;
+        list.forEach((p, i) => {
+          mesh.setMatrixAt(i, p.m);
+          const src = this.mats[p.mat];
+          mesh.setColorAt(i, perVertex ? white : src.color);
+          params?.setXY(i, src.roughness, src.metalness);
+          if (isLarge(p)) large++;
+          sphere.copy(hi.boundingSphere!).applyMatrix4(p.m);
+          bounds.expandByPoint(corner.copy(sphere.center).addScalar(-sphere.radius));
+          bounds.expandByPoint(corner.copy(sphere.center).addScalar(sphere.radius));
+        });
+        mesh.boundingSphere = bounds.getBoundingSphere(new THREE.Sphere());
+        mesh.castShadow = true; mesh.receiveShadow = true;
+        let loGeo: THREE.BufferGeometry | null = null;
+        if (lo) {
+          loGeo = lo.clone();
+          if (params) loGeo.setAttribute('aMatParams', params);
+        }
+        const entry: ChunkMesh = { mesh, large, total: list.length, mainCount: list.length, hi: geo, lo: loGeo };
+        // the far cascades only see the large prefix; the nearest one (and any non-CSM light) sees all
+        mesh.onBeforeShadow = () => { mesh.count = activeCascade() <= 0 ? entry.total : entry.large; };
+        mesh.onAfterShadow = () => { mesh.count = entry.mainCount; };
+        chunk.box.union(bounds);
+        chunk.meshes.push(entry);
+        this.group.add(mesh);
+      };
+      make(b.boxes, unitBox, null, false);
+      make(b.cylLarge, cylHi, null, false);
+      make(b.cylSmall, cylHi, cylLo, false);
+      make(b.lamps, lampHi, lampLo, true);
+      chunk.box.getBoundingSphere(sphere);
+      chunk.center.copy(sphere.center); chunk.r = sphere.radius; chunk.height = chunk.box.max.y - chunk.box.min.y;
+      this.chunks.push(chunk);
+      this.counts.meshes += chunk.meshes.length;
     }
-    for (const [mat, list] of this.cyls) {
-      const mesh = new THREE.InstancedMesh(cylGeo, this.mats[mat], list.length);
-      list.forEach((m, i) => mesh.setMatrixAt(i, m));
-      mesh.castShadow = true; mesh.receiveShadow = true; mesh.frustumCulled = false;
-      this.group.add(mesh);
+    this.counts.chunks = this.chunks.length;
+    this.boxes.length = 0; this.cyls.length = 0; this.lamps.length = 0;
+  }
+
+  /** Lamp heads glow at night. */
+  setNight(night: number): void {
+    this.material.emissiveIntensity = 8 * night;
+  }
+
+  /** Per-frame culling: a chunk is drawn when its box is in view and casts when its shadow can reach
+   *  the view; meshes that only cast leave the camera layer. Beyond SMALL_DISTANCE the main pass draws
+   *  the large prefix only; thin cylinders and lamps swap to the coarse prism beyond LOD_DISTANCE. */
+  updateLod(camX: number, camZ: number, cull: ViewCull): void {
+    for (const c of this.chunks) {
+      const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
+      const inView = cull.boxInView(c.box);
+      const cast = cull.casterInView(c.center, c.r, c.height);
+      const far = d > SMALL_DISTANCE;
+      for (const e of c.meshes) {
+        const n = far ? e.large : e.total;
+        e.mainCount = n;
+        e.mesh.count = n;
+        const drawn = inView && n > 0;
+        e.mesh.visible = drawn || cast;
+        e.mesh.castShadow = cast;
+        e.mesh.layers.mask = layerMask(e.large > 0 ? 'all' : 'near', drawn);
+        if (e.lo) e.mesh.geometry = d > LOD_DISTANCE ? e.lo : e.hi;
+      }
     }
   }
 
@@ -625,10 +758,7 @@ export class Props {
       }
     }
     for (const l of bridgeLamps) this.lampPositions.push(l.clone());
-    for (const l of this.lampPositions) {
-      this.cyl('steel', l.x, l.y, l.z, 0.12, 9);
-      this.box('steel', l.x, l.y + 9, l.z, 0.2, 0.2, 2.4);
-    }
+    for (const l of this.lampPositions) this.lamp(l.x, l.y, l.z);
   }
 
   private buildSeawalls(): void {

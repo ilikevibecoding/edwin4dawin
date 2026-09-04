@@ -4,6 +4,7 @@ import { clamp, lerp, smoothstep } from '../core/noise';
 import { Zone, type District, type WorldMap } from './map';
 import type { Block } from './roads';
 import { createFacadeMaterial } from './facade';
+import { layerMask, type ViewCull } from './culling';
 
 // ------------------------------------------------------------------ unit geometries
 // All are 1 m wide/deep centred on x/z and span y in [0,1]. Every geometry carries an `aPart` vertex
@@ -108,7 +109,9 @@ export class BuildingBatches {
   /** tile grid origin chosen so the downtown district falls inside a single tile */
   private readonly tileOx = -3400;
   private readonly tileOz = -4520;
-  private readonly tiles: { mesh: THREE.InstancedMesh; cx: number; cz: number; r: number }[] = [];
+  /** `lodR` is the horizontal half-diagonal of the tile (the shadow-distance metric); `center`, `r`
+   *  and `height` bound the buildings in world space and are only used for culling. */
+  private readonly tiles: { mesh: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number }[] = [];
   shadowDistance = 3200;
 
   constructor(nightUniform: THREE.IUniform<number>) {
@@ -129,7 +132,9 @@ export class BuildingBatches {
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), e = new THREE.Euler();
     for (const [key, list] of this.lists) {
       const kind = key.split('|')[0] as Kind;
-      const geo = this.geos[kind].clone(); // per-mesh copy so the instanced attributes are unique per tile
+      const unit = this.geos[kind];
+      if (unit.boundingSphere === null) unit.computeBoundingSphere();
+      const geo = unit.clone(); // per-mesh copy so the instanced attributes are unique per tile
       const mesh = new THREE.InstancedMesh(geo, this.material, list.length);
       const dims = new Float32Array(list.length * 3);
       const style = new Float32Array(list.length * 4);
@@ -151,22 +156,31 @@ export class BuildingBatches {
       geo.setAttribute('aDims', new THREE.InstancedBufferAttribute(dims, 3));
       geo.setAttribute('aStyle', new THREE.InstancedBufferAttribute(style, 4));
       geo.setAttribute('aStyle2', new THREE.InstancedBufferAttribute(style2, 4));
-      geo.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
-      geo.boundingBox = box.clone();
+      // the geometry keeps the unit shape's local bounds; the world-space bounds of the tile live on
+      // the mesh (identity transform), which is what the frustum test reads for instanced meshes
+      const sphere = box.getBoundingSphere(new THREE.Sphere());
+      mesh.boundingSphere = sphere;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       this.group.add(mesh);
-      const c = box.getCenter(new THREE.Vector3());
-      this.tiles.push({ mesh, cx: c.x, cz: c.z, r: Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2 });
+      const lodR = Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2;
+      this.tiles.push({ mesh, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR });
     }
   }
 
-  updateLod(camX: number, camZ: number): void {
+  /** Per-tile visibility: a tile is drawn when its box is in view and casts shadows when it is within
+   *  the shadow distance and its footprint, swept along the sun's shadow, can reach anything in view.
+   *  Tiles that only cast leave the camera layer so the main pass skips them. */
+  updateLod(camX: number, camZ: number, cull: ViewCull): void {
     for (const t of this.tiles) {
-      const d = Math.max(0, Math.hypot(t.cx - camX, t.cz - camZ) - t.r);
-      t.mesh.castShadow = d < this.shadowDistance;
+      const d = Math.max(0, Math.hypot(t.center.x - camX, t.center.z - camZ) - t.lodR);
+      const inView = cull.boxInView(t.box);
+      const cast = d < this.shadowDistance && cull.casterInView(t.center, t.r, t.height);
+      t.mesh.castShadow = cast;
+      t.mesh.visible = inView || cast;
+      t.mesh.layers.mask = layerMask('all', inView);
     }
   }
 }
