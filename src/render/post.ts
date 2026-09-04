@@ -232,7 +232,8 @@ export class PostPipeline {
     c.tBloom1.value = this.bloomRTs[1].texture;
     c.tBloom2.value = this.bloomRTs[2].texture;
     c.uBloom.value = this.opts.bloom ? 0.18 : 0.0;
-    c.uExposure.value = this.exposure * (1 + 5.0 * (this.aerialMat.uniforms.uNight.value as number));
+    // night exposure boost: x3.5 keeps 22:00 reading as night (x6 read as blue hour) while city lights stay bright
+    c.uExposure.value = this.exposure * (1 + 2.5 * (this.aerialMat.uniforms.uNight.value as number));
     c.uTime.value = time;
     this.blit(this.compositeMat, null);
     r.setRenderTarget(null);
