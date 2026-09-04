@@ -19,6 +19,10 @@ function shade(hex, f) {
   const cl = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
   return `rgb(${cl(r)},${cl(g)},${cl(b)})`;
 }
+function luminance(hex) {
+  const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
 
 // Regions for a w(x) x h(y) x d(z) head box: top/bottom row above, right|front|left|back row below.
 // Side faces: on the animal's left (+x) face the muzzle end is the region's left column, on the right (-x) face
@@ -44,20 +48,24 @@ function paintHead(ctx, canvas, type, coat, dark) {
   switch (type) {
     case 'horse': {
       // side faces (9x5, muzzle toward the region's outer column): 3x2 dark eye high on the rear half of the skull,
-      // a lighter glossy highlight on the front-top pixel and a thin lash line above; two nostrils on the muzzle.
-      const EYE = '#14100c', HI = '#8a7a70', LASH = shade(coat, 0.5), NOSTRIL = shade(coat, 0.6);
+      // a glossy highlight on the front-top pixel and a thin lash line above. On black / seal-brown coats a
+      // near-black eye would vanish, so the eye gets a soft dark grey, a bright glint and a lash line LIGHTER
+      // than the coat. Two small nostrils sit together on the bottom row of the muzzle.
+      const darkCoat = luminance(coat) < 0.18;
+      const EYE = darkCoat ? '#2c2622' : '#14100c', HI = darkCoat ? '#d8d0c8' : '#8a7a70';
+      const LASH = darkCoat ? shade(coat, 1.8) : shade(coat, 0.5), NOSTRIL = shade(coat, 0.8);
       px(uv.left, 4, 1, EYE, 3, 2); px(uv.left, 4, 1, HI); px(uv.left, 4, 0, LASH, 3, 1);
       px(uv.right, 2, 1, EYE, 3, 2); px(uv.right, 4, 1, HI); px(uv.right, 2, 0, LASH, 3, 1);
-      px(uv.front, 1, 3, NOSTRIL); px(uv.front, 4, 3, NOSTRIL);
+      px(uv.front, 2, 4, NOSTRIL, 2, 1);
       break;
     }
     case 'cow': {
-      // 2x2 eyes in the upper front corners (above the snout part) with a white highlight, wrapping one pixel
-      // onto each side face so they read from the side as well.
+      // 2x2 eyes in the upper front corners (above the snout part) with a white highlight, wrapping two pixels
+      // onto each side face so cows are not eyeless from the side.
       const EYE = '#1a1410', HI = '#e8e8e8';
       px(uv.front, 0, 2, EYE, 2, 2); px(uv.front, 1, 2, HI);
       px(uv.front, 6, 2, EYE, 2, 2); px(uv.front, 6, 2, HI);
-      px(uv.left, 0, 2, EYE, 1, 2); px(uv.right, 5, 2, EYE, 1, 2);
+      px(uv.left, 0, 2, EYE, 2, 2); px(uv.right, 4, 2, EYE, 2, 2);
       break;
     }
     case 'pig': {
