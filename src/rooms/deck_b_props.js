@@ -219,13 +219,14 @@ export function lightBox(kit, x, z, y, w, d, key = "emitWhiteSoft", opts = {}) {
 
 /** Ceiling-mounted projector housing pointing down at `target` with a faint holo cone. */
 export function projector(kit, x, y, z, target, opts = {}) {
-  const { accentKey = "emitBlue", spread = 0.9 } = opts;
+  const { accentKey = "emitBlue", spread = 0.9, cone = true } = opts;
   kit.box("impTrim", x, y - 0.2, z, 0.9, 0.4, 0.9, { color: PALETTE.impBlack, texel: 1 });
   kit.box("impMetal", x, y - 0.42, z, 0.7, 0.06, 0.7, { color: PALETTE.impCharcoal, texel: 1 });
   kit.cyl("impGloss", x, y - 0.47, z, 0.22, 0.06, "y", { segments: 20 });
   kit.cyl(accentKey, x, y - 0.46, z, 0.25, 0.02, "y", { segments: 20 });
   for (let i = 0; i < 4; i++) kit.box(i % 2 ? "emitRedImp" : accentKey, x - 0.3 + i * 0.2, y - 0.455, z + 0.32, 0.05, 0.02, 0.012);
-  // faint cone from the lens to the target (dim holo: a beam you notice, not a blue wedge)
+  // optional faint cone from the lens to the target (cone: false leaves the beam to the spot light)
+  if (!cone) return;
   ensureDeckBMaterials(kit.materials);
   kit.noShadowKeys.add("deckB_holoDim");
   const a = new THREE.Vector3(x, y - 0.5, z);

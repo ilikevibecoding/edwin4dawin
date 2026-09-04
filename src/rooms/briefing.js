@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRoomShell, impConsole, impWallGear, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
-import { wallScreen, chairInstance, projector, holoShip, cableRun, floorStrip } from "./deck_b_props.js";
+import { wallScreen, chairInstance, projector, holoShip, cableRun } from "./deck_b_props.js";
 
 export function buildBriefing(kit, ctx, room) {
   const [w, h, d] = room.size;
@@ -53,9 +53,8 @@ export function buildBriefing(kit, ctx, room) {
       kit.boxMM("impTrim", [xa - 0.02, yk - 0.03, -aisle], [xa + 0.08, yk + 0.012, aisle], { color: PALETTE.impBlack });
       kit.boxMM(accentKey, [xa - 0.03, yk - 0.08, -aisle + 0.1], [xa - 0.02, yk - 0.05, aisle - 0.1]);
     }
-    // aisle edge markers on the tier top
-    for (const s of [-1, 1]) floorStrip(kit, accentKey, t.x0 + 0.2, s * (aisle + 0.02), t.x1 - 0.2, s * (aisle + 0.06));
-    // readout desk and chairs on both sides of the aisle
+    // readout desk and chairs on both sides of the aisle (the aisle is marked by the riser and
+    // step nosing lights only — no glowing edge strips on the tier tops)
     for (const s of [-1, 1]) {
       const za = s * (aisle + 0.3);
       const zb = s * (hz - 0.5);
@@ -63,6 +62,14 @@ export function buildBriefing(kit, ctx, room) {
       for (let k = 0; k < 8; k++) chairInstance(kit, t.x0 + 2.05, s * (aisle + 0.75 + k * 1.15), Math.PI / 2, { y: t.y });
     }
     yPrev = t.y;
+  }
+  // ground-level front row on the flat floor ahead of the first tier (fills the deck between the
+  // door and the tiers; same desk and chair pattern at y = 0)
+  for (const s of [-1, 1]) {
+    const za = s * (aisle + 0.3);
+    const zb = s * (hz - 0.5);
+    desk(kit, -5.4, 0, Math.min(za, zb), Math.max(za, zb), accentKey, 1);
+    for (let k = 0; k < 8; k++) chairInstance(kit, -4.25, s * (aisle + 0.75 + k * 1.15), Math.PI / 2);
   }
   // step lights along the side walls at each tier height (small wall lamps)
   for (const t of tiers) {
@@ -110,7 +117,8 @@ export function buildBriefing(kit, ctx, room) {
   kit.cyl("impGloss", holoPos[0], dy + 0.07, holoPos[2], 0.44, 0.02, "y", { segments: 24 });
   kit.cyl(accentKey, holoPos[0], dy + 0.055, holoPos[2], 0.505, 0.02, "y", { segments: 24 });
   kit.collider([holoPos[0] - 0.5, dy, holoPos[2] - 0.5], [holoPos[0] + 0.5, dy + 0.1, holoPos[2] + 0.5], "emitter");
-  projector(kit, -5.2, h, -5.0, [holoPos[0], dy + 0.1, holoPos[2]], { accentKey, spread: 0.7 });
+  // projector housing only: the beam is the spot light below, the blue cone mesh is hidden
+  projector(kit, -5.2, h, -5.0, [holoPos[0], dy + 0.1, holoPos[2]], { accentKey, spread: 0.7, cone: false });
   const ship = holoShip(ctx.materials, 2.6);
   ship.position.set(holoPos[0], holoPos[1], holoPos[2]);
   ship.rotation.z = 0.12;
@@ -128,16 +136,14 @@ export function buildBriefing(kit, ctx, room) {
     W.box("impTrim", hz + 4.6 + s * 2.55, 2.65, 0.07, 0.24, 2.6, 0.08, { color: PALETTE.impBlack });
     W.box("emitWhiteSoft", hz + 4.6 + s * 2.55, 2.65, 0.115, 0.08, 2.4, 0.012, { uv: "keep" });
   }
-  // floor marking from the door to the aisle
-  kit.boxMM("impMetalRough", [-hx + 0.4, 0.002, -aisle + 0.1], [tiers[0].x0 - 0.75, 0.012, aisle - 0.1], { color: PALETTE.impGreyDark, texel: 0.7 });
-  for (const s of [-1, 1]) floorStrip(kit, accentKey, -hx + 0.6, s * (aisle - 0.06), tiers[0].x0 - 0.75, s * (aisle - 0.02));
+  // (no room-drawn lane from the door to the aisle: the plain deck runs to the first step)
 
   // --- lights
   // (raised ~25% after the dark ribbed ceiling landed: spawn view mean luma back above 32)
   kit.light({ type: "point", pos: [-9.6, h - 1.0, -4.6], color: 0xdfe8ff, intensity: lux(h - 1.0, 2.0), distance: 12, priority: 0.55 });
   kit.light({ type: "point", pos: [-8.5, h - 1.0, 4.0], color: 0xdfe8ff, intensity: lux(h - 1.0, 2.0), distance: 12, priority: 0.5 });
-  for (const s of [-1, 1]) kit.light({ type: "point", pos: [3.0, h - 1.0, s * 5.5], color: 0xdfe8ff, intensity: lux(h - 1.0, 2.8), distance: 14, priority: 0.45 });
-  for (const s of [-1, 1]) kit.light({ type: "point", pos: [11.0, h - 1.0, s * 4.5], color: 0xdfe8ff, intensity: lux(h - 1.0, 2.0), distance: 11, priority: 0.4 - (s + 1) * 0.005 });
+  for (const s of [-1, 1]) kit.light({ type: "point", pos: [1.5, h - 1.0, s * 5.5], color: 0xdfe8ff, intensity: lux(h - 1.0, 3.8), distance: 15, priority: 0.45 });
+  for (const s of [-1, 1]) kit.light({ type: "point", pos: [10.0, h - 1.0, s * 4.5], color: 0xdfe8ff, intensity: lux(h - 1.0, 2.8), distance: 12, priority: 0.4 - (s + 1) * 0.005 });
   kit.light({ type: "point", pos: [2.0, 1.2, 0], color: new THREE.Color(room.accent).getHex(), intensity: 3.6, distance: 9, priority: 0.3 });
   kit.light({ type: "spot", pos: [-5.2, h - 0.6, -5.0], target: [holoPos[0], dy, holoPos[2]], color: 0x9fd0ff, intensity: lux(4.2, 1.1), distance: 10, angle: 0.42, penumbra: 0.6, priority: 0.48 });
 }
@@ -148,7 +154,8 @@ function desk(kit, x, y, z0, z1, accentKey, tierIdx) {
   const top = y + 0.78;
   kit.boxMM("impMetal", [x - 0.25, y + 0.02, z0], [x + 0.25, top - 0.04, z1], { color: PALETTE.impCharcoal, texel: 1 });
   kit.boxMM("impTrim", [x - 0.3, top - 0.04, z0 - 0.04], [x + 0.3, top, z1 + 0.04], { color: PALETTE.impBlack, texel: 1 });
-  kit.boxMM("impGloss", [x - 0.24, top, z0 + 0.03], [x + 0.24, top + 0.01, z1 - 0.03]);
+  // matte top plate (a gloss plate reflects the environment as a hot blob from the spawn view)
+  kit.boxMM("impMetalRough", [x - 0.24, top, z0 + 0.03], [x + 0.24, top + 0.01, z1 - 0.03], { color: PALETTE.impCharcoal, texel: 1 });
   kit.boxMM(accentKey, [x - 0.31, y + 0.2, z0 + 0.1], [x - 0.3, y + 0.23, z1 - 0.1]);
   // legs / kick
   kit.boxMM("impTrim", [x - 0.2, y + 0.01, z0 + 0.02], [x + 0.2, y + 0.12, z1 - 0.02], { color: PALETTE.impBlack, texel: 1 });
@@ -161,9 +168,10 @@ function desk(kit, x, y, z0, z1, accentKey, tierIdx) {
     g.rotateX(-Math.PI / 2);
     g.rotateZ(-0.5);
     kit.add(k % 3 === tierIdx % 3 ? "scrBlue1" : "scrBlue0", g, { pos: [x + 0.02, top + 0.09, z], uv: "keep" });
+    // matte housing: a gloss plate here throws a specular hot spot back at the spawn view
     const b = new THREE.BoxGeometry(0.4, 0.03, 0.24);
     b.rotateZ(-0.5);
-    kit.add("impGloss", b, { pos: [x + 0.03, top + 0.07, z] });
+    kit.add("impTrim", b, { pos: [x + 0.03, top + 0.07, z], color: PALETTE.impBlack, texel: 1 });
     kit.box(accentKey, x - 0.17, top + 0.015, z + 0.1, 0.06, 0.01, 0.06);
     kit.box("emitRedImp", x - 0.17, top + 0.015, z - 0.1, 0.06, 0.01, 0.06);
   }
