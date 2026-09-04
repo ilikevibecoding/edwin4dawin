@@ -139,10 +139,12 @@ export function buildArmory(kit, ctx) {
   {
     const laneX = (cageX + 0.4 + xE) / 2;
     partition(kit, [cageX + 0.5, 329.6], [cageX + 0.5, zS], y, 2.4, { t: 0.1, tone: IMP.wallDark, toneAlt: IMP.wallMid, band: null, features: false, seed: 31, tag: "baffle", pitch: 2.7 });
-    counter(kit, [laneX, y, 329.2], 2.4, 0, { d: 0.6, h: 0.95, doors: false, tone: IMP.consoleDark, top: "impMetal", tag: "firingStand" });
-    kit.box("impPaintedMetal", laneX, y + 0.99, 329.15, 0.5, 0.06, 0.4, { color: IMP.wallDark, texel: 1 });
-    kit.box("blink", laneX - 0.7, y + 0.98, 329.2, 0.4, 0.008, 0.3, { uv: "keep" });
+    // firing stand butts against the baffle; a 1 m gap at the east wall leads downrange to the target
+    counter(kit, [laneX - 0.45, y, 329.2], 2.0, 0, { d: 0.6, h: 0.95, doors: false, tone: IMP.consoleDark, top: "impMetal", tag: "firingStand" });
+    kit.box("impPaintedMetal", laneX - 0.45, y + 0.99, 329.15, 0.5, 0.06, 0.4, { color: IMP.wallDark, texel: 1 });
+    kit.box("blink", laneX - 1.1, y + 0.98, 329.2, 0.4, 0.008, 0.3, { uv: "keep" });
     floorLine(kit, [cageX + 0.7, 329.9], [xE - 0.2, 329.9], y, 0.12);
+    floorDecal(kit, xE - 0.55, y, 329.2, 0.5, 13, 180);
     floorDecal(kit, laneX, y, 330.6, 0.6, 13, 180);
     const w = walls.south;
     const sf = wallFrame(kit, w.from, w.to, y).frame;

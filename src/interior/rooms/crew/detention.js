@@ -19,6 +19,7 @@ import { buildRifle, rifleRack } from "./armory.js";
 const RED = 0xff2a2a;
 const WHITE = 0xf2f6ff;
 const FIELD = 0x5aa0ff;
+const OPEN_CELL = { s: -1, k: 2 }; // cell 3 (west side) stands open with its field down
 
 export function buildDetention(kit, ctx) {
   ensureCrewMaterials(ctx.mats);
@@ -105,13 +106,15 @@ export function buildDetention(kit, ctx) {
       }
       for (let k = 0; k < cells; k++) {
         const zc = blockZ0 + (k + 0.5) * cellPitch;
-        cell(kit, ctx, s, zc, k + 1 + (s > 0 ? 4 : 0), { corrX, blockX, pitch: cellPitch, wallH, y });
+        const open = s === OPEN_CELL.s && k === OPEN_CELL.k; // one empty cell stands open (field down)
+        cell(kit, ctx, s, zc, k + 1 + (s > 0 ? 4 : 0), { corrX, blockX, pitch: cellPitch, wallH, y, open });
         floorDecal(kit, s * (corrX - 0.6), y, zc, 0.45, [0, 3, 6, 9, 15, 11, 5, 2][k + (s > 0 ? 4 : 0)], s > 0 ? -90 : 90);
       }
     }
     // force fields: one merged mesh, flickered by the room animator
     for (const s of [-1, 1]) {
       for (let k = 0; k < cells; k++) {
+        if (s === OPEN_CELL.s && k === OPEN_CELL.k) continue;
         const zc = blockZ0 + (k + 0.5) * cellPitch;
         const g = new THREE.PlaneGeometry(1.4, 2.35);
         g.rotateY(Math.PI / 2);
@@ -127,14 +130,14 @@ export function buildDetention(kit, ctx) {
     ctx.animate((dt, t) => {
       glitch = Math.max(0, glitch - dt * 3);
       if (r2() < dt * 0.6) glitch = 0.6 + r2() * 0.4;
-      fieldMat.opacity = 0.55 + 0.06 * Math.sin(t * 7.3) + 0.04 * Math.sin(t * 23.1 + 1.0) - glitch * 0.3;
+      fieldMat.opacity = 0.5 + 0.06 * Math.sin(t * 7.3) + 0.04 * Math.sin(t * 23.1 + 1.0) - glitch * 0.3;
       fieldMat.map.offset.y = (t * 0.03) % 1;
     });
     // corridor: red centre line, white edge lines, alternating white bars / red strips, one red fill
     floorLine(kit, [0, blockZ0 + 0.3], [0, blockZ1 - 0.3], y, 0.12);
     floorLine(kit, [-corrX + 0.35, blockZ0 + 0.2], [-corrX + 0.35, blockZ1 - 0.2], y, 0.06, "crewPaintWhite");
     floorLine(kit, [corrX - 0.35, blockZ0 + 0.2], [corrX - 0.35, blockZ1 - 0.2], y, 0.06, "crewPaintWhite");
-    for (const z of [blockZ0 + 3.7, blockZ0 + 11.1]) ceilingLight(kit, ctx, [0, y + h, z], 3.0, "z", { mat: "lightBand", color: WHITE, intensity: 6, distance: 8, priority: 1, drop: 0.4 });
+    for (const z of [blockZ0 + 3.7, blockZ0 + 11.1]) ceilingLight(kit, ctx, [0, y + h, z], 3.0, "z", { mat: "lightBand", color: WHITE, intensity: 9, distance: 13, priority: 1, drop: 0.4 });
     for (const z of [blockZ0 + 0.6, blockZ0 + 7.4, blockZ1 - 0.6]) ceilingStrip(kit, [0, y + h, z], 3.6, "x", { mat: "emitRed", w: 0.16 });
     pointLightDesc(ctx, RED, 3.0, 8, [0, y + h - 0.5, blockZ0 + 7.4], 1);
     // gate at the corridor mouth: jambs carrying field emitters (the gate field is down), header with
@@ -162,6 +165,17 @@ export function buildDetention(kit, ctx) {
     }
     cameraPod(kit, [-corrX + 0.35, y + h - 0.3, blockZ0 + 0.4], 150, -30);
     cameraPod(kit, [corrX - 0.35, y + h - 0.3, blockZ1 - 0.4], -30, -30);
+    // passage faces of the block's back walls: red band, cell stencils, LED strips, a comms panel
+    for (const s of [-1, 1]) {
+      const xf = s * (blockX + 0.136);
+      const bf = s < 0 ? wallFrame(kit, [xf, blockZ0], [xf, blockZ1], y).frame : wallFrame(kit, [xf, blockZ1], [xf, blockZ0], y).frame;
+      const L = blockZ1 - blockZ0;
+      bf.box("crewPaintRed", L / 2, 1.15, 0.004, L - 0.4, 0.1, 0.004);
+      for (let k = 0; k < cells; k++) bf.quad("impDecal", (k + 0.5) * cellPitch, 1.75, 0.004, 0.4, 0.4, { uvRect: impDecalRect(s < 0 ? [0, 3, 6, 9][k] : [15, 11, 5, 2][cells - 1 - k]) });
+      bf.box("leds", L / 2, 2.3, 0.004, 1.2, 0.05, 0.01, { uv: "keep" });
+      bf.box("impPaintedMetal", 1.6, 1.55, 0.03, 0.24, 0.36, 0.06, { color: IMP.consoleDark, texel: 1 });
+      bf.box("blinkSparse", 1.6, 1.61, 0.062, 0.18, 0.12, 0.006, { uv: "keep" });
+    }
     // south end of the block: the corridor opens onto the rear passage through a second gate frame
     for (const s of [-1, 1]) kit.box("impPaintedMetal", s * (corrX + 0.05), y + wallH / 2, blockZ1, 0.3, wallH, 0.3, { color: IMP.trim, texel: 1 });
     kit.box("impPaintedMetal", 0, y + 2.65, blockZ1, corrX * 2 + 0.4, wallH - 2.5, 0.3, { color: IMP.trim, texel: 1 });
@@ -285,10 +299,10 @@ export function buildDetention(kit, ctx) {
     const cz = 473.2;
     interrogationChair(kit, [cx, y, cz], Math.PI * 0.9);
     interrogationArm(kit, [cx + 1.2, y + h, cz - 0.9], [cx + 0.55, y + 1.45, cz - 0.35]);
-    spotLightDesc(ctx, 0xfff2e0, 6, 7, [cx, y + h - 0.35, cz], [cx, y + 0.6, cz], { angle: 0.45, penumbra: 0.6, shadow: true, priority: 2 });
+    spotLightDesc(ctx, 0xfff2e0, 14, 8, [cx, y + h - 0.35, cz], [cx, y + 0.6, cz], { angle: 0.55, penumbra: 0.6, shadow: true, priority: 2 });
     kit.add("impPaintedMetal", new THREE.CylinderGeometry(0.28, 0.32, 0.18, 16), { pos: [cx, y + h - 0.12, cz], color: IMP.consoleDark, uv: "scale", uvScale: [2, 0.3] });
     kit.add("crewEmit", new THREE.CylinderGeometry(0.2, 0.2, 0.01, 16), { pos: [cx, y + h - 0.215, cz], color: 0xfff2e0, uv: "scale", uvScale: [1, 0.1] });
-    pointLightDesc(ctx, RED, 2.0, 7, [12.4, y + 0.6, 476.0], 0);
+    pointLightDesc(ctx, RED, 2.0, 7, [xE - 0.6, y + 0.35, zS - 0.6], 0);
     floorLine(kit, [cx - 1.6, cz - 1.6], [cx + 1.6, cz - 1.6], y, 0.08);
     floorLine(kit, [cx - 1.6, cz + 1.6], [cx + 1.6, cz + 1.6], y, 0.08);
     floorLine(kit, [cx - 1.6, cz - 1.6], [cx - 1.6, cz + 1.6], y, 0.08);
@@ -337,6 +351,7 @@ export function buildDetention(kit, ctx) {
   ctx.view("detention", 0, y + STD.eye, zN + 0.5, 180, -4);
   ctx.view("detention_desk", -5.6, y + STD.eye, 458.6, -104, -6);
   ctx.view("detention_cells", 0.6, y + STD.eye, blockZ0 + 0.9, 168, -4);
+  ctx.view("detention_cell", 1.3, y + STD.eye, blockZ0 + (OPEN_CELL.k + 0.5) * cellPitch + 0.3, 96, -6);
   ctx.view("detention_observation", 12.1, y + STD.eye, 464.4, 180, -6);
   ctx.view("detention_interrogation", 10.0, y + STD.eye, 478.6, -30, -6);
   ctx.view("detention_holding", -8.6, y + STD.eye, 459.8, 158, -5);
@@ -352,17 +367,17 @@ function makeFieldMaterial() {
   c.width = 16;
   c.height = 64;
   const g = c.getContext("2d");
-  g.fillStyle = "#0a1a44";
+  g.fillStyle = "#061030";
   g.fillRect(0, 0, 16, 64);
-  g.fillStyle = "#2a5ab0";
+  g.fillStyle = "#234c9c";
   for (let v = 0; v < 64; v += 8) g.fillRect(0, v, 16, 2);
-  g.fillStyle = "#9fc0ff";
+  g.fillStyle = "#8fb4ff";
   for (let v = 1; v < 64; v += 8) g.fillRect(0, v, 16, 1);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(1, 3);
   t.colorSpace = THREE.SRGBColorSpace;
-  return new THREE.MeshBasicMaterial({ color: 0xffffff, map: t, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  return new THREE.MeshBasicMaterial({ color: 0xffffff, map: t, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
 }
 
 /**
@@ -371,11 +386,13 @@ function makeFieldMaterial() {
  * cell number plate. side = -1 (west) | +1 (east), zc = cell centre.
  */
 function cell(kit, ctx, side, zc, num, g) {
-  const { corrX, blockX, pitch, wallH, y } = g;
+  const { corrX, blockX, pitch, wallH, y, open = false } = g;
   const s = side;
   const xf = s * corrX; // front wall plane
   const doorW = 1.4;
   const half = pitch / 2;
+  const emitterColor = open ? 0x1a2440 : 0x3a70c0;
+  const lampColor = open ? 0x40ff70 : RED;
   // front wall segments (solid) either side of the door
   for (const d of [-1, 1]) {
     const za = zc + d * (doorW / 2 + 0.06);
@@ -387,16 +404,16 @@ function cell(kit, ctx, side, zc, num, g) {
   for (const d of [-1, 1]) {
     const zj = zc + d * (doorW / 2 + 0.03);
     kit.box("impPaintedMetal", xf, y + 1.25, zj, 0.26, 2.5, 0.12, { color: IMP.trim, texel: 1 });
-    kit.box("crewEmit", xf, y + 1.25, zj - d * 0.065, 0.14, 2.2, 0.006, { color: FIELD });
+    kit.box("crewEmit", xf, y + 1.25, zj - d * 0.065, 0.14, 2.2, 0.006, { color: emitterColor });
   }
   kit.box("impPaintedMetal", xf, y + 2.5 + (wallH - 2.5) / 2, zc, 0.26, wallH - 2.5, doorW + 0.3, { color: IMP.trim, texel: 1 });
-  kit.box("crewEmit", xf - s * 0.135, y + 2.56, zc, 0.006, 0.04, 0.6, { color: RED });
+  kit.box("crewEmit", xf - s * 0.135, y + 2.56, zc, 0.006, 0.04, 0.6, { color: lampColor });
   kit.box("impPaintedMetal", xf - s * 0.135, y + 2.9, zc, 0.006, 0.28, 0.9, { color: IMP.consoleDark, texel: 1 });
   kit.box("blinkSparse", xf - s * 0.14, y + 2.9, zc + 0.2, 0.006, 0.12, 0.4, { uv: "keep" });
   kit.add("impDecal", new THREE.PlaneGeometry(0.22, 0.22), { pos: [xf - s * 0.14, y + 2.9, zc - 0.25], rot: [0, s > 0 ? -Math.PI / 2 : Math.PI / 2, 0], uv: "keep", uvRect: impDecalRect([0, 3, 6, 9, 15, 11, 5, 2][num - 1]) });
   kit.collider([xf - 0.14, y, zc - half], [xf + 0.14, y + wallH, zc - doorW / 2], "cellFront");
   kit.collider([xf - 0.14, y, zc + doorW / 2], [xf + 0.14, y + wallH, zc + half], "cellFront");
-  kit.collider([xf - 0.06, y, zc - doorW / 2], [xf + 0.06, y + wallH, zc + doorW / 2], "forceField");
+  if (!open) kit.collider([xf - 0.06, y, zc - doorW / 2], [xf + 0.06, y + wallH, zc + doorW / 2], "forceField");
   // interior: bunk slab along the back wall, mattress, sanitation unit, light cage, number plate
   const xb = s * (blockX - 0.1 - 0.024); // back wall face
   const bx = xb - s * 0.45;
@@ -421,13 +438,13 @@ function cell(kit, ctx, side, zc, num, g) {
   kit.box("crewPaintRed", xb - s * 0.03, y + 1.1, zc + 0.3, 0.004, 0.06, 2.4);
 }
 
-// Barred wall from -> to ([x,z]) at floor y, height h: steel bars at 0.14 m, rails, posts, top plate,
+// Barred wall from -> to ([x,z]) at floor y, height h: steel bars at 0.18 m, rails, posts, top plate,
 // with `openings` [[u0,u1], ...] left clear (a header closes them above 2.3 m). One collider per span.
 function barWall(kit, from, to, y, h, opts = {}) {
   const { openings = [] } = opts;
   const { frame, length } = wallFrame(kit, from, to, y);
   const inOpening = (u) => openings.some(([a, b]) => u > a && u < b);
-  for (let u = 0.1; u < length - 0.05; u += 0.14) {
+  for (let u = 0.1; u < length - 0.05; u += 0.18) {
     const v0 = inOpening(u) ? 2.3 : 0.05;
     frame.box("impMetal", u, (v0 + h - 0.05) / 2, 0, 0.035, h - 0.05 - v0, 0.035, { color: IMP.steel });
   }
@@ -453,7 +470,7 @@ function barLeaf(kit, hinge, angle, w, h, y) {
   const { frame, length } = wallFrame(kit, hinge, end, y);
   frame.box("impPaintedMetal", length / 2, h / 2, 0, length, h, 0.05, { color: IMP.trim, texel: 1 });
   frame.box("impPaintedMetal", length / 2, h / 2, 0, length - 0.16, h - 0.2, 0.02, { color: IMP.black, texel: 1 });
-  for (let u = 0.1; u < length - 0.05; u += 0.14) frame.box("impMetal", u, h / 2, 0, 0.035, h - 0.14, 0.06, { color: IMP.steel });
+  for (let u = 0.1; u < length - 0.05; u += 0.18) frame.box("impMetal", u, h / 2, 0, 0.035, h - 0.14, 0.06, { color: IMP.steel });
   frame.box("impPaintedMetal", length / 2, h / 2, 0, length, 0.07, 0.09, { color: IMP.trim, texel: 1 });
   frame.box("impPaintedMetal", length - 0.2, 1.05, 0.06, 0.24, 0.3, 0.04, { color: IMP.consoleDark, texel: 1 });
   frame.box("crewEmit", length - 0.2, 1.12, 0.085, 0.14, 0.03, 0.006, { color: 0x40ff70 });
