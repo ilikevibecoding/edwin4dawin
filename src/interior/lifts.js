@@ -103,15 +103,16 @@ export class LiftSystem {
       landingDoors[dk.id] = this.doors.add(kit, { id: `${id}-${dk.id}`, x: px, z: pz, y: dk.y, width: DOOR_W, height: DOOR_H, axis, depth: 0.36, zone: null, lift: id });
       // deck plate + call panel beside the portal (on the landing side)
       const out = doorSide === "-x" ? -1 : 1;
+      // call panel on the landing side, clear of the 0.16 m shaft wall slab
       if (axis === "z") {
-        kit.box("satinBlack", px + out * 0.1, dk.y + 1.35, pz + 1.35, 0.06, 0.34, 0.22);
-        kit.box("emitBlue", px + out * 0.135, dk.y + 1.42, pz + 1.35, 0.01, 0.06, 0.12);
-        kit.box("emitAmber", px + out * 0.135, dk.y + 1.28, pz + 1.35, 0.01, 0.04, 0.12);
+        kit.box("satinBlack", px + out * 0.21, dk.y + 1.35, pz + 1.35, 0.1, 0.34, 0.22);
+        kit.box("emitBlue", px + out * 0.265, dk.y + 1.42, pz + 1.35, 0.01, 0.06, 0.12);
+        kit.box("emitAmber", px + out * 0.265, dk.y + 1.28, pz + 1.35, 0.01, 0.04, 0.12);
       } else {
         const outZ = doorSide === "-z" ? -1 : 1;
-        kit.box("satinBlack", px + 1.35, dk.y + 1.35, pz + outZ * 0.1, 0.22, 0.34, 0.06);
-        kit.box("emitBlue", px + 1.35, dk.y + 1.42, pz + outZ * 0.135, 0.12, 0.06, 0.01);
-        kit.box("emitAmber", px + 1.35, dk.y + 1.28, pz + outZ * 0.135, 0.12, 0.04, 0.01);
+        kit.box("satinBlack", px + 1.35, dk.y + 1.35, pz + outZ * 0.21, 0.22, 0.34, 0.1);
+        kit.box("emitBlue", px + 1.35, dk.y + 1.42, pz + outZ * 0.265, 0.12, 0.06, 0.01);
+        kit.box("emitAmber", px + 1.35, dk.y + 1.28, pz + outZ * 0.265, 0.12, 0.04, 0.01);
       }
     }
 

@@ -70,7 +70,7 @@ export function liftOpenings(room, dir, wallLen) {
  * Build floor, ceiling and the four walls of a room.
  * opts: { style: 'light'|'dark', skipWalls: ['-z'], openings: { '-z': [...] }, ceiling: true, floor: true,
  *         floorMat, floorColor, lightRows, lightMat, lights: true (adds point lights to ctx),
- *         panelW (panel pitch, use ~2 for tall halls), styles (panelGrid style mix) }
+ *         panelW (panel pitch, use ~2 for tall halls), styles (panelGrid style mix), ceilingColor }
  */
 export function roomShell(kit, ctx, room, opts = {}) {
   const {
@@ -90,6 +90,7 @@ export function roomShell(kit, ctx, room, opts = {}) {
     wallDepth = WALL_T,
     panelW = 1.05,
     styles = IMPERIAL_STYLES,
+    ceilingColor = PALETTE.gunmetal,
   } = opts;
   const y0 = roomFloorY(room);
   const h = room.height;
@@ -122,7 +123,7 @@ export function roomShell(kit, ctx, room, opts = {}) {
   // ceiling: dark plate, structural ribs across the short axis, recessed light channels along the long axis
   if (ceiling) {
     // matte painted ceiling plate: a metallic plate throws specular blobs from every pooled light
-    kit.boxMM("painted", [x0 - wallDepth, yTop, z0 - wallDepth], [x1 + wallDepth, yTop + 0.12, z1 + wallDepth], { color: PALETTE.gunmetal, uv: "world", texel: 0.5 });
+    kit.boxMM("painted", [x0 - wallDepth, yTop, z0 - wallDepth], [x1 + wallDepth, yTop + 0.12, z1 + wallDepth], { color: ceilingColor, uv: "world", texel: 0.5 });
     const longX = w >= d;
     const ribStep = 3.2;
     const ribCount = Math.max(1, Math.floor((longX ? w : d) / ribStep));
