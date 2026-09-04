@@ -1,0 +1,149 @@
+{
+  "updated": "2026-09-04T07:49:15.531Z",
+  "phase": "Phase 3 of 5: parallel builders finishing, merging + verifying into the integration branch",
+  "summary": "Plan: (1) baseline measured, (2) shared disaster foundation built, (3) 7 builder agents in isolated worktrees, (4) independent critics + verification agents, (5) final baseline comparison, changelog, PR. Nothing counts as done until it is merged, tested and measured in the actual game.",
+  "links": [
+    {
+      "label": "Pull request #17",
+      "url": "https://github.com/ilikevibecoding/edwin4dawin/pull/17"
+    },
+    {
+      "label": "Play the last verified build (integration branch)",
+      "url": "https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/cursor/minecraft-western-town-54d6/dist/index.html"
+    }
+  ],
+  "workstreams": [
+    {
+      "name": "Baseline + performance instrumentation",
+      "status": "done",
+      "detail": "PerfMonitor (frame/JS/GPU ms, draw calls, heap, long tasks, entities, network) + scripts/bench.mjs; baseline JSON recorded before changes."
+    },
+    {
+      "name": "Disaster foundation (manager, journal/restore, debris, effects, reactions, permissions, save)",
+      "status": "done",
+      "detail": "Deterministic command-driven manager, per-tick edit budgets, full journaled restore, instanced pooled debris, NPC/animal evacuate/swim/airborne reactions, admin permission model, save isolation."
+    },
+    {
+      "name": "Fix: bookshelves visible on the back of buildings",
+      "status": "verified",
+      "detail": "Shelves moved inside against intact walls (shops, saloon, general store, hotel); verified by screenshot from the alley."
+    },
+    {
+      "name": "Admin / debug control panel",
+      "status": "merged",
+      "detail": "Schema-driven DOM panel: selector, params, seed, preview/start (with warnings + confirm)/pause/stop/reset/replay, live intensity, save commit; 21/21 automated checks pass on the integration branch."
+    },
+    {
+      "name": "NPC + animal eyes and blinking",
+      "status": "in review",
+      "detail": "Cyclops fixed, blink verified live; independent critic requested brow/iris contrast and dark-coat horse eye fixes - builder applying them (round 2)."
+    },
+    {
+      "name": "Multiplayer (server-authoritative, synchronized disasters)",
+      "status": "merged",
+      "detail": "ws relay/authority, admin token, block relay, remote avatars, late-join replay; 8/8 sync checks pass on the integration branch (idle traffic ~1.45 KB/s per client)."
+    },
+    {
+      "name": "Tsunami & flood",
+      "status": "in progress",
+      "detail": "Builder committed the wave front + journaled flood fill + crest destruction + drain; tuning and measuring."
+    },
+    {
+      "name": "Tornado",
+      "status": "in progress",
+      "detail": "Builder committed the wind field, block ripping with orbiting debris, shader funnel, storm lighting, bell alarm, rope-out; finishing verification."
+    },
+    {
+      "name": "Orbital beam",
+      "status": "in progress",
+      "detail": "Builder committed the ring station, descending beam and deterministic crater carving; tuning crater floors and smoke."
+    },
+    {
+      "name": "Chunk pipeline optimization",
+      "status": "in progress",
+      "detail": "Builder committed packed vertex attributes, cheaper lighting seeds, worldgen shortcuts, chunk culling; awaiting its before/after report and my review."
+    },
+    {
+      "name": "Critics + verification (visuals, tests, replay, multiplayer, perf)",
+      "status": "pending",
+      "detail": "Eye critic done (round 1). Disaster visual critics, deterministic replay tests, multiplayer checks and perf comparison run after each merge."
+    }
+  ],
+  "metrics": [
+    {
+      "scenario": "Baseline - spawn overlook",
+      "load": "1.13 s",
+      "js": "5.98 / 17.1 / 226.9",
+      "draws": "n/a*",
+      "heap": "115",
+      "longTasks": "3 (459 ms)",
+      "notes": "before any change; *draw calls mis-measured in the first run, fixed afterwards (~256 in town)"
+    },
+    {
+      "scenario": "Baseline - town center",
+      "load": "0.79 s",
+      "js": "6.95 / 24.6 / 217.4",
+      "draws": "n/a*",
+      "heap": "96",
+      "longTasks": "4 (702 ms)",
+      "notes": "39 NPCs, 43 animals"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "img/back_store.png",
+      "caption": "Back of the general store after the shelves fix (07:49 UTC)"
+    },
+    {
+      "src": "img/mp_avatar.png",
+      "caption": "Remote player avatar seen from another client (07:49 UTC)"
+    },
+    {
+      "src": "img/eyes_horse.png",
+      "caption": "Horse head before / after (round 1) (07:49 UTC)"
+    },
+    {
+      "src": "img/eyes_abigail.png",
+      "caption": "NPC eyes before (cyclops) / after (round 1) (07:49 UTC)"
+    },
+    {
+      "src": "img/admin_panel.png",
+      "caption": "Admin control panel (tornado tab) in the live game (07:49 UTC)"
+    }
+  ],
+  "log": [
+    {
+      "time": "2026-09-04 05:30 UTC",
+      "text": "Inspected project: single-player Three.js/Vite game, no multiplayer/save/permission code yet. Baseline measured with new PerfMonitor + bench script."
+    },
+    {
+      "time": "2026-09-04 06:05 UTC",
+      "text": "Disaster foundation committed (manager, journal, debris, effects, reactions API, permissions, save, tests). Bookshelf-backs bug fixed."
+    },
+    {
+      "time": "2026-09-04 06:10 UTC",
+      "text": "Spawned 7 builder agents in parallel (tsunami, tornado, beam, eyes, multiplayer, admin panel, optimization)."
+    },
+    {
+      "time": "2026-09-04 06:35 UTC",
+      "text": "Admin panel merged: 21/21 checks pass on the integration branch."
+    },
+    {
+      "time": "2026-09-04 06:45 UTC",
+      "text": "Eyes merged + blinking wired into NPC renderer (1-2 unsynchronized blinks per NPC / 12 s verified)."
+    },
+    {
+      "time": "2026-09-04 07:15 UTC",
+      "text": "Multiplayer merged: 8/8 synchronization checks pass on the integration branch."
+    },
+    {
+      "time": "2026-09-04 07:25 UTC",
+      "text": "Independent eye critic: narrow reject (brow/iris fusion, dark-coat horse eyes invisible). Fixes sent back to the eyes builder; animals no longer spawn on roofs; deputies got their own posts."
+    }
+  ],
+  "issues": [
+    "Eyes: brow/iris contrast and dark-coat horse eyes being fixed (critic round 2 pending).",
+    "Multiplayer: NPCs/animals are client-side ambience (not synchronized); no server persistence; admin token in URL, no TLS.",
+    "Headless benchmark runs on software GL, so FPS/GPU figures are not representative of a real GPU; CPU-side metrics are compared."
+  ]
+}

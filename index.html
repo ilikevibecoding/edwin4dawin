@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Frontier Craft - live progress</title>
+<style>
+  :root { --bg:#14161a; --panel:#1d2026; --line:#2c313a; --text:#e6e6e6; --muted:#9aa3ad; --ok:#6fcf6f; --warn:#f0c060; --run:#7fb2ff; --bad:#ff7b7b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font: 15px/1.5 ui-monospace, Menlo, Consolas, "Liberation Mono", monospace; }
+  header { padding: 22px 28px 10px; border-bottom: 2px solid var(--line); display:flex; flex-wrap:wrap; gap:14px; align-items:baseline; }
+  h1 { margin:0; font-size: 22px; letter-spacing: 1px; }
+  .live { font-size: 13px; color: var(--muted); }
+  .live b { color: var(--ok); }
+  main { padding: 18px 28px 60px; max-width: 1200px; margin: 0 auto; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 18px; margin: 16px 0; }
+  h2 { margin: 0 0 10px; font-size: 15px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); }
+  table { width:100%; border-collapse: collapse; }
+  td, th { text-align:left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: normal; font-size: 13px; }
+  .badge { display:inline-block; padding: 1px 8px; border-radius: 3px; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: .5px; color:#111; }
+  .b-done { background: var(--ok); } .b-verified { background: #3fd0a0; } .b-merged { background: #9be27f; } .b-progress { background: var(--run); } .b-review { background: var(--warn); } .b-blocked { background: var(--bad); } .b-pending { background: #6b727c; color:#eee; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  figure { margin:0; background:#0f1114; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+  figure img { width:100%; display:block; image-rendering: pixelated; }
+  figcaption { padding: 6px 10px; font-size: 13px; color: var(--muted); }
+  .log li { margin: 4px 0; } .log time { color: var(--muted); margin-right: 8px; }
+  a { color: #8fc4ff; }
+  .metric-good { color: var(--ok); } .metric-bad { color: var(--bad); }
+  .phase { font-size: 17px; }
+  #error { color: var(--bad); }
+  .small { font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>FRONTIER CRAFT &mdash; live progress</h1>
+  <span class="live">Auto-refreshes every 60 s &middot; <b id="status-dot">LIVE</b> &middot; last update <span id="updated">…</span> (<span id="ago">…</span>) &middot; <span id="error"></span></span>
+</header>
+<main>
+  <section><h2>Now</h2><div class="phase" id="phase">Loading…</div><div id="summary" class="small"></div><div id="links" class="small"></div></section>
+  <section><h2>Workstreams</h2><table><thead><tr><th>Workstream</th><th>Status</th><th>Detail</th></tr></thead><tbody id="ws"></tbody></table></section>
+  <section><h2>Measurements (headless benchmark; software GL in the build VM, so compare CPU metrics)</h2><table><thead><tr><th>Scenario</th><th>Load</th><th>JS ms avg / p95 / max</th><th>Draw calls</th><th>Heap MB</th><th>Long tasks</th><th>Notes</th></tr></thead><tbody id="metrics"></tbody></table></section>
+  <section><h2>Latest screenshots</h2><div class="grid" id="shots"></div></section>
+  <section><h2>Activity log</h2><ul class="log" id="log"></ul></section>
+  <section><h2>Known issues / remaining work</h2><ul id="issues"></ul></section>
+</main>
+<script>
+const JSON_URLS = ['./status.json', 'https://raw.githubusercontent.com/ilikevibecoding/edwin4dawin/progress/status.json'];
+const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const badge = (s) => { const k = (s || 'pending').toLowerCase().replace(/[^a-z]/g, ''); const cls = { done: 'b-done', verified: 'b-verified', merged: 'b-merged', inprogress: 'b-progress', running: 'b-progress', review: 'b-review', inreview: 'b-review', blocked: 'b-blocked' }[k] || 'b-pending'; return `<span class="badge ${cls}">${esc(s)}</span>`; };
+let lastUpdated = null;
+async function load() {
+  let data = null, err = '';
+  for (const u of JSON_URLS) {
+    try { const r = await fetch(u + '?ts=' + Date.now(), { cache: 'no-store' }); if (r.ok) { data = await r.json(); break; } err = 'HTTP ' + r.status; } catch (e) { err = e.message; }
+  }
+  if (!data) { document.getElementById('error').textContent = 'could not load status.json (' + err + ')'; return; }
+  document.getElementById('error').textContent = '';
+  lastUpdated = new Date(data.updated);
+  document.getElementById('updated').textContent = lastUpdated.toUTCString();
+  document.getElementById('phase').textContent = data.phase || '';
+  document.getElementById('summary').textContent = data.summary || '';
+  document.getElementById('links').innerHTML = (data.links || []).map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join(' &middot; ');
+  document.getElementById('ws').innerHTML = (data.workstreams || []).map((w) => `<tr><td>${esc(w.name)}</td><td>${badge(w.status)}</td><td>${esc(w.detail)}</td></tr>`).join('');
+  document.getElementById('metrics').innerHTML = (data.metrics || []).map((m) => `<tr><td>${esc(m.scenario)}</td><td>${esc(m.load)}</td><td>${esc(m.js)}</td><td>${esc(m.draws)}</td><td>${esc(m.heap)}</td><td>${esc(m.longTasks)}</td><td class="small">${esc(m.notes)}</td></tr>`).join('');
+  document.getElementById('shots').innerHTML = (data.screenshots || []).map((s) => `<figure><img loading="lazy" src="${esc(s.src)}?v=${encodeURIComponent(data.updated)}" alt="${esc(s.caption)}" /><figcaption>${esc(s.caption)}</figcaption></figure>`).join('');
+  document.getElementById('log').innerHTML = (data.log || []).slice().reverse().map((l) => `<li><time>${esc(l.time)}</time>${esc(l.text)}</li>`).join('');
+  document.getElementById('issues').innerHTML = (data.issues || []).map((i) => `<li>${esc(i)}</li>`).join('');
+  tickAgo();
+}
+function tickAgo() { if (!lastUpdated) return; const m = Math.round((Date.now() - lastUpdated.getTime()) / 60000); document.getElementById('ago').textContent = m < 1 ? 'just now' : m + ' min ago'; document.getElementById('status-dot').textContent = m > 90 ? 'STALE?' : 'LIVE'; }
+load();
+setInterval(load, 60000);
+setInterval(tickAgo, 15000);
+</script>
+</body>
+</html>
