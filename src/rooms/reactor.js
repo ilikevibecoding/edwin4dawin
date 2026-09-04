@@ -326,11 +326,11 @@ export function buildReactor(kit, ctx, room) {
   // deep blue pit light under the grating
   kit.light({ type: "point", pos: [0, 6.5, 0], color: hot, intensity: lux(12, 2.6), distance: 52, priority: 0.95 });
   kit.light({ type: "point", pos: [0, 16, 0], color: hot, intensity: lux(14, 2.2), distance: 58, priority: 0.9 });
-  kit.light({ type: "point", pos: [-17, 13, -17], color: 0x9fb2d0, intensity: lux(13, 0.5), distance: 36, priority: 0.62 });
-  kit.light({ type: "point", pos: [17, 13, -17], color: 0x9fb2d0, intensity: lux(13, 0.5), distance: 36, priority: 0.61 });
-  kit.light({ type: "point", pos: [-17, 13, 17], color: 0x9fb2d0, intensity: lux(13, 0.5), distance: 36, priority: 0.6 });
-  kit.light({ type: "point", pos: [17, 13, 17], color: 0x9fb2d0, intensity: lux(13, 0.5), distance: 36, priority: 0.59 });
-  kit.light({ type: "point", pos: [0, 5.5, -23], color: 0xfff4e0, intensity: lux(5.5, 1.8), distance: 20, priority: 0.7 });
+  kit.light({ type: "point", pos: [-17, 13, -17], color: 0x9fb2d0, intensity: lux(13, 0.55), distance: 36, priority: 0.62 });
+  kit.light({ type: "point", pos: [17, 13, -17], color: 0x9fb2d0, intensity: lux(13, 0.55), distance: 36, priority: 0.61 });
+  kit.light({ type: "point", pos: [-17, 13, 17], color: 0x9fb2d0, intensity: lux(13, 0.55), distance: 36, priority: 0.6 });
+  kit.light({ type: "point", pos: [17, 13, 17], color: 0x9fb2d0, intensity: lux(13, 0.55), distance: 36, priority: 0.59 });
+  kit.light({ type: "point", pos: [0, 5.5, -23], color: 0xfff4e0, intensity: lux(5.5, 2.0), distance: 20, priority: 0.7 });
   kit.light({ type: "point", pos: [0, -2.6, 0], color: 0x3f8fd0, intensity: lux(10, 0.9), distance: 40, priority: 0.5 });
 }
 

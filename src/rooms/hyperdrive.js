@@ -1,6 +1,6 @@
 // Hyperdrive & Propulsion (deck D): an 18 m horizontal hyperdrive core on two cradles, wrapped in
 // alternating armour and blue coil rings that pulse in sequence, power conduits arcing to the walls,
-// a raised inspection catwalk ring at y = 3 with railings reached by two stair runs, a control pulpit
+// a raised inspection catwalk ring at y = 3.6 with railings reached by two stair runs, a control pulpit
 // on a dais by the door, coolant tanks in the aft corners, a power coupling block at the core's aft
 // nozzle, hazard stripes around the cradle footprint, roof trusses and a hoist rail with a slowly
 // traversing trolley. The forward nozzle is a dark aperture ring with a pulsing blue core behind a
@@ -139,8 +139,10 @@ export function buildHyperdrive(kit, ctx, room) {
       core.color.copy(coreBase).multiplyScalar(1.0 + 1.1 * corePulse(performance.now() * 0.001));
     });
   }
-  // E nozzle: conduit down into the coupling block
-  pipePath(kit, [[cx1 + 1.9, cy, 0], [cx1 + 2.6, cy, 0], [cx1 + 2.6, 1.6, 0], [cx1 + 3.1, 1.6, 0]], 0.42, { color: PALETTE.impGreyDark, clampStep: 1.0 });
+  // E nozzle: conduit from the underside of the aft flange down and into the coupling block (stays under
+  // the E catwalk run, whose deck starts at cx1 + 1.9)
+  pipePath(kit, [[cx1 + 1.35, cy - 0.9, 0], [cx1 + 1.35, 1.6, 0], [cx1 + 3.1, 1.6, 0]], 0.42, { color: PALETTE.impGreyDark, clampStep: 1.0 });
+  kit.collider([cx1 + 0.9, 0, -0.5], [cx1 + 2.2, 2.1, 0.5], "aftConduit");
   // cradles: base slab, inclined struts, saddle band, hazard stencil, bolted feet, oil grime
   for (const cxC of [-3.2, 8.4]) {
     kit.box("impTrim", cxC, 0.3, 0, 1.8, 0.6, 5.8, { color: PALETTE.impBlack, texel: 1 });
@@ -160,7 +162,7 @@ export function buildHyperdrive(kit, ctx, room) {
     for (const zz of [-2.2, 2.2]) kit.box("impMetal", cxC, 0.9, zz, 1.9, 0.6, 0.5, { color: PALETTE.impGreyDark, texel: 1 });
     decalD(kit, DECK_D_DECAL.oil, [cxC + 1.6, 0.018, 1.4], "up", 1.5);
   }
-  kit.collider([cx0 - 2.0, 0, -3.0], [cx1 + 3.2, cy + R + 0.4, 3.0], "core");
+  kit.collider([cx0 - 2.0, 0, -3.0], [cx1 + 1.9, cy + R + 0.4, 3.0], "core"); // ends at the aft nozzle: the E run deck starts there
   hazardBorder(kit, cx0 - 2.4, -3.5, cx1 + 3.5, 3.5, 0, 0.32, "chevronY", 3.0);
   // power conduits arcing from the core top to junction blocks on the N and S walls
   for (const x of [-1.2, 6.9]) {
@@ -185,8 +187,9 @@ export function buildHyperdrive(kit, ctx, room) {
     decalD(kit, DECK_D_DECAL.grime, [x + 0.6, 0.018, 8.0], "up", 1.2);
   }
 
-  // --- catwalk ring at y = 3 (N/S runs, W/E runs) with columns; railings routed around the stair landings
-  const Y = 3.0;
+  // --- catwalk ring at y = 3.6 (N/S runs, W/E runs) with columns; railings routed around the stair landings.
+  // 3.6 rather than 3 so that from the door the W run passes above the aperture core instead of across it.
+  const Y = 3.6;
   const N0 = -10.5;
   const N1 = 15.5;
   const zi = 3.5;
@@ -214,7 +217,7 @@ export function buildHyperdrive(kit, ctx, room) {
   solidStairs(kit, N0, -11.6, N0 + 1.6, -6.5, "z", -11.6, -6.5, 0, Y, { rails: ["-", "+"], railKey: LOW });
   solidStairs(kit, N0, 6.5, N0 + 1.6, 11.6, "z", 11.6, 6.5, 0, Y, { rails: ["-", "+"], railKey: LOW });
   // inspection kit on the catwalk: a toolbox, a portable scanner post, a coiled hose
-  impCrate(kit, 3.0, Y, -zo + 0.7, 0.9, 0.5, 0.6, { seed: 12, decal: IMP_DECAL.glyphs1 });
+  impCrate(kit, 3.0, Y, -zo + 0.4, 0.9, 0.5, 0.5, { seed: 12, decal: IMP_DECAL.glyphs1 }); // against the outer rail, walkway clear
   kit.box("impTrim", 9.0, Y + 0.6, zo - 0.55, 0.3, 1.2, 0.3, { color: PALETTE.impBlack });
   kit.box(LOW, 9.0, Y + 1.15, zo - 0.55, 0.32, 0.05, 0.32);
   kit.collider([8.8, Y, zo - 0.75], [9.2, Y + 1.3, zo - 0.35], "post");
@@ -366,17 +369,19 @@ export function buildHyperdrive(kit, ctx, room) {
   const blue = 0x4f8dff;
   const work = 0xe4ecff;
   kit.light({ type: "point", pos: [3.0, cy, 0], color: blue, intensity: lux(4.5, 3.0), distance: 17, priority: 0.7 });
-  kit.light({ type: "point", pos: [xa - 1.3, cy, 0], color: 0x8fbcff, intensity: lux(4.0, 2.6), distance: 15, priority: 0.68, dim: (t) => 0.55 + 0.45 * corePulse(t) });
+  // (kept low, > 1 m under the W run's deck, so the deck edge above the aperture carries no hotspot)
+  kit.light({ type: "point", pos: [xa - 0.5, cy - 0.9, 0], color: 0x8fbcff, intensity: lux(4.0, 2.6), distance: 15, priority: 0.68, dim: (t) => 0.55 + 0.45 * corePulse(t) });
   kit.light({ type: "point", pos: [8.5, cy + R + 1.2, 0], color: blue, intensity: lux(3.8, 3.0), distance: 16, priority: 0.65 });
   const yT = h - 0.95; // truss bottom chord
   for (const [i, [x, z]] of [[-7, -6.6], [-7, 6.6], [5, -6.6], [5, 6.6]].entries()) {
     const lamp = [x, 5.7, z];
     const aim = [x + 1.0, cy - 0.4, 0];
     shroudLamp(kit, [x, yT, z], lamp, aim, { key: "emitWhiteDim", size: 0.55 });
-    if (x < 0) kit.light({ type: "spot", pos: lamp, target: aim, color: work, intensity: lux(5.5, 2.8), distance: 22, angle: 0.72, penumbra: 0.55, priority: 0.8 - i * 0.01 });
-    else kit.light({ type: "point", pos: [lamp[0] + 0.15, lamp[1] - 0.35, lamp[2] - Math.sign(z) * 0.35], color: work, intensity: lux(5.5, 1.7), distance: 18, priority: 0.6 - i * 0.01 });
+    if (x < 0) kit.light({ type: "spot", pos: lamp, target: aim, color: work, intensity: lux(5.5, 3.2), distance: 22, angle: 0.78, penumbra: 0.55, priority: 0.8 - i * 0.01 });
+    else kit.light({ type: "point", pos: [lamp[0] + 0.15, lamp[1] - 0.35, lamp[2] - Math.sign(z) * 0.35], color: work, intensity: lux(5.5, 2.0), distance: 18, priority: 0.6 - i * 0.01 });
   }
-  shroudLamp(kit, [-13, yT, 4.6], [-13.2, 5.3, 4.6], [-13.6, 0.9, 4.6], { key: "emitWhiteDim", size: 0.45 });
-  kit.light({ type: "point", pos: [-13.3, 4.9, 4.6], color: 0xfff0dc, intensity: lux(4.6, 1.6), distance: 14, priority: 0.55 });
+  // pulpit / entry lamp: hung between the door and the pulpit so the entry lane is lit as well
+  shroudLamp(kit, [-13, yT, 2.6], [-13.2, 5.3, 2.6], [-13.6, 0.9, 3.4], { key: "emitWhiteDim", size: 0.45 });
+  kit.light({ type: "point", pos: [-13.3, 5.0, 2.6], color: 0xfff0dc, intensity: lux(5.0, 2.4), distance: 16, priority: 0.55 });
   void rand;
 }

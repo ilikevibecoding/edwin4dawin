@@ -41,9 +41,10 @@ export function ensureDeckDMaterials(kit) {
     const amberLow = emit(PALETTE.impAmber, 0.5);
     const warmLow = emit(0xfff0c0, 0.5);
     const blueLow = emit(PALETTE.impBlue, 0.45);
+    const greenLow = emit(PALETTE.impGreen, 0.5);
     // hyperdrive core: unlit blue, colour animated (pulse) by the room's updater
     const coreBlue = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x9fd0ff).multiplyScalar(1.6) });
-    deckDMaterials = { roomsd_decal: decal, roomsd_pulse: pulse, roomsd_glow: glow, roomsd_core: core, roomsd_slot: slot, roomsd_amberLow: amberLow, roomsd_warmLow: warmLow, roomsd_blueLow: blueLow, roomsd_coreBlue: coreBlue };
+    deckDMaterials = { roomsd_decal: decal, roomsd_pulse: pulse, roomsd_glow: glow, roomsd_core: core, roomsd_slot: slot, roomsd_amberLow: amberLow, roomsd_warmLow: warmLow, roomsd_blueLow: blueLow, roomsd_greenLow: greenLow, roomsd_coreBlue: coreBlue };
   }
   for (const [k, m] of Object.entries(deckDMaterials)) if (!kit.materials[k]) kit.materials[k] = m;
   return deckDMaterials;

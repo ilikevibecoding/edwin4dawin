@@ -3,19 +3,23 @@
 // grilles on the S wall (the middle fan turns), filter banks with instanced removable cartridges on
 // the W wall, a waste processing hopper with hazard marking in the SE corner, a pump manifold rack
 // through the middle of the room, a monitoring console by the door, a grated service trench with
-// lit pipes below, condensation streaks low on the walls. Green status light, white work light.
+// lit pipes below, condensation streaks low on the walls; in the E half a chemical dosing skid under
+// the N-wall gauges and a CO2 processor column with its air-quality screen bank on the S wall.
+// Light: green pendants over the tanks / scrubbers are the status practicals; hooded white lamps pool
+// light on the pump rack and the door lane; the ceiling slots are dim recessed lines, never the key.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impConsole, impChair, impWallGear, impWallLight, impCrate, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { rng } from "../kit.js";
-import { ensureDeckDMaterials, shellNoFloor, deckFloor, grateTrench, pipe, pipePath, valveWheel, gauge, junctionBox, tank, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, assembly, blinkers, equipmentRack, screenBank, instGeo, pendantLamp } from "./deck_d_kit.js";
+import { ensureDeckDMaterials, shellNoFloor, deckFloor, grateTrench, pipe, pipePath, valveWheel, gauge, junctionBox, tank, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, assembly, blinkers, equipmentRack, screenBank, instGeo, pendantLamp, shroudLamp, hexBolt } from "./deck_d_kit.js";
 
 export function buildLifeSupport(kit, ctx, room) {
   const [w, h, d] = room.size;
   const hx = w / 2;
   const hz = d / 2;
   const accentKey = "emitGreen";
+  const DIM = "roomsd_greenLow"; // green practicals (strips, lamp lenses, ceiling coffer accents)
   const green = 0x4fe08a;
   ensureDeckDMaterials(kit);
   const rand = rng(6103);
@@ -24,8 +28,8 @@ export function buildLifeSupport(kit, ctx, room) {
   const walls = shellNoFloor(kit, room, ctx.doors, {
     accentKey,
     seed: 3301,
-    wall: { panelW: 1.8, features: { vent: 0.16, equipment: 0.1, conduit: 0.16, light: 0.05, screen: 0.04 }, altChance: 0.35 },
-    ceiling: { troughs: 2, troughW: 0.55, beamStep: 3.4, accentKey },
+    wall: { panelW: 1.8, features: { vent: 0.16, equipment: 0.1, conduit: 0.16, light: 0.0, screen: 0.04 }, altChance: 0.35 },
+    ceiling: { troughs: 2, troughW: 0.36, beamStep: 3.4, accentKey: DIM, lightKey: "roomsd_slot" },
   });
   const trench = { x0: -14.0, z0: 2.6, x1: 11.0, z1: 4.0 };
   deckFloor(kit, -hx, -hz, hx, hz, [trench]);
@@ -114,7 +118,7 @@ export function buildLifeSupport(kit, ctx, room) {
       kit.box("impMetal", x - 0.9 + k * 1.8, 2.72, fz - 0.03, 0.4, 0.03, 0.03, { color: PALETTE.impGrey });
     }
     for (let k = 0; k < 6; k++) kit.box(k === 4 && i === 2 ? "emitRedImp" : accentKey, x - 1.5 + k * 0.22, 0.5, fz - 0.005, 0.06, 0.06, 0.01);
-    kit.add("scrGreen0", new THREE.PlaneGeometry(0.7, 0.3), { pos: [x + 1.2, 0.5, fz - 0.006], rot: [0, Math.PI, 0], uv: "keep" });
+    kit.add(["scrGreen2", "scrGreen0", "scrGreen3"][i], new THREE.PlaneGeometry(0.7, 0.3), { pos: [x + 1.2, 0.5, fz - 0.006], rot: [0, Math.PI, 0], uv: "keep" });
     decalImp(kit, IMP_DECAL.glyphs1, [x - 1.3, 2.4, fz - 0.005], "-z", 0.3);
     kit.box("impMetal", x, H + (h - H) / 2, zc + 0.2, 0.9, h - H, 0.9, { color: PALETTE.impGreyDark, texel: 1 });
     for (let k = 0; k < 3; k++) kit.box("impTrim", x, H + 0.3 + k * 0.6, zc + 0.2, 0.98, 0.06, 0.98, { color: PALETTE.impBlack });
@@ -158,7 +162,7 @@ export function buildLifeSupport(kit, ctx, room) {
           Wf.box(bad ? "emitRedImp" : accentKey, cu, cv + 0.25, 0.3, 0.05, 0.03, 0.01);
         }
       }
-      Wf.box(accentKey, u, 0.3 + fh - 0.08, 0.29, fw - 0.4, 0.03, 0.01);
+      Wf.box(DIM, u, 0.3 + fh - 0.08, 0.29, fw - 0.4, 0.03, 0.01);
       Wf.decal(IMP_DECAL.glyphs2, u, 0.3 + fh + 0.3, 0.03, 0.45);
       Wf.collider(u - fw / 2, u + fw / 2, 0, fh + 0.4, 0, 0.85, "filters");
     }
@@ -249,16 +253,81 @@ export function buildLifeSupport(kit, ctx, room) {
   }
 
   // --- monitoring console by the door, wall screens, deck gear on the E wall, crates
-  impConsole(kit, 12.4, 0, -4.2, 2.6, 0.9, { yaw: Math.PI / 2, seed: 770, screens: ["scrGreen0", "scrGreen1", "scrWhite0"], accentKey });
+  impConsole(kit, 12.4, 0, -4.2, 2.6, 0.9, { yaw: Math.PI / 2, seed: 770, screens: ["scrGreen2", "scrGreen1", "scrWhite0"], accentKey });
   impChair(kit, 13.45, 0, -4.2, Math.PI / 2);
   {
     const E = walls.E.frame;
-    screenBank(E, wallU(room, "E", -6.4), 1.5, 3, 2, 0.9, 0.5, 0.08, ["scrGreen0", "scrGreen1", "scrWhite1"], { seed: 780 });
+    screenBank(E, wallU(room, "E", -6.4), 1.5, 3, 2, 0.9, 0.5, 0.08, ["scrGreen0", "scrGreen3", "scrWhite1", "scrGreen1"], { seed: 780 });
     E.decal(IMP_DECAL.glyphs3, wallU(room, "E", -4.9), 3.2, 0.03, 0.5);
     impWallGear(E, wallU(room, "E", 4.0), 1.5, { seed: 781, accentKey });
     E.decal(IMP_DECAL.medical, wallU(room, "E", -2.3), 3.5, 0.03, 0.45);
     E.decal(IMP_DECAL.arrowUp, wallU(room, "E", 2.3), 3.5, 0.03, 0.45);
-    impWallLight(E, wallU(room, "E", -8.5), h - 0.7, { key: accentKey, w: 1.0 });
+    impWallLight(E, wallU(room, "E", -8.5), h - 0.7, { key: DIM, w: 1.0 });
+  }
+  // --- chemical dosing skid under the N-wall gauge cluster: four drums on a bunded frame, dosing pump
+  // box, feed hoses into the collector line, bolted lid rings
+  {
+    const sx0 = 8.6;
+    const sz = -hz + 1.6;
+    kit.box("impTrim", sx0 + 1.9, 0.1, sz, 4.2, 0.2, 1.7, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("impMetal", sx0 + 1.9, 0.24, sz, 4.0, 0.08, 1.5, { color: PALETTE.impCharcoal, texel: 1 });
+    for (let k = 0; k < 4; k++) {
+      const dx = sx0 + 0.55 + k * 0.9;
+      kit.cyl("impMetal", dx, 0.78, sz - 0.3, 0.36, 1.0, "y", { color: k % 2 ? PALETTE.impGreyDark : PALETTE.impWhite, segments: 20, texel: 1 });
+      kit.cyl("impTrim", dx, 1.3, sz - 0.3, 0.38, 0.06, "y", { color: PALETTE.impBlack, segments: 20 });
+      kit.cyl("impTrim", dx, 0.3, sz - 0.3, 0.38, 0.06, "y", { color: PALETTE.impBlack, segments: 20 });
+      for (let b = 0; b < 4; b++) hexBolt(kit, [dx + Math.cos((b / 4) * Math.PI * 2 + 0.4) * 0.3, 1.335, sz - 0.3 + Math.sin((b / 4) * Math.PI * 2 + 0.4) * 0.3], "up", 0.03);
+      decalImp(kit, k === 2 ? IMP_DECAL.hazard : IMP_DECAL.glyphs3, [dx, 0.8, sz - 0.3 - 0.365], "-z", 0.3);
+      pipe(kit, [dx, 1.33, sz - 0.3], [dx, 1.55, sz - 0.3], 0.04, { color: PALETTE.impGreyDark, segments: 8 });
+      pipe(kit, [dx, 1.55, sz - 0.3], [dx, 1.55, sz + 0.5], 0.04, { color: PALETTE.impGreyDark, segments: 8 });
+    }
+    pipe(kit, [sx0 + 0.55, 1.55, sz + 0.5], [sx0 + 3.25, 1.55, sz + 0.5], 0.05, { color: PALETTE.impGrey, segments: 10, flanges: true });
+    // dosing pump box at the E end, hose from the header down into the pump and on to the collector
+    kit.box("impTrim", sx0 + 3.6, 0.65, sz + 0.45, 0.6, 0.75, 0.6, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("impMetal", sx0 + 3.6, 0.7, sz + 0.76, 0.5, 0.5, 0.01, { color: PALETTE.impCharcoal, texel: 1 });
+    gauge(kit, [sx0 + 3.5, 0.82, sz + 0.77], "+z", 0.08, { seed: 810 });
+    kit.box(accentKey, sx0 + 3.75, 0.82, sz + 0.77, 0.05, 0.05, 0.01);
+    kit.box("emitRedImp", sx0 + 3.75, 0.7, sz + 0.77, 0.05, 0.05, 0.01);
+    pipe(kit, [sx0 + 3.25, 1.55, sz + 0.5], [sx0 + 3.6, 1.55, sz + 0.5], 0.05, { color: PALETTE.impGrey, segments: 10 });
+    pipe(kit, [sx0 + 3.6, 1.55, sz + 0.5], [sx0 + 3.6, 1.05, sz + 0.5], 0.05, { color: PALETTE.impGrey, segments: 10 });
+    pipePath(kit, [[sx0 + 3.6, 0.5, sz + 0.75], [sx0 + 3.6, 0.5, sz + 1.2], [7.75, 0.5, sz + 1.2], [7.75, 0.5, cz - 0.05]], 0.045, { color: PALETTE.impGreyDark, clampStep: 1.6 });
+    hazardBorder(kit, sx0 - 0.4, -hz + 0.05, sx0 + 4.3, sz + 1.0, 0, 0.24);
+    kit.collider([sx0 - 0.25, 0, -hz], [sx0 + 4.05, 1.6, sz + 0.9], "dosing");
+    decalD(kit, DECK_D_DECAL.grime, [sx0 + 1.6, 0.018, sz + 1.5], "up", 1.3);
+  }
+  // --- CO2 processor column on the S wall between the scrubbers and the waste unit, with an air-quality
+  // screen bank beside it: tall drum, bolted band flanges, sight glass, valve cluster, riser into the ceiling
+  {
+    const px = 4.4;
+    const pz = hz - 1.35;
+    kit.cyl("impTrim", px, 0.15, pz, 1.15, 0.3, "y", { color: PALETTE.impBlack, segments: 28 });
+    kit.cyl("impMetal", px, 1.95, pz, 0.95, 3.3, "y", { color: PALETTE.impGrey, segments: 28, texel: 0.8 });
+    for (const yy of [0.6, 1.7, 2.8, 3.5]) {
+      kit.cyl("impTrim", px, yy, pz, 0.99, 0.12, "y", { color: PALETTE.impBlack, segments: 28 });
+      for (let b = 0; b < 10; b++) hexBolt(kit, [px + Math.cos((b / 10) * Math.PI * 2) * 0.99, yy, pz + Math.sin((b / 10) * Math.PI * 2) * 0.99], b < 5 ? "-z" : "+z", 0.035);
+    }
+    kit.cyl("impMetal", px, 3.75, pz, 0.95, 0.3, "y", { r2: 0.45, color: PALETTE.impCharcoal, segments: 28 });
+    pipe(kit, [px, 3.9, pz], [px, h - 0.3, pz], 0.22, { color: PALETTE.impGreyDark, flanges: true, clampStep: 1.0 });
+    // sight glass (dim green) and a gauge pair on the room-facing side, valve cluster at the base
+    kit.box("impTrim", px, 2.25, pz - 0.98, 0.3, 0.9, 0.06, { color: PALETTE.impBlack });
+    kit.box(DIM, px, 2.25, pz - 1.0, 0.16, 0.76, 0.01, { uv: "keep" });
+    gauge(kit, [px - 0.45, 2.5, pz - 0.86], "-z", 0.1, { seed: 820 });
+    gauge(kit, [px + 0.45, 2.5, pz - 0.86], "-z", 0.1, { seed: 821, warn: true });
+    decalImp(kit, IMP_DECAL.glyphs2, [px, 1.2, pz - 0.97], "-z", 0.4);
+    pipe(kit, [px - 0.9, 1.0, pz - 0.3], [px - 1.9, 1.0, pz - 0.3], 0.09, { color: PALETTE.impGreyDark, flanges: true });
+    valveWheel(kit, [px - 1.5, 1.32, pz - 0.3], "y", 0.15, { color: PALETTE.impRed, stem: 0.2 });
+    pipePath(kit, [[px - 1.9, 1.0, pz - 0.3], [px - 2.4, 1.0, pz - 0.3], [px - 2.4, 1.0, hz - 0.45], [scrubXs[2] + 1.8, 1.0, hz - 0.45]], 0.09, { color: PALETTE.impGreyDark, clampStep: 1.6 });
+    pipe(kit, [px + 0.95, 1.5, pz], [px + 2.2, 1.5, pz], 0.12, { color: PALETTE.impGrey, flanges: true });
+    kit.box("impTrim", px + 2.4, 1.5, pz, 0.4, 0.5, 0.5, { color: PALETTE.impBlack, texel: 1 });
+    pipe(kit, [px + 2.4, 1.75, pz], [px + 2.4, h - 0.3, pz], 0.1, { color: PALETTE.impGreyDark, clampStep: 1.4 });
+    hazardBorder(kit, px - 2.6, pz - 1.5, px + 2.8, hz - 0.05, 0, 0.24);
+    kit.collider([px - 1.2, 0, pz - 1.2], [px + 1.2, 4.0, hz], "processor");
+    kit.collider([px - 2.5, 0, pz - 0.5], [px - 1.0, 1.5, pz + 0.3], "processorValve");
+    kit.collider([px + 2.1, 0, pz - 0.35], [px + 2.7, 1.9, pz + 0.35], "processorBox");
+    const S = walls.S.frame;
+    screenBank(S, wallU(room, "S", px + 3.6) - 1.0, 1.6, 2, 2, 0.9, 0.5, 0.08, ["scrGreen1", "scrWhite0", "scrGreen3", "scrGreen2"], { seed: 830 });
+    S.decal(IMP_DECAL.vacuum, wallU(room, "S", px + 3.6), 3.1, 0.03, 0.5);
+    decalD(kit, DECK_D_DECAL.streak, [px + 1.4, 3.8, hz - 0.075], "-z", 1.4, { h: 1.2 });
   }
   impCrate(kit, hx - 1.1, 0, -hz + 1.3, 1.2, 0.9, 1.1, { seed: 6, decal: IMP_DECAL.vacuum });
   impCrate(kit, hx - 2.4, 0, -hz + 1.1, 1.0, 0.7, 0.9, { seed: 7, decal: IMP_DECAL.bay03 });
@@ -275,14 +344,19 @@ export function buildLifeSupport(kit, ctx, room) {
     N.decal(IMP_DECAL.keepClear, wallU(room, "N", 6.4), 3.6, 0.03, 0.55);
   }
 
-  // --- lights: white work lights down the room, green status light over tanks / scrubbers / waste, lit trench
-  kit.light({ type: "point", pos: [-10.0, h - 0.6, -0.5], color: 0xe4ecff, intensity: lux(h - 0.6, 3.0), distance: 15, priority: 0.6 });
-  kit.light({ type: "point", pos: [-1.0, h - 0.6, -0.5], color: 0xe4ecff, intensity: lux(h - 0.6, 3.0), distance: 15, priority: 0.59 });
-  kit.light({ type: "point", pos: [8.5, h - 0.6, 0.5], color: 0xe4ecff, intensity: lux(h - 0.6, 2.8), distance: 15, priority: 0.58 });
-  pendantLamp(kit, -6.0, 3.4, -8.6, h, accentKey);
-  pendantLamp(kit, -7.4, 3.6, 9.2, h, accentKey);
-  pendantLamp(kit, 11.5, 3.2, 6.0, h, "emitAmber");
-  pendantLamp(kit, -14.2, 4.0, -3.6, h, "emitWhite");
+  // --- lights (8). Work light: three hooded white lamps hung from the ceiling over the pump rack (two)
+  // and the door lane (one), all aimed down at ~3.7 m, so the light pools on the equipment and the
+  // black ceiling stays dark. Status practicals: green pendants over the tanks and the scrubbers, an
+  // amber pendant over the waste unit, the lit trench, and a dim pendant over the filter banks.
+  const work = 0xe4ecff;
+  for (const [i, [x, z]] of [[-8.0, -3.4], [2.0, -3.4], [10.0, 0.6]].entries()) {
+    shroudLamp(kit, [x, h - 0.08, z], [x, 3.95, z], [x, 0.8, z], { key: "emitWhiteDim", size: 0.55 });
+    kit.light({ type: "point", pos: [x, 3.7, z], color: work, intensity: lux(3.4, 3.5), distance: 15, priority: 0.6 - i * 0.01 });
+  }
+  pendantLamp(kit, -6.0, 3.4, -8.6, h, DIM);
+  pendantLamp(kit, -7.4, 3.6, 9.2, h, DIM);
+  pendantLamp(kit, 11.5, 3.2, 6.0, h, "emitAmberDim");
+  pendantLamp(kit, -14.2, 4.0, -3.6, h, "emitWhiteDim");
   kit.light({ type: "point", pos: [-6.0, 3.4, -8.6], color: green, intensity: lux(3.4, 1.6), distance: 12, priority: 0.5 });
   kit.light({ type: "point", pos: [-7.4, 3.6, 9.2], color: green, intensity: lux(3.6, 1.6), distance: 12, priority: 0.49 });
   kit.light({ type: "point", pos: [11.5, 3.2, 6.0], color: 0xffb040, intensity: lux(3.2, 1.2), distance: 10, priority: 0.42 });

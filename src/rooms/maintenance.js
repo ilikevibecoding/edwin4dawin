@@ -3,16 +3,20 @@
 // droid on a clamp stand; a fighter wing panel (hex plating) leaning on an A-frame stand; a welding
 // station behind dark screens under an extraction hood with a flickering arc and a hard white spot;
 // parts shelving with instanced bins; a scissor parts lift in the SW corner; cable reels, a hydraulic
-// press, a drill press; oil stains and yellow/black hazard lanes. Yellow work light, white overheads.
+// press, a drill press; oil stains and yellow/black hazard lanes.
+// Light: hooded white downlights flush with the ceiling (above the crane bridge's travel) pool light on
+// the lane and the work areas; the amber pendant over the benches, the amber droid spot and the hard
+// white welding spot are the practicals; the ceiling slots are dim recessed lines, never the key.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRailing, impWallGear, impWallLight, impCrate, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { rng, prism } from "../kit.js";
-import { ensureDeckDMaterials, shellNoFloor, deckFloor, pipe, pipePath, valveWheel, gauge, junctionBox, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, assembly, blinkers, instGeo, pendantLamp } from "./deck_d_kit.js";
+import { ensureDeckDMaterials, shellNoFloor, deckFloor, pipe, pipePath, valveWheel, gauge, junctionBox, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, assembly, blinkers, instGeo, pendantLamp, shroudLamp } from "./deck_d_kit.js";
 
 const YEL = PALETTE.yellow;
 const UP = new THREE.Vector3(0, 1, 0);
+const DIM = "emitAmberDim"; // amber practicals: wall lights, pendant lens, ceiling coffer accents
 
 export function buildMaintenance(kit, ctx, room) {
   const [w, h, d] = room.size;
@@ -29,14 +33,14 @@ export function buildMaintenance(kit, ctx, room) {
   const walls = shellNoFloor(kit, room, ctx.doors, {
     accentKey,
     seed: 2207,
-    wall: { panelW: 2.0, features: { vent: 0.15, equipment: 0, conduit: 0, light: 0.07, screen: 0.06 }, altChance: 0.4, panelColor: PALETTE.impGrey, panelColorAlt: PALETTE.impGreyDark },
+    wall: { panelW: 2.0, features: { vent: 0.15, equipment: 0, conduit: 0, light: 0.0, screen: 0.06 }, altChance: 0.4, panelColor: PALETTE.impGrey, panelColorAlt: PALETTE.impGreyDark },
     walls: { N: { features: plain, altChance: 0.5 }, E: { features: plain, altChance: 0.5 } },
-    ceiling: { troughs: 2, troughW: 0.6, beamStep: 3.4, accentKey },
+    ceiling: { troughs: 2, troughW: 0.36, beamStep: 3.4, accentKey: DIM, lightKey: "roomsd_slot" },
   });
   deckFloor(kit, -hx, -hz, hx, hz, []);
-  // entry lane from the blast door, yellow/black edged
+  // entry lane from the blast door, yellow/black edged (fine chevron repeat: no stair-stepped edges up close)
   kit.boxMM("impMetalRough", [-hx + 0.3, 0, -1.6], [14.2, 0.012, 1.6], { color: PALETTE.impGreyDark, texel: 0.7 });
-  for (const s of [-1, 1]) kit.boxMM("chevronY", [-hx + 0.3, 0.002, s * 1.6 - (s > 0 ? 0 : 0.28)], [14.2, 0.014, s * 1.6 + (s > 0 ? 0.28 : 0)], { texel: 1.2 });
+  for (const s of [-1, 1]) kit.boxMM("chevronY", [-hx + 0.3, 0.002, s * 1.6 - (s > 0 ? 0 : 0.28)], [14.2, 0.014, s * 1.6 + (s > 0 ? 0.28 : 0)], { texel: 3.0 });
   decalImp(kit, IMP_DECAL.arrowRight, [-13.0, 0.016, 0], "up", 1.0, { spin: Math.PI });
   decalImp(kit, IMP_DECAL.keepClear, [-9.5, 0.016, 0], "up", 1.0, { spin: Math.PI / 2 });
   decalImp(kit, IMP_DECAL.bay02, [12.6, 0.016, 0], "up", 1.2, { spin: Math.PI / 2 });
@@ -78,7 +82,7 @@ export function buildMaintenance(kit, ctx, room) {
     E.box("impMetal", wallU(room, "E", 2.6), 1.1, 0.2, 0.5, 0.12, 0.4, { color: PALETTE.impGrey, texel: 1 });
     E.box("impMetal", wallU(room, "E", 2.6), 0.55, 0.16, 0.08, 1.1, 0.08, { color: PALETTE.impGreyDark });
     E.box("emitGreen", wallU(room, "E", 2.6), 1.75, 0.02, 0.35, 0.35, 0.01);
-    impWallLight(E, wallU(room, "E", 0), h - 0.7, { key: accentKey, w: 1.4 });
+    impWallLight(E, wallU(room, "E", 0), h - 0.7, { key: DIM, w: 1.4 });
   }
 
   // --- S side: wing panel on its stand, welding station, parts lift
@@ -97,7 +101,7 @@ export function buildMaintenance(kit, ctx, room) {
     impWallGear(S, wallU(room, "S", -1.0), 1.6, { seed: 220, accentKey });
     S.decal(IMP_DECAL.restricted, wallU(room, "S", 2.2), 3.2, 0.03, 0.7);
     decalD(kit, DECK_D_DECAL.scorch, [7.2, 1.6, hz - 0.075], "-z", 1.8);
-    impWallLight(S, wallU(room, "S", -5.0), h - 0.7, { key: accentKey, w: 1.4 });
+    impWallLight(S, wallU(room, "S", -5.0), h - 0.7, { key: DIM, w: 1.4 });
   }
   {
     // W wall (door wall): sign decals, warning lamp over the blast door, breaker-ish gear
@@ -120,13 +124,16 @@ export function buildMaintenance(kit, ctx, room) {
   // --- gantry crane: wall rails along x, bridge across z with a trolley + hook block, traversing
   gantryCrane(kit, room, { travel: [-6.5, 9.5], trolleyZ: -3.6 });
 
-  // --- lights: white overheads, yellow work light over the benches / droid / lift, hard white welding spot
-  kit.light({ type: "point", pos: [-8.0, h - 0.6, -5.0], color: 0xe6ecff, intensity: lux(h - 0.6, 3.4), distance: 20, priority: 0.6 });
-  kit.light({ type: "point", pos: [4.0, h - 0.6, -2.5], color: 0xe6ecff, intensity: lux(h - 0.6, 3.4), distance: 20, priority: 0.59 });
-  kit.light({ type: "point", pos: [12.5, h - 0.6, 3.0], color: 0xe6ecff, intensity: lux(h - 0.6, 3.0), distance: 20, priority: 0.5 });
-  kit.light({ type: "point", pos: [-4.0, h - 0.6, 5.5], color: 0xe6ecff, intensity: lux(h - 0.6, 3.0), distance: 20, priority: 0.49 });
-  pendantLamp(kit, -8.0, 3.6, -9.6, h, accentKey);
-  kit.light({ type: "point", pos: [-8.0, 3.6, -9.6], color: amber, intensity: lux(3.6, 2.4), distance: 13, priority: 0.55 });
+  // --- lights (8). Work light: four hooded downlights flush with the ceiling (the crane bridge travels
+  // just below them) over the lane and the work areas; practicals: the dim amber pendant over the
+  // benches, the amber droid spot, the hard white welding spot and the parts-lift lamp.
+  const work = 0xe6ecff;
+  for (const [i, [x, z]] of [[-8.0, -4.0], [4.3, -2.5], [12.2, 3.0], [-4.3, 6.5]].entries()) {
+    shroudLamp(kit, [x, h - 0.05, z], [x, h - 0.32, z], [x, 0.5, z], { key: "emitWhiteDim", size: 0.5 });
+    kit.light({ type: "point", pos: [x, h - 0.55, z], color: work, intensity: lux(h - 0.55, i < 2 ? 2.0 : 1.7), distance: 19, priority: 0.6 - i * 0.01 });
+  }
+  pendantLamp(kit, -8.0, 3.6, -9.6, h, DIM);
+  kit.light({ type: "point", pos: [-8.0, 3.6, -9.6], color: amber, intensity: lux(3.6, 1.6), distance: 13, priority: 0.55 });
   kit.light({ type: "spot", pos: [5.2, h - 0.5, -5.0], target: [5.2, 0.8, -6.6], color: amber, intensity: lux(5.0, 2.6), distance: 12, angle: 0.55, penumbra: 0.5, priority: 0.54 });
   kit.light({ type: "spot", pos: [9.2, 4.2, 7.0], target: [9.2, 0.9, 7.0], color: 0xffffff, intensity: lux(3.3, 4.5), distance: 9, angle: 0.5, penumbra: 0.35, priority: 0.57 });
   kit.light({ type: "point", pos: [-13.6, 4.4, 8.4], color: amber, intensity: lux(4.1, 1.5), distance: 10, priority: 0.42 });
@@ -452,7 +459,7 @@ function wingPanel(kit, x, z, opts) {
     kit.add("impMetal", new THREE.BoxGeometry(0.03, 0.7, 0.03), { pos: [x - 3.2 + Math.cos(a) * 0.15, 0.32, z - 1.8 + Math.sin(a) * 0.15], rot: [Math.sin(a) * 0.45, 0, -Math.cos(a) * 0.45], color: PALETTE.impGreyDark });
   }
   kit.box("impTrim", x - 3.2, 1.45, z - 1.7, 0.3, 0.22, 0.14, { color: PALETTE.impBlack });
-  kit.box("emitWhiteSoft", x - 3.2, 1.45, z - 1.62, 0.24, 0.16, 0.01, { uv: "keep" });
+  kit.box("emitWhiteDim", x - 3.2, 1.45, z - 1.62, 0.24, 0.16, 0.01, { uv: "keep" });
   hazardBorder(kit, x - 4.4, z - 2.2, x + 4.4, z + 2.4, 0, 0.26);
   kit.collider([x - 4.0, 0, z - 0.3], [x + 4.0, 4.5, z + 2.2], "wing");
   kit.collider([x + 0.4, 0, z - 1.7], [x + 1.6, 0.65, z - 1.1], "trestle");
