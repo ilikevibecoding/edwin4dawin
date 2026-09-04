@@ -18,11 +18,13 @@ export const meta = { id: "hangar", stream: "hangar" };
 const Y = -40; // deck
 const CAT_Y = -32; // service catwalks
 const GAL_Y = -22; // flight-control gallery (booth floor level)
+const GAL_X0 = 36; // outboard edge of the gallery balcony (4 m deep against the starboard wall)
 const DECK_TINT = new THREE.Color("#6f757d");
 const PAINT_WHITE = new THREE.Color("#c9ced6");
 const PAINT_RED = new THREE.Color("#b2382c");
 const PAINT_AMBER = IMP.hazardYellow;
-const HOIST = { x0: 26.6, x1: 31.0, z0: -12.2, z1: -7.8 };
+// cargo hoist beside the gallery edge, forward of the booth frontage (z -20..0) so it never crosses the glass
+const HOIST = { x0: 31.6, x1: GAL_X0, z0: -24.2, z1: -19.8 };
 // fixture positions (lights hang ~0.5 m under the pendant lenses)
 const SPOT_XZ = [0, -10];
 const SPOT_Y = -14.3;
@@ -597,15 +599,20 @@ function starboardStrip(ctx) {
   for (const x of [31.94, 34.46]) bar(kit, "emitAmber", [x, CAT_Y + 0.32, A.top.z], [x, CAT_Y + 10.32, B.top.z], 0.02, 0.06);
   kit.boxMM("paintedMetal", [35.6, CAT_Y - 0.44, -43.8], [37.2, CAT_Y - 0.3, -43.0], { color: IMP.black, texel: 1 });
   kit.boxMM("emitWhiteSoft", [35.75, CAT_Y - 0.45, -43.65], [37.05, CAT_Y - 0.44, -43.15], { uv: "keep" });
-  // gallery in front of the flight-control booth (its slab bridges the wall gap into the booth floor)
-  slab(kit, 31, B.top.z, 40.0, 3, GAL_Y, "gallery");
-  railing(kit, { from: [31.15, B.top.z], to: [31.15, HOIST.z0], y: GAL_Y, color: IMP.gunmetal });
-  railing(kit, { from: [31.15, HOIST.z1], to: [31.15, 3], y: GAL_Y, color: IMP.gunmetal });
-  railing(kit, { from: [31, B.top.z + 0.15], to: [31.9, B.top.z + 0.15], y: GAL_Y, color: IMP.gunmetal });
+  // tower head (the top of flight B) and the gallery in front of the flight-control booth: a 4 m balcony
+  // (x 36..40) whose slab bridges the wall gap into the booth floor. Kept narrow on purpose: a deep gallery at
+  // the booth's floor level hides the glass front from the deck below.
+  const HZ1 = -25.0; // aft edge of the tower head
+  slab(kit, 31.7, B.top.z, GAL_X0, HZ1, GAL_Y, "gallery_head");
+  slab(kit, GAL_X0, B.top.z, 40.0, 3, GAL_Y, "gallery");
+  railing(kit, { from: [31.85, B.top.z], to: [31.85, HZ1], y: GAL_Y, color: IMP.gunmetal });
+  railing(kit, { from: [31.95, HZ1 + 0.15], to: [GAL_X0, HZ1 + 0.15], y: GAL_Y, color: IMP.gunmetal });
+  railing(kit, { from: [GAL_X0 + 0.15, HZ1], to: [GAL_X0 + 0.15, HOIST.z0], y: GAL_Y, color: IMP.gunmetal });
+  railing(kit, { from: [GAL_X0 + 0.15, HOIST.z1], to: [GAL_X0 + 0.15, 3], y: GAL_Y, color: IMP.gunmetal });
   railing(kit, { from: [34.5, B.top.z + 0.15], to: [xw, B.top.z + 0.15], y: GAL_Y, color: IMP.gunmetal });
-  railing(kit, { from: [31, 2.85], to: [37.25, 2.85], y: GAL_Y, color: IMP.gunmetal });
+  railing(kit, { from: [GAL_X0, 2.85], to: [37.25, 2.85], y: GAL_Y, color: IMP.gunmetal });
   // tower frame: four columns, top frame, X-bracing on the outboard and forward faces, gallery columns
-  const TZ0 = LZ0 - 0.3, TZ1 = B.top.z + 0.3;
+  const TZ0 = LZ0 - 0.3, TZ1 = HZ1;
   const cols = [[31.7, TZ0], [31.7, TZ1], [37.6, TZ0], [37.6, TZ1]];
   for (const [x, z] of cols) {
     kit.boxMM("paintedMetal", [x - 0.25, Y, z - 0.25], [x + 0.25, GAL_Y + 1.4, z + 0.25], { color: IMP.plateDark, texel: 1 });
@@ -621,14 +628,14 @@ function starboardStrip(ctx) {
   }
   bar(kit, "paintedMetal", [31.7, Y + 0.5, TZ0], [37.6, CAT_Y - 0.4, TZ0], 0.3, 0.16, { color: IMP.gunmetal });
   bar(kit, "paintedMetal", [37.6, Y + 0.5, TZ0], [31.7, CAT_Y - 0.4, TZ0], 0.3, 0.16, { color: IMP.gunmetal });
-  for (const z of [-14.5, 2.6]) {
-    kit.boxMM("paintedMetal", [31.15, Y, z - 0.25], [31.65, GAL_Y - 0.3, z + 0.25], { color: IMP.plateDark, texel: 1 });
-    kit.collider([31.1, Y, z - 0.3], [31.7, GAL_Y, z + 0.3], "column");
+  for (const z of [-14.5, -6.5, 2.6]) {
+    kit.boxMM("paintedMetal", [GAL_X0 + 0.15, Y, z - 0.25], [GAL_X0 + 0.65, GAL_Y - 0.3, z + 0.25], { color: IMP.plateDark, texel: 1 });
+    kit.collider([GAL_X0 + 0.1, Y, z - 0.3], [GAL_X0 + 0.7, GAL_Y, z + 0.3], "column");
   }
   // gallery underside: stiffeners + a lit soffit so the space below is not a black slab
-  for (let z = -27; z < 3; z += 4) kit.boxMM("paintedMetal", [31, GAL_Y - 0.6, z - 0.15], [xw, GAL_Y - 0.3, z + 0.15], { color: IMP.black, texel: 1 });
-  kit.boxMM("paintedMetal", [34.6, GAL_Y - 0.44, -28.3], [35.4, GAL_Y - 0.3, 2.5], { color: IMP.black, texel: 1 });
-  kit.boxMM("emitWhiteSoft", [34.75, GAL_Y - 0.45, -27.8], [35.25, GAL_Y - 0.44, 2], { uv: "keep" });
+  for (let z = -27; z < 3; z += 4) kit.boxMM("paintedMetal", [z < HZ1 ? 31.7 : GAL_X0, GAL_Y - 0.6, z - 0.15], [xw, GAL_Y - 0.3, z + 0.15], { color: IMP.black, texel: 1 });
+  kit.boxMM("paintedMetal", [37.6, GAL_Y - 0.44, -28.3], [38.4, GAL_Y - 0.3, 2.5], { color: IMP.black, texel: 1 });
+  kit.boxMM("emitWhiteSoft", [37.75, GAL_Y - 0.45, -27.8], [38.25, GAL_Y - 0.44, 2], { uv: "keep" });
   // ops banks against the wall beside flight A and under the landing, a control panel at the foot
   props.computerBank(kit, { pos: [xw - 0.6, Y, -43.5], yaw: -Math.PI / 2, w: 3.2, h: 2.4, d: 0.6, seed: 12, accent: "emitAmber" });
   props.computerBank(kit, { pos: [xw - 0.6, Y, -36.5], yaw: -Math.PI / 2, w: 3.2, h: 2.4, d: 0.6, seed: 13, accent: "emitAmber" });
@@ -637,8 +644,8 @@ function starboardStrip(ctx) {
   FX.decal(-33.2 - ctx.inner.z0, 3.6, 0.03, 1.4, 1.4, DECAL.TEXT_B);
   toolCart(kit, 38.6, -40.4, 1.2, IMP.plateBlue);
   // gallery furniture: observation console at the rail, status board on the wall
-  props.consoleStation(kit, { pos: [32.6, GAL_Y, -8.5], yaw: Math.PI / 2, w: 2.2, d: 0.8, screens: 3, accent: "emitAmber", seed: 21, screenSet: [7, 2, 12] });
-  props.chair(kit, { pos: [33.6, GAL_Y, -8.5], yaw: Math.PI / 2 });
+  props.consoleStation(kit, { pos: [GAL_X0 + 0.95, GAL_Y, -8.5], yaw: Math.PI / 2, w: 2.2, d: 0.8, screens: 3, accent: "emitAmber", seed: 21, screenSet: [7, 2, 12] });
+  props.chair(kit, { pos: [GAL_X0 + 1.95, GAL_Y, -8.5], yaw: Math.PI / 2 });
   // ops banks and stores under the gallery
   props.computerBank(kit, { pos: [xw - 0.6, Y, -16.2], yaw: -Math.PI / 2, w: 3.2, h: 2.4, d: 0.6, seed: 5, accent: "emitAmber" });
   props.computerBank(kit, { pos: [xw - 0.6, Y, -12.7], yaw: -Math.PI / 2, w: 3.2, h: 2.4, d: 0.6, seed: 6, accent: "emitAmber" });

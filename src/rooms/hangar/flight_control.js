@@ -73,7 +73,7 @@ export function build(ctx) {
     kit.box(x < 48 ? "emitWhiteSoft" : "emitAmber", x, Y + 3.675, -10, 0.6, 0.02, 0.36, { uv: "keep" });
   }
   // a faint fill so the ceiling plates and upper walls are not pitch black between the downlights
-  ctx.light(0xc8d2ea, 7, 12, [47.6, Y + 2.6, -10], { decay: 1.5 });
+  ctx.light(0xc8d2ea, 14, 14, [47.6, Y + 2.6, -10], { decay: 1.5 });
 }
 
 /** Sill wall + rail + glass panes across the whole opening, with the walk-through gap onto the balcony. */
@@ -105,6 +105,11 @@ function glassFront(ctx, Y, x0, z0, z1) {
     g.rotateY(-Math.PI / 2);
     kit.add("glass", g, { pos: [x, Y + sillH + (ceil - Y - sillH) / 2, (a + b) / 2], uv: "keep" });
     kit.boxMM("paintedMetal", [x - 0.1, ceil - 0.25, a], [x + 0.1, ceil, b], { color: IMP.black, texel: 1 });
+    // luminous cove behind the glass header: lights the booth ceiling and makes the control room read as a
+    // lit window from the hangar deck 18 m below (from there you look up into the booth's ceiling)
+    kit.boxMM("paintedMetal", [x + 0.1, ceil - 0.42, a], [x + 1.15, ceil, b], { color: IMP.black, texel: 1 });
+    kit.boxMM("emitWhiteSoft", [x + 0.22, ceil - 0.425, a + 0.2], [x + 1.03, ceil - 0.42, b - 0.2], { uv: "keep" });
+    kit.boxMM("emitAmber", [x + 1.15, ceil - 0.4, a + 0.1], [x + 1.17, ceil - 0.3, b - 0.1]);
     kit.collider([x - 0.25, Y, a], [x + 0.3, ceil, b], "glass");
   }
   // gap jambs with amber edge lights (facing the balcony) and a hazard sill on the floor
