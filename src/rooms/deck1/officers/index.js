@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
 import { roomShell, partition, corridorDressing, doorReveal } from "../shared/imperial.js";
-import { seat } from "../bridge/stations.js";
+import { seat } from "../shared/props.js";
 import { IMP, LIGHT } from "../shared/palette.js";
 
 const ID = "d1-officers";

@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
 import { roomShell, doorReveal } from "../shared/imperial.js";
-import { consoleUnit, seat } from "../bridge/stations.js";
+import { consoleUnit, seat } from "../shared/props.js";
 import { IMP, LIGHT } from "../shared/palette.js";
 
 const ID = "d1-nav";
