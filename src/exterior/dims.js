@@ -76,7 +76,7 @@ export function cityTopY(z) {
 export const TOWER = {
   neck: { x: 38, z0: 562, z1: 648, yTop: 166 },
   bridge: { x: 112, z0: 590, z1: 652, y0: 166, y1: 200 },
-  windows: { x: 24, y0: 181.5, y1: 186.5, z: 590 }, // bridge windows on the front face (interior deck 1 floor at 180)
+  windows: { x: 24, y0: 180.7, y1: 186.5, z: 590 }, // bridge windows on the front face (interior deck 1 floor at 180; foot 0.7 m above it so the hull ahead is visible)
   domes: { r: 22, x: 72, y: 203, z: 621 },
   mast: { r: 2.2, y0: 200, y1: 262, z: 621 },
 };

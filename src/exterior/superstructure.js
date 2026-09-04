@@ -351,7 +351,9 @@ export function buildSuperstructure(materials) {
   batch.box("hull", 0, wn.y1 + 1.3, wn.z - 1.3, wn.x * 2 + 8, 1.4, 2.8, PALETTE.hullGrey);
   batch.box("hull", 0, wn.y0 - 1.2, wn.z - 1.3, wn.x * 2 + 8, 1.2, 2.8, PALETTE.hullGrey);
   batch.box("hullDark", 0, wn.y1 + 3.2, wn.z - 2.2, wn.x * 2 + 12, 1.6, 4.4, PALETTE.hullDark); // brow
-  for (let x = -wn.x + 6; x < wn.x - 1; x += 6) dark.push(boxItem(x, (wn.y0 + wn.y1) / 2, wn.z - 0.6, 0.35, wn.y1 - wn.y0 + 0.6, 1.2, [0.3, 0.31, 0.33]));
+  // near-black mullions aligned with the bridge's own frames (x = -22.5 + 3k) so from inside they hide
+  // behind the room's mullions; from outside they read as the window band's structure
+  for (let x = -22.5 + 3; x < 22.5 - 1; x += 3) dark.push(boxItem(x, (wn.y0 + wn.y1) / 2, wn.z - 0.5, 0.32, wn.y1 - wn.y0 + 0.6, 1.0, [0.05, 0.052, 0.06]));
   // observation-deck window rows along the bridge module's front and sides
   windowRow(windows, -br.x + 16, br.y0 + 6, br.z0 - 0.3, br.x - 16, br.z0 - 0.3, 34, rand);
   windowRow(windows, -br.x - 0.3, bcy, br.z0 + 6, -br.x - 0.3, br.z1 - 6, 10, rand, [0.4, 0.8, 1.2]);

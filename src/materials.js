@@ -270,7 +270,9 @@ function addImperialMaterials(mats, std) {
 
   // --- interior
   // black polished deck
-  mats.floorGloss = std(floorTex, { normalScale: new THREE.Vector2(0.7, 0.7), envMapIntensity: 1.1 });
+  // envMapIntensity kept low: the RoomEnvironment probe's area light otherwise mirrors as a white
+  // flare on every deck when looking along +Z at a shallow angle
+  mats.floorGloss = std(floorTex, { normalScale: new THREE.Vector2(0.7, 0.7), envMapIntensity: 0.45 });
   // clean white/grey panels (tint from vertex colours), two wear variants
   mats.impPanel = std(panelTex, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.7 });
   mats.impPanel1 = std(panelTex2, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.7 });
