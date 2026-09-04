@@ -43,14 +43,20 @@ const NOISE_GLSL = /* glsl */ `
 // Hologram material: additive, scanlines, slow flicker + occasional dropout, fresnel rim, upward sweep.
 // Replaces materials.holo before any room is built, so every ctx.kit.add("holo", …) gets this look.
 // ---------------------------------------------------------------------------------------------------
-export function makeHoloMaterial(baseColor = 0x5fb8ff) {
-  const mat = new THREE.ShaderMaterial({
-    uniforms: {
-      time: { value: 0 },
-      color: { value: new THREE.Color(baseColor) },
-      opacity: { value: 0.55 },
-    },
-    vertexShader: /* glsl */ `
+/**
+ * Hologram material. A ShaderMaterial subclass so `.color` / `.opacity` map onto its uniforms for every
+ * instance including clones (rooms do `materials.holo.clone()` and recolour it), and every instance registers
+ * itself so `update()` can advance `time` on all of them.
+ */
+export class HoloMaterial extends THREE.ShaderMaterial {
+  constructor(baseColor = 0x5fb8ff) {
+    super({
+      uniforms: {
+        time: { value: 0 },
+        color: { value: new THREE.Color(baseColor) },
+        opacity: { value: 0.55 },
+      },
+      vertexShader: /* glsl */ `
       varying vec3 vN;
       varying vec3 vW;
       varying vec3 vC;
@@ -65,7 +71,7 @@ export function makeHoloMaterial(baseColor = 0x5fb8ff) {
         vW = wp.xyz;
         gl_Position = projectionMatrix * viewMatrix * wp;
       }`,
-    fragmentShader: /* glsl */ `
+      fragmentShader: /* glsl */ `
       uniform float time;
       uniform vec3 color;
       uniform float opacity;
@@ -91,18 +97,47 @@ export function makeHoloMaterial(baseColor = 0x5fb8ff) {
         float a = opacity * flick * drop * grain * scan * band * (0.42 + 0.9 * rim) + sweep * opacity * 0.6;
         gl_FragColor = vec4(color * vC * a, a);
       }`,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    vertexColors: true,
-    fog: false,
-  });
-  mat.name = "holo";
-  // back-compat: code that reads/sets materials.holo.color / .opacity keeps working
-  mat.color = mat.uniforms.color.value;
-  mat.opacity = mat.uniforms.opacity.value;
-  return mat;
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      vertexColors: true,
+      fog: false,
+    });
+    this.name = "holo";
+    this.isHoloMaterial = true;
+    HoloMaterial.instances.add(this);
+  }
+  get color() {
+    return this.uniforms.color.value;
+  }
+  set color(c) {
+    if (c && c.isColor) this.uniforms.color.value.copy(c);
+    else if (c !== undefined) this.uniforms.color.value.set(c);
+  }
+  get opacity() {
+    return this.uniforms.opacity.value;
+  }
+  set opacity(v) {
+    if (this.uniforms) this.uniforms.opacity.value = v;
+  }
+  copy(src) {
+    super.copy(src);
+    if (src.uniforms) this.uniforms = THREE.UniformsUtils.clone(src.uniforms);
+    return this;
+  }
+  dispose() {
+    HoloMaterial.instances.delete(this);
+    super.dispose();
+  }
+  static tick(t) {
+    for (const m of HoloMaterial.instances) m.uniforms.time.value = t;
+  }
+}
+HoloMaterial.instances = new Set();
+
+export function makeHoloMaterial(baseColor = 0x5fb8ff) {
+  return new HoloMaterial(baseColor);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -956,8 +991,7 @@ export function createAtmosphere({ scene, camera, materials, rooms }) {
       const alert = SYSTEMS.lighting ? SYSTEMS.lighting.alert : 0;
       state.alert = alert;
       alertLevel.value = alert;
-      holo.uniforms.time.value = t;
-      holo.uniforms.opacity.value = holo.opacity;
+      HoloMaterial.tick(t); // every hologram material, clones included
       motes.mat.uniforms.time.value = t;
       shafts.material.uniforms.time.value = t;
       // alert: shafts and motes go red with the strips

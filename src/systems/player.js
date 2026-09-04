@@ -196,7 +196,7 @@ export class Player {
     const r = RADIUS * 0.7;
     for (const c of this.colliders) {
       if (c.enabled === false) continue;
-      if (c.max.y > p.y + STEP || c.max.y < p.y - 3.0) continue;
+      if (c.max.y >= p.y + STEP || c.max.y < p.y - 3.0) continue;
       if (p.x + r < c.min.x || p.x - r > c.max.x || p.z + r < c.min.z || p.z - r > c.max.z) continue;
       if (c.min.y > p.y + STEP) continue;
       if (best === null || c.max.y > best) best = c.max.y;
@@ -206,11 +206,11 @@ export class Player {
 
   resolveCollisions(axis) {
     const p = this.position;
-    const feet = p.y + STEP; // anything at or below the step height is walkable, not a wall
+    const feet = p.y + STEP; // anything below the step height is walkable, not a wall
     const head = p.y + HEIGHT;
     for (const c of this.colliders) {
       if (c.enabled === false) continue;
-      if (c.max.y <= feet || c.min.y >= head) continue;
+      if (c.max.y < feet || c.min.y >= head) continue;
       const cx = THREE.MathUtils.clamp(p.x, c.min.x, c.max.x);
       const cz = THREE.MathUtils.clamp(p.z, c.min.z, c.max.z);
       const dx = p.x - cx;

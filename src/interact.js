@@ -4,6 +4,22 @@ import * as THREE from "three";
 
 const REACH = 3.0;
 const HIGHLIGHT = new THREE.Color("#4f9bff");
+
+// slab ray/AABB test: entry distance or null
+function rayBox(o, d, min, max) {
+  let tmin = -Infinity;
+  let tmax = Infinity;
+  for (const k of ["x", "y", "z"]) {
+    const inv = 1 / d[k];
+    let t1 = (min[k] - o[k]) * inv;
+    let t2 = (max[k] - o[k]) * inv;
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    tmin = Math.max(tmin, t1);
+    tmax = Math.min(tmax, t2);
+    if (tmax < tmin) return null;
+  }
+  return tmax < 0 ? null : Math.max(tmin, 0);
+}
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export class Interactions {
@@ -70,10 +86,11 @@ export class Interactions {
           }
           o = o.parent;
         }
-        if (vis) {
-          hit = h.object.userData.interactable;
-          break;
-        }
+        if (!vis) continue;
+        // occlusion: a wall / partition collider between the eye and the target hides the prompt
+        if (this.occluded(h.distance)) continue;
+        hit = h.object.userData.interactable;
+        break;
       }
     }
     this.setHovered(hit);
@@ -81,6 +98,20 @@ export class Interactions {
       const k = 0.1 + 0.05 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004));
       this.hovered.material.emissive.copy(HIGHLIGHT).multiplyScalar(k);
     }
+  }
+
+  /** True when an active collider (excluding low furniture and floors) blocks the ray before `dist`. */
+  occluded(dist) {
+    const o = this.ray.ray.origin;
+    const d = this.ray.ray.direction;
+    for (const c of this.rooms.activeColliders) {
+      if (c.enabled === false) continue;
+      // ignore floors and anything a person can see over (tables, consoles, railings)
+      if (c.max.y - c.min.y < 1.3 || c.max.y < o.y - 0.2) continue;
+      const t = rayBox(o, d, c.min, c.max);
+      if (t !== null && t > 0.05 && t < dist - 0.05) return true;
+    }
+    return false;
   }
 
   setHovered(item) {
