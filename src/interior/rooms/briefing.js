@@ -5,7 +5,7 @@
 // the display wall, mission boards down the port wall and a refreshment counter aft by the door.
 import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
-import { roomShell, wallScreen, impConsole, platform, pipeRun, wallSegment, IMP_STYLES_TECH, IMP_THEME } from "../imperial.js";
+import { roomShell, wallScreen, impConsole, impChair, platform, pipeRun, wallSegment, IMP_STYLES_TECH, IMP_THEME } from "../imperial.js";
 import { pointLight, wallFrame, ceilingFrame, panelGrid } from "../builders.js";
 import { rng } from "../../kit.js";
 import { makeCanvas, toTexture, decalRect } from "../../textures.js";
@@ -54,9 +54,13 @@ export function buildBriefing(kit, ctx) {
   for (const t of tiers) {
     for (const z of [tierZ0, tierZ1]) kit.boxMM("paintedMetal", [t.x0 - (t === tiers[1] ? 0.05 : 0), t.y - 0.07, z - 0.05], [t.x1 + 0.05, t.y + 0.005, z + 0.05], { color: PALETTE.impBlack, texel: 2 });
   }
-  // seats: 5 per row, facing +x; the 0.94 m pitch leaves a 0.9 m aisle along each side wall
+  // seats face +x; the 0.94 m pitch leaves a 0.9 m aisle along each side wall. Row A: bench seats
+  // with one swung toward the aisle; row B: a briefing desk with four seated stations; row C: bench
+  // seats with two turned toward each other and a tunic left over a backrest
   const seatZ = [-2, -1, 0, 1, 2].map((i) => cz + i * 0.94);
-  rowsX.forEach((x, r) => benchRow(kit, x, r === 0 ? 0 : tiers[r - 1].y, seatZ, r));
+  benchRow(kit, rowsX[0], 0, seatZ, 0, { turns: { 3: -0.35 } });
+  deskRow(kit, ctx, rowsX[1] - 0.15, tiers[0].y, seatZ);
+  benchRow(kit, rowsX[2], tiers[1].y, seatZ, 2, { turns: { 1: 0.45, 2: -0.4 }, jacket: 4 });
 
   // --- forward wall (xmax): segmented mission display, lectern under the backlit emblem
   {
@@ -148,16 +152,38 @@ export function buildBriefing(kit, ctx) {
     const uAt = (x) => max[0] - x;
     const cx0 = min[0] + 3.2;
     const cw = 3.0;
+    // counter body: dark carcass, black kick plate, a worktop; the front is three inset grey door
+    // panels with recessed pulls, a drawer bank with a lit readout and a status lamp row
+    const cf = max[2] - 0.6; // front face
     kit.box("paintedMetal", cx0, 0.45, max[2] - 0.3, cw, 0.9, 0.6, { color: PALETTE.impDark, texel: 1.5 });
-    kit.box("impPanel1", cx0, 0.5, max[2] - 0.61, cw - 0.2, 0.7, 0.02, { color: PALETTE.impGrey, uv: "keep" });
+    kit.box("paintedMetal", cx0, 0.06, cf - 0.01, cw - 0.04, 0.12, 0.02, { color: PALETTE.impBlack, texel: 2 });
     kit.box("darkGloss", cx0, 0.915, max[2] - 0.3, cw + 0.06, 0.03, 0.66);
-    kit.box("emitWhiteDim", cx0, 0.1, max[2] - 0.6, cw - 0.3, 0.015, 0.01, { uv: "keep" });
-    for (let k = 0; k < 4; k++) kit.box("paintedMetal", cx0 - cw / 2 + 0.38 + k * 0.75, 0.5, max[2] - 0.625, 0.02, 0.6, 0.01, { color: PALETTE.impBlack, texel: 3 });
-    // dispenser unit on the counter and cups
-    kit.box("paintedMetal", cx0 + 0.95, 1.2, max[2] - 0.3, 0.5, 0.56, 0.45, { color: PALETTE.impLight, texel: 2 });
-    kit.box("impScreen4", cx0 + 0.95, 1.32, max[2] - 0.53, 0.2, 0.1, 0.006, { uv: "keep" });
-    kit.box("emitBlue", cx0 + 0.95, 1.08, max[2] - 0.53, 0.3, 0.012, 0.006);
+    kit.box("emitWhiteDim", cx0, 0.135, cf - 0.006, cw - 0.3, 0.012, 0.01, { uv: "keep" });
+    const doorW = 0.68;
+    for (let k = 0; k < 3; k++) {
+      const dx = cx0 - cw / 2 + 0.15 + doorW / 2 + k * (doorW + 0.06);
+      kit.box("impPanel1", dx, 0.5, cf - 0.012, doorW, 0.66, 0.024, { color: k === 1 ? PALETTE.impGrey : PALETTE.impMid, uv: "keep" });
+      kit.box("paintedMetal", dx, 0.5, cf - 0.02, doorW - 0.1, 0.56, 0.006, { color: PALETTE.impDark, texel: 3 });
+      kit.box("metal", dx + doorW / 2 - 0.1, 0.62, cf - 0.032, 0.03, 0.14, 0.016, { color: PALETTE.steel });
+      kit.box(k === 1 ? "emitAmberDim" : "emitBlueDim", dx - doorW / 2 + 0.1, 0.78, cf - 0.03, 0.05, 0.018, 0.006);
+    }
+    // drawer bank at the right end with a readout and a keypad
+    const bx = cx0 + cw / 2 - 0.33;
+    for (let k = 0; k < 3; k++) {
+      kit.box("impPanel1", bx, 0.28 + k * 0.22, cf - 0.012, 0.6, 0.19, 0.024, { color: PALETTE.impGrey, uv: "keep" });
+      kit.box("metal", bx, 0.28 + k * 0.22, cf - 0.03, 0.18, 0.02, 0.012, { color: PALETTE.steel });
+    }
+    kit.box("paintedMetal", bx, 0.84, cf - 0.012, 0.6, 0.1, 0.024, { color: PALETTE.impBlack, texel: 3 });
+    kit.box("impScreen4", bx - 0.12, 0.84, cf - 0.026, 0.26, 0.07, 0.004, { uv: "keep" });
+    for (let k = 0; k < 3; k++) kit.box(["emitBlueDim", "emitAmberDim", "emitRed"][k], bx + 0.1 + k * 0.08, 0.84, cf - 0.026, 0.04, 0.03, 0.004);
+    // dispenser unit on the counter: grey housing with a dark face, nozzle, readout and a drip tray
+    kit.box("paintedMetal", cx0 + 0.95, 1.2, max[2] - 0.3, 0.5, 0.56, 0.45, { color: PALETTE.impGrey, texel: 2 });
+    kit.box("paintedMetal", cx0 + 0.95, 1.2, max[2] - 0.527, 0.44, 0.5, 0.01, { color: PALETTE.impBlack, texel: 3 });
+    kit.box("impScreen4", cx0 + 0.95, 1.36, max[2] - 0.535, 0.24, 0.1, 0.006, { uv: "keep" });
+    kit.box("emitBlueDim", cx0 + 0.95, 1.22, max[2] - 0.535, 0.3, 0.012, 0.006);
+    for (let k = 0; k < 3; k++) kit.box(k === 1 ? "emitAmberDim" : "rubber", cx0 + 0.87 + k * 0.08, 1.1, max[2] - 0.535, 0.05, 0.03, 0.006, { color: PALETTE.rubber });
     kit.box("metal", cx0 + 0.95, 1.0, max[2] - 0.45, 0.06, 0.1, 0.2, { color: PALETTE.steel });
+    kit.box("paintedMetal", cx0 + 0.95, 0.94, max[2] - 0.55, 0.3, 0.02, 0.2, { color: PALETTE.impBlack, texel: 3 });
     for (const [dx, dz, col] of [[-1.05, 0.05, PALETTE.impLight], [-0.9, -0.12, PALETTE.impGrey], [-0.78, 0.08, PALETTE.impLight], [0.2, -0.05, PALETTE.impGrey]]) mug(kit, cx0 + dx, 0.93, max[2] - 0.3 + dz, col);
     datapad(kit, cx0 - 0.3, 0.93, max[2] - 0.35, 0.3, 2);
     datapad(kit, cx0 + 0.35, 0.93, max[2] - 0.28, -0.15, 0);
@@ -199,8 +225,7 @@ export function buildBriefing(kit, ctx) {
     kit.cyl("paintedMetal", min[0] + 0.55, 0.71, min[2] + 0.6, 0.23, 0.03, "y", { color: PALETTE.impBlack, segments: 16 });
     kit.collider([min[0] + 0.3, 0, min[2] + 0.35], [min[0] + 0.8, 0.72, min[2] + 0.85], "bin");
     impConsole(kit, ctx, { x: min[0] + 2.35, z: min[2] + 0.75, yaw: -Math.PI / 2, w: 1.0, d: 0.6, h: 1.05, screens: [4], seed: ctx.seed + 19, lampMat: "emitAmber" });
-    // entry lane: dark inlay from the door to the tiers with recessed white guide dots
-    kit.box("paintedMetal", (min[0] + 0.3 + tiers[1].x0) / 2, 0.004, cz, tiers[1].x0 - min[0] - 0.3, 0.008, 2.2, { color: PALETTE.impBlack, texel: 1.5 });
+    // entry lane: recessed white guide dots set straight into the polished deck (no inlay plate)
     for (let k = 0; k < 5; k++) {
       const x = min[0] + 1.0 + k * 1.05;
       for (const s of [-1, 1]) kit.cyl("emitWhiteDim", x, 0.009, cz + s * 1.0, 0.04, 0.004, "y", { segments: 10, uv: "keep" });
@@ -245,8 +270,11 @@ export function buildBriefing(kit, ctx) {
 // ---------------------------------------------------------------------------
 // Pieces
 // ---------------------------------------------------------------------------
-/** Row of `zs.length` bench seats on a shared plinth at floor level `y`, facing +x. */
-function benchRow(kit, x, y, zs, row) {
+/**
+ * Row of `zs.length` bench seats on a shared plinth at floor level `y`, facing +x. `turns` = { seatIndex:
+ * yaw } swings individual seats on their pedestals; `jacket` = index of a seat with a tunic over its back.
+ */
+function benchRow(kit, x, y, zs, row, { turns = {}, jacket = -1 } = {}) {
   const pitch = zs[1] - zs[0];
   const z0 = zs[0] - 0.6;
   const z1 = zs[zs.length - 1] + 0.6;
@@ -256,20 +284,30 @@ function benchRow(kit, x, y, zs, row) {
   kit.boxMM("paintedMetal", [x - 0.32, y + 0.08, z0], [x + 0.22, y + 0.36, z1], { color: PALETTE.impDark, texel: 1.5 });
   kit.boxMM("emitBlue", [x + 0.221, y + 0.14, z0 + 0.15], [x + 0.226, y + 0.16, z1 - 0.15]);
   kit.boxMM("emitWhiteDim", [x - 0.432, y + 0.03, z0 + 0.1], [x - 0.42, y + 0.06, z1 - 0.1], { uv: "keep" });
-  for (const z of zs) {
+  zs.forEach((z, i) => {
+    const yaw = turns[i] || 0;
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    const px = x - 0.1; // swivel pivot
+    const at = (lx, ly, lz) => new THREE.Vector3(lx, 0, lz).applyQuaternion(q).add(new THREE.Vector3(px, y + ly, z)).toArray();
+    const part = (mat, sx, sy, sz, lx, ly, lz, extra = {}, lean = 0) => {
+      const g = new THREE.BoxGeometry(sx, sy, sz);
+      if (lean) g.rotateZ(lean);
+      kit.add(mat, g, { pos: at(lx, ly, lz), quat: q, ...extra });
+    };
     // seat shell (grey), cushion and backrest (black fabric), tilted back a little
-    kit.box("paintedMetal", x - 0.02, y + 0.4, z, 0.58, 0.1, 0.56, { color: PALETTE.impGrey, texel: 2 });
-    kit.box("fabric", x + 0.02, y + 0.47, z, 0.5, 0.07, 0.5, { color: PALETTE.impBlack, uv: "world", texel: 2 });
-    const back = new THREE.BoxGeometry(0.08, 0.62, 0.52);
-    back.rotateZ(0.16);
-    kit.add("paintedMetal", back, { pos: [x - 0.33, y + 0.78, z], color: PALETTE.impGrey, texel: 2 });
-    const cush = new THREE.BoxGeometry(0.06, 0.52, 0.44);
-    cush.rotateZ(0.16);
-    kit.add("fabric", cush, { pos: [x - 0.27, y + 0.78, z], color: PALETTE.impBlack, uv: "world", texel: 2 });
-    kit.box("paintedMetal", x - 0.38, y + 1.1, z, 0.1, 0.05, 0.56, { color: PALETTE.impBlack, texel: 2 });
+    part("paintedMetal", 0.58, 0.1, 0.56, 0.08, 0.4, 0, { color: PALETTE.impGrey, texel: 2 });
+    part("fabric", 0.5, 0.07, 0.5, 0.12, 0.47, 0, { color: PALETTE.impBlack, uv: "world", texel: 2 });
+    part("paintedMetal", 0.08, 0.62, 0.52, -0.23, 0.78, 0, { color: PALETTE.impGrey, texel: 2 }, 0.16);
+    part("fabric", 0.06, 0.52, 0.44, -0.17, 0.78, 0, { color: PALETTE.impBlack, uv: "world", texel: 2 }, 0.16);
+    part("paintedMetal", 0.1, 0.05, 0.56, -0.28, 1.1, 0, { color: PALETTE.impBlack, texel: 2 });
+    if (i === jacket) {
+      // duty tunic thrown over the backrest: olive drape hanging down both sides
+      part("fabric", 0.34, 0.06, 0.42, -0.27, 1.145, 0, { color: 0x4b4f3f, uv: "world", texel: 2 });
+      part("fabric", 0.05, 0.4, 0.4, -0.42, 0.93, 0.02, { color: 0x4b4f3f, uv: "world", texel: 2 }, 0.16);
+    }
     // a datapad left on a couple of seats
     if (rand() < 0.3) datapad(kit, x + 0.04, y + 0.505, z + (rand() - 0.5) * 0.2, (rand() - 0.5) * 0.8, Math.floor(rand() * 5));
-  }
+  });
   // armrests midway between the seats (and outside the end seats) with a tiny status LED
   for (let i = 0; i <= zs.length; i++) {
     const z = i < zs.length ? zs[i] - pitch / 2 : zs[zs.length - 1] + pitch / 2;
@@ -278,6 +316,42 @@ function benchRow(kit, x, y, zs, row) {
     kit.box(i % 2 ? "emitBlue" : "emitAmber", x + 0.1, y + 0.686, z, 0.05, 0.005, 0.03);
   }
   kit.collider([x - 0.45, y, z0 - 0.1], [x + 0.32, y + 1.15, z1 + 0.1], "bench");
+}
+
+/**
+ * Briefing desk row: four bucket seats on the shared plinth behind a continuous desk carrying a
+ * tilted readout and a lamp per seat, lit along its front edge so it reads as a station row.
+ */
+function deskRow(kit, ctx, x, y, zs) {
+  const pitch = zs[1] - zs[0];
+  const z0 = zs[0] - 0.6;
+  const z1 = zs[zs.length - 1] + 0.6;
+  const seats = [-1.5, -0.5, 0.5, 1.5].map((k) => (zs[0] + zs[zs.length - 1]) / 2 + k * pitch);
+  kit.boxMM("paintedMetal", [x - 0.42, y, z0 - 0.1], [x + 0.3, y + 0.08, z1 + 0.1], { color: PALETTE.impBlack, texel: 2 });
+  kit.boxMM("emitWhiteDim", [x - 0.432, y + 0.03, z0 + 0.1], [x - 0.42, y + 0.06, z1 - 0.1], { uv: "keep" });
+  for (const z of seats) impChair(kit, ctx, { x: x - 0.02, z, y: y + 0.08, yaw: -Math.PI / 2 });
+  // desk: dark top on a black spine and three legs, front lip strip facing the display
+  const dx0 = x + 0.6;
+  const dx1 = x + 0.98;
+  kit.boxMM("paintedMetal", [dx0, y + 0.68, z0 + 0.1], [dx1, y + 0.74, z1 - 0.1], { color: PALETTE.impDark, texel: 1.5 });
+  kit.boxMM("darkGloss", [dx0 + 0.02, y + 0.74, z0 + 0.12], [dx1 - 0.02, y + 0.755, z1 - 0.12]);
+  kit.boxMM("paintedMetal", [dx1 - 0.16, y + 0.1, z0 + 0.15], [dx1 - 0.06, y + 0.68, z1 - 0.15], { color: PALETTE.impBlack, texel: 1.5 });
+  for (const z of [z0 + 0.3, (z0 + z1) / 2, z1 - 0.3]) kit.box("paintedMetal", (dx0 + dx1) / 2, y + 0.34, z, 0.34, 0.68, 0.08, { color: PALETTE.impDark, texel: 2 });
+  kit.boxMM("emitBlueDim", [dx1 - 0.008, y + 0.6, z0 + 0.3], [dx1 + 0.004, y + 0.62, z1 - 0.3]);
+  const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 0.5);
+  seats.forEach((z, i) => {
+    // tilted readout leaning toward the seat, a keypad strip and a small hooded lamp
+    const sx = dx1 - 0.16;
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.26, 0.03, 0.4), { pos: [sx, y + 0.8, z], quat: tilt, color: PALETTE.impBlack, texel: 2 });
+    kit.add("impScreen" + ((i * 2 + 1) % 5), new THREE.PlaneGeometry(0.34, 0.2).rotateX(-Math.PI / 2), { pos: new THREE.Vector3(0, 0.017, 0).applyQuaternion(tilt).add(new THREE.Vector3(sx, y + 0.8, z)).toArray(), quat: tilt, uv: "keep" });
+    for (let k = 0; k < 4; k++) kit.box(k === 1 ? "emitBlueDim" : "rubber", dx0 + 0.12, y + 0.762, z - 0.15 + k * 0.1, 0.1, 0.012, 0.06, { color: PALETTE.rubber });
+    kit.cyl("metal", dx1 - 0.08, y + 0.9, z + 0.32, 0.008, 0.3, "y", { color: PALETTE.steel, segments: 6 });
+    kit.box("paintedMetal", dx1 - 0.12, y + 1.05, z + 0.32, 0.14, 0.04, 0.1, { color: PALETTE.impBlack, texel: 3 });
+    kit.box("emitAmberDim", dx1 - 0.12, y + 1.028, z + 0.32, 0.1, 0.006, 0.06);
+  });
+  datapad(kit, dx0 + 0.2, y + 0.758, seats[2] + 0.3, 0.3, 3);
+  mug(kit, dx0 + 0.16, y + 0.755, seats[0] - 0.3, PALETTE.impGrey);
+  kit.collider([x - 0.45, y, z0 - 0.1], [dx1 + 0.02, y + 1.15, z1 + 0.1], "deskrow");
 }
 
 /**
@@ -304,15 +378,29 @@ function emblem(kit, ctx, frame, u, v, R) {
     const rg = R + 0.1;
     frame.box("briefing_glow", u + Math.cos(a) * rg * apo, v + Math.sin(a) * rg * apo, 0.05, rg + 0.04, 0.06, 0.02, { spin: a + Math.PI / 2, uv: "keep" });
     frame.box("paintedMetal", u + Math.cos(a) * R * apo, v + Math.sin(a) * R * apo, 0.085, R + 0.08, 0.16, 0.07, { color: PALETTE.impGrey, texel: 2, spin: a + Math.PI / 2 });
-    // spokes from the hub to the vertices (light grey on the black plate so the figure reads)
-    const av = (Math.PI / 3) * k;
-    const s0 = R * 0.34;
-    const s1 = R - 0.08;
-    frame.box("paintedMetal", u + Math.cos(av) * (s0 + s1) / 2, v + Math.sin(av) * (s0 + s1) / 2, 0.085, s1 - s0 + 0.04, 0.07, 0.07, { color: PALETTE.impGrey, texel: 2, spin: av });
   }
-  hexPlate(R * 0.38, 0.08, 0.09, "paintedMetal", { color: PALETTE.impGrey, texel: 2 });
-  hexPlate(R * 0.3, 0.02, 0.135, "paintedMetal", { color: PALETTE.impBlack, texel: 2 });
-  hexPlate(R * 0.19, 0.012, 0.15, "briefing_glow", { uv: "keep" });
+  // six cog spokes: wide light-grey sectors between the hub and the ring with dark gaps between them
+  // (a cog, not a wheel of thin spokes), each split by a hairline slot
+  const sector = (r0, r1, a0, a1) => {
+    const sh = new THREE.Shape();
+    sh.moveTo(Math.cos(a0) * r0, Math.sin(a0) * r0);
+    sh.lineTo(Math.cos(a0) * r1, Math.sin(a0) * r1);
+    sh.absarc(0, 0, r1, a0, a1, false);
+    sh.lineTo(Math.cos(a1) * r0, Math.sin(a1) * r0);
+    sh.absarc(0, 0, r0, a1, a0, true);
+    return new THREE.ExtrudeGeometry(sh, { depth: 0.06, bevelEnabled: false, curveSegments: 10 });
+  };
+  for (let k = 0; k < 6; k++) {
+    const av = (Math.PI / 3) * k;
+    const half = (Math.PI / 180) * 17;
+    frame.add("paintedMetal", sector(R * 0.4, R * 0.81, av - half, av + half), u, v, 0.05, { color: PALETTE.impLight, texel: 2 });
+    frame.box("paintedMetal", u + Math.cos(av) * R * 0.605, v + Math.sin(av) * R * 0.605, 0.112, R * 0.41, 0.025, 0.006, { color: PALETTE.impBlack, texel: 3, spin: av });
+    // small cog tooth on the outside of the ring at each vertex
+    frame.box("paintedMetal", u + Math.cos(av) * R * 1.17, v + Math.sin(av) * R * 1.17, 0.085, 0.14, 0.14, 0.07, { color: PALETTE.impGrey, texel: 2, spin: av });
+  }
+  hexPlate(R * 0.42, 0.08, 0.09, "paintedMetal", { color: PALETTE.impGrey, texel: 2 });
+  hexPlate(R * 0.32, 0.02, 0.135, "paintedMetal", { color: PALETTE.impBlack, texel: 2 });
+  hexPlate(R * 0.2, 0.012, 0.15, "briefing_glow", { uv: "keep" });
   // three thin chevrons under the ring on the backing plate
   for (let k = 0; k < 3; k++) frame.box("paintedMetal", u, v - R * apo - 0.2 - k * 0.06, 0.05, 0.8 - k * 0.2, 0.03, 0.02, { color: PALETTE.impGrey, texel: 3 });
 }
