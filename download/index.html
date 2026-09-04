@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>IRONVEIL RANGE — Game Files</title>
+<style>
+  :root {
+    --green: #8ef0b4;
+    --green-dim: rgba(142, 240, 180, 0.6);
+    --amber: #ffd257;
+    --border: rgba(142, 240, 180, 0.28);
+    --bg-panel: rgba(10, 20, 15, 0.85);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Consolas', 'Menlo', 'DejaVu Sans Mono', monospace;
+    color: var(--green);
+    background:
+      repeating-linear-gradient(0deg, rgba(120, 255, 170, 0.02) 0 1px, transparent 1px 3px),
+      radial-gradient(ellipse at 50% -20%, #14251b 0%, #0a1410 45%, #050a07 100%);
+  }
+  .panel {
+    width: min(680px, 92vw);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-panel);
+    box-shadow: 0 8px 60px rgba(0, 0, 0, 0.6), inset 0 0 60px rgba(46, 200, 122, 0.05);
+    padding: 34px 38px 30px;
+    margin: 30px 0;
+  }
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    letter-spacing: 0.24em;
+    font-weight: 800;
+  }
+  .tag {
+    margin: 8px 0 26px;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: var(--green-dim);
+  }
+  .dl {
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    font-family: inherit;
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    color: #0b1a10;
+    background: linear-gradient(180deg, #9df5bf, #5fce8d);
+    border: 1px solid #bdffd8;
+    border-radius: 5px;
+    padding: 17px 20px;
+    cursor: pointer;
+    box-shadow: 0 0 22px rgba(142, 240, 180, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+  .dl:hover { background: linear-gradient(180deg, #b2ffd0, #6fdf9d); }
+  .dl small { display: block; font-size: 10.5px; font-weight: 400; letter-spacing: 0.14em; margin-top: 5px; color: #163d26; }
+  .hint { text-align: center; font-size: 10.5px; color: var(--green-dim); margin: 10px 0 26px; letter-spacing: 0.08em; }
+  h2 {
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: var(--green-dim);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+    margin: 24px 0 10px;
+  }
+  pre {
+    background: rgba(5, 12, 8, 0.9);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px 14px;
+    font-size: 12.5px;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin: 0;
+  }
+  pre b { color: var(--amber); font-weight: 400; }
+  ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.9; }
+  .clean {
+    margin-top: 24px;
+    font-size: 11px;
+    line-height: 1.8;
+    letter-spacing: 0.04em;
+    color: var(--green-dim);
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    padding: 10px 14px;
+  }
+  .clean b { color: var(--green); }
+  .play { text-align: center; margin-top: 20px; font-size: 11.5px; letter-spacing: 0.1em; }
+  .play a { color: var(--amber); }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <h1>IRONVEIL RANGE</h1>
+    <div class="tag">FIRST-PERSON INTERCEPTOR BASE DEMO · THREE.JS · COMPLETE SOURCE CODE</div>
+
+    <a class="dl" href="ironveil-range-source.zip" download="ironveil-range-source.zip">
+      ⬇ DOWNLOAD GAME FILES (.ZIP)
+      <small>241 KB · 50 FILES · SOURCE + TESTS + DOCS</small>
+    </a>
+    <div class="hint">if it opens instead of downloading: right-click the button → “Save link as…”</div>
+
+    <h2>RUN IT (NEEDS NODE.JS 20.19+)</h2>
+    <pre>unzip ironveil-range-source.zip
+cd ironveil-range
+npm install
+npm run dev        <b># play at http://localhost:5173</b>
+npm run build      <b># static production build in dist/</b></pre>
+
+    <h2>WHAT'S INSIDE</h2>
+    <ul>
+      <li><b>src/</b> — all game code: player, base, batteries, threats, interceptors, physics, radar, effects, weather, audio, post-processing, UI, textures</li>
+      <li><b>index.html · vite.config.js · package.json</b> — ready-to-run Vite project</li>
+      <li><b>tests/ · tools/</b> — deterministic Playwright suite + visual QA probes</li>
+      <li><b>README.md · ARCHITECTURE.md</b> — controls, setup, and module contracts for anyone editing the code</li>
+    </ul>
+
+    <div class="clean">
+      <b>Safe to forward.</b> The archive contains only game source code and public npm
+      package references — no accounts, names, links, history, or personal data of any kind.
+      Everything in the game (models, textures, audio) is generated procedurally by the code itself;
+      there are no asset files.
+    </div>
+
+    <div class="play">▶ <a href="../demo/index.html">play the current build in your browser</a></div>
+  </div>
+</body>
+</html>
