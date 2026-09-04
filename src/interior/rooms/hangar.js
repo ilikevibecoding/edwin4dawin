@@ -189,6 +189,13 @@ function ensureMaterials(ctx) {
     m.hg_laneAmber = m.emitAmber.clone();
     m.hg_laneAmber.emissiveIntensity = 1.0;
   }
+  // flood faces (rig heads, hooded ceiling spots): warm, just under the bloom threshold, recessed
+  // behind rims so they read as warm floods from the deck and through the field from outside
+  if (!m.hg_flood) {
+    m.hg_flood = m.emitWhite.clone();
+    m.hg_flood.emissive = new THREE.Color("#ffd9ad");
+    m.hg_flood.emissiveIntensity = 1.05;
+  }
   // well approach strip / cornice cove: guidance lines, not room light
   if (!m.hg_approach) {
     m.hg_approach = m.emitWhite.clone();
@@ -667,7 +674,7 @@ function structure(kit, ctx, B0) {
     ]) {
       kit.box("paintedMetal", x + dx * 1.6, CEIL - 2.0, z + dz * 1.6, dx ? 0.2 : 3.4, 1.6, dz ? 0.2 : 3.4, { color: PALETTE.impDark, texel: 1.5 });
     }
-    kit.box("hg_lane", x, CEIL - 2.3, z, 2.6, 0.04, 2.6);
+    kit.box("hg_flood", x, CEIL - 2.3, z, 2.6, 0.04, 2.6);
     for (const dz of [-0.85, 0, 0.85]) kit.box("paintedMetal", x, CEIL - 2.7, z + dz, 3.0, 0.08, 0.36, { color: PALETTE.impBlack, texel: 2 });
   }
   // flood rigs hanging on stems from the trusses to y = 16 at the opening's ends: four lamp heads on
@@ -726,9 +733,9 @@ function floodRig(kit, x, z) {
     [-1, 1],
     [1, 1],
   ]) {
-    // lamp head: a hollow black hood (top plate + four lips) with the dim emitter face recessed 0.25 m
-    // behind the rim; the real light is the pool point light hung well below, and an exposed face
-    // here blooms out to a white blob in the entry view's top corners
+    // lamp head: a hollow black hood (top plate + four lips) with the warm emitter face (under the
+    // bloom threshold) recessed 0.25 m behind the rim; the real light is the pool point light hung
+    // well below, and an exposed bright face here blooms out to a white blob in the entry view's top corners
     const hx = x + dx * 1.05;
     const hz = z + dz * 1.05;
     kit.box("paintedMetal", hx, y + 0.05, hz, 1.2, 0.2, 1.2, { color: PALETTE.impBlack, texel: 2 });
@@ -740,7 +747,7 @@ function floodRig(kit, x, z) {
     ]) {
       kit.box("paintedMetal", hx + lx * 0.56, y - 0.25, hz + lz * 0.56, lx ? 0.08 : 1.2, 0.5, lz ? 0.08 : 1.2, { color: PALETTE.impBlack, texel: 2 });
     }
-    kit.box("hg_lane", hx, y - 0.24, hz, 0.9, 0.03, 0.9);
+    kit.box("hg_flood", hx, y - 0.24, hz, 0.9, 0.03, 0.9);
   }
   kit.box("emitRed", x, y + 0.85, z, 0.24, 0.2, 0.24);
   // hoist cable loop to the truss for servicing
