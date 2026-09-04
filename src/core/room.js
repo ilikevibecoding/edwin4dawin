@@ -50,6 +50,11 @@ export class BuildContext {
     return { frame, length, height: this.h, openings, side };
   }
 
+  /** Window openings declared on the room for one wall side, in that wall's u/v coordinates. */
+  windows(side) {
+    return this.doors.filter((d) => d.side === side && d.type === "window" && !d.other).map((d) => ({ u0: d.u0, u1: d.u1, v0: d.v0, v1: d.v1 }));
+  }
+
   /** Ceiling frame over the whole inner box (faces down). */
   ceilingFrame() {
     return { frame: ceilingFrame(this.kit, this.inner.x0, this.inner.z0, this.ceil), w: this.inner.x1 - this.inner.x0, d: this.inner.z1 - this.inner.z0 };
@@ -220,6 +225,9 @@ export class RoomManager {
     this.current = null;
     this.peek = false; // exterior mode: show the glazed tower rooms so the bridge is lit behind its windows
     this.visibleIds = new Set();
+    this.lightBudget = 14; // max interior lights enabled at once (forward renderer); nearest to the player win
+    this._lightTimer = 0;
+    this._playerPos = new THREE.Vector3();
     this.activeColliders = [];
     this.builtClusters = new Set();
     this.clusterVisit = new Map();
@@ -248,12 +256,13 @@ export class RoomManager {
       const v1 = v0 + d.h;
       let side, u0, u1;
       if (d.axis === "z") {
-        // wall perpendicular to z at z = at
-        side = Math.abs(d.at - def.box[2]) < 1e-6 ? "zmin" : "zmax";
+        // wall perpendicular to z at z = at: the nearest face (a door plane may sit a few metres beyond this
+        // room's own wall when the partner room's wall carries it — e.g. the reactor airlock, hangar arches)
+        side = Math.abs(d.at - def.box[2]) <= Math.abs(d.at - def.box[3]) ? "zmin" : "zmax";
         if (side === "zmin") [u0, u1] = [d.from - x0, d.to - x0];
         else [u0, u1] = [x1 - d.to, x1 - d.from];
       } else {
-        side = Math.abs(d.at - def.box[0]) < 1e-6 ? "xmin" : "xmax";
+        side = Math.abs(d.at - def.box[0]) <= Math.abs(d.at - def.box[1]) ? "xmin" : "xmax";
         if (side === "xmin") [u0, u1] = [z1 - d.to, z1 - d.from];
         else [u0, u1] = [d.from - z0, d.to - z0];
       }
@@ -401,6 +410,7 @@ export class RoomManager {
 
   /** Per-frame: track the player, cull by door portals, run animators. */
   update(dt, t, playerPos) {
+    this._playerPos.copy(playerPos);
     const def = this.roomAt(playerPos, this.current);
     if (def && def !== this.current) {
       if (!this.builtClusters.has(def.cluster)) this.ensureCluster(def.cluster);
@@ -409,7 +419,32 @@ export class RoomManager {
     } else if (this.doorSystem.dirty) {
       this.refreshVisibility();
     }
+    this._lightTimer -= dt;
+    if (this._lightTimer <= 0) {
+      this._lightTimer = 0.5;
+      this.cullLights();
+    }
     this.updateAnimators(dt, t);
+  }
+
+  /**
+   * Light budget: the visible set can span six rooms through the hangar arches (40+ lights); keep only the
+   * `lightBudget` nearest lights on (the current room's lights first), the rest are switched off.
+   */
+  cullLights() {
+    const all = [];
+    for (const id of this.visibleIds) {
+      const r = this.rooms.get(id);
+      if (!r || !r.built) continue;
+      const own = this.current && id === this.current.id;
+      for (const l of r.ctx.lights) all.push({ l, d: own ? -1 : l.position.distanceToSquared(this._playerPos) });
+    }
+    if (all.length <= this.lightBudget) {
+      for (const e of all) e.l.visible = true;
+      return;
+    }
+    all.sort((a, b) => a.d - b.d);
+    all.forEach((e, i) => (e.l.visible = i < this.lightBudget));
   }
 
   /** Run the per-frame animators of every visible room (screens, machinery, holograms). */
@@ -450,6 +485,7 @@ export class RoomManager {
     }
     this.doorSystem.refreshVisibility(vis, this.activeColliders);
     for (const e of this.extras) if (e.refreshVisibility) e.refreshVisibility(vis, this.activeColliders);
+    this.cullLights();
   }
 
   get visibleRooms() {

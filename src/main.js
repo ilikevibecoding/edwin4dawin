@@ -103,7 +103,10 @@ scene.environmentIntensity = 0.25;
     materials[k].needsUpdate = true;
   }
   cubeRT.dispose();
+  window.__spaceEnv = spaceEnv;
 }
+const spaceEnv = window.__spaceEnv;
+const bootstrapEnv = scene.environment;
 
 const audio = new AudioSystem();
 const fighters = createFighters({ scene, materials, audio });
@@ -119,6 +122,7 @@ const rooms = new RoomManager({
     fitSunShadow();
   },
 });
+rooms.lightBudget = MOBILE ? 8 : 14;
 const player = new Player(camera, canvas, rooms.activeColliders);
 const lifts = new LiftSystem({ scene, materials, player, hud, audio });
 lifts.attach(rooms);
@@ -189,6 +193,12 @@ function onModeChange(mode) {
   if (post) post.setMode(mode);
   hud.setStartMode(mode);
   if (touchControls) touchControls.setMode(mode);
+  if (mode === "exterior") {
+    // shared materials (glass, trim) reflect space again instead of the last interior capture
+    scene.environment = spaceEnv || bootstrapEnv;
+    scene.environmentIntensity = 0.3;
+    envCluster = null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -294,7 +304,7 @@ const VIEWS = {
   ext_close: { mode: "exterior", pos: [-90, 230, 90], target: [0, 214, 172] },
   // interior (player pose: feet x,y,z, yaw, pitch)
   bridge: { mode: "interior", pos: [0, 210, 203], yaw: 0, pitch: -3 },
-  bridge_window: { mode: "interior", pos: [0, 210, 176], yaw: 0, pitch: -10 },
+  bridge_window: { mode: "interior", pos: [0, 210, 173.5], yaw: 0, pitch: -16 },
   bridge_pit: { mode: "interior", pos: [-8, 208.6, 200], yaw: 20, pitch: 4 },
   cmd_corridor: { mode: "interior", pos: [-40, 210, 209], yaw: -90, pitch: 0 },
   lift_lobby: { mode: "interior", pos: [0, 210, 214], yaw: 180, pitch: 0 },
@@ -536,6 +546,7 @@ timings.boot = +(bootReady - bootT0).toFixed(0);
 const timer = new THREE.Timer();
 let last = performance.now();
 let envFrames = 0;
+const GLAZING_CENTER = new THREE.Vector3(0, 213, 170);
 
 function frame() {
   requestAnimationFrame(frame);
@@ -560,6 +571,9 @@ function frame() {
     audio.listener = player.position;
     if (envFrames++ % 240 === 5) captureEnvironment();
   } else {
+    // the glazed tower rooms stay resident only while the camera is close enough to see into them
+    const near = camera.position.distanceTo(GLAZING_CENTER) < 360;
+    if (near !== rooms.peek) rooms.setExteriorPeek(near);
     rooms.updateAnimators(dt, t);
   }
   space.update(dt);

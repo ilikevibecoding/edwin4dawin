@@ -113,10 +113,11 @@ export const TOWER = {
   ],
   bridge: { x: 120, z0: 170, z1: 230, y0: 195, y1: 235 },
   // glazing slots on the forward face (z = bridge.z0)
-  // glazing starts 0.5 m above the bridge deck (y 210) so a standing officer sees the hull ahead
+  // glazing runs from the bridge deck (y 210) up: the bow is only 9° below a standing eye 1.3 km away, so a
+  // sill at any height above the deck would hide the hull from the dais
   windows: [
-    { x0: -34, x1: 34, y0: 210.5, y1: 216.5 },
-    { x0: -84, x1: -62, y0: 210.5, y1: 215.5 },
+    { x0: -34, x1: 34, y0: 210.0, y1: 216.5 },
+    { x0: -84, x1: -62, y0: 210.0, y1: 215.5 },
   ],
   globes: { x: 92, y: 253, z: 200, r: 22 },
   mast: { x: 0, z: 200, y0: 235, y1: 290, w: 12, dishR: 10, tipY: 305 },
@@ -138,8 +139,9 @@ export const ENGINES = {
   nozzleLen: 60,
 };
 
-// Reactor bulb under the aft belly
-export const REACTOR_BULB = { x: 0, y: -62, z: 330, r: 82 };
+// Reactor bulb under the aft belly. Its top (y −20) stays below the engineering deck (floor −10), so the
+// sphere never crosses a room volume; it emerges from the belly (y ≈ −72 there) and hangs 108 m below it.
+export const REACTOR_BULB = { x: 0, y: -100, z: 330, r: 80 };
 
 // Ventral bays cut through the belly (x0,x1,z0,z1); the shaft runs from the hangar deck to the belly
 export const BAYS = {
@@ -161,10 +163,10 @@ const R = (id, cluster, title, floor, h, box, extra = {}) => ({ id, cluster, tit
 
 export const ROOMS = [
   // ---- TOWER (floor 210)
-  R("bridge", "tower", "Main Command Bridge", 210, 7, [-14, 14, 172, 206], { accent: "bridge", spawn: [0, 210, 200, 0], windows: [{ side: "zmin", x0: -13, x1: 13, v0: 0.5, v1: 6.5 }] }),
-  R("tactical", "tower", "Tactical Operations / Holo Planning", 210, 6, [-34, -16, 172, 206], { accent: "bridge", spawn: [-25, 210, 200, 0], windows: [{ side: "zmin", x0: -33, x1: -17, v0: 0.5, v1: 5.5 }] }),
-  R("nav_station", "tower", "Secondary Navigation / Flight Control", 210, 6, [16, 34, 172, 206], { accent: "bridge", spawn: [25, 210, 200, 0], windows: [{ side: "zmin", x0: 17, x1: 33, v0: 0.5, v1: 5.5 }] }),
-  R("observation", "tower", "Observation Gallery", 210, 6, [-84, -62, 172, 206], { accent: "bridge", spawn: [-73, 210, 200, 0], windows: [{ side: "zmin", x0: -83, x1: -63, v0: 0.5, v1: 5.5 }] }),
+  R("bridge", "tower", "Main Command Bridge", 210, 7, [-14, 14, 172, 206], { accent: "bridge", spawn: [0, 210, 200, 0], windows: [{ side: "zmin", x0: -13, x1: 13, v0: 0.0, v1: 6.5 }] }),
+  R("tactical", "tower", "Tactical Operations / Holo Planning", 210, 6, [-34, -16, 172, 206], { accent: "bridge", spawn: [-25, 210, 200, 0], windows: [{ side: "zmin", x0: -33, x1: -17, v0: 0.0, v1: 5.5 }] }),
+  R("nav_station", "tower", "Secondary Navigation / Flight Control", 210, 6, [16, 34, 172, 206], { accent: "bridge", spawn: [25, 210, 200, 0], windows: [{ side: "zmin", x0: 17, x1: 33, v0: 0.0, v1: 5.5 }] }),
+  R("observation", "tower", "Observation Gallery", 210, 6, [-84, -62, 172, 206], { accent: "bridge", spawn: [-73, 210, 200, 0], windows: [{ side: "zmin", x0: -83, x1: -63, v0: 0.0, v1: 5.5 }] }),
   R("cmd_corridor", "tower", "Command Deck Corridor", 210, 4.5, [-84, 60, 206, 212], { accent: "corridor", spawn: [0, 210, 209, 90] }),
   R("lift_lobby_tower", "tower", "Turbolift Lobby — Command Deck", 210, 4.5, [-6, 6, 212, 222], { accent: "corridor", spawn: [0, 210, 216, 180], lift: { cabs: [{ x0: -5, x1: -1 }, { x0: 1, x1: 5 }], wall: "zmax", z0: 222, z1: 225 } }),
   R("intelligence", "tower", "Restricted Intelligence Room", 210, 4.5, [-60, -40, 212, 228], { accent: "detention", spawn: [-50, 210, 220, 0] }),

@@ -64,7 +64,7 @@ been visited for a while.
 ### Cluster TOWER (floor y = 210, inside bridge block x ±120, z 170..230)
 | room | x | z | h | doors |
 |---|---|---|---|---|
-| bridge | −14..14 | 172..206 | 7 | aft z=206 x −2..2 (blast) → cmd_corridor; port x=−14 z 186..189 → tactical; stbd x=14 z 186..189 → nav_station. Forward glazing z=172, x −13..13, y 210.5..216.5, leaning out 12°. Crew pits y 208.6 at x ∈ [−12,−4] and [4,12], z 176..202, steps at both ends. |
+| bridge | −14..14 | 172..206 | 7 | aft z=206 x −2..2 (blast) → cmd_corridor; port x=−14 z 186..189 → tactical; stbd x=14 z 186..189 → nav_station. Forward glazing z=172, x −13..13, y 210..216.5 (deck level up), leaning out 12°. Crew pits y 208.6 at x ∈ [−12,−4] and [4,12], z 176..202, steps at both ends. |
 | tactical | −34..−16 | 172..206 | 6 | east x=−16 z 186..189 → bridge; aft z=206 x −26..−23 → cmd_corridor. Forward windows (shuttered). |
 | nav_station | 16..34 | 172..206 | 6 | west x=16 z 186..189 → bridge; aft z=206 x 23..26. Forward windows. |
 | observation | −84..−62 | 172..206 | 6 | aft z=206 x −75..−72. Forward windows x −83..−63. |
@@ -75,7 +75,7 @@ been visited for a while.
 | comms | 8..38 | 212..228 | 5 | z=212 x 21..24 |
 | officers_quarters | 40..60 | 212..228 | 4 | z=212 x 48..51 |
 
-Tower face windows (exterior, z = 170): continuous slot x −34..34 and x −84..−62, y 210.5..216.5.
+Tower face windows (exterior, z = 170): continuous slot x −34..34 and x −84..−62, y 210..216.5.
 
 ### Cluster HANGAR (floor y = −40)
 | room | x | z | h | doors / notes |

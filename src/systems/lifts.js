@@ -108,7 +108,7 @@ export class LiftSystem {
     group.add(panelGroup);
     // door frame on the lobby wall, doors slide apart
     const doorPos = [cx, y, b.doorZ];
-    doorFrame(kit, { pos: doorPos, yaw: 0, w: DOOR_W, h: DOOR_H, d: WALL_T, accent: "emitWhite" });
+    doorFrame(kit, { pos: doorPos, yaw: 0, w: DOOR_W, h: DOOR_H, d: WALL_T, accent: "emitWhite", sill: false }); // the lobbies lay their own thresholds
     kit.build(group);
     const cab = { lobby: def.id, index: i, group, box: b, center: new THREE.Vector3(cx, y, zc), doorZ: b.doorZ, openness: 0, target: 0, closeTimer: 0, slabs: [], colliders: kit.colliders, doorCollider: null, light: this.materials.emitWhiteSoft, panel: pm, pmat };
     for (const s of [-1, 1]) {

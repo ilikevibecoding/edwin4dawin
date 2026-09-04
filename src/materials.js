@@ -84,12 +84,15 @@ export function buildMaterials({ mobile = false } = {}) {
     // ---- atlases
     screen: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: screens, emissiveIntensity: 1.4, roughness: 0.15, metalness: 0, envMapIntensity: 1.0 }),
     leds: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: leds, emissiveIntensity: 2.2, roughness: 0.3, metalness: 0 }),
-    decal: new THREE.MeshStandardMaterial({ map: decals, transparent: true, depthWrite: false, roughness: 0.75, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.3 }),
+    // vertex colours tint stencils (white by default); rooms can pass `color:` to dim or colour a decal
+    decal: new THREE.MeshStandardMaterial({ map: decals, transparent: true, depthWrite: false, roughness: 0.75, metalness: 0, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.3 }),
 
     // ---- holograms and fields (additive, animated by their owners)
     holo: new THREE.MeshBasicMaterial({ color: 0x5fb8ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
     field: makeFieldMaterial(),
   };
+  // the hull lives in vacuum: never let the interior haze fog it (it is seen through the bridge glazing)
+  for (const k of ["hull", "hullDark", "engineGlow"]) mats[k].fog = false;
   mats.timings = timings;
   // back-compat aliases used by shared helpers
   mats.emitTeal = mats.emitCyan;
