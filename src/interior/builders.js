@@ -133,9 +133,13 @@ export function panelGrid(frame, length, height, opts = {}) {
     screenMats = ["screen0", "screen1", "screen2", "screen3"],
     decals = true,
     plateCol = PALETTE.creamDark,
+    // 0 = every cell rolls its own style/paint (kit-bash mosaic); 1 = a row keeps the style and paint
+    // of its first cell all the way along (coherent plate rows with the odd break)
+    coherence = 0,
   } = opts;
   const rand = rng(seed);
   const gap = 0.025;
+  const rowMemo = [];
 
   // u cuts
   const nCols = Math.max(1, Math.round(length / panelW));
@@ -216,7 +220,12 @@ export function panelGrid(frame, length, height, opts = {}) {
         if (op.type === "porthole") porthole(frame, cu, cv, cw, ch, depth, op);
         continue;
       }
-      const style = pickStyle(cw, ch, ri, nRows);
+      let style = pickStyle(cw, ch, ri, nRows);
+      const memo = rowMemo[ri];
+      const coherent = coherence > 0 && memo && style !== "kick" && style !== "top" && memo.style !== "kick" && memo.style !== "top" && rand() < coherence;
+      if (coherent) style = memo.style;
+      const rowCol = coherent && memo.col ? memo.col : null;
+      rowMemo[ri] = { style, col: rowCol };
       // backing plate
       frame.box("metal", cu, cv, -depth + 0.05, cw, ch, 0.1, { color: PALETTE.darkMetal, texel: 1.2 });
       switch (style) {
@@ -266,7 +275,7 @@ export function panelGrid(frame, length, height, opts = {}) {
             } else {
               // small labelled plate
               frame.box("painted", gu, gv, -0.005, gw + 0.04, gh + 0.02, 0.01, { color: PALETTE.cream, uv: "keep" });
-              frame.add("decal", new THREE.PlaneGeometry(gh, gh), gu, gv, 0.001, { uv: "keep", uvRect: decalRect(9 + Math.floor(rand() * 3)) });
+              frame.add("decal", new THREE.PlaneGeometry(gh, gh), gu, gv, 0.006, { uv: "keep", uvRect: decalRect(9 + Math.floor(rand() * 3)) });
             }
           }
           // a run of conduit feeding the panel
@@ -309,7 +318,8 @@ export function panelGrid(frame, length, height, opts = {}) {
         }
         default: {
           // painted panel; every one gets some secondary read (seam, bolts, hatch, inner plate or a decal)
-          const col = pickPaint();
+          const col = rowCol || pickPaint();
+          rowMemo[ri].col = col;
           paintBox(cu, cv, -0.03, cw - gap * 2, ch - gap * 2, 0.06, col);
           const big = cw > 0.6 && ch > 0.6;
           const sub = rand();
@@ -341,7 +351,8 @@ export function panelGrid(frame, length, height, opts = {}) {
             const dw = Math.min(0.42, cw * 0.55, ch * 0.55);
             const du = cu + (rand() - 0.5) * Math.max(0, cw - dw - 0.2);
             const dv = cv + (rand() - 0.5) * Math.max(0, ch - dw - 0.2);
-            frame.add("decal", new THREE.PlaneGeometry(dw, dw), du, dv, 0.001, { uv: "keep", uvRect: decalRect(idx) });
+            // 6 mm off the plate: at 1 mm the log depth buffer z-fights and eats letters out of the stencil
+            frame.add("decal", new THREE.PlaneGeometry(dw, dw), du, dv, 0.006, { uv: "keep", uvRect: decalRect(idx) });
             if (rand() < 0.5) frame.cylN("metal", u0 + 0.07, v1 - 0.07, 0.01, 0.014, 0.02, { color: PALETTE.steel, segments: 8 });
           } else {
             // bolts along the top and bottom edge

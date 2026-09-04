@@ -1236,16 +1236,25 @@ export function makeHullPlate(size = 1024, seed = 131) {
 export function makeImperialFloor(size = 1024, seed = 137) {
   const t = new TexGen(size, size);
   const tiles = 3;
+  const rand = mulberry32(seed + 11);
+  // scuff marks: a few long, thin drag streaks per tile (roughness + a touch lighter), instead of
+  // the per-pixel speckle that read as dirt from eye height
+  const scuffs = [];
+  for (let i = 0; i < 14; i++) {
+    const ang = (rand() < 0.7 ? 0 : Math.PI / 2) + (rand() - 0.5) * 0.25;
+    scuffs.push({ x: rand(), y: rand(), len: 0.06 + rand() * 0.2, w: 0.0015 + rand() * 0.003, ang, k: 0.4 + rand() * 0.6 });
+  }
   t.each((u, v, i) => {
     const pu = (u * tiles) % 1;
     const pv = (v * tiles) % 1;
     const ed = edgeDist(pu, pv);
     const n1 = fbm(u, v, { octaves: 4, freq: 6, seed });
-    const n2 = vnoise2(u, v, 28, 400, seed + 5);
-    let lum = 0.19 + (n1 - 0.5) * 0.05 + (n2 - 0.5) * 0.015;
-    let rough = 0.28 + (n1 - 0.5) * 0.12 + (n2 - 0.5) * 0.06;
+    // sub-plate grain: very low frequency variation only (no micro speckle)
+    const n3 = fbm(u, v, { octaves: 2, freq: 40, seed: seed + 5 });
+    let lum = 0.19 + (n1 - 0.5) * 0.05 + (n3 - 0.5) * 0.004;
+    let rough = 0.28 + (n1 - 0.5) * 0.12 + (n3 - 0.5) * 0.03;
     let metal = 0.55;
-    let hgt = 0.5 + (n2 - 0.5) * 0.006;
+    let hgt = 0.5 + (n3 - 0.5) * 0.002;
     const seam = 0.01;
     if (ed < seam) {
       const k = smooth(1 - ed / seam);
@@ -1254,10 +1263,30 @@ export function makeImperialFloor(size = 1024, seed = 137) {
       rough += 0.35 * k;
       metal = 0.2;
     }
+    // secondary plate seam: each tile is two plates with a hairline joint one third across
+    const sub = Math.abs(pu - 0.34);
+    if (sub < 0.003) {
+      const k = smooth(1 - sub / 0.003);
+      hgt -= 0.12 * k;
+      lum *= 1 - 0.25 * k;
+      rough += 0.15 * k;
+    }
     // scuffed traffic lanes: slightly rougher, lighter bands
     const lane = smooth(clamp01(1 - Math.abs(pv - 0.5) / 0.25));
     rough += lane * 0.08 * fbm(u, v, { octaves: 3, freq: 12, seed: seed + 7 });
     lum += lane * 0.015;
+    for (const s of scuffs) {
+      const dx = u - s.x;
+      const dy = v - s.y;
+      const along = dx * Math.cos(s.ang) + dy * Math.sin(s.ang);
+      const across = -dx * Math.sin(s.ang) + dy * Math.cos(s.ang);
+      if (Math.abs(along) < s.len && Math.abs(across) < s.w) {
+        const k = s.k * (1 - Math.abs(across) / s.w) * (1 - Math.abs(along) / s.len);
+        rough += 0.35 * k;
+        lum += 0.05 * k;
+        hgt -= 0.01 * k;
+      }
+    }
     t.setColor(i, lum * 0.97, lum, lum * 1.06);
     t.rough[i] = clamp01(rough);
     t.metal[i] = clamp01(metal);

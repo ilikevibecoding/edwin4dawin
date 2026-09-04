@@ -84,9 +84,15 @@ export class Door {
       this.boxUN(kit, "impPanel", -w / 2 - JAMB - 0.04, -w / 2 - JAMB, 0, h + JAMB + 0.04, nn[0], nn[1], { color: PALETTE.impGrey, uv: "keep" });
       this.boxUN(kit, "impPanel", w / 2 + JAMB, w / 2 + JAMB + 0.04, 0, h + JAMB + 0.04, nn[0], nn[1], { color: PALETTE.impGrey, uv: "keep" });
       this.boxUN(kit, "impPanel", -w / 2 - JAMB - 0.04, w / 2 + JAMB + 0.04, h + JAMB, h + JAMB + 0.04, nn[0], nn[1], { color: PALETTE.impGrey, uv: "keep" });
-      // lintel lamp on each face
+      // lintel status lamp on each face (large enough to read from the far end of a corridor)
       const lampN = n < 0 ? [n - 0.012, n] : [n, n + 0.012];
-      this.boxUN(kit, st.lamp, -Math.min(0.5, w * 0.3), Math.min(0.5, w * 0.3), h + JAMB * 0.35, h + JAMB * 0.35 + 0.05, lampN[0], lampN[1]);
+      this.boxUN(kit, "paintedMetal", -Math.min(0.6, w * 0.36) - 0.04, Math.min(0.6, w * 0.36) + 0.04, h + JAMB * 0.3 - 0.03, h + JAMB * 0.3 + 0.11, n < 0 ? n - 0.006 : n, n < 0 ? n : n + 0.006, { color: PALETTE.impBlack, texel: 2 });
+      this.boxUN(kit, st.lamp, -Math.min(0.6, w * 0.36), Math.min(0.6, w * 0.36), h + JAMB * 0.3, h + JAMB * 0.3 + 0.08, lampN[0], lampN[1]);
+      // blast doors carry their chevrons on the fixed header band, not on the sliding leaves
+      if (st.hazard) {
+        this.boxUN(kit, "hazard", -w / 2 - JAMB, -Math.min(0.6, w * 0.36) - 0.12, h + JAMB * 0.3 - 0.02, h + JAMB * 0.3 + 0.1, lampN[0], lampN[1], { texel: 3 });
+        this.boxUN(kit, "hazard", Math.min(0.6, w * 0.36) + 0.12, w / 2 + JAMB, h + JAMB * 0.3 - 0.02, h + JAMB * 0.3 + 0.1, lampN[0], lampN[1], { texel: 3 });
+      }
       if (st.keypad) {
         // keypad box beside the door on each face
         this.boxUN(kit, "paintedMetal", w / 2 + JAMB + 0.1, w / 2 + JAMB + 0.34, 1.15, 1.5, n < 0 ? n - 0.08 : n, n < 0 ? n : n + 0.08, { color: dark, texel: 2 });
@@ -135,11 +141,12 @@ export class Door {
         const n = f * (t / 2 + 0.01);
         mk("impPanel", mid + (s < 0 ? 0.03 : -0.03) - (leafW - 0.3) / 2, mid + (s < 0 ? 0.03 : -0.03) + (leafW - 0.3) / 2, 0.35, h - 0.45, Math.min(n, n - f * 0.012), Math.max(n, n - f * 0.012), { color: PALETTE.impGrey, uv: "keep" });
         mk("paintedMetal", mid - (leafW - 0.3) / 2, mid + (leafW - 0.3) / 2, 0.02, 0.3, Math.min(n, n - f * 0.008), Math.max(n, n - f * 0.008), { color: PALETTE.impDark, texel: 2 });
-        if (st.hazard) mk("hazard", s < 0 ? -0.5 : 0.14, s < 0 ? -0.14 : 0.5, h * 0.42, h * 0.58, Math.min(n, n - f * 0.004), Math.max(n, n - f * 0.004), { texel: 3 });
+        // blast doors: hazard chevrons only on the kick band (whole leaf width, so the stripes end at
+        // the seam like a real two-leaf door); the leaf face itself stays plain
+        if (st.hazard) mk("hazard", u0 + 0.06, u1 - 0.06, 0.08, 0.26, Math.min(n, n - f * 0.012), Math.max(n, n - f * 0.012), { texel: 3 });
         // full-height seam lamp: blue when idle, red on blast / secure doors — the leaves must read
         // as leaves from either side even in a dim corridor
         mk(st.lamp, s < 0 ? -0.14 : 0.09, s < 0 ? -0.09 : 0.14, 0.15, h - 0.2, Math.min(n, n - f * 0.006), Math.max(n, n - f * 0.006));
-        if (st.hazard) mk("hazard", u0 + 0.08, u1 - 0.08, h - 0.32, h - 0.12, Math.min(n, n - f * 0.004), Math.max(n, n - f * 0.004), { texel: 3 });
         if (st.keypad || st.hazard) {
           const g = new THREE.PlaneGeometry(0.3, 0.3);
           const [gx, gz] = this.place(mid, n - f * 0.002);

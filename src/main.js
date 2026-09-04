@@ -201,7 +201,7 @@ const INTERIOR_VIEWS = {
   bridge_window: { sector: "d1_bridge", x: 0, z: -44, yaw: 0, pitch: -8 },
   bridge_pit: { sector: "d1_bridge", x: 6.5, z: -28, yaw: -90, pitch: -6 },
   bridge_side: { sector: "d1_bridge", x: -18, z: -30, yaw: 70, pitch: -3 },
-  lobby: { sector: "d1_lobby", x: 0, z: 1, yaw: 180, pitch: -2 },
+  lobby: { sector: "d1_lobby", x: 0, z: -1.0, yaw: 180, pitch: 1 },
   corridor_bridge: { sector: "d1_corridor", x: 0, z: -4, yaw: 0, pitch: -2 },
   lift: { sector: "d1_lift", x: 0, z: 4.2, yaw: 180, pitch: -6 },
   comms: { sector: "d1_comms", x: 4, z: -8.5, yaw: -90, pitch: -3 },

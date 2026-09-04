@@ -51,6 +51,7 @@ export function createHUD() {
         lift.textContent = text;
         lift.classList.remove("hidden");
       } else lift.classList.add("hidden");
+      document.body.classList.toggle("lift", !!text);
     },
     setMode(mode) {
       modeTag.textContent = mode === "exterior" ? "EXTERIOR" : "INTERIOR";

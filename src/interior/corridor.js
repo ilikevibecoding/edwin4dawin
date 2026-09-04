@@ -187,9 +187,15 @@ export function buildLobby(kit, ctx) {
   // central square fixture with a real light
   const cx = (min[0] + max[0]) / 2;
   const cz = (min[2] + max[2]) / 2;
+  // square fixture: dark tray, faint lit diffuser, and a narrow bright ring — not a solid white slab
   kit.box("paintedMetal", cx, h - 0.06, cz, 2.2, 0.1, 2.2, { color: PALETTE.impDark, texel: 2 });
-  kit.box("emitStrip", cx, h - 0.11, cz, 1.9, 0.03, 1.9, { uv: "keep" });
-  ctx.light(pointLight(0xe8f0ff, 7, 10, [cx, h - 0.8, cz]));
+  kit.box("emitWhiteFaint", cx, h - 0.1, cz, 1.9, 0.02, 1.9, { uv: "keep" });
+  kit.box("paintedMetal", cx, h - 0.115, cz, 1.3, 0.02, 1.3, { color: PALETTE.impDark, texel: 2 });
+  for (const s of [-1, 1]) {
+    kit.box("emitWhiteDim", cx + s * 0.78, h - 0.12, cz, 0.07, 0.02, 1.62, { uv: "keep" });
+    kit.box("emitWhiteDim", cx, h - 0.12, cz + s * 0.78, 1.62, 0.02, 0.07, { uv: "keep" });
+  }
+  ctx.light(pointLight(0xe8f0ff, 6, 10, [cx, h - 0.8, cz]));
   const lobbyPaints = [
     [PALETTE.impLight, 0.45],
     [PALETTE.impGrey, 0.35],
@@ -202,9 +208,10 @@ export function buildLobby(kit, ctx) {
   const deck = ctx.deck;
   if (lift) {
     const u = max[0] - lift.pos[0];
-    signPlate(kit, ctx, { side: "zmax", u, v: h - 0.45, w: 3.0, h: 0.5, text: `Deck ${deck.index}`, sub: deck.name, accent: "#ffb347" });
-    wallScreen(kit, ctx, { side: "zmax", u: u - 2.9, v: 1.7, w: 0.9, h: 0.55, screen: 2 });
-    wallScreen(kit, ctx, { side: "zmax", u: u + 2.9, v: 1.7, w: 0.9, h: 0.55, screen: 0 });
+    // header sits just above the lift-door lintel (2.85 m) so it stays in frame at eye height
+    signPlate(kit, ctx, { side: "zmax", u, v: 3.1, w: 2.8, h: 0.42, text: `Deck ${deck.index}`, sub: deck.name, accent: "#ffb347" });
+    wallScreen(kit, ctx, { side: "zmax", u: u - 2.3, v: 1.7, w: 0.9, h: 0.55, screen: 2 });
+    wallScreen(kit, ctx, { side: "zmax", u: u + 2.3, v: 1.7, w: 0.9, h: 0.55, screen: 0 });
   }
   const opening = ctx.doors.find((d) => d.style === "open");
   if (opening) {

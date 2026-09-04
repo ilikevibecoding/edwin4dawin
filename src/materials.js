@@ -283,7 +283,8 @@ function addImperialMaterials(mats, std) {
     new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: new THREE.Color(hex), emissiveIntensity: intensity, roughness: 0.5, metalness: 0, ...extra });
   mats.emitWhite = emit("#f2f6ff", 2.6);
   mats.emitWhiteDim = emit("#dfe6f2", 1.15);
-  mats.emitStrip = emit("#eef3ff", 1.55, { emissiveMap: makeDiffuser(256, 25) });
+  mats.emitWhiteFaint = emit("#cfd8e6", 0.55); // lit fixture housings: reads as glowing, never clips
+  mats.emitStrip = emit("#eef3ff", 1.3, { emissiveMap: makeDiffuser(256, 25) });
   mats.emitBlueDim = emit("#4a9dff", 1.3);
   mats.emitRedDim = emit("#ff3a2a", 1.2);
   mats.emitAmberDim = emit("#ffb347", 1.2);
@@ -338,10 +339,13 @@ function addImperialMaterials(mats, std) {
   mats.tiePanel = new THREE.MeshStandardMaterial({ color: new THREE.Color("#1a1d22"), roughness: 0.45, metalness: 0.6, fog: false });
   mats.tieGlass = new THREE.MeshStandardMaterial({ color: new THREE.Color("#0b0f16"), roughness: 0.1, metalness: 0.7, emissive: new THREE.Color("#1a2a44"), emissiveIntensity: 0.6, fog: false });
   // interior window glass (bridge): nearly clear, slight blue tint, faint reflection
+  // roughness / specularIntensity keep the exterior sun's reflection a faint sheen: at 0.12 roughness
+  // it was a hot disc that bloomed across the mullions ("unoccluded glare")
   mats.bridgeGlass = new THREE.MeshPhysicalMaterial({
     color: 0x8fa8c0,
-    roughness: 0.12,
+    roughness: 0.34,
     metalness: 0,
+    specularIntensity: 0.2,
     transparent: true,
     opacity: 0.08,
     depthWrite: false,

@@ -16,12 +16,14 @@ export const JAMB = 0.25; // door frame margin cut into the wall on each side of
 // panelGrid theme for Imperial walls / ceilings
 export const IMP_THEME = {
   paintMats: ["impPanel", "impPanel1", "impPanel"],
-  accent: "emitWhite",
+  // wall light bars: the dim white emitter (the full emitWhite clipped to a blown bar on every wall)
+  accent: "emitWhiteDim",
   accent2: "emitBlue",
   pipeCol: PALETTE.impMid,
   screenMats: ["impScreen0", "impScreen1", "impScreen2"],
   decals: true,
   plateCol: PALETTE.impGrey,
+  coherence: 0.72,
 };
 export const IMP_PAINTS = [
   [PALETTE.impWhite, 0.6],
@@ -190,17 +192,22 @@ export function impCeiling(kit, ctx, opts = {}) {
   // coloured one) so rooms can own their light hierarchy without rebuilding the ceiling
   const n = opts.strips === false ? 0 : Math.max(1, Math.round(across / (opts.spacing || 4.5)));
   const stripMat = opts.stripMat || "emitStrip";
+  // fixture = dark housing, a dim diffuser (reads as the lit fixture body) and a narrow bright core;
+  // the core is the only part that clips, so the strip reads as a light rather than a white bar
+  const diffMat = opts.diffuserMat !== undefined ? opts.diffuserMat : stripMat === "emitWhiteDim" ? "emitWhiteFaint" : stripMat === "emitStrip" || stripMat === "emitWhiteSoft" || stripMat === "emitWhite" ? "emitWhiteDim" : null;
   for (let i = 0; i < n; i++) {
     const c = (i + 0.5) / n;
     const L = span - 1.2;
     if (along === "x") {
       const z = z0 + c * d;
       kit.box("paintedMetal", x0 + w / 2, y - 0.06, z, L + 0.2, 0.1, 0.42, { color: PALETTE.impDark, texel: 2 });
-      kit.box(stripMat, x0 + w / 2, y - 0.1, z, L, 0.03, 0.14, { uv: "keep" });
+      if (diffMat) kit.box(diffMat, x0 + w / 2, y - 0.095, z, L, 0.02, 0.26, { uv: "keep" });
+      kit.box(stripMat, x0 + w / 2, y - 0.11, z, L - 0.1, 0.02, 0.07, { uv: "keep" });
     } else {
       const x = x0 + c * w;
       kit.box("paintedMetal", x, y - 0.06, z0 + d / 2, 0.42, 0.1, L + 0.2, { color: PALETTE.impDark, texel: 2 });
-      kit.box(stripMat, x, y - 0.1, z0 + d / 2, 0.14, 0.03, L, { uv: "keep" });
+      if (diffMat) kit.box(diffMat, x, y - 0.095, z0 + d / 2, 0.26, 0.02, L, { uv: "keep" });
+      kit.box(stripMat, x, y - 0.11, z0 + d / 2, 0.07, 0.02, L - 0.1, { uv: "keep" });
     }
   }
   // real lights: a budgeted grid (forward renderer — every light costs every pixel). Big rooms get
@@ -439,7 +446,7 @@ export function railing(kit, x0, z0, x1, z1, y = 0, opts = {}) {
  * lamps, and an optional operator chair behind it. `yaw` in radians: 0 faces -Z (screens toward +Z,
  * i.e. the operator stands at +Z looking at -Z).
  */
-export function impConsole(kit, ctx, { x, z, y = 0, yaw = 0, w = 1.8, d = 0.8, h = 0.95, screens = [0, 1], chair = false, seed = 3, lampMat = "emitBlue", tall = false }) {
+export function impConsole(kit, ctx, { x, z, y = 0, yaw = 0, w = 1.8, d = 0.8, h = 0.95, screens = [0, 1], chair = false, seed = 3, lampMat = "emitBlue", tall = false, layout = "auto" }) {
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
   const local = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
   const add = (mat, geo, lx, ly, lz, extra = {}, tiltX = 0) => {
@@ -457,20 +464,60 @@ export function impConsole(kit, ctx, { x, z, y = 0, yaw = 0, w = 1.8, d = 0.8, h
   const slabD = d + 0.1;
   const tilt = -0.42;
   add("paintedMetal", new THREE.BoxGeometry(w, 0.08, slabD), 0, h - 0.18, 0.02, { color: PALETTE.impBlack, texel: 2 }, tilt);
-  // screens across the slab
-  const n = screens.length;
-  const sw = (w - 0.2) / n - 0.08;
-  for (let i = 0; i < n; i++) {
-    const sx = -w / 2 + 0.1 + (i + 0.5) * ((w - 0.2) / n);
-    const p = local(sx, h - 0.18, 0.02);
-    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, tilt)));
-    const pos = p.clone().addScaledVector(up, 0.045);
-    const qq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, tilt));
-    kit.add("darkGloss", new THREE.BoxGeometry(sw + 0.04, 0.012, slabD * 0.5 + 0.04), { pos: [pos.x, pos.y, pos.z], quat: qq });
-    const sg = new THREE.PlaneGeometry(sw, slabD * 0.5);
+  // screens across the slab. Layouts (chosen from the seed unless given) keep neighbouring consoles
+  // from being copies: "equal" = even split, "main" = one wide display + a narrow readout column,
+  // "keypad" = screens shifted left of a dark keypad block
+  const slabQ = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, tilt));
+  const slabUp = new THREE.Vector3(0, 1, 0).applyQuaternion(slabQ);
+  const slabFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(slabQ);
+  const onSlab = (lx, lift, along = 0) => local(lx, h - 0.18, 0.02).addScaledVector(slabUp, lift).addScaledVector(slabFwd, along);
+  const screenAt = (sx, sw, sd, idx) => {
+    const pos = onSlab(sx, 0.045);
+    kit.add("darkGloss", new THREE.BoxGeometry(sw + 0.04, 0.012, sd + 0.04), { pos: [pos.x, pos.y, pos.z], quat: slabQ });
+    const sg = new THREE.PlaneGeometry(sw, sd);
     sg.rotateX(-Math.PI / 2);
-    const pos2 = p.clone().addScaledVector(up, 0.053);
-    kit.add("impScreen" + (screens[i] % 5), sg, { pos: [pos2.x, pos2.y, pos2.z], quat: qq, uv: "keep" });
+    const pos2 = onSlab(sx, 0.053);
+    kit.add("impScreen" + (idx % 5), sg, { pos: [pos2.x, pos2.y, pos2.z], quat: slabQ, uv: "keep" });
+  };
+  const lay = layout === "auto" ? ["equal", "main", "keypad"][Math.floor(rand() * 3)] : layout;
+  const n = screens.length;
+  const sd = slabD * 0.5;
+  if (lay === "main" && w > 1.2) {
+    // one wide display on the left 62 %, a narrow readout column (ticker bars) on the right
+    const mainW = (w - 0.2) * 0.62 - 0.06;
+    screenAt(-w / 2 + 0.1 + mainW / 2 + 0.03, mainW, sd, screens[0]);
+    const colX = w / 2 - 0.1 - ((w - 0.2) * 0.38) / 2;
+    const colW = (w - 0.2) * 0.38 - 0.12;
+    const pos = onSlab(colX, 0.045);
+    kit.add("darkGloss", new THREE.BoxGeometry(colW + 0.04, 0.012, sd + 0.04), { pos: [pos.x, pos.y, pos.z], quat: slabQ });
+    for (let k = 0; k < 4; k++) {
+      const p = onSlab(colX, 0.056, -sd / 2 + 0.06 + k * ((sd - 0.12) / 3));
+      const mat = k === 1 ? "emitAmberDim" : k === 3 ? "emitRedDim" : "emitBlueDim";
+      kit.add(mat, new THREE.BoxGeometry(colW * (0.45 + 0.5 * rand()), 0.006, 0.025), { pos: [p.x, p.y, p.z], quat: slabQ });
+    }
+    if (n > 1) {
+      const p = onSlab(colX, 0.058, sd / 2 - 0.05);
+      kit.add("leds", new THREE.BoxGeometry(colW * 0.8, 0.006, 0.03), { pos: [p.x, p.y, p.z], quat: slabQ, uv: "keep" });
+    }
+  } else if (lay === "keypad" && w > 1.2) {
+    // screens on the left 70 %, a dark keypad block with a 4x3 button grid on the right
+    const usable = (w - 0.2) * 0.7;
+    const sw = usable / n - 0.08;
+    for (let i = 0; i < n; i++) screenAt(-w / 2 + 0.1 + (i + 0.5) * (usable / n), sw, sd, screens[i]);
+    const kx = w / 2 - 0.1 - ((w - 0.2) * 0.3) / 2;
+    const kw = (w - 0.2) * 0.3 - 0.1;
+    const kp = onSlab(kx, 0.05);
+    kit.add("paintedMetal", new THREE.BoxGeometry(kw + 0.04, 0.02, sd), { pos: [kp.x, kp.y, kp.z], quat: slabQ, color: PALETTE.impBlack, texel: 2 });
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 4; c++) {
+        const p = onSlab(kx - kw / 2 + 0.03 + (c + 0.5) * ((kw - 0.06) / 4), 0.068, -sd / 2 + 0.05 + (r + 0.5) * ((sd - 0.1) / 3));
+        const lit = rand() < 0.3;
+        kit.add(lit ? (rand() < 0.5 ? "emitBlueDim" : "emitAmberDim") : "rubber", new THREE.BoxGeometry((kw - 0.06) / 4 - 0.02, 0.016, (sd - 0.1) / 3 - 0.02), { pos: [p.x, p.y, p.z], quat: slabQ, color: PALETTE.rubber });
+      }
+    }
+  } else {
+    const sw = (w - 0.2) / n - 0.08;
+    for (let i = 0; i < n; i++) screenAt(-w / 2 + 0.1 + (i + 0.5) * ((w - 0.2) / n), sw, sd, screens[i]);
   }
   // button rows along the operator edge of the slab
   const rows = 2;
@@ -515,17 +562,31 @@ export function impChair(kit, ctx, { x, z, y = 0, yaw = 0 }) {
     const p = local(lx, ly, lz);
     return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: q, ...extra });
   };
-  kit.cyl("metal", x, y + 0.02, z, 0.3, 0.04, "y", { color: PALETTE.impBlack, segments: 16 });
-  kit.cyl("metal", x, y + 0.22, z, 0.05, 0.4, "y", { color: PALETTE.impMid });
-  add("rubber", new THREE.BoxGeometry(0.5, 0.1, 0.5), 0, 0.47, 0, { color: PALETTE.rubber });
-  add("fabric", new THREE.BoxGeometry(0.42, 0.05, 0.42), 0, 0.545, 0, { color: PALETTE.impBlack, uv: "world", texel: 2 });
-  // backrest leaning aft (+Z is the back)
-  const bq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, -0.18));
-  const p = local(0, 0.85, 0.24);
-  kit.add("rubber", new THREE.BoxGeometry(0.48, 0.7, 0.1), { pos: [p.x, p.y, p.z], quat: bq, color: PALETTE.rubber });
-  const p2 = local(0, 0.85, 0.19);
-  kit.add("fabric", new THREE.BoxGeometry(0.38, 0.6, 0.03), { pos: [p2.x, p2.y, p2.z], quat: bq, color: PALETTE.impBlack, uv: "world", texel: 2 });
-  for (const s of [-1, 1]) add("paintedMetal", new THREE.BoxGeometry(0.05, 0.05, 0.4), s * 0.27, 0.72, 0.02, { color: PALETTE.impDark });
+  // Imperial bucket seat: square pedestal, moulded shell with a tall back and wrap-around wings,
+  // a headrest and boxed armrests (nothing that reads as an office swivel chair)
+  add("paintedMetal", new THREE.BoxGeometry(0.44, 0.05, 0.44), 0, 0.025, 0, { color: PALETTE.impBlack, texel: 2 });
+  add("paintedMetal", new THREE.BoxGeometry(0.16, 0.34, 0.16), 0, 0.22, 0.02, { color: PALETTE.impDark, texel: 2 });
+  add("paintedMetal", new THREE.BoxGeometry(0.5, 0.06, 0.5), 0, 0.42, 0, { color: PALETTE.impBlack, texel: 2 });
+  add("rubber", new THREE.BoxGeometry(0.5, 0.1, 0.5), 0, 0.5, 0, { color: PALETTE.rubber });
+  add("fabric", new THREE.BoxGeometry(0.4, 0.05, 0.42), 0, 0.57, -0.01, { color: PALETTE.impBlack, uv: "world", texel: 2 });
+  // shell: tall back leaning aft (+Z is the back) with side wings, a headrest block and a spine
+  const bq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, -0.16));
+  const back = (mat, lx, ly, lz, w, h, d, extra = {}) => {
+    const p = local(lx, ly, lz);
+    kit.add(mat, new THREE.BoxGeometry(w, h, d), { pos: [p.x, p.y, p.z], quat: bq, ...extra });
+  };
+  back("rubber", 0, 1.02, 0.25, 0.5, 0.96, 0.1, { color: PALETTE.rubber });
+  back("fabric", 0, 1.0, 0.2, 0.36, 0.78, 0.03, { color: PALETTE.impBlack, uv: "world", texel: 2 });
+  back("rubber", 0, 1.42, 0.22, 0.3, 0.14, 0.12, { color: PALETTE.rubber });
+  for (const s of [-1, 1]) {
+    back("rubber", s * 0.27, 0.98, 0.16, 0.06, 0.8, 0.28, { color: PALETTE.rubber });
+    back("paintedMetal", s * 0.31, 1.1, 0.26, 0.03, 0.5, 0.06, { color: PALETTE.impDark, texel: 2 });
+    // boxed armrests with a small lamp on the inboard face
+    add("rubber", new THREE.BoxGeometry(0.07, 0.07, 0.4), s * 0.285, 0.75, 0.0, { color: PALETTE.rubber });
+    add("paintedMetal", new THREE.BoxGeometry(0.04, 0.16, 0.06), s * 0.285, 0.64, 0.14, { color: PALETTE.impDark });
+    if (s > 0) add("emitBlueDim", new THREE.BoxGeometry(0.02, 0.012, 0.06), 0.28, 0.79, -0.1);
+  }
+  back("paintedMetal", 0, 1.0, 0.31, 0.12, 0.9, 0.04, { color: PALETTE.impDark, texel: 2 });
   kit.collider([x - 0.3, y, z - 0.3], [x + 0.3, y + 0.6, z + 0.3], "chair");
 }
 
