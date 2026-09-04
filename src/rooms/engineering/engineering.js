@@ -9,7 +9,14 @@ import { DECAL } from "../../textures.js";
 
 export const meta = { id: "engineering", stream: "deck-rooms" };
 
-export const WINDOW = { c0: -8, c1: 8, v0: 1.0, v1: 4.5 };
+// the airlock blast door sits in the middle of this wall: the glazing is two side panes clear of the door's
+// travel (its halves park at |x| ≈ 6.2) plus a clerestory band above the lintel, so no slab ever shows behind glass
+export const WINDOW = { c0: -9.6, c1: 9.6, v0: 1.0, v1: 5.5 }; // overall surround extents
+export const WINDOWS = [
+  { c0: -9.6, c1: -6.9, v0: 1.0, v1: 4.1 },
+  { c0: 6.9, c1: 9.6, v0: 1.0, v1: 4.1 },
+  { c0: -9.6, c1: 9.6, v0: 4.3, v1: 5.5 },
+];
 
 export function build(ctx) {
   const { kit, IMP } = ctx;
@@ -21,7 +28,7 @@ export function build(ctx) {
   ctx.shell({ floorMat: "deckBlack", floorColor: IMP.plateLight, walls: { zmax: false, xmin: { pilasterEvery: 7.3 }, xmax: { pilasterEvery: 7.3 } }, stripSpacing: 4.4, seed: 21 });
 
   // ---- aft wall with the reactor window (door opening comes from the layout)
-  const aft = windowWall(ctx, "zmax", [WINDOW], { seed: 33, panelGridOpts: { pilasterEvery: 0 } });
+  const aft = windowWall(ctx, "zmax", WINDOWS, { seed: 33, panelGridOpts: { pilasterEvery: 0 } });
   const wu0 = wallU(ctx, "zmax", WINDOW.c1);
   const wu1 = wallU(ctx, "zmax", WINDOW.c0);
   const door = aft.openings.find((o) => o.type === "door");

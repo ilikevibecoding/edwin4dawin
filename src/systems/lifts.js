@@ -112,6 +112,15 @@ export class LiftSystem {
     doorFrame(kit, { pos: doorPos, yaw: 0, w: DOOR_W, h: DOOR_H, d: WALL_T, accent: "emitWhite", sill: false }); // the lobbies lay their own thresholds
     kit.build(group);
     const cab = { lobby: def.id, index: i, group, box: b, center: new THREE.Vector3(cx, y, zc), doorZ: b.doorZ, openness: 0, target: 0, closeTimer: 0, slabs: [], colliders: kit.colliders, doorCollider: null, light: this.materials.emitWhiteSoft, panel: pm, pmat };
+    // cab light: a data light registered with the lobby room so the light pool renders it (cabs are not rooms)
+    const lobbyRoom = this.manager.rooms.get(def.id);
+    if (lobbyRoom && lobbyRoom.ctx) {
+      const cl = new THREE.PointLight(0xdfe8ff, 5.6, 7, 2);
+      cl.position.set(cx, y + CAB_H - 0.5, zc);
+      cl.visible = false;
+      group.add(cl);
+      lobbyRoom.ctx.lights.push(cl);
+    }
     for (const s of [-1, 1]) {
       const sk = new Kit(this.materials);
       const P = new Placer(sk, [0, 0, 0], 0);

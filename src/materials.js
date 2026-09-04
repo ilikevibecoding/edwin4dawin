@@ -71,8 +71,8 @@ export function buildMaterials({ mobile = false } = {}) {
     glass: new THREE.MeshPhysicalMaterial({ color: 0x9fb2bc, roughness: 0.18, metalness: 0, transparent: true, opacity: 0.045, depthWrite: false, envMapIntensity: 0.12, side: THREE.DoubleSide }),
 
     // ---- emissive families (the lighting controller animates intensities / alert colours)
-    emitWhite: emit("#e6edff", 1.55),
-    emitWhiteSoft: emit("#e6edff", 1.45, { emissiveMap: diffuser }),
+    emitWhite: emit("#e6edff", 1.4),
+    emitWhiteSoft: emit("#e6edff", 1.25, { emissiveMap: diffuser }),
     emitWarmSoft: emit("#ffc78a", 1.4, { emissiveMap: diffuser }),
     emitRed: emit("#ff3b2f", 2.0),
     emitBlue: emit("#3f8dff", 2.0),

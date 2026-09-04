@@ -483,10 +483,11 @@ export function decalOn(frame, u, v, n, size, index, mirror = false, opts = {}) 
 }
 
 /** Deck signage: DECK stencil + screen strip + LED row on a black panel (lobby piers, lobby doors). */
-export function deckSign(frame, u, v, { w = 1.7, h = 0.8, screen = 4, leds = 6 } = {}) {
+export function deckSign(frame, u, v, { w = 1.7, h = 0.8, screen = 4, leds = 6, deck = null } = {}) {
   frame.box("paintedMetal", u, v, 0.04, w, h, 0.08, { color: IMP.black, texel: 1 });
   frame.box("darkGloss", u, v, 0.082, w - 0.08, h - 0.08, 0.01);
-  decalOn(frame, u - w / 2 + h / 2 + 0.02, v, 0.09, h - 0.18, DECAL.DECK_A);
+  // per-deck numeral (1–4) when the lobby says which deck it is; the generic DECK stencil otherwise
+  decalOn(frame, u - w / 2 + h / 2 + 0.02, v, 0.09, h - 0.18, deck === null ? DECAL.DECK_A : DECAL.NUMBER0 + (deck % 4));
   const uR = u + h / 2;
   const wR = w - h - 0.24;
   frame.box("screen", uR, v + 0.1, 0.09, wR, Math.min(0.32, h * 0.4), 0.005, { uv: "keep", uvRect: screenRect(screen) });
@@ -863,7 +864,7 @@ export function buildLobby(ctx, cfg) {
     const cabs = f.openings.filter((o) => o.type === "door").sort((p, q) => p.u0 - q.u0);
     builds.push(() => {
       const mid = f.length / 2;
-      deckSign(f.frame, mid, 3.35, { w: 1.9, h: 0.8, screen: 4 + (cfg.deckIndex || 0), leds: 2 + (cfg.deckIndex || 0) });
+      deckSign(f.frame, mid, 3.35, { w: 1.9, h: 0.8, screen: 4 + (cfg.deckIndex || 0), leds: 2 + (cfg.deckIndex || 0), deck: cfg.deckIndex ?? null });
       cabs.forEach((c, i) => {
         callIndicator(f.frame, c.u0 - 0.6, 1.2, i === 0 ? "emitWhite" : "emitAmber");
         callIndicator(f.frame, c.u1 + 0.6, 1.2, i === 0 ? "emitWhite" : "emitAmber");

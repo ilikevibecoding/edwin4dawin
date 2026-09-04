@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { consoleStation, railing, pipeRun, pillar } from "../../core/props.js";
 import { SYSTEMS } from "../../core/systems.js";
 import { windowWall, wallU, catwalk, column, beam, stairSwitchback, valveStack, hazardBay, floorDecal, strip, ledCluster, screenPanel, workLight, machineBlock, setLightLevel } from "./machinery.js";
-import { WINDOW } from "./engineering.js";
+import { WINDOW, WINDOWS } from "./engineering.js";
 import { DECAL } from "../../textures.js";
 
 export const meta = { id: "reactor", stream: "deck-rooms" };
@@ -33,7 +33,7 @@ export function build(ctx) {
     stripSpacing: 16,
     seed: 55,
   });
-  const fwd = windowWall(ctx, "zmin", [WINDOW], { extraDoors: [{ c0: -3, c1: 3, v1: 3.6 }], seed: 66, panelGridOpts: { panelW: 3.6, pilasterEvery: 12.7 } });
+  const fwd = windowWall(ctx, "zmin", WINDOWS, { extraDoors: [{ c0: -3, c1: 3, v1: 3.6 }], seed: 66, panelGridOpts: { panelW: 3.6, pilasterEvery: 12.7 } });
   {
     const f = fwd.frame;
     const u0 = wallU(ctx, "zmin", WINDOW.c0);
