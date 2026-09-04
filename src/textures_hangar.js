@@ -223,10 +223,15 @@ export function ensureHangarMaterials(materials) {
   const grateTex = makeHangarGrate(512, 31);
   const grate = new THREE.MeshStandardMaterial({ map: grateTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.55, metalness: 0.85, envMapIntensity: 0.7, vertexColors: true, color: 0xffffff });
   setDomain(grate, "interior");
-  // containment-field corner glow: the shared additive glow sprite, tinted to the field's blue
+  // containment-field corner glow: the shared additive glow sprite, tinted to the field's blue and kept
+  // faint (round-2 critic: the corner quads were adding to the "blue pool" read of the opening)
   const glow = materials.glowDisc.clone();
   glow.color = new THREE.Color(0x4f8fff);
-  glow.opacity = 0.55;
+  glow.opacity = 0.2;
+  // hairline blue for the coaming rim: emitBlueDim at 40 % (the rim reads by one faint line, not light bars)
+  const blueDim = materials.emitBlueDim.clone();
+  blueDim.emissiveIntensity = materials.emitBlueDim.emissiveIntensity * 0.4;
+  setDomain(blueDim, "interior");
   // low-level amber for long runs of catwalk rail lighting (the full emitAmber reads as a laser line)
   const amberDim = materials.emitAmber.clone();
   amberDim.emissiveIntensity = 0.75;
@@ -250,10 +255,11 @@ export function ensureHangarMaterials(materials) {
   materials.hangar_decal = decal;
   materials.hangar_grate = grate;
   materials.hangar_glowBlue = glow;
+  materials.hangar_blueDim = blueDim;
   materials.hangar_amberDim = amberDim;
   materials.hangar_ceilWarm = ceilWarm;
   materials.hangar_spillWarm = spillWarm;
   materials.hangar_tread = tread;
-  registered = { decal: "hangar_decal", grate: "hangar_grate", glow: "hangar_glowBlue", amberDim: "hangar_amberDim", ceilWarm: "hangar_ceilWarm", tread: "hangar_tread" };
+  registered = { decal: "hangar_decal", grate: "hangar_grate", glow: "hangar_glowBlue", blueDim: "hangar_blueDim", amberDim: "hangar_amberDim", ceilWarm: "hangar_ceilWarm", tread: "hangar_tread" };
   return registered;
 }

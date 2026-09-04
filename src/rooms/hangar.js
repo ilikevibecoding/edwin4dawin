@@ -199,14 +199,15 @@ export function buildHangar(kit, ctx, room) {
       kit.colliders[kit.colliders.length - 1].walkable = true;
       kit.floor(a, b, c, d, cH, "coaming");
     }
-    // soft blue rim glow: one dim channel recessed in the coaming top along the inner edge (the old
-    // bright edge strips on the well face and the white inset lamps are gone — the rim reads by its
-    // coaming, chevron band and railings, not by light lines)
-    const s = 0.08;
-    kit.boxMM("emitBlueDim", [IX0 + 0.12, cH, IZ0 + 0.12], [IX0 + 0.12 + s, cH + 0.02, IZ1 - 0.12], { uv: "keep" });
-    kit.boxMM("emitBlueDim", [IX1 - 0.12 - s, cH, IZ0 + 0.12], [IX1 - 0.12, cH + 0.02, IZ1 - 0.12], { uv: "keep" });
-    kit.boxMM("emitBlueDim", [IX0 + 0.12, cH, IZ0 + 0.12], [IX1 - 0.12, cH + 0.02, IZ0 + 0.12 + s], { uv: "keep" });
-    kit.boxMM("emitBlueDim", [IX0 + 0.12, cH, IZ1 - 0.12 - s], [IX1 - 0.12, cH + 0.02, IZ1 - 0.12], { uv: "keep" });
+    // faint blue rim: one hairline (3 cm, emitBlueDim at 40 %) recessed in the coaming top along the inner
+    // edge. Round 2: the 8 cm full-strength channel, the shaft marker line and the blue rail bars all fed
+    // the "blue pool" read of the opening — the rim now reads by its coaming, chevron band and railings
+    const s = 0.03;
+    const rimKey = "hangar_blueDim";
+    kit.boxMM(rimKey, [IX0 + 0.12, cH, IZ0 + 0.12], [IX0 + 0.12 + s, cH + 0.01, IZ1 - 0.12], { uv: "keep" });
+    kit.boxMM(rimKey, [IX1 - 0.12 - s, cH, IZ0 + 0.12], [IX1 - 0.12, cH + 0.01, IZ1 - 0.12], { uv: "keep" });
+    kit.boxMM(rimKey, [IX0 + 0.12, cH, IZ0 + 0.12], [IX1 - 0.12, cH + 0.01, IZ0 + 0.12 + s], { uv: "keep" });
+    kit.boxMM(rimKey, [IX0 + 0.12, cH, IZ1 - 0.12 - s], [IX1 - 0.12, cH + 0.01, IZ1 - 0.12], { uv: "keep" });
     // small amber marker lamps on the deck-facing coaming faces every 12 m
     for (let z = CZ0 + 3; z < CZ1 - 1; z += 12) {
       kit.box("emitAmberDim", CX0 - 0.01, 0.3, z, 0.02, 0.1, 0.5);
@@ -223,7 +224,7 @@ export function buildHangar(kit, ctx, room) {
     kit.boxMM("chevronY", [CX0, 0.002, CZ0 - cb], [CX1, 0.012, CZ0], { texel: 0.6 });
     kit.boxMM("chevronY", [CX0, 0.002, CZ1], [CX1, 0.012, CZ1 + cb], { texel: 0.6 });
     // railings on the coaming top: W / E with launch-lane gaps, forward end closed, aft end open
-    const railOpts = { h: 1.1, light: "emitBlueDim", tag: "coaming-rail", postStep: 2.5 };
+    const railOpts = { h: 1.1, light: rimKey, tag: "coaming-rail", postStep: 2.5 };
     hgRailingGaps(kit, "z", op.x0 - 0.7, CZ0 + 0.3, CZ1 - 0.3, cH, [LANE_Z], railOpts);
     hgRailingGaps(kit, "z", op.x1 + 0.7, CZ0 + 0.3, CZ1 - 0.3, cH, [LANE_Z], railOpts);
     hgRailingGaps(kit, "x", op.z0 - 0.7, CX0 + 0.3, CX1 - 0.3, cH, [], railOpts);
@@ -274,19 +275,15 @@ export function buildHangar(kit, ctx, room) {
       const yEnd1 = wellY(op.z1);
       strip(op.x0 + 0.3, op.z0 + 0.3, op.x1 - 0.3, op.z0 + 0.3 + t, yEnd0);
       strip(op.x0 + 0.3, op.z1 - 0.3 - t, op.x1 - 0.3, op.z1 - 0.3, yEnd1);
-      // one dim blue marker line half-way down the shaft (the two bright rings are gone)
-      const ly = -2.6;
-      kit.boxMM("emitBlueDim", [op.x0 + 0.4, ly - 0.04, op.z0 + 0.4], [op.x0 + 0.46, ly + 0.04, op.z1 - 0.4], { uv: "keep" });
-      kit.boxMM("emitBlueDim", [op.x1 - 0.46, ly - 0.04, op.z0 + 0.4], [op.x1 - 0.4, ly + 0.04, op.z1 - 0.4], { uv: "keep" });
-      kit.boxMM("emitBlueDim", [op.x0 + 0.4, ly - 0.04, op.z0 + 0.4], [op.x1 - 0.4, ly + 0.04, op.z0 + 0.46], { uv: "keep" });
-      kit.boxMM("emitBlueDim", [op.x0 + 0.4, ly - 0.04, op.z1 - 0.46], [op.x1 - 0.4, ly + 0.04, op.z1 - 0.4], { uv: "keep" });
+      // no light in the shaft: the well is dark painted steel and space below it, so the stars read
     }
     // magnetic containment field (additive, animated via map offset by main.js) + faint corner glow
+    // (4 m, opacity 0.2: small enough to read as emitter spill at the corners, not as a lit sheet)
     const fg = new THREE.PlaneGeometry(op.x1 - op.x0, op.z1 - op.z0);
     fg.rotateX(-Math.PI / 2);
     kit.add("field", fg, { pos: [(op.x0 + op.x1) / 2, 0.12, (op.z0 + op.z1) / 2], uv: "scale", uvScale: [12, 20] });
     for (const [gx, gz] of [[op.x0, op.z0], [op.x1, op.z0], [op.x0, op.z1], [op.x1, op.z1]]) {
-      const g = new THREE.PlaneGeometry(8, 8);
+      const g = new THREE.PlaneGeometry(4, 4);
       g.rotateX(-Math.PI / 2);
       kit.add("hangar_glowBlue", g, { pos: [gx, 0.45, gz], uv: "keep" });
     }
