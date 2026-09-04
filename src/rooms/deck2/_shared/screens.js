@@ -176,3 +176,72 @@ export function makeImperialScreen(kind = 0, seed = 1, w = 512, h = 256) {
   tex.anisotropy = 4;
   return tex;
 }
+
+// Clean Imperial wall panel albedo: light base, bevelled border, very faint streaks/noise. Replaces
+// the Kestrel painted map (whose edge grime and dents read as dirt under strong light) until A's
+// impPanel lands. Tint comes from vertex colour, so the map is near-white.
+export function makeImpPanelMap(size = 512, seed = 5) {
+  const rand = mulberry32(seed);
+  const c = canvas(size, size);
+  const g = c.getContext("2d");
+  g.fillStyle = "#e6e7ea";
+  g.fillRect(0, 0, size, size);
+  // faint large-scale variation
+  for (let i = 0; i < 40; i++) {
+    const x = rand() * size;
+    const y = rand() * size;
+    const r = size * (0.15 + rand() * 0.3);
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(0,0,0,${0.02 + rand() * 0.03})`);
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, size, size);
+  }
+  // faint vertical streaks (hand-polish / wash marks)
+  for (let i = 0; i < 18; i++) {
+    const x = rand() * size;
+    const w = 6 + rand() * 30;
+    const grad = g.createLinearGradient(x - w, 0, x + w, 0);
+    grad.addColorStop(0, "rgba(255,255,255,0)");
+    grad.addColorStop(0.5, `rgba(255,255,255,${0.04 + rand() * 0.05})`);
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(x - w, 0, w * 2, size);
+  }
+  // fine grain
+  const img = g.getImageData(0, 0, size, size);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (rand() - 0.5) * 10;
+    d[i] += n;
+    d[i + 1] += n;
+    d[i + 2] += n;
+  }
+  g.putImageData(img, 0, 0);
+  // bevelled border: light top/left, dark bottom/right, then a thin dark seam line
+  const b = Math.round(size * 0.022);
+  g.fillStyle = "rgba(255,255,255,0.35)";
+  g.fillRect(0, 0, size, b);
+  g.fillRect(0, 0, b, size);
+  g.fillStyle = "rgba(0,0,0,0.22)";
+  g.fillRect(0, size - b, size, b);
+  g.fillRect(size - b, 0, b, size);
+  g.fillStyle = "rgba(0,0,0,0.45)";
+  g.fillRect(0, 0, size, 3);
+  g.fillRect(0, 0, 3, size);
+  g.fillRect(0, size - 3, size, 3);
+  g.fillRect(size - 3, 0, 3, size);
+  // four recessed fasteners near the corners
+  g.fillStyle = "rgba(0,0,0,0.35)";
+  const o = Math.round(size * 0.07);
+  for (const [x, y] of [[o, o], [size - o, o], [o, size - o], [size - o, size - o]]) {
+    g.beginPath();
+    g.arc(x, y, size * 0.008, 0, Math.PI * 2);
+    g.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}

@@ -4,7 +4,7 @@
 // Usage in a manifest:  materials: (shared) => imperialExtras(shared)
 import * as THREE from "three";
 import { IMP } from "./palette.js";
-import { makeImperialScreen } from "./screens.js";
+import { makeImperialScreen, makeImpPanelMap } from "./screens.js";
 
 const emissive = (color, intensity, extra = {}) =>
   new THREE.MeshStandardMaterial({
@@ -23,10 +23,19 @@ export function imperialExtras(shared) {
   const need = (key) => !shared[key];
   const extras = {};
 
-  // Painted light-grey wall panel: the Kestrel painted panel (near-white base) tinted by vertex colour.
-  if (need("impPanel") && shared.painted) {
-    extras.impPanel = shared.painted.clone();
-    extras.impPanel.envMapIntensity = 0.6;
+  // Painted light-grey wall panel: clean procedural map with a bevelled border (the Kestrel painted
+  // map's edge grime and dents read as dirt under strong light); Kestrel normal map kept at low scale.
+  if (need("impPanel")) {
+    extras.impPanel = new THREE.MeshStandardMaterial({
+      map: makeImpPanelMap(512, 5),
+      normalMap: shared.painted ? shared.painted.normalMap : null,
+      normalScale: new THREE.Vector2(0.3, 0.3),
+      roughness: 0.62,
+      metalness: 0.04,
+      vertexColors: true,
+      color: 0xffffff,
+      envMapIntensity: 0.5,
+    });
   }
   // Dark deck with a fine grid: worn deck plating pulled down to charcoal.
   if (need("impFloor") && shared.deck) {
