@@ -222,10 +222,13 @@ export function panelGrid(frame, length, height, opts = {}) {
       }
       let style = pickStyle(cw, ch, ri, nRows);
       const memo = rowMemo[ri];
-      const coherent = coherence > 0 && memo && style !== "kick" && style !== "top" && memo.style !== "kick" && memo.style !== "top" && rand() < coherence;
+      // recesses and screens never run coherent for more than two panels: a whole row of dark
+      // conduit bays seen end-on reads as a missing wall segment
+      const capped = memo && (memo.style === "conduit" || memo.style === "screen") && (memo.run || 1) >= 2;
+      const coherent = coherence > 0 && memo && !capped && style !== "kick" && style !== "top" && memo.style !== "kick" && memo.style !== "top" && rand() < coherence;
       if (coherent) style = memo.style;
       const rowCol = coherent && memo.col ? memo.col : null;
-      rowMemo[ri] = { style, col: rowCol };
+      rowMemo[ri] = { style, col: rowCol, run: coherent ? (memo.run || 1) + 1 : 1 };
       // backing plate
       frame.box("metal", cu, cv, -depth + 0.05, cw, ch, 0.1, { color: PALETTE.darkMetal, texel: 1.2 });
       switch (style) {

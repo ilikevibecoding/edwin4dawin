@@ -160,6 +160,27 @@ export function impFloor(kit, ctx, opts = {}) {
 }
 
 /** Panelled ceiling with recessed white light strips; adds point lights through ctx.light. */
+/**
+ * One ceiling light fixture from (x0,z0) to (x1,z1) at ceiling height y: dark housing, a dim
+ * diffuser (the lit fixture body) and a narrow bright core — the only part that may clip, so the
+ * strip reads as a light rather than a white bar. Rooms with their own strip layouts use this
+ * instead of hand-rolling emissive boxes. diffuserMat null drops the diffuser.
+ */
+export function ceilingFixture(kit, x0, z0, x1, z1, y, { stripMat = "emitStrip", diffuserMat } = {}) {
+  const alongX = Math.abs(x1 - x0) >= Math.abs(z1 - z0);
+  const L = alongX ? Math.abs(x1 - x0) : Math.abs(z1 - z0);
+  const xc = (x0 + x1) / 2;
+  const zc = (z0 + z1) / 2;
+  const dims = (w, len) => (alongX ? [len, w] : [w, len]);
+  const diff = diffuserMat !== undefined ? diffuserMat : stripMat === "emitWhiteDim" ? "emitWhiteFaint" : "emitWhiteDim";
+  let [sx, sz] = dims(0.42, L + 0.2);
+  kit.box("paintedMetal", xc, y - 0.06, zc, sx, 0.1, sz, { color: PALETTE.impDark, texel: 2 });
+  [sx, sz] = dims(0.26, L);
+  if (diff) kit.box(diff, xc, y - 0.095, zc, sx, 0.02, sz, { uv: "keep" });
+  [sx, sz] = dims(0.07, L - 0.1);
+  kit.box(stripMat, xc, y - 0.11, zc, sx, 0.02, sz, { uv: "keep" });
+}
+
 export function impCeiling(kit, ctx, opts = {}) {
   const b = opts.bounds || ctx.bounds;
   const y = opts.y ?? b[1][1];
@@ -203,14 +224,10 @@ export function impCeiling(kit, ctx, opts = {}) {
     const L = span - 2 * inset;
     if (along === "x") {
       const z = z0 + c * d;
-      kit.box("paintedMetal", x0 + w / 2, y - 0.06, z, L + 0.2, 0.1, 0.42, { color: PALETTE.impDark, texel: 2 });
-      if (diffMat) kit.box(diffMat, x0 + w / 2, y - 0.095, z, L, 0.02, 0.26, { uv: "keep" });
-      kit.box(stripMat, x0 + w / 2, y - 0.11, z, L - 0.1, 0.02, 0.07, { uv: "keep" });
+      ceilingFixture(kit, x0 + w / 2 - L / 2, z, x0 + w / 2 + L / 2, z, y, { stripMat, diffuserMat: diffMat });
     } else {
       const x = x0 + c * w;
-      kit.box("paintedMetal", x, y - 0.06, z0 + d / 2, 0.42, 0.1, L + 0.2, { color: PALETTE.impDark, texel: 2 });
-      if (diffMat) kit.box(diffMat, x, y - 0.095, z0 + d / 2, 0.26, 0.02, L, { uv: "keep" });
-      kit.box(stripMat, x, y - 0.11, z0 + d / 2, 0.07, 0.02, L - 0.1, { uv: "keep" });
+      ceilingFixture(kit, x, z0 + d / 2 - L / 2, x, z0 + d / 2 + L / 2, y, { stripMat, diffuserMat: diffMat });
     }
   }
   // real lights: a budgeted grid (forward renderer — every light costs every pixel). Big rooms get
