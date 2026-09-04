@@ -143,10 +143,10 @@ export function build(kit, ctx, room, lib) {
   // the bunks and the deck rather than the ceiling.
   for (const bay of bays) {
     const xm = (bay.xa + bay.xb) / 2;
-    for (const dx of [-2.8, 2.8]) ctx.lights.warm.push(pointLight(0xffc48c, 6.5, 10, [xm + dx, yTop - 0.85, walkZ(bay)]));
-    ctx.lights.warm.push(pointLight(0xffd2a8, 8.0, 11, [xm, yTop - 0.8, laneZ(bay)]));
+    for (const dx of [-2.8, 2.8]) ctx.lights.warm.push(pointLight(0xffc48c, 7.5, 11, [xm + dx, yTop - 0.85, walkZ(bay)]));
+    ctx.lights.warm.push(pointLight(0xffd2a8, 9.5, 12, [xm, yTop - 0.8, laneZ(bay)]));
   }
-  for (const x of AISLE_X) ctx.lights.cool.push(pointLight(0xe9dfd2, 10.0, 14, [x, yTop - 0.75, 494]));
+  for (const x of AISLE_X) ctx.lights.cool.push(pointLight(0xe9dfd2, 11.0, 15, [x, yTop - 0.75, 494]));
 
   // ------------------------------------------------------------ the interactable bunk
   if (restBunk) {

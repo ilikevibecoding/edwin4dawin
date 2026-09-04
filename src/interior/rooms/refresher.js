@@ -33,15 +33,17 @@ export function build(kit, ctx, room, lib) {
   const frosted = new Frosted(ctx, { opacity: 0.26, color: 0xa9bccb, roughness: 0.4 });
   const mirror = new Mirror(ctx);
 
-  // walls: the standard Imperial panel mix minus the dark-red accent paint (a washroom has no reason
-  // for a red panel, and the reviewer read the one the shell rolled as unexplained)
+  // walls: the standard Imperial panel mix minus the dark-red accent paint and the vent panels with
+  // their orange marker band (a washroom has no reason for a red panel, and the reviewer read the one
+  // the shell rolled as unexplained)
   {
     const paints = IMPERIAL_PAINTS.filter(([c]) => c !== PALETTE.orange);
+    const styles = { ...IMPERIAL_STYLES, vent: 0 };
     let seed = 78;
     for (const [dir, { frame, length }] of Object.entries(frames)) {
       const ops = [];
       for (const door of room.doors || []) if (door[3] === dir) ops.push(doorOpening(room, door, y0, length, Math.min(h - 0.1, door[4] || DOOR_H)));
-      panelGrid(frame, length, h, { openings: ops, depth: WALL_T, seed: seed++, kick: true, topPipes: false, styles: IMPERIAL_STYLES, paints, tag: room.id + dir });
+      panelGrid(frame, length, h, { openings: ops, depth: WALL_T, seed: seed++, kick: true, topPipes: false, styles, paints, tag: room.id + dir });
       frame.box("satinBlack", length / 2, h - 0.09, 0.02, length, 0.18, 0.05);
     }
   }

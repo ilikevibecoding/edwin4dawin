@@ -147,8 +147,9 @@ export function build(kit, ctx, room, lib) {
   // ------------------------------------------------------------ lights: amber wash, a red beacon over the sealed pod, a little cool fill
   for (const u of HATCH_U) ctx.lights.warm.push(pointLight(0xffb060, 6.0, 10, [x0 + u, yTop - 0.5, zf + 1.3]));
   ctx.lights.warm.push(pointLight(0xff3a2a, 3.2, 7, [sealedX, yTop - 0.45, zf + 1.5]));
-  // the evacuation lane itself: warm pools under the shell's light channel (which runs along the lane)
-  for (const x of [-4.5, 0, 4.5]) ctx.lights.warm.push(pointLight(0xffc48c, 5.0, 10, [x, yTop - 0.6, zLat + 0.3]));
+  // the evacuation lane itself: two warm pools under the shell's light channel (which runs along the
+  // lane), set off the room axis so neither throws a glare spot onto the status board's screens
+  for (const x of [-2.2, 2.2]) ctx.lights.warm.push(pointLight(0xffc48c, 5.5, 11, [x, yTop - 0.6, zLat + 0.3]));
   for (const x of [-6, 6]) ctx.lights.cool.push(pointLight(0xdfe8ff, 5.0, 10, [x, yTop - 0.5, 476.4]));
   labels.build("podLabels");
   void lib;
