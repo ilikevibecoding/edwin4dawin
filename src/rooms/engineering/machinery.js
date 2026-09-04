@@ -670,8 +670,36 @@ export function droidAlcove(kit, { pos, yaw = 0, w = 2.2, h = 2.8, d = 1.6, acce
 }
 
 // ---------------------------------------------------------------------------------------------------
-// Door throats (passages between a room wall and a door plane that sits beyond it)
+// Door side fix-up + throats (passages between a room wall and a door plane that sits beyond it)
 // ---------------------------------------------------------------------------------------------------
+/**
+ * Work-around for RoomManager.doorsOf: it matches a door to a room wall by exact plane equality, so doors
+ * that sit on the neighbour's wall line (hangar arches at x ±40 vs. the support rooms at ±44, the shuttle
+ * blast door at z 70 vs. z 72, the reactor airlock at z 300 vs. 304) land on the *opposite* wall. Re-assign
+ * every door of this room to its nearest wall before `ctx.shell()` carves the openings.
+ */
+export function fixDoorSides(ctx) {
+  const { x0, x1, z0, z1 } = ctx.inner;
+  const b = ctx.box;
+  for (const d of ctx.doors) {
+    const spec = d.door;
+    if (!spec || spec.axis === undefined) continue;
+    if (spec.axis === "z") {
+      const side = Math.abs(spec.at - b.z0) <= Math.abs(spec.at - b.z1) ? "zmin" : "zmax";
+      if (side === d.side) continue;
+      d.side = side;
+      if (side === "zmin") [d.u0, d.u1] = [spec.from - x0, spec.to - x0];
+      else [d.u0, d.u1] = [x1 - spec.to, x1 - spec.from];
+    } else {
+      const side = Math.abs(spec.at - b.x0) <= Math.abs(spec.at - b.x1) ? "xmin" : "xmax";
+      if (side === d.side) continue;
+      d.side = side;
+      if (side === "xmin") [d.u0, d.u1] = [z1 - spec.to, z1 - spec.from];
+      else [d.u0, d.u1] = [spec.from - z0, spec.to - z0];
+    }
+  }
+}
+
 /**
  * Some doors in the layout sit on the neighbour's wall line, several metres beyond this room's own wall
  * (hangar arches at x ±40 vs. the support rooms at ±44; the shuttle blast door at z 70 vs. z 72). Line that
