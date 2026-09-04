@@ -1,7 +1,9 @@
-// Deck 2 spine corridor, port arm (x −62..−8). Greybox uses the local shell with ribs; switches to
-// D's corridorSegment (src/systems/corridor/corridor.js) when it lands.
+// Deck 2 spine corridor, port arm (x −62..−8): lobby blast door at the east end, medbay / quarters
+// doors on the forward wall, mess (blast) / armory doors aft, dead-end bulkhead at x −62. Detail
+// comes from the shared corridor generator so all three Deck 2 arms read as one corridor.
 import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
+import { corridorDetail } from "./corridor.js";
 
 const Y = 40;
 
@@ -17,22 +19,16 @@ export default defineRoom({
     "d2-cor-w-lobby-end": { pos: [-10.5, Y, 375], yaw: 90, pitch: 0 },
     "d2-cor-w-mid": { pos: [-36, Y, 374.2], yaw: 82, pitch: -1 },
     "d2-cor-w-medbay-door": { pos: [-47, Y, 376.6], yaw: 12, pitch: 2 },
+    "d2-cor-w-dead-end": { pos: [-56, Y, 375], yaw: 88, pitch: 3 },
   },
   shell: {
     panelW: 2.0,
-    ribs: 4,
-    floor: { color: IMP.impMid, strip: { axis: "x", width: 1.0 } },
+    ribs: 0,
+    floor: { color: IMP.impMid, strip: { axis: "x", width: 1.0, mat: "impFloor", color: IMP.impBlack } },
     ceiling: { channels: 0 },
-    lights: { count: 6, intensity: 26, distance: 12 },
+    lights: { count: 7, intensity: 26, distance: 12 },
   },
   detail(ctx, shell, room) {
-    // single centre light channel along the arm
-    const { kit } = ctx;
-    const z = 375;
-    for (let x = -61; x < -9; x += 4) {
-      kit.boxMM("paintedMetal", [x, room.ceilY - 0.14, z - 0.35], [x + 3.2, room.ceilY - 0.02, z + 0.35], { color: IMP.impBlack });
-      kit.boxMM("emitWhite", [x + 0.2, room.ceilY - 0.13, z - 0.12], [x + 3.0, room.ceilY - 0.11, z + 0.12]);
-    }
-    return {};
+    return corridorDetail(ctx, shell, room, { axis: "x", lobbyEnd: "max", accent: "emitBlue", seed: 21 });
   },
 });

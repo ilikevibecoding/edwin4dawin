@@ -1,6 +1,8 @@
-// Deck 2 forward corridor from the lobby to the escape-pod bay (z 330..370).
+// Deck 2 forward corridor from the lobby blast door (z 370) to the escape-pod bay door (z 330).
+// Same treatment and 4 m bulkhead rhythm as the spine arms via the shared corridor generator.
 import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
+import { corridorDetail } from "../cor-w/corridor.js";
 
 const Y = 40;
 
@@ -19,18 +21,12 @@ export default defineRoom({
   },
   shell: {
     panelW: 2.0,
-    ribs: 4,
-    floor: { color: IMP.impMid, strip: { axis: "z", width: 1.0 } },
+    ribs: 0,
+    floor: { color: IMP.impMid, strip: { axis: "z", width: 1.0, mat: "impFloor", color: IMP.impBlack } },
     ceiling: { channels: 0 },
-    lights: { count: 5, intensity: 26, distance: 12 },
+    lights: { count: 6, intensity: 26, distance: 12 },
   },
   detail(ctx, shell, room) {
-    const { kit } = ctx;
-    const x = 0;
-    for (let z = 331; z < 369; z += 4) {
-      kit.boxMM("paintedMetal", [x - 0.35, room.ceilY - 0.14, z], [x + 0.35, room.ceilY - 0.02, z + 3.2], { color: IMP.impBlack });
-      kit.boxMM("emitWhite", [x - 0.12, room.ceilY - 0.13, z + 0.2], [x + 0.12, room.ceilY - 0.11, z + 3.0]);
-    }
-    return {};
+    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "max", accent: "emitBlue", seed: 23 });
   },
 });
