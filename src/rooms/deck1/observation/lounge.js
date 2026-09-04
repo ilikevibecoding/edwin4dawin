@@ -51,7 +51,9 @@ function seatingGroup(kit, cx, y, z0, dir, withCase) {
     }
   }
   B("impPanel", cx - half, cx + half, y + 0.12, y + 0.4, 0, 0.7, cBlack);
-  B("metal", cx - half - 0.01, cx + half + 0.01, y + 0.38, y + 0.4, -0.01, 0.71, { color: IMP.grey, texel: 1 });
+  // metalRough, not bare metal: the seat-pan edge trim mirrored a soffit can as a 93 x 11 px patch with a halo from
+  // the window camera (critic round 4: "white specular patch on the sofa base"); the flat lobe stays under 0.25
+  B("metalRough", cx - half - 0.01, cx + half + 0.01, y + 0.38, y + 0.4, -0.01, 0.71, { color: IMP.grey, texel: 1 });
   // blue hairline along the frame's lower edge, front and back: the plinth gap reads as a lit gap, not a shadow
   B("emitBlue", cx - half + 0.2, cx + half - 0.2, y + 0.135, y + 0.145, -0.005, 0.0);
   B("emitBlue", cx - half + 0.2, cx + half - 0.2, y + 0.135, y + 0.145, 0.7, 0.705);
