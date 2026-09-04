@@ -1,16 +1,17 @@
 // Forward Observation Gallery (Deck B): a 96 m gallery directly behind the tower's forward face.
-// Its north wall carries the six wide gallery viewport bays cut into the hull (three per side, each
-// ~11.7 m wide between 0.9 m hull mullions), each lined with a window tunnel that runs right through
-// the hull face slab to the glass; the solid centre holds the Imperial crest as the room's second key.
-// Dim, blue, quiet: a viewing rail with standing scopes, benches, and a cut-away hologram of the
-// tower on the data column; the view outside is the point.
+// Its north wall carries the six wide gallery viewport bays cut into the hull (three per side from
+// x ±2.5 to ±46, 13.6 m openings between 0.9 m hull mullions, a 5 m solid mullion on the centreline),
+// each lined with a window tunnel that runs right through the hull face slab to the glass. The crest is
+// a floor inlay on the axis; the centre third has two low seating rings around holo planet pedestals
+// and the tower cut-away on its data column in front of the mullion. Dim, blue, quiet: the view
+// outside is the point.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { roomWalls, wallFrame, impWall, impFloor, impCeiling, impRailing, openingsFor, lux } from "./imperial_kit.js";
 import { panelWithHoles } from "../kit.js";
-import { IMP_DECAL } from "../textures_imperial.js";
+import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
 import { TOWER } from "../spec.js";
-import { bench, propFrame, rod, floorStrip, holoTowerMap, cableRun, deckBSetup } from "./deck_b_props.js";
+import { bench, seatRing, propFrame, rod, floorStrip, floorDecal, holoTowerMap, holoPlanet, cableRun, deckBSetup } from "./deck_b_props.js";
 
 export function buildObservation(kit, ctx, room) {
   deckBSetup(kit);
@@ -53,41 +54,41 @@ export function buildObservation(kit, ctx, room) {
     windowRun(kit, N, u0, u1, centres, winP, room.id + "N" + (s < 0 ? "W" : "E"));
     bayX.push(...centres.map((u) => u - hx));
   }
-  // centre section (x -8..8): panelled, with the crest on a lit plate, two tall light slots, uplights
+  // centre mullion (x -2.5..2.5): plain panelled wall, a dark dedication plaque at eye level and a
+  // narrow dim slot each side of it; the crest itself is the floor inlay in front (below)
   {
     const { frame: cF, length: cL } = wallFrame(kit, [-gv.x0, -hz], [gv.x0, -hz]);
-    impWall(cF, cL, h, { seed: seed + 7, accentKey, tag: room.id + "Nc", panelW: 2.0, features: {}, altChance: 0, bands: [1.15] });
+    impWall(cF, cL, h, { seed: seed + 7, accentKey, tag: room.id + "Nc", panelW: 2.5, features: {}, altChance: 0, bands: [1.15] });
     const cu = cL / 2;
-    cF.box("impTrim", cu, 2.6, 0.11, 4.5, 4.1, 0.1, { color: PALETTE.impBlack, texel: 1 });
-    cF.box("impMetal", cu, 2.6, 0.166, 4.2, 3.8, 0.012, { color: PALETTE.impGreyDark, texel: 1 });
-    cF.decal(IMP_DECAL.cog, cu, 2.65, 0.176, 3.4);
-    cF.box(accentKey, cu, 2.6 - 1.98, 0.17, 3.6, 0.03, 0.012);
-    cF.box(accentKey, cu, 2.6 + 1.98, 0.17, 3.6, 0.03, 0.012);
-    // dedication plate under the crest
-    cF.box("impGloss", cu, 0.62, 0.1, 2.4, 0.34, 0.05);
-    cF.decal(IMP_DECAL.glyphs3, cu - 0.65, 0.62, 0.128, 0.9, { h: 0.24 });
-    cF.decal(IMP_DECAL.glyphs1, cu + 0.65, 0.62, 0.128, 0.9, { h: 0.24 });
+    cF.box("impTrim", cu, 2.05, 0.08, 1.7, 1.1, 0.08, { color: PALETTE.impBlack, texel: 1 });
+    cF.box("impMetal", cu, 2.05, 0.125, 1.56, 0.96, 0.012, { color: PALETTE.impCharcoal, texel: 1 });
+    cF.decal(IMP_DECAL.glyphs3, cu, 2.28, 0.135, 1.2, { h: 0.3 });
+    cF.decal(IMP_DECAL.glyphs1, cu, 1.9, 0.135, 1.2, { h: 0.3 });
+    cF.box(accentKey, cu, 1.55, 0.13, 1.3, 0.02, 0.012);
     for (const s of [-1, 1]) {
-      const su = cu + s * 3.1;
-      cF.box("impTrim", su, 2.55, 0.1, 0.34, 3.9, 0.09, { color: PALETTE.impBlack, texel: 1 });
-      cF.box("emitWhiteSoft", su, 2.55, 0.15, 0.12, 3.7, 0.012, { uv: "keep" });
-      // floor uplight can aimed at the crest
-      const ux = s * 1.3;
-      kit.box("impTrim", ux, 0.16, -hz + 0.55, 0.5, 0.32, 0.4, { color: PALETTE.impBlack, texel: 1 });
-      kit.box("impMetal", ux, 0.33, -hz + 0.55, 0.42, 0.02, 0.32, { color: PALETTE.impCharcoal });
-      kit.box("emitWhiteSoft", ux, 0.345, -hz + 0.5, 0.34, 0.012, 0.16, { uv: "keep" });
-      kit.collider([ux - 0.26, 0, -hz + 0.34], [ux + 0.26, 0.36, -hz + 0.76], "uplight");
+      cF.box("impTrim", cu + s * 1.55, 2.5, 0.06, 0.22, 2.6, 0.08, { color: PALETTE.impBlack, texel: 1 });
+      cF.box("emitWhiteDim", cu + s * 1.55, 2.5, 0.105, 0.07, 2.4, 0.012, { uv: "keep" });
     }
-    cF.collider(cu - 2.3, cu + 2.3, 0, h, 0, 0.19, "emblem");
+    cF.collider(cu - 0.9, cu + 0.9, 0, h, 0, 0.14, "plaque");
   }
 
-  // --- floor and ceiling
-  impFloor(kit, -hx, -hz, hx, hz, { laneAxis: "x", laneW: 2.6, texel: 0.5 });
+  // --- floor and ceiling (no centre lane: the gallery is a promenade, not a corridor)
+  impFloor(kit, -hx, -hz, hx, hz, { texel: 0.5 });
   impCeiling(kit, -hx, -hz, hx, hz, h, { troughs: 0, beamStep: 3.2, seed: seed + 3, accentKey });
   // dim blue floor-edge strips along the window wall and the aft wall (broken at the door)
   for (const s of [-1, 1]) {
     floorStrip(kit, "emitBlueDim", s * (gv.x0 + 0.6), -hz + 0.3, s * (gv.x1 - 0.3), -hz + 0.36);
     floorStrip(kit, "emitBlueDim", s * 2.2, hz - 0.26, s * (hx - 0.6), hz - 0.2);
+  }
+  // crest: floor inlay on the axis in front of the mullion (dark disc, metal ring, 3.4 m cog), plus a
+  // darker promenade band along the windows with bay numbers at every bay centre
+  {
+    const cz = -1.2;
+    kit.cyl("impTrim", 0, 0.016, cz, 2.0, 0.008, "y", { segments: 40, color: PALETTE.impCharcoal, texel: 1 });
+    kit.add("impMetal", new THREE.TorusGeometry(2.0, 0.03, 6, 64).rotateX(Math.PI / 2), { pos: [0, 0.022, cz], color: PALETTE.impGreyDark });
+    kit.add("decalImp", new THREE.PlaneGeometry(3.4, 3.4).rotateX(-Math.PI / 2), { pos: [0, 0.026, cz], uv: "keep", uvRect: impDecalRect(IMP_DECAL.cog) });
+    kit.boxMM("impDeck", [-hx + 0.4, 0, -hz + 1.4], [hx - 0.4, 0.01, -hz + 4.6], { color: PALETTE.impGreyDark, texel: 0.5 });
+    for (const zz of [-hz + 1.4, -hz + 4.6]) kit.boxMM("impTrim", [-hx + 0.4, 0, zz - 0.03], [hx - 0.4, 0.012, zz + 0.03], { color: PALETTE.impBlack });
   }
 
   // --- structural ribs on every window pier (the hull mullions): ceiling beam + pilasters both sides
@@ -127,43 +128,94 @@ export function buildObservation(kit, ctx, room) {
     const xb = s * (gv.x1 + 0.4);
     impRailing(kit, [Math.min(xa, xb), -hz + 1.1], [Math.max(xa, xb), -hz + 1.1], 0, { h: 1.0, postStep: gw / 4, color: PALETTE.impCharcoal });
   }
-  // --- standing scopes at the rail: one at the inner edge of the first bay each side (in the spawn
-  // view), one at the middle bay
-  for (const s of [-1, 1]) for (const x of [gv.x0 + 3.0, gv.x0 + gw * 1.5]) viewer(kit, s * x, -hz + 1.85, 0, accentKey);
-
-  // --- benches: along the aft wall on the mullion axes, and island benches facing the view
-  const benchColor = new THREE.Color("#3b4250");
+  // --- standing scopes at the rail: one per bay centre plus one at the inner edge of the first bay
+  // (in the spawn view); bay numbers on the promenade band
   for (const s of [-1, 1]) {
-    bench(kit, s * 4.6, hz - 0.55, 3.0, 0, { pad: "fabric", padColor: benchColor, accentKey });
-    for (const x of [gv.x0 + gw, gv.x0 + 2 * gw]) bench(kit, s * x, hz - 0.55, 4.2, 0, { pad: "fabric", padColor: benchColor, accentKey });
-    for (const x of [gv.x0 + 0.5 * gw, gv.x0 + 2.5 * gw]) bench(kit, s * x, -3.4, 4.0, 0, { pad: "fabric", padColor: benchColor, accentKey });
+    for (let i = 0; i < gv.count; i++) {
+      const bx = gv.x0 + gw * (i + 0.5);
+      viewer(kit, s * bx, -hz + 1.85, 0, accentKey);
+      floorDecal(kit, [IMP_DECAL.bay01, IMP_DECAL.bay02, IMP_DECAL.bay03][i], s * (bx - 2.6), -hz + 3.2, 1.1, Math.PI / 2, 0.014);
+    }
+    viewer(kit, s * (gv.x0 + 2.2), -hz + 1.85, 0, accentKey);
   }
 
-  // --- data column with the slowly turning tower cut-away
-  const tower = dataColumn(kit, ctx, 5.6, -3.0, accentKey);
+  // --- seating: two low rings around holo planet pedestals in the centre third (bay 1 axes), viewing
+  // benches facing the windows in the outer bays, benches along the aft wall on the mullion axes
+  const benchColor = new THREE.Color("#3b4250");
+  const planets = [];
+  for (const s of [-1, 1]) {
+    // rings flank the crest inlay (x ±6.4) so both sit inside the spawn view's foreground
+    const rx = s * 6.4;
+    seatRing(kit, rx, 0.4, 2.1, { segments: 10, gap: 2, gapYaw: Math.PI, pad: "fabric", padColor: benchColor, accentKey });
+    planets.push(holoPedestal(kit, ctx, rx, 0.4, accentKey, s > 0));
+    // star-chart lecterns on the pier axes, mid-floor, read from the promenade
+    for (const x of [gv.x0 + gw, gv.x0 + 2 * gw]) chartLectern(kit, s * x, 3.2, accentKey, s > 0 ? "scrBlue3" : "scrBlue1");
+    bench(kit, s * 4.6, hz - 0.55, 3.0, 0, { pad: "fabric", padColor: benchColor, accentKey });
+    for (const x of [gv.x0 + gw, gv.x0 + 2 * gw]) bench(kit, s * x, hz - 0.55, 4.2, 0, { pad: "fabric", padColor: benchColor, accentKey });
+    for (const x of [gv.x0 + 1.5 * gw, gv.x0 + 2.5 * gw]) {
+      // two rows of viewing benches per outer bay, split around the bay axis so the scope stays reachable
+      for (const dx of [-2.6, 2.6]) bench(kit, s * x + dx, -2.8, 4.0, 0, { pad: "fabric", padColor: benchColor, accentKey });
+      bench(kit, s * x, 1.4, 4.0, 0, { pad: "fabric", padColor: benchColor, accentKey });
+    }
+  }
+
+  // --- data column with the slowly turning tower cut-away, on the axis in front of the mullion
+  const tower = dataColumn(kit, ctx, 0, -4.4, accentKey);
   kit.onUpdate((dt, t) => {
     tower.group.rotation.y += dt * 0.18;
     tower.blip.visible = Math.sin(t * 4.0) > -0.2;
+    for (const p of planets) p.globe.rotation.y += dt * p.rate;
   });
 
-  // --- lights: white fills over the walkway (hotter than the deck default: the windows are black
-  // space and the ceiling is dark), cool fills on the rail / surrounds, the crest spot as the second
-  // key, a blue glow at the data column, a warm wash on the aft benches
+  // --- lights (one cool temperature): white pendant fills over the promenade, cool fills on the rail /
+  // surrounds, a blue glow at the data column and at each holo pedestal
   const whites = [-32, -16, 0, 16, 32];
   whites.forEach((x, i) => {
     // pendant can under each fill so the light has a visible source and the ceiling above stays dark
     kit.cyl("impTrim", x, h - 0.2, 1.2, 0.3, 0.4, "y", { color: PALETTE.impBlack, segments: 18, texel: 1 });
     kit.cyl("impMetal", x, h - 0.41, 1.2, 0.24, 0.02, "y", { color: PALETTE.impCharcoal, segments: 18 });
     kit.cyl("emitWhiteDim", x, h - 0.425, 1.2, 0.18, 0.012, "y", { segments: 18, uv: "keep" });
-    kit.light({ type: "point", pos: [x, h - 1.3, 1.2], color: 0xd8e4ff, intensity: lux(h - 1.3, 2.6), distance: 22, priority: 0.46 - Math.abs(i - 2) * 0.01 });
+    kit.light({ type: "point", pos: [x, h - 1.3, 1.2], color: 0xd8e4ff, intensity: lux(h - 1.3, 2.9), distance: 22, priority: 0.46 - Math.abs(i - 2) * 0.01 });
   });
   for (const s of [-1, 1]) {
     kit.light({ type: "point", pos: [s * 10.5, 2.6, -hz + 1.7], color: 0x9fc6ff, intensity: 7.0, distance: 13, priority: 0.4 });
     kit.light({ type: "point", pos: [s * 27, 2.6, -hz + 1.7], color: 0x9fc6ff, intensity: 7.0, distance: 13, priority: 0.3 });
+    kit.light({ type: "point", pos: [s * 6.4, 1.9, 0.4], color: 0x6fa4ff, intensity: 3.0, distance: 6, priority: 0.34 });
   }
-  kit.light({ type: "spot", pos: [0, h - 0.3, -hz + 3.4], target: [0, 2.5, -hz], color: 0xeef3ff, intensity: lux(4.5, 2.2), distance: 12, angle: 0.58, penumbra: 0.4, priority: 0.62 });
-  kit.light({ type: "point", pos: [5.6, 2.0, -3.0], color: 0x6fa4ff, intensity: 3.5, distance: 6, priority: 0.36 });
-  kit.light({ type: "point", pos: [0, h - 0.5, 6.0], color: 0xffe6cc, intensity: lux(h - 0.5, 1.6), distance: 12, priority: 0.35 });
+  kit.light({ type: "point", pos: [0, 2.0, -4.4], color: 0x6fa4ff, intensity: 3.5, distance: 6, priority: 0.36 });
+}
+
+/** Star-chart lectern: black plinth, gloss top sloping toward the promenade (-z) with a chart screen, blue status strip. */
+function chartLectern(kit, x, z, accentKey, screen) {
+  kit.box("impMetal", x, 0.06, z, 0.9, 0.12, 0.7, { color: PALETTE.impCharcoal, texel: 1 });
+  kit.box("impTrim", x, 0.55, z, 0.7, 0.86, 0.5, { color: PALETTE.impBlack, texel: 1 });
+  const tilt = -0.5;
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tilt);
+  kit.add("impTrim", new THREE.BoxGeometry(0.9, 0.08, 0.6), { pos: [x, 1.02, z + 0.02], quat: q, color: PALETTE.impBlack, texel: 1 });
+  kit.add("impGloss", new THREE.BoxGeometry(0.8, 0.02, 0.5), { pos: [x, 1.07, z + 0.045], quat: q });
+  kit.add(screen, new THREE.PlaneGeometry(0.7, 0.4).rotateX(-Math.PI / 2 + tilt), { pos: [x, 1.085, z + 0.05], uv: "keep" });
+  kit.box(accentKey, x, 0.3, z - 0.256, 0.5, 0.02, 0.012);
+  // aft face (seen from the door): readout strip and a glyph plate, so the plinth is not a black block
+  kit.box("leds", x, 0.82, z + 0.256, 0.4, 0.05, 0.006, { uv: "keep" });
+  kit.add("decalImp", new THREE.PlaneGeometry(0.34, 0.34), { pos: [x, 0.52, z + 0.253], uv: "keep", uvRect: impDecalRect(IMP_DECAL.glyphs2) });
+  kit.collider([x - 0.45, 0, z - 0.35], [x + 0.45, 1.2, z + 0.35], "lectern");
+}
+
+/** Holo pedestal at the centre of a seating ring: black drum, gloss top, blue rim, slowly turning planet. */
+function holoPedestal(kit, ctx, x, z, accentKey, ring) {
+  kit.cyl("impMetal", x, 0.06, z, 0.5, 0.12, "y", { color: PALETTE.impCharcoal, segments: 20, texel: 1 });
+  kit.cyl("impTrim", x, 0.55, z, 0.36, 0.86, "y", { color: PALETTE.impBlack, segments: 20, texel: 1 });
+  kit.cyl("impMetal", x, 1.0, z, 0.42, 0.06, "y", { color: PALETTE.impCharcoal, segments: 20 });
+  kit.cyl("emitBlueDim", x, 1.035, z, 0.3, 0.014, "y", { segments: 20, uv: "keep" });
+  kit.cyl("impGloss", x, 1.045, z, 0.26, 0.02, "y", { segments: 20 });
+  for (let i = 0; i < 3; i++) kit.box(i === 1 ? "emitRedImp" : accentKey, x + 0.3 * Math.sin((i * 2 * Math.PI) / 3), 0.72, z + 0.3 * Math.cos((i * 2 * Math.PI) / 3), 0.05, 0.03, 0.05);
+  kit.add("deckB_holoDim", new THREE.CylinderGeometry(0.42, 0.24, 0.3, 20, 1, true), { pos: [x, 1.2, z], uv: "keep" });
+  const planet = holoPlanet(ctx.materials, ring ? 0.3 : 0.34, { ring });
+  planet.group.position.set(x, 1.55, z);
+  planet.group.rotation.z = ring ? 0.25 : -0.15;
+  kit.attach(planet.group);
+  kit.collider([x - 0.5, 0, z - 0.5], [x + 0.5, 1.1, z + 0.5], "pedestal");
+  return { globe: planet.globe, rate: ring ? 0.25 : -0.18 };
 }
 
 /**
