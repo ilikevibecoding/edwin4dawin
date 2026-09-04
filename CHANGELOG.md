@@ -5,6 +5,25 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 
 ## Unreleased
 
+## iter05 — wave 1 builders (five isolated worktrees, merged after review)
+- Aircraft: cabin built as an inset of the fuselage loft (no interior poke-through), two-shell physically
+  based glass (alpha 0.12, Fresnel reflection, interior visible), correct registration on both sides,
+  airfoil wing with flap/aileron notches and a lofted roof hump, yellow body / cream roof livery.
+- Clouds: adaptive three-level raymarch over a baked coverage field, half-resolution cloud layer composited
+  at full resolution (no speckle), cumulus volume/lighting rework, horizon fade, overcast cell structure.
+- Water: Schlick Fresnel against the sky PMREM, three swell sets + wind sea + advected chop with
+  footprint fading, coastal absorption depth colour, exposure-driven foam, anisotropic sun glitter.
+- City: twelve facade families with per-building night lighting, tower massing recipes and height
+  hierarchy, varied low-rise roofs; bridges with girder decks, parapets, piers with footings, cable-stayed
+  pylons and tied arches, concrete pavement shader.
+- Terrain/vegetation: five tree archetypes with impostor LOD (aerial-a 7.0 M -> 3.3 M triangles), dense
+  island canopy, organic island tracks, exposure-driven beaches and sand flats, mainland relief, lakes,
+  canals, parks, varied props and a rebuilt port.
+- Lead fixes: chase camera look-target aliasing (camera lost the aircraft in flight clips), aerial-a
+  aircraft at reference scale and rear three-quarter angle, hull foam/meniscus decals and contact probe
+  for statically placed aircraft, log-depth support for scene ShaderMaterials, PMREM render-target leak,
+  traffic vehicles baked to one mesh each (257 -> 85 draw calls), named scene groups for cost breakdown.
+
 ## iter03 — clouds, bathymetry, cockpit
 - Cloud density/lighting rewrite: cumulus towers with flat bases, overcast cell structure, brighter sunlit
   sides and darker bases; larger coverage masses.
