@@ -64,6 +64,7 @@ export function buildInterior({ scene, materials }) {
       zone: zone.id,
       group,
       dynamic: [],
+      markers: [], // seats / stations / idle points for future crew systems
       neighbors: new Set(),
       windows: spec.windows || [],
       floorY: kind === "room" ? roomFloorY(spec) : DECKS[spec.deck].floorY,
@@ -74,6 +75,7 @@ export function buildInterior({ scene, materials }) {
     if (kit) {
       zone.colliders.push(...kit.colliders);
       zone.floors.push(...kit.floors);
+      if (kit.markers) for (const m of kit.markers) sp.markers.push({ ...m, space: spec.id });
     }
     if (ctx) {
       for (const fam of ["warm", "cool", "teal"]) for (const l of ctx.lights[fam]) {
@@ -218,6 +220,7 @@ export function buildInterior({ scene, materials }) {
         const sp = spaces[room.id];
         zone.colliders.push(...kit.colliders);
         zone.floors.push(...kit.floors);
+        for (const m of kit.markers) sp.markers.push({ ...m, space: room.id });
         for (const fam of ["warm", "cool", "teal"]) for (const l of ctx.lights[fam]) {
           l.userData.baseIntensity = l.intensity;
           l.userData.baseColor = l.color.clone();
@@ -463,6 +466,12 @@ export function buildInterior({ scene, materials }) {
       }
       const yaw = THREE.MathUtils.radToDeg(Math.atan2(-(cx - x), -(cz - z)));
       return { x, z, y, yaw, pitch: -4, zone: DECKS[r.deck].zone, space: r.id };
+    },
+    // Navigation / crew data for future phases: walkable floors and colliders per zone, markers per space
+    navData(zoneId = state.zone) {
+      const z = zones[zoneId];
+      if (!z) return null;
+      return { floors: z.floors, colliders: z.colliders, markers: z.spaces.flatMap((sp) => sp.markers) };
     },
     roomIds: ROOMS.map((r) => r.id),
     corridorIds: CORRIDORS.map((c) => c.id),

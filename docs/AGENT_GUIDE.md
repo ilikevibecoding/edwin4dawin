@@ -49,6 +49,9 @@ export function build(kit, ctx, room, lib) { ... }   // signature of every room 
 - Lights: push template lights into `ctx.lights.warm / cool / teal` (PointLight) or `ctx.lights.spots`
   (SpotLight with target). They are *fixtures*: the LightPool renders the nearest 14 points + 3 shadowed
   spots. Give each room 3-10 fixtures, intensities ~2-8 (candela-ish after the 0.8 scale in `pointLight`).
+- Crew hooks: `kit.marker("seat" | "station" | "idle" | "spawn" | "waypoint", [x, y, z], yawRadians, { id })`
+  records where future NPCs sit, stand or idle (no characters are added now). Register one per seat /
+  console; the registry exposes them via `interior.navData(zone).markers`.
 - Interactables: `ctx.interactables.push({ id, key: "E", label: "Open locker", object: mesh, material,
   freeze: false, action: async ({ hud }) => {...} })`. `object` must be a Mesh/Group added to the scene by
   you (not merged into the kit) with its own material instance (the hover highlight edits emissive).

@@ -523,7 +523,8 @@ export class Fighter {
     this.lap = 0; // completed circuits since the launch (0 = still on the entry lap)
     this.returnRequested = false;
     this.pilot = null;
-    this.onEvent = null;
+    this.onEvent = null; // single-slot hook (kept for compatibility); prefer addListener()
+    this.listeners = [];
     this.far = false;
     this.rig = mesh.userData.rig || null; // per-craft material controls (sun term, engine glow)
     this.throttle = 1;
@@ -583,6 +584,18 @@ export class Fighter {
     const dt = this.t <= this.exitT ? this.exitT - this.t : 1 - this.t + this.exitT;
     return dt * this.durations.patrol;
   }
+  /** Subscribe to phase events; several systems (audio, NPC pilots, flight control) can listen at once. */
+  addListener(fn) {
+    this.listeners.push(fn);
+    return () => {
+      const i = this.listeners.indexOf(fn);
+      if (i >= 0) this.listeners.splice(i, 1);
+    };
+  }
+  _emit(state) {
+    if (this.onEvent) this.onEvent(this, state);
+    for (const fn of this.listeners) fn(this, state);
+  }
   requestLaunch() {
     if (this.state === "parked") this._enter("release");
   }
@@ -593,7 +606,7 @@ export class Fighter {
     this.state = state;
     this.t = 0;
     if (state === "patrol") this.lap = 0;
-    if (this.onEvent) this.onEvent(this, state);
+    this._emit(state);
   }
   _boundary(state = this.state, ret = this.returnRequested, t = this.t) {
     return state === "patrol" && ret && t < this.exitT ? this.exitT : 1;
@@ -606,7 +619,7 @@ export class Fighter {
       } else {
         this.t = 0;
         this.lap++;
-        if (this.onEvent) this.onEvent(this, "lap");
+        this._emit("lap");
       }
       return;
     }
@@ -614,7 +627,7 @@ export class Fighter {
     if (next === "parked") {
       this.state = "parked";
       this.t = 0;
-      if (this.onEvent) this.onEvent(this, "parked");
+      this._emit("parked");
     } else this._enter(next);
   }
   update(dt) {

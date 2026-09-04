@@ -14,6 +14,7 @@ export class Kit {
     this.groups = new Map();
     this.colliders = [];
     this.floors = [];
+    this.markers = [];
     this.meshes = [];
   }
 
@@ -71,6 +72,14 @@ export class Kit {
     const c = { min: new THREE.Vector3(...min), max: new THREE.Vector3(...max), tag };
     this.colliders.push(c);
     return c;
+  }
+
+  // Semantic marker for future crew / NPC systems: kind = "seat" | "station" | "idle" | "spawn" | "waypoint".
+  // pos = [x, y, z], yaw in radians (facing), extra = free-form (station id, seat owner ...).
+  marker(kind, pos, yaw = 0, extra = {}) {
+    const m = { kind, x: pos[0], y: pos[1], z: pos[2], yaw, ...extra };
+    this.markers.push(m);
+    return m;
   }
 
   // Walkable surface (see Player.groundAt). Ramps: pass y0/y1 + axis instead of y.
