@@ -1,6 +1,6 @@
 // Minecraft-style farm animals: horses, cattle, pigs, chickens with pen-bound wandering.
 import * as THREE from 'three';
-import { buildBoxModel, PX } from '../npc/model.js';
+import { buildBoxModel, buildStaticLOD, PX } from '../npc/model.js';
 import { standHeight } from '../npc/pathfinding.js';
 import { RNG } from '../rng.js';
 import { AABB } from '../player.js';
@@ -196,8 +196,11 @@ export class AnimalManager {
       panic: false, panicUntil: 0, air: null, stunned: 0, swimming: false, airSpin: 0,
     };
     a.targetYaw = a.yaw;
+    a.lod = buildStaticLOD(model.root); // distant stand-in (1 draw call)
+    a.lod.scale.copy(model.root.scale);
     this.list.push(a);
     this.group.add(a.root);
+    this.group.add(a.lod);
     this.placeOnGround(a, true);
     a.prevPos.copy(a.pos);
   }
@@ -335,11 +338,18 @@ export class AnimalManager {
       const px = a.prevPos.x + (a.pos.x - a.prevPos.x) * alpha, py = a.prevPos.y + (a.pos.y - a.prevPos.y) * alpha, pz = a.prevPos.z + (a.pos.z - a.prevPos.z) * alpha;
       const dx = px - cp.x, dz = pz - cp.z;
       const d2 = dx * dx + dz * dz;
-      if (d2 > 100 * 100) { a.root.visible = false; continue; }
-      a.root.visible = true;
-      a.root.position.set(px, py, pz);
+      if (d2 > 100 * 100) { a.root.visible = false; a.lod.visible = false; continue; }
       let dy = a.targetYaw - a.yaw; while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2;
       a.yaw += dy * Math.min(1, dt * 6);
+      const useLod = d2 > 30 * 30 && !a.air && a.stunned <= 0;
+      a.lod.visible = useLod;
+      a.root.visible = !useLod;
+      if (useLod) {
+        a.lod.position.set(px, py, pz); a.lod.rotation.y = a.yaw;
+        if (++a.lightTimer >= 8) { a.lightTimer = 0; const l = this.world.sampleLight(a.pos.x, a.pos.y + 0.8, a.pos.z); a.model.material.uniforms.uLight.value.set(l[0], l[1]); }
+        continue;
+      }
+      a.root.position.set(px, py, pz);
       a.root.rotation.y = a.yaw;
       if (a.air) { a.root.rotation.x = (a.airSpin || 0) * 0.8; a.root.rotation.z = (a.airSpin || 0) * 0.5; }
       else if (a.stunned > 0) { a.root.rotation.z += (1.3 - a.root.rotation.z) * Math.min(1, dt * 5); a.root.rotation.x *= 0.9; }

@@ -1,5 +1,6 @@
 // Minecraft-proportioned humanoid model (pixel units, 1 px = 1.8/32 blocks) with hats.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { REGIONS as R } from './skins.js';
 import { makeEntityMaterial, canvasTexture } from '../entityMaterial.js';
 
@@ -80,6 +81,32 @@ export function buildHumanoid(skinCanvas, hat, hatColor) {
     }
   }
   return { root, head, body, rightArm, leftArm, rightLeg, leftLeg, material: mat };
+}
+
+// Builds a static low-detail stand-in for an articulated model: all parts are baked (in their current pose)
+// into one geometry per material, so a distant entity costs 1-2 draw calls instead of ~8-10.
+export function buildStaticLOD(root) {
+  const saved = { p: root.position.clone(), q: root.quaternion.clone(), s: root.scale.clone() };
+  root.position.set(0, 0, 0); root.quaternion.identity(); root.scale.set(1, 1, 1);
+  root.updateMatrixWorld(true);
+  const byMat = new Map();
+  root.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const g = o.geometry.clone();
+    g.applyMatrix4(o.matrixWorld);
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') g.deleteAttribute(k);
+    if (!byMat.has(o.material)) byMat.set(o.material, []);
+    byMat.get(o.material).push(g);
+  });
+  root.position.copy(saved.p); root.quaternion.copy(saved.q); root.scale.copy(saved.s);
+  const lod = new THREE.Group();
+  for (const [mat, geos] of byMat) {
+    const merged = mergeGeometries(geos, false);
+    for (const g of geos) g.dispose();
+    if (merged) lod.add(new THREE.Mesh(merged, mat));
+  }
+  lod.visible = false;
+  return lod;
 }
 
 // Generic quadruped/other animal builder: parts described as {w,h,d,x,y,z,pivot?:[...]} in px (1 px = PX)

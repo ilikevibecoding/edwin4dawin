@@ -1,7 +1,7 @@
 // Autonomous western townsfolk: roles, daily schedules, A* navigation, name tags and dialog.
 import * as THREE from 'three';
 import { paintSkin } from './skins.js';
-import { buildHumanoid } from './model.js';
+import { buildHumanoid, buildStaticLOD } from './model.js';
 import { attachBlink, updateBlink } from './blink.js';
 import { findPath, findStand, standHeight } from './pathfinding.js';
 import { RNG } from '../rng.js';
@@ -41,6 +41,8 @@ const LINES = {
 };
 
 const PANIC_SPEED = 4.2;
+const LOD_DIST = 36;      // beyond this distance NPCs render as a baked static mesh
+const m0 = (npc) => npc.model.material;
 const SWIM_SPEED = 1.3;
 
 function hourOf(time) { return (time * 24) % 24; }
@@ -61,6 +63,7 @@ class NPC {
     this.model = model;
     this.root = model.root;
     attachBlink(this, skin);
+    this.lod = buildStaticLOD(this.root); // distant stand-in (1-2 draw calls)
     this.pos = new THREE.Vector3(def.x, def.y, def.z);
     this.prevPos = this.pos.clone();
     this.yaw = this.rng.range(0, Math.PI * 2);
@@ -193,6 +196,7 @@ export class NPCManager {
       npc.traveler = !!d.traveler;
       this.list.push(npc);
       this.group.add(npc.root);
+      this.group.add(npc.lod);
       const st = findStand(this.world, Math.floor(npc.pos.x), Math.floor(npc.pos.y), Math.floor(npc.pos.z), 4);
       if (st) npc.pos.y = st.h;
       npc.prevPos.copy(npc.pos);
@@ -570,16 +574,26 @@ export class NPCManager {
       const pz = npc.prevPos.z + (npc.pos.z - npc.prevPos.z) * alpha;
       const dx = px - cp.x, dz = pz - cp.z;
       const d2 = dx * dx + dz * dz;
-      if (d2 > 110 * 110) { r.visible = false; continue; }
-      r.visible = true;
+      if (d2 > 110 * 110) { r.visible = false; npc.lod.visible = false; continue; }
       npc.lastCamDist = Math.sqrt(d2);
-      updateBlink(npc, dt);
-      r.position.set(px, py - (npc.sitting ? 0.42 : 0), pz);
       // smooth turning
       let dy = npc.targetYaw - npc.yaw;
       while (dy > Math.PI) dy -= Math.PI * 2;
       while (dy < -Math.PI) dy += Math.PI * 2;
       npc.yaw += dy * Math.min(1, dt * 10);
+      // beyond LOD_DIST a baked static mesh stands in for the articulated model (unless airborne/stunned)
+      const useLod = d2 > LOD_DIST * LOD_DIST && !npc.air && npc.stunned <= 0;
+      npc.lod.visible = useLod;
+      r.visible = !useLod;
+      if (useLod) {
+        npc.lod.position.set(px, py - (npc.sitting ? 0.42 : 0), pz);
+        npc.lod.rotation.y = npc.yaw;
+        npc.tag.visible = false;
+        if (++npc.lightTimer >= 12) { npc.lightTimer = 0; const l = this.world.sampleLight(npc.pos.x, npc.pos.y + 1, npc.pos.z); m0(npc).uniforms.uLight.value.set(l[0], l[1]); for (const child of npc.model.head.children) if (child.material && child.material.uniforms) child.material.uniforms.uLight.value.set(l[0], l[1]); }
+        continue;
+      }
+      updateBlink(npc, dt);
+      r.position.set(px, py - (npc.sitting ? 0.42 : 0), pz);
       r.rotation.y = npc.yaw;
       // thrown through the air: tumble
       if (npc.air) { r.rotation.x = (npc.airSpin || 0) * 0.7; r.rotation.z = (npc.airSpin || 0) * 0.4; }
