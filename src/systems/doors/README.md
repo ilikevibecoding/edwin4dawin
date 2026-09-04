@@ -28,11 +28,18 @@ export default {
 - Cut a clean rectangular hole of exactly `doorHole(door)` in your wall on that face
   (`doorOpening(door)` gives the world AABB / wall-axis extents, `doorAsWallOpening()` a panelGrid
   opening). Keep wall panels `FRAME_W` (0.22 m) away from the hole edge: the frame's reveal covers that
-  band on your face (a plate 5–14 cm proud of the wall, embedded 2 cm into it).
+  band on your face (a plate 5–14 cm proud of the wall, embedded 2 cm into it). A second, stepped-back
+  surround band extends another 0.2 m beyond FRAME_W where your wall has room (clamped to your bounds;
+  it sits 2–7 cm proud, so anything you build outside FRAME_W and further proud simply covers it).
 - Leave room beside the hole for the leaves of standard / hatch doors to slide into the wall: at least
-  `w/2 − 2·lining + 0.07` m of wall on each side (standard 1.15 m, hatch 0.57 m). When a room is too
+  `w/2 − 2·lining − 0.034` m of wall on each side (standard 1.05 m, hatch 0.47 m). When a room is too
   narrow the system automatically splits that door's leaves top / bottom instead (an info log names the
   door). Add `split: "vertical"` or `split: "side"` to the entry to choose explicitly.
+- `to` also drives the dressing on each face: a standard / hatch door whose far room id ends in `-bay`
+  gets a black/yellow threshold apron on the near side (blast / bay leaves already carry their hazard
+  band), a door to `d4-stairs` gets a stair pictogram plate, a `to: null` door gets a red SEALED
+  cross-bar. Threshold plates are the only floor geometry the system
+  adds: a 1.2 cm sill under the frame plus (bay-bound faces) a 0.55 m apron into the room.
 - Nothing else is needed: the system adds the door's static colliders and dynamic leaf colliders.
 
 Unpaired doors are built **locked** (red light, never open) with a sealed slab behind the leaves:
@@ -49,32 +56,47 @@ Everything is in a local frame: n = room A's `dir`, u across the opening, v up; 
 floor level is the origin. Room A's inner wall face is at n = −WALL_T, room B's at +WALL_T, the leaves
 live in the middle of the gap (n = 0).
 
-- **Tunnel lining** (`metal`, mid grey): floor track, two jambs and a soffit spanning the gap between the
-  two inner faces so the raw wall edges are never visible. Standard / hatch: 2 cm black pocket slots in
-  the jambs; blast / bay: slot in the soffit + sill and steel guide rails.
+- **Tunnel lining** (`metal`, mid grey): two jambs and a soffit spanning the gap between the two inner
+  faces so the raw wall edges are never visible. Standard / hatch: 2 cm black pocket slots in the jambs;
+  vertical-split doors: slot in the soffit + sill and steel guide rails.
 - **Reveal frames** on both room faces (`paintedMetal`, `impMid` plates, `impDark` lips, `gunmetal`
   corner blocks, recessed black seams, steel bolt heads): FRAME_W around the hole, embedded 2 cm into
-  the wall panel and standing 5–14 cm proud depending on kind.
-- **Threshold**: black/yellow chevron plate (module material `doorHazard`) for blast / bay, plain dark
-  plate for standard / hatch; blast / bay sills carry the lower leaf's slot and steel track edges.
+  the wall panel and standing 5–14 cm proud depending on kind, plus the stepped-back 0.2 m outer band
+  (≥ 0.42 m of visible frame) and a thin `emitWhite` reveal strip on each lip so the reveal never reads
+  as a black slit.
+- **Header**: a black housing across the lintel with the leaf track (channel + steel rail) along its
+  bottom and the full-width status bar behind a four-rail steel bezel, recessed 3 mm (a housed lamp, not
+  a flat square).
+- **Sill / threshold** for every kind: dark plate raised 1.2 cm spanning jamb to jamb on both faces,
+  with a lighter nosing along each edge (steel; thin yellow line on blast / bay, whose one hazard element
+  is the leaf band). Vertical-split doors: black slot + steel track edges; side-sliding: floor track.
 - **Leaves**: two per door, `THREE.InstancedMesh` per kind+split (`doors_leaves_standard_side`,
   `doors_leaves_blast_vertical`, `doors_leaves_hatch_side`, `doors_leaves_bay_vertical`, …). Standard /
-  hatch slide sideways into wall pockets; blast / bay split top / bottom (thick armoured slabs with
-  recessed panel lines, stiffener ribs, interlocking lugs and a black/yellow stripe band along the
-  meeting edge). Material `doorLeaf`: dark gunmetal, roughness 0.55, metalness 0.6, shared worn-metal
-  maps, per-instance tint.
-- **Status lights**: one `InstancedMesh` (`doors_status_lights`, unlit, HDR `instanceColor`): a bar in
-  the lintel housing and a small LED on the jamb control panel, on each face. Blue-white = ready / open,
-  red = locked, amber = cycling. Colours are > 1.0 so they bloom (threshold 1.15).
+  hatch: lighter gunmetal body with broad light-grey face insets, a steel meeting-edge bar and a
+  recessed latch channel carrying the **centre light seam** (a status-coloured strip that rides on the
+  leaf). Blast / bay: thick armoured slabs with `impMid` plates, stiffener ribs, interlocking lugs with
+  4 cm of relief over a black shadow gap and the black/yellow band along the meeting edge. Material
+  `doorLeaf`: roughness 0.45, metalness 0.7, shared worn-metal maps, per-instance tint. **Open leaves
+  never vanish**: side / top leaves stop with 10 cm of their edge (bar + seam / band) in the reveal, the
+  bottom leaf keeps 3.5 cm above the sill.
+- **Status lights**: one `InstancedMesh` (`doors_status_lights`, unlit, HDR `instanceColor`): the header
+  bar, two housed LEDs (control panel on +u, lamp on −u) per face, and one seam per standard / hatch
+  leaf. Blue-white = ready / open, red = locked, amber = cycling. Blue-white is > 1.15 so it blooms;
+  red/amber sit at 1.3 so ACES keeps them saturated.
+- **Variants by `to`** (per face): `to: null` → red cross-bar across the frame with a self-lit SEALED
+  decal (module material `doorDecal`, canvas atlas) and a red line, on top of the red header/seams/LEDs;
+  far room `*-bay` (standard / hatch kinds) → black/yellow apron 0.55 m into the room (`doorHazard`);
+  far room `d4-stairs` → stair pictogram plate on the −u jamb.
 - **Unpaired**: the lining spans just the declaring wall (2·WALL_T deep) and is capped with a sealed
   black slab, X-brace and red seal bar behind the leaves.
-- **Colliders**: jambs + lintel static via `ctx.kit.collider`; leaves dynamic in `result.colliders`
-  (`{min, max, tag: "door-leaf:<id>"}`, mutated in place every frame — parked out of the path once
-  open ≥ 0.85).
+- **Colliders**: jambs (incl. outer band) + lintel + sealed bar static via `ctx.kit.collider`; leaves
+  dynamic in `result.colliders` (`{min, max, tag: "door-leaf:<id>"}`, mutated in place every frame —
+  parked once open ≥ 0.85: side/top leaves at their visible stop, the bottom leaf below the floor).
 
-Draw calls: up to 6 kit merges for the whole system (`metal`, `paintedMetal`, `darkGloss`, `emitBlue`,
-`doorHazard` for blast/bay, `emitRedImp` for unpaired caps) + one instanced mesh per kind/split in use
-+ one status-light mesh (≤ 6 beyond the kit merges with every kind present).
+Draw calls: up to 8 kit merges for the whole system (`metal`, `paintedMetal`, `darkGloss`, `emitBlue`,
+`emitWhite`, `doorHazard`, `doorDecal`, `emitRedImp`) + one instanced mesh per kind/split in use + one
+status-light mesh (≤ 6 beyond the kit merges with every kind present). Two canvas textures (chevrons —
+shared with the dev shim's `hazard`/`hazardImp` when present — and the 512 × 256 decal atlas).
 
 ## Behaviour
 
@@ -98,8 +120,9 @@ Draw calls: up to 6 kit merges for the whole system (`metal`, `paintedMetal`, `d
 
 ## Harness views
 
-`sys-doors-standard-closed` (east lobby door from 4 m), `sys-doors-standard-open` (1.8 m, shoot with
-`SHOT_ADVANCE=2`), `sys-doors-blast` / `sys-doors-blast-open`, `sys-doors-blast-side`,
-`sys-doors-standard-side`, `sys-doors-stairs` / `sys-doors-stairs-open` (side-sliding leaves).
-`?only=d4-lobby,sys-doors` shows every lobby door locked-red (unpaired); the full configuration shows
-paired doors opening.
+`sys-doors-standard-closed` (east lobby door from 4 m), `sys-doors-standard-open` (1.8 m; the view
+carries `advance: 2` so the leaves are open), `sys-doors-blast` / `sys-doors-blast-open`,
+`sys-doors-blast-side`, `sys-doors-standard-side`, `sys-doors-stairs` / `sys-doors-stairs-open`
+(side-sliding leaves), `sys-doors-sealed` (the `to: null` corridor-end door from 4 m),
+`sys-doors-bay-apron` (corridor → cargo-bay door with its threshold apron). `?only=d4-lobby,sys-doors`
+shows every lobby door locked-red (unpaired); the full configuration shows paired doors opening.

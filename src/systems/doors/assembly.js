@@ -8,14 +8,15 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { Kit } from "../../kit.js";
 import { WALL_T, FRAME_W } from "./helper.js";
+import { DECALS } from "./materials.js";
 
 // Per-kind construction: lining = tunnel lining thickness (jambs + soffit), leafT = leaf thickness,
-// proud = how far the reveal frame stands off the wall face, bar = lintel status-light size.
+// proud = how far the reveal frame stands off the wall face, bar = lintel status-bar height.
 export const KIND_SPEC = {
-  standard: { lining: 0.06, leafT: 0.08, proud: 0.06, split: "side", bar: [0.7, 0.05], hazard: false },
-  hatch: { lining: 0.05, leafT: 0.06, proud: 0.05, split: "side", bar: [0.4, 0.04], hazard: false },
-  blast: { lining: 0.1, leafT: 0.16, proud: 0.1, split: "vertical", bar: [1.4, 0.07], hazard: true },
-  bay: { lining: 0.14, leafT: 0.16, proud: 0.14, split: "vertical", bar: [3.0, 0.12], hazard: true },
+  standard: { lining: 0.06, leafT: 0.08, proud: 0.06, split: "side", bar: 0.05, hazard: false },
+  hatch: { lining: 0.05, leafT: 0.06, proud: 0.05, split: "side", bar: 0.04, hazard: false },
+  blast: { lining: 0.1, leafT: 0.16, proud: 0.1, split: "vertical", bar: 0.08, hazard: true },
+  bay: { lining: 0.14, leafT: 0.16, proud: 0.14, split: "vertical", bar: 0.12, hazard: true },
 };
 // Bay doors carry their own w/h; their leaves share one geometry built at this size and scaled per
 // instance (all planned bays are within ±25 % of this aspect, so relief and stripes stay in proportion).
@@ -24,6 +25,9 @@ export const BAY_REF = { w: 13.5, h: 10 };
 export const SEAM = 0.004; // half gap at the meeting line of the two leaves
 export const RECESS = 0.02; // depth of the pocket slots cut into the lining
 export const OPEN_CLEAR = 0.85; // open fraction above which leaf colliders are parked out of the path
+export const VIS_EDGE = 0.1; // leaf edge left showing in the reveal when open (side leaves, top leaves)
+export const VIS_SILL = 0.035; // bottom leaf edge left above the sill when open
+export const OUTER_BAND = 0.2; // second surround band beyond FRAME_W (clamped to the wall available)
 
 export function doorColours(PALETTE) {
   const P = (k, fb) => (PALETTE && PALETTE[k] ? PALETTE[k] : new THREE.Color(fb));
@@ -34,19 +38,28 @@ export function doorColours(PALETTE) {
     black: P("impBlack", "#111214"),
     lining: P("impMid", "#5a5e66"),
     steel: P("steel", "#9ea3aa"),
-    core: P("impDark", "#33363c"),
-    plate: new THREE.Color("#666b74"),
-    kick: new THREE.Color("#454952"),
+    red: P("impRed", "#ff2a1a"),
+    core: new THREE.Color("#52565e"), // leaf body showing between the plates (panel lines)
+    plate: new THREE.Color("#a2a6ad"), // light-grey face inset
+    plateMid: new THREE.Color("#7c8088"), // armour plates on blast / bay leaves
+    kick: new THREE.Color("#62666e"),
     yellow: new THREE.Color("#e8b923"),
     stripeBlack: new THREE.Color("#0c0d10"),
     white: new THREE.Color("#ffffff"),
   };
 }
 
+// Half width (along n) of the pocket slot the leaves run in. Vertical leaves carry lugs / ribs.
+export function slotHalf(kind, split) {
+  const s = KIND_SPEC[kind];
+  return s.leafT / 2 + (split === "vertical" ? (s.hazard ? 0.05 : 0.02) : 0.01);
+}
+
 /**
  * Closed-position extents of ONE leaf in leaf-local coordinates (x across, y up, z = thickness).
  * side: the left leaf (x <= 0); the right leaf is this geometry rotated 180° about the vertical axis.
  * vertical: the bottom leaf; the top leaf is this geometry rotated 180° about the normal through (0, h/2).
+ * travel* = visible travel (the leaf edge stays in the reveal), park* = collider travel when clear.
  */
 export function leafLayout(kind, split, w, h) {
   const s = KIND_SPEC[kind];
@@ -54,9 +67,11 @@ export function leafLayout(kind, split, w, h) {
   const LJ = s.lining;
   const XW = hw - LJ + 0.01; // 1 cm into the jamb lining / pocket recess so no slit is ever visible
   if (split === "side") {
-    return { x0: -XW, x1: -SEAM, y0: 0.005, y1: h - LJ + 0.02, z0: -s.leafT / 2, z1: s.leafT / 2, travel: XW - SEAM };
+    const travel = XW - SEAM - VIS_EDGE;
+    return { x0: -XW, x1: -SEAM, y0: 0.005, y1: h - LJ + 0.02, z0: -s.leafT / 2, z1: s.leafT / 2, travel, park: travel };
   }
   const y1 = h / 2 - SEAM;
+  const up = h - LJ + 0.01 - VIS_EDGE - (h / 2 + SEAM); // top leaf's bottom edge ends VIS_EDGE below the soffit
   return {
     x0: -XW,
     x1: XW,
@@ -64,15 +79,18 @@ export function leafLayout(kind, split, w, h) {
     y1,
     z0: -s.leafT / 2,
     z1: s.leafT / 2,
-    travelDown: y1 - 0.01, // bottom leaf parks with its top edge 1 cm above the floor, inside the sill slot
-    travelUp: h - LJ + 0.01 - (h / 2 + SEAM), // top leaf's bottom edge ends inside the soffit slot
+    travelDown: y1 - VIS_SILL, // bottom leaf parks with VIS_SILL of its edge above the sill
+    parkDown: y1 + 0.03, // ... but its collider drops fully below the floor
+    travelUp: up,
+    parkUp: up,
   };
 }
 
-// Wall length needed beside the hole (beyond hw) for a side-sliding leaf to disappear into the wall.
+// Wall length needed beside the hole (beyond hw) for a side-sliding leaf to retract into the wall.
 export function sidePocketNeeded(kind, w) {
   const s = KIND_SPEC[kind];
-  return w / 2 - 2 * s.lining + 0.02 + 0.05;
+  const XW = w / 2 - s.lining + 0.01;
+  return 2 * XW - SEAM - VIS_EDGE - w / 2 + 0.05;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,9 +153,30 @@ export function hazardBand(x0, x1, y0, y1, z, pitch, flip) {
   return { yellow: yellow.length ? flatGeo(yellow) : null, black: black.length ? flatGeo(black) : null };
 }
 
+// Meeting-edge bar width (steel strip along the edge the two leaves meet at). Standard / hatch keep it
+// narrow so the light seam beside it is still inside the VIS_EDGE that shows when the leaf is parked.
+function meetBar(kind, split, w) {
+  if (KIND_SPEC[kind].hazard) return kind === "bay" ? 0.06 : 0.04;
+  return split === "side" ? Math.min(0.04, (w / 2) * 0.05) : 0.03;
+}
+
 /**
- * Detailed leaf geometry in leaf-local space (see leafLayout). Vertex colours carry plates / edge bars /
- * hazard stripes; the instanced material adds the worn-metal maps.
+ * Light seam on the meeting edge (standard / hatch): a thin status-coloured strip in a recessed channel,
+ * in leaf-local coordinates (centre + size). Hazard kinds carry the chevron band instead → null.
+ */
+export function leafSeam(kind, split, w, h) {
+  const s = KIND_SPEC[kind];
+  if (s.hazard) return null;
+  const L = leafLayout(kind, split, w, h);
+  const LT = s.leafT;
+  const MB = meetBar(kind, split, w);
+  if (split === "side") return { c: [L.x1 - MB - 0.02, (L.y0 + L.y1) / 2, 0], size: [0.012, L.y1 - L.y0 - 0.1, LT + 0.006] };
+  return { c: [0, L.y1 - MB - 0.024, 0], size: [L.x1 - L.x0 - 0.24, 0.012, LT + 0.006] };
+}
+
+/**
+ * Detailed leaf geometry in leaf-local space (see leafLayout). Vertex colours carry the light-grey
+ * face insets, edge bars and hazard stripes; the instanced material adds the worn-metal maps.
  */
 export function leafGeometry(kind, split, w, h, C) {
   const s = KIND_SPEC[kind];
@@ -155,84 +194,116 @@ export function leafGeometry(kind, split, w, h, C) {
     [-LT / 2, -coreZ],
     [coreZ, LT / 2],
   ];
+  const MB = meetBar(kind, split, w);
   if (split === "side") {
-    const W = L.x1 - L.x0;
     const H = L.y1 - L.y0;
-    const EB = Math.min(0.075, W * 0.08); // meeting-edge bar
-    box(L.x1 - EB, L.x1, L.y0, L.y1, -LT / 2, LT / 2, C.lip);
+    // steel meeting-edge bar, a touch proud of both faces (this is what stays visible when open)
+    box(L.x1 - MB, L.x1, L.y0, L.y1, -LT / 2 - 0.004, LT / 2 + 0.004, C.steel);
     box(L.x0, L.x0 + 0.03, L.y0, L.y1, -LT / 2, LT / 2, C.lip); // outer edge (into the pocket)
     const px0 = L.x0 + 0.05;
-    const px1 = L.x1 - EB - 0.025;
+    const px1 = L.x1 - MB - 0.04;
     const rows =
       H > 2.2
         ? [
-            [L.y0 + 0.03, L.y0 + 0.45],
-            [L.y0 + 0.48, L.y1 - 0.66],
-            [L.y1 - 0.63, L.y1 - 0.03],
+            [L.y0 + 0.03, L.y0 + 0.42, C.kick],
+            [L.y0 + 0.46, L.y1 - 0.5, C.plate],
+            [L.y1 - 0.46, L.y1 - 0.03, C.plateMid],
           ]
         : [
-            [L.y0 + 0.03, L.y0 + 0.32],
-            [L.y0 + 0.35, L.y1 - 0.03],
+            [L.y0 + 0.03, L.y0 + 0.3, C.kick],
+            [L.y0 + 0.34, L.y1 - 0.03, C.plate],
           ];
     for (const [zA, zB] of faces) {
-      rows.forEach(([ya, yb], ri) => {
-        if (ri === 1 && H > 2.2) {
-          const xm = (px0 + px1) / 2;
-          box(px0, xm - 0.012, ya, yb, zA, zB, C.plate);
-          box(xm + 0.012, px1, ya, yb, zA, zB, C.plate);
-          // thin raised grip bar across the groove at hand height
-          box(xm - 0.05, xm + 0.05, ya + 0.5, ya + 0.53, zA, zB + (zB > 0 ? 0.004 : -0.004), C.corner);
-        } else box(px0, px1, ya, yb, zA, zB, ri === 0 ? C.kick : C.plate);
-      });
+      for (const [ya, yb, col] of rows) box(px0, px1, ya, yb, zA, zB, col);
+      // recessed seam channel between the plates and the bar (the light seam instance sits in it)
+      box(L.x1 - MB - 0.032, L.x1 - MB - 0.006, L.y0 + 0.04, L.y1 - 0.04, zA, zB, C.black);
     }
   } else {
-    const MB = kind === "bay" ? 0.06 : 0.04; // meeting-edge bar
-    box(L.x0, L.x1, L.y1 - MB, L.y1, -LT / 2, LT / 2, C.lip);
-    const HB = s.hazard ? (kind === "bay" ? 0.5 : 0.24) : 0.1; // band height along the meeting edge
-    const bandY1 = L.y1 - MB - 0.015;
-    const bandY0 = bandY1 - HB;
+    const W = L.x1 - L.x0;
+    box(L.x0, L.x1, L.y1 - MB, L.y1, -LT / 2 - 0.004, LT / 2 + 0.004, C.steel); // meeting-edge bar
     const px0 = L.x0 + 0.06;
     const px1 = L.x1 - 0.06;
-    const py0 = L.y0 + 0.04;
-    const py1 = bandY0 - 0.03;
-    const cols = Math.max(2, Math.round((px1 - px0) / (kind === "bay" ? 2.4 : 1.3)));
-    const rowsN = py1 - py0 > 1.2 ? 2 : 1;
-    const gap = kind === "bay" ? 0.06 : 0.035;
-    const cw = (px1 - px0 - gap * (cols - 1)) / cols;
-    const rh = (py1 - py0 - gap * (rowsN - 1)) / rowsN;
-    for (const [zA, zB] of faces) {
-      for (let c = 0; c < cols; c++) {
-        for (let r = 0; r < rowsN; r++) {
-          const xa = px0 + c * (cw + gap);
-          const ya = py0 + r * (rh + gap);
-          box(xa, xa + cw, ya, ya + rh, zA, zB, C.plate);
-        }
-      }
-      box(px0, px1, bandY0, bandY1, zA, zB, s.hazard ? C.stripeBlack : C.lip);
-    }
     if (s.hazard) {
+      // the door's one hazard element: black band with yellow chevrons along the meeting edge
+      const HB = kind === "bay" ? 0.5 : 0.24;
+      const bandY1 = L.y1 - MB - 0.015;
+      const bandY0 = bandY1 - HB;
+      for (const [zA, zB] of faces) box(px0, px1, bandY0, bandY1, zA, zB, C.stripeBlack);
       const pitch = kind === "bay" ? 0.36 : 0.17;
       for (const sgn of [-1, 1]) {
         const { yellow, black } = hazardBand(px0 + 0.02, px1 - 0.02, bandY0 + 0.02, bandY1 - 0.02, sgn * (LT / 2 + 0.002), pitch, sgn < 0);
         if (yellow) k.add("leaf", yellow, { color: C.yellow, uv: "keep" });
         if (black) k.add("leaf", black, { color: C.stripeBlack, uv: "keep" });
       }
-    }
-    // stiffener ribs in the column gaps, proud of the plates
-    for (let c = 1; c < cols; c++) {
-      const xg = px0 + c * (cw + gap) - gap / 2;
-      box(xg - 0.012, xg + 0.012, py0, py1, -(LT / 2 + 0.008), LT / 2 + 0.008, C.corner);
-    }
-    // locking lugs straddling the meeting edge; asymmetric spacing so the top leaf's mirrored set interlocks
-    const nl = kind === "bay" ? 5 : 3;
-    const lw = kind === "bay" ? 0.5 : 0.24;
-    for (let i = 0; i < nl; i++) {
-      const xc = L.x0 + ((i + 0.3) / nl) * (L.x1 - L.x0);
-      box(xc - lw / 2, xc + lw / 2, L.y1 - MB - HB * 0.55, L.y1 - 0.005, -(LT / 2 + 0.012), LT / 2 + 0.012, C.steel);
+      // armour plates below the band
+      const py0 = L.y0 + 0.04;
+      const py1 = bandY0 - 0.03;
+      const cols = Math.max(2, Math.round((px1 - px0) / (kind === "bay" ? 2.4 : 1.3)));
+      const rowsN = py1 - py0 > 1.2 ? 2 : 1;
+      const gap = kind === "bay" ? 0.06 : 0.035;
+      const cw = (px1 - px0 - gap * (cols - 1)) / cols;
+      const rh = (py1 - py0 - gap * (rowsN - 1)) / rowsN;
+      for (const [zA, zB] of faces) {
+        for (let c = 0; c < cols; c++) {
+          for (let r = 0; r < rowsN; r++) {
+            const xa = px0 + c * (cw + gap);
+            const ya = py0 + r * (rh + gap);
+            box(xa, xa + cw, ya, ya + rh, zA, zB, C.plateMid);
+          }
+        }
+      }
+      // stiffener ribs in the column gaps, proud of the plates
+      for (let c = 1; c < cols; c++) {
+        const xg = px0 + c * (cw + gap) - gap / 2;
+        box(xg - 0.012, xg + 0.012, py0, py1, -(LT / 2 + 0.008), LT / 2 + 0.008, C.corner);
+      }
+      // interlocking lugs straddling the meeting edge: 4 cm of relief over a black shadow gap;
+      // asymmetric spacing so the mirrored top leaf's set interlocks
+      const nl = kind === "bay" ? 5 : 3;
+      const lw = kind === "bay" ? 0.5 : 0.24;
+      const ly0 = L.y1 - MB - HB * 0.55;
+      for (let i = 0; i < nl; i++) {
+        const xc = L.x0 + ((i + 0.3) / nl) * (L.x1 - L.x0);
+        box(xc - lw / 2 - 0.02, xc + lw / 2 + 0.02, ly0 - 0.02, L.y1, -(LT / 2 + 0.012), LT / 2 + 0.012, C.black);
+        box(xc - lw / 2, xc + lw / 2, ly0, L.y1 - 0.005, -(LT / 2 + 0.04), LT / 2 + 0.04, C.steel);
+        // bevel line across the lug face
+        box(xc - lw / 2 + 0.02, xc + lw / 2 - 0.02, ly0 + (L.y1 - ly0) * 0.5 - 0.004, ly0 + (L.y1 - ly0) * 0.5 + 0.004, -(LT / 2 + 0.041), LT / 2 + 0.041, C.corner);
+      }
+    } else {
+      // standard / hatch: latch channel under the meeting bar (the light seam instance runs in it),
+      // light-grey face insets in two columns
+      const chY1 = L.y1 - MB - 0.008;
+      const chY0 = chY1 - 0.034;
+      const py0 = L.y0 + 0.04;
+      const py1 = chY0 - 0.035;
+      const cols = W > 1.6 ? 2 : 1;
+      const gap = 0.03;
+      const cw = (px1 - px0 - gap * (cols - 1)) / cols;
+      const rowsN = py1 - py0 > 1.0 ? 2 : 1;
+      const rh = (py1 - py0 - gap * (rowsN - 1)) / rowsN;
+      for (const [zA, zB] of faces) {
+        box(L.x0 + 0.1, L.x1 - 0.1, chY0, chY1, zA, zB, C.black);
+        for (let c = 0; c < cols; c++) {
+          for (let r = 0; r < rowsN; r++) {
+            const xa = px0 + c * (cw + gap);
+            const ya = py0 + r * (rh + gap);
+            box(xa, xa + cw, ya, ya + rh, zA, zB, r === 0 && rowsN > 1 ? C.kick : C.plate);
+          }
+        }
+      }
     }
   }
   const g = mergeGeometries(k.groups.get("leaf"), false);
   g.computeBoundingSphere();
+  return g;
+}
+
+// Plane geometry with UVs pointing at one decal-atlas cell (w × h metres, facing +z).
+function decalPlane(name, w, h) {
+  const r = DECALS[name];
+  const g = new THREE.PlaneGeometry(w, h);
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, r.u0 + (r.u1 - r.u0) * uv.getX(i), r.v0 + (r.v1 - r.v0) * uv.getY(i));
   return g;
 }
 
@@ -242,15 +313,17 @@ export function leafGeometry(kind, split, w, h, C) {
 /**
  * @param {Kit} kit module kit
  * @param {object} C colours from doorColours()
- * @param {object} d { pos:[x,y,z], U:Vector3, N:Vector3, w, h, kind, spec, split, paired,
- *                     faces:[{ s:-1|1, top:number }] }   top = frame top (v), already clamped to the room
+ * @param {object} d { pos:[x,y,z], U:Vector3, N:Vector3, w, h, kind, spec, split, paired, leafN,
+ *                     faces:[{ s:-1|1, top, ceil, avail:[neg,plus], sealed, bay, stairs }] }
+ *                   top = frame top (v) already clamped to the room, avail = wall beside the hole (m),
+ *                   sealed = `to: null` door (red bar + SEALED plate), bay = leads into a bay (hazard
+ *                   apron), stairs = leads to the stairs (pictogram plate)
  * @returns {{ lights: {pos:number[], size:number[], role:string, face:number}[] }}
  */
 export function buildStatic(kit, C, d) {
   const { w, h, kind, spec, split, paired } = d;
   const hw = w / 2;
   const LJ = spec.lining;
-  const LT = spec.leafT;
   const PR = spec.proud;
   const T = WALL_T;
   const F = FRAME_W;
@@ -272,13 +345,24 @@ export function buildStatic(kit, C, d) {
     const [min, max] = mm(u0, u1, v0, v1, n0, n1);
     kit.collider(min, max, tag);
   };
+  // decal plane facing the room on face s (x → s·U so the text reads left to right from inside)
+  const decal = (name, pw, ph, uu, vv, nn, s) => {
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(d.U.clone().multiplyScalar(s), new THREE.Vector3(0, 1, 0), d.N.clone().multiplyScalar(s)));
+    kit.add("doorDecal", decalPlane(name, pw, ph), { pos: P(uu, vv, nn), quat: q, uv: "keep" });
+  };
   const lights = [];
+  const blackOpts = { color: C.black, texel: 1 };
+  const steelOpts = { color: C.steel, texel: 3 };
+  const lipOpts = { color: C.lip, texel: 1 };
+  const frameOpts = { color: C.frame, texel: 1 };
+  const outerBand = (f) => Math.max(0, Math.min(OUTER_BAND, Math.min(f.avail[0], f.avail[1]) - F - 0.02));
+  const OBmax = Math.max(0, ...d.faces.map(outerBand));
 
   // ---- tunnel lining between the two inner faces (unpaired: the declaring wall, capped behind)
   const nA = -T + 0.01;
   const nB = paired ? T - 0.01 : T - 0.03;
   const zc = d.leafN; // leaf plane centre along n (0 when paired; pulled toward room A when capped)
-  const slot = LT / 2 + (split === "vertical" ? 0.02 : 0.01); // half width of the pocket slots (vertical leaves carry lugs)
+  const slot = slotHalf(kind, split);
   const s0 = zc - slot;
   const s1 = zc + slot;
   const liningOpts = { color: C.lining, texel: 1.2 };
@@ -296,7 +380,8 @@ export function buildStatic(kit, C, d) {
       // guide rails on both faces of the leaf plane (the leaf edge runs inside them)
       for (const q of [-1, 1]) {
         const r0 = zc + q * (slot + 0.005);
-        const r1 = zc + q * (slot + 0.04);
+        const r1 = Math.max(nA, Math.min(nB, zc + q * (slot + 0.04)));
+        if (Math.abs(r1 - r0) < 0.006 || (q < 0 && r1 > r0) || (q > 0 && r1 < r0)) continue;
         bx("metal", sgn * (hw - LJ - 0.035), uIn + sgn * 0.005, 0.03, h - LJ - 0.02, r0, r1, { color: C.lip, texel: 1 });
       }
     }
@@ -308,29 +393,30 @@ export function buildStatic(kit, C, d) {
     bx("paintedMetal", -(hw + 0.01), hw + 0.01, h - LJ + RECESS, h + 0.01, s0, s1, slotOpts);
   } else bx("metal", -(hw + 0.01), hw + 0.01, h - LJ, h + 0.01, nA, nB, liningOpts);
 
-  // ---- threshold plate (sill), spanning the frames' footprint; hazard chevrons on blast / bay
+  // ---- sill: raised dark plate spanning the whole visible frame on both faces, lighter nosing
+  // along each edge (steel; yellow line on blast / bay — the leaf band is their hazard element)
   const nT0 = -(T + PR);
   const nT1 = paired ? T + PR : nB;
-  const sillMat = spec.hazard ? "doorHazard" : "metal";
-  const sillOpts = spec.hazard ? { color: C.white, texel: kind === "bay" ? 0.5 : 1 } : { color: C.lip, texel: 1 };
+  const sillU = hw + F + OBmax;
+  bx("metal", -sillU, sillU, -0.04, 0.012, nT0, nT1, lipOpts);
+  const noseMat = spec.hazard ? "paintedMetal" : "metal";
+  const noseOpts = spec.hazard ? { color: C.yellow, texel: 2 } : steelOpts;
+  bx(noseMat, -sillU, sillU, 0.012, 0.018, nT0, nT0 + 0.025, noseOpts);
+  if (paired) bx(noseMat, -sillU, sillU, 0.012, 0.018, nT1 - 0.025, nT1, noseOpts);
   if (split === "vertical") {
-    bx(sillMat, -(hw + F), hw + F, -0.04, 0.025, nT0, s0, sillOpts);
-    bx(sillMat, -(hw + F), hw + F, -0.04, 0.025, s1, nT1, sillOpts);
-    bx("paintedMetal", -(hw + F), hw + F, -0.04, 0.005, s0, s1, slotOpts);
+    bx("paintedMetal", -(hw - LJ), hw - LJ, -0.04, 0.004, s0, s1, slotOpts);
     // steel edge strips either side of the slot so the sill reads as a machined track
-    for (const q of [-1, 1]) bx("metal", -(hw - LJ), hw - LJ, 0.025, 0.04, zc + q * slot, zc + q * (slot + 0.03), { color: C.steel, texel: 2 });
+    for (const q of [-1, 1]) bx("metal", -(hw - LJ), hw - LJ, 0.012, 0.02, zc + q * slot, zc + q * (slot + 0.03), steelOpts);
   } else {
-    bx(sillMat, -(hw + F), hw + F, -0.04, 0.025, nT0, nT1, sillOpts);
     // shallow floor track under the leaf plane
-    bx("metal", -(hw - LJ), hw - LJ, 0.025, 0.04, s0 - 0.02, s1 + 0.02, { color: C.black, texel: 2 });
+    bx("metal", -(hw - LJ), hw - LJ, 0.012, 0.02, s0 - 0.02, s1 + 0.02, { color: C.black, texel: 2 });
   }
 
   // ---- unpaired: sealed slab behind the leaves (future expansion / neighbour not built)
   if (!paired) {
-    bx("paintedMetal", -(hw - LJ + 0.005), hw - LJ + 0.005, -0.02, h - LJ + 0.005, s1 + 0.02, nB, { color: C.black, texel: 1 });
-    const capN = s1 + 0.02; // cap slab front face (the slab is ≥ 3 cm thick behind it)
-    // X-brace (1 cm proud of the slab, 2 cm embedded) + red seal bar 1 cm in front of the brace, both
-    // sized with the opening; everything stays behind the leaf slot so the closed leaves never touch it
+    const capN = s1 + 0.01; // cap slab front face
+    bx("paintedMetal", -(hw - LJ + 0.005), hw - LJ + 0.005, -0.02, h - LJ + 0.005, capN, nB, { color: C.black, texel: 1 });
+    // X-brace (1 cm proud of the slab) + red seal bar, sized with the opening
     const len = Math.min(w, h) * 0.8;
     const braceT = Math.max(0.09, h * 0.025);
     const axis = Math.abs(d.N.x) > 0.5 ? "x" : "z";
@@ -345,61 +431,125 @@ export function buildStatic(kit, C, d) {
     bx("emitRedImp", -sw, sw, h * 0.5 - sh, h * 0.5 + sh, capN - 0.02, capN - 0.01, {});
   }
 
-  // ---- reveal frames on each room face
+  // ---- per room face: reveal frame, outer band, header track + housed status bar, panel, variants
   for (const f of d.faces) {
     const s = f.s;
     const top = f.top;
-    const embedN = s * (T - 0.02);
-    const midN = s * (T + PR * 0.55);
-    const faceN = s * (T + PR);
-    const frameOpts = { color: C.frame, texel: 1 };
-    const lipOpts = { color: C.lip, texel: 1 };
+    const OB = outerBand(f);
+    const embedN = T - 0.02;
+    const midN = T + PR * 0.55;
+    const faceN = T + PR;
+    const nn = (a) => s * a; // n coordinate on this face (mm() sorts min/max)
     for (const sgn of [-1, 1]) {
-      // outer plate: from the lining's inner face out to FRAME_W beyond the hole
-      bx("paintedMetal", sgn * (hw - LJ), sgn * (hw + F), 0.025, h - LJ, embedN, midN, frameOpts);
+      // inner reveal plate: from the lining's inner face out to FRAME_W beyond the hole
+      bx("paintedMetal", sgn * (hw - LJ), sgn * (hw + F), 0.025, h - LJ, nn(embedN), nn(midN), frameOpts);
       // raised lip hugging the opening
-      bx("paintedMetal", sgn * (hw - LJ), sgn * (hw - LJ + 0.08), 0.025, h - LJ + 0.08, midN - s * 0.005, faceN, lipOpts);
-      // recessed black seam down the outer plate
-      bx("paintedMetal", sgn * (hw + F - 0.051), sgn * (hw + F - 0.039), 0.08, h - LJ - 0.04, midN - s * 0.002, midN + s * 0.004, { color: C.black, texel: 1 });
+      bx("paintedMetal", sgn * (hw - LJ), sgn * (hw - LJ + 0.08), 0.025, h - LJ + 0.08, nn(midN - 0.005), nn(faceN), lipOpts);
+      // lit reveal strip on the lip, right at the opening edge (the reveal is never a black slit)
+      bx("emitWhite", sgn * (hw - LJ + 0.006), sgn * (hw - LJ + 0.02), 0.2, h - LJ - 0.2, nn(faceN - 0.012), nn(faceN + 0.002), { uv: "keep" });
+      // recessed black seam down the plate
+      bx("paintedMetal", sgn * (hw + F - 0.051), sgn * (hw + F - 0.039), 0.08, h - LJ - 0.04, nn(midN - 0.002), nn(midN + 0.004), blackOpts);
       // bolt heads
       for (const fr of [0.12, 0.5, 0.88]) {
         const v = 0.025 + (h - LJ - 0.05) * fr;
-        bx("metal", sgn * (hw + F - 0.135), sgn * (hw + F - 0.105), v - 0.015, v + 0.015, midN, midN + s * 0.012, { color: C.steel, texel: 3 });
+        bx("metal", sgn * (hw + F - 0.135), sgn * (hw + F - 0.105), v - 0.015, v + 0.015, nn(midN), nn(midN + 0.012), steelOpts);
       }
     }
-    // lintel plate + lip
-    bx("paintedMetal", -(hw + F), hw + F, h - LJ, top, embedN, midN, frameOpts);
-    bx("paintedMetal", -(hw - LJ + 0.08), hw - LJ + 0.08, h - LJ, h - LJ + 0.08, midN - s * 0.005, faceN, lipOpts);
+    // lintel plate
+    bx("paintedMetal", -(hw + F), hw + F, h - LJ, top, nn(embedN), nn(midN), frameOpts);
     // heavy corner blocks
     for (const sgn of [-1, 1]) {
-      bx("paintedMetal", sgn * (hw + F - 0.2), sgn * (hw + F - 0.01), top - 0.2, top - 0.01, midN - s * 0.005, faceN + s * 0.01, { color: C.corner, texel: 1 });
+      bx("paintedMetal", sgn * (hw + F - 0.2), sgn * (hw + F - 0.01), top - 0.2, top - 0.01, nn(midN - 0.005), nn(faceN + 0.01), { color: C.corner, texel: 1 });
     }
-    // lintel status-light housing + bar
-    const bw = spec.bar[0];
-    const bh = spec.bar[1];
-    const hv0 = h - LJ + 0.09;
-    const hv1 = top - 0.02;
-    if (hv1 - hv0 > bh + 0.02) {
-      bx("paintedMetal", -(bw / 2 + 0.08), bw / 2 + 0.08, hv0, hv1, midN, faceN + s * 0.03, { color: C.black, texel: 1 });
-      lights.push({ pos: P(0, (hv0 + hv1) / 2, faceN + s * 0.04), size: [bw, bh, 0.02], role: "bar", face: s });
+    // second, stepped-back surround band (≥ 0.4 m of visible frame in total) with a panel groove
+    if (OB >= 0.05) {
+      const topO = Math.min(top + OB, f.ceil - 0.02);
+      const oN1 = T + PR * 0.5;
+      for (const sgn of [-1, 1]) {
+        bx("paintedMetal", sgn * (hw + F), sgn * (hw + F + OB), 0, topO, nn(embedN), nn(oN1), lipOpts);
+        bx("paintedMetal", sgn * (hw + F + OB - 0.045), sgn * (hw + F + OB - 0.033), 0.1, topO - 0.08, nn(oN1 - 0.004), nn(oN1 + 0.002), blackOpts);
+      }
+      if (topO > top + 0.01) bx("paintedMetal", -(hw + F + OB), hw + F + OB, top, topO, nn(embedN), nn(oN1), lipOpts);
+      if (topO > top + 0.07) bx("paintedMetal", -(hw + F + OB - 0.08), hw + F + OB - 0.08, topO - 0.045, topO - 0.033, nn(oN1 - 0.004), nn(oN1 + 0.002), blackOpts);
+    }
+    // header: black housing right above the soffit (it is the lintel lip) with the leaf track
+    // (channel + steel rail) along its bottom and the full-width status bar behind a steel bezel above
+    const hv0 = h - LJ;
+    const hv1 = Math.min(top - 0.02, h - LJ + 0.2);
+    const bw = Math.max(0.4, w - 0.5);
+    if (hv1 - hv0 >= 0.085) {
+      const HW = Math.max(hw - LJ + 0.08, hw + F - 0.22); // clear of the corner blocks
+      bx("paintedMetal", -HW, HW, hv0, hv1, nn(midN - 0.005), nn(faceN + 0.03), blackOpts);
+      bx("metal", -(hw - LJ + 0.03), hw - LJ + 0.03, hv0 + 0.006, hv0 + 0.036, nn(faceN + 0.03), nn(faceN + 0.038), { color: C.corner, texel: 2 });
+      bx("metal", -(hw - LJ), hw - LJ, hv0 + 0.014, hv0 + 0.028, nn(faceN + 0.038), nn(faceN + 0.046), steelOpts);
+      const avail = hv1 - (hv0 + 0.044);
+      const bh = Math.min(spec.bar, Math.max(0.025, avail - 0.03));
+      const lv = hv0 + 0.044 + avail / 2;
+      // bezel: four steel rails around a recess; the bar sits 3 mm below the bezel face
+      const iu = bw / 2 + 0.006;
+      const iv0 = lv - bh / 2 - 0.006;
+      const iv1 = lv + bh / 2 + 0.006;
+      const ou = iu + 0.014;
+      bx("metal", -ou, ou, iv1, iv1 + 0.012, nn(faceN + 0.03), nn(faceN + 0.04), steelOpts);
+      bx("metal", -ou, ou, iv0 - 0.012, iv0, nn(faceN + 0.03), nn(faceN + 0.04), steelOpts);
+      bx("metal", -ou, -iu, iv0, iv1, nn(faceN + 0.03), nn(faceN + 0.04), steelOpts);
+      bx("metal", iu, ou, iv0, iv1, nn(faceN + 0.03), nn(faceN + 0.04), steelOpts);
+      lights.push({ pos: P(0, lv, nn(faceN + 0.034)), size: [bw, bh, 0.006], role: "bar", face: s });
     } else {
-      lights.push({ pos: P(0, (hv0 + hv1) / 2, faceN + s * 0.01), size: [bw, Math.max(0.03, hv1 - hv0 - 0.01), 0.02], role: "bar", face: s });
+      // very low ceiling: plain lintel lip carrying the bar
+      bx("paintedMetal", -(hw - LJ + 0.08), hw - LJ + 0.08, hv0, Math.max(hv1, hv0 + 0.05), nn(midN - 0.005), nn(faceN), lipOpts);
+      lights.push({ pos: P(0, hv0 + 0.03, nn(faceN + 0.01)), size: [bw, 0.025, 0.02], role: "bar", face: s });
     }
-    // door control panel on the +u jamb: matte black box, status LED, three keys
+    // door control panel on the +u jamb (matte black, housed status LED, three keys) and a second
+    // housed LED on the -u jamb so the state reads from either side of the frame
     const pu0 = hw + 0.04;
     const pu1 = hw + F - 0.03;
     const pc = (pu0 + pu1) / 2;
-    bx("darkGloss", pu0, pu1, 1.02, 1.34, midN, midN + s * 0.03, {});
-    lights.push({ pos: P(pc, 1.28, midN + s * 0.036), size: [0.07, 0.035, 0.012], role: "led", face: s });
-    for (const du of [-0.04, 0, 0.04]) bx("emitBlue", pc + du - 0.012, pc + du + 0.012, 1.11, 1.135, midN + s * 0.03, midN + s * 0.038, {});
-    bx("metal", pc - 0.05, pc + 0.05, 1.05, 1.08, midN + s * 0.03, midN + s * 0.034, { color: C.steel, texel: 3 });
+    bx("darkGloss", pu0, pu1, 1.02, 1.34, nn(midN), nn(midN + 0.03), {});
+    for (const du of [-0.04, 0, 0.04]) bx("emitBlue", pc + du - 0.012, pc + du + 0.012, 1.11, 1.135, nn(midN + 0.03), nn(midN + 0.038), {});
+    bx("metal", pc - 0.05, pc + 0.05, 1.05, 1.08, nn(midN + 0.03), nn(midN + 0.034), steelOpts);
+    for (const side of [1, -1]) {
+      const cu = side * pc;
+      if (side < 0) bx("paintedMetal", -pu1, -pu0, 1.22, 1.34, nn(midN), nn(midN + 0.03), blackOpts);
+      // LED bezel (steel frame) + recessed LED
+      const lw = 0.08;
+      const lh = 0.035;
+      bx("metal", cu - lw / 2 - 0.014, cu + lw / 2 + 0.014, 1.28 - lh / 2 - 0.012, 1.28 - lh / 2 - 0.002, nn(midN + 0.03), nn(midN + 0.04), steelOpts);
+      bx("metal", cu - lw / 2 - 0.014, cu + lw / 2 + 0.014, 1.28 + lh / 2 + 0.002, 1.28 + lh / 2 + 0.012, nn(midN + 0.03), nn(midN + 0.04), steelOpts);
+      bx("metal", cu - lw / 2 - 0.014, cu - lw / 2 - 0.002, 1.28 - lh / 2 - 0.002, 1.28 + lh / 2 + 0.002, nn(midN + 0.03), nn(midN + 0.04), steelOpts);
+      bx("metal", cu + lw / 2 + 0.002, cu + lw / 2 + 0.014, 1.28 - lh / 2 - 0.002, 1.28 + lh / 2 + 0.002, nn(midN + 0.03), nn(midN + 0.04), steelOpts);
+      lights.push({ pos: P(cu, 1.28, nn(midN + 0.034)), size: [lw, lh, 0.006], role: "led", face: s });
+    }
+    // stairs: pictogram plate on the -u jamb reveal
+    if (f.stairs) {
+      bx("paintedMetal", -(hw - LJ + 0.225), -(hw - LJ + 0.085), 1.51, 1.69, nn(midN), nn(midN + 0.008), blackOpts);
+      decal("stairs", 0.12, 0.12, -(hw - LJ + 0.155), 1.6, nn(midN + 0.0095), s);
+    }
+    // leads into a bay: wide black/yellow threshold apron on this side (the door's hazard element)
+    if (f.bay) {
+      bx("doorHazard", -(hw + F + OB), hw + F + OB, -0.04, 0.014, nn(T + PR * 0.3), nn(T + PR + 0.55), { color: C.white, texel: 0.5 });
+      bx("metal", -(hw + F + OB), hw + F + OB, 0.014, 0.02, nn(T + PR + 0.53), nn(T + PR + 0.55), steelOpts);
+    }
+    // sealed (`to: null`): red cross-bar bolted across the frame with a lit SEALED plate + red line
+    if (f.sealed) {
+      const BH = Math.min(0.4, 0.24 + Math.max(0, w - 2.4) * 0.06);
+      const bv0 = 1.18 - BH / 2;
+      const bv1 = 1.18 + BH / 2;
+      const bu = hw + F + OB - 0.02;
+      bx("paintedMetal", -bu, bu, bv0, bv1, nn(faceN + 0.03), nn(faceN + 0.11), { color: C.red, texel: 1 });
+      for (const sgn of [-1, 1]) bx("paintedMetal", sgn * (bu - 0.1), sgn * bu, bv0 - 0.04, bv1 + 0.04, nn(embedN), nn(faceN + 0.12), blackOpts);
+      bx("emitRedImp", -(hw + F * 0.6), hw + F * 0.6, bv0 + 0.012, bv0 + 0.026, nn(faceN + 0.11), nn(faceN + 0.116), {});
+      const ph = BH - 0.06;
+      decal("sealed", ph * DECALS.sealed.aspect, ph, 0, 1.18 + 0.01, nn(faceN + 0.111), s);
+      coll(-bu, bu, bv0 - 0.04, bv1 + 0.04, nn(T), nn(faceN + 0.12), "door-sealed-bar");
+    }
   }
 
   // ---- static colliders: jambs + lintel (the leaves are dynamic, returned by the system)
   const cn0 = -(T + PR);
   const cn1 = paired ? T + PR : T;
-  for (const sgn of [-1, 1]) coll(sgn * (hw - LJ), sgn * (hw + F), 0, h + F, cn0, cn1, "door-jamb");
-  coll(-(hw + F), hw + F, h - LJ, h + F, cn0, cn1, "door-lintel");
+  for (const sgn of [-1, 1]) coll(sgn * (hw - LJ), sgn * (hw + F + OBmax), 0, h + F, cn0, cn1, "door-jamb");
+  coll(-(hw + F + OBmax), hw + F + OBmax, h - LJ, h + F, cn0, cn1, "door-lintel");
 
   return { lights };
 }

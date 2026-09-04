@@ -7,7 +7,7 @@
 import * as THREE from "three";
 import { doorHole, WALL_T, FRAME_W } from "./helper.js";
 import { doorMaterials } from "./materials.js";
-import { KIND_SPEC, BAY_REF, OPEN_CLEAR, doorColours, leafLayout, leafGeometry, buildStatic, sidePocketNeeded } from "./assembly.js";
+import { KIND_SPEC, BAY_REF, OPEN_CLEAR, doorColours, leafLayout, leafGeometry, leafSeam, slotHalf, buildStatic, sidePocketNeeded } from "./assembly.js";
 
 export const TRIGGER_RADIUS = 2.6; // m, horizontal distance from the opening centre (either side)
 export const EASE_SECONDS = 0.6; // full open / close travel
@@ -29,23 +29,30 @@ const _m = new THREE.Matrix4();
 const _v = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 
-// Wall length available beside the hole (beyond hw) along -U / +U, limited by every declaring room.
-function pocketAvail(list, hw, U) {
+// Wall length available beside the hole (beyond hw) along -U / +U in one declaring room.
+function wallBeside(room, door, hw, U) {
+  const b = room.bounds;
+  if (!b) return [Infinity, Infinity];
   const axis = Math.abs(U.x) > 0.5 ? 0 : 2;
   const sign = axis === 0 ? U.x : U.z;
+  const c = door.pos[axis];
+  const plus = sign > 0 ? b.max[axis] - c : c - b.min[axis];
+  const minus = sign > 0 ? c - b.min[axis] : b.max[axis] - c;
+  return [minus - hw, plus - hw];
+}
+// ... limited by every declaring room (side pockets need wall on both sides in both rooms).
+function pocketAvail(list, hw, U) {
   let neg = Infinity;
   let pos = Infinity;
   for (const { room, door } of list) {
-    const b = room.bounds;
-    if (!b) continue;
-    const c = door.pos[axis];
-    const plus = sign > 0 ? b.max[axis] - c : c - b.min[axis];
-    const minus = sign > 0 ? c - b.min[axis] : b.max[axis] - c;
-    pos = Math.min(pos, plus - hw);
-    neg = Math.min(neg, minus - hw);
+    const [a, b] = wallBeside(room, door, hw, U);
+    neg = Math.min(neg, a);
+    pos = Math.min(pos, b);
   }
   return [neg, pos];
 }
+const isBay = (id) => typeof id === "string" && /-bay$/.test(id);
+const isStairs = (id) => typeof id === "string" && /stairs/.test(id);
 
 export default {
   id: "sys-doors",
@@ -64,6 +71,10 @@ export default {
     // side-sliding leaves (the stairs door has wall pockets on both sides)
     "sys-doors-stairs": { pos: [7, -72, 176.5], yaw: 180, pitch: 2 },
     "sys-doors-stairs-open": { pos: [7, -72, 179.2], yaw: 180, pitch: 2, advance: 2 },
+    // `to: null` door at the starboard corridor end (SEALED bar, red header / seams / LEDs) from 4 m
+    "sys-doors-sealed": { pos: [136, -72, 171.75], yaw: -90, pitch: 2 },
+    // corridor → cargo bay door: black/yellow threshold apron on the corridor side
+    "sys-doors-bay-apron": { pos: [111, -72, 173.2], yaw: 0, pitch: -9 },
   },
   build(ctx) {
     const { kit, PALETTE, group, world, materials } = ctx;
@@ -132,11 +143,25 @@ export default {
         }
       }
       const paired = !!B;
-      const leafN = paired ? 0 : Math.min(0, WALL_T - 0.03 - spec.leafT / 2 - 0.07);
+      // unpaired: pull the leaf plane toward the declaring room so the sealed cap fits behind the slot
+      const leafN = paired ? 0 : Math.min(0, WALL_T - 0.03 - 0.03 - slotHalf(kind, split));
       const faces = [];
-      const faceTop = (room) => Math.min(hole.h + FRAME_W, room.bounds ? room.bounds.max[1] - pos[1] - 0.02 : hole.h + FRAME_W);
-      faces.push({ s: -1, top: faceTop(A.room) });
-      if (B) faces.push({ s: 1, top: faceTop(B.room) });
+      const ceilOf = (room) => (room.bounds ? room.bounds.max[1] - pos[1] : Infinity);
+      // frame top: FRAME_W above the hole, but never inside a room's ceiling slab (rooms hang their
+      // visible ceiling up to ~0.12 m below bounds.max.y)
+      const face = (s, mine, other, otherId) => ({
+        s,
+        top: Math.min(hole.h + FRAME_W, ceilOf(mine.room) - 0.14),
+        ceil: ceilOf(mine.room) - 0.12,
+        avail: wallBeside(mine.room, mine.door, hole.w / 2, U),
+        // variants by `to`: sealed future-expansion door, plain door into a bay (blast / bay leaves
+        // already carry their one hazard element, the meeting-edge band), door to the stairs
+        sealed: !paired && (mine.door.to === null || mine.door.to === undefined),
+        bay: isBay(otherId) && !spec.hazard,
+        stairs: isStairs(otherId) && !isStairs(mine.room.id),
+      });
+      faces.push(face(-1, A, B, B ? B.room.id : A.door.to));
+      if (B) faces.push(face(1, B, A, A.room.id));
       const { lights } = buildStatic(kit, C, { pos, U, N, w: hole.w, h: hole.h, kind, spec, split, paired, leafN, faces });
 
       const rot = new THREE.Matrix4().makeBasis(U, UP, N);
@@ -185,21 +210,24 @@ export default {
       }
       const S = new THREE.Matrix4().makeScale(sx, sy, 1);
       const plane = new THREE.Matrix4().makeTranslation(0, 0, leafN);
+      // travel = visible travel (VIS_EDGE of the leaf stays in the reveal), park = collider travel
       const defs =
         split === "side"
           ? [
-              { R: new THREE.Matrix4(), dir: new THREE.Vector3(-1, 0, 0), travel: L.travel },
-              { R: new THREE.Matrix4().makeRotationY(Math.PI), dir: new THREE.Vector3(1, 0, 0), travel: L.travel },
+              { R: new THREE.Matrix4(), dir: new THREE.Vector3(-1, 0, 0), travel: L.travel, park: L.park },
+              { R: new THREE.Matrix4().makeRotationY(Math.PI), dir: new THREE.Vector3(1, 0, 0), travel: L.travel, park: L.park },
             ]
           : [
-              { R: new THREE.Matrix4(), dir: new THREE.Vector3(0, -1, 0), travel: L.travelDown },
+              { R: new THREE.Matrix4(), dir: new THREE.Vector3(0, -1, 0), travel: L.travelDown, park: L.parkDown },
               {
                 R: new THREE.Matrix4().makeTranslation(0, hole.h / 2, 0).multiply(new THREE.Matrix4().makeRotationZ(Math.PI)).multiply(new THREE.Matrix4().makeTranslation(0, -hole.h / 2, 0)),
                 dir: new THREE.Vector3(0, 1, 0),
                 travel: L.travelUp,
+                park: L.parkUp,
               },
             ];
-      const tint = new THREE.Color(1, 1, 1).multiplyScalar(0.93 + 0.07 * ((Math.abs(pos[0] * 7 + pos[2] * 13) * 0.37) % 1));
+      const tint = new THREE.Color(1, 1, 1).multiplyScalar(1.0 + 0.08 * ((Math.abs(pos[0] * 7 + pos[2] * 13) * 0.37) % 1));
+      const seam = leafSeam(kind, split, hole.w, hole.h);
       for (const def of defs) {
         const poseNoScale = Mdoor.clone().multiply(plane).multiply(def.R);
         const base = poseNoScale.clone().multiply(S);
@@ -214,7 +242,12 @@ export default {
         }
         const collider = { min: min.clone(), max: max.clone(), tag: "door-leaf:" + id };
         colliders.push(collider);
-        const leaf = { base, slide, travel: def.travel, closedMin: min, closedMax: max, collider, mesh: null, index: -1 };
+        const leaf = { base, poseNoScale, slide, travel: def.travel, park: def.park, closedMin: min, closedMax: max, collider, mesh: null, index: -1, seam: null, seamIdx: -1 };
+        if (seam) {
+          // the meeting-edge light seam rides on the leaf (matrix refreshed with the leaf pose)
+          leaf.seam = new THREE.Matrix4().makeTranslation(seam.c[0], seam.c[1], seam.c[2]).scale(new THREE.Vector3(seam.size[0], seam.size[1], seam.size[2]));
+          lightSpecs.push({ door: rec, spec: null, leaf });
+        }
         rec.leaves.push(leaf);
         groups.get(key).items.push({ leaf, tint });
       }
@@ -249,12 +282,16 @@ export default {
       lightMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), materials.doorLight, lightSpecs.length);
       lightMesh.name = "doors_status_lights";
       lightMesh.frustumCulled = false;
-      lightSpecs.forEach(({ door, spec }, i) => {
-        // door basis (U, up, N are world axes) scaled to the emitter size, at the spec position
-        _m.makeBasis(door.U, UP, door.N);
-        _m.scale(_v.set(spec.size[0], spec.size[1], spec.size[2]));
-        _m.setPosition(spec.pos[0], spec.pos[1], spec.pos[2]);
-        lightMesh.setMatrixAt(i, _m);
+      lightSpecs.forEach(({ door, spec, leaf }, i) => {
+        if (leaf) {
+          leaf.seamIdx = i; // placed by setLeafPose()
+        } else {
+          // door basis (U, up, N are world axes) scaled to the emitter size, at the spec position
+          _m.makeBasis(door.U, UP, door.N);
+          _m.scale(_v.set(spec.size[0], spec.size[1], spec.size[2]));
+          _m.setPosition(spec.pos[0], spec.pos[1], spec.pos[2]);
+          lightMesh.setMatrixAt(i, _m);
+        }
         lightMesh.setColorAt(i, STATUS.locked);
         door.lightIdx.push(i);
       });
@@ -273,8 +310,17 @@ export default {
         _m.elements[14] += lf.slide.z * d;
         lf.mesh.setMatrixAt(lf.index, _m);
         lf.mesh.instanceMatrix.needsUpdate = true;
+        if (lf.seamIdx >= 0 && lightMesh) {
+          _m.copy(lf.poseNoScale);
+          _m.elements[12] += lf.slide.x * d;
+          _m.elements[13] += lf.slide.y * d;
+          _m.elements[14] += lf.slide.z * d;
+          _m.multiply(lf.seam);
+          lightMesh.setMatrixAt(lf.seamIdx, _m);
+          lightMesh.instanceMatrix.needsUpdate = true;
+        }
         // colliders: track the leaf, but park it fully once the door is clear enough to walk through
-        const cd = rec.open >= OPEN_CLEAR ? lf.travel : d;
+        const cd = rec.open >= OPEN_CLEAR ? lf.park : d;
         lf.collider.min.copy(lf.closedMin).addScaledVector(lf.slide, cd);
         lf.collider.max.copy(lf.closedMax).addScaledVector(lf.slide, cd);
       }

@@ -1,5 +1,6 @@
 // Module-local materials for the doors system (COORDINATION.md §10: manifest.materials(shared)).
-// One canvas texture (black/yellow chevrons) — the shared `hazard` is Kestrel orange.
+// Two canvas textures: black/yellow chevrons (also used by the dev shim for `hazard`/`hazardImp`) and a
+// small decal atlas (SEALED plate, stair pictogram).
 import * as THREE from "three";
 import { makeCanvas, toTexture, mulberry32 } from "../../textures.js";
 
@@ -64,34 +65,89 @@ export function makeChevronTexture(size = 512, seed = 7) {
   return toTexture(c, { srgb: true });
 }
 
+// Decal atlas (512 × 256). Cells in texture space (v up): "SEALED" red on black across the bottom half
+// (4:1), stair pictogram white on dark in the top-left 128² (1:1).
+export const DECALS = {
+  sealed: { u0: 0.0, v0: 0.0, u1: 1.0, v1: 0.5, aspect: 4.0 },
+  stairs: { u0: 0.0, v0: 0.5, u1: 0.25, v1: 1.0, aspect: 1.0 },
+};
+export function makeDecalAtlas() {
+  const W = 512;
+  const H = 256;
+  const c = makeCanvas(W, H);
+  const g = c.getContext("2d");
+  g.fillStyle = "#0b0c0e";
+  g.fillRect(0, 0, W, H);
+  // SEALED — big red letters inside a red frame line (canvas rows 128..256)
+  g.strokeStyle = "#c81c12";
+  g.lineWidth = 8;
+  g.strokeRect(10, 138, 492, 108);
+  g.fillStyle = "#e8271a";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.font = '700 78px "DejaVu Sans", "Liberation Sans", Arial, sans-serif';
+  if ("letterSpacing" in g) g.letterSpacing = "10px";
+  g.fillText("SEALED", 256, 194);
+  if ("letterSpacing" in g) g.letterSpacing = "0px";
+  // stair pictogram: four rising steps + a figure on the top step (canvas 0..128 square)
+  g.fillStyle = "#e6e9ee";
+  const ox = 20;
+  const oy = 116;
+  const st = 18;
+  for (let i = 0; i < 4; i++) g.fillRect(ox + i * st, oy - (i + 1) * st, 88 - i * st, st);
+  g.beginPath();
+  g.arc(ox + 71, 16, 7, 0, Math.PI * 2);
+  g.fill();
+  g.fillRect(ox + 67, 23, 8, 21);
+  g.fillRect(ox + 61, 30, 20, 4);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 /**
  * @param {Record<string, THREE.Material>} shared shared library (§10)
  * @returns {Record<string, THREE.Material>} keys merged into this module's kit / used by its meshes
  */
 export function doorMaterials(shared) {
   const metal = shared.metal || null;
-  // Leaves: dark gunmetal, textured with the shared worn-metal maps (vertex colours tint plates,
-  // stripes and edge bars; instanceColor gives each door a slight tone shift).
+  // Leaves: lighter gunmetal, clearly metallic (critic: leaves were the darkest object in frame). Vertex
+  // colours carry the light-grey face insets, edge bars and stripes; instanceColor tints per door.
   const doorLeaf = new THREE.MeshStandardMaterial({
     color: 0xffffff,
     vertexColors: true,
-    roughness: 0.55,
-    metalness: 0.6,
+    roughness: 0.45,
+    metalness: 0.7,
     map: metal ? metal.map : null,
     normalMap: metal ? metal.normalMap : null,
-    normalScale: new THREE.Vector2(0.5, 0.5),
-    envMapIntensity: 1.0,
+    normalScale: new THREE.Vector2(0.45, 0.45),
+    envMapIntensity: 1.1,
   });
-  // Status lights: unlit, colour comes entirely from instanceColor in HDR (values > 1 bloom).
+  // Status lights: unlit, colour comes entirely from instanceColor (blue-white is HDR and blooms).
   const doorLight = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  // Threshold / lintel hazard chevrons (blast + bay doors).
+  // Hazard chevrons (leaf bands, bay-side threshold aprons). Reuse the shim's black/yellow map when it
+  // exists so the module adds no second copy of the texture.
+  const chevron = shared.hazardImp && shared.hazardImp.map ? shared.hazardImp.map : makeChevronTexture(512, 7);
   const doorHazard = new THREE.MeshStandardMaterial({
-    map: makeChevronTexture(512, 7),
+    map: chevron,
     color: 0xffffff,
     vertexColors: true,
     roughness: 0.6,
     metalness: 0.08,
     envMapIntensity: 0.5,
   });
-  return { doorLeaf, doorLight, doorHazard };
+  // Decal plates (SEALED, stair pictogram): self-lit so they read in dim corridors, below bloom.
+  const atlas = makeDecalAtlas();
+  const doorDecal = new THREE.MeshStandardMaterial({
+    map: atlas,
+    emissive: 0xffffff,
+    emissiveMap: atlas,
+    emissiveIntensity: 0.7,
+    roughness: 0.5,
+    metalness: 0.1,
+  });
+  return { doorLeaf, doorLight, doorHazard, doorDecal };
 }
