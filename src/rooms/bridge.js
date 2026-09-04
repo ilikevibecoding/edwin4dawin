@@ -289,6 +289,13 @@ export function buildBridge(kit, ctx, room) {
       if (side === 0) kit.box("impTrim", p.x, p.y - 0.5, p.z, 0.05, 1.0, 0.05, { color: BLACK });
       else kit.box("impTrim", p.x + side * 0.06, p.y - 0.05, p.z, 0.12, 0.05, 0.05, { color: BLACK });
     }
+    if (side === 0) {
+      // open side: the same dim blue rail light as the walkway railings, under the handrail
+      const d = b.clone().sub(a);
+      const q = new THREE.Quaternion().setFromUnitVectors(Z_AXIS, d.clone().normalize());
+      const mid = a.clone().add(b).multiplyScalar(0.5);
+      kit.add("emitBlueDim", new THREE.BoxGeometry(0.03, 0.03, d.length() - 0.2), { pos: [mid.x, mid.y - 0.06, mid.z], quat: q, uv: "keep" });
+    }
   }
   for (const s of [-1, 1]) {
     const a = Math.min(s * STAIR.x0, s * STAIR.x1);
