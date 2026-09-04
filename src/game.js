@@ -453,7 +453,8 @@ export class Game {
     if (this.npcs) this.npcs.tick(this.player, this.sky);
     if (this.animals) this.animals.tick(this.player, this.sky);
     if (this.train) this.train.tick(this.player);
-    if (this.disasters) this.disasters.simTick();
+    // online, the network client steps the disaster clock against the server tick instead
+    if (this.disasters && !(this.net && this.net.connected && this.net.drivesDisasterClock)) this.disasters.simTick();
     if (this.net) this.net.tick();
     if (this.breakCooldown > 0) this.breakCooldown -= TICK_DT;
     if (this.placeCooldown > 0) this.placeCooldown -= TICK_DT;
