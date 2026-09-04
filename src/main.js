@@ -294,7 +294,7 @@ const VIEWS = {
   ext_close: { mode: "exterior", pos: [-90, 230, 90], target: [0, 214, 172] },
   // interior (player pose: feet x,y,z, yaw, pitch)
   bridge: { mode: "interior", pos: [0, 210, 203], yaw: 0, pitch: -3 },
-  bridge_window: { mode: "interior", pos: [0, 210, 176], yaw: 0, pitch: -6 },
+  bridge_window: { mode: "interior", pos: [0, 210, 176], yaw: 0, pitch: -10 },
   bridge_pit: { mode: "interior", pos: [-8, 208.6, 200], yaw: 20, pitch: 4 },
   cmd_corridor: { mode: "interior", pos: [-40, 210, 209], yaw: -90, pitch: 0 },
   lift_lobby: { mode: "interior", pos: [0, 210, 214], yaw: 180, pitch: 0 },
