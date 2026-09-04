@@ -85,6 +85,46 @@ ordinary interior view is ≤ 250 calls and ≤ 1.2 M triangles; the bridge (+ c
 blast door), the command corridor and the hangar well exceed 250 calls; the hangar well's 1.69 M
 triangles includes its shadow pass. Adaptive quality (pixel ratio + AO/bloom level) is the safety net.
 
+## Review round (report-only agents) and the fix pass
+
+Four independent reviewers worked on the integrated branch without editing source; their full reports, every
+cited screenshot and the probes they wrote are in `reviews/` and `shots/review_*`, `shots/validator`.
+
+| review | scope | headline |
+|---|---|---|
+| `REVIEW_EXTERIOR.md` | 26 exterior frames, 1–3 km down to 60 m | "unmistakably a Star Destroyer at 1–3 km; under 900 m it reads as a grey stone castle": one plating texture on everything, no cast shadows, blown engine throats, black glazing slot |
+| `REVIEW_INTERIOR_A.md` | bridge, tower rooms, hangar deck (60 frames) | "bones right, finish not cinematic": black ceilings, blown white bands, glazing haze, static screens, cracked-glass floor scuffs; flagship `hangar` view showed a wall (blocker) |
+| `REVIEW_INTERIOR_B.md` | engineering, crew, corridors, lobbies, cabs (74 frames incl. animation diffs) | 1 blocker / 26 major / 39 minor / 21 polish: reactor window plates (blocker), white vanishing points, repeated corridor modules, dark cabs, "deck 07" everywhere; no z-fighting, void gaps or floating props found |
+| `REVIEW_TECHNICAL.md` | loading, collision, transitions, streaming, sync, mobile, perf (16 defects D-1…D-16) | D-1 blocker: 2 m floor void at the hangar-deck lift door drops the player out of the ship; D-2 cargo arch walled; shader programs 43 → 343 across a walk; PMREM and `ctx.add()` leaks |
+
+Fixes made (each reproduced first with the reviewer's own view or probe, then re-shot):
+
+- **Navigation** — `hangar_lobby` box meets the door plane (D-1, `walktest --doors=hg_lobby` no longer reports a
+  gap); `hg_cargo` arch moved clear of the stair tower (D-2); hazard bar with a 0.9 m collider across each hangar
+  recovery-lane gap (D-6); blast-door trigger distance scaled by door speed (D-13); fall tether room-relative.
+- **Streaming / memory** — fixed light pool: rooms hold data lights, `RoomManager` copies the nearest 8 point + 4
+  spot into a constant set of scene lights, so shader programs stay at 88–135 for the whole walk instead of
+  43 → 343 (D-9); PMREM target disposed on re-capture (D-4); `ctx.add()` geometries and unique materials disposed
+  on release (D-5); prefetched-but-unvisited clusters trimmed (D-10); `compileAsync` during boarding and lift
+  rides hides the remaining compile hitch; hull plating texture 5.2 s → 1.9 s (D-14).
+- **Sync / API** — `DoorSystem.apply()` poses slabs and colliders, `on()` events, `setLocked()`; `LiftSystem.apply()`
+  rebuilds an in-progress ride; snapshot version field (D-3, D-11); `FlightState` instantiated and exposed (D-16).
+- **Exterior** — hull casts shadows onto itself; engine throats de-clipped; shield globes' texture scale; lit-window
+  wash behind the bridge glazing (the opaque backdrop is gone, the bridge interior is what you see); deep-red port
+  lights; smaller TIE halos; 58° exterior / 70° interior FOV; orbit can close to 45 m.
+- **Interior light and finish** — white strip/LED/screen emissives lowered in two steps (1.9 → 1.4 white,
+  1.6 → 1.25 soft white) so bands stop clipping; `deckBlack` scuff web thinned to sparse marks; `wornMetal`
+  cleaned; ceiling wash light in `ctx.shell`; hemisphere fill raised; light shafts and dust motes halved.
+- **Screens** — 16-cell screen atlas and LED atlas page-cycle by UV offset with flicker, so consoles animate.
+- **Rooms** — reactor window split into two side panes plus a clerestory band clear of the airlock door's travel
+  (the "two opaque plates" were the closed blast-door halves behind the glass); per-deck numerals on lobby signs
+  (was "07" on all four decks); lit turbolift cabs (data light registered with the lobby room); default camera
+  positions for `hangar`, `briefing`, `comms`, `fighter_maint`, `repair_bay`, `cargo_bay` now frame the hero content.
+
+Not addressed in this pass (design work, listed as limitations): landmark variation along the 124–144 m corridors,
+mid-floor dressing in the large engineering/medbay/armory/lounge rooms, identical bunks/tanks/racks, the sub-900 m
+exterior plating variety the exterior critic asked for, and the reactor/hyperdrive pulse being too subtle.
+
 ---
 
 ## Iteration 1 — first full build

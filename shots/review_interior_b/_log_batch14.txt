@@ -1,0 +1,6 @@
+int_-49_6_-199_0_0: 200 calls, 806k tris, 13 lights, 172 objs, 1966.75 ms/frame (software GL), rooms armory -> /workspace/shots/review_interior_b/int_-49_6_-199_0_0.png
+int_-12.5_6_-210_0_0: 178 calls, 782k tris, 13 lights, 153 objs, 2461.3 ms/frame (software GL), rooms detention -> /workspace/shots/review_interior_b/int_-12.5_6_-210_0_0.png
+int_50_6_-148_315_0: 230 calls, 793k tris, 13 lights, 200 objs, 2342.43 ms/frame (software GL), rooms medbay -> /workspace/shots/review_interior_b/int_50_6_-148_315_0.png
+int_35_6_-200_180_0: 235 calls, 852k tris, 13 lights, 168 objs, 2928.22 ms/frame (software GL), rooms escape_pods -> /workspace/shots/review_interior_b/int_35_6_-200_180_0.png
+int_0_6_-165_0_0: 328 calls, 940k tris, 14 lights, 296 objs, 3317.47 ms/frame (software GL), rooms crew_connector|crew_corridor|crew_corridor_fwd -> /workspace/shots/review_interior_b/int_0_6_-165_0_0.png
+int_-22.5_210_208.5_180_0: 265 calls, 725k tris, 14 lights, 295 objs, 3335.41 ms/frame (software GL), rooms cmd_corridor|tactical -> /workspace/shots/review_interior_b/int_-22.5_210_208.5_180_0.png

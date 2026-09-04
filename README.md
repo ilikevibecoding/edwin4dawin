@@ -48,4 +48,7 @@ Headless rendering here is software GL (SwiftShader); frame times printed by the
 - `src/exterior/` — hull, superstructure, tower, engines, greebles. `src/fighters/` — TIE model + traffic.
 - `src/rooms/<cluster>/<room>.js` — one module per room; `src/rooms/index.js` registry.
 - `src/materials.js`, `src/textures.js`, `src/space.js`, `src/post.js`, `src/lighting.js`, `src/hud.js`.
-- `PROGRESS.md` — iteration log with measurements and review results.
+- `src/systems/touch.js` — mobile touch mode (virtual stick, drag-look, on-screen buttons, pinch orbit),
+  enabled automatically on touch devices with a lighter render profile.
+- `reviews/` — the independent visual and technical review reports with their cited screenshots.
+- `PROGRESS.md` — iteration log with measurements, review results and remaining limitations.
