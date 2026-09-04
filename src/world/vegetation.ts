@@ -647,15 +647,16 @@ function frustumApex(f: THREE.Frustum, out: THREE.Vector3, fallbackX: number, fa
   return out.set(0, 0, 0).addScaledVector(_n23, -p1.constant).addScaledVector(_n31, -p2.constant).addScaledVector(_n12, -p3.constant).divideScalar(det);
 }
 
-/** Base tints (sRGB). The canopy needs a spread from sunlit yellow-greens through mid greens to dark
- *  shaded crowns: about a third of the broadleaf crowns are bright, a third mid, a third dark. */
+/** Base tints (sRGB), darkened/desaturated toward olive for the physical sun (the reference canopy averages
+ *  ~(81,85,74) sRGB with sunlit yellow-green caps). About a third of the broadleaf crowns are bright, a
+ *  third mid, a third dark. */
 const PALETTE: Record<Archetype, string[]> = {
-  0: ['#7c9c44', '#809c4a', '#709542', '#88a04e', '#7e9644', '#558a3c', '#5f8c46', '#467a37', '#649242', '#5a7f36', '#3c6431', '#3d6a32', '#375a2e', '#467238', '#3e6844'],
-  1: ['#3a7030', '#457a36', '#4d8a3c', '#35652d', '#5a8f42', '#2b5528'],
-  2: ['#3e6b2e', '#4a7734', '#365f28', '#55803f', '#436d33', '#2d4f26'],
-  3: ['#6f9a4a', '#7ea452', '#5f8a40', '#8aa04c', '#93a24f', '#7b9a3e'],
-  4: ['#6a9a3e', '#5e8f36', '#78a646', '#528230', '#83ac4c', '#6b9940'],
-  5: ['#a3a55a', '#b0a862', '#9aa35a', '#8f9a4e', '#b4ad6a'],
+  0: ['#6d7639', '#70763e', '#627137', '#777941', '#6e7239', '#4a6832', '#536a3a', '#3d5c2e', '#586e37', '#4f602d', '#344c29', '#35502a', '#304426', '#3d562f', '#364f39'],
+  1: ['#335528', '#3c5c2d', '#436832', '#2e4c25', '#4f6c37', '#254021'],
+  2: ['#365126', '#415a2b', '#2f4821', '#4a6134', '#3a522a', '#273c1f'],
+  3: ['#61753e', '#6e7c44', '#536835', '#79793f', '#817b42', '#6c7534'],
+  4: ['#5d7534', '#526c2d', '#697e3a', '#486228', '#73823f', '#5e7435'],
+  5: ['#8f7d4b', '#9a7f52', '#877b4b', '#7d7541', '#9e8359'],
 };
 
 export class Vegetation {
