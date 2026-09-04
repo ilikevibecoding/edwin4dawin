@@ -201,9 +201,9 @@ export function buildIntel(kit, ctx, room) {
   // ---- lights: hard key over the core, white fills, a dim red area light from the ceiling troughs,
   // cool practicals along the rack walls; the vestibule fill stays off the door axis (dark door frame)
   kit.light({ type: "spot", pos: [tx, h - 0.25, tz], target: [tx, th, tz], color: 0xdfe6ff, intensity: lux(h - 0.25 - th, 3.2), distance: 10, angle: 0.5, penumbra: 0.45, shadow: true, priority: 0.95 });
-  kit.light({ type: "point", pos: [4.0, h - 0.5, 0], color: 0xc8d0e0, intensity: lux(h - 0.5, 6.2), distance: 17, priority: 0.5 });
-  kit.light({ type: "point", pos: [-7.5, h - 0.5, 0], color: 0xc8d0e0, intensity: lux(h - 0.5, 5.4), distance: 17, priority: 0.48 });
-  kit.light({ type: "point", pos: [10.6, h - 0.5, -1.8], color: 0xc8d0e0, intensity: lux(h - 0.5, 5.4), distance: 13, priority: 0.46 });
+  kit.light({ type: "point", pos: [4.0, h - 0.5, 0], color: 0xc8d0e0, intensity: lux(h - 0.5, 7.0), distance: 17, priority: 0.5 });
+  kit.light({ type: "point", pos: [-7.5, h - 0.5, 0], color: 0xc8d0e0, intensity: lux(h - 0.5, 6.2), distance: 17, priority: 0.48 });
+  kit.light({ type: "point", pos: [10.6, h - 0.5, -1.8], color: 0xc8d0e0, intensity: lux(h - 0.5, 6.0), distance: 13, priority: 0.46 });
   kit.light({ type: "point", pos: [-6.0, h - 0.4, -3.5], color: red, intensity: lux(h - 0.4, 3.4), distance: 15, priority: 0.42 });
   kit.light({ type: "point", pos: [-6.0, h - 0.4, 3.5], color: red, intensity: lux(h - 0.4, 3.4), distance: 15, priority: 0.41 });
   kit.light({ type: "point", pos: [-4.5, 2.3, -6.4], color: 0xcfe0ff, intensity: 10.0, distance: 10, priority: 0.36 });
