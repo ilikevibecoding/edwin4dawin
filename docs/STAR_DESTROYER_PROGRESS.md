@@ -55,8 +55,51 @@ Open issues carried into wave 1: hull too dark/flat from mid range; shells are p
 new rooms; hangar shell has a solid floor (well must be open); legacy cockpit key light blob (spot now
 pooled without its frame shadow at that moment); exterior window rows invisible from far.
 
-## Wave 1 (parallel workstreams, isolated worktrees)
+## Wave 1 (parallel workstreams, isolated worktrees) — integrated at commit 142031b
 
-Exterior hull detail · bridge · command-deck rooms · crew-deck rooms (2 agents) · engineering rooms ·
-hangar deck + machinery · fighter traffic. Ownership per `docs/AGENT_GUIDE.md`. Results recorded below
-after integration.
+Eight agents, eight branches, each owning disjoint files (`docs/AGENT_GUIDE.md`): exterior hull detail
+(`src/exterior/*`), bridge, command-deck rooms, crew-deck rooms (two agents), engineering rooms, hangar
+deck + `src/hangar/machinery.js`, fighter traffic (`src/hangar/traffic.js`, `tie.js`). Two merge conflicts
+(both in `src/exterior/hull.js`: the tractor sheet, the keel-plate hole sign) resolved by hand.
+
+Shared fixes made during integration from the agents' reports: space resolution tolerates 2.6 m pits;
+pooled spots honour each fixture's shadow range; light pool skips fixtures in culled spaces and favours
+the current room; portal culling never draws rooms behind a second door; thin-wall-safe panel backing
+plates; legacy mirror reflects only within 4.5 m; ventral keel raised so the hangar keel block is the
+lowest point (the old hull wedge cut through the well); tractor sheet faces down and is faint; the lit
+hangar is shown through the well from below the ship; `roomShell` accepts panel pitch / style mix;
+touch controls for phones.
+
+All 27 spaces now have finished interiors; the exterior has plating with sun + fill shading, layered
+plates, trench machinery, superstructure city, turrets, engines, running lights; fighters are 3 meshes
+with an instanced far LOD.
+
+`tools/verify.mjs` on the integrated branch: 19/20 — the one failure is the legacy flight-control wing
+view at 332 draw calls against the 320 budget (its five freighter rooms are one space with ~35
+materials; portal culling has since been tightened).
+
+`tools/shots.mjs sd1_wave1` (build snapshot, 1280×720, 56 frames + checks; drift, interactions,
+transitions and lift ride all pass):
+
+| View | Calls | Triangles | Lights |
+| --- | --- | --- | --- |
+| ext_far | 79 | 152 k | sun term |
+| ext_mid | 87 | 119 k | sun term |
+| ext_close | 95 | 192 k | sun term |
+| ext_tower | 92 | 200 k | sun term |
+| ext_belly | 116 | 277 k | sun term |
+| bridge | 193 | 441 k | 15 |
+| bridgeAft (looks down the spine) | 348 | 663 k | 13 |
+| hangarDeck | 132 | 285 k | 15 |
+| room:reactor | 124 | 289 k | 14 |
+| room:medbay | 262 | 593 k | 14 |
+| room:lounge | 246 | 634 k | 14 |
+| room:B-spine (corridor, sees every crew-deck door) | 327 | 674 k | 14 |
+| room:cargo | 90 | 255 k | 15 |
+
+Totals: 121 MB estimated texture memory (108 baseline), 85 shader programs, 1.7 s shader compile on the
+build machine, JS heap 253 MB (includes the procedural texture canvases), zone build 1.1 s / 0.4 s / 0.3 s
+(tower / engineering / hangar) on the build machine, ready in 26 s here (software GL).
+
+Review after this merge: three independent visual critics (exterior, decks A+B, decks C+D) and one
+technical reviewer; their fix lists drive wave 2.
