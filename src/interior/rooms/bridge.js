@@ -20,9 +20,11 @@ const H = 8;
 const GLASS_X = 22.5; // glass spans x ±22.5: 15 panes of 3 m, a pane (not a mullion) on the centreline
 const PANES = 15;
 const PANE_W = 3;
-const WIN_Y0 = 1.5;
+const WIN_Y0 = 0.7; // glass foot at knee height so the hull ahead shows through the lower panes (exterior hole y 0.35..6.85)
 const WIN_Y1 = 6.5;
 const SILL_D = 1.0; // the glass foot sits 1 m inside the wall plane; the panes lean out to the plane at the top
+const APRON_D = 0.42; // sloped instrument apron in front of the sill base
+const APRON_KICK = 0.24; // height of the apron's vertical kick; the readout face slopes from there up to the ledge
 const PIT = { x0: 3, x1: 11, z0: -42, z1: -18, depth: 1.8 };
 const STAIR_Z = -23.6; // pit stairs (walkway side, just forward of the command platform)
 const STAIR_W = 1.6;
@@ -180,32 +182,48 @@ function buildWindowWall(kit, ctx) {
   const nIn = new THREE.Vector3(0, 0, 1).applyQuaternion(tilt); // pane normal pointing into the room
   const paneX = (k) => -GLASS_X + PANE_W / 2 + PANE_W * k;
 
-  // --- sill: dark base, metal ledge, floor light channel, one angled instrument bay per pane
+  // --- sill: low dark base with the metal ledge at the glass foot, and a sloped instrument apron in
+  // front of it (rubber kick, floor light channel, one slanted readout face per pane rising to the
+  // ledge) so the band still reads as a deep console run while nothing stands in front of the glass
+  const zApron = zFoot + APRON_D;
   kit.boxMM("paintedMetal", [X0, 0, Z0 - 0.16], [X1, WIN_Y0, zFoot], DARK);
   kit.boxMM("metal", [X0, WIN_Y0 - 0.04, Z0 - 0.16], [X1, WIN_Y0 + 0.04, zFoot + 0.12], { color: PALETTE.impMid, texel: 1 });
-  kit.boxMM("rubber", [X0, 0, zFoot], [X1, 0.14, zFoot + 0.03], { color: PALETTE.rubber });
-  kit.boxMM("paintedMetal", [-GLASS_X, 0, zFoot + 0.03], [GLASS_X, 0.02, zFoot + 0.2], BLACK);
-  kit.boxMM("emitWhiteSoft", [-GLASS_X + 0.3, 0.02, zFoot + 0.07], [GLASS_X - 0.3, 0.035, zFoot + 0.13], { uv: "keep" });
+  const ax0 = -GLASS_X - 0.15;
+  const ax1 = GLASS_X + 0.15;
+  kit.boxMM("paintedMetal", [ax0, 0, zFoot], [ax1, APRON_KICK, zApron], DARK);
+  kit.boxMM("rubber", [ax0, 0, zApron], [ax1, 0.14, zApron + 0.03], { color: PALETTE.rubber });
+  kit.boxMM("paintedMetal", [-GLASS_X, 0, zApron + 0.03], [GLASS_X, 0.02, zApron + 0.2], BLACK);
+  kit.boxMM("emitWhiteSoft", [-GLASS_X + 0.3, 0.02, zApron + 0.07], [GLASS_X - 0.3, 0.035, zApron + 0.13], { uv: "keep" });
+  for (const s of [-1, 1]) kit.boxMM("paintedMetal", [s * (GLASS_X + 0.1) - 0.05, 0, zFoot], [s * (GLASS_X + 0.1) + 0.05, WIN_Y0, zApron], BLACK); // end cheeks
+  // the slanted face runs from the kick top (zApron) up to the ledge (zFoot); t = 0 at the kick, 1 at the ledge
+  const slopeH = WIN_Y0 - APRON_KICK;
+  const slopeL = Math.hypot(APRON_D, slopeH);
+  const slopeQ = new THREE.Quaternion().setFromAxisAngle(X_AXIS, -Math.atan2(APRON_D, slopeH));
+  const sUp = new THREE.Vector3(0, 1, 0).applyQuaternion(slopeQ);
+  const sN = new THREE.Vector3(0, 0, 1).applyQuaternion(slopeQ); // up and into the room
+  const sMid = new THREE.Vector3(0, (APRON_KICK + WIN_Y0) / 2, (zApron + zFoot) / 2);
+  const onSlope = (mat, geo, x, t, lift, extra = {}) => {
+    const p = sMid.clone().addScaledVector(sUp, (t - 0.5) * slopeL).addScaledVector(sN, lift);
+    return kit.add(mat, geo, { pos: [x, p.y, p.z], quat: slopeQ, ...extra });
+  };
+  onSlope("paintedMetal", new THREE.BoxGeometry(ax1 - ax0, slopeL + 0.02, 0.08), 0, 0.5, -0.04, BLACK);
   const rand = rng(ctx.seed + 77);
   for (let k = 0; k < PANES; k++) {
     const xc = paneX(k);
-    // black instrument console under each pane: dark panel, bezelled readout slab tilted up toward
-    // whoever stands at the glass, button block, leds, stencil, status lamp
-    kit.box("impPanel1", xc, 0.85, zFoot + 0.008, 2.6, 1.14, 0.016, { color: PALETTE.impDark, uv: "keep" });
-    kit.box("paintedMetal", xc, 0.85, zFoot + 0.012, 2.4, 1.0, 0.012, BLACK);
+    // one readout group per pane on the slope: bezelled screen, button row along the kick, led strip,
+    // stencil and a status lamp; the dark inset panel keeps each group reading as its own bay
+    onSlope("impPanel1", new THREE.BoxGeometry(2.6, slopeL - 0.06, 0.012), xc, 0.5, 0.006, { color: PALETTE.impDark, uv: "keep" });
     const scr = k % 3 === 1 ? "brg_pulse" : "impScreen" + [2, 2, 0, 1][k % 4];
-    kit.add("darkGloss", new THREE.BoxGeometry(1.5, 0.4, 0.04), { pos: [xc, 1.14, zFoot + 0.06], rot: [-0.55, 0, 0] });
-    const sg = new THREE.PlaneGeometry(1.4, 0.32);
-    sg.rotateX(-0.55);
-    kit.add(scr, sg, { pos: [xc, 1.14 + 0.022 * Math.sin(0.55), zFoot + 0.06 + 0.022 * Math.cos(0.55)], uv: "keep" });
-    kit.box("paintedMetal", xc, 0.62, zFoot + 0.03, 1.6, 0.16, 0.05, { color: PALETTE.impDark, texel: 2 });
+    onSlope("darkGloss", new THREE.BoxGeometry(1.5, 0.36, 0.03), xc, 0.56, 0.027);
+    onSlope(scr, new THREE.PlaneGeometry(1.4, 0.3), xc, 0.56, 0.044, { uv: "keep" });
+    onSlope("paintedMetal", new THREE.BoxGeometry(1.6, 0.11, 0.02), xc, 0.15, 0.022, { color: PALETTE.impDark, texel: 2 });
     for (let b = 0; b < 12; b++) {
       const lit = rand() < 0.45;
-      kit.box(lit ? (rand() < 0.6 ? "emitBlue" : rand() < 0.5 ? "emitAmber" : "emitRed") : "rubber", xc - 0.7 + b * 0.125, 0.62, zFoot + 0.06, 0.07, 0.05, 0.02, { color: PALETTE.rubber });
+      onSlope(lit ? (rand() < 0.6 ? "emitBlue" : rand() < 0.5 ? "emitAmber" : "emitRed") : "rubber", new THREE.BoxGeometry(0.07, 0.05, 0.02), xc - 0.7 + b * 0.125, 0.15, 0.04, { color: PALETTE.rubber });
     }
-    kit.box("leds", xc + 0.6, 0.4, zFoot + 0.03, 0.9, 0.04, 0.012, { uv: "keep" });
-    kit.add("decal", new THREE.PlaneGeometry(0.28, 0.28), { pos: [xc - 0.95, 0.4, zFoot + 0.012], uv: "keep", uvRect: decalRect([9, 6, 14, 0][k % 4]) });
-    kit.box(k % 5 === 2 ? "emitAmber" : "emitBlue", xc - 1.15, 1.2, zFoot + 0.012, 0.05, 0.2, 0.012);
+    onSlope("leds", new THREE.BoxGeometry(0.44, 0.04, 0.012), xc + 1.02, 0.56, 0.018, { uv: "keep" });
+    onSlope("decal", new THREE.PlaneGeometry(0.24, 0.24), xc - 1.0, 0.56, 0.014, { uv: "keep", uvRect: decalRect([9, 6, 14, 0][k % 4]) });
+    onSlope(k % 5 === 2 ? "emitAmber" : "emitBlue", new THREE.BoxGeometry(0.05, 0.18, 0.012), xc - 1.24, 0.56, 0.018);
   }
 
   // --- header: heavy dark beam with segmented downlights and a bevelled fascia
@@ -227,7 +245,7 @@ function buildWindowWall(kit, ctx) {
     kit.add("metal", new THREE.BoxGeometry(0.1, paneLen + 0.1, 0.03), { pos: [pin.x, pin.y, pin.z], quat: tilt, color: PALETTE.impDark });
   }
   const rail = (y, z, sy, sz) => kit.boxMM("brg_frame", [-GLASS_X - 0.15, y - sy / 2, z - sz / 2], [GLASS_X + 0.15, y + sy / 2, z + sz / 2], {});
-  rail(WIN_Y0 + 0.05, zFoot - 0.02, 0.22, 0.4);
+  rail(WIN_Y0 + 0.05, zFoot - 0.08, 0.22, 0.28); // shallow: it must not shade the apron's readouts
   rail(WIN_Y1 - 0.02, Z0 + 0.1, 0.2, 0.5);
 
   // --- corner towers at x ±(22.5..24): dark, with an inset panel, a vertical light slot and an alert lamp
@@ -256,10 +274,12 @@ function buildWindowWall(kit, ctx) {
   glass.name = "bridge_glass";
   ctx.mesh(glass);
 
-  // --- reveal tube through the hull (z -50..-49.14), seen through the glass at oblique angles. Unlit
-  // black: the exterior sun's shadow map cannot resolve the tower's front edge and leaks ~1.5 m into the
-  // room, so a lit material here would render as sunlit grey instead of a dark recess.
-  const zA = Z0 - 1.0;
+  // --- reveal tube through the hull (z -49.95..-49.14), seen through the glass at oblique angles and,
+  // from outside, as the dark margin between the exterior hole (x ±24.5, y 0.35..6.85, cut through the
+  // face plate at z -50..-49.2) and the glass. Unlit black: the exterior sun's shadow map cannot resolve
+  // the tower's front edge and leaks ~1.5 m into the room, so a lit material here would render as
+  // sunlit grey instead of a dark recess. Starts 5 cm behind the plate's front so the two never z-fight.
+  const zA = Z0 - 0.95;
   const zB = Z0 - 0.14;
   kit.boxMM("brg_void", [-27, WIN_Y1 - 0.02, zA], [27, H + 0.5, zB], {});
   kit.boxMM("brg_void", [-27, -0.5, zA], [27, WIN_Y0 + 0.02, zB], {});
@@ -271,8 +291,8 @@ function buildWindowWall(kit, ctx) {
     kit.boxMM("brg_void", [x - 0.25, WIN_Y0, zA], [x + 0.25, WIN_Y1, zB], {});
   }
 
-  // collider: nothing walks into the sill / glass
-  kit.collider([X0, 0, Z0 - 0.2], [X1, H, zFoot + 0.2], "windowwall");
+  // collider: nothing walks into the apron / sill / glass
+  kit.collider([X0, 0, Z0 - 0.2], [X1, H, zApron + 0.2], "windowwall");
 }
 
 // ---------------------------------------------------------------------------
@@ -646,8 +666,8 @@ function mergeGroupMeshes(group) {
 // ---------------------------------------------------------------------------
 function buildForward(kit, ctx) {
   for (const s of [-1, 1]) {
-    impConsole(kit, ctx, { x: s * 5.1, z: -46.8, yaw: 0, w: 2.0, screens: [2, 2], chair: true, seed: ctx.seed + 400 + s });
-    impConsole(kit, ctx, { x: s * 7.6, z: -46.8, yaw: 0, w: 2.0, screens: [2, 0], chair: true, seed: ctx.seed + 402 + s, lampMat: "emitAmber" });
+    impConsole(kit, ctx, { x: s * 5.1, z: -46.6, yaw: 0, w: 2.0, screens: [2, 2], chair: true, seed: ctx.seed + 400 + s });
+    impConsole(kit, ctx, { x: s * 7.6, z: -46.6, yaw: 0, w: 2.0, screens: [2, 0], chair: true, seed: ctx.seed + 402 + s, lampMat: "emitAmber" });
     // low equipment plinth between the nav pair and the pit head (keeps the aisle to the side floors open)
     kit.boxMM("paintedMetal", [Math.min(s * 4.2, s * 8.6), 0, -43.6], [Math.max(s * 4.2, s * 8.6), 0.45, -43.1], DARK);
     kit.boxMM("leds", [Math.min(s * 4.5, s * 8.3), 0.3, -43.1], [Math.max(s * 4.5, s * 8.3), 0.34, -43.09], { uv: "keep" });
