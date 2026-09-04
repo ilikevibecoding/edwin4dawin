@@ -9,22 +9,23 @@ import { makeCanvas, toTexture } from "../textures.js";
 export function signPlate(kit, ctx, { side, u, v = 2.9, w = 2.4, h = 0.42, text, sub = null, accent = "#4a9dff", bounds = ctx.bounds }) {
   const key = "sign_" + text.replace(/[^A-Za-z0-9]/g, "_") + (sub ? "_" + sub.replace(/[^A-Za-z0-9]/g, "_") : "");
   if (!ctx.materials[key]) {
-    const c = makeCanvas(1024, 192);
+    // 512×96 (was 1024×192): eleven of these plates are resident at once and the text is 0.4 m tall
+    const c = makeCanvas(512, 96);
     const g = c.getContext("2d");
     g.fillStyle = "#07090c";
-    g.fillRect(0, 0, 1024, 192);
+    g.fillRect(0, 0, 512, 96);
     g.fillStyle = accent;
-    g.fillRect(24, 22, 6, 148);
-    g.fillRect(994, 22, 6, 148);
-    g.font = "bold 92px 'Helvetica Neue', Arial, sans-serif";
+    g.fillRect(12, 11, 3, 74);
+    g.fillRect(497, 11, 3, 74);
+    g.font = "bold 46px 'Helvetica Neue', Arial, sans-serif";
     g.textBaseline = "middle";
     g.textAlign = "center";
     g.fillStyle = "#dfe6f2";
-    g.fillText(text.toUpperCase(), 512, sub ? 72 : 96);
+    g.fillText(text.toUpperCase(), 256, sub ? 36 : 48);
     if (sub) {
-      g.font = "bold 44px 'Helvetica Neue', Arial, sans-serif";
+      g.font = "bold 22px 'Helvetica Neue', Arial, sans-serif";
       g.fillStyle = accent;
-      g.fillText(sub.toUpperCase(), 512, 146);
+      g.fillText(sub.toUpperCase(), 256, 73);
     }
     ctx.materials[key] = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: toTexture(c, { srgb: true, wrap: false }), emissiveIntensity: 1.25, roughness: 0.4, metalness: 0 });
   }
@@ -54,15 +55,16 @@ export function buildCorridor(kit, ctx) {
   const a1 = alongZ ? max[2] : max[0];
 
   impFloor(kit, ctx, { gutter: false });
-  // floor edge light channels
+  // floor edge light channels: faint emitter — at the dim level they were the brightest floor element
+  // and read as runway lights competing with the door at the end of the run
   const strip = (side) => {
     const off = side * (halfW - 0.12);
     if (alongZ) {
       kit.boxMM("paintedMetal", [cx + off - 0.09, 0, min[2]], [cx + off + 0.09, 0.02, max[2]], { color: PALETTE.impBlack, texel: 2 });
-      kit.boxMM("emitWhiteDim", [cx + off - 0.02, 0.02, min[2] + 0.2], [cx + off + 0.02, 0.03, max[2] - 0.2], { uv: "keep" });
+      kit.boxMM("emitWhiteFaint", [cx + off - 0.02, 0.02, min[2] + 0.2], [cx + off + 0.02, 0.03, max[2] - 0.2], { uv: "keep" });
     } else {
       kit.boxMM("paintedMetal", [min[0], 0, cz + off - 0.09], [max[0], 0.02, cz + off + 0.09], { color: PALETTE.impBlack, texel: 2 });
-      kit.boxMM("emitWhiteDim", [min[0] + 0.2, 0.02, cz + off - 0.02], [max[0] - 0.2, 0.03, cz + off + 0.02], { uv: "keep" });
+      kit.boxMM("emitWhiteFaint", [min[0] + 0.2, 0.02, cz + off - 0.02], [max[0] - 0.2, 0.03, cz + off + 0.02], { uv: "keep" });
     }
   };
   strip(-1);
@@ -97,7 +99,7 @@ export function buildCorridor(kit, ctx) {
   // ceiling: flat centre strip between the leaning panels
   const flatHalf = halfW - lean;
   const cb = alongZ ? [[cx - flatHalf, 0, min[2]], [cx + flatHalf, h, max[2]]] : [[min[0], 0, cz - flatHalf], [max[0], h, cz + flatHalf]];
-  impCeiling(kit, ctx, { bounds: cb, spacing: 100, lights: false, stripMat: "emitWhiteDim", paints: [[PALETTE.impGrey, 0.7], [PALETTE.impMid, 0.3]] });
+  impCeiling(kit, ctx, { bounds: cb, spacing: 100, lights: false, stripMat: "emitWhiteDim", stripInset: 2.0, paints: [[PALETTE.impGrey, 0.7], [PALETTE.impMid, 0.3]] });
   // budgeted lights along the run: one every ~9 m, max 8; the emissive strips fill in between
   const nl = Math.max(1, Math.min(3, Math.round(len / 14)));
   for (let i = 0; i < nl; i++) {
@@ -201,7 +203,8 @@ export function buildLobby(kit, ctx) {
     [PALETTE.impGrey, 0.35],
     [PALETTE.impMid, 0.2],
   ];
-  for (const side of ["zmin", "zmax", "xmin", "xmax"]) impWall(kit, ctx, side, { rows: [0, 0.5, 1.6, 2.6, h], paints: lobbyPaints, styles: { panel: 0.75, vent: 0.05, greeble: 0.1, strip: 0.1 }, seed: ctx.seed + side.length * 5 });
+  // strip panels rare: three rows of white dashes read as a wallpaper grid around the lift door
+  for (const side of ["zmin", "zmax", "xmin", "xmax"]) impWall(kit, ctx, side, { rows: [0, 0.5, 1.6, 2.6, h], paints: lobbyPaints, styles: { panel: 0.8, vent: 0.06, greeble: 0.11, strip: 0.03 }, seed: ctx.seed + side.length * 5 });
   // deck sign over the lift door (zmax wall), status readouts beside it, a direction sign over the
   // corridor opening (zmin wall) naming the deck's principal space
   const lift = ctx.doors.find((d) => d.style === "lift");

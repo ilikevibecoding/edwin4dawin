@@ -7,12 +7,15 @@ import { Kit } from "../kit.js";
 import { decalRect } from "../textures.js";
 import { JAMB } from "./imperial.js";
 
+// lamp = lintel status lamp; seam = the full-height leaf-edge lamp. Side doors along a corridor all
+// carry the same blue seam (one accent per corridor, mirrored) — a secure door says "secure" with
+// its red lintel and keypad, not a different seam colour. Blast doors keep the red seam, lifts amber.
 const STYLE = {
-  single: { leaves: 2, thick: 0.1, speed: 1.4, radius: 2.6, color: PALETTE.impLight, lamp: "emitBlue" },
-  double: { leaves: 2, thick: 0.12, speed: 1.1, radius: 3.0, color: PALETTE.impLight, lamp: "emitBlue" },
-  blast: { leaves: 2, thick: 0.3, speed: 0.55, radius: 4.2, color: PALETTE.impMid, lamp: "emitRed", hazard: true },
-  secure: { leaves: 2, thick: 0.14, speed: 1.0, radius: 2.6, color: PALETTE.impGrey, lamp: "emitRed", keypad: true },
-  lift: { leaves: 2, thick: 0.1, speed: 1.3, radius: 0, color: PALETTE.impLight, lamp: "emitAmber", manual: true },
+  single: { leaves: 2, thick: 0.1, speed: 1.4, radius: 2.6, color: PALETTE.impLight, lamp: "emitBlue", seam: "emitBlueDim" },
+  double: { leaves: 2, thick: 0.12, speed: 1.1, radius: 3.0, color: PALETTE.impLight, lamp: "emitBlue", seam: "emitBlueDim" },
+  blast: { leaves: 2, thick: 0.3, speed: 0.55, radius: 4.2, color: PALETTE.impMid, lamp: "emitRed", seam: "emitRedDim", hazard: true },
+  secure: { leaves: 2, thick: 0.14, speed: 1.0, radius: 2.6, color: PALETTE.impGrey, lamp: "emitRed", seam: "emitBlueDim", keypad: true },
+  lift: { leaves: 2, thick: 0.1, speed: 1.3, radius: 0, color: PALETTE.impLight, lamp: "emitAmber", seam: "emitAmberDim", manual: true },
   open: { leaves: 0, thick: 0, speed: 0, radius: 0, color: PALETTE.impLight, lamp: "emitWhite" },
 };
 
@@ -144,9 +147,9 @@ export class Door {
         // blast doors: hazard chevrons only on the kick band (whole leaf width, so the stripes end at
         // the seam like a real two-leaf door); the leaf face itself stays plain
         if (st.hazard) mk("hazard", u0 + 0.06, u1 - 0.06, 0.08, 0.26, Math.min(n, n - f * 0.012), Math.max(n, n - f * 0.012), { texel: 3 });
-        // full-height seam lamp: blue when idle, red on blast / secure doors — the leaves must read
-        // as leaves from either side even in a dim corridor
-        mk(st.lamp, s < 0 ? -0.14 : 0.09, s < 0 ? -0.09 : 0.14, 0.15, h - 0.2, Math.min(n, n - f * 0.006), Math.max(n, n - f * 0.006));
+        // full-height seam lamp (30 mm, dim emitter): the leaves must read as leaves from either side
+        // even in a dim corridor, without being the brightest thing in the room
+        mk(st.seam || st.lamp, s < 0 ? -0.13 : 0.1, s < 0 ? -0.1 : 0.13, 0.15, h - 0.2, Math.min(n, n - f * 0.006), Math.max(n, n - f * 0.006));
         if (st.keypad || st.hazard) {
           const g = new THREE.PlaneGeometry(0.3, 0.3);
           const [gx, gz] = this.place(mid, n - f * 0.002);

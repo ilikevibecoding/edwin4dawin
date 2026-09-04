@@ -133,7 +133,7 @@ if (!QUICK) {
       await window.debugAPI.teleport("d1_lift");
       window.debugAPI.player.yaw = Math.PI;
       const started = window.debugAPI.lift("hangar");
-      window.debugAPI.advance(3.2);
+      window.debugAPI.advance(2.0); // mid-ride: the sign reads PASSING DECK 3, not ARRIVING
       return { started, state: window.debugAPI.liftState() };
     });
     await settle(3, 600);

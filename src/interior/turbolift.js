@@ -21,7 +21,8 @@ function liftDisplays(materials) {
   const mk = (w, h) => {
     const canvas = makeCanvas(w, h);
     const tex = toTexture(canvas, { srgb: true, wrap: false });
-    const mat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.25, roughness: 0.4, metalness: 0 });
+    // matte: at roughness 0.4 the cab light put a specular hotspot across "IN TRANSIT"
+    const mat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 1.25, roughness: 0.9, metalness: 0 });
     mat.userData.canvas = canvas;
     mat.userData.tex = tex;
     return mat;
@@ -136,16 +137,27 @@ export function buildLiftCab(kit, ctx) {
     kit.box("emitWhiteDim", cx, h - 0.12, cz + s * 0.6, 1.26, 0.02, 0.06, { uv: "keep" });
   }
   ctx.light(pointLight(0xe8f0ff, 5, 6, [cx, h - 0.6, cz]));
-  // vertical light bars in the rear corners: a dedicated material so the lift can streak them
+  // vertical light channels in the rear corners: a soft bright band on a dim blue ground that the
+  // ride scrolls down (or up) the channel — one "passing floor" sweep per ~1.2 s, so a single frame
+  // taken mid-ride shows the band part-way along both channels
   if (!ctx.materials.lift_streak) {
-    ctx.materials.lift_streak = ctx.materials.emitBlue.clone();
-    ctx.materials.lift_streak.emissiveMap = ctx.materials.leds.emissiveMap.clone();
-    ctx.materials.lift_streak.emissiveMap.needsUpdate = true;
+    const c = makeCanvas(16, 256);
+    const g = c.getContext("2d");
+    g.fillStyle = "#0b1a30";
+    g.fillRect(0, 0, 16, 256);
+    const grad = g.createLinearGradient(0, 88, 0, 168);
+    grad.addColorStop(0, "rgba(74,157,255,0)");
+    grad.addColorStop(0.5, "rgba(205,228,255,1)");
+    grad.addColorStop(1, "rgba(74,157,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 88, 16, 80);
+    const tex = toTexture(c, { srgb: true, wrap: true, anisotropy: 2 });
+    ctx.materials.lift_streak = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.9, roughness: 0.5, metalness: 0 });
   }
   const depth = max[2] - min[2];
   for (const s of [-1, 1]) {
-    kit.box("paintedMetal", cx + s * (max[0] - min[0]) * 0.42, h / 2, max[2] - 0.1, 0.12, h - 0.4, 0.1, { color: PALETTE.impBlack, texel: 2 });
-    kit.box("lift_streak", cx + s * (max[0] - min[0]) * 0.42, h / 2, max[2] - 0.152, 0.05, h - 0.6, 0.01, { uv: "keep" });
+    kit.box("paintedMetal", cx + s * (max[0] - min[0]) * 0.42, h / 2, max[2] - 0.1, 0.2, h - 0.4, 0.1, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("lift_streak", cx + s * (max[0] - min[0]) * 0.42, h / 2, max[2] - 0.152, 0.11, h - 0.6, 0.01, { uv: "keep" });
     // side-wall light channels: three horizontal bands in dark housings; they chase downward (or
     // upward) during the ride so passing-deck light reads even in a still frame
     const x = s < 0 ? min[0] + 0.03 : max[0] - 0.03;
@@ -331,9 +343,10 @@ export class Turbolift {
       const toIdx = interior.deckById(this.to).def.index;
       const dir = Math.sign(toIdx - fromIdx) || 1;
       if (streak) {
-        streak.emissiveIntensity = 2.6 + 1.6 * Math.min(1, this.timer * 1.5);
-        streak.emissiveMap.offset.y -= dt * 6 * dir;
+        streak.emissiveIntensity = 1.6 + 1.2 * Math.min(1, this.timer * 1.5);
+        streak.emissiveMap.offset.y -= dt * 0.85 * dir;
       }
+      this.hud.setLocation("Turbolift", `In transit \u2192 ${interior.deckById(this.to).def.name}`);
       // transit readout: the passing deck steps from origin to destination over the ride
       const prog = Math.min(1, this.timer / this.rideTime);
       const passing = Math.round(fromIdx + (toIdx - fromIdx) * prog);
@@ -353,7 +366,7 @@ export class Turbolift {
         this.state = "opening";
         this.timer = 0;
         this.liftDoor(this.to).setOpen(true);
-        if (interior.materials.lift_streak) interior.materials.lift_streak.emissiveIntensity = 2.6;
+        if (interior.materials.lift_streak) interior.materials.lift_streak.emissiveIntensity = 0.9;
         this.display(toIdx);
         this.bands(false);
         this.audio.event("lift_arrive", dest);

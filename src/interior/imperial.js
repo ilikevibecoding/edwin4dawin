@@ -195,9 +195,12 @@ export function impCeiling(kit, ctx, opts = {}) {
   // fixture = dark housing, a dim diffuser (reads as the lit fixture body) and a narrow bright core;
   // the core is the only part that clips, so the strip reads as a light rather than a white bar
   const diffMat = opts.diffuserMat !== undefined ? opts.diffuserMat : stripMat === "emitWhiteDim" ? "emitWhiteFaint" : stripMat === "emitStrip" || stripMat === "emitWhiteSoft" || stripMat === "emitWhite" ? "emitWhiteDim" : null;
+  // opts.stripInset: clear distance from each end wall (a long corridor strip run right up to the
+  // far door compresses into a hot spot at the vanishing point; corridors pass ~2 m)
+  const inset = opts.stripInset ?? 0.6;
   for (let i = 0; i < n; i++) {
     const c = (i + 0.5) / n;
-    const L = span - 1.2;
+    const L = span - 2 * inset;
     if (along === "x") {
       const z = z0 + c * d;
       kit.box("paintedMetal", x0 + w / 2, y - 0.06, z, L + 0.2, 0.1, 0.42, { color: PALETTE.impDark, texel: 2 });
