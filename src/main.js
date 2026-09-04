@@ -226,7 +226,9 @@ function applyQuality() {
   renderer.setPixelRatio(q.ratio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   post.setSize(window.innerWidth, window.innerHeight);
-  post.ao.setQualityMode(q.ao);
+  // AO quality + bloom chain resolution scale together (mobile has 3 levels, desktop 4)
+  if (post.setQuality) post.setQuality(MOBILE ? quality.level : quality.level);
+  else post.ao.setQualityMode(q.ao);
 }
 function updateQuality(dt) {
   if (!quality.enabled) return;

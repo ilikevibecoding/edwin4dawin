@@ -68,7 +68,7 @@ for (const v of views) {
     if (flags.sim) await page.evaluate((s) => window.debugAPI.simulate(s), +flags.sim);
     await settle(3);
     const file = resolve(outDir, `${name}.png`);
-    await page.screenshot({ path: file });
+    await page.screenshot({ path: file, timeout: 300000 });
     const s = await page.evaluate(() => window.debugAPI.getStats());
     results[name] = s;
     console.log(`${name}: ${s.calls} calls, ${(s.triangles / 1000).toFixed(0)}k tris, ${s.visibleLights} lights, ${s.visibleObjects} objs, ${s.frameMs} ms/frame (software GL), rooms ${s.rooms.visible.join("|")} -> ${file}`);
