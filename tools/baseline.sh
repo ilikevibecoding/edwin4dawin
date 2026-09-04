@@ -27,5 +27,8 @@ node tools/fleetshots.mjs --url "$U&fleet=high" --times day,night --out "$OUT/fl
 node tools/lions.mjs --url "$U" --views close,face,far,medium,pride,seat,side --out "$OUT/lions_day"
 node tools/lions.mjs --url "$U" --time dusk --views close,medium,pride --out "$OUT/lions_dusk"
 node tools/lions.mjs --url "$U" --walk 8 --views close,medium,far,seat --out "$OUT/lions_walk"
-node tools/glassgauntlet.mjs --url "$U" --round "$(basename "$OUT")" --out "$OUT/glass"
+node tools/glassgauntlet.mjs --url "$U" --width $W --height $H --round "$(basename "$OUT")" --out "$OUT/glass"
+# the HUD stamp in the frames is the revision of the tree that was served; after a
+# deploy that is the bundle commit, one ahead of the source commit it was built from
+echo "$U" > "$OUT/SOURCE"
 echo "BASELINE_DONE $OUT"
