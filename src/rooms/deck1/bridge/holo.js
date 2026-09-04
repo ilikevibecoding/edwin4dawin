@@ -7,14 +7,17 @@ export function buildHolo(ctx, { x, y, z, scale = 1 / 1000, hover = 0.55 }) {
   const S = scale;
   const pts = [];
   const cols = [];
-  // kept under the 1.15 bloom threshold even where the additive lines overlap, so the wedge stays a blue wireframe
-  // rather than a white shape
-  const C_HULL = [0.38, 0.62, 0.9];
-  const C_DET = [0.3, 0.5, 0.85];
-  const C_GRID = [0.2, 0.38, 0.8];
+  // Normal (alpha) blending, not additive: seen edge-on from the far end of the walkway (d1-bridge-aft, 34 m) the
+  // ~120 segments of the wedge collapse into a few pixel columns, and additive overlap summed them into a
+  // clipped white streak in front of the blast door (critic round 2). With alpha blending every overlap
+  // converges on the line colour, so the wedge stays this blue from any distance; the brightest channel stays
+  // ≤ 1.0 so nothing blooms.
+  const C_HULL = [0.4, 0.64, 0.92];
+  const C_DET = [0.32, 0.52, 0.86];
+  const C_GRID = [0.22, 0.4, 0.82];
   const seg = (a, b, c, k = 1) => {
     pts.push(a[0], a[1], a[2], b[0], b[1], b[2]);
-    for (let i = 0; i < 2; i++) cols.push(c[0] * k, c[1] * k, c[2] * k);
+    for (let i = 0; i < 2; i++) cols.push(Math.min(1, c[0] * k), Math.min(1, c[1] * k), Math.min(1, c[2] * k));
   };
   const box = (mn, mx, c, k) => {
     const p = (i) => [i & 1 ? mx[0] : mn[0], i & 2 ? mx[1] : mn[1], i & 4 ? mx[2] : mn[2]];
@@ -93,7 +96,7 @@ export function buildHolo(ctx, { x, y, z, scale = 1 / 1000, hover = 0.55 }) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
   geo.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3));
-  const lineMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false });
+  const lineMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.85, blending: THREE.NormalBlending, depthWrite: false });
   const lines = new THREE.LineSegments(geo, lineMat);
   lines.name = "holo-wedge";
   lines.frustumCulled = false;
@@ -106,7 +109,8 @@ export function buildHolo(ctx, { x, y, z, scale = 1 / 1000, hover = 0.55 }) {
   hull.add(lines);
   group.add(hull);
 
-  const sweepMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.35, 0.6, 1.0).multiplyScalar(1.3), transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  // the scan disc stays additive (a single layer, so it cannot stack) but at 1.0 × colour and 0.1 opacity
+  const sweepMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.35, 0.6, 1.0), transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
   const sweep = new THREE.Mesh(new THREE.CircleGeometry(0.86, 40), sweepMat);
   sweep.name = "holo-sweep";
   sweep.rotation.x = -Math.PI / 2;
@@ -120,8 +124,8 @@ export function buildHolo(ctx, { x, y, z, scale = 1 / 1000, hover = 0.55 }) {
     const ph = (t * 0.25) % 1;
     const tri = ph < 0.5 ? ph * 2 : 2 - ph * 2;
     sweep.position.y = 0.32 + tri * 0.6;
-    sweepMat.opacity = 0.12 + 0.06 * Math.sin(t * 3);
-    lineMat.opacity = 0.76 + 0.05 * Math.sin(t * 7.3);
+    sweepMat.opacity = 0.08 + 0.04 * Math.sin(t * 3);
+    lineMat.opacity = 0.82 + 0.05 * Math.sin(t * 7.3);
   }
   update(ctx.time ? ctx.time() : 0);
   return { group, update };

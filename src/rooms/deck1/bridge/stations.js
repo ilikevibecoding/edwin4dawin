@@ -51,7 +51,7 @@ export function buildStations(kit, ctx, manifest, L) {
     const yawRoom = s < 0 ? Math.PI / 2 : -Math.PI / 2;
     cabinet(kit, { x: s * xi, y: FLOOR, z: 459.6, yaw: yawRoom, w: 0.9, h: 1.1, d: 0.5, seed: 61 + s });
     cabinet(kit, { x: s * xi, y: FLOOR, z: 460.7, yaw: yawRoom, w: 0.8, h: 0.95, d: 0.45, seed: 63 + s });
-    wallDisplay(kit, { x: s * (xi - 0.01), y: FLOOR + 1.7, z: 461.7, yaw: yawRoom, w: 1.8, h: 1.0, ...pickScreen(4 + (s < 0 ? 0 : 1)), label: 9 });
+    wallDisplay(kit, { x: s * (xi - 0.01), y: FLOOR + 1.7, z: 461.7, yaw: yawRoom, w: 1.8, h: 1.0, ...pickScreen(4 + (s < 0 ? 0 : 1)), label: 9, cableTo: FLOOR + 0.1 });
     junctionBox(kit, { x: s * (xi - 0.01), y: FLOOR + 2.85, z: 460.0, yaw: yawRoom, lamp: "emitRedImp" });
   }
   // nav table at the sill centre, helm pair behind it angled inward so both helmsmen look past the table to the glass
@@ -101,8 +101,8 @@ export function buildStations(kit, ctx, manifest, L) {
   // aft station bank either side of the blast door, wall displays + cabinets further out, side-wall dressing
   for (const s of [-1, 1]) {
     for (const ax of [4.35, 7.85]) unit(s * ax, 511.15, Math.PI, 3.2, { ends: ax > 5, variant: ax < 5 ? 1 : 0, service: ax > 5 && s > 0, pushBack: ax > 5 && s < 0 ? 1 : -1 });
-    wallDisplay(kit, { x: s * 12.6, y: FLOOR + 2.15, z: 511.69, yaw: Math.PI, w: 3.0, h: 1.2, ...pickScreen(6 + (s < 0 ? 0 : 3)), label: 12 });
-    wallDisplay(kit, { x: s * 16.5, y: FLOOR + 2.15, z: 511.69, yaw: Math.PI, w: 2.4, h: 1.2, ...pickScreen(8 + (s < 0 ? 0 : 3)) });
+    wallDisplay(kit, { x: s * 12.6, y: FLOOR + 2.2, z: 511.69, yaw: Math.PI, w: 3.0, h: 1.2, ...pickScreen(6 + (s < 0 ? 0 : 3)), label: 12, cableTo: FLOOR + 3.15 });
+    wallDisplay(kit, { x: s * 16.5, y: FLOOR + 2.05, z: 511.69, yaw: Math.PI, w: 2.4, h: 1.2, ...pickScreen(8 + (s < 0 ? 0 : 3)), cableTo: FLOOR + 3.15 });
     for (const [ax, w, h] of [
       [11.6, 1.0, 1.15],
       [13.6, 0.9, 1.05],
@@ -112,10 +112,49 @@ export function buildStations(kit, ctx, manifest, L) {
     junctionBox(kit, { x: s * 14.9, y: FLOOR + 1.75, z: 511.69, yaw: Math.PI, lamp: "emitAmber" });
     conduitRun(kit, [s * 10.2, 511.7], [s * 18.6, 511.7], FLOOR + 3.15, [0, -1], { r: 0.035, out: 0.08, every: 2.1 });
     const yawRoom = s < 0 ? Math.PI / 2 : -Math.PI / 2;
-    wallDisplay(kit, { x: s * (xi - 0.01), y: FLOOR + 1.7, z: 502.0, yaw: yawRoom, w: 1.8, h: 1.0, ...pickScreen(10 + (s < 0 ? 0 : 1)) });
+    wallDisplay(kit, { x: s * (xi - 0.01), y: FLOOR + 1.7, z: 502.0, yaw: yawRoom, w: 1.8, h: 1.0, ...pickScreen(10 + (s < 0 ? 0 : 1)), cableTo: FLOOR + 0.1 });
     cabinet(kit, { x: s * xi, y: FLOOR, z: 509.6, yaw: yawRoom, w: 0.9, h: 1.05, d: 0.5, seed: 71 + s });
+    // monitoring pod under each aft corner pendant, turned 46° toward the corner: from the d1-bridge-command
+    // camera (port aft corner) the operator's seat and the hooded screens fill the empty foreground floor
+    unit(s * 12.3, 507.0, s * 0.8, 2.2, { ends: true, back: true, variant: 1, screens: [S(s + 7), live(s < 0 ? CELL.tactical : CELL.ship)] });
   }
+  blastDoorSurround(kit, manifest);
   return holo;
+}
+
+// Heavy surround on the room side of the aft blast door so it reads as a door from the far end of the walkway
+// (critic round 2: "aft doorway is a white blob"): 0.6 m pilasters and a lintel beam 0.38 m proud of the wall,
+// the lintel split by a 0.12 m slot with a recessed blue strip at its back, hazard bands at the pilaster feet,
+// red status lamps and a control plate. Sits outside the shared doorReveal liners (|x| > 2.05) and off the
+// opening (4 × 4), so D's door leaves/frames still fit.
+function blastDoorSurround(kit, manifest) {
+  const door = manifest.doors.find((d) => d.kind === "blast" && d.dir[2] > 0.5);
+  if (!door) return;
+  const dx = door.pos[0];
+  const zf = manifest.bounds.max[2] - 0.3; // aft wall inner face
+  const y0 = FLOOR;
+  const dark = shade(IMP.dark, 0.7);
+  const proud = 0.38;
+  for (const s of [-1, 1]) {
+    const x0 = Math.min(dx + s * 2.07, dx + s * 2.67);
+    const x1 = Math.max(dx + s * 2.07, dx + s * 2.67);
+    kit.boxMM("paintedMetal", [x0, y0, zf - proud], [x1, y0 + 4.95, zf + 0.02], { color: dark, texel: 1 });
+    // recessed vertical seam line + hazard band at the foot + red lamp at 2.6 m
+    kit.boxMM("paintedMetal", [x0 + 0.27, y0 + 0.4, zf - proud - 0.004], [x0 + 0.33, y0 + 4.0, zf - proud + 0.01], { color: SCUFF, texel: 2 });
+    kit.boxMM("hazard", [x0 + 0.02, y0 + 0.02, zf - proud - 0.008], [x1 - 0.02, y0 + 0.34, zf - proud], { texel: 1 });
+    kit.box("emitRedImp", (x0 + x1) / 2, y0 + 2.6, zf - proud - 0.006, 0.05, 0.1, 0.012);
+    kit.collider([x0, y0, zf - proud], [x1, y0 + 4.95, zf], "door-surround");
+  }
+  // lintel: lower lip, upper beam, and the slot between them with a scuffed back plate carrying the blue strip
+  kit.boxMM("paintedMetal", [dx - 2.67, y0 + 4.06, zf - proud], [dx + 2.67, y0 + 4.3, zf + 0.02], { color: dark, texel: 1 });
+  kit.boxMM("paintedMetal", [dx - 2.67, y0 + 4.42, zf - proud], [dx + 2.67, y0 + 4.95, zf + 0.02], { color: dark, texel: 1 });
+  kit.boxMM("paintedMetal", [dx - 2.67, y0 + 4.3, zf - 0.2], [dx + 2.67, y0 + 4.42, zf + 0.02], { color: SCUFF, texel: 1 });
+  kit.boxMM("emitBlue", [dx - 2.3, y0 + 4.33, zf - 0.21], [dx + 2.3, y0 + 4.39, zf - 0.2], { uv: "keep" });
+  // control plate on the port pilaster: dark bezel, small screen strip, three lamps
+  const cx = dx - 2.37;
+  kit.box("darkGloss", cx, y0 + 1.35, zf - proud - 0.006, 0.26, 0.34, 0.012);
+  kit.box("screenImp1", cx, y0 + 1.42, zf - proud - 0.013, 0.2, 0.1, 0.006, { uv: "keep" });
+  for (let k = 0; k < 3; k++) kit.box(["emitRedImp", "emitBlue", "emitAmber"][k], cx - 0.07 + k * 0.07, y0 + 1.26, zf - proud - 0.013, 0.03, 0.03, 0.006);
 }
 
 // Chart table under the window centre: black body, gloss top with a live tactical map, indicator row on the
@@ -169,12 +208,18 @@ function lectern(kit, x, y, z, yaw, screen) {
   f.box("darkGloss", p[0], p[1], p[2], 0.54, 0.008, 0.26, { tilt: a });
   p = onTilt(c, a, 0, -0.13, 0.036);
   f.box(screen, p[0], p[1], p[2], 0.5, 0.006, 0.22, { tilt: a, uv: "keep" });
+  // 3×4 key cluster: 24 × 18 mm keys, each in a black well on the gloss plate, a third of them unlit and two
+  // cool white so the cluster reads as an instrument keypad, not a candy grid (critic round 2)
   p = onTilt(c, a, 0, 0.14, 0.03);
   f.box("darkGloss", p[0], p[1], p[2], 0.32, 0.008, 0.2, { tilt: a });
   for (let r = 0; r < 3; r++) {
     for (let k = 0; k < 4; k++) {
-      p = onTilt(c, a, -0.105 + k * 0.07, 0.08 + r * 0.06, 0.037);
-      f.box(IND[(r * 4 + k + 2) % IND.length], p[0], p[1], p[2], 0.05, 0.005, 0.04, { tilt: a });
+      const i = r * 4 + k;
+      p = onTilt(c, a, -0.09 + k * 0.06, 0.09 + r * 0.05, 0.036);
+      f.box("paintedMetal", p[0], p[1], p[2], 0.036, 0.004, 0.028, { color: SCUFF, texel: 2, tilt: a });
+      p = onTilt(c, a, -0.09 + k * 0.06, 0.09 + r * 0.05, 0.0385);
+      const km = i === 5 || i === 10 ? "bridgeLamp" : i % 3 === 1 ? "paintedMetal" : IND[(i + 2) % IND.length];
+      f.box(km, p[0], p[1], p[2], 0.024, 0.003, 0.018, { tilt: a, ...(km === "paintedMetal" ? { color: 0x1c1e22, texel: 2 } : {}) });
     }
   }
   p = onTilt(c, a, 0, -0.27, 0.05);
@@ -233,8 +278,10 @@ function holoPlinth(kit, ctx, x, y, z) {
   kit.add("paintedMetal", new THREE.CylinderGeometry(1.14, 1.14, 0.08, 20), { pos: [x, y + 0.04, z], color: SCUFF, texel: 1 });
   kit.add("paintedMetal", new THREE.CylinderGeometry(0.92, 1.12, 0.84, 20), { pos: [x, y + 0.5, z], color: shade(IMP.black, 0.9), texel: 1 });
   kit.add("paintedMetal", new THREE.CylinderGeometry(0.97, 0.97, 0.05, 20), { pos: [x, y + 0.905, z], color: shade(IMP.mid, 1.2), texel: 2 });
-  kit.add("darkGloss", new THREE.CylinderGeometry(0.86, 0.86, 0.02, 20), { pos: [x, y + 0.94, z] });
-  kit.add("emitBlue", new THREE.RingGeometry(0.72, 0.8, 32), { pos: [x, y + 0.952, z], rot: [-Math.PI / 2, 0, 0], uv: "keep" });
+  // top plate in the deck's bridgeFloor (roughness 0.55), not darkGloss: from the dais camera the gloss plate
+  // mirrored the 75 cd fore pendant 33 m away as a 10 × 8 px clipped disc beside the wedge (bridge-r2)
+  kit.add("bridgeFloor", new THREE.CylinderGeometry(0.86, 0.86, 0.02, 20), { pos: [x, y + 0.94, z], color: IMP.black, texel: 1 });
+  kit.add("emitBlue", new THREE.RingGeometry(0.76, 0.8, 32), { pos: [x, y + 0.952, z], rot: [-Math.PI / 2, 0, 0], uv: "keep" });
   for (let i = 0; i < 4; i++) {
     const a = (i * Math.PI) / 2 + Math.PI / 4;
     const px = x + Math.cos(a) * 0.9;

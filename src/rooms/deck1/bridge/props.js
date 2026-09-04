@@ -138,10 +138,16 @@ export function bridgeConsole(kit, spec) {
     f.box("paintedMetal", p[0], p[1], p[2], w - 0.02, 0.03, 0.4, { color: shade(IMP.dark, 0.75), texel: 1, tilt: a });
     const top = p[1];
     f.box("metal", 0.25, top + 0.26, hz + 0.02, 0.02, 0.5, 0.02, { color: IMP.mid, texel: 2 });
-    // hooded head: the emitter is a 0.2 × 0.03 emitWhite slot on its underside (emitCoolSoft's 2.4 hot centre
-    // bloomed the sill row's task lights into white bars from the helm)
-    f.box("paintedMetal", 0, top + 0.53, hz + 0.16, 0.34, 0.05, 0.1, { color: shade(IMP.dark, 0.7), texel: 1 });
-    f.box("emitWhite", 0, top + 0.503, hz + 0.17, 0.2, 0.008, 0.03, { uv: "keep" });
+    // hooded head: a 0.1 × 0.02 bridgeLamp slot (emissive 1.05, no bloom) set 3 cm up inside a cheeked hood, so
+    // from an eye at the head's own height (the window camera) only the dark cheeks show; emitWhite 0.2 × 0.03
+    // slots read as two clipped lamp heads in the window view (critic round 2)
+    const hd = shade(IMP.dark, 0.7);
+    f.box("paintedMetal", 0, top + 0.54, hz + 0.16, 0.34, 0.04, 0.12, { color: hd, texel: 1 });
+    for (const s of [-1, 1]) {
+      f.box("paintedMetal", s * 0.16, top + 0.505, hz + 0.16, 0.02, 0.03, 0.12, { color: hd, texel: 1 });
+      f.box("paintedMetal", 0, top + 0.505, hz + 0.16 + s * 0.05, 0.34, 0.03, 0.02, { color: hd, texel: 1 });
+    }
+    f.box("bridgeLamp", 0, top + 0.516, hz + 0.16, 0.1, 0.008, 0.02, { uv: "keep" });
   } else if (variant === 2) {
     // standing unit: two posts carry an overhead panel tipped 30° down toward the operator, two wide screens + a lamp row
     for (const s of [-1, 1]) f.box("paintedMetal", s * (w / 2 - 0.09), 1.72, hz + 0.1, 0.06, 0.84, 0.06, { color: shade(IMP.dark, 0.8), texel: 1 });
@@ -256,8 +262,9 @@ export function bridgeConsole(kit, spec) {
   f.collider(0, 0, 1.3, 0.02, w + 0.06, d + 0.02, tag);
 }
 
-// Operator seat facing local -z. Cushion top at 0.48.
-export function bridgeSeat(kit, x, y, z, yaw = 0, { cushion = "fabric", tag = "seat" } = {}) {
+// Operator seat facing local -z. Cushion top at 0.48. Pads in darkGloss (black leather read): the shared
+// `fabric` was a draw call spent on 91 small pads, freed for the module-local bridgeLamp diffusers.
+export function bridgeSeat(kit, x, y, z, yaw = 0, { cushion = "darkGloss", tag = "seat" } = {}) {
   const f = new Frame(kit, x, y, z, yaw);
   const pad = 0x2b2e34;
   f.box("paintedMetal", 0, 0.02, 0, 0.52, 0.04, 0.52, { color: IMP.black, texel: 1 });
@@ -288,15 +295,15 @@ export function commandChair(kit, x, y, z, yaw = 0, { screen = "screenImp2" } = 
   // pedestal, seat pan (cushion top 0.65 = plinth + 0.45)
   f.add("paintedMetal", new THREE.CylinderGeometry(0.13, 0.17, 0.3, 12), 0, 0.35, 0.05, { color: shade(IMP.dark, 0.8), texel: 1 });
   f.box("paintedMetal", 0, 0.545, 0.03, 0.72, 0.09, 0.7, { color: IMP.dark, texel: 1 });
-  f.box("fabric", 0, 0.62, 0.05, 0.62, 0.06, 0.58, { color: pad, texel: 2 });
+  f.box("darkGloss", 0, 0.62, 0.05, 0.62, 0.06, 0.58, { color: pad, texel: 2 });
   // back 0.62..1.58 leaning back 6°: shell, pad, headrest, wings, rear spine with a status lamp
   const bt = 0.1;
   const bc = [0, 1.1, 0.36];
   f.box("paintedMetal", bc[0], bc[1], bc[2], 0.7, 0.96, 0.08, { color: IMP.black, texel: 1, tilt: bt });
   let p = onTilt(bc, bt, 0, -0.055, -0.08);
-  f.box("fabric", p[0], p[1], p[2], 0.5, 0.7, 0.03, { color: pad, texel: 2, tilt: bt });
+  f.box("darkGloss", p[0], p[1], p[2], 0.5, 0.7, 0.03, { color: pad, texel: 2, tilt: bt });
   p = onTilt(bc, bt, 0, -0.065, 0.36);
-  f.box("fabric", p[0], p[1], p[2], 0.34, 0.16, 0.05, { color: shade(pad, 0.8), texel: 2, tilt: bt });
+  f.box("darkGloss", p[0], p[1], p[2], 0.34, 0.16, 0.05, { color: shade(pad, 0.8), texel: 2, tilt: bt });
   for (const s of [-1, 1]) {
     p = onTilt(bc, bt, s * 0.37, -0.06, 0.06);
     f.box("paintedMetal", p[0], p[1], p[2], 0.06, 0.8, 0.22, { color: IMP.black, texel: 1, tilt: bt });
@@ -304,32 +311,67 @@ export function commandChair(kit, x, y, z, yaw = 0, { screen = "screenImp2" } = 
     p = onTilt(bc, bt, s * 0.37, 0.052, 0.06);
     f.box("emitBlue", p[0], p[1], p[2], 0.012, 0.7, 0.008, { tilt: bt });
   }
-  // rear face: painted spine (dielectric, reads grey under the dais spot), polished top rail, two readout panels
-  // with a screen and a lamp row each so the chair keeps a silhouette from behind (the dais view)
+  // rear face (fills the left third of the dais view, so it is detailed like a cabinet): painted spine, polished
+  // top rail, a seam grid of 6 mm ridges, a slatted vent grille high on each half, two readout panels with a
+  // screen and a recessed key row, a readout strip low on each half
   p = onTilt(bc, bt, 0, 0.055, 0.0);
   f.box("paintedMetal", p[0], p[1], p[2], 0.12, 0.9, 0.03, { color: shade(IMP.mid, 1.1), texel: 2, tilt: bt });
   p = onTilt(bc, bt, 0, 0.0, 0.49);
   f.box("metal", p[0], p[1], p[2], 0.74, 0.03, 0.1, { color: POLISH, texel: 2, tilt: bt });
+  const ridge = shade(IMP.dark, 1.15);
   for (const s of [-1, 1]) {
+    p = onTilt(bc, bt, s * 0.325, 0.043, 0.0);
+    f.box("paintedMetal", p[0], p[1], p[2], 0.006, 0.9, 0.006, { color: ridge, texel: 2, tilt: bt });
+    for (const hh of [-0.44, -0.24, 0.24, 0.42]) {
+      p = onTilt(bc, bt, s * 0.2, 0.043, hh);
+      f.box("paintedMetal", p[0], p[1], p[2], 0.25, 0.006, 0.006, { color: ridge, texel: 2, tilt: bt });
+    }
+    // vent grille: 5 slats over a dark recess, upper half
+    p = onTilt(bc, bt, s * 0.2, 0.042, 0.33);
+    f.box("paintedMetal", p[0], p[1], p[2], 0.2, 0.14, 0.004, { color: SCUFF, texel: 2, tilt: bt });
+    for (let k = 0; k < 5; k++) {
+      p = onTilt(bc, bt, s * 0.2, 0.048, 0.28 + k * 0.025);
+      f.box("metal", p[0], p[1], p[2], 0.18, 0.008, 0.006, { color: IMP.mid, texel: 2, tilt: bt });
+    }
+    // readout panel: screen + four 14 mm keys sunk in a black well strip
     p = onTilt(bc, bt, s * 0.2, 0.046, 0.0);
     f.box("darkGloss", p[0], p[1], p[2], 0.2, 0.36, 0.012, { tilt: bt });
     p = onTilt(bc, bt, s * 0.2, 0.054, 0.09);
     f.box(s > 0 ? "screenImp1" : "screenImp3", p[0], p[1], p[2], 0.16, 0.09, 0.006, { tilt: bt, uv: "keep" });
+    p = onTilt(bc, bt, s * 0.2, 0.053, -0.06);
+    f.box("paintedMetal", p[0], p[1], p[2], 0.17, 0.03, 0.004, { color: IMP.black, texel: 2, tilt: bt });
     for (let k = 0; k < 4; k++) {
-      p = onTilt(bc, bt, s * 0.2 - 0.06 + k * 0.04, 0.054, -0.06);
-      f.box(IND[(k * 4 + (s > 0 ? 1 : 3)) % IND.length], p[0], p[1], p[2], 0.025, 0.02, 0.006, { tilt: bt });
+      p = onTilt(bc, bt, s * 0.2 - 0.06 + k * 0.04, 0.0555, -0.06);
+      f.box(k === 2 ? "bridgeLamp" : k === 1 ? "paintedMetal" : IND[(k * 4 + (s > 0 ? 1 : 3)) % IND.length], p[0], p[1], p[2], 0.014, 0.012, 0.003, { tilt: bt, ...(k === 1 ? { color: 0x1c1e22, texel: 2 } : {}) });
+    }
+    // low readout strip: dark bezel, screen strip, three lamps
+    p = onTilt(bc, bt, s * 0.2, 0.046, -0.34);
+    f.box("darkGloss", p[0], p[1], p[2], 0.22, 0.07, 0.012, { tilt: bt });
+    p = onTilt(bc, bt, s * 0.2 - 0.03, 0.054, -0.34);
+    f.box(s > 0 ? "screenImp0" : "screenImp2", p[0], p[1], p[2], 0.12, 0.035, 0.006, { tilt: bt, uv: "keep" });
+    for (let k = 0; k < 3; k++) {
+      p = onTilt(bc, bt, s * 0.2 + 0.06 + k * 0.022, 0.054, -0.34);
+      f.box(["emitRedImp", "emitBlue", "emitAmber"][(k + (s > 0 ? 1 : 0)) % 3], p[0], p[1], p[2], 0.012, 0.02, 0.006, { tilt: bt });
     }
   }
   p = onTilt(bc, bt, 0, 0.075, 0.36);
   f.box("emitRedImp", p[0], p[1], p[2], 0.05, 0.03, 0.01, { tilt: bt });
-  // armrest consoles: 0.35 wide, gloss top with three displays, four keys and a thumb wheel each
+  // armrest consoles: 0.35 wide, gloss top with three displays, four 18 mm keys sunk in black wells (two lit
+  // colours, one cool white, one unlit — critic round 2: "pastel keycaps oversized and candy-like") and a thumb wheel
   for (const s of [-1, 1]) {
     const ax = s * 0.49;
     f.box("paintedMetal", ax, 0.72, 0.12, 0.1, 0.3, 0.3, { color: IMP.dark, texel: 1 });
     f.box("paintedMetal", ax, 0.895, 0.02, 0.35, 0.09, 0.78, { color: IMP.black, texel: 1 });
     f.box("darkGloss", ax, 0.945, -0.02, 0.3, 0.012, 0.62);
     for (let k = 0; k < 3; k++) f.box(k === 1 ? screen : "screenImp" + ((k + (s > 0 ? 1 : 3)) % 4), ax, 0.953, -0.26 + k * 0.155, 0.22, 0.006, 0.12, { uv: "keep" });
-    for (let k = 0; k < 4; k++) f.box(IND[(k * 3 + (s > 0 ? 2 : 0)) % IND.length], ax + ((k % 2) - 0.5) * 0.09, 0.955, 0.19 + Math.floor(k / 2) * 0.05, 0.035, 0.008, 0.025);
+    f.box("paintedMetal", ax, 0.953, 0.215, 0.12, 0.006, 0.08, { color: IMP.black, texel: 2 });
+    for (let k = 0; k < 4; k++) {
+      const kx = ax + ((k % 2) - 0.5) * 0.05;
+      const kz = 0.195 + Math.floor(k / 2) * 0.04;
+      f.box("paintedMetal", kx, 0.955, kz, 0.028, 0.004, 0.022, { color: SCUFF, texel: 2 });
+      const km = k === 3 ? "bridgeLamp" : k === 1 ? "paintedMetal" : IND[(k * 3 + (s > 0 ? 2 : 0)) % IND.length];
+      f.box(km, kx, 0.9575, kz, 0.018, 0.003, 0.013, km === "paintedMetal" ? { color: 0x1c1e22, texel: 2 } : {});
+    }
     f.add("metal", new THREE.CylinderGeometry(0.028, 0.028, 0.02, 10), ax + s * 0.115, 0.955, 0.215, { color: IMP.steel, texel: 2 });
     f.box("emitAmber", ax, 0.9, 0.412, 0.24, 0.006, 0.01);
   }
@@ -352,14 +394,34 @@ export function readoutBar(kit, x, y, z, yaw, w, { screen = "screenImp1", rect =
   f.box("metal", 0, h + 0.005, zb, w - 0.1, 0.01, 0.16, { color: IMP.mid, texel: 2 });
 }
 
-// Wall-mounted display, local +z faces the room. Frame, bezel, screen, three lamps, optional stencil label.
-export function wallDisplay(kit, { x, y, z, yaw, w = 1.5, h = 1.1, screen = "screenImp0", rect = null, label }) {
+// Wall-mounted display, local +z faces the room, (x, y, z) on the wall face. Mounted, not floating (critic
+// round 2): a wall plate with a 0.1 m mounting arm carries the unit, a matte black bezel frames a dark-gloss
+// inner bezel and the screen, two lamps + optional stencil under the screen, and `cableTo` (world y) runs a
+// conduit from the unit's back down/up the wall to a tray or box, with clamps at both ends.
+export function wallDisplay(kit, { x, y, z, yaw, w = 1.5, h = 1.1, screen = "screenImp0", rect = null, label, arm = true, cableTo = null, cableOut = 0.05 }) {
   const f = new Frame(kit, x, y, z, yaw);
-  f.box("paintedMetal", 0, 0, 0.03, w + 0.16, h + 0.18, 0.06, { color: shade(IMP.dark, 0.9), texel: 1 });
-  f.box("darkGloss", 0, 0.01, 0.07, w + 0.06, h + 0.06, 0.02);
-  f.box(screen, 0, 0.01, 0.083, w, h, 0.006, { uv: "keep", ...(rect ? { uvRect: rect } : {}) });
-  for (let i = 0; i < 2; i++) f.box(["emitBlue", "emitRedImp"][i], -w / 2 + 0.12 + i * 0.14, -h / 2 - 0.05, 0.065, 0.07, 0.02, 0.012);
-  if (label !== undefined) f.decal(label, w / 2 - 0.14, -h / 2 - 0.05, 0.064, 0.12);
+  const o = arm ? 0.1 : 0;
+  if (arm) {
+    f.box("paintedMetal", 0, 0, 0.012, 0.36, 0.3, 0.024, { color: IMP.mid, texel: 2 });
+    f.box("paintedMetal", 0, 0, 0.024 + (o - 0.024) / 2, 0.14, 0.14, o - 0.024, { color: shade(IMP.dark, 0.8), texel: 2 });
+    for (const s of [-1, 1]) f.box("metal", s * 0.14, 0.1, 0.03, 0.03, 0.03, 0.012, { color: IMP.steel, texel: 2 });
+  }
+  f.box("paintedMetal", 0, 0, o + 0.03, w + 0.16, h + 0.18, 0.06, { color: IMP.black, texel: 1 });
+  f.box("darkGloss", 0, 0.01, o + 0.07, w + 0.06, h + 0.06, 0.02);
+  f.box(screen, 0, 0.01, o + 0.083, w, h, 0.006, { uv: "keep", ...(rect ? { uvRect: rect } : {}) });
+  for (let i = 0; i < 2; i++) f.box(["emitBlue", "emitRedImp"][i], -w / 2 + 0.12 + i * 0.14, -h / 2 - 0.05, o + 0.065, 0.07, 0.02, 0.012);
+  if (label !== undefined) f.decal(label, w / 2 - 0.14, -h / 2 - 0.05, o + 0.064, 0.12);
+  if (cableTo !== null) {
+    // conduit from the unit's back edge (behind the bezel) to the tray/box height, hugging the wall
+    const yb = cableTo > y ? h / 2 + 0.06 : -h / 2 - 0.06;
+    const dy = cableTo - y;
+    const y0 = Math.min(yb, dy);
+    const y1 = Math.max(yb, dy);
+    if (y1 - y0 > 0.2) {
+      f.add("metal", new THREE.CylinderGeometry(0.022, 0.022, y1 - y0, 8), 0.3, (y0 + y1) / 2, cableOut, { color: IMP.mid, texel: 2 });
+      for (const yy of [y0 + 0.12, y1 - 0.12]) f.box("paintedMetal", 0.3, yy, (cableOut + 0.02) / 2, 0.08, 0.06, cableOut + 0.02, { color: IMP.dark, texel: 2 });
+    }
+  }
 }
 
 // Floor cabinet against a wall; local +z faces the room, body spans z 0..d. Door panel, handle, LED column, slats.
@@ -394,11 +456,42 @@ export function ventPanel(kit, { x, y, z, yaw, w = 0.9, h = 0.5 }) {
   for (let k = 0; k < n; k++) f.box("metal", 0, -h / 2 + (h / (n + 1)) * (k + 1), 0.036, w - 0.12, 0.02, 0.012, { color: IMP.mid, texel: 2 });
 }
 
-// Junction box with a lamp and a conduit stub; local +z faces the room.
+// Junction box with a lamp and a lid seam; local +z faces the room. Painted steel like every other box on these
+// walls (the shared wall() helper keeps metalRough in the bridge's material set anyway, via its panel joints).
 export function junctionBox(kit, { x, y, z, yaw, w = 0.3, h = 0.36, lamp = "emitAmber" }) {
   const f = new Frame(kit, x, y, z, yaw);
-  f.box("metalRough", 0, 0, 0.06, w, h, 0.12, { color: IMP.mid, texel: 2 });
-  f.box(lamp, w / 2 - 0.06, h / 2 - 0.06, 0.124, 0.03, 0.03, 0.01);
+  f.box("paintedMetal", 0, 0, 0.06, w, h, 0.12, { color: IMP.mid, texel: 2 });
+  f.box("paintedMetal", 0, 0, 0.123, w - 0.05, h - 0.05, 0.006, { color: shade(IMP.mid, 0.8), texel: 2 });
+  f.box(lamp, w / 2 - 0.06, h / 2 - 0.06, 0.13, 0.03, 0.03, 0.01);
+}
+
+// Junction-box cluster on a wall (a swap-in for a wall display so a display row is not one template tiled):
+// a backing plate, three boxes of two sizes, a conduit between them and two stubs off the plate.
+export function junctionCluster(kit, { x, y, z, yaw, seed = 1 }) {
+  const f = new Frame(kit, x, y, z, yaw);
+  const lamps = ["emitAmber", "emitRedImp", "emitBlue"];
+  f.box("paintedMetal", 0, 0, 0.012, 1.5, 0.9, 0.024, { color: shade(IMP.dark, 0.9), texel: 1 });
+  const p = f.pos(0, 0, 0);
+  junctionBox(kit, { x: p[0], y: p[1] + 0.15, z: p[2], yaw, w: 0.44, h: 0.4, lamp: lamps[seed % 3] });
+  for (const s of [-1, 1]) {
+    const q = f.pos(s * 0.5, 0, 0);
+    junctionBox(kit, { x: q[0], y: q[1] - 0.12 + (s > 0 ? 0.1 : 0), z: q[2], yaw, w: 0.3, h: 0.34, lamp: lamps[(seed + s + 3) % 3] });
+  }
+  f.box("metal", 0, -0.08, 0.06, 1.0, 0.05, 0.05, { color: IMP.mid, texel: 2 });
+  for (const s of [-1, 1]) f.add("metal", new THREE.CylinderGeometry(0.03, 0.03, 0.5, 8), s * 0.5, 0.3, 0.07, { color: IMP.mid, texel: 2 });
+  f.box("emitRedImp", -0.62, 0.36, 0.03, 0.03, 0.03, 0.012);
+}
+
+// Vent-grille pair on a wall (the other swap-in): two slotted panels side by side on a shared dark surround
+// with a red lamp between them.
+export function ventCluster(kit, { x, y, z, yaw, w = 1.0, h = 0.5 }) {
+  const f = new Frame(kit, x, y, z, yaw);
+  f.box("paintedMetal", 0, 0, 0.008, 2 * w + 0.4, h + 0.3, 0.016, { color: shade(IMP.dark, 0.9), texel: 1 });
+  for (const s of [-1, 1]) {
+    const p = f.pos(s * (w / 2 + 0.1), 0, 0.016);
+    ventPanel(kit, { x: p[0], y: p[1], z: p[2], yaw, w, h });
+  }
+  f.box("emitRedImp", 0, h / 2 + 0.06, 0.02, 0.03, 0.03, 0.01);
 }
 
 // Horizontal conduit along a wall between two world points at height y, offset `out` from the wall plane along

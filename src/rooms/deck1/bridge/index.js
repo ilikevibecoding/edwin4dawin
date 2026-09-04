@@ -88,6 +88,16 @@ function makePitFloor(shared) {
   });
 }
 
+// Lamp diffusers (pendant / downlight / raft undersides, console task lights, head-height wall strips): cool
+// white at emissive 1.05, i.e. ≈ 226 sRGB after ACES and under the 1.15 bloom threshold, so a lit diffuser reads
+// as a lit panel in its housing instead of a clipped square with a halo (the shared emitWhite is 1.35 → ≈ 236
+// plus bloom, right at the clip level; critic round 2: "fixture is a white blob", "lamp heads clip"). +1 draw
+// call, paid for by dropping `fabric` (seat cushions are darkGloss now); metalRough still arrives through the
+// shared wall() helper's panel joints, so the bridge's own metalRough boxes went to paintedMetal for nothing.
+function makeBridgeLamp() {
+  return new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xe6eeff, emissiveIntensity: 1.05, roughness: 0.6, metalness: 0 });
+}
+
 const manifest = {
   id: ID,
   name: "Main Bridge",
@@ -115,7 +125,7 @@ const manifest = {
   },
   materials(shared) {
     screens = makeBridgeScreens();
-    return { bridgeScreen: screens.material, bridgeFloor: makeBridgeFloor(), bridgeSeam: makeBridgeSeam(), bridgePitFloor: makePitFloor(shared) };
+    return { bridgeScreen: screens.material, bridgeFloor: makeBridgeFloor(), bridgeSeam: makeBridgeSeam(), bridgePitFloor: makePitFloor(shared), bridgeLamp: makeBridgeLamp() };
   },
   build(ctx) {
     const { kit } = ctx;
@@ -128,6 +138,7 @@ const manifest = {
     if (!ctx.materials.bridgeFloor) ctx.materials.bridgeFloor = makeBridgeFloor();
     if (!ctx.materials.bridgeSeam) ctx.materials.bridgeSeam = makeBridgeSeam();
     if (!ctx.materials.bridgePitFloor) ctx.materials.bridgePitFloor = makePitFloor(ctx.materials);
+    if (!ctx.materials.bridgeLamp) ctx.materials.bridgeLamp = makeBridgeLamp();
 
     // --- walls. Port/starboard walls drop to the pit floor so the pits are panelled; fore/aft walls sit on +240.
     const winOpening = { a0: -19, a1: 19, y0: 241.2, y1: 245.4, kind: "window" };
@@ -213,13 +224,15 @@ const manifest = {
     // walkway pendants 100 / 70 / 40 %, the point just under the housing top (6.2 m over the deck)
     const pendantY = CEILY - L.pendantDrop + 0.13;
     L.walkwayLightsZ.forEach((z, i) => lights.push({ type: "point", pos: [0, pendantY, z], color: COOL, intensity: [75, 52, 30][i], distance: 18, priority: 1 }));
-    // aft deck: one warm pendant pool over the aft station bank (60 %) and two 60 % pools over the outer aft
-    // bank at x ±14: with the centre pendant alone the 40 × 12 m aft deck was a black void from the command
-    // camera (E ≈ 0.13 in its corners) — everything on the aft deck is matte black, so the walls (5.7 m from
-    // these pendants, E ≈ 0.6) are what carries the brightness. Same priority as the rafts, so the distance term
-    // swaps them in for the aft cameras (they take the slots of the 40 m-away fore rafts) and out again forward.
-    lights.push({ type: "point", pos: [0, pendantY, L.aftPendantZ], color: WARM, intensity: 45, distance: 16, priority: 0.85 });
-    for (const [x, z] of L.aftCornerPendants) lights.push({ type: "point", pos: [x, pendantY, z], color: WARM, intensity: 45, distance: 14, priority: 0.75 });
+    // aft deck: one warm pendant pool over the aft station bank and two over the outer aft bank at x ±14: with
+    // the centre pendant alone the 40 × 12 m aft deck was a black void from the command camera (E ≈ 0.13 in its
+    // corners) — everything on the aft deck is matte black, so the walls (5.7 m from these pendants) are what
+    // carries the brightness. Critic round 2 ("command view underexposed") = one more stop: 45 → 85 cd on the
+    // corner pendants (E ≈ 2.4 on the pod tops under them, ≈ 1.3 on the side wall) and 45 → 70 on the centre,
+    // reach 20 m so the two pools overlap on the aft wall cabinets. Same priority as the rafts, so the distance
+    // term swaps them in for the aft cameras (they take the slots of the 40 m-away fore rafts) and out forward.
+    lights.push({ type: "point", pos: [0, pendantY, L.aftPendantZ], color: WARM, intensity: 70, distance: 20, priority: 0.85 });
+    for (const [x, z] of L.aftCornerPendants) lights.push({ type: "point", pos: [x, pendantY, z], color: WARM, intensity: 85, distance: 20, priority: 0.75 });
     for (const s of [-1, 1]) {
       // fore platform downlights, inside the recessed ceiling housings (0.3 m boxes under the slab)
       lights.push({ type: "point", pos: [s * 9.5, CEILY - 0.05, 462.4], color: COOL, intensity: 80, distance: 18, priority: 0.85 });

@@ -31,26 +31,37 @@ export function buildCeiling(kit, { xIn, z0, z1, ceilY, beamsZ, walkwayLightsZ, 
   }
   kit.boxMM("bridgeFloor", [cur, ceilY - 0.02, z0 - 0.05], [xo, top, z1 + 0.05], { color: near, texel: 0.5 });
 
-  // channel emitters, one segment per bay between beams (the beams cross the channels)
+  // channel emitters, one segment per bay between beams (the beams cross the channels). The strip sits 6 cm up
+  // inside the 0.24 m channel, not at its back: at the back (0.19 m up) the channel's own side wall hid it
+  // beyond ~24° off the vertical, so from the aft corner camera the white walkway channels 12–16 m to the side
+  // showed only their dim lit walls and read dull blue (critic round 2); at 6 cm they show from anywhere in the room.
   const bays = [z0 + 0.3, ...beamsZ, z1 - 0.3];
   for (const c of chans) {
     for (let i = 0; i < bays.length - 1; i++) {
       const a = bays[i] + (i === 0 ? 0 : 0.45);
       const b = bays[i + 1] - (i === bays.length - 2 ? 0 : 0.45);
       if (b - a < 0.6) continue;
-      kit.boxMM(c.emit, [c.at - c.ew / 2, top - 0.05, a], [c.at + c.ew / 2, top - 0.02, b], { uv: "keep" });
+      kit.boxMM(c.emit, [c.at - c.ew / 2, ceilY + 0.05, a], [c.at + c.ew / 2, ceilY + 0.08, b], { uv: "keep" });
     }
   }
 
-  // transverse beams: web + lighter bottom flange + a dark rivet line
+  // transverse beams: web + lighter bottom flange + a dark rivet line. Webs and flanges in the module-local
+  // bridgeSeam (flat dielectric, F90 capped at 0.25, roughness 0.55): in paintedMetal the flange underside 3 m
+  // from each pendant (E ≈ 7) mirrored the pendant's point light toward every centreline camera — seen at
+  // NdotV ≈ 0.2 the grazing Fresnel and the map's roughness-0.4 spots made a 20 × 6 px clipped glint over the
+  // walkway in the walkway / dais / command shots, the last "white blob" left after the fixtures were fixed
+  // (bridge-r2). Tints × 0.33 = the worn-metal map's mean albedo (0.39) × (1 − metalness 0.15) the flat
+  // material no longer carries, so the beams stay as dark as the longitudinal paintedMetal pair beside them.
+  const beamFlat = shade(beam, 0.33);
+  const flangeFlat = shade(flange, 0.33);
   for (const z of beamsZ) {
-    kit.boxMM("paintedMetal", [-xo, ceilY - 0.46, z - 0.18], [xo, ceilY - 0.02, z + 0.18], { color: beam, texel: 1 });
-    kit.boxMM("paintedMetal", [-xo, ceilY - 0.52, z - 0.27], [xo, ceilY - 0.46, z + 0.27], { color: flange, texel: 1 });
+    kit.boxMM("bridgeSeam", [-xo, ceilY - 0.46, z - 0.18], [xo, ceilY - 0.02, z + 0.18], { color: beamFlat, texel: 1 });
+    kit.boxMM("bridgeSeam", [-xo, ceilY - 0.52, z - 0.27], [xo, ceilY - 0.46, z + 0.27], { color: flangeFlat, texel: 1 });
     kit.boxMM("paintedMetal", [-xo + 0.3, ceilY - 0.525, z - 0.02], [xo - 0.3, ceilY - 0.52, z + 0.02], { color: IMP.black, texel: 1 });
     // junction box + lamp on alternate beams, port and starboard
     for (const s of [-1, 1]) {
       const bx = s * (beamsZ.indexOf(z) % 2 ? 8.2 : 14.6);
-      kit.box("metalRough", bx, ceilY - 0.32, z - 0.26, 0.36, 0.26, 0.16, { color: IMP.mid, texel: 2 });
+      kit.box("paintedMetal", bx, ceilY - 0.32, z - 0.26, 0.36, 0.26, 0.16, { color: IMP.mid, texel: 2 });
       kit.box(beamsZ.indexOf(z) % 3 ? "emitAmber" : "emitRedImp", bx + 0.1, ceilY - 0.28, z - 0.345, 0.04, 0.04, 0.012);
     }
   }
@@ -65,13 +76,14 @@ export function buildCeiling(kit, { xIn, z0, z1, ceilY, beamsZ, walkwayLightsZ, 
   // their own light — read as clipped white blobs from anywhere in the room. Every fixture here is a CLOSED dark
   // box with the pool light descriptor INSIDE it, just under its top (index.js): every outer face then points
   // away from the light (N·L < 0, unlit), the lit interior is sealed, and the only lit geometry is the lamp on the
-  // underside: a flat emitWhite diffuser (1.7 ≈ 1.3× the screens, no falloff-map hot centre) in a black 6 cm
-  // lip, split by a black egg-crate 0.3 m under the light (E ≈ 150 on black paint → 0.2, dark grey fins). From
-  // below the fixture reads as a louvred lamp in a dark housing; from across the room as a small lit square.
+  // underside: a flat bridgeLamp diffuser (module-local, emissive 1.05 ≈ 226 sRGB, under the bloom threshold — the
+  // shared emitWhite at 1.35 still clipped and haloed from every camera) in a black 6 cm lip, split by a black
+  // egg-crate 0.3 m under the light (E ≈ 150 on black paint → 0.2, dark grey fins). From below the fixture reads
+  // as a louvred lamp in a dark housing; from across the room as a small lit square.
   const dark = shade(IMP.dark, 0.7);
   // lamp on the underside of a closed housing whose bottom face is at yb: `w` × `d` diffuser, black lip, fins
   const lamp = (x, yb, z, w, d, nx = 3, nz = 3) => {
-    kit.box("emitWhite", x, yb - 0.006, z, w, 0.012, d, { uv: "keep" });
+    kit.box("bridgeLamp", x, yb - 0.006, z, w, 0.012, d, { uv: "keep" });
     for (const s of [-1, 1]) {
       kit.box("paintedMetal", x + s * (w / 2 + 0.02), yb - 0.03, z, 0.04, 0.06, d + 0.08, { color: IMP.black, texel: 1 });
       kit.box("paintedMetal", x, yb - 0.03, z + s * (d / 2 + 0.02), w, 0.06, 0.04, { color: IMP.black, texel: 1 });

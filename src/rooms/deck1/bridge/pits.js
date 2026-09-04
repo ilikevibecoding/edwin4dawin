@@ -8,7 +8,7 @@ import { decalRect } from "../../../textures.js";
 import { FLOOR, PIT_FLOOR } from "../shared/plan.js";
 import { stairs } from "../shared/imperial.js";
 import { IMP } from "../shared/palette.js";
-import { SCUFF, shade, wallDisplay, cabinet, hatch, ventPanel, junctionBox, conduitRun, dataPillar, rack, dropConduit, stairRail, floorHatch, deckSeams, cableCover } from "./props.js";
+import { SCUFF, shade, wallDisplay, cabinet, hatch, ventPanel, junctionBox, junctionCluster, ventCluster, conduitRun, dataPillar, rack, dropConduit, stairRail, floorHatch, deckSeams, cableCover } from "./props.js";
 import { CELLS } from "./screens.js";
 
 const SCREENS = ["screenImp0", "screenImp1", "screenImp2", "screenImp3"];
@@ -44,9 +44,17 @@ export function buildPits(kit, ctx, L) {
     kit.boxMM("emitBlue", [a, y0 + 0.05, pz0 + 0.5], [b, y0 + 0.085, pz1 - 0.5]);
     [a, b] = span(wx, wx + s * 0.05);
     for (let z = pz0 + 1.5; z < pz1 - 1; z += 3.0) kit.boxMM("paintedMetal", [a, y0 + 0.26, z - 0.02], [b, y1 - 0.25, z + 0.02], { color: IMP.black, texel: 1 });
+    // operator displays for the inner console row: six mounted units (arm, black bezel, cable down to the kick
+    // duct) at two heights and two widths, a junction-box cluster and a vent pair in the third and sixth slots so
+    // the row is not one template tiled at one height (critic round 2)
     for (let k = 0; k < 8; k++) {
       const z = 466.9 + k * 4.2;
-      wallDisplay(kit, { x: wx + s * 0.01, y: y0 + 1.65, z, yaw: yawIn, w: 1.6, h: 1.0, ...pickScreen(k + (s < 0 ? 0 : 2)), label: k % 4 === 0 ? 9 : undefined });
+      if (k === 2) junctionCluster(kit, { x: wx + s * 0.01, y: y0 + 1.6, z, yaw: yawIn, seed: s < 0 ? 1 : 2 });
+      else if (k === 5) ventCluster(kit, { x: wx + s * 0.01, y: y0 + 1.6, z, yaw: yawIn, w: 0.9, h: 0.5 });
+      else {
+        const dy = k % 2 ? -0.12 : 0.08;
+        wallDisplay(kit, { x: wx + s * 0.01, y: y0 + 1.65 + dy, z, yaw: yawIn, w: k % 3 ? 1.4 : 1.6, h: 1.0, ...pickScreen(k + (s < 0 ? 0 : 2)), label: k % 4 === 0 ? 9 : undefined, cableTo: y0 + 0.3 });
+      }
       if (k < 7) {
         junctionBox(kit, { x: wx + s * 0.02, y: y0 + 1.9, z: z + 2.1, yaw: yawIn, w: 0.26, h: 0.3, lamp: k % 2 ? "emitRedImp" : "emitAmber" });
         [a, b] = span(wx, wx + s * 0.09);
@@ -97,20 +105,46 @@ export function buildPits(kit, ctx, L) {
     conduitRun(kit, [s * 9.0, pz1], [s * 18.6, pz1], y0 + 2.28, [0, -1], { r: 0.035, out: 0.08, every: 2.2 });
     kit.add("decal", new THREE.PlaneGeometry(0.5, 0.5), { pos: [s * 4.75, y0 + 1.5, pz1 - 0.005], rot: [0, Math.PI, 0], uv: "keep", uvRect: decalRect(s < 0 ? 2 : 14) });
 
-    // --- outer wall (x = ±19.7): display band over floor cabinets; 0.4 m cable tray at +3 m with a drop conduit
-    // and a junction box (1.4 m) in every display gap; vent grilles every 6 m; 1.6 m status displays every 8 m and
-    // a conduit run in the upper band; base duct
+    // --- outer wall (x = ±19.7). Lower band, one slot per outer-row station (5.4 m pitch): four mounted displays
+    // of three widths at four heights (±0.2 m), a junction-box cluster and a vent pair in place of the other two
+    // (critic round 2: the eight 3 m units at one height read as one tiled template); floor cabinets between
+    // them; a drop conduit per station from the 0.4 m cable tray (+3 m) into a cabinet with its junction box at
+    // 1.4 m; a housed head-height (2.6 m) blue-white strip along the whole wall; a junction box per beam bay
+    // over the tray; vent grilles every 6 m at 3.9 m; three mounted status displays (of the four slots) and a
+    // junction-box cluster in the upper band, each cabled down to the tray; conduit run at 7.3 m; base duct.
     const ox = s * xi;
-    for (let k = 0; k < 8; k++) {
-      const z = 467.1 + k * 4.2;
-      wallDisplay(kit, { x: ox + s * 0.01, y: y0 + 1.75, z, yaw: yawOut, w: 3.0, h: 1.1, ...pickScreen(k + 1 + (s < 0 ? 1 : 0)), label: k % 3 === 1 ? 12 : undefined });
-      if (k < 7) {
-        cabinet(kit, { x: ox, y: y0, z: z + 2.1, yaw: yawOut, w: 0.8, h: 1.05, d: 0.5, seed: 100 + k + (s < 0 ? 0 : 20) });
-        dropConduit(kit, { x: ox, z: z + 2.1, yaw: yawOut, y0: y0 + 1.1, y1: y0 + 3.0, boxY: y0 + 1.4, lamp: k % 2 ? "emitRedImp" : "emitAmber" });
-      }
-      // second cabinet under every other display, staggered so the wall never reads as one repeated cell
-      if (k % 2 === 0) cabinet(kit, { x: ox, y: y0, z: z + (k % 4 ? -1.0 : 0.8), yaw: yawOut, w: 0.7 + (k % 3) * 0.1, h: 0.95, d: 0.45, seed: 300 + k + (s < 0 ? 0 : 40) });
+    const lower = [
+      [468.6, "d", 3.0, 1.1, 0.12, 1],
+      [474.0, "d", 2.4, 1.0, -0.2, 2],
+      [476.7, "jb"],
+      [479.4, "d", 3.0, 1.1, 0.02, 3],
+      [484.8, "vent"],
+      [490.2, "d", 2.6, 1.0, -0.12, 4],
+    ];
+    for (const [z, kind, w, h, dy, si] of lower) {
+      if (kind === "jb") junctionCluster(kit, { x: ox + s * 0.01, y: y0 + 1.75, z, yaw: yawOut, seed: s < 0 ? 3 : 4 });
+      else if (kind === "vent") ventCluster(kit, { x: ox + s * 0.01, y: y0 + 1.75, z, yaw: yawOut, w: 1.0, h: 0.5 });
+      else wallDisplay(kit, { x: ox + s * 0.01, y: y0 + 1.75 + dy, z, yaw: yawOut, w, h, ...pickScreen(si + (s < 0 ? 1 : 0)), label: si === 3 ? 12 : undefined, cableTo: y0 + 3.0, cableOut: 0.1 });
     }
+    [
+      [466.5, 0.8, 1.05],
+      [471.3, 0.9, 1.05],
+      [472.3, 0.7, 1.05],
+      [477.6, 0.8, 1.05],
+      [483.0, 0.9, 1.05],
+      [487.5, 0.7, 0.95],
+      [488.5, 0.8, 1.05],
+      [493.4, 0.9, 1.05],
+      [496.6, 0.8, 0.95],
+    ].forEach(([z, w, h], k) => cabinet(kit, { x: ox, y: y0, z, yaw: yawOut, w, h, d: 0.5, seed: 100 + k + (s < 0 ? 0 : 20) }));
+    [466.8, 472.2, 477.6, 483.0, 488.4].forEach((z, k) => dropConduit(kit, { x: ox, z, yaw: yawOut, y0: y0 + 1.05, y1: y0 + 3.0, boxY: y0 + 1.4, lamp: k % 2 ? "emitRedImp" : "emitAmber" }));
+    // head-height strip in a dark channel housing 2.6 m over the pit floor (0.2 m over the walkway deck)
+    [a, b] = span(ox, ox - s * 0.06);
+    kit.boxMM("paintedMetal", [a, y0 + 2.57, pz0 + 0.5], [b, y0 + 2.67, pz1 - 0.5], { color: shade(IMP.dark, 0.7), texel: 1 });
+    [a, b] = span(ox - s * 0.06, ox - s * 0.064);
+    kit.boxMM("paintedMetal", [a, y0 + 2.6, pz0 + 0.6], [b, y0 + 2.64, pz1 - 0.6], { color: SCUFF, texel: 2 });
+    [a, b] = span(ox - s * 0.06, ox - s * 0.068);
+    kit.boxMM("emitWhite", [a, y0 + 2.61, pz0 + 0.7], [b, y0 + 2.63, pz1 - 0.7], { uv: "keep" });
     // cable tray 3 m over the pit floor: 0.4 m deep, outer lip, three cable bundles
     [a, b] = span(ox, ox - s * 0.4);
     kit.boxMM("paintedMetal", [a, y0 + 3.0, pz0 + 0.4], [b, y0 + 3.04, pz1 - 0.4], { color: IMP.mid, texel: 1 });
@@ -122,9 +156,22 @@ export function buildPits(kit, ctx, L) {
     kit.boxMM("paintedMetal", [a, y0 + 3.04, pz0 + 0.6], [b, y0 + 3.11, pz1 - 0.6], { color: 0x2a2320, texel: 2 });
     [a, b] = span(ox - s * 0.28, ox - s * 0.35);
     kit.boxMM("paintedMetal", [a, y0 + 3.04, pz0 + 0.6], [b, y0 + 3.1, pz1 - 0.6], { color: shade(IMP.dark, 0.6), texel: 2 });
+    // one junction box per beam bay just over the tray, with a stub down into it
+    [468.7, 474.5, 480.5, 486.5, 493.6, 498.3].forEach((z, k) => {
+      junctionBox(kit, { x: ox + s * 0.01, y: y0 + 3.5, z, yaw: yawOut, w: 0.3, h: 0.36, lamp: k % 3 === 1 ? "emitRedImp" : "emitAmber" });
+      kit.cyl("metal", ox - s * 0.07, y0 + 3.23, z, 0.022, 0.2, "y", { color: IMP.mid, segments: 8, texel: 2 });
+    });
     for (let z = 467; z < pz1 - 1; z += 6) ventPanel(kit, { x: ox + s * 0.01, y: y0 + 3.9, z, yaw: yawOut, w: 1.0, h: 0.5 });
-    for (let k = 0; k < 4; k++) wallDisplay(kit, { x: ox + s * 0.01, y: y0 + 6.3, z: 468 + k * 8, yaw: yawOut, w: 1.6, h: 0.9, ...pickScreen(k + 13 + (s < 0 ? 0 : 2)), label: k % 2 ? 12 : undefined });
+    [
+      [468, 0.2, 13],
+      [476, -0.2, 14],
+      [492, 0.1, 16],
+    ].forEach(([z, dy, si]) => wallDisplay(kit, { x: ox + s * 0.01, y: y0 + 6.3 + dy, z, yaw: yawOut, w: 1.6, h: 0.9, ...pickScreen(si + (s < 0 ? 0 : 2)), label: si === 14 ? 12 : undefined, cableTo: y0 + 3.14 }));
+    junctionCluster(kit, { x: ox + s * 0.01, y: y0 + 6.3, z: 484, yaw: yawOut, seed: s < 0 ? 5 : 6 });
+    // service hatches between the 4.8 m wall strip and the status displays, and a heavier pipe run at 8.7 m
+    for (const z of [472, 488]) hatch(kit, { x: ox + s * 0.01, y: y0 + 5.6, z, yaw: yawOut, w: 1.0, h: 0.8, label: z === 472 ? 9 : undefined });
     conduitRun(kit, [ox, pz0 + 1.0], [ox, pz1 - 1.0], y0 + 7.3, [-s, 0], { r: 0.04, out: 0.09, every: 3.0 });
+    conduitRun(kit, [ox, pz0 + 0.6], [ox, pz1 - 0.6], y0 + 8.7, [-s, 0], { r: 0.07, out: 0.12, every: 3.0, color: shade(IMP.mid, 1.1) });
     for (const z of [472, 488]) junctionBox(kit, { x: ox + s * 0.01, y: y0 + 7.75, z, yaw: yawOut, w: 0.34, h: 0.4, lamp: "emitBlue" });
     [a, b] = span(ox, ox - s * 0.3);
     kit.boxMM("paintedMetal", [a, y0, pz0 + 0.3], [b, y0 + 0.12, pz1 - 0.3], { color: IMP.black, texel: 1 });
@@ -202,22 +249,23 @@ function litStairs(kit, { x0, x1, z0, z1, dir }) {
 // Hanging light raft over each pit aisle: a CLOSED 0.7 × 0.3 × 2.8 m housing with the pit pool light inside it
 // just under its top (index.js: raftY + 0.13), so every outer face points away from the light and stays dark and
 // the lit interior is sealed (the open-bottomed version lit its own inner walls and louvre to E ≈ 500 and read
-// as a clipped white bar from every pit view). The lamp is a 0.3 × 2.5 m emitWhite diffuser flush under the
-// bottom face in a black lip, split by black fins 0.3 m under the light. Red end lamps, two rods up into the
-// blue ceiling channel.
+// as a clipped white bar from every pit view). The lamp is a 0.14 × 2.5 m bridgeLamp diffuser (emissive 1.05,
+// under the bloom threshold; half the area of the 0.3 m emitWhite strip that still clipped from the pit floor in
+// critic round 2) flush under the bottom face between two 0.12 m deep black cheeks, split by 21 black cross
+// fins 0.12 m deep at 0.125 m pitch (cut-off ≈ 44° off the vertical). Red end lamps, two rods up into the blue
+// ceiling channel.
 function raft(kit, x, y, z, rodLen) {
   const dark = shade(IMP.dark, 0.7);
   kit.box("paintedMetal", x, y, z, 0.7, 0.3, 2.8, { color: dark, texel: 1 });
   for (const s of [-1, 1]) {
     kit.box("emitRedImp", x, y + 0.02, z + s * 1.403, 0.16, 0.03, 0.006);
     kit.box("paintedMetal", x, y + 0.15 + rodLen / 2, z + s * 1.2, 0.04, rodLen, 0.04, { color: IMP.black, texel: 2 });
-    kit.box("paintedMetal", x + s * 0.17, y - 0.18, z, 0.04, 0.06, 2.58, { color: IMP.black, texel: 1 });
-    kit.box("paintedMetal", x, y - 0.18, z + s * 1.27, 0.3, 0.06, 0.04, { color: IMP.black, texel: 1 });
+    kit.box("paintedMetal", x + s * 0.11, y - 0.21, z, 0.04, 0.12, 2.6, { color: IMP.black, texel: 1 });
+    kit.box("paintedMetal", x, y - 0.21, z + s * 1.28, 0.26, 0.12, 0.04, { color: IMP.black, texel: 1 });
   }
   const yb = y - 0.15;
-  kit.box("emitWhite", x, yb - 0.006, z, 0.3, 0.012, 2.5, { uv: "keep" });
-  kit.box("paintedMetal", x, yb - 0.037, z, 0.012, 0.05, 2.5, { color: IMP.black, texel: 1 });
-  for (let k = -4; k <= 4; k++) kit.box("paintedMetal", x, yb - 0.037, z + k * 0.25, 0.3, 0.05, 0.012, { color: IMP.black, texel: 1 });
+  kit.box("bridgeLamp", x, yb - 0.006, z, 0.14, 0.012, 2.5, { uv: "keep" });
+  for (let k = -10; k <= 10; k++) kit.box("paintedMetal", x, yb - 0.072, z + k * 0.125, 0.18, 0.12, 0.012, { color: IMP.black, texel: 1 });
 }
 
 // Platform edges: nosings (split at the stair heads), 0.15 m black inlay with a blue kick strip along both
