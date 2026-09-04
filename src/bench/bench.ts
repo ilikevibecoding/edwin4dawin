@@ -103,6 +103,9 @@ export class Bench {
   }
 
   /** Advance the simulation by n fixed frames (flight enabled) and render the last one. */
+  /** Called after every stepped/rendered frame (main.ts refreshes the HUD from the live telemetry here). */
+  onFrame: (() => void) | null = null;
+
   step(n = 1): void {
     const g = this.game;
     for (let i = 0; i < n; i++) {
@@ -111,6 +114,7 @@ export class Bench {
       this.frame++;
     }
     this.flying = true;
+    this.onFrame?.();
     g.render();
   }
 
