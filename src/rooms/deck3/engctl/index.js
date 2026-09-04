@@ -23,13 +23,15 @@ const D2R = Math.PI / 180;
 // Window onto the reactor, shared plane z 612.5 with d3-reactor (which cuts the same hole).
 export const REACTOR_WINDOW = { a0: -26, a1: -2, y0: Y + 1.2, y1: Y + 5.5 };
 
-// Console arcs are centred on the reactor door / window (x −12) at the aft wall plane.
+// Console arcs are centred on x −12 at the aft wall plane (window x −26..−2). The east ends of the two
+// outer arcs are left open so a 2.8 m aisle (x −0.4..2.4) runs from the command post to the reactor
+// door at x 1 (hole x −0.2..2.2).
 const CX = -12;
 const CZ = 612.5;
 const ARCS = [
   { r: 8, phis: [-49.4, -25, 25, 49.4] },
-  { r: 12, phis: [-65.3, -49.1, -32.9, -16.7, 16.7, 32.9, 49.1, 65.3] },
-  { r: 16, phis: [-49.1, -36.9, -24.7, -12.5, 12.5, 24.7, 36.9, 49.1] },
+  { r: 12, phis: [-65.3, -49.1, -32.9, -16.7, 16.7, 32.9, 49.1] },
+  { r: 16, phis: [-49.1, -36.9, -24.7, -12.5, 12.5, 24.7, 36.9] },
 ];
 
 export default defineRoom({
@@ -46,6 +48,7 @@ export default defineRoom({
     "d3-engctl-window": { pos: [-12, Y, 597.8], yaw: 180, pitch: 7 },
     "d3-engctl-status": { pos: [-9, Y, 596], yaw: 62, pitch: 10 },
     "d3-engctl-mezz": { pos: [-27.4, MEZZ, 577.2], yaw: -138, pitch: -9 },
+    "d3-engctl-aft-door": { pos: [1, Y, 602.5], yaw: 172, pitch: 6 },
   },
   shell: {
     panelW: 2.0,
@@ -72,12 +75,12 @@ export default defineRoom({
         const [x, z] = arcPos(CX, CZ, arc.r, phi);
         consoleProp(kit, PALETTE, [x, Y, z], Math.PI - phi, { w: 3, screens: 3, seed: seed++, screenMat: seed % 2 ? "screenImp1" : "screenImp2" });
       }
-      // orange marking arcs on the screen side of each row, broken at the central aisle
+      // orange marking arcs on the screen side of each row, broken at the central aisle; each end
+      // runs 8° past its last console (the east ends stop short of the door aisle)
       const rr = arc.r - 0.75;
       const gap = Math.asin(2.1 / rr);
-      const ext = (Math.abs(arc.phis[0]) + 8) * D2R;
-      arcLine(kit, CX, Y, CZ, rr, -ext, -gap);
-      arcLine(kit, CX, Y, CZ, rr, gap, ext);
+      arcLine(kit, CX, Y, CZ, rr, (arc.phis[0] - 8) * D2R, -gap);
+      arcLine(kit, CX, Y, CZ, rr, gap, (arc.phis[arc.phis.length - 1] + 8) * D2R);
     });
     // central aisle edges + landing bars
     floorLine(kit, [CX - 2.1, Y, 596.5], [CX - 2.1, Y, 610.4], 0.12, "emitOrange");
@@ -108,10 +111,17 @@ export default defineRoom({
     schematic.position.set(CX, Y + 0.95 + 0.22, 592);
     ctx.group.add(schematic);
 
-    // ---- sill consoles under the window (leave the reactor door approach x −14.2..−9.8 clear) ----
-    for (const x of [-17.6, -6.4]) sillConsole(kit, PALETTE, [x, Y, 611.72], Math.PI, { w: 6, seed: seed++ });
+    // ---- continuous sill console under the window (x −26.6..−3.4, four 5.8 m sections) ----------------
+    for (const x of [-23.7, -17.9, -12.1, -6.3]) sillConsole(kit, PALETTE, [x, Y, 611.72], Math.PI, { w: 5.8, seed: seed++ });
+    // reactor door (hole x −0.2..2.2): status panel on the strip of wall between window and door
+    {
+      const F = placer(kit, [-1.6, 0, Z1], Math.PI);
+      F.box("paintedMetal", 0, Y + 1.5, 0.05, 0.6, 0.9, 0.06, { color: black });
+      indicatorField(F, 0, Y + 1.6, 0.09, 0.5, 0.5, seed++);
+      F.box("emitAmber", 0, Y + 1.15, 0.085, 0.36, 0.06, 0.01);
+    }
     // window mullions + header manifold the ceiling trunks feed into
-    for (const x of [-20, -14.05, -9.95, -4]) kit.box("paintedMetal", x, (REACTOR_WINDOW.y0 + REACTOR_WINDOW.y1) / 2, Z1 - 0.1, 0.16, REACTOR_WINDOW.y1 - REACTOR_WINDOW.y0 - 0.06, 0.16, { color: dark });
+    for (const x of [-20, -14, -8]) kit.box("paintedMetal", x, (REACTOR_WINDOW.y0 + REACTOR_WINDOW.y1) / 2, Z1 - 0.1, 0.16, REACTOR_WINDOW.y1 - REACTOR_WINDOW.y0 - 0.06, 0.16, { color: dark });
     kit.boxMM("paintedMetal", [-27, Y + 6.2, Z1 - 0.95], [-1, Y + 9.4, Z1 - 0.05], { color: dark, texel: 1 });
     kit.boxMM("paintedMetal", [-27.1, Y + 6.2, Z1 - 1.0], [-0.9, Y + 6.5, Z1 - 0.05], { color: black });
     kit.boxMM("paintedMetal", [-27.1, Y + 9.1, Z1 - 1.0], [-0.9, Y + 9.4, Z1 - 0.05], { color: black });
@@ -196,8 +206,6 @@ export default defineRoom({
     for (const z of [578.3, 582.3, 599.5, 607.5]) ventGrille(kit, PALETTE, [X1, Y + 4.6, z], -Math.PI / 2, { w: 1.6, h: 0.6 });
     for (const x of [-4.6, 1.4]) junctionBox(kit, PALETTE, [x, Y + 3.2, Z0], 0, { seed: seed++ });
     crate(kit, PALETTE, [X1 - 0.7, Y, 573.85], 0.05, { seed: seed++ });
-    crate(kit, PALETTE, [X1 - 0.75, Y, 610.9], -0.12, { seed: seed++ });
-    crate(kit, PALETTE, [X1 - 0.75, Y + 1.2, 610.9], 0.1, { seed: seed++, h: 0.8 });
     // door-side indicator panel by the corridor door (east wall, forward of the hole)
     {
       const F = placer(kit, [X1, 0, 586.6], -Math.PI / 2);
@@ -220,10 +228,13 @@ export default defineRoom({
       floorLine(kit, [islandX[0] - 1.3, Y, zc - 1.3], [islandX[3] + 1.3, Y, zc - 1.3], 0.1, "emitAmber");
       floorLine(kit, [islandX[0] - 1.3, Y, zc + 1.3], [islandX[3] + 1.3, Y, zc + 1.3], 0.1, "emitAmber");
     }
-    // walk lane from the corridor door to the command post
+    // walk lane: corridor door -> command post, with a branch aft along the open east side of the arcs
+    // to the reactor door (hole x −0.2..2.2; lines stop 1.6 m short of the aft wall)
     floorLine(kit, [2.8, Y, 588.6], [-4.6, Y, 588.6], 0.12, "emitOrange");
     floorLine(kit, [2.8, Y, 591.4], [-4.6, Y, 591.4], 0.12, "emitOrange");
-    // spares bay in front of the west mezzanine: hazard outline, crates, a rack
+    floorLine(kit, [-0.4, Y, 591.5], [-0.4, Y, 610.9], 0.12, "emitOrange");
+    floorLine(kit, [2.4, Y, 591.5], [2.4, Y, 610.9], 0.12, "emitOrange");
+    // spares bay in front of the west mezzanine: hazard outline, crates
     hazardStrip(kit, [-23.5, 580.0], [-17.5, 580.4], Y + 0.005);
     hazardStrip(kit, [-23.5, 584.6], [-17.5, 585.0], Y + 0.005);
     crate(kit, PALETTE, [-22.4, Y, 581.6], 0.12, { seed: seed++ });
@@ -231,6 +242,8 @@ export default defineRoom({
     crate(kit, PALETTE, [-20.8, Y, 583.4], -0.2, { seed: seed++ });
     crate(kit, PALETTE, [-18.7, Y, 581.7], 0.3, { seed: seed++, w: 1.0, d: 1.0, h: 1.0 });
     crate(kit, PALETTE, [-19.0, Y, 583.6], 0.05, { seed: seed++, w: 1.4, d: 1.0, h: 0.7 });
+    crate(kit, PALETTE, [-20.5, Y, 581.4], 0.15, { seed: seed++ });
+    crate(kit, PALETTE, [-20.5, Y + 1.2, 581.4], -0.1, { seed: seed++, w: 1.0, d: 1.0, h: 0.8 });
 
     // ---- ceiling: heavy trunks converging on the header, ducts, trays ------------------------------
     const trunkY = CEIL - 1.6;
@@ -260,6 +273,7 @@ export default defineRoom({
     L([-20, CEIL - 0.9, 577.5], 0xffc890, 32, 16, 0.5);
     L([-1, CEIL - 1.0, 584], 0xffd0a0, 28, 16, 0.5);
     L([-14, Y + 2.6, 609.6], 0xff8a30, 14, 9, 0.4);
+    L([1, CEIL - 1.2, 606], 0xffc890, 26, 14, 0.4);
 
     return {
       update(dt, t) {

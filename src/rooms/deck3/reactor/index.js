@@ -45,6 +45,7 @@ export default defineRoom({
     "d3-reactor-core": { pos: [-28.6, Y, 645], yaw: -75, pitch: 16 },
     "d3-reactor-bridge": { pos: [0, Y, 683.5], yaw: 0, pitch: 10 },
     "d3-reactor-pit": { pos: [-12, Y, 620.2], yaw: -155, pitch: -20 },
+    "d3-reactor-engctl-door": { pos: [3.2, Y, 620.5], yaw: 8, pitch: 4 },
   },
   shell: {
     panelW: 3.2,
@@ -369,8 +370,9 @@ export default defineRoom({
     }
 
     // ---- catwalk kit along the outer walls (facing the core) ----------------------------------------
-    // Each wall: [along-coordinate, kind]. Forward wall keeps the doors (x 3.5..9.5, −14.2..−9.8) and the
-    // engctl window (x −26..−2, above y 13.2: low items only) clear; aft wall keeps x −3..3 clear.
+    // Each wall: [along-coordinate, kind]. Forward wall keeps the doors (blast x 3.5..9.5, engctl door
+    // x −1.2..3.2) and the engctl window (x −26..−2, above y 13.2: low items only) clear; aft wall keeps
+    // x −3..3 clear.
     const westList = [
       [618, "crates"],
       [622, "valve"],
@@ -436,8 +438,8 @@ export default defineRoom({
       [-30.3, "rack"],
       [-22, "console"],
       [-18, "console"],
+      [-12, "console"],
       [-6.5, "console"],
-      [1.0, "crates"],
       [12, "valve"],
       [15.7, "cabinets"],
       [20, "rack"],
@@ -463,13 +465,17 @@ export default defineRoom({
       [33.5, "cabinet"],
     ];
     for (const [x, k] of aftList) place(k, (d) => [x, Y, Z1 - d], 0, Math.PI, (d, dx, dy = 0) => [x + dx, Y + dy, Z1 - d]);
-    // status panels flanking the doors (the two under the engctl window stay below its sill at y 13.2)
-    for (const [x, z, yaw, yc] of [[10.3, Z0, 0, Y + 1.5], [-8.6, Z0, 0, Y + 0.65], [-15.4, Z0, 0, Y + 0.65], [-4.0, Z1, Math.PI, Y + 1.5], [4.0, Z1, Math.PI, Y + 1.5]]) {
+    // status panels flanking the doors: blast door (x 10.3), engctl door (x −1.6, on the 1.8 m strip
+    // between the window edge x −2 and the hole x −0.2), hyperdrive door (±4); the two under the engctl
+    // window stay below its sill at y 13.2
+    for (const [x, z, yaw, yc, w] of [[10.3, Z0, 0, Y + 1.5, 0.7], [-1.6, Z0, 0, Y + 1.5, 0.6], [-8.6, Z0, 0, Y + 0.65, 0.7], [-15.4, Z0, 0, Y + 0.65, 0.7], [-4.0, Z1, Math.PI, Y + 1.5, 0.7], [4.0, Z1, Math.PI, Y + 1.5, 0.7]]) {
       const F = placer(kit, [x, 0, z], yaw);
-      F.box("paintedMetal", 0, yc, 0.05, 0.7, 0.9, 0.06, { color: black });
-      indicatorField(F, 0, yc + 0.1, 0.09, 0.6, 0.5, seed++);
-      F.box(x > 0 ? "emitRedImp" : "emitAmber", 0, yc - 0.34, 0.085, 0.4, 0.06, 0.01);
+      F.box("paintedMetal", 0, yc, 0.05, w, 0.9, 0.06, { color: black });
+      indicatorField(F, 0, yc + 0.1, 0.09, w - 0.1, 0.5, seed++);
+      F.box(x > 0 ? "emitRedImp" : "emitAmber", 0, yc - 0.34, 0.085, w - 0.3, 0.06, 0.01);
     }
+    // under-sill conduit along the engctl window wall, behind the consoles
+    pipe(kit, PALETTE, [-25.5, Y + 0.95, Z0 + 0.25], [-2.6, Y + 0.95, Z0 + 0.25], 0.1, { bracket: 4, color: steel, segments: 10 });
     // corner crates on the ring
     crate(kit, PALETTE, [X0 + 0.75, Y, Z1 - 0.75], 0.2, { seed: seed++ });
     crate(kit, PALETTE, [X1 - 0.75, Y, Z0 + 0.75], -0.15, { seed: seed++ });
