@@ -150,6 +150,9 @@ export function detail(ctx, shell, room) {
     const z = TANK_Z[i];
     const offline = i === 3;
     tank(kit, PALETTE, [TANK_X, Y, z], Math.PI / 2, { r: 2.0, h: 6, color: P("medWhite"), bands: 4, emit: offline ? "emitRedImp" : "emitTeal" });
+    // painted shell over the prop's galvanised body (fine-grain texel 4): no speckle at close range and
+    // a soft, not blown, reflection of the ceiling strips on the top course
+    kit.cyl("paintedMetal", TANK_X, Y + 3.3, z, 2.012, 6.02, "y", { color: P("medWhite"), segments: 32, texel: 4 });
     // identification bands
     kit.cyl("paintedMetal", TANK_X, Y + 3.6, z, 2.06, 0.16, "y", { color: TANK_BAND[i], segments: 28 });
     kit.cyl("paintedMetal", TANK_X, Y + 5.3, z, 2.06, 0.08, "y", { color: TANK_BAND[i], segments: 28 });
@@ -230,7 +233,7 @@ export function detail(ctx, shell, room) {
     const z = PUMP_Z[i];
     // pump skid: black block, grey motor along z, end bells, indicator field, teal status strip
     const Q = placer(kit, [RX, Y, z], Math.PI / 2); // front → +X (the room)
-    Q.box("paintedMetal", 0, 0.45, 0, 1.2, 0.9, 1.1, { color: black, texel: 2.5 });
+    Q.box("paintedMetal", 0, 0.45, 0, 1.2, 0.9, 1.1, { color: black, texel: 4 });
     Q.box("paintedMetal", 0, 0.04, 0, 1.3, 0.08, 1.2, { color: dark });
     Q.cyl("metal", 0, 1.22, 0, 0.32, 0.9, "x", { color: grey, segments: 16 });
     for (const lx of [-0.5, 0.5]) Q.cyl("paintedMetal", lx, 1.22, 0, 0.36, 0.1, "x", { color: dark, segments: 16 });
@@ -251,7 +254,7 @@ export function detail(ctx, shell, room) {
   {
     const T = placer(kit, [46.7, Y, 387.0], Math.PI / 2); // front → +X
     T.box("paintedMetal", 0, 0.06, 0, 1.3, 0.12, 1.1, { color: dark, texel: 2.5 });
-    T.box("paintedMetal", 0, 0.5, 0, 0.9, 0.76, 0.8, { color: black, texel: 2.5 });
+    T.box("paintedMetal", 0, 0.5, 0, 0.9, 0.76, 0.8, { color: black, texel: 4 });
     T.cyl("metal", 0, 1.12, -0.05, 0.28, 0.8, "x", { color: grey, segments: 16 });
     for (const lx of [-0.42, 0.42]) T.cyl("paintedMetal", lx, 1.12, -0.05, 0.32, 0.08, "x", { color: dark, segments: 16 });
     T.cyl("metal", 0.2, 1.12, 0.36, 0.22, 0.16, "z", { color: WATER, segments: 16 });
@@ -261,10 +264,23 @@ export function detail(ctx, shell, room) {
     T.box("darkGloss", 0, 0.25, 0.405, 0.7, 0.14, 0.02);
     T.collider([-0.65, 0, -0.55], [0.65, 1.45, 0.55], "transfer-pump");
   }
+  // suction riser: deck flange, bolted flange pairs at both ends of the bend, into the pump's end bell
   kit.cyl("paintedMetal", 46.7, Y + 0.03, 386.0, 0.22, 0.06, "y", { color: dark, segments: 16 });
   pipe(kit, PALETTE, [46.7, Y + 0.06, 386.0], [46.7, Y + 1.12, 386.0], 0.12, { color: WATER, bracket: 9 });
   elbow(46.7, Y + 1.12, 386.0, 0.14);
-  pipe(kit, PALETTE, [46.7, Y + 1.12, 386.0], [46.7, Y + 1.12, 386.4], 0.12, { color: WATER, bracket: 9 });
+  pipe(kit, PALETTE, [46.7, Y + 1.12, 386.0], [46.7, Y + 1.12, 386.62], 0.12, { color: WATER, bracket: 9 });
+  for (const y of [0.2, 0.86]) {
+    kit.cyl("paintedMetal", 46.7, Y + y, 386.0, 0.17, 0.06, "y", { color: WATER_DARK, segments: 16 });
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      kit.cyl("metal", 46.7 + 0.15 * Math.cos(a), Y + y, 386.0 + 0.15 * Math.sin(a), 0.018, 0.08, "y", { color: steel, segments: 6 });
+    }
+  }
+  kit.cyl("paintedMetal", 46.7, Y + 1.12, 386.5, 0.17, 0.06, "z", { color: WATER_DARK, segments: 16 });
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
+    kit.cyl("metal", 46.7 + 0.15 * Math.cos(a), Y + 1.12 + 0.15 * Math.sin(a), 386.5, 0.018, 0.08, "z", { color: steel, segments: 6 });
+  }
   pipe(kit, PALETTE, [46.5, Y + 0.5, 387.0], [42.85, Y + 0.5, 387.25], 0.12, { color: WATER, bracket: 2 });
   kit.box("paintedMetal", 44.6, Y + 0.5, 387.13, 0.36, 0.36, 0.36, { color: dark, texel: 2.5 });
   kit.cyl("metal", 44.6, Y + 0.78, 387.13, 0.03, 0.2, "y", { color: steel, segments: 8 });
@@ -293,7 +309,7 @@ export function detail(ctx, shell, room) {
     const d = 0.8;
     const open = i === OPEN_SCRUB;
     Q.box("paintedMetal", 0, 0.06, 0, w, 0.12, d, { color: black });
-    Q.box("paintedMetal", 0, h / 2 + 0.06, 0, w, h - 0.12, d, { color: grey, texel: 2.5 });
+    Q.box("paintedMetal", 0, h / 2 + 0.06, 0, w, h - 0.12, d, { color: grey, texel: 4 });
     Q.box("paintedMetal", 0, h - 0.03, 0, w + 0.04, 0.06, d + 0.04, { color: dark });
     if (!open) {
       Q.box("impPanel", 0, h / 2 + 0.06, d / 2 + 0.012, w - 0.12, h - 0.24, 0.02, { color: white, uv: "keep" });
@@ -398,16 +414,29 @@ export function detail(ctx, shell, room) {
     const sx = 55.5;
     const sz0 = 389.0;
     const sz1 = 396.0;
-    kit.boxMM("paintedMetal", [sx - 1.3, Y, sz0], [sx + 1.3, Y + 0.15, sz1], { color: black, texel: 2.5 });
+    kit.boxMM("paintedMetal", [sx - 1.3, Y, sz0], [sx + 1.3, Y + 0.15, sz1], { color: black, texel: 4 });
     const zs = [0, 1, 2, 3].map((k) => sz0 + 1.0 + k * 1.7);
     zs.forEach((z, k) => {
-      // vessel 2 carries an amber band + red status (isolated); vessel 4 has its dome off for a
-      // cartridge change — the dome and the spare cartridge wait on a pallet by the walkway
+      // four vessel states, different in silhouette so they read from the door: 1 standard (dome,
+      // teal); 2 isolated (dark grey body, amber band, red status, amber handwheel, lockout tag); 3 flat
+      // top with a relief-valve stack and a lit sight-glass level gauge; 4 dome off for a cartridge
+      // change (bolted flange ring) — the spare cartridge waits on a pallet by the walkway
       const isolated = k === 1;
+      const gauged = k === 2;
       const opened = k === 3;
-      kit.cyl("paintedMetal", sx, Y + 0.3, z, 0.58, 0.3, "y", { color: dark, segments: 20 });
-      kit.cyl("metal", sx, Y + 1.65, z, 0.55, 2.4, "y", { color: white, segments: 20, texel: 0.5 });
-      if (!opened) kit.add("metal", new THREE.SphereGeometry(0.55, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [sx, Y + 2.85, z], color: white });
+      kit.cyl("paintedMetal", sx, Y + 0.3, z, 0.58, 0.3, "y", { color: dark, segments: 20, texel: 4 });
+      kit.cyl("paintedMetal", sx, Y + 1.65, z, 0.55, 2.4, "y", { color: isolated ? mid : white, segments: 20, texel: 4 });
+      if (gauged) {
+        kit.cyl("paintedMetal", sx, Y + 2.89, z, 0.57, 0.08, "y", { color: dark, segments: 20 });
+        kit.cyl("metal", sx, Y + 3.1, z, 0.07, 0.36, "y", { color: steel, segments: 10 });
+        kit.cyl("paintedMetal", sx, Y + 3.31, z, 0.11, 0.07, "y", { color: WATER_DARK, segments: 12 });
+        kit.cyl("metal", sx - 0.2, Y + 3.02, z, 0.03, 0.2, "y", { color: steel, segments: 6 });
+        // sight glass on the walkway side: brackets to the shell, dark tube, lit liquid column, ticks
+        for (const y of [0.9, 1.7, 2.5]) kit.box("paintedMetal", sx - 0.53, Y + y, z + 0.34, 0.22, 0.06, 0.12, { color: dark });
+        kit.box("darkGloss", sx - 0.66, Y + 1.7, z + 0.34, 0.08, 1.8, 0.1);
+        kit.box("emitTeal", sx - 0.705, Y + 1.35, z + 0.34, 0.01, 1.1, 0.04);
+        for (let t = 0; t < 6; t++) kit.box("paintedMetal", sx - 0.705, Y + 0.95 + t * 0.3, z + 0.375, 0.01, 0.015, 0.03, { color: white });
+      } else if (!opened) kit.add("metal", new THREE.SphereGeometry(0.55, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [sx, Y + 2.85, z], color: isolated ? mid : white });
       else {
         kit.add("metal", new THREE.TorusGeometry(0.57, 0.05, 6, 28), { pos: [sx, Y + 2.87, z], rot: [Math.PI / 2, 0, 0], color: steel });
         kit.cyl("paintedMetal", sx, Y + 2.84, z, 0.52, 0.04, "y", { color: black, segments: 20 });
@@ -421,24 +450,59 @@ export function detail(ctx, shell, room) {
       kit.box("darkGloss", sx - 0.56, Y + 1.7, z, 0.04, 0.26, 0.26);
       kit.box(isolated ? "emitRedImp" : "emitTeal", sx - 0.578, Y + 1.7, z, 0.01, 0.16, 0.16);
       handwheel(sx - 0.6, Y + 0.95, z, "x", 0.14, isolated ? P("impAmber") : P("impRed"));
-      if (!opened) pipe(kit, PALETTE, [sx + 0.2, Y + 3.3, z], [sx + 0.2, Y + 3.55, z], 0.1, { color: WATER, bracket: 9 });
+      if (isolated) {
+        // lockout tag hanging off the handwheel rim
+        kit.box("paintedMetal", sx - 0.6, Y + 0.72, z + 0.05, 0.01, 0.2, 0.14, { color: PAINT_AMBER });
+        kit.box("paintedMetal", sx - 0.606, Y + 0.7, z + 0.05, 0.01, 0.03, 0.09, { color: black });
+      }
+      if (!opened) pipe(kit, PALETTE, [sx + 0.2, Y + (gauged ? 2.93 : 3.3), z], [sx + 0.2, Y + 3.55, z], 0.1, { color: WATER, bracket: 9 });
       else kit.cyl("paintedMetal", sx + 0.2, Y + 3.38, z, 0.14, 0.06, "y", { color: WATER_DARK, segments: 12 });
       pipe(kit, PALETTE, [sx + 0.4, Y + 0.6, z], [sx + 0.75, Y + 0.6, z], 0.1, { color: WATER, bracket: 9 });
     });
     {
-      // pallet with the spare cartridge, the lifted dome beside it
+      // pallet with the spare cartridge by the walkway
       const px = 53.4;
       const pz = 390.9;
-      kit.box("paintedMetal", px, Y + 0.06, pz, 1.0, 0.12, 1.0, { color: dark, texel: 2.5 });
+      kit.box("paintedMetal", px, Y + 0.06, pz, 1.0, 0.12, 1.0, { color: dark, texel: 4 });
       for (const dx of [-0.4, 0.4]) kit.box("paintedMetal", px + dx, Y + 0.14, pz, 0.12, 0.04, 1.0, { color: black });
-      kit.cyl("metal", px, Y + 0.16 + 0.65, pz, 0.36, 1.3, "y", { color: white, segments: 18, texel: 0.5 });
+      kit.cyl("paintedMetal", px, Y + 0.16 + 0.65, pz, 0.36, 1.3, "y", { color: white, segments: 18, texel: 4 });
       kit.cyl("paintedMetal", px, Y + 0.16 + 1.31, pz, 0.38, 0.06, "y", { color: dark, segments: 18 });
       kit.cyl("paintedMetal", px, Y + 0.16 + 0.65, pz, 0.37, 0.08, "y", { color: PAINT_AMBER, segments: 18 });
       kit.box("paintedMetal", px + 0.365, Y + 1.0, pz, 0.01, 0.3, 0.4, { color: dark });
       kit.collider([px - 0.5, Y, pz - 0.5], [px + 0.5, Y + 1.5, pz + 0.5], "pallet");
-      kit.add("metal", new THREE.SphereGeometry(0.55, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [px, Y, pz + 1.35], color: white });
-      kit.add("metal", new THREE.TorusGeometry(0.57, 0.04, 6, 28), { pos: [px, Y + 0.04, pz + 1.35], rot: [Math.PI / 2, 0, 0], color: steel });
-      kit.collider([px - 0.6, Y, pz + 0.75], [px + 0.6, Y + 0.6, pz + 1.95], "dome");
+    }
+    {
+      // circulation pump for the filter bank beside the pallet: plinth, motor with end bells, coupling
+      // guard, teal volute, flanged suction and discharge stubs down into deck flanges, status strip
+      const U = placer(kit, [53.4, Y, 392.45], 0);
+      U.box("paintedMetal", 0, 0.06, 0, 0.9, 0.12, 0.8, { color: black, texel: 4 });
+      U.box("paintedMetal", 0, 0.2, -0.1, 0.5, 0.16, 0.5, { color: dark, texel: 4 });
+      U.cyl("metal", 0, 0.42, -0.1, 0.19, 0.55, "z", { color: grey, segments: 16 });
+      for (const lz of [-0.38, 0.18]) U.cyl("paintedMetal", 0, 0.42, lz, 0.22, 0.06, "z", { color: dark, segments: 16 });
+      U.box("paintedMetal", 0, 0.38, 0.28, 0.3, 0.26, 0.14, { color: dark });
+      U.cyl("metal", 0, 0.42, 0.44, 0.24, 0.18, "z", { color: WATER, segments: 16 });
+      U.cyl("metal", 0, 0.42, 0.56, 0.1, 0.06, "z", { color: steel, segments: 10 });
+      // suction: out of the volute nose, elbow down to a deck flange
+      pipe(kit, PALETTE, U.world(0, 0.42, 0.59), U.world(0, 0.42, 0.78), 0.08, { color: WATER, bracket: 9 });
+      elbow(...U.world(0, 0.42, 0.78), 0.1);
+      pipe(kit, PALETTE, U.world(0, 0.42, 0.78), U.world(0, 0.05, 0.78), 0.08, { color: WATER, bracket: 9 });
+      U.cyl("paintedMetal", 0, 0.03, 0.78, 0.15, 0.06, "y", { color: dark, segments: 12 });
+      U.cyl("paintedMetal", 0, 0.42, 0.62, 0.12, 0.04, "z", { color: WATER_DARK, segments: 12 });
+      // discharge: up off the volute, over toward the skid, down to a second deck flange
+      pipe(kit, PALETTE, U.world(0, 0.66, 0.44), U.world(0, 0.98, 0.44), 0.08, { color: WATER, bracket: 9 });
+      elbow(...U.world(0, 0.98, 0.44), 0.1);
+      pipe(kit, PALETTE, U.world(0, 0.98, 0.44), U.world(0.62, 0.98, 0.44), 0.08, { color: WATER, bracket: 9 });
+      elbow(...U.world(0.62, 0.98, 0.44), 0.1);
+      pipe(kit, PALETTE, U.world(0.62, 0.98, 0.44), U.world(0.62, 0.05, 0.44), 0.08, { color: WATER, bracket: 9 });
+      U.cyl("paintedMetal", 0.62, 0.03, 0.44, 0.15, 0.06, "y", { color: dark, segments: 12 });
+      U.cyl("paintedMetal", 0, 0.74, 0.44, 0.12, 0.04, "y", { color: WATER_DARK, segments: 12 });
+      handwheel(...U.world(0.62, 0.55, 0.44), "z", 0.12, P("impRed"));
+      // status panel tangent to the motor's walkway-side flank
+      const V = placer(kit, U.world(-0.2, 0, -0.1), -Math.PI / 2); // front → -X (the walkway)
+      V.box("darkGloss", 0, 0.42, 0.01, 0.3, 0.14, 0.02);
+      V.box("emitTeal", 0, 0.46, 0.025, 0.2, 0.03, 0.01);
+      indicatorField(V, 0, 0.385, 0.022, 0.24, 0.05, 79);
+      U.collider([-0.45, 0, -0.42], [0.8, 1.0, 0.9], "filter-pump");
     }
     pipe(kit, PALETTE, [sx + 0.2, Y + 3.55, sz0 + 0.3], [sx + 0.2, Y + 3.55, sz1 - 0.3], 0.14, { color: WATER, bracket: 9 });
     pipe(kit, PALETTE, [sx + 0.75, Y + 0.6, sz0 + 0.3], [sx + 0.75, Y + 0.6, sz1 - 0.3], 0.14, { color: WATER, bracket: 9 });
@@ -461,8 +525,8 @@ export function detail(ctx, shell, room) {
   {
     // O2 generator: grey cabinet with louvres and a screen, two white separator columns, pipes up
     const G = placer(kit, [55.5, Y, 402.5], -Math.PI / 2); // front → -X (walkway side); local x → world +Z
-    G.box("paintedMetal", 0, 0.1, 0, 4.6, 0.2, 2.6, { color: black, texel: 2.5 });
-    G.box("paintedMetal", -0.9, 1.5, 0, 2.6, 2.6, 2.2, { color: grey, texel: 2.5 });
+    G.box("paintedMetal", 0, 0.1, 0, 4.6, 0.2, 2.6, { color: black, texel: 4 });
+    G.box("paintedMetal", -0.9, 1.5, 0, 2.6, 2.6, 2.2, { color: grey, texel: 4 });
     G.box("paintedMetal", -0.9, 2.83, 0, 2.7, 0.06, 2.3, { color: dark });
     G.box("impPanel", -0.9, 1.5, 1.11, 2.3, 2.3, 0.02, { color: white, uv: "keep" });
     indicatorField(G, -1.45, 2.15, 1.125, 1.0, 0.4, 88);
@@ -472,7 +536,7 @@ export function detail(ctx, shell, room) {
     G.box("emitTeal", -0.9, 1.7, 1.13, 2.0, 0.04, 0.01);
     for (const lx of [1.1, 1.95]) {
       G.cyl("paintedMetal", lx, 0.3, -0.4, 0.5, 0.2, "y", { color: dark, segments: 18 });
-      G.cyl("metal", lx, 1.9, -0.4, 0.42, 3.2, "y", { color: white, segments: 18, texel: 0.5 });
+      G.cyl("metal", lx, 1.9, -0.4, 0.42, 3.2, "y", { color: white, segments: 18, texel: 4 });
       G.cyl("paintedMetal", lx, 3.52, -0.4, 0.46, 0.16, "y", { color: dark, segments: 18 });
       G.cyl("paintedMetal", lx, 2.3, -0.4, 0.44, 0.1, "y", { color: WATER, segments: 18 });
       G.box("darkGloss", lx, 1.5, 0.03, 0.22, 0.22, 0.04);
@@ -502,7 +566,7 @@ export function detail(ctx, shell, room) {
     [[WX1 - CURB, WZ0], [WX1, IZ1]],
     [[WX0, WZ0], [WX1, WZ0 + CURB]],
   ]) {
-    kit.boxMM("paintedMetal", [min[0], Y, min[1]], [max[0], Y + 0.3, max[1]], { color: dark, texel: 2.5 });
+    kit.boxMM("paintedMetal", [min[0], Y, min[1]], [max[0], Y + 0.3, max[1]], { color: dark, texel: 4 });
     hazardStrip(kit, min, max, Y + 0.3);
     kit.collider([min[0], Y, min[1]], [max[0], Y + 0.3, max[1]], "curb");
   }
@@ -515,11 +579,11 @@ export function detail(ctx, shell, room) {
   mark([WX0 - 0.5, Y + 0.004, WZ0 - 0.5], [WX1 + 0.5, Y + 0.004, WZ0 - 0.5], 0.12, PAINT_AMBER);
   for (const cz of [410.6, 413.0]) {
     const cy = Y + 1.55;
-    kit.cyl("metal", 50, cy, cz, 1.1, 11, "x", { color: grey, segments: 28, texel: 0.5 });
+    kit.cyl("metal", 50, cy, cz, 1.1, 11, "x", { color: grey, segments: 28, texel: 4 });
     for (const ex of [44.5, 55.5]) kit.add("metal", new THREE.SphereGeometry(1.1, 20, 12), { pos: [ex, cy, cz], color: grey });
     for (const bx of [46.5, 50, 53.5]) kit.cyl("paintedMetal", bx, cy, cz, 1.14, 0.2, "x", { color: dark, segments: 28 });
     for (const bx of [46.0, 50.0, 54.0]) {
-      kit.box("paintedMetal", bx, Y + 0.25, cz, 0.6, 0.5, 2.4, { color: black, texel: 2.5 });
+      kit.box("paintedMetal", bx, Y + 0.25, cz, 0.6, 0.5, 2.4, { color: black, texel: 4 });
       kit.box("paintedMetal", bx, Y + 0.62, cz, 0.7, 0.3, 2.3, { color: dark });
     }
     // amber warning strip along the room-facing shoulder, manway + handwheel on top
@@ -559,15 +623,15 @@ export function detail(ctx, shell, room) {
   const CT = Y + CAT_Y;
   const deck = (x0, z0, x1, z1) => {
     grateQuad(x0, z0, x1, z1, CT);
-    kit.boxMM("paintedMetal", [x0, CT - 0.28, z0], [x0 + 0.1, CT - 0.02, z1], { color: dark, texel: 2.5 });
-    kit.boxMM("paintedMetal", [x1 - 0.1, CT - 0.28, z0], [x1, CT - 0.02, z1], { color: dark, texel: 2.5 });
-    kit.boxMM("paintedMetal", [x0, CT - 0.28, z0], [x1, CT - 0.02, z0 + 0.1], { color: dark, texel: 2.5 });
-    kit.boxMM("paintedMetal", [x0, CT - 0.28, z1 - 0.1], [x1, CT - 0.02, z1], { color: dark, texel: 2.5 });
+    kit.boxMM("paintedMetal", [x0, CT - 0.28, z0], [x0 + 0.1, CT - 0.02, z1], { color: dark, texel: 4 });
+    kit.boxMM("paintedMetal", [x1 - 0.1, CT - 0.28, z0], [x1, CT - 0.02, z1], { color: dark, texel: 4 });
+    kit.boxMM("paintedMetal", [x0, CT - 0.28, z0], [x1, CT - 0.02, z0 + 0.1], { color: dark, texel: 4 });
+    kit.boxMM("paintedMetal", [x0, CT - 0.28, z1 - 0.1], [x1, CT - 0.02, z1], { color: dark, texel: 4 });
     const alongX = x1 - x0 > z1 - z0;
     const len = alongX ? x1 - x0 : z1 - z0;
     for (let t = 1.6; t < len - 0.3; t += 1.6) {
-      if (alongX) kit.boxMM("paintedMetal", [x0 + t - 0.04, CT - 0.2, z0], [x0 + t + 0.04, CT - 0.02, z1], { color: dark });
-      else kit.boxMM("paintedMetal", [x0, CT - 0.2, z0 + t - 0.04], [x1, CT - 0.02, z0 + t + 0.04], { color: dark });
+      if (alongX) kit.boxMM("paintedMetal", [x0 + t - 0.04, CT - 0.2, z0], [x0 + t + 0.04, CT - 0.02, z1], { color: dark, texel: 4 });
+      else kit.boxMM("paintedMetal", [x0, CT - 0.2, z0 + t - 0.04], [x1, CT - 0.02, z0 + t + 0.04], { color: dark, texel: 4 });
     }
   };
   // rail with a kick plate + amber edge strip along the open edge; `inward` points onto the deck
@@ -580,11 +644,11 @@ export function detail(ctx, shell, room) {
     const xmax = Math.max(a[0], b[0]);
     if (ix) {
       const x0 = ix > 0 ? a[0] : a[0] - 0.06;
-      kit.boxMM("paintedMetal", [x0, CT, zmin], [x0 + 0.06, CT + 0.1, zmax], { color: black });
+      kit.boxMM("paintedMetal", [x0, CT, zmin], [x0 + 0.06, CT + 0.1, zmax], { color: black, texel: 4 });
       kit.boxMM("emitAmber", [a[0] - 0.005, CT + 0.03, zmin + 0.1], [a[0] + 0.005, CT + 0.07, zmax - 0.1]);
     } else {
       const z0 = iz > 0 ? a[2] : a[2] - 0.06;
-      kit.boxMM("paintedMetal", [xmin, CT, z0], [xmax, CT + 0.1, z0 + 0.06], { color: black });
+      kit.boxMM("paintedMetal", [xmin, CT, z0], [xmax, CT + 0.1, z0 + 0.06], { color: black, texel: 4 });
       kit.boxMM("emitAmber", [xmin + 0.1, CT + 0.03, a[2] - 0.005], [xmax - 0.1, CT + 0.07, a[2] + 0.005]);
     }
   };
@@ -652,7 +716,7 @@ export function detail(ctx, shell, room) {
   {
     const hx = 50.0;
     const hz = 395.0;
-    kit.box("paintedMetal", hx, Y + 0.006, hz, 1.6, 0.012, 1.6, { color: dark, texel: 2.5 });
+    kit.box("paintedMetal", hx, Y + 0.006, hz, 1.6, 0.012, 1.6, { color: dark, texel: 4 });
     kit.box("paintedMetal", hx, Y + 0.013, hz, 1.3, 0.004, 1.3, { color: black });
     for (const dx of [-0.7, 0, 0.7]) for (const dz of [-0.7, 0, 0.7]) {
       if (dx === 0 && dz === 0) continue;

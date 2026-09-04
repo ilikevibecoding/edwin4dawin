@@ -3,11 +3,13 @@
 // annular face of a framed collar with a numbered label plate, a muster step with rails, a status
 // pillar and a launch-tube housing above. One hatch per wall stands open on a lit two-seat cabin
 // (through a real wall opening); one east pod is in FAULT (red ring, dark viewport, red pillar).
-// Centre: dark runway with the amber muster line, numbered muster squares in front of every pod,
-// boarding pedestals, six housed ceiling fixtures; belt dividers hold the west waiting area, the east
-// has A-frame barriers at the FAULT pod and an information pylon. Door end: lockers, O2 rack, console. Forward wall:
-// status board (numbered tiles + text strips), suit rack, supply shelves, locker banks. Amber
-// accents; lights are descriptors (10 hatch accents + 4 down-spots under the corner fixtures).
+// Centre: dark runway with the amber muster line, a boarding checkpoint (pedestal pair + open lane
+// gate) and a stretcher trolley near the door, numbered muster squares in front of every pod, mid-bay
+// pedestals; 24 housed suspended fixtures in three hall rows plus one pendant per pod; belt dividers
+// hold the west waiting area, the east has A-frame barriers at the FAULT pod and an information
+// pylon. Door end: lockers, O2 rack, console. Forward wall: status board (numbered tiles + text
+// strips), suit rack, supply shelves, locker banks. Amber accents; lights are descriptors (8 hatch
+// accents + 2 cabin lights + 4 down-spots under the centreline fixtures).
 import * as THREE from "three";
 import { insideOut } from "../../../kit.js";
 import { col } from "../_shared/palette.js";
@@ -25,24 +27,27 @@ const IZ1 = Z1 - WALL_T; // 329.7
 
 export const STATION_Z = [308.6, 313.0, 317.4, 321.8, 326.2];
 // per-station state: s = g ready / a standby / r fault; h = hinge side (local ±x); open = hatch open
+// West row alternates standby / ready (a g a g a from the door) with pod 4 open; east row is all
+// ready with pod 2 open and pod 3 in FAULT — the two rows never show the same sequence. The open
+// pods sit second from each row's camera so the cabin is seen ~35 deg off its axis.
 const WEST = [
-  { s: "g", h: -1 },
+  { s: "a", h: -1 },
   { s: "g", h: 1 },
-  { s: "a", h: 1, open: true },
-  { s: "g", h: -1 },
-  { s: "a", h: 1 },
+  { s: "a", h: -1 },
+  { s: "g", h: 1, open: true },
+  { s: "a", h: -1 },
 ];
 const EAST = [
   { s: "g", h: 1 },
-  { s: "r", h: -1 },
   { s: "g", h: 1, open: true },
-  { s: "g", h: -1 },
+  { s: "r", h: -1 },
   { s: "g", h: 1 },
+  { s: "g", h: -1 },
 ];
 const EMIT = { g: "emitGreen", a: "emitAmber", r: "emitRedImp" };
 const RED = new THREE.Color("#7a2a24");
 const PAINT_AMBER = new THREE.Color("#ffb040");
-const SWING = (110 * Math.PI) / 180; // open-hatch swing angle
+const SWING = (135 * Math.PI) / 180; // open-hatch swing angle (past 90 deg so the leaf clears the cabin view)
 
 // Wall openings behind the two open hatches (the manifest passes these to the shell): square holes
 // hidden behind the collar throat, closed off by the cabin tube built in detail().
@@ -176,10 +181,10 @@ export function detail(ctx, shell, room) {
     const { s: status, h, open } = spec;
     const cap = EMIT[status];
     // plinth + framed collar (3.0 x 3.0 x 0.5) around a 2.0 m throat, annular seat plate with bolts
-    Q.box("paintedMetal", 0, 0.25, 0.25, 3.0, 0.5, 0.5, { color: black, texel: 2.5 });
-    for (const sx of [-1, 1]) Q.box("paintedMetal", sx * 1.25, 2.0, 0.25, 0.5, 3.0, 0.5, { color: dark, texel: 2.5 });
-    Q.box("paintedMetal", 0, 0.7, 0.25, 2.0, 0.4, 0.5, { color: dark, texel: 2.5 });
-    Q.box("paintedMetal", 0, 3.2, 0.25, 2.0, 0.6, 0.5, { color: dark, texel: 2.5 });
+    Q.box("paintedMetal", 0, 0.25, 0.25, 3.0, 0.5, 0.5, { color: black, texel: 4 });
+    for (const sx of [-1, 1]) Q.box("paintedMetal", sx * 1.25, 2.0, 0.25, 0.5, 3.0, 0.5, { color: dark, texel: 4 });
+    Q.box("paintedMetal", 0, 0.7, 0.25, 2.0, 0.4, 0.5, { color: dark, texel: 4 });
+    Q.box("paintedMetal", 0, 3.2, 0.25, 2.0, 0.6, 0.5, { color: dark, texel: 4 });
     for (const sx of [-1, 1]) Q.box("impPanel", sx * 1.25, 2.0, 0.512, 0.34, 2.8, 0.02, { color: grey, uv: "keep" });
     Q.add("paintedMetal", new THREE.RingGeometry(1.0, 1.45, 48), 0, 1.9, 0.505, { color: grey, texel: 2.5 });
     for (let k = 0; k < 16; k++) {
@@ -203,21 +208,25 @@ export function detail(ctx, shell, room) {
       Q.cyl("darkGloss", 0, 2.35, -1.485, 0.16, 0.02, "z", { segments: 20 });
       Q.box("emitAmber", 0, 1.3, -1.485, 0.4, 0.05, 0.01);
       Q.box("impFloor", 0, 1.17, -0.55, 1.3, 0.05, 1.95, { color: dark, texel: 0.5 });
+      // two seats pulled toward the hatch so they read through the opening from the row views:
+      // black pads on dark frames, tall backs, crossed amber straps with lit buckles, headrests
       for (const sx of [-1, 1]) {
-        Q.box("paintedMetal", sx * 0.36, 1.4, -1.0, 0.5, 0.42, 0.5, { color: dark, texel: 2.5 });
-        Q.box("paintedMetal", sx * 0.36, 1.64, -1.0, 0.46, 0.06, 0.46, { color: black });
-        Q.box("paintedMetal", sx * 0.36, 2.0, -1.3, 0.5, 0.8, 0.08, { color: dark, texel: 2.5 });
-        Q.box("paintedMetal", sx * 0.36, 2.5, -1.3, 0.3, 0.16, 0.1, { color: black });
+        Q.box("paintedMetal", sx * 0.36, 1.38, -0.5, 0.5, 0.38, 0.5, { color: dark, texel: 2.5 });
+        Q.box("paintedMetal", sx * 0.36, 1.6, -0.5, 0.46, 0.08, 0.46, { color: black });
+        Q.box("paintedMetal", sx * 0.36, 2.05, -0.8, 0.5, 0.9, 0.1, { color: dark, texel: 2.5 });
+        Q.box("paintedMetal", sx * 0.36, 2.05, -0.74, 0.4, 0.8, 0.02, { color: black });
+        Q.box("paintedMetal", sx * 0.36, 2.6, -0.79, 0.3, 0.18, 0.12, { color: black });
         for (const d of [-1, 1]) {
-          const g = new THREE.BoxGeometry(0.06, 0.62, 0.02);
+          const g = new THREE.BoxGeometry(0.07, 0.7, 0.02);
           g.rotateZ(d * 0.55);
-          Q.add("paintedMetal", g, sx * 0.36, 2.0, -1.25, { color: amber });
+          Q.add("paintedMetal", g, sx * 0.36, 2.05, -0.72, { color: amber });
         }
-        Q.box("emitAmber", sx * 0.36, 2.0, -1.24, 0.08, 0.08, 0.01);
+        Q.box("emitAmber", sx * 0.36, 2.05, -0.705, 0.1, 0.1, 0.01);
+        Q.box("emitAmber", sx * 0.36, 2.72, -1.484, 0.14, 0.06, 0.01);
       }
       Q.box("paintedMetal", 0, 2.86, -0.6, 0.18, 0.05, 1.5, { color: black });
       Q.box("emitWhite", 0, 2.83, -0.6, 0.1, 0.02, 1.4);
-      Q.cyl("metal", 0, 2.55, -0.2, 0.02, 1.3, "x", { color: steel, segments: 8 });
+      Q.cyl("metal", 0, 2.55, 0.1, 0.02, 1.3, "x", { color: steel, segments: 8 });
       for (const sx of [-1, 1]) Q.box("emitAmber", sx * 0.62, 1.2, -0.55, 0.03, 0.02, 1.8);
       // boarding light recessed in the collar's top rail, lighting the cabin and the open door
       Q.box("paintedMetal", 0, 2.93, 0.25, 0.9, 0.06, 0.34, { color: black });
@@ -237,7 +246,7 @@ export function detail(ctx, shell, room) {
     Q.box(cap, 0.72, gy, gz, 0.1, 0.1, 0.01);
     // muster step: 0.6 m block with a deck tread, lit nose, kick base; hazard on the floor in front
     Q.box("paintedMetal", 0, 0.05, 1.0, 2.5, 0.1, 1.1, { color: black });
-    Q.box("paintedMetal", 0, 0.35, 1.0, 2.4, 0.5, 1.0, { color: mid, texel: 2.5 });
+    Q.box("paintedMetal", 0, 0.35, 1.0, 2.4, 0.5, 1.0, { color: mid, texel: 4 });
     Q.box("impFloor", 0, 0.61, 1.0, 2.42, 0.02, 1.02, { color: dark, texel: 0.5 });
     Q.box("emitAmber", 0, 0.58, 1.505, 2.2, 0.03, 0.01);
     Q.box("hazard", 0, 0.003, 1.85, 2.8, 0.006, 0.7, { texel: 2 });
@@ -265,15 +274,15 @@ export function detail(ctx, shell, room) {
     indicatorField(Q, 1.95, 1.15, 0.705, 0.22, 0.3, seed + 2);
     Q.collider([1.77, 0, 0.37], [2.13, 1.6, 0.73], "status-pillar");
     // launch-tube housing above: a vertical half-cylinder from the collar top to the ceiling
-    Q.add("paintedMetal", new THREE.CylinderGeometry(1.3, 1.3, tubeH, 20, 1, false, -Math.PI / 2, Math.PI), 0, TUBE_Y0 + tubeH / 2, 0, { color: dark, texel: 2.5 });
+    Q.add("paintedMetal", new THREE.CylinderGeometry(1.3, 1.3, tubeH, 20, 1, false, -Math.PI / 2, Math.PI), 0, TUBE_Y0 + tubeH / 2, 0, { color: dark, texel: 4 });
     for (const y of [TUBE_Y0 + 0.15, TUBE_Y0 + tubeH - 0.2]) Q.add("paintedMetal", new THREE.CylinderGeometry(1.36, 1.36, 0.14, 20, 1, false, -Math.PI / 2, Math.PI), 0, y, 0, { color: black });
     Q.box("paintedMetal", 0, TUBE_Y0 + tubeH / 2, 1.3, 0.12, tubeH - 0.5, 0.08, { color: black });
     Q.box(status === "r" ? "emitRedImp" : "emitAmber", 0, TUBE_Y0 + tubeH / 2, 1.345, 0.03, tubeH - 0.7, 0.01);
     // pendant fixture hung from the gantry cross-tie over the muster step: the housing that explains
     // the warm accent light. An open pod is lit from the boarding light in its throat instead.
     const pend = Q.world(0, 0, 1.9);
-    dropLight(kit, PALETTE, [pend[0], CY - 0.47, pend[2]], { w: 0.4, d: 1.2, stem: 2.0, mat: "emitWarmSoft" });
-    if (open) ctx.lights.push({ type: "point", pos: Q.world(0, 2.2, -0.2), color: 0xfff0dc, intensity: 4.5, distance: 6, priority: 0.6 });
+    dropLight(kit, PALETTE, [pend[0], CY - 0.47, pend[2]], { w: 0.5, d: 1.5, stem: 2.0, mat: "emitWarmSoft" });
+    if (open) ctx.lights.push({ type: "point", pos: Q.world(0, 2.45, -0.05), color: 0xfff0dc, intensity: 4.5, distance: 6, priority: 0.6 });
     else ctx.lights.push({ type: "point", pos: Q.world(0, 3.0, 1.9), color: status === "r" ? 0xff7a5c : 0xffb35c, intensity: 18, distance: 9, priority: 0.6 });
   };
   STATION_Z.forEach((z, i) => station([IX0, Y, z], Math.PI / 2, WEST[i], i, 100 + i * 7));
@@ -294,8 +303,8 @@ export function detail(ctx, shell, room) {
   hoseReel(IX0, Y + 1.5, 324.0, Math.PI / 2);
   hoseReel(IX1, Y + 1.5, 319.6, -Math.PI / 2);
   {
-    // west: a tool cart parked in the gap forward of the open pod
-    const Q = placer(kit, [IX0 + 1.1, Y, 315.2], Math.PI / 2);
+    // west: a tool cart parked in the gap aft of the open pod (its leaf swings into the forward gap)
+    const Q = placer(kit, [IX0 + 1.1, Y, 324.0], Math.PI / 2);
     for (const [lx, lz] of [[-0.5, -0.3], [0.5, -0.3], [-0.5, 0.3], [0.5, 0.3]]) Q.cyl("paintedMetal", lx, 0.09, lz, 0.09, 0.06, "x", { color: black, segments: 12 });
     Q.box("paintedMetal", 0, 0.25, 0, 1.2, 0.05, 0.7, { color: dark, texel: 2.5 });
     Q.box("paintedMetal", 0, 0.85, 0, 1.2, 0.05, 0.7, { color: dark, texel: 2.5 });
@@ -415,8 +424,57 @@ export function detail(ctx, shell, room) {
   }
   for (let k = 0; k < 6; k++) kit.box("paintedMetal", -0.65 + k * 0.26, Y + 0.016, 324.6, 0.18, 0.006, 0.18, { color: k % 2 ? PAINT_AMBER : black });
   for (const x of [-1.1, 1.1]) floorLine(kit, [x, Y + 0.004, 324.1], [x, Y + 0.004, 325.1], 0.1, "paintedMetal", PAINT_AMBER);
+  // boarding checkpoint on the runway 7.6 m in from the door: a pair of control pedestals angled at
+  // the arriving crew, a floor-mounted lane gate between them (pivot housing with its striped boom
+  // raised, receiving bollard opposite, lane-open lamps) and a painted check zone
+  {
+    const gz = 320.6;
+    consoleProp(kit, PALETTE, [-1.55, Y, gz], 0.35, { w: 0.9, d: 0.6, h: 1.15, screens: 1, screenMat: "screenImp2", seed: 45 });
+    consoleProp(kit, PALETTE, [1.55, Y, gz], -0.35, { w: 0.9, d: 0.6, h: 1.15, screens: 1, screenMat: "screenImp0", seed: 46 });
+    const C = placer(kit, [0, Y, gz], 0);
+    C.box("paintedMetal", 0, 0.03, 0, 1.2, 0.06, 0.4, { color: black, texel: 4 });
+    for (const f of [-1, 1]) C.box("paintedMetal", 0, 0.062, f * 0.17, 1.1, 0.004, 0.04, { color: PAINT_AMBER });
+    // pivot housing + raised boom (red / white bands) on the west side
+    C.box("paintedMetal", -0.62, 0.41, 0.02, 0.24, 0.7, 0.3, { color: dark, texel: 4 });
+    C.box("paintedMetal", -0.62, 0.78, 0.02, 0.26, 0.04, 0.32, { color: black });
+    C.box("darkGloss", -0.62, 0.5, 0.175, 0.16, 0.2, 0.01);
+    C.box("emitGreen", -0.62, 0.55, 0.182, 0.1, 0.03, 0.01);
+    C.box("emitAmber", -0.62, 0.46, 0.182, 0.06, 0.03, 0.01);
+    C.cyl("metal", -0.62, 0.7, 0.2, 0.05, 0.3, "x", { color: steel, segments: 12 });
+    for (let k = 0; k < 4; k++) C.box("paintedMetal", -0.62, 0.7 + 0.155 + k * 0.31, 0.2, 0.06, 0.31, 0.12, { color: k % 2 ? white : P("impRed") });
+    C.box("paintedMetal", -0.62, 1.96, 0.2, 0.08, 0.04, 0.14, { color: black });
+    C.collider([-0.75, 0, -0.14], [-0.49, 2.0, 0.28], "lane-gate");
+    // receiving bollard with the boom cradle on the east side
+    C.cyl("paintedMetal", 0.62, 0.3, 0.2, 0.07, 0.6, "y", { color: dark, segments: 12 });
+    C.box("emitGreen", 0.62, 0.5, 0.272, 0.06, 0.1, 0.01);
+    for (const f of [-1, 1]) C.box("metal", 0.62, 0.7, 0.2 + f * 0.08, 0.08, 0.16, 0.02, { color: steel });
+    C.box("metal", 0.62, 0.63, 0.2, 0.08, 0.02, 0.18, { color: steel });
+    C.collider([0.53, 0, -0.07], [0.71, 0.8, 0.3], "lane-gate");
+    for (let k = -1; k <= 1; k++) C.box("paintedMetal", k * 0.36, 0.016, 0.5, 0.2, 0.006, 0.2, { color: k ? PAINT_AMBER : black });
+  }
+  // stretcher trolley parked off the runway between the gate posts and the checkpoint: wheeled frame
+  // with two shelves, a folded stretcher on top, med kit + blanket + O2 bottle below, push handle
+  {
+    const S = placer(kit, [2.5, Y, 322.6], 0.12);
+    for (const [lx, lz] of [[-0.3, -0.8], [0.3, -0.8], [-0.3, 0.8], [0.3, 0.8]]) S.cyl("paintedMetal", lx, 0.08, lz, 0.08, 0.05, "x", { color: black, segments: 12 });
+    for (const [lx, lz] of [[-0.33, -0.85], [0.33, -0.85], [-0.33, 0.85], [0.33, 0.85]]) S.box("metal", lx, 0.55, lz, 0.04, 0.9, 0.04, { color: steel });
+    for (const y of [0.35, 0.85]) S.box("paintedMetal", 0, y, 0, 0.7, 0.04, 1.9, { color: dark, texel: 4 });
+    S.cyl("metal", 0, 1.0, 0.9, 0.02, 0.7, "x", { color: steel, segments: 8 });
+    for (const lx of [-0.33, 0.33]) S.cyl("metal", lx, 0.95, 0.9, 0.02, 0.1, "y", { color: steel, segments: 8 });
+    for (const lx of [-0.2, 0.2]) S.cyl("metal", lx, 0.89, 0, 0.02, 1.9, "z", { color: steel, segments: 8 });
+    S.box("paintedMetal", 0, 0.89, 0, 0.42, 0.06, 1.7, { color: mid, texel: 4 });
+    S.box("paintedMetal", 0, 0.925, 0, 0.42, 0.01, 0.12, { color: PAINT_AMBER });
+    S.box("paintedMetal", 0, 0.5, 0.55, 0.36, 0.26, 0.36, { color: white, texel: 4 });
+    S.box("paintedMetal", -0.183, 0.5, 0.55, 0.01, 0.16, 0.05, { color: P("impRed") });
+    S.box("paintedMetal", -0.183, 0.5, 0.55, 0.01, 0.05, 0.16, { color: P("impRed") });
+    S.box("paintedMetal", 0, 0.43, -0.05, 0.4, 0.12, 0.5, { color: mid, texel: 4 });
+    S.cyl("metal", 0.12, 0.45, -0.6, 0.08, 0.5, "z", { color: white, segments: 12 });
+    S.cyl("metal", 0.12, 0.45, -0.88, 0.03, 0.06, "z", { color: steel, segments: 8 });
+    S.box("emitAmber", 0, 0.85, 0.955, 0.24, 0.03, 0.01);
+    S.collider([-0.4, 0, -1.0], [0.4, 1.05, 1.0], "stretcher-trolley");
+  }
   // hanging muster signs: framed dark plates with small amber glyph bars (not a lit slab)
-  for (const z of [312.0, 322.5]) {
+  for (const z of [313.0, 321.8]) {
     kit.box("paintedMetal", 0, CY - 0.555, z, 0.06, 1.05, 0.06, { color: black });
     kit.box("paintedMetal", 0, CY - 1.3, z, 1.5, 0.5, 0.12, { color: black, texel: 2.5 });
     for (const s of [-1, 1]) {
@@ -426,17 +484,16 @@ export function detail(ctx, shell, room) {
       kit.box("emitAmber", -0.45, CY - 1.38, z + s * 0.072, 0.16, 0.16, 0.01);
     }
   }
-  // six housed ceiling fixtures (2 x 3) — the four corner ones carry the down-spot fills
-  const FIX = [];
-  for (const x of [-7, 7]) for (const z of [309.5, 317.5, 325.5]) {
-    dropLight(kit, PALETTE, [x, CY, z], { w: 2.4, d: 0.5, stem: 0.9, mat: "emitWarmSoft" });
-    if (z !== 317.5) FIX.push([x, z]);
-  }
+  // hall fixtures in three rows: a centreline row over the runway in the gaps between stations (the
+  // four down-spot fills hang under these) and two side rows on the pod rhythm over the muster floor
+  const FIX = [310.8, 315.2, 319.6, 324.0];
+  for (const z of FIX) dropLight(kit, PALETTE, [0, CY, z], { w: 2.4, d: 0.6, stem: 0.9, mat: "emitWarmSoft" });
+  for (const x of [-8.2, 8.2]) for (const z of STATION_Z) dropLight(kit, PALETTE, [x, CY, z], { w: 2.0, d: 0.5, stem: 0.9, mat: "emitWarmSoft" });
   // overhead gantry beams tying the launch tubes together along each wall (hung between channels)
   for (const s of [-1, 1]) {
-    kit.box("paintedMetal", s * 16.6, CY - 0.35, (IZ0 + IZ1) / 2, 0.32, 0.36, IZ1 - IZ0 - 1.0, { color: dark, texel: 2.5 });
+    kit.box("paintedMetal", s * 16.6, CY - 0.35, (IZ0 + IZ1) / 2, 0.32, 0.36, IZ1 - IZ0 - 1.0, { color: dark, texel: 4 });
     for (const z of [309.3, 313.4, 317.5, 321.6, 325.7]) kit.box("paintedMetal", s * 16.6, CY - 0.1, z, 0.16, 0.14, 0.24, { color: black });
-    for (const z of STATION_Z) kit.box("paintedMetal", s * 17.5, CY - 0.37, z, 1.9, 0.2, 0.3, { color: dark, texel: 2.5 });
+    for (const z of STATION_Z) kit.box("paintedMetal", s * 17.5, CY - 0.37, z, 1.9, 0.2, 0.3, { color: dark, texel: 4 });
   }
 
   // =============================================================================================
@@ -486,7 +543,8 @@ export function detail(ctx, shell, room) {
   // =============================================================================================
   {
     const bz = IZ0 + 0.02;
-    kit.boxMM("paintedMetal", [-3.3, Y + 1.25, bz], [3.3, Y + 3.75, bz + 0.12], { color: black, texel: 2.5 });
+    // clean dark panel plate (the worn-metal map on a 6.6 m slab reads as speckle even at texel 4)
+    kit.boxMM("impPanel", [-3.3, Y + 1.25, bz], [3.3, Y + 3.75, bz + 0.12], { color: black, uv: "keep" });
     kit.boxMM("impPanel", [-3.3, Y + 3.5, bz + 0.12], [3.3, Y + 3.75, bz + 0.14], { color: white, uv: "keep" });
     kit.boxMM("emitAmber", [-3.1, Y + 3.58, bz + 0.14], [3.1, Y + 3.66, bz + 0.15]);
     const B = placer(kit, [0, Y, bz + 0.12], 0);
@@ -498,13 +556,13 @@ export function detail(ctx, shell, room) {
         const x = -2.4 + i * 1.2;
         const y = 2.9 - row * 0.85;
         B.box("darkGloss", x, y, 0.01, 1.0, 0.7, 0.02);
-        B.box(EMIT[st.s], x, y + 0.14, 0.025, 0.86, 0.3, 0.01);
-        // pod number blocks (row letter block + i+1 lit blocks) and the READY / FAULT text strip
-        B.box("paintedMetal", x - 0.37, y - 0.14, 0.025, 0.08, 0.08, 0.01, { color: row ? grey : white });
-        for (let k = 0; k < 5; k++) B.box(k <= i ? "emitAmber" : "paintedMetal", x - 0.26 + k * 0.1, y - 0.14, 0.025, 0.07, 0.07, 0.01, { color: dark });
-        textStrip(B, x + 0.3, y - 0.14, 0.025, 0.36, 0.09, i + row * 3);
-        B.box(st.open ? "emitWhite" : st.s === "r" ? "emitRedImp" : "emitGreen", x + 0.4, y - 0.29, 0.025, 0.12, 0.04, 0.01);
-        B.box("paintedMetal", x - 0.2, y - 0.29, 0.025, 0.5, 0.03, 0.01, { color: black });
+        // status colour field (top), pod number as five 14 cm blocks (middle, readable at 3 m) with
+        // the row's W / E marker, and one READY / FAULT text strip across the tile (bottom)
+        B.box(EMIT[st.s], x, y + 0.21, 0.025, 0.9, 0.22, 0.01);
+        B.box("paintedMetal", x - 0.4, y + 0.21, 0.03, 0.1, 0.14, 0.01, { color: row ? black : white });
+        for (let k = 0; k < 5; k++) B.box(k <= i ? "emitAmber" : "paintedMetal", x - 0.34 + k * 0.17, y - 0.01, 0.025, 0.14, 0.14, 0.01, { color: dark });
+        textStrip(B, x - 0.06, y - 0.23, 0.025, 0.74, 0.12, i + row * 3);
+        B.box(st.open ? "emitWhite" : st.s === "r" ? "emitRedImp" : "emitGreen", x + 0.38, y - 0.23, 0.025, 0.1, 0.1, 0.01);
       }
     }
     indicatorField(B, 0, 1.45, 0.005, 5.8, 0.18, 51);
@@ -579,10 +637,10 @@ export function detail(ctx, shell, room) {
   pipe(kit, PALETTE, [-19.0, Y + 5.4, IZ0 + 0.3], [19.0, Y + 5.4, IZ0 + 0.3], 0.06, { color: dark, bracket: 3 });
 
   // =============================================================================================
-  // LIGHTS: four warm down-spots under the corner fixtures (spots use their own pool slot, so all
-  // ten hatch accents pushed by the stations stay live) = 14 total
+  // LIGHTS: four warm down-spots under the centreline fixtures aimed at the runway (spots use their
+  // own pool slot, so the ten station lights — 8 hatch accents + 2 cabins — stay live) = 14 total
   // =============================================================================================
-  for (const [x, z] of FIX) {
-    ctx.lights.push({ type: "spot", pos: [x, CY - 1.4, z], target: [x, Y, z], color: 0xffe6cc, intensity: 80, distance: 30, angle: 1.15, penumbra: 0.7, priority: 0.9 });
+  for (const z of FIX) {
+    ctx.lights.push({ type: "spot", pos: [0, CY - 1.4, z], target: [0, Y, z], color: 0xffe6cc, intensity: 90, distance: 30, angle: 1.15, penumbra: 0.7, priority: 0.9 });
   }
 }
