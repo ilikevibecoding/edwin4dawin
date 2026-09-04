@@ -183,6 +183,14 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
     ensureDeckBuilt,
     streamDeck,
     deckBuilt,
+    unloadDeck,
+    /** Unload every built deck at least 'keep' deck-indices away from the current one. */
+    trimDecks(keep = 2) {
+      if (!currentDeck) return [];
+      const dropped = [];
+      for (const deck of decks) if (deck.built && Math.abs(deck.def.index - currentDeck.def.index) >= keep && unloadDeck(deck.id)) dropped.push(deck.id);
+      return dropped;
+    },
     teleport,
     forceSector,
     onSectorChange(fn) {
@@ -402,6 +410,22 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
 
   function deckBuilt(id) {
     return deckById(id).built;
+  }
+
+  /**
+   * Free a deck's sector geometry (the current deck is never unloaded; doors are kept, they are
+   * small). Returns true when something was released.
+   */
+  function unloadDeck(id) {
+    const deck = deckById(id);
+    if (!deck || !deck.built || deck === currentDeck) return false;
+    for (const s of deck.sectors) s.dispose();
+    deck.built = false;
+    deck.pending = [];
+    deck.streaming = false;
+    deck.doorGroup.visible = false;
+    assignPool(); // drop pool sources that pointed into the released sectors
+    return true;
   }
 
   // A sector behind a door is only visible while that door is not fully closed or the player is

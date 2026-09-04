@@ -128,6 +128,30 @@ export class Sector {
     return this;
   }
 
+  /**
+   * Free the sector's geometry (materials and textures are shared and stay). The sector rebuilds on
+   * demand the next time it is shown, so decks far from the player can be unloaded.
+   */
+  dispose() {
+    if (!this.built) return;
+    this.group.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+    });
+    if (this.group.parent) this.group.parent.remove(this.group);
+    this.group = new THREE.Group();
+    this.group.name = "sector_" + this.def.id;
+    this.group.position.set(...this.deck.origin);
+    this.group.visible = false;
+    this.colliders = [];
+    this.lights = [];
+    this.anims = [];
+    this.interactables = [];
+    this.markers = [];
+    this.audioZones = [];
+    this.built = false;
+    this.visible = false;
+  }
+
   /** World position of a marker (or null). */
   markerWorld(id) {
     const m = this.markers.find((x) => x.id === id);

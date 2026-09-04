@@ -542,6 +542,7 @@ function frame() {
     // stream the hangar bay in when the camera can see the ventral opening
     if (!hangar.built && camera.position.y < -30) interior.streamDeck("hangar");
     if (!interior.deckBuilt("command") && camera.position.distanceTo(TOWER_POS) < 900) interior.streamDeck("command");
+    if (!interior.deckBuilt("bridge") && camera.position.distanceTo(TOWER_POS) < 900) interior.streamDeck("bridge");
     interior.setExteriorView(true);
   } else interior.setExteriorView(false);
   traffic.group.visible = showExterior || (hangar && hangar.visible);
