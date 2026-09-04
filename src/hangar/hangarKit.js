@@ -9,7 +9,7 @@ import { Kit, rng } from "../kit.js";
 import { wallFrame, X_AXIS } from "../core/frame.js";
 import { IMP } from "../materials/imperial.js";
 import { impDecalRect, deckMarkRect } from "../materials/imperialTextures.js";
-import { pointLightDesc, walkable, railing, crate } from "../interior/impKit.js";
+import { pointLightDesc, walkable, railing, crate, ramp } from "../interior/impKit.js";
 
 export { wallFrame };
 
@@ -284,6 +284,64 @@ export function slab(kit, ctx, box, y, opts = {}) {
   }
 }
 
+// Industrial open stair (axis-aligned): thin treads with steel nosings on two tilted stringers, sloped
+// handrails on posts, and the walkable ramp. from = [x,z] of the bottom edge centre, dir = [±1,0] |
+// [0,±1] is the direction of ascent, w = width, y0 -> y1. Tall flights read as stairs from across a
+// bay instead of the solid wedge impKit.stairs builds for short domestic flights.
+export function openStairs(kit, ctx, from, dir, w, y0, y1, opts = {}) {
+  const { riser = 0.19, tread = 0.3, rails = true, railH = 1.0, tone = IMP.wallDark, postPitch = 2.4 } = opts;
+  const rise = y1 - y0;
+  const n = Math.max(1, Math.round(rise / riser));
+  const stepH = rise / n;
+  const run = n * tread;
+  const [ux, uz] = dir;
+  const alongX = Math.abs(ux) > 0.5;
+  const sx = -uz;
+  const sz = ux;
+  const at = (along, side, yy) => [from[0] + ux * along + sx * side, yy, from[1] + uz * along + sz * side];
+  const dims = (len, h, wid) => (alongX ? new THREE.BoxGeometry(len, h, wid) : new THREE.BoxGeometry(wid, h, len));
+  const theta = Math.atan2(rise, run);
+  // tilt that raises the far (ascending) end of a box whose long axis runs along the stair
+  const tiltQ = alongX ? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), theta * ux) : new THREE.Quaternion().setFromAxisAngle(X_AXIS, -theta * uz);
+  const slopeLen = Math.hypot(run, rise);
+  for (let i = 0; i < n; i++) {
+    const along = (i + 0.5) * tread;
+    const top = y0 + (i + 1) * stepH;
+    kit.add("impDeck", dims(tread, 0.06, w), { pos: at(along, 0, top - 0.03), color: tone, texel: 1 });
+    kit.add("impMetal", dims(0.05, 0.02, w), { pos: at(along + tread / 2 - 0.025, 0, top + 0.005), color: IMP.steel });
+  }
+  for (const s of [-1, 1]) {
+    kit.add(RIB, dims(slopeLen, 0.5, 0.1), { pos: at(run / 2, s * (w / 2 - 0.05), y0 + rise / 2 - 0.24), quat: tiltQ, color: IMP.trim, texel: 1 });
+    // cross ties under the treads every few steps
+    for (let along = tread * 3; along < run - tread; along += tread * 6) {
+      kit.add("impMetal", dims(0.08, 0.08, w - 0.2), { pos: at(along, 0, y0 + (along / run) * rise - 0.32), color: IMP.gunmetal });
+    }
+  }
+  // hazard nosing on the deck at the foot and on the last tread
+  kit.add("hazard", dims(0.4, 0.012, w + 0.2), { pos: at(-0.2, 0, y0 + 0.006), uv: "world", texel: 1 });
+  const axis = alongX ? "x" : "z";
+  const ascending = alongX ? ux > 0 : uz > 0;
+  const c0 = at(0, -w / 2, 0);
+  const c1 = at(run, w / 2, 0);
+  ramp(ctx, c0[0], c0[2], c1[0], c1[2], ascending ? y0 : y1, ascending ? y1 : y0, axis, "stairs");
+  if (rails) {
+    for (const s of [-1, 1]) {
+      const side = s * (w / 2 + 0.06);
+      kit.add("impMetal", dims(slopeLen, 0.05, 0.06), { pos: at(run / 2, side, y0 + rise / 2 + railH), quat: tiltQ, color: IMP.steel, texel: 1 });
+      kit.add("impMetal", dims(slopeLen, 0.03, 0.04), { pos: at(run / 2, side, y0 + rise / 2 + railH * 0.55), quat: tiltQ, color: IMP.steel, texel: 1 });
+      for (let along = 0.15; along <= run - 0.1; along += postPitch) {
+        const yy = y0 + (along / run) * rise;
+        kit.add(RIB, dims(0.07, railH, 0.07), { pos: at(along, side, yy + railH / 2), color: IMP.trim });
+      }
+      kit.add(RIB, dims(0.07, railH, 0.07), { pos: at(run - 0.05, side, y1 + railH / 2), color: IMP.trim });
+      const a = at(0, side, 0);
+      const b = at(run, side, 0);
+      kit.collider([Math.min(a[0], b[0]) - 0.08, y0, Math.min(a[2], b[2]) - 0.08], [Math.max(a[0], b[0]) + 0.08, y1 + railH + 0.1, Math.max(a[2], b[2]) + 0.08], "stairRail");
+    }
+  }
+  return { run, n };
+}
+
 // Support column (deck to underside of a structure), square section
 export function pillar(kit, x, z, y0, y1, s = 0.8, opts = {}) {
   const { collide = true, tone = IMP.trim } = opts;
@@ -316,9 +374,9 @@ export function laneMarks(kit, from, to, y, w) {
 }
 // Hazard-striped kerb (box) from min to max corners
 export function hazardKerb(kit, min, max, opts = {}) {
-  const { collide = true, texel = 0.5 } = opts;
+  const { collide = true, texel = 0.5, top = false } = opts;
   kit.boxMM("hazard", min, max, { uv: "world", texel });
-  kit.boxMM("impMetal", [min[0], max[1], min[2]], [max[0], max[1] + 0.03, max[2]], { color: IMP.steel });
+  if (top) kit.boxMM("impMetal", [min[0], max[1], min[2]], [max[0], max[1] + 0.03, max[2]], { color: IMP.steel });
   if (collide) kit.collider(min, max, "kerb");
 }
 // Stencil decal on the floor
@@ -563,6 +621,92 @@ export function serviceGantry(kit, pos, yaw, opts = {}) {
   if (collide) footprint(kit, f, pos, w / 2 + 0.1, len / 2 + 1.3, h + 1.2, "gantry");
 }
 
+// Maintenance cradle for a TIE: skids under both wing bottom edges with padded saddles, a central
+// pedestal under the cockpit ball. pos = floor point under the fighter centre, yaw = fighter yaw. The
+// fighter centre then sits at pos.y + hang (wing bottoms 0.65 m up, ball bottom on the pedestal pad).
+export const TIE_CRADLE_HANG = 4.4;
+export function tieCradle(kit, pos, yaw, opts = {}) {
+  const { collide = true, wings = [-1, 1] } = opts;
+  const f = local(pos, yaw);
+  const box = boxer(kit, f);
+  for (const sx of wings) {
+    box(RIB, sx * 3.35, 0.14, 0, 0.7, 0.28, 7.0, { color: IMP.trim, texel: 1 });
+    box("hazard", sx * 3.35, 0.14, 0, 0.72, 0.16, 6.6, { uv: "world", texel: 1 });
+    for (const z of [-1.7, 1.7]) {
+      box(RIB, sx * 3.35, 0.45, z, 0.9, 0.34, 0.7, { color: IMP.hazardYellow, texel: 1 });
+      box("impRubber", sx * 3.35, 0.66, z, 0.5, 0.12, 0.6, { color: IMP.rubber });
+      for (const s of [-1, 1]) box(RIB, sx * 3.35 + s * 0.3, 0.8, z, 0.08, 0.36, 0.6, { color: IMP.darkMetal, texel: 1 });
+    }
+    for (const z of [-3.2, 3.2]) box("impMetal", sx * 3.35, 0.06, z, 1.0, 0.12, 0.4, { color: IMP.gunmetal });
+  }
+  for (const z of [-2.4, 2.4]) box(RIB, 0, 0.16, z, wings.length > 1 ? 7.4 : 3.9, 0.22, 0.34, { color: IMP.darkMetal, texel: 1 });
+  // pedestal + saddle pad under the ball (ball bottom at hang - 2.1 = 2.3)
+  box(RIB, 0, 1.15, 0, 1.1, 1.9, 1.1, { color: IMP.darkMetal, texel: 1 });
+  box(RIB, 0, 2.18, 0, 1.7, 0.16, 1.3, { color: IMP.trim, texel: 1 });
+  box("impRubber", 0, 2.3, 0, 1.4, 0.1, 1.1, { color: IMP.rubber });
+  for (const s of [-1, 1]) box("impRubber", s * 0.62, 2.42, 0, 0.16, 0.16, 1.1, { color: IMP.rubber });
+  box("blinkSparse", 0, 1.4, 0.56, 0.6, 0.2, 0.01, { uv: "keep" });
+  box("emitGreen", 0.3, 1.7, 0.56, 0.08, 0.06, 0.01);
+  if (collide) {
+    for (const sx of wings) footprint(kit, f, [f.L(sx * 3.35, 0, 0).x, pos[1], f.L(sx * 3.35, 0, 0).z], 0.5, 3.5, 1.0, "cradle");
+    footprint(kit, f, pos, 0.9, 0.9, 2.4, "cradle");
+  }
+}
+
+// A-frame stand a detached wing panel leans against (the wing itself: tie.js addTIEWing with
+// tilt = -lean about its chord). pos = floor point under the wing centre, yaw = wing yaw; the stand is
+// built on the local -x side, the side the top of the wing leans toward.
+export function wingStand(kit, pos, yaw, opts = {}) {
+  const { lean = 0.2, collide = true } = opts;
+  const f = local(pos, yaw);
+  const box = boxer(kit, f);
+  const hBar = 5.0;
+  const xBar = -(hBar - 3.75 * Math.cos(lean)) * Math.tan(lean) - 0.25;
+  for (const z of [-1.4, 1.4]) {
+    // inclined leg from the base out at -x to the bar
+    const xFoot = xBar - 1.6;
+    const len = Math.hypot(hBar, xFoot - xBar);
+    const g = new THREE.BoxGeometry(0.14, len, 0.14);
+    const q = f.q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.atan2(xFoot - xBar, hBar)));
+    const p = f.L((xFoot + xBar) / 2, hBar / 2, z);
+    kit.add(RIB, g, { pos: [p.x, p.y, p.z], quat: q, color: IMP.trim, texel: 1 });
+    box(RIB, xBar - 0.02, hBar / 2, z, 0.14, hBar, 0.14, { color: IMP.trim, texel: 1 });
+    box(RIB, xBar - 0.8, 0.08, z, 1.9, 0.16, 0.3, { color: IMP.darkMetal, texel: 1 });
+  }
+  box("impMetal", xBar, hBar, 0, 0.12, 0.12, 3.2, { color: IMP.steel });
+  box("impRubber", xBar + 0.1, hBar, 0, 0.1, 0.4, 3.0, { color: IMP.rubber });
+  box("impMetal", xBar - 0.02, hBar * 0.55, 0, 0.1, 0.1, 3.0, { color: IMP.steel });
+  box("hazard", xBar - 0.8, 0.17, 0, 1.9, 0.02, 3.1, { uv: "world", texel: 1 });
+  // chocks under the wing's bottom edge
+  const xBottom = 3.75 * Math.sin(lean);
+  for (const z of [-1.2, 1.2]) box("impRubber", xBottom, 0.12, z, 0.6, 0.24, 0.5, { color: IMP.rubber });
+  if (collide) footprint(kit, f, [f.L(xBar - 0.6, 0, 0).x, pos[1], f.L(xBar - 0.6, 0, 0).z], 1.3, 1.7, hBar, "wingStand");
+}
+
+// Ceiling bridge crane: rails on brackets along two side walls (running along z at x = rx0 / rx1),
+// a bridge across x at z, a trolley at trolleyX with the hook block hookDrop below the rail.
+export function bridgeCrane(kit, { rx0, rx1, z0, z1, z, y, trolleyX = 0, hookDrop = 4, tone = IMP.wallDark }) {
+  for (const rx of [rx0, rx1]) {
+    const s = rx < (rx0 + rx1) / 2 ? -1 : 1;
+    kit.boxMM(RIB, [rx - 0.4, y - 0.5, z0], [rx + 0.4, y, z1], { color: IMP.trim, texel: 0.5 });
+    kit.boxMM("impMetal", [rx - 0.2, y, z0], [rx + 0.2, y + 0.1, z1], { color: IMP.steel });
+    for (let zz = z0 + 2; zz < z1; zz += 5) kit.box(RIB, rx + s * 0.5, y - 0.8, zz, 0.8, 1.2, 0.5, { color: IMP.darkMetal, texel: 1 });
+  }
+  const L = rx1 - rx0 + 0.6;
+  const cx = (rx0 + rx1) / 2;
+  kit.box(RIB, cx, y + 0.75, z, L, 1.3, 1.0, { color: tone, texel: 0.5 });
+  kit.box(RIB, cx, y + 0.75, z, L, 0.25, 1.2, { color: IMP.trim, texel: 0.5 });
+  kit.box("hazard", cx, y + 1.45, z, L, 0.12, 1.02, { uv: "world", texel: 1 });
+  for (const rx of [rx0, rx1]) kit.box(RIB, rx, y + 0.5, z, 1.4, 1.2, 2.0, { color: IMP.darkMetal, texel: 1 });
+  kit.box(RIB, trolleyX, y + 0.1, z, 2.4, 1.0, 1.8, { color: IMP.darkMetal, texel: 1 });
+  kit.cyl("impMetal", trolleyX, y - 0.25, z, 0.4, 1.4, "x", { color: IMP.gunmetal, segments: 14 });
+  kit.box("emitAmber", trolleyX, y + 0.62, z + 0.91, 1.2, 0.08, 0.01);
+  kit.box("impMetal", trolleyX, y - hookDrop / 2 - 0.4, z, 0.05, hookDrop, 0.05, { color: IMP.steel });
+  kit.box(RIB, trolleyX, y - hookDrop - 0.7, z, 1.0, 0.7, 0.5, { color: IMP.hazardYellow, texel: 1 });
+  kit.box("impMetal", trolleyX, y - hookDrop - 1.35, z, 0.16, 0.7, 0.4, { color: IMP.steel });
+  return { hookY: y - hookDrop - 1.7 };
+}
+
 // Stack of cargo containers (uses the shared crate), n high
 export function crateStack(kit, pos, yaw, opts = {}) {
   const { seed = 1, n = 2, size = [2.2, 1.4, 1.6] } = opts;
@@ -581,7 +725,7 @@ export function statusBoard(frame, u, v, w, h, opts = {}) {
     frame.box("darkGloss", cu, v + h * 0.12, 0.17, w / cols - 0.16, h * 0.62, 0.01);
     frame.box("screen" + Math.floor(rand() * 3), cu, v + h * 0.12, 0.176, w / cols - 0.24, h * 0.56, 0.004, { uv: "keep" });
   }
-  frame.box("blinkDense", u, v - h * 0.36, 0.17, w - 0.3, h * 0.2, 0.01, { uv: "keep" });
+  frame.box("blink", u, v - h * 0.36, 0.17, w - 0.3, h * 0.2, 0.01, { uv: "keep" });
   frame.box("leds", u, v - h / 2 - 0.05, 0.165, Math.min(w, 3), 0.06, 0.01, { uv: "keep" });
 }
 

@@ -13,8 +13,8 @@ import { wallOpenings } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
-import { console as impConsole, chair, stairs, railing, pipeRun, pointLightDesc, spotLightDesc, walkable, wallScreen, lockers } from "../../impKit.js";
-import { bayWall, bayCeiling, gallery, slab, pillar, deckMark, laneMarks, hazardKerb, floorStencil, hoseReel, bowser, toolCart, wallLadder, fireStation, floodMast, serviceGantry, crateStack, statusBoard, bakeParts, instancedSet, bakeGroup } from "../../../hangar/hangarKit.js";
+import { console as impConsole, chair, railing, pipeRun, pointLightDesc, spotLightDesc, walkable, wallScreen, lockers } from "../../impKit.js";
+import { bayWall, bayCeiling, gallery, slab, pillar, openStairs, deckMark, laneMarks, hazardKerb, floorStencil, hoseReel, bowser, toolCart, wallLadder, fireStation, floodMast, serviceGantry, crateStack, statusBoard, bakeParts, instancedSet, bakeGroup } from "../../../hangar/hangarKit.js";
 import { addTIE } from "../../../hangar/tie.js";
 import { hangarBus } from "../../../hangar/hangarBus.js";
 
@@ -126,10 +126,10 @@ export function buildHangar(kit, ctx) {
   }
   // hazard kerb over the shaft wall tops (hull.js raises them 0.5 m), safety rail on top
   const kY = y + 0.6;
-  hazardKerb(kit, [W.x0 - kerb, y, W.z0 - kerb], [W.x0, kY, W.z1 + kerb]);
-  hazardKerb(kit, [W.x1, y, W.z0 - kerb], [W.x1 + kerb, kY, W.z1 + kerb]);
-  hazardKerb(kit, [W.x0, y, W.z0 - kerb], [W.x1, kY, W.z0]);
-  hazardKerb(kit, [W.x0, y, W.z1], [W.x1, kY, W.z1 + kerb]);
+  hazardKerb(kit, [W.x0 - kerb, y, W.z0 - kerb], [W.x0, kY, W.z1 + kerb], { texel: 1.25 });
+  hazardKerb(kit, [W.x1, y, W.z0 - kerb], [W.x1 + kerb, kY, W.z1 + kerb], { texel: 1.25 });
+  hazardKerb(kit, [W.x0, y, W.z0 - kerb], [W.x1, kY, W.z0], { texel: 1.25 });
+  hazardKerb(kit, [W.x0, y, W.z1], [W.x1, kY, W.z1 + kerb], { texel: 1.25 });
   const rin = 0.5;
   railing(kit, [W.x0 - rin, W.z1 + rin], [W.x0 - rin, W.z0 - rin], kY, { h: 1.1, lit: true, postPitch: 2.5 });
   railing(kit, [W.x1 + rin, W.z0 - rin], [W.x1 + rin, W.z1 + rin], kY, { h: 1.1, lit: true, postPitch: 2.5 });
@@ -208,10 +208,44 @@ export function buildHangar(kit, ctx) {
     // door tracks along the shaft wall at the keel end
     kit.boxMM("impMetal", [sx > 0 ? W.x1 - 0.3 : W.x0, W.yKeel + doorT / 2 + 0.2, W.z0], [sx > 0 ? W.x1 : W.x0 + 0.3, W.yKeel + doorT / 2 + 0.5, W.z1], { color: IMP.gunmetal });
   }
-  // shaft floodlights: cool strips on the shaft walls halfway down (visible from the deck edge)
-  for (const yy of [y - 8, y - 18]) {
-    kit.boxMM("lightBand", [W.x0 + 0.02, yy - 0.15, W.z0 + 4], [W.x0 + 0.1, yy + 0.15, W.z1 - 4], { uv: "keep" });
-    kit.boxMM("lightBand", [W.x1 - 0.1, yy - 0.15, W.z0 + 4], [W.x1 - 0.02, yy + 0.15, W.z1 - 4], { uv: "keep" });
+  // shaft lining inside the hull's shaft walls: armour plates between girder courses with cool light
+  // bands under them, vertical ribs, a hazard band at the door line — so the well reads as a deep
+  // machined shaft instead of a black hole from the deck edge and the galleries
+  {
+    const courses = [y - 1.2, y - 9.5, y - 18.5, W.yKeel + 1.9];
+    const lining = (along0, along1, normalAxis, sign, fixed) => {
+      // face at fixed coordinate on axis normalAxis; plates extend `along` on the other axis
+      const B = (a0, a1, y0, y1, depth, mat, o) => {
+        const lo = fixed + (sign > 0 ? 0 : -depth);
+        const hi = fixed + (sign > 0 ? depth : 0);
+        if (normalAxis === "x") kit.boxMM(mat, [lo, y0, a0], [hi, y1, a1], o);
+        else kit.boxMM(mat, [a0, y0, lo], [a1, y1, hi], o);
+      };
+      for (let j = 0; j < courses.length - 1; j++) {
+        const yTop = courses[j];
+        const yBot = courses[j + 1];
+        // girder + light band under the course line
+        if (j > 0) {
+          B(along0, along1, yTop - 0.45, yTop + 0.45, 0.4, RIB, { color: IMP.trim, texel: 0.5 });
+          B(along0 + 1, along1 - 1, yTop - 0.72, yTop - 0.47, 0.12, "lightBand", { uv: "keep" });
+        }
+        // plates between the ribs
+        for (let a = along0; a < along1 - 0.5; a += 12) {
+          const a1 = Math.min(along1, a + 12);
+          B(a + 0.4, a1 - 0.4, yBot + 0.6, yTop - 0.9, 0.08, "impPanel1", { color: IMP.wallDark, uv: "keep" });
+        }
+      }
+      for (let a = along0; a <= along1 + 0.01; a += 12) {
+        const c = Math.min(Math.max(a, along0 + 0.35), along1 - 0.35);
+        B(c - 0.35, c + 0.35, courses[courses.length - 1], courses[0], 0.32, RIB, { color: IMP.trim, texel: 0.5 });
+      }
+      B(along0, along1, W.yKeel + 1.9, W.yKeel + 2.4, 0.06, "hazard", { uv: "world", texel: 1 });
+      B(along0 + 2, along1 - 2, W.yKeel + 2.5, W.yKeel + 2.7, 0.06, "lightBandRed", { uv: "keep" });
+    };
+    lining(W.z0, W.z1, "x", 1, W.x0);
+    lining(W.z0, W.z1, "x", -1, W.x1);
+    lining(W.x0, W.x1, "z", 1, W.z0);
+    lining(W.x0, W.x1, "z", -1, W.z1);
   }
 
   // tractor emitters on the ceiling girders at the well edge, cones aimed into the shaft
@@ -357,18 +391,26 @@ export function buildHangar(kit, ctx) {
   // east gallery: u = z - z0
   gallery(kit, ctx, [ex, z0], [ex, z1], [-1, 0], GAL_LO, GAL_W, { railGaps: [[eastLo.top - 3 - z0, eastLo.top - z0]] });
   gallery(kit, ctx, [ex, z0], [ex, z1], [-1, 0], GAL_HI, GAL_W, { railGaps: [[eastHi.top - 3 - z0, eastHi.top - z0]] });
-  // stairs + landings (west)
-  stairs(kit, ctx, [sxW, westLo.z0], [0, 1], sw, y, GAL_LO, { tread: 0.3 });
+  // stairs + landings (west): open industrial flights on stringers, pillars under the landings
+  openStairs(kit, ctx, [sxW, westLo.z0], [0, 1], sw, y, GAL_LO, { tread: 0.3 });
   slab(kit, ctx, [wx + GAL_W, westLo.top, sxW + sw / 2, westLo.top + 3], GAL_LO, { rails: ["e"] });
-  stairs(kit, ctx, [sxW, westHi.z0], [0, 1], sw, GAL_LO, GAL_HI, { tread: 0.3 });
+  openStairs(kit, ctx, [sxW, westHi.z0], [0, 1], sw, GAL_LO, GAL_HI, { tread: 0.3 });
   slab(kit, ctx, [wx + GAL_W, westHi.top, sxW + sw / 2, westHi.top + 3], GAL_HI, { rails: ["e", "s"] });
-  for (const z of [138.4, 146, 156]) pillar(kit, sxW, z, y, GAL_LO, 0.8);
+  // columns: under the landings and under the inboard stringer mid-flight
+  const underStair = (st, z, yBase, rise, run) => yBase + (Math.abs(z - st.z0) / run) * rise - 0.55;
+  pillar(kit, sxW + sw / 2 - 0.4, 138.4, y, GAL_LO, 0.6);
+  pillar(kit, sxW + sw / 2 - 0.4, 163.6, y, GAL_HI, 0.6);
+  pillar(kit, sxW + sw / 2 - 0.05, 128, y, underStair(westLo, 128, y, 12, 18.9), 0.4);
+  pillar(kit, sxW + sw / 2 - 0.05, 151, y, underStair(westHi, 151, GAL_LO, 14, 22.2), 0.4);
   // stairs + landings (east)
-  stairs(kit, ctx, [sxE, eastLo.z0], [0, -1], sw, y, GAL_LO, { tread: 0.3 });
+  openStairs(kit, ctx, [sxE, eastLo.z0], [0, -1], sw, y, GAL_LO, { tread: 0.3 });
   slab(kit, ctx, [sxE - sw / 2, eastLo.top - 3, ex - GAL_W, eastLo.top], GAL_LO, { rails: ["w"] });
-  stairs(kit, ctx, [sxE, eastHi.z0], [0, -1], sw, GAL_LO, GAL_HI, { tread: 0.3 });
+  openStairs(kit, ctx, [sxE, eastHi.z0], [0, -1], sw, GAL_LO, GAL_HI, { tread: 0.3 });
   slab(kit, ctx, [sxE - sw / 2, eastHi.top - 3, ex - GAL_W, eastHi.top], GAL_HI, { rails: ["w", "n"] });
-  for (const z of [251.6, 244, 234]) pillar(kit, sxE, z, y, GAL_LO, 0.8);
+  pillar(kit, sxE - sw / 2 + 0.4, 251.6, y, GAL_LO, 0.6);
+  pillar(kit, sxE - sw / 2 + 0.4, 226.4, y, GAL_HI, 0.6);
+  pillar(kit, sxE - sw / 2 + 0.05, 262, y, underStair(eastLo, 262, y, 12, 18.9), 0.4);
+  pillar(kit, sxE - sw / 2 + 0.05, 239, y, underStair(eastHi, 239, GAL_LO, 14, 22.2), 0.4);
   // wall ladders between the deck and the galleries, fire stations by the doors, hose reels along the walls
   for (const u of [40, 95, 175]) wallLadder(frames.west.frame, u, 0, 11, {});
   for (const u of [15, 40, 140]) wallLadder(frames.east.frame, u, 0, 11, {});
@@ -459,7 +501,7 @@ export function buildHangar(kit, ctx) {
     kit.box("emitRed", 0, yB + bh + 2.8, 106, 0.3, 0.2, 0.3);
     for (const sx of [-1, 1]) kit.box(RIB, sx * 8, yB + bh + 0.9, 104, 1.2, 0.6, 0.8, { color: IMP.darkMetal, texel: 1 });
     // booth ceiling: light strips
-    for (const x of [-6, 0, 6]) kit.boxMM("lightBand", [x - 2, yB + bh - 0.03, 102], [x + 2, yB + bh - 0.01, 106.5], { uv: "keep" });
+    for (const x of [-6, 0, 6]) kit.boxMM("lightSoft", [x - 0.25, yB + bh - 0.03, 102], [x + 0.25, yB + bh - 0.01, 106.5], { uv: "keep" });
     // interior: console row along the glass facing the bay (+z), chairs, back-wall boards, wall console
     for (const x of [-7, 0, 7]) {
       impConsole(kit, ctx, [x, yB, bz1 - 1.9], Math.PI, { kind: "wide", width: 2.6, screens: 3, seed: 30 + x, light: false });
@@ -472,13 +514,14 @@ export function buildHangar(kit, ctx) {
       wallScreen(frame, 11.75, 2.0, 1.6, 1.0, 1);
     }
     impConsole(kit, ctx, [bx0 + t + 0.64, yB, 104.5], Math.PI / 2, { kind: "wall", width: 2.4, seed: 33, light: false });
-    pointLightDesc(ctx, 0x8fb0ff, 9, 14, [-4, yB + 2.4, 104.5], 1);
-    pointLightDesc(ctx, 0x8fb0ff, 9, 14, [6, yB + 2.4, 104.5], 0);
+    pointLightDesc(ctx, 0x9fbcff, 26, 16, [-4, yB + 2.6, 104.2], 1);
+    pointLightDesc(ctx, 0x9fbcff, 26, 16, [6, yB + 2.6, 104.2], 0);
     // landing east of the booth + the long stair from the deck along the north wall
     const landX1 = 15.6;
     slab(kit, ctx, [bx1, zFace, landX1, bz1], yB, { rails: ["s"] });
     railing(kit, [landX1 - 0.08, 103.0], [landX1 - 0.08, bz1], yB, { h: 1.1, lit: true });
-    stairs(kit, ctx, [34.5, 101.75], [-1, 0], 2.4, y, yB, { tread: 0.3 });
+    openStairs(kit, ctx, [34.5, 101.75], [-1, 0], 2.4, y, yB, { tread: 0.3 });
+    pillar(kit, 25.5, 101.75 + 1.15, y, underStair({ z0: 34.5 }, 25.5, y, 12, 18.9), 0.4);
     kit.boxMM(RIB, [landX1 - 0.2, slabBot, zFace], [landX1, yB - 0.3, bz1], { color: IMP.trim, texel: 0.5 });
     pillar(kit, landX1 - 0.6, bz1 - 0.6, y, slabBot, 0.7);
   }
@@ -580,18 +623,21 @@ export function buildHangar(kit, ctx) {
   amberN.dim = 0.15;
   amberS.dim = 0.15;
   // fill lights over the parking pads and the entrance deck (20 descriptors in total for the room)
-  for (const p of pads) pointLightDesc(ctx, 0xcfd9ff, 55, 40, [p.x, y + 9, p.z], 0);
+  for (const p of [pads[0], pads[3]]) pointLightDesc(ctx, 0xcfd9ff, 55, 40, [p.x, y + 9, p.z], 0);
   pointLightDesc(ctx, 0xcfd9ff, 55, 40, [0, y + 8, 116], 1);
+  // cool work lights inside the shaft so the lining and the blast doors read from the deck edge
+  for (const z of [wellCZ - 32, wellCZ + 32]) pointLightDesc(ctx, 0xbfd0ff, 380, 60, [wellCX, y - 12, z], 0);
 
   // =========================================================================================
   // Views
   // =========================================================================================
   ctx.view("hangar", 0, y + STD.eye, 104.6, 180, 8);
-  ctx.view("hangar_well", -31.5, y + STD.eye, 190, 270, -8);
+  ctx.view("hangar_well", -26.4, y + STD.eye, 160, 236, -14);
   ctx.view("hangar_racks", 34, y + STD.eye, 200, 90, 32);
-  // views whose feet are not on the hangar floor borrow the booth's floor height (y = -8)
-  ctx.views.hangar_gantry = { x: wx + 1.4, y: GAL_LO + STD.eye, z: 172, yaw: 236, pitch: -6, room: "flightControl" };
-  ctx.views.hangar_booth = { x: 0.5, y: yB + STD.eye, z: 104.4, yaw: 180, pitch: -9, room: "flightControl" };
+  // the gantry view's feet are on the lower gallery: a non-ROOMS id makes the harness take its floor
+  // from y; the booth view is in the flightControl sub-room (floor y = -8)
+  ctx.views.hangar_gantry = { x: wx + 1.4, y: GAL_LO + STD.eye, z: 172, yaw: 236, pitch: -6, room: "hangar:gallery" };
+  ctx.views.hangar_booth = { x: 3.5, y: yB + STD.eye, z: 102.2, yaw: 180, pitch: -6, room: "flightControl" };
 
   // =========================================================================================
   // Animation + traffic wiring

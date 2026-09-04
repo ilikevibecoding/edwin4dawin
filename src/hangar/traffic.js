@@ -27,7 +27,8 @@ export const TRAFFIC = {
   climbDecel: 3.6,
   patrolSpeed: 78,
   joinU: 0.035, // loop parameter where a launched fighter merges
-  leaveU: 0.955, // loop parameter where a recalled fighter peels off
+  leaveU: 0.955, // end of the leave window: the loop point nearest the well
+  leaveWindow: 0.06, // a recalled fighter may peel off anywhere in [leaveU - leaveWindow, leaveU]
   lod1: 400,
   hide: 6000,
   cycleMin: 20,
@@ -85,12 +86,26 @@ export function insideHull(p, margin = 30) {
 // segment would cut through the hull (a few of the layout anchors sit on the far side of the ship).
 export function buildPatrolCurve(anchors, margin = 35) {
   const pts = anchors.map((a) => new THREE.Vector3(a[0], a[1], a[2]));
-  for (const p of pts) {
-    const tb = hullTopBottom(p.x, p.z);
-    if (tb && Math.abs(p.x) < halfWidth(p.z) && p.y > tb[0] - margin && p.y < tb[1] + margin) p.y = p.y >= (tb[0] + tb[1]) / 2 ? tb[1] + margin : tb[0] - margin;
-  }
+  // move a point out of the hull envelope (+ clearance) along whichever axis is cheapest: sideways
+  // past the knife edge, or up / down past the dorsal / keel surface
+  const pushOut = (p, clear) => {
+    const zc = THREE.MathUtils.clamp(p.z, HULL.bowZ, HULL.sternZ);
+    if (p.z < HULL.bowZ - clear || p.z > HULL.sternZ + clear) return false;
+    const w = halfWidth(zc);
+    const tb = hullTopBottom(THREE.MathUtils.clamp(p.x, -w, w), zc);
+    if (!tb) return false;
+    if (Math.abs(p.x) >= w + clear || p.y >= tb[1] + clear || p.y <= tb[0] - clear) return false;
+    const dxOut = w + clear - Math.abs(p.x);
+    const dyUp = tb[1] + clear - p.y;
+    const dyDown = p.y - (tb[0] - clear);
+    if (dxOut <= Math.min(dyUp, dyDown)) p.x = Math.sign(p.x || 1) * (w + clear);
+    else if (dyUp <= dyDown) p.y = tb[1] + clear;
+    else p.y = tb[0] - clear;
+    return true;
+  };
+  for (const p of pts) pushOut(p, margin + 15);
   const S = 900;
-  for (let iter = 0; iter < 10; iter++) {
+  for (let iter = 0; iter < 12; iter++) {
     const curve = new THREE.CatmullRomCurve3(pts, true, "centripetal");
     const samples = curve.getPoints(S);
     let i0 = -1;
@@ -107,11 +122,25 @@ export function buildPatrolCurve(anchors, margin = 35) {
     let i1 = i0;
     while (i1 + 1 < S && insideHull(samples[i1 + 1], margin)) i1++;
     const im = Math.floor((i0 + i1) / 2);
-    const mid = samples[im];
-    const side = mid.x >= 0 ? 1 : -1;
-    const wp = new THREE.Vector3(side * (halfWidth(THREE.MathUtils.clamp(mid.z, HULL.bowZ, HULL.sternZ)) + 130), THREE.MathUtils.clamp(mid.y, -90, 90), mid.z);
+    const wp = samples[im].clone();
+    // a run whose ends lie on opposite faces of the hull (dorsal ↔ ventral) has to go round the
+    // knife edge, not over or under it
+    const a = samples[Math.max(0, i0 - 1)];
+    const b = samples[Math.min(S, i1 + 1)];
+    const face = (p) => {
+      const tb = hullTopBottom(THREE.MathUtils.clamp(p.x, -halfWidth(THREE.MathUtils.clamp(p.z, HULL.bowZ, HULL.sternZ)), halfWidth(THREE.MathUtils.clamp(p.z, HULL.bowZ, HULL.sternZ))), THREE.MathUtils.clamp(p.z, HULL.bowZ, HULL.sternZ));
+      return p.y > (tb ? (tb[0] + tb[1]) / 2 : 0) ? 1 : -1;
+    };
+    if (face(a) !== face(b)) {
+      const zc = THREE.MathUtils.clamp(wp.z, HULL.bowZ, HULL.sternZ);
+      const side = a.x + b.x >= 0 ? 1 : -1;
+      wp.set(side * (halfWidth(zc) + margin + 40 + iter * 10), 0, wp.z);
+    } else pushOut(wp, margin + 30 + iter * 10);
     const seg = Math.min(pts.length - 1, Math.floor((im / S) * pts.length));
-    pts.splice(seg + 1, 0, wp);
+    // if the detour lands on top of an existing control point, push that point further out instead
+    const near = pts.find((p) => p.distanceTo(wp) < 25);
+    if (near) pushOut(near, margin + 40 + iter * 15);
+    else pts.splice(seg + 1, 0, wp);
   }
   console.warn("traffic: a patrol loop still intersects the hull after re-routing");
   const c = new THREE.CatmullRomCurve3(pts, true, "centripetal");
@@ -199,10 +228,12 @@ export function createTraffic({ mats, audio, zone } = {}) {
       flybyCooldown: 0,
       lateral: (i % 2 ? 1 : -1) * 14, // side offset so two fighters can share a loop
       passed: false,
+      lu: null, // loop parameter where a recalled fighter actually peeled off
     });
   }
   const well = { owner: null, open: false, pending: 0, closeTimer: 0 };
-  const sched = { time: 0, next: T.firstCycle, seed: 1337, calls: 0 };
+  // deferLaunch: a cycle whose recall is about to arrive holds its launch until that fighter has docked
+  const sched = { time: 0, next: T.firstCycle, seed: 1337, calls: 0, deferLaunch: false };
   let rand = rng(sched.seed);
   const reseed = () => {
     rand = rng(sched.seed);
@@ -265,7 +296,7 @@ export function createTraffic({ mats, audio, zone } = {}) {
   const returnTargets = (f) => {
     const p0 = new THREE.Vector3();
     const tan = new THREE.Vector3();
-    loopPoint(f, T.leaveU, p0, tan);
+    loopPoint(f, f.lu === null || f.lu === undefined ? T.leaveU : f.lu, p0, tan);
     const v0 = tan.multiplyScalar(T.patrolSpeed);
     const r = racks[f.rack];
     const p1 = new THREE.Vector3(r.x, T.approachY, r.z);
@@ -398,7 +429,6 @@ export function createTraffic({ mats, audio, zone } = {}) {
   }
   function stepScripted(f, dt) {
     f.t += f.s === "patrol" ? (dt * T.patrolSpeed) / paths[f.path].length : dt;
-    const prevU = f.s === "patrol" ? f.t - (dt * T.patrolSpeed) / paths[f.path].length : 0;
     const done = pose(f);
     const r = f.rack !== null ? racks[f.rack] : null;
     switch (f.s) {
@@ -438,26 +468,24 @@ export function createTraffic({ mats, audio, zone } = {}) {
         }
         break;
       case "patrol": {
-        if (f.recall && well.owner === null) {
-          // peel off when we cross leaveU this step (with wrap-around)
-          const a = ((prevU % 1) + 1) % 1;
-          const b = ((f.t % 1) + 1) % 1;
-          const crossed = a <= b ? a <= T.leaveU && b >= T.leaveU : a <= T.leaveU || b >= T.leaveU;
-          if (crossed) {
-            const rack = freeRack();
-            if (rack) {
-              f.recall = false;
-              f.rack = rack.index;
-              rack.occupant = f.id;
-              well.owner = f.id;
-              setState(f, "returning");
-              wellOpen();
-              // extend the ram, clamps open, ready to receive
-              hangarBus.emit("rack", { rack: f.rack, ext: T.ramExt, clamped: false });
-            }
+        f.t = ((f.t % 1) + 1) % 1;
+        // peel off anywhere in the leave window (the ~300 m of loop before leaveU, which is the point
+        // nearest the well) as soon as the well is free; a busy well only costs a few seconds instead
+        // of another lap
+        if (f.recall && well.owner === null && ((f.t - (T.leaveU - T.leaveWindow) + 1) % 1) < T.leaveWindow + 0.015) {
+          const rack = freeRack();
+          if (rack) {
+            f.recall = false;
+            f.lu = f.t;
+            f.rack = rack.index;
+            rack.occupant = f.id;
+            well.owner = f.id;
+            setState(f, "returning");
+            wellOpen();
+            // extend the ram, clamps open, ready to receive
+            hangarBus.emit("rack", { rack: f.rack, ext: T.ramExt, clamped: false });
           }
         }
-        f.t = ((f.t % 1) + 1) % 1;
         break;
       }
       case "returning":
@@ -481,10 +509,15 @@ export function createTraffic({ mats, audio, zone } = {}) {
         if (done) {
           setState(f, "docked");
           f.path = null;
+          f.lu = null;
           hangarBus.emit("rack", { rack: f.rack, ext: 0, clamped: true });
           emit("dock", { id: f.id, rack: r.id });
           if (well.owner === f.id) well.owner = null;
           wellRelease();
+          if (sched.deferLaunch) {
+            sched.deferLaunch = false;
+            launchRandom();
+          }
         }
         break;
       default:
@@ -508,11 +541,33 @@ export function createTraffic({ mats, audio, zone } = {}) {
     f.recall = true;
     return true;
   }
+  function launchRandom() {
+    const docked = fighters.filter((f) => f.s === "docked");
+    if (!docked.length) return false;
+    return launch(docked[Math.floor(nextRand() * docked.length)]);
+  }
+  // loop fraction a patrolling fighter still has to fly before it reaches the leave window
+  const toLeave = (f) => (T.leaveU - T.leaveWindow - f.t + 1) % 1;
   function cycle() {
+    // one operation pair at a time: while the well is owned, a recall is still on its way or a
+    // deferred launch is pending, look again in a few seconds
+    if (well.owner !== null || sched.deferLaunch || fighters.some((f) => f.recall)) {
+      sched.next = sched.time + 4;
+      return;
+    }
     const docked = fighters.filter((f) => f.s === "docked");
     const flying = fighters.filter((f) => f.s === "patrol" && !f.recall);
-    if (docked.length) launch(docked[Math.floor(nextRand() * docked.length)]);
-    if (flying.length && flying.length + (docked.length ? 1 : 0) > 3) recall(flying[Math.floor(nextRand() * flying.length)]);
+    let deferred = false;
+    // recall the fighter that reaches the leave window soonest, so the recall lands within seconds
+    // rather than after another lap. Keep at least three on patrol.
+    if (flying.length && flying.length + (docked.length ? 1 : 0) > 3) {
+      const soonest = flying.reduce((a, b) => (toLeave(a) <= toLeave(b) ? a : b));
+      recall(soonest);
+      // an imminent arrival gets the well first; the launch follows as soon as it has docked
+      if (toLeave(soonest) < 0.4 && docked.length) deferred = true;
+    }
+    if (deferred) sched.deferLaunch = true;
+    else launchRandom();
     sched.next = sched.time + T.cycleMin + nextRand() * (T.cycleMax - T.cycleMin);
   }
   function stepWell(dt) {
@@ -674,11 +729,12 @@ export function createTraffic({ mats, audio, zone } = {}) {
     },
     getState() {
       return {
-        time: +sched.time.toFixed(2),
-        next: +sched.next.toFixed(2),
+        time: sched.time,
+        next: sched.next,
         calls: sched.calls,
+        dl: sched.deferLaunch ? 1 : 0,
         well: { o: well.owner, open: well.open ? 1 : 0, p: well.pending },
-        f: fighters.map((f) => ({ id: f.id, s: f.s, p: f.path, t: +f.t.toFixed(4), r: f.rack, rc: f.recall ? 1 : 0, h: f.wellHeld ? 1 : 0 })),
+        f: fighters.map((f) => ({ id: f.id, s: f.s, p: f.path, t: +f.t.toFixed(6), r: f.rack, rc: f.recall ? 1 : 0, h: f.wellHeld ? 1 : 0, lu: f.lu === null ? null : +f.lu.toFixed(6) })),
       };
     },
     applyState(st) {
@@ -693,18 +749,23 @@ export function createTraffic({ mats, audio, zone } = {}) {
         f.rack = e.r === undefined ? null : e.r;
         f.recall = !!e.rc;
         f.wellHeld = !!e.h;
+        f.lu = e.lu === undefined || e.lu === null ? null : e.lu;
         if (f.rack !== null && f.rack !== undefined) racks[f.rack].occupant = f.id;
         pose(f);
         f.prevFwd.copy(f.fwd);
         updateAttitude(f, 0);
       }
       if (st.well) {
+        const wasOpen = well.open;
         well.owner = st.well.o;
         well.open = !!st.well.open;
         well.pending = st.well.p || 0;
+        // the hangar's blast doors follow the bus, so a restored snapshot has to replay the door state
+        if (well.open !== wasOpen) emit(well.open ? "wellOpen" : "wellClose", {});
       }
       if (st.time !== undefined) sched.time = st.time;
       if (st.next !== undefined) sched.next = st.next;
+      sched.deferLaunch = !!st.dl;
       if (st.calls !== undefined) {
         sched.calls = st.calls;
         reseed();
