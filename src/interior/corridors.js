@@ -103,8 +103,9 @@ export function buildCorridor(kit, ctx, id) {
     }
   }
   // camera views for the harness: looking down the corridor from one end
-  if (alongX) ctx.view(id, x0 + 3, y + STD.eye, (z0 + z1) / 2, -90, -2);
-  else ctx.view(id, (x0 + x1) / 2, y + STD.eye, z1 - 3, 0, -2);
+  // stand a little off-axis so the nearest doorways and their signs are in frame
+  if (alongX) ctx.view(id, x0 + 6, y + STD.eye, (z0 + z1) / 2 - 1.1, -78, -3);
+  else ctx.view(id, (x0 + x1) / 2 + 1.1, y + STD.eye, z1 - 6, 12, -3);
 }
 
 // rectangle minus rectangles (axis-aligned), returns up to 4 pieces per cutout (handles one cutout well)

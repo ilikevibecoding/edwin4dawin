@@ -232,10 +232,10 @@ export function buildImperialMaterials() {
     emitEngine: engineGlowPatch(emit(IMP.engine, 3.5, { emissiveMap: diffuser })),
     emitHolo: emit(IMP.holo, 1.6),
     // recessed wall light band: cool white with a soft falloff map, uv 'keep' per emitter face
-    lightBand: new THREE.MeshStandardMaterial({ color: 0x0a0e14, emissive: IMP.coolWhite, emissiveMap: band, emissiveIntensity: 1.7, roughness: 0.5, metalness: 0 }),
-    lightBandWarm: new THREE.MeshStandardMaterial({ color: 0x14100a, emissive: IMP.warmWhite, emissiveMap: band, emissiveIntensity: 1.6, roughness: 0.5, metalness: 0 }),
-    lightBandRed: new THREE.MeshStandardMaterial({ color: 0x140606, emissive: IMP.red, emissiveMap: band, emissiveIntensity: 1.8, roughness: 0.5, metalness: 0 }),
-    lightSoft: new THREE.MeshStandardMaterial({ color: 0x0a0e14, emissive: IMP.coolWhite, emissiveMap: diffuser, emissiveIntensity: 2.4, roughness: 0.5, metalness: 0 }),
+    lightBand: new THREE.MeshStandardMaterial({ color: 0x0a0e14, emissive: IMP.coolWhite, emissiveMap: band, emissiveIntensity: 1.05, roughness: 0.5, metalness: 0 }),
+    lightBandWarm: new THREE.MeshStandardMaterial({ color: 0x14100a, emissive: IMP.warmWhite, emissiveMap: band, emissiveIntensity: 1.0, roughness: 0.5, metalness: 0 }),
+    lightBandRed: new THREE.MeshStandardMaterial({ color: 0x140606, emissive: IMP.red, emissiveMap: band, emissiveIntensity: 1.2, roughness: 0.5, metalness: 0 }),
+    lightSoft: new THREE.MeshStandardMaterial({ color: 0x0a0e14, emissive: IMP.coolWhite, emissiveMap: diffuser, emissiveIntensity: 1.4, roughness: 0.5, metalness: 0 }),
 
     // --- decals
     impDecal: new THREE.MeshStandardMaterial({ map: makeImperialDecals(1024, 371), transparent: true, depthWrite: false, roughness: 0.7, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.3 }),

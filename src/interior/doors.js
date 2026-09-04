@@ -82,7 +82,7 @@ export class Door {
 
     // moving panels: ONE material each (impPanel, vertex-coloured) so a door costs two draw calls
     const pt = heavy ? 0.36 : 0.12;
-    const panelMesh = (pw, ph, tone) => {
+    const panelMesh = (pw, ph, tone, seam = null) => {
       const k = new Kit(mats);
       const cx = 0;
       const cy = ph / 2;
@@ -95,6 +95,10 @@ export class Door {
         k.box("impPanel", cx, cy + ph * 0.34, zf, pw * 0.86, 0.03, 0.008, { color: IMP.trim, uv: "world", texel: 1 });
         k.box("impPanel", cx, cy - ph * 0.34, zf, pw * 0.86, 0.03, 0.008, { color: IMP.trim, uv: "world", texel: 1 });
         k.box("impPanel", cx, cy, zf + 0.008 * s, pw * 0.5, 0.02, 0.006, { color: IMP.steel, uv: "world", texel: 1 });
+        // lit strip along the leaf's meeting edge so a closed door reads as a machine even in a dim lobby
+        if (seam === "left" || seam === "right") k.box("emitBlue", cx + (seam === "left" ? -1 : 1) * (pw / 2 - 0.06), cy, zf + 0.004 * s, 0.025, ph * 0.7, 0.004);
+        else if (seam === "bottom") k.box("emitBlue", cx, cy - ph / 2 + 0.34, zf + 0.004 * s, pw * 0.7, 0.025, 0.004);
+        else if (seam === "top") k.box("emitBlue", cx, cy + ph / 2 - 0.1, zf + 0.004 * s, pw * 0.7, 0.025, 0.004);
         if (heavy) {
           // hazard chevrons as alternating vertex-coloured blocks along the bottom edge
           const n = Math.max(4, Math.round(pw / 0.5));
@@ -110,16 +114,16 @@ export class Door {
     if (this.style === "split") {
       const pw = w / 2 + 0.05;
       for (const s of [-1, 1]) {
-        const p = panelMesh(pw, h + 0.04, IMP.wallMid);
+        const p = panelMesh(pw, h + 0.04, IMP.wallLight, s > 0 ? "left" : "right");
         p.position.x = s * (pw / 2 - 0.05);
         p.userData.dir = s;
         this.panels.push(p);
       }
     } else {
-      const upper = panelMesh(w + 0.1, h * 0.62 + 0.04, IMP.wallDark);
+      const upper = panelMesh(w + 0.1, h * 0.62 + 0.04, IMP.wallMid, "bottom");
       upper.position.y = h * 0.38;
       upper.userData.dir = 1;
-      const lower = panelMesh(w + 0.1, h * 0.38 + 0.04, IMP.wallDark);
+      const lower = panelMesh(w + 0.1, h * 0.38 + 0.04, IMP.wallMid, "top");
       lower.userData.dir = -1;
       this.panels.push(upper, lower);
     }

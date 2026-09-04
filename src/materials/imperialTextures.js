@@ -103,7 +103,7 @@ export function makeDarkDeck(size = 1024, seed = 321) {
   const t = new TexGen(size, size);
   const rand = mulberry32(seed);
   const scuffs = [];
-  for (let i = 0; i < 30; i++) scuffs.push({ x: rand(), y: rand(), a: rand() * Math.PI, l: 0.05 + rand() * 0.2, w: 0.002 + rand() * 0.005, k: rand() });
+  for (let i = 0; i < 12; i++) scuffs.push({ x: rand(), y: rand(), a: rand() * Math.PI, l: 0.04 + rand() * 0.14, w: 0.0015 + rand() * 0.003, k: rand() });
   const plates = 2;
   t.each((u, v, i) => {
     const pu = (u * plates) % 1;
@@ -128,8 +128,8 @@ export function makeDarkDeck(size = 1024, seed = 321) {
         hgt += k * 0.1;
         lum += k * 0.03;
         const worn = k * clamp01((n2 - 0.4) * 2);
-        metal = lerp(metal, 0.8, worn);
-        rough = lerp(rough, 0.35, worn);
+        metal = lerp(metal, 0.55, worn);
+        rough = lerp(rough, 0.45, worn);
       }
     }
     for (const s of scuffs) {
@@ -138,9 +138,10 @@ export function makeDarkDeck(size = 1024, seed = 321) {
       const along = dx * Math.cos(s.a) + dy * Math.sin(s.a);
       const perp = -dx * Math.sin(s.a) + dy * Math.cos(s.a);
       if (Math.abs(along) < s.l && Math.abs(perp) < s.w) {
-        const k = (1 - Math.abs(perp) / s.w) * (1 - Math.abs(along) / s.l) * 0.8;
-        lum = lerp(lum, s.k > 0.5 ? 0.45 : 0.1, k);
-        rough = lerp(rough, s.k > 0.5 ? 0.3 : 0.8, k);
+        // faint drag marks only: bright metallic scuffs read as cracked marble under gloss
+        const k = (1 - Math.abs(perp) / s.w) * (1 - Math.abs(along) / s.l) * 0.5;
+        lum = lerp(lum, s.k > 0.5 ? 0.3 : 0.14, k);
+        rough = lerp(rough, s.k > 0.5 ? 0.5 : 0.75, k);
       }
     }
     t.setColor(i, lum, lum * 1.01, lum * 1.05);

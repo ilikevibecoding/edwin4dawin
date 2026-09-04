@@ -81,7 +81,7 @@ export function createPost(renderer, scene, camera) {
   composer.addPass(ao);
 
   // threshold sits above white so only genuine emitters bloom; modest radius keeps fixtures as shapes
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.3, 0.38, 1.15);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.3, 0.38, 1.25);
   composer.addPass(bloom);
 
   const output = new OutputPass();

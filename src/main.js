@@ -159,7 +159,7 @@ modes.onChange((mode) => {
   post.ao.configuration.intensity = mode === "exterior" ? 1.6 : 2.6;
   // sunlit armour is mid-grey, not white: pull exposure down outside and let only real emitters bloom
   renderer.toneMappingExposure = mode === "exterior" ? 0.74 : 1.0;
-  post.bloom.threshold = mode === "exterior" ? 1.35 : 1.15;
+  post.bloom.threshold = mode === "exterior" ? 1.35 : 1.25;
   perf.extra.mode = mode;
 });
 zone.onRoomChange = (room) => {
