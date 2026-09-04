@@ -126,7 +126,7 @@ function rifle(kit, PALETTE, Q, lx, baseY, lz, tilt, kind = 0) {
 // Wall rack of `count` angled slots with a red lock bar (front +Z, back panel at -Z). Per rack (from the
 // seed) two slots are issued-out (empty, with the slot plate and the empty-slot amber LED) and one slot
 // holds a different weapon silhouette, so racks do not read as copies.
-export function rifleRack(kit, PALETTE, pos, yaw, { count = 8, pitch = 0.4, seed = 1, locked = true, empties = 2, variantKind: forcedKind } = {}) {
+export function rifleRack(kit, PALETTE, pos, yaw, { count = 8, pitch = 0.4, seed = 1, locked = true, empties = 2, variantKind: forcedKind, lockEmit = true } = {}) {
   const Q = placer(kit, pos, yaw);
   const rand = rng(seed);
   const w = count * pitch + 0.2;
@@ -174,15 +174,29 @@ export function rifleRack(kit, PALETTE, pos, yaw, { count = 8, pitch = 0.4, seed
     }
     rifle(kit, PALETTE, Q, lx, 0.19, 0.15, tilt, i === variant ? variantKind : 0);
   }
-  // lock bar across the fronts + lock box (blue = released)
-  Q.cyl(locked ? "emitRedImp" : "emitBlue", 0, 1.12, 0.3, 0.018, w - 0.3, "x", { segments: 8 });
+  // lock bar across the fronts + lock box (blue = released). `lockEmit: false` leaves the bar as a dark
+  // core only, for the room to wrap in its animated (blinking) emitter — see rifleRackLock.
+  if (lockEmit) Q.cyl(locked ? "emitRedImp" : "emitBlue", 0, 1.12, 0.3, 0.018, w - 0.3, "x", { segments: 8 });
+  else Q.cyl("paintedMetal", 0, 1.12, 0.3, 0.013, w - 0.3, "x", { color: black, segments: 8 });
   Q.box("paintedMetal", -w / 2 + 0.16, 1.12, 0.26, 0.12, 0.16, 0.14, { color: black });
   Q.box("paintedMetal", w / 2 - 0.16, 1.12, 0.26, 0.12, 0.16, 0.14, { color: black });
-  Q.box(locked ? "emitRedImp" : "emitBlue", w / 2 - 0.16, 1.15, 0.335, 0.05, 0.03, 0.006);
+  if (lockEmit) Q.box(locked ? "emitRedImp" : "emitBlue", w / 2 - 0.16, 1.15, 0.335, 0.05, 0.03, 0.006);
   indicatorField(Q, w / 2 - 0.45, 1.85, 0.024, 0.5, 0.16, seed, { weights: [0.6, 0.25, 0.1, 0.05] });
   Q.box("metal", 0, 1.98, 0.02, w - 0.4, 0.04, 0.04, { color: steel });
   Q.collider([-w / 2, 0, -0.06], [w / 2, 2.2, 0.36], "rifle-rack");
   return w;
+}
+
+// World-space transform of a rack-local point (same frame as placer()).
+const worldOf = (pos, yaw, lx, ly, lz) => [pos[0] + lx * Math.cos(yaw) + lz * Math.sin(yaw), pos[1] + ly, pos[2] - lx * Math.sin(yaw) + lz * Math.cos(yaw)];
+
+/** Lock-bar emitter of a rifleRack built with lockEmit:false: { bar: {pos, len, rot}, lamp: {pos, rot} }. */
+export function rifleRackLock(pos, yaw, { count = 8, pitch = 0.4 } = {}) {
+  const w = count * pitch + 0.2;
+  return {
+    bar: { pos: worldOf(pos, yaw, 0, 1.12, 0.3), len: w - 0.3, rot: [0, yaw, Math.PI / 2] },
+    lamp: { pos: worldOf(pos, yaw, w / 2 - 0.16, 1.15, 0.335), rot: [0, yaw, 0] },
+  };
 }
 
 // Wall-hung pistol locker grid (front +Z), compartments with tiny status LEDs. Bottom at local y0.
@@ -363,7 +377,7 @@ export function issueCounter(kit, PALETTE, { x0, x1, z0, z1, y, h = 0.9 }) {
   // same readout strip, lamps and label, so it reads as the scanner from both sides
   const hb = cz + 0.12;
   kit.box("darkGloss", cx + 0.2, hy - 0.01, hb + 0.006, 0.7, 0.11, 0.012);
-  kit.box("screenImp2", cx + 0.2, hy - 0.01, hb + 0.015, 0.62, 0.08, 0.006, { uv: "keep" });
+  kit.box("screenImp1", cx + 0.2, hy - 0.01, hb + 0.015, 0.62, 0.08, 0.006, { uv: "keep" });
   for (const [i, m] of ["emitGreen", "emitAmber", "emitRedImp"].entries()) kit.box(m, cx - 0.3 - i * 0.09, hy - 0.01, hb + 0.015, 0.05, 0.05, 0.006);
   kit.box("emitWhite", cx + 0.35, hy + 0.06, hb + 0.015, 0.4, 0.014, 0.004);
   kit.box("paintedMetal", cx - 0.5, hy + 0.06, hb + 0.015, 0.14, 0.024, 0.004, { color: C(PALETTE, "impRed") });
@@ -410,7 +424,7 @@ export function issueCounter(kit, PALETTE, { x0, x1, z0, z1, y, h = 0.9 }) {
 // Blast-shield test rig: pedestal emitter facing local +Z, plus a control post. The field 1.2 m ahead is
 // two crossed additive `holo` planes (it reads as a volume from any angle instead of a 2D line), thrown
 // between a ceiling emitter housing at `fieldTop` and a floor receptor plate.
-export function shieldRig(kit, PALETTE, pos, yaw, { fieldTop = 2.9 } = {}) {
+export function shieldRig(kit, PALETTE, pos, yaw, { fieldTop = 2.9, field = true } = {}) {
   const Q = placer(kit, pos, yaw);
   const dark = C(PALETTE, "impDark");
   const black = C(PALETTE, "impBlack");
@@ -423,12 +437,9 @@ export function shieldRig(kit, PALETTE, pos, yaw, { fieldTop = 2.9 } = {}) {
   Q.cyl("emitBlue", 0, 1.2, 0.36, 0.1, 0.02, "z", { segments: 20 });
   indicatorField(Q, 0, 1.2, -0.21, 0.3, 0.2, 17);
   // field: crossed holo planes between the floor receptor (0.12) and the emitter housing lip
+  // (`field: false` leaves them to the room's pulsing mesh — see shieldField)
   const fz = 1.2;
-  const y0 = 0.12;
-  const y1 = fieldTop - 0.3;
-  Q.box("holo", 0, (y0 + y1) / 2, fz, 1.4, y1 - y0, 0.01, { uv: "keep" });
-  Q.box("holo", 0, (y0 + y1) / 2, fz, 0.01, y1 - y0, 0.5, { uv: "keep" });
-  Q.box("holo", 0, (y0 + y1) / 2, fz, 0.16, y1 - y0, 0.16, { uv: "keep" }); // bright core column
+  if (field) for (const b of shieldField(pos, yaw, fieldTop)) Q.box("holo", ...b.local, { uv: "keep" });
   // floor receptor: dark plate with a blue slot
   Q.box("paintedMetal", 0, 0.04, fz, 1.7, 0.08, 0.5, { color: black, texel: 2.5 });
   Q.box("emitBlue", 0, 0.082, fz, 1.5, 0.006, 0.05);
@@ -439,6 +450,23 @@ export function shieldRig(kit, PALETTE, pos, yaw, { fieldTop = 2.9 } = {}) {
   for (const s of [-1, 1]) Q.box("paintedMetal", s * 0.6, fieldTop - 0.15, fz - 0.28, 0.12, 0.2, 0.06, { color: dark });
   Q.box("emitRedImp", 0.72, fieldTop - 0.1, fz + 0.254, 0.05, 0.03, 0.006); // "field live" lamp
   Q.collider([-0.42, 0, -0.42], [0.42, 1.4, 0.42], "shield-rig");
+}
+
+/**
+ * The shield rig's three field boxes: [{ local: [lx, ly, lz, sx, sy, sz], pos (world), rot }] — two
+ * crossed planes and the bright core column between the receptor and the emitter housing lip.
+ */
+export function shieldField(pos, yaw, fieldTop = 2.9) {
+  const fz = 1.2;
+  const y0 = 0.12;
+  const y1 = fieldTop - 0.3;
+  const ym = (y0 + y1) / 2;
+  const h = y1 - y0;
+  return [
+    [1.4, h, 0.01],
+    [0.01, h, 0.5],
+    [0.16, h, 0.16],
+  ].map(([sx, sy, sz]) => ({ local: [0, ym, fz, sx, sy, sz], pos: worldOf(pos, yaw, 0, ym, fz), size: [sx, sy, sz], rot: [0, yaw, 0] }));
 }
 
 // Target plate on a wall (front +Z): clean dark plate in a black frame with three square target rings, a
@@ -559,7 +587,8 @@ export function channelFixture(kit, PALETTE, x0, x1, z, ceilY, { w = 0.5, mat = 
 
 // Range header sign over the alcove walkway (front +Z): dark plate, red header bar, three white text
 // lines, hazard band along the bottom, amber "range active" lamp at the right.
-export function rangeSign(kit, PALETTE, pos, yaw, { w = 2.0, h = 0.5 } = {}) {
+// `lamp: false` leaves the "range active" lamp to the room's animated emitter (see rangeSignLamp).
+export function rangeSign(kit, PALETTE, pos, yaw, { w = 2.0, h = 0.5, lamp = true } = {}) {
   const Q = placer(kit, pos, yaw);
   Q.box("paintedMetal", 0, 0, 0.03, w, h, 0.06, { color: C(PALETTE, "impBlack"), texel: 2.5 });
   Q.box("darkGloss", 0, 0.02, 0.062, w - 0.1, h - 0.14, 0.006);
@@ -569,22 +598,31 @@ export function rangeSign(kit, PALETTE, pos, yaw, { w = 2.0, h = 0.5 } = {}) {
   const bw = (w - 0.1) / segs;
   for (let k = 0; k < segs; k++) Q.box("paintedMetal", -(w - 0.1) / 2 + (k + 0.5) * bw, -h / 2 + 0.04, 0.065, bw, 0.06, 0.004, { color: k % 2 ? C(PALETTE, "impBlack") : AMBER_PAINT });
   Q.box("paintedMetal", w / 2 - 0.3, -0.02, 0.07, 0.24, 0.24, 0.02, { color: C(PALETTE, "impDark") });
-  Q.box("emitAmber", w / 2 - 0.3, -0.02, 0.082, 0.16, 0.16, 0.004);
+  if (lamp) Q.box("emitAmber", w / 2 - 0.3, -0.02, 0.082, 0.16, 0.16, 0.004);
 }
+
+/** The range sign's lamp as { pos, rot } (a 0.16 × 0.16 × 0.004 box) for a sign built with lamp:false. */
+export const rangeSignLamp = (pos, yaw, { w = 2.0 } = {}) => ({ pos: worldOf(pos, yaw, w / 2 - 0.3, -0.02, 0.082), rot: [0, yaw, 0] });
 
 // Caged red warning beacon on a base plate (used on top of the alcove partition): the room's red fill
 // sits inside it, so the light source is explained.
-export function beacon(kit, PALETTE, pos) {
+// `drum: false` builds a dark core instead of the static red drum, for the room's rotating emitter
+// (see beaconDrum).
+export function beacon(kit, PALETTE, pos, { drum = true } = {}) {
   const [x, y, z] = pos;
   const black = C(PALETTE, "impBlack");
   const steel = C(PALETTE, "steel");
   kit.box("paintedMetal", x, y + 0.04, z, 0.34, 0.08, 0.34, { color: black });
   kit.cyl("paintedMetal", x, y + 0.11, z, 0.11, 0.06, "y", { color: C(PALETTE, "impDark"), segments: 16 });
-  kit.cyl("emitRedImp", x, y + 0.24, z, 0.085, 0.2, "y", { segments: 16 });
+  if (drum) kit.cyl("emitRedImp", x, y + 0.24, z, 0.085, 0.2, "y", { segments: 16 });
+  else kit.cyl("paintedMetal", x, y + 0.24, z, 0.06, 0.2, "y", { color: 0x3a0806, segments: 16 });
   kit.cyl("paintedMetal", x, y + 0.36, z, 0.1, 0.04, "y", { color: black, segments: 16 });
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) kit.cyl("metal", x + sx * 0.12, y + 0.22, z + sz * 0.12, 0.008, 0.28, "y", { color: steel, segments: 6 });
   kit.cyl("metal", x, y + 0.3, z, 0.15, 0.012, "y", { color: steel, segments: 16, open: true });
 }
+
+/** Drum of a beacon built with drum:false: { center: [x, y, z], r, h } (facets go around the y axis). */
+export const beaconDrum = (pos) => ({ center: [pos[0], pos[1] + 0.24, pos[2]], r: 0.085, h: 0.2 });
 
 // Muted painted amber (the palette's impAmber under the range lamp read as saturated orange).
 export const AMBER_PAINT = 0xb07a30;
@@ -639,7 +677,7 @@ export function crateTag(kit, PALETTE, pos, yaw, seed = 5, style = 0) {
   if (style === 1) {
     Q.box("paintedMetal", 0, 0, 0.005, 0.5, 0.34, 0.01, { color: C(PALETTE, "impBlack") });
     // screen layout from the seed (two manifest tags in one view were the same screen twice)
-    Q.box("screenImp" + (seed % 4), 0, 0.04, 0.012, 0.4, 0.18, 0.004, { uv: "keep" });
+    Q.box("screenImp" + [0, 1, 3][seed % 3], 0, 0.04, 0.012, 0.4, 0.18, 0.004, { uv: "keep" }); // three of the layouts: screenImp2 is not a key this room spends a call on
     Q.box("emitAmber", 0, -0.11, 0.012, 0.36, 0.03, 0.004);
     return;
   }

@@ -6,6 +6,9 @@ import { IMP, col } from "../_shared/palette.js";
 import { rail } from "../_shared/shell.js";
 import { console as consoleProp, crate, lockerBank, cabinet, wallScreen, floorLine, pipe, placer } from "../_shared/props.js";
 import * as A from "./props.js";
+import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+import { EmitBatch, noise, breathe } from "./fx.js";
 
 const Y = 40;
 const CEIL = 44.6;
@@ -76,8 +79,15 @@ function detail(ctx) {
   A.channelFixture(kit, PALETTE, -25.6, -12.4, 383.3, CEIL);
 
   // ---- west wall: rifle racks, pistol lockers -------------------------------------------------------
-  A.rifleRack(kit, PALETTE, [IX0 + 0.1, Y, 385.6], HALF, { seed: 71, variantKind: 1 });
-  A.rifleRack(kit, PALETTE, [IX0 + 0.1, Y, 389.4], HALF, { seed: 72, variantKind: 2 });
+  // locked racks: the red lock bars blink (fx batch below), so the props leave them as dark cores
+  const lockedRacks = [
+    [[IX0 + 0.1, Y, 385.6], HALF],
+    [[IX0 + 0.1, Y, 389.4], HALF],
+    [[-19, Y, 388.6], 0],
+    [[-19, Y, 388.4], Math.PI],
+  ];
+  A.rifleRack(kit, PALETTE, lockedRacks[0][0], HALF, { seed: 71, variantKind: 1, lockEmit: false });
+  A.rifleRack(kit, PALETTE, lockedRacks[1][0], HALF, { seed: 72, variantKind: 2, lockEmit: false });
   A.pistolLockers(kit, PALETTE, [IX0 + 0.21, Y, 392.7], HALF, { cols: 4, rows: 3, seed: 73 });
   wallScreen(kit, [IX0 + 0.09, Y + 3.2, 392.7], HALF, 1.6, 0.8, "screenImp3");
   cabinet(kit, PALETTE, [IX0 + 0.21, Y, 394.4], HALF, { w: 1.0, h: 1.8, d: 0.4, seed: 74 });
@@ -93,8 +103,8 @@ function detail(ctx) {
   A.benchLight(kit, PALETTE, [IX1 - 0.9, CEIL, 395.2], { w: 1.8, d: 0.34, stem: 1.2 });
 
   // ---- centre island: double-sided rifle rack + inspection table under a drop light ---------------
-  A.rifleRack(kit, PALETTE, [-19, Y, 388.6], 0, { seed: 77, variantKind: 2 });
-  A.rifleRack(kit, PALETTE, [-19, Y, 388.4], Math.PI, { seed: 78, empties: 3, variantKind: 1 });
+  A.rifleRack(kit, PALETTE, lockedRacks[2][0], 0, { seed: 77, variantKind: 2, lockEmit: false });
+  A.rifleRack(kit, PALETTE, lockedRacks[3][0], Math.PI, { seed: 78, empties: 3, variantKind: 1, lockEmit: false });
   kit.box("paintedMetal", -19, Y + 2.14, 388.5, 3.6, 0.1, 0.9, { color: black, texel: 2.5 });
   kit.box("emitRedImp", -19, Y + 2.2, 388.5, 3.2, 0.02, 0.06);
   A.maintenanceBench(kit, PALETTE, [-19, Y, 393.3], 0, { len: 2.4, seed: 79, pegboard: false });
@@ -164,7 +174,8 @@ function detail(ctx) {
   kit.boxMM("grate", [AL.x0 + 0.34, Y + 0.005, fz0 + 0.24], [AL.x1 - 0.34, Y + 0.013, AL.z1 - 0.34]);
   // rig throws its field between a ceiling emitter housing under the slab and a floor receptor, toward
   // the aft target plate; rail across the north half of the opening
-  A.shieldRig(kit, PALETTE, [-24.9, Y, 396.6], 0, { fieldTop: 2.9 });
+  const RIG = [-24.9, Y, 396.6];
+  A.shieldRig(kit, PALETTE, RIG, 0, { fieldTop: 2.9, field: false }); // the field column pulses: own mesh below
   A.targetPlate(kit, PALETTE, [-24.9, Y + 1.5, AL.z1 - 0.1], Math.PI, { w: 1.8, h: 1.8 });
   rail(kit, PALETTE, [AL.x1, Y, AL.z0 + 0.3], [AL.x1, Y, 397.6], Y, { h: 1.02 });
   A.hazardBand(kit, PALETTE, [AL.x1 - 0.05, AL.z0 + 0.3], [AL.x1 + 0.15, AL.z1 - 0.1], Y);
@@ -174,8 +185,10 @@ function detail(ctx) {
   // screen on the partition, the header sign over the walkway, a caged red beacon on the partition top
   consoleProp(kit, PALETTE, [-22.2, Y, 396.75], HALF, { w: 1.2, d: 0.7, h: 1.15, screens: 1, seed: 95, screenMat: "screenImp3" });
   wallScreen(kit, [-24.85, Y + 1.6, AL.z0 - 0.09], Math.PI, 1.6, 0.9, "screenImp3");
-  A.rangeSign(kit, PALETTE, [AL.x1 + 0.04, Y + 2.8, 398.65], HALF, { w: 2.0, h: 0.5 });
-  A.beacon(kit, PALETTE, [-23.4, Y + 3.05, AL.z0 + 0.12]);
+  const SIGN = [[AL.x1 + 0.04, Y + 2.8, 398.65], HALF];
+  A.rangeSign(kit, PALETTE, SIGN[0], SIGN[1], { w: 2.0, h: 0.5, lamp: false }); // lamp breathes: fx batch below
+  const BEACON = [-23.4, Y + 3.05, AL.z0 + 0.12];
+  A.beacon(kit, PALETTE, BEACON, { drum: false }); // drum rotates: fx batch below
   // range lamp: hooded housing under the partition slab on the alcove side; the alcove spot hangs from it
   kit.box("paintedMetal", -24.9, Y + 2.81, AL.z0 + 0.36, 0.4, 0.16, 0.24, { color: black, texel: 2.5 });
   for (const s of [-1, 1]) kit.box("paintedMetal", -24.9, Y + 2.7, AL.z0 + 0.36 + s * 0.11, 0.44, 0.06, 0.03, { color: dark }); // hood lips
@@ -224,18 +237,27 @@ function detail(ctx) {
   }
   for (const x of [-22.8, -19.0, -15.2]) for (const z of [386.0, 391.0, 397.0]) A.ceilingFixture(kit, PALETTE, x, CEIL, z);
   for (const x of [-23.8, -14.2]) A.ceilingFixture(kit, PALETTE, x, CEIL, 379.6);
+  // cage floodlight: a smaller housed panel on the door axis between the vestibule pair and the cage
+  // channel; the room's shadow key hangs at its mouth (see lights)
+  A.ceilingFixture(kit, PALETTE, -19.0, CEIL, 380.3, { w: 0.7, d: 0.5 });
   // two small counter downlights in the ceiling strip between the cage header and the aft channel: from
   // the issue camera the aft channel's emitter hides behind its own trough wall (24 deg elevation), so
   // the top-left fifth of that view had no visible fixture; these sit at 40-45 deg left, 26-30 deg up
   for (const x of [-20.6, -23.2]) A.ceilingFixture(kit, PALETTE, x, CEIL, 382.64, { w: 0.6, d: 0.5 });
 
-  // ---- lights (13 descriptors: 12 point + 1 spot) ---------------------------------------------------
+  // ---- lights (14 descriptors: 12 point + 2 spots, one of them the shadow key) ----------------------
   // Point lights fall off with 1/d^2, so anything within ~1 m of a fill blows out: every fill sits
   // >= 1.6 m below the ceiling (no specular disc on the black plating) and >= 1.5 m from any fixture
   // housing, hood or tall prop top. Fixtures are emissive dressing; the fills explain themselves by
   // sitting near them, as in the mess.
   const warm = 0xffe0d8;
-  lights.push({ type: "point", pos: [-19, Y + 3.0, 379.6], color: 0xffd9d0, intensity: 22, distance: 11, priority: 0.7 }); // vestibule, forward of the cage channel
+  // KEY: the cage floodlight. A spot at the mouth of the small housed panel on the door axis, 1.85 m
+  // forward of the bar plane (in the cage channel itself, 1 m from the bars, the upper bars sat at 50 lx
+  // and blew white; from the vestibule panels 2.55 m out the stripes stretched thin), aimed down-aft
+  // through the cage line so the bars stripe the counter top and the issue-side floor from the counter
+  // to ~6 m aft (the issue view's foreground; the door view sees the striped floor through the flank bars).
+  lights.push({ type: "spot", pos: [-19, CEIL - 0.2, 380.3], target: [-19, Y, 384.6], color: 0xfff0e6, intensity: 110, distance: 24, angle: 0.8, penumbra: 0.4, priority: 1.2, shadow: true });
+  lights.push({ type: "point", pos: [-19, Y + 3.0, 379.6], color: 0xffd9d0, intensity: 16, distance: 11, priority: 0.7 }); // vestibule, under the key's panel
   lights.push({ type: "point", pos: [-16.5, Y + 3.0, 384.9], color: 0xffd9d0, intensity: 18, distance: 9, priority: 0.5 }); // issue side, aft of the cage channel
   lights.push({ type: "point", pos: [-22.8, Y + 2.6, 386.0], color: warm, intensity: 20, distance: 10, priority: 0.5 }); // 2 m under the recessed panels
   lights.push({ type: "point", pos: [-15.2, Y + 2.6, 386.0], color: warm, intensity: 20, distance: 10, priority: 0.5 });
@@ -245,13 +267,80 @@ function detail(ctx) {
   lights.push({ type: "point", pos: [-14.6, Y + 2.8, 396.6], color: 0xffffff, intensity: 16, distance: 9, priority: 0.4 }); // east bench, clear of its hood
   lights.push({ type: "point", pos: [-17.6, Y + 2.8, 397.6], color: warm, intensity: 14, distance: 8, priority: 0.4 }); // aft wall: charge rack + crates
   lights.push({ type: "point", pos: [-21.6, Y + 2.6, 397.0], color: 0xd8e2ff, intensity: 16, distance: 9, priority: 0.4 }); // range console, east of the alcove partition
-  lights.push({ type: "point", pos: [-23.4, Y + 3.3, AL.z0 + 0.12], color: 0xff7a60, intensity: 5, distance: 6, priority: 0.4 }); // inside the caged beacon
+  // inside the caged beacon; live: update() runs it round a 0.2 m circle with the drum's bright facet
+  const beaconLight = { type: "point", pos: [BEACON[0], Y + 3.3, BEACON[2]], color: 0xff7a60, intensity: 5, distance: 6, priority: 0.4 };
+  lights.push(beaconLight);
   // range lamp: a cool spot from the hooded housing under the partition slab down the alcove onto the
   // grate and the target plate (a point fill there would have blown the lining 0.6 m away)
   lights.push({ type: "spot", pos: [-24.9, Y + 2.66, AL.z0 + 0.4], target: [-24.9, Y + 0.2, AL.z1 - 0.8], color: 0xe4ecff, intensity: 34, distance: 8, angle: 0.85, penumbra: 0.5, priority: 0.5 });
   // small fill under the aft alcove panel (1.4 m below the slab) so the target plate and lining read
   lights.push({ type: "point", pos: [-24.85, Y + 1.5, 398.5], color: 0xe4ecff, intensity: 5, distance: 5, priority: 0.4 });
-  return {};
+
+  // ---- motion lighting: one additive emitter batch (1 draw call) + the pulsing field column (1) ------
+  // Beacon: 12 drum facets, a bright lobe sweeps round them at 24 rpm while the red point rides the same
+  // angle 0.2 m out from the axis. Lock bars: dull red idle, a short double blink every 4 s, each rack
+  // 0.9 s behind the previous. Range lamp: 3.2 s breathing. Field column: the holo material cloned so
+  // its opacity can pulse without touching the shared key.
+  const fx = new EmitBatch();
+  const red = P("impRed");
+  const drum = A.beaconDrum(BEACON);
+  const FACETS = 12;
+  const facetG = [];
+  for (let k = 0; k < FACETS; k++) {
+    const g = fx.group(red, 1.5);
+    fx.cyl(g, drum.center[0], drum.center[1], drum.center[2], drum.r, drum.h, "y", { segments: 1, open: true, thetaStart: (k * 2 * Math.PI) / FACETS, thetaLength: (2 * Math.PI) / FACETS });
+    facetG.push(g);
+  }
+  const lockG = lockedRacks.map(([pos, yaw]) => {
+    const g = fx.group(red, 1.5);
+    const lk = A.rifleRackLock(pos, yaw);
+    fx.cyl(g, lk.bar.pos[0], lk.bar.pos[1], lk.bar.pos[2], 0.018, lk.bar.len, "x", { segments: 8, rot: lk.bar.rot });
+    fx.box(g, lk.lamp.pos[0], lk.lamp.pos[1], lk.lamp.pos[2], 0.05, 0.03, 0.006, lk.lamp.rot);
+    return g;
+  });
+  const lampG = fx.group(P("impAmber"), 1.5);
+  {
+    const lp = A.rangeSignLamp(SIGN[0], SIGN[1]);
+    fx.box(lampG, lp.pos[0], lp.pos[1], lp.pos[2], 0.16, 0.16, 0.004, lp.rot);
+  }
+  fx.build(ctx.group);
+  const holoMat = ctx.materials.holo.clone();
+  const field = new THREE.Mesh(
+    mergeGeometries(
+      A.shieldField(RIG, 0, 2.9).map((b) => {
+        const g = new THREE.BoxGeometry(...b.size);
+        g.translate(b.pos[0], b.pos[1], b.pos[2]);
+        return g;
+      }),
+      false,
+    ),
+    holoMat,
+  );
+  field.name = "fx_shield_field";
+  ctx.group.add(field);
+
+  const OMEGA = (2 * Math.PI) / 2.5;
+  return {
+    update(dt, t) {
+      // beacon: lobe angle phi (CylinderGeometry theta = 0 is +z, grows toward +x), faces the alcove view at t = 40
+      const phi = OMEGA * t + Math.PI / 2;
+      for (let k = 0; k < FACETS; k++) {
+        const theta = ((k + 0.5) * 2 * Math.PI) / FACETS;
+        const c = Math.cos(theta - phi);
+        fx.set(facetG[k], 0.22 + 1.5 * (c > 0 ? c * c * c : 0));
+      }
+      beaconLight.pos[0] = BEACON[0] + 0.2 * Math.sin(phi);
+      beaconLight.pos[2] = BEACON[2] + 0.2 * Math.cos(phi);
+      beaconLight.intensity = 4.5 + 1.5 * noise(t, 6, 3);
+      for (let j = 0; j < lockG.length; j++) {
+        const p = (t + j * 0.9) % 4;
+        fx.set(lockG[j], p < 0.18 || (p >= 0.3 && p < 0.48) ? 2.2 : 0.45);
+      }
+      fx.set(lampG, 0.35 + 1.0 * breathe(t, 3.2));
+      fx.commit();
+      holoMat.opacity = 0.35 * (0.78 + 0.25 * breathe(t, 1.8) + 0.05 * Math.sin(t * 9.0));
+    },
+  };
 }
 
 export default defineRoom({

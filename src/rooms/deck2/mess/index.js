@@ -6,6 +6,7 @@ import { IMP, col } from "../_shared/palette.js";
 import { cabinet, wallScreen, dropLight, duct, pipe, floorLine } from "../_shared/props.js";
 import { rng } from "../../../kit.js";
 import * as M from "./props.js";
+import { EmitBatch, noise } from "./fx.js";
 
 const Y = 40;
 const CEIL = 46.5;
@@ -60,11 +61,17 @@ function detail(ctx) {
   M.washTrough(kit, PALETTE, [-53.2, Y, IZ0 + 0.26], 0, { len: 5, d: 0.5 });
   M.trayReturn(kit, PALETTE, [-39, Y, IZ0 + 0.46], 0, { len: 5, d: 0.9 });
   M.recyclingStation(kit, PALETTE, [-40.5, Y, 382.7], 0, { len: 3.0 });
-  M.dispenserTower(kit, PALETTE, [-60.5, Y, 381.6], 0, 31);
-  M.dispenserTower(kit, PALETTE, [-58.1, Y, 381.6], 0, 32);
+  // dispenser towers: indicator LEDs are animated (fx batch below), the props draw the bare plate
+  const towers = [
+    [[-60.5, Y, 381.6], 0, 31],
+    [[-58.1, Y, 381.6], 0, 32],
+    [[COUNTER.x0 - 0.42, Y, 403.15], Math.PI, 51],
+    [[COUNTER.x1 + 0.42, Y, 403.15], Math.PI, 52],
+  ];
+  for (const [pos, yaw, seed] of towers) M.dispenserTower(kit, PALETTE, pos, yaw, seed, { leds: false });
   M.cupStand(kit, PALETTE, [-59.3, Y, 381.6], 0, { len: 1.2, d: 0.5 });
   wallScreen(kit, [-53.2, Y + 2.95, IZ0 + 0.09], 0, 2.4, 0.9, "screenImp2");
-  wallScreen(kit, [-39, Y + 2.95, IZ0 + 0.09], 0, 2.4, 0.9, "screenImp3");
+  wallScreen(kit, [-39, Y + 2.95, IZ0 + 0.09], 0, 2.4, 0.9, "screenImp2");
   wallScreen(kit, [-46, Y + 5.2, IZ0 + 0.09], 0, 3.2, 1.0, "screenImp0");
   // forward wall above the service band (3.8–6.5 m was plain in the hall view): the room's 0.7 m duct
   // continues across at 5.95 m on brackets, framed grille vents at 4.6 m between the screens
@@ -87,7 +94,7 @@ function detail(ctx) {
     const off = (d) => wx + side * -1 * d; // distance into the room from the wall face
     duct(kit, PALETTE, [off(0.28), Y + 4.45, 383.5], [off(0.28), Y + 4.45, 402.5], 0.5, 0.3, { color: dark });
     for (const z of [386, 392, 398]) kit.box("paintedMetal", off(0.12), Y + 4.45, z, 0.24, 0.5, 0.6, { color: black, texel: 2.5 });
-    for (const [z, sm] of [[388.2, side < 0 ? "screenImp0" : "screenImp3"], [394.8, side < 0 ? "screenImp2" : "screenImp0"]]) wallScreen(kit, [off(0.09), Y + 2.95, z], yaw, 1.6, 0.9, sm);
+    for (const [z, sm] of [[388.2, side < 0 ? "screenImp0" : "screenImp2"], [394.8, side < 0 ? "screenImp2" : "screenImp0"]]) wallScreen(kit, [off(0.09), Y + 2.95, z], yaw, 1.6, 0.9, sm);
     cabinet(kit, PALETTE, [off(0.21), Y, 385.6], yaw, { w: 1.0, h: 1.8, d: 0.4, seed: 30 + side });
     cabinet(kit, PALETTE, [off(0.21), Y, 399.4], yaw, { w: 1.0, h: 1.8, d: 0.4, seed: 33 + side });
     M.wallPanel(kit, PALETTE, [off(0.01), Y + 1.5, 391.5], yaw, 40 + side);
@@ -98,8 +105,6 @@ function detail(ctx) {
 
   // ---- serving line ----------------------------------------------------------------------------
   M.servingCounter(kit, PALETTE, { ...COUNTER, y: Y, h: 0.9 });
-  M.dispenserTower(kit, PALETTE, [COUNTER.x0 - 0.42, Y, 403.15], Math.PI, 51);
-  M.dispenserTower(kit, PALETTE, [COUNTER.x1 + 0.42, Y, 403.15], Math.PI, 52);
   // queue lane: two amber lines with position ticks
   floorLine(kit, [OPENING.x0, Y, 400.5], [OPENING.x1, Y, 400.5], 0.1);
   floorLine(kit, [OPENING.x0, Y, 402.15], [OPENING.x1, Y, 402.15], 0.1);
@@ -134,8 +139,10 @@ function detail(ctx) {
   kit.boxMM("paintedMetal", [IX0, Y + PART_H + 0.3, PART_Z - 0.14], [IX1, Y + PART_H + 0.36, PART_Z + 0.36], { color: black, texel: 2.5 });
   // light slots mounted on the header's dining face (U-channel housing, steel lips, recessed emitter)
   for (let x = OPENING.x0 + 0.3; x < OPENING.x1 - 0.3; x += 2.4) M.beamSlotLight(kit, PALETTE, x, Math.min(x + 1.8, OPENING.x1 - 0.3), Y + PART_H + 0.15, PART_Z - 0.22);
-  // heat lamps hung from the header over the counter
-  for (let x = COUNTER.x0 + 1.0; x <= COUNTER.x1 - 0.9; x += 1.6) M.heatLamp(kit, PALETTE, x, Y + PART_H, 403.2, { drop: 0.45 });
+  // heat lamps hung from the header over the counter (their amber emitters flicker: fx batch below)
+  const lampX = [];
+  for (let x = COUNTER.x0 + 1.0; x <= COUNTER.x1 - 0.9; x += 1.6) lampX.push(x);
+  for (const x of lampX) M.heatLamp(kit, PALETTE, x, Y + PART_H, 403.2, { drop: 0.45, emit: false });
   // queue-lane fixtures over the serving line approach (the fills for the counter hang under these)
   for (const x of [-50, -46, -42]) dropLight(kit, PALETTE, [x, CEIL, 401.3], { w: 3.0, d: 0.35, stem: 2.3, mat: "emitWarmSoft" });
   // hazard bands at the two staff pass-throughs
@@ -149,7 +156,8 @@ function detail(ctx) {
   M.vat(kit, PALETTE, [-56.6, Y, IZ1 - 0.62], Math.PI, { seed: 63, w: 3.0, h: 1.7 });
   M.vat(kit, PALETTE, [-53.6, Y, IZ1 - 0.62], Math.PI, { seed: 62, w: 2.0, h: 2.2, style: "oven" });
   M.vat(kit, PALETTE, [-50.5, Y, IZ1 - 0.62], Math.PI, { seed: 61, w: 2.4, h: 1.9, open: true });
-  M.hood(kit, PALETTE, [-58.0, Y + 2.4, IZ1 - 1.4], [-49.0, Y + 3.4, IZ1]);
+  const HOOD = [[-58.0, Y + 2.4, IZ1 - 1.4], [-49.0, Y + 3.4, IZ1]];
+  M.hood(kit, PALETTE, HOOD[0], HOOD[1], { tubes: false }); // tubes buzz: fx batch below
   M.vertDuct(kit, PALETTE, -51.5, IZ1 - 0.7, Y + 3.4, CEIL, 0.8);
   M.sinkLine(kit, PALETTE, [-44, Y, IZ1 - 0.35], Math.PI, { len: 6, d: 0.7, basins: 3 });
   M.dishwasher(kit, PALETTE, [-38.6, Y, IZ1 - 0.5], Math.PI, { seed: 64 });
@@ -166,7 +174,7 @@ function detail(ctx) {
   M.trayRack(kit, PALETTE, [IX1 - 0.31, Y, 406.3], -HALF);
   cabinet(kit, PALETTE, [IX1 - 0.26, Y, 408.6], -HALF, { w: 1.2, h: 1.9, d: 0.5, seed: 67, emit: "emitRedImp" });
   wallScreen(kit, [IX0 + 0.09, Y + 2.95, 409.6], HALF, 1.6, 0.9, "screenImp0");
-  wallScreen(kit, [IX1 - 0.09, Y + 2.95, 405.6], -HALF, 1.6, 0.9, "screenImp3");
+  wallScreen(kit, [IX1 - 0.09, Y + 2.95, 405.6], -HALF, 1.6, 0.9, "screenImp2");
   M.wallPanel(kit, PALETTE, [IX0 + 0.01, Y + 1.5, 410.6], HALF, 44);
   // galley floor drain grate along the aft equipment line
   kit.boxMM("grate", [-60.5, Y + 0.001, 409.75], [-31.0, Y + 0.009, 410.15]);
@@ -178,7 +186,8 @@ function detail(ctx) {
   // galley ceiling fixtures (cool white)
   for (const x of [-56, -46, -36]) dropLight(kit, PALETTE, [x, CEIL, 407.6], { w: 2.4, d: 0.5, stem: 1.0, mat: "emitWhite" });
 
-  // ---- lights (14 descriptors; 1/d^2 falloff, so every fill keeps >= 1.2 m from any fixture hood) ---
+  // ---- lights (14 descriptors: 13 point + 1 shadow-casting spot; 1/d^2 falloff, so every fill keeps
+  //      >= 1.2 m from any fixture hood) -------------------------------------------------------------
   // Pool note: the runtime keeps the 12 nearest point lights weighted by distance/(0.5+priority) and the
   // west corridor's six priority-1 lights sit 6 m behind the door view, so the hall fills carry priority
   // 1 and the serving fills 1.5 — otherwise the far counter loses its light exactly in the door view.
@@ -186,19 +195,79 @@ function detail(ctx) {
   // nearest hood end and 1.8 m from the rows either side), 2.5 m below the ceiling
   for (const x of [-54, -38]) for (const z of [387.6, 391.2, 394.8]) lights.push({ type: "point", pos: [x, Y + 4.0, z], color: 0xffe0c0, intensity: 42, distance: 16, priority: 1.0 });
   lights.push({ type: "point", pos: [-46, Y + 4.0, 381.5], color: 0xffe6d0, intensity: 30, distance: 13, priority: 0.7 });
-  // serving line: three warm fills 1.2 m aft of the queue-lane fixtures (their hoods are not lit from
-  // below) light the counter front and the galley wall from above; one small amber pool under the heat lamps
-  for (const x of [-50, -46, -42]) lights.push({ type: "point", pos: [x, Y + 3.8, 402.5], color: 0xffe0c0, intensity: 26, distance: 10, priority: 1.5 });
+  // serving line. KEY (the room's one shadow caster): a spot 0.3 m under the middle queue-lane fixture,
+  // aimed at the counter centre: the towers, trays and the heat-lamp housings throw their shadows aft
+  // onto the counter top and the half wall's plates. Not the heat-lamp header itself: a spot in the
+  // header sits 0.5 m above and behind the six hanging lamps, which would shade the very counter it is
+  // meant to light. Two warm fills at the counter ends (15 % of the key) carry the flanks.
+  lights.push({ type: "spot", pos: [-46, Y + 3.9, 401.3], target: [-46, Y + 0.9, 403.1], color: 0xffe0c0, intensity: 95, distance: 34, angle: 1.0, penumbra: 0.5, priority: 1.5, shadow: true });
+  for (const x of [-50, -42]) lights.push({ type: "point", pos: [x, Y + 3.8, 402.5], color: 0xffe0c0, intensity: 14, distance: 10, priority: 1.5 });
   // amber pool: 3 cm under the rim of the heat lamp at x -46.8 (it hung between two lamps at 7 cd, a bare
-  // hot disc on the counter 0.5 m below); 1.4 cd at 0.6 m tints the trays without a hotspot
-  lights.push({ type: "point", pos: [-46.8, Y + 1.5, 403.2], color: 0xffb060, intensity: 1.4, distance: 3.2, priority: 0.4 });
+  // hot disc on the counter 0.5 m below); 1.4 cd at 0.6 m tints the trays without a hotspot. Live: it
+  // follows that lamp's flicker in update().
+  const pool = { type: "point", pos: [-46.8, Y + 1.5, 403.2], color: 0xffb060, intensity: 1.4, distance: 3.2, priority: 0.4 };
+  lights.push(pool);
   // galley: cool fills 0.8 m aft of the galley fixtures, 2.5 m below the ceiling, over the aisle between
   // the islands and the appliance line. At z 409.2 / 4.5 m they sat 25 cm under the mezzanine duct's
   // underside and 2 m in front of it: from the galley aisle that grazing pair read as the "hood lamp seen
   // edge-on" streak where the hood meets the ceiling (clipped white + bloom); 1.6 m out and 0.5 m lower
   // the same duct face peaks at ~230
   for (const x of [-56, -46, -36]) lights.push({ type: "point", pos: [x, Y + 4.0, 408.4], color: 0xe8f0ff, intensity: 30, distance: 12, priority: 0.5 });
-  return {};
+
+  // ---- motion lighting: one additive emitter batch (1 draw call) ---------------------------------------
+  // heat lamps: each lamp's diffuser + indicator is its own group with a gentle seeded flicker; the amber
+  // pool descriptor follows lamp 3's curve. Hood under-light tubes: a fast 8 % buzz, tube 3 is the faulty
+  // one and drops out now and then. Dispenser indicator plates: 6 LEDs each, slow state changes plus a
+  // running cursor, so the four plates cycle instead of sitting frozen.
+  const fx = new EmitBatch();
+  const amber = P("impAmber");
+  const lampG = lampX.map((x) => {
+    const g = fx.group(amber, 1.5);
+    for (const e of M.heatLampEmitters(x, Y + PART_H, 403.2, 0.45)) fx.box(g, ...e);
+    return g;
+  });
+  const tubeG = M.hoodTubes(HOOD[0], HOOD[1]).map((tb) => {
+    const g = fx.group(0xdfe9ff, 1.3);
+    fx.box(g, ...tb);
+    return g;
+  });
+  const ledCols = [
+    [P("impRed"), 1.5],
+    [P("impBlue"), 1.6],
+    [amber, 1.5],
+    [P("impGreen"), 1.3],
+  ];
+  const leds = []; // { g, tower, i, seed }
+  towers.forEach(([pos, yaw, seed], ti) => {
+    const rnd = rng(seed);
+    M.dispenserLeds(pos, yaw).forEach((led, i) => {
+      const r = rnd();
+      const c = ledCols[r < 0.45 ? 0 : r < 0.8 ? 1 : r < 0.95 ? 2 : 3];
+      const g = fx.group(c[0], c[1]);
+      fx.box(g, led.pos[0], led.pos[1], led.pos[2], 0.022, 0.016, 0.006, led.rot);
+      leds.push({ g, tower: ti, i, seed: seed * 7 + i });
+    });
+  });
+  fx.build(ctx.group);
+
+  const lampK = (t, j) => 0.86 + 0.14 * noise(t, 7, j) + 0.08 * (noise(t, 19, j + 3) - 0.5);
+  return {
+    update(dt, t) {
+      for (let j = 0; j < lampG.length; j++) fx.set(lampG[j], lampK(t, j));
+      pool.intensity = 1.4 * lampK(t, 2);
+      for (let j = 0; j < tubeG.length; j++) {
+        let k = 0.92 + 0.08 * noise(t, 30, 11 + j);
+        if (j === 2 && noise(t, 3, 40) < 0.22) k *= 0.3;
+        fx.set(tubeG[j], k);
+      }
+      for (const led of leds) {
+        const cursor = Math.floor(t * 4 + led.tower * 1.7) % 6 === led.i ? 1.7 : 0;
+        const on = noise(t, 0.7, led.seed) > 0.42 ? 1 : 0.12;
+        fx.set(led.g, Math.max(on, cursor));
+      }
+      fx.commit();
+    },
+  };
 }
 
 export default defineRoom({

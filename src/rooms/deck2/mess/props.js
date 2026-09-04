@@ -72,7 +72,9 @@ export function servingCounter(kit, PALETTE, { x0, x1, zFront, depth = 0.8, y, h
 
 // Heat lamp hung from a header above the serving line: stem, dark hooded housing with a steel rim, the
 // amber diffuser recessed 4 cm up inside the hood so the rim shades it (no bare bright quad).
-export function heatLamp(kit, PALETTE, x, yTop, z, { drop = 0.45 } = {}) {
+// `emit: false` leaves out the amber diffuser + "on" indicator so the room can animate them (see
+// heatLampEmitters for their placement).
+export function heatLamp(kit, PALETTE, x, yTop, z, { drop = 0.45, emit = true } = {}) {
   const black = C(PALETTE, "impBlack");
   const steel = C(PALETTE, "steel");
   const hy = yTop - drop - 0.08; // housing centre
@@ -82,8 +84,17 @@ export function heatLamp(kit, PALETTE, x, yTop, z, { drop = 0.45 } = {}) {
   for (const sz of [-1, 1]) kit.box("paintedMetal", x, hy - 0.11, z + sz * 0.145, 0.7, 0.06, 0.03, { color: black });
   for (const sx of [-1, 1]) kit.box("paintedMetal", x + sx * 0.335, hy - 0.11, z, 0.03, 0.06, 0.32, { color: black });
   kit.box("paintedMetal", x, hy - 0.14, z, 0.72, 0.012, 0.34, { color: steel }); // rim
-  kit.box("emitAmber", x, hy - 0.125, z, 0.6, 0.01, 0.22);
-  kit.box("emitAmber", x, hy + 0.02, z - 0.165, 0.36, 0.015, 0.006); // "on" indicator on the dining face
+  if (!emit) return;
+  for (const e of heatLampEmitters(x, yTop, z, drop)) kit.box("emitAmber", ...e);
+}
+
+/** The two emitter boxes of a heat lamp as [cx, cy, cz, sx, sy, sz] (diffuser, dining-face indicator). */
+export function heatLampEmitters(x, yTop, z, drop = 0.45) {
+  const hy = yTop - drop - 0.08;
+  return [
+    [x, hy - 0.125, z, 0.6, 0.01, 0.22],
+    [x, hy + 0.02, z - 0.165, 0.36, 0.015, 0.006],
+  ];
 }
 
 // Light slot mounted on a beam face (dining side of the serving-line header): U-channel housing (top,
@@ -118,7 +129,8 @@ export function hazardBand(kit, PALETTE, min, max, y) {
 }
 
 // Beverage dispenser tower: dark cylinder, blue ring, indicator panel, spout and drip tray on +Z.
-export function dispenserTower(kit, PALETTE, pos, yaw, seed = 3) {
+// `leds: false` draws the indicator plate without its LEDs (the room animates them, see dispenserLeds).
+export function dispenserTower(kit, PALETTE, pos, yaw, seed = 3, { leds = true } = {}) {
   const Q = placer(kit, pos, yaw);
   const black = C(PALETTE, "impBlack");
   const dark = C(PALETTE, "impDark");
@@ -129,13 +141,30 @@ export function dispenserTower(kit, PALETTE, pos, yaw, seed = 3) {
   Q.cyl("paintedMetal", 0, 0.3, 0, 0.305, 0.3, "y", { color: dark, segments: 20, texel: 2.5 });
   Q.cyl("metal", 0, 1.5, 0, 0.32, 0.06, "y", { color: steel, segments: 20 });
   Q.cyl("emitBlue", 0, 1.44, 0, 0.306, 0.04, "y", { segments: 20, open: true });
-  indicatorField(Q, 0, 1.22, 0.3, 0.36, 0.14, seed);
+  if (leds) indicatorField(Q, 0, 1.22, 0.3, 0.36, 0.14, seed);
+  else Q.box("darkGloss", 0, 1.22, 0.3, 0.36, 0.14, 0.02);
   Q.box("darkGloss", 0, 0.95, 0.31, 0.3, 0.3, 0.02);
   Q.box("emitAmber", 0.1, 1.06, 0.322, 0.05, 0.02, 0.006); // ready lamp
   Q.box("metal", 0, 1.03, 0.36, 0.06, 0.05, 0.12, { color: steel });
   Q.box("metal", 0, 0.8, 0.38, 0.34, 0.03, 0.16, { color: steel });
   Q.box("grate", 0, 0.82, 0.38, 0.3, 0.012, 0.12);
   Q.collider([-0.36, 0, -0.36], [0.36, 1.55, 0.46], "dispenser");
+}
+
+/**
+ * World placement of a dispenser tower's six indicator LEDs (the plate's 6×1 grid at the same spots
+ * indicatorField would use): [{ pos: [x, y, z], rot: [0, yaw, 0] }], LED size 0.022 × 0.016 × 0.006.
+ */
+export function dispenserLeds(pos, yaw) {
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  const out = [];
+  for (let i = 0; i < 6; i++) {
+    const lx = -0.18 + 0.04 + (i + 0.5) * (0.28 / 6);
+    const lz = 0.313;
+    out.push({ pos: [pos[0] + lx * c + lz * s, pos[1] + 1.22, pos[2] - lx * s + lz * c], rot: [0, yaw, 0] });
+  }
+  return out;
 }
 
 // Galley appliance, three states so a row of them does not read as copies:
@@ -223,7 +252,8 @@ export function vat(kit, PALETTE, pos, yaw, { w = 2.6, h = 1.9, d = 1.2, seed = 
 }
 
 // Extraction hood (world AABB) with filter grilles on the -Z face and two under-lights.
-export function hood(kit, PALETTE, min, max, { lamps = [0.09, 0.33, 0.69, 0.93] } = {}) {
+// `tubes: false` builds the under-light channels without their emitter tubes (see hoodTubes).
+export function hood(kit, PALETTE, min, max, { lamps = [0.09, 0.33, 0.69, 0.93], tubes = true } = {}) {
   const black = C(PALETTE, "impBlack");
   const dark = C(PALETTE, "impDark");
   const mid = C(PALETTE, "impMid");
@@ -266,8 +296,16 @@ export function hood(kit, PALETTE, min, max, { lamps = [0.09, 0.33, 0.69, 0.93] 
     for (const s of [-1, 1]) kit.box("paintedMetal", x, min[1] - 0.08, zc + s * (zl / 2 - 0.015), 0.27, 0.16, 0.03, { color: black, texel: 2.5 });
     for (const s of [-1, 1]) kit.box("paintedMetal", x + s * 0.135, min[1] - 0.165, zc, 0.06, 0.02, zl + 0.04, { color: steel });
     kit.box("paintedMetal", x, min[1] - 0.025, zc, 0.2, 0.01, zl - 0.06, { color: grey });
-    kit.box("emitWhite", x, min[1] - 0.045, zc, 0.05, 0.01, zl - 0.12);
   }
+  if (tubes) for (const tb of hoodTubes(min, max, lamps)) kit.box("emitWhite", ...tb);
+}
+
+/** The hood's under-light tubes as [cx, cy, cz, sx, sy, sz] boxes. */
+export function hoodTubes(min, max, lamps = [0.09, 0.33, 0.69, 0.93]) {
+  const len = max[0] - min[0];
+  const zc = (min[2] + max[2]) / 2;
+  const zl = max[2] - min[2] - 0.36;
+  return lamps.map((f) => [min[0] + len * f, min[1] - 0.045, zc, 0.05, 0.01, zl - 0.12]);
 }
 
 // Vertical square duct with flanges.

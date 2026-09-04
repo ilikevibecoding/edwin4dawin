@@ -6,6 +6,7 @@ import { defineRoom } from "../_shared/room.js";
 import { IMP, col } from "../_shared/palette.js";
 import { console as consoleProp, crate, lockerBank, cabinet, wallScreen, floorLine, dropLight, duct } from "../_shared/props.js";
 import * as S from "./props.js";
+import { EmitBatch, noise, gauss, clamp01, ownKitMaterial } from "./fx.js";
 
 const Y = 40;
 const CEIL = 44.6;
@@ -18,9 +19,10 @@ const IX1 = X1 - 0.3;
 const IZ0 = Z0 + 0.3;
 const IZ1 = Z1 - 0.3;
 const HALF = Math.PI / 2;
-// four Imperial screen layouts, cycled so no two neighbours repeat
-const SCR = ["screenImp0", "screenImp1", "screenImp2", "screenImp3"];
-const scr = (i) => SCR[((i % 4) + 4) % 4];
+// three of the four Imperial screen layouts, cycled so no two neighbours repeat (the fourth key's draw
+// call went to the room's animated emitters)
+const SCR = ["screenImp0", "screenImp1", "screenImp2"];
+const scr = (i) => SCR[((i % 3) + 3) % 3];
 
 const GATE_Z = 389.65; // centre plane of the gate wall
 const GAP = { x0: 21.8, x1: 24.2 }; // open gate
@@ -60,10 +62,16 @@ function detail(ctx) {
   for (const x of [21.7, 24.3]) floorLine(kit, [x, Y, 379.2], [x, Y, 382.1], 0.08, "emitWhite");
   // gate control console at the block entrance (operator faces the gate)
   consoleProp(kit, PALETTE, [23, Y, 388.0], Math.PI, { w: 1.6, d: 0.8, h: 1.15, screens: 1, seed: 13, screenMat: scr(1) });
-  // monitor wall (4×2) over an equipment rack on the west wall; upper row tilted down toward the desk
+  // monitor wall (4×2) over an equipment rack on the west wall, both rows angled down toward the desk
+  // (7 and 22 deg). The screens are glossy (roughness 0.35) and the west office fill's specular highlight
+  // for an eye-height viewer lands on the wall at 42.7 m whatever the viewer's position in the office,
+  // i.e. on the array's row boundary (a 240-luma blob on the third column in the desk view). Tilting a
+  // row down moves its highlight up the wall: at 7 deg the lower row's lands at 43.15 (0.75 m above its
+  // top edge), at 22 deg the upper row's at 44.15 (0.7 m above), both off the glass.
   for (let i = 0; i < 4; i++) {
-    wallScreen(kit, [IX0 + 0.09, Y + 1.95, 380.9 + i * 1.75], HALF, 1.6, 0.9, scr(i));
-    wallScreen(kit, [IX0 + 0.09, Y + 3.0, 380.9 + i * 1.75], HALF, 1.6, 0.9, scr(i + 2), { tilt: 0.14 });
+    wallScreen(kit, [IX0 + 0.11, Y + 1.95, 380.9 + i * 1.75], HALF, 1.6, 0.9, scr(i), { tilt: 0.12 });
+    wallScreen(kit, [IX0 + 0.19, Y + 3.0, 380.9 + i * 1.75], HALF, 1.6, 0.9, scr(i + 2), { tilt: 0.38 });
+    kit.box("emitBlue", IX0 + 0.045, Y + 1.42, 380.9 + i * 1.75, 0.01, 0.012, 0.96); // the flat variant's accent line, on the wall under the lower row
   }
   S.equipmentRack(kit, PALETTE, [IX0 + 0.26, Y, 383.5], HALF, { w: 7.0, h: 0.9, d: 0.5, units: 7, seed: 14 });
   S.wallPanel(kit, PALETTE, [IX0 + 0.01, Y + 1.5, 388.3], HALF, 15);
@@ -222,17 +230,18 @@ function detail(ctx) {
   }
   // block slab: dark grey at texel 4 (its black underside at 2.5 was the speckled slab over the cells view)
   kit.boxMM("paintedMetal", [BLOCK.x0, Y + BLOCK.h, BLOCK.z0], [BLOCK.x1, Y + BLOCK.h + 0.15, BLOCK.z1], { color: dark, texel: 4 });
-  // corridor ceiling: narrow red strips recessed in black channels + housed white panels under the slab
-  for (const x of [CORR.x0 + 0.25, CORR.x1 - 0.25]) {
-    kit.boxMM("paintedMetal", [x - 0.07, Y + BLOCK.h - 0.05, BLOCK.z0 + 0.3], [x + 0.07, Y + BLOCK.h, BLOCK.z1 - 0.3], { color: black });
-    kit.boxMM("emitRedImp", [x - 0.02, Y + BLOCK.h - 0.03, BLOCK.z0 + 0.4], [x + 0.02, Y + BLOCK.h - 0.02, BLOCK.z1 - 0.4]);
-  }
+  // corridor ceiling: black channels for the red alert-sweep strips (the strips themselves are animated:
+  // fx batch below) + housed white panels under the slab
+  const STRIP_X = [CORR.x0 + 0.25, CORR.x1 - 0.25];
+  const STRIP = { z0: BLOCK.z0 + 0.4, z1: BLOCK.z1 - 0.4, y: Y + BLOCK.h - 0.058 }; // strip hangs 2 mm under the channel
+  for (const x of STRIP_X) kit.boxMM("paintedMetal", [x - 0.07, Y + BLOCK.h - 0.05, BLOCK.z0 + 0.3], [x + 0.07, Y + BLOCK.h, BLOCK.z1 - 0.3], { color: black });
   for (const z of [392.0, 395.6, 399.2]) S.ceilingPanel(kit, PALETTE, 23, Y + BLOCK.h, z, { w: 0.7, d: 0.7 });
   // cell fronts on the corridor edges + fittings. Cell states: 1 standard · 2 force-field, occupied (fittings
   // along the aft partition, see below) · 3 vacant, door slid open · 4 standard · 5 occupied (mirrored, so
   // the bunk end with the blanket, tray, boots and the jacket hook sit at the aft end of the cell, which is
   // the part the cells view sees through the bars) · 6 out of service (red plate, locked, stripped)
   const barTop = Y + 3.0;
+  let fieldPane = null;
   const cellState = {
     1: { variant: "standard", locked: true },
     2: { variant: "occupied", locked: true },
@@ -256,9 +265,7 @@ function detail(ctx) {
         // force-field cell: glass pane in a red emitter frame with four thin field lines across it (seen
         // edge-on from the corridor the bare pane read as a blank light-grey panel), no door gap
         kit.boxMM("glass", [fx - 0.01, Y + 0.05, c0 + 0.03], [fx + 0.01, barTop, c1 - 0.03], { uv: "keep" });
-        for (const [y0, y1] of [[0.1, 0.125], [2.955, 2.98]]) kit.boxMM("emitRedImp", [fx - 0.02, Y + y0, c0], [fx + 0.02, Y + y1, c1]);
-        for (const z of [c0 + 0.012, c1 - 0.012]) kit.boxMM("emitRedImp", [fx - 0.02, Y + 0.1, z - 0.012], [fx + 0.02, barTop, z + 0.012]);
-        for (const h of [0.72, 1.3, 1.88, 2.46]) kit.boxMM("emitRedImp", [fx - 0.006, Y + h, c0 + 0.06], [fx + 0.006, Y + h + 0.01, c1 - 0.06]);
+        fieldPane = { x: fx, y0: Y + 0.1, y1: barTop, z0: c0, z1: c1 }; // red frame + field lines shimmer: fx batch below
         kit.boxMM("paintedMetal", [fx - 0.08, Y, c0 - 0.02], [fx + 0.08, Y + 0.1, c1 + 0.02], { color: black });
         kit.collider([fx - 0.08, Y, c0], [fx + 0.08, barTop, c1], "field");
         kit.box("emitRedImp", fx + side * -1 * 0.09, Y + 1.4, c1 - 0.35, 0.006, 0.4, 0.05); // field emitter post light
@@ -398,15 +405,14 @@ function detail(ctx) {
     }
   }
 
-  // ---- lights (14 descriptors: 13 point + 1 spot) ---------------------------------------------------------
+  // ---- lights (14 descriptors: 12 point + 2 spots, one of them the shadow key) ------------------------
   // 1/d^2 falloff: a fill 1.3 m under the plating left a specular disc on the ceiling and blew the fixture
   // lips, so every fill sits >= 1.7 m below its ceiling and >= 1.5 m from any housing or tall prop top.
   // The runtime keeps the 12 nearest point lights weighted by priority and the corridor next door brings 8
   // of its own, so the fills a view depends on carry priority >= 0.8 (the west office fill was being
   // dropped from the desk view, which is why the monitor wall read darker than the door wall).
   const warm = 0xffe2d8;
-  // office: two wall-side fills between the side panel pairs (same colour both sides), one under the desk
-  // channel reaching the gate wall (so its panels read the same grey as the side walls)
+  // office: two wall-side fills between the side panel pairs (same colour both sides)
   // (the office fills run ~30 % hotter than the wings': the palette's impMid deck is ~0.06 linear albedo
   // under the plating map, and the door view was 70 % of frame under 20 % grey at 22/26/44)
   // 46 and 0.8 m forward: the harness environment map lights +-z-facing walls ~3.5x harder than
@@ -415,27 +421,138 @@ function detail(ctx) {
   // centre because the screens are glossy: 1 m aft of it the same fill put a 190-luma lobe on the
   // upper row's second screen, at z 382.8 the lobe reads 60 (the round-2 level)
   for (const x of [13.6, 32.4]) lights.push({ type: "point", pos: [x, Y + 2.8, 382.8], color: warm, intensity: 46, distance: 11, priority: 1.0 });
-  // 1.65 m aft of the desk centre (under the desk/gate panel pair) so it reaches the gate-wall plates at
-  // 3.5 m instead of 5 m: the mid band of the door view (desk back to gate) was 86 % under 20 % grey
-  lights.push({ type: "point", pos: [23, Y + 2.9, 386.0], color: warm, intensity: 34, distance: 11, priority: 0.9 });
+  // KEY (the room's one shadow caster): a spot at the mouth of the duty-desk light channel, 0.7 m forward
+  // of the desk's front edge, aimed down-aft at the deck between the desk and the gate wall. The desk,
+  // its monitors and the operators' chairs throw their shadows aft onto that floor (the desk view's
+  // foreground) and the cone's far half lights the gate wall's plates in place of the fill that used to
+  // hang under the desk/gate panel pair.
+  lights.push({ type: "spot", pos: [23, CEIL - 0.2, 383.2], target: [23, Y, 386.0], color: warm, intensity: 120, distance: 14, angle: 1.0, penumbra: 0.5, priority: 1.5, shadow: true });
   // door approach (policy C): a wide spot between the door-axis panel pair, aimed down the checkpoint
   // lane at the deck, so the floor between the door and the desk carries light instead of reading black
-  lights.push({ type: "spot", pos: [23, Y + 4.3, 380.4], target: [23, Y, 383.5], color: warm, intensity: 70, distance: 11, angle: 1.0, penumbra: 0.6, priority: 0.8 });
+  // (40 % of the key; aimed 0.7 m shorter than before so its full cone ends at the desk's back edge and
+  // leaves the key's shadows their contrast)
+  lights.push({ type: "spot", pos: [23, Y + 4.3, 380.4], target: [23, Y, 382.8], color: warm, intensity: 48, distance: 11, angle: 1.0, penumbra: 0.6, priority: 0.8 });
   // cells: one low fill per cell 1.2 m under its housed ceiling plate, so bunk, sink and the back-wall
   // plates read through the bars; they also light the corridor edges
   for (const x of [19.2, 26.8]) for (const [c0, c1] of cells) lights.push({ type: "point", pos: [x, Y + 2.2, (c0 + c1) / 2], color: 0xffece4, intensity: 15, distance: 8, priority: 0.8 });
-  // west wing + its aft bay under the light channels (the wing view); the east wing, which no view looks
-  // into, gets one mid-wing fill (its second descriptor went to the door spot). The aft-zone channel
-  // between the block and the glass is reached by the cell 3/6 fills and the interrogation fill.
-  lights.push({ type: "point", pos: [14.2, Y + 2.8, 395.5], color: warm, intensity: 18, distance: 10, priority: 0.7 });
-  // aft-bay fill north of the interrogation glass plane (z 404.5): at 405.5 its mirror image in the glass
-  // (point lights ignore the room's west wall) was the white glare on the glass front's west end
-  lights.push({ type: "point", pos: [14.5, Y + 2.8, 403.6], color: warm, intensity: 20, distance: 10, priority: 0.7 });
-  lights.push({ type: "point", pos: [31.6, Y + 2.8, 401.0], color: warm, intensity: 24, distance: 12, priority: 0.4 });
+  // west wing: one fill between the scanner gate and the processing bay (2.4 m aft of the gate header,
+  // 2 m under the wing channel) lights the gate's camera-facing side, the lane markings and the evidence
+  // stack in the wing view; it replaces the pair that stood 1.9 m north of the gate and over the bay
+  // (their two descriptors went to the moving scanner and alert-sweep lights). North of the glass plane
+  // (z 404.4), so it has no mirror image in the interrogation front. The east wing, which no view looks
+  // into, keeps no fill of its own (its lockers, screens and the cell 4-6 fills through the block wall).
+  lights.push({ type: "point", pos: [14.3, Y + 2.8, 399.8], color: warm, intensity: 30, distance: 11, priority: 0.7 });
   // interrogation: one fill 1.2 m under the room's 3.4 m slab, 1.3 m west of the drop light so its hood and
   // diffuser are not blasted from below (the previous fill 8 cm under the diffuser read as a white blob)
   lights.push({ type: "point", pos: [icx - 1.6, Y + 2.2, 406.3], color: 0xffffff, intensity: 12, distance: 8, priority: 0.8 });
-  return {};
+  // live descriptors (update() drives pos + intensity): the red alert-sweep point riding under the block
+  // slab in the corridor, and the blue scanner point that follows the beam plane through the gate lane
+  const sweepLight = { type: "point", pos: [23, Y + 2.3, STRIP.z0], color: 0xff3a24, intensity: 0, distance: 7, priority: 0.9 };
+  const scanLight = { type: "point", pos: [14.3, Y + 1.2, 397.4], color: 0x78b0ff, intensity: 0, distance: 5, priority: 0.7 };
+  lights.push(sweepLight, scanLight);
+
+  // ---- motion lighting: one additive emitter batch (1 draw call) --------------------------------------
+  // Alert sweep: the two cell-top strips are 28 paired segments; a red pulse (sharp front, 1.2 m tail)
+  // runs gate -> aft every 7 s over a dull idle, with sweepLight under it. Scanner: a blue veil plane
+  // with a bright floor line crosses the gate lane approach -> north in 1.6 s every 4 s (translate() moves
+  // its vertices), scanLight riding at chest height. Force-field: the pane's red frame + four field lines
+  // shimmer irregularly. Screens: the room's three screen keys jitter emissiveIntensity 0.9-1.1 on
+  // different seeds, so the monitor wall's 4x2 array flickers in staggered thirds.
+  const fx = new EmitBatch();
+  const red = P("impRed");
+  const N_SEG = 28;
+  const segG = [];
+  const segZ = [];
+  {
+    const segLen = (STRIP.z1 - STRIP.z0) / N_SEG;
+    for (let i = 0; i < N_SEG; i++) {
+      const g = fx.group(red, 1.6);
+      const z = STRIP.z0 + (i + 0.5) * segLen;
+      for (const x of STRIP_X) fx.box(g, x, STRIP.y, z, 0.08, 0.012, segLen - 0.025);
+      segG.push(g);
+      segZ.push(z);
+    }
+  }
+  const GATE = { x: 14.3, z: 397.4, laneW: 2.0, headerY: Y + 2.4 };
+  const beamG = fx.group(0x5c9cff, 1.0);
+  fx.box(beamG, GATE.x, (Y + 0.01 + GATE.headerY - 0.05) / 2, GATE.z, GATE.laneW - 0.2, GATE.headerY - 0.05 - (Y + 0.01), 0.02); // veil
+  const beamFloorG = fx.group(0x9cc4ff, 2.2);
+  fx.box(beamFloorG, GATE.x, Y + 0.014, GATE.z, GATE.laneW - 0.2, 0.012, 0.06); // bright line where it meets the deck
+  fx.box(beamFloorG, GATE.x, GATE.headerY - 0.06, GATE.z, GATE.laneW - 0.2, 0.012, 0.03); // and where it leaves the sensor slot
+  let frameG = -1;
+  const lineG = [];
+  if (fieldPane) {
+    const fp = fieldPane;
+    frameG = fx.group(red, 1.1);
+    fx.box(frameG, fp.x, fp.y1 - 0.03, (fp.z0 + fp.z1) / 2, 0.03, 0.06, fp.z1 - fp.z0 - 0.06);
+    fx.box(frameG, fp.x, fp.y0 + 0.03, (fp.z0 + fp.z1) / 2, 0.03, 0.06, fp.z1 - fp.z0 - 0.06);
+    for (const z of [fp.z0 + 0.06, fp.z1 - 0.06]) fx.box(frameG, fp.x, (fp.y0 + fp.y1) / 2, z, 0.03, fp.y1 - fp.y0, 0.06);
+    for (let k = 0; k < 4; k++) {
+      const g = fx.group(red, 0.8);
+      fx.box(g, fp.x, fp.y0 + 0.62 + k * 0.6, (fp.z0 + fp.z1) / 2, 0.026, 0.012, fp.z1 - fp.z0 - 0.2);
+      lineG.push(g);
+    }
+  }
+  fx.build(ctx.group);
+
+  const SWEEP_T = 7;
+  const SWEEP_FROM = STRIP.z0 - 1.5;
+  const SWEEP_TO = STRIP.z1 + 1.5;
+  const SCAN_T = 4;
+  const SCAN_RUN = 1.6;
+  const SCAN_FROM = GATE.z + 1.4;
+  const SCAN_TO = GATE.z - 1.4;
+  const screenMats = [null, null, null];
+  const screenBase = [1.1, 1.1, 1.1];
+  return {
+    update(dt, t) {
+      // alert sweep
+      const ph = (t % SWEEP_T) / SWEEP_T;
+      const zh = SWEEP_FROM + ph * (SWEEP_TO - SWEEP_FROM);
+      for (let i = 0; i < N_SEG; i++) {
+        const d = segZ[i] - zh;
+        const k = d > 0 ? gauss(d, 0.32) : Math.exp(d / 1.2);
+        fx.set(segG[i], 0.2 + 1.3 * k);
+      }
+      sweepLight.pos[2] = Math.min(STRIP.z1, Math.max(STRIP.z0, zh));
+      sweepLight.intensity = 9 * clamp01(Math.min(zh - SWEEP_FROM, SWEEP_TO - zh) / 1.5);
+      // scanner gate
+      const sp = (t + 0.8) % SCAN_T;
+      if (sp < SCAN_RUN) {
+        const u = sp / SCAN_RUN;
+        const z = SCAN_FROM + u * (SCAN_TO - SCAN_FROM);
+        const env = Math.sin(Math.PI * u) ** 0.35;
+        fx.translate(beamG, 0, 0, z - GATE.z);
+        fx.translate(beamFloorG, 0, 0, z - GATE.z);
+        fx.set(beamG, 0.16 * env);
+        fx.set(beamFloorG, env);
+        scanLight.pos[2] = z;
+        scanLight.intensity = 7 * env;
+      } else {
+        fx.set(beamG, 0);
+        fx.set(beamFloorG, 0);
+        scanLight.intensity = 0;
+      }
+      // force-field shimmer
+      if (frameG >= 0) {
+        const flick = noise(t, 2.3, 9) > 0.82 ? 1.3 : 1;
+        fx.set(frameG, (0.8 + 0.3 * noise(t, 11, 5)) * flick);
+        for (let k = 0; k < lineG.length; k++) fx.set(lineG[k], 0.45 + 0.7 * noise(t, 5 + k, 20 + k) * flick);
+      }
+      fx.commit();
+      // screen flicker (materials exist once the kit is built, i.e. from the first update on)
+      for (let k = 0; k < 3; k++) {
+        if (!screenMats[k]) {
+          screenMats[k] = ownKitMaterial(kit, SCR[k]);
+          if (screenMats[k]) screenBase[k] = screenMats[k].emissiveIntensity;
+        }
+        const m = screenMats[k];
+        if (!m) continue;
+        const drop = noise(t, 1.1, 40 + k) < 0.08 ? 0.82 : 1;
+        m.emissiveIntensity = screenBase[k] * (0.92 + 0.16 * noise(t, 13 + 2 * k, 30 + k)) * drop;
+      }
+    },
+  };
 }
 
 export default defineRoom({
