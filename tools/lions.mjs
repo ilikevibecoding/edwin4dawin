@@ -236,7 +236,14 @@ async function capture(name, framing, frameIdx = -1) {
       const { camera, vehicle, wildlife } = api.objects;
       const lion = window.__lion;
       lion.root.updateMatrixWorld(true);
-      if (f.seat) {
+      if (f.world) {
+        // a camera planted in the world, so a foot that is planted is a pixel
+        // that does not move. The first walk strip hung the camera off the
+        // lion's root and every critic read the scrolling ground as sliding feet.
+        camera.position.set(f.world.pos[0], f.world.pos[1], f.world.pos[2]);
+        camera.fov = f.fov;
+        camera.lookAt(f.world.look[0], f.world.look[1], f.world.look[2]);
+      } else if (f.seat) {
         // driver's eye, turned toward the lion
         const e = vehicle.root.matrixWorld.elements;
         const xf = (v) => [e[0] * v[0] + e[4] * v[1] + e[8] * v[2] + e[12], e[1] * v[0] + e[5] * v[1] + e[9] * v[2] + e[13], e[2] * v[0] + e[6] * v[1] + e[10] * v[2] + e[14]];
@@ -446,8 +453,19 @@ if (walkFrames > 0) {
     b.dwell = 1e9;
     window.__sim(2.0);
   });
+  // Plant the camera once, in world space, side-on to the path and aimed a
+  // little ahead of where the lion starts, so it walks through the frame and
+  // a stance foot has to hold its pixel while the body passes over it.
+  const world = await page.evaluate(() => {
+    const lion = window.__lion;
+    const b = lion.brain;
+    const c = Math.cos(b.yaw);
+    const s = Math.sin(b.yaw);
+    const w = (v) => [b.pos.x + v[0] * c + v[2] * s, lion.root.position.y + v[1], b.pos.z - v[0] * s + v[2] * c];
+    return { pos: w([6.0, 1.3, 1.1]), look: w([0.0, 0.55, 0.8]) };
+  });
   for (let i = 0; i < walkFrames; i++) {
-    await capture('walk', { pos: [6.0, 1.3, 0.6], look: [0.0, 0.55, 0.3], fov: 30 }, i);
+    await capture('walk', { world, fov: 30 }, i);
     await page.evaluate(() => window.__sim(0.12));
   }
 }
