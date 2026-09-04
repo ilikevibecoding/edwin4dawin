@@ -12,9 +12,18 @@ procedurally in code. No downloaded assets.
 
 ## Run
 
+Requires **Node.js 20.19+ (or 22.12+)** and npm.
+
 ```bash
 npm install
 npm run dev        # http://localhost:5173
+```
+
+Production build (static site, deployable to any web host or CDN):
+
+```bash
+npm run build      # outputs dist/ with relative paths
+npm run preview    # serve the build at http://localhost:4173
 ```
 
 ## Play
@@ -50,6 +59,8 @@ npm run dev        # http://localhost:5173
 | SENTINEL LR-1 | entirely fictional | 3 rounds, longest reach, biggest plume |
 
 ## Tests
+
+One-time setup: `npx playwright install chromium` (downloads the test browser).
 
 ```bash
 npm test           # Playwright: deterministic gameplay + boot + budgets
