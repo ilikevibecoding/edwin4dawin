@@ -164,7 +164,8 @@ export function impWall(frame, length, height, opts = {}) {
       const fr = panelWithHoles(w - GAP, wv1 - wv0, 0.1, [{ x: 0, y: 0, w: w - 0.3, h: wv1 - wv0 - 0.3 }]);
       fitUVs(fr, w, wv1 - wv0);
       frame.add(ribMat, fr, cu, (wv0 + wv1) / 2, 0.02, { color: IMP.trim, uv: "keep" });
-      frame.quad("glass", cu, (wv0 + wv1) / 2, -0.02, w - 0.3, wv1 - wv0 - 0.3);
+      // op.glass: pane material override (e.g. "glassDark" where the view beyond is a bright emitter)
+      frame.quad(op.glass || "glass", cu, (wv0 + wv1) / 2, -0.02, w - 0.3, wv1 - wv0 - 0.3);
       continue;
     }
     if (band) {
