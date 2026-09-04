@@ -45,7 +45,7 @@ const planetFrag = /* glsl */ `
     // atmosphere seen through a thickening column toward the limb: wide, bright and blue-shifted
     float fres = pow(1.0 - ndv, 3.5);
     // faint night-side ambient so the dark hemisphere still reads as a sphere
-    vec3 col = alb * (day * brightness + 0.035 * vec3(0.55, 0.65, 1.0));
+    vec3 col = alb * (day * brightness + 0.14 * vec3(0.55, 0.65, 1.0));
     // terminator warmth
     float term = smoothstep(-0.2, 0.15, ndl) * (1.0 - smoothstep(0.15, 0.55, ndl));
     col += vec3(0.9, 0.45, 0.2) * term * 0.12;
@@ -57,7 +57,7 @@ const planetFrag = /* glsl */ `
     col *= 1.0 - 0.38 * pow(1.0 - ndv, 1.6);
     // haze toward the limb is capped below 1.0 so a planet filling a porthole never goes white;
     // only the last few degrees of the limb get the additive edge that blooms
-    vec3 rim = atmo * (0.3 + 0.7 * lit) * min(atmoStrength * 0.55, 0.95);
+    vec3 rim = atmo * (0.45 + 0.55 * lit) * min(atmoStrength * 0.55, 0.95);
     col = mix(col, rim, fres * 0.35);
     col += atmo * fres * fres * fres * atmoStrength * 0.6 * lit;
     gl_FragColor = vec4(col, 1.0);
@@ -85,7 +85,7 @@ const atmoFrag = /* glsl */ `
     vec3 nr = normalize(n - v * dot(n, v));
     float day = smoothstep(-0.55, 0.15, dot(nr, sunDir));
     // additive blend multiplies by alpha, so keep it at 1 or the falloff gets squared into a hairline
-    gl_FragColor = vec4(atmo * glow * strength * (0.15 + 0.85 * day), 1.0);
+    gl_FragColor = vec4(atmo * glow * strength * (0.4 + 0.6 * day), 1.0);
   }
 `;
 
