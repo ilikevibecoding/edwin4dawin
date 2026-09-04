@@ -316,6 +316,8 @@ export function build(kit, ctx, room, lib) {
       const xe = s * (PIT.x0 + run * (i + 1));
       const top = y0 - rise * (i + 1);
       box("metal", [xe - s * 0.03, top - 0.012, STAIR.z0 + 0.02], [xe, top + 0.004, STAIR.z1 - 0.02], { color: P.steel, texel: 2 });
+      // amber tread light behind each nosing so the descent reads in the dark
+      box("emitAmber", [xe - s * 0.065, top + 0.004, STAIR.z0 + 0.15], [xe - s * 0.04, top + 0.014, STAIR.z1 - 0.15], { uv: "keep" });
     }
     // open side of the stair: sloped stringer, handrail with posts, collider
     const L = Math.hypot(STAIR.run, PIT.depth);
@@ -556,11 +558,11 @@ export function build(kit, ctx, room, lib) {
   for (const z of [478, 484.5, 491]) ctx.lights.cool.push(pointLight(0xdfe8ff, 18, 26, [0, yTop - 0.7, z]));
   for (const s of [-1, 1]) {
     ctx.lights.cool.push(pointLight(0xdfe8ff, 14, 24, [s * 7, yTop - 0.9, z0 + SILL_DEPTH + 1.3]));
-    ctx.lights.cool.push(pointLight(0xd8e2ff, 12, 22, [s * 15.0, y0 + 4.7, 483]));
+    ctx.lights.cool.push(pointLight(0xd8e2ff, 14, 22, [s * 15.0, y0 + 4.7, 483]));
     const fam = s > 0 ? "warm" : "teal";
     const col = s > 0 ? 0xff5a3a : 0x4a8dff;
-    ctx.lights[fam].push(pointLight(col, 9, 13, [s * 8.6, pitY + 1.9, 484]));
-    ctx.lights[fam].push(pointLight(col, 9, 13, [s * 11.5, pitY + 1.9, 477.5]));
+    ctx.lights[fam].push(pointLight(col, 12, 14, [s * 8.6, pitY + 1.9, 485]));
+    ctx.lights[fam].push(pointLight(col, 12, 14, [s * 11.5, pitY + 1.9, 477.5]));
   }
   ctx.lights.teal.push(pointLight(0x66b6ff, 3, 8, [holoX, plat.y + 1.6, holoZ]));
   // key light: cool space light through the windows, one spot parked well outside the glass and aimed
