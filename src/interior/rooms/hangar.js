@@ -212,6 +212,13 @@ function ensureMaterials(ctx) {
     m.hg_cabBack = m.emitWhiteSoft.clone();
     m.hg_cabBack.emissiveIntensity = 0.8;
   }
+  // the cab ceiling is what the deck actually sees through the canted glass (the sightline from the
+  // apron clears the parapet only near the roof), so it is a soft warm lit surface, not black
+  if (!m.hg_cabCeil) {
+    m.hg_cabCeil = m.emitWhiteSoft.clone();
+    m.hg_cabCeil.emissive = new THREE.Color("#ffd6a4");
+    m.hg_cabCeil.emissiveIntensity = 0.5;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -866,6 +873,7 @@ function towerAndMezzanine(kit, ctx, B0) {
   // the cab reads as a lit room through the canted glass: two wide warm ceiling panels (what the deck
   // sees first, looking up through the glass), a lit band along the back wall at desk height that
   // silhouettes the consoles and chairs, and a row of status screens facing the bay behind the glass
+  kit.box("hg_cabCeil", 0, T.y1 - 0.03, (zt + 0.3 + T.z1 - 0.2) / 2, T.x1 - T.x0 - 0.6, 0.02, T.z1 - 0.2 - (zt + 0.3), { uv: "keep" });
   for (const z of [T.z0 + 2.4, T.z0 + 5.8]) {
     kit.box("paintedMetal", 0, T.y1 - 0.06, z, 20, 0.1, 1.4, { color: PALETTE.impBlack, texel: 2 });
     kit.box("hg_cabLight", 0, T.y1 - 0.115, z, 19.4, 0.03, 1.0, { uv: "keep" });
