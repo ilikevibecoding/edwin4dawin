@@ -13,6 +13,7 @@ import * as THREE from "three";
 import { rng } from "../../kit.js";
 import { PALETTE } from "../../materials.js";
 import { WALL_T } from "../doors/helper.js";
+import { stencilText, TEXT_MAT } from "./text.js";
 
 // Shared material keys (§10). One key = one draw call for the module.
 export const MAT = Object.freeze({
@@ -95,6 +96,8 @@ export function spansMinus(L, ranges, pad = 0) {
  * @param {number[]} [o.stripYs]  centre heights of emitWhite light strips ([2.1])
  * @param {string} [o.tint]       palette name for panels ("impWhite"); tint2 for the darker variant
  * @param {number} [o.greebles]   fraction of eligible cells that get a vent / junction box / placard
+ * @param {number[][]} [o.clear]  [[a, b], …] world spans along the wall kept free of greebles (plain panels
+ *                                only) — put your signs, boards and terminals in them
  * @param {boolean} [o.collide]   push AABB colliders for the wall body below head height
  * @returns {{length:number, holes:object[], slabs:object[]}}
  */
@@ -115,11 +118,16 @@ export function impWall(kit, o) {
     tint = "impWhite",
     tint2 = "impGrey",
     greebles = 0.08,
+    stripGaps = [],
+    clear = [],
     collide = true,
     tag = "wall",
     texel = 0.5,
   } = o;
   if (plane !== "x" && plane !== "z") throw new Error("impWall: plane must be 'x' or 'z'");
+  for (const c of clear) if (!Array.isArray(c) || c.length !== 2 || typeof c[0] !== "number" || typeof c[1] !== "number") throw new Error(`impWall: clear spans must be [a, b] pairs (${JSON.stringify(c)})`);
+  // greeble-free cells: any cell overlapping a clear span (in the wall's local u)
+  const inClear = (u0, u1) => clear.some(([a, b]) => Math.min(a, b) - a0 < u1 && Math.max(a, b) - a0 > u0);
   if (inward !== 1 && inward !== -1) throw new Error("impWall: inward must be 1 or -1");
   const along = plane === "z" ? 0 : 2;
   const norm = plane === "z" ? 2 : 0;
@@ -278,8 +286,8 @@ export function impWall(kit, o) {
         continue;
       }
       const big = cw > 0.85 && ch > 0.6;
-      const r = rand();
-      if (big && greebles > 0 && r < greebles) {
+      const r = rand(); // drawn for every cell so the pattern elsewhere does not shift with the clear list
+      if (big && greebles > 0 && r < greebles && !inClear(u0, u1)) {
         const kind = rand();
         if (kind < 0.4 && cv > 1.6) {
           // vent: darker panel, recessed grille, steel slats
@@ -311,13 +319,18 @@ export function impWall(kit, o) {
           for (const cy of [bv + 0.45, Math.min(top - 0.2, bv + 1.4)]) box(MAT.dark, cx - 0.04, cx + 0.04, cy - 0.02, cy + 0.02, -0.075, 0, { color: col("impDark") });
           continue;
         }
-        // placard: small black plate with a red status dot
+        // service placard: small black plate, stencilled service tag (real text when the module registered
+        // the text materials; a plain plate otherwise — never text bars), red status dot
         panel(u0, u1, v0, v1, panelTint);
         const pu = cu;
         const pv = cv + 0.1;
         box(MAT.dark, pu - 0.2, pu + 0.2, pv - 0.09, pv + 0.09, -0.012, 0, { color: col("impBlack"), texel: 2 });
-        for (let k = 0; k < 3; k++) box(MAT.panel, pu - 0.15, pu + 0.08, pv + 0.045 - k * 0.045, pv + 0.06 - k * 0.045, -0.015, -0.012, { color: col("impGrey"), uv: "keep" });
         box(MAT.red, pu + 0.12, pu + 0.15, pv - 0.055, pv - 0.025, -0.016, -0.012);
+        const tag = `SVC ${10 + Math.floor(rand() * 90)}`;
+        if (kit.materials && kit.materials[TEXT_MAT]) {
+          const normal = plane === "z" ? [0, 0, inward] : [inward, 0, 0];
+          stencilText(kit, { text: tag, pos: point(pu - 0.03, pv + 0.01, -0.013), normal, size: 0.07, color: "white", tint: 0x9a9ea6 });
+        }
         continue;
       }
       // plain panel variants
@@ -339,12 +352,18 @@ export function impWall(kit, o) {
     }
   }
 
-  // ---- light strips: continuous per span, broken at holes that cross the band
+  // ---- light strips: continuous per span, broken at holes that cross the band and at stripGaps
+  // (world coords along the wall, e.g. behind a status board); a gap gets a plain panel piece instead
+  const gaps = stripGaps.map(([g0, g1]) => [Math.max(0, Math.min(g0, g1) - a0), Math.min(L, Math.max(g0, g1) - a0)]).filter(([g0, g1]) => g1 - g0 > 0.03);
   for (const sy of bands) {
     const cut = ops.filter((op) => op.v1 > sy - 0.08 && op.v0 < sy + 0.08).map((op) => [op.u0, op.u1]);
-    for (const [s0, s1] of spansMinus(L, cut)) {
+    for (const [s0, s1] of spansMinus(L, [...cut, ...gaps])) {
       box(MAT.dark, s0, s1, sy - 0.08, sy + 0.08, 0.01, 0.06, { color: col("impBlack"), texel: 2 });
       box(MAT.strip, s0 + 0.02, s1 - 0.02, sy - STRIP_H / 2, sy + STRIP_H / 2, -0.004, 0.012);
+    }
+    for (const [g0, g1] of gaps) {
+      if (ops.some((op) => op.v1 > sy - 0.08 && op.v0 < sy + 0.08 && op.u0 < g1 && op.u1 > g0)) continue;
+      panel(g0, g1, sy - 0.08, sy + 0.08, panelTint);
     }
   }
   return { length: L, holes: ops, slabs, cells };
@@ -362,7 +381,8 @@ export function impFloorSlab(kit, o) {
 /**
  * Ceiling with black seams and recessed light channels. `y` is the visible (lower) face; the slab
  * occupies [y, y + thick].
- * channels: [{ axis:"x"|"z", at, width=0.6, c0, c1, fixtureAt:[...] | spacing, fixtureLen=2.4, fins=true }]
+ * channels: [{ axis:"x"|"z", at, width=0.6, c0, c1, fixtureAt:[...] | spacing, fixtureLen=2.4, fixtureMat=emitCoolSoft, stripW, fins=true }]
+ * Every channel is lit by housed fixtures (impFixture); fixtureMat = "emitBlue" gives a coloured channel.
  */
 export function impCeiling(kit, o) {
   const { x0, x1, z0, z1, y, thick = 0.12, panelW = 1.2, tint = "impGrey", seed = 1, channels = [], texel = 0.5 } = o;
@@ -443,31 +463,44 @@ export function impCeiling(kit, o) {
     }
     if (!centres) continue;
     const fl = Math.min(s.fixtureLen ?? 2.4, len - 0.3);
-    const w = s.width;
     for (const c of centres) {
       const c0 = Math.max(start + 0.1, c - fl / 2);
       const c1 = Math.min(start + len - 0.1, c + fl / 2);
       if (c1 - c0 < 0.3) continue;
-      const mm = (a0, a1, yy0, yy1, cross0, cross1) => {
-        if (s.axis === "x") return [[a0, yy0, cross0], [a1, yy1, cross1]];
-        return [[cross0, yy0, a0], [cross1, yy1, a1]];
-      };
-      const mid = s.at;
-      let [mn, mx] = mm(c0, c1, y + 0.05, y + 0.09, mid - w / 2 + 0.08, mid + w / 2 - 0.08);
-      kit.boxMM(MAT.dark, mn, mx, { color: col("impDark"), texel: 1 });
-      [mn, mx] = mm(c0 + 0.05, c1 - 0.05, y + 0.03, y + 0.05, mid - w / 2 + 0.13, mid + w / 2 - 0.13);
-      kit.boxMM(MAT.diffuser, mn, mx, { uv: "keep" });
-      for (const e of [c0, c1]) {
-        [mn, mx] = mm(e - 0.03, e + 0.03, y + 0.01, y + 0.09, mid - w / 2 + 0.05, mid + w / 2 - 0.05);
-        kit.boxMM(MAT.dark, mn, mx, { color: black });
-      }
-      if (s.fins !== false) {
-        for (let f = c0 + 0.25; f < c1 - 0.1; f += 0.3) {
-          [mn, mx] = mm(f - 0.008, f + 0.008, y + 0.015, y + 0.03, mid - w / 2 + 0.08, mid + w / 2 - 0.08);
-          kit.boxMM(MAT.dark, mn, mx, { color: black });
-        }
-      }
+      impFixture(kit, { axis: s.axis, at: s.at, c0, c1, y, width: s.width - 0.1, mat: s.fixtureMat, fins: s.fins !== false, stripW: s.stripW });
     }
+  }
+}
+
+/**
+ * Housed ceiling fixture: a dark housing (side rails + end caps) recessed into a light channel, black
+ * back plate, a narrow emissive strip well inside it and black louvre fins across the slot — so the
+ * emitter reads as a fitting, not a bare glowing rectangle. `y` is the ceiling face; the housing occupies
+ * y + 0.02 .. y + 0.10 (inside a 0.12 slab's channel). axis = along direction, at = centre across.
+ */
+export function impFixture(kit, o) {
+  const { axis, at, c0, c1, y, width = 0.5, mat = MAT.diffuser, fins = true, stripW = 0.14, finEvery = 0.15 } = o;
+  const black = col("impBlack");
+  const dark = col("impDark");
+  const mm = (a0, a1, yy0, yy1, cross0, cross1) => (axis === "x" ? [[a0, yy0, cross0], [a1, yy1, cross1]] : [[cross0, yy0, a0], [cross1, yy1, a1]]);
+  const put = (m, a, b, c, d, e, f, opts) => {
+    const [mn, mx] = mm(a, b, c, d, e, f);
+    kit.boxMM(m, mn, mx, opts);
+  };
+  const hw = width / 2;
+  const hb = y + 0.02;
+  const ht = y + 0.1;
+  put(MAT.dark, c0, c1, hb, ht, at - hw, at - hw + 0.04, { color: dark, texel: 1 });
+  put(MAT.dark, c0, c1, hb, ht, at + hw - 0.04, at + hw, { color: dark, texel: 1 });
+  put(MAT.dark, c0, c0 + 0.04, hb, ht, at - hw, at + hw, { color: dark, texel: 1 });
+  put(MAT.dark, c1 - 0.04, c1, hb, ht, at - hw, at + hw, { color: dark, texel: 1 });
+  put(MAT.dark, c0 + 0.04, c1 - 0.04, ht - 0.02, ht - 0.005, at - hw + 0.04, at + hw - 0.04, { color: black, texel: 1 });
+  put(mat, c0 + 0.08, c1 - 0.08, ht - 0.04, ht - 0.02, at - stripW / 2, at + stripW / 2, { uv: "keep" });
+  // dark reflector cheeks either side of the strip (they catch the glow and shade it toward the edges)
+  put(MAT.dark, c0 + 0.04, c1 - 0.04, ht - 0.045, ht - 0.02, at - hw + 0.04, at - stripW / 2 - 0.02, { color: col("impMid"), texel: 1 });
+  put(MAT.dark, c0 + 0.04, c1 - 0.04, ht - 0.045, ht - 0.02, at + stripW / 2 + 0.02, at + hw - 0.04, { color: col("impMid"), texel: 1 });
+  if (fins) {
+    for (let f = c0 + 0.1; f < c1 - 0.06; f += finEvery) put(MAT.dark, f - 0.004, f + 0.004, hb + 0.005, ht - 0.045, at - hw + 0.04, at + hw - 0.04, { color: black });
   }
 }
 
@@ -477,7 +510,10 @@ export function impCeiling(kit, o) {
  * across; y0 = floor; h = ceiling face height above the floor.
  */
 export function impRib(kit, o) {
-  const { axis, at, c0, c1, y0, h, depth = 0.25, proud = 0.18, collide = true, tag = "rib", index = 0, indicator = true } = o;
+  const { axis, at, c0, c1, y0, h, depth = 0.25, proud = 0.18, collide = true, tag = "rib", index = 0, indicator = true, accent = null } = o;
+  // indicator colour: alternating blue/red by default; with an accent (corridor identity) the accent on
+  // every rib but each fourth, which stays red
+  const indMat = accent ? (index % 4 === 3 ? MAT.red : accent) : index % 2 === 0 ? MAT.blue : MAT.red;
   const dark = col("impDark");
   const black = col("impBlack");
   const mm = (a0, a1, yy0, yy1, cr0, cr1) => (axis === "x" ? [[a0, yy0, cr0], [a1, yy1, cr1]] : [[cr0, yy0, a0], [cr1, yy1, a1]]);
@@ -500,7 +536,7 @@ export function impRib(kit, o) {
     [c1 - proud, -1],
   ]) {
     put(MAT.steel, at - 0.03, at + 0.03, y0 + 0.5, y0 + h - proud - 0.3, cin, cin + sgn * 0.015, { color: col("impGrey"), texel: 2 });
-    if (indicator) put(index % 2 === 0 ? MAT.blue : MAT.red, at - 0.02, at + 0.02, y0 + 1.5, y0 + 1.58, cin, cin + sgn * 0.02);
+    if (indicator) put(indMat, at - 0.02, at + 0.02, y0 + 1.5, y0 + 1.58, cin, cin + sgn * 0.02);
     put(MAT.dark, a0 - 0.01, a1 + 0.01, y0 + 0.4, y0 + 0.46, cin - sgn * 0.02, cin + sgn * 0.01, { color: black });
   }
   for (const side of [a0, a1]) {
@@ -517,45 +553,75 @@ export function impRib(kit, o) {
   }
 }
 
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
 /**
- * Handrail at 1.02 m (§11): steel tube on brackets, plus optional mid rail and posts (balustrade).
- * Axis-aligned run from a to b (world [x,z]) at floor height y0. side: +1|-1 offsets brackets toward
- * the wall (wall-mounted) or builds posts (balustrade) when wall === false.
+ * Handrail at 1.02 m (§11). Axis-aligned run from a to b (world [x, z]); flat at floor height y0 or
+ * sloped when y1 differs (stair flights — posts stay vertical, rails and infill follow the slope).
+ *  wall: true  → steel tube on L-brackets with wall plates (wallSide = [dx, dz] toward the wall)
+ *  wall: false → balustrade: square newel posts (with base plates and caps rising above the rail), top
+ *                rail, mid rail, and `infill` "panel" (dark sheet 0.12..0.84 m) | "none"; kick plate
  */
 export function impRail(kit, o) {
-  const { a, b, y0, height = 1.02, wall = true, wallSide = [0, 1], mid = true, collide = true, tag = "rail", postEvery = 1.4 } = o;
+  const { a, b, y0, y1 = y0, height = 1.02, wall = true, wallSide = [0, 1], mid = true, infill = wall ? "none" : "panel", postEvery = 1.4, newel = 0.07, collide = true, tag = "rail" } = o;
   const dx = b[0] - a[0];
   const dz = b[1] - a[1];
+  const dy = y1 - y0;
   const L = Math.hypot(dx, dz);
   if (L < 0.05) return;
   const axis = Math.abs(dx) > Math.abs(dz) ? "x" : "z";
-  const cx = (a[0] + b[0]) / 2;
-  const cz = (a[1] + b[1]) / 2;
+  const along = new THREE.Vector3(dx, dy, dz);
+  const slopeLen = along.length();
+  const q = new THREE.Quaternion().setFromUnitVectors(Y_AXIS, along.clone().normalize());
+  const k = dy / L; // rise per horizontal metre
   const steel = col("impGrey");
   const dark = col("impDark");
-  kit.cyl(MAT.steel, cx, y0 + height, cz, 0.022, L, axis, { color: steel, segments: 10, texel: 2 });
-  if (mid) kit.cyl(MAT.steel, cx, y0 + height * 0.55, cz, 0.016, L, axis, { color: steel, segments: 8, texel: 2 });
+  const black = col("impBlack");
+  const at = (t, up = 0) => [a[0] + dx * t, y0 + dy * t + up, a[1] + dz * t];
+  const tube = (r, up, len) => kit.add(MAT.steel, new THREE.CylinderGeometry(r, r, len, 10), { pos: at(0.5, up), quat: q, color: steel, uv: "scale", uvScale: [2 * Math.PI * r * 2, len * 2] });
+  // a box lying along the run whose vertical edges stay vertical on a slope (sheared, not rotated)
+  const shearedBox = (t0, t1, v0, v1, thick, mat, opts) => {
+    const segL = L * (t1 - t0);
+    if (segL < 0.03) return;
+    const g = new THREE.BoxGeometry(axis === "x" ? segL : thick, v1 - v0, axis === "x" ? thick : segL);
+    if (Math.abs(k) > 1e-6) {
+      const m = new THREE.Matrix4();
+      if (axis === "x") m.set(1, 0, 0, 0, k * Math.sign(dx), 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+      else m.set(1, 0, 0, 0, 0, 1, k * Math.sign(dz), 0, 0, 0, 1, 0, 0, 0, 0, 1);
+      g.applyMatrix4(m); // positions sheared, normals via the normal matrix; kit.worldUVs needs them present
+      g.computeVertexNormals();
+    }
+    kit.add(mat, g, { pos: at((t0 + t1) / 2, (v0 + v1) / 2), ...opts });
+  };
+
+  tube(0.024, height, slopeLen + (wall ? 0 : newel));
+  if (mid) tube(0.014, height * 0.55, slopeLen - (wall ? 0.1 : newel));
   const n = Math.max(2, Math.round(L / postEvery) + 1);
   for (let i = 0; i < n; i++) {
-    const t = Math.min(0.97, Math.max(0.03, i / (n - 1)));
-    const px = a[0] + dx * t;
-    const pz = a[1] + dz * t;
+    const t = i / (n - 1);
+    const [px, py, pz] = at(t);
     if (wall) {
-      const wx = px + wallSide[0] * 0.05;
-      const wz = pz + wallSide[1] * 0.05;
-      kit.box(MAT.dark, wx, y0 + height - 0.03, wz, axis === "x" ? 0.05 : 0.1, 0.05, axis === "x" ? 0.1 : 0.05, { color: dark });
-      kit.box(MAT.dark, wx, y0 + height - 0.08, wz, 0.05, 0.08, 0.05, { color: dark });
+      const wx = px + wallSide[0] * 0.045;
+      const wz = pz + wallSide[1] * 0.045;
+      kit.box(MAT.dark, wx, py + height - 0.035, wz, axis === "x" ? 0.045 : 0.11, 0.035, axis === "x" ? 0.11 : 0.045, { color: dark });
+      kit.box(MAT.dark, px, py + height - 0.06, pz, 0.045, 0.07, 0.045, { color: dark });
+      kit.box(MAT.dark, px + wallSide[0] * 0.095, py + height - 0.05, pz + wallSide[1] * 0.095, axis === "x" ? 0.09 : 0.02, 0.13, axis === "x" ? 0.02 : 0.09, { color: black });
     } else {
-      kit.box(MAT.dark, px, y0 + height / 2, pz, 0.05, height, 0.05, { color: dark, texel: 2 });
-      kit.box(MAT.dark, px, y0 + 0.03, pz, 0.12, 0.06, 0.12, { color: dark });
+      kit.box(MAT.dark, px, py + (height + 0.09) / 2, pz, newel, height + 0.09, newel, { color: dark, texel: 2 });
+      kit.box(MAT.dark, px, py + 0.02, pz, newel + 0.07, 0.04, newel + 0.07, { color: black });
+      kit.box(MAT.dark, px, py + height + 0.105, pz, newel + 0.03, 0.03, newel + 0.03, { color: black });
+      kit.box(MAT.steel, px, py + height + 0.125, pz, newel - 0.02, 0.01, newel - 0.02, { color: steel });
     }
   }
   if (!wall) {
-    // kick plate along the foot of a balustrade
-    kit.box(MAT.dark, cx, y0 + 0.06, cz, axis === "x" ? L : 0.03, 0.12, axis === "x" ? 0.03 : L, { color: col("impBlack"), texel: 2 });
+    const tn = (newel / 2) / L;
+    if (infill === "panel") {
+      for (let i = 0; i < n - 1; i++) shearedBox(i / (n - 1) + tn, (i + 1) / (n - 1) - tn, 0.12, 0.84, 0.02, MAT.dark, { color: dark, texel: 1 });
+    }
+    shearedBox(tn, 1 - tn, 0, 0.1, 0.03, MAT.dark, { color: black, texel: 2 });
   }
   if (collide) {
     const hw = wall ? 0.08 : 0.06;
-    kit.collider([Math.min(a[0], b[0]) - (axis === "x" ? 0 : hw), y0, Math.min(a[1], b[1]) - (axis === "x" ? hw : 0)], [Math.max(a[0], b[0]) + (axis === "x" ? 0 : hw), y0 + height + 0.05, Math.max(a[1], b[1]) + (axis === "x" ? hw : 0)], tag);
+    kit.collider([Math.min(a[0], b[0]) - (axis === "x" ? 0 : hw), Math.min(y0, y1), Math.min(a[1], b[1]) - (axis === "x" ? hw : 0)], [Math.max(a[0], b[0]) + (axis === "x" ? 0 : hw), Math.max(y0, y1) + height + 0.1, Math.max(a[1], b[1]) + (axis === "x" ? hw : 0)], tag);
   }
 }

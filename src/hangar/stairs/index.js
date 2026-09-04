@@ -1,12 +1,17 @@
 // d4-stairs — Deck 4 stairwell: switchback stair from the lift lobby (-72) up to the hangar flight-control
-// tower (-60). Six flights of 11 risers (0.1818) × 10 treads (0.28) around a central light spine, near
-// landings against the door wall (z = 181), far landings overlooking a machinery alcove at the back.
-// Until the player controller can step, two lit sign plates teleport foot ↔ top (with a fade); their
-// "stair-stop" colliders and the interactables go away when stepping lands.
+// tower (-60). Six flights of 11 risers (0.1818) × 10 treads (0.28) around an open well, near landings
+// against the door wall (z = 181), far landings overlooking a machinery alcove at the back.
+// Every landing is a panelled, lit ceiling for the level below (housed light channel across it), the
+// flights have panelled soffits lit by a housed strip, metal treads with steel nosings on painted risers,
+// visible stringers, and balustrades of square newels, top/mid rails and panel infill; wall handrails on
+// brackets; wall strips at 2.1 m above each landing. Chevrons appear only on the first and last nosing of
+// each flight. Until the player controller can step, two lit wall plaques beside the flights teleport
+// foot ↔ top (with a fade); their "stair-stop" collider and the interactables go away when stepping lands.
 import * as THREE from "three";
 import { doorOpening } from "../../systems/doors/helper.js";
 import { impWall, impCeiling, impFloorSlab, impRail, MAT, col } from "../../systems/corridor/imperial.js";
-import { Placer, impLocker, makeSignPlate } from "../../systems/corridor/props.js";
+import { impLocker, makeSignPlate, deckPlacard, sectionMarker } from "../../systems/corridor/props.js";
+import { textMaterials, stencilText } from "../../systems/corridor/text.js";
 
 const FLOOR = -72;
 const TOP = -60;
@@ -32,7 +37,6 @@ const DOORS = [
 ];
 
 const X_AXIS = new THREE.Vector3(1, 0, 0);
-const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 export default {
   id: "d4-stairs",
@@ -45,6 +49,7 @@ export default {
   lift: null,
   spawn: { pos: [7, FLOOR, 184], yaw: 180 },
   apertures: [],
+  materials: textMaterials,
   views: {
     "d4-stairs-foot": { pos: [7, FLOOR, 182.3], yaw: 180, pitch: 9 },
     "d4-stairs-well": { pos: [9.0, -64, 182.6], yaw: 155, pitch: 8 },
@@ -57,39 +62,68 @@ export default {
     const dark = col("impDark");
     const black = col("impBlack");
     const mid = col("impMid");
+    const grey = col("impGrey");
+    const steel = col("impGrey");
 
     // ---- shell
     impFloorSlab(kit, { x0: B.min[0], x1: B.max[0], z0: B.min[2], z1: B.max[2], y: FLOOR, tint: "impDark" });
     // wall strips sit 2.1 m above the landing they serve: near landings (-72/-68/-64/-60) on the door wall and
-    // the near third of the side walls, far landings (-70/-66/-62) on the back wall and the far third. The
-    // flight zone between them gets sloped strips (below) instead.
+    // the near third of the side walls, far landings (-70/-66/-62) on the back wall and the far third.
     const nearStrips = [FLOOR, -68, -64, TOP].map((lvl) => lvl - FLOOR + 2.1);
     const farStrips = [-70, -66, -62].map((lvl) => lvl - FLOOR + 2.1);
-    const wall = { y0: FLOOR, h: CEIL - 0.12 - FLOOR, holes, tint: "impWhite", tint2: "impGrey", greebles: 0.05 };
-    impWall(kit, { ...wall, plane: "z", at: B.min[2], inward: 1, a0: B.min[0], a1: B.max[0], stripYs: nearStrips, seed: seed + 1, tag: "stairs-fwd" });
+    const wall = { y0: FLOOR, h: CEIL - 0.12 - FLOOR, holes, tint: "impWhite", tint2: "impGrey", greebles: 0.04 };
+    impWall(kit, { ...wall, plane: "z", at: B.min[2], inward: 1, a0: B.min[0], a1: B.max[0], stripYs: nearStrips, seed: seed + 1, tag: "stairs-fwd", greebles: 0 });
     impWall(kit, { ...wall, plane: "z", at: B.max[2], inward: -1, a0: B.min[0], a1: B.max[0], stripYs: farStrips, seed: seed + 2, tag: "stairs-aft" });
-    for (const [at, inward, name, s] of [[B.min[0], 1, "west", 3], [B.max[0], -1, "east", 6]]) {
-      impWall(kit, { ...wall, plane: "x", at, inward, a0: B.min[2], a1: RUN0, stripYs: nearStrips, seed: seed + s, tag: `stairs-${name}` });
+    for (const [at, inward, name, s] of [
+      [B.min[0], 1, "west", 3],
+      [B.max[0], -1, "east", 6],
+    ]) {
+      impWall(kit, { ...wall, plane: "x", at, inward, a0: B.min[2], a1: RUN0, stripYs: nearStrips, greebles: 0, seed: seed + s, tag: `stairs-${name}` });
       impWall(kit, { ...wall, plane: "x", at, inward, a0: RUN0, a1: RUN1, stripYs: [], greebles: 0, seed: seed + s + 1, tag: `stairs-${name}` });
-      impWall(kit, { ...wall, plane: "x", at, inward, a0: RUN1, a1: B.max[2], stripYs: farStrips, seed: seed + s + 2, tag: `stairs-${name}` });
+      impWall(kit, { ...wall, plane: "x", at, inward, a0: RUN1, a1: B.max[2], stripYs: farStrips, greebles: 0.03, clear: [[189.1, 190.1]], seed: seed + s + 2, tag: `stairs-${name}` }); // level markers at z 189.6
     }
-    impCeiling(kit, { x0: B.min[0], x1: B.max[0], z0: B.min[2], z1: B.max[2], y: CEIL - 0.12, seed: seed + 5, channels: [{ axis: "z", at: 7, width: 0.6, c0: 182, c1: 192, fixtureAt: [184, 187.2, 190.4], fixtureLen: 2.2 }] });
+    // lit ceiling plane: the corridor's channel language with housed fixtures, plus a second channel
+    impCeiling(kit, {
+      x0: B.min[0],
+      x1: B.max[0],
+      z0: B.min[2],
+      z1: B.max[2],
+      y: CEIL - 0.12,
+      seed: seed + 5,
+      channels: [
+        { axis: "z", at: 7, width: 0.6, c0: 182, c1: 192, fixtureAt: [183.6, 187.0, 190.4], fixtureLen: 2.4, fixtureMat: MAT.strip },
+        { axis: "x", at: 185.2, width: 0.5, c0: X0 + 0.4, c1: X1 - 0.4, fixtureAt: [7], fixtureLen: 3.6, fixtureMat: MAT.strip, stripW: 0.1 },
+      ],
+    });
 
-    // ---- landings: near (z 181.16..185.5) at -68/-64/-60, far (z 188.3..190.8) at -70/-66/-62
-    const landing = (z0, z1, lvl, edgeZ) => {
-      kit.boxMM(MAT.floor, [X0 - 0.01, lvl - 0.15, z0], [X1 + 0.01, lvl, z1], { color: mid, texel: 0.5 });
-      kit.boxMM(MAT.dark, [X0 - 0.01, lvl - 0.19, z0], [X1 + 0.01, lvl - 0.15, z1], { color: black, texel: 1 });
-      // fascia + hazard nosing on the open edge (toward the flights)
-      const e0 = Math.min(edgeZ, edgeZ + (edgeZ > z0 ? -0.05 : 0.05));
-      kit.boxMM("hazard", [X0, lvl, e0], [X1, lvl + 0.006, e0 + 0.05], { texel: 4 });
-      kit.boxMM(MAT.dark, [X0 - 0.01, lvl - 0.28, edgeZ > z0 ? edgeZ - 0.06 : edgeZ], [X1 + 0.01, lvl - 0.15, edgeZ > z0 ? edgeZ : edgeZ + 0.06], { color: dark, texel: 1 });
+    // ---- landings: near (z 181.16..185.5) at -68/-64/-60, far (z 188.3..190.8) at -70/-66/-62. Each is a
+    // panelled ceiling for the level below with a housed light channel across it, a deck-plate top, a dark
+    // fascia and a steel nosing on the open edge.
+    const landing = (z0, z1, lvl, edgeZ, k) => {
+      impCeiling(kit, {
+        x0: X0 - 0.01,
+        x1: X1 + 0.01,
+        z0,
+        z1,
+        y: lvl - 0.22,
+        thick: 0.2,
+        tint: "impGrey",
+        seed: seed + 20 + k,
+        channels: [{ axis: "x", at: (z0 + z1) / 2, width: 0.5, c0: X0 + 0.45, c1: X1 - 0.45, fixtureAt: [7], fixtureLen: Math.min(3.4, X1 - X0 - 1.3), fixtureMat: MAT.strip, stripW: 0.12 }],
+      });
+      kit.boxMM(MAT.floor, [X0 - 0.01, lvl - 0.02, z0], [X1 + 0.01, lvl, z1], { color: mid, texel: 0.5 });
+      const fz0 = edgeZ > z0 ? edgeZ - 0.06 : edgeZ;
+      kit.boxMM(MAT.dark, [X0 - 0.01, lvl - 0.24, fz0], [X1 + 0.01, lvl - 0.02, fz0 + 0.06], { color: dark, texel: 1 });
+      kit.boxMM(MAT.steel, [X0, lvl, edgeZ > z0 ? edgeZ - 0.04 : edgeZ], [X1, lvl + 0.004, edgeZ > z0 ? edgeZ : edgeZ + 0.04], { color: steel });
+      kit.boxMM(MAT.dark, [X0, lvl - 0.005, edgeZ > z0 ? edgeZ - 0.2 : edgeZ + 0.04], [X1, lvl + 0.002, edgeZ > z0 ? edgeZ - 0.04 : edgeZ + 0.2], { color: black });
     };
-    for (const lvl of [-68, -64, -60]) landing(Z0, RUN0, lvl, RUN0);
-    for (const lvl of [-70, -66, -62]) landing(RUN1, ALCOVE, lvl, RUN1);
+    [-68, -64, -60].forEach((lvl, k) => landing(Z0, RUN0, lvl, RUN0, k));
+    [-70, -66, -62].forEach((lvl, k) => landing(RUN1, ALCOVE, lvl, RUN1, k + 3));
 
     // ---- flights (odd = west side rising +z, even = east side rising -z)
-    const slopeLen = Math.hypot(RUN1 - RUN0, RISE);
-    const theta = Math.atan2(RISE, RUN1 - RUN0);
+    const run = RUN1 - RUN0;
+    const slopeLen = Math.hypot(run, RISE);
+    const theta = Math.atan2(RISE, run);
     for (let k = 1; k <= 6; k++) {
       const base = FLOOR + (k - 1) * RISE;
       const west = k % 2 === 1;
@@ -97,124 +131,121 @@ export default {
       const x1 = west ? WELL[0] : X1;
       const xm = (x0 + x1) / 2;
       const w = x1 - x0;
+      const dz = west ? 1 : -1;
       for (let i = 0; i < RISERS - 1; i++) {
         const top = base + RISER * (i + 1);
         const zA = west ? RUN0 + TREAD * i : RUN1 - TREAD * (i + 1);
         const zB = zA + TREAD;
         const front = west ? zA : zB; // nosing edge
-        kit.boxMM(MAT.dark, [x0, top - RISER - 0.03, zA], [x1, top - 0.04, zB], { color: dark, texel: 1 });
-        kit.boxMM(MAT.floor, [x0, top - 0.04, west ? zA - 0.03 : zA], [x1, top, west ? zB : zB + 0.03], { color: mid, texel: 0.5 });
-        kit.boxMM(MAT.panel, [x0 + 0.05, top, west ? front - 0.03 : front - 0.015], [x1 - 0.05, top + 0.003, west ? front + 0.015 : front + 0.03], { color: col("impWhite"), uv: "keep" });
+        // painted riser + tread body, metal tread plate, steel nosing (chevron on the first and last step)
+        kit.boxMM(MAT.panel, [x0, top - RISER - 0.02, zA], [x1, top - 0.04, zB], { color: dark, uv: "keep" });
+        kit.boxMM(MAT.floor, [x0, top - 0.04, west ? zA - 0.03 : zA], [x1, top, west ? zB : zB + 0.03], { color: grey, texel: 0.5 });
+        const n0 = west ? front - 0.03 : front - 0.02;
+        const n1 = west ? front + 0.02 : front + 0.03;
+        if (i === 0 || i === RISERS - 2) kit.boxMM("hazard", [x0 + 0.04, top, n0 - 0.01], [x1 - 0.04, top + 0.005, n1 + 0.03], { texel: 4 });
+        else kit.boxMM(MAT.steel, [x0 + 0.04, top, n0], [x1 - 0.04, top + 0.004, n1], { color: steel });
         kit.collider([x0, top - RISER, zA], [x1, top, zB], "step");
       }
-      // sloped soffit slab + well-side stringer
+      // sloped soffit: a panelled slab whose top follows the riser bottoms (no gap), black seams across
+      // it and a housed light strip along its underside centre
       const q = new THREE.Quaternion().setFromAxisAngle(X_AXIS, west ? -theta : theta);
       const zMid = (RUN0 + RUN1) / 2;
-      const dz = west ? 1 : -1;
-      const soffit = new THREE.BoxGeometry(w, 0.16, slopeLen + 0.2);
-      const soffitY = base + RISE / 2 - 0.2 - 0.08 * Math.cos(theta);
-      const soffitZ = zMid + dz * 0.08 * Math.sin(theta);
-      kit.add(MAT.dark, soffit, { pos: [xm, soffitY, soffitZ], quat: q, color: mid, texel: 1 });
-      // slim light strip along the soffit underside so the flight above reads from the landing below
-      kit.add(MAT.dark, new THREE.BoxGeometry(0.14, 0.03, slopeLen - 0.4), { pos: [xm, soffitY - 0.085, soffitZ], quat: q, color: black, texel: 2 });
-      kit.add(MAT.strip, new THREE.BoxGeometry(0.06, 0.02, slopeLen - 0.44), { pos: [xm, soffitY - 0.1, soffitZ], quat: q });
-      // sloped wall light strip following the flight, 2.1 m above the nosing line (in a dark channel)
-      const stripX = west ? X0 : X1;
-      const stripY = base + RISER / 2 + RISE / 2 + 2.1;
-      kit.add(MAT.dark, new THREE.BoxGeometry(0.04, 0.16, slopeLen - 0.2), { pos: [stripX, stripY, zMid], quat: q, color: black, texel: 2 });
-      kit.add(MAT.strip, new THREE.BoxGeometry(0.02, 0.06, slopeLen - 0.24), { pos: [stripX - (west ? -0.02 : 0.02), stripY, zMid], quat: q });
+      const TS = 0.3;
+      const nY = Math.cos(theta);
+      const nZ = -dz * Math.sin(theta);
+      const lineY = base + RISE / 2 - 0.03;
+      const sc = [xm, lineY - nY * (TS / 2), zMid - nZ * (TS / 2)];
+      kit.add(MAT.panel, new THREE.BoxGeometry(w - 0.02, TS, slopeLen + 0.3), { pos: sc, quat: q, color: grey, texel: 0.5 });
+      const under = (off) => [sc[0], sc[1] - nY * (TS / 2 + off), sc[2] - nZ * (TS / 2 + off)];
+      for (const t of [-0.25, 0, 0.25]) {
+        const u = under(0.002);
+        kit.add(MAT.dark, new THREE.BoxGeometry(w - 0.02, 0.004, 0.025), { pos: [u[0], u[1] + Math.sin(theta) * t * slopeLen * dz, u[2] + Math.cos(theta) * t * slopeLen], quat: q, color: black });
+      }
+      for (const sx of [-0.09, 0.09]) {
+        const u = under(0.03);
+        kit.add(MAT.dark, new THREE.BoxGeometry(0.03, 0.06, slopeLen - 0.5), { pos: [u[0] + sx, u[1], u[2]], quat: q, color: dark, texel: 2 });
+      }
+      {
+        const u = under(0.016);
+        kit.add(MAT.dark, new THREE.BoxGeometry(0.15, 0.03, slopeLen - 0.5), { pos: u, quat: q, color: black, texel: 2 });
+        const s = under(0.036);
+        kit.add(MAT.strip, new THREE.BoxGeometry(0.05, 0.012, slopeLen - 0.56), { pos: s, quat: q });
+      }
+      // stringers: well side C-channel with a steel top flange, wall side skirting
       const stringerX = west ? WELL[0] - 0.03 : WELL[1] + 0.03;
-      const stringer = new THREE.BoxGeometry(0.06, 0.34, slopeLen + 0.1);
-      kit.add(MAT.dark, stringer, { pos: [stringerX, base + RISE / 2 + 0.02, zMid], quat: q, color: black, texel: 1 });
-      // handrails at 1.02 above the nosing line: wall side (tube on brackets), well side (posts + tube + mid rail)
-      const railDir = new THREE.Vector3(0, RISE, dz * (RUN1 - RUN0)).normalize();
-      const rq = new THREE.Quaternion().setFromUnitVectors(Y_AXIS, railDir);
-      const railY = base + RISER / 2 + RISE / 2 + 1.02;
-      const wallX = west ? X0 + 0.08 : X1 - 0.08;
-      kit.add(MAT.steel, new THREE.CylinderGeometry(0.022, 0.022, slopeLen - 0.3, 10), { pos: [wallX, railY, zMid], quat: rq, color: col("impGrey"), uv: "scale", uvScale: [0.14, slopeLen] });
-      for (const t of [0.15, 0.5, 0.85]) {
-        const zb = RUN0 + (RUN1 - RUN0) * (west ? t : 1 - t);
-        const yb = base + RISER / 2 + RISE * t + 1.02;
-        kit.boxMM(MAT.dark, [west ? X0 : X1 - 0.09, yb - 0.05, zb - 0.03], [west ? X0 + 0.09 : X1, yb - 0.01, zb + 0.03], { color: black });
-      }
-      const wellX = west ? WELL[0] - 0.05 : WELL[1] + 0.05;
-      kit.add(MAT.steel, new THREE.CylinderGeometry(0.022, 0.022, slopeLen - 0.1, 10), { pos: [wellX, railY, zMid], quat: rq, color: col("impGrey"), uv: "scale", uvScale: [0.14, slopeLen] });
-      kit.add(MAT.steel, new THREE.CylinderGeometry(0.014, 0.014, slopeLen - 0.1, 8), { pos: [wellX, railY - 0.45, zMid], quat: rq, color: col("impGrey"), uv: "scale", uvScale: [0.1, slopeLen] });
-      for (let i = 0; i <= RISERS - 1; i += 2) {
-        const zp = west ? RUN0 + TREAD * i + 0.06 : RUN1 - TREAD * i - 0.06;
-        const yt = base + RISER * (i + 1);
-        kit.boxMM(MAT.dark, [wellX - 0.02, yt, zp - 0.02], [wellX + 0.02, yt + 1.02 + RISER / 2, zp + 0.02], { color: black, texel: 2 });
-      }
-      kit.collider([wellX - 0.06, base, RUN0], [wellX + 0.06, base + RISE + 1.1, RUN1], "stair-rail");
+      kit.add(MAT.dark, new THREE.BoxGeometry(0.06, 0.42, slopeLen + 0.2), { pos: [stringerX, lineY - 0.12, zMid], quat: q, color: dark, texel: 1 });
+      kit.add(MAT.steel, new THREE.BoxGeometry(0.1, 0.02, slopeLen + 0.2), { pos: [stringerX, lineY + 0.1, zMid], quat: q, color: steel, texel: 1 });
+      kit.add(MAT.dark, new THREE.BoxGeometry(0.06, 0.06, slopeLen + 0.2), { pos: [stringerX, lineY - 0.33, zMid], quat: q, color: black, texel: 1 });
+      const skirtX = west ? X0 + 0.025 : X1 - 0.025;
+      kit.add(MAT.dark, new THREE.BoxGeometry(0.05, 0.3, slopeLen + 0.2), { pos: [skirtX, lineY + 0.04, zMid], quat: q, color: dark, texel: 1 });
+      // rails 1.02 m above the nosing line: wall side on brackets, well side a newel balustrade with panel infill
+      const ya = base + RISER / 2;
+      const yb = base + RISE + RISER / 2;
+      const za = west ? RUN0 : RUN1;
+      const zb = west ? RUN1 : RUN0;
+      impRail(kit, { a: [west ? X0 + 0.06 : X1 - 0.06, za], b: [west ? X0 + 0.06 : X1 - 0.06, zb], y0: ya, y1: yb, wall: true, wallSide: [west ? -1 : 1, 0], mid: false, postEvery: 0.95, collide: false });
+      const wellX = west ? WELL[0] - 0.06 : WELL[1] + 0.06;
+      impRail(kit, { a: [wellX, za], b: [wellX, zb], y0: ya, y1: yb, wall: false, infill: "panel", postEvery: 0.95, newel: 0.07, tag: "stair-rail" });
     }
 
-    // ---- rails across the well on each landing + alcove balustrades on the far landings and the ground
-    for (const lvl of [-68, -64]) impRail(kit, { a: [WELL[0], RUN0 - 0.05], b: [WELL[1], RUN0 - 0.05], y0: lvl, wall: false, postEvery: 0.9 });
-    for (const lvl of [-70, -66, -62]) impRail(kit, { a: [WELL[0], RUN1 + 0.05], b: [WELL[1], RUN1 + 0.05], y0: lvl, wall: false, postEvery: 0.9 });
-    for (const lvl of [-70, -66, -62]) impRail(kit, { a: [X0 + 0.05, ALCOVE], b: [X1 - 0.05, ALCOVE], y0: lvl, wall: false, postEvery: 1.4, tag: "alcove-rail" });
-    // top landing guard over the flight-5 drop (west) — the sign totem closes the well, the stair-stop the flight-6 head
-    impRail(kit, { a: [X0 + 0.05, RUN0 - 0.05], b: [WELL[0], RUN0 - 0.05], y0: TOP, wall: false, postEvery: 0.8, tag: "top-rail" });
-    // stair-stop: keeps the (non-stepping) player from walking off the top landing onto flight 6
+    // ---- rails across the well on each landing + alcove balustrades on the far landings
+    for (const lvl of [-68, -64]) impRail(kit, { a: [WELL[0] - 0.06, RUN0 - 0.05], b: [WELL[1] + 0.06, RUN0 - 0.05], y0: lvl, wall: false, postEvery: 1.2 });
+    for (const lvl of [-70, -66, -62]) impRail(kit, { a: [WELL[0] - 0.06, RUN1 + 0.05], b: [WELL[1] + 0.06, RUN1 + 0.05], y0: lvl, wall: false, postEvery: 1.2 });
+    for (const lvl of [-70, -66, -62]) impRail(kit, { a: [X0 + 0.06, ALCOVE], b: [X1 - 0.06, ALCOVE], y0: lvl, wall: false, postEvery: 1.4, tag: "alcove-rail" });
+    // top landing guard over the flight-5 drop (west half of the edge); the stair-stop keeps the
+    // (non-stepping) player from walking off the east half onto flight 6
+    impRail(kit, { a: [X0 + 0.06, RUN0 - 0.05], b: [WELL[1] + 0.06, RUN0 - 0.05], y0: TOP, wall: false, postEvery: 1.0, tag: "top-rail" });
     kit.collider([WELL[1], TOP, RUN0 - 0.05], [X1, TOP + 1.0, RUN0 + 0.05], "stair-stop");
 
     // ---- under-landing equipment store: the ground floor beneath the -70 far landing has < 1.9 m headroom,
     // so it is closed off with a panelled partition (its face 6 cm behind the landing fascia) and lockers
-    impWall(kit, { plane: "z", at: RUN1 + 0.06 + T, inward: -1, a0: X0, a1: X1, y0: FLOOR, h: 1.81, stripYs: [], tint: "impGrey", tint2: "impDark", greebles: 0.2, seed: seed + 6, tag: "understair" });
-    for (const [x, i] of [[7.95, 0], [8.65, 1]]) impLocker(kit, { pos: [x, FLOOR, RUN1 + 0.06 - 0.26], yaw: Math.PI, w: 0.62, h: 1.7, d: 0.5, status: i ? MAT.amber : MAT.blue, seed: seed + 7 + i, tag: "store-locker" });
-    kit.boxMM("hazard", [WELL[1] + 0.1, FLOOR, RUN1 + 0.06 - 0.6], [X1 - 0.1, FLOOR + 0.006, RUN1 + 0.06 - 0.54], { texel: 4 });
+    impWall(kit, { plane: "z", at: RUN1 + 0.06 + T, inward: -1, a0: X0, a1: X1, y0: FLOOR, h: 1.81, stripYs: [], tint: "impGrey", tint2: "impDark", greebles: 0, seed: seed + 6, tag: "understair" });
+    for (const [x, i] of [
+      [7.95, 0],
+      [8.65, 1],
+    ]) impLocker(kit, { pos: [x, FLOOR, RUN1 + 0.06 - 0.26], yaw: Math.PI, w: 0.62, h: 1.7, d: 0.5, status: i ? MAT.amber : MAT.blue, label: `STORE ${i + 1}`, seed: seed + 7 + i, tag: "store-locker" });
+    sectionMarker(kit, { pos: [5.4, FLOOR + 1.45, RUN1 + 0.06], normal: [0, 0, -1], text: "STORE 4-S", accent: "impAmber", w: 0.7, h: 0.22 });
 
-    // ---- central light spine in the well
-    {
-      const sx = 7;
-      const sz = (RUN0 + RUN1) / 2 + 0.3;
-      kit.boxMM(MAT.dark, [sx - 0.14, FLOOR, sz - 0.14], [sx + 0.14, CEIL - 0.12, sz + 0.14], { color: dark, texel: 1 });
-      for (const [ox, oz, sxw, szw] of [
-        [0.14, 0, 0.006, 0.03],
-        [-0.14, 0, 0.006, 0.03],
-        [0, 0.14, 0.03, 0.006],
-        [0, -0.14, 0.03, 0.006],
-      ]) {
-        kit.boxMM(MAT.strip, [sx + ox - sxw / 2 - (ox > 0 ? -0.003 : 0.003) * 0, FLOOR + 0.4, sz + oz - szw / 2], [sx + ox + sxw / 2, CEIL - 0.6, sz + oz + szw / 2]);
-      }
-      for (let y = FLOOR + 2; y < CEIL - 0.5; y += 2) kit.boxMM(MAT.dark, [sx - 0.17, y - 0.04, sz - 0.17], [sx + 0.17, y + 0.04, sz + 0.17], { color: black, texel: 1 });
-      kit.collider([sx - 0.16, FLOOR, sz - 0.16], [sx + 0.16, FLOOR + 3, sz + 0.16], "spine");
-    }
-
-    // ---- machinery alcove (z 190.8..192.84): three vertical trunks, manifolds every level, indicators
+    // ---- machinery alcove (z 190.8..192.84): three clad vertical trunks, manifolds every level, indicators
     {
       const zc = 191.9;
       for (const x of [5.2, 7.0, 8.8]) {
-        kit.cyl(MAT.dark, x, (FLOOR + CEIL - 0.12) / 2, zc, 0.34, CEIL - 0.12 - FLOOR, "y", { color: mid, segments: 18, texel: 0.5 });
+        kit.cyl(MAT.panel, x, (FLOOR + CEIL - 0.12) / 2, zc, 0.34, CEIL - 0.12 - FLOOR, "y", { color: grey, segments: 18, texel: 0.5 });
         for (let y = FLOOR + 1.0; y < CEIL - 1; y += 4) {
           kit.cyl(MAT.dark, x, y, zc, 0.38, 0.16, "y", { color: black, segments: 18 });
+          kit.cyl(MAT.dark, x, y + 2.0, zc, 0.36, 0.05, "y", { color: dark, segments: 18 });
           kit.boxMM(MAT.dark, [x - 0.2, y + 0.4, zc - 0.5], [x + 0.2, y + 0.7, zc - 0.34], { color: dark });
           kit.boxMM(MAT.amber, [x - 0.14, y + 0.5, zc - 0.505], [x + 0.14, y + 0.53, zc - 0.5]);
         }
       }
       for (let y = FLOOR + 3.0; y < CEIL - 1; y += 4) {
         kit.boxMM(MAT.dark, [X0 + 0.2, y - 0.12, zc - 0.12], [X1 - 0.2, y + 0.12, zc + 0.12], { color: dark, texel: 1 });
-        kit.cyl(MAT.steel, (X0 + X1) / 2, y + 0.3, zc + 0.3, 0.06, X1 - X0 - 0.4, "x", { color: col("impGrey"), segments: 10 });
+        kit.cyl(MAT.steel, (X0 + X1) / 2, y + 0.3, zc + 0.3, 0.06, X1 - X0 - 0.4, "x", { color: steel, segments: 10 });
       }
-      // conduit ladder on the back wall
-      for (const x of [4.6, 6.1, 7.9, 9.4]) kit.cyl(MAT.steel, x, (FLOOR + CEIL - 0.12) / 2, Z1 - 0.08, 0.035, CEIL - 0.12 - FLOOR - 0.4, "y", { color: col("impGrey"), segments: 8 });
+      for (const x of [4.6, 6.1, 7.9, 9.4]) kit.cyl(MAT.steel, x, (FLOOR + CEIL - 0.12) / 2, Z1 - 0.08, 0.035, CEIL - 0.12 - FLOOR - 0.4, "y", { color: steel, segments: 8 });
       kit.collider([X0, FLOOR, ALCOVE + 0.1], [X1, FLOOR + 3, Z1], "alcove");
     }
 
-    // ---- interactables: lit sign totems at the well entrance (foot) and on the top landing. "Up" lands just
+    // ---- signage: placards beside the doors at reading height, level markers on every landing
+    deckPlacard(kit, { pos: [4.8, FLOOR + 1.7, Z0], normal: [0, 0, 1], w: 1.0, h: 0.34, title: "STAIRWELL 4-S", sub: "FLIGHT CONTROL +12 M", arrow: "↑", accent: "impBlue" });
+    deckPlacard(kit, { pos: [4.8, TOP + 1.7, Z0], normal: [0, 0, 1], w: 1.0, h: 0.34, title: "FLIGHT CONTROL", sub: "LIFT LOBBY -12 M", arrow: "↓", accent: "impAmber" });
+    for (const lvl of [-68, -64]) sectionMarker(kit, { pos: [9.2, lvl + 1.7, Z0], normal: [0, 0, 1], text: `LEVEL ${lvl}`, accent: "impBlue" });
+    for (const lvl of [-70, -66, -62]) sectionMarker(kit, { pos: [X1, lvl + 1.7, 189.6], normal: [-1, 0, 0], text: `LEVEL ${lvl}`, accent: "impBlue" });
+    stencilText(kit, { text: "4-S", pos: [7, FLOOR + 0.006, 183.2], normal: [0, 1, 0], up: [0, 0, 1], size: 0.5, color: "white" });
+
+    // ---- interactables: lit wall plaques beside the flights (never in the walking line). "Up" lands just
     // inside d4-control (the top landing at z 184 is still inside this room's bounds, and the brief's
     // acceptance check expects getStats().room === "d4-control" after the climb).
     const items = [
-      { id: "d4-stairs-up", label: "Climb to flight control", lvl: FLOOR, target: { pos: [7, TOP, 179.6], yaw: 30 }, arrow: "up" },
-      { id: "d4-stairs-down", label: "Descend to the lobby", lvl: TOP, target: { pos: [7, FLOOR, 184], yaw: 0 }, arrow: "down" },
+      { id: "d4-stairs-up", label: "Climb to flight control", lvl: FLOOR, x: X0 + 0.012, normal: [1, 0, 0], text: "FLIGHT CONTROL", arrow: "up", emissive: 0x3a7bff, target: { pos: [7, TOP, 179.6], yaw: 30 } },
+      { id: "d4-stairs-down", label: "Descend to the lobby", lvl: TOP, x: X1 - 0.012, normal: [-1, 0, 0], text: "LIFT LOBBY", arrow: "down", emissive: 0xffa028, target: { pos: [7, FLOOR, 184], yaw: 0 } },
     ];
     for (const it of items) {
-      const P = new Placer(kit, [7, it.lvl, RUN0 + 0.02], Math.PI); // local +z faces the landing (-z)
-      P.box(MAT.dark, 0, 0.8, -0.1, 0.9, 1.6, 0.2, { color: dark, texel: 1 });
-      P.box(MAT.dark, 0, 0.02, -0.1, 1.0, 0.04, 0.3, { color: black });
-      P.box(MAT.panel, 0, 0.55, 0.005, 0.7, 0.5, 0.01, { color: col("impGrey"), uv: "keep" });
-      P.box(it.arrow === "up" ? MAT.blue : MAT.amber, 0, 1.55, 0.005, 0.6, 0.03, 0.01);
-      P.collider(-0.5, 0.5, 0, 1.7, -0.25, 0.05, "totem");
-      const sign = makeSignPlate(materials, { w: 0.7, h: 0.34, emissive: it.arrow === "up" ? 0x3a7bff : 0xffa028, emissiveIntensity: 0.8, arrow: it.arrow, pos: [7, it.lvl + 1.28, RUN0 + 0.02], normal: [0, 0, -1] });
+      const z = 184.5;
+      // backing plate on the wall + a painted caption under the lit sign
+      kit.boxMM(MAT.dark, [Math.min(it.x, it.x + it.normal[0] * 0.02), it.lvl + 1.02, z - 0.55], [Math.max(it.x, it.x + it.normal[0] * 0.02), it.lvl + 1.72, z + 0.55], { color: black, texel: 2 });
+      stencilText(kit, { text: "PRESS E - STAIR TRANSIT", pos: [it.x + it.normal[0] * 0.024, it.lvl + 1.12, z], normal: it.normal, size: 0.045, color: "white" });
+      const sign = makeSignPlate(materials, { w: 0.92, h: 0.34, emissive: it.emissive, emissiveIntensity: 0.8, arrow: it.arrow, text: it.text, pos: [it.x + it.normal[0] * 0.02, it.lvl + 1.45, z], normal: it.normal });
       ctx.group.add(sign.group);
       ctx.interactables.push({
         id: it.id,
@@ -230,9 +261,10 @@ export default {
       });
     }
 
-    // ---- lights: one per landing level (at strip height, 1.7 m under the next landing so its underside does
-    // not blow out) + ceiling (8 descriptors)
-    ctx.lights.push({ type: "point", pos: [7, CEIL - 1.0, 187], color: 0xdfe8ff, intensity: 14, distance: 16, priority: 0.5 });
+    // ---- lights (10 descriptors): a strong pool under the ceiling channel so the top plane reads from the
+    // foot, one per landing level (at strip height, 1.7 m under the next landing so its underside does not
+    // blow out), two mid-shaft lights in the open well for the soffits, stringers and rails
+    ctx.lights.push({ type: "point", pos: [7, CEIL - 1.3, 187], color: 0xdfe8ff, intensity: 18, distance: 20, priority: 0.5 });
     const levels = [
       [FLOOR, 183.3, 0.7],
       [-70, 189.6, 0.4],
@@ -242,10 +274,8 @@ export default {
       [-62, 189.6, 0.4],
       [TOP, 183.3, 0.7],
     ];
-    for (const [lvl, z, pr] of levels) ctx.lights.push({ type: "point", pos: [7, lvl + 2.1, z], color: 0xdfe8ff, intensity: 6, distance: 8, priority: pr });
-    // two mid-shaft lights in the open well (between the sign totem and the spine) so the flight soffits,
-    // stringers and rails read from below (10 descriptors)
-    for (const y of [-66.5, -59.5]) ctx.lights.push({ type: "point", pos: [7, y, 186.4], color: 0xcfdcff, intensity: 5, distance: 9, priority: 0.3 });
+    for (const [lvl, z, pr] of levels) ctx.lights.push({ type: "point", pos: [7, lvl + 2.1, z], color: 0xdfe8ff, intensity: 9, distance: 9, priority: pr });
+    for (const y of [-66.5, -59.5]) ctx.lights.push({ type: "point", pos: [7, y, 186.4], color: 0xcfdcff, intensity: 8, distance: 10, priority: 0.3 });
     return {};
   },
 };
