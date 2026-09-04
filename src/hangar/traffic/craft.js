@@ -20,9 +20,15 @@ export const SHUTTLE_SPEC = {
   rampHingeY: -2.05,
   rampHingeZ: -3.0,
   rampAngle: -0.24, // radians the ramp drops when deployed (free end toward the nose)
+  // fold state while parked: wings raised ~38° — clearly two separate wings, and low enough that the dorsal
+  // fin still shows above the near wing from a side view (span 19 m, inside the bay's 12 m pad clearance)
+  parkedFold: 0.5,
   length: 21.0,
   standHeight: 2.85, // origin height above the pad when parked on its skids
 };
+
+/** Shuttle engine layout (index.js places the glow quads here): nozzle centres (x, y) and exit z. */
+export const SHUTTLE_ENGINES = { offsets: [[0, 0.5], [-1.3, -0.75], [1.3, -0.75]], exitZ: 9.4 };
 
 // Colours (hex fallbacks so the builders work even before the Imperial palette lands).
 export function craftColours(PALETTE = {}) {
@@ -145,41 +151,75 @@ function plateYZ(shape, depth) {
   return g;
 }
 
+/** open-ended cylinder whose wall faces INWARD (for recesses: viewport tube, nozzle throats) */
+function innerTube(r1, r2, len, seg) {
+  const g = new THREE.CylinderGeometry(r1, r2, len, seg, 1, true).toNonIndexed();
+  flipWinding(g);
+  const n = g.attributes.normal;
+  for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+  return g;
+}
+
 /**
- * TIE-style fighter: cockpit sphere r 2.2, octagonal forward viewport, twin-engine block aft, two 1.4 m
- * pylons and two hexagonal solar-panel wings 7.0 tall x 5.6 long x 0.25 thick with a raised frame and six
- * radial spars. Span 7.7 m (wing faces at |x| 3.85). ~940 triangles.
+ * Re-bake a part's emissive as a radial gradient about the axis through (cx, cy) parallel to z: `hot` at the
+ * axis, `cold` at radius rMax. Used for nozzle throats so they glow from deep inside instead of as a flat disc.
+ */
+function radialEmit(geo, cx, cy, rMax, hot, cold) {
+  const p = geo.attributes.position;
+  const e = geo.attributes.aEmit;
+  for (let i = 0; i < p.count; i++) {
+    const k = Math.min(1, Math.hypot(p.getX(i) - cx, p.getY(i) - cy) / rMax);
+    e.setXYZ(i, hot[0] + (cold[0] - hot[0]) * k, hot[1] + (cold[1] - hot[1]) * k, hot[2] + (cold[2] - hot[2]) * k);
+  }
+}
+
+/** Fighter engine layout (also used by index.js for the glow quads): nozzle centres and exit z. */
+export const FIGHTER_ENGINES = { offsets: [[-0.72, -0.1], [0.72, -0.1]], exitZ: 3.3 };
+
+/**
+ * TIE-style fighter: cockpit sphere r 2.2, one spoked octagonal forward viewport (recessed dark glass, thin
+ * lit rim), aft engine block with two recessed nozzles (dark throats, no idle emissive — the engine glow
+ * quads light them only while flying), two 1.4 m pylons with hub plates and two hexagonal solar-panel wings
+ * 7.0 tall x 5.6 long x 0.25 thick with a raised frame and six radial spars. Span 7.7 m (wing faces at
+ * |x| 3.85). ~920 triangles.
  */
 export function buildFighter(PALETTE) {
   const C = craftColours(PALETTE);
   const b = new Builder();
   const R = 2.2;
-  b.add(new THREE.SphereGeometry(R, 14, 10), { color: C.hull });
-  // forward viewport: octagonal bezel ring, recessed glass, four crossing struts (8 spokes)
-  b.cyl(1.08, 1.08, 0.34, 8, "z", { pos: [0, 0, -2.08], color: C.frame });
-  b.add(new THREE.CircleGeometry(0.9, 8), { pos: [0, 0, -2.26], rot: [0, Math.PI, 0], color: C.glass, emit: [0.02, 0.05, 0.09] });
-  for (let i = 0; i < 4; i++) b.box(0.05, 1.8, 0.05, { pos: [0, 0, -2.24], rot: [0, 0, (i * Math.PI) / 4], color: C.frame });
+  b.add(new THREE.SphereGeometry(R, 14, 9), { color: C.hull });
+  // forward viewport: octagonal bezel tube (outer wall + front annulus), recessed glass 0.22 m inside with
+  // an inward-facing tube wall, a thin lit rim around the glass and four flat crossing struts (8 spokes)
+  const VZ = -2.05; // bezel front plane
+  b.cyl(1.08, 1.08, 0.36, 8, "z", { pos: [0, 0, VZ + 0.18], color: C.frame, open: true, spin: Math.PI / 8 });
+  b.add(new THREE.RingGeometry(0.9, 1.08, 8, 1, Math.PI / 8), { pos: [0, 0, VZ], rot: [0, Math.PI, 0], color: C.frame });
+  b.add(innerTube(0.9, 0.9, 0.22, 8).rotateX(Math.PI / 2).rotateZ(Math.PI / 8), { pos: [0, 0, VZ + 0.11], color: C.dark });
+  b.add(new THREE.CircleGeometry(0.9, 8, Math.PI / 8), { pos: [0, 0, VZ + 0.22], rot: [0, Math.PI, 0], color: C.glass, emit: [0.01, 0.02, 0.035] });
+  b.add(new THREE.RingGeometry(0.82, 0.9, 8, 1, Math.PI / 8), { pos: [0, 0, VZ + 0.2], rot: [0, Math.PI, 0], color: C.frame, emit: [0.5, 0.64, 0.9] });
+  for (let i = 0; i < 4; i++) b.add(new THREE.PlaneGeometry(0.07, 1.78), { pos: [0, 0, VZ + 0.12], rot: [0, Math.PI, (i * Math.PI) / 4], color: C.frame, emit: [0.05, 0.06, 0.08] });
   // top hatch (octagonal)
   b.cyl(0.72, 0.72, 0.26, 8, "y", { pos: [0, R - 0.05, 0], color: C.frame });
-  // aft engine block + twin nozzles with baked pale-blue emissive throats
-  b.box(2.4, 1.7, 1.1, { pos: [0, -0.1, 2.05], color: C.dark });
-  for (const sx of [-1, 1]) {
-    b.cyl(0.44, 0.52, 0.72, 8, "z", { pos: [sx * 0.72, -0.1, 2.85], color: C.frame, open: true });
-    b.add(new THREE.CircleGeometry(0.43, 8), { pos: [sx * 0.72, -0.1, 3.21], color: C.engine, emit: [0.12, 0.2, 0.38] });
+  // aft engine block: dark housing, two nozzle bells with a light lip ring and a recessed dark throat
+  b.box(2.5, 1.75, 1.1, { pos: [0, -0.1, 2.05], color: C.dark });
+  for (const [ex, ey] of FIGHTER_ENGINES.offsets) {
+    b.cyl(0.5, 0.42, 0.7, 8, "z", { pos: [ex, ey, 2.95], color: C.frame, open: true });
+    b.cyl(0.56, 0.56, 0.12, 8, "z", { pos: [ex, ey, 3.26], color: C.hullLight, open: true });
+    // throat: an inward-facing cone from the exit (r 0.48) to a point 0.6 m deep — reads as a dark recess
+    b.add(innerTube(0.48, 0.04, 0.6, 8).rotateX(Math.PI / 2), { pos: [ex, ey, 3.0], color: C.panel });
   }
   // twin cannons under the chin (thin tip forward)
   for (const sx of [-1, 1]) b.cyl(0.15, 0.11, 1.9, 6, "z", { pos: [sx * 0.55, -1.72, -1.55], color: C.dark, open: true });
   // belly access hatch + two upper sensor boxes
   b.box(1.2, 0.28, 1.5, { pos: [0, -2.1, 0.35], color: C.dark });
   for (const sx of [-1, 1]) b.box(0.34, 0.3, 0.42, { pos: [sx * 0.95, 1.62, -1.2], color: C.dark });
-  // pylons: collar at the sphere, 1.4 m tube (x 2.2..3.6), square boss at the wing root
+  // pylons: collar at the sphere, 1.4 m tube (x 2.2..3.6), square boss, hex hub plate on the wing's inner face
   for (const sx of [-1, 1]) {
-    b.cyl(0.62, 0.62, 0.28, 8, "x", { pos: [sx * 2.16, 0, 0], color: C.frame, open: true });
-    b.cyl(0.42, 0.42, 1.4, 6, "x", { pos: [sx * 2.9, 0, 0], color: C.hull, open: true, spin: Math.PI / 6 });
-    b.box(0.8, 0.8, 0.8, { pos: [sx * 3.35, 0, 0], color: C.frame });
+    b.cyl(0.64, 0.64, 0.3, 8, "x", { pos: [sx * 2.17, 0, 0], color: C.frame, open: true });
+    b.cyl(0.5, 0.5, 1.4, 6, "x", { pos: [sx * 2.9, 0, 0], color: C.hull, open: true, spin: Math.PI / 6 });
+    b.box(0.86, 0.86, 0.86, { pos: [sx * 3.3, 0, 0], color: C.frame });
   }
   // wings: outer face at |x| 3.85 (span 7.70 — the hangar's grip pads sit at 3.96). Panel x 3.55..3.80,
-  // raised frame 3.45..3.85 (5 cm proud outside, 10 cm inside), six spars and a hub inset 2 cm from the frame faces
+  // raised frame 3.45..3.85 (5 cm proud outside, 10 cm inside), six spars, hub plates on both faces
   const H = 7.0;
   const L = 5.6;
   const T = 0.25;
@@ -194,15 +234,20 @@ export function buildFighter(PALETTE) {
       const ang = Math.atan2(vz, vy);
       b.box(0.36, len, 0.22, { pos: [sx * 3.65, vy * 0.47, vz * 0.47], rot: [ang, 0, 0], color: C.frame });
     }
-    b.cyl(0.78, 0.78, 0.4, 6, "x", { pos: [sx * 3.64, 0, 0], color: C.hull, spin: Math.PI / 6 });
+    // inner hub plate (x 3.29..3.45, proud of the frame) and outer hub cap (3.71..3.87) — both hexagonal
+    b.cyl(1.0, 1.0, 0.16, 6, "x", { pos: [sx * 3.37, 0, 0], color: C.frame, open: true, spin: Math.PI / 6 });
+    b.add(new THREE.CircleGeometry(1.0, 6, Math.PI / 6).rotateY(sx > 0 ? -Math.PI / 2 : Math.PI / 2), { pos: [sx * 3.29, 0, 0], color: C.frame });
+    b.cyl(0.86, 0.86, 0.16, 6, "x", { pos: [sx * 3.79, 0, 0], color: C.hull, open: true, spin: Math.PI / 6 });
+    b.add(new THREE.CircleGeometry(0.86, 6, Math.PI / 6).rotateY(sx > 0 ? Math.PI / 2 : -Math.PI / 2), { pos: [sx * 3.87, 0, 0], color: C.hull });
   }
   return b.build();
 }
 
 /**
- * Shuttle-style craft: ~21 m fuselage (12-sided prism + tapered nose), raised cockpit, fixed dorsal fin,
- * two large folding wings hinged at the shoulders (aPart 1/2), landing skids and a boarding ramp (aPart 3).
- * Fold state is a per-instance attribute (see materials.js). ~1.0k triangles.
+ * Shuttle-style craft: ~21 m fuselage (12-sided prism + tapered nose) with baked panel seams, raised cockpit
+ * with a glazed band, fixed dorsal fin, two large folding wings hinged at the shoulders (aPart 1/2), four
+ * landing skids (pads at y -standHeight), a port boarding hatch and a belly boarding ramp (aPart 3).
+ * Fold state is a per-instance attribute (see materials.js). ~1.4k triangles.
  */
 export function buildShuttle(PALETTE) {
   const C = craftColours(PALETTE);
@@ -214,14 +259,26 @@ export function buildShuttle(PALETTE) {
   b.cyl(2.1, 2.1, 13, 12, "z", { pos: [0, 0, 1.5], color: C.hullLight, spin, scale: squash });
   b.cyl(2.1, 0.95, 5.5, 12, "z", { pos: [0, -0.25, -7.75], color: C.hullLight, spin, scale: squash });
   b.cyl(0.95, 0.35, 1.3, 12, "z", { pos: [0, -0.45, -11.15], color: C.dark, spin });
-  // plating seams: dark bands around the prism
-  for (const z of [-3.2, 0.6, 4.6]) b.cyl(2.14, 2.14, 0.18, 12, "z", { pos: [0, 0, z], color: C.dark, spin, open: true, scale: squash });
-  // dorsal spine + cockpit block with windscreen and side glazing
+  // plating seams: dark bands around the prism and nose, plus a dark strip along each of the 12 prism edges
+  for (const z of [-3.2, -1.3, 0.6, 2.6, 4.6]) b.cyl(2.14, 2.14, 0.18, 12, "z", { pos: [0, 0, z], color: C.dark, spin, open: true, scale: squash });
+  b.cyl(1.96, 1.91, 0.2, 12, "z", { pos: [0, -0.25, -6.0], color: C.dark, spin, open: true, scale: squash });
+  for (let k = 0; k < 12; k++) {
+    const a = Math.PI / 12 + (k * Math.PI) / 6;
+    b.box(0.1, 0.1, 12.9, { pos: [squash[0] * 2.12 * Math.sin(a), 2.12 * Math.cos(a), 1.5], rot: [0, 0, -a], color: C.dark });
+  }
+  // dorsal spine + cockpit: block z -6.7..-3.6 with a chin fairing down to the nose cone and a glazed band
+  // (raked windscreen from the block's top-front edge down to the chin, side glazing between dark frame strips)
   b.box(1.3, 0.4, 11.5, { pos: [0, 2.15, 2.0], color: C.frame });
-  b.box(2.7, 1.5, 3.6, { pos: [0, 2.55, -5.4], color: C.hullLight });
-  b.box(2.3, 0.95, 0.12, { pos: [0, 2.72, -7.22], rot: [-0.55, 0, 0], color: C.glass, emit: [0.03, 0.06, 0.1] });
-  for (const sx of [-1, 1]) b.box(0.08, 0.6, 1.7, { pos: [sx * 1.36, 2.7, -5.4], color: C.glass, emit: [0.03, 0.06, 0.1] });
-  b.box(1.0, 0.25, 0.9, { pos: [0, 3.36, -5.0], color: C.dark });
+  b.box(2.7, 1.5, 3.1, { pos: [0, 2.55, -5.15], color: C.hullLight });
+  b.box(2.62, 0.9, 1.7, { pos: [0, 1.6, -6.65], color: C.hullLight });
+  const GLASS = { color: C.glass, emit: [0.05, 0.09, 0.15] };
+  b.box(2.5, 1.51, 0.14, { pos: [0, 2.64, -7.1], rot: [0.559, 0, 0], ...GLASS });
+  for (const sx of [-1, 1]) {
+    b.box(0.1, 0.62, 2.7, { pos: [sx * 1.37, 2.72, -5.25], ...GLASS });
+    b.box(0.14, 0.1, 2.8, { pos: [sx * 1.38, 3.08, -5.25], color: C.dark });
+    b.box(0.14, 0.1, 2.8, { pos: [sx * 1.38, 2.36, -5.25], color: C.dark });
+  }
+  b.box(1.0, 0.25, 0.9, { pos: [0, 3.36, -4.8], color: C.dark });
   // dorsal fin: swept-back quad plate (root z -3..3.4, tip z 0.3..2.3 at y 8.6), darker inset, edge strips
   const fin = new THREE.Shape();
   fin.moveTo(-3.0, 2.2);
@@ -273,24 +330,37 @@ export function buildShuttle(PALETTE) {
     edge(root + 6.8, -1.5, root + 6.8, 3.1, 0.42);
     b.cyl(0.26, 0.3, 3.4, 8, "z", { pos: [sx * (tip - 0.2), S.hingeY, 0.2], color: C.dark, part });
   }
-  // engines: three nozzles with emissive throats on a rear plate
+  // engines: three nozzle bells with a light lip ring and a recessed conical throat carrying a dim blue glow
   b.box(3.9, 3.7, 0.3, { pos: [0, -0.1, 8.05], color: C.dark });
-  for (const [x, y] of [[0, 0.5], [-1.3, -0.75], [1.3, -0.75]]) {
-    b.cyl(0.62, 0.78, 1.3, 10, "z", { pos: [x, y, 8.75], color: C.frame, open: true });
-    b.add(new THREE.CircleGeometry(0.6, 10), { pos: [x, y, 9.38], color: C.engine, emit: [0.1, 0.17, 0.32] });
+  for (const [x, y] of SHUTTLE_ENGINES.offsets) {
+    b.cyl(0.78, 0.62, 1.3, 10, "z", { pos: [x, y, 8.75], color: C.frame, open: true });
+    b.cyl(0.86, 0.86, 0.14, 10, "z", { pos: [x, y, 9.35], color: C.hullLight, open: true });
+    const throat = b.add(innerTube(0.74, 0.06, 0.9, 10).rotateX(Math.PI / 2), { pos: [x, y, 8.97], color: C.panel, emit: [0, 0, 0] });
+    radialEmit(throat, x, y, 0.74, [0.2, 0.32, 0.55], [0.0, 0.0, 0.01]);
   }
-  // landing skids: one forward, two aft (feet bottom at y -2.85 = standHeight)
-  for (const [x, z] of [[0, -6.5], [-1.7, 5.2], [1.7, 5.2]]) {
-    b.box(0.3, 0.9, 0.3, { pos: [x, -2.3, z], color: C.dark });
-    b.box(0.75, 0.22, 1.8, { pos: [x, -2.74, z], color: C.dark });
-  }
-  // belly pod + side greebles + cabin windows + sensor dome + antenna
+  // landing skids: four legs (strut + diagonal brace + skid pad); pad bottoms at y -2.85 = standHeight
+  const skid = (x, z, top) => {
+    const sx = Math.sign(x) || 1;
+    const foot = -S.standHeight + 0.24;
+    const len = top - foot;
+    b.box(0.34, len, 0.34, { pos: [x, (top + foot) / 2, z], color: C.dark });
+    // brace leans inboard from the foot into the hull (rotation about z tips its +y toward -sx)
+    b.box(0.16, len * 1.15, 0.16, { pos: [x - sx * 0.29, (top + foot) / 2 + 0.02, z], rot: [0, 0, sx * 0.55], color: C.frame });
+    b.box(0.9, 0.24, 2.2, { pos: [x, foot - 0.12, z], color: C.dark });
+  };
+  skid(-1.15, -5.9, -1.5);
+  skid(1.15, -5.9, -1.5);
+  skid(-1.45, 5.0, -1.0);
+  skid(1.45, 5.0, -1.0);
+  // belly pod, boarding hatch (port) + service housing (starboard), cabin windows on the flat side faces
   b.box(2.3, 0.8, 6.5, { pos: [0, -1.95, 2.2], color: C.dark });
   for (const sx of [-1, 1]) {
-    b.box(0.25, 0.9, 2.6, { pos: [sx * 1.98, 0.6, -2.0], color: C.frame });
-    b.box(0.25, 0.6, 1.8, { pos: [sx * 1.98, -0.9, 3.6], color: C.dark });
-    for (let i = 0; i < 4; i++) b.box(0.08, 0.32, 0.5, { pos: [sx * 2.0, 1.0, -0.6 + i * 1.1], color: C.glass, emit: [0.05, 0.08, 0.12] });
+    b.box(0.52, 2.0, 1.3, { pos: [sx * 1.76, -0.1, 1.6], color: C.frame });
+    for (let i = 0; i < 4; i++) b.box(0.1, 0.32, 0.5, { pos: [sx * 1.9, 0.3, -2.6 + i * 0.9], color: C.glass, emit: [0.05, 0.08, 0.12] });
   }
+  b.box(0.06, 1.7, 1.0, { pos: [-2.03, -0.15, 1.6], color: C.dark });
+  b.box(0.1, 0.08, 1.0, { pos: [-2.02, 0.95, 1.6], color: C.amber, emit: [0.5, 0.3, 0.05] });
+  b.box(0.06, 1.2, 0.8, { pos: [2.03, -0.15, 1.6], color: C.dark });
   b.cyl(0.25, 0.65, 0.5, 10, "y", { pos: [0.9, 2.5, 4.6], color: C.frame });
   b.cyl(0.04, 0.04, 2.6, 4, "y", { pos: [-0.9, 3.5, 5.2], color: C.dark, open: true });
   // boarding ramp (aPart 3): plate + two side rails, hinged at the belly, free end toward the nose
@@ -303,8 +373,8 @@ export function buildShuttle(PALETTE) {
 
 /**
  * Rack clamp arm: pivot at the origin (hangs from the rack's overhead beam), 2.6 m arm down -Y, rubber
- * contact pad at the tip, amber status stripe. Rotates about Z (see effects.js makeClamps). Instanced twice
- * per rack slot.
+ * contact pad at the tip. Rotates about Z (see effects.js makeClamps). Instanced twice per rack slot;
+ * 36 triangles.
  */
 export const CLAMP_ARM = 2.6;
 export function buildClamp(PALETTE) {
@@ -312,19 +382,23 @@ export function buildClamp(PALETTE) {
   const b = new Builder();
   b.cyl(0.18, 0.18, 0.6, 6, "z", { color: C.frame, open: true, spin: Math.PI / 6 });
   b.box(0.22, CLAMP_ARM - 0.2, 0.34, { pos: [0, -(CLAMP_ARM - 0.2) / 2, 0], color: C.frame });
-  b.box(0.14, 0.3, 0.14, { pos: [0, -1.0, 0.24], color: C.amber, emit: [0.6, 0.35, 0.05] });
-  b.box(0.44, 0.2, 0.6, { pos: [0, -CLAMP_ARM - 0.08, 0], color: C.panel });
+  b.box(0.36, 0.2, 0.6, { pos: [0, -CLAMP_ARM - 0.08, 0], color: C.panel });
   return b.build();
 }
 
+/** cone ids in the beam mesh: 0..3 emitter halos, 4..7 emitter cores, 8 the craft's landing-light cone */
+export const BEAM_CONES = { halos: 4, cores: 4, landing: 8, count: 9 };
+
 /**
- * Eight unit cones stretched by the beam shader: aCone 0..3 are the halo cones of the four emitters, 4..7
- * the bright inner cores of the same emitters. Radius 1 at both ends, y 0 (emitter) .. 1 (target).
+ * Nine unit cones stretched by the beam shader: aCone 0..3 are the halo cones of the four emitters, 4..7
+ * the bright inner cores of the same emitters, 8 the landing-light cone under the active craft. Radius 1
+ * at both ends, y 0 (emitter) .. 1 (target); one height segment is enough because every effect is
+ * evaluated per fragment.
  */
-export function buildBeamCones(segments = 18) {
+export function buildBeamCones(segments = 12) {
   const geos = [];
-  for (let c = 0; c < 8; c++) {
-    const g = new THREE.CylinderGeometry(1, 1, 1, c < 4 ? segments : 8, 3, true).toNonIndexed();
+  for (let c = 0; c < BEAM_CONES.count; c++) {
+    const g = new THREE.CylinderGeometry(1, 1, 1, c >= 4 && c < 8 ? 8 : segments, 1, true).toNonIndexed();
     g.translate(0, 0.5, 0);
     for (const key of Object.keys(g.attributes)) if (key !== "position") g.deleteAttribute(key);
     const n = g.attributes.position.count;

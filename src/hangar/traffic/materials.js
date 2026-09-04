@@ -106,9 +106,11 @@ export function makeGlowMaterial() {
       void main() {
         vec2 d = vUv * 2.0 - 1.0;
         float r = length(d);
-        float halo = pow(max(0.0, 1.0 - r), 2.4);
-        float core = pow(max(0.0, 1.0 - r * 2.6), 1.6);
-        gl_FragColor = vec4(vCol * (halo * 0.55 + core * 1.4), 1.0);
+        // gaussian falloff: a hot centre inside a wide soft halo, masked to zero before the quad's edge
+        float core = exp(-r * r * 11.0);
+        float halo = exp(-r * r * 2.2);
+        float edge = smoothstep(1.0, 0.7, r);
+        gl_FragColor = vec4(vCol * (core * 1.2 + halo * 0.6) * edge, 1.0);
       }
     `,
     transparent: true,
@@ -123,9 +125,11 @@ export function makeGlowMaterial() {
 }
 
 /**
- * Tractor beam: one mesh, four unit cones (attribute aCone 0..3). The vertex shader stretches each cone
- * from its emitter to the shared target; the fragment shader adds a soft rim, scanlines that travel
- * toward the craft and a slow pulse. uOn scales everything to zero when idle.
+ * Tractor beams + landing light: one mesh, nine unit cones (attribute aCone: 0..3 emitter halos, 4..7
+ * emitter cores, 8 the landing-light cone). The vertex shader stretches each emitter cone from its emitter
+ * to the shared target (and the landing cone between uLight0/uLight1); the fragment shader adds a soft rim,
+ * scanlines that travel toward the craft and a slow pulse. uOn / uLightOn scale each effect to zero when
+ * idle (idle cones are clipped away in the vertex shader).
  */
 export function makeBeamMaterial() {
   const mat = new THREE.ShaderMaterial({
@@ -140,6 +144,13 @@ export function makeBeamMaterial() {
       uC0: { value: 0.12 },
       uC1: { value: 0.5 },
       uColor: { value: new THREE.Color(0.46, 0.7, 1.0) },
+      // landing-light cone: endpoints, radii (lamp end, far end), gate and warm colour
+      uLight0: { value: new THREE.Vector3() },
+      uLight1: { value: new THREE.Vector3() },
+      uL0: { value: 0.3 },
+      uL1: { value: 4.5 },
+      uLightOn: { value: 0 },
+      uLightColor: { value: new THREE.Color(1.0, 0.9, 0.72) },
     },
     vertexShader: /* glsl */ `
       attribute float aCone;
@@ -149,27 +160,40 @@ export function makeBeamMaterial() {
       uniform float uR1;
       uniform float uC0;
       uniform float uC1;
+      uniform float uOn;
+      uniform vec3 uLight0;
+      uniform vec3 uLight1;
+      uniform float uL0;
+      uniform float uL1;
+      uniform float uLightOn;
       varying float vAlong;
       varying float vLen;
-      varying float vCore;
+      varying float vKind;
       varying vec3 vN;
       varying vec3 vWorld;
       void main() {
+        // kind: 0 emitter halo, 1 emitter core, 2 landing light
+        float kind = aCone > 7.5 ? 2.0 : (aCone > 3.5 ? 1.0 : 0.0);
+        float gate = kind > 1.5 ? uLightOn : uOn;
+        if (gate <= 0.0005) {
+          gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+          vAlong = 0.0; vLen = 1.0; vKind = kind; vN = vec3(0.0, 1.0, 0.0); vWorld = vec3(0.0);
+          return;
+        }
         int i = int(mod(aCone + 0.5, 4.0));
-        float core = aCone > 3.5 ? 1.0 : 0.0;
-        vec3 e = uEmit[i];
-        vec3 axis = uTarget - e;
+        vec3 e = kind > 1.5 ? uLight0 : uEmit[i];
+        vec3 axis = (kind > 1.5 ? uLight1 : uTarget) - e;
         float L = max(0.01, length(axis));
         vec3 d = axis / L;
         vec3 up = abs(d.y) < 0.95 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
         vec3 p1 = normalize(cross(d, up));
         vec3 p2 = cross(d, p1);
-        float r = core > 0.5 ? mix(uC0, uC1, position.y) : mix(uR0, uR1, position.y);
+        float r = kind > 1.5 ? mix(uL0, uL1, position.y) : (kind > 0.5 ? mix(uC0, uC1, position.y) : mix(uR0, uR1, position.y));
         vec3 radial = p1 * position.x + p2 * position.z;
         vec3 w = e + d * (position.y * L) + radial * r;
         vAlong = position.y;
         vLen = L;
-        vCore = core;
+        vKind = kind;
         vN = normalize(radial);
         vWorld = w;
         gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
@@ -179,24 +203,36 @@ export function makeBeamMaterial() {
       uniform float uOn;
       uniform float uTime;
       uniform vec3 uColor;
+      uniform float uLightOn;
+      uniform vec3 uLightColor;
       varying float vAlong;
       varying float vLen;
-      varying float vCore;
+      varying float vKind;
       varying vec3 vN;
       varying vec3 vWorld;
       void main() {
         vec3 v = normalize(cameraPosition - vWorld);
         float facing = abs(dot(normalize(vN), v));
+        float rim = 1.0 - facing;
+        if (vKind > 1.5) {
+          // landing light: warm translucent cone, brightest near the lamp, fading out toward the far end,
+          // with the same flicker as the landing-light beacon
+          float body = 0.06 + 0.34 * pow(rim, 1.6);
+          float ends = smoothstep(0.0, 0.05, vAlong) * (1.0 - 0.9 * vAlong);
+          float flick = 0.86 + 0.14 * sin(uTime * 23.0) * sin(uTime * 7.3);
+          float a = uLightOn * body * ends * flick * 0.55;
+          gl_FragColor = vec4(uLightColor * a, 1.0);
+          return;
+        }
         // halo: a translucent fill that thickens toward the silhouette (front + back faces add up, so the
         // cone reads as a hazy volume); core: solid bright thread
-        float rim = 1.0 - facing;
         float halo = 0.12 + 0.5 * pow(rim, 1.5);
-        float body = mix(halo, 1.0, vCore);
+        float body = mix(halo, 1.0, vKind);
         float ends = smoothstep(0.0, 0.04, vAlong) * mix(1.0, 0.45, vAlong);
-        float scan = 0.74 + 0.26 * sin((vAlong * vLen / 2.4 - uTime * 3.2) * 6.2831853);
-        float fine = 0.88 + 0.12 * sin((vAlong * vLen / 0.55 - uTime * 9.0) * 6.2831853);
+        // scanlines travel toward the craft; the period (3.2 m) stays well above a pixel at view distances
+        float scan = 0.72 + 0.28 * sin((vAlong * vLen / 3.2 - uTime * 2.6) * 6.2831853);
         float pulse = 0.9 + 0.1 * sin(uTime * 5.5);
-        float a = uOn * body * ends * scan * fine * pulse * mix(0.3, 0.5, vCore);
+        float a = uOn * body * ends * scan * pulse * mix(0.3, 0.34, vKind);
         gl_FragColor = vec4(uColor * a, 1.0);
       }
     `,

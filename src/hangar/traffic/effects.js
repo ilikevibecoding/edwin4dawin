@@ -30,28 +30,40 @@ export function shaftStrength(p) {
   return lo * hi;
 }
 
+/** Tractor beams and the landing-light cone share one mesh/material (see materials.js makeBeamMaterial). */
 export function makeBeams(material) {
-  const mesh = new THREE.Mesh(buildBeamCones(18), material);
+  const mesh = new THREE.Mesh(buildBeamCones(12), material);
   mesh.name = "traffic_beams";
   mesh.frustumCulled = false;
   mesh.renderOrder = 20;
   mesh.visible = false;
   const u = material.uniforms;
   EMITTERS.forEach((e, i) => u.uEmit.value[i].set(e[0], e[1], e[2]));
+  const refresh = () => {
+    mesh.visible = u.uOn.value > 0 || u.uLightOn.value > 0;
+  };
   return {
     mesh,
     tris: mesh.geometry.attributes.position.count / 3,
-    /** target: Vector3 | null */
+    /** tractor beams — target: Vector3 | null, strength 0..1 */
     update(t, target, strength) {
       u.uTime.value = t;
-      if (!target || strength <= 0.001) {
-        u.uOn.value = 0;
-        mesh.visible = false;
-        return;
+      if (!target || strength <= 0.001) u.uOn.value = 0;
+      else {
+        u.uOn.value = strength;
+        u.uTarget.value.copy(target);
       }
-      mesh.visible = true;
-      u.uOn.value = strength;
-      u.uTarget.value.copy(target);
+      refresh();
+    },
+    /** landing-light cone from the lamp (Vector3) along dir (unit Vector3) for len metres; strength 0..1 */
+    setLight(lamp, dir, len, strength) {
+      if (!lamp || strength <= 0.001) u.uLightOn.value = 0;
+      else {
+        u.uLightOn.value = strength;
+        u.uLight0.value.copy(lamp);
+        u.uLight1.value.copy(lamp).addScaledVector(dir, len);
+      }
+      refresh();
     },
   };
 }
@@ -135,16 +147,16 @@ export function makeBeacons(material, capacity) {
  * +4.5) and a fore/aft stagger so the two arms pass each other when folded up.
  */
 export const CLAMP_PIVOT = { x: 2.4, y: 4.32, z: 0.32 };
-/** arm angle from vertical (positive = toward the centre line): folded up under the beam / pressed on the hull */
-export const CLAMP_OPEN_DEG = 80;
+/** arm angle from vertical (positive = toward the centre line): folded flat under the beam / pressed on the hull */
+export const CLAMP_OPEN_DEG = 90;
 export const CLAMP_CLOSED_DEG = 25;
 const _yAxis = new THREE.Vector3(0, 1, 0);
 
 /**
  * Rack clamps: two arms per slot hanging from the rack's overhead beam either side of the cockpit hatch.
- * Open = folded up under the beam (tips 0.25 m above the wing tops, so a fighter can slide in along the
- * slot's x axis); closed = swung down to 25° from vertical so the pads meet the hull sphere on its upper
- * shoulders.
+ * Open = folded flat against the underside of the beam (the two arms pass each other on the z stagger, so an
+ * empty slot shows nothing hanging in the air and a fighter can slide in along the slot's x axis);
+ * closed = swung down to 25° from vertical so the pads meet the hull sphere on its upper shoulders.
  */
 export function makeClamps(geometry, material, slots) {
   const n = slots.length * 2;

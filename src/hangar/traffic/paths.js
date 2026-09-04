@@ -13,13 +13,19 @@ import * as THREE from "three";
 
 export const APERTURE_CENTRE = [0, -85, 32];
 export const HOVER_POINT = [0, -40, 32];
+/** 65 m below the aperture, collinear with it and the hover: start of the slow vertical climb */
+export const SHAFT_ENTRY = [0, -150, 32];
 export const PRE_APERTURE = [0, -300, 32];
 export const ARRIVAL_DURATION = 80;
 export const LAUNCH_DURATION = 60;
 /** seconds after t0 at which an arrival is exactly at the aperture centre (schedule anchor) */
 export const ARRIVAL_SHAFT_TIME = 60;
+/** arrival hover dwell [start, end] seconds after t0 */
+export const ARRIVAL_HOVER = [66, 68];
+/** launch hover dwell [start, end] seconds after t0 */
+export const LAUNCH_HOVER = [15, 17];
 /** seconds after t0 at which a launch is exactly at the aperture centre */
-export const LAUNCH_SHAFT_TIME = 21;
+export const LAUNCH_SHAFT_TIME = 22;
 export const LAUNCH_UNCLAMP_TIME = 3;
 
 // Far-point variation (metres) picked by variant index; keeps arrivals/departures from stacking.
@@ -186,11 +192,15 @@ export class PathRegistry {
     const { side, mid, a1, a2 } = this.approach(slot);
     const v = FAR_VARIANTS[variant % FAR_VARIANTS.length];
     const sx = side;
+    // SHAFT_ENTRY is collinear with the aperture and hover points so the climb through the beams is a straight
+    // vertical, and the knot spacing holds ~8 m/s from 65 m below the aperture to the hover: the craft spends
+    // ~6 s inside the tractor column, so a view at shaft time ±2 s still shows it held in the beams.
     const points = [
       [sx * (900 + v[0]), -1800 + v[1], -3500 + v[2]],
       [sx * 380, -1250, -2100],
       [sx * 70, -720, -700],
       PRE_APERTURE,
+      SHAFT_ENTRY,
       APERTURE_CENTRE,
       HOVER_POINT,
       mid,
@@ -199,11 +209,11 @@ export class PathRegistry {
       slot.pos,
     ];
     const D = ARRIVAL_DURATION;
-    const times = [0, 14, 30, 50, ARRIVAL_SHAFT_TIME, 63, 70, 74, 77, 80];
+    const times = [0, 12, 26, 44, 52, ARRIVAL_SHAFT_TIME, ARRIVAL_HOVER[0], 71, 75, 78, 80];
     const path = new FlightPath(id(slotId, "arr", variant), { points, duration: D, kind: "arrival", divisions: 800 });
     const fr = path.fractions;
     const knots = times.map((tt, i) => [tt / D, fr[i]]);
-    knots.splice(6, 0, [66 / D, fr[5]]); // hover dwell 63..66 s
+    knots.splice(7, 0, [ARRIVAL_HOVER[1] / D, fr[6]]); // hover dwell
     path.profile = monotoneProfile(knots, { settleEnd: true });
     // The far approach heads aft (+Z) and pulls up through the shaft, so the natural level-off at the hover
     // faces aft; the extra 8° picks the yaw direction so the fighter turns to face the wall it docks on.
@@ -211,12 +221,12 @@ export class PathRegistry {
     path.orient = [
       { s: 0, mode: "tangent" },
       { s: ARRIVAL_SHAFT_TIME / D, mode: "tangent" },
-      { s: 63 / D, mode: "level", yaw: hoverYaw },
-      { s: 70 / D, mode: "level", yaw: hoverYaw },
-      { s: 74 / D, mode: "slot" },
+      { s: ARRIVAL_HOVER[0] / D, mode: "level", yaw: hoverYaw },
+      { s: 71 / D, mode: "level", yaw: hoverYaw },
+      { s: 75 / D, mode: "slot" },
       { s: 1, mode: "slot" },
     ];
-    path.keys = { shaft: ARRIVAL_SHAFT_TIME / D, hover: [63 / D, 66 / D], approach: 74 / D, settle: 77 / D };
+    path.keys = { shaft: ARRIVAL_SHAFT_TIME / D, hover: [ARRIVAL_HOVER[0] / D, ARRIVAL_HOVER[1] / D], approach: 75 / D, settle: 78 / D };
     return path;
   }
   launch(slotId, variant) {
@@ -224,24 +234,24 @@ export class PathRegistry {
     const { side, mid, a1, a2 } = this.approach(slot);
     const v = FAR_VARIANTS[(variant + 3) % FAR_VARIANTS.length];
     const sx = side;
-    const points = [slot.pos, a2, a1, mid, HOVER_POINT, APERTURE_CENTRE, PRE_APERTURE, [sx * 90, -800, 750], [sx * 420, -1500, 2300], [sx * (900 + v[0]), -2000 + v[1], 3900 + v[2]]];
+    const points = [slot.pos, a2, a1, mid, HOVER_POINT, APERTURE_CENTRE, SHAFT_ENTRY, PRE_APERTURE, [sx * 90, -800, 750], [sx * 420, -1500, 2300], [sx * (900 + v[0]), -2000 + v[1], 3900 + v[2]]];
     const D = LAUNCH_DURATION;
-    const times = [LAUNCH_UNCLAMP_TIME, 6, 9, 12, 15, LAUNCH_SHAFT_TIME, 27, 38, 49, 60];
+    const times = [LAUNCH_UNCLAMP_TIME, 6, 9, 12, LAUNCH_HOVER[0], LAUNCH_SHAFT_TIME, 28, 33, 42, 51, 60];
     const path = new FlightPath(id(slotId, "lau", variant), { points, duration: D, kind: "launch", divisions: 800 });
     const fr = path.fractions;
     const knots = times.map((tt, i) => [tt / D, fr[i]]);
     knots.unshift([0, fr[0]]); // unclamp dwell 0..3 s
-    knots.splice(6, 0, [17 / D, fr[4]]); // hover dwell 15..17 s
+    knots.splice(6, 0, [LAUNCH_HOVER[1] / D, fr[4]]); // hover dwell
     path.profile = monotoneProfile(knots, { settleEnd: false });
     path.orient = [
       { s: 0, mode: "slot" },
       { s: 9 / D, mode: "slot" },
       { s: 12 / D, mode: "level", yaw: 0 },
       { s: LAUNCH_SHAFT_TIME / D, mode: "level", yaw: 0 },
-      { s: 27 / D, mode: "tangent" },
+      { s: 28 / D, mode: "tangent" },
       { s: 1, mode: "tangent" },
     ];
-    path.keys = { unclamp: LAUNCH_UNCLAMP_TIME / D, hover: [15 / D, 17 / D], shaft: LAUNCH_SHAFT_TIME / D, clear: 27 / D };
+    path.keys = { unclamp: LAUNCH_UNCLAMP_TIME / D, hover: [LAUNCH_HOVER[0] / D, LAUNCH_HOVER[1] / D], shaft: LAUNCH_SHAFT_TIME / D, clear: 28 / D };
     return path;
   }
   patrol(name) {

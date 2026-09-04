@@ -4,7 +4,7 @@
 // Motion is time-parametric: pos(t) = path.getPointAt(profile((t - t0) / duration)); the schedule is
 // deterministic from ctx.seed so every client replays the same traffic. See README.md in this folder.
 import * as THREE from "three";
-import { buildFighter, buildShuttle, buildClamp, SHUTTLE_SPEC } from "./craft.js";
+import { buildFighter, buildShuttle, buildClamp, SHUTTLE_SPEC, FIGHTER_ENGINES, SHUTTLE_ENGINES } from "./craft.js";
 import { PathRegistry } from "./paths.js";
 import { Schedule, unit } from "./scheduler.js";
 import { makeBeams, makeGlow, makeBeacons, makeClamps, shaftStrength, insideShaft, EMITTERS } from "./effects.js";
@@ -20,21 +20,33 @@ const PATROL = [
   { loop: "alpha", count: 5 },
   { loop: "beta", count: 5 },
 ];
+/**
+ * Patrol flights fly as a five-ship V: member i trails the lead by `behind` metres along the loop and sits
+ * `right`/`up` metres off the path in the flight's tangent frame (so the echelon banks with the leader).
+ */
+const FORMATION = [
+  { behind: 0, right: 0, up: 0 },
+  { behind: 20, right: 16, up: -3 },
+  { behind: 20, right: -16, up: -3 },
+  { behind: 40, right: 32, up: -6 },
+  { behind: 40, right: -32, up: -6 },
+];
 const MAX_HANGAR_MOVERS = MAX_MOVERS - PATROL.reduce((n, p) => n + p.count, 0);
 const MAX_RACKED = 22;
 const RACK_FILL = 0.7;
 
-const FALLBACK_PAD = { pos: [-110, -72, 15], yaw: 90 };
+const FALLBACK_PAD = { pos: [-110, -71.7, 15], yaw: 90 };
 const FALLBACK_CRADLES = [
   { pos: [110, -67.8, -10], yaw: 0 },
   { pos: [110, -67.8, 30], yaw: 0 },
 ];
+// mirrors the hangar plan: two tiers per side wall, seven slots each, none within 10 m of the bay doors
 function fallbackSlots() {
   const out = [];
   for (const side of ["port", "starboard"]) {
     const x = side === "port" ? -70 : 70;
-    [-62, -50].forEach((y, tier) => {
-      for (let i = 0; i < 7; i++) out.push({ id: `rack-${side[0]}${tier}-${i}`, pos: [x, y, i * 10], yaw: 0, tier, side, occupied: false });
+    [-62, -46].forEach((y, tier) => {
+      for (let i = 0; i < 7; i++) out.push({ id: `rack-${side[0]}${tier}-${i}`, pos: [x, y, 28 + i * 10], yaw: 0, tier, side, occupied: false });
     });
   }
   return out;
@@ -58,16 +70,39 @@ const _qRest = new THREE.Quaternion();
 const _s1 = new THREE.Vector3(1, 1, 1);
 const _w = { tangent: 1, level: 0, slot: 0, yaw: 0 };
 const GLOW_COLOUR = new THREE.Color(0.62, 0.8, 1.0);
-const ENGINE_OFFSETS = [new THREE.Vector3(-0.72, -0.1, 3.4), new THREE.Vector3(0.72, -0.1, 3.4)];
-const SHUTTLE_ENGINE_OFFSETS = [new THREE.Vector3(0, 0.5, 9.6), new THREE.Vector3(-1.3, -0.75, 9.6), new THREE.Vector3(1.3, -0.75, 9.6)];
+const HOLD_COLOUR = new THREE.Color(0.5, 0.72, 1.0);
+const ENGINE_OFFSETS = FIGHTER_ENGINES.offsets.map(([x, y]) => new THREE.Vector3(x, y, FIGHTER_ENGINES.exitZ + 0.25));
+const SHUTTLE_ENGINE_OFFSETS = SHUTTLE_ENGINES.offsets.map(([x, y]) => new THREE.Vector3(x, y, SHUTTLE_ENGINES.exitZ + 0.25));
 const NAV_PORT = new THREE.Vector3(-3.95, 3.62, 0);
 const NAV_STBD = new THREE.Vector3(3.95, 3.62, 0);
 const LANDING = new THREE.Vector3(0, -2.35, -0.5);
+/** landing-light cone direction in the craft frame (forward and 45° down) and length */
+const LANDING_DIR = new THREE.Vector3(0, -0.707, -0.707);
+const LANDING_LEN = 18;
 const FIN_BEACON = new THREE.Vector3(0, 8.8, 1.3);
 
 const MOVING = new Set(["launching", "patrol", "arriving", "docking"]);
+const HANGAR_MOVING = new Set(["launching", "arriving", "docking"]);
 const EVENTS = ["launch", "dock", "depart", "arrive"];
 const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/**
+ * Patrol view camera, derived from the alpha loop itself: sit on the loop 100 m behind, 45 m right of and
+ * 30 m above the lead's position at the anchor time (its first control point), looking at empty air 30 m
+ * behind the lead so the V fills the frame in a 3/4 rear view at 75-115 m and nothing sits dead centre.
+ */
+function patrolCamera() {
+  const path = new PathRegistry(new Map(), 1).get("patrol:alpha");
+  const p = path.pointAt(0, new THREE.Vector3());
+  const d = path.tangentAt(0, new THREE.Vector3()).normalize();
+  const r = new THREE.Vector3().crossVectors(d, Y_AXIS).normalize();
+  const u = new THREE.Vector3().crossVectors(r, d).normalize();
+  const pos = p.clone().addScaledVector(d, -100).addScaledVector(r, 45).addScaledVector(u, 30);
+  const look = p.clone().addScaledVector(d, -30).addScaledVector(u, -5);
+  const arr = (v) => [+v.x.toFixed(1), +v.y.toFixed(1), +v.z.toFixed(1)];
+  return { pos: arr(pos), lookAt: arr(look) };
+}
+const PATROL_CAM = patrolCamera();
 
 class Craft {
   constructor(id, type) {
@@ -92,13 +127,15 @@ class Craft {
     this.phase = unit(id) * 6.283;
     this.arrived = false;
     this.cleared = false;
+    /** formation offset [right, up] metres in the path's tangent frame (patrol V members), or null */
+    this.offset = null;
   }
   yaw() {
     _f.set(0, 0, -1).applyQuaternion(this.quaternion);
     return THREE.MathUtils.radToDeg(Math.atan2(-_f.x, -_f.z));
   }
   plain() {
-    return {
+    const o = {
       id: this.id,
       type: this.type,
       state: this.state,
@@ -110,6 +147,8 @@ class Craft {
       position: [+this.position.x.toFixed(3), +this.position.y.toFixed(3), +this.position.z.toFixed(3)],
       yaw: +this.yaw().toFixed(2),
     };
+    if (this.offset) o.offset = this.offset.slice();
+    return o;
   }
 }
 
@@ -121,11 +160,16 @@ export default {
   owner: "D",
   materials: (shared) => makeTrafficMaterials(shared),
   views: {
-    "sys-traffic-approach": { mode: "exterior", camPos: [70, -140, -30], lookAt: [0, -85, 32], time: 40 },
-    // on the deck outside the aperture rail (x -36), looking up at the port rack tiers
-    "sys-traffic-racks": { pos: [-42, -72, 40], yaw: 90, pitch: 14, time: 40 },
-    "sys-traffic-hover": { pos: [0, -72, 120], yaw: 0, pitch: 18, time: 43 },
-    "sys-traffic-patrol": { mode: "exterior", camPos: [1600, 200, -900], lookAt: [0, 0, 0], time: 40 },
+    // below the keel, 39 m from the aperture centre: at t 40 arrival A0 is exactly there, held by all four
+    // beams (it spends ~6 s in the column, so the moment survives ±2 s of drift)
+    "sys-traffic-approach": { mode: "exterior", camPos: [20, -108, 8], lookAt: [0, -82, 34], time: 40 },
+    // on the deck outside the aperture rail (x -36), looking up at both port rack tiers
+    "sys-traffic-racks": { pos: [-42, -72, 40], yaw: 108, pitch: 18, time: 40 },
+    // 33 m from the hover point, aft-starboard of it and 18 m above the deck: A0 hovers 46..48 s, so at 47 it
+    // sits level with its engines toward the camera, the landing light sweeping down and the hold glow under it
+    "sys-traffic-hover": { mode: "exterior", camPos: [24, -54, 50], lookAt: [0, -40, 32], time: 47 },
+    // on alpha's loop 100 m behind / 45 m right / 30 m above the lead as the V passes its first control point
+    "sys-traffic-patrol": { mode: "exterior", camPos: PATROL_CAM.pos, lookAt: PATROL_CAM.lookAt, time: 40 },
   },
 
   build(ctx) {
@@ -185,14 +229,16 @@ export default {
     group.add(fighters, shuttles, beams.mesh, glow.mesh, beacons.points, clamps.mesh);
     const clampAmounts = new Float32Array(slots.length);
 
-    // triangle budget -> hard cap on live fighter instances (everything else is fixed-size)
-    const fixedTris = shuttleGeo.userData.tris * SHUTTLE_CAPACITY + clampGeo.userData.tris * slots.length * 2 + beams.tris + glow.capacity * 2;
+    // triangle budget -> hard cap on live fighter instances. Everything else the schedule can show is
+    // fixed-size (one parked shuttle, the clamps, the beam cones, the glow quads); api.spawn() craft are the
+    // integrator's explicit extras and are not reserved for here.
+    const fixedTris = shuttleGeo.userData.tris + clampGeo.userData.tris * slots.length * 2 + beams.tris + glow.capacity * 2;
     const maxFighterInstances = Math.max(0, Math.min(FIGHTER_CAPACITY, Math.floor((TRI_BUDGET - fixedTris) / fighterGeo.userData.tris)));
     const patrolCount = PATROL.reduce((n, p) => n + p.count, 0);
     const maxHangarFighters = Math.max(0, maxFighterInstances - cradles.length - patrolCount);
 
     // one pooled light rides with the craft in the shaft (tractor-beam fill); removed from the list when idle
-    const beamLight = { type: "point", pos: [0, -85, 32], color: 0x6f9cff, intensity: 40, distance: 70, decay: 1.5, priority: 0.6 };
+    const beamLight = { type: "point", pos: [0, -85, 32], color: 0x6f9cff, intensity: 60, distance: 80, decay: 1.5, priority: 0.7 };
 
     // ---- state
     const crafts = new Map();
@@ -311,13 +357,18 @@ export default {
       });
       PATROL.forEach(({ loop, count }) => {
         const path = paths.get("patrol:" + loop);
+        const speed = path.length / path.duration;
+        // the alpha lead passes the loop's first control point at the anchor time (t 40); beta is phased so
+        // its V is on the far side of the ship then. Members trail the lead by their formation distance.
+        const leadT0 = loop === "alpha" ? 40 : -17 - path.duration * 0.5;
         for (let i = 0; i < count; i++) {
           const c = new Craft(`tie-p-${loop}-${i}`, "fighter");
           c.state = "patrol";
           c.pathId = path.id;
           c.duration = path.duration;
-          // fighter 0 of alpha passes its first control point at the anchor time; the rest are spaced evenly
-          c.t0 = loop === "alpha" ? 40 - (i / count) * path.duration : -(i / count) * path.duration - 17;
+          const fm = FORMATION[i % FORMATION.length];
+          c.t0 = leadT0 + fm.behind / speed;
+          c.offset = [fm.right, fm.up];
           addCraft(c);
         }
       });
@@ -325,7 +376,7 @@ export default {
       sh.state = "racked";
       sh.to = "shuttle-pad";
       sh.pad = pad;
-      sh.fold = 1;
+      sh.fold = SHUTTLE_SPEC.parkedFold;
       addCraft(sh);
       hooks.surfaceContact(sh, pad);
     };
@@ -450,6 +501,8 @@ export default {
       _upRef.set(0, 1 - k, -k).normalize();
       _r.crossVectors(_f, _upRef).normalize();
       _u.crossVectors(_r, _f).normalize();
+      // formation members ride beside/below the path in its unbanked tangent frame
+      if (c.offset) _p.addScaledVector(_r, c.offset[0]).addScaledVector(_u, c.offset[1]);
       // bank into the turn: lateral acceleration vs an effective gravity
       _v2.sub(_v1).multiplyScalar(4);
       const aLat = _v2.dot(_r);
@@ -529,6 +582,7 @@ export default {
 
       let shaftCraft = null;
       let shaftStr = 0;
+      let lightCraft = null; // hangar mover that carries the landing-light cone (the shaft craft wins)
       glow.begin();
       beacons.begin();
       for (const c of crafts.values()) {
@@ -543,7 +597,7 @@ export default {
           hooks.flightControl(c, dt, t);
           if (!posePath(c, t)) poseStatic(c);
         } else poseStatic(c);
-        if (c.type === "shuttle") c.fold = c.state === "racked" ? 1 : c.fold;
+        if (c.type === "shuttle") c.fold = c.state === "racked" ? SHUTTLE_SPEC.parkedFold : c.fold;
         writeInstance(c);
 
         // tractor beam target: the (first) craft inside the shaft column
@@ -557,10 +611,29 @@ export default {
         // engine glow: movers only, brighter with speed and acceleration
         if (moving) {
           const offs = c.type === "shuttle" ? SHUTTLE_ENGINE_OFFSETS : ENGINE_OFFSETS;
-          const thr = 0.9 + 1.4 * THREE.MathUtils.clamp(c.speed / 160, 0, 1) + 1.8 * THREE.MathUtils.clamp(c.accel / 12, 0, 1);
+          const thr = 1.4 + 0.8 * THREE.MathUtils.clamp(c.speed / 160, 0, 1) + 1.6 * THREE.MathUtils.clamp(c.accel / 12, 0, 1);
           for (const o of offs) {
             _p.copy(o).applyQuaternion(c.quaternion).add(c.position);
-            glow.add(_p, c.type === "shuttle" ? 2.4 : 1.7, GLOW_COLOUR, thr);
+            glow.add(_p, c.type === "shuttle" ? 3.6 : 3.0, GLOW_COLOUR, thr);
+          }
+        }
+        // hangar movers inside the hall and away from their slot: a soft hold glow under a level, slow craft
+        // (it reads as held in the air rather than pasted on the wall) and the landing-light cone on the
+        // first of them
+        if (HANGAR_MOVING.has(c.state) && c.position.y > -86 && c.pathId) {
+          const keys = paths.get(c.pathId)?.keys || {};
+          const free = c.state === "launching" ? c.s > (keys.unclamp ?? 0) && c.s < (keys.shaft ?? 1) : c.s > (keys.shaft ?? 0) && c.s < (keys.settle ?? 1);
+          if (free) {
+            _f.set(0, 0, -1).applyQuaternion(c.quaternion);
+            const level = 1 - THREE.MathUtils.smoothstep(Math.abs(_f.y), 0.3, 0.7);
+            const slow = 1 - THREE.MathUtils.smoothstep(c.speed, 2, 10);
+            const hold = level * slow;
+            if (hold > 0.02) {
+              _p.copy(c.position);
+              _p.y -= 4.6;
+              glow.add(_p, 7.0, HOLD_COLOUR, 0.32 * hold * (0.9 + 0.1 * Math.sin(t * 6 + c.phase)));
+            }
+            if (!lightCraft) lightCraft = c;
           }
         }
         // beacons: nav lights (red port / green starboard), landing light on hangar movers, fin beacon on shuttles
@@ -593,26 +666,35 @@ export default {
         beacons.add(_p, 0.45 * k, 0.7 * k, 1.0 * k, 0.9);
       }
       beams.update(t, shaftCraft ? shaftCraft.position : null, shaftStr);
+      // landing-light cone: forward-and-down from the belly lamp of the shaft craft (or the first hangar mover)
+      const lc = shaftStr > 0.05 ? shaftCraft : lightCraft;
+      if (lc) {
+        _p.copy(LANDING).applyQuaternion(lc.quaternion).add(lc.position);
+        _f.copy(LANDING_DIR).applyQuaternion(lc.quaternion);
+        beams.setLight(_p, _f, LANDING_LEN, 1);
+      } else beams.setLight(null, null, 0, 0);
       const li = ctx.lights.indexOf(beamLight);
       if (shaftStr > 0.05) {
         beamLight.pos[0] = shaftCraft.position.x;
         beamLight.pos[1] = shaftCraft.position.y;
         beamLight.pos[2] = shaftCraft.position.z;
-        beamLight.intensity = 40 * shaftStr;
+        beamLight.intensity = 60 * shaftStr;
         if (li < 0) ctx.lights.push(beamLight);
       } else if (li >= 0) ctx.lights.splice(li, 1);
       glow.end();
       beacons.end();
 
-      // rack clamps: closed on settled fighters, animating during the last 3 s of an arrival / first 3 s of a launch
+      // rack clamps: closed on settled fighters, folded flat under the beam at empty slots, animating over
+      // the settle window of an arrival / the unclamp window of a launch
       for (let i = 0; i < slots.length; i++) {
         const slot = slots[i];
         let a = slot.fighterId ? 1 : 0;
         for (const f of schedule.flights) {
           if (f.ended || !f.started || f.slotId !== slot.id) continue;
           const s = (t - f.t0) / f.duration;
-          if (f.kind === "arrival") a = Math.max(a, THREE.MathUtils.smoothstep(s, 77 / 80, 1));
-          else a = Math.max(a, 1 - THREE.MathUtils.smoothstep(s, 0, 3 / 60));
+          const keys = paths.get(f.pathId)?.keys || {};
+          if (f.kind === "arrival") a = Math.max(a, THREE.MathUtils.smoothstep(s, keys.settle ?? 0.96, 1));
+          else a = Math.max(a, 1 - THREE.MathUtils.smoothstep(s, 0, keys.unclamp ?? 0.05));
         }
         clampAmounts[i] = a;
       }
@@ -713,6 +795,7 @@ export default {
             fold: c.type === "shuttle" ? c.fold : undefined,
             arrived: c.arrived || undefined,
             cleared: c.cleared || undefined,
+            offset: c.offset ? c.offset.slice() : undefined,
           })),
           paths: customPaths,
           spawnCount,
@@ -741,8 +824,9 @@ export default {
           c.external = !!f.external;
           c.arrived = !!f.arrived;
           c.cleared = !!f.cleared;
+          c.offset = Array.isArray(f.offset) && f.offset.length === 2 ? [+f.offset[0], +f.offset[1]] : null;
           if (c.type === "shuttle") {
-            c.fold = f.fold ?? 1;
+            c.fold = f.fold ?? SHUTTLE_SPEC.parkedFold;
             c.pad = pad;
           }
           if (c.state === "maintenance") c.pad = cradles[parseInt(String(c.to).split("-")[1], 10) || 0] || cradles[0];
