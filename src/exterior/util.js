@@ -162,16 +162,19 @@ export function atlasQuad(w, h, rect) {
 // Macro paint variation shared by hull vertex colours and instance colours: slow blotchy tone shifts,
 // soot toward the stern, dust lightening on up-facing surfaces. Writes into `out` (THREE.Color).
 export function macroTint(x, y, z, ny, out, { base = 1.0, trench = false } = {}) {
-  // three scales of paint-batch patchiness (whole-hull, ~300 m, ~80 m) so the plane never reads as one flat value
+  // four scales of paint-batch patchiness (~800 m patches with a warm/cool drift, whole-hull, ~300 m,
+  // ~80 m) so the plane reads as blotched grey from 4 km and never as one flat value
+  const n0 = fbm((x + 900) / 3000, (z + 900) / 3000, { octaves: 2, freq: 4, gain: 0.5, seed: 11 });
   const n = fbm((x + 900) / 2400, (z + 900) / 2400, { octaves: 3, freq: 6, gain: 0.55, seed: 17 });
   const n2 = fbm((z + 900) / 1800, (y + 300) / 900, { octaves: 2, freq: 9, gain: 0.5, seed: 29 });
   const n3 = fbm((x + 900) / 700, (z + 900) / 700, { octaves: 2, freq: 7, gain: 0.5, seed: 41 });
-  let k = base * (0.96 + (n - 0.5) * 0.2 + (n2 - 0.5) * 0.08 + (n3 - 0.5) * 0.09);
+  let k = base * (0.95 + (n0 - 0.5) * 0.34 + (n - 0.5) * 0.2 + (n2 - 0.5) * 0.08 + (n3 - 0.5) * 0.09);
   const soot = THREE.MathUtils.smoothstep(z, 380, 800) * 0.2;
   k *= 1 - soot;
   k *= 1 + ny * 0.05;
   if (trench) k *= 0.5;
-  out.setRGB(k * (1 + soot * 0.08), k, k * (1.02 - soot * 0.35));
+  const warm = (n0 - 0.5) * 0.05;
+  out.setRGB(k * (1 + soot * 0.08 + warm), k, k * (1.02 - soot * 0.35 - warm));
   return out;
 }
 

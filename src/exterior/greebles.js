@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { HULL, SUPERSTRUCTURE, TOWER } from "../config/shipSpec.js";
 import { TRENCH_HALF, TRENCH_DEPTH, EDGE_YAW, UP, dorsal, surfaceY, surfaceNormal, surfaceQuat, frameQuat, merge, box, bevelBox, atlasBox, atlasQuad, macroTint, instancedFromList, layerMesh, overlapsAny } from "./util.js";
+import { CENTRE_CHANNEL, FLANK_CHANNEL, REACTOR } from "./ventral.js";
 
 const _q = new THREE.Quaternion();
 const _q2 = new THREE.Quaternion();
@@ -54,11 +55,17 @@ const PLATE_CLASSES = [
   [0.8, 18, 36],
   [1.0, 10, 18],
 ];
-function partition(rand, rect, out) {
+// the belly is paint groups, not armour: mostly 40–90 m groups whose sub-panels come from the plating map
+const BELLY_CLASSES = [
+  [0.4, 60, 90],
+  [0.8, 40, 60],
+  [1.0, 24, 40],
+];
+function partition(rand, rect, out, classes = PLATE_CLASSES) {
   const w = rect.x1 - rect.x0;
   const d = rect.z1 - rect.z0;
   const r = rand();
-  const cls = PLATE_CLASSES.find(([p]) => r <= p) || PLATE_CLASSES[3];
+  const cls = classes.find(([p]) => r <= p) || classes[classes.length - 1];
   const target = cls[1] + rand() * (cls[2] - cls[1]);
   const longest = Math.max(w, d);
   if (longest <= target || longest < 14) {
@@ -69,25 +76,52 @@ function partition(rand, rect, out) {
   const ratio = 0.35 + rand() * 0.3;
   if (w >= d) {
     const xm = rect.x0 + w * ratio;
-    partition(rand, { x0: rect.x0, x1: xm, z0: rect.z0, z1: rect.z1 }, out);
-    partition(rand, { x0: xm, x1: rect.x1, z0: rect.z0, z1: rect.z1 }, out);
+    partition(rand, { x0: rect.x0, x1: xm, z0: rect.z0, z1: rect.z1 }, out, classes);
+    partition(rand, { x0: xm, x1: rect.x1, z0: rect.z0, z1: rect.z1 }, out, classes);
   } else {
     const zm = rect.z0 + d * ratio;
-    partition(rand, { x0: rect.x0, x1: rect.x1, z0: rect.z0, z1: zm }, out);
-    partition(rand, { x0: rect.x0, x1: rect.x1, z0: zm, z1: rect.z1 }, out);
+    partition(rand, { x0: rect.x0, x1: rect.x1, z0: rect.z0, z1: zm }, out, classes);
+    partition(rand, { x0: rect.x0, x1: rect.x1, z0: zm, z1: rect.z1 }, out, classes);
   }
 }
 
 // Dorsal plates are raised chamfered slabs / skins / strips; ventral plates are flat "paint" quads drawn
 // with polygonOffset (no side faces, so nothing sparkles at grazing angles) whose value jitter gives the
 // belly its legible plating. Returns the cells (plate or bare) for the fittings pass.
+// up-facing flat plate with a darker border (vertex colours), for the belly's paint groups: the border is
+// the group seam, the plating map inside it supplies the sub-panels
+function borderedPlane(size, border, tone) {
+  const h = size / 2;
+  const i = h - border;
+  const quads = [
+    [-i, -i, i, i, 1],
+    [-h, -h, h, -i, tone],
+    [-h, i, h, h, tone],
+    [-h, -i, -i, i, tone],
+    [i, -i, h, i, tone],
+  ];
+  const pos = [];
+  const col = [];
+  for (const [x0, z0, x1, z1, t] of quads) {
+    // faces +y: counter-clockwise seen from above
+    pos.push(x0, 0, z0, x0, 0, z1, x1, 0, z1, x0, 0, z0, x1, 0, z1, x1, 0, z0);
+    for (let k = 0; k < 6; k++) col.push(t, t, t);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(pos.length / 3 * 2), 2)); // world-projected material; attribute only has to exist
+  g.computeVertexNormals();
+  return g;
+}
+
 export function buildHullPlates(ctx) {
   const { rand, mats, detail, exclude } = ctx;
   const fams = {
     slab: { geo: bevelBox(30, 1.5, 30, 0.55), w: 30, d: 30, th: 1.5, list: [] },
     skin: { geo: bevelBox(30, 0.6, 30, 0.25), w: 30, d: 30, th: 0.6, list: [] },
     strip: { geo: bevelBox(8, 0.9, 60, 0.35), w: 8, d: 60, th: 0.9, list: [] },
-    paint: { geo: new THREE.PlaneGeometry(30, 30).rotateX(-Math.PI / 2), w: 30, d: 30, th: 0, list: [] },
+    paint: { geo: borderedPlane(30, 1.1, 0.74), w: 30, d: 30, th: 0, list: [] },
   };
   const cells = [];
   const gap = 2.4;
@@ -98,18 +132,18 @@ export function buildHullPlates(ctx) {
       const rects = [];
       let zb = HULL.bowZ + 30;
       while (zb < HULL.sternZ - 40) {
-        const z1 = Math.min(zb + 80 + rand() * 70, HULL.sternZ - 10);
-        partition(rand, { x0: 4, x1: HULL.halfWidthAt(zb) - 9, z0: zb, z1 }, rects);
+        const z1 = Math.min(zb + (top ? 80 + rand() * 70 : 110 + rand() * 90), HULL.sternZ - 10);
+        partition(rand, { x0: 4, x1: HULL.halfWidthAt(zb) - 9, z0: zb, z1 }, rects, top ? PLATE_CLASSES : BELLY_CLASSES);
         zb = z1;
       }
-      // the ventral flank strips (ventral.js) run at 56 % of the half-width: rects crossing that band are
-      // split around it so no paint plate lies under a strip
+      // the ventral flank channels (ventral.js) run at 56 % of the half-width: rects crossing that band are
+      // split around it so no paint plate lies across a channel
       if (!top) {
         const split = [];
         for (const r of rects) {
-          const b0 = HULL.halfWidthAt(r.z0) * 0.56 - 7;
-          const b1 = HULL.halfWidthAt(r.z1) * 0.56 + 7;
-          if (r.z1 < -520 || r.z0 > 700 || r.x1 <= b0 || r.x0 >= b1) {
+          const b0 = HULL.halfWidthAt(r.z0) * FLANK_CHANNEL.s - FLANK_CHANNEL.halfW - 3;
+          const b1 = HULL.halfWidthAt(r.z1) * FLANK_CHANNEL.s + FLANK_CHANNEL.halfW + 3;
+          if (r.z1 < FLANK_CHANNEL.z0 || r.z0 > FLANK_CHANNEL.z1 || r.x1 <= b0 || r.x0 >= b1) {
             split.push(r);
             continue;
           }
@@ -125,8 +159,8 @@ export function buildHullPlates(ctx) {
         if (top && r.z1 > 144 && r.z0 < 566) x0 = Math.max(x0, 167);
         if (top && r.z1 > SPINE.z0 - 4 && r.z0 < SPINE.z1 + 4) x0 = Math.max(x0, SPINE.halfBase + 3);
         if (!top && r.z1 > HULL.keelPlate.z0 - 6 && r.z0 < HULL.keelPlate.z1 + 6) x0 = Math.max(x0, HULL.keelPlate.x + 5);
-        if (!top && r.z1 > 640 && r.z0 < 760) x0 = Math.max(x0, 48); // reactor bulb
-        if (!top && x0 < 18 && r.z0 > -600 && r.z1 < 660) x0 = Math.max(x0, 18); // ventral channel
+        if (!top && r.z1 > REACTOR.z - REACTOR.hole - 4 && r.z0 < REACTOR.z + REACTOR.hole + 4) x0 = Math.max(x0, REACTOR.hole + 4); // reactor recess
+        if (!top && r.z1 > CENTRE_CHANNEL.z0 - 4 && r.z0 < CENTRE_CHANNEL.z1 + 4) x0 = Math.max(x0, CENTRE_CHANNEL.halfW + 4); // centreline channel
         const w = x1 - x0 - gap;
         const d = r.z1 - r.z0 - gap;
         if (w < 7 || d < 7) continue;
@@ -153,8 +187,8 @@ export function buildHullPlates(ctx) {
             _s.set(d / f.w, 1, w / f.d);
           } else _s.set(w / f.w, 1, d / f.d);
           macroTint(cx, _p.y, cz, _n.y, _c);
-          // per-plate paint batch: ±10 % value jitter with a faint warm/cool drift
-          _c.multiplyScalar(0.9 + rand() * 0.2);
+          // per-plate paint batch: ±10 % value jitter (±18 % on the belly's big groups) with a faint warm/cool drift
+          _c.multiplyScalar(top ? 0.9 + rand() * 0.2 : 0.82 + rand() * 0.36);
           const hue = (rand() - 0.5) * 0.05;
           _c.r *= 1 + hue;
           _c.b *= 1 - hue * 1.3;
@@ -266,33 +300,68 @@ export function buildHullFittings(ctx, cells) {
   );
 }
 
-// Docking pads: 60 m flat areas with painted markings and edge lights, on the dorsal hull beside the
-// superstructure and ahead of it. Returns their footprints so the plates avoid them.
-export const PAD_SPOTS = [
-  [-225, 300],
-  [225, 300],
-  [-255, 450],
-  [255, 450],
-  [-70, 20],
-  [70, 20],
+// Docking pads: flat landing areas of three kinds (square pad with the painted ring, round pad, long
+// lit strip) in different sizes and headings beside and ahead of the superstructure. The layout is not
+// mirrored, so from a distance the deck shows a handful of different marks rather than one repeated
+// stamp. padRects() returns their footprints so the plates avoid them.
+export const PADS = [
+  { x: -225, z: 300, w: 60, d: 60, kind: "square" },
+  { x: 240, z: 322, w: 40, d: 88, kind: "strip", yaw: 0.1 },
+  { x: -262, z: 458, w: 48, d: 48, kind: "round" },
+  { x: 258, z: 472, w: 62, d: 62, kind: "square", yaw: 0.36 },
+  { x: -58, z: 28, w: 36, d: 36, kind: "round" },
+  { x: 116, z: -72, w: 26, d: 26, kind: "square", yaw: -0.2 },
 ];
+function remapUV(g, rect) {
+  const uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, rect[0] + uv.getX(i) * (rect[2] - rect[0]), rect[1] + uv.getY(i) * (rect[3] - rect[1]));
+  return g;
+}
+// unit-diameter round pad: plate-grey rim, pad markings on the cap
+function roundPadGeo(A) {
+  const side = remapUV(new THREE.CylinderGeometry(0.5, 0.5, 1, 40, 1, true), A.plate);
+  const cap = remapUV(new THREE.CircleGeometry(0.5, 40), A.pad).rotateX(-Math.PI / 2).translate(0, 0.5, 0);
+  return merge([side, cap]);
+}
+// landing strip: plain slab, lit rails along both long edges, a hazard centreline, threshold bars
+function stripPadGeo(A, w, d) {
+  const parts = [atlasBox(w, 0.6, d, { py: A.plate, ny: A.dark, side: A.plate })];
+  for (const s of [-1, 1]) parts.push(atlasBox(d - 4, 0.25, 1.6, { py: A.edgeLights, side: A.dark }).rotateY(Math.PI / 2).translate(s * (w / 2 - 1.6), 0.4, 0));
+  parts.push(atlasBox(3, 0.2, d - 12, { py: A.hazard, side: A.dark }).translate(0, 0.4, 0));
+  for (const s of [-1, 1]) parts.push(atlasBox(w - 6, 0.2, 2.5, { py: A.dark, side: A.dark }).translate(0, 0.4, s * (d / 2 - 3.5)));
+  return merge(parts);
+}
 export function buildDockingPads(ctx) {
   const { mats, detail, atlas } = ctx;
   const A = atlas.cells;
-  const padGeo = atlasBox(60, 0.6, 60, { py: A.pad, ny: A.dark, side: A.plate });
-  const list = [];
-  for (const [x, z] of PAD_SPOTS) {
-    surfaceNormal(x, z, true, _n);
+  const layers = { square: { geo: atlasBox(1, 1, 1, { py: A.pad, ny: A.dark, side: A.plate }), list: [] }, round: { geo: roundPadGeo(A), list: [] } };
+  const strips = [];
+  for (const p of PADS) {
+    surfaceNormal(p.x, p.z, true, _n);
     frameQuat(_n, _q);
-    _p.set(x, dorsal(x, z), z).addScaledVector(_n, 0.3);
-    _s.set(1, 1, 1);
+    if (p.yaw) {
+      _q2.setFromAxisAngle(UP, p.yaw);
+      _q.multiply(_q2);
+    }
+    _p.set(p.x, dorsal(p.x, p.z), p.z).addScaledVector(_n, 0.3);
     _c.setRGB(1, 1, 1);
-    item(list, _p, _q, _s, _c);
+    if (p.kind === "strip") {
+      _s.set(1, 1, 1);
+      const list = [];
+      item(list, _p, _q, _s, _c);
+      strips.push({ geo: stripPadGeo(A, p.w, p.d), list });
+    } else {
+      _s.set(p.w, 0.6, p.kind === "round" ? p.w : p.d);
+      item(layers[p.kind].list, _p, _q, _s, _c);
+    }
   }
-  instancedFromList(padGeo, mats.atlas, list, detail.mid, "dockingPads");
+  layerMesh([layers.square, layers.round, ...strips], mats.atlas, detail.mid, "dockingPads");
 }
 export function padRects(margin = 3) {
-  return PAD_SPOTS.map(([x, z]) => ({ x0: x - 30 - margin, x1: x + 30 + margin, z0: z - 30 - margin, z1: z + 30 + margin }));
+  return PADS.map((p) => {
+    const r = Math.hypot(p.w, p.d) / 2 + margin;
+    return { x0: p.x - r, x1: p.x + r, z0: p.z - r, z1: p.z + r };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -666,8 +735,10 @@ export function buildSuperstructure(ctx) {
     });
   }
 
-  // --- neck: ribs on the four faces, a dark recessed channel per face (off-centre, different on each),
-  // dense window rows split by the channel, vertical pipe runs and ladders beside the ribs, bays
+  // --- neck: everything here is sized to read from 600 m. Each face gets proud ribs (every third one
+  // heavier), one wide dark channel plus a narrow one on the other side (off-centre, different per face),
+  // dark storey bands crossing under the ribs, a tall lit window row per storey split by the channels,
+  // lit bays inside the wide channel, two heavy dark pipe runs, wide ladder stacks and window bays.
   {
     const nH = neck.y1 - neck.y0;
     const nY = (neck.y0 + neck.y1) / 2;
@@ -677,86 +748,134 @@ export function buildSuperstructure(ctx) {
       { c: [-neck.halfX, nY, (neck.z0 + neck.z1) / 2], yaw: -Math.PI / 2, len: neck.z1 - neck.z0, ch: 0.12 },
       { c: [neck.halfX, nY, (neck.z0 + neck.z1) / 2], yaw: Math.PI / 2, len: neck.z1 - neck.z0, ch: -0.16 },
     ];
-    const bands = [
-      [14, 2.5],
-      [30, 2.5],
-      [44, 5],
-      [60, 2.5],
-      [78, 2.5],
-      [96, 5],
+    // [height above the neck base, window row height]; a dark storey band runs just under each row
+    const storeys = [
+      [12, 4],
+      [36, 5],
+      [60, 4],
+      [84, 5],
+      [105, 3.5],
     ];
+    // dark flat panel at the current _p / _q
+    const recessAt = (w, h, tone) => {
+      _s.set(w, h, 1);
+      _c.setScalar(tone);
+      item(L.recess, _p, _q, _s, _c);
+    };
     for (const f of faces) {
       const out = new THREE.Vector3(Math.sin(f.yaw), 0, Math.cos(f.yaw));
       const along = new THREE.Vector3(-out.z, 0, out.x);
       const at = (u, y, o) => _p.set(f.c[0], y, f.c[2]).addScaledVector(along, u).addScaledVector(out, o);
+      const chU = f.len * f.ch;
+      const chW = 11;
+      const ch2U = -f.len * f.ch * 0.95;
+      const ch2W = 4.5;
+      const inChannel = (u, m) => Math.abs(u - chU) < chW / 2 + m || Math.abs(u - ch2U) < ch2W / 2 + m;
+      // the two channels, dark grey (the recess material is lifted; the instance colour brings it down)
+      setYaw(f.yaw);
+      at(chU, neck.y0 + nH * 0.47, 0.06);
+      recessAt(chW, nH - 12, 0.42);
+      at(ch2U, neck.y0 + nH * 0.44, 0.06);
+      recessAt(ch2W, nH - 20, 0.5);
+      // face segments between the channels: storey bands and the lit rows above them run inside these
+      const chans = [
+        [chU, chW],
+        [ch2U, ch2W],
+      ].sort((a, b) => a[0] - b[0]);
+      const spans = [
+        [-f.len / 2 + 3, chans[0][0] - chans[0][1] / 2 - 1],
+        [chans[0][0] + chans[0][1] / 2 + 1, chans[1][0] - chans[1][1] / 2 - 1],
+        [chans[1][0] + chans[1][1] / 2 + 1, f.len / 2 - 3],
+      ];
+      storeys.forEach(([dy, h], si) => {
+        for (const [ua, ub] of spans) {
+          if (ub - ua < 5) continue;
+          setYaw(f.yaw);
+          at((ua + ub) / 2, neck.y0 + dy - h / 2 - 2.2, 0.06);
+          recessAt(ub - ua, 2.2, 0.5);
+          at((ua + ub) / 2, neck.y0 + dy, 0.25);
+          windowQuad(ub - ua, h, [_p.x, _p.y, _p.z], [0, f.yaw, 0]);
+        }
+        // lit bay inside the wide channel on alternate storeys
+        if (si % 2 === 0) {
+          at(chU, neck.y0 + dy + 1, 0.5);
+          addAt(L.bays, _p.x, _p.y, _p.z, chW - 3, h + 2, 1, f.yaw, 1);
+        }
+      });
+      // ribs (every third heavier), leaving the wide channel open
       const nRibs = Math.floor(f.len / 14);
       const ribU = [];
       for (let i = 0; i <= nRibs; i++) {
         const u = -f.len / 2 + 2 + (i / nRibs) * (f.len - 4);
+        if (Math.abs(u - chU) < chW / 2 + 1.5) continue;
         ribU.push(u);
-        at(u, neck.y0 - 2, 0.9);
+        const heavy = i % 3 === 0;
+        at(u, neck.y0 - 2, heavy ? 1.4 : 1.0);
         setYaw(f.yaw);
-        _s.set(2.4, nH + 2, 1.8);
+        _s.set(heavy ? 3.6 : 2.6, nH + 2, heavy ? 2.8 : 2.0);
         macroTint(_p.x, nY, _p.z, 0, _c);
-        _c.multiplyScalar(lightTone());
+        _c.multiplyScalar(heavy ? 0.9 : lightTone());
         item(L.ribs, _p, _q, _s, _c);
       }
-      // recessed channel
-      const chU = f.len * f.ch;
-      const chW = 5.5;
-      at(chU, neck.y0 + nH * 0.47, 0.06);
-      setYaw(f.yaw);
-      _s.set(chW, nH - 14, 1);
-      _c.setRGB(1, 1, 1);
-      item(L.recess, _p, _q, _s, _c);
-      // window rows on both sides of the channel
-      for (const [dy, h] of bands) {
-        const yy = neck.y0 + dy;
-        for (const [ua, ub] of [
-          [-f.len / 2 + 4, chU - chW / 2 - 1.5],
-          [chU + chW / 2 + 1.5, f.len / 2 - 4],
-        ]) {
-          if (ub - ua < 6) continue;
-          at((ua + ub) / 2, yy, 0.25);
-          windowQuad(ub - ua, h, [_p.x, _p.y, _p.z], [0, f.yaw, 0]);
+      // two heavy dark pipe runs per face, in the bays between ribs
+      let placed = 0;
+      for (let tries = 0; tries < 20 && placed < 2; tries++) {
+        const i = Math.floor(rand() * (ribU.length - 1));
+        const u = (ribU[i] + ribU[i + 1]) / 2 + (rand() - 0.5) * 4;
+        if (inChannel(u, 3) || Math.abs(u) > f.len / 2 - 4) continue;
+        const rad = 1.6 + rand() * 0.8;
+        at(u, neck.y0 - 1, rad + 0.3);
+        setYaw(0);
+        _s.set(rad, nH - 6 - rand() * 12, rad);
+        _c.setScalar(0.5 + rand() * 0.2);
+        item(L.vPipes, _p, _q, _s, _c);
+        // a bracket collar every 24 m
+        for (let y = neck.y0 + 10; y < neck.y1 - 8; y += 24) {
+          at(u, y, rad * 0.5 + 0.3);
+          setYaw(f.yaw);
+          _s.set(rad * 2 + 1.2, 1.6, rad + 0.8);
+          _c.setScalar(0.62);
+          item(L.wallBoxes, _p, _q, _s, _c);
         }
+        placed++;
       }
-      // pipes and ladders hug the ribs
+      // small pipes and wide ladder stacks hug the ribs
       for (let i = 0; i < ribU.length; i++) {
         const r = rand();
-        if (r < 0.3) {
-          const rad = 0.45 + rand() * 0.5;
-          const u = ribU[i] + (rand() < 0.5 ? -1 : 1) * (1.3 + rad);
-          if (Math.abs(u - chU) < chW / 2 + rad + 0.5 || Math.abs(u) > f.len / 2 - 2) continue;
+        if (r < 0.22) {
+          const rad = 0.5 + rand() * 0.5;
+          const u = ribU[i] + (rand() < 0.5 ? -1 : 1) * (1.6 + rad);
+          if (inChannel(u, rad + 0.5) || Math.abs(u) > f.len / 2 - 2) continue;
           at(u, neck.y0 - 1, rad + 0.15);
           setYaw(0);
           _s.set(rad, nH - 4 - rand() * 20, rad);
           _c.setScalar(0.72 + rand() * 0.28);
           item(L.vPipes, _p, _q, _s, _c);
-        } else if (r < 0.42) {
-          const u = ribU[i] + (rand() < 0.5 ? -1 : 1) * 2.0;
-          if (Math.abs(u - chU) < chW / 2 + 1) continue;
-          const segs = 2 + Math.floor(rand() * ((nH - 12) / 10 - 2));
+        } else if (r < 0.4) {
+          const u = ribU[i] + (rand() < 0.5 ? -1 : 1) * 2.6;
+          if (inChannel(u, 1.5) || Math.abs(u) > f.len / 2 - 3) continue;
+          const segs = 3 + Math.floor(rand() * ((nH - 12) / 10 - 3));
           const yStart = neck.y0 + 2 + rand() * Math.max(0, nH - 8 - segs * 10);
           for (let k = 0; k < segs; k++) {
-            at(u, yStart + k * 10, 0.45);
+            at(u, yStart + k * 10, 0.6);
             setYaw(f.yaw);
-            _s.set(1, 1, 1);
-            _c.setScalar(0.85);
+            _s.set(2.4, 1, 1.6);
+            _c.setScalar(0.92);
             item(L.ladders, _p, _q, _s, _c);
           }
         }
       }
-      for (let i = 0; i < nRibs; i++) {
-        if (rand() < 0.55) continue;
-        const u = -f.len / 2 + 2 + ((i + 0.5) / nRibs) * (f.len - 4);
-        if (Math.abs(u - chU) < chW / 2 + 5) continue;
-        const yy = neck.y0 + 8 + rand() * (nH - 30);
-        let onBand = false;
-        for (const [dy] of bands) if (Math.abs(yy - (neck.y0 + dy)) < 6) onBand = true;
-        if (onBand) continue;
+      // window bays between the storeys
+      for (let i = 0; i + 1 < ribU.length; i++) {
+        if (rand() < 0.6) continue;
+        const u = (ribU[i] + ribU[i + 1]) / 2;
+        if (inChannel(u, 5)) continue;
+        const yy = neck.y0 + 20 + rand() * (nH - 40);
+        let onRow = false;
+        for (const [dy, h] of storeys) if (Math.abs(yy - (neck.y0 + dy)) < h / 2 + 5) onRow = true;
+        if (onRow) continue;
         at(u, yy, 0.7);
-        addAt(L.bays, _p.x, _p.y, _p.z, 9, 5 + rand() * 4, 1.5, f.yaw, 1);
+        addAt(L.bays, _p.x, _p.y, _p.z, 9, 5 + rand() * 3, 1.5, f.yaw, 1);
       }
     }
   }

@@ -1,12 +1,15 @@
 // Exterior lighting and texturing patch for MeshStandardMaterial.
 //
 // Every exterior material carries a sun term plus shaped ambient fills: a dim cool starfield fill on
-// up-facing surfaces, a stronger cool planet-shine on down-facing ones (so the belly reads as mid grey,
-// never crushed), a whisper of bounce opposite the sun, an analytic soffit occluder under the bridge
-// slab overhang and the blue ion wash near the stern. In "exterior" mode (hull.js setMode) the sun term's
-// colour is zeroed and a real shadow-casting DirectionalLight of the same colour lights the hull through
-// the standard three.js path, so the tower and superstructure cast readable shadows; in "interior" mode
-// the light is off and the sun term returns, so the interior never receives it.
+// up-facing surfaces, a Lambert planet-shine about a fixed planet direction on down-facing ones (so the
+// belly reads as mid grey, never crushed, and a hemisphere under the hull shades round), a whisper of
+// bounce opposite the sun, an analytic soffit occluder under the bridge slab overhang and the blue ion
+// wash near the stern. A view-independent form factor scales the direct light: the deck keeps it all,
+// vertical faces a fixed share, and the roof half tilted toward the sun gains what the other loses, so
+// the wedge has a lit and a shadow side from any bearing. In "exterior" mode (hull.js setMode) the sun
+// term's colour is zeroed and a real shadow-casting DirectionalLight of the same colour lights the hull
+// through the standard three.js path, so the tower and superstructure cast readable shadows; in
+// "interior" mode the light is off and the sun term returns, so the interior never receives it.
 // Hull materials optionally sample their textures with planar UVs derived from the *world* position
 // (chosen per dominant world normal) so the plating runs continuously across the base hull, the
 // instanced armour plates and the superstructure blocks with no per-instance repetition, and blend in a
@@ -15,7 +18,9 @@ import * as THREE from "three";
 import { TOWER } from "../config/shipSpec.js";
 
 export const SUN_COLOR = new THREE.Color(1.0, 0.965, 0.915);
-export const SUN_INTENSITY = 3.2;
+// a stop under the previous 3.2: the lit deck lands on mid-light grey (~sRGB 150) under ACES instead of
+// compressing toward white, so the tilt of the two roof halves and the shadows still read as value steps
+export const SUN_INTENSITY = 2.0;
 
 export function makeSun() {
   return {
@@ -27,6 +32,13 @@ export function makeSun() {
     fillUp: { value: new THREE.Color(0.09, 0.1, 0.13) },
     fillDown: { value: new THREE.Color(0.68, 0.74, 0.86) },
     fillBack: { value: new THREE.Color(0.03, 0.03, 0.035) },
+    // the planet sits below and a little to starboard-aft: planet-shine is a Lambert term about this
+    // direction, so a hemisphere under the hull shades from a lit to a dark side and the two ventral
+    // half-planes take different values instead of one flat fill
+    planetDir: { value: new THREE.Vector3(0.45, -0.85, 0.28).normalize() },
+    // form: x = share of the sun kept by vertical faces (the deck keeps all of it), y = gain on the
+    // roof halves' tilt toward / away from the sun, z = clamp of that gain
+    form: { value: new THREE.Vector3(0.42, 6.0, 0.5) },
     // blue ion wash on aft-facing surfaces near the stern wall
     engineGlow: { value: new THREE.Color(0.5, 0.75, 1.25) },
     // bridge slab footprint for the soffit occluder (x half-width, y bottom, z0, z1)
@@ -42,9 +54,21 @@ const FILL_GLSL = /* glsl */ `
     sunLight.visible = true;
     RE_Direct( sunLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
     vec3 wN = inverseTransformDirection( geometryNormal, viewMatrix );
-    // planet-shine: full on down-facing surfaces, a quarter on vertical faces, none on the dorsal plane
-    float down = smoothstep( -0.3, 0.9, -wN.y );
-    vec3 fill = mix( uFillUp, uFillDown, down );
+    // form: the deck keeps the whole sun, steep and vertical faces a fixed share of it, and the roof half
+    // tilted toward the sun gains what the other loses. All of this is view-independent, so the wedge
+    // keeps a lit and a shadow side even with the sun behind the camera.
+    {
+      float form = mix( uForm.x, 1.0, smoothstep( 0.0, 0.8, wN.y ) );
+      float tilt = dot( wN.xz, uSunDir.xz ) * uForm.y;
+      form *= 1.0 + smoothstep( 0.6, 0.95, wN.y ) * clamp( tilt, -uForm.z, uForm.z );
+      reflectedLight.directDiffuse *= form;
+      reflectedLight.directSpecular *= form;
+    }
+    // starfield above (faint, strongest on the deck) plus planet-shine: a Lambert term about the planet
+    // direction with a floor, so the belly plane reads mid grey, a hemisphere under it shades round, and
+    // nothing on the ship is ever lit by nothing at all
+    float lam = clamp( dot( wN, uPlanetDir ), 0.0, 1.0 );
+    vec3 fill = uFillUp * ( 0.55 + 0.45 * wN.y ) + uFillDown * ( 0.1 + 0.9 * pow( lam, 1.5 ) );
     fill += uFillBack * clamp( dot( wN, -uSunDir ) * 0.5 + 0.5, 0.0, 1.0 );
     // soffit: ambient dies under the slab overhang (neck top, terrace decks and the slab underside)
     {
@@ -77,10 +101,12 @@ function chunk(name) {
  * @param {object} [opts]
  * @param {number} [opts.worldTexel]  tiles per metre for world-projected UVs (omit to keep geometry UVs)
  * @param {object} [opts.detail]      { map, normalMap, scale (tiles per metre), strength }
+ * @param {number} [opts.contrast]    0..1 albedo-map contrast about opts.mapMean (omit for the map as is)
  */
 export function exteriorPatch(mat, sun, opts = {}) {
   const world = opts.worldTexel !== undefined && opts.worldTexel !== null;
   const detail = opts.detail || null;
+  const contrast = opts.contrast !== undefined && opts.contrast !== null && opts.contrast < 1;
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uSunDir = sun.dir;
     shader.uniforms.uSunColor = sun.color;
@@ -91,7 +117,9 @@ export function exteriorPatch(mat, sun, opts = {}) {
     let vert = shader.vertexShader;
     shader.uniforms.uEngineGlow = sun.engineGlow;
     shader.uniforms.uSlab = sun.slab;
-    let pars = "uniform vec3 uSunDir;\nuniform vec3 uSunColor;\nuniform vec3 uFillUp;\nuniform vec3 uFillDown;\nuniform vec3 uFillBack;\nuniform vec3 uEngineGlow;\nuniform vec4 uSlab;\n";
+    shader.uniforms.uPlanetDir = sun.planetDir;
+    shader.uniforms.uForm = sun.form;
+    let pars = "uniform vec3 uSunDir;\nuniform vec3 uSunColor;\nuniform vec3 uFillUp;\nuniform vec3 uFillDown;\nuniform vec3 uFillBack;\nuniform vec3 uEngineGlow;\nuniform vec4 uSlab;\nuniform vec3 uPlanetDir;\nuniform vec3 uForm;\n";
     pars += "varying vec3 vHullPos;\nvarying vec3 vHullNormal;\n";
     vert = vert
       .replace("#include <common>", "#include <common>\nvarying vec3 vHullPos;\nvarying vec3 vHullNormal;")
@@ -155,6 +183,15 @@ export function exteriorPatch(mat, sun, opts = {}) {
   mapN.xy *= normalScale;`,
         );
     }
+    if (contrast) {
+      // flatten the albedo map about its mean: the seams and repaint patches stay legible up close but stop
+      // reading as a hard grid from a few hundred metres (used on the belly)
+      shader.uniforms.uMapContrast = { value: opts.contrast };
+      shader.uniforms.uMapMean = { value: opts.mapMean ?? 0.42 };
+      pars += "uniform float uMapContrast;\nuniform float uMapMean;\n";
+      if (!world && !detail) frag = frag.replace("#include <map_fragment>", chunk("map_fragment"));
+      frag = frag.replace("diffuseColor *= sampledDiffuseColor;", "sampledDiffuseColor.rgb = mix( vec3( uMapMean ), sampledDiffuseColor.rgb, uMapContrast );\n  diffuseColor *= sampledDiffuseColor;");
+    }
     frag = frag
       .replace("#include <common>", "#include <common>\n" + pars)
       .replace("#include <lights_fragment_begin>", "float hullAO = 1.0;\n#include <lights_fragment_begin>" + FILL_GLSL)
@@ -162,7 +199,7 @@ export function exteriorPatch(mat, sun, opts = {}) {
     shader.fragmentShader = frag;
     shader.vertexShader = vert;
   };
-  mat.customProgramCacheKey = () => `ext_${world ? "w" : "u"}_${detail ? "d" : "n"}`;
+  mat.customProgramCacheKey = () => `ext_${world ? "w" : "u"}_${detail ? "d" : "n"}_${contrast ? "c" : "n"}`;
   mat.fog = false;
   return mat;
 }
