@@ -417,13 +417,16 @@ export function railing(kit, x0, z0, x1, z1, y = 0, opts = {}) {
   const cx = (x0 + x1) / 2;
   const cz = (z0 + z1) / 2;
   const rot = [0, ang, 0];
+  // opts.col / opts.mat: top bar finish (bare steel by default; hangar gantries pass a dark painted
+  // bar so the rail does not catch the rigs as a white line across the ceiling)
+  const barMat = opts.mat || "metal";
   const bar = (yy, r, col) => {
     const g = new THREE.CylinderGeometry(r, r, len, 8);
     g.rotateX(Math.PI / 2);
-    kit.add("metal", g, { pos: [cx, y + yy, cz], rot, color: col, uv: "scale", uvScale: [0.2, len] });
+    kit.add(barMat, g, { pos: [cx, y + yy, cz], rot, color: col, uv: "scale", uvScale: [0.2, len] });
   };
-  bar(h, 0.028, PALETTE.steel);
-  bar(h * 0.55, 0.018, PALETTE.impMid);
+  bar(h, 0.028, opts.col || PALETTE.steel);
+  bar(h * 0.55, 0.018, opts.col || PALETTE.impMid);
   const n = Math.max(2, Math.round(len / 1.6) + 1);
   for (let i = 0; i < n; i++) {
     const t = n === 1 ? 0.5 : i / (n - 1);
