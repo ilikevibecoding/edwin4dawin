@@ -1,7 +1,7 @@
 # Status — D: hangar + ship systems (Deck 4 + infrastructure)
 
-Branch: `cursor/sd-hangar-systems-c071` · Last push: 7dddea11 · 2026-09-04 10:20 UTC
-Run: `bc-27044d48-9403-4636-af76-59d715aec071` · Phase: 2 (critic loop running)
+Branch: `cursor/sd-hangar-systems-c071` · Last push: 3312fa99 · 2026-09-04 18:40 UTC
+Run: `bc-27044d48-9403-4636-af76-59d715aec071` · Phase: 3 (one critic loop done; second critic pass scoring the fixed set)
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
 
@@ -13,7 +13,12 @@ errors**, every door paired, load 9.7 s on this VM, heaviest whole frame 199 cal
 the branch: `src/systems/corridor/corridor.js`, `src/systems/doors/helper.js`, `src/systems/lifts/helper.js`
 (each with a README). No scaffold on the integration branch yet, so testing runs through the dev
 harness in `src/hangar/_dev/` (implements §7/§8/§9.4/§9.5; retire when `src/core/registry.js` lands).
-Two blind critics are reviewing the 59 shots now; their findings and fixes land next.
+One full critic loop is done: two blind critics scored the first 59-view set at a 4.1–4.2 mean (clipped
+emitters/flat light, Kestrel textures reading as grime and cracked concrete, mixed hazard palettes,
+Earth-depot dressing, lorem placards, rack slots over bay doors, vanishing door leaves, kiosks in the stair
+path). Every finding was mapped to a fix (per-module lists in each fix commit); the global ones landed in the
+harness (clean `impPanel`, dark reflective `impFloor`, black/yellow `hazard`, emitters tuned to bloom, a
+lit-ceiling bootstrap environment). Final full-deck run `full2`: 13 modules, 61 views, 0 warnings.
 
 ## Plan
 
@@ -101,25 +106,29 @@ Dev harness (D only, not a deliverable): `src/hangar/_dev/` — registry shim im
 
 ## Done
 
-Per module, from the full-deck run `full1` (all 13 modules loaded, 59 views). Budgets: room ≤ 120k tris /
-≤ 16 materials / ≤ 14 descriptors / ≤ 400 colliders / ≤ 250 ms; hangar ≤ 300k / 24 / 28; traffic ≤ 40k
-tris / ≤ 6 draw calls.
+Per module, from the final full-deck run `full2` (all 13 modules loaded, 61 views, post-critic). Budgets:
+room ≤ 120k tris / ≤ 16 materials / ≤ 14 descriptors / ≤ 400 colliders / ≤ 250 ms; hangar ≤ 300k / 24 / 28;
+traffic ≤ 40k tris / ≤ 6 draw calls. (Build times are with all 13 modules building back to back.)
 
 | Module | build ms | materials (draw calls) | tris | light descriptors | colliders | views |
 |---|---|---|---|---|---|---|
-| `d4-hangar` | 130.5 | 21 | 224.9k | 26 | 107 | deck, aperture, racks, aft-wall, balcony, bay-door, exterior |
-| `d4-fighter-bay` | 82.6 | 13 | 67.1k | 11 | 90 | door, cradles, gantry, racks |
-| `d4-shuttle-bay` | 54.6 | 15 | 53.0k | 13 | 72 | door, pad, gantry, staging, booth |
-| `d4-cargo-bay` | 81.7 | 14 | 80.1k | 12 | 61 | door, racking, loader, conveyor |
-| `d4-repair-bay` | 82.5 | 14 | 65.6k | 13 | 127 | door, jacks, welding, benches |
-| `d4-lobby` | 22.8 | 12 | 11.5k | 6 | 23 | lift, hangar-door, east-wall, directory |
-| `d4-corridor-east` | 53.6 | 9 | 40.7k | 14 | 69 | long, cargo-door, end |
-| `d4-corridor-west` | 44.4 | 9 | 39.5k | 14 | 69 | long, repair-door, end |
-| `d4-stairs` | 21.8 | 10 | 20.5k | 10 | 92 (+2 interactables) | foot, well, landing, top |
-| `d4-control` | 46.8 | 16 | 27.1k | 11 | 39 | window, consoles, holo, board, hatch |
-| `sys-doors` | 48.1 | 6 kit + 5 instanced | 20.9k | 0 | 85 (26 dynamic leaves) | standard closed/open/side, blast closed/open/side, stairs closed/open |
-| `sys-lifts` | 10.9 | 12 kit + 4 | 3.3k | 1 | 9 (+2 dynamic) | door, door-open, cabin, panel |
-| `sys-traffic` | 12.9 | 6 (all instanced/points) | 34.1k | 0 | 0 | approach (exterior), racks, hover, patrol (exterior) |
+| `d4-hangar` | 230 | 20 (+1 field shader) | 278.1k | 26 | 150 | deck, aperture, racks, aft-wall, balcony, bay-door, exterior |
+| `d4-fighter-bay` | 113 | 13 | 82.2k | 11 | 96 | door, cradles, gantry, racks |
+| `d4-shuttle-bay` | 68 | 15 | 62.7k | 13 | 80 | door, pad, gantry, staging, booth |
+| `d4-cargo-bay` | 111 | 14 | 93.6k | 14 | 72 | door, racking, loader, conveyor |
+| `d4-repair-bay` | 94 | 14 | 76.3k | 14 | 133 | door, jacks, welding, benches |
+| `d4-lobby` | 21 | 14 | 12.5k | 6 | 23 | lift, hangar-door, east-wall, directory |
+| `d4-corridor-east` | 79 | 13 | 45.4k | 14 | 72 | long, cargo-door, end |
+| `d4-corridor-west` | 68 | 13 | 44.8k | 14 | 72 | long, repair-door, end |
+| `d4-stairs` | 40 | 11 | 28.9k | 10 | 89 (+2 interactables) | foot, well, landing, top |
+| `d4-control` | 69 | 16 | 32.1k | 11 | 53 | window, consoles, holo, board, hatch |
+| `sys-doors` | 35 | 8 kit + 6 instanced | 30.7k | 0 | 88 (30 dynamic leaves) | standard closed/open/side, blast closed/open/side, stairs closed/open, sealed, bay-apron |
+| `sys-lifts` | 25 | 14 kit + 5 | 5.5k | 1 | 9 (+2 dynamic) | door, door-open, cabin, panel |
+| `sys-traffic` | 13 | 6 (all instanced/points) | 34.6k | 0 | 0 | approach (exterior), racks, hover, patrol (exterior) |
+
+Whole frame per view (includes post passes and the three systems): 67–200 draw calls, 170k–1.03 M
+triangles (budget 450 / 1.5 M); load 12.2 s on this VM (budget 12 s — the hangar's 230 ms build and the
+canvas atlases are the cost; see Remaining).
 
 What each delivers:
 - **Doors** (§9.1): 15 door ids paired across Deck 4 (3 `to: null` future doors locked red). Frames,
@@ -144,10 +153,18 @@ What each delivers:
 
 ## Tested
 
-- Harness tag `full1` (`/tmp/sd-shots/full1/`, not in git): 13 modules, 59 views, **0 registry
-  warnings, 0 `[budget]` warnings, 0 page errors**, load 9.7 s. Whole-frame per view: 75–199 draw
-  calls, 138k–901k triangles (includes post passes and the doors/lifts/traffic systems); 16/16 pool
-  lights in every view with a neighbour loaded (12 in the stairs).
+- Harness tag `full2` (`/tmp/sd-shots/full2/`, not in git; results.json + log attached to the run as
+  artifacts): 13 modules, 61 views, **0 registry warnings, 0 `[budget]` warnings, 0 page errors**, load
+  12.2 s. Pre-critic baseline `full1`: 59 views, 0 warnings, load 9.7 s, 75–199 calls, 138k–901k tris.
+- Critic loop: two blind critics (images + brief only) scored `full1` — critic A (hangar, traffic, bays;
+  28 frames) mean 4.2/10, critic B (lobby, corridors, stairs, control, doors, lifts; 31 frames) mean
+  4.1/10. Ranked fixes from both: (1) emitters clip to white, no pools/contact shadows; (2) materials read
+  as grimy plaster / cracked concrete, mixed hazard palettes; (3) door leaves vanish when open, thin frames,
+  identical slabs; (4) copy-pasted dressing (lorem placards, identical bays, repeated screens, Earth-depot
+  props); (5) stairwell (3/10 ×4) and scale cues in the hangar. All items were mapped to fixes per module
+  (each fix commit message + the subagents' "critic items → what changed" lists); global ones landed in the
+  harness. A second blind critic is scoring a 16-frame cross-section of `full2` (result appended below when
+  it lands).
 - Doors (`/tmp/doors-test.mjs`, 30/30; `/tmp/doors-unit.mjs`, 19/19): approach opens in 1 s, closes
   2.5 s after leaving, locked stays shut, `setLocked` cycles lights red→amber→blue-white, `forceOpen`,
   `serialize`→`apply` round-trip on all 13 doors, closed leaf stops the player 0.36 m before the plane.
@@ -163,10 +180,17 @@ What each delivers:
   holes open; 20 of 28 clamps closed matching traffic occupancy; launch re-opens a clamp within 2 s.
 
 ## Remaining
-1. Critic findings (two blind critics on the 59 shots) → fixes → re-shoot → update this file.
-2. Re-run the full deck once B's `d1-lobby` / C's `d2-lobby`, `d3-lobby` merge, to confirm T1–T3
-   cabins and orientations.
-3. Retire `src/hangar/_dev/` when `src/core/registry.js` lands; move view checks to `tools/shots.mjs`.
+1. Second critic pass result → one more targeted fix round on whatever it still ranks lowest.
+2. Load time 12.2 s with all 13 modules is at the §12 limit: the hangar builds in 230 ms (limit 250) and
+   the text/hazard/decal canvas atlases cost ~1 s; candidates are lazy per-room building (A's streaming
+   plan already builds in chunks) and sharing one text atlas across modules.
+3. Re-run the full deck once B's `d1-lobby` / C's `d2-lobby`, `d3-lobby` merge, to confirm T1–T3
+   cabins and orientations (`liftLobbyClearance()` left 1.7 / right 2.4 m beside the lift door).
+4. Retire `src/hangar/_dev/` when `src/core/registry.js` lands; move view checks to `tools/shots.mjs`
+   (it already blocks the Vite HMR client and supports per-view `time` / `advance`).
+5. Two sets of clamp hardware per rack slot (hangar cradle arms + traffic clamps) agree via
+   `slot.occupied` but are doubled geometry; the open cradle arm still crosses the ±x final-approach
+   line for ~1 s of docking. Cheapest fix: hangar arms swing to 90° when the slot is empty.
 
 ## Blockers
 None. No scaffold yet — working against the contract text with the local shim.
