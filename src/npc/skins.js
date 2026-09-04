@@ -7,13 +7,24 @@ const SHIRTS = ['#4a6ea8', '#a83a3a', '#e8e2d2', '#5d8a4e', '#8a6a3d', '#3d3d3d'
 const PANTS = ['#3b4a6b', '#4d3b2a', '#2b2b2b', '#5a4a3a', '#6b6b6b', '#2f3f5f'];
 const DRESSES = ['#7a3a5a', '#3a5a7a', '#5a7a3a', '#8a4a2a', '#4a4a7a', '#a86a8a', '#6a8a9a', '#8a2a2a'];
 const HATS = ['#4a3520', '#1e1a16', '#8a6a40', '#5a4a3a', '#2d2620', '#a08860'];
+// iris palette (brown listed twice so it is the most common); dark skin tones always get dark brown eyes
+export const IRIS_COLORS = ['#3a5a8a', '#4a3a2a', '#2a6a3a', '#4a3a2a', '#6a4a2e'];
+export const IRIS_DARK = '#2a1a10';
+export const EYE_WHITE = '#ffffff';
+const LIP_TINT = '#a8484a';
 
 function hex(c) { return c; }
+function rgb(c) { return [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)]; }
 function shade(c, f) {
-  const r = parseInt(c.slice(1, 3), 16), g = parseInt(c.slice(3, 5), 16), b = parseInt(c.slice(5, 7), 16);
+  const [r, g, b] = rgb(c);
   const cl = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
   return `rgb(${cl(r)},${cl(g)},${cl(b)})`;
 }
+function mix(a, b, t) {
+  const A = rgb(a), B = rgb(b);
+  return `rgb(${A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(',')})`;
+}
+function luminance(c) { const [r, g, b] = rgb(c); return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; }
 
 // Region helpers for the classic layout: (x, y, w, h)
 const R = {
@@ -63,16 +74,26 @@ export function paintSkin(outfit) {
   rect(R.headRight, hair, 0, 0, 8, female ? 4 : 3); rect(R.headLeft, hair, 0, 0, 8, female ? 4 : 3);
   rect(R.headFront, hair, 0, 0, 8, 1);
   if (female) { rect(R.headFront, hair, 0, 0, 1, 3); rect(R.headFront, hair, 7, 0, 1, 3); }
-  // eyes (white + iris)
-  px(R.headFront, 2, 4, '#ffffff'); px(R.headFront, 3, 4, rng.pick(['#3a5a8a', '#4a3a2a', '#2a6a3a']));
-  px(R.headFront, 5, 4, '#ffffff'); px(R.headFront, 4, 4, rng.pick(['#3a5a8a', '#4a3a2a', '#2a6a3a']));
-  // eyebrows
-  ctx.fillStyle = hair; ctx.fillRect(R.headFront[0] + 2, R.headFront[1] + 3, 2, 1); ctx.fillRect(R.headFront[0] + 4, R.headFront[1] + 3, 2, 1);
-  // nose / mouth
-  px(R.headFront, 3, 5, shade(skin, 0.85)); px(R.headFront, 4, 5, shade(skin, 0.85));
-  if (mustache) rect(R.headFront, hair, 2, 6, 4, 1);
-  if (beard) { rect(R.headFront, hair, 1, 6, 6, 2); rect(R.headRight, hair, 6, 6, 2, 2); rect(R.headLeft, hair, 0, 6, 2, 2); }
-  else rect(R.headFront, female ? '#c0504a' : shade(skin, 0.8), 3, 6, 2, 1);
+  // eyes: classic proportions on the 8-wide face, row 4 -> [skin, skin, white, iris, skin(nose bridge), iris, white, skin]
+  // (white on the outside, iris toward the nose, one skin pixel between the eyes). Both irises share one colour.
+  const F = R.headFront;
+  const irisPick = rng.pick(IRIS_COLORS);
+  const browTone = rng.pick([0.72, 0.82, 0.92]);
+  const iris = luminance(skin) < 0.42 ? IRIS_DARK : irisPick;
+  const eyePixels = [
+    { x: F[0] + 2, y: F[1] + 4, color: EYE_WHITE }, { x: F[0] + 3, y: F[1] + 4, color: iris },
+    { x: F[0] + 5, y: F[1] + 4, color: iris }, { x: F[0] + 6, y: F[1] + 4, color: EYE_WHITE },
+  ];
+  for (const p of eyePixels) { ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 1, 1); }
+  // eyebrows: one 2px brow above each eye (hair colour, a little darker)
+  const brow = shade(hair, browTone);
+  rect(F, brow, 2, 3, 2, 1); rect(F, brow, 5, 3, 2, 1);
+  // nose: soft shadow under the bridge with the tip a touch darker
+  px(F, 3, 5, shade(skin, 0.93)); px(F, 4, 5, shade(skin, 0.84));
+  // mouth: a subtle darker lip line for men, a muted rose blended with the skin tone for women
+  if (mustache) rect(F, hair, 2, 6, 4, 1);
+  if (beard) { rect(F, hair, 1, 6, 6, 2); rect(R.headRight, hair, 6, 6, 2, 2); rect(R.headLeft, hair, 0, 6, 2, 2); }
+  else rect(F, female ? mix(skin, LIP_TINT, 0.55) : shade(skin, 0.76), 3, 6, 2, 1);
 
   // ---- body
   const bodyCol = female ? dress : shirt;
@@ -133,7 +154,11 @@ export function paintSkin(outfit) {
   rect(R.legTop, legCol); rect(R.legBottom, '#2a1a0e');
 
   const hat = pickHat(role, female, rng);
-  return { canvas: c, hat, hatColor, hair, skin };
+  // eye info for blink.js: pixel coordinates/colours, the eyelid colour and an exact snapshot of the eye strip
+  // (face columns 2..6 of row 4) taken after everything else has been painted, so a blink can restore it verbatim.
+  const ex = F[0] + 2, ey = F[1] + 4, ew = 5, eh = 1;
+  const eyes = { x: ex, y: ey, w: ew, h: eh, pixels: eyePixels, iris, lid: shade(skin, 0.85), image: ctx.getImageData(ex, ey, ew, eh) };
+  return { canvas: c, hat, hatColor, hair, skin, seed: outfit.seed || 1, eyes };
 }
 
 function pickHat(role, female, rng) {
