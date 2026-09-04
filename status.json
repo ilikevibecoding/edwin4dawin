@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-04T08:01:03.997Z",
+  "updated": "2026-09-04T08:55:14.364Z",
   "phase": "Phase 3 of 5: parallel builders finishing, merging + verifying into the integration branch",
   "summary": "Plan: (1) baseline measured, (2) shared disaster foundation built, (3) 7 builder agents in isolated worktrees, (4) independent critics + verification agents, (5) final baseline comparison, changelog, PR. Nothing counts as done until it is merged, tested and measured in the actual game.",
   "links": [
@@ -35,8 +35,8 @@
     },
     {
       "name": "NPC + animal eyes and blinking",
-      "status": "in review",
-      "detail": "Round 2 merged (skin-shadow brows, lighter irises, coat-aware horse eyes, cow side wrap, bonnet brim); independent critic re-reviewing for the final verdict."
+      "status": "verified",
+      "detail": "Independent critic round 2: ACCEPT WITH NITS (all 10 criteria pass: two separated eyes, alignment, proportions, matching irises, natural unsynchronized blinking with exact restore, horse/cow/pig/chicken eyes, grid discipline). The three remaining nits (black-coat horse eye, cow side wrap, dark-skin brows) are applied and verified."
     },
     {
       "name": "Multiplayer (server-authoritative, synchronized disasters)",
@@ -91,6 +91,14 @@
   ],
   "screenshots": [
     {
+      "src": "img/cornelius.png",
+      "caption": "Dark-skin NPC face after the brow polish (08:55 UTC)"
+    },
+    {
+      "src": "img/horse_heads.png",
+      "caption": "Horse head textures after polish: black, bay and grey coats (12x) (08:55 UTC)"
+    },
+    {
       "src": "img/eyes_horse_black.png",
       "caption": "Black-coat horse eye before/after (round 2) (07:57 UTC)"
     },
@@ -121,10 +129,6 @@
     {
       "src": "img/eyes_abigail.png",
       "caption": "NPC eyes before (cyclops) / after (round 1) (07:49 UTC)"
-    },
-    {
-      "src": "img/admin_panel.png",
-      "caption": "Admin control panel (tornado tab) in the live game (07:49 UTC)"
     }
   ],
   "log": [
@@ -167,6 +171,10 @@
     {
       "time": "2026-09-04 08:01 UTC",
       "text": "Optimization merged: identical visuals verified by pixel diff; streaming JS ~halved; -31% geometry memory; faster load."
+    },
+    {
+      "time": "2026-09-04 08:55 UTC",
+      "text": "Eye critic round 2: ACCEPT WITH NITS; nits applied (dark-coat horse eyes, cow wrap, dark-skin brows)."
     }
   ],
   "issues": [
