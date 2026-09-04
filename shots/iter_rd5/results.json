@@ -1,0 +1,512 @@
+{
+  "iter": "rd5",
+  "views": {
+    "room:maintenance": {
+      "frameMs": 10106.94,
+      "fps": 0.1,
+      "p95Ms": 10897.8,
+      "jsMs": 6.21,
+      "calls": 175,
+      "triangles": 423412,
+      "points": 0,
+      "lines": 0,
+      "geometries": 269,
+      "textures": 114,
+      "textureMB": 0,
+      "programs": 51,
+      "shaderCompiles": 51,
+      "longTasks": 46,
+      "longTaskMs": 311510,
+      "loadMs": 63446,
+      "pixelRatio": 1,
+      "jsHeapMB": 225.9,
+      "visibleCells": 7,
+      "activeLights": 19,
+      "current": "maintenance",
+      "cells": 46,
+      "colliders": 1257,
+      "floors": 195,
+      "mode": "interior",
+      "exteriorTriangles": 16360,
+      "poolLights": 19,
+      "qualityLevel": 3
+    },
+    "cam:mt_door:5.5/49.7/308:25/49.3/308:80:i": {
+      "frameMs": 9635.76,
+      "fps": 0.1,
+      "p95Ms": 7198.7,
+      "jsMs": 2.01,
+      "calls": 176,
+      "triangles": 424948,
+      "points": 0,
+      "lines": 0,
+      "geometries": 275,
+      "textures": 117,
+      "textureMB": 0,
+      "programs": 51,
+      "shaderCompiles": 51,
+      "longTasks": 58,
+      "longTaskMs": 424887,
+      "loadMs": 63446,
+      "pixelRatio": 1,
+      "jsHeapMB": 226.4,
+      "visibleCells": 7,
+      "activeLights": 19,
+      "current": "maintenance",
+      "cells": 46,
+      "colliders": 1257,
+      "floors": 195,
+      "mode": "interior",
+      "exteriorTriangles": 16360,
+      "poolLights": 19,
+      "qualityLevel": 3
+    },
+    "cam:mt_ne:35.5/50.5/297.5:20/49.5/312:80:i": {
+      "frameMs": 9182.39,
+      "fps": 0.1,
+      "p95Ms": 9924.8,
+      "jsMs": 0.91,
+      "calls": 333,
+      "triangles": 581128,
+      "points": 0,
+      "lines": 0,
+      "geometries": 436,
+      "textures": 120,
+      "textureMB": 0,
+      "programs": 56,
+      "shaderCompiles": 56,
+      "longTasks": 70,
+      "longTaskMs": 531369,
+      "loadMs": 63446,
+      "pixelRatio": 1,
+      "jsHeapMB": 226.6,
+      "visibleCells": 7,
+      "activeLights": 19,
+      "current": "maintenance",
+      "cells": 46,
+      "colliders": 1257,
+      "floors": 195,
+      "mode": "interior",
+      "exteriorTriangles": 16360,
+      "poolLights": 19,
+      "qualityLevel": 3
+    },
+    "room:reactor": {
+      "frameMs": 9535.63,
+      "fps": 0.1,
+      "p95Ms": 9276.2,
+      "jsMs": 1.04,
+      "calls": 76,
+      "triangles": 203728,
+      "points": 0,
+      "lines": 0,
+      "geometries": 436,
+      "textures": 120,
+      "textureMB": 0,
+      "programs": 56,
+      "shaderCompiles": 56,
+      "longTasks": 82,
+      "longTaskMs": 647599,
+      "loadMs": 63446,
+      "pixelRatio": 1,
+      "jsHeapMB": 226.2,
+      "visibleCells": 2,
+      "activeLights": 16,
+      "current": "reactor",
+      "cells": 46,
+      "colliders": 1257,
+      "floors": 195,
+      "mode": "interior",
+      "exteriorTriangles": 16360,
+      "poolLights": 16,
+      "qualityLevel": 3
+    },
+    "cam:r_main:0/49.7/362:0/49.3/362:70:i": {
+      "frameMs": 11228.76,
+      "fps": 0.1,
+      "p95Ms": 12446.5,
+      "jsMs": 2.11,
+      "calls": 71,
+      "triangles": 200958,
+      "points": 0,
+      "lines": 0,
+      "geometries": 436,
+      "textures": 120,
+      "textureMB": 0,
+      "programs": 56,
+      "shaderCompiles": 56,
+      "longTasks": 93,
+      "longTaskMs": 776036,
+      "loadMs": 63446,
+      "pixelRatio": 1,
+      "jsHeapMB": 227.1,
+      "visibleCells": 2,
+      "activeLights": 16,
+      "current": "reactor",
+      "cells": 46,
+      "colliders": 1257,
+      "floors": 195,
+      "mode": "interior",
+      "exteriorTriangles": 16360,
+      "poolLights": 16,
+      "qualityLevel": 3
+    },
+    "cam:r_upper:0/58.7/362:0/56/362:70:i": {
+      "frameMs": 17914.98,
+      "fps": 0.1,
+      "p95Ms": 21971,
+      "jsMs": 1.01,
+      "calls": 71,
+      "triangles": 200958,
+      "points": 0,
+      "lines": 0,
+      "geometries": 436,
+      "textures": 120,
+      "textureMB": 0,
+      "programs": 56,
+      "shaderCompiles": 56,
+      "longTasks": 106,
+      "longTaskMs": 1035857,
+      "loadMs": 63446,
+      "pixelRatio": 1,
+      "jsHeapMB": 226.9,
+      "visibleCells": 2,
+      "activeLights": 16,
+      "current": "reactor",
+      "cells": 46,
+      "colliders": 1257,
+      "floors": 195,
+      "mode": "interior",
+      "exteriorTriangles": 16360,
+      "poolLights": 16,
+      "qualityLevel": 3
+    },
+    "cam:r_bridge:0/49.7/336:0/52/362:75:i": {
+      "frameMs": 15057.6,
+      "fps": 0.1,
+      "p95Ms": 13367.2,
+      "jsMs": 2.08,
+      "calls": 76,
+      "triangles": 203728,
+      "points": 0,
+      "lines": 0,
+      "geometries": 436,
+      "textures": 120,
+      "textureMB": 0,
+      "programs": 56,
+      "shaderCompiles": 56,
+      "longTasks": 117,
+      "longTaskMs": 1190714,
+      "loadMs": 63446,
+      "pixelRatio": 1,
+      "jsHeapMB": 227,
+      "visibleCells": 2,
+      "activeLights": 16,
+      "current": "reactor",
+      "cells": 46,
+      "colliders": 1257,
+      "floors": 195,
+      "mode": "interior",
+      "exteriorTriangles": 16360,
+      "poolLights": 16,
+      "qualityLevel": 3
+    },
+    "cam:ls_w:-31/50.0/305:-37.4/49.5/303:75:i": {
+      "frameMs": 9611.73,
+      "fps": 0.1,
+      "p95Ms": 8179.2,
+      "jsMs": 0.86,
+      "calls": 71,
+      "triangles": 77676,
+      "points": 0,
+      "lines": 0,
+      "geometries": 436,
+      "textures": 120,
+      "textureMB": 0,
+      "programs": 56,
+      "shaderCompiles": 56,
+      "longTasks": 129,
+      "longTaskMs": 1285746,
+      "loadMs": 63446,
+      "pixelRatio": 1,
+      "jsHeapMB": 227.1,
+      "visibleCells": 2,
+      "activeLights": 16,
+      "current": "life_support",
+      "cells": 46,
+      "colliders": 1257,
+      "floors": 195,
+      "mode": "interior",
+      "exteriorTriangles": 16360,
+      "poolLights": 16,
+      "qualityLevel": 3
+    }
+  },
+  "checks": {},
+  "stats": {
+    "frameMs": 9096.07,
+    "fps": 0.1,
+    "p95Ms": 6195.6,
+    "jsMs": 0.72,
+    "calls": 71,
+    "triangles": 77676,
+    "points": 0,
+    "lines": 0,
+    "geometries": 436,
+    "textures": 120,
+    "textureMB": 0,
+    "programs": 56,
+    "shaderCompiles": 56,
+    "longTasks": 131,
+    "longTaskMs": 1299617,
+    "loadMs": 63446,
+    "pixelRatio": 1,
+    "jsHeapMB": 226.3,
+    "visibleCells": 2,
+    "activeLights": 16,
+    "current": "life_support",
+    "cells": 46,
+    "colliders": 1257,
+    "floors": 195,
+    "mode": "interior",
+    "exteriorTriangles": 16360,
+    "poolLights": 16,
+    "qualityLevel": 3
+  },
+  "logs": [
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected.",
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected."
+  ],
+  "buildLog": [
+    {
+      "room": "bridge",
+      "ms": 322.9,
+      "builder": "buildBridge"
+    },
+    {
+      "room": "lobby_a",
+      "ms": 44.8,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_a",
+      "ms": 66.2,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "intel",
+      "ms": 111.2,
+      "builder": "buildIntel"
+    },
+    {
+      "room": "ready_room",
+      "ms": 124.9,
+      "builder": "buildReadyRoom"
+    },
+    {
+      "room": "comms",
+      "ms": 93.1,
+      "builder": "buildComms"
+    },
+    {
+      "room": "tactical",
+      "ms": 87.7,
+      "builder": "buildTactical"
+    },
+    {
+      "room": "navigation",
+      "ms": 79.3,
+      "builder": "buildNavigation"
+    },
+    {
+      "room": "lobby_b",
+      "ms": 17.4,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "observation",
+      "ms": 102.5,
+      "builder": "buildObservation"
+    },
+    {
+      "room": "corridor_b",
+      "ms": 20.9,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "officers_quarters",
+      "ms": 69,
+      "builder": "buildOfficersQuarters"
+    },
+    {
+      "room": "briefing",
+      "ms": 58,
+      "builder": "buildBriefing"
+    },
+    {
+      "room": "lounge",
+      "ms": 34.6,
+      "builder": "buildLounge"
+    },
+    {
+      "room": "escape_pods",
+      "ms": 25.7,
+      "builder": "buildEscapePods"
+    },
+    {
+      "room": "lobby_c",
+      "ms": 32.2,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_c",
+      "ms": 21.6,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "crew_quarters",
+      "ms": 34.9,
+      "builder": "buildCrewQuarters"
+    },
+    {
+      "room": "mess_hall",
+      "ms": 37.7,
+      "builder": "buildMessHall"
+    },
+    {
+      "room": "medbay",
+      "ms": 95.9,
+      "builder": "buildMedbay"
+    },
+    {
+      "room": "armory",
+      "ms": 93.6,
+      "builder": "buildArmory"
+    },
+    {
+      "room": "detention",
+      "ms": 104.4,
+      "builder": "buildDetention"
+    },
+    {
+      "room": "lobby_d",
+      "ms": 64.3,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_d",
+      "ms": 183.1,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "engineering",
+      "ms": 552.9,
+      "builder": "buildEngineering"
+    },
+    {
+      "room": "hyperdrive",
+      "ms": 197.7,
+      "builder": "buildHyperdrive"
+    },
+    {
+      "room": "life_support",
+      "ms": 244.6,
+      "builder": "buildLifeSupport"
+    },
+    {
+      "room": "maintenance",
+      "ms": 180.5,
+      "builder": "buildMaintenance"
+    },
+    {
+      "room": "reactor",
+      "ms": 966.2,
+      "builder": "buildReactor"
+    },
+    {
+      "room": "hangar",
+      "ms": 2509.1,
+      "builder": "buildHangar"
+    },
+    {
+      "room": "fighter_bay",
+      "ms": 690.1,
+      "builder": "buildFighterBay"
+    },
+    {
+      "room": "shuttle_bay",
+      "ms": 495.8,
+      "builder": "buildShuttleBay"
+    },
+    {
+      "room": "cargo",
+      "ms": 265.4,
+      "builder": "buildCargo"
+    },
+    {
+      "room": "lobby_e",
+      "ms": 13.9,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "flight_control",
+      "ms": 29.3,
+      "builder": "buildFlightControl"
+    },
+    {
+      "room": "lift_L1_A",
+      "ms": 7.9,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_A",
+      "ms": 4.2,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_B",
+      "ms": 4.6,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_B",
+      "ms": 2.6,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_C",
+      "ms": 3.3,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_C",
+      "ms": 3.7,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_D",
+      "ms": 6.1,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_D",
+      "ms": 18,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_E",
+      "ms": 4.5,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_E",
+      "ms": 2,
+      "builder": "buildLift"
+    },
+    {
+      "total": 19770
+    }
+  ]
+}
