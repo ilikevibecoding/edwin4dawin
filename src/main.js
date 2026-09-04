@@ -319,6 +319,34 @@ const debugAPI = {
     interior.update(0, player);
     return interior.lifts.travelNext(lift);
   },
+  // Physically walk the player toward (x, z) with the movement controller and collisions, in fixed
+  // 1/60 s steps (doors/lifts/dynamics tick too). Returns whether the point was reached.
+  walkTo(x, z, maxSeconds = 20) {
+    player.frozen = false;
+    player.locked = true;
+    player.touchMode = false;
+    const step = 1 / 60;
+    let t = 0;
+    let reached = false;
+    player.keys.clear();
+    player.keys.add("KeyW");
+    player.keys.add("ShiftLeft");
+    for (; t < maxSeconds; t += step) {
+      const dx = x - player.position.x;
+      const dz = z - player.position.z;
+      if (Math.hypot(dx, dz) < 0.45) {
+        reached = true;
+        break;
+      }
+      player.yaw = Math.atan2(-dx, -dz);
+      player.update(step);
+      interior.update(step, player);
+    }
+    player.keys.clear();
+    player.velocity.set(0, 0, 0);
+    framesRendered = 0;
+    return { reached, x: +player.position.x.toFixed(2), y: +player.position.y.toFixed(2), z: +player.position.z.toFixed(2), seconds: +t.toFixed(1), space: interior.state.space };
+  },
   liftState(liftId) {
     return interior.lifts.serialize().find((l) => l.id === liftId);
   },
@@ -481,7 +509,8 @@ function updateWellPeek() {
     interior.peek("hangar", ["hangar"]);
     pool.setFixtures(interior.fixtures(), interior.spotFixtures());
   } else if (!want && interior.peeking) {
-    interior.unpeek(modes.mode !== "exterior");
+    // in a transition the transition owns root visibility; interior mode always shows it
+    interior.unpeek(modes.mode === "interior" ? true : modes.mode === "exterior" ? false : interior.root.visible);
     pool.setFixtures(interior.fixtures(), interior.spotFixtures());
   }
 }
@@ -509,8 +538,8 @@ function frame() {
     player.update(dt);
     interior.update(dt, player);
     interactions.update();
-  } else if (modes.mode === "transition") {
-    interior.update(dt, player);
+  } else if (modes.mode === "transition" || interior.peeking) {
+    interior.update(dt, player); // keeps doors, lifts and hangar machinery moving while seen from outside
   }
   traffic.update(dt);
   space.update(dt, camera.position, modes.mode === "interior");

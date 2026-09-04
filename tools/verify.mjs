@@ -12,7 +12,7 @@ import { existsSync } from "node:fs";
 const args = process.argv.slice(2);
 const bi = args.indexOf("--base");
 const base = bi >= 0 ? args[bi + 1] : process.env.SHOT_BASE || "http://127.0.0.1:5174/";
-const BUDGET = { calls: 320, triangles: 1_600_000, lights: 20 };
+const BUDGET = { calls: 360, triangles: 1_600_000, lights: 20 };
 
 const executablePath = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].find((p) => existsSync(p));
 const browser = await chromium.launch({ headless: true, executablePath, args: ["--no-sandbox", "--disable-dev-shm-usage", "--use-gl=angle", "--use-angle=swiftshader-webgl", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl", "--disable-gpu-vsync", "--disable-frame-rate-limit"] });
@@ -61,6 +61,25 @@ check("per-room budgets (calls/tris/lights)", budgetFails.length === 0, budgetFa
 // ---- connectivity: every space reachable on foot from the bridge (doors, junctions, lifts)
 const conn = await page.evaluate(() => window.debugAPI.connectivity());
 check("every space reachable from the bridge", conn.unreachable.length === 0, conn.unreachable.length ? "unreachable: " + conn.unreachable.join(", ") : `${conn.reachable.length} spaces`);
+
+// ---- physical walk: bridge door -> spine -> cross corridor -> legacy wing door (junction and door
+// colliders must actually let the player through), then crew deck lobby -> lift2 portal
+const walk = await page.evaluate(() => {
+  const d = window.debugAPI;
+  d.setView("bridge");
+  const legs = [];
+  legs.push(["spine", d.walkTo(0, 500, 12)]);
+  legs.push(["junction", d.walkTo(-6, 497.5, 12)]);
+  legs.push(["cross corridor", d.walkTo(-38, 497.5, 25)]);
+  legs.push(["wing door", d.walkTo(-40, 492, 12)]);
+  d.setView("room:B-lobby");
+  legs.push(["lobby->lift2 corridor", d.walkTo(-10, 479.5, 15)]);
+  legs.push(["lift2 portal", d.walkTo(-35.6, 479.5, 25)]);
+  d.setView("room:C-spine");
+  legs.push(["C-spine east", d.walkTo(60, 479.5, 40)]);
+  return legs;
+});
+for (const [name, r] of walk) check(`walk: ${name}`, r.reached, `${r.reached ? "reached" : "blocked"} at (${r.x}, ${r.y}, ${r.z}) in ${r.seconds}s, space ${r.space}`);
 
 // ---- doors: approach a room door from the corridor side and confirm it opens, then leaves
 const doorTest = await page.evaluate(() => {

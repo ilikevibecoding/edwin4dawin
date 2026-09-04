@@ -23,6 +23,7 @@ export class LiftSystem {
     this.fixtures = [];
     this.interactables = [];
     this.onZoneChange = null;
+    this.onPrepareZone = null;
     this.audio = null;
   }
 
@@ -169,6 +170,7 @@ export class LiftSystem {
     // car light fixture (moves with the car)
     const fx = pointLight(0xe8f0ff, 2.6, 5, [0, CAR_H - 0.3, 0]);
     fx.visible = false;
+    fx.userData.moving = true; // rides with the car, so the light pool must not cache its position
     car.add(fx);
     this.fixtures.push(fx);
 
@@ -229,14 +231,21 @@ export class LiftSystem {
     return `Turbolift to ${next.name}`;
   }
 
-  travelNext(lift) {
-    if (lift.state !== "idle") return false;
-    lift.targetIndex = (lift.deckIndex + 1) % lift.decks.length;
+  _start(lift, targetIndex) {
+    lift.targetIndex = targetIndex;
     lift.state = "closing";
     lift.zoneSwitched = false;
     this.doors.setOpen(lift.landingDoors[lift.decks[lift.deckIndex].id], false);
+    // build the destination zone now, behind the closing doors, not in the middle of the ride
+    const to = lift.decks[targetIndex];
+    if (this.onPrepareZone && to.zone !== lift.decks[lift.deckIndex].zone) this.onPrepareZone(to.zone);
     if (this.audio) this.audio.play("lift.start", lift.car);
     return true;
+  }
+
+  travelNext(lift) {
+    if (lift.state !== "idle") return false;
+    return this._start(lift, (lift.deckIndex + 1) % lift.decks.length);
   }
 
   travelTo(liftId, deckId) {
@@ -244,11 +253,7 @@ export class LiftSystem {
     if (!lift || lift.state !== "idle") return false;
     const idx = lift.decks.findIndex((d) => d.id === deckId);
     if (idx < 0 || idx === lift.deckIndex) return false;
-    lift.targetIndex = idx;
-    lift.state = "closing";
-    lift.zoneSwitched = false;
-    this.doors.setOpen(lift.landingDoors[lift.decks[lift.deckIndex].id], false);
-    return true;
+    return this._start(lift, idx);
   }
 
   update(dt) {
@@ -297,7 +302,31 @@ export class LiftSystem {
   }
 
   serialize() {
-    return this.lifts.map((l) => ({ id: l.id, state: l.state, deck: l.decks[l.deckIndex].id, target: l.decks[l.targetIndex].id, y: +l.y.toFixed(3) }));
+    return this.lifts.map((l) => ({ id: l.id, state: l.state, deck: l.decks[l.deckIndex].id, target: l.decks[l.targetIndex].id, y: +l.y.toFixed(3), v: +l.v.toFixed(3), zoneSwitched: l.zoneSwitched }));
+  }
+
+  // Replay a serialised lift state (network sync / save): car height and velocity, phase, landing doors.
+  applyState(states) {
+    for (const st of states) {
+      const lift = this.lifts.find((l) => l.id === st.id);
+      if (!lift) continue;
+      lift.deckIndex = Math.max(0, lift.decks.findIndex((d) => d.id === st.deck));
+      lift.targetIndex = Math.max(0, lift.decks.findIndex((d) => d.id === st.target));
+      lift.state = st.state;
+      lift.y = st.y;
+      lift.v = st.v || 0;
+      lift.zoneSwitched = !!st.zoneSwitched;
+      lift.car.position.y = lift.y;
+      for (const dk of lift.decks) {
+        const door = lift.landingDoors[dk.id];
+        const open = lift.state === "idle" && dk === lift.decks[lift.deckIndex] ? 1 : 0;
+        door.open = open;
+        door.target = open;
+      }
+      lift.item.label = this._label(lift);
+      lift.buttons.forEach((b, i) => (b.material = i === lift.deckIndex ? this.materials.emitAmber : this.materials.emitBlue));
+    }
+    if (this.doors.mesh) this.doors.applyState(this.doors.serialize());
   }
 
   zoneOfDeck(deckId) {
