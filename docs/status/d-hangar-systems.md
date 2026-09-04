@@ -163,8 +163,17 @@ What each delivers:
   identical slabs; (4) copy-pasted dressing (lorem placards, identical bays, repeated screens, Earth-depot
   props); (5) stairwell (3/10 ×4) and scale cues in the hangar. All items were mapped to fixes per module
   (each fix commit message + the subagents' "critic items → what changed" lists); global ones landed in the
-  harness. A second blind critic is scoring a 16-frame cross-section of `full2` (result appended below when
-  it lands).
+  harness.
+- Second blind critic on a 16-frame cross-section of `full2`: **mean 6.1/10** (from 4.1–4.2). Per frame:
+  blast door 7.5, lobby 7.0, open standard door 7.0, lift cabin 7.0, cargo racking 6.5, corridor 6.5,
+  control window 6.5, fighter bay 6, shuttle bay 6, repair bay 6, stairwell 6 (was 3), traffic approach 5.5,
+  hangar deck/aperture/racks 5, hangar aft wall 4. Verdict: "systems and corridors are near-shippable; the
+  main hangar is the weakest room". Two of its readings were checked and are not bugs: "half-size fighters"
+  compares 7 m fighters with the 10 m bay doors (it assumed 4 m doors — so the bay doors need human-scale
+  cues beside them), and "rack IDs repeated on both tiers" misread `P1-xx`/`P2-xx`. Its hangar items
+  (bare deck near the cameras, floods lighting walls instead of racks, ceiling reading as a void, aft/bow
+  walls as tiled billboards, unlit shaft) went to a final hangar round; the global ones landed in the
+  harness (clean `metal`/`paintedMetal`, lifted hemisphere ground term).
 - Doors (`/tmp/doors-test.mjs`, 30/30; `/tmp/doors-unit.mjs`, 19/19): approach opens in 1 s, closes
   2.5 s after leaving, locked stays shut, `setLocked` cycles lights red→amber→blue-white, `forceOpen`,
   `serialize`→`apply` round-trip on all 13 doors, closed leaf stops the player 0.36 m before the plane.
