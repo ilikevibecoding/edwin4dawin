@@ -74,7 +74,7 @@ export function instancePrefab(kit, pf, transforms, opts = {}) {
 // Standard Imperial cargo container prefab (body baked white so per-instance colours tint it; the
 // braces, bands, handles, label and status light keep their colours). Origin at the floor centre.
 export function containerPrefab(mats, size = [2.4, 2.4, 2.4], opts = {}) {
-  const { label = 3, light = "emitAmber" } = opts;
+  const { label = 3, label2 = 9, light = "emitAmber" } = opts;
   const [w, h, d] = size;
   return prefab(mats, (k) => {
     k.box("impPaintedMetal", 0, h / 2, 0, w, h, d, { color: 0xffffff, texel: 1 });
@@ -90,8 +90,9 @@ export function containerPrefab(mats, size = [2.4, 2.4, 2.4], opts = {}) {
     // handles on the ends
     for (const s of [-1, 1]) k.box("impMetal", s * (w / 2 + 0.03), h * 0.55, 0, 0.04, 0.1, Math.min(0.5, d * 0.35), { color: IMP.steel });
     k.add("impDecal", new THREE.PlaneGeometry(0.7, 0.7), { pos: [-w * 0.22, h * 0.55, d / 2 + 0.012], uv: "keep", uvRect: impDecalRect(label) });
+    k.add("impDecal", new THREE.PlaneGeometry(0.7, 0.7), { pos: [w * 0.22, h * 0.55, -d / 2 - 0.012], rot: [0, Math.PI, 0], uv: "keep", uvRect: impDecalRect(label2) });
     k.box(light, w * 0.32, h * 0.86, d / 2 + 0.012, 0.1, 0.04, 0.01);
-    k.box("darkGloss", w * 0.32, h * 0.72, d / 2 + 0.01, 0.4, 0.12, 0.01);
+    k.box("impMetal", w * 0.32, h * 0.72, d / 2 + 0.01, 0.4, 0.12, 0.01, { color: IMP.black });
   });
 }
 
@@ -185,7 +186,7 @@ export function workbench(kit, pos, yaw, w = 3.0, opts = {}) {
   for (const s of [-1, 1]) {
     box("impPaintedMetal", s * (w / 2 - 0.45), (h - 0.1) / 2, 0, 0.8, h - 0.1, d - 0.15, { color: IMP.wallDark, texel: 1 });
     for (let k = 0; k < 3; k++) box("impMetal", s * (w / 2 - 0.45), 0.2 + k * 0.25, -d / 2 + 0.08, 0.4, 0.03, 0.02, { color: IMP.steel });
-    box(rand() < 0.5 ? "emitGreen" : "emitAmber", s * (w / 2 - 0.45) + 0.28, h - 0.22, -d / 2 + 0.08, 0.04, 0.02, 0.01);
+    box(rand() < 0.5 ? "emitRed" : "emitAmber", s * (w / 2 - 0.45) + 0.28, h - 0.22, -d / 2 + 0.08, 0.04, 0.02, 0.01);
   }
   box("impMetal", 0, 0.08, d / 2 - 0.1, w - 1.6, 0.08, 0.3, { color: IMP.gunmetal });
   // vice
@@ -514,7 +515,7 @@ export function toolCart(kit, pos, yaw = 0, opts = {}) {
   // odds and ends on the top tray
   box("impMetal", -0.25, 0.96, 0.1, 0.3, 0.06, 0.12, { color: IMP.steel });
   cyl("impMetal", 0.2, 0.98, 0.12, 0.05, 0.4, "x", { color: IMP.gunmetal, segments: 8 });
-  if (rand() < 0.7) box(rand() < 0.5 ? "emitAmber" : "emitGreen", 0.3, 0.95, -0.15, 0.1, 0.04, 0.1);
+  if (rand() < 0.7) box("emitAmber", 0.3, 0.95, -0.15, 0.1, 0.04, 0.1);
   collider(-0.5, 0, -0.35, 0.5, 1.0, 0.35, "cart");
 }
 
@@ -540,7 +541,7 @@ export function craneRails(kit, a0, a1, side0, side1, y, axis = "z", opts = {}) 
 // Crane bridge assembly built in local coordinates (span along local x, centred), trolley at x = tx,
 // hook hanging `drop` below the bridge. `k` is any Kit (room kit with offsets baked, or a mini kit).
 export function craneBridge(k, span, y, z, opts = {}) {
-  const { tx = 0, drop = 3, girder = 0.9, color = IMP.hazardYellow, cx = 0 } = opts;
+  const { tx = 0, drop = 3, girder = 0.9, color = IMP.hazardYellow, cx = 0, lamp = true, bands = true } = opts;
   const X = (x) => cx + x;
   ibeam(k, [X(-span / 2), y, z - 0.6], [X(span / 2), y, z - 0.6], { h: girder, w: 0.4, color });
   ibeam(k, [X(-span / 2), y, z + 0.6], [X(span / 2), y, z + 0.6], { h: girder, w: 0.4, color });
@@ -548,13 +549,13 @@ export function craneBridge(k, span, y, z, opts = {}) {
     k.box("impPaintedMetal", X((s * span) / 2), y - 0.15, z, 0.6, girder + 0.3, 1.9, { color: IMP.trim, texel: 1 });
     k.cyl("impMetal", X((s * span) / 2 + (s > 0 ? 0.35 : -0.35)), y - girder / 2 - 0.35, z - 0.6, 0.25, 0.3, "x", { color: IMP.gunmetal, segments: 12 });
     k.cyl("impMetal", X((s * span) / 2 + (s > 0 ? 0.35 : -0.35)), y - girder / 2 - 0.35, z + 0.6, 0.25, 0.3, "x", { color: IMP.gunmetal, segments: 12 });
-    hazardBand(k, [X((s * span) / 2), y - 0.15, z + 0.96], 0, 0.5, girder * 0.6);
+    if (bands) hazardBand(k, [X((s * span) / 2), y - 0.15, z + 0.96], 0, 0.5, girder * 0.6);
   }
   for (let x = -span / 2 + 2; x < span / 2 - 1; x += 3) k.box("impPaintedMetal", X(x), y, z, 0.12, girder - 0.12, 1.2, { color: IMP.trim, texel: 1 });
   // trolley + hoist drum + cable + hook block
   k.box("impPaintedMetal", X(tx), y + girder / 2 + 0.35, z, 1.8, 0.7, 1.6, { color: IMP.trim, texel: 1 });
   k.cyl("impMetal", X(tx), y + girder / 2 + 0.4, z, 0.3, 1.0, "z", { color: IMP.gunmetal, segments: 14 });
-  k.box("emitAmber", X(tx + 0.7), y + girder / 2 + 0.45, z + 0.81, 0.3, 0.06, 0.01);
+  if (lamp) k.box("emitAmber", X(tx + 0.7), y + girder / 2 + 0.45, z + 0.81, 0.3, 0.06, 0.01);
   k.cyl("impMetal", X(tx), y - drop / 2, z, 0.03, drop, "y", { color: IMP.steel, segments: 6 });
   k.box("impPaintedMetal", X(tx), y - drop - 0.25, z, 0.5, 0.5, 0.3, { color, texel: 1 });
   k.add("impMetal", new THREE.TorusGeometry(0.28, 0.06, 8, 14, Math.PI * 1.4), { pos: [X(tx), y - drop - 0.75, z], rot: [0, 0, Math.PI * 0.8], color: IMP.steel, uv: "scale", uvScale: [2, 1] });
@@ -734,7 +735,7 @@ export function screenBank(frame, u, v, cols, rows, sw, sh, seed = 1) {
       const cu = u - W / 2 + gap + sw / 2 + i * (sw + gap);
       const cv = v - H / 2 + gap + sh / 2 + j * (sh + gap);
       frame.box("darkGloss", cu, cv, 0.093, sw, sh, 0.01);
-      frame.box("screen" + Math.floor(rand() * 5), cu, cv, 0.1, sw - 0.04, sh - 0.04, 0.004, { uv: "keep" });
+      frame.box("screen" + Math.floor(rand() * 3), cu, cv, 0.1, sw - 0.04, sh - 0.04, 0.004, { uv: "keep" });
     }
   }
   frame.box("leds", u, v - H / 2 - 0.1, 0.07, Math.min(W * 0.6, 2.4), 0.05, 0.01, { uv: "keep" });
@@ -751,7 +752,7 @@ export function relayCabinet(frame, u, v0, v1, w, seed = 1) {
     const cv = v0 + 0.3 + r * ((h - 0.5) / rows);
     frame.box("impPaintedMetal", u, cv, 0.46, w - 0.4, 0.28, 0.02, { color: IMP.trim, texel: 1 });
     frame.box(rand() < 0.5 ? "blinkSparse" : "leds", u - w * 0.12, cv, 0.475, w * 0.5, 0.08, 0.004, { uv: "keep" });
-    frame.box(rand() < 0.7 ? "emitGreen" : "emitRed", u + w * 0.3, cv, 0.475, 0.06, 0.06, 0.004);
+    frame.box(rand() < 0.7 ? "emitAmber" : "emitRed", u + w * 0.3, cv, 0.475, 0.06, 0.06, 0.004);
   }
   frame.quad("impDecal", u + w * 0.25, v1 - 0.3, 0.472, 0.3, 0.3, { uvRect: impDecalRect(Math.floor(rand() * 16)) });
   frame.collider(u - w / 2, u + w / 2, v0, v1, 0, 0.5, "relay");

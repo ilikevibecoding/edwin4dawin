@@ -5,6 +5,7 @@ import { buildEngControl } from "./engControl.js";
 import { buildHyperdrive } from "./hyperdrive.js";
 import { buildLifeSupport } from "./lifeSupport.js";
 import { buildMaintenance } from "./maintenance.js";
+import { buildCargo } from "./cargo.js";
 
 export function register(registerRoom) {
   registerRoom("reactor", buildReactor);
@@ -12,4 +13,5 @@ export function register(registerRoom) {
   registerRoom("hyperdrive", buildHyperdrive);
   registerRoom("lifeSupport", buildLifeSupport);
   registerRoom("maintenance", buildMaintenance);
+  registerRoom("cargo", buildCargo);
 }

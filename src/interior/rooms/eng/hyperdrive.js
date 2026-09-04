@@ -198,7 +198,7 @@ export function buildHyperdrive(kit, ctx) {
     const w = walls.south;
     const { frame } = wallFrame(kit, w.from, w.to, y);
     wallScreen(frame, w.u(CX - 7), 2.2, 1.6, 0.9, 0);
-    wallScreen(frame, w.u(CX + 7), 2.2, 1.6, 0.9, 3);
+    wallScreen(frame, w.u(CX + 7), 2.2, 1.6, 0.9, 1);
     lockers(frame, w.u(x1 - 1.5), w.u(x1 - 6.5), 2.1, { seed: 21 });
     relayCabinet(frame, w.u(x0 + 4.5), 0, 2.6, 3.0, 97);
     frame.quad("impDecal", w.u(CX - 10.5), 1.8, 0.064, 0.8, 0.8, { uvRect: impDecalRect(7) });
@@ -230,7 +230,7 @@ export function buildHyperdrive(kit, ctx) {
     ceilingLight(kit, ctx, [ax, y + h, 566], 5, "z", { mat: "lightBandWarm", color: 0xffc27a, intensity: 4.5, distance: 12, priority: 1 });
     ceilingLight(kit, ctx, [ax, y + h, 578], 5, "z", { mat: "lightBandWarm", color: 0xffc27a, intensity: 4.5, distance: 12, priority: 1 });
   }
-  ceilingLight(kit, ctx, [CX, y + h, 588], 6, "x", { color: 0xdfe8ff, intensity: 5, distance: 12, priority: 2 });
+  ceilingLight(kit, ctx, [CX, y + h, 588], 6, "x", { mat: "lightBandWarm", color: 0xdfe8ff, intensity: 5, distance: 12, priority: 2 });
   pointLightDesc(ctx, 0xffc27a, 2.5, 9, [x0 + 3, y + 3.5, 592], 0);
 
   // ------------------------------------------------------------ views

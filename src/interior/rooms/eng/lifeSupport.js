@@ -231,7 +231,7 @@ export function buildLifeSupport(kit, ctx) {
   {
     const w = walls.south;
     const { frame } = wallFrame(kit, w.from, w.to, y);
-    wallScreen(frame, w.u(-31), 2.4, 1.6, 0.9, 4);
+    wallScreen(frame, w.u(-31), 2.4, 1.6, 0.9, 1);
     relayCabinet(frame, w.u(-26.5), 0, 2.4, 2.0, 102);
     frame.quad("impDecal", w.u(-34.5), 2.0, 0.064, 0.9, 0.9, { uvRect: impDecalRect(11) });
     frame.quad("impDecal", w.u(-4.5), 2.0, 0.064, 0.9, 0.9, { uvRect: impDecalRect(2) });

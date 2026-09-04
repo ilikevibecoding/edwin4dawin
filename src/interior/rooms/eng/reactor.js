@@ -89,7 +89,7 @@ export function buildReactor(kit, ctx) {
     let s = 0;
     for (const p of pieces) {
       const f = ceilingFrame(kit, p[0], p[1], top);
-      impCeiling(f, p[2] - p[0], p[3] - p[1], { lights: false, panelW: 3, tone: IMP.wallDark, seed: 40 + s++ });
+      impCeiling(f, p[2] - p[0], p[3] - p[1], { lights: false, panelW: 4.5, tone: IMP.wallDark, seed: 40 + s++ });
     }
     // collar: the core passes up through the deck above
     kit.cyl("impPaintedMetal", CX, top - 1.6, CZ, 12.6, 3.2, "y", { color: IMP.wallDark, segments: 48, texel: 0.5 });
@@ -139,7 +139,7 @@ export function buildReactor(kit, ctx) {
   // gallery edge: fascia, hazard kerb, railing (gaps at the two stair heads)
   const stairW = 2.6;
   const stairX = [PIT.x0 + stairW / 2, PIT.x1 - stairW / 2]; // stair centre x (west, east)
-  const edgeRail = (a, b) => railing(kit, a, b, y, { h: 1.1, postPitch: 2.0, lit: true });
+  const edgeRail = (a, b) => railing(kit, a, b, y, { h: 1.1, postPitch: 2.5, lit: true });
   edgeRail([PIT.x0, PIT.z0], [PIT.x1, PIT.z0]);
   edgeRail([PIT.x0, PIT.z0], [PIT.x0, PIT.z1]);
   edgeRail([PIT.x1, PIT.z0], [PIT.x1, PIT.z1]);
@@ -166,7 +166,7 @@ export function buildReactor(kit, ctx) {
     walkable(ctx, s[0], s[1], s[2], s[3], RING_Y, "ring");
   }
   // grate strip along the inner edge + kerb + railing all round the deep pit
-  const innerRail = (a, b) => railing(kit, a, b, RING_Y, { h: 1.1, postPitch: 2.0 });
+  const innerRail = (a, b) => railing(kit, a, b, RING_Y, { h: 1.1, postPitch: 2.5 });
   innerRail([INNER.x0, INNER.z0], [INNER.x1, INNER.z0]);
   innerRail([INNER.x0, INNER.z1], [INNER.x1, INNER.z1]);
   innerRail([INNER.x0, INNER.z0], [INNER.x0, INNER.z1]);
@@ -240,13 +240,13 @@ export function buildReactor(kit, ctx) {
       const hy = PIT_Y + 3.6;
       const dir = new THREE.Vector2(-tx, CZ - tz).normalize();
       const end = [CX - dir.x * 11.2, hy - 0.8, CZ - dir.y * 11.2];
-      pipeRun(kit, [[tx, PIT_Y + 2.8, tz], [tx, hy, tz], [tx + dir.x * 2.5, hy, tz + dir.y * 2.5], [end[0], end[1] + 0.8, end[2]]], 0.42, { color: IMP.gunmetal, clampPitch: 3 });
+      pipeRun(kit, [[tx, PIT_Y + 2.8, tz], [tx, hy, tz], [tx + dir.x * 2.5, hy, tz + dir.y * 2.5], [end[0], end[1] + 0.8, end[2]]], 0.42, { color: IMP.gunmetal, clampPitch: 5 });
       flange(kit, [tx, PIT_Y + 3.0, tz], 0.42, "y");
     }
     // big coolant mains along the x walls: riser from the pit floor up the whole pit to the gallery pumps
     for (const mz of [CZ - 4, CZ + 4]) {
       const wx = sx * (INNER.x1 - 0.7);
-      pipeRun(kit, [[CX + sx * 11.4, PIT_Y + 1.2, mz], [wx, PIT_Y + 1.2, mz], [wx, RING_Y - 0.9, mz]], 0.5, { color: IMP.steel, clampPitch: 2.5 });
+      pipeRun(kit, [[CX + sx * 11.4, PIT_Y + 1.2, mz], [wx, PIT_Y + 1.2, mz], [wx, RING_Y - 0.9, mz]], 0.5, { color: IMP.steel, clampPitch: 5 });
       flange(kit, [wx, RING_Y - 0.6, mz], 0.5, "y");
       valve(kit, [CX + sx * 14, PIT_Y + 1.2 + 0.72, mz], 0.3, "y", { stem: 0.35 });
     }
@@ -324,6 +324,7 @@ export function buildReactor(kit, ctx) {
     kit.collider([px - 0.5, y, 548.3], [px + 0.5, y + 1.6, PIT.z0], "suction");
     // sleeve where the suction passes the service ring
     kit.box("impPaintedMetal", px, RING_Y + 0.4, PIT.z0 + 0.7, 1.3, 0.8, 1.3, { color: IMP.trim, texel: 1 });
+    kit.collider([px - 0.65, RING_Y, PIT.z0], [px + 0.65, RING_Y + 0.8, PIT.z0 + 1.35], "sleeve");
     // discharge: up to the coolant loop at y + 15
     pipeRun(kit, [p.discharge, [px, y + 15, 546], [px, y + 15, z0 + 0.8]], 0.36, { color: IMP.steel, clampPitch: 3 });
     valve(kit, [px, y + 4.6, 546], 0.32, "z", { stem: 0.5 });
@@ -332,8 +333,8 @@ export function buildReactor(kit, ctx) {
   // coolant loop: a big header running around all four upper walls
   const lp = 0.8;
   const ly = y + 15;
-  pipeRun(kit, [[x0 + lp, ly, z0 + lp], [x1 - lp, ly, z0 + lp], [x1 - lp, ly, z1 - lp], [x0 + lp, ly, z1 - lp], [x0 + lp, ly, z0 + lp]], 0.45, { color: IMP.gunmetal, clampPitch: 4 });
-  pipeRun(kit, [[x0 + lp, ly + 1.1, z0 + lp], [x1 - lp, ly + 1.1, z0 + lp], [x1 - lp, ly + 1.1, z1 - lp], [x0 + lp, ly + 1.1, z1 - lp], [x0 + lp, ly + 1.1, z0 + lp]], 0.22, { color: IMP.steel, clampPitch: 4 });
+  pipeRun(kit, [[x0 + lp, ly, z0 + lp], [x1 - lp, ly, z0 + lp], [x1 - lp, ly, z1 - lp], [x0 + lp, ly, z1 - lp], [x0 + lp, ly, z0 + lp]], 0.45, { color: IMP.gunmetal, clampPitch: 8 });
+  pipeRun(kit, [[x0 + lp, ly + 1.1, z0 + lp], [x1 - lp, ly + 1.1, z0 + lp], [x1 - lp, ly + 1.1, z1 - lp], [x0 + lp, ly + 1.1, z1 - lp], [x0 + lp, ly + 1.1, z0 + lp]], 0.22, { color: IMP.steel, clampPitch: 8 });
   // east gallery: capacitor bank against the east wall with a busbar header
   for (let i = 0; i < 6; i++) {
     const cz = 557 + i * 5.2;
@@ -418,7 +419,7 @@ function pitWall(frame, L, h, opts = {}) {
     if (deep) {
       // vent grille low down + a panel seam + occasional pipe stub
       frame.box("impPaintedMetal", cu, 1.6, 0.05, bw * 0.7, 1.4, 0.06, { color: IMP.consoleDark, texel: 1 });
-      for (let s = 0; s < 6; s++) frame.box("impMetal", cu, 1.0 + s * 0.22, 0.09, bw * 0.7 - 0.2, 0.04, 0.06, { color: IMP.gunmetal, tilt: 0.5 });
+      for (let s = 0; s < 4; s++) frame.box("impMetal", cu, 1.0 + s * 0.33, 0.09, bw * 0.7 - 0.2, 0.05, 0.06, { color: IMP.gunmetal, tilt: 0.5 });
       frame.box("emitBlue", cu, 0.35, 0.03, bw * 0.8, 0.05, 0.02);
       if (r < 0.4) {
         frame.cylN("impMetal", cu - bw * 0.25, h - 3.2, 0.3, 0.3, 0.6, { color: IMP.steel, segments: 12 });
@@ -474,7 +475,7 @@ function upperWall(frame, L, v0, v1, seed) {
     const lh = g1 - 0.3 - v0 - 0.4;
     if (r < 0.3) {
       frame.box("impPaintedMetal", cu, lc, 0.06, bw * 0.8, lh * 0.8, 0.08, { color: IMP.consoleDark, texel: 1 });
-      const slats = 7;
+      const slats = 5;
       for (let s = 0; s < slats; s++) frame.box("impMetal", cu, lc - lh * 0.34 + (s / (slats - 1)) * lh * 0.68, 0.11, bw * 0.8 - 0.3, 0.07, 0.12, { color: IMP.gunmetal, tilt: 0.5 });
     } else if (r < 0.55) {
       for (const du of [-0.3, 0, 0.3]) frame.cylV("impMetal", cu + du * bw, lc, 0.32, 0.18, lh, { color: du === 0 ? IMP.gunmetal : IMP.steel, segments: 10 });

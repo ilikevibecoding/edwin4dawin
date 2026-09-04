@@ -7,7 +7,7 @@
 import * as THREE from "three";
 import { buildShell, roomWalls } from "../../shell.js";
 import { wallFrame } from "../../../core/frame.js";
-import { console as impConsole, chair, ceilingLight, pointLightDesc, railing, catwalk, wallScreen, lockers, walkable, pipeRun, column, rng } from "../../impKit.js";
+import { console as impConsole, ceilingLight, pointLightDesc, railing, catwalk, wallScreen, lockers, walkable, pipeRun, column, rng } from "../../impKit.js";
 import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
@@ -85,17 +85,15 @@ export function buildCargo(kit, ctx) {
     kit.boxMM("impPaintedMetal", [lx - hf - 0.4, y + h - 0.6, lz + hf - 0.2], [lx + hf + 0.4, y + h, lz + hf + 0.4], { color: IMP.trim, texel: 1 });
     kit.boxMM("impPaintedMetal", [lx - hf - 0.4, y + h - 0.6, lz - hf + 0.2], [lx - hf + 0.2, y + h, lz + hf - 0.2], { color: IMP.trim, texel: 1 });
     kit.boxMM("impPaintedMetal", [lx + hf - 0.2, y + h - 0.6, lz - hf + 0.2], [lx + hf + 0.4, y + h, lz + hf - 0.2], { color: IMP.trim, texel: 1 });
-    kit.boxMM("lightBandRed", [lx - hf + 0.2, y + h - 0.61, lz - hf - 0.1], [lx + hf - 0.2, y + h - 0.6, lz - hf + 0.1], { uv: "keep" });
-    kit.boxMM("lightBandRed", [lx - hf + 0.2, y + h - 0.61, lz + hf - 0.1], [lx + hf - 0.2, y + h - 0.6, lz + hf + 0.1], { uv: "keep" });
+    kit.boxMM("emitRed", [lx - hf + 0.2, y + h - 0.61, lz - hf - 0.1], [lx + hf - 0.2, y + h - 0.6, lz - hf + 0.1]);
+    kit.boxMM("emitRed", [lx - hf + 0.2, y + h - 0.61, lz + hf - 0.1], [lx + hf - 0.2, y + h - 0.6, lz + hf + 0.1]);
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.cyl("impMetal", lx + sx * (hf - 1), y + h - 1.0, lz + sz * (hf - 1), 0.6, 0.3, "x", { color: IMP.gunmetal, segments: 16 });
   }
 
   // ------------------------------------------------------------ container blocks (instanced)
   const palette = [IMP.wallDark, IMP.gunmetal, IMP.consoleDark, IMP.wallMid, 0x5a2a22, 0x6e6a2a, IMP.darkMetal];
-  const pf = containerPrefab(ctx.mats, [2.4, 2.4, 2.4], { label: 3 });
-  const pf2 = containerPrefab(ctx.mats, [2.4, 2.4, 2.4], { label: 9, light: "emitBlue" });
-  const xfA = [];
-  const xfB = [];
+  const pf = containerPrefab(ctx.mats, [2.4, 2.4, 2.4], { label: 3, label2: 9 });
+  const xf = [];
   const C = 2.4;
   const G = 0.18;
   const blocks = [
@@ -119,7 +117,7 @@ export function buildCargo(kit, ctx) {
         const L = layers - (rand() < 0.3 && layers > 1 ? 1 : 0);
         for (let l = 0; l < L; l++) {
           const t = { pos: [bx + c * (C + G) + C / 2, y + l * (C + 0.05), bz + r * (C + G) + C / 2], quat: yawQ((rand() - 0.5) * 0.06 + (rand() < 0.5 ? 0 : Math.PI)), color: palette[Math.floor(rand() * palette.length)] };
-          (rand() < 0.7 ? xfA : xfB).push(t);
+          xf.push(t);
         }
       }
     }
@@ -134,7 +132,7 @@ export function buildCargo(kit, ctx) {
   }
   // a few loose containers around the lift and the lane
   for (const [cx, cz, yaw] of [[-11, 696, 0.3], [11.5, 717, -0.2], [12.5, 693, 0.1], [-13.5, 719, 0.8]]) {
-    xfB.push({ pos: [cx, y, cz], quat: yawQ(yaw), color: palette[Math.floor(rand() * palette.length)] });
+    xf.push({ pos: [cx, y, cz], quat: yawQ(yaw), color: palette[Math.floor(rand() * palette.length)] });
     kit.collider([cx - 1.8, y, cz - 1.8], [cx + 1.8, y + 2.4, cz + 1.8], "container");
   }
   const colorKeys = new Set(["impPaintedMetal"]);
@@ -163,13 +161,13 @@ export function buildCargo(kit, ctx) {
     }
     // driver's seat + control yoke at the back, headlight bar at the front
     box("impPaintedMetal", 0, 1.15, 1.45, 0.9, 0.7, 0.5, { color: IMP.wallDark, texel: 1 });
-    box("impFabric", 0, 1.0, 1.05, 0.8, 0.14, 0.7, { color: IMP.fabricBlack, texel: 1 });
-    box("impFabric", 0, 1.35, 1.35, 0.8, 0.7, 0.14, { color: IMP.fabricBlack, texel: 1 });
+    box("impPaintedMetal", 0, 1.0, 1.05, 0.8, 0.14, 0.7, { color: IMP.fabricBlack, texel: 1 });
+    box("impPaintedMetal", 0, 1.35, 1.35, 0.8, 0.7, 0.14, { color: IMP.fabricBlack, texel: 1 });
     cyl("impMetal", 0, 1.3, 0.4, 0.04, 0.9, { color: IMP.steel, segments: 8 });
     box("impPaintedMetal", 0, 1.75, 0.15, 0.6, 0.25, 0.3, { color: IMP.consoleDark, texel: 1 });
     box("blinkSparse", 0, 1.78, 0.0, 0.5, 0.15, 0.004, { uv: "keep" });
     box("impPaintedMetal", 0, 0.75, -1.65, 1.6, 0.16, 0.16, { color: IMP.trim, texel: 1 });
-    box("emitWarm", 0, 0.75, -1.735, 1.3, 0.06, 0.01);
+    box("emitAmber", 0, 0.75, -1.735, 1.3, 0.06, 0.01);
     box("emitAmber", 0.75, 1.0, 1.45, 0.06, 0.06, 0.04);
     if (forks) for (const sx of [-1, 1]) box("impMetal", sx * 0.6, 0.42, -2.3, 0.22, 0.1, 1.6, { color: IMP.steel, texel: 1 });
     const g = new THREE.PlaneGeometry(0.5, 0.5);
@@ -199,10 +197,9 @@ export function buildCargo(kit, ctx) {
     const top = CRY + 0.7 - 4.2 - 1.0;
     kit.box("impPaintedMetal", cx, top - 0.15, cz, 2.8, 0.3, 0.4, { color: IMP.hazardYellow, texel: 1 });
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.cyl("impMetal", cx + sx * 1.15, top - 0.3 - 0.4, cz + sz * 1.0, 0.02, 0.8, "y", { color: IMP.steel, segments: 6 });
-    xfB.push({ pos: [cx, top - 1.1 - 2.4, cz], quat: yawQ(0.08), color: IMP.gunmetal });
+    xf.push({ pos: [cx, top - 1.1 - 2.4, cz], quat: yawQ(0.08), color: IMP.gunmetal });
   }
-  instancePrefab(kit, pf, xfA, { colorKeys });
-  instancePrefab(kit, pf2, xfB, { colorKeys });
+  instancePrefab(kit, pf, xf, { colorKeys });
 
   // ------------------------------------------------------------ gantry catwalks along both side walls, with stairs
   const CY = y + 6;
@@ -261,8 +258,6 @@ export function buildCargo(kit, ctx) {
     // inside: two consoles facing the bay through the south glass, a screen wall on the east, lockers
     impConsole(kit, ctx, [bx0 + 4.0, y + 0.16, bz1 - 1.2], Math.PI, { kind: "wide", width: 2.6, screens: 3, seed: 310, light: true });
     impConsole(kit, ctx, [bx0 + 8.6, y + 0.16, bz1 - 1.2], Math.PI, { kind: "wide", width: 2.4, screens: 3, seed: 311, light: false });
-    chair(kit, [bx0 + 4.0, y + 0.16, bz1 - 2.1], Math.PI);
-    chair(kit, [bx0 + 8.6, y + 0.16, bz1 - 2.1], Math.PI);
     const w = walls.east;
     const { frame } = wallFrame(kit, w.from, w.to, y);
     screenBank(frame, w.u((bz0 + bz1) / 2), 2.1, 3, 2, 1.1, 0.7, 37);
@@ -279,7 +274,6 @@ export function buildCargo(kit, ctx) {
   deckMark(kit, -22, y, 690, 34, 4.0, 0, 0);
   deckMark(kit, 22, y, 690, 34, 4.0, 0, 0);
   deckMark(kit, 0, y, 735, 60, 4.0, 0, 0);
-  kit.boxMM("impGloss", [-0.8, y - 0.001, z0 + T + 0.5], [0.8, y + 0.006, LIFT.z - LIFT.half - 2.4], { color: IMP.white, texel: 0.25 });
   floorDecal(kit, 3.6, y, z0 + T + 5, 1.4, 0);
   floorDecal(kit, -3.6, y, z0 + T + 5, 1.4, 15);
   for (const [bx, bz] of [[-11.5, 698.8], [11.5, 698.8], [-11.5, 713.2], [11.5, 713.2]]) beacon(kit, ctx, [bx, y, bz], { light: false, mat: "emitAmber" });
@@ -288,7 +282,7 @@ export function buildCargo(kit, ctx) {
     const { frame } = wallFrame(kit, w.from, w.to, y);
     relayCabinet(frame, w.u(-8), 0, 3.0, 3.2, 320);
     relayCabinet(frame, w.u(8), 0, 3.0, 3.2, 321);
-    wallScreen(frame, w.u(-14), 2.6, 1.8, 1.0, 3);
+    wallScreen(frame, w.u(-14), 2.6, 1.8, 1.0, 1);
     wallScreen(frame, w.u(14), 2.6, 1.8, 1.0, 0);
     frame.quad("impDecal", w.u(-22), 6.5, 0.064, 2.4, 2.4, { uvRect: impDecalRect(1) });
     frame.quad("impDecal", w.u(22), 6.5, 0.064, 2.4, 2.4, { uvRect: impDecalRect(13) });
@@ -299,7 +293,7 @@ export function buildCargo(kit, ctx) {
     const { frame } = wallFrame(kit, w.from, w.to, y);
     for (const dx of [-30, -10, 10, 30]) frame.quad("impDecal", w.u(dx), 6.5, 0.064, 2.4, 2.4, { uvRect: impDecalRect(dx < 0 ? 3 : 9) });
     relayCabinet(frame, w.u(0), 0, 3.0, 3.6, 322);
-    wallScreen(frame, w.u(-20), 2.6, 1.8, 1.0, 4);
+    wallScreen(frame, w.u(-20), 2.6, 1.8, 1.0, 2);
     wallScreen(frame, w.u(20), 2.6, 1.8, 1.0, 1);
     lockers(frame, w.u(14), w.u(8), 2.1, { seed: 45 });
   }

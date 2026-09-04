@@ -12,7 +12,7 @@ import { IMP } from "../../../materials/imperial.js";
 import { impDecalRect } from "../../../materials/imperialTextures.js";
 import { STD } from "../../../config/layout.js";
 import { addEngMaterials } from "./engMaterials.js";
-import { miniKit, partsRackPrefab, instancePrefab, workbench, droid, gasCylinder, toolCart, craneRails, craneBridge, ibeam, hazardKerb, hazardBand, floorDecal, deckMark, relayCabinet, cableTray, screenBank, valve, stain, yawQ } from "./engKit.js";
+import { miniKit, partsRackPrefab, instancePrefab, workbench, droid, gasCylinder, toolCart, craneRails, craneBridge, ibeam, hazardKerb, hazardBand, floorDecal, deckMark, relayCabinet, cableTray, screenBank, valve, yawQ } from "./engKit.js";
 
 export function buildMaintenance(kit, ctx) {
   addEngMaterials(ctx.mats);
@@ -39,7 +39,7 @@ export function buildMaintenance(kit, ctx) {
   {
     const tx = 18.2 - (RX0 + RX1) / 2; // trolley parked west of the actuator's breech
     const bridge = miniKit(ctx.mats, (k) => {
-      craneBridge(k, RX1 - RX0, RY + 0.6, 0, { cx: 0, tx, drop: 1.3, girder: 0.7 });
+      craneBridge(k, RX1 - RX0, RY + 0.6, 0, { cx: 0, tx, drop: 1.3, girder: 0.7, lamp: false, bands: false });
       // the removed armour ring, slung from the hook (bottom stays above head height)
       const hy = RY + 0.6 - 1.3 - 0.75;
       k.add("impMetal", new THREE.TorusGeometry(1.15, 0.14, 8, 28), { pos: [tx, hy - 0.3 - 1.15, 0], rot: [0, Math.PI / 2, 0], color: IMP.gunmetal, uv: "scale", uvScale: [6, 1] });
@@ -94,7 +94,6 @@ export function buildMaintenance(kit, ctx) {
     kit.collider([X1 - 3.0, y, az + 1.9], [X1 + 1.0, y + 2.6, az + 3.3], "shells");
     for (let i = 0; i < 3; i++) kit.add("impPaintedMetal", new THREE.CylinderGeometry(R + 0.14, R + 0.14, 0.3, 20, 1, true, Math.PI * (1.2 + i * 0.1), Math.PI * 0.6), { pos: [X0 + 1.4 + i * 0.8, y + 0.15, az - 2.6], rot: [0, 0.3 * i, 0], color: IMP.trim, uv: "scale", uvScale: [4, 1] });
     kit.collider([X0 + 0.9, y, az - 3.4], [X0 + 3.4, y + 0.8, az - 1.9], "ringSegments");
-    stain(kit, [ax + 1.5, y, az], 2.4, { rot: 0.5 });
     kit.collider([X0 - 0.9, y, az - 1.7], [X1 + 0.3, y + 3.0, az + 1.7], "actuator");
     // diagnostic stations facing the actuator, cabled into the breech end
     for (const cz of [az - 1.6, az + 1.2]) {
@@ -200,7 +199,7 @@ export function buildMaintenance(kit, ctx) {
       const q = yawQ(yaw);
       kit.add("impPaintedMetal", new THREE.BoxGeometry(len, 0.08, 0.08), { pos: [cx, y + 0.06, cz], quat: q, color: IMP.trim, texel: 1 });
       kit.add("impPaintedMetal", new THREE.BoxGeometry(len, 0.06, 0.06), { pos: [cx, y + 2.1, cz], quat: q, color: IMP.trim, texel: 1 });
-      kit.add("glassDark", new THREE.BoxGeometry(len - 0.1, 1.9, 0.02), { pos: [cx, y + 1.08, cz], quat: q });
+      kit.add("darkGloss", new THREE.BoxGeometry(len - 0.1, 1.9, 0.02), { pos: [cx, y + 1.08, cz], quat: q });
       for (const s of [-1, 1]) kit.add("impPaintedMetal", new THREE.BoxGeometry(0.08, 2.14, 0.08), { pos: [cx - Math.cos(yaw) * s * (len / 2), y + 1.07, cz + Math.sin(yaw) * s * (len / 2)], color: IMP.trim, texel: 1 });
       hazardBand(kit, [cx, y + 0.35, cz], yaw, len - 0.2, 0.3);
     };
@@ -230,7 +229,6 @@ export function buildMaintenance(kit, ctx) {
     gasCylinder(kit, [bx0 + 1.5, y, bz0 + 1.4], { color: IMP.gunmetal, h: 1.4 });
     kit.box("impMetal", bx0 + 1.05, y + 1.15, bz0 + 1.1, 1.4, 0.04, 0.04, { color: IMP.steel });
     toolCart(kit, [bx1 - 1.6, y, bz1 - 1.2], 0.2, { seed: 11 });
-    stain(kit, [tx + 0.4, y, tz + 1.4], 1.4, { rot: 1.9 });
     // arc flicker
     const arc = pointLightDesc(ctx, 0xa8c8ff, 3.5, 9, [tx - 0.2, y + 1.9, tz], 0);
     ctx.animate((dt, t) => {
@@ -242,7 +240,7 @@ export function buildMaintenance(kit, ctx) {
     const w = walls.west;
     const { frame } = wallFrame(kit, w.from, w.to, y);
     lockers(frame, w.u(641.6), w.u(636.6), 2.1, { seed: 29 });
-    wallScreen(frame, w.u(629.5), 2.3, 1.6, 0.9, 4);
+    wallScreen(frame, w.u(629.5), 2.3, 1.6, 0.9, 2);
     frame.quad("impDecal", w.u(626.5), 1.8, 0.064, 0.9, 0.9, { uvRect: impDecalRect(1) });
     relayCabinet(frame, w.u(622.5), 0, 2.4, 2.4, 240);
   }
@@ -283,7 +281,6 @@ export function buildMaintenance(kit, ctx) {
   // ------------------------------------------------------------ deck marks, spare pipe bits
   deckMark(kit, x0 + T + 6.5, y, 634, 12, 3.4, 0, 0);
   floorDecal(kit, x0 + T + 3.5, y, 631.4, 1.2, 0);
-  kit.boxMM("impGloss", [x0 + T + 0.6, y - 0.001, 633.3], [x0 + T + 12.5, y + 0.006, 634.7], { color: IMP.white, texel: 0.25 });
   valve(kit, [30.5, y + 3.2, z0 + T + 0.35], 0.3, "z", { stem: 0.3 });
   pipeRun(kit, [[30.5, y + 0.3, z0 + T + 0.35], [30.5, y + 3.2, z0 + T + 0.35], [30.5, y + h - 1.0, z0 + T + 0.35], [30.5, y + h - 1.0, z0 + T + 2.4]], 0.16, { color: IMP.steel, clampPitch: 2 });
 
