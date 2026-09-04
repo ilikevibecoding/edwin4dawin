@@ -135,16 +135,29 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
     float footEff = max((abs(dot(dx, sa)) + abs(dot(dy, sa))) / stretch, abs(dot(dx, sc)) + abs(dot(dy, sc)));
     vec2 s = vec2(0.0);   // slope offset of the resolved facets
     float resolved = 0.0; // fraction of the variance they carry
-    float carry = 0.0;    // variance share of the octaves too fine to resolve, passed up to the next
     vec2 gp = wp + uWindDir * (0.9 * t);
     vec2 gq = vec2(dot(gp, sa) / stretch, dot(gp, sc));
-    float cell = 0.7;
-    for (int o = 0; o < 5; o++, cell *= 4.0) {
+    // nine octaves of 0.7 m * 2^o with variance shares 0.272 * 0.7^o (87 % in all); a pixel evaluates the five
+    // starting at the finest octave whose cell spans more than 3 px. That one fades in until its cell spans
+    // 6 px ('u'), the coarsest of the five fades out over the same stretch, so the window slides seamlessly;
+    // the shares of the octaves finer than the window ride on its finest member, those coarser on its
+    // fourth, so the field's variance (and the 13 % residual lobe) never depends on the distance.
+    float oF = log2(max(footEff / 0.7, 1e-4)) + 1.585;
+    int o0 = int(floor(oF)) + 1;
+    float u = float(o0) - oF;
+    if (o0 < 0) { o0 = 0; u = 1.0; }
+    float w0 = smoothstep(0.0, 1.0, u), w4 = 1.0 - w0;
+    float sh0 = 0.272 * pow(0.7, float(o0));
+    float carry = 0.272 * (1.0 - pow(0.7, float(o0))) / 0.3;
+    float extra3 = max(0.272 * (pow(0.7, float(o0 + 5)) - pow(0.7, 9.0)) / 0.3, 0.0) + (o0 + 4 <= 8 ? sh0 * 0.2401 * (1.0 - w4 * w4) : 0.0);
+    for (int i = 0; i < 5; i++) {
+      int o = o0 + i;
+      if (o > 8) break;
       float fo = float(o);
-      float f = 0.45 * exp2(-fo) + carry;
-      // resolved while the cell spans more than ~3.5 px (fully above ~6 px)
-      float w = 1.0 - smoothstep(cell / 6.0, cell / 3.5, footEff);
-      carry = f * (1.0 - w * w);
+      float cell = 0.7 * exp2(fo);
+      float f = sh0 * pow(0.7, float(i)) + carry + (i == 3 ? extra3 : 0.0);
+      float w = i == 0 ? w0 : (i == 4 ? w4 : 1.0);
+      carry = i == 0 ? f * (1.0 - w * w) : 0.0;
       if (w < 0.003) continue;
       vec2 q = gq / cell;
       // two independent value-noise vectors (0.214 rms per component) rotated by a slow phase: a unit-variance
@@ -283,8 +296,8 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   // wet sand at the waterline (mirrors the terrain's wet band above it)
   bed *= mix(0.72, 1.0, smoothstep(0.0, 0.45, depth));
   // wave focusing: shallow bed brightness follows the crests of the short waves (cheap caustics)
-  float caustic = ((val1 - 0.5) * w1 * 0.35 + (val2 - 0.5) * w2 * 0.3 + (val3 - 0.5) * w3 * 0.25) * rippleF;
-  bed *= 1.0 + caustic * (1.0 - smoothstep(1.0, 3.5, depth)) * smoothstep(0.05, 0.3, depth);
+  float caustic = ((val1 - 0.5) * w1 * 0.5 + (val2 - 0.5) * w2 * 0.45 + (val3 - 0.5) * w3 * 0.35) * rippleF;
+  bed *= 1.0 + caustic * (1.0 - smoothstep(1.5, 5.0, depth)) * smoothstep(0.05, 0.3, depth);
   // deep-water reflectance under neutral irradiance: blue-teal bay water carrying some suspended matter,
   // clearer and bluer ocean beyond the shelf (a few percent, peaking in the blue)
   vec3 Rinf = mix(vec3(0.038, 0.094, 0.168), vec3(0.013, 0.048, 0.128), smoothstep(8.0, 22.0, depth));
@@ -332,7 +345,12 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
     float mud = (1.0 - smoothstep(0.004, 0.012, slope)) * (1.0 - smoothstep(0.3, 2.0, depth)) * coastGate;
     R = mix(R, vec3(0.05, 0.062, 0.075), mud * 0.4 * (1.0 - exp(-path)));
   }
-  float whitecap = smoothstep(0.74, 0.86, val0) * smoothstep(7.0, 14.0, uWindSpeed) * smoothstep(2.0, 6.0, depth) * open * w0;
+  // whitecaps (fresh breeze and up): short crest-parallel streaks riding on the steepest chop groups; the
+  // streak pattern is filtered to its coverage once its cells fall below a few pixels (no cell-shaped flecks)
+  float capFade = 1.0 - smoothstep(1.0, 3.0, foot);
+  float streak = vnoise(vec2((dot(wp, wd) + 4.5 * t) * 0.25, dot(wp, vec2(-wd.y, wd.x)) * 0.08 + 7.0));
+  float caps = mix(0.08, smoothstep(0.7, 0.82, streak), capFade);
+  float whitecap = caps * smoothstep(0.6, 0.9, val0) * smoothstep(7.0, 14.0, uWindSpeed) * smoothstep(2.0, 6.0, depth) * open * w0;
   foam = clamp(foam + wake.r * 1.3 + whitecap, 0.0, 1.0);
 
   wN = N; wV = V; wFoam = foam; wMss = mss; wDx = dxw; wDy = dyw;
