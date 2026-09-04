@@ -9,6 +9,7 @@ import { roomWalls, openingsFor, impWall, impCeiling, impFloor, impConsole, impC
 import { IMP_DECAL } from "../textures_imperial.js";
 import { HG_DECAL, hgNumber, hgDecalRect } from "../textures_hangar.js";
 import { hgSetup, cutSpans, hgBeacons } from "./hangar_kit.js";
+import { ROOM_BY_ID } from "../spec.js";
 
 /** Window wall: slab strips around the openings, dado under the sills, frames, mullions, glass, header. */
 function windowWall(frame, length, height, openings, opts = {}) {
@@ -66,6 +67,10 @@ function windowWall(frame, length, height, openings, opts = {}) {
 export function buildFlightControl(kit, ctx, room) {
   hgSetup(kit);
   const materials = kit.materials;
+  // The booth exists to look into the hangar, but the small-room default fog (FogExp2 0.03) turns the
+  // 130 m of hangar behind the glass into a flat grey wall (exp(-(0.03·130)²) ≈ 0). Use the hangar's
+  // density while the player is in here. Runtime shim — spec.js owns this; see the orchestrator request.
+  if (ROOM_BY_ID.hangar && room.fog > ROOM_BY_ID.hangar.fog) room.fog = ROOM_BY_ID.hangar.fog;
   const [W, H, D] = room.size;
   const hx = W / 2;
   const hz = D / 2;

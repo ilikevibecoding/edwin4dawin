@@ -629,19 +629,21 @@ export function buildHangar(kit, ctx, room) {
   // =====================================================================================
   hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 12.5, beamAxis: "x", troughsX: [-35, -20, 20, 35], ductsX: [-62.5, 62.5], lightKey: "emitWhiteSoft", beamH: 1.4 });
   {
-    // sodium-amber floods: the room is 28 000 m² of deck under an 8-light budget, so each flood is a
-    // strong pool (≈ 2.5× the default rig's per-fixture intensity) with a long reach, placed over the
-    // service lanes of the four rack rows and the two staging areas
+    // sodium-amber floods: the room is 28 000 m² of deck, so each flood is a strong pool (≈ 2.3× the
+    // default rig's per-fixture output) hung at y = 28 — below the gantries so their decks catch grazing
+    // light, far enough under the ceiling not to blow it out — two per rack row along the service lanes
     const amber = 0xffbe6a;
     const floods = [
-      [-40, 26, -62],
-      [40, 26, -62],
-      [-40, 26, 50],
-      [40, 26, 50],
-      [0, 26, -96],
-      [0, 26, 100],
+      [-40, 28, -80],
+      [40, 28, -80],
+      [-40, 28, -35],
+      [40, 28, -35],
+      [-40, 28, 25],
+      [40, 28, 25],
+      [-40, 28, 72],
+      [40, 28, 72],
     ];
-    floods.forEach(([x, y, z], i) => kit.light({ type: "point", pos: [x, y, z], color: amber, intensity: lux(y, 3.4), distance: 130, priority: 0.66 - i * 0.01 }));
+    floods.forEach(([x, y, z], i) => kit.light({ type: "point", pos: [x, y, z], color: amber, intensity: lux(y, 3.2), distance: 100, priority: 0.66 - i * 0.01 }));
     kit.light({ type: "point", pos: [0, 11, 105], color: 0xff3b2e, intensity: lux(10, 1.2), distance: 26, priority: 0.35 });
   }
 

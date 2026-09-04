@@ -36,6 +36,7 @@ import {
   hgFloorSocket,
   hgDeckLamp,
   hgCrateStack,
+  hgPallet,
   hgManifold,
   hgWall,
   hgWallOpenings,
@@ -136,14 +137,18 @@ export function buildFighterBay(kit, ctx, room) {
       P.box("chevronY", sx, 0.2, 0, 0.46, 0.18, fz * 2 + 0.52, { texel: 1 });
     }
     for (const sz of [-fz, fz]) P.box("impTrim", 0, 0.18, sz, fx * 2 + 0.45, 0.36, 0.4, { color: PALETTE.impBlack, texel: 1 });
-    // uprights with a lit strip, top frame
+    // uprights (pale grey so the frame reads against the dark walls) with a lit strip and hazard collars,
+    // grey top frame with black corner blocks
     for (const [sx, sz] of [[-fx, -fz], [fx, -fz], [-fx, fz], [fx, fz]]) {
-      P.box("impMetal", sx, frameTop / 2, sz, 0.36, frameTop, 0.36, { color: PALETTE.impGreyDark, texel: 1 });
+      P.box("impMetal", sx, frameTop / 2, sz, 0.36, frameTop, 0.36, { color: PALETTE.impGrey, texel: 1 });
+      P.box("chevronY", sx, 1.6, sz, 0.38, 0.6, 0.38, { texel: 1.5 });
+      P.box("chevronY", sx, frameTop - 0.9, sz, 0.38, 0.6, 0.38, { texel: 1.5 });
       P.box(accentKey, sx + (sx < 0 ? 0.19 : -0.19), frameTop * 0.55, sz, 0.015, frameTop * 0.6, 0.08);
+      P.box("impTrim", sx, frameTop + 0.25, sz, 0.6, 0.6, 0.6, { color: PALETTE.impBlack, texel: 1 });
       P.collider(sx - 0.2, 0, sz - 0.2, sx + 0.2, frameTop, sz + 0.2, "cradle-post");
     }
-    for (const sx of [-fx, fx]) P.box("impTrim", sx, frameTop + 0.25, 0, 0.5, 0.5, fz * 2 + 0.5, { color: PALETTE.impBlack, texel: 1 });
-    for (const sz of [-fz, fz]) P.box("impTrim", 0, frameTop + 0.25, sz, fx * 2 + 0.5, 0.5, 0.5, { color: PALETTE.impBlack, texel: 1 });
+    for (const sx of [-fx, fx]) P.box("impMetal", sx, frameTop + 0.25, 0, 0.5, 0.5, fz * 2 + 0.5, { color: PALETTE.impGreyDark, texel: 1 });
+    for (const sz of [-fz, fz]) P.box("impMetal", 0, frameTop + 0.25, sz, fx * 2 + 0.5, 0.5, 0.5, { color: PALETTE.impGreyDark, texel: 1 });
     // wing saddles: V-blocks along z at the wing stations, top clamps hanging from the frame
     for (const sx of [-tie.wingHalfSpan, tie.wingHalfSpan]) {
       P.box("impTrim", sx, 0.6, 0, 0.9, 0.4, tie.wingW - 0.4, { color: PALETTE.impBlack, texel: 1 });
@@ -294,6 +299,17 @@ export function buildFighterBay(kit, ctx, room) {
   hgPowerBox(kit, 18, 37.6, Math.PI, { on: false });
   hgHoseReel(kit, -8, -37.2, 0);
   hgToolCart(kit, 0, 34.5, 1.9, { seed: 15 });
+  // inbound staging beside the tow lane (E half): parts pallets waiting for the cradles, a parked lift,
+  // a second bowser topping up from the door side
+  hgPallet(kit, 13, 16, 0.15, { seed: 41 });
+  hgCrateStack(kit, 13, 21.5, -0.1, [["a", 0, 0, 0], ["c", 1.3, 0, 0.2, 0.5], ["c", 0.1, 1.0, 0.1, 0.2]], { seed: 24 });
+  hgScissorLift(kit, 19, 13, Math.PI / 2 - 0.2, 2.6);
+  hgToolCart(kit, 8, 14, -1.2, { seed: 16 });
+  hgPallet(kit, 12, -17, -0.2, { seed: 42, w: 2.8, d: 2.2 });
+  hgCrateStack(kit, 7, -20, 0.3, [["b", 0, 0, 0], ["a", 0.1, 1.2, 0.1, 0.4]], { seed: 25 });
+  hgFuelBowser(kit, 17, -20, -0.35, { seed: 4 });
+  hgPowerBox(kit, 20, -12, Math.PI / 2);
+  for (const z of [-14, 14]) hgDeckLamp(kit, 22.5, z, "emitAmber");
 
   // ---- walls: industrial, 14 m; blast door on the E wall; tool walls on the N / S plates
   const walls = roomWalls(kit, room);
@@ -340,8 +356,8 @@ export function buildFighterBay(kit, ctx, room) {
   // ---- lights: orange-amber work lights over the cradles and racks, cool key at the door
   const amber = 0xffa040;
   // six fixtures stand in for the default rig's two dozen, so each carries ~2.5× the default output
-  kit.light({ type: "point", pos: [-8, 11.5, -19], color: amber, intensity: lux(11.5, 3.0), distance: 64, priority: 0.62 });
-  kit.light({ type: "point", pos: [-8, 11.5, 19], color: amber, intensity: lux(11.5, 3.0), distance: 64, priority: 0.61 });
+  kit.light({ type: "point", pos: [-8, 11.5, -19], color: amber, intensity: lux(11.5, 3.6), distance: 64, priority: 0.62 });
+  kit.light({ type: "point", pos: [-8, 11.5, 19], color: amber, intensity: lux(11.5, 3.6), distance: 64, priority: 0.61 });
   kit.light({ type: "point", pos: [-18, 10, -22], color: 0xffb060, intensity: lux(10, 2.0), distance: 44, priority: 0.5 });
   kit.light({ type: "point", pos: [-18, 10, 24], color: 0xffb060, intensity: lux(10, 2.0), distance: 44, priority: 0.49 });
   kit.light({ type: "point", pos: [14, 12, 0], color: 0xdfe8ff, intensity: lux(12, 2.6), distance: 60, priority: 0.55 });
