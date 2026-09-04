@@ -315,6 +315,110 @@ export function revealGeometry(outer: LoftGrid, inner: LoftGrid, b: QuadBlock): 
   return geo;
 }
 
+/**
+ * One window pane of a quad block with its own [0,1]^2 UV (u along the body, v along the ring, both by arc length)
+ * and an `aPane` attribute carrying the pane's physical size (m), a centre-seal flag and an inner-face flag (`flip`),
+ * so the glass shader can draw a rubber seal / edge vignette of constant physical width on every pane and treat the
+ * cabin side of the glass (cleaner, shaded by the roof) differently from the outside.
+ */
+export function paneGeometry(g: LoftGrid, b: QuadBlock, flip: boolean, centreSeal = false): THREE.BufferGeometry {
+  const R = g.R;
+  const J = (j: number) => (j > R ? j - R : j);
+  const ni = b.i1 - b.i0, nj = b.j1 - b.j0;
+  const P = (i: number, j: number) => { const k = (i * (R + 1) + J(j)) * 3; return [g.pos[k], g.pos[k + 1], g.pos[k + 2]] as const; };
+  const dist = (a: readonly [number, number, number], c: readonly [number, number, number]) => Math.hypot(a[0] - c[0], a[1] - c[1], a[2] - c[2]);
+  // cumulative arc lengths along both directions
+  const along = (ii: number, jj: number, dirI: boolean): [number, number] => {
+    let acc = 0, total = 0;
+    if (dirI) { for (let k = 0; k < ni; k++) { const d = dist(P(b.i0 + k, b.j0 + jj), P(b.i0 + k + 1, b.j0 + jj)); if (k < ii) acc += d; total += d; } }
+    else { for (let k = 0; k < nj; k++) { const d = dist(P(b.i0 + ii, b.j0 + k), P(b.i0 + ii, b.j0 + k + 1)); if (k < jj) acc += d; total += d; } }
+    return [acc, total];
+  };
+  let width = 0, height = 0;
+  for (let jj = 0; jj <= nj; jj++) width += along(0, jj, true)[1] / (nj + 1);
+  for (let ii = 0; ii <= ni; ii++) height += along(ii, 0, false)[1] / (ni + 1);
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], pane: number[] = [], idx: number[] = [];
+  for (let ii = 0; ii <= ni; ii++) {
+    for (let jj = 0; jj <= nj; jj++) {
+      const i = b.i0 + ii, j = J(b.j0 + jj), k = i * (R + 1) + j;
+      pos.push(g.pos[k * 3], g.pos[k * 3 + 1], g.pos[k * 3 + 2]);
+      const f = flip ? -1 : 1;
+      nrm.push(g.normal[k * 3] * f, g.normal[k * 3 + 1] * f, g.normal[k * 3 + 2] * f);
+      const [au, tu] = along(ii, jj, true), [av, tv] = along(ii, jj, false);
+      uv.push(au / Math.max(tu, 1e-6), av / Math.max(tv, 1e-6));
+      pane.push(width, height, centreSeal ? 1 : 0, flip ? 1 : 0);
+    }
+  }
+  for (let ii = 0; ii < ni; ii++) for (let jj = 0; jj < nj; jj++) {
+    const a = ii * (nj + 1) + jj, c = a + nj + 1;
+    if (g.forwardX !== flip) idx.push(a, a + 1, c, a + 1, c + 1, c);
+    else idx.push(a, c, a + 1, a + 1, c, c + 1);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setAttribute('aPane', new THREE.Float32BufferAttribute(pane, 4));
+  geo.setIndex(idx);
+  return geo;
+}
+
+/**
+ * Glare shield: a flat deck at height y from the rear edge xRear forward to xFront (trimmed to the body width minus
+ * inset) whose rear edge rolls down into a half-round lip of radius lipR overhanging the instrument panel. UVs run
+ * across the width (u) and rear lip -> front (v) inside the given atlas rectangle.
+ */
+export function glareShieldGeometry(sections: Section[], y: number, xRear: number, xFront: number, inset: number, lipR: number, uv: { u0: number; v0: number; u1: number; v1: number }, steps = 8): THREE.BufferGeometry {
+  const hw = (x: number) => Math.max(halfWidthAt(sectionAt(sections, x), y) - inset, 0.02);
+  const pos: number[] = [], nrm: number[] = [], uvs: number[] = [], idx: number[] = [];
+  // rows of the strip: lip (rolling from the underside up over the edge) then the deck to the front
+  const rows: { x: number; y: number; nx: number; ny: number; v: number }[] = [];
+  const LIP = 7;
+  for (let k = 0; k <= LIP; k++) {
+    const a = (Math.PI * 1.5) - (k / LIP) * Math.PI; // 270 deg (underside) -> 90 deg (top edge)
+    rows.push({ x: xRear + Math.cos(a) * lipR, y: y - lipR + Math.sin(a) * lipR, nx: Math.cos(a), ny: Math.sin(a), v: (k / LIP) * 0.3 });
+  }
+  for (let k = 1; k <= steps; k++) rows.push({ x: xRear + (xFront - xRear) * (k / steps), y, nx: 0, ny: 1, v: 0.3 + 0.7 * (k / steps) });
+  const COLS = 10;
+  for (const r of rows) {
+    const w = hw(Math.max(r.x, xRear));
+    for (let c = 0; c <= COLS; c++) {
+      const z = -w + (2 * w) * (c / COLS);
+      pos.push(r.x, r.y, z); nrm.push(r.nx, r.ny, 0);
+      uvs.push(uv.u0 + (uv.u1 - uv.u0) * (c / COLS), uv.v1 + (uv.v0 - uv.v1) * r.v);
+    }
+  }
+  for (let r = 0; r < rows.length - 1; r++) for (let c = 0; c < COLS; c++) {
+    const a = r * (COLS + 1) + c, b = a + COLS + 1;
+    idx.push(a, a + 1, b, a + 1, b + 1, b);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(idx);
+  return geo;
+}
+
+/** Flat strap (seat belt) between two points: `width` across, `thick` along the given face normal. */
+export function strapGeometry(a: THREE.Vector3, b: THREE.Vector3, width: number, thick: number, faceNormal: THREE.Vector3): THREE.BufferGeometry {
+  const dir = b.clone().sub(a).normalize();
+  const n = faceNormal.clone().addScaledVector(dir, -faceNormal.dot(dir)).normalize();
+  const s = new THREE.Vector3().crossVectors(dir, n).normalize();
+  const g = new THREE.BoxGeometry(width, a.distanceTo(b), thick);
+  const m = new THREE.Matrix4().makeBasis(s, dir, n).setPosition(a.clone().add(b).multiplyScalar(0.5));
+  g.applyMatrix4(m);
+  return g;
+}
+
+/** Textured quad (placard, screen) of size w x h centred at the origin in the XY plane facing +Z, UVs inside an atlas rectangle. */
+export function quadGeometry(w: number, h: number, uv: { u0: number; v0: number; u1: number; v1: number }): THREE.BufferGeometry {
+  const g = new THREE.PlaneGeometry(w, h);
+  const a = g.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < a.count; i++) a.setXY(i, uv.u0 + (uv.u1 - uv.u0) * a.getX(i), uv.v0 + (uv.v1 - uv.v0) * a.getY(i));
+  return g;
+}
+
 /** Flat horizontal deck (floor, glare shield) at height y between stations x0..x1, trimmed to the body width minus inset. */
 export function deckGeometry(sections: Section[], y: number, x0: number, x1: number, inset: number, steps = 8): THREE.BufferGeometry {
   const lo = Math.min(x0, x1), hi = Math.max(x0, x1);
