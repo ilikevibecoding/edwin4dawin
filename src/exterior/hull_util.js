@@ -723,7 +723,8 @@ export function channel(chunks, rand, { zA, zB, xc, halfW, depth, yAt, up = true
  * normal turns downward: emissive × albedo × vertex tint, so plating seams and paint variation stay
  * readable on the belly without touching the sunlit side.
  */
-const SHINE = new THREE.Color(0x585d66);
+// halved from 0x585d66 now that the scene hemisphere light carries part of the belly fill
+const SHINE = new THREE.Color(0x2c2f33);
 const SHINE_CHUNK = /* glsl */ `
 #include <emissivemap_fragment>
 {

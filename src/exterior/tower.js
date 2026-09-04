@@ -148,7 +148,10 @@ export function buildTower(ctx) {
     const vp = TOWER.viewports;
     const gv = TOWER.galleryViewports;
     const w = b.hw * 2;
-    const zFace = b.z0 + 3; // panel centre; the panel spans z0 .. z0 + 6 exactly as the skeleton did
+    // the face slab is only 1 m thick (z0 .. z0+1): the bridge and observation-gallery interiors start
+    // right behind it (their forward walls sit at z0+1 and z0+3), so nothing may reach further aft
+    const FACE_T = 1.0;
+    const zFace = b.z0 + FACE_T / 2;
     // horizontal pieces of the forward face: [y0, y1, dark?]
     const bandA = [vp.y0 - 2.1, vp.y1 + 2.1];
     const bandB = [gv.y0 - 1.0, gv.y1 + 1.2];
@@ -180,13 +183,13 @@ export function buildTower(ctx) {
           }
         }
       }
-      const face = panelWithHoles(w, y1 - y0, 6, holes);
+      const face = panelWithHoles(w, y1 - y0, FACE_T, holes);
       face.rotateY(Math.PI); // extrusion along -z: outward normal faces -z (forward)
       at("far", dark ? "hullGreeble" : "hullPlate").addGeometry(face, { pos: [0, cy, zFace], color: dark ? T : tintFor(L, 0, cy), texel: dark ? TEXEL * 2 : TEXEL });
     }
     // viewport glass 1 m inside the face (shared with the bridge / observation interiors)
-    at("far", "viewGlass").addGeometry(new THREE.PlaneGeometry(vp.hw * 2 + 1, vp.y1 - vp.y0 + 0.4), { pos: [0, (vp.y0 + vp.y1) / 2, b.z0 + 1.0], uv: "keep" });
-    for (const s of [-1, 1]) at("far", "viewGlass").addGeometry(new THREE.PlaneGeometry(gv.x1 - gv.x0, gv.y1 - gv.y0 + 0.2), { pos: [(s * (gv.x0 + gv.x1)) / 2, (gv.y0 + gv.y1) / 2, b.z0 + 1.0], uv: "keep" });
+    at("far", "viewGlass").addGeometry(new THREE.PlaneGeometry(vp.hw * 2 + 1, vp.y1 - vp.y0 + 0.4), { pos: [0, (vp.y0 + vp.y1) / 2, b.z0 + FACE_T / 2], uv: "keep" });
+    for (const s of [-1, 1]) at("far", "viewGlass").addGeometry(new THREE.PlaneGeometry(gv.x1 - gv.x0, gv.y1 - gv.y0 + 0.2), { pos: [(s * (gv.x0 + gv.x1)) / 2, (gv.y0 + gv.y1) / 2, b.z0 + FACE_T / 2], uv: "keep" });
     // proud plates on the light bands of the face (mid), brow and sill (far)
     {
       const mid = at("mid", "hullPlate1");
@@ -220,7 +223,7 @@ export function buildTower(ctx) {
     }
     // side faces: pilasters + bands (recessed window bands at decks A and B)
     {
-      const pilZ = [b.z0 + 6, 265, 309, 353, b.z1];
+      const pilZ = [b.z0 + FACE_T, 265, 309, 353, b.z1];
       const bands = [
         [b.y0, bandB[0], "plate"],
         [bandB[0], bandB[1], "recess"],
@@ -261,7 +264,7 @@ export function buildTower(ctx) {
       const domes = TOWER.domes;
       const m = TOWER.mast;
       plateField(chunks, rand, {
-        zStart: b.z0 + 6,
+        zStart: b.z0 + FACE_T,
         zEnd: b.z1,
         rowLen: [7, 11],
         strips: () => [{ s0: -b.hw, s1: b.hw, kind: "plate" }],
@@ -288,7 +291,7 @@ export function buildTower(ctx) {
       far.box(0, b.y0 - 3, (b.z0 + 12 + b.z1 - 6) / 2, (b.hw - 8) * 2, 6, b.z1 - 6 - (b.z0 + 12), M, TEXEL, { skip: new Set(["+y"]) });
       far.box(0, b.y0 - 8.25, (b.z0 + 25 + b.z1 - 13) / 2, (b.hw - 24) * 2, 4.5, b.z1 - 13 - (b.z0 + 25), mixC(M, D, 0.4), TEXEL, { skip: new Set(["+y"]) });
       const down = V(0, -1, 0);
-      far.quad(V(-b.hw, b.y0, b.z0 + 6), V(b.hw, b.y0, b.z0 + 6), V(b.hw, b.y0, b.z0 + 12), V(-b.hw, b.y0, b.z0 + 12), M, TEXEL, down);
+      far.quad(V(-b.hw, b.y0, b.z0 + FACE_T), V(b.hw, b.y0, b.z0 + FACE_T), V(b.hw, b.y0, b.z0 + 12), V(-b.hw, b.y0, b.z0 + 12), M, TEXEL, down);
       far.quad(V(-b.hw, b.y0, b.z1 - 6), V(b.hw, b.y0, b.z1 - 6), V(b.hw, b.y0, b.z1), V(-b.hw, b.y0, b.z1), M, TEXEL, down);
       for (const s of [-1, 1]) far.quad(V(s * (b.hw - 8), b.y0, b.z0 + 12), V(s * b.hw, b.y0, b.z0 + 12), V(s * b.hw, b.y0, b.z1 - 6), V(s * (b.hw - 8), b.y0, b.z1 - 6), M, TEXEL, down);
     }

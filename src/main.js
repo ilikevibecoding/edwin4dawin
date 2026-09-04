@@ -66,7 +66,7 @@ sun.shadow.camera.far = 6000;
 scene.add(sun);
 scene.add(sun.target);
 // faint "planet-shine" fill so the shadow side of the hull is not pure black
-const hemi = new THREE.HemisphereLight(0x3a4a66, 0x101418, 0.35);
+const hemi = new THREE.HemisphereLight(0x3a4a66, 0x2a2e38, 0.45);
 scene.add(hemi);
 
 const exterior = buildExteriorAll(scene, materials, camera);
@@ -441,7 +441,7 @@ const debugAPI = {
     if (EXTERIOR_VIEWS[name]) {
       rig.applyPreset(name);
       // sun forward-left-above at this sky time: hull front-lit from the hero angles, lit planets aft
-      space.setTime(EXTERIOR_VIEWS[name].time ?? 185);
+      space.setTime(EXTERIOR_VIEWS[name].time ?? 195);
       return true;
     }
     throw new Error("unknown view " + name);
