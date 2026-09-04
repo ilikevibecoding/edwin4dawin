@@ -449,7 +449,10 @@ export function createTraffic({ mats, audio, zone } = {}) {
         }
         if (done) {
           setState(f, "launching");
-          f.path = f.id % 2 ? "ventral" : "dorsal";
+          // join the emptier loop so the dorsal / ventral patrols stay balanced over time
+          const nd = onLoop("dorsal");
+          const nv = onLoop("ventral");
+          f.path = nd === nv ? (f.id % 2 ? "ventral" : "dorsal") : nd < nv ? "dorsal" : "ventral";
           racks[f.rack].occupant = null;
           f.wellHeld = true;
           // the fighter is clear of the shaft: stow the ram
@@ -548,6 +551,8 @@ export function createTraffic({ mats, audio, zone } = {}) {
   }
   // loop fraction a patrolling fighter still has to fly before it reaches the leave window
   const toLeave = (f) => (T.leaveU - T.leaveWindow - f.t + 1) % 1;
+  // fighters flying (and staying on) a loop; launching ones count as they are about to join it
+  const onLoop = (p) => fighters.filter((g) => g.path === p && ((g.s === "patrol" && !g.recall) || g.s === "launching")).length;
   function cycle() {
     // one operation pair at a time: while the well is owned, a recall is still on its way or a
     // deferred launch is pending, look again in a few seconds
@@ -561,7 +566,12 @@ export function createTraffic({ mats, audio, zone } = {}) {
     // recall the fighter that reaches the leave window soonest, so the recall lands within seconds
     // rather than after another lap. Keep at least three on patrol.
     if (flying.length && flying.length + (docked.length ? 1 : 0) > 3) {
-      const soonest = flying.reduce((a, b) => (toLeave(a) <= toLeave(b) ? a : b));
+      // take the recall from the fuller loop (a tie keeps both candidates), then the soonest arrival
+      const nd = onLoop("dorsal");
+      const nv = onLoop("ventral");
+      const fuller = nd === nv ? [] : flying.filter((f) => f.path === (nd > nv ? "dorsal" : "ventral"));
+      const pool = fuller.length ? fuller : flying;
+      const soonest = pool.reduce((a, b) => (toLeave(a) <= toLeave(b) ? a : b));
       recall(soonest);
       // an imminent arrival gets the well first; the launch follows as soon as it has docked
       if (toLeave(soonest) < 0.4 && docked.length) deferred = true;

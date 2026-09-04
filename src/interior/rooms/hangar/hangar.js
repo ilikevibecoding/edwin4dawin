@@ -654,7 +654,7 @@ export function buildHangar(kit, ctx) {
   // Views
   // =========================================================================================
   ctx.view("hangar", 0, y + STD.eye, 104.6, 180, 8);
-  ctx.view("hangar_well", -26.4, y + STD.eye, 160, 236, -14);
+  ctx.view("hangar_well", -32, y + STD.eye, 146, 225, -11);
   ctx.view("hangar_racks", 34, y + STD.eye, 200, 90, 32);
   // the gantry view's feet are on the lower gallery: a non-ROOMS id makes the harness take its floor
   // from y; the booth view is in the flightControl sub-room (floor y = -8)
