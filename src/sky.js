@@ -26,7 +26,7 @@ const skyFragment = /* glsl */ `
 uniform vec3 uZenith, uHorizon, uHaze, uGround, uSunColor, uCloudCol, uAnti;
 uniform vec3 uSunDir;
 uniform float uSunDisc, uGlow, uAureole, uHazeFalloff, uCloud, uExposure;
-uniform float uZenithPow, uStars, uMoonDetail, uMilkyWay, uAntiGain, uWarm;
+uniform float uZenithPow, uStars, uMoonDetail, uMilkyWay, uAntiGain, uWarm, uHazeAniso;
 uniform vec2 uDisc;
 varying vec3 vDir;
 
@@ -72,15 +72,28 @@ vec3 starGrid( vec2 o, float px, float cells, float fill, float radius, float ga
   if ( h3 > fill ) return vec3( 0.0 );
   vec2 pos = c + 0.18 + vec2( h1, h2 ) * 0.64;
   vec2 dv = p - pos;
-  // still floored on the derivative so the field cannot crawl or twinkle under
-  // motion, just floored tight enough that a star stays a point of light
+  // Floored on the derivative so the field cannot crawl or twinkle under
+  // motion, and the floor is the radius that matters: the authored radius is
+  // now well under it at any capture pitch. The old 0.16 / 0.22 cell radii
+  // were 1.2 and 3.6 *pixels* at 640 across — every star a soft disc, and the
+  // coarse grid's discs all the same size, which is the "uniform blobs" read.
   float r = max( radius, px * cells * 0.62 );
   float q = dot( dv, dv ) / ( r * r );
   float s = exp( -q * 3.4 );
-  // magnitudes: cubed so the field is mostly faint with a few genuinely bright
-  float mag = h4 * h4 * h4;
+  // Magnitudes: fourth power, so the field is mostly faint with a handful
+  // genuinely bright, and the bright end is bright — a first-magnitude star
+  // is a point that reads at a glance, not a slightly whiter speck. The top
+  // of the range stays under the night bloom threshold.
+  float mag = h4 * h4 * h4 * h4;
   vec3 tint = mix( vec3( 1.0, 0.90, 0.78 ), vec3( 0.74, 0.84, 1.0 ), h1 );
-  return tint * s * ( 0.02 + mag * 0.34 ) * gain;
+  return tint * s * ( 0.05 + mag * 1.6 ) * gain;
+}
+
+// Ordered dither, a fraction of an 8-bit step, applied multiplicatively to
+// the dome. The sky is the one smooth gradient in the frame, and the grade's
+// film grain is weighted out of the highlights where the dusk sky sits.
+float skyDither( vec2 p ) {
+  return fract( 52.9829189 * fract( dot( p, vec2( 0.06711056, 0.00583715 ) ) ) ) - 0.5;
 }
 
 void main() {
@@ -90,12 +103,16 @@ void main() {
 
   vec3 col = mix( uHorizon, uZenith, pow( up, uZenithPow ) );
 
-  // thick band of scattered light sitting on the horizon
-  float haze = exp( -max( h, 0.0 ) * uHazeFalloff );
-  col = mix( col, uHaze, haze * 0.52 );
-
   float c = clamp( dot( d, uSunDir ), -1.0, 1.0 );
   float cp = max( c, 0.0 );
+
+  // thick band of scattered light sitting on the horizon. Forward-scattered,
+  // so with uHazeAniso up the band is a full-strength wall on the sun's
+  // side and thins to half on the far side, where the earth's shadow and the
+  // Belt of Venus can show through it instead of a cream wash.
+  float haze = exp( -max( h, 0.0 ) * uHazeFalloff );
+  float hazeSide = smoothstep( -1.0, 1.0, c );
+  col = mix( col, uHaze, haze * 0.52 * mix( 1.0, 0.5 + 0.5 * hazeSide, uHazeAniso ) );
 
   // Open-sky gradient across the azimuth, which a forest sky never needed.
   // The sun's half of the sky warms towards the horizon band well outside the
@@ -114,14 +131,21 @@ void main() {
     // and the density read as a sky; over a plain the same field is snow.
     // Thinned again after the plain: at a capture's pixel pitch every star is
     // floored to a whole pixel, so the count is what reads, not the radius.
-    vec3 sf = starGrid( o, px, 210.0, 0.045, 0.16, 0.8 )
-            + starGrid( o + 7.3, px, 96.0, 0.022, 0.22, 1.35 );
-    // The Milky Way is a soft band round a tilted great circle. It is what stops
-    // the upper sky reading as an even wash of dots.
+    // Three grids: a dense faint one, a sparse one that carries the bright
+    // stars, and a very fine dusting that only shows inside the Milky Way.
+    vec3 sf = starGrid( o, px, 210.0, 0.06, 0.03, 0.7 )
+            + starGrid( o + 7.3, px, 96.0, 0.03, 0.03, 1.2 );
+    // The Milky Way is a soft band round a tilted great circle, with the dark
+    // rift down its middle and a granular texture of unresolved stars. It is
+    // what stops the upper sky reading as an even wash of dots.
     vec3 axis = normalize( vec3( 0.42, 0.52, -0.74 ) );
-    float band = exp( -pow( dot( d, axis ) / 0.30, 2.0 ) );
-    float mw = band * ( 0.16 + fbm( o * 5.5 + 21.0 ) * 0.62 );
-    sf += vec3( 0.52, 0.60, 0.82 ) * mw * uMilkyWay;
+    float along = dot( d, axis );
+    float band = exp( -pow( along / 0.26, 2.0 ) );
+    float rift = 1.0 - 0.55 * exp( -pow( ( along + 0.04 ) / 0.07, 2.0 ) );
+    float grain = fbm( o * 5.5 + 21.0 );
+    float mw = band * rift * ( 0.10 + grain * grain * 0.9 );
+    sf += vec3( 0.58, 0.64, 0.82 ) * mw * uMilkyWay;
+    sf += starGrid( o + 3.9, px, 420.0, 0.35, 0.03, 0.45 ) * band * uMilkyWay;
     // nothing in the first few degrees over the treeline, and less of it inside
     // the moon's own glow
     sf *= smoothstep( -0.01, 0.20, h ) * ( 1.0 - haze * 0.72 );
@@ -163,6 +187,7 @@ void main() {
   // the terrain's edge is sky-blue
   col = mix( col, uGround, smoothstep( 0.0, -0.10, h ) );
 
+  col *= 1.0 + skyDither( gl_FragCoord.xy ) * 0.012;
   col = clamp( col * uExposure, vec3( 0.0 ), vec3( 80.0 ) );
   gl_FragColor = vec4( col, 1.0 );
 }`;
@@ -203,7 +228,7 @@ const DAY_SKY = {
   horizon: rad(0x9cb8dc, 0.6),
   // Held under white: the band was clipping to paper at the ridge line, and a
   // dust haze is a colour, not a highlight.
-  haze: rad(0xe6d2ae, 0.82),
+  haze: rad(0xe6d2ae, 0.74),
   anti: rad(0xc9c3bc, 0.6),
   antiGain: 0.0,
   warm: 0.12,
@@ -227,9 +252,13 @@ const DAY_SKY = {
 const DUSK_SKY = {
   zenith: rad(DUSK.skyTop, 0.62),
   horizon: rad(0xf0b478, 0.58),
-  haze: rad(DUSK.haze, 0.9),
+  // Down from 0.9 with the sun at six degrees: the aureole now sits *in* the
+  // haze band, and the two together were taking the whole sun-side sky to
+  // cream. Anisotropic, so the anti-solar half keeps its rose and blue-grey.
+  haze: rad(DUSK.haze, 0.8),
+  hazeAniso: 1.0,
   anti: rad(DUSK.antiSun, 0.66),
-  antiGain: 0.9,
+  antiGain: 1.1,
   warm: 0.3,
   ground: rad(DUSK.ground, 0.9),
   sunColor: rad(DUSK.sunLow, 1.1),
@@ -240,7 +269,9 @@ const DUSK_SKY = {
   envGlow: 2.4,
   // A low sun scatters through far more air, so the aureole is most of the
   // sky rather than a ring: this is the term that makes dusk read as dusk.
-  aureole: 0.7,
+  // Held back from 0.7 now that the disc is on the horizon, where the
+  // `haze * 0.9` half of its own weighting is at full.
+  aureole: 0.55,
   hazeFalloff: 10.0,
   cloud: 0.7,
   zenithPow: 0.5,
@@ -250,6 +281,40 @@ const DUSK_SKY = {
   stars: 0,
   milkyWay: 0,
   moonDetail: 0,
+};
+
+const NIGHT_SKY = {
+  zenith: lin(NIGHT.skyTop, 1.0),
+  horizon: lin(NIGHT.skyHorizon, 1.0),
+  // No brighter than the horizon it sits on. At 1.15 this was the pale band
+  // every critic saw: a haze term lighter than the sky above it *and* than the
+  // fog the ground went to, so the hills floated on a luminous strip. Held to
+  // the horizon's own value the sky darkens smoothly to the ground line and
+  // the fog below (`horizonOf` this) meets it there.
+  haze: lin(NIGHT.haze, 0.78),
+  anti: lin(NIGHT.haze, 0.8),
+  antiGain: 0.0,
+  warm: 0.0,
+  ground: lin(NIGHT.ground, 1.0),
+  sunColor: lin(NIGHT.moon),
+  cloudCol: lin(NIGHT.cloud, 0.9),
+  // Small and hot rather than large and grey: the moon is a quarter of a
+  // degree across and brighter than anything else in the sky.
+  sunDisc: 26.0,
+  envDisc: 5.0,
+  glow: 2.6,
+  envGlow: 1.6,
+  aureole: 0.30,
+  hazeFalloff: 9.0,
+  cloud: 0.30,
+  zenithPow: 0.55,
+  disc: [0.999905, 0.999975],
+  // Points now, not discs (see `starGrid`), so the count can come back up a
+  // little without the field reading as snow, and the Milky Way carries the
+  // sense of a dark-sky night.
+  stars: 0.7,
+  milkyWay: 0.85,
+  moonDetail: 1.0,
 };
 
 const OVERCAST_SKY = {
@@ -307,22 +372,33 @@ const MODES = {
   },
 
   dusk: {
-    // Genuinely low. The forest held this at 38 degrees because a 24 m conifer
-    // shaded the whole corridor at anything lower; there is no canopy to clear
-    // on a plain, so the key is where a golden-hour key is, and the shadows
-    // stretch across the road the way the hour wants.
-    key: { az: 296, el: 15, color: DUSK.sun, intensity: 5.2 },
+    // Genuinely low, and lower again. Fifteen degrees was "low" against the
+    // forest's 38, but it is still an hour before sunset: shadows two and a
+    // half times an object's height, no disc in any frame that is not aimed
+    // at it, the roof line lit from above rather than raked. At six the sun is
+    // a hand's width off the horizon: a 2.5 m truck throws a 24 m shadow up
+    // the road, the acacias a hundred metres up-sun lay theirs across it, the
+    // disc sits in the haze band where the sky shader has its aureole, and
+    // the roof and bonnet go dark while the sun-side flank lights up — which
+    // is the key/fill split this hour is about. The shadow boxes are as deep
+    // as the sun needs (`shadowReach`), so none of that is clipped.
+    //
+    // Brighter to compensate for the angle: the ground gets sin(6)/sin(15) of
+    // what it did, and it is the flanks that have to hold the exposure now.
+    key: { az: 296, el: 6, color: DUSK.sun, intensity: 7.0 },
     sky: DUSK_SKY,
     // The hemisphere is diffuse only, the environment is diffuse *and*
     // specular, and it is the specular half that chalks a flank.
-    hemi: { sky: DUSK.hemiSky, ground: DUSK.bounce, intensity: 0.9 },
+    hemi: { sky: DUSK.hemiSky, ground: DUSK.bounce, intensity: 0.8 },
     rim: { color: DUSK.shadowTint, intensity: 0.45 },
     // Cool, and deliberately so. With the key round the far side the near flank
     // is lit by nothing but sky, and a *warm* fill under a warm key is how a
     // first pass turned every surface the same orange. The whole appeal of this
     // hour is that the two sources disagree, so the fill has the colour of the
     // half of the sky the sun is not in, from the camera-side azimuth.
-    fill: { color: 0x93add4, intensity: 21, angle: 0.6, throw: 13, az: 48, el: 18 },
+    // Roughly a third of the key on a flank now (decay 1 over 13 m), so the two
+    // sides of the truck are a ratio and not a tint.
+    fill: { color: 0x93add4, intensity: 14, angle: 0.6, throw: 13, az: 48, el: 18 },
     // Dustier than noon, and the dust is lit: distance towards the sun goes to
     // amber, away from it to the rose of the haze band.
     fog: { color: horizonOf(DUSK_SKY, 0.35), density: 0.0021, sunGain: 0.5, sunPow: 3.0, height: 0.02, heightMix: 1.0 },
@@ -332,7 +408,9 @@ const MODES = {
     // this environment is an amber dome, and at 0.62 every shadow in the frame
     // was the same amber as the key. The hemisphere above is the blue half.
     envIntensity: 0.5,
-    shadow: { radius: 2.0, bias: -0.00016, normalBias: 0.045, intensity: 0.82 },
+    // A wider far-map filter than noon: a six-degree sun's penumbrae are long,
+    // and a hard-edged 24 m shadow reads as a paper cut-out.
+    shadow: { radius: 2.0, bias: -0.00016, normalBias: 0.045, intensity: 0.82, farRadius: 2.2, farStrength: 0.92 },
     shafts: { color: 0xffa354, gain: 1.1, width: 2.4 },
     // Larger and fainter than the first pass: at 0.3 and under a pixel each,
     // the lit dust read as white specks over the sky rather than as haze.
@@ -357,40 +435,22 @@ const MODES = {
     // and the standing water in them come up as the brightest thing in the
     // frame. That is the shot. Sixty lit the near flank better and looked like
     // an underexposed afternoon.
-    key: { az: 140, el: 43, color: NIGHT.moon, intensity: 1.6 },
-    sky: {
-      zenith: lin(NIGHT.skyTop, 1.0),
-      horizon: lin(NIGHT.skyHorizon, 1.0),
-      haze: lin(NIGHT.haze, 1.15),
-      anti: lin(NIGHT.haze, 1.0),
-      antiGain: 0.0,
-      warm: 0.0,
-      ground: lin(NIGHT.ground, 1.0),
-      sunColor: lin(NIGHT.moon),
-      cloudCol: lin(NIGHT.cloud, 0.9),
-      // Small and hot rather than large and grey: the moon is a quarter of a
-      // degree across and brighter than anything else in the sky.
-      sunDisc: 26.0,
-      envDisc: 5.0,
-      glow: 2.6,
-      envGlow: 1.6,
-      aureole: 0.30,
-      hazeFalloff: 9.0,
-      cloud: 0.30,
-      zenithPow: 0.55,
-      disc: [0.999905, 0.999975],
-      // Down from 0.8 with the field thinned twice: a wide campground framing
-      // has half its frame in sky, and at a capture's pitch the count is what
-      // reads. The Milky Way carries the sense of a dark-sky night instead.
-      stars: 0.5,
-      milkyWay: 0.5,
-      moonDetail: 1.0,
-    },
-    hemi: { sky: NIGHT.hemiSky, ground: NIGHT.bounce, intensity: 0.36 },
+    //
+    // Up from 1.6, with the fill and the hemisphere pulled down under it: the
+    // three of them were within a factor of two of each other, and a frame
+    // whose key, fill and ambient agree is a frame with no key. The moon now
+    // owns the tops and the far flank, the fill models the near flank at a
+    // third of it, and the undersides get almost nothing.
+    key: { az: 140, el: 43, color: NIGHT.moon, intensity: 2.1 },
+    sky: NIGHT_SKY,
+    // The ground half is near black. Moonlit earth bounces almost nothing, and
+    // the 0x211c17 it had was what put the same value on the underside of a
+    // wheel arch as on the bonnet above it.
+    hemi: { sky: NIGHT.hemiSky, ground: 0x0a0907, intensity: 0.3 },
     // A cool counter-key from behind the camera. At 0.16 it did nothing at all
     // and the truck's near flank was a single flat value; this is what puts an
     // edge on the roof line and the tyre shoulders on the shadow side.
-    rim: { color: NIGHT.shadowTint, intensity: 0.34 },
+    rim: { color: NIGHT.shadowTint, intensity: 0.3 },
     // With the moon behind the truck the near flank has nothing on it, so the
     // fill is doing all of the modelling here rather than merely opening the
     // shadow — the same job the bounce card does in the day rig, and the same
@@ -401,31 +461,48 @@ const MODES = {
     // Low, because a fill this close to the key's own elevation just adds a
     // second flat wash; at fourteen degrees it rakes along the door skins and
     // the flank finally has a gradient across it.
-    fill: { color: 0x9db5d8, intensity: 15, angle: 0.6, throw: 13, az: 48, el: 14 },
+    // Down from 15: at that it matched the moon and the near flank was as
+    // bright as the lit one. It is the fill for the shadow side, so it sits
+    // under the key by about three to one.
+    fill: { color: 0x9db5d8, intensity: 8, angle: 0.6, throw: 13, az: 48, el: 14 },
     // Thinner than the forest's 0.0082: a moonlit plain has kilometres of
     // visibility, and the fog's job here is only to put the far acacias under
     // the horizon band rather than to close the corridor.
-    fog: { color: NIGHT.fog, density: 0.0046, sunGain: 0.0, sunPow: 3.0, height: 0.02, heightMix: 1.0 },
+    //
+    // The colour is the sky's own horizon, not a darker navy of its own. With
+    // the fog under the sky the far ground went to one value and the sky just
+    // above it to a lighter one, and the join was a pale band along every
+    // night horizon in the round; the ground now fogs to exactly what the dome
+    // shows at elevation zero.
+    fog: { color: horizonOf(NIGHT_SKY, 0.45), density: 0.0046, sunGain: 0.0, sunPow: 3.0, height: 0.02, heightMix: 1.0 },
     // Traded down against the hemisphere above. The environment is a render of
     // the night sky and is therefore as saturated as the night sky; the
     // hemisphere is a colour I can set. Same total ambient, more of it from the
     // term whose hue is under control.
-    envIntensity: 0.72,
-    shadow: { radius: 2.4, bias: -0.00018, normalBias: 0.05, intensity: 0.88 },
+    envIntensity: 0.6,
+    shadow: { radius: 2.4, bias: -0.00018, normalBias: 0.05, intensity: 0.88, farRadius: 1.8, farStrength: 0.9 },
     shafts: { color: 0x9dbbe8, gain: 0.45, width: 1.4 },
     // Dust you can see across the whole frame needs a light source filling the
     // whole frame; at night there is none, so the field is thinned to a third
     // and shrunk, and what is left only shows where the lamps reach it. Before
     // this the motes read as a snowstorm of blown white specks.
     motes: { color: 0x6f83a6, opacity: 0.055, beam: 1.0, size: 0.5, density: 0.34, cap: 0.1 },
-    beams: { gain: 2.1, glare: 1.0 },
+    // The lens emissive is authored for daylight (0x6f6653 at 6.5 is about
+    // 1.0 linear), which is under the night bloom threshold, so the lamps
+    // did not bloom and barely read from the side. The glare billboard is the
+    // term in this file that can light the lens: at this gain its lens disc
+    // (see beamFrag) sits over the threshold and the lamp blooms as a lamp,
+    // while the beam itself is bright enough to read as a cone from the hero
+    // framing.
+    beams: { gain: 3.0, glare: 2.8 },
     rays: { color: 0x9dbbe8, gain: 0.0 },
-    // Up from 0.4. Under the headlamps the trail's relief swings the full range
-    // of N.L in the space of a few centimetres, so the lit facets clip and the
-    // ones tilted away have nothing on them at all; a little more indirect on
-    // this one surface is what puts a floor under the dark half and keeps the
-    // pool reading as a textured surface rather than as noise.
-    groundIndirect: 0.62,
+    // Under the headlamps the trail's relief swings the full range of N.L in
+    // the space of a few centimetres, so the lit facets clip and the ones
+    // tilted away have nothing on them at all; some indirect on this one
+    // surface is what puts a floor under the dark half and keeps the pool
+    // reading as a textured surface rather than as noise. Down from 0.62 with
+    // the rest of the ambient: the moonlit ground was reading at day value.
+    groundIndirect: 0.5,
     surfaces: { dash: 2.1, film: 0.2, glass: 0.24 },
   },
 
@@ -580,7 +657,10 @@ function installPcss(renderer, pcss, extent) {
 					// hits is at least one, so this cannot divide by zero
 					float blocker = sum / hits;
 					float gap = max( zR - blocker, 0.0 );
-					float radius = clamp( gap * ${span.toFixed(5)} * ${SOURCE_TAN} * soft,
+					// The span moves with the hour now — a low sun needs a deep
+					// box — so it is read from the cascade uniform when there is one.
+					float span = ${cascadeInstalled ? 'uCascade.x > 0.0 ? uCascade.x : ' : ''}${span.toFixed(5)};
+					float radius = clamp( gap * span * ${SOURCE_TAN} * soft,
 						texel * 0.7, maxR );
 					float lit = 0.0;
 					for ( int i = 0; i < ${pcss.filter}; i ++ ) {
@@ -597,6 +677,155 @@ function installPcss(renderer, pcss, extent) {
   THREE.ShaderChunk.shadowmap_pars_fragment = chunk.slice(0, head) + body + '\t' + chunk.slice(tail);
   renderer.shadowMap.type = THREE.BasicShadowMap;
   pcssInstalled = true;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Two shadow cascades.
+//
+// The sun's shadow box is +/-22 m around the truck, and it follows the truck.
+// That is the right box for the thing PCSS exists for — the tyre in its rut,
+// the bumper over the dirt — and it is the wrong box for everything else in
+// the game: the camp is forty metres across and thirty off the road, the pride
+// lies twenty-six metres from the verge, and the acacias line the corridor.
+// All of it was shadowless whenever the truck was more than ~22 m away, which
+// every critic saw before they saw anything else.
+//
+// So there are two maps now. The near one is unchanged: tight, PCSS-filtered,
+// centred on the truck. The far one is a second `DirectionalLight` at zero
+// intensity whose only job is to own a shadow map: +/-130 m, snapped to its
+// own texel grid so the world's shadows do not crawl as the truck drives, and
+// filtered with a plain five-tap disc — at 13 cm a texel a penumbra is not
+// something this map can resolve, so it does not try.
+//
+// The two are combined in the shader, not by three: the lighting loop's call
+// for directional light 0 is redirected to `getDirShadowCascade`, which takes
+// the near result inside the near box, fades it into the far result over the
+// last 6 % of the box, and answers 1.0 for light 1 so the carrier light costs
+// a branch and nothing else. Doing it this way keeps a single key light in the
+// BRDF — an intensity split between two lights would have given the camp a
+// half-strength shadow — and keeps three's own shadow pass rendering the far
+// map, which is what makes alpha-tested canopies and skinned lions cast
+// correctly in it for free.
+//
+// The one uniform the filter needs at runtime rides on `ShaderLib`, the same
+// way the haze fog does: a typed array that `cloneUniforms` copies by
+// reference, so one write reaches every program. Zero reads as "use the baked
+// constant" for any ShaderMaterial that includes the chunk without it.
+// ---------------------------------------------------------------------------
+
+const CASCADE = {
+  // x: PCSS span for the near map ( depth range / box width ), which moves
+  //    with the hour now that a low sun needs a deep box
+  // y: far map filter radius in texels
+  // z: far cascade strength, so the world's shadow can be a shade lighter
+  //    than the truck's (the far map has no penumbra and reads harder)
+  // w: unused
+  params: new Float32Array([0, 1.5, 1, 0]),
+};
+
+let cascadeInstalled = false;
+
+/** `?farshadow=off` builds without the far cascade, for A/B and cost. */
+function farShadowMode() {
+  try {
+    return new URLSearchParams(location.search).get('farshadow') || 'live';
+  } catch {
+    return 'live';
+  }
+}
+
+function installCascade(pcss, extent) {
+  if (cascadeInstalled) return true;
+  const chunk = THREE.ShaderChunk.shadowmap_pars_fragment;
+  const decl = chunk.indexOf('float getShadow(');
+  const tail = decl < 0 ? -1 : chunk.indexOf('#if NUM_POINT_LIGHT_SHADOWS > 0', decl);
+  const loop = THREE.ShaderChunk.lights_fragment_begin;
+  const call =
+    'getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] )';
+  if (decl < 0 || tail < 0 || loop.indexOf(call) < 0) {
+    console.warn('sky: cascade anchors not found, keeping the single shadow box');
+    return false;
+  }
+
+  for (const key of Object.keys(THREE.ShaderLib)) {
+    const u = THREE.ShaderLib[key].uniforms;
+    if (!u || !u.directionalShadowMap) continue;
+    u.uCascade = { value: CASCADE.params };
+  }
+
+  const structDecl = 'uniform DirectionalLightShadow directionalLightShadows[ NUM_DIR_LIGHT_SHADOWS ];';
+  if (chunk.indexOf(structDecl) < 0) {
+    console.warn('sky: cascade uniform anchor not found, keeping the single shadow box');
+    return false;
+  }
+
+  const span = (SHADOW_FAR - SHADOW_NEAR) / (2 * extent);
+  const body = /* glsl */ `
+	#if NUM_DIR_LIGHT_SHADOWS > 0
+		#if defined( SHADOWMAP_TYPE_PCF )
+			#define CSC_SAMPLER sampler2DShadow
+		#else
+			#define CSC_SAMPLER sampler2D
+		#endif
+		float cscNoise( vec2 p ) {
+			return fract( 52.9829189 * fract( dot( p, vec2( 0.06711056, 0.00583715 ) ) ) );
+		}
+		vec2 cscDisk( int i, int n, float phi ) {
+			const float golden = 2.399963229728653;
+			float r = sqrt( ( float( i ) + 0.5 ) / float( n ) );
+			float theta = float( i ) * golden + phi;
+			return vec2( cos( theta ), sin( theta ) ) * r;
+		}
+		#if NUM_DIR_LIGHT_SHADOWS > 1
+		// The world's shadow: five taps on a rotated disc over the wide map.
+		float cscFar( vec4 coord, vec2 mapSize, float bias ) {
+			coord.xyz /= coord.w;
+			coord.z += bias;
+			if ( coord.x < 0.0 || coord.x > 1.0 || coord.y < 0.0 || coord.y > 1.0 || coord.z > 1.0 ) return 1.0;
+			float r = ( uCascade.y > 0.0 ? uCascade.y : 1.5 ) / mapSize.x;
+			float phi = cscNoise( gl_FragCoord.xy ) * PI2;
+			float lit = 0.0;
+			for ( int i = 0; i < 5; i ++ ) {
+				vec2 o = cscDisk( i, 5, phi ) * r;
+				#if defined( SHADOWMAP_TYPE_PCF )
+					lit += texture( directionalShadowMap[ 1 ], vec3( coord.xy + o, coord.z ) );
+				#else
+					lit += step( coord.z, texture2D( directionalShadowMap[ 1 ], coord.xy + o ).r );
+				#endif
+			}
+			return lit * 0.2;
+		}
+		#endif
+		float getDirShadowCascade( int idx, CSC_SAMPLER shadowMap, DirectionalLightShadow s, vec4 coord ) {
+			// light 1 is the far map's carrier: black, and never shadowed itself
+			if ( idx != 0 ) return 1.0;
+			float near = getShadow( shadowMap, s.shadowMapSize, s.shadowIntensity, s.shadowBias, s.shadowRadius, coord );
+			#if NUM_DIR_LIGHT_SHADOWS > 1
+				vec3 p = coord.xyz / coord.w;
+				vec2 e = min( p.xy, 1.0 - p.xy );
+				float inside = smoothstep( 0.0, 0.06, min( e.x, e.y ) ) * ( 1.0 - step( 1.0, p.z ) );
+				if ( inside < 1.0 ) {
+					DirectionalLightShadow f = directionalLightShadows[ 1 ];
+					float far = cscFar( vDirectionalShadowCoord[ 1 ], f.shadowMapSize, f.shadowBias );
+					far = mix( 1.0, far, s.shadowIntensity * ( uCascade.z > 0.0 ? uCascade.z : 1.0 ) );
+					near = mix( far, near, inside );
+				}
+			#endif
+			return near;
+		}
+	#endif
+`;
+  THREE.ShaderChunk.shadowmap_pars_fragment = (chunk.slice(0, tail) + body + '\t' + chunk.slice(tail)).replace(
+    structDecl,
+    `${structDecl}\n\t\tuniform vec4 uCascade;`,
+  );
+  THREE.ShaderChunk.lights_fragment_begin = loop.replace(
+    call,
+    'getDirShadowCascade( UNROLLED_LOOP_INDEX, directionalShadowMap[ i ], directionalLightShadow, vDirectionalShadowCoord[ i ] )',
+  );
+  CASCADE.params[0] = span;
+  cascadeInstalled = true;
   return true;
 }
 
@@ -627,6 +856,7 @@ function makeSkyMaterial(cfg, sunDir) {
       uAnti: { value: cfg.anti.clone() },
       uAntiGain: { value: cfg.antiGain },
       uWarm: { value: cfg.warm },
+      uHazeAniso: { value: cfg.hazeAniso ?? 0 },
       uSunDir: { value: sunDir.clone() },
       uSunDisc: { value: cfg.sunDisc },
       uGlow: { value: cfg.glow },
@@ -660,6 +890,7 @@ function applySkyUniforms(material, cfg, sunDir, { env = false } = {}) {
   u.uAnti.value.copy(cfg.anti);
   u.uAntiGain.value = cfg.antiGain;
   u.uWarm.value = cfg.warm;
+  u.uHazeAniso.value = cfg.hazeAniso ?? 0;
   u.uSunDir.value.copy(sunDir);
   u.uSunDisc.value = env ? cfg.envDisc : cfg.sunDisc;
   u.uGlow.value = env ? cfg.envGlow : cfg.glow;
@@ -975,11 +1206,55 @@ function uniformBags(mat, out) {
 // but leaves the wheel contact no crisper, and the contact is what a PCSS
 // filter has to have to harden against.
 // ---------------------------------------------------------------------------
+//
+// `farExtent` is the half-width of the second, world cascade. +/-130 m holds
+// the whole camp with the truck parked on the road beside it, the pride from
+// the road with forty metres to spare, and two rows of acacias either side of
+// the corridor. `farSize` is its map: 2048 is 12.7 cm a texel, 4096 is 6.3.
+//
+// `farCadence` is how many frames the far map lives before it is re-rendered.
+// The pass draws every caster within 260 m — measured at +209 draw calls and
+// +0.9 M triangles a frame on the camp's mess framing — and what it draws is
+// scenery that does not move plus animals that move slowly, so at 2 the
+// world's shadows update at half rate and the pass costs half. The matrix and
+// the map are always a consistent pair (three updates both in the same
+// render), so a held frame is a correct frame, just one the truck has driven
+// a few centimetres past. Ultra pays for every frame.
 const SKY_TIERS = {
-  fast: { shadowExtent: 22, envSize: 256, pcss: null, beamSlices: 12 },
-  high: { shadowExtent: 22, envSize: 512, pcss: { blocker: 8, filter: 12 }, beamSlices: 20 },
-  ultra: { shadowExtent: 34, envSize: 1024, pcss: { blocker: 16, filter: 28 }, beamSlices: 44 },
+  fast: { shadowExtent: 22, farExtent: 130, farSize: 2048, farCadence: 2, envSize: 256, pcss: null, beamSlices: 12 },
+  high: { shadowExtent: 22, farExtent: 130, farSize: 2048, farCadence: 2, envSize: 512, pcss: { blocker: 8, filter: 12 }, beamSlices: 20 },
+  ultra: { shadowExtent: 34, farExtent: 130, farSize: 4096, farCadence: 1, envSize: 1024, pcss: { blocker: 16, filter: 28 }, beamSlices: 44 },
 };
+
+/**
+ * How deep the shadow box has to be for this sun.
+ *
+ * The ortho box is +/-extent in light space, so at a low elevation its
+ * footprint on the ground is a strip `extent / sin(el)` long along the sun's
+ * azimuth, and the tallest caster up-sun of that strip throws a shadow
+ * `h / tan(el)` long into it. At 58 degrees both are a few tens of metres and
+ * the old fixed 260 m range covered them; at 6 degrees the near box alone
+ * wants two hundred metres up-sun, which is what a golden-hour shadow across
+ * the road *is*. Capped, because past 400 m the depth precision is being spent
+ * on trees the fog has already taken.
+ */
+function shadowReach(el, extent, tallest = 26) {
+  const rad = THREE.MathUtils.degToRad(Math.max(el, 3));
+  const ground = extent / Math.sin(rad);
+  const caster = tallest / Math.tan(rad);
+  const dist = THREE.MathUtils.clamp(Math.max(ground, caster) + 40, 110, 400);
+  return { dist, far: dist * 2 };
+}
+
+/** `?shadowextent=60` widens the single near box instead, for the A/B. */
+function extentOverride(base) {
+  try {
+    const v = Number(new URLSearchParams(location.search).get('shadowextent'));
+    return v > 4 && v < 400 ? v : base;
+  } catch {
+    return base;
+  }
+}
 
 export function createSky(
   scene,
@@ -992,7 +1267,10 @@ export function createSky(
   let cfg = modeOf(modeName);
   const sunDir = dirFrom(cfg.key.az, cfg.key.el);
 
-  const softShadows = installPcss(renderer, tier.pcss, tier.shadowExtent);
+  const nearExtent = extentOverride(tier.shadowExtent);
+  const farMode = farShadowMode();
+  const cascade = farMode !== 'off' && installCascade(tier.pcss, nearExtent);
+  const softShadows = installPcss(renderer, tier.pcss, nearExtent);
   // Before any material compiles: this is the first thing boot builds.
   installHazeFog();
   applyHaze(cfg);
@@ -1106,12 +1384,13 @@ export function createSky(
 
   // --- lights --------------------------------------------------------------
   const sun = new THREE.DirectionalLight(cfg.key.color, cfg.key.intensity);
+  sun.name = 'sun';
   sun.position.copy(sunDir).multiplyScalar(120);
   sun.castShadow = true;
   sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
   sun.shadow.camera.near = SHADOW_NEAR;
   sun.shadow.camera.far = SHADOW_FAR;
-  const s = tier.shadowExtent;
+  const s = nearExtent;
   sun.shadow.camera.left = -s;
   sun.shadow.camera.right = s;
   sun.shadow.camera.top = s;
@@ -1122,6 +1401,38 @@ export function createSky(
   scene.add(sun);
   scene.add(sun.target);
   sunShadowRef = softShadows ? sun.shadow : null;
+
+  // The far cascade's carrier. Added directly after the sun so three's
+  // shadow-casting-first sort leaves it at index 1, which is the slot the
+  // shader reads it from. Black: it lights nothing, it only renders a map.
+  const fs = tier.farExtent;
+  const shadowMapFarSize = tier.farSize;
+  const sunFar = cascade ? new THREE.DirectionalLight(0x000000, 0) : null;
+  const farTexel = (2 * fs) / shadowMapFarSize;
+  if (sunFar) {
+    sunFar.name = 'sunFar';
+    sunFar.castShadow = true;
+    sunFar.shadow.mapSize.set(shadowMapFarSize, shadowMapFarSize);
+    sunFar.shadow.camera.left = -fs;
+    sunFar.shadow.camera.right = fs;
+    sunFar.shadow.camera.top = fs;
+    sunFar.shadow.camera.bottom = -fs;
+    sunFar.shadow.camera.near = SHADOW_NEAR;
+    sunFar.shadow.camera.far = 600;
+    // Rendered on request, never automatically: `followFar` decides when.
+    // `static` renders the map once per re-centre rather than on the cadence:
+    // the fixed scenery is baked, the animals lag until the next refresh.
+    sunFar.shadow.autoUpdate = false;
+    sunFar.shadow.needsUpdate = true;
+    scene.add(sunFar);
+    scene.add(sunFar.target);
+  }
+  const farCadence = farMode === 'static' ? 0 : farMode === 'every' ? 1 : tier.farCadence;
+  const farState = { centre: new THREE.Vector3(NaN, NaN, NaN), dist: 300, mode: '', frame: 0 };
+  const _fr = new THREE.Vector3();
+  const _fu = new THREE.Vector3();
+  const _fc = new THREE.Vector3();
+  let nearDist = 110;
 
   // Sky fill from above, warm bounce from the litter below.
   //
@@ -1172,18 +1483,83 @@ export function createSky(
   publishBeamState(beams.state);
 
   applyShadow(cfg);
+  followFar(sun.target.position);
 
   function applyShadow(c) {
     sun.shadow.radius = c.shadow.radius;
+    // The box is as deep as the hour's sun needs, and the depth bias is a
+    // fraction of that depth, so it is rescaled to stay the same few
+    // centimetres of world whatever the range.
+    const reach = shadowReach(c.key.el, s);
+    nearDist = reach.dist;
+    sun.shadow.camera.far = reach.far;
+    sun.shadow.camera.updateProjectionMatrix();
+    const rangeK = (SHADOW_FAR - SHADOW_NEAR) / (reach.far - SHADOW_NEAR);
+    CASCADE.params[0] = (reach.far - SHADOW_NEAR) / (2 * s);
     // Both biases are a defence against a receiver self-shadowing across the
     // width of one shadow texel, so both scale with how much world a texel
     // covers. PCSS filters over a variable radius rather than a fixed five
     // taps, so it needs a little more of the depth bias than the stock filter
     // does — a penumbra that reaches twenty texels reaches twenty texels of
     // slope error with it.
-    sun.shadow.bias = c.shadow.bias * texelScale * (softShadows ? 1.6 : 1);
+    sun.shadow.bias = c.shadow.bias * texelScale * (softShadows ? 1.6 : 1) * rangeK;
     sun.shadow.normalBias = c.shadow.normalBias * texelScale;
     if ('intensity' in sun.shadow) sun.shadow.intensity = c.shadow.intensity;
+
+    if (sunFar) {
+      const farReach = shadowReach(c.key.el, fs);
+      farState.dist = farReach.dist;
+      sunFar.shadow.camera.far = farReach.far;
+      sunFar.shadow.camera.updateProjectionMatrix();
+      // A texel of the far map is six times the near one's, so the biases are
+      // six times as well — but only the depth bias in full. The normal bias
+      // pushes the lookup along the receiver's normal, and at 12.7 cm a texel
+      // the full ratio lifts a tent's shadow off its own guy-ropes.
+      const farTexelScale = (farTexel / (44 / 2048));
+      const farRangeK = (SHADOW_FAR - SHADOW_NEAR) / (farReach.far - SHADOW_NEAR);
+      sunFar.shadow.bias = c.shadow.bias * farTexelScale * farRangeK;
+      sunFar.shadow.normalBias = c.shadow.normalBias * farTexelScale * 0.6;
+      sunFar.shadow.radius = c.shadow.radius;
+      CASCADE.params[1] = c.shadow.farRadius ?? 1.5;
+      CASCADE.params[2] = c.shadow.farStrength ?? 1.0;
+      farState.mode = '';
+    }
+  }
+
+  /**
+   * Centre the far box on the truck, snapped to the map's own texel grid in
+   * light space. Without the snap every texel edge in the map moves a fraction
+   * of a texel per frame as the truck drives, and every static shadow in the
+   * world crawls with it.
+   */
+  function followFar(target) {
+    if (!sunFar) return;
+    _fr.set(0, 1, 0).cross(sunDir).normalize();
+    _fu.copy(sunDir).cross(_fr);
+    const x = target.dot(_fr);
+    const y = target.dot(_fu);
+    const sx = Math.round(x / farTexel) * farTexel;
+    const sy = Math.round(y / farTexel) * farTexel;
+    _fc.copy(target).addScaledVector(_fr, sx - x).addScaledVector(_fu, sy - y);
+    farState.frame++;
+    // A fresh map: the first frame, the hour changing, or the truck having
+    // been teleported (the capture tools park it beside the camp or the pride
+    // in one step; at road speed it moves fourteen centimetres a frame).
+    const fresh = !Number.isFinite(farState.centre.x) || farState.mode !== modeName || farState.centre.distanceTo(_fc) > 3;
+    if (farCadence === 0) {
+      // static: re-bake when the truck has used up a third of the margin, or
+      // the hour has changed under it
+      const moved = fresh || farState.centre.distanceTo(_fc) > fs * 0.35;
+      if (!moved) return;
+    } else if (!fresh && farState.frame % farCadence !== 0) {
+      // holding this frame: the light stays where the map was rendered from
+      return;
+    }
+    farState.mode = modeName;
+    sunFar.shadow.needsUpdate = true;
+    farState.centre.copy(_fc);
+    sunFar.target.position.copy(_fc);
+    sunFar.position.copy(_fc).addScaledVector(sunDir, farState.dist);
   }
 
   // --- scene-wide retune ---------------------------------------------------
@@ -1389,9 +1765,11 @@ export function createSky(
       fill.target.position.copy(target);
       fill.position.copy(target).addScaledVector(fillDir, fillThrow);
       sun.target.position.copy(target);
-      sun.position.copy(target).addScaledVector(sunDir, 110);
-      sun.shadow.camera.updateProjectionMatrix();
+      sun.position.copy(target).addScaledVector(sunDir, nearDist);
+      followFar(target);
     },
+    /** The far cascade's light, or null when it was built without one. */
+    sunFar,
     /**
      * Move the whole rig to another hour. Sky, key, fill, fog, environment and
      * every analytic lighting term in the scene, in that order — the
@@ -1410,8 +1788,9 @@ export function createSky(
 
       sun.color.set(cfg.key.color);
       sun.intensity = cfg.key.intensity;
-      sun.position.copy(sun.target.position).addScaledVector(sunDir, 110);
       applyShadow(cfg);
+      sun.position.copy(sun.target.position).addScaledVector(sunDir, nearDist);
+      followFar(sun.target.position);
 
       hemi.color.set(cfg.hemi.sky);
       hemi.groundColor.set(cfg.hemi.ground);
@@ -1708,13 +2087,18 @@ uniform float uNearR;
 uniform float uFarR;
 uniform float uGlareR;
 varying float vAlong;
-varying float vRad;
+varying vec2 vQuad;
 varying float vGlare;
 varying vec3 vWorld;
 void main() {
   vAlong = aAlong;
   vGlare = aGlare;
-  vRad = length( position.xy );
+  // The quad coordinate, not its length: every corner of a quad is the same
+  // distance from its centre, so a length taken here interpolated to a
+  // constant sqrt(2) across the whole slice and the radial profile below
+  // evaluated to zero everywhere. Neither the cone nor the glare had ever
+  // drawn a pixel; the "beam" in every night frame was the spotlight's pool.
+  vQuad = position.xy;
   float r = mix( uNearR, uFarR, aAlong );
   vec3 centre = uOrigin + uDir * ( aAlong * uLength );
   if ( aGlare > 0.5 ) {
@@ -1732,12 +2116,14 @@ const beamFrag = /* glsl */ `
 uniform vec3 uColor;
 uniform float uIntensity;
 uniform float uGlareGain;
+uniform float uGlareR;
+uniform vec3 uOrigin;
 uniform float uGroundY;
 uniform float uTime;
 uniform float uInside;
 uniform vec3 uDir;
 varying float vAlong;
-varying float vRad;
+varying vec2 vQuad;
 varying float vGlare;
 varying vec3 vWorld;
 
@@ -1758,10 +2144,20 @@ float vnoise( vec3 p ) {
 }
 
 void main() {
+  float vRad = length( vQuad );
   float r = clamp( 1.0 - vRad, 0.0, 1.0 );
 
   if ( vGlare > 0.5 ) {
-    // the lamp seen head-on: a tight core with a wide veiling halo
+    // The lamp seen head-on: the lens as a lit disc, a hot core on it, and a
+    // wide veiling halo. The disc is sized in metres to the lamp it sits on.
+    // A core alone was a two-pixel speck — pow( r, 7 ) on a 0.8 m quad is
+    // eight centimetres across, and the spotlight it is centred on sits a few
+    // centimetres off the lens centre, so the speck read as a stray highlight
+    // on a dark lens rather than as the lens lit. The disc covers the lens
+    // whatever the offset, and it is the disc that carries the lamp over the
+    // bloom threshold as a lamp-sized patch rather than a point.
+    float lensR = 0.11 / uGlareR;
+    float lens = smoothstep( lensR * 1.6, lensR * 0.7, vRad );
     float core = pow( r, 7.0 );
     float halo = pow( r, 2.2 );
     // A glare billboard is a fixed size in metres, so walking the camera up to
@@ -1769,7 +2165,11 @@ void main() {
     // keeps it the size of a lamp instead of the size of the shot.
     float dcg = length( vWorld - cameraPosition );
     float near = smoothstep( 2.0, 7.0, dcg );
-    float a = ( core * 1.5 + halo * 0.22 ) * uGlareGain * mix( 0.18, 1.0, near );
+    // and a lamp is brightest looked into: from the flank it is a lit lens,
+    // from head-on it is a glare
+    float cosv = dot( normalize( cameraPosition - uOrigin ), uDir );
+    float aim = mix( 0.25, 1.0, smoothstep( 0.0, 0.9, cosv ) );
+    float a = ( lens * 1.4 + core * 0.8 + halo * 0.22 ) * uGlareGain * aim * mix( 0.18, 1.0, near );
     gl_FragColor = vec4( uColor * a, a );
     return;
   }
@@ -1964,7 +2364,11 @@ function createHeadlightBeams(slices = SLICES) {
         // Scatter scales with the lamp's own irradiance, referenced to the
         // headlamps' 13 so the roof bar reads as the brighter of the two.
         u.uIntensity.value = ((0.5 * light.intensity) / 13) * cfg.beams.gain * (2.0 / slices);
-        u.uGlareGain.value = cfg.beams.glare * 0.32;
+        // The roof bar is a metre of small LEDs, not one lens, and its lamp
+        // is a single point: a lens-sized glare disc on it read as a flood
+        // lamp ball above the cab. The bar is the cool light in the rig.
+        const led = light.color.b > light.color.r;
+        u.uGlareGain.value = cfg.beams.glare * 0.32 * (led ? 0.3 : 1);
         u.uGroundY.value = group.parent ? beamGroundY(group.parent) : 0;
         u.uTime.value = t;
         // How much of the beam the lens is standing in. Inside the cone every

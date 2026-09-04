@@ -828,6 +828,16 @@ const GradeShader = {
     uLift: { value: new THREE.Vector3(0.02, 0.026, 0.04) },
     uGain: { value: new THREE.Vector3(1.02, 1.0, 0.968) },
     uSaturation: { value: 1.08 },
+    // Saturation of the darks, blended up to `uSaturation` through the mid
+    // tones. Scotopic vision: the eye's rods see no colour, so a moonlit
+    // surface is grey-violet whatever its albedo, while a lamp bright enough
+    // to work the cones keeps its colour. Day sets both the same.
+    uSatDark: { value: 1.08 },
+    // What the darks desaturate *toward*: grey by day, and at night a grey
+    // pulled a little toward blue-violet, which is the Purkinje shift — rods
+    // peak in the blue-green, so a moonlit scene reads cooler than its
+    // spectrum. A hue cannot be moved by mixing toward neutral grey alone.
+    uDarkTint: { value: new THREE.Vector3(1, 1, 1) },
     // Weight of an S-curve toward smoothstep rather than a linear slope about
     // mid grey. A linear contrast lift steepens the toe and the shoulder too,
     // which is what was clipping trail highlights in any framing facing the sun.
@@ -855,9 +865,9 @@ const GradeShader = {
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse;
     uniform float uTime, uVignette, uVignetteSoft, uGrain, uAberration;
-    uniform float uSaturation, uSCurve, uHiDesat, uSharpen, uMidPivot, uMidContrast;
+    uniform float uSaturation, uSatDark, uSCurve, uHiDesat, uSharpen, uMidPivot, uMidContrast;
     uniform float uKnee, uShoulder;
-    uniform vec3 uLift, uGain;
+    uniform vec3 uLift, uGain, uDarkTint;
     uniform vec2 uResolution;
     uniform sampler2D tDepth;
     uniform float uHeat;
@@ -978,7 +988,10 @@ const GradeShader = {
       col = mix( col, col * col * ( 3.0 - 2.0 * col ), uSCurve );
 
       float luma = dot( col, LUMA );
-      col = mix( vec3( luma ), col, uSaturation );
+      float dark = 1.0 - smoothstep( 0.06, 0.48, luma );
+      float sat = mix( uSaturation, uSatDark, dark );
+      vec3 grey = vec3( luma ) * mix( vec3( 1.0 ), uDarkTint, dark );
+      col = mix( grey, col, sat );
       // bleach the top end toward white the way a real sensor does
       col = mix( col, vec3( luma ), smoothstep( 0.72, 1.0, luma ) * uHiDesat );
 
@@ -1040,8 +1053,14 @@ const GRADES = {
       sharpen: 0.3,
       midPivot: 0.36,
       midContrast: 0.12,
-      knee: 0.86,
-      shoulder: 0.55,
+      // A lower knee and a firmer shoulder than the forest's. Measured on the
+      // round-1 frames: the sun-side sand at the camp gate peaked at 0.91 and
+      // the far plain at 0.90, both within a few steps of paper and both
+      // brighter than the sky they stand under. This takes the top of the
+      // range down to about 0.85 and leaves everything under the knee — the
+      // truck, the near ground, the sky — exactly where it was.
+      knee: 0.78,
+      shoulder: 0.8,
     },
   },
   dusk: {
@@ -1115,8 +1134,10 @@ const GRADES = {
     //
     // This threshold is read against the linear buffer, before exposure, and
     // that is the last place in the chain where the lamp lenses and the pool
-    // they throw are still far apart: the lenses sit near 6.5 and the lit trail
-    // near 1.5. By the time ACES has finished with both they are 0.06 apart and
+    // they throw are still far apart: the lens emissive alone is about 1.0
+    // (0x6f6653 at 6.5 — authored against daylight), the glare disc the beam
+    // rig lays over it takes the lens to 2.5–3, and the lit trail sits near
+    // 1.5. By the time ACES has finished with both they are 0.06 apart and
     // no curve downstream can tell them from each other — so the whole job of
     // making the lamps read as the hot thing in the frame is done here, with a
     // threshold above the pool and enough strength to give them a real halo.
@@ -1167,7 +1188,15 @@ const GRADES = {
       // trail bleached to a white sheet on its way up, and a black tyre and
       // dark green paint both landed within a few degrees of hue 220.
       gain: [0.995, 1.0, 1.03],
-      saturation: 1.14,
+      // The mid tones and up keep their colour: the fire, the lanterns, the
+      // headlamp pool are the warm anchors of the frame. The darks do not.
+      // The moonlit ground was measuring hue 2 at 0.43 saturation — the
+      // day's laterite red, only darker, because multiplying a saturated
+      // albedo by a blue key darkens it without desaturating it. Rod vision
+      // does the desaturating, and this is where that lives.
+      saturation: 1.05,
+      saturationDark: 0.35,
+      darkTint: [0.9, 0.95, 1.1],
       // Shallow: a steep curve on an image that lives in the bottom third is
       // exactly what crushes it.
       sCurve: 0.1,
@@ -1345,6 +1374,8 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
     u.uLift.value.set(...g.grade.lift);
     u.uGain.value.set(...g.grade.gain);
     u.uSaturation.value = g.grade.saturation;
+    u.uSatDark.value = g.grade.saturationDark ?? g.grade.saturation;
+    u.uDarkTint.value.set(...(g.grade.darkTint ?? [1, 1, 1]));
     u.uSCurve.value = g.grade.sCurve;
     u.uHiDesat.value = g.grade.hiDesat;
     u.uSharpen.value = g.grade.sharpen;
