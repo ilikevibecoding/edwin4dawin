@@ -165,6 +165,8 @@ async function boot() {
     skyRig.setTimeOfDay?.(name, { scene });
     post.setTimeOfDay?.(name);
     vehicle.setLights(name !== 'day');
+    fleet.setTimeOfDay?.(name);
+    camp.setTimeOfDay?.(name);
     hud.setStatus(`${name.charAt(0).toUpperCase()}${name.slice(1)}`);
     return timeOfDay;
   }
