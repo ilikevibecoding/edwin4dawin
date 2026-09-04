@@ -7,6 +7,7 @@
 //
 // Deck-local metres, floor y = 0. Room bounds x -36..36, y -10..30, z -155..-35.
 import * as THREE from "three";
+import { HANGAR } from "../../exterior/dims.js";
 import { PALETTE } from "../../materials.js";
 import { impWall, impConsole, wallScreen, equipmentRack, crate, stairs, platform, railing, pipeRun, pillar, doorOpenings, wallSegment } from "../imperial.js";
 import { pointLight, wallFrame } from "../builders.js";
@@ -18,7 +19,7 @@ import { HANGAR_OPENING } from "../layout.js";
 // Layout constants
 // ---------------------------------------------------------------------------
 const HOLE = { x0: HANGAR_OPENING.x[0], x1: HANGAR_OPENING.x[1], z0: HANGAR_OPENING.z[0], z1: HANGAR_OPENING.z[1] };
-const WELL_DEPTH = 10; // deck → hull skin
+const WELL_DEPTH = HANGAR.deckY - HANGAR.module.bottomY; // deck → hull skin (module bottom)
 const FIELD_Y = -9;
 const CEIL = 30;
 const RACK_X = 29;

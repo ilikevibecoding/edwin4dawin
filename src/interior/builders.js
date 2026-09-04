@@ -132,6 +132,7 @@ export function panelGrid(frame, length, height, opts = {}) {
     pipeCol = PALETTE.orange,
     screenMats = ["screen0", "screen1", "screen2", "screen3"],
     decals = true,
+    plateCol = PALETTE.creamDark,
   } = opts;
   const rand = rng(seed);
   const gap = 0.025;
@@ -246,7 +247,7 @@ export function panelGrid(frame, length, height, opts = {}) {
         }
         case "greeble": {
           // equipment panel: painted backing, a dark bezel, then a cluster of small devices
-          paintBox(cu, cv, -0.05, cw - gap * 2, ch - gap * 2, 0.06, PALETTE.creamDark);
+          paintBox(cu, cv, -0.05, cw - gap * 2, ch - gap * 2, 0.06, plateCol);
           frame.box("paintedMetal", cu, cv, -0.015, cw - 0.16, ch - 0.16, 0.01, { color: PALETTE.darkMetal, texel: 2 });
           const n = 4 + Math.floor(rand() * 4);
           for (let g = 0; g < n; g++) {
@@ -285,7 +286,7 @@ export function panelGrid(frame, length, height, opts = {}) {
           break;
         }
         case "screen": {
-          paintBox(cu, cv, -0.05, cw - gap * 2, ch - gap * 2, 0.06, PALETTE.creamDark);
+          paintBox(cu, cv, -0.05, cw - gap * 2, ch - gap * 2, 0.06, plateCol);
           const sw = Math.min(0.62, cw - 0.25);
           const sh = Math.min(0.36, ch - 0.25);
           frame.box("darkGloss", cu, cv, -0.005, sw + 0.06, sh + 0.06, 0.03);
@@ -330,7 +331,7 @@ export function panelGrid(frame, length, height, opts = {}) {
             const hu = cu + (rand() - 0.5) * (cw - hw2 * 2 - 0.2);
             const hv = cv + (rand() - 0.5) * (ch - hh2 * 2 - 0.2);
             frame.box("metal", hu, hv, -0.01, hw2 * 2 + 0.03, hh2 * 2 + 0.03, 0.02, { color: PALETTE.darkMetal });
-            paintBox(hu, hv, 0.01, hw2 * 2, hh2 * 2, 0.02, rand() < 0.5 ? col : PALETTE.creamDark);
+            paintBox(hu, hv, 0.01, hw2 * 2, hh2 * 2, 0.02, rand() < 0.5 ? col : plateCol);
             frame.box("metal", hu - hw2 - 0.01, hv + hh2 * 0.5, 0.012, 0.03, 0.08, 0.03, { color: PALETTE.steel });
             frame.box("metal", hu - hw2 - 0.01, hv - hh2 * 0.5, 0.012, 0.03, 0.08, 0.03, { color: PALETTE.steel });
             frame.box("darkGloss", hu + hw2 * 0.55, hv, 0.018, 0.1, 0.04, 0.01);

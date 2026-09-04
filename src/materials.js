@@ -47,8 +47,8 @@ export const PALETTE = {
   impBlue: new THREE.Color("#4a9dff"),
   impAmber: new THREE.Color("#ffb347"),
   impGreen: new THREE.Color("#4cff88"),
-  hullGrey: new THREE.Color("#a9aeb5"),
-  hullLight: new THREE.Color("#c3c7cd"),
+  hullGrey: new THREE.Color("#979ca3"),
+  hullLight: new THREE.Color("#b3b8be"),
   hullDark: new THREE.Color("#5f646b"),
   hullBlack: new THREE.Color("#23262b"),
   engineBlue: new THREE.Color("#6fb4ff"),
@@ -272,7 +272,7 @@ function addImperialMaterials(mats, std) {
   // black polished deck
   // envMapIntensity kept low: the RoomEnvironment probe's area light otherwise mirrors as a white
   // flare on every deck when looking along +Z at a shallow angle
-  mats.floorGloss = std(floorTex, { normalScale: new THREE.Vector2(0.7, 0.7), envMapIntensity: 0.45 });
+  mats.floorGloss = std(floorTex, { normalScale: new THREE.Vector2(0.35, 0.35), envMapIntensity: 0.45 });
   // clean white/grey panels (tint from vertex colours), two wear variants
   mats.impPanel = std(panelTex, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.7 });
   mats.impPanel1 = std(panelTex2, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.7 });
@@ -280,6 +280,7 @@ function addImperialMaterials(mats, std) {
   const emit = (hex, intensity, extra = {}) =>
     new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: new THREE.Color(hex), emissiveIntensity: intensity, roughness: 0.5, metalness: 0, ...extra });
   mats.emitWhite = emit("#f2f6ff", 2.6);
+  mats.emitWhiteDim = emit("#dfe6f2", 1.15);
   mats.emitWhiteSoft = emit("#f2f6ff", 2.4, { emissiveMap: makeDiffuser(256, 21) });
   mats.emitBlue = emit("#4a9dff", 2.6);
   mats.emitAmber = emit("#ffb347", 2.2);

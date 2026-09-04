@@ -29,7 +29,7 @@ export function buildExterior(scene, materials) {
   hull.stats.plates += sup.stats.tierPlates;
 
   // --- lighting rig (exterior only; toggled with the group)
-  const sun = new THREE.DirectionalLight(0xfff1dc, 2.8);
+  const sun = new THREE.DirectionalLight(0xfff1dc, 2.1);
   sun.position.set(-900, 1300, 1400);
   sun.target.position.set(0, 40, 200);
   sun.castShadow = true;
@@ -58,9 +58,9 @@ export function buildExterior(scene, materials) {
 
   // --- camera stations (position, look-at) for the director / harness
   const stations = {
-    exterior_far: { pos: [-2400, 900, -2600], look: [0, 60, 0] },
+    exterior_far: { pos: [-1750, 680, -1950], look: [0, 60, 0] },
     exterior_medium: { pos: [-1100, 520, 300], look: [0, 60, 200] },
-    exterior_front: { pos: [300, 260, -2300], look: [0, 40, 0] },
+    exterior_front: { pos: [220, 190, -1550], look: [0, 40, 0] },
     exterior_close: { pos: [-420, 260, 560], look: [-80, 120, 520] },
     exterior_tower: { pos: [-260, 240, 330], look: [0, 185, 620] },
     exterior_bridge: { pos: [40, 196, 470], look: [0, 184, 592] },
@@ -141,7 +141,7 @@ export function buildExterior(scene, materials) {
       const inside = mode === "interior";
       fill.intensity = inside ? 0.12 : 0.55;
       hemi.intensity = inside ? 0.08 : 0.35;
-      sun.intensity = inside ? 2.6 : 3.2;
+      sun.intensity = inside ? 2.0 : 2.1;
     },
     dims: { TOWER, HANGAR, HULL, ENGINES },
   };

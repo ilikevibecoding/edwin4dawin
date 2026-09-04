@@ -1242,10 +1242,10 @@ export function makeImperialFloor(size = 1024, seed = 137) {
     const ed = edgeDist(pu, pv);
     const n1 = fbm(u, v, { octaves: 4, freq: 6, seed });
     const n2 = vnoise2(u, v, 28, 400, seed + 5);
-    let lum = 0.19 + (n1 - 0.5) * 0.05 + (n2 - 0.5) * 0.03;
+    let lum = 0.19 + (n1 - 0.5) * 0.05 + (n2 - 0.5) * 0.015;
     let rough = 0.28 + (n1 - 0.5) * 0.12 + (n2 - 0.5) * 0.06;
     let metal = 0.55;
-    let hgt = 0.5 + (n2 - 0.5) * 0.02;
+    let hgt = 0.5 + (n2 - 0.5) * 0.006;
     const seam = 0.01;
     if (ed < seam) {
       const k = smooth(1 - ed / seam);
@@ -1323,7 +1323,9 @@ export function makeCityLights(size = 512, seed = 141, density = 0.035) {
   const rand = mulberry32(seed);
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, size, size);
-  const cell = 6;
+  // 14 px cells: at the 20 m tiling used on the tiers / trench a window is ~0.6 m, so rows of
+  // windows read as deck lines instead of static
+  const cell = 14;
   const n = size / cell;
   for (let y = 0; y < n; y++) {
     // rows of windows follow deck lines: every 3rd row is a deck
@@ -1333,8 +1335,8 @@ export function makeCityLights(size = 512, seed = 141, density = 0.035) {
       if (rand() > p) continue;
       const k = rand();
       ctx.fillStyle = k < 0.78 ? "#ffe9c4" : k < 0.9 ? "#9fc8ff" : k < 0.96 ? "#ffb070" : "#ff4a3a";
-      const w = 1 + Math.floor(rand() * 2);
-      ctx.fillRect(x * cell + 2, y * cell + 2, w, 1 + Math.floor(rand() * 2));
+      const w = 3 + Math.floor(rand() * 4);
+      ctx.fillRect(x * cell + 3, y * cell + 4, w, 2 + Math.floor(rand() * 3));
     }
   }
   return toTexture(c, { srgb: true, anisotropy: 4 });

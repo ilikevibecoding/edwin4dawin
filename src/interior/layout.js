@@ -131,7 +131,7 @@ export const DECKS = [
       { id: "d5_lobby", kind: "lobby", name: "Hangar Deck Lobby", bounds: [[-5, 0, -3], [5, 3.6, 3]], spawn: [0, 1.5, 0] },
       { id: "d5_corridor", kind: "corridor", name: "Hangar Access Corridor", bounds: [[-2.5, 0, -34.6], [2.5, 3.8, -3.4]] },
       { id: "d5_cargo", kind: "room", builder: "hangarCargo", name: "Cargo Lift & Logistics", bounds: [[2.9, 0, -30], [28, 7, -8]], spawn: [12, -19, 90] },
-      { id: "d5_hangar", kind: "room", builder: "hangar", name: "Main Hangar Bay", bounds: [[-36, -10, -155], [36, 30, -35]], seesExterior: true, spawn: [0, -45, 0] },
+      { id: "d5_hangar", kind: "room", builder: "hangar", name: "Main Hangar Bay", bounds: [[-36, -16, -155], [36, 30, -35]], seesExterior: true, spawn: [0, -45, 0] },
       { id: "d5_fighterbay", kind: "room", builder: "fighterBay", name: "Fighter Maintenance & Refuelling", bounds: [[36.4, 0, -125], [70, 14, -75]], spawn: [50, -100, 90] },
       { id: "d5_shuttlebay", kind: "room", builder: "shuttleBay", name: "Shuttle & Secondary Docking Bay", bounds: [[-90, 0, -140], [-36.4, 18, -70]], spawn: [-55, -105, -90] },
     ],

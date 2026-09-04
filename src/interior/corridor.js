@@ -1,8 +1,38 @@
 // Shared Imperial builders for the connective tissue: corridors and turbolift lobbies.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
-import { pointLight } from "./builders.js";
-import { impFloor, impWall, impCeiling, wallScreen, equipmentRack, pillar } from "./imperial.js";
+import { pointLight, wallFrame } from "./builders.js";
+import { impFloor, impWall, impCeiling, wallScreen, equipmentRack, pillar, wallSegment, IMP_PAINTS_DARK } from "./imperial.js";
+import { makeCanvas, toTexture } from "../textures.js";
+
+/** Lit signage plate: dark housing, text on an emissive canvas (one material per unique text). */
+export function signPlate(kit, ctx, { side, u, v = 2.9, w = 2.4, h = 0.42, text, sub = null, accent = "#4a9dff", bounds = ctx.bounds }) {
+  const key = "sign_" + text.replace(/[^A-Za-z0-9]/g, "_") + (sub ? "_" + sub.replace(/[^A-Za-z0-9]/g, "_") : "");
+  if (!ctx.materials[key]) {
+    const c = makeCanvas(1024, 192);
+    const g = c.getContext("2d");
+    g.fillStyle = "#07090c";
+    g.fillRect(0, 0, 1024, 192);
+    g.fillStyle = accent;
+    g.fillRect(24, 22, 6, 148);
+    g.fillRect(994, 22, 6, 148);
+    g.font = "bold 92px 'Helvetica Neue', Arial, sans-serif";
+    g.textBaseline = "middle";
+    g.textAlign = "center";
+    g.fillStyle = "#dfe6f2";
+    g.fillText(text.toUpperCase(), 512, sub ? 72 : 96);
+    if (sub) {
+      g.font = "bold 44px 'Helvetica Neue', Arial, sans-serif";
+      g.fillStyle = accent;
+      g.fillText(sub.toUpperCase(), 512, 146);
+    }
+    ctx.materials[key] = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: toTexture(c, { srgb: true, wrap: false }), emissiveIntensity: 1.25, roughness: 0.4, metalness: 0 });
+  }
+  const seg = wallSegment(bounds, side);
+  const { frame } = wallFrame(kit, seg.from, seg.to, bounds[0][1]);
+  frame.box("paintedMetal", u, v, 0.035, w + 0.12, h + 0.12, 0.07, { color: PALETTE.impBlack, texel: 2 });
+  frame.add(key, new THREE.PlaneGeometry(w, h), u, v, 0.072, { uv: "keep" });
+}
 
 /**
  * Imperial corridor: black gloss deck with edge light channels, white panelled lower walls, angled
@@ -29,10 +59,10 @@ export function buildCorridor(kit, ctx) {
     const off = side * (halfW - 0.12);
     if (alongZ) {
       kit.boxMM("paintedMetal", [cx + off - 0.09, 0, min[2]], [cx + off + 0.09, 0.02, max[2]], { color: PALETTE.impBlack, texel: 2 });
-      kit.boxMM("emitWhiteSoft", [cx + off - 0.03, 0.02, min[2] + 0.2], [cx + off + 0.03, 0.03, max[2] - 0.2], { uv: "keep" });
+      kit.boxMM("emitWhiteDim", [cx + off - 0.02, 0.02, min[2] + 0.2], [cx + off + 0.02, 0.03, max[2] - 0.2], { uv: "keep" });
     } else {
       kit.boxMM("paintedMetal", [min[0], 0, cz + off - 0.09], [max[0], 0.02, cz + off + 0.09], { color: PALETTE.impBlack, texel: 2 });
-      kit.boxMM("emitWhiteSoft", [min[0] + 0.2, 0.02, cz + off - 0.03], [max[0] - 0.2, 0.03, cz + off + 0.03], { uv: "keep" });
+      kit.boxMM("emitWhiteDim", [min[0] + 0.2, 0.02, cz + off - 0.02], [max[0] - 0.2, 0.03, cz + off + 0.02], { uv: "keep" });
     }
   };
   strip(-1);
@@ -160,15 +190,29 @@ export function buildLobby(kit, ctx) {
   kit.box("paintedMetal", cx, h - 0.06, cz, 2.2, 0.1, 2.2, { color: PALETTE.impDark, texel: 2 });
   kit.box("emitWhiteSoft", cx, h - 0.11, cz, 1.9, 0.03, 1.9, { uv: "keep" });
   ctx.light(pointLight(0xe8f0ff, 7, 10, [cx, h - 0.8, cz]));
-  for (const side of ["zmin", "zmax", "xmin", "xmax"]) impWall(kit, ctx, side, { rows: [0, 0.5, 1.6, 2.6, h], styles: { panel: 0.75, vent: 0.05, greeble: 0.1, strip: 0.1 }, seed: ctx.seed + side.length * 5 });
-  // deck indicator over the lift door (zmax wall) and a ship crest decal panel opposite
+  const lobbyPaints = [
+    [PALETTE.impLight, 0.45],
+    [PALETTE.impGrey, 0.35],
+    [PALETTE.impMid, 0.2],
+  ];
+  for (const side of ["zmin", "zmax", "xmin", "xmax"]) impWall(kit, ctx, side, { rows: [0, 0.5, 1.6, 2.6, h], paints: lobbyPaints, styles: { panel: 0.75, vent: 0.05, greeble: 0.1, strip: 0.1 }, seed: ctx.seed + side.length * 5 });
+  // deck sign over the lift door (zmax wall), status readouts beside it, a direction sign over the
+  // corridor opening (zmin wall) naming the deck's principal space
   const lift = ctx.doors.find((d) => d.style === "lift");
+  const deck = ctx.deck;
   if (lift) {
     const u = max[0] - lift.pos[0];
-    // deck number readout
-    wallScreen(kit, ctx, { side: "zmax", u: u - 2.2, v: 1.7, w: 0.9, h: 0.55, screen: 2 });
-    wallScreen(kit, ctx, { side: "zmax", u: u + 2.2, v: 1.7, w: 0.9, h: 0.55, screen: 0 });
+    signPlate(kit, ctx, { side: "zmax", u, v: h - 0.45, w: 3.0, h: 0.5, text: `Deck ${deck.index}`, sub: deck.name, accent: "#ffb347" });
+    wallScreen(kit, ctx, { side: "zmax", u: u - 2.9, v: 1.7, w: 0.9, h: 0.55, screen: 2 });
+    wallScreen(kit, ctx, { side: "zmax", u: u + 2.9, v: 1.7, w: 0.9, h: 0.55, screen: 0 });
   }
+  const opening = ctx.doors.find((d) => d.style === "open");
+  if (opening) {
+    const principal = deck.sectors.filter((s) => s.kind === "room").sort((a, b) => (b.bounds[1][0] - b.bounds[0][0]) * (b.bounds[1][2] - b.bounds[0][2]) - (a.bounds[1][0] - a.bounds[0][0]) * (a.bounds[1][2] - a.bounds[0][2]))[0];
+    const u = opening.pos[0] - min[0];
+    if (principal) signPlate(kit, ctx, { side: "zmin", u, v: h - 0.45, w: 3.6, h: 0.42, text: `▲ ${principal.name}`, accent: "#4a9dff" });
+  }
+  void IMP_PAINTS_DARK;
   // equipment racks on the side walls away from doors
   const rackSide = ctx.doors.some((d) => d.wall === "z" && d.pos[0] < min[0] + 1) ? "xmax" : "xmin";
   equipmentRack(kit, ctx, { side: rackSide, u: (max[2] - min[2]) / 2, w: 1.4, h: 2.6, seed: ctx.seed });

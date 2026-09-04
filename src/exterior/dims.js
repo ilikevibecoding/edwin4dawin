@@ -20,13 +20,13 @@ export function halfWidth(z) {
 /** Dorsal plateau height above the trench centre line at z. */
 export function dorsalH(z) {
   const t = (z - HULL.bowZ) / HULL.length;
-  return 14 + 40 * t;
+  return 15 + 48 * t;
 }
 
 /** Ventral plateau depth below the trench centre line at z (positive number). */
 export function ventralH(z) {
   const t = (z - HULL.bowZ) / HULL.length;
-  return 20 + 32 * t;
+  return 20 + 44 * t;
 }
 
 /** Surface point + unit normal on the dorsal (side=+1) or ventral (side=-1) skin at (x, z). */
@@ -74,7 +74,7 @@ export function cityTopY(z) {
 
 // Command tower
 export const TOWER = {
-  neck: { x: 38, z0: 562, z1: 648, yTop: 166 },
+  neck: { x: 56, z0: 562, z1: 648, yTop: 166 },
   bridge: { x: 112, z0: 590, z1: 652, y0: 166, y1: 200 },
   windows: { x: 24, y0: 180.7, y1: 186.5, z: 590 }, // bridge windows on the front face (interior deck 1 floor at 180; foot 0.7 m above it so the hull ahead is visible)
   domes: { r: 22, x: 72, y: 203, z: 621 },
@@ -84,15 +84,15 @@ export const TOWER = {
 // Engines (stern face)
 export const ENGINES = {
   main: [
-    { x: -178, y: 6, r: 40 },
-    { x: 0, y: 8, r: 42 },
-    { x: 178, y: 6, r: 40 },
+    { x: -186, y: 4, r: 48 },
+    { x: 0, y: 6, r: 52 },
+    { x: 186, y: 4, r: 48 },
   ],
   secondary: [
-    { x: -90, y: 44, r: 15 },
-    { x: 90, y: 44, r: 15 },
-    { x: -272, y: -6, r: 16 },
-    { x: 272, y: -6, r: 16 },
+    { x: -92, y: 46, r: 18 },
+    { x: 92, y: 46, r: 18 },
+    { x: -284, y: -8, r: 19 },
+    { x: 284, y: -8, r: 19 },
   ],
   z0: 740,
   z1: 800,
@@ -104,7 +104,7 @@ export const REACTOR = { x: 0, z: 260, r: 72 };
 // Ventral hangar module: a box hanging below the ventral plateau with the bay opening in its floor.
 // Matches layout.js HANGAR_OPENING (deck 5 origin z = 95, opening local z -130..-60 → world -35..+35).
 export const HANGAR = {
-  module: { x: 44, z0: -70, z1: 70, bottomY: -40 },
+  module: { x: 44, z0: -70, z1: 70, bottomY: -46 },
   opening: { x: 22, z0: -35, z1: 35 },
   interiorCeilingY: 0,
   deckY: -30,

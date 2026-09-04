@@ -21,6 +21,7 @@ export const IMP_THEME = {
   pipeCol: PALETTE.impMid,
   screenMats: ["impScreen0", "impScreen1", "impScreen2"],
   decals: true,
+  plateCol: PALETTE.impGrey,
 };
 export const IMP_PAINTS = [
   [PALETTE.impWhite, 0.6],
