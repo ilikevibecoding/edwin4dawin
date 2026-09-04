@@ -245,19 +245,22 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       if (i >= 0) occ[i] = 1;
     }
   };
-  /** Marks only the cells whose centre lies inside the rotated footprint grown by `margin`, so yards between
-   *  houses stay free for vegetation while nothing grows through a wall. */
+  /** Marks the cells that touch the rotated footprint grown by `margin` (centre or a corner inside it), so yards
+   *  between houses stay free for vegetation while nothing grows through a wall. */
   const markFootprint = (x: number, z: number, w: number, d: number, rot: number, margin: number) => {
     const hx = w / 2 + margin, hz = d / 2 + margin;
-    const r = Math.hypot(hx, hz);
+    const r = Math.hypot(hx, hz) + 8;
     const c = Math.cos(rot), s = Math.sin(rot);
     const ix0 = Math.floor((x - r + 10000) / 10), ix1 = Math.floor((x + r + 10000) / 10);
     const iz0 = Math.floor((z - r + 10000) / 10), iz1 = Math.floor((z + r + 10000) / 10);
+    const inside = (px: number, pz: number) => {
+      const lx = px * c + pz * s, lz = -px * s + pz * c;
+      return Math.abs(lx) <= hx && Math.abs(lz) <= hz;
+    };
     for (let iz = iz0; iz <= iz1; iz++) for (let ix = ix0; ix <= ix1; ix++) {
       if (ix < 0 || iz < 0 || ix >= 2000 || iz >= 2000) continue;
-      const px = ix * 10 + 5 - 10000 - x, pz = iz * 10 + 5 - 10000 - z;
-      const lx = px * c + pz * s, lz = -px * s + pz * c;
-      if (Math.abs(lx) <= hx && Math.abs(lz) <= hz) occ[iz * 2000 + ix] = 1;
+      const px = ix * 10 - 10000 - x, pz = iz * 10 - 10000 - z;
+      if (inside(px + 5, pz + 5) || inside(px, pz) || inside(px + 10, pz) || inside(px, pz + 10) || inside(px + 10, pz + 10)) occ[iz * 2000 + ix] = 1;
     }
   };
   const occupied = (x: number, z: number) => { const i = occIndex(x, z); return i >= 0 && occ[i] === 1; };
@@ -560,11 +563,12 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
 
       function fillMidrise(): void {
         const n = Math.max(1, Math.round((bw * bd) / 1800));
-        for (let i = 0; i < n; i++) {
+        for (let i = 0, placed = 0; i < n * 2 && placed < n; i++) {
           const fw = drng.range(16, Math.min(44, bw * 0.75)), fd = drng.range(16, Math.min(44, bd * 0.75));
           const lx = drng.range(bx0 + fw / 2, bx1 - fw / 2), lz = drng.range(bz0 + fd / 2, bz1 - fd / 2);
           const [x, z] = toWorld(lx, lz);
           if (!landOK(x, z, fw, fd, d.rot) || !areaFree(x, z, fw + 4, fd + 4, d.rot)) continue;
+          placed++;
           let h = lerp(d.hMin, d.hMax, Math.pow(drng.next(), 2.0)) * lerp(0.75, 1.15, prox);
           h = clamp(h, d.hMin * 0.8, d.hMax);
           const fam = h > 50
@@ -653,11 +657,12 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
 
       function fillIndustrial(): void {
         const n = Math.max(1, Math.round((bw * bd) / 3600));
-        for (let i = 0; i < n; i++) {
+        for (let i = 0, placed = 0; i < n * 3 && placed < n; i++) {
           const fw = drng.range(28, Math.min(80, bw * 0.85)), fd = drng.range(22, Math.min(60, bd * 0.85));
           const lx = drng.range(bx0 + fw / 2, bx1 - fw / 2), lz = drng.range(bz0 + fd / 2, bz1 - fd / 2);
           const [x, z] = toWorld(lx, lz);
           if (!landOK(x, z, fw, fd, d.rot) || !areaFree(x, z, fw, fd, d.rot)) continue;
+          placed++;
           const lk = look(FAM.industrial, drng);
           const h = drng.range(8, 15);
           const top = place('box', x, z, fw, h, fd, d.rot, lk.tint, S.INDUSTRIAL, 4.0, { lit: lk.lit, warm: lk.warm, variant: lk.variant });

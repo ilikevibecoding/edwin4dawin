@@ -290,17 +290,19 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
       const capBottom = capTop - capH;
       const colBottom = Math.min(ground, -0.5) - 2.5;
       const inWater = ground < 0.2;
+      // hammerhead caps overhang the fascia so the pier line stays visible from above the deck
+      const capW = W + 2.6;
       if (W >= 20 || heavy) {
         const ww = heavy ? W * 0.7 : W * 0.5, wt = heavy ? 3.2 : 2.0;
         boxAt(cBoxes, f.x, colBottom, f.z, ww, capBottom - colBottom, wt, yaw);
-        boxAt(cBoxes, f.x, capBottom, f.z, W + 0.6, capH, wt + 0.8, yaw);
+        boxAt(cBoxes, f.x, capBottom, f.z, capW, capH, wt + 0.8, yaw);
         if (inWater) boxAt(cBoxes, f.x, -1.0, f.z, ww + 2.4, 1.6, wt + 2.4, yaw);
       } else {
         for (const off of [-W * 0.3, W * 0.3]) {
           colAt(cCols, f.x + f.rx * off, colBottom, f.z + f.rz * off, 2.0, capBottom - colBottom);
           if (inWater) boxAt(cBoxes, f.x + f.rx * off, -1.0, f.z + f.rz * off, 3.6, 1.6, 3.6, yaw);
         }
-        boxAt(cBoxes, f.x, capBottom, f.z, W + 0.6, capH, 2.2, yaw);
+        boxAt(cBoxes, f.x, capBottom, f.z, capW, capH, 2.2, yaw);
       }
       // expansion joint across the carriageway over every pier
       boxAt(sBoxes, f.x, f.y + 0.03, f.z, cw, 0.04, 0.3, yaw);
