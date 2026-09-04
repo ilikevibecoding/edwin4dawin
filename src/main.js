@@ -181,8 +181,13 @@ async function boot() {
 
   window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyC') {
+      const was = rig.firstPerson;
       rig.cycle();
+      // stepping into the cab is a door
+      if (rig.firstPerson && !was) audio.cue('door');
       hud.setCamera(rig.label);
+    } else if (e.code === 'KeyH') {
+      audio.cue('horn', { duration: 0.35 });
     } else if (e.code === 'KeyL') {
       vehicle.setLights(!vehicle.state.lightsOn);
       hud.setStatus(vehicle.state.lightsOn ? 'Lights on' : 'Lights off');
@@ -372,6 +377,8 @@ async function boot() {
 
   const contacts = [];
   const _v = new THREE.Vector3();
+  let indicatorT = 0.42;
+  let indicatorTock = false;
 
   function simulate(dt) {
     simTime += dt;
@@ -400,16 +407,30 @@ async function boot() {
       vehicleSpeed: driver.state.speed,
       throttle: driver.input.throttle,
       camera,
+      // so a lion that reacts can be heard doing it
+      cue: (name, opts) => audio.cue(name, opts),
     });
     audio.update(dt, {
       speed: driver.state.speed,
       throttle: driver.input.throttle,
       rpm: driver.state.rpm,
+      gear: driver.state.gear,
       surface: driver.state.route,
       timeOfDay,
       camera,
       vehiclePos: vehicle.root.position,
     });
+    // indicator relay while the wheel is held over under manual control
+    if (!driver.state.auto && Math.abs(driver.input.steer) > 0.6) {
+      indicatorT += dt;
+      if (indicatorT > 0.42) {
+        indicatorT = 0;
+        indicatorTock = !indicatorTock;
+        audio.cue('indicator', { tock: indicatorTock });
+      }
+    } else {
+      indicatorT = 0.42;
+    }
 
     skyRig.follow(vehicle.root.position);
     hud.update(dt, driver.state.auto ? 'Auto-drive engaged' : 'Manual control');

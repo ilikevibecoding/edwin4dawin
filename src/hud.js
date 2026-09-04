@@ -25,6 +25,7 @@ export function createHud() {
         <span><b>P</b> photo</span>
         <span><b>N</b> time</span>
         <span><b>L</b> lights</span>
+        <span><b>H</b> horn</span>
       </div>
     </div>
     <div class="hud-fade" id="hud-fade"></div>
