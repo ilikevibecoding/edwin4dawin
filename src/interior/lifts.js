@@ -103,6 +103,9 @@ export class LiftSystem {
       decal.rotation.y = bs > 0 ? Math.PI / 2 : -Math.PI / 2;
       decal.geometry.setAttribute("uv", new THREE.Float32BufferAttribute(rectUV(impDecalRect(14)), 2));
       ctx.add(decal);
+      // the cab is part of the lobby for streaming and current-room detection: a rider arriving from
+      // another deck stands inside it before the lobby box, so the lobby must count as "here"
+      ctx.expandBounds([x0 - 0.3, y - 1, z0 - 0.3], [x1 + 0.3, y + h + 1, z1 + 0.3]);
       // cab light + walkable + colliders
       pointLightDesc(ctx, 0xdfe8ff, 2.6, 5, [(x0 + x1) / 2, y + h - 0.5, (z0 + z1) / 2], 1);
       walkable(ctx, x0, z0, x1, z1, y, "lift:" + spec.id);

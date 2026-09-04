@@ -58,6 +58,11 @@ export class Room {
       portal(otherId) {
         room.portals.add(otherId);
       },
+      // grow the room's streaming / current-room bounds (turbolift cabs sit outside the lobby box)
+      expandBounds(min, max) {
+        room.bounds.expandByPoint(new THREE.Vector3(...min));
+        room.bounds.expandByPoint(new THREE.Vector3(...max));
+      },
       view(name, x, y, z, yaw, pitch) {
         room.views[name] = { x, y, z, yaw, pitch, room: room.id };
       },
