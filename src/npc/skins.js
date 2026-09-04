@@ -7,9 +7,11 @@ const SHIRTS = ['#4a6ea8', '#a83a3a', '#e8e2d2', '#5d8a4e', '#8a6a3d', '#3d3d3d'
 const PANTS = ['#3b4a6b', '#4d3b2a', '#2b2b2b', '#5a4a3a', '#6b6b6b', '#2f3f5f'];
 const DRESSES = ['#7a3a5a', '#3a5a7a', '#5a7a3a', '#8a4a2a', '#4a4a7a', '#a86a8a', '#6a8a9a', '#8a2a2a'];
 const HATS = ['#4a3520', '#1e1a16', '#8a6a40', '#5a4a3a', '#2d2620', '#a08860'];
-// iris palette (brown listed twice so it is the most common); dark skin tones always get dark brown eyes
-export const IRIS_COLORS = ['#3a5a8a', '#4a3a2a', '#2a6a3a', '#4a3a2a', '#6a4a2e'];
-export const IRIS_DARK = '#2a1a10';
+// iris palette (brown listed twice so it is the most common); medium/dark skin tones always get dark brown eyes.
+// Irises are kept lighter than any brow/hair shade so brow and iris never fuse into one dark block.
+export const IRIS_COLORS = ['#3a5a8a', '#6b4a2f', '#2a6a3a', '#6b4a2f', '#75552d'];
+export const IRIS_DARK = '#3b2415';
+export const DARK_SKIN_LUMINANCE = 0.5;
 export const EYE_WHITE = '#ffffff';
 const LIP_TINT = '#a8484a';
 
@@ -78,22 +80,24 @@ export function paintSkin(outfit) {
   // (white on the outside, iris toward the nose, one skin pixel between the eyes). Both irises share one colour.
   const F = R.headFront;
   const irisPick = rng.pick(IRIS_COLORS);
-  const browTone = rng.pick([0.72, 0.82, 0.92]);
-  const iris = luminance(skin) < 0.42 ? IRIS_DARK : irisPick;
+  const browTone = rng.pick([0.76, 0.78, 0.8]);
+  const iris = luminance(skin) < DARK_SKIN_LUMINANCE ? IRIS_DARK : irisPick;
   const eyePixels = [
     { x: F[0] + 2, y: F[1] + 4, color: EYE_WHITE }, { x: F[0] + 3, y: F[1] + 4, color: iris },
     { x: F[0] + 5, y: F[1] + 4, color: iris }, { x: F[0] + 6, y: F[1] + 4, color: EYE_WHITE },
   ];
   for (const p of eyePixels) { ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 1, 1); }
-  // eyebrows: one 2px brow above each eye (hair colour, a little darker)
-  const brow = shade(hair, browTone);
+  // eyebrows: one 2px brow ridge above each eye painted as a skin shadow (not hair colour), so it reads for
+  // every hair colour and never merges with the iris below into one dark block
+  const brow = shade(skin, browTone);
   rect(F, brow, 2, 3, 2, 1); rect(F, brow, 5, 3, 2, 1);
   // nose: soft shadow under the bridge with the tip a touch darker
   px(F, 3, 5, shade(skin, 0.93)); px(F, 4, 5, shade(skin, 0.84));
-  // mouth: a subtle darker lip line for men, a muted rose blended with the skin tone for women
+  // mouth: a subtle darker lip line for men, a muted rose blended with the skin tone for women;
+  // facial hair is painted afterwards so a mustache/beard stays continuous over the mouth
+  rect(F, female ? mix(skin, LIP_TINT, 0.55) : shade(skin, 0.76), 3, 6, 2, 1);
   if (mustache) rect(F, hair, 2, 6, 4, 1);
   if (beard) { rect(F, hair, 1, 6, 6, 2); rect(R.headRight, hair, 6, 6, 2, 2); rect(R.headLeft, hair, 0, 6, 2, 2); }
-  else rect(F, female ? mix(skin, LIP_TINT, 0.55) : shade(skin, 0.76), 3, 6, 2, 1);
 
   // ---- body
   const bodyCol = female ? dress : shirt;
