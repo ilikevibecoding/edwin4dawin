@@ -271,7 +271,28 @@ export function buildCargo(kit, ctx, room) {
 
   // ---- walls: 14 m industrial; blast door on the N wall (u = lx + 40)
   const walls = roomWalls(kit, room);
-  const wallOpts = { ribPitch: 10, plateH: 5, rowH: 3, floodV: 11.6, floodAim: 14, accentKey, bigDecals: false, ducts: false, lightKey: "emitWhiteSoft" };
+  // dark structural bays (no backlit galleries): trench-grey plates, amber lamp points per level, dim cornice
+  const wallOpts = {
+    ribPitch: 10,
+    plateH: 5,
+    rowH: 3,
+    floodV: 11.6,
+    floodAim: 14,
+    accentKey,
+    bigDecals: false,
+    ducts: false,
+    lightKey: "emitWhiteDim",
+    corniceKey: "emitAmberDim",
+    lightBays: false,
+    lampRows: true,
+    lampKey: "emitAmber",
+    lampStep: 3.4,
+    floodLamp: "emitAmber",
+    plateColor: PALETTE.hullTrench,
+    plateAlt: PALETTE.impGreyDark,
+    upperColor: PALETTE.hullTrench,
+    ribAccentKey: null,
+  };
   const nOpen = hgWallOpenings(room, ctx.doors, "N");
   hgWall(walls.N.frame, W, H, { ...wallOpts, openings: nOpen, seed: 401, tag: "cgN" });
   hgWall(walls.S.frame, W, H, { ...wallOpts, openings: hgWallOpenings(room, ctx.doors, "S"), seed: 403, tag: "cgS", features: { gear: 0.25, light: 0.15, vent: 0.15, pipes: 0.15, cabinet: 0.1, stencil: 0.1 } });
@@ -297,21 +318,26 @@ export function buildCargo(kit, ctx, room) {
     f.screen("scrAmber1", 28.9, 2.5, 0.25, 2.2, 1.6);
     f.screen("scrAmber0", 31.3, 2.5, 0.25, 2.2, 1.6);
     f.box("impMetal", 30, 3.85, 0.2, 5.0, 0.12, 0.3, { color: PALETTE.impGreyDark });
-    f.box("emitWhiteSoft", 30, 3.8, 0.34, 4.6, 0.03, 0.02, { uv: "keep" });
+    f.box("emitWhiteDim", 30, 3.8, 0.34, 4.6, 0.03, 0.02, { uv: "keep" });
     f.collider(27.3, 32.7, 0, 3.9, 0, 0.3, "board");
   }
 
-  // ---- ceiling: beams across x every 10 m, three light troughs, ducts along the side walls
-  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 10, beamAxis: "x", troughsX: [-19.5, 0, 19.5], ductsX: [-37.5, 37.5], lightKey: "emitWhiteSoft", beamH: 0.9 });
+  // ---- ceiling: beams across x every 10 m, three light troughs (dim, 0.85 emissive, louvred every metre —
+  //      the old emitWhiteSoft central trough read as a near-white blob at the aisle's end), side ducts
+  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 10, beamAxis: "x", troughsX: [-19.5, 0, 19.5], ductsX: [-37.5, 37.5], lightKey: "emitWhiteDim", beamH: 0.9, slabColor: PALETTE.hullTrench });
 
   // ---- lights: amber over the aisle and the lift, warm white over the side aisles, red at the door
   const amber = 0xffb45a;
   // three aisle floods + two rack-face lights (≈2.5× the default per-fixture output) + red door beacon
-  kit.light({ type: "point", pos: [0, 12, -16], color: amber, intensity: lux(12, 2.8), distance: 64, priority: 0.62 });
-  kit.light({ type: "point", pos: [0, 12, 2], color: amber, intensity: lux(12, 2.8), distance: 64, priority: 0.61 });
-  kit.light({ type: "point", pos: [0, 11, 21], color: amber, intensity: lux(11, 2.6), distance: 56, priority: 0.58 });
-  kit.light({ type: "point", pos: [-19.5, 12, -8], color: 0xffd7a0, intensity: lux(12, 2.0), distance: 52, priority: 0.5 });
-  kit.light({ type: "point", pos: [19.5, 12, -8], color: 0xffd7a0, intensity: lux(12, 2.0), distance: 52, priority: 0.49 });
+  // the floods sit inside the ceiling troughs (x = 0, ±19.5; between the emitter pane and its plate, 13.55 m):
+  // a point light hanging under the slab lit it to a near-white blob, inside the fixture the pane and slab
+  // are back-facing / hidden and the top shelves still catch the light
+  const TY = H - 0.45;
+  kit.light({ type: "point", pos: [0, TY, -16], color: amber, intensity: lux(TY, 3.0), distance: 64, priority: 0.62 });
+  kit.light({ type: "point", pos: [0, TY, 2], color: amber, intensity: lux(TY, 3.0), distance: 64, priority: 0.61 });
+  kit.light({ type: "point", pos: [0, TY, 21], color: amber, intensity: lux(TY, 2.6), distance: 56, priority: 0.58 });
+  kit.light({ type: "point", pos: [-19.5, TY, -8], color: 0xffd7a0, intensity: lux(TY, 2.2), distance: 52, priority: 0.5 });
+  kit.light({ type: "point", pos: [19.5, TY, -8], color: 0xffd7a0, intensity: lux(TY, 2.2), distance: 52, priority: 0.49 });
   kit.light({ type: "point", pos: [0, 8, -28], color: 0xff3b2e, intensity: lux(8, 0.6), distance: 20, priority: 0.3 });
 
   // ---- animated beacons

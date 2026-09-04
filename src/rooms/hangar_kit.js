@@ -682,7 +682,8 @@ export function hoseGeometry(a, b, sag, r, n = 6) {
 // Instanced crates in three sizes; a stack is one collider
 // ---------------------------------------------------------------------------
 export const CRATE_SIZES = { a: [1.2, 1.0, 1.2], b: [1.6, 1.2, 1.0], c: [0.8, 0.8, 0.8], d: [2.4, 2.2, 2.4], e: [3.6, 2.4, 2.4] };
-const CRATE_COLORS = [PALETTE.impGreyDark, PALETTE.impGrey, new THREE.Color("#5a5348"), new THREE.Color("#4a5560"), new THREE.Color("#6b3f2e"), new THREE.Color("#4d5a3e")];
+// Imperial cargo: greys and near-blacks only (the earlier tan / rust tints read as plywood under amber light)
+const CRATE_COLORS = [new THREE.Color("#6d7076"), new THREE.Color("#2b2d31"), new THREE.Color("#4a4d54"), new THREE.Color("#3a3d43"), new THREE.Color("#5a5d63"), new THREE.Color("#34363b")];
 const CRATE_DECAL = { a: IMP_DECAL.bay01, b: IMP_DECAL.bay02, c: IMP_DECAL.glyphs2, d: IMP_DECAL.bay03, e: IMP_DECAL.hazard };
 function cageGeometry(sx, sy, sz) {
   const t = 0.06;
@@ -700,6 +701,29 @@ export function hgCrate(kit, size, x, y, z, yaw = 0, colorIdx = 0, decal = true)
   const q = yawQuat(yaw);
   inst(kit, "hg_crate_" + size, "impPanel1", () => new THREE.BoxGeometry(sx, sy, sz).translate(0, sy / 2, 0), [x, y, z], q, CRATE_COLORS[colorIdx % CRATE_COLORS.length]);
   inst(kit, "hg_cage_" + size, "impTrim", () => cageGeometry(sx, sy, sz), [x, y, z], q, PALETTE.impBlack);
+  // hazard band around the big containers' lower quarter (a ring of four thin chevron strips)
+  if (size === "d" || size === "e") {
+    inst(
+      kit,
+      "hg_chaz_" + size,
+      "chevronY",
+      () => {
+        const by = sy * 0.2;
+        const bh = 0.28;
+        return mergeGeometries(
+          [
+            new THREE.BoxGeometry(sx + 0.02, bh, 0.02).translate(0, by, sz / 2),
+            new THREE.BoxGeometry(sx + 0.02, bh, 0.02).translate(0, by, -sz / 2),
+            new THREE.BoxGeometry(0.02, bh, sz + 0.02).translate(sx / 2, by, 0),
+            new THREE.BoxGeometry(0.02, bh, sz + 0.02).translate(-sx / 2, by, 0),
+          ],
+          false,
+        );
+      },
+      [x, y, z],
+      q,
+    );
+  }
   if (decal) {
     inst(
       kit,

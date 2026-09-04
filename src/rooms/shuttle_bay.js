@@ -392,9 +392,12 @@ export function buildShuttleBay(kit, ctx, room) {
   flood([-15, 16.2, -22], [PAD.x - 1, 4, PAD.z - 2], 3.4, { priority: 2.06, shadow: true }); // from the NW, over the nose and the port wing
   flood([15, 16.2, 10], [PAD.x + 1, 4, PAD.z + 1], 3.0, { priority: 2.04 }); // from the SE, ramp side
   const blue = 0x7fa6e0;
-  kit.light({ type: "point", pos: [16, 15, -22], color: blue, intensity: lux(15, 2.0), distance: 60, priority: 0.62 });
-  kit.light({ type: "point", pos: [-14, 15, 14], color: blue, intensity: lux(15, 2.0), distance: 60, priority: 0.6 });
-  kit.light({ type: "point", pos: [-6, 13, 26], color: cool, intensity: lux(13, 2.2), distance: 56, priority: 0.55 });
+  // the fills sit inside the ceiling troughs at x = ±12 (between the emitter pane and its plate, 17.55 m) so
+  // the slab above them is hidden rather than lit to a blob
+  const TY = H - 0.45;
+  kit.light({ type: "point", pos: [12, TY, -24], color: blue, intensity: lux(TY, 2.0), distance: 64, priority: 0.62 });
+  kit.light({ type: "point", pos: [-12, TY, 12], color: blue, intensity: lux(TY, 2.0), distance: 64, priority: 0.6 });
+  kit.light({ type: "point", pos: [-12, TY, 28], color: cool, intensity: lux(TY, 2.2), distance: 60, priority: 0.55 });
   kit.light({ type: "point", pos: [-22, 12, 0], color: 0xff3b2e, intensity: lux(12, 0.4), distance: 24, priority: 0.3 });
 
   // ---- animated beacons

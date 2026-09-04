@@ -458,7 +458,7 @@ export function buildFighterBay(kit, ctx, room) {
 
   // ---- ceiling: beams across x every 10 m, two light troughs, one round duct along the W side
   // troughs at ≈ 30 % warm white behind louvre fins (hgCeiling), trench-grey slab so the work lights read on it
-  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 10, beamAxis: "x", troughsX: [-16, 12], ductsX: [-22.5], lightKey: "hangar_ceilWarm", beamH: 0.9, slabColor: PALETTE.hullTrench });
+  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 10, beamAxis: "x", troughsX: [-18, -8, 14], ductsX: [-22.5], lightKey: "hangar_ceilWarm", beamH: 0.9, slabColor: PALETTE.hullTrench });
   // deck marker lamps on the tow lane and under the hoists
   for (let x = -10; x <= 22; x += 8) {
     hgDeckLamp(kit, x, -5.6, "emitAmber");
@@ -467,12 +467,15 @@ export function buildFighterBay(kit, ctx, room) {
 
   // ---- lights: orange-amber work lights over the cradles and racks, cool key at the door
   const amber = 0xffa040;
-  // six fixtures stand in for the default rig's two dozen, so each carries ~2.5× the default output
-  kit.light({ type: "point", pos: [-8, 11.5, -19], color: amber, intensity: lux(11.5, 3.6), distance: 64, priority: 0.62 });
-  kit.light({ type: "point", pos: [-8, 11.5, 19], color: amber, intensity: lux(11.5, 3.6), distance: 64, priority: 0.61 });
-  kit.light({ type: "point", pos: [-18, 10, -22], color: 0xffb060, intensity: lux(10, 2.0), distance: 44, priority: 0.5 });
-  kit.light({ type: "point", pos: [-18, 10, 24], color: 0xffb060, intensity: lux(10, 2.0), distance: 44, priority: 0.49 });
-  kit.light({ type: "point", pos: [14, 12, 0], color: 0xf0e2c8, intensity: lux(12, 2.6), distance: 60, priority: 0.55 });
+  // six fixtures stand in for the default rig's two dozen, so each carries ~2.5× the default output; they
+  // sit inside the ceiling troughs (x = -18, -8, 14; between the emitter pane and its plate) so the slab
+  // above them is hidden instead of lit to a white blob, and only the bay below is lit
+  const TY = H - 0.45;
+  kit.light({ type: "point", pos: [-8, TY, -19], color: amber, intensity: lux(TY, 3.6), distance: 64, priority: 0.62 });
+  kit.light({ type: "point", pos: [-8, TY, 19], color: amber, intensity: lux(TY, 3.6), distance: 64, priority: 0.61 });
+  kit.light({ type: "point", pos: [-18, TY, -22], color: 0xffb060, intensity: lux(TY, 2.0), distance: 44, priority: 0.5 });
+  kit.light({ type: "point", pos: [-18, TY, 24], color: 0xffb060, intensity: lux(TY, 2.0), distance: 44, priority: 0.49 });
+  kit.light({ type: "point", pos: [14, TY, 0], color: 0xf0e2c8, intensity: lux(TY, 2.6), distance: 60, priority: 0.55 });
   kit.light({ type: "point", pos: [22, 8, 0], color: 0xff3b2e, intensity: lux(8, 0.6), distance: 20, priority: 0.3 });
   // amber underlight in the grated pit (lights the pit walls and the fighter's belly through the grate)
   kit.light({ type: "point", pos: [cradles[0].x, -0.7, cradles[0].z], color: 0xffa040, intensity: 5, distance: 10, priority: 0.45 });

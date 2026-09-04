@@ -94,8 +94,7 @@ export function buildFlightControl(kit, ctx, room) {
   kit.floor(TX, -hz, hx, hz, TY, "upper-tier");
   kit.collider([TX, 0, -hz], [hx, TY - 0.02, hz], "tier-slab");
   kit.colliders[kit.colliders.length - 1].walkable = true;
-  // walkway lane from the door to the upper tier
-  kit.boxMM("impMetalRough", [-hx + 0.3, 0.001, -1.1], [TX, 0.012, 1.1], { color: PALETTE.impGreyDark, texel: 0.7 });
+  // walkway from the door to the upper tier: two painted edge lines only (no speckled runner)
   for (const s of [-1, 1]) kit.boxMM("impTrim", [-hx + 0.3, 0.001, s * 1.1 - 0.03], [TX, 0.014, s * 1.1 + 0.03], { color: PALETTE.impBlack });
 
   // ---- walls: window wall toward the hangar (W), Imperial panels elsewhere
@@ -110,7 +109,7 @@ export function buildFlightControl(kit, ctx, room) {
   windowWall(walls.W.frame, D, H, [...wOpen, ...fcWin], { accentKey });
   for (const side of ["N", "E", "S"]) {
     const { frame, length } = walls[side];
-    impWall(frame, length, H, { openings: openingsFor(room, ctx.doors, side), seed: 500 + side.charCodeAt(0), accentKey, tag: "fc" + side, panelW: 1.6, features: { vent: 0.1, equipment: 0.14, conduit: 0.06, light: 0.12, screen: 0.08 } });
+    impWall(frame, length, H, { openings: openingsFor(room, ctx.doors, side), seed: 500 + side.charCodeAt(0), accentKey, tag: "fc" + side, panelW: 1.6, features: { vent: 0.12, equipment: 0.16, conduit: 0.08, light: 0.12, screen: 0 } });
   }
   // status board on the E wall (u = lz + 7): black housing, four screens, hangar schematic, light bar
   {
@@ -190,9 +189,12 @@ export function buildFlightControl(kit, ctx, room) {
   // ---- ceiling and lights (blue-white)
   impCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 3.5, troughs: 2, seed: 71, accentKey });
   // two ceiling keys (≈2.5× the default per-fixture output: the room has 2 fixtures where the default rig
-  // would place 8) + a small cyan accent over the holo table
-  kit.light({ type: "point", pos: [-6, 3.55, 0], color: 0xbfe0ff, intensity: lux(3.5, 3.2), distance: 22, priority: 0.6 });
-  kit.light({ type: "point", pos: [6, 3.55, 0], color: 0xbfe0ff, intensity: lux(3.1, 3.0), distance: 22, priority: 0.58 });
+  // would place 8) + a small cyan accent over the holo table. The keys sit INSIDE the trough fixtures, above
+  // the down-facing emitter pane (y 3.90–3.92): a point light 0.45 m under the black ceiling lit it to a
+  // near-white blob; from inside the fixture the pane, the fins' tops and the slab above are back-facing
+  // or hidden, so the fixture reads as a dim louvred slot and only the room below is lit.
+  kit.light({ type: "point", pos: [-6, 3.95, 0], color: 0xbfe0ff, intensity: lux(3.9, 3.2), distance: 22, priority: 0.6 });
+  kit.light({ type: "point", pos: [6, 3.95, 0], color: 0xbfe0ff, intensity: lux(3.5, 3.0), distance: 22, priority: 0.58 });
   kit.light({ type: "point", pos: [7.8, TY + 1.4, 0], color: 0x5fd0ff, intensity: lux(1.2, 1.0), distance: 7, priority: 0.35 });
 
   hgBeacons(kit, materials, "emitBlue", blueBlink, { period: 1.2, duty: 0.5, min: 0.3, max: 3.0 });
