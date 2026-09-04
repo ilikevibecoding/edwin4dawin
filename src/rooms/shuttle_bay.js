@@ -47,6 +47,7 @@ import {
   hgLadder,
   hgDeckCable,
   hgChocks,
+  HG_PALETTE,
 } from "./hangar_kit.js";
 
 /** Mobile boarding stairs: wheeled chassis, solid-sided flight rising toward -x, top platform. */
@@ -146,7 +147,9 @@ export function buildShuttleBay(kit, ctx, room) {
   const hx = W / 2;
   const hz = D / 2;
   const [OX, OY, OZ] = room.origin;
-  const accentKey = "emitBlue";
+  // Imperial neutral (round 2: the bay read cool-blue): white accent lamps, white key light, amber only at
+  // the pad edge, the bollards and the bay numbers
+  const accentKey = "emitWhiteDim";
   const rand = rng(9090);
   const redBlink = [];
   const PAD = { x: 0, z: -5, r: 12 };
@@ -169,8 +172,8 @@ export function buildShuttleBay(kit, ctx, room) {
   const soffit = { x0: -hx, x1: Math.min(hx, fcBox.x1 + 0.6), z0: Math.max(-hz, fcBox.z0 - 0.3), z1: Math.min(hz, fcBox.z1 + 0.3), y0: fcBox.y0 - 0.4, y1: fcBox.y0 };
   const hasSoffit = fcBox.x1 > -hx && fcBox.z1 > -hz && fcBox.z0 < hz && fcBox.y0 < H;
 
-  // ---- deck: dark plates, seams, approach lane from the blast door to the pad
-  kit.boxMM("impDeck", [-hx, -0.14, -hz], [hx, 0, hz], { color: PALETTE.impGreyDark, texel: 0.35 });
+  // ---- deck: mid-grey plates, seams, approach lane from the blast door to the pad
+  kit.boxMM("impDeck", [-hx, -0.14, -hz], [hx, 0, hz], { color: HG_PALETTE.deck, texel: 0.35 });
   for (let x = -20; x <= 20; x += 10) kit.boxMM("impTrim", [x - 0.04, 0.0005, -hz + 0.5], [x + 0.04, 0.006, hz - 0.5], { color: PALETTE.impBlack, texel: 1 });
   for (let z = -30; z <= 30; z += 10) kit.boxMM("impTrim", [-hx + 0.5, 0.0005, z - 0.04], [hx - 0.5, 0.006, z + 0.04], { color: PALETTE.impBlack, texel: 1 });
   // landing pad: ring decal, inner dashed ring, centre mark, lamps and sockets around the rim
@@ -179,7 +182,7 @@ export function buildShuttleBay(kit, ctx, room) {
   deckDecal(kit, hgNumber(7), PAD.x, PAD.z + PAD.r + 2.6, 3.2, Math.PI, 0.007);
   for (let i = 0; i < 20; i++) {
     const a = (i / 20) * Math.PI * 2;
-    hgDeckLamp(kit, PAD.x + Math.cos(a) * (PAD.r + 1.0), PAD.z + Math.sin(a) * (PAD.r + 1.0), "emitBlue");
+    hgDeckLamp(kit, PAD.x + Math.cos(a) * (PAD.r + 1.0), PAD.z + Math.sin(a) * (PAD.r + 1.0), i % 2 ? "emitAmberDim" : "emitAmber");
   }
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
@@ -293,8 +296,8 @@ export function buildShuttleBay(kit, ctx, room) {
     hgCrateStack(kit, 5.5, 35, -0.15, [["b", 0, 0, 0], ["c", 1.4, 0, 0.1, 0.5], ["a", 0.1, 1.2, 0.1, 0.3]], { seed: 73 });
     hgPowerBox(kit, -24, 37.6, Math.PI / 2, { on: true });
     for (const z of [26, 32]) {
-      hgDeckLamp(kit, -10.5, z, "emitBlue");
-      hgDeckLamp(kit, -1.5, z, "emitBlue");
+      hgDeckLamp(kit, -10.5, z, "emitWhiteDim");
+      hgDeckLamp(kit, -1.5, z, "emitWhiteDim");
     }
   }
 
@@ -309,9 +312,9 @@ export function buildShuttleBay(kit, ctx, room) {
     kit.boxMM("impTrim", [s.x0, s.y0 - 0.45, s.z0 - 0.05], [s.x1 + 0.05, s.y0 + 0.02, s.z0 + 0.45], { color: PALETTE.impBlack, texel: 1 });
     kit.boxMM("impTrim", [s.x0, s.y0 - 0.45, s.z1 - 0.45], [s.x1 + 0.05, s.y0 + 0.02, s.z1 + 0.05], { color: PALETTE.impBlack, texel: 1 });
     kit.boxMM("impTrim", [s.x1 - 0.45, s.y0 - 0.45, s.z0], [s.x1 + 0.05, s.y0 + 0.02, s.z1], { color: PALETTE.impBlack, texel: 1 });
-    kit.boxMM("emitBlueDim", [s.x0 + 0.3, s.y0 - 0.46, s.z0 + 0.5], [s.x1 - 0.5, s.y0 - 0.42, s.z0 + 0.58], { uv: "keep" });
-    kit.boxMM("emitBlueDim", [s.x0 + 0.3, s.y0 - 0.46, s.z1 - 0.58], [s.x1 - 0.5, s.y0 - 0.42, s.z1 - 0.5], { uv: "keep" });
-    kit.boxMM("emitBlueDim", [s.x1 - 0.58, s.y0 - 0.46, s.z0 + 0.5], [s.x1 - 0.5, s.y0 - 0.42, s.z1 - 0.5], { uv: "keep" });
+    kit.boxMM("emitWhiteDim", [s.x0 + 0.3, s.y0 - 0.46, s.z0 + 0.5], [s.x1 - 0.5, s.y0 - 0.42, s.z0 + 0.58], { uv: "keep" });
+    kit.boxMM("emitWhiteDim", [s.x0 + 0.3, s.y0 - 0.46, s.z1 - 0.58], [s.x1 - 0.5, s.y0 - 0.42, s.z1 - 0.5], { uv: "keep" });
+    kit.boxMM("emitWhiteDim", [s.x1 - 0.58, s.y0 - 0.46, s.z0 + 0.5], [s.x1 - 0.5, s.y0 - 0.42, s.z1 - 0.5], { uv: "keep" });
     for (let x = s.x0 + 4; x < s.x1 - 3; x += 5) {
       kit.box("impTrim", x, s.y0 - 0.12, (s.z0 + s.z1) / 2, 2.4, 0.24, 1.6, { color: PALETTE.impCharcoal, texel: 1 });
       for (let f = 0; f < 6; f++) kit.box("impMetal", x, s.y0 - 0.26, (s.z0 + s.z1) / 2 - 0.65 + f * 0.26, 2.2, 0.03, 0.2, { color: PALETTE.impGreyDark });
@@ -326,8 +329,8 @@ export function buildShuttleBay(kit, ctx, room) {
 
   // ---- walls: 18 m industrial; blast door on the W wall (+ the notch for the booth volume)
   const walls = roomWalls(kit, room);
-  // dark structural bays (no backlit galleries): charcoal plates with trench-grey alternates, cool-white
-  // lamp points per level, dim blue cornice, cool flood banks; the shuttle is the only bright thing here
+  // Imperial neutral (shared HG_PALETTE): cool-grey plates on the clean impPanel maps, black ribs, white
+  // lamp points per level, white cornice, warm-white flood banks; the shuttle is the brightest thing here
   const wallOpts = {
     ribPitch: 10,
     plateH: 6,
@@ -338,16 +341,16 @@ export function buildShuttleBay(kit, ctx, room) {
     bigDecals: false,
     ducts: false,
     lightKey: "emitWhiteDim",
-    corniceKey: "emitBlueDim",
+    corniceKey: "emitWhiteDim",
     lightBays: false,
     lampRows: true,
     lampKey: "emitWhiteDim",
     lampStep: 3.4,
     floodLamp: "emitWarmSoft", // shares the shuttle hatch pane's key (mesh budget: ≤ 50)
-    plateColor: PALETTE.hullTrench,
-    plateAlt: PALETTE.impGreyDark,
-    upperColor: PALETTE.hullTrench,
-    plateKey: "paintedMetal", // painted steel takes the blue fills; the pure-metal plates stayed black
+    plateColor: HG_PALETTE.plate,
+    plateAlt: HG_PALETTE.plateAlt,
+    upperColor: HG_PALETTE.upper,
+    plateKey: "impPanel1",
     ribAccentKey: null,
   };
   const wOpen = hgWallOpenings(room, ctx.doors, "W");
@@ -382,24 +385,23 @@ export function buildShuttleBay(kit, ctx, room) {
     ductsX: [22.5],
     lightKey: "emitWhiteDim",
     beamH: 1.2,
-    slabColor: PALETTE.hullTrench,
+    slabColor: HG_PALETTE.ceiling,
     slabKey: "paintedMetal",
     skip: hasSoffit ? { x0: soffit.x0, x1: soffit.x1, z0: soffit.z0, z1: soffit.z1 } : null,
   });
 
-  // ---- lights: two cool-white floods keyed on the shuttle (the pool's spot slots; slot 0 casts its shadow
-  //      onto the pad), two dim blue fills for the marshalling areas, a white over customs, red at the door
-  const cool = 0xdfe8ff;
-  const flood = (pos, target, k, extra = {}) => kit.light({ type: "spot", pos, target, color: cool, intensity: lux(pos[1], k), distance: 60, decay: 2, angle: 0.62, penumbra: 0.45, ...extra });
+  // ---- lights: two neutral-white floods keyed on the shuttle (the pool's spot slots; slot 0 casts its
+  //      shadow onto the pad), white fills for the marshalling areas and customs, red at the door
+  const white = HG_PALETTE.keyWhite;
+  const flood = (pos, target, k, extra = {}) => kit.light({ type: "spot", pos, target, color: white, intensity: lux(pos[1], k), distance: 60, decay: 2, angle: 0.62, penumbra: 0.45, ...extra });
   flood([-15, 16.2, -22], [PAD.x - 1, 4, PAD.z - 2], 3.4, { priority: 2.06, shadow: true }); // from the NW, over the nose and the port wing
   flood([15, 16.2, 10], [PAD.x + 1, 4, PAD.z + 1], 3.0, { priority: 2.04 }); // from the SE, ramp side
-  const blue = 0x7fa6e0;
   // the fills sit inside the ceiling troughs at x = ±12 (between the emitter pane and its plate, 17.55 m) so
   // the slab above them is hidden rather than lit to a blob
   const TY = H - 0.45;
-  kit.light({ type: "point", pos: [12, TY, -24], color: blue, intensity: lux(TY, 2.0), distance: 64, priority: 0.62 });
-  kit.light({ type: "point", pos: [-12, TY, 12], color: blue, intensity: lux(TY, 2.0), distance: 64, priority: 0.6 });
-  kit.light({ type: "point", pos: [-12, TY, 28], color: cool, intensity: lux(TY, 2.2), distance: 60, priority: 0.55 });
+  kit.light({ type: "point", pos: [12, TY, -24], color: white, intensity: lux(TY, 2.0), distance: 64, priority: 0.62 });
+  kit.light({ type: "point", pos: [-12, TY, 12], color: white, intensity: lux(TY, 2.0), distance: 64, priority: 0.6 });
+  kit.light({ type: "point", pos: [-12, TY, 28], color: white, intensity: lux(TY, 2.2), distance: 60, priority: 0.55 });
   kit.light({ type: "point", pos: [-22, 12, 0], color: 0xff3b2e, intensity: lux(12, 0.4), distance: 24, priority: 0.3 });
 
   // ---- animated beacons

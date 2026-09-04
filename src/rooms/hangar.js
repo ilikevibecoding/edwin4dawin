@@ -50,6 +50,7 @@ import {
   hgBollard,
   hgDeckCable,
   deckLine,
+  HG_PALETTE,
 } from "./hangar_kit.js";
 
 export function buildHangar(kit, ctx, room) {
@@ -152,9 +153,9 @@ export function buildHangar(kit, ctx, room) {
   // =====================================================================================
   // Deck
   // =====================================================================================
-  // dark deck: the grid texture's 0.62 sRGB base × this tint ≈ 0.04 linear albedo (sRGB ≈ #38393c), i.e.
-  // near-black away from the floods and a dark grey under them; the painted markings carry it
-  const DECK_TINT = new THREE.Color("#5e6168");
+  // mid-grey deck (shared HG_PALETTE.deck tint on the grid map): a dark grey away from the floods, mid-grey
+  // under them; the painted markings carry it
+  const DECK_TINT = HG_PALETTE.deck;
   const deck = (x0, z0, x1, z1) => kit.boxMM("impDeck", [x0, -0.14, z0], [x1, 0, z1], { color: DECK_TINT, texel: 0.35 });
   deck(-hx, -hz, hx, CZ0); // forward deck
   deck(-hx, CZ0, CX0, CZ1); // W flank of the opening
@@ -466,7 +467,7 @@ export function buildHangar(kit, ctx, room) {
         gaps: wallSide === "W" ? { E: gapsZ, W: towerGap } : { W: gapsZ, E: towerGap },
         hangers: { yTop: H, step: 12.5, start: zr[0] + 2, end: zr[1] - 2, axis: "z" },
         tag: "gantry",
-        light: "hangar_amberDim",
+        light: "emitWhiteDim",
       });
       // cross platforms reaching in between the fighters
       for (const [g0, g1] of gapsZ) {
@@ -500,7 +501,7 @@ export function buildHangar(kit, ctx, room) {
     }
     // catwalk at y = 16 along the E wall: from the tower's level-5 landing (open N face) it runs under the
     // booth's window strip to the raised flight-control door, braced off the wall
-    hgCatwalk(kit, towerE.x0, -2.5, hx, towerE.z0, FC_Y, { rails: { N: true, S: true, E: false, W: true }, gaps: { S: [[towerE.x0, towerE.x1]] }, tag: "fc-catwalk", light: "emitAmber" });
+    hgCatwalk(kit, towerE.x0, -2.5, hx, towerE.z0, FC_Y, { rails: { N: true, S: true, E: false, W: true }, gaps: { S: [[towerE.x0, towerE.x1]] }, tag: "fc-catwalk", light: "emitWhiteDim" });
     for (const z of [-1.9, 2.3, towerE.z0 - 1.0]) tiltedBox(kit, "impTrim", new THREE.Vector3(hx - 0.1, FC_Y - 4.6, z), new THREE.Vector3(towerE.x0 + 0.6, FC_Y - 0.55, z), 0.26, 0.3, { color: PALETTE.impBlack, texel: 1 });
     kit.boxMM("impTrim", [hx - 0.5, FC_Y - 0.62, -2.5], [hx, FC_Y - 0.42, towerE.z0], { color: PALETTE.impBlack, texel: 1 });
     kit.boxMM("impMetal", [hx - 0.35, FC_Y - 0.9, -2.5], [hx - 0.05, FC_Y - 0.62, towerE.z0], { color: PALETTE.impGreyDark });
@@ -662,10 +663,10 @@ export function buildHangar(kit, ctx, room) {
   // =====================================================================================
   const walls = roomWalls(kit, room);
   {
-    // dark structural bays: charcoal plates, black ribs, no backlit galleries — the only emissives are
-    // the amber lamp points at every gallery level, the sodium flood banks and dim cornice lines. The
-    // upper plates are painted steel (paintedMetal), not the pure-metal impMetalRough: a trench-grey pure
-    // metal is a black mirror, and the walls of the spawn view stayed at luma ~20 under any fill strength
+    // Imperial neutral (round 2): cool-grey plates on the clean impPanel maps (no stained paintedMetal in
+    // the upper band, i.e. the "wall dirt" is gone with it), black ribs and structure, white fixtures at a
+    // regular pitch (gallery lamp rows, flood banks, cornices, rib accents) — amber stays only on the
+    // deck-level berth floods, bollards and bay signage
     const wallOpts = {
       ribPitch: 12.5,
       plateH: 8,
@@ -677,14 +678,14 @@ export function buildHangar(kit, ctx, room) {
       corniceKey: "emitWhiteDim",
       lightBays: false,
       lampRows: true,
-      lampKey: "emitAmber",
+      lampKey: "emitWhiteDim",
       lampStep: 4.2,
-      floodLamp: "emitAmber",
-      plateColor: PALETTE.hullTrench,
-      plateAlt: PALETTE.impGreyDark,
-      upperColor: PALETTE.hullTrench,
-      plateKey: "paintedMetal",
-      ribAccentKey: "emitAmber",
+      floodLamp: "emitWhite",
+      plateColor: HG_PALETTE.plate,
+      plateAlt: HG_PALETTE.plateAlt,
+      upperColor: HG_PALETTE.upper,
+      plateKey: "impPanel1",
+      ribAccentKey: "emitWhiteDim",
       features: { gear: 0.22, light: 0.06, vent: 0.14, pipes: 0.14, cabinet: 0.08, stencil: 0.12 },
     };
     hgWall(walls.N.frame, W, H, { ...wallOpts, openings: hgWallOpenings(room, ctx.doors, "N"), seed: 101, tag: "hangarN", quiet: [[24, 41], [89, 106]] });
@@ -758,27 +759,29 @@ export function buildHangar(kit, ctx, room) {
   // Ceiling and lights
   // =====================================================================================
   // ceiling troughs: warm white at ≈ 30 % of the old output, louvred every metre (hgCeiling fins)
-  // slab in trench-grey painted steel (diffuse), not the pure-metal impMetalRough: the amber fills 13 m
-  // below it are what light the far half of the spawn view, and a dark pure metal swallowed them
-  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 12.5, beamAxis: "x", troughsX: [-35, -20, 20, 35], ductsX: [-62.5, 62.5], lightKey: "hangar_ceilWarm", beamH: 1.4, slabColor: PALETTE.hullTrench, slabKey: "paintedMetal" });
+  // slab in cool-grey painted steel (diffuse), not the pure-metal impMetalRough: the fills 13 m below it
+  // are what light the far half of the spawn view, and a dark pure metal swallowed them
+  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 12.5, beamAxis: "x", troughsX: [-35, -20, 20, 35], ductsX: [-62.5, 62.5], lightKey: "hangar_ceilWarm", beamH: 1.4, slabColor: HG_PALETTE.ceiling, slabKey: "paintedMetal" });
   {
-    // Sodium-amber deck lighting (10 lights: the hangar's budget). Two spots hang under the gantries at
-    // rack height (y = 27) aimed at the W berths and the parked Kestrel: the pool has three spot slots, and
-    // with priority 0.9+ the hangar's own spots always win them while the player is in here (slot 0 casts
-    // shadows: the W berths' fighters and ground kit throw shadows on the deck). Seven amber fills at the
-    // same height along the rack service lanes cover the rims, berths, racks and ceiling along the full
-    // 220 m; two of them sit over the aft coaming, where the spawn stands looking forward along the well.
+    // Deck lighting (10 lights: the hangar's budget), neutral white with amber only at the berths. Two
+    // spots hang under the gantries at rack height (y = 27): a sodium-amber work flood aimed at the W
+    // berths and a white one at the parked Kestrel; the pool has three spot slots, and with priority 0.9+
+    // the hangar's own spots always win them while the player is in here (slot 0 casts shadows: the W
+    // berths' fighters and ground kit throw shadows on the deck). Seven white fills at the same height
+    // along the rack service lanes cover the rims, berths, racks and ceiling along the full 220 m; two of
+    // them sit over the aft coaming, where the spawn stands looking forward along the well.
     // The fills use a 1/d^1.5 falloff (decay 1.5): a 130 × 220 m bay lit by a handful of pooled lights
     // with inverse-square falloff is black beyond ~40 m of each one, and the pool cannot hold the thirty
     // lights the physical answer would need. `k` is the irradiance at the deck under each light.
     // Priorities are high because the pool score subtracts dist/40: in a 220 m bay a fill at the far end
     // is 4+ points down and would otherwise be evicted by any neighbour room's light.
     const amber = 0xffb45a;
+    const white = HG_PALETTE.keyWhite;
     const DECAY = 1.5;
     const I = (h, k) => k * Math.pow(h, DECAY);
-    const spot = (pos, target, k, extra = {}) => kit.light({ type: "spot", pos, target, color: amber, intensity: I(pos[1], k), distance: 120, decay: DECAY, angle: 0.8, penumbra: 0.5, ...extra });
-    spot([-40, 27, 58], [-43, 0, 71], 5.0, { priority: 3.06, shadow: true }); // W berths (deck spots 1–2) + W rim aft
-    spot([-42, 27, -56], [-22, 0, -70], 4.5, { priority: 3.02 }); // the parked Kestrel: hull, ramp and its ground kit
+    const spot = (pos, target, k, color, extra = {}) => kit.light({ type: "spot", pos, target, color, intensity: I(pos[1], k), distance: 120, decay: DECAY, angle: 0.8, penumbra: 0.5, ...extra });
+    spot([-40, 27, 58], [-43, 0, 71], 4.2, amber, { priority: 3.06, shadow: true }); // W berths (deck spots 1–2): sodium work flood
+    spot([-42, 27, -56], [-22, 0, -70], 4.5, white, { priority: 3.02 }); // the parked Kestrel: hull, ramp and its ground kit
     const fills = [
       [-30, 27, 92], // aft coaming, W (the spawn)
       [30, 27, 86], // aft coaming, E
@@ -788,7 +791,7 @@ export function buildHangar(kit, ctx, room) {
       [40, 27, -72], // E berth (deck spot 3)
       [-40, 27, -86],
     ];
-    fills.forEach(([x, y, z], i) => kit.light({ type: "point", pos: [x, y, z], color: amber, intensity: I(y, 5.2), distance: 170, decay: DECAY, priority: 3.0 - i * 0.01 }));
+    fills.forEach(([x, y, z], i) => kit.light({ type: "point", pos: [x, y, z], color: white, intensity: I(y, 4.6), distance: 170, decay: DECAY, priority: 3.0 - i * 0.01 }));
     // warm interior spill at the Kestrel's door: under the hood's soffit lamp (ship local (0, 2.85, 2.3) →
     // hangar local), physical falloff, reaching the ramp and the staged kit at its foot
     const [sx, sz] = kz(0, 2.3);

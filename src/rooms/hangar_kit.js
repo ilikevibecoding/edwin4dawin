@@ -19,6 +19,22 @@ const _q = new THREE.Quaternion();
 const _p = new THREE.Vector3();
 const _s = new THREE.Vector3();
 
+// Imperial neutral palette shared by the hangar complex (round-2 critic: the bays read warm-brown or
+// cool-blue; the films' hangars are grey / black with white light and a few amber accents). Vertex tints
+// multiply the maps: the impPanel maps are near-white (≈ 0.9), paintedMetal is mid-grey (≈ 0.66).
+export const HG_PALETTE = {
+  plate: new THREE.Color("#7d8288"), // deck-band plates (impPanel*) -> ≈ #71767b on screen
+  plateAlt: new THREE.Color("#6e7379"),
+  upper: new THREE.Color("#5e626a"), // upper-band plates (impPanel1) -> a darker cool grey, no stains
+  ceiling: new THREE.Color("#5a5e66"), // slab (paintedMetal)
+  // impDeck grid tint. The critic's "#5a5e62-ish" is the on-screen target: the tint multiplies the grid map
+  // (linear mean 0.34) in linear space, so a #5a5e62 tint gave an albedo of 0.036 (asphalt); #8a8e94 puts
+  // the deck at ≈ 0.09 and it reads mid-grey under a 2–3 lux key
+  deck: new THREE.Color("#8a8e94"),
+  keyWhite: 0xf3efe8, // neutral-white key / fill light (a touch warm so grey steel does not read blue)
+  fixture: 0xf6f3ee,
+};
+
 /** Register the hangar materials on this kit's library and mark the non-casting keys. */
 export function hgSetup(kit) {
   ensureHangarMaterials(kit.materials);
