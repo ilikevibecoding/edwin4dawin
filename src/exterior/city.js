@@ -122,7 +122,7 @@ export function buildCity(kit, tiers, rand) {
 }
 
 /** Large dark recessed openings with a cold light bar (shuttered hangar / vent mouths) on a wall. */
-function recessPanels(tiers, rand, w, n) {
+export function recessPanels(tiers, rand, w, n) {
   const dx = w.bx - w.ax;
   const dz = w.bz - w.az;
   const len = Math.hypot(dx, dz);

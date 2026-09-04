@@ -13,7 +13,7 @@
 import * as THREE from "three";
 import { SYSTEMS } from "../core/systems.js";
 import { tOf } from "../core/layout.js";
-import { rng, ExtKit, Tier, LodSets, LOD_NEAR, LOD_MID, makeExteriorMaterials, syncSharedMaterials } from "./common.js";
+import { rng, ExtKit, Tier, LodSets, LOD_NEAR, LOD_MID, makeExteriorMaterials, syncSharedMaterials, insideRooms } from "./common.js";
 import { PROTOS, dressPlates } from "./greebles.js";
 import { buildBaseSurfaces, buildDorsalPlates, buildVentralPlates, buildTrenchWalls, buildSternFace } from "./plating.js";
 import { buildTrench } from "./trench.js";
@@ -80,7 +80,8 @@ export function buildExterior(scene, materials) {
     const cam = SYSTEMS.camera;
     if (cam) {
       cam.getWorldPosition(_cam);
-      lod.update(_cam);
+      // indoors the exterior is only seen through the glazing, hundreds of metres away: skip the near tier
+      lod.update(_cam, !insideRooms(_cam.x, _cam.y, _cam.z));
     }
   }
 

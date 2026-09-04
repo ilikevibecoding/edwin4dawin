@@ -309,6 +309,11 @@ export const FLIGHT_CORRIDOR = { x0: -40, x1: 40, y0: 205, y1: 225, z0: 100, z1:
 export function inBox(b, x, y, z) {
   return x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1 && z > b.z0 && z < b.z1;
 }
+/** True when the point lies inside a room volume (camera indoors → only the glazing shows the exterior). */
+export function insideRooms(x, y, z) {
+  for (const b of ROOM_BOXES) if (inBox(b, x, y, z)) return true;
+  return false;
+}
 /** True when the point must stay free of exterior geometry. */
 export function blocked(x, y, z) {
   if (inBox(FLIGHT_CORRIDOR, x, y, z)) return true;
@@ -355,12 +360,13 @@ export class LodSets {
     const radius = box.getSize(new THREE.Vector3()).length() / 2;
     this.sets.push({ group, center, radius, reach, tier });
   }
-  update(camPos) {
+  /** Toggle sets from the camera position; `nearOn = false` drops the near tier (camera inside a room). */
+  update(camPos, nearOn = true) {
     let near = 0;
     let mid = 0;
     for (const s of this.sets) {
       const d = camPos.distanceTo(s.center) - s.radius;
-      const on = d < s.reach;
+      const on = d < s.reach && (nearOn || s.tier !== "near");
       s.group.visible = on;
       if (on) {
         if (s.tier === "near") near++;

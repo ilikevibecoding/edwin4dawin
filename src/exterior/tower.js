@@ -6,8 +6,9 @@ import * as THREE from "three";
 import { IMP } from "../core/palette.js";
 import { TOWER } from "../core/layout.js";
 import { prism } from "../core/kit.js";
-import { boxBlocked } from "./common.js";
+import { boxBlocked, faceMatrix } from "./common.js";
 import { dressWall } from "./greebles.js";
+import { recessPanels } from "./city.js";
 
 const _c = new THREE.Color();
 const B = TOWER.bridge;
@@ -146,6 +147,33 @@ export function buildTower(kit, tiers, rand) {
   }
 
   for (const w of walls) dressWall(tiers, rand, w, { nx: w.nx, nz: w.nz, rows: 6, occupancy: w.sparse ? 0.14 : 0.22, pilasterEvery: 10, warm: 0.1 });
+  // recessed shuttered openings on the neck fronts / sides and the bridge block flanks
+  for (const w of walls) {
+    const len = Math.hypot(w.bx - w.ax, w.bz - w.az);
+    if (w.sparse || len < 60 || w.y1 - w.y0 < 14) continue;
+    recessPanels(tiers, rand, w, 1 + Math.floor(rand() * 2));
+  }
+  // forward face relief: recessed deck bands (flush, inside the wall thickness) above and below the glazing
+  for (const [y0, y1] of [
+    [B.y0 + 4.6, B.y0 + 5.6],
+    [206.2, 207.2],
+    [224.0, 225.0],
+    [B.y1 - 6.2, B.y1 - 5.2],
+  ]) kit.boxMM("hullDark", [-B.x + 2, y0, FACE - 0.01], [B.x - 2, y1, FACE + 0.8], { color: IMP.hullShadow, texel: 1 / 8 });
+  // sensor clusters on the upper forward face and the brow ends (dishes + blister domes on the wall)
+  for (const side of [-1, 1]) {
+    for (const [x, y, s] of [
+      [side * (B.x - 14), 228, 3.2],
+      [side * (B.x - 30), 230, 2.2],
+      [side * 52, 227.5, 2.6],
+    ]) {
+      const m = faceMatrix(x, y, FACE - 0.02, 0, 0, -1, rand() * 0.6 - 0.3, s);
+      tiers.mid.placeM(rand() < 0.5 ? "dish" : "sensorBall", m, IMP.hullLight);
+    }
+    tiers.mid.place("wallBoxDark", { pos: [side * (B.x - 22), 229, FACE - 0.01], rot: [0, Math.PI, 0], scale: [22, 5.5, 0.4], color: IMP.hullShadow });
+    // wing-tip sensor blisters at the brow ends
+    kit.add("hull", new THREE.SphereGeometry(2.6, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), { pos: [side * (B.x - 6), 220.6, FACE - 1.2], color: IMP.hullLight, uv: "scale", uvScale: [4, 2] });
+  }
 
   // ---- shield generator globes with panel lines
   for (const side of [-1, 1]) {
