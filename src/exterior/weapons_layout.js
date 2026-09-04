@@ -18,11 +18,12 @@ export function heavyTurretSites() {
     const z = z0 + ((z1 - z0) * i) / (n - 1);
     const xBase = terraceBaseHalfWidth(t0, z);
     const xEdge = 0.72 * hullHalfWidth(z);
-    // sit a third of the way across the free strip, leaving the outer part for greebles
-    const x = xBase + Math.min(17, (xEdge - xBase) * 0.36);
+    // r 18 base rings: the ring clears the terrace foot by 4 m and leaves the outer 15–24 m of the
+    // 55–64 m strip for the greeble street along the trench lip
+    const x = xBase + Math.min(22, (xEdge - xBase) * 0.4);
     for (const s of [-1, 1]) {
       // rest yaw: barrels forward, deflected 28° outboard (local barrels point -z; +yaw swings -z toward -x)
-      out.push({ kind: "heavy", x: s * x, y: hullTopY(z), z, yaw: -s * 0.49, r: 13, index: out.length });
+      out.push({ kind: "heavy", x: s * x, y: hullTopY(z), z, yaw: -s * 0.49, r: 19, index: out.length });
     }
   }
   return out;
@@ -34,7 +35,7 @@ export function ionTurretSites() {
   const zs = [-720, -640, -560, -480];
   for (const z of zs) {
     const x = 0.44 * hullHalfWidth(z);
-    for (const s of [-1, 1]) out.push({ kind: "ion", x: s * x, y: hullTopY(z), z, yaw: -s * 0.35, r: 8.5, index: out.length });
+    for (const s of [-1, 1]) out.push({ kind: "ion", x: s * x, y: hullTopY(z), z, yaw: -s * 0.35, r: 10.5, index: out.length });
   }
   return out;
 }
@@ -72,10 +73,10 @@ export function sensorSites() {
   const t1 = TERRACES[1];
   const t2 = TERRACES[2];
   const out = [];
-  // dishes on the terrace-1 roof (fully exposed forward of terrace 2)
-  for (const s of [-1, 1]) out.push({ kind: "dish", x: s * (terraceHalfWidth(t1, -100) - 14), y: t1.yTop, z: -100, r: 7, yaw: -s * 0.7, size: 5.5 });
+  // dishes on the terrace-1 roof (fully exposed forward of terrace 2): r 9 spheres, rim ≈ 14 m across
+  for (const s of [-1, 1]) out.push({ kind: "dish", x: s * (terraceHalfWidth(t1, -100) - 16), y: t1.yTop, z: -100, r: 11, yaw: -s * 0.7, size: 9 });
   // dishes on the terrace-2 roof forward of the neck
-  for (const s of [-1, 1]) out.push({ kind: "dish", x: s * (terraceHalfWidth(t2, 150) - 12), y: t2.yTop, z: 150, r: 6, yaw: -s * 0.5, size: 4.5 });
+  for (const s of [-1, 1]) out.push({ kind: "dish", x: s * (terraceHalfWidth(t2, 150) - 14), y: t2.yTop, z: 150, r: 9, yaw: -s * 0.5, size: 7 });
   // sensor cages on the terrace-0 roof (forward block)
   for (const s of [-1, 1]) out.push({ kind: "array", x: s * (terraceHalfWidth(t0, -300) - 16), y: t0.yTop, z: -300, r: 7, yaw: 0, size: 6 });
   // long-range array on the terrace-1 roof beside the terrace-2 front face
