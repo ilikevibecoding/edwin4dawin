@@ -35,14 +35,15 @@ export class ScreenAtlas {
     this.tex.colorSpace = THREE.SRGBColorSpace;
     this.tex.wrapS = this.tex.wrapT = THREE.ClampToEdgeWrapping;
     this.tex.anisotropy = 4;
+    // anti-glare finish: room lights land on the glass as a broad soft sheen, not a hot white spot
     this.material = new THREE.MeshStandardMaterial({
       color: 0x000000,
       emissive: 0xffffff,
       emissiveMap: this.tex,
       emissiveIntensity: intensity,
-      roughness: 0.15,
+      roughness: 0.42,
       metalness: 0,
-      envMapIntensity: 1.0,
+      envMapIntensity: 0.6,
     });
     this.regions = [];
     this.period = 1 / fps;
@@ -221,11 +222,21 @@ export function wedgeIcon(g, x, y, len, a, color, fill = false) {
 /** Navigation chart: star field, hyperlane route with waypoints, moving ship marker, side readouts. */
 export function paintStarMap(seed, { title = "NAV PLOT  //  HYPERLANE 7  ·  SECTOR K-12" } = {}) {
   const base = mulberry32(seed);
+  // sparse background field plus seven star systems (clusters), the route threads four of them
   const stars = [];
-  for (let i = 0; i < 520; i++) stars.push([base(), base(), base(), base()]);
+  for (let i = 0; i < 260; i++) stars.push([base(), base(), base() * 0.5, base()]);
+  const systems = [];
+  for (let i = 0; i < 7; i++) systems.push([0.08 + (i / 6) * 0.72 + (base() - 0.5) * 0.08, 0.18 + ((i * 2.3) % 1) * 0.6]);
+  for (const [sx, sy] of systems) {
+    for (let k = 0; k < 34; k++) {
+      const r = Math.pow(base(), 1.6) * 0.06;
+      const a = base() * Math.PI * 2;
+      stars.push([sx + Math.cos(a) * r * 0.75, sy + Math.sin(a) * r * 1.9, 0.5 + base() * 0.5, base()]);
+    }
+  }
   const wps = [];
-  const nW = 7;
-  for (let i = 0; i < nW; i++) wps.push([0.08 + (0.7 * i) / (nW - 1) + (base() - 0.5) * 0.05, 0.25 + Math.sin(i * 1.3 + 1) * 0.16 + (base() - 0.5) * 0.12]);
+  const nW = 4;
+  for (let i = 0; i < nW; i++) wps.push(systems[[0, 2, 4, 6][i]]);
   const neb = [];
   for (let i = 0; i < 5; i++) neb.push([base(), base(), 0.12 + base() * 0.2, base()]);
   return (g, w, h, t) => {
@@ -248,8 +259,8 @@ export function paintStarMap(seed, { title = "NAV PLOT  //  HYPERLANE 7  ·  SEC
       g.fillRect(sx * w * 0.78 + w * 0.02, sy * h * 0.86 + h * 0.1, r, r);
     }
     g.globalAlpha = 1;
-    // route
-    const P = wps.map(([u, v]) => [w * 0.02 + u * w, h * 0.1 + v * h]);
+    // route (same mapping as the stars, so the legs run system to system)
+    const P = wps.map(([u, v]) => [w * 0.02 + u * w * 0.78, h * 0.1 + v * h * 0.86]);
     g.strokeStyle = UI.amberDim;
     g.lineWidth = 6;
     g.beginPath();
@@ -558,6 +569,76 @@ export function paintWeaponsBoard(seed, { title = "BATTERY STATUS  ·  PORT / ST
     text(g, "FAULT", 170, h - 14, 10, UI.red);
     digits(g, w - 80, h - 14, 11, 6, t, rand, UI.white, 1);
     scanlines(g, w, h);
+  };
+}
+
+/**
+ * Compact route plot (2:1): the same three-leg orange jump line as the chart hologram between four star
+ * systems, leg labels, a travelling ship marker, ETA / distance readouts and a progress bar.
+ */
+export function paintRoutePlot(seed, { title = "JUMP SOLUTION  ·  LANE 7" } = {}) {
+  const base = mulberry32(seed);
+  const systems = [];
+  for (let i = 0; i < 6; i++) systems.push([0.1 + (i / 5) * 0.62 + (base() - 0.5) * 0.06, 0.3 + ((i * 2.3) % 1) * 0.5]);
+  const stars = [];
+  for (const [sx, sy] of systems) for (let k = 0; k < 26; k++) stars.push([sx + (base() - 0.5) * 0.07, sy + (base() - 0.5) * 0.16, base()]);
+  for (let i = 0; i < 90; i++) stars.push([base() * 0.78, base(), base() * 0.4]);
+  const route = [0, 2, 3, 5].map((i) => systems[i]);
+  return (g, w, h, t) => {
+    const rand = mulberry32(seed + 7);
+    gridBg(g, w, h, 22);
+    for (const [sx, sy, k] of stars) {
+      g.fillStyle = k > 0.92 ? UI.amber : UI.white;
+      g.globalAlpha = 0.3 + 0.7 * k * (0.6 + 0.4 * Math.sin(t * 1.5 + sx * 50));
+      const r = 0.8 + k * 1.6;
+      g.fillRect(sx * w, sy * h, r, r);
+    }
+    g.globalAlpha = 1;
+    const P = route.map(([u, v]) => [u * w, v * h]);
+    g.strokeStyle = UI.amberDim;
+    g.lineWidth = 6;
+    g.beginPath();
+    P.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+    g.stroke();
+    g.strokeStyle = UI.amber;
+    g.lineWidth = 2;
+    g.stroke();
+    P.forEach((p, i) => {
+      g.strokeStyle = i === P.length - 1 ? UI.red : i === 0 ? UI.white : UI.cyan;
+      g.lineWidth = 2;
+      g.beginPath();
+      g.moveTo(p[0], p[1] - 7);
+      g.lineTo(p[0] + 7, p[1]);
+      g.lineTo(p[0], p[1] + 7);
+      g.lineTo(p[0] - 7, p[1]);
+      g.closePath();
+      g.stroke();
+      text(g, i === 0 ? "ORIGIN" : i === P.length - 1 ? "DEST" : `JMP-${i}`, p[0] + 10, p[1] - 10, 9, UI.cyanDim);
+    });
+    // ship marker on the route
+    const u = (t / 60) % 1;
+    const si = Math.min(2, Math.floor(u * 3));
+    const f = u * 3 - si;
+    const sx = P[si][0] + (P[si + 1][0] - P[si][0]) * f;
+    const sy = P[si][1] + (P[si + 1][1] - P[si][1]) * f;
+    wedgeIcon(g, sx, sy, 8, Math.atan2(P[si + 1][1] - P[si][1], P[si + 1][0] - P[si][0]) + Math.PI / 2, UI.white, true);
+    // right column: leg readouts
+    const px = w * 0.8;
+    g.fillStyle = "rgba(4,8,18,0.85)";
+    g.fillRect(px, 26, w - px - 4, h - 32);
+    ["LEG 1", "LEG 2", "LEG 3"].forEach((l, i) => {
+      const yy = 40 + i * 30;
+      text(g, l, px + 6, yy, 9, i === si ? UI.amber : UI.grey);
+      digits(g, px + 6, yy + 13, 11, 5, t, rand, i === si ? UI.white : UI.whiteDim, 1 + i);
+    });
+    g.fillStyle = UI.blueDim;
+    g.fillRect(px + 6, h - 22, w - px - 16, 5);
+    g.fillStyle = UI.amber;
+    g.fillRect(px + 6, h - 22, (w - px - 16) * u, 5);
+    g.fillStyle = "rgba(4,8,18,0.8)";
+    g.fillRect(0, 0, w, 22);
+    header(g, w, title, UI.amber, 10);
+    scanlines(g, w, h, 0.2);
   };
 }
 

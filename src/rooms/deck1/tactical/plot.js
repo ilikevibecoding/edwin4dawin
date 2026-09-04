@@ -1,8 +1,9 @@
 // d1-tactical holo table (5 × 3 m rectangular instrument: skirt, glow band, facetted body, corner indicator
 // posts, sloped edge control panels, emitter field) and the fleet plot projected above it: one additive
-// LineSegments object (grid plane, range rings, radar sweep, wireframe wedge silhouettes for own ships, hostile
-// contacts with course vectors and id brackets, target lines with travelling pulses) plus one Points object
-// (sensor returns / debris field). The commander's lectern console lives here too.
+// LineSegments object (feathered grid plane, range rings, radar sweep, a wireframe planet with orbit + moon,
+// wedge / hexagon ship icons with label tags, course vectors and id brackets, firing solutions with travelling
+// pulses) plus one Points object (sensor returns + planet surface). The commander's lectern, the wall rack and
+// the stepped briefing seating live here too.
 import { rng } from "../../../kit.js";
 import { IMP } from "../shared/palette.js";
 import { placer, placerRad, IND } from "../nav/props.js";
@@ -47,12 +48,12 @@ function edgePanel(kit, p, w, rand, atlasMat, screenRect, { sy0 = 0.9, sz0 = -0.
 export function buildHoloTable(kit, atlasMat, cells, cx, floorY, cz, { hx = 1.5, hz = 2.5, seed = 5 } = {}) {
   const rand = rng(seed);
   const y = (v) => floorY + v;
-  // floor inlay under the table: black plate + blue border line
+  // floor inlay under the table: black plate + painted light-grey border line (lit by the room)
   kit.boxMM("paintedMetal", [cx - hx - 0.55, y(0.006), cz - hz - 0.55], [cx + hx + 0.55, y(0.018), cz + hz + 0.55], { color: IMP.black, texel: 1 });
   const bw = 0.035;
   for (const s of [-1, 1]) {
-    kit.boxMM("emitBlue", [cx + s * (hx + 0.45) - bw / 2, y(0.012), cz - hz - 0.45], [cx + s * (hx + 0.45) + bw / 2, y(0.024), cz + hz + 0.45]);
-    kit.boxMM("emitBlue", [cx - hx - 0.45, y(0.012), cz + s * (hz + 0.45) - bw / 2], [cx + hx + 0.45, y(0.024), cz + s * (hz + 0.45) + bw / 2]);
+    kit.boxMM("paintedMetal", [cx + s * (hx + 0.45) - bw / 2, y(0.012), cz - hz - 0.45], [cx + s * (hx + 0.45) + bw / 2, y(0.024), cz + hz + 0.45], { color: IMP.white, texel: 2 });
+    kit.boxMM("paintedMetal", [cx - hx - 0.45, y(0.012), cz + s * (hz + 0.45) - bw / 2], [cx + hx + 0.45, y(0.024), cz + s * (hz + 0.45) + bw / 2], { color: IMP.white, texel: 2 });
   }
   // skirt, glow band, body
   kit.boxMM("paintedMetal", [cx - hx + 0.15, y(0), cz - hz + 0.15], [cx + hx - 0.15, y(0.15), cz + hz - 0.15], { color: IMP.black, texel: 1 });
@@ -142,81 +143,44 @@ function frameAt(c, heading) {
   return (u, yy, v) => [c[0] + u * fx + v * fz, c[1] + yy, c[2] + u * fz - v * fx];
 }
 
-/** Dagger-shaped capital ship (our side): wedge hull with a raised spine, conning tower, engine bells. */
+/** Own-side capital ship icon: bright wedge (bow, two flanks, stern), a raised spine and a short bridge bar. */
 function wedge(lines, c, heading, L, color, colorDim, { anim = 3, phase = 0 } = {}) {
   const P = frameAt(c, heading);
-  const W = L * 0.62;
-  const T = L * 0.06;
+  const W = L * 0.6;
   const bow = P(L / 2, 0, 0);
   const sp = P(-L / 2, 0, -W / 2);
   const ss = P(-L / 2, 0, W / 2);
-  const ridge = P(-L / 2, T, 0);
-  const keel = P(-L / 2, -T * 0.7, 0);
+  const ridge = P(-L * 0.45, L * 0.1, 0);
   lines.seg(bow, sp, color, anim, phase);
   lines.seg(bow, ss, color, anim, phase);
   lines.seg(sp, ss, color, anim, phase);
   lines.seg(bow, ridge, colorDim, anim, phase);
   lines.seg(ridge, sp, colorDim, anim, phase);
   lines.seg(ridge, ss, colorDim, anim, phase);
-  lines.seg(bow, keel, colorDim, anim, phase);
-  lines.seg(keel, sp, colorDim, anim, phase);
-  lines.seg(keel, ss, colorDim, anim, phase);
-  // conning tower box + bridge bar
-  const u0 = -L * 0.36;
-  const u1 = -L * 0.18;
-  const hv = L * 0.07;
-  const y0 = T * 0.6;
-  const y1 = T + L * 0.11;
-  const corners = [
-    [u0, -hv],
-    [u1, -hv],
-    [u1, hv],
-    [u0, hv],
-  ];
-  for (let i = 0; i < 4; i++) {
-    const a = corners[i];
-    const b = corners[(i + 1) % 4];
-    lines.seg(P(a[0], y0, a[1]), P(b[0], y0, b[1]), colorDim, anim, phase);
-    lines.seg(P(a[0], y1, a[1]), P(b[0], y1, b[1]), color, anim, phase);
-    lines.seg(P(a[0], y0, a[1]), P(a[0], y1, a[1]), colorDim, anim, phase);
-  }
-  lines.seg(P(-L * 0.27, y1, -L * 0.14), P(-L * 0.27, y1, L * 0.14), color, anim, phase);
-  for (const s of [-1, 1]) lines.diamond(P(-L * 0.27, y1 + L * 0.02, s * L * 0.14), L * 0.02, color, { anim, phase });
-  // engine bells (three squares on the stern face)
-  for (let i = -1; i <= 1; i++) {
-    const v = i * W * 0.24;
-    const r = L * 0.035;
-    const q = [P(-L / 2, -r, v - r), P(-L / 2, -r, v + r), P(-L / 2, r, v + r), P(-L / 2, r, v - r)];
-    lines.poly(q, colorDim, anim, { phase, closed: true });
-  }
+  lines.seg(P(-L * 0.3, L * 0.12, -L * 0.1), P(-L * 0.3, L * 0.12, L * 0.1), color, anim, phase);
+  lines.seg(P(-L * 0.3, L * 0.12, 0), P(-L * 0.3, L * 0.04, 0), colorDim, anim, phase);
 }
 
-/** Hostile contact: elongated hexagonal hull, forward hammerhead bar, dorsal fin. */
+/** Hostile contact icon: bright flat hexagon with a bow bar and a dorsal fin. */
 function hostile(lines, c, heading, L, color, colorDim, { anim = 3, phase = 0 } = {}) {
   const P = frameAt(c, heading);
-  const W = L * 0.42;
-  const H = L * 0.09;
+  const W = L * 0.5;
   const hex = [
     [L / 2, 0],
-    [L * 0.2, -W / 2],
+    [L * 0.15, -W / 2],
     [-L * 0.4, -W / 2],
     [-L / 2, 0],
     [-L * 0.4, W / 2],
-    [L * 0.2, W / 2],
+    [L * 0.15, W / 2],
   ];
   for (let i = 0; i < 6; i++) {
     const a = hex[i];
     const b = hex[(i + 1) % 6];
-    lines.seg(P(a[0], H / 2, a[1]), P(b[0], H / 2, b[1]), color, anim, phase);
-    lines.seg(P(a[0], -H / 2, a[1]), P(b[0], -H / 2, b[1]), colorDim, anim, phase);
-    lines.seg(P(a[0], H / 2, a[1]), P(a[0], -H / 2, a[1]), colorDim, anim, phase);
+    lines.seg(P(a[0], 0, a[1]), P(b[0], 0, b[1]), color, anim, phase);
   }
-  // hammerhead bar across the bow, fin on the back
-  lines.seg(P(L * 0.42, 0, -W * 0.75), P(L * 0.42, 0, W * 0.75), color, anim, phase);
-  lines.seg(P(L * 0.42, 0, -W * 0.75), P(L * 0.3, 0, -W * 0.5), colorDim, anim, phase);
-  lines.seg(P(L * 0.42, 0, W * 0.75), P(L * 0.3, 0, W * 0.5), colorDim, anim, phase);
-  lines.seg(P(-L * 0.1, H / 2, 0), P(-L * 0.3, H / 2 + L * 0.12, 0), color, anim, phase);
-  lines.seg(P(-L * 0.3, H / 2 + L * 0.12, 0), P(-L * 0.45, H / 2, 0), color, anim, phase);
+  lines.seg(P(L * 0.38, 0, -W * 0.7), P(L * 0.38, 0, W * 0.7), color, anim, phase);
+  lines.seg(P(-L * 0.1, 0, 0), P(-L * 0.3, L * 0.14, 0), colorDim, anim, phase);
+  lines.seg(P(-L * 0.3, L * 0.14, 0), P(-L * 0.45, 0, 0), colorDim, anim, phase);
 }
 
 /** Bracket corners (id box) around a contact in the horizontal plane. */
@@ -232,68 +196,37 @@ function bracket(lines, c, r, color, { anim = 0, phase = 0 } = {}) {
   }
 }
 
-/** Fleet plot above the table. Own fleet at -z heading +z, hostiles at +z closing. Returns { lines, points }. */
+/** Course vector with an arrowhead; dashed for hostiles. */
+function vector(lines, c, heading, len, color, { dashed = false, anim = 3, phase = 0 } = {}) {
+  const vx = Math.sin(heading);
+  const vz = Math.cos(heading);
+  const e = [c[0] + vx * len, c[1], c[2] + vz * len];
+  if (dashed) lines.dashed(c, e, color, { dash: 0.05, gap: 0.04, anim, phase });
+  else lines.seg(c, e, color, anim, phase);
+  const k = 0.05;
+  lines.seg(e, [e[0] - vx * k + vz * k * 0.6, e[1], e[2] - vz * k - vx * k * 0.6], color, anim, phase);
+  lines.seg(e, [e[0] - vx * k - vz * k * 0.6, e[1], e[2] - vz * k + vx * k * 0.6], color, anim, phase);
+}
+
+/**
+ * Fleet plot above the table: a feathered cyan grid (no border), a 1 m wireframe planet with orbit ring and
+ * a moon at the far end, four own ships (wedges) and four hostiles (hexagons) at 0.2–0.35 m, each with a
+ * label tag, a course vector and a drop line to its ground mark, range rings + a sweep about the flagship,
+ * two amber firing solutions and a white jump-in arc. Returns { lines, points }.
+ */
 export function buildFleetPlot(cx, top, cz, { seed = 11, sweep = 0.7 } = {}) {
   const rand = rng(seed);
-  const gy = top + 0.4; // grid plane
-  const hx = 1.1;
-  const hz = 2.1;
+  const gy = top + 0.3; // grid plane
+  const hx = 1.15;
+  const hz = 2.2;
   const centre = [cx, gy, cz];
-  const flag = [cx, top + 0.82, cz - 1.05]; // flagship; the sweep rotates about its ground mark
+  const flag = [cx - 0.1, top + 0.72, cz - 1.15]; // flagship; the sweep rotates about its ground mark
   const fg = [flag[0], gy + 0.003, flag[2]];
-  const lines = new HoloLines(fg, { spin: 0, sweep });
-  // grid plane with major lines and a bright border, corner posts and a faint volume box
-  lines.grid(cx - hx, cx + hx, cz - hz, cz + hz, gy, { step: 0.2, major: 1.0, minorColor: HOLO.cyanFaint, majorColor: HOLO.cyanDim });
-  lines.poly(
-    [
-      [cx - hx, gy, cz - hz],
-      [cx + hx, gy, cz - hz],
-      [cx + hx, gy, cz + hz],
-      [cx - hx, gy, cz + hz],
-    ],
-    HOLO.cyan,
-    0,
-    { closed: true }
-  );
-  const vy = gy + 0.95;
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) lines.seg([cx + sx * hx, gy, cz + sz * hz], [cx + sx * hx, vy, cz + sz * hz], HOLO.cyanFaint);
-  lines.poly(
-    [
-      [cx - hx, vy, cz - hz],
-      [cx + hx, vy, cz - hz],
-      [cx + hx, vy, cz + hz],
-      [cx - hx, vy, cz + hz],
-    ],
-    HOLO.cyanFaint,
-    0,
-    { closed: true }
-  );
-  // scale ticks along the long edges
-  for (let z = -hz; z <= hz + 1e-6; z += 0.2) {
-    const major = Math.abs((z / 1.0) % 1) < 1e-3 || Math.abs(Math.abs((z / 1.0) % 1) - 1) < 1e-3;
-    for (const s of [-1, 1]) lines.seg([cx + s * hx, gy, cz + z], [cx + s * (hx + (major ? 0.1 : 0.05)), gy, cz + z], major ? HOLO.cyan : HOLO.cyanDim);
-  }
-  // own fleet
-  const own = [
-    { c: flag, L: 0.72, h: 0.02 },
-    { c: [cx - 0.6, top + 0.72, cz - 1.45], L: 0.42, h: 0.12 },
-    { c: [cx + 0.62, top + 0.74, cz - 1.5], L: 0.42, h: -0.1 },
-    { c: [cx - 0.36, top + 0.88, cz - 0.5], L: 0.3, h: 0.25 },
-    { c: [cx + 0.4, top + 0.9, cz - 0.42], L: 0.3, h: -0.2 },
-    { c: [cx + 0.05, top + 0.7, cz - 1.8], L: 0.34, h: 0.0 },
-  ];
-  own.forEach((s, i) => {
-    wedge(lines, s.c, s.h, s.L, i === 0 ? HOLO.white : HOLO.blue, i === 0 ? HOLO.blueDim : HOLO.blueDim, { phase: i * 1.3 });
-    lines.dashed(s.c, [s.c[0], gy, s.c[2]], HOLO.blueDim, { dash: 0.04, gap: 0.05 });
-    lines.diamond([s.c[0], gy + 0.002, s.c[2]], 0.05, HOLO.blueDim);
-    // course vector (solid) with a speed tick
-    const vx = Math.sin(s.h);
-    const vz = Math.cos(s.h);
-    const len = 0.35 + s.L * 0.4;
-    lines.seg(s.c, [s.c[0] + vx * len, s.c[1], s.c[2] + vz * len], HOLO.blue, 3, i * 1.3);
-    lines.seg([s.c[0] + vx * len - vz * 0.04, s.c[1], s.c[2] + vz * len + vx * 0.04], [s.c[0] + vx * len + vz * 0.04, s.c[1], s.c[2] + vz * len - vx * 0.04], HOLO.blue, 3, i * 1.3);
-  });
-  // range rings and bearing ticks around the flagship (on the grid plane), weapon arc (amber, dashed)
+  const planet = [cx + 0.25, top + 0.85, cz + 1.35];
+  const lines = new HoloLines(fg, { spin: 0, sweep, center2: planet, spin2: 0.12 });
+  // grid plane, fading out over 0.25 m toward its edge
+  lines.gridFaded(cx - hx, cx + hx, cz - hz, cz + hz, gy, { step: 0.2, major: 1.0, minorColor: HOLO.cyanFaint, majorColor: HOLO.cyanDim, feather: 0.25 });
+  // range rings and bearing ticks around the flagship, weapon arc (amber)
   lines.circle(fg, 0.5, HOLO.cyanDim, { n: 64 });
   lines.circle(fg, 1.0, HOLO.cyanDim, { n: 96, dashed: 2 });
   for (let k = 0; k < 36; k++) {
@@ -301,68 +234,83 @@ export function buildFleetPlot(cx, top, cz, { seed = 11, sweep = 0.7 } = {}) {
     const r0 = k % 3 === 0 ? 0.93 : 0.97;
     lines.seg([fg[0] + Math.sin(a) * r0, fg[1], fg[2] + Math.cos(a) * r0], [fg[0] + Math.sin(a) * 1.0, fg[1], fg[2] + Math.cos(a) * 1.0], HOLO.cyanDim);
   }
-  lines.circle([flag[0], flag[1], flag[2]], 0.85, HOLO.amber, { n: 40, a0: -0.75, a1: 0.75, dashed: 2 });
-  lines.circle([flag[0], flag[1], flag[2]], 0.85, HOLO.amberDim, { n: 40, a0: -0.75, a1: 0.75 });
-  for (const s of [-1, 1]) lines.seg(flag, [flag[0] + Math.sin(s * 0.75) * 0.85, flag[1], flag[2] + Math.cos(s * 0.75) * 0.85], HOLO.amberDim);
+  lines.circle(flag, 0.8, HOLO.amberDim, { n: 40, a0: -0.7, a1: 0.7, dashed: 2 });
+  for (const s of [-1, 1]) lines.seg(flag, [flag[0] + Math.sin(s * 0.7) * 0.8, flag[1], flag[2] + Math.cos(s * 0.7) * 0.8], HOLO.amberDim);
   // radar sweep: fan of trailing lines rotating about the flagship's ground mark
   for (let k = 0; k < 14; k++) {
     const f = 1 - k / 14;
     const col = [HOLO.cyan[0] * f * f, HOLO.cyan[1] * f * f, HOLO.cyan[2] * f * f];
     lines.seg(fg, [fg[0], fg[1], fg[2] + 1.0], col, 4, -k * 0.045);
   }
-  lines.seg(fg, [fg[0], fg[1] + 0.9, fg[2]], HOLO.cyanFaint, 4, 0);
-  // hostiles
+  // planet: wireframe sphere turning on its axis, equator, tilted orbit ring with a moon, ground shadow ring
+  const pr = 0.5;
+  lines.sphereWire(planet, pr, HOLO.cyanDim, { lat: 5, lon: 8, n: 40, colorLat: HOLO.cyanFaint });
+  lines.circle(planet, pr, HOLO.cyan, { n: 64, anim: 6 });
+  lines.circle(planet, pr * 1.45, HOLO.blueDim, { n: 72, dashed: 3 });
+  const moon = [planet[0] + pr * 1.45, planet[1], planet[2]];
+  lines.circle(moon, 0.06, HOLO.blue, { n: 16, anim: 6, phase: 0 });
+  lines.circle([planet[0], gy + 0.003, planet[2]], pr, HOLO.cyanDim, { n: 48 });
+  lines.dashed([planet[0], planet[1] - pr, planet[2]], [planet[0], gy, planet[2]], HOLO.cyanDim, { dash: 0.04, gap: 0.04 });
+  lines.tag([planet[0], planet[1] + pr, planet[2]], [0.7, 0.7], { color: HOLO.cyan, colorDim: HOLO.cyanDim, rise: 0.1, lead: 0.15, len: 0.24, bars: 3 });
+  // own fleet: flagship + three escorts, labels leaning to -x, vectors, drop lines
+  const own = [
+    { c: flag, L: 0.36, h: 0.05 },
+    { c: [cx - 0.72, top + 0.62, cz - 1.5], L: 0.22, h: 0.18 },
+    { c: [cx + 0.55, top + 0.66, cz - 1.55], L: 0.22, h: -0.12 },
+    { c: [cx + 0.3, top + 0.82, cz - 0.45], L: 0.2, h: -0.25 },
+  ];
+  own.forEach((s, i) => {
+    wedge(lines, s.c, s.h, s.L, i === 0 ? HOLO.white : HOLO.blue, HOLO.blueDim, { phase: i * 1.3 });
+    lines.dashed(s.c, [s.c[0], gy, s.c[2]], HOLO.blueDim, { dash: 0.04, gap: 0.05 });
+    lines.diamond([s.c[0], gy + 0.002, s.c[2]], 0.05, HOLO.blueDim);
+    vector(lines, s.c, s.h, 0.3 + s.L * 0.5, HOLO.blue, { phase: i * 1.3 });
+    lines.tag(s.c, [-0.8, -0.6], { color: i === 0 ? HOLO.white : HOLO.blue, colorDim: HOLO.blueDim, rise: 0.1, lead: 0.12, len: 0.16, anim: 3, phase: i * 1.3 });
+  });
+  // hostiles: four contacts closing from the planet side, labels leaning to +x
   const foes = [];
-  for (let i = 0; i < 7; i++) {
-    const c = [cx - 0.85 + (i / 6) * 1.7 + (rand() - 0.5) * 0.2, top + 0.68 + rand() * 0.42, cz + 0.55 + rand() * 1.3];
-    const h = Math.PI + (rand() - 0.5) * 0.7;
-    const L = 0.22 + rand() * 0.16;
+  for (let i = 0; i < 4; i++) {
+    const c = [cx - 0.8 + i * 0.55 + (rand() - 0.5) * 0.15, top + 0.62 + rand() * 0.3, cz + 0.35 + rand() * 0.55];
+    const h = Math.PI + (rand() - 0.5) * 0.6;
+    const L = 0.2;
     foes.push({ c, h, L });
     hostile(lines, c, h, L, HOLO.red, HOLO.redDim, { phase: 2 + i });
     lines.dashed(c, [c[0], gy, c[2]], HOLO.redDim, { dash: 0.03, gap: 0.05 });
     lines.diamond([c[0], gy + 0.002, c[2]], 0.04, HOLO.redDim);
-    bracket(lines, c, L * 0.75, HOLO.redDim, { anim: i % 3 === 0 ? 5 : 0, phase: i * 0.37 });
-    const vx = Math.sin(h);
-    const vz = Math.cos(h);
-    lines.dashed(c, [c[0] + vx * 0.45, c[1], c[2] + vz * 0.45], HOLO.red, { dash: 0.04, gap: 0.04, anim: 3, phase: 2 + i });
-    // leader line + small data bar
-    const l = [c[0] + 0.18, c[1] + 0.12, c[2] + 0.1];
-    lines.seg(c, l, HOLO.redDim);
-    lines.seg(l, [l[0] + 0.14, l[1], l[2]], HOLO.red);
-    lines.seg([l[0], l[1] + 0.025, l[2]], [l[0] + 0.09, l[1] + 0.025, l[2]], HOLO.redDim);
+    bracket(lines, c, 0.17, HOLO.redDim, { anim: i % 2 === 0 ? 5 : 3, phase: i * 0.37 });
+    vector(lines, c, h, 0.4, HOLO.red, { dashed: true, phase: 2 + i });
+    lines.tag(c, [0.8, 0.6], { color: HOLO.red, colorDim: HOLO.redDim, rise: 0.1, lead: 0.12, len: 0.16, anim: 3, phase: 2 + i });
   }
-  // target solutions: flagship → two nearest hostiles (travelling pulse), escort → one hostile
+  // firing solutions: flagship → two nearest hostiles (travelling pulse) with target rings
   const byDist = [...foes].sort((a, b) => Math.hypot(a.c[0] - flag[0], a.c[2] - flag[2]) - Math.hypot(b.c[0] - flag[0], b.c[2] - flag[2]));
-  for (let i = 0; i < 2; i++) lines.poly([flag, byDist[i].c], HOLO.amber, 2, { phased: true });
-  lines.poly([own[3].c, byDist[2].c], HOLO.amberDim, 2, { phased: true });
-  for (let i = 0; i < 3; i++) lines.circle(byDist[i].c, 0.09 + i * 0.01, HOLO.amber, { n: 20, anim: 5, phase: i * 0.3 });
-  // engagement line (contact boundary) across the plot with hash marks
-  const bz = cz + 0.12;
-  lines.dashed([cx - hx, gy + 0.004, bz], [cx + hx, gy + 0.004, bz], HOLO.amberDim, { dash: 0.12, gap: 0.08 });
-  for (let x = -hx + 0.1; x < hx; x += 0.4) lines.seg([cx + x, gy + 0.004, bz], [cx + x + 0.08, gy + 0.004, bz + 0.08], HOLO.amberDim);
-  // jump-in vector for a reinforcement: dashed arc from the plot edge to the fleet (blinking marker at the end)
+  for (let i = 0; i < 2; i++) {
+    lines.poly([flag, byDist[i].c], HOLO.amber, 2, { phased: true });
+    lines.circle(byDist[i].c, 0.1, HOLO.amber, { n: 20, anim: 5, phase: i * 0.3 });
+  }
+  // engagement line across the plot (dim)
+  const bz = cz + 0.05;
+  lines.dashed([cx - hx + 0.3, gy + 0.004, bz], [cx + hx - 0.3, gy + 0.004, bz], HOLO.amberDim, { dash: 0.12, gap: 0.1 });
+  // jump-in vector for a reinforcement: arc from the plot edge to the fleet (blinking marker at the end)
   const arc = [];
   for (let i = 0; i <= 12; i++) {
     const u = i / 12;
-    arc.push([cx - hx + 0.05 + u * 0.95, gy + 0.3 + Math.sin(u * Math.PI) * 0.35, cz - 1.9 + u * 0.35]);
+    arc.push([cx - hx + 0.3 + u * 0.55, gy + 0.25 + Math.sin(u * Math.PI) * 0.3, cz - 2.0 + u * 0.45]);
   }
   lines.poly(arc, HOLO.white, 2, { phased: true });
-  lines.diamond([arc[0][0], arc[0][1], arc[0][2]], 0.05, HOLO.white, { anim: 5, vertical: true });
+  lines.diamond(arc[0], 0.05, HOLO.white, { anim: 5, vertical: true });
 
-  // sensor returns / debris: a thin band between the fleets plus a faint scatter through the volume
-  const stars = new HoloStars(centre, { spin: 0 });
-  for (let i = 0; i < 700; i++) {
-    const band = i < 480;
-    let p;
-    if (band) {
-      const u = rand() * 2 - 1;
-      p = [cx + u * hx * 0.95 + (rand() - 0.5) * 0.1, gy + 0.25 + rand() * 0.5 + Math.sin(u * 3) * 0.08, bz + (rand() - 0.5) * 0.45 + Math.sin(u * 5) * 0.12];
-    } else {
-      p = [cx + (rand() - 0.5) * 2 * hx, gy + 0.05 + rand() * 0.9, cz + (rand() - 0.5) * 2 * hz];
-    }
-    const k = band ? 0.35 + rand() * 0.6 : 0.2 + rand() * 0.3;
-    const size = band ? 0.006 + rand() * rand() * 0.02 : 0.005 + rand() * 0.008;
-    stars.add(p, [0.35 * k, 0.8 * k, 1.0 * k], size, rand() * 6.283);
+  // points: sparse sensor returns through the volume + a speckled planet surface turning with it
+  const stars = new HoloStars(centre, { spin: 0, center2: planet, spin2: 0.12 });
+  for (let i = 0; i < 160; i++) {
+    const p = [cx + (rand() - 0.5) * 1.9, gy + 0.08 + rand() * 0.75, cz + (rand() - 0.5) * 3.6];
+    const k = 0.2 + rand() * 0.35;
+    stars.add(p, [0.35 * k, 0.8 * k, 1.0 * k], 0.005 + rand() * 0.008, rand() * 6.283);
+  }
+  for (let i = 0; i < 220; i++) {
+    const th = rand() * Math.PI * 2;
+    const ph = Math.acos(2 * rand() - 1);
+    const p = [planet[0] + pr * Math.sin(ph) * Math.cos(th), planet[1] + pr * Math.cos(ph), planet[2] + pr * Math.sin(ph) * Math.sin(th)];
+    const k = 0.3 + rand() * 0.5;
+    stars.add(p, [0.3 * k, 0.75 * k, 0.95 * k], 0.006 + rand() * 0.008, rand() * 6.283, 1);
   }
   return { lines: lines.build("tac-plot-lines"), points: stars.build("tac-plot-points") };
 }
@@ -380,6 +328,14 @@ export function lectern(kit, p, { w = 1.2, screenMat, screenRect = null, stripRe
     p.box("paintedMetal", s * (w / 2 - 0.05), 0.62, -0.04, 0.1, 1.24, 0.56, { color: IMP.dark, texel: 1 });
     p.box("metal", s * (w / 2 - 0.05), 1.245, -0.04, 0.11, 0.03, 0.58, { color: IMP.mid, texel: 2 });
     for (let i = 0; i < 4; i++) p.box(IND[(i + seed + (s > 0 ? 3 : 0)) % IND.length], s * (w / 2 - 0.05), 0.5 + i * 0.07, 0.244, 0.03, 0.03, 0.006);
+    // side status screen on the ear's outer face (the lectern is seen side-on from most of the tier)
+    const q = placerRad(kit, ...p.P(s * (w / 2), 0, -0.04), p.a + (s * Math.PI) / 2);
+    q.box("darkGloss", 0, 0.98, 0.012, 0.5, 0.34, 0.024);
+    q.box("metal", 0, 0.98, 0.026, 0.46, 0.3, 0.006, { color: IMP.mid, texel: 2 });
+    q.screenV(screenMat, 0, 0.98, 0.032, 0.42, 0.26, stripRect || screenRect);
+    for (let i = 0; i < 3; i++) q.box(IND[(i + s + 4) % IND.length], -0.16 + i * 0.06, 0.78, 0.014, 0.035, 0.02, 0.006);
+    q.decal(0.15, 0.78, 0.014, 0.1, 9);
+    for (let k = 0; k < 4; k++) q.box("metalRough", 0, 0.28 + k * 0.05, 0.014, 0.3, 0.012, 0.012, { color: IMP.black });
   }
   // sloped top (high at the far side), frame edge, grab bar along the near edge
   const sy0 = 1.1;
@@ -446,18 +402,31 @@ export function wallRack(kit, p, { w = 6.0, h = 0.9, d = 0.5, seed = 0, screenMa
   p.collider(-w / 2 - 0.02, w / 2 + 0.02, 0, h + 0.05, 0, f + 0.05, "rack");
 }
 
-/** A briefing seat block: rows of chairs on stepped platforms with nosing, riser hazard stripe, step lights. */
-export function seatBlock(kit, floorY, { rows, zMin, zMax, seatZ, facing = 3, chairFn }) {
+/**
+ * A briefing seat block: rows of chairs on stepped platforms (mid-grey deck plate, steel nosing with a lit
+ * strip, hazard riser). Seats turn toward `aimZ` by up to `maxTurn` radians; `skip` = [{ row, i }] positions
+ * left empty for the caller (standing consoles). facing 3 = occupants face +x.
+ */
+export function seatBlock(kit, floorY, { rows, zMin, zMax, seatZ, facing = 3, chairFn, aimZ = null, maxTurn = 0.26, skip = [] }) {
   // rows: [{ x, y }] from the front (lowest) to the back (highest); platforms rise toward the back (−x)
   for (let r = 1; r < rows.length; r++) {
     const xe = (rows[r].x + rows[r - 1].x) / 2;
     const xw = r + 1 < rows.length ? (rows[r].x + rows[r + 1].x) / 2 : rows[r].x - 0.55;
     const yBelow = rows[r - 1].y;
-    kit.boxMM("impFloor", [xw, floorY, zMin], [xe, rows[r].y, zMax], { color: IMP.dark, texel: 0.5 });
+    kit.boxMM("impFloor", [xw, floorY, zMin], [xe, rows[r].y, zMax], { color: IMP.mid, texel: 0.5 });
     kit.boxMM("metal", [xe - 0.035, rows[r].y, zMin], [xe, rows[r].y + 0.006, zMax], { color: IMP.steel });
+    kit.boxMM("emitBlue", [xe - 0.08, rows[r].y, zMin + 0.1], [xe - 0.06, rows[r].y + 0.008, zMax - 0.1]);
     kit.boxMM("hazard", [xe, yBelow + 0.015, zMin + 0.05], [xe + 0.006, yBelow + 0.065, zMax - 0.05], { texel: 3 });
     kit.boxMM("emitBlue", [xe, rows[r].y - 0.045, zMin + 0.05], [xe + 0.006, rows[r].y - 0.025, zMax - 0.05]);
     kit.collider([xw - 0.02, floorY, zMin - 0.02], [xe + 0.02, rows[r].y, zMax + 0.02], "seat-step");
   }
-  for (const row of rows) for (const z of seatZ) chairFn(placer(kit, row.x, row.y, z, facing));
+  const base = (facing * Math.PI) / 2;
+  rows.forEach((row, r) => {
+    seatZ.forEach((z, i) => {
+      if (skip.some((s) => s.row === r && s.i === i)) return;
+      // turn toward aimZ: for facing 3 a smaller yaw turns the occupant toward +z
+      const turn = aimZ === null ? 0 : Math.max(-maxTurn, Math.min(maxTurn, ((aimZ - z) / 2.8) * maxTurn));
+      chairFn(placerRad(kit, row.x, row.y, z, base - turn));
+    });
+  });
 }

@@ -4,7 +4,9 @@
 // floor inlays, hazard geometry, low rails and raised steps. Everything is world-space kit-bashing.
 //
 // Materials used here (all §10 shared keys): paintedMetal metalRough metal impPanel impFloor darkGloss
-// emitWhite emitBlue emitRedImp emitAmber decal hazard (+ a screen material passed by the caller).
+// emitCoolSoft emitBlue emitRedImp emitAmber decal hazard (+ a screen material passed by the caller).
+// White fixtures use emitCoolSoft (centre-bright diffuser map, per-face uvs) recessed behind louvres / bezels
+// instead of bare emitWhite faces, which clip to white blobs under bloom.
 import * as THREE from "three";
 import { rng } from "../../../kit.js";
 import { decalRect } from "../../../textures.js";
@@ -40,9 +42,10 @@ export function placerRad(kit, cx, cy, cz, a) {
     a,
     P,
     origin: [cx, cy, cz],
+    // yaw = extra turn about the vertical (open doors, angled parts), applied before tilt/roll
     box(mat, ox, oy, oz, sx, sy, sz, opts = {}) {
-      const { tilt = 0, roll = 0, ...rest } = opts;
-      return kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: P(ox, oy, oz), quat: quatYX(a, tilt, roll), ...rest });
+      const { tilt = 0, roll = 0, yaw = 0, ...rest } = opts;
+      return kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: P(ox, oy, oz), quat: quatYX(a + yaw, tilt, roll), ...rest });
     },
     cyl(mat, ox, oy, oz, r, len, axis = "y", opts = {}) {
       const { segments = 12, r2, ...rest } = opts;
@@ -181,25 +184,171 @@ export function chair(kit, p, { pad = "paintedMetal", padColor = IMP.dark, shell
   }
 }
 
+/** Pedestal stool: base disc, column, foot ring, round pad. p at floor centre. */
+export function stool(kit, p, { padColor = IMP.grey } = {}) {
+  p.cyl("paintedMetal", 0, 0.02, 0, 0.22, 0.04, "y", { color: IMP.black, segments: 14, texel: 1 });
+  p.cyl("metal", 0, 0.3, 0, 0.035, 0.52, "y", { color: IMP.mid, segments: 10, texel: 1 });
+  kit.add("metal", new THREE.TorusGeometry(0.17, 0.012, 6, 16), { pos: p.P(0, 0.2, 0), quat: quatYX(p.a, Math.PI / 2), color: IMP.steel, uv: "keep" });
+  p.cyl("paintedMetal", 0, 0.575, 0, 0.19, 0.04, "y", { color: IMP.dark, segments: 16, texel: 1 });
+  p.cyl("paintedMetal", 0, 0.61, 0, 0.17, 0.03, "y", { color: padColor, segments: 16, texel: 2 });
+}
+
+/**
+ * Standing briefing console (replaces a seat): waist-high body with a sloped top carrying a screen and a key
+ * cluster, front grab bar, foot plinth, indicator column. p at floor centre; the operator stands on local +z.
+ */
+export function standingConsole(kit, p, { w = 0.7, screenMat, screenRect = null, seed = 0 } = {}) {
+  const rand = rng(seed + 17);
+  const tilt = 0.4;
+  p.box("paintedMetal", 0, 0.04, 0, w - 0.1, 0.08, 0.5, { color: IMP.black, texel: 1 });
+  p.box("paintedMetal", 0, 0.55, -0.02, w - 0.2, 0.94, 0.38, { color: IMP.dark, texel: 1 });
+  for (const s of [-1, 1]) p.box("paintedMetal", s * (w / 2 - 0.04), 0.6, -0.02, 0.08, 1.12, 0.44, { color: IMP.black, texel: 1 });
+  p.box("darkGloss", 0, 1.06, -0.02, w - 0.1, 0.04, 0.46, { tilt });
+  {
+    const [sx, sy, sz] = p.onSlope(-0.04, 0.026, -0.06, tilt);
+    p.screenH(screenMat, sx, 1.06 + sy, -0.02 + sz, w - 0.3, 0.2, screenRect, tilt);
+    for (let i = 0; i < 4; i++) {
+      const [kx, ky, kz] = p.onSlope(-w / 2 + 0.12 + i * 0.09, 0.03, 0.15, tilt);
+      const v = rand();
+      p.box(v < 0.5 ? "paintedMetal" : v < 0.8 ? "emitBlue" : "emitAmber", kx, 1.06 + ky, -0.02 + kz, 0.06, 0.014, 0.05, { color: IMP.black, texel: 4, tilt });
+    }
+    const [bx, by, bz] = p.onSlope(0, -0.04, 0.26, tilt);
+    p.cyl("metal", bx, 1.06 + by, -0.02 + bz, 0.015, w - 0.24, "x", { color: IMP.steel, segments: 8 });
+  }
+  for (let i = 0; i < 4; i++) p.box(IND[(i + seed) % IND.length], w / 2 - 0.04, 0.45 + i * 0.07, 0.202, 0.03, 0.03, 0.006);
+  p.box("emitBlue", 0, 0.1, 0.171, w - 0.36, 0.012, 0.006);
+  p.decal(-w / 2 + 0.16, 0.4, 0.172, 0.16, 6);
+  p.collider(-w / 2 - 0.02, w / 2 + 0.02, 0, 1.2, -0.26, 0.26, "console");
+}
+
+/**
+ * Equipment pedestal (1.2 m): dark column on a plinth with a small angled screen or a control cluster on top,
+ * LED column, vent slats, a conduit down into a floor box. p at floor centre; front = local +z.
+ */
+export function equipmentPedestal(kit, p, { h = 1.2, seed = 0, screenMat = null, screenRect = null } = {}) {
+  const rand = rng(seed + 23);
+  p.box("paintedMetal", 0, 0.04, 0, 0.6, 0.08, 0.6, { color: IMP.black, texel: 1 });
+  p.box("paintedMetal", 0, h / 2, 0, 0.46, h - 0.1, 0.46, { color: IMP.dark, texel: 1 });
+  p.box("metal", 0, h - 0.04, 0, 0.5, 0.03, 0.5, { color: IMP.mid, texel: 2 });
+  p.box("darkGloss", 0, h + 0.03, 0.02, 0.44, 0.04, 0.4, { tilt: 0.3 });
+  if (screenMat) {
+    const [sx, sy, sz] = p.onSlope(0, 0.024, -0.03, 0.3);
+    p.screenH(screenMat, sx, h + 0.03 + sy, 0.02 + sz, 0.32, 0.2, screenRect, 0.3);
+  } else {
+    for (let i = 0; i < 3; i++) {
+      const [kx, ky, kz] = p.onSlope(-0.12 + i * 0.12, 0.045, -0.02, 0.3);
+      p.box("metal", kx, h + 0.03 + ky, 0.02 + kz, 0.04, 0.06, 0.04, { color: IMP.steel, texel: 4, tilt: 0.3 });
+    }
+  }
+  for (let i = 0; i < 3; i++) {
+    const [lx, ly, lz] = p.onSlope(-0.12 + i * 0.12, 0.024, 0.14, 0.3);
+    p.box(IND[(i + seed) % IND.length], lx, h + 0.03 + ly, 0.02 + lz, 0.05, 0.012, 0.03, { tilt: 0.3 });
+  }
+  for (let i = 0; i < 5; i++) p.box(IND[(i * 2 + seed) % IND.length], -0.15, 0.5 + i * 0.07, 0.232, 0.03, 0.03, 0.006);
+  for (let k = 0; k < 5; k++) p.box("metalRough", 0.06, 0.22 + k * 0.045, 0.232, 0.24, 0.012, 0.012, { color: IMP.black });
+  p.box("impPanel", 0, h * 0.62, 0.232, 0.3, 0.3, 0.008, { color: IMP.grey, texel: 1 });
+  p.decal(0.1, 0.95, 0.238, 0.14, rand() < 0.5 ? 9 : 6);
+  p.cyl("metalRough", 0, 0.14, -0.3, 0.025, 0.2, "y", { color: IMP.mid, segments: 8 });
+  p.box("metal", 0, 0.02, -0.3, 0.16, 0.04, 0.12, { color: IMP.mid, texel: 2 });
+  p.collider(-0.31, 0.31, 0, h + 0.1, -0.31, 0.31, "pedestal");
+}
+
 // ---------------------------------------------------------------------------
 // Wall-mounted equipment (p = wallAnchor at floor level unless noted)
 // ---------------------------------------------------------------------------
 
-/** Storage locker with panelled doors, handle, vent slats, status LED, label. p at floor, centred. */
-export function locker(kit, p, { w = 0.8, h = 2.2, d = 0.55, seed = 0, label = 6, double = true } = {}) {
+/**
+ * Storage locker: dark carcass with a lighter panelled door (single ≤ 0.7 m, double above), recessed handle
+ * plates, vent slats, status LED, a proud label plate. `open` swings the (right) door out ~75° and shows the
+ * interior: shelves, a canister, a case and a coiled cable. p at floor, centred.
+ */
+export function locker(kit, p, { w = 0.8, h = 2.2, d = 0.55, seed = 0, label = 6, double = w > 0.7, open = false } = {}) {
   const f = WALL_OFF + d;
+  const dw = double ? (w - 0.06) / 2 : w - 0.06; // door leaf width
+  const dh = h - 0.16;
   p.box("paintedMetal", 0, h / 2, WALL_OFF + d / 2, w, h, d, { color: IMP.dark, texel: 1 });
   p.box("metal", 0, h + 0.015, WALL_OFF + d / 2, w + 0.02, 0.03, d + 0.02, { color: IMP.mid, texel: 2 });
-  p.box("impPanel", 0, h / 2 + 0.02, f + 0.008, w - 0.06, h - 0.16, 0.016, { color: IMP.grey, texel: 0.8 });
-  if (double) p.box("paintedMetal", 0, h / 2 + 0.02, f + 0.017, 0.02, h - 0.16, 0.004, { color: IMP.black });
-  for (const s of double ? [-1, 1] : [1]) {
-    p.box("metal", s * 0.06, 1.05, f + 0.03, 0.025, 0.16, 0.025, { color: IMP.steel, texel: 2 });
-    p.box("paintedMetal", s * 0.06, 1.05, f + 0.018, 0.05, 0.2, 0.004, { color: IMP.black });
+  const leaf = (cx, openAngle) => {
+    if (!openAngle) {
+      p.box("impPanel", cx, h / 2 + 0.02, f + 0.008, dw, dh, 0.016, { color: IMP.grey, texel: 0.8 });
+      p.box("metal", cx + (cx < 0 ? dw / 2 - 0.06 : -dw / 2 + 0.06), 1.05, f + 0.03, 0.025, 0.16, 0.025, { color: IMP.steel, texel: 2 });
+      p.box("paintedMetal", cx + (cx < 0 ? dw / 2 - 0.06 : -dw / 2 + 0.06), 1.05, f + 0.018, 0.05, 0.2, 0.004, { color: IMP.black });
+      return;
+    }
+    // hinge on the leaf's outer (right) edge; the leaf swings out into the room
+    const hx = cx + dw / 2;
+    const c = Math.cos(openAngle);
+    const s = Math.sin(openAngle);
+    p.box("impPanel", hx - (dw / 2) * c, h / 2 + 0.02, f + 0.008 + (dw / 2) * s, dw, dh, 0.016, { color: IMP.grey, texel: 0.8, yaw: openAngle });
+    p.box("metal", hx - (dw - 0.06) * c + 0.022 * s, 1.05, f + 0.008 + (dw - 0.06) * s + 0.022 * c, 0.025, 0.16, 0.025, { color: IMP.steel, texel: 2, yaw: openAngle });
+  };
+  if (double) {
+    leaf(-(dw / 2 + 0.03), 0);
+    leaf(dw / 2 + 0.03, open ? 1.3 : 0);
+    p.box("paintedMetal", 0, h / 2 + 0.02, f + 0.017, 0.02, dh, 0.004, { color: IMP.black });
+  } else leaf(0, open ? 1.3 : 0);
+  if (open) {
+    // interior behind the open leaf: back panel, two shelves, contents
+    const ix = double ? dw / 2 + 0.03 : 0;
+    p.box("impPanel", ix, h / 2 + 0.02, WALL_OFF + 0.03, dw - 0.02, dh - 0.02, 0.01, { color: IMP.mid, texel: 1 });
+    for (const y of [0.8, 1.5]) p.box("metal", ix, y, WALL_OFF + d / 2, dw - 0.02, 0.02, d - 0.06, { color: IMP.mid, texel: 2 });
+    p.cyl("metalRough", ix - 0.06, 0.8 + 0.13, WALL_OFF + d / 2, 0.06, 0.26, "y", { color: IMP.grey, segments: 10 });
+    p.box("paintedMetal", ix + 0.08, 0.8 + 0.06, WALL_OFF + d / 2 + 0.05, 0.12, 0.12, 0.2, { color: IMP.black, texel: 2 });
+    p.box("paintedMetal", ix, 0.16, WALL_OFF + d / 2, dw - 0.1, 0.32, d - 0.12, { color: IMP.dark, texel: 2 });
+    p.box("hazard", ix, 0.16, WALL_OFF + d - 0.06, dw - 0.14, 0.04, 0.006, { texel: 3 });
+    kit.add("metal", new THREE.TorusGeometry(0.09, 0.014, 6, 16), { pos: p.P(ix, 1.5 + 0.02, WALL_OFF + d / 2), quat: quatYX(p.a, Math.PI / 2), color: IMP.black, uv: "keep" });
+    p.box("emitAmber", ix + 0.08, 0.8 + 0.13, WALL_OFF + d / 2 + 0.152, 0.02, 0.012, 0.006);
   }
-  for (let k = 0; k < 5; k++) p.box("metalRough", 0, 0.22 + k * 0.045, f + 0.02, w - 0.3, 0.012, 0.012, { color: IMP.black });
+  for (let k = 0; k < 5; k++) p.box("metalRough", double ? -(dw / 2 + 0.03) : 0, 0.22 + k * 0.045, f + 0.02, dw - 0.16, 0.012, 0.012, { color: IMP.black });
   p.box(seed % 2 ? "emitAmber" : "emitBlue", w / 2 - 0.1, h - 0.18, f + 0.02, 0.03, 0.03, 0.008);
-  p.decal(0, h - 0.5, f + 0.02, 0.26, label);
-  p.collider(-w / 2 - 0.02, w / 2 + 0.02, 0, h + 0.05, 0, f + 0.05, "locker");
+  // label plate (proud) on the fixed / left leaf
+  const lx = double ? -(dw / 2 + 0.03) : 0;
+  p.box("metal", lx, h - 0.5, f + 0.02, 0.24, 0.1, 0.008, { color: IMP.mid, texel: 2 });
+  p.decal(lx, h - 0.5, f + 0.027, 0.2, label);
+  p.collider(-w / 2 - 0.02, w / 2 + 0.02, 0, h + 0.05, 0, f + (open ? dw + 0.05 : 0.05), "locker");
+}
+
+/**
+ * Open-frame equipment rack: four uprights with cross members, stacked modules of varying height with
+ * gloss front plates, LED rows, handles and one small screen, patch loops down one side, a cable bundle
+ * from the top into the wall. p at floor, centred (replaces a pair of lockers).
+ */
+export function equipmentRack(kit, p, { w = 1.6, h = 2.0, d = 0.6, seed = 0, screenMat = null, screenRect = null } = {}) {
+  const rand = rng(seed + 41);
+  const f = WALL_OFF + d;
+  p.box("paintedMetal", 0, 0.05, WALL_OFF + d / 2, w, 0.1, d, { color: IMP.black, texel: 1 });
+  for (const sx of [-1, 1]) for (const sz of [WALL_OFF + 0.04, f - 0.04]) p.box("metal", sx * (w / 2 - 0.04), h / 2 + 0.05, sz, 0.06, h - 0.1, 0.06, { color: IMP.mid, texel: 2 });
+  p.box("metal", 0, h + 0.02, WALL_OFF + d / 2, w, 0.04, d, { color: IMP.mid, texel: 2 });
+  p.box("impPanel", 0, h / 2 + 0.05, WALL_OFF + 0.015, w - 0.16, h - 0.2, 0.02, { color: IMP.dark, texel: 1 }); // back plane
+  // modules
+  let y = 0.1;
+  let i = 0;
+  while (y < h - 0.2) {
+    const mh = Math.min(h - 0.05 - y, 0.18 + Math.floor(rand() * 3) * 0.12);
+    if (mh < 0.12) break;
+    const mw = w - 0.2;
+    p.box("paintedMetal", 0, y + mh / 2, WALL_OFF + d / 2 - 0.02, mw, mh - 0.02, d - 0.14, { color: i % 3 === 1 ? IMP.dark : IMP.black, texel: 1 });
+    p.box("darkGloss", 0, y + mh / 2, f - 0.08, mw, mh - 0.03, 0.01);
+    for (const s of [-1, 1]) p.box("metal", s * (mw / 2 - 0.06), y + mh / 2, f - 0.07, 0.03, mh * 0.5, 0.025, { color: IMP.steel, texel: 2 });
+    const leds = 4 + Math.floor(rand() * 5);
+    for (let k = 0; k < leds; k++) {
+      const v = rand();
+      p.box(v < 0.55 ? "emitBlue" : v < 0.85 ? "emitAmber" : "emitRedImp", -mw / 2 + 0.14 + k * 0.05, y + mh - 0.06, f - 0.072, 0.03, 0.014, 0.006);
+    }
+    if (i % 3 === 2 && screenMat) p.screenV(screenMat, mw / 2 - 0.35, y + mh / 2, f - 0.072, 0.4, Math.min(0.2, mh - 0.08), screenRect);
+    else for (let k = 0; k < 3; k++) p.box("metalRough", mw / 2 - 0.35, y + 0.04 + k * 0.035, f - 0.07, 0.4, 0.008, 0.01, { color: IMP.mid });
+    y += mh;
+    i++;
+  }
+  // patch loops on the right upright, bundle up the back into the wall
+  for (let k = 0; k < 4; k++) {
+    const ly = 0.5 + k * 0.35;
+    kit.add("paintedMetal", new THREE.TorusGeometry(0.07, 0.012, 6, 14, Math.PI), { pos: p.P(w / 2 + 0.02, ly, f - 0.2), quat: quatYX(p.a + Math.PI / 2, 0, Math.PI), color: k % 2 ? IMP.black : new THREE.Color("#3b3f62"), uv: "keep" });
+  }
+  for (const ox of [-0.12, 0, 0.12]) p.cyl("paintedMetal", ox, h + 0.04 + 0.15, WALL_OFF + 0.1, 0.02, 0.3, "y", { color: IMP.black, segments: 8 });
+  p.box("metal", 0, h + 0.36, WALL_OFF + 0.1, 0.4, 0.06, 0.16, { color: IMP.steel, texel: 2 });
+  p.decal(-w / 2 + 0.2, h - 0.12, f - 0.03, 0.16, 9);
+  p.collider(-w / 2 - 0.02, w / 2 + 0.06, 0, h + 0.05, 0, f + 0.02, "rack");
 }
 
 /**
@@ -294,10 +443,11 @@ export function framedScreen(kit, p, { w = 2.0, h = 1.2, mat, uvRect = null, bez
 }
 
 /** Overhead readout bar: tilted housing on two brackets, wide screen, amber end caps. p at the bar centre height. */
-export function readoutBar(kit, p, { w = 2.4, h = 0.26, mat, uvRect = null, tilt = 0.28 } = {}) {
+export function readoutBar(kit, p, { w = 2.4, h = 0.26, mat, uvRect = null, uvRect2 = null, tilt = 0.28, caps = "emitAmber" } = {}) {
   const d = 0.1;
   const oz = WALL_OFF + 0.14;
-  for (const s of [-1, 1]) p.box("metalRough", s * (w / 2 - 0.25), 0.02, WALL_OFF + 0.06, 0.06, 0.1, 0.12, { color: IMP.mid, texel: 2 });
+  const nb = w > 3 ? 3 : 2;
+  for (let i = 0; i < nb; i++) p.box("metalRough", -w / 2 + 0.25 + (i * (w - 0.5)) / (nb - 1), 0.02, WALL_OFF + 0.06, 0.06, 0.1, 0.12, { color: IMP.mid, texel: 2 });
   p.box("paintedMetal", 0, 0, oz, w, h + 0.08, d, { color: IMP.dark, texel: 1, tilt });
   {
     const [, cy, cz] = p.onSlope(0, (h + 0.08) / 2 + 0.01, 0, tilt);
@@ -305,8 +455,14 @@ export function readoutBar(kit, p, { w = 2.4, h = 0.26, mat, uvRect = null, tilt
   }
   // front face centre of the tilted housing: the housing's +z offset rotated about local x by the tilt
   const [, fy, fz] = p.onSlope(0, 0, d / 2 + 0.006, tilt);
-  p.screenV(mat, 0, fy, oz + fz, w - 0.16, h, uvRect, tilt);
-  for (const s of [-1, 1]) p.box("emitAmber", s * (w / 2 - 0.04), fy, oz + fz, 0.02, h * 0.6, 0.006, { tilt });
+  if (uvRect2) {
+    // two displays side by side with a divider (wide bars)
+    const sw = (w - 0.22) / 2;
+    p.screenV(mat, -(sw / 2 + 0.03), fy, oz + fz, sw, h, uvRect, tilt);
+    p.screenV(mat, sw / 2 + 0.03, fy, oz + fz, sw, h, uvRect2, tilt);
+    p.box("metal", 0, fy, oz + fz, 0.03, h + 0.02, 0.008, { color: IMP.mid, tilt });
+  } else p.screenV(mat, 0, fy, oz + fz, w - 0.16, h, uvRect, tilt);
+  for (const s of [-1, 1]) p.box(caps, s * (w / 2 - 0.04), fy, oz + fz, 0.02, h * 0.6, 0.006, { tilt });
 }
 
 /** Vertical conduit bundle between two manifold blocks (Kestrel-style). p at floor; y0..y1 is the run. */
@@ -329,13 +485,22 @@ export function wallPipe(kit, p, { len = 4, r = 0.03, color = IMP.mid, clampEver
 }
 
 /** Wall luminaire (over a door / above seating): angled housing with a downward emitter and two brackets. p at the housing centre height. */
-export function wallLuminaire(kit, p, { w = 0.7, emit = "emitWhite" } = {}) {
+export function wallLuminaire(kit, p, { w = 0.7, emit = "emitCoolSoft" } = {}) {
   const tilt = -0.5;
   const oz = WALL_OFF + 0.13;
   for (const s of [-1, 1]) p.box("metalRough", s * (w / 2 - 0.08), 0.05, WALL_OFF + 0.05, 0.05, 0.1, 0.1, { color: IMP.mid, texel: 2 });
   p.box("paintedMetal", 0, 0, oz, w, 0.12, 0.2, { color: IMP.dark, texel: 1, tilt });
-  const [, ey, ez] = p.onSlope(0, -0.061, 0, tilt);
-  p.box(emit, 0, ey, oz + ez, w - 0.12, 0.006, 0.14, { tilt });
+  // recessed diffuser (centre-bright map, uv kept per face) behind a row of louvre blades
+  const [, ey, ez] = p.onSlope(0, -0.05, 0, tilt);
+  p.box(emit, 0, ey, oz + ez, w - 0.14, 0.006, 0.12, { tilt, uv: "keep" });
+  for (let x = -w / 2 + 0.1; x < w / 2 - 0.05; x += 0.07) {
+    const [bx, by, bz] = p.onSlope(x, -0.075, 0, tilt);
+    p.box("metal", bx, by, oz + bz, 0.008, 0.04, 0.14, { color: IMP.mid, tilt });
+  }
+  for (const s of [-1, 1]) {
+    const [rx, ry, rz] = p.onSlope(s * (w / 2 - 0.03), -0.07, 0, tilt);
+    p.box("metalRough", rx, ry, oz + rz, 0.06, 0.03, 0.2, { color: IMP.mid, tilt, texel: 2 });
+  }
   const [, ly, lz] = p.onSlope(0, 0, 0.103, tilt);
   p.box("emitBlue", w / 2 - 0.04, ly, oz + lz, 0.02, 0.02, 0.006, { tilt });
 }
@@ -371,11 +536,88 @@ export function beam(kit, min, max, { color = IMP.dark, flange = true, bolts = t
  * Ceiling ribs: shallow lighter-grey stiffeners under the dark ceiling panels (they catch the downlights and
  * break the ceiling into bays). Runs along z at each x in `xs`, from z0 to z1; top face buried in the panel.
  */
-export function ceilingRibs(kit, xs, z0, z1, ceilY, { w = 0.08, depth = 0.1, color = IMP.mid } = {}) {
+export function ceilingRibs(kit, xs, z0, z1, ceilY, { w = 0.08, depth = 0.1, color = IMP.mid, axis = "z" } = {}) {
   for (const x of xs) {
-    kit.boxMM("metal", [x - w / 2, ceilY - depth, z0], [x + w / 2, ceilY + 0.01, z1], { color, texel: 1 });
-    kit.boxMM("paintedMetal", [x - 0.012, ceilY - depth - 0.006, z0 + 0.02], [x + 0.012, ceilY - depth, z1 - 0.02], { color: IMP.black });
+    if (axis === "z") {
+      kit.boxMM("metal", [x - w / 2, ceilY - depth, z0], [x + w / 2, ceilY + 0.01, z1], { color, texel: 1 });
+      kit.boxMM("paintedMetal", [x - 0.012, ceilY - depth - 0.006, z0 + 0.02], [x + 0.012, ceilY - depth, z1 - 0.02], { color: IMP.black });
+    } else {
+      // axis "x": xs are z positions, z0..z1 are the x extents
+      kit.boxMM("metal", [z0, ceilY - depth, x - w / 2], [z1, ceilY + 0.01, x + w / 2], { color, texel: 1 });
+      kit.boxMM("paintedMetal", [z0 + 0.02, ceilY - depth - 0.006, x - 0.012], [z1 - 0.02, ceilY - depth, x + 0.012], { color: IMP.black });
+    }
   }
+}
+
+/**
+ * Ceiling: black top slab plus dark hanging panels with gaps left for recessed light troughs. The panels are
+ * matte charcoal (the map-only-grain "rubber" set, tinted up with IMP.white: 0.037 × 0.59 ≈ 0.022 linear, a
+ * dark ceiling that is not a void) — no oxidised blotches or scratches, so no grime reads on the ceiling, and
+ * roughness ≈ 0.86 / metalness 0 so the downlights' pools land as soft diffuse patches instead of streaked
+ * specular bars. gaps: [{ at, w }] across `axis` ("z": gaps run along z at x = at). Panels span
+ * ceilY .. ceilY + depth - 0.02; the slab sits above them (seen through the gaps).
+ */
+export function ceilingPanels(kit, bounds, ceilY, { axis = "z", inset = 0.25, gaps = [], depth = 0.2, panelMat = "rubber", panelColor = IMP.white } = {}) {
+  const x0 = bounds.min[0] + inset;
+  const x1 = bounds.max[0] - inset;
+  const z0 = bounds.min[2] + inset;
+  const z1 = bounds.max[2] - inset;
+  kit.boxMM("paintedMetal", [x0, ceilY + depth, z0], [x1, ceilY + depth + 0.15, z1], { color: IMP.black, texel: 0.5 });
+  const across = axis === "z" ? [x0, x1] : [z0, z1];
+  const sorted = [...gaps].sort((p, q) => p.at - q.at);
+  let cur = across[0];
+  const panel = (p0, p1) => {
+    if (p1 - p0 < 0.01) return;
+    if (axis === "z") kit.boxMM(panelMat, [p0, ceilY, z0], [p1, ceilY + depth - 0.02, z1], { color: panelColor, texel: 1 });
+    else kit.boxMM(panelMat, [x0, ceilY, p0], [x1, ceilY + depth - 0.02, p1], { color: panelColor, texel: 1 });
+  };
+  for (const g of sorted) {
+    panel(cur, g.at - g.w / 2);
+    cur = g.at + g.w / 2;
+  }
+  panel(cur, across[1]);
+  return { x0, x1, z0, z1 };
+}
+
+/**
+ * Louvred light trough along z (axis "z", at = x) or along x (axis "x", at = z), occupying top - depth .. top:
+ * two dark side cheeks with lighter lips at the mouth, a recessed diffuser split into short centre-bright
+ * segments (emitCoolSoft with per-face uvs) under a light-grey reflector, and shallow louvre blades across
+ * the mouth, so no bare bar faces the room. Pass top = ceilY + panel depth to recess it into a ceiling gap.
+ */
+export function lightTrough(kit, axis, at, a0, a1, ceilY, { w = 0.5, depth = 0.14, emit = "emitCoolSoft", seg = 0.9, gap = 0.1, louvreEvery = 0.3, bladeH = 0.05 } = {}) {
+  const L = a1 - a0;
+  const B = (u0, u1, y0, y1, v0, v1, mat, opts) => {
+    // u along the run, v across it
+    if (axis === "z") kit.boxMM(mat, [at + v0, y0, u0], [at + v1, y1, u1], opts);
+    else kit.boxMM(mat, [u0, y0, at + v0], [u1, y1, at + v1], opts);
+  };
+  const t = 0.05;
+  for (const s of [-1, 1]) {
+    const v0 = s < 0 ? -w / 2 : w / 2 - t;
+    B(a0, a1, ceilY - depth, ceilY, v0, v0 + t, "paintedMetal", { color: IMP.dark, texel: 1 });
+    const l0 = s < 0 ? -w / 2 - 0.02 : w / 2 - t - 0.02;
+    B(a0, a1, ceilY - depth - 0.02, ceilY - depth, l0, l0 + t + 0.04, "metalRough", { color: IMP.mid, texel: 1 });
+  }
+  // end caps
+  for (const [u0, u1] of [
+    [a0, a0 + 0.04],
+    [a1 - 0.04, a1],
+  ])
+    B(u0, u1, ceilY - depth, ceilY, -w / 2, w / 2, "paintedMetal", { color: IMP.dark, texel: 1 });
+  // light-grey reflector soffit inside the trough, diffuser segments standing 2 cm proud of it
+  B(a0, a1, ceilY - 0.03, ceilY, -w / 2 + t, w / 2 - t, "metalRough", { color: IMP.mid, texel: 1 });
+  const n = Math.max(1, Math.floor((L - 0.1) / (seg + gap)));
+  const segLen = (L - 0.1 - gap * (n - 1)) / n;
+  for (let i = 0; i < n; i++) {
+    const u0 = a0 + 0.05 + i * (segLen + gap);
+    const ew = 0.1;
+    B(u0, u0 + segLen, ceilY - 0.05, ceilY - 0.03, -ew / 2, ew / 2, emit, { uv: "keep" });
+    B(u0 - 0.02, u0 + segLen + 0.02, ceilY - 0.045, ceilY - 0.03, -ew / 2 - 0.03, ew / 2 + 0.03, "paintedMetal", { color: IMP.black, texel: 2 });
+  }
+  // louvre blades across the mouth
+  const bTop = Math.min(ceilY - depth + 0.005 + bladeH, ceilY - 0.07);
+  for (let u = a0 + 0.15; u < a1 - 0.1; u += louvreEvery) B(u - 0.005, u + 0.005, ceilY - depth + 0.005, bTop, -w / 2 + t, w / 2 - t, "metal", { color: IMP.mid, texel: 2 });
 }
 
 /** Cable tray: U-channel with cable bundles and hangers to the ceiling. Straight run along x or z. */
@@ -417,13 +659,41 @@ export function cableTray(kit, from, to, y, { w = 0.36, hangTo = null, cables = 
   }
 }
 
-/** Downlight housing: dark can, lighter rim, emitter disc, cross louvre. y = housing top (under the ceiling). */
-export function downlight(kit, x, y, z, { r = 0.17, emit = "emitWhite" } = {}) {
-  kit.cyl("metalRough", x, y - 0.06, z, r + 0.07, 0.12, "y", { color: IMP.dark, segments: 16, texel: 1 });
-  kit.cyl("metal", x, y - 0.118, z, r + 0.05, 0.012, "y", { color: IMP.mid, segments: 16, texel: 1 });
-  kit.cyl(emit, x, y - 0.126, z, r, 0.012, "y", { segments: 16 });
-  kit.box("metalRough", x, y - 0.134, z, r * 2, 0.008, 0.02, { color: IMP.dark });
-  kit.box("metalRough", x, y - 0.134, z, 0.02, 0.008, r * 2, { color: IMP.dark });
+/** Ceiling service pipe along x or z at height y with flanged joints and hanger straps up to `hangTo`. from/to = [x,z]. */
+export function ceilingPipe(kit, from, to, y, { r = 0.05, color = IMP.mid, hangTo = null, hangEvery = 2.4 } = {}) {
+  const alongX = Math.abs(to[0] - from[0]) > Math.abs(to[1] - from[1]);
+  const x0 = Math.min(from[0], to[0]);
+  const x1 = Math.max(from[0], to[0]);
+  const z0 = Math.min(from[1], to[1]);
+  const z1 = Math.max(from[1], to[1]);
+  const L = alongX ? x1 - x0 : z1 - z0;
+  const cx = (x0 + x1) / 2;
+  const cz = (z0 + z1) / 2;
+  const axis = alongX ? "x" : "z";
+  kit.cyl("metalRough", cx, y, cz, r, L, axis, { color, segments: 12 });
+  for (let s = 1.5; s < L - 0.5; s += 3.0) kit.cyl("metal", alongX ? x0 + s : cx, y, alongX ? cz : z0 + s, r + 0.025, 0.06, axis, { color: IMP.steel, segments: 12 });
+  if (hangTo !== null && hangTo - y - r > 0.05) {
+    for (let s = hangEvery / 2; s < L; s += hangEvery) {
+      const px = alongX ? x0 + s : cx;
+      const pz = alongX ? cz : z0 + s;
+      kit.box("metal", px, (y + r + hangTo) / 2, pz, 0.03, hangTo - y - r, 0.03, { color: IMP.mid, texel: 2 });
+      kit.box("metalRough", px, y, pz, alongX ? 0.05 : r * 2 + 0.04, r * 2 + 0.04, alongX ? r * 2 + 0.04 : 0.05, { color: IMP.steel, texel: 2 });
+    }
+  }
+}
+
+/**
+ * Downlight: dark can with a lighter bezel ring, a deep black recess and a small centre-bright diffuser
+ * (emitCoolSoft, per-face uvs) set 6 cm up inside it behind a cross louvre. y = housing top (under the ceiling).
+ */
+export function downlight(kit, x, y, z, { r = 0.08, emit = "emitCoolSoft" } = {}) {
+  kit.cyl("metalRough", x, y - 0.08, z, r + 0.1, 0.16, "y", { color: IMP.dark, segments: 16, texel: 1 });
+  // bezel ring, black throat and the diffuser stacked just under the can's bottom face
+  kit.add("metal", new THREE.RingGeometry(r + 0.03, r + 0.09, 16), { pos: [x, y - 0.162, z], rot: [Math.PI / 2, 0, 0], color: IMP.mid, uv: "keep" });
+  kit.add("paintedMetal", new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.004, 16), { pos: [x, y - 0.164, z], color: IMP.black, uv: "keep" });
+  kit.add(emit, new THREE.CylinderGeometry(r, r, 0.004, 16), { pos: [x, y - 0.169, z], uv: "keep" });
+  kit.box("metalRough", x, y - 0.175, z, r * 2 + 0.04, 0.008, 0.014, { color: IMP.mid });
+  kit.box("metalRough", x, y - 0.175, z, 0.014, 0.008, r * 2 + 0.04, { color: IMP.mid });
 }
 
 /** Ceiling vent grille (square). y = ceiling face. */
@@ -484,20 +754,98 @@ export function projectorRig(kit, cx, cy, cz, { shape = "octagon", rx = 1.6, rz 
 // Floor
 // ---------------------------------------------------------------------------
 
-/** Floor inlay band: black plate with two blue edge strips and cross ticks. Straight along x or z (min/max). */
-export function floorInlay(kit, min, max, { emit = "emitBlue", ticks = true } = {}) {
+/**
+ * Floor inlay band: black plate with two painted light-grey edge lines and cross ticks (lit by the room, not
+ * emissive — glowing strips belong on step nosings only). Straight along x or z (min/max).
+ */
+export function floorInlay(kit, min, max, { lineMat = "paintedMetal", lineColor = IMP.white, ticks = true } = {}) {
   const alongX = max[0] - min[0] > max[2] - min[2];
   const y = min[1];
+  const line = (mn, mx) => kit.boxMM(lineMat, mn, mx, { color: lineColor, texel: 2 });
   kit.boxMM("paintedMetal", [min[0], y, min[2]], [max[0], y + 0.012, max[2]], { color: IMP.black, texel: 1 });
   const e = 0.035;
   if (alongX) {
-    kit.boxMM(emit, [min[0] + 0.1, y + 0.006, min[2] + 0.03], [max[0] - 0.1, y + 0.016, min[2] + 0.03 + e]);
-    kit.boxMM(emit, [min[0] + 0.1, y + 0.006, max[2] - 0.03 - e], [max[0] - 0.1, y + 0.016, max[2] - 0.03]);
-    if (ticks) for (let x = min[0] + 1.0; x < max[0] - 0.5; x += 1.5) kit.boxMM(emit, [x, y + 0.006, min[2] + 0.03 + e], [x + 0.03, y + 0.016, max[2] - 0.03 - e]);
+    line([min[0] + 0.1, y + 0.006, min[2] + 0.03], [max[0] - 0.1, y + 0.016, min[2] + 0.03 + e]);
+    line([min[0] + 0.1, y + 0.006, max[2] - 0.03 - e], [max[0] - 0.1, y + 0.016, max[2] - 0.03]);
+    if (ticks) for (let x = min[0] + 1.0; x < max[0] - 0.5; x += 1.5) line([x, y + 0.006, min[2] + 0.03 + e], [x + 0.03, y + 0.016, max[2] - 0.03 - e]);
   } else {
-    kit.boxMM(emit, [min[0] + 0.03, y + 0.006, min[2] + 0.1], [min[0] + 0.03 + e, y + 0.016, max[2] - 0.1]);
-    kit.boxMM(emit, [max[0] - 0.03 - e, y + 0.006, min[2] + 0.1], [max[0] - 0.03, y + 0.016, max[2] - 0.1]);
-    if (ticks) for (let z = min[2] + 1.0; z < max[2] - 0.5; z += 1.5) kit.boxMM(emit, [min[0] + 0.03 + e, y + 0.006, z], [max[0] - 0.03 - e, y + 0.016, z + 0.03]);
+    line([min[0] + 0.03, y + 0.006, min[2] + 0.1], [min[0] + 0.03 + e, y + 0.016, max[2] - 0.1]);
+    line([max[0] - 0.03 - e, y + 0.006, min[2] + 0.1], [max[0] - 0.03, y + 0.016, max[2] - 0.1]);
+    if (ticks) for (let z = min[2] + 1.0; z < max[2] - 0.5; z += 1.5) line([min[0] + 0.03 + e, y + 0.006, z], [max[0] - 0.03 - e, y + 0.016, z + 0.03]);
+  }
+}
+
+/** Raised floor cable cover: shallow channel with bevelled hazard edges, bolt heads and end ramps. from/to = [x,z], along x or z. */
+export function cableCover(kit, from, to, y, { w = 0.28 } = {}) {
+  const alongX = Math.abs(to[0] - from[0]) > Math.abs(to[1] - from[1]);
+  const x0 = Math.min(from[0], to[0]);
+  const x1 = Math.max(from[0], to[0]);
+  const z0 = Math.min(from[1], to[1]);
+  const z1 = Math.max(from[1], to[1]);
+  const cx = (x0 + x1) / 2;
+  const cz = (z0 + z1) / 2;
+  if (alongX) {
+    kit.boxMM("metalRough", [x0, y, cz - w / 2], [x1, y + 0.04, cz + w / 2], { color: IMP.mid, texel: 1 });
+    kit.boxMM("hazard", [x0, y + 0.004, cz - w / 2 - 0.05], [x1, y + 0.012, cz - w / 2], { texel: 3 });
+    kit.boxMM("hazard", [x0, y + 0.004, cz + w / 2], [x1, y + 0.012, cz + w / 2 + 0.05], { texel: 3 });
+    for (let x = x0 + 0.3; x < x1 - 0.2; x += 0.6) for (const s of [-1, 1]) kit.cyl("metal", x, y + 0.043, cz + s * (w / 2 - 0.05), 0.016, 0.006, "y", { color: IMP.steel, segments: 8 });
+  } else {
+    kit.boxMM("metalRough", [cx - w / 2, y, z0], [cx + w / 2, y + 0.04, z1], { color: IMP.mid, texel: 1 });
+    kit.boxMM("hazard", [cx - w / 2 - 0.05, y + 0.004, z0], [cx - w / 2, y + 0.012, z1], { texel: 3 });
+    kit.boxMM("hazard", [cx + w / 2, y + 0.004, z0], [cx + w / 2 + 0.05, y + 0.012, z1], { texel: 3 });
+    for (let z = z0 + 0.3; z < z1 - 0.2; z += 0.6) for (const s of [-1, 1]) kit.cyl("metal", cx + s * (w / 2 - 0.05), y + 0.043, z, 0.016, 0.006, "y", { color: IMP.steel, segments: 8 });
+  }
+}
+
+/** Round floor access hatch: hazard ring, steel rim ring, recessed dark lid with bolt heads and a lifting bar. */
+export function floorHatchRound(kit, cx, y, cz, { r = 0.5 } = {}) {
+  kit.add("hazard", new THREE.RingGeometry(r + 0.04, r + 0.14, 32), { pos: [cx, y + 0.004, cz], rot: [-Math.PI / 2, 0, 0], uv: "scale", uvScale: [6, 6] });
+  kit.add("metal", new THREE.CylinderGeometry(r + 0.04, r + 0.04, 0.014, 32), { pos: [cx, y + 0.007, cz], color: IMP.mid, uv: "keep" });
+  kit.add("paintedMetal", new THREE.CylinderGeometry(r - 0.04, r - 0.04, 0.006, 32), { pos: [cx, y + 0.016, cz], color: IMP.dark, uv: "keep" });
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    kit.cyl("metal", cx + Math.sin(a) * (r - 0.12), y + 0.021, cz + Math.cos(a) * (r - 0.12), 0.02, 0.006, "y", { color: IMP.steel, segments: 8 });
+  }
+  kit.box("metal", cx, y + 0.024, cz, 0.3, 0.012, 0.04, { color: IMP.steel, texel: 2 });
+}
+
+/**
+ * Wall cable tray: U-channel (0.4 m) on L-brackets running along a wall at height y, three cable bundles
+ * inside, optional conduit drops from the tray down to equipment below (drops: [{ a, y1 }]).
+ * face n|s|e|w, inner = room inner bounds, a0..a1 = along-wall extent (x for n/s, z for e/w).
+ */
+export function wallTray(kit, face, inner, a0, a1, y, { w = 0.4, cables = 3, bracketEvery = 1.6, drops = [], skip = [] } = {}) {
+  const alongX = face === "n" || face === "s";
+  const wallT = alongX ? (face === "n" ? inner.min[2] : inner.max[2]) : face === "w" ? inner.min[0] : inner.max[0];
+  const into = face === "n" || face === "w" ? 1 : -1; // direction into the room along the wall normal
+  const t0 = wallT + into * WALL_OFF;
+  const t1 = wallT + into * (WALL_OFF + w);
+  const tmin = Math.min(t0, t1);
+  const tmax = Math.max(t0, t1);
+  const B = (u0, u1, y0, y1, v0, v1, mat, opts) => (alongX ? kit.boxMM(mat, [u0, y0, v0], [u1, y1, v1], opts) : kit.boxMM(mat, [v0, y0, u0], [v1, y1, u1], opts));
+  B(a0, a1, y, y + 0.02, tmin, tmax, "metalRough", { color: IMP.dark, texel: 1 });
+  B(a0, a1, y, y + 0.1, tmin, tmin + 0.02, "metalRough", { color: IMP.dark, texel: 1 });
+  B(a0, a1, y, y + 0.1, tmax - 0.02, tmax, "metalRough", { color: IMP.dark, texel: 1 });
+  const cols = [IMP.black, new THREE.Color("#3b3f62"), IMP.mid, IMP.black];
+  for (let i = 0; i < cables; i++) {
+    const off = 0.07 + (i * (w - 0.14)) / Math.max(1, cables - 1);
+    const r = 0.018 + (i % 2) * 0.01;
+    const t = into > 0 ? t0 + off : t0 - off;
+    if (alongX) kit.cyl("paintedMetal", (a0 + a1) / 2, y + 0.02 + r, t, r, a1 - a0 - 0.06, "x", { color: cols[i % cols.length], segments: 8 });
+    else kit.cyl("paintedMetal", t, y + 0.02 + r, (a0 + a1) / 2, r, a1 - a0 - 0.06, "z", { color: cols[i % cols.length], segments: 8 });
+  }
+  for (let a = a0 + 0.4; a < a1 - 0.2; a += bracketEvery) {
+    if (skip.some(([s0, s1]) => a > s0 && a < s1)) continue; // no brackets hanging into a door opening
+    B(a - 0.02, a + 0.02, y - 0.04, y, tmin, tmax, "metal", { color: IMP.mid, texel: 2 });
+    B(a - 0.02, a + 0.02, y - 0.3, y, Math.min(t0, t0 + into * 0.04), Math.max(t0, t0 + into * 0.04), "metal", { color: IMP.mid, texel: 2 });
+  }
+  for (const d of drops) {
+    const tc = t0 + into * 0.11;
+    const L = y - d.y1;
+    if (L < 0.05) continue;
+    if (alongX) kit.cyl("metalRough", d.a, d.y1 + L / 2, tc, 0.02, L, "y", { color: IMP.mid, segments: 8 });
+    else kit.cyl("metalRough", tc, d.y1 + L / 2, d.a, 0.02, L, "y", { color: IMP.mid, segments: 8 });
+    for (const yy of [d.y1 + 0.08, y - 0.1]) B(d.a - 0.04, d.a + 0.04, yy - 0.015, yy + 0.015, Math.min(t0, tc + into * 0.03), Math.max(t0, tc + into * 0.03), "metal", { color: IMP.steel, texel: 2 });
   }
 }
 

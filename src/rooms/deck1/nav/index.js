@@ -1,14 +1,14 @@
-// d1-nav — secondary navigation (Phase 2 detail): a working star-chart table instrument with a rotating
-// point-cloud hologram and plotted route, an animated chart wall, plotting stations with overhead readouts,
-// the navigator's raised desk, cable trays from the ceiling to the table, wall greebles, floor inlays.
+// d1-nav — secondary navigation (Phase 2 detail, critic round 1): a working star-chart table instrument with a
+// clustered point-cloud hologram and a three-jump route, an animated chart wall, plotting stations with overhead
+// readouts, the navigator's raised dais with a tilted chart desk, cable trays on the walls and ceiling,
+// recessed louvred light troughs, wall greebles and painted floor inlays.
 // Contract (COORDINATION.md §7): id/kind/deck/owner/bounds/doors/lift/spawn/apertures unchanged from Phase 1.
-import * as THREE from "three";
 import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
 import { roomShell, doorReveal, railing, stairs } from "../shared/imperial.js";
 import { IMP, LIGHT } from "../shared/palette.js";
-import { ScreenAtlas, UI, paintStarMap, paintStatusColumn, paintConsole, paintReadoutBar, paintGauge, paintStack } from "./ui.js";
-import { placer, wallAnchor, station, chair, locker, dataColumn, junctionBox, vent, intercom, emergencyCabinet, framedScreen, readoutBar, conduitBundle, wallPipe, stencilPlate, beam, ceilingRibs, cableTray, downlight, ceilingVent, projectorRig, floorInlay, floorHatch, stepBlock, WALL_OFF } from "./props.js";
-import { buildChartTable, buildChartHolo } from "./table.js";
+import { ScreenAtlas, UI, paintStarMap, paintStatusColumn, paintConsole, paintReadoutBar, paintGauge, paintStack, paintRoutePlot } from "./ui.js";
+import { placer, wallAnchor, station, chair, stool, locker, equipmentRack, dataColumn, junctionBox, vent, intercom, emergencyCabinet, framedScreen, readoutBar, conduitBundle, wallPipe, wallTray, stencilPlate, beam, ceilingPanels, lightTrough, ceilingRibs, cableTray, downlight, ceilingVent, projectorRig, floorInlay, floorHatch, stepBlock, WALL_OFF } from "./props.js";
+import { buildChartTable, buildChartHolo, buildChartDesk } from "./table.js";
 import { tickHolo } from "./holo.js";
 
 const ID = "d1-nav";
@@ -17,6 +17,9 @@ const CY = CEIL[ID];
 const IN = { min: [B.min[0] + 0.3, FLOOR, B.min[2] + 0.3], max: [B.max[0] - 0.3, CY, B.max[2] - 0.3] };
 const CX = (B.min[0] + B.max[0]) / 2; // -33.8
 const CZ = (B.min[2] + B.max[2]) / 2; // 477
+const TY = FLOOR + 3.2; // wall cable-tray underside
+const DLX = [CX - 6.4, CX + 6.4]; // downlight rows (3.5 m off the side walls: no hot specular blobs on the panels)
+const DLZ = [472.6, CZ, 481.4];
 
 let atlas = null;
 
@@ -48,17 +51,17 @@ const manifest = {
     const holoObjects = [];
     if (!atlas) manifest.materials();
 
-    // ---- atlas regions (canvas px, top-down) → uv rects
-    // (non-overlapping grid: left column x 0..352, middle x 352..768, right x 768..1024 below the 380 px map)
+    // ---- atlas regions (canvas px, top-down) → uv rects; non-overlapping columns x 0..352 / 352..768 / 768..1024
     const cells = {
       map: atlas.region(0, 0, 1024, 380, paintStarMap(1201)),
-      colA: atlas.region(0, 380, 176, 380, paintStatusColumn(1301, { title: "LANE STATUS" })),
-      colB: atlas.region(176, 380, 176, 380, paintStatusColumn(1302, { title: "GRAV SHADOW", accent: UI.amber })),
-      wall: [atlas.region(352, 724, 300, 180, paintConsole(2001, { title: "DRIVE PLOT", accent: UI.blue })), atlas.region(0, 764, 300, 180, paintConsole(2002, { title: "BEACON NET", accent: UI.amber }))],
+      colA: atlas.region(0, 380, 140, 300, paintStatusColumn(1301, { title: "LANE STATUS" })),
+      colB: atlas.region(140, 380, 140, 300, paintStatusColumn(1302, { title: "GRAV SHADOW", accent: UI.amber })),
+      wall: [atlas.region(352, 716, 300, 180, paintRoutePlot(1951, { title: "JUMP SOLUTION  ·  LANE 7" })), atlas.region(0, 684, 300, 180, paintConsole(2002, { title: "BEACON NET", accent: UI.amber }))],
+      deskDisp: atlas.region(0, 868, 300, 150, paintRoutePlot(1952, { title: "CHART DESK  ·  PLOTTED LEGS" })),
       con: [0, 1, 2].map((i) => atlas.region(352, 380 + i * 64, 416, 64, paintConsole(1401 + i, { title: "PLOT STN" }))),
       rb: [0, 1].map((i) => atlas.region(352, 572 + i * 48, 416, 48, paintReadoutBar(1501 + i, { accent: i ? UI.cyan : UI.amber }))),
-      navdesk: atlas.region(352, 672, 416, 48, paintReadoutBar(1901, { accent: UI.cyan, labels: ["LANE", "LEG", "ETA", "DEV", "MASS", "GRAV", "SYNC", "BCN"] })),
-      board: atlas.region(352, 908, 280, 116, paintStatusColumn(2101, { title: "HYPERLANE 7 · READY", accent: UI.cyan })),
+      rb2: atlas.region(352, 668, 416, 48, paintReadoutBar(1901, { accent: UI.cyan, labels: ["LANE", "LEG", "ETA", "DEV", "MASS", "GRAV", "SYNC", "BCN"] })),
+      board: atlas.region(352, 900, 280, 116, paintStatusColumn(2101, { title: "HYPERLANE 7 · READY", accent: UI.cyan })),
       desk: [0, 1].map((i) => atlas.region(768, 380 + i * 112, 176, 112, paintGauge(1601 + i, { label: i ? "ALIGN" : "DRIVE" }))),
       gauge: [0, 1, 2].map((i) => atlas.region(768 + (i % 2) * 112, 604 + Math.floor(i / 2) * 112, 112, 112, paintGauge(1701 + i, { label: ["MASS", "SYNC", "REF"][i], accent: [UI.cyan, UI.amber, UI.blue][i] }))),
       stack: atlas.region(880, 716, 80, 300, paintStack(1801, { title: "LINK" })),
@@ -66,16 +69,13 @@ const manifest = {
     atlas.paint(ctx.time());
     const M = "navAtlas";
 
-    // ---- shell (unchanged Phase-1 helpers): light-grey panels, blue strip, two ceiling light channels
-    roomShell(kit, manifest, {
-      floorY: FLOOR,
-      ceilY: CY,
-      seed: 61,
-      panelW: 2.4,
-      strip: "emitBlue",
-      ceiling: { axis: "z", inset: 0.25, channels: [{ at: CX - 5, w: 0.5, emit: "emitWhite", emitW: 0.14 }, { at: CX + 5, w: 0.5, emit: "emitWhite", emitW: 0.14 }] },
-    });
+    // ---- shell: light-grey panels with the recessed blue strip; own ceiling — clean dark panels with two
+    //      recessed louvred light troughs (segmented emitCoolSoft diffusers 15 cm up behind the blades)
+    roomShell(kit, manifest, { floorY: FLOOR, ceilY: CY, seed: 61, panelW: 2.4, strip: "emitBlue", ceiling: null });
     for (const d of manifest.doors) doorReveal(kit, manifest, d, FLOOR);
+    const TR = [CX - 5, CX + 5];
+    ceilingPanels(kit, B, CY, { axis: "z", inset: 0.25, gaps: TR.map((x) => ({ at: x, w: 0.5 })) });
+    for (const x of TR) lightTrough(kit, "z", x, B.min[2] + 0.25, B.max[2] - 0.25, CY + 0.2, { w: 0.5, depth: 0.2 });
 
     // ---- star-chart table + hologram
     const { top } = buildChartTable(kit, M, cells, CX, FLOOR, CZ, { seed: 3 });
@@ -83,24 +83,61 @@ const manifest = {
     ctx.group.add(holo.stars, holo.lines);
     holoObjects.push(holo.stars, holo.lines);
 
-    // ---- floor inlays: door → table, table → chart wall, table → dais
+    // ---- floor inlays (black plate, painted light-grey lines): door → table, table → chart wall, table → dais
     floorInlay(kit, [-31.15, FLOOR, CZ - 0.7], [IN.max[0] - 0.1, FLOOR, CZ + 0.7]);
     floorInlay(kit, [CX - 0.55, FLOOR, 470.4], [CX + 0.55, FLOOR, CZ - 2.95]);
     floorInlay(kit, [CX - 0.55, FLOOR, CZ + 2.95], [CX + 0.55, FLOOR, 481.9]);
 
-    // ---- ceiling: cross beams, projector rig, cable trays, downlights, vents
+    // ---- ceiling: cross beams, projector rig, cable trays, bezelled downlights, ribs both ways, vents
     beam(kit, [IN.min[0], CY - 0.32, 472.0], [IN.max[0], CY, 472.35]);
     beam(kit, [IN.min[0], CY - 0.32, 481.65], [IN.max[0], CY, 482.0]);
     projectorRig(kit, CX, CY - 0.62, CZ, { shape: "octagon", rx: 1.65, ceilY: CY, emit: "emitBlue" });
     cableTray(kit, [CX, CZ - 1.55], [CX, 472.4], CY - 0.2, { w: 0.36, hangTo: CY });
     cableTray(kit, [CX, 471.95], [CX, IN.min[2] + 0.35], CY - 0.2, { w: 0.36, hangTo: CY });
-    cableTray(kit, [CX + 1.55, CZ - 0.9], [IN.max[0] - 0.35, CZ - 0.9], CY - 0.2, { w: 0.3, hangTo: CY, cables: 2 });
-    for (const x of [CX - 8.2, CX + 8.2]) for (const z of [471.0, CZ, 483.0]) downlight(kit, x, CY, z);
+    cableTray(kit, [CX + 0.18, 475.0], [IN.max[0] - 0.35, 475.0], CY - 0.2, { w: 0.3, hangTo: CY, cables: 2 });
+    for (const x of DLX) for (const z of DLZ) downlight(kit, x, CY, z);
+    downlight(kit, CX, CY, 484.0); // the dais wall-wash source
+    downlight(kit, CX + 0.8, CY, 470.9); // the console-bank pool's source (beside the ceiling tray)
     ceilingRibs(kit, [CX - 7.5, CX - 2.5, CX + 2.5, CX + 7.5], IN.min[2] + 0.3, IN.max[2] - 0.3, CY);
+    for (const [x0, x1] of [
+      [IN.min[0] + 0.3, CX - 5.3],
+      [CX - 4.7, CX + 4.7],
+      [CX + 5.3, IN.max[0] - 0.3],
+    ])
+      ceilingRibs(kit, [474.7, 479.3], x0, x1, CY, { axis: "x" });
     ceilingVent(kit, CX + 3.2, CY, 470.0);
     ceilingVent(kit, CX - 3.2, CY, 484.6);
-    // conduit drop from the east ceiling tray to the door junction
-    conduitBundle(kit, wallAnchor(kit, "e", IN, CZ - 0.9, FLOOR), { y0: 2.35, y1: CY - FLOOR - 0.12, pipes: [[-0.06, 0.025], [0.06, 0.025]] });
+    // ceiling tray → east wall tray: short conduit bundle down the wall (clear of the door opening)
+    conduitBundle(kit, wallAnchor(kit, "e", IN, 475.0, FLOOR), { y0: 3.32, y1: CY - FLOOR - 0.12, pipes: [[-0.06, 0.025], [0.06, 0.025]] });
+
+    // ---- wall cable trays at 3.2 m (0.4 m channels on brackets) around the west, south and east walls plus the
+    //      north-wall corners; conduit drops feed the displays, junctions, lockers and the rack below
+    wallTray(kit, "n", IN, IN.min[0] + 0.05, CX - 6.75, TY);
+    wallTray(kit, "n", IN, CX + 6.75, IN.max[0] - 0.05, TY, { drops: [{ a: IN.max[0] - 1.9, y1: FLOOR + 1.81 }] });
+    wallTray(kit, "w", IN, IN.min[2] + 0.45, IN.max[2] - 0.45, TY, {
+      skip: [[479.5, 480.5]],
+      drops: [
+        { a: 472.8, y1: FLOOR + 2.75 },
+        { a: 474.6, y1: FLOOR + 1.76 },
+        { a: 478.2, y1: FLOOR + 1.76 },
+        { a: 483.75, y1: FLOOR + 2.42 },
+      ],
+    });
+    wallTray(kit, "e", IN, IN.min[2] + 0.45, IN.max[2] - 0.45, TY, {
+      skip: [[475.6, 478.4]],
+      drops: [
+        { a: 470.2, y1: FLOOR + 2.75 },
+        { a: 471.7, y1: FLOOR + 1.76 },
+        { a: 483.0, y1: FLOOR + 2.74 },
+      ],
+    });
+    wallTray(kit, "s", IN, IN.min[0] + 0.45, IN.max[0] - 0.45, TY, {
+      drops: [
+        { a: -39.1, y1: FLOOR + 1.81 },
+        { a: -29.05, y1: FLOOR + 2.24 },
+        { a: -26.2, y1: FLOOR + 1.06 },
+      ],
+    });
 
     // ---- chart wall (north): main route display, two status columns, two link stacks, control desk
     {
@@ -117,36 +154,40 @@ const manifest = {
         chair(kit, placer(kit, CX + dx + (i % 2 ? 0.2 : -0.2), FLOOR, zc + 1.05, 0));
       });
     }
-    // NW corner: two equipment columns; NE corner: emergency cabinet, intercom, junction, vent
-    dataColumn(kit, wallAnchor(kit, "n", IN, IN.min[0] + 0.55, FLOOR), { ceilY: CY - FLOOR, seed: 1, screenMat: M, screenRect: cells.desk[1] });
-    dataColumn(kit, wallAnchor(kit, "n", IN, IN.min[0] + 1.5, FLOOR), { ceilY: CY - FLOOR, seed: 2 });
+    // NW corner: two equipment columns (conduits end in the wall tray); NE corner: emergency cabinet, intercom,
+    // junction fed from the tray, vent up in the ceiling band
+    dataColumn(kit, wallAnchor(kit, "n", IN, IN.min[0] + 0.55, FLOOR), { ceilY: 3.2, seed: 1, screenMat: M, screenRect: cells.desk[1] });
+    dataColumn(kit, wallAnchor(kit, "n", IN, IN.min[0] + 1.5, FLOOR), { ceilY: 3.2, seed: 2 });
     emergencyCabinet(kit, wallAnchor(kit, "n", IN, IN.max[0] - 0.5, FLOOR + 1.25));
     intercom(kit, wallAnchor(kit, "n", IN, IN.max[0] - 1.15, FLOOR + 1.45));
-    junctionBox(kit, wallAnchor(kit, "n", IN, IN.max[0] - 1.9, FLOOR + 1.6), { up: 0.3, down: 1.1, seed: 1 });
-    vent(kit, wallAnchor(kit, "n", IN, IN.max[0] - 1.2, FLOOR + 3.3), { w: 1.2, h: 0.36 });
+    junctionBox(kit, wallAnchor(kit, "n", IN, IN.max[0] - 1.9, FLOOR + 1.6), { down: 1.1, seed: 1 });
+    vent(kit, wallAnchor(kit, "n", IN, IN.max[0] - 1.2, FLOOR + 3.75), { w: 1.2, h: 0.36 });
     stencilPlate(kit, wallAnchor(kit, "n", IN, IN.max[0] - 0.5, FLOOR + 2.7), 0.3, 14);
 
-    // ---- west wall: three plotting stations facing the wall, overhead readout bars, greebles, lockers
+    // ---- west wall: three plotting stations facing the wall under a standard bar, a double-width bar and a
+    //      vertical link column; junctions fed from the tray, equipment rack with cabling in the SW corner
     {
       const xc = IN.min[0] + WALL_OFF + 0.57;
       [472.8, 476.4, 480.0].forEach((z, i) => {
         station(kit, placer(kit, xc, FLOOR, z, 1), { w: 2.4, screenMat: M, screenRect: cells.con[(i + 1) % 3], deskMat: M, deskRect: cells.desk[i % 2], seed: 30 + i, label: 6 });
         chair(kit, placer(kit, xc + 1.05, FLOOR, z + (i % 2 ? -0.15 : 0.15), 1));
-        readoutBar(kit, wallAnchor(kit, "w", IN, z, FLOOR + 2.55), { w: 2.4, mat: M, uvRect: cells.rb[i % 2] });
       });
-      for (const z of [474.6, 478.2]) junctionBox(kit, wallAnchor(kit, "w", IN, z, FLOOR + 1.55), { up: 0.35, down: 1.05, seed: Math.round(z) });
-      conduitBundle(kit, wallAnchor(kit, "w", IN, 482.2, FLOOR), { y0: 1.15, y1: 3.75 });
-      locker(kit, wallAnchor(kit, "w", IN, 483.3, FLOOR), { seed: 1, label: 6 });
-      locker(kit, wallAnchor(kit, "w", IN, 484.2, FLOOR), { seed: 2, label: 9 });
-      vent(kit, wallAnchor(kit, "w", IN, 483.75, FLOOR + 3.3), { w: 1.4, h: 0.36 });
+      readoutBar(kit, wallAnchor(kit, "w", IN, 472.8, FLOOR + 2.55), { w: 2.4, mat: M, uvRect: cells.rb[0] });
+      readoutBar(kit, wallAnchor(kit, "w", IN, 476.4, FLOOR + 2.55), { w: 3.4, mat: M, uvRect: cells.rb[1], uvRect2: cells.rb2, caps: "emitBlue" });
+      framedScreen(kit, wallAnchor(kit, "w", IN, 480.0, FLOOR + 2.35), { w: 0.5, h: 1.4, mat: M, uvRect: cells.stack, bezel: 0.06, deep: 0.1, leds: false });
+      for (const z of [474.6, 478.2]) junctionBox(kit, wallAnchor(kit, "w", IN, z, FLOOR + 1.55), { down: 1.05, seed: Math.round(z) });
+      conduitBundle(kit, wallAnchor(kit, "w", IN, 482.2, FLOOR), { y0: 1.15, y1: 3.18 });
+      equipmentRack(kit, wallAnchor(kit, "w", IN, 483.75, FLOOR), { w: 1.6, h: 2.0, seed: 4, screenMat: M, screenRect: cells.desk[1] });
+      vent(kit, wallAnchor(kit, "w", IN, 483.75, FLOOR + 3.75), { w: 1.4, h: 0.36 });
       intercom(kit, wallAnchor(kit, "w", IN, 485.1, FLOOR + 1.5));
-      // NW: keep the corner clear at eye level (harness view), dress it above 2.4 m and at the skirting
-      wallPipe(kit, wallAnchor(kit, "w", IN, 469.9, FLOOR + 3.55), { len: 3.0, r: 0.035 });
-      wallPipe(kit, wallAnchor(kit, "w", IN, 469.9, FLOOR + 3.35), { len: 3.0, r: 0.022, color: IMP.dark });
+      // NW: keep the corner clear at eye level (harness view), dress it above the tray and at the skirting
+      wallPipe(kit, wallAnchor(kit, "w", IN, 469.9, FLOOR + 3.8), { len: 3.0, r: 0.035 });
+      wallPipe(kit, wallAnchor(kit, "w", IN, 469.9, FLOOR + 3.6), { len: 3.0, r: 0.022, color: IMP.dark });
       stencilPlate(kit, wallAnchor(kit, "w", IN, 469.2, FLOOR + 1.6), 0.28, 2);
     }
 
-    // ---- east wall: door (reveal only, D builds the assembly), two stations north of it, lockers + board south
+    // ---- east wall: door (reveal only, D builds the assembly), two stations north of it, a narrow and a wide
+    //      locker (the wide one open, showing its shelves) + board south of it
     {
       const xc = IN.max[0] - WALL_OFF - 0.57;
       [470.2, 473.2].forEach((z, i) => {
@@ -154,47 +195,47 @@ const manifest = {
         chair(kit, placer(kit, xc - 1.05, FLOOR, z + (i ? 0.12 : -0.12), 3));
         readoutBar(kit, wallAnchor(kit, "e", IN, z, FLOOR + 2.55), { w: 2.4, mat: M, uvRect: cells.rb[(i + 1) % 2] });
       });
-      junctionBox(kit, wallAnchor(kit, "e", IN, 471.7, FLOOR + 1.55), { up: 0.35, down: 1.05, seed: 5 });
+      junctionBox(kit, wallAnchor(kit, "e", IN, 471.7, FLOOR + 1.55), { down: 1.05, seed: 5 });
       intercom(kit, wallAnchor(kit, "e", IN, 479.0, FLOOR + 1.35));
       stencilPlate(kit, wallAnchor(kit, "e", IN, 479.0, FLOOR + 1.9), 0.3, 14);
-      locker(kit, wallAnchor(kit, "e", IN, 480.0, FLOOR), { seed: 3, label: 6 });
-      locker(kit, wallAnchor(kit, "e", IN, 480.9, FLOOR), { seed: 4, label: 9 });
-      junctionBox(kit, wallAnchor(kit, "e", IN, 480.45, FLOOR + 3.05), { w: 0.5, h: 0.3, up: 0.6, seed: 6, decal: null });
+      locker(kit, wallAnchor(kit, "e", IN, 479.9, FLOOR), { w: 0.6, seed: 3, label: 6 });
+      locker(kit, wallAnchor(kit, "e", IN, 480.75, FLOOR), { w: 0.9, seed: 4, label: 9, open: true });
+      junctionBox(kit, wallAnchor(kit, "e", IN, 480.35, FLOOR + 2.85), { w: 0.5, h: 0.3, up: 0.2, seed: 6, decal: null });
       framedScreen(kit, wallAnchor(kit, "e", IN, 483.0, FLOOR + 2.15), { w: 2.4, h: 1.0, mat: M, uvRect: cells.board, bezel: 0.08, deep: 0.12 });
-      vent(kit, wallAnchor(kit, "e", IN, 483.0, FLOOR + 3.3), { w: 1.2, h: 0.32 });
+      vent(kit, wallAnchor(kit, "e", IN, 483.0, FLOOR + 3.75), { w: 1.2, h: 0.32 });
       emergencyCabinet(kit, wallAnchor(kit, "e", IN, 485.2, FLOOR + 1.3));
       floorHatch(kit, IN.max[0] - 1.4, FLOOR, 483.0);
     }
 
-    // ---- south: navigator's raised dais with steps, rails, desk; wall screens and gauges behind it
+    // ---- south: navigator's raised dais (mid-grey plate, lit nosing) with centre steps and rails, the tilted
+    //      chart desk against the wall with two stools, route plot + beacon screen and gauges above it
     {
       const dx0 = -37.6;
       const dx1 = -30.0;
       const dz0 = 482.9;
-      // lighter deck plate than the main floor so the platform reads under the ceiling pool
       stepBlock(kit, [dx0, FLOOR, dz0], [dx1, FLOOR + 0.3, IN.max[2]], { edges: ["n", "e", "w"], hazardRiser: true, glow: "emitBlue", color: IMP.mid, tag: "dais" });
-      // centre steps at the end of the floor inlay from the table; rails either side and along the flanks
       stairs(kit, { x0: CX - 0.8, x1: CX + 0.8, z0: 482.0, z1: dz0, yTop: FLOOR + 0.3, yBottom: FLOOR, dir: "-z", color: IMP.mid });
       railing(kit, [dx0, dz0], [CX - 0.9, dz0], FLOOR + 0.3);
       railing(kit, [CX + 0.9, dz0], [dx1, dz0], FLOOR + 0.3);
       railing(kit, [dx1, dz0], [dx1, IN.max[2] - 0.3], FLOOR + 0.3);
       railing(kit, [dx0, dz0], [dx0, IN.max[2] - 0.3], FLOOR + 0.3);
-      station(kit, placer(kit, CX, FLOOR + 0.3, 484.0, 0), { w: 3.0, screenMat: M, screenRect: cells.navdesk, deskMat: M, deskRect: cells.desk[0], seed: 50, label: 9 });
-      chair(kit, placer(kit, CX, FLOOR + 0.3, 485.05, 0));
-      framedScreen(kit, wallAnchor(kit, "s", IN, CX - 2.4, FLOOR + 2.55), { w: 2.0, h: 1.2, mat: M, uvRect: cells.wall[0] });
-      framedScreen(kit, wallAnchor(kit, "s", IN, CX + 2.4, FLOOR + 2.55), { w: 2.0, h: 1.2, mat: M, uvRect: cells.wall[1] });
+      // chart desk: 2 × 1 m display tilted toward the navigators (who sit on the room side, facing the wall screens)
+      buildChartDesk(kit, placer(kit, CX, FLOOR + 0.3, 485.0, 2), M, cells.deskDisp, { w: 2.6, d: 1.4, seed: 50 });
+      for (const s of [-1, 1]) stool(kit, placer(kit, CX + s * 0.7, FLOOR + 0.3, 483.95, 0));
+      framedScreen(kit, wallAnchor(kit, "s", IN, CX - 2.4, FLOOR + 2.45), { w: 2.0, h: 1.2, mat: M, uvRect: cells.wall[0] });
+      framedScreen(kit, wallAnchor(kit, "s", IN, CX + 2.4, FLOOR + 2.45), { w: 2.0, h: 1.2, mat: M, uvRect: cells.wall[1] });
       for (let i = 0; i < 3; i++) framedScreen(kit, wallAnchor(kit, "s", IN, CX - 0.6 + i * 0.6, FLOOR + 2.75), { w: 0.46, h: 0.46, mat: M, uvRect: cells.gauge[i], bezel: 0.05, deep: 0.08, leds: false });
-      stencilPlate(kit, wallAnchor(kit, "s", IN, CX, FLOOR + 3.55), 0.3, 7);
-      // west of the dais: equipment column, big vent, junction, pipe runs
-      dataColumn(kit, wallAnchor(kit, "s", IN, -42.6, FLOOR), { ceilY: CY - FLOOR, seed: 3, screenMat: M, screenRect: cells.desk[0] });
+      stencilPlate(kit, wallAnchor(kit, "s", IN, CX, FLOOR + 3.6), 0.3, 7);
+      // west of the dais: equipment column, big vent, junction fed from the tray, pipe runs above the tray
+      dataColumn(kit, wallAnchor(kit, "s", IN, -42.6, FLOOR), { ceilY: 3.2, seed: 3, screenMat: M, screenRect: cells.desk[0] });
       vent(kit, wallAnchor(kit, "s", IN, -40.6, FLOOR + 1.35), { w: 1.3, h: 0.44 });
-      junctionBox(kit, wallAnchor(kit, "s", IN, -39.1, FLOOR + 1.6), { up: 0.3, down: 1.1, seed: 7 });
-      wallPipe(kit, wallAnchor(kit, "s", IN, -40.5, FLOOR + 3.05), { len: 5.4, r: 0.04 });
-      wallPipe(kit, wallAnchor(kit, "s", IN, -40.5, FLOOR + 3.3), { len: 5.4, r: 0.025, color: IMP.dark });
+      junctionBox(kit, wallAnchor(kit, "s", IN, -39.1, FLOOR + 1.6), { down: 1.1, seed: 7 });
+      wallPipe(kit, wallAnchor(kit, "s", IN, -40.5, FLOOR + 3.6), { len: 5.4, r: 0.04 });
+      wallPipe(kit, wallAnchor(kit, "s", IN, -40.5, FLOOR + 3.85), { len: 5.4, r: 0.025, color: IMP.dark });
       stencilPlate(kit, wallAnchor(kit, "s", IN, -41.8, FLOOR + 2.4), 0.3, 5);
-      // east of the dais: lockers, low chart cabinet, junction, vent, pipes
-      locker(kit, wallAnchor(kit, "s", IN, -29.1, FLOOR), { seed: 5, label: 6 });
-      locker(kit, wallAnchor(kit, "s", IN, -28.2, FLOOR), { seed: 6, label: 9 });
+      // east of the dais: wide + narrow lockers, low chart cabinet, junction, vent, pipe
+      locker(kit, wallAnchor(kit, "s", IN, -29.05, FLOOR), { w: 0.9, seed: 5, label: 6 });
+      locker(kit, wallAnchor(kit, "s", IN, -28.25, FLOOR), { w: 0.6, seed: 6, label: 9 });
       {
         const p = wallAnchor(kit, "s", IN, -26.2, FLOOR);
         p.box("paintedMetal", 0, 0.5, WALL_OFF + 0.3, 1.4, 1.0, 0.6, { color: IMP.dark, texel: 1 });
@@ -206,23 +247,28 @@ const manifest = {
         p.decal(0.5, 0.76, WALL_OFF + 0.612, 0.18, 9);
         p.collider(-0.72, 0.72, 0, 1.05, 0, WALL_OFF + 0.65, "cabinet");
       }
-      junctionBox(kit, wallAnchor(kit, "s", IN, -28.65, FLOOR + 3.0), { w: 0.5, h: 0.3, up: 0.65, seed: 8, decal: null });
-      vent(kit, wallAnchor(kit, "s", IN, -25.6, FLOOR + 3.3), { w: 1.2, h: 0.32 });
-      wallPipe(kit, wallAnchor(kit, "s", IN, -26.6, FLOOR + 2.3), { len: 5.6, r: 0.03 });
+      junctionBox(kit, wallAnchor(kit, "s", IN, -28.65, FLOOR + 2.85), { w: 0.5, h: 0.3, up: 0.2, seed: 8, decal: null });
+      vent(kit, wallAnchor(kit, "s", IN, -25.6, FLOOR + 3.75), { w: 1.2, h: 0.32 });
+      wallPipe(kit, wallAnchor(kit, "s", IN, -26.6, FLOOR + 2.6), { len: 5.6, r: 0.03 });
       intercom(kit, wallAnchor(kit, "s", IN, -24.6, FLOOR + 1.5));
     }
 
-    // ---- lights (13 descriptors: 10 point + 3 spot; corridor keeps 2 point + 1 spot pool slots)
-    // downlight points sit 0.8 m under their housings so the dark ceiling panels around them pick up light too
+    // ---- lights (11 descriptors: 8 point + 3 spot; corridor keeps 4 point + 1 spot pool slots)
+    // Downlight points sit 1.0 m under their housings, 3.5 m off the side walls and ≥ 4.3 m off the end walls,
+    // so they pool on the floor (and softly on the matte ceiling) instead of throwing hot specular blobs onto
+    // the glossy wall panels; the end walls get down-aimed spots whose cones cut off before the panel band a
+    // floor camera mirrors.
     ctx.lights.push({ type: "point", pos: [CX, FLOOR + 2.85, CZ], color: 0x4fd8ff, intensity: 9, distance: 9, priority: 0.9 });
     ctx.lights.push({ type: "spot", pos: [CX, CY - 0.85, CZ], color: LIGHT.coolWhite, intensity: 10, distance: 8, target: [CX, top, CZ], angle: 0.8, penumbra: 0.4, priority: 0.85 });
-    for (const x of [CX - 8.2, CX + 8.2]) for (const z of [471.0, CZ, 483.0]) ctx.lights.push({ type: "point", pos: [x, CY - 0.8, z], color: LIGHT.coolWhite, intensity: 14, distance: 12, priority: 0.5 });
-    ctx.lights.push({ type: "spot", pos: [CX, CY - 0.7, 471.0], color: 0xbfd4ff, intensity: 12, distance: 8, target: [CX, FLOOR + 1.5, IN.min[2]], angle: 1.05, penumbra: 0.6, priority: 0.6 });
-    // navigator's dais: narrow white pool straight down onto the desk plus a wider fill over the platform / wall screens
-    // (pool surfaces are dark: mid-grey deck plate + black desk, so this spot runs hotter than the downlights)
-    ctx.lights.push({ type: "spot", pos: [CX, CY - 0.5, 484.0], color: LIGHT.coolWhite, intensity: 30, distance: 7, target: [CX, FLOOR + 1.2, 484.1], angle: 0.62, penumbra: 0.45, priority: 0.62 });
-    ctx.lights.push({ type: "point", pos: [CX, CY - 0.9, 483.4], color: LIGHT.coolWhite, intensity: 12, distance: 7, priority: 0.5 });
-    ctx.lights.push({ type: "point", pos: [IN.max[0] - 1.3, CY - 0.8, CZ], color: LIGHT.coolWhite, intensity: 7, distance: 6, priority: 0.4 });
+    for (const x of DLX) for (const z of [472.6, 481.4]) ctx.lights.push({ type: "point", pos: [x, CY - 1.0, z], color: LIGHT.coolWhite, intensity: 11, distance: 11, priority: 0.5 });
+    ctx.lights.push({ type: "point", pos: [DLX[0], CY - 1.0, CZ], color: LIGHT.coolWhite, intensity: 10, distance: 10, priority: 0.5 });
+    ctx.lights.push({ type: "point", pos: [DLX[1], CY - 1.0, CZ], color: LIGHT.coolWhite, intensity: 9, distance: 10, priority: 0.45 });
+    // chart-wall console bank: down-aimed pool over the four stations
+    ctx.lights.push({ type: "spot", pos: [CX + 0.8, CY - 0.5, 470.9], color: 0xbfd4ff, intensity: 15, distance: 8, target: [CX, FLOOR, 470.4], angle: 1.05, penumbra: 0.5, priority: 0.6 });
+    // navigator's dais: one spot high over the chart desk aimed at the foot of the south wall — it washes the
+    // wall panels between the screens (cone tops out just above the 3.2 m tray, so the panel band a floor camera
+    // mirrors is outside it) and pools straight down onto the desk, stools and dais plate
+    ctx.lights.push({ type: "spot", pos: [CX, CY - 0.3, 484.0], color: LIGHT.coolWhite, intensity: 14, distance: 7.5, target: [CX, FLOOR + 1.0, IN.max[2]], angle: 0.72, penumbra: 0.45, priority: 0.62 });
     ctx.lights.push({ type: "point", pos: [CX, FLOOR + 0.35, CZ], color: LIGHT.blue, intensity: 1.5, distance: 4.5, priority: 0.3 });
 
     return {
