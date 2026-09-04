@@ -361,6 +361,7 @@ export class Sky {
   private readonly envScene = new THREE.Scene();
   private readonly envMat: THREE.ShaderMaterial;
   private pmrem: THREE.PMREMGenerator | null = null;
+  private envRT: THREE.WebGLRenderTarget | null = null;
   envMap: THREE.Texture | null = null;
   private readonly noise: THREE.Data3DTexture;
 
@@ -440,9 +441,10 @@ export class Sky {
 
   /** Re-render the environment map (IBL for every PBR material). Cheap enough to call every few frames. */
   updateEnvironment(): THREE.Texture {
-    if (this.envMap) this.envMap.dispose();
-    const rt = this.pmrem!.fromScene(this.envScene, 0, 0.1, 200);
-    this.envMap = rt.texture;
+    // dispose the whole previous render target (disposing only its texture leaked the framebuffer/renderbuffer)
+    if (this.envRT) this.envRT.dispose();
+    this.envRT = this.pmrem!.fromScene(this.envScene, 0, 0.1, 200);
+    this.envMap = this.envRT.texture;
     return this.envMap;
   }
 
