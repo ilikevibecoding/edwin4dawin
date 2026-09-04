@@ -32,8 +32,16 @@ export function buildEngines(materials) {
   const glows = [];
   const batch = new Batcher(materials);
   const sternZ = HULL.sternZ;
+  const w = halfWidth(sternZ) - HULL.trenchInset;
+  const topY = dorsalH(sternZ);
+  const botY = -ventralH(sternZ);
   const all = [...ENGINES.main.map((e) => ({ ...e, kind: 0 })), ...ENGINES.secondary.map((e) => ({ ...e, kind: 1 })), ...VERNIERS.map((e) => ({ ...e, kind: 2 }))];
   let greebles = 0;
+  // distance along a ray from (x, y) in direction (dx, dy) until it leaves the stern face rectangle
+  const faceLimit = (x, y, dx, dy) => {
+    const lim = (v, lo, hi, d) => (d > 1e-6 ? (hi - v) / d : d < -1e-6 ? (lo - v) / d : Infinity);
+    return Math.min(lim(x, -(w - 6), w - 6, dx), lim(y, botY + 3, topY - 3, dy));
+  };
   for (const e of all) {
     const main = e.kind === 0;
     const len = main ? ENGINES.z1 - ENGINES.z0 : e.kind === 1 ? (ENGINES.z1 - ENGINES.z0) * 0.7 : 24;
@@ -74,6 +82,8 @@ export function buildEngines(materials) {
     if (e.kind < 2) {
       for (let k = 0; k < 4; k++) {
         const a = Math.PI / 4 + (k / 4) * Math.PI * 2;
+        const py = e.y + Math.sin(a) * e.r * 1.16;
+        if (py > topY - 4 || py < botY + 4) continue; // would stick out above / below the stern face
         const pl = new THREE.BoxGeometry(e.r * 0.28, e.r * 0.12, 22);
         pl.rotateZ(a);
         pl.translate(e.x + Math.cos(a) * e.r * 1.16, e.y + Math.sin(a) * e.r * 1.16, sternZ + 11);
@@ -118,12 +128,14 @@ export function buildEngines(materials) {
       group.add(sp);
       glows.push({ sprite: sp, base: e.r * 2.5 });
     }
-    // soot streaks radiating from the nozzle over the stern plating
+    // soot streaks radiating from the nozzle over the stern plating, clipped to the stern face so
+    // none pokes out past the hull silhouette
     const nStreak = main ? 9 : 4;
     for (let k = 0; k < nStreak; k++) {
       const a = rand() * Math.PI * 2;
       const l0 = e.r * 1.25;
-      const l1 = l0 + e.r * (0.4 + rand() * 0.9);
+      const l1 = Math.min(l0 + e.r * (0.4 + rand() * 0.9), faceLimit(e.x, e.y, Math.cos(a), Math.sin(a)));
+      if (l1 - l0 < 4) continue;
       const sw = e.r * (0.08 + rand() * 0.1);
       const sg = new THREE.BoxGeometry(l1 - l0, sw, 0.25);
       sg.translate((l0 + l1) / 2, 0, 0);
@@ -135,9 +147,6 @@ export function buildEngines(materials) {
   }
 
   // --- engine-block machinery on the stern face
-  const w = halfWidth(sternZ) - HULL.trenchInset;
-  const topY = dorsalH(sternZ);
-  const botY = -ventralH(sternZ);
   batch.box("cityDense", 0, topY - 5, sternZ + 7, w * 0.92, 7, 14, PALETTE.hullDark, 0.025);
   batch.box("cityDense", 0, botY + 5, sternZ + 7, w * 0.84, 7, 14, PALETTE.hullDark, 0.025);
   for (const s of [-1, 1]) {
