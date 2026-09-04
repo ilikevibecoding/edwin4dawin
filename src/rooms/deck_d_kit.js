@@ -37,7 +37,9 @@ export function ensureDeckDMaterials(kit) {
     const core = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff0c0).multiplyScalar(2.4) });
     // low emitters for practicals (handrail LEDs, pillar slots, tracer lines): ~20% of the kit's
     // emitBlue / emitAmber so they read as fixtures beside the room's key light, never as neon
-    const emit = (color, intensity, extra = {}) => setDomain(new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.08), emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 0.45, metalness: 0, ...extra }), "interior");
+    // dim emitters are purely emissive (black diffuse): a lens or slit reads at exactly its own level
+    // whatever lamp sits next to it, instead of picking up the bulb it hoods and going white-hot
+    const emit = (color, intensity, extra = {}) => setDomain(new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 0.45, metalness: 0, ...extra }), "interior");
     const diffuser = makeDiffuser(256, 13);
     const slot = emit("#dfe6f4", 0.42, { emissiveMap: diffuser });
     // the deck's one fixture colour temperature: amber-white slots for engineering / maintenance ceilings
@@ -207,12 +209,20 @@ export function warningLamp(kit, pos, key = "emitRedImp", opts = {}) {
   return m;
 }
 
-/** Yellow/black hazard border (four thin strips) around a floor rectangle. texel = chevron repeats per metre. */
+/**
+ * Yellow/black hazard border (four strips) around a floor rectangle, built as GEOMETRY bars
+ * (hazardBars): every stripe edge is a mesh edge the anti-aliasing pass smooths, where the chevron
+ * texture stair-stepped and shimmered at grazing angles. mat "chevronR" = red/black. (texel is kept
+ * for the old signature and ignored.)
+ */
 export function hazardBorder(kit, x0, z0, x1, z1, y = 0, w = 0.28, mat = "chevronY", texel = 1.2) {
-  kit.boxMM(mat, [x0, y + 0.002, z0], [x1, y + 0.008, z0 + w], { texel });
-  kit.boxMM(mat, [x0, y + 0.002, z1 - w], [x1, y + 0.008, z1], { texel });
-  kit.boxMM(mat, [x0, y + 0.002, z0 + w], [x0 + w, y + 0.008, z1 - w], { texel });
-  kit.boxMM(mat, [x1 - w, y + 0.002, z0 + w], [x1, y + 0.008, z1 - w], { texel });
+  void texel;
+  const color = mat === "chevronR" ? PALETTE.impRed : PALETTE.yellow;
+  const bar = Math.max(0.24, Math.min(0.4, w * 1.15));
+  hazardBars(kit, x0, z0 + w / 2, x1, z0 + w / 2, { w, bar, color, y });
+  hazardBars(kit, x0, z1 - w / 2, x1, z1 - w / 2, { w, bar, color, y });
+  hazardBars(kit, x0 + w / 2, z0 + w, x0 + w / 2, z1 - w, { w, bar, color, y });
+  hazardBars(kit, x1 - w / 2, z0 + w, x1 - w / 2, z1 - w, { w, bar, color, y });
 }
 
 /**
@@ -282,8 +292,9 @@ export function shroudLamp(kit, mount, pos, target, opts = {}) {
   pipe(kit, m, p, 0.03, { color: PALETTE.impGreyDark, segments: 8 });
   kit.box("impTrim", m.x, m.y - 0.05, m.z, 0.3, 0.1, 0.3, { color: PALETTE.impBlack, texel: 1 });
   // shroud: a box whose local -Z points at the target (open face), lens 8 cm inside. The hood is deep
-  // (its own size) and the reflector dark, so a point light sitting in the mouth cannot blow the
-  // interior out and the mouth reads as a dim lens from any angle a player can reach.
+  // (its own size), matte powder-black (rubber: roughness 0.86, no metalness, so the bulb outside its
+  // mouth raises no specular sheen on the inner walls) and the reflector dark, so the mouth reads as a
+  // dim lens in a dark box from any angle a player can reach.
   const dir = t.clone().sub(p).normalize();
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), dir);
   const place = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(p);
@@ -292,11 +303,11 @@ export function shroudLamp(kit, mount, pos, target, opts = {}) {
     kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [c.x, c.y, c.z], quat: q, color: col, texel: 1 });
   };
   const d = size; // hood depth
-  add("impTrim", 0, 0, d / 2, size + 0.12, size + 0.12, 0.06, PALETTE.impBlack); // back
-  add("impTrim", -(size + 0.06) / 2, 0, 0, 0.06, size + 0.12, d, PALETTE.impBlack);
-  add("impTrim", (size + 0.06) / 2, 0, 0, 0.06, size + 0.12, d, PALETTE.impBlack);
-  add("impTrim", 0, (size + 0.06) / 2, 0, size + 0.12, 0.06, d, PALETTE.impBlack);
-  add("impTrim", 0, -(size + 0.06) / 2, 0, size + 0.12, 0.06, d, PALETTE.impBlack);
+  add("rubber", 0, 0, d / 2, size + 0.12, size + 0.12, 0.06, PALETTE.impBlack); // back
+  add("rubber", -(size + 0.06) / 2, 0, 0, 0.06, size + 0.12, d, PALETTE.impBlack);
+  add("rubber", (size + 0.06) / 2, 0, 0, 0.06, size + 0.12, d, PALETTE.impBlack);
+  add("rubber", 0, (size + 0.06) / 2, 0, size + 0.12, 0.06, d, PALETTE.impBlack);
+  add("rubber", 0, -(size + 0.06) / 2, 0, size + 0.12, 0.06, d, PALETTE.impBlack);
   add("impMetalRough", 0, 0, d / 2 - 0.04, size, size, 0.01, reflector); // reflector (matte, dark)
   const lens = place(0, 0, d / 2 - 0.06);
   kit.add(key, new THREE.BoxGeometry(size * 0.7, size * 0.7, 0.02), { pos: [lens.x, lens.y, lens.z], quat: q, uv: "keep" });

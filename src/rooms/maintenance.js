@@ -3,18 +3,20 @@
 // droid on a clamp stand; a fighter wing panel (hex plating) leaning on an A-frame stand; a welding
 // station behind dark screens under an extraction hood with a flickering arc and a hard white spot;
 // parts shelving with instanced bins; a scissor parts lift in the SW corner; cable reels, a hydraulic
-// press, a drill press; oil stains and yellow/black hazard lanes.
+// press, a drill press; a painted dashed vehicle lane from the blast door (geometry lines and bars, no
+// textured stripes to stair-step), faint oil under the machines only.
 // Light: the crane bridge sweeps the whole middle of the room just under the ceiling, so nothing hangs
 // there: two flush hooded downlights (spots) pool light on the bays, two hooded pendants over the lane
-// at either end (outside the bridge's travel) and a portable work-light stand light the rest; the
-// amber pendant over the benches, the hard white welding lamp on the extraction duct and the
-// parts-lift lamp are the practicals; the ceiling slots are dim recessed lines, never the key.
+// at either end (outside the bridge's travel) and a portable work-light stand light the rest, all
+// amber-white (the deck's workshop temperature, shared with engineering); the amber pendant over the
+// benches, the hard white welding lamp on the extraction duct and the parts-lift lamp are the
+// practicals; the ceiling slots are dim recessed lines, never the key.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRailing, impWallGear, impWallLight, impCrate, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { rng, prism } from "../kit.js";
-import { ensureDeckDMaterials, shellNoFloor, deckFloor, pipe, pipePath, valveWheel, gauge, junctionBox, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, assembly, blinkerField, instGeo, pendantLamp, shroudLamp } from "./deck_d_kit.js";
+import { ensureDeckDMaterials, shellNoFloor, deckFloor, pipe, pipePath, valveWheel, gauge, junctionBox, hazardBorder, dashedLine, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, assembly, blinkerField, instGeo, pendantLamp, shroudLamp } from "./deck_d_kit.js";
 
 const YEL = PALETTE.yellow;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -44,21 +46,20 @@ export function buildMaintenance(kit, ctx, room) {
     seed: 2207,
     wall: { panelW: 2.0, features: { vent: 0.15, equipment: 0, conduit: 0, light: 0.0, screen: 0.06 }, altChance: 0.4, panelColor: PALETTE.impGrey, panelColorAlt: PALETTE.impGreyDark },
     walls: { N: { features: plain, altChance: 0.5 }, E: { features: plain, altChance: 0.5 } },
-    ceiling: { troughs: 2, troughW: 0.36, beamStep: 3.4, accentKey: DIM, lightKey: "roomsd_slot" },
+    ceiling: { troughs: 2, troughW: 0.36, beamStep: 3.4, accentKey: DIM, lightKey: "roomsd_slotWarm" },
   });
   deckFloor(kit, -hx, -hz, hx, hz, []);
-  // entry lane from the blast door, yellow/black edged (fine chevron repeat: no stair-stepped edges up close)
-  kit.boxMM("impMetalRough", [-hx + 0.3, 0, -1.6], [14.2, 0.012, 1.6], { color: PALETTE.impGreyDark, texel: 0.7 });
-  for (const s of [-1, 1]) kit.boxMM("chevronY", [-hx + 0.3, 0.002, s * 1.6 - (s > 0 ? 0 : 0.28)], [14.2, 0.014, s * 1.6 + (s > 0 ? 0.28 : 0)], { texel: 3.0 });
+  // vehicle lane from the blast door: plain tile between two painted dashed yellow lines (geometry, so
+  // the edges never stair-step), a solid stop bar at its end, deck stencils
+  for (const s of [-1, 1]) dashedLine(kit, -hx + 0.3, s * 1.6, 14.2, s * 1.6, { w: 0.14, dash: 1.0, gap: 0.7 });
+  kit.boxMM("impPanel1", [14.1, 0.002, -1.67], [14.3, 0.01, 1.67], { color: YEL, uv: "world", texel: 1 });
   decalImp(kit, IMP_DECAL.arrowRight, [-13.0, 0.016, 0], "up", 1.0, { spin: Math.PI });
   decalImp(kit, IMP_DECAL.keepClear, [-9.5, 0.016, 0], "up", 1.0, { spin: Math.PI / 2 });
   decalImp(kit, IMP_DECAL.bay02, [12.6, 0.016, 0], "up", 1.2, { spin: Math.PI / 2 });
-  // crane travel zone markers (dashed yellow line either side of the lane)
-  for (let x = -8; x < 10; x += 2.0) for (const z of [-2.4, 2.4]) kit.boxMM("chevronY", [x, 0.002, z - 0.06], [x + 1.0, 0.008, z + 0.06], { texel: 1 });
-  // oil, grime, scorch
-  for (const [x, z, s] of [[-2.5, -3.6, 1.6], [6.0, -2.2, 1.2], [-9.0, 4.0, 1.4], [2.0, 5.5, 1.0], [12.0, -6.0, 1.1]]) decalD(kit, DECK_D_DECAL.oil, [x, 0.018, z], "up", s, { spin: rand() * 3 });
-  decalD(kit, DECK_D_DECAL.grime, [-13.5, 0.018, 5.4], "up", 1.8);
-  decalD(kit, DECK_D_DECAL.grime, [14.5, 0.018, 9.0], "up", 1.4);
+  // wear: large faint oil smudges under the machines only (press, reels, welder), grime in the corners
+  for (const [x, z, s] of [[1.4, -9.4, 2.6], [-14.4, -5.8, 2.4], [10.8, 8.0, 2.2]]) decalD(kit, DECK_D_DECAL.oil, [x, 0.018, z], "up", s, { spin: rand() * 3 });
+  decalD(kit, DECK_D_DECAL.grime, [-14.2, 0.018, 4.8], "up", 2.8);
+  decalD(kit, DECK_D_DECAL.grime, [14.6, 0.018, 9.4], "up", 2.4);
 
   // --- workbenches + tool boards along the N wall
   const N = walls.N.frame;
@@ -141,14 +142,18 @@ export function buildMaintenance(kit, ctx, room) {
   // portable work-light stand by the droid. Practicals: the dim amber pendant over the benches, the
   // hard white welding lamp clamped to the extraction duct, the parts-lift lamp. Three spots in all:
   // the pool has three spot slots and the current cell's lights always win them.
-  const work = 0xe6ecff;
+  const work = 0xffe0bc; // amber-white, as in engineering
+  const WARM = "roomsd_warmLow";
   for (const [i, x] of [-10.5, 11.5].entries()) {
-    shroudLamp(kit, [x, h - 0.08, 0], [x, 4.9, 0], [x, 0.5, 0], { key: "emitWhiteDim", size: 0.55 });
-    kit.light({ type: "point", pos: [x, 4.65, 0], color: work, intensity: lux(4.6, 4.8), distance: 18, priority: 0.6 - i * 0.01 });
+    // low pendant, source 30 cm under the hood mouth with linear falloff: dark hood, dim lens, no ceiling blob
+    const mouth = shroudLamp(kit, [x, h - 0.08, 0], [x, 4.3, 0], [x, 0, 0], { key: WARM, size: 0.55 });
+    kit.light({ type: "point", pos: [mouth[0], mouth[1] - 0.3, mouth[2]], color: work, intensity: 4.4 * 3.8, decay: 1, distance: 18, priority: 0.6 - i * 0.01 });
   }
   for (const [i, [x, z]] of [[3.5, -5.0], [-2.5, 5.2]].entries()) {
-    shroudLamp(kit, [x, h - 0.05, z], [x, h - 0.32, z], [x, 0.5, z], { key: "emitWhiteDim", size: 0.5 });
-    kit.light({ type: "spot", pos: [x, h - 0.15, z], target: [x, 0, z], color: work, intensity: lux(h - 0.15, 5.6), distance: 18, angle: 1.1, penumbra: 0.35, priority: 0.62 - i * 0.01 });
+    // flush hooded downlight: the spot's source sits in the hood mouth, so the cone lights the bay below and
+    // neither the hood interior nor the ceiling
+    const mouth = shroudLamp(kit, [x, h - 0.05, z], [x, h - 0.32, z], [x, 0, z], { key: WARM, size: 0.5 });
+    kit.light({ type: "spot", pos: [mouth[0], mouth[1] - 0.08, mouth[2]], target: [x, 0, z], color: work, intensity: lux(h - 0.5, 6.2), distance: 18, angle: 1.15, penumbra: 0.4, priority: 0.62 - i * 0.01 });
   }
   {
     const [x, z, target] = [2.8, -4.6, [5.2, 1.0, -6.6]];
@@ -156,10 +161,10 @@ export function buildMaintenance(kit, ctx, room) {
     const dx = target[0] - x;
     const dz = target[2] - z;
     const L = Math.hypot(dx, dz);
-    kit.light({ type: "point", pos: [x + (dx / L) * 0.35, 2.32, z + (dz / L) * 0.35], color: work, intensity: lux(2.4, 2.6), distance: 14, priority: 0.58 });
+    kit.light({ type: "point", pos: [x + (dx / L) * 0.35, 2.32, z + (dz / L) * 0.35], color: work, intensity: lux(2.4, 3.0), distance: 14, priority: 0.58 });
   }
   pendantLamp(kit, -8.0, 3.6, -9.6, h, DIM);
-  kit.light({ type: "point", pos: [-8.0, 3.6, -9.6], color: amber, intensity: lux(3.6, 1.6), distance: 13, priority: 0.55 });
+  kit.light({ type: "point", pos: [-8.0, 3.6, -9.6], color: amber, intensity: lux(3.6, 2.0), distance: 13, priority: 0.55 });
   // welding lamp: hood on a bracket off the extraction duct riser, spot straight down onto the table
   kit.box("impTrim", 9.2, 4.38, 6.78, 0.08, 0.08, 0.44, { color: PALETTE.impBlack });
   shroudLamp(kit, [9.2, 4.42, 6.6], [9.2, 4.12, 6.62], [9.2, 0.9, 7.0], { key: "emitWhiteDim", size: 0.3 });
