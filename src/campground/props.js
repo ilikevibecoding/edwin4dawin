@@ -28,9 +28,28 @@ export function chair(rnd, cloth = 'chairCloth') {
   }
   o.box('timber', w + 0.02, leg, leg, { pos: [0, 0.6, -0.27] });
   o.box('timber', w + 0.02, leg, leg, { pos: [0, 0.6, 0.23] });
-  // seat sags between the rails, the back panel bows out
-  o.box(cloth, w - 0.02, 0.012, 0.44, { pos: [0, 0.45 - rnd() * 0.02, 0.0] });
-  o.box(cloth, w - 0.02, 0.24, 0.012, { pos: [0, 0.86, -0.26 - lean * 0.15], rot: [-lean, 0, 0] });
+  // seat rails the cloth slings from
+  o.box('timber', w - 0.02, leg, leg, { pos: [0, 0.47, -0.21] });
+  o.box('timber', w - 0.02, leg, leg, { pos: [0, 0.47, 0.21] });
+  // the seat is a sling: it hangs between the rails and the sides, deepest
+  // where the last person sat; the back panel bows out between the uprights
+  const seat = new THREE.PlaneGeometry(w - 0.02, 0.44, 4, 4);
+  seat.rotateX(-Math.PI / 2);
+  const sp = seat.attributes.position;
+  const drop = 0.05 + rnd() * 0.03;
+  for (let i = 0; i < sp.count; i++) {
+    const fx = 1 - Math.abs(sp.getX(i) / ((w - 0.02) * 0.5));
+    const fz = 1 - Math.abs(sp.getZ(i) / 0.22);
+    sp.setY(i, sp.getY(i) - drop * Math.sin(fx * Math.PI * 0.5) * Math.sin(fz * Math.PI * 0.5));
+  }
+  o.add(cloth, seat, { pos: [0, 0.48, 0.0] });
+  const back = new THREE.PlaneGeometry(w - 0.02, 0.24, 4, 2);
+  const bp = back.attributes.position;
+  for (let i = 0; i < bp.count; i++) {
+    const fx = 1 - Math.abs(bp.getX(i) / ((w - 0.02) * 0.5));
+    bp.setZ(i, bp.getZ(i) - 0.03 * Math.sin(fx * Math.PI));
+  }
+  o.add(cloth, back, { pos: [0, 0.86, -0.26 - lean * 0.15], rot: [-lean, 0, 0] });
   return o;
 }
 
@@ -81,20 +100,20 @@ export function logBench(rnd) {
   return o;
 }
 
-/** A slatted timber crate, lid nailed on or slid half off. */
+/**
+ * A slatted timber crate, lid nailed on or slid half off. The body is one box
+ * carrying the crate map — three planks, battens, stencil and edge wear per
+ * face — with real battens standing proud at the corners and a plank lid.
+ */
 export function crate(rnd, w = 0.6, h = 0.45, d = 0.45, open = false) {
   const o = new Obj();
   const t = 0.02;
-  for (const s of [-1, 1]) {
-    o.box('timberWarm', t, h, d, { pos: [s * (w * 0.5 - t * 0.5), h * 0.5, 0] });
-    for (let i = 0; i < 3; i++) o.box('timberWarm', w, h / 3 - 0.012, t, { pos: [0, (h / 3) * (i + 0.5), s * (d * 0.5 - t * 0.5)] });
-  }
-  o.box('timberWarm', w, t, d, { pos: [0, t * 0.5, 0] });
-  for (const s of [-1, 1]) o.box('timber', 0.04, h, 0.04, { pos: [s * (w * 0.5 - 0.02), h * 0.5, 0] });
+  o.box('crate', w, h, d, { pos: [0, h * 0.5, 0], rot: [0, 0, (rnd() - 0.5) * 0.01] }, { uv: false, r: 0 });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) o.box('timber', 0.035, h + 0.01, 0.035, { pos: [sx * (w * 0.5 - 0.005), h * 0.5, sz * (d * 0.5 - 0.005)] });
   if (open) {
-    o.box('timberWarm', w, t, d, { pos: [w * 0.18, h + t, d * 0.12], rot: [0.05, 0.1, 0.12] });
+    o.box('crate', w, t, d, { pos: [w * 0.18, h + t, d * 0.12], rot: [0.05, 0.1, 0.12] }, { uv: false, r: 0 });
   } else {
-    o.box('timberWarm', w + 0.01, t, d + 0.01, { pos: [0, h + t * 0.5, 0] });
+    o.box('crate', w + 0.01, t, d + 0.01, { pos: [0, h + t * 0.5, 0] }, { uv: false, r: 0 });
   }
   return o;
 }
@@ -227,6 +246,35 @@ export function woodpile(rnd, L = 2.0, H = 0.9) {
       o.cyl('deadwood', rad, rad * (0.85 + rnd() * 0.3), len, 7, { pos: [x, y, -len * 0.5 + (rnd() - 0.5) * 0.06], rot: [Math.PI / 2 + (rnd() - 0.5) * 0.08, 0, (rnd() - 0.5) * 0.12] });
       x += rad * 2 + 0.01;
     }
+  }
+  return o;
+}
+
+/** A chopping block: a stump on end with the axe left in it. */
+export function choppingBlock(rnd) {
+  const o = new Obj();
+  o.cyl('deadwood', 0.19, 0.22, 0.45, 12, { rot: [0.02, 0, 0.03] });
+  // the axe: haft leaning back, head bitten into the top
+  const lean = -0.35;
+  o.cyl('timberWarm', 0.017, 0.02, 0.8, 7, { pos: [0.02, 0.44, -0.03], rot: [lean, 0, 0.1] });
+  o.box('steel', 0.05, 0.16, 0.02, { pos: [0.02 - Math.sin(0.1) * 0.06, 0.5, -0.03 - Math.sin(lean) * 0.04], rot: [lean, 0, 0.1] });
+  o.box('steel', 0.18, 0.09, 0.03, { pos: [0.02, 0.44, -0.03 + 0.06], rot: [0.1, 0, 0.1] });
+  return o;
+}
+
+/** Split wood dropped in a loose heap: quarter rounds at all angles. */
+export function splitWood(rnd, count = 6) {
+  const o = new Obj();
+  for (let i = 0; i < count; i++) {
+    const ang = rnd() * TAU;
+    const r = Math.sqrt(rnd()) * 0.5;
+    const len = 0.32 + rnd() * 0.12;
+    const yaw = rnd() * TAU;
+    const dir = new THREE.Vector3(Math.cos(yaw), (rnd() - 0.5) * 0.25, Math.sin(yaw)).normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    const rad = 0.045 + rnd() * 0.02;
+    const lift = i < count * 0.6 ? rad : rad * 2.4;
+    o.cyl('deadwood', rad, rad * 1.1, len, 6, { pos: [Math.cos(ang) * r, lift, Math.sin(ang) * r], quat: q }, { centre: true });
   }
   return o;
 }

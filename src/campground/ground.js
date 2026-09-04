@@ -15,7 +15,60 @@ import { mulberry32 } from '../textures/core.js';
 
 const EXTENT = { u0: -50, u1: 50, v0: -40, v1: 42 };
 
-export function buildGroundWear(frame, plan, { quality = 'high' } = {}) {
+// The terrain's graded pad is an ellipse in camp coordinates: 21 m toward the
+// road, 30 m away from it, 27 m to either side, with an edge that wanders a
+// metre or so. The clearing's *visual* boundary — where bare dirt gives way to
+// grass — is painted here as a 3–6 m noise-displaced band straddling that
+// edge, and the same function is exported so the vegetation can ramp its grass
+// off the same line.
+const PAD = { road: 21, far: 30, side: 27 };
+const BLEND_IN = -2.2; // metres inside the pad edge where grass starts to creep in
+const BLEND_OUT = 3.6; // metres outside it where the dust stops
+
+/** Signed distance from the pad edge in camp coordinates, wobbled; negative inside. */
+export function padEdge(u, v) {
+  const rv = v < 0 ? PAD.road : PAD.far;
+  const qn = Math.sqrt((u * u) / (PAD.side * PAD.side) + (v * v) / (rv * rv));
+  const wob = Math.sin(u * 0.31 + v * 0.17) * 1.1 + Math.sin(u * 0.83 - v * 0.62 + 1.7) * 0.7 + Math.sin(v * 1.9 + u * 0.4) * 0.35;
+  return (qn - 1) * PAD.side + wob;
+}
+
+/** 1 on bare compound dirt, 0 on savanna, ramping across the blend band. */
+export function bareAt(u, v) {
+  const e = padEdge(u, v);
+  const t = (e - BLEND_IN) / (BLEND_OUT - BLEND_IN);
+  const s = t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+  return 1 - s;
+}
+
+/**
+ * The clearing as the vegetation sees it: world-space queries. `bare(x, z)` is
+ * 1 where nothing grows, 0 in the open savanna; `edge(x, z)` is the signed
+ * distance to the pad edge in metres.
+ */
+export function clearingMask(anchor) {
+  const a = anchor;
+  const toCamp = (x, z) => {
+    const dx = x - a.x;
+    const dz = z - a.z;
+    return [dx * a.tx + dz * a.tz, -(dx * a.lx + dz * a.lz)];
+  };
+  return {
+    radii: { ...PAD },
+    blend: { inside: -BLEND_IN, outside: BLEND_OUT },
+    bare: (x, z) => {
+      const [u, v] = toCamp(x, z);
+      return bareAt(u, v);
+    },
+    edge: (x, z) => {
+      const [u, v] = toCamp(x, z);
+      return padEdge(u, v);
+    },
+    toCamp,
+  };
+}
+
+export function buildGroundWear(frame, plan, { quality = 'high', footprints = [] } = {}) {
   const px = quality === 'fast' ? 12 : quality === 'ultra' ? 22 : 16; // pixels per metre
   const W = Math.round((EXTENT.u1 - EXTENT.u0) * px);
   const H = Math.round((EXTENT.v1 - EXTENT.v0) * px);
@@ -122,8 +175,22 @@ export function buildGroundWear(frame, plan, { quality = 'high' } = {}) {
     ctx.arc(X(u), Y(v), (0.03 + rnd() * 0.06) * px, 0, Math.PI * 2);
     ctx.fill();
   }
-  stroke(plan.wear.trackIn, 5.5, packed, { step: 0.4, jitter: 0.4, alpha: 0.55, feather: 1.5 });
-  tyreTracks(plan.wear.trackIn, { alpha: 0.8, passes: 3 });
+  // The access track. Inside the fence it is the darkest, most driven ground in
+  // the camp; out on the road's pale platform the same dark fill read as a
+  // shadow slab the size of a wall in the gate frame (round 1, critic C), so
+  // past the gate it fades to twin ruts alone, and those fade into the road.
+  const inside = plan.wear.trackIn.filter(([, v]) => v > plan.gate.v - 0.5);
+  const outside = plan.wear.trackIn.filter(([, v]) => v <= plan.gate.v + 0.5);
+  stroke(inside, 5.0, packed, { step: 0.4, jitter: 0.4, alpha: 0.4, feather: 1.5 });
+  tyreTracks(inside, { alpha: 0.6, passes: 3 });
+  // the ruts through the gate and out to the road, thinning with every metre
+  for (let i = 0; i < outside.length - 1; i++) {
+    const seg = [outside[i], outside[i + 1]];
+    const vMid = (outside[i][1] + outside[i + 1][1]) * 0.5;
+    const k = 1 - Math.min(1, Math.max(0, (plan.gate.v - vMid) / 9));
+    if (k <= 0.03) continue;
+    tyreTracks(seg, { alpha: 0.12 + 0.3 * k, passes: 2, width: 0.3 });
+  }
   tyreTracks(plan.wear.laneLine, { alpha: 0.7, passes: 3 });
   // the turn into each slot is driven once a day, the lane a hundred times
   for (const t of plan.wear.slotTracks) tyreTracks(t, { alpha: 0.45, passes: 1 });
@@ -131,9 +198,12 @@ export function buildGroundWear(frame, plan, { quality = 'high' } = {}) {
   for (const p of plan.parking) stroke([[p.u, p.v - 1.5], [p.u, p.v + 1.5]], 2.2, packed, { step: 0.4, alpha: 0.35, feather: 1.6 });
 
   // --- footpaths -----------------------------------------------------------
+  // a worn path in dry country is pale in the middle, where feet have polished
+  // the dust, with a darker scuffed margin where the grass roots were
   for (const p of plan.wear.paths) {
-    stroke(p, 0.8, path, { step: 0.22, jitter: 0.18, alpha: 0.7, feather: 1.5 });
-    stroke(p, 0.4, rut, { step: 0.2, jitter: 0.1, alpha: 0.45, feather: 1.2 });
+    stroke(p, 1.0, path, { step: 0.22, jitter: 0.2, alpha: 0.6, feather: 1.5 });
+    stroke(p, 0.45, dust, { step: 0.18, jitter: 0.08, alpha: 0.42, feather: 1.15 });
+    stroke(p, 0.55, rut, { step: 0.2, jitter: 0.14, alpha: 0.22, feather: 1.3 });
   }
   // trampled ground: round the fire, under the mess tent, at the kitchen, at the gate
   const trample = (u, v, r, a) => {
@@ -170,6 +240,96 @@ export function buildGroundWear(frame, plan, { quality = 'high' } = {}) {
   };
   scorch(plan.fire.u, plan.fire.v, plan.fire.radius * 2.1);
   scorch(plan.fire2.u, plan.fire2.v, plan.fire2.radius * 2.2);
+  // ash: raked out of the pit, kicked about by feet and blown downwind (the
+  // camp's wind comes off the road, so it drifts toward +v); charcoal bits with it
+  const ashSpill = (u, v, r, wind) => {
+    for (let i = 0; i < 260; i++) {
+      const ang = rnd() * Math.PI * 2;
+      const rr = r * (0.9 + Math.pow(rnd(), 0.6) * 1.6);
+      const du = Math.cos(ang) * rr + wind[0] * rnd() * r * 1.2;
+      const dv = Math.sin(ang) * rr + wind[1] * rnd() * r * 1.2;
+      const grey = 140 + rnd() * 50;
+      ctx.fillStyle = rnd() < 0.8 ? `rgba(${grey},${grey - 6},${grey - 14},${0.18 + rnd() * 0.3})` : `rgba(28,24,20,${0.5 + rnd() * 0.4})`;
+      ctx.beginPath();
+      ctx.ellipse(X(u + du), Y(v + dv), (0.06 + rnd() * 0.16) * px, (0.04 + rnd() * 0.1) * px, rnd() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // the ash-grey ground just outside the stones
+    const g = ctx.createRadialGradient(X(u), Y(v), r * 0.9 * px, X(u), Y(v), r * 1.9 * px);
+    g.addColorStop(0, 'rgba(150,144,132,0.32)');
+    g.addColorStop(1, 'rgba(150,144,132,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(X(u), Y(v), r * 1.9 * px, 0, Math.PI * 2);
+    ctx.fill();
+  };
+  ashSpill(plan.fire.u, plan.fire.v, plan.fire.radius, [0.3, 0.7]);
+  ashSpill(plan.fire2.u, plan.fire2.v, plan.fire2.radius, [0.3, 0.7]);
+  // bark and chips round the woodpile and the chopping ground beside it
+  for (let i = 0; i < 220; i++) {
+    const u = plan.wood.u + (rnd() - 0.5) * 5.5 + 0.8;
+    const v = plan.wood.v + (rnd() - 0.5) * 3.2 - 0.4;
+    const t = rnd();
+    ctx.fillStyle = t < 0.5 ? `rgba(196,170,120,${0.3 + rnd() * 0.4})` : t < 0.8 ? `rgba(120,88,52,${0.3 + rnd() * 0.4})` : `rgba(60,44,28,${0.3 + rnd() * 0.3})`;
+    ctx.beginPath();
+    ctx.ellipse(X(u), Y(v), (0.05 + rnd() * 0.12) * px, (0.02 + rnd() * 0.05) * px, rnd() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // --- contact: the ground under everything that stands on it ------------------
+  // A soft dark blob under every placed prop — a chair leg's shadow, the damp
+  // under a drum, the shade under a table — so nothing floats on a flat plane.
+  for (const f of footprints) {
+    const r = f.r * 1.1 + 0.15;
+    const a = f.r < 0.6 ? 0.42 : f.r < 1.5 ? 0.3 : 0.16;
+    const g = ctx.createRadialGradient(X(f.u), Y(f.v), 0, X(f.u), Y(f.v), r * px);
+    g.addColorStop(0, `rgba(40,30,20,${a})`);
+    g.addColorStop(0.5, `rgba(40,30,20,${a * 0.6})`);
+    g.addColorStop(1, 'rgba(40,30,20,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(X(f.u), Y(f.v), r * px, r * px * 0.85, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // --- the clearing's edge: a band where dirt and grass trade places -----------
+  // Inside the pad edge a thinning cover of straw-coloured tufts creeps in;
+  // outside it bare dust patches thin out into the grass. On the road side the
+  // pad edge runs just inside the fence line, so the band breaks the straight
+  // pale strip between the parking row and the road (round 1, critics A, B).
+  {
+    const straw = (a) => `rgba(176,160,104,${a})`;
+    const olive = (a) => `rgba(126,124,78,${a})`;
+    const bare = (a) => `rgba(150,124,90,${a})`;
+    const n = Math.round(W * H * 0.0075);
+    for (let i = 0; i < n; i++) {
+      const u = EXTENT.u0 + rnd() * (EXTENT.u1 - EXTENT.u0);
+      const v = EXTENT.v0 + rnd() * (EXTENT.v1 - EXTENT.v0);
+      const e = padEdge(u, v);
+      if (e < BLEND_IN - 3 || e > BLEND_OUT + 2) continue;
+      // along the road the band runs under the fence line, thinner (the verge is
+      // driven and trampled) and clear of the access track through the gate
+      if (v < -13 && Math.abs(u - plan.gate.u) < 4.5) continue;
+      const roadSide = v < -13 ? 0.55 : 1;
+      if (e < 0.4) {
+        // inside: grass creeping back over the graded dirt, thickest at the edge
+        const k = Math.min(1, Math.max(0, (e - BLEND_IN + 3) / (3 - BLEND_IN))) * roadSide;
+        if (rnd() > k * k) continue;
+        ctx.fillStyle = rnd() < 0.7 ? straw(0.28 + rnd() * 0.35) : olive(0.25 + rnd() * 0.3);
+        ctx.beginPath();
+        ctx.ellipse(X(u), Y(v), (0.18 + rnd() * 0.3) * px, (0.14 + rnd() * 0.22) * px, rnd() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        // outside: dust and bare patches in the grass, thinning outward
+        const k = (1 - Math.min(1, e / (BLEND_OUT + 2))) * roadSide;
+        if (rnd() > k * k * 1.4) continue;
+        ctx.fillStyle = bare(0.2 + rnd() * 0.3);
+        ctx.beginPath();
+        ctx.ellipse(X(u), Y(v), (0.35 + rnd() * 0.7) * px, (0.25 + rnd() * 0.5) * px, rnd() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
   // oil under the workshop, the darkest thing on the ground
   for (let i = 0; i < 6; i++) {
     const u = plan.workshop.u - 1 + rnd() * 2.5;

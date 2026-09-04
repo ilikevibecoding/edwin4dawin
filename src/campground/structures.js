@@ -251,7 +251,7 @@ export function lookout(rnd, height = 4.6) {
     for (const sz of [-1, 1]) o.cyl('pole', 0.035, 0.035, 1.1, 7, { pos: [sx * (s + 0.1), height, sz * (s + 0.1)] });
   }
   // canvas roof on the pole tops
-  gable(o, 'canvasSand', s * 2 + 0.6, s * 2 + 0.6, height + 1.9, height + 2.6, { overhang: 0.2, sag: 0.05 });
+  gable(o, 'canvasSand', s * 2 + 0.6, s * 2 + 0.6, height + 1.9, height + 2.6, { overhang: 0.2, sag: 0.05, belly: 0.04, edge: 0.03, wrinkle: 0.02, seg: 2.2, seed: 5.1 });
   for (const sx of [-1, 1]) o.cyl('pole', 0.04, 0.04, s * 2 + 0.9, 7, { pos: [sx * (s + 0.3), height + 1.9, -s - 0.45], rot: [Math.PI / 2, 0, 0] });
   o.cyl('pole', 0.04, 0.04, s * 2 + 0.9, 7, { pos: [0, height + 2.55, -s - 0.45], rot: [Math.PI / 2, 0, 0] });
   // ladder up the front
@@ -597,12 +597,36 @@ export function firePit(rnd, radius = 1.15, { small = false } = {}) {
     p.setY(i, 0.04 + (1 - r / radius) * 0.08);
   }
   o.add('ash', ash, {}, { uv: false });
-  for (let i = 0; i < (small ? 3 : 5); i++) {
-    const a = rnd() * TAU;
-    o.cyl('emberGlow', 0.05 + rnd() * 0.03, 0.06 + rnd() * 0.03, radius * (0.9 + rnd() * 0.4), 7, {
-      pos: [Math.cos(a) * radius * 0.35, 0.1 + i * 0.045, Math.sin(a) * radius * 0.35],
-      rot: [Math.PI / 2 + (rnd() - 0.5) * 0.35, 0, a],
-    });
+  // The logs: laid in a star with their burnt ends in the coals and the thick
+  // ends resting on the ring, so they stick out past the flames and read as
+  // logs rather than as a glow with a texture in it. Two of them propped up
+  // across the others.
+  const logs = small ? 3 : 5;
+  for (let i = 0; i < logs; i++) {
+    const a = (i / logs) * TAU + rnd() * 0.5;
+    const len = radius * (1.15 + rnd() * 0.35);
+    const rIn = 0.055 + rnd() * 0.02;
+    const rOut = rIn * (1.25 + rnd() * 0.25);
+    // inner end near the centre at coal height, outer end up on the stones
+    const inner = radius * 0.12;
+    const outer = inner + len;
+    const yIn = 0.12 + (i % 2) * 0.05;
+    const yOut = i < 2 ? 0.34 + rnd() * 0.06 : 0.2 + rnd() * 0.05;
+    const cx = Math.cos(a) * (inner + outer) * 0.5;
+    const cz = Math.sin(a) * (inner + outer) * 0.5;
+    const dir = new THREE.Vector3(Math.cos(a) * len, yOut - yIn, Math.sin(a) * len).normalize();
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    o.cyl('charLog', rIn, rOut, Math.hypot(len, yOut - yIn), 8, { pos: [cx, (yIn + yOut) * 0.5, cz], quat: q }, { centre: true });
+  }
+  // a couple of unburnt rounds dropped by the ring, ready to go on
+  if (!small) {
+    for (const [x, z, yaw, len] of [
+      [radius * 1.35, radius * 0.5, 0.4, radius * 0.9],
+      [radius * 1.5, radius * 0.15, 1.2, radius * 0.8],
+    ]) {
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(Math.cos(yaw), 0, Math.sin(yaw)));
+      o.cyl('deadwood', 0.055, 0.065, len, 8, { pos: [x, 0.06, z], quat: q }, { centre: true });
+    }
   }
   if (!small) {
     // tripod and hanging pot, grill on two stones

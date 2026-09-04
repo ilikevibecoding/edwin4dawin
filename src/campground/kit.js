@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { boxUV, Kit, rbox, transform } from '../lib/geo.js';
+import { boxUV, Kit as BaseKit, rbox, transform } from '../lib/geo.js';
 
 // ---------------------------------------------------------------------------
 // Assembly helpers on top of the shared merging Kit.
@@ -45,6 +45,8 @@ export const TILE = {
   polyYellow: 0.4,
   rock: 1.6,
   deadwood: 1.2,
+  charLog: 0.5,
+  crate: 1.0,
   ash: 2.4,
   solar: 1.0,
 };
@@ -53,6 +55,38 @@ const _q = new THREE.Quaternion();
 const _qy = new THREE.Quaternion();
 const _n = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
+
+/**
+ * The shared Kit merges every bucket non-indexed and recomputes normals, which
+ * flat-shades everything: a 9-segment pole shows its facets from two metres and
+ * a subdivided canvas shows every quad. Every geometry that reaches here already
+ * carries the normals its builder meant (three's primitives, `boxUV`,
+ * `lump`), and `transform()` rotates them along with the vertices, so keep
+ * them: merge indexed where the whole bucket is indexed, and where a lump or an
+ * extrusion forces the bucket non-indexed, expand without recomputing.
+ */
+export class Kit extends BaseKit {
+  build(materials, { castShadow = true, receiveShadow = true, group = new THREE.Group() } = {}) {
+    group.name = this.name;
+    for (const [key, list] of this.buckets) {
+      const mat = materials[key];
+      if (!mat) {
+        console.warn(`[Kit ${this.name}] missing material "${key}"`);
+        continue;
+      }
+      let geos = list.map((g) => {
+        const c = g.clone();
+        if (!c.attributes.normal) c.computeVertexNormals();
+        if (!c.attributes.uv) c.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(c.attributes.position.count * 2), 2));
+        for (const name of Object.keys(c.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'uv') c.deleteAttribute(name);
+        return c;
+      });
+      if (!geos.every((g) => g.index)) geos = geos.map((g) => (g.index ? g.toNonIndexed() : g));
+      this.emit(group, key, mat, geos, { castShadow, receiveShadow });
+    }
+    return group;
+  }
+}
 
 export class Obj {
   constructor() {
@@ -205,4 +239,4 @@ export function lump(rx, ry, rz, rnd, { detail = 1, rough = 0.18, flat = 0 } = {
   return g;
 }
 
-export { Kit, rbox, transform, boxUV };
+export { rbox, transform, boxUV };

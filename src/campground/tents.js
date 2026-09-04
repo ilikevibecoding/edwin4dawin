@@ -16,26 +16,74 @@ import { boots, chair, cot, crate, duffel, lantern, table, washStand } from './p
 const TAU = Math.PI * 2;
 
 /**
- * Two sloped canvas panels meeting at a ridge, with a little sag baked in as a
- * bend along the eave direction. `sag` is how far the middle of each panel
- * drops below the straight line.
+ * Two sloped canvas panels meeting at a ridge. Each panel is a subdivided
+ * sheet, single-sided (the canvas materials are double-sided), with the shape
+ * cloth actually takes on a frame baked in:
+ *
+ *  - a catenary sag along the eave between the points that hold it (`bays`,
+ *    z positions of the poles or frame corners), `sag` of the span deep at the
+ *    eave and pinned at the ridge pole;
+ *  - a belly across the panel between ridge and eave, pinned at the frame ends;
+ *  - a torn-paper waver along the free eave edge;
+ *  - tension wrinkles fanning out from every guy point.
+ *
+ * `sag` is a fraction of the bay span (a fly on poles is 5–8 %, a tent on a
+ * full frame with eave rails is nearly nothing).
  */
-function gable(o, key, w, d, eaveY, ridgeY, { overhang = 0, sag = 0.04, t = 0.014 } = {}) {
+function gable(o, key, w, d, eaveY, ridgeY, { overhang = 0, sag = 0.06, belly = 0.04, bays = null, edge = 0.035, wrinkle = 0.02, seg = 2.5, seed = 0 } = {}) {
   const half = w * 0.5 + overhang;
+  const L = d + overhang * 2;
   const rise = ridgeY - eaveY;
   const slope = Math.atan2(rise, w * 0.5);
   const panelW = Math.hypot(half, (rise * half) / (w * 0.5));
+  const holds = (bays || [-d * 0.5, d * 0.5]).slice().sort((a, b) => a - b);
+  // sag between consecutive holds: parabola, a good catenary at these spans
+  const sagAt = (z) => {
+    if (z <= holds[0] || z >= holds[holds.length - 1]) {
+      // past the last hold the cloth is cantilevered: droop with the overhang
+      const over = z < holds[0] ? holds[0] - z : z - holds[holds.length - 1];
+      return over * over * 0.25;
+    }
+    for (let i = 0; i < holds.length - 1; i++) {
+      if (z >= holds[i] && z <= holds[i + 1]) {
+        const span = holds[i + 1] - holds[i];
+        const t = (z - holds[i]) / span;
+        return span * sag * 4 * t * (1 - t);
+      }
+    }
+    return 0;
+  };
+  const segX = Math.max(4, Math.round(panelW * seg));
+  const segZ = Math.max(4, Math.round(L * seg));
   for (const s of [-1, 1]) {
-    const g = new THREE.BoxGeometry(panelW, t, d + overhang * 2, 6, 1, 8);
+    const g = new THREE.PlaneGeometry(panelW, L, segX, segZ);
+    g.rotateX(-Math.PI / 2); // lie in xz, normal +y
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i);
-      const z = p.getZ(i);
-      // belly between the frame members, pinned at the ridge and at the eave ends
-      const along = 1 - Math.abs(z / ((d + overhang * 2) * 0.5));
-      const across = 1 - Math.abs(x / (panelW * 0.5));
-      p.setY(i, p.getY(i) - sag * Math.sin(along * Math.PI * 0.5) * Math.sin(across * Math.PI));
+      const z = -p.getZ(i);
+      // 0 at the ridge, 1 at the eave, whichever side this panel is
+      const across = THREE.MathUtils.clamp((x * s + panelW * 0.5) / panelW, 0, 1);
+      const along = 1 - Math.abs(z / (L * 0.5));
+      let dy = -sagAt(z) * Math.pow(across, 1.4);
+      dy -= belly * Math.sin(across * Math.PI) * Math.sin(Math.min(1, along * 1.6) * Math.PI * 0.5);
+      // the free edge wavers
+      const edgeK = Math.pow(across, 6);
+      dy += edge * edgeK * (Math.sin(z * 5.1 + seed) * 0.5 + Math.sin(z * 11.7 + seed * 1.7 + 1.0) * 0.35 + Math.sin(z * 23.0 + seed * 0.4) * 0.15);
+      // tension wrinkles from the guy points: a fan of ridges that dies out over a metre
+      for (const hz of holds) {
+        const dx = across * panelW; // distance from the ridge, along the slope
+        const rx = panelW - dx;
+        const rz = z - hz;
+        const dist = Math.hypot(rx, rz);
+        if (dist > 1.4 || dist < 0.02) continue;
+        const ang = Math.atan2(rz, rx);
+        dy += wrinkle * Math.cos(ang * 7.0 + seed) * Math.exp(-dist * 2.2) * Math.min(1, across * 3);
+      }
+      p.setY(i, dy);
+      p.setZ(i, -z);
     }
+    g.computeVertexNormals();
     const xc = s * half * 0.5;
     const yc = ridgeY - (rise * half) / w;
     o.add(key, g, { pos: [xc, yc, 0], rot: [0, 0, -s * slope] });
@@ -123,7 +171,8 @@ export function safariTent(rnd, kind = 'khaki') {
   for (const sx of [-1, 1]) o.cyl(frame, 0.022, 0.022, wallH + 0.5, 8, { pos: [sx * (W * 0.5 + 0.3), 0, zf + veranda - 0.1], rot: [0.03, 0, -sx * 0.02] });
 
   // --- inner tent ----------------------------------------------------------
-  gable(o, key, W, D, wallH, ridgeH, { sag: 0.05 });
+  // on a full frame with eave rails: no sag along, only a shallow belly across
+  gable(o, key, W, D, wallH, ridgeH, { sag: 0.004, belly: 0.05, bays: [-D * 0.5, D * 0.5], edge: 0.01, wrinkle: 0.008, seg: 1.6, seed: rnd() * 7 });
   for (const sx of [-1, 1]) {
     wall(o, key, D, wallH, 0.012, { pos: [sx * W * 0.5, wallH * 0.5, 0], rot: [0, Math.PI / 2, 0], belly: 0.04 * sx });
     // mesh window, zipped storm flap rolled above it
@@ -150,8 +199,20 @@ export function safariTent(rnd, kind = 'khaki') {
   o.box('canvasChair', 1.6, 0.02, 1.1, { pos: [0.1, 0.012, zf + 0.75], rot: [0, 0.04, 0] });
 
   // --- flysheet ------------------------------------------------------------
-  const flyLift = 0.25;
-  gable(o, flyKey, W, D + veranda, wallH + flyLift, ridgeH + flyLift, { overhang: 0.5, sag: 0.08, t: 0.012 });
+  // held at the frame's four corners and the two veranda poles, guyed at the
+  // corners: it sags between them and its half-metre overhang droops
+  const flyLift = 0.3;
+  const fd = D + veranda;
+  gable(o, flyKey, W, fd, wallH + flyLift, ridgeH + flyLift, {
+    overhang: 0.5,
+    sag: 0.045,
+    belly: 0.05,
+    bays: [-fd * 0.5, -fd * 0.5 + D, fd * 0.5 - 0.1],
+    edge: 0.04,
+    wrinkle: 0.025,
+    seg: 2.2,
+    seed: rnd() * 7,
+  });
   // shift the fly forward over the veranda: rebuild is simpler than moving, so
   // instead translate the last two parts
   for (let i = o.parts.length - 2; i < o.parts.length; i++) o.parts[i][1].translate(0, 0, veranda * 0.5);
@@ -199,8 +260,10 @@ export function messTent(rnd, { w = 9, d = 6, ridge = 3.3, eave = 2.3 } = {}) {
   const lamps = [];
   const key = 'canvasOlive';
   const poleKey = 'steelWhite';
-  // ridge runs along x; front (+z) and back are the long sides
-  gable(o, key, d, w, eave, ridge, { overhang: 0.35, sag: 0.1, t: 0.014 });
+  // ridge runs along x; front (+z) and back are the long sides. Built along z
+  // with the eave held at the three perimeter poles a side, so the canvas hangs
+  // in two 4.5 m catenaries between them.
+  gable(o, key, d, w, eave, ridge, { overhang: 0.35, sag: 0.06, belly: 0.06, bays: [-w * 0.5, 0, w * 0.5], edge: 0.04, wrinkle: 0.03, seg: 2.6, seed: 3.3 });
   // the gable built along z; turn it so the ridge runs along x
   for (let i = o.parts.length - 2; i < o.parts.length; i++) o.parts[i][1].rotateY(Math.PI / 2);
   // gable ends
@@ -299,7 +362,7 @@ export function ridgeTent(rnd) {
   const key = 'canvasGreen';
   for (const sz of [-1, 1]) o.cyl('pole', 0.025, 0.03, H, 7, { pos: [0, 0, sz * D * 0.5] });
   o.cyl('pole', 0.02, 0.02, D + 0.3, 7, { pos: [0, H, -D * 0.5 - 0.15], rot: [Math.PI / 2, 0, 0] });
-  gable(o, key, W, D, 0.25, H, { overhang: 0.1, sag: 0.05, t: 0.012 });
+  gable(o, key, W, D, 0.25, H, { overhang: 0.1, sag: 0.05, belly: 0.03, edge: 0.02, wrinkle: 0.015, seg: 2.5, seed: rnd() * 7 });
   wall(o, key, W - 0.1, 0.27, 0.012, { pos: [0, 0.13, -D * 0.5], belly: -0.02 });
   gableEnd(o, key, W - 0.1, 0.25, H - 0.02, -D * 0.5 + 0.01);
   // front flap tied open to one side

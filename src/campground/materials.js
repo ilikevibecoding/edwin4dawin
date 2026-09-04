@@ -4,6 +4,10 @@ import { deadWoodMaps } from '../textures/nature.js';
 import {
   ashMaps,
   canvasMaps,
+  chairClothMaps,
+  charLogMaps,
+  coalsGlowMap,
+  crateMaps,
   dryGrassCutout,
   galvMaps,
   mapBoardMap,
@@ -15,6 +19,37 @@ import {
   solarMaps,
   timberMaps,
 } from './textures.js';
+
+// ---------------------------------------------------------------------------
+// Canvas translucency. A tent fly is thin cloth: with the sun on the other
+// side it glows, and from underneath the whole roof is a warm diffuse panel.
+// MeshPhysicalMaterial's transmission is a scene re-render per frame, so this
+// is the cheap version — a Lambert term from the key light through the *back*
+// of the surface, tinted by the cloth, added to the diffuse. All the canvas
+// materials share the one hook, so they still share one program.
+// ---------------------------------------------------------------------------
+const CANVAS_TRANSMIT = 0.13;
+function canvasTranslucency(shader) {
+  shader.uniforms.uTransmit = { value: CANVAS_TRANSMIT };
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform float uTransmit;')
+    .replace(
+      '#include <lights_fragment_end>',
+      `#include <lights_fragment_end>
+      #if NUM_DIR_LIGHTS > 0
+      {
+        // geometryNormal faces the viewer; light arriving from behind the cloth
+        // is what comes through it
+        float back = saturate(dot(-normal, directionalLights[0].direction));
+        vec3 through = directionalLights[0].color * diffuseColor.rgb * back * uTransmit;
+        #if defined(USE_SHADOWMAP) && NUM_DIR_LIGHT_SHADOWS > 0
+        through *= getShadow(directionalShadowMap[0], directionalLightShadows[0].shadowMapSize, directionalLightShadows[0].shadowIntensity, directionalLightShadows[0].shadowBias, directionalLightShadows[0].shadowRadius, vDirectionalShadowCoord[0]);
+        #endif
+        reflectedLight.directDiffuse += through;
+      }
+      #endif`,
+    );
+}
 
 // ---------------------------------------------------------------------------
 // The camp's material library. Keys are what every builder references through
@@ -37,11 +72,11 @@ export function campMaterials(env = null) {
 
   const canvasOf = (kind, color = 0xffffff, extra = {}) => {
     const t = canvasMaps(kind);
-    return new THREE.MeshStandardMaterial({
+    const mat = new THREE.MeshStandardMaterial({
       map: t.map,
       normalMap: t.normal,
       roughnessMap: t.rough,
-      normalScale: V2(0.8),
+      normalScale: V2(0.9),
       color,
       metalness: 0,
       roughness: 1,
@@ -49,6 +84,8 @@ export function campMaterials(env = null) {
       side: THREE.DoubleSide,
       ...extra,
     });
+    mat.onBeforeCompile = canvasTranslucency;
+    return mat;
   };
   m.canvas = canvasOf('khaki');
   m.canvasOlive = canvasOf('olive');
@@ -212,6 +249,9 @@ export function campMaterials(env = null) {
     envMapIntensity: 0.3,
   });
   const ash = ashMaps();
+  // The bed of coals under the flames: the emissive mask is the glowing
+  // charcoal in the middle of the ash, and index.js drives its intensity with
+  // the fire's flicker and the hour.
   m.ash = new THREE.MeshStandardMaterial({
     map: ash.map,
     normalMap: ash.normal,
@@ -220,6 +260,34 @@ export function campMaterials(env = null) {
     metalness: 0,
     roughness: 1,
     envMapIntensity: 0.2,
+    emissive: 0xff5a14,
+    emissiveMap: coalsGlowMap(),
+    emissiveIntensity: 0.6,
+  });
+  // Charred logs in the fire: black crazed char, glowing in the cracks.
+  const charLog = charLogMaps();
+  m.charLog = new THREE.MeshStandardMaterial({
+    map: charLog.map,
+    normalMap: charLog.normal,
+    roughnessMap: charLog.rough,
+    normalScale: V2(1.0),
+    metalness: 0,
+    roughness: 1,
+    envMapIntensity: 0.1,
+    emissive: 0xff6a1a,
+    emissiveMap: charLog.glow,
+    emissiveIntensity: 0.6,
+  });
+  // Slatted crates: one face per tile, the stencil and the edge wear in the map.
+  const crate = crateMaps('stores');
+  m.crate = new THREE.MeshStandardMaterial({
+    map: crate.map,
+    normalMap: crate.normal,
+    roughnessMap: crate.rough,
+    normalScale: V2(1.0),
+    metalness: 0,
+    roughness: 1,
+    envMapIntensity: 0.3,
   });
 
   m.glass = new THREE.MeshPhysicalMaterial({
@@ -263,16 +331,6 @@ export function campMaterials(env = null) {
     roughness: 0.3,
     envMapIntensity: 0.4,
   });
-  // Fire: charred logs on the pit floor read as the fire's own glow at night
-  m.emberGlow = new THREE.MeshStandardMaterial({
-    color: 0x1a1210,
-    emissive: 0xff6a1a,
-    emissiveIntensity: 0.9,
-    metalness: 0,
-    roughness: 1,
-    envMapIntensity: 0.1,
-  });
-
   const solar = solarMaps();
   // Glass over cells: a mirror-flat 6 m² pointed at the sky is a white blob in
   // every overhead, so the glass is dusty rather than polished.
@@ -291,13 +349,16 @@ export function campMaterials(env = null) {
       envMapIntensity: 0.3,
       name: key,
     });
+  // The two boards read from the road are drawn at 1024 px with the name line
+  // given twice the height of the rest, so the one word that matters survives
+  // a 512-pixel frame from fifteen metres.
   m.signGate = sign(
     'signGate',
-    signMap('gate', ['OLARE RIVER', 'RANGER POST & CAMP', 'Please report to the office'], { board: '#cbbf9f', ink: '#2a2622', accent: '#4a5a3a' }),
+    signMap('gate', ['OLARE RIVER', 'RANGER POST & CAMP', 'Please report to the office'], { board: '#cbbf9f', ink: '#2a2622', accent: '#4a5a3a', w: 1024, h: 512, weights: [2.2, 1.3, 1] }),
   );
   m.signFuel = sign('signFuel', signMap('fuel', ['FUEL STORE', 'NO NAKED FLAME'], { board: '#9c2e26', ink: '#e9e0cc', w: 512, h: 256 }));
   m.signLatrine = sign('signLatrine', signMap('latrine', ['SHOWERS  ·  WC', 'water is precious'], { board: '#cbbf9f', ink: '#2a2622', w: 512, h: 192 }));
-  m.signSpeed = sign('signSpeed', signMap('speed', ['DEAD SLOW', 'ANIMALS ON ROAD'], { board: '#cfc3a6', ink: '#2a2622', accent: '#c9302c' }));
+  m.signSpeed = sign('signSpeed', signMap('speed', ['DEAD SLOW', 'ANIMALS ON ROAD'], { board: '#cfc3a6', ink: '#2a2622', accent: '#c9302c', w: 1024, h: 512, weights: [1.8, 1] }));
   m.signOffice = sign('signOffice', signMap('office', ['RADIO ROOM', 'Ranger on duty'], { board: '#c8bc9c', ink: '#2a2622', w: 512, h: 160 }));
   m.signRadio = sign('signRadio', signMap('radio', ['CALL SIGN', 'ZULU 4'], { board: '#4a5a3a', ink: '#e8dcc0', w: 256, h: 192 }));
   m.mapBoard = sign('mapBoard', mapBoardMap());
@@ -317,8 +378,19 @@ export function campMaterials(env = null) {
     emissiveIntensity: 0.4,
   });
 
-  // Fabric on the folding chairs: heavy cloth with the truck's weave normal
-  m.chairCloth = canvasOf('green', 0x7f8a6a, { side: THREE.DoubleSide });
+  // Fabric on the folding chairs: a striped cotton duck, faded where the sun sits on it
+  const cloth = chairClothMaps();
+  m.chairCloth = new THREE.MeshStandardMaterial({
+    map: cloth.map,
+    normalMap: cloth.normal,
+    roughnessMap: cloth.rough,
+    normalScale: V2(0.8),
+    metalness: 0,
+    roughness: 1,
+    envMapIntensity: 0.3,
+    side: THREE.DoubleSide,
+  });
+  m.chairCloth.onBeforeCompile = canvasTranslucency;
 
   if (env) for (const mat of Object.values(m)) if ('envMap' in mat) mat.envMap = env;
   for (const [key, mat] of Object.entries(m)) if (mat && mat.isMaterial && !mat.name) mat.name = key;

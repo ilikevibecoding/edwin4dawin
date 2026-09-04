@@ -54,9 +54,13 @@ export function canvasMaps(kind = 'khaki') {
       // a seam: a raised double row of stitching with the cloth pulled tight either side
       const sv = (v * 1.0) % 1;
       const seam = smoothstep(0.02, 0.0, Math.abs(sv - 0.5)) * 0.5;
-      return clamp(weave * 0.6 + slub * 0.3 + seam * 0.3 + 0.05);
+      // wrinkles: soft creases at the 10-30 cm scale where the cloth was folded
+      // and never pulled quite flat, so the surface undulates rather than
+      // reading as one sheet of fine weave
+      const crease = ridged(u * 4 + 3.1, v * 4, { octaves: 3, period: 4, seed: seed + 3 });
+      return clamp(weave * 0.45 + slub * 0.22 + seam * 0.3 + crease * 0.3 + 0.03);
     });
-    const normal = normalFromHeight(hf, n, n, 0.9, { repeat: 1 });
+    const normal = normalFromHeight(hf, n, n, 1.2, { repeat: 1 });
     const palette = {
       // the pad is pale sand, so every canvas sits a stop darker than the dirt
       khaki: { base: 0x7a6742, faded: 0x96845e, shade: 0x4c3f2a },
@@ -146,6 +150,10 @@ export function timberMaps(kind = 'grey') {
         c = mixRgb(c, tone > 0.5 ? light : dark, Math.abs(tone - 0.5) * 0.35);
         const bv = (v * boards) % 1;
         const gap = smoothstep(0.0, 0.03, bv) * smoothstep(1.0, 0.97, bv);
+        // the arrises are rounded and rubbed pale where hands and crates go over them
+        const edge = (1 - smoothstep(0.03, 0.1, bv) * smoothstep(0.97, 0.9, bv)) * gap;
+        const rub = fbm(u * 9 + board * 5, v * 3, { octaves: 2, period: 9, seed: seed + 31 + board });
+        c = mixRgb(c, light, edge * (0.25 + 0.45 * rub));
         c = mixRgb(dark, c, 0.3 + 0.7 * gap);
         put(out, c);
       },
@@ -430,11 +438,15 @@ export function solarMaps() {
  * and the lettering colour are parameters. Sun-faded and dust-streaked like
  * everything else.
  */
-export function signMap(key, lines, { board = '#e8dcc0', ink = '#2a2622', accent = null, w = 512, h = 256, font = 'bold' } = {}) {
+export function signMap(key, lines, { board = '#e8dcc0', ink = '#2a2622', accent = null, w = 512, h = 256, font = 'bold', weights = null } = {}) {
   return cached('camp.sign.' + key, () =>
     canvasTexture(
       w,
       (ctx) => {
+        // Drawn at 2x and left at 2x: the canvas is the texture, and a board
+        // read from fifteen metres in a 512-pixel frame needs every texel it
+        // can get before the mip chain averages the strokes into the board.
+        const s = w / 512;
         ctx.fillStyle = board;
         ctx.fillRect(0, 0, w, h);
         const rnd = mulberry32(key.length * 31);
@@ -442,7 +454,7 @@ export function signMap(key, lines, { board = '#e8dcc0', ink = '#2a2622', accent
         for (let i = 0; i < 60; i++) {
           ctx.fillStyle = `rgba(${rnd() < 0.5 ? '60,50,40' : '255,250,235'},${0.03 + rnd() * 0.05})`;
           ctx.beginPath();
-          ctx.ellipse(rnd() * w, rnd() * h, 20 + rnd() * 80, 8 + rnd() * 30, rnd() * 3, 0, Math.PI * 2);
+          ctx.ellipse(rnd() * w, rnd() * h, (20 + rnd() * 80) * s, (8 + rnd() * 30) * s, rnd() * 3, 0, Math.PI * 2);
           ctx.fill();
         }
         if (accent) {
@@ -450,34 +462,300 @@ export function signMap(key, lines, { board = '#e8dcc0', ink = '#2a2622', accent
           ctx.fillRect(0, 0, w, h * 0.09);
           ctx.fillRect(0, h * 0.91, w, h * 0.09);
         }
+        // a 3 mm painted border inside the accent bands
+        ctx.strokeStyle = ink;
+        ctx.lineWidth = 3 * s;
+        ctx.strokeRect(w * 0.025, h * (accent ? 0.11 : 0.04), w * 0.95, h * (accent ? 0.78 : 0.92));
         const pad = h * 0.14;
-        const lineH = (h - pad * 2) / lines.length;
+        const wts = weights || lines.map(() => 1);
+        const total = wts.reduce((a, b) => a + b, 0);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = ink;
+        let y = pad;
         lines.forEach((ln, i) => {
-          const size = Math.min(lineH * 0.72, (w * 0.86) / Math.max(4, ln.length * 0.62));
+          const lineH = ((h - pad * 2) * wts[i]) / total;
+          const size = Math.min(lineH * 0.78, (w * 0.86) / Math.max(4, ln.length * 0.6));
           ctx.font = `${font} ${size}px Georgia, "Times New Roman", serif`;
-          ctx.fillText(ln, w / 2, pad + lineH * (i + 0.5));
+          ctx.fillText(ln, w / 2, y + lineH * 0.5);
+          y += lineH;
         });
-        // dust down from the top edge and chips at the corners
+        // dust down from the top edge and chips at the corners, kept off the lettering
         const g = ctx.createLinearGradient(0, 0, 0, h);
-        g.addColorStop(0, 'rgba(120,95,60,0.28)');
-        g.addColorStop(0.4, 'rgba(120,95,60,0.0)');
-        g.addColorStop(1, 'rgba(90,70,45,0.22)');
+        g.addColorStop(0, 'rgba(120,95,60,0.2)');
+        g.addColorStop(0.3, 'rgba(120,95,60,0.0)');
+        g.addColorStop(1, 'rgba(90,70,45,0.14)');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, w, h);
         ctx.fillStyle = 'rgba(70,60,50,0.5)';
         for (let i = 0; i < 18; i++) {
           const x = rnd() < 0.5 ? rnd() * w * 0.08 : w - rnd() * w * 0.08;
           ctx.beginPath();
-          ctx.ellipse(x, rnd() * h, 3 + rnd() * 5, 2 + rnd() * 4, rnd() * 3, 0, Math.PI * 2);
+          ctx.ellipse(x, rnd() * h, (3 + rnd() * 5) * s, (2 + rnd() * 4) * s, rnd() * 3, 0, Math.PI * 2);
           ctx.fill();
         }
       },
-      { srgb: true, repeat: 1, height: h },
+      { srgb: true, repeat: 1, height: h, aniso: 8 },
     ),
   );
+}
+
+/**
+ * The face of a slatted timber crate, one crate face per tile: three planks
+ * with the gaps between them, a nailed batten at each end, sun-bleached in the
+ * middle and worn back to bare wood along the edges, and a stencilled mark.
+ * `kind` picks the stencil; the wood is the same.
+ */
+export function crateMaps(kind = 'stores') {
+  return cached('camp.crate.' + kind, () => {
+    const n = 256;
+    const seed = 211;
+    const planks = 3;
+    const plankOf = (v) => Math.floor(clamp(v, 0, 0.999) * planks);
+    const hf = heightField(n, n, (x, y) => {
+      const u = x / n;
+      const v = y / n;
+      const pv = (v * planks) % 1;
+      const plank = plankOf(v);
+      const gap = smoothstep(0.0, 0.05, pv) * smoothstep(1.0, 0.95, pv);
+      const grain = ridged(u * 2.5 + plank * 5.7, v * 30, { octaves: 4, period: 2.5, seed: seed + plank });
+      // the end battens stand proud of the planks
+      const batten = smoothstep(0.045, 0.06, u) * smoothstep(0.955, 0.94, u) < 0.5 ? 1 : 0;
+      return clamp((grain * 0.5 + 0.35) * gap + batten * 0.25);
+    });
+    const normal = normalFromHeight(hf, n, n, 1.6, { repeat: 1 });
+    const light = rgb(0xc59b6a);
+    const mid = rgb(0x8d6740);
+    const dark = rgb(0x4a3421);
+    const bleach = rgb(0xd6c19a);
+    const bare = rgb(0xa8895f);
+    const stencil = rgb(0x2b2a2a);
+    const stencilRnd = mulberry32(seed + kind.length);
+    // the stencil: a rectangle of letters standing in for the paint mask;
+    // drawn as blocks rather than glyphs because at 256 px a word is a texture
+    const marks = [];
+    const rows = kind === 'fragile' ? 1 : 2;
+    for (let r = 0; r < rows; r++) {
+      const nChars = 5 + Math.floor(stencilRnd() * 4);
+      for (let c = 0; c < nChars; c++) marks.push([0.2 + (c / nChars) * 0.6, 0.38 + r * 0.16, 0.6 / nChars * 0.62, 0.09, stencilRnd()]);
+    }
+    const map = pixelTexture(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n;
+        const v = y / n;
+        const h = hf[y * n + x];
+        const plank = plankOf(v);
+        const tone = fbm(u * 2 + plank * 11, v * 2, { octaves: 3, period: 2, seed: seed + 20 + plank });
+        let c = mixRgb(dark, mid, smoothstep(0.15, 0.6, h));
+        c = mixRgb(c, light, smoothstep(0.55, 0.9, h) * 0.8);
+        c = mixRgb(c, tone > 0.5 ? light : dark, Math.abs(tone - 0.5) * 0.3);
+        // bleached where the sun hits, bare and darker where hands and the
+        // truck bed have worn the edges
+        const centre = smoothstep(0.55, 0.05, Math.hypot((u - 0.5) * 1.3, v - 0.5));
+        c = mixRgb(c, bleach, centre * 0.28 * (0.6 + tone * 0.6));
+        const edge = 1 - smoothstep(0.0, 0.09, Math.min(u, 1 - u, v, 1 - v));
+        const wearN = fbm(u * 9, v * 9, { octaves: 3, period: 9, seed: seed + 31 });
+        c = mixRgb(c, bare, edge * smoothstep(0.35, 0.7, wearN) * 0.7);
+        c = mixRgb(c, dark, edge * smoothstep(0.6, 0.9, wearN) * 0.4);
+        // gaps between the planks are dark
+        const pv = (v * planks) % 1;
+        const gap = smoothstep(0.0, 0.04, pv) * smoothstep(1.0, 0.96, pv);
+        c = mixRgb(dark, c, 0.2 + 0.8 * gap);
+        // nail heads on the battens
+        const bx = u < 0.5 ? u : 1 - u;
+        if (bx > 0.02 && bx < 0.055) {
+          const ny = (v * planks * 2) % 1;
+          if (Math.abs(ny - 0.5) < 0.12 && Math.abs(bx - 0.0375) < 0.011) c = mixRgb(c, rgb(0x3a3230), 0.8);
+        }
+        // stencil, broken by the grain so it reads as paint on wood
+        for (const [mx, my, mw, mh, drop] of marks) {
+          if (drop < 0.15) continue;
+          if (Math.abs(u - mx - mw * 0.5) < mw * 0.5 && Math.abs(v - my) < mh * 0.5) {
+            const cover = smoothstep(0.25, 0.55, fbm(u * 30, v * 30, { octaves: 2, period: 30, seed: seed + 40 }));
+            c = mixRgb(c, stencil, 0.75 * cover);
+          }
+        }
+        put(out, c);
+      },
+      { srgb: true, repeat: 1 },
+    );
+    const rough = roughnessTexture(n, n, (x, y) => clamp(0.68 + (1 - hf[y * n + x]) * 0.28), { repeat: 1 });
+    return { map, normal, rough };
+  });
+}
+
+/**
+ * The cloth of a director's chair: a heavy cotton duck in a faded stripe,
+ * with the weave showing through and the colour gone where the sun sits on it.
+ */
+export function chairClothMaps() {
+  return cached('camp.chaircloth', () => {
+    const n = 128;
+    const seed = 223;
+    const hf = heightField(n, n, (x, y) => {
+      const u = x / n;
+      const v = y / n;
+      const warp = 0.5 + 0.5 * Math.sin(u * Math.PI * 2 * 48 + fbm(u * 6, v * 6, { octaves: 2, period: 6, seed }) * 1.5);
+      const weft = 0.5 + 0.5 * Math.sin(v * Math.PI * 2 * 48 + fbm(u * 6, v * 6, { octaves: 2, period: 6, seed: seed + 1 }) * 1.5);
+      const weave = Math.abs(warp - weft) * 0.5 + Math.max(warp, weft) * 0.5;
+      const sag = fbm(u * 3, v * 3, { octaves: 3, period: 3, seed: seed + 2 });
+      return clamp(weave * 0.55 + sag * 0.4 + 0.03);
+    });
+    const normal = normalFromHeight(hf, n, n, 1.0, { repeat: 1 });
+    const a = rgb(0x5a6a4a);
+    const b = rgb(0xb8a67e);
+    const fadeA = rgb(0x8a9478);
+    const fadeB = rgb(0xd2c6a6);
+    const grime = rgb(0x4a4636);
+    const map = pixelTexture(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n;
+        const v = y / n;
+        const h = hf[y * n + x];
+        const stripe = 0.5 + 0.5 * Math.sin(u * Math.PI * 2 * 4);
+        const isA = stripe > 0.5;
+        const fade = fbm(u * 2, v * 2, { octaves: 3, period: 2, seed: seed + 5 });
+        let c = isA ? mixRgb(a, fadeA, smoothstep(0.35, 0.8, fade)) : mixRgb(b, fadeB, smoothstep(0.35, 0.8, fade));
+        c = mixRgb(mixRgb(c, [0, 0, 0], 0.25), c, clamp(0.3 + h * 0.8));
+        const dirt = smoothstep(0.6, 0.9, fbm(u * 7, v * 7, { octaves: 3, period: 7, seed: seed + 6 }));
+        c = mixRgb(c, grime, dirt * 0.3);
+        put(out, c);
+      },
+      { srgb: true, repeat: 1 },
+    );
+    const rough = roughnessTexture(n, n, (x, y) => clamp(0.85 + (1 - hf[y * n + x]) * 0.12), { repeat: 1 });
+    return { map, normal, rough };
+  });
+}
+
+/**
+ * A charred log: black crazed char over the bark with the wood glowing in the
+ * cracks. `map` is the albedo, `glow` the emissive mask — brightest at the
+ * cracks and the ends, nothing on the unburnt outer bark.
+ */
+export function charLogMaps() {
+  return cached('camp.charlog', () => {
+    const n = 128;
+    const seed = 229;
+    const hf = heightField(n, n, (x, y) => {
+      const u = x / n;
+      const v = y / n;
+      const cells = worley(u * 10, v * 4, 10, seed);
+      const crack = smoothstep(0.08, 0.0, cells.f2 - cells.f1);
+      const bark = ridged(u * 6, v * 2, { octaves: 3, period: 6, seed: seed + 1 });
+      return clamp(0.6 - crack * 0.5 + bark * 0.25);
+    });
+    const normal = normalFromHeight(hf, n, n, 1.6, { repeat: 1 });
+    const char = rgb(0x111010);
+    const charLight = rgb(0x2c2826);
+    const ashGrey = rgb(0x6f6a62);
+    const ember = rgb(0xff6a1a);
+    const map = pixelTexture(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n;
+        const v = y / n;
+        const h = hf[y * n + x];
+        let c = mixRgb(char, charLight, smoothstep(0.4, 0.9, h));
+        // a dusting of white ash on the top of the blocks
+        const ashN = fbm(u * 8, v * 8, { octaves: 3, period: 8, seed: seed + 3 });
+        c = mixRgb(c, ashGrey, smoothstep(0.6, 0.95, ashN) * smoothstep(0.5, 0.85, h) * 0.6);
+        put(out, c);
+      },
+      { srgb: true, repeat: 1 },
+    );
+    const glow = pixelTexture(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n;
+        const v = y / n;
+        const h = hf[y * n + x];
+        // cracks glow; the underside (v near 0.5 in pole UV is the far side) glows more
+        const crack = smoothstep(0.45, 0.15, h);
+        const hot = fbm(u * 3, v * 3, { octaves: 3, period: 3, seed: seed + 7 });
+        const k = crack * (0.35 + 0.65 * smoothstep(0.35, 0.75, hot));
+        put(out, mixRgb([0, 0, 0], ember, clamp(k)));
+      },
+      { srgb: true, repeat: 1 },
+    );
+    const rough = roughnessTexture(n, n, () => 0.95, { repeat: 1 });
+    return { map, normal, rough, glow };
+  });
+}
+
+/** Emissive mask for the ash bed: coals glowing under the flames, darkest at the rim. */
+export function coalsGlowMap() {
+  return cached('camp.coals', () => {
+    const n = 128;
+    return pixelTexture(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n;
+        const v = y / n;
+        const r = Math.hypot(u - 0.5, v - 0.5) * 2;
+        const lumps = worley(u * 12, v * 12, 12, 233);
+        const coal = smoothstep(0.3, 0.05, lumps.f1) * (lumps.id > 0.35 ? 1 : 0.2);
+        const k = coal * (1 - smoothstep(0.25, 0.75, r)) * (0.5 + 0.5 * fbm(u * 5, v * 5, { octaves: 2, period: 5, seed: 239 }));
+        put(out, mixRgb([0, 0, 0], rgb(0xff5a14), clamp(k * 1.3)));
+      },
+      { srgb: true, repeat: 1 },
+    );
+  });
+}
+
+/**
+ * Flame sprite atlas: four tongues on a 2 x 2 grid, each a teardrop with a
+ * noise-torn edge. RGB carries heat (white core, dark edge) and A the cutout,
+ * so the shader can ramp colour by heat rather than by distance from centre —
+ * that is what separates a flame from a glowing disc.
+ */
+export function flameAtlas() {
+  return cached('camp.flameatlas', () => {
+    const n = 256;
+    const half = n / 2;
+    return pixelTexture(
+      n,
+      n,
+      (x, y, out) => {
+        const fx = x % half;
+        const fy = y % half;
+        const frame = Math.floor(x / half) + Math.floor(y / half) * 2;
+        // frame space: x in -1..1, y in -1 (bottom) .. 1 (top). The texture is
+        // uploaded with flipY, so row 0 of the data is the top of the image.
+        const px = (fx / half) * 2 - 1;
+        const py = 1 - (fy / half) * 2;
+        // silhouette: a round base that tapers to a point, leaning with the frame
+        const lean = (frame - 1.5) * 0.12;
+        const cx = px - lean * (py + 1) * 0.5;
+        const t = (py + 0.55) / 1.4; // 0 at the base circle centre, 1 at the tip
+        let w;
+        if (t < 0) w = Math.sqrt(Math.max(0, 0.42 * 0.42 - (py + 0.55) * (py + 0.55)));
+        else w = 0.42 * Math.pow(Math.max(0, 1 - t), 0.75);
+        const edgeN = fbm(px * 2.5 + frame * 7.1, py * 2.5, { octaves: 3, period: 5, seed: 241 + frame });
+        const dist = Math.abs(cx) - w * (0.8 + 0.5 * edgeN);
+        const inner = fbm(px * 4 + frame * 3.3, py * 3, { octaves: 3, period: 8, seed: 251 + frame });
+        // torn holes near the tip, where a flame breaks up
+        const tear = smoothstep(0.62, 0.9, inner) * smoothstep(0.1, 0.9, t);
+        const alpha = clamp(smoothstep(0.06, -0.08, dist) * (1 - tear * 0.9) * smoothstep(-1.0, -0.85, py));
+        // heat: hottest low in the core, cooling toward the edge and the tip
+        const core = clamp(1 - Math.abs(cx) / Math.max(0.05, w * 0.9)) * (1 - smoothstep(-0.2, 0.9, py) * 0.7);
+        const heat = clamp(core * 0.85 + 0.15 - inner * 0.25);
+        const g = Math.round(heat * 255);
+        out[0] = g;
+        out[1] = g;
+        out[2] = g;
+        out[3] = Math.round(alpha * 255);
+      },
+      { srgb: false, repeat: 1, mips: true },
+    );
+  });
 }
 
 /** A hand-drawn park map for the notice board: river, roads, camp, contour lines. */

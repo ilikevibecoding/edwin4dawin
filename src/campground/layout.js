@@ -64,19 +64,28 @@ export function buildPlan() {
   // nose-in slots face +v (into the camp), the long vehicles lie along the
   // lane at either end where they can pull straight out, and the ranger's
   // vehicle is backed in beside the office so it leaves forwards.
+  //
+  // Nobody parks on a painted line here: each driver stopped where the last
+  // one left room. Spacing runs 3.9–5.6 m, yaw wanders up to ±12° off square,
+  // one jeep is a metre short of the line and the pickup a metre past it.
+  // `yaw` is degrees off the nose-in axis, turned into the heading vector.
+  const noseIn = (u, v, yawDeg, kind) => {
+    const a = (yawDeg * Math.PI) / 180;
+    return { u, v, heading: [Math.sin(a), Math.cos(a)], kind };
+  };
   const parking = [
-    { u: -23.5, v: -12.6, heading: [1, 0.02], kind: 'supply-truck' },
-    { u: -15.5, v: -10.6, heading: [0.05, 1], kind: 'expedition-truck' },
-    { u: -10.8, v: -10.2, heading: [-0.08, 1], kind: 'safari-jeep' },
-    { u: -6.8, v: -10.4, heading: [0.04, 1], kind: 'safari-jeep' },
-    { u: -2.6, v: -10.2, heading: [0.1, 1], kind: 'suv' },
-    { u: 1.6, v: -10.5, heading: [-0.05, 1], kind: 'pickup' },
-    { u: 5.8, v: -10.3, heading: [0.06, 1], kind: 'safari-jeep' },
-    { u: 10.0, v: -10.4, heading: [0.0, 1], kind: 'utility' },
-    { u: 14.6, v: -9.4, heading: [0.04, -1], kind: 'ranger' },
-    { u: 21.5, v: -12.4, heading: [1, -0.03], kind: 'camper' },
-    { u: 26.5, v: -8.6, heading: [0.12, 1], kind: 'trailer' },
-    { u: 15.2, v: -4.6, heading: [0.5, -1], kind: 'motorcycle' },
+    { u: -23.9, v: -12.9, heading: [1, 0.09], kind: 'supply-truck' },
+    noseIn(-15.9, -10.4, 7, 'expedition-truck'),
+    noseIn(-10.6, -11.2, -11, 'safari-jeep'),
+    noseIn(-6.6, -10.1, 4, 'safari-jeep'),
+    noseIn(-2.1, -10.5, 12, 'suv'),
+    noseIn(2.6, -9.4, -6, 'pickup'),
+    noseIn(8.0, -10.6, 9, 'safari-jeep'),
+    noseIn(12.1, -10.2, -3, 'utility'),
+    { u: 16.4, v: -9.2, heading: [Math.sin(Math.PI + 0.14), Math.cos(Math.PI + 0.14)], kind: 'ranger' },
+    { u: 22.3, v: -12.6, heading: [1, -0.12], kind: 'camper' },
+    noseIn(27.2, -8.4, 15, 'trailer'),
+    { u: 15.4, v: -4.9, heading: [0.55, -1], kind: 'motorcycle' },
   ];
 
   // Ground wear, as polylines the overlay paints. Tyre tracks run from the

@@ -24,7 +24,7 @@ import {
   waterTank,
 } from './structures.js';
 import * as P from './props.js';
-import { buildGroundWear } from './ground.js';
+import { bareAt, buildGroundWear, clearingMask } from './ground.js';
 import { createFire } from './fire.js';
 import { createCampLights } from './lights.js';
 
@@ -40,8 +40,14 @@ import { createCampLights } from './lights.js';
 //     anchor,                      // world position of the clearing centre
 //     parking,                     // [{ x, z, heading, kind }] handed to the fleet
 //     lights,                      // any point/spot lights, so tiers can cap them
+//     clearing,                    // { bare(x, z), edge(x, z), radii, blend } for the vegetation
 //     stats: { objects, tris },
 //   }
+//
+// `clearing.bare(x, z)` is 1 on the compound's dirt and 0 in the savanna, with
+// a 3–6 m noise-displaced ramp along the graded pad's edge — the same line the
+// ground overlay paints its dirt-to-grass band on, so grass planted against it
+// meets the dirt where the dirt actually stops.
 //
 // Everything is placed relative to `anchor`, which comes from WORLD.camp, and
 // sits on terrain.heightAt(). Objects have a practical reason to be where they
@@ -64,6 +70,7 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   const kit = new Kit('camp');
   const lamps = [];
   const lightAnchors = [];
+  const footprints = [];
   let objects = 0;
 
   /** Place a builder result (Obj, or { obj, lamps }) and carry its lamps into camp space. */
@@ -71,6 +78,8 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
     const obj = res.obj || res;
     const p = obj.place(kit, frame, placement);
     objects++;
+    // anything that stands on the dirt darkens it where it touches
+    if (placement.conform !== undefined && placement.half !== undefined && (placement.dy || 0) < 0.3) footprints.push({ u: p.u, v: p.v, r: placement.half });
     for (const l of res.lamps || []) {
       const c = Math.cos(p.yaw);
       const s = Math.sin(p.yaw);
@@ -84,9 +93,11 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
 
   // --- structures --------------------------------------------------------------
   const cab = cabin(rnd);
-  const cabP = put(cab, { u: plan.cabin.u, v: plan.cabin.v, facing: plan.cabin.facing });
+  put(cab, { u: plan.cabin.u, v: plan.cabin.v, facing: plan.cabin.facing });
+  footprints.push({ u: plan.cabin.u, v: plan.cabin.v - 0.6, r: 3.0 });
   lightAt(plan.cabin.u + 0.2, plan.cabin.v - 2.9, 2.45, { name: 'cabinPorch', intensity: 16, distance: 11, priority: 8, color: 0xffb35c });
   put(storeHut(rnd), { u: plan.store.u, v: plan.store.v, facing: plan.store.facing });
+  footprints.push({ u: plan.store.u, v: plan.store.v, r: 2.2 });
   put(radioMast(rnd, plan.mast.height), { u: plan.mast.u, v: plan.mast.v, facing: [0, -1] });
   put(solarArray(rnd), { u: plan.solar.u, v: plan.solar.v, facing: plan.solar.facing });
   put(waterTank(rnd), { u: plan.tank.u, v: plan.tank.v, facing: [1, -0.3] });
@@ -147,6 +158,11 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   put(P.cooler(rnd, 'polyBlue'), { u: plan.fire.u + 3.9, v: plan.fire.v - 2.2, facing: [0.5, -1], conform: 1, half: 0.3 });
   put(P.woodpile(rnd, 2.4, 1.0), { u: plan.wood.u, v: plan.wood.v, facing: [0.15, -1], conform: 0.5, half: 1.2 });
   put(P.woodpile(rnd, 1.4, 0.6), { u: plan.wood.u + 2.2, v: plan.wood.v + 1.2, facing: [1, 0.2], conform: 0.5, half: 0.7 });
+  // the chopping block with the axe in it, split wood where it fell, and an
+  // armful of logs dropped beside the fire ring for tonight
+  put(P.choppingBlock(rnd), { u: plan.wood.u + 1.2, v: plan.wood.v - 1.6, facing: [0.4, -1], conform: 1, half: 0.4 });
+  put(P.splitWood(rnd, 7), { u: plan.wood.u + 1.0, v: plan.wood.v - 1.0, conform: 1, half: 0.9 });
+  put(P.splitWood(rnd, 5), { u: plan.fire.u - 2.4, v: plan.fire.v - 0.6, conform: 1, half: 0.6 });
   for (let i = 0; i < 3; i++) put(P.jerry(rnd, i === 1 ? 'polyBlue' : 'poly'), { u: plan.fire.u - 3.2 + i * 0.4, v: plan.fire.v + 2.6, facing: [R.jitter(1), -1], conform: 1, half: 0.3 });
   // the staff fire behind the store
   put(firePit(rnd, plan.fire2.radius, { small: true }), { u: plan.fire2.u, v: plan.fire2.v, conform: 1 });
@@ -215,21 +231,28 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   built.name = 'campStatic';
   // the glass and lamp glass are transparent and should draw after the dirt
   for (const c of built.children) {
-    if (c.material === mats.glass || c.material === mats.lampGlass) c.renderOrder = 1;
+    if (c.material === mats.glass || c.material === mats.lampGlass) {
+      c.renderOrder = 1;
+      // a pane or a lantern chimney throws no shadow worth an opaque one
+      c.castShadow = false;
+    }
   }
   group.add(built);
 
-  const wear = buildGroundWear(frame, plan, { quality });
+  const wear = buildGroundWear(frame, plan, { quality, footprints });
   group.add(wear.mesh);
+  const clearing = clearingMask(anchor);
 
   // --- grass tufts at the margins -------------------------------------------------------
-  const grass = buildGrass(mats, frame, rnd, { count: Math.round(520 * tier), inCore, onWear });
+  const grass = buildGrass(mats, frame, rnd, { count: Math.round(560 * tier), inCore, onWear });
   group.add(grass.mesh);
 
   // --- fire -----------------------------------------------------------------------------
   const fires = [];
   const fireAt = (f, opts) => {
-    const fire = createFire({ radius: f.radius * 0.55, height: f.radius * 1.5, quality, ...opts });
+    // a 1.15 m pit burns about a metre high; the first cut at 1.5 radii stood
+    // taller than the chair backs twice over
+    const fire = createFire({ radius: f.radius * 0.55, height: f.radius * 1.0, quality, ...opts });
     fire.group.position.set(f.u, frame.ground(f.u, f.v) + 0.12, -f.v);
     group.add(fire.group);
     fires.push(fire);
@@ -263,7 +286,7 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
       calls++;
     }
   });
-  calls += fires.length * 3 + (camp.bulbCount ? 1 : 0) + 1;
+  calls += fires.reduce((n, f) => n + f.calls, 0) + (camp.bulbCount ? 1 : 0) + 1;
   const stats = {
     objects,
     tris: Math.round(tris),
@@ -283,6 +306,7 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
     anchor,
     parking,
     lights,
+    clearing,
     plan,
     frame,
     materials: mats,
@@ -296,6 +320,11 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
         f.update(step, time, { night });
         f.setNight(night);
       }
+      // the coals and the charred logs glow with the main fire's flicker: barely
+      // there in sunlight, the second brightest thing after the flames at night
+      const fl = fires.length ? fires[0].flicker : 1;
+      mats.ash.emissiveIntensity = (0.35 + 1.4 * night) * fl;
+      mats.charLog.emissiveIntensity = (0.3 + 1.1 * night) * fl;
       flag.update(step, time);
     },
   };
@@ -320,15 +349,20 @@ function buildGrass(mats, frame, rnd, { count, inCore, onWear }) {
   const pos = new THREE.Vector3();
   let n = 0;
   let guard = 0;
-  while (n < count && guard++ < count * 20) {
+  while (n < count && guard++ < count * 30) {
     const ang = rnd() * Math.PI * 2;
-    const r = 14 + Math.sqrt(rnd()) * 34;
+    const r = 12 + Math.sqrt(rnd()) * 36;
     const u = Math.cos(ang) * r;
     const v = 4 + Math.sin(ang) * r * 0.85;
     if (v < -24) continue;
     if (onWear(u, v)) continue;
-    if (inCore(u, v) && rnd() < 0.8) continue;
-    const sc = 0.55 + rnd() * 0.8;
+    // density follows the clearing mask: a few survivors inside the compound,
+    // thick where the dirt gives way to grass, thinning again outside where
+    // the forest's own grass carries on
+    const bare = bareAt(u, v);
+    const keep = inCore(u, v) ? 0.12 : bare > 0.98 ? 0.3 : bare > 0.02 ? 1.0 : 0.55;
+    if (rnd() > keep) continue;
+    const sc = (0.55 + rnd() * 0.8) * (0.8 + 0.3 * (1 - bare));
     pos.set(u, frame.ground(u, v) - 0.03, -v);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * Math.PI * 2);
     s.set(sc * (0.8 + rnd() * 0.5), sc, sc * (0.8 + rnd() * 0.5));
