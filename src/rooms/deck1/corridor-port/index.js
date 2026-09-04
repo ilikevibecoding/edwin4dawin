@@ -42,7 +42,7 @@ const manifest = {
       ribPhase: 1.7, // ribs at z = 468, 472, … (minus the door bays)
       pipeFaces: ["e"],
       trayFace: "w",
-      railFace: "e", // the bridge door is the only opening on the e wall
+      railFaces: ["w", "e"], // handrails on both walls, broken at the doors, ribs, lockers and alcoves
       gratingW: 0.5,
       noRibs: [[507.5, 508.5]], // the rib at 508 would sit behind the bridge-door sign
       reserved: [

@@ -5,7 +5,7 @@ import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
 import { roomShell, corridorDressing, doorReveal } from "../shared/imperial.js";
 import { LIGHT } from "../shared/palette.js";
 import { rng } from "../../../kit.js";
-import { signMaterials } from "../spine/signage.js";
+import { signMaterials, boardMaterials } from "../spine/signage.js";
 import { corridorFrame, dressCorridor, doorSigns, signPanel, sealedBulkhead, chevronBand, chevronThreshold, SIGN_TOP } from "../spine/dressing.js";
 
 const ID = "d1-corridor-stbd";
@@ -29,7 +29,7 @@ const manifest = {
     "d1-corridor-stbd-bulkhead": { pos: [21.8, FLOOR, 471.5], yaw: 0, pitch: 2 }, // the sealed maintenance bulkhead at the forward dead end
   },
   materials() {
-    return signMaterials();
+    return { ...signMaterials(), ...boardMaterials() }; // `board` carries the bulkhead's sealed plate + readout
   },
   build(ctx) {
     const { kit } = ctx;
@@ -45,7 +45,7 @@ const manifest = {
       ribPhase: 1.7,
       pipeFaces: ["w"],
       trayFace: "e",
-      railFace: "w", // the bridge door is the only opening on the w wall
+      railFaces: ["w", "e"], // handrails on both walls, broken at the doors, ribs, lockers and alcoves
       gratingW: 0.5,
       noRibs: [[507.5, 508.5]], // the rib at 508 would sit behind the bridge-door sign
       reserved: [

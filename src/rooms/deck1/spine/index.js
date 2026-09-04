@@ -1,12 +1,13 @@
 // d1-spine — the 168 m transverse corridor behind the bridge: bridge blast door and lift-lobby blast door face
 // each other at x = 0 (junction node); side passages, officers' country and two locked future-expansion doors at
 // the ends. Shell from shared/imperial.js; Phase 2 detail from ./dressing.js in repeating 4 m bays.
+import * as THREE from "three";
 import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
 import { roomShell, corridorDressing, doorReveal } from "../shared/imperial.js";
 import { IMP, LIGHT } from "../shared/palette.js";
 import { rng } from "../../../kit.js";
 import { signMaterials } from "./signage.js";
-import { corridorFrame, dressCorridor, ribs, signPanel, chevronBand, chevronThreshold, sealedEnd, doorSigns, arrowToward, SIGN_TOP } from "./dressing.js";
+import { corridorFrame, dressCorridor, ribs, signPanel, chevronBand, chevronThreshold, sealedEnd, doorSigns, arrowToward, floorInlay, inlayCorner, downlight, SIGN_TOP } from "./dressing.js";
 
 const ID = "d1-spine";
 const B = BOUNDS[ID];
@@ -28,7 +29,9 @@ const manifest = {
     "d1-spine-east": { pos: [-40, FLOOR, 514], yaw: -90, pitch: -2 },
     "d1-spine-west": { pos: [40, FLOOR, 514], yaw: 90, pitch: -2 },
     "d1-spine-end-port": { pos: [-78, FLOOR, 514], yaw: 90, pitch: -2 },
-    "d1-spine-bay": { pos: [-45.4, FLOOR, 515.0], yaw: -26, pitch: 5 }, // one forward-wall bay: rib, conduits, junction box + drop, grating
+    // one forward-wall bay under the x 27 light pool: rib 26, fire panel, equipment locker (x 28), grille + plates,
+    // rib 30, then the SECTION 1-B sign bay and rib 34 receding to the right; rails, kick plates, grating, conduits
+    "d1-spine-bay": { pos: [26.4, FLOOR, 515.35], yaw: -24, pitch: 1 },
   },
   materials() {
     return signMaterials(); // backlit `sign` + matte `signPaint`, one shared canvas atlas
@@ -50,7 +53,7 @@ const manifest = {
       ribPhase: 1.7, // ribs at x = -82, -78, …, 82 (minus doors, the junction and the two end bays)
       pipeFaces: ["n"],
       trayFace: "s",
-      railFace: "s",
+      railFaces: ["n", "s"], // handrails on both walls, broken at doors, ribs, lockers and alcoves
       gratingW: 0.62,
       noRibs: [
         [-5.5, 5.5],
@@ -105,46 +108,61 @@ const manifest = {
     for (const d of cf.endDoors) sealedEnd(kit, cf, d, { signFace: "n", clusterFace: "s", rand });
 
     // 14 descriptors (budget 14): one pool every 13.5 m (the outer pair at ±81 lights the sealed-end treatments),
-    // the junction brightest, plus a low blue accent on the medallion
+    // the junction brightest, plus a low blue accent on the medallion. 11 ≈ E 1.5 under a pool and ≈ 0.4 midway
+    // between two (6.75 m out), so the bays between pools stay readable instead of dropping to black.
     for (let i = -6; i <= 6; i++) {
       const x = i * 13.5;
       const end = Math.abs(i) === 6;
-      ctx.lights.push({ type: "point", pos: [x, ceilY - 0.5, 514], color: LIGHT.coolWhite, intensity: x === 0 ? 12 : end ? 10 : 9, distance: 15, priority: x === 0 ? 0.9 : end ? 0.4 : 0.3 });
+      ctx.lights.push({ type: "point", pos: [x, ceilY - 0.5, 514], color: LIGHT.coolWhite, intensity: x === 0 ? 13 : 11, distance: 17, priority: x === 0 ? 0.9 : end ? 0.4 : 0.3 });
     }
     ctx.lights.push({ type: "point", pos: [0, FLOOR + 0.5, 514], color: LIGHT.blue, intensity: 1.6, distance: 5, priority: 0.6 });
     return {};
   },
 };
 
-// Hanging cross housing across the corridor at x 0 with edge light lines, a central lens housing and four corner
-// downlights — the ceiling marks the node the way the ribs mark the walls.
+// Hanging cross housing across the corridor at x 0 with recessed edge light lines, a central luminaire (drum, bezel
+// ring, annular lens set back behind the bezel, dark centre cap) and four square recessed corner downlights — the
+// ceiling marks the node the way the ribs mark the walls. No bare emitter anywhere.
 function junctionCeiling(kit, cf) {
   const { ceilY, c0, c1, mid } = cf;
   cf.box(kit, "paintedMetal", -0.55, 0.55, ceilY - 0.16, ceilY, c0 + 0.3, c1 - 0.3, { color: IMP.dark, texel: 1 });
   cf.box(kit, "metalRough", -0.62, 0.62, ceilY - 0.06, ceilY, c0 + 0.3, c1 - 0.3, { color: IMP.mid, texel: 1 });
-  for (const s of [-0.43, 0.43]) cf.box(kit, "emitWhite", s - 0.02, s + 0.02, ceilY - 0.168, ceilY - 0.13, c0 + 0.5, c1 - 0.5);
-  kit.cyl("metalRough", 0, ceilY - 0.23, mid, 0.56, 0.16, "y", { color: IMP.mid, segments: 24, texel: 1 });
-  kit.cyl("paintedMetal", 0, ceilY - 0.325, mid, 0.44, 0.04, "y", { color: IMP.black, segments: 24, texel: 1 });
-  kit.cyl("emitBlue", 0, ceilY - 0.338, mid, 0.3, 0.016, "y", { segments: 24 });
-  kit.cyl("paintedMetal", 0, ceilY - 0.345, mid, 0.14, 0.02, "y", { color: IMP.black, segments: 16, texel: 1 });
-  for (const x of [-2.3, 2.3]) {
-    for (const z of [c0 + 0.62, c1 - 0.62]) {
-      kit.box("metalRough", x, ceilY - 0.05, z, 0.32, 0.1, 0.32, { color: IMP.dark, texel: 1 });
-      kit.box("emitWhite", x, ceilY - 0.104, z, 0.2, 0.012, 0.2);
-    }
+  // edge light lines: two lips 12 mm below the housing with a 1.6 cm lens set 1 cm up between them
+  const yb = ceilY - 0.16;
+  for (const s of [-0.43, 0.43]) {
+    cf.box(kit, "paintedMetal", s - 0.05, s - 0.02, yb - 0.012, yb + 0.03, c0 + 0.45, c1 - 0.45, { color: IMP.black, texel: 1 });
+    cf.box(kit, "paintedMetal", s + 0.02, s + 0.05, yb - 0.012, yb + 0.03, c0 + 0.45, c1 - 0.45, { color: IMP.black, texel: 1 });
+    cf.box(kit, "paintedMetal", s - 0.02, s + 0.02, yb + 0.006, yb + 0.03, c0 + 0.45, c1 - 0.45, { color: IMP.black, texel: 1 });
+    cf.box(kit, "emitWhite", s - 0.008, s + 0.008, yb - 0.002, yb + 0.006, c0 + 0.5, c1 - 0.5);
   }
+  // central luminaire
+  kit.cyl("metalRough", 0, ceilY - 0.23, mid, 0.56, 0.16, "y", { color: IMP.mid, segments: 24, texel: 1 });
+  kit.cyl("paintedMetal", 0, ceilY - 0.32, mid, 0.44, 0.03, "y", { color: IMP.black, segments: 24, texel: 1 });
+  const bezel = new THREE.TorusGeometry(0.36, 0.03, 8, 32);
+  bezel.rotateX(Math.PI / 2);
+  kit.add("metalRough", bezel, { pos: [0, ceilY - 0.35, mid], color: IMP.dark, texel: 1 });
+  const lens = new THREE.RingGeometry(0.2, 0.32, 32, 1);
+  lens.rotateX(Math.PI / 2); // faces down, 4 cm above the bezel's lowest point
+  kit.add("emitBlue", lens, { pos: [0, ceilY - 0.337, mid] });
+  kit.cyl("paintedMetal", 0, ceilY - 0.345, mid, 0.18, 0.02, "y", { color: IMP.black, segments: 24, texel: 1 });
+  // square recessed corner downlights
+  for (const x of [-2.3, 2.3]) for (const z of [c0 + 0.62, c1 - 0.62]) downlight(kit, ceilY, x, z);
 }
 
-// Dark gloss field between the heavy ribs with an emissive inlay ring around the centre strip and two blue cross bars.
+// Dark gloss field between the heavy ribs with a steel inlay frame (2 cm lit groove) around the centre strip, steel
+// corner plates and two blue-grooved cross inlays — physical plates, not a glowing outline.
 function junctionFloor(kit, cf) {
   const { floorY, c0, c1, mid } = cf;
   kit.boxMM("blackGloss", [-HEAVY_RIB_X + 0.24, floorY + 0.002, c0 + 0.02], [HEAVY_RIB_X - 0.24, floorY + 0.009, c1 - 0.02]);
   const zA = mid - 0.7;
   const zB = mid + 0.7;
-  kit.boxMM("emitWhite", [-2.3, floorY + 0.011, zA - 0.015], [2.3, floorY + 0.018, zA + 0.015]);
-  kit.boxMM("emitWhite", [-2.3, floorY + 0.011, zB - 0.015], [2.3, floorY + 0.018, zB + 0.015]);
-  for (const x of [-2.3, 2.3]) kit.boxMM("emitWhite", [x - 0.015, floorY + 0.011, zA], [x + 0.015, floorY + 0.018, zB]);
-  for (const x of [-1.25, 1.25]) kit.boxMM("emitBlue", [x - 0.02, floorY + 0.013, mid - 0.5], [x + 0.02, floorY + 0.02, mid + 0.5]);
+  floorInlay(kit, floorY, [-2.3, zA], [2.3, zA]);
+  floorInlay(kit, floorY, [-2.3, zB], [2.3, zB]);
+  for (const x of [-2.3, 2.3]) {
+    floorInlay(kit, floorY, [x, zA], [x, zB]);
+    for (const z of [zA, zB]) inlayCorner(kit, floorY, x, z);
+  }
+  for (const x of [-1.25, 1.25]) floorInlay(kit, floorY, [x, mid - 0.5], [x, mid + 0.5], "emitBlue");
 }
 
 export default manifest;
