@@ -1,0 +1,184 @@
+// Turbolift: one cab per deck (identical interiors), a lift door per lobby, and the ride sequence:
+// doors close → cab "moves" (light streaks, rumble hook, deck readout counts) → the destination deck
+// is streamed in → the player is teleported into the destination cab → doors open.
+import * as THREE from "three";
+import { PALETTE } from "../materials.js";
+import { pointLight, wallFrame } from "./builders.js";
+import { impFloor, impWall, wallScreen } from "./imperial.js";
+
+/** Cab interior builder (sector kind "lift"). Door is on the zmin side (toward the lobby). */
+export function buildLiftCab(kit, ctx) {
+  const [min, max] = ctx.bounds;
+  const h = max[1] - min[1];
+  const cx = (min[0] + max[0]) / 2;
+  const cz = (min[2] + max[2]) / 2;
+  impFloor(kit, ctx, { pad: 0.2 });
+  for (const side of ["zmin", "zmax", "xmin", "xmax"]) {
+    impWall(kit, ctx, side, {
+      rows: [0, 0.5, 1.9, h],
+      panelW: 1.0,
+      styles: { panel: 0.8, strip: 0.2 },
+      paints: [
+        [PALETTE.impGrey, 0.5],
+        [PALETTE.impMid, 0.35],
+        [PALETTE.impLight, 0.15],
+      ],
+      seed: ctx.seed + side.length,
+    });
+  }
+  // ceiling: dark panel with a bright white square diffuser and a ring of small lamps
+  kit.boxMM("paintedMetal", [min[0] - 0.2, h, min[2] - 0.2], [max[0] + 0.2, h + 0.15, max[2] + 0.2], { color: PALETTE.impDark, texel: 1.5 });
+  kit.box("paintedMetal", cx, h - 0.05, cz, 1.8, 0.1, 1.8, { color: PALETTE.impBlack, texel: 2 });
+  kit.box("emitWhiteSoft", cx, h - 0.1, cz, 1.5, 0.03, 1.5, { uv: "keep" });
+  ctx.light(pointLight(0xe8f0ff, 5, 6, [cx, h - 0.6, cz]));
+  // vertical light bars in the rear corners (they streak during the ride)
+  for (const s of [-1, 1]) {
+    kit.box("paintedMetal", cx + s * (max[0] - min[0]) * 0.42, h / 2, max[2] - 0.1, 0.12, h - 0.4, 0.1, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("emitBlue", cx + s * (max[0] - min[0]) * 0.42, h / 2, max[2] - 0.152, 0.05, h - 0.6, 0.01);
+  }
+  // control panel + deck readout on the rear wall
+  wallScreen(kit, ctx, { side: "zmax", u: (max[0] - min[0]) / 2, v: 1.9, w: 1.0, h: 0.4, screen: 2 });
+  const { frame } = wallFrame(kit, [max[0], max[2]], [min[0], max[2]], 0);
+  const u = (max[0] - min[0]) / 2;
+  frame.box("paintedMetal", u, 1.25, 0.04, 0.5, 0.7, 0.08, { color: PALETTE.impDark, texel: 2 });
+  frame.box("impPanel", u, 1.25, 0.082, 0.42, 0.62, 0.006, { color: PALETTE.impGrey, uv: "keep" });
+  for (let i = 0; i < 5; i++) {
+    const y = 1.5 - i * 0.12;
+    frame.box("rubber", u - 0.12, y, 0.09, 0.08, 0.06, 0.02, { color: PALETTE.rubber });
+    frame.box(i === 0 ? "emitAmber" : "emitBlue", u + 0.08, y, 0.088, 0.14, 0.03, 0.008);
+  }
+  frame.box("leds", u, 1.0, 0.088, 0.3, 0.03, 0.008, { uv: "keep" });
+  // handrail on the side walls
+  for (const s of [-1, 1]) {
+    const x = s < 0 ? min[0] + 0.08 : max[0] - 0.08;
+    kit.cyl("metal", x, 1.0, cz, 0.02, max[2] - min[2] - 0.6, "z", { color: PALETTE.steel, segments: 10 });
+  }
+  kit.collider([min[0], 0, max[2] - 0.15], [max[0], 2, max[2]], "liftpanel");
+}
+
+const RIDE_BASE = 2.2; // seconds
+const RIDE_PER_DECK = 0.55;
+
+export class Turbolift {
+  constructor({ interior, player, hud, audio, anim }) {
+    this.interior = interior;
+    this.player = player;
+    this.hud = hud;
+    this.audio = audio;
+    this.state = "idle"; // idle | closing | moving | opening
+    this.timer = 0;
+    this.from = null;
+    this.to = null;
+    this.cabSector = null;
+    this.enabled = true;
+    this.onArrive = null;
+    this._onKey = (e) => {
+      if (this.state !== "idle" || !this.cabSector) return;
+      const m = /^Digit([1-5])$/.exec(e.code);
+      if (!m) return;
+      const idx = +m[1];
+      const deck = interior.decks.find((d) => d.def.index === idx);
+      if (deck) this.go(deck.def.id);
+    };
+    document.addEventListener("keydown", this._onKey);
+  }
+
+  /** Door object of the lift on a deck */
+  liftDoor(deckId) {
+    const deck = this.interior.deckById(deckId);
+    return deck.doors.find((d) => d.def.style === "lift");
+  }
+
+  cabOf(deckId) {
+    const deck = this.interior.deckById(deckId);
+    return deck.sectors.find((s) => s.def.kind === "lift");
+  }
+
+  go(deckId) {
+    if (this.state !== "idle") return false;
+    const cur = this.interior.currentSector;
+    if (!cur || cur.def.kind !== "lift") return false;
+    if (cur.deck.id === deckId) {
+      this.hud.setStatus("Already on this deck.");
+      return false;
+    }
+    this.from = cur.deck.id;
+    this.to = deckId;
+    this.state = "closing";
+    this.timer = 0;
+    this.liftDoor(this.from).setOpen(false);
+    this.hud.setLiftPrompt(null);
+    this.audio.event("lift_doors", cur.worldCenter);
+    return true;
+  }
+
+  update(dt) {
+    const interior = this.interior;
+    const cur = interior.currentSector;
+    const inCab = cur && cur.def.kind === "lift";
+    this.cabSector = inCab ? cur : null;
+    if (this.state === "idle") {
+      // proximity control of the lift door on the current deck
+      const deck = interior.currentDeck;
+      if (deck) {
+        const door = this.liftDoor(deck.def.id);
+        if (door) {
+          const p = this.player.position;
+          const d = Math.hypot(p.x - door.worldCenter.x, p.z - door.worldCenter.z);
+          door.setOpen(d < 2.8 || inCab);
+        }
+      }
+      if (inCab) {
+        const decks = interior.decks.map((d) => `${d.def.index} ${d.def.name}`).join("   ");
+        this.hud.setLiftPrompt(`TURBOLIFT — press a deck number:  ${decks}`);
+      } else this.hud.setLiftPrompt(null);
+      return;
+    }
+    this.timer += dt;
+    if (this.state === "closing") {
+      const door = this.liftDoor(this.from);
+      if (door.isClosed || this.timer > 3) {
+        this.state = "moving";
+        this.timer = 0;
+        const fromIdx = interior.deckById(this.from).def.index;
+        const toIdx = interior.deckById(this.to).def.index;
+        this.rideTime = RIDE_BASE + RIDE_PER_DECK * Math.abs(fromIdx - toIdx);
+        this.audio.event("lift_move", this.player.position);
+        this.hud.setStatus(`Turbolift moving to ${interior.deckById(this.to).def.name}...`);
+        interior.streamDeck(this.to); // start building the destination while the doors are shut
+      }
+      return;
+    }
+    if (this.state === "moving") {
+      // rumble: tiny camera shake through the player's bob channel
+      const k = Math.sin(this.timer * 40) * 0.006 * Math.min(1, this.timer * 2) * Math.min(1, Math.max(0, this.rideTime - this.timer));
+      this.player.camera.position.y += k;
+      interior.streamDeck(this.to);
+      if (this.timer >= this.rideTime && interior.deckBuilt(this.to)) {
+        // teleport: keep the player's offset inside the cab
+        const fromCab = this.cabOf(this.from);
+        const toCab = this.cabOf(this.to);
+        const p = this.player.position;
+        const off = new THREE.Vector3().subVectors(p, fromCab.worldCenter);
+        const dest = toCab.worldCenter.clone().add(off);
+        this.player.position.set(dest.x, toCab.floorY, dest.z);
+        this.player.vy = 0;
+        interior.forceSector(toCab);
+        this.state = "opening";
+        this.timer = 0;
+        this.liftDoor(this.to).setOpen(true);
+        this.audio.event("lift_arrive", dest);
+        this.hud.setStatus(`${interior.deckById(this.to).def.name}.`);
+        if (this.onArrive) this.onArrive(this.to);
+      }
+      return;
+    }
+    if (this.state === "opening") {
+      const door = this.liftDoor(this.to);
+      if (door.isOpen || this.timer > 3) {
+        this.state = "idle";
+        this.from = this.to = null;
+      }
+    }
+  }
+}

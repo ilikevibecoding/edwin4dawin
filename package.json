@@ -1,14 +1,16 @@
 {
-  "name": "spaceship-interior-demo",
+  "name": "isd-vigilance",
   "version": "0.1.0",
-  "description": "",
+  "description": "Imperial Star Destroyer — explorable exterior and interior (Three.js)",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "vite build",
     "preview": "vite preview",
-    "shots": "node tools/shots.mjs"
+    "shots": "node tools/shots.mjs",
+    "publish": "node tools/publish.mjs",
+    "check": "node tools/check.mjs"
   },
   "repository": {
     "type": "git",

@@ -10,6 +10,8 @@ const opt = (name) => {
   return i >= 0 ? args[i + 1] : null;
 };
 const view = opt("--view");
+const views = opt("--views") ? opt("--views").split(",") : null;
+const outDir = opt("--out") || "/tmp/shots";
 const shot = opt("--shot");
 const evalJs = opt("--eval");
 const width = +(opt("--w") || 960);
@@ -47,6 +49,23 @@ if (view) {
   const ok = await page.evaluate((v) => window.debugAPI.setView(v), view);
   console.log(`view ${view}: ${ok}`);
   await settle(4);
+}
+if (views) {
+  const { mkdirSync } = await import("node:fs");
+  mkdirSync(outDir, { recursive: true });
+  for (const v of views) {
+    const t1 = Date.now();
+    try {
+      await page.evaluate((vv) => window.debugAPI.setView(vv), v);
+    } catch (e) {
+      console.log(`view ${v} failed: ${e.message.slice(0, 200)}`);
+      continue;
+    }
+    await settle(4);
+    await page.screenshot({ path: `${outDir}/${v}.png` });
+    const st = await page.evaluate(() => window.debugAPI.getStats());
+    console.log(`${v}: ${st.calls} calls ${(st.triangles / 1000).toFixed(0)}k tris ${st.lights} lights ${st.visibleObjects} objs ${st.frameMs} ms  (${Date.now() - t1} ms)`);
+  }
 }
 if (evalJs) {
   const r = await page.evaluate(evalJs);

@@ -125,6 +125,13 @@ export function panelGrid(frame, length, height, opts = {}) {
     ],
     collide = true,
     tag = "wall",
+    // theme: which painted-panel materials, emissive accents, pipe paint and screen set a wall uses
+    paintMats = ["painted", "painted1", "painted2"],
+    accent = "emitTeal",
+    accent2 = "emitOrange",
+    pipeCol = PALETTE.orange,
+    screenMats = ["screen0", "screen1", "screen2", "screen3"],
+    decals = true,
   } = opts;
   const rand = rng(seed);
   const gap = 0.025;
@@ -175,7 +182,7 @@ export function panelGrid(frame, length, height, opts = {}) {
   // painted panels: rotate through texture variants + mirrored UVs so wear never repeats obviously
   const paintBox = (cu, cv, cn, w, hh, d, color) => {
     const variant = Math.floor(rand() * 3);
-    const g = frame.box(variant === 0 ? "painted" : "painted" + variant, cu, cv, cn, w, hh, d, { color, uv: "keep" });
+    const g = frame.box(paintMats[variant % paintMats.length], cu, cv, cn, w, hh, d, { color, uv: "keep" });
     jitterPanelUVs(g, rand);
     return g;
   };
@@ -221,7 +228,7 @@ export function panelGrid(frame, length, height, opts = {}) {
           // panel + two continuous pipes across the top row
           paintBox(cu, cv, -0.05, cw - gap * 2, ch - gap * 2, 0.06, pickPaint());
           frame.cylU("metal", cu, v0 + ch * 0.3, 0.02, 0.045, cw + 0.002, { color: PALETTE.steel, segments: 10 });
-          frame.cylU("metal", cu, v0 + ch * 0.68, 0.0, 0.03, cw + 0.002, { color: PALETTE.orange, segments: 8 });
+          frame.cylU("metal", cu, v0 + ch * 0.68, 0.0, 0.03, cw + 0.002, { color: pipeCol, segments: 8 });
           // clamps
           frame.box("metal", u0 + 0.06, v0 + ch * 0.3, 0.0, 0.05, 0.14, 0.07, { color: PALETTE.gunmetal });
           frame.box("metal", u1 - 0.06, v0 + ch * 0.3, 0.0, 0.05, 0.14, 0.07, { color: PALETTE.gunmetal });
@@ -234,7 +241,7 @@ export function panelGrid(frame, length, height, opts = {}) {
             const sv = v0 + 0.12 + (s / (slats - 1)) * (ch - 0.24);
             frame.box("metal", cu, sv, -0.02, cw - 0.16, 0.025, 0.08, { color: PALETTE.steel, tilt: 0.55 });
           }
-          frame.box("painted", cu, cv, -0.04, cw - gap * 2, 0.06, 0.05, { color: PALETTE.orange, uv: "keep" });
+          frame.box(paintMats[0], cu, cv, -0.04, cw - gap * 2, 0.06, 0.05, { color: pipeCol, uv: "keep" });
           break;
         }
         case "greeble": {
@@ -252,7 +259,7 @@ export function panelGrid(frame, length, height, opts = {}) {
             const r = rand();
             if (r < 0.55) {
               frame.box("metal", gu, gv, -0.01 + gd / 2, gw, gh, gd, { color: cols[Math.floor(rand() * cols.length)], texel: 3 });
-              if (rand() < 0.5) frame.box(rand() < 0.5 ? "emitOrange" : "emitTeal", gu + gw * 0.3, gv, -0.01 + gd + 0.004, 0.018, 0.018, 0.008);
+              if (rand() < 0.5) frame.box(rand() < 0.5 ? accent2 : accent, gu + gw * 0.3, gv, -0.01 + gd + 0.004, 0.018, 0.018, 0.008);
             } else if (r < 0.8) {
               frame.cylN("metal", gu, gv, -0.01 + gd / 2, 0.02 + rand() * 0.03, gd, { color: PALETTE.steel, segments: 12 });
             } else {
@@ -272,9 +279,9 @@ export function panelGrid(frame, length, height, opts = {}) {
           paintBox(cu, cv, -0.04, cw - gap * 2, ch - gap * 2 - 0.3, 0.06, pickPaint());
           // housing + emissive
           frame.box("metal", cu, v1 - 0.09, -0.02, cw - 0.2, 0.08, 0.05, { color: PALETTE.darkMetal });
-          frame.box("emitTeal", cu, v1 - 0.09, 0.005, cw - 0.28, 0.03, 0.02);
+          frame.box(accent, cu, v1 - 0.09, 0.005, cw - 0.28, 0.03, 0.02);
           frame.box("metal", cu, v0 + 0.09, -0.02, cw - 0.2, 0.08, 0.05, { color: PALETTE.darkMetal });
-          frame.box("emitTeal", cu, v0 + 0.09, 0.005, cw - 0.28, 0.03, 0.02);
+          frame.box(accent, cu, v0 + 0.09, 0.005, cw - 0.28, 0.03, 0.02);
           break;
         }
         case "screen": {
@@ -282,7 +289,7 @@ export function panelGrid(frame, length, height, opts = {}) {
           const sw = Math.min(0.62, cw - 0.25);
           const sh = Math.min(0.36, ch - 0.25);
           frame.box("darkGloss", cu, cv, -0.005, sw + 0.06, sh + 0.06, 0.03);
-          frame.box("screen" + Math.floor(rand() * 4), cu, cv, 0.012, sw, sh, 0.005, { uv: "keep" });
+          frame.box(screenMats[Math.floor(rand() * screenMats.length)], cu, cv, 0.012, sw, sh, 0.005, { uv: "keep" });
           frame.box("leds", cu, v0 + 0.08, -0.01, Math.min(0.5, cw - 0.3), 0.045, 0.02, { uv: "keep" });
           break;
         }
@@ -292,7 +299,7 @@ export function panelGrid(frame, length, height, opts = {}) {
           for (let p = 0; p < n; p++) {
             const r = 0.025 + rand() * 0.035;
             const pu = u0 + 0.14 + ((p + 0.5) / n) * (cw - 0.28);
-            const col = [PALETTE.steel, PALETTE.gunmetal, PALETTE.orange, PALETTE.steel][Math.floor(rand() * 4)];
+            const col = [PALETTE.steel, PALETTE.gunmetal, pipeCol, PALETTE.steel][Math.floor(rand() * 4)];
             frame.cylV("metal", pu, cv, -0.02 + r, r, ch - 0.06, { color: col, segments: 10 });
             frame.box("metal", pu, v0 + 0.12, -0.02 + r, r * 2 + 0.05, 0.06, r * 2 + 0.02, { color: PALETTE.darkMetal });
             frame.box("metal", pu, v1 - 0.12, -0.02 + r, r * 2 + 0.05, 0.06, r * 2 + 0.02, { color: PALETTE.darkMetal });
@@ -327,7 +334,7 @@ export function panelGrid(frame, length, height, opts = {}) {
             frame.box("metal", hu - hw2 - 0.01, hv + hh2 * 0.5, 0.012, 0.03, 0.08, 0.03, { color: PALETTE.steel });
             frame.box("metal", hu - hw2 - 0.01, hv - hh2 * 0.5, 0.012, 0.03, 0.08, 0.03, { color: PALETTE.steel });
             frame.box("darkGloss", hu + hw2 * 0.55, hv, 0.018, 0.1, 0.04, 0.01);
-          } else if (sub < 0.85) {
+          } else if (sub < 0.85 && decals) {
             // stencil decal
             const idx = Math.floor(rand() * 16);
             const dw = Math.min(0.42, cw * 0.55, ch * 0.55);

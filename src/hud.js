@@ -1,4 +1,5 @@
-// DOM overlay: crosshair, prompt, one-line status, fade layer, start card, debug stats.
+// DOM overlay: crosshair, prompt, one-line status, location line (deck / room), control hint, lift
+// panel, fade layer, start card, loading bar, debug stats.
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function createHUD() {
@@ -10,6 +11,13 @@ export function createHUD() {
   const fadeText = $("fade-text");
   const start = $("start");
   const stats = $("stats");
+  const location = $("location");
+  const hint = $("hint");
+  const lift = $("lift");
+  const loading = $("loading");
+  const loadingBar = $("loading-bar");
+  const loadingText = $("loading-text");
+  const modeTag = $("mode-tag");
 
   return {
     showPrompt(key, label) {
@@ -31,6 +39,32 @@ export function createHUD() {
     },
     statusText() {
       return status.textContent;
+    },
+    setLocation(deck, room) {
+      location.textContent = room ? `${deck} — ${room}` : deck || "";
+    },
+    setHint(text) {
+      hint.textContent = text || "";
+    },
+    setLiftPrompt(text) {
+      if (text) {
+        lift.textContent = text;
+        lift.classList.remove("hidden");
+      } else lift.classList.add("hidden");
+    },
+    setMode(mode) {
+      modeTag.textContent = mode === "exterior" ? "EXTERIOR" : "INTERIOR";
+      document.body.classList.toggle("exterior", mode === "exterior");
+      crosshair.classList.toggle("hidden", mode === "exterior");
+    },
+    setLoading(fraction, text) {
+      if (fraction >= 1) {
+        loading.classList.add("hidden");
+        return;
+      }
+      loading.classList.remove("hidden");
+      loadingBar.style.width = `${Math.round(fraction * 100)}%`;
+      if (text) loadingText.textContent = text;
     },
     async fadeIn(ms) {
       fade.style.transition = `opacity ${ms}ms ease`;

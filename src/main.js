@@ -1,19 +1,30 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { buildMaterials } from "./materials.js";
-import { buildShip } from "./ship.js";
 import { buildSpace } from "./space.js";
 import { Player } from "./player.js";
 import { Interactions } from "./interact.js";
 import { createPost } from "./post.js";
-import { createLightingController } from "./lighting.js";
 import { createHUD } from "./hud.js";
+import { createInterior } from "./interior/interior.js";
+import { buildExterior } from "./exterior/exterior.js";
+import { createTraffic } from "./traffic/fighters.js";
+import { CameraDirector } from "./camera/director.js";
+import { createMetrics } from "./perf/metrics.js";
+import { createAudioBus } from "./fx/audio.js";
+import { createReservedSystems } from "./systems/reserved.js";
+import { hasDedicatedBuilder } from "./interior/rooms/index.js";
+import { DECKS } from "./interior/layout.js";
 
 // ---------------------------------------------------------------------------
-// Renderer / scene
+// Renderer / scene. Reverse-Z (EXT_clip_control) gives the depth precision to render a 0.08 m near
+// plane inside the bridge and the 1,600 m hull through its windows in one pass; logarithmic depth
+// is the fallback where the extension is missing.
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById("view");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false });
+const probe = document.createElement("canvas").getContext("webgl2");
+const reverseDepth = !!(probe && probe.getExtension("EXT_clip_control"));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false, reverseDepthBuffer: reverseDepth, logarithmicDepthBuffer: !reverseDepth });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -25,79 +36,110 @@ renderer.info.autoReset = false;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
-scene.fog = new THREE.FogExp2(0x0a0c10, 0.03);
+const INTERIOR_FOG = new THREE.FogExp2(0x0a0c10, 0.006);
+scene.fog = INTERIOR_FOG;
 
-const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 7000);
+const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.08, 60000);
 scene.add(camera);
 
 const hud = createHUD();
+const audio = createAudioBus();
+const metrics = createMetrics(renderer, scene);
+const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
 // ---------------------------------------------------------------------------
-// World
+// World (staged so the loading bar can update between the heavy synchronous builds)
 // ---------------------------------------------------------------------------
-const materials = buildMaterials();
-const ship = buildShip(scene, materials);
-const space = buildSpace(scene);
-
-const hemi = new THREE.HemisphereLight(0x5a6f86, 0x3a2f26, 0.16);
+let materials, space, exterior, interior, traffic, player, interactions, director, post, systems;
+const hemi = new THREE.HemisphereLight(0x5a6f86, 0x2a2f38, 0.18);
 scene.add(hemi);
-
-// Bootstrap environment (neutral room), replaced by a capture of the actual interior below.
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.2;
 
-const lighting = createLightingController({ lights: ship.lights, materials, hemi });
+async function init() {
+  hud.setLoading(0.05, "Generating materials…");
+  await nextFrame();
+  materials = buildMaterials();
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.35;
 
-const player = new Player(camera, canvas, ship.colliders);
-player.setPose(0, -1.6, 0, 0);
-player.onLockChange = (locked) => {
-  if (locked) hud.hideStart();
-  else if (!debugMode) hud.showStart();
-};
-hud.startEl.addEventListener("click", () => player.requestLock());
+  hud.setLoading(0.25, "Charting the star field…");
+  await nextFrame();
+  space = buildSpace(scene, { scale: 9, turnRateDeg: 0.22, dustRange: 1100, dustSpeed: 140, dustCount: 70, dustOpacity: 0.22 });
 
-const interactions = new Interactions({ camera, interactables: ship.interactables, lighting, space, player, hud });
+  hud.setLoading(0.4, "Laying hull plating…");
+  await nextFrame();
+  exterior = buildExterior(scene, materials);
 
-// Capture the finished interior into the environment map so metals reflect the real corridor.
-function captureEnvironment() {
-  const cubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType, generateMipmaps: false });
-  const cubeCam = new THREE.CubeCamera(0.1, 60, cubeRT);
-  cubeCam.position.set(0, 1.5, -8);
-  const savedFog = scene.fog;
-  scene.fog = null;
-  space.root.visible = false;
-  // keep the light fixtures from turning every metal into a blown-out mirror of them
-  const emissives = [materials.emitTeal, materials.emitWarm, materials.emitOrange, materials.emitRed, materials.emitCool, materials.emitWarmSoft, materials.emitCoolSoft, materials.leds, ...materials.screens];
-  const saved = emissives.map((m) => m.emissiveIntensity);
-  emissives.forEach((m) => (m.emissiveIntensity *= 0.25));
-  cubeCam.update(renderer, scene);
-  emissives.forEach((m, i) => (m.emissiveIntensity = saved[i]));
-  space.root.visible = true;
-  scene.fog = savedFog;
-  const env = pmrem.fromCubemap(cubeRT.texture).texture;
-  scene.environment = env;
-  // metals have no diffuse term: this is the only thing that keeps gunmetal from reading as black
-  scene.environmentIntensity = 0.45;
-  cubeRT.dispose();
+  hud.setLoading(0.6, "Pressurising decks…");
+  await nextFrame();
+  player = new Player(camera, canvas, []);
+  interior = createInterior({ scene, materials, player, hud, audio });
+  interior.ensureDeckBuilt("bridge");
+
+  hud.setLoading(0.8, "Fuelling the fighter wing…");
+  await nextFrame();
+  traffic = createTraffic({ scene, materials, audio, count: 8 });
+  systems = createReservedSystems(traffic);
+
+  hud.setLoading(0.9, "Powering post-processing…");
+  await nextFrame();
+  post = createPost(renderer, scene, camera);
+  interactions = new Interactions({ camera, interactables: [], lighting: null, space, player, hud, audio });
+  director = new CameraDirector({ camera, canvas, player, interior, exterior, space, hud, post, scene, audio });
+  director.onModeChange = (mode) => {
+    interactions.enabled = mode === "interior";
+    audio.setZone(mode === "exterior" ? "exterior" : zoneFor(interior.currentSector));
+  };
+  interior.onSectorChange((sector) => {
+    hud.setLocation(sector.deck.name, sector.def.name);
+    interactions.setItems(interior.visibleSectors.flatMap((s) => s.interactables));
+    audio.setZone(zoneFor(sector));
+  });
+  interior.teleport("d1_bridge", { yaw: 0 });
+  hud.setLocation(interior.currentSector.deck.name, interior.currentSector.def.name);
+  interactions.setItems(interior.visibleSectors.flatMap((s) => s.interactables));
+  player.onLockChange = (locked) => {
+    if (locked) hud.hideStart();
+    else if (!debugMode && director.mode === "interior") hud.showStart();
+  };
+  player.onStep = (pos) => audio.event("footstep", pos);
+  hud.startEl.addEventListener("click", () => {
+    audio.unlock();
+    if (director.mode === "interior") player.requestLock();
+    else hud.hideStart();
+  });
+  canvas.addEventListener("click", () => {
+    audio.unlock();
+    if (director.mode === "interior" && !player.locked && !debugMode) player.requestLock();
+  });
+  director.applyModeSettings();
+  hud.setMode("interior");
+  hud.setHint("WASD move · Shift sprint · mouse look · E interact · V exterior view · F3 stats");
+  hud.setLoading(1);
+  hud.showStart();
+  metrics.markReady();
+  debugAPI.ready = true;
+}
+
+function zoneFor(sector) {
+  if (!sector) return "corridor";
+  const id = sector.id;
+  if (id === "d5_hangar" || id === "d5_fighterbay" || id === "d5_shuttlebay") return "hangar";
+  if (id.startsWith("d4_")) return "engineering";
+  if (id === "d1_bridge") return "bridge";
+  if (sector.def.kind === "lift") return "lift";
+  return "corridor";
 }
 
 // ---------------------------------------------------------------------------
-// Post
+// Resize / adaptive quality (resolution + AO quality; never removes content)
 // ---------------------------------------------------------------------------
-const post = createPost(renderer, scene, camera);
-
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
-  post.setSize(window.innerWidth, window.innerHeight);
+  if (post) post.setSize(window.innerWidth, window.innerHeight);
 });
-
-// ---------------------------------------------------------------------------
-// Adaptive quality: hold 60 fps on mid-range GPUs by stepping render resolution and AO quality,
-// never by removing content. Steps down after ~0.5 s of slow frames, back up after ~10 s of headroom.
-// ---------------------------------------------------------------------------
 const QUALITY_LEVELS = [
   { ratio: 0.66, ao: "Low" },
   { ratio: 0.8, ao: "Low" },
@@ -133,140 +175,251 @@ function updateQuality(dt) {
 }
 
 // ---------------------------------------------------------------------------
-// Debug API (deterministic camera placement for screenshots)
+// Debug API (deterministic camera placement for screenshots + navigation / perf tests)
 // ---------------------------------------------------------------------------
 let debugMode = false;
-const VIEWS = {
-  // just inside the cockpit doorway looking over the seats and consoles at the windshield
-  cockpit: { x: 0.0, z: -17.1, yaw: 0, pitch: -4, planet: 0, planetOffset: -12, time: 40 },
-  // aft end of the corridor looking forward; the ocean world's limb sits in the near port porthole
-  corridor: { x: 0.4, z: -1.3, yaw: 12, pitch: -2, planet: 1, planetOffset: 51, time: 40 },
-  // inside the crew quarters looking at the bunk; ocean world limb in the porthole above the bed
-  quarters: { x: -2.3, z: -6.3, yaw: 52, pitch: -8, planet: 1, planetOffset: 26, time: 40 },
-  // nose to the port corridor porthole
-  window: { x: -0.55, z: -12.55, yaw: 90, pitch: 2, planet: 0, planetOffset: -12, time: 40 },
-  // extra QA views
-  windshield: { x: 0.0, z: -18.3, yaw: 0, pitch: 2, planet: 0, planetOffset: -10, time: 40 },
-  galley: { x: 2.3, z: -10.4, yaw: -70, pitch: -6, planet: 0, planetOffset: 0, time: 40 },
-  bathroom: { x: 2.1, z: -3.9, yaw: -100, pitch: -4, planet: 0, planetOffset: 0, time: 40 },
-  aft: { x: 0.2, z: -6.5, yaw: 180, pitch: -3, planet: 0, planetOffset: 0, time: 40 },
+// interior views: sector + deck-local x/z + yaw/pitch (deg)
+const INTERIOR_VIEWS = {
+  bridge_aft: { sector: "d1_bridge", x: 0, z: -17, yaw: 0, pitch: -4 },
+  bridge_window: { sector: "d1_bridge", x: 0, z: -44, yaw: 0, pitch: -8 },
+  bridge_pit: { sector: "d1_bridge", x: 6.5, z: -28, yaw: -90, pitch: -6 },
+  bridge_side: { sector: "d1_bridge", x: -18, z: -30, yaw: 70, pitch: -3 },
+  lobby: { sector: "d1_lobby", x: 0, z: 1, yaw: 180, pitch: -2 },
+  corridor_bridge: { sector: "d1_corridor", x: 0, z: -4, yaw: 0, pitch: -2 },
+  lift: { sector: "d1_lift", x: 0, z: 4.2, yaw: 180, pitch: -6 },
+  comms: { sector: "d1_comms", x: 4, z: -8.5, yaw: -90, pitch: -3 },
+  intel: { sector: "d1_intel", x: -4, z: -8.5, yaw: 90, pitch: -3 },
+  tactical: { sector: "d2_tactical", x: -4, z: -16, yaw: 90, pitch: -6 },
+  navigation: { sector: "d2_nav", x: 4, z: -18, yaw: -90, pitch: -4 },
+  briefing: { sector: "d2_briefing", x: 4, z: -7.5, yaw: -90, pitch: -4 },
+  officers: { sector: "d2_officers", x: -7, z: 0, yaw: 90, pitch: -4 },
+  observation: { sector: "d2_observation", x: 0, z: -36, yaw: 0, pitch: -3 },
+  mess: { sector: "d3_mess", x: 5, z: -19, yaw: -90, pitch: -4 },
+  quarters: { sector: "d3_quarters", x: -5, z: -19, yaw: 90, pitch: -4 },
+  medbay: { sector: "d3_medbay", x: 5, z: -53, yaw: -90, pitch: -4 },
+  recreation: { sector: "d3_rec", x: -5, z: -53, yaw: 90, pitch: -4 },
+  armory: { sector: "d3_armory", x: -44, z: -36, yaw: 90, pitch: -4 },
+  detention: { sector: "d3_detention", x: 44, z: -36, yaw: -90, pitch: -4 },
+  escape: { sector: "d3_escape", x: 0, z: -72, yaw: 0, pitch: -4 },
+  lifesupport: { sector: "d3_lifesupport", x: -7, z: 0, yaw: 90, pitch: -4 },
+  corridor_crew: { sector: "d3_corridor", x: 0, z: -6, yaw: 0, pitch: -2 },
+  engineering: { sector: "d4_engctrl", x: -5, z: -19, yaw: 90, pitch: -4 },
+  hyperdrive: { sector: "d4_hyperdrive", x: 5, z: -19, yaw: -90, pitch: -4 },
+  maintenance: { sector: "d4_maintenance", x: 5, z: -50, yaw: -90, pitch: -4 },
+  cargo: { sector: "d4_cargo", x: -5, z: -50, yaw: 90, pitch: -4 },
+  reactor: { sector: "d4_reactor", x: 0, z: -67, yaw: 0, pitch: -2 },
+  hangar_entry: { sector: "d5_hangar", x: 0, z: -37, yaw: 0, pitch: -4 },
+  hangar_deck: { sector: "d5_hangar", x: -20, z: -60, yaw: 40, pitch: -2 },
+  hangar_racks: { sector: "d5_hangar", x: 10, z: -95, yaw: -110, pitch: 10 },
+  fighterbay: { sector: "d5_fighterbay", x: 38, z: -100, yaw: -90, pitch: -4 },
+  shuttlebay: { sector: "d5_shuttlebay", x: -38, z: -105, yaw: 90, pitch: -4 },
+  hangar_cargo: { sector: "d5_cargo", x: 5, z: -19, yaw: -90, pitch: -4 },
 };
 
 let framesRendered = 0;
-let frameMs = 16;
 let pendingCapture = null;
 const debugAPI = {
   ready: false,
-  views: Object.keys(VIEWS),
-  setView(name) {
-    const v = VIEWS[name];
-    if (!v) throw new Error("unknown view " + name);
+  get views() {
+    return [...Object.keys(exterior ? exterior.stations : {}), ...Object.keys(INTERIOR_VIEWS)];
+  },
+  interiorViews: Object.keys(INTERIOR_VIEWS),
+  async setView(name) {
     debugMode = true;
-    quality.enabled = false; // deterministic resolution for screenshots
+    quality.enabled = false;
     hud.hideStart();
     player.headBob = false;
-    player.frozen = true;
-    player.setPose(v.x, v.z, v.yaw, v.pitch);
-    const yaw = THREE.MathUtils.degToRad(v.yaw + (v.planetOffset || 0));
-    space.setTime(v.time ?? 40);
-    space.framePlanet(v.planet ?? 0, new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)));
     post.finalPass.uniforms.seed.value = 0.37;
     debugAPI.freezeGrain = true;
+    if (exterior.stations[name]) {
+      await director.toExterior(name, true);
+      director.goToStation(name, true);
+      hud.fadeOut(0);
+    } else {
+      const v = INTERIOR_VIEWS[name];
+      if (!v) throw new Error("unknown view " + name);
+      await director.toInterior(v.sector, true);
+      interior.teleport(v.sector, { x: v.x, z: v.z, yaw: v.yaw, pitch: v.pitch });
+      player.frozen = true;
+      hud.fadeOut(0);
+    }
+    space.setTime(40);
     framesRendered = 0;
     return true;
   },
-  // Advance only the sky (stars / planets / dust) by dt seconds; interior stays put. For drift measurement.
+  /** Walk-through helper: teleport to a sector spawn (interior mode). */
+  async teleport(sectorId) {
+    debugMode = true;
+    hud.hideStart();
+    if (director.mode !== "interior") await director.toInterior(sectorId, true);
+    const s = interior.teleport(sectorId);
+    player.frozen = false;
+    player.locked = true;
+    framesRendered = 0;
+    return { sector: s.id, pos: player.position.toArray(), floorY: s.floorY, visible: interior.visibleSectors.map((x) => x.id) };
+  },
+  /** Move the player toward a world point for `seconds` using the real controller (collision test). */
+  walkTo(x, z, seconds = 2, dt = 1 / 60) {
+    player.locked = true;
+    player.frozen = false;
+    const start = player.position.clone();
+    let steps = 0;
+    for (let t = 0; t < seconds; t += dt) {
+      const dx = x - player.position.x;
+      const dz = z - player.position.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.15) break;
+      player.yaw = Math.atan2(-dx, -dz);
+      player.keys = new Set(["KeyW", "ShiftLeft"]);
+      player.update(dt);
+      interior.update(dt, t);
+      steps++;
+    }
+    player.keys = new Set();
+    const s = interior.currentSector;
+    return { from: start.toArray(), to: player.position.toArray(), reached: Math.hypot(x - player.position.x, z - player.position.z) < 0.6, steps, sector: s ? s.id : null };
+  },
+  /** Open the door nearest the player instantly (for traversal tests). */
+  openNearestDoor() {
+    let best = null;
+    let bd = Infinity;
+    for (const s of interior.visibleSectors) for (const d of s.doors) {
+      const dist = d.worldCenter.distanceTo(player.position);
+      if (dist < bd) {
+        bd = dist;
+        best = d;
+      }
+    }
+    if (best) {
+      best.openness = 1;
+      best.target = 1;
+      best.update(0, player.position, true);
+    }
+    return best ? { door: best.group.name, dist: +bd.toFixed(2) } : null;
+  },
+  lift(deckId) {
+    return interior.lift.go(deckId);
+  },
+  liftState() {
+    return interior.lift.state;
+  },
+  sectors() {
+    return DECKS.flatMap((d) => d.sectors.map((s) => ({ id: s.id, deck: d.id, kind: s.kind, builder: s.builder || s.kind, dedicated: s.builder ? hasDedicatedBuilder(s.builder) : true })));
+  },
+  current() {
+    const s = interior.currentSector;
+    return s ? { id: s.id, deck: s.deck.id, visible: interior.visibleSectors.map((x) => x.id), colliders: player.colliders.length } : null;
+  },
+  doors() {
+    const out = [];
+    for (const deck of interior.decks) for (const d of deck.doors) out.push({ name: d.group.name, state: d.state, openness: +d.openness.toFixed(2), style: d.def.style });
+    return out;
+  },
+  trafficSnapshot() {
+    return traffic.snapshot();
+  },
+  trafficCounts() {
+    return traffic.counts();
+  },
+  requestLaunch(n) {
+    return traffic.requestLaunch(n);
+  },
+  advanceTraffic(seconds, dt = 0.1) {
+    for (let t = 0; t < seconds; t += dt) traffic.update(dt, t);
+    return traffic.counts();
+  },
+  reserved() {
+    return systems.summary();
+  },
+  audioLog() {
+    return audio.log.slice(-40);
+  },
+  mode() {
+    return director.mode;
+  },
+  async toExterior(station) {
+    await director.toExterior(station || "exterior_medium", true);
+    hud.fadeOut(0);
+    framesRendered = 0;
+    return director.mode;
+  },
+  async toInterior(sectorId) {
+    await director.toInterior(sectorId || null, true);
+    hud.fadeOut(0);
+    framesRendered = 0;
+    return director.mode;
+  },
   advanceSky(dt) {
     space.setTime(space.state.time + dt);
     space.update(0);
     framesRendered = 0;
   },
-  // Resolve with RGBA bytes of a screen region (CSS px) from the next rendered frame.
   capturePixels(x, y, w, h) {
     return new Promise((resolve) => {
       pendingCapture = { x, y, w, h, resolve };
     });
   },
   freezeGrain: false,
-  // PNG data URL of a material's albedo canvas (texture QA)
-  textureDataURL(name) {
-    const m = materials[name];
-    const img = m && m.map && m.map.image;
-    return img && img.toDataURL ? img.toDataURL("image/png") : null;
-  },
-  // Place the player in front of an interactable, looking at it (for prompt / interaction tests)
-  lookAt(id) {
-    const poses = {
-      bed: { x: -3.0, z: -7.6, yaw: 76, pitch: -40 },
-      galley: { x: 3.4, z: -10.6, yaw: -78, pitch: -22 },
-      bathroom: { x: 2.5, z: -3.7, yaw: -90, pitch: -43 },
-    };
-    const p = poses[id];
-    if (!p) throw new Error("unknown interactable " + id);
-    debugMode = true;
-    quality.enabled = false;
-    hud.hideStart();
-    player.headBob = false;
-    player.frozen = false;
-    player.locked = true; // simulate pointer lock for the interaction gate
-    player.setPose(p.x, p.z, p.yaw, p.pitch);
-    interactions.update();
-    framesRendered = 0;
-    return !!interactions.hovered;
-  },
-  hovered() {
-    return interactions.hovered ? interactions.hovered.id : null;
-  },
-  interact(id) {
-    return interactions.activate(id);
-  },
-  pressE() {
-    document.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyE" }));
-  },
-  status() {
-    return hud.statusText();
-  },
-  fadeOpacity() {
-    return hud.fadeOpacity();
-  },
-  setRest(t) {
-    lighting.setRest(t, true);
-  },
-  restLevel() {
-    return lighting.rest;
-  },
   frames() {
     return framesRendered;
   },
   getStats() {
-    const info = renderer.info;
-    return {
-      frameMs: +frameMs.toFixed(2),
-      fps: +(1000 / frameMs).toFixed(1),
-      calls: info.render.calls,
-      triangles: info.render.triangles,
-      geometries: info.memory.geometries,
-      textures: info.memory.textures,
-      programs: info.programs ? info.programs.length : 0,
-      colliders: ship.colliders.length,
-      lights: ship.lights.warm.length + ship.lights.cool.length + ship.lights.teal.length + ship.lights.spots.length,
+    return metrics.snapshot({
+      mode: director ? director.mode : "loading",
+      sector: interior && interior.currentSector ? interior.currentSector.id : null,
+      colliders: player ? player.colliders.length : 0,
+      lights: countLights(),
       qualityLevel: quality.level,
       pixelRatio: renderer.getPixelRatio(),
-    };
+      reverseDepth,
+      hullPlates: exterior ? exterior.stats.plates : 0,
+      hullGreebles: exterior ? exterior.stats.greebles : 0,
+    });
   },
   setPixelRatio(r) {
     renderer.setPixelRatio(r);
     renderer.setSize(window.innerWidth, window.innerHeight);
     post.setSize(window.innerWidth, window.innerHeight);
   },
-  player,
-  space,
-  lighting,
-  post,
+  get player() {
+    return player;
+  },
+  get interior() {
+    return interior;
+  },
+  get exterior() {
+    return exterior;
+  },
+  get traffic() {
+    return traffic;
+  },
+  get director() {
+    return director;
+  },
   scene,
   renderer,
 };
 window.debugAPI = debugAPI;
+
+function countLights() {
+  let n = 0;
+  scene.traverse((o) => {
+    if (o.isLight && o.visible && !o.isAmbientLight && !o.isHemisphereLight) {
+      // count only lights whose ancestors are all visible
+      let p = o.parent;
+      let vis = true;
+      while (p) {
+        if (!p.visible) {
+          vis = false;
+          break;
+        }
+        p = p.parent;
+      }
+      if (vis) n++;
+    }
+  });
+  return n;
+}
 
 // ---------------------------------------------------------------------------
 // Loop
@@ -277,30 +430,42 @@ document.addEventListener("keydown", (e) => {
     showStats = !showStats;
     hud.toggleStats(showStats);
   }
+  if (e.code === "KeyM") audio.toggleMute();
 });
 
 const timer = new THREE.Timer();
-let envCaptured = false;
-let last = performance.now();
+let statsTick = 0;
 
 function frame() {
   requestAnimationFrame(frame);
-  const now = performance.now();
-  frameMs += (now - last - frameMs) * 0.1;
-  last = now;
+  if (!debugAPI.ready) return;
+  metrics.begin();
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.1);
   const t = timer.getElapsed();
   renderer.info.reset();
 
-  if (!envCaptured && framesRendered >= 2) {
-    captureEnvironment();
-    envCaptured = true;
-  }
-
   player.update(dt);
+  director.update(dt);
+  interior.update(dt, t);
+  // exterior visible outside, or from rooms with windows; the hangar bay (a lit interior) is also
+  // visible from outside through its ventral opening
+  const showExterior = director.mode === "exterior" || interior.seesExterior();
+  exterior.setVisible(showExterior);
+  if (showExterior) exterior.updateLOD(camera.position);
+  exterior.update(dt, t);
+  const hangar = interior.sectors.get("d5_hangar");
+  if (director.mode === "exterior") {
+    // stream the hangar bay in when the camera can see the ventral opening
+    if (!hangar.built && camera.position.y < -30) interior.streamDeck("hangar");
+    interior.setExteriorView(true);
+  } else interior.setExteriorView(false);
+  traffic.group.visible = showExterior || (hangar && hangar.visible);
+  traffic.update(dt, t);
+  systems.update(dt);
   space.update(dt);
-  lighting.update(dt);
+  audio.setListener(camera.position);
+  audio.update(dt);
   interactions.update();
   if (framesRendered > 60) updateQuality(dt);
 
@@ -308,7 +473,6 @@ function frame() {
   else post.render(debugAPI.freezeGrain ? 0.37 : t);
   framesRendered++;
   if (pendingCapture) {
-    // copy the freshly presented frame synchronously (valid without preserveDrawingBuffer)
     const { x, y, w, h, resolve } = pendingCapture;
     pendingCapture = null;
     const c2 = document.createElement("canvas");
@@ -319,11 +483,14 @@ function frame() {
     ctx.drawImage(canvas, x * pr, y * pr, w * pr, h * pr, 0, 0, w, h);
     resolve(Array.from(ctx.getImageData(0, 0, w, h).data));
   }
-  if (showStats) {
+  if (showStats && ++statsTick % 10 === 0) {
     const s = debugAPI.getStats();
-    hud.setStats(`${s.fps} fps  ${s.frameMs} ms\n${s.calls} calls  ${(s.triangles / 1000).toFixed(1)}k tris\n${s.lights} lights`);
+    hud.setStats(`${s.fps} fps  ${s.frameMs} ms (p95 ${s.frameP95})\n${s.calls} calls  ${(s.triangles / 1000).toFixed(1)}k tris  ${s.visibleObjects} objs\n${s.lights} lights  ${s.textureMB} MB tex  ${s.jsHeapMB ?? "-"} MB heap\n${s.mode} · ${s.sector || ""}`);
   }
 }
 
-debugAPI.ready = true;
+init().catch((e) => {
+  console.error(e);
+  hud.setLoading(0.99, "Failed to load: " + e.message);
+});
 frame();

@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import { makeStarSprite, makeNebula, makeGasGiant, makeOceanWorld, makeMoon, makeClouds, mulberry32 } from "./textures.js";
 
-const TURN_RATE = THREE.MathUtils.degToRad(1.3); // ship slowly banking: the sky slides past at 1.3 deg/s (a planet crosses the windshield in ~80 s)
+let TURN_RATE = THREE.MathUtils.degToRad(1.3); // ship slowly banking: the sky slides past (a planet crosses a window in ~80 s at 1.3 deg/s)
 
 const planetVert = /* glsl */ `
   varying vec3 vN;
@@ -129,8 +129,15 @@ const ringFrag = /* glsl */ `
   }
 `;
 
-export function buildSpace(scene) {
+/**
+ * @param scale multiplies every distance and radius (the Kestrel sky was built for a 25 m ship;
+ *   the Star Destroyer uses ~9 so planets stay far beyond the 1,600 m hull)
+ * @param turnRateDeg apparent sky drift in degrees per second
+ */
+export function buildSpace(scene, { scale = 1, turnRateDeg = 1.3, dustRange = 90, dustSpeed = 34, dustCount = 260, dustOpacity = 0.42 } = {}) {
+  TURN_RATE = THREE.MathUtils.degToRad(turnRateDeg);
   const root = new THREE.Group();
+  root.scale.setScalar(scale);
   root.name = "space";
   scene.add(root);
   const rand = mulberry32(2024);
@@ -386,32 +393,32 @@ export function buildSpace(scene) {
   });
 
   // --- dust streaks near the ship (not rotating with the far field)
-  const dustCount = 260;
   const dustPos = new Float32Array(dustCount * 2 * 3);
   const dust = [];
   const spawn = (i, zOverride = null) => {
     let x, y, z;
     do {
-      x = (rand() * 2 - 1) * 90;
-      y = (rand() * 2 - 1) * 60;
-      z = zOverride !== null ? zOverride : (rand() * 2 - 1) * 160;
-    } while (Math.abs(x) < 9 && y > -4 && y < 7); // keep them out of the hull volume
-    dust[i] = { x, y, z, len: 1.2 + rand() * 2.2 };
+      x = (rand() * 2 - 1) * dustRange;
+      y = (rand() * 2 - 1) * dustRange * 0.67;
+      z = zOverride !== null ? zOverride : (rand() * 2 - 1) * dustRange * 1.8;
+    } while (Math.abs(x) < dustRange * 0.1 && y > -dustRange * 0.045 && y < dustRange * 0.08); // keep them out of the hull volume
+    dust[i] = { x, y, z, len: (1.2 + rand() * 2.2) * (dustRange / 90) };
   };
   for (let i = 0; i < dustCount; i++) spawn(i);
   const dustGeo = new THREE.BufferGeometry();
   dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
-  const dustMat = new THREE.LineBasicMaterial({ color: 0xa9c3e6, transparent: true, opacity: 0.42, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  const dustMat = new THREE.LineBasicMaterial({ color: 0xa9c3e6, transparent: true, opacity: dustOpacity, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
   const dustLines = new THREE.LineSegments(dustGeo, dustMat);
   dustLines.frustumCulled = false;
   dustLines.name = "dust";
   scene.add(dustLines);
   const updateDust = (dt) => {
-    const speed = 34;
+    const speed = dustSpeed;
+    const zr = dustRange * 1.8;
     for (let i = 0; i < dustCount; i++) {
       const d = dust[i];
       d.z += speed * dt;
-      if (d.z > 160) spawn(i, -160 + (d.z - 160));
+      if (d.z > zr) spawn(i, -zr + (d.z - zr));
       dustPos[i * 6] = d.x;
       dustPos[i * 6 + 1] = d.y;
       dustPos[i * 6 + 2] = d.z;

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Kestrel — Ship Interior</title>
+    <title>ISD Vigilance — Imperial Star Destroyer</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -13,10 +13,14 @@
     <div id="hud">
       <div id="crosshair"></div>
       <div id="prompt" class="hidden"></div>
+      <div id="lift" class="hidden"></div>
+      <div id="location"></div>
       <div id="status">
-        <span id="status-tag">KESTREL</span>
-        <span id="status-text">Systems nominal. Cruising.</span>
+        <span id="status-tag">ISD VIGILANCE</span>
+        <span id="mode-tag">INTERIOR</span>
+        <span id="status-text">All stations report ready.</span>
       </div>
+      <div id="hint"></div>
       <div id="stats" class="hidden"></div>
     </div>
 
@@ -24,12 +28,21 @@
       <div id="fade-text"></div>
     </div>
 
-    <div id="start">
+    <div id="loading">
       <div class="card">
-        <h1>KESTREL</h1>
-        <p class="sub">light freighter · in transit</p>
-        <p class="hint">Click to take the deck</p>
-        <p class="keys">WASD move · mouse look · E interact · Esc release</p>
+        <h1>ISD VIGILANCE</h1>
+        <p class="sub">Imperial-class Star Destroyer</p>
+        <div id="loading-track"><div id="loading-bar"></div></div>
+        <p id="loading-text" class="keys">Generating hull plating…</p>
+      </div>
+    </div>
+
+    <div id="start" class="hidden">
+      <div class="card">
+        <h1>ISD VIGILANCE</h1>
+        <p class="sub">Imperial-class Star Destroyer · 1,600 m · outer rim patrol</p>
+        <p class="hint">Click to take the bridge</p>
+        <p class="keys">WASD move · Shift sprint · mouse look · E interact · V exterior view · 1–5 in the turbolift · F3 stats · Esc release</p>
       </div>
     </div>
 

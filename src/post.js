@@ -99,6 +99,26 @@ export function createPost(renderer, scene, camera) {
     ao,
     bloom,
     finalPass,
+    mode: "interior",
+    /** Per-mode tuning: AO radius scales with the scene (0.9 m rooms vs a 1,600 m hull). */
+    setMode(mode) {
+      api.mode = mode;
+      if (mode === "exterior") {
+        ao.configuration.aoRadius = 14;
+        ao.configuration.distanceFalloff = 6;
+        ao.configuration.intensity = 2.0;
+        bloom.strength = 0.42;
+        bloom.threshold = 1.05;
+        finalPass.uniforms.vignette.value = 0.28;
+      } else {
+        ao.configuration.aoRadius = 0.9;
+        ao.configuration.distanceFalloff = 0.9;
+        ao.configuration.intensity = 2.6;
+        bloom.strength = 0.3;
+        bloom.threshold = 1.15;
+        finalPass.uniforms.vignette.value = 0.34;
+      }
+    },
     setSize(width, height) {
       composer.setSize(width, height);
       const p = renderer.getPixelRatio();
