@@ -30,15 +30,21 @@ seed) in both. `npm run mp-test` automates this with three headless clients incl
   `Effects` (camera shake, lighting/fog overrides, flashes), bulk world edits (`World.setBlockRaw` +
   `relightChunk`, budgeted `Terrain.remeshDirty`, border-light diffing so untouched neighbours are not remeshed),
   new blocks (scorched stone, ash, magma, charred planks).
-- **Tsunami & flood** (`src/disasters/tsunami.js`, `tsunami/`) - deterministic wave front with a crest mesh,
-  foam and spray, real water blocks rising column by column behind the front (buoyancy, swimming and currents use
-  the normal water physics), gradual structural damage by material with floating debris, receding phase that
-  drains the streets, silt/damage left behind, ambient roar loop, NPC evacuation to upper floors / swimming with
-  calls for help, animals panicking; preview shows the flooded extent.
-- **Tornado** (`src/disasters/tornado.js`, `tornado/`) - seeded travelling path with wobble, layered rotating
-  funnel (scrolling noise shader) connected to a cloud deck, dust skirt, orbiting debris ring, storm lighting,
-  wind field applied to players/NPCs/animals/debris by mass and distance with speed caps, church bell + shouts,
-  gradual material-aware destruction along the path, rope-out ending, preview ribbon + radius.
+- **Tsunami & flood** (`src/disasters/tsunami.js`, `tsunami/`) - deterministic wave front rendered as a voxel
+  crest (unit water columns quantised to whole blocks, staircase + breaking lip, clipped by walls so it wraps
+  around facades, world water tile with foam on toe and lip, fades when the camera is inside/under a roof), real
+  water blocks placed the moment the front passes and deepened oldest-first so full depth follows within ~5 blocks
+  of the crest, textured spray chips, gradual structural damage by material with floating debris that settles as
+  the water leaves, receding phase that drains the streets with a final sweep, subtle overcast sky, ambient roar
+  loop, NPC evacuation to upper floors / swimming (body-height water detection) with calls for help, animals
+  panicking; preview shows the flooded extent with direction chevrons and the entry ribbon.
+- **Tornado** (`src/disasters/tornado.js`, `tornado/`) - seeded travelling path with wobble, chunky pixel-smoke
+  funnel (nearest-filtered coarse noise, banded alpha, stepped silhouette, ragged tip) dissolving into a storm
+  deck, instanced dust skirt at the base, orbiting debris ring, storm sky (dome/fog/sun/clouds blend to the deck
+  colour within 120 blocks, fading over the whole rope-out), wind field applied to players/NPCs/animals/debris
+  by mass and distance with speed caps (a captured player is ejected after ~4 s), church bell + shouts, gradual
+  outside-in, roof-first material-aware destruction along the path (interiors survive until the roof is gone),
+  rope-out ending, preview ribbon + radius.
 - **Orbital beam** (`src/disasters/orbitalBeam.js`, `beam/`) - original ring station charging above the target
   (motes spiralling into a focus sphere, rising hum), slow visible descent with shimmer sleeve and cloud rings,
   impact flash/shockwave/sparks/smoke columns/debris, deterministic crater growth (scorched floor, magma pool that
@@ -64,13 +70,17 @@ seed) in both. `npm run mp-test` automates this with three headless clients incl
   `scripts/mp-test.mjs`.
 - Static low-detail meshes (`buildStaticLOD`) for NPCs and animals beyond 28-32 blocks: one draw call per entity
   instead of ~8-9 (busy town scene draw calls -54%).
+- Shared storm-sky override (`Effects.setEnvironment({skyColor, skyMix, cloudAlpha})` applied by `Sky.applyOverride`)
+  used by the tornado and flood; magma emits light 13 and burns players (NPCs path around it and walk off it).
 
 ### Changed / optimized
 - Chunk pipeline: packed vertex attributes, 16-bit indices, cheaper lighting seeds, exact worldgen shortcuts,
   AABB frustum culling per chunk (-31% geometry memory, faster load, about half the streaming JS while walking).
 - Relighting after disaster edits is coalesced per chunk and only marks neighbours whose border light actually
   changed; remesh work is budgeted per frame.
-- NPC shouts are globally throttled; name-tag and debris shader programs are pre-compiled at load.
+- NPC shouts are globally throttled (one per 3 s, no repeated line within 20 s); name-tag and debris shader
+  programs are pre-compiled at load; debris keeps an ambient light floor and re-samples light every 0.2 s.
+- Disaster relighting uses a time-based per-frame budget that catches up faster once the event is over.
 
 ### Fixed
 - Shops, saloon, general store and hotel had their goods shelves/bookshelves placed IN the back wall, so the
@@ -117,7 +127,18 @@ skew <= 1); identical journal hashes across two independent browser pages per di
 tsunami `0a49d87c:46894`, tornado `fcb6e0cf:84`, beam `06d55efa:122`); `?admin=0` refuses every command and hides
 the panel; 0 exceptions and 0 console errors across 23 page sessions.
 
+### Review rounds
+Independent critics reviewed each disaster on the integrated build. Round 1: beam ACCEPT WITH NITS (station
+pop-in, dim night glow, roar restart on cancel - all fixed), tornado REJECT (interiors gutted while facades stood,
+sunny sky above the funnel, smooth cone), tsunami REJECT (smooth translucent crest with a dry street under it,
+NPCs standing on the street bottom under water). Round 2 reworked both (see Added) and re-reviewed them; the
+final verdicts are recorded below.
+
 ### Known imperfections
+- The default 110-block flood is paced by the manager's edit budget: the front runs at ~80-90% of the nominal
+  speed across the widest part of the disc and the drain takes ~40 s, so the whole event lasts ~105 s.
+- With outside-in exposure the tornado finds more valid targets and uses its full rip budget (about 2.5x the
+  block damage of the first version over the same path); lower `intensity` or `damage` for a gentler storm.
 - Frame times in this build VM are dominated by SwiftShader; disaster carving/flooding windows are bounded by the
   manager's relight/remesh budgets (3 relights + ~10 remeshes per frame) rather than by the disaster code itself.
 - Buildings sliced by the beam crater or the tornado leave floating voxel fragments (expected voxel behaviour).
