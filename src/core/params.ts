@@ -12,6 +12,11 @@
 export type Quality = 'low' | 'medium' | 'high' | 'ultra';
 export type Weather = 'clear' | 'scattered' | 'cloudy' | 'storm';
 
+/** Planar water reflection: render-target size as a fraction of the frame per quality level (0 = off). */
+export const REFLECTION_SCALE: Record<Quality, number> = { low: 0.25, medium: 0.4, high: 0.5, ultra: 0.5 };
+/** Planar water reflection: distance (m) beyond which buildings, props and terrain rings are left out of the mirror image. */
+export const REFLECTION_RANGE: Record<Quality, number> = { low: 2500, medium: 3500, high: 5000, ultra: 6000 };
+
 export interface Params {
   bench: string | null;
   seed: number;
@@ -27,7 +32,7 @@ export interface Params {
   grid: boolean;
   debug: boolean;
   debugRoads: boolean;
-  /** comma-separated debug switches: noterrain, noshadow, nowake, noveg, nocity */
+  /** comma-separated debug switches: noterrain, noshadow, nowake, noveg, nocity, norefl (no water reflection pass), reflview (blit the mirror image over the frame) */
   dbg: Set<string>;
 }
 

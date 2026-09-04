@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CSM } from 'three/examples/jsm/csm/CSM.js';
-import type { Params, Quality } from './core/params';
+import { REFLECTION_RANGE, REFLECTION_SCALE, type Params, type Quality } from './core/params';
 import { Atmosphere } from './world/atmosphere';
 import { WorldMap } from './world/map';
 import { Sky } from './world/sky';
@@ -8,6 +8,7 @@ import { MapTextures, Terrain } from './world/terrain';
 import { Water } from './world/water';
 import { WakeMap } from './render/wakes';
 import { PostPipeline } from './render/post';
+import { PlanarReflection, boundsRadius, distanceToBounds, trianglesOf } from './render/reflection';
 import { buildRoadMeshes, buildRoadNetwork, createRoadMaterial, type RoadSegment } from './world/roads';
 import { buildBridges, type BridgeBuild } from './world/bridges';
 import { buildCity, type CityBuild } from './world/city';
@@ -52,6 +53,7 @@ export class Game {
   wakes!: WakeMap;
   csm!: CSM;
   post!: PostPipeline;
+  reflection!: PlanarReflection;
   roads!: RoadSegment[];
   bridges!: BridgeBuild;
   city!: CityBuild;
@@ -76,6 +78,8 @@ export class Game {
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // shadow maps are rendered once per frame, by the first scene render of render() (see PlanarReflection)
+    this.renderer.shadowMap.autoUpdate = false;
     this.renderer.autoClear = true;
     this.renderer.info.autoReset = false;
     this.camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.4, 60000);
@@ -142,6 +146,15 @@ export class Game {
     this.registerLit(this.water.material);
     this.water.mesh.name = 'water';
     this.scene.add(this.water.mesh);
+    // planar reflection pass (after installCascadeRouting: it wraps the routed shadow render). The mirror image
+    // only needs what is close enough to survive the roughness streaking: beyond the reflection range the
+    // terrain clipmap rings, building tiles and prop chunks are left out (the water there mirrors the
+    // environment sky, which is what a streak that long carries anyway).
+    const reflRange = REFLECTION_RANGE[this.params.quality];
+    this.reflection = new PlanarReflection(this.renderer, this.atmos, REFLECTION_SCALE[this.params.quality], reflRange);
+    this.reflection.exclude(this.water.mesh, this.sky.dome);
+    this.reflection.excludeChildrenWhen(this.terrain.group, (ring) => boundsRadius(ring) > reflRange * 1.2);
+    this.water.attachReflection(this.reflection.uniforms);
 
     await this.tick(progress, 'Laying out streets', 0.4);
     const network = buildRoadNetwork(this.map);
@@ -149,7 +162,8 @@ export class Game {
     const roadMat = createRoadMaterial();
     this.registerLit(roadMat);
     const roadRender: THREE.Material = this.params.debugRoads ? new THREE.MeshBasicMaterial({ color: 0xff2020 }) : roadMat;
-    for (const m of buildRoadMeshes(this.map, this.roads, roadRender)) { m.name = 'roads'; this.scene.add(m); }
+    // roads lie flat on the terrain: not worth mirroring (one 250 k-triangle mesh)
+    for (const m of buildRoadMeshes(this.map, this.roads, roadRender)) { m.name = 'roads'; this.scene.add(m); this.reflection.exclude(m); }
 
     await this.tick(progress, 'Raising bridges', 0.46);
     const concrete = new THREE.MeshStandardMaterial({ color: 0xb8b4aa, roughness: 0.9 });
@@ -158,12 +172,18 @@ export class Game {
     this.bridges = buildBridges(this.map, roadRender, concrete, steel);
     this.bridges.group.name = 'bridges';
     this.scene.add(this.bridges.group);
+    // the instanced steelwork that is too fine to cast a shadow (railings, hangers, cable stays: ~130 k
+    // triangles) is far below a texel of the mirror image as well
+    this.reflection.excludeChildrenWhen(this.bridges.group, (m) => (m as THREE.InstancedMesh).isInstancedMesh === true && !m.castShadow);
 
     await this.tick(progress, 'Building the city', 0.52);
     this.city = buildCity(this.map, network.blocksByDistrict, this.atmos.uniforms.uNight);
     this.registerLit(this.city.batches.material);
     this.city.batches.group.name = 'city';
     this.scene.add(this.city.batches.group);
+    // building tiles and prop chunks carry world-space bounds: mirror those within the reflection range
+    const beyondRange = (o: THREE.Object3D, cam: THREE.PerspectiveCamera) => distanceToBounds(o, cam) > reflRange;
+    this.reflection.excludeChildrenWhen(this.city.batches.group, beyondRange);
     // roads occupy ground so trees keep off them
     for (const s of this.roads) {
       const len = Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
@@ -176,12 +196,16 @@ export class Game {
     for (const m of this.props.materials) this.registerLit(m);
     this.props.group.name = 'props';
     this.scene.add(this.props.group);
+    this.reflection.excludeChildrenWhen(this.props.group, beyondRange);
 
     await this.tick(progress, 'Planting palms and mangroves', 0.74);
     this.vegetation = new Vegetation(this.map, this.city.occupied);
     for (const m of this.vegetation.materials) this.registerLit(m);
     this.vegetation.group.name = 'vegetation';
     this.scene.add(this.vegetation.group);
+    // mirror only the card impostors, and only within 1.5 km: the 3D near-tile meshes are far too heavy for
+    // a blurred mirror image and farther tiles blur into the environment sky anyway
+    this.reflection.excludeChildrenWhen(this.vegetation.group, (tile, cam) => trianglesOf(tile) > 64 || distanceToBounds(tile, cam) > 1500);
 
     await this.tick(progress, 'Launching boats and traffic', 0.86);
     this.traffic = new Traffic(this.map, this.roads, this.bridges.routes, this.wakes.scene, this.params.seed, this.props.mooredBoatPositions);
@@ -193,6 +217,10 @@ export class Game {
     await this.tick(progress, 'Pre-flighting the aircraft', 0.92);
     this.aircraft = new Aircraft((x, z) => this.map.heightAt(x, z), this.scene, this.wakes.scene);
     this.registerTree(this.aircraft.model.root);
+    // surface decals, point sprites and trails are not mirrored (the sprites are sized for the main frame),
+    // nor is the cabin interior (only visible through the glass)
+    const fx = this.aircraft.effects;
+    this.reflection.exclude(fx.stampL.mesh, fx.stampR.mesh, fx.spray.points, fx.exhaust.points, fx.vortexL.mesh, fx.vortexR.mesh, ...this.traffic.contrailMeshes, ...this.aircraft.model.interiorMeshes);
     this.flightCamera = new FlightCamera(this.camera);
     this.flightCamera.groundHeight = (x, z) => Math.max(0, this.map.heightAt(x, z));
     // default spawn: on the water at the downtown seaplane base facing east
@@ -205,7 +233,8 @@ export class Game {
     if (dbg.has('noshadow')) this.renderer.shadowMap.enabled = false;
     if (dbg.has('noveg')) this.vegetation.group.visible = false;
     if (dbg.has('nocity')) this.city.batches.group.visible = false;
-    if (dbg.has('nocloudshadow')) this.post.cloudShadowStrength = 0;
+    if (dbg.has('nocloudshadow')) { this.post.cloudShadowStrength = 0; this.reflection.cloudShadowStrength = 0; }
+    if (dbg.has('norefl')) this.reflection.enabled = false;
     this.atmos.update(0);
     this.refreshEnvironment();
     progress('Ready', 1);
@@ -225,6 +254,7 @@ export class Game {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.post.setSize(Math.round(w * pixelRatio), Math.round(h * pixelRatio));
+    this.reflection.setSize(Math.round(w * pixelRatio), Math.round(h * pixelRatio));
     this.csm.updateFrustums();
   }
 
@@ -274,9 +304,14 @@ export class Game {
       l.shadow.bias = -0.0003;
     }
     this.sky.render(this.renderer, cam, this.post.width, this.post.height);
+    // the shadow cascades are rendered by the first of the two scene renders below (the mirror pass when it
+    // runs, else the main pass) and reused by the second
+    this.renderer.shadowMap.needsUpdate = true;
+    this.reflection.render(this.scene, cam);
     this.renderer.setRenderTarget(this.post.target);
     this.renderer.render(this.scene, cam);
     this.post.finish(cam, this.time);
+    if (this.params.dbg.has('reflview')) this.reflection.debugBlit();
     this.metrics.endFrame();
   }
 }
