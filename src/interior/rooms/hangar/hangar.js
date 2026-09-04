@@ -273,14 +273,15 @@ export function buildHangar(kit, ctx) {
     kit.cyl("emitBlue", e.pos.x, e.pos.y - 0.15, e.pos.z, 0.55, 0.1, "y", { segments: 16 });
     kit.box("blinkSparse", e.pos.x + (e.pos.x > 0 ? -1.21 : 1.21), e.pos.y + 0.9, e.pos.z, 0.01, 0.4, 1.2, { uv: "keep" });
   }
-  const coneGeo = new THREE.CylinderGeometry(3.0, 0.4, 1, 20, 1, true);
-  coneGeo.translate(0, -0.5, 0); // apex at the origin, opening along -y
+  // slim beam: 0.5 m at the emitter lens, widening to 1.6 m where it meets the shaft axis
+  const coneGeo = new THREE.CylinderGeometry(0.5, 1.6, 1, 20, 1, true);
+  coneGeo.translate(0, -0.5, 0); // lens end at the origin, beam along -y
   // additive beam: bright at the emitter, fading toward the shaft (vertex colour ramps to near black)
   {
     const pos = coneGeo.attributes.position;
     const col = new Float32Array(pos.count * 3);
     for (let i = 0; i < pos.count; i++) {
-      const k = 1 + pos.getY(i) * 0.85; // y: 0 at the apex .. -1 at the base
+      const k = 1 + pos.getY(i) * 0.85; // y: 0 at the lens .. -1 at the far end
       col[i * 3] = col[i * 3 + 1] = col[i * 3 + 2] = k;
     }
     coneGeo.setAttribute("color", new THREE.BufferAttribute(col, 3));
@@ -707,7 +708,7 @@ export function buildHangar(kit, ctx) {
     anim.tractorHold = Math.max(0, anim.tractorHold - dt);
     const want = anim.tractorHold > 0 ? 1 : 0;
     anim.tractorLevel = snap ? want : anim.tractorLevel + (want - anim.tractorLevel) * Math.min(1, dt * 2.5);
-    tractorMat.opacity = 0.09 * anim.tractorLevel * (0.85 + 0.15 * Math.sin(tNow * 9));
+    tractorMat.opacity = 0.14 * anim.tractorLevel * (0.85 + 0.15 * Math.sin(tNow * 9));
     cones.visible = anim.tractorLevel > 0.01;
     // rack rams / jaws
     for (const st of rackState) {
