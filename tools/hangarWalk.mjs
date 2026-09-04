@@ -31,7 +31,8 @@ page.on("pageerror", (e) => console.log("PAGE ERROR:", e.message));
 page.on("console", (m) => {
   if (m.type() === "error" && !m.text().includes("WebSocket") && !m.text().includes("[vite]")) console.log("[error]", m.text().slice(0, 200));
 });
-await page.goto(base, { waitUntil: "load" });
+// the software renderer on a loaded build machine can take minutes to serve the first frame
+await page.goto(base, { waitUntil: "load", timeout: 240000 });
 await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 240000 });
 
 async function settle(minFrames = 2) {
