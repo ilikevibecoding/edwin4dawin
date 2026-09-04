@@ -438,19 +438,25 @@ function hexInlay(kit, cx, cz, R, cell) {
 function starChart(kit, ctx, x, y, z, hm, swatch, s = 1) {
   const base = ctx.materials.holo;
   const mat = (ctx.materials.nav_holo ||= Object.assign(base.clone(), { opacity: 1.0, color: new THREE.Color("#8ccaff") }));
+  // hoops use a normal-blended translucent line material: an additive tube seen edge-on sums to a
+  // glaring streak across the projection (the spin is bound to bring one edge-on to the camera)
+  const line = (ctx.materials.nav_holo_line ||= new THREE.MeshBasicMaterial({ color: new THREE.Color("#7cc0ff"), transparent: true, opacity: 0.48, depthWrite: false, side: THREE.DoubleSide }));
   const group = new THREE.Group();
   group.position.set(x, y, z);
   group.add(new THREE.Mesh(new THREE.SphereGeometry(0.56 * s, 32, 20), mat));
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.78 * s, 1.05 * s, 64), mat);
-  ring.rotation.x = Math.PI / 2 - 0.3;
-  group.add(ring);
+  // orbital ring as two thin hoops
+  for (const [r, tube] of [[0.86, 0.009], [1.05, 0.005]]) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(r * s, tube, 6, 96), line);
+    ring.rotation.x = Math.PI / 2 - 0.3;
+    group.add(ring);
+  }
   // meridian and equator hoops so the sphere reads as a globe, plus two tilted orbit tracks
-  group.add(new THREE.Mesh(new THREE.TorusGeometry(0.57 * s, 0.01, 6, 72), mat));
-  const eq = new THREE.Mesh(new THREE.TorusGeometry(0.57 * s, 0.01, 6, 72), mat);
+  group.add(new THREE.Mesh(new THREE.TorusGeometry(0.57 * s, 0.007, 6, 72), line));
+  const eq = new THREE.Mesh(new THREE.TorusGeometry(0.57 * s, 0.007, 6, 72), line);
   eq.rotation.x = Math.PI / 2;
   group.add(eq);
   for (const [r, tx] of [[0.68, 0.9], [0.62, 1.9]]) {
-    const orbit = new THREE.Mesh(new THREE.TorusGeometry(r * s, 0.006, 5, 72), mat);
+    const orbit = new THREE.Mesh(new THREE.TorusGeometry(r * s, 0.004, 5, 72), line);
     orbit.rotation.set(tx, 0.4, 0);
     group.add(orbit);
   }
@@ -521,10 +527,13 @@ function plottingTable(kit, ctx, x, z, labels, hm, swatch) {
  * lines over a hex field, one lit route with ringed waypoints and system tags, a header with the
  * lane name / ETA and a footer of readouts. Registered once on ctx.materials; returns the key.
  */
-function courseChart(ctx, key = "nav_course", { w = 1024, h = 512, seed = 7, intensity = 1.2 } = {}) {
+function courseChart(ctx, key = "nav_course", { w = 1024, h = 512, scale = 0.5, seed = 7, intensity = 1.2 } = {}) {
   if (!ctx.materials[key]) {
-    const c = makeCanvas(w, h);
+    // drawn in a w×h design space onto a canvas `scale` times that size (the pane is ~90 px wide
+    // from the rubric camera, so a 512×256 texture is plenty)
+    const c = makeCanvas(Math.round(w * scale), Math.round(h * scale));
     const g = c.getContext("2d");
+    g.scale(scale, scale);
     const rand = rng(seed);
     const blue = (a) => `rgba(120,190,255,${a})`;
     const amber = (a) => `rgba(255,179,71,${a})`;

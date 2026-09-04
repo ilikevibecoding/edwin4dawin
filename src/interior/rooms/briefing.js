@@ -241,9 +241,11 @@ export function buildBriefing(kit, ctx) {
     for (const x of rowsX) {
       const z0 = seatZ[0] - 0.45;
       const z1 = seatZ[seatZ.length - 1] + 0.45;
-      // black recess with a narrow frosted diffuser deep inside it
+      // black recess with a faint frosted diffuser deep inside it and a narrow brighter core (the
+      // same housing + diffuser + core build as the corridor strips, so nothing reads as a tube)
       kit.boxMM("paintedMetal", [x - 0.12, H - 0.16, z0 - 0.12], [x + 0.32, H, z1 + 0.12], { color: PALETTE.impBlack, texel: 2 });
-      kit.boxMM("emitWhiteDim", [x + 0.02, H - 0.17, z0], [x + 0.18, H - 0.15, z1], { uv: "keep" });
+      kit.boxMM("emitWhiteFaint", [x + 0.02, H - 0.17, z0], [x + 0.18, H - 0.15, z1], { uv: "keep" });
+      kit.boxMM("emitWhiteDim", [x + 0.075, H - 0.175, z0 + 0.1], [x + 0.125, H - 0.16, z1 - 0.1], { uv: "keep" });
       for (const z of [z0 - 0.06, z1 + 0.06]) kit.boxMM("paintedMetal", [x - 0.14, H - 0.2, z - 0.03], [x + 0.34, H - 0.16, z + 0.03], { color: PALETTE.impDark, texel: 2 });
     }
     // cove over the forward wall: a dropped soffit with a blue strip washing the display
@@ -409,13 +411,16 @@ function emblem(kit, ctx, frame, u, v, R) {
  * Printed mission sheets: one canvas with four 4:5 sheets (roster table, route map, orbital chart,
  * classified text block) as a lit-by-lights (non emissive) material. Returns { key, rect(i) }.
  */
-export function sheetAtlas(ctx, key, { dark = false } = {}) {
+export function sheetAtlas(ctx, key, { dark = false, scale = 0.5 } = {}) {
   const N = 4;
   const W = 256;
   const Hh = 320;
   if (!ctx.materials[key]) {
-    const c = makeCanvas(W * N, Hh);
+    // sheets are drawn in a 256×320 design space each onto a canvas `scale` times that size (the
+    // boards are ~0.5 m wide and read as documents, not text, from anywhere in the room)
+    const c = makeCanvas(Math.round(W * N * scale), Math.round(Hh * scale));
     const g = c.getContext("2d");
+    g.scale(scale, scale);
     const rand = rng(41);
     // `dark`: the same four layouts as lit display boards (near-black ground, pale ink, emissive)
     const INK = dark ? "#c9d3e2" : "#1c1f24";

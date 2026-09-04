@@ -73,29 +73,51 @@ export function buildObservation(kit, ctx) {
     // slim black glazing bead around the pane
     kit.boxMM("paintedMetal", [x0 + 0.13, sillH, zw + 0.08], [x1 - 0.13, sillH + 0.04, zw + 0.16], { color: PALETTE.impBlack, texel: 2 });
     kit.boxMM("paintedMetal", [x0 + 0.13, glassTop - 0.04, zw + 0.08], [x1 - 0.13, glassTop, zw + 0.16], { color: PALETTE.impBlack, texel: 2 });
-    // instrument tray set into the ledge, tilted toward the room; three layouts alternate along the
-    // sill (wide readout + lamp row / twin readouts + knobs / tall readout + keypad + lever)
-    const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), 0.5);
+    // instrument units set into the ledge, tilted toward the room. Four housings alternate along the
+    // sill, each with its own content: a hooded wide readout slab / twin pods on a steel strap /
+    // a boxy steep-sloped unit with keypad and lever / a flat service cover on the two end panes
+    const layout = i === 0 || i === panes - 1 ? 3 : i % 3;
+    const tiltA = [0.5, 0.42, 0.68, 0.0][layout];
+    const tilt = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tiltA);
     const tz = zw + depth - 0.22;
-    const tp = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(tilt).add(new THREE.Vector3(xc, sillH + 0.06, tz)).toArray();
+    const ox = [0, 0.14, -0.18, 0][layout]; // off-centre so the units do not line up as one row
+    const tp = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(tilt).add(new THREE.Vector3(xc + ox, sillH + 0.06, tz)).toArray();
     const tadd = (mat, geo, lx, ly, lz, extra = {}) => kit.add(mat, geo, { pos: tp(lx, ly, lz), quat: tilt, ...extra });
     const flat = (w, h) => new THREE.PlaneGeometry(w, h).rotateX(-Math.PI / 2);
-    tadd("paintedMetal", new THREE.BoxGeometry(0.9, 0.04, 0.3), 0, 0, 0, { color: PALETTE.impBlack, texel: 2 });
-    const layout = i % 3;
     if (layout === 0) {
-      tadd("impScreen" + ((i * 2 + 1) % 5), flat(0.6, 0.2), 0, 0.021, 0.02, { uv: "keep" });
-      for (let k = 0; k < 4; k++) tadd(k === i % 4 ? "emitAmber" : "emitBlue", new THREE.BoxGeometry(0.06, 0.012, 0.03), -0.3 + k * 0.2, 0.024, -0.11);
+      // wide slab in dark grey with a black recessed face and a raised rear hood over the readout
+      tadd("paintedMetal", new THREE.BoxGeometry(1.0, 0.05, 0.32), 0, 0, 0, { color: PALETTE.impDark, texel: 2 });
+      tadd("paintedMetal", new THREE.BoxGeometry(0.92, 0.012, 0.26), 0, 0.026, 0.01, { color: PALETTE.impBlack, texel: 2 });
+      tadd("paintedMetal", new THREE.BoxGeometry(1.0, 0.07, 0.05), 0, 0.045, -0.145, { color: PALETTE.impDark, texel: 2 });
+      tadd("impScreen" + ((i * 2 + 1) % 5), flat(0.6, 0.2), 0, 0.034, 0.02, { uv: "keep" });
+      for (let k = 0; k < 4; k++) tadd(k === i % 4 ? "emitAmber" : "emitBlue", new THREE.BoxGeometry(0.06, 0.012, 0.03), -0.3 + k * 0.2, 0.036, -0.1);
     } else if (layout === 1) {
-      tadd("impScreen" + ((i + 3) % 5), flat(0.26, 0.2), -0.24, 0.021, 0.0, { uv: "keep" });
-      tadd("impScreen4", flat(0.26, 0.2), 0.08, 0.021, 0.0, { uv: "keep" });
-      for (const dx of [0.28, 0.38]) tadd("metal", new THREE.CylinderGeometry(0.03, 0.035, 0.03, 12), dx, 0.035, -0.02, { color: PALETTE.steel });
-      tadd("emitRedDim", new THREE.BoxGeometry(0.08, 0.012, 0.02), 0.33, 0.024, -0.1);
+      // two separate black pods with a steel strap across their backs; knobs on the right pod
+      tadd("metal", new THREE.BoxGeometry(0.92, 0.02, 0.05), 0, 0.01, -0.13, { color: PALETTE.steel });
+      for (const px of [-0.24, 0.22]) {
+        tadd("paintedMetal", new THREE.BoxGeometry(0.4, 0.06, 0.3), px, 0, 0, { color: PALETTE.impBlack, texel: 2 });
+        tadd("paintedMetal", new THREE.BoxGeometry(0.42, 0.012, 0.02), px, 0.02, 0.15, { color: PALETTE.impGrey, texel: 2 });
+      }
+      tadd("impScreen" + ((i + 3) % 5), flat(0.3, 0.2), -0.24, 0.031, 0.0, { uv: "keep" });
+      tadd("impScreen4", flat(0.22, 0.18), 0.15, 0.031, -0.02, { uv: "keep" });
+      for (const dx of [0.3, 0.38]) tadd("metal", new THREE.CylinderGeometry(0.03, 0.035, 0.03, 12), dx, 0.045, 0.06, { color: PALETTE.steel });
+      tadd("emitRedDim", new THREE.BoxGeometry(0.08, 0.012, 0.02), 0.33, 0.034, -0.1);
+    } else if (layout === 2) {
+      // boxy unit standing proud of the ledge with a steep sloped top, a grey top edge and a side
+      // bracket carrying the lever
+      tadd("paintedMetal", new THREE.BoxGeometry(0.8, 0.14, 0.28), 0, -0.02, 0, { color: PALETTE.impDark, texel: 1.5 });
+      tadd("paintedMetal", new THREE.BoxGeometry(0.8, 0.02, 0.03), 0, 0.05, -0.135, { color: PALETTE.impGrey, texel: 2 });
+      tadd("paintedMetal", new THREE.BoxGeometry(0.72, 0.012, 0.22), -0.02, 0.05, 0.0, { color: PALETTE.impBlack, texel: 2 });
+      tadd("impScreen" + ((i * 3) % 5), flat(0.3, 0.2), -0.2, 0.058, 0.0, { uv: "keep" });
+      for (let k = 0; k < 6; k++) tadd(k === 4 ? "emitBlue" : "rubber", new THREE.BoxGeometry(0.05, 0.012, 0.05), 0.02 + (k % 3) * 0.07, 0.06, -0.06 + Math.floor(k / 3) * 0.08, { color: PALETTE.rubber });
+      tadd("metal", new THREE.BoxGeometry(0.06, 0.1, 0.16), 0.43, 0.0, 0.0, { color: PALETTE.impBlack });
+      tadd("metal", new THREE.CylinderGeometry(0.012, 0.012, 0.16, 8), 0.43, 0.12, -0.03, { color: PALETTE.steel });
+      tadd("emitAmber", new THREE.BoxGeometry(0.03, 0.012, 0.03), 0.3, 0.058, 0.08);
     } else {
-      tadd("impScreen" + ((i * 3) % 5), flat(0.3, 0.22), -0.25, 0.021, 0.0, { uv: "keep" });
-      for (let k = 0; k < 6; k++) tadd(k === 4 ? "emitBlue" : "rubber", new THREE.BoxGeometry(0.05, 0.012, 0.05), 0.02 + (k % 3) * 0.07, 0.024, -0.06 + Math.floor(k / 3) * 0.08, { color: PALETTE.rubber });
-      tadd("metal", new THREE.BoxGeometry(0.04, 0.03, 0.14), 0.34, 0.03, 0.0, { color: PALETTE.impBlack });
-      tadd("metal", new THREE.CylinderGeometry(0.012, 0.012, 0.14, 8), 0.34, 0.1, -0.03, { color: PALETTE.steel });
-      tadd("emitAmber", new THREE.BoxGeometry(0.03, 0.012, 0.03), 0.34, 0.024, 0.1);
+      // flat service cover: grey plate flush with the ledge, a vent slot and a single status lamp
+      tadd("paintedMetal", new THREE.BoxGeometry(0.9, 0.03, 0.3), 0, -0.01, 0, { color: PALETTE.impGrey, texel: 2 });
+      for (let k = 0; k < 5; k++) tadd("paintedMetal", new THREE.BoxGeometry(0.5, 0.008, 0.012), 0, 0.006, -0.08 + k * 0.03, { color: PALETTE.impBlack, texel: 3 });
+      tadd("emitBlueDim", new THREE.BoxGeometry(0.05, 0.01, 0.02), 0.36, 0.006, 0.1);
     }
   }
   // mullions (12): dark column with a grey rebate strip up the face, a small marker light and pane numbers
@@ -208,7 +230,7 @@ export function buildObservation(kit, ctx) {
   // (where the fixtures' beams land) so the ceiling above the glass carries soft warm pools and the
   // header / mullion tops catch the spill; the deck below stays dim so the exterior keeps the room.
   // Intensity kept where the pool directly overhead peaks well short of white — and a white at the door
-  for (const x of [-11.25, -6.25, 0, 6.25, 11.25]) ctx.light(pointLight(0xffe0b8, 5.0, 8.0, [x, H - 0.55, zw + 1.05]));
+  for (const x of [-11.25, -6.25, 0, 6.25, 11.25]) ctx.light(pointLight(0xffe0b8, 6.0, 9.0, [x, H - 0.55, zw + 1.05]));
   ctx.light(pointLight(0xe8f0ff, 2.4, 6.0, [0, H - 0.5, max[2] - 1.2]));
   if (ctx.audioZone) ctx.audioZone({ id: "obs_quiet", pos: [0, 1.5, bz], radius: 12, loop: "hum_low" });
 }
