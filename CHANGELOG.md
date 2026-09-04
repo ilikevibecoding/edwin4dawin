@@ -116,6 +116,21 @@ Verdict: no regression in load time, memory or steady-state JS; draw calls 2.8x 
 | town + tsunami | 3.4 | 40.3 / 73.9 | 165 (212) | 199k | 105 | 15 | 372 / 600 (cap) | 0 |
 | town + orbital beam | 3.3 | 22.5 / 37.3 | 144 (163) | 203k | 98 | 9 | 299 / 600 (cap) | 0 |
 
+Final pass on the finished code with the machine quiet (load 3-4, `bench/final_*.json`), same scenarios:
+
+| scenario | fps | js avg / p95 / max ms | draw calls avg (max) | heap avg (max) MB | long tasks | particles / debris max | exceptions |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| spawn overlook (baseline: 11.2 fps, js 5.98 / 17.1, 115 MB, ~257 draw calls) | 15.2 | 1.7 / 4.9 / 874 (load) | 90 (92) | 109 (115) | 5 | 152 / 0 | 0 |
+| town centre (baseline: 10.1 fps, js 6.95 / 24.6, 96 MB, ~256 draw calls) | 12.6 | 3.2 / 13.7 / 359 | 144 (156) | 93 (100) | 6 | 279 / 0 | 0 |
+| town, walking | 11.4 | 4.5 / 16.6 / 349 | 104 (180) | 107 (124) | 6 | 231 / 0 | 0 |
+| town + tornado | 10.1 | 12.0 / 48.0 / 376 | 150 (173) | 112 (143) | 9 | 574 / 155 | 0 |
+| town + tsunami | 8.6 | 21.0 / 50.3 / 386 | 152 (176) | 117 (151) | 8 | 391 / 552 | 0 |
+| town + orbital beam (45 s) | 10.4 | 6.5 / 24.3 / 382 | 135 (169) | 100 (111) | 8 | 433 / 600 (cap) | 0 |
+
+Against the pre-change baseline (same machine class, quiet): lower JS time, lower memory, 1.8-2.8x fewer draw calls and
+higher fps in both baseline scenarios; disasters add 3-18 ms of JS per frame in this software-GL VM (relight/remesh
+of touched chunks), with zero exceptions in every run.
+
 Disaster JS time is dominated by the shared relight/remesh pipeline running at its per-frame budgets (a SwiftShader
 relight costs ~10x a real machine's); the disasters' own `simulate`/`render` code measures 0.05-0.3 ms per tick/frame.
 Each disaster start shows one 650-800 ms frame in this VM (material compilation + first relight burst).
