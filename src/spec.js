@@ -401,15 +401,15 @@ export const DECK_SPOTS = [
 // planets behind the ship rather than beside it.
 // ---------------------------------------------------------------------------
 export const EXTERIOR_VIEWS = {
-  ext_hero: { pos: [-1150, 260, -1250], look: [0, 60, -100], fov: 45, time: 230.8 },
-  ext_bow: { pos: [-300, -10, -1450], look: [0, 40, -350], fov: 55, time: 215.4 },
-  ext_stern: { pos: [850, 240, 1250], look: [0, 10, 350], fov: 50, time: 96.2 },
-  ext_tower: { pos: [-330, 300, 40], look: [0, 235, 300], fov: 45, time: 246.2 },
+  ext_hero: { pos: [-1150, 260, -1250], look: [0, 60, -100], fov: 45, time: 250 },
+  ext_bow: { pos: [-300, -10, -1450], look: [0, 40, -350], fov: 55, time: 107.7 },
+  ext_stern: { pos: [850, 240, 1250], look: [0, 10, 350], fov: 50, time: 250 },
+  ext_tower: { pos: [-330, 300, 40], look: [0, 235, 300], fov: 45, time: 107.7 },
   ext_bridge_close: { pos: [-50, 250, 125], look: [0, 249, 215], fov: 50, time: 215.4 },
-  ext_belly: { pos: [-650, -480, -450], look: [0, -60, -50], fov: 55, time: 7.7 },
+  ext_belly: { pos: [-650, -480, -450], look: [0, -60, -50], fov: 55, time: 275.4 },
   ext_hangar_mouth: { pos: [-120, -160, 160], look: [0, -40, 10], fov: 60, time: 67.7 },
-  ext_trench: { pos: [-430, 12, -260], look: [-320, -2, 120], fov: 50, time: 215.4 },
-  ext_far: { pos: [-3000, 1000, -2600], look: [0, 60, -100], fov: 30, time: 230.8 },
+  ext_trench: { pos: [-430, 12, -260], look: [-320, -2, 120], fov: 50, time: 107.7 },
+  ext_far: { pos: [-3000, 1000, -2600], look: [0, 60, -100], fov: 30, time: 250 },
   ext_top: { pos: [0, 2600, -200], look: [0, 0, -200], fov: 45, time: 215.4 },
 };
 
