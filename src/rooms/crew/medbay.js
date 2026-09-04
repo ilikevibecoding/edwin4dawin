@@ -322,7 +322,12 @@ export function build(ctx) {
     chair(kit, { pos: [bx + 3.45, F, bz], yaw: Math.PI / 2 });
     const rx = bx - 3.1;
     kit.box("paintedMetal", rx, F + 1.1, bz, 0.6, 2.2, 1.6, { color: IMP.black, texel: 1 });
-    kit.box("plate", rx, F + 1.1, bz, 0.5, 2.0, 1.5, { color: PALE, uv: "world", texel: 1 });
+    // pale service panels on the back and sides (the back faces the port ward aisle), with a vent and a spec plate
+    kit.box("plate", rx - 0.305, F + 1.1, bz, 0.01, 1.9, 1.4, { color: PALE, uv: "world", texel: 1 });
+    for (const s of [-1, 1]) kit.box("plate", rx, F + 1.1, bz + s * 0.805, 0.5, 1.9, 0.01, { color: PALE, uv: "world", texel: 1 });
+    for (let k = 0; k < 5; k++) kit.box("darkGloss", rx - 0.312, F + 0.4 + k * 0.08, bz, 0.005, 0.03, 1.0, {});
+    kit.add("decal", new THREE.PlaneGeometry(0.3, 0.3), { pos: [rx - 0.312, F + 1.8, bz + 0.4], rot: [0, -Math.PI / 2, 0], uv: "keep", uvRect: decalRect(DECAL.SPEC_PLATE) });
+    kit.box("emitGreen", rx - 0.312, F + 1.8, bz - 0.4, 0.005, 0.06, 0.06, {});
     for (let k = 0; k < 4; k++) {
       const y = F + 0.45 + k * 0.42;
       kit.box("darkGloss", rx + 0.305, y, bz, 0.01, 0.3, 1.3, {});
