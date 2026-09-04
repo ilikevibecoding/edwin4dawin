@@ -10,9 +10,13 @@ import { IMP_DECAL } from "../textures_imperial.js";
 import { HG_DECAL, hgNumber, hgDecalRect } from "../textures_hangar.js";
 import { hgSetup, cutSpans, hgBeacons } from "./hangar_kit.js";
 
-/** Window wall: slab strips around the openings, dado under the sills, frames, mullions, glass, header. */
+/**
+ * Window wall: slab strips around the openings, dado under the sills, frames, header, and the glazing
+ * itself raked outward by `rake` radians (the top of each pane leans out over the hangar, control-tower
+ * style, so the deck below is in view from the consoles). Mullions follow the rake.
+ */
 function windowWall(frame, length, height, openings, opts = {}) {
-  const { depth = 0.4, accentKey = "emitBlue", tag = "fcW" } = opts;
+  const { depth = 0.4, accentKey = "emitBlue", tag = "fcW", rake = -0.21 } = opts;
   const ops = openings.map((o) => ({ ...o, u0: Math.max(0, o.u0), u1: Math.min(length, o.u1), v0: Math.max(0, o.v0), v1: Math.min(height, o.v1) }));
   // backing slab as strips with their own solid v-intervals (drives the colliders too)
   const edges = [...new Set([0, length, ...ops.flatMap((o) => [o.u0, o.u1])])].sort((a, b) => a - b);
@@ -33,25 +37,30 @@ function windowWall(frame, length, height, openings, opts = {}) {
   const vTop = Math.max(...windows.map((o) => o.v1));
   frame.box("impTrim", length / 2, (vTop + height) / 2, 0.06, length, height - vTop, 0.12, { color: PALETTE.impBlack, texel: 1 });
   frame.box("impMetal", length / 2, vTop + 0.22, 0.13, length - 0.4, 0.1, 0.03, { color: PALETTE.impCharcoal });
-  frame.box("emitWhiteSoft", length / 2, vTop + 0.22, 0.15, length - 0.6, 0.04, 0.012, { uv: "keep" });
+  frame.box("emitWhiteDim", length / 2, vTop + 0.22, 0.15, length - 0.6, 0.04, 0.012, { uv: "keep" });
   for (const w of windows) {
     const cu = (w.u0 + w.u1) / 2;
     const cv = (w.v0 + w.v1) / 2;
     const ww = w.u1 - w.u0;
     const wh = w.v1 - w.v0;
+    // the pane's centre sits inside the slab so that its raked top leans out over the hangar and its
+    // foot lands on the sill
+    const gn = -depth / 2 - 0.1;
     // dado under the sill: pale panel with a black kick and an inset conduit run
     frame.box("impTrim", cu, 0.16, 0.04, ww + 0.3, 0.32, 0.08, { color: PALETTE.impBlack, texel: 1 });
     frame.box("impPanel1", cu, (0.32 + w.v0 - 0.1) / 2, 0.03, ww + 0.3, w.v0 - 0.42, 0.06, { color: PALETTE.impGrey, uv: "world", texel: 1 });
-    frame.box("impTrim", cu, w.v0 - 0.06, 0.12, ww + 0.3, 0.12, 0.24, { color: PALETTE.impBlack, texel: 1 }); // sill
+    frame.box("impTrim", cu, w.v0 - 0.06, 0.0, ww + 0.3, 0.12, 0.5, { color: PALETTE.impBlack, texel: 1 }); // sill (spans the slab)
     frame.box("impMetal", cu, w.v0 - 0.0, 0.15, ww + 0.34, 0.03, 0.3, { color: PALETTE.impGreyDark });
     frame.cylU("impMetal", cu, 0.6, 0.1, 0.04, ww, { color: PALETTE.impGreyDark, segments: 8 });
-    // frame ring proud of the wall + mullions + glass
+    // frame ring proud of the wall (jambs), raked mullions and the raked pane
     frame.box("impTrim", cu, w.v1 + 0.08, 0.1, ww + 0.3, 0.16, 0.2, { color: PALETTE.impBlack, texel: 1 });
     frame.box("impTrim", w.u0 - 0.08, cv, 0.1, 0.16, wh + 0.3, 0.2, { color: PALETTE.impBlack, texel: 1 });
     frame.box("impTrim", w.u1 + 0.08, cv, 0.1, 0.16, wh + 0.3, 0.2, { color: PALETTE.impBlack, texel: 1 });
-    const nM = Math.round(ww / 1.2);
-    for (let m = 1; m < nM; m++) frame.box("impGloss", w.u0 + (ww * m) / nM, cv, 0.0, 0.1, wh, 0.2);
-    frame.add("viewGlass", new THREE.PlaneGeometry(ww, wh), cu, cv, -0.02, { uv: "keep" });
+    const nM = Math.round(ww / 1.3);
+    for (let m = 1; m < nM; m++) frame.box("impGloss", w.u0 + (ww * m) / nM, cv, gn, 0.08, wh + 0.1, 0.16, { tilt: rake });
+    // top and bottom glazing bars following the rake
+    for (const s of [-1, 1]) frame.box("impTrim", cu, cv + (s * wh) / 2, gn + s * (wh / 2) * Math.sin(rake), ww, 0.1, 0.14, { color: PALETTE.impBlack, tilt: rake });
+    frame.add("viewGlass", new THREE.PlaneGeometry(ww, wh).rotateX(rake), cu, cv, gn, { uv: "keep" });
     // accent strip under the sill (controllers' side)
     frame.box(accentKey, cu, w.v0 - 0.13, 0.245, ww - 0.2, 0.03, 0.01);
   }
@@ -92,10 +101,11 @@ export function buildFlightControl(kit, ctx, room) {
   // ---- walls: window wall toward the hangar (W), Imperial panels elsewhere
   const walls = roomWalls(kit, room);
   const wOpen = openingsFor(room, ctx.doors, "W");
-  // window strips flanking the door: these must match the holes in the hangar's E wall (world z ±1.8..±6.6, y 1.0..3.4)
+  // full-width window strip (sill 0.9, head 3.2) in two panes flanking the door: these must match the
+  // holes in the hangar's E wall (hangar.js fcWin, u_hangar = 117 - u_here)
   const fcWin = [
-    { u0: hz - 6.6 - 0.02, u1: hz - 1.8 + 0.02, v0: 0.98, v1: 3.42 },
-    { u0: hz + 1.8 - 0.02, u1: hz + 6.6 + 0.02, v0: 0.98, v1: 3.42 },
+    { u0: 0.3, u1: 5.45, v0: 0.9, v1: 3.2 },
+    { u0: 8.55, u1: 13.7, v0: 0.9, v1: 3.2 },
   ];
   windowWall(walls.W.frame, D, H, [...wOpen, ...fcWin], { accentKey });
   for (const side of ["N", "E", "S"]) {
@@ -107,10 +117,10 @@ export function buildFlightControl(kit, ctx, room) {
     const f = walls.E.frame;
     f.box("impTrim", hz, 2.0 + TY, 0.12, 9.0, 2.5, 0.24, { color: PALETTE.impBlack, texel: 1 });
     f.box("impMetal", hz, 2.0 + TY, 0.245, 8.8, 2.3, 0.02, { color: PALETTE.impCharcoal, texel: 2 });
-    f.screen("scrBlue0", hz - 2.6, 2.25 + TY, 0.26, 3.2, 1.5);
+    f.screen("scrBlue2", hz - 2.6, 2.25 + TY, 0.26, 3.2, 1.5);
     f.screen("scrBlue1", hz + 0.9, 2.45 + TY, 0.26, 3.4, 1.1);
-    f.screen("scrGreen0", hz + 3.4, 2.45 + TY, 0.26, 1.2, 1.1);
-    f.screen("scrAmber1", hz + 0.9, 1.35 + TY, 0.26, 2.0, 0.7);
+    f.screen("scrGreen3", hz + 3.4, 2.45 + TY, 0.26, 1.2, 1.1);
+    f.screen("scrAmber2", hz + 0.9, 1.35 + TY, 0.26, 2.0, 0.7);
     f.screen("scrRed0", hz + 3.1, 1.35 + TY, 0.26, 1.6, 0.7);
     // deck schematic: rack rows as numbered plates around a fighter outline
     const g = new THREE.PlaneGeometry(1.3, 1.3);
@@ -120,28 +130,36 @@ export function buildFlightControl(kit, ctx, room) {
       f.add("hangar_decal", g2, hz - 3.9 + k * 0.5, 1.2 + TY, 0.262, { uv: "keep", uvRect: hgDecalRect(hgNumber(k + 1)) });
     }
     f.box("impMetal", hz, 3.35 + TY, 0.3, 8.6, 0.08, 0.16, { color: PALETTE.impGreyDark });
-    f.box("emitWhiteSoft", hz, 3.32 + TY, 0.34, 8.2, 0.03, 0.02, { uv: "keep" });
+    f.box("emitWhiteDim", hz, 3.32 + TY, 0.34, 8.2, 0.03, 0.02, { uv: "keep" });
     for (let k = 0; k < 10; k++) {
       const p = f.pos(hz - 3.6 + k * 0.8, 0.95 + TY, 0.27);
       if (k % 3 === 0) blueBlink.push([p.x, p.y, p.z, 0.02, 0.08, 0.16]);
       else f.box(k % 3 === 1 ? "emitGreen" : "emitWhite", hz - 3.6 + k * 0.8, 0.95 + TY, 0.27, 0.16, 0.08, 0.02);
     }
     f.collider(hz - 4.6, hz + 4.6, TY, TY + 3.4, 0, 0.3, "board");
-    impWallLight(walls.N.frame, 4, 3.2, { key: "emitWhiteSoft", w: 1.2 });
-    impWallLight(walls.S.frame, 4, 3.2, { key: "emitWhiteSoft", w: 1.2 });
+    impWallLight(walls.N.frame, 4, 3.2, { key: "emitWhiteDim", w: 1.2 });
+    impWallLight(walls.S.frame, 4, 3.2, { key: "emitWhiteDim", w: 1.2 });
   }
 
-  // ---- tiered consoles facing the window (operators sit at +x looking toward -x)
+  // ---- tiered consoles facing the window (operators sit at +x looking toward -x); every desk gets its
+  // own mix of the four screen layouts (traffic plot, status grid, bars, star chart)
+  const layouts = [
+    ["scrBlue0", "scrBlue2", "scrGreen1", "scrAmber3"],
+    ["scrBlue3", "scrWhite1", "scrBlue1", "scrGreen2"],
+    ["scrBlue2", "scrAmber0", "scrBlue0", "scrRed3"],
+    ["scrGreen0", "scrBlue1", "scrBlue3", "scrWhite2"],
+  ];
+  let desk = 0;
   const consoleRow = (x, y, zs, w, seedBase) => {
     zs.forEach((z, i) => {
-      impConsole(kit, x, y, z, w, 0.9, { yaw: Math.PI / 2, seed: seedBase + i, screens: ["scrBlue0", "scrBlue1", "scrGreen0", "scrAmber0"], accentKey, tall: i % 2 === 0 });
+      impConsole(kit, x, y, z, w, 0.9, { yaw: Math.PI / 2, seed: seedBase + i, screens: layouts[desk++ % layouts.length], accentKey, tall: i % 2 === 0 });
       impChair(kit, x + 0.95, y, z, Math.PI / 2);
     });
   };
   consoleRow(-8.2, 0, [-4.2, 4.2], 3.0, 600); // lower tier: two long desks flanking the entry aisle
   consoleRow(3.6, TY, [-4.6, 4.6], 3.4, 620); // upper tier
   // supervisor station on the upper tier facing the board, a holo table in the middle
-  impConsole(kit, 8.6, TY, -4.8, 1.8, 0.8, { yaw: -Math.PI / 2, seed: 640, screens: ["scrBlue1", "scrRed0"], accentKey });
+  impConsole(kit, 8.6, TY, -4.8, 1.8, 0.8, { yaw: -Math.PI / 2, seed: 640, screens: ["scrWhite0", "scrRed1"], accentKey });
   impChair(kit, 7.65, TY, -4.8, -Math.PI / 2);
   {
     const hx0 = 7.8;
