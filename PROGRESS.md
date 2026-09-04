@@ -819,3 +819,76 @@ Build `45a2074`, live. Round 2 (silhouette, scale, composition) is eight
 builders in parallel with disjoint files; the remaining census wins go to
 their owners (terrain tiles, fleet per-vehicle merge, forest cells, kit
 indexing, shadow-caster list, cache keys).
+
+## Gauntlet rounds 2 and 3 — every family rebuilt once
+
+**Build `a8ca6eb`**, live: HUD reads `build a8ca6eb · 2026-09-04 19:19Z`, zero
+page errors, smoke-tested by `tools/deploy.mjs`. Eleven landings since the
+round-1 verdict, listed with their builds in `CHANGELOG.md`.
+
+### The landing gate
+
+Round 2 ran eight builders at once in one checkout, so "build the working tree
+and boot it" stopped meaning anything: the tree was always somebody's
+half-finished work. `tools/gate.mjs` builds HEAD plus only the files being
+landed, in a throwaway worktree, boots it at fast, high and ultra, reads the
+link status back from every program (three logs a failed compile and carries
+on with the program invalid, so the console alone misses it), then runs the
+interaction checks. The first thing it caught was mine: the PCSS installer at
+high/ultra replaced the stock `getShadow` span up to the point-light block —
+exactly where the new cascade had just been spliced — and 107 programs failed
+to link at `high` while `fast` was clean (`515984f`).
+
+### What the builders found
+
+- **Lions.** Two builders, body and head, sharing `textures.js`, landed
+  together. The head is now built as a cat's — skull loft, brow ridge,
+  zygomatic arch, whisker pads, a deeper and longer muzzle, eyes forward in
+  carved sockets and 1.35× larger — and the coat is tawny-ochre with dorsal
+  darkening and tuft-cell breakup instead of the parallel streaks the critics
+  called "suede". The male's mane no longer shows the open ends of its shells as
+  rings around the face; the chain ends inside the skull. Two cross-file
+  fixes came out of the head work: the blink closed three quarters of the new,
+  wider opening (`pose.js` read the old lid angles) and the cornea sat inside
+  the enlarged ball (`index.js` read the old radius).
+- **Lighting.** Three's `WebGLShadowMap` tests layers against the *rendering*
+  camera, not the shadow camera, so putting the far cascade's casters on a
+  layer did nothing until the far map got its own pre-pass. With casters picked
+  by name and world size the far pass went from 305 calls to 79. The sun-side
+  "cream band" survived round 2 because fog converged on a fixed lit-dust colour
+  1.35× brighter and warmer than the sky at 1–7° elevation; fog now converges on
+  the displayed dome evaluated at the ray's own elevation and azimuth. What is
+  left of the band is terrain's: the hills render 1.3 stops under the sky at
+  their base (`hillSkyK` multiplies an already-correct airlight down) and the
+  0.56 straw flat at 70–300 m is brighter than the foreground ground into the
+  sun. That is the round-3 horizon builder's brief, with the frames.
+- **Glass.** Reflections were landing at a fraction of their strength because
+  the panes were not premultiplied; fixed, with neutral tints. The SSR
+  windscreen still shows no bonnet: from the driver-side cameras the reflected
+  ray points toward the lens and the thickness test misses; a proper fix is
+  two-sided thickness or a depth pyramid, and it is deferred with that reason.
+  Door mirrors as real render targets at high/ultra are with the hero-car
+  builder.
+- **Vegetation.** The grass "glow" at dusk was a bug, not a tuning problem: the
+  lamp-transmission path compared a view-space light direction with a
+  world-space sun direction and so never recognised the sun.
+- **Terrain.** The water hole's panorama reflection had `flipY` on and read the
+  zenith at grazing angles — the "flat pale blue disc".
+- **Hero car.** Tyres now bear weight: squash by suspension load in the vertex
+  shader, a flat patch sunk into the soil, occlusion blobs and a chassis pool
+  sampled on the terrain, and tracks left behind.
+
+### Measured (`fast`, software raster)
+
+After the far-pass cull (`perf/…0f8c00e+.json`): sampled frame 962 → 649 draw
+calls, 3.35 → 2.38 M triangles, 168 programs, boot compile 31 s at fast, 46 s
+at ultra. Heap unchanged from round 1's 216 MB.
+
+### Next
+
+`tools/baseline.sh` is shooting the full round-2 frame set into `shots/round2/`
+from a clean worktree of `a8ca6eb`; three blind critics score it against
+`shots/round1/` next, and their consensus decides the round-4 briefs. Running
+now: the horizon builder (`src/terrain.js` far hills and flat, `src/forest.js`
+skirt and treeline) and the hero car's geometry round (arches, brakes,
+suspension, lamp lenses at night, cabin colour, door mirrors at high/ultra).

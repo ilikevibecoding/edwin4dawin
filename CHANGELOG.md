@@ -17,6 +17,71 @@ numbers the targets are about.
 
 ---
 
+## Gauntlet rounds 2 and 3 — every family rebuilt once
+
+**Build `a8ca6eb`** — live, smoke-tested (HUD reads `build a8ca6eb · 2026-09-04 19:19Z`, zero page errors).
+
+Eleven landings since `45a2074`, each gated by `tools/gate.mjs` (HEAD plus the
+files being landed, built in a throwaway worktree, booted at fast/high/ultra
+with program link status and page errors read back, then the interaction
+checks). Frames for the critics are being shot into `shots/round2/` by
+`tools/baseline.sh`; their verdict follows in the next entry.
+
+- **Lions, rounds 2 and 3** (`01711a7`, `db81bb4`): body rebuilt with limb
+  volumes and a heavier torso; gait and lie/sit on the feet solver; head
+  rebuilt as a cat's — superellipse skull loft with brow ridge, zygomatic arch,
+  whisker pads, a longer and deeper muzzle, eyes forward in carved sockets
+  (1.35× and the cornea to match), broad nose leather, cupped ears on the sides
+  at brow level; coat re-palettised tawny-ochre with dorsal darkening and worley
+  tuft breakup instead of streaks; four-lobed paws with claw sheaths; the male
+  mane's shell chain ends inside the skull with tapered shells and a 512 px
+  strand map at every tier. The blink closes the full opening.
+- **Glass, round 2** (`7cae2bd`): premultiplied panes so the PMREM reflection
+  lands at full strength; neutral near-black tints; flat-metal mirror with a
+  graded ground half; gasket and proud edge rim on every pane; frit bands; the
+  black band behind the door glass was `body_gap` running 110 mm above the
+  beltline — capped.
+- **Lighting, rounds 2 and 3** (`e385d26`, `515984f`, `2e6dbc9`): a second
+  shadow cascade (±130 m, 2048², texel-snapped) so the camp and the pride cast
+  shadows from the road; the far map renders in its own pre-pass with casters
+  picked by name and world size — 305 → 79 calls, 0.97 → 0.51 M tris. Night
+  has a moon key, point stars and a Milky Way and a scotopic grade; dusk a
+  lower, stronger sun. Fog now converges on the *displayed* sky dome evaluated
+  at the ray's elevation and azimuth, so the sun-side plain no longer fogs to a
+  cream band brighter than the sky (`camp_beyond` strip hue 136 → 210, matching
+  the sky's 217). The PCSS installer stops at the cascade body — at high/ultra it
+  had been replacing the cascade function and breaking 107 programs.
+- **Terrain, round 2** (`a51ba8b`): roadside stones sunk, laterite-tinted,
+  fewer and larger; far hills to Lambert with haze that follows the ray's
+  elevation and a luma cap under the sky; the water hole's reflection had
+  `flipY` on and read the zenith at grazing angles — fixed, with a dielectric
+  Fresnel, khaki murk and a shore ring; mainline ruts with a compacted dark
+  centre and lit lip.
+- **Vegetation, round 2** (`0f8c00e`): grass glowed at dusk because the
+  lamp-transmission path fired on the sun (view-space direction compared with a
+  world-space `uSunDir`); per-instance scale/hue/value jitter and an fbm density
+  mask replace identical clumps; acacia crowns get ragged tile edges, three
+  tiers of fill cards, alpha-cut shadows; far trees to Lambert with fog.
+- **Campground, round 2** (`e6385a2`): fire rebuilt (4-frame flame atlas,
+  standing and rising tongues, embers, ground glow, charred logs); canvas with
+  catenary sag and translucency; the gate 'slab' was a shadow-casting track
+  overlay — now twin ruts that fade; footpaths, ash spill, woodpiles, jittered
+  parking.
+- **Fleet, round 2** (`5c16d3e`): trailer level on its jockey stand, every tyre
+  on the ground, hour-gated lamps, real glass, a parking row that is not a row.
+- **Hero car, round 2** (`308c476`): tyres deform in the vertex shader (21 mm
+  squash by suspension load, flat patch sunk into the soil, sidewall belly,
+  dirt line); one-mesh occlusion blobs under each tyre and a chassis pool
+  sampled on the terrain; a 96-quad-per-wheel tread-track ring buffer; the old
+  pale contact decals are gone (−4 draw calls).
+- Measured on the integrated build at `fast` after the far-pass cull
+  (`perf/…0f8c00e+.json`): sampled frame 962 → 649 draw calls, 3.35 → 2.38 M
+  triangles, 168 programs; boot compile at `fast` 31 s under SwiftShader.
+- Round 3 builders running: horizon integration (hills 1.3 stops under the sky
+  at their base, the 0.56 straw flat, the skirt's lit term) and the hero car's
+  geometry round (arches, brakes, suspension, lamps at night, cabin colour,
+  door mirrors at high/ultra).
+
 ## Gauntlet round 1 — verdict, and two measured wins
 
 **Build `45a2074`** — live, smoke-tested (HUD reads `build 45a2074 · 2026-09-04 14:17Z`, zero page errors).
