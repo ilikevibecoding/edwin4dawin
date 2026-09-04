@@ -5,7 +5,7 @@
 // walls and the astrogation plot board on the starboard wall. Accent blue.
 import * as THREE from "three";
 import { IMP } from "../../core/palette.js";
-import { screenRect, ledRect, DECAL } from "../../textures.js";
+import { ledRect, DECAL } from "../../textures.js";
 import { Instancer, chairProto, lightBand, screenArray } from "./tactical.js";
 
 export const meta = { id: "nav_station", stream: "tower-rooms" };
