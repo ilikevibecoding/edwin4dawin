@@ -223,8 +223,9 @@ export function buildLifeSupport(kit, ctx) {
   {
     const w = walls.east;
     const { frame } = wallFrame(kit, w.from, w.to, y);
-    screenBank(frame, w.u(640.6), 2.9, 3, 2, 1.3, 0.8, 9, { variants: [0, 1, 2, 4], dark: 0.15, wide: [[0, 1]] });
-    statusBoard(frame, w.u(640.6), 4.6, 3.6, 1.1, 27, { displays: ["screenGauges", "screenBars"] });
+    screenBank(frame, w.u(640.6), 2.9, 3, 2, 1.3, 0.8, 9, { variants: [0, 1, 2, "screenBars"], dark: 0.15, wide: [[0, 1]] });
+    // (cool strip + displays the room already draws: each new key here is a draw call)
+    statusBoard(frame, w.u(640.6), 4.6, 3.6, 1.1, 27, { displays: ["screen2", "screenBars"], strip: "lightBandCool" });
     lockers(frame, w.u(645.0), w.u(650.0), 2.1, { seed: 23 });
     relayCabinet(frame, w.u(652.8), 0, 2.6, 2.4, 101);
     cableTray(frame, w.u(643.5), w.u(z1 - T - 1.0), 4.4, { n: 0.45, cables: 4 });
@@ -324,9 +325,9 @@ export function buildLifeSupport(kit, ctx) {
   floorDecal(kit, -16, y, 631.8, 1.0, 8, -Math.PI / 2);
 
   // ------------------------------------------------------------ lights: mint-green service light, damp and cool
-  // nine recessed bars under a 7 m ceiling; the point sources hang 2.2 m below the fixtures so the deck
-  // between the machines reads at ~1.5 lux of mint light (the fixture emissive itself stays soft)
-  for (const lx of [-35, -24.5, -14]) for (const lz of [619.5, 633.5, 648]) ceilingLight(kit, ctx, [lx, y + h, lz], 6, "x", { mat: "lightBandCool", color: 0xb8ffe6, intensity: 36, distance: 17, priority: lz === 633.5 ? 2 : 1, drop: 2.2 });
+  // nine recessed bars under a 7 m ceiling; the point sources hang 2.6 m below the fixtures so the deck
+  // between the machines reads at ~2.5 lux of mint light (the fixture emissive itself stays soft)
+  for (const lx of [-35, -24.5, -14]) for (const lz of [619.5, 633.5, 648]) ceilingLight(kit, ctx, [lx, y + h, lz], 6, "x", { mat: "lightBandCool", color: 0xb8ffe6, intensity: 50, distance: 18, priority: lz === 633.5 ? 2 : 1, drop: 2.6 });
   pointLightDesc(ctx, 0x7fffc0, 5.0, 10, [HX + 0.6, y + 2.6, 646], 0); // tank gauges
   pointLightDesc(ctx, 0xdfe8ff, 7.0, 9, [x1 - T - 2.2, y + 3.0, 634], 1); // door
 
