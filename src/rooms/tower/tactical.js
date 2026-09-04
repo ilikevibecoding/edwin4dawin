@@ -279,7 +279,7 @@ function shipGeometry(L) {
 }
 
 /** Wall-mounted grid of bezelled screens on a frame at (u, v); ids cycle through the screen atlas. */
-function screenArray(frame, u, v, cols, rows, sw, sh, ids, { gap = 0.1, n = 0.06 } = {}) {
+export function screenArray(frame, u, v, cols, rows, sw, sh, ids, { gap = 0.1, n = 0.06 } = {}) {
   const W = cols * (sw + gap) + gap;
   const H = rows * (sh + gap) + gap;
   frame.box("paintedMetal", u, v, n, W + 0.3, H + 0.3, 0.12, { color: IMP.black, texel: 1 });
