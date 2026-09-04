@@ -161,7 +161,7 @@ export class PostPipeline {
       uniforms: {
         tColor: { value: null }, tBloom0: { value: null }, tBloom1: { value: null }, tBloom2: { value: null },
         uBloom: { value: 0.2 }, uExposure: { value: 0.92 }, uSaturation: { value: 1.16 }, uVignette: { value: 0.25 },
-        uLift: { value: new THREE.Vector3(0.0, 0.006, 0.012) }, uGain: { value: new THREE.Vector3(1.03, 1.0, 0.97) },
+        uLift: { value: new THREE.Vector3(0.0, 0.002, 0.004) }, uGain: { value: new THREE.Vector3(1.03, 1.0, 0.97) },
         uResolution: { value: new THREE.Vector2(1, 1) }, uGrain: { value: 0.004 }, uTime: { value: 0 },
       },
       depthTest: false,

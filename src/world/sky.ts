@@ -330,17 +330,26 @@ ${GLSL_ATMOS_UNIFORMS}
 ${GLSL_NOISE}
 ${GLSL_CLOUD_FIELD}
 ${GLSL_SKY}
+uniform vec3 uGroundColor;
 in vec3 vDir;
 void main() {
   vec3 dir = normalize(vDir);
   vec3 col = skyRadiance(dir);
-  // clouds as a soft brightening band so reflections pick up overcast light
+  float up = max(dir.y, 0.0);
+  // The dome is a saturated stylised gradient; the light a surface actually receives from a clear sky is
+  // whitened by aerosol scattering and by sunlight bounced off the ground, so the probe blends toward a
+  // neutral haze/ground mix (strongest low in the sky, absent at the zenith). Keeps white surfaces white
+  // and shadows cool rather than blue without touching the visible sky.
+  vec3 fill = mix(uHazeColor, uGroundColor, 0.4);
+  col = mix(col, fill, 0.65 * pow(1.0 - up, 0.3));
+  // clouds as a soft neutral brightening band so reflections and the IBL pick up overcast (grey, not blue) light
   float cov = uCloudCoverage;
-  col = mix(col, mix(uHorizonColor, uZenithColor, 0.4) * 1.1, cov * 0.35 * smoothstep(0.0, 0.3, dir.y));
+  vec3 cloudCol = vec3(dot(uHorizonColor, vec3(0.2126, 0.7152, 0.0722))) * 1.15;
+  col = mix(col, cloudCol, cov * 0.35 * smoothstep(0.0, 0.3, dir.y));
   vec3 sun = sunDisc(dir);
   col += min(sun, vec3(12.0));
-  // sea below the horizon for reflections
-  col = mix(col, uHazeColor * 0.55, smoothstep(0.0, -0.05, dir.y));
+  // sunlit ground below the horizon: bounce light for walls, hulls and undersides
+  col = mix(col, uGroundColor, smoothstep(0.02, -0.06, dir.y));
   gl_FragColor = vec4(col, 1.0);
 }
 `;

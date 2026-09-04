@@ -7,25 +7,41 @@ export interface AtmosState {
   sunDir: THREE.Vector3;
   sunElevation: number; // degrees
   sunColor: THREE.Color;
+  /** Irradiance of the key light (sun, or moon at night) on a perpendicular surface: the CSM light intensity. */
   sunIntensity: number;
   zenith: THREE.Color;
   horizon: THREE.Color;
   haze: THREE.Color;
   sunHaze: THREE.Color;
+  /** Radiance of the sunlit ground seen from above (environment-map lower hemisphere, bounce light). */
+  ground: THREE.Color;
   ambientIntensity: number;
   night: number;
 }
 
 interface Key { el: number; sun: [number, number, number]; sunI: number; zen: [number, number, number]; hor: [number, number, number]; haze: [number, number, number]; sunHaze: [number, number, number]; amb: number; }
 
+/**
+ * Radiometric balance. The sky colours below are the radiance of the visible dome (what the camera and the
+ * water reflections see). The image-based light integrates that dome over the hemisphere, so for the sun to
+ * dominate on sunlit surfaces the way it does outdoors (direct : sky diffuse ≈ 4 : 1 on a horizontal white
+ * at midday) its irradiance has to be about 15x the zenith radiance. `sunI` in the keys is the normalised
+ * 0..1 strength that the cloud raymarch and the sun disc were tuned against; the CSM light receives
+ * `sunI * SUN_IRRADIANCE`. Moonlight keeps a 1:1 scale (the night exposure boost does the rest).
+ */
+export const SUN_IRRADIANCE = 5.0;
+const MOON_IRRADIANCE = 1.0;
+/** Mean albedo of the sunlit world below the horizon (water, sand, roads, canopy): warm neutral. */
+const GROUND_ALBEDO = new THREE.Color(0.26, 0.24, 0.20);
+
 const KEYS: Key[] = [
-  { el: -18, sun: [0.5, 0.6, 0.85], sunI: 0.12, zen: [0.006, 0.010, 0.024], hor: [0.018, 0.024, 0.042], haze: [0.014, 0.018, 0.03], sunHaze: [0.02, 0.022, 0.03], amb: 0.12 },
-  { el: -8, sun: [0.5, 0.6, 0.85], sunI: 0.12, zen: [0.006, 0.011, 0.028], hor: [0.035, 0.035, 0.065], haze: [0.024, 0.026, 0.045], sunHaze: [0.06, 0.03, 0.03], amb: 0.14 },
-  { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.06, zen: [0.02, 0.04, 0.11], hor: [0.42, 0.22, 0.2], haze: [0.22, 0.16, 0.2], sunHaze: [0.9, 0.35, 0.18], amb: 0.25 },
-  { el: 4, sun: [1.0, 0.5, 0.22], sunI: 0.437, zen: [0.08, 0.17, 0.42], hor: [0.9, 0.5, 0.35], haze: [0.55, 0.42, 0.42], sunHaze: [1.0, 0.55, 0.3], amb: 0.5 },
-  { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.75, zen: [0.10, 0.24, 0.62], hor: [0.80, 0.66, 0.58], haze: [0.58, 0.56, 0.6], sunHaze: [1.0, 0.75, 0.5], amb: 0.75 },
-  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.06, 0.20, 0.58], hor: [0.50, 0.66, 0.86], haze: [0.5, 0.64, 0.84], sunHaze: [0.95, 0.9, 0.82], amb: 0.95 },
-  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.05, 0.18, 0.56], hor: [0.48, 0.65, 0.86], haze: [0.48, 0.63, 0.84], sunHaze: [0.9, 0.9, 0.88], amb: 1.0 },
+  { el: -18, sun: [0.5, 0.6, 0.85], sunI: 0.12, zen: [0.006, 0.010, 0.024], hor: [0.018, 0.024, 0.042], haze: [0.014, 0.018, 0.03], sunHaze: [0.02, 0.022, 0.03], amb: 0.15 },
+  { el: -8, sun: [0.5, 0.6, 0.85], sunI: 0.12, zen: [0.006, 0.011, 0.028], hor: [0.035, 0.035, 0.065], haze: [0.024, 0.026, 0.045], sunHaze: [0.06, 0.03, 0.03], amb: 0.16 },
+  { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.06, zen: [0.015, 0.035, 0.10], hor: [0.42, 0.22, 0.2], haze: [0.22, 0.16, 0.2], sunHaze: [0.9, 0.35, 0.18], amb: 0.4 },
+  { el: 4, sun: [1.0, 0.5, 0.22], sunI: 0.437, zen: [0.035, 0.10, 0.30], hor: [0.82, 0.48, 0.34], haze: [0.50, 0.40, 0.40], sunHaze: [1.0, 0.55, 0.3], amb: 0.85 },
+  { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.75, zen: [0.03, 0.11, 0.34], hor: [0.66, 0.58, 0.54], haze: [0.54, 0.52, 0.54], sunHaze: [1.0, 0.75, 0.5], amb: 1.0 },
+  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.02, 0.095, 0.325], hor: [0.42, 0.51, 0.62], haze: [0.51, 0.55, 0.62], sunHaze: [1.0, 0.92, 0.80], amb: 1.0 },
+  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.018, 0.09, 0.32], hor: [0.40, 0.50, 0.62], haze: [0.50, 0.55, 0.62], sunHaze: [0.98, 0.93, 0.84], amb: 1.0 },
 ];
 
 function mixKey(el: number): Key {
@@ -67,16 +83,18 @@ export class Atmosphere {
   preset: WeatherPreset = WEATHER.clear;
   state: AtmosState = {
     sunDir: new THREE.Vector3(0, 1, 0), sunElevation: 60, sunColor: new THREE.Color(), sunIntensity: 3, zenith: new THREE.Color(), horizon: new THREE.Color(),
-    haze: new THREE.Color(), sunHaze: new THREE.Color(), ambientIntensity: 1, night: 0,
+    haze: new THREE.Color(), sunHaze: new THREE.Color(), ground: new THREE.Color(), ambientIntensity: 1, night: 0,
   };
   /** Shared uniforms referenced by every atmosphere-aware material. */
   uniforms = {
     uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    /** Normalised (0..1 scale) sun radiance for the sky dome, sun disc and cloud raymarch; the CSM light uses `state.sunIntensity`. */
     uSunColor: { value: new THREE.Color(1, 1, 1) },
     uZenithColor: { value: new THREE.Color() },
     uHorizonColor: { value: new THREE.Color() },
     uHazeColor: { value: new THREE.Color() },
     uSunHazeColor: { value: new THREE.Color() },
+    uGroundColor: { value: new THREE.Color() },
     uHazeDensity: { value: 3e-5 },
     uHazeHeight: { value: 1300 },
     uCloudCoverage: { value: 0.3 },
@@ -113,24 +131,34 @@ export class Atmosphere {
     s.sunDir.copy(dir).lerp(moon, moonMix).normalize();
     s.sunElevation = elevation;
     s.sunColor.setRGB(k.sun[0], k.sun[1], k.sun[2]);
-    s.sunIntensity = k.sunI * p.sunDim;
+    const keyStrength = k.sunI * p.sunDim;
+    s.sunIntensity = keyStrength * lerp(SUN_IRRADIANCE, MOON_IRRADIANCE, moonMix);
     s.zenith.setRGB(k.zen[0], k.zen[1], k.zen[2]);
     s.horizon.setRGB(k.hor[0], k.hor[1], k.hor[2]);
     s.haze.setRGB(k.haze[0], k.haze[1], k.haze[2]);
     s.sunHaze.setRGB(k.sunHaze[0], k.sunHaze[1], k.sunHaze[2]);
-    s.ambientIntensity = k.amb * lerp(1, 0.75, p.coverage);
+    // the environment map already darkens with the sky colours; the multiplier only mutes the IBL at night
+    // (the night exposure boost would otherwise turn the dark-blue sky into a strong ground fill)
+    s.ambientIntensity = k.amb;
     s.night = 1 - smoothstep(-12, -1, elevation);
-    // overcast: flatter sky, greyer haze
+    // overcast: the dome flattens toward a neutral grey of the horizon's brightness (no blue cast under the deck)
     const grey = smoothstep(0.45, 0.95, p.coverage);
-    const zl = s.zenith.clone().lerp(s.horizon, grey * 0.6).multiplyScalar(lerp(1, 0.7, grey));
-    const hl = s.horizon.clone().multiplyScalar(lerp(1, 0.8, grey));
+    const horLum = s.horizon.r * 0.2126 + s.horizon.g * 0.7152 + s.horizon.b * 0.0722;
+    const overcast = new THREE.Color(horLum, horLum, horLum).lerp(s.horizon, 0.3);
+    const zl = s.zenith.clone().lerp(overcast, grey * 0.8);
+    const hl = s.horizon.clone().lerp(overcast, grey * 0.7).multiplyScalar(lerp(1, 0.9, grey));
+    const hazeL = s.haze.clone().lerp(new THREE.Color(horLum, horLum, horLum), grey * 0.6).multiplyScalar(lerp(1, 0.9, grey));
+    // bounce light from the world below: sunlit ground plus its share of the sky, scaled by the mean albedo
+    const skyIrr = s.zenith.clone().lerp(s.horizon, 0.3);
+    s.ground.copy(s.sunColor).multiplyScalar(s.sunIntensity * Math.max(s.sunDir.y, 0) / Math.PI).add(skyIrr).multiply(GROUND_ALBEDO);
     const u = this.uniforms;
     u.uSunDir.value.copy(dir);
-    u.uSunColor.value.copy(s.sunColor).multiplyScalar(s.sunIntensity);
+    u.uSunColor.value.copy(s.sunColor).multiplyScalar(keyStrength);
     u.uZenithColor.value.copy(zl);
     u.uHorizonColor.value.copy(hl);
-    u.uHazeColor.value.copy(s.haze).multiplyScalar(lerp(1, 0.85, grey));
+    u.uHazeColor.value.copy(hazeL);
     u.uSunHazeColor.value.copy(s.sunHaze).multiplyScalar(lerp(1, 0.6, grey));
+    u.uGroundColor.value.copy(s.ground);
     u.uHazeDensity.value = p.hazeDensity;
     u.uHazeHeight.value = p.hazeHeight;
     u.uCloudCoverage.value = p.coverage;
