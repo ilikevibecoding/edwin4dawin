@@ -20,6 +20,11 @@ const FACES = [
 // two triangles per face as (su, sv) corner signs
 const CU = [-1, 1, 1, -1, 1, -1];
 const CV = [-1, -1, 1, -1, 1, 1];
+// the two triangles of a decal quad as (su, sv) corner signs, laid out like PlaneGeometry.toNonIndexed():
+// (top-left, bottom-left, top-right), (bottom-left, bottom-right, top-right); CCW seen from local +z
+const QU = [-1, -1, 1, -1, 1, 1];
+const QV = [1, -1, 1, -1, -1, 1];
+const _ax = new THREE.Vector3(), _ay = new THREE.Vector3(), _az = new THREE.Vector3();
 const _m = new THREE.Matrix4(), _nm = new THREE.Matrix3(), _v = new THREE.Vector3(), _s = new THREE.Vector3(), _qi = new THREE.Quaternion(), _one = new THREE.Vector3(1, 1, 1);
 const _up = new THREE.Vector3(0, 1, 0), _dir = new THREE.Vector3();
 
@@ -167,6 +172,35 @@ export class Batch {
   }
 
   /**
+   * One w x h decal quad centred on (cx, cy, cz), facing the local +z of `q` (local +y is the quad's
+   * up), with the atlas rectangle [u0, v0, u1, v1] mapped over it exactly as a PlaneGeometry run
+   * through Kit.rectUVs would be - without the PlaneGeometry, toNonIndexed and per-quad kit.add.
+   */
+  quad(cx, cy, cz, q, w, h, rect) {
+    this._reserve(6);
+    _ax.set(1, 0, 0).applyQuaternion(q);
+    _ay.set(0, 1, 0).applyQuaternion(q);
+    _az.set(0, 0, 1).applyQuaternion(q);
+    const P = this.pos, N = this.nor, U = this.uv;
+    const hw = w / 2, hh = h / 2;
+    let i = this.count;
+    for (let k = 0; k < 6; k++) {
+      const su = QU[k] * hw, sv = QV[k] * hh;
+      const o = i * 3, ou = i * 2;
+      P[o] = cx + su * _ax.x + sv * _ay.x;
+      P[o + 1] = cy + su * _ax.y + sv * _ay.y;
+      P[o + 2] = cz + su * _ax.z + sv * _ay.z;
+      N[o] = _az.x;
+      N[o + 1] = _az.y;
+      N[o + 2] = _az.z;
+      U[ou] = QU[k] < 0 ? rect[0] : rect[2];
+      U[ou + 1] = QV[k] < 0 ? rect[1] : rect[3];
+      i++;
+    }
+    this.count = i;
+  }
+
+  /**
    * Append any (shared, reusable) geometry transformed by pos / quat / scale. Much cheaper than one
    * Kit.add per instance for the hundreds of identical cylinders/hoops/wheels: the input is read in
    * place and only the transformed floats are written. Normals go through the normal matrix (so a
@@ -275,6 +309,10 @@ export class Batcher {
   geo(mat, color, geometry, pos, quat = null, scale = null) {
     this._get(mat, color).addGeometry(geometry, { pos, quat, scale });
   }
+  /** atlas decal quad (see Batch.quad) */
+  quad(mat, color, center, q, w, h, rect) {
+    this._get(mat, color).quad(center[0], center[1], center[2], q, w, h, rect);
+  }
   /** axis-aligned cylinder: one shared unit cylinder per segment count, scaled through the matrix */
   cyl(mat, color, cx, cy, cz, r, len, axis = "y", segments = 12) {
     this.geo(mat, color, sharedCylinder(1, 1, segments), [cx, cy, cz], axisQuat(axis), [r, len, r]);
@@ -288,13 +326,15 @@ export class Batcher {
     const q = new THREE.Quaternion().setFromUnitVectors(_up, _dir);
     this.geo(mat, color, sharedCylinder(1, 1, segments), [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], q, [r, len, r]);
   }
-  flush() {
-    for (const byColor of this.groups.values()) {
-      for (const { mat, color, batch } of byColor.values()) {
-        if (batch.empty) continue;
-        this.kit.add(mat, batch.geometry(), { color, uv: "keep" });
-      }
-    }
+  /**
+   * Hand every batch to the kit. `order` (optional comparator over {mat, color}) sets the order the
+   * batches are added in, which is their draw order inside a transparent material's merged mesh.
+   */
+  flush(order = null) {
+    let groups = [];
+    for (const byColor of this.groups.values()) for (const g of byColor.values()) if (!g.batch.empty) groups.push(g);
+    if (order) groups = groups.sort(order);
+    for (const { mat, color, batch } of groups) this.kit.add(mat, batch.geometry(), { color, uv: "keep" });
     this.groups.clear();
   }
 }

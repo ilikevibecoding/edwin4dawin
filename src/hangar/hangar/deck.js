@@ -6,9 +6,9 @@
 // containment field over the hole and the four tractor emitters.
 import * as THREE from "three";
 import { Batcher, sharedTorus, PY } from "./batch.js";
-import { FLOOR, SHAFT_BOTTOM, HOLE, HALL, PADS, TAXI_X, RACK, RAIL_H, HG, TRACTOR_POINTS, RIB_Z, RIB_X } from "./layout.js";
+import { FLOOR, SHAFT_BOTTOM, HOLE, HALL, PADS, TAXI_X, RACK, RAIL_H, HG, TRACTOR_POINTS, RIB_Z, RIB_X, DOORS, WALL_T } from "./layout.js";
 import { DECK_TILE, LABELS } from "./materials.js";
-import { tube, label, railRun, housedLamp, redBeacon, hazardBlocks } from "./util.js";
+import { tube, label, railRun, housedLamp, redBeacon, hazardBlocks, wearStreak, shadowGrad } from "./util.js";
 
 export const Y_MARK = FLOOR + 0.02; // painted markings are 2 cm proud of the plating (no coplanar faces)
 const FLAT_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)); // XY -> XZ plane
@@ -39,6 +39,7 @@ export function buildDeck(ctx) {
   buildShaft(ctx, B);
   buildRails(ctx, B);
   buildMarkings(ctx, B);
+  buildWear(ctx);
   buildField(ctx);
   for (const p of TRACTOR_POINTS) buildTractorHousing(ctx, B, p);
 
@@ -48,8 +49,9 @@ export function buildDeck(ctx) {
 // ---------------------------------------------------------------------------
 // Plates: 4 m semi-gloss plates (hgDeck; the sheet draws seams, rivets and tie-down rings, the vertex tone
 // sets the plate colour) with 6 cm gaps to the black bed, wider section joints on the rib lines, a darker
-// plate band under each taxi lane and round the aperture, a small per-plate tone step so the tiled sheet
-// never reads as one repeated image.
+// plate band under each taxi lane and round the aperture, and five per-plate tone steps (one plate in
+// ten a whole stop darker, one in ten lighter) so adjacent plates visibly differ at 20 m and the tiled
+// sheet never reads as one repeated image.
 // ---------------------------------------------------------------------------
 function buildPlates(ctx, B) {
   const { PALETTE } = ctx;
@@ -57,15 +59,20 @@ function buildPlates(ctx, B) {
   // lip band rect (grown by half a seam so the plates keep a seam to the band)
   const cut = { x0: HOLE.x0 - LIP.band - seam / 2, x1: HOLE.x1 + LIP.band + seam / 2, z0: HOLE.z0 - LIP.band - seam / 2, z1: HOLE.z1 + LIP.band + seam / 2 };
   const onJoint = (v, lines) => lines.some((l) => Math.abs(l - v) < 1.01);
-  const steps = (c) => [c.clone().multiplyScalar(0.93), c, c.clone().multiplyScalar(1.07)];
-  const tones = { mid: steps(PALETTE.impMid), dark: steps(PALETTE.impDark) };
+  // tone steps: index by a weighted table (10 % a stop darker, 20 % dark, 30 % mid, 30 % plain, 10 % light)
+  const steps = (c) => [0.5, 0.74, 0.88, 1.0, 1.14].map((k) => c.clone().multiplyScalar(k));
+  const TABLE = [0, 1, 1, 2, 2, 2, 3, 3, 3, 4];
+  // base tones: mid-grey plating (between impMid and impGrey, so the tone steps have room to read in the
+  // IBL-lit stretches between the flood pools), a darker set under the taxi lanes and round the aperture
+  const tones = { mid: steps(PALETTE.impMid.clone().lerp(PALETTE.impGrey, 0.45)), dark: steps(PALETTE.impDark.clone().lerp(PALETTE.impMid, 0.3)) };
   const tone = (cx, cz) => {
     const nearHole = cx > HOLE.x0 - 8 && cx < HOLE.x1 + 8 && cz > HOLE.z0 - 8 && cz < HOLE.z1 + 8;
     const lane = Math.abs(Math.abs(cx) - TAXI_X) < G;
     const set = nearHole || lane ? tones.dark : tones.mid;
-    // deterministic per-plate step (integer hash of the plate cell)
-    const h = (Math.round(cx / G) * 73856093) ^ (Math.round(cz / G) * 19349663);
-    return set[((h >>> 0) % 3 + 3) % 3];
+    // deterministic per-plate step (integer hash of the plate cell, mixed so neighbours differ)
+    let h = (Math.round(cx / G) * 73856093) ^ (Math.round(cz / G) * 19349663);
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    return set[TABLE[h % 10]];
   };
   const plate = (x0, x1, z0, z1) => {
     if (x1 - x0 < 0.3 || z1 - z0 < 0.3) return;
@@ -286,10 +293,14 @@ function buildRails(ctx, B) {
     for (const z of [rz0, rz1]) railRun(B, kit, [s * end, z], [s * gap, z], FLOOR, { tag: "aperture-rail", lit: true });
   }
   for (const z of [rz0, rz1]) {
-    // bar (lowered = closed): dark box with a light top edge and a small yellow centre tag
+    // bar (lowered = closed): dark box with a light top edge; a black sign plate hung under the middle of
+    // the bar carries "APERTURE - KEEP CLEAR" on both faces (a legible label, not an unfinished plate),
+    // with a yellow block at each end
     B.box("paintedMetal", PALETTE.impDark, 0, FLOOR + 0.98, z, gap * 2 + 0.1, 0.16, 0.14);
     B.box("metal", HG.steel, 0, FLOOR + 1.07, z, gap * 2 + 0.1, 0.03, 0.15);
-    hazardBlocks(B, [-0.45, FLOOR + 0.9, z - 0.075], [0.45, FLOOR + 1.06, z + 0.075], "x", { block: 0.15 });
+    B.box("paintedMetal", PALETTE.impBlack, 0, FLOOR + 0.72, z, 2.9, 0.38, 0.08);
+    for (const s of [-1, 1]) B.box("painted", HG.yellow, s * 1.55, FLOOR + 0.72, z, 0.2, 0.38, 0.085);
+    for (const dz of [-1, 1]) label(kit, "hgDecal", "APERTURE - KEEP CLEAR", [0, FLOOR + 0.72, z + dz * 0.045], [0, 0, dz], 2.7, { color: HG.white });
     for (const s of [-1, 1]) {
       const px = s * (gap + 0.18);
       B.box("paintedMetal", PALETTE.impDark, px, FLOOR + 0.71, z, 0.3, 1.42, 0.3);
@@ -421,17 +432,112 @@ function buildMarkings(ctx, B) {
   }
 }
 
-const SHADOW_BLACK = new THREE.Color(0x000000);
+// ---------------------------------------------------------------------------
+// Directional wear and baked shadows on the deck (atlas alpha shapes painted black): tyre tracks along
+// the apron lane (strongest at the aperture bar and at the blast door) and both long taxi lanes
+// (strongest where craft turn into the bays), scuff arcs and skids on every landing pad, drag marks
+// out of every door, a soft band under the rack tiers and along the base of every wall. Everything
+// worn is duller: the decals are rough and dark, and the plate sheet's grime is rough too.
+// ---------------------------------------------------------------------------
+const UP = [0, 1, 0];
+function buildWear(ctx) {
+  const { kit } = ctx;
+  const y = Y_MARK + 0.011;
+  const track = (x, z, dz, len, w = 0.9) => wearStreak(kit, [x, y, z], UP, [0, 0, dz], len, w);
+  // apron lane (x 0, z 98 .. 168): two tyre tracks either side of the centreline, each in two runs
+  for (const sx of [-1, 1]) {
+    const x = sx * 1.15;
+    track(x, 100.5, 1, 34, 1.0); // from the hold-short bar aft, fading
+    track(x, 165.5, -1, 32, 1.0); // from the blast door forward, fading
+    track(x + sx * 0.35, 102, 1, 22, 0.6); // a second, offset set (not every tug tracks the same line)
+  }
+  // long taxi lanes (x +-52): tracks at +-1.2 m, runs meeting at the bay spurs (z 15 and z 120)
+  for (const s of [-1, 1]) for (const sx of [-1, 1]) {
+    const x = s * TAXI_X + sx * 1.2;
+    track(x, 14, -1, 44, 0.9);
+    track(x, 16, 1, 40, 0.9);
+    track(x, 119, -1, 40, 0.9);
+    track(x, 121, 1, 26, 0.9);
+    track(x + sx * 0.4, 60, -1, 30, 0.5);
+  }
+  // landing pads: scuff arcs where craft set down (three per pad, turned), two skids across the centre
+  PADS.forEach((p, i) => {
+    for (let k = 0; k < 3; k++) {
+      const a = i * 1.7 + k * 2.1;
+      const r = 5.2 + ((i + k) % 3) * 0.9;
+      label(kit, "hgDecal", "ARC", [p.x + Math.cos(a) * 0.6, y, p.z + Math.sin(a) * 0.6], UP, 2 * r, { color: HG.shadow, spin: a });
+    }
+    wearStreak(kit, [p.x - 1.6, y, p.z - 3.2 + (i % 2)], UP, [0.08, 0, 1], 5.5, 0.7);
+    wearStreak(kit, [p.x + 1.7, y, p.z + 3.0 - (i % 3) * 0.6], UP, [-0.06, 0, -1], 5.0, 0.7);
+  });
+  // drag marks out of every door: from the threshold into the hall, strongest at the door
+  for (const d of DOORS) {
+    if (d.kind === "hatch") continue;
+    const [px, , pz] = d.pos;
+    const n = [-d.dir[0], 0, -d.dir[2]]; // into the hall
+    const across = d.dir[0] !== 0 ? [0, 0, 1] : [1, 0, 0];
+    const w = d.kind === "blast" ? 4 : d.w;
+    const offs = d.kind === "blast" ? [-1.3, 1.3] : [-w * 0.3, -w * 0.1, w * 0.12, w * 0.32];
+    offs.forEach((o, i) => {
+      const from = [px + n[0] * 0.9 + across[0] * o, y, pz + n[2] * 0.9 + across[2] * o];
+      wearStreak(kit, from, UP, n, 10 + (i % 2) * 4, 0.9 + (i % 2) * 0.3);
+    });
+  }
+  // baked shadow under the rack tiers: a 3.4 m band along each side wall, dark at the wall
+  for (const s of [-1, 1]) {
+    const wall = s * (HALL.x1 - WALL_T - 0.12);
+    shadowGrad(kit, [wall - s * 1.7, y, (RACK.zoneZ0 + RACK.zoneZ1) / 2], UP, [-s, 0, 0], 3.4, RACK.zoneZ1 - RACK.zoneZ0);
+  }
+  // wall base: a 1.3 m band along every wall, broken at the door thresholds (their hazard aprons stay
+  // clean) and at the rack-tier band
+  const base = (wall, spans) => {
+    for (const [a, b] of spans) {
+      if (b - a < 1) continue;
+      const c = (a + b) / 2, L = b - a;
+      if (wall.plane === "x") shadowGrad(kit, [wall.c + wall.inward * 0.65, y, c], UP, [wall.inward, 0, 0], 1.3, L);
+      else shadowGrad(kit, [c, y, wall.c + wall.inward * 0.65], UP, [0, 0, wall.inward], 1.3, L);
+    }
+  };
+  const inX = HALL.x1 - WALL_T - 0.12, inZ0 = HALL.z0 + WALL_T + 0.12, inZ1 = HALL.z1 - WALL_T - 0.12;
+  const cutSpans = (a, b, cuts) => {
+    let spans = [[a, b]];
+    for (const [c0, c1] of cuts) {
+      const next = [];
+      for (const [p, q] of spans) {
+        if (c1 <= p || c0 >= q) next.push([p, q]);
+        else {
+          if (c0 > p) next.push([p, c0]);
+          if (c1 < q) next.push([c1, q]);
+        }
+      }
+      spans = next;
+    }
+    return spans;
+  };
+  for (const s of [-1, 1]) {
+    const cuts = DOORS.filter((d) => Math.sign(d.dir[0]) === s).map((d) => [d.pos[2] - d.w / 2 - 2.5, d.pos[2] + d.w / 2 + 2.5]);
+    cuts.push([RACK.zoneZ0, RACK.zoneZ1]);
+    base({ plane: "x", c: s * inX, inward: -s }, cutSpans(inZ0, inZ1, cuts));
+  }
+  for (const [zc, inward] of [[inZ0, 1], [inZ1, -1]]) {
+    const cuts = DOORS.filter((d) => d.dir[2] === -inward && d.kind === "blast").map((d) => [d.pos[0] - 6.5, d.pos[0] + 6.5]);
+    base({ plane: "z", c: zc, inward }, cutSpans(-inX, inX, cuts));
+  }
+}
+
 /**
- * Soft dark blob on the deck (contact darkening under props, threshold wear): the atlas blob (5:3, alpha
- * falling off to the edge) painted black over the plating. w along x, d along z; a footprint that is not
- * 5:3 gets a second, crossed blob so the union covers the prop.
+ * Soft dark blob on the deck (contact darkening under props, threshold wear): the atlas blob (alpha
+ * falling off to the edge) painted black over the plating. w along x, d along z are the prop's
+ * footprint; the blob is grown 0.5 m beyond it on every side and a footprint that is not the blob's
+ * aspect gets a second, crossed blob so the union covers the prop.
  */
-export function contactShadow(kit, x, z, w, d) {
+export function contactShadow(kit, x, z, w, d, grow = 0.5) {
+  w += 2 * grow;
+  d += 2 * grow;
   const bd = w / LABELS.SHADOW.aspect; // one blob's depth at width w
   const n = Math.max(1, Math.ceil(d / bd));
   const step = n > 1 ? (d - bd) / (n - 1) : 0;
-  for (let i = 0; i < n; i++) label(kit, "hgDecal", "SHADOW", [x, Y_MARK + 0.012, z - d / 2 + bd / 2 + i * step], [0, 1, 0], w, { color: SHADOW_BLACK });
+  for (let i = 0; i < n; i++) label(kit, "hgDecal", "SHADOW", [x, Y_MARK + 0.012, z - d / 2 + bd / 2 + i * step], [0, 1, 0], w, { color: HG.shadow });
 }
 
 // ---------------------------------------------------------------------------
@@ -485,7 +591,7 @@ function buildTractorHousing(ctx, B, p) {
   B.box("paintedMetal", PALETTE.impBlack, p[0] + sx * 0.9, Y_MARK + 0.015, p[2] + sz * 0.9, 2.4, 0.03, 2.4);
   // deck stencil + contact shadow + collider (generous AABB so the corner between the rail ends is closed)
   label(kit, "hgDecal", "TRACTOR EMITTER", [cx + sx * 0.4, Y_MARK + 0.01, cz + sz * 3.0], [0, 1, 0], 3.6, { color: HG.yellow, spin: sz > 0 ? 0 : Math.PI });
-  contactShadow(kit, cx, cz, 5.2, 5.2);
+  contactShadow(kit, cx, cz, 4.4, 4.4, 0.9);
   kit.collider(
     [Math.min(cx - 1.8, p[0] - sx * 0.2), FLOOR, Math.min(cz - 1.8, p[2] - sz * 0.2)],
     [Math.max(cx + 1.8, p[0] - sx * 0.2), top + 1, Math.max(cz + 1.8, p[2] - sz * 0.2)],

@@ -1,14 +1,17 @@
 // d4-hangar machinery: the ceiling crane (two full-length gantry rails at y -16 hung from the ceiling
-// ribs with a lit strip under each, an underslung bridge with light-grey flanges, lit under-girder
-// strips and a maintenance walkway, a trolley with amber beacons, hoist and hook block, driven by t on
-// a park-travel-park schedule that leaves it over the aft apron with the hook down at t = 40), and the
-// deck-level utility clutter clustered under the racks, along the end walls and by the spawn: fuel
-// bowsers, ground-power carts, tool carts, crate stacks, cable reels, mobile access platforms, drums.
+// ribs with a lit strip under each, an underslung bridge with light-grey flanges, wide lit under-girder
+// strips, amber beacons along the girder and a maintenance walkway, a trolley with amber beacons, hoist
+// and hook block with a slung container, driven by t on a park-travel-park schedule that leaves it over
+// the aft half of the aperture with the hook down at y -40 at t = 40 - the one place a 54 m-high bridge
+// sits inside the deck view's frame, and in the balcony view's), and the deck-level utility clutter
+// clustered under the racks, along the end walls and by the spawn: fuel bowsers, ground-power carts,
+// tool carts, crate stacks, cable reels, mobile access platforms, drums, each on its contact shadow.
 // Nothing stands on a landing pad, taxi lane or door approach.
 import * as THREE from "three";
 import { Batch, Batcher, sharedCylinder } from "./batch.js";
-import { FLOOR, CEIL, WALL_T, HALL, RIB_Z, RIB_D, RAIL_H, HG } from "./layout.js";
+import { FLOOR, CEIL, WALL_T, HALL, RIB_Z, RIB_D, RAIL_H, HG, EM } from "./layout.js";
 import { label, railRun } from "./util.js";
+import { contactShadow } from "./deck.js";
 
 // ---------------------------------------------------------------------------
 // Crane
@@ -18,10 +21,13 @@ const RAIL_TOP = -16;
 const RIB_BOTTOM = CEIL - WALL_T - RIB_D; // underside of the transverse ceiling ribs
 const GIRDER_Z = 1.4; // half distance between the two bridge girders
 const DRUM_Y = -20.75; // hoist drum axis (trolley local)
-// schedule (module clock, 200 s cycle, offset so t = 40 lands mid-dwell over the apron): dwell forward
-// over pad 05 with the hook part-lowered, 40 s travel aft, 60 s dwell over the aft apron (bridge z 112,
-// trolley x 10) with the hook block down at y -42, travel back
-const PARK_AFT = { z: 112, x: 10, hook: -42 };
+// schedule (module clock, 200 s cycle, offset so t = 40 lands mid-dwell at the aft park): dwell forward
+// over pad 05 with the hook part-lowered, 40 s travel aft, 60 s dwell over the aft half of the aperture
+// (bridge z 66, trolley x 8: from the spawn camera the bridge sits 94 m out at 30 deg elevation, in the
+// top of the frame, the hook block at y -40 in its upper third; from the balcony camera at 22 deg) with
+// the hook block down at y -40, travel back. The hover column of the traffic system is at (0, *, 32)
+// and its slot transfers leave the column toward +-x, so the slung load at (8, -40 .. -46, 66) is clear.
+const PARK_AFT = { z: 66, x: 8, hook: -40 };
 const PARK_FWD = { z: -52, x: -20, hook: -30 };
 const HOOK_TRAVEL = -22;
 const smooth = (k) => k * k * (3 - 2 * k);
@@ -73,15 +79,23 @@ export function buildCrane(ctx) {
     bb.box(x + s * 1.3, -16.7, 0, 0.2, 0.2, 3.6, { color: HG.steel });
     for (const dz of [-1.5, 1.5]) bp.box(x + s * 1.35, -16.55, dz, 0.3, 0.3, 0.3); // beacons on the truck faces
   }
+  const ba = new Batch(); // amber beacons along the girders (read at 100 m)
   for (const zs of [-GIRDER_Z, GIRDER_Z]) {
     bb.box(0, -17.6, zs, L, 1.4, 0.7, { color: impDark, texel: 0.5 });
     bb.box(0, -16.84, zs, L, 0.12, 0.9, { color: impMid, texel: 0.5 });
-    // light-grey bottom flange (the underside is what the deck sees) with a lit strip in a black channel
+    // light-grey bottom flange (the underside is what the deck sees) with a wide lit strip in a black
+    // channel: 0.4 m of lit under-girder that reads as a line across the roof from the deck
     bb.box(0, -18.36, zs, L, 0.12, 0.9, { color: HG.steel });
-    bb.box(0, -18.45, zs, L - 3, 0.06, 0.24, { color: PALETTE.impBlack });
-    be.box(0, -18.475, zs, L - 3.4, 0.01, 0.14);
-    // stiffener plates every 6 m on the outer face
+    bb.box(0, -18.46, zs, L - 3, 0.08, 0.52, { color: PALETTE.impBlack });
+    be.box(0, -18.505, zs, L - 3.4, 0.01, 0.4);
+    // stiffener plates every 6 m on the outer face, an amber beacon housing every 20 m with the lens on
+    // the outer face and under the flange
     for (let x = -60; x <= 60; x += 6) bb.box(x, -17.6, zs + Math.sign(zs) * 0.36, 0.25, 1.3, 0.04, { color: impMid });
+    for (let x = -50; x <= 50; x += 20) {
+      bb.box(x, -17.1, zs + Math.sign(zs) * 0.5, 0.7, 0.5, 0.3, { color: HG.gunmetal });
+      ba.box(x, -17.1, zs + Math.sign(zs) * 0.66, 0.6, 0.4, 0.03);
+      ba.box(x, -17.36, zs + Math.sign(zs) * 0.5, 0.6, 0.03, 0.26);
+    }
   }
   for (let x = -60; x <= 60; x += 12) bb.box(x, -17.15, 0, 0.3, 0.3, 2 * GIRDER_Z - 0.6, { color: impDark });
   // maintenance walkway along the +z girder with a 1.02 m rail
@@ -100,9 +114,10 @@ export function buildCrane(ctx) {
     }
   }
   const meshB = new THREE.Mesh(bb.geometry(), materials.paintedMetal);
-  const meshE = new THREE.Mesh(be.geometry(0xffffff), materials.emitWhite);
+  const meshE = new THREE.Mesh(be.geometry(EM.crane), materials.hgEmit);
   const meshP = new THREE.Mesh(bp.geometry(0xffffff), materials.hgPulse);
-  bridge.add(meshB, meshE, meshP);
+  const meshA = new THREE.Mesh(ba.geometry(0xffffff), materials.emitAmber);
+  bridge.add(meshB, meshE, meshP, meshA);
 
   // ---- trolley (moves along x on the bridge)
   const trolley = new THREE.Group();
@@ -114,15 +129,18 @@ export function buildCrane(ctx) {
   for (const sx of [-1, 1]) tb.box(sx * 1.0, -20.1, 0, 0.2, 0.9, 0.6, { color: impDark }); // drum mounts
   tb.addGeometry(new THREE.CylinderGeometry(0.45, 0.45, 1.8, 14), { pos: [0, DRUM_Y, 0], quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2), color: HG.gunmetal });
   tb.addGeometry(new THREE.CylinderGeometry(0.2, 0.2, 0.4, 10), { pos: [0, -19.1, -1.9], quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2), color: HG.steel }); // motor stub
-  // amber beacon housings on the four corners of the hoist body (lenses in the amber batch below)
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) tb.box(sx * 1.0, -18.4, sz * 1.5, 0.36, 0.3, 0.36, { color: HG.gunmetal });
+  // amber beacon housings on the four corners of the hoist body (lenses in the amber batch below) and an
+  // amber bar along the hoist body's underside
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) tb.box(sx * 1.0, -18.4, sz * 1.5, 0.6, 0.3, 0.6, { color: HG.gunmetal });
+  tb.box(0, -19.72, 0, 2.2, 0.14, 0.5, { color: HG.gunmetal });
   const meshT = new THREE.Mesh(tb.geometry(), materials.paintedMetal);
   const te = new Batch();
   for (const sx of [-1, 1]) te.box(sx * 0.8, -19.68, 1.2, 0.5, 0.06, 0.3);
   te.box(0, -18.75, -1.72, 0.9, 0.08, 0.02);
   const meshTE = new THREE.Mesh(te.geometry(0xffffff), materials.emitWhite);
   const ta = new Batch();
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) ta.box(sx * 1.0, -18.19, sz * 1.5, 0.26, 0.12, 0.26);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) ta.box(sx * 1.0, -18.19, sz * 1.5, 0.5, 0.14, 0.5);
+  ta.box(0, -19.8, 0, 2.0, 0.03, 0.36);
   const meshTA = new THREE.Mesh(ta.geometry(0xffffff), materials.emitAmber);
   // two hoist cables: unit-height boxes hanging from the drum, scaled to the hook height each frame
   const cb = new Batch();
@@ -140,9 +158,12 @@ export function buildCrane(ctx) {
   hb.addGeometry(new THREE.TorusGeometry(0.34, 0.09, 8, 18, Math.PI), { pos: [0, -1.44, 0], quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2), color: HG.steel });
   const hazard = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.3, 0.52), materials.hazard);
   hazard.position.y = -0.4;
-  // housed amber lamp on the block's top (the lowered hook reads as a lit point from the deck)
-  const hookLamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.3), materials.emitAmber);
-  hookLamp.position.set(0, 0.64, 0);
+  // housed amber lamps on the block's top and on the spreader bar ends (the lowered hook reads as lit
+  // amber points from the deck)
+  const hookLamp = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.1, 0.5), materials.emitAmber);
+  hookLamp.position.set(0, 0.65, 0);
+  const spreaderLamps = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 0.2), materials.emitAmber);
+  spreaderLamps.position.set(0, -2.16, 0);
   // slung load: a spreader bar on two slings from the hook, a 2.4 m cargo container on four slings under
   // it (recessed side panels, corner posts, dark lid) - the crane is at work, not a bare hook 50 m up
   const lb = new Batch(), lp = new Batch();
@@ -275,6 +296,12 @@ class Placer {
     const [bx, bz] = this.w(lmax[0], lmax[2]);
     this.kit.collider([Math.min(ax, bx), lmin[1], Math.min(az, bz)], [Math.max(ax, bx), lmax[1], Math.max(az, bz)], tag);
   }
+  /** contact shadow under a prop footprint (local centre + size; grown 0.5 m beyond it by contactShadow) */
+  shadow(lx, lz, sx, sz, grow) {
+    const [x, z] = this.w(lx, lz);
+    const [ex, ez] = this.ext(sx, sz);
+    contactShadow(this.kit, x, z, ex, ez, grow);
+  }
 }
 
 const F = FLOOR;
@@ -319,10 +346,12 @@ function crateAt(P, lx, lz, s, tone, base, text) {
 /** crate on the deck; `level` stacks it on a same-size crate below (skids resting on its corner caps) */
 function crate(P, lx, lz, s = 1.2, tone = "mid", level = 0, text = null) {
   crateAt(P, lx, lz, s, tone, F + level * (s + 0.22), text);
+  if (level === 0) P.shadow(lx, lz, s, s, 0.55);
 }
 
 /** deck tug: low cab with a canopy, four wheels, headlights, beacon, tow hitch at +lz */
 function tug(P, lx, lz) {
+  P.shadow(lx, lz, 2.4, 3.8);
   P.box("paintedMetal", HG.yellow, lx, F + 0.75, lz, 2.2, 0.7, 3.6, { texel: 0.5 });
   P.box("paintedMetal", P.P.impDark, lx, F + 0.42, lz, 2.3, 0.14, 3.7, { texel: 1 });
   for (const dx of [-1.0, 1.0]) for (const dz of [-1.2, 1.2]) {
@@ -345,6 +374,7 @@ function tug(P, lx, lz) {
 
 /** flatbed trailer (4.4 x 2.4) on four wheels with a draw bar toward -lz and a load of crates */
 function trailer(P, lx, lz, load = "crates") {
+  P.shadow(lx, lz, 2.6, 5.4);
   P.box("paintedMetal", P.P.impDark, lx, F + 0.72, lz, 2.4, 0.16, 4.4, { texel: 0.5 });
   P.box("hazard", 0xffffff, lx, F + 0.72, lz + 2.21, 2.4, 0.17, 0.02, { texel: 1 });
   for (const dx of [-1.1, 1.1]) for (const dz of [-1.4, 1.4]) {
@@ -388,6 +418,7 @@ function train(P, lx, lz) {
  */
 function tallGantry(P, lx, lz) {
   const W = 6, D = 3, Ht = 7.0;
+  P.shadow(lx, lz, W, D, 0.7);
   P.box("paintedMetal", P.P.impDark, lx, F + 0.35, lz, W, 0.25, D, { texel: 0.5 });
   for (const dx of [-W / 2 + 0.4, W / 2 - 0.4]) for (const dz of [-D / 2 + 0.3, D / 2 - 0.3]) {
     P.cyl("rubber", HG.rubber, lx + dx, F + 0.22, lz + dz, 0.22, 0.2, "x", { segments: 12 });
@@ -435,6 +466,7 @@ function ladderLite(P, x, z, nx, nz, y0, y1) {
 }
 
 function drum(P, lx, lz, color) {
+  P.shadow(lx, lz, 0.6, 0.6, 0.4);
   P.kcyl("paintedMetal", color, lx, F + 0.45, lz, 0.3, 0.9, "y", { segments: 14, texel: 1 });
   for (const y of [0.28, 0.62]) P.cyl("metal", HG.steel, lx, F + y, lz, 0.315, 0.05, "y", { segments: 14 });
 }
@@ -445,6 +477,7 @@ function drum(P, lx, lz, color) {
  * the -lx end with its hose trailing onto the deck
  */
 function toolCart(P, lx, lz) {
+  P.shadow(lx - 0.1, lz, 1.9, 0.7);
   P.box("paintedMetal", P.P.impBlack, lx, F + 0.21, lz, 1.04, 0.06, 0.54, { texel: 1 });
   for (const dx of [-0.4, 0.4]) for (const dz of [-0.2, 0.2]) {
     P.cyl("rubber", HG.rubber, lx + dx, F + 0.11, lz + dz, 0.11, 0.07, "x", { segments: 10 });
@@ -475,6 +508,7 @@ function toolCart(P, lx, lz) {
 
 /** ground power unit: dark cabinet on wheels, vents, indicator panel, a heavy cable on the deck */
 function gpu(P, lx, lz, cableTo = null) {
+  P.shadow(lx, lz, 1.6, 1.0);
   P.box("paintedMetal", P.P.impDark, lx, F + 0.77, lz, 1.5, 0.9, 0.95, { texel: 1 });
   for (const dx of [-0.55, 0.55]) for (const dz of [-0.38, 0.38]) P.cyl("metal", HG.gunmetal, lx + dx, F + 0.2, lz + dz, 0.2, 0.14, "x", { segments: 10 });
   for (let i = 0; i < 3; i++) P.box("paintedMetal", P.P.impBlack, lx + 0.76, F + 0.55 + i * 0.2, lz, 0.02, 0.1, 0.7, { texel: 1 });
@@ -492,6 +526,7 @@ function gpu(P, lx, lz, cableTo = null) {
 
 /** fuel bowser: tank trailer with pump cabinet, hose reel, beacon and tow bar (long axis local z) */
 function bowser(P, lx, lz) {
+  P.shadow(lx, lz - 0.2, 2.6, 5.6);
   P.box("paintedMetal", P.P.impDark, lx, F + 0.68, lz, 2.0, 0.25, 4.4, { texel: 0.5 });
   for (const dx of [-1.05, 1.05]) for (const dz of [-1.45, 1.45]) {
     P.cyl("rubber", HG.rubber, lx + dx, F + 0.45, lz + dz, 0.45, 0.34, "x", { segments: 16 });
@@ -520,6 +555,7 @@ function bowser(P, lx, lz) {
 }
 
 function cableReel(P, lx, lz) {
+  P.shadow(lx, lz, 1.6, 1.6);
   for (const dx of [-0.42, 0.42]) P.cyl("metal", HG.gunmetal, lx + dx, F + 0.95, lz, 0.75, 0.06, "x", { segments: 18 });
   P.cyl("rubber", HG.rubber, lx, F + 0.95, lz, 0.45, 0.8, "x", { segments: 16 });
   P.cyl("metal", HG.steel, lx, F + 0.95, lz, 0.05, 1.3, "x", { segments: 8 });
@@ -530,6 +566,7 @@ function cableReel(P, lx, lz) {
 
 /** mobile access platform: castored base, four posts, braces, grate at 2.9 m, rails, end ladder */
 function accessPlatform(P, lx, lz) {
+  P.shadow(lx, lz, 1.8, 2.6);
   P.box("paintedMetal", P.P.impDark, lx, F + 0.28, lz, 1.6, 0.12, 2.4, { texel: 0.5 });
   for (const dx of [-0.65, 0.65]) for (const dz of [-1.05, 1.05]) P.cyl("metal", HG.gunmetal, lx + dx, F + 0.11, lz + dz, 0.11, 0.08, "x", { segments: 10 });
   for (const dz of [-1.2, 1.2]) P.box("hazard", 0xffffff, lx, F + 0.28, lz + dz, 1.62, 0.13, 0.03, { texel: 1 });

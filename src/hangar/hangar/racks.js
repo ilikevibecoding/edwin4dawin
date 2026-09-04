@@ -12,6 +12,7 @@ import * as THREE from "three";
 import { Batch, Batcher, sharedCylinder, axisQuat } from "./batch.js";
 import { FLOOR, HALL, WALL_T, DOORS, RACK, RIB_Z, RIB_W, RIB_D, STAIRS, LADDER_Z, RAIL_H, RAIL_MID, HG } from "./layout.js";
 import { label, railRun, ladder, housedLamp, hazardBlocks } from "./util.js";
+import { contactShadow } from "./deck.js";
 
 const WALL_FACE = HALL.x1 - WALL_T - 0.12; // 79.72: wall panel front
 const RIB_FACE = HALL.x1 - WALL_T - RIB_D; // 78.64: rib front
@@ -230,6 +231,7 @@ function buildPlatform(ctx, B, s, tier) {
         // black/yellow bands round the column foot (piano-key blocks, no texture)
         hazardBlocks(B, [Math.min(xa, xb) - 0.01, FLOOR + 0.12, z - 0.21], [Math.max(xa, xb) + 0.01, FLOOR + 1.32, z + 0.21], "y", { block: 0.2 });
         kit.collider([Math.min(fa, fb), FLOOR, z - 0.35], [Math.max(fa, fb), FLOOR + 3, z + 0.35], "rack-column");
+        contactShadow(kit, (fa + fb) / 2, z, 0.7, 0.7, 0.6);
       }
     }
   }

@@ -1,8 +1,32 @@
 // Small shared helpers for the hangar builders: oriented cylinders, atlas labels, rails, ladders.
 import * as THREE from "three";
 import { LABELS } from "./materials.js";
-import { RAIL_H, RAIL_MID, RAIL_KICK, HG } from "./layout.js";
-import { sharedTorus } from "./batch.js";
+import { RAIL_H, RAIL_MID, RAIL_KICK, HG, EM } from "./layout.js";
+import { sharedTorus, Batcher } from "./batch.js";
+
+// Every atlas decal (labels, wear streaks, baked-shadow gradients, contact blobs: ~800 quads a build)
+// goes into one Batcher per kit and reaches the kit as one geometry per material + colour when the
+// module's build() calls flushDecals(); 800 PlaneGeometry + kit.add round trips cost ~8 ms.
+const _decals = new WeakMap();
+function decals(kit) {
+  let b = _decals.get(kit);
+  if (!b) {
+    b = new Batcher(kit);
+    _decals.set(kit, b);
+  }
+  return b;
+}
+/**
+ * Add the batched decals to the kit. The decal materials are transparent without depth writes, so
+ * their draw order is buffer order: the black wear / shadow shapes go last, over the stencils they
+ * darken (the order the builders drew them in).
+ */
+export function flushDecals(kit) {
+  const b = _decals.get(kit);
+  if (!b) return;
+  b.flush((a, c) => (a.color === HG.shadow ? 1 : 0) - (c.color === HG.shadow ? 1 : 0));
+  _decals.delete(kit);
+}
 
 /**
  * Housed lamp: a dark housing box with the emissive face set 1 cm proud of its open side and inset
@@ -96,28 +120,70 @@ export function tube(kit, mat, a, b, r, opts = {}) {
   });
 }
 
-/**
- * Text label quad from the atlas. `normal` is the facing direction ([0,1,0] lays it flat, with the
- * text top toward -Z; `spin` rotates it about the normal). width in metres; height from the aspect.
- */
-export function label(kit, mat, name, center, normal, width, { color = 0xffffff, spin = 0 } = {}) {
-  const L = LABELS[name];
-  if (!L) throw new Error("hangar atlas: no label " + name);
-  const h = width / L.aspect;
-  const geo = new THREE.PlaneGeometry(width, h);
-  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...normal).normalize());
-  if (normal[1] > 0.5) q.copy(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)));
-  if (spin) q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), spin));
-  return kit.add(mat, geo, { pos: center, quat: q, uv: "keep", uvRect: L.rect, color });
+/** base orientation of a decal quad facing `normal` (flat ones keep their top toward -Z) */
+function decalQuat(normal) {
+  if (normal[1] > 0.5) return new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+  return new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(...normal).normalize());
 }
 
 /**
- * Safety rail from [x,z] to [x,z] at floor y0: dark posts every <= 2.5 m, a thin light-grey top rail at
- * 1.02 m, a dark mid rail at 0.55 m and a 0.15 m kick plate, plus a 1.02 m tall blocking collider along
- * it. `lit` adds a 1 cm light strip under the top rail and (unless `caps` is false) a lit cap lens on
- * every post, so the rail still reads at night and from 70 m. Uses the Batcher for everything (boxes only).
+ * Text label quad from the atlas. `normal` is the facing direction ([0,1,0] lays it flat, with the
+ * text top toward -Z; `spin` rotates it about the normal). width in metres; height from the aspect
+ * unless `height` is given (stretched alpha shapes: streaks, gradients).
  */
-export function railRun(B, kit, from, to, y0, { tag = "rail", collide = true, kick = true, foot = true, lit = false, caps = true, postEvery = 2.5, colors = {} } = {}) {
+export function label(kit, mat, name, center, normal, width, { color = 0xffffff, spin = 0, height = null } = {}) {
+  const L = LABELS[name];
+  if (!L) throw new Error("hangar atlas: no label " + name);
+  const h = height ?? width / L.aspect;
+  const q = decalQuat(normal);
+  if (spin) q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), spin));
+  decals(kit).quad(mat, color, center, q, width, h, L.rect);
+}
+
+const _ex = new THREE.Vector3(), _ey = new THREE.Vector3(), _dir = new THREE.Vector3();
+/**
+ * Baked-shadow gradient (atlas GRAD: opaque at its u = 0 edge, gone at u = 1) on a surface facing
+ * `normal`: `len` metres of falloff along `dir` (world direction from the occluder out into the light,
+ * in the surface plane), `span` metres across it. Black by default; `tone` is the vertex colour (a dark
+ * grey for a lighter shadow).
+ */
+export function shadowGrad(kit, center, normal, dir, len, span, { tone = HG.shadow, mat = "hgDecal" } = {}) {
+  const L = LABELS.GRAD;
+  const q = decalQuat(normal);
+  _ex.set(1, 0, 0).applyQuaternion(q);
+  _ey.set(0, 1, 0).applyQuaternion(q);
+  _dir.set(dir[0], dir[1], dir[2]).normalize();
+  // spin about the normal so the quad's local +x (the fade direction) points along dir
+  const spin = Math.atan2(_dir.dot(_ey), _dir.dot(_ex));
+  q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), spin));
+  decals(kit).quad(mat, tone, center, q, len, span, L.rect);
+}
+
+/**
+ * Worn-paint streak (atlas STREAK: strongest at its u = 0 end, 20 % at the far end, a bell across) from
+ * point `from` running along `dir` for `len` metres, `width` metres wide, on the deck (normal +y) or a
+ * wall. Tyre tracks along the lanes, drag marks at the doors, skids on the pads.
+ */
+export function wearStreak(kit, from, normal, dir, len, width, { tone = HG.shadow } = {}) {
+  const L = LABELS.STREAK;
+  const q = decalQuat(normal);
+  _ex.set(1, 0, 0).applyQuaternion(q);
+  _ey.set(0, 1, 0).applyQuaternion(q);
+  _dir.set(dir[0], dir[1], dir[2]).normalize();
+  const spin = Math.atan2(_dir.dot(_ey), _dir.dot(_ex));
+  q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), spin));
+  const center = [from[0] + _dir.x * len / 2, from[1] + _dir.y * len / 2, from[2] + _dir.z * len / 2];
+  decals(kit).quad("hgDecal", tone, center, q, len, width, L.rect);
+}
+
+/**
+ * Safety rail from [x,z] to [x,z] at floor y0: dark posts every <= 2.5 m, a round light-grey handrail
+ * (3 cm radius) at 1.02 m, a dark mid rail at 0.55 m and a 0.15 m kick plate, plus a 1.02 m tall blocking
+ * collider along it. `lit` adds a 1 cm light strip under the handrail and (unless `caps` is false) a lit
+ * cap lens on every post, so the rail still reads at night and from 70 m; `soft` puts that strip on the
+ * vertex-level emitter under the bloom threshold (a rail 1.5 m from the eye must not smear).
+ */
+export function railRun(B, kit, from, to, y0, { tag = "rail", collide = true, kick = true, foot = true, lit = false, caps = true, soft = false, postEvery = 2.5, colors = {} } = {}) {
   const dx = to[0] - from[0], dz = to[1] - from[1];
   const L = Math.hypot(dx, dz);
   if (L < 0.2) return;
@@ -129,15 +195,20 @@ export function railRun(B, kit, from, to, y0, { tag = "rail", collide = true, ki
   for (let i = 0; i <= n; i++) {
     const t = i / n;
     const x = from[0] + dx * t, z = from[1] + dz * t;
-    B.box("paintedMetal", post, x, y0 + RAIL_H / 2, z, 0.09, RAIL_H, 0.09);
+    B.box("paintedMetal", post, x, y0 + RAIL_H / 2 - 0.02, z, 0.07, RAIL_H - 0.04, 0.07);
     // foot plate (skipped on rails nobody gets near, e.g. the catwalk ring 36 m up)
     if (foot) B.box("paintedMetal", post, x, y0 + 0.015, z, 0.22, 0.03, 0.22);
-    if (lit && caps) B.box("emitWhite", 0xffffff, x, y0 + RAIL_H + 0.015, z, 0.07, 0.03, 0.07);
+    if (lit && caps) B.box("emitWhite", 0xffffff, x, y0 + RAIL_H + 0.015, z, 0.05, 0.03, 0.05);
   }
   const cx = (from[0] + to[0]) / 2, cz = (from[1] + to[1]) / 2;
   const sx = alongX ? L : 0.05, sz = alongX ? 0.05 : L;
-  B.box("metal", rail, cx, y0 + RAIL_H - 0.03, cz, alongX ? L + 0.09 : 0.07, 0.06, alongX ? 0.07 : L + 0.09);
-  if (lit) B.box("emitWhite", 0xffffff, cx, y0 + RAIL_H - 0.065, cz, alongX ? L - 0.1 : 0.03, 0.01, alongX ? 0.03 : L - 0.1);
+  // round handrail (a tube, not a box beam), painted light grey: bare metal 1 m from a point light drew
+  // a specular streak the length of the rail
+  B.tube("paintedMetal", rail, [from[0] - ux * 0.045, y0 + RAIL_H - 0.03, from[1] - uz * 0.045], [to[0] + ux * 0.045, y0 + RAIL_H - 0.03, to[1] + uz * 0.045], 0.03, 10);
+  if (lit) {
+    if (soft) B.box("hgEmit", EM.strip, cx, y0 + RAIL_H - 0.068, cz, alongX ? L - 0.1 : 0.03, 0.01, alongX ? 0.03 : L - 0.1);
+    else B.box("emitWhite", 0xffffff, cx, y0 + RAIL_H - 0.068, cz, alongX ? L - 0.1 : 0.03, 0.01, alongX ? 0.03 : L - 0.1);
+  }
   B.box("paintedMetal", post, cx, y0 + RAIL_MID, cz, sx, 0.05, sz);
   if (kick) B.box("paintedMetal", colors.kick || post, cx, y0 + 0.02 + RAIL_KICK / 2, cz, alongX ? L : 0.03, RAIL_KICK, alongX ? 0.03 : L);
   if (collide) {

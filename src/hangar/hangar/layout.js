@@ -79,16 +79,18 @@ export const GALLERY_SPANS = {
 };
 
 // the four spot descriptors of the light plan: each is a real ceiling flood fixture with a lit lens
-// (walls.js builds the housing at `pos`, index.js lights it toward `target`). Two pools on the aft apron
-// flanking the taxi lane 13 m ahead of the spawn (full-intensity radius 8 m: x 8..24, z 139..155, so
-// the two spawn-side clutter clusters at (+-8.5, 149.5) stand inside them and the pads 03/04 take the
-// fade; from eye height a pool further out than ~20 m is a thin band hidden behind that clutter), two
-// key lights on the port rack tiers for the racks view's nearest slots. The first one casts the shadows.
+// (walls.js builds the housing at `pos`, index.js lights it toward `target`). Two pools centred on pads
+// 03/04 (0.21 rad from 55 m up: a 10 m pool with the full-intensity core 5 m wide, so the pad ring sits
+// in the penumbra and the apron lane between the pads stays dark - from the balcony camera the two pads
+// read as pools with edges, from the spawn the pool halves flank the lane), and one key light per side
+// aimed at the tier-1 fighters (0.24 rad, ~520: the cone stops short of the wall behind tier 2, and the
+// panel wall behind tier 1 takes a mid-grey wash instead of a blown-out patch). The first one casts the
+// shadows.
 export const FLOODS = [
-  { pos: [-16, -17, 148], target: [-16, FLOOR, 147], angle: 0.24, intensity: 1150 },
-  { pos: [16, -17, 148], target: [16, FLOOR, 147], angle: 0.24, intensity: 1150 },
-  { pos: [-44, -17, 36], target: [-70, -62, 34], angle: 0.3, intensity: 820 },
-  { pos: [-44, -17, 58], target: [-70, -46, 50], angle: 0.3, intensity: 760 },
+  { pos: [-22, -17, 143], target: [-22, FLOOR, 142], angle: 0.21, penumbra: 0.5, intensity: 1300 },
+  { pos: [22, -17, 143], target: [22, FLOOR, 142], angle: 0.21, penumbra: 0.5, intensity: 1300 },
+  { pos: [-44, -17, 42], target: [-70, -60, 42], angle: 0.24, penumbra: 0.4, intensity: 520 },
+  { pos: [44, -17, 42], target: [70, -60, 42], angle: 0.24, penumbra: 0.4, intensity: 520 },
 ];
 
 // landing pads (centre x,z, radius) and their numbers
@@ -124,4 +126,17 @@ export const HG = {
   gunmetal: new THREE.Color("#4a4e55"),
   rubber: new THREE.Color("#ffffff"),
   black: new THREE.Color("#111214"),
+  shadow: new THREE.Color("#000000"),
+};
+
+// emitter levels (linear light) for the vertex-level emitter materials.hgEmit: everything here stays
+// under the bloom threshold (1.15) so it glows as a lit surface instead of clipping to white
+export const EM = {
+  lens: new THREE.Color(0.98, 1.0, 1.08), // housed ceiling / wall flood lenses
+  strip: new THREE.Color(0.88, 0.9, 0.98), // balcony rail strip, hatch slits
+  jamb: new THREE.Color(0.58, 0.6, 0.68), // caged bay-door jamb bars (about 40 % of emitWhite)
+  crane: new THREE.Color(1.02, 1.04, 1.1), // crane under-girder strips
+  amberGlow: new THREE.Color(0.34, 0.16, 0.03), // behind the vent louvres (a warm glow through the slats, not a lamp)
+  blueGlow: new THREE.Color(0.3, 0.45, 0.85), // behind the hatch slats
+  window: new THREE.Color(0.46, 0.54, 0.76), // tower / lift window bands (lit glazing, not a lamp)
 };

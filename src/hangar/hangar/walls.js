@@ -13,9 +13,9 @@ import * as THREE from "three";
 import { Batcher, PX, NX, PY, NY, PZ, NZ, ALL, sharedBox } from "./batch.js";
 import { doorOpening, FRAME_W } from "../../systems/doors/helper.js";
 import { rng } from "../../kit.js";
-import { FLOOR, CEIL, WALL_T, HALL, DOORS, DOOR_LABELS, WINDOW, BALCONY, RACK, STAIRS, LADDER_Z, CATWALK, GALLERY, GALLERY_SPANS, FLOODS, RIB_Z, RIB_X, RIB_W, RIB_D, PANEL_W, SEAM, HG } from "./layout.js";
+import { FLOOR, CEIL, WALL_T, HALL, DOORS, DOOR_LABELS, WINDOW, BALCONY, RACK, STAIRS, LADDER_Z, CATWALK, GALLERY, GALLERY_SPANS, FLOODS, RIB_Z, RIB_X, RIB_W, RIB_D, PANEL_W, SEAM, HG, EM } from "./layout.js";
 import { LABELS } from "./materials.js";
-import { label, railRun, ladder, housedLamp, redBeacon, hazardBlocks } from "./util.js";
+import { label, railRun, ladder, housedLamp, redBeacon, hazardBlocks, shadowGrad } from "./util.js";
 
 const H = CEIL - FLOOR; // 60
 const P0 = WALL_T; // panel back (on the black backing)
@@ -25,24 +25,31 @@ const CAT_V = CATWALK.y - FLOOR; // plate top, wall-local v (36.54)
 const GAL_V = GALLERY.y - FLOOR; // gallery plate top, wall-local v (12)
 const END_LADDER_X = { bow: 50, aft: -50 }; // deck -> catwalk ladders on the end walls
 const BEACON_V = [27, 52]; // housed red beacons on every rib (y -45 and y -20)
+const CORNICE_V = 58.6; // cornice beam from here to the ceiling (1.4 m)
+const TOWER_HW = 3.6; // buttress tower half width (flanking both blast portals)
+const TOWER_D = 4.0; // tower depth: the balcony's fascia girder runs 14 cm proud of the tower fronts (the towers carry the balcony ends)
+const DOWN = [0, -1, 0];
 
 // rows of the 60 m wall: [v0, v1, type]
 const ROWS = [];
 for (let k = 0; k < 5; k++) {
   const b = k * 12;
   if (k === 0) ROWS.push([0, 0.9, "kick"], [0.9, 6.2, "panelLow"], [6.2, 11.6, "panel"]);
-  else ROWS.push([b + 0.4, b + 6.0, "panel"], [b + 6.0, b + 11.6, "panel"]);
+  else if (k < 4) ROWS.push([b + 0.4, b + 6.0, "panel"], [b + 6.0, b + 11.6, "panel"]);
+  else ROWS.push([b + 0.4, b + 6.0, "panel"], [b + 6.0, CORNICE_V, "panel"]);
   if (k < 4) ROWS.push([b + 11.6, b + 12.4, "band"]);
-  else ROWS.push([b + 11.6, H, "cornice"]);
+  else ROWS.push([CORNICE_V, H, "cornice"]);
 }
 // the one darker panel row (10 % of the field): the row above the first band, all four walls
 const DARK_ROW = [12.4, 18.0];
-// baked light falloff: the hall is lit from the deck, so the panel tone darkens with height (one tint
-// per 12 m storey above 24 m; the ceiling darkest so its light channels have something to sit in)
+// baked light falloff: the hall is lit from the deck, so the panel tone darkens with height - the base
+// storey full, then a stop and a half down to the cornice, so the upper two thirds of every wall read
+// clearly darker than the base band and the ceiling structure sits in shadow
 const HEIGHT_TINT = [
-  [48, 0.62],
-  [36, 0.74],
-  [24, 0.86],
+  [48, 0.4],
+  [36, 0.5],
+  [24, 0.63],
+  [12, 0.8],
 ];
 const _tints = new Map();
 function tinted(color, k) {
@@ -116,6 +123,10 @@ class Wall {
     this.faces = ALL & ~this.backBit;
     this.facesHigh = this.frontBit | NY; // panels above 24 m: only the front and the underside can be seen from the deck
     this.N = plane === "x" ? new THREE.Vector3(inward, 0, 0) : new THREE.Vector3(0, 0, inward);
+    this.uDir = plane === "x" ? [0, 0, 1] : [1, 0, 0]; // world direction of local +u
+    // the hall's light is imagined as one big source over its centre: everything standing off a wall
+    // casts its baked shadow away from the centre (u of the hall centre in this wall's coordinates)
+    this.uCentre = plane === "x" ? this.u(50) : this.u(0);
     this.holes = []; // exact holes {u0,u1,v0,v1,door?,mu,mv}
     this.extraCuts = []; // panels/bands keep out of these (balcony slot, tower base, hatches)
     this.trayCuts = []; // cable trays keep out of these (stairs, ladders, hatches)
@@ -137,11 +148,43 @@ class Wall {
   }
   box(mat, color, u0, u1, v0, v1, d0, d1, opts = {}) {
     const [mn, mx] = this.aabb(u0, u1, v0, v1, d0, d1);
+    // a box whose back sits in or on the panel skin has no visible back face (it is against the backing
+    // or inside the panel) unless it stands in a hole; an explicit face mask always wins
+    if (opts.faces === undefined && d0 <= P1 + 1e-6 && !this.holes.some((h) => u0 < h.u1 && u1 > h.u0 && v0 < h.v1 && v1 > h.v0)) opts = { ...opts, faces: this.faces };
     this.B.boxMM(mat, color, mn, mx, opts);
   }
   /** local u for a world across-axis coordinate */
   u(worldAcross) {
     return worldAcross - this.uw0;
+  }
+  /**
+   * Baked shadow on the panel face: a gradient `len` metres long fading along the wall from the edge
+   * (u | v) of an occluder. dir "u+" / "u-" = sideways from a rib flank, "down" = under a ledge. Spans
+   * uSpan (across a ledge) or vSpan (down a rib flank); clipped to the wall; skipped when nothing is left.
+   */
+  grad(dir, u, v, len, span, tone) {
+    let cu, cv, worldDir, sp;
+    if (dir === "down") {
+      cu = u;
+      cv = v - len / 2;
+      worldDir = DOWN;
+      sp = span;
+      if (cv - len / 2 < 0) return;
+    } else {
+      const s = dir === "u+" ? 1 : -1;
+      const u0 = Math.max(0.05, u + (s > 0 ? 0 : -len)), u1 = Math.min(this.L - 0.05, u + (s > 0 ? len : 0));
+      if (u1 - u0 < 0.2) return;
+      cu = (u0 + u1) / 2;
+      len = u1 - u0;
+      cv = v;
+      worldDir = [this.uDir[0] * s, 0, this.uDir[2] * s];
+      sp = span;
+    }
+    shadowGrad(this.kit, this.pos(cu, cv, P1 + 0.02), this.N.toArray(), worldDir, len, sp, tone ? { tone } : undefined);
+  }
+  /** +1 / -1: the side of local u that faces away from the hall centre (where the baked shadows fall) */
+  shadeSide(u) {
+    return u >= this.uCentre ? 1 : -1;
   }
   /** is local u inside one of this wall's gallery spans */
   inGallery(u) {
@@ -195,28 +238,39 @@ class Wall {
 
   // ---- panel field
   panels() {
-    const cuts = [...this.cuts(), ...this.ribRects(), ...this.extraCuts];
+    const allCuts = [...this.cuts(), ...this.ribRects(), ...this.extraCuts];
     const nCols = Math.round(this.L / PANEL_W);
     for (const [v0, v1, type] of ROWS) {
+      // only the cuts that reach this row (a third of them per row: the rest is tested 2000 times for nothing)
+      const cuts = allCuts.filter((c) => c.v1 > v0 && c.v0 < v1);
       if (type === "band" || type === "kick" || type === "cornice") {
         for (const r of subtract({ u0: 0, u1: this.L, v0, v1 }, cuts)) {
           if (type === "band") {
-            // recessed structural channel: black back behind the panel plane, steel lips top and bottom
-            // standing proud of the panels, dark bolt blocks inside every 4 m on the two lower bands (the
-            // ones 36 m and 48 m up are too far for a 20 cm block to read)
-            this.box("paintedMetal", this.P.impBlack, r.u0, r.u1, r.v0, r.v1, P0, P0 + 0.02, { texel: 0.5 });
+            // structural channel in dark steel (a clearly darker value than the panels, not the same
+            // grey): gunmetal body 4 cm proud of the panels, light steel lips top and bottom standing
+            // further proud, dark bolt blocks on the two lower bands (the ones 36 m and 48 m up are too
+            // far for a 20 cm block to read); a baked shadow band 0.9 m deep under the channel
+            this.box("paintedMetal", HG.gunmetal, r.u0, r.u1, v0 + 0.1, v1 - 0.1, P0, P1 + 0.04, { faces: this.frontBit, texel: 0.5 });
             this.box("metal", HG.steel, r.u0, r.u1, v0, v0 + 0.12, P0, P1 + 0.14);
             this.box("metal", HG.steel, r.u0, r.u1, v1 - 0.12, v1, P0, P1 + 0.14);
-            if (v0 < 30) for (let u = r.u0 + 2; u < r.u1 - 1; u += 4) this.box("metal", HG.gunmetal, u - 0.1, u + 0.1, v0 + 0.24, v1 - 0.24, P0 + 0.02, P0 + 0.1);
+            if (v0 < 30) for (let u = r.u0 + 2; u < r.u1 - 1; u += 4) this.box("metal", this.P.impBlack, u - 0.1, u + 0.1, v0 + 0.24, v1 - 0.24, P1 + 0.04, P1 + 0.12);
+            this.grad("down", (r.u0 + r.u1) / 2, v0, 0.9, r.u1 - r.u0);
             continue;
           }
-          const depth = type === "kick" ? 0.34 : 0.5;
-          this.box("paintedMetal", this.P.impDark, r.u0, r.u1, r.v0, r.v1, P0, depth, { texel: 0.5 });
-          if (type === "kick") {
-            // waist-height light strip in a black channel just above the kick band
-            this.box("paintedMetal", this.P.impBlack, r.u0 + 0.25, r.u1 - 0.25, 0.96, 1.14, P1, P1 + 0.08);
-            this.box("emitWhite", 0xffffff, r.u0 + 0.3, r.u1 - 0.3, 1.02, 1.08, P1 + 0.08, P1 + 0.09);
+          if (type === "cornice") {
+            // where the wall meets the ceiling: a 1.4 m black cornice beam 1.0 m deep with a steel lip
+            // along its bottom edge and a baked shadow under it (the top of every wall reads as a dark
+            // rib run, not as one more panel row fading into the roof)
+            this.box("paintedMetal", this.P.impBlack, r.u0, r.u1, r.v0, r.v1, 0.02, 1.0, { faces: ALL & ~this.backBit & ~PY, texel: 0.5 });
+            this.box("paintedMetal", this.P.impDark, r.u0, r.u1, r.v0 + 0.3, r.v1 - 0.3, 1.0, 1.06, { faces: this.frontBit, texel: 0.5 });
+            this.box("metal", HG.gunmetal, r.u0, r.u1, r.v0, r.v0 + 0.1, 0.02, 1.08);
+            this.grad("down", (r.u0 + r.u1) / 2, r.v0, 1.1, r.u1 - r.u0);
+            continue;
           }
+          this.box("paintedMetal", this.P.impDark, r.u0, r.u1, r.v0, r.v1, P0, 0.34, { texel: 0.5 });
+          // waist-height light strip in a black channel just above the kick band
+          this.box("paintedMetal", this.P.impBlack, r.u0 + 0.25, r.u1 - 0.25, 0.96, 1.14, P1, P1 + 0.08);
+          this.box("emitWhite", 0xffffff, r.u0 + 0.3, r.u1 - 0.3, 1.02, 1.08, P1 + 0.08, P1 + 0.09);
         }
         continue;
       }
@@ -252,39 +306,45 @@ class Wall {
     if (full && w > 1.5 && h > 2) {
       const s = this.rand();
       if (plain) style = s < 0.3 ? "seam" : "plain";
-      else if (dark) style = s < 0.34 ? "vent" : s < 0.42 ? "hatch" : s < 0.6 ? "seam" : "plain"; // the dark row is the service row
+      else if (dark) style = s < 0.24 ? "vent" : s < 0.5 ? "seam" : "plain"; // the dark row is the service row: lit vents
       else if (detailed) {
-        if (s < 0.05) style = "vent";
-        else if (s < 0.1) style = "greeble";
+        // hatches and greebles only where a person can reach them; higher up they read as black
+        // rectangles from the deck, so the upper storeys get lit vents instead
+        if (s < 0.04) style = "vent";
+        else if (s < 0.08) style = r.v0 < 12 ? "greeble" : "vent";
         else if (s < 0.23) style = "seam";
-        else if (s < 0.27) style = "hatch";
+        else if (s < 0.27) style = r.v0 < 12 ? "hatch" : "plain";
       } else if (r.v0 < 36 && s < 0.14) style = "seam"; // upper storeys: a few grooves; above 36 m plain sheets (nobody sees bolts there)
     }
     const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2;
     if (style === "vent" || style === "hatch") {
-      // a real opening: the panel becomes a frame round a recess that goes back to the black backing
+      // a real opening: the panel becomes a frame round a recess that goes back to the backing
       const gw = style === "vent" ? Math.min(w - 1.0, 2.6) : Math.min(w - 1.2, 2.2), gh = style === "vent" ? h - 1.2 : Math.min(h - 1.0, 3.0);
       const ou0 = cu - gw / 2, ou1 = cu + gw / 2, ov0 = style === "vent" ? cv - gh / 2 : v0 + 0.5, ov1 = ov0 + gh;
       this.box("impPanel", color, u0, ou0, v0, v1, P0, P1, { faces, fit: true });
       this.box("impPanel", color, ou1, u1, v0, v1, P0, P1, { faces, fit: true });
       this.box("impPanel", color, ou0, ou1, v0, ov0, P0, P1, { faces, fit: true });
       this.box("impPanel", color, ou0, ou1, ov1, v1, P0, P1, { faces, fit: true });
-      // steel frame lip proud of the panel, black recess back
+      // steel frame lip proud of the panel
       this.box("metal", HG.steel, ou0 - 0.1, ou1 + 0.1, ov0 - 0.1, ov0, P1 - 0.02, P1 + 0.08);
       this.box("metal", HG.steel, ou0 - 0.1, ou1 + 0.1, ov1, ov1 + 0.1, P1 - 0.02, P1 + 0.08);
       this.box("metal", HG.steel, ou0 - 0.1, ou0, ov0, ov1, P1 - 0.02, P1 + 0.08);
       this.box("metal", HG.steel, ou1, ou1 + 0.1, ov0, ov1, P1 - 0.02, P1 + 0.08);
-      this.box("paintedMetal", this.P.impBlack, ou0, ou1, ov0, ov1, P0 - 0.01, P0 + 0.01, { faces: this.frontBit });
       if (style === "vent") {
-        // louvre slats inside the recess
+        // lit from inside: an amber glow plate at the back of the recess behind mid-grey louvre slats,
+        // so from the deck the vent reads as a warm slatted opening, never a flat black decal
+        this.box("hgEmit", EM.amberGlow, ou0, ou1, ov0, ov1, P0 - 0.01, P0 + 0.01, { faces: this.frontBit });
         const n = Math.floor(gh / 0.34);
         for (let i = 0; i < n; i++) {
           const y = ov0 + 0.17 + i * 0.34;
-          this.box("metal", HG.gunmetal, ou0 + 0.05, ou1 - 0.05, y - 0.05, y + 0.05, P0 + 0.01, P0 + 0.1);
+          this.box("paintedMetal", this.P.impMid, ou0 + 0.05, ou1 - 0.05, y - 0.085, y + 0.085, P0 + 0.02, P0 + 0.11, { texel: 0.5 });
         }
       } else {
-        // recessed service hatch: dark leaf set 6 cm into the opening, handle, housed amber lamp on the lip
-        this.box("paintedMetal", this.P.impDark, ou0 + 0.05, ou1 - 0.05, ov0 + 0.05, ov1 - 0.05, P0 + 0.01, P0 + 0.06, { texel: 0.5 });
+        // recessed service hatch: dark leaf set 6 cm into the opening, a blue-lit seam across the top
+        // of the recess, handle, housed amber lamp on the lip
+        this.box("paintedMetal", this.P.impBlack, ou0, ou1, ov0, ov1, P0 - 0.01, P0 + 0.01, { faces: this.frontBit });
+        this.box("paintedMetal", this.P.impDark, ou0 + 0.05, ou1 - 0.05, ov0 + 0.05, ov1 - 0.2, P0 + 0.01, P0 + 0.06, { texel: 0.5 });
+        this.box("hgEmit", EM.blueGlow, ou0 + 0.1, ou1 - 0.1, ov1 - 0.16, ov1 - 0.08, P0 + 0.02, P0 + 0.03);
         this.box("metal", HG.steel, cu + 0.45, cu + 0.55, ov0 + 0.9, ov0 + 1.3, P0 + 0.06, P0 + 0.1);
         housedLamp(this.B, "emitAmber", this.pos(cu, ov1 + 0.3, P1 + 0.08), this.N.toArray(), [0.4, 0.12, 0.16], { inset: 0.04 });
       }
@@ -337,12 +397,15 @@ class Wall {
         a = Math.max(a, o1);
       }
       segs.push([a, H]);
+      const shade = this.shadeSide(u);
       for (const [s0, s1] of segs) {
         if (s1 - s0 < 0.5) continue;
         this.box("paintedMetal", this.P.impDark, u - RIB_W / 2, u + RIB_W / 2, s0, s1, 0.02, D, { texel: 0.5 });
         this.box("impPanel", this.P.impMid, u - RIB_W / 2 + 0.2, u + RIB_W / 2 - 0.2, s0 + 0.4, s1 - 0.4, D, D + 0.06, { texel: 0.5 });
         // side flanges (lighter) so the rib reads as a profile, not a slab
         for (const s of [-1, 1]) this.box("paintedMetal", this.P.impMid, u + s * (RIB_W / 2 + 0.12) - 0.12, u + s * (RIB_W / 2 + 0.12) + 0.12, s0, s1, P1, D - 0.3, { texel: 0.5 });
+        // baked shadow: a 0.9 m dark gradient on the panels along the rib's shaded flank
+        this.grad(shade > 0 ? "u+" : "u-", u + shade * (RIB_W / 2 + 0.24), (s0 + s1) / 2, 0.9, s1 - s0);
       }
       // opening lintels + a housed lamp under each lighting the walkway
       for (const [, o1] of ops) {
@@ -379,7 +442,7 @@ class Wall {
       if (k % 2 === 0) this.flood(u, v);
       else {
         this.box("paintedMetal", this.P.impDark, u - 0.2, u + 0.2, v - 0.5, v + 0.1, P1, P1 + 0.3, { texel: 0.5 });
-        housedLamp(this.B, "emitWhite", this.pos(u, v - 0.5, P1 + 0.3), [0, -1, 0], [0.9, 0.16, 0.3], { inset: 0.04 });
+        housedLamp(this.B, "hgEmit", this.pos(u, v - 0.5, P1 + 0.3), [0, -1, 0], [0.9, 0.16, 0.3], { inset: 0.04, lampColor: EM.lens });
       }
     }
   }
@@ -398,7 +461,7 @@ class Wall {
     // housing body (behind the lens) + rim slabs round the open front, lens recessed 12 cm, three slats
     this.B.geo("paintedMetal", this.P.impDark, sharedBox(1.9, 0.6, 0.5), c.clone().addScaledVector(fr, -0.35).toArray(), q);
     for (const s of [-1, 1]) this.B.geo("paintedMetal", this.P.impDark, sharedBox(1.9, 0.06, 0.4), c.clone().addScaledVector(up, s * 0.27).addScaledVector(fr, 0.1).toArray(), q);
-    this.B.geo("emitWhite", 0xffffff, sharedBox(1.7, 0.42, 0.03), c.clone().addScaledVector(fr, -0.1).toArray(), q);
+    this.B.geo("hgEmit", EM.lens, sharedBox(1.7, 0.42, 0.03), c.clone().addScaledVector(fr, -0.1).toArray(), q);
     for (const k of [-0.15, 0, 0.15]) this.B.geo("paintedMetal", this.P.impMid, sharedBox(1.8, 0.04, 0.12), c.clone().addScaledVector(up, k).addScaledVector(fr, 0.2).toArray(), q);
     this.B.tube("metal", HG.gunmetal, this.pos(u, v, 0.95), c.clone().addScaledVector(fr, -0.55).toArray(), 0.09, 8);
   }
@@ -415,15 +478,23 @@ class Wall {
       this.B.tube("metal", HG.steel, this.pos(r.u0, 3.12, P1 + 0.28), this.pos(r.u1, 3.12, P1 + 0.28), 0.11, 10);
       this.B.tube("metal", HG.gunmetal, this.pos(r.u0, 3.38, P1 + 0.24), this.pos(r.u1, 3.38, P1 + 0.24), 0.07, 8);
       for (let u = r.u0 + 2; u < r.u1 - 1; u += 4) this.box("metal", HG.gunmetal, u - 0.1, u + 0.1, 3.0, 3.5, P1 + 0.1, P1 + 0.4);
+      // a conduit run above the tray the length of the span, dropping into every junction box
+      this.B.tube("metal", HG.gunmetal, this.pos(r.u0, 5.0, P1 + 0.16), this.pos(r.u1, 5.0, P1 + 0.16), 0.05, 8);
       for (let u = r.u0 + 6; u < r.u1 - 2; u += 16) {
         if (this.ribs.some((rb) => Math.abs(rb - u) < 1.6)) continue;
-        this.box("paintedMetal", this.P.impDark, u - 0.4, u + 0.4, 3.7, 4.6, P1, P1 + 0.35, { texel: 0.5 });
-        for (let i = 0; i < 3; i++) this.box("metal", HG.gunmetal, u - 0.3, u + 0.3, 3.8 + i * 0.14, 3.84 + i * 0.14, P1 + 0.35, P1 + 0.39);
-        this.box("emitGreen", 0xffffff, u - 0.25, u - 0.15, 4.35, 4.45, P1 + 0.35, P1 + 0.37);
-        this.box("emitRedImp", 0xffffff, u - 0.05, u + 0.05, 4.35, 4.45, P1 + 0.35, P1 + 0.37);
+        // junction box: louvres, a lit status display and two housed indicator lamps big enough to read
+        // from 20 m, the conduit drop from above, cable drops into the tray, stencil
+        this.box("paintedMetal", this.P.impDark, u - 0.45, u + 0.45, 3.7, 4.7, P1, P1 + 0.35, { texel: 0.5 });
+        for (let i = 0; i < 3; i++) this.box("metal", HG.gunmetal, u - 0.35, u + 0.35, 3.8 + i * 0.14, 3.84 + i * 0.14, P1 + 0.35, P1 + 0.39);
+        this.box("paintedMetal", this.P.impBlack, u - 0.38, u + 0.38, 4.28, 4.62, P1 + 0.35, P1 + 0.37);
+        this.box("screenImp1", 0xffffff, u - 0.34, u + 0.02, 4.32, 4.58, P1 + 0.37, P1 + 0.38, { fit: true });
+        this.box("emitGreen", 0xffffff, u + 0.1, u + 0.2, 4.44, 4.56, P1 + 0.37, P1 + 0.38);
+        this.box("emitRedImp", 0xffffff, u + 0.24, u + 0.34, 4.44, 4.56, P1 + 0.37, P1 + 0.38);
+        this.box("emitAmber", 0xffffff, u + 0.1, u + 0.34, 4.32, 4.38, P1 + 0.37, P1 + 0.38);
+        this.B.tube("metal", HG.gunmetal, this.pos(u, 5.0, P1 + 0.16), this.pos(u, 4.7, P1 + 0.16), 0.05, 8);
         this.B.tube("rubber", HG.rubber, this.pos(u + 0.2, 3.7, P1 + 0.2), this.pos(u + 0.3, 2.95, P1 + 0.3), 0.04, 8);
         this.B.tube("metal", HG.steel, this.pos(u - 0.2, 3.7, P1 + 0.18), this.pos(u - 0.2, 2.92, P1 + 0.18), 0.04, 8);
-        label(this.kit, "hgDecal", "HIGH VOLTAGE", this.pos(u, 4.22, P1 + 0.355), N, 0.6, { color: HG.yellow });
+        label(this.kit, "hgDecal", "HIGH VOLTAGE", this.pos(u, 4.21, P1 + 0.355), N, 0.6, { color: HG.yellow });
       }
     }
   }
@@ -455,11 +526,11 @@ class Wall {
         redBeacon(this.B, this.pos(u, hv1 + 0.3, 0.7), N, 0.44);
       }
       if (txt) label(this.kit, "hgSign", txt, this.pos((h.u0 + h.u1) / 2, (hv0 + hv1) / 2, 0.925), N, Math.min(0.8 * LABELS[txt].aspect, h.u1 - h.u0 + 3.0));
-      // jamb columns either side of the surround, each with a thin light strip in a black channel
+      // jamb columns either side of the surround, each with a caged light slot: the strip sits 10 cm
+      // back in a black channel between two dark cheeks, behind steel cage bars, at 40 % of the bare
+      // emitter level - a housed fixture with a glow, not a clipped white bar
       for (const [a, b] of [[h.u0 - m - bw - 0.9, h.u0 - m - bw - 0.15], [h.u1 + m + bw + 0.15, h.u1 + m + bw + 0.9]]) {
-        this.box("paintedMetal", this.P.impDark, a, b, 0, hv0, 0.02, 0.9, { texel: 0.5 });
-        this.box("paintedMetal", this.P.impBlack, (a + b) / 2 - 0.1, (a + b) / 2 + 0.1, 0.4, hv0 - 0.4, 0.9, 0.96);
-        this.box("emitWhite", 0xffffff, (a + b) / 2 - 0.04, (a + b) / 2 + 0.04, 0.5, hv0 - 0.5, 0.96, 0.97);
+        this.cagedStrip(a, b, 0.4, hv0 - 0.4, 0.9);
         const [mn, mx] = this.aabb(a, b, 0, 4, 0, 0.9);
         this.kit.collider(mn, mx, "jamb");
       }
@@ -479,12 +550,21 @@ class Wall {
     const c0 = h.u0 - m - bw - cw, c1 = h.u1 + m + bw + cw; // portal outer edges
     const lv0 = h.v1 + m + bw + 0.3, lv1 = lv0 + 1.4; // lintel
     for (const [a, b] of [[c0, c0 + cw], [c1 - cw, c1]]) {
-      this.box("paintedMetal", this.P.impDark, a, b, 0, lv0, 0.02, pd, { texel: 0.5 });
-      this.box("paintedMetal", this.P.impMid, a + 0.2, b - 0.2, 0.4, lv0 - 0.4, pd, pd + 0.06, { texel: 0.5 });
-      // lit strip down the column's inner face
+      // column core (no front face) and a front layer split round the recessed strip channel on the
+      // inner edge: the channel is a 20 cm black slot 10 cm deep with the strip at its back, on the
+      // housed level (a lit reveal down the portal, not a bare bar)
       const inner = a === c0 ? b : a, dir = a === c0 ? -1 : 1;
-      this.box("paintedMetal", this.P.impBlack, inner + dir * 0.02, inner + dir * 0.2, 0.5, lv0 - 0.5, P0 + 0.6, pd - 0.1);
-      this.box("emitWhite", 0xffffff, inner + dir * 0.05, inner + dir * 0.17, 0.6, lv0 - 0.6, pd - 0.11, pd - 0.1);
+      const s0 = Math.min(inner + dir * 0.02, inner + dir * 0.22), s1 = Math.max(inner + dir * 0.02, inner + dir * 0.22);
+      this.box("paintedMetal", this.P.impDark, a, b, 0, lv0, 0.02, pd - 0.1, { faces: ALL & ~this.backBit & ~this.frontBit, texel: 0.5 });
+      this.box("paintedMetal", this.P.impDark, a, s0, 0, lv0, pd - 0.1, pd, { texel: 0.5 });
+      this.box("paintedMetal", this.P.impDark, s1, b, 0, lv0, pd - 0.1, pd, { texel: 0.5 });
+      this.box("paintedMetal", this.P.impDark, s0, s1, 0, 0.5, pd - 0.1, pd, { texel: 0.5 });
+      this.box("paintedMetal", this.P.impDark, s0, s1, lv0 - 0.5, lv0, pd - 0.1, pd, { texel: 0.5 });
+      this.box("paintedMetal", this.P.impBlack, s0, s1, 0.5, lv0 - 0.5, pd - 0.1, pd - 0.09, { faces: this.frontBit });
+      this.box("hgEmit", EM.jamb, s0 + 0.04, s1 - 0.04, 0.6, lv0 - 0.6, pd - 0.09, pd - 0.08);
+      // recessed-look mid-grey face panel on the outer part of the column, clear of the channel
+      if (a === c0) this.box("paintedMetal", this.P.impMid, a + 0.2, s0 - 0.15, 0.4, lv0 - 0.4, pd, pd + 0.06, { texel: 0.5 });
+      else this.box("paintedMetal", this.P.impMid, s1 + 0.15, b - 0.2, 0.4, lv0 - 0.4, pd, pd + 0.06, { texel: 0.5 });
       this.box("metal", HG.steel, a, b, 0.05, 0.2, pd, pd + 0.03);
       const [mn, mx] = this.aabb(a, b, 0, 4, 0, pd);
       this.kit.collider(mn, mx, "jamb");
@@ -502,6 +582,68 @@ class Wall {
       const [mn, mx] = this.aabb(h.u0 - 0.8, h.u1 + 0.8, 0, 0.02, pd, pd + 1.2);
       hazardBlocks(this.B, mn, mx, this.plane === "x" ? "z" : "x", { block: 0.4, faces: PY });
     }
+  }
+
+  /**
+   * Jamb column (u a..b, deck to v1 + 0.4, `depth` deep) with a caged light slot: black channel 10 cm
+   * deep between two dark cheeks, the strip at the back on the housed level, steel cage bars across the
+   * slot every 0.5 m.
+   */
+  cagedStrip(a, b, v0, v1, depth) {
+    const c = (a + b) / 2, P = this.P, nf = ALL & ~this.backBit & ~this.frontBit;
+    // core behind the slot (no front face), then the front layer in pieces round the open slot
+    this.box("paintedMetal", P.impDark, a, b, 0, v1 + 0.4, 0.02, depth - 0.1, { faces: nf, texel: 0.5 });
+    this.box("paintedMetal", P.impDark, a, c - 0.12, 0, v1 + 0.4, depth - 0.1, depth, { texel: 0.5 });
+    this.box("paintedMetal", P.impDark, c + 0.12, b, 0, v1 + 0.4, depth - 0.1, depth, { texel: 0.5 });
+    this.box("paintedMetal", P.impDark, c - 0.12, c + 0.12, 0, v0, depth - 0.1, depth, { texel: 0.5 });
+    this.box("paintedMetal", P.impDark, c - 0.12, c + 0.12, v1, v1 + 0.4, depth - 0.1, depth, { texel: 0.5 });
+    // slot: black back plate, the strip on the housed level, cheeks proud of the face, steel cage bars
+    this.box("paintedMetal", P.impBlack, c - 0.12, c + 0.12, v0, v1, depth - 0.1, depth - 0.09, { faces: this.frontBit });
+    for (const s of [-1, 1]) this.box("paintedMetal", P.impDark, c + s * 0.16 - 0.04, c + s * 0.16 + 0.04, v0, v1, depth - 0.02, depth + 0.06, { texel: 0.5 });
+    this.box("hgEmit", EM.jamb, c - 0.05, c + 0.05, v0 + 0.1, v1 - 0.1, depth - 0.09, depth - 0.08);
+    for (let v = v0 + 0.3; v < v1 - 0.1; v += 0.5) this.box("metal", HG.steel, c - 0.13, c + 0.13, v - 0.015, v + 0.015, depth, depth + 0.03);
+  }
+
+  /**
+   * Buttress tower flanking a blast portal: a dark block from the deck to `top` (the balcony / gallery
+   * underside), TOWER_D deep, that carries the walkway ends; recessed mid-grey face panel, a lit blue-
+   * white window band (lift / stair tower) up the front, steel edge trims, black plinth and cap, a
+   * housed lamp under the cap, and baked shadow on the wall along its shaded flank. Blocks the player.
+   */
+  tower(uc, top, { beacon = true, faceTop = top - 0.6 } = {}) {
+    const P = this.P, u0 = uc - TOWER_HW, u1 = uc + TOWER_HW, D = TOWER_D;
+    // body: a core without a front face, and the front layer in four pieces round the open window channel
+    this.box("paintedMetal", P.impDark, u0, u1, 0.9, top - 0.3, 0.02, D - 0.12, { faces: ALL & ~this.backBit & ~PY & ~this.frontBit, texel: 0.5 });
+    const fo = { faces: ALL & ~this.backBit & ~PY, texel: 0.5 };
+    this.box("paintedMetal", P.impDark, u0, uc - 0.5, 0.9, top - 0.3, D - 0.12, D, fo);
+    this.box("paintedMetal", P.impDark, uc + 0.5, u1, 0.9, top - 0.3, D - 0.12, D, fo);
+    this.box("paintedMetal", P.impDark, uc - 0.5, uc + 0.5, 0.9, 1.4, D - 0.12, D, fo);
+    this.box("paintedMetal", P.impDark, uc - 0.5, uc + 0.5, faceTop, top - 0.3, D - 0.12, D, fo);
+    this.box("paintedMetal", P.impBlack, u0 - 0.1, u1 + 0.1, 0, 0.9, 0.02, D + 0.1, { faces: ALL & ~this.backBit, texel: 0.5 });
+    this.box("paintedMetal", P.impBlack, u0 - 0.1, u1 + 0.1, top - 0.3, top, 0.02, D + 0.1, { faces: ALL & ~this.backBit, texel: 0.5 });
+    // recessed face panels (mid grey) either side of the window band, steel trims on the vertical edges
+    for (const [a, b] of [[u0 + 0.35, uc - 0.75], [uc + 0.75, u1 - 0.35]]) this.box("impPanel", P.impMid, a, b, 1.3, faceTop - 0.1, D, D + 0.05, { faces: this.frontBit, fit: true });
+    for (const s of [-1, 1]) this.box("metal", HG.steel, uc + s * TOWER_HW - 0.06, uc + s * TOWER_HW + 0.06, 0.9, top - 0.3, D, D + 0.08);
+    // window band: black channel with the lit band recessed in it, dark mullions every 1.2 m
+    this.box("paintedMetal", P.impBlack, uc - 0.5, uc + 0.5, 1.4, faceTop, D - 0.12, D - 0.11, { faces: this.frontBit });
+    this.box("hgEmit", EM.window, uc - 0.4, uc + 0.4, 1.5, faceTop - 0.1, D - 0.11, D - 0.1);
+    for (const s of [-1, 1]) this.box("paintedMetal", P.impDark, uc + s * 0.5 - 0.04, uc + s * 0.5 + 0.04, 1.4, faceTop, D - 0.12, D + 0.04, { texel: 0.5 });
+    for (let v = 2.6; v < faceTop - 0.2; v += 1.2) this.box("paintedMetal", P.impDark, uc - 0.5, uc + 0.5, v - 0.04, v + 0.04, D - 0.12, D + 0.02, { texel: 0.5 });
+    // two housed lamps high on the front face flanking the band, a red beacon on the cap edge
+    for (const s of [-1, 1]) housedLamp(this.B, "hgEmit", this.pos(uc + s * 2.2, faceTop, D + 0.05), this.N.toArray(), [0.9, 0.16, 0.24], { inset: 0.04, lampColor: EM.lens });
+    if (beacon) redBeacon(this.B, this.pos(uc + TOWER_HW - 0.6, top + 0.25, D - 0.3), this.N.toArray(), 0.34);
+    // baked shadow along the shaded flank
+    const shade = this.shadeSide(uc);
+    this.grad(shade > 0 ? "u+" : "u-", uc + shade * (TOWER_HW + 0.1), top / 2, 1.2, top);
+    const [mn, mx] = this.aabb(u0 - 0.1, u1 + 0.1, 0, 4, 0, D + 0.1);
+    this.kit.collider(mn, mx, "tower");
+  }
+  /** keeps panels, trays, dressing and the gallery clear of a tower's footprint (call before building) */
+  towerCut(uc, top) {
+    const u0 = uc - TOWER_HW - 0.3, u1 = uc + TOWER_HW + 0.3;
+    this.extraCuts.push({ u0, u1, v0: 0, v1: top + 0.3 });
+    this.trayCuts.push({ u0, u1, v0: 0, v1: H });
+    this.baseCuts.push({ u0: u0 - 1.2, u1: u1 + 1.2, v0: 0, v1: 3.3 });
   }
 
   // ---- human-scale dressing along the wall base: free spans between ribs / doors / stairs / ladders /
@@ -574,7 +716,7 @@ class Wall {
         this.box("metal", HG.steel, u - 1.24, u + 1.24, 3.0, 3.06, P0 + 0.3, P0 + 0.36);
         this.box("metal", HG.steel, u - 0.2, u - 0.14, 1.0, 1.25, P0 + 0.37, P0 + 0.41);
         this.box("metal", HG.steel, u + 0.14, u + 0.2, 1.0, 1.25, P0 + 0.37, P0 + 0.41);
-        for (const s of [-1, 1]) this.box("emitWhite", 0xffffff, u + s * 1.33 - 0.02, u + s * 1.33 + 0.02, 0.3, 2.9, P0 + 0.3, P0 + 0.315);
+        for (const s of [-1, 1]) this.box("hgEmit", EM.strip, u + s * 1.33 - 0.02, u + s * 1.33 + 0.02, 0.3, 2.9, P0 + 0.3, P0 + 0.315);
         housedLamp(this.B, "emitBlue", this.pos(u, 3.45, P0 + 0.3), N, [0.36, 0.14, 0.18], { inset: 0.04 });
         label(this.kit, "hgDecal", text || "MAINT ACCESS", this.pos(u, 3.17, P0 + 0.305), N, 1.9, { color: HG.white });
         label(this.kit, "hgDecal", "AUTHORISED ONLY", this.pos(u, 2.7, P0 + 0.375), N, 1.6, { color: HG.yellow });
@@ -587,9 +729,13 @@ class Wall {
 }
 
 // ---------------------------------------------------------------------------
-// Ceiling: backing, rib grid, faintly self-lit cell panels (crane bays darker), long light channels with
-// diffuser segments, louvred flood fixtures (two sizes), and the four flood fixtures of the light plan
+// Ceiling: backing, the 20 m rib grid with 10 m purlins between (a dark truss grid reading in the
+// environment fill), dark faintly self-lit cell panels (crane bays darker), a staggered field of big
+// louvred flood fixtures ~14 m apart (each a dark housing with slats over a lens held under the bloom
+// threshold - no light channels, no fluorescent grid), and the four flood fixtures of the light plan
 // ---------------------------------------------------------------------------
+const PURLIN_Z = RIB_Z.slice(0, -1).map((z, i) => (z + RIB_Z[i + 1]) / 2); // between the transverse ribs
+const PURLIN_X = [-70, -50, -30, -10, 10, 30, 50, 70]; // between the longitudinal ribs (the 40 m centre bay split in three)
 function buildCeiling(ctx, B) {
   const { PALETTE } = ctx;
   const yB = CEIL - WALL_T; // -12.16 (panel back)
@@ -600,35 +746,21 @@ function buildCeiling(ctx, B) {
     B.boxMM("paintedMetal", PALETTE.impDark, [HALL.x0 + P1, yB - ribD, z - w / 2], [HALL.x1 - P1, yB, z + w / 2], { faces: ALL & ~PY, texel: 0.5 });
     B.boxMM("impPanel", PALETTE.impMid, [HALL.x0 + P1 + 0.5, yB - ribD - 0.06, z - w / 2 + 0.2], [HALL.x1 - P1 - 0.5, yB - ribD, z + w / 2 - 0.2], { texel: 0.5 });
   }
-  const chanOff = w / 2 + 1.0; // channel centre from the rib centre
-  const chanW = 1.0, chanD = 0.55;
-  for (const x of RIB_X) {
-    B.boxMM("paintedMetal", PALETTE.impDark, [x - w / 2, yB - ribD + 0.16, HALL.z0 + P1], [x + w / 2, yB, HALL.z1 - P1], { faces: ALL & ~PY, texel: 0.5 });
-    // light channels either side: two dark lips hanging 0.55 m with the black backing as the trough,
-    // diffuser segments (3 per rib bay) set back inside
-    for (const s of [-1, 1]) {
-      const cx = x + s * chanOff;
-      for (const t of [-1, 1]) B.boxMM("paintedMetal", PALETTE.impDark, [cx + t * chanW / 2 - 0.06, yB - chanD, HALL.z0 + 1], [cx + t * chanW / 2 + 0.06, yB, HALL.z1 - 1], { faces: ALL & ~PY, texel: 0.5 });
-      const ci = RIB_X.indexOf(x) * 2 + (s + 1) / 2; // channel index 0..11
-      for (let i = 0; i < RIB_Z.length - 1; i++) {
-        const z0 = RIB_Z[i] + w / 2 + 0.6, z1 = RIB_Z[i + 1] - w / 2 - 0.6;
-        const seg = (z1 - z0 - 2 * 1.4) / 3;
-        for (let k = 0; k < 3; k++) {
-          const a = z0 + k * (seg + 1.4);
-          B.boxMM("paintedMetal", PALETTE.impBlack, [cx - 0.36, yB - 0.28, a - 0.05], [cx + 0.36, yB - 0.02, a + seg + 0.05], { faces: ALL & ~PY });
-          // one diffuser in three is dark (staggered per channel and bay) so the channels read as a
-          // rhythm of long lit runs rather than an unbroken grid of identical strips
-          const lit = (i + k + ci) % 3 !== 0;
-          B.boxMM(lit ? "emitWhite" : "paintedMetal", lit ? 0xffffff : PALETTE.impMid, [cx - 0.3, yB - 0.34, a], [cx + 0.3, yB - 0.28, a + seg], lit ? { faces: ALL & ~PY } : { faces: NY });
-        }
-      }
-    }
+  for (const x of RIB_X) B.boxMM("paintedMetal", PALETTE.impDark, [x - w / 2, yB - ribD + 0.16, HALL.z0 + P1], [x + w / 2, yB, HALL.z1 - P1], { faces: ALL & ~PY, texel: 0.5 });
+  // purlins: a 10 m secondary grid of shallower dark beams with a lighter bottom flange, so the cells
+  // between the ribs read as a structured truss ceiling rather than one flat plane
+  for (const z of PURLIN_Z) {
+    B.boxMM("paintedMetal", PALETTE.impDark, [HALL.x0 + P1, yB - 0.7, z - 0.25], [HALL.x1 - P1, yB, z + 0.25], { faces: ALL & ~PY, texel: 0.5 });
+    B.boxMM("paintedMetal", PALETTE.impMid, [HALL.x0 + P1 + 0.5, yB - 0.74, z - 0.32], [HALL.x1 - P1 - 0.5, yB - 0.7, z + 0.32], { texel: 0.5 });
   }
-  // cell panels between the ribs: faintly self-lit (hgCeil), the outer cells (crane bays) dark
+  for (const x of PURLIN_X) {
+    B.boxMM("paintedMetal", PALETTE.impDark, [x - 0.2, yB - 0.5, HALL.z0 + P1], [x + 0.2, yB, HALL.z1 - P1], { faces: ALL & ~PY, texel: 0.5 });
+    B.boxMM("paintedMetal", PALETTE.impMid, [x - 0.26, yB - 0.54, HALL.z0 + P1 + 0.5], [x + 0.26, yB - 0.5, HALL.z1 - P1 - 0.5], { texel: 0.5 });
+  }
+  // cell panels between the ribs: dark, very faintly self-lit (hgCeil), the outer cells (crane bays) darker
   const xEdges = [HALL.x0 + P1, ...RIB_X.flatMap((x) => [x - w / 2, x + w / 2]), HALL.x1 - P1];
   const zEdges = [HALL.z0 + P1, ...RIB_Z.flatMap((z) => [z - w / 2, z + w / 2]), HALL.z1 - P1];
-  const chan = RIB_X.flatMap((x) => [x - chanOff, x + chanOff]);
-  const cellTone = tinted(PALETTE.impGrey, 0.6), craneTone = tinted(PALETTE.impGrey, 0.4);
+  const cellTone = tinted(PALETTE.impGrey, 0.5), craneTone = tinted(PALETTE.impGrey, 0.36);
   for (let i = 0; i < xEdges.length - 1; i += 2) {
     const x0 = xEdges[i], x1 = xEdges[i + 1];
     const craneBay = x0 < HALL.x0 + 1 || x1 > HALL.x1 - 1;
@@ -638,45 +770,35 @@ function buildCeiling(ctx, B) {
       const px = (x1 - x0) / nx, pz = (z1 - z0) / nz;
       for (let a = 0; a < nx; a++) {
         for (let b = 0; b < nz; b++) {
-          let ax0 = x0 + a * px + 0.1, ax1 = x0 + (a + 1) * px - 0.1;
+          const ax0 = x0 + a * px + 0.1, ax1 = x0 + (a + 1) * px - 0.1;
           const az0 = z0 + b * pz + 0.1, az1 = z0 + (b + 1) * pz - 0.1;
-          for (const cx of chan) {
-            if (ax0 < cx + chanW / 2 + 0.16 && ax1 > cx - chanW / 2 - 0.16) {
-              if (cx - ax0 < ax1 - cx) ax0 = cx + chanW / 2 + 0.16;
-              else ax1 = cx - chanW / 2 - 0.16;
-            }
-          }
-          if (ax1 - ax0 < 0.5) continue;
           // 60 m up only the underside is ever seen: the 12 cm edges are dropped (the black backing in the gaps is the seam)
           B.boxMM("hgCeil", craneBay ? craneTone : cellTone, [ax0, yB - 0.12, az0], [ax1, yB, az1], { faces: NY });
         }
       }
     }
   }
-  // louvred flood fixtures hanging from the transverse ribs: big ones over the pads/aprons (x +-22),
-  // small ones over the taxi lanes every other rib
+  // louvred flood fixture: dark housing (top plate, four side slabs, open bottom) on a stem and yoke,
+  // the lens 0.3 m up inside on the housed level, three slats across the mouth
   const fixture = (x, z, big, lensY = null) => {
     const W = big ? 3.2 : 2.2, D = big ? 2.0 : 1.4, Hh = big ? 1.0 : 0.7;
     const top = yB - ribD;
     const y1 = lensY === null ? top - 0.75 : lensY + Hh - 0.3, y0 = y1 - Hh;
-    // stem (long when the lens height is given) + yoke, top plate + four side slabs (open bottom), lens
-    // set 0.3 up inside, three slats across the mouth
-    B.boxMM("paintedMetal", PALETTE.impDark, [x - 0.22, y1 + 0.15, z - 0.22], [x + 0.22, top, z + 0.22], { texel: 0.5 });
+    B.boxMM("paintedMetal", PALETTE.impDark, [x - 0.22, y1 + 0.15, z - 0.22], [x + 0.22, top, z + 0.22], { faces: ALL & ~PY, texel: 0.5 });
     B.boxMM("paintedMetal", PALETTE.impMid, [x - W / 2 - 0.1, y1, z - 0.2], [x + W / 2 + 0.1, y1 + 0.15, z + 0.2], { texel: 0.5 });
-    B.boxMM("paintedMetal", PALETTE.impDark, [x - W / 2, y1 - 0.08, z - D / 2], [x + W / 2, y1, z + D / 2], { texel: 0.5 });
+    B.boxMM("paintedMetal", PALETTE.impDark, [x - W / 2, y1 - 0.08, z - D / 2], [x + W / 2, y1, z + D / 2], { faces: ALL & ~PY, texel: 0.5 });
     for (const s of [-1, 1]) {
-      B.boxMM("paintedMetal", PALETTE.impDark, [x + s * W / 2 - 0.04, y0, z - D / 2], [x + s * W / 2 + 0.04, y1, z + D / 2], { texel: 0.5 });
-      B.boxMM("paintedMetal", PALETTE.impDark, [x - W / 2, y0, z + s * D / 2 - 0.04], [x + W / 2, y1, z + s * D / 2 + 0.04], { texel: 0.5 });
+      B.boxMM("paintedMetal", PALETTE.impDark, [x + s * W / 2 - 0.04, y0, z - D / 2], [x + s * W / 2 + 0.04, y1, z + D / 2], { faces: ALL & ~PY, texel: 0.5 });
+      B.boxMM("paintedMetal", PALETTE.impDark, [x - W / 2, y0, z + s * D / 2 - 0.04], [x + W / 2, y1, z + s * D / 2 + 0.04], { faces: ALL & ~PY, texel: 0.5 });
     }
-    B.boxMM("emitWhite", 0xffffff, [x - W / 2 + 0.12, y0 + 0.3, z - D / 2 + 0.12], [x + W / 2 - 0.12, y0 + 0.36, z + D / 2 - 0.12]);
-    for (const k of [-1, 0, 1]) B.boxMM("paintedMetal", PALETTE.impMid, [x - W / 2, y0, z + k * D * 0.3 - 0.025], [x + W / 2, y0 + 0.14, z + k * D * 0.3 + 0.025], { texel: 0.5 });
+    B.boxMM("hgEmit", EM.lens, [x - W / 2 + 0.12, y0 + 0.3, z - D / 2 + 0.12], [x + W / 2 - 0.12, y0 + 0.36, z + D / 2 - 0.12], { faces: NY | PX | NX | PZ | NZ });
+    for (const k of [-1, 0, 1]) B.boxMM("paintedMetal", PALETTE.impMid, [x - W / 2, y0, z + k * D * 0.3 - 0.025], [x + W / 2, y0 + 0.14, z + k * D * 0.3 + 0.025], { faces: ALL & ~PY, texel: 0.5 });
   };
-  RIB_Z.forEach((z, i) => {
-    for (const s of [-1, 1]) {
-      fixture(s * 22, z, true);
-      if (i % 2 === 1) fixture(s * 58, z, false);
-    }
-  });
+  // the fixture field: rows on the transverse ribs (x +-13, +-39, +-65) and, staggered, on the purlins
+  // between them (x +-26, +-52): ~14 m to the nearest neighbour, none within 6 m of a light-plan flood
+  const nearFlood = (x, z) => FLOODS.some((f) => Math.abs(f.pos[0] - x) < 6 && Math.abs(f.pos[2] - z) < 6);
+  for (const z of RIB_Z) for (const x of [-65, -39, -13, 13, 39, 65]) if (!nearFlood(x, z)) fixture(x, z, true);
+  for (const z of PURLIN_Z) for (const x of [-52, -26, 26, 52]) if (!nearFlood(x, z)) fixture(x, z, true);
   // the light plan's four floods: real fixtures at the spot positions. Nearly vertical ones are big
   // louvred boxes on a long stem off a cross-arm from the nearest longitudinal rib; tilted ones (the rack
   // key lights) are a housing aimed along the spot axis with the lens in its mouth.
@@ -698,7 +820,7 @@ function buildCeiling(ctx, B) {
     B.geo("paintedMetal", PALETTE.impMid, sharedBox(0.9, 0.5, 0.9), [x, y + 0.75, z], null);
     B.geo("paintedMetal", PALETTE.impDark, sharedBox(2.4, 1.6, 1.1), c.clone().addScaledVector(dir, -0.4).toArray(), q);
     for (const s of [-1, 1]) B.geo("paintedMetal", PALETTE.impDark, sharedBox(2.4, 0.08, 0.7), c.clone().addScaledVector(up, s * 0.84).addScaledVector(dir, 0.45).toArray(), q);
-    B.geo("emitWhite", 0xffffff, sharedBox(2.1, 1.3, 0.04), c.clone().addScaledVector(dir, 0.17).toArray(), q);
+    B.geo("hgEmit", EM.lens, sharedBox(2.1, 1.3, 0.04), c.clone().addScaledVector(dir, 0.17).toArray(), q);
     for (const k of [-0.45, 0, 0.45]) B.geo("paintedMetal", PALETTE.impMid, sharedBox(2.3, 0.05, 0.3), c.clone().addScaledVector(up, k).addScaledVector(dir, 0.6).toArray(), q);
     B.geo("paintedMetal", PALETTE.impMid, sharedBox(0.3, 0.3, 1.2), c.clone().addScaledVector(up, 0.95).addScaledVector(dir, -0.2).toArray(), q);
   }
@@ -741,30 +863,38 @@ function buildBalcony(ctx, B) {
   const zWall = HALL.z1 - WALL_T; // backing front
   const T = 0.3;
   B.boxMM("grate", 0xffffff, [x0, y - T, z0], [x1, y, zWall], { texel: 0.8 });
-  // edge trim (sides), a hair proud of the plate; fascia beam along the front with the soffit strip
+  // edge trim (sides), a hair proud of the plate; a deep fascia girder (1.1 m) along the front so the
+  // balcony reads as a real cantilever from the deck, with a steel edge and the soffit under it
   for (const [a, b] of [[x0 - 0.14, x0], [x1, x1 + 0.14]]) B.boxMM("paintedMetal", PALETTE.impDark, [a, y - T - 0.06, z0], [b, y + 0.02, zWall], { texel: 0.5 });
-  B.boxMM("paintedMetal", PALETTE.impDark, [x0 - 0.14, y - T - 0.55, z0 - 0.14], [x1 + 0.14, y + 0.02, z0 + 0.3], { texel: 0.5 });
+  const gB = y - T - 0.8; // girder bottom
+  B.boxMM("paintedMetal", PALETTE.impDark, [x0 - 0.14, gB, z0 - 0.14], [x1 + 0.14, y + 0.02, z0 + 0.3], { texel: 0.5 });
   B.boxMM("metal", HG.steel, [x0 - 0.14, y - T - 0.2, z0 - 0.16], [x1 + 0.14, y - T - 0.14, z0 - 0.14]);
-  // lit fascia strip (6 cm, in a black channel on the front face) + four housed soffit lamps underneath
-  // (a thin line and a row of lamps read as a lit balcony from 70 m; one solid bar would just bloom)
-  B.boxMM("paintedMetal", PALETTE.impBlack, [x0 + 0.4, y - T - 0.46, z0 - 0.2], [x1 - 0.4, y - T - 0.3, z0 - 0.14]);
-  B.boxMM("emitWhite", 0xffffff, [x0 + 0.5, y - T - 0.41, z0 - 0.21], [x1 - 0.5, y - T - 0.35, z0 - 0.2]);
-  for (const x of [-9, -3, 3, 9]) housedLamp(B, "emitWhite", [x, y - T - 0.551, z0 + 0.08], [0, -1, 0], [2.4, 0.16, 0.26], { inset: 0.05 });
-  // three heavy brackets: arm under the plate, wall plate, square-section strut
-  for (const x of [-10.5, 0, 10.5]) {
-    B.boxMM("paintedMetal", PALETTE.impDark, [x - 0.25, y - T - 0.5, z0 + 0.3], [x + 0.25, y - T - 0.06, zWall], { texel: 0.5 });
-    B.boxMM("paintedMetal", PALETTE.impDark, [x - 0.35, y - 3.8, zWall - 0.35], [x + 0.35, y - T - 0.06, zWall], { texel: 0.5 });
-    const a = new THREE.Vector3(x, y - T - 0.6, z0 + 0.55), b = new THREE.Vector3(x, y - 3.4, zWall - 0.25);
+  B.boxMM("metal", HG.steel, [x0 - 0.14, gB, z0 - 0.16], [x1 + 0.14, gB + 0.06, z0 - 0.14]);
+  // lit fascia strip (6 cm, in a black channel on the front face), a soft lit strip along the soffit's
+  // inner edge and four housed soffit lamps underneath (a thin line and a row of lamps read as a lit
+  // balcony from 70 m; one solid bar would just bloom)
+  B.boxMM("paintedMetal", PALETTE.impBlack, [x0 + 0.4, y - T - 0.56, z0 - 0.2], [x1 - 0.4, y - T - 0.4, z0 - 0.14]);
+  B.boxMM("emitWhite", 0xffffff, [x0 + 0.5, y - T - 0.51, z0 - 0.21], [x1 - 0.5, y - T - 0.45, z0 - 0.2]);
+  // (the soffit between the two buttress towers, x +-5.2, is the only part seen from below)
+  B.boxMM("hgEmit", EM.strip, [-4.9, gB - 0.01, z0 + 0.34], [4.9, gB, z0 + 0.4], { faces: NY });
+  for (const x of [-1.7, 1.7]) housedLamp(B, "hgEmit", [x, gB - 0.001, z0 + 0.08], [0, -1, 0], [2.4, 0.16, 0.26], { inset: 0.05, lampColor: EM.lens });
+  // three heavy brackets between the towers (which carry the ends): arm under the plate, wall plate,
+  // square-section knee strut, gusset plate over the girder
+  for (const x of [-3.4, 0, 3.4]) {
+    B.boxMM("paintedMetal", PALETTE.impDark, [x - 0.3, y - T - 0.7, z0 + 0.3], [x + 0.3, y - T - 0.06, zWall], { texel: 0.5 });
+    B.boxMM("paintedMetal", PALETTE.impDark, [x - 0.4, y - 4.6, zWall - 0.4], [x + 0.4, y - T - 0.06, zWall], { texel: 0.5 });
+    B.boxMM("paintedMetal", PALETTE.impMid, [x - 0.36, gB - 0.3, z0 - 0.2], [x + 0.36, y - T - 0.06, z0 + 0.36], { texel: 0.5 });
+    const a = new THREE.Vector3(x, gB - 0.1, z0 + 0.6), b = new THREE.Vector3(x, y - 4.2, zWall - 0.3);
     const L = a.distanceTo(b);
     const ang = Math.atan2(b.y - a.y, b.z - a.z); // rotation about x taking +z onto the strut
-    kit.add("paintedMetal", new THREE.BoxGeometry(0.28, 0.28, L), { pos: a.clone().add(b).multiplyScalar(0.5).toArray(), rot: [-ang, 0, 0], color: PALETTE.impDark, texel: 0.5 });
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.34, 0.34, L), { pos: a.clone().add(b).multiplyScalar(0.5).toArray(), rot: [-ang, 0, 0], color: PALETTE.impDark, texel: 0.5 });
   }
-  // rails (1.02 m, blocking, lit); the front rail has no post cap lenses: from the balcony view they are
-  // 1.5 m from the eye and bloom into blobs, and the strip under the light-grey top rail is what reads
-  // from the deck 70 m away
-  railRun(B, kit, [x0, z0], [x1, z0], y, { tag: "balcony-rail", lit: true, caps: false, postEvery: 2.2 });
-  railRun(B, kit, [x0, z0], [x0, zWall - 0.1], y, { tag: "balcony-rail", lit: true });
-  railRun(B, kit, [x1, z0], [x1, zWall - 0.1], y, { tag: "balcony-rail", lit: true });
+  // rails (1.02 m, blocking, lit): round light-grey handrail on thin posts, dark mid rail and kick plate,
+  // the lit strip under the handrail on the housed level (it is 1.5 m from the eye in the balcony view,
+  // so it must not smear); no post cap lenses on the front rail (they bloom into blobs that close)
+  railRun(B, kit, [x0, z0], [x1, z0], y, { tag: "balcony-rail", lit: true, soft: true, caps: false, postEvery: 2.2 });
+  railRun(B, kit, [x0, z0], [x0, zWall - 0.1], y, { tag: "balcony-rail", lit: true, soft: true, caps: false });
+  railRun(B, kit, [x1, z0], [x1, zWall - 0.1], y, { tag: "balcony-rail", lit: true, soft: true, caps: false });
   // standing console at the rail (0.9 m, matte black, tilted screen + indicators)
   const cx = 6.0, cz = z0 + 0.75;
   B.boxMM("paintedMetal", PALETTE.impBlack, [cx - 0.45, y, cz - 0.25], [cx + 0.45, y + 0.78, cz + 0.25], { texel: 1 });
@@ -860,12 +990,13 @@ export function buildWalls(ctx) {
   const aft = byName.aft;
   aft.addHole({ u0: aft.u(WINDOW.x0), u1: aft.u(WINDOW.x1), v0: WINDOW.y0 - FLOOR, v1: WINDOW.y1 - FLOOR, window: true, mu: 0.9, mv: 0.9 });
   aft.levels = [[FLOOR, BALCONY.y - 0.6], [BALCONY.y, CEIL]];
-  // the balcony plate meets the wall: keep the band/panels out of its slot; the tower base (dark field
-  // between the blast-door portal and the balcony) has its own cut
+  // the balcony plate meets the wall: keep the band/panels out of its slot; the bracket field (dark
+  // recess between the blast-door portal lintel and the balcony, between the two buttress towers) has
+  // its own cut
   const towerV0 = 4 + FRAME_W + 1.0 + 0.3 + 1.4 + 0.9, towerV1 = BALCONY.y - FLOOR - 0.5;
   aft.extraCuts = [
     { u0: aft.u(BALCONY.x0 - 0.3), u1: aft.u(BALCONY.x1 + 0.3), v0: BALCONY.y - FLOOR - 0.5, v1: BALCONY.y - FLOOR + 0.5 },
-    { u0: aft.u(-12.3), u1: aft.u(12.3), v0: towerV0, v1: towerV1 },
+    { u0: aft.u(-5.0), u1: aft.u(5.0), v0: towerV0, v1: towerV1 },
   ];
   // end-wall catwalk ladders: trays + dressing keep clear
   for (const w of [byName.bow, byName.aft]) w.trayCuts.push({ u0: w.u(END_LADDER_X[w.name]) - 0.8, u1: w.u(END_LADDER_X[w.name]) + 0.8, v0: 0, v1: H });
@@ -880,14 +1011,19 @@ export function buildWalls(ctx) {
     // the second structural band would cross the tier-2 platform at chest height: recess it there
     w.extraCuts.push({ u0: w.u(RACK.zoneZ0) - 0.5, u1: w.u(RACK.zoneZ1) + 0.5, v0: 23.6, v1: 24.4 });
   }
-  // fire stations: two per side wall, two on the aft wall, one on the bow wall (between ribs)
+  // buttress towers flanking both blast-door portals (x +-5.2 .. +-12.4): on the aft wall up to the
+  // balcony underside (they carry its ends and the gallery ends), on the bow wall up to the gallery
+  const TOWER_X = 8.8;
+  const towerTops = { aft: BALCONY.y - FLOOR - 0.3 - 0.02, bow: GAL_V - CAT_T - 0.02 };
+  for (const W of [byName.aft, byName.bow]) for (const s of [-1, 1]) W.towerCut(W.u(s * TOWER_X), towerTops[W.name]);
+  // fire stations: two per side wall, two on the aft wall, one on the bow wall (between ribs, clear of the towers)
   fireStation(byName.starboard, byName.starboard.u(78));
   fireStation(byName.starboard, byName.starboard.u(-56));
   fireStation(byName.port, byName.port.u(78));
   fireStation(byName.port, byName.port.u(-56));
-  fireStation(byName.aft, byName.aft.u(12));
+  fireStation(byName.aft, byName.aft.u(16.5));
   fireStation(byName.aft, byName.aft.u(-30));
-  fireStation(byName.bow, byName.bow.u(12));
+  fireStation(byName.bow, byName.bow.u(16.5));
   // maintenance hatches (decorative, standard door size): two per side wall, one per end wall
   const hatches = { starboard: [-40, 150], port: [-40, 150], aft: [-52, 40], bow: [-40, 30] };
   const hatchCut = (W, u) => {
@@ -912,6 +1048,13 @@ export function buildWalls(ctx) {
     }
   }
 
+  // panels under the giant stencils, the designation bands and the bow signage band stay plain (no vent
+  // frames or hatch lips poking through the plates)
+  for (const W of [byName.bow, byName.aft]) for (const s of [-1, 1]) W.plainRects.push({ u0: W.u(s * 50) - 9.1, u1: W.u(s * 50) + 9.1, v0: 24.4, v1: 35.6 });
+  byName.bow.plainRects.push({ u0: byName.bow.u(-19.2), u1: byName.bow.u(19.2), v0: 24.4, v1: 30.2 });
+  // the panels over the control window / HANGAR CONTROL sign: no vent glowing above the sign
+  aft.plainRects.push({ u0: aft.u(-12), u1: aft.u(12), v0: 16, v1: 24.4 });
+
   for (const w of walls) {
     w.backing();
     w.panels();
@@ -928,14 +1071,20 @@ export function buildWalls(ctx) {
     W.dress("lockers", lockersU);
   }
 
-  // giant wall stencils: the deck number on the bow and aft walls (both bays between the 20 m and 60 m
-  // ribs), the side letter over the forward bay of each side wall (between the rib at z -5 and the bay
-  // door surround)
+  // giant wall stencils: a designation panel on the bow and aft walls filling each 40-60 m bay between
+  // the 24 m and 36 m bands - a 17.8 x 10.6 m black plate with steel lips carrying a worn "DECK" (15 m,
+  // 3 m letters) over a worn "4" (4 m glyph) in Imperial light grey - and the side letter over the
+  // forward bay of each side wall (between the rib at z -5 and the bay door surround)
   for (const W of [byName.bow, byName.aft]) {
     const N = W.N.toArray();
     for (const s of [-1, 1]) {
-      label(kit, "hgDecal", "4", W.pos(W.u(s * 30), 18.2, P1 + 0.015), N, 7.4, { color: HG.white });
-      label(kit, "hgDecal", "DECK 4", W.pos(W.u(s * 50), 28.4, P1 + 0.015), N, 12.8, { color: HG.white });
+      const b0 = W.u(s * 50) - 8.9, b1 = W.u(s * 50) + 8.9;
+      W.box("paintedMetal", PALETTE.impBlack, b0, b1, 24.7, 35.3, P1, P1 + 0.03, { faces: W.frontBit, texel: 0.5 });
+      W.box("metal", HG.gunmetal, b0 - 0.1, b1 + 0.1, 24.6, 24.7, P1, P1 + 0.12);
+      W.box("metal", HG.gunmetal, b0 - 0.1, b1 + 0.1, 35.3, 35.4, P1, P1 + 0.12);
+      for (const u of [b0, b1]) W.box("metal", HG.gunmetal, u - 0.05, u + 0.05, 24.6, 35.4, P1, P1 + 0.12);
+      label(kit, "hgDecal", "DECK", W.pos(W.u(s * 50), 32.7, P1 + 0.045), N, 15.0, { color: HG.white });
+      label(kit, "hgDecal", "4", W.pos(W.u(s * 50), 27.8, P1 + 0.045), N, 5.6, { color: HG.white });
     }
   }
   label(kit, "hgDecal", "P", byName.port.pos(byName.port.u(0.3), 19.2, P1 + 0.015), byName.port.N.toArray(), 6.2, { color: HG.white });
@@ -969,12 +1118,42 @@ export function buildWalls(ctx) {
       W.box("paintedMetal", PALETTE.impDark, u - 0.12, u + 0.12, sv - 0.85, sv + 0.85, P1, P1 + 0.1);
       W.box("emitWhite", 0xffffff, u - 0.04, u + 0.04, sv - 0.75, sv + 0.75, P1 + 0.1, P1 + 0.11);
     }
-    // tower base: dark recessed field with vertical fins between the blast-door portal and the balcony
-    const tu0 = W.u(-12.3), tu1 = W.u(12.3);
+    // bracket field between the buttress towers: dark recess over the portal lintel up to the balcony,
+    // two fins between the three bracket wall plates, dark rails top and bottom
+    const tu0 = W.u(-5.0), tu1 = W.u(5.0);
     W.box("paintedMetal", PALETTE.impBlack, tu0, tu1, towerV0, towerV1, P0, P0 + 0.04, { texel: 0.5 });
-    for (let u = tu0 + 0.6; u < tu1; u += 2.4) W.box("paintedMetal", PALETTE.impDark, u - 0.14, u + 0.14, towerV0, towerV1, P0, P0 + 0.5, { texel: 0.5 });
+    for (const x of [-1.7, 1.7]) W.box("paintedMetal", PALETTE.impDark, W.u(x) - 0.14, W.u(x) + 0.14, towerV0, towerV1, P0, P0 + 0.5, { texel: 0.5 });
     W.box("paintedMetal", PALETTE.impDark, tu0, tu1, towerV0, towerV0 + 0.25, P0, P0 + 0.55, { texel: 0.5 });
     W.box("paintedMetal", PALETTE.impDark, tu0, tu1, towerV1 - 0.25, towerV1, P0, P0 + 0.55, { texel: 0.5 });
+  }
+
+  // buttress towers: aft wall up to the balcony plate (the fascia girder runs across their fronts, so
+  // the lamps and the window band stop under it), bow wall up to the gallery plate
+  {
+    const gB = BALCONY.y - 0.3 - 0.8 - FLOOR; // girder bottom, wall-local v
+    for (const s of [-1, 1]) {
+      aft.tower(aft.u(s * TOWER_X), towerTops.aft, { beacon: false, faceTop: gB - 0.25 });
+      byName.bow.tower(byName.bow.u(s * TOWER_X), towerTops.bow);
+    }
+  }
+
+  // bow wall: a wide lit signage band between the +-20 m ribs at 25-30 m (the vanishing point of the
+  // deck view gets a lit feature 240 m away, not a dim plane): black plate with steel lips, a housed-
+  // level strip along its top and bottom edges, the forward-sections legend lit white and SEALED in red
+  {
+    const W = byName.bow, N = W.N.toArray();
+    const u0 = W.u(-18.9), u1 = W.u(18.9), v0 = 24.7, v1 = 29.9;
+    W.box("paintedMetal", PALETTE.impBlack, u0, u1, v0, v1, P1, P1 + 0.05, { faces: W.faces, texel: 0.5 });
+    W.box("metal", HG.steel, u0 - 0.1, u1 + 0.1, v0 - 0.12, v0, P1, P1 + 0.14);
+    W.box("metal", HG.steel, u0 - 0.1, u1 + 0.1, v1, v1 + 0.12, P1, P1 + 0.14);
+    W.box("hgEmit", EM.strip, u0 + 0.3, u1 - 0.3, v0 + 0.25, v0 + 0.37, P1 + 0.05, P1 + 0.06);
+    W.box("hgEmit", EM.strip, u0 + 0.3, u1 - 0.3, v1 - 0.37, v1 - 0.25, P1 + 0.05, P1 + 0.06);
+    label(kit, "hgSign", "FORWARD SECTIONS", W.pos(W.u(0), 28.1, P1 + 0.065), N, 19.2);
+    label(kit, "hgSignRed", "SEALED", W.pos(W.u(0), 25.9, P1 + 0.065), N, 6.0);
+    for (const s of [-1, 1]) {
+      W.box("paintedMetal", PALETTE.impDark, W.u(s * 14) - 0.3, W.u(s * 14) + 0.3, v0 + 0.6, v1 - 0.6, P1 + 0.05, P1 + 0.25, { texel: 0.5 });
+      redBeacon(B, W.pos(W.u(s * 14), (v0 + v1) / 2, P1 + 0.25), N, 0.7);
+    }
   }
 
   buildBalcony(ctx, B);

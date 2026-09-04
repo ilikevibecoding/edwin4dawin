@@ -10,6 +10,7 @@ import { buildDeck } from "./deck.js";
 import { buildWalls } from "./walls.js";
 import { buildRacks } from "./racks.js";
 import { buildCrane, buildClutter } from "./machinery.js";
+import { flushDecals } from "./util.js";
 
 // Light descriptors (27 with the four rack-platform points from racks.js and the crane's work light).
 // The harness pool is 12 points + 4 spots for the whole active set, so the few that matter carry the
@@ -23,15 +24,17 @@ function addLights(ctx) {
   const L = ctx.lights;
   // tight cones (13 m pools on the deck from 55 m up) with a soft penumbra so the pools have edges and
   // the deck between them stays dark instead of an even wash
-  for (const f of FLOODS) L.push({ type: "spot", pos: [...f.pos], target: [...f.target], color: 0xf6f8ff, intensity: f.intensity, distance: 95, decay: 1.2, angle: f.angle, penumbra: 0.4, priority: 0.9 });
+  for (const f of FLOODS) L.push({ type: "spot", pos: [...f.pos], target: [...f.target], color: 0xf6f8ff, intensity: f.intensity, distance: 95, decay: 1.2, angle: f.angle, penumbra: f.penumbra, priority: 0.9 });
   for (const p of TRACTOR_POINTS) L.push({ type: "point", pos: [p[0] + Math.sign(p[0]) * 1.6, FLOOR + 3.4, p[2] + Math.sign(p[2] - 32) * 1.6], color: 0xff2a1a, intensity: 55, distance: 28, decay: 1.6, priority: 0.6 });
   // apron pool below the balcony / in front of the blast door: the aft-wall view's far apron, and a low
   // fill on the deck view's foreground (kept well under the flood pools so those still read as pools;
   // from 9 m up so its reflection stays out of both frames)
-  L.push({ type: "point", pos: [0, FLOOR + 9, 158], color: 0xf4f7ff, intensity: 60, distance: 34, decay: 1.5, priority: 0.5 });
+  L.push({ type: "point", pos: [0, FLOOR + 9, 158], color: 0xf4f7ff, intensity: 85, distance: 30, decay: 1.5, priority: 0.5 });
   // rim spill under the deck edge: lights the shaft lining and the deck lip from below (exterior view)
   for (const z of [2, 62]) L.push({ type: "point", pos: [0, FLOOR - 2.5, z], color: 0xffe9c8, intensity: 320, distance: 60, decay: 1.4, priority: 0.45 });
-  L.push({ type: "point", pos: [0, BALCONY.y + 2.5, 167], color: 0xd6e4ff, intensity: 40, distance: 22, priority: 0.4 });
+  // balcony: over the hatch by the wall, 3.5 m behind the front rail (over the rail it drew a specular
+  // streak the length of the handrail 1 m from the balcony camera)
+  L.push({ type: "point", pos: [0, BALCONY.y + 2.6, 169.3], color: 0xd6e4ff, intensity: 30, distance: 22, priority: 0.4 });
   L.push({ type: "point", pos: [0, FLOOR + 6, -64], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.3 });
   // the two bar gaps in the aperture rail: lifts the dashes, rails and bar posts where people stand, and
   // the aft one is the aft-wall view's foreground deck (behind that camera, so no reflection in frame).
@@ -44,9 +47,13 @@ function addLights(ctx) {
   // lane edges in the bottom third of that frame are IBL-only). Priority 0.1: the harness's distance
   // term brings it in only for a viewer within ~20 m, so no other view loses a pool light to it
   L.push({ type: "point", pos: [-50, FLOOR + 7, 30], color: 0xf6f8ff, intensity: 110, distance: 30, decay: 1.6, priority: 0.1 });
+  // bay-door approaches: 14 m off each door's axis, over its crew-hatch / console group, so the light's
+  // mirror image seen from the bay-door camera (on the axis) and from the racks camera falls on the
+  // panel wall beside the surround, not on the glossy leaves (on the axis it drew a pale specular
+  // blotch over the hazard band)
   for (const s of [-1, 1]) {
-    L.push({ type: "point", pos: [s * 74, FLOOR + 7, 15], color: 0xfff0e0, intensity: 70, distance: 32, priority: 0.3 });
-    L.push({ type: "point", pos: [s * 74, FLOOR + 6, 120], color: 0xfff0e0, intensity: 70, distance: 32, priority: 0.3 });
+    L.push({ type: "point", pos: [s * 74, FLOOR + 8, 1], color: 0xfff0e0, intensity: 80, distance: 32, priority: 0.3 });
+    L.push({ type: "point", pos: [s * 74, FLOOR + 8, 134], color: 0xfff0e0, intensity: 80, distance: 32, priority: 0.3 });
   }
   for (const z of [-12, 76]) L.push({ type: "point", pos: [0, -79, z], color: 0x3b6cff, intensity: 60, distance: 46, priority: 0.3 });
 }
@@ -81,6 +88,7 @@ export default {
     const slots = racks.slots;
     const crane = buildCrane(ctx);
     buildClutter(ctx);
+    flushDecals(ctx.kit);
     addLights(ctx);
     return {
       update(dt, t) {
