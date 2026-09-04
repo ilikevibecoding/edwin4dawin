@@ -1,141 +1,28 @@
-// Star Destroyer exterior: wedge hull, side trenches, stern wall with ion engines, terraced
-// superstructure, command tower (neck, bridge slab with the real interior window openings, shield domes,
-// spire), ventral keel block with the hangar well, and instanced detail layers (armour plates, trench
-// machinery, terrace greebles, turrets, sensor domes, antennas, lit window rows).
+// Star Destroyer exterior: wedge hull with the equatorial trenches, finely tessellated stern wall with
+// heat-discoloured ion engines, terraced superstructure with sloped fronts, command tower (neck, bridge
+// slab with the real interior window openings and their bezels, shield domes, comms spire), ventral keel
+// block with the hangar well and the reserved secondary bay, plus the instanced detail layers from
+// greebles.js / turrets.js / engines.js / exteriorLights.js (armour plates, city blocks, trench machinery,
+// turrets, hatches, docking pads, window rows, running lights).
 //
-// Lighting: exterior materials carry their own sun term (see sunPatch) so the interior never receives
-// stray sunlight and no shadow map is needed; n8ao supplies the contact shadows between plates.
+// Lighting: exterior materials carry their own sun + fill terms (see hullShader.js) so the interior never
+// receives stray sunlight and no shadow map is needed; n8ao supplies the contact shadows between plates.
 import * as THREE from "three";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { HULL, SUPERSTRUCTURE, TOWER, ENGINES, HANGAR, ROOMS, roomFloorY } from "../config/shipSpec.js";
-import { makeHullPlating, makeTrenchDetail, makeWindowStrips } from "./hullTextures.js";
+import { HULL, SUPERSTRUCTURE, TOWER, HANGAR, ROOMS, roomFloorY } from "../config/shipSpec.js";
+import { makeHullPlating, makeHullDetail, makeMachinery, makeWindowStrips, makeDetailAtlas } from "./hullTextures.js";
+import { makeSun, exteriorPatch, sunPatch } from "./hullShader.js";
 import { panelWithHoles, rng } from "../kit.js";
-import { fbm } from "../textures.js";
+import { TRENCH_HALF, TRENCH_DEPTH, dorsal, ventral, merge, box, boxMM, worldUV, macroColor, finish, Soup, atlasQuad } from "./util.js";
+import { terraceDescriptors, buildHullPlates, buildHullFittings, buildDockingPads, padRects, buildSuperstructure, buildTrench } from "./greebles.js";
+import { buildTurrets, turretRects } from "./turrets.js";
+import { buildEngines, sternHeatTint } from "./engines.js";
+import { createWindowRows, buildRunningLights } from "./exteriorLights.js";
+
+export { sunPatch };
 
 // ---------------------------------------------------------------------------
-// sun term injected into standard materials
+// base wedge
 // ---------------------------------------------------------------------------
-export function sunPatch(mat, sun) {
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uSunDir = sun.dir;
-    shader.uniforms.uSunColor = sun.color;
-    shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform vec3 uSunDir;\nuniform vec3 uSunColor;")
-      .replace(
-        "#include <lights_fragment_begin>",
-        `#include <lights_fragment_begin>
-  {
-    IncidentLight sunLight;
-    sunLight.color = uSunColor;
-    sunLight.direction = normalize( ( viewMatrix * vec4( uSunDir, 0.0 ) ).xyz );
-    sunLight.visible = true;
-    RE_Direct( sunLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
-  }`,
-      );
-  };
-  mat.customProgramCacheKey = () => "sunpatch";
-  mat.fog = false;
-  return mat;
-}
-
-// ---------------------------------------------------------------------------
-// geometry helpers
-// ---------------------------------------------------------------------------
-const _tmp = new THREE.Vector3();
-
-// merge indexed and non-indexed geometries alike (everything becomes a triangle soup)
-function merge(geos) {
-  return mergeGeometries(geos.map((g) => (g.index ? g.toNonIndexed() : g)), false);
-}
-
-// Planar world UVs by dominant normal (like kit.worldUVs) at a hull-scale texel density.
-function worldUV(geo, texel) {
-  const pos = geo.attributes.position;
-  const nor = geo.attributes.normal;
-  const uv = new Float32Array(pos.count * 2);
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-    const nx = Math.abs(nor.getX(i));
-    const ny = Math.abs(nor.getY(i));
-    const nz = Math.abs(nor.getZ(i));
-    let u;
-    let v;
-    if (ny >= nx && ny >= nz) (u = x), (v = z);
-    else if (nx >= nz) (u = z), (v = y);
-    else (u = x), (v = y);
-    uv[i * 2] = u * texel;
-    uv[i * 2 + 1] = v * texel;
-  }
-  geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
-}
-
-// Vertex colours: macro paint variation, soot toward the stern, dust on upward faces.
-function macroColor(geo, { base = 1.0, trench = false } = {}) {
-  const pos = geo.attributes.position;
-  const nor = geo.attributes.normal;
-  const col = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-    const n = fbm((x + 900) / 2400, (z + 900) / 2400, { octaves: 3, freq: 6, gain: 0.55, seed: 17 });
-    const n2 = fbm((z + 900) / 1800, (y + 300) / 900, { octaves: 2, freq: 9, gain: 0.5, seed: 29 });
-    let k = base * (0.94 + (n - 0.5) * 0.16 + (n2 - 0.5) * 0.06);
-    // soot: darker toward the stern, heaviest around the engine wall
-    const soot = THREE.MathUtils.smoothstep(z, 350, 800) * 0.22;
-    k *= 1 - soot;
-    // dust / lighter on up-facing surfaces, slightly darker on down-facing
-    const ny = nor.getY(i);
-    k *= 1 + ny * 0.05;
-    if (trench) k *= 0.55;
-    col[i * 3] = k;
-    col[i * 3 + 1] = k * 1.0;
-    col[i * 3 + 2] = k * (1.02 - soot * 0.3);
-  }
-  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-}
-
-function finish(geo, texel, colorOpts) {
-  const g = geo.index ? geo.toNonIndexed() : geo;
-  g.computeVertexNormals();
-  worldUV(g, texel);
-  macroColor(g, colorOpts);
-  for (const k of Object.keys(g.attributes)) if (!["position", "normal", "uv", "color"].includes(k)) g.deleteAttribute(k);
-  return g;
-}
-
-// Triangle soup builder for the wedge surfaces.
-class Soup {
-  constructor() {
-    this.p = [];
-  }
-  tri(a, b, c) {
-    this.p.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
-  }
-  quad(a, b, c, d) {
-    // a b c d in winding order
-    this.tri(a, b, c);
-    this.tri(a, c, d);
-  }
-  geometry() {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(this.p, 3));
-    return g;
-  }
-}
-
-const TRENCH_HALF = HULL.trenchHeight / 2;
-const TRENCH_DEPTH = 10;
-
-function dorsal(x, z) {
-  return HULL.dorsalY(x, z) + TRENCH_HALF;
-}
-function ventral(x, z) {
-  return HULL.ventralY(x, z) - TRENCH_HALF;
-}
-
 function buildWedge() {
   const NZ = 40;
   const NX = 16;
@@ -155,19 +42,27 @@ function buildWedge() {
       const B = [sb * hwa, 0, za];
       const C = [sb * hwb, 0, zb];
       const D = [sa * hwb, 0, zb];
-      // dorsal (normal up): winding so the face points +Y
       top.quad([A[0], dorsal(A[0], za), za], [D[0], dorsal(D[0], zb), zb], [C[0], dorsal(C[0], zb), zb], [B[0], dorsal(B[0], za), za]);
-      // ventral (normal down)
       bottom.quad([A[0], ventral(A[0], za), za], [B[0], ventral(B[0], za), za], [C[0], ventral(C[0], zb), zb], [D[0], ventral(D[0], zb), zb]);
     }
   }
-  // stern wall (faces +Z)
+  // stern wall (faces +Z), finely tessellated so the heat discolouration reads as smooth gradients
   const stern = new Soup();
   const hwS = HULL.halfWidthAt(HULL.sternZ);
-  for (let xi = 0; xi < NX; xi++) {
-    const xa = -hwS + (2 * hwS * xi) / NX;
-    const xb = -hwS + (2 * hwS * (xi + 1)) / NX;
-    stern.quad([xa, ventral(xa, HULL.sternZ), HULL.sternZ], [xb, ventral(xb, HULL.sternZ), HULL.sternZ], [xb, dorsal(xb, HULL.sternZ), HULL.sternZ], [xa, dorsal(xa, HULL.sternZ), HULL.sternZ]);
+  const SX = 72;
+  const SY = 18;
+  for (let xi = 0; xi < SX; xi++) {
+    const xa = -hwS + (2 * hwS * xi) / SX;
+    const xb = -hwS + (2 * hwS * (xi + 1)) / SX;
+    const ya0 = ventral(xa, HULL.sternZ);
+    const ya1 = dorsal(xa, HULL.sternZ);
+    const yb0 = ventral(xb, HULL.sternZ);
+    const yb1 = dorsal(xb, HULL.sternZ);
+    for (let yi = 0; yi < SY; yi++) {
+      const t0 = yi / SY;
+      const t1 = (yi + 1) / SY;
+      stern.quad([xa, ya0 + (ya1 - ya0) * t0, HULL.sternZ], [xb, yb0 + (yb1 - yb0) * t0, HULL.sternZ], [xb, yb0 + (yb1 - yb0) * t1, HULL.sternZ], [xa, ya0 + (ya1 - ya0) * t1, HULL.sternZ]);
+    }
   }
   // trenches: lips + recessed inner wall, both flanks
   const trench = new Soup();
@@ -180,7 +75,6 @@ function buildWedge() {
       const eb = s * HULL.halfWidthAt(zb);
       const ia = ea - s * TRENCH_DEPTH;
       const ib = eb - s * TRENCH_DEPTH;
-      // top lip (faces down), inner wall (faces outward), bottom lip (faces up)
       const q = (a, b, c, d) => (s > 0 ? lips.quad(a, b, c, d) : lips.quad(a, d, c, b));
       const qi = (a, b, c, d) => (s > 0 ? trench.quad(a, b, c, d) : trench.quad(a, d, c, b));
       q([ea, TRENCH_HALF, za], [ia, TRENCH_HALF, za], [ib, TRENCH_HALF, zb], [eb, TRENCH_HALF, zb]);
@@ -191,14 +85,17 @@ function buildWedge() {
   return { top: top.geometry(), bottom: bottom.geometry(), stern: stern.geometry(), trench: trench.geometry(), lips: lips.geometry() };
 }
 
-// Box helper producing a positioned BoxGeometry
-function box(cx, cy, cz, sx, sy, sz) {
-  const g = new THREE.BoxGeometry(sx, sy, sz);
-  g.translate(cx, cy, cz);
-  return g;
-}
-function boxMM(min, max) {
-  return box((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2, max[0] - min[0], max[1] - min[1], max[2] - min[2]);
+// Terrace block with a sloped front face: top, front slope, back wall, two side walls (base is inside the hull).
+function terraceGeometry(t) {
+  const s = new Soup();
+  const { hx, z0, z1, yTop, inset } = t;
+  const zf = z0 + inset;
+  s.quad([-hx, yTop, zf], [-hx, yTop, z1], [hx, yTop, z1], [hx, yTop, zf]); // top (+y)
+  s.quad([-hx, 0, z0], [hx, 0, z0], [hx, yTop, zf], [-hx, yTop, zf]); // sloped front (-z, +y)
+  s.quad([hx, 0, z1], [-hx, 0, z1], [-hx, yTop, z1], [hx, yTop, z1]); // back (+z)
+  s.quad([hx, 0, z0], [hx, 0, z1], [hx, yTop, z1], [hx, yTop, zf]); // starboard side (+x)
+  s.quad([-hx, 0, z1], [-hx, 0, z0], [-hx, yTop, zf], [-hx, yTop, z1]); // port side (-x)
+  return s.geometry();
 }
 
 // ---------------------------------------------------------------------------
@@ -224,62 +121,56 @@ export function buildExterior(scene) {
   group.name = "exterior";
   scene.add(group);
 
-  const sun = { dir: { value: new THREE.Vector3(-0.46, 0.38, 0.8).normalize() }, color: { value: new THREE.Color(1.0, 0.95, 0.88).multiplyScalar(2.4) } };
+  const sun = makeSun();
 
+  // ---------------- textures (5 sets, all <= 1024^2)
   const plating = makeHullPlating(1024, 301);
-  const trenchTex = makeTrenchDetail(512, 351);
-  const windowsTex = makeWindowStrips(512, 128, 401);
-  windowsTex.wrapS = windowsTex.wrapT = THREE.RepeatWrapping;
+  const detailTex = makeHullDetail(512, 311);
+  const machinery = makeMachinery(1024, 351);
+  const windowsTex = makeWindowStrips(512, 64, 401);
+  const atlas = makeDetailAtlas(1024, 421);
 
-  const hullMat = sunPatch(
-    new THREE.MeshStandardMaterial({
-      map: plating.map,
-      roughnessMap: plating.roughnessMap,
-      metalnessMap: plating.metalnessMap,
-      normalMap: plating.normalMap,
-      normalScale: new THREE.Vector2(0.9, 0.9),
-      vertexColors: true,
-      roughness: 1,
-      metalness: 1,
-      envMapIntensity: 0.3,
-    }),
+  // ---------------- materials
+  const detailLayer = { map: detailTex.map, normalMap: detailTex.normalMap, scale: 1 / 3.5, strength: 0.8 };
+  const platingParams = () => ({
+    map: plating.map,
+    roughnessMap: plating.roughnessMap,
+    metalnessMap: plating.metalnessMap,
+    normalMap: plating.normalMap,
+    normalScale: new THREE.Vector2(0.85, 0.85),
+    vertexColors: true,
+    roughness: 1,
+    metalness: 1,
+    envMapIntensity: 0.25,
+  });
+  const hullMat = exteriorPatch(new THREE.MeshStandardMaterial(platingParams()), sun, { worldTexel: 1 / 24, detail: detailLayer });
+  const plateMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...platingParams(), color: 0xf6f6f6 }), sun, { worldTexel: 1 / 24, detail: detailLayer });
+  const hullUvMat = exteriorPatch(new THREE.MeshStandardMaterial(platingParams()), sun, { detail: detailLayer });
+  const machineryParams = () => ({
+    map: machinery.map,
+    roughnessMap: machinery.roughnessMap,
+    metalnessMap: machinery.metalnessMap,
+    normalMap: machinery.normalMap,
+    normalScale: new THREE.Vector2(0.9, 0.9),
+    vertexColors: true,
+    roughness: 1,
+    metalness: 1,
+    envMapIntensity: 0.2,
+  });
+  const darkMat = exteriorPatch(new THREE.MeshStandardMaterial(machineryParams()), sun, { worldTexel: 1 / 12 });
+  const engineMat = exteriorPatch(new THREE.MeshStandardMaterial({ ...machineryParams(), side: THREE.DoubleSide }), sun, { worldTexel: 1 / 12 });
+  const greebleMat = exteriorPatch(new THREE.MeshStandardMaterial({ color: 0xb6bac0, roughness: 0.68, metalness: 0.22, envMapIntensity: 0.25 }), sun);
+  const greebleDark = exteriorPatch(new THREE.MeshStandardMaterial({ color: 0x62666e, roughness: 0.78, metalness: 0.35, envMapIntensity: 0.2 }), sun);
+  const atlasMat = exteriorPatch(
+    new THREE.MeshStandardMaterial({ map: atlas.map, emissiveMap: atlas.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1.7, roughness: 0.7, metalness: 0.15, envMapIntensity: 0.2 }),
     sun,
   );
-  const darkMat = sunPatch(
-    new THREE.MeshStandardMaterial({
-      map: trenchTex.map,
-      roughnessMap: trenchTex.roughnessMap,
-      metalnessMap: trenchTex.metalnessMap,
-      normalMap: trenchTex.normalMap,
-      normalScale: new THREE.Vector2(0.8, 0.8),
-      vertexColors: true,
-      roughness: 1,
-      metalness: 1,
-      envMapIntensity: 0.25,
-    }),
-    sun,
-  );
-  const greebleMat = sunPatch(new THREE.MeshStandardMaterial({ color: 0xa8acb3, roughness: 0.72, metalness: 0.25, envMapIntensity: 0.3 }), sun);
-  const greebleDark = sunPatch(new THREE.MeshStandardMaterial({ color: 0x3a3d43, roughness: 0.8, metalness: 0.35, envMapIntensity: 0.2 }), sun);
-  const plateMat = sunPatch(
-    new THREE.MeshStandardMaterial({
-      map: plating.map,
-      roughnessMap: plating.roughnessMap,
-      metalnessMap: plating.metalnessMap,
-      normalMap: plating.normalMap,
-      normalScale: new THREE.Vector2(0.6, 0.6),
-      color: 0xf2f2f2,
-      roughness: 1,
-      metalness: 1,
-      envMapIntensity: 0.3,
-    }),
-    sun,
-  );
-  const windowMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: windowsTex, emissiveIntensity: 1.6, roughness: 0.6, metalness: 0, fog: false, transparent: true, opacity: 0.999, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
-  const engineGlow = new THREE.MeshBasicMaterial({ color: 0x8fc8ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
-  const engineCore = new THREE.MeshBasicMaterial({ color: 0xe8f4ff, fog: false });
+  const windowMat = new THREE.MeshStandardMaterial({ map: windowsTex, emissiveMap: windowsTex, emissive: 0xffffff, emissiveIntensity: 1.6, alphaTest: 0.5, roughness: 0.5, metalness: 0, fog: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+  const engineCore = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
+  const engineGlow = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
   const tractorMat = new THREE.MeshBasicMaterial({ color: 0x4d9dff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
-  const materials = { hullMat, darkMat, greebleMat, greebleDark, plateMat, windowMat, engineGlow };
+  const materials = { hullMat, darkMat, greebleMat, greebleDark, plateMat, windowMat, engineGlow, engineCore, hullUvMat, engineMat, atlasMat };
+  const mats = { hull: hullMat, plate: plateMat, hullUv: hullUvMat, dark: darkMat, engine: engineMat, greeble: greebleMat, greebleDark, atlas: atlasMat, windows: windowMat, engineCore, engineGlow };
 
   const rand = rng(4242);
   const addMesh = (geo, mat, name, parent = group) => {
@@ -292,28 +183,18 @@ export function buildExterior(scene) {
 
   // ---------------- base hull (always visible)
   const wedge = buildWedge();
-  const hullGeos = [finish(wedge.top, 1 / 24), finish(wedge.bottom, 1 / 24)];
-  addMesh(merge(hullGeos), hullMat, "hull");
-  addMesh(finish(wedge.stern, 1 / 24, { base: 0.7 }), darkMat, "sternWall");
+  addMesh(merge([finish(wedge.top), finish(wedge.bottom)]), hullMat, "hull");
+  addMesh(finish(wedge.stern, 1 / 12, { base: 0.72, tint: sternHeatTint }), darkMat, "sternWall");
   addMesh(finish(wedge.trench, 1 / 12, { trench: true }), darkMat, "trenchWall");
-  addMesh(finish(wedge.lips, 1 / 24), hullMat, "trenchLips");
+  addMesh(finish(wedge.lips), hullMat, "trenchLips");
 
-  // ---------------- superstructure terraces
-  const terraceGeos = [];
-  for (const [hx, tz0, tz1, yTop] of SUPERSTRUCTURE.terraces) {
-    terraceGeos.push(boxMM([-hx, 0, tz0], [hx, yTop, tz1]));
-    // bevelled step face: a slanted plate across the front edge
-    const bevel = new THREE.BoxGeometry(hx * 2, 6, 14);
-    bevel.rotateX(-0.6);
-    bevel.translate(0, yTop - 2, tz0 + 4);
-    terraceGeos.push(bevel);
-  }
-  addMesh(finish(merge(terraceGeos), 1 / 24), hullMat, "terraces");
+  // ---------------- superstructure terraces (sloped fronts)
+  const terraces = terraceDescriptors();
+  addMesh(finish(merge(terraces.map(terraceGeometry))), hullMat, "terraces");
 
   // ---------------- command tower
   const { neck, slab, domes, spire } = TOWER;
   const towerGeos = [boxMM([-neck.halfX, neck.y0 - 2, neck.z0], [neck.halfX, neck.y1, neck.z1])];
-  // slab: five solid faces + forward face with real window openings
   towerGeos.push(boxMM([-slab.halfX, slab.y0, slab.z0 + 1.2], [slab.halfX, slab.y1, slab.z1]));
   const openings = forwardWindowOpenings();
   const faceW = slab.halfX * 2;
@@ -323,7 +204,7 @@ export function buildExterior(scene) {
   const face = panelWithHoles(faceW, faceH, 1.2, holes);
   face.translate(0, cy, slab.z0 + 0.6);
   towerGeos.push(face);
-  addMesh(finish(merge(towerGeos), 1 / 24), hullMat, "tower");
+  addMesh(finish(merge(towerGeos)), hullMat, "tower");
   // window bay linings (dark) so the interior glass sits in a recess
   const bays = [];
   for (const o of openings) {
@@ -334,70 +215,101 @@ export function buildExterior(scene) {
     bays.push(boxMM([o.x0 - 0.5, o.y1, slab.z0], [o.x1 + 0.5, o.y1 + 0.5, slab.z0 + d]));
   }
   addMesh(finish(merge(bays), 1 / 4, { base: 0.6 }), darkMat, "windowBays");
-  // shield domes on pedestals + comms spire with dishes
-  const domeGeos = [];
-  for (const [dx, dy, dz] of domes.positions) {
-    domeGeos.push(new THREE.CylinderGeometry(15, 17, 12, 24).translate(dx, slab.y1 + 6, dz));
-    domeGeos.push(new THREE.SphereGeometry(domes.radius, 40, 24).translate(dx, dy, dz));
-  }
-  domeGeos.push(new THREE.CylinderGeometry(2.2, 3.5, spire.y1 - spire.y0, 12).translate(spire.x, (spire.y0 + spire.y1) / 2, spire.z));
-  for (let i = 0; i < 4; i++) {
-    const y = spire.y0 + 14 + i * 12;
-    domeGeos.push(new THREE.BoxGeometry(14 - i * 2, 0.8, 0.8).translate(spire.x, y, spire.z));
-    domeGeos.push(new THREE.BoxGeometry(0.8, 0.8, 10 - i * 1.5).translate(spire.x, y + 2, spire.z));
-  }
-  domeGeos.push(new THREE.CylinderGeometry(6, 0.5, 3, 16).rotateX(-1.1).translate(spire.x + 6, spire.y0 + 30, spire.z + 2));
-  addMesh(finish(merge(domeGeos), 1 / 12), hullMat, "domesSpire");
 
-  // ---------------- engines
-  const engGeos = [];
-  const glowGeos = [];
-  const coreGeos = [];
-  const engine = (x, y, r) => {
-    const len = r * 0.7;
-    const nozzle = new THREE.CylinderGeometry(r, r * 0.86, len, 40, 1, true);
-    nozzle.rotateX(Math.PI / 2);
-    nozzle.translate(x, y, ENGINES.sternZ + len / 2 - 4);
-    engGeos.push(nozzle);
-    const inner = new THREE.CylinderGeometry(r * 0.98, r * 0.55, len - 2, 40, 1, true);
-    inner.rotateX(Math.PI / 2);
-    inner.translate(x, y, ENGINES.sternZ + len / 2 - 4);
-    engGeos.push(inner);
-    const lip = new THREE.TorusGeometry(r, r * 0.06, 10, 48);
-    lip.translate(x, y, ENGINES.sternZ + len - 4);
-    engGeos.push(lip);
-    const glow = new THREE.CircleGeometry(r * 0.62, 40);
-    glow.translate(x, y, ENGINES.sternZ + 2);
-    glowGeos.push(glow);
-    const core = new THREE.CircleGeometry(r * 0.3, 32);
-    core.translate(x, y, ENGINES.sternZ + 2.5);
-    coreGeos.push(core);
-  };
-  for (const [x, y] of ENGINES.main.positions) engine(x, y, ENGINES.main.radius);
-  for (const [x, y] of ENGINES.aux.positions) engine(x, y, ENGINES.aux.radius);
-  const engMesh = addMesh(finish(merge(engGeos), 1 / 8, { base: 0.75 }), darkMat, "engines");
-  engMesh.material.side = THREE.DoubleSide;
-  addMesh(merge(glowGeos), engineGlow, "engineGlow");
-  addMesh(merge(coreGeos), engineCore, "engineCore");
+  // shield domes on pedestals (spherical UVs so the plating seams wrap the sphere) + comms spire
+  {
+    const domeGeos = [];
+    const uvGeos = [];
+    for (const [dx, dy, dz] of domes.positions) {
+      const sphere = new THREE.SphereGeometry(domes.radius, 48, 28);
+      const uv = sphere.attributes.uv;
+      const circ = 2 * Math.PI * domes.radius;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * circ) / 24, (uv.getY(i) * (Math.PI * domes.radius)) / 24);
+      sphere.translate(dx, dy, dz);
+      domeGeos.push(sphere);
+      uvGeos.push(new THREE.CylinderGeometry(15, 17.5, 12, 32).translate(dx, slab.y1 + 6, dz));
+      uvGeos.push(new THREE.TorusGeometry(domes.radius + 0.2, 0.5, 8, 64).rotateX(Math.PI / 2).translate(dx, dy, dz));
+      uvGeos.push(new THREE.CylinderGeometry(2.6, 3.2, 1.6, 16).translate(dx, dy + domes.radius + 0.4, dz));
+      uvGeos.push(new THREE.CylinderGeometry(0.2, 0.3, 4, 6).translate(dx, dy + domes.radius + 3, dz));
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        uvGeos.push(box(dx + Math.cos(a) * 17.2, slab.y1 + 1.4, dz + Math.sin(a) * 17.2, 2.4, 2.8, 2.4).rotateY(0));
+      }
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        const clamp = box(0, 0, 0, 1.6, 6, 3);
+        clamp.translate(0, slab.y1 + 9, 16.8);
+        clamp.rotateY(a);
+        clamp.translate(dx, 0, dz);
+        uvGeos.push(clamp);
+      }
+    }
+    // spire: tapered mast, cross arms with dishes, sensor array, whip antenna
+    const sh = spire.y1 - spire.y0;
+    uvGeos.push(new THREE.CylinderGeometry(2.0, 3.6, sh, 12).translate(spire.x, spire.y0 + sh / 2, spire.z));
+    uvGeos.push(new THREE.CylinderGeometry(4.5, 5.2, 4, 12).translate(spire.x, spire.y0 + 2, spire.z));
+    for (let i = 0; i < 4; i++) {
+      const y = spire.y0 + 16 + i * 11;
+      const w = 16 - i * 2.5;
+      uvGeos.push(box(spire.x, y, spire.z, w, 0.9, 0.9));
+      uvGeos.push(box(spire.x, y + 2.2, spire.z, 0.9, 0.9, w * 0.7));
+      uvGeos.push(box(spire.x + w / 2, y, spire.z, 1.4, 2.2, 1.4));
+      uvGeos.push(box(spire.x - w / 2, y, spire.z, 1.4, 2.2, 1.4));
+    }
+    const dishPts = [];
+    for (let i = 0; i <= 8; i++) dishPts.push(new THREE.Vector2((i / 8) * 5.5, 0.3 * (i / 8) * (i / 8) * 5.5));
+    for (const [ox, oy, rx, ry] of [
+      [7, 30, -1.1, 0.4],
+      [-7, 41, -1.0, -0.6],
+      [0, 52, -0.7, 2.4],
+    ]) {
+      const dish = new THREE.LatheGeometry(dishPts, 20);
+      dish.rotateX(rx);
+      dish.rotateY(ry);
+      dish.translate(spire.x + ox, spire.y0 + oy, spire.z + 1.5);
+      uvGeos.push(dish);
+      uvGeos.push(new THREE.CylinderGeometry(0.35, 0.35, 5, 6).rotateZ(Math.PI / 2).translate(spire.x + ox / 2, spire.y0 + oy, spire.z + 1.5));
+    }
+    uvGeos.push(box(spire.x, spire.y0 + 62, spire.z, 9, 5, 0.7));
+    uvGeos.push(box(spire.x, spire.y1 + 2, spire.z, 0.5, 5, 0.5));
+    const uvMerged = merge(uvGeos);
+    worldUV(uvMerged, 1 / 12);
+    const all = merge([merge(domeGeos), uvMerged]);
+    macroColor(all, {});
+    all.computeBoundingSphere();
+    addMesh(all, hullUvMat, "domesSpire");
+  }
 
-  // ---------------- ventral keel block with the hangar well
+  // ---------------- ventral keel block with the hangar well and the reserved secondary bay
   const k = HULL.keelPlate;
   const keelGeos = [];
   const wellW = HANGAR.well.x1 - HANGAR.well.x0;
   const wellD = HANGAR.well.z1 - HANGAR.well.z0;
   // 1.5 m plate: its top (k.y + 1.5) stays below the interior hangar deck slab, so no coplanar faces
   const plate = panelWithHoles(k.x * 2, k.z1 - k.z0, 1.5, [{ x: (HANGAR.well.x0 + HANGAR.well.x1) / 2, y: -((HANGAR.well.z0 + HANGAR.well.z1) / 2 - (k.z0 + k.z1) / 2), w: wellW, h: wellD }]);
-  plate.rotateX(Math.PI / 2); // lies flat, faces down
+  plate.rotateX(Math.PI / 2);
   plate.translate(0, k.y + 0.75, (k.z0 + k.z1) / 2);
   keelGeos.push(plate);
   keelGeos.push(boxMM([-k.x - 1, k.y, k.z0 - 1], [-k.x, -20, k.z1 + 1]));
   keelGeos.push(boxMM([k.x, k.y, k.z0 - 1], [k.x + 1, -20, k.z1 + 1]));
   keelGeos.push(boxMM([-k.x - 1, k.y, k.z0 - 1], [k.x + 1, -20, k.z0]));
   keelGeos.push(boxMM([-k.x - 1, k.y, k.z1], [k.x + 1, -20, k.z1 + 1]));
-  // secondary bay door outline (reserved, closed): a slightly recessed plate ahead of the well
+  // chamfered skirt so the block meets the hull with a bevel instead of a raw step
+  for (const sx of [-1, 1]) {
+    const skirt = box(sx * (k.x + 3.5), (k.y + 12) / 2 - 6, (k.z0 + k.z1) / 2, 6, 24, k.z1 - k.z0 + 2);
+    skirt.rotateZ(sx * 0.35);
+    keelGeos.push(skirt);
+  }
+  addMesh(finish(merge(keelGeos)), hullMat, "keelBlock");
+  // secondary bay door outline (reserved, closed): proud dark plate with the painted door stamp
   const sb = HANGAR.secondaryBayDoor;
-  keelGeos.push(boxMM([sb.x0, k.y - 0.6, sb.z0], [sb.x1, k.y + 1, sb.z1]));
-  addMesh(finish(merge(keelGeos), 1 / 24), hullMat, "keelBlock");
+  addMesh(finish(boxMM([sb.x0 - 1, k.y - 0.7, sb.z0 - 1], [sb.x1 + 1, k.y + 1, sb.z1 + 1]), 1 / 6, { base: 0.6 }), darkMat, "secondaryBayFrame");
+  {
+    const door = atlasQuad(sb.x1 - sb.x0, sb.z1 - sb.z0, atlas.cells.bayDoor);
+    door.rotateX(Math.PI / 2);
+    door.translate((sb.x0 + sb.x1) / 2, k.y - 0.75, (sb.z0 + sb.z1) / 2);
+    addMesh(door, atlasMat, "secondaryBayDoor");
+  }
   // well throat lining through the plate thickness plus a 0.25 m curb above the hangar deck
   const throatTop = HANGAR.deckY + 0.25;
   const throat = [
@@ -407,9 +319,21 @@ export function buildExterior(scene) {
     boxMM([HANGAR.well.x0 - 0.6, k.y, HANGAR.well.z1], [HANGAR.well.x1 + 0.6, throatTop, HANGAR.well.z1 + 0.6]),
   ];
   addMesh(finish(merge(throat), 1 / 6, { base: 0.5 }), darkMat, "wellThroat");
+  // hazard rim and approach lights around the well mouth
+  {
+    const rim = merge([
+      atlasQuad(wellW + 8, 3, atlas.cells.hazard).rotateX(Math.PI / 2).translate((HANGAR.well.x0 + HANGAR.well.x1) / 2, k.y - 0.05, HANGAR.well.z0 - 2.2),
+      atlasQuad(wellW + 8, 3, atlas.cells.hazard).rotateX(Math.PI / 2).translate((HANGAR.well.x0 + HANGAR.well.x1) / 2, k.y - 0.05, HANGAR.well.z1 + 2.2),
+      atlasQuad(wellD, 3, atlas.cells.hazard).rotateZ(Math.PI / 2).rotateX(Math.PI / 2).translate(HANGAR.well.x0 - 2.2, k.y - 0.05, (HANGAR.well.z0 + HANGAR.well.z1) / 2),
+      atlasQuad(wellD, 3, atlas.cells.hazard).rotateZ(Math.PI / 2).rotateX(Math.PI / 2).translate(HANGAR.well.x1 + 2.2, k.y - 0.05, (HANGAR.well.z0 + HANGAR.well.z1) / 2),
+      atlasQuad(wellD + 8, 2, atlas.cells.edgeLights).rotateZ(Math.PI / 2).rotateX(Math.PI / 2).translate(HANGAR.well.x0 - 5, k.y - 0.05, (HANGAR.well.z0 + HANGAR.well.z1) / 2),
+      atlasQuad(wellD + 8, 2, atlas.cells.edgeLights).rotateZ(Math.PI / 2).rotateX(Math.PI / 2).translate(HANGAR.well.x1 + 5, k.y - 0.05, (HANGAR.well.z0 + HANGAR.well.z1) / 2),
+    ]);
+    addMesh(rim, atlasMat, "wellRim");
+  }
   const field = new THREE.PlaneGeometry(wellW, wellD);
   field.rotateX(Math.PI / 2);
-  field.translate((HANGAR.well.x0 + HANGAR.well.x1) / 2, k.y + 0.5, (HANGAR.well.z0 + HANGAR.well.z1) / 2);
+  field.translate((HANGAR.well.x0 + HANGAR.well.x1) / 2, k.y + 0.4, (HANGAR.well.z0 + HANGAR.well.z1) / 2);
   const tractor = addMesh(field, tractorMat, "tractorField");
 
   // ---------------- instanced detail layers
@@ -418,234 +342,46 @@ export function buildExterior(scene) {
   detail.mid.name = "detail_mid";
   group.add(detail.near, detail.mid);
 
-  const m4 = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const s3 = new THREE.Vector3();
-  const p3 = new THREE.Vector3();
-  const up = new THREE.Vector3(0, 1, 0);
-  const col = new THREE.Color();
-
-  function instanced(geo, mat, count, parent, fill, name) {
-    const im = new THREE.InstancedMesh(geo, mat, count);
-    im.name = name;
-    let n = 0;
-    for (let i = 0; i < count; i++) {
-      const ok = fill(i, m4, col);
-      if (ok === false) continue;
-      im.setMatrixAt(n, m4);
-      im.setColorAt(n, col);
-      n++;
-    }
-    im.count = n;
-    im.instanceMatrix.needsUpdate = true;
-    if (im.instanceColor) im.instanceColor.needsUpdate = true;
-    im.computeBoundingSphere();
-    parent.add(im);
-    return im;
-  }
-
-  // surface normal of the dorsal / ventral plane at (x,z)
-  function surfaceNormal(x, z, top) {
-    const f = top ? dorsal : ventral;
-    const e = 2;
-    const dydx = (f(x + e, z) - f(x - e, z)) / (2 * e);
-    const dydz = (f(x, z + e) - f(x, z - e)) / (2 * e);
-    _tmp.set(-dydx, 1, -dydz).normalize();
-    if (!top) _tmp.negate();
-    return _tmp;
-  }
-
-  // random point on the wedge outline interior, avoiding the superstructure footprint on top
-  function randomHullPoint(top) {
-    for (let tries = 0; tries < 20; tries++) {
-      const z = HULL.bowZ + 60 + rand() * (HULL.length - 80);
-      const hw = HULL.halfWidthAt(z) - 22;
-      if (hw < 10) continue;
-      const x = (rand() * 2 - 1) * hw;
-      if (top && z > 140 && Math.abs(x) < 170) continue;
-      if (!top && z > HULL.keelPlate.z0 - 10 && z < HULL.keelPlate.z1 + 10 && Math.abs(x) < HULL.keelPlate.x + 10) continue;
-      return [x, z];
-    }
-    return null;
-  }
-
-  // raised armour plates (mid distance and closer)
-  const plateGeo = new THREE.BoxGeometry(1, 1, 1);
-  for (const top of [true, false]) {
-    instanced(plateGeo, plateMat, 520, detail.mid, (i, m, c) => {
-      const pt = randomHullPoint(top);
-      if (!pt) return false;
-      const [x, z] = pt;
-      const w = 14 + rand() * 40;
-      const d = 14 + rand() * 60;
-      const th = 1.0 + rand() * 1.2;
-      const n = surfaceNormal(x, z, top).clone();
-      const y = (top ? dorsal(x, z) : ventral(x, z)) + n.y * th * 0.5;
-      q.setFromUnitVectors(up, n);
-      m.compose(p3.set(x, y, z), q, s3.set(w, th, d));
-      const tone = 0.9 + rand() * 0.14;
-      c.setRGB(tone, tone, tone * 1.01);
-      return true;
-    }, top ? "platesTop" : "platesBottom");
-  }
-
-  // trench machinery: boxes packed into the recess on both flanks
-  const gGeo = new THREE.BoxGeometry(1, 1, 1);
-  instanced(gGeo, greebleDark, 1400, detail.mid, (i, m, c) => {
-    const z = HULL.bowZ + 80 + rand() * (HULL.length - 100);
-    const s = rand() < 0.5 ? -1 : 1;
-    const e = s * HULL.halfWidthAt(z);
-    const depth = 2 + rand() * (TRENCH_DEPTH - 3);
-    const x = e - s * depth;
-    const y = (rand() * 2 - 1) * (TRENCH_HALF - 2);
-    const sx = 2 + rand() * 6;
-    const sy = 1.5 + rand() * 4;
-    const sz = 3 + rand() * 14;
-    q.identity();
-    m.compose(p3.set(x, y, z), q, s3.set(sx, sy, sz));
-    const t = 0.35 + rand() * 0.5;
-    c.setRGB(t, t, t * 1.05);
-    return true;
-  }, "trenchGreebles");
-
-  // terrace greebles: blocks on the terrace tops and along their side faces
-  instanced(gGeo, greebleMat, 900, detail.near, (i, m, c) => {
-    const [hx, tz0, tz1, yTop] = SUPERSTRUCTURE.terraces[i % SUPERSTRUCTURE.terraces.length];
-    const onTop = rand() < 0.55;
-    let x;
-    let y;
-    let z;
-    let sx;
-    let sy;
-    let sz;
-    if (onTop) {
-      x = (rand() * 2 - 1) * (hx - 6);
-      z = tz0 + 8 + rand() * (tz1 - tz0 - 16);
-      // keep the neck footprint and the next terrace clear
-      const next = SUPERSTRUCTURE.terraces[(i % SUPERSTRUCTURE.terraces.length) + 1];
-      if (next && Math.abs(x) < next[0] + 4 && z > next[1] - 4) return false;
-      if (Math.abs(x) < TOWER.neck.halfX + 6 && z > TOWER.neck.z0 - 6) return false;
-      sx = 3 + rand() * 12;
-      sy = 2 + rand() * 9;
-      sz = 3 + rand() * 12;
-      y = yTop + sy / 2;
-    } else {
-      const side = rand() < 0.5 ? -1 : 1;
-      x = side * (hx + 1.5);
-      z = tz0 + 6 + rand() * (tz1 - tz0 - 12);
-      y = 12 + rand() * (yTop - 20);
-      sx = 2 + rand() * 4;
-      sy = 2 + rand() * 6;
-      sz = 4 + rand() * 12;
-    }
-    q.identity();
-    m.compose(p3.set(x, y, z), q, s3.set(sx, sy, sz));
-    const t = 0.55 + rand() * 0.45;
-    c.setRGB(t, t, t);
-    return true;
-  }, "terraceGreebles");
-
-  // heavy turbolaser turrets: base drum, housing, twin barrels (one merged geometry, instanced)
-  const turretGeo = merge([
-    new THREE.CylinderGeometry(9, 10, 5, 20).translate(0, 2.5, 0),
-    new THREE.BoxGeometry(15, 7, 13).translate(0, 8.5, 0),
-    new THREE.BoxGeometry(11, 4, 9).translate(0, 13.5, -1),
-    new THREE.CylinderGeometry(1.1, 1.3, 26, 10).rotateX(Math.PI / 2 + 0.12).translate(-3.5, 9.5, -17),
-    new THREE.CylinderGeometry(1.1, 1.3, 26, 10).rotateX(Math.PI / 2 + 0.12).translate(3.5, 9.5, -17),
-    new THREE.BoxGeometry(9, 3, 5).translate(0, 9.5, -7),
-  ]);
-  turretGeo.computeVertexNormals();
-  const heavySpots = [];
-  for (const side of [-1, 1]) for (let i = 0; i < 4; i++) heavySpots.push([side * (168 + (i % 2) * 14), 200 + i * 80]);
-  instanced(turretGeo, greebleMat, heavySpots.length, detail.mid, (i, m, c) => {
-    const [x, z] = heavySpots[i];
-    const y = dorsal(x, z);
-    q.setFromAxisAngle(up, (rand() - 0.5) * 0.9);
-    m.compose(p3.set(x, y, z), q, s3.set(1, 1, 1));
-    c.setRGB(0.85, 0.86, 0.9);
-    return true;
-  }, "heavyTurrets");
-  // light emplacements along the trench top edge
-  instanced(turretGeo, greebleMat, 16, detail.near, (i, m, c) => {
-    const side = i < 8 ? -1 : 1;
-    const z = -520 + (i % 8) * 150;
-    const x = side * (HULL.halfWidthAt(z) - 30);
-    const y = dorsal(x, z);
-    q.setFromAxisAngle(up, side * -0.5 + (rand() - 0.5) * 0.6);
-    m.compose(p3.set(x, y, z), q, s3.set(0.4, 0.4, 0.4));
-    c.setRGB(0.8, 0.82, 0.86);
-    return true;
-  }, "lightTurrets");
-
-  // sensor domes and antennas on the terraces and the slab
-  const domeGeo = new THREE.SphereGeometry(1, 16, 10);
-  instanced(domeGeo, greebleMat, 26, detail.near, (i, m, c) => {
-    const [hx, tz0, tz1, yTop] = SUPERSTRUCTURE.terraces[i % 3];
-    const x = (rand() * 2 - 1) * (hx - 10);
-    const z = tz0 + 10 + rand() * (tz1 - tz0 - 20);
-    if (Math.abs(x) < TOWER.neck.halfX + 10 && z > TOWER.neck.z0 - 10) return false;
-    const r = 2.5 + rand() * 4;
-    q.identity();
-    m.compose(p3.set(x, yTop, z), q, s3.set(r, r, r));
-    c.setRGB(0.9, 0.9, 0.92);
-    return true;
-  }, "sensorDomes");
-  const mastGeo = new THREE.CylinderGeometry(0.35, 0.6, 1, 8).translate(0, 0.5, 0);
-  instanced(mastGeo, greebleDark, 40, detail.near, (i, m, c) => {
-    const onSlab = i < 16;
-    let x;
-    let z;
-    let y;
-    if (onSlab) {
-      x = (rand() * 2 - 1) * (slab.halfX - 12);
-      z = slab.z0 + 8 + rand() * (slab.z1 - slab.z0 - 16);
-      y = slab.y1;
-      if (Math.abs(Math.abs(x) - 90) < 28 && Math.abs(z - 530) < 28) return false;
-    } else {
-      const [hx, tz0, tz1, yTop] = SUPERSTRUCTURE.terraces[i % 3];
-      x = (rand() * 2 - 1) * (hx - 8);
-      z = tz0 + 6 + rand() * (tz1 - tz0 - 12);
-      y = yTop;
-      if (Math.abs(x) < TOWER.neck.halfX + 8 && z > TOWER.neck.z0 - 8) return false;
-    }
-    const h = 8 + rand() * 22;
-    q.identity();
-    m.compose(p3.set(x, y, z), q, s3.set(1, h, 1));
-    c.setRGB(0.5, 0.52, 0.55);
-    return true;
-  }, "antennas");
-
-  // lit window rows: neck faces, slab faces (outside the interior openings), terrace fronts
-  const winGeos = [];
-  const winQuad = (w, h, pos, rot, repU, repV) => {
-    const g = new THREE.PlaneGeometry(w, h);
-    const uv = g.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * repU, uv.getY(i) * repV);
-    g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)), new THREE.Vector3(1, 1, 1)));
-    winGeos.push(g);
+  const windowRows = createWindowRows();
+  const ctx = {
+    rand,
+    mats,
+    detail,
+    group,
+    atlas,
+    openings,
+    exclude: { top: [...turretRects(), ...padRects()], bottom: [] },
+    windowQuad: (w, h, pos, rot) => windowRows.add(w, h, pos, rot),
   };
-  // neck: four faces, rows over 100 m of height
-  const nH = neck.y1 - neck.y0 - 20;
-  const nY = (neck.y0 + neck.y1) / 2;
-  winQuad(neck.halfX * 2 - 6, nH, [0, nY, neck.z0 - 0.3], [0, Math.PI, 0], 12, nH / 4);
-  winQuad(neck.halfX * 2 - 6, nH, [0, nY, neck.z1 + 0.3], [0, 0, 0], 12, nH / 4);
-  winQuad(neck.z1 - neck.z0 - 6, nH, [-neck.halfX - 0.3, nY, (neck.z0 + neck.z1) / 2], [0, -Math.PI / 2, 0], 10, nH / 4);
-  winQuad(neck.z1 - neck.z0 - 6, nH, [neck.halfX + 0.3, nY, (neck.z0 + neck.z1) / 2], [0, Math.PI / 2, 0], 10, nH / 4);
-  // slab: side faces and aft face, plus the forward face's upper strip
-  const sH = slab.y1 - slab.y0 - 10;
-  const sY = (slab.y0 + slab.y1) / 2;
-  winQuad(slab.z1 - slab.z0 - 8, sH, [-slab.halfX - 0.3, sY, (slab.z0 + slab.z1) / 2], [0, -Math.PI / 2, 0], 16, sH / 4);
-  winQuad(slab.z1 - slab.z0 - 8, sH, [slab.halfX + 0.3, sY, (slab.z0 + slab.z1) / 2], [0, Math.PI / 2, 0], 16, sH / 4);
-  winQuad(slab.halfX * 2 - 8, sH, [0, sY, slab.z1 + 0.3], [0, 0, 0], 34, sH / 4);
-  winQuad(60, 6, [-100, slab.y1 - 6, slab.z0 - 0.3], [0, Math.PI, 0], 8, 1);
-  winQuad(60, 6, [100, slab.y1 - 6, slab.z0 - 0.3], [0, Math.PI, 0], 8, 1);
-  // terrace fronts and flanks
-  for (const [hx, tz0, tz1, yTop] of SUPERSTRUCTURE.terraces) {
-    winQuad(hx * 2 - 10, 10, [0, yTop - 12, tz0 - 0.3], [0, Math.PI, 0], hx / 4, 2);
-    winQuad(tz1 - tz0 - 10, 10, [-hx - 0.3, yTop - 14, (tz0 + tz1) / 2], [0, -Math.PI / 2, 0], (tz1 - tz0) / 8, 2);
-    winQuad(tz1 - tz0 - 10, 10, [hx + 0.3, yTop - 14, (tz0 + tz1) / 2], [0, Math.PI / 2, 0], (tz1 - tz0) / 8, 2);
+
+  buildEngines(ctx);
+  buildTurrets(ctx);
+  buildDockingPads(ctx);
+  const cells = buildHullPlates(ctx);
+  buildHullFittings(ctx, cells);
+  buildSuperstructure(ctx);
+  buildTrench(ctx);
+
+  // slab window rows: sides, aft, forward face outside the real openings (which stay clear)
+  {
+    const sY = (slab.y0 + slab.y1) / 2;
+    const sLen = slab.z1 - slab.z0 - 8;
+    const sZ = (slab.z0 + slab.z1) / 2;
+    for (const yy of [sY - 10, sY + 2, sY + 12]) {
+      windowRows.add(sLen, yy === sY + 2 ? 5 : 2.5, [-slab.halfX - 0.25, yy, sZ], [0, -Math.PI / 2, 0]);
+      windowRows.add(sLen, yy === sY + 2 ? 5 : 2.5, [slab.halfX + 0.25, yy, sZ], [0, Math.PI / 2, 0]);
+      windowRows.add(slab.halfX * 2 - 8, yy === sY + 2 ? 5 : 2.5, [0, yy, slab.z1 + 0.25], [0, 0, 0]);
+    }
+    for (const sx of [-1, 1]) {
+      windowRows.add(74, 2.5, [sx * 91, slab.y0 + 9, slab.z0 - 0.25], [0, Math.PI, 0]);
+      windowRows.add(74, 5, [sx * 91, slab.y0 + 18.5, slab.z0 - 0.25], [0, Math.PI, 0]);
+      windowRows.add(74, 2.5, [sx * 91, slab.y1 - 5.5, slab.z0 - 0.25], [0, Math.PI, 0]);
+    }
+    // sensor/comms bands on the forward face upper corners
+    windowRows.add(120, 2.5, [0, slab.y1 - 4, slab.z0 - 0.25], [0, Math.PI, 0]);
   }
-  addMesh(merge(winGeos), windowMat, "windowRows", detail.mid);
+  windowRows.build(windowMat, group);
+  const running = buildRunningLights(ctx);
 
   // ---------------- LOD by camera distance to each detail mesh
   const lodMeshes = [];
@@ -672,7 +408,9 @@ export function buildExterior(scene) {
       if (e.mesh.visible) vis++;
     }
     stats.visibleDetail = vis;
-    tractor.material.opacity = 0.16 + 0.08 * Math.sin(performance.now() * 0.0016);
+    const now = performance.now();
+    tractor.material.opacity = 0.16 + 0.08 * Math.sin(now * 0.0016);
+    if (group.visible) running.update(now * 0.001);
   }
 
   // Which exterior parts to draw from inside: everything for "forward"/"belly" windows, nothing otherwise
@@ -681,5 +419,7 @@ export function buildExterior(scene) {
     group.visible = any;
   }
 
-  return { group, detail, materials, sun, update, setInteriorView, stats, openings };
+  const api = { group, detail, materials, sun, update, setInteriorView, stats, openings };
+  globalThis.__exterior = api; // DEBUG-TEMP
+  return api;
 }
