@@ -1,5 +1,5 @@
 // Atmosphere / post regression + cost measurement (headless, software GL).
-//   node tools/atmo_test.mjs [url] [--out=shots/atmo_test] [--w=960 --h=540] [--no-shots]
+//   node tools/atmo_test.mjs [url | --url=url] [--out=shots/atmo_test] [--w=960 --h=540] [--no-shots]
 // Checks: hologram shader swap, motes confined to the current room, shafts per room (planet-shine / sun /
 // hangar work lights), engine glow only outside, alert tint + alert vignette, post setMode/setQuality hooks,
 // draw-call / triangle cost of the atmosphere group (measured by toggling it), no page errors.
@@ -9,7 +9,8 @@ import { resolve } from "node:path";
 
 const args = process.argv.slice(2);
 const flags = Object.fromEntries(args.filter((a) => a.startsWith("--")).map((a) => a.slice(2).split("=")));
-const url = args.find((a) => !a.startsWith("--")) || "http://127.0.0.1:5173/";
+const url = flags.url || args.find((a) => !a.startsWith("--")) || "http://127.0.0.1:5173/";
+console.log(`testing ${url}`);
 const outDir = resolve(flags.out || "shots/atmo_test");
 const W = +(flags.w || 960);
 const H = +(flags.h || 540);
@@ -115,6 +116,76 @@ const summary = {};
   summary.bridge = c;
   check("bridge: atmosphere adds ≤ 6 draw calls and ≤ 30k triangles", c.calls <= 6 && c.triangles <= 30000, `+${c.calls} calls, +${c.triangles} tris (frame ${c.frameMsOff.toFixed(0)} → ${c.frameMsOn.toFixed(0)} ms sw)`);
   await shot("bridge_planetshine");
+  await ev(() => window.debugAPI.setView("bridge_window"));
+  await settle(2);
+  await shot("bridge_window_planetshine");
+  await ev(() => window.debugAPI.setView("bridge"));
+  await settle(1);
+}
+
+// 2b. hologram look: no grey-box room uses `holo` yet, so drop a wedge hologram on the bridge at runtime
+//     (built from constructors reachable through debugAPI — no source change) and check it renders.
+{
+  const region = [400, 200, 160, 140];
+  const before = await ev(async (r) => window.debugAPI.capturePixels(...r), region);
+  const added = await ev(() => {
+    const d = window.debugAPI;
+    const Geo = d.atmosphere.motes.geometry.constructor;
+    const Attr = d.atmosphere.motes.geometry.attributes.position.constructor;
+    const Mesh = d.atmosphere.shafts.constructor;
+    // flat wedge (bow toward -z) + tower block, non-indexed so computeVertexNormals gives flat faces
+    const tri = (a, b, c) => [...a, ...b, ...c];
+    const y0 = -0.06;
+    const y1 = 0.06;
+    const A0 = [0, y0, -2.2], B0 = [-1.0, y0, 1.0], C0 = [1.0, y0, 1.0];
+    const A1 = [0, y1, -2.2], B1 = [-1.0, y1, 1.0], C1 = [1.0, y1, 1.0];
+    const v = [];
+    v.push(...tri(A0, C0, B0), ...tri(A1, B1, C1));
+    v.push(...tri(A0, A1, C1), ...tri(A0, C1, C0), ...tri(A0, B0, B1), ...tri(A0, B1, A1), ...tri(B0, C0, C1), ...tri(B0, C1, B1));
+    const box = (x0, x1, yb, yt, z0, z1) => {
+      const P = (x, y, z) => [x, y, z];
+      const f = [
+        [P(x0, yb, z1), P(x1, yb, z1), P(x1, yt, z1), P(x0, yt, z1)],
+        [P(x1, yb, z0), P(x0, yb, z0), P(x0, yt, z0), P(x1, yt, z0)],
+        [P(x0, yb, z0), P(x0, yb, z1), P(x0, yt, z1), P(x0, yt, z0)],
+        [P(x1, yb, z1), P(x1, yb, z0), P(x1, yt, z0), P(x1, yt, z1)],
+        [P(x0, yt, z1), P(x1, yt, z1), P(x1, yt, z0), P(x0, yt, z0)],
+      ];
+      for (const [a, b, c, dd] of f) v.push(...tri(a, b, c), ...tri(a, c, dd));
+    };
+    box(-0.12, 0.12, y1, 0.32, 0.3, 0.75);
+    box(-0.3, 0.3, 0.32, 0.42, 0.25, 0.6);
+    const g = new Geo();
+    g.setAttribute("position", new Attr(new Float32Array(v), 3));
+    g.computeVertexNormals();
+    const m = new Mesh(g, d.materials.holo);
+    m.position.set(0, 211.55, 196.5);
+    m.rotation.y = -1.1;
+    m.rotation.x = 0.25;
+    m.name = "atmo_test_holo";
+    d.scene.add(m);
+    return g.attributes.position.count / 3;
+  });
+  await settle(2);
+  const after = await ev(async (r) => window.debugAPI.capturePixels(...r), region);
+  let blueGain = 0;
+  let lit = 0;
+  for (let i = 0; i < after.length; i += 4) {
+    const db = after[i + 2] - before[i + 2];
+    if (db > 12 && after[i + 2] > after[i]) lit++;
+    blueGain += Math.max(0, db);
+  }
+  const pixels = after.length / 4;
+  check("hologram: runtime wedge with materials.holo renders blue additive light", lit > pixels * 0.02, `${added} tris; ${lit}/${pixels} pixels gained blue, total blue gain ${blueGain}`);
+  await shot("bridge_hologram");
+  await ev(() => {
+    const d = window.debugAPI;
+    const m = d.scene.getObjectByName("atmo_test_holo");
+    if (m) {
+      d.scene.remove(m);
+      m.geometry.dispose();
+    }
+  });
 }
 
 // 3. swing the sun ahead of the bow: warm sun shafts replace the planet-shine
@@ -186,6 +257,9 @@ const summary = {};
   summary.ext_stern = c;
   check("exterior: atmosphere adds ≤ 2 draw calls", c.calls <= 2, `+${c.calls} calls, +${c.triangles} tris`);
   await shot("ext_stern");
+  await ev(() => window.debugAPI.setView("ext_mid"));
+  await settle(2);
+  await shot("ext_mid");
 }
 
 // 8. post hooks

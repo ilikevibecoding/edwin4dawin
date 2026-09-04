@@ -340,15 +340,16 @@ class BeamBatch {
             // volume, dying out toward the silhouette so no edge is ever visible
             a = pow(ndv, 3.2);
           } else {
-            // slice: carries the glow when looking along the beam; soft rounded falloff, never close-up
-            float r = pow(pow(abs(vLocal.x), 3.0) + pow(abs(vLocal.y), 3.0), 1.0 / 3.0);
-            a = pow(ndv, 3.0) * (1.0 - smoothstep(0.15, 1.0, r)) * 0.32 * smoothstep(1.0, 6.0, dc);
+            // slice: carries the glow when looking along the beam; soft elliptical falloff, never close-up
+            float r = length(vLocal);
+            a = pow(ndv, 3.0) * pow(max(0.0, 1.0 - r), 1.6) * 0.42 * smoothstep(1.0, 6.0, dc);
           }
           // bright near the aperture, fading out toward the far end
           float along = smoothstep(0.0, 0.05, vUv.y) * (1.0 - smoothstep(0.15, 1.0, vUv.y));
-          // drifting dust density inside the beam (large slow billows + fine streaks)
-          float n = vnoise(vec2(vUv.x * 2.0 + time * 0.02, vUv.y * 3.0 - time * 0.04));
-          n += 0.5 * vnoise(vec2(vUv.x * 6.0 - time * 0.015, vUv.y * 9.0 - time * 0.07));
+          // drifting dust density inside the beam: world-space billows shared by shells and slices
+          vec2 wq = vec2(vW.x + 0.7 * vW.z, vW.y - 0.3 * vW.z);
+          float n = vnoise(wq * 0.35 + vec2(time * 0.02, -time * 0.035));
+          n += 0.5 * vnoise(wq * 1.1 + vec2(-time * 0.03, -time * 0.06));
           n = 0.4 + 0.8 * n;
           // no wall of light when the camera walks through a beam
           a *= smoothstep(0.0, 3.0, dc) * vFade;
@@ -613,8 +614,12 @@ const _cam = new THREE.Vector3();
 const _lightPick = []; // scratch for light selection (holds references, no allocation after warm-up)
 const _q = new THREE.Quaternion();
 const byDistanceToCamera = (a, b) => a.position.distanceToSquared(_cam) - b.position.distanceToSquared(_cam);
+// reusable beam spec handed to BeamBatch.add (rebuilds happen on room change / sun drift, never per frame)
+const _spec = { origin: _origin, axis: _axis, across: _across, up: _up, w0: 1, h0: 1, w1: 1, h1: 1, length: 1, color: _col, n: 2 };
+const HANGAR_CONE_Z = [-50, -10, 30]; // fallback cone rows over the well (BAYS.hangar z −70..50)
+const HANGAR_CONE_X = [-11, 11];
 
-const SUN_COLOR = new THREE.Vector3(1.0, 0.86, 0.68);
+const SUN_COLOR = new THREE.Vector3(1.0, 0.8, 0.55);
 const PLANET_COLOR = new THREE.Vector3(0.5, 0.72, 1.0);
 const WORK_COLOR = new THREE.Vector3(1.0, 0.82, 0.58);
 
@@ -711,8 +716,10 @@ export function createAtmosphere({ scene, camera, materials, rooms }) {
       if (enter < 0.12) continue;
       const [x0, x1, z0, z1] = def.box;
       const half = WALL_T / 2;
-      const along = w.side === "zmin" || w.side === "zmax" ? [w.x0, w.x1] : [w.z0, w.z1];
-      const width = along[1] - along[0];
+      const onZ = w.side === "zmin" || w.side === "zmax";
+      const a0 = onZ ? w.x0 : w.z0;
+      const a1 = onZ ? w.x1 : w.z1;
+      const width = a1 - a0;
       const height = w.v1 - w.v0;
       const K = Math.min(budget, Math.max(1, Math.round(width / 7)));
       const segW = width / K;
@@ -729,7 +736,7 @@ export function createAtmosphere({ scene, camera, materials, rooms }) {
       const by = Math.abs(UP.dot(_up));
       const cy = def.floor + (w.v0 + w.v1) / 2;
       for (let k = 0; k < K; k++) {
-        const u = along[0] + segW * (k + 0.5);
+        const u = a0 + segW * (k + 0.5);
         if (w.side === "zmin") _origin.set(u, cy, z0 + half + 0.05);
         else if (w.side === "zmax") _origin.set(u, cy, z1 - half - 0.05);
         else if (w.side === "xmin") _origin.set(x0 + half + 0.05, cy, u);
@@ -743,7 +750,13 @@ export function createAtmosphere({ scene, camera, materials, rooms }) {
         _edge.setY(_origin.y - height / 2);
         len = Math.max(len, exitDistance(_edge, _axis, def, 2));
         _col.copy(color).multiplyScalar(gain);
-        shafts.add({ origin: _origin, axis: _axis, across: _across, up: _up, w0, h0, w1: w0 * 1.18, h1: h0 * 1.18, length: len, color: _col, n: 4 });
+        _spec.w0 = w0;
+        _spec.h0 = h0;
+        _spec.w1 = w0 * 1.18;
+        _spec.h1 = h0 * 1.18;
+        _spec.length = len;
+        _spec.n = 4;
+        shafts.add(_spec);
         budget--;
       }
       if (budget <= 0) break;
@@ -772,22 +785,28 @@ export function createAtmosphere({ scene, camera, materials, rooms }) {
     _axis.set(0, -1, 0);
     _across.set(1, 0, 0);
     _up.set(0, 0, 1);
+    const cone = (len) => {
+      _spec.w0 = 0.9;
+      _spec.h0 = 0.9;
+      _spec.w1 = len * 0.22;
+      _spec.h1 = len * 0.22;
+      _spec.length = len;
+      _spec.n = 2;
+      shafts.add(_spec);
+    };
     if (_lightPick.length >= 2) {
       for (const l of _lightPick) {
         _origin.copy(l.position);
-        const len = Math.max(6, _origin.y - (def.floor - 4));
         _col.set(l.color.r, l.color.g, l.color.b).multiply(WORK_COLOR).multiplyScalar(0.9);
-        shafts.add({ origin: _origin, axis: _axis, across: _across, up: _up, w0: 0.9, h0: 0.9, w1: len * 0.22, h1: len * 0.22, length: len, color: _col, n: 2 });
+        cone(Math.max(6, _origin.y - (def.floor - 4)));
       }
     } else {
       const cx = (bay.x0 + bay.x1) / 2;
-      const zs = [bay.z0 + 20, (bay.z0 + bay.z1) / 2, bay.z1 - 20];
-      for (const z of zs) {
-        for (const sx of [-1, 1]) {
-          _origin.set(cx + sx * 11, def.floor + def.h - 0.6, z);
-          const len = def.h + 4;
+      for (const z of HANGAR_CONE_Z) {
+        for (const dx of HANGAR_CONE_X) {
+          _origin.set(cx + dx, def.floor + def.h - 0.6, z);
           _col.copy(WORK_COLOR).multiplyScalar(0.85);
-          shafts.add({ origin: _origin, axis: _axis, across: _across, up: _up, w0: 0.9, h0: 0.9, w1: len * 0.22, h1: len * 0.22, length: len, color: _col, n: 2 });
+          cone(def.h + 4);
         }
       }
     }
@@ -865,7 +884,7 @@ export function createAtmosphere({ scene, camera, materials, rooms }) {
       state.shaftKind = kind;
       state.shaftGain = gain;
       _lastAxis.copy(_dir);
-      shafts.material.uniforms.strength.value = kind === "sun" ? 0.2 : 0.22;
+      shafts.material.uniforms.strength.value = kind === "sun" ? 0.3 : 0.22;
     }
   }
 
