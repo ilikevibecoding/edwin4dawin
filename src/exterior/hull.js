@@ -81,14 +81,14 @@ const region = (x, z, seed) => {
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 };
 /**
- * Skin tint: a hard-edged patchwork of 110–260 m regions at ±12 % (studio-model style: whole sections
+ * Skin tint: a hard-edged patchwork of 110–260 m regions at ±22 % (studio-model style: whole sections
  * of the hull painted in a slightly different grey) over two smooth low-frequency layers (150 m at
  * ±10 % and 380 m at ±8 %) so the plating has a slow tonal drift — repainted sections, weathering —
  * rather than a per-tile quilt; a few replaced plates one step darker; soot toward the stern (the
  * engine wash reaches ~100 m forward along the dorsal and ventral plates).
  */
 const paint = (base, alt, seed) => (x, y, z) => {
-  let c = shade(base, (0.9 + fieldNoise(x, z, 150, seed) * 0.2) * (0.92 + fieldNoise(x + 3000, z, 380, seed + 1) * 0.16) * (0.88 + region(x, z, seed) * 0.24));
+  let c = shade(base, (0.9 + fieldNoise(x, z, 150, seed) * 0.2) * (0.92 + fieldNoise(x + 3000, z, 380, seed + 1) * 0.16) * (0.78 + region(x, z, seed) * 0.44));
   const h = hash2(x, z);
   if (h < 0.06) c = mixC(c, alt, 0.35);
   else if (h > 0.96) c = shade(c, 1.04);

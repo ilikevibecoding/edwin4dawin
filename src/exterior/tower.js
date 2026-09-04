@@ -330,7 +330,7 @@ export function buildTower(ctx) {
         for (let i = 0; i < cols; i++) {
           const x0 = -b.hw + 1.2 + (i * (w - 2.4)) / cols + 0.7;
           const x1 = -b.hw + 1.2 + ((i + 1) * (w - 2.4)) / cols - 0.7;
-          mid.box((x0 + x1) / 2, (y0 + y1) / 2, b.z0 - 0.5, x1 - x0, y1 - y0, 1.0, mixC(plateTone(rand), L, 0.5), TEXEL, { skip: new Set(["+z"]) });
+          mid.box((x0 + x1) / 2, (y0 + y1) / 2, b.z0 - 0.5, x1 - x0, y1 - y0, 1.0, shade(mixC(plateTone(rand), L, 0.2), 0.84 + rand() * 0.32), TEXEL, { skip: new Set(["+z"]) });
         }
       }
       const far = at("far", "hullTrim");
