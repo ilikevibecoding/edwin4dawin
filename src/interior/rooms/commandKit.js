@@ -305,10 +305,13 @@ function benchSeats(kit, f, len, facing, tag) {
 // a reclined back on two posts with a fabric pad in front and a painted rear panel under a steel top
 // rail, end armrests, a soft light strip under the seat front and a row plate on the rear. Reads from
 // behind (rear panel, rail, legs) as well as from the front. `len` runs along u.
+// opts.tilt: back recline (radians, negative leans back; -0.12 default). opts.ledge: the top rail becomes a
+// flat steel shelf for the row behind; opts.props: [[u, kind, rot], ...] effects set on that shelf (or on
+// the seat when there is no ledge).
 export function theatreBench(kit, cx, y, cz, facing, opts = {}) {
-  const { len = 3.0, color = P.fabricTeal, rear = P.creamDark, strip = "emitCoolSoft", tag = "bench" } = opts;
+  const { len = 3.0, color = P.fabricTeal, rear = P.creamDark, strip = "emitCoolSoft", tilt = -0.12, ledge = false, props = [], tag = "bench" } = opts;
   const f = facingFrame(kit, cx, y, cz, facing);
-  for (const s of [-1, 1]) {
+  for (const s of len > 4 ? [-1, 0, 1] : [-1, 1]) {
     f.box("metal", s * (len / 2 - 0.45), 0.03, -0.02, 0.5, 0.06, 0.5, { color: P.darkMetal });
     f.box("metal", s * (len / 2 - 0.45), 0.22, -0.02, 0.12, 0.34, 0.3, { color: P.steel });
   }
@@ -316,19 +319,69 @@ export function theatreBench(kit, cx, y, cz, facing, opts = {}) {
   f.box("satinBlack", 0, 0.42, 0, len, 0.06, 0.56);
   f.box("fabric", 0, 0.5, 0.02, len - 0.08, 0.1, 0.5, { color, uv: "world", texel: 2 });
   f.box(strip, 0, 0.387, 0.2, len - 0.5, 0.006, 0.03, { uv: "keep" });
-  const tilt = -0.12;
+  // the back pivots about its centre (v 0.8); the rail and row plate follow the top edge of the rear panel
+  const nRail = -0.3 + 0.26 * Math.sin(tilt);
+  const nPlate = -0.33 + 0.08 * (Math.sin(tilt) - Math.sin(-0.12));
   for (const s of [-1, 1]) f.box("metal", s * (len / 2 - 0.1), 0.74, -0.27, 0.05, 0.62, 0.05, { color: P.steel, tilt });
   f.box("fabric", 0, 0.8, -0.24, len - 0.3, 0.44, 0.05, { color, tilt, uv: "world", texel: 2 });
   f.box("painted", 0, 0.8, -0.3, len - 0.22, 0.52, 0.03, { color: rear, tilt, uv: "keep" });
-  f.box("metal", 0, 1.06, -0.33, len, 0.04, 0.08, { color: P.steel, tilt });
-  f.box("satinBlack", 0, 0.88, -0.33, 0.5, 0.12, 0.02, { tilt });
-  f.box("leds", 0, 0.88, -0.345, 0.4, 0.05, 0.006, { tilt, uv: "keep" });
+  if (ledge) {
+    f.box("metal", 0, 1.06, nRail - 0.09, len, 0.03, 0.26, { color: P.steel });
+    f.box("satinBlack", 0, 1.045, nRail - 0.1, len - 0.1, 0.05, 0.2);
+    f.box("satinBlack", 0, 1.085, nRail - 0.215, len, 0.025, 0.02);
+    for (const s of [-1, 1]) f.box("metal", s * (len / 2 - 0.3), 0.98, nRail - 0.12, 0.04, 0.16, 0.16, { color: P.darkMetal, tilt: -0.5 });
+  } else f.box("metal", 0, 1.06, nRail, len, 0.04, 0.08, { color: P.steel, tilt });
+  f.box("satinBlack", 0, 0.88, nPlate, 0.5, 0.12, 0.02, { tilt });
+  f.box("leds", 0, 0.88, nPlate - 0.015, 0.4, 0.05, 0.006, { tilt, uv: "keep" });
   for (const s of [-1, 1]) {
     f.box("satinBlack", s * (len / 2 - 0.03), 0.67, -0.02, 0.06, 0.04, 0.44);
     f.box("satinBlack", s * (len / 2 - 0.03), 0.57, -0.2, 0.06, 0.2, 0.05);
   }
-  f.collider(-len / 2, len / 2, 0, 1.08, -0.38, 0.3, tag);
+  for (const [u, kind, rot = 0] of props) {
+    const p = ledge ? f.pos(u, 1.075, nRail - 0.11) : f.pos(u, 0.55, 0.02);
+    effects(kit, p.x, p.y, p.z, kind, rot);
+  }
+  f.collider(-len / 2, len / 2, 0, 1.08, ledge ? nRail - 0.24 : -0.38, 0.3, tag);
   benchSeats(kit, f, len, facing, tag);
+}
+
+// Steward's service trolley: steel frame on four castors with two black shelves, a push handle and a
+// load of mugs, canisters and a document stack; `facing` is the handle end's outward normal.
+export function serviceTrolley(kit, cx, y, cz, facing, opts = {}) {
+  const { tag = "trolley" } = opts;
+  const f = facingFrame(kit, cx, y, cz, facing);
+  for (const [u, n] of [[-0.38, -0.24], [0.38, -0.24], [-0.38, 0.24], [0.38, 0.24]]) {
+    f.box("metal", u, 0.5, n, 0.03, 0.88, 0.03, { color: P.steel });
+    f.cylU("rubber", u, 0.06, n, 0.06, 0.04, { color: P.rubber, segments: 12 });
+    f.box("metal", u, 0.1, n, 0.04, 0.06, 0.02, { color: P.darkMetal });
+  }
+  const shelves = [0.3, 0.92];
+  for (const v of shelves) {
+    f.box("satinBlack", 0, v, 0, 0.84, 0.03, 0.56);
+    f.box("metal", 0, v + 0.02, 0, 0.86, 0.012, 0.58, { color: P.gunmetal });
+  }
+  const [low, top] = shelves.map((v) => v + 0.026);
+  f.box("metal", 0, 1.0, 0.3, 0.8, 0.03, 0.03, { color: P.steel });
+  for (const s of [-1, 1]) f.box("metal", s * 0.385, 0.965, 0.3, 0.03, 0.1, 0.03, { color: P.steel });
+  f.box("painted", 0, top + 0.01, -0.16, 0.6, 0.02, 0.2, { color: P.creamDark, uv: "keep" });
+  for (const [u, n] of [[-0.25, 0.1], [-0.14, 0.14], [-0.03, 0.09], [0.1, 0.16]]) {
+    const p = f.pos(u, top, n);
+    effects(kit, p.x, p.y, p.z, "mug");
+  }
+  // hot-drinks urn: the tall thing that gives the trolley a silhouette from across the room
+  f.cylV("metal", 0.26, top + 0.17, -0.1, 0.11, 0.34, { color: P.steel, segments: 16 });
+  f.cylV("metal", 0.26, top + 0.36, -0.1, 0.05, 0.04, { color: P.darkMetal, segments: 10 });
+  f.box("emitOrange", 0.26, top + 0.1, 0.012, 0.04, 0.02, 0.006);
+  let p = f.pos(-0.15, top + 0.02, -0.16);
+  effects(kit, p.x, p.y, p.z, "datapad", 0.3);
+  p = f.pos(0.05, low, -0.05);
+  effects(kit, p.x, p.y, p.z, "stack", 0.4);
+  f.box("painted", -0.24, low + 0.1, 0.08, 0.26, 0.2, 0.26, { color: P.gunmetal, uv: "keep" });
+  f.box("hazard", -0.24, low + 0.1, 0.215, 0.2, 0.05, 0.01, { texel: 3 });
+  p = f.pos(0.26, low, 0.1);
+  effects(kit, p.x, p.y, p.z, "canister");
+  f.collider(-0.44, 0.44, 0, 1.02, -0.3, 0.33, tag);
+  marker(kit, "idle", f.pos(0, 0, 0.75), OPPOSITE[facing], { id: tag });
 }
 
 // Steel handrail on black posts between two floor points (axis-aligned).
