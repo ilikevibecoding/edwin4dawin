@@ -1,52 +1,19 @@
-// Water visuals for the tsunami: one shader shared by the moving crest strip, the far "sea" sheet and the
-// preview flood disc. Everything animated is computed in the vertex shader from uniforms, so a frame costs
-// a handful of uniform writes and one draw call per mesh (no per-frame geometry uploads).
+// Water sheets for the tsunami: one shader shared by the far "sea" sheet beyond the start edge and the preview flood
+// disc (the moving crest itself is the voxel strip in crestMesh.js). Everything animated is computed in the shaders
+// from uniforms, so a frame costs a handful of uniform writes and one draw call per mesh. The preview also carries a
+// direction cue: scrolling chevrons from the source side and a bright ribbon where the front enters the disc.
 import * as THREE from 'three';
 import { SHARED } from '../../entityMaterial.js';
 import { tileUV, TILES } from '../../textures.js';
 
 const VERT = /* glsl */ `
-uniform float uMode;        // 0 = flat sheet (local xz plane, world y from the mesh transform), 1 = crest strip
-uniform vec2 uCenter;       // disc centre (x, z)
-uniform vec2 uDir;          // travel direction (unit, x/z)
-uniform float uS;           // front distance from the start edge of the disc
-uniform float uRadius;
-uniform float uBaseY;       // ground the crest foot runs on
-uniform float uBackY;       // flood surface right behind the crest
-uniform float uCrestTop;    // crest peak height
 uniform float uTime;
 varying vec2 vLocal;
-varying float vFoam;
 varying float vDist;
-varying float vEdge;
 void main() {
-  vec3 p;
-  if (uMode < 0.5) {
-    vec4 w = modelMatrix * vec4(position, 1.0);
-    p = w.xyz;
-    vLocal = w.xz * 0.5 + vec2(uTime * 0.08, uTime * 0.05);
-    vFoam = 0.0;
-    vEdge = 1.0;
-  } else {
-    float u = position.x;                 // -1..1 along the front line
-    float v = position.y;                 // 0 = back of the wave, 1 = foot at the front
-    float k = uS - uRadius;               // signed offset of the front from the disc centre
-    float halfLen = sqrt(max(0.0, uRadius * uRadius - k * k)) + 6.0;
-    float along = u * halfLen;
-    vec2 perp = vec2(-uDir.y, uDir.x);
-    float bump = sin(3.14159265 * pow(v, 1.5));
-    float wob = 0.86 + 0.14 * sin(along * 0.31 + uTime * 1.3) * sin(along * 0.071 + 1.7);
-    float h = (uCrestTop - uBaseY) * wob;
-    float d = mix(-10.0, 1.6, v) + 2.4 * bump * smoothstep(0.35, 0.95, v);
-    float y = mix(uBackY, uBaseY, v) + h * pow(bump, 1.25);
-    y += (0.22 * sin(along * 0.9 + uTime * 5.0) + 0.12 * sin(along * 2.3 - uTime * 7.0)) * bump;
-    vec2 xz = uCenter + uDir * (k + d) + perp * along;
-    p = vec3(xz.x, y, xz.y);
-    vLocal = vec2(along * 0.25, d * 0.25 - uTime * 0.7);
-    vFoam = smoothstep(0.55, 0.95, bump) * (0.72 + 0.28 * sin(along * 1.7 + uTime * 3.0));
-    vEdge = 1.0 - smoothstep(halfLen - 8.0, halfLen, abs(along));
-  }
-  vec4 mv = viewMatrix * vec4(p, 1.0);
+  vec4 w = modelMatrix * vec4(position, 1.0);
+  vLocal = w.xz * 0.5 + vec2(uTime * 0.08, uTime * 0.05);
+  vec4 mv = viewMatrix * w;
   vDist = length(mv.xyz);
   gl_Position = projectionMatrix * mv;
 }`;
@@ -57,33 +24,22 @@ uniform vec3 uTile;         // atlas tile origin (u, v) and size
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
 uniform float uAlpha;
 uniform vec3 uTint;
-varying vec2 vLocal; varying float vFoam; varying float vDist; varying float vEdge;
+varying vec2 vLocal; varying float vDist;
 void main() {
   vec2 t = fract(vLocal) * 0.9 + 0.05;
   vec4 tex = texture2D(map, uTile.xy + t * uTile.z);
   vec3 light = max(vec3(uSkyLight) * uSkyTint, vec3(0.035)) + vec3(uFlash);
   vec3 col = tex.rgb * uTint * light;
-  vec3 foam = vec3(0.93, 0.96, 1.0) * light;
-  col = mix(col, foam, vFoam);
-  float a = mix(0.74, 0.97, vFoam) * uAlpha * vEdge;
   col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vDist));
-  gl_FragColor = vec4(col, a);
+  gl_FragColor = vec4(col, 0.78 * uAlpha);
 }`;
 
-function makeMaterial(atlas, mode) {
+function makeMaterial(atlas) {
   const [tu, tv, ts] = tileUV(TILES.water ?? 0);
   return new THREE.ShaderMaterial({
     uniforms: {
       map: { value: atlas },
       uTile: { value: new THREE.Vector3(tu, tv, ts) },
-      uMode: { value: mode },
-      uCenter: { value: new THREE.Vector2() },
-      uDir: { value: new THREE.Vector2(1, 0) },
-      uS: { value: 0 },
-      uRadius: { value: 100 },
-      uBaseY: { value: 57 },
-      uBackY: { value: 60 },
-      uCrestTop: { value: 63 },
       uTime: { value: 0 },
       uAlpha: { value: 1 },
       uTint: { value: new THREE.Vector3(1, 1, 1) },
@@ -95,56 +51,30 @@ function makeMaterial(atlas, mode) {
   });
 }
 
-// Unit grid: x in [-1,1] (along the front), y in [0,1] (profile back -> front).
-function crestGeometry(nu = 128, nv = 12) {
-  const pos = new Float32Array((nu + 1) * (nv + 1) * 3);
-  let k = 0;
-  for (let j = 0; j <= nv; j++) for (let i = 0; i <= nu; i++) { pos[k++] = (i / nu) * 2 - 1; pos[k++] = j / nv; pos[k++] = 0; }
-  const idx = new Uint32Array(nu * nv * 6);
-  k = 0;
-  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
-    const a = j * (nu + 1) + i, b = a + 1, c = a + nu + 1, d = c + 1;
-    idx[k++] = a; idx[k++] = c; idx[k++] = b; idx[k++] = b; idx[k++] = c; idx[k++] = d;
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  g.setIndex(new THREE.BufferAttribute(idx, 1));
-  return g;
-}
+const ARROW_COLOR = new THREE.Color(0.85, 0.97, 1.0);
+const RIBBON_COLOR = new THREE.Color(1.0, 0.72, 0.25);
 
 export class WaveVisuals {
   constructor(scene, atlas) {
     this.scene = scene;
-    this.crest = new THREE.Mesh(crestGeometry(), makeMaterial(atlas, 1));
-    this.crest.frustumCulled = false;
-    this.crest.renderOrder = 11;
-    this.crest.visible = false;
     // far sea: a big sheet beyond the start edge of the disc, in the source direction
-    this.sea = new THREE.Mesh(new THREE.PlaneGeometry(1000, 420), makeMaterial(atlas, 0));
+    this.sea = new THREE.Mesh(new THREE.PlaneGeometry(1000, 420), makeMaterial(atlas));
     this.sea.geometry.rotateX(-Math.PI / 2);
     this.sea.renderOrder = 10;
     this.sea.visible = false;
     this.sea.frustumCulled = false;
-    this.disc = null; // preview flood plane (created on demand)
-    scene.add(this.crest);
+    this.disc = null;       // preview flood plane (created on demand)
+    this.arrows = null;     // preview direction chevrons (scrolling)
+    this.ribbon = null;     // preview: where the front enters the disc
+    this.arrowDir = [1, 0];
+    this.arrowSpeed = 6;
     scene.add(this.sea);
   }
 
-  setGeometry(cx, cz, dirX, dirZ, radius, baseY, crestTop) {
-    for (const m of [this.crest, this.sea]) {
-      const u = m.material.uniforms;
-      u.uCenter.value.set(cx, cz); u.uDir.value.set(dirX, dirZ); u.uRadius.value = radius; u.uBaseY.value = baseY; u.uCrestTop.value = crestTop;
-    }
+  setGeometry(cx, cz, dirX, dirZ, radius, baseY) {
     // sea sheet centred 20 blocks behind the start edge, stretching 420 blocks back
     this.sea.position.set(cx - dirX * (radius + 20 + 210), baseY - 4, cz - dirZ * (radius + 20 + 210));
     this.sea.rotation.y = Math.atan2(dirX, dirZ);
-  }
-
-  // per-frame crest state
-  setFront(s, backY, time, alpha) {
-    const u = this.crest.material.uniforms;
-    u.uS.value = s; u.uBackY.value = backY; u.uTime.value = time; u.uAlpha.value = alpha;
-    this.crest.visible = alpha > 0.01;
   }
 
   setSea(y, time, alpha) {
@@ -154,29 +84,78 @@ export class WaveVisuals {
     this.sea.visible = alpha > 0.01;
   }
 
-  showDisc(cx, cz, radius, y, atlas) {
+  // Preview: flooded extent, chevrons flowing from the source side and the entry ribbon (orange = destructive).
+  showDisc(cx, cz, radius, y, atlas, dirX = 1, dirZ = 0, speed = 6, damage = 0.35) {
     if (!this.disc) {
-      this.disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 96), makeMaterial(atlas, 0));
+      this.disc = new THREE.Mesh(new THREE.CircleGeometry(radius, 96), makeMaterial(atlas));
       this.disc.geometry.rotateX(-Math.PI / 2);
       this.disc.renderOrder = 10;
       this.disc.frustumCulled = false;
-      this.disc.material.uniforms.uAlpha.value = 0.6;
+      this.disc.material.uniforms.uAlpha.value = 0.75;
       this.disc.material.uniforms.uTint.value.set(0.9, 0.95, 1.1);
       this.scene.add(this.disc);
     }
     this.disc.position.set(cx, y, cz);
     this.disc.visible = true;
+    this.arrowDir = [dirX, dirZ];
+    this.arrowSpeed = speed;
+    if (this.arrows) { this.scene.remove(this.arrows); this.arrows.geometry.dispose(); this.arrows.material.dispose(); }
+    if (this.ribbon) { this.scene.remove(this.ribbon); this.ribbon.geometry.dispose(); this.ribbon.material.dispose(); }
+    // chevrons: lanes across the disc, one chevron every SPACING blocks along the travel axis (the group scrolls)
+    const px = -dirZ, pz = dirX, pos = [];
+    const spacing = 14, half = 2.6, len = 3.2;
+    const chevron = (ax, az) => {
+      // an open "V" pointing along (dirX, dirZ): two slanted bars of width 0.7
+      const tipX = ax + dirX * len * 0.5, tipZ = az + dirZ * len * 0.5;
+      const backX = ax - dirX * len * 0.5, backZ = az - dirZ * len * 0.5;
+      for (const sgn of [-1, 1]) {
+        const bx = backX + px * sgn * half, bz = backZ + pz * sgn * half;
+        const ox = px * sgn * 0.35 - dirX * 0.35, oz = pz * sgn * 0.35 - dirZ * 0.35; // bar thickness
+        pos.push(tipX, y + 0.08, tipZ, bx, y + 0.08, bz, bx + ox, y + 0.08, bz + oz);
+        pos.push(tipX, y + 0.08, tipZ, bx + ox, y + 0.08, bz + oz, tipX + ox, y + 0.08, tipZ + oz);
+      }
+    };
+    for (let lane = -3; lane <= 3; lane++) {
+      const b = lane * radius * 0.28;
+      for (let k = -radius; k <= radius + spacing; k += spacing) {
+        const ax = cx + dirX * k + px * b, az = cz + dirZ * k + pz * b;
+        if ((ax - cx) ** 2 + (az - cz) ** 2 < (radius - 4) ** 2) chevron(ax, az);
+      }
+    }
+    const ag = new THREE.BufferGeometry();
+    ag.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    this.arrows = new THREE.Mesh(ag, new THREE.MeshBasicMaterial({ color: ARROW_COLOR, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
+    this.arrows.renderOrder = 21; this.arrows.frustumCulled = false;
+    this.scene.add(this.arrows);
+    // entry ribbon: the front 8 blocks after it enters the disc (orange when the crest breaks things, pale otherwise)
+    const kR = -radius + 8, hl = Math.sqrt(Math.max(0, radius * radius - kR * kR));
+    const rp = [];
+    const x0 = cx + dirX * kR, z0 = cz + dirZ * kR, w = 0.9;
+    rp.push(x0 - px * hl - dirX * w, y + 0.1, z0 - pz * hl - dirZ * w, x0 + px * hl - dirX * w, y + 0.1, z0 + pz * hl - dirZ * w, x0 + px * hl + dirX * w, y + 0.1, z0 + pz * hl + dirZ * w);
+    rp.push(x0 - px * hl - dirX * w, y + 0.1, z0 - pz * hl - dirZ * w, x0 + px * hl + dirX * w, y + 0.1, z0 + pz * hl + dirZ * w, x0 - px * hl + dirX * w, y + 0.1, z0 - pz * hl + dirZ * w);
+    const rg = new THREE.BufferGeometry();
+    rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3));
+    const col = RIBBON_COLOR.clone().lerp(ARROW_COLOR, damage > 0.05 ? 0 : 0.8);
+    this.ribbon = new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
+    this.ribbon.renderOrder = 22; this.ribbon.frustumCulled = false;
+    this.scene.add(this.ribbon);
   }
 
-  setDiscTime(time) { if (this.disc) this.disc.material.uniforms.uTime.value = time; }
+  setDiscTime(time) {
+    if (this.disc) this.disc.material.uniforms.uTime.value = time;
+    if (this.arrows) {
+      const off = (time * this.arrowSpeed) % 14;
+      this.arrows.position.set(this.arrowDir[0] * off, 0, this.arrowDir[1] * off);
+    }
+  }
 
   dispose() {
-    for (const m of [this.crest, this.sea, this.disc]) {
+    for (const m of [this.sea, this.disc, this.arrows, this.ribbon]) {
       if (!m) continue;
       this.scene.remove(m);
       m.geometry.dispose();
       m.material.dispose();
     }
-    this.disc = null;
+    this.disc = null; this.arrows = null; this.ribbon = null;
   }
 }

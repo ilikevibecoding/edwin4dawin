@@ -1,41 +1,46 @@
 // Tsunami / flood disaster.
 //
 // A wave front (a straight line perpendicular to `direction`) starts at the edge of the affected disc and
-// travels across it at `speed`. Behind the front every column rises to the flood level (57 + waterHeight)
-// one block per RISE_TICKS, realised as real WATER blocks placed through the manager (journaled, budgeted).
-// Columns are generated pre-sorted by their distance along the travel direction, so "passed" columns are a
-// prefix of the list and the fill walks it back from the front (nearest to the crest first).
-//
-// The disc is cut into cells that coincide with the world's 16x16 chunks. Each tick edits at most two cells:
-// the cell with the most passed-but-dry columns gets the crest's work (destruction + first sheet of water),
-// then one cell of the round robin gets the levels that came due (sticking to it while it has work). Every
-// tick's edits therefore land in one or two chunks, which is what bounds the manager's relight/remesh work
-// per frame (a relit chunk dirties its eight neighbours too).
-// Blocks hit by the crest are destroyed with probability damage * intensity * fragility,
-// decided by a position hash so the world outcome never depends on iteration order or on what the pool/loading
-// state happens to be, and turn into buoyant debris riding the flow. After `duration` the water drains layer by
-// layer (top first, cell by cell from the far side) and the disaster ends. Everything visual (crest mesh, sea
-// sheet, foam, sound, shake) lives in render() and never touches world state.
+// travels across it at up to `speed`. Every column the front passes is flooded with real WATER blocks (journaled,
+// budgeted, placed through the manager): one block the moment the front passes (the toe), then up to the depth due
+// at its distance behind the front - a staircase of one block per STEP_DIST blocks up to waterHeight, the same
+// profile the voxel crest draws. Columns are generated pre-sorted by their distance along the travel direction, so
+// the passed columns are a prefix of the list and the fill walks the prefix oldest-first: the water body is always
+// a compact block behind the crest. When the per-tick edit budget cannot keep up with the demanded volume (a wide
+// front), the front itself slows down (`s` never runs more than LEAD blocks ahead of the oldest unfilled column),
+// so the visual crest, the destruction and the water reaching the player stay together - never 40 blocks apart.
+// Blocks hit by the crest are destroyed with probability damage * intensity * fragility, decided by a position hash
+// so the world outcome never depends on iteration order or on loading state. After `duration` the water drains layer
+// by layer (top first, cell by cell from the far side), a final sweep removes every water cell the flood created,
+// and the disaster ends. Everything visual (voxel crest mesh, far sea sheet, spray, debris, sound, shake, sky) lives
+// in render() and never touches world state; debris is spawned render-side from queued destruction events, so the
+// simulation's RNG is never consumed by cosmetics.
 import { Disaster } from './base.js';
 import { DisasterManager } from './manager.js';
 import { BLOCKS, B, SHAPE } from '../blocks.js';
-import { TOWN_GROUND, CHUNK_HEIGHT as CH } from '../constants.js';
+import { TOWN_GROUND, CHUNK_HEIGHT as CH, ATLAS_TILES } from '../constants.js';
 import { TOWN_BOUNDS } from '../worldgen.js';
 import { hash3, clamp } from '../rng.js';
+import { TILES } from '../textures.js';
 import { WaveVisuals } from './tsunami/waveMesh.js';
+import { VoxelCrest, CREST_BACK, STEP_DIST, crestDepth } from './tsunami/crestMesh.js';
 
 const TPS = 20;
-const RISE_TICKS = 12;            // one block of water level every 0.6 s in a passed column
-const MAX_DEBRIS_PER_TICK = 12;
+const LEAD = 4.5;                 // max distance the crest may run ahead of the oldest unfilled column (blocks)
 const MAX_DESTROY_PER_TICK = 40;  // block edits reserved for crest destruction (the rest floods)
 const MAX_DRAIN_VISITS = 4000;    // cells inspected per tick while draining
-const MAX_FOAM = 280;             // live foam/spray particles owned by the tsunami
-const CELLS_PER_TICK = 1;         // chunk-sized cells that may receive edits in one tick (fewer = fewer relights)
+const SWEEP_COLUMNS = 1500;       // columns re-checked per tick by the slow sweeps (late-loaded chunks, final drain)
+const MAX_FOAM = 170;             // live spray particles owned by the tsunami
 const UNKNOWN = -32768;
 const DIRS = { west: [1, 0], east: [-1, 0], north: [0, 1], south: [0, -1] };
 const EV_CRACK = 0, EV_SPLASH = 1, EV_RUMBLE = 2;
-const UV_SOLID = [0, 0, 0, 1], COL_SPRAY = [0.96, 0.98, 1], COL_MIST = [0.94, 0.97, 1];
-const ENV_STORM = { tint: [0.86, 0.9, 0.98], fogColor: [0.52, 0.6, 0.7], fogFarMul: 0.85 };
+const EV_STRIDE = 5, EV_MAX = 40 * EV_STRIDE;
+const WHITE = [1, 1, 1];
+// overcast storm: slate haze that the sky dome, horizon and fog share (skyMix keeps it daylight, not night)
+const ENV_STORM = { tint: [0.86, 0.9, 0.98], fogColor: [0.52, 0.6, 0.7], fogFarMul: 0.85, skyColor: [0.5, 0.55, 0.63], skyMix: 0.45, cloudAlpha: 0.7 };
+const ENV_RECEDE = { tint: [0.93, 0.95, 1], fogColor: [0.6, 0.68, 0.78], fogFarMul: 0.95, skyColor: [0.55, 0.6, 0.68], skyMix: 0.2, cloudAlpha: 0.9 };
+// debris budget (visual): pieces per second the flood may launch and the share of the shared pool it may occupy
+const DEBRIS_RATE = 28, DEBRIS_BURST = 10, DEBRIS_POOL_SHARE = 0.92, DEBRIS_LIFE_MIN = 120, DEBRIS_LIFE_MAX = 200;
 
 // Cells the rising water may occupy: air and things a flood simply washes over.
 function fillable(id) {
@@ -66,10 +71,12 @@ export class Tsunami extends Disaster {
     const [dx, dz] = DIRS[p.direction] || DIRS.west;
     const baseY = TOWN_GROUND + 1;                       // street level: the flood is measured from here
     const floodTop = baseY + Math.round(p.waterHeight);  // y of the water surface (cells below are water)
+    const crestTop = Math.max(baseY + p.waveHeight, floodTop) + 0.4 + 0.35 * p.waveHeight;
     // frozen geometry (live 'set' commands may change speed/damage/intensity/duration only)
     this.g = {
-      cx: p.center[0], cz: p.center[1], r: p.radius, dx, dz, baseY, floodTop,
-      crestTop: Math.max(baseY + p.waveHeight, floodTop) + 0.4 + 0.35 * p.waveHeight,
+      cx: p.center[0], cz: p.center[1], r: p.radius, dx, dz, baseY, floodTop, crestTop,
+      depth: floodTop - baseY,                           // flood depth in blocks
+      lip: crestTop - floodTop,                          // how far the breaking crest rises above the flood surface
       townEdgeS: 0,
     };
     // distance along the travel axis at which the front reaches the town rectangle
@@ -78,16 +85,19 @@ export class Tsunami extends Disaster {
     this.phase = 'wave';        // wave | hold | recede | ending
     this.s = 0;                 // front distance from the start edge (blocks)
     this.prevS = 0;
-    this.passedCount = 0;
+    this.passedCount = 0;       // columns the front has passed (prefix of the sorted list)
+    this.hitPtr = 0;            // next column the crest has not dealt with yet (destruction)
+    this.toePtr = 0;            // next passed column without its first block of water
+    this.fillPtr = 0;           // oldest passed column that is not yet at full depth
+    this.sweepPtr = 0;          // slow re-check of all passed columns (chunks loaded after the front passed)
     this.minBase = floodTop - 1;
     this.waveEndTick = -1;
     this.holdEndTick = this.durationTicks;
-    this.fillCell = 0;          // cell the fill resumes at
-    this.destroyLeft = 0;       // per-tick destruction / debris allowances (reset every tick)
-    this.debrisLeft = 0;
+    this.destroyLeft = 0;       // per-tick destruction allowance (reset every tick)
     this.drainY = floodTop - 1;
     this.drainCell = -1;        // cell being drained (walks the sweep order backwards: far side first)
     this.drainJ = -1;           // position in that cell's list (far side first)
+    this.drainSweep = -1;       // >= 0: final pass removing every flood water cell still standing
     this.drainDone = false;
     this.endTick = -1;
     this.playerHit = false;
@@ -95,13 +105,16 @@ export class Tsunami extends Disaster {
     this.nextRumbleTick = 0;
     this.destroyed = 0;
     this.c = null;              // column arrays (built in begin)
-    this.events = [];           // flat [kind, x, y, z, ...] queued by simulate(), flushed by render()
+    this.events = [];           // flat [kind, x, y, z, id, ...] queued by simulate(), flushed by render()
     this.flow = [0, 0];         // scratch returned by flowFn
+    this.flow2 = [0, 0];        // scratch returned by the NPC flow (ceiling escape)
     this.flowFn = (x, z) => this._flowAt(x, z);
+    this.npcFlowFn = (x, z) => this._npcFlow(x, z);
     // visuals
     this.visuals = null;
+    this.crest = null;
     this.anim = 0;
-    this.envStorm = false;
+    this.envState = 0;          // 0 clear, 1 storm, 2 receding
     this.loopOn = false;
     this.audioTimer = 0;
     this.crackTimer = 0;
@@ -109,15 +122,22 @@ export class Tsunami extends Disaster {
     this.foamLive = 0;
     this.seaY = baseY - 4;
     this.seaAlpha = 0;
+    this.crestFade = 1;         // 1 = crest fully shown; eased toward 0 when the camera is inside it / indoors
+    this.debrisAcc = DEBRIS_BURST;
     this._tmp = { x: 0, y: 0, z: 0 };
     this._evPos = { x: 0, y: 0, z: 0 };
+    this._uv = [0, 0, 0, 0];
+    const [su, sv, ss] = this._tile(TILES.snow ?? 0), [wu, wv, ws] = this._tile(TILES.water ?? 0);
+    this._snow = [su, sv, ss]; this._water = [wu, wv, ws];
   }
+
+  _tile(index) { const ts = 1 / ATLAS_TILES; return [(index % ATLAS_TILES) * ts, Math.floor(index / ATLAS_TILES) * ts, ts]; }
 
   // ------------------------------------------------------------------ info
   warnings() {
     const p = this.params;
     const cells = Math.round(Math.PI * p.radius * p.radius * p.waterHeight);
-    const w = [`Floods everything within ${p.radius} blocks of (${p.center[0]}, ${p.center[1]}) up to ${p.waterHeight} blocks deep (about ${Math.round(cells / 1000)}k water blocks, roughly ${Math.round(cells / (260 * TPS))} s to fill at the edit budget).`];
+    const w = [`Floods everything within ${p.radius} blocks of (${p.center[0]}, ${p.center[1]}) up to ${p.waterHeight} blocks deep (about ${Math.round(cells / 1000)}k water blocks, roughly ${Math.round(cells / (260 * TPS))} s to fill at the edit budget; a wide front slows the wave down to what the budget can fill).`];
     if (p.damage * p.intensity > 0) w.push(`The ${p.waveHeight}-block crest breaks about ${Math.round(p.damage * p.intensity * 100)}% of the light structures it hits (planks, fences, glass, doors, signs).`);
     if (cells > 225000) w.push('Exceeds the block journal capacity: the flood stops growing once the journal is full.');
     return w;
@@ -127,12 +147,13 @@ export class Tsunami extends Disaster {
     const g = this.g;
     if (this.phase === 'wave' || this.phase === 'hold') return Math.min(0.7, 0.7 * this.tick / Math.max(1, this.holdEndTick));
     if (this.phase === 'recede') {
+      if (this.drainSweep >= 0) return 0.97 + 0.01 * (this.c ? this.drainSweep / Math.max(1, this.c.n) : 1);
       const layers = Math.max(1, (g.floodTop - 1) - this.minBase);
       const c = this.c;
       let within = 1;
       if (c && this.drainCell >= 0) { const len = c.cells[this.drainCell].length; within = (c.S - 1 - this.drainCell + (len ? 1 - Math.max(0, this.drainJ) / len : 1)) / c.S; }
       const f = ((g.floodTop - 1 - this.drainY) + within) / layers;
-      return 0.7 + 0.28 * clamp(f, 0, 1);
+      return 0.7 + 0.27 * clamp(f, 0, 1);
     }
     return this.done ? 1 : 0.99;
   }
@@ -157,13 +178,15 @@ export class Tsunami extends Disaster {
 
   beginPreview() {
     this._ensureVisuals();
-    this.visuals.showDisc(this.g.cx, this.g.cz, this.g.r, this.g.floodTop + 0.05, this.game.atlas);
+    const g = this.g;
+    this.visuals.showDisc(g.cx, g.cz, g.r, g.floodTop + 0.05, this.game.atlas, g.dx, g.dz, this.params.speed, this.params.damage * this.params.intensity);
   }
 
   stop() { this.stopping = true; }
 
   dispose() {
     if (this.visuals) { this.visuals.dispose(); this.visuals = null; }
+    if (this.crest) { this.crest.dispose(); this.crest = null; }
     if (this.loopOn) { this.game.audio.loopStop('flood'); this.loopOn = false; }
     if (this.m.debris.waterLevelFn) this.m.debris.waterLevelFn = null;
     if (this.m.debris.forceFn) this.m.debris.forceFn = null;
@@ -180,7 +203,7 @@ export class Tsunami extends Disaster {
     const colX = new Int16Array(cap), colZ = new Int16Array(cap), colP = new Float32Array(cap), colCell = new Int32Array(cap);
     const grid = new Int32Array(gw * gw).fill(-1);
     const fx = Math.floor(cx), fz = Math.floor(cz);
-    // cells = the chunks the disc overlaps (local chunk grid)
+    // cells = the chunks the disc overlaps (local chunk grid); used by the drain (cell-wise, far side first)
     const ccx0 = Math.floor((fx - R - 1) / 16), ccz0 = Math.floor((fz - R - 1) / 16);
     const ccw = Math.floor((fx + R + 1) / 16) - ccx0 + 1, cch = Math.floor((fz + R + 1) / 16) - ccz0 + 1;
     const count = new Int32Array(ccw * cch);
@@ -212,13 +235,8 @@ export class Tsunami extends Disaster {
     for (let i = 0; i < n; i++) { const k = pos[colCell[i]]; colCell[i] = k; cells[k][count[k]++] = i; }
     this.c = {
       n, colX, colZ, colP, colCell, grid, gw, x0, z0, S, cells,
-      passed: new Int32Array(S),               // passed columns of a cell = prefix of its list
-      low: new Int32Array(S),                  // lowest list position that may still need water
-      hit: new Int32Array(S),                  // next list position the crest has not dealt with yet
-      wet: new Int32Array(S),                  // next list position without its first sheet of water
       base: new Int16Array(n).fill(UNKNOWN),   // ground the water stands on (clamped to the flood top)
       top: new Int16Array(n),                  // highest cell processed by the fill (= water top when filled)
-      passTick: new Int32Array(n).fill(-1),
     };
   }
 
@@ -246,9 +264,12 @@ export class Tsunami extends Disaster {
   simulate() {
     if (this.stopping && this.phase !== 'recede' && this.phase !== 'ending') this._startRecede();
     switch (this.phase) {
-      case 'wave':
+      case 'wave': {
         this.prevS = this.s;
-        this.s += this.params.speed / TPS;
+        let next = this.s + this.params.speed / TPS;
+        // the crest never outruns the water body: at most LEAD blocks ahead of the oldest unfilled column
+        if (this.fillPtr < this.passedCount) next = Math.min(next, Math.max(this.s, this.c.colP[this.fillPtr] + LEAD));
+        this.s = next;
         this._advanceFront();
         this._fill();
         if (!this.reachedTown && this.s >= this.g.townEdgeS) { this.reachedTown = true; this._queue(EV_SPLASH); this._queue(EV_RUMBLE); this.nextRumbleTick = this.tick + 80; }
@@ -258,9 +279,11 @@ export class Tsunami extends Disaster {
           this.holdEndTick = Math.max(this.durationTicks, this.tick + 100);
         }
         break;
+      }
       case 'hold':
         this.prevS = this.s;
         this._fill();
+        this._sweepFill();
         if (this.tick >= this.holdEndTick) this._startRecede();
         break;
       case 'recede':
@@ -284,88 +307,79 @@ export class Tsunami extends Disaster {
     this.drainY = this.g.floodTop - 1;
     this.drainCell = this.c ? this.c.S - 1 : -1;
     this.drainJ = this.c ? this.c.cells[this.drainCell].length - 1 : -1;
+    this.drainSweep = -1;
     this.drainDone = !this.c;
     this.m.say('The water is receding.');
   }
 
-  // Move the front: newly passed columns get their pass tick (the crest hits them when their cell is served).
+  // Move the front: newly passed columns get their ground level (the crest hits and floods them in _fill).
   _advanceFront() {
     const c = this.c, s = this.s;
-    while (this.passedCount < c.n && c.colP[this.passedCount] <= s) {
-      const i = this.passedCount++;
-      c.passTick[i] = this.tick;
-      this._terrainOf(i);
-      c.passed[c.colCell[i]]++;
-    }
+    while (this.passedCount < c.n && c.colP[this.passedCount] <= s) this._terrainOf(this.passedCount++);
   }
 
-  // Two passes per tick, each confined to one chunk-sized cell:
-  //  A. the crest's work (destruction + the first sheet of water) for the cell with the most passed-but-dry
-  //     columns, so the water body follows the crest closely;
-  //  B. deepening (levels that came due) round robin over the cells, sticking to a cell while it has work.
+  // Water surface (block y) due `behind` blocks behind the front: street level + a staircase of one block per
+  // STEP_DIST blocks up to the flood top. Absolute, so dips fill deeper and humps later, like a real surge.
+  _dueTop(behind) { return behind < 0 ? this.g.baseY - 1 : Math.min(this.g.floodTop - 1, this.g.baseY - 1 + Math.min(this.g.depth, 1 + Math.floor(behind / STEP_DIST))); }
+
+  // Three passes per tick over the passed columns, all oldest-first (global order = distance along the travel axis):
+  //  A. the crest's work: destruction of fragile blocks in the columns it just reached (MAX_DESTROY_PER_TICK edits);
+  //  B. the toe: one block of water in every column the front has passed (one edit per column, so it is never
+  //     starved by the body) - the street under the visual foot is wet the moment the crest arrives;
+  //  C. the body: every column is raised to the depth due at its distance behind the front, stopping when the tick's
+  //     edit budget is spent. fillPtr ends at the oldest column that is still short, which paces the front.
   _fill() {
-    const c = this.c, S = c.S;
-    this.destroyLeft = MAX_DESTROY_PER_TICK; this.debrisLeft = MAX_DEBRIS_PER_TICK;
-    let best = -1, bestN = 0;
-    for (let k = 0; k < S; k++) { const n = c.passed[k] - Math.min(c.wet[k], c.hit[k]); if (n > bestN) { bestN = n; best = k; } }
-    if (best >= 0 && !this._wetCell(best)) return;
-    let served = 0, k = this.fillCell;
-    for (let n = 0; n < S; n++, k = (k + 1) % S) {
-      const r = this._deepenCell(k);
-      if (r === 2) break;
-      if (r === 1 && ++served >= CELLS_PER_TICK) { k = (k + 1) % S; break; }
-    }
-    this.fillCell = k;
-  }
-
-  // Crest destruction, then the first level of water, for the columns the front passed in this cell.
-  // Returns false when the tick's edit budget ran out (the cell keeps its backlog and is picked again).
-  _wetCell(k) {
-    const c = this.c, list = c.cells[k], passed = c.passed[k], floodTop = this.g.floodTop, world = this.world;
-    let j = c.hit[k];
-    for (; j < passed && this.destroyLeft > 0 && this.m.budgetLeft > 0; j++) if (!this._hitColumn(list[j])) break;
-    c.hit[k] = j;
-    for (j = c.wet[k]; j < passed; j++) {
-      const i = list[j], b = c.base[i];
-      if (c.top[i] > b || b >= floodTop - 1) continue;
-      const x = c.colX[i], z = c.colZ[i];
+    const c = this.c, world = this.world, full = this.g.floodTop - 1;
+    this.destroyLeft = MAX_DESTROY_PER_TICK;
+    let j = this.hitPtr;
+    for (; j < this.passedCount && this.destroyLeft > 0 && this.m.budgetLeft > 0; j++) if (!this._hitColumn(j)) break;
+    this.hitPtr = j;
+    let k = this.toePtr;
+    for (; k < this.passedCount && this.m.budgetLeft > 0; k++) {
+      const b = c.base[k];
+      if (c.top[k] > b || b >= full) continue;
+      const x = c.colX[k], z = c.colZ[k];
       if (!world.isLoaded(x, z)) continue;
-      if (this.m.budgetLeft <= 0) { c.wet[k] = j; return false; }
       if (fillable(world.getBlock(x, b + 1, z))) this.m.setBlock(x, b + 1, z, B.WATER);
-      c.top[i] = b + 1;
+      c.top[k] = b + 1;
     }
-    c.wet[k] = passed;
-    return this.m.budgetLeft > 0;
-  }
-
-  // Raise the columns of a cell to the level that is due, nearest the front first.
-  // Returns 0 = nothing to do, 1 = done for now, 2 = ran out of budget (resume here).
-  _deepenCell(k) {
-    const c = this.c, list = c.cells[k], passed = c.passed[k];
-    const before = this.m.budgetLeft;
-    const floodTop = this.g.floodTop, tick = this.tick, world = this.world;
-    let newLow = -1;
-    for (let j = passed - 1; j >= c.low[k]; j--) {
-      const i = list[j], t = c.top[i];
-      if (t >= floodTop - 1) continue;
-      const due = Math.min(floodTop - 1, c.base[i] + 1 + Math.floor((tick - c.passTick[i]) / RISE_TICKS));
-      if (t >= due) { newLow = j; continue; }
+    this.toePtr = k;
+    let ptr = -1, i = this.fillPtr;
+    for (; i < this.passedCount; i++) {
+      const t = c.top[i];
+      if (t >= full) continue;
       const x = c.colX[i], z = c.colZ[i];
-      if (!world.isLoaded(x, z)) { newLow = j; continue; }
+      if (!world.isLoaded(x, z)) continue;                      // cannot be filled now: never holds the front back
+      const due = Math.max(c.base[i], this._dueTop(this.s - c.colP[i]));
+      if (t >= due) { if (ptr < 0) ptr = i; continue; }         // staircase band: waiting for the front to move on
+      if (this.m.budgetLeft <= 0) { if (ptr < 0) ptr = i; break; }
       let y = t;
-      while (y < due) {
-        if (this.m.budgetLeft <= 0) { c.top[i] = y; return 2; }   // low[k] unchanged: unvisited columns remain
-        y++;
-        if (fillable(world.getBlock(x, y, z))) this.m.setBlock(x, y, z, B.WATER);
-      }
+      while (y < due && this.m.budgetLeft > 0) { y++; if (fillable(world.getBlock(x, y, z))) this.m.setBlock(x, y, z, B.WATER); }
       c.top[i] = y;
-      if (y < floodTop - 1) newLow = j;
+      if (y < full && ptr < 0) ptr = i;
+      if (this.m.budgetLeft <= 0) break;
     }
-    c.low[k] = newLow === -1 ? passed : newLow;
-    return this.m.budgetLeft < before ? 1 : 0;
+    this.fillPtr = ptr >= 0 ? ptr : i;
   }
 
-  // The crest hits a column: fragile blocks in surface..surface+waveHeight break into buoyant debris.
+  // Hold phase: slowly re-check every column so chunks that were loaded after the front passed still flood.
+  _sweepFill() {
+    const c = this.c, world = this.world, full = this.g.floodTop - 1;
+    let k = this.sweepPtr;
+    for (let n = 0; n < SWEEP_COLUMNS && this.m.budgetLeft > 0; n++, k = (k + 1) % Math.max(1, this.passedCount)) {
+      if (k >= this.passedCount) break;
+      const t = c.top[k];
+      if (t >= full) continue;
+      const x = c.colX[k], z = c.colZ[k];
+      if (!world.isLoaded(x, z)) continue;
+      let y = t;
+      while (y < full && this.m.budgetLeft > 0) { y++; if (fillable(world.getBlock(x, y, z))) this.m.setBlock(x, y, z, B.WATER); }
+      c.top[k] = y;
+    }
+    this.sweepPtr = k;
+  }
+
+  // The crest hits a column: fragile blocks in surface..surface+waveHeight break (into water inside the body).
   // Returns false when the tick's destruction allowance ran out before the column was finished.
   _hitColumn(i) {
     const c = this.c, terrain = this._terrainOf(i);
@@ -391,23 +405,39 @@ export class Tsunami extends Disaster {
         if (BLOCKS[this.world.getBlock(x, y + 1, z)].shape === shape && this.m.budgetLeft > 0) this.m.setBlock(x, y + 1, z, B.AIR);
         if (BLOCKS[this.world.getBlock(x, y - 1, z)].shape === shape && this.m.budgetLeft > 0) this.m.setBlock(x, y - 1, z, B.AIR);
       }
-      this._queue(EV_CRACK, x + 0.5, y + 0.5, z + 0.5);
-      if (this.debrisLeft > 0) {
-        this.debrisLeft--;
-        const g = this.g, sp = this.params.speed;
-        const f = this.rand(0.7, 1.2), side = this.rand(-1.6, 1.6);
-        this.m.debris.spawn(x + 0.5, y + 0.6, z + 0.5, g.dx * sp * f - g.dz * side, this.rand(2, 6), g.dz * sp * f + g.dx * side, id, this.rand(0.45, 0.75), this.rand(18, 32), { buoyant: true });
-      }
+      this._queue(EV_CRACK, x + 0.5, y + 0.5, z + 0.5, id);
     }
     return true;
   }
 
   // Drain layer by layer from the top; within a layer cell by cell from the far side; only water the flood created.
+  // When the layers are gone a final sweep walks every column and clears any flood water still standing (columns
+  // whose chunk was not loaded when their layer was drained, water left by late destruction) before the end.
   _drain() {
-    const c = this.c, world = this.world, journal = this.m.journal;
+    const c = this.c, world = this.world, journal = this.m.journal, full = this.g.floodTop - 1;
+    if (this.drainSweep >= 0) {
+      let k = this.drainSweep;
+      for (let n = 0; n < SWEEP_COLUMNS && k < c.n; n++, k++) {
+        const b = c.base[k];
+        if (b === UNKNOWN) continue;
+        const x = c.colX[k], z = c.colZ[k];
+        if (!world.isLoaded(x, z)) continue;
+        for (let y = b + 1; y <= full; y++) {
+          if (world.getBlock(x, y, z) !== B.WATER) continue;
+          const o = journal.original(x, y, z);
+          if (o === undefined || o === B.WATER) continue;
+          if (this.m.budgetLeft <= 0) { this.drainSweep = k; return; }
+          this.m.setBlock(x, y, z, B.AIR);
+        }
+        c.top[k] = b;
+      }
+      this.drainSweep = k;
+      if (k >= c.n) this.drainDone = true;
+      return;
+    }
     let visits = 0;
     while (visits < MAX_DRAIN_VISITS) {
-      if (this.drainY <= this.minBase) { this.drainDone = true; return; }
+      if (this.drainY <= this.minBase) { this.drainSweep = 0; return; }
       if (this.drainJ < 0) {                                     // cell finished: next cell, or next layer down
         if (--this.drainCell < 0) { this.drainCell = c.S - 1; this.drainY--; }
         this.drainJ = c.cells[this.drainCell].length - 1;
@@ -417,7 +447,7 @@ export class Tsunami extends Disaster {
       visits++;
       if (c.base[i] === UNKNOWN || y <= c.base[i]) { this.drainJ--; continue; }
       const x = c.colX[i], z = c.colZ[i];
-      if (world.getBlock(x, y, z) !== B.WATER) { this.drainJ--; continue; }
+      if (world.getBlock(x, y, z) !== B.WATER) { if (c.top[i] >= y) c.top[i] = y - 1; this.drainJ--; continue; }
       const o = journal.original(x, y, z);
       if (o === undefined || o === B.WATER) { this.drainJ--; continue; }
       if (this.m.budgetLeft <= 0) return;                        // resume at this column next tick
@@ -439,6 +469,31 @@ export class Tsunami extends Disaster {
     const sp = this.params.speed * (0.9 * Math.exp(-Math.max(0, behind) / 14) + 0.08);
     f[0] = g.dx * sp; f[1] = g.dz * sp;
     return f;
+  }
+
+  // Flow for swimming townsfolk: the current, plus a nudge toward open water when their head is under a ceiling
+  // (a flooded room), so they drift to the doorway instead of bobbing against the roof.
+  _npcFlow(x, z) {
+    const f = this._flowAt(x, z);
+    const world = this.world, yTop = this.g.floodTop, bx = Math.floor(x), bz = Math.floor(z);
+    const ceiling = (cx, cz) => BLOCKS[world.getBlock(cx, yTop, cz)].solid || BLOCKS[world.getBlock(cx, yTop + 1, cz)].solid;
+    if (this.phase === 'ending' || !ceiling(bx, bz)) return f;
+    let bestX = 0, bestZ = 0, bestD = Infinity;
+    for (let r = 1; r <= 6 && bestD === Infinity; r++) {                  // ring search for the nearest open cell
+      for (let k = -r; k <= r; k++) {
+        for (let side = 0; side < 4; side++) {
+          const ox = side < 2 ? k : (side === 2 ? -r : r), oz = side < 2 ? (side === 0 ? -r : r) : k;
+          if (ceiling(bx + ox, bz + oz)) continue;
+          const d = ox * ox + oz * oz;
+          if (d < bestD) { bestD = d; bestX = ox; bestZ = oz; }
+        }
+      }
+    }
+    if (bestD === Infinity) return f;
+    const len = Math.sqrt(bestD), out = this.flow2;
+    out[0] = (bestX / len) * 1.8 + (f ? f[0] * 0.3 : 0);
+    out[1] = (bestZ / len) * 1.8 + (f ? f[1] * 0.3 : 0);
+    return out;
   }
 
   // Signed distance of a point ahead of the front (negative = already flooded).
@@ -466,12 +521,12 @@ export class Tsunami extends Disaster {
   _alert() {
     const g = this.g;
     const k = this.s - g.r;
-    const info = { kind: 'flood', x: g.cx + g.dx * k, z: g.cz + g.dz * k, radius: g.r * 2 + 40, safeY: g.floodTop, dir: [g.dx, g.dz], flowFn: this.flowFn };
+    const info = { kind: 'flood', x: g.cx + g.dx * k, z: g.cz + g.dz * k, radius: g.r * 2 + 40, awayRadius: g.r, safeY: g.floodTop, dir: [g.dx, g.dz], flowFn: this.npcFlowFn };
     if (this.game.npcs) this.game.npcs.alert(info);
-    if (this.game.animals) this.game.animals.alert(info);
+    if (this.game.animals) this.game.animals.alert({ ...info, flowFn: this.flowFn });
   }
 
-  _queue(kind, x = 0, y = 0, z = 0) { if (this.events.length < 96) this.events.push(kind, x, y, z); }
+  _queue(kind, x = 0, y = 0, z = 0, id = 0) { if (this.events.length < EV_MAX) this.events.push(kind, x, y, z, id); }
 
   // ------------------------------------------------------------------ debris hooks
   _waterLevelAt(x, z) {
@@ -482,13 +537,18 @@ export class Tsunami extends Disaster {
     let lvl = c.top[i] + 0.9;
     if (this.phase === 'wave') {                 // ride the crest
       const behind = this.s - c.colP[i];
-      if (behind > -3 && behind < 10) lvl = Math.max(lvl, this.g.baseY + (this.g.crestTop - this.g.baseY) * Math.sin(Math.PI * clamp((behind + 3) / 13, 0, 1)));
+      if (behind > -1 && behind < CREST_BACK) lvl = Math.max(lvl, this.g.baseY + crestDepth(behind, this.g.depth, this.g.lip) - 0.1);
     }
     return lvl;
   }
 
   _debrisForce(i, out) {
     const d = this.m.debris;
+    // pieces resting far from the camera give their slot back early; near ones stay deposited for their full life
+    if (d.camera) {
+      const cx = d.px[i] - d.camera.position.x, cz = d.pz[i] - d.camera.position.z;
+      if (cx * cx + cz * cz > 100 * 100 && d.life[i] - d.age[i] > 12) d.life[i] = d.age[i] + 6 + 4 * ((i * 7) % 5) / 5;
+    }
     const f = this._flowAt(d.px[i], d.pz[i]);
     if (!f) return;
     if (d.py[i] > this._waterLevelAt(d.px[i], d.pz[i]) + 0.3) return;
@@ -497,19 +557,45 @@ export class Tsunami extends Disaster {
     out.z += (f[1] - d.vz[i]) * k;
   }
 
+  // Render-side debris launch for a destroyed block: budgeted per second, likelier near the camera, and when the
+  // shared pool is full the piece that is farthest from the camera (weighted by age) gives up its slot.
+  _spawnDebris(x, y, z, id, camDist) {
+    const d = this.m.debris;
+    if (this.debrisAcc < 1) return;
+    const pNear = camDist < 40 ? 1 : camDist > 120 ? 0.1 : 1 - 0.9 * (camDist - 40) / 80;
+    if (Math.random() > pNear) return;
+    if (d.count >= Math.floor(d.max * DEBRIS_POOL_SHARE)) {
+      if (!d.camera) return;
+      const cx = d.camera.position.x, cz = d.camera.position.z;
+      let worst = -1, worstScore = -1;
+      for (let k = 0; k < 24; k++) {
+        const j = Math.floor(Math.random() * d.count);
+        const dx = d.px[j] - cx, dz = d.pz[j] - cz;
+        const score = (dx * dx + dz * dz + 25) * (1 + d.age[j] / 20);
+        if (score > worstScore) { worstScore = score; worst = j; }
+      }
+      if (worst < 0) return;
+      d.remove(worst);
+    }
+    this.debrisAcc -= 1;
+    const g = this.g, sp = this.params.speed;
+    const f = 0.7 + Math.random() * 0.5, side = (Math.random() - 0.5) * 3.2;
+    const size = 0.45 + Math.random() * 0.3, life = DEBRIS_LIFE_MIN + Math.random() * (DEBRIS_LIFE_MAX - DEBRIS_LIFE_MIN);
+    if (d.spawn(x, y + 0.1, z, g.dx * sp * f - g.dz * side, 2 + Math.random() * 4, g.dz * sp * f + g.dx * side, id, size, life, { buoyant: true }) >= 0) this.m.stats.debrisSpawned++;
+  }
+
   // ------------------------------------------------------------------ visuals (per frame)
   _ensureVisuals() {
     if (!this.visuals) {
       this.visuals = new WaveVisuals(this.game.scene, this.game.atlas);
-      this.visuals.setGeometry(this.g.cx, this.g.cz, this.g.dx, this.g.dz, this.g.r, this.g.baseY, this.g.crestTop);
+      this.visuals.setGeometry(this.g.cx, this.g.cz, this.g.dx, this.g.dz, this.g.r, this.g.baseY);
     }
     return this.visuals;
   }
 
-  _backY() {
-    const p = this.params;
-    const lvl = Math.min(p.waterHeight, 1 + Math.floor((10 / Math.max(0.5, p.speed)) * TPS / RISE_TICKS));
-    return this.g.baseY + lvl - 0.1;
+  _ensureCrest() {
+    if (!this.crest) this.crest = new VoxelCrest(this.game.scene, this.game.atlas, this.world, this.m);
+    return this.crest;
   }
 
   render(dt, alpha, camera) {
@@ -517,63 +603,86 @@ export class Tsunami extends Disaster {
     if (!paused) this.anim += dt;
     const vis = this._ensureVisuals();
     if (this.preview) {
-      vis.setFront(0, this._backY(), this.anim, 0.7);
       vis.setSea(this.g.baseY - 4, this.anim, 0);
       vis.setDiscTime(this.anim);
       return;
     }
     const g = this.g, p = this.game.player;
     const s = paused ? this.s : this.prevS + (this.s - this.prevS) * clamp(alpha, 0, 1);
-    // crest
-    let crestAlpha = 0;
-    if (this.phase === 'wave') crestAlpha = Math.min(1, this.tick / 20) * clamp(1 - (s - (2 * g.r + 4)) / 8, 0, 1);
-    vis.setFront(s, this._backY(), this.anim, crestAlpha);
-    // far sea: rises with the wave, follows the draining level, sinks away at the end
-    let seaTarget, alphaTarget = 0.85;
-    if (this.phase === 'wave' || this.phase === 'hold') seaTarget = g.baseY - 4 + (g.floodTop - 0.15 - (g.baseY - 4)) * clamp(this.tick / 160, 0, 1);
-    else if (this.phase === 'recede') seaTarget = this.drainY + 0.85;
-    else { seaTarget = g.baseY - 4; alphaTarget = 0; }
-    if (!paused) { const k = Math.min(1, dt * 1.5); this.seaY += (seaTarget - this.seaY) * k; this.seaAlpha += (alphaTarget - this.seaAlpha) * k; }
-    vis.setSea(this.seaY, this.anim, this.seaAlpha);
-    // environment: grey-blue storm haze while the water is up (the effects system eases towards the target)
-    const storm = this.phase === 'wave' || this.phase === 'hold';
-    if (storm !== this.envStorm) { this.envStorm = storm; if (storm) this.m.effects.setEnvironment(ENV_STORM); else this.m.effects.reset(); }
-    if (paused) return;
     // player-relative quantities
     const ahead = this._aheadOf(p.pos.x, p.pos.z);
     const perp = -(p.pos.x - g.cx) * g.dz + (p.pos.z - g.cz) * g.dx;          // player's coordinate along the front line
     const k = s - g.r;
     const halfLen = Math.sqrt(Math.max(0, g.r * g.r - k * k)) + 6;
+    // crest: voxel strip clipped against the world; hidden while the camera is inside it, under water or indoors
+    let crestAlpha = 0;
+    if (this.phase === 'wave') crestAlpha = Math.min(1, this.tick / 20) * clamp(1 - (s - (2 * g.r + 4)) / 8, 0, 1);
+    const eyeY = p.pos.y + p.eyeHeight;
+    const inside = ahead < 1.2 && ahead > -(CREST_BACK + 1) && eyeY < g.crestTop + 0.6;
+    const fadeTarget = (inside || p.eyeUnderwater || this._indoors(p.pos.x, eyeY, p.pos.z)) ? 0 : 1;
+    if (!paused) this.crestFade += (fadeTarget - this.crestFade) * Math.min(1, dt * 7);
+    const crest = this._ensureCrest();
+    crest.update(dt, {
+      s, cx: g.cx, cz: g.cz, dx: g.dx, dz: g.dz, r: g.r, baseY: g.baseY, depth: g.depth, lip: g.lip, time: this.anim,
+      camX: camera.position.x, camZ: camera.position.z, alpha: crestAlpha * this.crestFade, paused,
+    });
+    // far sea: rises with the wave, follows the draining level, sinks away at the end
+    let seaTarget, alphaTarget = 0.85;
+    if (this.phase === 'wave' || this.phase === 'hold') seaTarget = g.baseY - 4 + (g.floodTop - 0.15 - (g.baseY - 4)) * clamp(this.tick / 160, 0, 1);
+    else if (this.phase === 'recede') seaTarget = this.drainY + 0.85;
+    else { seaTarget = g.baseY - 4; alphaTarget = 0; }
+    if (!paused) { const kk = Math.min(1, dt * 1.5); this.seaY += (seaTarget - this.seaY) * kk; this.seaAlpha += (alphaTarget - this.seaAlpha) * kk; }
+    vis.setSea(this.seaY, this.anim, this.seaAlpha);
+    // environment: overcast storm while the water is up, thinning as it recedes, clear again at the end
+    const env = (this.phase === 'wave' || this.phase === 'hold') ? 1 : this.phase === 'recede' ? 2 : 0;
+    if (env !== this.envState) { this.envState = env; if (env === 1) this.m.effects.setEnvironment(ENV_STORM); else if (env === 2) this.m.effects.setEnvironment(ENV_RECEDE); else this.m.effects.reset(); }
+    if (paused) return;
     const fp = this._tmp;                                                     // nearest point of the front to the player
     const pc = clamp(perp, -halfLen, halfLen);
     fp.x = g.cx + g.dx * k - g.dz * pc; fp.z = g.cz + g.dz * k + g.dx * pc; fp.y = g.crestTop - 1;
     const dFront = this.phase === 'wave' ? Math.abs(ahead) : Infinity;
     if (this.phase === 'wave' && dFront < 25) this.m.effects.shake(0.35 * (1 - dFront / 25) * (0.5 + 0.5 * this.params.intensity), 4);
-    this._foam(dt, s, halfLen, perp, ahead);
+    this.debrisAcc = Math.min(DEBRIS_BURST, this.debrisAcc + DEBRIS_RATE * dt);
+    this._foam(dt, s, halfLen, perp, ahead, camera);
     this._audio(dt, dFront, fp, ahead);
-    this._flushEvents(fp, p);
+    this._flushEvents(fp, p, camera);
   }
 
-  _foam(dt, s, halfLen, perp, ahead) {
-    if (this.phase !== 'wave' || Math.abs(ahead) > 90 || this.foamLive >= MAX_FOAM) { this.foamLive = Math.max(0, this.foamLive - dt * 220); return; }
+  // A solid block within 10 blocks above the eye: the camera is under a roof / ceiling.
+  _indoors(x, y, z) {
+    const bx = Math.floor(x), bz = Math.floor(z), y0 = Math.floor(y) + 1;
+    for (let yy = y0; yy < y0 + 10 && yy < CH; yy++) if (BLOCKS[this.world.getBlock(bx, yy, bz)].solid) return true;
+    return false;
+  }
+
+  // Spray at the lip: small textured chips (snow tile = foam, water tile = drops), never spawned right at the
+  // camera and shrunk when close so they read as spray instead of filling the screen.
+  _foam(dt, s, halfLen, perp, ahead, camera) {
+    if (this.phase !== 'wave' || Math.abs(ahead) > 90 || this.foamLive >= MAX_FOAM || this.crestFade < 0.3) { this.foamLive = Math.max(0, this.foamLive - dt * 160); return; }
     const g = this.g, parts = this.game.particles, sp = this.params.speed;
-    const rate = 120 + 120 * this.params.intensity;
+    const rate = 70 + 70 * this.params.intensity;
     this.foamAcc += rate * dt;
-    let n = Math.min(8, Math.floor(this.foamAcc));
+    let n = Math.min(6, Math.floor(this.foamAcc));
     this.foamAcc -= n;
-    const k = s - g.r;
+    const k = s - g.r, cam = camera.position, uv = this._uv;
+    const lipY = g.baseY + g.depth + Math.max(0.5, g.lip) - 0.3;
     while (n-- > 0) {
-      const along = clamp(perp + (Math.random() - 0.5) * 80, -halfLen, halfLen);
-      const d = k + Math.random() * 3 - 1;
+      const along = clamp(perp + (Math.random() - 0.5) * 70, -halfLen, halfLen);
+      const d = k - 3 - Math.random() * 4;                                   // on the lip, 3-7 blocks behind the foot
       const x = g.cx + g.dx * d - g.dz * along, z = g.cz + g.dz * d + g.dx * along;
-      const y = g.crestTop - Math.random() * 1.5;
-      const f = sp * (0.9 + Math.random() * 0.7), side = (Math.random() - 0.5) * 4;
+      const y = lipY + Math.random() * 0.8;
+      const dcx = x - cam.x, dcz = z - cam.z, camDist = Math.sqrt(dcx * dcx + dcz * dcz);
+      if (camDist < 2.5) continue;
+      const near = Math.min(1, camDist / 8);
+      const f = sp * (0.8 + Math.random() * 0.5), side = (Math.random() - 0.5) * 3;
       const vx = g.dx * f - g.dz * side, vz = g.dz * f + g.dx * side;
-      if (Math.random() < 0.5) parts.spawn(x, y, z, vx, 0.5 + Math.random() * 3.5, vz, 0.15 + Math.random() * 0.15, 0.5 + Math.random() * 0.4, 0, UV_SOLID, COL_SPRAY, 1);
-      else parts.spawn(x, y, z, vx * 0.6, 0.8 + Math.random() * 1.5, vz * 0.6, 0.5 + Math.random() * 0.4, 0.8 + Math.random() * 0.6, 1, UV_SOLID, COL_MIST, 0.6);
+      const tile = Math.random() < 0.6 ? this._snow : this._water;
+      const sub = tile[2] / 4;
+      uv[0] = tile[0] + Math.floor(Math.random() * 3) * sub; uv[1] = tile[1] + Math.floor(Math.random() * 3) * sub; uv[2] = sub; uv[3] = 0;
+      parts.spawn(x, y, z, vx, 2 + Math.random() * 4, vz, (0.14 + Math.random() * 0.14) * near, 0.45 + Math.random() * 0.4, 0, uv, WHITE, 1);
       this.foamLive++;
     }
-    this.foamLive = Math.max(0, this.foamLive - dt * 220);   // ~ average particle lifetime turnover
+    this.foamLive = Math.max(0, this.foamLive - dt * 160);   // ~ average particle lifetime turnover
   }
 
   _audio(dt, dFront, fp, ahead) {
@@ -600,19 +709,33 @@ export class Tsunami extends Disaster {
     audio.loopSet('flood', { gain, cutoff, pan });
   }
 
-  _flushEvents(fp, player) {
+  // Destruction events -> chips of the broken block + foam, crack sounds and debris (all camera-relative, visual only).
+  _flushEvents(fp, player, camera) {
     const ev = this.events;
     if (!ev.length) return;
-    const audio = this.game.audio, parts = this.game.particles, at = this._evPos;
+    const audio = this.game.audio, parts = this.game.particles, at = this._evPos, uv = this._uv;
+    const cam = camera.position;
     this.crackTimer -= 0.016;
-    for (let i = 0; i < ev.length; i += 4) {
+    for (let i = 0; i < ev.length; i += EV_STRIDE) {
       const kind = ev[i];
       if (kind === EV_CRACK) {
-        const x = ev[i + 1], y = ev[i + 2], z = ev[i + 3];
-        const d = Math.hypot(x - player.pos.x, z - player.pos.z);
-        if (d > 45) continue;
+        const x = ev[i + 1], y = ev[i + 2], z = ev[i + 3], id = ev[i + 4];
+        const dcx = x - cam.x, dcz = z - cam.z, d = Math.sqrt(dcx * dcx + dcz * dcz);
+        if (d > 130) continue;
+        this._spawnDebris(x, y, z, id, d);
+        if (d > 60) continue;
         if (this.crackTimer <= 0) { at.x = x; at.y = y; at.z = z; audio.crack(at); this.crackTimer = 0.15; }
-        if (this.foamLive < MAX_FOAM) for (let n = 0; n < 4; n++) { parts.spawn(x, y, z, (Math.random() - 0.5) * 4, 1 + Math.random() * 3, (Math.random() - 0.5) * 4, 0.2, 0.6, 0, UV_SOLID, COL_SPRAY, 1); this.foamLive++; }
+        if (this.foamLive < MAX_FOAM && d > 2) {
+          const def = BLOCKS[id], tile = def && def.tex ? def.tex[2] : (TILES.oak_planks ?? 0);
+          const ts = 1 / ATLAS_TILES, tu = (tile % ATLAS_TILES) * ts, tv = Math.floor(tile / ATLAS_TILES) * ts, sub = ts / 4;
+          const near = Math.min(1, d / 8);
+          for (let n = 0; n < 4; n++) {
+            const foam = n === 3, t = foam ? this._snow : null;
+            uv[0] = (foam ? t[0] : tu) + Math.floor(Math.random() * 3) * sub; uv[1] = (foam ? t[1] : tv) + Math.floor(Math.random() * 3) * sub; uv[2] = sub; uv[3] = 0;
+            parts.spawn(x + (Math.random() - 0.5) * 0.6, y + (Math.random() - 0.5) * 0.6, z + (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 4 + this.g.dx * 2, 1 + Math.random() * 3, (Math.random() - 0.5) * 4 + this.g.dz * 2, (0.12 + Math.random() * 0.08) * near, 0.6 + Math.random() * 0.4, 0, uv, WHITE, 1);
+            this.foamLive++;
+          }
+        }
       } else if (kind === EV_SPLASH) audio.splashBig(fp);
       else if (kind === EV_RUMBLE) { audio.rumble(fp, 0.8); this.m.effects.shake(0.25, 2); }
     }
