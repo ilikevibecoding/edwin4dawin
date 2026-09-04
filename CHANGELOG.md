@@ -77,6 +77,9 @@ seed) in both. `npm run mp-test` automates this with three headless clients incl
   outside of those buildings showed bookshelf textures. Shelves now stand inside against an intact wall.
 - Deputies no longer stack on one work spot; horses no longer spawn on stable roofs.
 - Player collision floating-point drift (getting blocked by floor blocks when leaving buildings).
+- Found by verification: after a disaster reset, player edits on formerly damaged cells were dropped from the save
+  for the rest of the session (the exclusion set was never cleared); now cleared on restore and covered by
+  `test-disasters.mjs`.
 
 ### Measured (independent verification run, `bench/verify_*.json`)
 Machine load during the run was 10-18 on 4 cores (other agents), so absolute numbers are 2-3x worse than the
@@ -115,8 +118,6 @@ tsunami `0a49d87c:46894`, tornado `fcb6e0cf:84`, beam `06d55efa:122`); `?admin=0
 the panel; 0 exceptions and 0 console errors across 23 page sessions.
 
 ### Known imperfections
-- Player edits placed on ground a disaster had damaged were dropped from the save for the rest of the session
-  after a reset (the exclusion set was never cleared) - fixed in this round and covered by `test-disasters.mjs`.
 - Frame times in this build VM are dominated by SwiftShader; disaster carving/flooding windows are bounded by the
   manager's relight/remesh budgets (3 relights + ~10 remeshes per frame) rather than by the disaster code itself.
 - Buildings sliced by the beam crater or the tornado leave floating voxel fragments (expected voxel behaviour).
