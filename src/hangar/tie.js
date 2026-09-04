@@ -1,87 +1,365 @@
-// Original TIE-style fighter: spherical cockpit pod, twin pylons, two hexagonal solar-panel wings.
-// ~6.5 m across, faces -Z (forward). One shared set of geometries/materials, cloned per fighter.
+// Original TIE-style fighter: ball cockpit with an octagonal viewport, twin pylons and two tall hexagonal
+// solar-panel wings with a framed lattice. Every craft is exactly three meshes (geometry merged per
+// material, vertex colours carry the shading, tint and unit stencil):
+//   hull  - lit, vertex-coloured: pod, pylons, hubs, viewport / hatch rings and struts, wing lattice
+//   panel - lit, vertex-coloured, double-sided: the two solar wings and the rear hatch plate
+//   glow  - unlit HDR: twin red-orange ion engines (bloom picks them up), faint blue viewport light
+// A shared < 300-triangle far LOD (buildTieFar) is what traffic.js instances for distant fighters.
+// Forward is -Z, up is +Y, units are metres. Exterior lighting comes from the same kind of injected sun
+// term the hull uses, so the fighters never depend on interior light fixtures.
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-let cache = null;
+export const TIE = {
+  span: 6.5, // outer wing face to outer wing face
+  wingHeight: 7.0,
+  wingDepth: 4.6,
+  podRadius: 2.0,
+  // half extents of the whole craft in its local frame (x span, y height, z depth)
+  halfExtents: Object.freeze({ x: 3.5, y: 3.6, z: 2.1 }),
+  farDistance: 600, // beyond this the instanced far LOD is drawn instead of the three detail meshes
+};
 
-export function buildTie() {
-  if (!cache) {
-    const hullMat = new THREE.MeshStandardMaterial({ color: 0x8d949c, roughness: 0.55, metalness: 0.6, fog: false });
-    const panelMat = new THREE.MeshStandardMaterial({ color: 0x1b1d22, roughness: 0.85, metalness: 0.35, fog: false });
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0x5b6169, roughness: 0.6, metalness: 0.7, fog: false });
-    const glassMat = new THREE.MeshStandardMaterial({ color: 0x0a1018, roughness: 0.2, metalness: 0.3, fog: false });
-    const glowMat = new THREE.MeshBasicMaterial({ color: 0xff6a4a, fog: false });
+// Default sun (matches the exterior's initial sun); traffic.js shares the exterior's uniforms when it can.
+export function makeSun() {
+  return {
+    dir: { value: new THREE.Vector3(-0.46, 0.38, 0.8).normalize() },
+    color: { value: new THREE.Color(1.0, 0.95, 0.88).multiplyScalar(2.4) },
+  };
+}
 
-    const root = new THREE.Group();
-    const pod = new THREE.Mesh(new THREE.SphereGeometry(2.0, 24, 16), hullMat);
-    root.add(pod);
-    // forward viewport: octagonal window plate
-    const win = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.25, 8), glassMat);
-    win.rotation.x = Math.PI / 2;
-    win.position.z = -1.95;
-    root.add(win);
-    const winFrame = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.09, 6, 8), frameMat);
-    winFrame.position.z = -2.0;
-    root.add(winFrame);
-    // rear hatch ring + twin ion engine glow
-    const hatch = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.1, 6, 12), frameMat);
-    hatch.position.z = 1.95;
-    root.add(hatch);
-    for (const x of [-0.45, 0.45]) {
-      const e = new THREE.Mesh(new THREE.CircleGeometry(0.28, 12), glowMat);
-      e.position.set(x, -0.3, 2.05);
-      root.add(e);
-    }
-    // pylons and wings
-    for (const side of [-1, 1]) {
-      const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, 2.2, 10), frameMat);
-      pylon.rotation.z = Math.PI / 2;
-      pylon.position.x = side * 2.9;
-      root.add(pylon);
-      const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.5, 10), hullMat);
-      collar.rotation.z = Math.PI / 2;
-      collar.position.x = side * 3.9;
-      root.add(collar);
-      // hexagonal wing: 7.6 m tall, 5.6 m deep, elongated hexagon in the YZ plane
-      const shape = new THREE.Shape();
-      const H = 3.8;
-      const D = 2.8;
-      shape.moveTo(0, -H);
-      shape.lineTo(D, -H * 0.5);
-      shape.lineTo(D, H * 0.5);
-      shape.lineTo(0, H);
-      shape.lineTo(-D, H * 0.5);
-      shape.lineTo(-D, -H * 0.5);
-      shape.closePath();
-      const wingGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.14, bevelEnabled: false });
-      wingGeo.rotateY(Math.PI / 2);
-      const wing = new THREE.Mesh(wingGeo, panelMat);
-      wing.position.x = side * 4.1 - 0.07;
-      root.add(wing);
-      // wing frame: outer rim + spokes
-      const rimPts = [];
-      for (let i = 0; i <= 6; i++) {
-        const a = (i / 6) * Math.PI * 2 + Math.PI / 2;
-        rimPts.push(new THREE.Vector3(0, Math.sin(a) * H * 1.0, Math.cos(a) * D * 1.02));
-      }
-      const rim = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rimPts, true, "catmullrom", 0), 24, 0.16, 6, true), frameMat);
-      rim.position.x = side * 4.12;
-      root.add(rim);
-      for (const [dy, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.5, 0.5], [0.5, -0.5], [-0.5, 0.5], [-0.5, -0.5]]) {
-        const len = Math.hypot(dy * H, dz * D);
-        const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.18, len, 0.18), frameMat);
-        spoke.position.set(side * 4.12, (dy * H) / 2, (dz * D) / 2);
-        spoke.rotation.x = Math.atan2(dz * D, dy * H);
-        root.add(spoke);
-      }
-    }
-    root.traverse((o) => {
-      if (o.isMesh) {
-        o.castShadow = false;
-        o.receiveShadow = false;
-      }
-    });
-    cache = root;
+// Same idea as the exterior hull materials: a directional sun term added inside the standard lighting
+// loop, so no scene DirectionalLight (and no shadow map) is needed for objects flying in space. `scale`
+// is a per-craft uniform ({ value }) that traffic.js fades to 0 while the craft is inside the hangar.
+function sunPatch(mat, sun, scale) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uSunDir = sun.dir;
+    shader.uniforms.uSunColor = sun.color;
+    shader.uniforms.uSunScale = scale;
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform vec3 uSunDir;\nuniform vec3 uSunColor;\nuniform float uSunScale;")
+      .replace(
+        "#include <lights_fragment_begin>",
+        `#include <lights_fragment_begin>
+  {
+    IncidentLight sunLight;
+    sunLight.color = uSunColor * uSunScale;
+    sunLight.direction = normalize( ( viewMatrix * vec4( uSunDir, 0.0 ) ).xyz );
+    sunLight.visible = true;
+    RE_Direct( sunLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+  }`,
+      );
+  };
+  mat.customProgramCacheKey = () => "tie-sun";
+  mat.fog = false;
+  return mat;
+}
+
+// ---------------------------------------------------------------------------
+// palette (hex = sRGB, converted to linear by THREE.Color; glow values are linear HDR)
+// ---------------------------------------------------------------------------
+const C = {
+  pod: new THREE.Color(0x9ea4ab),
+  mid: new THREE.Color(0x767d86),
+  frame: new THREE.Color(0x474d57),
+  panel: new THREE.Color(0x353d4a),
+  engine: new THREE.Color(1.0, 0.32, 0.1).multiplyScalar(3.4),
+  viewport: new THREE.Color(0.03, 0.09, 0.22),
+};
+// unit stencils: squadron colour of the painted band across one row of solar cells
+const UNIT_BANDS = [new THREE.Color(0x8c2424), new THREE.Color(0xc4c8ce), new THREE.Color(0x2f568f)];
+// slight per-craft variation of the hull paint
+const TINTS = [
+  new THREE.Color(1.0, 1.0, 1.0),
+  new THREE.Color(1.03, 1.0, 0.96),
+  new THREE.Color(0.95, 0.97, 1.03),
+  new THREE.Color(0.9, 0.9, 0.92),
+  new THREE.Color(1.05, 1.04, 1.02),
+  new THREE.Color(0.97, 0.99, 1.0),
+];
+
+// hexagon wing outline in the (y, z) plane: flat vertical edges between +-H/2, points at +-H
+const H = TIE.wingHeight / 2; // 3.5
+const D = TIE.wingDepth / 2; // 2.3
+const PANEL_X = 3.18; // wing plane; lattice bars straddle it, outer bar face at 3.27
+const HEX = [
+  [H, 0],
+  [H / 2, D],
+  [-H / 2, D],
+  [-H, 0],
+  [-H / 2, -D],
+  [H / 2, -D],
+];
+// half depth of the hexagon at height y
+const hexDepth = (y) => (Math.abs(y) <= H / 2 ? D : (D * (H - Math.abs(y))) / (H / 2));
+const NOSE_Z = -1.7; // the pod is flattened here for the viewport hatch
+const TAIL_Z = 1.82; // and here for the rear hatch
+const ENGINE = { x: 0.78, y: -1.02, z: 1.77, r: 0.34 }; // glow discs just aft of the housing caps
+
+// ---------------------------------------------------------------------------
+// geometry helpers: every part becomes non-indexed with a constant vertex colour so parts of one
+// material merge into a single BufferGeometry
+// ---------------------------------------------------------------------------
+const _m4 = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
+const _v = new THREE.Vector3();
+const _s = new THREE.Vector3(1, 1, 1);
+
+function colorize(geo, color) {
+  const g = geo.index ? geo.toNonIndexed() : geo;
+  if (g !== geo) geo.dispose();
+  const n = g.attributes.position.count;
+  const arr = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    arr[i * 3] = color.r;
+    arr[i * 3 + 1] = color.g;
+    arr[i * 3 + 2] = color.b;
   }
-  return cache.clone();
+  g.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+  return g;
+}
+
+function place(geo, x, y, z, rx = 0, ry = 0, rz = 0) {
+  _q.setFromEuler(new THREE.Euler(rx, ry, rz));
+  _m4.compose(_v.set(x, y, z), _q, _s);
+  geo.applyMatrix4(_m4);
+  return geo;
+}
+
+// a bar between two points in the wing plane at x = px, square cross-section t
+function bar(px, y0, z0, y1, z1, t, color) {
+  const len = Math.hypot(y1 - y0, z1 - z0);
+  const g = colorize(new THREE.BoxGeometry(t, len, t), color);
+  // box Y axis aligned with the (y, z) direction of the bar
+  const ang = Math.atan2(z1 - z0, y1 - y0);
+  return place(g, px, (y0 + y1) / 2, (z0 + z1) / 2, ang, 0, 0);
+}
+
+function wingLattice(side, out) {
+  const px = side * PANEL_X;
+  for (let i = 0; i < 6; i++) {
+    const [ay, az] = HEX[i];
+    const [by, bz] = HEX[(i + 1) % 6];
+    out.push(bar(px, ay, az, by, bz, 0.2, C.frame));
+    out.push(bar(px, 0, 0, ay, az, 0.13, C.frame));
+  }
+  // cross ribs that split the cells: two horizontals at the hexagon corners, two verticals
+  for (const y of [H / 2, -H / 2]) out.push(bar(px, y, -D, y, D, 0.11, C.frame));
+  for (const z of [-D / 2, D / 2]) {
+    const yTop = H - (H / 2) * (Math.abs(z) / D);
+    out.push(bar(px, -yTop, z, yTop, z, 0.11, C.frame));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// hull (shared geometry)
+// ---------------------------------------------------------------------------
+let hullGeo = null;
+function buildHullGeometry() {
+  if (hullGeo) return hullGeo;
+  const parts = [];
+  const R = TIE.podRadius;
+  // pod, flattened at the nose for the viewport hatch and at the tail for the rear hatch (both flats are
+  // covered by their bezel / ring)
+  const pod = new THREE.SphereGeometry(R, 24, 16);
+  const pp = pod.attributes.position;
+  for (let i = 0; i < pp.count; i++) pp.setZ(i, THREE.MathUtils.clamp(pp.getZ(i), NOSE_Z, TAIL_Z));
+  parts.push(colorize(pod, C.pod));
+  // octagonal viewport hatch (flat on top): protruding bezel, frame ring and 8 struts to the corners
+  const oct = Math.PI / 8;
+  parts.push(place(colorize(new THREE.CylinderGeometry(1.22, 1.34, 0.3, 8), C.mid), 0, 0, NOSE_Z - 0.1, -Math.PI / 2, oct, 0));
+  parts.push(place(colorize(new THREE.TorusGeometry(1.12, 0.09, 6, 8), C.frame), 0, 0, NOSE_Z - 0.27, 0, 0, oct));
+  for (let i = 0; i < 8; i++) {
+    const a = i * (Math.PI / 4) + oct;
+    const g = colorize(new THREE.BoxGeometry(0.06, 1.08, 0.06), C.frame);
+    place(g, Math.cos(a) * 0.56, Math.sin(a) * 0.56, NOSE_Z - 0.3, 0, 0, a - Math.PI / 2);
+    parts.push(g);
+  }
+  // rear hatch ring on the tail flat
+  parts.push(place(colorize(new THREE.TorusGeometry(0.72, 0.08, 6, 8), C.frame), 0, 0, TAIL_Z, 0, 0, oct));
+  // twin engine housings, low on the aft face (flared end aft; the glow discs sit just outside the caps)
+  for (const x of [-ENGINE.x, ENGINE.x]) parts.push(place(colorize(new THREE.CylinderGeometry(0.42, 0.34, 0.5, 12), C.frame), x, ENGINE.y, ENGINE.z - 0.27, Math.PI / 2, 0, 0));
+  // pylons: collar at the pod, tapered strut, wing hub
+  for (const side of [-1, 1]) {
+    parts.push(place(colorize(new THREE.CylinderGeometry(0.72, 0.72, 0.3, 12), C.mid), side * 2.02, 0, 0, 0, 0, Math.PI / 2));
+    parts.push(place(colorize(new THREE.CylinderGeometry(0.5, 0.62, 1.4, 10), C.mid), side * 2.45, 0, 0, 0, 0, Math.PI / 2));
+    parts.push(place(colorize(new THREE.CylinderGeometry(0.95, 0.95, 0.46, 12), C.mid), side * 2.95, 0, 0, 0, 0, Math.PI / 2));
+    parts.push(place(colorize(new THREE.CylinderGeometry(0.5, 0.5, 0.22, 10), C.frame), side * 3.36, 0, 0, 0, 0, Math.PI / 2));
+    wingLattice(side, parts);
+  }
+  hullGeo = mergeGeometries(parts, false);
+  for (const p of parts) p.dispose();
+  hullGeo.computeBoundingSphere();
+  return hullGeo;
+}
+
+// ---------------------------------------------------------------------------
+// panels (per craft: tint + stencil band live in the vertex colours)
+// ---------------------------------------------------------------------------
+const ROW_EDGES = [-H, -H * 0.75, -H / 2, -H / 4, 0, H / 4, H / 2, H * 0.75, H];
+
+function buildPanelGeometry(variant) {
+  const tint = TINTS[variant % TINTS.length];
+  const band = UNIT_BANDS[variant % UNIT_BANDS.length];
+  const bandRow = 1 + (variant % 6);
+  const pos = [];
+  const nrm = [];
+  const col = [];
+  const uv = [];
+  const c = new THREE.Color();
+  const quad = (x, y0, y1, ci) => {
+    // trapezoid row of the hexagon, both faces come from DoubleSide on the material
+    const d0 = hexDepth(y0);
+    const d1 = hexDepth(y1);
+    const pts = [
+      [x, y0, -d0],
+      [x, y0, d0],
+      [x, y1, d1],
+      [x, y1, -d1],
+    ];
+    const idx = x > 0 ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3];
+    for (const k of idx) {
+      pos.push(...pts[k]);
+      nrm.push(Math.sign(x), 0, 0);
+      col.push(ci.r, ci.g, ci.b);
+      uv.push(pts[k][2] / (2 * D) + 0.5, pts[k][1] / (2 * H) + 0.5);
+    }
+  };
+  for (const side of [-1, 1]) {
+    for (let r = 0; r < ROW_EDGES.length - 1; r++) {
+      if (r === bandRow) c.copy(band);
+      else c.copy(C.panel).multiplyScalar(r % 2 ? 0.85 : 1.15);
+      c.multiply(tint);
+      quad(side * PANEL_X, ROW_EDGES[r], ROW_EDGES[r + 1], c);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("normal", new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  // rear hatch plate (dark, sits inside the hatch ring on the tail flat)
+  const hatch = place(colorize(new THREE.CircleGeometry(0.68, 8), C.panel.clone().multiply(tint)), 0, 0, TAIL_Z + 0.01, 0, 0, Math.PI / 8);
+  const merged = mergeGeometries([g, hatch], false);
+  g.dispose();
+  hatch.dispose();
+  merged.computeBoundingSphere();
+  return merged;
+}
+
+// ---------------------------------------------------------------------------
+// glow (shared): engine discs + viewport plate
+// ---------------------------------------------------------------------------
+let glowGeo = null;
+function buildGlowGeometry() {
+  if (glowGeo) return glowGeo;
+  const parts = [];
+  for (const x of [-ENGINE.x, ENGINE.x]) parts.push(place(colorize(new THREE.CircleGeometry(ENGINE.r, 12), C.engine), x, ENGINE.y, ENGINE.z));
+  const plate = colorize(new THREE.CircleGeometry(1.06, 8), C.viewport);
+  plate.rotateZ(Math.PI / 8);
+  plate.rotateY(Math.PI); // face -Z
+  plate.translate(0, 0, NOSE_Z - 0.26); // just ahead of the bezel cap, behind the ring and struts
+  parts.push(plate);
+  glowGeo = mergeGeometries(parts, false);
+  for (const p of parts) p.dispose();
+  glowGeo.computeBoundingSphere();
+  return glowGeo;
+}
+
+// ---------------------------------------------------------------------------
+// materials: one set per craft (same program for all of them, so no extra shader compiles) because the
+// sun scale and the engine throttle are per-craft uniforms
+// ---------------------------------------------------------------------------
+function craftMaterials(tint, sun, sunScale) {
+  return {
+    hull: sunPatch(new THREE.MeshStandardMaterial({ color: tint, vertexColors: true, roughness: 0.5, metalness: 0.55 }), sun, sunScale),
+    panel: sunPatch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.35, side: THREE.DoubleSide }), sun, sunScale),
+    glow: new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }),
+  };
+}
+
+/**
+ * Build one detailed fighter: a Group with three meshes (hull, panel, glow) at the origin, facing -Z.
+ * `variant` picks the hull tint, the squadron band colour and the band row; `sun` is the shared sun
+ * uniform object ({ dir: { value: Vector3 }, color: { value: Color } }).
+ * The group's `userData.rig` exposes the per-craft controls the traffic sim drives every pose:
+ *   rig.sunScale.value  0 inside the hangar .. 1 in space (the injected sun term)
+ *   rig.setThrottle(k)  engine / cockpit glow intensity, 0..1
+ */
+export function buildTie({ variant = 0, sun = null } = {}) {
+  const sunU = sun || defaultSun();
+  const sunScale = { value: 1 };
+  const mats = craftMaterials(TINTS[variant % TINTS.length], sunU, sunScale);
+  const root = new THREE.Group();
+  root.name = "tie";
+  const hull = new THREE.Mesh(buildHullGeometry(), mats.hull);
+  hull.name = "hull";
+  const panel = new THREE.Mesh(buildPanelGeometry(variant), mats.panel);
+  panel.name = "panel";
+  const glow = new THREE.Mesh(buildGlowGeometry(), mats.glow);
+  glow.name = "glow";
+  for (const m of [hull, panel, glow]) {
+    m.castShadow = false;
+    m.receiveShadow = false;
+    root.add(m);
+  }
+  root.userData.variant = variant;
+  root.userData.rig = {
+    sunScale,
+    setThrottle(k) {
+      mats.glow.color.setScalar(k);
+    },
+  };
+  return root;
+}
+
+let _defaultSun = null;
+function defaultSun() {
+  if (!_defaultSun) _defaultSun = makeSun();
+  return _defaultSun;
+}
+
+/**
+ * Far LOD: one vertex-coloured low-poly body (pod, pylons, two hexagon plates; 116 triangles) and one
+ * HDR glow quad on the aft face, both meant to be drawn through InstancedMesh for every distant fighter.
+ */
+export function buildTieFar(sun = null) {
+  const sunU = sun || defaultSun();
+  const parts = [];
+  parts.push(colorize(new THREE.SphereGeometry(TIE.podRadius, 8, 6), C.pod));
+  for (const side of [-1, 1]) {
+    parts.push(place(colorize(new THREE.BoxGeometry(1.3, 1.1, 1.1), C.mid), side * 2.5, 0, 0));
+    const hex = new THREE.BufferGeometry();
+    const pos = [];
+    const nrm = [];
+    const col = [];
+    const uv = [];
+    const x = side * PANEL_X;
+    for (let i = 0; i < 6; i++) {
+      const [ay, az] = HEX[i];
+      const [by, bz] = HEX[(i + 1) % 6];
+      const tri = side > 0 ? [[x, 0, 0], [x, ay, az], [x, by, bz]] : [[x, 0, 0], [x, by, bz], [x, ay, az]];
+      for (const p of tri) {
+        pos.push(...p);
+        nrm.push(side, 0, 0);
+        col.push(C.panel.r, C.panel.g, C.panel.b);
+        uv.push(0, 0);
+      }
+    }
+    hex.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    hex.setAttribute("normal", new THREE.Float32BufferAttribute(nrm, 3));
+    hex.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
+    hex.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    parts.push(hex);
+  }
+  const geometry = mergeGeometries(parts, false);
+  for (const p of parts) p.dispose();
+  geometry.computeBoundingSphere();
+  // far craft are only ever seen from outside, so the sun is always fully on; the instance colour of the
+  // glow quad carries the per-craft throttle
+  const material = sunPatch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.45, side: THREE.DoubleSide }), sunU, { value: 1 });
+  const glowGeometry = colorize(new THREE.PlaneGeometry(2.3, 0.7), C.engine);
+  glowGeometry.translate(0, ENGINE.y, TIE.podRadius + 0.05);
+  const glowMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
+  return { geometry, material, glowGeometry, glowMaterial };
 }
