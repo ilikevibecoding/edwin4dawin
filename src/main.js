@@ -105,6 +105,7 @@ function refreshZone(zoneId) {
 interior.onZoneChange = refreshZone;
 interior.onSpaceChange = (sp) => {
   hud.setLocation(sp ? `${sp.spec.name || sp.id} · ${sp.deck ? "Deck " + sp.deck : ""}` : "");
+  pool.setContext(sp ? sp.id : null, interior.state.visible);
   if (modes.mode === "interior") exterior.setInteriorView(interior.exteriorWindows());
 };
 modes.onModeChange = (mode) => {

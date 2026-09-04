@@ -34,7 +34,16 @@ export class LightPool {
     }
     this.pointFixtures = [];
     this.spotFixtures = [];
+    this.current = null; // space id the viewer is in
+    this.visible = null; // Set of space ids that are rendered (portal culling)
     this._tmp = new THREE.Vector3();
+  }
+
+  // Where the viewer is: fixtures in culled spaces are behind walls and never take a slot; the current
+  // space's fixtures win ties against neighbours seen through doorways.
+  setContext(spaceId, visibleSet) {
+    this.current = spaceId;
+    this.visible = visibleSet && visibleSet.size ? visibleSet : null;
   }
 
   setFixtures(pointFixtures, spotFixtures = []) {
@@ -47,11 +56,14 @@ export class LightPool {
   // little and don't flicker on the threshold).
   _score(f, camPos) {
     if ((f.userData && f.userData.off) || f.intensity <= 0) return 0;
+    const sp = f.userData ? f.userData.space : null;
+    if (sp && this.visible && !this.visible.has(sp)) return 0;
     f.getWorldPosition ? f.getWorldPosition(this._tmp) : this._tmp.copy(f.position);
     const d2 = this._tmp.distanceToSquared(camPos);
     const range = (f.distance || 10) * 1.6;
     if (d2 > range * range) return 0;
-    return f.intensity / (1 + d2 * 0.25);
+    const s = f.intensity / (1 + d2 * 0.25);
+    return sp && sp === this.current ? s * 1.8 : s;
   }
 
   _assign(slots, fixtures, camPos, dt) {

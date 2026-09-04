@@ -1145,6 +1145,14 @@ function buildBathroom(kit, ctx) {
   mirror.position.set(mx, 1.65, sz);
   mirror.rotation.y = -Math.PI / 2;
   mirror.name = "mirror";
+  // the reflection is a second full scene render: only pay for it when the viewer is at the basin
+  const reflect = mirror.onBeforeRender;
+  const mirrorWorld = new THREE.Vector3();
+  mirror.onBeforeRender = function (renderer, scene, camera, ...rest) {
+    this.getWorldPosition(mirrorWorld);
+    if (camera.position.distanceTo(mirrorWorld) > 4.5) return;
+    reflect.call(this, renderer, scene, camera, ...rest);
+  };
   ctx.group.add(mirror);
   kit.boxMM("metal", [mx, 1.25, sz - 0.4], [x1 + 0.01, 1.29, sz + 0.4], { color: PALETTE.gunmetal, texel: 1 });
   kit.boxMM("metal", [mx, 2.01, sz - 0.4], [x1 + 0.01, 2.05, sz + 0.4], { color: PALETTE.gunmetal, texel: 1 });
