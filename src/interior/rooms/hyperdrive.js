@@ -41,8 +41,10 @@ export function buildHyperdrive(kit, ctx) {
     const dome = new THREE.SphereGeometry(R, 40, 12, 0, Math.PI * 2, 0, Math.PI / 2);
     dome.scale(1, 0.3, 1);
     dome.rotateZ(s > 0 ? -Math.PI / 2 : Math.PI / 2);
-    kit.add("paintedMetal", dome, { pos: [x, CY, CZ], color: PALETTE.impGrey, uv: "scale", uvScale: [6, 2] });
-    kit.cyl("paintedMetal", x + s * 0.9, CY, CZ, 1.3, 1.0, "x", { color: PALETTE.impDark, segments: 28, texel: 1 });
+    kit.add("paintedMetal", dome, { pos: [x, CY, CZ], color: PALETTE.impDark, uv: "scale", uvScale: [6, 2] });
+    // glow ring where the dome meets the shell (the end nearest the door is the first thing seen)
+    kit.cyl("hyp_coil", x - s * 0.1, CY, CZ, R + 0.04, 0.14, "x", { segments: 40 });
+    kit.cyl("paintedMetal", x + s * 0.9, CY, CZ, 1.3, 1.0, "x", { color: PALETTE.impBlack, segments: 28, texel: 1 });
     kit.cyl("metal", x + s * 1.35, CY, CZ, 1.1, 0.16, "x", { color: PALETTE.steel, segments: 28 });
     kit.cyl("hyp_core", x + s * 1.44, CY, CZ, 0.95, 0.04, "x", { segments: 28 });
     kit.cyl("paintedMetal", x + s * 1.46, CY, CZ, 0.72, 0.06, "x", { color: PALETTE.impBlack, segments: 28, texel: 2 });

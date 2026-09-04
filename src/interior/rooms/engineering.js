@@ -245,8 +245,9 @@ export function buildEngineering(kit, ctx) {
   }
   ctx.light(spotLight(AMBER, 44, 18, [-24, H - 0.2, az], [-25.5, 0, az], { angle: 1.05, penumbra: 0.55, shadow: true }));
   ctx.light(pointLight(BLUE, 7, 11, [min[0] + 2.2, 2.7, az]));
-  ctx.light(pointLight(COOL, 7, 10, [-14, H - 0.5, az]));
+  // (cool fills kept ≥1.3 m under the ceiling: hugging it puts a white specular blob on the panels)
+  ctx.light(pointLight(COOL, 7, 10, [-14, 2.6, az]));
   ctx.light(pointLight(AMBER_DEEP, 8, 10, [-21, 2.9, min[2] + 2.2]));
-  ctx.light(pointLight(COOL, 6, 10, [-18, H - 0.6, max[2] - 2.5]));
-  ctx.light(pointLight(COOL, 6, 10, [-6, H - 0.6, az]));
+  ctx.light(pointLight(COOL, 6, 10, [-18, 2.7, max[2] - 2.5]));
+  ctx.light(pointLight(COOL, 6, 10, [-6, 2.7, az]));
 }
