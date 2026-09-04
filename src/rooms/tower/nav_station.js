@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { IMP } from "../../core/palette.js";
 import { ledRect, DECAL } from "../../textures.js";
-import { Instancer, chairProto, lightBand, screenArray } from "./tactical.js";
+import { Instancer, chairProto, lightBand, screenArray, doorPocket } from "./tactical.js";
 
 export const meta = { id: "nav_station", stream: "tower-rooms" };
 
@@ -44,6 +44,11 @@ export function build(ctx) {
   });
   for (const side of ["zmin", "zmax"]) lightBand(ctx.wall(side));
   for (const side of ["xmin", "xmax"]) lightBand(sideWall(side));
+  // passage to the bridge door (the door plane is the bridge wall, 2 m past our port wall)
+  {
+    const d = ctx.doors.find((o) => o.door.id === "br_nav");
+    if (d) doorPocket(ctx, { xWall: ctx.box.x0, xDoor: d.door.at, z0: d.door.from, z1: d.door.to, h: d.door.h });
+  }
 
   const inst = new Instancer(ctx);
   const chair = chairProto(inst, "nav_chair", { color: IMP.fabricGrey });

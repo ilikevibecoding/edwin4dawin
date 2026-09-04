@@ -36,6 +36,11 @@ export function build(ctx) {
   const { frame: cf, w: cw, d: cd } = ctx.ceilingFrame();
   imperialCeiling(cf, cw, cd, { seed: 21, stripSpacing: 16, dir: "u", stripMat: "emitWhiteSoft" });
   for (const side of ["zmin", "zmax", "xmin", "xmax"]) lightBand(ctx.wall(side), { mat: "emitBlue" });
+  // passage to the bridge door (the door plane is the bridge wall, 2 m past our starboard wall)
+  {
+    const d = ctx.doors.find((o) => o.door.id === "br_tac");
+    if (d) doorPocket(ctx, { xWall: ctx.box.x1, xDoor: d.door.at, z0: d.door.from, z1: d.door.to, h: d.door.h });
+  }
 
   // ---- forward window watch ----
   {
@@ -148,6 +153,35 @@ export function lightBand(W, { v0 = 1.6, v1 = 1.85, mat = "emitWhiteSoft", n = -
     spans = next;
   }
   for (const [a, b] of spans) W.frame.box(mat, (a + b) / 2, (v0 + v1) / 2, n, b - a, v1 - v0 - 0.09, 0.02, { uv: "keep" });
+}
+
+/**
+ * Short passage between a room wall and a door whose plane lies off that wall (the bridge doors sit on the
+ * bridge wall at x = ±14, two metres from the tactical / nav_station walls at x = ∓16). Floor, lintel slab,
+ * side walls with a light slot, colliders. xWall = this room's box edge, xDoor = door plane, z0..z1 = opening.
+ */
+export function doorPocket(ctx, { xWall, xDoor, z0, z1, h = 2.6 }) {
+  const { kit } = ctx;
+  const fy = ctx.floor;
+  const dir = Math.sign(xDoor - xWall); // +1: pocket extends toward +x
+  const xa = Math.min(xWall, xDoor - dir * 0.25);
+  const xb = Math.max(xWall, xDoor - dir * 0.25);
+  const t = 0.25;
+  kit.boxMM("deckGrey", [xa, fy - 0.3, z0 - t], [xb, fy, z1 + t], { color: IMP.plateDark, texel: 0.5 });
+  kit.collider([xa, fy - 0.6, z0 - t], [xb, fy, z1 + t], "pocket_floor");
+  kit.boxMM("paintedMetal", [xa, fy + h, z0 - t], [xb, fy + h + 0.4, z1 + t], { color: IMP.black, texel: 0.3 });
+  for (const [za, zb] of [[z0 - t, z0], [z1, z1 + t]]) {
+    kit.boxMM("plate", [xa, fy, za], [xb, fy + h, zb], { color: IMP.plateDark, uv: "world", texel: 1 });
+    kit.collider([xa, fy, za], [xb, fy + h, zb], "pocket_wall");
+    // light slot on the inner face (za === z0 - t is the low-z wall, whose inner face looks toward +z)
+    const zf = za === z0 - t ? z0 : z1;
+    const n = za === z0 - t ? 1 : -1;
+    const zz = (d0, d1) => [Math.min(zf + n * d0, zf + n * d1), Math.max(zf + n * d0, zf + n * d1)];
+    let [q0, q1] = zz(0, 0.03);
+    kit.boxMM("paintedMetal", [xa + 0.1, fy + 1.6, q0], [xb - 0.1, fy + 1.85, q1], { color: IMP.black, texel: 1 });
+    [q0, q1] = zz(0.03, 0.04);
+    kit.boxMM("emitWhiteSoft", [xa + 0.14, fy + 1.66, q0], [xb - 0.14, fy + 1.79, q1], { uv: "keep" });
+  }
 }
 
 /**
