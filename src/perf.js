@@ -133,14 +133,29 @@ export class PerfMonitor {
     };
   }
 
-  // Compact JSON-friendly snapshot for benchmarks
+  // Stats over the frames recorded since the previous snapshot() call (steady-state window, not the whole ring)
+  _windowStats() {
+    const n = Math.min(this.count - (this._winCount || 0), HISTORY);
+    const out = { frame: { avg: 0, p95: 0, max: 0 }, js: { avg: 0, p95: 0, max: 0 }, gpu: { avg: 0, p95: 0, max: 0 }, frames: n };
+    if (n < 1) return out;
+    const take = (arr) => { const v = []; for (let i = 1; i <= n; i++) { const x = arr[(this.idx - i + HISTORY) % HISTORY]; if (x > 0) v.push(x); } if (!v.length) return { avg: 0, p95: 0, max: 0 }; v.sort((a, b) => a - b); return { avg: v.reduce((a, b) => a + b, 0) / v.length, p95: v[Math.floor(v.length * 0.95)], max: v[v.length - 1] }; };
+    out.frame = take(this.frameMs); out.js = take(this.jsMs); out.gpu = take(this.gpuMs);
+    this._winCount = this.count;
+    return out;
+  }
+
+  // Compact JSON-friendly snapshot for benchmarks. frame*/js*/gpu* are windowed since the last snapshot;
+  // ring* fields keep the 240-frame ring-buffer view.
   snapshot() {
     const s = this.summary();
+    const w = this._windowStats();
     return {
-      t: performance.now(),
-      fps: +s.fps.toFixed(1), frameAvg: +s.frameMs.avg.toFixed(2), frameP95: +s.frameMs.p95.toFixed(2), frameMax: +s.frameMs.max.toFixed(1),
-      jsAvg: +s.jsMs.avg.toFixed(2), jsP95: +s.jsMs.p95.toFixed(2), jsMax: +s.jsMs.max.toFixed(1),
-      gpuAvg: s.gpuMs ? +s.gpuMs.avg.toFixed(2) : null,
+      t: performance.now(), windowFrames: w.frames,
+      fps: w.frame.avg > 0 ? +(1000 / w.frame.avg).toFixed(1) : +s.fps.toFixed(1),
+      frameAvg: +w.frame.avg.toFixed(2), frameP95: +w.frame.p95.toFixed(2), frameMax: +w.frame.max.toFixed(1),
+      jsAvg: +w.js.avg.toFixed(2), jsP95: +w.js.p95.toFixed(2), jsMax: +w.js.max.toFixed(1),
+      gpuAvg: s.gpuMs ? +w.gpu.avg.toFixed(2) : null,
+      ringJsAvg: +s.jsMs.avg.toFixed(2), ringJsP95: +s.jsMs.p95.toFixed(2), ringJsMax: +s.jsMs.max.toFixed(1),
       drawCalls: s.draw.calls, triangles: s.draw.triangles,
       memMB: s.memoryMB ? +s.memoryMB.used.toFixed(1) : null,
       longTasks: s.longTasks, longTaskMs: +s.longTaskMs.toFixed(0),

@@ -1,6 +1,8 @@
 // Headless performance benchmark. Samples game.perf every second and writes a JSON report.
 //   node scripts/bench.mjs --url "http://localhost:5173/?x=-8&z=2&time=0.45" --seconds 30 --label town --out bench/town.json
-//   optional: --steps '[{"at":5,"eval":"game.disasters.command({type:\"start\",disaster:\"tornado\"})"}]'
+//   optional: --steps '[{"at":5,"eval":"game.disasters.command({type:\"start\",disaster:\"tornado\"})"}]'   --walk (player walks east)
+// Per-sample frame/js/gpu numbers are windowed (frames since the previous 1 s sample); the report's averages
+// are the mean of those windows and the max is the worst window, so startup frames do not dominate.
 // Note: in this VM Chrome renders with SwiftShader (software GL), so FPS/GPU numbers are far below a real
 // GPU; the CPU-side metrics (js ms, long tasks, memory, draw calls, entity counts) are the comparable ones.
 import { launchPage } from './cdp.mjs';
@@ -14,6 +16,12 @@ const label = args.label || 'run';
 const out = args.out || `bench/${label}.json`;
 const steps = args.steps ? JSON.parse(args.steps) : [];
 const width = parseInt(args.width || '1280', 10), height = parseInt(args.height || '800', 10);
+// --walk: hold W from t=2s until 2s before the end (headless Chrome drops the pointer lock, so key state
+// and the lock flag are overridden for the duration of the walk)
+if (args.walk) {
+  steps.push({ at: 2, eval: 'game.player.yaw = -Math.PI / 2; game.input.isDown = (c) => c === "KeyW" || game.input.keys.has(c); Object.defineProperty(game.input, "locked", { get: () => true, set: () => {} }); "walk"' });
+  steps.push({ at: Math.max(3, seconds - 2), eval: 'game.input.isDown = (c) => game.input.keys.has(c); "stop"' });
+}
 
 const page = await launchPage(url, { width, height });
 const t0 = Date.now();
@@ -38,7 +46,7 @@ while (Date.now() - start < seconds * 1000) {
 const shotPath = out.replace(/\.json$/, '.png');
 mkdirSync(dirname(out), { recursive: true });
 await page.screenshot(shotPath);
-const avg = (k) => { const v = samples.map((s) => s[k]).filter((x) => typeof x === 'number'); return v.length ? +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(2) : null; };
+const avg = (k) => { const v = samples.slice(2).map((s) => s[k]).filter((x) => typeof x === 'number'); return v.length ? +(v.reduce((a, b) => a + b, 0) / v.length).toFixed(2) : null; }; // skip the first 2 s (startup)
 const max = (k) => { const v = samples.map((s) => s[k]).filter((x) => typeof x === 'number'); return v.length ? Math.max(...v) : null; };
 const last = samples[samples.length - 1] || {};
 const report = {
