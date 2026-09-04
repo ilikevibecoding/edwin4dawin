@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Kit, bend, bolt, profile, rbox, rivet, transform, tube } from '../lib/geo.js';
 import { SUN } from '../palette.js';
 import { CABIN_ATLAS, CABIN_CELLS, CABIN_DIALS, rubberMaps, vinylMaps } from '../textures/vehicle.js';
+import { emitPieces } from './body.js';
 import { SPEC as S } from './spec.js';
 
 // ---------------------------------------------------------------------------
@@ -553,6 +554,10 @@ function applyCabinLight(
     // darken every value by roughly its own gamma.
     uClTint: { value: new THREE.Vector3(...(tint || [1, 1, 1])) },
     uClSat: { value: sat },
+    // Recentred panes (see `emitPieces`) carry their own origin; this puts the
+    // object-space position the gate and the aperture terms read back into the
+    // cab's frame. Zero for every merged mesh.
+    uClOff: { value: new THREE.Vector3() },
   };
   material.userData.cl = u;
   return extendCabin(material, `cl:${tag}:${spec > 0 ? 1 : 0}:${y0}:${y1}`, (shader) => {
@@ -562,6 +567,7 @@ function applyCabinLight(
       .replace(
         '#include <common>',
         `#include <common>
+        uniform vec3 uClOff;
         varying vec3 vClPos;
         varying vec3 vClNrm;
         varying vec3 vClSun;`,
@@ -569,7 +575,7 @@ function applyCabinLight(
       .replace(
         '#include <beginnormal_vertex>',
         `#include <beginnormal_vertex>
-        vClPos = position;
+        vClPos = position + uClOff;
         vClNrm = objectNormal;
         // world -> object for a rigid transform is the transpose, which is what
         // a row-vector product against the model matrix gives.
@@ -941,10 +947,14 @@ function screenFilmTexture() {
       const edge = Math.min(0.6, ex * 0.34 + ey * 0.38 + 0.26);
       // wipers: two blades pivoting off the bottom edge, so the clean region is
       // the union of two annular sectors
+      // The same two arcs the body's pane draws (`glassLayerMap('screen')`),
+      // mirrored: this plane is turned to face the cab, so its u runs the other
+      // way along the screen. Both blades park along the bottom edge and sweep
+      // up and over, so between them they clear the whole width.
       let swept = 0;
       for (const [pu, pv, a0, a1, r0, r1] of [
-        [0.31, 1.14, -0.42, 1.62, 0.28, 0.98],
-        [0.78, 1.14, -0.5, 1.5, 0.24, 0.82],
+        [0.7, 1.16, 0.59, 3.13, 0.22, 0.98],
+        [0.24, 1.16, 0.69, 3.13, 0.2, 0.78],
       ]) {
         const dx = u - pu;
         const dy = (v - pv) * (H / W);
@@ -1544,7 +1554,7 @@ class CabinKit extends Kit {
         if (scale !== 'keep') boxProjectUV(c, scale);
         return c;
       });
-      this.emit(group, key, mat, geos, { castShadow, receiveShadow, prefix: 'cabin' });
+      emitPieces(this, group, key, mat, geos, { castShadow, receiveShadow, prefix: 'cabin' });
     }
     const film = group.getObjectByName('cabin_screenFilm');
     if (film) {

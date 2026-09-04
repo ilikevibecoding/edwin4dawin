@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Kit, bend, bolt, profile, rbox, rivet, tube } from '../lib/geo.js';
+import { emitPieces } from './body.js';
 import { SPEC as S } from './spec.js';
 
 // ---------------------------------------------------------------------------
@@ -38,7 +39,7 @@ class GearKit extends Kit {
         for (const name of Object.keys(c.attributes)) if (!KEEP_ATTRS.includes(name)) c.deleteAttribute(name);
         return c.index ? c.toNonIndexed() : c;
       });
-      this.emit(group, key, mat, geos, { castShadow, receiveShadow });
+      emitPieces(this, group, key, mat, geos, { castShadow, receiveShadow });
     }
     return group;
   }
@@ -114,6 +115,9 @@ export function buildDetails() {
   bedGear(k);
   sideGear(k);
   mudFlaps(k);
+  pillarSpot(k);
+  swingOut(k);
+  fridgeSlide(k);
   return k;
 }
 
@@ -420,37 +424,295 @@ function rackGear(k) {
     k.add('canvasTop', gbox(0.24, 0.014, 0.042, 0.004), { pos: [lx, deckY + 0.052, -0.62 + dz] });
   }
 
-  // rolled swag across the rear bay, same treatment as the awning
-  const sy = deckY + 0.125;
-  k.add('canvasTop', new THREE.CylinderGeometry(0.115, 0.11, 1.1, 14), {
-    pos: [0.0, sy, -1.72],
-    rot: [0, 0, Math.PI / 2],
+  roofTent(k);
+}
+
+/**
+ * Roof tent, folded, across the rear bay of the rack — where the rolled swag
+ * was. This is the one object that says *safari* from any distance: a flat
+ * khaki slab a third of a metre high over the bed, in a PVC travel cover with
+ * the zip line round it, cinched down with two straps, its ladder stowed flat
+ * along one edge. The cover is not one box: the mattress inside it humps the
+ * lid, the sides bag out under the straps and the corners are dragged down by
+ * the buckles, which is what tells a stuffed cover from a plastic case.
+ */
+function roofTent(k) {
+  const { deckY } = RACK;
+  const cz = -1.5;
+  const L = 1.08; // along z
+  const W = 1.16; // across
+  const H = 0.27;
+  const y0 = deckY;
+  // aluminium base plate and the two hinge extrusions it folds about
+  k.add('alu', gbox(W + 0.02, 0.024, L + 0.02, 0.006), { pos: [0, y0 + 0.012, cz] });
+  for (const dx of [-W * 0.5 - 0.004, W * 0.5 + 0.004]) {
+    k.add('trimGloss', gbox(0.03, 0.05, L - 0.06, 0.008), { pos: [dx, y0 + 0.04, cz] });
+  }
+  // the cover: lower body, then a slightly narrower, humped lid section so the
+  // slab has a waist where the zip runs
+  // A black PVC skirt round the base, then the khaki cover over it: a tan slab
+  // on a tan-lit roof was reading as a crate, and the two-tone split at the
+  // waist is what every folded roof tent actually shows from the ground.
+  k.add('trimGloss', rbox(W + 0.01, H * 0.3, L + 0.01, 0.03), { pos: [0, y0 + 0.024 + H * 0.15, cz] });
+  k.add('canvasKhaki', rbox(W, H * 0.4, L, 0.05), { pos: [0, y0 + 0.024 + H * 0.45, cz] });
+  k.add('canvasKhaki', rbox(W - 0.03, H * 0.5, L - 0.03, 0.075), { pos: [0, y0 + 0.024 + H * 0.75, cz] });
+  // corner protectors on the cover
+  for (const dx of [-1, 1]) {
+    for (const dz of [-1, 1]) {
+      k.add('trimGloss', rbox(0.09, H * 0.5, 0.09, 0.02), {
+        pos: [dx * (W * 0.5 - 0.035), y0 + 0.024 + H * 0.6, cz + dz * (L * 0.5 - 0.035)],
+      });
+    }
+  }
+  // mattress hump under the lid, and sag between the straps
+  k.add('canvasKhaki', new THREE.SphereGeometry(0.5, 12, 8), {
+    pos: [0, y0 + 0.024 + H * 0.62, cz],
+    scale: [W * 0.92, H * 0.55, L * 0.92],
   });
-  k.add('canvasTop', new THREE.CylinderGeometry(0.1, 0.104, 1.06, 12), {
-    pos: [0.0, sy + 0.018, -1.705],
-    rot: [0, 0, Math.PI / 2],
-  });
-  for (const [i, a] of [0.35, 1.1, 1.95, 2.7, -0.5].entries()) {
-    const r = 0.112 + jit(i, 21) * 0.007;
-    k.add('canvasTop', gbox(1.0 - jit(i, 23) * 0.24, 0.017, 0.017, 0.004), {
-      pos: [(jit(i, 27) - 0.5) * 0.12, sy + Math.sin(a) * r, -1.72 + Math.cos(a) * r],
+  // zip line round the waist, in two lengths with the slider at the corner
+  k.add('gap', gbox(W + 0.004, 0.012, L + 0.004, 0.002), { pos: [0, y0 + 0.024 + H * 0.52, cz] });
+  k.add('alu', gbox(0.02, 0.03, 0.05, 0.004), { pos: [W * 0.5 - 0.04, y0 + 0.024 + H * 0.52, cz + L * 0.5 - 0.02] });
+  k.add('canvasKhaki', gbox(0.02, 0.05, 0.02, 0.004), { pos: [W * 0.5 - 0.02, y0 + 0.024 + H * 0.5 - 0.03, cz + L * 0.5 - 0.02] });
+  // straps over the cover down to the rack rails, buckles outboard
+  for (const dz of [-0.3, 0.32]) {
+    lashing(k, { x: 0, z: cz + dz, y0: y0 + 0.02, y1: y0 + 0.024 + H, halfW: W * 0.5, buckle: dz < 0 ? -1 : 1 });
+  }
+  // the fabric bags out between the straps: a soft ridge along each long edge
+  for (const dx of [-1, 1]) {
+    k.add('canvasKhaki', new THREE.CylinderGeometry(0.035, 0.035, L - 0.2, 8), {
+      pos: [dx * (W * 0.5 - 0.02), y0 + 0.024 + H * 0.78, cz],
+      rot: [Math.PI / 2, 0, 0],
     });
   }
-  for (const dx of [-0.55, 0.55]) {
-    k.add('trim', new THREE.CylinderGeometry(0.12, 0.12, 0.04, 14), {
-      pos: [dx, sy, -1.72],
+  // Telescopic ladder folded flat and strapped on top along the near edge,
+  // rungs and all: a ladder is the second thing that says roof tent.
+  const lx = -W * 0.5 + 0.16;
+  const ly = y0 + 0.024 + H + 0.03;
+  for (const dx of [-0.1, 0.1]) {
+    k.add('alu', gbox(0.03, 0.03, L - 0.16, 0.006), { pos: [lx + dx, ly, cz] });
+  }
+  for (let i = 0; i < 7; i++) {
+    k.add('alu', new THREE.CylinderGeometry(0.011, 0.011, 0.2, 8), {
+      pos: [lx, ly, cz - (L - 0.28) * 0.5 + i * ((L - 0.28) / 6)],
       rot: [0, 0, Math.PI / 2],
     });
-    k.add('alu', new THREE.CylinderGeometry(0.06, 0.06, 0.014, 12), {
-      pos: [dx * 1.055, sy, -1.72],
-      rot: [0, 0, Math.PI / 2],
+  }
+  for (const dz of [-0.28, 0.3]) {
+    k.add('canvasTop', gbox(0.26, 0.012, 0.04, 0.004), { pos: [lx, ly + 0.02, cz + dz] });
+    k.add('alu', gbox(0.03, 0.04, 0.05, 0.006), { pos: [lx - 0.14, ly - 0.005, cz + dz] });
+  }
+  // label patch on the rear face, the one panel the rear camera sees square
+  k.add('decalBadge', new THREE.PlaneGeometry(0.28, 0.084), {
+    pos: [0.2, y0 + 0.024 + H * 0.3, cz - L * 0.5 - 0.003],
+    rot: [0, Math.PI, 0],
+  });
+}
+
+/**
+ * Pillar spotlight on the driver's side. A safari truck's night work is done
+ * with a hand lamp off the A pillar, not the light bar, and it is a strongly
+ * named silhouette that sits exactly where the hero camera looks: a drum on a
+ * ball joint on a clamp, with a handle off the back of it.
+ */
+function pillarSpot(k) {
+  const x = S.bodyHalfWidth - 0.02;
+  const y = S.beltlineY + 0.44;
+  // where the pillar is at this height
+  const t = (y - (S.beltlineY - 0.02)) / (S.roofY - S.beltlineY + 0.02);
+  const z = S.windshieldBottomZ + 0.03 - t * (S.windshieldBottomZ - S.windshieldTopZ);
+  const px = x - 0.035 - t * 0.07;
+  // clamp round the pillar: two halves and their bolts
+  k.add('steelDark', gbox(0.07, 0.05, 0.08, 0.01), { pos: [px + 0.02, y, z], rot: [-0.9, 0, 0] });
+  k.add('steelDark', gbox(0.05, 0.05, 0.08, 0.01), { pos: [px - 0.03, y, z], rot: [-0.9, 0, 0] });
+  for (const dz of [-0.025, 0.025]) {
+    k.add('steel', bolt(0.009, 0.007), { pos: [px + 0.055, y + dz * 0.6, z + dz], rot: [0, 0, -Math.PI / 2] });
+  }
+  // stalk out from the clamp, ball joint, then the drum
+  k.add('steelDark', new THREE.CylinderGeometry(0.011, 0.011, 0.09, 10), {
+    pos: [px + 0.09, y + 0.01, z],
+    rot: [0, 0, Math.PI / 2],
+  });
+  const bx = px + 0.14;
+  k.add('trimGloss', new THREE.SphereGeometry(0.024, 12, 8), { pos: [bx, y + 0.012, z] });
+  k.add('steelDark', gbox(0.03, 0.06, 0.03, 0.006), { pos: [bx, y + 0.045, z] });
+  // Drum, aimed forward and a touch down: a lamp left where it was last used.
+  const dy = y + 0.085;
+  const rot = [0.1, 0.12, 0];
+  const dz = z + 0.02;
+  k.add('trimGloss', new THREE.CylinderGeometry(0.068, 0.062, 0.1, 18), { pos: [bx, dy, dz], rot: [Math.PI / 2 + rot[0], rot[1], 0] });
+  k.add('trimGloss', new THREE.CylinderGeometry(0.03, 0.05, 0.03, 12), { pos: [bx, dy + 0.006, dz - 0.062], rot: [Math.PI / 2 + rot[0], rot[1], 0] });
+  k.add('reflector', new THREE.CylinderGeometry(0.06, 0.028, 0.05, 18, 1, true), {
+    pos: [bx + 0.003, dy - 0.003, dz + 0.03],
+    rot: [Math.PI / 2 + rot[0], rot[1], 0],
+  });
+  k.add('headlight', new THREE.SphereGeometry(0.012, 10, 8), { pos: [bx + 0.003, dy - 0.003, dz + 0.02] });
+  k.add('lensClear', new THREE.CircleGeometry(0.06, 20), { pos: [bx + 0.006, dy - 0.006, dz + 0.056], rot: [rot[0], rot[1], 0] });
+  k.add('chrome', new THREE.TorusGeometry(0.063, 0.005, 6, 20), { pos: [bx + 0.006, dy - 0.006, dz + 0.054], rot: [rot[0], rot[1], 0] });
+  // handle off the back, and the coiled lead down into the door
+  k.add('trimGloss', gbox(0.024, 0.024, 0.08, 0.006), { pos: [bx, dy - 0.06, dz - 0.07], rot: [-0.6, 0, 0] });
+  k.add('rubber', tube(
+    [
+      [bx, dy - 0.04, dz - 0.08],
+      [bx + 0.02, y - 0.09, z - 0.02],
+      [px + 0.06, y - 0.2, z + 0.02],
+    ],
+    0.006,
+    6,
+  ));
+}
+
+/**
+ * Spare on a swing-out carrier off the rear bumper. The spare used to lie flat
+ * in the bed, where no camera saw it; a wheel standing up behind the tailgate
+ * is the largest single object on the back of the truck and the clearest read
+ * of what kind of truck it is. Hinge post on the near corner of the bumper,
+ * a box-section arm across to a latch on the far side, the wheel bolted to a
+ * plate on the arm with a brace up to the top of the post.
+ */
+function swingOut(k) {
+  const rz = -2.55; // bumper bar centre
+  const hx = 0.86;
+  const hz = rz - 0.19;
+  const hy0 = 0.9;
+  const hy1 = 1.62;
+  // hinge post with its brackets back to the bumper and the pin caps
+  k.add('steelDark', new THREE.CylinderGeometry(0.03, 0.03, hy1 - hy0, 14), { pos: [hx, (hy0 + hy1) * 0.5, hz] });
+  for (const y of [hy0 + 0.05, hy1 - 0.08]) {
+    k.add('steelDark', gbox(0.09, 0.06, 0.14, 0.01), { pos: [hx - 0.01, y, hz + 0.09] });
+    k.add('steel', new THREE.CylinderGeometry(0.036, 0.036, 0.02, 14), { pos: [hx, y + (y > 1.2 ? 0.045 : -0.045), hz] });
+    weldBead(k, 'steel', { pos: [hx, y + (y > 1.2 ? 0.032 : -0.032), hz], r: 0.031, tube: 0.006, rot: [Math.PI / 2, 0, 0], seed: 5 + y });
+  }
+  k.add('steel', bolt(0.014, 0.01), { pos: [hx, hy1 + 0.01, hz], rot: [0, 0, 0] });
+  // arm: box section from the post across the gate, in two lengths with a
+  // gusset at the post
+  const ay = 1.12;
+  const az = hz - 0.03;
+  const ax1 = -0.36;
+  segBar(k, 'steelDark', { len: hx - ax1, w: 0.07, h: 0.09, pos: [(hx + ax1) * 0.5, ay, az], axis: 'x', segs: 2, seed: 91, cut: 0.008 });
+  k.add('steelDark', gbox(0.14, 0.2, 0.06, 0.012), { pos: [hx - 0.09, ay + 0.07, az], rot: [0, 0, 0.6] });
+  // brace from the post top down to the arm
+  k.add('steelDark', tube(
+    [
+      [hx, hy1 - 0.06, az],
+      [hx - 0.36, ay + 0.28, az],
+      [hx - 0.62, ay + 0.06, az],
+    ],
+    0.016,
+    8,
+  ));
+  // latch at the far end: a hook over a striker on a post off the bumper
+  k.add('steelDark', gbox(0.06, 0.16, 0.06, 0.01), { pos: [ax1 + 0.03, ay - 0.1, az + 0.06] });
+  k.add('steel', gbox(0.05, 0.05, 0.04, 0.008), { pos: [ax1 + 0.02, ay, az + 0.04] });
+  k.add('paintAccent', gbox(0.05, 0.11, 0.02, 0.006), { pos: [ax1 + 0.02, ay + 0.06, az - 0.05], rot: [0, 0, 0.3] });
+  k.add('steel', new THREE.CylinderGeometry(0.009, 0.009, 0.09, 8), { pos: [ax1 + 0.02, ay + 0.02, az - 0.02], rot: [Math.PI / 2, 0, 0] });
+  // wheel mount: plate on the arm, then the wheel itself
+  const wx = 0.16;
+  const wy = 1.34;
+  const R = S.wheelRadius - 0.02;
+  const half = S.wheelWidth * 0.5 - 0.02;
+  const wz = az - 0.03 - half;
+  k.add('steelDark', gbox(0.09, wy - ay + 0.04, 0.07, 0.012), { pos: [wx, (wy + ay) * 0.5, az] });
+  k.add('steel', new THREE.CylinderGeometry(0.15, 0.15, 0.018, 20), { pos: [wx, wy, az - 0.045], rot: [Math.PI / 2, 0, 0] });
+  // tyre: carcass torus, then a ring of lug blocks so it reads as the same
+  // rubber as the four on the axles rather than a doughnut
+  const tubeR = half;
+  k.add('rubber', new THREE.TorusGeometry(R - tubeR + 0.01, tubeR, 14, 36), { pos: [wx, wy, wz] });
+  const lugs = 20;
+  for (let i = 0; i < lugs; i++) {
+    const a = (i / lugs) * Math.PI * 2;
+    const rr = R - 0.012;
+    const w = 0.09 + jit(i, 3) * 0.02;
+    for (const s of [-1, 1]) {
+      k.add('tread', gbox(w, 0.05, half * 0.82, 0.01), {
+        pos: [wx + Math.cos(a) * rr, wy + Math.sin(a) * rr, wz + s * half * 0.42],
+        rot: [0, 0, a + Math.PI / 2 + s * 0.14],
+      });
+    }
+  }
+  // rim: dish, hub, lugs; the inner face is what the rear camera sees
+  const dish = wz - 0.02;
+  k.add('alu', new THREE.CylinderGeometry(R - tubeR + 0.01, R - tubeR - 0.02, 0.1, 24), { pos: [wx, wy, dish], rot: [Math.PI / 2, 0, 0] });
+  k.add('gap', new THREE.CylinderGeometry(R - tubeR - 0.03, R - tubeR - 0.03, 0.02, 24), { pos: [wx, wy, dish - 0.045], rot: [Math.PI / 2, 0, 0] });
+  k.add('alu', new THREE.CylinderGeometry(0.09, 0.09, 0.05, 16), { pos: [wx, wy, dish - 0.05], rot: [Math.PI / 2, 0, 0] });
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    k.add('steel', bolt(0.014, 0.012), { pos: [wx + Math.cos(a) * 0.065, wy + Math.sin(a) * 0.065, dish - 0.078], rot: [Math.PI / 2, 0, 0] });
+    // spoke windows between the hub and the barrel
+    k.add('gap', gbox(0.07, 0.11, 0.02, 0.01), {
+      pos: [wx + Math.cos(a + 0.52) * 0.15, wy + Math.sin(a + 0.52) * 0.15, dish - 0.06],
+      rot: [0, 0, a + 0.52],
     });
   }
-  for (const dx of [-0.34, 0.34]) {
-    k.add('canvasTop', gbox(0.045, 0.014, 0.26, 0.004), { pos: [dx, deckY + 0.245, -1.72] });
-    k.add('canvasTop', gbox(0.045, 0.26, 0.014, 0.004), { pos: [dx, deckY + 0.12, -1.6] });
-    k.add('alu', gbox(0.05, 0.05, 0.026, 0.006), { pos: [dx, deckY + 0.02, -1.6] });
+  // the wheel's own three mounting nuts and a padlock chain
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.4;
+    k.add('steel', new THREE.CylinderGeometry(0.014, 0.014, 0.03, 8), {
+      pos: [wx + Math.cos(a) * 0.065, wy + Math.sin(a) * 0.065, dish - 0.095],
+      rot: [Math.PI / 2, 0, 0],
+    });
   }
+  // recovery board straps and a shovel clipped to the arm? Keep it to a shovel
+  // — the traction boards already live on the rack legs.
+  k.add('steelDark', gbox(0.02, 0.02, 0.62, 0.004), { pos: [wx - 0.52, ay + 0.18, az + 0.02], rot: [0, 0, -0.35] });
+  k.add('alu', gbox(0.16, 0.22, 0.012, 0.004), { pos: [wx - 0.62, ay - 0.15, az + 0.02], rot: [0, 0, -0.35] });
+  for (const dy of [0.06, 0.3]) {
+    k.add('steelDark', gbox(0.05, 0.03, 0.06, 0.006), { pos: [wx - 0.55 + dy * 0.36, ay + dy, az + 0.005] });
+  }
+}
+
+/**
+ * Fridge on a drawer slide in the bed, where the spare was. A 40 litre
+ * compressor fridge is the third object every overland truck has and the one
+ * that puts a hard, clean, coloured box against the bed's dark liner: grey
+ * case, black lid with the latch line, the handle recess, a control panel on
+ * the end, and the slide frame's rails and rollers showing under it. The lid
+ * stands well above the bed rail so it reads from the hero camera.
+ */
+function fridgeSlide(k) {
+  const floorY = S.bedFloorY + 0.042;
+  const fx = 0.36;
+  const fz = -1.72;
+  const W = 0.44;
+  const L = 0.76;
+  const H = 0.48;
+  // slide frame: two rails on the floor, the drawer plate above them, rollers
+  for (const dx of [-0.17, 0.17]) {
+    k.add('steelDark', gbox(0.04, 0.05, L + 0.1, 0.006), { pos: [fx + dx, floorY + 0.025, fz] });
+    for (const dz of [-0.3, 0.3]) {
+      k.add('trimGloss', new THREE.CylinderGeometry(0.02, 0.02, 0.02, 10), {
+        pos: [fx + dx * 1.15, floorY + 0.04, fz + dz],
+        rot: [0, 0, Math.PI / 2],
+      });
+    }
+  }
+  k.add('alu', gbox(W + 0.04, 0.02, L + 0.04, 0.005), { pos: [fx, floorY + 0.06, fz] });
+  k.add('steelDark', gbox(W + 0.02, 0.03, 0.03, 0.005), { pos: [fx, floorY + 0.085, fz - L * 0.5 - 0.02] });
+  // case: grey moulded body with a black lid; the lid overhangs and has a
+  // rounded edge, which is what separates it from the toolbox
+  const cy = floorY + 0.07;
+  k.add('fridgeCase', rbox(W, H - 0.07, L, 0.02), { pos: [fx, cy + (H - 0.07) * 0.5, fz] });
+  k.add('trimGloss', rbox(W + 0.01, 0.07, L + 0.01, 0.03), { pos: [fx, cy + H - 0.035, fz] });
+  k.add('gap', gbox(W + 0.014, 0.006, L + 0.014, 0.001), { pos: [fx, cy + H - 0.07, fz] });
+  // lid latches and the hinge line
+  for (const dz of [-0.22, 0.22]) {
+    k.add('trim', gbox(0.05, 0.06, 0.03, 0.006), { pos: [fx + W * 0.5 + 0.008, cy + H - 0.08, fz + dz] });
+    k.add('alu', gbox(0.04, 0.03, 0.02, 0.004), { pos: [fx + W * 0.5 + 0.012, cy + H - 0.062, fz + dz] });
+  }
+  k.add('trim', gbox(0.03, 0.03, L - 0.1, 0.008), { pos: [fx - W * 0.5 - 0.004, cy + H - 0.05, fz] });
+  // handle recesses in the end faces and a control panel on the rear end
+  for (const s of [-1, 1]) {
+    k.add('gap', gbox(0.16, 0.05, 0.02, 0.006), { pos: [fx, cy + H * 0.55, fz + s * (L * 0.5 + 0.004)] });
+    k.add('fridgeCase', gbox(0.18, 0.02, 0.03, 0.004), { pos: [fx, cy + H * 0.55 + 0.03, fz + s * (L * 0.5 + 0.012)] });
+  }
+  k.add('trimGloss', gbox(0.14, 0.08, 0.012, 0.004), { pos: [fx, cy + H * 0.3, fz - L * 0.5 - 0.006] });
+  k.add('cabinPanel', new THREE.PlaneGeometry(0.11, 0.05), { pos: [fx, cy + H * 0.3, fz - L * 0.5 - 0.013], rot: [0, Math.PI, 0] });
+  // moulded ribs down the case sides
+  for (let i = 0; i < 5; i++) {
+    const z = fz - L * 0.5 + 0.1 + i * ((L - 0.2) / 4);
+    k.add('fridgeCase', gbox(W + 0.012, H - 0.16, 0.02, 0.004), { pos: [fx, cy + (H - 0.16) * 0.5 + 0.03, z] });
+  }
+  // strapped down through the tie rails
+  lashing(k, { x: fx, z: fz + 0.1, y0: floorY + 0.06, y1: cy + H, halfW: W * 0.5 + 0.006, buckle: 1 });
 }
 
 function lightBar(k) {
@@ -918,16 +1180,10 @@ function bedGear(k) {
     k.add('alu', gbox(0.06, 0.04, 0.028, 0.007), { pos: [sx * 0.22, floorY + 0.275, tbZ - 0.202] });
   }
 
-  // spare wheel flat on the floor with a coil of rope dropped into the middle
-  const spZ = -1.88;
-  k.add('rubber', new THREE.TorusGeometry(0.33, 0.115, 12, 28), {
-    pos: [0.3, floorY + 0.115, spZ],
-    rot: [Math.PI / 2, 0, 0],
-  });
-  k.add('alu', new THREE.CylinderGeometry(0.23, 0.23, 0.14, 24), { pos: [0.3, floorY + 0.11, spZ] });
-  k.add('trimGloss', new THREE.CylinderGeometry(0.07, 0.07, 0.17, 14), { pos: [0.3, floorY + 0.12, spZ] });
+  // The spare used to lie flat here; it is on the swing-out now and the fridge
+  // slide has its bay. The coil of rope it held stays, dropped by the cans.
   k.add('trim', new THREE.TorusGeometry(0.13, 0.028, 7, 20), {
-    pos: [0.3, floorY + 0.238, spZ],
+    pos: [0.05, floorY + 0.028, -2.2],
     rot: [Math.PI / 2, 0.2, 0],
   });
 

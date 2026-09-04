@@ -4,6 +4,7 @@ import {
   applyBrightwork,
   applyCabinBounce,
   applyDirt,
+  applyGlassFilm,
   bedLinerMaps,
   brushedMaps,
   cabinAtlas,
@@ -11,7 +12,6 @@ import {
   diamondPlateMaps,
   fabricMaps,
   floorMatMaps,
-  glassFilmMap,
   glassRoughness,
   glassTintMap,
   headlinerMaps,
@@ -43,6 +43,24 @@ import {
 // ---------------------------------------------------------------------------
 
 let cachedMats = null;
+
+/**
+ * What the truck is dirty with. Laterite: iron-rich, so red rather than brown,
+ * from `PALETTE.earth` and its neighbours rather than guessed, so the film on
+ * the panels is the same soil as the ground the truck is standing on. Dried
+ * onto a panel it goes paler and pinker (the murram tone); packed in the arches
+ * it stays close to the wet earth. Every exterior `applyDirt` call spreads
+ * this, so the truck is one soil rather than twenty browns.
+ */
+export const LATERITE = {
+  color: 0xa26a44, // dried mud
+  dust: PALETTE.murram, // thin settled film
+  wet: PALETTE.earthDark, // fresh spatter and cake
+  chroma: 0.55,
+  // Laterite fines are pale for a soil, so a film of them on black plastic is
+  // allowed a little more lift over the substrate than the old grey mud was.
+  lift: 3.2,
+};
 
 export function vehicleMaterials(env = null) {
   if (cachedMats) {
@@ -142,13 +160,13 @@ export function vehicleMaterials(env = null) {
     // reflection below puts the variation back so it does not go flat.
     envMapIntensity: 0.5,
   });
-  applyDirt(m.steel, { amount: 0.85, tag: 'steel', color: 0x6f5c3d, film: 0.8, grain: 0.14 });
+  applyDirt(m.steel, { ...LATERITE, amount: 0.85, tag: 'steel', film: 0.8, grain: 0.14 });
   applyBrightwork(m.steel, {
     tag: 'steel',
     strength: 0.5,
     band: 0.22,
     trees: 0.55,
-    line: 0.46,
+    line: 0.3,
     flat: 0.85,
     // 0.6 metalness leaves 40% of a dielectric to catch this; a fully metallic
     // material would ignore it, which is the correct split.
@@ -186,7 +204,7 @@ export function vehicleMaterials(env = null) {
     roughness: 0.72,
     envMapIntensity: 0.5,
   });
-  applyDirt(m.steelDark, { amount: 0.95, tag: 'steelDark', color: 0x6c5a3c, grain: 0.18 });
+  applyDirt(m.steelDark, { ...LATERITE, amount: 0.95, tag: 'steelDark', film: 1.5, lift: 3.8, grain: 0.18 });
   // `flat` is high because the same key also covers the bumper's face and the
   // rack's flat stock, and those are what a skyline streak blows out on; the
   // tubes keep the streak through the curvature gate. The ambient term is what
@@ -197,7 +215,7 @@ export function vehicleMaterials(env = null) {
     strength: 0.6,
     band: 0.26,
     trees: 0.6,
-    line: 0.46,
+    line: 0.3,
     fresnel: 0.25,
     flat: 0.85,
     // Desaturated, and warmer than the default 0x9cbbd8. Nothing at bumper
@@ -232,11 +250,11 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(0.07, 0.07),
     envMapIntensity: 0.45,
   });
-  applyDirt(m.chrome, { amount: 0.5, tag: 'chrome', color: 0x7c6949, film: 0.7 });
+  applyDirt(m.chrome, { ...LATERITE, amount: 0.5, tag: 'chrome', film: 0.7 });
   // Chrome is small curved hardware — bezels, a handle strip — so it is the one
   // brightwork that should keep its hot skyline streak at full strength, and the
   // curvature gate hands it over for free.
-  applyBrightwork(m.chrome, { tag: 'chrome', strength: 1.0, band: 0.55, trees: 0.95, line: 0.46, flat: 0.6 });
+  applyBrightwork(m.chrome, { tag: 'chrome', strength: 1.0, band: 0.55, trees: 0.95, line: 0.3, flat: 0.6 });
   // The door mirror's own pane. Chrome was standing in for it, and at roughness
   // 0.26 the lobe smears the graded skyline into an even wash — which is fine on
   // a bezel and is exactly wrong on the one surface whose whole job is to return
@@ -245,23 +263,32 @@ export function vehicleMaterials(env = null) {
   // gated by curvature, and a mirror is the one that should keep the band on a
   // flat face. No dirt film either — chrome's would put the housing's grime on
   // the glass.
+  //
+  // Under the savanna sky the face reads from outboard-aft, where the reflected
+  // ray runs out over the plain: pale murram below a thin bush band and a lot
+  // of sky. The forest grade returned one khaki value across the whole glass
+  // — a painted plate, not a mirror — so this one carries the real PMREM at
+  // near full strength for the sky half and grades the ground half itself.
   m.mirrorGlass = new THREE.MeshStandardMaterial({
-    color: 0xcfd6da,
+    color: 0xd6dcdf,
     metalness: 1.0,
-    roughness: 0.05,
+    roughness: 0.04,
     roughnessMap: brushed.rough,
     normalMap: metal.normal,
     normalScale: new THREE.Vector2(0.04, 0.04),
-    envMapIntensity: 0.45,
+    envMapIntensity: 0.7,
   });
   applyBrightwork(m.mirrorGlass, {
     tag: 'mirrorGlass',
-    strength: 1.3,
+    strength: 0.75,
     lobe: 0.35,
     flat: 0,
-    band: 0.55,
-    trees: 0.95,
-    line: 0.46,
+    band: 0.5,
+    trees: 0.6,
+    line: 0.1,
+    ground: 0x5e4632,
+    wall: 0x50442f,
+    rim: 0xfff0d8,
   });
   m.alu = new THREE.MeshStandardMaterial({
     // Brighter than the steel and cooler: bare aluminium is the light metal in
@@ -300,12 +327,12 @@ export function vehicleMaterials(env = null) {
   // low-ledge term now delivers to the tops of the sliders. The dry colour is
   // pulled off ochre at the same time: cake at this weight in the old 0x76643f
   // took the sill to r:b 1.45, and a rock slider wears grey road film, not clay.
-  applyDirt(m.alu, { amount: 0.9, tag: 'alu', color: 0x6f6552, film: 0.7, cake: 1.5, grain: 0.16 });
+  applyDirt(m.alu, { ...LATERITE, amount: 0.9, tag: 'alu', film: 0.7, cake: 1.5, grain: 0.16 });
   // Aluminium stays the bright metal, but "bright" against a 0.34 steel, not
   // against the sky: on the chart both metals sat at 0.62 and the difference
   // between them was invisible. Value is the only cue that separates two grey
   // metals at 1 m, so the gap between them is now most of a stop.
-  applyBrightwork(m.alu, { tag: 'alu', strength: 0.62, band: 0.3, trees: 0.7, line: 0.46, flat: 0.9 });
+  applyBrightwork(m.alu, { tag: 'alu', strength: 0.62, band: 0.3, trees: 0.7, line: 0.3, flat: 0.9 });
   m.plate = new THREE.MeshStandardMaterial({
     map: plate.map,
     // Lifted, and metalness pulled well down. A metre of rough metal in the
@@ -325,7 +352,7 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(1.0, 1.0),
     envMapIntensity: 0.62,
   });
-  applyDirt(m.plate, { amount: 1.2, tag: 'plate', color: 0x6f5c3c });
+  applyDirt(m.plate, { ...LATERITE, amount: 1.2, tag: 'plate', film: 1.5, lift: 3.8 });
   // Tread plate needs the graded wall like the rest of the brightwork, but the
   // raised bars are what should be picking the streak up — hence the curvature
   // gate, which leaves the flat lands between them dark.
@@ -334,7 +361,7 @@ export function vehicleMaterials(env = null) {
     strength: 0.55,
     band: 0.3,
     trees: 0.55,
-    line: 0.46,
+    line: 0.3,
     flat: 0.85,
     // The plate hangs under the nose and its mirror ray goes straight up, so it
     // is the part that most needs the sky told what colour it is down here.
@@ -373,7 +400,10 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.3,
   });
-  applyDirt(m.rubber, { amount: 1.0, tag: 'rubber', color: 0x6a5837, film: 0.55 });
+  applyDirt(m.rubber, { ...LATERITE, amount: 1.0, tag: 'rubber', film: 0.55 });
+  // Hoses, gaiters and the spare all live in the truck's own shadow; a sixth
+  // of a bounce keeps them from going to silhouette there.
+  applyBrightwork(m.rubber, { tag: 'rubber', strength: 0.15, band: 0.05, trees: 0.3, fresnel: 0.6, ambient: 0.5 });
   m.tread = new THREE.MeshStandardMaterial({
     map: rubber.map,
     normalMap: tread.normal,
@@ -385,7 +415,7 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.25,
   });
-  applyDirt(m.tread, { amount: 1.25, tag: 'tread', color: 0x6a5837, film: 0.5, cake: 1.5 });
+  applyDirt(m.tread, { ...LATERITE, amount: 1.25, tag: 'tread', film: 0.5, cake: 1.5 });
   // Textured black cladding. Faded by the sun on the flats, so it never reads
   // as the same substance as the painted panel next to it.
   m.trim = new THREE.MeshStandardMaterial({
@@ -404,7 +434,7 @@ export function vehicleMaterials(env = null) {
   // term is back to being a supplement that breaks up tiling rather than a
   // substitute for the maps — and at 0.42 its own brightness swing was part of
   // what made the arch band read as a light-coloured object.
-  applyDirt(m.trim, { amount: 1.0, tag: 'trim', color: 0x715f3f, grain: 0.16 });
+  applyDirt(m.trim, { ...LATERITE, amount: 1.0, tag: 'trim', grain: 0.16 });
   // Matt black plastic is the floor of the frame, and on the material chart its
   // vertical faces measured 0.076 — a featureless hole. What a real moulding
   // does at that angle is pick up a faint, *graded* sheen from the sky it can
@@ -451,7 +481,7 @@ export function vehicleMaterials(env = null) {
   // supplement. It still earns its place: it is projected from object position,
   // so it breaks up the map's tiling and carries a relief bump across the merged
   // flare without a seam, neither of which the uvs give for free.
-  applyDirt(m.trimGloss, { amount: 1.0, tag: 'trimGloss', color: 0x715e3d, grain: 0.18 });
+  applyDirt(m.trimGloss, { ...LATERITE, amount: 1.0, tag: 'trimGloss', grain: 0.18 });
   applyBrightwork(m.trimGloss, {
     tag: 'trimGloss',
     strength: 0.62,
@@ -470,7 +500,7 @@ export function vehicleMaterials(env = null) {
     roughness: 0.9,
     envMapIntensity: 0.6,
   });
-  applyDirt(m.bedLiner, { amount: 1.1, tag: 'liner', color: 0x6d5b3c, arch: 0.45 });
+  applyDirt(m.bedLiner, { ...LATERITE, amount: 1.1, tag: 'liner', arch: 0.45 });
   // A spray-in liner is a textured black tub that fills most of the bed in the
   // hero framing. It has the same problem the grille had — a dielectric that
   // dark gets nothing from a specular-only reflection model — and the bed walls
@@ -485,7 +515,7 @@ export function vehicleMaterials(env = null) {
     roughness: 0.95,
     envMapIntensity: 0.12,
   });
-  applyDirt(m.gap, { amount: 1.0, tag: 'gap', color: 0x63512f, film: 0.2, spatter: 0.5, cake: 1.6, grain: 0.3 });
+  applyDirt(m.gap, { ...LATERITE, amount: 1.0, tag: 'gap', film: 0.2, spatter: 0.5, cake: 1.6, grain: 0.3 });
   // A shut line should stay a shut line, but this key also lines both arch
   // openings, and an arch liner is a square foot of visible surface that ought
   // to read as "dark moulded tub with mud caked in it" rather than as a hole
@@ -493,92 +523,128 @@ export function vehicleMaterials(env = null) {
   applyBrightwork(m.gap, { tag: 'gap', strength: 0.2, band: 0.06, trees: 0.3, fresnel: 0.55, ambient: 0.7 });
 
   // --- glass ---------------------------------------------------------------
-  // Tinted, dirty, and genuinely see-through. The dust film is carried on the
-  // emissive channel so it *adds* haze instead of multiplying the tint down; the
-  // tint gradient on `map` gives the pane a shade band and a grimy perimeter so
-  // it is not one flat value. The reflection is Fresnel-weighted analytic sky,
-  // which means the pane mirrors hard at grazing angles — the read from outside
-  // — and stays clear looking straight through it from the driver's seat.
-  m.glass = new THREE.MeshPhysicalMaterial({
+  // Tinted, dirty, and genuinely see-through. Every pane on the truck is built
+  // by the one function so the windscreen, the door glass and the rear glass
+  // are the same substance seen through different dirt: same tint, same
+  // reflection model, same Fresnel, same thickness cue. What differs per pane
+  // is only the film — which pane gets wiped, which one lives in the plume.
+  //
+  // The dust is *lit* (`applyGlassFilm`): it used to ride on the emissive
+  // channel, which ignores light, so a screen in the sun and the same screen
+  // in shade carried identical haze and from the driver's seat the film lit
+  // itself against a dark cab — the milky read. Now it takes the pane's own
+  // irradiance, so it is bright where the sun lands and goes quiet in shade.
+  //
+  // The reflection is Fresnel-weighted analytic sky, which means the pane
+  // mirrors hard at grazing angles — the read from outside — and stays clear
+  // looking straight through it from the driver's seat.
+  const pane = (key, { kind, color, opacity, roughness, film, bw }) => {
+    const mat = new THREE.MeshPhysicalMaterial({
+      color,
+      map: glassTintMap(),
+      metalness: 0.0,
+      roughness,
+      roughnessMap: kind === 'screen' ? glassRoughness() : null,
+      // Enough tint to read as glass, but the pane has to stay see-through: at
+      // a higher env intensity it just mirrors the forest and goes opaque black.
+      opacity,
+      transparent: true,
+      // The BRDF's own Fresnel takes this to a full sky mirror at grazing
+      // angles, which from the driver's seat is a pale wedge across the bottom
+      // of the screen. Kept as a glare, with the graded reflection doing the
+      // rest.
+      envMapIntensity: 1.0,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.03,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    // `pane` is the important flag: it adds the graded reflection again after
+    // the lighting and lifts the alpha with it, because a 0.28-opacity blend
+    // and the BRDF's own 4 per cent Fresnel between them were scaling the
+    // windscreen's reflection down by about a hundred. With it the screen
+    // mirrors the tree line at the angles `detail` and `hero` see it at, and
+    // stays see-through from the driver's seat.
+    applyBrightwork(mat, {
+      tag: key,
+      strength: 1.25,
+      band: 0.55,
+      // the pane is what most obviously ought to be mirroring the world, so it
+      // gets the strongest break-up of anything on the truck
+      trees: 1.15,
+      line: 0.3,
+      pane: 1.2,
+      clearcoat: true,
+      ground: 0x141712,
+      wall: 0x1c2117,
+      rim: 0xfff0d2,
+      // A window mirrors the sky more directly than anything else on the
+      // truck, so it has the least excuse for using a bluer one than the scene
+      // has. Inherits REFLECTED_SKY.
+      ...bw,
+    });
+    applyGlassFilm(mat, { tag: key, kind, ...film });
+    m[key] = mat;
+    return mat;
+  };
+  // Windscreen: wiped, so the least dusty, with the factory shade band.
+  pane('glass', {
+    kind: 'screen',
     color: 0x33474f,
-    map: glassTintMap(),
-    metalness: 0.0,
+    opacity: 0.26,
     roughness: 0.07,
-    roughnessMap: glassRoughness(),
-    emissive: 0xffffff,
-    emissiveMap: glassFilmMap(),
-    // the dust film is what makes the pane read as a pane from the driver's seat
-    // rather than an open aperture — the bonnet has to sit behind something
-    emissiveIntensity: 0.55,
-    // Enough tint to read as glass, but the pane has to stay see-through: at a
-    // higher env intensity it just mirrors the forest and goes opaque black.
-    opacity: 0.28,
-    transparent: true,
-    // The BRDF's own Fresnel takes this to a full sky mirror at grazing angles,
-    // which from the driver's seat is a pale wedge across the bottom of the
-    // screen. Kept as a glare, with the graded reflection doing the rest — and
-    // with the cabin lifted, that wedge no longer has a black dash to sit
-    // against, so it can come down again.
-    envMapIntensity: 1.0,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.03,
-    side: THREE.DoubleSide,
-    depthWrite: false,
+    film: { dustAmount: 0.9, dustAlpha: 0.5, band: 0.5 },
   });
-  // `pane` is the important flag: it adds the graded reflection again after the
-  // lighting and lifts the alpha with it, because a 0.28-opacity blend and the
-  // BRDF's own 4 per cent Fresnel between them were scaling the windscreen's
-  // reflection down by about a hundred. With it the screen mirrors the tree line
-  // at the angles `detail` and `hero` see it at, and stays see-through from the
-  // driver's seat.
-  applyBrightwork(m.glass, {
-    tag: 'glass',
-    strength: 1.25,
-    band: 0.55,
-    // the pane is what most obviously ought to be mirroring the forest, so it
-    // gets the strongest tree break-up of anything on the truck
-    trees: 1.15,
-    line: 0.42,
-    pane: 1.35,
-    clearcoat: true,
-    ground: 0x141712,
-    wall: 0x1c2117,
-    rim: 0xfff0d2,
-    // A window mirrors the sky more directly than anything else on the truck, so
-    // it has the least excuse for using a bluer one than the scene has. Inherits
-    // REFLECTED_SKY.
+  // Door glass: same tint, nothing ever wipes it. `glassDark` used to stand in
+  // for both this and the rear glass and the door panes carried the
+  // windscreen's wiper arcs, which is why the two never agreed.
+  pane('glassSide', {
+    kind: 'side',
+    color: 0x33474f,
+    opacity: 0.26,
+    roughness: 0.08,
+    film: { dustAmount: 1.0, dustAlpha: 0.42, band: 0 },
   });
-  m.glassDark = new THREE.MeshPhysicalMaterial({
-    color: 0x223037,
-    map: glassTintMap(),
+  // Rear cab glass: sits in the plume the truck drags behind it.
+  pane('glassDark', {
+    kind: 'rear',
+    color: 0x2c3d44,
+    opacity: 0.3,
+    roughness: 0.1,
+    // in the cab's own shadow all day, so the film takes more skylight
+    film: { dustAmount: 1.0, dustAlpha: 0.7, band: 0, dustAmbient: 0.42 },
+    bw: { strength: 1.1, band: 0.45, trees: 1.0, pane: 1.1, wall: 0x1b2016, rim: 0xfbecce, sky: reflectedSky(1.2) },
+  });
+  // The cut edge of a pane. Glass is 5 mm of green-tinted solid, and the one
+  // place that shows is the edge: light pipes along the sheet and comes out of
+  // the cut face as a thin bright green line, which is also the only cue a
+  // zero-thickness quad has of being anything but a decal. Opaque, so it also
+  // caps the sorting problem at the perimeter — nothing overlaps at an edge.
+  //
+  // The piped light is a *thin* bright line, not a neon tube: at emissive 0.9
+  // the frame read as a green fluorescent strip round every window from three
+  // metres. Most of the edge's brightness now comes from the graded
+  // reflection, which only fires where the frame faces the sky, so the top
+  // edges glint and the bottom edges stay a dark bottle-green.
+  m.glassEdge = new THREE.MeshStandardMaterial({
+    color: 0x1e4038,
+    emissive: 0x0c2a22,
+    emissiveIntensity: 0.4,
     metalness: 0.0,
-    roughness: 0.12,
-    emissive: 0xffffff,
-    emissiveMap: glassFilmMap(),
-    emissiveIntensity: 0.32,
-    opacity: 0.4,
-    transparent: true,
-    envMapIntensity: 1.5,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.05,
-    side: THREE.DoubleSide,
-    depthWrite: false,
+    roughness: 0.16,
+    envMapIntensity: 0.7,
   });
-  applyBrightwork(m.glassDark, {
-    tag: 'glassDark',
+  applyBrightwork(m.glassEdge, {
+    tag: 'glassEdge',
     strength: 1.1,
-    band: 0.45,
-    trees: 1.0,
+    band: 0.7,
+    trees: 0.5,
     line: 0.42,
-    pane: 1.1,
-    clearcoat: true,
-    ground: 0x141712,
-    wall: 0x1b2016,
-    rim: 0xfbecce,
-    // Was 0x8fb2d4. The side glass is the second largest reflective area on the
-    // truck and it was mirroring a bluer sky than the scene has; scaled to hold
-    // the value it had rather than dropped, so only the chroma changes.
-    sky: reflectedSky(1.2),
+    fresnel: 0.3,
+    ground: 0x141f1a,
+    wall: 0x1c2a24,
+    rim: 0xd8f5d8,
+    sky: 0x8cc4b4,
   });
 
   // --- lights --------------------------------------------------------------
@@ -616,7 +682,7 @@ export function vehicleMaterials(env = null) {
     // one bright arc across the stamping and leaves the rest of the cone dark.
     band: 0.75,
     trees: 0.35,
-    line: 0.46,
+    line: 0.3,
     ground: 0x120e09,
     wall: 0x1f1e16,
     rim: 0xffe8c4,
@@ -688,6 +754,19 @@ export function vehicleMaterials(env = null) {
     metalness: 0.08,
     envMapIntensity: 1.8,
   });
+  // Reverse lamp: a clear prismatic lens over a silvered bowl. Off, it is the
+  // one pale cell in the cluster; the ride wiring can drive
+  // `emissiveIntensity` (about 4 when backing up) the way it does `taillight`.
+  m.reverseLamp = new THREE.MeshStandardMaterial({
+    color: 0xd9dedd,
+    emissive: 0x8a8f8c,
+    emissiveIntensity: 0.18,
+    normalMap: prismNormal(),
+    normalScale: new THREE.Vector2(1.2, 1.2),
+    roughness: 0.1,
+    metalness: 0.08,
+    envMapIntensity: 1.5,
+  });
   m.reflectorRed = new THREE.MeshStandardMaterial({
     color: 0x7a1509,
     metalness: 0.1,
@@ -716,8 +795,8 @@ export function vehicleMaterials(env = null) {
   m.decalName = decal('name');
   m.decalBadge = decal('badge');
   m.decalNumber = decal('number');
-  applyDirt(m.decalName, { amount: 0.8, tag: 'decalName', color: 0x6f5c3d });
-  applyDirt(m.decalNumber, { amount: 0.9, tag: 'decalNumber', color: 0x6f5c3d });
+  applyDirt(m.decalName, { ...LATERITE, amount: 0.8, tag: 'decalName' });
+  applyDirt(m.decalNumber, { ...LATERITE, amount: 0.9, tag: 'decalNumber' });
 
   // --- cabin ---------------------------------------------------------------
   // The whole interior has to sit *below* the exterior in value or the
@@ -748,7 +827,10 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.16,
   });
-  applyDirt(m.fabric, { amount: 0.7, tag: 'seat', color: 0x5f5138, dust: 0x877a60, arch: 0 });
+  // Cabin dust is the same laterite, thinner and paler: it comes in through the
+  // windows as airborne fines, not as spatter, so `chroma` sits lower than the
+  // exterior's and the dust colours are lifted towards the murram tone.
+  applyDirt(m.fabric, { amount: 0.5, tag: 'seat', color: 0x7a5a40, dust: 0x948473, wet: LATERITE.wet, chroma: 0.35, arch: 0 });
   // Every cabin envMapIntensity in here is roughly half what it was, and the
   // difference has moved to `applyCabinBounce` below. The environment is a PMREM
   // of the sky, and 0x4c7fb5 at the zenith is a saturated blue: leaning on it to
@@ -766,7 +848,7 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.42,
   });
-  applyDirt(m.interiorPlastic, { amount: 1.0, tag: 'cabin', color: 0x5e5038, dust: 0x8d7f63, arch: 0 });
+  applyDirt(m.interiorPlastic, { amount: 0.7, tag: 'cabin', color: 0x785640, dust: 0x958473, wet: LATERITE.wet, chroma: 0.35, arch: 0 });
   // Top surfaces. These are the ones under the screen that the sun bakes, so
   // they are chalkier and a stop or two lighter — and they are what you see of
   // the cabin from outside, which is what keeps the greenhouse from going black.
@@ -782,7 +864,7 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.5,
   });
-  applyDirt(m.interiorFaded, { amount: 1.5, tag: 'cabinTop', color: 0x6b5c40, dust: 0x9a8b6b, arch: 0 });
+  applyDirt(m.interiorFaded, { amount: 0.8, tag: 'cabinTop', color: 0x84603f, dust: 0x9f907a, wet: LATERITE.wet, chroma: 0.35, arch: 0 });
   // Stitched welt strips down the pad edges and the seat panel seams.
   const stitch = stitchMaps();
   m.stitch = new THREE.MeshStandardMaterial({
@@ -917,7 +999,9 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.28,
   });
-  applyDirt(m.floorMat, { amount: 1.8, tag: 'floor', color: 0x5c4a30, dust: 0x8a7454, arch: 0 });
+  // the floor is where boots bring the real soil in, so it takes the exterior's
+  // chroma rather than the cabin's
+  applyDirt(m.floorMat, { amount: 1.8, tag: 'floor', color: 0x7e5236, dust: 0x9a7452, wet: LATERITE.wet, chroma: 0.5, arch: 0 });
   const liner2 = headlinerMaps();
   m.headliner = new THREE.MeshStandardMaterial({
     map: liner2.map,
@@ -946,6 +1030,33 @@ export function vehicleMaterials(env = null) {
     normalScale: new THREE.Vector2(1.2, 1.2),
     envMapIntensity: 0.6,
   });
+  // The roof tent's PVC travel cover: the campground's own canvas colour, so
+  // the truck and the tents it parks beside are visibly the same kit. Coated
+  // fabric, so a shade glossier than the strap webbing, and it is the largest
+  // up-facing surface on the truck after the roof, so it takes settled dust.
+  m.canvasKhaki = new THREE.MeshStandardMaterial({
+    color: PALETTE.canvas,
+    metalness: 0,
+    roughness: 0.78,
+    normalMap: fabric.normal,
+    normalScale: new THREE.Vector2(0.9, 0.9),
+    envMapIntensity: 0.5,
+  });
+  applyDirt(m.canvasKhaki, { ...LATERITE, amount: 0.9, tag: 'canvasKhaki', arch: 0, spatter: 0.3, film: 1.2, grain: 0.12 });
+  applyBrightwork(m.canvasKhaki, { tag: 'canvasKhaki', strength: 0.3, band: 0.1, trees: 0.4, fresnel: 0.5, flat: 0.9, ambient: 0.9 });
+  // Moulded fridge case: pale warm grey polyethylene, satin, with the trim
+  // normal for the moulding grain.
+  m.fridgeCase = new THREE.MeshStandardMaterial({
+    color: 0x9a9890,
+    metalness: 0.0,
+    roughness: 0.62,
+    normalMap: trimSatin.normal,
+    roughnessMap: trimSatin.rough,
+    normalScale: new THREE.Vector2(0.5, 0.5),
+    envMapIntensity: 0.55,
+  });
+  applyDirt(m.fridgeCase, { ...LATERITE, amount: 0.7, tag: 'fridgeCase', arch: 0, spatter: 0.2, grain: 0.1 });
+  applyBrightwork(m.fridgeCase, { tag: 'fridgeCase', strength: 0.5, band: 0.25, trees: 0.4, fresnel: 0.35, flat: 0.85, ambient: 1.0 });
 
   // --- cabin bounce --------------------------------------------------------
   // Every material that shows up inside the cab gets the analytic bounce. It is
@@ -1004,7 +1115,7 @@ export function vehicleMaterials(env = null) {
   // Flagged rather than inferred from `transparent`, because most transparent
   // materials here are small scattered decals that never overlap and are better
   // off merged.
-  for (const key of ['glass', 'glassDark', 'cabinGlass', 'lensClear', 'lensRibbed']) {
+  for (const key of ['glass', 'glassSide', 'glassDark', 'cabinGlass', 'lensClear', 'lensRibbed']) {
     if (m[key]) m[key].userData.sortPieces = true;
   }
 

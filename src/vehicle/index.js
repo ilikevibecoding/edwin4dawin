@@ -99,6 +99,13 @@ export function createVehicle({ env = null } = {}) {
     state.speed = speed;
     state.steer = steer;
 
+    // Brake lamps come up on the pedal, reverse lamps when actually rolling
+    // backwards, both on top of whatever the running lights are doing.
+    const braking = finite(drive.brake) > 0.05 && speed > -0.2;
+    const tailBase = state.lightsOn ? 4.0 : 1.6;
+    materials.taillight.emissiveIntensity = braking ? Math.max(tailBase, 9.0) : tailBase;
+    if (materials.reverseLamp) materials.reverseLamp.emissiveIntensity = speed < -0.15 ? 7.0 : 0.9;
+
     state.wheelAngle += (speed / S.wheelRadius) * dt;
     for (const w of wheels) {
       w.spin.rotation.x = state.wheelAngle;

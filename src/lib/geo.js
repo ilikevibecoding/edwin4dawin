@@ -179,11 +179,16 @@ export class Kit {
       const mesh = new THREE.Mesh(geo, mat);
       if (recentre) {
         geo.computeBoundingSphere();
-        const c = geo.boundingSphere?.center;
+        // Copy, not reference. `boundingSphere.center` is the same Vector3 the
+        // recompute below writes into, so holding a reference to it and then
+        // recomputing read back as zero — and every sorted pane on the truck
+        // rendered at its origin, inside the chassis, for a whole iteration.
+        // The windscreen the game shipped with was the interior dust film.
+        const c = geo.boundingSphere ? geo.boundingSphere.center.clone() : null;
         if (c) {
           geo.translate(-c.x, -c.y, -c.z);
           geo.computeBoundingSphere();
-          mesh.position.set(c.x, c.y, c.z);
+          mesh.position.copy(c);
         }
       }
       mesh.name = name;

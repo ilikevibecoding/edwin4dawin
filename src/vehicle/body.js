@@ -51,13 +51,16 @@ const UV_SCALE = {
   trimGloss: 3.2,
   bedLiner: 2.2,
   glass: 'keep',
+  glassSide: 'keep',
   glassDark: 'keep',
+  glassEdge: 2,
   reflector: 'keep',
   lensClear: 'keep',
   lensRibbed: 'keep',
   headlight: 'keep',
   taillight: 'keep',
   amber: 'keep',
+  reverseLamp: 'keep',
   reflectorRed: 'keep',
   decalName: 'keep',
   decalBadge: 'keep',
@@ -70,7 +73,54 @@ const KEEP_ATTRS = ['position', 'normal', 'uv'];
 // hard-edged black half across every reflector. Taking them out of the shadow
 // pass stands in for the forward bounce a real reflector does, and it is what
 // keeps a lamp reading as a lamp when the nose is facing away from the sun.
-const UNSHADOWED = new Set(['reflector', 'headlight', 'lensClear', 'lensRibbed', 'amber', 'taillight']);
+// The panes too: a depth pass has no alpha, so a 26 per cent windscreen would
+// throw a *solid* shadow across the whole dash and the cabin daylight model is
+// built on the sun coming through it.
+const UNSHADOWED = new Set(['reflector', 'headlight', 'lensClear', 'lensRibbed', 'amber', 'taillight', 'reverseLamp', 'glass', 'glassSide', 'glassDark']);
+
+/**
+ * `Kit.emit` with the per-piece recentring done right.
+ *
+ * The shared emit splits a `sortPieces` material into one mesh per pane and
+ * moves each onto its own origin so three can sort them by distance. It reads
+ * the centre it needs off `geo.boundingSphere.center`, translates the geometry
+ * by it, and then recomputes the sphere — which updates that same Vector3 in
+ * place to zero before it is copied into `mesh.position`. Every pane on the
+ * truck therefore sat at the truck's origin, inside the chassis, and the truck
+ * has had no exterior glass since the sort fix went in: what read as a
+ * windscreen in the beauty shots was the cabin's own interior dust film. The
+ * shared kit is not this module's to change, so the piece path is redone here
+ * and the merged path is handed straight back to it.
+ *
+ * Pieces also hand their offset to any object-space shader on the material
+ * (`uClOff` in the cabin light), since recentring is exactly the transform
+ * those shaders assume never happens.
+ */
+export function emitPieces(kit, group, key, mat, geos, { castShadow = true, receiveShadow = true, finish, prefix = kit.name } = {}) {
+  if (!mat.userData?.sortPieces) return kit.emit(group, key, mat, geos, { castShadow, receiveShadow, finish, prefix });
+  const offsets = Object.values(mat.userData)
+    .map((bag) => bag && typeof bag === 'object' && bag.uClOff)
+    .filter(Boolean);
+  geos.forEach((geo, i) => {
+    if (finish) finish(geo, key);
+    geo.computeBoundingSphere();
+    const c = geo.boundingSphere.center.clone();
+    geo.translate(-c.x, -c.y, -c.z);
+    geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(c);
+    mesh.name = `${prefix}_${key}_${i}`;
+    mesh.castShadow = castShadow;
+    mesh.receiveShadow = receiveShadow;
+    if (offsets.length) {
+      mesh.onBeforeRender = () => {
+        for (const o of offsets) o.value.copy(c);
+      };
+    }
+    group.add(mesh);
+  });
+  return undefined;
+}
 
 function flipWinding(geo) {
   if (geo.index) {
@@ -169,7 +219,7 @@ class BodyKit extends Kit {
         for (const name of Object.keys(c.attributes)) if (!KEEP_ATTRS.includes(name)) c.deleteAttribute(name);
         return c.index ? c.toNonIndexed() : c;
       });
-      this.emit(group, key, mat, geos, {
+      emitPieces(this, group, key, mat, geos, {
         castShadow: castShadow && !UNSHADOWED.has(key),
         receiveShadow: receiveShadow && !UNSHADOWED.has(key),
         finish: (g, k) => {
@@ -2319,6 +2369,30 @@ function doorMirror(k, sd, beltY) {
   }
 }
 
+/**
+ * A pane with an edge. The glass itself is one quad; round it runs a 5 mm
+ * frame in `glassEdge`, which is the cut face of the sheet — the only part of
+ * a window that has thickness to show, and the part that pipes light and reads
+ * as a bright green line against the seal. Sized `inset` inside the quad so the
+ * frame's front face stands 2.5 mm proud of the pane and nothing is coplanar.
+ * `mirror` adds the pane on both sides, the far one with its uvs mirrored too,
+ * so the film reads the same way round on both doors.
+ */
+function pane(k, key, w, h, { pos, rot, mirror = false }) {
+  const T = 0.005;
+  const B = 0.014;
+  const add = mirror ? (key2, g, x) => k.addMirrored(key2, g, x) : (key2, g, x) => k.add(key2, g, x);
+  add(key, new THREE.PlaneGeometry(w, h), { pos, rot });
+  for (const [bw, bh, x, y] of [
+    [w, B, 0, h * 0.5 - B * 0.5],
+    [w, B, 0, -(h * 0.5 - B * 0.5)],
+    [B, h - B * 2, w * 0.5 - B * 0.5, 0],
+    [B, h - B * 2, -(w * 0.5 - B * 0.5), 0],
+  ]) {
+    add('glassEdge', new THREE.BoxGeometry(bw, bh, T).translate(x, y, 0), { pos, rot });
+  }
+}
+
 // --- cab --------------------------------------------------------------------
 function cab(k) {
   const cabL = S.cabFrontZ - S.cabRearZ;
@@ -2353,7 +2427,7 @@ function cab(k) {
 
   const wsAngle = Math.atan2(S.roofY - beltY, wsBottom - wsTop);
   const wsLen = Math.hypot(S.roofY - beltY, wsBottom - wsTop);
-  k.add('glass', new THREE.PlaneGeometry(HW * 2 - 0.22, wsLen - 0.03), {
+  pane(k, 'glass', HW * 2 - 0.22, wsLen - 0.03, {
     pos: [0, (S.roofY + beltY) * 0.5 - 0.01, (wsBottom + wsTop) * 0.5],
     rot: [wsAngle - Math.PI / 2, 0, 0],
   });
@@ -2367,28 +2441,72 @@ function cab(k) {
       pos: [side * (HW - 0.078), (S.roofY + beltY) * 0.5, S.cabRearZ + 0.09],
     });
   }
-  k.add('paint', rbox(HW * 2 - 0.06, S.roofY - beltY - 0.02, 0.08, 0.03), {
-    pos: [0, (S.roofY + beltY) * 0.5, S.cabRearZ + 0.02],
-  });
-  k.add('gap', rbox(1.32, 0.54, 0.05, 0.008), { pos: [0, beltY + 0.34, S.cabRearZ + 0.045] });
-  k.add('glassDark', new THREE.PlaneGeometry(1.24, 0.46), { pos: [0, beltY + 0.34, S.cabRearZ + 0.07] });
-  k.add('trim', rbox(1.36, 0.05, 0.045, 0.012), { pos: [0, beltY + 0.6, S.cabRearZ + 0.052] });
-  k.add('trim', rbox(1.36, 0.045, 0.045, 0.012), { pos: [0, beltY + 0.09, S.cabRearZ + 0.052] });
+  // The rear wall is four panels round a real aperture. It used to be one slab
+  // with the glass, its seal and its trims all placed *inside* it — eighty
+  // millimetres of paint between the pane and the camera — so from behind the
+  // cab was a blank green wall with a lamp on it, and from the driver's seat
+  // the "window" was the back of that slab. Now the pane is on the aft face
+  // where the bed camera sees it and the cab is open through it.
+  {
+    const wallD = 0.08;
+    const wallZ = S.cabRearZ + 0.02;
+    const wallW = HW * 2 - 0.06;
+    const apW = 1.28;
+    const apY0 = beltY + 0.11;
+    const apY1 = beltY + 0.57;
+    const wallY0 = beltY;
+    const wallY1 = S.roofY - 0.02;
+    k.add('paint', rbox(wallW, apY0 - wallY0, wallD, 0.03), { pos: [0, (apY0 + wallY0) * 0.5, wallZ] });
+    k.add('paint', rbox(wallW, wallY1 - apY1, wallD, 0.03), { pos: [0, (apY1 + wallY1) * 0.5, wallZ] });
+    for (const side of [-1, 1]) {
+      k.add('paint', rbox((wallW - apW) * 0.5, apY1 - apY0 + 0.02, wallD, 0.024), {
+        pos: [side * (apW + (wallW - apW) * 0.5) * 0.5, (apY0 + apY1) * 0.5, wallZ],
+      });
+    }
+    // rubber seal lining the aperture, standing a few millimetres proud of the
+    // paint on the outside and finishing it on the inside
+    const sealZ = S.cabRearZ - 0.02;
+    for (const [w, h, x, y] of [
+      [apW + 0.04, 0.04, 0, apY1],
+      [apW + 0.04, 0.04, 0, apY0],
+      [0.04, apY1 - apY0, apW * 0.5, (apY0 + apY1) * 0.5],
+      [0.04, apY1 - apY0, -apW * 0.5, (apY0 + apY1) * 0.5],
+    ]) {
+      k.add('gap', rbox(w, h, 0.09, 0.006), { pos: [x, y, sealZ] });
+    }
+    // Turned to face aft. A PlaneGeometry's front is +z, which here pointed
+    // into the cab, so the pane model took the outside of the rear glass for
+    // its cabin side: reflection cut to a fifth, dust thinned, the one window
+    // on the truck that did not match the others.
+    pane(k, 'glassDark', apW - 0.02, apY1 - apY0 - 0.02, { pos: [0, beltY + 0.34, S.cabRearZ - 0.05], rot: [0, Math.PI, 0] });
+    k.add('trim', rbox(1.4, 0.05, 0.045, 0.012), { pos: [0, apY1 + 0.03, S.cabRearZ - 0.04] });
+    k.add('trim', rbox(1.4, 0.045, 0.045, 0.012), { pos: [0, apY0 - 0.03, S.cabRearZ - 0.04] });
+  }
   k.add('trim', rbox(0.34, 0.07, 0.05, 0.014), { pos: [0, S.roofY - 0.11, S.cabRearZ + 0.02] });
   k.add('taillight', rbox(0.3, 0.045, 0.03, 0.008), { pos: [0, S.roofY - 0.11, S.cabRearZ - 0.008] });
 
   // --- door glass: two panes with a real division bar --------------------
   const paneTop = S.roofY - 0.1;
+  for (const [zf, zr] of [
+    [0.9, 0.06],
+    [0.02, S.cabRearZ + 0.07],
+  ]) {
+    const len = zf - zr;
+    // Right-hand pane and its mirror: a +90 yaw puts the quad's +u aft, so the
+    // film's wind streaks trail the right way, and the mirrored copy keeps that
+    // rather than reversing it the way a -90 yaw would.
+    pane(k, 'glassSide', len, paneTop - beltY - 0.07, {
+      pos: [HW - 0.045, (paneTop + beltY) * 0.5 - 0.03, (zf + zr) * 0.5],
+      rot: [0, Math.PI * 0.5, 0],
+      mirror: true,
+    });
+  }
   for (const side of [-1, 1]) {
     for (const [zf, zr] of [
       [0.9, 0.06],
       [0.02, S.cabRearZ + 0.07],
     ]) {
       const len = zf - zr;
-      k.add('glass', new THREE.PlaneGeometry(len, paneTop - beltY - 0.07), {
-        pos: [side * (HW - 0.045), (paneTop + beltY) * 0.5 - 0.03, (zf + zr) * 0.5],
-        rot: [0, side * Math.PI * 0.5, 0],
-      });
       k.add('trim', rbox(0.05, 0.028, len + 0.02, 0.008), {
         pos: [side * (HW - 0.03), paneTop - 0.022, (zf + zr) * 0.5],
       });
@@ -2649,8 +2767,10 @@ function bed(k) {
   k.add('paint', crownZ(tgField, tgY1 - tgY0 - 0.11), { pos: [0, tgCy, 0] });
   brokenSwage(k, 'paint', { len: 1.4, size: 0.03, pos: [0, tgCy + 0.105, fieldFace - 0.004], axis: 'x', segs: 3, seed: 71 });
   brokenSwage(k, 'paint', { len: 1.4, size: 0.023, pos: [0, tgCy - 0.135, fieldFace - 0.004], axis: 'x', segs: 3, seed: 73 });
-  k.add('decalName', new THREE.PlaneGeometry(1.06, 0.28), {
-    pos: [0, tgCy - 0.02, fieldFace - 0.0135],
+  // Moved off centre and down a size: the spare on the swing-out now hangs over
+  // the middle of the gate, so the wordmark lives on the far side of it.
+  k.add('decalName', new THREE.PlaneGeometry(0.5, 0.132), {
+    pos: [-0.44, tgCy - 0.02, fieldFace - 0.0135],
     rot: [0, Math.PI, 0.004],
   });
   // Machined applique across the top of the field and a diamond-plate kick strip
@@ -2770,10 +2890,14 @@ function bed(k) {
     const lh = 0.44;
     k.add('gap', rbox(0.275, 0.48, 0.08, 0.008), { pos: [tx, ty, outer + 0.03] });
     k.add('trimGloss', rbox(lw, lh, 0.075, 0.018), { pos: [tx, ty, outer + 0.032] });
+    // tail/brake over indicator over reverse, with the reflex strip along the
+    // bottom of the unit — the reverse cell was missing, so the truck had no
+    // way of showing it was backing up
     for (const [dy, h, key] of [
-      [0.13, 0.16, 'taillight'],
-      [-0.01, 0.1, 'amber'],
-      [-0.13, 0.09, 'reflectorRed'],
+      [0.14, 0.14, 'taillight'],
+      [0.02, 0.085, 'amber'],
+      [-0.075, 0.085, 'reverseLamp'],
+      [-0.16, 0.05, 'reflectorRed'],
     ]) {
       k.add('reflector', rbox(lw - 0.06, h - 0.018, 0.02, 0.005), { pos: [tx, ty + dy, outer + 0.006] });
       k.add(key, rbox(lw - 0.05, h, 0.036, 0.01), { pos: [tx, ty + dy, outer - 0.016] });

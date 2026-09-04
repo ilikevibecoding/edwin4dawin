@@ -306,14 +306,19 @@ export function applyBrightwork(
     // effectively black, so the only thing the model could deliver was "dark",
     // and the horizon line — the single most recognisable feature of a
     // reflection in car paint — had no contrast to be visible in.
-    ground = 0x2b241c,
-    wall = 0x191c14,
+    // Savanna, not a forest clearing: what a flank mirrors below the horizon is
+    // laterite and straw, and the "wall" above it is a low band of bush and
+    // dust-haze — warm, and only a few degrees deep — before open sky. The
+    // forest values (0x2b241c / 0x191c14 / 0.48) gave every panel a dark green
+    // band up to thirty degrees, which is a canopy the scene no longer has.
+    ground = 0x4a3424,
+    wall = 0x3a3226,
     sky = REFLECTED_SKY,
     rim = 0xffeccb,
     strength = 1,
     band = 0.5,
     trees = 0.8,
-    line = 0.48,
+    line = 0.3,
     fresnel = 0,
     clearcoat = false,
     pane = 0,
@@ -792,10 +797,16 @@ export function applyCabinBounce(
  * green paint while the bright dry layers go grey-brown. One rule, and the hue
  * each call site chose is preserved.
  */
-function soilChroma(hex) {
+/**
+ * Soil colours are handed in as they look on the ground and come out as they
+ * look dried onto a panel — greyer, the lighter the thinner. `chroma` is how
+ * much of that desaturation to skip: iron-rich laterite keeps its red when it
+ * dries, which is the whole reason a safari truck reads as one.
+ */
+function soilChroma(hex, chroma = 0) {
   const c = new THREE.Color(hex);
   const lum = c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722;
-  const k = clamp(0.16 + 2.1 * lum, 0, 0.78);
+  const k = clamp(0.16 + 2.1 * lum, 0, 0.78) * (1 - clamp(chroma));
   return c.lerp(new THREE.Color().setRGB(lum, lum, lum), k);
 }
 
@@ -806,12 +817,15 @@ export function applyDirt(
     tag = 'a',
     // Back-compat: the single `color` every call site used is the dried-mud
     // hue. Dust and wet mud are their own colours now.
-    color = 0x7a6746,
+    // Laterite by default now — the soil under this truck is iron-red murram,
+    // and every call site that does not say otherwise gets the same earth. The
+    // Pacific-Northwest set was 0x7a6746 / 0x9b8e75 / 0x4a3826 at zero chroma.
+    color = 0xa26a44,
     // A dust colour at 0.45 linear over a 0.012 plastic is a 4x lift at 12%
     // coverage: the arch flare measured 0.50 luma, i.e. light warm grey, and no
     // amount of layering underneath it was going to show. So dust is well down
     // from where it started.
-    dust = 0x9b8e75,
+    dust = PALETTE.murram,
     // Wet mud has to be darker than the paint it lands on or the spatter is
     // invisible — but 0x2b2016 is 0.015 linear, which is darker than coal and
     // darker than every plastic and powder coat on this truck. A crush mask of
@@ -820,7 +834,7 @@ export function applyDirt(
     // hole. Wet earth sits nearer 0.045 linear, which is still well under the
     // 0.09 of the body colour — so it still reads brown-on-green where it is
     // meant to — and now lands *on top of* dark plastic rather than through it.
-    wet = 0x4a3826,
+    wet = PALETTE.earthDark,
     arch = 1,
     film = 1,
     spatter = 1,
@@ -839,25 +853,34 @@ export function applyDirt(
     // How far any dirt layer may lift the substrate it lands on, as a multiple
     // of the substrate's own luma. See the ceiling in the shader: this is the
     // fix for a road film that was brighter than the paint next to it.
-    lift = 2.6,
+    lift = 3.2,
+    // how much of the soil's chroma survives drying; see soilChroma. Laterite
+    // keeps most of its red.
+    chroma = 0.55,
+    // Bush stripes: the fine horizontal scoring thorn scrub leaves along a
+    // flank between sill and beltline. Scratched lacquer goes pale and matt, so
+    // the layer lightens and roughens rather than darkens. Off by default; on
+    // for paint and the cladding.
+    scratch = 0,
   } = {},
 ) {
   const tex = dirtLayers();
   const u = {
     uDirtTex: { value: tex },
-    uDirtDust: { value: soilChroma(dust) },
-    uDirtWet: { value: soilChroma(wet) },
-    uDirtDry: { value: soilChroma(color) },
+    uDirtDust: { value: soilChroma(dust, chroma) },
+    uDirtWet: { value: soilChroma(wet, chroma) },
+    uDirtDry: { value: soilChroma(color, chroma) },
     uDirtFilm: { value: film * amount },
     uDirtSpat: { value: spatter * amount },
     uDirtCake: { value: cake * amount },
     uDirtArch: { value: arch },
     uDirtGrain: { value: grain },
     uDirtLift: { value: lift },
+    uDirtScratch: { value: scratch },
   };
   // exposed so the mix can be swept against a live render instead of guessed
   material.userData.dirt = u;
-  return extendMaterial(material, `dirt:${tag}:${arch}`, (shader) => {
+  return extendMaterial(material, `dirt:${tag}:${arch}:${scratch > 0}`, (shader) => {
     Object.assign(shader.uniforms, u);
 
     shader.vertexShader = shader.vertexShader
@@ -888,8 +911,10 @@ export function applyDirt(
         uniform float uDirtArch;
         uniform float uDirtGrain;
         uniform float uDirtLift;
+        uniform float uDirtScratch;
         varying vec3 vDirtPos;
         varying vec3 vDirtNrm;
+        float dirtScratch = 0.0;
         float dirtFilm = 0.0;
         float dirtDrop = 0.0;
         float dirtCake = 0.0;
@@ -1052,9 +1077,12 @@ export function applyDirt(
           // strength, which is a flat grey veil. Dust has edges — it collects
           // in the still air behind a crease and gets wiped off the leading
           // faces — so the mask needs patches, not a gradient.
-          float settle = 0.2 + 0.8 * up * up;
+          // Fines this light settle on vertical panels too — a murram road
+          // powders the whole flank below the beltline — so the floor for a
+          // wall is up from 0.2, and the sill zone takes more of it.
+          float settle = 0.3 + 0.7 * up * up;
           float wipe = smoothstep( 0.30, 0.62, blotch ) * ( 0.32 + 0.68 * smoothstep( 0.24, 0.7, sF.a ) );
-          dirtFilm = clamp( settle * ( 0.12 + 0.95 * wipe ) * ( 0.4 + 0.7 * reach ) * uDirtFilm, 0.0, 0.85 );
+          dirtFilm = clamp( settle * ( 0.12 + 0.95 * wipe ) * ( 0.4 + 0.9 * reach ) * uDirtFilm, 0.0, 0.85 );
 
           vec3 dc = diffuseColor.rgb;
           float lum = dot( dc, vec3( 0.2126, 0.7152, 0.0722 ) );
@@ -1066,7 +1094,7 @@ export function applyDirt(
           // shows through between the grains is also slightly desaturated,
           // which is the other half of the read.
           vec3 veil = mix( dc, vec3( lum ), 0.34 * dirtFilm );
-          dc = mix( veil, uDirtDust * ( 0.6 + 0.5 * blotch ), dirtFilm * 0.15 );
+          dc = mix( veil, uDirtDust * ( 0.6 + 0.5 * blotch ), dirtFilm * 0.2 );
           dc = mix( dc, uDirtDry * ( 0.66 + 0.55 * grit ), dirtCake );
           dc = mix( dc, uDirtDry * 0.95, halo * 0.16 );
           // Not a full replace: wet mud is translucent over the first coat and
@@ -1097,6 +1125,25 @@ export function applyDirt(
           float dLumB = dot( dc, vec3( 0.2126, 0.7152, 0.0722 ) );
           float dCeil = lum * uDirtLift + 0.004;
           dc *= min( 1.0, dCeil / max( dLumB, 1e-5 ) );
+
+          // --- bush stripes ----------------------------------------------
+          // Long along z, a few millimetres tall: the fine tap stretched forty
+          // to one, thresholded, and clumped by the coarse field so the marks
+          // come in bands where a branch dragged rather than everywhere at
+          // once. Only on faces that look sideways, only between the sill and
+          // the beltline, and never on the top or the nose.
+          if ( uDirtScratch > 0.0 ) {
+            float sideOn = smoothstep( 0.55, 0.9, abs( dn.x ) ) * smoothstep( 0.55, 0.8, abs( dp.x ) );
+            float bandY = smoothstep( 0.62, 0.8, dp.y ) * ( 1.0 - smoothstep( 1.22, 1.38, dp.y ) );
+            vec4 sS = texture2D( uDirtTex, vec2( dp.z * 0.33 + dp.x * 0.05, dp.y * 26.0 ) );
+            float clump = smoothstep( 0.35, 0.75, sC.g );
+            float lines = smoothstep( 0.78, 0.92, sS.r ) * 0.7 + smoothstep( 0.86, 0.96, sS.g ) * 0.5;
+            // the individual scores fade with the pixel, but the matt band they
+            // make together is a few hundred millimetres tall and stays
+            dirtScratch = clamp( mix( 0.12 * clump, lines, lodMid ) * clump * sideOn * bandY * uDirtScratch, 0.0, 1.0 );
+            // scored lacquer scatters: chalky, towards the substrate's own hue
+            dc = mix( dc, mix( vec3( lum * 2.2 + 0.06 ), dc, 0.4 ), dirtScratch * 0.45 );
+          }
           diffuseColor.rgb = max( dc, vec3( 0.0 ) );
 
           // Mud sits *on* a surface rather than in its albedo, and the arch
@@ -1113,7 +1160,17 @@ export function applyDirt(
         // damp mud keeps a little sheen, which is most of what separates fresh
         // spatter from the dried crust it lands on
         roughnessFactor = clamp( mix( roughnessFactor, 0.5, dirtDrop * 0.85 ), 0.03, 1.0 );
-        roughnessFactor = clamp( roughnessFactor + dirtGrain * 0.3, 0.03, 1.0 );`,
+        roughnessFactor = clamp( roughnessFactor + dirtGrain * 0.3, 0.03, 1.0 );
+        roughnessFactor = clamp( mix( roughnessFactor, 0.6, dirtScratch ), 0.03, 1.0 );`,
+      )
+      .replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+        // Earth is a dielectric. On the steel and aluminium the dirt used to be
+        // mixed into a diffuse colour that metalness then threw away, so a
+        // bumper could carry a full film and still render as clean dark metal.
+        // Where the coating covers the surface it covers the metal's response.
+        metalnessFactor *= 1.0 - clamp( dirtCake * 0.9 + dirtDrop * 0.7 + dirtFilm * 0.45, 0.0, 0.95 );`,
       );
 
     // Relief. A screen-space bump off a scalar built from object position is
@@ -1159,7 +1216,7 @@ export function applyDirt(
           float dirtCC = clamp( max( dirtCake, dirtDrop * 0.85 ) + dirtFilm * 0.3, 0.0, 1.0 );
           material.clearcoat = clamp( material.clearcoat * ( 1.0 - dirtCC * 0.93 ), 0.0, 1.0 );
           material.clearcoatRoughness = clamp(
-            material.clearcoatRoughness + dirtFilm * 0.07 + dirtDrop * 0.3 + dirtCake * 0.5, 0.0, 1.0 );
+            material.clearcoatRoughness + dirtFilm * 0.07 + dirtDrop * 0.3 + dirtCake * 0.5 + dirtScratch * 0.45, 0.0, 1.0 );
         #endif`,
       );
     }
@@ -1508,9 +1565,244 @@ export function glassRoughness() {
         const spots = smoothstep(0.72, 0.95, fbm(u * 40, v * 40, { octaves: 2, period: 40, seed: 511 }));
         return clamp(0.015 + wipe * 0.09 + dust * 0.05 + edge * 0.2 + spots * smoothstep(0.44, 0.6, r) * 0.16, 0.015, 0.46);
       },
-      { repeat: 1 },
+      // Every glass map is authored with v running bottom-to-top, the way a
+      // PlaneGeometry's uvs do. Data textures are uploaded row 0 first, so
+      // with the default flip the wiper pivot landed at the *top* of the
+      // screen and the factory shade band along the bottom.
+      { repeat: 1, flipY: false },
     ),
   );
+}
+
+/**
+ * The glass layers as one packed map, per pane kind:
+ *
+ *   r  dust — dried film outside whatever cleans the pane (wiper arcs on the
+ *      screen, the wind on the door glass, nothing at all on the rear glass,
+ *      which lives in the truck's own plume)
+ *   g  shade band — the factory tint graded into the top of a windscreen
+ *   b  frit — the black ceramic band round the perimeter under the seal
+ *
+ * Read by `applyGlassFilm`, which lights the dust and turns the other two into
+ * opacity rather than into colour: darkening the *tint* of a pane at 0.28
+ * opacity changes nothing you can see, because the blend only mixes that much
+ * of it in — a darker band on glass is more glass, not darker glass.
+ */
+export function glassLayerMap(kind = 'screen') {
+  return cached(`veh.glassLayer.${kind}`, () =>
+    pixelTexture(
+      S,
+      S,
+      (x, y, out) => {
+        const u = x / S;
+        const v = y / S;
+        const cx = u - 0.5;
+        let dust;
+        let band = 0;
+        let frit;
+        if (kind === 'screen') {
+          // two blades pivoting off the bottom edge, so the clean region is
+          // the union of two annular sectors — the same pair the interior's
+          // own film draws, so the two layers agree about where the dirt is
+          let swept = 0;
+          // Tandem blades: both park along the bottom edge pointing right and
+          // sweep up and over to the left. The first cut had both stopping at
+          // vertical, so the left third of the screen was never cleaned and the
+          // whole pane read as one even haze.
+          for (const [pu, pv, a0, a1, r0, r1] of [
+            [0.3, -0.16, -0.06, 2.55, 0.22, 0.98],
+            [0.76, -0.16, -0.1, 2.45, 0.2, 0.78],
+          ]) {
+            const dx = u - pu;
+            const dy = (v - pv) * 0.56;
+            const r = Math.hypot(dx, dy);
+            const ang = Math.atan2(dy, dx);
+            if (ang > a0 && ang < a1 && r > r0 && r < r1) {
+              const eA = Math.min(ang - a0, a1 - ang);
+              const eR = Math.min(r - r0, r1 - r);
+              swept = Math.max(swept, Math.min(1, eA * 14) * Math.min(1, eR * 30));
+            }
+          }
+          // Low-contrast: a film of fines is an even haze that thickens towards
+          // the edges, not a blotch pattern. The first cut at 0.55 of noise read
+          // as frost from three metres.
+          const blotch = fbm(u * 6, v * 6, { octaves: 4, period: 6, seed: 205 });
+          const grit = smoothstep(0.72, 0.95, fbm(u * 46, v * 46, { octaves: 2, period: 46, seed: 511 }));
+          // the corners and the top edge are where the arcs never reach; the
+          // bottom edge collects a ledge of dust where the blades park
+          const corner = smoothstep(0.3, 0.5, Math.abs(cx)) * 0.6 + smoothstep(0.78, 1.0, v) * 0.6;
+          const ledge = (1 - smoothstep(0.0, 0.1, v)) * 0.45;
+          dust = clamp((0.3 + blotch * 0.3 + corner + ledge) * (1 - swept * 0.88) + grit * 0.14 * (1 - swept * 0.6));
+          band = smoothstep(0.7, 1.0, v) * (0.85 + 0.15 * fbm(u * 6, v * 6, { octaves: 2, period: 6, seed: 3 }));
+          frit = Math.max(smoothstep(0.455, 0.49, Math.abs(cx)), smoothstep(0.44, 0.485, Math.abs(v - 0.5)));
+        } else if (kind === 'side') {
+          // Door glass. Nothing wipes it, so the film is the wind's: streaks
+          // trailing aft and down from the leading edge, the whole lower rear
+          // corner caked from the front tyre's spray, and a clear-ish patch at
+          // eye level where an arm has been through the window.
+          // the streaks run aft-and-down, so they are sampled along that
+          // diagonal: fine across, long along
+          const streak = fbm((u - v * 0.35) * 48, v * 3, { octaves: 3, period: 48, seed: 17 });
+          const blotch = fbm(u * 6, v * 6, { octaves: 4, period: 6, seed: 207 });
+          const rearLow = smoothstep(0.3, 1.0, u) * (1 - smoothstep(0.0, 0.6, v));
+          const wipe = 1 - smoothstep(0.18, 0.32, Math.hypot((u - 0.42) * 0.8, v - 0.55));
+          const drips = smoothstep(0.55, 0.9, streak) * (1 - smoothstep(0.0, 0.7, v));
+          dust = clamp((0.16 + blotch * 0.3 + streak * 0.2 + rearLow * 0.45 + drips * 0.18) * (1 - wipe * 0.65));
+          frit = Math.max(smoothstep(0.45, 0.49, Math.abs(cx)), smoothstep(0.44, 0.485, Math.abs(v - 0.5)));
+        } else {
+          // Rear glass. Lives inside the plume the truck drags behind it, so
+          // it is the dustiest pane by a wide margin, with a single finger
+          // stripe where somebody checked the load.
+          const blotch = fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: 209 });
+          const finger = 1 - smoothstep(0.03, 0.05, Math.abs(v - 0.5 - (u - 0.5) * 0.12)) * smoothstep(0.2, 0.3, u);
+          dust = clamp(0.55 + blotch * 0.45 - finger * 0.5 * smoothstep(0.55, 0.9, u));
+          frit = Math.max(smoothstep(0.44, 0.49, Math.abs(cx)), smoothstep(0.43, 0.485, Math.abs(v - 0.5)));
+        }
+        out[0] = dust * 255;
+        out[1] = band * 255;
+        out[2] = frit * 255;
+        out[3] = 255;
+      },
+      { repeat: 1, flipY: false },
+    ),
+  );
+}
+
+/**
+ * Dust, shade band and frit on a pane, done in the shader rather than on the
+ * emissive channel.
+ *
+ * The old film sat on `emissive`, which was the only channel a pane could add
+ * to rather than multiply — but emissive ignores light. A screen in the sun and
+ * the same screen in the shade carried identical dust, and from the driver's
+ * seat the film lit itself against a dark cab, which is the "milky" read. Here
+ * the dust is a diffuse layer: it takes the pane's own direct and indirect
+ * irradiance, recovered from what the lighting pass already computed, so it is
+ * bright where the sun lands on the glass and dim in shade. Seen from inside
+ * the face is lit by the cab, so the same dust goes dark, and a fraction of
+ * skylight is put through it instead — a dusty screen looked at from behind
+ * is a pale haze towards the sun, not a wall.
+ *
+ * Dust, band and frit all *raise the alpha*, which is the only way a layer on
+ * glass gets darker or more opaque under a normal blend: the shade band is a
+ * region of more glass, the frit is opaque black, the dust is opaque dust.
+ */
+export function applyGlassFilm(
+  material,
+  {
+    tag = 'glass',
+    kind = 'screen',
+    // dried laterite, well down in chroma the way a dried film is. Lit by the
+    // key at full strength this lands near the murram it came from; at the
+    // first 0xb69a78 the film sat at 0.45 luma against a 0.33 cab and read as
+    // frost.
+    dust = 0xa47a55,
+    dustAmount = 1,
+    // how far full dust closes the pane
+    dustAlpha = 0.4,
+    // skylight scattered forward through the dust when seen from the cab side
+    dustSky = 0.35,
+    // Skylight the film scatters on the *outside* face, in units of plain
+    // reflectance against the reflected-sky colour. The rig's hemisphere light
+    // under-delivers sky to a vertical pane by a wide margin, so the rear glass
+    // — the dustiest pane on the truck, and always on the shaded side of the
+    // cab — measured +0.008 luma over the seats behind it: invisible.
+    dustAmbient = 0.18,
+    band = 0.55,
+    bandColor = 0x0a1a20,
+    frit = 0.9,
+    // dust roughens the glass under it, which is what breaks the mirror up
+    dustRough = 0.55,
+  } = {},
+) {
+  const u = {
+    uGfMap: { value: glassLayerMap(kind) },
+    uGfDust: { value: new THREE.Color(dust) },
+    uGfDustAmt: { value: dustAmount },
+    uGfDustA: { value: dustAlpha },
+    uGfDustSky: { value: dustSky },
+    uGfBand: { value: band },
+    uGfBandCol: { value: new THREE.Color(bandColor) },
+    uGfFrit: { value: frit },
+    uGfRough: { value: dustRough },
+    uGfAmb: { value: dustAmbient },
+    uGfSkyCol: { value: reflectedSky(0.9) },
+  };
+  material.userData.glassFilm = u;
+  return extendMaterial(material, `gf:${tag}:${kind}`, (shader) => {
+    Object.assign(shader.uniforms, u);
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform sampler2D uGfMap;
+        uniform vec3 uGfDust;
+        uniform float uGfDustAmt;
+        uniform float uGfDustA;
+        uniform float uGfDustSky;
+        uniform float uGfBand;
+        uniform vec3 uGfBandCol;
+        uniform float uGfFrit;
+        uniform float uGfRough;
+        uniform float uGfAmb;
+        uniform vec3 uGfSkyCol;
+        float gfDust = 0.0;`,
+      )
+      .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+        {
+          // every pane carries a tint map, so its uv varying is the one that
+          // is guaranteed to exist
+          vec4 gf = texture2D( uGfMap, vMapUv );
+          // the film is on the outside; from the cab it is seen through the
+          // glass and reads thinner
+          gfDust = gf.r * uGfDustAmt * ( gl_FrontFacing ? 1.0 : 0.7 );
+          float gfBand = gf.g * uGfBand;
+          float gfFrit = gf.b * uGfFrit;
+          diffuseColor.rgb = mix( diffuseColor.rgb, uGfBandCol, gfBand );
+          diffuseColor.rgb = mix( diffuseColor.rgb, vec3( 0.004 ), gfFrit );
+          diffuseColor.a = clamp( diffuseColor.a + gfBand + gfFrit + gfDust * uGfDustA, 0.0, 1.0 );
+        }`,
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+        roughnessFactor = mix( roughnessFactor, uGfRough, gfDust );`,
+      )
+      .replace(
+        '#include <opaque_fragment>',
+        `{
+          // irradiance the lighting pass already summed for this face, with
+          // the Lambert albedo divided back out; dust is a diffuse layer that
+          // sees exactly the same light the pane does
+          vec3 gfIrr = ( reflectedLight.directDiffuse + reflectedLight.indirectDiffuse ) / max( material.diffuseColor, vec3( 0.004 ) );
+          // open sky on the film: more of it the more the pane looks up, and a
+          // third as much through the glass from the cab side
+          {
+            vec3 gfN = inverseTransformDirection( normal, viewMatrix );
+            gfIrr += uGfSkyCol * ( uGfAmb * ( 0.55 + 0.45 * gfN.y ) * ( gl_FrontFacing ? 1.0 : 0.35 ) );
+          }
+          #if NUM_DIR_LIGHTS > 0
+          if ( !gl_FrontFacing ) {
+            // From the cab the film is between the eye and the sun: what lights
+            // it is the key on the *outside* face, scattered forward. Taken off
+            // the scene's own directional light so it follows the hour — a
+            // dusty screen at night is dark, not a constant grey veil.
+            #pragma unroll_loop_start
+            for ( int i = 0; i < NUM_DIR_LIGHTS; i ++ ) {
+              gfIrr += directionalLights[ i ].color * ( saturate( dot( -normal, directionalLights[ i ].direction ) ) * uGfDustSky );
+            }
+            #pragma unroll_loop_end
+          }
+          #endif
+          // the blend multiplies outgoing light by alpha, so the layer is
+          // pre-divided to land at its own value after the blend
+          outgoingLight += uGfDust * gfIrr * ( gfDust * uGfDustA / max( diffuseColor.a, 0.05 ) );
+        }
+        #include <opaque_fragment>`,
+      );
+  });
 }
 
 /**
@@ -1545,7 +1837,7 @@ export function glassTintMap() {
         out[1] = c[1];
         out[2] = c[2];
       },
-      { srgb: true, repeat: 1 },
+      { srgb: true, repeat: 1, flipY: false },
     );
   });
 }
@@ -1582,7 +1874,7 @@ export function glassFilmMap() {
         out[2] = film[2] * d;
         out[3] = 255;
       },
-      { srgb: true, repeat: 1 },
+      { srgb: true, repeat: 1, flipY: false },
     );
   });
 }
@@ -1698,8 +1990,11 @@ export function vinylMaps(kind = 'dark') {
     // studio, but in here it went to silhouette, and ACES pulls dark warm values
     // toward magenta, which is where the pinkish read came from. Green is held
     // just under red so the hue lands on khaki rather than plum.
-    const base = faded ? rgb(0x5e5748) : rgb(0x413c33);
-    const high = faded ? rgb(0x766d5a) : rgb(0x544d41);
+    // The faded set is down a touch from 0x5e5748 / 0x766d5a: with the cabin
+    // bounce and the laterite film now both on it, the pad was reading as
+    // unglazed clay rather than as sun-bleached vinyl.
+    const base = faded ? rgb(0x554e40) : rgb(0x413c33);
+    const high = faded ? rgb(0x6c6452) : rgb(0x544d41);
     const grit = rgb(0x8a7d66);
     const map = pixelTexture(
       n,
@@ -1711,7 +2006,7 @@ export function vinylMaps(kind = 'dark') {
         // UV fade blotches, stronger on the surfaces that face the screen
         const bleach = smoothstep(0.4, 0.95, fbm(u * 6, v * 6, { octaves: 4, period: 6, seed: 617 }));
         let c = mixRgb(base, high, clamp(h * 1.2));
-        if (faded) c = mixRgb(c, [c[0] * 1.22 + 12, c[1] * 1.2 + 12, c[2] * 1.14 + 10], bleach * 0.75);
+        if (faded) c = mixRgb(c, [c[0] * 1.22 + 12, c[1] * 1.2 + 12, c[2] * 1.14 + 10], bleach * 0.5);
         // grit only in the gutters between the pebbles
         c = mixRgb(c, grit, clamp(1 - h * 2.4) * (faded ? 0.3 : 0.22));
         out[0] = c[0];
@@ -2989,7 +3284,7 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
     // Fresnel gain was. A crease highlight is the point of the material.
     band: 0.78,
     trees: 0.9,
-    line: 0.32,
+    line: 0.24,
     // the coat carries the reflection at every angle; the BRDF's own Fresnel is
     // what should be deciding how much of it survives, not a hand-rolled falloff
     clearcoat: 'full',
@@ -3004,8 +3299,10 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
     // lands on the whole panel at once instead of on the swage line running
     // through it, which is a light leak rather than a highlight.
     flat: 0.82,
-    ground: 0x3a3129,
-    wall: 0x1b2017,
+    // warm earth and a dry-bush band: the doors now pick the plain up rather
+    // than a conifer wall
+    ground: 0x4a3626,
+    wall: 0x353022,
     // sky is inherited: see REFLECTED_SKY. The 0x93b6d8 that used to be here is
     // half of why the bed and canopy panels read teal.
     rim: 0xffeecd,
@@ -3028,6 +3325,6 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
     ambient: 0.6,
     ...bw,
   });
-  if (dirt > 0) applyDirt(m, { amount: dirt, tag: 'paint' + dirtTag, arch: dirtArch, ...dirtOpts });
+  if (dirt > 0) applyDirt(m, { amount: dirt, tag: 'paint' + dirtTag, arch: dirtArch, scratch: dirtArch ? 1 : 0, ...dirtOpts });
   return m;
 }

@@ -14,6 +14,7 @@ import {
   smoothstep,
   worley,
 } from '../textures/core.js';
+import { applyBrightwork } from '../textures/vehicle.js';
 import { SPEC as S } from './spec.js';
 
 // ---------------------------------------------------------------------------
@@ -61,7 +62,9 @@ const RUBBER = LIN(0x262b34);
 // within a stop or two of RUBBER's ~0.03 linear. Anything brighter stops being
 // soil on the tread and becomes the tread's colour instead. It is also kept
 // close to neutral: a saturated brown at 60% coverage tints the whole block.
-const TREAD_DUST = LIN(0x3c3a34);
+// Leans red now rather than grey — the soil is laterite — but at the same
+// value, so the tyre still reads black with a dusting rather than as a clay tyre.
+const TREAD_DUST = LIN(0x503a2c);
 
 // ---------------------------------------------------------------------------
 // A local kit-basher. Same idea as lib/geo.js `Kit`, with two differences that
@@ -183,7 +186,7 @@ class Bash {
  * dark. One vertex-colour trick that does most of the work of making cast
  * parts read as a dirty truck rather than grey primitives.
  */
-function grime(baseHex, { dust = 0x8b7c5d, up = 0.78, down = 0.42, jitter = 0 } = {}) {
+function grime(baseHex, { dust = 0x9a7856, up = 0.78, down = 0.42, jitter = 0 } = {}) {
   const base = LIN(baseHex);
   const dst = LIN(dust);
   return (x, y, z, nx, ny, nz) => {
@@ -719,6 +722,15 @@ function wheelMaterials(base) {
     roughness: 0.85,
     envMapIntensity: 0.9,
   });
+  // The rotor and caliper live in the one pocket on the truck that no light
+  // in the rig reaches: behind the spokes, under the arch, on the shaded side
+  // more often than not. The brief wants them read through the wheel, so they
+  // get the same analytic hemisphere fill the grille and the bumper tubes use
+  // — trail bounce coming in through the spoke windows — in units of plain
+  // reflectance, so a dark caliper stays dark and a bright disc face lifts.
+  for (const [mat, ambient] of [[m.rotor, 1.5], [m.caliperM, 1.0], [m.cast, 0.4]]) {
+    applyBrightwork(mat, { tag: mat.name, strength: 0.2, band: 0.1, trees: 0.3, fresnel: 0.5, ambient });
+  }
   m.mudM = std({
     name: 'mudCake',
     map: mud.map,
@@ -914,7 +926,10 @@ function lugShade(extraDust, value) {
     // Hard-capped. Film over rubber is *thin* — even the shielded root of a block
     // is rubber you can see the earth on, never earth you can see the rubber
     // through, so no vertex is allowed past 60% of the way to the dust colour.
-    const d = Math.min(0.6, (1 - smoothstep(-0.2, 0.4, t)) * 0.55 * (1 - face * 0.8) + extraDust * (1 - face * 0.5));
+    // Laterite fines cling to the tread face too: on murram the road face is
+    // only ever scrubbed back part way between one dust bath and the next, so
+    // the face keeps a third of the film the root does.
+    const d = Math.min(0.68, (1 - smoothstep(-0.2, 0.4, t)) * 0.58 * (1 - face * 0.62) + extraDust * (1 - face * 0.4));
     return [
       lerp(RUBBER[0], TREAD_DUST[0], d) * value,
       lerp(RUBBER[1], TREAD_DUST[1], d) * value,
@@ -1223,8 +1238,9 @@ function blob(radius, seed, scale = [1, 1, 1]) {
 // Two ages of mud, so the tyre is not one brown. The wet plugs are what was
 // picked up last, the dried crust is what has been baking on the shoulder for a
 // while; both stay darker than the pale ground so the tyre still reads black.
-const MUD_WET = [0x332c25, 0x3a322a, 0x2a2521];
-const MUD_DRY = [0x5c5344, 0x534b3e, 0x665c4a];
+// Laterite: red-brown wet, pinker and paler dried.
+const MUD_WET = [0x3a2a20, 0x443026, 0x2e231b];
+const MUD_DRY = [0x6a4f3c, 0x5f4737, 0x76583f];
 
 /** Mud packed into the tread voids, over the shoulder and up the sidewall. */
 function buildTyreMud(k) {
@@ -1281,7 +1297,7 @@ function buildTyreMud(k) {
  * comes back filthy, while the middle stays comparatively clean. A position
  * hash on top of that stops six identical spokes reading as a stamped rosette.
  */
-function rimGrime(baseHex, { dust = 0x584f3e, from = 0.06, to = 0.2, amount = 0.5, floor = 0.16 } = {}) {
+function rimGrime(baseHex, { dust = 0x76563e, from = 0.06, to = 0.2, amount = 0.5, floor = 0.16 } = {}) {
   const base = LIN(baseHex);
   const dst = LIN(dust);
   return (x, y, z) => {
@@ -1397,11 +1413,13 @@ function buildRim(k) {
       ),
       { rot: [0, Math.PI / 2, 0] },
     );
-  const spokeBody = spokeShape(0.033, 0.062, 0.042, 0.1, 0.214, 0.052);
+  // Narrower than the first cut, so the windows between them are a real
+  // opening onto the rotor and caliper rather than slots.
+  const spokeBody = spokeShape(0.028, 0.056, 0.036, 0.1, 0.214, 0.052);
   // The machined face covers nearly the whole spoke, with the powdercoated body
   // showing only as a dark chamfer around it. Without this the face of the wheel
   // is six black plates over a bright rotor, which reads inside out.
-  const spokeCap = spokeShape(0.028, 0.056, 0.037, 0.104, 0.208, 0.016);
+  const spokeCap = spokeShape(0.023, 0.05, 0.031, 0.104, 0.208, 0.016);
   for (let i = 0; i < SPOKES; i++) {
     const a = (i / SPOKES) * Math.PI * 2 + 0.26;
     const ca = Math.cos(a);
@@ -1409,7 +1427,7 @@ function buildRim(k) {
     k.add('anod', spokeBody, {
       pos: [faceX, 0, 0],
       rot: [a, 0, 0],
-      shade: rimGrime(0x363b3e, { amount: 0.6 }),
+      shade: rimGrime(0x363b3e, { amount: 0.78 }),
     });
     // Powdercoat, not bare machining. Six machined spoke faces are the largest
     // area on the wheel and the wheel well is lit almost entirely by bounce off a
@@ -1420,7 +1438,7 @@ function buildRim(k) {
     k.add('anod', spokeCap, {
       pos: [faceX + 0.031, 0, 0],
       rot: [a, 0, 0],
-      shade: rimGrime(0x474d51, { amount: 0.46, floor: 0.12 }),
+      shade: rimGrime(0x474d51, { amount: 0.6, floor: 0.12 }),
     });
     // pad where the spoke lands on the barrel, with a countersunk rivet
     k.add('anod', rbox(0.08, 0.05, 0.096, 0.012, 1), {
