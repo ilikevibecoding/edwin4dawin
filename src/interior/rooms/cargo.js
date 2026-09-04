@@ -7,7 +7,7 @@ import { roomFloorY } from "../../config/shipSpec.js";
 import { decalRect } from "../../textures.js";
 import * as THREE from "three";
 import {
-  propFrame, railing, deckStrip, hazardBand, deckDecal, grateFloor, bayWalls, containerStack, crate, toolCart,
+  propFrame, railing, deckStrip, hazardBand, deckDecal, bayWalls, containerStack, crate, toolCart, shadowCasters,
   pedestalConsole, cabinet, lightBank, pipeRun, stairRun, beacons, cargoLift, hoist, loaderVehicle, pallet,
 } from "../../hangar/machinery.js";
 
@@ -23,8 +23,9 @@ export function build(kit, ctx, room, lib) {
   const y0 = roomFloorY(room);
   const yTop = y0 + room.height;
   const shell = lib.roomShell(kit, ctx, room, { style: "dark", lights: false, lightMat: "emitWarmSoft", lightRows: 4, skipWalls: ["-z", "+z", "-x", "+x"] });
-  // light strip row 6.4..11.2 puts a wall light 2.8 m above the mezzanine floor
-  bayWalls(kit, room, shell, y0, { lower: 6.4, rows: [6.4, 11.2, room.height], lightRow: 0, seed: 81 });
+  // light strip row 5.4..11.2 puts a wall light above the mezzanine floor; no kick strip (no rubber in the bay)
+  bayWalls(kit, room, shell, y0, { rows: [2.4, 5.4, 11.2, room.height], lightRow: 1, kick: false, lightMat: "emitWarmSoft", seed: 81 });
+  shadowCasters(kit, ["paintedMetal"]);
 
   lanes(kit, P, room, y0);
   containers(kit, y0);
@@ -44,7 +45,7 @@ function lanes(kit, P, room, y0) {
   hazardBand(kit, -4.4, z0 + 0.16, 4.4, z0 + 1.2, y0);
   deckDecal(kit, 0, y0, z0 + 2.6, 1.8, 1, 0);
   for (const x of [LANE.x0, LANE.x1]) deckStrip(kit, "emitAmber", x - 0.08, LANE.z0, x + 0.08, LANE.z1, y0);
-  for (let z = LANE.z0 + 3; z < LANE.z1 - 2; z += 3) deckStrip(kit, "emitWhite", -0.15, z, 0.15, z + 1.4, y0);
+  for (let z = LANE.z0 + 3; z < LANE.z1 - 2; z += 3) deckStrip(kit, "emitAmber", -0.15, z, 0.15, z + 1.4, y0);
   deckDecal(kit, -6.2, y0, 528, 2.6, 11, Math.PI / 2);
   deckDecal(kit, 6.2, y0, 528, 2.6, 2, -Math.PI / 2);
   deckDecal(kit, 0, y0, 536, 2.4, 3, 0);
@@ -86,23 +87,23 @@ function island(kit, ctx, lib, y0) {
   kit.boxMM("hazard", [-3.01, y0 + 0.02, iz - 2.51], [3.01, y0 + 0.13, iz + 2.51], { uv: "world", texel: 1.2 });
   kit.floor(-3, iz - 2.5, 3, iz + 2.5, ty);
   pedestalConsole(kit, propFrame(kit, -2.3, ty, iz, -Math.PI / 2), "screen6", { w: 1.6 });
-  pedestalConsole(kit, propFrame(kit, 2.3, ty, iz, Math.PI / 2), "screen4", { w: 1.6 });
+  pedestalConsole(kit, propFrame(kit, 2.3, ty, iz, Math.PI / 2), "screen6", { w: 1.6 });
   pedestalConsole(kit, propFrame(kit, 0, ty, iz - 1.85, Math.PI), "screen6", { w: 1.8 });
-  pedestalConsole(kit, propFrame(kit, 0, ty, iz + 1.85, 0), "screen4", { w: 1.8 });
+  pedestalConsole(kit, propFrame(kit, 0, ty, iz + 1.85, 0), "screen6", { w: 1.8 });
   // central pillar with four screens and an amber "LOGISTICS" halo
   kit.boxMM("satinBlack", [-0.45, ty, iz - 0.45], [0.45, ty + 3.6, iz + 0.45]);
   kit.collider([-0.45, ty, iz - 0.45], [0.45, ty + 3.6, iz + 0.45], "islandPillar");
   for (const [dx, dz, rot] of [[0.46, 0, Math.PI / 2], [-0.46, 0, -Math.PI / 2], [0, 0.46, 0], [0, -0.46, Math.PI]]) {
     const g = new THREE.PlaneGeometry(0.8, 0.5);
     g.rotateY(rot);
-    kit.add(dz === 0 ? "screen6" : "screen4", g, { pos: [dx, ty + 2.5, iz + dz], uv: "keep" });
+    kit.add("screen6", g, { pos: [dx, ty + 2.5, iz + dz], uv: "keep" });
     const d = new THREE.PlaneGeometry(0.6, 0.6);
     d.rotateY(rot);
     kit.add("decal", d, { pos: [dx, ty + 1.7, iz + dz], uv: "keep", uvRect: decalRect(11) });
   }
   kit.boxMM("emitAmber", [-0.6, ty + 3.6, iz - 0.6], [0.6, ty + 3.7, iz + 0.6], { uv: "keep" });
   kit.boxMM("satinBlack", [-0.7, ty + 3.7, iz - 0.7], [0.7, ty + 3.8, iz + 0.7]);
-  lightBank(kit, 0, y0 + 16, iz, 5, 1.2, "emitWhiteSoft");
+  lightBank(kit, 0, y0 + 16, iz, 5, 1.2, "emitWarmSoft");
   ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 80, 22, [0, ty + 4.5, iz]));
 }
 
@@ -116,7 +117,7 @@ function mezzanine(kit, ctx, lib, room, y0, mats) {
   const zb = z1 - 0.16;
   kit.boxMM("paintedMetal", [xa, my - 0.3, MEZZ_Z], [xb, my - 0.02, zb], { color: P.gunmetal, uv: "world", texel: 0.8 });
   kit.boxMM("deck", [xa, my - 0.02, MEZZ_Z], [xb, my, zb], { color: P.impGreyDark, uv: "world", texel: 1 });
-  grateFloor(kit, xa + 0.3, MEZZ_Z + 0.4, xb - 0.3, MEZZ_Z + 1.6, my + 0.004);
+  kit.boxMM("metal", [xa + 0.3, my, MEZZ_Z + 0.4], [xb - 0.3, my + 0.004, MEZZ_Z + 1.6], { color: P.darkMetal, uv: "world", texel: 2 });
   hazardBand(kit, xa, MEZZ_Z, xb, MEZZ_Z + 0.35, my + 0.006);
   kit.floor(xa, MEZZ_Z, xb, zb, my);
   // edge lip, cut at the lift docks so the platforms can meet the floor
@@ -155,7 +156,7 @@ function mezzanine(kit, ctx, lib, room, y0, mats) {
   for (const cx of [-22, -8, 8, 22]) containerStack(kit, propFrame(kit, cx, my, zb - 1.3, Math.PI / 2), 6, 1, 1, seed++);
   for (const [px, pz] of [[-27, 566.2], [-15.5, 566], [-14, 567.4], [0, 566.2], [1.5, 567.6], [15, 566], [26, 566.3]]) pallet(kit, propFrame(kit, px, my, pz, (px * 7) % 1), { tiers: 1 + (Math.abs(px) % 2), tone: [P.impGrey, P.impGreyDark, P.slate][Math.abs(Math.round(px)) % 3] });
   pedestalConsole(kit, propFrame(kit, -26, my, MEZZ_Z + 1.9, Math.PI), "screen6", { w: 1.4 });
-  cabinet(kit, propFrame(kit, xb - 0.32, my, 567.5, -Math.PI / 2), { screen: "screen4" });
+  cabinet(kit, propFrame(kit, xb - 0.32, my, 567.5, -Math.PI / 2), { screen: "screen6" });
   // under the mezzanine: sealed loading-dock doors on the aft wall, work lights, pallets
   for (const dx of [-24, -10, 10, 24]) {
     kit.boxMM("paintedMetal", [dx - 2.3, y0, zb - 0.34], [dx + 2.3, y0 + 4.9, zb], { color: P.gunmetal, uv: "world", texel: 0.8 });
@@ -179,7 +180,7 @@ function craneRail(kit, ctx, mats, P, yTop) {
   kit.boxMM("metal", [-27.5, yTop - 2.0, z - 0.15], [27.5, yTop - 1.7, z + 0.15], { color: P.steel, uv: "world", texel: 1 });
   kit.boxMM("paintedMetal", [-27.5, yTop - 1.7, z - 0.4], [27.5, yTop - 1.3, z + 0.4], { color: P.gunmetal, uv: "world", texel: 0.8 });
   for (let x = -27; x <= 27; x += 9) kit.boxMM("paintedMetal", [x - 0.25, yTop - 1.3, z - 0.4], [x + 0.25, yTop, z + 0.4], { color: P.darkMetal, texel: 1 });
-  for (const sx of [-1, 1]) kit.box("emitRed", sx * 27.6, yTop - 1.85, z, 0.05, 0.2, 0.2);
+  for (const sx of [-1, 1]) kit.box("emitAmber", sx * 27.6, yTop - 1.85, z, 0.05, 0.2, 0.2);
   hoist(ctx, mats, { x0: -25, x1: 25, y: yTop - 2.0, z, drop: 5, speed: 0.45, name: "cargo.hoist" });
 }
 
@@ -201,7 +202,7 @@ function props(kit, P, room, y0) {
   kit.collider([24.4, y0, 522.2], [26.7, y0 + 1.25, 524.5], "drums");
   // wall cabinets and consoles on the forward wall beside the door
   for (let i = 0; i < 3; i++) cabinet(kit, propFrame(kit, -12 + i * 1.4, y0, z0 + 0.32, 0), { screen: i === 1 ? "screen6" : null });
-  for (let i = 0; i < 3; i++) cabinet(kit, propFrame(kit, 12 + i * 1.4, y0, z0 + 0.32, 0), { screen: i === 1 ? "screen4" : null, color: P.slate });
+  for (let i = 0; i < 3; i++) cabinet(kit, propFrame(kit, 12 + i * 1.4, y0, z0 + 0.32, 0), { screen: i === 1 ? "screen6" : null, color: P.slate });
   pedestalConsole(kit, propFrame(kit, -19, y0, z0 + 1.0, 0), "screen6", { w: 1.4 });
 }
 

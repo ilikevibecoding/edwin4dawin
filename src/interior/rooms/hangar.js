@@ -10,7 +10,7 @@ import { decalRect } from "../../textures.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, grateFloor, grateScreen, bayWalls, containerStack,
   crate, toolCart, fuelBowser, pedestalConsole, cabinet, lightBank, pipeRun, stairTower, gantryCrane, blastLeaves,
-  beacons, tractorEmitters, cargoLift, loaderVehicle, RAIL_H,
+  beacons, tractorEmitters, cargoLift, loaderVehicle, shadowCasters, RAIL_H,
 } from "../../hangar/machinery.js";
 
 const CAT_Y = -62; // service catwalks
@@ -28,6 +28,8 @@ export function build(kit, ctx, room, lib) {
   const T = lib.WALL_T;
 
   const shell = lib.roomShell(kit, ctx, room, { style: "dark", floor: false, ceiling: false, lights: false, skipWalls: ["-z", "+z", "-x", "+x"] });
+  // only the structural plate material throws shadows (catwalks, platforms, stair towers, girders, cab)
+  shadowCasters(kit, ["paintedMetal"]);
 
   deck(kit, lib, room, y0, W, T);
   wellEdge(kit, lib, y0, W);
@@ -84,9 +86,9 @@ function wellEdge(kit, lib, y0, W) {
   for (const [z, zc0, zc1] of [[W.z0, W.z0 - 0.62, W.z0 + 0.05], [W.z1, W.z1 - 0.05, W.z1 + 0.62]]) {
     for (const sx of [-1, 1]) {
       kit.box("hazard", sx * (gap + 0.15), y0 + 0.55, z + (z < 465 ? -0.55 : 0.55), 0.3, 1.1, 0.3, { uv: "world", texel: 1.5 });
-      kit.box("emitRed", sx * (gap + 0.15), y0 + 1.2, z + (z < 465 ? -0.55 : 0.55), 0.2, 0.12, 0.2);
+      kit.box("emitAmber", sx * (gap + 0.15), y0 + 1.2, z + (z < 465 ? -0.55 : 0.55), 0.2, 0.12, 0.2);
     }
-    kit.boxMM("emitRed", [-gap, y0 + 0.25, z + (z < 465 ? -0.5 : 0.3)], [gap, y0 + 0.265, z + (z < 465 ? -0.3 : 0.5)], { uv: "keep" });
+    kit.boxMM("emitAmber", [-gap, y0 + 0.25, z + (z < 465 ? -0.5 : 0.3)], [gap, y0 + 0.265, z + (z < 465 ? -0.3 : 0.5)], { uv: "keep" });
     kit.collider([-gap - 0.3, y0, zc0], [gap + 0.3, y0 + 0.3, zc1], "wellCurb");
   }
   // hazard bands and the yellow limit line around the well
@@ -110,8 +112,8 @@ function wellEdge(kit, lib, y0, W) {
 // ---------------------------------------------------------------- lane markings and stencils
 function markings(kit, lib, y0, W, z0, z1) {
   // launch lane: white edge lines and centre dashes from the shuttle-bay door to the forward well opening
-  for (const sx of [-1, 1]) deckStrip(kit, "emitWhite", sx * 5.0 - 0.08, z0 + 1, sx * 5.0 + 0.08, W.z0 - 2.4, y0);
-  for (let z = z0 + 2.5; z < W.z0 - 4; z += 3) deckStrip(kit, "emitWhite", -0.15, z, 0.15, z + 1.4, y0);
+  for (const sx of [-1, 1]) deckStrip(kit, "emitWhiteSoft", sx * 5.0 - 0.08, z0 + 1, sx * 5.0 + 0.08, W.z0 - 2.4, y0);
+  for (let z = z0 + 2.5; z < W.z0 - 4; z += 3) deckStrip(kit, "emitWhiteSoft", -0.15, z, 0.15, z + 1.4, y0);
   deckDecal(kit, -7.4, y0, z0 + 6, 3.2, 0, Math.PI / 2);
   deckDecal(kit, 7.4, y0, z0 + 6, 3.2, 2, -Math.PI / 2);
   // recovery lane: amber
@@ -130,8 +132,8 @@ function markings(kit, lib, y0, W, z0, z1) {
 function walls(kit, ctx, lib, room, shell, y0) {
   const P = lib.PALETTE;
   const h = room.height;
-  // light strip row 16.8..22 m puts a wall light 1.4 m above the catwalks
-  bayWalls(kit, room, shell, y0, { lower: 6.4, rows: [6.4, 11.6, 16.8, 22, 27.2, 32.4, h], lightRow: 2, seed: 41 });
+  // 2.4 m panel band, then plate rows; the 16.8..22 m row carries a wall light 1.4 m above the catwalks
+  bayWalls(kit, room, shell, y0, { rows: [2.4, 5.4, 11.2, 16.8, 22, 27.2, 32.4, h], lightRow: 3, seed: 41 });
   // bay number plates high on the walls
   for (const [dir, { frame, length }] of Object.entries(shell.frames)) {
     for (let u = length * 0.25; u < length; u += length * 0.5) {
@@ -205,7 +207,7 @@ function clampGantry(kit, lib, gx, rz, idx) {
   const plate = new THREE.PlaneGeometry(0.9, 0.9);
   plate.rotateY(face > 0 ? Math.PI / 2 : -Math.PI / 2);
   kit.add("decal", plate, { pos: [gx + face * 1.42, yC - 0.55, rz], uv: "keep", uvRect: decalRect(idx % 2 ? 14 : 0) });
-  kit.box("emitTeal", gx - face * 1.42, yC - 0.4, rz + 0.9, 0.02, 0.1, 0.5);
+  kit.box("emitBlue", gx - face * 1.42, yC - 0.4, rz + 0.9, 0.02, 0.1, 0.5);
   kit.box("emitAmber", gx - face * 1.42, yC - 0.4, rz - 0.9, 0.02, 0.1, 0.5);
   // clamp arm beam across the wings, two vertical arms with saddle pads that grip the wing tops.
   // A parked fighter (tie.js) has its wing rims topping out at rackY + 3.96 = -54.04 and the pod at -56.
@@ -217,7 +219,7 @@ function clampGantry(kit, lib, gx, rz, idx) {
     kit.boxMM("metal", [ax - 0.21, armBottom, rz - 0.21], [ax + 0.21, beamY, rz + 0.21], { color: P.steel, texel: 1.5 });
     kit.box("paintedMetal", ax, armBottom - 0.05, rz, 1.1, 0.5, 2.3, { color: P.darkMetal, texel: 1 });
     kit.box("rubber", ax, armBottom - 0.35, rz, 0.95, 0.12, 2.1, { color: P.rubber });
-    kit.box("emitTeal", ax + s * 0.56, armBottom, rz, 0.02, 0.12, 1.6);
+    kit.box("emitBlue", ax + s * 0.56, armBottom, rz, 0.02, 0.12, 1.6);
     // hydraulic cylinders alongside the arm
     kit.cyl("metal", ax + s * 0.4, armBottom + 1.4, rz + 0.5, 0.09, 2.6, "y", { color: P.gunmetal, segments: 8 });
     kit.cyl("metal", ax + s * 0.4, armBottom + 1.4, rz - 0.5, 0.09, 2.6, "y", { color: P.gunmetal, segments: 8 });
@@ -397,7 +399,7 @@ function stations(kit, ctx, lib, y0) {
       crate(kit, cf, { decal: 6 });
       crate(kit, propFrame(kit, s * 30.4, y0 + 0.8, z + 3.0, face + 0.1), { decal: 11, h: 0.7 });
       crate(kit, propFrame(kit, s * 28.8, y0, z + 3.4, face), { w: 0.9, d: 0.9, h: 0.9, decal: 9 });
-      cabinet(kit, propFrame(kit, s * (wallX - 0.35), y0, z - 1.2, face), { screen: "screen4" });
+      cabinet(kit, propFrame(kit, s * (wallX - 0.35), y0, z - 1.2, face), { screen: "screen6" });
       cabinet(kit, propFrame(kit, s * (wallX - 0.35), y0, z + 0.2, face), { screen: null, color: P.slate });
       // parts rack: shelves with wing spars and canisters
       kit.box("metal", s * (wallX - 0.5), y0 + 1.1, z + 2.6, 0.9, 2.2, 1.8, { color: P.gunmetal, texel: 1 });
@@ -469,7 +471,7 @@ function controlCab(kit, ctx, lib, y0) {
   kit.collider([9, y0, 506], [13.2, fy, 509.2], "cabCore");
   for (let y = y0 + 0.8; y < fy - 1; y += 1.4) kit.box("metal", 9.0, y, 507.6, 0.06, 0.5, 2.6, { color: P.darkMetal, texel: 1 });
   kit.box("satinBlack", 11.1, y0 + 1.1, 505.98, 1.2, 2.2, 0.06);
-  kit.box("emitTeal", 11.7, y0 + 1.6, 505.95, 0.06, 0.4, 0.02);
+  kit.box("emitBlue", 11.7, y0 + 1.6, 505.95, 0.06, 0.4, 0.02);
   for (const [px, pz] of [[cx0 + 0.3, cz0 + 0.3], [cx1 - 0.3, cz0 + 0.3], [cx0 + 0.3, cz1 - 0.3], [cx1 - 0.3, cz1 - 0.3]]) {
     kit.boxMM("paintedMetal", [px - 0.3, y0, pz - 0.3], [px + 0.3, fy, pz + 0.3], { color: P.darkMetal, uv: "world", texel: 0.8 });
     kit.collider([px - 0.3, y0, pz - 0.3], [px + 0.3, fy, pz + 0.3], "cabColumn");
@@ -509,23 +511,23 @@ function controlCab(kit, ctx, lib, y0) {
     kit.collider([a[0], fy, a[1]], [b[0], roofY, b[1]], "cabWall");
   }
   kit.boxMM("paintedMetal", [cx0 - 0.5, roofY, cz0 - 0.5], [cx1 + 0.5, roofY + 0.3, cz1 + 0.5], { color: P.gunmetal, uv: "world", texel: 0.8 });
-  kit.boxMM("emitRed", [cx0 - 0.45, roofY + 0.1, cz0 - 0.52], [cx1 + 0.45, roofY + 0.18, cz0 - 0.5], { uv: "keep" });
-  kit.boxMM("emitRed", [cx0 - 0.52, roofY + 0.1, cz0 - 0.45], [cx0 - 0.5, roofY + 0.18, cz1 + 0.45], { uv: "keep" });
+  kit.boxMM("emitAmber", [cx0 - 0.45, roofY + 0.1, cz0 - 0.52], [cx1 + 0.45, roofY + 0.18, cz0 - 0.5], { uv: "keep" });
+  kit.boxMM("emitAmber", [cx0 - 0.52, roofY + 0.1, cz0 - 0.45], [cx0 - 0.5, roofY + 0.18, cz1 + 0.45], { uv: "keep" });
   kit.boxMM("satinBlack", [cx0 + 1, roofY - 0.12, cz0 + 1], [cx1 - 1, roofY, cz1 - 1]);
   kit.boxMM("emitWhiteSoft", [cx0 + 1.2, roofY - 0.14, cz0 + 1.2], [cx1 - 1.2, roofY - 0.12, cz1 - 1.2], { uv: "keep" });
   // sensor mast and dish on the roof
   kit.box("metal", 8.2, roofY + 1.6, 509.6, 0.12, 2.6, 0.12, { color: P.gunmetal });
   kit.cyl("metal", 8.2, roofY + 2.9, 509.6, 0.5, 0.1, "y", { color: P.steel, segments: 12 });
   // consoles facing the well, equipment rack at the back, seats
-  for (const x of [8.6, 10.2, 11.8, 13.4]) pedestalConsole(kit, propFrame(kit, x, fy, cz0 + 0.95, 0), x < 11 ? "screen4" : "screen6", { w: 1.5 });
+  for (const x of [8.6, 10.2, 11.8, 13.4]) pedestalConsole(kit, propFrame(kit, x, fy, cz0 + 0.95, 0), "screen6", { w: 1.5 });
   for (const x of [8.6, 10.2, 11.8, 13.4]) {
     kit.box("satinBlack", x, fy + 0.5, cz0 + 1.9, 0.5, 0.1, 0.5);
     kit.box("satinBlack", x, fy + 0.3, cz0 + 1.9, 0.12, 0.4, 0.12);
     kit.box("satinBlack", x, fy + 0.8, cz0 + 2.12, 0.5, 0.5, 0.08);
   }
-  cabinet(kit, propFrame(kit, 8.6, fy, cz1 - 0.42, Math.PI), { w: 2.6, h: 2.6, d: 0.6, screen: "screen4" });
+  cabinet(kit, propFrame(kit, 8.6, fy, cz1 - 0.42, Math.PI), { w: 2.6, h: 2.6, d: 0.6, screen: "screen6" });
   cabinet(kit, propFrame(kit, 12.4, fy, cz1 - 0.42, Math.PI), { w: 2.6, h: 2.6, d: 0.6, screen: "screen6" });
-  pedestalConsole(kit, propFrame(kit, cx0 + 0.75, fy, 507.6, Math.PI / 2), "screen4", { w: 1.6 });
+  pedestalConsole(kit, propFrame(kit, cx0 + 0.75, fy, 507.6, Math.PI / 2), "screen6", { w: 1.6 });
   ctx.lights.cool.push(lib.pointLight(0xfff0dd, 8, 10, [11.1, roofY - 0.4, 507.6]));
   // access stair tower (2 flights, exits through its x0 face onto the cab floor)
   stairTower(kit, { x0: cx1, x1: cx1 + 2.6, z0: cz0, z1: cz1, yBottom: y0, yTop: fy, entry: "+z", exit: "x0", flights: 2, light: null });
@@ -538,23 +540,24 @@ function lights(ctx, lib, y0) {
   // The bay is 64 x 110 x 38 m and the pool only ever runs ~14 point lights: few, strong, long-reach
   // floods under the side catwalks so the far side of the bay stays lit from wherever the player stands.
   // (inverse-square: a 17 m drop to the deck needs ~600 cd for a lit deck, so these are big numbers)
-  for (const s of [-1, 1]) for (const z of [424, 452, 480, 508]) cool(760, 110, [s * 25, CAT_Y - 1.0, z]);
-  for (const z of [412.5, 517.5]) cool(440, 80, [0, CAT_Y - 1.0, z]);
+  for (const s of [-1, 1]) for (const z of [424, 452, 480, 508]) cool(1000, 110, [s * 25, CAT_Y - 1.0, z]);
+  for (const z of [412.5, 517.5]) cool(560, 80, [0, CAT_Y - 1.0, z]);
   // rack lights on the girder undersides: the parked fighters and the well mouth below them
   for (const s of [-1, 1]) for (const z of [448, 480]) cool(420, 70, [s * 14, GIRDER.y0 - 0.6, z], 0xe6eeff);
   // tractor glow: blue lights hovering in the beams above the well mouth
   for (const z of [448.5, 470.5, 492.5]) ctx.lights.teal.push(lib.pointLight(0x66b6ff, 170, 60, [0, -70, z]));
-  // two shadowed floods from the girders down onto the side decks (fighter wings throw the shadows)
-  for (const s of [-1, 1]) {
-    const sp = new THREE.SpotLight(0xe8f0ff, 1500 * lib.LIGHT_SCALE, 70, 0.6, 0.5, 1.8);
-    sp.position.set(s * 13, GIRDER.y0 - 0.4, 465);
-    sp.target.position.set(s * 27, y0, 465);
-    sp.shadow.camera.near = 2;
-    sp.shadow.camera.far = 60;
-    sp.shadow.bias = -0.0004;
-    sp.shadow.normalBias = 0.05;
-    ctx.lights.spots.push(sp);
-  }
+  // one shadowed flood from the starboard girder down onto the starboard side deck (catwalk, platform and
+  // stair tower throw the shadows). Every pooled spot is a full shadow pass over the zone, so this is the
+  // only spot fixture in the bay; its range (distance x 1.6 in the pool) stops short of the cargo bay and the
+  // shuttle dock so it does not switch on (and render its shadow map) while the player is in those rooms.
+  const sp = new THREE.SpotLight(0xe8f0ff, 2600 * lib.LIGHT_SCALE, 48, 0.62, 0.5, 1.8);
+  sp.position.set(13, GIRDER.y0 - 0.4, 465);
+  sp.target.position.set(27, y0, 465);
+  sp.shadow.camera.near = 2;
+  sp.shadow.camera.far = 50;
+  sp.shadow.bias = -0.0004;
+  sp.shadow.normalBias = 0.05;
+  ctx.lights.spots.push(sp);
 }
 
 // ---------------------------------------------------------------- moving machinery

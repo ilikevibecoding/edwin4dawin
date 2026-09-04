@@ -93,28 +93,47 @@ export function grateScreen(kit, ax, az, bx, bz, y0, y1) {
  * frame: wall frame (u along the wall, v up, n into the room). Columns every `colW`, rows `rows` (v cuts).
  */
 export function bigWall(frame, length, rows, opts = {}) {
-  const { colW = 4.2, seed = 3, depth = 0.16, paints = [PALETTE.gunmetal, PALETTE.gunmetal, PALETTE.darkMetal, PALETTE.slate], ribEvery = 2, lightRow = -1, tag = "bigwall" } = opts;
+  const { colW = 4.2, seed = 3, depth = 0.16, paints = [PALETTE.gunmetal, PALETTE.gunmetal, PALETTE.darkMetal, PALETTE.slate], ribEvery = 2, lightRow = -1, lampMat = "emitAmber", lightMat = "emitWhiteSoft", openings = [] } = opts;
   const rand = rng(seed);
   const nCols = Math.max(1, Math.round(length / colW));
   const cw = length / nCols;
   const v0 = rows[0];
   const v1 = rows[rows.length - 1];
-  // one continuous backing plate per wall band (cheap), then plate seams, ribs and features on top
-  frame.box("paintedMetal", length / 2, (v0 + v1) / 2, -depth / 2, length, v1 - v0, depth, { color: PALETTE.darkMetal, texel: 0.5 });
+  const hits = (u0, u1, va, vb) => openings.some((o) => u1 > o.u0 + 1e-3 && u0 < o.u1 - 1e-3 && vb > o.v0 + 1e-3 && va < o.v1 - 1e-3);
+  // u-spans of a band not covered by an opening that reaches into it
+  const spans = (va, vb) => {
+    let out = [[0, length]];
+    for (const o of openings) {
+      if (!(vb > o.v0 + 1e-3 && va < o.v1 - 1e-3)) continue;
+      const next = [];
+      for (const [a, b] of out) {
+        if (o.u1 <= a || o.u0 >= b) next.push([a, b]);
+        else {
+          if (o.u0 > a) next.push([a, o.u0]);
+          if (o.u1 < b) next.push([o.u1, b]);
+        }
+      }
+      out = next;
+    }
+    return out.filter(([a, b]) => b - a > 0.02);
+  };
   for (let r = 0; r < rows.length - 1; r++) {
     const ra = rows[r];
     const rb = rows[r + 1];
     const rh = rb - ra;
+    // backing plate for the band (split around door openings), then plates and features on top
+    for (const [a, b] of spans(ra, rb)) frame.box("paintedMetal", (a + b) / 2, (ra + rb) / 2, -depth / 2, b - a, rh, depth, { color: PALETTE.darkMetal, texel: 0.5 });
     for (let c = 0; c < nCols; c++) {
       const u0 = c * cw;
       const cu = u0 + cw / 2;
       const col = paints[Math.floor(rand() * paints.length)];
       const variant = Math.floor(rand() * 3);
-      frame.box(variant === 0 ? "painted" : "painted" + variant, cu, (ra + rb) / 2, -0.03, cw - 0.08, rh - 0.08, 0.06, { color: col, uv: "world", texel: 0.35 });
       const f = rand();
+      if (hits(u0, u0 + cw, ra, rb)) continue;
+      frame.box(variant === 0 ? "painted" : "painted" + variant, cu, (ra + rb) / 2, -0.03, cw - 0.08, rh - 0.08, 0.06, { color: col, uv: "world", texel: 0.35 });
       if (r === lightRow) {
         frame.box("satinBlack", cu, ra + rh * 0.5, 0.02, cw - 0.6, 0.3, 0.06);
-        frame.box("emitWhiteSoft", cu, ra + rh * 0.5, 0.055, cw - 0.7, 0.16, 0.01, { uv: "keep" });
+        frame.box(lightMat, cu, ra + rh * 0.5, 0.055, cw - 0.7, 0.16, 0.01, { uv: "keep" });
       } else if (f < 0.16 && rh > 2.5) {
         // big vent grille
         frame.box("metal", cu, (ra + rb) / 2, 0.0, cw * 0.6, rh * 0.5, 0.08, { color: PALETTE.gunmetal, texel: 1 });
@@ -131,15 +150,16 @@ export function bigWall(frame, length, rows, opts = {}) {
       } else if (f < 0.44) {
         // raised access plate with a status lamp
         frame.box("paintedMetal", cu, (ra + rb) / 2, 0.02, cw * 0.5, rh * 0.5, 0.04, { color: PALETTE.slate, texel: 0.8 });
-        frame.box(rand() < 0.5 ? "emitTeal" : "emitAmber", cu + cw * 0.18, ra + rh * 0.3, 0.045, 0.14, 0.06, 0.01);
+        frame.box(lampMat, cu + cw * 0.18, ra + rh * 0.3, 0.045, 0.14, 0.06, 0.01);
       }
     }
     // horizontal seam band between rows
-    if (r < rows.length - 2) frame.box("satinBlack", length / 2, rb, 0.0, length, 0.12, 0.05);
+    if (r < rows.length - 2) for (const [a, b] of spans(rb - 0.06, rb + 0.06)) frame.box("satinBlack", (a + b) / 2, rb, 0.0, b - a, 0.12, 0.05);
   }
-  // pilasters
+  // pilasters (none through a door opening)
   for (let c = 0; c <= nCols; c += ribEvery) {
     const u = Math.min(length, c * cw);
+    if (hits(u - 0.3, u + 0.3, v0, v1)) continue;
     frame.box("paintedMetal", u, (v0 + v1) / 2, 0.12, 0.5, v1 - v0, 0.24, { color: PALETTE.gunmetal, texel: 0.6 });
   }
 }
@@ -150,19 +170,24 @@ export function bigWall(frame, length, rows, opts = {}) {
  * roomShell result (its frames); doors must fit inside the lower band.
  */
 export function bayWalls(kit, room, shell, y0, opts = {}) {
-  const { lower = 6.4, panelW = 2.1, colW = 4.2, rows = null, lightRow = -1, seed = 41, paints = DARK_PAINTS, styles = { panel: 0.72, vent: 0.12, greeble: 0.08, strip: 0.08 } } = opts;
+  // Two bands: a 2.4 m human-scale panelGrid band (2 rows, wide panels; only the panel / vent styles so the
+  // walls add no materials beyond the paints, metal and decals the room has anyway) and large plates above.
+  // The blast-door openings (5-6 m) cut through both bands. Wall cost drives the whole zone's triangle count
+  // because every deck D room is rendered from every other one, so this stays deliberately lean.
+  const { lower = 2.4, panelW = 2.4, colW = 4.2, rows = null, lightRow = -1, seed = 41, paints = DARK_PAINTS, styles = { panel: 0.82, vent: 0.18 }, kick = true, lampMat = "emitAmber", lightMat = "emitWhiteSoft", firstUpper = 3.0 } = opts;
   const h = room.height;
   let upper = rows;
   if (!upper) {
-    const n = Math.max(1, Math.round((h - lower) / 5.2));
-    upper = Array.from({ length: n + 1 }, (_, i) => lower + ((h - lower) * i) / n);
+    const a = lower + firstUpper;
+    const n = Math.max(1, Math.round((h - a) / 5.2));
+    upper = [lower, ...Array.from({ length: n }, (_, i) => a + ((h - a) * (i + 1)) / n)];
   }
   let s = seed;
   for (const [dir, { frame, length }] of Object.entries(shell.frames)) {
     const ops = [];
     for (const door of room.doors || []) if (door[3] === dir) ops.push(doorOpening(room, door, y0, length, Math.min(h - 0.1, door[4] || DOOR_H)));
-    panelGrid(frame, length, lower, { openings: ops, rows: [0, 0.45, 2.2, 4.4, lower], panelW, depth: WALL_T, seed: s++, kick: true, topPipes: false, styles, paints, tag: room.id + dir });
-    bigWall(frame, length, upper, { colW, seed: s++, depth: WALL_T, lightRow, ribEvery: 2 });
+    panelGrid(frame, length, lower, { openings: ops, rows: [0, 0.45, lower], panelW, depth: WALL_T, seed: s++, kick, topPipes: false, styles, paints, tag: room.id + dir });
+    bigWall(frame, length, upper, { colW, seed: s++, depth: WALL_T, lightRow, ribEvery: 2, lampMat, lightMat, openings: ops });
     frame.collider(0, length, lower, h, -WALL_T, 0.02, room.id + dir);
     frame.box("satinBlack", length / 2, h - 0.09, 0.02, length, 0.18, 0.05);
   }
@@ -282,13 +307,13 @@ export function toolCart(kit, f, opts = {}) {
     f.box("painted", 0, v + (h - 0.2) / 8, d / 2 + 0.01, w - 0.1, (h - 0.2) / 4 - 0.04, 0.02, { color: PALETTE.orange, uv: "keep" });
     f.box("metal", 0, v + (h - 0.2) / 8, d / 2 + 0.03, 0.3, 0.03, 0.02, { color: PALETTE.steel });
   }
-  f.box("rubber", 0, 0.2 + h + 0.02, 0, w + 0.05, 0.04, d + 0.05, { color: PALETTE.rubber });
-  for (const su of [-1, 1]) for (const sn of [-1, 1]) f.cylU("rubber", su * (w / 2 - 0.12), 0.12, sn * (d / 2 - 0.1), 0.12, 0.08, { color: PALETTE.rubber, segments: 10 });
+  f.box("satinBlack", 0, 0.2 + h + 0.02, 0, w + 0.05, 0.04, d + 0.05);
+  for (const su of [-1, 1]) for (const sn of [-1, 1]) f.cylU("satinBlack", su * (w / 2 - 0.12), 0.12, sn * (d / 2 - 0.1), 0.12, 0.08, { segments: 10 });
   f.cylU("metal", -w / 2 - 0.1, 0.2 + h + 0.05, 0, 0.02, 0.05, { color: PALETTE.steel, segments: 8 });
   f.cylV("metal", -w / 2 - 0.1, 0.2 + h * 0.7, 0, 0.02, h * 0.6, { color: PALETTE.steel, segments: 8 });
   f.box("metal", 0.2, 0.2 + h + 0.08, 0.1, 0.35, 0.08, 0.2, { color: PALETTE.gunmetal });
   f.box("metal", -0.25, 0.2 + h + 0.06, -0.1, 0.2, 0.04, 0.12, { color: PALETTE.steel });
-  f.box("leds", -0.3, 0.2 + h * 0.5, d / 2 + 0.04, 0.08, 0.02, 0.005, { uv: "keep" });
+  f.box("emitAmber", -0.3, 0.2 + h * 0.5, d / 2 + 0.04, 0.08, 0.02, 0.005, { uv: "keep" });
   f.collider(-w / 2 - 0.15, w / 2, 0, h + 0.3, -d / 2, d / 2, "cart");
 }
 
@@ -305,7 +330,7 @@ export function fuelBowser(kit, f, opts = {}) {
   // control cabinet at the rear with a pump gauge screen
   f.box("satinBlack", 0.4, 1.1, -1.85, 0.8, 1.0, 0.35);
   f.box("screen6", 0.4, 1.3, -2.03, 0.5, 0.25, 0.01, { uv: "keep" });
-  f.box("leds", 0.4, 0.95, -2.03, 0.5, 0.05, 0.01, { uv: "keep" });
+  f.box("emitAmber", 0.4, 0.95, -2.03, 0.5, 0.05, 0.01, { uv: "keep" });
   f.box("emitAmber", 0.4, 2.85, 0, 0.16, 0.14, 0.16);
   // hose reel
   f.add("metal", new THREE.TorusGeometry(0.42, 0.13, 8, 20), -0.5, 1.15, -1.9, { color: PALETTE.rubber, uv: "scale", uvScale: [4, 1] });
@@ -330,11 +355,11 @@ export function loaderVehicle(kit, f) {
   f.box("paintedMetal", 0, 1.1, 1.2, 1.9, 0.2, 1.2, { color: PALETTE.impGreyDark, texel: 1 });
   for (const su of [-0.5, 0.5]) f.box("metal", su, 0.35, 2.4, 0.16, 0.06, 1.4, { color: PALETTE.steel });
   f.box("metal", 0, 1.2, 1.85, 1.6, 1.4, 0.1, { color: PALETTE.gunmetal, texel: 1 });
-  for (const su of [-1, 1]) for (const sn of [-1.2, 1.2]) f.cylU("rubber", su * 1.2, 0.45, sn, 0.45, 0.4, { color: PALETTE.rubber, segments: 14 });
+  for (const su of [-1, 1]) for (const sn of [-1.2, 1.2]) f.cylU("satinBlack", su * 1.2, 0.45, sn, 0.45, 0.4, { segments: 14 });
   f.box("hazard", 0, 0.45, 1.85, 2.2, 0.3, 0.1, { uv: "world", texel: 1.5 });
   f.box("emitAmber", 0, 2.05, -0.6, 0.3, 0.12, 0.3);
-  f.box("emitWhite", -0.7, 0.9, 1.92, 0.3, 0.12, 0.02);
-  f.box("emitWhite", 0.7, 0.9, 1.92, 0.3, 0.12, 0.02);
+  f.box("emitWhiteSoft", -0.7, 0.9, 1.92, 0.3, 0.12, 0.02);
+  f.box("emitWhiteSoft", 0.7, 0.9, 1.92, 0.3, 0.12, 0.02);
   f.collider(-1.4, 1.4, 0, 2.1, -1.9, 3.1, "loader");
 }
 
@@ -362,12 +387,12 @@ export function pallet(kit, f, opts = {}) {
 }
 
 /** Free-standing pedestal console: black desk, slanted screen, key strip. screenMat e.g. "screen4" / "screen6". */
-export function pedestalConsole(kit, f, screenMat = "screen4", opts = {}) {
+export function pedestalConsole(kit, f, screenMat = "screen6", opts = {}) {
   const { w = 1.2, h = 1.05, d = 0.55 } = opts;
   f.box("satinBlack", 0, h / 2, 0, w, h, d);
   f.box("satinBlack", 0, h + 0.14, d * 0.05, w, 0.28, d * 0.9, { tilt: -0.5 });
   f.box(screenMat, 0, h + 0.16, d * 0.05 + 0.13, w - 0.12, 0.2, 0.01, { uv: "keep", tilt: -0.5 });
-  f.box("leds", 0, h + 0.02, d / 2 + 0.005, w - 0.2, 0.05, 0.01, { uv: "keep" });
+  f.box("emitAmber", 0, h + 0.02, d / 2 + 0.005, w - 0.2, 0.05, 0.01, { uv: "keep" });
   f.box("metal", 0, 0.05, 0, w + 0.06, 0.1, d + 0.06, { color: PALETTE.darkMetal });
   f.collider(-w / 2, w / 2, 0, h + 0.3, -d / 2, d / 2 + 0.05, "console");
 }
@@ -378,9 +403,9 @@ export function cabinet(kit, f, opts = {}) {
   f.box("painted1", 0, h / 2, 0, w, h, d, { color, uv: "world", texel: 1 });
   f.box("satinBlack", 0, h / 2, d / 2 + 0.005, w - 0.16, h - 0.16, 0.01);
   if (screen) f.box(screen, 0, h * 0.7, d / 2 + 0.015, w - 0.4, 0.3, 0.01, { uv: "keep" });
-  f.box("leds", 0, h * 0.5, d / 2 + 0.015, w - 0.4, 0.05, 0.01, { uv: "keep" });
+  f.box("emitAmber", 0, h * 0.5, d / 2 + 0.015, w - 0.4, 0.05, 0.01, { uv: "keep" });
   for (let i = 0; i < 3; i++) f.box("metal", -w / 2 + 0.25 + i * 0.3, h * 0.3, d / 2 + 0.02, 0.18, 0.06, 0.02, { color: PALETTE.steel });
-  f.box("emitTeal", w / 2 - 0.2, h * 0.9, d / 2 + 0.015, 0.06, 0.06, 0.01);
+  f.box("emitAmber", w / 2 - 0.2, h * 0.9, d / 2 + 0.015, 0.06, 0.06, 0.01);
   f.collider(-w / 2, w / 2, 0, h, -d / 2, d / 2 + 0.05, "cabinet");
 }
 
@@ -528,7 +553,7 @@ export function tieShape(kit, cx, cy, cz, opts = {}) {
   kit.cyl("darkGloss", cx, cy, cz - 1.95, 1.1, 0.25, "z", { segments: 8 });
   kit.add("metal", new THREE.TorusGeometry(1.15, 0.09, 6, 8), { pos: [cx, cy, cz - 2.0], color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
   kit.add("metal", new THREE.TorusGeometry(0.9, 0.1, 6, 12), { pos: [cx, cy, cz + 1.95], color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
-  for (const x of [-0.45, 0.45]) kit.cyl("emitRed", cx + x, cy - 0.3, cz + 2.05, 0.28, 0.04, "z", { segments: 12 });
+  for (const x of [-0.45, 0.45]) kit.cyl("darkGloss", cx + x, cy - 0.3, cz + 2.05, 0.28, 0.04, "z", { segments: 12 }); // engines cold
   // top hatch ring
   kit.add("metal", new THREE.TorusGeometry(0.6, 0.07, 6, 16), { pos: [cx, cy + 1.96, cz], rot: [Math.PI / 2, 0, 0], color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
   for (const side of [-1, 1]) {
@@ -551,13 +576,31 @@ export function tieShape(kit, cx, cy, cz, opts = {}) {
 // ---------------------------------------------------------------------------
 // Moving machinery (ctx.dynamic entries)
 // ---------------------------------------------------------------------------
+// Moving machinery lives above the pooled spot lights (crane, hoists) or below the deck (blast leaves), so
+// none of it casts: every caster costs one extra draw per shadowed spot.
 function buildGroup(mats, name, fn) {
   const g = new THREE.Group();
   g.name = name;
   const k = new Kit(mats);
   fn(k, g);
-  k.build(g, { castShadow: true, receiveShadow: true });
+  k.build(g, { castShadow: false, receiveShadow: true });
   return g;
+}
+
+/**
+ * Restrict the room kit's shadow casters to the listed material keys. Every pooled spot renders every caster
+ * whose bounding sphere touches its frustum, and a merged room mesh touches everything, so a 20-material room
+ * costs 20 shadow draws per spot; the big structural plates (catwalks, platforms, stair towers) sell the
+ * shadows on their own. Wraps kit.build, which the registry calls after the builder returns.
+ */
+export function shadowCasters(kit, keys) {
+  const allow = new Set(keys);
+  const build = kit.build.bind(kit);
+  kit.build = (parent, opts) => {
+    const meshes = build(parent, opts);
+    for (const m of meshes) if (!allow.has(m.name.replace(/^kit_/, ""))) m.castShadow = false;
+    return meshes;
+  };
 }
 
 /**
@@ -568,6 +611,7 @@ export function gantryCrane(ctx, mats, o) {
   const { x0, x1, y, zMin, zMax, trolleyRange = [-8, 8], hookDrop = 7, load = true, speed = 0.7, name = "hangar.crane" } = o;
   const span = x1 - x0;
   const cx = (x0 + x1) / 2;
+  // three materials on the bridge, two on the trolley: each one is a draw call in every deck D view
   const bridge = buildGroup(mats, name + ".bridge", (k) => {
     for (const dz of [-1.3, 1.3]) k.box("paintedMetal", 0, 0, dz, span, 1.6, 0.8, { color: PALETTE.gunmetal, texel: 0.7 });
     for (let x = -span / 2 + 3; x < span / 2 - 2; x += 6) k.box("paintedMetal", x, 0.5, 0, 0.3, 0.5, 2.0, { color: PALETTE.darkMetal });
@@ -576,21 +620,21 @@ export function gantryCrane(ctx, mats, o) {
     for (const sx of [-1, 1]) {
       k.box("paintedMetal", sx * (span / 2 - 0.8), -0.4, 0, 1.6, 2.4, 3.8, { color: PALETTE.darkMetal, texel: 0.7 });
       k.box("emitAmber", sx * (span / 2 - 0.8), 1.1, 0, 0.5, 0.25, 0.5);
-      k.box("emitRed", sx * (span / 2 - 1.6), -1.4, 1.95, 0.4, 0.15, 0.02);
+      k.box("emitAmber", sx * (span / 2 - 1.6), -1.4, 1.95, 0.4, 0.15, 0.02);
     }
-    k.box("satinBlack", 0, 0.9, 0, span - 4, 0.05, 2.4);
-    k.box("emitWhiteSoft", 0, -0.82, 0, span - 6, 0.02, 0.6, { uv: "keep" });
+    k.box("paintedMetal", 0, 0.9, 0, span - 4, 0.05, 2.4, { color: PALETTE.darkMetal, texel: 0.7 });
   });
   const trolley = buildGroup(mats, name + ".trolley", (k) => {
-    k.box("paintedMetal", 0, -1.4, 0, 3.2, 1.3, 3.4, { color: PALETTE.slate, texel: 1 });
+    k.box("metal", 0, -1.4, 0, 3.2, 1.3, 3.4, { color: PALETTE.slate, texel: 1 });
     k.box("metal", 0, -2.3, 0, 1.6, 0.6, 1.6, { color: PALETTE.darkMetal });
-    k.box("emitAmber", 1.4, -1.0, 1.72, 0.3, 0.2, 0.02);
     for (const dx of [-0.5, 0.5]) k.cyl("metal", dx, -2.6 - hookDrop / 2, 0, 0.04, hookDrop, "y", { color: PALETTE.steel, segments: 6 });
     k.box("metal", 0, -2.6 - hookDrop, 0, 1.4, 0.5, 0.7, { color: PALETTE.gunmetal });
-    k.box("hazard", 0, -2.6 - hookDrop, 0, 1.42, 0.2, 0.72, { uv: "world", texel: 1.5 });
     if (load) {
-      const f = new Frame(k, new THREE.Vector3(0, -2.6 - hookDrop - 0.3 - 2.4, 0), new THREE.Vector3(1, 0, 0), UP);
-      container(k, f, 6, 1, 77, { label: true, decal: 11 });
+      // slung cargo pod: painted body, steel corner frame and four slings up to the hook block
+      const py = -2.6 - hookDrop - 0.3 - 1.2;
+      k.box("painted", 0, py, 0, 2.4, 2.4, 6, { color: PALETTE.slate, uv: "world", texel: 0.5 });
+      for (const dx of [-1.2, 1.2]) for (const dz of [-3, 3]) k.box("metal", dx, py, dz, 0.16, 2.5, 0.16, { color: PALETTE.gunmetal });
+      for (const dz of [-3, 3]) k.box("metal", 0, py + 1.25, dz, 2.5, 0.1, 0.16, { color: PALETTE.gunmetal });
       for (const [dx, dz] of [[-1.1, -2.9], [1.1, -2.9], [-1.1, 2.9], [1.1, 2.9]]) {
         const len = Math.hypot(dx, dz, 0.4);
         k.add("metal", new THREE.CylinderGeometry(0.025, 0.025, len, 5), { pos: [dx / 2, -2.6 - hookDrop - 0.35, dz / 2], rot: [Math.atan2(dz, 0.4) * 0.5, 0, -Math.atan2(dx, 0.4) * 0.5], color: PALETTE.steel, uv: "scale", uvScale: [1, 1] });
@@ -637,13 +681,10 @@ export function blastLeaves(ctx, mats, o) {
   for (const side of [-1, 1]) {
     const leaf = buildGroup(mats, name + (side < 0 ? ".port" : ".stbd"), (k) => {
       k.box("paintedMetal", 0, 0, 0, leafW, thickness, len, { color: PALETTE.darkMetal, texel: 0.5 });
-      // inner edge: hazard band, tooth blocks and red edge lights
+      // inner edge: hazard band and tooth blocks
       const edge = -side * leafW / 2;
       k.box("hazard", edge + side * 0.01, 0, 0, 0.02, thickness - 0.1, len - 0.4, { uv: "world", texel: 1.2 });
-      for (let z = -len / 2 + 2; z < len / 2 - 1; z += 4) {
-        k.box("paintedMetal", edge + side * 0.6, thickness * 0.15, z, 1.2, thickness * 0.5, 1.2, { color: PALETTE.gunmetal });
-        k.box("emitRed", edge - side * 0.02, -thickness * 0.2, z, 0.03, 0.12, 0.6);
-      }
+      for (let z = -len / 2 + 2; z < len / 2 - 1; z += 4) k.box("paintedMetal", edge + side * 0.6, thickness * 0.15, z, 1.2, thickness * 0.5, 1.2, { color: PALETTE.gunmetal });
       // ribs on the underside face the void
       for (let x = -leafW / 2 + 2; x < leafW / 2; x += 4) k.box("paintedMetal", x, -thickness / 2 - 0.1, 0, 0.6, 0.2, len - 0.2, { color: PALETTE.gunmetal, texel: 0.5 });
     });
@@ -802,24 +843,25 @@ export function cargoLift(kit, ctx, mats, o) {
   kit.boxMM("hazard", [x0 - 0.3, yLow, z0 - 0.3], [x1 + 0.3, yLow + 0.008, z1 + 0.3], { uv: "world", texel: 1.2 });
   kit.boxMM("deck", [x0 - 0.05, yLow - 0.02, z0 - 0.05], [x1 + 0.05, yLow + 0.006, z1 + 0.05], { color: PALETTE.impBlack, uv: "world", texel: 1 });
 
+  // the moving platform is two materials (plate + hazard edges); its rails share the plate material
   const plat = buildGroup(mats, name, (k) => {
     k.boxMM("paintedMetal", [-w / 2, -0.3, -d / 2], [w / 2, 0, d / 2], { color: PALETTE.gunmetal, uv: "world", texel: 1 });
-    k.boxMM("deck", [-w / 2 + 0.05, 0, -d / 2 + 0.05], [w / 2 - 0.05, 0.02, d / 2 - 0.05], { color: PALETTE.impGreyDark, uv: "world", texel: 1 });
+    k.boxMM("paintedMetal", [-w / 2 + 0.05, 0, -d / 2 + 0.05], [w / 2 - 0.05, 0.02, d / 2 - 0.05], { color: PALETTE.darkMetal, uv: "world", texel: 1.5 });
     k.boxMM("hazard", [-w / 2, 0.02, -d / 2], [w / 2, 0.03, -d / 2 + 0.3], { uv: "world", texel: 1.5 });
     k.boxMM("hazard", [-w / 2, 0.02, d / 2 - 0.3], [w / 2, 0.03, d / 2], { uv: "world", texel: 1.5 });
     k.boxMM("hazard", [-w / 2, -0.3, -d / 2 - 0.01], [w / 2, 0, -d / 2], { uv: "world", texel: 1.5 });
     k.boxMM("hazard", [-w / 2, -0.3, d / 2], [w / 2, 0, d / 2 + 0.01], { uv: "world", texel: 1.5 });
+    const ro = { collide: false, mat: "paintedMetal", kick: false };
     for (const side of ["-x", "+x", "-z", "+z"]) {
       if (openSides.includes(side)) continue;
-      if (side === "-x") railing(k, -w / 2 + 0.1, -d / 2 + 0.1, -w / 2 + 0.1, d / 2 - 0.1, 0.02, { collide: false });
-      if (side === "+x") railing(k, w / 2 - 0.1, -d / 2 + 0.1, w / 2 - 0.1, d / 2 - 0.1, 0.02, { collide: false });
-      if (side === "-z") railing(k, -w / 2 + 0.1, -d / 2 + 0.1, w / 2 - 0.1, -d / 2 + 0.1, 0.02, { collide: false });
-      if (side === "+z") railing(k, -w / 2 + 0.1, d / 2 - 0.1, w / 2 - 0.1, d / 2 - 0.1, 0.02, { collide: false });
+      if (side === "-x") railing(k, -w / 2 + 0.1, -d / 2 + 0.1, -w / 2 + 0.1, d / 2 - 0.1, 0.02, ro);
+      if (side === "+x") railing(k, w / 2 - 0.1, -d / 2 + 0.1, w / 2 - 0.1, d / 2 - 0.1, 0.02, ro);
+      if (side === "-z") railing(k, -w / 2 + 0.1, -d / 2 + 0.1, w / 2 - 0.1, -d / 2 + 0.1, 0.02, ro);
+      if (side === "+z") railing(k, -w / 2 + 0.1, d / 2 - 0.1, w / 2 - 0.1, d / 2 - 0.1, 0.02, ro);
     }
-    // guide shoes toward the columns
-    for (const [px, pz] of colPos) k.box("metal", px - cx, 0.4, pz - cz + (frameSide === "+z" ? -0.45 : frameSide === "-z" ? 0.45 : 0), 0.5, 1.0, 0.3, { color: PALETTE.darkMetal });
-    k.box("satinBlack", alongX ? -w / 2 + 0.5 : 0, 1.0, alongX ? d / 2 - 0.2 : -d / 2 + 0.5, 0.3, 1.2, 0.2);
-    k.box("emitAmber", alongX ? -w / 2 + 0.5 : 0, 1.4, alongX ? d / 2 - 0.31 : -d / 2 + 0.5, 0.15, 0.1, 0.02);
+    // guide shoes toward the columns and a control pedestal
+    for (const [px, pz] of colPos) k.box("paintedMetal", px - cx, 0.4, pz - cz + (frameSide === "+z" ? -0.45 : frameSide === "-z" ? 0.45 : 0), 0.5, 1.0, 0.3, { color: PALETTE.darkMetal });
+    k.box("paintedMetal", alongX ? -w / 2 + 0.5 : 0, 1.0, alongX ? d / 2 - 0.2 : -d / 2 + 0.5, 0.3, 1.2, 0.2, { color: PALETTE.darkMetal });
   });
   plat.position.set(cx, yLow, cz);
   // moving rails: colliders follow the platform
@@ -861,8 +903,7 @@ export function cargoLift(kit, ctx, mats, o) {
 export function hoist(ctx, mats, o) {
   const { x0, x1, y, z, drop = 3, speed = 0.4, name = "hangar.hoist" } = o;
   const trolley = buildGroup(mats, name, (k) => {
-    k.box("paintedMetal", 0, -0.35, 0, 1.4, 0.7, 1.0, { color: PALETTE.slate, texel: 1 });
-    k.box("emitAmber", 0.55, -0.3, 0.51, 0.2, 0.12, 0.02);
+    k.box("metal", 0, -0.35, 0, 1.4, 0.7, 1.0, { color: PALETTE.slate, texel: 1 });
     k.cyl("metal", 0, -0.7 - drop / 2, 0, 0.03, drop, "y", { color: PALETTE.steel, segments: 6 });
     k.box("metal", 0, -0.7 - drop, 0, 0.5, 0.35, 0.3, { color: PALETTE.gunmetal });
     k.add("metal", new THREE.TorusGeometry(0.22, 0.05, 6, 12), { pos: [0, -0.7 - drop - 0.4, 0], rot: [0, 0, 0], color: PALETTE.steel, uv: "scale", uvScale: [4, 1] });
