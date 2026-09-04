@@ -230,16 +230,34 @@ function bar(kit, ctx, frame, u0, u1, seed) {
   }
 }
 
-/** Games / datapad shelf unit on a wall frame. */
+/**
+ * Games unit on a wall frame: a mid-grey cabinet with two lit shelves of datapads and boxed games, a
+ * control ledge and a dim holo-board screen in the upper half (the earlier full-height dark shelf unit
+ * read as an unlit black rectangle under the GAMES board from the door).
+ */
 function gameShelf(frame, u, seed) {
   const rand = rng(seed);
   const w = 3.0;
-  frame.box("paintedMetal", u, 1.2, 0.18, w, 2.4, 0.36, { color: PALETTE.impDark, texel: 1.5 });
-  frame.box("impPanel", u, 1.2, 0.02, w - 0.1, 2.3, 0.02, { color: PALETTE.impMid, uv: "keep" });
-  for (let s = 0; s < 4; s++) {
-    const v = 0.5 + s * 0.5;
-    frame.box("paintedMetal", u, v, 0.2, w - 0.1, 0.03, 0.32, { color: PALETTE.impGrey, texel: 2 });
-    frame.box("emitAmber", u, v + 0.35 + 0.1, 0.03, w - 0.3, 0.01, 0.02);
+  // open-fronted case: mid-grey back, black sides, plinth and top
+  frame.box("impPanel1", u, 1.2, 0.03, w, 2.4, 0.06, { color: PALETTE.impMid, uv: "world", texel: 0.5 });
+  for (const s of [-1, 1]) frame.box("paintedMetal", u + s * (w / 2 - 0.04), 1.2, 0.2, 0.08, 2.4, 0.4, { color: PALETTE.impBlack, texel: 2 });
+  frame.box("paintedMetal", u, 0.06, 0.2, w + 0.04, 0.12, 0.4, { color: PALETTE.impBlack, texel: 2 });
+  frame.box("paintedMetal", u, 2.42, 0.2, w + 0.04, 0.08, 0.4, { color: PALETTE.impBlack, texel: 2 });
+  // holo-board in the closed upper half: dark housing, gloss bezel, dim amber tabular screen, lit header
+  frame.box("impPanel1", u, 1.85, 0.19, w - 0.16, 1.0, 0.34, { color: PALETTE.impDark, uv: "keep" });
+  frame.box("darkGloss", u, 1.85, 0.375, w - 0.3, 1.0, 0.03);
+  frame.add("crew_holoDim", new THREE.PlaneGeometry(w - 0.5, 0.82), u, 1.85, 0.392, { uv: "keep" });
+  frame.box("emitAmberDim", u, 2.375, 0.37, w - 0.5, 0.025, 0.01);
+  // control ledge between the board and the shelves: gloss deck, a row of amber keys, two dice cups
+  frame.box("paintedMetal", u, 1.3, 0.3, w - 0.16, 0.08, 0.6, { color: PALETTE.impDark, texel: 2 });
+  frame.box("darkGloss", u, 1.345, 0.36, w - 0.4, 0.012, 0.44);
+  for (let k = 0; k < 10; k++) frame.box(k % 3 === 1 ? "emitRedDim" : "emitAmberDim", u - 0.9 + k * 0.2, 1.353, 0.42, 0.1, 0.006, 0.06);
+  for (const du of [-1.2, 1.2]) frame.cylV("metal", u + du, 1.4, 0.36, 0.06, 0.1, { color: PALETTE.steel, segments: 10 });
+  // two lit shelves below the ledge with the games stock
+  for (let s = 0; s < 2; s++) {
+    const v = 0.42 + s * 0.44;
+    frame.box("paintedMetal", u, v, 0.2, w - 0.16, 0.03, 0.32, { color: PALETTE.impGrey, texel: 2 });
+    frame.box("emitWhiteFaint", u, v + 0.38, 0.3, w - 0.4, 0.012, 0.1, { uv: "keep" });
     // datapads standing in a row, boxed games, holo-chips
     let cu = u - w / 2 + 0.2;
     while (cu < u + w / 2 - 0.2) {
@@ -263,8 +281,7 @@ function gameShelf(frame, u, seed) {
       }
     }
   }
-  frame.box("paintedMetal", u, 2.42, 0.18, w + 0.04, 0.08, 0.4, { color: PALETTE.impBlack, texel: 2 });
-  frame.collider(u - w / 2, u + w / 2, 0, 2.5, 0, 0.4, "shelf");
+  frame.collider(u - w / 2, u + w / 2, 0, 2.5, 0, 0.6, "shelf");
 }
 
 /** Drinks dispenser: tall unit with a lit menu screen, cup slot and a status lamp. */
@@ -304,9 +321,9 @@ export function buildRecreation(kit, ctx) {
   // ------------------------------------------------------------------ slatted ceiling with four soft warm bands, beams, perimeter soffit
   // (the ceiling is kept quiet so the star windows are the brightest thing in the room)
   kit.boxMM("paintedMetal", [min[0] - 0.2, H, min[2] - 0.2], [max[0] + 0.2, H + 0.12, max[2] + 0.2], { color: PALETTE.impBlack, texel: 2 });
-  // the bands stop 7.5 m short of the door wall: the stretch overhead of the fixed view showed through
-  // the slats as two hotspots in the top corners of the frame
-  const bandX1 = -10.5;
+  // the bands stop 9.5 m short of the door wall: the stretch overhead of the fixed view showed through
+  // the slats as hotspots in the top corners of the frame (at -10.5 the left one was still in view)
+  const bandX1 = -12.5;
   for (let i = 0; i < 4; i++) {
     const z = min[2] + ((i + 0.5) / 4) * D;
     kit.box("crew_warmBand", (min[0] + 0.8 + bandX1) / 2, H - 0.008, z, bandX1 - min[0] - 0.8, 0.012, 1.6, { uv: "keep" });
@@ -334,8 +351,11 @@ export function buildRecreation(kit, ctx) {
   kit.boxMM("emitAmber", [max[0] - sof - 0.03, H - drop - 0.01, min[2] + sof], [max[0] - sof + 0.03, H - drop + 0.02, max[2] - sof]);
 
   // ------------------------------------------------------------------ lights (6): amber clusters, bar, cool window wash, holo teal, door
-  ctx.light(pointLight(0xffb060, 24, 15, [-18.0, 2.8, -56.5]));
-  ctx.light(pointLight(0xffb060, 24, 15, [-11.0, 2.8, -48.0]));
+  // (the amber pair hang at pendant height and the games-wall one sits nearer the door: at (-11, 2.8,
+  // -48) its specular reflection on the painted slats fell in the top-left of the fixed view and read
+  // as a louvre hotspot; from (-9.2, 2.6, -47.2) the reflection lands outside the frame)
+  ctx.light(pointLight(0xffb060, 24, 15, [-18.0, 2.3, -56.5]));
+  ctx.light(pointLight(0xffb060, 24, 15, [-9.2, 2.6, -47.2]));
   ctx.light(pointLight(0xffc27a, 16, 11, [-22.6, 2.4, -54.0]));
   ctx.light(pointLight(0x7f9fe0, 10, 12, [-14.5, 2.2, -61.8]));
   ctx.light(pointLight(0x4fd8cc, 6, 6, [-8.6, 1.6, -58.6]));
