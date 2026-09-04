@@ -57,9 +57,21 @@ export class PlaneModel {
       color: 0xffffff, roughness: 1.0, metalness: 0.55, clearcoat: 0.2, clearcoatRoughness: 0.3, envMapIntensity: 1.0,
     });
     const glass = new THREE.MeshPhysicalMaterial({
-      color: 0x9fbdd0, transparent: true, opacity: 0.32, roughness: 0.03, metalness: 0.0, envMapIntensity: 1.4,
+      color: 0x8fb4c4, transparent: true, opacity: 0.3, roughness: 0.03, metalness: 0.0, envMapIntensity: 1.5,
       side: THREE.DoubleSide, depthWrite: false, specularIntensity: 1.0, ior: 1.5, clearcoat: 1.0, clearcoatRoughness: 0.02,
     });
+    // view-dependent opacity: glass turns more mirror-like and less transparent at grazing angles
+    glass.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>
+      {
+        float ndv = clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+        float grazing = pow(1.0 - ndv, 3.0);
+        diffuseColor.a = mix(0.22, 0.85, grazing);
+        // faint green-grey tint typical of laminated glass, a touch darker at the edges
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55, 0.68, 0.66), grazing * 0.5);
+      }`);
+    };
+    glass.customProgramCacheKey = () => 'cockpit-glass-v1';
     const plainPaint = new THREE.MeshPhysicalMaterial({ color: 0xf4f0e6, roughness: 0.4, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.15 });
     const metal = new THREE.MeshStandardMaterial({ color: 0x8e949a, roughness: 0.38, metalness: 0.9 });
     const darkMetal = new THREE.MeshStandardMaterial({ color: 0x2c2f33, roughness: 0.45, metalness: 0.8 });

@@ -218,9 +218,9 @@ export function createLandmasses(): Landmass[] {
   L.push({
     id: 'garza', bx: 300, bz: 2400, br: 1500,
     sd: (x, z) => {
-      let d = sdIsland(x, z, 300, 2400, 780, 360, 0.08, 11, 0.16);
-      d = smin(d, sdIsland(x, z, -350, 2520, 320, 210, -0.2, 12, 0.22), 120);
-      d = smin(d, sdIsland(x, z, 980, 2330, 300, 230, 0.3, 13, 0.25), 140);
+      let d = sdIsland(x, z, 300, 2400, 620, 420, 0.08, 11, 0.16);
+      d = smin(d, sdIsland(x, z, -320, 2540, 300, 220, -0.2, 12, 0.22), 120);
+      d = smin(d, sdIsland(x, z, 860, 2300, 260, 240, 0.3, 13, 0.25), 140);
       // interior lagoon
       const lagoon = sdIsland(x, z, 470, 2380, 150, 95, 0.4, 14, 0.3);
       d = Math.max(d, -lagoon + 15);
@@ -306,7 +306,7 @@ export function createDistricts(): District[] {
   add({ id: 'barrier-res', zone: Zone.RES_LOW, cx: 2650, cz: -6900, hw: 350, hh: 1200, rot: 0.0, gridX: 90, gridZ: 110, density: 0.7, hMin: 4, hMax: 12 });
   add({ id: 'barrier-golf', zone: Zone.GOLF, cx: 2680, cz: -5300, hw: 420, hh: 520, rot: 0.0, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
   add({ id: 'garza-res', zone: Zone.RES_LOW, cx: -120, cz: 2420, hw: 260, hh: 180, rot: 0.08, gridX: 110, gridZ: 120, density: 0.5, hMin: 4, hMax: 9 });
-  add({ id: 'garza-park', zone: Zone.PARK, cx: 1000, cz: 2330, hw: 300, hh: 240, rot: 0.3, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
+  add({ id: 'garza-park', zone: Zone.PARK, cx: 860, cz: 2300, hw: 280, hh: 240, rot: 0.3, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
   add({ id: 'southkey-res', zone: Zone.RES_LOW, cx: 2200, cz: 5300, hw: 700, hh: 500, rot: 0.25, gridX: 100, gridZ: 120, density: 0.6, hMin: 4, hMax: 10 });
   add({ id: 'southkey-golf', zone: Zone.GOLF, cx: 1300, cz: 6300, hw: 550, hh: 420, rot: -0.3, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
   add({ id: 'airport', zone: Zone.AIRPORT, cx: -7100, cz: -1400, hw: 1600, hh: 900, rot: 0.0, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
@@ -330,7 +330,7 @@ export function createRoads(): RoadSpec[] {
   R.push({ id: 'south-hwy-mainland', cls: 'highway', width: 22, lanes: 4, traffic: 14, pts: [[-6000, 2650], [-4500, 2700], [-3400, 2720], [-2500, 2680]] });
   R.push({ id: 'garza-hwy', cls: 'highway', width: 22, lanes: 4, traffic: 14, pts: [[-1650, 2590], [-1050, 2540], [-620, 2520]] });
   R.push({ id: 'garza-hwy-2', cls: 'highway', width: 22, lanes: 4, traffic: 14, pts: [[-420, 2500], [-200, 2350], [-40, 2060]] });
-  R.push({ id: 'garza-east', cls: 'arterial', width: 14, lanes: 2, traffic: 5, pts: [[-200, 2350], [200, 2470], [600, 2420], [1000, 2200]] });
+  R.push({ id: 'garza-east', cls: 'arterial', width: 14, lanes: 2, traffic: 5, pts: [[-200, 2350], [200, 2470], [560, 2420], [860, 2250]] });
   R.push({ id: 'tortuga-rd', cls: 'highway', width: 22, lanes: 4, traffic: 12, pts: [[980, -400], [1200, -720], [1480, -1050]] });
   // Downtown arterials
   R.push({ id: 'dt-bayshore', cls: 'arterial', width: 16, lanes: 4, traffic: 10, pts: [[-2200, -4600], [-2150, -4200], [-2100, -3700], [-2200, -3300], [-2500, -2900], [-2650, -2400], [-2700, -1800], [-2650, -1200]] });

@@ -228,15 +228,15 @@ export class Vegetation {
   readonly uTime = { value: 0 };
   readonly uWind = { value: 0.5 };
   counts = { palms: 0, trees: 0, mangroves: 0, shrubs: 0 };
-  private readonly tiles: { mesh: THREE.InstancedMesh; cx: number; cz: number; r: number }[] = [];
+  private readonly tiles: { mesh: THREE.InstancedMesh; cx: number; cz: number; r: number; full: number }[] = [];
   shadowDistance = 1800;
-  viewDistance = 9000;
+  viewDistance = 8000;
 
   constructor(map: WorldMap, occupied: (x: number, z: number) => boolean) {
     const rng = new Rng('vegetation');
     const frondTex = frondTexture();
     const trunkMat = windMaterial(new THREE.MeshStandardMaterial({ color: 0x8a7458, roughness: 0.9 }), this.uTime, this.uWind);
-    const frondMat = windMaterial(new THREE.MeshStandardMaterial({ map: frondTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.75, color: 0xffffff }), this.uTime, this.uWind);
+    const frondMat = windMaterial(new THREE.MeshStandardMaterial({ map: frondTex, alphaTest: 0.5, alphaToCoverage: true, side: THREE.DoubleSide, roughness: 0.75, color: 0xffffff }), this.uTime, this.uWind);
     const canopyMat = windMaterial(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, vertexColors: true }), this.uTime, this.uWind);
     const mangroveMat = windMaterial(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }), this.uTime, this.uWind);
     const treeTrunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.95 });
@@ -272,9 +272,9 @@ export class Vegetation {
           // palms on the dune line, none on the wet sand
           if (height > 1.2 && h < 0.09 + 0.08 * clump) palms.push({ x: jx, y: height, z: jz, s: rng.range(7, 13), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 2) });
         } else if (zone === Zone.PARK) {
-          const garza = Math.hypot((jx - 300) / 900, (jz - 2400) / 500) < 1.0 ? 2.6 : 1.0;
+          const garza = Math.hypot((jx - 300) / 900, (jz - 2400) / 500) < 1.0 ? 4.5 : 1.0;
           const p = (0.09 + 0.14 * clump) * garza;
-          if (h < p * 0.75) trees.push({ x: jx, y: height, z: jz, s: rng.range(9, 17), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 2) });
+          if (h < p * 0.75) trees.push({ x: jx, y: height, z: jz, s: rng.range(garza > 1 ? 12 : 9, garza > 1 ? 20 : 17), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 2) });
           else if (h < p) palms.push({ x: jx, y: height, z: jz, s: rng.range(8, 14), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(palmTints)), variant: rng.int(0, 2) });
           else if (h < p + 0.02) shrubs.push({ x: jx, y: height, z: jz, s: rng.range(2, 4), rot: rng.range(0, 6.28), tint: new THREE.Color(rng.pick(treeTints)), variant: rng.int(0, 2) });
         } else if (zone === Zone.RES_LOW) {
@@ -306,9 +306,12 @@ export class Vegetation {
       }
       return m;
     };
+    const shuffleRng = new Rng('veg-shuffle');
     const build = (list: Plant[], parts: { geo: (v: number) => THREE.BufferGeometry; mat: THREE.Material; tint: boolean }[], yOffset = 0) => {
       for (const [key, plants] of tiled(list)) {
         const variant = Number(key.split('|')[2]);
+        // deterministic shuffle so that reducing the instance count at distance thins the tile evenly
+        for (let i = plants.length - 1; i > 0; i--) { const j = shuffleRng.int(0, i); const t = plants[i]; plants[i] = plants[j]; plants[j] = t; }
         for (const part of parts) {
           const mesh = new THREE.InstancedMesh(part.geo(variant), part.mat, plants.length);
           const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3();
@@ -327,7 +330,7 @@ export class Vegetation {
           mesh.receiveShadow = true;
           mesh.instanceMatrix.needsUpdate = true;
           this.group.add(mesh);
-          this.tiles.push({ mesh, cx: (box.min.x + box.max.x) / 2, cz: (box.min.z + box.max.z) / 2, r: Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2 });
+          this.tiles.push({ mesh, cx: (box.min.x + box.max.x) / 2, cz: (box.min.z + box.max.z) / 2, r: Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2, full: plants.length });
         }
       }
     };
@@ -348,6 +351,9 @@ export class Vegetation {
       const d = Math.max(0, Math.hypot(t.cx - camX, t.cz - camZ) - t.r);
       t.mesh.castShadow = d < this.shadowDistance;
       t.mesh.visible = d < this.viewDistance;
+      // thin distant tiles: full density to 2 km, half at 3.5 km, a quarter at 5 km (trees are ~3 px there)
+      const frac = d < 2000 ? 1 : d < 3500 ? 0.5 : d < 5000 ? 0.25 : 0.12;
+      t.mesh.count = Math.max(1, Math.round(t.full * frac));
     }
   }
 }

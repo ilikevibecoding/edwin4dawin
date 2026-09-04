@@ -120,6 +120,8 @@ const ROAD_FRAG_MAIN = /* glsl */ `
   float n = fbm3(vWorldPosR.xz * 0.15);
   float n2 = vnoise(vWorldPosR.xz * 1.7);
   vec3 asphalt = mix(vec3(0.16, 0.16, 0.165), vec3(0.24, 0.235, 0.23), n) * (0.92 + 0.16 * n2);
+  // causeways and highways are pale, sun-bleached concrete-asphalt
+  if (cls > 2.5 && cls < 4.5) asphalt = mix(vec3(0.30, 0.30, 0.29), vec3(0.40, 0.39, 0.37), n) * (0.94 + 0.12 * n2);
   if (cls > 4.5) {
     // runway: concrete, centre line dashes, threshold bars
     vec3 concrete = mix(vec3(0.33, 0.33, 0.32), vec3(0.42, 0.41, 0.4), n) * (0.94 + 0.12 * n2);

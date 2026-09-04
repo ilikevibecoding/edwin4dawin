@@ -107,7 +107,7 @@ export function fuselageMaps(): PbrMaps {
   hctx.fillStyle = '#808080'; hctx.fillRect(0, 0, w, h);
   // base: upper white, lower yellow. The cheat line sits at ~v 0.33 and 0.67 (just below the windows)
   actx.fillStyle = LIVERY.upper; actx.fillRect(0, 0, w, h);
-  const cheatV = 0.345;
+  const cheatV = 0.245;
   const belly = (v0: number, v1: number) => { actx.fillStyle = LIVERY.lower; actx.fillRect(0, v0 * h, w, (v1 - v0) * h); };
   belly(cheatV, 1 - cheatV);
   // cheat line with pinstripe (both sides), swooping up toward the tail

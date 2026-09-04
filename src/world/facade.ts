@@ -188,6 +188,12 @@ vec3 roofPalette(float k) {
     // ground floor: darker plinth / shopfronts, streaks of grime under sills
     col *= 1.0 - 0.18 * smoothstep(0.55, 0.85, grime) * (1.0 - smoothstep(2.0, 12.0, v));
     col = mix(col, col * 0.8, step(v, 0.8));
+    // crown lighting on tall towers at night: a lit band just below the roof line
+    if (vDims.y > 110.0) {
+      float crown = smoothstep(vDims.y - 6.0, vDims.y - 4.5, v) * (1.0 - smoothstep(vDims.y - 1.0, vDims.y, v));
+      vec3 crownCol = mix(vec3(1.0, 0.85, 0.6), vec3(0.4, 0.8, 1.0), step(0.5, hash11(seed * 2.7)));
+      emis += crownCol * crown * 6.0 * uNight;
+    }
   }
   diffuseColor.rgb = col;
   roughnessFactor = rough;
