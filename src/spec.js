@@ -394,19 +394,23 @@ export const DECK_SPOTS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Exterior camera presets (world positions and look-at targets)
+// Exterior camera presets (world positions and look-at targets).
+// `time` is the far-field clock (seconds) main.js applies with space.setTime(): the sun bearing is
+// -30° + 1.3°·time (measured from +z toward +x, 22° elevation), so each preset gets a 3/4 key light
+// 45–60° off the camera's back axis with a readable shadow side, the sun sprite out of frame and the
+// planets behind the ship rather than beside it.
 // ---------------------------------------------------------------------------
 export const EXTERIOR_VIEWS = {
-  ext_hero: { pos: [-1700, 380, -1750], look: [0, 40, -150], fov: 50 },
-  ext_bow: { pos: [-250, 90, -1550], look: [0, 30, -300], fov: 55 },
-  ext_stern: { pos: [700, 220, 1500], look: [0, 60, 300], fov: 55 },
-  ext_tower: { pos: [-330, 300, 40], look: [0, 235, 300], fov: 45 },
-  ext_bridge_close: { pos: [-60, 262, 150], look: [0, 249, 215], fov: 50 },
-  ext_belly: { pos: [-380, -420, -300], look: [0, -60, 0], fov: 60 },
-  ext_hangar_mouth: { pos: [-120, -160, 160], look: [0, -40, 10], fov: 60 },
-  ext_trench: { pos: [-520, 14, -120], look: [-400, 4, 60], fov: 55 },
-  ext_far: { pos: [-4200, 1400, -3800], look: [0, 60, -100], fov: 40 },
-  ext_top: { pos: [0, 2600, -200], look: [0, 0, -200], fov: 45 },
+  ext_hero: { pos: [-1150, 260, -1250], look: [0, 60, -100], fov: 45, time: 230.8 },
+  ext_bow: { pos: [-300, -10, -1450], look: [0, 40, -350], fov: 55, time: 215.4 },
+  ext_stern: { pos: [850, 240, 1250], look: [0, 10, 350], fov: 50, time: 96.2 },
+  ext_tower: { pos: [-330, 300, 40], look: [0, 235, 300], fov: 45, time: 246.2 },
+  ext_bridge_close: { pos: [-50, 250, 125], look: [0, 249, 215], fov: 50, time: 215.4 },
+  ext_belly: { pos: [-650, -480, -450], look: [0, -60, -50], fov: 55, time: 7.7 },
+  ext_hangar_mouth: { pos: [-120, -160, 160], look: [0, -40, 10], fov: 60, time: 67.7 },
+  ext_trench: { pos: [-430, 12, -260], look: [-320, -2, 120], fov: 50, time: 215.4 },
+  ext_far: { pos: [-3000, 1000, -2600], look: [0, 60, -100], fov: 30, time: 230.8 },
+  ext_top: { pos: [0, 2600, -200], look: [0, 0, -200], fov: 45, time: 215.4 },
 };
 
 export const SHIP_NAME = "VINDICATOR";

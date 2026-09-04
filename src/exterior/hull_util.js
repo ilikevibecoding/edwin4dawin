@@ -723,8 +723,9 @@ export function channel(chunks, rand, { zA, zB, xc, halfW, depth, yAt, up = true
  * normal turns downward: emissive × albedo × vertex tint, so plating seams and paint variation stay
  * readable on the belly without touching the sunlit side.
  */
-// halved from 0x585d66 now that the scene hemisphere light carries part of the belly fill
-const SHINE = new THREE.Color(0x2c2f33);
+// tuned with the scene hemisphere fill at 0.8 so the belly plating sits at ~15–20 % grey after ACES
+// (never below 8 %): ext_belly / ext_hangar_mouth are the reference frames
+const SHINE = new THREE.Color(0x5a5f68);
 const SHINE_CHUNK = /* glsl */ `
 #include <emissivemap_fragment>
 {
