@@ -487,8 +487,8 @@ export default {
         // welding arc: 1.1 s bursts every 2.6 s with fast flicker, driven by t only
         const on = t % 2.6 < 1.1;
         const fl = on ? 0.55 + 0.45 * Math.abs(Math.sin(t * 41) * Math.sin(t * 29 + 0.7)) : 0;
-        arcMat.emissiveIntensity = 0.2 + 2.6 * fl;
-        arcLight.intensity = 150 * fl;
+        arcMat.emissiveIntensity = 0.2 + 2.1 * fl;
+        arcLight.intensity = 105 * fl;
       },
       api: {},
     };

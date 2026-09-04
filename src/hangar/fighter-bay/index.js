@@ -206,7 +206,7 @@ export default {
     floorMark(kit, 80 + WALL_T + 1.2, 15 - 7.2, 101.5, 15 - 7.0, FLOOR, YELLOW);
     floorMark(kit, 80 + WALL_T + 1.2, 15 + 7.0, 101.5, 15 + 7.2, FLOOR, YELLOW);
     floorMark(kit, 101.3, 15 - 7.2, 101.7, 15 + 7.2, FLOOR, YELLOW, { h: 0.017 });
-    floorMark(kit, 86.0, 15 - 6.4, 86.5, 15 + 6.4, FLOOR, P.impWhite, { h: 0.011 });
+    floorMark(kit, 86.0, 15 - 6.4, 86.3, 15 + 6.4, FLOOR, P.impWhite, { h: 0.011 });
 
     // ---- per cradle: diagnostic consoles (operator faces +x), one status post, chests, rack, fuel cart
     for (const c of CRADLES) {

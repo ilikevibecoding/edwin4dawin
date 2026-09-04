@@ -148,7 +148,7 @@ export default {
     //      pointing at the pad, one white hold bar
     octagonPad(kit, P);
     for (const z of LANE_Z) floorMark(kit, -80 - WALL_T - 1.2, z - 0.1, -97.6, z + 0.1, FLOOR, P.impWhite);
-    floorMark(kit, -85.7, pz - 7.2, -85.3, pz + 7.2, FLOOR, P.impWhite, { h: 0.011 });
+    floorMark(kit, -85.65, pz - 7.2, -85.35, pz + 7.2, FLOOR, P.impWhite, { h: 0.011 });
     for (const xt of [-88.5, -92.0, -95.5]) {
       for (const s of [-1, 1]) kit.add("painted", new THREE.BoxGeometry(0.25, 0.012, 3.6), { pos: [xt + 1.27, FLOOR + 0.006, pz + s * 1.27], rot: [0, s * Math.PI / 4, 0], color: YELLOW, texel: 1 });
     }
@@ -260,7 +260,22 @@ export default {
     // ---- crew ready area (aft-starboard, near the spawn): Imperial benches facing the briefing board,
     //      lockers on the aft wall, kit racks on the east wall, crate stack + baggage carts
     floorRect(kit, -100, 42, -83, 66, FLOOR, P.impWhite, 0.12);
-    for (const z of [50, 54]) for (const x of [-94, -90, -86]) benchSeat(new Placer(kit, [x, FLOOR, z], 180), P, { len: 3.6 });
+    // benches face west toward a free-standing briefing board (dark stand, screenImp display at 1.2–2.6 m,
+    // lectern shelf at 0.9 m) so the staging frame carries the human-scale kit, not just seats
+    for (const x of [-89, -92.5]) for (const z of [48.5, 53]) benchSeat(new Placer(kit, [x, FLOOR, z], 90), P, { len: 3.6 });
+    {
+      const pl = new Placer(kit, [-96.3, FLOOR, 50.75], -90);
+      pl.box("paintedMetal", 0, 0.04, 0.1, 3.2, 0.08, 0.7, { color: P.impBlack, texel: 2 });
+      for (const sx of [-1, 1]) pl.box("paintedMetal", sx * 1.45, 1.4, 0.12, 0.14, 2.8, 0.14, { color: P.impDark, texel: 2 });
+      pl.box("paintedMetal", 0, 2.78, 0.12, 3.1, 0.1, 0.2, { color: P.impBlack, texel: 2 });
+      pl.box("paintedMetal", 0, 1.9, 0.14, 2.9, 1.7, 0.1, { color: P.impBlack, texel: 2 }); // bezel
+      pl.box("screenImp0", 0, 1.95, 0.085, 2.6, 1.4, 0.01, { uv: "keep" });
+      pl.box("emitAmber", 0, 1.13, 0.085, 2.6, 0.03, 0.01);
+      pl.box("paintedMetal", 0, 0.88, -0.25, 1.2, 0.05, 0.5, { color: P.impGrey, texel: 2 }); // lectern shelf
+      pl.box("paintedMetal", 0, 0.45, -0.15, 0.5, 0.82, 0.3, { color: P.impDark, texel: 2 });
+      pl.box("emitBlue", 0.3, 0.91, -0.3, 0.12, 0.01, 0.08);
+      pl.collider([-1.6, 0, -0.5], [1.6, 2.85, 0.45], "briefing-board");
+    }
     lockerBank(new Placer(kit, [-88.5, FLOOR, 70 - WALL_T - 0.06 - 0.3], 0), P, 8);
     lockerBank(new Placer(kit, [-100.5, FLOOR, 70 - WALL_T - 0.06 - 0.3], 0), P, 8);
     wallScreen(new Placer(kit, [-83, FLOOR, 70 - WALL_T - 0.08], 0), P, { w: 2.6, h: 1.3, mat: "screenImp0" });
