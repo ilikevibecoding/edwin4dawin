@@ -16,7 +16,10 @@ const LOUNGE_PAINTS = [
   [PALETTE.impMid, 0.2],
   [PALETTE.impDark, 0.08],
 ];
-const FABRICS = [new THREE.Color("#3a4152"), new THREE.Color("#4a2e2e"), new THREE.Color("#2e3236"), new THREE.Color("#514433")];
+// upholstery held well above the black deck so the furniture reads from the door: slate blue, oxblood,
+// olive, tan
+const FABRICS = [new THREE.Color("#56627a"), new THREE.Color("#6b3838"), new THREE.Color("#5d6a4a"), new THREE.Color("#8a7a5a")];
+const RUG = new THREE.Color("#3a3238");
 
 /** Sofa of `len` metres, seat facing +Z when yaw = 0 (back at -Z). */
 function sofa(kit, { x, z, yaw = 0, len = 2.2, color = FABRICS[0], seed = 1 }) {
@@ -24,9 +27,9 @@ function sofa(kit, { x, z, yaw = 0, len = 2.2, color = FABRICS[0], seed = 1 }) {
   const rand = rng(seed);
   const d = 0.9;
   const seatH = 0.42;
-  // plinth, frame, seat cushions (split per seat), back cushion leaning, armrests, a lit kick strip
+  // plinth, mid-grey frame, seat cushions (split per seat), back cushion leaning, armrests, a lit kick strip
   L.box("paintedMetal", 0, 0.06, 0, len - 0.1, 0.12, d - 0.15, { color: PALETTE.impBlack, texel: 2 });
-  L.box("paintedMetal", 0, 0.2, -0.02, len, 0.16, d - 0.05, { color: PALETTE.impDark, texel: 1.5 });
+  L.box("paintedMetal", 0, 0.2, -0.02, len, 0.16, d - 0.05, { color: PALETTE.impMid, texel: 1.5 });
   const seats = Math.max(1, Math.round(len / 0.75));
   const sw = (len - 0.2) / seats;
   for (let i = 0; i < seats; i++) {
@@ -36,10 +39,10 @@ function sofa(kit, { x, z, yaw = 0, len = 2.2, color = FABRICS[0], seed = 1 }) {
     L.box("fabric", sx, seatH + 0.3, -d / 2 + 0.2, sw - 0.03, 0.6, 0.16, { color, uv: "world", texel: 2, quat: bq });
   }
   // back shell + top rail
-  L.box("paintedMetal", 0, seatH + 0.28, -d / 2 + 0.05, len, 0.72, 0.1, { color: PALETTE.impDark, texel: 1.5 });
-  L.box("paintedMetal", 0, seatH + 0.66, -d / 2 + 0.06, len + 0.02, 0.05, 0.14, { color: PALETTE.impMid, texel: 2 });
+  L.box("paintedMetal", 0, seatH + 0.28, -d / 2 + 0.05, len, 0.72, 0.1, { color: PALETTE.impMid, texel: 1.5 });
+  L.box("paintedMetal", 0, seatH + 0.66, -d / 2 + 0.06, len + 0.02, 0.05, 0.14, { color: PALETTE.impGrey, texel: 2 });
   for (const s of [-1, 1]) {
-    L.box("paintedMetal", s * (len / 2 + 0.05), 0.38, 0.0, 0.1, 0.62, d - 0.1, { color: PALETTE.impDark, texel: 1.5 });
+    L.box("paintedMetal", s * (len / 2 + 0.05), 0.38, 0.0, 0.1, 0.62, d - 0.1, { color: PALETTE.impMid, texel: 1.5 });
     L.box("fabric", s * (len / 2 + 0.05), 0.7, 0.02, 0.12, 0.06, d - 0.2, { color, uv: "world", texel: 2 });
   }
   L.box("emitAmber", 0, 0.125, d / 2 - 0.1, len - 0.4, 0.015, 0.01);
@@ -190,7 +193,7 @@ function bar(kit, ctx, frame, u0, u1, seed) {
       frame.cylV("metal", bu, v + 0.015 + bh + 0.05, 0.52, br * 0.45, 0.1, { color: rand() < 0.5 ? PALETTE.steel : PALETTE.impBlack, segments: 8 });
     }
   }
-  frame.box("emitWhiteSoft", cu, 2.45, 0.42, len - 0.3, 0.02, 0.2, { uv: "keep" });
+  frame.box("emitAmber", cu, 2.45, 0.42, len - 0.3, 0.02, 0.2, { uv: "keep" });
   frame.box("paintedMetal", cu, 2.53, 0.3, len + 0.04, 0.1, 0.6, { color: PALETTE.impBlack, texel: 2 });
   frame.collider(u0, u1, 0, 2.6, 0, 0.62, "backbar");
   // counter 1.1 m out: body, top, lit kick, taps and a glass rack
@@ -292,23 +295,20 @@ export function buildRecreation(kit, ctx) {
     wall: { zmin: { openings: windows.map((w) => ({ type: "window", u0: w.u - w.w / 2 - 0.12, u1: w.u + w.w / 2 + 0.12, v0: w.v - w.h / 2 - 0.12, v1: w.v + w.h / 2 + 0.12 })) } },
   });
 
-  // ------------------------------------------------------------------ slatted ceiling with warm glow bands, beams, perimeter soffit
+  // ------------------------------------------------------------------ slatted ceiling with four soft warm bands, beams, perimeter soffit
+  // (the ceiling is kept quiet so the star windows are the brightest thing in the room)
   kit.boxMM("paintedMetal", [min[0] - 0.2, H, min[2] - 0.2], [max[0] + 0.2, H + 0.12, max[2] + 0.2], { color: PALETTE.impBlack, texel: 2 });
-  for (let i = 0; i < 6; i++) {
-    const z = min[2] + ((i + 0.5) / 6) * D;
-    kit.box("emitWarmSoft", min[0] + W / 2, H - 0.008, z, W - 1.6, 0.012, 1.6, { uv: "keep" });
+  for (let i = 0; i < 4; i++) {
+    const z = min[2] + ((i + 0.5) / 4) * D;
+    kit.box("crew_warmBand", min[0] + W / 2, H - 0.008, z, W - 1.6, 0.012, 1.6, { uv: "keep" });
   }
   const slatMat = "paintedMetal";
   for (let z = min[2] + 0.9; z < max[2] - 0.7; z += 0.3) {
     kit.box(slatMat, min[0] + W / 2, H - 0.11, z, W - 1.4, 0.12, 0.06, { color: PALETTE.impGrey, texel: 2 });
   }
-  // beams along z carrying downlight cans
+  // plain beams along z (no downlight cans)
   for (const x of [-20.4, -14.45, -8.5]) {
     kit.box("paintedMetal", x, H - 0.2, min[2] + D / 2, 0.36, 0.3, D - 1.4, { color: PALETTE.impDark, texel: 1.5 });
-    for (let z = min[2] + 2.4; z < max[2] - 1.2; z += 3.4) {
-      kit.cyl("paintedMetal", x, H - 0.36, z, 0.13, 0.04, "y", { color: PALETTE.impBlack, segments: 14 });
-      kit.cyl("emitAmber", x, H - 0.375, z, 0.1, 0.01, "y", { segments: 14 });
-    }
   }
   // perimeter soffit: dark band with an amber cove line on its inner edge
   const sof = 0.7;
@@ -354,21 +354,21 @@ export function buildRecreation(kit, ctx) {
   }
 
   // ------------------------------------------------------------------ seating clusters on rugs
-  rug(kit, -18.4, -57.4, 5.0, 4.2, new THREE.Color("#2a2326"));
+  rug(kit, -18.4, -57.4, 5.0, 4.2, RUG);
   sofa(kit, { x: -18.4, z: -59.1, yaw: 0, len: 2.6, color: FABRICS[0], seed: ctx.seed + 1 });
   sofa(kit, { x: -20.4, z: -57.2, yaw: Math.PI / 2, len: 2.0, color: FABRICS[1], seed: ctx.seed + 2 });
   sofa(kit, { x: -16.3, z: -57.3, yaw: -Math.PI / 2, len: 1.0, color: FABRICS[0], seed: ctx.seed + 3 });
   lowTable(kit, { x: -18.4, z: -57.2, w: 1.3, d: 0.75, seed: ctx.seed + 4 });
   floorLamp(kit, -21.2, -59.3);
 
-  rug(kit, -10.2, -47.6, 4.6, 4.4, new THREE.Color("#242a2f"));
+  rug(kit, -10.2, -47.6, 4.6, 4.4, RUG);
   sofa(kit, { x: -10.2, z: -45.9, yaw: Math.PI, len: 2.4, color: FABRICS[3], seed: ctx.seed + 5 });
   sofa(kit, { x: -10.2, z: -49.3, yaw: 0, len: 2.4, color: FABRICS[2], seed: ctx.seed + 6 });
   lowTable(kit, { x: -10.2, z: -47.6, w: 1.4, d: 0.7, seed: ctx.seed + 7 });
   floorLamp(kit, -12.2, -49.6);
 
   // two armchairs by the middle window, a side table between them
-  rug(kit, -14.5, -60.6, 3.6, 2.6, new THREE.Color("#2a2326"), 0.05);
+  rug(kit, -14.5, -60.6, 3.6, 2.6, RUG, 0.05);
   sofa(kit, { x: -15.4, z: -61.0, yaw: Math.PI + 0.45, len: 1.0, color: FABRICS[1], seed: ctx.seed + 8 });
   sofa(kit, { x: -13.6, z: -61.0, yaw: Math.PI - 0.45, len: 1.0, color: FABRICS[1], seed: ctx.seed + 9 });
   lowTable(kit, { x: -14.5, z: -60.2, w: 0.6, d: 0.6, seed: ctx.seed + 10 });
@@ -381,10 +381,11 @@ export function buildRecreation(kit, ctx) {
   }
   floorGrime(kit, -8.6, -58.6, 3.4, 3.4, 0.4);
 
-  // ------------------------------------------------------------------ centre: card table with chairs, a third cluster, a crest pedestal
+  // ------------------------------------------------------------------ centre: card table on a rug facing the door, a third cluster, a crest pedestal
   {
-    const cx = -15.6;
-    const cz = -56.4;
+    const cx = -13.0;
+    const cz = -53.0;
+    rug(kit, cx, cz, 3.8, 3.8, RUG, 0.12);
     kit.cyl("paintedMetal", cx, 0.04, cz, 0.5, 0.08, "y", { color: PALETTE.impBlack, segments: 20, texel: 2 });
     kit.cyl("paintedMetal", cx, 0.4, cz, 0.16, 0.72, "y", { color: PALETTE.impDark, segments: 12, texel: 2 });
     kit.cyl("paintedMetal", cx, 0.76, cz, 0.85, 0.06, "y", { color: PALETTE.impMid, segments: 28, texel: 2 });
@@ -403,7 +404,7 @@ export function buildRecreation(kit, ctx) {
     }
     floorGrime(kit, cx, cz, 3.6, 3.6, 0.2);
   }
-  rug(kit, -19.6, -49.4, 4.4, 4.0, new THREE.Color("#2a2a24"), -0.2);
+  rug(kit, -19.6, -49.4, 4.4, 4.0, RUG, -0.2);
   sofa(kit, { x: -20.9, z: -48.2, yaw: Math.PI / 2 - 0.2, len: 2.0, color: FABRICS[2], seed: ctx.seed + 14 });
   sofa(kit, { x: -18.3, z: -50.6, yaw: -Math.PI / 2 - 0.2, len: 2.0, color: FABRICS[3], seed: ctx.seed + 15 });
   lowTable(kit, { x: -19.6, z: -49.4, yaw: -0.2, w: 1.2, d: 0.7, seed: ctx.seed + 16 });
