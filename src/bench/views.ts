@@ -38,7 +38,8 @@ export const BENCH_VIEWS: BenchView[] = [
     id: 'aerial-a', name: 'Reference A — high aerial', description: 'Reference-style wide aerial over Isla Garza looking north: causeway receding NNE, downtown skyline upper-left, boats with wakes below, aircraft lower right.',
     time: 14.6, weather: 'scattered',
     camera: { mode: 'fixed', pos: [360, 400, 3720], headingDeg: -6, pitchDeg: -12, fov: 42 },
-    plane: { fromCamera: { screenX: 0.80, screenY: 0.755, distance: 72 }, headingDeg: -52, pitchDeg: 3, bankDeg: -10, speed: 52, throttle: 0.75 },
+    // reference: aircraft centroid (0.81, 0.75), rear three-quarter view from above-left, nose into the scene to the right
+    plane: { fromCamera: { screenX: 0.79, screenY: 0.74, distance: 44 }, headingDeg: 34, pitchDeg: 2, bankDeg: -12, speed: 52, throttle: 0.75 },
     presim: 40, clipInputs: { pitch: 0.05, roll: -0.05, yaw: 0 },
   },
   {
