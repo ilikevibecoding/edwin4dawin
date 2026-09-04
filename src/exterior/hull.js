@@ -175,7 +175,7 @@ export function buildExterior(scene) {
   const windowMat = new THREE.MeshStandardMaterial({ map: windowsTex, emissiveMap: windowsTex, emissive: 0xffffff, emissiveIntensity: 1.6, alphaTest: 0.5, roughness: 0.5, metalness: 0, fog: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   const engineCore = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
   const engineGlow = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
-  const tractorMat = new THREE.MeshBasicMaterial({ color: 0x4d9dff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const tractorMat = new THREE.MeshBasicMaterial({ color: 0x4d9dff, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.FrontSide, fog: false });
   const materials = { hullMat, darkMat, greebleMat, greebleDark, plateMat, windowMat, engineGlow, engineCore, hullUvMat, engineMat, atlasMat };
   const mats = { hull: hullMat, plate: plateMat, hullUv: hullUvMat, dark: darkMat, engine: engineMat, greeble: greebleMat, greebleDark, atlas: atlasMat, windows: windowMat, engineCore, engineGlow };
 
@@ -362,9 +362,11 @@ export function buildExterior(scene) {
     ]);
     addMesh(rim, atlasMat, "wellRim");
   }
-  // thin slab rather than a plane: reads from above and below and avoids the software rasteriser's
-  // large-triangle seam on a single quad
-  const field = box((HANGAR.well.x0 + HANGAR.well.x1) / 2, k.y + 0.4, (HANGAR.well.z0 + HANGAR.well.z1) / 2, wellW - 0.4, 0.3, wellD - 0.4).toNonIndexed();
+  // faint field sheet across the mouth, facing down: read from below the ship, invisible from the deck
+  // (the hangar's own emitter cones carry the effect inside)
+  const field = new THREE.PlaneGeometry(wellW - 0.4, wellD - 0.4).toNonIndexed();
+  field.rotateX(Math.PI / 2);
+  field.translate((HANGAR.well.x0 + HANGAR.well.x1) / 2, k.y + 0.4, (HANGAR.well.z0 + HANGAR.well.z1) / 2);
   const tractor = addMesh(field, tractorMat, "tractorField");
 
   // ---------------- instanced detail layers
@@ -474,7 +476,7 @@ export function buildExterior(scene) {
     }
     stats.visibleDetail = vis;
     const now = performance.now();
-    tractor.material.opacity = 0.07 + 0.035 * Math.sin(now * 0.0016);
+    tractor.material.opacity = 0.05 + 0.02 * Math.sin(now * 0.0016);
     if (group.visible) running.update(now * 0.001);
   }
 
