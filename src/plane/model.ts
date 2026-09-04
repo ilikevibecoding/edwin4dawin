@@ -835,7 +835,7 @@ export class PlaneModel {
         yoke.add(strutGeometry(tip, grip, 0.017, 10), undefined, SURF.rubber);
         if (hands) {
           // pilot's hands wrapped around the grips
-          yoke.add(new THREE.BoxGeometry(0.06, 0.085, 0.055), at(tip.clone().lerp(grip, 0.5).add(new THREE.Vector3(-0.012, 0, 0))), SURF.skin);
+          yoke.add(new THREE.CapsuleGeometry(0.03, 0.045, 4, 12), at(tip.clone().lerp(grip, 0.5).add(new THREE.Vector3(-0.012, 0, 0)), [0, 0, s * 0.2]), SURF.skin);
           yoke.add(new THREE.CylinderGeometry(0.011, 0.011, 0.05, 8), at(tip.clone().lerp(grip, 0.75).add(new THREE.Vector3(0.028, 0.0, -s * 0.01)), [0, 0, Math.PI / 2]), SURF.skin);
         }
       }
