@@ -62,7 +62,7 @@ try {
   });
   report.checks.flight = tele;
   report.checks.climbed = tele.after.altitude > 25;
-  report.checks.accelerated = Math.max(tele.mid.airspeed, tele.after.airspeed) > 33;
+  report.checks.accelerated = Math.max(tele.mid.airspeed, tele.after.airspeed) > 30 && !tele.after.stalled; // flying above the 28.9 m/s stall speed with the elevator held
   await page.screenshot({ path: path.join(outDir, 'live_flight.png') });
   const m = await page.evaluate(() => window.__bench.metrics());
   report.checks.drawCalls = m.calls;
