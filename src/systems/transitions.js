@@ -35,6 +35,7 @@ export class Modes {
       this.camera.far = 6000;
       this.scene.fog = this.fogInterior;
       this.rooms.group.visible = true;
+      this.rooms.setExteriorPeek(false);
       this.hud.setModeHint("V exterior view · E interact · Shift sprint · Esc release");
     } else {
       this.player.enabled = false;
@@ -43,7 +44,10 @@ export class Modes {
       this.camera.near = 1;
       this.camera.far = 40000;
       this.scene.fog = null;
-      this.rooms.group.visible = false;
+      // keep the glazed tower rooms rendering so the bridge glows behind its windows from outside
+      this.rooms.group.visible = true;
+      this.rooms.prefetch("tower");
+      this.rooms.setExteriorPeek(true);
       this.hud.setModeHint("drag orbit · wheel zoom · F free-fly · Enter board");
     }
     this.camera.updateProjectionMatrix();

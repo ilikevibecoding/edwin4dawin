@@ -218,6 +218,7 @@ export class RoomManager {
     this.rooms = new Map(); // id -> { def, ctx, built, visible }
     for (const def of ROOMS) this.rooms.set(def.id, { def, ctx: null, built: false, visible: false, cluster: def.cluster });
     this.current = null;
+    this.peek = false; // exterior mode: show the glazed tower rooms so the bridge is lit behind its windows
     this.visibleIds = new Set();
     this.activeColliders = [];
     this.builtClusters = new Set();
@@ -331,8 +332,14 @@ export class RoomManager {
     this.interactablesVersion++;
     this.doorSystem.roomBuilt(id);
     for (const e of this.extras) if (e.roomBuilt) e.roomBuilt(id);
-    if (this.current && this.current.id === id) this.refreshVisibility(true);
+    if ((this.current && this.current.id === id) || this.peek) this.refreshVisibility(true);
     return r;
+  }
+
+  /** Exterior peek: render only the rooms that have windows (they are visible from outside). */
+  setExteriorPeek(on) {
+    this.peek = on;
+    this.refreshVisibility(true);
   }
 
   releaseCluster(cluster) {
@@ -402,6 +409,11 @@ export class RoomManager {
     } else if (this.doorSystem.dirty) {
       this.refreshVisibility();
     }
+    this.updateAnimators(dt, t);
+  }
+
+  /** Run the per-frame animators of every visible room (screens, machinery, holograms). */
+  updateAnimators(dt, t) {
     for (const id of this.visibleIds) {
       const r = this.rooms.get(id);
       if (!r.built) continue;
@@ -413,7 +425,9 @@ export class RoomManager {
   refreshVisibility(force = false) {
     this.doorSystem.dirty = false;
     const vis = new Set();
-    if (this.current) {
+    if (this.peek) {
+      for (const [id, r] of this.rooms) if (r.built && r.def.windows) vis.add(id);
+    } else if (this.current) {
       vis.add(this.current.id);
       for (const d of this.doorsOf(this.current.id)) {
         if (!d.other) continue;

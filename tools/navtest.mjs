@@ -11,6 +11,7 @@ mkdirSync(outDir, { recursive: true });
 const executablePath = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].find((p) => existsSync(p));
 const browser = await chromium.launch({ headless: true, executablePath, args: ["--no-sandbox", "--disable-dev-shm-usage", "--use-gl=angle", "--use-angle=swiftshader-webgl", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl"] });
 const page = await browser.newPage({ viewport: { width: 800, height: 450 } });
+page.setDefaultTimeout(300000);
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => m.type() === "error" && errors.push(m.text().slice(0, 200)));
@@ -58,7 +59,7 @@ const settle = async (n = 2) => {
   r = await ev(() => window.debugAPI.nudge(0, 4.5, 40));
   check("player walks into the corridor", r.room === "cmd_corridor" && r.pos[2] > 206.3, JSON.stringify(r));
   await settle(2);
-  await page.screenshot({ path: resolve(outDir, "corridor_after_door.png") });
+  await page.screenshot({ path: resolve(outDir, "corridor_after_door.png"), timeout: 120000 });
   // walk into a wall (x = -30 has no door on the corridor's aft wall): must be blocked
   await ev(() => window.debugAPI.nudge(-30, 0, 60));
   const wall = await ev(() => window.debugAPI.nudge(0, 20, 40));
@@ -105,7 +106,7 @@ const settle = async (n = 2) => {
   });
   check("turbolift delivers the player to the hangar lobby", res.room === "hangar_lobby" && !res.ride, JSON.stringify(res));
   await settle(2);
-  await page.screenshot({ path: resolve(outDir, "after_lift.png") });
+  await page.screenshot({ path: resolve(outDir, "after_lift.png"), timeout: 120000 });
 }
 
 // 5. transitions: exit to exterior and board again (fast-forwarded through the fade timers)
@@ -115,13 +116,13 @@ const settle = async (n = 2) => {
   await page.waitForFunction(() => window.debugAPI.modes.mode === "exterior" && !window.debugAPI.modes.busy, null, { timeout: 60000 });
   check("exit to exterior view", true, `from ${modeBefore}`);
   await settle(2);
-  await page.screenshot({ path: resolve(outDir, "exterior_after_exit.png") });
+  await page.screenshot({ path: resolve(outDir, "exterior_after_exit.png"), timeout: 120000 });
   await ev(() => window.debugAPI.board());
   await page.waitForFunction(() => window.debugAPI.modes.mode === "interior" && !window.debugAPI.modes.busy, null, { timeout: 240000 });
   const where = await ev(() => ({ room: window.debugAPI.rooms.current.id, pos: window.debugAPI.player.position.toArray().map((v) => +v.toFixed(1)) }));
   check("boarding lands on the bridge", where.room === "bridge", JSON.stringify(where));
   await settle(2);
-  await page.screenshot({ path: resolve(outDir, "bridge_after_boarding.png") });
+  await page.screenshot({ path: resolve(outDir, "bridge_after_boarding.png"), timeout: 120000 });
 }
 
 // 6. snapshot round-trip

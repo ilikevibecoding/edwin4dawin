@@ -9,7 +9,9 @@ import { resolve } from "node:path";
 const args = process.argv.slice(2);
 const flags = Object.fromEntries(args.filter((a) => a.startsWith("--")).map((a) => a.slice(2).split("=")));
 const pos = args.filter((a) => !a.startsWith("--"));
-const views = (pos[0] || "ext_far").split(",");
+// named views are comma-separated; inline specs contain commas themselves, so lists mixing them use ';'
+const viewArg = pos[0] || "ext_far";
+const views = viewArg.includes(":") ? viewArg.split(";") : viewArg.split(",");
 const outDir = resolve(pos[1] || "shots/quick");
 const W = +(flags.w || 960);
 const H = +(flags.h || 540);
@@ -68,7 +70,7 @@ for (const v of views) {
     if (flags.sim) await page.evaluate((s) => window.debugAPI.simulate(s), +flags.sim);
     await settle(3);
     const file = resolve(outDir, `${name}.png`);
-    await page.screenshot({ path: file });
+    await page.screenshot({ path: file, timeout: 300000 });
     const s = await page.evaluate(() => window.debugAPI.getStats());
     results[name] = s;
     console.log(`${name}: ${s.calls} calls, ${(s.triangles / 1000).toFixed(0)}k tris, ${s.visibleLights} lights, ${s.visibleObjects} objs, ${s.frameMs} ms/frame (software GL), rooms ${s.rooms.visible.join("|")} -> ${file}`);
