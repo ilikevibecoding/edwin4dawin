@@ -98,7 +98,9 @@ float envelope(vec3 p, vec4 f, out float hf, out float hn, out float H) {
   H = mix(0.3, 1.0, smoothstep(0.05, 0.75, f.y));
   hn = hf / H;
   float v = smoothstep(0.0, 0.05, hf) * (1.0 - smoothstep(0.55, 1.0, hn));
-  return f.x * v;
+  // thin columns (cell edges, the gaps of a deck) are less dense: light gets through, the underside of an
+  // overcast reads as cells instead of an even grey
+  return f.x * v * mix(0.8, 1.2, f.w);
 }
 
 vec3 noiseCoord(vec3 p) { return (p + vec3(uCloudWind.x, 0.0, uCloudWind.y)) * NOISE_SCALE; }
@@ -258,7 +260,7 @@ void main() {
       // thickness is modulated by the low-frequency shape noise so the flat bases read as mottled
       // (hollows between the lobes let more sky light through) instead of a uniform grey.
       float above = max(H - hf, 0.0) * (uCloudTop - uCloudBase) * e * mix(1.6, 0.55, mott) * mix(0.45, 1.3, f.w);
-      float ao = mix(0.14, 1.0, exp(-above * 0.0015));
+      float ao = mix(0.14, 1.0, exp(-above * 0.0015)) * mix(0.82, 1.12, mott);
       vec3 amb = mix(gndAmb, skyAmb, clamp(hf * 1.3, 0.0, 1.0)) * ao;
       vec3 S = lightCol * sunTerm + amb;
       float a = 1.0 - exp(-dens * SIGMA * dt);
