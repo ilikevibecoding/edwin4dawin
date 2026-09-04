@@ -17,8 +17,9 @@ export default defineRoom({
   views: {
     // from the door: walkway between the tank farm (left) and the scrubber bank (right)
     "d2-lifesupport-door": { pos: [50, Y, 380], yaw: 180, pitch: 4 },
-    // water section: tanks, manifold, pump skids
-    "d2-lifesupport-water": { pos: [48.5, Y, 384.5], yaw: 150, pitch: 6 },
+    // water section: transfer pump in the foreground, the tank row (amber-banded tank 2 with its sight
+    // glass, tank 4 with the manway open), manifold and pump skids
+    "d2-lifesupport-water": { pos: [45.6, Y, 383.6], yaw: 160, pitch: 5 },
     // air section: scrubber cabinets under the duct trunk and catwalk, filter skid, stairs at the end
     "d2-lifesupport-air": { pos: [57.0, Y, 386.0], yaw: -160, pitch: 6 },
     // from the aft catwalk: the whole plant room — tanks, skids, walkway, control station
@@ -30,7 +31,13 @@ export default defineRoom({
     wallAlt: IMP.impWhite,
     stripMat: "emitTeal",
     floor: { color: IMP.impMid },
-    ceiling: { channels: 4, axis: "z" },
+    // cool-white channel strips: the teal emitter (Kestrel key, intensity 2.4) mirrored in the metal
+    // tank rims as a blown streak; the wall strips stay teal
+    ceiling: { channels: 4, axis: "z", stripMat: "emitWhite" },
+    doorDressing: { accent: "emitTeal" },
+    // cable tray + pipe runs across the bare 4.7–5.4 m band of the forward and west walls (the east
+    // and aft walls carry the catwalk at that height)
+    serviceBand: { y: 4.7, faces: ["n", "w"] },
     lights: false,
   },
   detail,
