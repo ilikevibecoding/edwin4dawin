@@ -487,11 +487,12 @@ function buildPit(kit, ctx, s) {
   grate.rotateX(-Math.PI / 2);
   kit.add("grate", grate, { pos: [ax, y + 0.006, (PIT.z0 + PIT.z1) / 2], uv: "scale", uvScale: [1.1 / 1.24, (PIT.z1 - PIT.z0 - 2) / 0.9] });
   for (const z of [-38, -30, -22]) kit.boxMM("paintedMetal", [x0 + 0.2, y, z - 0.12], [x1 - 0.2, y + 0.05, z + 0.12], BLACK);
-  for (const z of [PIT.z0 + 0.6, PIT.z1 - 0.6]) kit.box("emitBlue", ax, y + 0.02, z, 0.6, 0.02, 0.06, {});
-  // pit wall accents: a continuous blue light seam along the top of both long walls
+  for (const z of [PIT.z0 + 0.6, PIT.z1 - 0.6]) kit.box("brg_ring", ax, y + 0.02, z, 0.6, 0.02, 0.06, {});
+  // pit wall accents: a continuous blue light seam along the top of both long walls (kept under the
+  // bloom threshold so it stays a blue line instead of blowing to white)
   for (const xw of [x0, x1]) {
     const inner = xw === x0 ? 1 : -1;
-    kit.boxMM("emitBlue", [xw + (inner > 0 ? 0.0 : -0.03), -0.315, PIT.z0 + 0.3], [xw + (inner > 0 ? 0.03 : 0.0), -0.29, PIT.z1 - 0.3], {});
+    kit.boxMM("brg_ring", [xw + (inner > 0 ? 0.0 : -0.03), -0.315, PIT.z0 + 0.3], [xw + (inner > 0 ? 0.03 : 0.0), -0.29, PIT.z1 - 0.3], {});
   }
   // railings (walkway side split around the stairs)
   const xw = s * (PIT.x0 - 0.13);
