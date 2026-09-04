@@ -199,12 +199,12 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; float wFoot; vec3 wDbg;
     g += gs * swellF * wSw;
   }
   mss += 0.0035 * swellF * (1.0 - wSw * wSw);
-  float w0 = 1.0 - smoothstep(1.4, 6.0, foot);
+  float w0 = 1.0 - smoothstep(2.8, 6.0, foot);
   float a0 = 0.035 * wind * chopF;
   if (w0 > 0.001) g += chopSlope(wp, rot2(wd, 0.15), 14.0, 2.0, 4.5, t, 1.3, a0, val0) * w0;
   mss += a0 * a0 * (1.0 - w0 * w0);
   // wind sea: short-crested directional waves whose height follows the wave groups of the layer above
-  float wWs = 1.0 - smoothstep(1.0, 5.0, foot);
+  float wWs = 1.0 - smoothstep(1.1, 2.6, foot);
   if (wWs > 0.001 && chopF > 0.001) {
     float grp = (0.55 + 0.9 * val0) * chopF * wind;
     vec2 gw = swellSlope(wp, rot2(wd, -0.30), 11.0, 0.050, t, 1.0)
@@ -213,12 +213,12 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; float wFoot; vec3 wDbg;
     g += gw * grp * wWs;
   }
   mss += 0.0015 * chopF * wind * (1.0 - wWs * wWs);
-  float w1 = 1.0 - smoothstep(0.5, 2.2, foot);
+  float w1 = 1.0 - smoothstep(1.0, 2.2, foot);
   float a1 = 0.12 * wind * mix(chopF, rippleF, 0.4);
   if (w1 > 0.001) g += chopSlope(wp, rot2(wd, -0.2), 5.0, 1.8, 2.7, t, 3.7, a1, val1) * w1;
   mss += a1 * a1 * (1.0 - w1 * w1);
   // short crested ripples of the local wind sea, bunched by the groups of the layer above
-  float w2 = 1.0 - smoothstep(0.17, 0.75, foot);
+  float w2 = 1.0 - smoothstep(0.35, 0.75, foot);
   float a2 = 0.14 * wind * rippleF;
   if (w2 > 0.001) {
     g += chopSlope(wp, rot2(wd, 0.3), 1.7, 1.4, 1.6, t, 7.1, a2, val2) * w2;
@@ -226,7 +226,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; float wFoot; vec3 wDbg;
     g += (swellSlope(wp, rot2(wd, -0.35), 3.4, 0.022, t, 2.7) + swellSlope(wp, rot2(wd, 0.25), 2.2, 0.013, t, 8.1)) * grp2;
   }
   mss += (a2 * a2 + 0.0012 * rippleF * wind) * (1.0 - w2 * w2);
-  float w3 = 1.0 - smoothstep(0.05, 0.22, foot);
+  float w3 = 1.0 - smoothstep(0.1, 0.22, foot);
   float a3 = 0.12 * wind * rippleF;
   if (w3 > 0.001) g += chopSlope(wp, rot2(wd, -0.05), 0.5, 1.2, 0.9, t, 11.3, a3, val3) * w3;
   mss += a3 * a3 * (1.0 - w3 * w3);
@@ -250,7 +250,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; float wFoot; vec3 wDbg;
   float cosSunR = sqrt(1.0 - (1.0 - sunUp * sunUp) / 1.77);
   float path = depth * (1.0 / cosSunR + 1.0 / max(cosR, 0.2));
   // clear tropical shelf water: red is gone within a metre, green within a few, blue reaches the deep bed
-  vec3 K = vec3(0.75, 0.245, 0.19);
+  vec3 K = vec3(0.9, 0.245, 0.19);
   vec3 T = exp(-K * path);
   vec3 refr = refract(-V, N, 0.75);
   vec2 bedP = wp + refr.xz / max(-refr.y, 0.25) * depth;
@@ -260,7 +260,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; float wFoot; vec3 wDbg;
   float rippleFade = 1.0 - smoothstep(0.25, 1.0, foot);
   float sandRipple = rippleFade > 0.001 ? mix(0.5, vnoise(vec2(dot(bedP, wd) * 1.4 + 2.0 * vnoise(bedP * 0.2), dot(bedP, vec2(-wd.y, wd.x)) * 0.35)), rippleFade) : 0.5;
   // bed albedo is physical (neutral sun+sky irradiance since the lighting rebalance): coral sand
-  vec3 sand = vec3(0.52, 0.475, 0.385) * (0.86 + 0.24 * grain + 0.14 * (sandRipple - 0.5));
+  vec3 sand = vec3(0.52, 0.49, 0.42) * (0.86 + 0.24 * grain + 0.14 * (sandRipple - 0.5));
   float sgN = fbm3(bedP * 0.012 + 3.0);
   float sg = smoothstep(0.54, 0.68, sgN + 0.12 * (grain - 0.5)) * smoothstep(0.5, 1.6, depth) * (1.0 - smoothstep(5.0, 9.0, depth));
   vec3 bed = mix(sand, vec3(0.07, 0.11, 0.05), sg);
@@ -271,12 +271,12 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; float wFoot; vec3 wDbg;
   bed *= 1.0 + caustic * (1.0 - smoothstep(1.0, 3.5, depth)) * smoothstep(0.05, 0.3, depth);
   // deep-water reflectance under neutral irradiance: blue-teal bay water carrying some suspended matter,
   // clearer and bluer ocean beyond the shelf (a few percent, peaking in the blue)
-  vec3 Rinf = mix(vec3(0.022, 0.070, 0.128), vec3(0.008, 0.036, 0.105), smoothstep(8.0, 22.0, depth));
+  vec3 Rinf = mix(vec3(0.03, 0.072, 0.13), vec3(0.01, 0.038, 0.105), smoothstep(8.0, 22.0, depth));
   vec3 R = bed * T + Rinf * (1.0 - T);
   // suspended sediment: milky, pale turquoise over the flats and along the shore
   float milkN = fbm2o(wp * 0.004 + 9.0);
-  float milk = (1.0 - smoothstep(0.3, 2.5, depth)) * (0.35 + 0.65 * smoothstep(0.35, 0.8, milkN));
-  R += vec3(0.035, 0.065, 0.095) * milk * (1.0 - exp(-path * 0.9));
+  float milk = (1.0 - smoothstep(0.3, 3.5, depth)) * (0.3 + 0.7 * smoothstep(0.35, 0.8, milkN));
+  R += vec3(0.04, 0.068, 0.095) * milk * (1.0 - exp(-path * 0.9));
 
   // ---- foam: shore wash driven by exposure to the incoming waves, surf lines, whitecaps, wakes
   float foam = 0.0;
