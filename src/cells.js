@@ -17,6 +17,7 @@ export class Cell {
     this.group = new THREE.Group();
     this.group.name = "cell:" + room.id;
     this.group.position.set(room.origin[0], room.origin[1], room.origin[2]);
+    this.group.visible = false; // Object3D defaults to visible; setVisible(false) would early-return
     this.kit = new Kit(materials);
     this.colliders = [];
     this.floors = [];

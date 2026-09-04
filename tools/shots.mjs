@@ -90,8 +90,27 @@ for (const name of views) {
   const file = resolve(outDir, `${label}.png`);
   await page.screenshot({ path: file, timeout: 150000 });
   const stats = await page.evaluate(() => window.debugAPI.getStats());
+  // per-cell budget line for the current room (what this room alone contributes)
+  stats.cell = await page.evaluate(() => {
+    const api = window.debugAPI;
+    const c = api.cells.current;
+    if (!c || api.rig.mode !== "interior") return null;
+    let meshes = 0;
+    let tris = 0;
+    c.group.traverse((o) => {
+      if (o.isMesh || o.isLine || o.isLineSegments || o.isPoints) {
+        meshes++;
+        const g = o.geometry;
+        if (!g || !g.attributes.position) return;
+        const per = g.index ? g.index.count / 3 : g.attributes.position.count / 3;
+        tris += Math.round(per * (o.isInstancedMesh ? o.count : 1));
+      }
+    });
+    return { id: c.id, meshes, triangles: tris, lights: c.lights.length, colliders: c.colliders.length, floors: c.floors.length, updaters: c.updaters.length };
+  });
   results.views[name] = stats;
-  console.log(`shot ${name}: ${stats.calls} calls, ${(stats.triangles / 1000).toFixed(0)}k tris, ${stats.poolLights} lights, cells ${stats.visibleCells}, ${stats.frameMs} ms/frame (software GL)`);
+  const cellLine = stats.cell ? ` | cell ${stats.cell.id}: ${stats.cell.meshes} meshes, ${(stats.cell.triangles / 1000).toFixed(0)}k tris, ${stats.cell.lights} lights, ${stats.cell.colliders} colliders` : "";
+  console.log(`shot ${name}: ${stats.calls} calls, ${(stats.triangles / 1000).toFixed(0)}k tris, ${stats.poolLights} lights, cells ${stats.visibleCells}, ${stats.frameMs} ms/frame (software GL)${cellLine}`);
 }
 
 if (!QUICK) {
