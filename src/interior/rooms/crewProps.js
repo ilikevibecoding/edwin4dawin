@@ -236,6 +236,9 @@ export function ensureCrewMaterials(ctx) {
   // lounge ceiling glow bands: the warm diffuser held well below the star windows
   m.crew_warmBand = m.emitWarmSoft.clone();
   m.crew_warmBand.emissiveIntensity = 1.1;
+  // quarters night blue: a muted navy emitter (not the azure of emitBlue) at about half strength, for
+  // the aisle kick strips, the ceiling spine and the bay-lane strips
+  m.crew_nightBlue = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: new THREE.Color("#3a5a9a"), emissiveIntensity: 1.25, roughness: 0.5, metalness: 0 });
   // pulsing amber beacon emitter (escape pod bay) and red alert domes (armoury), animated by the rooms
   m.crew_beacon = m.emitAmber.clone();
   m.crew_alert = m.emitRed.clone();
@@ -525,11 +528,18 @@ export function messTable(kit, ctx, { x, z, yaw = 0, len = 3.6, seed = 1, props 
     add("paintedMetal", new THREE.BoxGeometry(0.12, h - 0.12, 0.5), s * (len / 2 - 0.4), (h - 0.12) / 2, 0, { color: PALETTE.impDark, texel: 2 });
     add("paintedMetal", new THREE.BoxGeometry(0.4, 0.06, 0.8), s * (len / 2 - 0.4), 0.03, 0, { color: PALETTE.impBlack, texel: 2 });
   }
-  // benches: fabric pad on a grey box, black legs
+  // benches: a dark box with a light piping line and a row of separate seat cushions in the bench
+  // fabric on top (one slab read as a plain dark plank), black legs
   for (const s of [-1, 1]) {
     const bz = s * (w / 2 + 0.42);
     add("paintedMetal", new THREE.BoxGeometry(len - 0.3, 0.06, 0.36), 0, 0.42, bz, { color: PALETTE.impDark, texel: 2 });
-    add("fabric", new THREE.BoxGeometry(len - 0.34, 0.06, 0.32), 0, 0.48, bz, { color: fabric, texel: 2 });
+    add("paintedMetal", new THREE.BoxGeometry(len - 0.3, 0.015, 0.34), 0, 0.4575, bz, { color: PALETTE.impLight, texel: 2 });
+    const seats = Math.max(2, Math.round((len - 0.34) / 0.6));
+    const sw = (len - 0.34) / seats;
+    for (let i = 0; i < seats; i++) {
+      const sx = -(len - 0.34) / 2 + (i + 0.5) * sw;
+      add("fabric", new THREE.BoxGeometry(sw - 0.05, 0.08, 0.32), sx, 0.5, bz, { color: fabric, texel: 2 });
+    }
     for (const e of [-1, 1]) add("paintedMetal", new THREE.BoxGeometry(0.08, 0.4, 0.3), e * (len / 2 - 0.5), 0.2, bz, { color: PALETTE.impBlack, texel: 2 });
     add("paintedMetal", new THREE.BoxGeometry(len - 1.1, 0.04, 0.05), 0, 0.12, bz, { color: PALETTE.impMid, texel: 2 });
   }
@@ -654,6 +664,19 @@ export function wallShelf(frame, u, v, w, depth = 0.3) {
 /** Quaternion helper for props built around a yaw. */
 export function yawQuat(yaw) {
   return new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+}
+
+/**
+ * Stormtrooper-style helmet as a boxed shape (no sphere: a ball on a shelf reads as a ball). Sits with
+ * its base at y; the visor faces local +Z rotated by yaw. `color` tints the shell.
+ */
+export function helmet(kit, x, y, z, yaw = 0, color = PALETTE.impWhite) {
+  const F = propFrame(kit, x, z, yaw, y);
+  F.box("crew_white", 0, 0.14, 0, 0.26, 0.28, 0.26, { color });
+  F.box("crew_white", 0, 0.16, 0.12, 0.28, 0.1, 0.08, { color });
+  F.box("paintedMetal", 0, 0.18, 0.155, 0.22, 0.04, 0.02, { color: PALETTE.impBlack, texel: 3 });
+  F.box("paintedMetal", 0, 0.07, 0.135, 0.09, 0.05, 0.02, { color: PALETTE.impBlack, texel: 3 });
+  for (const s of [-1, 1]) F.box("paintedMetal", s * 0.1, 0.07, 0.125, 0.05, 0.04, 0.02, { color: PALETTE.impDark, texel: 3 });
 }
 
 /**
