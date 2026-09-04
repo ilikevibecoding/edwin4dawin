@@ -25,16 +25,21 @@ const BLUE = IMP.medBlue;
 const DARK = IMP.impDark;
 const BLACK = IMP.impBlack;
 const STEEL = IMP.steel;
-// Three of the four Imperial screen layouts (schematic / tactical grid / text columns): the room's
-// 16 draw calls are all spent, so the fourth key is not affordable.
+// Two of the four Imperial screen layouts (schematic / text columns); the room's 16 draw calls are
+// spent on four animated emitter clones (see the lighting section), so the bed monitors get their
+// third content variant from a kit-drawn green bar graph ("board") instead of a third screen key.
 const SCR = "screenImp0";
-const SCR2 = "screenImp1";
 const SCR3 = "screenImp2";
-const BED_SCR = [SCR2, SCR3, SCR];
-// suspended fixtures hug the ceiling (emitter at CEIL − 0.625); each fill hangs 1.3 m under its
-// emitter and 1.9 m below the ceiling, so neither the housing nor the ceiling gets a blown disc
+const BED_SCR = ["board", SCR3, SCR];
+// animated emitter keys (clones registered in detail(); "emit" prefix keeps them out of shadow casting)
+const TEAL = "emitTealPulse";
+const AMBER_BLINK = "emitAmberBlink";
+const GREEN_FLK = "emitGreenFlicker";
+const COOL_DIP = "emitCoolDip";
+// suspended fixtures hug the ceiling (emitter at CEIL − 0.625); each fill hangs 1.6 m under its
+// emitter and 2.2 m below the ceiling, so neither the housing nor the ceiling gets a blown disc
 const FIX_STEM = 0.5;
-const FILL_Y = CEIL - 1.9;
+const FILL_Y = CEIL - 2.2;
 
 // ward geometry
 const BAY_Z = [352.0, 355.5, 359.0, 362.5, 366.0];
@@ -82,6 +87,23 @@ export default defineRoom({
   detail(ctx) {
     const { kit, PALETTE } = ctx;
 
+    // ---------------------------------------------------------------- animated emitter materials
+    // Cloned emissives registered under room-local keys: the kit merges each into its own mesh (one
+    // draw call per effect, counted in the room's 16) and update() drives emissiveIntensity, so every
+    // moving light below has a visible emitter moving with it. Base intensities come from the source
+    // materials so the shared emitter tuning still applies.
+    const clone = (src, key) => {
+      const m = ctx.materials[src].clone();
+      m.name = key;
+      ctx.materials[key] = m;
+      return m;
+    };
+    const tealMat = clone("emitTeal", TEAL); // bacta columns, surface discs, wall status plates, canister bands
+    const amberMat = clone("emitAmber", AMBER_BLINK); // drained tank: hatch tell-tale, gauge arc, probe LED, cap status
+    const greenMat = clone("emitGreen", GREEN_FLK); // three vitals boards in the ward
+    const coolMat = clone("emitCoolSoft", COOL_DIP); // the two west-ward bars over the faulty circuit
+    const base = { teal: tealMat.emissiveIntensity, amber: amberMat.emissiveIntensity, green: greenMat.emissiveIntensity, cool: coolMat.emissiveIntensity };
+
     // ---------------------------------------------------------------- reception (z 366..372)
     // supply cabinets both sides of the door (door hole x −49.2..−46.8; 1 m approach kept clear)
     const aftZ = wz1 - 0.25;
@@ -89,12 +111,12 @@ export default defineRoom({
       cabinet(kit, PALETTE, [x, Y, aftZ], Math.PI, { h, color: c, seed: Math.round(-x * 7) });
     }
     shelfUnit(kit, [-40.5, Y, aftZ + 0.03], Math.PI, { w: 2.2, h: 2.0, d: 0.44, seed: 21 });
-    cabinet(kit, PALETTE, [-38.6, Y, aftZ], Math.PI, { h: 1.5, color: WHITE, emit: "emitTeal", seed: 33 });
+    cabinet(kit, PALETTE, [-38.6, Y, aftZ], Math.PI, { h: 1.5, color: WHITE, emit: "emitBlue", seed: 33 });
     wallScreen(kit, [-43.75, Y + 2.95, wz1 - 0.06], Math.PI, 1.8, 1.0, SCR3);
     vitalsBoard(kit, [-40.5, Y + 2.95, wz1 - 0.05], Math.PI, 1.6, 0.7, 41);
     vent(kit, [-38.4, Y + 3.1, wz1 - 0.02], Math.PI, 0.7, 0.4);
     bench(kit, [-55.5, Y, wz1 - 0.3], Math.PI, 2.4);
-    wallScreen(kit, [-55.5, Y + 2.9, wz1 - 0.06], Math.PI, 1.6, 0.9, SCR2);
+    wallScreen(kit, [-55.5, Y + 2.9, wz1 - 0.06], Math.PI, 1.6, 0.9, SCR3);
     vitalsBoard(kit, [-58.1, Y + 2.9, wz1 - 0.05], Math.PI, 1.2, 0.6, 43);
     vitalsBoard(kit, [-52.4, Y + 2.9, wz1 - 0.05], Math.PI, 1.0, 0.5, 44);
     junctionBox(kit, [-58.9, Y + 1.5, wz1 - 0.02], Math.PI, 8);
@@ -103,14 +125,14 @@ export default defineRoom({
     const C = [-44.6, Y, 366.4];
     arcCounter(kit, C, 2.3, (80 * Math.PI) / 180, (190 * Math.PI) / 180, 7);
     const dd = [-0.506, 0.863]; // unit direction from C to the door
-    consoleProp(kit, PALETTE, [C[0] + 0.6 * dd[0], Y, C[2] + 0.6 * dd[1]], Math.atan2(-dd[0], -dd[1]), { w: 1.6, d: 0.9, screens: 2, sit: true, seed: 12, screenMat: SCR2 });
+    consoleProp(kit, PALETTE, [C[0] + 0.6 * dd[0], Y, C[2] + 0.6 * dd[1]], Math.atan2(-dd[0], -dd[1]), { w: 1.6, d: 0.9, screens: 2, stool: true, seed: 12, screenMat: [SCR, SCR3] });
     // desk top kit: a check-in terminal facing the door, the receptionist's terminal facing in, a datapad
     {
       const onArc = (deg, r = 2.3) => [C[0] + Math.cos((deg * Math.PI) / 180) * r, Y + 1.13, C[2] + Math.sin((deg * Math.PI) / 180) * r];
       const outward = (deg) => Math.atan2(Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180));
       deskTerminal(kit, onArc(135), outward(135), SCR, { seed: 14 });
       deskTerminal(kit, onArc(103.6), outward(103.6) + Math.PI, SCR3, { w: 0.38, h: 0.26, seed: 15 });
-      datapad(kit, onArc(166.4), outward(166.4) + 0.4, SCR2);
+      datapad(kit, onArc(166.4), outward(166.4) + 0.4, SCR);
       // a stack of med-cartridges and a cup on the inner worktop
       const wt = onArc(150.7, 1.8);
       kit.box("paintedMetal", wt[0], Y + 0.78, wt[2], 0.22, 0.1, 0.16, { color: IMP.impGrey });
@@ -120,7 +142,7 @@ export default defineRoom({
     gurney(kit, [-37.0, Y, 366.6], Math.PI / 2);
     equipmentCart(kit, [-38.2, Y, 368.9], 2.4, { seed: 63, screenMat: SCR3 });
     // east wall of the reception: waiting chairs, screens, dispenser
-    for (const z of [371.0, 370.3, 369.6]) chair(kit, PALETTE, [wx1 - 0.35, Y, z], -Math.PI / 2);
+    for (const z of [371.0, 370.3, 369.6]) chair(kit, PALETTE, [wx1 - 0.35, Y, z], -Math.PI / 2, { seatMat: "paintedMetal" });
     wallScreen(kit, [wx1 - 0.06, Y + 2.7, 369.9], -Math.PI / 2, 1.8, 1.0, SCR);
     vitalsBoard(kit, [wx1 - 0.05, Y + 2.7, 367.7], -Math.PI / 2, 1.4, 0.7, 45);
     // above the waiting chairs: queue display, pamphlet rack, sanitiser dispenser
@@ -142,7 +164,7 @@ export default defineRoom({
       kit.box("paintedMetal", P.x, Y + 0.05, P.z, 0.62, 0.1, 0.57, { color: BLACK });
       kit.box("darkGloss", P.x - 0.28, Y + 1.1, P.z, 0.02, 0.5, 0.4);
       kit.box("emitBlue", P.x - 0.29, Y + 1.3, P.z, 0.006, 0.03, 0.3);
-      kit.box("emitTeal", P.x - 0.29, Y + 0.95, P.z, 0.006, 0.12, 0.12);
+      kit.box("emitGreen", P.x - 0.29, Y + 0.95, P.z, 0.006, 0.12, 0.12);
       kit.collider([P.x - 0.3, Y, P.z - 0.28], [P.x + 0.3, Y + 1.5, P.z + 0.28], "dispenser");
     }
     // west wall of the reception
@@ -170,7 +192,7 @@ export default defineRoom({
     for (const z of BAY_Z) kit.box("paintedMetal", SPINE_X + 0.08, Y + 0.76, z, 0.2, 1.52, 0.14, { color: DARK });
     for (let i = 0; i < 4; i++) {
       const zc = (BAY_Z[i] + BAY_Z[i + 1]) / 2;
-      vitalsBoard(kit, [SPINE_X + 0.22, Y + 1.0, zc], Math.PI / 2, 1.0, 0.42, 400 + i);
+      vitalsBoard(kit, [SPINE_X + 0.22, Y + 1.0, zc], Math.PI / 2, 1.0, 0.42, 400 + i, i === 1 ? GREEN_FLK : "emitGreen");
       kit.box("emitBlue", SPINE_X + 0.175, Y + 1.32, zc, 0.01, 0.06, 0.24);
     }
 
@@ -217,7 +239,7 @@ export default defineRoom({
         const mz = zc + side * 0.3;
         rod(kit, [hx, Y + 1.38, mz], [hx, Y + 2.35, mz], 0.02);
         rod(kit, [hx, Y + 2.3, mz], [bx, Y + 2.3, mz], 0.015);
-        vitalsBoard(kit, [bx, Y + 2.1, mz], side < 0 ? Math.PI / 2 : -Math.PI / 2, 0.7, 0.4, 300 + i * 2 + (side + 1) / 2);
+        vitalsBoard(kit, [bx, Y + 2.1, mz], side < 0 ? Math.PI / 2 : -Math.PI / 2, 0.7, 0.4, 300 + i * 2 + (side + 1) / 2, side < 0 && (i === 1 || i === 3) ? GREEN_FLK : "emitGreen");
       }
       // gas panel on the west wall, bedside unit / IV stand / cart alternating
       {
@@ -271,13 +293,19 @@ export default defineRoom({
     // ---------------------------------------------------------------- corridor + bacta tanks
     // three tanks in three states: full, half-cycled, drained for service (amber status)
     const tankState = [{ level: 1 }, { level: 0.62 }, { level: 0.05, drained: true }];
+    // tank accents are the coloured practicals of the platform: low (1.5 m) so they pool on the
+    // plinths and the deck in front of the tanks; the two teal ones breathe with the fluid columns,
+    // the amber one blinks with the drained tank's service status (see update())
+    const tankAccent = [];
     for (let i = 0; i < 3; i++) {
       const z = TANK_Z[i];
-      bactaTank(kit, [TANK_X, Y, z], { pipeTopY: Y + 4.5, facing: -1, seed: 70 + i, ...tankState[i] });
+      bactaTank(kit, [TANK_X, Y, z], { pipeTopY: Y + 4.5, facing: -1, seed: 70 + i, teal: TEAL, amber: AMBER_BLINK, ...tankState[i] });
       for (const s of [-0.35, 0.35]) kit.cyl("metal", (TANK_X + s + wx1 - 0.05) / 2, Y + 4.5, z, 0.06, wx1 - 0.05 - (TANK_X + s), "x", { color: STEEL, segments: 12 });
-      consoleProp(kit, PALETTE, [-40.1, Y, z + 1.55], -Math.PI / 2, { w: 1.0, d: 0.6, h: 1.05, screens: 1, seed: 80 + i, screenMat: [SCR2, SCR3, SCR][i] });
+      consoleProp(kit, PALETTE, [-40.1, Y, z + 1.55], -Math.PI / 2, { w: 1.0, d: 0.6, h: 1.05, screens: 1, seed: 80 + i, screenMat: [SCR, SCR3, SCR][i] });
       const drained = !!tankState[i].drained;
-      ctx.lights.push({ type: "point", pos: [TANK_X - 1.1, Y + 2.4, z], color: drained ? 0xffb050 : 0x4fd8cc, intensity: drained ? 6 : 12, distance: 6, priority: 0.3 });
+      const acc = { type: "point", pos: [TANK_X - 1.15, Y + 1.5, z], color: drained ? 0xffb050 : 0x4fd8cc, intensity: drained ? 7 : 12, distance: 6, priority: 0.3 };
+      ctx.lights.push(acc);
+      tankAccent.push(acc);
     }
     // service kit at the drained tank: open access panel on the plinth, tool case, coiled hose
     {
@@ -292,7 +320,7 @@ export default defineRoom({
     }
     // canister dolly parked in the corridor between the station and the tank consoles (foreground of
     // the tanks view), handle toward the reception
-    supplyDolly(kit, [-42.5, Y, 361.7], Math.PI / 2 + 0.25, 73);
+    supplyDolly(kit, [-42.5, Y, 361.7], Math.PI / 2 + 0.25, 73, TEAL);
     pipe(kit, PALETTE, [wx1 - 0.3, Y + 4.5, 352.4], [wx1 - 0.3, Y + 4.5, 366.2], 0.1, { bracket: 2.4 });
     rail(kit, PALETTE, [-39.2, Y, 352.8], [-39.2, Y, 365.4], Y);
     for (const z of [356.8, 361.2]) {
@@ -305,18 +333,18 @@ export default defineRoom({
       // tank status plate on the wall behind each tank
       const Q = { x: wx1 - 0.03, z };
       kit.box("darkGloss", Q.x, Y + 1.7, Q.z, 0.03, 0.6, 0.5);
-      kit.box("emitTeal", Q.x - 0.02, Y + 1.85, Q.z, 0.006, 0.1, 0.36);
+      kit.box(TEAL, Q.x - 0.02, Y + 1.85, Q.z, 0.006, 0.1, 0.36);
       for (let k = 0; k < 6; k++) kit.box(k % 2 ? "emitBlue" : "emitGreen", Q.x - 0.02, Y + 1.55, Q.z - 0.18 + k * 0.072, 0.006, 0.05, 0.03);
     }
     vent(kit, [wx1 - 0.02, Y + 3.0, 365.6], -Math.PI / 2, 0.6, 0.35);
     vent(kit, [wx1 - 0.02, Y + 3.0, 352.5], -Math.PI / 2, 0.6, 0.35);
     // nurses' station island: two consoles back to back around a monitor mast
-    consoleProp(kit, PALETTE, [-44.7, Y, 359.0], -Math.PI / 2, { w: 2.0, d: 0.9, screens: 2, sit: true, seed: 90, screenMat: SCR });
-    consoleProp(kit, PALETTE, [-43.5, Y, 359.0], Math.PI / 2, { w: 2.0, d: 0.9, screens: 2, sit: true, seed: 91, screenMat: SCR3 });
+    consoleProp(kit, PALETTE, [-44.7, Y, 359.0], -Math.PI / 2, { w: 2.0, d: 0.9, screens: 2, stool: true, seed: 90, screenMat: SCR });
+    consoleProp(kit, PALETTE, [-43.5, Y, 359.0], Math.PI / 2, { w: 2.0, d: 0.9, screens: 2, stool: true, seed: 91, screenMat: SCR3 });
     kit.box("paintedMetal", -44.1, Y + 1.15, 359.0, 0.24, 2.3, 1.3, { color: DARK, texel: 2.5 });
     kit.box("paintedMetal", -44.1, Y + 2.33, 359.0, 0.3, 0.06, 1.4, { color: BLACK });
     kit.box("emitCoolSoft", -44.1, Y + 2.37, 359.0, 0.1, 0.02, 1.2, { uv: "keep" });
-    datapad(kit, [-45.05, Y + 0.745, 358.3], -Math.PI / 2 + 0.3, SCR2);
+    datapad(kit, [-45.05, Y + 0.745, 358.3], -Math.PI / 2 + 0.3, SCR3);
     vitalsBoard(kit, [-44.1, Y + 1.85, 358.33], Math.PI, 1.0, 0.5, 95);
     vitalsBoard(kit, [-44.1, Y + 1.85, 359.67], 0, 1.0, 0.5, 96);
     kit.collider([-44.25, Y, 358.35], [-43.95, Y + 2.3, 359.65], "mast");
@@ -341,11 +369,11 @@ export default defineRoom({
     vitalsBoard(kit, [-55.6, Y + 2.7, wz0 + 0.05], 0, 2.0, 0.9, 105);
     wallScreen(kit, [-52.6, Y + 2.7, wz0 + 0.06], 0, 1.4, 0.9, SCR3);
     consoleProp(kit, PALETTE, [wx0 + 0.36, Y, 343.2], Math.PI / 2, { w: 1.6, d: 0.7, h: 1.25, screens: 2, seed: 106, screenMat: SCR });
-    consoleProp(kit, PALETTE, [wx0 + 0.36, Y, 346.6], Math.PI / 2, { w: 1.6, d: 0.7, h: 1.25, screens: 2, seed: 107, screenMat: SCR2 });
+    consoleProp(kit, PALETTE, [wx0 + 0.36, Y, 346.6], Math.PI / 2, { w: 1.6, d: 0.7, h: 1.25, screens: 2, seed: 107, screenMat: SCR3 });
     vitalsBoard(kit, [wx0 + 0.05, Y + 2.3, 344.9], Math.PI / 2, 1.4, 0.7, 108);
     vent(kit, [wx0 + 0.02, Y + 4.1, 345.0], Math.PI / 2, 0.7, 0.4);
     junctionBox(kit, [wx0 + 0.02, Y + 1.3, 348.6], Math.PI / 2, 109);
-    equipmentCart(kit, [-57.3, Y, 347.6], 0.3, { seed: 110, screenMat: SCR2 });
+    equipmentCart(kit, [-57.3, Y, 347.6], 0.3, { seed: 110, screenMat: SCR });
     equipmentCart(kit, [-52.4, Y, 346.5], -0.7, { seed: 111, screenMat: SCR3 });
     ivStand(kit, [-53.4, Y, 343.8]);
     for (const [a, b] of [[[-56.6, 343.4], [-53.0, 343.4]], [[-56.6, 346.6], [-53.0, 346.6]], [[-56.6, 343.4], [-56.6, 346.6]], [[-53.0, 343.4], [-53.0, 346.6]]]) {
@@ -368,18 +396,18 @@ export default defineRoom({
     const PZ = 348.2;
     counter(kit, [-42.3, Y, PZ], 0, 7.4);
     hazardBand(kit, [-38.55, PZ - 0.2], [-37.25, PZ + 0.2], Y + 0.005);
-    deskTerminal(kit, [-44.3, Y + 1.13, PZ], Math.PI, SCR2, { w: 0.38, h: 0.26, seed: 16 });
+    deskTerminal(kit, [-44.3, Y + 1.13, PZ], Math.PI, SCR, { w: 0.38, h: 0.26, seed: 16 });
     datapad(kit, [-40.4, Y + 1.13, PZ + 0.05], 0.5, SCR3);
     floorLine(kit, [-46.0, Y, PZ + 0.75], [-38.6, Y, PZ + 0.75], 0.08, "paintedMetal", WHITE);
     for (const x of [-44.85, -42.9, -40.95, -39.0]) shelfUnit(kit, [x, Y, wz0 + 0.225], 0, { w: 1.9, h: 2.1, d: 0.45, seed: Math.round(-x * 3) });
     for (const z of [342.0, 344.0, 346.0]) shelfUnit(kit, [wx1 - 0.225, Y, z], -Math.PI / 2, { w: 1.9, h: 2.1, d: 0.45, seed: Math.round(z) });
     shelfUnit(kit, [-46.1, Y, 341.5], Math.PI / 2, { w: 2.0, h: 2.1, d: 0.45, seed: 131 });
     shelfUnit(kit, [-46.1, Y, 343.6], Math.PI / 2, { w: 2.0, h: 2.1, d: 0.45, seed: 132 });
-    cabinet(kit, PALETTE, [-46.05, Y, 345.4], Math.PI / 2, { h: 2.0, color: IMP.impMid, emit: "emitTeal", seed: 133 });
-    cabinet(kit, PALETTE, [-46.05, Y, 346.9], Math.PI / 2, { h: 2.0, color: IMP.impMid, emit: "emitTeal", seed: 134 });
-    consoleProp(kit, PALETTE, [-42.6, Y, 346.3], Math.PI, { w: 1.6, d: 0.9, screens: 2, sit: true, seed: 135, screenMat: SCR3 });
+    cabinet(kit, PALETTE, [-46.05, Y, 345.4], Math.PI / 2, { h: 2.0, color: IMP.impMid, emit: "emitBlue", seed: 133 });
+    cabinet(kit, PALETTE, [-46.05, Y, 346.9], Math.PI / 2, { h: 2.0, color: IMP.impMid, emit: "emitBlue", seed: 134 });
+    consoleProp(kit, PALETTE, [-42.6, Y, 346.3], Math.PI, { w: 1.6, d: 0.9, screens: 2, stool: true, seed: 135, screenMat: SCR3 });
     vitalsBoard(kit, [wx1 - 0.05, Y + 2.75, 344.0], -Math.PI / 2, 1.6, 0.7, 136);
-    wallScreen(kit, [-42.2, Y + 2.85, wz0 + 0.06], 0, 1.6, 0.9, SCR2);
+    wallScreen(kit, [-42.2, Y + 2.85, wz0 + 0.06], 0, 1.6, 0.9, SCR3);
     vent(kit, [wx1 - 0.02, Y + 4.35, 344.0], -Math.PI / 2, 0.7, 0.4);
     junctionBox(kit, [wx1 - 0.02, Y + 1.6, 348.9], -Math.PI / 2, 137);
     // 1.2 m supply module on a pallet by the pharmacy gate (scale reference; no rubber material)
@@ -399,28 +427,74 @@ export default defineRoom({
     // ---------------------------------------------------------------- ceiling fixture grid
     // Suspended housed fixtures explain every fill: crosswise bars over the reception, ward aisle and
     // pharmacy; lengthwise bars down the corridor and between the tanks. Emitters at CEIL − 1.225.
-    const fixture = (x, z, along = "x", len = 2.4) => dropLight(kit, PALETTE, [x, CEIL, z], { w: along === "x" ? len : 0.5, d: along === "x" ? 0.5 : len, stem: FIX_STEM, mat: "emitCoolSoft" });
+    const fixture = (x, z, along = "x", len = 2.4, mat = "emitCoolSoft") => dropLight(kit, PALETTE, [x, CEIL, z], { w: along === "x" ? len : 0.5, d: along === "x" ? 0.5 : len, stem: FIX_STEM, mat });
     for (const z of [369.4, 366.9]) for (const x of [-52.6, -46.0, -39.6]) fixture(x, z);
-    for (const z of [353.75, 357.25, 360.75, 364.25]) fixture(-54.8, z, "x", 2.0);
+    // west ward bars; the two over bays 3–4 share the circuit that sags (COOL_DIP + the fill under them)
+    for (const z of [353.75, 357.25, 360.75, 364.25]) fixture(-54.8, z, "x", 2.0, z > 359 ? COOL_DIP : "emitCoolSoft");
     for (const x of [-47.8, -44.4]) for (const z of [353.4, 357.2, 361.0, 364.8]) fixture(x, z, "z");
     for (const z of [356.8, 361.2]) fixture(-39.7, z, "z", 2.0);
     for (const x of [-44.2, -40.0]) fixture(x, 344.6);
     fixture(-46.8, 350.6, "x", 2.0);
 
     // ---------------------------------------------------------------- lights (cool blue-white)
-    // fills hang 1.9 m below the ceiling, centred between the paired bar rows (reception, corridor)
-    // or under single bars (tanks, surgery, pharmacy); 10 fills + 3 tank accents = 13 descriptors
-    const L = (x, z, intensity = 26, distance = 12, color = 0xdbe8ff, y = FILL_Y, priority = 0.5) => ctx.lights.push({ type: "point", pos: [x, y, z], color, intensity, distance, priority });
+    // fills hang 2.2 m below the ceiling, centred between the paired bar rows (reception, corridor)
+    // or under single bars (tanks, surgery, pharmacy). GAIN re-tunes them for the rig's captured
+    // environment (the old studio env-map ambient is gone, so direct light carries the room).
+    // 10 fills + 1 key spot + 3 tank accents = 14 descriptors
+    const GAIN = 1.7;
+    const L = (x, z, intensity = 26, distance = 12, color = 0xdbe8ff, y = FILL_Y, priority = 0.5) => {
+      const d = { type: "point", pos: [x, y, z], color, intensity: intensity * GAIN, distance, priority };
+      ctx.lights.push(d);
+      return d;
+    };
     L(-46.0, 368.15, 28, 12);
     L(-52.6, 368.15, 16, 9);
     L(-39.6, 368.15, 18, 9);
     L(-54.8, 355.5, 24, 11);
-    L(-54.8, 362.5, 24, 11);
+    const wardDip = L(-54.8, 362.5, 24, 11); // the sagging circuit: fill between the two COOL_DIP bars
+    const wardDip0 = wardDip.intensity;
     L(-46.1, 355.3, 26, 12);
     L(-46.1, 362.9, 26, 12);
     L(-39.7, 359.0, 16, 9);
-    L(-53.6, 345.0, 26, 11, 0xf2f7ff, FILL_Y, 0.7);
+    L(-53.6, 345.0, 14, 9, 0xf2f7ff); // surgery ceiling wash above the pendant (the key is below it)
     L(-42.1, 344.6, 26, 11);
-    return {};
+    // KEY (shadow): the operating light itself — a spot just under the pendant head's diffuser, aimed
+    // straight down at the table, so the table, arm boards, IV stand, carts and consoles throw radial
+    // shadows across the deck and up the walls (visible in d2-medbay-surgery). Angle 1.0 from 2.55 m
+    // covers the whole surgical bay floor; the pendant is the dominant source there by design.
+    ctx.lights.push({ type: "spot", pos: [-54.8, Y + 2.55, 345.0], target: [-54.8, Y + 0.85, 345.0], color: 0xf2f7ff, intensity: 55, distance: 34, angle: 1.0, penumbra: 0.5, priority: 0.9, shadow: true });
+
+    // ---------------------------------------------------------------- motion lighting
+    // All state is a function of t (replayable; the harness freezes t = 40 s, where every effect is in
+    // its "normal" state: columns at peak, status lamp on, ward circuit steady). No allocation here.
+    const hash = (i) => {
+      const s = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+      return s - Math.floor(s);
+    };
+    const TWO_PI = Math.PI * 2;
+    return {
+      update(dt, t) {
+        const tp = t - 40;
+        // bacta columns breathe over 6 s with the two teal accents (0.72–1.0 / 0.65–1.0)
+        const breath = 0.5 + 0.5 * Math.cos((TWO_PI * tp) / 6);
+        tealMat.emissiveIntensity = base.teal * (0.72 + 0.28 * breath);
+        tankAccent[0].intensity = 12 * (0.65 + 0.35 * breath);
+        tankAccent[1].intensity = 12 * (0.65 + 0.35 * breath);
+        // drained tank: double blink every 2.4 s on the status emitters and the amber accent
+        const p = (((tp + 0.12) % 2.4) + 2.4) % 2.4;
+        const on = p < 0.22 || (p > 0.42 && p < 0.64);
+        amberMat.emissiveIntensity = base.amber * (on ? 1.15 : 0.18);
+        tankAccent[2].intensity = on ? 8 : 1.2;
+        // vitals boards: 12 Hz emissive jitter, 0.85–1.1 of the static boards
+        greenMat.emissiveIntensity = base.green * (0.85 + 0.25 * hash(Math.floor(t * 12)));
+        // ward circuit: every 7.3 s a 0.55 s sag to ~45 % with a rattle, then a 0.35 s recovery ramp
+        const q = (((tp + 4.3) % 7.3) + 7.3) % 7.3;
+        let dip = 1;
+        if (q < 0.55) dip = 0.42 + 0.12 * hash(Math.floor(t * 40));
+        else if (q < 0.9) dip = 0.54 + 0.46 * ((q - 0.55) / 0.35);
+        coolMat.emissiveIntensity = base.cool * dip;
+        wardDip.intensity = wardDip0 * dip;
+      },
+    };
   },
 });

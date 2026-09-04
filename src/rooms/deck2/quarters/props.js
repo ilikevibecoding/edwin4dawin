@@ -47,7 +47,8 @@ export function junctionBox(kit, pos, yaw, seed = 3) {
 // notes; a drawer under the bottom tier and a ladder at the foot end. `stripped` = tier index left
 // as a bare slab with the mattress rolled at the head; `noBlanket` = tier index with sheet only.
 // The head end is a solid headboard; the foot end is an open post frame.
-export function bunk(kit, PALETTE, pos, yaw, { tiers = 3, len = 2.1, w = 0.9, gap = 0.75, seed = 7, head = -1, bedding = BEDDING[0], stripped = -1, noBlanket = -1 } = {}) {
+// `faultyTier` draws that tier's reading lamp with `faultyMat` (the room's flickering clone).
+export function bunk(kit, PALETTE, pos, yaw, { tiers = 3, len = 2.1, w = 0.9, gap = 0.75, seed = 7, head = -1, bedding = BEDDING[0], stripped = -1, noBlanket = -1, faultyTier = -1, faultyMat = "emitWarm" } = {}) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
   const frame = DARK;
@@ -97,7 +98,7 @@ export function bunk(kit, PALETTE, pos, yaw, { tiers = 3, len = 2.1, w = 0.9, ga
     }
     // reading lamp on every tier: a housed warm strip under the slab above, over the pillow
     P.box("paintedMetal", hx, y + gap - 0.09, -w / 2 + 0.09, 0.5, 0.04, 0.1, { color: BLACK });
-    P.box("emitWarm", hx, y + gap - 0.112, -w / 2 + 0.095, 0.44, 0.012, 0.07);
+    P.box(i === faultyTier ? faultyMat : "emitWarm", hx, y + gap - 0.112, -w / 2 + 0.095, 0.44, 0.012, 0.07);
     if (i > 0) P.cyl("metal", -head * 0.2, y + 0.3, w / 2, 0.015, len * 0.55, "x", { color: STEEL, segments: 8 });
     const nCards = Math.floor(rand() * 3);
     for (let c = 0; c < nCards; c++) {
@@ -320,7 +321,9 @@ export function showers(kit, pos, yaw, n = 4, { pitch = 1.25, d = 1.4, seed = 17
 }
 
 // Front-loading laundry unit against a wall (local −Z behind).
-export function washer(kit, pos, yaw, seed = 19) {
+// `cycleMat` adds a "cycle running" lamp beside the drum door (the room passes its animated amber
+// clone so the lamp pulses).
+export function washer(kit, pos, yaw, seed = 19, cycleMat = null) {
   const P = placer(kit, pos, yaw);
   P.box("paintedMetal", 0, 0.45, 0, 0.8, 0.9, 0.7, { color: IMP.impGrey, texel: 2.5 });
   P.box("paintedMetal", 0, 0.05, 0, 0.82, 0.1, 0.72, { color: BLACK });
@@ -329,6 +332,10 @@ export function washer(kit, pos, yaw, seed = 19) {
   P.box("darkGloss", 0, 0.94, 0.0, 0.76, 0.06, 0.66);
   const Q = placer(kit, P.world(0, 0.84, 0.352), yaw);
   indicatorField(Q, 0, 0, 0, 0.5, 0.1, seed, { weights: [0.2, 0.4, 0.3, 0.1] });
+  if (cycleMat) {
+    P.box("paintedMetal", 0.33, 0.7, 0.352, 0.08, 0.08, 0.01, { color: BLACK });
+    P.box(cycleMat, 0.33, 0.7, 0.358, 0.05, 0.05, 0.004);
+  }
   P.collider([-0.4, 0, -0.35], [0.4, 0.97, 0.35], "washer");
 }
 

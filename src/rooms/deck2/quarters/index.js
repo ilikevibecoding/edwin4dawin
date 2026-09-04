@@ -23,14 +23,17 @@ const GREY = IMP.impGrey;
 const DARK = IMP.impDark;
 const BLACK = IMP.impBlack;
 const STEEL = IMP.steel;
-// three Imperial screen layouts: schematic (duty desk / bay panels), text columns (roster boards),
-// gauges + alert (slot panels, laundry)
-const SCR = "screenImp0";
-const SCR2 = "screenImp2";
-const SCR3 = "screenImp3";
+// Two Imperial screen layouts: text columns on every wall/bay/roster screen (static key), gauges +
+// alert on the duty desk (a flickering clone of screenImp3). The room's other draw calls go to the
+// breathing night-light circuit and one faulty reading lamp, so the schematic key is not affordable.
+const SCR = "screenImp2";
+const SCR_DUTY = "emitScreenDuty";
+// animated emitter keys (clones registered in detail(); "emit" prefix keeps them out of shadow casting)
+const AMBER_BR = "emitAmberBreathe";
+const WARM_FLK = "emitWarmFlicker";
 const FIX = "emitWarmSoft"; // housed fixture diffuser (uv "keep")
 const FIX_STEM = 0.5; // suspended fixtures hug the ceiling: emitter at CEIL − 0.625
-const FILL_Y = CEIL - 1.9; // fills 1.3 m under the emitters (no blown housings / ceiling discs)
+const FILL_Y = CEIL - 2.2; // fills 1.6 m under the emitters, 2.4 m above the deck (floors carry the room under the captured env)
 
 const MOUTH = 2.6; // half-width of the nave (mouth lines at x −24.6 / −19.4); fascias sit aisle-side of it
 const PANEL = 3.15; // slot-mouth panel plane (0.1 thick, aisle face at ±3.1)
@@ -89,6 +92,22 @@ export default defineRoom({
   },
   detail(ctx) {
     const { kit, PALETTE } = ctx;
+
+    // ---------------------------------------------------------------- animated emitter materials
+    // Cloned emissives under room-local keys: the kit merges each into its own mesh (one draw call per
+    // effect, inside the room's 16) and update() drives emissiveIntensity, so the night-light pool
+    // below has a visible emitter breathing with it. Base intensities come from the source materials.
+    const clone = (src, key) => {
+      const m = ctx.materials[src].clone();
+      m.name = key;
+      ctx.materials[key] = m;
+      return m;
+    };
+    const amberMat = clone("emitAmber", AMBER_BR); // kick strips, washroom header line, washer cycle lamp
+    const warmMat = clone("emitWarm", WARM_FLK); // one reading lamp in bay 2 port
+    const dutyMat = clone("screenImp3", SCR_DUTY); // duty desk screens
+    const base = { amber: amberMat.emissiveIntensity, warm: warmMat.emissiveIntensity, duty: dutyMat.emissiveIntensity };
+
     const mm = (mat, a, b, opts) => kit.boxMM(mat, [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])], [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])], opts);
     const coll = (a, b, tag) => kit.collider([Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])], [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])], tag);
 
@@ -116,7 +135,7 @@ export default defineRoom({
       // corner post closing the soffit / fascia end at the aft strip
       kit.box("paintedMetal", mouthX - s * 0.03, (Y + CEIL) / 2, END_Z + 0.05, 0.16, CEIL - Y, 0.16, { color: DARK, texel: 4 });
       // floor night-light along the mouth line (aisle side)
-      mm("emitAmber", [mouthX - s * 0.03, Y, MOD0], [mouthX - s * 0.07, Y + 0.006, END_Z]);
+      mm(AMBER_BR, [mouthX - s * 0.03, Y, MOD0], [mouthX - s * 0.07, Y + 0.006, END_Z]);
       // high pipe along the outer wall above the stacks, running into the washroom wall and the final
       // divider (no free ends), with a drop to each bay's status plate
       pipe(kit, PALETTE, [wallX - s * 0.12, Y + 2.8, WASH_Z + 0.05], [wallX - s * 0.12, Y + 2.8, END_Z + 0.04], 0.05, { bracket: 3.1 });
@@ -144,7 +163,7 @@ export default defineRoom({
         const dress = DRESS[String(s)][k];
         lockerPair(kit, [CX + s * (MOUTH + 0.25), Y, sz0 + 0.72], faceYaw, { color: dress.color, states: dress.doors, seed: 30 + k * 2 + (s + 1) / 2 });
         foldDesk(kit, [panelX, Y, sz0 + 1.62], faceYaw, 40 + k * 2 + (s + 1) / 2, dress.stool);
-        if (k % 2) wallScreen(kit, [panelX, Y + 2.5, sz0 + 0.72], faceYaw, 0.7, 0.4, k === 1 ? SCR3 : SCR, { tilt: 0.2 });
+        if (k % 2) wallScreen(kit, [panelX, Y + 2.5, sz0 + 0.72], faceYaw, 0.7, 0.4, SCR, { tilt: 0.2 });
         else vent(kit, [panelX, Y + 2.55, sz0 + 0.72], faceYaw, 0.7, 0.3);
         junctionBox(kit, [panelX, Y + 2.35, sz0 + 1.62], faceYaw, 50 + k);
         kit.box("emitWarm", panelX - s * 0.006, Y + 2.9, sz0 + 1.62, 0.012, 0.06, 0.5);
@@ -175,7 +194,7 @@ export default defineRoom({
         const strippedA = k === 2 && s < 0 ? 1 : -1;
         const noBlanketB = k === 3 && s > 0 ? 0 : -1;
         bunk(kit, PALETTE, [bx, Y, bz0 + 0.51], 0, { seed: sd, head: s, bedding, stripped: strippedA });
-        bunk(kit, PALETTE, [bx, Y, bz1 - 0.51], Math.PI, { seed: sd + 1, head: -s, bedding, noBlanket: noBlanketB, stripped: k === 0 && s > 0 ? 2 : -1 });
+        bunk(kit, PALETTE, [bx, Y, bz1 - 0.51], Math.PI, { seed: sd + 1, head: -s, bedding, noBlanket: noBlanketB, stripped: k === 0 && s > 0 ? 2 : -1, faultyTier: k === 2 && s < 0 ? 1 : -1, faultyMat: WARM_FLK });
         footLocker(kit, [CX + s * 8.22, Y, bz0 + 0.51], faceYaw, sd + 2, 0.8, (k === 1 && s < 0) || (k === 4 && s > 0));
         footLocker(kit, [CX + s * 8.22, Y, bz1 - 0.51], faceYaw, sd + 3, 0.8, k === 3 && s < 0);
         // wall kit between the stacks: status plate fed by a drop from the high pipe, hook rail
@@ -209,7 +228,7 @@ export default defineRoom({
           kit.box("emitWarm", CX + s * 7.0, Y + 2.33, z + dz * 0.062, 1.3, 0.03, 0.006);
           // mouth end of the face (2–3 m band was bare): bay status screen with a conduit run feeding
           // it and the lamp, bay number plate above the boot rack / kit shelf
-          wallScreen(kit, [CX + s * 4.6, Y + 2.15, z + dz * 0.012], yaw, 0.7, 0.45, (k + (s > 0 ? 1 : 0)) % 2 ? SCR3 : SCR);
+          wallScreen(kit, [CX + s * 4.6, Y + 2.15, z + dz * 0.012], yaw, 0.7, 0.45, SCR);
           kit.cyl("metal", CX + s * 5.35, Y + 2.72, z + dz * 0.05, 0.025, 5.0, "x", { color: STEEL, segments: 8 });
           kit.cyl("metal", CX + s * 4.6, Y + 2.56, z + dz * 0.05, 0.02, 0.3, "y", { color: STEEL, segments: 8 });
           kit.cyl("metal", CX + s * 7.6, Y + 2.54, z + dz * 0.05, 0.02, 0.32, "y", { color: STEEL, segments: 8 });
@@ -254,7 +273,7 @@ export default defineRoom({
     // housed header fixture on the washroom side + a thin accent line on the aisle face
     mm("paintedMetal", [CX - MOUTH + 0.3, SOFFIT_Y - 0.09, WASH_Z - 0.2], [CX + MOUTH - 0.3, SOFFIT_Y, WASH_Z - 0.03], { color: BLACK, texel: 2.5 });
     kit.box(FIX, CX, SOFFIT_Y - 0.096, WASH_Z - 0.115, 2 * MOUTH - 0.9, 0.012, 0.1, { uv: "keep" });
-    mm("emitWarm", [CX - MOUTH + 0.3, SOFFIT_Y + 0.1, WASH_Z + 0.13], [CX + MOUTH - 0.3, SOFFIT_Y + 0.14, WASH_Z + 0.136]);
+    mm(AMBER_BR, [CX - MOUTH + 0.3, SOFFIT_Y + 0.1, WASH_Z + 0.13], [CX + MOUTH - 0.3, SOFFIT_Y + 0.14, WASH_Z + 0.136]);
     // mirrors: darkGloss won the metal / darkGloss A-B shot (smooth dark reflection with a fill
     // highlight; the worn `metal` map reads frosted)
     washCounter(kit, [CX, Y, wz0], 0, 4, 1.6, () => "darkGloss");
@@ -278,8 +297,8 @@ export default defineRoom({
     towelRack(kit, [CX + 3.35, Y + 2.35, wz0], 0, 1.0, 29);
     for (const x of [CX + 5.3, CX + 6.2]) wallCabinet(kit, [x, Y + 2.55, wz0], 0, { w: 0.86, h: 0.6, color: GREY });
     wallCabinet(kit, [CX + 8.3, Y + 2.55, wz0], 0, { w: 1.2, h: 0.6, color: IMP.impMid, emit: "emitAmber" });
-    wallScreen(kit, [CX + 7.3, Y + 1.9, wz0 + 0.06], 0, 0.9, 0.55, SCR3);
-    washer(kit, [CX + 5.3, Y, wz0 + 0.36], 0, 19);
+    wallScreen(kit, [CX + 7.3, Y + 1.9, wz0 + 0.06], 0, 0.9, 0.55, SCR);
+    washer(kit, [CX + 5.3, Y, wz0 + 0.36], 0, 19, AMBER_BR);
     washer(kit, [CX + 6.2, Y, wz0 + 0.36], 0, 20);
     foldTable(kit, [CX + 8.6, Y, wz0 + 0.5], 0, 1.8, 23);
     kitShelf(kit, [wx1 - 0.2, Y, 342.7], -Math.PI / 2, { w: 1.6, h: 2.0, d: 0.4, seed: 27 });
@@ -293,8 +312,8 @@ export default defineRoom({
     pipe(kit, PALETTE, [wx0 + 0.2, Y + 3.85, wz0 + 0.2], [wx1 - 0.2, Y + 3.85, wz0 + 0.2], 0.05, { bracket: 2.6, color: IMP.impAmber });
 
     // ---------------------------------------------------------------- aft strip: duty desk, notice board
-    consoleProp(kit, PALETTE, [-27.4, Y, 370.8], 0, { w: 1.8, d: 0.9, screens: 2, sit: true, seed: 5, screenMat: SCR });
-    wallScreen(kit, [-27.4, Y + 2.85, wz1 - 0.07], Math.PI, 1.6, 0.9, SCR2);
+    consoleProp(kit, PALETTE, [-27.4, Y, 370.8], 0, { w: 1.8, d: 0.9, screens: 2, sit: true, seed: 5, screenMat: SCR_DUTY });
+    wallScreen(kit, [-27.4, Y + 2.85, wz1 - 0.07], Math.PI, 1.6, 0.9, SCR);
     cabinet(kit, PALETTE, [-32.05, Y, wz1 - 0.25], Math.PI, { h: 1.8, color: IMP.impMid, seed: 61 });
     cabinet(kit, PALETTE, [-30.8, Y, wz1 - 0.25], Math.PI, { h: 1.8, color: GREY, seed: 62 });
     crate(kit, PALETTE, [-29.35, Y, wz1 - 0.66], 0, { seed: 71, bumperMat: "paintedMetal" });
@@ -306,26 +325,70 @@ export default defineRoom({
     cabinet(kit, PALETTE, [-14.6, Y, wz1 - 0.25], Math.PI, { h: 1.4, color: 0x8a1a12, emit: "emitRedImp", seed: 66 });
     cabinet(kit, PALETTE, [-13.25, Y, wz1 - 0.25], Math.PI, { h: 1.8, color: IMP.impMid, seed: 67 });
     cabinet(kit, PALETTE, [-11.98, Y, wz1 - 0.25], Math.PI, { h: 1.8, color: GREY, seed: 68 });
-    wallScreen(kit, [-13.0, Y + 2.85, wz1 - 0.07], Math.PI, 1.4, 0.8, SCR3);
+    wallScreen(kit, [-13.0, Y + 2.85, wz1 - 0.07], Math.PI, 1.4, 0.8, SCR);
     vent(kit, [-16.2, Y + 3.5, wz1 - 0.02], Math.PI, 0.7, 0.35);
     // aft wall top band: pipe run (> 1 m above the 3 m door lintel)
     pipe(kit, PALETTE, [wx0 + 0.2, Y + 4.2, wz1 - 0.2], [wx1 - 0.2, Y + 4.2, wz1 - 0.2], 0.06, { bracket: 2.6 });
 
     // ---------------------------------------------------------------- aisle fixtures
-    // suspended crosswise bars over the slot centres and the aft strip (each fill hangs 1.3 m under its bar)
+    // suspended crosswise bars over the slot centres and the aft strip (each fill hangs 1.6 m under its bar)
     const AISLE_Z = [345.7, 350.8, 355.9, 361.0, 366.1, 370.9];
     for (const z of AISLE_Z) barLight(kit, [CX, CEIL, z], { w: 2.4, d: 0.4, stem: FIX_STEM, mat: FIX });
 
     // ---------------------------------------------------------------- lights (warm white, 14 descriptors)
-    const L = (x, z, intensity = 20, distance = 10, color = 0xffe0bd, y = FILL_Y, priority = 0.5) => ctx.lights.push({ type: "point", pos: [x, y, z], color, intensity, distance, priority });
-    for (const z of AISLE_Z) L(CX, z, z > 370 ? 16 : 20, z > 370 ? 9 : 10);
-    // bay nook fills under the soffit fixtures (alternating sides), 0.65 m below the soffit
-    for (const k of [0, 2, 4]) L(CX - 7.0, MOD0 + k * MOD + SLOT + BAY / 2, 12, 8, 0xffe6cc, SOFFIT_Y - 0.65, 0.4);
+    // 5 aisle fills + 1 amber mouth pool + 1 key spot + 4 nook fills + 3 washroom fills. GAIN re-tunes
+    // the fills for the rig's captured environment (no studio env-map ambient any more).
+    const GAIN = 1.7;
+    const L = (x, z, intensity = 20, distance = 10, color = 0xffe0bd, y = FILL_Y, priority = 0.5) => {
+      const d = { type: "point", pos: [x, y, z], color, intensity: intensity * GAIN, distance, priority };
+      ctx.lights.push(d);
+      return d;
+    };
+    // aisle fills under the bars; the washroom-mouth bar's slot is taken by the amber practical below
+    for (const z of AISLE_Z) if (z !== 345.7) L(CX, z, z > 370 ? 16 : 20, z > 370 ? 9 : 10);
+    // amber practical: a warm-amber pool on the deck at the washroom mouth, between the header's amber
+    // line and the first bar; it breathes with the night-light circuit (see update())
+    const mouthPool = L(CX, WASH_Z + 0.6, 18, 8, 0xffb060, FILL_Y - 0.3, 0.6);
+    const mouthPool0 = mouthPool.intensity;
+    // KEY (shadow): warm spot at the aisle end of bay 2 port's soffit bar (the room's midpoint), 0.3 m
+    // under the housing, aimed at the deck between the two stacks: ladders, footlockers and stack frames
+    // throw long shadows across the bay deck and up the outer wall (visible in d2-quarters-bunks). The
+    // aisle-centre bar cannot key the bunks — the fascia and soffit shadow everything west of the mouth.
+    const BC2 = MOD0 + 2 * MOD + SLOT + BAY / 2;
+    ctx.lights.push({ type: "spot", pos: [CX - 5.0, SOFFIT_Y - 0.4, BC2], target: [CX - 9.2, Y, BC2], color: 0xffe0bd, intensity: 120, distance: 34, angle: 1.0, penumbra: 0.5, priority: 0.9, shadow: true });
+    // bay nook fills under the soffit fixtures (alternating sides), 0.65 m below the soffit; bay 2 port is
+    // lower so the key's shadows keep their contrast there; bay 0 port is carried by the amber mouth pool
+    for (const k of [2, 4]) L(CX - 7.0, MOD0 + k * MOD + SLOT + BAY / 2, k === 2 ? 7 : 12, 8, 0xffe6cc, SOFFIT_Y - 0.65, 0.4);
     for (const k of [1, 3]) L(CX + 7.0, MOD0 + k * MOD + SLOT + BAY / 2, 12, 8, 0xffe6cc, SOFFIT_Y - 0.65, 0.4);
-    // washroom: one fill per drop fixture (the middle one also puts the highlight on the mirrors)
-    L(CX - 6.5, 342.4, 14, 9, 0xfff0e0);
-    L(CX - 1.6, 342.4, 17, 10, 0xfff0e0);
-    L(CX + 3.3, 342.4, 14, 9, 0xfff0e0);
-    return {};
+    // washroom: one fill per drop fixture, 0.3 m lower than the aisle fills so their highlights sit on
+    // the mirror glass (the middle one is the mirrors' key)
+    L(CX - 6.5, 342.4, 14, 9, 0xfff0e0, FILL_Y - 0.3);
+    L(CX - 1.6, 342.4, 18, 10, 0xfff0e0, FILL_Y - 0.3);
+    L(CX + 3.3, 342.4, 14, 9, 0xfff0e0, FILL_Y - 0.3);
+
+    // ---------------------------------------------------------------- motion lighting
+    // All state is a function of t (replayable; the harness freezes t = 40 s, where the night-light
+    // circuit is at its peak, the faulty lamp is lit and the duty screens sit at nominal). No allocation.
+    const hash = (i) => {
+      const s = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+      return s - Math.floor(s);
+    };
+    const TWO_PI = Math.PI * 2;
+    return {
+      update(dt, t) {
+        const tp = t - 40;
+        // night-light circuit (kick strips, mouth header line, washer cycle lamp) breathes 0.7–1.0 over 9 s;
+        // the amber mouth pool follows it
+        const br = 0.7 + 0.3 * (0.5 + 0.5 * Math.cos((TWO_PI * tp) / 9));
+        amberMat.emissiveIntensity = base.amber * br;
+        mouthPool.intensity = mouthPool0 * (0.8 + 0.2 * br); // the pool doubles as the mouth fill, so it sways less than the strips
+        // faulty reading lamp: 11 Hz cells, ~22 % of them drop to 25–65 %, a further 12 % sag to 70 %
+        const c = Math.floor((tp + 0.5) * 11);
+        const r = hash(c + 19);
+        warmMat.emissiveIntensity = base.warm * (r < 0.22 ? 0.25 + 0.4 * hash(c * 3 + 5) : r < 0.34 ? 0.7 : 1);
+        // duty desk screens: 8 Hz refresh jitter 0.9–1.1
+        dutyMat.emissiveIntensity = base.duty * (0.9 + 0.2 * hash(Math.floor(t * 8) + 3));
+      },
+    };
   },
 });

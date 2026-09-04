@@ -24,8 +24,9 @@ export function rod(kit, a, b, r = 0.015, mat = "metal", color = STEEL, segments
 
 // Abstract vitals display on a dark plate; three layouts chosen by seed % 3 so neighbouring boards
 // never repeat: 0 = bar graph with guide lines, 1 = pulse trace with a large readout, 2 = grid of
-// numeric fields (one amber). Status dots on every layout.
-export function vitalsBoard(kit, pos, yaw, w = 0.9, h = 0.45, seed = 1) {
+// numeric fields (one amber). Status dots on every layout. `green` is the trace material key, so a
+// board can be drawn with the room's flickering clone instead of the static emitter.
+export function vitalsBoard(kit, pos, yaw, w = 0.9, h = 0.45, seed = 1, green = "emitGreen") {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
   P.box("paintedMetal", 0, 0, -0.03, w + 0.08, h + 0.08, 0.05, { color: BLACK });
@@ -38,10 +39,10 @@ export function vitalsBoard(kit, pos, yaw, w = 0.9, h = 0.45, seed = 1) {
     for (let i = 0; i < n; i++) {
       v = Math.min(0.92, Math.max(0.08, v + (rand() - 0.5) * 0.45));
       const bh = 0.03 + v * (h - 0.2);
-      P.box("emitGreen", -w / 2 + 0.1 + i * 0.055, base + bh / 2, 0.012, 0.028, bh, 0.006);
+      P.box(green, -w / 2 + 0.1 + i * 0.055, base + bh / 2, 0.012, 0.028, bh, 0.006);
     }
-    P.box("emitGreen", -0.04, h / 2 - 0.05, 0.012, w - 0.24, 0.006, 0.006);
-    P.box("emitGreen", -0.04, h / 2 - 0.09, 0.012, w * 0.55, 0.004, 0.006);
+    P.box(green, -0.04, h / 2 - 0.05, 0.012, w - 0.24, 0.006, 0.006);
+    P.box(green, -0.04, h / 2 - 0.09, 0.012, w * 0.55, 0.004, 0.006);
   } else if (mode === 1) {
     // pulse trace: flat line with a periodic spike complex, drawn as short segments + risers
     const x0 = -w / 2 + 0.08;
@@ -58,13 +59,13 @@ export function vitalsBoard(kit, pos, yaw, w = 0.9, h = 0.45, seed = 1) {
       const v = k === 2 ? -0.2 : k === 3 ? 0.95 : k === 4 ? -0.45 : k === 7 ? 0.22 : (rand() - 0.5) * 0.06;
       const y = mid + v * amp;
       const x = x0 + (i + 0.5) * step;
-      P.box("emitGreen", x, y, 0.012, step + 0.004, 0.012, 0.006);
-      if (Math.abs(y - prev) > 0.02) P.box("emitGreen", x - step / 2, (y + prev) / 2, 0.012, 0.008, Math.abs(y - prev), 0.006);
+      P.box(green, x, y, 0.012, step + 0.004, 0.012, 0.006);
+      if (Math.abs(y - prev) > 0.02) P.box(green, x - step / 2, (y + prev) / 2, 0.012, 0.008, Math.abs(y - prev), 0.006);
       prev = y;
     }
-    P.box("emitGreen", (x0 + x1) / 2, mid - amp - 0.03, 0.012, x1 - x0, 0.004, 0.006);
+    P.box(green, (x0 + x1) / 2, mid - amp - 0.03, 0.012, x1 - x0, 0.004, 0.006);
     // large readout block + two small fields at the right
-    P.box("emitGreen", w / 2 - 0.19, h / 2 - 0.13, 0.012, 0.16, 0.09, 0.006);
+    P.box(green, w / 2 - 0.19, h / 2 - 0.13, 0.012, 0.16, 0.09, 0.006);
     P.box("emitBlue", w / 2 - 0.22, -h / 2 + 0.1, 0.012, 0.1, 0.03, 0.006);
     P.box("emitAmber", w / 2 - 0.22, -h / 2 + 0.16, 0.012, 0.06, 0.02, 0.006);
   } else {
@@ -79,13 +80,13 @@ export function vitalsBoard(kit, pos, yaw, w = 0.9, h = 0.45, seed = 1) {
         const cx = -w / 2 + 0.08 + (c + 0.5) * cw;
         const cy = h / 2 - 0.06 - (r + 0.5) * rh;
         const idx = r * cols + c;
-        P.box(idx === amber ? "emitAmber" : "emitGreen", cx, cy + rh * 0.14, 0.012, cw * 0.66, rh * 0.34, 0.006);
-        P.box("emitGreen", cx - cw * 0.12, cy - rh * 0.26, 0.012, cw * 0.42, 0.008, 0.006);
+        P.box(idx === amber ? "emitAmber" : green, cx, cy + rh * 0.14, 0.012, cw * 0.66, rh * 0.34, 0.006);
+        P.box(green, cx - cw * 0.12, cy - rh * 0.26, 0.012, cw * 0.42, 0.008, 0.006);
         if (rand() < 0.5) P.box("emitBlue", cx + cw * 0.24, cy - rh * 0.26, 0.012, cw * 0.14, 0.008, 0.006);
       }
     }
   }
-  for (let i = 0; i < 3; i++) P.box(["emitGreen", "emitBlue", "emitAmber"][i], w / 2 - 0.05, h / 2 - 0.05 - i * 0.05, 0.012, 0.02, 0.02, 0.006);
+  for (let i = 0; i < 3; i++) P.box([green, "emitBlue", "emitAmber"][i], w / 2 - 0.05, h / 2 - 0.05 - i * 0.05, 0.012, 0.02, 0.02, 0.006);
 }
 
 // Wall vent: dark frame with light slats.
@@ -108,22 +109,32 @@ export function junctionBox(kit, pos, yaw, seed = 3) {
 
 // Medical bed: pedestal, platform 2.0 × 0.9 with its top at 0.70, white mattress, headboard with a
 // small monitor + indicator field, side rails, footboard chart, swing-arm lamp. Head at local −X.
-export function medBed(kit, PALETTE, pos, yaw, { seed = 1, occupied = false, screenMat = "screenImp1" } = {}) {
+// Mattress, pillow and blanket are vinyl-covered (painted material at texel 2.5) — the room spends
+// its 16 calls on animated emitters, so `fabric` is not in its material set. screenMat "board" draws
+// the monitor as a small green bar graph instead of a screen texture (third content variant).
+export function medBed(kit, PALETTE, pos, yaw, { seed = 1, occupied = false, screenMat = "screenImp0" } = {}) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
   P.box("paintedMetal", 0, 0.29, 0, 1.15, 0.58, 0.5, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", 0, 0.03, 0, 1.4, 0.06, 0.7, { color: BLACK });
   P.box("paintedMetal", 0, 0.64, 0, 2.0, 0.12, 0.9, { color: WHITE, texel: 2.5 });
   for (const s of [-1, 1]) P.box("emitBlue", 0.05, 0.605, s * 0.452, 1.7, 0.012, 0.008);
-  P.box("fabric", 0, 0.755, 0, 1.9, 0.11, 0.84, { color: WHITE, texel: 2 });
-  P.box("fabric", -0.7, 0.845, 0, 0.42, 0.08, 0.58, { color: 0xffffff, texel: 2 });
-  if (occupied) P.box("fabric", 0.3, 0.86, 0, 1.25, 0.12, 0.86, { color: 0x7fa8d8, texel: 2 });
-  else if (rand() < 0.7) P.box("fabric", 0.55, 0.83, 0, 0.6, 0.05, 0.7, { color: 0x7fa8d8, texel: 2 });
+  P.box("paintedMetal", 0, 0.755, 0, 1.9, 0.11, 0.84, { color: WHITE, texel: 2.5 });
+  P.box("paintedMetal", -0.7, 0.845, 0, 0.42, 0.08, 0.58, { color: 0xffffff, texel: 2.5 });
+  if (occupied) P.box("paintedMetal", 0.3, 0.86, 0, 1.25, 0.12, 0.86, { color: 0x7fa8d8, texel: 2.5 });
+  else if (rand() < 0.7) P.box("paintedMetal", 0.55, 0.83, 0, 0.6, 0.05, 0.7, { color: 0x7fa8d8, texel: 2.5 });
   // headboard (from floor to 1.4) with monitor + indicators facing the foot end
   P.box("paintedMetal", -1.04, 0.75, 0, 0.08, 1.3, 0.9, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", -1.005, 1.1, 0, 0.02, 0.5, 0.82, { color: WHITE });
   P.box("darkGloss", -0.99, 1.2, 0.18, 0.02, 0.26, 0.4);
-  P.box(screenMat, -0.979, 1.2, 0.18, 0.01, 0.22, 0.34, { uv: "keep" });
+  if (screenMat === "board") {
+    for (let k = 0; k < 6; k++) {
+      const v = 0.3 + 0.6 * rand();
+      P.box("emitGreen", -0.978, 1.1 + v * 0.08, 0.055 + k * 0.05, 0.006, v * 0.16, 0.024);
+    }
+    P.box("emitGreen", -0.978, 1.295, 0.18, 0.006, 0.006, 0.3);
+    P.box("emitBlue", -0.978, 1.275, 0.31, 0.006, 0.014, 0.04);
+  } else P.box(screenMat, -0.979, 1.2, 0.18, 0.01, 0.22, 0.34, { uv: "keep" });
   P.box("emitGreen", -0.979, 1.04, 0.18, 0.008, 0.016, 0.3);
   const Q = placer(kit, P.world(-0.985, 1.16, -0.22), yaw + Math.PI / 2);
   indicatorField(Q, 0, 0, 0, 0.32, 0.14, seed + 5, { weights: [0.2, 0.4, 0.15, 0.25] });
@@ -166,20 +177,23 @@ export function bayDivider(kit, a, b, h = 1.2) {
   P.collider([-0.07, 0, 0], [0.07, h, len], "divider");
 }
 
-// Bacta-style treatment tank: glass cylinder r 0.8 × 2.6 on a dark plinth, teal inner column, frame
-// ribs, bands, cap with pipes rising to `pipeTopY` (world y), a valve wheel facing −X. `level` (0..1)
-// sets the fluid column height; `drained` swaps the status emitters to amber and leaves a residue puddle.
-export function bactaTank(kit, pos, { pipeTopY, facing = -1, seed = 2, level = 1, drained = false } = {}) {
+// Bacta-style treatment tank: open tube r 0.8 × 2.6 on a dark plinth (frame ribs, bands and a thin
+// steel mid ring stand in for the glass, which at opacity 0.06 was a draw call that never read),
+// teal inner column, cap with pipes rising to `pipeTopY` (world y), a valve wheel facing −X. `level`
+// (0..1) sets the fluid column height; `drained` swaps the status emitters to amber. `teal` / `amber`
+// are the emitter keys: the room passes its animated clones so the fluid breathes and the service
+// status blinks.
+export function bactaTank(kit, pos, { pipeTopY, facing = -1, seed = 2, level = 1, drained = false, teal = "emitTeal", amber = "emitAmber" } = {}) {
   const [x, y, z] = pos;
-  const statusMat = drained ? "emitAmber" : "emitTeal";
+  const statusMat = drained ? amber : teal;
   kit.cyl("paintedMetal", x, y + 0.15, z, 1.05, 0.3, "y", { color: BLACK, segments: 32, texel: 2.5 });
   kit.cyl("metal", x, y + 0.31, z, 1.0, 0.02, "y", { color: STEEL, segments: 32 });
-  kit.cyl("glass", x, y + 1.6, z, 0.8, 2.6, "y", { segments: 32 });
+  kit.cyl("metal", x, y + 1.62, z, 0.805, 0.02, "y", { color: STEEL, segments: 32, open: true });
   if (!drained) {
-    kit.cyl("emitTeal", x, y + 0.325, z, 0.83, 0.03, "y", { segments: 32 });
+    kit.cyl(teal, x, y + 0.325, z, 0.83, 0.03, "y", { segments: 32 });
     const colH = Math.max(0.12, 2.2 * level);
-    kit.cyl("emitTeal", x, y + 0.45 + colH / 2, z, 0.42, colH, "y", { segments: 24 });
-    if (level < 0.99) kit.cyl("emitTeal", x, y + 0.45 + colH + 0.01, z, 0.72, 0.02, "y", { segments: 24 }); // surface disc
+    kit.cyl(teal, x, y + 0.45 + colH / 2, z, 0.42, colH, "y", { segments: 24 });
+    if (level < 0.99) kit.cyl(teal, x, y + 0.45 + colH + 0.01, z, 0.72, 0.02, "y", { segments: 24 }); // surface disc
   }
   kit.cyl("paintedMetal", x, y + 0.42, z, 0.5, 0.16, "y", { color: DARK, segments: 24 });
   kit.cyl("paintedMetal", x, y + 2.72, z, 0.5, 0.16, "y", { color: DARK, segments: 24 });
@@ -193,14 +207,14 @@ export function bactaTank(kit, pos, { pipeTopY, facing = -1, seed = 2, level = 1
     kit.box("paintedMetal", hx, y + 0.38, z + 0.14, 0.04, 0.15, 0.36, { color: IMP.impMid });
     kit.box("paintedMetal", hx + facing * 0.021, y + 0.38, z + 0.14, 0.006, 0.11, 0.32, { color: BLACK });
     for (const dz of [-0.02, 0.3]) kit.box("metal", hx + facing * 0.03, y + 0.38, z + dz, 0.02, 0.05, 0.03, { color: STEEL });
-    kit.box("emitAmber", hx + facing * 0.025, y + 0.43, z + 0.14, 0.006, 0.014, 0.08);
+    kit.box(amber, hx + facing * 0.025, y + 0.43, z + 0.14, 0.006, 0.014, 0.08);
     kit.cyl("paintedMetal", hx, y + 0.38, z - 0.2, 0.085, 0.06, "x", { color: BLACK, segments: 16 });
     kit.cyl("darkGloss", hx + facing * 0.031, y + 0.38, z - 0.2, 0.068, 0.004, "x", { segments: 16 });
-    kit.box("emitAmber", hx + facing * 0.034, y + 0.405, z - 0.2, 0.004, 0.012, 0.075);
+    kit.box(amber, hx + facing * 0.034, y + 0.405, z - 0.2, 0.004, 0.012, 0.075);
     kit.box("emitRedImp", hx + facing * 0.034, y + 0.375, z - 0.15, 0.004, 0.03, 0.01);
     kit.cyl("metal", x, y + 2.2, z, 0.012, 0.9, "y", { color: STEEL, segments: 6 });
     kit.box("paintedMetal", x, y + 1.7, z, 0.24, 0.16, 0.14, { color: DARK });
-    kit.box("emitAmber", x, y + 1.7, z + 0.072, 0.1, 0.03, 0.006);
+    kit.box(amber, x, y + 1.7, z + 0.072, 0.1, 0.03, 0.006);
   }
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
@@ -326,7 +340,9 @@ export function glassWall(kit, a, b, { h = 3.0, gaps = [], postEvery = 2.4, head
     const span = u1 - u0 - 0.14;
     P.box("paintedMetal", 0, 0.225, um, 0.12, 0.45, span, { color: DARK, texel: 2.5 });
     P.box("paintedMetal", 0, 0.47, um, 0.14, 0.04, span, { color: IMP.impMid });
-    P.box("glass", 0, (0.49 + h - 0.24) / 2, um, 0.02, h - 0.24 - 0.49, span, { uv: "keep" });
+    // open pane: the 6 %-opacity glass never read and its draw call now pays for an animated emitter;
+    // a thin steel glazing bar at the rail height keeps the pane's outline
+    P.box("metal", 0, 1.02, um, 0.03, 0.03, span, { color: STEEL });
     P.box("emitBlue", 0.062, 1.02, um, 0.006, 0.01, span - 0.1);
     P.collider([-0.08, 0, u0], [0.08, h, u1], "glass-wall");
   }
@@ -340,10 +356,10 @@ export function operatingTable(kit, pos, yaw) {
   P.box("paintedMetal", 0, 0.42, 0, 0.5, 0.64, 0.4, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", 0, 0.78, 0, 2.1, 0.06, 0.66, { color: DARK });
   P.box("paintedMetal", 0, 0.83, 0, 2.05, 0.04, 0.62, { color: WHITE });
-  P.box("fabric", 0, 0.87, 0, 1.95, 0.05, 0.56, { color: 0x2d3a4a, texel: 2 });
+  P.box("paintedMetal", 0, 0.87, 0, 1.95, 0.05, 0.56, { color: 0x2d3a4a, texel: 2.5 });
   for (const s of [-1, 1]) P.box("paintedMetal", -0.35, 0.82, s * 0.55, 0.7, 0.03, 0.22, { color: DARK });
-  P.box("fabric", -0.35, 0.845, -0.55, 0.65, 0.02, 0.18, { color: 0x2d3a4a, texel: 2 });
-  P.box("fabric", -0.35, 0.845, 0.55, 0.65, 0.02, 0.18, { color: 0x2d3a4a, texel: 2 });
+  P.box("paintedMetal", -0.35, 0.845, -0.55, 0.65, 0.02, 0.18, { color: 0x2d3a4a, texel: 2.5 });
+  P.box("paintedMetal", -0.35, 0.845, 0.55, 0.65, 0.02, 0.18, { color: 0x2d3a4a, texel: 2.5 });
   P.cyl("metal", 1.0, 0.95, 0, 0.012, 0.6, "z", { color: STEEL, segments: 8 });
   P.collider([-1.05, 0, -0.66], [1.05, 0.9, 0.66], "op-table");
 }
@@ -397,7 +413,7 @@ export function scanner(kit, pos, yaw, seed = 7) {
   P.box("paintedMetal", 0.2, 0.05, 0, 1.2, 0.1, 0.7, { color: BLACK });
   P.box("paintedMetal", 0.2, 0.42, 0, 0.6, 0.64, 0.5, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", 0.2, 0.78, 0, 2.4, 0.06, 0.66, { color: WHITE, texel: 2.5 });
-  P.box("fabric", 0.2, 0.835, 0, 2.3, 0.05, 0.56, { color: 0x2d3a4a, texel: 2 });
+  P.box("paintedMetal", 0.2, 0.835, 0, 2.3, 0.05, 0.56, { color: 0x2d3a4a, texel: 2.5 });
   for (const s of [-1, 1]) P.box("emitBlue", 0.2, 0.75, s * 0.335, 2.2, 0.012, 0.01);
   for (const s of [-1, 1]) {
     P.box("paintedMetal", -0.9, 1.25, s * 0.95, 0.5, 2.5, 0.3, { color: DARK, texel: 2.5 });
@@ -419,8 +435,8 @@ export function scanner(kit, pos, yaw, seed = 7) {
 export function gurney(kit, pos, yaw) {
   const P = placer(kit, pos, yaw);
   P.box("paintedMetal", 0, 0.78, 0, 1.95, 0.06, 0.62, { color: WHITE, texel: 2.5 });
-  P.box("fabric", 0, 0.835, 0, 1.85, 0.05, 0.56, { color: 0x7fa8d8, texel: 2 });
-  P.box("fabric", -0.7, 0.87, 0, 0.35, 0.05, 0.4, { color: 0xffffff, texel: 2 });
+  P.box("paintedMetal", 0, 0.835, 0, 1.85, 0.05, 0.56, { color: 0x7fa8d8, texel: 2.5 });
+  P.box("paintedMetal", -0.7, 0.87, 0, 0.35, 0.05, 0.4, { color: 0xffffff, texel: 2.5 });
   P.box("paintedMetal", 0, 0.42, 0, 0.5, 0.7, 0.4, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", 0, 0.12, 0, 1.4, 0.06, 0.55, { color: DARK });
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) P.cyl("metal", sx * 0.65, 0.06, sz * 0.24, 0.06, 0.04, "z", { color: BLACK, segments: 12 });
@@ -532,7 +548,7 @@ export function hazardBand(kit, min, max, y) {
 export function bench(kit, pos, yaw, len = 2.0, color = IMP.impMid) {
   const P = placer(kit, pos, yaw);
   P.box("paintedMetal", 0, 0.45, 0, len, 0.06, 0.45, { color, texel: 2.5 });
-  P.box("fabric", 0, 0.5, 0, len - 0.1, 0.05, 0.4, { color: DARK, texel: 2 });
+  P.box("paintedMetal", 0, 0.5, 0, len - 0.1, 0.05, 0.4, { color: DARK, texel: 2.5 });
   for (const x of [-len / 2 + 0.3, len / 2 - 0.3]) P.box("paintedMetal", x, 0.21, 0, 0.12, 0.42, 0.36, { color: BLACK });
   P.box("emitBlue", 0, 0.415, 0.226, len - 0.3, 0.01, 0.006);
   P.collider([-len / 2, 0, -0.23], [len / 2, 0.55, 0.23], "bench");
@@ -550,7 +566,7 @@ export function curtain(kit, from, dir, len, drop, color = 0x9fc4e8) {
     const off = (i % 2 ? 0.02 : -0.02);
     const sx = Math.abs(dir[0]) > 0.5 ? t1 - t0 : 0.03;
     const sz = Math.abs(dir[2]) > 0.5 ? t1 - t0 : 0.03;
-    kit.box("fabric", cx + (Math.abs(dir[2]) > 0.5 ? off : 0), from[1] - drop / 2 - 0.03, cz + (Math.abs(dir[0]) > 0.5 ? off : 0), sx, drop, sz, { color, texel: 1.5 });
+    kit.box("paintedMetal", cx + (Math.abs(dir[2]) > 0.5 ? off : 0), from[1] - drop / 2 - 0.03, cz + (Math.abs(dir[0]) > 0.5 ? off : 0), sx, drop, sz, { color, texel: 8 });
   }
   // gather band + runner clips along the top edge
   const mx = from[0] + dir[0] * (len / 2);
@@ -560,7 +576,7 @@ export function curtain(kit, from, dir, len, drop, color = 0x9fc4e8) {
 
 // Wheeled supply dolly: low deck with castors and a push handle, two bacta canisters (white drums
 // with a teal band, dark cap + valve, blue label) and one empty ring holder. Handle at local −X.
-export function supplyDolly(kit, pos, yaw, seed = 5) {
+export function supplyDolly(kit, pos, yaw, seed = 5, teal = "emitTeal") {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
   P.box("paintedMetal", 0, 0.12, 0, 1.0, 0.06, 0.6, { color: DARK, texel: 2.5 });
@@ -577,7 +593,7 @@ export function supplyDolly(kit, pos, yaw, seed = 5) {
     kit.add("metal", new THREE.TorusGeometry(0.16, 0.012, 6, 20), { pos: P.world(x, 0.55, 0), quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(0, P.yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0))), color: STEEL });
     if (i === empty) continue;
     P.cyl("paintedMetal", x, 0.53, 0, 0.15, 0.72, "y", { color: WHITE, segments: 16, texel: 2.5 });
-    P.cyl("emitTeal", x, 0.62, 0, 0.152, 0.03, "y", { segments: 16 });
+    P.cyl(teal, x, 0.62, 0, 0.152, 0.03, "y", { segments: 16 });
     P.cyl("paintedMetal", x, 0.92, 0, 0.11, 0.06, "y", { color: DARK, segments: 14 });
     P.cyl("metal", x, 0.98, 0, 0.03, 0.08, "y", { color: STEEL, segments: 8 });
     P.box("paintedMetal", x, 0.42, 0.146, 0.14, 0.1, 0.006, { color: rand() < 0.5 ? IMP.impBlue : IMP.medBlue });
