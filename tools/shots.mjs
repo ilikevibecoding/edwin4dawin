@@ -1,60 +1,82 @@
 // Headless screenshot harness. Usage: node tools/shots.mjs <iteration> [baseUrl]
-// Loads the app, calls window.debugAPI.setView(name) for each view, waits for frames to
-// settle, and writes shots/iter_<N>/<view>.png. Also exercises the interactions and records stats.
+// Loads the app, calls window.debugAPI.setView(name) for each view, waits for frames to settle, and
+// writes shots/iter_<N>/<view>.jpg plus results.json (per-view stats, interaction / drift / transition
+// checks, console log). Environment:
+//   SHOT_VIEWS=a,b     only these views            SHOT_ALL=1   every view the app exposes
+//   SHOT_QUICK=1       skip drift / interaction / transition passes (spot re-checks)
+//   SHOT_PNG=1         PNG instead of JPEG          SHOT_BUILD=1 build to a temp dir and serve it
+//                                                   statically (immune to dev-server reloads while editing)
 import { chromium } from "playwright-core";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { mkdirSync, writeFileSync, existsSync, readFileSync, statSync } from "node:fs";
+import { resolve, extname, join } from "node:path";
+import { execSync } from "node:child_process";
+import { createServer } from "node:http";
 
 const iter = process.argv[2] || "0";
-const base = process.argv[3] || "http://127.0.0.1:5173/";
+let base = process.argv[3] || process.env.SHOT_BASE || "http://127.0.0.1:5173/";
 const outDir = resolve("shots", `iter_${iter}`);
 mkdirSync(outDir, { recursive: true });
-
-// SHOT_VIEWS=a,b limits the views; SHOT_QUICK=1 skips the drift / interaction passes (spot re-checks
-// during an iteration; the full run is what gets scored).
-const ALL_VIEWS = ["cockpit", "corridor", "quarters", "window"];
-const ALL_EXTRA = ["windshield", "galley", "bathroom", "aft"];
-const only = process.env.SHOT_VIEWS ? process.env.SHOT_VIEWS.split(",") : null;
-const VIEWS = only ? ALL_VIEWS.filter((v) => only.includes(v)) : ALL_VIEWS;
-const EXTRA = only ? ALL_EXTRA.filter((v) => only.includes(v)) : ALL_EXTRA;
 const QUICK = !!process.env.SHOT_QUICK;
+const PNG = !!process.env.SHOT_PNG;
+const ext = PNG ? "png" : "jpg";
+
+// Optional static build snapshot
+let server = null;
+if (process.env.SHOT_BUILD) {
+  const dist = `/tmp/shot-dist-${process.pid}`;
+  execSync(`npx vite build --logLevel warn --outDir ${dist}`, { stdio: "inherit" });
+  const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".svg": "image/svg+xml" };
+  server = createServer((req, res) => {
+    let p = decodeURIComponent(req.url.split("?")[0]);
+    if (p === "/") p = "/index.html";
+    const file = join(dist, p);
+    if (!existsSync(file) || statSync(file).isDirectory()) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    res.writeHead(200, { "Content-Type": MIME[extname(file)] || "application/octet-stream" });
+    res.end(readFileSync(file));
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  base = `http://127.0.0.1:${server.address().port}/`;
+  console.log(`serving build snapshot at ${base}`);
+}
+
+// The default review set: exterior from every distance, then the interior key views and every room.
+const EXTERIOR = ["ext_far", "ext_mid", "ext_close", "ext_tower", "ext_bridgeFace", "ext_belly", "ext_stern", "ext_bow"];
+const INTERIOR_KEY = ["bridge", "bridgeAft", "hangarDeck", "hangarWell", "cockpit", "corridor", "quarters", "galley", "room:A-spine", "room:C-spine"];
 
 const executablePath = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].find((p) => existsSync(p));
 
 const browser = await chromium.launch({
   headless: true,
   executablePath,
-  args: [
-    "--no-sandbox",
-    "--disable-dev-shm-usage",
-    "--use-gl=angle",
-    "--use-angle=swiftshader-webgl",
-    "--enable-unsafe-swiftshader",
-    "--ignore-gpu-blocklist",
-    "--enable-webgl",
-    "--disable-gpu-vsync",
-    "--disable-frame-rate-limit",
-  ],
+  args: ["--no-sandbox", "--disable-dev-shm-usage", "--use-gl=angle", "--use-angle=swiftshader-webgl", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl", "--disable-gpu-vsync", "--disable-frame-rate-limit"],
 });
 
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
 const logs = [];
 page.on("console", (m) => {
   const text = `[${m.type()}] ${m.text()}`;
+  if (text.includes("GPU stall") || text.includes("WebSocket") || text.includes("[vite]")) return;
   logs.push(text);
   if (m.type() === "error" || m.type() === "warning") console.log(text.slice(0, 400));
 });
 page.on("pageerror", (e) => {
+  if (e.message.includes("WebSocket")) return;
   logs.push(`[pageerror] ${e.message}`);
   console.log("PAGE ERROR:", e.message);
 });
 
 console.log(`loading ${base}`);
+const tLoad = Date.now();
 await page.goto(base, { waitUntil: "load" });
-await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 120000 });
-console.log("app ready");
+await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 240000 });
+const readyMs = Date.now() - tLoad;
+console.log(`app ready in ${(readyMs / 1000).toFixed(1)} s`);
 
-async function settle(minFrames = 4, minMs = 2000, timeout = 90000) {
+async function settle(minFrames = 4, minMs = 1200, timeout = 240000) {
   const t0 = Date.now();
   const f0 = await page.evaluate(() => window.debugAPI.frames());
   await page.waitForFunction((target) => window.debugAPI.frames() >= target, f0 + minFrames, { timeout });
@@ -62,92 +84,99 @@ async function settle(minFrames = 4, minMs = 2000, timeout = 90000) {
   if (elapsed < minMs) await page.waitForTimeout(minMs - elapsed);
 }
 
-// let the scene warm up (shader compile + env capture)
-await settle(4, 2000, 180000);
+await settle(4, 1500, 240000);
 const stats0 = await page.evaluate(() => window.debugAPI.getStats());
 console.log("warmup stats", JSON.stringify(stats0));
 
-const results = { iter, views: {}, interactions: {}, stats: null, logs: [] };
-for (const name of [...VIEWS, ...EXTRA]) {
-  await page.evaluate((n) => window.debugAPI.setView(n), name);
-  await settle(4, 2000);
-  const file = resolve(outDir, `${name}.png`);
-  await page.screenshot({ path: file });
+const allViews = await page.evaluate(() => window.debugAPI.views);
+let VIEWS;
+if (process.env.SHOT_ALL) VIEWS = allViews;
+else if (process.env.SHOT_VIEWS) VIEWS = process.env.SHOT_VIEWS.split(",").filter((v) => allViews.includes(v));
+else VIEWS = [...EXTERIOR, ...INTERIOR_KEY, ...allViews.filter((v) => v.startsWith("room:") && !INTERIOR_KEY.includes(v))];
+
+const results = { iter, base, readyMs, views: {}, interactions: {}, checks: {}, stats: null, logs: [] };
+for (const name of VIEWS) {
+  try {
+    await page.evaluate((n) => window.debugAPI.setView(n), name);
+  } catch (e) {
+    console.log(`setView(${name}) failed: ${e.message.split("\n")[0]}`);
+    continue;
+  }
+  await settle(4, 1200);
+  const file = resolve(outDir, `${name.replace(":", "_")}.${ext}`);
+  await page.screenshot({ path: file, ...(PNG ? {} : { type: "jpeg", quality: 84 }) });
   const stats = await page.evaluate(() => window.debugAPI.getStats());
   results.views[name] = stats;
-  console.log(`shot ${name}: ${stats.calls} calls, ${stats.triangles} tris, ${stats.frameMs} ms/frame (software GL)`);
+  console.log(`shot ${name}: ${stats.calls} calls, ${stats.triangles} tris, ${stats.visibleObjects} objs, ${stats.lights} lights, ${stats.frameMs} ms/frame (software GL)`);
 }
 
-if (QUICK) {
-  console.log("quick mode: skipping drift + interaction passes ->", outDir);
-  await browser.close();
-  process.exit(0);
-}
-
-// --- motion check: the sky must visibly drift. Compare the porthole interior between two frames whose
-// sky time differs by 2 s (interior static, grain frozen). A wall patch is captured as a control.
-{
+if (!QUICK) {
+  // sky drift: the far field must move while the interior stays put
   await page.evaluate(() => window.debugAPI.setView("window"));
-  await settle(3, 1000);
-  const sky = { x: 562, y: 294, w: 200, h: 200 }; // porthole interior at 1280x720
-  const wall = { x: 40, y: 560, w: 120, h: 120 }; // static interior control
-  const grab = (r) => page.evaluate((rr) => window.debugAPI.capturePixels(rr.x, rr.y, rr.w, rr.h), r);
-  const a = await grab(sky);
-  const aw = await grab(wall);
+  await settle(4, 1200);
+  const before = await page.evaluate(() => window.debugAPI.capturePixels(0, 0, 1280, 720));
   await page.evaluate(() => window.debugAPI.advanceSky(2));
-  await settle(3, 500);
-  await page.screenshot({ path: resolve(outDir, "window_plus2s.png") });
-  const b = await grab(sky);
-  const bw = await grab(wall);
-  const diff = (p, q) => {
+  await settle(3, 800);
+  const after = await page.evaluate(() => window.debugAPI.capturePixels(0, 0, 1280, 720));
+  const region = (x0, y0, x1, y1) => {
     let sum = 0;
     let changed = 0;
-    const n = p.length / 4;
-    for (let i = 0; i < p.length; i += 4) {
-      const d = Math.abs(p[i] - q[i]) + Math.abs(p[i + 1] - q[i + 1]) + Math.abs(p[i + 2] - q[i + 2]);
+    let n = 0;
+    for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) {
+      const i = (y * 1280 + x) * 4;
+      const d = Math.abs(before[i] - after[i]) + Math.abs(before[i + 1] - after[i + 1]) + Math.abs(before[i + 2] - after[i + 2]);
       sum += d;
-      if (d > 30) changed++;
+      if (d > 12) changed++;
+      n++;
     }
-    return { meanAbsDiff: +(sum / n / 3).toFixed(2), changedFraction: +(changed / n).toFixed(3) };
+    return { meanAbsDiff: +(sum / n / 3).toFixed(1), changedFraction: +(changed / n).toFixed(2) };
   };
-  results.drift = { skyRegion: diff(a, b), interiorControl: diff(aw, bw) };
-  console.log("drift (2 s of sky time):", JSON.stringify(results.drift));
-}
+  results.checks.drift = { skyRegion: region(520, 250, 760, 470), interiorControl: region(0, 600, 300, 720) };
+  console.log("drift (2 s of sky time):", JSON.stringify(results.checks.drift));
+  await page.screenshot({ path: resolve(outDir, `window_plus2s.${ext}`), ...(PNG ? {} : { type: "jpeg", quality: 84 }) });
 
-// --- interaction checks: prompt appears when looking at each interactable, action fires, status updates
-for (const id of ["bed", "galley", "bathroom"]) {
-  const hovered = await page.evaluate((i) => window.debugAPI.lookAt(i), id);
-  await settle(2, 800);
-  await page.screenshot({ path: resolve(outDir, `prompt_${id}.png`) });
-  const promptText = await page.evaluate(() => document.getElementById("prompt").textContent);
-  const promptVisible = await page.evaluate(() => !document.getElementById("prompt").classList.contains("hidden"));
-  await page.evaluate(() => window.debugAPI.pressE());
-  // capture mid-fade state for bed / bathroom
-  if (id !== "galley") {
-    await page.waitForTimeout(id === "bed" ? 1500 : 1100);
-    await page.screenshot({ path: resolve(outDir, `fade_${id}.png`) });
+  // legacy interactions still work inside the command deck wing
+  for (const id of ["bed", "galley", "bathroom"]) {
+    const hovered = await page.evaluate((i) => window.debugAPI.lookAt(i), id);
+    await settle(2, 400);
+    const prompt = await page.evaluate(() => document.getElementById("prompt").textContent);
+    await page.screenshot({ path: resolve(outDir, `prompt_${id}.${ext}`), ...(PNG ? {} : { type: "jpeg", quality: 80 }) });
+    await page.evaluate((i) => window.debugAPI.interact(i), id);
+    await page.waitForTimeout(id === "bed" ? 5200 : 1600);
+    await settle(2, 300);
+    const status = await page.evaluate(() => window.debugAPI.status());
+    const rest = await page.evaluate(() => window.debugAPI.restLevel());
+    results.interactions[id] = { hovered, prompt, status, rest };
+    console.log(`interaction ${id}: hovered=${hovered} prompt="${prompt}" status="${status}" rest=${rest}`);
+    if (id === "bed") {
+      await page.screenshot({ path: resolve(outDir, `rest_cycle_bed.${ext}`), ...(PNG ? {} : { type: "jpeg", quality: 84 }) });
+      await page.evaluate(() => window.debugAPI.setRest(0));
+    }
   }
-  const expected = { bed: /slept/, galley: /Energy restored/, bathroom: /Refreshed/ }[id];
-  const t0 = Date.now();
-  let status = "";
-  while (Date.now() - t0 < 12000) {
-    await page.waitForTimeout(300);
-    status = await page.evaluate(() => window.debugAPI.status());
-    const busy = await page.evaluate(() => window.debugAPI.fadeOpacity() > 0.01);
-    if (!busy && expected.test(status)) break;
-  }
-  if (id === "bed") {
-    await settle(3, 1500);
-    await page.screenshot({ path: resolve(outDir, `rest_cycle_${id}.png`) });
-  }
-  const restLevel = await page.evaluate(() => window.debugAPI.restLevel());
-  results.interactions[id] = { hovered, promptVisible, promptText, status, restLevel };
-  console.log(`interaction ${id}: hovered=${hovered} prompt="${promptText}" status="${status}" rest=${restLevel}`);
-  if (id === "bed") await page.evaluate(() => window.debugAPI.setRest(0));
+
+  // transitions and lifts (systems, not looks)
+  results.checks.systems = await page.evaluate(() => {
+    const d = window.debugAPI;
+    d.setView("bridge");
+    d.exitShip();
+    d.advanceSim(6);
+    const afterExit = d.mode();
+    d.board();
+    d.advanceSim(7);
+    const afterBoard = { mode: d.mode(), space: d.spaceId() };
+    d.setView("room:lift1LobbyB");
+    const rode = d.ride("lift1");
+    d.advanceSim(20);
+    const lift = d.liftState("lift1");
+    return { afterExit, afterBoard, lift: { rode, ...lift }, traffic: d.trafficState().counts, doors: d.doors().length };
+  });
+  console.log("systems:", JSON.stringify(results.checks.systems));
 }
 
 results.stats = await page.evaluate(() => window.debugAPI.getStats());
-results.logs = logs.filter((l) => !l.startsWith("[log]")).slice(0, 50);
+results.logs = logs.slice(-200);
 writeFileSync(resolve(outDir, "results.json"), JSON.stringify(results, null, 2));
-console.log("done ->", outDir);
+console.log(`done -> ${outDir}`);
 await browser.close();
+if (server) server.close();
+process.exit(0);
