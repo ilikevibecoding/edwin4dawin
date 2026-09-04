@@ -213,7 +213,9 @@ export function build(kit, ctx, room, lib) {
     fN.add("decal", new THREE.PlaneGeometry(0.3, 0.3), uc - 1.2, 1.5, 0.022, { uv: "keep", uvRect: decalRect(9) });
     fN.collider(uc - 2.05, uc + 2.05, 0, 2.4, 0, 0.46, "shelves");
   }
-  // forward wall, right of the shelves: framed stencil plates, a light bar and a climate unit
+  // forward wall, right of the shelves: holo-net terminal, framed stencil plates, a light bar and a climate unit
+  wallConsole(fN, 8.5, 1.2, "screen3");
+  wallLightBar(fN, 7.2, 9.8, 2.5, "emitWarmSoft");
   for (const [u, idx, col] of [[11.2, 0, PALETTE.tealPaint], [12.7, 8, PALETTE.creamDark], [14.2, 3, PALETTE.tealPaint]]) {
     fN.box("satinBlack", u, 1.7, 0.02, 0.86, 0.86, 0.04);
     stencil(fN, u, 1.7, 0.6, idx, { color: col, n: 0.04 });
@@ -281,5 +283,11 @@ export function build(kit, ctx, room, lib) {
     stencil(fS, 10.6, 1.62, 0.5, 12, { color: PALETTE.creamDark });
     wallLightBar(fS, 6.0, 11.0, 2.5, "emitWarmSoft");
   }
+  // aft wall over the L-bench: framed art plates and a light bar
+  for (const [u, idx, col] of [[12.4, 8, PALETTE.creamDark], [14.2, 2, PALETTE.tealPaint]]) {
+    fS.box("satinBlack", u, 1.75, 0.02, 0.86, 0.86, 0.04);
+    stencil(fS, u, 1.75, 0.6, idx, { color: col, n: 0.04 });
+  }
+  wallLightBar(fS, 11.6, 16.6, 2.5, "emitWarmSoft");
   return shell;
 }

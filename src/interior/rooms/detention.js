@@ -25,12 +25,12 @@ export function build(kit, ctx, room, lib) {
   const cells = Array.from({ length: 6 }, (_, i) => ({ xa: -22.8 + i * 2.6, xb: -20.4 + i * 2.6, n: i + 1 }));
 
   // ------------------------------------------------------------ lights: harsh white mains, red at the gate and cells
-  ctx.lights.cool.push(pointLight(0xf2f4ff, 12, 13, [-4.8, yTop - 0.4, 546.6]));
-  ctx.lights.cool.push(pointLight(0xf2f4ff, 12, 13, [-11.5, yTop - 0.4, 546.4]));
-  ctx.lights.cool.push(pointLight(0xf2f4ff, 12, 13, [-19.0, yTop - 0.4, 546.4]));
-  ctx.lights.cool.push(pointLight(0xf2f4ff, 10, 11, [-8.5, yTop - 0.35, 551.9]));
-  ctx.lights.cool.push(pointLight(0xf2f4ff, 10, 11, [-15.0, yTop - 0.35, 551.9]));
-  ctx.lights.cool.push(pointLight(0xf2f4ff, 10, 11, [-21.5, yTop - 0.35, 551.9]));
+  ctx.lights.cool.push(pointLight(0xf2f4ff, 16, 14, [-4.8, yTop - 0.4, 546.6]));
+  ctx.lights.cool.push(pointLight(0xf2f4ff, 16, 14, [-11.5, yTop - 0.4, 546.4]));
+  ctx.lights.cool.push(pointLight(0xf2f4ff, 16, 14, [-19.0, yTop - 0.4, 546.4]));
+  ctx.lights.cool.push(pointLight(0xf2f4ff, 12, 12, [-8.5, yTop - 0.35, 551.9]));
+  ctx.lights.cool.push(pointLight(0xf2f4ff, 12, 12, [-15.0, yTop - 0.35, 551.9]));
+  ctx.lights.cool.push(pointLight(0xf2f4ff, 12, 12, [-21.5, yTop - 0.35, 551.9]));
   ctx.lights.teal.push(pointLight(0xff3020, 4, 8, [-5.0, yTop - 0.5, 551.6]));
   ctx.lights.teal.push(pointLight(0xff3020, 4, 8, [-12.0, yTop - 0.6, 552.6]));
   ctx.lights.teal.push(pointLight(0xff3020, 4, 8, [-19.0, yTop - 0.6, 552.6]));

@@ -20,14 +20,16 @@ export function build(kit, ctx, room, lib) {
 
   // ------------------------------------------------------------ lights
   // The pool keeps the 14 best-scoring fixtures (intensity / distance^2 from the camera), so the room
-  // uses a few strong practicals: two over the issue side, one over the counter, two in the cage and
-  // one over the far-wall racks; red accents sit low over the racks and the counter.
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 9, 14, [4.6, yTop - 0.4, 529.5]));
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 9, 14, [4.6, yTop - 0.4, 536.5]));
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 8, 12, [5.8, yTop - 0.4, 533]));
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 9, 14, [10.5, yTop - 0.4, 530.5]));
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 9, 14, [10.5, yTop - 0.4, 535.5]));
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 11, 15, [16.2, yTop - 0.4, 533]));
+  // uses a few strong practicals: two over the issue side, one over the counter, one just behind the
+  // barred window, two in the cage and one over the far-wall racks; red accents sit low over the racks
+  // and the counter.
+  ctx.lights.cool.push(pointLight(0xe0e8ff, 11, 14, [4.6, yTop - 0.4, 529.5]));
+  ctx.lights.cool.push(pointLight(0xe0e8ff, 11, 14, [4.6, yTop - 0.4, 536.5]));
+  ctx.lights.cool.push(pointLight(0xe0e8ff, 10, 12, [5.8, yTop - 0.4, 533]));
+  ctx.lights.cool.push(pointLight(0xe0e8ff, 14, 14, [8.6, yTop - 0.4, 533]));
+  ctx.lights.cool.push(pointLight(0xe0e8ff, 16, 15, [10.5, yTop - 0.4, 530.5]));
+  ctx.lights.cool.push(pointLight(0xe0e8ff, 16, 15, [10.5, yTop - 0.4, 535.5]));
+  ctx.lights.cool.push(pointLight(0xe0e8ff, 18, 16, [16.2, yTop - 0.4, 533]));
   ctx.lights.teal.push(pointLight(0xff3a2a, 5, 10, [12.5, yTop - 0.5, 533]));
   ctx.lights.teal.push(pointLight(0xff3a2a, 4, 9, [16.8, yTop - 0.7, 529.5]));
   ctx.lights.teal.push(pointLight(0xff3a2a, 4, 9, [16.8, yTop - 0.7, 535.5]));

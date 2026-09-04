@@ -58,9 +58,9 @@ export function build(kit, ctx, room, lib) {
   floorStencil(kit, 3.2, y0, 547.2, 0.8, 15, Math.PI / 2);
   floorStencil(kit, 3.2, y0, 550.8, 0.8, 15, Math.PI / 2);
 
-  // ------------------------------------------------------------ scrubber plinths with steps
+  // ------------------------------------------------------------ scrubber plinths with steps and a service walkway in front of the tanks
   const plinth = (xa, xb, sx0, sx1) => {
-    const zf = 546.4;
+    const zf = 547.2;
     kit.boxMM("deck", [xa, y0, z0], [xb, yP, zf], deckOpts);
     kit.floor(xa, z0, xb, zf, yP);
     kit.boxMM("satinBlack", [xa, y0 + 0.02, zf - 0.01], [xb, yP - 0.06, zf + 0.02]);
@@ -145,12 +145,12 @@ export function build(kit, ctx, room, lib) {
     kit.box("leds", 12.8, y0 + 2.8, dz + 0.42, 18.0, 0.02, 0.03, { uv: "keep" });
   }
   for (const [tx] of tanks) {
-    kit.cyl("metal", tx, y0 + 2.6, 546.6, 0.22, 0.4, "y", { color: PALETTE.gunmetal, segments: 14 });
-    kit.add("metal", new THREE.CylinderGeometry(0.22, 0.36, 0.3, 14), { pos: [tx, y0 + 2.25, 546.6], color: PALETTE.darkMetal, uv: "scale", uvScale: [2, 0.3] });
+    kit.cyl("metal", tx, y0 + 2.74, 546.6, 0.22, 0.12, "y", { color: PALETTE.gunmetal, segments: 14 });
+    kit.add("metal", new THREE.CylinderGeometry(0.22, 0.36, 0.3, 14), { pos: [tx, y0 + 2.53, 546.6], color: PALETTE.darkMetal, uv: "scale", uvScale: [2, 0.3] });
     const g = new THREE.CircleGeometry(0.3, 14);
     g.rotateX(Math.PI / 2);
-    grateQuad(kit, g, [tx, y0 + 2.094, 546.6], 0.6, 0.6);
-    kit.add("emitTeal", new THREE.TorusGeometry(0.32, 0.01, 4, 20), { pos: [tx, y0 + 2.1, 546.6], rot: [Math.PI / 2, 0, 0], uv: "keep" });
+    grateQuad(kit, g, [tx, y0 + 2.374, 546.6], 0.6, 0.6);
+    kit.add("emitTeal", new THREE.TorusGeometry(0.32, 0.01, 4, 20), { pos: [tx, y0 + 2.38, 546.6], rot: [Math.PI / 2, 0, 0], uv: "keep" });
   }
   // cage work lamps hung from the ducts and the ceiling over the machinery
   workLamp(kit, ctx, 13.4, yTop, 545.0, { drop: 0.95, intensity: 12, distance: 10 });
