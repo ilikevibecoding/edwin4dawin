@@ -222,7 +222,8 @@ export function portalArch(kit, PALETTE, pos, yaw, { span = 4.7, h = 4.5, post =
 
 // Housed wall lamp: dark hood on the wall with a bright face tilted `tilt` rad DOWN from horizontal,
 // so the face is hidden from above and lights the floor/props below. Faces +Z (into the room).
-export function wallLamp(kit, PALETTE, pos, yaw, { w = 0.9, tilt = 0.7, mat = "emitWhite" } = {}) {
+// `face` scales the emitter inside the same head (0.6 = a small lamp in a big hood, no clipped bar).
+export function wallLamp(kit, PALETTE, pos, yaw, { w = 0.9, tilt = 0.7, mat = "emitWhite", face = 1 } = {}) {
   const P = placer(kit, pos, yaw);
   const black = col(PALETTE, "impBlack");
   const dark = col(PALETTE, "impDark");
@@ -232,11 +233,12 @@ export function wallLamp(kit, PALETTE, pos, yaw, { w = 0.9, tilt = 0.7, mat = "e
   const hc = P.world(0, 0.12, 0.5);
   kit.add("paintedMetal", new THREE.BoxGeometry(w - 0.1, 0.4, 0.3), { pos: hc, quat: q, color: black, texel: 2.5 });
   const fwd = new THREE.Vector3(0, 0, 0.155).applyQuaternion(q);
-  kit.add(mat, new THREE.BoxGeometry(w - 0.24, 0.28, 0.02), { pos: [hc[0] + fwd.x, hc[1] + fwd.y, hc[2] + fwd.z], quat: q });
+  kit.add(mat, new THREE.BoxGeometry((w - 0.24) * face, 0.28 * face, 0.02), { pos: [hc[0] + fwd.x, hc[1] + fwd.y, hc[2] + fwd.z], quat: q });
   for (const s of [-1, 1]) P.box("paintedMetal", (s * (w - 0.06)) / 2, 0.1, 0.5, 0.06, 0.5, 0.7, { color: black });
 }
 
-// Ceiling fixture: framed housing on a stem with a recessed light face (the fill light sits just below).
+// Ceiling fixture: framed housing on a stem with a louvred light face under it (the fill light sits
+// just below). The face hangs below the black bottom plate so it is visible from the floor.
 export function ceilingFixture(kit, PALETTE, pos, { w = 2.4, d = 0.7, stem = 1.0, mat = "emitAmber", yaw = 0 } = {}) {
   const P = placer(kit, pos, yaw);
   const black = col(PALETTE, "impBlack");
@@ -244,8 +246,26 @@ export function ceilingFixture(kit, PALETTE, pos, { w = 2.4, d = 0.7, stem = 1.0
   for (const s of [-1, 1]) P.box("paintedMetal", (s * w) / 3, -stem / 2, 0, 0.06, stem, 0.06, { color: black });
   P.box("paintedMetal", 0, -stem - 0.16, 0, w, 0.32, d, { color: dark, texel: 2.5 });
   P.box("paintedMetal", 0, -stem - 0.33, 0, w - 0.16, 0.04, d - 0.16, { color: black });
-  P.box(mat, 0, -stem - 0.3, 0, w - 0.3, 0.02, d - 0.3, { uv: "keep" });
-  for (let i = 1; i < 4; i++) P.box("paintedMetal", -w / 2 + (i * w) / 4, -stem - 0.31, 0, 0.04, 0.05, d - 0.2, { color: black });
+  P.box(mat, 0, -stem - 0.36, 0, w - 0.3, 0.02, d - 0.3, { uv: "keep" });
+  for (let i = 1; i < 4; i++) P.box("paintedMetal", -w / 2 + (i * w) / 4, -stem - 0.375, 0, 0.04, 0.05, d - 0.2, { color: black });
+}
+
+// High-bay cluster hung under a ceiling duct: a drop rod, a cross bar and three hooded heads (centre
+// one straight down, outer two splayed ±0.5 rad) with small emitter faces. `pos` is the hang point.
+export function highBay(kit, PALETTE, pos, { drop = 1.4, mat = "emitWhite", yaw = 0 } = {}) {
+  const P = placer(kit, pos, yaw);
+  const black = col(PALETTE, "impBlack");
+  const dark = col(PALETTE, "impDark");
+  P.box("paintedMetal", 0, -drop / 2, 0, 0.1, drop, 0.1, { color: black });
+  P.box("paintedMetal", 0, -drop - 0.06, 0, 2.6, 0.12, 0.16, { color: dark, texel: 2.5 });
+  P.box("paintedMetal", 0, -drop - 0.02, 0, 0.5, 0.2, 0.3, { color: black });
+  for (const [x, tilt] of [[-0.95, -0.5], [0, 0], [0.95, 0.5]]) {
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, tilt)));
+    const hc = P.world(x, -drop - 0.5, 0);
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.7, 0.6, 0.7), { pos: hc, quat: q, color: black, texel: 2.5 });
+    const down = new THREE.Vector3(0, -0.305, 0).applyQuaternion(q);
+    kit.add(mat, new THREE.BoxGeometry(0.44, 0.02, 0.44), { pos: [hc[0] + down.x, hc[1] + down.y, hc[2] + down.z], quat: q });
+  }
 }
 
 // Conduit bundle collecting a cabinet row: a collector duct on the cabinet tops plus a few thick
@@ -261,7 +281,7 @@ export function conduitBundle(kit, PALETTE, a, b, topY, risers, { r = 0.18, duct
   kit.boxMM("paintedMetal", [min[0] - 0.03, a[1] + ductH - 0.06, min[2] - 0.03], [max[0] + 0.03, a[1] + ductH, max[2] + 0.03], { color: black });
   for (const t of risers) {
     const p = alongX ? [t, a[1] + ductH, a[2]] : [a[0], a[1] + ductH, t];
-    kit.cyl("metal", p[0], (p[1] + topY) / 2, p[2], r, topY - p[1], "y", { color: dark, segments: 12, texel: 0.5 });
+    kit.cyl("metal", p[0], (p[1] + topY) / 2, p[2], r, topY - p[1], "y", { color: dark, segments: 12, texel: 2 });
     kit.cyl("paintedMetal", p[0], p[1] + 0.2, p[2], r + 0.08, 0.4, "y", { color: black, segments: 12 });
     kit.cyl("paintedMetal", p[0], topY - 0.25, p[2], r + 0.08, 0.5, "y", { color: black, segments: 12 });
     kit.cyl("paintedMetal", p[0], (p[1] + topY) / 2, p[2], r + 0.06, 0.25, "y", { color: black, segments: 12 });
@@ -305,6 +325,56 @@ export function labelCrate(kit, PALETTE, pos, yaw, opts = {}) {
     P.box("paintedMetal", (s * (w - 0.45)) / 2, h * 0.3, d / 2 + 0.065, 0.06, 0.1, 0.02, { color: black });
   }
   if (rand() < 0.5) P.box("hazard", w / 2 - 0.3, h * 0.55, d / 2 + 0.036, 0.3, 0.14, 0.01, { texel: 2 });
+}
+
+// Strapped pallet load that reads from above (mezzanines, catwalks): a slatted pallet, crates in two
+// sizes (some stacked) with amber cargo straps over their tops, white top labels with a red stripe and
+// stencil bars, one hazard patch. `pos` is the pallet centre on the floor; local X = pallet length.
+export function palletStack(kit, PALETTE, pos, yaw, { seed = 9, len = 4.4, dep = 3.0 } = {}) {
+  const P = placer(kit, pos, yaw);
+  const rand = rng(seed);
+  const black = col(PALETTE, "impBlack");
+  const dark = col(PALETTE, "impDark");
+  const mid = col(PALETTE, "impMid");
+  const grey = col(PALETTE, "impGrey");
+  const amber = col(PALETTE, "impAmber");
+  // pallet: two bearers, five slats across, black edge kerb
+  for (const z of [-dep / 2 + 0.25, dep / 2 - 0.25]) P.box("paintedMetal", 0, 0.07, z, len, 0.14, 0.3, { color: black, texel: 2.5 });
+  for (let i = 0; i < 5; i++) P.box("paintedMetal", -len / 2 + (i + 0.5) * (len / 5), 0.17, 0, len / 5 - 0.12, 0.06, dep, { color: mid, texel: 2.5 });
+  P.box("paintedMetal", 0, 0.14, 0, len, 0.02, dep + 0.04, { color: dark });
+  const top = 0.2;
+  // [x, z, w, h, d, yaw, tint, level] — level 1 sits on the crate below it
+  const units = [
+    [-1.35, -0.55, 1.5, 1.0, 1.5, 0.05, mid, 0],
+    [-1.35, -0.55, 1.1, 0.7, 1.1, -0.12, dark, 1],
+    [0.35, -0.6, 1.5, 0.9, 1.4, -0.04, grey, 0],
+    [1.55, 0.6, 0.8, 0.7, 0.8, 0.2, dark, 0],
+    [0.55, 0.75, 0.8, 0.6, 0.8, -0.15, mid, 0],
+    [-1.3, 0.75, 1.4, 0.7, 0.9, 0.08, dark, 0],
+  ];
+  const stackY = {};
+  for (const [x, z, w, h, d, cy, tint, level] of units) {
+    const key = x + "," + z;
+    const y0 = level ? stackY[key] : top;
+    const c = P.world(x, y0, z);
+    const C = placer(kit, c, yaw + cy);
+    crate(kit, PALETTE, c, yaw + cy, { w, h, d, color: tint, seed: seed++, bumperMat: "paintedMetal" });
+    stackY[key] = y0 + h;
+    // two amber straps over the top, down both sides (x-direction), with a black buckle on top
+    for (const sz of [-d / 4, d / 4]) {
+      C.box("paintedMetal", 0, h + 0.012, sz, w + 0.03, 0.02, 0.08, { color: amber });
+      for (const s of [-1, 1]) C.box("paintedMetal", (s * (w + 0.06)) / 2, h / 2, sz, 0.02, h, 0.08, { color: amber });
+      C.box("paintedMetal", w / 2 - 0.25, h + 0.03, sz, 0.14, 0.03, 0.1, { color: black });
+    }
+    // top label: white plate, red stripe, three stencil bars (or a hazard patch on one crate)
+    if (rand() < 0.8) {
+      C.box("impPanel", -w / 4, h + 0.014, 0, Math.min(0.5, w * 0.36), 0.008, Math.min(0.32, d * 0.3), { color: grey, uv: "keep" });
+      C.box("paintedMetal", -w / 4, h + 0.02, -Math.min(0.32, d * 0.3) / 2 + 0.03, Math.min(0.5, w * 0.36), 0.004, 0.05, { color: col(PALETTE, "impRed") });
+      for (let k = 0; k < 3; k++) C.box("paintedMetal", -w / 4, h + 0.02, -0.02 + k * 0.06, Math.min(0.5, w * 0.36) - 0.14, 0.004, 0.025, { color: black });
+    } else {
+      C.box("hazard", -w / 4, h + 0.014, 0, Math.min(0.5, w * 0.36), 0.008, Math.min(0.3, d * 0.28), { texel: 2 });
+    }
+  }
 }
 
 // Power cabinet variant with the front panel swung open: dark interior, cable bundles, breaker rows.

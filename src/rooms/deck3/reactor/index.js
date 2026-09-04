@@ -101,7 +101,8 @@ export default defineRoom({
     kit.cyl("impFloor", 0, PIT_Y + 0.65, CZ, 16, 0.3, "y", { color: 0x2a2d33, segments: 40, texel: 0.5 });
     kit.cyl("paintedMetal", 0, PIT_Y + 0.95, CZ, 16.05, 0.3, "y", { color: black, segments: 40, open: true });
     for (const [r, y] of [[11.3, PIT_Y + 1.7], [12.6, PIT_Y + 2.7]]) {
-      ring(kit, "metal", [0, y, CZ], r, 0.36, "y", { color: steel, tubular: 48 });
+      // matte painted steel: polished `metal` here mirrored the collar's hot line as white streaks
+      ring(kit, "paintedMetal", [0, y, CZ], r, 0.36, "y", { color: steel, tubular: 48, texel: 2.5 });
       for (let k = 0; k < 8; k++) {
         const a = (k / 8) * TAU + Math.PI / 8;
         kit.box("paintedMetal", Math.cos(a) * r, (PIT_Y + 0.8 + y) / 2, CZ + Math.sin(a) * r, 0.5, y - PIT_Y - 0.8, 0.5, { color: black, rot: [0, -a, 0] });
@@ -121,9 +122,9 @@ export default defineRoom({
     // and eight coolant feed pipes radiating from the collar to the deck edge
     kit.cyl("paintedMetal", 0, PIT_Y + 1.6, CZ, 10.4, 3.2, "y", { color: black, segments: 40, texel: 2.5 });
     kit.cyl("emitAmber", 0, PIT_Y + 3.1, CZ, 10.46, 0.7, "y", { segments: 40, open: true });
-    kit.cyl("emitOrange", 0, PIT_Y + 3.1, CZ, 10.49, 0.4, "y", { segments: 40, open: true });
+    kit.cyl("emitOrange", 0, PIT_Y + 3.1, CZ, 10.49, 0.34, "y", { segments: 40, open: true });
     {
-      const g = new THREE.CylinderGeometry(10.53, 10.53, 0.16, 40, 1, true);
+      const g = new THREE.CylinderGeometry(10.53, 10.53, 0.1, 40, 1, true);
       g.translate(0, PIT_Y + 3.1, CZ);
       chanGeos.push(g.toNonIndexed());
     }
@@ -308,9 +309,10 @@ export default defineRoom({
     for (let i = 0; i < 16; i++) {
       if (CHANNELS.has(i)) {
         const h = 4.0;
+        // gradient by geometry: wide amber rim, orange mid band, narrow white-hot centre (capped ~1.9)
         kit.cyl("emitAmber", 0, y + h / 2, CZ, 8.8, h - 0.3, "y", { segments: 32, open: true });
-        kit.cyl("emitOrange", 0, y + h / 2, CZ, 8.84, 2.2, "y", { segments: 32, open: true });
-        const g = new THREE.CylinderGeometry(8.88, 8.88, 1.0, 32, 1, true);
+        kit.cyl("emitOrange", 0, y + h / 2, CZ, 8.84, 1.5, "y", { segments: 32, open: true });
+        const g = new THREE.CylinderGeometry(8.88, 8.88, 0.45, 32, 1, true);
         g.translate(0, y + h / 2, CZ);
         chanGeos.push(g.toNonIndexed());
         const ns = 36;
@@ -386,9 +388,10 @@ export default defineRoom({
       glow([-0.05, sy - 0.79, CZ + 10.2], [0.05, sy - 0.75, Z1 - 0.8]);
       glow([-0.05, sy - 0.79, Z0 + 0.8], [0.05, sy - 0.75, CZ - 10.2]);
     }
-    // pulsing white-hot channel centres: one mesh, cloned emissive material (intensity 2.5–3.5)
+    // pulsing white-hot channel centres: one mesh, cloned emissive material capped just past white
+    // (1.6–2.1); the hot read comes from the narrow centre inside the wider orange/amber layers
     const chanMat = ctx.materials.emitWhite.clone();
-    chanMat.emissiveIntensity = 3.0;
+    chanMat.emissiveIntensity = 1.85;
     const channel = new THREE.Mesh(mergeGeometries(chanGeos, false), chanMat);
     ctx.group.add(channel);
 
@@ -568,7 +571,8 @@ export default defineRoom({
     junctionBox(kit, PALETTE, [3.35, Y + 4.1, Z0 + 0.152], 0, { seed: seed++, w: 0.6, h: 0.5 });
     kit.boxMM("paintedMetal", [-1.0, Y + 5.4, Z0], [9.6, Y + 6.3, Z0 + 0.6], { color: dark, texel: 2.5 });
     kit.boxMM("impPanel", [-0.92, Y + 5.48, Z0 + 0.6], [9.52, Y + 6.22, Z0 + 0.612], { color: dark, uv: "keep" });
-    kit.boxMM("paintedMetal", [-1.0, Y + 5.3, Z0], [9.6, Y + 5.4, Z0 + 0.66], { color: black });
+    kit.boxMM("paintedMetal", [-1.0, Y + 5.3, Z0], [9.6, Y + 5.4, Z0 + 0.66], { color: black, texel: 4 });
+    kit.boxMM("impPanel", [-0.92, Y + 5.288, Z0 + 0.02], [9.52, Y + 5.3, Z0 + 0.64], { color: dark, uv: "keep" });
     kit.boxMM("emitAmber", [-0.6, Y + 5.85, Z0 + 0.612], [9.2, Y + 5.95, Z0 + 0.632]);
     for (const x of [-0.4, 3.35, 9.0]) kit.boxMM("paintedMetal", [x - 0.25, Y + 6.3, Z0], [x + 0.25, Y + 8.0, Z0 + 0.5], { color: black, texel: 2.5 });
 
@@ -595,7 +599,7 @@ export default defineRoom({
 
     return {
       update(dt, t) {
-        chanMat.emissiveIntensity = 3.0 + 0.4 * Math.sin(t * 1.3) + 0.1 * Math.sin(t * 4.1);
+        chanMat.emissiveIntensity = 1.85 + 0.2 * Math.sin(t * 1.3) + 0.05 * Math.sin(t * 4.1);
       },
     };
   },
@@ -626,29 +630,63 @@ function exchanger(kit, PALETTE, pos, yaw, seed) {
 }
 
 // Pit pump block: plinth, body, tangential motor drum, top valve wheel and a status lamp. Front = +Z.
-// variant 1: side hatch open with a red fault lamp and a cable loop; variant 2: filter drum + coolant
-// sight tube on top instead of the wheel.
+// Three states that read from the catwalk above: 0 = standard single drum + valve wheel; 1 = small
+// twin-drum motor, red service placard with a beacon on the deck, front hatch swung open with a fault
+// lamp; 2 = big finned motor, filter drum and an open top hatch (raised lid, glowing coil bay).
 function pumpBlock(kit, PALETTE, pos, yaw, seed, variant = 0) {
   const P = placer(kit, pos, yaw);
   const black = col(PALETTE, "impBlack");
   const dark = col(PALETTE, "impDark");
+  const mid = col(PALETTE, "impMid");
   const steel = col(PALETTE, "steel");
   P.box("paintedMetal", 0, 0.15, 0, 3.4, 0.3, 2.6, { color: black, texel: 2.5 });
-  P.box("paintedMetal", 0, 1.25, 0, 2.8, 1.9, 2.0, { color: dark, texel: 2.5 });
-  P.box("paintedMetal", 0, 2.28, 0, 3.0, 0.16, 2.2, { color: black });
-  // motor drum on the top deck (so the block reads as a pump from the catwalk above): saddle, steel
-  // drum overhanging both sides, black end bells and centre band; outlet stub on the front
+  P.box("paintedMetal", 0, 1.25, 0, 2.8, 1.9, 2.0, { color: variant === 2 ? black : dark, texel: 2.5 });
+  P.box("paintedMetal", 0, 2.28, 0, 3.0, 0.16, 2.2, { color: variant === 1 ? dark : black, texel: 2.5 });
+  // motor on the top deck (so the block reads as a pump from the catwalk above): saddle, steel drum(s)
+  // overhanging both sides, black end bells and centre band; outlet stub on the front
   P.box("paintedMetal", 0, 2.5, -0.45, 2.0, 0.3, 1.0, { color: black });
-  P.cyl("metal", 0, 2.95, -0.45, 0.55, 3.2, "x", { color: steel, segments: 16, texel: 0.5 });
-  P.cyl("paintedMetal", 1.65, 2.95, -0.45, 0.62, 0.22, "x", { color: black, segments: 16 });
-  P.cyl("paintedMetal", -1.65, 2.95, -0.45, 0.62, 0.22, "x", { color: black, segments: 16 });
-  P.cyl("paintedMetal", 0, 2.95, -0.45, 0.6, 0.5, "x", { color: black, segments: 16 });
+  if (variant === 1) {
+    for (const z of [-0.78, -0.12]) {
+      P.cyl("metal", 0, 2.96, z, 0.3, 2.4, "x", { color: steel, segments: 14, texel: 0.5 });
+      P.cyl("paintedMetal", 1.25, 2.96, z, 0.34, 0.16, "x", { color: black, segments: 14 });
+      P.cyl("paintedMetal", -1.25, 2.96, z, 0.34, 0.16, "x", { color: black, segments: 14 });
+    }
+    P.box("paintedMetal", 0, 2.96, -0.45, 0.4, 0.5, 0.9, { color: black });
+  } else if (variant === 2) {
+    P.cyl("metal", 0, 3.38, -0.45, 0.72, 3.8, "x", { color: steel, segments: 18, texel: 0.5 });
+    for (const x of [-1.2, -0.6, 0, 0.6, 1.2]) P.cyl("paintedMetal", x, 3.38, -0.45, 0.8, 0.08, "x", { color: black, segments: 18 });
+    P.cyl("paintedMetal", 1.95, 3.38, -0.45, 0.78, 0.24, "x", { color: black, segments: 18 });
+    P.cyl("paintedMetal", -1.95, 3.38, -0.45, 0.78, 0.24, "x", { color: black, segments: 18 });
+  } else {
+    P.cyl("metal", 0, 2.95, -0.45, 0.55, 3.2, "x", { color: steel, segments: 16, texel: 0.5 });
+    P.cyl("paintedMetal", 1.65, 2.95, -0.45, 0.62, 0.22, "x", { color: black, segments: 16 });
+    P.cyl("paintedMetal", -1.65, 2.95, -0.45, 0.62, 0.22, "x", { color: black, segments: 16 });
+    P.cyl("paintedMetal", 0, 2.95, -0.45, 0.6, 0.5, "x", { color: black, segments: 16 });
+  }
   P.cyl("metal", 0, 1.6, 1.2, 0.26, 1.0, "z", { color: steel, segments: 12 });
   if (variant === 2) {
     P.cyl("metal", 0.8, 2.85, 0.55, 0.42, 1.0, "y", { color: steel, segments: 14, texel: 0.5 });
     P.cyl("paintedMetal", 0.8, 3.38, 0.55, 0.48, 0.12, "y", { color: black, segments: 14 });
     P.cyl("emitBlue", 1.3, 2.85, 0.55, 0.04, 0.7, "y", { segments: 6 });
-    P.cyl("metal", -0.6, 2.9, 0.55, 0.05, 1.1, "y", { color: steel, segments: 6 });
+    // open top hatch on the front-left of the deck: mid-grey rim, black bay with a glowing coil strip
+    // and three steel coil bars, lid hinged on its back edge and raised 70°
+    P.box("paintedMetal", -0.8, 2.39, 0.7, 1.16, 0.06, 0.76, { color: mid });
+    P.box("paintedMetal", -0.8, 2.4, 0.7, 1.04, 0.06, 0.64, { color: black });
+    P.box("emitAmber", -0.8, 2.435, 0.7, 0.9, 0.01, 0.08);
+    for (const z of [0.52, 0.88]) P.cyl("metal", -0.8, 2.45, z, 0.03, 0.9, "x", { color: steel, segments: 6 });
+    // lid hinged on the bay's front edge (z 1.08), standing 20° past vertical toward the core
+    const lq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0.35, 0, 0)));
+    kit.add("paintedMetal", new THREE.BoxGeometry(1.1, 0.7, 0.04), { pos: P.world(-0.8, 2.42 + 0.33, 1.08 + 0.12), quat: lq, color: dark, texel: 2.5 });
+  } else if (variant === 1) {
+    // red service placard on a post at the deck's front-right corner (tilted to face up and forward so
+    // it reads from the catwalk), white label plate, red beacon on top
+    P.cyl("metal", 1.2, 2.66, 0.85, 0.025, 0.6, "y", { color: steel, segments: 6 });
+    const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.35, 0, 0)));
+    const pc = P.world(1.2, 2.98, 0.85);
+    const pn = new THREE.Vector3(0, 0, 1).applyQuaternion(tq).multiplyScalar(0.02);
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.56, 0.4, 0.02), { pos: pc, quat: tq, color: col(PALETTE, "impRed") });
+    kit.add("impPanel", new THREE.BoxGeometry(0.4, 0.12, 0.01), { pos: [pc[0] + pn.x, pc[1] + pn.y, pc[2] + pn.z], quat: tq, color: mid, uv: "keep" });
+    P.cyl("emitRedImp", 1.2, 3.02 + 0.22, 0.85, 0.06, 0.1, "y", { segments: 8 });
   } else {
     P.add("metal", new THREE.TorusGeometry(0.3, 0.035, 8, 24), 0.9, 2.6, 0.55, { rot: [Math.PI / 2, 0, 0], color: col(PALETTE, "impRed") });
     P.cyl("metal", 0.9, 2.5, 0.55, 0.05, 0.3, "y", { color: steel, segments: 8 });

@@ -10,7 +10,7 @@ import { defineRoom } from "../../deck2/_shared/room.js";
 import { IMP, col } from "../../deck2/_shared/palette.js";
 import { rail } from "../../deck2/_shared/shell.js";
 import { placer, console as consoleProp, indicatorField, wallScreen, pipe, duct, pillar, stairs, holoTable, floorLine, cabinet, hazardStrip } from "../../deck2/_shared/props.js";
-import { arcLine, arcPos, powerCabinet, openPowerCabinet, cableTray, toolRack, junctionBox, ventGrille, yawBox, conduitBundle, ceilingFixture, topScreens, labelCrate } from "./engprops.js";
+import { arcLine, arcPos, powerCabinet, openPowerCabinet, cableTray, toolRack, junctionBox, ventGrille, yawBox, conduitBundle, ceilingFixture, topScreens, labelCrate, palletStack } from "./engprops.js";
 
 const Y = 12;
 const CEIL = 22;
@@ -45,7 +45,7 @@ export default defineRoom({
   openings: [{ face: "s", ...REACTOR_WINDOW, glass: true, id: "engctl-reactor-window" }],
   spawn: { pos: [2, Y, 590], yaw: 90 },
   views: {
-    "d3-engctl-door": { pos: [-0.9, Y, 591.0], yaw: 108, pitch: 4 },
+    "d3-engctl-door": { pos: [-3.3, Y, 591.8], yaw: 108, pitch: 4 },
     "d3-engctl-window": { pos: [-12, Y, 599.2], yaw: 180, pitch: 6 },
     "d3-engctl-status": { pos: [-9, Y, 596], yaw: 62, pitch: 10 },
     "d3-engctl-mezz": { pos: [-27.4, MEZZ, 577.2], yaw: -138, pitch: -9 },
@@ -56,7 +56,9 @@ export default defineRoom({
     wallColor: IMP.impMid,
     wallAlt: IMP.impGrey,
     stripMat: "emitAmber",
-    floor: { mat: "impFloor", color: 0x2b2e34 },
+    // impMid (policy C): the deck plate is 0.35-metal paint, so the tint mostly sets the diffuse term —
+    // at 0x2b2e34 / 0x40444b the status/mezz floors read ~10 % grey under the 8 m ceiling fixtures
+    floor: { mat: "impFloor", color: IMP.impMid },
     ceiling: { channels: 5, axis: "x", color: IMP.impDark, stripMat: "emitAmber" },
     lights: false,
     doorDressing: { accent: "emitAmber" },
@@ -143,14 +145,17 @@ export default defineRoom({
     // window mullions + header manifold the ceiling trunks feed into
     for (const x of [-20, -14, -8]) kit.box("paintedMetal", x, (REACTOR_WINDOW.y0 + REACTOR_WINDOW.y1) / 2, Z1 - 0.1, 0.16, REACTOR_WINDOW.y1 - REACTOR_WINDOW.y0 - 0.06, 0.16, { color: dark });
     // header runs past the door to the east wall so the strip left of the door is dressed too
-    kit.boxMM("paintedMetal", [-27, Y + 6.2, Z1 - 0.95], [3.5, Y + 9.4, Z1 - 0.05], { color: dark, texel: 2.5 });
+    kit.boxMM("paintedMetal", [-27, Y + 6.2, Z1 - 0.95], [3.5, Y + 9.4, Z1 - 0.05], { color: dark, texel: 4 });
+    kit.boxMM("impPanel", [-26.9, Y + 6.188, Z1 - 0.93], [3.4, Y + 6.2, Z1 - 0.07], { color: dark, uv: "keep" }); // clean soffit plate
     kit.boxMM("paintedMetal", [-27.1, Y + 6.2, Z1 - 1.0], [3.6, Y + 6.5, Z1 - 0.05], { color: black });
     kit.boxMM("paintedMetal", [-27.1, Y + 9.1, Z1 - 1.0], [3.6, Y + 9.4, Z1 - 0.05], { color: black });
     kit.boxMM("emitAmber", [-26.5, Y + 6.55, Z1 - 0.96], [3.0, Y + 6.62, Z1 - 0.9]);
     kit.boxMM("emitAmber", [-26.5, Y + 8.98, Z1 - 0.96], [3.0, Y + 9.05, Z1 - 0.9]);
-    // 13 lit gauges (amber dial faces with a needle, every fourth red) alternating with vent slats
+    // 13 lit gauges (amber dial faces with a needle, every fourth red) alternating with vent slats,
+    // each bay faced with a clean painted plate (the worn-metal map speckles at this size)
     for (let i = 0; i < 13; i++) {
       const x = -25.5 + i * 2.15;
+      kit.boxMM("impPanel", [x - 0.78, Y + 6.7, Z1 - 0.962], [x + 0.62, Y + 8.9, Z1 - 0.95], { color: dark, uv: "keep" });
       kit.cyl("paintedMetal", x, Y + 7.8, Z1 - 0.97, 0.36, 0.06, "z", { segments: 20, color: black });
       kit.cyl(i % 4 === 0 ? "emitRedImp" : "emitAmber", x, Y + 7.8, Z1 - 1.005, 0.28, 0.02, "z", { segments: 20 });
       const na = -0.9 + ((i * 7) % 5) * 0.45;
@@ -246,8 +251,8 @@ export default defineRoom({
     // panel with an indicator field, vent, and a conduit drop from the tray
     {
       const F = placer(kit, [X1, 0, 610.8], -Math.PI / 2);
-      F.box("paintedMetal", 0, Y + 3.0, 0.08, 2.2, 5.2, 0.16, { color: dark, texel: 2.5 });
-      F.box("paintedMetal", 0, Y + 3.0, 0.17, 2.0, 5.0, 0.02, { color: black });
+      F.box("paintedMetal", 0, Y + 3.0, 0.08, 2.2, 5.2, 0.16, { color: dark, texel: 4 });
+      F.box("impPanel", 0, Y + 3.0, 0.17, 2.0, 5.0, 0.02, { color: black, uv: "keep" });
       indicatorField(F, 0, Y + 4.6, 0.19, 1.6, 0.6, seed++);
       F.box("emitAmber", 0, Y + 4.1, 0.19, 1.6, 0.05, 0.01);
       for (let j = 0; j < 10; j++) F.box("paintedMetal", 0, Y + 1.2 + j * 0.18, 0.19, 1.6, 0.05, 0.02, { color: mid });
@@ -288,15 +293,9 @@ export default defineRoom({
     // spares bay in front of the west mezzanine: hazard outline, crates
     hazardStrip(kit, [-23.5, 580.0], [-17.5, 580.4], Y + 0.005);
     hazardStrip(kit, [-23.5, 584.6], [-17.5, 585.0], Y + 0.005);
-    labelCrate(kit, PALETTE, [-22.4, Y + 0.1, 581.6], 0.12, { seed: seed++ });
-    labelCrate(kit, PALETTE, [-22.4, Y + 1.3, 581.6], -0.1, { seed: seed++, w: 1.0, d: 1.0, h: 0.8 });
-    labelCrate(kit, PALETTE, [-20.8, Y, 583.4], -0.2, { seed: seed++ });
-    labelCrate(kit, PALETTE, [-18.7, Y, 581.7], 0.3, { seed: seed++, w: 1.0, d: 1.0, h: 1.0 });
-    labelCrate(kit, PALETTE, [-19.0, Y, 583.6], 0.05, { seed: seed++, w: 1.4, d: 1.0, h: 0.7 });
-    labelCrate(kit, PALETTE, [-20.5, Y, 581.4], 0.15, { seed: seed++ });
-    labelCrate(kit, PALETTE, [-20.5, Y + 1.2, 581.4], -0.1, { seed: seed++, w: 1.0, d: 1.0, h: 0.8 });
-    // pallet under the west stack
-    kit.boxMM("paintedMetal", [-23.1, Y, 580.9], [-21.7, Y + 0.1, 582.3], { color: dark, texel: 2.5 });
+    // strapped pallet load (two crate sizes, one stacked, top labels) — read from the mezzanine above
+    palletStack(kit, PALETTE, [-20.5, Y, 582.5], 0.06, { seed: seed++ });
+    seed += 6;
 
     // ---- ceiling: heavy trunks converging on the header, ducts, trays ------------------------------
     const trunkY = CEIL - 1.6;
@@ -323,8 +322,6 @@ export default defineRoom({
       [-10, 605.5, 0xffb060, 36, 18, 0.7, "emitAmber"],
       [-23.5, 601, 0xffb060, 34, 18, 0.6, "emitAmber"],
       [-6.5, 601, 0xffb060, 34, 18, 0.6, "emitAmber"],
-      [-9.5, 591, 0xc4d2ff, 30, 16, 0.7, "emitBlue"],
-      [-20, 588, 0xffc890, 30, 16, 0.5, "emitAmber"],
       [-20, 577.5, 0xffc890, 32, 16, 0.5, "emitAmber"],
       [-3.5, 584, 0xffd0a0, 28, 16, 0.5, "emitAmber"],
       [1, 606, 0xffc890, 26, 14, 0.4, "emitAmber"],
@@ -332,6 +329,16 @@ export default defineRoom({
     for (const [x, z, color, intensity, distance, priority, mat] of FIXTURES) {
       ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 2.4, d: 0.7, stem: 1.0, mat });
       L([x, CEIL - 1.85, z], color, intensity, distance, priority);
+    }
+    // low pendants for the open deck (policy C): housed fixtures on 5.5 m stems, faces 4.1 m over the
+    // floor, so their pools land where the status and mezz cameras look — the strip north of the
+    // western arcs (status bottom-left), the command post east of the holo (status bottom-right, cool
+    // tint, replacing the 8 m blue fixture at −9.5/591; turned along z to clear the x −12 trunk) and
+    // the open floor under the mezz camera (in place of the 8 m fixture at −20/588). The deck plate is
+    // 0.35-metal paint with a ~0.01 diffuse albedo at impMid, so the pools need ~5 lx to read mid-grey.
+    for (const [x, z, color, yaw] of [[-17, 595, 0xfff0dc, 0], [-10.6, 590, 0xd8e2ff, Math.PI / 2], [-20, 587, 0xfff0dc, 0]]) {
+      ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 2.0, d: 0.7, stem: 5.5, mat: "emitWhite", yaw });
+      L([x, CEIL - 6.4, z], color, 60, 16, 0.7); // 0.5 m under the face: at the face it blew the housing white
     }
     L([-14, Y + 2.6, 609.6], 0xff8a30, 10, 8, 0.4); // spill from the sill indicators
 

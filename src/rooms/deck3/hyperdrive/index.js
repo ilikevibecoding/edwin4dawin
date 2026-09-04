@@ -7,7 +7,7 @@ import { defineRoom } from "../../deck2/_shared/room.js";
 import { IMP, col } from "../../deck2/_shared/palette.js";
 import { rail, WALL_T } from "../../deck2/_shared/shell.js";
 import { console as consoleProp, pipe, duct, tank, stairs, floorLine, cabinet, hazardStrip, indicatorField, placer, wallScreen } from "../../deck2/_shared/props.js";
-import { TAU, ring, strut, powerCabinet, cableTray, toolRack, monitorPedestal, junctionBox, ventGrille, valveStation, wallLamp, ceilingFixture, topScreens, labelCrate } from "../engctl/engprops.js";
+import { TAU, ring, strut, powerCabinet, cableTray, toolRack, monitorPedestal, junctionBox, ventGrille, valveStation, wallLamp, ceilingFixture, highBay, topScreens, labelCrate } from "../engctl/engprops.js";
 
 const Y = 12;
 const CEIL = 40;
@@ -32,8 +32,8 @@ export default defineRoom({
   ceil: CEIL,
   spawn: { pos: [0, Y, 693], yaw: 180 },
   views: {
-    "d3-hyperdrive-door": { pos: [-11, Y, 694.2], yaw: -140, pitch: 7 },
-    "d3-hyperdrive-side": { pos: [-15.5, Y, 702.5], yaw: -142, pitch: 12 },
+    "d3-hyperdrive-door": { pos: [-10.4, Y, 694.2], yaw: -137, pitch: 7 },
+    "d3-hyperdrive-side": { pos: [-16.6, Y, 701.1], yaw: -142, pitch: 12 },
     "d3-hyperdrive-housing": { pos: [-9.5, Y, 740.5], yaw: -136, pitch: 14 },
     "d3-hyperdrive-aft": { pos: [13, Y, 748.5], yaw: 30, pitch: 10 },
   },
@@ -41,10 +41,10 @@ export default defineRoom({
     panelW: 3.0,
     rows: [0, 0.4, 2.05, 2.27, 5, 9, 14, 20, 27.45, 28],
     wallColor: IMP.impMid,
-    wallAlt: IMP.impDark,
+    wallAlt: new THREE.Color("#474b52"), // between mid and dark: impDark rows showed the panel map's smudges as stains
     stripMat: "emitAmber",
     floor: { color: IMP.impMid }, // same deck tone as the reactor catwalk; impDark read as black under 28 m of air
-    ceiling: { channels: 6, axis: "z", color: IMP.impBlack, panelW: 4 },
+    ceiling: { channels: 6, axis: "z", color: IMP.impDark, panelW: 4 },
     lights: false,
     doorDressing: { accent: "emitBlue" },
     serviceBand: { y: 3.4, faces: ["e", "w"] },
@@ -59,11 +59,10 @@ export default defineRoom({
     let seed = 500;
 
     // ---- motivator body, seams, side slots -----------------------------------------------------------
-    kit.cyl("paintedMetal", 0, AX, (MZ0 + MZ1) / 2, R, MZ1 - MZ0 + 0.2, "z", { color: dark, segments: 40, texel: 2.5 });
+    kit.cyl("paintedMetal", 0, AX, (MZ0 + MZ1) / 2, R, MZ1 - MZ0 + 0.2, "z", { color: dark, segments: 40, texel: 4 });
     // hull: seam rings with bolt rows, longitudinal panel seams between the ribs, access hatches
     const onHull = (a, dr) => [Math.cos(a) * (R + dr), AX + Math.sin(a) * (R + dr)];
-    for (let z = MZ0 + 4; z < MZ1 - 1; z += 4) {
-      if (COILS.some((c) => Math.abs(c - z) < 1.5) || CRADLES.some((c) => Math.abs(c - z) < 1.5)) continue;
+    for (const z of [708, 712, 716, 724, 728, 736]) {
       kit.cyl("paintedMetal", 0, AX, z, R + 0.04, 0.1, "z", { color: black, segments: 40, open: true });
       for (let k = 0; k < 20; k++) {
         const a = (k / 20) * TAU + Math.PI / 20;
@@ -85,7 +84,7 @@ export default defineRoom({
       kit.add("paintedMetal", new THREE.BoxGeometry(0.06, 0.03, MZ1 - MZ0 - 2.4), { pos: [Math.cos(b) * (R + 0.005), AX + Math.sin(b) * (R + 0.005), (MZ0 + MZ1) / 2], rot: [0, 0, b - Math.PI / 2], color: black });
     }
     // access hatches: framed dark plates with a latch bar and a status lamp, on the upper hull
-    for (const [z, a] of [[704, 1.2], [713, 2.0], [720.5, 0.9], [729, 2.3], [737, 1.1], [744, 1.9]]) {
+    for (const [z, a] of [[704, 1.2], [713, 2.0], [720.5, 0.9], [729, 2.3], [737, 1.1], [744, 1.9], [731.5, 2.7], [739.5, 2.9]]) {
       const [hx, hy] = onHull(a, 0.04);
       const rot = [0, 0, a - Math.PI / 2];
       kit.add("paintedMetal", new THREE.BoxGeometry(1.3, 0.08, 1.0), { pos: [hx, hy, z], rot, color: black, texel: 2.5 });
@@ -94,6 +93,24 @@ export default defineRoom({
       const [lx, ly] = onHull(a, 0.13);
       kit.add("metal", new THREE.BoxGeometry(0.5, 0.05, 0.06), { pos: [lx, ly, z + 0.3], rot, color: steel });
       kit.add(a > 1.5 ? "emitAmber" : "emitBlue", new THREE.BoxGeometry(0.12, 0.02, 0.05), { pos: [lx, ly, z - 0.3], rot });
+    }
+    // hull service lamps: housed heads on stand-off brackets along the port lower flank, one just aft
+    // of each cradle clamp (the housing view's top-left is this flank at ~7 m and read as a void).
+    // Only the 741 head carries a point light (see the light list); the other two are emissive faces.
+    for (const z of [709, 725, 741]) {
+      const [hx, hy] = onHull(3.7, 0.1);
+      wallLamp(kit, PALETTE, [hx, hy - 0.12, z], -Math.PI / 2, { w: 0.7, tilt: 1.05, face: 0.6 });
+    }
+    // label band behind the forward cap: light painted band with two black pinstripes, a red unit
+    // plaque and a white stencil plate on the port flank (toward the door)
+    kit.cyl("impPanel", 0, AX, 700.2, R + 0.03, 0.6, "z", { color: col(PALETTE, "impGrey"), segments: 40, open: true, uvScale: [10, 1] });
+    for (const z of [699.93, 700.47]) kit.cyl("paintedMetal", 0, AX, z, R + 0.04, 0.05, "z", { color: black, segments: 40, open: true });
+    {
+      const [px, py] = onHull(2.55, 0.06);
+      kit.add("paintedMetal", new THREE.BoxGeometry(1.3, 0.03, 0.42), { pos: [px, py, 700.2], rot: [0, 0, 2.55 - Math.PI / 2], color: col(PALETTE, "impRed") });
+      const [qx, qy] = onHull(3.05, 0.06);
+      kit.add("impPanel", new THREE.BoxGeometry(1.6, 0.03, 0.4), { pos: [qx, qy, 700.2], rot: [0, 0, 3.05 - Math.PI / 2], color: col(PALETTE, "impWhite"), uv: "keep" });
+      for (const dz of [-0.12, 0, 0.12]) kit.add("paintedMetal", new THREE.BoxGeometry(1.2, 0.01, 0.05), { pos: [qx + Math.cos(3.05) * 0.02, qy + Math.sin(3.05) * 0.02, 700.2 + dz], rot: [0, 0, 3.05 - Math.PI / 2], color: black });
     }
     // end caps: stacked discs with an emissive hub; the aft end runs a neck into the wall housing
     const cap = (z, dir) => {
@@ -118,9 +135,33 @@ export default defineRoom({
     // red fault lamps and a service cable dropping to the 738 cradle
     for (const [ci, z] of COILS.entries()) {
       const doubled = ci === 1;
+      const shrouded = ci === 2;
+      const plaque = ci === 3;
       const sensor = ci === 4;
       ring(kit, "paintedMetal", [0, AX, z], 5.2, 0.5, "z", { radial: 10, tubular: 40, color: dark });
-      ring(kit, "emitBlue", [0, AX, z], 4.62, 0.09, "z", { radial: 6, tubular: 40 });
+      ring(kit, doubled ? "emitAmber" : "emitBlue", [0, AX, z], 4.62, 0.09, "z", { radial: 6, tubular: 40 });
+      if (shrouded) {
+        // maintenance shroud: light canvas cover over the top 150° of the ring, cinched by black straps,
+        // amber tag at the port edge
+        const g = new THREE.CylinderGeometry(5.95, 5.95, 1.5, 40, 1, true, Math.PI - 1.31, 2.62);
+        kit.add("impPanel", g, { pos: [0, AX, z], rot: [Math.PI / 2, 0, 0], color: col(PALETTE, "impGrey"), uv: "scale", uvScale: [6, 1] });
+        for (const dz of [-0.55, 0.55]) {
+          const sg = new THREE.CylinderGeometry(5.98, 5.98, 0.1, 40, 1, true, Math.PI - 1.31, 2.62);
+          kit.add("paintedMetal", sg, { pos: [0, AX, z + dz], rot: [Math.PI / 2, 0, 0], color: black });
+        }
+        for (const a of [Math.PI / 2 - 1.31, Math.PI / 2 + 1.31]) {
+          kit.box("paintedMetal", Math.cos(a) * 5.95, AX + Math.sin(a) * 5.95, z, 0.12, 0.3, 1.6, { color: black, rot: [0, 0, a] });
+        }
+        kit.box("emitAmber", Math.cos(Math.PI / 2 + 1.25) * 6.0, AX + Math.sin(Math.PI / 2 + 1.25) * 6.0, z + 0.85, 0.3, 0.16, 0.02, { rot: [0, 0, Math.PI / 2 + 1.25] });
+      }
+      if (plaque) {
+        // red service plaque bolted to the port side of the ring at eye-catching height, white label
+        for (const [a, dz] of [[2.35, 0.55], [2.35, -0.55]]) {
+          kit.box("paintedMetal", Math.cos(a) * 5.75, AX + Math.sin(a) * 5.75, z + dz, 1.1, 0.06, 0.7, { color: col(PALETTE, "impRed"), rot: [0, 0, a - Math.PI / 2] });
+          kit.box("impPanel", Math.cos(a) * 5.79, AX + Math.sin(a) * 5.79, z + dz, 0.8, 0.02, 0.22, { color: col(PALETTE, "impWhite"), rot: [0, 0, a - Math.PI / 2], uv: "keep" });
+        }
+        kit.box("emitRedImp", Math.cos(2.35) * 5.79, AX + Math.sin(2.35) * 5.79, z, 0.24, 0.02, 0.1, { rot: [0, 0, 2.35 - Math.PI / 2] });
+      }
       ring(kit, "paintedMetal", [0, AX, z], 5.7, 0.08, "z", { radial: 6, tubular: 40, color: black });
       if (doubled) {
         for (const dz of [-0.75, 0.75]) ring(kit, "paintedMetal", [0, AX, z + dz], 5.05, 0.32, "z", { radial: 8, tubular: 40, color: black });
@@ -185,11 +226,15 @@ export default defineRoom({
     kit.boxMM("emitWhite", [0.86, GANTRY + 0.005, GZ0 + 0.3], [0.9, GANTRY + 0.012, GZ1 - 0.3]);
     // gantry light masts: post + crossbar with two hooded heads aimed down at the hull (the blue-white
     // key lights sit just under them)
-    for (const z of [710, 736]) {
+    // (masts sit between coils: a key light straight over a coil torus put a clipped specular streak
+    // on its crown that read as a blown lamp)
+    for (const z of [714, 730]) {
       kit.box("paintedMetal", 0, GANTRY + 1.3, z, 0.14, 2.6, 0.14, { color: black });
       kit.box("paintedMetal", 0, GANTRY + 2.55, z, 2.6, 0.12, 0.14, { color: black });
-      for (const s of [-1, 1]) wallLamp(kit, PALETTE, [s * 0.85, GANTRY + 2.08, z], s > 0 ? Math.PI / 2 : -Math.PI / 2, { w: 0.7, tilt: 1.0, mat: "emitBlue" });
+      for (const s of [-1, 1]) wallLamp(kit, PALETTE, [s * 0.85, GANTRY + 2.08, z], s > 0 ? Math.PI / 2 : -Math.PI / 2, { w: 0.7, tilt: 1.0, mat: "emitBlue", face: 0.55 });
     }
+    // fixture row along the gantry: small hooded lamps on the outside of both rails between the masts
+    for (const z of [703, 718, 728, 743]) for (const s of [-1, 1]) wallLamp(kit, PALETTE, [s * 1.05, GANTRY + 0.75, z], s > 0 ? Math.PI / 2 : -Math.PI / 2, { w: 0.6, tilt: 1.1, face: 0.7 });
     // bridge from the gantry to the tower's top landing
     kit.boxMM("impFloor", [1, GANTRY - 0.2, 698.5], [6.4, GANTRY, 700.1], { color: mid, texel: 0.5 });
     kit.boxMM("paintedMetal", [1, GANTRY - 0.5, 698.5], [6.4, GANTRY - 0.2, 698.7], { color: black });
@@ -265,8 +310,9 @@ export default defineRoom({
       for (let k = 0; k < 7; k++) pipe(kit, PALETTE, [s * (X1 - 0.5), Y + 10.4, 698.5 + k * 8], [s * 25.2, Y + 9.0, 698.5 + k * 8], 0.12, { bracket: 3, color: black });
       for (const zc of [706, 722, 738]) ventGrille(kit, PALETTE, [s * X1, Y + 12.5, zc], s > 0 ? -Math.PI / 2 : Math.PI / 2, { w: 2.0, h: 0.8 });
       for (const zc of [700, 730, 746]) junctionBox(kit, PALETTE, [s * X1, Y + 11.4, zc], s > 0 ? -Math.PI / 2 : Math.PI / 2, { seed: seed++ });
-      // housed wall floods at 9.5 m in the bank gaps, aimed down at the racks (fill lights sit in them)
-      for (const zc of [702.5, 718.5, 734.5]) wallLamp(kit, PALETTE, [s * X1, Y + 9.5, zc], s > 0 ? -Math.PI / 2 : Math.PI / 2, { w: 1.4, tilt: 0.8 });
+      // big housed floods at 12 m on each long wall, aimed down at the racks and the lane (fill lights
+      // sit in the outer two; the middle one is a fixture only)
+      for (const zc of [703, 719, 735]) wallLamp(kit, PALETTE, [s * X1, Y + 12, zc], s > 0 ? -Math.PI / 2 : Math.PI / 2, { w: 2.2, tilt: 0.9, face: 0.8 });
     }
 
     // ---- floor: consoles facing the motivator, rails with openings, safety lines --------------------
@@ -286,7 +332,7 @@ export default defineRoom({
       labelCrate(kit, PALETTE, [s * 13.4, Y, 720.6], s * 0.4, { seed: seed++, w: 0.9, d: 0.9, h: 0.9 });
     }
     labelCrate(kit, PALETTE, [12.5, Y, 744.3], -0.2, { seed: seed++ });
-    labelCrate(kit, PALETTE, [13.8, Y, 743.5], 0.3, { seed: seed++, w: 1.0, d: 1.0, h: 1.0 });
+    tank(kit, PALETTE, [13.9, Y, 743.4], 0.3, { r: 0.55, h: 1.3, emit: "emitAmber" });
     for (const [a, b] of [[697, 711], [717, 727], [733, 747]]) rail(kit, PALETTE, [-8, Y, a], [-8, Y, b], Y);
     for (const [a, b] of [[705.5, 711], [717, 727], [733, 747]]) rail(kit, PALETTE, [8, Y, a], [8, Y, b], Y);
     floorLine(kit, [-7.4, Y, 697], [-7.4, Y, 747], 0.12, "emitOrange");
@@ -305,14 +351,38 @@ export default defineRoom({
     }
     cableTray(kit, PALETTE, [-24, trayY, Z0 + 0.42], [24, trayY, Z0 + 0.42], { w: 0.7 });
     for (const x of [-7.2, 7.2]) toolRack(kit, PALETTE, [x, Y, Z0 + 0.06], 0, { w: 1.8, seed: seed++ });
-    for (const x of [-12.2, -13.6, 12.2, 13.6]) cabinet(kit, PALETTE, [x, Y, Z0 + 0.28], 0, { seed: seed++, emit: x > 0 ? "emitBlue" : "emitAmber" });
+    for (const x of [-12.2, -13.6, 14.0, 15.4]) cabinet(kit, PALETTE, [x, Y, Z0 + 0.28], 0, { seed: seed++, emit: x > 0 ? "emitBlue" : "emitAmber" });
     for (const s of [-1, 1]) {
       labelCrate(kit, PALETTE, [s * 27.6, Y, Z0 + 0.72], s * 0.08, { seed: seed++ });
       labelCrate(kit, PALETTE, [s * 27.6, Y + 1.2, Z0 + 0.72], -s * 0.2, { seed: seed++, w: 1.0, d: 1.0, h: 0.8 });
       labelCrate(kit, PALETTE, [s * 26.9, Y, Z0 + 2.2], s * 0.25, { seed: seed++, w: 1.0, d: 1.0, h: 1.0 });
       junctionBox(kit, PALETTE, [s * 15.5, Y + 3.2, Z0], 0, { seed: seed++ });
-      ventGrille(kit, PALETTE, [s * 10, Y + 4.4, Z0], 0, { w: 1.6, h: 0.6 });
+      ventGrille(kit, PALETTE, [s * 10, Y + (s > 0 ? 5.5 : 4.4), Z0], 0, { w: 1.6, h: 0.6 });
     }
+    // sealed blast shutter in the starboard forward-wall bay: from the aft camera the real blast door
+    // hides behind the motivator's forward cradle and this bare bay is what reads as the far exit, so it
+    // gets a frame, ribbed leaves, a full-width red lintel bar and a hazard band sized to resolve at 58 m
+    {
+      const sx = 11.4; // bay clear of the stair tower, which hides wall x < ~9.5 from the aft camera
+      kit.boxMM("paintedMetal", [sx - 1.7, Y, Z0], [sx + 1.7, Y + 4.0, Z0 + 0.3], { color: dark, texel: 2.5 });
+      kit.boxMM("paintedMetal", [sx - 1.45, Y + 0.05, Z0 + 0.1], [sx + 1.45, Y + 3.7, Z0 + 0.22], { color: black, texel: 2.5 });
+      kit.boxMM("paintedMetal", [sx - 0.03, Y + 0.05, Z0 + 0.22], [sx + 0.03, Y + 3.7, Z0 + 0.25], { color: dark });
+      for (const y of [1.3, 2.5]) kit.boxMM("paintedMetal", [sx - 1.45, Y + y - 0.05, Z0 + 0.22], [sx + 1.45, Y + y + 0.05, Z0 + 0.26], { color: dark });
+      kit.boxMM("hazard", [sx - 1.45, Y + 0.3, Z0 + 0.22], [sx + 1.45, Y + 0.75, Z0 + 0.23], { texel: 2 });
+      kit.boxMM("paintedMetal", [sx - 1.7, Y + 4.0, Z0], [sx + 1.7, Y + 4.8, Z0 + 0.14], { color: black, texel: 2.5 });
+      kit.boxMM("emitRedImp", [sx - 1.35, Y + 4.25, Z0 + 0.14], [sx + 1.35, Y + 4.55, Z0 + 0.155]);
+      for (const x of [-1.55, 1.55]) kit.boxMM("emitAmber", [sx + x - 0.1, Y + 4.25, Z0 + 0.14], [sx + x + 0.1, Y + 4.55, Z0 + 0.155]);
+      kit.boxMM("paintedMetal", [sx + 1.42, Y + 1.3, Z0 + 0.3], [sx + 1.62, Y + 1.6, Z0 + 0.34], { color: black });
+      kit.boxMM("emitRedImp", [sx + 1.46, Y + 1.5, Z0 + 0.34], [sx + 1.58, Y + 1.54, Z0 + 0.345]);
+      hazardStrip(kit, [sx - 1.7, Z0 + 0.32], [sx + 1.7, Z0 + 1.5], Y + 0.006);
+      kit.collider([sx - 1.7, Y, Z0], [sx + 1.7, Y + 4.0, Z0 + 0.3], "shutter");
+    }
+    // big lintel sign over the blast door (seen from the spawn / forward end; the motivator hides it from
+    // the aft camera): black plate, blue bar, red squares
+    kit.boxMM("paintedMetal", [-2.6, Y + 4.75, Z0], [2.6, Y + 5.55, Z0 + 0.12], { color: black, texel: 2.5 });
+    kit.boxMM("emitBlue", [-2.2, Y + 5.05, Z0 + 0.12], [2.2, Y + 5.3, Z0 + 0.135]);
+    for (const x of [-2.4, 2.4]) kit.boxMM("emitRedImp", [x - 0.1, Y + 5.05, Z0 + 0.12], [x + 0.1, Y + 5.3, Z0 + 0.135]);
+    hazardStrip(kit, [-2.6, Z0 + 0.78], [2.6, Z0 + 1.9], Y + 0.006);
     // door status panels either side of the blast door (hole x −2..2; approach kept clear)
     for (const x of [-3.6, 3.6]) {
       const F = placer(kit, [x, 0, Z0], 0);
@@ -385,6 +455,11 @@ export default defineRoom({
       kit.collider([s * 22.1 - 0.4, Y, Z1 - 0.4], [s * 22.1 + 0.4, Y + 3, Z1], "ladder");
     }
 
+    // floods on the aft wall around the housing, aimed down the bulkhead (fixtures only): two on the
+    // housing plate beside the disc rim, two on the wall outside the ribs (the housing view's top-left)
+    for (const x of [-6.5, 6.5]) wallLamp(kit, PALETTE, [x, Y + 12.8, Z1 - 0.65], Math.PI, { w: 2.0, tilt: 1.0, face: 0.8 });
+    for (const x of [-10.5, 10.5]) wallLamp(kit, PALETTE, [x, Y + 12.5, Z1], Math.PI, { w: 2.0, tilt: 1.0, face: 0.8 });
+
     // ---- ceiling: two big ducts along the hall and cross ducts, feeding the coil-bank trays ---------
     for (const s of [-1, 1]) {
       duct(kit, PALETTE, [s * 13, CEIL - 1.0, 692.5], [s * 13, CEIL - 1.0, 749.5], 1.2, 0.8, { color: mid });
@@ -392,20 +467,28 @@ export default defineRoom({
     }
     duct(kit, PALETTE, [-12.4, CEIL - 1.0, 711], [12.4, CEIL - 1.0, 711], 0.9, 0.6, { color: mid });
     duct(kit, PALETTE, [-12.4, CEIL - 1.0, 733], [12.4, CEIL - 1.0, 733], 0.9, 0.6, { color: mid });
-    // suspended hall fixtures over the two floor lanes: framed housings on 14 m stems, hanging at
-    // gantry height so their fills reach the floor (and the housings sit in every view)
-    const FIX = [[-11, 704], [11, 704], [-11, 740], [11, 740]];
-    for (const [x, z] of FIX) ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 3.2, d: 1.0, stem: 14, mat: "emitWhite" });
+    // suspended hall fixtures over the two floor lanes on the cross-duct rhythm: framed housings on
+    // 13 m stems hanging just above gantry height, louvred white faces down (fills sit in the 711/733 pairs)
+    const FIX = [[-11, 711], [11, 711], [-11, 733], [11, 733]];
+    for (const z of [700, 711, 722, 733, 744]) for (const x of [-11, 11]) ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 3.2, d: 1.0, stem: 13, mat: "emitWhite" });
+    // high-bay clusters: under the three wall-side cross ducts over the coil banks, and under the two
+    // central ducts either side of the gantry (the only ceiling the floor views see past the motivator)
+    for (const z of [700, 722, 744]) for (const s of [-1, 1]) highBay(kit, PALETTE, [s * 23.5, CEIL - 1.3, z], { drop: 1.4 });
+    for (const z of [711, 733]) for (const s of [-1, 1]) highBay(kit, PALETTE, [s * 5, CEIL - 1.3, z], { drop: 1.4 });
 
     // ---- lights (shell fills off, 14): blue-white keys under the gantry masts, warm fills inside the
     // suspended fixtures, wall floods in their hoods, housing accent, door pool -------------------------
     const L = (pos, color, intensity, distance, priority = 0.5) => ctx.lights.push({ type: "point", pos, color, intensity, distance, priority });
-    L([0, GANTRY + 1.6, 710], 0x8ab0ff, 110, 38, 0.8);
-    L([0, GANTRY + 1.6, 736], 0x8ab0ff, 110, 38, 0.8);
-    for (const [x, z] of FIX) L([x, CEIL - 14.85, z], 0xfff0dc, 140, 42, 0.5);
-    for (const s of [-1, 1]) for (const z of [702.5, 718.5, 734.5]) L([s * (X1 - 1.3), Y + 9.0, z], 0xffcf90, 85, 30, 0.5);
+    L([0, GANTRY + 1.6, 714], 0x8ab0ff, 90, 38, 0.8);
+    L([0, GANTRY + 1.6, 730], 0x8ab0ff, 90, 38, 0.8);
+    for (const [x, z] of FIX) L([x, CEIL - 13.9, z], 0xfff0dc, 150, 44, 0.5);
+    L([5, CEIL - 3.6, 733], 0xfff0dc, 210, 46, 0.5); // central clusters: light the ceiling the door/side views see
+    L([-5, CEIL - 3.6, 711], 0xfff0dc, 210, 46, 0.5); // ...and the one the aft view sees
+    for (const s of [-1, 1]) for (const z of [703, 735]) L([s * (X1 - 1.4), Y + 11.4, z], 0xffcf90, 120, 34, 0.5);
     L([0, AX + 2, Z1 - 3.5], 0x6a9bff, 70, 20, 0.6);
-    L([0, Y + 6, 694.5], 0xffd0a0, 36, 18, 0.5);
+    // port-flank service lamp at 741 (traded for the door pool): 1 m off its head, washes the shadowed
+    // lower flank the housing view's top-left looks at
+    L([-5.1, AX - 3.1, 741], 0xffe8d0, 36, 13, 0.6);
     return {};
   },
 });
