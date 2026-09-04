@@ -606,7 +606,7 @@ function weaponDiscs(ctx, filter) {
 }
 
 function topPlate(ctx) {
-  const discs = weaponDiscs(ctx, (w) => w.kind === "heavy" || w.kind === "ion" || Math.abs(w.y - hullTopY(w.z)) < 1);
+  const discs = weaponDiscs(ctx, (w) => w.kind === "medium" || w.kind === "ion" || Math.abs(w.y - hullTopY(w.z)) < 1);
   const surf = {
     v0: -930,
     v1: 597,

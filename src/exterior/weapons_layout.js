@@ -7,24 +7,44 @@ export function terraceBaseHalfWidth(t, z) {
   return terraceHalfWidth(t, z) + t.draft * (t.yTop - (hullTopY(z) - 0.5));
 }
 
-/** Heavy twin-barrel turbolaser batteries: a row per side on the top plate beside terrace 0. */
+/**
+ * Heavy twin-barrel turbolaser batteries: four per side on the terrace-0 roof (the "shoulder" strip
+ * between the terrace-1 flank and the roof edge, 42–48 m wide at these stations), where they stand
+ * against the terrace wall and read as the ship's main guns from the hero and top views.
+ */
 export function heavyTurretSites() {
   const t0 = TERRACES[0];
+  const t1 = TERRACES[1];
   const out = [];
-  const n = 7;
-  const z0 = -340;
-  const z1 = 440;
+  for (const z of [-110, 50, 210, 370]) {
+    // terrace-1 footprint on the terrace-0 roof (envelope draft + the 0.12 wall incline over its
+    // lower tier ≈ 3 m) and the roof edge
+    const xIn = terraceHalfWidth(t1, z) + t1.draft * (t1.yTop - t0.yTop) + 3.5;
+    const xOut = terraceHalfWidth(t0, z);
+    const x = (xIn + xOut) / 2 + 1;
+    for (const s of [-1, 1]) {
+      // rest yaw: barrels forward, deflected 28° outboard (local barrels point -z; +yaw swings -z toward -x)
+      out.push({ kind: "heavy", x: s * x, y: t0.yTop, z, yaw: -s * 0.49, r: 16, index: out.length });
+    }
+  }
+  return out;
+}
+
+/** Medium turbolasers (half-scale heavies): six per side along the deck edge beside terrace 0. */
+export function mediumTurretSites() {
+  const t0 = TERRACES[0];
+  const out = [];
+  const n = 6;
+  const z0 = -320;
+  const z1 = 430;
   for (let i = 0; i < n; i++) {
     const z = z0 + ((z1 - z0) * i) / (n - 1);
     const xBase = terraceBaseHalfWidth(t0, z);
     const xEdge = 0.72 * hullHalfWidth(z);
-    // r 18 base rings: the ring clears the terrace foot by 4 m and leaves the outer 15–24 m of the
-    // 55–64 m strip for the greeble street along the trench lip
-    const x = xBase + Math.min(22, (xEdge - xBase) * 0.4);
-    for (const s of [-1, 1]) {
-      // rest yaw: barrels forward, deflected 28° outboard (local barrels point -z; +yaw swings -z toward -x)
-      out.push({ kind: "heavy", x: s * x, y: hullTopY(z), z, yaw: -s * 0.49, r: 19, index: out.length });
-    }
+    // the ring clears the terrace foot by ~6 m and leaves the outer part of the strip for the greeble
+    // street along the trench lip
+    const x = xBase + Math.min(20, (xEdge - xBase) * 0.4);
+    for (const s of [-1, 1]) out.push({ kind: "medium", x: s * x, y: hullTopY(z), z, yaw: -s * 0.49, r: 10, index: out.length });
   }
   return out;
 }
@@ -86,5 +106,5 @@ export function sensorSites() {
 
 /** Everything the greeble scatter must stay clear of: { x, z, y, r } discs on a given surface. */
 export function weaponExclusions() {
-  return [...heavyTurretSites(), ...ionTurretSites(), ...pointDefenceSites(), ...tractorSites(), ...sensorSites()].map((s) => ({ x: s.x, z: s.z, y: s.y, r: s.r + 3 }));
+  return [...heavyTurretSites(), ...mediumTurretSites(), ...ionTurretSites(), ...pointDefenceSites(), ...tractorSites(), ...sensorSites()].map((s) => ({ x: s.x, z: s.z, y: s.y, r: s.r + 3 }));
 }

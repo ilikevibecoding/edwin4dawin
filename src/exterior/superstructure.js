@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { TERRACES, terraceHalfWidth, hullTopY, TOWER } from "../spec.js";
 import { plateField, shade, mixC, plateTone, fieldNoise, TEXEL } from "./hull_util.js";
+import { heavyTurretSites } from "./weapons_layout.js";
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
@@ -329,10 +330,16 @@ export function buildSuperstructure(ctx) {
         const nb = chunks.batch(zc, "near", "hullGreeble");
         for (let i = 0; i < vents; i++) nb.box(side * (xc + (rand() - 0.5) * w * 0.5), yR + h + 0.4, zc + (rand() - 0.5) * len * 0.7, 2 + rand() * 2, 0.8, 2 + rand() * 3, T, TEXEL * 3, { skip: new Set(["-y"]) });
       };
+      // the heavy turbolaser batteries stand on this roof (weapons_layout.js): no blocks near them
+      const gunZ = ti === 0 ? [...new Set(heavyTurretSites().map((s) => s.z))] : [];
       let z = terraceRoofZStart(t) + 10 + rand() * 30;
       while (z < t.zBack - 30) {
         const len = Math.min(18 + rand() * 34, t.zBack - 6 - z);
         const zc = z + len / 2;
+        if (gunZ.some((g) => Math.abs(g - zc) < len / 2 + 24)) {
+          z += len + 14 + rand() * 40;
+          continue;
+        }
         const e = terraceHalfWidth(t, zc);
         let inner = 0;
         if (next && z + len + 2 > next.zFront && z < next.zBack) inner = terraceBaseHalfWidth(next, Math.max(z + len, next.zFront + 0.5));

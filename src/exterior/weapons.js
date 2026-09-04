@@ -13,9 +13,11 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { prism, insideOut, rng } from "../kit.js";
 import { hullTopY, hullBottomY, trenchBand } from "../spec.js";
 import { bash, TINT, triCount } from "./greebles_shapes.js";
-import { heavyTurretSites, ionTurretSites, pointDefenceSites, tractorSites, sensorSites } from "./weapons_layout.js";
+import { heavyTurretSites, mediumTurretSites, ionTurretSites, pointDefenceSites, tractorSites, sensorSites } from "./weapons_layout.js";
 
-export const TURRET_LOD_DISTANCE = 1500;
+// far enough that the top / far presets (camera ≈ 2600–3200 m out) still draw the real turrets: at
+// those distances the proxy boxes were all that showed and nothing read as a gun
+export const TURRET_LOD_DISTANCE = 3400;
 const TRAVERSE = THREE.MathUtils.degToRad(10);
 
 // surface slopes (dy/dz) so bases sit flush on the tilted plates
@@ -31,46 +33,50 @@ const barrel = (rTip, rBase, len, x, y, z, color, seg = 12) => ({ geo: new THREE
 // ---------------------------------------------------------------------------
 // Geometry factories (metres; local origin on the mount point, barrels along -z)
 // ---------------------------------------------------------------------------
-// Heavy turbolaser battery: r 18 base ring stack (dark rings so the hull-tone housing sits in a shadow
-// gap), 22 m wide housing with a glacis, twin 30 m barrels. Everything in the plate tones; black only
-// for the ring gap, the muzzle throats and the rangefinder slit.
+// Heavy turbolaser battery: r 14 × 6 m drum base (mid tone, dark ring gap at the top so the hull-tone
+// housing sits in a shadow line), 22 × 10 m housing with a glacis, twin 30 m barrels a tone darker
+// than the plating so they read against the deck from above. Black only for the ring gap, the muzzle
+// throats and the rangefinder slit.
+const BASE_H = 6.0;
 function heavyBase() {
-  const parts = [cylY(18, 1.4, 0, 0.7, 0, TINT.dark, 32), cylY(16.2, 1.2, 0, 2.0, 0, TINT.mid, 32), cylY(14.4, 0.9, 0, 3.05, 0, TINT.black, 32)];
+  const parts = [cylY(14, BASE_H - 1.0, 0, (BASE_H - 1.0) / 2, 0, TINT.mid, 32), cylY(14.6, 1.0, 0, 0.5, 0, TINT.dark, 32), cylY(13.2, 1.0, 0, BASE_H - 0.5, 0, TINT.black, 32)];
   for (let i = 0; i < 10; i++) {
     const a = (i / 10) * Math.PI * 2 + Math.PI / 10;
-    parts.push(box(3.0, 0.7, 2.2, Math.cos(a) * 16.4, 1.75, Math.sin(a) * 16.4, TINT.light, [0, -a, 0]));
+    // vertical ribs and a hatch on the drum wall
+    parts.push(box(2.4, BASE_H - 1.6, 1.4, Math.cos(a) * 14.2, (BASE_H - 1.0) / 2, Math.sin(a) * 14.2, TINT.light, [0, -a, 0]));
+    if (i % 3 === 0) parts.push(box(1.6, 1.6, 0.6, Math.cos(a + 0.3) * 14.3, 2.4, Math.sin(a + 0.3) * 14.3, TINT.dark, [0, -a - 0.3, 0]));
   }
   return bash(parts, { texel: 1 / 10 });
 }
 function heavyHousing() {
-  // side profile (z, y) extruded across x; sloped glacis toward the barrels (-z)
+  // side profile (z, y) extruded across x; sloped glacis toward the barrels (-z); 10 m tall
   const body = prism(
     [
       [10.0, 0],
       [-11.0, 0],
-      [-9.0, 5.0],
-      [-4.0, 7.5],
-      [8.4, 7.5],
-      [10.0, 5.4],
+      [-9.0, 6.6],
+      [-4.0, 10.0],
+      [8.4, 10.0],
+      [10.0, 7.2],
     ],
     22.0,
   ).rotateY(-Math.PI / 2);
   return bash(
     [
       { geo: body, color: TINT.light },
-      box(22.8, 1.4, 4.4, 0, 3.8, 9.4, TINT.mid),
-      box(4.2, 5.0, 7.0, -13.0, 3.6, -4.0, TINT.light),
-      box(4.2, 5.0, 7.0, 13.0, 3.6, -4.0, TINT.light),
-      box(3.2, 0.8, 3.2, -13.0, 6.5, -4.0, TINT.dark),
-      box(3.2, 0.8, 3.2, 13.0, 6.5, -4.0, TINT.dark),
-      box(5.0, 0.7, 5.0, -6.0, 7.8, 3.2, TINT.mid),
-      box(5.0, 0.7, 5.0, 6.0, 7.8, 3.2, TINT.mid),
-      box(3.0, 2.4, 3.8, 0, 8.6, 5.2, TINT.mid),
-      { geo: new THREE.CylinderGeometry(0.65, 0.65, 4.6, 10, 1, false).rotateX(Math.PI / 2), pos: [0, 9.6, 5.0], color: TINT.dark },
-      box(1.8, 1.0, 9.0, 0, 7.9, -1.5, TINT.dark),
-      box(6.0, 0.4, 0.9, 0, 6.6, -9.3, TINT.black),
-      box(1.2, 1.8, 1.2, -9.5, 8.3, 7.0, TINT.dark),
-      box(1.2, 1.8, 1.2, 9.5, 8.3, 7.0, TINT.dark),
+      box(22.8, 1.6, 4.4, 0, 5.0, 9.4, TINT.mid),
+      box(4.2, 6.6, 7.0, -13.0, 4.6, -4.0, TINT.light),
+      box(4.2, 6.6, 7.0, 13.0, 4.6, -4.0, TINT.light),
+      box(3.2, 0.8, 3.2, -13.0, 8.3, -4.0, TINT.dark),
+      box(3.2, 0.8, 3.2, 13.0, 8.3, -4.0, TINT.dark),
+      box(5.0, 0.7, 5.0, -6.0, 10.3, 3.2, TINT.mid),
+      box(5.0, 0.7, 5.0, 6.0, 10.3, 3.2, TINT.mid),
+      box(3.0, 2.4, 3.8, 0, 11.1, 5.2, TINT.mid),
+      { geo: new THREE.CylinderGeometry(0.65, 0.65, 4.6, 10, 1, false).rotateX(Math.PI / 2), pos: [0, 12.1, 5.0], color: TINT.dark },
+      box(1.8, 1.0, 9.0, 0, 10.4, -1.5, TINT.dark),
+      box(6.0, 0.4, 0.9, 0, 8.8, -9.3, TINT.black),
+      box(1.2, 1.8, 1.2, -9.5, 10.8, 7.0, TINT.dark),
+      box(1.2, 1.8, 1.2, 9.5, 10.8, 7.0, TINT.dark),
     ],
     { texel: 1 / 10 },
   );
@@ -78,19 +84,21 @@ function heavyHousing() {
 function heavyBarrels() {
   const parts = [box(14.0, 3.4, 3.6, 0, 0, 2.4, TINT.mid)];
   for (const x of [-4.6, 4.6]) {
-    parts.push(barrel(1.05, 1.8, 30, x, 0, -13, TINT.light));
-    parts.push(barrel(2.0, 2.0, 2.6, x, 0, -26.8, TINT.mid));
-    parts.push(barrel(1.25, 1.25, 0.6, x, 0, -28.2, TINT.black));
-    parts.push(barrel(1.65, 1.65, 1.6, x, 0, -18.6, TINT.mid));
-    parts.push(barrel(2.2, 2.2, 4.0, x, 0, -1.6, TINT.mid));
+    parts.push(barrel(1.2, 1.9, 30, x, 0, -13, TINT.mid));
+    parts.push(barrel(2.1, 2.1, 2.6, x, 0, -26.8, TINT.dark));
+    parts.push(barrel(1.35, 1.35, 0.6, x, 0, -28.2, TINT.black));
+    parts.push(barrel(1.8, 1.8, 1.6, x, 0, -18.6, TINT.dark));
+    parts.push(barrel(2.3, 2.3, 4.0, x, 0, -1.6, TINT.dark));
     parts.push(box(4.0, 4.0, 6.4, x, 0, 1.6, TINT.light));
     parts.push(barrel(0.5, 0.5, 10.5, x, 2.4, -7.5, TINT.dark, 8));
   }
   return bash(parts, { texel: 1 / 10 });
 }
 function heavyProxy() {
-  return bash([box(22, 7.5, 21, 0, 3.75, -0.5, TINT.light), box(13, 4.0, 30, 0, 4.4, -13, TINT.light)], { texel: 1 / 10 });
+  return bash([box(22, 10, 21, 0, 5, -0.5, TINT.light), box(13, 4.0, 30, 0, 6.2, -13, TINT.mid)], { texel: 1 / 10 });
 }
+/** Half-scale copies of the heavy battery parts for the medium turrets along the deck edge. */
+const half = (g) => g.scale(0.5, 0.5, 0.5);
 
 function ionBase() {
   return bash([cylY(9.2, 1.2, 0, 0.6, 0, TINT.dark, 28), cylY(7.8, 1.0, 0, 1.7, 0, TINT.mid, 28), cylY(6.8, 0.8, 0, 2.6, 0, TINT.black, 28), box(2.0, 0.6, 1.4, 0, 1.4, 8.5, TINT.light), box(2.0, 0.6, 1.4, 0, 1.4, -8.5, TINT.light)], { texel: 1 / 10 });
@@ -278,7 +286,8 @@ export function buildWeapons({ group, materials }) {
 
   // ---- animated turrets: per-kind instanced sets
   const kinds = {
-    heavy: { sites: heavyTurretSites(), base: heavyBase(), housing: heavyHousing(), barrels: heavyBarrels(), proxy: heavyProxy(), pivotY: 3.5, trunnion: new THREE.Vector3(0, 4.4, -4.0), pitchRest: 0.14, pitchAmp: 0.06, up: upTop, lights: 17.0 },
+    heavy: { sites: heavyTurretSites(), base: heavyBase(), housing: heavyHousing(), barrels: heavyBarrels(), proxy: heavyProxy(), pivotY: BASE_H, trunnion: new THREE.Vector3(0, 5.9, -4.0), pitchRest: 0.14, pitchAmp: 0.06, up: upRoof, lights: 15.0 },
+    medium: { sites: mediumTurretSites(), base: half(heavyBase()), housing: half(heavyHousing()), barrels: half(heavyBarrels()), proxy: half(heavyProxy()), pivotY: BASE_H / 2, trunnion: new THREE.Vector3(0, 2.95, -2.0), pitchRest: 0.14, pitchAmp: 0.06, up: upTop, lights: 7.5 },
     ion: { sites: ionTurretSites(), base: ionBase(), housing: ionHousing(), barrels: ionBarrel(), proxy: ionProxy(), pivotY: 3.0, trunnion: new THREE.Vector3(0, 3.1, -1.8), pitchRest: 0.12, pitchAmp: 0.05, up: upTop, lights: 8.4 },
   };
   const turrets = [];
@@ -491,6 +500,7 @@ export function buildWeapons({ group, materials }) {
   const stats = {
     turrets: turrets.length,
     heavy: kinds.heavy.sites.length,
+    medium: kinds.medium.sites.length,
     ion: kinds.ion.sites.length,
     pointDefence: pdSites.length,
     tractors: tractors.length,
@@ -499,6 +509,6 @@ export function buildWeapons({ group, materials }) {
     meshes: meshes.length + instanced.length,
     triangles: Math.round(triangles),
   };
-  console.log(`[weapons] ${stats.turrets} turrets (${stats.heavy} heavy, ${stats.ion} ion), ${stats.pointDefence} PD, ${stats.tractors} tractors, ${stats.dishes} dishes, ${stats.arrays} arrays; ${stats.meshes} meshes, ${(triangles / 1000).toFixed(0)}k triangles`);
+  console.log(`[weapons] ${stats.turrets} turrets (${stats.heavy} heavy, ${stats.medium} medium, ${stats.ion} ion), ${stats.pointDefence} PD, ${stats.tractors} tractors, ${stats.dishes} dishes, ${stats.arrays} arrays; ${stats.meshes} meshes, ${(triangles / 1000).toFixed(0)}k triangles`);
   return { update, stats, meshes: [...meshes, ...instanced], turrets };
 }

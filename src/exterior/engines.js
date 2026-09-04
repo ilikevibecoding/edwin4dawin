@@ -108,14 +108,16 @@ export function buildEngines(ctx) {
     const segs = b.main ? 56 : 32;
     const o = V(b.x, b.y, e.z);
     const prof = BELL.map(([f, k]) => ({ r: r * k, t: f * L }));
-    // outer skin: heat-tempering ramp along the axis (u), slight vertex darkening toward the lip
-    at("far", "exta_heat").lathe(prof, o, IDENT, segs, { uv: "axial", colorAt: (i, f) => shade(0xffffff, 0.9 + 0.1 * (1 - f) + (rand() - 0.5) * 0.04) });
-    // inner bell from the throat to the lip: dark worn metal, only the throat end glow-tinted (the sun
-    // sits aft of the ship and shines straight into the nozzles, so a light tint here would wash the
-    // whole opening into a flat sheet)
+    // outer skin: heat-tempering ramp along the axis (u), the outer 20 % of the bell wall darkened
+    // (scorched flare) so the lip reads as a dark rim around the lit mouth
+    at("far", "exta_heat").lathe(prof, o, IDENT, segs, { uv: "axial", colorAt: (i, f) => shade(0xffffff, (0.9 + 0.1 * (1 - f) + (rand() - 0.5) * 0.04) * (1 - 0.42 * smooth(0.78, 1.0, f))) });
+    // inner bell from the throat to the lip: a radial gradient from the glow-tinted throat to a dark
+    // blue 0x2a4a80 rim (the sun sits aft of the ship and shines straight into the nozzles, so a light
+    // tint here would wash the whole opening into a flat sheet)
     const wallIn = b.main ? 0.7 : 0.4;
+    const rim = C(0x2a4a80);
     const inner = prof.filter((p) => p.t >= 0.24 * L - 1e-6).map((p) => ({ r: p.r - wallIn, t: p.t }));
-    at("far", "hullGreeble").lathe(inner, o, IDENT, segs, { inside: true, colorAt: (i, f) => mixC(shade(T, 0.85), blue, 0.45 * Math.pow(1 - f, 2)), texel: TEXEL * 3 });
+    at("far", "hullGreeble").lathe(inner, o, IDENT, segs, { inside: true, colorAt: (i, f) => mixC(mixC(shade(T, 0.85), rim, 0.5 + 0.5 * f), blue, 0.45 * Math.pow(1 - f, 2)), texel: TEXEL * 3 });
     // interior stiffener rings, slightly embedded in the wall so nothing is coplanar
     {
       const rings = at("mid", "hullTrim");
@@ -157,11 +159,11 @@ export function buildEngines(ctx) {
     {
       const p = [];
       for (let f = 0.25; f <= 0.97; f += 0.09) p.push({ r: r * bellR(f) - wallIn - 0.3, t: L * f });
-      glow.lathe(p, o, IDENT, segs, { colorAt: (i, f) => blue.clone().multiplyScalar(0.015 + 0.24 * Math.pow(1 - f, 2.2)) });
+      glow.lathe(p, o, IDENT, segs, { colorAt: (i, f) => blue.clone().multiplyScalar(0.01 + 0.2 * Math.pow(1 - f, 2.6)) });
     }
     cone(0.25, 0.5, 0.42, 0.28, C(0xffffff).multiplyScalar(0.45), 2.0);
-    // plume: ~2 L long, faint (two additive layers between an aft camera and the opening)
-    cone(1.0, 3.0, 1.0, 0.32, blue.clone().multiplyScalar(0.035), 1.6, 8);
+    // plume: ~2 L long, very faint (0.01 additive — a haze behind the ship, not a beam)
+    cone(1.0, 3.0, 1.0, 0.32, blue.clone().multiplyScalar(0.012), 1.6, 8);
     // dim vertex-gradient halo just behind the lip (the old additive glowDisc sprite over the core is
     // gone: at alpha 1 it was what pushed the centre to clipped white)
     glow.disc(V(b.x, b.y, e.z + L + 1.5), Z, r * 1.25, segs, blue.clone().multiplyScalar(0.04), 1, { colorOut: 0x000000 });
