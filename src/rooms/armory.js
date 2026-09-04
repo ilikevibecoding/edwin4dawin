@@ -297,9 +297,10 @@ export function buildArmory(kit, ctx, room) {
     seed: 7404,
     accentKey,
     // wall variant: narrow dark ribbed panels (grey-dark / charcoal), heavy on vents and conduit, no bare wall light slots
-    wall: { panelW: 1.2, bands: [1.15], features: { vent: 0.16, equipment: 0.1, conduit: 0.16, light: 0, screen: 0.03 }, altChance: 0.35, panelColor: GD, panelColorAlt: CHR, accent: ORANGE },
+    wall: { panelW: 1.2, bands: [1.15], features: { vent: 0.16, equipment: 0.1, conduit: 0.16, light: 0, screen: 0.03 }, altChance: 0.35, panelColor: GD, panelColorAlt: GREY, accent: ORANGE },
     floor: { lane: false },
-    ceiling: { troughs: 2, troughW: 0.5, beamStep: 4.4 },
+    // ceiling troughs unlit: the armour rig is the only white in the room, the aisle slots are amber
+    ceiling: { troughs: 2, troughW: 0.5, beamStep: 4.4, withLights: false },
   });
   const N = walls.N.frame; // u = x + hx
   const S = walls.S.frame; // u = hx - x
@@ -363,7 +364,7 @@ export function buildArmory(kit, ctx, room) {
     hoodLamp(N, hx - 12.1, 2.6, WORK, 0.8);
     N.decal(IMP_DECAL.glyphs3, 1.2, 2.3, 0.03, 0.4);
     crateStack(kit, -10.3, -9.8, 0.1, { seed: 41, decal: IMP_DECAL.power, n: 2 });
-    keyLight(kit, -12.1, 2.6, -6.4, { color: 0xffc080, k: 1.5, distance: 9, priority: 0.45 });
+    keyLight(kit, -12.1, 2.6, -6.4, { color: 0xffc080, k: 2.0, distance: 9, priority: 0.45 });
   }
 
   // ---------------------------------------------------------------- vestibule: door wall signage, status, gear
@@ -524,9 +525,11 @@ export function buildArmory(kit, ctx, room) {
 
   // ---------------------------------------------------------------- lights (8): armour spot + fill (above), booth amber + red beacon (above), vestibule white, 2 amber aisle, bench white
   // vestibule white sits a little S of the door so it also carries the inspection table and the S-wall lockers
-  keyLight(kit, -11.5, 3.4, 2.5, { color: 0xe8eeff, k: 2.6, distance: 13, priority: 0.5 });
-  // the two aisle keys sit north of the aisle so the rifle racks / cell cages get direct light; the armour rig carries the middle
-  keyLight(kit, -4.5, 3.4, -3.5, { color: 0xffc38a, k: 2.6, distance: 13, priority: 0.49 });
-  keyLight(kit, 10.5, 3.4, -3.5, { color: 0xffc38a, k: 2.6, distance: 13, priority: 0.47 });
+  keyLight(kit, -11.5, 3.4, 2.5, { color: 0xe8eeff, k: 3.2, distance: 14, priority: 0.5 });
+  // the two aisle keys sit just north of the aisle so the rifle racks / cell cages get direct light and the
+  // grating still catches the pool; the armour rig carries the middle (pass 2: +30%, longer reach — the far
+  // half of the room read as a black void at k 2.6 / 13 m)
+  keyLight(kit, -4.5, 3.4, -2.5, { color: 0xffc38a, k: 3.4, distance: 16, priority: 0.49 });
+  keyLight(kit, 10.5, 3.4, -2.5, { color: 0xffc38a, k: 3.4, distance: 16, priority: 0.47 });
   keyLight(kit, 13.2, 2.8, 5.6, { color: 0xf0f4ff, k: 2.6, distance: 8, priority: 0.44 });
 }

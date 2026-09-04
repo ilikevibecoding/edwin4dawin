@@ -168,7 +168,7 @@ export function buildDetention(kit, ctx, room) {
     seed: 8505,
     accentKey,
     // wall variant: dark ribbed — grey-dark / charcoal panels cut by two bands, conduit-heavy, no bare wall light slots
-    wall: { panelW: 1.4, bands: [1.05, 2.25], features: { vent: 0.1, equipment: 0.06, conduit: 0.22, light: 0, screen: 0.03 }, altChance: 0.35, panelColor: GD, panelColorAlt: CHR, accent: PALETTE.impRed },
+    wall: { panelW: 1.4, bands: [1.05, 2.25], features: { vent: 0.1, equipment: 0.06, conduit: 0.22, light: 0, screen: 0.03 }, altChance: 0.3, panelColor: GD, panelColorAlt: GREY, accent: PALETTE.impRed },
     floor: { laneW: 2.6, laneAxis: "z" },
     floorEdgeLight: accentKey,
     ceiling: { troughs: 2, troughW: 0.5, beamStep: 4.8 },
@@ -212,11 +212,17 @@ export function buildDetention(kit, ctx, room) {
     }
     kit.box("leds", 0, my - 0.4, dz - 0.9 + 0.07, 3.0, 0.04, 0.01, { uv: "keep" });
     kit.box(accentKey, 0, my + 0.47, dz - 0.9 + 0.11, 3.4, 0.02, 0.01);
-    // the spine's back faces the blast door: block status board, restricted stencil, red edge strip
+    // the spine's back faces the blast door: block status board, restricted stencil, red edge strip.
+    // The board is tilted 14° toward the deck: flat, its glossy face mirrored the entrance key straight into
+    // the spawn sightline as a white flare (screen materials are roughness 0.15).
     {
       const bz = dz - 0.9 - 0.07;
-      kit.box("impGloss", 0.6, my + 0.05, bz, 1.6, 0.5, 0.02);
-      kit.add("scrRed0", new THREE.PlaneGeometry(1.5, 0.42).rotateY(Math.PI), { pos: [0.6, my + 0.05, bz - 0.012], uv: "keep" });
+      const tilt = -0.24;
+      const ct = Math.cos(tilt);
+      const st = Math.sin(tilt);
+      const bp = (ly, lz) => [0.6, my + 0.05 + ly * ct - lz * st, bz + ly * st + lz * ct];
+      kit.add("impGloss", new THREE.BoxGeometry(1.6, 0.5, 0.02), { pos: bp(0, 0), rot: [tilt, 0, 0] });
+      kit.add("scrRed0", new THREE.PlaneGeometry(1.5, 0.42).rotateY(Math.PI), { pos: bp(0, -0.012), rot: [tilt, 0, 0], uv: "keep" });
       kit.add("decalImp", new THREE.PlaneGeometry(0.5, 0.5).rotateY(Math.PI), { pos: [-1.1, my + 0.05, bz - 0.005], uv: "keep", uvRect: impDecalRect(IMP_DECAL.restricted) });
       kit.box(accentKey, 0, my - 0.38, bz - 0.005, 3.2, 0.03, 0.01);
       kit.box("leds", -1.1, my - 0.28, bz - 0.005, 0.5, 0.04, 0.01, { uv: "keep" });
@@ -240,7 +246,7 @@ export function buildDetention(kit, ctx, room) {
     impRailing(kit, [-5.5, dz - 2.3], [-5.5, dz + 2.6], 0, { h: 1.0 });
     impRailing(kit, [5.5, dz - 2.3], [5.5, dz + 2.6], 0, { h: 1.0 });
     floorDecal(kit, IMP_DECAL.keepClear, 0, dz - 3.2, 0.8, Math.PI);
-    kit.boxMM("rubber", [-5.3, 0.002, dz - 2.1], [5.3, 0.02, dz + 2.5], { color: CHR, texel: 1 });
+    kit.boxMM("rubber", [-5.3, 0.002, dz - 2.1], [5.3, 0.02, dz + 2.5], { color: GD, texel: 1 });
     // over the desk: a pair of dim red louvred slots in one black housing (the old white panel killed the red mood)
     kit.box("impTrim", 0, h - 0.11, dz + 0.4, 3.6, 0.22, 1.5, { color: BLK, texel: 1 });
     for (const dzz of [-0.45, 0.45]) slotLight(kit, 0, dz + 0.4 + dzz, h - 0.02, 3.2, "x", "emitRedDim", { w: 0.34, bar: 0.1 });
@@ -279,14 +285,15 @@ export function buildDetention(kit, ctx, room) {
       const lens = new THREE.Mesh(compound([B(0.06, 0.24, 0.16, [0.06, 0, 0], PALETTE.impRed), B(0.06, 0.24, 0.16, [-0.06, 0, 0], PALETTE.impRed)]), ctx.materials.emitRedImp);
       lens.position.set(px, h - 0.76, z);
       kit.attach(lens);
-      const phase = rand() * 6.28;
       kit.onUpdate((dt) => {
         lens.rotation.y += dt * 3.2;
       });
-      // one pulsing red pool per cell pair: lights the cell fronts / walkway and spills through the doorways
-      // the pool sits a little lower and further out than the lens so the cell fronts are lit face-on, not grazed
-      kit.light({ type: "point", pos: [s * (cellX - 3.0), 2.7, z], color: 0xff3a28, intensity: lux(2.7, 3.0) / 2.7, decay: 1, distance: 12, priority: 0.44, dim: (t) => 0.7 + 0.3 * Math.sin(t * 3.2 + phase) });
     }
+    // one pulsing red pool per cell row (pass 3: was one per pair — the two freed slots became the cool side keys
+    // below): 2.5 m in front of the row centre, 3 m up, so all four cell fronts and the walkway are lit face-on
+    // and the red spills through the doorways
+    const phase = rand() * 6.28;
+    kit.light({ type: "point", pos: [s * (cellX - 4.0), 3.0, (cellZ[1] + cellZ[2]) / 2], color: 0xff3a28, intensity: lux(3.0, 4.2) / 3.0, decay: 1, distance: 15, priority: 0.44, dim: (t) => 0.72 + 0.28 * Math.sin(t * 3.2 + phase) });
   }
 
   // ---------------------------------------------------------------- interrogation room at the far end (S wall): raised dais, chair, droid, spot, screens
@@ -401,9 +408,14 @@ export function buildDetention(kit, ctx, room) {
   cameraHousing(kit, -hx + 0.3, h - 0.55, hz - 0.3, -Math.PI * 0.25);
   cameraHousing(kit, 0.9, h - 0.55, -4.6 - 3.0, Math.PI);
 
-  // ---------------------------------------------------------------- lights (8): 4 pulsing red beacons (above), interrogation spot (above),
-  // dim red pool over the desk (the screens carry the white there), cool fill over the entrance and the aisle so the block stays readable
-  keyLight(kit, 0, h - 1.0, -4.4, { color: 0xff4a34, k: 2.6, distance: 12, priority: 0.5 });
-  keyLight(kit, 0, h - 1.0, -9.6, { color: 0xdfe8ff, k: 2.6, distance: 12, priority: 0.47 });
-  keyLight(kit, 0, h - 1.0, 1.5, { color: 0xdfe8ff, k: 2.4, distance: 13, priority: 0.48 });
+  // ---------------------------------------------------------------- lights (8): 2 pulsing red row pools (above), interrogation spot (above),
+  // dim red pool over the desk (the screens carry the white there), cool fill: entrance key 2.4 m in front of the
+  // spawn (over the railing gate, so it lights the desk front and the floor beyond it rather than the deck behind
+  // the camera), two side keys over the open floor between the desk wings and the cell rows (that floor read as
+  // a black void when the only cool light sat on the centre line), one aisle key behind the desk
+  keyLight(kit, 0, h - 1.0, -4.4, { color: 0xff4a34, k: 3.2, distance: 12, priority: 0.5 });
+  keyLight(kit, 0, h - 1.0, -7.6, { color: 0xdfe8ff, k: 3.4, distance: 13, priority: 0.47 });
+  keyLight(kit, -8.0, h - 1.0, -4.6, { color: 0xdfe8ff, k: 3.2, distance: 14, priority: 0.46 });
+  keyLight(kit, 8.0, h - 1.0, -4.6, { color: 0xdfe8ff, k: 3.2, distance: 14, priority: 0.45 });
+  keyLight(kit, 0, h - 1.0, 2.5, { color: 0xdfe8ff, k: 3.0, distance: 14, priority: 0.43 });
 }

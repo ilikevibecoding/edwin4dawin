@@ -40,12 +40,15 @@ function bunkFrameGeo() {
   return compound(parts, 1);
 }
 function bunkSoftGeo() {
+  // regulation berth: pale grey mattress, white top sheet turned down at the head, grey-blue blanket, pillow
   const parts = [];
   for (const y of SHELF_Y) {
     const top = y + 0.025;
-    parts.push(B(1.95, 0.1, 0.82, [0, top + 0.05, 0], 0x5c6068));
-    parts.push(B(0.42, 0.09, 0.3, [-0.7, top + 0.145, -0.05], 0xc8ccd4));
-    parts.push(B(1.1, 0.03, 0.84, [0.35, top + 0.115, 0], DECK_C.fabricBlue));
+    parts.push(B(1.95, 0.1, 0.82, [0, top + 0.05, 0], 0xa9adb5));
+    parts.push(B(0.42, 0.09, 0.3, [-0.7, top + 0.145, -0.05], 0xe8ebf0));
+    parts.push(B(0.5, 0.02, 0.84, [-0.5, top + 0.11, 0], 0xdfe3e9));
+    parts.push(B(1.15, 0.035, 0.84, [0.33, top + 0.118, 0], 0x6c7b98));
+    parts.push(B(1.15, 0.03, 0.08, [0.33, top + 0.15, 0.36], 0x6c7b98));
   }
   return compound(parts, 2);
 }
@@ -397,16 +400,17 @@ export function buildCrewQuarters(kit, ctx, room) {
   }
 
   // ---------------------------------------------------------------- lights (8): six warm barracks keys, one warm far-wall key, one cool door key
-  // Keys hang 0.7 m under the ceiling, 2 m east of the fronts they light, so the berths facing the door are lit
-  // face-on rather than grazed; the door key sits behind the spawn so its ceiling highlight stays out of frame.
+  // Keys hang 1.2 m under the ceiling (a 0.7 m drop painted hot blobs on the ribbed ceiling), 2 m east of the
+  // fronts they light, so the berths facing the door are lit face-on rather than grazed; the door key sits
+  // behind the spawn so its ceiling highlight stays out of frame.
   const warm = 0xf6ead6;
-  const ky = h - 0.7;
-  keyLight(kit, 5.6, ky, -5.9, { color: warm, k: 4.6, distance: 14, priority: 0.5 });
-  keyLight(kit, 5.6, ky, 5.9, { color: warm, k: 4.6, distance: 14, priority: 0.49 });
-  keyLight(kit, -1.4, ky, -5.9, { color: warm, k: 4.2, distance: 14, priority: 0.48 });
-  keyLight(kit, -1.4, ky, 5.9, { color: warm, k: 4.2, distance: 14, priority: 0.47 });
-  keyLight(kit, -8.4, ky, -5.9, { color: warm, k: 3.8, distance: 13, priority: 0.46 });
-  keyLight(kit, -8.4, ky, 5.9, { color: warm, k: 3.8, distance: 13, priority: 0.45 });
-  keyLight(kit, -14.6, ky, 0, { color: warm, k: 4.4, distance: 15, priority: 0.44 });
-  keyLight(kit, 13.0, ky, 0, { color: 0xdfe8ff, k: 3.6, distance: 14, priority: 0.43 });
+  const ky = h - 1.2;
+  keyLight(kit, 5.6, ky, -5.9, { color: warm, k: 5.2, distance: 14, priority: 0.5 });
+  keyLight(kit, 5.6, ky, 5.9, { color: warm, k: 5.2, distance: 14, priority: 0.49 });
+  keyLight(kit, -1.4, ky, -5.9, { color: warm, k: 4.8, distance: 14, priority: 0.48 });
+  keyLight(kit, -1.4, ky, 5.9, { color: warm, k: 4.8, distance: 14, priority: 0.47 });
+  keyLight(kit, -8.4, ky, -5.9, { color: warm, k: 4.4, distance: 13, priority: 0.46 });
+  keyLight(kit, -8.4, ky, 5.9, { color: warm, k: 4.4, distance: 13, priority: 0.45 });
+  keyLight(kit, -14.6, ky, 0, { color: warm, k: 5.0, distance: 15, priority: 0.44 });
+  keyLight(kit, 13.0, ky, 0, { color: 0xdfe8ff, k: 4.2, distance: 14, priority: 0.43 });
 }

@@ -52,7 +52,8 @@ export function buildMessHall(kit, ctx, room) {
     wall: { panelW: 2.2, bands: [2.5], features: { vent: 0.1, equipment: 0.06, conduit: 0.06, light: 0, screen: 0.05 }, altChance: 0.2, panelColor: PALETTE.impGrey, panelColorAlt: PALETTE.impWhite },
     walls: { N: { panelW: 1.1, bands: null, features: { vent: 0.14, equipment: 0.05, conduit: 0.1, light: 0, screen: 0.02 }, panelColor: PALETTE.impWhite, panelColorAlt: PALETTE.impGrey, altChance: 0.06 } },
     floor: { laneW: 2.6 },
-    ceiling: { troughs: 2, troughW: 0.6, beamStep: 4.2 },
+    // the shell's two ceiling troughs carry amber bars like the slot fixtures over the tables: no white ceiling panels
+    ceiling: { troughs: 2, troughW: 0.5, beamStep: 4.2, lightKey: "emitAmberDim" },
   });
 
   // ---------------------------------------------------------------- galley deck (pale-grey 0.3 m enamel tiles: one bevelled panel per tile) + serving counter
@@ -408,11 +409,12 @@ export function buildMessHall(kit, ctx, room) {
   cameraHousing(kit, hx - 0.3, h - 0.55, hz - 0.3, Math.PI * 0.25);
   cameraHousing(kit, -hx + 0.3, h - 0.55, -hz + 0.3, -Math.PI * 0.75);
 
-  // ---------------------------------------------------------------- lights (8): 4 cool keys over the tables, 2 neutral galley keys, blue cooler (above), amber south accent
-  const cool = 0xe4ebff;
+  // ---------------------------------------------------------------- lights (8): 4 warm keys over the tables (the pools under the amber
+  // slots), 2 neutral galley keys, blue cooler (above), amber south accent
+  const warm = 0xffdcae;
   for (const [i, z] of rows.entries()) {
-    keyLight(kit, -8.75, 3.3, z, { color: cool, k: 2.9, distance: 14, priority: 0.5 - i * 0.01 });
-    keyLight(kit, 6.25, 3.3, z, { color: cool, k: 2.9, distance: 14, priority: 0.49 - i * 0.01 });
+    keyLight(kit, -8.75, 3.3, z, { color: warm, k: 2.9, distance: 14, priority: 0.5 - i * 0.01 });
+    keyLight(kit, 6.25, 3.3, z, { color: warm, k: 2.9, distance: 14, priority: 0.49 - i * 0.01 });
   }
   keyLight(kit, -6.0, 3.4, -9.8, { color: 0xeef2ff, k: 3.0, distance: 12, priority: 0.45 });
   keyLight(kit, 2.0, 3.4, -9.8, { color: 0xeef2ff, k: 3.0, distance: 12, priority: 0.44 });
