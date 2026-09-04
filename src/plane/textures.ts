@@ -104,7 +104,7 @@ export const LIVERY = {
   upper: '#f3f1ea',
   /** wing / stabiliser undersides */
   under: '#e3d9c2',
-  lower: '#f6c230',
+  lower: '#f5cc5a', // reference body yellow ~ (239,199,90): pale warm yellow, not golden
   cheat: '#1c2d5a',
   pin: '#d8322e',
   registration: 'N726BV',
