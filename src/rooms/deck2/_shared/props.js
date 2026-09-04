@@ -124,7 +124,7 @@ export function wallScreen(kit, pos, yaw, w = 1.6, h = 0.9, mat = "screenImp0") 
 }
 
 // Imperial cargo crate: 1.2 m module with recessed side panels and a lit status tab.
-export function crate(kit, PALETTE, pos, yaw, { w = 1.2, h = 1.2, d = 1.2, color, seed = 5 } = {}) {
+export function crate(kit, PALETTE, pos, yaw, { w = 1.2, h = 1.2, d = 1.2, color, seed = 5, bumperMat = "rubber" } = {}) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
   const body = color || pick(rand, [col(PALETTE, "impMid"), col(PALETTE, "impGrey"), col(PALETTE, "impDark")]);
@@ -137,7 +137,7 @@ export function crate(kit, PALETTE, pos, yaw, { w = 1.2, h = 1.2, d = 1.2, color
     void inset;
   }
   // corner bumpers + handles + status tab
-  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) P.box("rubber", (sx * (w - 0.1)) / 2, h / 2, (sz * (d - 0.1)) / 2, 0.1, h + 0.02, 0.1, { color: 0xffffff });
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) P.box(bumperMat, (sx * (w - 0.1)) / 2, h / 2, (sz * (d - 0.1)) / 2, 0.1, h + 0.02, 0.1, { color: bumperMat === "rubber" ? 0xffffff : col(PALETTE, "impBlack") });
   P.box("metal", 0, h - 0.15, d / 2 + 0.03, 0.4, 0.05, 0.05, { color: col(PALETTE, "steel") });
   P.box(rand() < 0.7 ? "emitBlue" : "emitAmber", w / 2 - 0.2, h - 0.12, d / 2 + 0.017, 0.12, 0.03, 0.006);
   P.collider([-w / 2, 0, -d / 2], [w / 2, h, d / 2], "crate");
@@ -294,14 +294,15 @@ export function holoTable(ctx, pos, { r = 1.4, h = 0.95, holoH = 1.6, mat = "hol
   P.cyl("emitBlue", 0, h - 0.04, 0, r + 0.01, 0.04, "y", { segments: 32, open: true });
   indicatorField(P, 0, h - 0.3, r + 0.001, 1.2, 0.2, 21);
   P.collider([-r, 0, -r], [r, h, r], "holo");
-  const holoMat = materials[mat] || materials.holo;
+  // per-instance material clone so a room can pulse opacity without touching other holo tables
+  const holoMat = (materials[mat] || materials.holo).clone();
   const cone = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.75, r * 0.2, holoH, 24, 1, true), holoMat);
   cone.position.set(pos[0], pos[1] + h + holoH / 2, pos[2]);
   const grid = new THREE.Mesh(new THREE.TorusGeometry(r * 0.55, 0.02, 6, 48), holoMat);
   grid.rotation.x = Math.PI / 2;
   grid.position.set(pos[0], pos[1] + h + 0.5, pos[2]);
   group.add(cone, grid);
-  return { cone, grid };
+  return { cone, grid, material: holoMat };
 }
 
 // Floor marking (yellow/white line) slightly proud of the deck.

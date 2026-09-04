@@ -32,14 +32,16 @@ export function imperialExtras(shared) {
     extras.impFloor = shared.deck.clone();
     extras.impFloor.envMapIntensity = 0.7;
   }
-  // Command-floor gloss: dark, low roughness, mostly dielectric so it still shows its own colour.
+  // Command-floor gloss: dark, mostly dielectric so it still shows its own colour. Roughness 0.3 /
+  // env 0.5 rather than the §10 0.18: at 0.18 a long grazing sightline mirrors the environment map
+  // into a blown-out band (seen in briefing, quarters, engctl). A's real key replaces this anyway.
   if (need("blackGloss")) {
     extras.blackGloss = new THREE.MeshStandardMaterial({
       color: 0x14161a,
-      roughness: 0.18,
+      roughness: 0.3,
       metalness: 0.35,
       vertexColors: true,
-      envMapIntensity: 1.0,
+      envMapIntensity: 0.5,
     });
   }
   if (need("emitWhite")) extras.emitWhite = emissive("#dfe9ff", 2.2);
