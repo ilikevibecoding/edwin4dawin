@@ -615,10 +615,10 @@ export function createTraffic({ mats, audio, zone } = {}) {
       lodSets[lod].push(im);
     }
   }
-  // exhaust flares: two crossed additive quads per engine, scaled by throttle
+  // exhaust flares: one camera-facing additive quad per engine, scaled by throttle
   const flare = (() => {
     const g = new THREE.PlaneGeometry(1.5, 1.5);
-    const im = new THREE.InstancedMesh(g, mats.exhaustGlow, N * 4);
+    const im = new THREE.InstancedMesh(g, mats.exhaustGlow, N * 2);
     im.name = "tie_exhaust";
     im.castShadow = false;
     im.receiveShadow = false;
@@ -627,15 +627,12 @@ export function createTraffic({ mats, audio, zone } = {}) {
     group.add(im);
     return im;
   })();
-  const flareLocal = [];
-  for (const sx of [-1, 1]) {
-    for (const rotY of [0, Math.PI / 2]) {
-      const m = new THREE.Matrix4().compose(new THREE.Vector3(sx * 0.64, -0.42, 2.9), new THREE.Quaternion().setFromAxisAngle(UP, rotY), new THREE.Vector3(1, 1, 1));
-      flareLocal.push(m);
-    }
-  }
+  const flareLocal = [new THREE.Vector3(-0.64, -0.42, 2.9), new THREE.Vector3(0.64, -0.42, 2.9)];
   const _s = new THREE.Vector3();
   const _fm = new THREE.Matrix4();
+  const _fp = new THREE.Vector3();
+  const _fq = new THREE.Quaternion();
+  const _look = new THREE.Matrix4();
 
   function updateInstances(cameraPos) {
     for (const f of fighters) {
@@ -643,24 +640,23 @@ export function createTraffic({ mats, audio, zone } = {}) {
       f.lod = d > T.hide ? -1 : d > T.lod1 ? 1 : 0;
       _m.compose(f.pos, f.quat, _s.set(1, 1, 1));
       for (const lod of [0, 1]) for (const im of lodSets[lod]) im.setMatrixAt(f.id, f.lod === lod ? _m : _zero);
-      // exhaust flares grow with distance beyond 350 m so a patrolling fighter still reads as a pair of
-      // glowing specks from the exterior presets (a 9 m craft is a few pixels at 1.7 km)
-      const far = Math.min(6, Math.max(1, d / 350));
+      // Exhaust flares grow with distance beyond 200 m and slide from the emitters toward the hull
+      // centre, so a patrolling fighter still reads as a glowing speck from the exterior presets
+      // (a 9 m craft is a few pixels at 1.7 km, and its own body would hide the engines from the front).
+      const far = Math.min(8, Math.max(1, d / 200));
       const throttle = (f.s === "docked" || f.s === "lowering" || f.s === "raising" ? 0.35 : THREE.MathUtils.clamp(0.9 + f.speed / 60, 0.9, 2.2)) * far;
-      for (let k = 0; k < 4; k++) {
+      const pull = 1 / far;
+      for (let k = 0; k < 2; k++) {
         if (f.lod < 0) {
-          flare.setMatrixAt(f.id * 4 + k, _zero);
+          flare.setMatrixAt(f.id * 2 + k, _zero);
           continue;
         }
-        _fm.copy(flareLocal[k]);
-        _fm.elements[0] *= throttle;
-        _fm.elements[1] *= throttle;
-        _fm.elements[2] *= throttle;
-        _fm.elements[4] *= throttle;
-        _fm.elements[5] *= throttle;
-        _fm.elements[6] *= throttle;
-        _fm.premultiply(_m);
-        flare.setMatrixAt(f.id * 4 + k, _fm);
+        _fp.copy(flareLocal[k]).multiplyScalar(pull).applyQuaternion(f.quat).add(f.pos);
+        if (cameraPos) {
+          _look.lookAt(cameraPos, _fp, UP);
+          _fq.setFromRotationMatrix(_look);
+        } else _fq.copy(f.quat);
+        flare.setMatrixAt(f.id * 2 + k, _fm.compose(_fp, _fq, _s.set(throttle, throttle, throttle)));
       }
     }
     // InstancedMesh.computeBoundingSphere unions the geometry sphere per instance, so the culling
@@ -676,7 +672,6 @@ export function createTraffic({ mats, audio, zone } = {}) {
   }
 
   // heading / banking → quaternion
-  const _look = new THREE.Matrix4();
   const _qr = new THREE.Quaternion();
   const Z_AXIS = new THREE.Vector3(0, 0, 1);
   const _origin = new THREE.Vector3();
