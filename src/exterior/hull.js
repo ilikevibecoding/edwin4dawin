@@ -208,7 +208,7 @@ export function buildExterior(scene, materials) {
     const cz = (b.z0 + b.z1) / 2;
     // body: box minus the forward face (built separately with cut-outs); chamfered underside via a
     // slightly smaller lower slab
-    kit.boxMM("hullPlate", [-b.hw, b.y0, b.z0 + 6], [b.hw, b.y1, b.z1], { color: PALETTE.hullLight, uv: "world", texel: HULL_TEXEL });
+    kit.boxMM("hullPlate", [-b.hw, b.y0, b.z0 + 1], [b.hw, b.y1, b.z1], { color: PALETTE.hullLight, uv: "world", texel: HULL_TEXEL });
     kit.boxMM("hullPlate1", [-b.hw + 8, b.y0 - 6, b.z0 + 12], [b.hw - 8, b.y0 + 0.1, b.z1 - 6], { color: PALETTE.hullMid, uv: "world", texel: HULL_TEXEL });
     // forward face with viewport cut-outs: bridge strip and the two gallery runs
     const holes = [];
@@ -229,15 +229,17 @@ export function buildExterior(scene, materials) {
         holes.push({ x, y: (gv.y0 + gv.y1) / 2 - cy, w: gw - 0.9, h: gv.y1 - gv.y0 });
       }
     }
-    const face = panelWithHoles(w, h, 6, holes);
+    // the face slab is only 1 m thick: the bridge and gallery interiors start right behind it (their
+    // forward walls sit at z0+1 and z0+3), so nothing of the exterior may reach further aft than z0+1
+    const face = panelWithHoles(w, h, 1.0, holes);
     face.rotateY(Math.PI); // extrusion along -z; the outward normal faces -z (forward)
-    kit.add("hullPlate1", face, { pos: [0, cy, b.z0 + 3], color: PALETTE.hullMid, uv: "world", texel: HULL_TEXEL });
-    // brow over the bridge windows and a sill below
-    kit.boxMM("hullTrim", [-vp.hw - 4, vp.y1 + 0.6, b.z0 - 2.4], [vp.hw + 4, vp.y1 + 2.4, b.z0 + 6], { color: PALETTE.hullDark, uv: "world", texel: 0.2 });
-    kit.boxMM("hullTrim", [-vp.hw - 4, vp.y0 - 1.6, b.z0 - 1.2], [vp.hw + 4, vp.y0 - 0.4, b.z0 + 6], { color: PALETTE.hullDark, uv: "world", texel: 0.2 });
-    // viewport glass sits 1 m inside the face (shared with the bridge interior)
-    kit.add("viewGlass", new THREE.PlaneGeometry(vp.hw * 2 + 1, vp.y1 - vp.y0 + 0.4), { pos: [0, (vp.y0 + vp.y1) / 2, b.z0 + 1.0], uv: "keep" });
-    for (const s of [-1, 1]) kit.add("viewGlass", new THREE.PlaneGeometry(gv.x1 - gv.x0, gv.y1 - gv.y0 + 0.2), { pos: [s * (gv.x0 + gv.x1) / 2, (gv.y0 + gv.y1) / 2, b.z0 + 1.0], uv: "keep" });
+    kit.add("hullPlate1", face, { pos: [0, cy, b.z0 + 0.5], color: PALETTE.hullMid, uv: "world", texel: HULL_TEXEL });
+    // brow over the bridge windows and a sill below (forward of the face only)
+    kit.boxMM("hullTrim", [-vp.hw - 4, vp.y1 + 0.6, b.z0 - 2.4], [vp.hw + 4, vp.y1 + 2.4, b.z0 + 0.6], { color: PALETTE.hullDark, uv: "world", texel: 0.2 });
+    kit.boxMM("hullTrim", [-vp.hw - 4, vp.y0 - 1.6, b.z0 - 1.2], [vp.hw + 4, vp.y0 - 0.4, b.z0 + 0.6], { color: PALETTE.hullDark, uv: "world", texel: 0.2 });
+    // viewport glass sits in the middle of the face slab (shared with the bridge / gallery interiors)
+    kit.add("viewGlass", new THREE.PlaneGeometry(vp.hw * 2 + 1, vp.y1 - vp.y0 + 0.4), { pos: [0, (vp.y0 + vp.y1) / 2, b.z0 + 0.5], uv: "keep" });
+    for (const s of [-1, 1]) kit.add("viewGlass", new THREE.PlaneGeometry(gv.x1 - gv.x0, gv.y1 - gv.y0 + 0.2), { pos: [s * (gv.x0 + gv.x1) / 2, (gv.y0 + gv.y1) / 2, b.z0 + 0.5], uv: "keep" });
     // running lights on the module corners
     for (const s of [-1, 1]) {
       kit.box("extEmitRed", s * (b.hw + 0.4), b.y1 - 2, b.z0 + 8, 0.8, 1.2, 2.5);
