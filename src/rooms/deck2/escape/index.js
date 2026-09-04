@@ -1,6 +1,8 @@
 // Deck 2 escape-pod bay: two rows of pod hatches with launch tubes, muster markings, status boards.
+// Content lives in ./detail.js.
 import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
+import { detail } from "./detail.js";
 
 const Y = 40;
 
@@ -13,17 +15,25 @@ export default defineRoom({
   ceil: 46,
   spawn: { pos: [0, Y, 328], yaw: 0 },
   views: {
-    "d2-escape-door": { pos: [0, Y, 328.5], yaw: 0, pitch: -2 },
-    "d2-escape-row-west": { pos: [-18, Y, 308], yaw: -135, pitch: -2 },
-    "d2-escape-row-east": { pos: [16, Y, 320], yaw: 90, pitch: -2 },
+    // from the door: the muster runway to the pod status board, hatch rows either side
+    "d2-escape-door": { pos: [0, Y, 328.6], yaw: 0, pitch: 0 },
+    // west row of pod stations receding forward
+    "d2-escape-west-row": { pos: [-13.0, Y, 327.4], yaw: 27, pitch: 2 },
+    // east row from the forward end, door and lockers in the distance
+    "d2-escape-east-row": { pos: [13.6, Y, 307.6], yaw: -152, pitch: 2 },
+    // pod status board with benches and lockers along the forward wall
+    "d2-escape-board": { pos: [-2.4, Y, 312.2], yaw: -14, pitch: 4 },
   },
   shell: {
     panelW: 2.0,
     wallColor: IMP.impGrey,
     wallAlt: IMP.impMid,
     stripMat: "emitAmber",
-    floor: { color: IMP.impMid },
-    ceiling: { channels: 4, axis: "x" },
-    lights: { count: 6, color: 0xffe0c0, intensity: 40, distance: 16 },
+    // the deck material is metallic, so the floor reads as whatever it mirrors: a mid ceiling and a
+    // slightly lifted floor tint keep the wide bay from going black between the amber accents
+    floor: { color: 0x6a6e76, strip: { axis: "z", width: 1.8 } },
+    ceiling: { channels: 4, axis: "x", stripMat: "emitAmber", color: IMP.impMid },
+    lights: false,
   },
+  detail,
 });
