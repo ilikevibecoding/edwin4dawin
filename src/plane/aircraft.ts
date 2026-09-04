@@ -44,7 +44,7 @@ export class Aircraft {
     if (simulate) this.flight.step(this.inputs, dt);
     this.syncModel();
     const t = this.flight.telemetry;
-    this.model.animate(this.inputs.pitch, this.inputs.roll, this.inputs.yaw, this.inputs.flaps, t.rpm, dt, time, night, t.gearDown);
+    this.model.animate(this.inputs.pitch, this.inputs.roll, this.inputs.yaw, this.inputs.flaps, t.rpm, dt, time, night, t.gearDown, t, this.inputs.throttle);
     this.effects.update(this.flight, this.model, dt, time, pixelHeight);
   }
 }
