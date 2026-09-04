@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ISD Vigilant — Imperial Star Destroyer</title>
+    <link rel="icon" href="data:," />
+    <script type="module" crossorigin src="./assets/index-7f2R6N-4.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CWvBjpOp.css">
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+
+    <div id="hud">
+      <div id="crosshair"></div>
+      <div id="prompt" class="hidden"></div>
+      <div id="mode" class="hidden"></div>
+      <div id="deck" class="hidden"></div>
+      <div id="hint" class="hidden"></div>
+      <div id="status">
+        <span id="status-tag">ISD VIGILANT</span>
+        <span id="location"></span>
+        <span id="status-text">All stations report ready.</span>
+      </div>
+      <div id="stats" class="hidden"></div>
+      <div id="menu" class="hidden">
+        <div id="menu-title"></div>
+        <ul id="menu-list"></ul>
+        <div id="menu-hint"></div>
+      </div>
+    </div>
+
+    <div id="fade">
+      <div id="fade-text"></div>
+    </div>
+
+    <div id="start">
+      <div class="card">
+        <h1>ISD VIGILANT</h1>
+        <p class="sub">Imperial I-class Star Destroyer · 1,600 m · Outer Rim patrol</p>
+        <p class="hint">Click to begin</p>
+        <p class="keys">EXTERIOR: drag orbit · wheel zoom · 1–6 camera presets · F board ship</p>
+        <p class="keys">INTERIOR: WASD move · Shift sprint · mouse look · E interact · F exterior view · F3 stats</p>
+        <p class="keys" id="start-info"></p>
+      </div>
+    </div>
+
+  </body>
+</html>
