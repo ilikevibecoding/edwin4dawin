@@ -4,6 +4,7 @@
 // doors are driven by the turbolift system.
 import * as THREE from "three";
 import { Kit } from "./kit.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { ROOM_BY_ID, roomBounds } from "./spec.js";
 import { PALETTE } from "./materials.js";
 import { impDecalRect, IMP_DECAL } from "./textures_imperial.js";
@@ -12,7 +13,7 @@ const SPEEDS = { std: 2.6, blast: 1.1, lift: 2.2 };
 const HOLD = 1.1; // seconds a door stays open after the trigger volume empties
 
 export class Door {
-  constructor(spec, { materials, audio = null }) {
+  constructor(spec, { materials, audio = null, frameKit = null }) {
     this.spec = spec;
     this.id = spec.id;
     this.type = spec.type;
@@ -33,6 +34,7 @@ export class Door {
     this.across = this.axis === "z" ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
     // rotate the group so local +Z is the passage direction
     if (this.axis === "x") this.group.rotation.y = Math.PI / 2;
+    this.frameKit = frameKit;
     this.build(materials);
     this.wasOpen = false;
   }
@@ -73,7 +75,7 @@ export class Door {
     const wallT = 0.4;
     const trim = big ? 0.5 : 0.22;
     // --- passage shell: floor, ceiling, side walls (only if the passage is longer than a wall)
-    kit.boxMM("impDeck", [-w / 2 - trim, -0.14, z0], [w / 2 + trim, 0, z1], { color: PALETTE.impGreyDark, texel: big ? 0.15 : 0.5 });
+    kit.boxMM("impTrim", [-w / 2 - trim, -0.14, z0], [w / 2 + trim, 0, z1], { color: PALETTE.impGreyDark, texel: big ? 0.15 : 0.5 });
     kit.boxMM("impTrim", [-w / 2 - trim, h, z0], [w / 2 + trim, h + trim + 0.2, z1], { color: PALETTE.impBlack, texel: 0.5 });
     for (const s of [-1, 1]) {
       const x0 = s * (w / 2);
@@ -82,7 +84,7 @@ export class Door {
       kit.collider([Math.min(x0, x1) - 0.02, 0, z0 - 0.02], [Math.max(x0, x1) + 0.02, h + trim, z1 + 0.02], "jamb");
     }
     // threshold plate
-    kit.boxMM(blast ? "chevronY" : "impMetal", [-w / 2, -0.005, -0.25], [w / 2, 0.012, 0.25], { color: blast ? 0xffffff : PALETTE.impGreyDark, texel: blast ? 1.2 : 2 });
+    kit.boxMM(blast ? "chevronY" : "impTrim", [-w / 2, -0.005, -0.25], [w / 2, 0.012, 0.25], { color: blast ? 0xffffff : PALETTE.impGrey, texel: blast ? 1.2 : 2 });
     // --- frame ring at the door plane, proud on both faces
     // frame depth along the passage: proud of both room faces when the rooms share a wall
     const fd = len < 1.4 ? len + 0.24 : big ? 0.9 : 0.36;
@@ -93,7 +95,7 @@ export class Door {
     // header light strip (white) + status lamp housing on both faces
     for (const s of [-1, 1]) {
       const zf = s * (fd / 2 + 0.01);
-      kit.boxMM("impMetal", [-w / 2 + 0.2, h + t * 0.25, Math.min(zf, zf + s * 0.05)], [w / 2 - 0.2, h + t * 0.75, Math.max(zf, zf + s * 0.05)], { color: PALETTE.impCharcoal, texel: 2 });
+      kit.boxMM("impTrim", [-w / 2 + 0.2, h + t * 0.25, Math.min(zf, zf + s * 0.05)], [w / 2 - 0.2, h + t * 0.75, Math.max(zf, zf + s * 0.05)], { color: PALETTE.impCharcoal, texel: 2 });
       kit.boxMM("emitWhiteDim", [-w / 2 + 0.3, h + t * 0.35, Math.min(zf + s * 0.05, zf + s * 0.07)], [w / 2 - 0.3, h + t * 0.65, Math.max(zf + s * 0.05, zf + s * 0.07)], { uv: "keep" });
       // door class decal on the frame post
       const g = new THREE.PlaneGeometry(Math.min(0.3, t * 0.9), Math.min(0.3, t * 0.9));
@@ -107,7 +109,7 @@ export class Door {
     if (big) {
       // heavy blast door: hydraulic rams and track housings above the leaves, chevrons on the floor lane
       for (const x of [-w * 0.3, 0, w * 0.3]) {
-        kit.cyl("impMetal", x, h + t + 0.5, 0, 0.35, 1.4, "y", { color: PALETTE.impGreyDark, segments: 14 });
+        kit.cyl("impTrim", x, h + t + 0.5, 0, 0.35, 1.4, "y", { color: PALETTE.impGreyDark, segments: 14 });
         kit.box("impTrim", x, h + t + 1.3, 0, 1.2, 0.5, 1.2, { color: PALETTE.impBlack });
       }
       kit.boxMM("chevronY", [-w / 2, -0.002, -len / 2 - 0.5], [w / 2, 0.006, -0.3], { texel: 0.6 });
@@ -119,19 +121,21 @@ export class Door {
       }
     }
     // status lamps: red (closed) and blue (open) — swapped by visibility
-    this.lampClosed = new THREE.Group();
-    this.lampOpen = new THREE.Group();
-    for (const s of [-1, 1]) {
-      const zf = s * (fd / 2 + 0.04);
-      const r = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.05), materials.emitRedImp);
-      r.position.set(w / 2 + t / 2, h + t * 0.5, zf);
-      this.lampClosed.add(r);
-      const b = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.05), materials.emitBlue);
-      b.position.set(w / 2 + t / 2, h + t * 0.5, zf);
-      this.lampOpen.add(b);
+    {
+      const lampGeo = () => {
+        const parts = [];
+        for (const s of [-1, 1]) {
+          const g = new THREE.BoxGeometry(0.16, 0.05, 0.05);
+          g.translate(w / 2 + t / 2, h + t * 0.5, s * (fd / 2 + 0.04));
+          parts.push(g);
+        }
+        return mergeGeometries(parts, false);
+      };
+      this.lampClosed = new THREE.Mesh(lampGeo(), materials.emitRedImp);
+      this.lampOpen = new THREE.Mesh(lampGeo(), materials.emitBlue);
+      this.lampOpen.visible = false;
+      this.group.add(this.lampClosed, this.lampOpen);
     }
-    this.lampOpen.visible = false;
-    this.group.add(this.lampClosed, this.lampOpen);
 
     // --- leaves
     const leafT = big ? 0.5 : blast ? 0.24 : 0.14;
@@ -143,7 +147,7 @@ export class Door {
       const x1 = s > 0 ? leafW : 0;
       if (blast) {
         // painted armour (dielectric): a bare-metal leaf only mirrors the dark room and reads as a hole
-        lk.boxMM("impPanel1", [x0, 0.02, -leafT / 2], [x1, h - 0.02, leafT / 2], { color: PALETTE.impGrey, uv: "world", texel: big ? 0.25 : 1 });
+        lk.boxMM("impPanel", [x0, 0.02, -leafT / 2], [x1, h - 0.02, leafT / 2], { color: PALETTE.impGrey, uv: "world", texel: big ? 0.25 : 1 });
         // raised armour bands
         for (const yy of big ? [h * 0.2, h * 0.5, h * 0.8] : [h * 0.3, h * 0.7]) {
           lk.boxMM("impTrim", [x0 + 0.05, yy - (big ? 0.5 : 0.12), -leafT / 2 - 0.03], [x1 - 0.05, yy + (big ? 0.5 : 0.12), leafT / 2 + 0.03], { color: PALETTE.impBlack, texel: 1 });
@@ -157,11 +161,11 @@ export class Door {
         lk.boxMM("impPanel", [x0, 0.02, -leafT / 2], [x1, h - 0.02, leafT / 2], { color: PALETTE.impGrey, uv: "world", texel: 1 });
         // recessed dark centre panel with a slim vertical light bar on the leading edge
         lk.boxMM("impTrim", [x0 + 0.12, 0.35, -leafT / 2 - 0.012], [x1 - 0.12, h - 0.35, leafT / 2 + 0.012], { color: PALETTE.impCharcoal, texel: 1 });
-        lk.boxMM("impPanel2", [x0 + 0.18, 0.42, -leafT / 2 - 0.02], [x1 - 0.18, h - 0.42, leafT / 2 + 0.02], { color: PALETTE.impWhite, uv: "world", texel: 1 });
+        lk.boxMM("impPanel", [x0 + 0.18, 0.42, -leafT / 2 - 0.02], [x1 - 0.18, h - 0.42, leafT / 2 + 0.02], { color: PALETTE.impWhite, uv: "world", texel: 1 });
         const ex = s > 0 ? x0 + 0.04 : x1 - 0.06;
         lk.boxMM(this.type === "lift" ? "emitWhite" : "emitBlue", [ex, 0.5, -leafT / 2 - 0.022], [ex + 0.02, h - 0.5, leafT / 2 + 0.022]);
         // kick plate
-        lk.boxMM("impMetal", [x0, 0.02, -leafT / 2 - 0.01], [x1, 0.3, leafT / 2 + 0.01], { color: PALETTE.impCharcoal, texel: 2 });
+        lk.boxMM("impTrim", [x0, 0.02, -leafT / 2 - 0.01], [x1, 0.3, leafT / 2 + 0.01], { color: PALETTE.impCharcoal, texel: 2 });
       }
       const leaf = new THREE.Group();
       lk.build(leaf);
@@ -169,7 +173,10 @@ export class Door {
       this.group.add(leaf);
       this.leaves.push(leaf);
     }
-    kit.build(this.group);
+    if (this.frameKit) {
+      this.group.updateMatrixWorld(true);
+      this.frameKit.absorb(kit, this.group.matrixWorld.clone());
+    } else kit.build(this.group);
     // world colliders: passage side walls (from the kit, rotated into world) and the leaves
     this.colliders = [];
     const rot = this.group.rotation.y;
@@ -254,14 +261,22 @@ export class Door {
 export function buildDoors(doorSpecs, cells, { materials, audio }) {
   const group = new THREE.Group();
   group.name = "doors";
+  // every door's static frame / passage geometry is batched into one merged mesh per material for the
+  // whole ship (a handful of draw calls instead of ~10 per visible door); leaves and lamps stay per door
+  const frameKit = new Kit(materials);
   const list = [];
   for (const spec of doorSpecs) {
     if (!cells.cells.has(spec.a) || !cells.cells.has(spec.b)) continue;
-    const d = new Door(spec, { materials, audio });
+    const d = new Door(spec, { materials, audio, frameKit });
     group.add(d.group);
     for (const c of d.colliders) cells.addCollider(c);
     cells.doors.set(d.id, d);
     list.push(d);
   }
-  return { group, doors: list };
+  const frames = new THREE.Group();
+  frames.name = "door-frames";
+  frameKit.build(frames);
+  for (const m of frames.children) m.frustumCulled = false; // ship-wide merged batch
+  group.add(frames);
+  return { group, doors: list, frames };
 }

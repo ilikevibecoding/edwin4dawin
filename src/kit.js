@@ -127,6 +127,19 @@ export class Kit {
     e.items.push({ matrix: matrix.clone(), color: color instanceof THREE.Color ? color.clone() : new THREE.Color(color) });
   }
 
+  /** Move another kit's pending geometry into this one, transformed by `matrix` (world-space batching). */
+  absorb(other, matrix) {
+    for (const [mat, geos] of other.groups) {
+      if (!this.groups.has(mat)) this.groups.set(mat, []);
+      const dst = this.groups.get(mat);
+      for (const g of geos) {
+        g.applyMatrix4(matrix);
+        dst.push(g);
+      }
+    }
+    other.groups.clear();
+  }
+
   // Register an interactable { object, material, id, label, key, onActivate }
   interactable(it) {
     this.interactables.push(it);
