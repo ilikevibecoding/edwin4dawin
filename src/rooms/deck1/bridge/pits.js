@@ -378,4 +378,20 @@ export function buildPlatforms(kit, L) {
   deckSeams(kit, [-xi, pz1 + 0.1], [xi, 511.6], y, { xs: -18, zs: 502.4, mat: "bridgeSeam" });
   // walkway floor hatches between the pendant pools
   for (const z of [476, 488]) floorHatch(kit, 0, y, z);
+  // deck plating on the fore platform and the aft deck (critic round 4: "foreground floor black, featureless" from
+  // the command and window cameras): a 2.4 m plate grid in the pit-floor material with 2 cm gaps showing the dark
+  // deck (the gaps are the seams here — the plates sit over the deckSeams' level), alternating tints a step darker
+  // than the pit plates so the command deck stays the more formal surface. The walkway keeps its gloss (its read is
+  // the threshold lines, hatches and the channel reflections). 3 mm thick: under the dais, pods and station bases.
+  const plateGrid = (x0, x1, z0, z1) => {
+    let k = 0;
+    for (let x = x0; x < x1 - 0.05; x += 2.4, k++) {
+      for (let z = z0, j = 0; z < z1 - 0.05; z += 2.4, j++) {
+        const tint = shade(PLATE, (k + j) % 2 ? 0.62 : 0.8);
+        kit.boxMM("bridgePitFloor", [x, y + 0.001, z], [Math.min(x + 2.38, x1), y + 0.004, Math.min(z + 2.38, z1)], { color: tint, texel: 0.5 });
+      }
+    }
+  };
+  plateGrid(-xi + 0.3, xi - 0.3, 458.6, pz0 - 0.5);
+  plateGrid(-xi + 0.3, xi - 0.3, pz1 + 0.5, 511.6);
 }

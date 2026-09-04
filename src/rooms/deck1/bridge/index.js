@@ -236,7 +236,8 @@ const manifest = {
     // distance 10, not 20: at 20 the port pendant reached the port passage's west wall through the door wall (no
     // shadows in the pool) at E ≈ 0.6 — as much as the passage's own pools — and the passage could not be dimmed.
     // 10 keeps ≈ 0.9 of the reach on the aft wall (5 m) and ≈ 0.75 on the side walls (6 m), 0.4 in the passage.
-    for (const [x, z] of L.aftCornerPendants) lights.push({ type: "point", pos: [x, pendantY, z], color: WARM, intensity: 85, distance: 10, priority: 0.75 });
+    // 100 cd (round 4: the command frame sat at mean 21 against the bridge's 25–27); the passage still gets ≤ 0.5
+    for (const [x, z] of L.aftCornerPendants) lights.push({ type: "point", pos: [x, pendantY, z], color: WARM, intensity: 100, distance: 10, priority: 0.75 });
     for (const s of [-1, 1]) {
       // fore platform downlights, inside the recessed ceiling housings (0.3 m boxes under the slab)
       lights.push({ type: "point", pos: [s * 9.5, CEILY - 0.05, 462.4], color: COOL, intensity: 80, distance: 18, priority: 0.85 });
