@@ -56,13 +56,13 @@ export function build(kit, ctx, room, lib) {
   // wall frame so the seat faces the wall (its back toward +N).
   function seat(f, u, nS) {
     f.cylV("metal", u, 0.02, nS, 0.27, 0.04, { color: P.darkMetal, segments: 12 });
-    f.cylV("metal", u, 0.2, nS, 0.055, 0.36, { color: P.gunmetal, segments: 8 });
-    f.box("metal", u, 0.4, nS, 0.44, 0.04, 0.44, { color: P.gunmetal });
-    f.box("rubber", u, 0.47, nS, 0.56, 0.1, 0.54, { color: P.rubber });
-    f.box("fabric", u, 0.535, nS - 0.02, 0.4, 0.04, 0.46, { color: P.slate, uv: "world", texel: 2 });
-    for (const b of [-0.24, 0.24]) f.box("rubber", u + b, 0.55, nS - 0.02, 0.09, 0.06, 0.48, { color: P.rubber });
+    f.cylV("metal", u, 0.16, nS, 0.055, 0.28, { color: P.gunmetal, segments: 8 });
+    f.box("metal", u, 0.32, nS, 0.44, 0.04, 0.44, { color: P.gunmetal });
+    f.box("rubber", u, 0.39, nS, 0.56, 0.1, 0.54, { color: P.rubber });
+    f.box("fabric", u, 0.455, nS - 0.02, 0.4, 0.04, 0.46, { color: P.slate, uv: "world", texel: 2 });
+    for (const b of [-0.24, 0.24]) f.box("rubber", u + b, 0.47, nS - 0.02, 0.09, 0.06, 0.48, { color: P.rubber });
     const tilt = 0.2;
-    const vb = 0.5;
+    const vb = 0.42;
     const nb = nS + 0.22;
     tiltedBox(f, "rubber", u, vb, nb, 0.56, 0.5, 0.1, tilt, { color: P.rubber });
     tiltedBox(f, "rubber", u, vb, nb, 0.46, 0.4, 0.1, tilt, { along: 0.5, color: P.rubber });
@@ -73,11 +73,11 @@ export function build(kit, ctx, room, lib) {
     tiltedBox(f, "fabric", u, vb, nb, 0.24, 0.1, 0.03, tilt, { along: 1.0, lift: -0.03, color: P.slate, uv: "world", texel: 2 });
     tiltedBox(f, "emitBlue", u, vb, nb, 0.03, 0.03, 0.01, tilt, { along: 0.7, lift: 0.1 });
     for (const a of [-0.34, 0.34]) {
-      f.box("metal", u + a, 0.66, nS + 0.1, 0.05, 0.2, 0.06, { color: P.gunmetal });
-      f.box("metal", u + a, 0.77, nS - 0.02, 0.06, 0.04, 0.42, { color: P.gunmetal });
-      f.box("rubber", u + a, 0.805, nS - 0.02, 0.08, 0.03, 0.38, { color: P.rubber });
+      f.box("metal", u + a, 0.58, nS + 0.1, 0.05, 0.2, 0.06, { color: P.gunmetal });
+      f.box("metal", u + a, 0.69, nS - 0.02, 0.06, 0.04, 0.42, { color: P.gunmetal });
+      f.box("rubber", u + a, 0.725, nS - 0.02, 0.08, 0.03, 0.38, { color: P.rubber });
     }
-    f.collider(u - 0.32, u + 0.32, 0, 1.2, nS - 0.3, nS + 0.42, "seat");
+    f.collider(u - 0.32, u + 0.32, 0, 1.15, nS - 0.3, nS + 0.42, "seat");
   }
 
   // Operator station on a wall frame: black desk with a dark-gloss top, sloped instrument panel with the
