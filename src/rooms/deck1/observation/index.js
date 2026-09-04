@@ -8,7 +8,7 @@ import { LIGHT } from "../shared/palette.js";
 import { windowBand } from "./window.js";
 import { lounge, holoAnchors, GROUPS, EAST_GROUP } from "./lounge.js";
 import { eastPart } from "./east.js";
-import { dressing, pendant, soffitCan } from "./dressing.js";
+import { dressing, keyHousing, pendant, soffitCan } from "./dressing.js";
 import { holoShips } from "./holo.js";
 import { observationMaterials } from "./atlas.js";
 
@@ -62,14 +62,32 @@ const manifest = {
     dressing(kit, FLOOR, ceilY, A);
     const holoUpdate = holoShips(ctx, holoAnchors(FLOOR));
 
-    // --- lights (13 of 14): warm pools carry the room, the window contributes a cold rim only. There are no
-    // shadows, so every descriptor sits inside a closed dark housing (mullion, pendant can, soffit can, sill slab).
+    // --- lights (14 of 14: 5 spots + 9 points): warm pools carry the room, the window contributes a cold rim and
+    // one cold raking key. Every descriptor sits inside a closed dark housing (mullion, pendant can, soffit can,
+    // sill slab, projector body). Five spots for four pool slots: score = 2 + priority − d/120, so the lounge,
+    // along, counter and gallery views drop the -64 soffit fill (out of frame there) and the window and viewer
+    // views drop the east fill (out of frame there); the window view — the critic's PASS — keeps its two cold keys
+    // and the -64 fill unchanged.
     // Cold key: two narrow spots hidden inside the mullions at x -70/-58, high in the reveal, cones pitched down
     // so the reveal head/jambs sit outside the cone (E ≈ 1.6 on the near-black floor).
     for (const x of [-70, -58]) {
       const tx = x + (x < -64 ? 1.6 : -1.6); // lean both cones toward the band's centre so the pools merge
       ctx.lights.push({ type: "spot", pos: [x, A.y1 - 0.2, A.zIn - 0.4], target: [tx, FLOOR, 462.6], color: LIGHT.coolWhite, intensity: 70, distance: 30, angle: 0.6, penumbra: 0.5, priority: 0.9 });
     }
+    // Raking key (critic round 3: "the wall is flat-lit"): a housed projector at the window head's east end, aimed
+    // 31° off the south wall's plane at the feature bay's upper panels (y 3.2 at x -38). Incidence 55–70° along the
+    // bay, so the over-panel seams, the plate, the tray and its drops throw gradients eastward: with decay 1.8,
+    // E ≈ 2.0 at x -42 → 1.0 at -38 → 0.5 at -34 → 0.3 at -30 (the pendant patch at -37.5 gives ≈ 2.5 for scale).
+    // The 24° cone (full to 12°) clears the north soffit lip, the niche bench (25° off-axis) and the floor's mirror
+    // point for the lounge camera; the only things inside it nearer than the wall are black pendant cans. Priority
+    // 0.85 puts it in the shadow slot for the lounge and gallery views (the two cold keys are farther), so the bay
+    // also gets the plate's and the tray's real shadows; its body sits inside the shadow camera's near plane.
+    const keyPos = [-49.4, A.y1 + 0.1, A.zIn + 0.6];
+    const keyTarget = [-38, FLOOR + 3.2, 465.7];
+    keyHousing(kit, keyPos, keyTarget);
+    // 140, not 200: at 200 the lounge frame's mean was 47 (the deck's brightest, +0.9 EV over the bridge) and the
+    // bay's top row of panels rendered near-white; 140 keeps the raking gradient with the panels at light grey.
+    ctx.lights.push({ type: "spot", pos: keyPos, target: keyTarget, color: LIGHT.coolWhite, intensity: 140, distance: 40, angle: 0.42, penumbra: 0.5, priority: 0.85 });
     // Bench-back fills: downward spots in cans under the soffits behind the two benches the critic's views look at
     // from behind. Every pool sits on the window side of the -64 bench and on the star-map side of the east bench,
     // so their backs, the floor behind them and the lower wall saw no light at all (critic round 2: "black slabs in

@@ -1,5 +1,6 @@
 // Officers' quarters — small shared helpers: wall-mounted boxes by normal, decal plates, amber lamps,
-// wainscot bands and a local (u,v) frame so one cabin function serves both sides of the corridor.
+// wainscot bands, a fleet crest and a local (u,v) frame so one cabin function serves both sides of the corridor.
+import * as THREE from "three";
 import { FLOOR } from "../shared/plan.js";
 import { IMP } from "../shared/palette.js";
 import { decalRect } from "../../../textures.js";
@@ -80,6 +81,38 @@ export function sconce(kit, p, n, { w = 0.7, h = 1.0, emit = "emitAmber" } = {})
   return [p[0] + d[0], p[1], p[2] + d[2]];
 }
 
+/**
+ * Fleet crest: a brushed-metal cog ring with six spokes and a hexagonal hub on a black backplate between two
+ * light rails — geometry only (no atlas cell, no emissive), so it reads as a cast plaque under the room's lights.
+ * p = centre on the wall face, n = normal into the room, d = ring diameter.
+ */
+export function crest(kit, p, n, d = 0.7) {
+  const alongX = n === "+x" || n === "-x";
+  const s = n === "+x" || n === "+z" ? 1 : -1;
+  const at = (t) => (alongX ? [p[0] + s * t, p[1], p[2]] : [p[0], p[1], p[2] + s * t]);
+  const axis = alongX ? "x" : "z";
+  const steel = { color: IMP.hullLight, texel: 1 };
+  const rail = { color: IMP.mid, texel: 2 };
+  mount(kit, "impPanel", p, n, d + 0.3, d + 0.3, 0, 0.025, { color: IMP.black.clone().multiplyScalar(0.47), texel: 1 });
+  mount(kit, "metal", [p[0], p[1] + d / 2 + 0.11, p[2]], n, d + 0.22, 0.02, 0.025, 0.035, rail);
+  mount(kit, "metal", [p[0], p[1] - d / 2 - 0.11, p[2]], n, d + 0.22, 0.02, 0.025, 0.035, rail);
+  let c = at(0.04);
+  kit.cyl("metalRough", c[0], c[1], c[2], d / 2, 0.03, axis, { ...steel, segments: 24 });
+  c = at(0.05);
+  kit.cyl("paintedMetal", c[0], c[1], c[2], d / 2 - 0.06, 0.03, axis, { color: IMP.black, texel: 1, segments: 24 });
+  c = at(0.07);
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI;
+    const len = d - 0.13;
+    const geo = alongX ? new THREE.BoxGeometry(0.012, 0.04, len) : new THREE.BoxGeometry(len, 0.04, 0.012);
+    kit.add("metalRough", geo, { pos: c, rot: alongX ? [a, 0, 0] : [0, 0, a], ...steel });
+  }
+  c = at(0.08);
+  kit.cyl("metalRough", c[0], c[1], c[2], d / 6, 0.03, axis, { ...steel, segments: 6 });
+  c = at(0.09);
+  kit.cyl("paintedMetal", c[0], c[1], c[2], d / 6 - 0.035, 0.03, axis, { color: IMP.black, texel: 1, segments: 6 });
+}
+
 // Atlas display: black housing + the emissive atlas cell; w is the face width, height follows the cell aspect.
 export function display(kit, p, n, name, w, { bezel = 0.035, depth = 0.04, frame = "paintedMetal" } = {}) {
   const [fw, fh] = cellSize(name, w);
@@ -137,7 +170,7 @@ export function wainscot(kit, { axis, at, from, to, n, gaps = [], y0 = 0.3, y1 =
 }
 
 // Ceiling luminaire: black housing flush with the ceiling + emissive diffuser
-export function luminaire(kit, x0, x1, z0, z1, ceilY, { emit = "emitWarmSoft", drop = 0.06 } = {}) {
+export function luminaire(kit, x0, x1, z0, z1, ceilY, { emit = "offLamp", drop = 0.06 } = {}) {
   kit.boxMM("paintedMetal", [x0, ceilY - drop, z0], [x1, ceilY, z1], { color: IMP.black, texel: 1 });
   kit.boxMM(emit, [x0 + 0.06, ceilY - drop - 0.01, z0 + 0.06], [x1 - 0.06, ceilY - drop, z1 - 0.06]);
 }

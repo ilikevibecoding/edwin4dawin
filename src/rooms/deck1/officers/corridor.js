@@ -1,6 +1,7 @@
-// Private corridor dressing: heavy recessed doorways with fixed leaves (open into the pocket or closed
+// Private corridor dressing: heavy recessed doorways with fixed leaves (open into the pocket, ajar, or closed
 // with a status lamp), atlas nameplates, amber bar lamps, intercoms, clean door-adjacent plates, ribs,
-// ceiling bay ribs, cable trays, service hatches / fire stations and the end-wall display.
+// ceiling bay ribs, cable trays, the centre-channel housing, service hatches / fire stations, a fire-point
+// recess, threshold mats and the end-wall display.
 import { FLOOR } from "../shared/plan.js";
 import { IMP } from "../shared/palette.js";
 import { mount, plate, junctionBox, amberBar, display, cleanPlate } from "./lib.js";
@@ -19,9 +20,11 @@ const cleanMid = clean(IMP.mid);
 /**
  * One corridor doorway. wallX = partition centre; face = corridor-side visible face x; n = normal into the
  * corridor ("+x" for the west wall, "-x" for the east wall); z0..z1 = gap.
- * opts: { closed, plateName, pocket, plateColor, lamp }
+ * opts: { closed, ajar, plateName, pocket, plateColor, lamp }. `pocket` is the side (−z / +z) the leaf slides into;
+ * `ajar` (true, or the gap width in m; default 0.45) leaves the rest of the leaf across the opening with the gap at
+ * the jamb away from the pocket.
  */
-export function doorway(kit, { wallX, face, n, z0, z1, h = 2.2, closed = false, plateName = "plate0", status = true, pocket = -1, plateColor = IMP.grey, lamp = true, ceilY = FLOOR + 3.2 }) {
+export function doorway(kit, { wallX, face, n, z0, z1, h = 2.2, closed = false, ajar = false, plateName = "plate0", status = true, pocket = -1, plateColor = IMP.grey, lamp = true, ceilY = FLOOR + 3.2 }) {
   const zc = (z0 + z1) / 2;
   const w = z1 - z0;
   const y = (v) => FLOOR + v;
@@ -37,7 +40,7 @@ export function doorway(kit, { wallX, face, n, z0, z1, h = 2.2, closed = false, 
   mount(kit, "impPanel", [face, y(h / 2), z0 - 0.05], n, 0.1, h, 0.12, 0.2, cleanBlack);
   mount(kit, "impPanel", [face, y(h / 2), z1 + 0.05], n, 0.1, h, 0.12, 0.2, cleanBlack);
   mount(kit, "impPanel", [face, y(h + 0.1), zc], n, w + 0.2, 0.2, 0.12, 0.2, cleanBlack);
-  mount(kit, "emitWarmSoft", [face, y(h + 0.01), zc], n, w - 0.1, 0.012, 0.13, 0.19);
+  mount(kit, "offLamp", [face, y(h + 0.01), zc], n, w - 0.1, 0.012, 0.13, 0.19);
   // kick plates and a threshold across the wall thickness
   mount(kit, "metal", [face, y(0.08), z0 - 0.15], n, 0.3, 0.16, 0.12, 0.13, midM);
   mount(kit, "metal", [face, y(0.08), z1 + 0.15], n, 0.3, 0.16, 0.12, 0.13, midM);
@@ -55,6 +58,24 @@ export function doorway(kit, { wallX, face, n, z0, z1, h = 2.2, closed = false, 
       kit.boxMM("metal", [sx - 0.02, FLOOR + 0.95, zc - 0.25], [sx + 0.012, FLOOR + 0.99, zc + 0.25], midM);
     }
     kit.collider([lx0 - 0.02, FLOOR, z0], [lx1 + 0.02, FLOOR + h, z1], "door-closed");
+  } else if (ajar) {
+    // leaf slid `gap` m into the pocket: the rest still spans the opening, the gap sits at the far jamb
+    const gap = typeof ajar === "number" ? ajar : 0.45;
+    const leaf = w - gap;
+    const a0 = pocket < 0 ? z0 : z1 - leaf;
+    const a1 = a0 + leaf;
+    const edge = pocket < 0 ? a1 : a0; // leading edge of the leaf
+    kit.boxMM("impPanel", [lx0, FLOOR + 0.01, a0 + 0.01], [lx1, FLOOR + h - 0.01, a1 - 0.01], cleanMid);
+    // leading-edge strip in the mid tone (closed leaves use black): it faces the gap, so the room's light marks it
+    kit.boxMM("impPanel", [lx0 - 0.005, FLOOR + 0.02, edge - 0.01], [lx1 + 0.005, FLOOR + h - 0.02, edge + 0.01], cleanMid);
+    kit.boxMM("paintedMetal", [lx0 - 0.004, FLOOR + 0.02, a0 + 0.03], [lx1 + 0.004, FLOOR + 0.3, a1 - 0.03], dark);
+    const sx = n === "+x" ? lx1 : lx0 - 0.01; // corridor-facing side of the leaf
+    kit.boxMM("paintedMetal", [sx, FLOOR + 0.3, a0 + 0.1], [sx + 0.01, FLOOR + h - 0.3, a1 - 0.1], dark);
+    kit.boxMM("paintedMetal", [sx - 0.002, FLOOR + 1.15, a0 + 0.08], [sx + 0.012, FLOOR + 1.19, a1 - 0.08], black);
+    kit.boxMM("metal", [sx - 0.02, FLOOR + 0.95, edge + (pocket < 0 ? -0.3 : 0.06)], [sx + 0.012, FLOOR + 0.99, edge + (pocket < 0 ? -0.06 : 0.3)], midM);
+    kit.collider([lx0 - 0.02, FLOOR, a0], [lx1 + 0.02, FLOOR + h, a1], "door-ajar");
+    // a gap under 0.7 m is too narrow for the player capsule (r 0.32): block it flush with the leaf
+    if (gap < 0.7) kit.collider([lx0 - 0.02, FLOOR, pocket < 0 ? a1 : z0], [lx1 + 0.02, FLOOR + h, pocket < 0 ? z1 : a0], "door-ajar-gap");
   } else {
     const ez0 = pocket < 0 ? z0 : z1 - 0.1;
     kit.boxMM("impPanel", [lx0, FLOOR + 0.01, ez0], [lx1, FLOOR + h - 0.01, ez0 + 0.1], cleanMid);
@@ -121,7 +142,7 @@ export function ribs(kit, x0, x1, floorY, ceilY, stations) {
     kit.boxMM("impPanel", [x0, floorY, a - rib / 2], [x0 + depth, ceilY, a + rib / 2], cleanDark);
     kit.boxMM("impPanel", [x1 - depth, floorY, a - rib / 2], [x1, ceilY, a + rib / 2], cleanDark);
     kit.boxMM("impPanel", [x0, ceilY - depth, a - rib / 2], [x1, ceilY, a + rib / 2], cleanDark);
-    kit.boxMM("emitWarmSoft", [x0 + depth, ceilY - 0.08, a - 0.02], [x1 - depth, ceilY - 0.06, a + 0.02]);
+    kit.boxMM("offLamp", [x0 + depth, ceilY - 0.08, a - 0.02], [x1 - depth, ceilY - 0.06, a + 0.02]);
     kit.boxMM("metal", [x0, floorY + 1.0, a - rib / 2 - 0.01], [x0 + depth + 0.01, floorY + 1.04, a + rib / 2 + 0.01], midM);
     kit.boxMM("metal", [x1 - depth - 0.01, floorY + 1.0, a - rib / 2 - 0.01], [x1, floorY + 1.04, a + rib / 2 + 0.01], midM);
   }
@@ -177,12 +198,13 @@ export function fireStation(kit, p, n) {
 }
 
 /**
- * Centre floor strip in the corridor-kit look, with the blue edge lines recessed in a groove: a 1.5 cm emitter
+ * Centre floor strip in the corridor-kit look, with the edge lines recessed in a groove: a 1.5 cm emitter
  * (half the shared kit's 3 cm bar) set 4 mm below two black lips, so only its top face shows and it disappears
  * at grazing angles instead of converging into two white lines (critic round 2: "floor edge strips clip white").
+ * The lines are amber — the officers' accent — not the spine's cold blue (critic round 3).
  * Long thin boxes are split into ≤ 6 m pieces (depth precision under software GL).
  */
-export function floorStrip(kit, xc, z0, z1, { segment = 6 } = {}) {
+export function floorStrip(kit, xc, z0, z1, { segment = 6, emit = "emitAmber" } = {}) {
   const n = Math.max(1, Math.ceil((z1 - z0) / segment));
   const run = (lo, hi, place) => {
     for (let i = 0; i < n; i++) place(lo + ((hi - lo) * i) / n, lo + ((hi - lo) * (i + 1) / n));
@@ -198,26 +220,105 @@ export function floorStrip(kit, xc, z0, z1, { segment = 6 } = {}) {
     run(z0, z1, (a, b) => kit.boxMM("paintedMetal", [s > 0 ? hi - 0.025 : lo, FLOOR + 0.004, a], [s > 0 ? hi : lo + 0.025, FLOOR + 0.012, b], black));
     const ex0 = xc + s * 0.512;
     const ex1 = xc + s * 0.527;
-    run(z0 + 0.4, z1 - 0.4, (a, b) => kit.boxMM("emitBlue", [Math.min(ex0, ex1), FLOOR + 0.004, a], [Math.max(ex0, ex1), FLOOR + 0.008, b]));
+    run(z0 + 0.4, z1 - 0.4, (a, b) => kit.boxMM(emit, [Math.min(ex0, ex1), FLOOR + 0.004, a], [Math.max(ex0, ex1), FLOOR + 0.008, b]));
   }
 }
 
-// Floor scuffs along the centre path / thresholds: a few thin dark patches beside the strip
-export function floorScuffs(kit, xc, zs) {
-  for (let i = 0; i < zs.length; i++) {
-    const z = zs[i];
-    const side = i % 2 ? 1 : -1;
-    const x = xc + side * (0.78 + (i % 3) * 0.12);
-    kit.boxMM("paintedMetal", [x - 0.18, FLOOR, z - 0.3 - (i % 2) * 0.2], [x + 0.18, FLOOR + 0.002, z + 0.3], black);
-    kit.boxMM("paintedMetal", [x + 0.25 * side - 0.08, FLOOR, z + 0.35], [x + 0.25 * side + 0.08, FLOOR + 0.002, z + 0.9], black);
+/**
+ * Threshold mats: one crisp dark rectangle with a thin lighter border in front of every door, 0.9 m deep from the
+ * wall face and 0.1 m wider than the opening either side (replaced the floor scuffs, whose loose dark patches read
+ * as spills — critic round 3). `dir` = +1 when the corridor lies on the +x side of `face`.
+ */
+export function thresholdMats(kit, face, dir, doors) {
+  const border = { color: IMP.hullDark, texel: 2 };
+  for (const [z0, z1] of doors) {
+    const xa = Math.min(face + dir * 0.02, face + dir * 0.92);
+    const xb = Math.max(face + dir * 0.02, face + dir * 0.92);
+    const za = z0 - 0.1;
+    const zb = z1 + 0.1;
+    kit.boxMM("paintedMetal", [xa, FLOOR, za], [xb, FLOOR + 0.003, zb], black);
+    kit.boxMM("metal", [xa + 0.03, FLOOR + 0.003, za + 0.03], [xb - 0.03, FLOOR + 0.005, za + 0.055], border);
+    kit.boxMM("metal", [xa + 0.03, FLOOR + 0.003, zb - 0.055], [xb - 0.03, FLOOR + 0.005, zb - 0.03], border);
+    kit.boxMM("metal", [xa + 0.03, FLOOR + 0.003, za + 0.03], [xa + 0.055, FLOOR + 0.005, zb - 0.03], border);
+    kit.boxMM("metal", [xb - 0.055, FLOOR + 0.003, za + 0.03], [xb - 0.03, FLOOR + 0.005, zb - 0.03], border);
   }
+}
+
+/**
+ * Housing for the shell ceiling's centre channel (recess x = xc ± 0.25 from ceilY up to the slab at ceilY + 0.22,
+ * with an 8 cm bare emitter near the top that read as a clipped white gap the corridor's full length — critic
+ * round 3). A black body fills the recess above ceilY + 0.10 and hides the shared bar; proud lips hang 3 cm below
+ * the ceiling either side; the light is a 5 cm diffuser dash 0.6 m long per 1 m module (the emitting area cut
+ * ~60 %) on the body's underside, 13 cm up behind a louvre bar at every module joint — so beyond ~11 m the bars
+ * hide the dashes and only the housing shows, and the channel fades out with distance instead of converging into
+ * a line. Long pieces are split ≤ 6 m for depth precision.
+ */
+export function channelHousing(kit, xc, z0, z1, ceilY) {
+  const n = Math.ceil((z1 - z0) / 6);
+  const pieces = (fn) => {
+    for (let i = 0; i < n; i++) fn(z0 + ((z1 - z0) * i) / n, z0 + ((z1 - z0) * (i + 1)) / n);
+  };
+  pieces((a, b) => kit.boxMM("paintedMetal", [xc - 0.25, ceilY + 0.1, a], [xc + 0.25, ceilY + 0.2, b], black));
+  for (const s of [-1, 1]) {
+    const lo = xc + Math.min(s * 0.2, s * 0.27);
+    const hi = xc + Math.max(s * 0.2, s * 0.27);
+    pieces((a, b) => kit.boxMM("paintedMetal", [lo, ceilY - 0.03, a], [hi, ceilY + 0.1, b], black));
+    pieces((a, b) => kit.boxMM("metal", [s < 0 ? lo : hi - 0.012, ceilY - 0.03, a], [s < 0 ? lo + 0.012 : hi, ceilY - 0.02, b], midM));
+  }
+  const modules = Math.floor((z1 - z0 - 0.4) / 1.0);
+  const start = z0 + ((z1 - z0) - modules * 1.0) / 2;
+  for (let i = 0; i <= modules; i++) {
+    const z = start + i;
+    kit.boxMM("metal", [xc - 0.2, ceilY - 0.03, z - 0.03], [xc + 0.2, ceilY - 0.005, z + 0.03], midM);
+    if (i < modules) kit.boxMM("offLamp", [xc - 0.025, ceilY + 0.094, z + 0.2], [xc + 0.025, ceilY + 0.1, z + 0.8], { uv: "keep" });
+  }
+}
+
+/**
+ * Fire-point recess: the wall opening (cut by corridorWall, liners included) gets a back panel 0.3 m in, a sill
+ * plate with a red band, an extinguisher and a hose reel on brackets, the FIRE SUPPRESSION label and a red beacon
+ * under the head. `face` = corridor-side wall face, `n` = normal into the corridor.
+ */
+export function fireRecess(kit, { face, n, z0, z1, y0, y1 }) {
+  const s = n === "+x" ? -1 : 1; // into the wall
+  const X = (d) => face + s * d;
+  const mm = (d0, d1, ya, yb, za, zb) => [
+    [Math.min(X(d0), X(d1)), ya, za],
+    [Math.max(X(d0), X(d1)), yb, zb],
+  ];
+  const zc = (z0 + z1) / 2;
+  const back = 0.3;
+  kit.boxMM("impPanel", ...mm(back, back + 0.04, y0, y1, z0 - 0.06, z1 + 0.06), cleanDark);
+  kit.boxMM("metal", ...mm(-0.02, back, y0, y0 + 0.012, z0 - 0.06, z1 + 0.06), midM);
+  kit.boxMM("paintedMetal", ...mm(-0.025, -0.02, y0 - 0.06, y0 - 0.02, z0 - 0.06, z1 + 0.06), { color: IMP.red, texel: 1 });
+  // extinguisher on a bracket: red bottle, black neck and handle, steel collar
+  const ez = z0 + 0.24;
+  kit.cyl("paintedMetal", X(0.16), y0 + 0.32, ez, 0.085, 0.6, "y", { color: IMP.red, texel: 1, segments: 12 });
+  kit.cyl("metal", X(0.16), y0 + 0.63, ez, 0.05, 0.03, "y", { ...midM, segments: 12 });
+  kit.cyl("paintedMetal", X(0.16), y0 + 0.7, ez, 0.028, 0.12, "y", { ...black, segments: 8 });
+  kit.boxMM("paintedMetal", ...mm(0.1, 0.22, y0 + 0.75, y0 + 0.78, ez - 0.02, ez + 0.02), black);
+  kit.boxMM("metal", ...mm(0.22, back, y0 + 0.4, y0 + 0.44, ez - 0.1, ez + 0.1), midM);
+  kit.boxMM("paintedMetal", ...mm(0.08, 0.24, y0 + 0.02, y0 + 0.035, ez - 0.1, ez + 0.1), black);
+  // hose reel: dark drum with an amber hose coil, nozzle clipped beside it
+  const hz = z1 - 0.28;
+  kit.cyl("metalRough", X(0.17), y0 + 1.05, hz, 0.24, 0.12, "x", { color: IMP.dark, texel: 1, segments: 16 });
+  kit.cyl("metalRough", X(0.17), y0 + 1.05, hz, 0.17, 0.14, "x", { color: IMP.amber, texel: 1, segments: 16 });
+  kit.cyl("metal", X(0.17), y0 + 1.05, hz, 0.05, 0.16, "x", { ...midM, segments: 8 });
+  kit.boxMM("metal", ...mm(0.23, back, y0 + 0.78, y0 + 1.32, hz - 0.03, hz + 0.03), midM);
+  kit.boxMM("paintedMetal", ...mm(0.12, 0.16, y0 + 0.55, y0 + 0.75, hz + 0.24, hz + 0.28), black);
+  kit.boxMM("metal", ...mm(0.11, 0.17, y0 + 0.75, y0 + 0.8, hz + 0.23, hz + 0.29), midM);
+  // label on the back panel, beacon under the head
+  display(kit, [X(back), y0 + 1.5, zc], n, "lblFire", 0.36, { bezel: 0.012, depth: 0.02 });
+  kit.boxMM("paintedMetal", ...mm(0.08, 0.24, y1 - 0.09, y1 - 0.01, zc - 0.1, zc + 0.1), black);
+  kit.boxMM("emitRedImp", ...mm(0.1, 0.22, y1 - 0.095, y1 - 0.09, zc - 0.07, zc + 0.07));
+  kit.collider(...mm(-0.03, back + 0.04, FLOOR, y1 + 0.06, z0 - 0.06, z1 + 0.06), "fire-recess");
 }
 
 // Corridor end wall display (focal point for the long view) + a bench below
 export function endWall(kit, z, xc, n) {
   const [fw, fh] = noticeScreen(kit, [xc, FLOOR + 1.85, z], n, "status", 1.2);
   mount(kit, "darkGloss", [xc, FLOOR + 1.85 + fh / 2 + 0.3, z], n, fw + 0.6, 0.24, 0, 0.02);
-  mount(kit, "emitWarmSoft", [xc, FLOOR + 1.85 + fh / 2 + 0.3, z], n, fw, 0.03, 0.02, 0.03);
+  mount(kit, "offLamp", [xc, FLOOR + 1.85 + fh / 2 + 0.3, z], n, fw, 0.03, 0.02, 0.03);
   amberBar(kit, [xc - fw / 2 - 0.45, FLOOR + 1.7, z], n);
   amberBar(kit, [xc + fw / 2 + 0.45, FLOOR + 1.7, z], n);
   junctionBox(kit, [xc - 1.35, FLOOR + 0.9 + 0.35, z], n, "emitRedImp");

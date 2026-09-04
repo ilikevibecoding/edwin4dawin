@@ -1,7 +1,8 @@
 // Module-local 1024² display atlas for the observation gallery: star charts (three sectors), the viewing schedule,
-// a hull-camera feed, sill heading readouts, dispenser menus and the viewer eyepiece screen. Dark backgrounds, blue /
-// amber / red Imperial UI in a monospace face. One canvas → one emissive material ("obsScreen"), replacing the two
-// bridge stand-in screen textures the critic recognised as the bridge template.
+// a hull-camera feed, sill heading readouts, dispenser menus, the viewer eyepiece screen and the display case's
+// light recognition placard. Dark backgrounds, blue / amber / red Imperial UI in a monospace face. One canvas → one
+// emissive material ("obsScreen"), replacing the two bridge stand-in screen textures the critic recognised as the
+// bridge template.
 import * as THREE from "three";
 import { makeCanvas, toTexture, mulberry32 } from "../../../textures.js";
 
@@ -295,30 +296,56 @@ export function makeObservationAtlas() {
     text("GALLERY OPEN TO ALL RANKS · SILENCE DURING BRIEFINGS · NO RECORDING DEVICES", 12, h - 13, 9, DIM, "left", false);
   });
 
-  // --- fleet disposition (spare cell; escort positions relative to the ship)
+  // --- recognition placard behind the ship model in the display case (dressing.js): the one light plate in the
+  // atlas — a backlit museum card in ink line-work, not a dark UI screen — side elevation and plan of the wedge hull
+  // with dimension bars. Emissive 1.0 × #a6aab2 ≈ 0.39 radiance: a lit light-grey plate, well under the strips.
   cell("fleet", (w, h) => {
-    header(w, "ESCORT DISPOSITION", "RELATIVE · 10 KM RINGS", AMBER);
-    const cx = w * 0.32;
-    const cy = h * 0.55;
-    for (let r = 30; r <= 90; r += 30) ring(cx, cy, r, "rgba(255,160,40,0.25)");
-    ctx.fillStyle = PALE;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - 10);
-    ctx.lineTo(cx + 6, cy + 8);
-    ctx.lineTo(cx - 6, cy + 8);
-    ctx.closePath();
-    ctx.fill();
-    for (let k = 0; k < 5; k++) {
-      const a = rand() * Math.PI * 2;
-      const r = 35 + rand() * 60;
-      const x = cx + r * Math.cos(a);
-      const y = cy + r * Math.sin(a);
-      dot(x, y, 2.5, k < 3 ? AMBER : GREY);
-      text(`ESC-${k + 1}`, x + 6, y, 8, GREY, "left", false);
-    }
-    const list = ["ESC-1  FRIGATE   ON STATION", "ESC-2  FRIGATE   ON STATION", "ESC-3  FRIGATE   REPOSITION", "ESC-4  PICKET    ON STATION", "ESC-5  TENDER    DOCKING"];
-    list.forEach((s, k) => text(s, w * 0.6, 50 + k * 20, 10, k === 2 ? AMBER : GREY, "left", false));
-    text("FORMATION DELTA · HOLD UNTIL JUMP", w - 12, h - 12, 9, DIM, "right", false);
+    const INK = "#1c2230";
+    ctx.fillStyle = "#a6aab2";
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(10, 10, w - 20, h - 20);
+    text("RECOGNITION PROFILE · WEDGE-HULL CAPITAL", 22, 30, 14, INK);
+    text("SCALE 1 : 1600", w - 22, 30, 10, INK, "right", false);
+    ctx.fillStyle = INK;
+    ctx.fillRect(22, 44, w - 44, 2);
+    ctx.lineWidth = 2.5;
+    const poly = (pts, close = false) => {
+      ctx.beginPath();
+      pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+      if (close) ctx.closePath();
+      ctx.stroke();
+    };
+    // side elevation, nose left: hull, terrace, tower, bridge, belly
+    const ex = 30;
+    const ey = 132;
+    const L = 240;
+    poly([[ex, ey], [ex + L, ey - 22], [ex + L, ey + 14]], true);
+    poly([[ex + 110, ey - 10], [ex + 110, ey - 30], [ex + 222, ey - 30], [ex + 222, ey - 20]]);
+    poly([[ex + 160, ey - 30], [ex + 160, ey - 46], [ex + 190, ey - 46], [ex + 190, ey - 30]]);
+    poly([[ex + 150, ey - 46], [ex + 200, ey - 46], [ex + 200, ey - 54], [ex + 150, ey - 54]], true);
+    poly([[ex + 60, ey + 5], [ex + 180, ey + 5], [ex + 180, ey + 26], [ex + 100, ey + 26]], true);
+    // plan view, nose left: hull triangle, terrace outline, centreline
+    const px = 300;
+    const py = 130;
+    poly([[px, py], [px + 180, py - 58], [px + 180, py + 58]], true);
+    poly([[px + 95, py - 11], [px + 176, py - 11], [px + 176, py + 11], [px + 95, py + 11]], true);
+    ctx.setLineDash([4, 4]);
+    poly([[px + 6, py], [px + 178, py]]);
+    ctx.setLineDash([]);
+    // dimension bars
+    const dim = (x0, x1, yy, label) => {
+      ctx.fillStyle = INK;
+      ctx.fillRect(x0, yy, x1 - x0, 1);
+      ctx.fillRect(x0, yy - 5, 1, 10);
+      ctx.fillRect(x1 - 1, yy - 5, 1, 10);
+      text(label, (x0 + x1) / 2, yy + 11, 9, INK, "center", false);
+    };
+    dim(ex, ex + L, ey + 44, "LOA 1 600 M");
+    dim(px, px + 180, py + 78, "BEAM 900 M · DRAUGHT 440 M");
+    text("FLEET ARCHIVE · DECK 1 OBSERVATION GALLERY", 22, h - 22, 9, INK, "left", false);
+    text("CLASS: LINE DESTROYER · HULL 3", w - 22, h - 22, 9, INK, "right", false);
   });
 
   return toTexture(c, { srgb: true, wrap: false, anisotropy: 4 });

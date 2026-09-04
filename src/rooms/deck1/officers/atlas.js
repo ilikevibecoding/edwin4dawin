@@ -346,10 +346,15 @@ export function makeOfficersAtlas() {
   return toTexture(c, { srgb: true, wrap: false, anisotropy: 4 });
 }
 
-// manifest.materials(shared) hook: one emissive material for every display in the module
+// manifest.materials(shared) hook: one emissive material for every display in the module, plus the warm lens/cove
+// emitter. offLamp replaces the shared emitWarmSoft (emissive 1.9) everywhere in the module: its red channel sat
+// 65 % over the bloom threshold, so any lens seen square-on — the cabin luminaire's two panes from the door camera,
+// 250 px — clipped to white with a halo. At 1.15 the peak channel is at the threshold: the lenses read as bright
+// warm glass (sRGB ≈ 236/208/152) with no bloom, and the cove lines lose only their halos. Same material count (16).
 export function officersMaterials() {
   const tex = makeOfficersAtlas();
   return {
+    offLamp: new THREE.MeshStandardMaterial({ color: 0x1a1410, emissive: 0xffc78a, emissiveIntensity: 1.15, roughness: 0.5, metalness: 0 }),
     offScreen: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.9, roughness: 0.2, metalness: 0, envMapIntensity: 0.6 }),
   };
 }

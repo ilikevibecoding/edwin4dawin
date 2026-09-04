@@ -1,9 +1,11 @@
 // Architectural dressing: cove soffits with short ribs every 4 m (ribs never cross the two ceiling channels, so
 // the channels stay two unbroken low lines), a per-bay cove strip over the window band only, cable tray,
-// framed ship-silhouette plaques, junction boxes, vents, intercoms and decals.
+// framed ship-silhouette plaques, junction boxes, vents, intercoms and decals, the south-wall feature bay of
+// over-panels around the star-chart plate, the ship-model display case and the raking key's housing.
 import * as THREE from "three";
 import { IMP } from "../shared/palette.js";
 import { decalRect } from "../../../textures.js";
+import { cellRect } from "./atlas.js";
 
 const X0 = -83.7;
 const X1 = -20.3;
@@ -18,7 +20,9 @@ const cDark = clean(IMP.dark);
 export function dressing(kit, FLOOR, ceilY, A) {
   ceilingWork(kit, ceilY, A);
   southWall(kit, FLOOR);
+  featureBay(kit, FLOOR);
   northWallEast(kit, FLOOR);
+  displayCase(kit, FLOOR);
   doorEnd(kit, FLOOR);
 }
 
@@ -64,12 +68,161 @@ function southWall(kit, y) {
   kit.add("decal", new THREE.PlaneGeometry(0.4, 0.4), { pos: [-28.5, y + 1.9, zf - 0.001], rot: [0, Math.PI, 0], uv: "keep", uvRect: decalRect(6) });
 }
 
-// blank north-wall stretch between the briefing niche and the counter (x -41.5..-34): two plaques + a vent
+// blank north-wall stretch between the briefing niche and the counter (x -41.5..-34): two plaques + a vent; the
+// intercom sits west of the -40.2 plaque, leaving the wall east of the -36.2 plaque to the display case
 function northWallEast(kit, y) {
   plaque(kit, -40.2, y + 2.3, N_FACE, 1, 3);
   plaque(kit, -36.2, y + 2.3, N_FACE, 1, 4);
   greeble(kit, -38.2, y, N_FACE, 1, "vent");
-  greeble(kit, -34.6, y, N_FACE, 1, "intercom");
+  greeble(kit, -41.8, y, N_FACE, 1, "intercom");
+}
+
+// --- south-wall feature bay (x -46..-30.4, rib to rib) around the star-chart plate. Critic round 3: "rivet-grid
+// wall reads as wallpaper under flat light". Two black backing plates (the shell's strip row stays exposed between
+// them) carry clean over-panels in a 2.4 / 2.4 / 1.2 rhythm — half-width every third, one texture tile per plate
+// so each plate has its own corner rivets — with 3 cm seams 2.5 cm deep that the raking key (index.js) shades from
+// the west. Pilasters close both ends; the cable tray continues over the bay and feeds the chart plate through two
+// conduit drops and a junction box; a vent grille sits on one of the half-width plates; an intercom east of the plate.
+const BAY = { x0: -46.0, x1: -30.4, cuts: [-46.0, -43.6, -41.2, -40.0, -37.6, -35.2, -34.0, -31.6, -30.4] };
+const PLATE = { x0: -42.2, x1: -33.8, y0: 1.16, y1: 3.04 }; // star-chart plate footprint (east.js)
+function featureBay(kit, y) {
+  const zf = S_FACE;
+  const back = (y0, y1) => kit.boxMM("impPanel", [BAY.x0, y + y0, zf - 0.015], [BAY.x1, y + y1, zf], cBlack);
+  back(0.33, 2.02);
+  back(2.28, 4.92);
+  const rows = [
+    [0.36, 1.15],
+    [1.21, 1.99],
+    [2.31, 3.57],
+    [3.63, 4.89],
+  ];
+  rows.forEach(([r0, r1], ri) => {
+    for (let ci = 0; ci < BAY.cuts.length - 1; ci++) {
+      const c0 = BAY.cuts[ci] + 0.015;
+      const c1 = BAY.cuts[ci + 1] - 0.015;
+      if (c0 >= PLATE.x0 - 0.05 && c1 <= PLATE.x1 + 0.05 && r0 >= PLATE.y0 - 0.05 && r1 <= PLATE.y1 + 0.05) continue; // behind the plate
+      const half = c1 - c0 < 1.5;
+      const tone = half ? IMP.grey : (ri + ci) % 5 === 4 ? IMP.hullLight : IMP.white;
+      kit.boxMM("impPanel", [c0, y + r0, zf - 0.04], [c1, y + r1, zf - 0.015], { color: tone, uv: "scale", uvScale: [half ? 1 : 2, 1] });
+    }
+  });
+  // pilasters with a steel rule, floor kick to soffit underside
+  for (const px of [BAY.x0 - 0.1, BAY.x1 + 0.1]) {
+    kit.boxMM("impPanel", [px - 0.11, y + 0.3, zf - 0.08], [px + 0.11, y + 5.08, zf], cDark);
+    kit.boxMM("metal", [px - 0.02, y + 0.4, zf - 0.09], [px + 0.02, y + 4.95, zf - 0.08], { color: IMP.grey, texel: 1 });
+  }
+  // cable tray continued over the bay (the west run ends at -46.4): bottom, rails, hangers, two cables
+  const tx0 = -46.4;
+  const tx1 = BAY.x1;
+  kit.boxMM("metal", [tx0, y + 4.55, zf - 0.34], [tx1, y + 4.6, zf - 0.04], { color: IMP.dark, texel: 1 });
+  kit.boxMM("metal", [tx0, y + 4.55, zf - 0.34], [tx1, y + 4.72, zf - 0.3], { color: IMP.dark, texel: 1 });
+  kit.boxMM("metal", [tx0, y + 4.55, zf - 0.08], [tx1, y + 4.72, zf - 0.04], { color: IMP.dark, texel: 1 });
+  for (const x of [-45.6, -42, -38, -34, -30.8]) kit.boxMM("paintedMetal", [x - 0.04, y + 4.5, zf - 0.36], [x + 0.04, y + 4.8, zf], { color: IMP.black, texel: 1 });
+  kit.cyl("paintedMetal", (tx0 + tx1) / 2, y + 4.63, zf - 0.19, 0.03, tx1 - tx0, "x", { color: IMP.black, texel: 1 });
+  kit.cyl("paintedMetal", (tx0 + tx1) / 2, y + 4.63, zf - 0.27, 0.025, tx1 - tx0, "x", { color: IMP.black, texel: 1 });
+  // conduit drops from the tray to the chart plate's top rail: bare at the west end, through a junction box at the east
+  const drop = (x, y0, y1, clips = true) => {
+    kit.cyl("paintedMetal", x, y + (y0 + y1) / 2, zf - 0.09, 0.028, y1 - y0, "y", { color: IMP.black, texel: 1, segments: 10 });
+    if (clips) for (const cy of [y0 + 0.25, y1 - 0.25]) kit.boxMM("metal", [x - 0.05, y + cy - 0.02, zf - 0.13], [x + 0.05, y + cy + 0.02, zf - 0.03], { color: IMP.grey, texel: 1 });
+  };
+  drop(-41.9, PLATE.y1, 4.55);
+  drop(-34.1, 3.75, 4.55);
+  drop(-34.1, PLATE.y1, 3.2, false);
+  kit.boxMM("paintedMetal", [-34.32, y + 3.2, zf - 0.16], [-33.88, y + 3.75, zf - 0.02], { color: IMP.black, texel: 1 });
+  kit.boxMM("paintedMetal", [-34.28, y + 3.24, zf - 0.18], [-33.92, y + 3.71, zf - 0.16], { color: IMP.dark, texel: 1 });
+  kit.boxMM("emitAmber", [-34.22, y + 3.62, zf - 0.185], [-34.16, y + 3.66, zf - 0.18]);
+  kit.boxMM("emitBlue", [-34.04, y + 3.62, zf - 0.185], [-33.98, y + 3.66, zf - 0.18]);
+  kit.add("decal", new THREE.PlaneGeometry(0.2, 0.2), { pos: [-34.1, y + 3.42, zf - 0.181], rot: [0, Math.PI, 0], uv: "keep", uvRect: decalRect(12) });
+  // vent grille on the half-width plate over the west third of the chart plate
+  kit.boxMM("impPanel", [-41.05, y + 3.75, zf - 0.12], [-40.15, y + 4.2, zf - 0.02], cBlack);
+  for (let i = 0; i < 5; i++) kit.boxMM("paintedMetal", [-41.01, y + 3.8 + i * 0.075, zf - 0.14], [-40.19, y + 3.835 + i * 0.075, zf - 0.12], { color: IMP.grey, texel: 1 });
+  greeble(kit, -32.7, y, zf, -1, "intercom");
+}
+
+// --- ship-model display case on the north wall between the -36.2 plaque and the counter (critic round 3: "put a
+// crest or a ship-model display case between the left screens"). The lounge camera sees this wall at 13° from its
+// plane, where a wall-facing case shows nothing but its side, so the case is turned to face WEST along the gallery:
+// a 0.6 m wide black box standing 0.9 m off the wall with glass on its west face, the backlit recognition placard
+// (atlas cell "fleet") on its east inner face and the wedge-hull model on a post between them, hull along the
+// case's depth with the nose toward the room — the camera, like anyone walking east along the north side, reads
+// the lit card with the model's broadside silhouette against it. Steel rules top and bottom, white hairline case
+// light under the top.
+function displayCase(kit, y) {
+  const x0 = -35.3;
+  const x1 = -34.7;
+  const y0 = 1.95;
+  const y1 = 3.05;
+  const z0 = N_FACE;
+  const z1 = N_FACE + 0.9;
+  const f = 0.06;
+  kit.boxMM("impPanel", [x0, y + y0, z0], [x1, y + y1, z0 + 0.04], cDark);
+  kit.boxMM("impPanel", [x0, y + y1, z0], [x1, y + y1 + f, z1], cBlack);
+  kit.boxMM("impPanel", [x0, y + y0 - f, z0], [x1, y + y0, z1], cBlack);
+  kit.boxMM("impPanel", [x1 - f, y + y0, z0], [x1, y + y1, z1], cBlack);
+  kit.boxMM("impPanel", [x0, y + y0, z1 - f], [x1, y + y1, z1], cBlack);
+  kit.boxMM("metal", [x0, y + y1 + 0.04, z0], [x0 + 0.02, y + y1 + f, z1], { color: IMP.grey, texel: 1 });
+  kit.boxMM("metal", [x0, y + y0 - f, z0], [x0 + 0.02, y + y0 - 0.04, z1], { color: IMP.grey, texel: 1 });
+  kit.boxMM("obsScreen", [x1 - f - 0.005, y + 2.3, z0 + 0.05], [x1 - f, y + 2.7, z0 + 0.85], { uv: "keep", uvRect: cellRect("fleet") });
+  kit.boxMM("emitWhite", [x0 + 0.08, y + y1 - 0.03, z0 + 0.1], [x0 + 0.12, y + y1 - 0.01, z1 - 0.1]);
+  kit.add("glass", new THREE.PlaneGeometry(z1 - z0, y1 - y0).rotateY(-Math.PI / 2), { pos: [x0 + 0.01, y + (y0 + y1) / 2, (z0 + z1) / 2], uv: "keep" });
+  const mx = x0 + 0.26;
+  const mz = z0 + 0.36; // hull origin: nose 2/3 of the length toward the room, stern 1/3 toward the wall
+  const yb = y + 2.33;
+  shipModel(kit, [mx, mz], yb, Math.PI / 2, 0.7);
+  kit.cyl("metal", mx, (y + y0 + yb) / 2, mz, 0.014, yb - y - y0, "y", { color: IMP.grey, texel: 1, segments: 8 });
+  kit.cyl("paintedMetal", mx, y + y0 + 0.006, mz, 0.09, 0.012, "y", { color: IMP.black, texel: 1, segments: 16 });
+  kit.add("decal", new THREE.PlaneGeometry(0.16, 0.16).rotateY(-Math.PI / 2), { pos: [x1 - f - 0.001, y + y0 + 0.12, z1 - 0.22], uv: "keep", uvRect: decalRect(9) });
+  kit.collider([x0, y, z0], [x1, y + y1 + f, z1], "display-case");
+}
+
+// Wedge-hull capital-ship model, `len` m long: triangular-prism hull (3-segment cylinder, scaled) with a belly,
+// terrace, tower neck and bridge in brushed metal, two deflector domes, three engines with blue glow. Local frame:
+// u along the hull (nose at −u, 2/3 of the length ahead of the origin, the stern 1/3 behind it), v across the beam;
+// `yaw` turns local +u from world +x (0) to world −z (π/2), so at π/2 the nose points to +z.
+function shipModel(kit, [ox, oz], yb, yaw, len = 1.0) {
+  const s = len;
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const W = (u, v) => [ox + (u * cy + v * sy) * s, oz + (-u * sy + v * cy) * s];
+  const rot = [0, yaw, 0];
+  const uAxis = Math.abs(sy) > 0.5 ? "z" : "x";
+  const hull = { color: IMP.hullLight, texel: 2 };
+  const trim = { color: IMP.grey, texel: 2 };
+  const box = (mat, u0, y0, v0, u1, y1, v1, o) => {
+    const [x, z] = W((u0 + u1) / 2, (v0 + v1) / 2);
+    kit.add(mat, new THREE.BoxGeometry((u1 - u0) * s, (y1 - y0) * s, (v1 - v0) * s), { pos: [x, yb + ((y0 + y1) / 2) * s, z], rot, ...o });
+  };
+  const cyl = (mat, u, y, v, r, h, axis, o) => {
+    const [x, z] = W(u, v);
+    kit.cyl(mat, x, yb + y * s, z, r * s, h * s, axis === "u" ? uAxis : "y", o);
+  };
+  const wedge = (l, beam, th) => new THREE.CylinderGeometry(1, 1, th * s, 3).scale((beam * s) / Math.sqrt(3), 1, (l * s) / 1.5).rotateY(-Math.PI / 2);
+  let [x, z] = W(0, 0);
+  kit.add("metal", wedge(1.0, 0.3, 0.06), { pos: [x, yb + 0.03 * s, z], rot, ...hull, uv: "scale", uvScale: [2, 1] });
+  [x, z] = W(-0.02, 0);
+  kit.add("metal", wedge(0.5, 0.16, 0.04), { pos: [x, yb - 0.02 * s, z], rot, ...hull, uv: "scale", uvScale: [1, 1] });
+  box("metal", 0.03, 0.06, -0.07, 0.31, 0.095, 0.07, trim);
+  box("metal", 0.14, 0.095, -0.02, 0.2, 0.15, 0.02, trim);
+  box("metal", 0.1, 0.15, -0.05, 0.24, 0.18, 0.05, hull);
+  for (const side of [-1, 1]) cyl("metal", 0.17, 0.19, side * 0.03, 0.012, 0.02, "y", { ...trim, segments: 8 });
+  for (const dv of [-0.07, 0, 0.07]) {
+    cyl("metal", 0.348, 0.03, dv, 0.022, 0.03, "u", { ...trim, segments: 10 });
+    cyl("emitBlue", 0.366, 0.03, dv, 0.016, 0.006, "u", { segments: 10 });
+  }
+}
+
+// Raking-key housing at the window head's east end: black projector body on a wall bracket, steel rim and white
+// lens facing the target. The spot descriptor sits inside the body (index.js): every body face turns away from it,
+// the lens shows only its emissive, and the body lies inside the shadow camera's 0.5 m near plane, so when this
+// key takes the shadow slot it does not occlude its own light.
+export function keyHousing(kit, pos, target) {
+  const u = new THREE.Vector3(...target).sub(new THREE.Vector3(...pos)).normalize();
+  const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), u);
+  const at = (t) => [pos[0] + u.x * t, pos[1] + u.y * t, pos[2] + u.z * t];
+  kit.boxMM("paintedMetal", [pos[0] - 0.05, pos[1] - 0.16, N_FACE], [pos[0] + 0.05, pos[1] + 0.12, pos[2] - 0.05], { color: IMP.black, texel: 1 });
+  kit.add("paintedMetal", new THREE.BoxGeometry(0.3, 0.28, 0.4), { pos: at(0.05), quat, color: IMP.black, texel: 1 });
+  kit.add("metal", new THREE.CylinderGeometry(0.12, 0.12, 0.03, 20).rotateX(Math.PI / 2), { pos: at(0.265), quat, color: IMP.grey, texel: 1 });
+  kit.add("emitWhite", new THREE.CylinderGeometry(0.085, 0.085, 0.01, 20).rotateX(Math.PI / 2), { pos: at(0.285), quat });
 }
 
 // Framed plaque: dark plate, light-grey frame, thin polished-metal wireframe of a wedge-hulled ship (side

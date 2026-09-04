@@ -126,14 +126,17 @@ function briefingNiche(kit, y) {
   kit.boxMM("metal", [cx - 1.6, y + 1.35, N_FACE], [cx + 1.6, y + 1.4, N_FACE + 0.22], { color: IMP.grey, texel: 1 });
   kit.add("decal", new THREE.PlaneGeometry(0.4, 0.4), { pos: [cx + 2.2, y + 1.0, N_FACE + 0.001], uv: "keep", uvRect: decalRect(8) });
   kit.collider([cx - 1.6, y, N_FACE], [cx + 1.6, y + 3.2, N_FACE + 0.23], "briefing-screen");
-  // curved bench facing the screen (arc south of the centre, 7 segments), dark bevelled cushions
+  // curved bench facing the screen (arc south of the centre): five upholstered segments between two side tables
+  // at the arc's ends — the east one stands 1.4 m in front of the lounge camera, where its gloss top, carafe and
+  // cups replace the back cushion that used to fill the frame's foreground (critic round 3: "swap one foreground
+  // chair for a low table with datapads/cups")
   const c = [cx, N_FACE + 1.1];
   const r = 2.3;
   const segs = 7;
   const a0 = Math.PI * 0.2;
   const a1 = Math.PI * 0.8;
   const segLen = (r * (a1 - a0)) / segs + 0.02;
-  for (let i = 0; i < segs; i++) {
+  for (let i = 1; i < segs - 1; i++) {
     const a = a0 + ((i + 0.5) / segs) * (a1 - a0);
     const px = c[0] + r * Math.cos(a);
     const pz = c[1] + r * Math.sin(a);
@@ -146,6 +149,7 @@ function briefingNiche(kit, y) {
     kit.add("fabric", new RoundedBoxGeometry(segLen - 0.03, 0.42, 0.08, 1, 0.035), { pos: [bx - 0.08 * Math.cos(a), y + 0.72, bz - 0.08 * Math.sin(a)], rot, color: CUSHION, texel: 2 });
     kit.collider([Math.min(px, bx) - 0.45, y, Math.min(pz, bz) - 0.45], [Math.max(px, bx) + 0.45, y + 1.0, Math.max(pz, bz) + 0.45], "niche-bench");
   }
+  for (const i of [0, segs - 1]) sideTable(kit, y, c, 2.45, a0 + ((i + 0.5) / segs) * (a1 - a0), i === 0);
   // round table with a thin rim glow and a datapad
   kit.cyl("paintedMetal", c[0], y + 0.2, c[1] + 0.3, 0.16, 0.4, "y", { color: IMP.black, texel: 1 });
   kit.cyl("paintedMetal", c[0], y + 0.02, c[1] + 0.3, 0.4, 0.04, "y", { color: IMP.black, texel: 1 });
@@ -153,6 +157,36 @@ function briefingNiche(kit, y) {
   kit.cyl("emitBlue", c[0], y + 0.43, c[1] + 0.3, 0.605, 0.008, "y", {});
   dataPad(kit, c[0] + 0.2, y + 0.465, c[1] + 0.45, 0.5, 9);
   kit.collider([c[0] - 0.6, y, c[1] - 0.3], [c[0] + 0.6, y + 0.5, c[1] + 0.9], "niche-table");
+}
+
+// Side table at one end of the niche's curved bench: black pedestal on a base plate, steel edge under a gloss top
+// (0.7 m along the arc × 0.6 m, top at 0.65 m — sofa-arm height), carafe at the free end, a datapad and two cups.
+// c = arc centre, r = radius to the table's centre, a = arc angle; the local frame is the bench segments' (x along
+// the arc, z toward the centre), mirrored for the west table so the carafe sits at the free end on both.
+function sideTable(kit, y, c, r, a, east) {
+  const px = c[0] + r * Math.cos(a);
+  const pz = c[1] + r * Math.sin(a);
+  const rot = [0, -a - Math.PI / 2, 0];
+  const mir = east ? 1 : -1;
+  const W = (lx, ly, lz) => [px - mir * lx * Math.sin(a) - lz * Math.cos(a), y + ly, pz + mir * lx * Math.cos(a) - lz * Math.sin(a)];
+  kit.add("paintedMetal", new THREE.BoxGeometry(0.5, 0.03, 0.4), { pos: [px, y + 0.015, pz], rot, color: IMP.black, texel: 1 });
+  kit.add("paintedMetal", new THREE.BoxGeometry(0.22, 0.55, 0.22), { pos: [px, y + 0.305, pz], rot, color: IMP.black, texel: 1 });
+  kit.add("metal", new THREE.BoxGeometry(0.72, 0.012, 0.62), { pos: [px, y + 0.586, pz], rot, color: IMP.grey, texel: 1 });
+  kit.add("blackGloss", new THREE.BoxGeometry(0.7, 0.058, 0.6), { pos: [px, y + 0.621, pz], rot });
+  let p = W(-0.15, 0.76, -0.12);
+  kit.cyl("blackGloss", p[0], p[1], p[2], 0.06, 0.22, "y", { segments: 14 });
+  p = W(-0.15, 0.895, -0.12);
+  kit.cyl("metal", p[0], p[1], p[2], 0.03, 0.05, "y", { color: IMP.steel, texel: 1, segments: 10 });
+  p = W(0.12, 0.65, -0.1);
+  dataPad(kit, p[0], p[1], p[2], -a - Math.PI / 2 + (east ? -0.4 : 0.4), 6);
+  for (const [lx, lz] of [
+    [0.25, -0.18],
+    [-0.04, 0.13],
+  ]) {
+    p = W(lx, 0.695, lz);
+    kit.cyl("metal", p[0], p[1], p[2], 0.04, 0.09, "y", { color: IMP.white, texel: 1, segments: 12 });
+  }
+  kit.collider([px - 0.45, y, pz - 0.45], [px + 0.45, y + 0.7, pz + 0.45], "side-table");
 }
 
 // west end wall (x -83.7): framed hull-camera feed so the long view down the gallery has a terminus

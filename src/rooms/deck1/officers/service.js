@@ -2,7 +2,7 @@
 import { FLOOR } from "../shared/plan.js";
 import { seat } from "../shared/props.js";
 import { IMP } from "../shared/palette.js";
-import { amberLamp, display, junctionBox, luminaire, mount, plate, vent, wainscot } from "./lib.js";
+import { amberLamp, display, junctionBox, luminaire, mount, plate, sconce, vent, wainscot } from "./lib.js";
 
 const black = { color: IMP.black, texel: 1 };
 const dark = { color: IMP.dark, texel: 1 };
@@ -79,7 +79,7 @@ export function buildDutyOffice(kit, faces, door, ceilY) {
   plate(kit, [x1 - 0.615, y(1.85), 508.92], "-x", 0.26, 0.26, 13);
   kit.collider([x1 - 0.66, FLOOR, 507.55], [x1, y(2.26), 509.45], "weapon-locker");
   vent(kit, [x1, y(2.7), 508.5], "-x", 0.8, 0.3);
-  amberLamp(kit, [x1, y(2.0), 510.6], "-x", { emit: "emitWarmSoft" });
+  amberLamp(kit, [x1, y(2.0), 510.6], "-x", { emit: "offLamp" });
   plate(kit, [x1, y(1.9), 506.9], "-x", 0.3, 0.3, 5);
 
   // north wall: file cabinet, bench, deck plan
@@ -96,18 +96,24 @@ export function buildDutyOffice(kit, faces, door, ceilY) {
   display(kit, [72.2, y(1.8), z0], "+z", "deckplan", 0.9, { bezel: 0.04, depth: 0.05 });
   plate(kit, [74.0, y(1.9), z0], "+z", 0.3, 0.3, 14);
   junctionBox(kit, [69.4, y(1.5), z0], "+z", "emitBlue");
-  luminaire(kit, 70.5, 73.5, 508.3, 508.9, ceilY, { emit: "emitWarmSoft", drop: 0.05 });
+  luminaire(kit, 70.5, 73.5, 508.3, 508.9, ceilY, { emit: "offLamp", drop: 0.05 });
 }
 
-/** faces { x0, x1, z0, z1 } (x1 = corridor wall), door { z0, z1 } on the east face */
+/**
+ * faces { x0, x1, z0, z1 } (x1 = corridor wall), door { z0, z1 } on the east face. Returns { lamp }: the position
+ * for the room's amber point, inside the sconce just south of the door on the corridor wall — the door's leaf
+ * stands ajar with its gap at that jamb, so the point's spill lands on the corridor floor in front of the gap
+ * (index.js).
+ */
 export function buildUtility(kit, faces, door, ceilY) {
   const { x0, x1, z0, z1 } = faces;
   const y = (v) => FLOOR + v;
-  // inner door frame + label
+  // inner door frame + the sconce carrying the point, label and junction box
   kit.boxMM("paintedMetal", [x1 - 0.08, FLOOR, door.z0 - 0.2], [x1, y(2.5), door.z0], black);
   kit.boxMM("paintedMetal", [x1 - 0.08, FLOOR, door.z1], [x1, y(2.5), door.z1 + 0.2], black);
   kit.boxMM("paintedMetal", [x1 - 0.08, y(2.2), door.z0 - 0.2], [x1, y(2.5), door.z1 + 0.2], black);
-  plate(kit, [x1, y(1.7), door.z1 + 0.6], "-x", 0.3, 0.3, 6);
+  const lamp = sconce(kit, [x1, y(1.55), door.z1 + 0.55], "-x", { w: 0.6, h: 0.9 });
+  plate(kit, [x1, y(1.7), door.z1 + 1.25], "-x", 0.3, 0.3, 6);
   junctionBox(kit, [x1, y(1.5), door.z0 - 0.6], "-x", "emitRedImp");
 
   // equipment units along the west wall: three cabinets with vents, readouts and LED status
@@ -195,7 +201,8 @@ export function buildUtility(kit, faces, door, ceilY) {
   kit.boxMM("darkGloss", [59.6, y(0.002), 507.0], [60.4, y(0.008), 507.8]);
   vent(kit, [x1, y(2.6), 504.5], "-x", 0.8, 0.3);
   plate(kit, [x1, y(1.9), 504.5], "-x", 0.3, 0.3, 12);
-  luminaire(kit, 59.2, 61.6, 506.4, 507.0, ceilY, { emit: "emitWarmSoft", drop: 0.05 });
-  luminaire(kit, 59.2, 61.6, 509.4, 510.0, ceilY, { emit: "emitWarmSoft", drop: 0.05 });
-  amberLamp(kit, [x1, y(2.0), 510.6], "-x", { emit: "emitWarmSoft" });
+  luminaire(kit, 59.2, 61.6, 506.4, 507.0, ceilY, { emit: "offLamp", drop: 0.05 });
+  luminaire(kit, 59.2, 61.6, 509.4, 510.0, ceilY, { emit: "offLamp", drop: 0.05 });
+  amberLamp(kit, [x1, y(2.0), 510.6], "-x", { emit: "offLamp" });
+  return { lamp };
 }
