@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { roomShell, wallLightBar, wallConsole } from "../shell.js";
 import { PALETTE } from "../../materials.js";
 import { pointLight } from "../lib.js";
-import { stencil, floorStencil, bench, locker, rifle, rifleRack, helmet, chestPlate, crate, downlight, pendant, workLamp } from "./aftProps.js";
+import { stencil, floorStencil, bench, locker, rifle, rifleRack, helmet, chestPlate, crate, downlight, pendant, workLamp, stationMarker } from "./aftProps.js";
 
 export function build(kit, ctx, room, lib) {
   const shell = roomShell(kit, ctx, room, { style: "dark", lights: false, lightRows: 2, lightMat: "emitCoolSoft", seed: 51 });
@@ -27,12 +27,15 @@ export function build(kit, ctx, room, lib) {
     downlight(kit, 4.6, yTop, z, "emitCoolSoft", 0.11);
     ctx.lights.cool.push(pointLight(0xe0e8ff, 10, 13, [4.6, yTop - 0.35, z]));
   }
-  for (const z of [531.4, 533.0, 534.6]) pendant(kit, ctx, 5.9, yTop, z, { drop: 0.75, r: 0.2, intensity: z === 533 ? 9 : 0, distance: 10, color: 0xe0e8ff, mat: "emitCoolSoft", family: "cool" });
+  // two pendants flank the barred window (none on the door-to-counter sightline, which blew out the bars)
+  for (const z of [530.9, 535.1]) pendant(kit, ctx, 5.9, yTop, z, { drop: 0.6, r: 0.18, intensity: 4, distance: 7, color: 0xe0e8ff, mat: "emitWhiteSoft", family: "cool" });
   workLamp(kit, ctx, 9.9, yTop, 529.6, { drop: 0.5, intensity: 12, distance: 10 });
   workLamp(kit, ctx, 9.9, yTop, 536.4, { drop: 0.5, intensity: 12, distance: 10 });
   workLamp(kit, ctx, 15.2, yTop, 530.4, { drop: 0.5, intensity: 13, distance: 10 });
   workLamp(kit, ctx, 15.2, yTop, 535.6, { drop: 0.5, intensity: 13, distance: 10 });
   ctx.lights.teal.push(pointLight(0xff3a2a, 4, 9, [12.5, y0 + 2.05, 533]));
+  // the free-standing rack's aisle-face header diffuser: two practicals so the rifles read through the window
+  for (const z of [531.3, 534.7]) ctx.lights.cool.push(pointLight(0xe0e8ff, 5, 9, [11.85, y0 + 1.85, z]));
   ctx.lights.teal.push(pointLight(0xff3a2a, 3, 8, [x1 - 0.5, y0 + 2.0, 529.5]));
   ctx.lights.teal.push(pointLight(0xff3a2a, 3, 8, [x1 - 0.5, y0 + 2.0, 535.5]));
   ctx.lights.teal.push(pointLight(0xff3a2a, 2.5, 7, [px - 0.3, y0 + 2.5, 533]));
@@ -87,6 +90,7 @@ export function build(kit, ctx, room, lib) {
     kit.box("screen5", 6.565, y0 + 1.16, 534.6, 0.008, 0.26, 0.3, { rot: [0, 0.2, 0], uv: "keep" });
     kit.cyl("metal", 6.6, y0 + 0.97, 534.6, 0.05, 0.06, "y", { color: PALETTE.gunmetal, segments: 12 });
     kit.collider([6.25, y0, 530.35], [px + 0.1, y0 + 1.0, 535.65], "counter");
+    kit.marker("station", [px + 0.6, y0, 533.0], Math.PI / 2, { id: "armory-issue-clerk" });
     kit.collider([px - 0.1, y0, z0], [px + 0.1, yTop, 536.15], "partition");
     kit.collider([px - 0.1, y0, 537.45], [px + 0.1, yTop, z1], "partition");
     // gate: header, open barred leaf parked against the cage side, status lamp
@@ -125,6 +129,7 @@ export function build(kit, ctx, room, lib) {
     stencil(fN, u - 0.2, 1.6, 0.4, 8, { plate: false, n: 0.716 });
     fN.collider(u - 0.8, u + 0.8, 0, 2.25, 0, 0.78, "vault");
     wallConsole(fN, 3.4, 1.4, "screen9");
+    stationMarker(fN, 3.4, { id: "armory-check-terminal" });
     fN.box("satinBlack", 3.4, 1.8, 0.04, 0.9, 0.56, 0.08);
     fN.box("screen10", 3.4, 1.8, 0.082, 0.78, 0.44, 0.006, { uv: "keep" });
     stencil(fN, 4.5, 1.75, 0.36, 9, { color: PALETTE.creamDark });
@@ -151,6 +156,7 @@ export function build(kit, ctx, room, lib) {
     fW.box("metal", z1 - 536.2, 0.85, 0.19, 0.4, 0.05, 0.05, { color: PALETTE.steel });
     fW.collider(z1 - 536.7, z1 - 535.7, 0, 1.8, 0, 0.2, "fireCabinet");
     wallConsole(fW, z1 - 538.3, 1.2, "screen8", { height: 1.0, depth: 0.45 });
+    stationMarker(fW, z1 - 538.3, { depth: 0.45, id: "armory-comm-panel" });
     wallLightBar(fW, z1 - 539.5, z1 - 535.2, 2.5, "emitCoolSoft");
     // personal lockers on the aft wall, issue side
     for (let k = 0; k < 4; k++) locker(fS, x1 - (3.05 + k * 0.92), 0.88, 2.1, { color: PALETTE.impGreyDark, band: PALETTE.impRed, decal: [14, 0, 9, 6][k] });

@@ -9,7 +9,7 @@ import { roomShell, wallLightBar, wallConsole } from "../shell.js";
 import { PALETTE } from "../../materials.js";
 import { pointLight } from "../lib.js";
 import { rng } from "../../kit.js";
-import { ceilingPlate, stencil, downlight, pendant, floorLamp, sofa, armchair, table, stool, cup, bench, locker, rug, holoMaterial, decalRect } from "./aftProps.js";
+import { ceilingPlate, stencil, downlight, pendant, floorLamp, sofa, armchair, table, stool, cup, bench, locker, rug, holoMaterial, decalRect, stationMarker } from "./aftProps.js";
 
 export function build(kit, ctx, room, lib) {
   const shell = roomShell(kit, ctx, room, { style: "light", lights: false, ceiling: false, seed: 31 });
@@ -64,6 +64,7 @@ export function build(kit, ctx, room, lib) {
     locker(fE, 1.8, 0.72, 2.1, { color: PALETTE.creamDark, band: PALETTE.tealPaint, decal: 9 });
     wallLightBar(fE, 0.4, 2.5, 2.5);
     wallConsole(fE, 10.5, 1.3, "screen2");
+    stationMarker(fE, 10.5, { id: "lounge-holonet" });
     stencil(fE, 10.5, 1.9, 0.42, 14, { color: PALETTE.tealPaint });
     wallLightBar(fE, 9.4, 11.6, 2.5);
   }
@@ -128,7 +129,7 @@ export function build(kit, ctx, room, lib) {
     kit.box("satinBlack", 9.5, y0 + h + 0.12, 514.9, 0.16, 0.18, 0.08);
     kit.box("emitTeal", 9.5, y0 + h + 0.14, 514.945, 0.1, 0.1, 0.004);
     kit.collider([xa - 0.05, y0, za - 0.6], [xb + 0.05, y0 + h + 0.05, zb + 0.18], "bar");
-    for (const x of [5.9, 7.1, 8.3, 9.5]) stool(kit, x, y0, 516.05, { seatH: 0.74, ring: true });
+    for (const x of [5.9, 7.1, 8.3, 9.5]) stool(kit, x, y0, 516.05, { seatH: 0.74, ring: true, face: 0, id: "lounge-bar" });
     for (const x of [6.1, 7.5, 8.9]) pendant(kit, ctx, x, yTop, 515.1, { drop: 1.0, r: 0.2, intensity: x === 7.5 ? 10 : 0, distance: 11, color: 0xffb070 });
   }
 
@@ -139,12 +140,12 @@ export function build(kit, ctx, room, lib) {
     kit.cyl("metal", tx, y0 + 0.03, tz, 0.4, 0.06, "y", { color: PALETTE.darkMetal, segments: 20 });
     kit.cyl("metal", tx, y0 + 0.4, tz, 0.1, 0.7, "y", { color: PALETTE.gunmetal, segments: 12 });
     kit.cyl("satinBlack", tx, y0 + 0.74, tz, 0.6, 0.05, "y", { segments: 28 });
-    kit.cyl("darkGloss", tx, y0 + 0.768, tz, 0.48, 0.006, "y", { segments: 28 });
+    kit.cyl("fabric", tx, y0 + 0.768, tz, 0.48, 0.006, "y", { segments: 28, color: PALETTE.fabricTeal, uv: "world", texel: 2 }); // baize, not gloss: no specular blob under the pendant
     kit.add("painted", new THREE.TorusGeometry(0.58, 0.02, 8, 28), { pos: [tx, y0 + 0.765, tz], rot: [Math.PI / 2, 0, 0], color: PALETTE.orange, uv: "scale", uvScale: [6, 1] });
     for (let k = 0; k < 4; k++) {
       const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
       kit.box("leds", tx + Math.cos(a) * 0.34, y0 + 0.774, tz + Math.sin(a) * 0.34, 0.16, 0.004, 0.05, { rot: [0, -a, 0], uv: "keep" });
-      stool(kit, tx + Math.cos(a) * 1.0, y0, tz + Math.sin(a) * 1.0);
+      stool(kit, tx + Math.cos(a) * 1.0, y0, tz + Math.sin(a) * 1.0, { face: Math.atan2(Math.cos(a), Math.sin(a)), id: "lounge-cards" });
     }
     for (let k = 0; k < 5; k++) kit.box("painted", tx - 0.12 + k * 0.06, y0 + 0.775, tz + 0.02, 0.05, 0.004, 0.08, { rot: [0, 0.3 - k * 0.15, 0], color: k % 2 ? PALETTE.cream : PALETTE.tealPaint, uv: "keep" });
     kit.box("emitTeal", tx, y0 + 0.78, tz, 0.08, 0.012, 0.08);
@@ -163,7 +164,8 @@ export function build(kit, ctx, room, lib) {
   for (let k = 0; k < 4; k++) {
     const a = (k / 4) * Math.PI * 2;
     kit.box("leds", tx + Math.cos(a) * 0.74, y0 + 0.69, tz + Math.sin(a) * 0.74, 0.16, 0.03, 0.01, { rot: [0, -a + Math.PI / 2, 0], uv: "keep" });
-    stool(kit, tx + Math.cos(a + Math.PI / 4) * 1.2, y0, tz + Math.sin(a + Math.PI / 4) * 1.2);
+    const b = a + Math.PI / 4;
+    stool(kit, tx + Math.cos(b) * 1.2, y0, tz + Math.sin(b) * 1.2, { face: Math.atan2(Math.cos(b), Math.sin(b)), id: "lounge-holo-game" });
   }
   kit.collider([tx - 0.8, y0, tz - 0.8], [tx + 0.8, y0 + 0.8, tz + 0.8], "holoTable");
   {
@@ -282,6 +284,7 @@ export function build(kit, ctx, room, lib) {
   }
   // right of the shelves: holo-net terminal, framed stencil plates, a light bar and a climate unit
   wallConsole(fN, 8.7, 1.2, "screen9");
+  stationMarker(fN, 8.7, { id: "lounge-notice-terminal" });
   wallLightBar(fN, 7.7, 9.9, 2.5, "emitWarmSoft");
   for (const [u, idx, col] of [[11.2, 0, PALETTE.tealPaint], [12.7, 8, PALETTE.creamDark], [14.2, 3, PALETTE.tealPaint]]) {
     fN.box("satinBlack", u, 1.7, 0.02, 0.86, 0.86, 0.04);

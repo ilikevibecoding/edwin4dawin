@@ -101,8 +101,28 @@ export function alongBox(kit, mat, axis, cAlong, cAcross, cy, len, across, h, op
 
 // Padded bench on a satin-black plinth. Runs along `axis`, `facing` is the side the sitter faces:
 // +1 toward +across, -1 toward -across. Adds its collider.
+// Crew-marker yaw for a sitter on an axis-aligned seat: `facing` +1 looks toward +across, -1 toward -across
+// (player yaw 0 looks down -Z, +90 deg toward -X).
+export function seatYaw(axis, facing) {
+  if (axis === "x") return facing > 0 ? Math.PI : 0;
+  return facing > 0 ? -Math.PI / 2 : Math.PI / 2;
+}
+
+// Crew "station" marker for an operator standing at a wall console on `frame` at u, 0.4 m clear of its
+// depth and facing the wall.
+export function stationMarker(frame, u, opts = {}) {
+  const { depth = 0.55, id = "console" } = opts;
+  const p = frame.pos(u, 0, depth + 0.4);
+  frame.kit.marker("station", [p.x, p.y, p.z], Math.atan2(frame.N.x, frame.N.z), { id });
+}
+
 export function bench(kit, axis, cAlong, cAcross, y, len, opts = {}) {
-  const { depth = 0.5, seatH = 0.45, back = true, color = PALETTE.fabricTeal, facing = -1, collide = true } = opts;
+  const { depth = 0.5, seatH = 0.45, back = true, color = PALETTE.fabricTeal, facing = -1, collide = true, id = "bench" } = opts;
+  const places = Math.max(1, Math.round(len / 0.6));
+  for (let i = 0; i < places; i++) {
+    const a = cAlong - len / 2 + (len / places) * (i + 0.5);
+    kit.marker("seat", axis === "x" ? [a, y, cAcross] : [cAcross, y, a], seatYaw(axis, facing), { id });
+  }
   alongBox(kit, "satinBlack", axis, cAlong, cAcross, y + (seatH - 0.08) / 2, len, depth - 0.08, seatH - 0.08);
   alongBox(kit, "metal", axis, cAlong, cAcross, y + 0.03, len + 0.04, depth - 0.04, 0.06, { color: PALETTE.darkMetal, texel: 2 });
   alongBox(kit, "fabric", axis, cAlong, cAcross, y + seatH - 0.04, len, depth, 0.1, { color, uv: "world", texel: 2 });
@@ -127,7 +147,7 @@ function roundedBox(kit, mat, pos, size, radius, opts = {}) {
 // padded armrests with a pale accent pad, a warm glow strip under the front edge. Runs along `axis`,
 // `facing` like bench() (+1 sitter faces +across).
 export function sofa(kit, axis, cAlong, cAcross, y, len, opts = {}) {
-  const { color = PALETTE.fabricTeal, cushion = color, accent = PALETTE.fabricCream, facing = 1, depth = 0.95, shell = PALETTE.impGreyDark, glow = "emitWarmSoft" } = opts;
+  const { color = PALETTE.fabricTeal, cushion = color, accent = PALETTE.fabricCream, facing = 1, depth = 0.95, shell = PALETTE.impGreyDark, glow = "emitWarmSoft", id = "sofa" } = opts;
   const X = axis === "x";
   const P = (a, yy, c) => (X ? [a, yy, c] : [c, yy, a]);
   const S = (sa, sy, sc) => (X ? [sa, sy, sc] : [sc, sy, sa]);
@@ -149,6 +169,7 @@ export function sofa(kit, axis, cAlong, cAcross, y, len, opts = {}) {
     const a = cAlong - inner / 2 + secLen * (i + 0.5);
     roundedBox(kit, "fabric", P(a, y + 0.48, cAcross + facing * 0.09), S(secLen - 0.035, 0.2, depth - 0.42), 0.07, { color: cushion, uv: "world", texel: 2, segments: 3 });
     roundedBox(kit, "fabric", P(a, y + 0.76, bAcross + facing * 0.17), S(secLen - 0.035, 0.5, 0.17), 0.07, { color, uv: "world", texel: 2, segments: 3, rot: R(-facing * 0.12) });
+    kit.marker("seat", P(a, y, cAcross + facing * 0.09), seatYaw(axis, facing), { id });
     // pale piping seam between seat and back
     alongBox(kit, "fabric", axis, a, bAcross + facing * 0.26, y + 0.585, secLen - 0.08, 0.03, 0.02, { color: accent, uv: "world", texel: 2 });
   }
@@ -165,11 +186,12 @@ export function sofa(kit, axis, cAlong, cAcross, y, len, opts = {}) {
 
 // Single armchair spun by yaw (0 faces +z), same shell language as the sofa.
 export function armchair(kit, x, y, z, yaw, opts = {}) {
-  const { color = PALETTE.fabricTeal, cushion = color, accent = PALETTE.fabricCream, shell = PALETTE.impGreyDark } = opts;
+  const { color = PALETTE.fabricTeal, cushion = color, accent = PALETTE.fabricCream, shell = PALETTE.impGreyDark, id = "armchair" } = opts;
   const rot = [0, yaw, 0];
   const s = Math.sin(yaw);
   const c = Math.cos(yaw);
   const P = (dx, dy, dz) => [x + dx * c + dz * s, y + dy, z - dx * s + dz * c];
+  kit.marker("seat", [x, y, z], yaw + Math.PI, { id }); // chair yaw 0 faces +z; player yaw 0 looks down -z
   kit.box("satinBlack", ...P(0, 0.045, 0), 0.6, 0.09, 0.6, { rot });
   roundedBox(kit, "painted", P(0, 0.24, 0), [0.86, 0.3, 0.84], 0.04, { rot, color: shell, uv: "world", texel: 0.8 });
   roundedBox(kit, "fabric", P(0, 0.48, 0.08), [0.5, 0.2, 0.52], 0.07, { rot, color: cushion, uv: "world", texel: 2, segments: 3 });
@@ -212,7 +234,8 @@ export function table(kit, x, y, z, sx, sz, opts = {}) {
 
 // Bar stool: cast base, column, rubber seat.
 export function stool(kit, x, y, z, opts = {}) {
-  const { seatH = 0.46, collide = true, ring = false, seat = PALETTE.rubber } = opts;
+  const { seatH = 0.46, collide = true, ring = false, seat = PALETTE.rubber, face = null, id = "stool" } = opts;
+  if (face !== null) kit.marker("seat", [x, y, z], face, { id });
   kit.cyl("metal", x, y + 0.02, z, 0.2, 0.04, "y", { color: PALETTE.darkMetal, segments: 16 });
   kit.cyl("metal", x, y + seatH / 2, z, 0.045, seatH - 0.06, "y", { color: PALETTE.gunmetal, segments: 10 });
   kit.cyl("rubber", x, y + seatH - 0.035, z, 0.2, 0.07, "y", { color: seat, segments: 16 });

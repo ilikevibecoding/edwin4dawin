@@ -9,7 +9,7 @@ import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { roomShell, wallLightBar, wallConsole } from "../shell.js";
 import { PALETTE } from "../../materials.js";
 import { pointLight, Frame, WALL_T } from "../lib.js";
-import { ceilingPlate, stencil, downlight, bench, standFrame, holoMaterial, locker, UP } from "./aftProps.js";
+import { ceilingPlate, stencil, downlight, bench, standFrame, holoMaterial, locker, stationMarker, UP } from "./aftProps.js";
 
 export function build(kit, ctx, room, lib) {
   const shell = roomShell(kit, ctx, room, { style: "light", lights: false, ceiling: false, floor: false, seed: 41 });
@@ -146,6 +146,7 @@ export function build(kit, ctx, room, lib) {
     f.cylV("metal", 0.28, 1.34, -0.14, 0.008, 0.36, { color: PALETTE.steel, segments: 6 });
     f.box("rubber", 0.28, 1.53, -0.14, 0.03, 0.05, 0.03, { color: PALETTE.rubber });
     kit.collider([lx - 0.32, L2, lz - 0.42], [lx + 0.32, L2 + 1.4, lz + 0.42], "lectern");
+    kit.marker("station", [lx - 0.62, L2 + 0.16, lz], -Math.PI / 2, { id: "briefing-lectern" });
     downlight(kit, lx, yTop, lz, "emitCoolSoft", 0.11);
     ctx.lights.cool.push(pointLight(0xdfe8ff, 6, 9, [lx, yTop - 0.4, lz]));
   }
@@ -327,6 +328,7 @@ export function build(kit, ctx, room, lib) {
     kit.collider([kx - 0.3, y0, kz - 0.25], [kx + 0.3, y0 + 1.3, kz + 0.25], "kiosk");
     // door wall (+x): technician console forward of the door, waiting bench + lockers aft of it
     wallConsole(fX, 2.6, 1.6, "screen10");
+    stationMarker(fX, 2.6, { id: "briefing-technician" });
     stencil(fX, 2.6, 2.0, 0.42, 9, { color: PALETTE.creamDark });
     wallLightBar(fX, 0.5, 5.6, 2.7, "emitCoolSoft");
     bench(kit, "z", 536.0, x1 - 0.3, y0, 2.4, { facing: -1, depth: 0.5, color: PALETTE.fabricTeal });
@@ -341,6 +343,7 @@ export function build(kit, ctx, room, lib) {
     // forward wall (-z): stage-level technician console + sector map, tier panels, landing comm panel
     const fN2 = lower(fN, -0.72);
     wallConsole(fN2, 2.4, 1.6, "screen8");
+    stationMarker(fN2, 2.4, { id: "briefing-sector-map" });
     stencil(fN2, 2.4, 2.0, 0.42, 6, { color: PALETTE.creamDark });
     fN2.box("satinBlack", 5.2, 2.05, 0.04, 2.2, 1.3, 0.08);
     fN2.box("screen7", 5.2, 2.05, 0.082, 2.04, 1.14, 0.006, { uv: "keep" });
@@ -399,6 +402,7 @@ export function build(kit, ctx, room, lib) {
     locker(fS2, 12.2, 0.9, 2.2, { color: PALETTE.creamDark, band: PALETTE.tealPaint, decal: 9 });
     locker(fS2, 13.2, 0.9, 2.2, { color: PALETTE.cream, band: PALETTE.tealPaint, decal: 6 });
     wallConsole(fS2, 15.6, 1.6, "screen4");
+    stationMarker(fS2, 15.6, { id: "briefing-status" });
     stencil(fS2, 15.6, 2.0, 0.42, 12, { color: PALETTE.creamDark });
     stencil(fS2, 17.2, 1.7, 0.42, 1, { color: PALETTE.cream });
     wallLightBar(fS2, 11.4, 17.6, 3.1, "emitCoolSoft");
