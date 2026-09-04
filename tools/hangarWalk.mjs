@@ -137,6 +137,32 @@ await teleport(0, 518.5, 90, -10);
 a = await pose();
 check("aft gallery height", near(a.y, CAT, 0.05), a);
 
+// 7. flight-control cab on the starboard catwalk (y -62): walk toward the consoles / glazing over the well
+await teleport(26.5, 464, 90, -6);
+a = await pose();
+check("flight control cab height", near(a.y, CAT, 0.05), a);
+await walk("KeyW", 3); // facing -x
+b = await pose();
+check("flight control consoles block the glazing", near(b.y, CAT, 0.05) && b.x > 22.2 && b.x < 24.5, b);
+await shot("walk_flightControl");
+
+// 8. launch-lane opening at the well: the raised lip is a step (0.42), its inner edge stops the player
+await teleport(0, 426.5, 180, -20);
+a = await pose();
+check("deck height at the launch lane", near(a.y, DECK, 0.05), a);
+await walk("KeyW", 4); // facing +z, toward the open well
+b = await pose();
+check("well lip stops the player (no floor over the well)", near(b.y, DECK + 0.42, 0.06) && b.z < 430.45 && b.z > 429.4, b);
+await shot("walk_wellLip");
+
+// 9. port deck by the cradled fighter: level deck, the cradle skid blocks the way to the pod
+await teleport(-25, 463, 180, -2);
+a = await pose();
+check("deck height at the cradle bay", near(a.y, DECK, 0.05), a);
+await walk("KeyW", 3); // facing +z, into the cradle
+b = await pose();
+check("cradle collider blocks the pod", near(b.y, DECK, 0.05) && b.z > 464.6 && b.z < 465.4, b);
+
 const failed = results.filter((r) => !r.ok);
 writeFileSync(resolve(outDir, "walk.json"), JSON.stringify(results, null, 1));
 console.log(failed.length ? `${failed.length} FAILED` : "all walk checks passed");

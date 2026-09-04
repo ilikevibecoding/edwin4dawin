@@ -12,7 +12,7 @@ import { HANGAR, roomFloorY } from "../../config/shipSpec.js";
 import { decalRect } from "../../textures.js";
 import {
   propFrame, railing, deckStrip, hazardBand, deckDecal, grateFloor, grateScreen, bayWalls, containerStack,
-  crate, toolCart, fuelBowser, pedestalConsole, cabinet, lightBar, recessedBank, floodFixture, truss, cableTray,
+  crate, toolCart, fuelBowser, pedestalConsole, cabinet, lightBar, recessedBank, floodFixture, truss, cableTray, pallet,
   pipeRun, stairTower, gantryCrane, blastLeaves, beacons, tractorEmitters, cargoLift, loaderVehicle, shadowCasters,
   RAIL_H, BLACK, ensureLabels, ensureDiffuser, frameLabel, deckLabel, launchCradle, doorSurround, wellShaft,
   shimmerSheet, tieCradle, tieShape, ladder, displayWall, glassCab, clampRack,
@@ -22,7 +22,7 @@ const CAT_Y = -62; // service catwalks
 const PLAT_Y = -60; // maintenance platforms beside the racks
 const GIRDER = { y0: -50.2, y1: -48.6 }; // rack girders
 const CRANE_Y = -46.8; // crane bridge centre
-const RAIL = { y: -69.7, z: 466 }; // launch-cradle drop rail (underside, z between the rack rows 456 / 472)
+const RAIL = { y: -69.7, z: 466, x: -8 }; // launch-cradle drop rail (underside, z between the rack rows 456 / 472), carriage start
 const CAB = { x0: 21.5, x1: 28.5, z0: 460, z1: 468 }; // flight-control cab on the starboard catwalk
 // traffic.js parks its craft in racks 0..5 (createTraffic count 6, racks ordered z-major then x); the two
 // aft racks stay free, so static kit fighters hang there "under maintenance"
@@ -56,7 +56,7 @@ export function build(kit, ctx, room, lib) {
   cradleBay(kit, ctx, lib, y0);
   forwardDeck(kit, lib, y0);
   aftDeck(kit, ctx, lib, y0, mats);
-  lights(ctx, lib, y0);
+  lights(ctx, lib, y0, yTop);
   dynamics(kit, ctx, mats, y0, yTop, W);
   return shell;
 }
@@ -105,23 +105,20 @@ function wellEdge(kit, lib, y0, W) {
     }
     kit.boxMM("emitAmber", [-gap, y0 + 0.43, z + dz - 0.1], [gap, y0 + 0.445, z + dz + 0.1], { uv: "keep" });
   }
-  // hazard bands and the yellow limit line around the well
-  hazardBand(kit, -rx - 0.15, rz0 - 0.15, -rx - 0.95, rz1 + 0.15, y0);
-  hazardBand(kit, rx + 0.15, rz0 - 0.15, rx + 0.95, rz1 + 0.15, y0);
-  hazardBand(kit, -rx - 0.95, rz0 - 0.15, -gap, rz0 - 0.95, y0);
-  hazardBand(kit, gap, rz0 - 0.15, rx + 0.95, rz0 - 0.95, y0);
-  hazardBand(kit, -rx - 0.95, rz1 + 0.15, -gap, rz1 + 0.95, y0);
-  hazardBand(kit, gap, rz1 + 0.15, rx + 0.95, rz1 + 0.95, y0);
+  // the amber limit line around the well (the shaft lip carries the hazard chevrons: a second striped band
+  // outside the railing made the whole edge one 2 m orange slab from anywhere near it)
   const ly = rx + 1.6;
   deckStrip(kit, "emitAmber", -ly - 0.08, rz0 - 1.6, -ly + 0.08, rz1 + 1.6, y0);
   deckStrip(kit, "emitAmber", ly - 0.08, rz0 - 1.6, ly + 0.08, rz1 + 1.6, y0);
   deckStrip(kit, "emitAmber", -ly, rz0 - 1.68, ly, rz0 - 1.52, y0);
   deckStrip(kit, "emitAmber", -ly, rz1 + 1.52, ly, rz1 + 1.68, y0);
-  // "mind the gap" stencils at the lane openings, "no step" at the corners, DANGER stencils along both edges
-  deckDecal(kit, 0, y0, W.z0 - 2.6, 2.2, 15, 0);
-  deckDecal(kit, 0, y0, W.z1 + 2.6, 2.2, 15, Math.PI);
-  for (const sx of [-1, 1]) for (const [sz, z] of [[-1, rz0 - 2.4], [1, rz1 + 2.4]]) deckDecal(kit, sx * (rx + 1.2), y0, z, 1.6, 7, sx * sz > 0 ? Math.PI / 2 : -Math.PI / 2);
-  for (const sx of [-1, 1]) for (const z of [440, 458, 478, 496]) deckLabel(kit, sx * (rx + 2.6), y0, z, 4.5, 16, sx > 0 ? -Math.PI / 2 : Math.PI / 2);
+  // "mind the gap" stencils at the lane openings, "no step" at the corners, DANGER stencils along both edges.
+  // Deck text is read by someone walking up to the well: yaw 0 puts the top of the letters toward -z (reader
+  // faces -z), PI toward +z, PI/2 toward -x (starboard reader), -PI/2 toward +x (port reader).
+  deckDecal(kit, 0, y0, W.z0 - 2.6, 2.2, 15, Math.PI);
+  deckDecal(kit, 0, y0, W.z1 + 2.6, 2.2, 15, 0);
+  for (const sx of [-1, 1]) for (const z of [rz0 - 2.4, rz1 + 2.4]) deckDecal(kit, sx * (rx + 1.2), y0, z, 1.6, 7, sx * Math.PI / 2);
+  for (const sx of [-1, 1]) for (const z of [440, 458, 478, 496]) deckLabel(kit, sx * (rx + 2.6), y0, z, 4.5, 16, sx * Math.PI / 2);
 }
 
 // ---------------------------------------------------------------- lane markings and stencils
@@ -129,20 +126,22 @@ function markings(kit, lib, y0, W, z0, z1) {
   // launch lane: white edge lines and centre dashes from the shuttle-bay door to the forward well opening
   for (const sx of [-1, 1]) deckStrip(kit, "emitWhiteSoft", sx * 5.0 - 0.08, z0 + 1.8, sx * 5.0 + 0.08, W.z0 - 2.4, y0);
   for (let z = z0 + 3.5; z < W.z0 - 4; z += 3) deckStrip(kit, "emitWhiteSoft", -0.15, z, 0.15, z + 1.4, y0);
-  deckLabel(kit, 0, y0, z0 + 9, 7, 4, 0);
-  deckDecal(kit, -7.4, y0, z0 + 6, 3.2, 0, Math.PI / 2);
-  deckDecal(kit, 7.4, y0, z0 + 6, 3.2, 2, -Math.PI / 2);
-  // recovery lane: amber
+  // (read walking in from the shuttle dock door, i.e. facing +z)
+  deckLabel(kit, 0, y0, z0 + 9, 7, 4, Math.PI);
+  deckDecal(kit, -7.4, y0, z0 + 6, 3.2, 0, Math.PI);
+  deckDecal(kit, 7.4, y0, z0 + 6, 3.2, 2, Math.PI);
+  // recovery lane: amber (read walking in from the cargo bay door, facing -z)
   for (const sx of [-1, 1]) deckStrip(kit, "emitAmber", sx * 5.0 - 0.08, W.z1 + 2.4, sx * 5.0 + 0.08, z1 - 1.8, y0);
   for (let z = W.z1 + 4; z < z1 - 3.5; z += 3) deckStrip(kit, "emitAmber", -0.15, z, 0.15, z + 1.4, y0);
-  deckLabel(kit, 0, y0, z1 - 9, 7, 5, Math.PI);
-  deckDecal(kit, -7.4, y0, z1 - 6, 3.2, 14, Math.PI / 2);
-  deckDecal(kit, 7.4, y0, z1 - 6, 3.2, 2, -Math.PI / 2);
+  deckLabel(kit, 0, y0, z1 - 9, 7, 5, 0);
+  deckDecal(kit, -7.4, y0, z1 - 6, 3.2, 14, 0);
+  deckDecal(kit, 7.4, y0, z1 - 6, 3.2, 2, 0);
   // side-deck walk lanes (painted; the port lane stops at the cradle bay) and rack numbers on the deck
+  // (read from the side decks facing the well)
   for (const sx of [-1, 1]) {
     const spans = sx > 0 ? [[W.z0 - 6, W.z1 + 6]] : [[W.z0 - 6, 464.5], [476, W.z1 + 6]];
     for (const [za, zb] of spans) kit.boxMM("painted", [sx * 25.6 - 0.08, y0, za], [sx * 25.6 + 0.08, y0 + 0.008, zb], { color: lib.PALETTE.impWhite, uv: "keep" });
-    HANGAR.rackZ.forEach((rz, i) => deckLabel(kit, sx * 24.6, y0, rz, 3.6, 8 + i * 2 + (sx > 0 ? 1 : 0), sx > 0 ? -Math.PI / 2 : Math.PI / 2));
+    HANGAR.rackZ.forEach((rz, i) => deckLabel(kit, sx * 24.6, y0, rz, 3.6, 8 + i * 2 + (sx > 0 ? 1 : 0), sx * Math.PI / 2));
   }
 }
 
@@ -183,12 +182,13 @@ function ceiling(kit, lib, room, yTop, T) {
   const P = lib.PALETTE;
   const { x0, x1, z0, z1 } = room;
   kit.boxMM("paintedMetal", [x0 - T, yTop, z0 - T], [x1 + T, yTop + 0.12, z1 + T], { color: P.darkMetal, uv: "world", texel: 0.5 });
-  // transverse Warren trusses every 11 m and two longitudinal ones over the well edges
-  for (let z = z0 + 11; z < z1 - 1; z += 11) truss(kit, { axis: "x", from: x0, to: x1, at: z, yTop, yBot: yTop - 2.6, panel: 4, chord: 0.5, web: 0.26, color: P.gunmetal, chordColor: P.slate });
+  // transverse Warren trusses every 10 m (z 420..510) and two longitudinal ones over the well edges
+  for (let z = z0 + 10; z < z1 - 1; z += 10) truss(kit, { axis: "x", from: x0, to: x1, at: z, yTop, yBot: yTop - 2.6, panel: 4, chord: 0.5, web: 0.26, color: P.gunmetal, chordColor: P.slate });
   for (const x of [-21, 21]) truss(kit, { axis: "z", from: z0, to: z1, at: x, yTop, yBot: yTop - 2.0, panel: 4, chord: 0.45, web: 0.22, color: P.gunmetal, chordColor: P.slate });
   for (const x of [-7, 7]) kit.boxMM("paintedMetal", [x - 0.4, yTop - 1.4, z0], [x + 0.4, yTop, z1], { color: P.gunmetal, uv: "world", texel: 0.6 });
-  // recessed light banks in four rows, between the trusses
-  for (const x of [-26, -8, 8, 26]) for (let z = z0 + 5.5; z < z1 - 3; z += 11) recessedBank(kit, x, yTop, z, 5, 1.4, "emitDiffuser");
+  // recessed light banks in four rows midway between the trusses; the six over the side decks at z 435 /
+  // 465 / 495 carry the pooled high-bay point lights (see lights)
+  for (const x of [-26, -8, 8, 26]) for (let z = z0 + 5; z < z1 - 3; z += 10) recessedBank(kit, x, yTop, z, 5, 1.4, "emitDiffuser");
   // cable trays and pipe runs under the trusses along the long walls, a big duct against each wall
   for (const s of [-1, 1]) {
     cableTray(kit, s * 24.5, yTop - 3.1, (z0 + z1) / 2, z1 - z0, "z", 0.9);
@@ -258,7 +258,8 @@ function catwalks(kit, ctx, lib, room, y0) {
       z = Math.max(z, c1);
     }
     if (516.5 > z + 0.3) railing(kit, s * inX, z, s * inX, 516.5, CAT_Y, { postEvery: 2.2, tag: "catwalkRail" });
-    // visored flood fixtures under the catwalk every 11 m (the pooled point lights sit at four of them)
+    // visored flood fixtures under the catwalk every 11 m (lit housings only: the pooled lights are the
+    // high-bay banks, see lights)
     for (let fz = 418; fz <= 506; fz += 11) floodFixture(kit, s * 30.0, CAT_Y - 0.5, fz, "emitDiffuser", { w: 2.2 });
     // stair towers (inboard of the catwalk, exiting sideways onto it)
     const tx0 = s > 0 ? 25.8 : -28.4;
@@ -267,7 +268,7 @@ function catwalks(kit, ctx, lib, room, y0) {
     const towerLight = (x, y, z) => ctx.lights.cool.push(lib.pointLight(0xdfe8ff, 14, 14, [x, y, z]));
     stairTower(kit, { x0: tx0, x1: tx1, z0: towerZ.fwd[0], z1: towerZ.fwd[1], yBottom: y0, yTop: CAT_Y, entry: "+z", exit, light: towerLight });
     stairTower(kit, { x0: tx0, x1: tx1, z0: towerZ.aft[0], z1: towerZ.aft[1], yBottom: y0, yTop: CAT_Y, entry: "-z", exit, light: towerLight });
-    for (const z of [towerZ.fwd[1] + 0.9, towerZ.aft[0] - 0.9]) deckDecal(kit, (tx0 + tx1) / 2, y0, z, 1.4, 1, z < 465 ? Math.PI : 0);
+    for (const z of [towerZ.fwd[1] + 0.9, towerZ.aft[0] - 0.9]) deckDecal(kit, (tx0 + tx1) / 2, y0, z, 1.4, 1, z < 465 ? 0 : Math.PI);
   }
   // transverse galleries along the forward and aft walls
   catwalkSlab(kit, lib, x0, z0 + 0.16, x1, 413.4, CAT_Y);
@@ -455,16 +456,21 @@ function cradleBay(kit, ctx, lib, y0) {
   deckStrip(kit, "emitAmber", bay[0], bay[3] - 0.12, bay[2], bay[3], y0);
   deckStrip(kit, "emitAmber", bay[0], bay[1], bay[0] + 0.12, bay[3], y0);
   deckStrip(kit, "emitAmber", bay[2] - 0.12, bay[1], bay[2], bay[3], y0);
-  deckLabel(kit, cx, y0, cz - 5.6, 5, 18, Math.PI / 2);
-  deckDecal(kit, cx + 3.2, y0, cz + 5.6, 1.4, 7, Math.PI / 2);
-  // ground kit: bowser hosed to the pod, rolling ladder at the hatch, carts, crates, a diagnostic console
-  fuelBowser(kit, propFrame(kit, -29.4, y0, 461.8, 0.35), { hoseTo: [2.6, 0, 4.4] });
+  // (the FUEL stencil on the aft edge reads for anyone walking in from the lift corridor, i.e. facing -z)
+  deckLabel(kit, cx, y0, cz + 5.6, 5, 18, 0);
+  deckDecal(kit, cx + 3.2, y0, cz - 5.6, 1.4, 7, -Math.PI / 2);
+  // ground kit. Two viewpoints are fixed: the lift-corridor door at (-30.6, 479.5) looks at the room centre
+  // (room:hangar) and the hangarDeck view stands at (-26, 465) looking across the well. The lane from the door
+  // to the well (x -32..-20, z 476..483) stays empty so neither the walk in nor the door view is blocked; the
+  // bowser stands forward of the skid hosed to its fuel point, the carts turn their drawers to the viewer.
+  fuelBowser(kit, propFrame(kit, -27.0, y0, 462.0, Math.PI), { hoseTo: [-1.6, 0, -3.3] });
   ladder(kit, propFrame(kit, -28.1, y0, 468.7, Math.PI / 2), { h: 3.2 });
-  toolCart(kit, propFrame(kit, -22.6, y0, 478.2, -0.6));
-  toolCart(kit, propFrame(kit, -29.8, y0, 477.4, 2.4));
-  crate(kit, propFrame(kit, -30.4, y0, 464.8, 0.2), { decal: 5 });
-  crate(kit, propFrame(kit, -30.4, y0 + 0.8, 464.8, 0.35), { decal: 11, h: 0.7 });
-  pedestalConsole(kit, propFrame(kit, -23.2, y0, 462.4, Math.PI), "screen7");
+  toolCart(kit, propFrame(kit, -21.8, y0, 477.8, -0.6));
+  toolCart(kit, propFrame(kit, -23.0, y0, 462.2, -0.9));
+  crate(kit, propFrame(kit, -30.4, y0, 465.6, 0.2), { decal: 5 });
+  crate(kit, propFrame(kit, -30.4, y0 + 0.8, 465.6, 0.35), { decal: 11, h: 0.7 });
+  pallet(kit, propFrame(kit, -23.6, y0, 459.6, 0.15), { tiers: 2, decal: 9 });
+  pedestalConsole(kit, propFrame(kit, -22.0, y0, 467.6, -2.0), "screen7");
   // pod umbilical from a wall reel to the open hatch
   kit.box("paintedMetal", -31.6, y0 + 3.4, 468.7, 0.8, 1.4, 1.6, { color: P.gunmetal, texel: 1 });
   kit.cyl("metal", -31.05, y0 + 3.4, 468.7, 0.55, 0.5, "x", { color: P.slate, segments: 16 });
@@ -514,7 +520,7 @@ function aftDeck(kit, ctx, lib, y0, mats) {
       base(dt);
       gate.disabled = lift.state.y > CAT_Y - 0.25;
     };
-    deckDecal(kit, (lx0 + lx1) / 2, y0, 509.5, 1.8, 1, 0);
+    deckDecal(kit, (lx0 + lx1) / 2, y0, 509.5, 1.8, 1, Math.PI);
   }
   // container stacks between the recovery lane and the port cargo lift
   containerStack(kit, propFrame(kit, -13, y0, 508.4, Math.PI / 2), 6, 2, 2, 13, { open: true });
@@ -556,18 +562,26 @@ function trafficCab(kit, ctx, lib, y0) {
 }
 
 // ---------------------------------------------------------------- light fixtures
-function lights(ctx, lib, y0) {
+function lights(ctx, lib, y0, yTop) {
   const cool = (i, d, p, c = 0xdfe8ff) => ctx.lights.cool.push(lib.pointLight(c, i, d, p));
-  // The bay is 64 x 110 x 38 m and the pool only ever runs ~14 point lights: few, strong, long-reach
-  // floods under the side catwalks so the far side of the bay stays lit from wherever the player stands.
-  // (inverse-square: a 17 m drop to the deck needs ~600 cd for a lit deck, so these are big numbers)
-  for (const s of [-1, 1]) for (const z of [424, 452, 480, 508]) cool(820, 100, [s * 25, CAT_Y - 1.0, z]);
-  for (const z of [412.5, 517.5]) cool(480, 80, [0, CAT_Y - 1.0, z]);
-  // one work light per rack under the clamp beam: the craft read as lit silhouettes against the dark ceiling
-  // (strong enough to win pool slots from the far deck, 60 m range so they never drop out)
-  for (const rz of HANGAR.rackZ) for (const gx of HANGAR.rackX) cool(560, 60, [gx, GIRDER.y0 - 2.4, rz], 0xe6eeff);
-  // tractor glow: blue lights hovering in the beams above the well mouth
-  for (const z of [448.5, 470.5, 492.5]) ctx.lights.teal.push(lib.pointLight(0x66b6ff, 170, 60, [0, -70, z]));
+  // The bay is 64 x 110 x 38 m and the pool runs 14 point lights, chosen by their irradiance at the camera
+  // (intensity / distance^2), so the plan is written for that budget seen from the decks: 6 high-bay banks,
+  // 4 rack-row lights, the cradle bay's two and the tractor glow = 13, leaving one slot for whichever practical
+  // (station, stair tower, cab interior) the player is standing next to.
+  // The banks sit in the ceiling plane (inside the plate's thickness, in the recessed housings): a point light
+  // in the plane of a surface leaves that surface unlit, so the ceiling stays dark around the fixtures instead
+  // of blowing out in a halo, and nothing walkable is within 18 m of them, so the catwalks and platforms never
+  // wash out as they did with floods hung 1 m under the catwalk grating.
+  // (inverse-square: a 38 m drop to the deck needs ~2500 cd for a lit deck, so these are big numbers)
+  for (const s of [-1, 1]) for (const z of [435, 465, 495]) cool(2600, 130, [s * 26, yTop + 0.04, z]);
+  // rack-row lights: one per rack pair, hovering over the well between the two rows 2 m under rack height.
+  // 14 m from either pod, they light the faces the deck sees (pod, pylons, the inner wing panels and the clamp
+  // arms) at ~2 cd/m^2 so the parked craft read as lit fighters against the dark ceiling; a light per rack
+  // never reached the deck viewer strongly enough to win a pool slot against the banks
+  for (const rz of HANGAR.rackZ) cool(400, 40, [0, HANGAR.rackY - 2, rz], 0xe6eeff);
+  // tractor glow: a blue light hovering in the beams above the well mouth (it also lights the fighter hanging
+  // from the launch cradle from above, 10 m away)
+  ctx.lights.teal.push(lib.pointLight(0x66b6ff, 170, 60, [0, -70, 465]));
   // one shadowed flood from the starboard girder down onto the starboard side deck (catwalk, platform and
   // stair tower throw the shadows). Every pooled spot is a full shadow pass over the zone, so this is the
   // only spot fixture in the bay; its range (distance x 1.6 in the pool) stops short of the cargo bay and the
@@ -590,12 +604,16 @@ function dynamics(kit, ctx, mats, y0, yTop, W) {
     kit.boxMM("metal", [Math.min(s * 31.0, s * 31.6), CRANE_Y - 1.9, W.z0 + 1], [Math.max(s * 31.0, s * 31.6), CRANE_Y - 1.6, W.z1 - 1], { color: P.steel, uv: "world", texel: 1 });
     for (let z = W.z0 + 4; z < W.z1; z += 8) kit.boxMM("paintedMetal", [Math.min(s * 30.6, s * 32), CRANE_Y - 2.5, z - 0.3], [Math.max(s * 30.6, s * 32), CRANE_Y - 1.9, z + 0.3], { color: P.darkMetal, texel: 0.8 });
   }
-  gantryCrane(ctx, mats, { x0: -31.0, x1: 31.0, y: CRANE_Y, zMin: W.z0 + 10, zMax: W.z1 - 10, trolleyRange: [-7.5, 7.5], hookDrop: 7, load: true, speed: 0.6, zStart: 470, name: "hangar.crane" });
-  // drop-rail launch cradle over the well: the carriage stays inside the opening (x -15.5..10)
-  launchCradle(kit, ctx, mats, { z: RAIL.z, y: RAIL.y, x0: -15.5, x1: 10, xStart: -8, wallX: 32, variant: 3, labelIdx: 4 });
+  // the slung load hangs 11 m under the trolley (16 m over the deck) so the crane reads from deck level, where
+  // the bridge itself is at the top of the field of view
+  gantryCrane(ctx, mats, { x0: -31.0, x1: 31.0, y: CRANE_Y, zMin: W.z0 + 10, zMax: W.z1 - 10, trolleyRange: [-7.5, 7.5], hookDrop: 11, load: true, speed: 0.6, zStart: 470, name: "hangar.crane" });
+  // drop-rail launch cradle over the well: the carriage stays inside the opening (x -14.5..10, wing tips 1 m
+  // clear of the shaft lining); the fighter hangs slewed 57 degrees off the launch line so it reads in
+  // three-quarter view (viewport, pylons and both hexagonal wings) from the port deck
+  launchCradle(kit, ctx, mats, { z: RAIL.z, y: RAIL.y, x0: -14.5, x1: 10, xStart: RAIL.x, wallX: 32, variant: 3, labelIdx: 4, heading: 1.0 });
   blastLeaves(ctx, mats, { well: W, y: y0 - 0.95, thickness: 0.9, protrude: 1.6, travel: 0.6, period: 34 });
   shimmerSheet(ctx, W, y0 - 0.42);
-  tractorEmitters(kit, ctx, { positions: [[-4.5, 448.5], [4.5, 448.5], [-4.5, 470.5], [4.5, 470.5], [-4.5, 492.5], [4.5, 492.5]], yCeil: yTop, yTarget: y0 - 1.6, radius: 4.2 });
+  tractorEmitters(kit, ctx, { positions: [[-4.5, 445], [4.5, 445], [-4.5, 465], [4.5, 465], [-4.5, 485], [4.5, 485]], yCeil: yTop, yTarget: y0 - 1.6, radius: 4.2 });
   const rx = W.x1 + 2.3;
   beacons(kit, ctx, mats, [
     [-rx, y0, W.z0 - 2.0, 3.0], [rx, y0, W.z0 - 2.0, 3.0], [-rx, y0, W.z1 + 2.0, 3.0], [rx, y0, W.z1 + 2.0, 3.0],
