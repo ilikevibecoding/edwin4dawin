@@ -692,6 +692,157 @@ export function makeScreen(w = 512, h = 256, seed = 5, accent = "#6fb4ff", warn 
   return toTexture(c, { srgb: true, wrap: false });
 }
 
+// Alternative console layouts so a deck of screens does not repeat one texture.
+// mode: "schematic" (wedge-ship status diagram), "radar" (sweep + contacts), "columns" (data
+// readout), "bars" (power distribution). Same palette conventions as makeScreen.
+export function makeScreenLayout(mode = "schematic", w = 512, h = 256, seed = 5, accent = "#6fb4ff", warn = "#ffb347") {
+  const c = makeCanvas(w, h);
+  const ctx = c.getContext("2d");
+  const rand = mulberry32(seed);
+  ctx.fillStyle = "#04090c";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "rgba(111,180,255,0.07)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x < w; x += 16) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+  }
+  for (let y = 0; y < h; y += 16) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+    ctx.stroke();
+  }
+  const pad = 14;
+  ctx.fillStyle = accent;
+  ctx.fillRect(pad, pad, w - pad * 2, 3);
+  ctx.fillRect(pad, pad + 8, 70 + rand() * 60, 9);
+  const dim = (a) => accent.replace(")", "") && `rgba(111,180,255,${a})`;
+  if (mode === "schematic") {
+    // top-down wedge with section boxes, a few flagged amber
+    const cx = w * 0.5;
+    const top = pad + 34;
+    const bot = h - pad - 18;
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, top);
+    ctx.lineTo(cx + (bot - top) * 0.62, bot);
+    ctx.lineTo(cx - (bot - top) * 0.62, bot);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 6; i++) {
+      const t = i / 6;
+      const y = top + (bot - top) * t;
+      const half = (bot - top) * 0.62 * t;
+      ctx.strokeStyle = dim(0.35);
+      ctx.beginPath();
+      ctx.moveTo(cx - half, y);
+      ctx.lineTo(cx + half, y);
+      ctx.stroke();
+      for (let k = -2; k <= 2; k++) {
+        if (Math.abs(k) * 22 > half - 8) continue;
+        ctx.fillStyle = rand() < 0.12 ? warn : dim(0.5);
+        ctx.fillRect(cx + k * 22 - 8, y - 9, 16, 7);
+      }
+    }
+    ctx.fillStyle = dim(0.7);
+    for (let i = 0; i < 5; i++) ctx.fillRect(pad, top + 8 + i * 16, 30 + rand() * 40, 6);
+    for (let i = 0; i < 5; i++) ctx.fillRect(w - pad - 80, top + 8 + i * 16, 30 + rand() * 50, 6);
+  } else if (mode === "radar") {
+    const cx = w * 0.5;
+    const cy = h * 0.56;
+    const R = h * 0.36;
+    for (let r = R; r > 0; r -= R / 4) {
+      ctx.strokeStyle = dim(0.35);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(cx - R, cy);
+    ctx.lineTo(cx + R, cy);
+    ctx.moveTo(cx, cy - R);
+    ctx.lineTo(cx, cy + R);
+    ctx.stroke();
+    const grad = ctx.createConicGradient ? ctx.createConicGradient(-Math.PI / 2 + seed * 0.3, cx, cy) : null;
+    if (grad) {
+      grad.addColorStop(0, "rgba(111,180,255,0.45)");
+      grad.addColorStop(0.25, "rgba(111,180,255,0)");
+      grad.addColorStop(1, "rgba(111,180,255,0)");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let i = 0; i < 9; i++) {
+      const a = rand() * Math.PI * 2;
+      const d = R * (0.2 + rand() * 0.75);
+      ctx.fillStyle = rand() < 0.25 ? warn : accent;
+      ctx.fillRect(cx + Math.cos(a) * d - 2, cy + Math.sin(a) * d - 2, 4, 4);
+    }
+    ctx.fillStyle = dim(0.7);
+    for (let i = 0; i < 6; i++) ctx.fillRect(pad, pad + 40 + i * 15, 24 + rand() * 40, 6);
+    for (let i = 0; i < 6; i++) ctx.fillRect(w - pad - 70, pad + 40 + i * 15, 24 + rand() * 46, 6);
+  } else if (mode === "columns") {
+    const cols = 4;
+    const cw = (w - pad * 2) / cols;
+    for (let cI = 0; cI < cols; cI++) {
+      const x = pad + cI * cw;
+      ctx.fillStyle = dim(0.9);
+      ctx.fillRect(x, pad + 30, cw * 0.55, 7);
+      let y = pad + 46;
+      while (y < h - pad - 8) {
+        const flag = rand() < 0.08;
+        ctx.fillStyle = flag ? warn : dim(0.3 + rand() * 0.45);
+        ctx.fillRect(x, y, cw * (0.25 + rand() * 0.6), 5);
+        y += 12;
+      }
+    }
+  } else {
+    // bars: power distribution
+    const n = 14;
+    const bw = (w - pad * 2) / n;
+    const base = h - pad - 20;
+    for (let i = 0; i < n; i++) {
+      const bh = (h - pad * 2 - 60) * (0.2 + rand() * 0.8);
+      ctx.fillStyle = dim(0.25);
+      ctx.fillRect(pad + i * bw + 3, pad + 34, bw - 6, base - pad - 34);
+      ctx.fillStyle = rand() < 0.15 ? warn : accent;
+      ctx.fillRect(pad + i * bw + 3, base - bh, bw - 6, bh);
+      ctx.fillStyle = dim(0.8);
+      ctx.fillRect(pad + i * bw + 5, base + 6, bw - 10, 5);
+    }
+  }
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  for (let yy = 0; yy < h; yy += 3) ctx.fillRect(0, yy, w, 1);
+  return toTexture(c, { srgb: true, wrap: false });
+}
+
+// Door sign: black plate, blue rule, light-grey stencil text (room names beside doors).
+export function makeLabel(text, w = 512, h = 128, accent = "#6fb4ff") {
+  const c = makeCanvas(w, h);
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#0b0d11";
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = accent;
+  ctx.fillRect(18, 18, 6, h - 36);
+  ctx.fillStyle = "#c9cdd4";
+  let px = Math.floor(h * 0.42);
+  ctx.font = `bold ${px}px "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace`;
+  ctx.textBaseline = "middle";
+  const label = String(text).toUpperCase();
+  while (ctx.measureText(label).width > w - 60 && px > 12) {
+    px -= 2;
+    ctx.font = `bold ${px}px "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace`;
+  }
+  ctx.fillText(label, 40, h / 2);
+  return toTexture(c, { srgb: true, wrap: false });
+}
+
 // Small indicator-light strip: row of coloured LEDs on dark panel.
 export function makeLedStrip(w = 256, h = 32, seed = 9) {
   const c = makeCanvas(w, h);
@@ -789,10 +940,10 @@ export function makeDecalSheet(size = 1024, seed = 19) {
   };
   // 0: bay code
   at(0, (s) => {
-    text("A-07", s / 2, s * 0.42, s * 0.34, INK);
+    text("SEC 07", s / 2, s * 0.42, s * 0.3, INK);
     ctx.fillStyle = ORANGE;
     ctx.fillRect(s * 0.15, s * 0.64, s * 0.7, s * 0.05);
-    text("DECK 02", s / 2, s * 0.8, s * 0.13, INK);
+    text("ACCESS RESTRICTED", s / 2, s * 0.8, s * 0.1, INK);
   });
   // 1: caution block
   at(1, (s) => {
@@ -818,7 +969,7 @@ export function makeDecalSheet(size = 1024, seed = 19) {
     ctx.lineTo(s * 0.12, s * 0.52);
     ctx.closePath();
     ctx.fill();
-    text("AIRLOCK", s / 2, s * 0.82, s * 0.16, INK);
+    text("AUTHORISED", s / 2, s * 0.82, s * 0.13, INK);
   });
   // 4: O2 roundel
   at(4, (s) => {
@@ -871,7 +1022,7 @@ export function makeDecalSheet(size = 1024, seed = 19) {
   });
   // 8: hatch code
   at(8, (s) => {
-    text("H-2", s / 2, s * 0.36, s * 0.32, ORANGE);
+    text("SEAL", s / 2, s * 0.36, s * 0.28, ORANGE);
     text("PRESSURE DOOR", s / 2, s * 0.66, s * 0.09, INK);
     text("KEEP CLEAR", s / 2, s * 0.78, s * 0.09, INK);
   });
@@ -888,8 +1039,8 @@ export function makeDecalSheet(size = 1024, seed = 19) {
   });
   // 11: cargo
   at(11, (s) => {
-    text("CARGO", s / 2, s * 0.4, s * 0.22, INK);
-    text("↑ THIS SIDE UP", s / 2, s * 0.64, s * 0.1, INK);
+    text("SUPPLY", s / 2, s * 0.4, s * 0.22, INK);
+    text("IMPERIAL ISSUE", s / 2, s * 0.64, s * 0.1, INK);
   });
   // 12: vent label
   at(12, (s) => {
@@ -905,12 +1056,12 @@ export function makeDecalSheet(size = 1024, seed = 19) {
   });
   // 14: B-12
   at(14, (s) => {
-    text("B-12", s / 2, s * 0.5, s * 0.34, INK);
+    text("VIGILANT", s / 2, s * 0.5, s * 0.2, INK);
   });
   // 15: fine hazard text
   at(15, (s) => {
-    text("MIND", s / 2, s * 0.36, s * 0.18, INK);
-    text("THE GAP", s / 2, s * 0.58, s * 0.18, INK);
+    text("WATCH", s / 2, s * 0.36, s * 0.18, INK);
+    text("YOUR STEP", s / 2, s * 0.58, s * 0.16, INK);
   });
   // erode: knock out speckles + scuffed streaks so stencils look worn
   const img = ctx.getImageData(0, 0, size, size);

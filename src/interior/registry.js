@@ -13,6 +13,7 @@ import { DoorSystem } from "./doors.js";
 import { LiftSystem } from "./lifts.js";
 import * as lib from "./lib.js";
 import { PALETTE } from "../materials.js";
+import { makeLabel } from "../textures.js";
 
 const LIB = { ...lib, roomShell, IMPERIAL_STYLES, IMPERIAL_PAINTS, DARK_PAINTS, wallLightBar, wallConsole, doorOpening, roomWalls, PALETTE };
 
@@ -41,6 +42,16 @@ export function buildInterior({ scene, materials }) {
   }
 
   const spaces = {}; // id -> { id, kind: 'room'|'corridor', spec, deck, zone, group, neighbors:Set, interactables, windows }
+  const signs = [];
+  const labelCache = new Map();
+  function labelMaterial(name, accent) {
+    const key = name + "|" + accent;
+    if (!labelCache.has(key)) {
+      const col = /red/.test(accent || "") ? "#ff5a4a" : /amber|warm/.test(accent || "") ? "#ffb347" : "#6fb4ff";
+      labelCache.set(key, new THREE.MeshBasicMaterial({ map: makeLabel(name, 512, 128, col), fog: false }));
+    }
+    return labelCache.get(key);
+  }
   const interactables = [];
   const stats = { buildMs: {} };
 
@@ -120,7 +131,20 @@ export function buildInterior({ scene, materials }) {
       }
       const axis = facing === "+z" || facing === "-z" ? "x" : "z";
       const big = w >= 5;
-      doors.add(kit, { id: `${room.id}-${i}`, x: cx, z: cz, y, width: w, height: Math.min(room.height - 0.1, h || lib.DOOR_H), axis, depth, zone: zone.id, blast: big, locked: !!room.restricted && false });
+      const doorH = Math.min(room.height - 0.1, h || lib.DOOR_H);
+      doors.add(kit, { id: `${room.id}-${i}`, x: cx, z: cz, y, width: w, height: doorH, axis, depth, zone: zone.id, blast: big, locked: !!room.restricted && false });
+      // wayfinding: the room's name on a sign above the door, read from the far side of the doorway
+      if (nb && nb.id && !room.legacy) {
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(1.6, w * 0.6), 0.24), labelMaterial(room.name, room.accent));
+        const out = depth / 2 + 0.03;
+        const yS = y + doorH + (big ? 0.6 : 0.34);
+        if (facing === "+x") sign.position.set(cx + out, yS, cz), sign.rotation.y = Math.PI / 2;
+        else if (facing === "-x") sign.position.set(cx - out, yS, cz), sign.rotation.y = -Math.PI / 2;
+        else if (facing === "+z") sign.position.set(cx, yS, cz + out);
+        else sign.position.set(cx, yS, cz - out), sign.rotation.y = Math.PI;
+        sign.name = "sign:" + room.id;
+        signs.push(sign);
+      }
     }
   }
 
@@ -146,7 +170,7 @@ export function buildInterior({ scene, materials }) {
         g.name = "space:" + room.id;
         if (room.legacy === "kestrel") {
           g.position.set(LEGACY_WING.x, LEGACY_WING.y, LEGACY_WING.z);
-          const wing = buildLegacyWing(g, materials, { aftOpen: true });
+          const wing = buildLegacyWing(g, materials, { aftOpen: true, shutterPortholes: true });
           const off = new THREE.Vector3(LEGACY_WING.x, LEGACY_WING.y, LEGACY_WING.z);
           for (const c of wing.colliders) {
             c.min.add(off);
@@ -185,7 +209,10 @@ export function buildInterior({ scene, materials }) {
         if (builder) builder(kit, ctx, room, LIB);
         else roomShell(kit, ctx, room, {});
         registerSpace("room", room, zone, g, null, null); // neighbours need the space entry first
+        signs.length = 0;
         addRoomDoors(kit, room, zone);
+        for (const sgn of signs) g.add(sgn);
+        signs.length = 0;
         kit.build(g);
         zone.group.add(g);
         const sp = spaces[room.id];
@@ -240,7 +267,9 @@ export function buildInterior({ scene, materials }) {
   doors.build(root);
   doors.rebuild = () => {
     root.remove(doors.mesh);
+    root.remove(doors.lamps);
     doors.mesh.dispose();
+    doors.lamps.dispose();
     doors.build(root);
   };
   for (const it of lifts.interactables) interactables.push(it);
@@ -403,7 +432,10 @@ export function buildInterior({ scene, materials }) {
         x = dx + (facing === "+x" ? -1.4 : facing === "-x" ? 1.4 : 0);
         z = dz + (facing === "+z" ? -1.4 : facing === "-z" ? 1.4 : 0);
       } else {
-        x = r.x0 + 1.5;
+        // corridors: stand near one end and look down the long axis (dead ends face their lift portal)
+        const longX = r.x1 - r.x0 >= r.z1 - r.z0;
+        if (longX) x = r.x1 - 1.2;
+        else z = r.z1 - 1.2;
       }
       const yaw = THREE.MathUtils.radToDeg(Math.atan2(-(cx - x), -(cz - z)));
       return { x, z, y, yaw, pitch: -4, zone: DECKS[r.deck].zone, space: r.id };

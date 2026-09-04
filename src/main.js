@@ -61,7 +61,7 @@ interior.lifts.audio = audio;
 const traffic = createTraffic({ scene, count: 6, audio, sun: exterior.sun });
 const pool = new LightPool(scene, { points: 14, spots: 3 });
 
-const hemi = new THREE.HemisphereLight(0x5a6f86, 0x3a2f26, 0.16);
+const hemi = new THREE.HemisphereLight(0x5a6f86, 0x3a2f26, 0.26);
 scene.add(hemi);
 
 // Bootstrap environment (neutral room), replaced by a capture of the actual interior below.

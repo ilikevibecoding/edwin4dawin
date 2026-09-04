@@ -415,7 +415,17 @@ export function porthole(frame, cu, cv, cw, ch, depth, op) {
   // glass, set into the tube
   const glass = new THREE.CircleGeometry(r, 36);
   frame.add("glass", glass, cu, cv, -0.1, { uv: "keep" });
+  // closed blast shutter behind the glass for portholes that face into the ship's own structure
+  if (op.shutter || PORTHOLE_DEFAULTS.shutter) {
+    const disc = new THREE.CircleGeometry(r - 0.006, 36);
+    frame.add("paintedMetal", disc, cu, cv, -0.16, { color: PALETTE.darkMetal, uv: "keep" });
+    for (let i = -2; i <= 2; i++) frame.box("metal", cu, cv + i * (r * 0.36), -0.15, r * 1.7, 0.012, 0.008, { color: PALETTE.gunmetal });
+    frame.box("emitRed", cu + r * 0.55, cv - r * 0.72, -0.14, 0.03, 0.03, 0.006);
+  }
 }
+
+// Module-wide porthole behaviour, set by builders whose rooms sit inside the hull (no view out).
+export const PORTHOLE_DEFAULTS = { shutter: false };
 
 // ---------------------------------------------------------------------------
 // Rooms

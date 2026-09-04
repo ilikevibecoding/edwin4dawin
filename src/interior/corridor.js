@@ -146,8 +146,47 @@ export function buildCorridorBox(kit, ctx, b, opts = {}) {
     }
   }
 
+  // floor guide light lines along both walls (lift the lower third out of the black) and bulkhead
+  // frames every ~12 m with a section stencil so long runs read as structure, not one repeated module
+  const len0 = longX ? w : d;
+  const guide = (side) => {
+    if (longX) {
+      const z = side < 0 ? b.z0 + 0.06 : b.z1 - 0.06;
+      kit.box(style.bar, (b.x0 + b.x1) / 2, y0 + 0.1, z, w - 0.6, 0.02, 0.03, { uv: "keep" });
+    } else {
+      const x = side < 0 ? b.x0 + 0.06 : b.x1 - 0.06;
+      kit.box(style.bar, x, y0 + 0.1, (b.z0 + b.z1) / 2, 0.03, 0.02, d - 0.6, { uv: "keep" });
+    }
+  };
+  guide(-1);
+  guide(1);
+  if (len0 > 14) {
+    const nB = Math.floor(len0 / 12);
+    for (let i = 1; i <= nB; i++) {
+      const t = (i - 0.5 + (nB % 2 ? 0.5 : 0)) / nB;
+      const a = (longX ? b.x0 : b.z0) + len0 * t;
+      // skip frames that would land on an opening
+      const hit = Object.values(openings).some((ops) => ops.some((o) => Math.abs((longX ? o.u0 + o.u1 : o.u0 + o.u1) / 2 - (a - (longX ? b.x0 : b.z0))) < 2.2 || Math.abs(len0 - (o.u0 + o.u1) / 2 - (a - (longX ? b.x0 : b.z0))) < 2.2));
+      if (hit) continue;
+      const beamY = y0 + h - 0.12;
+      if (longX) {
+        kit.box("paintedMetal", a, y0 + h / 2, b.z0 + 0.06, 0.24, h, 0.12, { color: PALETTE.darkMetal, texel: 1.5 });
+        kit.box("paintedMetal", a, y0 + h / 2, b.z1 - 0.06, 0.24, h, 0.12, { color: PALETTE.darkMetal, texel: 1.5 });
+        kit.box("paintedMetal", a, beamY, (b.z0 + b.z1) / 2, 0.24, 0.24, d, { color: PALETTE.darkMetal, texel: 1.5 });
+        kit.box(style.accent, a, y0 + 2.05, b.z0 + 0.125, 0.06, 0.06, 0.01);
+        kit.box(style.accent, a, y0 + 2.05, b.z1 - 0.125, 0.06, 0.06, 0.01);
+      } else {
+        kit.box("paintedMetal", b.x0 + 0.06, y0 + h / 2, a, 0.12, h, 0.24, { color: PALETTE.darkMetal, texel: 1.5 });
+        kit.box("paintedMetal", b.x1 - 0.06, y0 + h / 2, a, 0.12, h, 0.24, { color: PALETTE.darkMetal, texel: 1.5 });
+        kit.box("paintedMetal", (b.x0 + b.x1) / 2, beamY, a, w, 0.24, 0.24, { color: PALETTE.darkMetal, texel: 1.5 });
+        kit.box(style.accent, b.x0 + 0.125, y0 + 2.05, a, 0.01, 0.06, 0.06);
+        kit.box(style.accent, b.x1 - 0.125, y0 + 2.05, a, 0.01, 0.06, 0.06);
+      }
+    }
+  }
+
   // ceiling: plate, ribs, two edge light channels along the long axis
-  kit.boxMM("paintedMetal", [b.x0 - WALL_T, y0 + h, b.z0 - WALL_T], [b.x1 + WALL_T, y0 + h + 0.12, b.z1 + WALL_T], { color: PALETTE.gunmetal, uv: "world", texel: 0.7 });
+  kit.boxMM("painted", [b.x0 - WALL_T, y0 + h, b.z0 - WALL_T], [b.x1 + WALL_T, y0 + h + 0.12, b.z1 + WALL_T], { color: PALETTE.gunmetal, uv: "world", texel: 0.5 });
   const len = longX ? w : d;
   const ribs = Math.max(1, Math.floor(len / 4));
   for (let i = 1; i < ribs; i++) {
@@ -173,7 +212,7 @@ export function buildCorridorBox(kit, ctx, b, opts = {}) {
     const t = (i + 0.5) / n;
     const px = longX ? b.x0 + w * t : (b.x0 + b.x1) / 2;
     const pz = longX ? (b.z0 + b.z1) / 2 : b.z0 + d * t;
-    ctx.lights.cool.push(pointLight(style.light, 4.5, 10, [px, y0 + h - 0.45, pz]));
+    ctx.lights.cool.push(pointLight(style.light, 4.5, 10, [px, y0 + h - 0.9, pz]));
   }
   return { y0, h, openings, frames };
 }
