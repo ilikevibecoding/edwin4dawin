@@ -193,7 +193,7 @@ const INTERIOR_VIEWS = {
   navigation: { sector: "d2_nav", x: 4, z: -18, yaw: -90, pitch: -4 },
   briefing: { sector: "d2_briefing", x: 4, z: -7.5, yaw: -90, pitch: -4 },
   officers: { sector: "d2_officers", x: -7, z: 0, yaw: 90, pitch: -4 },
-  observation: { sector: "d2_observation", x: 0, z: -36, yaw: 0, pitch: -3 },
+  observation: { sector: "d2_observation", x: 0, z: -43.5, yaw: 0, pitch: -3 },
   mess: { sector: "d3_mess", x: 5, z: -19, yaw: -90, pitch: -4 },
   quarters: { sector: "d3_quarters", x: -5, z: -19, yaw: 90, pitch: -4 },
   medbay: { sector: "d3_medbay", x: 5, z: -53, yaw: -90, pitch: -4 },
@@ -477,6 +477,7 @@ document.addEventListener("keydown", (e) => {
   if (e.code === "KeyR" && interior && !e.repeat) interior.setAlert(interior.alert.target === 0);
 });
 
+const TOWER_POS = new THREE.Vector3(0, 170, 600);
 const timer = new THREE.Timer();
 let statsTick = 0;
 
@@ -503,6 +504,7 @@ function frame() {
   if (director.mode === "exterior") {
     // stream the hangar bay in when the camera can see the ventral opening
     if (!hangar.built && camera.position.y < -30) interior.streamDeck("hangar");
+    if (!interior.deckBuilt("command") && camera.position.distanceTo(TOWER_POS) < 900) interior.streamDeck("command");
     interior.setExteriorView(true);
   } else interior.setExteriorView(false);
   traffic.group.visible = showExterior || (hangar && hangar.visible);

@@ -47,6 +47,19 @@ function taperedBlock(hw0, hw1, zs, ze, y0, h) {
 }
 
 /** Row of small lit windows along a line (instanced boxes). */
+/**
+ * Vertical face plate in the XY plane at depth z..z+thick with a rectangular hole (the real window
+ * opening of an interior room whose transparent glass sits just behind it). Exterior side faces -z.
+ */
+function facePlateWithHole(hw, y0, y1, z, thick, hole) {
+  const shape = new THREE.Shape([new THREE.Vector2(-hw, y0), new THREE.Vector2(hw, y0), new THREE.Vector2(hw, y1), new THREE.Vector2(-hw, y1)]);
+  const p = new THREE.Path([new THREE.Vector2(-hole.hw, hole.y0), new THREE.Vector2(-hole.hw, hole.y1), new THREE.Vector2(hole.hw, hole.y1), new THREE.Vector2(hole.hw, hole.y0)]);
+  shape.holes.push(p);
+  const g = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: false, curveSegments: 2 });
+  g.translate(0, 0, z);
+  return g;
+}
+
 function windowRow(items, x0, y, z0, x1, z1, count, rand, size = [1.2, 0.7, 0.4]) {
   for (let i = 0; i < count; i++) {
     if (rand() < 0.22) continue; // dark windows
@@ -227,9 +240,12 @@ export function buildSuperstructure(materials) {
   // --- tower neck + shoulder blocks + observation band + sensor pods + neck channels
   const nk = TOWER.neck;
   {
-    const { top, side } = taperedBlock(nk.x * 0.92, nk.x, nk.z0, nk.z1, cityTop - 2, nk.yTop - cityTop + 2);
+    // the block starts 0.8 m behind the face; the face itself is a plate with the observation gallery's
+    // window opening (deck 2 room glass at world z = 562, y 150.9..153.4) so the room looks out
+    const { top, side } = taperedBlock(nk.x * 0.92, nk.x, nk.z0 + 0.8, nk.z1, cityTop - 2, nk.yTop - cityTop + 2);
     batch.add("hullDark", top, PALETTE.hullDark, 0.02);
     batch.add("city", side, PALETTE.hullGrey, 0.02);
+    batch.add("city", facePlateWithHole(nk.x * 0.92, cityTop - 2, nk.yTop, nk.z0, 0.8, { hw: 16.3, y0: 150.7, y1: 153.6 }), PALETTE.hullGrey, 0.02);
     const nh = nk.yTop - cityTop;
     // vertical channels on the neck faces (front and sides), leaving the observation band clear
     for (let x = -nk.x * 0.92 + 5; x < nk.x * 0.92 - 4; x += 6.5) {
@@ -258,13 +274,11 @@ export function buildSuperstructure(materials) {
       light.push(boxItem(s * (nk.x + 6), cityTop + 21, (nk.z0 + nk.z1) / 2 - 8, 8, 2.4, 14, grey(0.72)));
       light.push(boxItem(s * (nk.x + 6), cityTop + 22.5, (nk.z0 + nk.z1) / 2 + 10, 5, 5, 6, grey(0.6)));
     }
-    // observation gallery band (deck 2, world z ≈ 562, y ≈ 151.6): recess, glass strip, frame, lit segments
-    batch.box("hullDark", 0, 151.6, nk.z0 + 0.2, 36, 4.2, 2.2, PALETTE.hullBlack);
-    batch.box("exteriorGlass", 0, 151.6, nk.z0 - 0.6, 32, 2.2, 0.4, PALETTE.impBlack);
+    // observation gallery band: frame lips above / below the opening and dark side cheeks; the panes,
+    // mullions and lit interior belong to the room itself (visible through the hole)
     batch.box("hull", 0, 154.4, nk.z0 - 1.1, 38, 1.2, 2.4, PALETTE.hullGrey);
     batch.box("hull", 0, 148.9, nk.z0 - 1.1, 38, 1.2, 2.4, PALETTE.hullGrey);
-    for (let x = -14; x <= 14; x += 4) dark.push(boxItem(x, 151.6, nk.z0 - 1.0, 0.5, 2.4, 0.5, grey(0.3)));
-    windowRow(windows, -15, 151.6, nk.z0 - 1.15, 15, nk.z0 - 1.15, 16, rand, [1.4, 1.2, 0.3]);
+    for (const sx of [-1, 1]) batch.box("hullDark", sx * 17.6, 152.15, nk.z0 - 0.6, 2.6, 4.4, 1.4, PALETTE.hullBlack);
   }
 
   // --- bridge module: the wide bar with buttresses, panel channels, brow, window band
@@ -274,7 +288,10 @@ export function buildSuperstructure(materials) {
   const bh = br.y1 - br.y0;
   const bcz = (br.z0 + br.z1) / 2;
   const bcy = (br.y0 + br.y1) / 2;
-  batch.box("hull", 0, bcy, bcz, bw, bh, bd, PALETTE.hullGrey, 0.03);
+  // the bar starts 0.8 m behind its front face; the face is a plate with the bridge window opening
+  // (deck 1 bridge glass sits at world z = 591 just behind it, y 181.5..186.5)
+  batch.box("hull", 0, bcy, (br.z0 + 0.8 + br.z1) / 2, bw, bh, bd - 0.8, PALETTE.hullGrey, 0.03);
+  batch.add("hull", facePlateWithHole(br.x, br.y0, br.y1, br.z0, 0.8, { hw: TOWER.windows.x + 0.5, y0: TOWER.windows.y0 - 0.35, y1: TOWER.windows.y1 + 0.35 }), PALETTE.hullGrey, 0.03);
   batch.box("hullDark", 0, br.y0 - 1.5, bcz, bw + 2, 3, bd + 2, PALETTE.hullDark);
   batch.box("hullDark", 0, br.y1 + 1, bcz, bw - 8, 2, bd - 6, PALETTE.hullDark);
   const wedges = [];
@@ -329,16 +346,12 @@ export function buildSuperstructure(materials) {
   // bridge windows: a recessed dark band across the front face with the glass strip inside; frame
   // lips above and below, mullions, a brow ledge (TOWER.windows y / z unchanged)
   const wn = TOWER.windows;
-  batch.box("hullDark", 0, (wn.y0 + wn.y1) / 2, wn.z + 0.2, wn.x * 2 + 6, wn.y1 - wn.y0 + 3, 2.4, PALETTE.hullBlack);
-  batch.box("exteriorGlass", 0, (wn.y0 + wn.y1) / 2, wn.z - 0.9, wn.x * 2, wn.y1 - wn.y0, 0.6, PALETTE.impBlack);
+  // dark cheeks either side of the opening (no box across it: the room's glass is the pane)
+  for (const sx of [-1, 1]) batch.box("hullDark", sx * (wn.x + 2.2), (wn.y0 + wn.y1) / 2, wn.z - 0.6, 3.4, wn.y1 - wn.y0 + 3, 1.6, PALETTE.hullBlack);
   batch.box("hull", 0, wn.y1 + 1.3, wn.z - 1.3, wn.x * 2 + 8, 1.4, 2.8, PALETTE.hullGrey);
   batch.box("hull", 0, wn.y0 - 1.2, wn.z - 1.3, wn.x * 2 + 8, 1.2, 2.8, PALETTE.hullGrey);
   batch.box("hullDark", 0, wn.y1 + 3.2, wn.z - 2.2, wn.x * 2 + 12, 1.6, 4.4, PALETTE.hullDark); // brow
-  for (let x = -wn.x + 3; x < wn.x; x += 3) {
-    const thick = Math.abs(x) < 0.1 ? 1.0 : 0.5;
-    dark.push(boxItem(x, (wn.y0 + wn.y1) / 2, wn.z - 1.1, thick, wn.y1 - wn.y0, 0.6, [0.35, 0.36, 0.38]));
-  }
-  dark.push(boxItem(0, (wn.y0 + wn.y1) / 2, wn.z - 1.1, wn.x * 2, 0.3, 0.6, [0.35, 0.36, 0.38]));
+  for (let x = -wn.x + 6; x < wn.x - 1; x += 6) dark.push(boxItem(x, (wn.y0 + wn.y1) / 2, wn.z - 0.6, 0.35, wn.y1 - wn.y0 + 0.6, 1.2, [0.3, 0.31, 0.33]));
   // observation-deck window rows along the bridge module's front and sides
   windowRow(windows, -br.x + 16, br.y0 + 6, br.z0 - 0.3, br.x - 16, br.z0 - 0.3, 34, rand);
   windowRow(windows, -br.x - 0.3, bcy, br.z0 + 6, -br.x - 0.3, br.z1 - 6, 10, rand, [0.4, 0.8, 1.2]);

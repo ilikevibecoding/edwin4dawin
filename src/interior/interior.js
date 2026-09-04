@@ -85,8 +85,9 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
   function assignPool() {
     const pts = [];
     const sps = [];
-    // in exterior view only the hangar bay (seen through its opening) needs real lights
-    const ids = api.exteriorView ? (sectors.get("d5_hangar").built ? ["d5_hangar"] : []) : visibleSet;
+    // in exterior view only the rooms seen through real openings (hangar bay, bridge, observation
+    // gallery) need real lights
+    const ids = api.exteriorView ? EXTERIOR_VISIBLE.filter((id) => sectors.get(id).built) : visibleSet;
     const ref = api.exteriorView ? player.camera.position : player.position;
     for (const id of ids) {
       for (const l of sectors.get(id).lights) {
@@ -201,8 +202,10 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
       if (on) {
         for (const s of sectors.values()) if (s.built) s.group.visible = false;
         for (const deck of decks) deck.doorGroup.visible = false;
-        const hangar = sectors.get("d5_hangar");
-        if (hangar && hangar.built) hangar.group.visible = true;
+        for (const id of EXTERIOR_VISIBLE) {
+          const sec = sectors.get(id);
+          if (sec && sec.built) sec.group.visible = true;
+        }
         if (!api.exteriorView) {
           api.exteriorView = true;
           assignPool();
@@ -350,6 +353,8 @@ export function createInterior({ scene, materials, player, hud, audio, traffic =
   // close enough that it is about to open (pre-warm), so a corridor lined with shut doors renders
   // only itself. Open portals (style "open") are always co-visible, transitively.
   const DOOR_PREWARM = 9;
+  // sectors kept visible from outside: they sit behind real holes in the hull
+  const EXTERIOR_VISIBLE = ["d5_hangar", "d1_bridge", "d2_observation"];
   function computeVisible(sector) {
     const vis = new Set();
     const closure = (id) => {

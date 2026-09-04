@@ -43,12 +43,13 @@ export const DECKS = [
     sectors: [
       { id: "d2_lift", kind: "lift", name: "Turbolift", bounds: [[-1.6, 0, 3.4], [1.6, 3.0, 6.4]] },
       { id: "d2_lobby", kind: "lobby", name: "Command Lobby", bounds: [[-5, 0, -3], [5, 3.6, 3]], spawn: [0, 1.5, 0] },
-      { id: "d2_corridor", kind: "corridor", name: "Command Corridor", bounds: [[-2, 0, -34.6], [2, 3.6, -3.4]] },
-      { id: "d2_tactical", kind: "room", builder: "tactical", name: "Tactical Operations", bounds: [[-22, 0, -24], [-2.4, 5, -8]], spawn: [-12, -16, -90] },
+      { id: "d2_corridor", kind: "corridor", name: "Command Corridor", bounds: [[-2, 0, -40.6], [2, 3.6, -3.4]] },
+      { id: "d2_tactical", kind: "room", builder: "tactical", name: "Tactical Operations", bounds: [[-22, 0, -24], [-2.4, 5, -8]], spawn: [-5.2, -16, 90] },
       { id: "d2_nav", kind: "room", builder: "navigation", name: "Navigation & Flight Control", bounds: [[2.4, 0, -24], [18, 3.6, -12]], spawn: [10, -18, 90] },
-      { id: "d2_briefing", kind: "room", builder: "briefing", name: "Crew Briefing Room", bounds: [[2.4, 0, -11], [18, 3.6, -4]], spawn: [10, -7.5, 90] },
+      { id: "d2_briefing", kind: "room", builder: "briefing", name: "Crew Briefing Room", bounds: [[2.4, 0, -11], [18, 3.6, -4]], spawn: [5.2, -7.5, -90] },
       { id: "d2_officers", kind: "room", builder: "officers", name: "Officers' Quarters", bounds: [[-24, 0, -7], [-5.4, 3.6, 7]], spawn: [-14, 0, -90] },
-      { id: "d2_observation", kind: "room", builder: "observation", name: "Observation Gallery", bounds: [[-16, 0, -42], [16, 4, -35]], seesExterior: true, spawn: [0, -38, 0] },
+      // the gallery's glass wall (zmin, local -48) sits on the tower neck's front face (world z = 562)
+      { id: "d2_observation", kind: "room", builder: "observation", name: "Observation Gallery", bounds: [[-16, 0, -48], [16, 4, -41]], seesExterior: true, spawn: [0, -44, 0] },
     ],
     doors: [
       { a: "d2_lobby", b: "d2_lift", pos: [0, 3.2], wall: "x", w: 2.0, h: 2.6, style: "lift" },
@@ -57,7 +58,7 @@ export const DECKS = [
       { a: "d2_corridor", b: "d2_nav", pos: [2.2, -18], wall: "z", w: 2.2, h: 2.8, style: "single" },
       { a: "d2_corridor", b: "d2_briefing", pos: [2.2, -7.5], wall: "z", w: 2.2, h: 2.8, style: "single" },
       { a: "d2_lobby", b: "d2_officers", pos: [-5.2, 0], wall: "z", w: 2.2, h: 2.8, style: "single" },
-      { a: "d2_corridor", b: "d2_observation", pos: [0, -34.8], wall: "x", w: 3.0, h: 3.0, style: "double" },
+      { a: "d2_corridor", b: "d2_observation", pos: [0, -40.8], wall: "x", w: 3.0, h: 3.0, style: "double" },
     ],
   },
   {
