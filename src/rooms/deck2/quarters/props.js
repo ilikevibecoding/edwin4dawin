@@ -9,7 +9,11 @@ import { placer, indicatorField } from "../_shared/props.js";
 const STEEL = IMP.steel;
 const DARK = IMP.impDark;
 const BLACK = IMP.impBlack;
-const CARD = [0xd8402a, 0x2f7fe0, 0xe0b040, 0x3fbf7f, 0xf0f0f0, 0xe07a30, 0x8a5fd0];
+// pinned cards read as notes / flimsi-prints: pale stock with a darker printed patch
+const CARD = [0xe8e6dc, 0xd4d8de, 0xc9c2a8, 0xf0f0f0];
+const PRINT = [0x2a2e36, 0x3b4658, 0x6b2e28, 0x2f4a3a];
+// issue bedding colours (per bay): slate, olive-grey, Imperial grey
+export const BEDDING = [0x3b4658, 0x4b5046, IMP.impMid];
 
 export function rod(kit, a, b, r = 0.015, mat = "metal", color = STEEL, segments = 8) {
   const dx = b[0] - a[0];
@@ -31,35 +35,54 @@ export function vent(kit, pos, yaw, w = 0.6, h = 0.35) {
 export function junctionBox(kit, pos, yaw, seed = 3) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
-  P.box("paintedMetal", 0, 0, -0.08, 0.32, 0.4, 0.16, { color: DARK, texel: 1 });
+  P.box("paintedMetal", 0, 0, -0.08, 0.32, 0.4, 0.16, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", 0, 0, 0.005, 0.26, 0.34, 0.01, { color: IMP.impMid });
   P.box(rand() < 0.6 ? "emitBlue" : "emitAmber", 0.08, 0.12, 0.012, 0.04, 0.02, 0.006);
   P.cyl("metal", 0, 0.36, -0.08, 0.025, 0.35, "y", { color: STEEL, segments: 8 });
 }
 
 // Stacked bunks along local X (length 2.1), open side +Z. `head` = −1 puts the pillow at −X, +1 at
-// +X. Each tier: slab, mattress, pillow, blanket (spread or folded), reading lamp, safety rail,
-// pinned cards; a drawer under the bottom tier and a ladder at the foot end. The head end is a solid
-// headboard; the foot end is an open post frame so the tiers read in profile from the bay mouth.
-export function bunk(kit, PALETTE, pos, yaw, { tiers = 3, len = 2.1, w = 0.9, gap = 0.75, seed = 7, head = -1 } = {}) {
+// +X. Each tier: slab, mattress, sheet, pillow, issue blanket in the bay's `bedding` colour (made
+// bed with a turned-down sheet edge, or folded at the foot), reading lamp, safety rail, pinned
+// notes; a drawer under the bottom tier and a ladder at the foot end. `stripped` = tier index left
+// as a bare slab with the mattress rolled at the head; `noBlanket` = tier index with sheet only.
+// The head end is a solid headboard; the foot end is an open post frame.
+export function bunk(kit, PALETTE, pos, yaw, { tiers = 3, len = 2.1, w = 0.9, gap = 0.75, seed = 7, head = -1, bedding = BEDDING[0], stripped = -1, noBlanket = -1 } = {}) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
   const frame = DARK;
   const h = 0.3 + tiers * gap;
   const hx = head * (len / 2 - 0.35);
-  P.box("paintedMetal", 0, h / 2, -w / 2 - 0.02, len, h, 0.04, { color: frame, texel: 1 });
-  P.box("paintedMetal", head * (len / 2 - 0.03), h / 2, 0, 0.06, h, w + 0.04, { color: frame });
+  P.box("paintedMetal", 0, h / 2, -w / 2 - 0.02, len, h, 0.04, { color: frame, texel: 2.5 });
+  P.box("paintedMetal", head * (len / 2 - 0.03), h / 2, 0, 0.06, h, w + 0.04, { color: frame, texel: 2.5 });
   for (const z of [-w / 2 - 0.01, w / 2 - 0.01]) P.box("paintedMetal", -head * (len / 2 - 0.03), h / 2, z, 0.06, h, 0.06, { color: frame });
   for (let i = 0; i < tiers; i++) {
     const y = 0.3 + i * gap;
-    P.box("paintedMetal", 0, y, 0, len, 0.08, w, { color: frame, texel: 1 });
-    P.box("fabric", 0, y + 0.1, 0, len - 0.1, 0.12, w - 0.08, { color: IMP.impGrey, texel: 2 });
-    P.box("fabric", hx, y + 0.18, 0, 0.5, 0.06, w - 0.3, { color: IMP.impWhite, texel: 2 });
-    const r = rand();
-    if (r < 0.5) P.box("fabric", -head * 0.15, y + 0.19, -0.05, len - 0.9, 0.05, w - 0.25, { color: IMP.impMid, texel: 2 });
-    else if (r < 0.85) P.box("fabric", -head * (len / 2 - 0.35), y + 0.2, 0, 0.35, 0.09, w - 0.35, { color: IMP.impMid, texel: 2 });
+    P.box("paintedMetal", 0, y, 0, len, 0.08, w, { color: frame, texel: 2.5 });
+    if (i === stripped) {
+      // bare slab, mattress rolled against the headboard, a folded blanket left on the slab
+      P.cyl("fabric", hx, y + 0.25, 0, 0.2, w - 0.16, "z", { color: IMP.impGrey, segments: 14, texel: 2 });
+      P.box("fabric", -head * 0.3, y + 0.085, 0.1, 0.4, 0.09, 0.3, { color: bedding, texel: 2 });
+    } else {
+      P.box("fabric", 0, y + 0.1, 0, len - 0.1, 0.12, w - 0.08, { color: IMP.impGrey, texel: 2 });
+      P.box("fabric", 0, y + 0.165, 0, len - 0.14, 0.012, w - 0.1, { color: IMP.impWhite, texel: 2 }); // sheet
+      P.box("fabric", hx, y + 0.2, 0, 0.5, 0.07, w - 0.3, { color: IMP.impWhite, texel: 2 }); // pillow
+      const r = rand();
+      if (i === noBlanket) {
+        // sheet only, thrown back toward the foot
+        P.box("fabric", -head * (len / 2 - 0.5), y + 0.19, 0.08, 0.6, 0.04, w - 0.3, { color: IMP.impWhite, texel: 2 });
+      } else if (r < 0.65) {
+        // made bed: blanket from the foot to 0.75 from the head end, white fold at its head edge
+        const bl = len - 0.95;
+        P.box("fabric", -head * (len / 2 - 0.05 - bl / 2), y + 0.195, 0, bl, 0.05, w - 0.14, { color: bedding, texel: 2 });
+        P.box("fabric", -head * (len / 2 - 0.05 - bl + 0.1), y + 0.225, 0, 0.2, 0.02, w - 0.16, { color: IMP.impWhite, texel: 2 });
+      } else {
+        // folded blanket at the foot
+        P.box("fabric", -head * (len / 2 - 0.35), y + 0.215, 0, 0.4, 0.09, w - 0.35, { color: bedding, texel: 2 });
+      }
+    }
     P.box("paintedMetal", hx, y + gap - 0.085, -w / 2 + 0.03, 0.34, 0.03, 0.06, { color: BLACK });
-    P.box("emitWhite", hx, y + gap - 0.112, -w / 2 + 0.035, 0.3, 0.02, 0.03);
+    P.box("emitWarm", hx, y + gap - 0.112, -w / 2 + 0.035, 0.3, 0.02, 0.03);
     if (i > 0) P.cyl("metal", -head * 0.2, y + 0.3, w / 2, 0.015, len * 0.55, "x", { color: STEEL, segments: 8 });
     const nCards = Math.floor(rand() * 3);
     for (let c = 0; c < nCards; c++) {
@@ -68,11 +91,12 @@ export function bunk(kit, PALETTE, pos, yaw, { tiers = 3, len = 2.1, w = 0.9, ga
       const cx = -len / 2 + 0.3 + rand() * (len - 0.6);
       const cy = y + 0.36 + rand() * 0.2;
       P.box("paintedMetal", cx, cy, -w / 2 + 0.004, cw, ch, 0.006, { color: CARD[Math.floor(rand() * CARD.length)] });
+      P.box("paintedMetal", cx, cy + 0.01, -w / 2 + 0.0075, cw - 0.03, ch - 0.045, 0.002, { color: PRINT[Math.floor(rand() * PRINT.length)] });
     }
     if (rand() < 0.3) P.box("emitBlue", -head * 0.5, y + 0.44, -w / 2 + 0.004, 0.1, 0.07, 0.006);
   }
   P.box("paintedMetal", 0, h - 0.02, 0, len, 0.04, w + 0.04, { color: frame });
-  P.box("paintedMetal", 0, 0.13, 0.02, len - 0.2, 0.22, w - 0.1, { color: IMP.impMid, texel: 1 });
+  P.box("paintedMetal", 0, 0.13, 0.02, len - 0.2, 0.22, w - 0.1, { color: IMP.impMid, texel: 2.5 });
   for (const x of [-len / 4, len / 4]) P.box("metal", x, 0.13, w / 2 - 0.02, 0.25, 0.02, 0.02, { color: STEEL });
   const lx = -head * (len / 2 - 0.2);
   for (const dx of [-0.16, 0.16]) P.cyl("metal", lx + dx, (h - 0.2) / 2 + 0.1, w / 2 + 0.04, 0.014, h - 0.2, "y", { color: STEEL, segments: 8 });
@@ -84,15 +108,19 @@ export function bunk(kit, PALETTE, pos, yaw, { tiers = 3, len = 2.1, w = 0.9, ga
 export function foldDesk(kit, pos, yaw, seed = 5) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
-  P.box("paintedMetal", 0, 0.75, 0.22, 0.52, 0.03, 0.44, { color: IMP.impGrey, texel: 1 });
+  P.box("paintedMetal", 0, 0.75, 0.22, 0.52, 0.03, 0.44, { color: IMP.impGrey, texel: 2.5 });
   P.box("paintedMetal", 0, 0.72, 0.03, 0.5, 0.06, 0.06, { color: BLACK });
   for (const s of [-1, 1]) rod(kit, P.world(s * 0.2, 0.735, 0.4), P.world(s * 0.2, 0.42, 0.02), 0.012);
   P.box("darkGloss", 0.05, 0.77, 0.24, 0.26, 0.012, 0.18);
   P.box(rand() < 0.5 ? "emitBlue" : "emitAmber", 0.05, 0.778, 0.24, 0.2, 0.004, 0.12);
   P.box("paintedMetal", -0.16, 0.78, 0.12, 0.1, 0.03, 0.14, { color: CARD[Math.floor(rand() * CARD.length)] });
   P.box("paintedMetal", 0, 1.35, 0.01, 0.4, 0.5, 0.02, { color: DARK });
-  P.box("emitWhite", 0, 1.62, 0.02, 0.3, 0.012, 0.01);
-  for (let i = 0; i < 3; i++) P.box("paintedMetal", -0.12 + i * 0.12, 1.32 + (i % 2) * 0.06, 0.022, 0.09, 0.12, 0.004, { color: CARD[(seed + i) % CARD.length] });
+  P.box("paintedMetal", 0, 1.63, 0.03, 0.34, 0.04, 0.06, { color: BLACK });
+  P.box("emitWarm", 0, 1.615, 0.035, 0.3, 0.012, 0.03);
+  for (let i = 0; i < 3; i++) {
+    P.box("paintedMetal", -0.12 + i * 0.12, 1.32 + (i % 2) * 0.06, 0.022, 0.09, 0.12, 0.004, { color: CARD[(seed + i) % CARD.length] });
+    P.box("paintedMetal", -0.12 + i * 0.12, 1.33 + (i % 2) * 0.06, 0.0255, 0.06, 0.07, 0.002, { color: PRINT[(seed + i) % PRINT.length] });
+  }
   P.collider([-0.26, 0, 0], [0.26, 0.78, 0.44], "desk");
   stool(kit, P.world(0, 0, 0.75));
 }
@@ -128,7 +156,7 @@ export function bootRack(kit, pos, yaw, pairs = 4, seed = 9) {
 export function laundryCart(kit, pos, yaw, seed = 11) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
-  P.box("paintedMetal", 0, 0.42, 0, 0.9, 0.7, 0.65, { color: IMP.impMid, texel: 1 });
+  P.box("paintedMetal", 0, 0.42, 0, 0.9, 0.7, 0.65, { color: IMP.impMid, texel: 2.5 });
   P.box("paintedMetal", 0, 0.42, 0.328, 0.7, 0.5, 0.01, { color: DARK });
   P.box("paintedMetal", 0, 0.42, -0.328, 0.7, 0.5, 0.01, { color: DARK });
   for (const s of [-1, 1]) {
@@ -148,29 +176,42 @@ export function laundryCart(kit, pos, yaw, seed = 11) {
   P.collider([-0.46, 0, -0.34], [0.46, 0.85, 0.34], "cart");
 }
 
-// Notice board: dark plate with pinned coloured cards (no text) and two lit data-cards.
-export function noticeBoard(kit, pos, yaw, w = 1.6, h = 1.0, seed = 13) {
+// Duty-roster board: dark frame, a text-column screen (screenImp2) across the top, rows of name
+// plates with status tabs below, a housed light bar on top. Reads as a notice board without text.
+export function noticeBoard(kit, pos, yaw, w = 1.6, h = 1.0, seed = 13, screenMat = "screenImp2") {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
-  P.box("paintedMetal", 0, 0, -0.03, w + 0.08, h + 0.08, 0.06, { color: BLACK });
-  P.box("paintedMetal", 0, 0, 0.002, w, h, 0.01, { color: DARK });
-  const n = Math.floor((w * h) / 0.06);
-  for (let i = 0; i < n; i++) {
-    const cw = 0.1 + rand() * 0.1;
-    const ch = 0.1 + rand() * 0.1;
-    const x = -w / 2 + 0.1 + rand() * (w - 0.2);
-    const y = -h / 2 + 0.1 + rand() * (h - 0.2);
-    const emit = rand() < 0.12;
-    P.box(emit ? "emitBlue" : "paintedMetal", x, y, 0.01 + rand() * 0.004, cw, ch, 0.005, emit ? {} : { color: CARD[Math.floor(rand() * CARD.length)] });
+  P.box("paintedMetal", 0, 0, -0.03, w + 0.08, h + 0.08, 0.06, { color: BLACK, texel: 2.5 });
+  P.box("paintedMetal", 0, 0, 0.002, w, h, 0.01, { color: DARK, texel: 2.5 });
+  const sh = h * 0.5;
+  P.box("darkGloss", 0, h / 2 - 0.04 - sh / 2, 0.01, w - 0.08, sh, 0.01);
+  P.box(screenMat, 0, h / 2 - 0.04 - sh / 2, 0.017, w - 0.12, sh - 0.04, 0.006, { uv: "keep" });
+  // name plates: 2 rows, each a pale plate with a printed strip and a coloured status tab
+  const rows = h > 0.7 ? 3 : 2;
+  const cols = Math.max(2, Math.floor((w - 0.1) / 0.3));
+  const pw = (w - 0.1 - (cols - 1) * 0.03) / cols;
+  const y0 = -h / 2 + 0.07;
+  const ph = (h - sh - 0.16 - (rows - 1) * 0.03) / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (rand() < 0.12) continue;
+      const x = -w / 2 + 0.05 + pw / 2 + c * (pw + 0.03);
+      const y = y0 + ph / 2 + r * (ph + 0.03);
+      P.box("paintedMetal", x, y, 0.012, pw, ph, 0.006, { color: CARD[Math.floor(rand() * CARD.length)] });
+      P.box("paintedMetal", x + 0.02, y, 0.0155, pw - 0.09, ph * 0.4, 0.002, { color: PRINT[Math.floor(rand() * PRINT.length)] });
+      const t = rand();
+      P.box(t < 0.55 ? "emitGreen" : t < 0.85 ? "emitAmber" : "emitBlue", x - pw / 2 + 0.025, y, 0.0155, 0.02, ph * 0.6, 0.002);
+    }
   }
-  P.box("emitWhite", 0, h / 2 + 0.06, 0.02, w * 0.7, 0.015, 0.02);
+  P.box("paintedMetal", 0, h / 2 + 0.08, 0.02, w * 0.8, 0.05, 0.1, { color: BLACK });
+  P.box("emitWarm", 0, h / 2 + 0.052, 0.045, w * 0.7, 0.012, 0.04);
 }
 
 // Open kit shelf with folded blankets / towels (fabric bundles). Front = +Z.
 export function kitShelf(kit, pos, yaw, { w = 1.2, h = 1.8, d = 0.4, shelves = 4, seed = 15 } = {}) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
-  P.box("paintedMetal", 0, h / 2, -d / 2 + 0.015, w, h, 0.03, { color: DARK, texel: 1 });
+  P.box("paintedMetal", 0, h / 2, -d / 2 + 0.015, w, h, 0.03, { color: DARK, texel: 2.5 });
   for (const s of [-1, 1]) P.box("paintedMetal", s * (w / 2 - 0.02), h / 2, 0, 0.04, h, d, { color: DARK });
   P.box("paintedMetal", 0, 0.04, 0, w, 0.08, d, { color: BLACK });
   const step = (h - 0.1) / shelves;
@@ -197,20 +238,26 @@ export function kitShelf(kit, pos, yaw, { w = 1.2, h = 1.8, d = 0.4, shelves = 4
 export function washCounter(kit, pos, yaw, n = 4, pitch = 1.6) {
   const P = placer(kit, pos, yaw);
   const len = n * pitch;
-  P.box("paintedMetal", 0, 0.4, 0.33, len, 0.8, 0.6, { color: IMP.impMid, texel: 1 });
+  P.box("paintedMetal", 0, 0.4, 0.33, len, 0.8, 0.6, { color: IMP.impMid, texel: 2.5 });
   P.box("paintedMetal", 0, 0.05, 0.33, len + 0.02, 0.1, 0.62, { color: BLACK });
-  P.box("paintedMetal", 0, 0.83, 0.35, len + 0.04, 0.06, 0.7, { color: IMP.impWhite, texel: 1 });
+  P.box("paintedMetal", 0, 0.83, 0.35, len + 0.04, 0.06, 0.7, { color: IMP.impWhite, texel: 2.5 });
   P.box("emitWarm", 0, 0.795, 0.705, len - 0.2, 0.012, 0.01);
   for (let i = 0; i < n; i++) {
     const x = -len / 2 + (i + 0.5) * pitch;
-    P.box("paintedMetal", x, 0.9, 0.36, 0.52, 0.08, 0.42, { color: IMP.impWhite, texel: 1 });
+    P.box("paintedMetal", x, 0.9, 0.36, 0.52, 0.08, 0.42, { color: IMP.impWhite, texel: 2.5 });
     P.box("darkGloss", x, 0.941, 0.36, 0.42, 0.004, 0.32);
     P.cyl("metal", x, 1.0, 0.1, 0.016, 0.24, "y", { color: STEEL, segments: 8 });
     P.cyl("metal", x, 1.11, 0.18, 0.013, 0.18, "z", { color: STEEL, segments: 8 });
-    P.box("darkGloss", x, 1.6, 0.03, 0.62, 0.8, 0.02);
-    P.box("paintedMetal", x, 1.6, 0.02, 0.68, 0.86, 0.01, { color: BLACK });
-    P.box("paintedMetal", x, 2.06, 0.05, 0.6, 0.04, 0.08, { color: BLACK });
-    P.box("emitWhite", x, 2.05, 0.06, 0.56, 0.015, 0.03);
+    // mirror: polished-steel plate (env-reflective `metal`, pale tint) inside a thin lit frame, with a
+    // housed light bar above it
+    P.box("paintedMetal", x, 1.6, 0.02, 0.7, 0.88, 0.02, { color: BLACK });
+    P.box("metal", x, 1.6, 0.036, 0.62, 0.8, 0.012, { color: 0xd8dee6, texel: 2.5 });
+    for (const s of [-1, 1]) {
+      P.box("emitWarm", x + s * 0.325, 1.6, 0.036, 0.012, 0.8, 0.008);
+      P.box("emitWarm", x, 1.6 + s * 0.406, 0.036, 0.66, 0.012, 0.008);
+    }
+    P.box("paintedMetal", x, 2.1, 0.06, 0.64, 0.06, 0.12, { color: BLACK });
+    P.box("emitWarm", x, 2.068, 0.075, 0.56, 0.012, 0.07);
     P.box("metal", x, 1.15, 0.08, 0.5, 0.015, 0.12, { color: STEEL });
     P.box("paintedMetal", x + 0.6, 1.25, 0.06, 0.18, 0.28, 0.12, { color: IMP.impGrey });
   }
@@ -220,7 +267,7 @@ export function washCounter(kit, pos, yaw, n = 4, pitch = 1.6) {
 // Hand dryer on a wall (local −Z behind).
 export function handDryer(kit, pos, yaw) {
   const P = placer(kit, pos, yaw);
-  P.box("paintedMetal", 0, 0, 0.1, 0.28, 0.42, 0.2, { color: IMP.impGrey, texel: 1 });
+  P.box("paintedMetal", 0, 0, 0.1, 0.28, 0.42, 0.2, { color: IMP.impGrey, texel: 2.5 });
   P.box("paintedMetal", 0, -0.18, 0.21, 0.2, 0.06, 0.02, { color: BLACK });
   P.box("emitBlue", 0.08, 0.12, 0.201, 0.03, 0.02, 0.004);
 }
@@ -258,7 +305,7 @@ export function showers(kit, pos, yaw, n = 4, { pitch = 1.25, d = 1.4, seed = 17
 // Front-loading laundry unit against a wall (local −Z behind).
 export function washer(kit, pos, yaw, seed = 19) {
   const P = placer(kit, pos, yaw);
-  P.box("paintedMetal", 0, 0.45, 0, 0.8, 0.9, 0.7, { color: IMP.impGrey, texel: 1 });
+  P.box("paintedMetal", 0, 0.45, 0, 0.8, 0.9, 0.7, { color: IMP.impGrey, texel: 2.5 });
   P.box("paintedMetal", 0, 0.05, 0, 0.82, 0.1, 0.72, { color: BLACK });
   P.cyl("darkGloss", 0, 0.48, 0.355, 0.27, 0.02, "z", { segments: 24 });
   P.cyl("metal", 0, 0.48, 0.36, 0.3, 0.03, "z", { color: STEEL, segments: 24, open: true });
@@ -272,7 +319,7 @@ export function washer(kit, pos, yaw, seed = 19) {
 export function foldTable(kit, pos, yaw, len = 1.8, seed = 23) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
-  P.box("paintedMetal", 0, 0.83, 0, len, 0.05, 0.85, { color: IMP.impGrey, texel: 1 });
+  P.box("paintedMetal", 0, 0.83, 0, len, 0.05, 0.85, { color: IMP.impGrey, texel: 2.5 });
   P.box("paintedMetal", 0, 0.78, 0, len - 0.1, 0.05, 0.75, { color: DARK });
   for (const x of [-len / 2 + 0.3, len / 2 - 0.3]) P.box("paintedMetal", x, 0.4, 0, 0.1, 0.8, 0.7, { color: DARK });
   let x = -len / 2 + 0.3;
@@ -287,7 +334,7 @@ export function foldTable(kit, pos, yaw, len = 1.8, seed = 23) {
 // Simple wall bench (slab on pedestals), along local X.
 export function wallBench(kit, pos, yaw, len = 2.0) {
   const P = placer(kit, pos, yaw);
-  P.box("paintedMetal", 0, 0.45, 0, len, 0.06, 0.4, { color: IMP.impMid, texel: 1 });
+  P.box("paintedMetal", 0, 0.45, 0, len, 0.06, 0.4, { color: IMP.impMid, texel: 2.5 });
   for (const x of [-len / 2 + 0.25, len / 2 - 0.25]) P.box("paintedMetal", x, 0.21, 0, 0.1, 0.42, 0.32, { color: BLACK });
   P.collider([-len / 2, 0, -0.2], [len / 2, 0.5, 0.2], "bench");
 }
@@ -315,15 +362,62 @@ export function hookRail(kit, pos, yaw, len = 1.6, seed = 21, towelsOnly = false
 }
 
 // Foot locker: low stowage box with a lid seam, two latches and a status tab. Along local X, latches +Z.
-export function footLocker(kit, pos, yaw, seed = 25, w = 0.8) {
+// `open` hinges the lid up at the back (local −Z) and shows folded kit inside.
+export function footLocker(kit, pos, yaw, seed = 25, w = 0.8, open = false) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
-  P.box("paintedMetal", 0, 0.22, 0, w, 0.44, 0.45, { color: rand() < 0.5 ? IMP.impMid : IMP.impGrey, texel: 1 });
-  P.box("paintedMetal", 0, 0.34, 0, w + 0.02, 0.012, 0.47, { color: BLACK });
-  P.box("paintedMetal", 0, 0.03, 0, w + 0.01, 0.06, 0.46, { color: BLACK });
-  for (const x of [-w / 4, w / 4]) P.box("metal", x, 0.3, 0.232, 0.08, 0.06, 0.015, { color: STEEL });
-  P.box(rand() < 0.5 ? "emitBlue" : "emitAmber", w / 2 - 0.1, 0.4, 0.228, 0.05, 0.015, 0.006);
-  P.collider([-w / 2, 0, -0.23], [w / 2, 0.45, 0.23], "footlocker");
+  const body = rand() < 0.5 ? IMP.impMid : IMP.impGrey;
+  if (open) {
+    P.box("paintedMetal", 0, 0.17, 0, w, 0.34, 0.45, { color: body, texel: 2.5 });
+    P.box("paintedMetal", 0, 0.03, 0, w + 0.01, 0.06, 0.46, { color: BLACK });
+    // lid hinged at the back edge, swung up ~75°
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-1.3, 0, 0)));
+    kit.add("paintedMetal", new THREE.BoxGeometry(w + 0.02, 0.03, 0.47), { pos: P.world(0, 0.35 + 0.235 * Math.sin(1.3), -0.225 + 0.235 * Math.cos(1.3)), quat: q, color: body, texel: 2.5 });
+    // contents: folded tunics and a rolled towel
+    P.box("fabric", -w / 4, 0.3, 0.02, w / 2 - 0.08, 0.1, 0.36, { color: BLACK, texel: 2 });
+    P.box("fabric", w / 4, 0.28, 0.02, w / 2 - 0.1, 0.06, 0.34, { color: IMP.impGrey, texel: 2 });
+    P.cyl("fabric", w / 4, 0.36, 0.0, 0.05, 0.3, "x", { color: IMP.impWhite, segments: 10, texel: 2 });
+  } else {
+    P.box("paintedMetal", 0, 0.22, 0, w, 0.44, 0.45, { color: body, texel: 2.5 });
+    P.box("paintedMetal", 0, 0.34, 0, w + 0.02, 0.012, 0.47, { color: BLACK });
+    P.box("paintedMetal", 0, 0.03, 0, w + 0.01, 0.06, 0.46, { color: BLACK });
+    for (const x of [-w / 4, w / 4]) P.box("metal", x, 0.3, 0.232, 0.08, 0.06, 0.015, { color: STEEL });
+    P.box(rand() < 0.5 ? "emitBlue" : "emitAmber", w / 2 - 0.1, 0.4, 0.228, 0.05, 0.015, 0.006);
+  }
+  P.collider([-w / 2, 0, -0.23], [w / 2, open ? 0.8 : 0.45, 0.23], "footlocker");
+}
+
+// Upper wall cabinet (pos = centre of the door face, doors toward local +Z, wall at local −Z).
+export function wallCabinet(kit, pos, yaw, { w = 0.9, h = 0.6, d = 0.35, color = IMP.impGrey, emit = "emitBlue" } = {}) {
+  const P = placer(kit, pos, yaw);
+  P.box("paintedMetal", 0, 0, -d / 2, w, h, d, { color, texel: 2.5 });
+  P.box("paintedMetal", 0, 0, 0.004, 0.016, h - 0.08, 0.008, { color: BLACK });
+  for (const s of [-1, 1]) P.box("metal", s * 0.07, -h / 2 + 0.14, 0.014, 0.025, 0.16, 0.02, { color: STEEL });
+  P.box(emit, -w / 2 + 0.1, h / 2 - 0.07, 0.006, 0.06, 0.014, 0.006);
+}
+
+// Towel rack: dark shelf on brackets with rolled towels stood on it and two hung towels below.
+// Along local X, wall at local −Z, pos = shelf centre.
+export function towelRack(kit, pos, yaw, len = 1.4, seed = 5) {
+  const P = placer(kit, pos, yaw);
+  const rand = rng(seed);
+  P.box("paintedMetal", 0, 0, 0.15, len, 0.03, 0.3, { color: DARK });
+  for (const x of [-len / 2 + 0.15, len / 2 - 0.15]) P.box("paintedMetal", x, -0.08, 0.06, 0.03, 0.14, 0.12, { color: BLACK });
+  P.cyl("metal", 0, 0.1, 0.29, 0.01, len - 0.06, "x", { color: STEEL, segments: 6 });
+  for (let x = -len / 2 + 0.1; x < len / 2 - 0.08; x += 0.19) {
+    if (rand() < 0.15) continue;
+    P.cyl("fabric", x, 0.16, 0.15, 0.075, 0.3, "y", { color: rand() < 0.6 ? IMP.impWhite : IMP.impGrey, segments: 10, texel: 2 });
+  }
+  P.cyl("metal", 0, -0.18, 0.1, 0.012, len - 0.2, "x", { color: STEEL, segments: 6 });
+  for (const x of [-len / 4, len / 4]) P.box("fabric", x, -0.5, 0.1, 0.3, 0.62, 0.04, { color: IMP.impWhite, texel: 2 });
+}
+
+// Duffel bag lying along local X (pos = floor/shelf point under its centre).
+export function duffel(kit, pos, yaw, color = BLACK) {
+  const P = placer(kit, pos, yaw);
+  P.cyl("fabric", 0, 0.16, 0, 0.16, 0.62, "x", { color, segments: 12, texel: 2 });
+  P.box("paintedMetal", 0, 0.3, 0, 0.16, 0.03, 0.06, { color: DARK });
+  for (const s of [-1, 1]) P.cyl("metal", s * 0.31, 0.16, 0, 0.17, 0.02, "x", { color: DARK, segments: 12 });
 }
 
 // Wall-bracketed suppressant cylinder (pos = cylinder centre). Wall at local −Z.
@@ -340,8 +434,8 @@ export function extinguisher(kit, pos, yaw) {
 // Low holo-table for a lounge nook: dark plinth, gloss top, blue projector disc and a base glow.
 export function holoTable(kit, pos, yaw, { len = 1.3, w = 0.8, h = 0.5 } = {}) {
   const P = placer(kit, pos, yaw);
-  P.box("paintedMetal", 0, (h - 0.06) / 2, 0, len - 0.5, h - 0.06, w - 0.3, { color: BLACK, texel: 1 });
-  P.box("paintedMetal", 0, h - 0.03, 0, len, 0.06, w, { color: DARK, texel: 1 });
+  P.box("paintedMetal", 0, (h - 0.06) / 2, 0, len - 0.5, h - 0.06, w - 0.3, { color: BLACK, texel: 2.5 });
+  P.box("paintedMetal", 0, h - 0.03, 0, len, 0.06, w, { color: DARK, texel: 2.5 });
   P.box("darkGloss", 0, h + 0.004, 0, len - 0.16, 0.008, w - 0.16);
   P.cyl("emitBlue", 0, h + 0.012, 0, 0.22, 0.008, "y", { segments: 20 });
   for (const s of [-1, 1]) P.box("emitBlue", 0, 0.12, s * (w / 2 - 0.144), len - 0.6, 0.012, 0.01);

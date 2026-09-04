@@ -53,7 +53,7 @@ export function vent(kit, pos, yaw, w = 0.6, h = 0.35) {
 export function junctionBox(kit, pos, yaw, seed = 3) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
-  P.box("paintedMetal", 0, 0, -0.08, 0.32, 0.4, 0.16, { color: DARK, texel: 1 });
+  P.box("paintedMetal", 0, 0, -0.08, 0.32, 0.4, 0.16, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", 0, 0, 0.005, 0.26, 0.34, 0.01, { color: IMP.impMid });
   P.box(rand() < 0.6 ? "emitBlue" : "emitAmber", 0.08, 0.12, 0.012, 0.04, 0.02, 0.006);
   P.cyl("metal", 0, 0.36, -0.08, 0.025, 0.35, "y", { color: STEEL, segments: 8 });
@@ -64,16 +64,16 @@ export function junctionBox(kit, pos, yaw, seed = 3) {
 export function medBed(kit, PALETTE, pos, yaw, { seed = 1, occupied = false, screenMat = "screenImp1" } = {}) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
-  P.box("paintedMetal", 0, 0.29, 0, 1.15, 0.58, 0.5, { color: DARK, texel: 1 });
+  P.box("paintedMetal", 0, 0.29, 0, 1.15, 0.58, 0.5, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", 0, 0.03, 0, 1.4, 0.06, 0.7, { color: BLACK });
-  P.box("paintedMetal", 0, 0.64, 0, 2.0, 0.12, 0.9, { color: WHITE, texel: 1 });
+  P.box("paintedMetal", 0, 0.64, 0, 2.0, 0.12, 0.9, { color: WHITE, texel: 2.5 });
   for (const s of [-1, 1]) P.box("emitBlue", 0.05, 0.605, s * 0.452, 1.7, 0.012, 0.008);
   P.box("fabric", 0, 0.755, 0, 1.9, 0.11, 0.84, { color: WHITE, texel: 2 });
   P.box("fabric", -0.7, 0.845, 0, 0.42, 0.08, 0.58, { color: 0xffffff, texel: 2 });
   if (occupied) P.box("fabric", 0.3, 0.86, 0, 1.25, 0.12, 0.86, { color: 0x7fa8d8, texel: 2 });
   else if (rand() < 0.7) P.box("fabric", 0.55, 0.83, 0, 0.6, 0.05, 0.7, { color: 0x7fa8d8, texel: 2 });
   // headboard (from floor to 1.4) with monitor + indicators facing the foot end
-  P.box("paintedMetal", -1.04, 0.75, 0, 0.08, 1.3, 0.9, { color: DARK, texel: 1 });
+  P.box("paintedMetal", -1.04, 0.75, 0, 0.08, 1.3, 0.9, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", -1.005, 1.1, 0, 0.02, 0.5, 0.82, { color: WHITE });
   P.box("darkGloss", -0.99, 1.2, 0.18, 0.02, 0.26, 0.4);
   P.box(screenMat, -0.979, 1.2, 0.18, 0.01, 0.22, 0.34, { uv: "keep" });
@@ -98,7 +98,7 @@ export function medBed(kit, PALETTE, pos, yaw, { seed = 1, occupied = false, scr
   rod(kit, post1, elbow, 0.014);
   rod(kit, elbow, head, 0.012);
   P.cyl("paintedMetal", -0.2, 1.86, -0.12, 0.09, 0.07, "y", { color: DARK, segments: 14 });
-  P.cyl("emitWhite", -0.2, 1.822, -0.12, 0.07, 0.01, "y", { segments: 14 });
+  P.cyl("emitCoolSoft", -0.2, 1.822, -0.12, 0.07, 0.01, "y", { segments: 14, uv: "keep" });
   P.collider([-1.08, 0, -0.5], [1.06, 1.0, 0.5], "bed");
   return P;
 }
@@ -120,28 +120,38 @@ export function bayDivider(kit, a, b, h = 1.2) {
 }
 
 // Bacta-style treatment tank: glass cylinder r 0.8 × 2.6 on a dark plinth, teal inner column, frame
-// ribs, bands, cap with pipes rising to `pipeTopY` (world y), a valve wheel facing −X.
-export function bactaTank(kit, pos, { pipeTopY, facing = -1, seed = 2 } = {}) {
+// ribs, bands, cap with pipes rising to `pipeTopY` (world y), a valve wheel facing −X. `level` (0..1)
+// sets the fluid column height; `drained` swaps the status emitters to amber and leaves a residue puddle.
+export function bactaTank(kit, pos, { pipeTopY, facing = -1, seed = 2, level = 1, drained = false } = {}) {
   const [x, y, z] = pos;
-  kit.cyl("paintedMetal", x, y + 0.15, z, 1.05, 0.3, "y", { color: BLACK, segments: 32, texel: 1 });
+  const statusMat = drained ? "emitAmber" : "emitTeal";
+  kit.cyl("paintedMetal", x, y + 0.15, z, 1.05, 0.3, "y", { color: BLACK, segments: 32, texel: 2.5 });
   kit.cyl("metal", x, y + 0.31, z, 1.0, 0.02, "y", { color: STEEL, segments: 32 });
-  kit.cyl("emitTeal", x, y + 0.325, z, 0.83, 0.03, "y", { segments: 32 });
+  kit.cyl(statusMat, x, y + 0.325, z, 0.83, 0.03, "y", { segments: 32 });
   kit.cyl("glass", x, y + 1.6, z, 0.8, 2.6, "y", { segments: 32 });
-  kit.cyl("emitTeal", x, y + 1.55, z, 0.42, 2.2, "y", { segments: 24 });
+  const colH = Math.max(0.12, 2.2 * level);
+  kit.cyl("emitTeal", x, y + 0.45 + colH / 2, z, drained ? 0.7 : 0.42, colH, "y", { segments: 24 });
+  if (!drained && level < 0.99) kit.cyl("emitTeal", x, y + 0.45 + colH + 0.01, z, 0.72, 0.02, "y", { segments: 24 }); // surface disc
   kit.cyl("paintedMetal", x, y + 0.42, z, 0.5, 0.16, "y", { color: DARK, segments: 24 });
   kit.cyl("paintedMetal", x, y + 2.72, z, 0.5, 0.16, "y", { color: DARK, segments: 24 });
+  if (drained) {
+    // service state: suspended harness and a diagnostic probe hanging in the empty tank
+    kit.cyl("metal", x, y + 2.2, z, 0.012, 0.9, "y", { color: STEEL, segments: 6 });
+    kit.box("paintedMetal", x, y + 1.7, z, 0.24, 0.16, 0.14, { color: DARK });
+    kit.box("emitAmber", x, y + 1.7, z + 0.072, 0.1, 0.03, 0.006);
+  }
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2 + Math.PI / 6;
-    kit.box("paintedMetal", x + Math.cos(a) * 0.8, y + 1.6, z + Math.sin(a) * 0.8, 0.08, 2.6, 0.08, { color: DARK, rot: [0, -a, 0] });
+    kit.box("paintedMetal", x + Math.cos(a) * 0.8, y + 1.6, z + Math.sin(a) * 0.8, 0.08, 2.6, 0.08, { color: DARK, rot: [0, -a, 0], texel: 2.5 });
   }
   for (const by of [1.2, 2.05]) kit.cyl("paintedMetal", x, y + by, z, 0.84, 0.07, "y", { color: DARK, segments: 32 });
-  kit.cyl("paintedMetal", x, y + 3.05, z, 0.95, 0.3, "y", { color: DARK, segments: 32, texel: 1 });
+  kit.cyl("paintedMetal", x, y + 3.05, z, 0.95, 0.3, "y", { color: DARK, segments: 32, texel: 2.5 });
   kit.cyl("metal", x, y + 2.92, z, 0.98, 0.05, "y", { color: STEEL, segments: 32 });
   // status plate on the cap + valve wheel on the plinth, both on the `facing` side (±X)
   const fx = x + facing * 0.96;
   kit.box("darkGloss", fx, y + 3.05, z, 0.03, 0.18, 0.32);
-  kit.box("emitTeal", fx + facing * 0.012, y + 3.05, z - 0.06, 0.01, 0.1, 0.1);
-  kit.box("emitBlue", fx + facing * 0.012, y + 3.05, z + 0.08, 0.01, 0.03, 0.08);
+  kit.box(statusMat, fx + facing * 0.012, y + 3.05, z - 0.06, 0.01, 0.1, 0.1);
+  kit.box(drained ? "emitRedImp" : "emitBlue", fx + facing * 0.012, y + 3.05, z + 0.08, 0.01, 0.03, 0.08);
   kit.cyl("metal", x + facing * 1.07, y + 0.6, z, 0.14, 0.04, "x", { color: IMP.impRed, segments: 16 });
   kit.cyl("metal", x + facing * 1.09, y + 0.6, z, 0.03, 0.04, "x", { color: STEEL, segments: 8 });
   // pipes up from the cap
@@ -158,7 +168,7 @@ export function shelfUnit(kit, pos, yaw, { w = 1.8, h = 2.0, d = 0.45, shelves =
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
   const pal = colors || [WHITE, IMP.medBlue, IMP.impGrey, 0xd8d0b0, 0x4a6fa5, 0xb0b8c0, 0x3fa8a0, 0xd9a441, 0xffffff];
-  P.box("paintedMetal", 0, h / 2, -d / 2 + 0.015, w, h, 0.03, { color: DARK, texel: 1 });
+  P.box("paintedMetal", 0, h / 2, -d / 2 + 0.015, w, h, 0.03, { color: DARK, texel: 2.5 });
   for (const s of [-1, 1]) P.box("paintedMetal", s * (w / 2 - 0.02), h / 2, 0, 0.04, h, d, { color: DARK });
   P.box("paintedMetal", 0, 0.04, 0, w, 0.08, d, { color: BLACK });
   P.box("paintedMetal", 0, h - 0.02, 0, w, 0.04, d, { color: DARK });
@@ -166,7 +176,7 @@ export function shelfUnit(kit, pos, yaw, { w = 1.8, h = 2.0, d = 0.45, shelves =
   for (let i = 0; i < shelves; i++) {
     const y = 0.08 + i * step;
     if (i > 0) P.box("paintedMetal", 0, y, 0, w - 0.08, 0.03, d - 0.02, { color: IMP.impGrey });
-    P.box("emitWhite", 0, y + step - 0.045, -d / 2 + 0.05, w - 0.4, 0.01, 0.02);
+    P.box("emitCoolSoft", 0, y + step - 0.045, -d / 2 + 0.05, w - 0.4, 0.01, 0.02, { uv: "keep" });
     let x = -w / 2 + 0.08;
     while (x < w / 2 - 0.15) {
       const bw = 0.1 + rand() * 0.18;
@@ -200,12 +210,12 @@ export function arcCounter(kit, centre, r, a0, a1, segments, { h = 1.1, d = 0.5,
     const cz = centre[2] + Math.sin(a) * r;
     const yaw = Math.atan2(Math.cos(a), Math.sin(a)); // local +Z = outward
     const P = placer(kit, [cx, centre[1], cz], yaw);
-    P.box("paintedMetal", 0, h / 2, 0, chord, h, d, { color, texel: 1 });
+    P.box("paintedMetal", 0, h / 2, 0, chord, h, d, { color, texel: 2.5 });
     P.box("paintedMetal", 0, 0.05, 0, chord + 0.01, 0.1, d + 0.02, { color: BLACK });
     P.box("darkGloss", 0, h + 0.015, 0, chord + 0.04, 0.03, d + 0.08);
     P.box("emitBlue", 0, h - 0.06, d / 2 + 0.006, chord - 0.1, 0.012, 0.01);
     P.box("paintedMetal", 0, h / 2 + 0.05, d / 2 + 0.003, chord - 0.12, h - 0.4, 0.006, { color: IMP.impGrey });
-    P.box("paintedMetal", 0, 0.73, -d / 2 - 0.25, chord + 0.02, 0.04, 0.5, { color: DARK, texel: 1 });
+    P.box("paintedMetal", 0, 0.73, -d / 2 - 0.25, chord + 0.02, 0.04, 0.5, { color: DARK, texel: 2.5 });
     P.collider([-chord / 2, 0, -d / 2 - 0.5], [chord / 2, h, d / 2], "counter");
   }
 }
@@ -213,12 +223,12 @@ export function arcCounter(kit, centre, r, a0, a1, segments, { h = 1.1, d = 0.5,
 // Straight counter along local X with an upper dispensing ledge and a lit kick. Front = +Z.
 export function counter(kit, pos, yaw, len, { h = 1.1, d = 0.6, ledge = true, color = WHITE } = {}) {
   const P = placer(kit, pos, yaw);
-  P.box("paintedMetal", 0, h / 2, 0, len, h, d, { color, texel: 1 });
+  P.box("paintedMetal", 0, h / 2, 0, len, h, d, { color, texel: 2.5 });
   P.box("paintedMetal", 0, 0.05, 0, len + 0.01, 0.1, d + 0.02, { color: BLACK });
   P.box("darkGloss", 0, h + 0.015, 0, len + 0.04, 0.03, d + 0.06);
   P.box("emitBlue", 0, h - 0.06, d / 2 + 0.006, len - 0.2, 0.012, 0.01);
   for (let x = -len / 2 + 0.6; x < len / 2 - 0.3; x += 1.2) P.box("paintedMetal", x, h / 2 + 0.05, d / 2 + 0.003, 0.9, h - 0.4, 0.006, { color: IMP.impGrey });
-  if (ledge) P.box("paintedMetal", 0, 0.76, -d / 2 - 0.22, len, 0.04, 0.44, { color: DARK, texel: 1 });
+  if (ledge) P.box("paintedMetal", 0, 0.76, -d / 2 - 0.22, len, 0.04, 0.44, { color: DARK, texel: 2.5 });
   P.collider([-len / 2, 0, -d / 2 - (ledge ? 0.44 : 0)], [len / 2, h, d / 2], "counter");
 }
 
@@ -236,11 +246,11 @@ export function glassWall(kit, a, b, { h = 3.0, gaps = [], postEvery = 2.4, head
     if (!gaps.some(([g0, g1]) => u > g0 - 0.3 && u < g1 + 0.3)) edges.push(u);
   }
   edges.sort((p, q) => p - q);
-  for (const u of edges) P.box("paintedMetal", 0, h / 2, u, 0.14, h, 0.14, { color: DARK, texel: 1 });
+  for (const u of edges) P.box("paintedMetal", 0, h / 2, u, 0.14, h, 0.14, { color: DARK, texel: 2.5 });
   if (header) {
-    P.box("paintedMetal", 0, h - 0.12, len / 2, 0.16, 0.24, len, { color: DARK, texel: 1 });
-    P.box("emitWhite", 0.083, h - 0.12, len / 2, 0.006, 0.05, len - 0.4);
-    P.box("emitWhite", -0.083, h - 0.12, len / 2, 0.006, 0.05, len - 0.4);
+    P.box("paintedMetal", 0, h - 0.12, len / 2, 0.16, 0.24, len, { color: DARK, texel: 2.5 });
+    P.box("emitCoolSoft", 0.083, h - 0.12, len / 2, 0.006, 0.05, len - 0.4, { uv: "keep" });
+    P.box("emitCoolSoft", -0.083, h - 0.12, len / 2, 0.006, 0.05, len - 0.4, { uv: "keep" });
   }
   // spans between edges that are not gaps
   for (let i = 0; i < edges.length - 1; i++) {
@@ -250,7 +260,7 @@ export function glassWall(kit, a, b, { h = 3.0, gaps = [], postEvery = 2.4, head
     const um = (u0 + u1) / 2;
     if (gaps.some(([g0, g1]) => um > g0 && um < g1)) continue;
     const span = u1 - u0 - 0.14;
-    P.box("paintedMetal", 0, 0.225, um, 0.12, 0.45, span, { color: DARK, texel: 1 });
+    P.box("paintedMetal", 0, 0.225, um, 0.12, 0.45, span, { color: DARK, texel: 2.5 });
     P.box("paintedMetal", 0, 0.47, um, 0.14, 0.04, span, { color: IMP.impMid });
     P.box("glass", 0, (0.49 + h - 0.24) / 2, um, 0.02, h - 0.24 - 0.49, span, { uv: "keep" });
     P.box("emitBlue", 0.062, 1.02, um, 0.006, 0.01, span - 0.1);
@@ -263,7 +273,7 @@ export function operatingTable(kit, pos, yaw) {
   const P = placer(kit, pos, yaw);
   P.box("paintedMetal", 0, 0.05, 0, 0.9, 0.1, 0.7, { color: BLACK });
   P.box("emitBlue", 0, 0.11, 0, 0.8, 0.012, 0.6);
-  P.box("paintedMetal", 0, 0.42, 0, 0.5, 0.64, 0.4, { color: DARK, texel: 1 });
+  P.box("paintedMetal", 0, 0.42, 0, 0.5, 0.64, 0.4, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", 0, 0.78, 0, 2.1, 0.06, 0.66, { color: DARK });
   P.box("paintedMetal", 0, 0.83, 0, 2.05, 0.04, 0.62, { color: WHITE });
   P.box("fabric", 0, 0.87, 0, 1.95, 0.05, 0.56, { color: 0x2d3a4a, texel: 2 });
@@ -278,10 +288,11 @@ export function operatingTable(kit, pos, yaw) {
 export function surgeryLight(kit, pos, topY) {
   const [x, , z] = pos;
   const hubY = pos[1];
-  kit.cyl("paintedMetal", x, (hubY + 0.1 + topY) / 2, z, 0.05, topY - hubY - 0.1, "y", { color: BLACK, segments: 10 });
+  kit.cyl("paintedMetal", x, (hubY + 0.1 + topY) / 2, z, 0.07, topY - hubY - 0.1, "y", { color: BLACK, segments: 12 });
+  kit.cyl("paintedMetal", x, (hubY + topY) / 2, z, 0.11, 0.18, "y", { color: DARK, segments: 14 }); // joint collar
   kit.cyl("paintedMetal", x, hubY, z, 0.26, 0.22, "y", { color: DARK, segments: 20 });
-  kit.cyl("paintedMetal", x, hubY - 0.16, z, 1.0, 0.12, "y", { color: BLACK, segments: 40, texel: 1 });
-  kit.cyl("emitWhite", x, hubY - 0.23, z, 0.86, 0.02, "y", { segments: 40 });
+  kit.cyl("paintedMetal", x, hubY - 0.16, z, 1.0, 0.12, "y", { color: BLACK, segments: 40, texel: 2.5 });
+  kit.cyl("emitCoolSoft", x, hubY - 0.23, z, 0.86, 0.02, "y", { segments: 40, uv: "keep" });
   kit.cyl("paintedMetal", x, hubY - 0.245, z, 0.48, 0.03, "y", { color: BLACK, segments: 32 });
   kit.cyl("metal", x, hubY - 0.16, z, 1.02, 0.04, "y", { color: STEEL, segments: 40 });
   for (let i = 0; i < 4; i++) {
@@ -290,7 +301,7 @@ export function surgeryLight(kit, pos, topY) {
     const hz = z + Math.sin(a) * 1.45;
     rod(kit, [x, hubY + 0.05, z], [hx, hubY - 0.05, hz], 0.02);
     kit.cyl("paintedMetal", hx, hubY - 0.12, hz, 0.17, 0.09, "y", { color: DARK, segments: 16 });
-    kit.cyl("emitWhite", hx, hubY - 0.17, hz, 0.14, 0.012, "y", { segments: 16 });
+    kit.cyl("emitCoolSoft", hx, hubY - 0.17, hz, 0.14, 0.012, "y", { segments: 16, uv: "keep" });
   }
 }
 
@@ -299,33 +310,33 @@ export function surgeryLight(kit, pos, topY) {
 export function scanner(kit, pos, yaw, seed = 7) {
   const P = placer(kit, pos, yaw);
   P.box("paintedMetal", 0.2, 0.05, 0, 1.2, 0.1, 0.7, { color: BLACK });
-  P.box("paintedMetal", 0.2, 0.42, 0, 0.6, 0.64, 0.5, { color: DARK, texel: 1 });
-  P.box("paintedMetal", 0.2, 0.78, 0, 2.4, 0.06, 0.66, { color: WHITE, texel: 1 });
+  P.box("paintedMetal", 0.2, 0.42, 0, 0.6, 0.64, 0.5, { color: DARK, texel: 2.5 });
+  P.box("paintedMetal", 0.2, 0.78, 0, 2.4, 0.06, 0.66, { color: WHITE, texel: 2.5 });
   P.box("fabric", 0.2, 0.835, 0, 2.3, 0.05, 0.56, { color: 0x2d3a4a, texel: 2 });
   for (const s of [-1, 1]) P.box("emitBlue", 0.2, 0.75, s * 0.335, 2.2, 0.012, 0.01);
   for (const s of [-1, 1]) {
-    P.box("paintedMetal", -0.9, 1.25, s * 0.95, 0.5, 2.5, 0.3, { color: DARK, texel: 1 });
+    P.box("paintedMetal", -0.9, 1.25, s * 0.95, 0.5, 2.5, 0.3, { color: DARK, texel: 2.5 });
     P.box("paintedMetal", -0.9, 0.05, s * 0.95, 0.6, 0.1, 0.4, { color: BLACK });
     P.box("emitBlue", -0.9, 1.4, s * 0.79, 0.06, 1.6, 0.012);
   }
-  P.box("paintedMetal", -0.9, 2.55, 0, 0.5, 0.3, 2.2, { color: DARK, texel: 1 });
+  P.box("paintedMetal", -0.9, 2.55, 0, 0.5, 0.3, 2.2, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", -0.9, 2.32, 0, 0.3, 0.2, 0.3, { color: BLACK });
-  P.add("paintedMetal", new THREE.TorusGeometry(0.85, 0.14, 12, 40), -0.9, 1.3, 0, { rot: [0, yaw + Math.PI / 2, 0], color: BLACK, texel: 1 });
+  P.add("paintedMetal", new THREE.TorusGeometry(0.85, 0.14, 12, 40), -0.9, 1.3, 0, { rot: [0, yaw + Math.PI / 2, 0], color: BLACK, texel: 2.5 });
   P.add("emitBlue", new THREE.TorusGeometry(0.78, 0.035, 8, 40), -0.74, 1.3, 0, { rot: [0, yaw + Math.PI / 2, 0] });
   P.add("metal", new THREE.TorusGeometry(0.99, 0.02, 8, 40), -0.9, 1.3, 0, { rot: [0, yaw + Math.PI / 2, 0], color: STEEL });
   const Q = placer(kit, P.world(-0.9, 1.7, 1.11), yaw);
   indicatorField(Q, 0, 0, 0, 0.4, 0.2, seed, { weights: [0.2, 0.4, 0.15, 0.25] });
-  P.box("emitWhite", -0.9, 2.72, 0, 0.3, 0.02, 1.8);
+  P.box("emitCoolSoft", -0.9, 2.72, 0, 0.3, 0.02, 1.8, { uv: "keep" });
   P.collider([-1.2, 0, -1.1], [1.45, 2.7, 1.1], "scanner");
 }
 
 // Wheeled gurney: white platform at 0.8 with a thin pad, folding rails, castors.
 export function gurney(kit, pos, yaw) {
   const P = placer(kit, pos, yaw);
-  P.box("paintedMetal", 0, 0.78, 0, 1.95, 0.06, 0.62, { color: WHITE, texel: 1 });
+  P.box("paintedMetal", 0, 0.78, 0, 1.95, 0.06, 0.62, { color: WHITE, texel: 2.5 });
   P.box("fabric", 0, 0.835, 0, 1.85, 0.05, 0.56, { color: 0x7fa8d8, texel: 2 });
   P.box("fabric", -0.7, 0.87, 0, 0.35, 0.05, 0.4, { color: 0xffffff, texel: 2 });
-  P.box("paintedMetal", 0, 0.42, 0, 0.5, 0.7, 0.4, { color: DARK, texel: 1 });
+  P.box("paintedMetal", 0, 0.42, 0, 0.5, 0.7, 0.4, { color: DARK, texel: 2.5 });
   P.box("paintedMetal", 0, 0.12, 0, 1.4, 0.06, 0.55, { color: DARK });
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) P.cyl("metal", sx * 0.65, 0.06, sz * 0.24, 0.06, 0.04, "z", { color: BLACK, segments: 12 });
   for (const s of [-1, 1]) {
@@ -338,7 +349,7 @@ export function gurney(kit, pos, yaw) {
 // Equipment cart: drawer stack with a tilted display and castors.
 export function equipmentCart(kit, pos, yaw, { seed = 6, screenMat = "screenImp0" } = {}) {
   const P = placer(kit, pos, yaw);
-  P.box("paintedMetal", 0, 0.5, 0, 0.56, 0.9, 0.5, { color: WHITE, texel: 1 });
+  P.box("paintedMetal", 0, 0.5, 0, 0.56, 0.9, 0.5, { color: WHITE, texel: 2.5 });
   P.box("paintedMetal", 0, 0.07, 0, 0.5, 0.06, 0.44, { color: BLACK });
   for (let i = 0; i < 3; i++) {
     P.box("paintedMetal", 0, 0.25 + i * 0.22, 0.253, 0.48, 0.18, 0.006, { color: IMP.impGrey });
@@ -371,22 +382,71 @@ export function ivStand(kit, pos) {
 // Wall scrub basin with mirror plate and a sensor tap.
 export function scrubBasin(kit, pos, yaw) {
   const P = placer(kit, pos, yaw);
-  P.box("paintedMetal", 0, 0.45, 0.22, 0.7, 0.9, 0.44, { color: WHITE, texel: 1 });
+  P.box("paintedMetal", 0, 0.45, 0.22, 0.7, 0.9, 0.44, { color: WHITE, texel: 2.5 });
   P.box("paintedMetal", 0, 0.05, 0.22, 0.6, 0.1, 0.4, { color: BLACK });
   P.box("darkGloss", 0, 0.905, 0.22, 0.5, 0.02, 0.32);
   P.cyl("metal", 0, 1.0, 0.06, 0.015, 0.2, "y", { color: STEEL, segments: 8 });
   P.cyl("metal", 0, 1.1, 0.14, 0.012, 0.18, "z", { color: STEEL, segments: 8 });
   P.box("darkGloss", 0, 1.55, 0.02, 0.6, 0.5, 0.02);
-  P.box("emitWhite", 0, 1.83, 0.02, 0.5, 0.02, 0.02);
+  P.box("paintedMetal", 0, 1.84, 0.04, 0.56, 0.06, 0.08, { color: BLACK });
+  P.box("emitCoolSoft", 0, 1.815, 0.05, 0.5, 0.01, 0.05, { uv: "keep" });
   P.box("paintedMetal", 0.5, 1.3, 0.04, 0.14, 0.3, 0.08, { color: DARK });
   P.box("emitBlue", 0.5, 1.4, 0.085, 0.06, 0.02, 0.006);
   P.collider([-0.35, 0, 0], [0.35, 0.95, 0.44], "basin");
 }
 
+// Desk terminal: a small tilted screen on a stem over a keypad plate, facing local +Z. `pos` is the
+// desk-top point under the base.
+export function deskTerminal(kit, pos, yaw, screenMat = "screenImp0", { w = 0.42, h = 0.28, seed = 3 } = {}) {
+  const P = placer(kit, pos, yaw);
+  const tilt = -0.32; // leans back, screen normal toward +Z and slightly up
+  P.box("paintedMetal", 0, 0.015, -0.1, 0.3, 0.03, 0.2, { color: BLACK });
+  P.cyl("metal", 0, 0.1, -0.14, 0.02, 0.16, "y", { color: STEEL, segments: 8 });
+  const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, 0, 0)));
+  const ny = -Math.sin(tilt);
+  const nz = Math.cos(tilt);
+  const at = (d) => P.world(0, 0.18 + h / 2 + ny * d, -0.14 + nz * d);
+  kit.add("paintedMetal", new THREE.BoxGeometry(w + 0.06, h + 0.06, 0.04), { pos: at(0), quat: tq, color: BLACK });
+  kit.add("darkGloss", new THREE.BoxGeometry(w + 0.02, h + 0.02, 0.01), { pos: at(0.024), quat: tq });
+  kit.add(screenMat, new THREE.BoxGeometry(w, h, 0.01), { pos: at(0.03), quat: tq, uv: "keep" });
+  // keypad plate in front of the stem
+  P.box("darkGloss", 0, 0.012, 0.12, 0.34, 0.024, 0.16);
+  const rand = rng(seed);
+  for (let i = 0; i < 12; i++) {
+    const m = rand() < 0.7 ? "paintedMetal" : rand() < 0.5 ? "emitBlue" : "emitAmber";
+    P.box(m, -0.12 + (i % 6) * 0.048, 0.028, 0.09 + Math.floor(i / 6) * 0.05, 0.036, 0.008, 0.036, { color: IMP.impGrey });
+  }
+}
+
+// Datapad lying on a surface: dark slab with a lit face and a stylus beside it.
+export function datapad(kit, pos, yaw, screenMat = "screenImp2") {
+  const P = placer(kit, pos, yaw);
+  P.box("paintedMetal", 0, 0.008, 0, 0.28, 0.016, 0.2, { color: BLACK });
+  P.box("darkGloss", 0, 0.018, 0, 0.26, 0.006, 0.18);
+  P.box(screenMat, 0, 0.022, -0.005, 0.22, 0.004, 0.13, { uv: "keep" });
+  P.box("emitBlue", 0.09, 0.022, 0.078, 0.05, 0.004, 0.01);
+  P.cyl("metal", 0.19, 0.008, 0.02, 0.006, 0.16, "z", { color: STEEL, segments: 6 });
+}
+
+// Painted hazard band on the floor: alternating amber/black plates along the longer axis (no extra
+// material — the room already spends its 16 calls).
+export function hazardBand(kit, min, max, y) {
+  const alongX = max[0] - min[0] >= max[1] - min[1];
+  const len = alongX ? max[0] - min[0] : max[1] - min[1];
+  const segs = Math.max(2, Math.round(len / 0.3));
+  for (let k = 0; k < segs; k++) {
+    const c = k % 2 ? BLACK : IMP.impAmber;
+    const a0 = (alongX ? min[0] : min[1]) + (k * len) / segs;
+    const a1 = a0 + len / segs;
+    if (alongX) kit.boxMM("paintedMetal", [a0, y, min[1]], [a1, y + 0.005, max[1]], { color: c });
+    else kit.boxMM("paintedMetal", [min[0], y, a0], [max[0], y + 0.005, a1], { color: c });
+  }
+}
+
 // Waiting bench: slab seat on two pedestals, along local X.
 export function bench(kit, pos, yaw, len = 2.0, color = IMP.impMid) {
   const P = placer(kit, pos, yaw);
-  P.box("paintedMetal", 0, 0.45, 0, len, 0.06, 0.45, { color, texel: 1 });
+  P.box("paintedMetal", 0, 0.45, 0, len, 0.06, 0.45, { color, texel: 2.5 });
   P.box("fabric", 0, 0.5, 0, len - 0.1, 0.05, 0.4, { color: DARK, texel: 2 });
   for (const x of [-len / 2 + 0.3, len / 2 - 0.3]) P.box("paintedMetal", x, 0.21, 0, 0.12, 0.42, 0.36, { color: BLACK });
   P.box("emitBlue", 0, 0.415, 0.226, len - 0.3, 0.01, 0.006);
