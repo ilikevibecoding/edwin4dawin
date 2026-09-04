@@ -376,7 +376,7 @@ export function buildShell(ctx, spec) {
           // painted panels (uv keep) show the panel map's edge grime as dirt under close fixtures;
           // `ceiling.mat: "paintedMetal"` gives clean plated panels with fine world UVs instead
           const cm = ce.mat || panelMat;
-          const g = kit.boxMM(cm, [bx0, ceilY - 0.06, bz0], [bx1, ceilY, bz1], cm === panelMat ? { color: rand() < 0.1 ? P("impMid") : cColor, uv: "keep" } : { color: rand() < 0.1 ? P("impMid") : cColor, texel: 2.5 });
+          const g = kit.boxMM(cm, [bx0, ceilY - 0.06, bz0], [bx1, ceilY, bz1], cm === panelMat ? { color: rand() < 0.1 ? P("impMid") : cColor, uv: "keep" } : { color: rand() < 0.1 ? P("impMid") : cColor, texel: ce.texel ?? 2.5 });
           if (cm === panelMat && rand() < 0.5) flipUVs(g);
         }
       }

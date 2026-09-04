@@ -84,7 +84,8 @@ export function console(kit, PALETTE, pos, yaw, { w = 2.4, d = 0.9, h = 1.15, sc
   const ny = -0.2 * Math.sin(tilt);
   for (let i = 0; i < screens; i++) {
     const x = -w / 2 + 0.1 + (i + 0.5) * ((w - 0.2) / screens);
-    const m = screenMat || "screenImp" + Math.floor(rand() * 4);
+    // screenMat may be a key or an array of keys rotated per screen (seeded picks repeat for ~30 % of seeds)
+    const m = Array.isArray(screenMat) ? screenMat[i % screenMat.length] : screenMat || "screenImp" + Math.floor(rand() * 4);
     kit.add("darkGloss", new THREE.BoxGeometry(sw + 0.05, slopeH * 0.62 + 0.05, 0.02), { pos: P.world(x, deskH + slopeH * 0.5 + ny, -d / 2 + 0.28 + nz), quat: tq });
     kit.add(m, new THREE.BoxGeometry(sw, slopeH * 0.62, 0.02), { pos: P.world(x, deskH + slopeH * 0.5 + ny * 1.08, -d / 2 + 0.28 + nz * 1.08), quat: tq, uv: "keep" });
   }
