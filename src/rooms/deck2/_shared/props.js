@@ -70,14 +70,14 @@ export function console(kit, PALETTE, pos, yaw, { w = 2.4, d = 0.9, h = 1.15, sc
   const dark = col(PALETTE, "impDark");
   const deskH = sit ? 0.74 : 0.9;
   // body
-  P.box("paintedMetal", 0, deskH / 2, 0, w, deskH, d, { color: black, texel: 1 });
+  P.box("paintedMetal", 0, deskH / 2, 0, w, deskH, d, { color: black, texel: 2.5 });
   P.box("paintedMetal", 0, 0.06, 0, w - 0.1, 0.12, d - 0.1, { color: dark }); // kick recess
   // sloped upper face (tilted box) with a screen bank
   const slopeH = h - deskH;
   const tilt = -0.42;
   // tilt about the console's own X axis: q = Ry(yaw) * Rx(tilt)
   const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, 0, 0)));
-  P.add("paintedMetal", new THREE.BoxGeometry(w, slopeH, 0.42), 0, deskH + slopeH / 2 - 0.03, -d / 2 + 0.28, { quat: tq, color: black, texel: 1 });
+  P.add("paintedMetal", new THREE.BoxGeometry(w, slopeH, 0.42), 0, deskH + slopeH / 2 - 0.03, -d / 2 + 0.28, { quat: tq, color: black, texel: 2.5 });
   const sw = (w - 0.2) / screens - 0.06;
   // local offset of the screen plane: 0.2 along the tilted face normal (local +Z rotated by tilt)
   const nz = 0.2 * Math.cos(tilt);
@@ -141,12 +141,12 @@ export function crate(kit, PALETTE, pos, yaw, { w = 1.2, h = 1.2, d = 1.2, color
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
   const body = color || pick(rand, [col(PALETTE, "impMid"), col(PALETTE, "impGrey"), col(PALETTE, "impDark")]);
-  P.box("paintedMetal", 0, h / 2, 0, w, h, d, { color: body, texel: 1 });
+  P.box("paintedMetal", 0, h / 2, 0, w, h, d, { color: body, texel: 2.5 });
   // recessed panels on four sides
   for (const [sx, sz, ax] of [[0, 1, "z"], [0, -1, "z"], [1, 0, "x"], [-1, 0, "x"]]) {
     const inset = 0.04;
-    if (ax === "z") P.box("paintedMetal", 0, h / 2, (sz * d) / 2 + sz * 0.001, w - 0.3, h - 0.3, 0.03, { color: col(PALETTE, "impDark"), texel: 1 });
-    else P.box("paintedMetal", (sx * w) / 2 + sx * 0.001, h / 2, 0, 0.03, h - 0.3, d - 0.3, { color: col(PALETTE, "impDark"), texel: 1 });
+    if (ax === "z") P.box("paintedMetal", 0, h / 2, (sz * d) / 2 + sz * 0.001, w - 0.3, h - 0.3, 0.03, { color: col(PALETTE, "impDark"), texel: 2.5 });
+    else P.box("paintedMetal", (sx * w) / 2 + sx * 0.001, h / 2, 0, 0.03, h - 0.3, d - 0.3, { color: col(PALETTE, "impDark"), texel: 2.5 });
     void inset;
   }
   // corner bumpers + handles + status tab
@@ -161,7 +161,7 @@ export function lockerBank(kit, PALETTE, pos, yaw, { count = 6, unit = 0.6, h = 
   const P = placer(kit, pos, yaw);
   const w = count * unit;
   const body = color || col(PALETTE, "impMid");
-  P.box("paintedMetal", 0, h / 2, 0, w, h, d, { color: body, texel: 1 });
+  P.box("paintedMetal", 0, h / 2, 0, w, h, d, { color: body, texel: 2.5 });
   for (let i = 0; i < count; i++) {
     const x = -w / 2 + (i + 0.5) * unit;
     P.box("impPanel", x, h / 2, d / 2 + 0.012, unit - 0.04, h - 0.1, 0.02, { color: col(PALETTE, "impGrey"), uv: "keep" });
@@ -179,11 +179,11 @@ export function bunkStack(kit, PALETTE, pos, yaw, { tiers = 3, len = 2.1, w = 0.
   const rand = rng(seed);
   const frame = col(PALETTE, "impDark");
   const h = 0.3 + tiers * gap;
-  P.box("paintedMetal", 0, h / 2, -w / 2 - 0.02, len, h, 0.04, { color: frame, texel: 1 }); // back
+  P.box("paintedMetal", 0, h / 2, -w / 2 - 0.02, len, h, 0.04, { color: frame, texel: 2.5 }); // back
   for (const x of [-len / 2 + 0.03, len / 2 - 0.03]) P.box("paintedMetal", x, h / 2, 0, 0.06, h, w + 0.04, { color: frame });
   for (let i = 0; i < tiers; i++) {
     const y = 0.3 + i * gap;
-    P.box("paintedMetal", 0, y, 0, len, 0.08, w, { color: frame, texel: 1 });
+    P.box("paintedMetal", 0, y, 0, len, 0.08, w, { color: frame, texel: 2.5 });
     P.box("fabric", 0, y + 0.1, 0, len - 0.1, 0.12, w - 0.08, { color: col(PALETTE, "impGrey"), texel: 2 });
     P.box("fabric", -len / 2 + 0.35, y + 0.18, 0, 0.5, 0.06, w - 0.3, { color: col(PALETTE, "impWhite"), texel: 2 });
     if (rand() < 0.6) P.box("fabric", 0.15, y + 0.19, -0.05, len - 0.9, 0.05, w - 0.25, { color: col(PALETTE, "impMid"), texel: 2 });
@@ -198,7 +198,7 @@ export function bunkStack(kit, PALETTE, pos, yaw, { tiers = 3, len = 2.1, w = 0.
 // Long table with pedestal legs, optional benches both sides (along local X).
 export function table(kit, PALETTE, pos, yaw, { len = 4.0, w = 0.9, h = 0.78, benches = true } = {}) {
   const P = placer(kit, pos, yaw);
-  P.box("paintedMetal", 0, h - 0.03, 0, len, 0.06, w, { color: col(PALETTE, "impGrey"), texel: 1 });
+  P.box("paintedMetal", 0, h - 0.03, 0, len, 0.06, w, { color: col(PALETTE, "impGrey"), texel: 2.5 });
   P.box("paintedMetal", 0, h - 0.09, 0, len - 0.1, 0.06, w - 0.1, { color: col(PALETTE, "impDark") });
   for (const x of [-len / 2 + 0.5, len / 2 - 0.5]) {
     P.box("paintedMetal", x, (h - 0.1) / 2, 0, 0.12, h - 0.1, w - 0.3, { color: col(PALETTE, "impDark") });
@@ -209,7 +209,7 @@ export function table(kit, PALETTE, pos, yaw, { len = 4.0, w = 0.9, h = 0.78, be
   if (benches) {
     for (const s of [-1, 1]) {
       const z = s * (w / 2 + 0.45);
-      P.box("paintedMetal", 0, 0.42, z, len - 0.2, 0.06, 0.38, { color: col(PALETTE, "impMid"), texel: 1 });
+      P.box("paintedMetal", 0, 0.42, z, len - 0.2, 0.06, 0.38, { color: col(PALETTE, "impMid"), texel: 2.5 });
       for (const x of [-len / 2 + 0.6, len / 2 - 0.6]) P.box("paintedMetal", x, 0.2, z, 0.1, 0.4, 0.3, { color: col(PALETTE, "impDark") });
       P.collider([-len / 2, 0, z - 0.2], [len / 2, 0.45, z + 0.2], "bench");
     }
@@ -238,8 +238,8 @@ export function duct(kit, PALETTE, a, b, w = 0.6, h = 0.4, { color } = {}) {
   const min = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])];
   const max = [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])];
   const axis = max[0] - min[0] > max[2] - min[2] ? "x" : "z";
-  if (axis === "x") kit.boxMM("paintedMetal", [min[0], min[1] - h / 2, min[2] - w / 2], [max[0], min[1] + h / 2, min[2] + w / 2], { color: color || col(PALETTE, "impMid"), texel: 1 });
-  else kit.boxMM("paintedMetal", [min[0] - w / 2, min[1] - h / 2, min[2]], [min[0] + w / 2, min[1] + h / 2, max[2]], { color: color || col(PALETTE, "impMid"), texel: 1 });
+  if (axis === "x") kit.boxMM("paintedMetal", [min[0], min[1] - h / 2, min[2] - w / 2], [max[0], min[1] + h / 2, min[2] + w / 2], { color: color || col(PALETTE, "impMid"), texel: 2.5 });
+  else kit.boxMM("paintedMetal", [min[0] - w / 2, min[1] - h / 2, min[2]], [min[0] + w / 2, min[1] + h / 2, max[2]], { color: color || col(PALETTE, "impMid"), texel: 2.5 });
   const len = axis === "x" ? max[0] - min[0] : max[2] - min[2];
   for (let t = 1.5; t < len; t += 3) {
     if (axis === "x") kit.boxMM("paintedMetal", [min[0] + t, min[1] - h / 2 - 0.03, min[2] - w / 2 - 0.03], [min[0] + t + 0.08, min[1] + h / 2 + 0.03, min[2] + w / 2 + 0.03], { color: col(PALETTE, "impDark") });
@@ -309,7 +309,7 @@ export function stairs(kit, PALETTE, pos, yaw, { rise = 3.0, run = 4.5, w = 1.8,
 export function holoTable(ctx, pos, { r = 1.4, h = 0.95, holoH = 1.6, mat = "holo" } = {}) {
   const { kit, PALETTE, group, materials } = ctx;
   const P = placer(kit, pos, 0);
-  P.cyl("paintedMetal", 0, h / 2, 0, r, h, "y", { color: col(PALETTE, "impBlack"), segments: 32, texel: 1 });
+  P.cyl("paintedMetal", 0, h / 2, 0, r, h, "y", { color: col(PALETTE, "impBlack"), segments: 32, texel: 2.5 });
   P.cyl("paintedMetal", 0, 0.1, 0, r + 0.15, 0.2, "y", { color: col(PALETTE, "impDark"), segments: 32 });
   P.cyl("darkGloss", 0, h + 0.01, 0, r - 0.1, 0.02, "y", { segments: 32 });
   P.cyl("emitBlue", 0, h - 0.04, 0, r + 0.01, 0.04, "y", { segments: 32, open: true });
@@ -338,14 +338,14 @@ export function floorLine(kit, a, b, w = 0.12, mat = "emitAmber", color) {
 // Ceiling drop fixture: dark housing with a bright diffuser, hung from a stem.
 export function dropLight(kit, PALETTE, pos, { w = 1.6, d = 0.4, stem = 0.6, mat = "emitCoolSoft" } = {}) {
   kit.box("paintedMetal", pos[0], pos[1] - stem / 2, pos[2], 0.06, stem, 0.06, { color: col(PALETTE, "impBlack") });
-  kit.box("paintedMetal", pos[0], pos[1] - stem - 0.06, pos[2], w, 0.12, d, { color: col(PALETTE, "impDark"), texel: 1 });
+  kit.box("paintedMetal", pos[0], pos[1] - stem - 0.06, pos[2], w, 0.12, d, { color: col(PALETTE, "impDark"), texel: 2.5 });
   kit.box(mat, pos[0], pos[1] - stem - 0.125, pos[2], w - 0.12, 0.02, d - 0.12, { uv: "keep" });
 }
 
 // Wall-mounted equipment cabinet with a lit status panel, doors facing local +Z.
 export function cabinet(kit, PALETTE, pos, yaw, { w = 1.2, h = 1.8, d = 0.5, color, emit = "emitBlue", seed = 9 } = {}) {
   const P = placer(kit, pos, yaw);
-  P.box("paintedMetal", 0, h / 2, 0, w, h, d, { color: color || col(PALETTE, "impMid"), texel: 1 });
+  P.box("paintedMetal", 0, h / 2, 0, w, h, d, { color: color || col(PALETTE, "impMid"), texel: 2.5 });
   P.box("impPanel", 0, h / 2, d / 2 + 0.012, w - 0.08, h - 0.08, 0.02, { color: col(PALETTE, "impGrey"), uv: "keep" });
   P.box("paintedMetal", 0, h / 2, d / 2 + 0.024, 0.02, h - 0.2, 0.01, { color: col(PALETTE, "impBlack") });
   indicatorField(P, 0, h - 0.25, d / 2 + 0.025, w - 0.3, 0.16, seed);
