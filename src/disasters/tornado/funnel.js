@@ -128,10 +128,10 @@ void main() {
   vec2 uv2 = vec2(vU * around * 0.5 - uTime * uSpin * 0.2 + hs * 0.2, vH * up * 0.5 - uTime * 0.2);
   float n = texture2D(uNoise, uv1).r * 0.6 + texture2D(uNoise, uv2).g * 0.4;
   float lo = 0.5 - 0.3 * uDensity;
+  lo += 0.6 * (1.0 - smoothstep(0.0, 0.1, vH));          // ragged tip (only the densest cells survive)
+  lo += 0.7 * smoothstep(uTopFade, 1.0, vH);             // dissolves into the deck: no visible top ring
   float a = clamp((n - lo) / 0.28, 0.0, 1.0);
   a = floor(a * 3.0 + 0.5) / 3.0;                        // four alpha bands: hard-edged pixel smoke
-  a *= smoothstep(0.0, 0.06, vH);
-  a *= 1.0 - smoothstep(uTopFade, 1.0, vH);              // dissolve into the deck: no visible top ring
   float rim = abs(dot(normalize(vNormal), normalize(vView)));
   a *= 0.55 + 0.45 * step(0.25, rim);
   float shade = floor(n * 4.0) / 4.0;                     // four shade bands

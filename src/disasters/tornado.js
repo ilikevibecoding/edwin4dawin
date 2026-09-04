@@ -28,7 +28,7 @@ const SCAN_ABOVE = 24;            // blocks above the terrain surface searched f
 const GROUND_SCOUR = 0.12;        // rip probability multiplier for the terrain surface itself
 // exposure faces (index stored with each queued rip): 0 = up, 1 = +x, 2 = -x, 3 = +z, 4 = -z
 const FX = [0, 1, -1, 0, 0], FY = [1, 0, 0, 0, 0], FZ = [0, 0, 0, 1, -1];
-const CAPTURE_TICKS = 80;         // a player held in the core this long (4 s) is thrown clear...
+const CAPTURE_TICKS = 80;         // a player held in / on the core this long (4 s) is thrown clear...
 const EJECT_TICKS = 60;           // ...and the wind lets go of them for 3 s
 // Decided rips are applied in bursts every RIP_BATCH_TICKS (0.8 s). The manager answers every touched chunk
 // with a full relight plus a remesh of that chunk and its 8 neighbours (~20 ms on this VM), so the number of
@@ -47,7 +47,7 @@ const CLOUD_DECK_Y = 120;
 const DUST_RATE = 70;             // pool dust streaks per second at full intensity (the skirt carries the base)
 const DUST_LIFE = 1.2;
 const SKY_NEAR = 120;             // storm sky at full strength within this distance of the funnel...
-const SKY_FAR = 420;              // ...and at 35 % beyond this one
+const SKY_FAR = 300;              // ...and at 35 % beyond this one
 const SOUND_RANGE = 220;
 const BELL_RANGE = 220;
 const RIP_QUEUE_MAX = 48;         // ripped cells buffered for render-side effects (x,y,z,id)
@@ -338,8 +338,9 @@ export class Tornado extends Disaster {
   }
 
   // Player: follows the wind (pulled around and lifted inside the core), buffeted by gusts outside it. A player
-  // held in the core for CAPTURE_TICKS is thrown clear along the outer wall and ignored by the wind for
-  // EJECT_TICKS, so nobody is ground down in place: damage per capture is bounded (~1-3 HP plus the landing).
+  // held in or on the core wall for CAPTURE_TICKS is thrown clear and ignored by the wind for EJECT_TICKS, so
+  // nobody is ground down in place; while the wind carries them their accumulated fall distance is capped so
+  // being dropped costs at most ~1 HP. Damage per capture is therefore bounded (a few HP).
   pushPlayer() {
     const pl = this.game.player;
     if (!pl || pl.dead) { this.playerDist = 1e9; this.captured = 0; return; }
@@ -350,19 +351,20 @@ export class Tornado extends Disaster {
     const w = this._wind;
     const env = windAt(dx, dz, dy, R, I, this.strength, w);
     if (env <= 0) { this.captured = 0; return; }
+    if (env > 0.2 && pl.fallDistance > 4.5) pl.fallDistance = 4.5;
     const q = this.playerDist / R;
     const r = Math.max(0.5, this.playerDist), ux = dx / r, uz = dz / r;
     if (this.tick < this.ejectUntil) {                  // thrown out: a steady outward shove, nothing else
       pl.addForce(ux * 30, 0, uz * 30);
       return;
     }
-    const inCore = q < 0.8 && this.strength > 0.3;
-    this.captured = inCore ? this.captured + 1 : Math.max(0, this.captured - 2);
+    const held = q < 1.25 && this.strength > 0.3;
+    this.captured = held ? this.captured + 1 : Math.max(0, this.captured - 2);
     if (this.captured >= CAPTURE_TICKS) {
       this.captured = 0;
       this.ejectUntil = this.tick + EJECT_TICKS;
       const h = hash2(this.tick, 19, this.seed);
-      pl.impulse(ux * 20 + SWIRL_SIGN * uz * 10 * h, 5, uz * 20 - SWIRL_SIGN * ux * 10 * h);
+      pl.impulse(ux * 20 + SWIRL_SIGN * uz * 10 * h, 2, uz * 20 - SWIRL_SIGN * ux * 10 * h);
       return;
     }
     const lift = dy < 4 ? 1 : dy > 10 ? 0 : 1 - (dy - 4) / 6;   // tossed, not launched into orbit
@@ -371,7 +373,7 @@ export class Tornado extends Disaster {
     const k = 2.2 + 1.3 * I;
     const gust = env * this.strength * Math.min(1, q / 0.8) * this.gustMag * I;
     pl.addForce((w.x - vx) * k + this.gustX * gust, (w.y - vy) * k * (w.y > vy ? 1 : 0.3), (w.z - vz) * k + this.gustZ * gust);
-    if (this.tick % 30 === 0 && inCore) {
+    if (this.tick % 30 === 0 && q < 0.8 && this.strength > 0.3) {
       const roll = hash2(this.tick, 17, this.seed);
       if (roll < 0.6) pl.damage(roll < 0.2 ? 2 : 1);
     }
