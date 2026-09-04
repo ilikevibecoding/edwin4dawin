@@ -181,7 +181,7 @@ export function makeCanvas(w, h = w) {
   return c;
 }
 
-function configure(tex, { srgb = false, repeat = 1, aniso = 8, flipY = true } = {}) {
+function configure(tex, { srgb = false, repeat = 1, aniso = 8, flipY = true, keepData = false } = {}) {
   tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   const r = Array.isArray(repeat) ? repeat : [repeat, repeat];
@@ -189,6 +189,19 @@ function configure(tex, { srgb = false, repeat = 1, aniso = 8, flipY = true } = 
   tex.anisotropy = aniso;
   tex.flipY = flipY;
   tex.needsUpdate = true;
+  // Once a DataTexture is on the GPU three never reads its array again unless
+  // it is marked for re-upload, but the array stays referenced: 211 of the 267
+  // textures are DataTextures and their pixels were 109 MB of a 335 MB heap
+  // (perf/census-r1.md, win 8). Three calls onUpdate after the upload; drop
+  // the bytes there. Nothing here samples a texture on the CPU after it is
+  // made, and nothing re-uploads one, so the only cost is that a lost WebGL
+  // context cannot be repopulated from the array — the page reloads instead.
+  if (tex.isDataTexture && !keepData) {
+    tex.onUpdate = (t) => {
+      t.image.data = null;
+      t.onUpdate = null;
+    };
+  }
   return tex;
 }
 
