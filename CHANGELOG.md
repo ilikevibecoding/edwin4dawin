@@ -131,8 +131,12 @@ the panel; 0 exceptions and 0 console errors across 23 page sessions.
 Independent critics reviewed each disaster on the integrated build. Round 1: beam ACCEPT WITH NITS (station
 pop-in, dim night glow, roar restart on cancel - all fixed), tornado REJECT (interiors gutted while facades stood,
 sunny sky above the funnel, smooth cone), tsunami REJECT (smooth translucent crest with a dry street under it,
-NPCs standing on the street bottom under water). Round 2 reworked both (see Added) and re-reviewed them; the
-final verdicts are recorded below.
+NPCs standing on the street bottom under water). Round 2 reworked both (see Added) and re-reviewed them: tornado
+ACCEPT WITH NITS by day but REJECT at night (black screen, invisible funnel), tsunami ACCEPT WITH NITS with the
+crest hidden from porches and swimmers' heads in ceilings still open. Round 3 fixed those (night floor + lightning,
+enclosed-room test + per-column fade, ceiling clamp + open-sky escape, body-height animal water test); the tornado
+re-check is ACCEPT WITH NITS including night storms (remaining nits: speckled rather than peeled roofs, glass rarely
+breaks, faint vanilla-cloud squares through the deck during a flash).
 
 ### Known imperfections
 - The default 110-block flood is paced by the manager's edit budget: the front runs at ~80-90% of the nominal
