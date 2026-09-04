@@ -95,7 +95,13 @@ export function buildTower(kit, tiers, rand) {
     boxMM(kit, "hullDark", [w.x0 - 1.0, yTopBand, FACE - 0.02], [w.x1 + 1.0, yTopBand + 0.4, WALL_IN], { color: IMP.hullShadow, texel: 1 / 10 });
     // glazing pane + slim mullions on the outer face; dark backdrop facing outward only (culled from inside)
     kit.boxMM("glass", [w.x0, sillTop + 0.3, FACE + 0.7], [w.x1, yTopBand - 0.3, FACE + 0.8]);
-    for (let x = w.x0 + 4.25; x < w.x1 - 1; x += 4.25) kit.boxMM("hullDark", [x - 0.13, sillTop, FACE], [x + 0.13, yTopBand, FACE + 0.55], { color: IMP.hullShadow });
+    // odd pane count so the centre line of the slot (the bridge_window sightline) stays clear of a mullion
+    const panes = 2 * Math.floor((w.x1 - w.x0) / 9) + 1;
+    const pitch = (w.x1 - w.x0) / panes;
+    for (let k = 1; k < panes; k++) {
+      const x = w.x0 + pitch * k;
+      kit.boxMM("hullDark", [x - 0.13, sillTop, FACE], [x + 0.13, yTopBand, FACE + 0.55], { color: IMP.hullShadow });
+    }
     const back = new THREE.PlaneGeometry(w.x1 - w.x0, yTopBand - sillTop);
     back.rotateY(Math.PI); // faces −z (outward)
     kit.add("hullDark", back, { pos: [(w.x0 + w.x1) / 2, (sillTop + yTopBand) / 2, WALL_IN - 0.1], color: new THREE.Color(0x0b0d12), uv: "keep" });

@@ -44,9 +44,9 @@ export function makeExteriorMaterials(materials) {
     hullDark: clone(materials.hullDark),
     glass: clone(materials.glass),
     // window rows: dim, slightly cold; a few warm decks
-    emitWin: emit("#d6e2ff", 0.85),
-    emitWinWarm: emit("#ffd9a6", 0.72),
-    emitWinDim: emit("#9fb4d8", 0.4),
+    emitWin: emit("#d6e2ff", 0.7),
+    emitWinWarm: emit("#ffd9a6", 0.62),
+    emitWinDim: emit("#9fb4d8", 0.36),
     emitBay: emit("#ffb547", 2.0),
     emitPort: emit("#ff5a3c", 1.6),
     emitBlueCold: emit("#6fa8ff", 1.8),
@@ -242,9 +242,9 @@ export function faceMatrix(px, py, pz, nx, ny, nz, yaw = 0, scale = 1, out = new
 
 /** Yaw of the side edge (plan-view angle of the wedge edge on the given side, about +Y). */
 export function edgeYaw(side) {
-  // edge direction from bow to the stern corner: (side*HW, 0, sternCornerZ - bowZ)
-  const ang = Math.atan2(side * HW, HULL.sternCornerZ - BOW);
-  return -ang;
+  // edge direction from bow to the stern corner: (side*HW, 0, sternCornerZ - bowZ). A yaw of θ about +Y
+  // maps local +Z to (sin θ, 0, cos θ), so θ = atan2(dx, dz) aligns a box's long (Z) axis with the edge.
+  return Math.atan2(side * HW, HULL.sternCornerZ - BOW);
 }
 
 // ---------------------------------------------------------------------------------------------------

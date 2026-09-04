@@ -281,7 +281,7 @@ export function dressWall(tiers, rand, wall, opts = {}) {
         if (!lit) continue;
         const pos = at(u, y + (rand() - 0.5) * 0.2, 0.04);
         if (!ok(pos)) continue;
-        wtier.place(warmRow ? "windowWarm" : rand() < 0.15 ? "windowDim" : "window", { pos, rot });
+        wtier.place(warmRow ? "windowWarm" : rand() < 0.4 ? "windowDim" : "window", { pos, rot });
       }
     }
   }
