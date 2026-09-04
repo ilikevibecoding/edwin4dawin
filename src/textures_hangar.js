@@ -2,7 +2,7 @@
 // ring, launch-lane arrow, rack / bay numbers, fighter footprint outline, drop-hazard sign) and the
 // material that carries it. Canvas-generated; nothing downloaded.
 import * as THREE from "three";
-import { makeCanvas, toTexture, mulberry32 } from "./textures.js";
+import { makeCanvas, toTexture, mulberry32, TexGen, fbm } from "./textures.js";
 import { setDomain } from "./materials.js";
 
 export const HG_DECAL_CELLS = 4;
@@ -186,6 +186,31 @@ export function makeHangarGrate(size = 512, seed = 31) {
   return toTexture(c, { srgb: true, wrap: true, anisotropy: 8 });
 }
 
+// Kestrel ramp / hull tread: #c8781e chevrons on #1a1a1a, ~40 % coverage, worn at the edges.
+export function makeTreadChevron(size = 256, seed = 7) {
+  const t = new TexGen(size, size);
+  // the albedo map is sRGB-tagged: feed sRGB components (THREE.Color would hand back linear ones)
+  const a = { r: 0xc8 / 255, g: 0x78 / 255, b: 0x1e / 255 };
+  const b = { r: 0x1a / 255, g: 0x1a / 255, b: 0x1a / 255 };
+  const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+  const smooth = (x) => x * x * (3 - 2 * x);
+  t.each((u, v, i) => {
+    const s = (u + v) % 1;
+    const k = smooth(clamp01((Math.abs(s - 0.5) - 0.3) / 0.015));
+    const n = fbm(u, v, { octaves: 4, freq: 10, seed });
+    const wear = clamp01((n - 0.6) * 4);
+    const col = k > 0.5 ? a : b;
+    const lum = 1 - wear * 0.45;
+    t.setColor(i, (col.r * (1 - wear * 0.5) + 0.3 * wear * 0.5) * lum, (col.g * (1 - wear * 0.5) + 0.3 * wear * 0.5) * lum, (col.b * (1 - wear * 0.5) + 0.3 * wear * 0.5) * lum);
+    t.rough[i] = 0.75 + wear * 0.15;
+    t.metal[i] = 0.15;
+    t.height[i] = 0.5 + (k > 0.5 ? 0.06 : 0) - wear * 0.05;
+  });
+  const set = t.bake({ normalStrength: 1.2 });
+  set.metalnessMap = set.roughnessMap;
+  return set;
+}
+
 let registered = null;
 /**
  * Register the hangar workstream's materials on the shared library (keys prefixed `hangar_`), once.
@@ -206,10 +231,29 @@ export function ensureHangarMaterials(materials) {
   const amberDim = materials.emitAmber.clone();
   amberDim.emissiveIntensity = 0.75;
   setDomain(amberDim, "interior");
+  // ceiling troughs of the hangar complex: warm white at ≈ 30 % of the old emitWhiteSoft output
+  const ceilWarm = materials.emitWhiteSoft.clone();
+  ceilWarm.emissive = new THREE.Color("#ffd9a8");
+  ceilWarm.color = new THREE.Color("#ffd9a8").multiplyScalar(0.08);
+  ceilWarm.emissiveIntensity = 0.7;
+  setDomain(ceilWarm, "interior");
+  // cool-white flood lamp faces (shuttle bay) and warm interior spill panes (Kestrel door): dim glass
+  const spillWarm = materials.emitAmber.clone();
+  spillWarm.emissive = new THREE.Color("#ffc07a");
+  spillWarm.emissiveIntensity = 1.2;
+  spillWarm.transparent = true;
+  spillWarm.opacity = 0.85;
+  setDomain(spillWarm, "interior");
+  const treadSet = makeTreadChevron(256, 7);
+  const tread = new THREE.MeshStandardMaterial({ map: treadSet.map, roughnessMap: treadSet.roughnessMap, metalnessMap: treadSet.metalnessMap, normalMap: treadSet.normalMap, roughness: 1, metalness: 1, vertexColors: true, color: 0xffffff, envMapIntensity: 0.4 });
+  setDomain(tread, "interior");
   materials.hangar_decal = decal;
   materials.hangar_grate = grate;
   materials.hangar_glowBlue = glow;
   materials.hangar_amberDim = amberDim;
-  registered = { decal: "hangar_decal", grate: "hangar_grate", glow: "hangar_glowBlue", amberDim: "hangar_amberDim" };
+  materials.hangar_ceilWarm = ceilWarm;
+  materials.hangar_spillWarm = spillWarm;
+  materials.hangar_tread = tread;
+  registered = { decal: "hangar_decal", grate: "hangar_grate", glow: "hangar_glowBlue", amberDim: "hangar_amberDim", ceilWarm: "hangar_ceilWarm", tread: "hangar_tread" };
   return registered;
 }

@@ -42,16 +42,19 @@ const BLACK = PALETTE.impBlack;
 const POD = PALETTE.impGreyDark;
 const CHARCOAL = PALETTE.impCharcoal;
 const GREY = PALETTE.impGrey;
-// the hex texture is dark by design; lift the wing faces a little so the cell pattern reads at hangar light levels
-const PANEL_TINT = new THREE.Color(1.35, 1.38, 1.5);
-const RIB = new THREE.Color("#4a4e57");
+// the hex texture is dark by design (solar cells); a slight lift keeps the cell pattern legible under the
+// hangar floods without the faces reading as glazed
+const PANEL_TINT = new THREE.Color(1.12, 1.13, 1.2);
+const RIB = new THREE.Color("#33363c");
+const FRAME_GREY = new THREE.Color("#5c6068");
 
 /**
  * Kit-bash one fighter into `kit` at the origin (instance frame). Exposed so a room builder can also place
  * a static fighter (e.g. one being serviced in the fighter bay) merged into its own kit.
+ * opts.wings: [-1, 1] by default; pass [1] / [-1] for a fighter with a wing panel removed (fighter bay).
  */
 export function kitbashTie(kit, opts = {}) {
-  const { podKey = "impMetal", frameKey = "impTrim", panelKey = "hexPanel", glassKey = "impGloss", thrusterKey = "emitRedImp", glowKey = "glowDisc" } = opts;
+  const { podKey = "impMetal", frameKey = "impTrim", panelKey = "hexPanel", glassKey = "impGloss", thrusterKey = "emitRedDim", wings = [-1, 1] } = opts;
   const R = TIE.ballR;
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
@@ -84,16 +87,16 @@ export function kitbashTie(kit, opts = {}) {
     kit.add(frameKey, new THREE.SphereGeometry(0.11, 10, 7), { pos: [p.x, p.y, p.z], color: CHARCOAL });
   }
 
-  // ---------------- forward viewport: octagonal frame, 8 spokes, hub, dark glass cap ----------------
+  // ---------------- forward viewport: dark octagon with a thin grey frame, 8 spokes, hub ----------------
   const WIN_R = 0.9; // window radius on the sphere
   const zWin = -Math.sqrt(R * R - WIN_R * WIN_R); // z of the window ring on the sphere surface
-  // dark glass: a spherical cap slightly proud of the pod
+  // dark glass: a spherical cap slightly proud of the pod (impGloss is near-black; no emissive, no glow)
   {
     const cap = new THREE.SphereGeometry(R + 0.015, 24, 6, 0, Math.PI * 2, 0, Math.asin(WIN_R / R) + 0.02);
     cap.rotateX(-Math.PI / 2); // pole toward -z
-    kit.add(glassKey, cap, { color: 0xffffff });
+    kit.add(glassKey, cap, { color: 0x9a9ea6 });
   }
-  // octagonal ring: 8 bars tangent to the sphere
+  // octagonal ring: 8 thin grey bars tangent to the sphere
   const tilt = Math.asin(WIN_R / R);
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
@@ -105,7 +108,7 @@ export function kitbashTie(kit, opts = {}) {
     q.setFromEuler(e);
     const tiltQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(Math.cos(a + Math.PI / 2), Math.sin(a + Math.PI / 2), 0), -tilt);
     const qq = tiltQ.multiply(q);
-    kit.add(frameKey, new THREE.BoxGeometry(len, 0.13, 0.16), { pos: [cx * 1.0, cy * 1.0, zWin - 0.05], quat: qq, color: BLACK });
+    kit.add(podKey, new THREE.BoxGeometry(len, 0.09, 0.14), { pos: [cx * 1.0, cy * 1.0, zWin - 0.05], quat: qq, color: FRAME_GREY, texel: 0.5 });
   }
   // spokes from the hub to the ring corners
   for (let i = 0; i < 8; i++) {
@@ -135,14 +138,13 @@ export function kitbashTie(kit, opts = {}) {
   // small antenna aft of the hatch
   kit.add(frameKey, new THREE.CylinderGeometry(0.02, 0.03, 0.55, 6), { pos: [0.35, R + 0.15, 0.75], color: BLACK });
 
-  // ---------------- rear: thruster block and twin ports ----------------
+  // ---------------- rear: thruster block and twin ports (dim red, recessed, no glow planes) ----------------
   kit.add(frameKey, new THREE.BoxGeometry(1.7, 1.05, 0.5), { pos: [0, -0.2, R - 0.22], color: CHARCOAL });
   for (const s of [-1, 1]) {
     const x = s * 0.5;
     const y = -0.2;
     kit.add(frameKey, new THREE.CylinderGeometry(0.34, 0.3, 0.32, 18, 1, true), { pos: [x, y, R + 0.02], rot: [Math.PI / 2, 0, 0], color: BLACK });
-    kit.add(thrusterKey, new THREE.CircleGeometry(0.26, 18), { pos: [x, y, R + 0.1], rot: [0, 0, 0], color: 0xffffff });
-    kit.add(glowKey, new THREE.PlaneGeometry(1.1, 1.1), { pos: [x, y, R + 0.22], color: PALETTE.impRed, uv: "keep" });
+    kit.add(thrusterKey, new THREE.CircleGeometry(0.24, 18), { pos: [x, y, R - 0.06], rot: [0, 0, 0], color: 0xffffff });
   }
   // surface conduits from the hatch ring aft-down to the thruster block (torus arcs hugging the pod)
   for (const s of [-1, 1]) {
@@ -181,7 +183,7 @@ export function kitbashTie(kit, opts = {}) {
 
   // ---------------- solar wings ----------------
   const outline = wingOutline();
-  for (const s of [-1, 1]) {
+  for (const s of wings) {
     const xc = s * TIE.wingHalfSpan;
     // panel: hexagon extruded along x (prism extrudes along z, then rotate so its axis is x)
     const g = prism(outline.map(([u, v]) => [u, v]), WING_T);
@@ -214,25 +216,26 @@ export function kitbashTie(kit, opts = {}) {
       for (const f of [-1, 1]) {
         const xf = xc + f * (WING_T / 2 + 0.05);
         kit.add(frameKey, new THREE.BoxGeometry(0.1, 0.2, slen), { pos: [xf, (v0 / rlen) * cm, (-u0 / rlen) * cm], rot: [sphi, 0, 0], color: BLACK });
-        // lighter cap rib on top of the black spoke so the frame separates from the panels
+        // dark cap rib on top of the black spoke: a matte, non-emissive line that separates the frame
+        // from the cell panels without catching the floods
         kit.add(podKey, new THREE.BoxGeometry(0.05, 0.09, slen - 0.2), { pos: [xf + f * 0.05, (v0 / rlen) * cm, (-u0 / rlen) * cm], rot: [sphi, 0, 0], color: RIB, texel: 0.5 });
       }
     }
-    // three horizontal stiffeners across each face (the classic panel sub-divisions)
+    // three horizontal stiffeners across each face (the classic panel sub-divisions), plus two vertical
+    // rib lines per half so every cell field is framed in dark ribs
     for (const f of [-1, 1]) {
       const xf = xc + f * (WING_T / 2 + 0.035);
       for (const v of [-2.05, 0, 2.05]) {
         const w = v === 0 ? TIE.wingW - 0.3 : TIE.wingW - 0.35;
         kit.add(frameKey, new THREE.BoxGeometry(0.07, 0.1, w), { pos: [xf, v * 0.5, 0], color: BLACK });
       }
+      for (const u of [-1.1, 1.1]) kit.add(frameKey, new THREE.BoxGeometry(0.06, 2.0, 0.08), { pos: [xf, 0, u], color: RIB });
     }
-    // running lights at the wing's top and bottom vertices: a small emitter on the rim plus crossed glow
-    // planes so the halo reads from every direction
+    // wing-tip fittings (the old red running lights and their glow planes are gone: the only emitters left
+    // on the fighter are the two dim thruster ports at the rear)
     for (const sv of [-1, 1]) {
       const y = sv * (TIE.wingH / 2 - 0.16);
-      kit.add(thrusterKey, new THREE.BoxGeometry(0.14, 0.12, 0.3), { pos: [xc, y, 0], color: 0xffffff });
-      kit.add(glowKey, new THREE.PlaneGeometry(0.6, 0.6), { pos: [xc + s * 0.25, y, 0], rot: [0, Math.PI / 2, 0], uv: "keep" });
-      kit.add(glowKey, new THREE.PlaneGeometry(0.6, 0.6), { pos: [xc, y + sv * 0.2, 0], rot: [Math.PI / 2, 0, 0], uv: "keep" });
+      kit.add(frameKey, new THREE.BoxGeometry(0.14, 0.12, 0.3), { pos: [xc, y, 0], color: CHARCOAL });
     }
   }
 }
@@ -283,7 +286,7 @@ export function fighterMaterials(materials) {
   let cache = _fighterMatCache.get(materials);
   if (cache) return cache;
   cache = {};
-  for (const key of ["impMetal", "impTrim", "hexPanel", "impGloss", "emitRedImp"]) {
+  for (const key of ["impMetal", "impTrim", "hexPanel", "impGloss", "emitRedDim", "emitRedImp"]) {
     const src = materials[key];
     if (!src) continue;
     const m = src.clone();
