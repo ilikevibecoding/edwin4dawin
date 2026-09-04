@@ -73,6 +73,15 @@ const manifest = {
         { face, a0: B.max[0] - endZone, a1: B.max[0] },
       ]),
       sectionLabel: (a) => (a < 0 ? "SECTION 1-A" : "SECTION 1-B"),
+      // critic round 3 (d1-spine-bay, "identical panel modules edge to edge"): the shell's wall strip gets dark
+      // end-caps on both flanks of every rib (one lit segment per bay instead of a line running edge to edge), a
+      // dark scuff / kick band with short scuff plates runs along the wall base (cut at the blast doors' chevron
+      // bands), and every third bay swaps the standard kit for the half-width-module kit (seam pilasters, twin
+      // grilles, half plates) — a 4 m / 4 m / 2+2 m rhythm on both walls, phased so facing walls never match.
+      stripCaps: { y0: FLOOR + 2.05, y1: FLOOR + 2.25 },
+      scuffBand: { y0: 0.2, y1: 0.48 },
+      bandBlocks: [-1, 1].map((s) => ({ a: s * (2.0 + 0.05 + 0.2), w: 0.28 })),
+      groupBays: true,
     });
 
     // --- junction node between the two facing blast doors

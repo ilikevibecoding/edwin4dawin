@@ -28,6 +28,13 @@ export const RED_CAB = new THREE.Color("#8e1d15"); // fire equipment cabinets (c
 const KICK = new THREE.Color("#0d0e11");
 const SCUFF_LIGHT = new THREE.Color("#4a4e57");
 const SCUFF_DARK = new THREE.Color("#07080a");
+// Scuff band tints. Under the transit pools the wall base gets E ≈ 0.1–0.3: the shell's kick row (IMP.dark, albedo
+// 0.04) renders at sRGB 8–14, the same as the near-black kick plate and the floor — a band in "the kick tint a step
+// darker" (#2c2f35, measured in cor-r5) was indistinguishable from them and the light panels simply looked shorter.
+// The band has to sit between the two: albedo ≈ 0.07 renders at ≈ 24 next to the panels' 60–90, its plates (albedo
+// 0.03) at ≈ 10 read as darker patches on it, and a hullDark top edge (≈ 45) marks it off from the panel above.
+const BAND = new THREE.Color("#4a4e55");
+const BAND_SCUFF = new THREE.Color("#2c2f35");
 
 /** Split [s0,s1] into ≤ seg m pieces. */
 export function segs(s0, s1, seg = SEG) {
@@ -471,6 +478,67 @@ export function overlayPlate(kit, wf, a0, a1, y0, y1, color) {
   wf.box(kit, "impPanel", lo + 0.025, hi - 0.025, y0 + 0.025, y1 - 0.025, 0.002, 0.007, { color, texel: 0.8 });
 }
 
+/** Dark end-caps on both flanks of each column (rib) at the shell's wall light strip: 8 cm blocks proud of the
+ *  strip's lips, so the strip reads as one segment per bay closed by a fitting instead of a line running edge to
+ *  edge behind the ribs. `y0..y1` is the strip channel (world y); `ribW` the column width the caps sit against. */
+export function stripCaps(kit, wf, positions, y0, y1, { ribW = 0.3, w = 0.08, d = 0.05, color = IMP.black } = {}) {
+  for (const a of positions) {
+    for (const s of [-1, 1]) {
+      const c0 = a + s * (ribW / 2 + 0.004);
+      wf.box(kit, "paintedMetal", c0, c0 + s * w, y0 - 0.03, y1 + 0.03, -0.005, d, { color, texel: 1 });
+    }
+  }
+}
+
+/** Dark scuff / kick band along the wall base over the given spans: a continuous dark-grey band (y0..y1 above the
+ *  floor, 8 mm proud — it passes behind the ribs) between the near-black kick plate and the light panels, under a
+ *  2 cm cast-metal top edge that marks it off from the panel above, with a few short darker scuff plates per span,
+ *  so the floor–wall junction reads as a fitted, worn kick band rather than pristine. No new material. */
+export function scuffBand(kit, wf, bandSpans, floorY, { y0 = 0.2, y1 = 0.48, d = 0.008, rand = Math.random } = {}) {
+  for (const [s0, s1] of bandSpans) {
+    const L = s1 - s0;
+    if (L < 0.4) continue;
+    for (const [p0, p1] of segs(s0, s1)) {
+      wf.box(kit, "paintedMetal", p0, p1, floorY + y0, floorY + y1 - 0.02, -0.005, d, { color: BAND, texel: 1 });
+      wf.box(kit, "metalRough", p0, p1, floorY + y1 - 0.02, floorY + y1, -0.005, d + 0.01, { color: IMP.hullDark, texel: 2 });
+    }
+    const n = Math.max(1, Math.round(L / 4));
+    for (let i = 0; i < n; i++) {
+      const len = Math.min(L - 0.3, 0.4 + rand() * 0.6);
+      const c = s0 + 0.15 + len / 2 + rand() * Math.max(0, L - 0.3 - len);
+      const h = 0.08 + rand() * 0.08;
+      const y = floorY + y0 + 0.03 + rand() * (y1 - 0.02 - y0 - h - 0.06);
+      wf.box(kit, "paintedMetal", c - len / 2, c + len / 2, y, y + h, d, d + 0.005, { color: BAND_SCUFF, texel: 2 });
+    }
+  }
+}
+
+/** Vertical seam pilaster splitting a 2 m wall module into half-width panels: a 6 cm black cover strip from the
+ *  kick to the cornice, 4.5 cm proud (over the strip channel's lips, so it also caps the strip), with a narrow
+ *  steel-grey centre line. Two boxes. */
+export function pilaster(kit, wf, a, y0, y1, { w = 0.06, d = 0.045 } = {}) {
+  wf.box(kit, "paintedMetal", a - w / 2, a + w / 2, y0, y1, -0.005, d, { color: IMP.black, texel: 1 });
+  wf.box(kit, "metal", a - 0.006, a + 0.006, y0 + 0.04, y1 - 0.04, d, d + 0.004, { color: IMP.mid, texel: 2 });
+}
+
+/** Wall vent grille as a decal: the floor-grating cut-out texture over a black recess, in a thin frame — four
+ *  boxes and a quad where the slatted vent() costs nine boxes. The UV scale packs the grating's cross bars into
+ *  five thin horizontal slats with a centre mullion (rails sit at u = 0, ¼, ½; bars at v = 0, 0.1, …, 0.5). */
+export function grilleDecal(kit, wf, a, yc, { w = 0.5, h = 0.34, f = 0.03 } = {}) {
+  const hw = w / 2;
+  const hh = h / 2;
+  wf.box(kit, "paintedMetal", a - hw, a + hw, yc - hh, yc + hh, -0.01, 0.012, { color: IMP.black, texel: 1 });
+  const g = new THREE.PlaneGeometry(w - 2 * f, h - 2 * f);
+  kit.add("grate", g, { pos: wf.pt(a, yc, 0.014), rot: [0, wf.yaw, 0], uv: "scale", uvScale: [0.5, 0.5] });
+  for (const [aa0, aa1, y0, y1] of [
+    [a - hw, a + hw, yc - hh, yc - hh + f],
+    [a - hw, a + hw, yc + hh - f, yc + hh],
+    [a - hw, a - hw + f, yc - hh, yc + hh],
+    [a + hw - f, a + hw, yc - hh, yc + hh],
+  ])
+    wf.box(kit, "metalRough", aa0, aa1, y0, y1, 0.012, 0.03, { color: IMP.mid, texel: 1 });
+}
+
 /** Small fire-suppression cabinet (0.3 × 0.4 m) with a white band, stencil, handle and a red status LED. */
 export function firePanel(kit, wf, a, floorY, { y0 = 1.32, w = 0.3, h = 0.4, d0 = 0.007 } = {}) {
   const yb = floorY + y0;
@@ -709,7 +777,7 @@ export function alcove(kit, wf, a, floorY, { w = 1.2, h = 1.9, depth = 0.16 } = 
 // Furniture (lobby)
 // ---------------------------------------------------------------------------
 
-export const BENCH_FABRIC = new THREE.Color("#6b7280"); // mid blue-grey upholstery: reads as a seat next to the black floor
+export const BENCH_FABRIC = new THREE.Color("#7a808e"); // mid blue-grey upholstery: reads as a seat next to the black floor
 
 // Rounded-rectangle outline in shape space, centred on the origin.
 function roundedRect(w, h, r) {
@@ -739,47 +807,59 @@ export function cushion(kit, wf, a0, a1, yBottom, h, d0, d1, color = BENCH_FABRI
   kit.add("fabric", geo, { pos: wf.pt((a0 + a1) / 2, yBottom, (d0 + d1) / 2), rot: [0, wf.yaw, 0], color, texel: 2 });
 }
 
-/** Wall bench over [a0,a1]: an open steel frame on four square-tube legs with foot plates and stretchers (a clear
- *  gap underneath — furniture, not a plinth), a dark rail with a steel nosing, `n` separate bevelled fabric cushions
- *  and a matching split backrest pad on a wall rail. Reads as seating from across the room. */
+/** Wall bench over [a0,a1]: a steel end frame at each end (front and back square-tube posts on foot plates rising
+ *  past the seat to an armrest bar with a black pad, a stretcher near the floor) carrying a dark seat pan with a
+ *  steel nosing — a clear gap under the seat between the frames, closed only by a low steel stretcher at the back;
+ *  `n` separate bevelled fabric cushions inset in the pan with 6 cm gaps showing a steel cross bar (the split
+ *  lines), and a matching split backrest pad on a wall rail. The frame parts are light cast metal (metalRough
+ *  hullLight — env-mapped steel only mirrors the dark room and vanished): read edge-on from across the lobby, the
+ *  frames, dividers and nosing are what stop the seat reading as a slab. */
 export function bench(kit, wf, a0, a1, floorY, { depth = 0.55, seatY = 0.44, backrest = true, cushions = null, fabric = BENCH_FABRIC } = {}) {
   const lo = Math.min(a0, a1);
   const hi = Math.max(a0, a1);
   const L = hi - lo;
   const ys = floorY + seatY; // cushion top
   const ch = 0.06; // cushion thickness
-  const yr = ys - ch; // rail top
-  // frame rail + steel nosing on the front edge
-  wf.box(kit, "paintedMetal", lo, hi, yr - 0.04, yr, 0.04, depth, { color: IMP.dark, texel: 1 });
-  wf.box(kit, "metal", lo, hi, yr - 0.04, yr + 0.008, depth - 0.008, depth + 0.015, { color: IMP.steel, texel: 2 });
-  // legs: square tubes at both ends, front and back, on steel foot plates; a stretcher joins each pair near the floor
-  const dLegs = [0.14, depth - 0.12];
-  for (const la of [lo + 0.2, hi - 0.2]) {
-    for (const ld of dLegs) {
-      wf.box(kit, "paintedMetal", la - 0.025, la + 0.025, floorY + 0.012, yr - 0.04, ld - 0.025, ld + 0.025, { color: IMP.black, texel: 2 });
-      wf.box(kit, "metal", la - 0.035, la + 0.035, floorY, floorY + 0.012, ld - 0.035, ld + 0.035, { color: IMP.steel, texel: 2 });
+  const yr = ys - ch; // seat pan top
+  const frame = { color: IMP.hullLight, texel: 2 };
+  // seat pan + steel nosing on the front edge, spanning between the end frames
+  wf.box(kit, "paintedMetal", lo + 0.05, hi - 0.05, yr - 0.04, yr, 0.04, depth, { color: IMP.dark, texel: 1 });
+  wf.box(kit, "metal", lo + 0.05, hi - 0.05, yr - 0.04, yr + 0.008, depth - 0.008, depth + 0.015, { color: IMP.steel, texel: 2 });
+  // end frames: back post at d 0.12, front post 10 cm behind the nosing, armrest bar 22 cm over the cushions
+  const dB = 0.12;
+  const dF = depth - 0.1;
+  const ya = ys + 0.22;
+  for (const la of [lo + 0.03, hi - 0.03]) {
+    for (const ld of [dB, dF]) {
+      wf.box(kit, "metalRough", la - 0.02, la + 0.02, floorY + 0.012, ya, ld - 0.02, ld + 0.02, frame);
+      wf.box(kit, "metalRough", la - 0.035, la + 0.035, floorY, floorY + 0.012, ld - 0.035, ld + 0.035, frame);
     }
-    wf.box(kit, "paintedMetal", la - 0.015, la + 0.015, floorY + 0.1, floorY + 0.13, dLegs[0], dLegs[1], { color: IMP.black, texel: 2 });
+    wf.box(kit, "metalRough", la - 0.02, la + 0.02, ya - 0.04, ya, dB - 0.02, dF + 0.02, frame);
+    wf.box(kit, "paintedMetal", la - 0.03, la + 0.03, ya - 0.01, ya + 0.02, dB - 0.03, dF + 0.03, { color: IMP.mid, texel: 2 }); // grey rubber armrest pad (black vanished against the floor)
+    wf.box(kit, "metalRough", la - 0.015, la + 0.015, floorY + 0.1, floorY + 0.13, dB, dF, frame);
   }
-  wf.box(kit, "paintedMetal", lo + 0.2, hi - 0.2, floorY + 0.1, floorY + 0.13, dLegs[1] - 0.015, dLegs[1] + 0.015, { color: IMP.black, texel: 2 });
-  // cushions: ~0.65 m seats with a 3 cm gap, bevelled all round
+  wf.box(kit, "metalRough", lo + 0.03, hi - 0.03, floorY + 0.1, floorY + 0.13, dB - 0.015, dB + 0.015, frame);
+  // cushions: ~0.65 m seats inset in the pan, a divider bar (flush with the cushion tops) in each 6 cm gap,
+  // bevelled all round
   const n = cushions || Math.max(2, Math.round(L / 0.68));
-  const gap = 0.03;
-  const cw = (L - 0.08 - gap * (n - 1)) / n;
+  const gap = 0.06;
+  const cw = (L - 0.16 - gap * (n - 1)) / n;
+  const cushionA0 = (i) => lo + 0.08 + i * (cw + gap);
   for (let i = 0; i < n; i++) {
-    const c0 = lo + 0.04 + i * (cw + gap);
+    const c0 = cushionA0(i);
     cushion(kit, wf, c0, c0 + cw, yr, ch, 0.05, depth - 0.02, fabric);
+    if (i) wf.box(kit, "metalRough", c0 - gap + 0.012, c0 - 0.012, yr, ys - 0.004, 0.05, depth - 0.02, frame);
   }
   if (backrest) {
     // wall rail with one stepped fabric pad per cushion
     wf.box(kit, "metalRough", lo + 0.05, hi - 0.05, ys + 0.26, ys + 0.5, -0.01, 0.04, { color: IMP.hullDark, texel: 1 });
     for (let i = 0; i < n; i++) {
-      const c0 = lo + 0.04 + i * (cw + gap);
+      const c0 = cushionA0(i);
       wf.box(kit, "fabric", c0 + 0.02, c0 + cw - 0.02, ys + 0.29, ys + 0.47, 0.04, 0.06, { color: fabric, texel: 2 });
       wf.box(kit, "fabric", c0 + 0.045, c0 + cw - 0.045, ys + 0.315, ys + 0.445, 0.06, 0.072, { color: fabric, texel: 2 });
     }
   }
-  wf.collider(kit, lo, hi, floorY, ys + 0.05, 0, depth + 0.02, "bench");
+  wf.collider(kit, lo, hi, floorY, ya, 0, depth + 0.02, "bench");
 }
 
 /** Wall beacon (fire point / alarm): dark base plate, cage ring on three posts and a coloured dome — the visible
@@ -1037,7 +1117,15 @@ const PLATE_TONES = [IMP.grey, IMP.hullLight];
  * hatch every `majorEvery` bays — each wall on its own phase so facing walls never match. Returns rib positions.
  * opts: { seed, ribEvery, ribPhase, pipeFaces, trayFace, railFaces, gratingFaces, gratingW, noRibs: [[a0,a1]],
  *         extraBlocks: [{a,w}], reserved: [{face, a0, a1}], sectionLabel: (a) => text|null, features, bayKit,
- *         majorEvery }
+ *         majorEvery,
+ *         stripCaps: { y0, y1 } — dark end-caps on both flanks of every rib at the shell's wall strip channel
+ *                                 (world y range of the channel),
+ *         scuffBand: { y0, y1 } — dark scuff / kick band along both walls' base (heights above the floor), cut at
+ *                                 doors, lockers, alcoves and `bandBlocks: [{a, w}]`; the low overlay plates start
+ *                                 above it,
+ *         groupBays: true — every majorEvery-th bay (the one after each locker / alcove / hatch bay) swaps the
+ *                           standard kit for a half-width-module kit: two seam pilasters splitting the 2 m panels,
+ *                           twin vent grilles in the 1.6–2.0 m band, half plates low, fire / comm panel inboard }
  */
 export function dressCorridor(kit, cf, opts = {}) {
   const {
@@ -1058,9 +1146,14 @@ export function dressCorridor(kit, cf, opts = {}) {
     bayKit = true,
     majorEvery = 3,
     emit = "emitWhite", // rib light-line lens material (the transit rooms pass their under-bloom strip emitter)
+    stripCaps: caps = null,
+    scuffBand: band = null,
+    bandBlocks = [],
+    groupBays = false,
   } = opts;
   const { floorY, ceilY } = cf;
   const rand = rng(seed);
+  const bandRand = rng(seed + 7); // own stream: the band must not reshuffle the features' random picks
   const doorsOn = (face) => cf.sideDoors.filter((d) => d.face === face);
 
   // ribs
@@ -1071,6 +1164,7 @@ export function dressCorridor(kit, cf, opts = {}) {
     ribPos.push(+a.toFixed(3));
   }
   ribs(kit, cf, ribPos, { emit });
+  if (caps) for (const face of cf.sides) stripCaps(kit, cf.walls[face], ribPos, caps.y0, caps.y1);
 
   // bays between ribs (and the corridor ends) → conduit clamp positions
   const edges = [cf.a0, ...ribPos, cf.a1];
@@ -1128,9 +1222,12 @@ export function dressCorridor(kit, cf, opts = {}) {
     if (railFaces.includes(face)) handrail(kit, wf, cutSpans(cutSpans(spans(cf.a0 + 0.35, cf.a1 - 0.35, doorBlocks, 0.4), ribBlocks, 0.06), majorBlocks[face], 0.15), floorY);
     if (gratingFaces.includes(face)) gratingStrips(kit, wf, spans(cf.a0 + 0.04, cf.a1 - 0.04, [...doorBlocks, ...majorBlocks[face]], 0.3), floorY, { w: gratingW });
     if (bayKit) for (const [s0, s1] of spans(cf.a0 + 0.3, cf.a1 - 0.3, [...doorBlocks, ...ribBlocks, ...majorBlocks[face]], 0.18, 0.5)) kickPlate(kit, wf, s0, s1, floorY, rand);
+    // the band passes behind the ribs (0.2 m proud) — cut only at doors, lockers / alcoves and the caller's blocks
+    if (band) scuffBand(kit, wf, cutSpans(spans(cf.a0 + 0.3, cf.a1 - 0.3, doorBlocks, 0.18), [...majorBlocks[face], ...bandBlocks], 0.12), floorY, { ...band, rand: bandRand });
   }
 
   // per-bay features + kit
+  const plateY0 = floorY + (band ? band.y1 + 0.03 : 0.34); // low plates start above the scuff band
   cf.sides.forEach((face, fi) => {
     const wf = cf.walls[face];
     const isRail = railFaces.includes(face);
@@ -1140,10 +1237,22 @@ export function dressCorridor(kit, cf, opts = {}) {
       if (!kind) return;
       placeFeature(kit, wf, bc, floorY, ceilY, kind, { rand, dropTo, isRail, sectionLabel });
       if (!bayKit) return;
-      // mirrored slot layout: grille + 1.4 m lower plate one side, comm/fire panel on a 1.0 m upper plate the other
       const m = (fi ? -1 : 1) * (i % 2 ? -1 : 1);
       const tone = PLATE_TONES[(i + fi) % 2];
-      overlayPlate(kit, wf, bc - m * 1.9, bc - m * 0.5, floorY + 0.34, floorY + 1.16, tone);
+      if (groupBays && (i + fi) % majorEvery === 1) {
+        // half-width-module bay: seam pilasters at ±1.0 split both 2 m panels, a vent grille high in each outer
+        // half (1.63–1.97 m), a half plate low in each, the fire / comm panel inboard of a pilaster
+        for (const s of [-1, 1]) {
+          pilaster(kit, wf, bc + s * 1.0, floorY + 0.2, ceilY - 0.3);
+          grilleDecal(kit, wf, bc + s * 1.45, floorY + 1.8, { w: 0.5, h: 0.34 });
+          overlayPlate(kit, wf, bc + s * 1.1, bc + s * 1.75, plateY0, floorY + 1.16, tone);
+        }
+        if ((i + fi) % 2) firePanel(kit, wf, bc + m * 0.62, floorY);
+        else commPanel(kit, wf, bc + m * 0.62, floorY);
+        return;
+      }
+      // mirrored slot layout: grille + 1.4 m lower plate one side, comm/fire panel on a 1.0 m upper plate the other
+      overlayPlate(kit, wf, bc - m * 1.9, bc - m * 0.5, plateY0, floorY + 1.16, tone);
       overlayPlate(kit, wf, bc + m * 0.7, bc + m * 1.7, floorY + 1.25, floorY + 1.95, PLATE_TONES[(i + fi + 1) % 2]);
       vent(kit, wf, bc - m * 1.15, floorY, { y: 1.7, w: 0.6, h: 0.3 });
       if ((i + fi) % 2) firePanel(kit, wf, bc + m * 1.2, floorY);

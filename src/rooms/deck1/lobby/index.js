@@ -265,16 +265,18 @@ const manifest = {
     kit.add(STRIP, lens, { pos: [0, ceilY - 0.177, cz] });
     kit.cyl("paintedMetal", 0, ceilY - 0.18, cz, 0.18, 0.02, "y", { color: IMP.black, segments: 24, texel: 1 });
 
-    // 5 descriptors (budget 14). Main pool inside the drum (9 at 3.93 m ≈ 7 at the old 3.5 m: ~0.5 EV under round 3's
-    // 10, ~1.2 EV under round 2's 16 — critic round 3: lobby brighter than the bridge, target mean ≤ 32); the amber
-    // header wash, two corner fills and the beacon's red wash scaled with it. The amber point sits INSIDE the solid
-    // lift header block (x ±1.5, y top..top + 0.3, d -0.02..0.15), level with the black indicator band: floating 0.25 m
-    // in front of the header (round 4) it lit the band and the lens channel to a white-amber blob (E ≈ 38 at 25 cm).
-    // Inside, every face of the header, band, ticks, marker and lens channel points away from it; what it reaches is
-    // the door jambs, the threshold chevrons and the lane below — the amber lens strip reads as its source.
-    ctx.lights.push({ type: "point", pos: [0, lumY, cz], color: LIGHT.coolWhite, intensity: 9, distance: 15, priority: 0.8 });
-    ctx.lights.push({ type: "point", pos: lw.pt(0, top + 0.15, 0.065), color: LIGHT.amber, intensity: 2.4, distance: 6, priority: 0.5 });
-    for (const x of [-6.3, 6.3]) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.8, 518.7], color: LIGHT.coolWhite, intensity: 2.5, distance: 8, priority: 0.4 });
+    // 5 descriptors (budget 14). Main pool inside the drum: 6.5 (round 5: 9, round 3: 10, round 2: 16 — critic round 4:
+    // "brightest frame on the deck, out-shines the bridge it leads to", target d1-lobby-side mean ≤ 22; the 0.7× step
+    // from 9 is ~0.5 EV, the lane paint and the lens ring are emissive / high-albedo and stay readable); the amber
+    // header wash and the two corner fills scaled with it (2.4 / 2.5 → 1.8), the beacon's red accent kept. The amber
+    // point sits INSIDE the solid lift header block (x ±1.5, y top..top + 0.3, d -0.02..0.15), level with the black
+    // indicator band: floating 0.25 m in front of the header (round 4) it lit the band and the lens channel to a
+    // white-amber blob (E ≈ 38 at 25 cm). Inside, every face of the header, band, ticks, marker and lens channel
+    // points away from it; what it reaches is the door jambs, the threshold chevrons and the lane below — the amber
+    // lens strip reads as its source.
+    ctx.lights.push({ type: "point", pos: [0, lumY, cz], color: LIGHT.coolWhite, intensity: 6.5, distance: 15, priority: 0.8 });
+    ctx.lights.push({ type: "point", pos: lw.pt(0, top + 0.15, 0.065), color: LIGHT.amber, intensity: 1.8, distance: 6, priority: 0.5 });
+    for (const x of [-6.3, 6.3]) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.8, 518.7], color: LIGHT.coolWhite, intensity: 1.8, distance: 8, priority: 0.4 });
     ctx.lights.push({ type: "point", pos: [4.6, FLOOR + 2.55, lz - 0.65], color: LIGHT.red, intensity: 1.0, distance: 3.5, priority: 0.3 }); // from the beacon
 
     // indicator: demo sweep between the deck marks until a lift system drives it (u = 0 → deck 1 … 1 → deck 4)
