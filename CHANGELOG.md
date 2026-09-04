@@ -136,7 +136,10 @@ ACCEPT WITH NITS by day but REJECT at night (black screen, invisible funnel), ts
 crest hidden from porches and swimmers' heads in ceilings still open. Round 3 fixed those (night floor + lightning,
 enclosed-room test + per-column fade, ceiling clamp + open-sky escape, body-height animal water test); the tornado
 re-check is ACCEPT WITH NITS including night storms (remaining nits: speckled rather than peeled roofs, glass rarely
-breaks, faint vanilla-cloud squares through the deck during a flash).
+breaks, faint vanilla-cloud squares through the deck during a flash) and the tsunami re-check is ACCEPT (remaining
+nits: a 1-2 s "inside the wave" tint before the real water reaches the player, a pale lip band when the eye sits in
+the hump, three pasture animals beyond the fog still under the surface, and the 68-77 s budgeted restore at 4 fps).
+Beam: ACCEPT WITH NITS, all nits fixed in the same round.
 
 ### Known imperfections
 - The default 110-block flood is paced by the manager's edit budget: the front runs at ~80-90% of the nominal
