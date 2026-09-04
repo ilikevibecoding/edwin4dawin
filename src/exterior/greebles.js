@@ -310,8 +310,9 @@ function seamLanes(ctx, surf, { along, spacing, len, gap, prob, tint = [0.42, 0.
   const rand = ctx.rand;
   const acc = ctx.sets.get("seam");
   const tryPlace = (uFn, v0, v1, cross) => {
-    // sample the segment
+    // sample the segment (segments clamped to the lane end can end up too short or reversed)
     const L = v1 - v0;
+    if (L < 4) return false;
     const steps = Math.max(2, Math.ceil(L / 6));
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
