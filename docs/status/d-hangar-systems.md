@@ -1,6 +1,6 @@
 # Status — D: hangar + ship systems (Deck 4 + infrastructure)
 
-Branch: `cursor/sd-hangar-systems-c071` · Last push: 0917da0a · 2026-09-04 21:05 UTC
+Branch: `cursor/sd-hangar-systems-c071` · Last push: 3a5684f2 · 2026-09-04 21:40 UTC
 Run: `bc-27044d48-9403-4636-af76-59d715aec071` · Phase: 3 (two critic loops done; final hangar round landed; waiting on A's scaffold to merge)
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
@@ -265,7 +265,23 @@ None. No scaffold yet — working against the contract text with the local shim.
   room that does not exist (B's `d1-future-*`) are also built locked, with a `[doors]` warning.
 - **Lift door opening = 2.4 w × 3.0 h, centred on the lift anchor** (`LIFT_DOOR` in
   `src/systems/lifts/helper.js`). B and C already cut that size on decks 1–3 — confirmed, no change
-  needed. `liftCabinBox(lift)` returns the 4 × 4 × 3.6 volume to keep free.
+  needed (C asked for this in `docs/review/`; that folder is A's, so the answer is here and in the
+  lifts README). `liftCabinBox(lift)` returns the 4 × 4 × 3.6 volume to keep free. Checked against the
+  branches: B `T1 (0, 240, 522) dir (0,0,-1)`, C `T2 (0, 40, 385)`, `T3 (0, 12, 565)`, all `dir (0,0,-1)`
+  with 2.4 × 3.0 holes — the network will pair T1–T4 as-is.
+- **Wall thickness (answer to B's interface note).** Decks 1–3 build 0.30 m walls; the doors and lifts
+  systems assumed 0.16 everywhere, which would have buried the frames, headers and status lights inside
+  those walls and left 0.14 m of raw hole edge. Fixed on D's side without a contract change: a room may
+  declare **`wallT: 0.30`** on its manifest (optional, default 0.16, read by `wallThickness()` in
+  `src/systems/doors/helper.js`). The doors system puts each face's lining, frame, header, status
+  lights and colliders on that room's own inner face — a 0.30 room pairs with a 0.16 room (Deck 4 stays
+  0.16) — and the lift's whole lobby-side frame (jambs, header, lintel, hood, sill front, call panel)
+  moves out to the lobby's face; `liftLobbyClearance(lift, wallT)` grows by the difference. B and C:
+  add `wallT: 0.30` to every room manifest (one line each; `_shared/room.js` on C's side can spread it).
+  Verified: node test (13/13) with 0.16/0.16, 0.30/0.16, 0.30/0.30 and an unpaired 0.30 door; the
+  existing doors (21/21) and lifts (28/28) tests unchanged at 0.16; harness shots with `d4-lobby` at a
+  synthetic 0.30 show the complete blast-door and lift frames standing 0.14 m further into the room.
+  If A instead fixes the contract at 0.30 for everyone, flipping `WALL_T` is the only change needed.
 - Door-hole helpers for every deck: `src/systems/doors/helper.js` exports `doorHole(kindOrDoor)`,
   `doorOpening(door)` (world AABB + u/v extents on the wall), `doorAsWallOpening(door, from, to)`
   (a `panelGrid`-style opening record), `WALL_T` 0.16, `FRAME_W` 0.22.
