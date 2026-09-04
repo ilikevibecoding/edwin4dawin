@@ -477,10 +477,12 @@ export function buildTactical(kit, ctx) {
       kit.collider([Math.min(x0, x1) - 0.05, 0, Math.min(z0, z1) - 0.05], [Math.max(x0, x1) + 0.05, h, Math.max(z0, z1) + 0.05], "guard");
     }
   }
-  // two low seated plotter stations tucked into the well's door-side corners, facing the table
-  for (const [z, seed] of [[gz0 - 1.5, 3], [gz1 + 1.5, 4]]) {
-    const x = wx1 - 1.6;
-    impConsole(kit, ctx, { x, z, yaw: faceYaw(x, z, cx, cz), w: 1.3, d: 0.65, h: 0.82, screens: [2, 4], chair: true, seed: ctx.seed + 50 + seed, lampMat: "emitAmber", layout: seed === 3 ? "keypad" : "main" });
+  // two low seated plotter stations backed against the door-side risers either side of the gangway
+  // mouth, looking past the table at the video wall (an axis-aligned footprint keeps the walk lane
+  // along the well's fore / aft edge and the passage past the 30° / 150° stations clear)
+  for (const [z, seed] of [[gz0 - 1.3, 3], [gz1 + 1.3, 4]]) {
+    const x = wx1 - 1.25;
+    impConsole(kit, ctx, { x, z, yaw: Math.PI / 2, w: 1.3, d: 0.65, h: 0.82, screens: [2, 4], chair: true, seed: ctx.seed + 50 + seed, lampMat: "emitAmber", layout: seed === 3 ? "keypad" : "main" });
   }
 
   // --- seated analyst stations on the display-side platform (facing the 6 m wall)

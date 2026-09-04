@@ -17,7 +17,7 @@ export function buildObservation(kit, ctx) {
   const [min, max] = ctx.bounds; // [-16, 0, -48] .. [16, 4, -41]; everything is placed relative to these
   const H = max[1];
   const zw = min[2]; // window plane (the neck's front face)
-  const bz = zw + 2.4; // bench line: a row of benches faces the glass 1.4 m behind the rail
+  const bz = zw + 2.7; // bench line: a row of benches faces the glass 1.85 m behind the rail (0.88 m walk lane past the tripods)
   const rand = rng(ctx.seed + 9);
   const labels = labelAtlas(ctx, "obs_labels", [
     "OBSERVATION GALLERY",
@@ -125,9 +125,9 @@ export function buildObservation(kit, ctx) {
   // "do not lean" plates on the sill front under two panes
   for (const i of [2, 8]) signAt(kit, labels, 5, { x: run0 + (i + 0.5) * paneW, y: 0.6, z: zw + depth + 0.03, yaw: 0, h: 0.12, bezel: true });
 
-  // --- rail 0.5 m behind the sill with low warm floor lights along it (the deck itself stays the
+  // --- rail 0.35 m behind the sill with low warm floor lights along it (the deck itself stays the
   // ship's gloss plate floor from roomShell)
-  const railZ = zw + depth + 0.5;
+  const railZ = zw + depth + 0.35;
   railing(kit, run0 + 0.2, railZ, run1 - 0.2, railZ, 0, { h: 1.05 });
   for (let i = 0; i <= panes; i += 2) {
     const x = run0 + i * paneW;
@@ -141,11 +141,11 @@ export function buildObservation(kit, ctx) {
   // between them; the centre aisle (spawn → rail) stays 2 m clear
   for (const x of [-10.6, -6.6, -2.2, 2.2, 6.6, 10.6]) bench(kit, x, bz, 2.4, rand);
   for (const x of [-12.6, -8.6, -4.4, 4.4, 8.6, 12.6]) bollard(kit, x, bz);
-  // plaque pedestals in the corners past the rail ends
-  pedestal(kit, ctx, labels, -14.6, zw + 3.0, 4);
-  pedestal(kit, ctx, labels, 14.6, zw + 3.0, 3);
-  // macrobinocular stands at the rail
-  for (const x of [-7.3, 7.3]) binoculars(kit, x, railZ + 0.55);
+  // plaque pedestals in the corners past the rail ends, on the bench line
+  pedestal(kit, ctx, labels, -14.6, bz, 4);
+  pedestal(kit, ctx, labels, 14.6, bz, 3);
+  // macrobinocular stands tight against the rail (their tripod feet reach the rail's kick)
+  for (const x of [-7.3, 7.3]) binoculars(kit, x, railZ + 0.34);
   // wall benches against the aft wall either side of the door, with backrests
   for (const x of [-6.4, 6.4]) {
     kit.boxMM("paintedMetal", [x - 1.5, 0, max[2] - 0.75], [x + 1.5, 0.42, max[2] - 0.2], { color: PALETTE.impDark, texel: 1.5 });
