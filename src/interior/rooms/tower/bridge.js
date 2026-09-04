@@ -12,6 +12,7 @@
 //                   the outer platforms (x ±9.8..±20.75) either side; stairs at the pits' aft end
 //   z 592.4..599.75 aft platform with the three doors in the aft wall (main x 0, side doors x ±14)
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { STD } from "../../../config/layout.js";
 import { roomWalls, wallOpenings } from "../../shell.js";
 import { wallFrame, ceilingFrame, X_AXIS } from "../../../core/frame.js";
@@ -24,7 +25,6 @@ import {
   railing,
   console as impConsole,
   chair,
-  holoTable,
   table,
   lockers,
   crate,
@@ -56,6 +56,9 @@ const LOWER = 4.6; // the walls are built in two lifts: 0..4.6 (doors, control b
 const CAP_STEP = 0.25; // captain's raised step
 const CAP_Z0 = SILL_Z + BENCH_D;
 const CAP_Z1 = 555.3;
+// lit key colours (red, blue, amber, white) for the unlit vertex-coloured key material: bright enough
+// to read as lit, under the bloom threshold
+const KEY_LIT = [0xb03a2a, 0x3a78d0, 0xb88024, 0xb8c4d0];
 
 // box from two arbitrary corners
 const mm = (kit, mat, a, b, opts = {}) =>
@@ -78,17 +81,22 @@ export function buildBridge(kit, ctx) {
   band.emissiveIntensity = 1.05;
   mats.bridgeBand = band;
   const bandWarm = mats.lightBandWarm.clone();
-  bandWarm.emissiveIntensity = 1.0;
+  bandWarm.emissiveIntensity = 0.85; // the beam troughs run down the walkway's axis; at 1.0 they tone-map to white
   mats.bridgeBandWarm = bandWarm;
   const bandRest = { color: band.color.clone(), emissive: band.emissive.clone(), wColor: bandWarm.color.clone(), wEmissive: bandWarm.emissive.clone() };
   const alertLights = []; // descriptors tinted red on alert
   if (!mats.bridgeGloss) {
-    // the black gloss deck, roughened so the space light does not mirror into a blown-out streak
+    // the black gloss deck, roughened so the space light does not mirror into a blown-out streak. The
+    // gloss deck's roughness map sits around 0.16, so the factor has to be well over 1 to leave a broad
+    // highlight (2.6 lands near 0.4, the same as impGlossSoft).
     const gloss = mats.impGloss.clone();
-    gloss.roughness = 1.55;
-    gloss.envMapIntensity = 0.9;
+    gloss.roughness = 2.6;
+    gloss.envMapIntensity = 0.8;
     mats.bridgeGloss = gloss;
   }
+  // lit console keys: unlit vertex colours kept under the bloom threshold, so an indicator reads as a
+  // small lit key instead of a blown square (the shared emit* materials run at 2.2-2.4)
+  if (!mats.bridgeKeyLit) mats.bridgeKeyLit = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true });
   // window glass under a room-owned key: unlike "glass" it is not in NO_SHADOW_KEYS, so the panes cast
   // shadows and keep the exterior sun (exposed for the hull, it blows out the sill consoles whenever
   // the sky brings it round to the bow) out of the room while staying see-through
@@ -113,7 +121,8 @@ export function buildBridge(kit, ctx) {
       bandY: 2.3,
       bandH: 0.14,
       cornice: 0.3,
-      styles: { plain: 0.44, control: 0.18, vent: 0.1, hatch: 0.08, pipes: 0.06, screen: 0.1, niche: 0.04 },
+      // no hatch bays: at 1.4 x 1.3 m in a lighter tone they read as unframed door slabs from across the room
+      styles: { plain: 0.44, control: 0.18, vent: 0.1, hatch: 0, pipes: 0.1, screen: 0.14, niche: 0.04 },
       seed: 900 + wi * 11,
       tag: ctx.id + ":" + key,
     });
@@ -224,7 +233,7 @@ export function buildBridge(kit, ctx) {
     pointLightDesc(ctx, 0x5f8fff, 2.2, 7, [s * (xi1 - 1.6), y + 1.9, 577.6], 0);
   }
   // tactical holo table (port) and navigation plotting table (starboard)
-  holoTable(kit, ctx, [-15.2, y, 570.5], 1.6, { content: "ship" });
+  tacticalTable(kit, ctx, [-15.2, y, 570.5], 1.6);
   navTable(kit, ctx, [15.2, y, 570.5]);
 
   // ---------------------------------------------------------------------------------------------
@@ -270,9 +279,9 @@ export function buildBridge(kit, ctx) {
   // the glass head (the panes block shadow-casting light, so it cannot sit outside). Its upper edge
   // runs level under the ceiling and its lower edge lands just aft of the captain's step, so neither
   // the ceiling above it nor the sill consoles get a hot spot.
-  spotLightDesc(ctx, 0xc4d6ff, 110, 60, [2.5, ceilY - 0.9, SILL_Z + 0.6], [0, y + 0.6, 565], { angle: 0.45, penumbra: 0.55, shadow: true, priority: 2 });
+  spotLightDesc(ctx, 0xc4d6ff, 70, 60, [2.5, ceilY - 0.9, SILL_Z + 0.6], [0, y + 0.6, 565], { angle: 0.45, penumbra: 0.55, shadow: true, priority: 2 });
   for (const z of [562, 578, 594]) {
-    const d = pointLightDesc(ctx, 0xffe0c0, 5.5, 12, [0, ceilY - 1.0, z], 1);
+    const d = pointLightDesc(ctx, 0xffe0c0, 4.2, 12, [0, ceilY - 1.0, z], 1);
     d.baseColor = d.color.clone();
     alertLights.push(d);
   }
@@ -362,7 +371,143 @@ export function buildBridge(kit, ctx) {
   // room so the harness derives the feet from the eye height instead of the room floor
   ctx.views.bridge_pit.room = "bridge:pit";
   ctx.view("bridge_window", -7.6, y + STD.eye, 550.5, -4, -18);
-  ctx.view("bridge_holo", -15.2, y + STD.eye, 574.6, 0, -16);
+  ctx.view("bridge_holo", -15.2, y + STD.eye, 574.9, 0, -7);
+}
+
+// -----------------------------------------------------------------------------------------------
+// Tactical holo table (port platform). The kit's holoTable throws a 2 m projection column that ends in
+// a flat cut; this one keeps the same pedestal but caps the projection at 1.5 m over the top in a
+// narrowing cone and fills it: the ship over a range grid, a target planet with its orbit ring and a
+// stack of readout tags, escort blips on two orbits and a hostile pair on the perimeter (one instanced
+// mesh, animated) each on an altitude stalk down to the grid.
+// -----------------------------------------------------------------------------------------------
+function tacticalTable(kit, ctx, pos, r) {
+  const [x, y, z] = pos;
+  const h = 0.9;
+  const mats = ctx.mats;
+  kit.add("impPaintedMetal", new THREE.CylinderGeometry(r, r + 0.1, h, 32), { pos: [x, y + h / 2, z], color: IMP.consoleDark, uv: "scale", uvScale: [4, 1] });
+  kit.add("impMetal", new THREE.CylinderGeometry(r + 0.06, r + 0.06, 0.08, 32), { pos: [x, y + h, z], color: IMP.steel, uv: "scale", uvScale: [4, 0.2] });
+  kit.add("impMatte", new THREE.CylinderGeometry(r - 0.12, r - 0.12, 0.02, 32), { pos: [x, y + h + 0.03, z], color: IMP.black, uv: "keep" });
+  kit.add("emitBlue", new THREE.TorusGeometry(r - 0.08, 0.02, 8, 48), { pos: [x, y + h + 0.04, z], rot: [Math.PI / 2, 0, 0] });
+  kit.add("blink", new THREE.CylinderGeometry(r + 0.001, r + 0.001, 0.14, 32, 1, true), { pos: [x, y + h - 0.2, z], uv: "scale", uvScale: [6, 1] });
+  kit.collider([x - r, y, z - r], [x + r, y + h, z + r], "holoTable");
+  // projection cone: wide at the rim, narrowing to a 0.45 m crown 1.5 m up
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.45, r - 0.15, 1.5, 32, 1, true), mats.beam);
+  cone.position.set(x, y + h + 0.75, z);
+  ctx.add(cone);
+  const holo = new THREE.Group();
+  holo.position.set(x, y + h + 0.6, z);
+  // range grid + two range rings (one line batch)
+  const pts = [];
+  const half = r - 0.35;
+  for (let i = -4; i <= 4; i++) {
+    const s = (i / 4) * half;
+    pts.push(-half, 0, s, half, 0, s, s, 0, -half, s, 0, half);
+  }
+  for (const rr of [half * 0.55, half * 1.05]) {
+    for (let i = 0; i < 64; i++) {
+      const a0 = (i / 64) * Math.PI * 2;
+      const a1 = ((i + 1) / 64) * Math.PI * 2;
+      pts.push(Math.cos(a0) * rr, 0.004, Math.sin(a0) * rr, Math.cos(a1) * rr, 0.004, Math.sin(a1) * rr);
+    }
+  }
+  const gridGeo = new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  const gridMat = new THREE.LineBasicMaterial({ color: IMP.holo, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false });
+  holo.add(new THREE.LineSegments(gridGeo, gridMat));
+  // the ship: wedge hull with a tower block, filled + wireframe
+  const ship = new THREE.Group();
+  const shape = new THREE.Shape([new THREE.Vector2(0, 0.9), new THREE.Vector2(0.5, -0.65), new THREE.Vector2(-0.5, -0.65)]);
+  const wedge = new THREE.ExtrudeGeometry(shape, { depth: 0.09, bevelEnabled: false });
+  wedge.rotateX(Math.PI / 2);
+  ship.add(new THREE.Mesh(wedge, mats.holo), new THREE.Mesh(wedge.clone(), mats.holoWire));
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.14, 0.12), mats.holoWire);
+  tower.position.set(0, 0.13, 0.4);
+  ship.add(tower);
+  ship.position.y = 0.42;
+  holo.add(ship);
+  // target planet with its orbit ring, off the bow
+  const planetPos = new THREE.Vector3(-0.8, 0.55, -0.55);
+  const sphere = new THREE.SphereGeometry(0.3, 16, 10);
+  const ring = new THREE.TorusGeometry(0.48, 0.006, 6, 56);
+  ring.rotateX(Math.PI / 2 - 0.3);
+  const planet = new THREE.Mesh(mergeGeometries([sphere, ring], false), mats.holoWire);
+  planet.position.copy(planetPos);
+  holo.add(planet);
+  // data tags: a stack of readout bars beside the planet and one over the ship (read from eye level,
+  // where the grid plane is edge-on)
+  const tags = [];
+  for (let i = 0; i < 4; i++) {
+    const g = new THREE.PlaneGeometry(0.34 - i * 0.05, 0.035);
+    g.translate(planetPos.x + 0.62, planetPos.y + 0.34 - i * 0.07, planetPos.z + 0.1);
+    tags.push(g);
+  }
+  for (let i = 0; i < 2; i++) {
+    const g = new THREE.PlaneGeometry(0.28, 0.03);
+    g.translate(0.45, 0.82 - i * 0.06, 0.15);
+    tags.push(g);
+  }
+  holo.add(new THREE.Mesh(mergeGeometries(tags, false), mats.holo));
+  // blips: six escorts on two orbits round the planet, two hostiles running the outer ring
+  const N_ESC = 6;
+  const N_HOS = 2;
+  const blipShape = new THREE.Shape([new THREE.Vector2(0, 0.13), new THREE.Vector2(0.07, -0.08), new THREE.Vector2(-0.07, -0.08)]);
+  const blip = new THREE.ExtrudeGeometry(blipShape, { depth: 0.02, bevelEnabled: false });
+  blip.rotateX(Math.PI / 2);
+  const blipMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const blips = new THREE.InstancedMesh(blip, blipMat, N_ESC + N_HOS);
+  blips.frustumCulled = false;
+  const col = new THREE.Color();
+  for (let i = 0; i < N_ESC + N_HOS; i++) blips.setColorAt(i, col.set(i < N_ESC ? 0xa8d4ff : 0xff7a60));
+  blips.instanceColor.needsUpdate = true;
+  holo.add(blips);
+  // altitude stalks from the grid plane up to every blip (positions rewritten each frame)
+  const stalkPos = new Float32Array((N_ESC + N_HOS) * 6);
+  const stalkGeo = new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(stalkPos, 3));
+  const stalks = new THREE.LineSegments(stalkGeo, gridMat);
+  stalks.frustumCulled = false;
+  holo.add(stalks);
+  ctx.add(holo);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const p = new THREE.Vector3();
+  const one = new THREE.Vector3(1, 1, 1);
+  const dir = new THREE.Vector3();
+  const Z = new THREE.Vector3(0, 0, 1);
+  const stalk = (i) => {
+    const o = i * 6;
+    stalkPos[o] = stalkPos[o + 3] = p.x;
+    stalkPos[o + 2] = stalkPos[o + 5] = p.z;
+    stalkPos[o + 1] = 0;
+    stalkPos[o + 4] = p.y - 0.03;
+  };
+  ctx.animate((dt, t) => {
+    ship.rotation.y += dt * 0.2;
+    ship.position.y = 0.42 + Math.sin(t * 0.8) * 0.03;
+    planet.rotation.y += dt * 0.35;
+    for (let i = 0; i < N_ESC; i++) {
+      const k = i % 2;
+      const rr = 0.5 + k * 0.18;
+      const w = k ? -0.35 : 0.5;
+      const a = t * w + Math.floor(i / 2) * ((Math.PI * 2) / 3);
+      p.set(planetPos.x + Math.cos(a) * rr, planetPos.y + Math.sin(a * 2) * 0.04, planetPos.z + Math.sin(a) * rr);
+      dir.set(-Math.sin(a) * w, 0, Math.cos(a) * w).normalize();
+      q.setFromUnitVectors(Z, dir);
+      blips.setMatrixAt(i, m.compose(p, q, one));
+      stalk(i);
+    }
+    for (let j = 0; j < N_HOS; j++) {
+      const a = -t * 0.18 + j * 0.12;
+      p.set(Math.cos(a) * half * 1.05, 0.2, Math.sin(a) * half * 1.05);
+      dir.set(Math.sin(a), 0, -Math.cos(a)).normalize();
+      q.setFromUnitVectors(Z, dir);
+      blips.setMatrixAt(N_ESC + j, m.compose(p, q, one));
+      stalk(N_ESC + j);
+    }
+    stalkGeo.attributes.position.needsUpdate = true;
+    blips.instanceMatrix.needsUpdate = true;
+    gridMat.opacity = 0.28 + 0.04 * Math.sin(t * 3.1);
+  });
+  pointLightDesc(ctx, IMP.holo, 2.6, 6, [x, y + h + 1.4, z], 2);
 }
 
 // -----------------------------------------------------------------------------------------------
@@ -534,7 +679,7 @@ function pitWallDress(frame, length, opts) {
 // Tilted control slab in a wall frame: centre (cu, cv, cn), width w along U, depth d along N, tilted
 // by `a` so the operator's edge (+N) is lower. items: { mat, du, dd, w, h, uvRect } on its surface.
 function slopedSlab(frame, cu, cv, cn, w, d, a, items, tone = IMP.consoleDark) {
-  frame.box("impPaintedMetal", cu, cv, cn, w, 0.06, d, { color: tone, texel: 1, tilt: a });
+  frame.box("impMatte", cu, cv, cn, w, 0.06, d, { color: tone, uv: "keep", tilt: a });
   const ca = Math.cos(a);
   const sa = Math.sin(a);
   const rot = new THREE.Quaternion().setFromAxisAngle(X_AXIS, a - Math.PI / 2);
@@ -599,10 +744,11 @@ function bridgeConsole(kit, pos, yaw, opts = {}) {
   }
   if (keys) {
     const nb = Math.floor((width - 0.36) / keyPitch);
+    const kw = Math.min(keyPitch * 0.62, 0.06);
     for (let b = 0; b < nb; b++) {
       const p = slab(-((nb - 1) * keyPitch) / 2 + b * keyPitch, 0.19, 0.012);
       const em = rand() < 0.28;
-      kit.add(em ? ["emitRed", "emitBlue", "emitAmber", "emitWhite"][Math.floor(rand() * 4)] : "impRubber", new THREE.BoxGeometry(keyPitch * 0.62, 0.025, 0.06), { pos: [p.x, p.y, p.z], quat: slabQuat, color: IMP.rubber });
+      kit.add(em ? "bridgeKeyLit" : "impRubber", new THREE.BoxGeometry(kw, 0.025, 0.05), { pos: [p.x, p.y, p.z], quat: slabQuat, color: em ? KEY_LIT[Math.floor(rand() * 4)] : IMP.rubber });
     }
   }
   if (riser) {
@@ -617,7 +763,8 @@ function bridgeConsole(kit, pos, yaw, opts = {}) {
   return { slab, slabQuat, planeQuat };
 }
 
-// Row of physical keys along a sloped slab (tilt a, centre cv/cn) at slab depth offset dd.
+// Row of 5 cm physical keys along a sloped slab (tilt a, centre cv/cn) at slab depth offset dd; lit
+// keys in the dim vertex-coloured key material.
 function keyRow(frame, rand, cu, cv, cn, a, dd, w, pitchU) {
   const ca = Math.cos(a);
   const sa = Math.sin(a);
@@ -626,7 +773,7 @@ function keyRow(frame, rand, cu, cv, cn, a, dd, w, pitchU) {
   const n = cn + 0.05 * sa + dd * ca;
   for (let b = 0; b < nb; b++) {
     const em = rand() < 0.3;
-    frame.box(em ? ["emitRed", "emitBlue", "emitAmber", "emitWhite"][Math.floor(rand() * 4)] : "impRubber", cu - w / 2 + pitchU / 2 + b * pitchU, v, n, pitchU * 0.6, 0.03, 0.06, { color: IMP.rubber, tilt: a });
+    frame.box(em ? "bridgeKeyLit" : "impRubber", cu - w / 2 + pitchU / 2 + b * pitchU, v, n, 0.05, 0.03, 0.05, { color: em ? KEY_LIT[Math.floor(rand() * 4)] : IMP.rubber, tilt: a });
   }
 }
 
@@ -643,7 +790,7 @@ function deskSegment(frame, cu, w, seed) {
     { mat: rand() < 0.5 ? "blink" : "blinkDense", du: w * 0.2, dd: -0.06, w: w * 0.36, h: 0.22 },
     { mat: "blinkSparse", du: 0, dd: 0.17, w: w - 0.4, h: 0.07 },
   ]);
-  keyRow(frame, rand, cu, 0.78, 0.38, a, 0.09, w - 0.5, 0.2);
+  keyRow(frame, rand, cu, 0.78, 0.38, a, 0.09, w - 0.5, 0.12);
   // riser screen + indicator block on the wall above the desk
   wallScreen(frame, cu - w * 0.16, 1.32, w * 0.5, 0.42, Math.floor(rand() * 3), { leds: false });
   frame.box("impPaintedMetal", cu + w * 0.3, 1.32, 0.05, w * 0.26, 0.5, 0.04, { color: IMP.consoleDark, texel: 1 });
@@ -733,13 +880,15 @@ function buildWindows(kit, ctx, { xi0, xi1, y, ceilY, wb }) {
     [s * (xoT + grow), yt + grow],
     [s * (xiT - grow), yt + grow],
   ];
-  // frame slab with the two openings
-  kit.add("impPaintedMetal", prism(outer, FRAME_D, { holes: [bank(-1), bank(1)] }), { pos: [0, 0, zc], color: IMP.darkMetal, texel: 0.5 });
-  const mullion = (a, b, w, d, z, color = IMP.trim, mat = "impPaintedMetal") => {
+  // frame slab with the two openings. The frame, rings and mullions are map-less matte (impMatte): the
+  // worn-metal maps under the raw exterior sun read as mottled stone; a smooth dark metal with one steel
+  // edge line per mullion reads as machined casement
+  kit.add("impMatte", prism(outer, FRAME_D, { holes: [bank(-1), bank(1)] }), { pos: [0, 0, zc], color: IMP.darkMetal, uv: "keep" });
+  const mullion = (a, b, w, d, z, color = IMP.trim, mat = "impMatte") => {
     const dx = b[0] - a[0];
     const dy = b[1] - a[1];
     const L = Math.hypot(dx, dy);
-    kit.add(mat, new THREE.BoxGeometry(w, L, d), { pos: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z], rot: [0, 0, -Math.atan2(dx, dy)], color, texel: 1 });
+    kit.add(mat, new THREE.BoxGeometry(w, L, d), { pos: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z], rot: [0, 0, -Math.atan2(dx, dy)], color, uv: "keep" });
   };
   const lerp = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
   for (const s of [-1, 1]) {
@@ -752,24 +901,25 @@ function buildWindows(kit, ctx, { xi0, xi1, y, ceilY, wb }) {
       [FRAME_Z + FRAME_D + 0.06, 0.12],
       [FRAME_Z - 0.06, 0.12],
     ]) {
-      kit.add("impPaintedMetal", prism(bank(s, 0.34), dr, { holes: [b] }), { pos: [0, 0, zr], color: IMP.trim, texel: 1 });
+      kit.add("impMatte", prism(bank(s, 0.34), dr, { holes: [b] }), { pos: [0, 0, zr], color: IMP.trim, uv: "keep" });
     }
-    kit.add("impMetal", prism(bank(s, 0.4), 0.02, { holes: [bank(s, 0.34)] }), { pos: [0, 0, FRAME_Z + FRAME_D + 0.13], color: IMP.gunmetal, texel: 1 });
-    // fanned mullions (bottom edge -> top edge), a horizontal rail, steel inlays on the room side
+    kit.add("impMatte", prism(bank(s, 0.4), 0.02, { holes: [bank(s, 0.34)] }), { pos: [0, 0, FRAME_Z + FRAME_D + 0.13], color: IMP.gunmetal, uv: "keep" });
+    // fanned mullions (bottom edge -> top edge), a horizontal rail; one steel edge line per mullion on the
+    // room side, a dark one outside
     const [ib, ob, ot, it] = b;
     for (let k = 1; k < 5; k++) {
       const t = k / 5;
       const p = lerp(ib, ob, t);
       const q = lerp(it, ot, t);
       mullion(p, q, 0.24, FRAME_D - 0.04, zc);
-      mullion(p, q, 0.05, 0.01, FRAME_Z + FRAME_D - 0.02 + 0.006, IMP.gunmetal, "impMetal");
-      mullion(p, q, 0.05, 0.01, FRAME_Z + 0.02 - 0.006, IMP.gunmetal, "impMetal");
+      mullion(p, q, 0.03, 0.01, FRAME_Z + FRAME_D - 0.02 + 0.006, IMP.steel);
+      mullion(p, q, 0.05, 0.01, FRAME_Z + 0.02 - 0.006, IMP.gunmetal);
     }
     const th = 0.42;
     const hl = lerp(ib, it, th);
     const hr = lerp(ob, ot, th);
     mullion(hl, hr, 0.2, FRAME_D - 0.04, zc);
-    mullion(hl, hr, 0.05, 0.01, FRAME_Z + FRAME_D - 0.02 + 0.006, IMP.gunmetal, "impMetal");
+    mullion(hl, hr, 0.03, 0.01, FRAME_Z + FRAME_D - 0.02 + 0.006, IMP.steel);
   }
   // sill bench across the whole forward wall with a console run under each bank
   sillBench(kit, y, xi0, xi1, [xiB + 0.2, xoB + 1.5]);
@@ -800,15 +950,16 @@ function buildWindows(kit, ctx, { xi0, xi1, y, ceilY, wb }) {
 function sillBench(kit, y, xi0, xi1, [xa, xb]) {
   const { frame, length } = wallFrame(kit, [xi0, SILL_Z], [xi1, SILL_Z], y);
   const U = (x) => x - xi0;
-  frame.box("impPaintedMetal", length / 2, BENCH_H / 2, BENCH_D / 2, length, BENCH_H, BENCH_D, { color: IMP.console, texel: 1 });
+  // sunlit surfaces (bench top, ledge, plinth) in the map-less matte: see buildWindows
+  frame.box("impMatte", length / 2, BENCH_H / 2, BENCH_D / 2, length, BENCH_H, BENCH_D, { color: IMP.console, uv: "keep" });
   frame.box("impPaintedMetal", length / 2, 0.06, BENCH_D - 0.05, length - 0.2, 0.12, 0.2, { color: IMP.trim, texel: 1 });
   frame.box("impPaintedMetal", length / 2, 0.4, BENCH_D + 0.005, length - 0.2, 0.3, 0.01, { color: IMP.consoleDark, texel: 1 });
   frame.box("emitBlue", length / 2, 0.16, BENCH_D + 0.005, length - 0.4, 0.02, 0.01);
   // indicator ledge under the glass, full width
-  frame.box("impPaintedMetal", length / 2, BENCH_H + 0.06, 0.1, length - 0.3, 0.12, 0.2, { color: IMP.consoleDark, texel: 1 });
+  frame.box("impMatte", length / 2, BENCH_H + 0.06, 0.1, length - 0.3, 0.12, 0.2, { color: IMP.consoleDark, uv: "keep" });
   frame.box("leds", length / 2, BENCH_H + 0.06, 0.205, length - 0.6, 0.05, 0.01, { uv: "keep" });
   // central pillar plinth (3 cm proud of the bench front so the two never share a face)
-  frame.box("impPaintedMetal", U(0), 0.4, (BENCH_D + 0.03) / 2, 2.9, 0.8, BENCH_D + 0.03, { color: IMP.trim, texel: 1 });
+  frame.box("impMatte", U(0), 0.4, (BENCH_D + 0.03) / 2, 2.9, 0.8, BENCH_D + 0.03, { color: IMP.trim, uv: "keep" });
   frame.box("impPanel1", U(0), 0.42, BENCH_D + 0.04, 2.4, 0.5, 0.02, { color: IMP.wallDark, uv: "keep" });
   frame.box("leds", U(0), 0.72, BENCH_D + 0.035, 1.2, 0.04, 0.01, { uv: "keep" });
   frame.quad("impDecal", U(0), 0.42, BENCH_D + 0.051, 0.36, 0.36, { uvRect: impDecalRect(9) });
@@ -822,7 +973,7 @@ function sillBench(kit, y, xi0, xi1, [xa, xb]) {
     const n = 7;
     const run = xb - xa;
     const pw = run / n;
-    for (let i = 0; i <= n; i++) frame.box("impPaintedMetal", U(s * (xa + i * pw)), sv + 0.02, sn, 0.06, 0.1, 0.62, { color: IMP.trim, texel: 1, tilt: a });
+    for (let i = 0; i <= n; i++) frame.box("impMatte", U(s * (xa + i * pw)), sv + 0.02, sn, 0.06, 0.1, 0.62, { color: IMP.trim, uv: "keep", tilt: a });
     for (let i = 0; i < n; i++) {
       const cx = s * (xa + (i + 0.5) * pw);
       const cu = U(cx);
@@ -832,7 +983,7 @@ function sillBench(kit, y, xi0, xi1, [xa, xb]) {
         { mat: rand() < 0.5 ? "blinkDense" : "blink", du: w * 0.22, dd: -0.12, w: w * 0.4, h: 0.2 },
         { mat: "blinkSparse", du: 0, dd: 0.09, w: w - 0.3, h: 0.07 },
       ]);
-      keyRow(frame, rand, cu, sv, sn, a, 0.21, w - 0.4, 0.15);
+      keyRow(frame, rand, cu, sv, sn, a, 0.21, w - 0.4, 0.09);
       if (i % 3 === 1) frame.quad("impDecal", cu, 0.32, BENCH_D + 0.012, 0.24, 0.24, { uvRect: impDecalRect(9) });
     }
     // deck-number stencil on the plain bench ends
