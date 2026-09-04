@@ -415,7 +415,8 @@ export function buildDetention(kit, ctx, room) {
   // a black void when the only cool light sat on the centre line), one aisle key behind the desk
   keyLight(kit, 0, h - 1.0, -4.4, { color: 0xff4a34, k: 3.2, distance: 12, priority: 0.5 });
   keyLight(kit, 0, h - 1.0, -7.6, { color: 0xdfe8ff, k: 3.4, distance: 13, priority: 0.47 });
-  keyLight(kit, -8.0, h - 1.0, -4.6, { color: 0xdfe8ff, k: 3.2, distance: 14, priority: 0.46 });
-  keyLight(kit, 8.0, h - 1.0, -4.6, { color: 0xdfe8ff, k: 3.2, distance: 14, priority: 0.45 });
+  // (the side keys carry a faint rose cast so the block's floor stays in the red family rather than going steel-blue)
+  keyLight(kit, -8.0, h - 1.0, -4.6, { color: 0xf4dcd6, k: 3.2, distance: 14, priority: 0.46 });
+  keyLight(kit, 8.0, h - 1.0, -4.6, { color: 0xf4dcd6, k: 3.2, distance: 14, priority: 0.45 });
   keyLight(kit, 0, h - 1.0, 2.5, { color: 0xdfe8ff, k: 3.0, distance: 14, priority: 0.43 });
 }

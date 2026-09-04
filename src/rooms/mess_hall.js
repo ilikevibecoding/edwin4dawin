@@ -416,7 +416,10 @@ export function buildMessHall(kit, ctx, room) {
     keyLight(kit, -8.75, 3.3, z, { color: warm, k: 2.9, distance: 14, priority: 0.5 - i * 0.01 });
     keyLight(kit, 6.25, 3.3, z, { color: warm, k: 2.9, distance: 14, priority: 0.49 - i * 0.01 });
   }
-  keyLight(kit, -6.0, 3.4, -9.8, { color: 0xeef2ff, k: 3.0, distance: 12, priority: 0.45 });
-  keyLight(kit, 2.0, 3.4, -9.8, { color: 0xeef2ff, k: 3.0, distance: 12, priority: 0.44 });
+  // galley keys stay above the menu board's top edge (3.3 m) — lower, the board's tilted face mirrors them into
+  // the door sightline. The W key sits at x -8 rather than over the range centre: from the spawn its ceiling
+  // reflection then falls just outside the 52° horizontal half-FOV instead of burning a blob in the top-left.
+  keyLight(kit, -8.0, 3.4, -9.8, { color: 0xeef2ff, k: 3.0, distance: 12, priority: 0.45 });
+  keyLight(kit, 0.0, 3.4, -9.8, { color: 0xeef2ff, k: 3.0, distance: 12, priority: 0.44 });
   keyLight(kit, 3, h - 0.6, 9.0, { color: 0xffb45a, k: 1.6, distance: 13, priority: 0.4 });
 }

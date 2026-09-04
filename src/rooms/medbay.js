@@ -243,10 +243,17 @@ export function buildMedbay(kit, ctx, room) {
       for (const [a, b] of spans) if (b - a > 0.3) F.box("impTrim", (a + b) / 2, v, 0.038, b - a, 0.018, 0.016, { color: PALETTE.impBlack });
     }
   }
-  // sterile white tile deck laid over the shell's grey deck: the deck-grid texture (4 plates per repeat, dark
-  // seams) tinted near-white at a 1.2 m repeat gives 0.3 m tiles with real grout lines (the bevelled enamel
-  // panel used before had no legible grid once lit); teal edge strips along the long walls
-  kit.boxMM("impDeck", [-hx + 0.42, 0, -hz + 0.42], [hx - 0.42, FLOOR_Y, hz - 0.42], { color: 0xe6eaee, texel: 1 / 1.2 });
+  // sterile white tile deck laid over the shell's grey deck: one bevelled enamel panel per 0.3 m tile plus a thin
+  // grey grout grid on the same 0.3 m pitch (world UVs put the panel edges on multiples of 0.3, so the lines land
+  // on them). The bevel alone had no legible grid once lit, and the deck-grid texture tinted light tops out at a
+  // 0.62 grey. ~180 thin boxes merge into the existing impMetal mesh. Teal edge strips along the long walls.
+  const fx0 = -hx + 0.42;
+  const fx1 = hx - 0.42;
+  const fz0 = -hz + 0.42;
+  const fz1 = hz - 0.42;
+  kit.boxMM("impPanel1", [fx0, 0, fz0], [fx1, FLOOR_Y, fz1], { color: 0xdfe4e9, texel: 1 / 0.3 });
+  for (let gx = Math.ceil(fx0 / 0.3) * 0.3; gx < fx1; gx += 0.3) kit.boxMM("impMetal", [gx - 0.009, FLOOR_Y - 0.004, fz0], [gx + 0.009, FLOOR_Y + 0.0015, fz1], { color: 0xb4bac2 });
+  for (let gz = Math.ceil(fz0 / 0.3) * 0.3; gz < fz1; gz += 0.3) kit.boxMM("impMetal", [fx0, FLOOR_Y - 0.004, gz - 0.009], [fx1, FLOOR_Y + 0.0015, gz + 0.009], { color: 0xb4bac2 });
   for (const s of [-1, 1]) kit.boxMM(accentKey, [-hx + 0.6, FLOOR_Y + 0.002, s * (hz - 0.6) - 0.03], [hx - 0.6, FLOOR_Y + 0.012, s * (hz - 0.6) + 0.03]);
   for (const s of [-1, 1]) kit.boxMM(accentKey, [s * (hx - 0.6) - 0.03, FLOOR_Y + 0.002, -hz + 0.9], [s * (hx - 0.6) + 0.03, FLOOR_Y + 0.012, hz - 0.9]);
 
@@ -725,7 +732,7 @@ export function buildMedbay(kit, ctx, room) {
   keyLight(kit, -3.0, ky, -7.0, { color: white, k: 1.7, distance: 13, priority: 0.49 });
   keyLight(kit, 2.0, ky, -7.0, { color: white, k: 1.7, distance: 13, priority: 0.48 });
   keyLight(kit, -4.0, ky, 5.6, { color: 0xffffff, k: 1.9, distance: 11, priority: 0.47 });
-  keyLight(kit, 12.5, ky, 0.0, { color: white, k: 1.5, distance: 13, priority: 0.46 });
+  keyLight(kit, 12.5, ky, 0.0, { color: white, k: 1.2, distance: 13, priority: 0.46 });
   keyLight(kit, -11.5, ky, 3.0, { color: white, k: 1.6, distance: 12, priority: 0.45 });
   keyLight(kit, 7.6, ky, -4.4, { color: white, k: 1.7, distance: 12, priority: 0.44 });
 }
