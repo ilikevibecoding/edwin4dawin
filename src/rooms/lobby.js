@@ -78,11 +78,11 @@ export function buildLobby(kit, ctx, room) {
   kit.cyl(accentKey, 0, h - 0.925, iz, 0.66, 0.012, "y", { segments: 24, uv: "keep" });
   kit.cyl("impMetal", 0, h - 0.935, iz, 0.5, 0.012, "y", { color: PALETTE.impCharcoal, segments: 24 });
   kit.cyl("emitWhiteDim", 0, h - 0.947, iz, 0.4, 0.012, "y", { segments: 24, uv: "keep" });
-  kit.light({ type: "point", pos: [0, h - 1.3, iz], color: 0xffdcb4, intensity: lux(h - 1.3, 3.0), distance: 15, priority: 0.5 });
+  kit.light({ type: "point", pos: [0, h - 1.8, iz], color: 0xffdcb4, intensity: lux(h - 1.8, 3.0), distance: 15, priority: 0.5 });
   // deck accent at each lift so the framed doors read from across the lobby
-  for (const lf of lifts) kit.light({ type: "point", pos: [lf.lx, 2.9, hz - 1.3], color: accentHex.getHex(), intensity: 5.5, distance: 9, priority: 0.44 - (lf.lx > 0 ? 0.005 : 0) });
+  for (const lf of lifts) kit.light({ type: "point", pos: [lf.lx, 2.9, hz - 1.3], color: accentHex.getHex(), intensity: 7.0, distance: 9, priority: 0.44 - (lf.lx > 0 ? 0.005 : 0) });
   // small warm wash on the crest plate
-  kit.light({ type: "point", pos: [4.4, 3.3, hz - 1.1], color: 0xffe2c0, intensity: 3.0, distance: 6, priority: 0.38 });
+  kit.light({ type: "point", pos: [4.4, 3.3, hz - 1.1], color: 0xffe2c0, intensity: 3.6, distance: 6, priority: 0.38 });
   kit.light({ type: "point", pos: [0, h - 0.6, -4.4], color: 0xdfe8ff, intensity: lux(h - 0.6, 1.1), distance: 10, priority: 0.36 });
 }
 

@@ -155,7 +155,7 @@ export function buildObservation(kit, ctx, room) {
     kit.cyl("impTrim", x, h - 0.2, 1.2, 0.3, 0.4, "y", { color: PALETTE.impBlack, segments: 18, texel: 1 });
     kit.cyl("impMetal", x, h - 0.41, 1.2, 0.24, 0.02, "y", { color: PALETTE.impCharcoal, segments: 18 });
     kit.cyl("emitWhiteDim", x, h - 0.425, 1.2, 0.18, 0.012, "y", { segments: 18, uv: "keep" });
-    kit.light({ type: "point", pos: [x, h - 0.75, 1.2], color: 0xd8e4ff, intensity: lux(h - 0.75, 2.6), distance: 22, priority: 0.46 - Math.abs(i - 2) * 0.01 });
+    kit.light({ type: "point", pos: [x, h - 1.3, 1.2], color: 0xd8e4ff, intensity: lux(h - 1.3, 2.6), distance: 22, priority: 0.46 - Math.abs(i - 2) * 0.01 });
   });
   for (const s of [-1, 1]) {
     kit.light({ type: "point", pos: [s * 10.5, 2.6, -hz + 1.7], color: 0x9fc6ff, intensity: 7.0, distance: 13, priority: 0.4 });
