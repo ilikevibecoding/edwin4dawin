@@ -75,7 +75,7 @@ export function buildHumanoid(skinCanvas, hat, hatColor) {
       case 'bowler': head.add(solid(11, 1, 11, 8.5), solid(8.6, 3.5, 8.6, 10.75)); break;
       case 'flat': head.add(solid(12, 1, 12, 8.5), solid(8.6, 2, 8.6, 10)); break;
       case 'flatcap': { const m = solid(8.6, 2, 8.6, 9); head.add(m); const brim = solid(6, 1, 4, 8.5); brim.position.z = 5 * PX; head.add(brim); break; }
-      case 'bonnet': { const m = solid(8.8, 5, 8.8, 6); m.position.z = -1 * PX; head.add(m); const brim = solid(9.5, 6, 2, 6.5); brim.position.z = 4.5 * PX; head.add(brim); break; }
+      case 'bonnet': { const m = solid(8.8, 5, 8.8, 6); m.position.z = -1 * PX; head.add(m); const brim = solid(9.5, 4.5, 2, 7.25); brim.position.z = 4.5 * PX; head.add(brim); break; } // brim spans px 5-9.5: ends above the brows
       default: break;
     }
   }
