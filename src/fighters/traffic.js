@@ -290,7 +290,7 @@ export function createTraffic({ materials, audio = null, camera = null } = {}) {
     fighters.push({
       id: i,
       phase: "docked",
-      home: -1, // rack slot occupied (docked / release / descend)
+      home: -1, // rack slot the fighter hangs in (docked / release) or departed from (ownership: slotOwner)
       target: -1, // rack slot reserved for the return
       lane: 0,
       deck: -1,
@@ -426,8 +426,7 @@ export function createTraffic({ materials, audio = null, camera = null } = {}) {
     return true;
   }
   function beginDescend(f) {
-    slotOwner[f.home] = -1; // the rack is free once the fighter leaves its hover point
-    f.home = -1;
+    slotOwner[f.home] = -1; // the rack is free once the fighter leaves its hover point (f.home stays: the path needs it)
     f.s = 0;
     setPhase(f, "descend");
   }
@@ -771,7 +770,7 @@ export function createTraffic({ materials, audio = null, camera = null } = {}) {
       f.home = +m[1];
       f.target = +m[2];
       f.lane = +m[3];
-      if (f.home >= 0) slotOwner[f.home] = f.id;
+      if (f.home >= 0 && fs.phase === "release") slotOwner[f.home] = f.id; // freed once the descent starts
       if (f.target >= 0) slotOwner[f.target] = f.id;
       f.phase = fs.phase;
       switch (fs.phase) {

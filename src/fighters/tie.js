@@ -42,6 +42,9 @@ const BLACK = PALETTE.impBlack;
 const POD = PALETTE.impGreyDark;
 const CHARCOAL = PALETTE.impCharcoal;
 const GREY = PALETTE.impGrey;
+// the hex texture is dark by design; lift the wing faces a little so the cell pattern reads at hangar light levels
+const PANEL_TINT = new THREE.Color(1.35, 1.38, 1.5);
+const RIB = new THREE.Color("#4a4e57");
 
 /**
  * Kit-bash one fighter into `kit` at the origin (instance frame). Exposed so a room builder can also place
@@ -55,12 +58,12 @@ export function kitbashTie(kit, opts = {}) {
 
   // ---------------- cockpit pod ----------------
   kit.add(podKey, new THREE.SphereGeometry(R, 30, 20), { color: POD, texel: 0.6 });
-  // panel belt around the pod's equator (slightly proud), broken into 8 plates
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    const x = Math.cos(a) * (R + 0.02);
-    const z = Math.sin(a) * (R + 0.02);
-    kit.add(frameKey, new THREE.BoxGeometry(0.06, 0.55, 0.95), { pos: [x, -0.15, z], rot: [0, -a, 0], color: CHARCOAL });
+  // shallow panel seams around the pod's lower equator (four short plates, barely proud)
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+    const x = Math.cos(a) * (R - 0.01);
+    const z = Math.sin(a) * (R - 0.01);
+    kit.add(frameKey, new THREE.BoxGeometry(0.05, 0.34, 0.8), { pos: [x, -0.45, z], rot: [0, -a, 0], color: CHARCOAL });
   }
   // access panels (thin raised plates) on the sphere at spherical coordinates
   const panel = (theta, phi, w, h, key = podKey, color = GREY) => {
@@ -183,7 +186,7 @@ export function kitbashTie(kit, opts = {}) {
     // panel: hexagon extruded along x (prism extrudes along z, then rotate so its axis is x)
     const g = prism(outline.map(([u, v]) => [u, v]), WING_T);
     // prism lies in the (x=u, y=v) plane extruded along z; rotate about y so u -> -z (wing plane = yz)
-    kit.add(panelKey, g, { pos: [xc, 0, 0], rot: [0, Math.PI / 2, 0], color: 0xffffff, texel: HEX_TEXEL });
+    kit.add(panelKey, g, { pos: [xc, 0, 0], rot: [0, Math.PI / 2, 0], color: PANEL_TINT, texel: HEX_TEXEL });
     // hub discs (both faces) with a raised boss on the outer face
     for (const f of [-1, 1]) {
       const xf = xc + f * (WING_T / 2 + 0.06);
@@ -210,7 +213,9 @@ export function kitbashTie(kit, opts = {}) {
       const cm = (inner + rlen) / 2;
       for (const f of [-1, 1]) {
         const xf = xc + f * (WING_T / 2 + 0.05);
-        kit.add(frameKey, new THREE.BoxGeometry(0.1, 0.18, slen), { pos: [xf, (v0 / rlen) * cm, (-u0 / rlen) * cm], rot: [sphi, 0, 0], color: BLACK });
+        kit.add(frameKey, new THREE.BoxGeometry(0.1, 0.2, slen), { pos: [xf, (v0 / rlen) * cm, (-u0 / rlen) * cm], rot: [sphi, 0, 0], color: BLACK });
+        // lighter cap rib on top of the black spoke so the frame separates from the panels
+        kit.add(podKey, new THREE.BoxGeometry(0.05, 0.09, slen - 0.2), { pos: [xf + f * 0.05, (v0 / rlen) * cm, (-u0 / rlen) * cm], rot: [sphi, 0, 0], color: RIB, texel: 0.5 });
       }
     }
     // three horizontal stiffeners across each face (the classic panel sub-divisions)
@@ -221,8 +226,14 @@ export function kitbashTie(kit, opts = {}) {
         kit.add(frameKey, new THREE.BoxGeometry(0.07, 0.1, w), { pos: [xf, v * 0.5, 0], color: BLACK });
       }
     }
-    // wing tip lights (top / bottom vertices)
-    kit.add(glowKey, new THREE.PlaneGeometry(0.5, 0.5), { pos: [xc + s * 0.22, TIE.wingH / 2 - 0.35, 0], rot: [0, Math.PI / 2, 0], color: s < 0 ? PALETTE.impRed : PALETTE.impGreen, uv: "keep" });
+    // running lights at the wing's top and bottom vertices: a small emitter on the rim plus crossed glow
+    // planes so the halo reads from every direction
+    for (const sv of [-1, 1]) {
+      const y = sv * (TIE.wingH / 2 - 0.16);
+      kit.add(thrusterKey, new THREE.BoxGeometry(0.14, 0.12, 0.3), { pos: [xc, y, 0], color: 0xffffff });
+      kit.add(glowKey, new THREE.PlaneGeometry(0.6, 0.6), { pos: [xc + s * 0.25, y, 0], rot: [0, Math.PI / 2, 0], uv: "keep" });
+      kit.add(glowKey, new THREE.PlaneGeometry(0.6, 0.6), { pos: [xc, y + sv * 0.2, 0], rot: [Math.PI / 2, 0, 0], uv: "keep" });
+    }
   }
 }
 
@@ -254,11 +265,17 @@ export function buildTieGeometry(materials = null, opts = {}) {
 // Fighter light domain (see file header)
 // ---------------------------------------------------------------------------
 const SUN_CHUNK = THREE.ShaderChunk.lights_fragment_begin.replace(/getDirectionalLightInfo\( directionalLight, directLight \);/g, "getDirectionalLightInfo( directionalLight, directLight ); directLight.color *= fighterSun;");
+// Outside the hull the fighters fly in the ship's shadow most of the time; a faint planet-shine fill keeps them
+// readable against the black underside. Zero inside the hangar (the interior lights take over).
+const FILL_CHUNK = "#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += fighterSun * vec3( 0.42, 0.46, 0.58 ) * BRDF_Lambert( diffuseColor.rgb );";
 function fighterPatch(shader) {
   shader.vertexShader = shader.vertexShader
     .replace("#include <common>", "#include <common>\nvarying float vFighterY;")
     .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\n{ vec4 fwp = vec4( transformed, 1.0 );\n#ifdef USE_INSTANCING\n\tfwp = instanceMatrix * fwp;\n#endif\n\tfwp = modelMatrix * fwp; vFighterY = fwp.y; }");
-  shader.fragmentShader = shader.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vFighterY;").replace("#include <lights_fragment_begin>", "float fighterSun = 1.0 - smoothstep( -85.0, -50.0, vFighterY );\n" + SUN_CHUNK);
+  shader.fragmentShader = shader.fragmentShader
+    .replace("#include <common>", "#include <common>\nvarying float vFighterY;")
+    .replace("#include <lights_fragment_begin>", "float fighterSun = 1.0 - smoothstep( -85.0, -50.0, vFighterY );\n" + SUN_CHUNK)
+    .replace("#include <lights_fragment_end>", FILL_CHUNK);
 }
 const _fighterMatCache = new WeakMap();
 /** Clone the library materials the fighter uses and give them the fighter light domain (cached per library). */

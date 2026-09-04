@@ -1,0 +1,96 @@
+{
+  "tag": "b",
+  "placed": {
+    "origin": [
+      95.4,
+      -40,
+      -60
+    ],
+    "size": [
+      50,
+      18,
+      80
+    ],
+    "tris": 3686,
+    "meshes": 5,
+    "colliders": 1,
+    "localBounds": [
+      -4.96,
+      -0.01,
+      -10.52,
+      4.96,
+      14.78,
+      11.55
+    ]
+  },
+  "views": {
+    "cockpit": {
+      "stats": {
+        "frameMs": 11871.65,
+        "fps": 0.1,
+        "p95Ms": 12992.5,
+        "jsMs": 4.26,
+        "calls": 147,
+        "triangles": 1376292,
+        "points": 14800,
+        "lines": 0,
+        "geometries": 212,
+        "textures": 116,
+        "textureMB": 0,
+        "programs": 56,
+        "shaderCompiles": 56,
+        "longTasks": 58,
+        "longTaskMs": 379414,
+        "loadMs": 60959,
+        "pixelRatio": 1,
+        "jsHeapMB": 197.7,
+        "visibleCells": 2,
+        "activeLights": 16,
+        "current": "shuttle_bay",
+        "cells": 46,
+        "colliders": 622,
+        "floors": 47,
+        "mode": "interior",
+        "exteriorTriangles": 16312,
+        "poolLights": 16,
+        "qualityLevel": 3
+      }
+    },
+    "wings_up": {
+      "stats": {
+        "frameMs": 10468.35,
+        "fps": 0.1,
+        "p95Ms": 7223.6,
+        "jsMs": 2.84,
+        "calls": 141,
+        "triangles": 1351070,
+        "points": 14800,
+        "lines": 0,
+        "geometries": 212,
+        "textures": 116,
+        "textureMB": 0,
+        "programs": 56,
+        "shaderCompiles": 56,
+        "longTasks": 69,
+        "longTaskMs": 488175,
+        "loadMs": 60959,
+        "pixelRatio": 1,
+        "jsHeapMB": 197.4,
+        "visibleCells": 2,
+        "activeLights": 16,
+        "current": "shuttle_bay",
+        "cells": 46,
+        "colliders": 622,
+        "floors": 47,
+        "mode": "interior",
+        "exteriorTriangles": 16312,
+        "poolLights": 16,
+        "qualityLevel": 3
+      }
+    }
+  },
+  "logs": [
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected."
+  ]
+}
