@@ -408,6 +408,37 @@ export function buildArmory(kit, ctx, room) {
   kit.boxMM(accentKey, [-2.4, 0.004, 8.2], [7.7, 0.016, 8.24]);
   rifleRack(kit, -6.5, 10.7, Math.PI, 4, { accentKey, seed: 25 });
   hoodLamp(S, hx + 6.5, 2.55, WORK, 0.9);
+  // heavy lockers W of the rack, and an inspection table on the open floor S of the aisle (two racked-out
+  // rifles laid flat, a magazine tray with a charged cell, a stool) so the S half reads from the door
+  for (const [k, lx] of [-10.9, -9.9, -8.9].entries()) heavyLocker(kit, lx, hz - 0.38, Math.PI, { seed: 66 + k });
+  {
+    const p = new Placer(kit, -7.0, 0, 5.4, 0.12);
+    const len = 3.0;
+    const dpt = 0.9;
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) p.box("impTrim", sx * (len / 2 - 0.1), 0.41, sz * (dpt / 2 - 0.1), 0.1, 0.82, 0.1, { color: BLK });
+    p.box("impTrim", 0, 0.85, 0, len, 0.06, dpt, { color: BLK, texel: 1 });
+    p.box("impMetal", 0, 0.895, 0, len + 0.02, 0.03, dpt + 0.02, { color: GREY, texel: 1 });
+    p.box("rubber", 0, 0.92, 0, len - 0.4, 0.02, dpt - 0.3, { color: CHR, texel: 1 });
+    p.box(ACCENT, 0, 0.83, dpt / 2 + 0.005, len - 0.4, 0.015, 0.005);
+    p.box("impMetal", 0, 0.3, 0, len - 0.24, 0.03, dpt - 0.24, { color: GD, texel: 1 });
+    for (const [rx, rz, ry] of [[-0.75, 0.05, 0.08], [0.7, -0.05, -0.12]]) {
+      const q = p.quat(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ry));
+      const pos = p.pos(rx, 1.075, rz);
+      kit.instance("dc_rifle", "impMetal", rifleGeo, new THREE.Matrix4().compose(pos, q, new THREE.Vector3(1, 1, 1)), 0xffffff);
+    }
+    p.box("impTrim", -0.05, 0.96, 0.28, 0.6, 0.06, 0.24, { color: BLK });
+    for (let k = 0; k < 3; k++) p.box("impMetal", -0.28 + k * 0.12, 1.0, 0.28, 0.05, 0.11, 0.03, { color: k % 2 ? GD : BLK });
+    p.box(WORK, 0.14, 1.0, 0.28, 0.16, 0.02, 0.1);
+    p.box("impGloss", 1.1, 0.945, -0.25, 0.16, 0.03, 0.1);
+    p.screen("scrAmber1", 1.1, 0.962, -0.25, 0.12, 0.07, "up");
+    p.collider(-len / 2 - 0.02, 0, -dpt / 2 - 0.02, len / 2 + 0.02, 0.95, dpt / 2 + 0.04, "inspect");
+    const sp = p.pos(0.6, 0, -0.95);
+    kit.cyl("impTrim", sp.x, 0.03, sp.z, 0.24, 0.06, "y", { color: BLK, segments: 14 });
+    kit.cyl("impMetal", sp.x, 0.35, sp.z, 0.03, 0.6, "y", { color: GD, segments: 8 });
+    kit.cyl("rubber", sp.x, 0.68, sp.z, 0.2, 0.06, "y", { color: CHR, segments: 16 });
+    kit.collider([sp.x - 0.25, 0, sp.z - 0.25], [sp.x + 0.25, 0.72, sp.z + 0.25], "stool");
+    floorDecal(kit, IMP_DECAL.glyphs3, -7.0, 3.2, 0.5);
+  }
   cableRun(S, hx - 8.6, hx + 2.6, 2.95, { n: 2, seed: 13, accentKey });
   {
     // open equipment crate with a helmet and a folded cloth inside, lid leaning open
@@ -468,7 +499,8 @@ export function buildArmory(kit, ctx, room) {
   for (const x of [-4.5, 3.0, 10.5]) ceilingPanel(kit, x, 0, h, 2.4, 0.9, "emitWarmSoft");
 
   // ---------------------------------------------------------------- lights (8): vestibule white, booth amber (above), red beacon (above), 3 amber aisle, bench white, armour amber
-  keyLight(kit, -12.2, 3.4, 0, { color: 0xe8eeff, k: 2.4, distance: 12, priority: 0.5 });
+  // vestibule white sits a little S of the door so it also carries the inspection table and the S-wall lockers
+  keyLight(kit, -11.5, 3.4, 2.5, { color: 0xe8eeff, k: 2.6, distance: 13, priority: 0.5 });
   // the two outer aisle keys sit north of the aisle so the rifle racks / cell cages get direct light
   keyLight(kit, -4.5, 3.4, -3.5, { color: 0xffc38a, k: 2.6, distance: 13, priority: 0.49 });
   keyLight(kit, 3.0, 3.4, 0, { color: 0xffc38a, k: 2.6, distance: 13, priority: 0.48 });

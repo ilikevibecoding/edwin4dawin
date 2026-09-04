@@ -46,6 +46,28 @@ function medBedGeo() {
   );
 }
 
+/** Wheeled med cart for kit.instance: posts, shelves, casters, push handle, drawer module, a few supplies. */
+function medCartGeo() {
+  const parts = [];
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      parts.push(C(0.014, 0.9, [sx * 0.3, 0.5, sz * 0.22], STEEL, "y", 6));
+      parts.push(C(0.035, 0.03, [sx * 0.3, 0.035, sz * 0.22], CHR, "x", 8));
+    }
+  }
+  for (const y of [0.12, 0.5]) parts.push(B(0.66, 0.02, 0.5, [0, y, 0], WHITE));
+  parts.push(B(0.7, 0.05, 0.54, [0, 0.93, 0], BLK));
+  parts.push(B(0.62, 0.3, 0.46, [0, 1.11, 0], WHITE));
+  for (let k = 0; k < 2; k++) parts.push(B(0.56, 0.012, 0.012, [0, 1.0 + k * 0.14, 0.235], BLK));
+  for (let k = 0; k < 2; k++) parts.push(B(0.12, 0.02, 0.012, [0, 1.07 + k * 0.14, 0.235], GD));
+  parts.push(C(0.012, 0.5, [-0.38, 1.05, 0], STEEL, "z", 6));
+  for (const sz of [-1, 1]) parts.push(C(0.012, 0.16, [-0.35, 1.0, sz * 0.25], STEEL, "x", 6));
+  parts.push(B(0.2, 0.08, 0.3, [0.1, 0.55, 0], PALE_TEAL));
+  parts.push(C(0.05, 0.18, [-0.15, 0.6, 0.1], WHITE, "y", 8));
+  parts.push(B(0.24, 0.12, 0.34, [0.05, 0.19, 0], WHITE));
+  return compound(parts, 1);
+}
+
 /** Wheeled privacy screen: tubular frame, casters, fabric panel; length along local x. */
 function privacyScreen(kit, x, z, yaw, len = 2.2, opts = {}) {
   const p = new Placer(kit, x, 0, z, yaw);
@@ -205,6 +227,69 @@ export function buildMedbay(kit, ctx, room) {
   // (impConsole's operator side is local +z: yaw 0 puts the operator on the south side, where the chair is)
   impConsole(kit, 8.6, 0, -4.6, 2.6, 1.0, { yaw: 0, seed: 63, screens: ["scrGreen0", "scrGreen1"], accentKey });
   impChair(kit, 8.6, 0, -3.4, 0);
+  // med carts parked at the foot of the ward
+  for (const [cx, cz, yaw] of [[-9.8, -6.4, 0.4], [1.4, -6.2, -0.3]]) {
+    const p = new Placer(kit, cx, 0, cz, yaw);
+    kit.instance("mb_cart", "impPanel1", medCartGeo, p.matrix(), 0xffffff);
+    p.collider(-0.42, 0, -0.3, 0.36, 1.28, 0.3, "cart");
+  }
+
+  // ---------------------------------------------------------------- diagnostic scanner island (room centre, S of the lane)
+  // A bed on a low plinth with a gantry arch riding a pair of rails along the patient — the room's main
+  // animated element, in view straight from the door — plus its readout pedestal at the foot end.
+  {
+    const cx = 4.0;
+    const cz = 4.6;
+    kit.box("impTrim", cx, 0.06, cz, 3.6, 0.12, 2.4, { color: BLK, texel: 1 });
+    kit.box("impMetal", cx, 0.13, cz, 3.5, 0.02, 2.3, { color: CHR, texel: 1 });
+    for (const s of [-1, 1]) {
+      kit.box(accentKey, cx, 0.145, cz + s * 1.1, 3.4, 0.012, 0.03);
+      kit.box("impMetal", cx, 0.17, cz + s * 0.98, 2.8, 0.06, 0.08, { color: STEEL, texel: 1 });
+    }
+    kit.instance("mb_bed", "impPanel1", medBedGeo, new THREE.Matrix4().makeRotationY(Math.PI / 2).setPosition(cx, 0.14, cz), 0xffffff);
+    kit.box("fabric", cx + 0.3, 0.97, cz, 1.3, 0.03, 0.86, { color: PALE_TEAL, texel: 1 });
+    kit.collider([cx - 1.85, 0, cz - 1.25], [cx + 1.85, 2.2, cz + 1.25], "scanner");
+    // gantry: half-torus arch on two posts + rail carriages (one merged impMetal mesh) carrying an
+    // emissive inner arc; eases back and forth along the rails
+    const archR = 0.95;
+    const archY = 1.0;
+    const gantry = new THREE.Mesh(
+      compound(
+        [
+          { geo: new THREE.TorusGeometry(archR, 0.05, 8, 28, Math.PI), pos: [0, archY, 0], rot: [0, Math.PI / 2, 0], color: GD },
+          B(0.12, archY - 0.2, 0.12, [0, (archY + 0.2) / 2, -archR], GD),
+          B(0.12, archY - 0.2, 0.12, [0, (archY + 0.2) / 2, archR], GD),
+          B(0.36, 0.1, 0.18, [0, 0.25, -0.98], BLK),
+          B(0.36, 0.1, 0.18, [0, 0.25, 0.98], BLK),
+          B(0.1, 0.06, 0.16, [0, archY + archR + 0.03, 0], BLK),
+        ],
+        1,
+      ),
+      ctx.materials.impMetal,
+    );
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(archR - 0.06, 0.018, 6, 28, Math.PI).rotateY(Math.PI / 2), ctx.materials.emitTeal);
+    arc.position.y = archY;
+    gantry.add(arc);
+    gantry.position.set(cx - 1.1, 0, cz);
+    kit.attach(gantry);
+    let g = 0.5;
+    kit.onUpdate((dt) => {
+      g = (g + dt * 0.22) % 2;
+      const k = g < 1 ? g : 2 - g;
+      gantry.position.x = cx - 1.1 + 2.2 * k * k * (3 - 2 * k);
+    });
+    // readout pedestal (screen toward the operator standing at the foot end), floor stencil, overhead panel
+    const p = new Placer(kit, cx + 2.35, 0, cz + 0.55, Math.PI / 2);
+    p.box("impTrim", 0, 0.5, 0, 0.5, 1.0, 0.36, { color: BLK, texel: 1 });
+    p.box("impPanel1", 0, 0.45, 0.19, 0.42, 0.7, 0.02, { color: WHITE, uv: "world", texel: 1 });
+    p.box("leds", 0, 0.86, 0.19, 0.3, 0.03, 0.02, { uv: "keep" });
+    p.box(accentKey, 0, 0.12, 0.205, 0.3, 0.02, 0.01);
+    p.box("impTrim", 0, 1.18, 0.02, 0.6, 0.42, 0.06, { color: BLK, tilt: -0.35 });
+    p.screen("scrGreen0", 0, 1.19, 0.055, 0.52, 0.34, "+z", { tilt: -0.35 });
+    p.collider(-0.32, 0, -0.2, 0.32, 1.4, 0.2, "readout");
+    floorDecal(kit, IMP_DECAL.medical, cx, cz - 1.7, 0.5);
+    ceilingPanel(kit, cx, cz, h, 2.4, 0.9);
+  }
 
   // ---------------------------------------------------------------- bacta tank on a railed platform (W end)
   {
@@ -516,7 +601,7 @@ export function buildMedbay(kit, ctx, room) {
   const ky = h - 1.0;
   keyLight(kit, -10.0, ky, -7.0, { color: white, k: 1.7, distance: 13, priority: 0.5 });
   keyLight(kit, -3.0, ky, -7.0, { color: white, k: 1.7, distance: 13, priority: 0.49 });
-  keyLight(kit, 4.0, ky, -6.5, { color: white, k: 1.7, distance: 13, priority: 0.48 });
+  keyLight(kit, 2.0, ky, -7.0, { color: white, k: 1.7, distance: 13, priority: 0.48 });
   keyLight(kit, -4.0, ky, 5.6, { color: 0xffffff, k: 2.0, distance: 11, priority: 0.47 });
   keyLight(kit, 13.0, ky, 0.0, { color: white, k: 1.6, distance: 13, priority: 0.46 });
   keyLight(kit, 4.5, ky, 6.5, { color: white, k: 1.5, distance: 13, priority: 0.45 });

@@ -20,7 +20,7 @@ export function keyLight(kit, x, y, z, opts = {}) {
   return kit.light({ type: "point", pos: [x, y, z], color, intensity: lux(y, k) / y, decay: 1, distance, priority });
 }
 
-export const UP = new THREE.Vector3(0, 1, 0);
+const UP = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const Y_AXIS = UP;
@@ -151,11 +151,6 @@ export const C = (r, len, pos, color, axis = "y", segments = 10, r2) => {
   return { geo: g, pos, color };
 };
 export const S = (r, pos, color, segments = 12) => ({ geo: new THREE.SphereGeometry(r, segments, Math.max(6, segments >> 1)), pos, color });
-
-/** Matrix at (x, y, z) with a yaw (room-local). */
-export function mat4(x, y, z, yaw = 0, scale = 1) {
-  return new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw), new THREE.Vector3(scale, scale, scale));
-}
 
 /** Straight rod (cylinder) between two room-local points a and b. */
 export function rod(kit, mat, a, b, r, opts = {}) {
@@ -470,11 +465,6 @@ export function medDroid(kit, x, z, yaw, opts = {}) {
     p.box("impTrim", s * 0.36, 0.86, 0.46, 0.05, 0.06, 0.06, { color: PALETTE.impBlack });
   }
   p.collider(-0.4, 0, -0.4, 0.4, 1.95, 0.5, "droid");
-}
-
-/** Dark under-console / kick glow strip (emissive proud of a face by 1 cm). */
-export function glowStrip(kit, key, x0, y0, z0, x1, y1, z1) {
-  kit.boxMM(key, [Math.min(x0, x1), Math.min(y0, y1), Math.min(z0, z1)], [Math.max(x0, x1), Math.max(y0, y1), Math.max(z0, z1)]);
 }
 
 /** Vertical stack of small crates with hazard / number stencils in a corner. */
