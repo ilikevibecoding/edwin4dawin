@@ -8,6 +8,13 @@ import { mount, plate, junctionBox, amberBar, display, cleanPlate } from "./lib.
 const black = { color: IMP.black, texel: 1 };
 const dark = { color: IMP.dark, texel: 1 };
 const midM = { color: IMP.mid, texel: 2 };
+// impPanel tints for surfaces that used to be paintedMetal: the worn-metal chip map reads as stains on anything
+// bigger than ~0.5 m² above knee height (critic round 2), and impPanel's base is ~2.1× brighter, so × 0.47 keeps the albedo
+const CLEAN = 0.47;
+const clean = (c, texel = 1) => ({ color: c.clone().multiplyScalar(CLEAN), texel });
+const cleanBlack = clean(IMP.black);
+const cleanDark = clean(IMP.dark);
+const cleanMid = clean(IMP.mid);
 
 /**
  * One corridor doorway. wallX = partition centre; face = corridor-side visible face x; n = normal into the
@@ -21,14 +28,15 @@ export function doorway(kit, { wallX, face, n, z0, z1, h = 2.2, closed = false, 
   // clean plates over the door-adjacent panels (the shared panel texture's dot clusters read as pitting)
   cleanPlate(kit, [face, y(1.15), z0 - 0.79], n, 0.92, 1.66, { color: plateColor });
   cleanPlate(kit, [face, y(1.15), z1 + 0.79], n, 0.92, 1.66, { color: plateColor });
-  mount(kit, "paintedMetal", [face, (y(2.77) + ceilY - 0.03) / 2, zc], n, w + 0.6, ceilY - 0.03 - y(2.77), 0, 0.02, dark);
+  mount(kit, "impPanel", [face, (y(2.77) + ceilY - 0.03) / 2, zc], n, w + 0.6, ceilY - 0.03 - y(2.77), 0, 0.02, cleanDark);
   // stepped heavy frame: outer band 0.3 wide / 0.12 proud, inner lip 0.1 wide / 0.2 proud, header with a light slot
-  mount(kit, "paintedMetal", [face, y(h / 2 + 0.1), z0 - 0.15], n, 0.3, h + 0.2, 0, 0.12, dark);
-  mount(kit, "paintedMetal", [face, y(h / 2 + 0.1), z1 + 0.15], n, 0.3, h + 0.2, 0, 0.12, dark);
-  mount(kit, "paintedMetal", [face, y(h + 0.32), zc], n, w + 0.6, 0.45, 0, 0.12, dark);
-  mount(kit, "paintedMetal", [face, y(h / 2), z0 - 0.05], n, 0.1, h, 0.12, 0.2, black);
-  mount(kit, "paintedMetal", [face, y(h / 2), z1 + 0.05], n, 0.1, h, 0.12, 0.2, black);
-  mount(kit, "paintedMetal", [face, y(h + 0.1), zc], n, w + 0.2, 0.2, 0.12, 0.2, black);
+  // (clean panel material on the big frame faces; wear stays on the kick plates and lips below knee height)
+  mount(kit, "impPanel", [face, y(h / 2 + 0.1), z0 - 0.15], n, 0.3, h + 0.2, 0, 0.12, cleanDark);
+  mount(kit, "impPanel", [face, y(h / 2 + 0.1), z1 + 0.15], n, 0.3, h + 0.2, 0, 0.12, cleanDark);
+  mount(kit, "impPanel", [face, y(h + 0.32), zc], n, w + 0.6, 0.45, 0, 0.12, cleanDark);
+  mount(kit, "impPanel", [face, y(h / 2), z0 - 0.05], n, 0.1, h, 0.12, 0.2, cleanBlack);
+  mount(kit, "impPanel", [face, y(h / 2), z1 + 0.05], n, 0.1, h, 0.12, 0.2, cleanBlack);
+  mount(kit, "impPanel", [face, y(h + 0.1), zc], n, w + 0.2, 0.2, 0.12, 0.2, cleanBlack);
   mount(kit, "emitWarmSoft", [face, y(h + 0.01), zc], n, w - 0.1, 0.012, 0.13, 0.19);
   // kick plates and a threshold across the wall thickness
   mount(kit, "metal", [face, y(0.08), z0 - 0.15], n, 0.3, 0.16, 0.12, 0.13, midM);
@@ -38,7 +46,9 @@ export function doorway(kit, { wallX, face, n, z0, z1, h = 2.2, closed = false, 
   const lx0 = wallX - 0.03;
   const lx1 = wallX + 0.03;
   if (closed) {
-    kit.boxMM("paintedMetal", [lx0, FLOOR + 0.01, z0 + 0.01], [lx1, FLOOR + h - 0.01, z1 - 0.01], { color: IMP.mid, texel: 1 });
+    kit.boxMM("impPanel", [lx0, FLOOR + 0.01, z0 + 0.01], [lx1, FLOOR + h - 0.01, z1 - 0.01], cleanMid);
+    // scuffed kick band on the leaf (wear below knee height only)
+    kit.boxMM("paintedMetal", [lx0 - 0.004, FLOOR + 0.02, z0 + 0.03], [lx1 + 0.004, FLOOR + 0.3, z1 - 0.03], dark);
     for (const sx of [lx0 - 0.01, lx1]) {
       kit.boxMM("paintedMetal", [sx, FLOOR + 0.3, z0 + 0.12], [sx + 0.01, FLOOR + h - 0.3, z1 - 0.12], dark);
       kit.boxMM("paintedMetal", [sx - 0.002, FLOOR + 1.15, z0 + 0.1], [sx + 0.012, FLOOR + 1.19, z1 - 0.1], black);
@@ -47,8 +57,8 @@ export function doorway(kit, { wallX, face, n, z0, z1, h = 2.2, closed = false, 
     kit.collider([lx0 - 0.02, FLOOR, z0], [lx1 + 0.02, FLOOR + h, z1], "door-closed");
   } else {
     const ez0 = pocket < 0 ? z0 : z1 - 0.1;
-    kit.boxMM("paintedMetal", [lx0, FLOOR + 0.01, ez0], [lx1, FLOOR + h - 0.01, ez0 + 0.1], { color: IMP.mid, texel: 1 });
-    kit.boxMM("paintedMetal", [lx0 - 0.005, FLOOR + 0.02, pocket < 0 ? ez0 + 0.09 : ez0], [lx1 + 0.005, FLOOR + h - 0.02, pocket < 0 ? ez0 + 0.1 : ez0 + 0.01], black);
+    kit.boxMM("impPanel", [lx0, FLOOR + 0.01, ez0], [lx1, FLOOR + h - 0.01, ez0 + 0.1], cleanMid);
+    kit.boxMM("impPanel", [lx0 - 0.005, FLOOR + 0.02, pocket < 0 ? ez0 + 0.09 : ez0], [lx1 + 0.005, FLOOR + h - 0.02, pocket < 0 ? ez0 + 0.1 : ez0 + 0.01], cleanBlack);
   }
   // status lamp on the header, nameplate + intercom beside the door, amber bar on the other side
   if (status) {
@@ -108,9 +118,9 @@ export function ribs(kit, x0, x1, floorY, ceilY, stations) {
   const rib = 0.18;
   const depth = 0.16;
   for (const a of stations) {
-    kit.boxMM("paintedMetal", [x0, floorY, a - rib / 2], [x0 + depth, ceilY, a + rib / 2], dark);
-    kit.boxMM("paintedMetal", [x1 - depth, floorY, a - rib / 2], [x1, ceilY, a + rib / 2], dark);
-    kit.boxMM("paintedMetal", [x0, ceilY - depth, a - rib / 2], [x1, ceilY, a + rib / 2], dark);
+    kit.boxMM("impPanel", [x0, floorY, a - rib / 2], [x0 + depth, ceilY, a + rib / 2], cleanDark);
+    kit.boxMM("impPanel", [x1 - depth, floorY, a - rib / 2], [x1, ceilY, a + rib / 2], cleanDark);
+    kit.boxMM("impPanel", [x0, ceilY - depth, a - rib / 2], [x1, ceilY, a + rib / 2], cleanDark);
     kit.boxMM("emitWarmSoft", [x0 + depth, ceilY - 0.08, a - 0.02], [x1 - depth, ceilY - 0.06, a + 0.02]);
     kit.boxMM("metal", [x0, floorY + 1.0, a - rib / 2 - 0.01], [x0 + depth + 0.01, floorY + 1.04, a + rib / 2 + 0.01], midM);
     kit.boxMM("metal", [x1 - depth - 0.01, floorY + 1.0, a - rib / 2 - 0.01], [x1, floorY + 1.04, a + rib / 2 + 0.01], midM);
@@ -120,7 +130,7 @@ export function ribs(kit, x0, x1, floorY, ceilY, stations) {
 // Ceiling-only bay ribs: 0.2 m dark band across the ceiling breaking the light channel every 4 m bay
 export function ceilingRibs(kit, x0, x1, ceilY, stations) {
   for (const a of stations) {
-    kit.boxMM("paintedMetal", [x0, ceilY - 0.1, a - 0.1], [x1, ceilY, a + 0.1], black);
+    kit.boxMM("impPanel", [x0, ceilY - 0.1, a - 0.1], [x1, ceilY, a + 0.1], cleanBlack);
     kit.boxMM("metal", [x0 + 0.3, ceilY - 0.11, a - 0.03], [x1 - 0.3, ceilY - 0.1, a + 0.03], midM);
   }
 }
@@ -132,11 +142,12 @@ export function cableTrays(kit, ceilY, z0, z1, xs) {
     kit.boxMM("metalRough", [x - 0.16, yb, z0], [x + 0.16, yb + 0.02, z1], midM);
     kit.boxMM("metalRough", [x - 0.16, yb, z0], [x - 0.14, yb + 0.08, z1], midM);
     kit.boxMM("metalRough", [x + 0.14, yb, z0], [x + 0.16, yb + 0.08, z1], midM);
-    kit.boxMM("paintedMetal", [x - 0.1, yb + 0.02, z0 + 0.5], [x + 0.02, yb + 0.06, z1 - 0.5], black);
-    kit.boxMM("paintedMetal", [x + 0.03, yb + 0.02, z0 + 0.3], [x + 0.11, yb + 0.05, z1 - 0.3], dark);
+    // cable bundles + hangers in clean panel (the 53 m worn-metal runs under the ceiling read as a chipped seam)
+    kit.boxMM("impPanel", [x - 0.1, yb + 0.02, z0 + 0.5], [x + 0.02, yb + 0.06, z1 - 0.5], cleanBlack);
+    kit.boxMM("impPanel", [x + 0.03, yb + 0.02, z0 + 0.3], [x + 0.11, yb + 0.05, z1 - 0.3], cleanDark);
     for (let z = z0 + 1.5; z < z1 - 0.5; z += 3) {
-      kit.boxMM("paintedMetal", [x - 0.02, yb + 0.08, z - 0.015], [x + 0.02, ceilY, z + 0.015], black);
-      kit.boxMM("paintedMetal", [x - 0.18, yb + 0.08, z - 0.02], [x + 0.18, yb + 0.11, z + 0.02], black);
+      kit.boxMM("impPanel", [x - 0.02, yb + 0.08, z - 0.015], [x + 0.02, ceilY, z + 0.015], cleanBlack);
+      kit.boxMM("impPanel", [x - 0.18, yb + 0.08, z - 0.02], [x + 0.18, yb + 0.11, z + 0.02], cleanBlack);
     }
   }
 }
@@ -144,9 +155,9 @@ export function cableTrays(kit, ceilY, z0, z1, xs) {
 // Service hatch: framed 0.8 × 1.2 access panel with grooves, handle, status dot and label
 export function serviceHatch(kit, p, n) {
   const alongZ = n === "+x" || n === "-x";
-  mount(kit, "paintedMetal", p, n, 0.94, 1.34, 0, 0.06, black);
-  mount(kit, "paintedMetal", p, n, 0.8, 1.2, 0.06, 0.085, { color: IMP.mid, texel: 1 });
-  for (const dy of [-0.3, 0.3]) mount(kit, "paintedMetal", [p[0], p[1] + dy, p[2]], n, 0.7, 0.02, 0.085, 0.09, black);
+  mount(kit, "impPanel", p, n, 0.94, 1.34, 0, 0.06, cleanBlack);
+  mount(kit, "impPanel", p, n, 0.8, 1.2, 0.06, 0.085, cleanMid);
+  for (const dy of [-0.3, 0.3]) mount(kit, "impPanel", [p[0], p[1] + dy, p[2]], n, 0.7, 0.02, 0.085, 0.09, cleanBlack);
   const hq = alongZ ? [p[0], p[1], p[2] + 0.3] : [p[0] + 0.3, p[1], p[2]];
   mount(kit, "metal", hq, n, 0.04, 0.24, 0.085, 0.12, midM);
   mount(kit, "emitAmber", alongZ ? [p[0], p[1] + 0.5, p[2] - 0.3] : [p[0] - 0.3, p[1] + 0.5, p[2]], n, 0.05, 0.02, 0.085, 0.092);
@@ -155,7 +166,7 @@ export function serviceHatch(kit, p, n) {
 
 // Fire-suppression station: red-banded cabinet with a beacon and label
 export function fireStation(kit, p, n) {
-  mount(kit, "paintedMetal", p, n, 0.4, 0.6, 0, 0.14, dark);
+  mount(kit, "impPanel", p, n, 0.4, 0.6, 0, 0.14, cleanDark);
   mount(kit, "paintedMetal", [p[0], p[1] + 0.12, p[2]], n, 0.4, 0.08, 0.14, 0.145, { color: IMP.red, texel: 1 });
   mount(kit, "paintedMetal", [p[0], p[1] - 0.12, p[2]], n, 0.4, 0.08, 0.14, 0.145, { color: IMP.red, texel: 1 });
   mount(kit, "metal", [p[0], p[1] - 0.02, p[2]], n, 0.03, 0.16, 0.14, 0.17, midM);
@@ -163,6 +174,32 @@ export function fireStation(kit, p, n) {
   mount(kit, "emitRedImp", [p[0], p[1] + 0.36, p[2]], n, 0.08, 0.05, 0.1, 0.11);
   display(kit, [p[0], p[1] - 0.4, p[2]], n, "lblFire", 0.3, { bezel: 0.01, depth: 0.02 });
   plate(kit, [p[0], p[1] - 0.6, p[2]], n, 0.18, 0.18, 1);
+}
+
+/**
+ * Centre floor strip in the corridor-kit look, with the blue edge lines recessed in a groove: a 1.5 cm emitter
+ * (half the shared kit's 3 cm bar) set 4 mm below two black lips, so only its top face shows and it disappears
+ * at grazing angles instead of converging into two white lines (critic round 2: "floor edge strips clip white").
+ * Long thin boxes are split into ≤ 6 m pieces (depth precision under software GL).
+ */
+export function floorStrip(kit, xc, z0, z1, { segment = 6 } = {}) {
+  const n = Math.max(1, Math.ceil((z1 - z0) / segment));
+  const run = (lo, hi, place) => {
+    for (let i = 0; i < n; i++) place(lo + ((hi - lo) * i) / n, lo + ((hi - lo) * (i + 1) / n));
+  };
+  run(z0, z1, (a, b) => kit.boxMM("blackGloss", [xc - 0.5, FLOOR, a], [xc + 0.5, FLOOR + 0.012, b], { color: IMP.black }));
+  for (const s of [-1, 1]) {
+    const gx0 = xc + s * 0.5;
+    const gx1 = xc + s * 0.56;
+    const lo = Math.min(gx0, gx1);
+    const hi = Math.max(gx0, gx1);
+    // groove floor + outer lip; the inner lip is the centre strip's own edge
+    run(z0, z1, (a, b) => kit.boxMM("paintedMetal", [lo, FLOOR, a], [hi, FLOOR + 0.004, b], black));
+    run(z0, z1, (a, b) => kit.boxMM("paintedMetal", [s > 0 ? hi - 0.025 : lo, FLOOR + 0.004, a], [s > 0 ? hi : lo + 0.025, FLOOR + 0.012, b], black));
+    const ex0 = xc + s * 0.512;
+    const ex1 = xc + s * 0.527;
+    run(z0 + 0.4, z1 - 0.4, (a, b) => kit.boxMM("emitBlue", [Math.min(ex0, ex1), FLOOR + 0.004, a], [Math.max(ex0, ex1), FLOOR + 0.008, b]));
+  }
 }
 
 // Floor scuffs along the centre path / thresholds: a few thin dark patches beside the strip

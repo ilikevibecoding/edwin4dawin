@@ -9,6 +9,11 @@ const X0 = -83.7;
 const X1 = -20.3;
 const N_FACE = 458.3;
 const S_FACE = 465.7;
+// impPanel for every plate bigger than a hand's breadth (paintedMetal's chip map read as stains at room scale,
+// critic round 2); ×0.47 keeps the albedo paintedMetal had at the same tint
+const clean = (c, texel = 1) => ({ color: c.clone().multiplyScalar(0.47), texel });
+const cBlack = clean(IMP.black);
+const cDark = clean(IMP.dark);
 
 export function dressing(kit, FLOOR, ceilY, A) {
   ceilingWork(kit, ceilY, A);
@@ -20,9 +25,9 @@ export function dressing(kit, FLOOR, ceilY, A) {
 function ceilingWork(kit, ceilY, A) {
   // dropped soffits along both long walls with a black lip
   for (const [z0, z1, dir] of [[N_FACE, N_FACE + 0.75, 1], [S_FACE - 0.75, S_FACE, -1]]) {
-    kit.boxMM("paintedMetal", [X0, ceilY - 0.32, z0], [X1, ceilY + 0.01, z1], { color: IMP.dark, texel: 0.5 });
+    kit.boxMM("impPanel", [X0, ceilY - 0.32, z0], [X1, ceilY + 0.01, z1], clean(IMP.dark, 0.5));
     const lipZ = dir > 0 ? z1 : z0;
-    kit.boxMM("paintedMetal", [X0, ceilY - 0.4, dir > 0 ? lipZ - 0.1 : lipZ], [X1, ceilY - 0.3, dir > 0 ? lipZ : lipZ + 0.1], { color: IMP.black, texel: 0.5 });
+    kit.boxMM("impPanel", [X0, ceilY - 0.4, dir > 0 ? lipZ - 0.1 : lipZ], [X1, ceilY - 0.3, dir > 0 ? lipZ : lipZ + 0.1], clean(IMP.black, 0.5));
   }
   // cove strip only over the window band: one short 12 mm segment centred on each bay (reads as discrete cove
   // lights, not a broken bar)
@@ -77,7 +82,7 @@ function plaque(kit, cx, cy, zf, facing, variant) {
   const zr = (t) => zf + facing * t; // t = distance from the wall face into the room
   const zmm = (t0, t1) => [Math.min(zr(t0), zr(t1)), Math.max(zr(t0), zr(t1))];
   let [za, zb] = zmm(0, 0.05);
-  kit.boxMM("paintedMetal", [cx - w / 2, cy - h / 2, za], [cx + w / 2, cy + h / 2, zb], { color: IMP.black, texel: 1 });
+  kit.boxMM("impPanel", [cx - w / 2, cy - h / 2, za], [cx + w / 2, cy + h / 2, zb], cBlack);
   [za, zb] = zmm(0.05, 0.07);
   const f = 0.035;
   kit.boxMM("metal", [cx - w / 2, cy + h / 2 - f, za], [cx + w / 2, cy + h / 2, zb], { color: IMP.grey, texel: 1 });
@@ -138,7 +143,7 @@ function greeble(kit, x, y, zf, facing, kind) {
     box("metal", x - 0.05, y + 2.05, 0.02, x + 0.05, y + 2.2, 0.12, { color: IMP.grey, texel: 1 });
     decal(12, 0.2, 0, 1.7, 0.161);
   } else if (kind === "vent") {
-    box("paintedMetal", x - 0.5, y + 3.4, 0, x + 0.5, y + 3.9, 0.1, { color: IMP.black, texel: 1 });
+    box("impPanel", x - 0.5, y + 3.4, 0, x + 0.5, y + 3.9, 0.1, cBlack);
     for (let i = 0; i < 6; i++) box("paintedMetal", x - 0.46, y + 3.45 + i * 0.075, 0.1, x + 0.46, y + 3.45 + i * 0.075 + 0.035, 0.12, { color: IMP.grey, texel: 1 });
   } else {
     box("paintedMetal", x - 0.14, y + 1.35, 0, x + 0.14, y + 1.75, 0.08, { color: IMP.dark, texel: 1 });
@@ -160,6 +165,14 @@ export function pendant(kit, x, ceilY, z) {
   kit.cyl("emitAmber", x, top - 0.325, z, 0.11, 0.01, "y", { segments: 20 });
 }
 
+// Downlight can under a soffit (soffit underside at ceilY - 0.32): black can with a white lens disc. The fill spot
+// descriptor sits inside the can pointing down, so its cone never touches the soffit or the ceiling.
+export function soffitCan(kit, x, ceilY, z) {
+  kit.cyl("paintedMetal", x, ceilY - 0.41, z, 0.09, 0.18, "y", { color: IMP.black, texel: 1, segments: 16 });
+  kit.cyl("metal", x, ceilY - 0.505, z, 0.1, 0.012, "y", { color: IMP.grey, texel: 1, segments: 16 });
+  kit.cyl("emitWhite", x, ceilY - 0.512, z, 0.05, 0.006, "y", { segments: 16 });
+}
+
 // door end (x -24..-20.3): intercom + panel decal on the east wall, junction cabinet north of the counter's end
 function doorEnd(kit, y) {
   const xf = X1;
@@ -168,8 +181,8 @@ function doorEnd(kit, y) {
   kit.boxMM("emitBlue", [xf - 0.105, y + 1.36, 463.66], [xf - 0.1, y + 1.39, 463.84]);
   kit.add("decal", new THREE.PlaneGeometry(0.5, 0.5), { pos: [xf - 0.001, y + 2.1, 461.2], rot: [0, -Math.PI / 2, 0], uv: "keep", uvRect: decalRect(8) });
   kit.add("decal", new THREE.PlaneGeometry(0.5, 0.5), { pos: [-24.6, y + 2.2, S_FACE - 0.001], rot: [0, Math.PI, 0], uv: "keep", uvRect: decalRect(6) });
-  kit.boxMM("paintedMetal", [xf - 0.35, y + 0.2, 458.6], [xf, y + 2.2, 459.5], { color: IMP.dark, texel: 1 });
-  kit.boxMM("paintedMetal", [xf - 0.37, y + 0.3, 458.7], [xf - 0.35, y + 2.1, 459.4], { color: IMP.black, texel: 1 });
+  kit.boxMM("impPanel", [xf - 0.35, y + 0.2, 458.6], [xf, y + 2.2, 459.5], cDark);
+  kit.boxMM("impPanel", [xf - 0.37, y + 0.3, 458.7], [xf - 0.35, y + 2.1, 459.4], cBlack);
   kit.boxMM("emitAmber", [xf - 0.375, y + 1.9, 458.8], [xf - 0.37, y + 1.94, 459.3]);
   kit.boxMM("emitBlue", [xf - 0.375, y + 1.8, 458.8], [xf - 0.37, y + 1.84, 459.1]);
   kit.collider([xf - 0.4, y, 458.6], [xf, y + 2.2, 459.5], "cabinet");

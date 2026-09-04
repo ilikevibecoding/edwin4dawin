@@ -62,6 +62,24 @@ export function amberBar(kit, p, n, { w = 0.15, h = 0.4, emit = "emitAmber" } = 
   mount(kit, emit, [p[0], p[1] - h / 2, p[2]], n, w - 0.04, 0.015, 0.01, 0.06);
 }
 
+/**
+ * Sconce: amber bar housing on a wide dark backplate, for the few wall lamps that carry a real point descriptor.
+ * The point sits 8 cm off the wall inside the housing; at that grazing depth the wall illuminance falls as 1/r³,
+ * so the plate hides the blown ring around the housing and the wall beyond it gets a soft warm gradient (the
+ * periphery fill the wardroom lacked). Returns the descriptor position.
+ */
+export function sconce(kit, p, n, { w = 0.7, h = 1.0, emit = "emitAmber" } = {}) {
+  mount(kit, "impPanel", p, n, w, h, 0, 0.02, { color: IMP.black.clone().multiplyScalar(0.47), texel: 1 });
+  mount(kit, "metal", [p[0], p[1] + h / 2 - 0.03, p[2]], n, w - 0.08, 0.012, 0.02, 0.028, { color: IMP.mid, texel: 2 });
+  mount(kit, "metal", [p[0], p[1] - h / 2 + 0.03, p[2]], n, w - 0.08, 0.012, 0.02, 0.028, { color: IMP.mid, texel: 2 });
+  mount(kit, "paintedMetal", p, n, 0.16, 0.42, 0.02, 0.14, { color: IMP.black, texel: 1 });
+  mount(kit, emit, p, n, 0.12, 0.34, 0.14, 0.15);
+  mount(kit, emit, [p[0], p[1] + 0.21, p[2]], n, 0.12, 0.015, 0.04, 0.13);
+  mount(kit, emit, [p[0], p[1] - 0.21, p[2]], n, 0.12, 0.015, 0.04, 0.13);
+  const d = { "+x": [0.08, 0, 0], "-x": [-0.08, 0, 0], "+z": [0, 0, 0.08], "-z": [0, 0, -0.08] }[n];
+  return [p[0] + d[0], p[1], p[2] + d[2]];
+}
+
 // Atlas display: black housing + the emissive atlas cell; w is the face width, height follows the cell aspect.
 export function display(kit, p, n, name, w, { bezel = 0.035, depth = 0.04, frame = "paintedMetal" } = {}) {
   const [fw, fh] = cellSize(name, w);
@@ -70,7 +88,7 @@ export function display(kit, p, n, name, w, { bezel = 0.035, depth = 0.04, frame
   return [fw, fh];
 }
 
-// Clean panel plate (covers the shared panel texture) with 2 cm bolts in rows at its corners only
+// Clean panel plate (covers the shared panel texture) with one 2 cm bolt at each corner
 export function cleanPlate(kit, p, n, w, h, { color, proud = 0.025, bolts = true, texel = 1 } = {}) {
   // impPanel, not paintedMetal: the worn-metal chip map read as mould blotches on every corridor plate (critic
   // round 2). impPanel's base is ~2.1× brighter than the worn-metal mean, so the tint is scaled to keep the albedo.
@@ -80,18 +98,17 @@ export function cleanPlate(kit, p, n, w, h, { color, proud = 0.025, bolts = true
   const inset = 0.08;
   for (const sa of [-1, 1]) {
     for (const sy of [-1, 1]) {
-      for (let k = 0; k < 2; k++) {
-        const a = sa * (w / 2 - inset - k * 0.07);
-        const q = alongZ ? [p[0], p[1] + sy * (h / 2 - inset), p[2] + a] : [p[0] + a, p[1] + sy * (h / 2 - inset), p[2]];
-        mount(kit, "paintedMetal", q, n, 0.02, 0.02, proud, proud + 0.006, { color: IMP.black, texel: 1 });
-      }
+      const a = sa * (w / 2 - inset);
+      const q = alongZ ? [p[0], p[1] + sy * (h / 2 - inset), p[2] + a] : [p[0] + a, p[1] + sy * (h / 2 - inset), p[2]];
+      mount(kit, "paintedMetal", q, n, 0.02, 0.02, proud, proud + 0.006, { color: IMP.black, texel: 1 });
     }
   }
 }
 
 // Dark lower-wall panelling with a chair rail; face runs along `axis` ("x"|"z") at the given fixed coordinate.
-// n = normal of the face; gaps = [[a0,a1]] ranges along the run left open (doors, fixtures).
-export function wainscot(kit, { axis, at, from, to, n, gaps = [], y0 = 0.3, y1 = 1.1, proud = 0.035, color = IMP.dark, rail = IMP.mid }) {
+// n = normal of the face; gaps = [[a0,a1]] ranges along the run left open (doors, fixtures). `strip` (an emissive
+// key) adds a 12 mm light line under the rail: a low wall-strip that outlines the room's periphery.
+export function wainscot(kit, { axis, at, from, to, n, gaps = [], y0 = 0.3, y1 = 1.1, proud = 0.035, color = IMP.dark, rail = IMP.mid, strip = null }) {
   const lo = Math.min(from, to);
   const hi = Math.max(from, to);
   const segs = [];
@@ -108,6 +125,7 @@ export function wainscot(kit, { axis, at, from, to, n, gaps = [], y0 = 0.3, y1 =
     const p = axis === "z" ? [at, 0, c] : [c, 0, at];
     mount(kit, "paintedMetal", [p[0], FLOOR + (y0 + y1) / 2, p[2]], n, w, y1 - y0, 0.0, proud, { color, texel: 1 });
     mount(kit, "metal", [p[0], FLOOR + y1 + 0.02, p[2]], n, w, 0.04, 0.0, proud + 0.012, { color: rail, texel: 2 });
+    if (strip && w > 0.4) mount(kit, strip, [p[0], FLOOR + y1 - 0.03, p[2]], n, w - 0.08, 0.012, proud + 0.004, proud + 0.008);
     // vertical seams every ~1.2 m
     const nSeam = Math.max(0, Math.round(w / 1.2) - 1);
     for (let i = 1; i <= nSeam; i++) {

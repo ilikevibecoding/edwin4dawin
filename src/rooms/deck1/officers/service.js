@@ -7,6 +7,10 @@ import { amberLamp, display, junctionBox, luminaire, mount, plate, vent, wainsco
 const black = { color: IMP.black, texel: 1 };
 const dark = { color: IMP.dark, texel: 1 };
 const midM = { color: IMP.mid, texel: 2 };
+// impPanel tints for cabinet faces > 0.5 m² above knee height (paintedMetal's chip map reads as stains at that size)
+const clean = (c, texel = 1) => ({ color: c.clone().multiplyScalar(0.47), texel });
+const cDark = clean(IMP.dark);
+const cMid = clean(IMP.mid);
 
 /** faces { x0, x1, z0, z1 } (x0 = corridor wall), door { z0, z1 } on the west face */
 export function buildDutyOffice(kit, faces, door, ceilY) {
@@ -57,14 +61,14 @@ export function buildDutyOffice(kit, faces, door, ceilY) {
   display(kit, [68.75, y(1.8), z1], "-z", "log", 0.6, { bezel: 0.03, depth: 0.04 });
 
   // weapon locker on the east wall: heavy cabinet, two doors, red band, keypad, caution plate
-  kit.boxMM("paintedMetal", [x1 - 0.6, FLOOR, 507.6], [x1, y(2.2), 509.4], dark);
+  kit.boxMM("impPanel", [x1 - 0.6, FLOOR, 507.6], [x1, y(2.2), 509.4], cDark);
   kit.boxMM("paintedMetal", [x1 - 0.62, FLOOR, 507.55], [x1, y(0.12), 509.45], black);
   kit.boxMM("paintedMetal", [x1 - 0.62, y(2.2), 507.55], [x1, y(2.26), 509.45], black);
   for (const [a, b] of [
     [507.7, 508.45],
     [508.55, 509.3],
   ]) {
-    kit.boxMM("paintedMetal", [x1 - 0.615, y(0.2), a], [x1 - 0.6, y(2.1), b], { color: IMP.mid, texel: 1 });
+    kit.boxMM("impPanel", [x1 - 0.615, y(0.2), a], [x1 - 0.6, y(2.1), b], cMid);
     kit.boxMM("paintedMetal", [x1 - 0.62, y(1.5), a + 0.05], [x1 - 0.615, y(1.58), b - 0.05], { color: IMP.red, texel: 2 });
     kit.boxMM("metal", [x1 - 0.65, y(0.95), (a + b) / 2 - 0.02], [x1 - 0.615, y(1.25), (a + b) / 2 + 0.02], midM);
   }
@@ -79,9 +83,9 @@ export function buildDutyOffice(kit, faces, door, ceilY) {
   plate(kit, [x1, y(1.9), 506.9], "-x", 0.3, 0.3, 5);
 
   // north wall: file cabinet, bench, deck plan
-  kit.boxMM("paintedMetal", [74.2, FLOOR, z0], [75.0, y(1.3), z0 + 0.5], dark);
+  kit.boxMM("impPanel", [74.2, FLOOR, z0], [75.0, y(1.3), z0 + 0.5], cDark);
   for (let i = 0; i < 3; i++) {
-    kit.boxMM("paintedMetal", [74.25, y(0.12 + i * 0.4), z0 + 0.5], [74.95, y(0.46 + i * 0.4), z0 + 0.512], { color: IMP.mid, texel: 1 });
+    kit.boxMM("impPanel", [74.25, y(0.12 + i * 0.4), z0 + 0.5], [74.95, y(0.46 + i * 0.4), z0 + 0.512], cMid);
     kit.boxMM("metal", [74.5, y(0.36 + i * 0.4), z0 + 0.512], [74.7, y(0.39 + i * 0.4), z0 + 0.54], midM);
   }
   kit.collider([74.2, FLOOR, z0], [75.0, y(1.3), z0 + 0.54], "cabinet");
@@ -108,10 +112,10 @@ export function buildUtility(kit, faces, door, ceilY) {
 
   // equipment units along the west wall: three cabinets with vents, readouts and LED status
   const cab = (zc, i) => {
-    kit.boxMM("paintedMetal", [x0, FLOOR, zc - 0.45], [x0 + 0.7, y(2.1), zc + 0.45], dark);
+    kit.boxMM("impPanel", [x0, FLOOR, zc - 0.45], [x0 + 0.7, y(2.1), zc + 0.45], cDark);
     kit.boxMM("paintedMetal", [x0, FLOOR, zc - 0.47], [x0 + 0.72, y(0.1), zc + 0.47], black);
     kit.boxMM("paintedMetal", [x0, y(2.1), zc - 0.47], [x0 + 0.72, y(2.16), zc + 0.47], black);
-    kit.boxMM("paintedMetal", [x0 + 0.7, y(0.2), zc - 0.4], [x0 + 0.712, y(1.9), zc + 0.4], { color: IMP.mid, texel: 1 });
+    kit.boxMM("impPanel", [x0 + 0.7, y(0.2), zc - 0.4], [x0 + 0.712, y(1.9), zc + 0.4], cMid);
     for (let k = 0; k < 5; k++) kit.boxMM("metal", [x0 + 0.712, y(0.35 + k * 0.08), zc - 0.3], [x0 + 0.725, y(0.37 + k * 0.08), zc + 0.3], midM);
     kit.boxMM("paintedMetal", [x0 + 0.712, y(1.35), zc - 0.3], [x0 + 0.75, y(1.75), zc + 0.3], black);
     display(kit, [x0 + 0.75, y(1.62), zc], "+x", "utility", 0.5, { bezel: 0.01, depth: 0.004 });
@@ -125,7 +129,7 @@ export function buildUtility(kit, faces, door, ceilY) {
   cab(506.0, 2);
   kit.collider([x0, FLOOR, 503.5], [x0 + 0.76, y(2.16), 506.5], "equipment");
   // air handler with a duct up to the ceiling and a pipe run
-  kit.boxMM("paintedMetal", [x0, FLOOR, 508.0], [x0 + 1.15, y(2.3), 510.5], { color: IMP.mid, texel: 1 });
+  kit.boxMM("impPanel", [x0, FLOOR, 508.0], [x0 + 1.15, y(2.3), 510.5], cMid);
   kit.boxMM("paintedMetal", [x0, FLOOR, 507.95], [x0 + 1.2, y(0.15), 510.55], black);
   kit.boxMM("paintedMetal", [x0 + 1.15, y(0.4), 508.2], [x0 + 1.18, y(1.6), 510.3], black);
   for (let k = 0; k < 8; k++) kit.boxMM("metal", [x0 + 1.18, y(0.5 + k * 0.14), 508.3], [x0 + 1.2, y(0.54 + k * 0.14), 510.2], midM);

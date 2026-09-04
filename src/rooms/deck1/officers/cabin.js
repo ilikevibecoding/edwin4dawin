@@ -1,12 +1,17 @@
 // One officer's cabin, varied by seed (mirrored layout, bedding colours, personal items). The captain's
 // suite is the same function with a seating pair, a larger desk, wardrobe / arms rack / schematic wall,
 // a sleeping-area floor inset and a sideboard.
+import * as THREE from "three";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { FLOOR } from "../shared/plan.js";
-import { seat } from "../shared/props.js";
 import { IMP } from "../shared/palette.js";
 import { amberBar, junctionBox, makeFrame, rng, vent, wainscot } from "./lib.js";
 
-const BLANKETS = [IMP.mid, IMP.dark, IMP.grey, IMP.hullDark];
+// dark bedding only (the light sheet read as a flat white slab under the ceiling lamp)
+const BLANKETS = [IMP.dark, IMP.hullDark, IMP.mid];
+// impPanel tint for surfaces that used to be paintedMetal (worn-metal chips read as stains above knee height)
+const CLEAN = 0.47;
+const clean = (c, texel = 1) => ({ color: c.clone().multiplyScalar(CLEAN), texel });
 
 /**
  * faces: { x0, x1, z0, z1 } interior wall faces; side -1 west (door wall at x1) / +1 east (door wall at x0);
@@ -25,16 +30,38 @@ export function buildCabin(kit, faces, side, doorZ, { seed = 1, captain = false,
   const dark = { color: IMP.dark, texel: 1 };
   const black = { color: IMP.black, texel: 1 };
   const midM = { color: IMP.mid, texel: 2 };
-  const fab = (c) => ({ color: c, texel: 2 });
+  const fab = (c, texel = 2) => ({ color: c, texel });
+  // chamfered box (RoundedBoxGeometry, 1 segment = 45° chamfer, 108 tris) in local (u, y, v) terms
+  const rbox = (mat, u0, u1, y0, y1, v0, v1, r, opts) => {
+    const p = F.P((u0 + u1) / 2, (y0 + y1) / 2, (v0 + v1) / 2);
+    kit.add(mat, new RoundedBoxGeometry(Math.abs(v1 - v0), y1 - y0, Math.abs(u1 - u0), 1, r), { pos: p, ...opts });
+  };
+  // rug: dark border, fine-weave warm-grey field, two inset stripes (the plain mid slab read as blocking geometry)
+  const rugField = new THREE.Color().copy(IMP.mid).lerp(IMP.amber, 0.12);
+  const rug = (u0, u1, v0, v1) => {
+    box("fabric", u0, u1, 0.0, 0.012, v0, v1, fab(IMP.dark, 3));
+    box("fabric", u0 + 0.22, u1 - 0.22, 0.0, 0.016, v0 + 0.22, v1 - 0.22, fab(rugField, 6));
+    for (const [a, b] of [
+      [u0 + 0.32, u0 + 0.36],
+      [u1 - 0.36, u1 - 0.32],
+    ])
+      box("fabric", a, b, 0.016, 0.018, v0 + 0.32, v1 - 0.32, fab(IMP.dark, 3));
+    for (const [a, b] of [
+      [v0 + 0.32, v0 + 0.36],
+      [v1 - 0.36, v1 - 0.32],
+    ])
+      box("fabric", u0 + 0.32, u1 - 0.32, 0.016, 0.018, a, b, fab(IMP.dark, 3));
+  };
 
   // --- wall treatment: dark wainscot on all four faces, pelmet over the door wall hides the corridor strip
   const wz = (u0, u1) => [Math.min(F.Z(u0), F.Z(u1)), Math.max(F.Z(u0), F.Z(u1))];
   const wx = (v0, v1) => [Math.min(F.X(v0), F.X(v1)), Math.max(F.X(v0), F.X(v1))];
+  const wardU = [3.35, 4.35]; // wardrobe on the back wall between the nightstand and the desk
   wainscot(kit, { axis: "z", at: F.X(0), from: F.Z(0), to: F.Z(U), n: F.nrm("+v"), gaps: [wz(doorU - 0.85, doorU + 0.85), wz(0.35, 1.45)] });
-  wainscot(kit, { axis: "z", at: F.X(V), from: F.Z(0), to: F.Z(U), n: F.nrm("-v"), gaps: captain ? [wz(3.3, 4.0)] : [] });
+  wainscot(kit, { axis: "z", at: F.X(V), from: F.Z(0), to: F.Z(U), n: F.nrm("-v"), gaps: [wz(wardU[0] - 0.05, wardU[1] + 0.05)] });
   wainscot(kit, { axis: "x", at: F.Z(0), from: F.X(0), to: F.X(V), n: F.nrm("+u"), gaps: [] });
   wainscot(kit, { axis: "x", at: F.Z(U), from: F.X(0), to: F.X(V), n: F.nrm("-u"), gaps: [wx(0.9, 2.0)] });
-  box("paintedMetal", 0.02, U - 0.02, 1.98, 2.32, 0, 0.05, dark);
+  box("impPanel", 0.02, U - 0.02, 1.98, 2.32, 0, 0.05, clean(IMP.dark));
   // inner door frame (heavy, recessed look) + threshold
   box("paintedMetal", doorU - 0.8, doorU - 0.6, 0, 2.5, 0, 0.08, black);
   box("paintedMetal", doorU + 0.6, doorU + 0.8, 0, 2.5, 0, 0.08, black);
@@ -44,7 +71,8 @@ export function buildCabin(kit, faces, side, doorZ, { seed = 1, captain = false,
   F.display(kit, doorU + 1.3, 1.5, 0, "+v", plateName, 0.32, { bezel: 0.02, depth: 0.03 });
   junctionBox(kit, F.P(doorU - 1.2, 1.5, 0), F.nrm("+v"), rand() < 0.5 ? "emitRedImp" : "emitBlue");
 
-  // --- bunk against the outer wall: 0.15 m frame, mattress, blanket with folds, pillow, recessed shelf above
+  // --- bunk against the outer wall: frame on four legs (plinth gap), dark mattress + bedding, chamfered pillow,
+  // folded blanket at the foot, recessed shelf above
   const bw = captain ? 1.25 : 1.0;
   if (captain) {
     // sleeping-area floor inset (3 × 4 m) with a metal edge
@@ -53,26 +81,28 @@ export function buildCabin(kit, faces, side, doorZ, { seed = 1, captain = false,
     box("metal", 0.3, 0.33, 0.0, 0.012, V - 4.0, V - 0.02, midM);
     box("metal", 3.27, 3.3, 0.0, 0.012, V - 4.0, V - 0.02, midM);
   }
-  box("paintedMetal", 0.45, 2.55, 0.0, 0.15, V - bw, V, black);
-  box("paintedMetal", 0.43, 2.57, 0.15, 0.2, V - bw - 0.02, V, dark);
-  box("metal", 0.43, 2.57, 0.2, 0.215, V - bw - 0.03, V - bw, midM);
+  for (const u of [0.55, 2.45]) for (const v of [V - bw + 0.08, V - 0.08]) F.cyl(kit, "metal", u, 0.07, v, 0.03, 0.14, "y", { ...midM, segments: 8 });
+  box("paintedMetal", 0.45, 2.55, 0.14, 0.3, V - bw, V, dark);
+  box("metal", 0.44, 2.56, 0.29, 0.31, V - bw - 0.015, V - bw + 0.03, midM);
+  box("metal", 0.44, 0.46, 0.29, 0.31, V - bw - 0.015, V, midM);
+  box("metal", 2.54, 2.56, 0.29, 0.31, V - bw - 0.015, V, midM);
+  // drawer fronts in the frame (below knee height: worn metal is fine here)
   for (const [a, b] of [
-    [0.5, 1.45],
-    [1.55, 2.5],
+    [0.55, 1.45],
+    [1.55, 2.45],
   ]) {
-    box("paintedMetal", a, b, 0.03, 0.13, V - bw - 0.012, V - bw, dark);
-    box("metal", a + 0.3, b - 0.3, 0.07, 0.09, V - bw - 0.03, V - bw - 0.012, midM);
+    box("paintedMetal", a, b, 0.16, 0.28, V - bw - 0.012, V - bw, black);
+    box("metal", a + 0.3, b - 0.3, 0.21, 0.23, V - bw - 0.03, V - bw - 0.012, midM);
   }
-  box("fabric", 0.48, 2.52, 0.2, 0.36, V - bw + 0.03, V - 0.03, fab(IMP.grey));
-  box("fabric", 0.5, 2.5, 0.36, 0.385, V - bw + 0.05, V - 0.05, fab(IMP.white));
-  box("fabric", 1.15, 2.48, 0.36, 0.43, V - bw + 0.04, V - 0.04, fab(blanket));
-  box("fabric", 1.15, 1.4, 0.43, 0.47, V - bw + 0.06, V - 0.06, fab(blanket));
-  box("fabric", 1.95, 2.48, 0.43, 0.5, V - bw + 0.1, V - 0.1, fab(blanket));
-  box("fabric", 2.2, 2.46, 0.5, 0.56, V - bw + 0.16, V - 0.16, fab(IMP.mid));
-  box("fabric", 0.55, 1.05, 0.36, 0.47, V - bw + 0.1, V - 0.1, fab(IMP.white));
+  box("fabric", 0.47, 2.53, 0.3, 0.44, V - bw + 0.02, V - 0.02, fab(IMP.dark)); // mattress
+  rbox("fabric", 1.05, 2.5, 0.43, 0.5, V - bw + 0.03, V - 0.03, 0.03, fab(blanket)); // tucked blanket
+  rbox("fabric", 1.05, 1.32, 0.5, 0.53, V - bw + 0.05, V - 0.05, 0.015, fab(IMP.dark)); // turned-down sheet edge
+  rbox("fabric", 0.52, 1.0, 0.44, 0.55, V - bw + 0.1, V - 0.1, 0.045, fab(IMP.grey)); // pillow
+  rbox("fabric", 2.02, 2.46, 0.5, 0.6, V - bw + 0.18, V - 0.18, 0.035, fab(IMP.mid)); // folded blanket
+  rbox("fabric", 2.06, 2.42, 0.6, 0.68, V - bw + 0.22, V - 0.22, 0.03, fab(IMP.mid));
   col(0.45, 2.55, 0, 0.6, V - bw, V, "bunk");
   // recessed shelf niche above the bunk with objects, reading lamp under its lip
-  box("paintedMetal", 0.45, 2.55, 1.6, 2.3, V - 0.34, V, black);
+  box("impPanel", 0.45, 2.55, 1.6, 2.3, V - 0.34, V, clean(IMP.black));
   box("paintedMetal", 0.45, 2.55, 1.6, 1.64, V - 0.36, V - 0.02, dark);
   box("paintedMetal", 0.45, 2.55, 2.26, 2.3, V - 0.36, V - 0.02, dark);
   box("paintedMetal", 0.45, 0.49, 1.64, 2.26, V - 0.36, V - 0.02, dark);
@@ -84,7 +114,7 @@ export function buildCabin(kit, faces, side, doorZ, { seed = 1, captain = false,
   box("paintedMetal", 1.25, 1.75, 1.5, 1.6, V - 0.4, V - 0.3, black);
   box("emitAmber", 1.28, 1.72, 1.49, 1.5, V - 0.39, V - 0.31);
   // headboard panel on the u=0 wall
-  box("paintedMetal", 0, 0.05, 0.2, 1.4, V - bw - 0.15, V - 0.02, dark);
+  box("impPanel", 0, 0.05, 0.2, 1.4, V - bw - 0.15, V - 0.02, clean(IMP.dark));
   // nightstand + item
   box("paintedMetal", 2.7, 3.2, 0.0, 0.5, V - 0.55, V, dark);
   box("darkGloss", 2.72, 3.18, 0.5, 0.52, V - 0.53, V - 0.02);
@@ -100,7 +130,7 @@ export function buildCabin(kit, faces, side, doorZ, { seed = 1, captain = false,
   box("paintedMetal", d1 - 0.55, d1 - 0.05, 0.0, 0.7, V - 0.8, V - 0.05, dark);
   box("paintedMetal", d1 - 0.5, d1 - 0.1, 0.12, 0.3, V - 0.812, V - 0.8, black);
   box("paintedMetal", d1 - 0.5, d1 - 0.1, 0.38, 0.56, V - 0.812, V - 0.8, black);
-  box("paintedMetal", d0 + 0.05, d1 - 0.55, 0.15, 0.7, V - 0.1, V - 0.03, dark);
+  box("impPanel", d0 + 0.05, d1 - 0.55, 0.15, 0.7, V - 0.1, V - 0.03, clean(IMP.dark));
   box("paintedMetal", d0 + 0.05, d0 + 0.09, 0.0, 0.7, V - 0.8, V - 0.05, black);
   col(d0, d1, 0, 0.78, V - 0.85, V, "desk");
   const dc = (d0 + d1) / 2;
@@ -123,11 +153,20 @@ export function buildCabin(kit, faces, side, doorZ, { seed = 1, captain = false,
     box("paintedMetal", dc - 0.5, dc + 0.5, 1.5, 1.6, V - 0.04, V, black);
     for (let i = 0; i < 8; i++) box(i % 3 === 0 ? "emitRedImp" : "emitAmber", dc - 0.42 + i * 0.12, dc - 0.36 + i * 0.12, 1.535, 1.565, V - 0.045, V - 0.04);
   }
-  const sp = F.P(dc, 0, V - 1.3);
-  seat(kit, sp[0], FLOOR, sp[2], F.facing("+v"));
+  // desk chair facing the desk: metal pedestal, chamfered fabric seat + back, armrests
+  const cu = dc + (captain ? 0.2 : 0.0);
+  const cv = V - 1.35;
+  F.cyl(kit, "paintedMetal", cu, 0.02, cv, 0.22, 0.04, "y", { ...black, segments: 10 });
+  F.cyl(kit, "metal", cu, 0.25, cv, 0.035, 0.42, "y", { ...midM, segments: 8 });
+  box("paintedMetal", cu - 0.25, cu + 0.25, 0.44, 0.48, cv - 0.24, cv + 0.24, black);
+  rbox("fabric", cu - 0.25, cu + 0.25, 0.48, 0.56, cv - 0.24, cv + 0.24, 0.03, fab(IMP.mid));
+  box("paintedMetal", cu - 0.22, cu + 0.22, 0.56, 0.62, cv - 0.28, cv - 0.24, black);
+  rbox("fabric", cu - 0.24, cu + 0.24, 0.62, 1.06, cv - 0.3, cv - 0.22, 0.03, fab(IMP.mid));
+  for (const s of [-1, 1]) box("metal", cu + s * 0.25, cu + s * 0.29, 0.5, 0.74, cv - 0.22, cv + 0.14, midM);
+  col(cu - 0.3, cu + 0.3, 0, 1.06, cv - 0.3, cv + 0.26, "chair");
 
   // --- locker on the door wall: vents, seam, handle, label
-  box("paintedMetal", 0.4, 1.4, 0.0, 2.1, 0.0, 0.6, dark);
+  box("impPanel", 0.4, 1.4, 0.0, 2.1, 0.0, 0.6, clean(IMP.dark));
   box("paintedMetal", 0.4, 1.4, 2.1, 2.14, 0.0, 0.62, black);
   box("paintedMetal", 0.895, 0.905, 0.05, 2.05, 0.6, 0.61, black);
   for (let i = 0; i < 3; i++) box("metal", 0.5, 0.85, 1.75 + i * 0.08, 1.77 + i * 0.08, 0.6, 0.615, midM);
@@ -164,9 +203,52 @@ export function buildCabin(kit, faces, side, doorZ, { seed = 1, captain = false,
     }
   }
 
+  // --- wardrobe on the back wall (v=V) between the nightstand and the desk: carcass with one leaf slid open,
+  // revealing a dark recess with a rail, hanging uniforms and a folded stack; the other leaf closed with a handle
+  {
+    const [w0, w1] = wardU;
+    const wd = 0.58;
+    const wm = (w0 + w1) / 2;
+    box("paintedMetal", w0 - 0.02, w1 + 0.02, 0.0, 0.1, V - wd - 0.01, V, black); // plinth
+    box("impPanel", w0 - 0.02, w0, 0.1, 2.05, V - wd, V, clean(IMP.dark)); // sides
+    box("impPanel", w1, w1 + 0.02, 0.1, 2.05, V - wd, V, clean(IMP.dark));
+    box("impPanel", w0 - 0.02, w1 + 0.02, 2.05, 2.1, V - wd - 0.01, V, clean(IMP.dark)); // top
+    box("impPanel", w0, w1, 0.1, 2.05, V - 0.03, V, { color: 0x08090b, texel: 1 }); // back (near-black: recess depth)
+    // closed leaf (u wm..w1) with a seam, handle and a small label
+    box("impPanel", wm + 0.005, w1 - 0.005, 0.12, 2.03, V - wd - 0.02, V - wd, clean(IMP.mid));
+    box("metal", wm + 0.05, wm + 0.09, 0.95, 1.25, V - wd - 0.05, V - wd - 0.02, midM);
+    F.plate(kit, (wm + w1) / 2, 1.6, V - wd - 0.02, "-v", 0.14, 0.14, 6);
+    // open half: leaf slid behind the closed one (its edge shows), rail, three hanging tunics, folded stack + boots
+    box("impPanel", wm - 0.06, wm, 0.12, 2.03, V - wd - 0.005, V - wd + 0.015, clean(IMP.mid));
+    F.cyl(kit, "metal", wm - 0.02, 1.8, V - wd / 2, 0.012, wm - w0 - 0.08, "u", { ...midM, segments: 8 });
+    for (let i = 0; i < 3; i++) {
+      const hu = w0 + 0.12 + i * 0.13;
+      box("metal", hu - 0.005, hu + 0.005, 1.76, 1.8, V - wd / 2 - 0.01, V - wd / 2 + 0.01, midM);
+      box("fabric", hu - 0.035, hu + 0.035, 0.85, 1.76, V - wd / 2 - 0.2, V - wd / 2 + 0.2, fab(i === 1 ? IMP.mid : IMP.dark));
+      box("fabric", hu - 0.03, hu + 0.03, 1.55, 1.76, V - wd / 2 - 0.22, V - wd / 2 + 0.22, fab(i === 1 ? IMP.mid : IMP.dark));
+    }
+    box("metal", w0 + 0.02, wm - 0.08, 0.6, 0.62, V - wd + 0.06, V - 0.04, midM); // shelf
+    rbox("fabric", w0 + 0.08, w0 + 0.36, 0.62, 0.72, V - wd + 0.12, V - 0.12, 0.02, fab(IMP.grey));
+    rbox("fabric", w0 + 0.1, w0 + 0.34, 0.72, 0.8, V - wd + 0.14, V - 0.14, 0.02, fab(IMP.mid));
+    box("paintedMetal", w0 + 0.08, w0 + 0.2, 0.1, 0.36, V - wd + 0.1, V - 0.08, black); // boots
+    box("paintedMetal", w0 + 0.24, w0 + 0.36, 0.1, 0.36, V - wd + 0.08, V - 0.1, black);
+    col(w0 - 0.02, w1 + 0.02, 0, 2.1, V - wd - 0.02, V, "wardrobe");
+  }
+  // --- mirror with a metal frame and a small shelf with two objects on the u=0 wall (between shelves and bunk head)
+  {
+    const mv = captain ? 5.4 : 5.0;
+    F.mount(kit, "metal", 0, 1.6, mv, "+u", 0.5, 0.72, 0, 0.025, midM);
+    F.mount(kit, "darkGloss", 0, 1.6, mv, "+u", 0.44, 0.66, 0.025, 0.032);
+    F.mount(kit, "paintedMetal", 0, 1.13, mv, "+u", 0.56, 0.03, 0, 0.22, black);
+    F.mount(kit, "paintedMetal", 0, 1.08, mv, "+u", 0.56, 0.08, 0, 0.03, dark);
+    F.cyl(kit, "metal", 0.11, 1.2, mv - 0.14, 0.035, 0.11, "y", { ...midM, segments: 10 });
+    box("darkGloss", 0.05, 0.18, 1.145, 1.21, mv + 0.04, mv + 0.2);
+    box("emitBlue", 0.09, 0.14, 1.21, 1.213, mv + 0.09, mv + 0.15);
+  }
+
   // --- fresher hatch on the u=U wall: recessed frame, closed leaf, status dot, label
-  box("paintedMetal", U - 0.07, U, 0, 2.08, 0.92, 1.98, black);
-  box("paintedMetal", U - 0.11, U - 0.07, 0.02, 2.0, 1.0, 1.9, { color: IMP.mid, texel: 1 });
+  box("impPanel", U - 0.07, U, 0, 2.08, 0.92, 1.98, clean(IMP.black));
+  box("impPanel", U - 0.11, U - 0.07, 0.02, 2.0, 1.0, 1.9, clean(IMP.mid));
   box("paintedMetal", U - 0.115, U - 0.11, 0.04, 1.98, 1.44, 1.46, black);
   box("paintedMetal", U - 0.115, U - 0.11, 1.0, 1.02, 1.05, 1.85, black);
   box("metal", U - 0.14, U - 0.11, 0.95, 1.15, 1.08, 1.12, midM);
@@ -177,28 +259,43 @@ export function buildCabin(kit, faces, side, doorZ, { seed = 1, captain = false,
 
   // --- seating: settee + low table (officers) or armchair pair, low table with lamp, sideboard (captain)
   if (!captain) {
-    box("paintedMetal", U - 0.75, U - 0.05, 0.0, 0.15, 3.05, 4.75, black);
-    box("fabric", U - 0.75, U - 0.05, 0.15, 0.45, 3.0, 4.8, fab(blanket));
-    box("fabric", U - 0.2, U - 0.05, 0.45, 0.95, 3.0, 4.8, fab(blanket));
-    box("fabric", U - 0.75, U - 0.2, 0.45, 0.6, 3.0, 3.1, fab(blanket));
-    box("fabric", U - 0.75, U - 0.2, 0.45, 0.6, 4.7, 4.8, fab(blanket));
-    col(U - 0.75, U - 0.05, 0, 0.95, 3.0, 4.8, "settee");
+    // settee on legs: dark frame, two chamfered seat cushions and two back cushions in a mid tint, armrests
+    for (const u of [U - 0.7, U - 0.1]) for (const v of [3.1, 4.7]) F.cyl(kit, "metal", u, 0.06, v, 0.025, 0.12, "y", { ...midM, segments: 8 });
+    box("paintedMetal", U - 0.75, U - 0.05, 0.12, 0.4, 3.02, 4.78, black);
+    for (const [a, b] of [
+      [3.06, 3.88],
+      [3.92, 4.74],
+    ]) {
+      rbox("fabric", U - 0.72, U - 0.2, 0.4, 0.5, a, b, 0.035, fab(IMP.mid));
+      rbox("fabric", U - 0.2, U - 0.08, 0.5, 0.92, a + 0.02, b - 0.02, 0.035, fab(IMP.mid));
+    }
+    box("paintedMetal", U - 0.12, U - 0.05, 0.4, 0.98, 3.02, 4.78, dark);
+    for (const [a, b] of [
+      [3.0, 3.06],
+      [4.74, 4.8],
+    ]) {
+      box("paintedMetal", U - 0.75, U - 0.08, 0.4, 0.62, a, b, dark);
+      box("metal", U - 0.75, U - 0.08, 0.62, 0.64, a - 0.005, b + 0.005, midM);
+    }
+    col(U - 0.75, U - 0.05, 0, 0.98, 3.0, 4.8, "settee");
     box("darkGloss", U - 1.75, U - 1.05, 0.4, 0.43, 3.3, 4.5);
     box("paintedMetal", U - 1.55, U - 1.25, 0.0, 0.4, 3.75, 4.05, black);
     box("paintedMetal", U - 1.65, U - 1.15, 0.0, 0.03, 3.5, 4.3, black);
     col(U - 1.75, U - 1.05, 0, 0.43, 3.3, 4.5, "table");
     box("darkGloss", U - 1.5, U - 1.3, 0.43, 0.44, 3.6, 3.85);
     amberBar(kit, F.P(U, 1.75, 3.9), F.nrm("-u"));
-    box("fabric", 2.6, U - 1.9, 0.0, 0.012, 2.0, V - 1.6, { color: IMP.mid, texel: 1 });
+    rug(2.4, 5.0, 2.1, 5.1);
   } else {
     const chair = (u0, v0, dir) => {
-      // dir +1: back on the +v side, faces -v; dir -1: back on the -v side, faces +v
-      box("paintedMetal", u0, u0 + 0.7, 0.0, 0.12, v0, v0 + 0.7, black);
-      box("fabric", u0, u0 + 0.7, 0.12, 0.45, v0, v0 + 0.7, fab(IMP.mid));
+      // dir +1: back on the +v side, faces -v; dir -1: back on the -v side, faces +v. Frame on legs, chamfered cushions
+      for (const u of [u0 + 0.06, u0 + 0.64]) for (const v of [v0 + 0.06, v0 + 0.64]) F.cyl(kit, "metal", u, 0.06, v, 0.025, 0.12, "y", { ...midM, segments: 8 });
+      box("paintedMetal", u0, u0 + 0.7, 0.12, 0.4, v0, v0 + 0.7, black);
+      rbox("fabric", u0 + 0.03, u0 + 0.67, 0.4, 0.5, v0 + 0.03, v0 + 0.67, 0.035, fab(IMP.mid));
       const bv0 = dir > 0 ? v0 + 0.56 : v0;
-      box("fabric", u0, u0 + 0.7, 0.45, 1.0, bv0, bv0 + 0.14, fab(IMP.mid));
-      box("fabric", u0, u0 + 0.1, 0.45, 0.65, v0, v0 + 0.7, fab(IMP.dark));
-      box("fabric", u0 + 0.6, u0 + 0.7, 0.45, 0.65, v0, v0 + 0.7, fab(IMP.dark));
+      box("paintedMetal", u0, u0 + 0.7, 0.4, 1.0, dir > 0 ? bv0 + 0.1 : bv0, dir > 0 ? bv0 + 0.14 : bv0 + 0.04, dark);
+      rbox("fabric", u0 + 0.03, u0 + 0.67, 0.5, 0.98, dir > 0 ? bv0 : bv0 + 0.04, dir > 0 ? bv0 + 0.1 : bv0 + 0.14, 0.035, fab(IMP.mid));
+      rbox("fabric", u0, u0 + 0.1, 0.4, 0.66, v0, v0 + 0.7, 0.03, fab(IMP.dark));
+      rbox("fabric", u0 + 0.6, u0 + 0.7, 0.4, 0.66, v0, v0 + 0.7, 0.03, fab(IMP.dark));
       col(u0, u0 + 0.7, 0, 1.0, v0, v0 + 0.7, "chair");
     };
     chair(5.7, 3.1, -1);
@@ -220,7 +317,7 @@ export function buildCabin(kit, faces, side, doorZ, { seed = 1, captain = false,
     box("paintedMetal", U - 0.045, U - 0.04, 1.55, 1.65, 2.3, 2.7, { color: IMP.red, texel: 2 });
     box("paintedMetal", U - 0.045, U - 0.04, 2.0, 2.3, 2.35, 2.65, { color: IMP.grey, texel: 2 });
     // sideboard with decanter + glasses
-    box("paintedMetal", U - 0.5, U - 0.02, 0.0, 0.9, 4.95, 6.55, dark);
+    box("impPanel", U - 0.5, U - 0.02, 0.0, 0.9, 4.95, 6.55, clean(IMP.dark));
     box("darkGloss", U - 0.52, U, 0.9, 0.93, 4.93, 6.57);
     box("paintedMetal", U - 0.51, U - 0.5, 0.1, 0.8, 5.72, 5.78, black);
     box("metal", U - 0.53, U - 0.5, 0.45, 0.5, 5.35, 5.6, midM);
@@ -230,16 +327,8 @@ export function buildCabin(kit, faces, side, doorZ, { seed = 1, captain = false,
     for (let i = 0; i < 3; i++) F.cyl(kit, "metal", U - 0.28, 0.98, 5.5 + i * 0.18, 0.035, 0.1, "y", midM);
     box("darkGloss", U - 0.4, U - 0.15, 0.93, 0.945, 6.1, 6.4);
     amberBar(kit, F.P(U, 1.9, 5.75), F.nrm("-u"));
-    box("fabric", 3.4, U - 1.0, 0.0, 0.012, 2.4, V - 1.6, { color: IMP.mid, texel: 1 });
-    // --- back wall (v=V): wardrobe between bunk and desk; arms rack, framed schematic + rank plaque over the desk
-    box("paintedMetal", 3.35, 3.95, 0.0, 2.0, V - 0.6, V, dark);
-    box("paintedMetal", 3.33, 3.97, 2.0, 2.04, V - 0.62, V, black);
-    box("paintedMetal", 3.645, 3.655, 0.05, 1.95, V - 0.61, V - 0.6, black);
-    box("metal", 3.6, 3.64, 0.95, 1.2, V - 0.64, V - 0.6, midM);
-    box("metal", 3.66, 3.7, 0.95, 1.2, V - 0.64, V - 0.6, midM);
-    for (let i = 0; i < 3; i++) box("metal", 3.43, 3.87, 1.7 + i * 0.08, 1.72 + i * 0.08, V - 0.615, V - 0.6, midM);
-    F.display(kit, 3.65, 1.5, V - 0.6, "-v", "plate0", 0.24, { bezel: 0.01, depth: 0.012 });
-    col(3.33, 3.97, 0, 2.04, V - 0.62, V, "wardrobe");
+    rug(4.8, 7.1, 2.7, 6.4);
+    // --- back wall (v=V): arms rack, framed schematic + rank plaque over the desk (wardrobe recess below, shared)
     F.display(kit, 4.75, 1.85, V, "-v", "schematic", 0.74, { bezel: 0.04, depth: 0.03, frame: "darkGloss" });
     F.mount(kit, "darkGloss", 4.75, 1.36, V, "-v", 0.42, 0.2, 0, 0.02);
     F.display(kit, 4.75, 1.36, V, "-v", "plate0", 0.32, { bezel: 0.01, depth: 0.025 });
@@ -317,22 +406,26 @@ export function buildCabin(kit, faces, side, doorZ, { seed = 1, captain = false,
     placed++;
   }
 
-  // --- ceiling luminaire: black housing with a louvred diffuser (four narrow slots, ~¼ of the old emissive area)
-  const lx = wx(V / 2 - 0.4, V / 2 + 0.4);
-  const lz = wz(U / 2 - 0.7, U / 2 + 0.7);
-  kit.boxMM("paintedMetal", [lx[0], ceilY - 0.06, lz[0]], [lx[1], ceilY, lz[1]], black);
-  kit.boxMM("emitWarmSoft", [lx[0] + 0.1, ceilY - 0.035, lz[0] + 0.08], [lx[1] - 0.1, ceilY - 0.03, lz[1] - 0.08]);
-  for (let i = 0; i <= 4; i++) {
-    const x = lx[0] + 0.1 + (i * (lx[1] - lx[0] - 0.2)) / 4;
-    kit.boxMM("metal", [x - 0.045, ceilY - 0.06, lz[0] + 0.08], [x + 0.045, ceilY - 0.035, lz[1] - 0.08], midM);
-  }
-  for (let i = 1; i < 5; i++) {
-    const z = lz[0] + 0.08 + (i * (lz[1] - lz[0] - 0.16)) / 5;
-    kit.boxMM("metal", [lx[0] + 0.1, ceilY - 0.06, z - 0.02], [lx[1] - 0.1, ceilY - 0.035, z + 0.02], midM);
+  // --- ceiling luminaire: closed black housing hung 0.32 m below the ceiling on two rods, lens on its underside
+  // (0.3 × 0.9 m ≈ 40 % of the old flush diffuser) behind three louvre bars. The room's point descriptor sits inside
+  // the housing (see `lamp` below): every housing face points away from it, so nothing near the source blows out
+  // and the ceiling only gets a soft halo (critic round 2: "ceiling lamp is a blown warm blob").
+  const lx = wx(V / 2 - 0.25, V / 2 + 0.25);
+  const lz = wz(U / 2 - 0.55, U / 2 + 0.55);
+  const lTop = ceilY - 0.32;
+  const lBot = ceilY - 0.54;
+  for (const z of [lz[0] + 0.2, lz[1] - 0.2]) kit.cyl("metal", (lx[0] + lx[1]) / 2, (ceilY + lTop) / 2, z, 0.012, ceilY - lTop, "y", { ...midM, segments: 8 });
+  kit.boxMM("paintedMetal", [lx[0], lBot, lz[0]], [lx[1], lTop, lz[1]], black);
+  kit.boxMM("metal", [lx[0] - 0.01, lBot + 0.05, lz[0] - 0.01], [lx[1] + 0.01, lBot + 0.07, lz[1] + 0.01], midM);
+  kit.boxMM("emitWarmSoft", [lx[0] + 0.1, lBot - 0.006, lz[0] + 0.1], [lx[1] - 0.1, lBot, lz[1] - 0.1], { uv: "keep" });
+  for (let i = 1; i <= 3; i++) {
+    const z = lz[0] + 0.1 + (i * (lz[1] - lz[0] - 0.2)) / 4;
+    kit.boxMM("metal", [lx[0] + 0.1, lBot - 0.008, z - 0.012], [lx[1] - 0.1, lBot - 0.004, z + 0.012], midM);
   }
   // cornice boards on the u walls keep the tall walls from reading bare
-  box("paintedMetal", U - 0.04, U, H - 0.32, H - 0.02, 0.05, V - 0.05, dark);
-  box("paintedMetal", 0, 0.04, H - 0.32, H - 0.02, 0.05, V - 0.05, dark);
+  box("impPanel", U - 0.04, U, H - 0.32, H - 0.02, 0.05, V - 0.05, clean(IMP.dark));
+  box("impPanel", 0, 0.04, H - 0.32, H - 0.02, 0.05, V - 0.05, clean(IMP.dark));
 
-  return { center: F.P(U / 2, 0, V / 2), F };
+  const centre = F.P(U / 2, 0, V / 2);
+  return { center: centre, lamp: [centre[0], (lTop + lBot) / 2, centre[2]], F };
 }

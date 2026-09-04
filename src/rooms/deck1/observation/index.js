@@ -8,12 +8,16 @@ import { LIGHT } from "../shared/palette.js";
 import { windowBand } from "./window.js";
 import { lounge, holoAnchors, GROUPS, EAST_GROUP } from "./lounge.js";
 import { eastPart } from "./east.js";
-import { dressing, pendant } from "./dressing.js";
+import { dressing, pendant, soffitCan } from "./dressing.js";
 import { holoShips } from "./holo.js";
+import { observationMaterials } from "./atlas.js";
 
 const ID = "d1-observation";
 const B = BOUNDS[ID];
 const A = { x0: -78, x1: -50, y0: 241.5, y1: 244.5, zOut: 455.5, zIn: 458 };
+// pendant white: neutral-warm rather than LIGHT.warm's orange, which turned the impPanel wall panels yellow
+// (critic round 2, "yellow-stained")
+const WARM = 0xffe4c8;
 
 const manifest = {
   id: ID,
@@ -34,6 +38,7 @@ const manifest = {
     "d1-observation-viewer": { pos: [-62.4, FLOOR, 461.9], yaw: 36, pitch: -5 },
     "d1-observation-gallery": { pos: [-47.5, FLOOR, 460.9], yaw: 72, pitch: -3 },
   },
+  materials: observationMaterials,
   build(ctx) {
     const { kit } = ctx;
     const ceilY = CEIL[ID];
@@ -51,38 +56,46 @@ const manifest = {
     });
     for (const d of manifest.doors) doorReveal(kit, manifest, d, FLOOR);
 
-    windowBand(kit, A, FLOOR);
+    const band = windowBand(kit, A, FLOOR);
     lounge(kit, FLOOR);
     eastPart(kit, FLOOR);
     dressing(kit, FLOOR, ceilY, A);
     const holoUpdate = holoShips(ctx, holoAnchors(FLOOR));
 
-    // --- lights (11 descriptors): warm pools carry the room, the window contributes a cold rim only
+    // --- lights (13 of 14): warm pools carry the room, the window contributes a cold rim only. There are no
+    // shadows, so every descriptor sits inside a closed dark housing (mullion, pendant can, soffit can, sill slab).
     // Cold key: two narrow spots hidden inside the mullions at x -70/-58, high in the reveal, cones pitched down
     // so the reveal head/jambs sit outside the cone (E ≈ 1.6 on the near-black floor).
     for (const x of [-70, -58]) {
       const tx = x + (x < -64 ? 1.6 : -1.6); // lean both cones toward the band's centre so the pools merge
       ctx.lights.push({ type: "spot", pos: [x, A.y1 - 0.2, A.zIn - 0.4], target: [tx, FLOOR, 462.6], color: LIGHT.coolWhite, intensity: 70, distance: 30, angle: 0.6, penumbra: 0.5, priority: 0.9 });
     }
-    // Wide low blue-white fill from the window plane (inside the mullion at x -66) so sill and floor pick up a
-    // cold rim; cone edge stays ~1.5° above horizontal, i.e. below the head frame.
-    ctx.lights.push({ type: "spot", pos: [-66, A.y1 - 0.2, A.zIn - 0.4], target: [-64, FLOOR, 461.5], color: LIGHT.coolWhite, intensity: 16, distance: 24, angle: 0.8, penumbra: 0.6, priority: 0.85 });
-    // Warm-white pendant downlights (LIGHT.warm) over the three window-facing groups, the east group, the counter
-    // stools and the briefing niche. The point sits inside the pendant can 1.2 m below the ceiling: h ≈ 4.2 m to
-    // the floor → E ≈ 1.6, ≈ 2.2 on the table tops, and the ceiling around it no longer blooms.
+    // Bench-back fills: downward spots in cans under the soffits behind the two benches the critic's views look at
+    // from behind. Every pool sits on the window side of the -64 bench and on the star-map side of the east bench,
+    // so their backs, the floor behind them and the lower wall saw no light at all (critic round 2: "black slabs in
+    // a black room"). The cones (±34°, pitched into the room) exclude the soffit underside and the ceiling; only
+    // the south one's penumbra grazes the wall's lower 2.5 m.
+    soffitCan(kit, -64, ceilY, 465.3);
+    ctx.lights.push({ type: "spot", pos: [-64, ceilY - 0.42, 465.3], target: [-64, FLOOR, 463.7], color: WARM, intensity: 35, distance: 9, angle: 0.6, penumbra: 0.4, priority: 0.8 });
+    soffitCan(kit, EAST_GROUP.cx, ceilY, 458.7);
+    ctx.lights.push({ type: "spot", pos: [EAST_GROUP.cx, ceilY - 0.42, 458.7], target: [EAST_GROUP.cx, FLOOR, 461.7], color: WARM, intensity: 35, distance: 9, angle: 0.6, penumbra: 0.4, priority: 0.8 });
+    // Pendant downlights over the three window-facing groups, the east group, the counter stools and the briefing
+    // niche. The point sits inside the pendant can 1.2 m below the ceiling: h ≈ 4.2 m to the floor → E ≈ 1.3,
+    // ≈ 1.7 on the table tops; 22 rather than 28 keeps the wall panels at pendant height below clipping.
     const pendants = [
-      ...GROUPS.map((x) => [x, 462.1, 28]),
-      [EAST_GROUP.cx, 464.0, 28],
-      [-29, 461.4, 26],
-      [-44.5, 460.4, 18],
+      ...GROUPS.map((x) => [x, 462.1, 22]),
+      [EAST_GROUP.cx, 464.0, 22],
+      [-29, 461.4, 20],
+      [-44.5, 460.4, 16],
     ];
     for (const [x, z, intensity] of pendants) {
       pendant(kit, x, ceilY, z);
-      ctx.lights.push({ type: "point", pos: [x, ceilY - 1.2, z], color: LIGHT.warm, intensity, distance: 10, priority: 0.6 });
+      ctx.lights.push({ type: "point", pos: [x, ceilY - 1.2, z], color: WARM, intensity, distance: 10, priority: 0.6 });
     }
-    // Cool fills at the two ends
-    ctx.lights.push({ type: "point", pos: [-81.5, ceilY - 0.4, 462.0], color: LIGHT.coolWhite, intensity: 14, distance: 9, priority: 0.3 });
-    ctx.lights.push({ type: "point", pos: [-23, ceilY - 0.4, 463.0], color: LIGHT.coolWhite, intensity: 14, distance: 9, priority: 0.3 });
+    // Under-sill wash: cold points inside the sill apron slab at bays 1/3/5 (the white cove hairline reads as the
+    // source). They pool on the floor along the window and uplight the rail posts and viewer pedestals; the apron
+    // face and fascia are behind them, so nothing near the light is lit.
+    for (const p of band.sillLights) ctx.lights.push({ type: "point", pos: p, color: LIGHT.coolWhite, intensity: 3, distance: 6, priority: 0.5 });
 
     return {
       update(dt, t) {
