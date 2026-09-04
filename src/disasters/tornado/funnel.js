@@ -134,6 +134,7 @@ void main() {
   a = floor(a * 3.0 + 0.5) / 3.0;                        // four alpha bands: hard-edged pixel smoke
   float rim = abs(dot(normalize(vNormal), normalize(vView)));
   a *= 0.55 + 0.45 * step(0.25, rim);
+  a *= mix(1.0, smoothstep(0.12, 0.5, rim), smoothstep(0.55, 0.95, vH));   // the widening top has no glassy rim
   float shade = floor(n * 4.0) / 4.0;                     // four shade bands
   vec3 col = mix(uColorBase, uColorTop, smoothstep(0.0, 0.8, vH)) * (0.66 + 0.5 * shade);
   col = stormLight(col);
@@ -224,7 +225,7 @@ export class FunnelVisual {
     // 24 radial segments (visibly faceted) and two height segments per tier (vertical wall + ledge)
     this.tube = new THREE.CylinderGeometry(1, 1, 1, 24, FUNNEL_TIERS * 2, true);
     this.tube.translate(0, 0.5, 0);
-    const top = [STORM_COLOR[0] * 0.8, STORM_COLOR[1] * 0.8, STORM_COLOR[2] * 0.8];
+    const top = [STORM_COLOR[0] * 0.62, STORM_COLOR[1] * 0.62, STORM_COLOR[2] * 0.62];
     this.outer = new THREE.Mesh(this.tube, funnelMaterial(noise, { density: 0.65, opacity: 0.9, spin: 0.55, colorTop: top, colorBase: [0.5, 0.44, 0.36], bulge: 1, topFade: 0.8, cell: 1.0 }));
     this.inner = new THREE.Mesh(this.tube, funnelMaterial(noise, { density: 1.0, opacity: 0.97, spin: 0.9, colorTop: [top[0] * 0.7, top[1] * 0.7, top[2] * 0.7], colorBase: [0.36, 0.31, 0.26], bulge: 0.6, topFade: 0.86, cell: 1.0 }));
     this.outer.renderOrder = 8; this.inner.renderOrder = 7;

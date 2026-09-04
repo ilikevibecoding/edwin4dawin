@@ -354,8 +354,8 @@ export class Tornado extends Disaster {
     if (env > 0.2 && pl.fallDistance > 4.5) pl.fallDistance = 4.5;
     const q = this.playerDist / R;
     const r = Math.max(0.5, this.playerDist), ux = dx / r, uz = dz / r;
-    if (this.tick < this.ejectUntil) {                  // thrown out: a steady outward shove, nothing else
-      pl.addForce(ux * 30, 0, uz * 30);
+    if (this.tick < this.ejectUntil) {                  // thrown out: shoved outward until safely down and clear
+      if (!pl.onGround || q < 1.5) pl.addForce(ux * 30, 0, uz * 30);
       return;
     }
     const held = q < 1.25 && this.strength > 0.3;
@@ -429,14 +429,14 @@ export class Tornado extends Disaster {
     const ropeEnd = clamp((this.rope - 0.7) / 0.3, 0, 1);      // last 30 % of the rope-out: the funnel body fades
     const fade = Math.min(1, (this.tick + alpha) / 30) * (1 - ropeEnd);
     // storm presence: builds over the first 2 s, blends out across the WHOLE rope-out (deck, overcast, sky, fog)
-    const envFade = Math.min(1, (this.tick + alpha) / 40) * (1 - this.rope);
+    const envFade = Math.min(1, (this.tick + alpha) / 160) * (1 - this.rope);
     const day = this.game.sky ? this.game.sky.dayFactor : 1;
     const sky = this.stormSkyColor(day);
     const vx = (this.position.x - this.prevPosition.x) * 20, vz = (this.position.z - this.prevPosition.z) * 20;
     const t = this.vtime;
     const vs = this._vs;
     vs.x = this.rx; vs.z = this.rz; vs.baseY = this.baseY; vs.topY = CLOUD_DECK_Y; vs.radius = p.radius; vs.rope = this.ropeSmooth; vs.time = t;
-    vs.fade = fade; vs.deckFade = envFade; vs.day = 0.1 + 0.9 * day; vs.sky = sky;
+    vs.fade = fade; vs.deckFade = envFade; vs.day = 0.4 + 0.6 * day; vs.sky = sky;
     vs.swayX = 2.5 * Math.sin(t * 0.6) - vx * 1.2 + this.ropeSmooth * 6 * Math.sin(t * 0.9);
     vs.swayZ = 2.5 * Math.cos(t * 0.45) - vz * 1.2 + this.ropeSmooth * 6 * Math.cos(t * 0.7);
     this.visual.update(vs);
@@ -458,7 +458,7 @@ export class Tornado extends Disaster {
 
   // Overcast colour (shared with the deck) scaled by daylight so a night storm stays dark.
   stormSkyColor(day) {
-    const s = 0.1 + 0.9 * day, c = this._sky;
+    const s = 0.4 + 0.6 * day, c = this._sky;
     c[0] = STORM_COLOR[0] * s; c[1] = STORM_COLOR[1] * s; c[2] = STORM_COLOR[2] * s;
     return c;
   }
@@ -518,19 +518,41 @@ export class Tornado extends Disaster {
   // of the funnel and 35 % beyond SKY_FAR; it ramps in with the touchdown and blends out across the whole
   // rope-out (envFade), after which finishVisuals() resets the effects.
   updateEnvironment(dt, camDist, envFade, sky) {
-    this.envTimer -= dt;
+    this.envTimer -= dt; this.envAcc = (this.envAcc || 0) + dt;
     if (this.envTimer > 0) return;
+    const step = this.envAcc; this.envAcc = 0;
     this.envTimer = 0.1;
     const fx = this.m.effects;
     if (envFade <= 0.002) { fx.reset(); return; }
     const I = this.params.intensity;
     const far = clamp((camDist - SKY_NEAR) / (SKY_FAR - SKY_NEAR), 0, 1);
-    const presence = (1 - 0.65 * far * far * (3 - 2 * far)) * envFade;
+    const gone = clamp((camDist - SKY_FAR) / 300, 0, 1);          // nothing left of the storm sky ~600 blocks out
+    const presence = (1 - 0.65 * far * far * (3 - 2 * far)) * (1 - gone) * envFade;
     const mix = presence * (0.85 + 0.15 * I);
-    const dark = presence * (0.55 + 0.45 * I);
+    // the dust darkening of the terrain is a daytime effect; at night the world is already dark
+    const day = this.game.sky ? this.game.sky.dayFactor : 1;
+    const dark = presence * (0.55 + 0.45 * I) * clamp((day - 0.15) / 0.3, 0, 1);
     const tint = this._tint;
     tint[0] = 1 + (0.42 - 1) * dark; tint[1] = 1 + (0.4 - 1) * dark; tint[2] = 1 + (0.385 - 1) * dark;
-    fx.setEnvironment({ skyColor: sky, skyMix: mix, cloudAlpha: 1 - 0.9 * mix, skyLightMul: 1, tint, fogColor: null, fogNearMul: 1 - 0.3 * presence, fogFarMul: 1 - 0.35 * presence });
+    fx.setEnvironment({ skyColor: sky, skyMix: mix, cloudAlpha: 1 - 0.9 * mix, skyLightMul: 1, tint, fogColor: null, fogNearMul: 1 - 0.2 * presence, fogFarMul: 1 - 0.2 * presence });
+    this.updateLightning(presence, day, step);
+  }
+
+  // Lightning: the storm sky flashes bright for a moment (the override colour snaps up and eases back), the
+  // world gets a short cool flash and thunder rumbles. Cosmetic only (render side), more frequent at night
+  // where it is what silhouettes the funnel.
+  updateLightning(presence, day, step) {
+    if (presence < 0.25) return;
+    this.lightningTimer = (this.lightningTimer === undefined ? 4 : this.lightningTimer) - step;
+    if (this.lightningTimer > 0) return;
+    const night = 1 - clamp((day - 0.1) / 0.4, 0, 1);
+    this.lightningTimer = (night > 0.5 ? 5 : 11) + Math.random() * (night > 0.5 ? 7 : 14);
+    const fx = this.m.effects;
+    const k = 0.55 + 0.35 * night;
+    fx.override.skyColor.setRGB(0.55 + 0.35 * k, 0.6 + 0.32 * k, 0.75 + 0.25 * k);
+    fx.flash(0.22 + 0.2 * night, 0.35, [0.8, 0.85, 1]);
+    const audio = this.game.audio;
+    if (audio && audio.ctx) { this._sndPos.x = this.rx; this._sndPos.y = this.baseY + 40; this._sndPos.z = this.rz; audio.rumble(this._sndPos, 0.8); }
   }
 
   updateAudio(dt, camDist, fade, paused) {
