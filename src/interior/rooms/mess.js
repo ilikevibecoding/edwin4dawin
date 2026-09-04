@@ -8,7 +8,7 @@ import { roomShell, impWall, wallScreen, equipmentRack, crate, pipeRun, wallSegm
 import { pointLight, wallFrame } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect, GRATE_TILE } from "../../textures.js";
-import { ensureCrewMaterials, SIGN, signRect, wallSign, messTable, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, valveWheel, gauge, intercom, stool, wallShelf, propFrame } from "./crewProps.js";
+import { ensureCrewMaterials, SIGN, signRect, wallSign, floorSign, messTable, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, valveWheel, gauge, intercom, stool, wallShelf, propFrame } from "./crewProps.js";
 
 /** Round pedestal table (light plate top, black rim) with four stools. */
 function roundTable(kit, ctx, { x, z, seed }) {
@@ -187,6 +187,95 @@ export function buildMess(kit, ctx) {
     kit.cyl("paintedMetal", x + 1.1, 0.82, z, 0.28, 0.06, "y", { color: PALETTE.impBlack, segments: 14, texel: 2 });
     kit.box("hazard", x + 1.1, 0.5, z + 0.265, 0.3, 0.06, 0.01, { texel: 3 });
     kit.collider([x + 0.82, 0, z - 0.28], [x + 1.38, 0.9, z + 0.28], "bin");
+  }
+
+  // ------------------------------------------------------------------ entry: hand-wash and tray-return stations
+  // flanking the aisle just inside the door (the front 40 % of the fixed view was bare deck: the entry
+  // aisle between the turned near tables is 5 m wide). Both back onto the near tables and leave the
+  // 3.6 m centre lane to the counter open. A KEEP AISLE CLEAR stencil sits between them.
+  {
+    const x0 = 6.9; // (the fixed view's bottom edge meets the deck at x ≈ 7: nothing nearer is seen)
+    const x1 = 9.1;
+    const xc = (x0 + x1) / 2;
+    const L = x1 - x0;
+    // hand-wash trough on the south side: cabinet, steel top with a sunken trough, three taps, a splash
+    // panel with the lit WASH HANDS plate, soap dispensers and a towel bin
+    {
+      const zb = -21.5; // back face (toward the near table)
+      const zf = -20.85; // front face (aisle)
+      const zc = (zb + zf) / 2;
+      kit.boxMM("paintedMetal", [x0, 0, zb], [x1, 0.86, zf], { color: PALETTE.impDark, texel: 1.5 });
+      kit.boxMM("paintedMetal", [x0 - 0.02, 0, zb - 0.02], [x1 + 0.02, 0.1, zf + 0.02], { color: PALETTE.impBlack, texel: 2 });
+      kit.boxMM("impPanel1", [x0 + 0.05, 0.14, zf - 0.01], [x1 - 0.05, 0.82, zf + 0.012], { color: PALETTE.impGrey, uv: "keep" });
+      kit.boxMM("metal", [x0 - 0.03, 0.86, zb - 0.03], [x1 + 0.03, 0.92, zf + 0.03], { color: PALETTE.steel, texel: 1 });
+      kit.boxMM("darkGloss", [x0 + 0.15, 0.905, zb + 0.14], [x1 - 0.15, 0.925, zf - 0.14]);
+      for (let k = 0; k < 3; k++) {
+        const tx = x0 + 0.5 + k * 0.7;
+        kit.cyl("metal", tx, 1.07, zb + 0.1, 0.016, 0.32, "y", { color: PALETTE.steel, segments: 8 });
+        kit.cyl("metal", tx, 1.23, zb + 0.2, 0.016, 0.22, "z", { color: PALETTE.steel, segments: 8 });
+        kit.box("rubber", tx, 1.27, zb + 0.1, 0.08, 0.02, 0.03, { color: PALETTE.rubber });
+      }
+      // splash panel rising from the back edge, lit sign facing the aisle
+      kit.boxMM("paintedMetal", [x0, 0.86, zb - 0.02], [x1, 1.75, zb + 0.06], { color: PALETTE.impBlack, texel: 2 });
+      kit.boxMM("impPanel", [x0 + 0.04, 0.92, zb + 0.06], [x1 - 0.04, 1.7, zb + 0.075], { color: PALETTE.impLight, uv: "keep" });
+      kit.boxMM("metal", [x0 + 0.2, 1.0, zb + 0.075], [x1 - 0.2, 1.04, zb + 0.14], { color: PALETTE.steel, texel: 1 });
+      for (let k = 0; k < 2; k++) {
+        const sx = x0 + 0.9 + k * 0.6;
+        kit.box("paintedMetal", sx, 1.2, zb + 0.11, 0.1, 0.16, 0.08, { color: PALETTE.impWhite, texel: 2 });
+        kit.box("emitGreen", sx, 1.13, zb + 0.152, 0.03, 0.02, 0.006);
+      }
+      // ink stencil on the splash panel (a lit plate this close to the camera blew out to a white slab)
+      kit.add("crew_sign", new THREE.PlaneGeometry(1.2, 0.3), { pos: [xc, 1.5, zb + 0.081], uv: "keep", uvRect: signRect(SIGN.HANDWASH) });
+      kit.box("paintedMetal", xc, 1.31, zb + 0.08, 1.2, 0.012, 0.01, { color: PALETTE.impBlack, texel: 2 });
+      // towel bin at the door end
+      kit.cyl("paintedMetal", x0 - 0.35, 0.36, zc, 0.24, 0.72, "y", { color: PALETTE.impMid, segments: 14, texel: 2 });
+      kit.cyl("paintedMetal", x0 - 0.35, 0.74, zc, 0.26, 0.05, "y", { color: PALETTE.impBlack, segments: 14, texel: 2 });
+      kit.box("fabric", x0 - 0.35, 0.78, zc + 0.1, 0.2, 0.06, 0.16, { color: PALETTE.impWhite, texel: 3 });
+      kit.collider([x0 - 0.62, 0, zb - 0.04], [x1 + 0.04, 1.75, zf + 0.04], "handwash");
+    }
+    // tray-return rack on the north side: open steel frame with three shelves of stacked trays, a
+    // header carrying the lit TRAY RETURN plate toward the aisle, cutlery bin and a waste bin
+    {
+      const zf = -17.25; // front face (aisle)
+      const zb = -16.6; // back face (toward the near table)
+      const zc = (zb + zf) / 2;
+      kit.boxMM("paintedMetal", [x0, 0, zf], [x1, 0.1, zb], { color: PALETTE.impBlack, texel: 2 });
+      for (const [px, pz] of [
+        [x0 + 0.04, zf + 0.04],
+        [x1 - 0.04, zf + 0.04],
+        [x0 + 0.04, zb - 0.04],
+        [x1 - 0.04, zb - 0.04],
+      ]) kit.box("metal", px, 0.85, pz, 0.05, 1.7, 0.05, { color: PALETTE.steel, texel: 1 });
+      for (let s = 0; s < 3; s++) {
+        const y = 0.34 + s * 0.4;
+        kit.boxMM("metal", [x0, y, zf], [x1, y + 0.03, zb], { color: PALETTE.steel, texel: 1 });
+        // stacks of returned trays, uneven heights
+        let tx = x0 + 0.3;
+        let k = 0;
+        while (tx < x1 - 0.3) {
+          const n = 2 + ((s * 3 + k) % 4);
+          for (let t = 0; t < n; t++) kit.box("impPanel1", tx, y + 0.03 + 0.012 + t * 0.025, zc, 0.44, 0.02, 0.32, { color: t % 2 ? PALETTE.impLight : PALETTE.impGrey, uv: "keep", texel: 3 });
+          tx += 0.56;
+          k++;
+        }
+      }
+      // header plate facing the aisle (-z): light plate in a black frame with the TRAY RETURN stencil
+      // and a dim amber line under it
+      kit.box("paintedMetal", xc, 1.6, zf + 0.06, L + 0.04, 0.3, 0.12, { color: PALETTE.impBlack, texel: 2 });
+      kit.box("impPanel", xc, 1.6, zf - 0.006, L - 0.16, 0.22, 0.012, { color: PALETTE.impLight, uv: "keep" });
+      const tg = new THREE.PlaneGeometry(1.2, 0.3);
+      tg.rotateY(Math.PI);
+      kit.add("crew_sign", tg, { pos: [xc, 1.6, zf - 0.018], uv: "keep", uvRect: signRect(SIGN.TRAYS) });
+      kit.box("emitAmberDim", xc, 1.43, zf - 0.006, L - 0.6, 0.02, 0.01, { uv: "keep" });
+      // cutlery bin on the top shelf end, waste bin on the deck at the door end
+      kit.box("paintedMetal", x1 - 0.32, 1.25, zc, 0.36, 0.14, 0.3, { color: PALETTE.impDark, texel: 2 });
+      for (let k = 0; k < 6; k++) kit.cyl("metal", x1 - 0.44 + k * 0.05, 1.4, zc + (k % 2) * 0.06, 0.006, 0.2, "y", { color: PALETTE.steel, segments: 5 });
+      kit.cyl("paintedMetal", x0 - 0.35, 0.4, zc, 0.26, 0.8, "y", { color: PALETTE.impMid, segments: 14, texel: 2 });
+      kit.cyl("paintedMetal", x0 - 0.35, 0.82, zc, 0.28, 0.06, "y", { color: PALETTE.impBlack, segments: 14, texel: 2 });
+      kit.box("hazard", x0 - 0.35, 0.5, zc - 0.265, 0.3, 0.06, 0.01, { texel: 3 });
+      kit.collider([x0 - 0.64, 0, zf - 0.04], [x1 + 0.04, 1.75, zb + 0.04], "trayreturn");
+    }
+    floorSign(kit, SIGN.KEEPCLEAR, 8.2, -19.0, 2.6, -Math.PI / 2, false);
   }
 
   // ------------------------------------------------------------------ serving counter (x ≈ 21.5)
