@@ -1,3 +1,89 @@
+# PROGRESS — ISD Vigilant (Imperial Star Destroyer)
+
+Stack: Vite + three (npm), n8ao, playwright-core (headless Chromium via SwiftShader for screenshots and
+navigation tests). Environment note: the development container has no GPU, so every frame time in
+`results.json` is software-GL and meaningless as an FPS claim; the numbers that transfer to a real machine
+are draw calls, triangles (note: `renderer.info` counts shadow-map and AO pre-passes too, so a "frame" is
+2–3× the visible geometry), shader programs, heap, build/load times, light counts and collider counts.
+Rubric: `docs/REVIEW_RUBRIC.md`. Plan and hierarchy: `docs/SHIP_PLAN.md`. Conventions: `docs/WORKSTREAMS.md`.
+
+Live build (refreshed hourly from the working branch by `tools/publish_hourly.sh`):
+https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/star-destroyer-play-14e2/index.html
+
+---
+
+## Baseline — the Kestrel freighter before the transformation
+
+`shots/iter_baseline/`, `results.json`: 5 rooms (corridor, cockpit, quarters, galley, bathroom), 110–171 draw
+calls, 226k–366k triangles, 22 lights, 49 programs, 66 geometries, three interactions all passing.
+
+## Milestone 1 — framework and layout
+
+- `src/config/layout.js`: 1,600 m hull profile (`halfWidth/dorsalY/keelY`), terraces, tower, engines,
+  reactor bulb, hangar/shuttle wells, 4 clusters, 28 rooms + 7 corridors, 45 doors, 8 turbolifts, spawns,
+  TIE racks, patrol loops. Every builder imports from here; no coordinate is duplicated.
+- Streaming (`core/zone.js`): one merged mesh set per material per room; visible = current room + rooms
+  behind open doors / open portals; exterior camera streams only window rooms. Door frames merged per
+  cluster (a door costs 2 leaf meshes + 1 light).
+- Fixed light pool (`core/lightpool.js`): 12 point + 2 shadow spots re-targeted per room; the shader light
+  count never changes, so no recompiles when moving between rooms. All interior programs are precompiled in
+  parallel at load (`compileAsync` over the hidden rooms).
+- Doors (`interior/doors.js`): split / blast leaves, proximity auto-open, locked keypads (ISB, armory,
+  security), serialisable state. Turbolifts (`interior/lifts.js`): seal → strobe/shake/deck counter →
+  teleport → far doors open; 8 cabs, 4 decks.
+- Player: substepped capsule collision, walkable patches (pits, stairs, catwalks, ramps) with step-up and
+  gravity, sprint. Cameras: exterior orbit/fly with 8 presets, fly-in boarding, fade-out leaving.
+- Materials (`materials/imperial.js`): Imperial palette, hierarchical hull plating with a distance-faded
+  detail normal, blinking indicator banks and animated tactical screens (shader-driven, zero CPU),
+  Aurebesh-style stencils, hangar deck markings. Procedural audio bus, sync snapshot registry,
+  flight/landing interface stubs (`systems/flight.js`).
+
+## Milestone 2 — six parallel workstreams (separate agents, partitioned files)
+
+| workstream | delivered | room-own draw calls / triangles |
+|---|---|---|
+| exterior detail | 29k instanced greebles in 58 batched chunks with S/M/L LOD tiers, 6 heavy + 24 point-defence turbolasers, sensor arrays, hatches/docking ports/landing pads, window slits + running lights + strobes, ~2.7k weathering decals | ≤ 50 greeble calls, ≤ 806k drawn greeble tris at the closest pose |
+| bridge | walkway, two crew pits with 24 duty consoles, outer platforms, holo + nav tables, two trapezoid window banks, captain's step, alert toggle | 40 / 62k, 20 lights |
+| hangar + fighters | 120×190×42 m bay, launch well with animated blast doors, 12 TIE racks, galleries, flight-control booth, fighter maintenance, Lambda shuttle bay, escape pods; 12 TIEs with launch/patrol/return scheduler, pilot hooks, replayable state (0 mismatches after 120 s) | hangar 50 / 128k; traffic 8 calls |
+| crew deck | crew quarters, officers' quarters, mess + galley, lounge with slanted viewports, medbay (bacta tank), armory, detention (force-field cells) | 24–28 / 27k–144k each |
+| engineering | reactor chamber (26 m pit, glowing core), engineering control (window onto the core), hyperdrive, life support, maintenance bay, cargo bay | reactor 47 / 128k; others 28 / 29k–118k |
+| tower rooms | tactical holo room, comms/sensor control, ISB intelligence room, briefing amphitheatre, aft observation deck | 22–28 / 12k–31k each |
+
+## Review round 1 (`shots/review_1/`, 134 views + navigation)
+
+Technical: no page errors; 33/33 doors traversed by the walk test; board (fly-in → fade → bridge) and
+leave transitions OK; 139 shader programs after visiting every room (53 at load); heap 168 MB; load 13.7 s
+in headless software GL (materials 3.2 s, exterior 0.3 s, interior 1.5 s). The turbolift ride test
+timed out: root cause found afterwards — the destination cab lay outside every room's bounds, so the
+arrival deck never streamed in until the rider stepped out (fixed: cabs are part of their lobby).
+Worst view before fixes: 1,037 draw calls / 3.5M triangles at the turbolaser close-up (every tower room
+was being streamed for an exterior camera that could not see them; fixed by streaming only window rooms).
+
+Three independent critics (exterior; tower + hangar; crew + engineering) ranked 42 defects. Cross-cutting
+findings and fixes:
+
+| finding | fix |
+|---|---|
+| sunlit armour near white, window lights oversized and blown | exterior exposure 0.74, bloom threshold 1.35 outside; windows ≤ 0.9 m, 2,741 → 432, 20% emissive; roof-edge tubes removed |
+| plate grid "graph paper", one tile everywhere | hierarchical plating (12–24 m primaries with irregular sub-plates, per-plate tone/height, wide bevelled primary seams, hairline sub-seams); regional tone sets |
+| no contact shadows at 50 m | shadow skirts under 3,340 greebles, turret plinths, normal·sun face shading, dark grille faces |
+| engine glow a flat recessed disc off-axis | emissive bore lining core → blue lip, throat moved clear of the soot decals |
+| moon with a hard orange rim behind the mast; planet halos sun-independent | airless moons get no shell; halos 1.1× radius, night side 4%; moon moved |
+| interior light bands blown to white bars | `lightBand`/`lightSoft` −40%, bloom threshold 1.25 inside; rooms re-keyed with point descriptors |
+| "confetti" indicator grids | grids redrawn as ordered console banks (blocks, bar-graph runs, dark joints); wall-sized panels replaced by authored displays in every room |
+| door leaves read as black slabs; lift lobbies empty; corridors end in a black vanishing point | light leaves with a lit meeting-edge strip, clean painted frames; lobbies dressed per deck (directory kiosk, boards, lockers, pipes, crates, benches); bulkhead frames every 12 m |
+| deck scuffs read as cracked marble | scuffs fainter and non-metallic |
+| room-specific (floating screen, dish through a console, open interrogation cell, briefing column in the sightline, flat launch well, shuttle-bay hairlines, bare decks, conduit through hyperdrive spheres, engControl empty, …) | fixed by the five workstreams' round-1 passes (`shots/*_fix1/`) |
+
+## Review round 2 (`shots/review_2/`)
+
+(see the table appended below when the run completes)
+
+---
+---
+
+# Earlier project: Kestrel first-person interior (kept for history)
+
 # PROGRESS — first-person spaceship interior (Three.js)
 
 Stack: Vite + three (npm), n8ao, playwright-core (headless Chromium via SwiftShader for screenshots).
