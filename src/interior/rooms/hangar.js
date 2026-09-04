@@ -15,7 +15,7 @@ import {
   crate, toolCart, fuelBowser, pedestalConsole, cabinet, lightBar, recessedBank, floodFixture, truss, cableTray, pallet,
   pipeRun, stairTower, gantryCrane, blastLeaves, beacons, tractorEmitters, cargoLift, loaderVehicle, shadowCasters,
   RAIL_H, BLACK, ensureLabels, ensureDiffuser, frameLabel, deckLabel, launchCradle, doorSurround, wellShaft,
-  shimmerSheet, tieCradle, tieShape, ladder, displayWall, glassCab, clampRack, corridorPortal,
+  shimmerSheet, tieCradle, tieShape, ladder, displayWall, glassCab, clampRack, corridorPortal, tripodLamp, hoseReel,
 } from "../../hangar/machinery.js";
 
 const CAT_Y = -62; // service catwalks
@@ -24,9 +24,18 @@ const GIRDER = { y0: -50.2, y1: -48.6 }; // rack girders
 const CRANE_Y = -46.8; // crane bridge centre
 const RAIL = { y: -69.7, z: 466, x: -4 }; // launch-cradle drop rail (underside, z between the rack rows 456 / 472), carriage start
 const CAB = { x0: 21.5, x1: 28.5, z0: 460, z1: 468 }; // flight-control cab on the starboard catwalk
-// traffic.js parks its craft in racks 0..5 (createTraffic count 6, racks ordered z-major then x); the two
-// aft racks stay free, so static kit fighters hang there "under maintenance"
-const STATIC_RACKS = [6, 7];
+// traffic.js parks its craft in racks 0..5 (createTraffic count 6, racks ordered z-major then x) nose -z, so
+// from either side deck a parked fighter shows one wing panel face-on with the pod hidden behind it. The two
+// aft racks stay free and hold static kit fighters, and two more maintenance racks hang from the starboard
+// girder between the traffic racks; all four clamp heads are slewed so the pod shows between the wings from
+// the port deck (hangarDeck at (-26, 465), the lift door at (-30.6, 479.5)): heading h puts the nose at
+// (-sin h, -cos h), and the values below leave both viewpoints 10-30 degrees off the nose. The head's arms
+// swing to +-4.25 sin h along the girder, 1.5 m clear of the neighbouring parked craft (+-2.3 about their z).
+const STATIC_RACKS = { 6: -1.48, 7: 1.48 };
+const MAINT_RACKS = [
+  { gx: 14, rz: 448, heading: 2.5, variant: 6, labelIdx: 20 },
+  { gx: 14, rz: 464, heading: 2.1, variant: 7, labelIdx: 21 },
+];
 const UP = new THREE.Vector3(0, 1, 0);
 
 export function build(kit, ctx, room, lib) {
@@ -118,7 +127,8 @@ function wellEdge(kit, lib, y0, W) {
   deckDecal(kit, 0, y0, W.z0 - 2.6, 2.2, 15, Math.PI);
   deckDecal(kit, 0, y0, W.z1 + 2.6, 2.2, 15, 0);
   for (const sx of [-1, 1]) for (const z of [rz0 - 2.4, rz1 + 2.4]) deckDecal(kit, sx * (rx + 1.2), y0, z, 1.6, 7, sx * Math.PI / 2);
-  for (const sx of [-1, 1]) for (const z of [440, 458, 478, 496]) deckLabel(kit, sx * (rx + 2.6), y0, z, 4.5, 16, sx * Math.PI / 2);
+  // (the starboard aft one sits behind the parked loader's slot, see starboardAft)
+  for (const sx of [-1, 1]) for (const z of [440, 458, 478, sx > 0 ? 499 : 496]) deckLabel(kit, sx * (rx + 2.6), y0, z, 4.5, 16, sx * Math.PI / 2);
 }
 
 // ---------------------------------------------------------------- lane markings and stencils
@@ -143,6 +153,7 @@ function markings(kit, lib, y0, W, z0, z1) {
     for (const [za, zb] of spans) kit.boxMM("painted", [sx * 25.6 - 0.08, y0, za], [sx * 25.6 + 0.08, y0 + 0.008, zb], { color: lib.PALETTE.impWhite, uv: "keep" });
     HANGAR.rackZ.forEach((rz, i) => deckLabel(kit, sx * 24.6, y0, rz, 3.6, 8 + i * 2 + (sx > 0 ? 1 : 0), sx * Math.PI / 2));
   }
+  for (const { rz, labelIdx } of MAINT_RACKS) deckLabel(kit, 24.6, y0, rz, 3.6, labelIdx, Math.PI / 2);
 }
 
 // ---------------------------------------------------------------- walls: human-scale band + designed plate rows
@@ -215,29 +226,37 @@ function racks(kit, lib, yTop) {
   const W = HANGAR.well;
   const positions = [];
   for (const rz of HANGAR.rackZ) for (const gx of HANGAR.rackX) positions.push([gx, rz]);
-  for (const gx of HANGAR.rackX) {
+  const wallTruss = (gx, rz) => {
+    // truss from the girder to the side wall (the crane end trucks pass above it)
     const side = Math.sign(gx);
+    const xa = Math.min(gx + side * 0.7, side * 32);
+    const xb = Math.max(gx + side * 0.7, side * 32);
+    kit.boxMM("paintedMetal", [xa, -49.7, rz - 0.4], [xb, -49.0, rz + 0.4], { color: P.gunmetal, uv: "world", texel: 0.6 });
+    kit.boxMM("paintedMetal", [xa, -49.05, rz - 0.6], [xb, -48.9, rz + 0.6], { color: P.darkMetal, uv: "world", texel: 0.6 });
+    for (let x = Math.min(xa, xb) + 2; x < Math.max(xa, xb) - 1; x += 4) kit.box("metal", x, -49.35, rz, 0.16, 0.5, 0.9, { color: P.steel, texel: 1.5 });
+  };
+  for (const gx of HANGAR.rackX) {
     kit.boxMM("paintedMetal", [gx - 0.7, GIRDER.y0, W.z0 + 1], [gx + 0.7, GIRDER.y1, W.z1 - 1], { color: P.gunmetal, uv: "world", texel: 0.6 });
     kit.boxMM("paintedMetal", [gx - 0.95, GIRDER.y1 - 0.14, W.z0 + 1], [gx + 0.95, GIRDER.y1, W.z1 - 1], { color: P.darkMetal, uv: "world", texel: 0.6 });
     kit.boxMM("paintedMetal", [gx - 0.95, GIRDER.y0, W.z0 + 1], [gx + 0.95, GIRDER.y0 + 0.14, W.z1 - 1], { color: P.darkMetal, uv: "world", texel: 0.6 });
     for (const s of [-1, 1]) kit.boxMM("emitAmber", [gx + s * 0.78 - 0.02, GIRDER.y0 + 0.4, W.z0 + 3], [gx + s * 0.78 + 0.02, GIRDER.y0 + 0.46, W.z1 - 3], { uv: "keep" });
     for (const hz of [W.z0 + 2, W.z1 - 2]) kit.boxMM("paintedMetal", [gx - 0.5, GIRDER.y1, hz - 0.5], [gx + 0.5, yTop, hz + 0.5], { color: P.gunmetal, uv: "world", texel: 0.6 });
-    for (const rz of HANGAR.rackZ) {
-      // truss to the side wall (the crane end trucks pass above it)
-      const xa = Math.min(gx + side * 0.7, side * 32);
-      const xb = Math.max(gx + side * 0.7, side * 32);
-      kit.boxMM("paintedMetal", [xa, -49.7, rz - 0.4], [xb, -49.0, rz + 0.4], { color: P.gunmetal, uv: "world", texel: 0.6 });
-      kit.boxMM("paintedMetal", [xa, -49.05, rz - 0.6], [xb, -48.9, rz + 0.6], { color: P.darkMetal, uv: "world", texel: 0.6 });
-      for (let x = Math.min(xa, xb) + 2; x < Math.max(xa, xb) - 1; x += 4) kit.box("metal", x, -49.35, rz, 0.16, 0.5, 0.9, { color: P.steel, texel: 1.5 });
-    }
+    for (const rz of HANGAR.rackZ) wallTruss(gx, rz);
   }
+  const staticTie = (gx, rz, heading, variant) => {
+    const f = new lib.Frame(kit, new THREE.Vector3(gx, HANGAR.rackY, rz), new THREE.Vector3(-Math.cos(heading), 0, Math.sin(heading)), UP);
+    tieShape(kit, f, { variant, engines: null });
+  };
   positions.forEach(([gx, rz], i) => {
-    clampRack(kit, { gx, rz, rackY: HANGAR.rackY, girderY: GIRDER.y0, index: i, labelIdx: 8 + i, lampMat: "emitDiffuser" });
-    if (STATIC_RACKS.includes(i)) {
-      // a fighter held for maintenance: kit TIE nose forward (-z) like the parked traffic craft
-      const f = new lib.Frame(kit, new THREE.Vector3(gx, HANGAR.rackY, rz), new THREE.Vector3(-1, 0, 0), UP);
-      tieShape(kit, f, { variant: i, engines: null });
-    }
+    const heading = STATIC_RACKS[i] || 0;
+    clampRack(kit, { gx, rz, rackY: HANGAR.rackY, girderY: GIRDER.y0, index: i, labelIdx: 8 + i, lampMat: "emitDiffuser", heading });
+    if (heading) staticTie(gx, rz, heading, i);
+  });
+  // maintenance racks on the starboard girder, midway between the traffic racks
+  MAINT_RACKS.forEach(({ gx, rz, heading, variant, labelIdx }, i) => {
+    wallTruss(gx, rz);
+    clampRack(kit, { gx, rz, rackY: HANGAR.rackY, girderY: GIRDER.y0, index: 8 + i, labelIdx, lampMat: "emitDiffuser", heading });
+    staticTie(gx, rz, heading, variant);
   });
 }
 
@@ -443,19 +462,81 @@ function stations(kit, ctx, lib, y0) {
   loaderVehicle(kit, propFrame(kit, 23.6, y0, 465.6, Math.PI / 2));
   for (let i = 0; i < 3; i++) crate(kit, propFrame(kit, 29.2 + (i % 2) * 1.3, y0 + Math.floor(i / 2) * 0.8, 466.2, 0.1 * i), { decal: [6, 11, 9][i] });
   deckDecal(kit, 25.6, y0, 454, 1.6, 7, -Math.PI / 2);
+  starboardAft(kit, ctx, lib, y0);
+}
+
+// ---------------------------------------------------------------- starboard deck aft of the 472 fuel station
+// The hangarWell view at (-21.5, 500) looks across the well at the starboard deck between z 470 and 496: with
+// only the wall stations dressed, the 5 m strip between the walk lane and the railing read as bare plate. Hose
+// reels at the wall pay out across the lane to couplings at the well edge, a rigid fuel line runs along the
+// wall base between the two stations, and the strip carries a tool cart cluster, a pallet, a tripod lamp, a
+// ladder and a parked loader with crates behind it, inside an amber work-zone outline under a work-light mast.
+function starboardAft(kit, ctx, lib, y0) {
+  const P = lib.PALETTE;
+  // zone outline (aft of the OPEN WELL stencil at 478, short of the loader): from 50 m the amber lines and
+  // the lit strip are what read, the props themselves are a few pixels
+  const zone = [21.5, 480.6, 25.1, 492.0];
+  deckStrip(kit, "emitAmber", zone[0], zone[1], zone[2], zone[1] + 0.12, y0);
+  deckStrip(kit, "emitAmber", zone[0], zone[3] - 0.12, zone[2], zone[3], y0);
+  deckStrip(kit, "emitAmber", zone[0], zone[1], zone[0] + 0.12, zone[3], y0);
+  deckStrip(kit, "emitAmber", zone[2] - 0.12, zone[1], zone[2], zone[3], y0);
+  // work-light mast at the lane edge, its head out over the zone: the strip's one pooled light that reaches
+  // the well view (the tripod's warm 14 m lamp drops out of the pool 22 m away; a 32 m range keeps this one
+  // in it from (-21.5, 500), 50 m off). The light sits 1 m above the head, clear of the arm and mast top
+  // (a 70 cd source within half a metre of a face blows it white)
+  kit.box("paintedMetal", 26.2, y0 + 0.15, 484.0, 0.9, 0.3, 0.9, { color: P.gunmetal, texel: 1 });
+  kit.box("hazard", 26.2, y0 + 0.31, 484.0, 0.92, 0.02, 0.92, { uv: "world", texel: 1.5 });
+  kit.box("metal", 26.2, y0 + 2.6, 484.0, 0.14, 4.6, 0.14, { color: P.gunmetal });
+  kit.box("metal", 25.55, y0 + 4.5, 484.0, 1.4, 0.1, 0.1, { color: P.gunmetal });
+  floodFixture(kit, 25.0, y0 + 4.3, 484.0, "emitDiffuser", { alongX: true, w: 1.0, lip: 0.25 });
+  kit.box("emitAmber", 26.2, y0 + 4.95, 484.0, 0.16, 0.06, 0.16);
+  kit.collider([25.75, y0, 483.55], [26.65, y0 + 4.95, 484.45], "lampMast");
+  ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 70, 32, [25.0, y0 + 5.3, 484.0]));
+  hoseReel(kit, propFrame(kit, 29.6, y0, 481.4, -Math.PI / 2), { hoseTo: [1.0, 7.0], color: P.orange });
+  hoseReel(kit, propFrame(kit, 29.6, y0, 484.2, -Math.PI / 2), { hoseTo: [1.4, 6.4], color: P.steel });
+  // fuel line on saddles along the wall base with a valve manifold, FUEL stencil on the deck beside it
+  const fx = 31.5;
+  kit.cyl("metal", fx, y0 + 0.24, 481, 0.12, 9.0, "z", { color: P.orange, segments: 10 });
+  for (let z = 477.5; z <= 485.5; z += 2) kit.box("metal", fx, y0 + 0.1, z, 0.5, 0.2, 0.3, { color: P.gunmetal });
+  kit.box("paintedMetal", fx - 0.15, y0 + 0.55, 481, 0.7, 1.1, 1.4, { color: P.gunmetal, texel: 1 });
+  kit.box("hazard", fx - 0.15, y0 + 1.12, 481, 0.72, 0.04, 1.42, { uv: "world", texel: 1.5 });
+  for (const dz of [-0.4, 0.4]) {
+    kit.cyl("metal", fx - 0.15, y0 + 1.25, 481 + dz, 0.06, 0.3, "y", { color: P.steel, segments: 8 });
+    kit.box("metal", fx - 0.15, y0 + 1.42, 481 + dz, 0.32, 0.05, 0.32, { color: P.orange });
+  }
+  kit.box("emitAmber", fx - 0.51, y0 + 0.8, 481, 0.01, 0.06, 0.5, { uv: "keep" });
+  kit.collider([fx - 0.5, y0, 480.3], [32, y0 + 1.5, 481.7], "manifold");
+  deckDecal(kit, 29.0, y0, 478.2, 1.4, 5, -Math.PI / 2);
+  // crew kit at the couplings: tripod lamp, ladder, the tool cart cluster, a pallet
+  const tl = tripodLamp(kit, propFrame(kit, 24.6, y0, 481.2, Math.PI / 2), { h: 2.2, pitch: 0.5, mat: "emitDiffuser" });
+  ctx.lights.warm.push(lib.pointLight(0xffd9a0, 22, 14, tl.toArray()));
+  ladder(kit, propFrame(kit, 25.4, y0, 486.6, Math.PI / 2), { h: 2.4 });
+  toolCart(kit, propFrame(kit, 23.4, y0, 487.2, 0.5));
+  toolCart(kit, propFrame(kit, 24.8, y0, 488.3, -1.9));
+  toolCart(kit, propFrame(kit, 22.5, y0, 488.9, 2.4));
+  pallet(kit, propFrame(kit, 25.4, y0, 490.4, 0.2), { tiers: 2, decal: 6 });
+  // parked loader nosed toward the well corner, crates and a console behind it
+  loaderVehicle(kit, propFrame(kit, 23.2, y0, 494.6, Math.PI));
+  crate(kit, propFrame(kit, 25.0, y0, 498.4, 0.1), { decal: 9 });
+  crate(kit, propFrame(kit, 25.0, y0 + 0.8, 498.4, -0.2), { decal: 11, h: 0.7 });
+  pedestalConsole(kit, propFrame(kit, 25.2, y0, 500.6, Math.PI / 2 + 0.4), "screen8");
 }
 
 // ---------------------------------------------------------------- port deck: fighter on a maintenance cradle
 function cradleBay(kit, ctx, lib, y0) {
   const P = lib.PALETTE;
-  const cx = -25;
+  const cx = -25.8;
   const cz = 470;
-  // nose toward the port wall, wings across the deck: the +z wing faces anyone coming in from the lift
-  // corridor, the open shoulder hatch faces the well
+  // nose 60 degrees off the port wall toward the lift door: the door view at (-30.6, 479.5) is 30 degrees off
+  // the nose, so it sees the pod and the viewport between both wings (nose-on to the wall the near wing stood
+  // square to the door, a 7 m black hexagon with the pod behind it). Skid corners reach x -30.2 and -21.4, half
+  // a metre short of the well railing; the open shoulder hatch faces the wall reel
   const podY = 4.5;
-  tieCradle(kit, propFrame(kit, cx, y0, cz, -Math.PI / 2), { podY, variant: 2, hatch: true });
+  const yaw = -1.05;
+  const cf = propFrame(kit, cx, y0, cz, yaw);
+  const cradle = tieCradle(kit, cf, { podY, variant: 2, hatch: true, mast: { side: 1, n: -1.3, h: 6.2, arm: 1.6 } });
   // bay outline, stencils
-  const bay = [cx - 4.6, cz - 6.6, cx + 4.2, cz + 6.6];
+  const bay = [cx - 4.6, cz - 6.6, cx + 4.4, cz + 6.6];
   deckStrip(kit, "emitAmber", bay[0], bay[1], bay[2], bay[1] + 0.12, y0);
   deckStrip(kit, "emitAmber", bay[0], bay[3] - 0.12, bay[2], bay[3], y0);
   deckStrip(kit, "emitAmber", bay[0], bay[1], bay[0] + 0.12, bay[3], y0);
@@ -469,24 +550,31 @@ function cradleBay(kit, ctx, lib, y0) {
   // to the well (x -32..-20, z 476..483) stays empty so neither the walk in nor the door view is blocked; the
   // bowser stands forward of the skid hosed to its fuel point, the carts turn their drawers to the viewer.
   fuelBowser(kit, propFrame(kit, -27.0, y0, 462.0, Math.PI), { hoseTo: [-1.6, 0, -3.3] });
-  ladder(kit, propFrame(kit, -28.1, y0, 468.7, Math.PI / 2), { h: 3.2 });
+  ladder(kit, propFrame(kit, -28.9, y0, 469.9, Math.PI), { h: 3.2 });
   toolCart(kit, propFrame(kit, -21.8, y0, 477.8, -0.6));
   toolCart(kit, propFrame(kit, -23.0, y0, 462.2, -0.9));
   crate(kit, propFrame(kit, -30.4, y0, 465.6, 0.2), { decal: 5 });
   crate(kit, propFrame(kit, -30.4, y0 + 0.8, 465.6, 0.35), { decal: 11, h: 0.7 });
   pallet(kit, propFrame(kit, -23.6, y0, 459.6, 0.15), { tiers: 2, decal: 9 });
   pedestalConsole(kit, propFrame(kit, -22.0, y0, 467.6, -2.0), "screen7");
-  // pod umbilical from a wall reel to the open hatch
+  // pod umbilical from a wall reel to the open hatch (on the pod's port shoulder, toward the wall)
   kit.box("paintedMetal", -31.6, y0 + 3.4, 468.7, 0.8, 1.4, 1.6, { color: P.gunmetal, texel: 1 });
   kit.cyl("metal", -31.05, y0 + 3.4, 468.7, 0.55, 0.5, "x", { color: P.slate, segments: 16 });
   kit.cyl(BLACK, -31.05, y0 + 3.4, 468.7, 0.4, 0.56, "x", { segments: 16 });
-  const hatch = new THREE.Vector3(cx - 0.95 - 0.5, y0 + podY + 1.0, cz - 1.25);
-  const pts = [new THREE.Vector3(-30.7, y0 + 3.4, 468.7), new THREE.Vector3(-29.2, y0 + 4.8, 468.7), new THREE.Vector3(-27.6, y0 + 5.7, 468.7), hatch];
+  const hatch = cf.pos(-1.25 - 0.5, podY + 1.0, 0.95);
+  const pts = [new THREE.Vector3(-30.7, y0 + 3.4, 468.7), new THREE.Vector3(-29.4, y0 + 4.8, 468.7), new THREE.Vector3(-28.2, y0 + 5.6, 468.8), hatch];
   kit.add(BLACK, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.5), 14, 0.07, 6, false), { uv: "scale", uvScale: [1, 10] });
   kit.box("emitAmber", -31.2, y0 + 4.3, 469.6, 0.2, 0.1, 0.02);
   lightBar(propFrame(kit, -31.98, y0, 470, Math.PI / 2), -6, 6, 2.9, "emitDiffuser");
-  ctx.lights.warm.push(lib.pointLight(0xffc880, 20, 16, [cx - 1.5, y0 + 6.5, cz + 1.5]));
+  // Lights. From the door the craft stood as a black cut-out: the bay's two lights hung above and behind it
+  // and the banks 36 m up only graze it. The cradle's own work light (a mast on the starboard wing jaw, head 2 m
+  // off the wing face, warm, 12 m range) lights the wing panel and pod side that face the door; a tripod lamp
+  // on the deck behind the tail rims the pod's underside and the wing edges from below (2 m up: on the deck
+  // itself an 18 cd source burns a white disc into the plates); the overhead cool light stays as the top light
+  ctx.lights.warm.push(lib.pointLight(0xffc880, 24, 12, cradle.lamp.toArray()));
   ctx.lights.cool.push(lib.pointLight(0xe8f0ff, 40, 18, [cx + 3.5, y0 + 9.5, cz]));
+  const rim = tripodLamp(kit, propFrame(kit, -22.3, y0, 465.5, Math.atan2(cx + 1.0 + 22.3, cz - 465.5)), { h: 2.0, pitch: 0.7, mat: "emitDiffuser" });
+  ctx.lights.cool.push(lib.pointLight(0xcfe0ff, 18, 12, rim.toArray()));
 }
 
 // ---------------------------------------------------------------- forward deck (containers, tug bay)
@@ -614,15 +702,17 @@ function dynamics(kit, ctx, mats, y0, yTop, W) {
   // the bridge itself is at the top of the field of view
   gantryCrane(ctx, mats, { x0: -31.0, x1: 31.0, y: CRANE_Y, zMin: W.z0 + 10, zMax: W.z1 - 10, trolleyRange: [-7.5, 7.5], hookDrop: 11, load: true, speed: 0.6, zStart: 470, name: "hangar.crane" });
   // drop-rail launch cradle over the well: the carriage stays inside the opening (x -14.5..10, wing tips 1 m
-  // clear of the shaft lining). The fighter hangs slewed 70 degrees off the launch line: the two fixed views
-  // (hangarDeck at (-26, 465), the lift door at (-30.6, 479.5)) are 30 degrees apart, and this heading shows
-  // the pod between both wings to each of them (17 degrees off the nose from the deck, 47 from the door)
-  // instead of a lone wing panel hiding the pod from the door. The yoke work lamps are a real pooled light
-  // riding with the carriage, so the hanging fighter is lit from its own cradle wherever the carriage is.
-  const yokeLamp = ctx.lib.pointLight(0xfff0dd, 60, 18, [RAIL.x, RAIL.y - 2.95, RAIL.z]);
+  // clear of the shaft lining). The fighter hangs slewed 110 degrees off the launch line, nose toward the
+  // port deck: the three fixed views (hangarDeck at (-26, 465), the lift door at (-30.6, 479.5), hangarWell
+  // at (-21.5, 500)) then sit 23, 7 and 43 degrees off the nose, so each sees the pod between both wings
+  // (at 70 degrees the well view looked square at a wing panel, a dark hexagon hiding the whole pod). The
+  // yoke work lamps are a real pooled light riding with the carriage, so the hanging fighter is lit from its
+  // own cradle wherever the carriage is; 90 cd with a 30 m range keeps it in the pool from the well view 35 m
+  // away (the pool drops a fixture beyond 1.6 x its range and ranks the rest by intensity / distance^2)
+  const yokeLamp = ctx.lib.pointLight(0xfff0dd, 90, 30, [RAIL.x, RAIL.y - 2.95, RAIL.z]);
   yokeLamp.userData.moving = true;
   ctx.lights.cool.push(yokeLamp);
-  launchCradle(kit, ctx, mats, { z: RAIL.z, y: RAIL.y, x0: -14.5, x1: 10, xStart: RAIL.x, wallX: 32, variant: 3, labelIdx: 4, heading: 1.22, lamp: yokeLamp });
+  launchCradle(kit, ctx, mats, { z: RAIL.z, y: RAIL.y, x0: -14.5, x1: 10, xStart: RAIL.x, wallX: 32, variant: 3, labelIdx: 4, heading: 1.92, lamp: yokeLamp });
   // (2.2 m of leaf in the opening: from the railing, the line of sight over the raised lip reaches the outer
   // 0.7 m of the leaf's hazard top; at 1.6 m the leaves were hidden by the lip from anywhere on the deck)
   blastLeaves(ctx, mats, { well: W, y: y0 - 0.95, thickness: 0.9, protrude: 2.2, travel: 0.6, period: 34 });
