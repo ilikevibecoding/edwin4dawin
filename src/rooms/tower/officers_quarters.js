@@ -150,7 +150,7 @@ export function build(ctx) {
   }
 
   // ---- lights: one per cabin, one for the corridor, two for the lounge ----
-  for (const c of cabins) ctx.light(0xffc78a, 26, 11, [c.cornerX + c.out * (c.width / 2 + 0.3), fy + 3.3, (c.z0 + c.z1) / 2], { decay: 1.4 });
+  for (const c of cabins) ctx.light(0xffc78a, 34, 12, [c.cornerX + c.out * (c.width / 2 + 0.9), fy + 3.2, (c.z0 + c.z1) / 2 + 0.3], { decay: 1.3 });
   ctx.light(0xffd9b0, 22, 12, [ax, fy + 3.4, (z0 + LOUNGE_Z) / 2], { decay: 1.5 });
   ctx.light(0xffc78a, 28, 14, [ax - 4.0, fy + 3.4, 225.3], { decay: 1.4 });
   ctx.light(0xffc78a, 28, 14, [ax + 4.0, fy + 3.4, 225.3], { decay: 1.4 });
