@@ -62,7 +62,7 @@ const LIT_COL = (i) => {
 };
 const INK_COL = (i) => {
   if ((i >= 13 && i <= 14) || (i >= 16 && i <= 23) || i === 29 || i === 30) return "#7a1811";
-  if ((i >= 24 && i <= 25) || (i >= 32 && i <= 38)) return "#8a4e10";
+  if ((i >= 24 && i <= 25) || (i >= 32 && i <= 38) || i === 55) return "#8a4e10"; // (floor keep-clear marking: amber, the near-black ink vanished on the dark deck)
   return "#1d1e21";
 };
 
