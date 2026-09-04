@@ -17,7 +17,7 @@ export default {
   // Harness views around the Deck 4 cabin (T4 at (0, -72, 181), doors facing -Z into d4-lobby).
   views: {
     "sys-lifts-door": { pos: [0, FLOOR4, 176.5], yaw: 180, pitch: 2 },
-    "sys-lifts-door-open": { pos: [0, FLOOR4, 179.2], yaw: 180, pitch: 0 },
+    "sys-lifts-door-open": { pos: [0, FLOOR4, 179.2], yaw: 180, pitch: 0, advance: 2 },
     "sys-lifts-cabin": { pos: [0, FLOOR4, 183.6], yaw: 180, pitch: -4 },
     "sys-lifts-panel": { pos: [-0.6, FLOOR4, 183.2], yaw: -90, pitch: -6 },
   },

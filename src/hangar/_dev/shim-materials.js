@@ -36,11 +36,12 @@ export function extendMaterials(mats) {
   add("blackGloss", () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.18, metalness: 0.35, vertexColors: true, envMapIntensity: 1.0 }));
   add("impPanel", () => mats.painted);
   add("impFloor", () => mats.deck);
-  add("emitWhite", () => emitter("#e8f0ff", 2.4));
-  add("emitBlue", () => emitter("#3a7bff", 2.6));
-  add("emitRedImp", () => emitter("#ff2a1a", 2.2));
-  add("emitAmber", () => emitter("#ffa028", 2.2));
-  add("emitGreen", () => emitter("#38d67a", 2.0));
+  // just above the bloom threshold (1.15): strips glow instead of clipping to white
+  add("emitWhite", () => emitter("#dfe9ff", 1.55));
+  add("emitBlue", () => emitter("#3a7bff", 1.9));
+  add("emitRedImp", () => emitter("#ff2a1a", 1.3));
+  add("emitAmber", () => emitter("#ffa028", 1.6));
+  add("emitGreen", () => emitter("#38d67a", 1.5));
   const impScreens = [
     [131, "#3a7bff", "#ff2a1a"],
     [137, "#ff2a1a", "#3a7bff"],

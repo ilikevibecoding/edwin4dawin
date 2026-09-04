@@ -56,14 +56,14 @@ export default {
   // Deterministic harness views (feet positions in the Deck 4 lobby; see README for the door layout)
   views: {
     "sys-doors-standard-closed": { pos: [6, -72, 171.75], yaw: -90, pitch: 2 },
-    "sys-doors-standard-open": { pos: [8.2, -72, 171.75], yaw: -90, pitch: 2 },
+    "sys-doors-standard-open": { pos: [8.2, -72, 171.75], yaw: -90, pitch: 2, advance: 2 },
     "sys-doors-blast": { pos: [0, -72, 176], yaw: 0, pitch: 3 },
-    "sys-doors-blast-open": { pos: [0, -72, 172], yaw: 0, pitch: 3 },
+    "sys-doors-blast-open": { pos: [0, -72, 172], yaw: 0, pitch: 3, advance: 2 },
     "sys-doors-blast-side": { pos: [3.6, -72, 173.6], yaw: 38, pitch: 8 },
     "sys-doors-standard-side": { pos: [7.4, -72, 175.2], yaw: -58, pitch: 6 },
     // side-sliding leaves (the stairs door has wall pockets on both sides)
     "sys-doors-stairs": { pos: [7, -72, 176.5], yaw: 180, pitch: 2 },
-    "sys-doors-stairs-open": { pos: [7, -72, 179.2], yaw: 180, pitch: 2 },
+    "sys-doors-stairs-open": { pos: [7, -72, 179.2], yaw: 180, pitch: 2, advance: 2 },
   },
   build(ctx) {
     const { kit, PALETTE, group, world, materials } = ctx;

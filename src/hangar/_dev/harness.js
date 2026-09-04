@@ -284,6 +284,8 @@ const debugAPI = {
     }
     post.finalPass.uniforms.seed.value = 0.37;
     debugAPI.freezeGrain = true;
+    // a view may carry `advance: seconds` (doors/lift leaves need ~2 s to open once the player stands there)
+    if (v.advance) debugAPI.advance(v.advance);
     framesRendered = 0;
     return true;
   },
