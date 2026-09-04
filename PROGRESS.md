@@ -784,3 +784,38 @@ triangles, 254 visible objects, 26.9 k visible instances, 4 animated animals,
 which shader compilation is 24.3 s — 277 programs is the number to bring down,
 and a census (`tools/census.mjs`) is attributing them to modules before anyone
 guesses.
+
+### The verdict
+
+Three critics, blind to one another (`gauntlet/round1/critic_{A,B,C}.md`,
+consensus in `CONSENSUS.md`). Unanimous: the lions are the weakest family —
+a bear's head on a greyhound's body with suede for fur — and glass that
+reflects nothing is the system defect dragging the hero car, the fleet and the
+water down together. Every family floors at 2–4 in at least one category.
+
+Three unanimous findings were investigated rather than averaged, and two of
+them were mine, not the game's. "The feet slide": the walk-strip camera hung
+off the lion's root, so the animal stayed put in frame while the ground
+scrolled 12 cm a frame; shot from a world-fixed camera the stance feet hold
+their pixel, the probe was right, and what is actually wrong is a 0.5 m/s
+amble with short steps against a full leg swing. "No shadows on the camp or
+the lions": true in the frames because the capture tools teleported the truck
+without moving the shadow frustum — and true in the game too, because the
+sun's shadow box is 44 m around the truck (`shadowExtent: 22`), so the camp
+and the pride are shadowless from the road. That is the top lighting item.
+"Headlights dead at night": on, with a pool ahead; the lenses do not bloom and
+the throw does not read from the side.
+
+### Two wins from the census (`perf/census-r1.md`)
+
+- The boot compile ran with the screen bound, so three keyed every program
+  tone-mapped, and the composer's first frame — drawn linear — built them all
+  again: 124 of 284 programs were never used. Compiled into the composer's
+  target: **277 → 159 programs**, calls and triangles unchanged.
+- 211 of 267 textures are DataTextures whose pixel arrays sat in the heap
+  after upload, never read again: **JS heap 332 → 216 MB**, frames identical.
+
+Build `45a2074`, live. Round 2 (silhouette, scale, composition) is eight
+builders in parallel with disjoint files; the remaining census wins go to
+their owners (terrain tiles, fleet per-vehicle merge, forest cells, kit
+indexing, shadow-caster list, cache keys).

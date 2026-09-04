@@ -17,6 +17,36 @@ numbers the targets are about.
 
 ---
 
+## Gauntlet round 1 — verdict, and two measured wins
+
+**Build `45a2074`** — live, smoke-tested (HUD reads `build 45a2074 · 2026-09-04 14:17Z`, zero page errors).
+
+- Three blind critics scored the baseline (`gauntlet/round1/critic_{A,B,C}.md`);
+  consensus and the disagreements that were investigated rather than averaged
+  are in `gauntlet/round1/CONSENSUS.md`, key frames in `gauntlet/round1/frames/`.
+  Weakest area by unanimous verdict: the lions (head, proportions, coat, gait);
+  system defect: glass and reflections; highest-leverage fix: shadow coverage —
+  the sun's shadow box is 44 m around the truck, so the camp and the pride are
+  shadowless from the road.
+- Two unanimous critic findings were capture artefacts and are fixed in the
+  tools: the walk strip's camera followed the lion (read as sliding feet — the
+  probe was right, the feet hold), and the camp/lion tools did not move the
+  shadow frustum with the teleported truck. Lion far/pride/seat and camp
+  arrive/interior cameras re-planted so they show their subjects.
+- HUD key strip wraps clear of the speed block at narrow widths.
+- **Shader programs 277 → 159**: the boot compile ran with the screen bound and
+  built every program tone-mapped, then the composer built them all again
+  linear; now compiled into the composer's target. Draw calls and triangles
+  unchanged.
+- **JS heap 332 → 216 MB**: DataTexture pixel arrays dropped after upload
+  (109 MB that was never read again). Flat over reset loops; frames identical.
+- `perf/census-r1.md`: a measured attribution of programs, triangles, textures
+  and heap to modules, with ten ranked wins; the rest go to their owners in
+  round 2/3 (terrain tiles, fleet per-vehicle merge, forest cells, kit
+  indexing, shadow-caster list, cache keys).
+- Round 2 builders running in parallel: lion body+gait, lion head, glass,
+  lighting, road/terrain, fleet, vegetation, campground.
+
 ## Gauntlet round 1 — baseline
 
 **Build `8754528`** — live, smoke-tested (HUD reads `build 8754528 · 2026-09-04 12:46Z`, zero page errors).
