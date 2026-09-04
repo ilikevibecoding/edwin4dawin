@@ -15,7 +15,8 @@ export function buildId() {
     }
   };
   const rev = run('git rev-parse --short=7 HEAD', 'dev');
-  const dirty = run('git status --porcelain', '') !== '';
+  // tracked modifications only: an untracked scratch file is not a different build
+  const dirty = run('git status --porcelain --untracked-files=no', '') !== '';
   const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ') + 'Z';
   return { rev: dirty ? `${rev}+` : rev, stamp };
 }
