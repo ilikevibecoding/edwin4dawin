@@ -584,25 +584,33 @@ export function wingPanel(spec: WingSpec, o: PanelOptions): THREE.BufferGeometry
 
 /** Propeller blade: twisted, tapered, slightly cambered. Root at origin, extends +Y. */
 export function bladeGeometry(length: number, rootChord: number, tipChord: number): THREE.BufferGeometry {
-  const segs = 10;
+  // closed thin airfoil section (upper + lower skins) so the blade keeps a silhouette edge-on; a single
+  // one-sided sheet vanished at some angles and left the yellow tips floating
+  const segs = 10, n = 8; // n points around the closed section
   const pos: number[] = [], idx: number[] = [], uv: number[] = [];
   for (let i = 0; i <= segs; i++) {
     const t = i / segs;
     const y = t * length;
     const chord = rootChord + (tipChord - rootChord) * Math.pow(t, 1.4);
+    const thick = chord * (0.16 - 0.08 * t);
     const pitch = 0.95 - 0.7 * t; // strong twist near the root
     const c = Math.cos(pitch), s = Math.sin(pitch);
-    for (let j = 0; j <= 4; j++) {
-      const u = j / 4 - 0.5;
+    for (let j = 0; j < n; j++) {
+      // walk around the section: leading edge -> upper surface -> trailing edge -> lower surface
+      const a = (j / n) * Math.PI * 2;
+      const u = -0.5 * Math.cos(a);                 // chordwise -0.5 .. 0.5
+      const upper = Math.sin(a) >= 0;
       const camber = 0.08 * chord * (1 - 4 * u * u);
-      const lx = u * chord, lz = camber;
+      const half = 0.5 * thick * Math.sqrt(Math.max(0, 1 - 4 * u * u)) * Math.abs(Math.sin(a));
+      const lx = u * chord, lz = camber + (upper ? half : -half);
       pos.push(lx * c - lz * s, y, lx * s + lz * c);
-      uv.push(j / 4, t);
+      uv.push(j / n, t);
     }
   }
-  for (let i = 0; i < segs; i++) for (let j = 0; j < 4; j++) {
-    const a = i * 5 + j, b = a + 5;
-    idx.push(a, b, a + 1, a + 1, b, b + 1);
+  for (let i = 0; i < segs; i++) for (let j = 0; j < n; j++) {
+    const j1 = (j + 1) % n;
+    const a = i * n + j, b = a + n, a1 = i * n + j1, b1 = a1 + n;
+    idx.push(a, b, a1, a1, b, b1);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
