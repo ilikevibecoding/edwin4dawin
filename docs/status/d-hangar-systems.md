@@ -1,6 +1,6 @@
 # Status — D: hangar + ship systems (Deck 4 + infrastructure)
 
-Branch: `cursor/sd-hangar-systems-c071` · Last push: 3a5684f2 · 2026-09-04 21:40 UTC
+Branch: `cursor/sd-hangar-systems-c071` · Last push: eeaa2618 · 2026-09-04 23:55 UTC
 Run: `bc-27044d48-9403-4636-af76-59d715aec071` · Phase: 3 (two critic loops done; final hangar round landed; waiting on A's scaffold to merge)
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
@@ -115,7 +115,7 @@ traffic ≤ 40k tris / ≤ 6 draw calls. (Build times are with all 13 modules bu
 
 | Module | build ms | materials (draw calls) | tris | light descriptors | colliders | views |
 |---|---|---|---|---|---|---|
-| `d4-hangar` | 207 (165–184 alone) | 21 (+1 field shader) | 287.2k | 27 | 156 | deck, aperture, racks, aft-wall, balcony, bay-door, exterior |
+| `d4-hangar` | 203 (155 alone) | 22 (+1 field shader) | 287.8k | 27 | 159 | deck, aperture, racks, aft-wall, balcony, bay-door, exterior |
 | `d4-fighter-bay` | 113 | 13 | 82.2k | 11 | 96 | door, cradles, gantry, racks |
 | `d4-shuttle-bay` | 68 | 15 | 62.7k | 13 | 80 | door, pad, gantry, staging, booth |
 | `d4-cargo-bay` | 111 | 14 | 93.6k | 14 | 72 | door, racking, loader, conveyor |
@@ -130,8 +130,8 @@ traffic ≤ 40k tris / ≤ 6 draw calls. (Build times are with all 13 modules bu
 | `sys-traffic` | 13 | 6 (all instanced/points) | 34.6k | 0 | 0 | approach (exterior), racks, hover, patrol (exterior) |
 
 Whole frame per view (includes post passes and the three systems): 67–200 draw calls, 170k–1.03 M
-triangles (budget 450 / 1.5 M; heaviest hangar frame after the final round: deck view 162 calls / 986k
-tris); load 12.1 s on this VM (budget 12 s — the hangar's ~200 ms build and the canvas atlases are the
+triangles (budget 450 / 1.5 M; heaviest hangar frame after round 3: balcony view 183 calls / 1.02 M
+tris); load 11.2 s on this VM (budget 12 s — the hangar's ~200 ms build and the canvas atlases are the
 cost; see Remaining).
 
 What each delivers:
@@ -225,9 +225,30 @@ What each delivers:
   boxes, crane parked in view) and a traffic round 3 (soft tractor-beam cones with length falloff at
   half opacity; dark blue-grey TIE albedo).
 
+- Hangar round 3 + traffic round 3 (every critic-3 item has a change against it; full lists in the two
+  commit messages): deck — five per-plate tone steps (adjacent plates measured 56/67/70/77), seam grime,
+  tyre tracks along both lanes (~25 % darker than the plate beside), pad scuff arcs, drag marks at doors,
+  contact shadows 0.5–0.9 m past every footprint (62 % darker under a crate) + bands under tiers and
+  wall bases; ceiling — housed louvred floods at 16 m, strips under the bloom threshold; rack spots
+  re-aimed at tier 1 (520, wall behind mid-grey, port = starboard); apron pools on pads 03/04 from the
+  balcony; aft/bow walls — baked AO flanks on every rib, upper two-thirds 35–40 % darker, gunmetal bands,
+  1.4 m cornice, recessed amber-lit vents, 17.8 m DECK / 4 panels, buttress towers + fascia girder + knee
+  struts under the control balcony, `FORWARD SECTIONS — SEALED` band on the bow wall; thin lit
+  handrail; field body 0.002 (space near-black); `APERTURE — KEEP CLEAR` rail plate; caged jamb bars;
+  the hazard-band blotches were the bay-door point light mirrored in the glossy leaves (moved off-axis);
+  lit junction boxes; crane parked over the lane at z 66, hook at y −40, in the deck and balcony frames.
+  Traffic — beams brightest facing the camera and zero at the silhouette with length falloff (halo
+  alpha 0.14), TIE albedo dark blue-grey (frames `0x3a3e4b`, cells `0x08090c`), rougher hull; 22/22.
+  Build-time work in the same round: ~800 decals batched per material, row-filtered panel cuts,
+  back-face-culled wall boxes (frames pixel-identical). Scripts: collisions 24/24, clamp/occupancy 0
+  mismatches. Full deck `full-r3`: 13 modules, 61 views, 0 warnings, 0 page errors, load 11.2 s.
+- A stray `node -e` unused-import checker left by a subagent had pinned one of the four CPUs at 94 %
+  for nine hours (inflating every build-time reading, including the 281 ms hangar outlier); killed by
+  PID. All timings above are from after that.
+
 ## Remaining
-1. Hangar round 3 + traffic round 3 in flight (critic pass 3 items above); re-shoot the full deck and
-   re-critic the seven hangar frames afterwards.
+1. Fourth blind critic pass on the round-3 hangar frames (in flight); act on anything it still ranks as
+   a bug or below the corridors' 7/10.
 2. Load time 12.1 s with all 13 modules is at the §12 limit: the hangar builds in ~200 ms (limit 250) and
    the text/hazard/decal canvas atlases cost ~1 s; candidates are lazy per-room building (A's streaming
    plan already builds in chunks) and sharing one text atlas across modules.
