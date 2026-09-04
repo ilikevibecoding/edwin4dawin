@@ -1,16 +1,17 @@
 # Status — B: command tower (Deck 1)
 
-Branch: `cursor/sd-command-tower-e845` · Last push: 27f6d314 · 2026-09-04 09:50 UTC
-Run: bc-624cbbb1-95b2-4ce5-82bb-455f2d92e845 · Phase: 2 (detail) — 6 of 11 modules detailed and pushed
+Branch: `cursor/sd-command-tower-e845` · Last push: 356bcd37 · 2026-09-04 10:25 UTC
+Run: bc-624cbbb1-95b2-4ce5-82bb-455f2d92e845 · Phase: 2 (detail) — all 11 modules detailed and pushed; critic loop running
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
 
-Phase 1 greybox is pushed: 11 manifests under `src/rooms/deck1/**` (7 rooms, 2 side passages, spine, lift lobby) built
-to the §7/§8 contract (bounds, paired door ids, spawn, ≥ 3 views each, light descriptors, `build(ctx)`), closed
-Imperial shells at 1:1, both apertures glazed with reveal + mullions, lift anchor T1 respected. Harness run over all
-37 views: **0 registry warnings** (my shim implements the §7 checks), all rooms far inside budgets. Scaffold has not
-landed, so everything was tested through `src/rooms/deck1/_dev/` (throw-away registry/ctx shim + own shots runner).
-Phase 2 (detail + blind critic) is running with six subagents on disjoint folders.
+All 11 Deck 1 modules (`src/rooms/deck1/**`: bridge, observation, nav, comms, tactical, intel, officers, two side
+passages, spine, lift lobby) are built to the §7/§8 contract and fully detailed (Phase 2). Full-deck harness run
+`p2-verify`: **54 views, 0 registry warnings**, every room inside budget (bridge 55.9k tris / 22 calls / 24 desc;
+largest room 72.7k tris; builds 10–140 ms). Two blind critics are reviewing 22 shots now; fixes follow per room.
+Scaffold has not landed, so testing runs through `src/rooms/deck1/_dev/` (registry/ctx/light-pool shim, no-HMR
+Vite config, own shots runner). Open interface items for A: wall thickness vs D's doors helper, N8AO leak, player
+floor height, `metal` reading black at room scale (see Requests).
 
 ## Plan
 
@@ -59,13 +60,13 @@ lining x ±19, y 241.2..245.4, z 455.5..458.3). `d1-observation` → `["observat
 ## Subagents
 | # | Deliverable | Files | Status |
 |---|---|---|---|
-| 1 | Bridge (flagship): pits, walkway, window wall, stations, command dais, animated displays | `src/rooms/deck1/bridge/**` | Phase 2 running |
-| 2 | Nav + tactical/holo planning rooms | `src/rooms/deck1/nav/**`, `src/rooms/deck1/tactical/**` | Phase 2 running |
-| 3 | Comms + sensors, intel room | `src/rooms/deck1/comms/**`, `src/rooms/deck1/intel/**` | Phase 2 running |
+| 1 | Bridge (flagship): pits, walkway, window wall, stations, command dais, animated displays | `src/rooms/deck1/bridge/**` | done (51dcfe07) |
+| 2 | Nav + tactical/holo planning rooms | `src/rooms/deck1/nav/**`, `src/rooms/deck1/tactical/**` | done (b23e6765) |
+| 3 | Comms + sensors, intel room | `src/rooms/deck1/comms/**`, `src/rooms/deck1/intel/**` | done (356bcd37) |
 | 4 | Officers' quarters (private corridor + cabins + wardroom) | `src/rooms/deck1/officers/**` | done (f0a80c75) |
 | 5 | Observation gallery (window band) | `src/rooms/deck1/observation/**` | done (f4120da1) |
 | 6 | Deck 1 corridors + lift lobby (spine, port/stbd passages, lobby) | `src/rooms/deck1/spine/**`, `src/rooms/deck1/corridor-port/**`, `src/rooms/deck1/corridor-stbd/**`, `src/rooms/deck1/lobby/**` | done (27f6d314) |
-| C | Blind visual critic (screenshots + §11 brief only) | none (report only) | after each batch |
+| C | Blind visual critic (screenshots + §11 brief only) | none (report only) | running on 22 final shots |
 
 Shared Deck-1 helpers (mine, not copies of ship.js): `src/rooms/deck1/shared/` — `imperial.js` (wall with openings,
 floor, ceiling with recessed channels, light strip, railing, stairs, partition, corridor dressing, door reveal),
@@ -74,6 +75,32 @@ the scaffold adds `PALETTE.imp*`), `plan.js`. Dev harness: `src/rooms/deck1/_dev
 
 ## Done
 Phase 2 detail (pushed; each verified with a fresh harness run, 0 registry-shim warnings):
+- `d1-bridge` (51dcfe07): 24 descriptors (key spot parked in the reveal aimed at the walkway, 3 pendants, dais spot,
+  6 pit light rafts, 4 wall washes, 4 low pit accents, holo glow); bridge console family with 23–26 emissives per unit
+  (sill bank, nav table, helm pair, 5+3 units per pit with readout bars and detailed backs, officers' stations, aft
+  bank); command chair, dais with lit reveal, aide pedestals, holo plinth projecting the §6.2 ship envelope at 1:1000
+  as an additive wireframe with scan plane; animated 1024×512 screen atlas (radar, text columns, waveforms, schematic)
+  redrawn at 8 Hz; ceiling with 8 transverse + 2 longitudinal beams, pendants, trays, pipes, vents, 4 recessed
+  channels; pit walls with 8-display bands, racks, cabinets, ducts, cable trays; painted nosings/kick strips on every
+  drop; window band with chamfered hexagonal mullion caps, head channel diffusers, sill instrument bars. Views +
+  `d1-bridge-dais`, `-sill`. 55.9k tris / 22 calls / 24 desc / 158 colliders / 122 ms.
+- `d1-nav`, `d1-tactical` (b23e6765): shader-animated holo primitives (`nav/holo.js`: Points + LineSegments with
+  per-vertex animation classes — one `uTime` uniform, 2 draw calls per room), per-room 1024² screen atlas repainted at
+  8 fps (`nav/ui.js`); nav: chart table with 8 control facets and rim indicators, 3600-star chart with grid disc and a
+  7-waypoint hyperspace route, chart wall with animated route display + status columns, 9 stations with chairs, raised
+  navigator dais with steps/rails/desk, ceiling beams/projector rig/trays/downlights, wall greebles; tactical: 5×3 m
+  holo table with 10 edge panels projecting a fleet plot (wedge silhouettes, range rings, sweep, contacts), tier with
+  lectern + 2 stations, 6.4 m animated display wall + fleet columns + weapons boards, 18-seat stepped briefing block
+  with rails, ceiling rig. Views + `d1-nav-holo`, `-dais`, `d1-tactical-plot`, `-lectern`. Nav 31.7k / 15 / 13 /
+  34 / 51 ms; tactical 39.5k / 15 / 14 / 43 / 60 ms.
+- `d1-comms`, `d1-intel` (356bcd37): comms: 22 racks (drawer/LED-matrix/readout/vent modules, ~1900 LEDs emitted as
+  batched geometry — `comms/lib.js LedBatch`), patch frames + cables, 5 cable trays, ducts/pipes, 4 operator stations
+  with detailed backs, supervisor dais, signal wall with animated receiver display + blue/amber atlas, sensor dome, 2
+  pedestals with instanced rotating dishes; intel: security lock (scanner arch with 6 red beams, barrier, offset gate
+  with retracted ribbed leaves, guard desk, lockers), 7 data columns with scrolling red text, analysis table with
+  pulsing red wireframe holo, monitor bank + cipher station, 6 archive cabinets, evidence hatch, red-only 14
+  descriptors. Views + `d1-comms-dish`, `-station`, `d1-intel-gate`, `-table`. Comms 68.1k / 15 / 13 / 49 / 94 ms;
+  intel 27.5k / 12 / 14 / 48 / 39 ms.
 - `d1-observation` (f4120da1): reveal lining + heavy outer frame + inner frame, chamfered mullion caps, red lamp per
   mullion foot, 7 tilted sill instruments, leaning rail, 3 binocular viewers, 3 seating groups, 3 holo plinths (one
   additive LineSegments, 3 original wireframe ships rotating in update), refreshment counter, star-map wall, briefing
@@ -127,8 +154,10 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   (includes the post passes and the exterior stand-in), 9–14 pool lights. Frame time 1.6–3.1 s/frame is SwiftShader
   and only useful relatively.
 - Per-room build times 5–56 ms (budget 250). Largest room 38.6k tris (budget 120k), bridge 24.8k (300k).
-- Phase 2 verification runs: `obs-verify`, `officers-verify`, `corr-4`, `leakfix` (all 0 warnings). Whole-frame with
-  neighbours: 87–175 calls, 87k–308k tris.
+- Phase 2 verification runs: `obs-verify`, `officers-verify`, `corr-4`, `leakfix`, `p2-verify` (all 11 rooms built
+  together, 54 views registered, 22 shot; 0 warnings). Whole-frame with neighbours: 79–175 calls, 87k–309k tris; the
+  pool renders 12–16 lights, the current room's descriptors always win (shim scores current room first, then
+  priority, then distance/120).
 - Rendering artifact traced (not Deck 1 geometry): in `d1-lobby-side` a faint dashed blue line of the spine's
   `emitBlue` floor-strip edges shows through two solid walls. Probes: gone with `?post=0` (direct render), gone when
   the spine's `kit_emitBlue` mesh is hidden, persists with bloom disabled and with N8AO at full res → it is the N8AO
@@ -136,8 +165,7 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
 - Critic: not yet (after the remaining three subagents land).
 
 ## Remaining
-1. Phase 2 detail per room via subagents (running): density, materials, animated displays, per-room lighting balance
-   (the greybox is too dark away from the walkway/centre lights), critic loop, push after each room.
+1. Critic findings (two blind critics on 22 shots) → fixes per room → re-shoot → push.
 2. Replace corridor greybox with D's `corridorSegment` when it lands; switch `doorHole` import to D's helper.
 3. Delete `_dev/` and re-test on the real registry when `SCAFFOLD READY`.
 4. Phase 3 budgets/warnings/status.
@@ -147,6 +175,19 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   as stand-ins by the harness only, rooms reference them by the §10 names.
 
 ## Requests for integrator
+- **`metal` / `metalRough` read as black at room scale.** They are metalness 1 with only the dim interior env map to
+  reflect; every subagent independently moved mullions, nosings, flanges and trays to `paintedMetal` + grey tints.
+  A shared dielectric-ish trim material (`steelPainted`: metalness ≈ 0.3, IMP.mid base) in §10 would save every deck
+  the same discovery. Also please check the real `impFloor`: the stand-in (metalness 0.6, dark tint) renders as a
+  void at E ≈ 1.5 — the bridge pits switched to painted grey plating.
+- **Light intensities.** Practical values to make pools read on dark Imperial surfaces are ~2× the E·h² ≈ 1 rule
+  (bridge runs E ≈ 2–3, rafts 62 cd at 4 m). Worth a line in §9.4, together with the pool scoring ratio (in my shim
+  0.1 priority ≡ 12 m of distance) so rooms can tune fills deliberately.
+- **Batched small emissives.** ~1900 LEDs as individual `BoxGeometry` adds cost ~40 % of a room's build time;
+  `comms/lib.js LedBatch` builds them as one hand-made 5-face geometry per material. A shared `kit.batchBoxes()` would
+  let every room have dense indicators within the 250 ms budget.
+- **Intel door.** The room's mood depends on the blast door being opaque and closed by default; if D's doors idle open
+  (auto-open on approach is fine), please keep leaves closed at rest.
 - **N8AO pass leaks thin hidden emissives through walls (software GL).** Repro: harness view `d1-lobby-side`
   (rooms d1-lobby + d1-spine): a dashed blue line of the spine's 1 cm floor-strip edges is drawn across the lobby's
   north wall. Disappears with direct rendering (`?post=0`) and when the spine's `kit_emitBlue` mesh is hidden;
