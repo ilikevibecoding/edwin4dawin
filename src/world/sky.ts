@@ -6,8 +6,9 @@ import { createCloudNoiseTexture } from './noiseTexture';
 /** Size (texels) and world extent (m) of the baked 2D cloud macro field. */
 const COV_SIZE = 1024;
 const COV_EXTENT = 76000;
-/** Clouds are marched no further than this; beyond it they have faded into the horizon haze. */
-const CLOUD_MAX_DIST = 30000;
+/** Clouds are marched no further than this; beyond it they have faded into the horizon haze. Far enough
+ *  that from a few hundred metres up the distant cells stack into a low layer 1-3 deg above the horizon. */
+const CLOUD_MAX_DIST = 42000;
 /** Re-bake the macro field when the camera (in cloud space) drifts this far from the baked centre. */
 const COV_REBAKE_DIST = 7000;
 
@@ -119,10 +120,12 @@ float densityBase(vec3 p, vec4 f) {
   return clamp(shapeDensity(e, hn, n), 0.0, 1.0);
 }
 
-/** Full density with detail erosion of the edges. */
-float densityFull(vec3 p, float e, float hn) {
+/** Full density with detail erosion of the edges; mott returns the low-frequency shape noise so the
+ *  lighting can mottle the undersides without another fetch. */
+float densityFull(vec3 p, float e, float hn, out float mott) {
   vec3 q = noiseCoord(p);
   vec4 n = texture(uNoise3D, q);
+  mott = n.a;
   float d = shapeDensity(e, hn, n);
   if (d <= 0.0) return 0.0;
   // low-frequency worley erosion, billowy at the base and wispier toward the top
@@ -196,7 +199,8 @@ void main() {
     // dual-lobe phase: forward lobe gives the silver lining near the sun, back lobe keeps bases readable
     float phase = mix(hgN(cosSun, 0.72), hgN(cosSun, -0.18), 0.45);
     float forward = smoothstep(0.3, 0.95, cosSun);
-    vec3 skyAmb = mix(uHorizonColor, uZenithColor, 0.4) * 0.9;
+    // sky light on the tops: hemisphere average of the dome (deep blue) whitened by aerosol scatter
+    vec3 skyAmb = mix(uZenithColor, uHazeColor, 0.5) * 0.95;
     vec3 gndAmb = uHazeColor * 0.55;
     // low sun: grazing light reaches the undersides (warm sunset bases)
     float lowSun = (1.0 - smoothstep(0.04, 0.3, L.y)) * (1.0 - nightMix);
@@ -224,7 +228,8 @@ void main() {
         t = max(t + dtF - dtC, t0);
         continue;
       }
-      float dens = densityFull(p, e, hn);
+      float mott;
+      float dens = densityFull(p, e, hn, mott);
       if (dens <= 0.003) {
         empty++;
         if (level == 2 && empty > 1) level = 1;
@@ -249,9 +254,11 @@ void main() {
       float powder = 1.0 - exp(-dens * 5.0);
       float sunTerm = lt * phase * mix(mix(0.55, 1.0, powder), 1.0, forward);
       // ambient: sky from above, sea/haze bounce from below, occluded by the cloud thickness overhead
-      // (thin cells of an overcast deck stay bright underneath, thick cells go dark)
-      float above = max(H - hf, 0.0) * (uCloudTop - uCloudBase) * e;
-      float ao = mix(0.16, 1.0, exp(-above * 0.0015));
+      // (thin cells of an overcast deck stay bright underneath, thick cells go dark). The overhead
+      // thickness is modulated by the low-frequency shape noise so the flat bases read as mottled
+      // (hollows between the lobes let more sky light through) instead of a uniform grey.
+      float above = max(H - hf, 0.0) * (uCloudTop - uCloudBase) * e * mix(1.6, 0.55, mott);
+      float ao = mix(0.14, 1.0, exp(-above * 0.0015));
       vec3 amb = mix(gndAmb, skyAmb, clamp(hf * 1.3, 0.0, 1.0)) * ao;
       vec3 S = lightCol * sunTerm + amb;
       float a = 1.0 - exp(-dens * SIGMA * dt);
@@ -270,8 +277,9 @@ void main() {
     vec3 c = col / alpha;
     vec3 far = uCamPos + dir * meanDist;
     c = applyAerial(c, uCamPos, far);
-    // distant clouds sink into the horizon haze (long low-angle paths through humid air)
-    float fade = exp(-meanDist * 1.5e-5) * (1.0 - smoothstep(0.62 * uMaxDist, uMaxDist, meanDist));
+    // distant clouds sink into the horizon haze (long low-angle paths through humid air); the aerial
+    // perspective above already carries them to the haze colour, this only removes the cut-off at uMaxDist
+    float fade = exp(-meanDist * 1.0e-5) * (1.0 - smoothstep(0.7 * uMaxDist, uMaxDist, meanDist));
     alpha *= fade;
     col = c * alpha;
   } else {

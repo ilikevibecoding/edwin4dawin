@@ -41,8 +41,10 @@ const KEYS: Key[] = [
   // low sun: airmass extinction takes the direct beam well below its midday strength (keeps the sunset glitter path golden)
   { el: 4, sun: [1.0, 0.5, 0.22], sunI: 0.30, zen: [0.035, 0.10, 0.30], hor: [0.82, 0.48, 0.34], haze: [0.50, 0.40, 0.40], sunHaze: [1.0, 0.55, 0.3], amb: 0.85 },
   { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.62, zen: [0.03, 0.11, 0.34], hor: [0.66, 0.58, 0.54], haze: [0.54, 0.52, 0.54], sunHaze: [1.0, 0.75, 0.5], amb: 1.0 },
-  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.02, 0.095, 0.325], hor: [0.38, 0.47, 0.60], haze: [0.48, 0.54, 0.64], sunHaze: [1.0, 0.92, 0.80], amb: 1.0 },
-  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.018, 0.09, 0.32], hor: [0.36, 0.46, 0.60], haze: [0.47, 0.54, 0.65], sunHaze: [0.98, 0.93, 0.84], amb: 1.0 },
+  // day: `hor` is the saturated blue-cyan of the sky a few degrees above the horizon (the whitening of the
+  // last degrees comes from the haze band in skyRadiance), `zen` the deep cerulean of the upper sky
+  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.022, 0.12, 0.32], hor: [0.17, 0.29, 0.40], haze: [0.48, 0.54, 0.64], sunHaze: [1.0, 0.92, 0.80], amb: 1.0 },
+  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.02, 0.12, 0.32], hor: [0.16, 0.29, 0.40], haze: [0.47, 0.54, 0.65], sunHaze: [0.98, 0.93, 0.84], amb: 1.0 },
 ];
 
 function mixKey(el: number): Key {
@@ -58,9 +60,11 @@ function mixKey(el: number): Key {
 export interface WeatherPreset { coverage: number; hazeDensity: number; hazeHeight: number; windSpeed: number; turbulence: number; cloudBase: number; cloudTop: number; rain: number; sunDim: number; }
 
 export const WEATHER: Record<Weather, WeatherPreset> = {
-  clear: { coverage: 0.2, hazeDensity: 1.5e-5, hazeHeight: 1400, windSpeed: 5, turbulence: 0.25, cloudBase: 1500, cloudTop: 2500, rain: 0, sunDim: 1 },
-  scattered: { coverage: 0.36, hazeDensity: 1.9e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1200, cloudTop: 2900, rain: 0, sunDim: 0.97 },
-  cloudy: { coverage: 0.66, hazeDensity: 3.2e-5, hazeHeight: 1100, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2600, rain: 0, sunDim: 0.72 },
+  // coverage is the macro-field threshold (see cloudFieldCS): 0.22 ~ 7 % ground cover of sparse fair-weather
+  // cumulus, 0.36 ~ 20 % (about 40 % of the sky band seen from 400 m), 0.66 ~ 60 % broken stratocumulus
+  clear: { coverage: 0.22, hazeDensity: 1.5e-5, hazeHeight: 1400, windSpeed: 5, turbulence: 0.25, cloudBase: 1500, cloudTop: 2400, rain: 0, sunDim: 1 },
+  scattered: { coverage: 0.36, hazeDensity: 1.9e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 2500, rain: 0, sunDim: 0.97 },
+  cloudy: { coverage: 0.66, hazeDensity: 3.2e-5, hazeHeight: 1100, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2100, rain: 0, sunDim: 0.72 },
   storm: { coverage: 0.92, hazeDensity: 5.5e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 2600, rain: 1, sunDim: 0.4 },
 };
 
