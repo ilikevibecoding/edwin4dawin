@@ -1,12 +1,13 @@
-// Armoury (deck B, starboard, x 2..18 / z 526..540, h 3.0). A floor-to-ceiling grated partition with a
-// barred issue counter and an open gate splits the room: the issue side has the weapons-check terminal,
-// a queue rail, waiting bench, personal lockers and a heavy locked cabinet; the cage holds rifle racks
-// (wall and free-standing), helmet / armour shelves, power-cell crates and red status lighting.
+// Armoury (deck B, starboard, x 2..18 / z 526..540, h 3.0). A floor-to-ceiling armoured partition with
+// a barred issue window over the counter and an open barred gate splits the room: the issue side has
+// the weapons-check terminal, a queue rail, waiting bench, personal lockers and a heavy locked cabinet;
+// the cage holds lit rifle racks (wall and free-standing), helmet / armour shelves, power-cell crates
+// and red status lighting.
 import * as THREE from "three";
 import { roomShell, wallLightBar, wallConsole } from "../shell.js";
 import { PALETTE } from "../../materials.js";
 import { pointLight } from "../lib.js";
-import { stencil, floorStencil, bench, locker, rifle, rifleRack, helmet, chestPlate, crate, grateQuad } from "./aftProps.js";
+import { stencil, floorStencil, bench, locker, rifle, rifleRack, helmet, chestPlate, crate, downlight, pendant, workLamp } from "./aftProps.js";
 
 export function build(kit, ctx, room, lib) {
   const shell = roomShell(kit, ctx, room, { style: "dark", lights: false, lightRows: 2, lightMat: "emitCoolSoft", seed: 51 });
@@ -18,61 +19,65 @@ export function build(kit, ctx, room, lib) {
   const fS = frames["+z"].frame; // aft wall (lockers, crates), u = x1 - x
   const px = 7.0; // partition plane
 
-  // ------------------------------------------------------------ lights
-  // The pool keeps the 14 best-scoring fixtures (intensity / distance^2 from the camera), so the room
-  // uses a few strong practicals: two over the issue side, one over the counter, one just behind the
-  // barred window, two in the cage and one over the far-wall racks; red accents sit low over the racks
-  // and the counter.
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 11, 14, [4.6, yTop - 0.4, 529.5]));
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 11, 14, [4.6, yTop - 0.4, 536.5]));
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 10, 12, [5.8, yTop - 0.4, 533]));
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 14, 14, [8.6, yTop - 0.4, 533]));
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 16, 15, [10.5, yTop - 0.4, 530.5]));
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 16, 15, [10.5, yTop - 0.4, 535.5]));
-  ctx.lights.cool.push(pointLight(0xe0e8ff, 18, 16, [16.2, yTop - 0.4, 533]));
-  ctx.lights.teal.push(pointLight(0xff3a2a, 5, 10, [12.5, yTop - 0.5, 533]));
-  ctx.lights.teal.push(pointLight(0xff3a2a, 4, 9, [16.8, yTop - 0.7, 529.5]));
-  ctx.lights.teal.push(pointLight(0xff3a2a, 4, 9, [16.8, yTop - 0.7, 535.5]));
-  ctx.lights.teal.push(pointLight(0xff3a2a, 2.5, 7, [6.5, yTop - 0.8, 533]));
+  // ------------------------------------------------------------ lights: every one is a practical
+  // Issue side: two recessed cans and a pendant row over the counter. Cage: four cage work lamps hung
+  // low over the racks (nothing sits right behind the barred window, so the window no longer blows out).
+  // Red: the partition-top lamps, a cage lamp on the free-standing rack and the wall racks' headers.
+  for (const z of [529.5, 536.5]) {
+    downlight(kit, 4.6, yTop, z, "emitCoolSoft", 0.11);
+    ctx.lights.cool.push(pointLight(0xe0e8ff, 10, 13, [4.6, yTop - 0.35, z]));
+  }
+  for (const z of [531.4, 533.0, 534.6]) pendant(kit, ctx, 5.9, yTop, z, { drop: 0.75, r: 0.2, intensity: z === 533 ? 9 : 0, distance: 10, color: 0xe0e8ff, mat: "emitCoolSoft", family: "cool" });
+  workLamp(kit, ctx, 9.9, yTop, 529.6, { drop: 0.5, intensity: 12, distance: 10 });
+  workLamp(kit, ctx, 9.9, yTop, 536.4, { drop: 0.5, intensity: 12, distance: 10 });
+  workLamp(kit, ctx, 15.2, yTop, 530.4, { drop: 0.5, intensity: 13, distance: 10 });
+  workLamp(kit, ctx, 15.2, yTop, 535.6, { drop: 0.5, intensity: 13, distance: 10 });
+  ctx.lights.teal.push(pointLight(0xff3a2a, 4, 9, [12.5, y0 + 2.05, 533]));
+  ctx.lights.teal.push(pointLight(0xff3a2a, 3, 8, [x1 - 0.5, y0 + 2.0, 529.5]));
+  ctx.lights.teal.push(pointLight(0xff3a2a, 3, 8, [x1 - 0.5, y0 + 2.0, 535.5]));
+  ctx.lights.teal.push(pointLight(0xff3a2a, 2.5, 7, [px - 0.3, y0 + 2.5, 533]));
 
-  // ------------------------------------------------------------ partition: posts, rails, solid skirts, grate, counter, gate
+  // ------------------------------------------------------------ partition: plain armoured panels with a barred counter window and gate
   {
     const post = (z, h = 3.0) => kit.box("satinBlack", px, y0 + h / 2, z, 0.12, h, 0.12);
     for (const z of [526.15, 530.4, 535.6, 536.1, 537.5, 538.4, 539.85]) post(z);
     kit.boxMM("satinBlack", [px - 0.06, yTop - 0.12, z0], [px + 0.06, yTop, z1]);
-    const grateWall = (za, zb, ya, yb) => {
-      const g = new THREE.PlaneGeometry(zb - za, yb - ya);
-      g.rotateY(Math.PI / 2);
-      grateQuad(kit, g, [px, y0 + (ya + yb) / 2, (za + zb) / 2], zb - za, yb - ya);
-      kit.boxMM("metal", [px - 0.04, y0 + ya - 0.04, za], [px + 0.04, y0 + ya + 0.04, zb], { color: PALETTE.gunmetal, texel: 2 });
-      kit.boxMM("metal", [px - 0.04, y0 + yb - 0.04, za], [px + 0.04, y0 + yb + 0.04, zb], { color: PALETTE.gunmetal, texel: 2 });
-    };
-    const skirt = (za, zb) => {
-      kit.boxMM("painted", [px - 0.05, y0 + 0.02, za], [px + 0.05, y0 + 1.0, zb], { color: PALETTE.gunmetal, uv: "world", texel: 0.8 });
+    // solid panel: rubber base, painted skirt, lighter armour plate above with a seam grid, red status
+    // strip near the top; both faces get the same treatment
+    const panel = (za, zb, ya = 1.0) => {
       kit.boxMM("rubber", [px - 0.06, y0, za], [px + 0.06, y0 + 0.08, zb], { color: PALETTE.rubber, texel: 2 });
+      kit.boxMM("painted", [px - 0.05, y0 + 0.02, za], [px + 0.05, y0 + ya, zb], { color: PALETTE.gunmetal, uv: "world", texel: 0.8 });
+      kit.boxMM("painted", [px - 0.045, y0 + ya, za], [px + 0.045, yTop - 0.12, zb], { color: PALETTE.impGreyDark, uv: "world", texel: 0.8 });
+      kit.boxMM("metal", [px - 0.055, y0 + ya - 0.03, za], [px + 0.055, y0 + ya + 0.03, zb], { color: PALETTE.steel, texel: 2 });
+      for (let z = za + 0.9; z < zb - 0.3; z += 0.9) kit.boxMM("satinBlack", [px - 0.05, y0 + ya + 0.05, z - 0.01], [px + 0.05, yTop - 0.15, z + 0.01]);
+      kit.boxMM("satinBlack", [px - 0.05, y0 + 2.0, za], [px + 0.05, y0 + 2.02, zb]);
+      kit.boxMM("emitRed", [px - 0.052, y0 + 2.72, za + 0.15], [px + 0.052, y0 + 2.75, zb - 0.15]);
     };
-    skirt(526.2, 530.4);
-    grateWall(526.2, 530.4, 1.0, 2.88);
-    skirt(535.6, 536.1);
-    grateWall(535.6, 536.1, 1.0, 2.88);
-    grateWall(536.1, 537.5, 2.55, 2.88);
-    skirt(537.5, 539.85);
-    grateWall(537.5, 539.85, 1.0, 2.88);
-    // stencils on the issue side of the skirts
-    const fP = new lib.Frame(kit, new THREE.Vector3(px - 0.05, y0, z1), new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 1, 0));
-    stencil(fP, z1 - 528.3, 0.55, 0.42, 1, { plate: false });
-    stencil(fP, z1 - 538.7, 0.55, 0.42, 5, { plate: false });
-    stencil(fP, z1 - 529.6, 0.55, 0.3, 8, { plate: false });
-    // counter with a barred window above it
+    panel(526.2, 530.4);
+    panel(535.6, 536.1);
+    panel(537.5, 539.85);
+    kit.boxMM("painted", [px - 0.045, y0 + 2.55, 536.1], [px + 0.045, yTop - 0.12, 537.5], { color: PALETTE.impGreyDark, uv: "world", texel: 0.8 });
+    // stencils and an intercom on the issue side of the panels
+    const fP = new lib.Frame(kit, new THREE.Vector3(px - 0.05, y0, z0), new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0)); // faces -x, u = z - z0
+    stencil(fP, 2.3, 0.55, 0.42, 1, { plate: false });
+    stencil(fP, 12.7, 0.55, 0.42, 5, { plate: false });
+    stencil(fP, 3.6, 0.55, 0.3, 8, { plate: false });
+    stencil(fP, 2.3, 1.75, 0.5, 0, { color: PALETTE.creamDark });
+    stencil(fP, 12.7, 1.75, 0.5, 14, { color: PALETTE.creamDark });
+    fP.box("satinBlack", 4.0, 1.5, 0.05, 0.3, 0.44, 0.1);
+    fP.box("screen5", 4.0, 1.6, 0.102, 0.22, 0.16, 0.004, { uv: "keep" });
+    for (let k = 0; k < 6; k++) fP.box("metal", 4.0, 1.3 + k * 0.03, 0.102, 0.2, 0.01, 0.004, { color: PALETTE.steel });
+    fP.box("emitRed", 3.9, 1.68, 0.102, 0.03, 0.03, 0.004);
+    // counter with the barred window above it: 8 cm square bars at 26 cm pitch between two flat rails
     kit.boxMM("painted", [6.35, y0 + 0.02, 530.4], [px + 0.05, y0 + 0.88, 535.6], { color: PALETTE.gunmetal, uv: "world", texel: 0.8 });
     kit.boxMM("rubber", [6.33, y0, 530.4], [px + 0.06, y0 + 0.08, 535.6], { color: PALETTE.rubber, texel: 2 });
     kit.boxMM("metal", [6.25, y0 + 0.88, 530.35], [px + 0.1, y0 + 0.94, 535.65], { color: PALETTE.steel, texel: 2 });
     kit.boxMM("painted", [6.34, y0 + 0.4, 530.5], [6.36, y0 + 0.46, 535.5], { color: PALETTE.orange, uv: "keep" });
     kit.boxMM("leds", [6.34, y0 + 0.8, 530.6], [6.35, y0 + 0.83, 535.4], { uv: "keep" });
     for (const z of [531.7, 533.0, 534.3]) kit.boxMM("metal", [6.34, y0 + 0.15, z - 0.006], [6.36, y0 + 0.78, z + 0.006], { color: PALETTE.darkMetal });
-    kit.boxMM("metal", [px - 0.04, y0 + 1.22, 530.4], [px + 0.04, y0 + 1.28, 535.6], { color: PALETTE.gunmetal, texel: 2 });
-    kit.boxMM("metal", [px - 0.04, y0 + 2.05, 530.4], [px + 0.04, y0 + 2.11, 535.6], { color: PALETTE.gunmetal, texel: 2 });
-    for (let z = 530.55; z < 535.6; z += 0.16) kit.cyl("metal", px, y0 + 2.06, z, 0.018, 1.64, "y", { color: PALETTE.steel, segments: 8 });
+    kit.boxMM("metal", [px - 0.05, y0 + 1.5, 530.4], [px + 0.05, y0 + 1.58, 535.6], { color: PALETTE.gunmetal, texel: 2 });
+    kit.boxMM("metal", [px - 0.05, y0 + 2.2, 530.4], [px + 0.05, y0 + 2.28, 535.6], { color: PALETTE.gunmetal, texel: 2 });
+    for (let z = 530.59; z < 535.5; z += 0.26) kit.boxMM("metal", [px - 0.04, y0 + 0.94, z - 0.04], [px + 0.04, yTop - 0.12, z + 0.04], { color: PALETTE.steel, texel: 3 });
     // pass-through tray, hand scanner and the check terminal on the counter
     kit.box("metal", 6.7, y0 + 0.955, 532.2, 0.6, 0.03, 0.42, { color: PALETTE.darkMetal, texel: 2 });
     kit.box("metal", 6.7, y0 + 0.985, 532.0, 0.6, 0.03, 0.02, { color: PALETTE.steel });
@@ -90,7 +95,7 @@ export function build(kit, ctx, room, lib) {
     const gx = px + 0.16;
     kit.boxMM("satinBlack", [gx - 0.03, y0 + 0.02, 537.55], [gx + 0.03, y0 + 2.4, 538.85]);
     kit.boxMM("painted", [gx - 0.04, y0 + 0.02, 537.55], [gx + 0.04, y0 + 0.9, 538.85], { color: PALETTE.gunmetal, uv: "world", texel: 0.8 });
-    for (let z = 537.7; z < 538.85; z += 0.14) kit.cyl("metal", gx, y0 + 1.65, z, 0.016, 1.5, "y", { color: PALETTE.steel, segments: 8 });
+    for (let z = 537.72; z < 538.8; z += 0.22) kit.boxMM("metal", [gx - 0.03, y0 + 0.9, z - 0.03], [gx + 0.03, y0 + 2.4, z + 0.03], { color: PALETTE.steel, texel: 3 });
     kit.boxMM("metal", [gx - 0.05, y0 + 1.3, 537.55], [gx + 0.05, y0 + 1.36, 538.85], { color: PALETTE.gunmetal, texel: 2 });
     kit.box("metal", gx + 0.05, y0 + 1.1, 537.7, 0.04, 0.2, 0.06, { color: PALETTE.steel });
     kit.collider([gx - 0.08, y0, 537.5], [gx + 0.08, y0 + 2.4, 538.9], "gate");
@@ -119,9 +124,9 @@ export function build(kit, ctx, room, lib) {
     fN.box("hazard", u, 0.3, 0.716, 1.3, 0.08, 0.01, { texel: 3 });
     stencil(fN, u - 0.2, 1.6, 0.4, 8, { plate: false, n: 0.716 });
     fN.collider(u - 0.8, u + 0.8, 0, 2.25, 0, 0.78, "vault");
-    wallConsole(fN, 3.4, 1.4, "screen5");
+    wallConsole(fN, 3.4, 1.4, "screen9");
     fN.box("satinBlack", 3.4, 1.8, 0.04, 0.9, 0.56, 0.08);
-    fN.box("screen5", 3.4, 1.8, 0.082, 0.78, 0.44, 0.006, { uv: "keep" });
+    fN.box("screen10", 3.4, 1.8, 0.082, 0.78, 0.44, 0.006, { uv: "keep" });
     stencil(fN, 4.5, 1.75, 0.36, 9, { color: PALETTE.creamDark });
     wallLightBar(fN, 2.4, 4.8, 2.55, "emitCoolSoft");
     // queue rail
@@ -145,7 +150,7 @@ export function build(kit, ctx, room, lib) {
     stencil(fW, z1 - 536.2, 1.35, 0.4, 13, { color: PALETTE.cream, n: 0.17 });
     fW.box("metal", z1 - 536.2, 0.85, 0.19, 0.4, 0.05, 0.05, { color: PALETTE.steel });
     fW.collider(z1 - 536.7, z1 - 535.7, 0, 1.8, 0, 0.2, "fireCabinet");
-    wallConsole(fW, z1 - 538.3, 1.2, "screen5", { height: 1.0, depth: 0.45 });
+    wallConsole(fW, z1 - 538.3, 1.2, "screen8", { height: 1.0, depth: 0.45 });
     wallLightBar(fW, z1 - 539.5, z1 - 535.2, 2.5, "emitCoolSoft");
     // personal lockers on the aft wall, issue side
     for (let k = 0; k < 4; k++) locker(fS, x1 - (3.05 + k * 0.92), 0.88, 2.1, { color: PALETTE.impGreyDark, band: PALETTE.impRed, decal: [14, 0, 9, 6][k] });
@@ -183,15 +188,22 @@ export function build(kit, ctx, room, lib) {
     const len = zb - za;
     kit.box("metal", rx, y0 + 0.06, zm, 0.8, 0.12, len + 0.2, { color: PALETTE.gunmetal, texel: 2 });
     kit.box("satinBlack", rx, y0 + 1.05, zm, 0.08, 1.9, len);
-    kit.box("metal", rx, y0 + 2.02, zm, 0.3, 0.08, len + 0.1, { color: PALETTE.gunmetal, texel: 2 });
+    for (const s of [-1, 1]) kit.box("painted", rx + s * 0.045, y0 + 1.05, zm, 0.01, 1.7, len - 0.1, { color: PALETTE.slate, uv: "world", texel: 0.8 });
+    // header hood with downward diffusers on both faces and a red cage lamp on top
+    kit.box("satinBlack", rx, y0 + 2.06, zm, 0.9, 0.12, len + 0.1);
+    for (const s of [-1, 1]) {
+      kit.box("emitCoolSoft", rx + s * 0.3, y0 + 1.995, zm, 0.3, 0.01, len - 0.3, { uv: "keep" });
+      kit.box("emitRed", rx + s * 0.455, y0 + 2.06, zm, 0.01, 0.03, len - 0.3);
+    }
+    kit.box("satinBlack", rx, y0 + 2.2, zm, 0.16, 0.16, 0.16);
+    kit.cyl("emitRed", rx, y0 + 2.14, zm, 0.06, 0.04, "y", { segments: 12 });
     for (const s of [-1, 1]) {
       kit.box("metal", rx + s * 0.22, y0 + 0.22, zm, 0.36, 0.05, len, { color: PALETTE.gunmetal, texel: 2 });
       kit.box("metal", rx + s * 0.2, y0 + 1.36, zm, 0.05, 0.04, len, { color: PALETTE.steel, texel: 2 });
-      kit.box("emitRed", rx + s * 0.15, y0 + 1.97, zm, 0.02, 0.03, len - 0.2);
       kit.box("leds", rx + s * 0.4, y0 + 0.3, zm, 0.006, 0.03, len - 0.4, { uv: "keep" });
-      for (let z = za + 0.18; z < zb - 0.1; z += 0.3) {
+      for (let z = za + 0.2; z < zb - 0.1; z += 0.34) {
         kit.box("metal", rx + s * 0.22, y0 + 1.36, z, 0.1, 0.08, 0.05, { color: PALETTE.gunmetal });
-        rifle(kit, rx + s * 0.2, y0 + 0.25, z, s > 0 ? Math.PI / 2 : -Math.PI / 2);
+        rifle(kit, rx + s * 0.2, y0 + 0.25, z, s > 0 ? 0 : Math.PI); // profile toward the aisle
       }
     }
     for (const z of [za - 0.1, zb + 0.1]) {
