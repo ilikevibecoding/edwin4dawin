@@ -1,7 +1,9 @@
 // Deck 5 — Cargo Lift & Logistics. A 25 × 22 × 7 m logistics hall between the access corridor and
-// the hangar: a big fenced cargo lift that cycles between the deck and +3 m, two roller conveyors
-// feeding it, container stacks, a logistics station with inventory screens, a ceiling hoist on a rail
-// and hazard-striped traffic lanes.
+// the hangar: a big fenced cargo lift that cycles between the deck and +3 m, a long roller conveyor
+// feeding it on the forward side and a short one with a weigh station on the aft side, container
+// stacks (tall on the forward wall, a low row plus drums and a loader tug on the aft wall), a logistics
+// station with inventory screens, a ceiling hoist on a rail carrying a container over the lane, and
+// hazard-striped traffic lanes. Three real lights: two ceiling floods and the amber lift lamp.
 //
 // Deck-local metres, floor y = 0. Room bounds x 2.9..28, y 0..7, z -30..-8; blast door on xmin at z = -19.
 import * as THREE from "three";
@@ -12,7 +14,7 @@ import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
 
 const LIFT = { x: 22.5, z: -19, half: 3.2 };
-const LANES = [-24.5, -13.5]; // conveyor centre lines (z)
+const LANES = [-24.5, -13.5]; // conveyor centre lines (z): forward (long) / aft (short, weigh station)
 
 export function buildHangarCargo(kit, ctx) {
   const [min, max] = ctx.bounds;
@@ -34,9 +36,9 @@ export function buildHangarCargo(kit, ctx) {
       panelW: 2.6,
       rowH: 2.6,
       spacing: 6,
-      maxLights: 4, // 2 × 2 grid + the amber lift light = 5 of the 6 allowed
-      lightIntensity: 18,
-      lightDistance: 22,
+      maxLights: 2, // two floods + the amber lift light: the pool is shared with the hangar next door
+      lightIntensity: 26,
+      lightDistance: 24,
       styles: { panel: 0.86, greeble: 0.06, vent: 0.08 },
       paints: [
         [PALETTE.impLight, 0.5],
@@ -50,12 +52,14 @@ export function buildHangarCargo(kit, ctx) {
     pillar(kit, 18, z, 0, max[1], 0.6, PALETTE.impMid);
   }
   hazardLanes(kit, min, max);
-  for (const z of LANES) conveyor(kit, ctx, 6.5, LIFT.x - LIFT.half - 1.6, z, rand);
+  conveyor(kit, ctx, 6.5, LIFT.x - LIFT.half - 1.6, LANES[0], rand, { density: 0.55 });
+  conveyor(kit, ctx, 11.5, LIFT.x - LIFT.half - 1.6, LANES[1], rand, { density: 0.3 });
+  weighStation(kit, ctx, 7.6, LANES[1]);
   cargoLift(kit, ctx);
   containers(kit, ctx, min, max, rand);
   logistics(kit, ctx, min, max);
   hoist(kit, ctx, min, max);
-  ctx.light(pointLight(0xffb060, 12, 16, [LIFT.x, 5.6, LIFT.z]));
+  ctx.light(pointLight(0xffb060, 14, 18, [LIFT.x, 5.6, LIFT.z]));
 }
 
 // ---------------------------------------------------------------------------
@@ -65,24 +69,29 @@ function hazardLanes(kit, min, max) {
   const z1 = -17.2;
   kit.boxMM("paintedMetal", [min[0] + 0.4, 0, z0], [LIFT.x - LIFT.half - 1.0, 0.012, z1], { color: PALETTE.impBlack, texel: 2 });
   for (const z of [z0, z1]) {
-    kit.boxMM("hazard", [min[0] + 0.4, 0, z - 0.2], [LIFT.x - LIFT.half - 1.0, 0.014, z + 0.2], { texel: 2 });
+    kit.boxMM("hazard", [min[0] + 0.4, 0, z - 0.2], [LIFT.x - LIFT.half - 1.0, 0.014, z + 0.2], { texel: 0.7 });
     for (let x = min[0] + 1.5; x < LIFT.x - LIFT.half - 1.6; x += 2.2) kit.boxMM("emitAmber", [x, 0.014, z - 0.06], [x + 1.0, 0.026, z + 0.06], {});
   }
   void max;
 }
 
 // ---------------------------------------------------------------------------
-// Roller conveyor along x: two side rails on legs, rollers, a drive box, crates riding on it
+// Roller conveyor along x: low side rails on legs, steel rollers standing proud of the rails so they
+// read from the lane, a drive box, a control post, crates riding on it (`density` = share of the run)
 // ---------------------------------------------------------------------------
-function conveyor(kit, ctx, x0, x1, z, rand) {
+function conveyor(kit, ctx, x0, x1, z, rand, { density = 0.5 } = {}) {
   const y = 0.85;
   const w = 1.3;
-  for (const s of [-1, 1]) kit.boxMM("paintedMetal", [x0, y - 0.12, z + s * (w / 2) - 0.06], [x1, y + 0.08, z + s * (w / 2) + 0.06], { color: PALETTE.impDark, texel: 2 });
-  for (let x = x0 + 0.4; x < x1; x += 2.2) {
-    for (const s of [-1, 1]) kit.box("paintedMetal", x, (y - 0.12) / 2, z + s * (w / 2), 0.1, y - 0.12, 0.1, { color: PALETTE.impDark, texel: 2 });
-    kit.box("paintedMetal", x, 0.04, z, 0.3, 0.08, w + 0.3, { color: PALETTE.impBlack, texel: 2 });
+  for (const s of [-1, 1]) {
+    kit.boxMM("paintedMetal", [x0, y - 0.16, z + s * (w / 2) - 0.06], [x1, y - 0.02, z + s * (w / 2) + 0.06], { color: PALETTE.impDark, texel: 2 });
+    kit.boxMM("hazard", [x0 + 0.3, y - 0.14, z + s * (w / 2) + s * 0.061], [x1 - 0.3, y - 0.04, z + s * (w / 2) + s * 0.062], { texel: 0.5 });
   }
-  for (let x = x0 + 0.2; x < x1 - 0.1; x += 0.36) kit.cyl("metal", x, y - 0.02, z, 0.06, w - 0.16, "z", { color: PALETTE.steel, segments: 8 });
+  for (let x = x0 + 0.4; x < x1; x += 2.2) {
+    for (const s of [-1, 1]) kit.box("paintedMetal", x, (y - 0.16) / 2, z + s * (w / 2), 0.1, y - 0.16, 0.1, { color: PALETTE.impDark, texel: 2 });
+    kit.box("paintedMetal", x, 0.04, z, 0.3, 0.08, w + 0.3, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("paintedMetal", x, y - 0.3, z, 0.08, 0.06, w, { color: PALETTE.impDark, texel: 2 });
+  }
+  for (let x = x0 + 0.25; x < x1 - 0.2; x += 0.3) kit.cyl("metal", x, y, z, 0.09, w - 0.14, "z", { color: PALETTE.steel, segments: 10 });
   // drive housing at the lift end, control post at the door end
   kit.box("paintedMetal", x1 - 0.5, y - 0.35, z, 1.0, 0.5, w + 0.2, { color: PALETTE.impDark, texel: 2 });
   kit.box("emitGreen", x1 - 0.5, y - 0.35, z + w / 2 + 0.11, 0.3, 0.08, 0.01);
@@ -95,9 +104,25 @@ function conveyor(kit, ctx, x0, x1, z, rand) {
   let x = x0 + 1.0 + rand() * 1.5;
   while (x < x1 - 1.8) {
     const sx = 0.8 + rand() * 0.7;
-    crate(kit, ctx, { x: x + sx / 2, y: y + 0.04, z, sx, sy: 0.6 + rand() * 0.6, sz: 0.9 + rand() * 0.3, yaw: 0, seed: ctx.seed + Math.floor(x * 7) });
-    x += sx + 1.2 + rand() * 3.5;
+    crate(kit, ctx, { x: x + sx / 2, y: y + 0.09, z, sx, sy: 0.6 + rand() * 0.6, sz: 0.9 + rand() * 0.3, yaw: 0, seed: ctx.seed + Math.floor(x * 7) });
+    x += sx + (1.2 + rand() * 3.5) * (0.5 / density);
   }
+}
+
+/** Weigh / scan station at the door end of the aft conveyor: a scale plate on the floor, a scanner arch, a console. */
+function weighStation(kit, ctx, x, z) {
+  kit.boxMM("paintedMetal", [x - 1.4, 0, z - 1.2], [x + 1.4, 0.12, z + 1.2], { color: PALETTE.impBlack, texel: 2 });
+  kit.boxMM("impPanel", [x - 1.3, 0.12, z - 1.1], [x + 1.3, 0.14, z + 1.1], { color: PALETTE.impMid, uv: "keep" });
+  kit.boxMM("hazard", [x - 1.42, 0.12, z - 1.22], [x + 1.42, 0.125, z - 1.1], { texel: 0.5 });
+  kit.boxMM("hazard", [x - 1.42, 0.12, z + 1.1], [x + 1.42, 0.125, z + 1.22], { texel: 0.5 });
+  kit.collider([x - 1.4, 0, z - 1.2], [x + 1.4, 0.14, z + 1.2], "scale");
+  // scanner arch over the plate
+  for (const s of [-1, 1]) kit.box("paintedMetal", x, 1.3, z + s * 1.35, 0.3, 2.6, 0.3, { color: PALETTE.impDark, texel: 2 });
+  kit.box("paintedMetal", x, 2.72, z, 0.36, 0.24, 3.0, { color: PALETTE.impDark, texel: 2 });
+  kit.box("emitBlue", x, 2.59, z, 0.2, 0.02, 2.4);
+  for (const s of [-1, 1]) kit.box("emitBlueDim", x + 0.16, 1.4, z + s * 1.35, 0.01, 1.6, 0.12);
+  for (const s of [-1, 1]) kit.collider([x - 0.2, 0, z + s * 1.35 - 0.2], [x + 0.2, 2.9, z + s * 1.35 + 0.2], "arch");
+  impConsole(kit, ctx, { x: x - 2.2, z: z + 0.2, yaw: -Math.PI / 2, w: 1.4, d: 0.7, screens: [1], seed: ctx.seed + 8, lampMat: "emitAmber" });
 }
 
 // ---------------------------------------------------------------------------
@@ -115,12 +140,12 @@ function cargoLift(kit, ctx) {
     }
   }
   kit.boxMM("paintedMetal", [x - half - 0.55, H - 0.5, z - half - 0.55], [x + half + 0.55, H, z + half + 0.55], { color: PALETTE.impDark, texel: 2 });
-  kit.boxMM("hazard", [x - half - 0.56, H - 0.45, z - half - 0.56], [x + half + 0.56, H - 0.15, z - half - 0.54], { texel: 2 });
+  kit.boxMM("hazard", [x - half - 0.56, H - 0.45, z - half - 0.56], [x + half + 0.56, H - 0.15, z - half - 0.54], { texel: 1 });
   kit.boxMM("emitAmber", [x - half, H - 0.52, z - 0.15], [x + half, H - 0.5, z + 0.15], {});
   kit.boxMM("emitAmber", [x - 0.15, H - 0.52, z - half], [x + 0.15, H - 0.5, z + half], {});
   // recessed pit (dark) under the platform and the hazard curb around it
   kit.boxMM("paintedMetal", [x - half - 0.1, -0.5, z - half - 0.1], [x + half + 0.1, -0.02, z + half + 0.1], { color: PALETTE.impBlack, texel: 2 });
-  kit.boxMM("hazard", [x - half - 0.7, 0, z - half - 0.7], [x + half + 0.7, 0.04, z + half + 0.7], { texel: 2 });
+  kit.boxMM("hazard", [x - half - 0.7, 0, z - half - 0.7], [x + half + 0.7, 0.04, z + half + 0.7], { texel: 1 });
   kit.boxMM("paintedMetal", [x - half - 0.2, 0, z - half - 0.2], [x + half + 0.2, 0.05, z + half + 0.2], { color: PALETTE.impBlack, texel: 2 });
   // railings around the pit; the door-side (−x) run is split by a lit gate that stays shut
   const f = half + 0.75;
@@ -130,7 +155,7 @@ function cargoLift(kit, ctx) {
   railing(kit, x - f, z - f, x - f, z - 1.2, 0.04);
   railing(kit, x - f, z + 1.2, x - f, z + f, 0.04);
   kit.box("paintedMetal", x - f, 0.6, z, 0.08, 1.1, 2.4, { color: PALETTE.impDark, texel: 2 });
-  kit.box("hazard", x - f - 0.045, 0.6, z, 0.01, 0.5, 2.2, { texel: 3 });
+  kit.box("hazard", x - f - 0.045, 0.6, z, 0.01, 0.5, 2.2, { texel: 1 });
   kit.box("emitRed", x - f - 0.05, 1.0, z, 0.01, 0.08, 1.6);
   kit.collider([x - f - 0.1, 0, z - 1.25], [x - f + 0.1, 1.15, z + 1.25], "gate");
   // control pedestal outside the gate
@@ -144,7 +169,7 @@ function cargoLift(kit, ctx) {
   const k = new Kit(ctx.materials);
   const g = new THREE.Group();
   k.box("floorGloss", 0, -0.14, 0, half * 2, 0.28, half * 2, { texel: 0.5 });
-  k.box("hazard", 0, 0.005, 0, half * 2, 0.01, half * 2, { texel: 1.5 });
+  k.box("hazard", 0, 0.005, 0, half * 2, 0.01, half * 2, { texel: 1 });
   k.box("paintedMetal", 0, -0.42, 0, half * 2 - 0.4, 0.3, half * 2 - 0.4, { color: PALETTE.impBlack, texel: 2 });
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.box("metal", sx * (half + 0.02), -0.1, sz * (half + 0.02), 0.3, 0.5, 0.3, { color: PALETTE.gunmetal });
   k.box("emitWhite", 0, -0.29, half + 0.01, half * 2 - 0.6, 0.04, 0.01);
@@ -182,7 +207,7 @@ function containers(kit, ctx, min, max, rand) {
         crate(kit, ctx, { x: x + i * 1.5, y: j * 1.15, z, sx: 1.35, sy: 1.1, sz: 1.35, yaw: (rand() - 0.5) * 0.06, seed: seed + i * 3 + j });
       }
     }
-    kit.boxMM("hazard", [x - 0.9, 0, z - 0.9], [x + (cols - 1) * 1.5 + 0.9, 0.012, z - 0.86], { texel: 2 });
+    kit.boxMM("hazard", [x - 0.9, 0, z - 0.9], [x + (cols - 1) * 1.5 + 0.9, 0.012, z - 0.86], { texel: 1 });
   };
   stack(6.5, min[2] + 1.0, 5, 2, ctx.seed + 11);
   stack(15.5, min[2] + 1.0, 3, 3, ctx.seed + 21);
@@ -243,7 +268,7 @@ function hoist(kit, ctx, min, max) {
   const k = new Kit(ctx.materials);
   const g = new THREE.Group();
   k.box("paintedMetal", 0, y - 0.45, 0, 0.9, 0.7, 0.8, { color: PALETTE.impDark, texel: 2 });
-  k.box("hazard", 0, y - 0.82, 0, 0.92, 0.06, 0.82, { texel: 3 });
+  k.box("hazard", 0, y - 0.82, 0, 0.92, 0.06, 0.82, { texel: 1 });
   k.box("emitRed", 0.3, y - 0.45, 0.41, 0.15, 0.1, 0.01);
   k.cyl("metal", 0, y - 2.0, 0, 0.025, 2.4, "y", { color: PALETTE.steel, segments: 6 });
   k.box("paintedMetal", 0, y - 3.3, 0, 0.4, 0.3, 0.3, { color: PALETTE.impDark, texel: 2 });
