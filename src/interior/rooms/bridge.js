@@ -71,7 +71,7 @@ function ensureMaterials(ctx) {
     m.brg_alert = new THREE.MeshStandardMaterial({ color: 0x1a0505, emissive: new THREE.Color("#ff2a1a"), emissiveIntensity: 0.35, roughness: 0.45, metalness: 0 });
     // hairline seams (waist rails, rib undersides, coves): below the bloom threshold so they read as
     // lines, never as blown bars
-    m.brg_hair = new THREE.MeshStandardMaterial({ color: 0x050505, emissive: new THREE.Color("#dfe6f2"), emissiveIntensity: 0.45, roughness: 0.5, metalness: 0 });
+    m.brg_hair = new THREE.MeshStandardMaterial({ color: 0x050505, emissive: new THREE.Color("#dfe6f2"), emissiveIntensity: 0.3, roughness: 0.5, metalness: 0 });
     // steady red for the corner-tower slots and the alert housings' standby glow
     m.brg_red = new THREE.MeshStandardMaterial({ color: 0x120404, emissive: new THREE.Color("#ff3a2a"), emissiveIntensity: 1.0, roughness: 0.5, metalness: 0 });
     // dais rim rings: blue kept under the bloom threshold (the shared emitBlue blows to white)
@@ -115,6 +115,9 @@ function ensureMaterials(ctx) {
     m.brg_floor.name = "brg_floor";
     m.brg_floor.envMapIntensity = 0.1;
     m.brg_floor.roughness = 1.35;
+    // and the deck albedo itself pulled down: the walkway must read as the film's near-black spine
+    // under the side-bay fill lights, not as mid-grey tiles
+    m.brg_floor.color.setScalar(0.6);
     m.brg_top = m.darkGloss.clone();
     m.brg_top.name = "brg_top";
     m.brg_top.envMapIntensity = 0.3;
@@ -1193,5 +1196,5 @@ function buildLights(ctx) {
   for (const s of [-1, 1]) for (const z of [-36, -25]) ctx.light(pointLight(0x4a9dff, 11, 11, [s * 7, -0.8, z]));
   for (const s of [-1, 1]) ctx.light(pointLight(0xff3a2a, 3.5, 9, [s * 23.2, 4.5, -47.6]));
   for (const s of [-1, 1]) ctx.light(pointLight(0xffb347, 3, 5.5, [s * 6.3, 1.8, -45.6]));
-  for (const s of [-1, 1]) ctx.light(pointLight(0xdde8ff, 4.5, 14, [s * 18, 5.4, -33]));
+  for (const s of [-1, 1]) ctx.light(pointLight(0xdde8ff, 3.6, 13, [s * 18, 5.4, -33]));
 }
