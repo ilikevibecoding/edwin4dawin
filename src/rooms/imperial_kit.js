@@ -371,7 +371,7 @@ export function impCeiling(kit, x0, z0, x1, z1, y, opts = {}) {
 // Floor: dark grid deck with a lighter walkway lane and edge trim strips
 // ---------------------------------------------------------------------------
 export function impFloor(kit, x0, z0, x1, z1, opts = {}) {
-  const { lane = true, laneW = 1.8, laneAxis = "z", edgeLight = null, texel = 0.5, y = 0 } = opts;
+  const { lane = false, laneW = 1.8, laneAxis = "z", edgeLight = null, texel = 0.5, y = 0 } = opts;
   kit.boxMM("impDeck", [x0, y - 0.14, z0], [x1, y, z1], { color: PALETTE.impGrey, texel });
   if (lane) {
     const cx = (x0 + x1) / 2;

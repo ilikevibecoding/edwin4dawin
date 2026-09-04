@@ -93,7 +93,8 @@ export const TOWER = {
   viewports: { y0: 247.6, y1: 251.4, hw: 34, count: 9, pillar: 1.1 },
   // lower observation gallery viewports (deck B), two runs left and right of the centreline
   // three wide viewport bays per side with 0.9 m mullions (was six letterbox slots)
-  galleryViewports: { y0: 233.0, y1: 235.6, x0: 8, x1: 46, count: 3 },
+  // three wide viewport bays per side running almost to the centreline (a 5 m mullion at x = 0)
+  galleryViewports: { y0: 233.0, y1: 235.8, x0: 2.5, x1: 46, count: 3 },
   domes: [
     { x: -62, z: 330, r: 30, yCenter: 282 },
     { x: 62, z: 330, r: 30, yCenter: 282 },
@@ -353,7 +354,7 @@ export const KESTREL = {
   const y = DECKS.E.y;
   // The Kestrel's cabin is a room too (its colliders/floors come from the legacy builder); its aft
   // blast door opens onto the ramp into the hangar. Local -z (bow) is world +z after the 180° yaw.
-  room({ id: "kestrel", name: "Kestrel — Light Freighter", deck: "E", origin: [-22, KESTREL.position.y, -108 + 12.6], size: [10.7, 3.0, 25.8], accent: "#4fd8cc", fog: 0.03, spawn: { x: 0, z: -11.0, yaw: 180, pitch: 0 }, kind: "room", tags: ["legacy", "seeThrough"] });
+  room({ id: "kestrel", name: "Kestrel — Light Freighter", deck: "E", origin: [-22, KESTREL.position.y, -108 + 12.6], size: [10.7, 3.0, 25.8], accent: "#4fd8cc", fog: 0.006, spawn: { x: 0, z: -11.0, yaw: 180, pitch: 0 }, kind: "room", tags: ["legacy", "seeThrough"] });
   door("kestrel", "hangar", [-22, KESTREL.position.y, -108], "z", { type: "blast", w: 1.7, h: 2.35, span: [-0.28, 0.28], kestrel: true });
   void y;
 }

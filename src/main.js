@@ -165,7 +165,8 @@ function buildInteriorEnvironment() {
   env.add(new THREE.AmbientLight(0x404040, 0.4));
   const tex = pmrem.fromScene(env, 0.02).texture;
   scene.environment = tex;
-  scene.environmentIntensity = 0.35;
+  // interior fill: rooms are lit by a few practicals each, so the environment carries the base level
+  scene.environmentIntensity = 0.55;
 }
 function buildExteriorEnvironment() {
   const cubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType, generateMipmaps: false });
@@ -451,8 +452,10 @@ const debugAPI = {
     }
     if (EXTERIOR_VIEWS[name]) {
       rig.applyPreset(name);
-      // sun forward-left-above at this sky time: hull front-lit from the hero angles, lit planets aft
-      space.setTime(EXTERIOR_VIEWS[name].time ?? 195);
+      // per-preset sun: `time` sets the bearing (1.3°/s), `sunElev` the elevation in degrees
+      const v = EXTERIOR_VIEWS[name];
+      space.setSunElevation(v.sunElev ?? 22);
+      space.setTime(v.time ?? 195);
       return true;
     }
     throw new Error("unknown view " + name);

@@ -483,5 +483,15 @@ export function buildSpace(scene, { camera = null } = {}) {
   function sunDirection(out = new THREE.Vector3()) {
     return out.copy(sunWorld);
   }
-  return { root, planets, layers, dust: dustLines, update, setTime, framePlanet, sunDirLocal, sunDirection, state };
+  /** Move the sun to a new elevation (degrees above the ship's plane), keeping its bearing. */
+  function setSunElevation(deg) {
+    const e = THREE.MathUtils.degToRad(deg);
+    const h = Math.hypot(sunDirLocal.x, sunDirLocal.z) || 1;
+    const c = Math.cos(e);
+    sunDirLocal.set((sunDirLocal.x / h) * c, Math.sin(e), (sunDirLocal.z / h) * c).normalize();
+    sun.position.copy(sunDirLocal).multiplyScalar(4400 * K);
+    sunHalo.position.copy(sun.position);
+    apply();
+  }
+  return { root, planets, layers, dust: dustLines, update, setTime, framePlanet, sunDirLocal, sunDirection, setSunElevation, state };
 }

@@ -13,7 +13,7 @@ export function buildCorridor(kit, ctx, room) {
   const walls = impRoomShell(kit, room, ctx.doors, {
     accentKey,
     wall: { panelW: 2.2, features: { vent: 0.08, equipment: 0.08, conduit: 0.05, light: 0.1, screen: 0.03 }, corniceLight: false, corniceH: 0.2 },
-    floor: { laneW: Math.min(1.8, w * 0.45), edgeLight: "emitBlueDim" },
+    floor: { lane: true, laneW: Math.min(1.8, w * 0.45), edgeLight: "emitBlueDim" },
     ceiling: { troughs: 1, troughW: 0.5, beamStep: 4.0, lightKey: "emitWhiteSoft" },
   });
   // angled upper walls: 45° chamfer strips between the wall tops and the (narrower) ceiling spine, with a
