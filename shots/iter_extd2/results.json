@@ -1,0 +1,332 @@
+{
+  "iter": "extd2",
+  "views": {
+    "cam:plates:-300/120/-400:0/60/-300:60": {
+      "frameMs": 4715.65,
+      "fps": 0.2,
+      "p95Ms": 7807.1,
+      "jsMs": 0.96,
+      "calls": 406,
+      "triangles": 1619762,
+      "points": 14800,
+      "lines": 260,
+      "geometries": 369,
+      "textures": 140,
+      "textureMB": 261.6,
+      "programs": 81,
+      "shaderCompiles": 81,
+      "longTasks": 43,
+      "longTaskMs": 126208,
+      "loadMs": 18345,
+      "pixelRatio": 1,
+      "jsHeapMB": 310.2,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 580784,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    },
+    "cam:turret:-260/95/-120:-200/70/0:55": {
+      "frameMs": 7804.2,
+      "fps": 0.1,
+      "p95Ms": 8133.4,
+      "jsMs": 1.26,
+      "calls": 460,
+      "triangles": 1920510,
+      "points": 14800,
+      "lines": 260,
+      "geometries": 427,
+      "textures": 145,
+      "textureMB": 261.6,
+      "programs": 82,
+      "shaderCompiles": 82,
+      "longTasks": 59,
+      "longTaskMs": 264514,
+      "loadMs": 18345,
+      "pixelRatio": 1,
+      "jsHeapMB": 311,
+      "visibleCells": 2,
+      "activeLights": 13,
+      "current": "bridge",
+      "cells": 46,
+      "colliders": 4263,
+      "floors": 714,
+      "mode": "orbit",
+      "exteriorTriangles": 580784,
+      "poolLights": 13,
+      "qualityLevel": 3,
+      "cell": null
+    }
+  },
+  "checks": {},
+  "stats": {
+    "frameMs": 7689.64,
+    "fps": 0.1,
+    "p95Ms": 6789,
+    "jsMs": 1.11,
+    "calls": 460,
+    "triangles": 1920510,
+    "points": 14800,
+    "lines": 260,
+    "geometries": 427,
+    "textures": 145,
+    "textureMB": 261.6,
+    "programs": 82,
+    "shaderCompiles": 82,
+    "longTasks": 61,
+    "longTaskMs": 278954,
+    "loadMs": 18345,
+    "pixelRatio": 1,
+    "jsHeapMB": 310.7,
+    "visibleCells": 2,
+    "activeLights": 13,
+    "current": "bridge",
+    "cells": 46,
+    "colliders": 4263,
+    "floors": 714,
+    "mode": "orbit",
+    "exteriorTriangles": 580784,
+    "poolLights": 13,
+    "qualityLevel": 3
+  },
+  "logs": [
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected."
+  ],
+  "buildLog": [
+    {
+      "room": "bridge",
+      "ms": 145.2,
+      "builder": "buildBridge"
+    },
+    {
+      "room": "lobby_a",
+      "ms": 19.5,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_a",
+      "ms": 15.4,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "intel",
+      "ms": 60.7,
+      "builder": "buildIntel"
+    },
+    {
+      "room": "ready_room",
+      "ms": 21.3,
+      "builder": "buildReadyRoom"
+    },
+    {
+      "room": "comms",
+      "ms": 76.7,
+      "builder": "buildComms"
+    },
+    {
+      "room": "tactical",
+      "ms": 53,
+      "builder": "buildTactical"
+    },
+    {
+      "room": "navigation",
+      "ms": 38.2,
+      "builder": "buildNavigation"
+    },
+    {
+      "room": "lobby_b",
+      "ms": 18,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "observation",
+      "ms": 26.9,
+      "builder": "buildObservation"
+    },
+    {
+      "room": "corridor_b",
+      "ms": 9.7,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "officers_quarters",
+      "ms": 26.5,
+      "builder": "buildOfficersQuarters"
+    },
+    {
+      "room": "briefing",
+      "ms": 17.3,
+      "builder": "buildBriefing"
+    },
+    {
+      "room": "lounge",
+      "ms": 59.9,
+      "builder": "buildLounge"
+    },
+    {
+      "room": "escape_pods",
+      "ms": 39.5,
+      "builder": "buildEscapePods"
+    },
+    {
+      "room": "lobby_c",
+      "ms": 23.5,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_c",
+      "ms": 13,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "crew_quarters",
+      "ms": 61.1,
+      "builder": "buildCrewQuarters"
+    },
+    {
+      "room": "mess_hall",
+      "ms": 45.3,
+      "builder": "buildMessHall"
+    },
+    {
+      "room": "medbay",
+      "ms": 57.7,
+      "builder": "buildMedbay"
+    },
+    {
+      "room": "armory",
+      "ms": 53.2,
+      "builder": "buildArmory"
+    },
+    {
+      "room": "detention",
+      "ms": 50.3,
+      "builder": "buildDetention"
+    },
+    {
+      "room": "lobby_d",
+      "ms": 16.9,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_d",
+      "ms": 18.4,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "engineering",
+      "ms": 103.6,
+      "builder": "buildEngineering"
+    },
+    {
+      "room": "hyperdrive",
+      "ms": 85.5,
+      "builder": "buildHyperdrive"
+    },
+    {
+      "room": "life_support",
+      "ms": 69.2,
+      "builder": "buildLifeSupport"
+    },
+    {
+      "room": "maintenance",
+      "ms": 36.2,
+      "builder": "buildMaintenance"
+    },
+    {
+      "room": "reactor",
+      "ms": 214,
+      "builder": "buildReactor"
+    },
+    {
+      "room": "hangar",
+      "ms": 253.2,
+      "builder": "buildHangar"
+    },
+    {
+      "room": "fighter_bay",
+      "ms": 99.4,
+      "builder": "buildFighterBay"
+    },
+    {
+      "room": "shuttle_bay",
+      "ms": 52.4,
+      "builder": "buildShuttleBay"
+    },
+    {
+      "room": "cargo",
+      "ms": 48.4,
+      "builder": "buildCargo"
+    },
+    {
+      "room": "lobby_e",
+      "ms": 17.7,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "flight_control",
+      "ms": 17.4,
+      "builder": "buildFlightControl"
+    },
+    {
+      "room": "lift_L1_A",
+      "ms": 2.9,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_A",
+      "ms": 2.2,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_B",
+      "ms": 2.1,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_B",
+      "ms": 2.1,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_C",
+      "ms": 1.9,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_C",
+      "ms": 2.2,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_D",
+      "ms": 2.1,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_D",
+      "ms": 2.1,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_E",
+      "ms": 2.1,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_E",
+      "ms": 2.1,
+      "builder": "buildLift"
+    },
+    {
+      "total": 4616
+    }
+  ]
+}
