@@ -117,17 +117,20 @@ function edgeLight(kit, x, z) {
 // ---- build ---------------------------------------------------------------------------------------------
 export function build(ctx) {
   const { kit } = ctx;
-  // big plates at hangar scale (the panel grid is the dominant build cost: ~1500 panels for the shell)
+  // big plates at hangar scale (the panel grid is the dominant build cost: ~1500 panels for the shell); no
+  // vent cells — a 4 × 5.6 m louvre reads as a rusty blank at deck level
   const longRows = [0, 0.5, 2.2, 8.9, 9.3, 15.2, 20.9, 21.3, 27.0, 32];
+  const endRows = [0, 0.4, 1.9, 2.15, 4.6, 7.75, 8.05, 13.65, 13.95, 19.55, 19.85, 25.45, 25.75, 32];
+  const styles = { plate: 0.74, panel: 0.1, hatch: 0.06, pipes: 0.06, screen: 0.04 };
   ctx.shell({
     skipFloor: true,
     pilasterEvery: 16,
     seed: 11,
     walls: {
-      xmin: { panelW: 4, rows: longRows, detail: 0, pilasterEvery: 0 },
-      xmax: { panelW: 4, rows: longRows, detail: 0, pilasterEvery: 0 },
-      zmin: { panelW: 4, detail: 0 },
-      zmax: { panelW: 4, detail: 0 },
+      xmin: { panelW: 4, rows: longRows, detail: 0, pilasterEvery: 0, styles },
+      xmax: { panelW: 4, rows: longRows, detail: 0, pilasterEvery: 0, styles },
+      zmin: { panelW: 3.2, rows: endRows, detail: 0, styles },
+      zmax: { panelW: 3.2, rows: endRows, detail: 0, styles },
     },
     ceiling: { panelW: 5, stripSpacing: 11, stripW: 0.5 },
   });
@@ -413,6 +416,14 @@ function wallDressing(ctx) {
   zminF.decal(39.75 + 0, 14, 0.03, 8, 8, DECAL.EMBLEM);
   zminF.decal(39.75 - 18, 9, 0.03, 3.5, 3.5, DECAL.BAY_CODE);
   zminF.decal(39.75 + 18, 9, 0.03, 3.5, 3.5, DECAL.BAY_CODE);
+  // spawn corner (forward wall, x -36..-20): bay designation stencil + a deck-ops board over the computer bank
+  zminF.decal(39.75 - 33, 4.7, 0.03, 4.4, 4.4, DECAL.BAY_CODE);
+  zminF.decal(39.75 - 36.6, 3.6, 0.03, 1.6, 1.6, DECAL.TEXT_A);
+  zminF.box("darkGloss", 39.75 - 23, 3.5, 0.05, 4.4, 1.9, 0.08);
+  zminF.box("screen", 39.75 - 23, 3.5, 0.095, 4.2, 1.7, 0.01, { uv: "keep", uvRect: screenRect(12) });
+  zminF.box("leds", 39.75 - 23, 2.4, 0.09, 3.8, 0.1, 0.01, { uv: "keep", uvRect: ledRect(8) });
+  zminF.box("paintedMetal", 39.75 - 23, 4.6, 0.06, 4.6, 0.12, 0.1, { color: IMP.black });
+  zminF.box("emitAmber", 39.75 - 23, 4.6, 0.115, 4.2, 0.05, 0.01);
   zmaxF.decal(39.75, 22, 0.03, 8, 8, DECAL.EMBLEM_RED);
   zmaxF.decal(39.75 - 20, 18, 0.03, 3.5, 3.5, DECAL.RESTRICTED);
   zmaxF.decal(39.75 + 20, 18, 0.03, 3.5, 3.5, DECAL.RESTRICTED);
@@ -570,6 +581,13 @@ function starboardStrip(ctx) {
   railing(kit, { from: [32.4, -33.6], to: [32.4, -27.6], y: CAT_Y, color: IMP.gunmetal });
   railing(kit, { from: [35.0, -33.75], to: [37.3, -33.75], y: CAT_Y, color: IMP.gunmetal });
   railing(kit, { from: [32.4, -27.45], to: [37.3, -27.45], y: CAT_Y, color: IMP.gunmetal });
+  // amber stringer lights along the open sides of both flights + a soffit lamp under the landing, so the
+  // tower reads from the deck (the nearest work light is 25 m away)
+  bar(kit, "emitAmber", [37.26, Y + 0.32, -18], [37.26, Y + 8.32, -27.6], 0.02, 0.06);
+  bar(kit, "emitAmber", [32.46, CAT_Y + 0.32, -33.6], [32.46, CAT_Y + 10.32, -21.6], 0.02, 0.06);
+  bar(kit, "emitAmber", [35.04, CAT_Y + 0.32, -33.6], [35.04, CAT_Y + 10.32, -21.6], 0.02, 0.06);
+  kit.boxMM("paintedMetal", [35.6, CAT_Y - 0.44, -31.0], [37.2, CAT_Y - 0.3, -30.2], { color: IMP.black, texel: 1 });
+  kit.boxMM("emitWhiteSoft", [35.75, CAT_Y - 0.45, -30.85], [37.05, CAT_Y - 0.44, -30.35], { uv: "keep" });
   // gallery in front of the flight-control booth (its slab bridges the wall gap into the booth floor)
   slab(kit, 31, -21.6, 40.0, 3, GAL_Y, "gallery");
   railing(kit, { from: [31.15, -21.6], to: [31.15, HOIST.z0], y: GAL_Y, color: IMP.gunmetal });

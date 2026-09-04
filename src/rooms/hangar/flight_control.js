@@ -120,8 +120,9 @@ function glassFront(ctx, Y, x0, z0, z1) {
 }
 
 function floorMarkings(kit, Y, x0, x1, z0, z1) {
-  // dark operator dais under the console row, amber edge, aisle centre line
-  kit.boxMM("deckBlack", [x0 + 0.6, Y + 0.003, z0 + 0.6], [44.2, Y + 0.006, z1 - 0.6], { texel: 0.5 });
+  // dark operator dais under the console row (matte anti-fatigue matting: a glossy deckBlack dais mirrors the
+  // gallery work light outside the glass into a blown-out streak at the spawn view), amber edge, aisle centre line
+  kit.boxMM("rubber", [x0 + 0.6, Y + 0.003, z0 + 0.6], [44.2, Y + 0.006, z1 - 0.6], { color: new THREE.Color("#b0b6c0"), texel: 0.5 });
   kit.boxMM("paintedMetal", [44.2, Y + 0.006, z0 + 0.6], [44.32, Y + 0.018, z1 - 0.6], { color: IMP.hazardYellow, texel: 1 });
   kit.boxMM("paintedMetal", [x0 + 0.6, Y + 0.006, -10.68], [x1 - 0.8, Y + 0.018, -10.52], { color: new THREE.Color("#c9ced6"), texel: 1 });
 }
