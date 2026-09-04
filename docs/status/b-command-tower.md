@@ -195,6 +195,11 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   surfaces and destination rooms the darkest, so the three decks will not read as one ship unless A sets a common
   strip/emitter level in the shared materials (a clipped `emitWhite` at 2.4 under ACES + bloom threshold 1.15 is the
   main offender; 1.6–1.9 with narrow recessed emitters reads right).
+- **"Blob" rule for the light pool (found by the comms pass, worth a line in §9.4).** The blown fixtures the critics
+  saw were not emitters but housings/ceilings lit at point-blank range by pool points 0.1–0.6 m away (inverse-square
+  × bloom threshold 1.15; even black paint blows past ~0.5 m through its specular term). Rules that fixed it: every
+  point descriptor sits inside a closed dark housing ≥ 1.2 m below the ceiling; anything that must hang near a surface
+  is a downward spot whose cone never reaches its own can or the ceiling.
 - **Light intensities.** Practical values to make pools read on dark Imperial surfaces are ~2× the E·h² ≈ 1 rule
   (bridge runs E ≈ 2–3, rafts 62 cd at 4 m). Worth a line in §9.4, together with the pool scoring ratio (in my shim
   0.1 priority ≡ 12 m of distance) so rooms can tune fills deliberately.
