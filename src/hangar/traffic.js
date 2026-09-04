@@ -478,12 +478,13 @@ const AIM_BIAS = 18; // m/s of "keep the nose forward" blended into the aim belo
 const AIM_FADE = 70;
 const BANK_WINDOW = 1.2; // s each side for the heading-rate estimate
 const BANK_G = 26; // lateral acceleration (m/s^2) that reads as a 45 degree bank
+const IDLE_GLOW = 0.22; // engine glow of a racked craft relative to flight
 const _t0 = new THREE.Vector3();
 const _p = new THREE.Vector3();
 const _v = new THREE.Vector3();
 const _a = new THREE.Vector3();
 const _m = new THREE.Matrix4();
-const _q = new THREE.Quaternion();
+const _c = new THREE.Color();
 const _qr = new THREE.Quaternion();
 const _sh = { state: "parked", t: 0 };
 const smooth = (k) => k * k * (3 - 2 * k);
@@ -507,6 +508,8 @@ export class Fighter {
     this.pilot = null;
     this.onEvent = null;
     this.far = false;
+    this.rig = mesh.userData.rig || null; // per-craft material controls (sun term, engine glow)
+    this.throttle = 1;
     this.dropHeight = rack.y - WELL_EXIT_Y;
     const vE = (2 * this.dropHeight) / RELEASE_T;
     this.profiles = {
@@ -727,6 +730,20 @@ export class Fighter {
     out.t = state === "parked" ? 0 : t;
     return out;
   }
+  // engine / cockpit glow: idling in the rack, spooling up through the drop, winding down in the tractor
+  _throttle(state, t) {
+    if (state === "parked") return IDLE_GLOW;
+    if (state === "release") return IDLE_GLOW + (1 - IDLE_GLOW) * smooth(t);
+    if (state === "capture") return 1 - (1 - IDLE_GLOW) * smooth(t);
+    return 1;
+  }
+  // material controls are part of the pose: sun only once the craft is below the keel, glow per phase
+  _dress(state, t) {
+    this.throttle = this._throttle(state, t);
+    if (!this.rig) return;
+    this.rig.sunScale.value = THREE.MathUtils.clamp((HULL.keelPlate.y - 2 - this.mesh.position.y) / 6, 0, 1);
+    this.rig.setThrottle(this.throttle);
+  }
   /** Deterministic pose for (state, t, returnRequested); writes mesh.position / mesh.quaternion. */
   pose() {
     const state = this.state;
@@ -734,9 +751,11 @@ export class Fighter {
     if (state === "parked") {
       this.mesh.position.copy(this.rack);
       this.mesh.quaternion.identity();
+      this._dress(state, t);
       return;
     }
     this.kinematics(state, t, this.mesh.position, _v);
+    this._dress(state, t);
     const speed = _v.length();
     this._aim(_v, _a);
     _m.lookAt(ZERO, _a, UP);
@@ -792,6 +811,7 @@ class FighterLOD extends THREE.LOD {
         _m.compose(f.mesh.position, f.mesh.quaternion, ONE);
         this.far.setMatrixAt(n, _m);
         this.farGlow.setMatrixAt(n, _m);
+        this.farGlow.setColorAt(n, _c.setScalar(f.throttle));
         n++;
       }
     }
@@ -802,6 +822,7 @@ class FighterLOD extends THREE.LOD {
     if (n > 0) {
       this.far.instanceMatrix.needsUpdate = true;
       this.farGlow.instanceMatrix.needsUpdate = true;
+      this.farGlow.instanceColor.needsUpdate = true;
     }
   }
 }
@@ -879,6 +900,7 @@ export function createTraffic({ scene, count = 6, audio = null, sun = null }) {
   farGlow.name = "fighters_far_glow";
   farGlow.frustumCulled = false;
   farGlow.count = 0;
+  for (let i = 0; i < farGlow.instanceMatrix.count; i++) farGlow.setColorAt(i, _c.setScalar(1)); // allocate instanceColor up front
   for (const im of [far, farGlow]) {
     im.castShadow = false;
     im.receiveShadow = false;
