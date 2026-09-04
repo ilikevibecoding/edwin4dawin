@@ -1,9 +1,15 @@
 // d1-observation — observation gallery along the tower's port front face. APERTURE OBSERVATION (§6.2):
 // x -78..-50, y 241.5..244.5 in the face plane z 455..458; B owns z ≥ 455.5 inside it.
-import * as THREE from "three";
+// Layout (x west→east): west screen wall | three seating groups facing the window band with plinths between |
+// briefing niche (north) + star-map wall (south) | refreshment counter (north) by the door (south-east).
 import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
-import { roomShell, railing, doorReveal } from "../shared/imperial.js";
-import { IMP, LIGHT } from "../shared/palette.js";
+import { roomShell, doorReveal } from "../shared/imperial.js";
+import { LIGHT } from "../shared/palette.js";
+import { windowBand } from "./window.js";
+import { lounge, holoAnchors, GROUPS } from "./lounge.js";
+import { eastPart } from "./east.js";
+import { dressing } from "./dressing.js";
+import { holoShips } from "./holo.js";
 
 const ID = "d1-observation";
 const B = BOUNDS[ID];
@@ -24,6 +30,8 @@ const manifest = {
     "d1-observation-window": { pos: [-64, FLOOR, 464.5], yaw: 0, pitch: -1 },
     "d1-observation-along": { pos: [-24, FLOOR, 462], yaw: 90, pitch: -2 },
     "d1-observation-lounge": { pos: [-44, FLOOR, 460.5], yaw: -120, pitch: -4 },
+    "d1-observation-counter": { pos: [-30.5, FLOOR, 464.2], yaw: -18, pitch: -3 },
+    "d1-observation-viewer": { pos: [-62.4, FLOOR, 461.9], yaw: 36, pitch: -5 },
   },
   build(ctx) {
     const { kit } = ctx;
@@ -40,45 +48,36 @@ const manifest = {
     });
     for (const d of manifest.doors) doorReveal(kit, manifest, d, FLOOR);
 
-    // --- window band: reveal lining, mullions every 4 m, glass 0.8 m into the reveal, leaning rail inside
-    const zRoom = A.zIn + 0.3;
-    const t = 0.1;
-    kit.boxMM("metalRough", [A.x0, A.y0, A.zOut], [A.x1, A.y0 + t, zRoom], { color: IMP.mid, texel: 1 });
-    kit.boxMM("metalRough", [A.x0, A.y1 - t, A.zOut], [A.x1, A.y1, zRoom], { color: IMP.dark, texel: 1 });
-    kit.boxMM("metalRough", [A.x0, A.y0, A.zOut], [A.x0 + t, A.y1, zRoom], { color: IMP.dark, texel: 1 });
-    kit.boxMM("metalRough", [A.x1 - t, A.y0, A.zOut], [A.x1, A.y1, zRoom], { color: IMP.dark, texel: 1 });
-    const n = 7;
-    const pw = (A.x1 - A.x0) / n;
-    for (let i = 0; i <= n; i++) {
-      const x = A.x0 + i * pw;
-      kit.boxMM("paintedMetal", [x - 0.12, A.y0, A.zOut + 0.05], [x + 0.12, A.y1, zRoom + 0.03], { color: IMP.dark, texel: 1 });
-    }
-    for (let i = 0; i < n; i++) {
-      const x = A.x0 + (i + 0.5) * pw;
-      kit.add("glass", new THREE.PlaneGeometry(pw - 0.26, A.y1 - A.y0 - 2 * t), { pos: [x, (A.y0 + A.y1) / 2, A.zOut + 0.8], uv: "keep" });
-    }
-    kit.boxMM("metal", [A.x0 - 0.3, A.y0 - 0.02, zRoom - 0.02], [A.x1 + 0.3, A.y0 + 0.04, zRoom + 0.4], { color: IMP.mid, texel: 1 });
-    kit.collider([A.x0 - 0.3, FLOOR, A.zOut], [A.x1 + 0.3, A.y1, zRoom + 0.4], "sill");
-    railing(kit, [A.x0 + 0.2, zRoom + 0.9], [A.x1 - 0.2, zRoom + 0.9], FLOOR, { postEvery: 2.0 });
+    windowBand(kit, A, FLOOR);
+    lounge(kit, FLOOR);
+    eastPart(kit, FLOOR);
+    dressing(kit, FLOOR, ceilY);
+    const holoUpdate = holoShips(ctx, holoAnchors(FLOOR));
 
-    // --- lounge: benches along the south wall facing the window, low tables, display plinths at the east end
-    for (let x = -80; x < -48; x += 6) {
-      kit.boxMM("paintedMetal", [x, FLOOR, 464.6], [x + 4.4, FLOOR + 0.42, 465.5], { color: IMP.dark, texel: 1 });
-      kit.boxMM("fabric", [x - 0.05, FLOOR + 0.42, 464.5], [x + 4.45, FLOOR + 0.5, 465.55], { color: IMP.mid, texel: 2 });
-      kit.boxMM("paintedMetal", [x + 1.4, FLOOR, 462.0], [x + 3.0, FLOOR + 0.55, 462.8], { color: IMP.black, texel: 1 });
-      kit.collider([x - 0.05, FLOOR, 464.5], [x + 4.45, FLOOR + 0.6, 465.55], "bench");
-      kit.collider([x + 1.4, FLOOR, 462.0], [x + 3.0, FLOOR + 0.6, 462.8], "table");
+    // --- lights (12 descriptors)
+    // Cold star-light: two spots hidden inside the mullions at x -70/-58, high in the reveal, cones pitched down
+    // so the reveal head/jambs sit outside the cone. The floor is near-black gloss, so E ≈ 2 at 6.5 m (≈ 85) is
+    // needed for the wash to read; nothing the cone touches is close to the source.
+    for (const x of [-70, -58]) {
+      const tx = x + (x < -64 ? 1.6 : -1.6); // lean both cones toward the band's centre so the pools merge
+      ctx.lights.push({ type: "spot", pos: [x, A.y1 - 0.2, A.zIn - 0.4], target: [tx, FLOOR, 462.6], color: LIGHT.coolWhite, intensity: 85, distance: 30, angle: 0.6, penumbra: 0.5, priority: 0.9 });
     }
-    for (let x = -44; x < -24; x += 5) {
-      kit.boxMM("paintedMetal", [x, FLOOR, 459.0], [x + 1.2, FLOOR + 1.1, 460.2], { color: IMP.dark, texel: 1 });
-      kit.boxMM("screenImp" + (Math.abs(Math.round(x / 5)) % 4), [x + 0.1, FLOOR + 1.11, 459.1], [x + 1.1, FLOOR + 1.12, 460.1], { uv: "keep" });
-      kit.collider([x, FLOOR, 459.0], [x + 1.2, FLOOR + 1.2, 460.2], "plinth");
-    }
+    // Cool fill under the north ceiling channel (z 460.2), between beams: lights the mullion caps, rail and viewers
+    for (const x of [-68, -60]) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.6, 460.2], color: LIGHT.coolWhite, intensity: 22, distance: 11, priority: 0.6 });
+    // Warm-white pools over each seating group (h ≈ 5 m → 30) and over the counter stools
+    for (const x of GROUPS) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.35, 462.6], color: LIGHT.warm, intensity: 30, distance: 11, priority: 0.5 });
+    ctx.lights.push({ type: "point", pos: [-29, ceilY - 0.35, 461.4], color: LIGHT.warm, intensity: 30, distance: 10, priority: 0.5 });
+    // Cool fills: star-map wall (blue), briefing niche, west end, door end
+    ctx.lights.push({ type: "point", pos: [-38, FLOOR + 3.2, 464.3], color: LIGHT.blue, intensity: 9, distance: 9, priority: 0.3 });
+    ctx.lights.push({ type: "point", pos: [-44.5, ceilY - 0.4, 461.0], color: LIGHT.coolWhite, intensity: 16, distance: 9, priority: 0.35 });
+    ctx.lights.push({ type: "point", pos: [-81.5, ceilY - 0.4, 462.0], color: LIGHT.coolWhite, intensity: 16, distance: 9, priority: 0.3 });
+    ctx.lights.push({ type: "point", pos: [-23, ceilY - 0.4, 463.0], color: LIGHT.coolWhite, intensity: 16, distance: 9, priority: 0.3 });
 
-    // --- lights: cold star-light through the band (spot outside), warm-white pools over the lounge
-    ctx.lights.push({ type: "spot", pos: [-64, 244.2, 455.8], target: [-64, 240, 465], color: LIGHT.coolWhite, intensity: 150, distance: 40, angle: 0.95, penumbra: 0.7, priority: 0.9 });
-    for (let x = -76; x <= -28; x += 12) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.5, 462], color: LIGHT.coolWhite, intensity: 24, distance: 14, priority: 0.4 });
-    return {};
+    return {
+      update(dt, t) {
+        holoUpdate(t ?? ctx.time());
+      },
+    };
   },
 };
 export default manifest;

@@ -100,7 +100,9 @@ async function settle(minFrames = 4, minMs = 1500, timeout = 120000) {
 await settle(3, 1500, 180000);
 
 const results = { tag, base, warnings, rooms: roomStats, views: {}, errors: [] };
-for (const name of viewsToShoot) {
+// If a dev server with HMR reloads the page mid-run (another agent saved a file), wait for the harness to come
+// back and retry the view instead of losing the run.
+async function shootView(name) {
   const ok = await page.evaluate((n) => {
     try {
       return window.debugAPI.setView(n);
@@ -110,13 +112,25 @@ for (const name of viewsToShoot) {
   }, name);
   if (ok !== true) {
     console.log(`view ${name}: ${ok}`);
-    continue;
+    return;
   }
   await settle(4, 1500);
   await page.screenshot({ path: resolve(outDir, `${name}.png`) });
   const stats = await page.evaluate(() => window.debugAPI.getStats());
   results.views[name] = stats;
   console.log(`shot ${name}: ${stats.calls} calls, ${stats.triangles} tris, ${stats.lights} pool lights (${stats.descriptors} desc, ${stats.lightsDropped} dropped), ${stats.frameMs} ms/frame (software GL), active=${stats.active.join("+")}`);
+}
+for (const name of viewsToShoot) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await shootView(name);
+      break;
+    } catch (e) {
+      console.log(`view ${name}: page context lost (${e.message.split("\n")[0]}), waiting for the harness to reload (attempt ${attempt + 1})`);
+      await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 180000 });
+      await settle(3, 1500, 180000);
+    }
+  }
 }
 results.errors = errors.slice(0, 60);
 writeFileSync(resolve(outDir, "results.json"), JSON.stringify(results, null, 2));
