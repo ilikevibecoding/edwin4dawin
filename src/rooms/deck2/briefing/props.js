@@ -1,43 +1,70 @@
-// Briefing-room-local props (tiered auditorium furniture, status boards, cable trays). Everything is
-// kit-bashed; colliders are world AABBs. Shared props stay untouched (see _shared/props.js).
+// Briefing-room-local props (tiered auditorium furniture, status boards, cable trays, duty desks).
+// Everything is kit-bashed; colliders are world AABBs. Shared props stay untouched (see _shared/props.js).
 import * as THREE from "three";
 import { rng } from "../../../kit.js";
 import { IMP } from "../_shared/palette.js";
+import { placer } from "../_shared/props.js";
 
 const BLACK = IMP.impBlack;
 const DARK = IMP.impDark;
 const MID = IMP.impMid;
+const STEEL = IMP.steel;
+const SHELL = 0x767a83; // seat shells / desk tops: between impMid and impGrey
 
-// Fixed auditorium seat: pedestal, cushion, backrest, armrests. Faces -Z (toward the screen wall).
-export function fixedSeat(kit, x, y, z) {
-  kit.box("paintedMetal", x, y + 0.2, z, 0.14, 0.4, 0.14, { color: BLACK });
-  kit.box("paintedMetal", x, y + 0.02, z, 0.4, 0.04, 0.4, { color: BLACK });
-  kit.box("fabric", x, y + 0.45, z, 0.56, 0.1, 0.52, { color: DARK, texel: 2 });
-  kit.box("paintedMetal", x, y + 0.4, z, 0.5, 0.03, 0.46, { color: BLACK });
-  // backrest: cushion + shell, leaning 8 degrees aft
-  const lean = -0.14;
-  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(lean, 0, 0));
-  kit.add("fabric", new THREE.BoxGeometry(0.52, 0.56, 0.07), { pos: [x, y + 0.79, z + 0.26], quat: q, color: DARK, texel: 2 });
-  kit.add("paintedMetal", new THREE.BoxGeometry(0.56, 0.6, 0.03), { pos: [x, y + 0.79, z + 0.31], quat: q, color: BLACK });
-  for (const s of [-1, 1]) {
-    kit.box("paintedMetal", x + s * 0.31, y + 0.66, z + 0.04, 0.05, 0.04, 0.4, { color: DARK });
-    kit.box("paintedMetal", x + s * 0.31, y + 0.55, z + 0.2, 0.04, 0.22, 0.04, { color: BLACK });
+// Fixed auditorium seat facing local -Z (toward the screen wall): steel column on a black base disc,
+// painted shell with a fabric cushion, leaning backrest with its own shell, tubular steel armrests with
+// black pads. `yaw` swivels the seat about its column, `folded` tips the pan up against the backrest,
+// `headrest` adds a wing (front row), `shell`/`cushion` recolour the row.
+export function fixedSeat(kit, x, y, z, { yaw = 0, folded = false, headrest = false, shell = SHELL, cushion = DARK } = {}) {
+  const P = placer(kit, [x, y, z], yaw);
+  const lean = -0.16;
+  const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(lean, 0, 0)));
+  const tilted = (mat, lx, ly, lz, sx, sy, sz, opts = {}) => kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: P.world(lx, ly, lz), quat: tq, ...opts });
+  P.cyl("metal", 0, 0.02, 0, 0.23, 0.04, "y", { color: BLACK, segments: 14 });
+  P.cyl("metal", 0, 0.24, 0, 0.045, 0.4, "y", { color: STEEL, segments: 10 });
+  P.box("paintedMetal", 0, 0.43, 0.05, 0.3, 0.04, 0.34, { color: BLACK }); // seat carrier
+  // shells are clean painted panels (the worn-metal map reads as grime on a seat-sized part)
+  if (folded) {
+    tilted("impPanel", 0, 0.74, 0.14, 0.54, 0.5, 0.05, { color: shell, uv: "keep" });
+    tilted("fabric", 0, 0.73, 0.095, 0.48, 0.44, 0.05, { color: cushion, texel: 2 });
+  } else {
+    P.box("impPanel", 0, 0.47, 0.02, 0.54, 0.05, 0.5, { color: shell, uv: "keep" });
+    P.box("fabric", 0, 0.535, 0.0, 0.48, 0.09, 0.46, { color: cushion, texel: 2 });
   }
+  tilted("impPanel", 0, 0.86, 0.3, 0.56, 0.66, 0.04, { color: shell, uv: "keep" });
+  tilted("fabric", 0, 0.85, 0.252, 0.48, 0.56, 0.06, { color: cushion, texel: 2 });
+  if (headrest) tilted("fabric", 0, 1.27, 0.365, 0.34, 0.16, 0.08, { color: cushion, texel: 2 });
+  for (const sx of [-1, 1]) {
+    P.cyl("metal", sx * 0.31, 0.72, 0.08, 0.016, 0.4, "z", { color: STEEL, segments: 8 });
+    P.box("paintedMetal", sx * 0.31, 0.745, 0.06, 0.07, 0.03, 0.3, { color: BLACK });
+    P.cyl("metal", sx * 0.31, 0.6, 0.22, 0.014, 0.24, "y", { color: STEEL, segments: 8 });
+  }
+  P.collider([-0.3, 0, -0.26], [0.3, 1.2, 0.34], "seat");
+}
+
+// Datapad lying on a desk: dark slab with a lit face and a side key.
+export function datapad(kit, x, y, z, yaw, mat = "screenImp2") {
+  const P = placer(kit, [x, y, z], yaw);
+  P.box("darkGloss", 0, 0.008, 0, 0.24, 0.016, 0.17);
+  P.box(mat, 0, 0.0175, 0, 0.2, 0.004, 0.13, { uv: "keep" });
+  P.box("emitBlue", 0.1, 0.0175, 0, 0.012, 0.004, 0.05);
 }
 
 // Continuous desk edge for one seating row: modesty panel, top, a lit key strip lying flat, an edge
 // glow toward the seated officers, and a data slot per seat. Spans x0..x1 at the tier front z0.
+// `seed` also picks which positions carry a datapad or a stack of data cards.
 export function deskRow(kit, x0, x1, y, z0, seats, seed) {
   const rand = rng(seed);
   const len = x1 - x0;
   const cx = (x0 + x1) / 2;
   const zf = z0 + 0.32; // modesty panel front
-  kit.box("paintedMetal", cx, y + 0.36, zf + 0.03, len, 0.72, 0.06, { color: BLACK, texel: 1 }); // modesty panel
-  kit.box("paintedMetal", cx, y + 0.2, zf + 0.035, len - 0.2, 0.3, 0.005, { color: DARK }); // recessed band
-  kit.box("paintedMetal", cx, y + 0.745, zf + 0.26, len, 0.05, 0.52, { color: BLACK, texel: 1 }); // top
+  kit.box("paintedMetal", cx, y + 0.36, zf + 0.03, len, 0.72, 0.06, { color: BLACK, texel: 2.5 }); // modesty panel
+  kit.box("paintedMetal", cx, y + 0.2, zf + 0.035, len - 0.2, 0.3, 0.005, { color: DARK, texel: 2.5 }); // recessed band
+  kit.box("paintedMetal", cx, y + 0.745, zf + 0.26, len, 0.05, 0.52, { color: BLACK, texel: 2.5 }); // top
   kit.box("paintedMetal", cx, y + 0.72, zf + 0.5, len - 0.1, 0.03, 0.04, { color: DARK }); // lip
   kit.box("emitBlue", cx, y + 0.7, zf + 0.53, len - 0.3, 0.012, 0.01); // edge glow toward the seats
   // per-seat inset panel: darkGloss plate + a row of flat keys + a small readout
+  const screenMats = ["screenImp0", "screenImp1", "screenImp2", "screenImp3"];
   for (const sx of seats) {
     kit.box("darkGloss", sx, y + 0.772, zf + 0.22, 0.7, 0.008, 0.28);
     for (let i = 0; i < 9; i++) {
@@ -46,20 +73,22 @@ export function deskRow(kit, x0, x1, y, z0, seats, seed) {
       const m = r < 0.5 ? "emitBlue" : r < 0.8 ? "emitAmber" : "emitRedImp";
       kit.box(m, sx - 0.24 + i * 0.06, y + 0.78, zf + 0.32, 0.035, 0.006, 0.03);
     }
-    kit.box(rand() < 0.5 ? "screenImp0" : "screenImp1", sx, y + 0.78, zf + 0.15, 0.46, 0.006, 0.12, { uv: "keep" });
+    kit.box(screenMats[Math.floor(rand() * 4)], sx, y + 0.78, zf + 0.15, 0.46, 0.006, 0.12, { uv: "keep" });
+    const v = rand();
+    if (v < 0.3) datapad(kit, sx + 0.42, y + 0.77, zf + 0.36, (rand() - 0.5) * 0.9, screenMats[Math.floor(rand() * 4)]);
+    else if (v < 0.42) {
+      for (let k = 0; k < 3; k++) kit.box("paintedMetal", sx - 0.45 + k * 0.012, y + 0.78 + k * 0.008, zf + 0.4, 0.08, 0.008, 0.12, { color: k % 2 ? DARK : MID });
+    }
   }
 }
 
 // Wall status board: black plate with a lighter frame, a header bar and rows of amber/blue bars of
 // varied length (a duty roster / system status readout). `yaw` gives the facing direction like props.
 export function statusBoard(kit, pos, yaw, w, h, seed, { accent = "emitAmber", secondary = "emitBlue", rows = 5 } = {}) {
-  const c = Math.cos(yaw);
-  const s = Math.sin(yaw);
-  const W = (lx, ly, lz) => [pos[0] + lx * c + lz * s, pos[1] + ly, pos[2] - lx * s + lz * c];
-  const rot = [0, yaw, 0];
-  const box = (mat, lx, ly, lz, sx, sy, sz, opts = {}) => kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: W(lx, ly, lz), rot, ...opts });
+  const P = placer(kit, pos, yaw);
+  const box = P.box;
   const rand = rng(seed);
-  box("paintedMetal", 0, 0, 0.03, w + 0.16, h + 0.16, 0.06, { color: DARK, texel: 1 });
+  box("paintedMetal", 0, 0, 0.03, w + 0.16, h + 0.16, 0.06, { color: DARK, texel: 2.5 });
   box("paintedMetal", 0, 0, 0.065, w, h, 0.01, { color: BLACK });
   box("darkGloss", 0, 0, 0.072, w - 0.06, h - 0.06, 0.004);
   // header
@@ -86,18 +115,15 @@ export function statusBoard(kit, pos, yaw, w, h, seed, { accent = "emitAmber", s
     }
   }
   // corner bolts
-  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box("metal", (sx * (w + 0.1)) / 2, (sy * (h + 0.1)) / 2, 0.062, 0.03, 0.03, 0.01, { color: IMP.steel });
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box("metal", (sx * (w + 0.1)) / 2, (sy * (h + 0.1)) / 2, 0.062, 0.03, 0.03, 0.01, { color: STEEL });
 }
 
 // Amber status strip in a black housing, wall mounted, running along local X.
 export function statusStrip(kit, pos, yaw, len, mat = "emitAmber") {
-  const c = Math.cos(yaw);
-  const s = Math.sin(yaw);
-  const W = (lx, ly, lz) => [pos[0] + lx * c + lz * s, pos[1] + ly, pos[2] - lx * s + lz * c];
-  const rot = [0, yaw, 0];
-  kit.add("paintedMetal", new THREE.BoxGeometry(len + 0.2, 0.18, 0.06), { pos: W(0, 0, 0.03), rot, color: BLACK });
-  kit.add(mat, new THREE.BoxGeometry(len, 0.05, 0.012), { pos: W(0, 0, 0.066), rot });
-  for (const lx of [-len / 2 - 0.05, len / 2 + 0.05]) kit.add("paintedMetal", new THREE.BoxGeometry(0.06, 0.24, 0.09), { pos: W(lx, 0, 0.045), rot, color: DARK });
+  const P = placer(kit, pos, yaw);
+  P.box("paintedMetal", 0, 0, 0.03, len + 0.2, 0.18, 0.06, { color: BLACK, texel: 2.5 });
+  P.box(mat, 0, 0, 0.066, len, 0.05, 0.012);
+  for (const lx of [-len / 2 - 0.05, len / 2 + 0.05]) P.box("paintedMetal", lx, 0, 0.045, 0.06, 0.24, 0.09, { color: DARK });
 }
 
 // High-level cable tray along an axis-aligned line between a and b (same y): U-channel, three cables,
@@ -111,10 +137,10 @@ export function cableTray(kit, a, b, { w = 0.4, bracket = 3.0, wallDir = null, g
   const sz = (l, t) => (alongX ? [l, 0.03, t] : [t, 0.03, l]);
   const off = (d) => (alongX ? [cx, y, cz + d] : [cx + d, y, cz]);
   const B = (mat, p, s, opts) => kit.box(mat, p[0], p[1], p[2], s[0], s[1], s[2], opts);
-  B("paintedMetal", [cx, y, cz], sz(len, w), { color: DARK, texel: 1 });
+  B("paintedMetal", [cx, y, cz], sz(len, w), { color: DARK, texel: 2.5 });
   for (const d of [-w / 2 + 0.015, w / 2 - 0.015]) {
     const p = off(d);
-    B("paintedMetal", [p[0], y + 0.05, p[2]], alongX ? [len, 0.1, 0.03] : [0.03, 0.1, len], { color: DARK });
+    B("paintedMetal", [p[0], y + 0.05, p[2]], alongX ? [len, 0.1, 0.03] : [0.03, 0.1, len], { color: DARK, texel: 2.5 });
   }
   const cableColors = [BLACK, DARK, 0x3a3f5a];
   for (let i = 0; i < 3; i++) {
@@ -136,47 +162,84 @@ export function cableTray(kit, a, b, { w = 0.4, bracket = 3.0, wallDir = null, g
   }
 }
 
-// Recessed door control panel: dark plate with a lit call button and a status LED.
-export function doorPanel(kit, pos, yaw, { lit = "emitBlue" } = {}) {
-  const c = Math.cos(yaw);
-  const s = Math.sin(yaw);
-  const W = (lx, ly, lz) => [pos[0] + lx * c + lz * s, pos[1] + ly, pos[2] - lx * s + lz * c];
-  const rot = [0, yaw, 0];
-  kit.add("paintedMetal", new THREE.BoxGeometry(0.28, 0.4, 0.05), { pos: W(0, 0, 0.025), rot, color: BLACK });
-  kit.add("darkGloss", new THREE.BoxGeometry(0.22, 0.34, 0.01), { pos: W(0, 0, 0.055), rot });
-  kit.add(lit, new THREE.BoxGeometry(0.12, 0.08, 0.01), { pos: W(0, 0.06, 0.062), rot });
-  kit.add("emitRedImp", new THREE.BoxGeometry(0.04, 0.02, 0.01), { pos: W(-0.06, -0.08, 0.062), rot });
-  kit.add("emitGreen", new THREE.BoxGeometry(0.04, 0.02, 0.01), { pos: W(0.06, -0.08, 0.062), rot });
-}
-
 // Ceiling light channel (surface-mounted trough) running along X between x0..x1 at z, hung from
 // ceilY: black housing, mid-grey lips, segmented emitter strip.
 export function lightChannel(kit, x0, x1, z, ceilY, { w = 0.5, mat = "emitWhite", segment = 2.0, drop = 0.14 } = {}) {
   const len = x1 - x0;
-  const cx = (x0 + x1) / 2;
-  kit.boxMM("paintedMetal", [x0, ceilY - drop, z - w / 2], [x1, ceilY - 0.02, z + w / 2], { color: BLACK });
-  kit.boxMM("paintedMetal", [x0, ceilY - drop - 0.02, z - w / 2 - 0.05], [x1, ceilY - 0.02, z - w / 2], { color: MID });
-  kit.boxMM("paintedMetal", [x0, ceilY - drop - 0.02, z + w / 2], [x1, ceilY - 0.02, z + w / 2 + 0.05], { color: MID });
+  kit.boxMM("paintedMetal", [x0, ceilY - drop, z - w / 2], [x1, ceilY - 0.02, z + w / 2], { color: BLACK, texel: 2.5 });
+  kit.boxMM("paintedMetal", [x0, ceilY - drop - 0.02, z - w / 2 - 0.05], [x1, ceilY - 0.02, z - w / 2], { color: MID, texel: 2.5 });
+  kit.boxMM("paintedMetal", [x0, ceilY - drop - 0.02, z + w / 2], [x1, ceilY - 0.02, z + w / 2 + 0.05], { color: MID, texel: 2.5 });
   const nSeg = Math.max(1, Math.round(len / segment));
   for (let i = 0; i < nSeg; i++) {
     const s0 = x0 + (len * i) / nSeg + 0.12;
     const s1 = x0 + (len * (i + 1)) / nSeg - 0.12;
     kit.boxMM(mat, [s0, ceilY - drop - 0.015, z - 0.07], [s1, ceilY - drop + 0.005, z + 0.07]);
   }
-  void cx;
 }
 
-// Small wall junction box with a conduit dropping from above.
+// Small wall junction box with a conduit rising from its top (to a tray or the service band).
 export function junctionBox(kit, pos, yaw, { w = 0.3, h = 0.4, conduitUp = 0 } = {}) {
-  const c = Math.cos(yaw);
-  const s = Math.sin(yaw);
-  const W = (lx, ly, lz) => [pos[0] + lx * c + lz * s, pos[1] + ly, pos[2] - lx * s + lz * c];
-  const rot = [0, yaw, 0];
-  kit.add("paintedMetal", new THREE.BoxGeometry(w, h, 0.14), { pos: W(0, 0, 0.07), rot, color: MID, texel: 1 });
-  kit.add("paintedMetal", new THREE.BoxGeometry(w - 0.06, h - 0.06, 0.01), { pos: W(0, 0, 0.145), rot, color: DARK });
-  kit.add("emitAmber", new THREE.BoxGeometry(0.05, 0.02, 0.008), { pos: W(w / 2 - 0.08, h / 2 - 0.08, 0.152), rot });
-  if (conduitUp > 0) {
-    const p = W(0, h / 2 + conduitUp / 2, 0.06);
-    kit.cyl("metal", p[0], p[1], p[2], 0.03, conduitUp, "y", { color: DARK, segments: 8 });
+  const P = placer(kit, pos, yaw);
+  P.box("paintedMetal", 0, 0, 0.07, w, h, 0.14, { color: MID, texel: 2.5 });
+  P.box("paintedMetal", 0, 0, 0.145, w - 0.06, h - 0.06, 0.01, { color: DARK });
+  P.box("emitAmber", w / 2 - 0.08, h / 2 - 0.08, 0.152, 0.05, 0.02, 0.008);
+  if (conduitUp > 0) P.cyl("metal", 0, h / 2 + conduitUp / 2, 0.06, 0.03, conduitUp, "y", { color: DARK, segments: 8 });
+}
+
+// Duty desk: pedestal desk with a monitor on a post at the back edge (screen facing the operator at
+// local +Z), keyboard, indicator strip, datapad and cup on the top, a fixed seat behind it.
+export function dutyDesk(kit, pos, yaw, { w = 1.8, d = 0.8, screenMat = "screenImp2", seed = 1, headrest = true } = {}) {
+  const P = placer(kit, pos, yaw);
+  const rand = rng(seed);
+  const H = 0.74;
+  P.box("impPanel", 0, H - 0.025, 0, w, 0.05, d, { color: SHELL, uv: "keep" });
+  P.box("paintedMetal", 0, H - 0.07, 0, w - 0.1, 0.04, d - 0.1, { color: BLACK });
+  for (const sx of [-1, 1]) {
+    P.box("paintedMetal", sx * (w / 2 - 0.25), (H - 0.1) / 2, 0.02, 0.5, H - 0.1, d - 0.16, { color: BLACK, texel: 2.5 });
+    for (let i = 0; i < 3; i++) {
+      P.box("paintedMetal", sx * (w / 2 - 0.25), 0.14 + i * 0.2, d / 2 - 0.055, 0.42, 0.012, 0.01, { color: MID });
+      P.box("metal", sx * (w / 2 - 0.25), 0.22 + i * 0.2, d / 2 - 0.05, 0.12, 0.016, 0.02, { color: STEEL });
+    }
   }
+  P.box("paintedMetal", 0, (H - 0.1) / 2 + 0.05, -d / 2 + 0.05, w - 1.0, H - 0.2, 0.04, { color: DARK, texel: 2.5 }); // modesty panel
+  // monitor
+  const tilt = -0.14;
+  const tq = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, 0, 0)));
+  P.cyl("metal", 0, H + 0.13, -d / 2 + 0.16, 0.03, 0.26, "y", { color: STEEL, segments: 10 });
+  P.box("paintedMetal", 0, H + 0.01, -d / 2 + 0.16, 0.3, 0.02, 0.2, { color: BLACK });
+  const my = H + 0.26 + 0.27;
+  const mz = -d / 2 + 0.14;
+  const ny = -Math.sin(tilt);
+  const nz = Math.cos(tilt);
+  kit.add("paintedMetal", new THREE.BoxGeometry(0.98, 0.58, 0.05), { pos: P.world(0, my, mz), quat: tq, color: BLACK, texel: 2.5 });
+  kit.add("darkGloss", new THREE.BoxGeometry(0.94, 0.54, 0.01), { pos: P.world(0, my + ny * 0.03, mz + nz * 0.03), quat: tq });
+  kit.add(screenMat, new THREE.BoxGeometry(0.88, 0.48, 0.01), { pos: P.world(0, my + ny * 0.04, mz + nz * 0.04), quat: tq, uv: "keep" });
+  kit.add("emitBlue", new THREE.BoxGeometry(0.5, 0.012, 0.01), { pos: P.world(0, my - 0.31 + ny * 0.03, mz + nz * 0.03), quat: tq });
+  // desk top: keyboard with keys, indicator strip, datapad, cup
+  P.box("darkGloss", -0.1, H + 0.006, 0.1, 0.62, 0.012, 0.2);
+  for (let i = 0; i < 10; i++) {
+    for (let j = 0; j < 2; j++) {
+      if (rand() < 0.2) continue;
+      P.box(rand() < 0.75 ? "emitBlue" : "emitAmber", -0.1 - 0.27 + i * 0.06, H + 0.014, 0.05 + j * 0.07, 0.04, 0.006, 0.04);
+    }
+  }
+  P.box("darkGloss", 0.45, H + 0.005, -0.12, 0.5, 0.01, 0.1);
+  for (let i = 0; i < 6; i++) P.box(i % 3 === 0 ? "emitAmber" : "emitBlue", 0.25 + i * 0.08, H + 0.012, -0.12, 0.05, 0.006, 0.03);
+  datapad(kit, ...P.world(0.55, H, 0.16), yaw + 0.35, rand() < 0.5 ? "screenImp0" : "screenImp3");
+  P.cyl("metal", -0.7, H + 0.045, 0.2, 0.04, 0.09, "y", { color: STEEL, segments: 10 });
+  P.cyl("metal", -0.7, H + 0.085, 0.2, 0.034, 0.01, "y", { color: BLACK, segments: 10 });
+  P.collider([-w / 2, 0, -d / 2], [w / 2, H + 0.85, d / 2], "desk");
+  const seat = P.world(0, 0, d / 2 + 0.55);
+  fixedSeat(kit, seat[0], seat[1], seat[2], { yaw: yaw + (rand() - 0.5) * 0.4, headrest, cushion: DARK });
+}
+
+// Audience-facing dressing for the back of a podium console: framed text screen, key row, blue edge.
+export function podiumBack(kit, pos, yaw, w, { screenMat = "screenImp2" } = {}) {
+  const P = placer(kit, pos, yaw);
+  P.box("paintedMetal", 0, 0.52, 0.02, w - 0.2, 0.62, 0.04, { color: DARK, texel: 2.5 });
+  P.box("darkGloss", 0, 0.6, 0.045, w - 0.36, 0.4, 0.01);
+  P.box(screenMat, 0, 0.6, 0.052, w - 0.42, 0.34, 0.006, { uv: "keep" });
+  P.box("emitBlue", 0, 0.82, 0.045, w - 0.36, 0.014, 0.01);
+  for (let i = 0; i < 7; i++) P.box(i % 2 ? "emitAmber" : "emitBlue", -w / 2 + 0.35 + i * ((w - 0.7) / 6), 0.31, 0.05, 0.06, 0.03, 0.01);
+  P.box("emitRedImp", w / 2 - 0.2, 0.31, 0.05, 0.05, 0.03, 0.01);
 }
