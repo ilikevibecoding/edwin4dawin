@@ -1,8 +1,10 @@
 // Chunk streaming + rendering: generation/lighting/meshing budgets and the world shader.
 import * as THREE from 'three';
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH, DEFAULT_RENDER_DISTANCE } from './constants.js';
-import { Mesher } from './mesher.js';
+import { Mesher, SHADE_SCALE } from './mesher.js';
+import { World } from './world.js';
 
+// aLight is a normalized uint8 pair holding the light sum k in 0..60 (k/255); aShade is shade * SHADE_SCALE.
 const VERT = /* glsl */ `
 attribute vec2 aLight;
 attribute float aShade;
@@ -12,8 +14,8 @@ varying float vShade;
 varying float vDist;
 void main() {
   vUv = uv;
-  vLight = aLight;
-  vShade = aShade;
+  vLight = aLight * (255.0 / 60.0);
+  vShade = aShade / ${SHADE_SCALE.toFixed(1)};
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
   gl_Position = projectionMatrix * mv;
@@ -77,6 +79,8 @@ export function makeWorldMaterial(atlas, opts = {}) {
   });
 }
 
+const COST_EMA = 0.2; // smoothing of the per-step cost estimates
+
 export class Terrain {
   constructor(world, scene, atlas) {
     this.world = world;
@@ -92,6 +96,24 @@ export class Terrain {
     this.offsets = [];
     this.buildOffsets();
     this.stats = { chunks: 0, meshed: 0, genTimeMs: 0 };
+    // measured per-step costs (ms, exponential moving averages) so a frame stops before a step that would
+    // overshoot its budget instead of after it
+    this.cost = { gen: 1.5, light: 1.0, mesh: 1.0 };
+
+    // Exact per-render frustum culling of chunk meshes by their world-space AABB. three.js only tests
+    // bounding spheres, which are very loose for tall thin chunk columns, so many off-screen chunks were
+    // drawn. Hooked into the scene's onBeforeRender (runs after the camera matrices update and before
+    // three.js builds its render list); update() restores visibility if the hook stops being called.
+    this.frustumCullChunks = true;
+    this._frustum = new THREE.Frustum();
+    this._projScreen = new THREE.Matrix4();
+    this._cullRuns = 0;
+    this._cullRunsSeen = 0;
+    const prev = scene.onBeforeRender;
+    scene.onBeforeRender = (renderer, scn, camera, target) => {
+      if (prev) prev.call(scene, renderer, scn, camera, target);
+      this.cullChunks(camera);
+    };
   }
 
   buildOffsets() {
@@ -122,64 +144,110 @@ export class Terrain {
     }
   }
 
+  // Fills a chunk's block array (no lighting) and marks the 3x3 neighbourhood for remeshing.
+  generateChunk(c) {
+    const t0 = performance.now();
+    this.world.gen.generateChunk(c);
+    if (this.onChunkGenerated) this.onChunkGenerated(c); // saved player edits overlay
+    c.generated = true;
+    const dt = performance.now() - t0;
+    this.stats.genTimeMs += dt;
+    this.cost.gen += (dt - this.cost.gen) * COST_EMA;
+    // neighbours need remeshing for border faces
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+      const n = this.world.getChunk(c.cx + dx, c.cz + dz);
+      if (n) n.dirty = true;
+    }
+  }
+
+  lightChunk(c) {
+    const t0 = performance.now();
+    this.world.lightChunk(c);
+    const dt = performance.now() - t0;
+    this.stats.genTimeMs += dt;
+    this.cost.light += (dt - this.cost.light) * COST_EMA;
+  }
+
   // Ensure a chunk exists, is generated and lit. Returns the chunk.
   ensureChunk(cx, cz) {
     const c = this.world.getOrCreateChunk(cx, cz);
-    if (!c.generated) {
-      const t0 = performance.now();
-      this.world.gen.generateChunk(c);
-      if (this.onChunkGenerated) this.onChunkGenerated(c); // saved player edits overlay
-      c.generated = true;
-      this.world.lightChunk(c);
-      this.stats.genTimeMs += performance.now() - t0;
-      // neighbours need remeshing for border faces
-      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
-        const n = this.world.getChunk(cx + dx, cz + dz);
-        if (n) n.dirty = true;
-      }
-    }
+    if (!c.generated) this.generateChunk(c);
+    if (!c.lit) this.lightChunk(c);
     return c;
   }
 
   neighborsReady(cx, cz) {
+    const m = this.world.chunks;
     for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
       if (dx === 0 && dz === 0) continue;
-      const n = this.world.getChunk(cx + dx, cz + dz);
+      const n = m.get(World.key(cx + dx, cz + dz));
       if (!n || !n.lit) return false;
     }
     return true;
   }
 
   meshChunk(c) {
+    const t0 = performance.now();
     const { solid, water } = this.mesher.build(this.world, c);
-    if (c.mesh) { this.group.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh = null; }
-    if (c.waterMesh) { this.group.remove(c.waterMesh); c.waterMesh.geometry.dispose(); c.waterMesh = null; }
-    if (solid) {
-      const m = new THREE.Mesh(solid, this.material);
+    c.mesh = this._setMesh(c.mesh, solid, this.material, c, false);
+    c.waterMesh = this._setMesh(c.waterMesh, water, this.waterMaterial, c, true);
+    c.dirty = false;
+    c.meshed = true;
+    this.cost.mesh += (performance.now() - t0 - this.cost.mesh) * COST_EMA;
+  }
+
+  // Replaces a chunk mesh's geometry (reusing the Mesh object), creating or removing the mesh as needed.
+  _setMesh(m, geo, material, c, isWater) {
+    if (!geo) {
+      if (m) { this.group.remove(m); m.geometry.dispose(); }
+      return null;
+    }
+    if (m) {
+      m.geometry.dispose();
+      m.geometry = geo;
+    } else {
+      m = new THREE.Mesh(geo, material);
       m.position.set(c.cx * CS, 0, c.cz * CS);
       m.matrixAutoUpdate = false;
       m.updateMatrix();
       m.frustumCulled = true;
+      if (isWater) m.renderOrder = 10;
+      m.chunkBox = new THREE.Box3();
+      m.chunkInRange = true; // meshes are only built inside the render distance
       this.group.add(m);
-      c.mesh = m;
     }
-    if (water) {
-      const m = new THREE.Mesh(water, this.waterMaterial);
-      m.position.set(c.cx * CS, 0, c.cz * CS);
-      m.matrixAutoUpdate = false;
-      m.updateMatrix();
-      m.renderOrder = 10;
-      this.group.add(m);
-      c.waterMesh = m;
-    }
-    c.dirty = false;
-    c.meshed = true;
+    m.chunkBox.copy(geo.boundingBox).translate(m.position);
+    return m;
   }
 
   disposeChunk(c) {
     if (c.mesh) { this.group.remove(c.mesh); c.mesh.geometry.dispose(); }
     if (c.waterMesh) { this.group.remove(c.waterMesh); c.waterMesh.geometry.dispose(); }
     c.mesh = null; c.waterMesh = null;
+  }
+
+  // Hides in-range chunk meshes whose world AABB is outside the camera frustum (exact: such a mesh
+  // contributes no fragments). Called for every render of the scene.
+  cullChunks(camera) {
+    this._cullRuns++;
+    if (!this.frustumCullChunks) return;
+    this._projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    const fr = this._frustum.setFromProjectionMatrix(this._projScreen);
+    const children = this.group.children;
+    for (let i = 0; i < children.length; i++) {
+      const m = children[i];
+      if (m.chunkInRange) m.visible = fr.intersectsBox(m.chunkBox);
+    }
+  }
+
+  // If no render ran the culling hook since the last update (e.g. the hook was replaced), fall back to
+  // plain render-distance visibility so nothing stays hidden.
+  _checkCullHook() {
+    if (this._cullRuns === this._cullRunsSeen && this._cullRuns > 0) {
+      const children = this.group.children;
+      for (let i = 0; i < children.length; i++) { const m = children[i]; m.visible = m.chunkInRange; }
+    }
+    this._cullRunsSeen = this._cullRuns;
   }
 
   // Chunks in this block region are always kept generated (the town, so NPCs simulate everywhere)
@@ -216,50 +284,71 @@ export class Terrain {
 
   update(px, pz, budgetMs = 6) {
     const t0 = performance.now();
+    this._checkCullHook();
     const pcx = Math.floor(px / CS), pcz = Math.floor(pz / CS);
     const R = this.renderDistance;
-    let generated = 0;
-    // generation pass (nearest first)
-    for (const [dx, dz] of this.offsets) {
-      const cx = pcx + dx, cz = pcz + dz;
-      const c = this.world.getChunk(cx, cz);
-      if (c && c.generated) continue;
-      this.ensureChunk(cx, cz);
-      generated++;
-      if (performance.now() - t0 > budgetMs) break;
+    const world = this.world, offsets = this.offsets, cost = this.cost;
+    let now = t0;
+    // generation + lighting pass (nearest first). Generation and lighting are separate steps so the budget
+    // check falls between them; a step is skipped when its estimated cost would overshoot the budget, but
+    // at least one step always runs so streaming never stalls.
+    let steps = 0;
+    for (let k = 0; k < offsets.length; k++) {
+      const o = offsets[k];
+      const cx = pcx + o[0], cz = pcz + o[1];
+      let c = world.getChunk(cx, cz);
+      if (c && c.generated && c.lit) continue;
+      if (!c || !c.generated) {
+        if (steps > 0 && now - t0 + cost.gen > budgetMs) break;
+        if (!c) c = world.getOrCreateChunk(cx, cz);
+        this.generateChunk(c);
+        steps++;
+        now = performance.now();
+      }
+      if (!c.lit) {
+        if (steps > 0 && now - t0 + cost.light > budgetMs) break;
+        this.lightChunk(c);
+        steps++;
+        now = performance.now();
+      }
+      if (now - t0 > budgetMs) break;
     }
-    // meshing pass
+    // meshing pass: dirty chunks inside the render distance whose 3x3 neighbourhood is lit
+    const meshBudget = budgetMs * 1.5;
     let meshedNow = 0;
-    for (const [dx, dz, d] of this.offsets) {
-      if (d > R + 0.5) break;
-      const c = this.world.getChunk(pcx + dx, pcz + dz);
+    for (let k = 0; k < offsets.length; k++) {
+      const o = offsets[k];
+      if (o[2] > R + 0.5) break;
+      const c = world.getChunk(pcx + o[0], pcz + o[1]);
       if (!c || !c.generated || !c.dirty || c.needsRelight) continue;
       if (!this.neighborsReady(c.cx, c.cz)) continue;
+      if (meshedNow > 0 && now - t0 + cost.mesh > meshBudget) break;
       this.meshChunk(c);
       meshedNow++;
-      if (performance.now() - t0 > budgetMs * 1.5) break;
+      now = performance.now();
     }
     // unload far chunks occasionally
     if (pcx !== this.lastCx || pcz !== this.lastCz) {
       this.lastCx = pcx; this.lastCz = pcz;
       const maxD = R + 4;
-      for (const [key, c] of this.world.chunks) {
+      for (const [key, c] of world.chunks) {
         const ddx = c.cx - pcx, ddz = c.cz - pcz;
         if (ddx * ddx + ddz * ddz > maxD * maxD) {
           this.disposeChunk(c);
           c.dirty = true;
-          if (!c.pinned) this.world.chunks.delete(key);
+          if (!c.pinned) world.chunks.delete(key);
         }
       }
       // hide meshes beyond render distance
-      for (const c of this.world.chunks.values()) {
+      const lim = (R + 0.5) * (R + 0.5);
+      for (const c of world.chunks.values()) {
         const ddx = c.cx - pcx, ddz = c.cz - pcz;
-        const visible = Math.sqrt(ddx * ddx + ddz * ddz) <= R + 0.5;
-        if (c.mesh) c.mesh.visible = visible;
-        if (c.waterMesh) c.waterMesh.visible = visible;
+        const visible = ddx * ddx + ddz * ddz <= lim;
+        if (c.mesh) { c.mesh.chunkInRange = visible; c.mesh.visible = visible; }
+        if (c.waterMesh) { c.waterMesh.chunkInRange = visible; c.waterMesh.visible = visible; }
       }
     }
-    this.stats.chunks = this.world.chunks.size;
+    this.stats.chunks = world.chunks.size;
     this.stats.meshed = this.group.children.length;
   }
 
