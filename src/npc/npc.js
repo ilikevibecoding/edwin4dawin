@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { paintSkin } from './skins.js';
 import { buildHumanoid } from './model.js';
+import { attachBlink, updateBlink } from './blink.js';
 import { findPath, findStand, standHeight } from './pathfinding.js';
 import { RNG } from '../rng.js';
 import { drawText, measureText } from '../font.js';
@@ -59,6 +60,7 @@ class NPC {
     const model = buildHumanoid(skin.canvas, skin.hat, skin.hatColor);
     this.model = model;
     this.root = model.root;
+    attachBlink(this, skin);
     this.pos = new THREE.Vector3(def.x, def.y, def.z);
     this.prevPos = this.pos.clone();
     this.yaw = this.rng.range(0, Math.PI * 2);
@@ -566,6 +568,8 @@ export class NPCManager {
       const d2 = dx * dx + dz * dz;
       if (d2 > 110 * 110) { r.visible = false; continue; }
       r.visible = true;
+      npc.lastCamDist = Math.sqrt(d2);
+      updateBlink(npc, dt);
       r.position.set(px, py - (npc.sitting ? 0.42 : 0), pz);
       // smooth turning
       let dy = npc.targetYaw - npc.yaw;
