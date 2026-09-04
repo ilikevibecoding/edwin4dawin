@@ -416,7 +416,7 @@ export function build(kit, ctx, room, lib) {
     });
     // viewport-side rail along the shelf where no station stands (leaning rail for the watch officer)
     for (const [a, b] of [[-15.4, -12.6], [-9.8, -7.0], [7.0, 9.8], [12.6, 15.4]]) {
-      const rz = shelfZ + 0.32;
+      const rz = shelfZ + 0.22;
       kit.cyl("metal", (a + b) / 2, y0 + RAIL_H, rz, 0.03, b - a, "x", { color: P.steel, segments: 10 });
       for (const px of [a, b]) kit.box("paintedMetal", px, y0 + RAIL_H / 2, rz, 0.06, RAIL_H, 0.06, { color: P.darkMetal, texel: 2 });
       kit.collider([a - 0.05, y0, rz - 0.06], [b + 0.05, y0 + RAIL_H + 0.05, rz + 0.06], "sillRail");
@@ -545,21 +545,25 @@ export function build(kit, ctx, room, lib) {
   }
 
   // ---------------------------------------------------------------- lights
-  // twelve practicals: white over the walkway, the command strip and the side galleries (which also
-  // spill into the outer rows of the pits), one coloured practical per pit, teal on the hologram
-  for (const z of [477.5, 484, 490.5]) ctx.lights.cool.push(pointLight(0xdfe8ff, 9, 14, [0, yTop - 0.7, z]));
+  // twelve practicals. The ceiling is 6 m up, so the white fixtures carry roughly three times the
+  // candela of a standard 3.2 m room and a long reach: whichever subset the pool keeps active from a
+  // given spot, the walkway stays lit and the pits / walls never fall to black. The pits themselves get
+  // two coloured practicals each (blue port, red starboard) so they read as lit by their consoles.
+  for (const z of [478, 484.5, 491]) ctx.lights.cool.push(pointLight(0xdfe8ff, 18, 26, [0, yTop - 0.7, z]));
   for (const s of [-1, 1]) {
-    ctx.lights.cool.push(pointLight(0xdfe8ff, 8, 13, [s * 8, yTop - 0.9, z0 + SILL_DEPTH + 1.2]));
-    for (const z of [479, 487.5]) ctx.lights.cool.push(pointLight(0xd8e2ff, 7, 14, [s * 15.0, y0 + 4.6, z]));
+    ctx.lights.cool.push(pointLight(0xdfe8ff, 14, 24, [s * 7, yTop - 0.9, z0 + SILL_DEPTH + 1.3]));
+    ctx.lights.cool.push(pointLight(0xd8e2ff, 12, 22, [s * 15.0, y0 + 4.7, 483]));
+    const fam = s > 0 ? "warm" : "teal";
+    const col = s > 0 ? 0xff5a3a : 0x4a8dff;
+    ctx.lights[fam].push(pointLight(col, 7, 12, [s * 8.6, pitY + 1.8, 483.5]));
+    ctx.lights[fam].push(pointLight(col, 7, 12, [s * 12.5, pitY + 1.8, 477.5]));
   }
-  ctx.lights.warm.push(pointLight(0xff5a3a, 6, 10, [8.6, pitY + 1.8, 483.5]));
-  ctx.lights.teal.push(pointLight(0x4a8dff, 6, 10, [-8.6, pitY + 1.8, 483.5]));
-  ctx.lights.teal.push(pointLight(0x66b6ff, 3, 5, [holoX, plat.y + 1.6, holoZ]));
+  ctx.lights.teal.push(pointLight(0x66b6ff, 3, 8, [holoX, plat.y + 1.6, holoZ]));
   // key light: cool space light through the windows, one spot parked well outside the glass and aimed
   // down the centreline so the mullions throw their shadows across the platform and the walkway. The
   // pooled spot always shadows, and its shadow camera reaches exactly `distance`: 26 m ends inside the
   // bridge, so the rooms behind the aft wall never enter the shadow pass.
-  const key = new THREE.SpotLight(0x9fc6ff, 60 * LIGHT_SCALE, 26, 0.72, 0.55, 1.2);
+  const key = new THREE.SpotLight(0x9fc6ff, 150 * LIGHT_SCALE, 26, 0.72, 0.55, 1.2);
   key.position.set(0, y0 + 7.5, z0 - 9);
   key.target.position.set(0, y0 - 1.0, z0 + 12);
   key.shadow.bias = -0.0004;
