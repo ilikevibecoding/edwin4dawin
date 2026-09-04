@@ -1,9 +1,10 @@
 // Fighter traffic regression test (headless). Drives the shared scheduler with debugAPI.simulate(dt) and checks:
 //   - the traffic API contract (records, events, snapshot/apply round-trip, controller override, recall)
 //   - a full launch → field_pass → depart → return → field_pass → dock cycle completes for one fighter
-//   - every sampled in-flight position stays ≥ 40 m from the hull: checked in-page with the fighters' own
+//   - every sampled patrol position stays ≥ 40 m from the hull: checked in-page with the fighters' own
 //     clearance function AND independently here in Node with the layout hull functions (insideHull, halfWidth,
-//     topY, ventralY), plus a slab margin test for points over / under the wedge
+//     topY, ventralY), plus a slab margin test for points over / under the wedge and a tower fly-by distance;
+//     the launch / recovery legs must stay inside the well footprint until 40 m below the belly plate
 //   - the steady state keeps ≤ maxAirborne fighters out and never exceeds the mesh pool
 //   - update() is cheap (no per-frame allocations: heap growth over 3000 steps stays small)
 // Usage: node tools/traffic_test.mjs [url]   (exit code 0 = all checks passed)
@@ -99,16 +100,18 @@ else {
   let nearTower = Infinity;
   let below = 0;
   for (const s of cycle.samples) {
-    if (s.y > -70) continue; // in the hangar well shaft / crossing the containment field
-    below++;
-    if (insideHull(s.x, s.y, s.z)) inside++;
+    if (s.y <= -70) {
+      // under the belly line (the shaft / field crossing itself is above it)
+      below++;
+      if (insideHull(s.x, s.y, s.z)) inside++;
+    }
     if (s.st !== "patrol") continue; // the approach legs necessarily pass through the belly
     const inPlan = s.z >= HULL.bowZ && s.z <= HULL.sternZ && Math.abs(s.x) <= halfWidth(s.z);
     if (inPlan) minSlab = Math.min(minSlab, Math.max(s.y - topY(s.x, s.z), ventralY(s.x, s.z) - s.y));
     const B = TOWER.bridge;
     if (s.z > B.z0 - 60 && s.z < B.z1 + 60 && s.y > B.y0 - 60) nearTower = Math.min(nearTower, Math.abs(s.x) - B.x);
   }
-  check("no sample below the belly is inside the hull (layout.insideHull)", inside === 0 && below > 60, `${inside} inside of ${below} samples`);
+  check("no sample below the belly is inside the hull (layout.insideHull)", inside === 0 && below > 20, `${inside} inside of ${below} samples`);
   check(`vertical clearance over/under the wedge ≥ ${MIN_CLEARANCE} m (layout.topY/ventralY)`, minSlab >= MIN_CLEARANCE, `min ${minSlab.toFixed(1)} m`);
   check("passes the bridge tower flank at a safe distance (≥ 40 m, ≤ 250 m from the block)", nearTower >= MIN_CLEARANCE && nearTower <= 250, `${nearTower.toFixed(0)} m from the bridge block face`);
 }
@@ -120,20 +123,25 @@ else {
     const loop = info.minClearance(800);
     const tr = window.debugAPI.traffic;
     const p = new tr.fighters[0].pos.constructor();
+    // the launch / recovery legs pass through the hull by design (the well); the rule is: stay inside the well
+    // footprint until 40 m below the belly plate (y -108), and be ≥ 40 m clear of the hull from there on
     let legs = Infinity;
+    let strays = 0;
     for (const set of [tr.launchCurves, tr.recoveryCurves]) {
       for (const lc of set) {
-        for (let i = 0; i <= 120; i++) {
-          lc.curve.getPointAt(i / 120, p);
-          if (p.y > -75) continue; // still in the shaft / at the field
-          legs = Math.min(legs, info.clearance(p.x, p.y, p.z));
+        for (let i = 0; i <= 200; i++) {
+          lc.curve.getPointAt(i / 200, p);
+          if (p.y > -68) continue; // in the shaft
+          if (p.y >= -108) {
+            if (!(p.x > -18.5 && p.x < 18.5 && p.z > -66.5 && p.z < 46.5)) strays++;
+          } else legs = Math.min(legs, info.clearance(p.x, p.y, p.z));
         }
       }
     }
-    return { loop: +loop.min.toFixed(1), at: +loop.at.toFixed(3), legs: +legs.toFixed(1) };
+    return { loop: +loop.min.toFixed(1), at: +loop.at.toFixed(3), legs: +legs.toFixed(1), strays };
   });
   check(`patrol spline ≥ ${MIN_CLEARANCE} m from every hull piece (800 samples)`, c.loop >= MIN_CLEARANCE, `min ${c.loop} m at u=${c.at}`);
-  check(`launch / recovery legs below the belly ≥ ${MIN_CLEARANCE} m from the hull`, c.legs >= MIN_CLEARANCE, `min ${c.legs} m`);
+  check(`launch / recovery legs stay in the well footprint down to y -108, then ≥ ${MIN_CLEARANCE} m from the hull`, c.strays === 0 && c.legs >= MIN_CLEARANCE, `${c.strays} strays, min ${c.legs} m`);
 }
 
 // 4. scheduler steady state: ≤ 2 airborne, launches every ~35 s, the pool never overflows

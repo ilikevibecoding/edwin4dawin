@@ -169,13 +169,14 @@ export class Traffic {
     for (const fn of hs) fn(data);
   }
 
+  /** Compact, JSON-safe state. Times are kept at full precision so apply() reproduces poses exactly. */
   snapshot() {
     return {
-      clock: +this.clock.toFixed(3),
-      lastLaunch: this.lastLaunch === -Infinity ? null : +this.lastLaunch.toFixed(3),
+      clock: this.clock,
+      lastLaunch: this.lastLaunch === -Infinity ? null : this.lastLaunch,
       seq: this.launchSeq,
       nextRack: this.nextRack,
-      fighters: this.fighters.map((f) => ({ id: f.id, s: STATES.indexOf(f.state), t0: +f.t0.toFixed(3), dur: f.dur === Infinity ? null : +f.dur.toFixed(3), seq: f.seq, pd: +f.patrolDur.toFixed(3), rt: f.recallTau })),
+      fighters: this.fighters.map((f) => ({ id: f.id, s: STATES.indexOf(f.state), t0: f.t0, dur: f.dur === Infinity ? null : f.dur, seq: f.seq, pd: f.patrolDur, rt: f.recallTau })),
     };
   }
 
@@ -402,7 +403,9 @@ function makeLaunchCurve(slot) {
   const z3 = z - 22;
   const z4 = (z3 + S.z) / 2;
   const z5 = z4 + 0.6 * (S.z - z4);
-  const pts = [new THREE.Vector3(x, RELEASE_Y, z), new THREE.Vector3(x, -46, z), new THREE.Vector3(x, -82, z + 1), new THREE.Vector3(x * 0.75, -114, z3), new THREE.Vector3(x * 0.4, -138, z4), new THREE.Vector3(x * 0.12, -149, z5), S.clone()];
+  // straight down the shaft and on to 40 m below the belly plate before the dive bends forward, so the fighter
+  // never leaves the well footprint inside the 40 m hull-clearance band
+  const pts = [new THREE.Vector3(x, RELEASE_Y, z), new THREE.Vector3(x, -46, z), new THREE.Vector3(x, -82, z), new THREE.Vector3(x, -112, z), new THREE.Vector3(x * 0.75, -132, z3), new THREE.Vector3(x * 0.4, -144, z4), new THREE.Vector3(x * 0.12, -150, z5), S.clone()];
   const curve = new THREE.CatmullRomCurve3(pts, false, "centripetal", 0.5);
   curve.arcLengthDivisions = 200;
   return { curve, len: curve.getLength(), length: curve.getLength() };
