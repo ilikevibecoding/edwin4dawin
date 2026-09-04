@@ -22,6 +22,8 @@ import { PathPreview } from './tornado/preview.js';
 const ROPE_TICKS = 120;           // rope-out length (6 s)
 const TOUCHDOWN_TICKS = 60;       // funnel descends / spins up over the first 3 s
 const RIP_PICKS = 24;             // candidate cells tested per tick
+const RIP_BATCH_TICKS = 8;        // decided rips are applied in bursts (2.5 Hz) so touched chunks relight/remesh ~2.5x/s, not 20x/s
+const PENDING_MAX = 64;           // cells waiting for the next burst (x,y,z,id each)
 const MAX_DEBRIS_PER_TICK = 10;
 const MAX_FLING_PER_TICK = 3;
 const ALERT_INTERVAL = 40;        // ticks between NPC/animal alerts (2 s)
@@ -60,6 +62,7 @@ export class Tornado extends Disaster {
     this.flung = 0;
     this.gustX = 0; this.gustZ = 0; this.gustMag = 0;
     this.ripQueue = [];       // flattened [x,y,z,id,...] consumed by render()
+    this.pending = [];        // flattened [x,y,z,id,...] rips decided but not yet applied (see RIP_BATCH_TICKS)
     this.ripCount = 0;
     // visuals / audio state (render side)
     this.visual = null;
@@ -166,6 +169,7 @@ export class Tornado extends Disaster {
     this.m.effects.reset();
     if (this.windLoop) { this.game.audio.loopStop('wind', 0.8); this.windLoop = null; }
     this.ripQueue.length = 0;
+    this.pending.length = 0;
   }
 
   // ------------------------------------------------------------------------------------------ simulation (20 TPS)
@@ -191,6 +195,7 @@ export class Tornado extends Disaster {
       if (this.game.animals) this.game.animals.eachNear(this.position.x, this.position.z, r, this._flingAnimal);
     }
     if (this.rope < 0.6) this.ripBlocks(touchdown * (1 - this.rope / 0.6));
+    else if (this.pending.length) this.applyRips();
   }
 
   alertEntities() {
@@ -200,12 +205,14 @@ export class Tornado extends Disaster {
   }
 
   // Deterministic block ripping inside the core cylinder (surface .. surface + 10), fragility-weighted.
+  // Every tick RIP_PICKS cells are drawn and rolled; the cells that fail their roll are queued and torn out
+  // together every RIP_BATCH_TICKS ticks (applyRips), which keeps the manager's relight/remesh work per
+  // second low without changing the rip rate.
   ripBlocks(mult) {
     const R = this.params.radius, I = this.params.intensity * mult;
     if (I <= 0) return;
     const cx = this.position.x, cz = this.position.z;
-    const rng = this.rng, world = this.world;
-    let spawned = 0;
+    const rng = this.rng, world = this.world, pending = this.pending;
     for (let k = 0; k < RIP_PICKS; k++) {
       const u = rng.next(), a = rng.next() * Math.PI * 2, rr = R * Math.sqrt(u);
       const x = Math.floor(cx + rr * Math.cos(a)), z = Math.floor(cz + rr * Math.sin(a));
@@ -220,6 +227,19 @@ export class Tornado extends Disaster {
       let pr = DisasterManager.fragility(id) * I * (1 - d / R);
       if (y <= g) pr *= 0.3;                            // scours the ground only occasionally
       if (pr <= rng.next()) continue;
+      if (pending.length < PENDING_MAX * 4) pending.push(x, y, z, id);
+    }
+    if (pending.length && (this.tick % RIP_BATCH_TICKS === 0 || pending.length >= PENDING_MAX * 4)) this.applyRips();
+  }
+
+  // Tear out the queued cells: set AIR (journaled, budgeted) and launch debris tangentially so it orbits.
+  applyRips() {
+    const pending = this.pending, world = this.world;
+    const cx = this.position.x, cz = this.position.z;
+    let spawned = 0;
+    for (let i = 0; i < pending.length; i += 4) {
+      const x = pending[i], y = pending[i + 1], z = pending[i + 2], id = pending[i + 3];
+      if (world.getBlock(x, y, z) !== id) continue;     // already gone (duplicate pick)
       if (!this.m.setBlock(x, y, z, B.AIR)) continue;
       this.ripCount++;
       if (this.ripQueue.length < RIP_QUEUE_MAX * 4) this.ripQueue.push(x, y, z, id);
@@ -227,14 +247,16 @@ export class Tornado extends Disaster {
       if (spawned < MAX_DEBRIS_PER_TICK && def.shape !== SHAPE.CROSS && def.shape !== SHAPE.TORCH && def.shape !== SHAPE.RAIL) {
         spawned++;
         const h = hash3(x, y, z, this.seed);
-        const r = Math.max(0.5, d), ux = dx / r, uz = dz / r;
+        const dx = x + 0.5 - cx, dz = z + 0.5 - cz;
+        const r = Math.max(0.5, Math.sqrt(dx * dx + dz * dz)), ux = dx / r, uz = dz / r;
         const vt = 12 + 8 * h, vy = 7 + 6 * (1 - h);
         const tx = SWIRL_SIGN * uz, tz = -SWIRL_SIGN * ux;
         const size = def.shape === SHAPE.CUBE ? 0.7 + 0.15 * h : 0.45;
-        this.m.debris.spawn(x + 0.5, y + 0.5, z + 0.5, tx * vt - ux * 2, vy, tz * vt - uz * 2, id, size, 9 + h * 5, { force: true });
+        this.m.debris.spawn(x + 0.5, y + 0.5, z + 0.5, tx * vt - ux * 2, vy, tz * vt - uz * 2, id, size, 6 + h * 4, { force: true });
         this.m.stats.debrisSpawned++;
       }
     }
+    pending.length = 0;
   }
 
   // Player: follows the wind (pulled around and lifted inside the core), buffeted by gusts outside it.
