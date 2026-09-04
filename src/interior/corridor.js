@@ -4,11 +4,20 @@
 // deck with a lighter centre runner and black edge strips.
 import { PALETTE } from "../materials.js";
 import { wallFrame, panelGrid, pointLight, WALL_T, DOOR_H } from "./lib.js";
-import { IMPERIAL_STYLES, IMPERIAL_PAINTS, wallLightBar } from "./shell.js";
+import { IMPERIAL_STYLES, IMPERIAL_PAINTS, DARK_PAINTS, wallLightBar } from "./shell.js";
 import { DECKS, CORRIDORS, ROOMS, LIFTS, roomFloorY } from "../config/shipSpec.js";
 
 export const CORRIDOR_H = 3.0;
 const EPS = 0.45; // adjacency tolerance (two back-to-back walls)
+
+// Per-deck corridor identity: command level is the cleanest and coolest, crew level warmer, the
+// engineering and hangar decks are dark industrial with amber / white work light.
+const DECK_STYLE = {
+  A: { paints: IMPERIAL_PAINTS, bar: "emitWhiteSoft", runner: "impGrey", light: 0xe4ecff, accent: "emitBlue" },
+  B: { paints: IMPERIAL_PAINTS, bar: "emitWarmSoft", runner: "impGrey", light: 0xf2e6d2, accent: "emitAmber" },
+  C: { paints: DARK_PAINTS, bar: "emitWarmSoft", runner: "impGreyDark", light: 0xffd2a0, accent: "emitAmber" },
+  D: { paints: DARK_PAINTS, bar: "emitWhiteSoft", runner: "impGreyDark", light: 0xe8eeff, accent: "emitRed" },
+};
 
 // Walls of an axis-aligned box keyed by outward direction, frames oriented so N points inside.
 function boxWalls(kit, b, base) {
@@ -100,17 +109,18 @@ export function buildCorridorBox(kit, ctx, b, opts = {}) {
   const longX = w >= d;
   const { openings, skip } = corridorOpenings(b, h);
   ctx.openings = openings;
+  const style = DECK_STYLE[b.deck] || DECK_STYLE.A;
 
   // deck: dark plate, lighter runner, black edge strips
   kit.boxMM("deck", [b.x0 - WALL_T, y0 - 0.12, b.z0 - WALL_T], [b.x1 + WALL_T, y0, b.z1 + WALL_T], { color: PALETTE.impGreyDark, uv: "world", texel: 1 });
   kit.floor(b.x0 - WALL_T, b.z0 - WALL_T, b.x1 + WALL_T, b.z1 + WALL_T, y0);
   const runnerW = Math.min(longX ? d : w, 3) * 0.42;
   if (longX) {
-    kit.boxMM("deck", [b.x0 + 0.3, y0, (b.z0 + b.z1) / 2 - runnerW / 2], [b.x1 - 0.3, y0 + 0.012, (b.z0 + b.z1) / 2 + runnerW / 2], { color: PALETTE.impGrey, uv: "world", texel: 1 });
+    kit.boxMM("deck", [b.x0 + 0.3, y0, (b.z0 + b.z1) / 2 - runnerW / 2], [b.x1 - 0.3, y0 + 0.012, (b.z0 + b.z1) / 2 + runnerW / 2], { color: PALETTE[style.runner], uv: "world", texel: 1 });
     kit.boxMM("satinBlack", [b.x0, y0, b.z0], [b.x1, y0 + 0.008, b.z0 + 0.25]);
     kit.boxMM("satinBlack", [b.x0, y0, b.z1 - 0.25], [b.x1, y0 + 0.008, b.z1]);
   } else {
-    kit.boxMM("deck", [(b.x0 + b.x1) / 2 - runnerW / 2, y0, b.z0 + 0.3], [(b.x0 + b.x1) / 2 + runnerW / 2, y0 + 0.012, b.z1 - 0.3], { color: PALETTE.impGrey, uv: "world", texel: 1 });
+    kit.boxMM("deck", [(b.x0 + b.x1) / 2 - runnerW / 2, y0, b.z0 + 0.3], [(b.x0 + b.x1) / 2 + runnerW / 2, y0 + 0.012, b.z1 - 0.3], { color: PALETTE[style.runner], uv: "world", texel: 1 });
     kit.boxMM("satinBlack", [b.x0, y0, b.z0], [b.x0 + 0.25, y0 + 0.008, b.z1]);
     kit.boxMM("satinBlack", [b.x1 - 0.25, y0, b.z0], [b.x1, y0 + 0.008, b.z1]);
   }
@@ -121,7 +131,7 @@ export function buildCorridorBox(kit, ctx, b, opts = {}) {
   for (const [dir, { frame, length }] of Object.entries(frames)) {
     if (skip.has(dir)) continue;
     const ops = openings[dir];
-    panelGrid(frame, length, h, { openings: ops, depth: WALL_T, seed: seed++, kick: true, topPipes: false, styles: IMPERIAL_STYLES, paints: IMPERIAL_PAINTS, panelW: 1.25, tag: b.id + dir });
+    panelGrid(frame, length, h, { openings: ops, depth: WALL_T, seed: seed++, kick: true, topPipes: b.deck === "C" || b.deck === "D", styles: IMPERIAL_STYLES, paints: style.paints, panelW: 1.25, tag: b.id + dir });
     frame.box("satinBlack", length / 2, h - 0.09, 0.02, length, 0.18, 0.05);
     // wall light bars at 2.25 m between openings, only on the long walls
     const isLong = longX ? dir === "-z" || dir === "+z" : dir === "-x" || dir === "+x";
@@ -130,7 +140,9 @@ export function buildCorridorBox(kit, ctx, b, opts = {}) {
     for (let i = 0; i + 1 < cuts.length; i += 2) {
       const u0 = cuts[i] + 0.4;
       const u1 = cuts[i + 1] - 0.4;
-      if (u1 - u0 > 1.2) wallLightBar(frame, u0, u1, 2.3);
+      if (u1 - u0 > 1.2) wallLightBar(frame, u0, u1, 2.3, style.bar);
+      // deck marker lamp beside each opening
+      if (i + 1 < cuts.length - 1) frame.box(style.accent, cuts[i + 1] + 0.15, 1.9, 0.03, 0.05, 0.3, 0.03);
     }
   }
 
@@ -148,11 +160,11 @@ export function buildCorridorBox(kit, ctx, b, opts = {}) {
     if (longX) {
       const z = (b.z0 + b.z1) / 2 + side * (d / 2 - inset);
       kit.box("satinBlack", (b.x0 + b.x1) / 2, y0 + h - 0.03, z, w - 0.6, 0.06, 0.3);
-      kit.box("emitWhiteSoft", (b.x0 + b.x1) / 2, y0 + h - 0.06, z, w - 0.7, 0.02, 0.18, { uv: "keep" });
+      kit.box(style.bar, (b.x0 + b.x1) / 2, y0 + h - 0.06, z, w - 0.7, 0.02, 0.18, { uv: "keep" });
     } else {
       const x = (b.x0 + b.x1) / 2 + side * (w / 2 - inset);
       kit.box("satinBlack", x, y0 + h - 0.03, (b.z0 + b.z1) / 2, 0.3, 0.06, d - 0.6);
-      kit.box("emitWhiteSoft", x, y0 + h - 0.06, (b.z0 + b.z1) / 2, 0.18, 0.02, d - 0.7, { uv: "keep" });
+      kit.box(style.bar, x, y0 + h - 0.06, (b.z0 + b.z1) / 2, 0.18, 0.02, d - 0.7, { uv: "keep" });
     }
   }
   // practicals every ~7 m
@@ -161,7 +173,7 @@ export function buildCorridorBox(kit, ctx, b, opts = {}) {
     const t = (i + 0.5) / n;
     const px = longX ? b.x0 + w * t : (b.x0 + b.x1) / 2;
     const pz = longX ? (b.z0 + b.z1) / 2 : b.z0 + d * t;
-    ctx.lights.cool.push(pointLight(0xe4ecff, 4.5, 10, [px, y0 + h - 0.45, pz]));
+    ctx.lights.cool.push(pointLight(style.light, 4.5, 10, [px, y0 + h - 0.45, pz]));
   }
   return { y0, h, openings, frames };
 }
