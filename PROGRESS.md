@@ -439,3 +439,39 @@ Second consecutive all-pass → stopping condition met at iteration 9.
 5. Window-shot lighting: a small warm practical over the porthole (a reading lamp on the bezel) so
    the darkest rubric view lifts to the others' exposure without adding a global fill; cockpit mat
    gets an under-console teal strip on its aft edge for the foreground floor.
+
+---
+
+# Milestone 2 — Star Destroyer (ISD *Vindicator*)
+
+Branch `cursor/star-destroyer-ship-9880`; playable build published from `tools/publish.sh` to
+`cursor/star-destroyer-play-9880` (https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/star-destroyer-play-9880/index.html).
+Plan: `docs/SHIP_PLAN.md`. Workstream contract: `docs/AGENT_GUIDE.md`.
+
+## Baseline (Kestrel, iteration 9) — `shots/iter_baseline/`
+
+1280×720, SwiftShader software GL (frame times relative only): cockpit 112 calls / 250k tris,
+corridor 124 calls / 226k tris, 22 lights always on, 49 programs, 69 colliders, 928 kB JS (307 kB gzip).
+
+## Step 1–2: architecture and skeleton — `shots/iter_skel1/`
+
+Commit `9e1d9011`+: spec-driven ship (hull loft, terraces, tower, bridge module with viewport cut-outs,
+domes, mast, engines, hangar mouth), 46 cells (36 spaces + 10 lift cars), 41 doors, cells/portals,
+light pool (16 point + 3 spot; the Kestrel's 22 real lights became pool declarations), vertical
+movement, camera modes and transitions, far field ×60, live publishing.
+
+| View | Draw calls | Triangles | Visible cells | Active lights |
+|---|---|---|---|---|
+| room:bridge (placeholder room) | 109 | 149k | 5 | 16 |
+| room:corridor_a | 525 (before door/shadow fixes) | 312k | 10 | 16 |
+| cockpit (Kestrel, docked) | 591 → | 1.48M (hangar + hull through the windshield) | 2 | 19 |
+| ext_hero | 269 | 1.63M | — | — |
+| ext_stern | 402 | 2.28M | — | — |
+
+Findings fixed in this step: sun shadow pass re-rendered every visible room (frustum now collapses
+inside the hull); coplanar wall layers rendered black (all impWall layers now stepped ≥ 2 cm); bridge
+module face slab intruded 5 m into the bridge interior (now 1 m, body built as five slabs so the
+viewports look into the interior); far-field planets sat next to the 1.6 km hull (scaled ×60).
+
+Workstreams launched (isolated worktrees): EXT-A hull/superstructure/engines, EXT-B greebles/weapons,
+BRIDGE, HANGAR complex, FIGHTERS (TIE model + traffic), ROOMS-A/B/C/D (20 rooms).
