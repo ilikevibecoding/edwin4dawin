@@ -4,19 +4,27 @@
 // station behind dark screens under an extraction hood with a flickering arc and a hard white spot;
 // parts shelving with instanced bins; a scissor parts lift in the SW corner; cable reels, a hydraulic
 // press, a drill press; oil stains and yellow/black hazard lanes.
-// Light: hooded white downlights flush with the ceiling (above the crane bridge's travel) pool light on
-// the lane and the work areas; the amber pendant over the benches, the amber droid spot and the hard
-// white welding spot are the practicals; the ceiling slots are dim recessed lines, never the key.
+// Light: the crane bridge sweeps the whole middle of the room just under the ceiling, so nothing hangs
+// there: two flush hooded downlights (spots) pool light on the bays, two hooded pendants over the lane
+// at either end (outside the bridge's travel) and a portable work-light stand light the rest; the
+// amber pendant over the benches, the hard white welding lamp on the extraction duct and the
+// parts-lift lamp are the practicals; the ceiling slots are dim recessed lines, never the key.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRailing, impWallGear, impWallLight, impCrate, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { rng, prism } from "../kit.js";
-import { ensureDeckDMaterials, shellNoFloor, deckFloor, pipe, pipePath, valveWheel, gauge, junctionBox, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, assembly, blinkers, instGeo, pendantLamp, shroudLamp } from "./deck_d_kit.js";
+import { ensureDeckDMaterials, shellNoFloor, deckFloor, pipe, pipePath, valveWheel, gauge, junctionBox, hazardBorder, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, assembly, blinkerField, instGeo, pendantLamp, shroudLamp } from "./deck_d_kit.js";
 
 const YEL = PALETTE.yellow;
 const UP = new THREE.Vector3(0, 1, 0);
 const DIM = "emitAmberDim"; // amber practicals: wall lights, pendant lens, ceiling coffer accents
+
+// Blinking lamps from every prop are collected here and built as ONE InstancedMesh at the end of the
+// build (blinkers() costs a mesh per lamp; the room's mesh budget is 40).
+const BLINK = { emitAmber: 0xffb040, emitRedImp: 0xff3b2e, emitGreen: 0x4fe08a, emitWhite: 0xffffff, emitCyan: 0x7fd8ff };
+let blinks = [];
+const blink = (pos, size, key, period, duty, phase = 0) => blinks.push({ pos, size, color: BLINK[key], period, duty, phase });
 
 export function buildMaintenance(kit, ctx, room) {
   const [w, h, d] = room.size;
@@ -26,6 +34,7 @@ export function buildMaintenance(kit, ctx, room) {
   const amber = 0xffb040;
   ensureDeckDMaterials(kit);
   const rand = rng(7719);
+  blinks = [];
 
   // --- shell + deck
   // N / E walls are covered by benches and shelving: plain panels there so nothing pokes through
@@ -111,7 +120,7 @@ export function buildMaintenance(kit, ctx, room) {
     W.decal(IMP_DECAL.glyphs1, wallU(room, "W", 0), 3.9, 0.03, 0.7);
     const lp = W.pos(wallU(room, "W", 0), 3.35, 0.18);
     warningLamp(kit, [lp.x, lp.y, lp.z], accentKey);
-    blinkers(kit, [{ pos: [lp.x, lp.y, lp.z], size: [0.12, 0.1, 0.12], key: accentKey, period: 1.6, duty: 0.5 }]);
+    blink([lp.x, lp.y, lp.z], [0.12, 0.1, 0.12], accentKey, 1.6, 0.5);
     impWallGear(W, wallU(room, "W", 6.0), 1.6, { seed: 230, accentKey });
     junctionBox(W, wallU(room, "W", -6.2), 2.0, 0.8, 1.0, { seed: 231, accentKey });
     W.decal(IMP_DECAL.bay01, wallU(room, "W", 8.8), 3.8, 0.03, 1.2);
@@ -122,26 +131,75 @@ export function buildMaintenance(kit, ctx, room) {
   impCrate(kit, -14.6, 0.9, 3.4, 0.9, 0.6, 0.8, { seed: 23, decal: IMP_DECAL.bay03 });
 
   // --- gantry crane: wall rails along x, bridge across z with a trolley + hook block, traversing
-  gantryCrane(kit, room, { travel: [-6.5, 9.5], trolleyZ: -3.6 });
+  // (travel stops short of the welding station's duct riser at x = 9.2 and its duct along the S wall)
+  gantryCrane(kit, room, { travel: [-6.5, 8.3], trolleyZ: -3.6 });
 
-  // --- lights (8). Work light: four hooded downlights flush with the ceiling (the crane bridge travels
-  // just below them) over the lane and the work areas; practicals: the dim amber pendant over the
-  // benches, the amber droid spot, the hard white welding spot and the parts-lift lamp.
+  // --- lights (8). Work light: two hooded pendants over the lane, hung outside the bridge's travel
+  // (x < -6.8 and x > 8.6); two hooded downlights flush with the ceiling over the bays, as spots aimed
+  // straight down (the cone never touches the ceiling or the hood's own reflector, so the fixture reads
+  // as a dim lens in a black hood, and the dark girder passing under them just catches the light); a
+  // portable work-light stand by the droid. Practicals: the dim amber pendant over the benches, the
+  // hard white welding lamp clamped to the extraction duct, the parts-lift lamp. Three spots in all:
+  // the pool has three spot slots and the current cell's lights always win them.
   const work = 0xe6ecff;
-  for (const [i, [x, z]] of [[-8.0, -4.0], [4.3, -2.5], [12.2, 3.0], [-4.3, 6.5]].entries()) {
+  for (const [i, x] of [-10.5, 11.5].entries()) {
+    shroudLamp(kit, [x, h - 0.08, 0], [x, 4.9, 0], [x, 0.5, 0], { key: "emitWhiteDim", size: 0.55 });
+    kit.light({ type: "point", pos: [x, 4.65, 0], color: work, intensity: lux(4.6, 4.8), distance: 18, priority: 0.6 - i * 0.01 });
+  }
+  for (const [i, [x, z]] of [[3.5, -5.0], [-2.5, 5.2]].entries()) {
     shroudLamp(kit, [x, h - 0.05, z], [x, h - 0.32, z], [x, 0.5, z], { key: "emitWhiteDim", size: 0.5 });
-    kit.light({ type: "point", pos: [x, h - 0.55, z], color: work, intensity: lux(h - 0.55, i < 2 ? 2.0 : 1.7), distance: 19, priority: 0.6 - i * 0.01 });
+    kit.light({ type: "spot", pos: [x, h - 0.15, z], target: [x, 0, z], color: work, intensity: lux(h - 0.15, 5.6), distance: 18, angle: 1.1, penumbra: 0.35, priority: 0.62 - i * 0.01 });
+  }
+  {
+    const [x, z, target] = [2.8, -4.6, [5.2, 1.0, -6.6]];
+    workLightStand(kit, x, z, target);
+    const dx = target[0] - x;
+    const dz = target[2] - z;
+    const L = Math.hypot(dx, dz);
+    kit.light({ type: "point", pos: [x + (dx / L) * 0.35, 2.32, z + (dz / L) * 0.35], color: work, intensity: lux(2.4, 2.6), distance: 14, priority: 0.58 });
   }
   pendantLamp(kit, -8.0, 3.6, -9.6, h, DIM);
   kit.light({ type: "point", pos: [-8.0, 3.6, -9.6], color: amber, intensity: lux(3.6, 1.6), distance: 13, priority: 0.55 });
-  kit.light({ type: "spot", pos: [5.2, h - 0.5, -5.0], target: [5.2, 0.8, -6.6], color: amber, intensity: lux(5.0, 2.6), distance: 12, angle: 0.55, penumbra: 0.5, priority: 0.54 });
-  kit.light({ type: "spot", pos: [9.2, 4.2, 7.0], target: [9.2, 0.9, 7.0], color: 0xffffff, intensity: lux(3.3, 4.5), distance: 9, angle: 0.5, penumbra: 0.35, priority: 0.57 });
+  // welding lamp: hood on a bracket off the extraction duct riser, spot straight down onto the table
+  kit.box("impTrim", 9.2, 4.38, 6.78, 0.08, 0.08, 0.44, { color: PALETTE.impBlack });
+  shroudLamp(kit, [9.2, 4.42, 6.6], [9.2, 4.12, 6.62], [9.2, 0.9, 7.0], { key: "emitWhiteDim", size: 0.3 });
+  kit.light({ type: "spot", pos: [9.2, 4.0, 6.65], target: [9.2, 0.9, 7.0], color: 0xffffff, intensity: lux(3.1, 4.5), distance: 9, angle: 0.5, penumbra: 0.35, priority: 0.57 });
   kit.light({ type: "point", pos: [-13.6, 4.4, 8.4], color: amber, intensity: lux(4.1, 1.5), distance: 10, priority: 0.42 });
+
+  blinkerField(kit, blinks, { intensity: 2.4 });
 }
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
+/**
+ * Portable work-light stand: rubber-footed tripod, telescopic mast with a clamp collar, a crossbar
+ * across the aim direction carrying two hooded heads aimed at `target`. The caller adds the point light
+ * just in front of the heads.
+ */
+function workLightStand(kit, x, z, target) {
+  const top = 2.1;
+  kit.cyl("impMetal", x, 0.75, z, 0.04, 1.3, "y", { color: PALETTE.impGreyDark, segments: 8 });
+  kit.cyl("impMetal", x, 1.75, z, 0.028, 0.75, "y", { color: PALETTE.impGrey, segments: 8 });
+  kit.cyl("impTrim", x, 1.42, z, 0.06, 0.16, "y", { color: PALETTE.impBlack, segments: 8 });
+  for (let k = 0; k < 3; k++) {
+    const a = (k / 3) * Math.PI * 2 + 0.4;
+    kit.add("impMetal", new THREE.BoxGeometry(0.04, 1.2, 0.04), { pos: [x + Math.cos(a) * 0.3, 0.56, z + Math.sin(a) * 0.3], rot: [Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5], color: PALETTE.impGreyDark });
+    kit.box("rubber", x + Math.cos(a) * 0.58, 0.03, z + Math.sin(a) * 0.58, 0.1, 0.06, 0.1, { color: PALETTE.impBlack });
+  }
+  const yaw = Math.atan2(target[0] - x, target[2] - z);
+  const px = Math.cos(yaw);
+  const pz = -Math.sin(yaw);
+  kit.add("impTrim", new THREE.BoxGeometry(0.8, 0.06, 0.06), { pos: [x, top, z], rot: [0, yaw, 0], color: PALETTE.impBlack });
+  for (const s of [-1, 1]) {
+    const hx = x + px * s * 0.28;
+    const hz = z + pz * s * 0.28;
+    shroudLamp(kit, [hx, top + 0.03, hz], [hx, top + 0.2, hz], target, { key: "emitWhiteDim", size: 0.26 });
+  }
+  cable(kit, [[x + 0.04, 1.5, z], [x + 0.35, 0.6, z + 0.3], [x + 0.9, 0.02, z + 0.7], [x + 2.2, 0.02, z + 0.9]], 0.018, { color: PALETTE.impBlack });
+  kit.collider([x - 0.65, 0, z - 0.65], [x + 0.65, 2.5, z + 0.65], "lightStand");
+}
+
 /** Workbench against the N wall at x = bx (len along x), tool board on the wall frame above it. */
 function workbench(kit, N, room, bx, len, opts) {
   const { seed = 1, accentKey = "emitAmber" } = opts;
@@ -302,11 +360,9 @@ function droidStand(kit, x, z, opts) {
   kit.cyl("impMetal", x, 1.7, z, 0.36, 0.1, "y", { color: PALETTE.impGreyDark, segments: 28 });
   kit.box("impTrim", x + 0.2, 1.1, z + 0.4, 0.42, 0.6, 0.12, { color: PALETTE.impBlack, texel: 1 });
   for (let k = 0; k < 4; k++) kit.box("impMetal", x + 0.2, 0.9 + k * 0.13, z + 0.47, 0.3, 0.05, 0.02, { color: PALETTE.impGreyDark });
-  blinkers(kit, [
-    { pos: [x + 0.08, 1.33, z + 0.465], size: [0.04, 0.04, 0.01], key: "emitRedImp", period: 0.7, duty: 0.5 },
-    { pos: [x + 0.2, 1.33, z + 0.465], size: [0.04, 0.04, 0.01], key: accentKey, period: 1.1, duty: 0.6, phase: 0.3 },
-    { pos: [x + 0.32, 1.33, z + 0.465], size: [0.04, 0.04, 0.01], key: "emitGreen", period: 1.9, duty: 0.8 },
-  ]);
+  blink([x + 0.08, 1.33, z + 0.465], [0.04, 0.04, 0.01], "emitRedImp", 0.7, 0.5);
+  blink([x + 0.2, 1.33, z + 0.465], [0.04, 0.04, 0.01], accentKey, 1.1, 0.6, 0.3);
+  blink([x + 0.32, 1.33, z + 0.465], [0.04, 0.04, 0.01], "emitGreen", 1.9, 0.8);
   cable(kit, [[x + 0.1, 0.95, z + 0.44], [x + 0.35, 0.7, z + 0.75], [x + 0.6, 0.02, z + 1.0]], 0.02, { color: PALETTE.impBlack });
   cable(kit, [[x + 0.25, 1.0, z + 0.44], [x + 0.15, 0.55, z + 0.85], [x - 0.3, 0.02, z + 1.15]], 0.016, { color: PALETTE.impRed });
   // removed side panel leaning on the pedestal, shoulder manipulators (one hanging, one clamped up)
@@ -483,10 +539,8 @@ function weldingStation(kit, S, room, x, z, h, opts) {
   kit.cyl("impTrim", x + 0.05, 1.02, z, 0.105, 0.02, "x", { color: PALETTE.impBlack, segments: 16 });
   pipe(kit, [x + 0.1, 1.14, z + 0.06], [x + 0.35, 1.5, z + 0.35], 0.03, { color: PALETTE.impBlack, segments: 8 });
   kit.cyl("impTrim", x + 0.36, 1.52, z + 0.36, 0.05, 0.14, "y", { color: PALETTE.impBlack, segments: 10 });
-  blinkers(kit, [
-    { pos: [x + 0.07, 1.13, z + 0.04], size: [0.09, 0.09, 0.09], key: "emitWhite", period: 0.21, duty: 0.55 },
-    { pos: [x + 0.07, 1.13, z + 0.04], size: [0.14, 0.05, 0.14], key: "emitCyan", period: 0.33, duty: 0.4, phase: 0.1 },
-  ]);
+  blink([x + 0.07, 1.13, z + 0.04], [0.09, 0.09, 0.09], "emitWhite", 0.21, 0.55);
+  blink([x + 0.07, 1.13, z + 0.04], [0.14, 0.05, 0.14], "emitCyan", 0.33, 0.4, 0.1);
   // welder unit (yellow) beside the table, torch cable and earth clamp
   const ux = x + 1.45;
   const uz = z + 0.5;
@@ -570,7 +624,7 @@ function partsLift(kit, x, z, h, opts) {
   kit.box("impTrim", x, h - 1.04, z, 0.7, 0.08, 0.5, { color: PALETTE.impBlack });
   kit.box(accentKey, x, h - 1.09, z, 0.6, 0.02, 0.4);
   warningLamp(kit, [x + 1.2, h - 0.7, z - 1.2], accentKey);
-  blinkers(kit, [{ pos: [x + 1.2, h - 0.7, z - 1.2], size: [0.14, 0.12, 0.14], key: accentKey, period: 2.2, duty: 0.35, phase: 0.7 }]);
+  blink([x + 1.2, h - 0.7, z - 1.2], [0.14, 0.12, 0.14], accentKey, 2.2, 0.35, 0.7);
   for (const sx of [-1, 1]) kit.cyl("impMetal", x + sx * 0.6, h / 2 + 0.1, z + half + 0.16, 0.03, h - 1.0, "y", { color: PALETTE.impGrey, segments: 8 });
   // gate rails on the open sides (E full, N with a gap for access)
   impRailing(kit, [x + half - 0.08, z - half + 0.1], [x + half - 0.08, z + half - 0.1], py, { light: accentKey, postStep: 1.4 });
@@ -590,7 +644,11 @@ function partsLift(kit, x, z, h, opts) {
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.collider([x + sx * (half + 0.16) - 0.12, 0, z + sz * (half + 0.16) - 0.12], [x + sx * (half + 0.16) + 0.12, h, z + sz * (half + 0.16) + 0.12], "liftPost");
 }
 
-/** Gantry crane: yellow rails on wall brackets, one bridge with end trucks, trolley, hook block (traverses along x). */
+/**
+ * Gantry crane: yellow rails on wall brackets, one dark bridge girder (yellow only at the chevron end
+ * blocks and the trolley drum, so no lamp can blow out a 23 m yellow beam) with end trucks, trolley,
+ * hook block; traverses along x.
+ */
 function gantryCrane(kit, room, opts) {
   const [w, , d] = room.size;
   const hx = w / 2;
@@ -611,7 +669,7 @@ function gantryCrane(kit, room, opts) {
   // the bridge (animated group at x = 0)
   const span = hz - 0.6;
   const bridge = assembly(kit, [0, 0, 0], (s) => {
-    s.box("impMetal", 0, railY - 0.07, 0, 0.56, 0.64, span * 2 + 0.3, { color: YEL, texel: 1 });
+    s.box("impMetal", 0, railY - 0.07, 0, 0.56, 0.64, span * 2 + 0.3, { color: PALETTE.impGreyDark, texel: 1 });
     s.box("impTrim", 0, railY - 0.07, 0, 0.6, 0.1, span * 2 + 0.3, { color: PALETTE.impBlack, texel: 1 });
     for (const t of [-1, 1]) s.box("chevronY", 0, railY - 0.07, t * (span - 1.2), 0.58, 0.5, 0.6, { texel: 2 });
     for (const t of [-1, 1]) {
