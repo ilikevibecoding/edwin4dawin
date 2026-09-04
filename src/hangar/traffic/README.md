@@ -20,32 +20,39 @@ seed and the module time `t` renders the same traffic without any message traffi
 | --- | --- | --- |
 | `traffic_fighters` | `InstancedMesh` cap 48 | racked, maintenance, patrol and hangar movers; matrices rewritten every frame |
 | `traffic_shuttles` | `InstancedMesh` cap 2 | per-instance `aFold` attribute (0 spread .. 1 folded) drives the wings and ramp in the vertex shader |
-| `traffic_beams` | `Mesh` | 8 unit cones (4 halo + 4 core) stretched in the vertex shader from the emitters to the craft in the shaft; `uOn` = 0 when idle |
-| `traffic_glow` | `InstancedMesh` cap 64 | additive engine-glow billboards for movers, brighter with speed and acceleration |
+| `traffic_beams` | `Mesh` | 9 unit cones (4 halo + 4 core tractor beams, 1 landing-light cone) stretched in the vertex shader from the emitters / the craft's lamp; each set collapses to nothing when its gate uniform is 0 |
+| `traffic_glow` | `InstancedMesh` cap 64 | additive gaussian billboards: twin engine glows on every mover (brighter with speed and acceleration, never under ~5 px) plus one "hold" disc under a craft hovering in the hangar |
 | `traffic_beacons` | `Points` | nav lights, landing-light flicker, shuttle fin beacon, emitter glow |
-| `traffic_clamps` | `InstancedMesh` 2 per slot | rack clamp arms: folded up under the beam when open, 25° onto the hull when closed |
+| `traffic_clamps` | `InstancedMesh` 2 per slot | rack clamp arms: folded flat under the beam (90°) at empty slots and while a fighter approaches, swung 25° onto the hull when closed |
 
 Materials: `trafficHull` (fighters + clamps), `trafficShuttle`, `trafficGlow`, `trafficBeam`,
 `trafficBeacon`. No canvas textures, no `THREE.Light`s. One pooled point-light *descriptor* rides with the
 craft in the shaft (tractor fill) and is removed from `ctx.lights` when the beam is idle.
 
-Geometry: fighter 900 tris (span 7.70 m, wing faces at |x| 3.85, nose −Z at yaw 0), shuttle 1042 tris
-(21 m, origin 2.85 m above the pad when parked on its skids), clamp 48 tris. The live triangle total is
-kept under 40 000 by capping fighter instances: `maxFighterInstances = floor((40000 − fixed) / 900)`
-(38 with the 28-slot rack); the scheduler refuses arrivals while the hangar holds
-`maxFighterInstances − maintenance − patrol` fighters. `api.stats()` reports the live figure.
+Geometry: fighter 936 tris (span 7.70 m, wing faces at |x| 3.85, nose −Z at yaw 0; spoked octagonal
+viewport with dark glass and a lit rim, dark aft engine block with two recessed nozzles that carry no idle
+emissive), shuttle 1492 tris (21 m; plated fuselage with baked seams, glazed cockpit band, port boarding
+hatch, four landing skids whose pads sit exactly `standHeight` = 2.85 m below the origin, three recessed
+nozzles with a dim radial glow), clamp 36 tris. The live triangle total is kept under 40 000 by capping
+fighter instances: `maxFighterInstances = floor((40000 − fixed) / 936)` where `fixed` is one parked
+shuttle + clamps + beam cones + glow quads (38 with the 28-slot rack); the scheduler refuses arrivals while
+the hangar holds `maxFighterInstances − maintenance − patrol` fighters. `api.stats()` reports the live
+figure.
 
 ## World interfaces (systems build after rooms)
 
 | source | call | fallback |
 | --- | --- | --- |
-| `d4-hangar` | `ctx.world.get("d4-hangar").result.api.rackSlots()` → `[{id,pos,yaw,tier,side,occupied}]` | both sides x ±70, tiers y −62/−50, z 0,10,…,60 (28 slots) |
-| `d4-shuttle-bay` | `…api.shuttlePad()` → `{pos,yaw}` | `{pos:[-110,-72,15], yaw:90}` |
+| `d4-hangar` | `ctx.world.get("d4-hangar").result.api.rackSlots()` → `[{id,pos,yaw,tier,side,occupied}]` | both sides x ±70, tiers y −62/−46, z 28,38,…,88 (28 slots, none within 10 m of the bay doors) |
+| `d4-shuttle-bay` | `…api.shuttlePad()` → `{pos,yaw}` (`pos.y` = pad top surface) | `{pos:[-110,-71.7,15], yaw:90}` |
 | `d4-fighter-bay` | `…api.cradles()` → `[{pos,yaw}]` | `[[110,-67.8,-10],[110,-67.8,30]]`, yaw 0 |
 
-At build ~70 % of the slots (20 of 28, chosen from the seed) receive a racked fighter and the hangar's
-slot objects get `occupied = true`; the flag is kept current as fighters launch and dock. Two fighters
-sit on the maintenance cradles (`state: "maintenance"`), one shuttle parks on the pad with wings folded.
+Slots are read from `rackSlots()` once at build (positions, yaw and ids come from the hangar; the fallback
+grid is only used when the hangar is absent). ~70 % of them (20 of 28, chosen from the seed) receive a
+racked fighter and the hangar's slot objects get `occupied = true`; the flag is kept current as fighters
+launch and dock, which is what drives the hangar's own cradle arms. Two fighters sit on the maintenance
+cradles (`state: "maintenance"`), one shuttle parks on the pad with its skids on the pad top and its
+wings parked at `fold` 0.5 (raised ~38°, clearly two wings plus the fin from any angle).
 
 Hangar facts used here: floor y −72, aperture x ∈ [−36, 36], z ∈ [−30, 94], centre (0, −85, 32);
 tractor emitters (±36, −73, −30) and (±36, −73, 94). The beams target any mover inside the shaft column
@@ -60,17 +67,35 @@ exact dwells. Nothing integrates `dt`.
 
 | id | duration | shape |
 | --- | --- | --- |
-| `arr:<slotId>:<v>` | 80 s | far point ≈ (±900, −1800, −3500) + variant offset → (0, −300, 32) → **aperture centre at 60 s** → hover (0, −40, 32) 63–66 s → mid → 14 m and 5 m out along the slot's ±x axis (74 s, 77 s) → slot (80 s, zero speed) |
-| `lau:<slotId>:<v>` | 60 s | unclamp dwell 0–3 s → 5 m / 14 m out (6 s, 9 s) → mid → hover 15–17 s → **aperture centre at 21 s** → (0, −300, 32) 27 s → departure ≈ (±900, −2000, 3900) + variant |
-| `patrol:alpha` | 96 s loop | ~2 km loop, passes (1550, 197, −901) — 50 m from the `sys-traffic-patrol` camera |
-| `patrol:beta` | 118 s loop | ~1.6 km loop under the keel plane |
+| `arr:<slotId>:<v>` | 80 s | far point ≈ (±900, −1800, −3500) + variant offset → (0, −300, 32) 44 s → shaft entry (0, −150, 32) 52 s → **aperture centre at 60 s** (a straight ~8 m/s vertical climb, ~6 s inside the tractor column) → hover (0, −40, 32) 66–68 s → mid 71 s → 14 m and 5 m out along the slot's ±x axis (75 s, 78 s) → slot (80 s, zero speed) |
+| `lau:<slotId>:<v>` | 60 s | unclamp dwell 0–3 s → 5 m / 14 m out (6 s, 9 s) → mid 12 s → hover 15–17 s → **aperture centre at 22 s** → shaft entry 28 s → (0, −300, 32) 33 s → departure ≈ (±900, −2000, 3900) + variant |
+| `patrol:alpha` | 96 s loop | ~15 km loop at ~155 m/s; the lead passes (1550, 197, −901) at t 40 (+96 k) with the `sys-traffic-patrol` camera 100 m behind, 45 m right and 30 m above it |
+| `patrol:beta` | 118 s loop | ~13 km loop under the keel plane, phased so its V is on the far side of the ship at t 40 |
 | `custom:<n>` | length / 120 m/s | `api.spawn({ path: Vector3[] })`; smooth start/stop |
+
+Patrol flights fly as five-ship Vs (`FORMATION` in `index.js`): member *i* trails the lead by 0/20/40 m
+along the loop (a `t0` offset of `behind / speed`) and sits ±16/±32 m right and 3/6 m below it in the
+flight's tangent frame, so the echelon banks with the leader. The offset is part of the serialized state.
 
 Orientation: nose along the tangent with banked roll from lateral acceleration; arrivals blend to a
 level hover yaw (aft-facing, turned 8° toward the docking wall) then to the slot yaw during the final
 approach; launches hold the slot yaw while backing out, level off at the hover, then follow the tangent.
 `FlightPath.keys` exposes the fractions used for effects (`shaft`, `hover`, `approach`, `settle`,
 `unclamp`, `clear`).
+
+## Effects (`effects.js`, driven from `update`)
+
+* **Tractor beams** — while a mover is inside the shaft column, four pale-blue halo cones (with scanlines
+  travelling toward the craft and a faint pulse) plus four bright core threads converge on it from the
+  emitters; strength fades over 6 m at both ends of the column and the pooled tractor point light follows.
+* **Landing light** — the craft in the shaft (else the first hangar mover) carries an 18 m warm flickering
+  cone from its chin, angled forward-down, and a flickering landing-light beacon.
+* **Engine glow** — every mover has two additive gaussian quads at its nozzle exits (`FIGHTER_ENGINES` /
+  `SHUTTLE_ENGINES`), scaled by speed and acceleration; racked craft have none (nozzles are dark recesses).
+* **Hold glow** — a soft additive disc 4.6 m under a hangar mover that is level and slow (the hover and the
+  final approach) so it reads as held in the air; gated by the flight phase, never on the shaft climb.
+* **Clamps** — closed (25° onto the hull) on occupied slots, folded flat under the beam otherwise; they
+  close over the arrival's last 2 s (`keys.settle` → 1) and open during a launch's unclamp dwell.
 
 ## Schedule (`scheduler.js`)
 
@@ -86,9 +111,11 @@ rebuilds from the seed.
 ## States
 
 ```
-{ id, type: "fighter"|"shuttle", state, pathId, t0, duration, from, to, position:[x,y,z], yaw }
+{ id, type: "fighter"|"shuttle", state, pathId, t0, duration, from, to, position:[x,y,z], yaw, offset? }
 state ∈ racked | launching | patrol | arriving | docking | maintenance
 ```
+
+`offset` (`[right, up]` metres in the tangent frame) is present on formation members only.
 
 `arriving` → `docking` when the craft leaves the hover for its slot; `racked` when it settles.
 `launching` fighters leave the world at the end of their path (`depart`), arrivals appear at their far
@@ -126,15 +153,24 @@ No-op seams, each with JSDoc describing the future implementation, called at the
 
 ## Views
 
-`sys-traffic-approach` (exterior, t 40: fighter in the shaft + beams), `sys-traffic-racks` (port racks,
-t 40), `sys-traffic-hover` (t 43: the arrival at the hover point), `sys-traffic-patrol` (exterior, t 40:
-alpha-0 passing the camera).
+Every view carries its own `time`; none relies on an external advance.
+
+| view | camera | moment |
+| --- | --- | --- |
+| `sys-traffic-approach` | exterior, (20, −108, 8) → (0, −82, 34): 39 m below/beside the aperture | t 40 — arrival A0 is exactly at the aperture centre, all four beams on, engine glow and landing light lit; it stays in the column for t 58–62 |
+| `sys-traffic-racks` | on the deck at (−42, −72, 40) outside the aperture rail, yaw 108, pitch 18 | t 40 — both port rack tiers, closed clamps on occupied slots, folded clamps on empty ones |
+| `sys-traffic-hover` | exterior, (20, −52, 46) → (0, −40, 32): 27 m from the hover point, looking up | t 47 — A0 holds level at the hover (66–68 s after its t0 = −20), engines toward the camera, hold glow under it, landing light sweeping down |
+| `sys-traffic-patrol` | exterior, on alpha's loop 100 m behind / 45 m right / 30 m above the lead (`PATROL_CAM`) | t 40 — the five-ship V passes its first control point, 70–115 m from the camera, 3/4 rear view, nothing at frame centre |
 
 ## Known integration notes
 
-* `d4-hangar/racks.js` builds fixed "open" clamp arms at ±4.0 m from every slot centre (8 m gap). A
-  7.7 m fighter approaching along the slot's ±x axis (§9.6) passes through the hall-side arm, and the
-  overhead beam blocks vertical entry; the hangar arms need to swing clear (or be left to this module's
-  animated clamps) before combined docking shots look right. This module's clamps fold up under the beam
-  when open so its own hardware never intersects an approaching fighter.
+* `d4-hangar/racks.js` builds its own cradle arms at every slot and animates them from `slot.occupied`
+  (`api.clampState()`); this module sets that flag, so both sets of hardware agree. A 7.7 m fighter
+  approaching along the slot's ±x axis (§9.6) still passes through the hall-side hangar arm while it is
+  open, and the overhead beam blocks vertical entry; if that shows in combined docking shots the hangar
+  arms need to swing further clear (or be left to this module's clamps). This module's clamps fold flat
+  under the beam when open so its own hardware never intersects an approaching fighter.
+* The shuttle's origin is `standHeight` (2.85 m) above `shuttlePad().pos.y`; the pad top must be at
+  `pos.y` for the skid pads to touch (it is, since the shuttle bay's fix round).
+* The harness HUD draws a crosshair at the exact frame centre in every view; it is not part of this module.
 * Racked fighters are static instances; only movers rewrite matrices (≤ 16 + external spawns).

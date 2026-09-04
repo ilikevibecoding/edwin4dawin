@@ -188,15 +188,16 @@ export function buildFighter(PALETTE) {
   const b = new Builder();
   const R = 2.2;
   b.add(new THREE.SphereGeometry(R, 14, 9), { color: C.hull });
-  // forward viewport: octagonal bezel tube (outer wall + front annulus), recessed glass 0.22 m inside with
-  // an inward-facing tube wall, a thin lit rim around the glass and four flat crossing struts (8 spokes)
-  const VZ = -2.05; // bezel front plane
-  b.cyl(1.08, 1.08, 0.36, 8, "z", { pos: [0, 0, VZ + 0.18], color: C.frame, open: true, spin: Math.PI / 8 });
+  // forward viewport: octagonal bezel tube (outer wall + front annulus) standing 14 cm proud of the sphere's
+  // nose (z -2.2), glass recessed 12 cm inside it (still 2 cm ahead of the hull at the centre) behind an
+  // inward-facing tube wall, a thin lit rim around the glass and four flat crossing struts (8 spokes)
+  const VZ = -2.34; // bezel front plane
+  b.cyl(1.08, 1.08, 0.4, 8, "z", { pos: [0, 0, VZ + 0.2], color: C.frame, open: true, spin: Math.PI / 8 });
   b.add(new THREE.RingGeometry(0.9, 1.08, 8, 1, Math.PI / 8), { pos: [0, 0, VZ], rot: [0, Math.PI, 0], color: C.frame });
-  b.add(innerTube(0.9, 0.9, 0.22, 8).rotateX(Math.PI / 2).rotateZ(Math.PI / 8), { pos: [0, 0, VZ + 0.11], color: C.dark });
-  b.add(new THREE.CircleGeometry(0.9, 8, Math.PI / 8), { pos: [0, 0, VZ + 0.22], rot: [0, Math.PI, 0], color: C.glass, emit: [0.01, 0.02, 0.035] });
-  b.add(new THREE.RingGeometry(0.82, 0.9, 8, 1, Math.PI / 8), { pos: [0, 0, VZ + 0.2], rot: [0, Math.PI, 0], color: C.frame, emit: [0.5, 0.64, 0.9] });
-  for (let i = 0; i < 4; i++) b.add(new THREE.PlaneGeometry(0.07, 1.78), { pos: [0, 0, VZ + 0.12], rot: [0, Math.PI, (i * Math.PI) / 4], color: C.frame, emit: [0.05, 0.06, 0.08] });
+  b.add(innerTube(0.9, 0.9, 0.12, 8).rotateX(Math.PI / 2).rotateZ(Math.PI / 8), { pos: [0, 0, VZ + 0.06], color: C.dark });
+  b.add(new THREE.CircleGeometry(0.9, 8, Math.PI / 8), { pos: [0, 0, VZ + 0.12], rot: [0, Math.PI, 0], color: C.glass, emit: [0.01, 0.02, 0.035] });
+  b.add(new THREE.RingGeometry(0.82, 0.9, 8, 1, Math.PI / 8), { pos: [0, 0, VZ + 0.1], rot: [0, Math.PI, 0], color: C.frame, emit: [0.5, 0.64, 0.9] });
+  for (let i = 0; i < 4; i++) b.add(new THREE.PlaneGeometry(0.07, 1.78), { pos: [0, 0, VZ + 0.05], rot: [0, Math.PI, (i * Math.PI) / 4], color: C.frame, emit: [0.05, 0.06, 0.08] });
   // top hatch (octagonal)
   b.cyl(0.72, 0.72, 0.26, 8, "y", { pos: [0, R - 0.05, 0], color: C.frame });
   // aft engine block: dark housing, two nozzle bells with a light lip ring and a recessed dark throat

@@ -165,9 +165,9 @@ export default {
     "sys-traffic-approach": { mode: "exterior", camPos: [20, -108, 8], lookAt: [0, -82, 34], time: 40 },
     // on the deck outside the aperture rail (x -36), looking up at both port rack tiers
     "sys-traffic-racks": { pos: [-42, -72, 40], yaw: 108, pitch: 18, time: 40 },
-    // 33 m from the hover point, aft-starboard of it and 18 m above the deck: A0 hovers 46..48 s, so at 47 it
+    // 27 m from the hover point, aft-starboard of it and 20 m above the deck: A0 hovers 46..48 s, so at 47 it
     // sits level with its engines toward the camera, the landing light sweeping down and the hold glow under it
-    "sys-traffic-hover": { mode: "exterior", camPos: [24, -54, 50], lookAt: [0, -40, 32], time: 47 },
+    "sys-traffic-hover": { mode: "exterior", camPos: [20, -52, 46], lookAt: [0, -40, 32], time: 47 },
     // on alpha's loop 100 m behind / 45 m right / 30 m above the lead as the V passes its first control point
     "sys-traffic-patrol": { mode: "exterior", camPos: PATROL_CAM.pos, lookAt: PATROL_CAM.lookAt, time: 40 },
   },
