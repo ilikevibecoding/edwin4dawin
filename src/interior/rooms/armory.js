@@ -265,6 +265,34 @@ export function buildArmory(kit, ctx) {
   // ------------------------------------------------------------------ cage with the counter hatch and an open gate
   const gate = [counterZ + 1.5, counterZ + 2.6];
   cageWall(kit, cageX, min[2] + 0.2, max[2] - 0.2, [[counterZ - 1.4, counterZ + 1.4], gate], H);
+  // rack-top band on the visitor face of the header: the bare plate above the cage was the upper 40 %
+  // of the fixed frame with only the two beacons on it. A cable tray runs under the ceiling trim, the
+  // seam bays alternate vent grilles and RESTRICTED repeat stencils, and each bay carries a status lamp
+  {
+    const hb = [[cageX + 0.07, 0, min[2]], [max[0], H, max[2]]]; // wall frame on the header face, u = max.z - z
+    const z0 = min[2] + 0.2;
+    const z1 = max[2] - 0.2;
+    const len = z1 - z0;
+    const nSeam = Math.max(2, Math.round(len / 1.3));
+    const bayW = len / nSeam;
+    cableTray(kit, ctx, "xmin", max[2] - z1 + 0.25, max[2] - z0 - 0.25, H - 0.34, hb);
+    const { frame } = wallFrame(kit, [cageX + 0.07, max[2]], [cageX + 0.07, min[2]], 0);
+    for (let i = 0; i < nSeam; i++) {
+      const zc = z0 + (i + 0.5) * bayW;
+      if (beaconZ.some((bz) => Math.abs(bz - zc) < 0.7)) continue; // the beacon units own their bays
+      const u = max[2] - zc;
+      const v = CAGE_H + 0.5;
+      if (i % 2 === 0) {
+        ventGrille(frame, u, v, 0.86, 0.34, 0.06);
+      } else {
+        frame.box("paintedMetal", u, v, 0.062, 1.0, 0.3, 0.012, { color: PALETTE.impLight, texel: 2 });
+        wallSign(kit, ctx, { side: "xmin", u, v, w: 0.9, cell: SIGN.RESTRICTED, lit: false, plate: false, bounds: [[cageX + 0.14, 0, min[2]], [max[0], H, max[2]]] });
+      }
+      // small status lamp under the tray, one per bay (steady red on the restricted bays)
+      frame.box("paintedMetal", u, H - 0.47, 0.05, 0.14, 0.08, 0.06, { color: PALETTE.impBlack, texel: 2 });
+      frame.box(i % 2 === 0 ? "emitGreen" : "emitRedDim", u, H - 0.47, 0.082, 0.06, 0.03, 0.006);
+    }
+  }
   // counter hatch: a deep black lintel under the header carrying the lit RESTRICTED plate toward the
   // visitor, with a thin dim strip under it (the hatch opening runs from the counter top to the lintel)
   {
@@ -316,7 +344,9 @@ export function buildArmory(kit, ctx) {
     kit.collider([cageX - 0.55, 0, counterZ - cw / 2 - 0.02], [cageX + 0.45, 1.08, counterZ + cw / 2 + 0.02], "counter");
     impChair(kit, ctx, { x: cageX - 1.0, z: counterZ, yaw: -Math.PI / 2 });
     wallSign(kit, ctx, { side: "xmax", u: counterZ - min[2], v: 3.25, w: 1.6, cell: SIGN.ARMOURY, lit: true });
-    floorSign(kit, SIGN.RESTRICTED, cageX + 1.6, counterZ, 1.8, Math.PI / 2, false);
+    // (between the counter and the queue rail: at cageX + 1.6 the stencil straddled the fixed view's
+    // bottom edge and read as a bisected line of text)
+    floorSign(kit, SIGN.RESTRICTED, cageX + 0.95, counterZ, 1.8, Math.PI / 2, false);
     // queue rail 1.2 m out from the counter face with a gap at the hatch, and a visitor-facing issue
     // status board on the cage beside the hatch
     const qx = cageX + 0.45 + 1.2;
