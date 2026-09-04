@@ -115,7 +115,7 @@ export function buildBridge(kit, ctx) {
     });
     const { frame: up } = wallFrame(kit, w.from, w.to, y + LOWER);
     impWall(up, length, H - LOWER, {
-      pitch: 4,
+      pitch: 6,
       tone: IMP.wallDark,
       toneAlt: IMP.consoleDark,
       bandMat: "bridgeBand",
@@ -166,7 +166,7 @@ export function buildBridge(kit, ctx) {
   mm(kit, "bridgeGloss", [-WALK, y - 0.14, PIT_Z0], [WALK, y, PIT_Z1], { color: IMP.white, texel: 0.25 });
   for (const s of [-1, 1]) {
     mm(kit, "emitBlue", [s * (WALK - 0.1), y + 0.003, PIT_Z0 + 0.2], [s * (WALK - 0.04), y + 0.011, PIT_Z1 - 0.2]);
-    railing(kit, [s * (WALK - 0.16), CAP_Z1 + 0.2], [s * (WALK - 0.16), PIT_Z1 - 0.15], y, { h: 0.86, postPitch: 2.0, lit: true });
+    railing(kit, [s * (WALK - 0.16), CAP_Z1 + 0.2], [s * (WALK - 0.16), PIT_Z1 - 0.15], y, { h: 0.86, postPitch: 2.6, lit: true });
   }
   for (let z = PIT_Z0 + 4; z < PIT_Z1 - 1; z += 4) mm(kit, "impMetal", [-WALK + 0.25, y + 0.002, z - 0.015], [WALK - 0.25, y + 0.006, z + 0.015], { color: IMP.gunmetal });
 
@@ -191,8 +191,8 @@ export function buildBridge(kit, ctx) {
   // ---------------------------------------------------------------------------------------------
   for (const s of [-1, 1]) {
     // railing along the pit edge (on the kerb), lit
-    railing(kit, [s * (PIT_X1 + 0.15), PIT_Z0 + 0.15], [s * (PIT_X1 + 0.15), PIT_Z1 - 0.1], y, { h: 1.05, postPitch: 2.0, lit: true });
-    railing(kit, [s * (PIT_X0 + 0.15), PIT_Z0 + 0.15], [s * (PIT_X1 + 0.15), PIT_Z0 + 0.15], y, { h: 1.05, postPitch: 1.8, lit: true });
+    railing(kit, [s * (PIT_X1 + 0.15), PIT_Z0 + 0.15], [s * (PIT_X1 + 0.15), PIT_Z1 - 0.1], y, { h: 1.05, postPitch: 2.6, lit: true });
+    railing(kit, [s * (PIT_X0 + 0.15), PIT_Z0 + 0.15], [s * (PIT_X1 + 0.15), PIT_Z0 + 0.15], y, { h: 1.05, postPitch: 2.4, lit: true });
     // wall stations along the outer wall, in two groups
     let k = 0;
     for (const z of [556.5, 559.6, 562.7, 574.5, 577.6, 580.7]) {
@@ -202,9 +202,9 @@ export function buildBridge(kit, ctx) {
     // heavy structural columns against the outer wall
     for (const z of [568.6, 587.2]) column(kit, s * (xi1 - 0.28), z, y, ceilY, { w: 0.7, d: 0.7, lit: true, tone: IMP.wallDark });
     // standing officer stations facing the windows over the pit
-    impConsole(kit, ctx, [s * 13.2, y, 557.8], 0, { kind: "station", width: 1.4, seed: 41 + s, light: false });
-    impConsole(kit, ctx, [s * 13.2, y, 585.2], 0, { kind: "station", width: 1.4, seed: 47 + s, light: false });
-    impConsole(kit, ctx, [s * 17.4, y, 585.2], 0, { kind: "station", width: 1.4, seed: 53 + s, light: false });
+    bridgeConsole(kit, [s * 13.2, y, 557.8], 0, { width: 1.4, seed: 41 + s });
+    bridgeConsole(kit, [s * 13.2, y, 585.2], 0, { width: 1.4, seed: 47 + s });
+    bridgeConsole(kit, [s * 17.4, y, 585.2], 0, { width: 1.4, seed: 53 + s });
     // storage: lockers on the outer wall between the aft column and the aft doors, crates in the corners
     {
       const w = s > 0 ? walls.east : walls.west;
@@ -240,8 +240,9 @@ export function buildBridge(kit, ctx) {
     frame.box("leds", u, 1.12, 0.026, 0.4, 0.04, 0.01, { uv: "keep" });
     frame.quad("impDecal", u, 2.02, 0.021, 0.3, 0.3, { uvRect: impDecalRect(3) });
   }
-  pointLightDesc(ctx, IMP.amber, 2.0, 6, [0, y + 3.9, zi1 - 0.6], 0);
-  for (const s of [-1, 1]) pointLightDesc(ctx, IMP.red, 1.4, 5, [s * 14, y + 3.3, zi1 - 0.6], 0);
+  // door lights: amber over the main door approach, red at the side doors (they also light the door leaves)
+  pointLightDesc(ctx, IMP.amber, 2.4, 7, [0, y + 2.4, zi1 - 1.4], 1);
+  for (const s of [-1, 1]) pointLightDesc(ctx, IMP.red, 1.6, 5, [s * 14, y + 2.2, zi1 - 1.2], 0);
 
   // ---------------------------------------------------------------------------------------------
   // Forward wall: window banks, central pillar, sill bench with its consoles
@@ -250,7 +251,7 @@ export function buildBridge(kit, ctx) {
   kit.collider([xi0, y, FRAME_Z], [xi1, y + 0.95, SILL_Z + BENCH_D + 0.05], "sill");
 
   // captain's command console on the step, facing the windows
-  impConsole(kit, ctx, [0, y + CAP_STEP, CAP_Z0 + 2.3], 0, { kind: "station", width: 1.5, screens: 2, seed: 77, light: false });
+  const capConsole = bridgeConsole(kit, [0, y + CAP_STEP, CAP_Z0 + 2.3], 0, { width: 1.5, screens: 2, seed: 77, keyPitch: 0.13 });
   pointLightDesc(ctx, 0xcfe0ff, 1.6, 4.5, [0, y + CAP_STEP + 1.5, CAP_Z0 + 2.5], 1);
 
   // ---------------------------------------------------------------------------------------------
@@ -277,18 +278,13 @@ export function buildBridge(kit, ctx) {
   {
     const mat = new THREE.MeshStandardMaterial({ color: 0x0c1016, emissive: IMP.blue, emissiveIntensity: 0.45, roughness: 0.3, metalness: 0.1 });
     const plate = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.05, 0.16), mat);
-    // console(): slab centre = pos + (0, h+0.05, -depth + slabLen/2 + 0.05), tilted -0.42 about X;
-    // the plate sits over the middle of the indicator row, between the screens and the key row
-    const tq = new THREE.Quaternion().setFromAxisAngle(X_AXIS, -0.42);
-    const top = new THREE.Vector3(0, y + CAP_STEP + 0.83, CAP_Z0 + 2.3 - 0.85 + 0.31 + 0.05);
-    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(tq);
-    const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(tq);
-    plate.position.copy(top).addScaledVector(fwd, -0.15).addScaledVector(up, 0.07);
-    plate.quaternion.copy(tq);
+    // the plate sits on the slab over the middle of the indicator row, between the screens and the keys
+    plate.position.copy(capConsole.slab(0, 0.06, 0.03));
+    plate.quaternion.copy(capConsole.slabQuat);
     ctx.add(plate);
     // insignia stencil on the plate (merged into the room's decal mesh)
-    const ip = top.clone().addScaledVector(fwd, -0.15).addScaledVector(up, 0.097);
-    kit.add("impDecal", new THREE.PlaneGeometry(0.18, 0.18), { pos: [ip.x, ip.y, ip.z], quat: tq.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, -Math.PI / 2)), uv: "keep", uvRect: impDecalRect(4) });
+    const ip = capConsole.slab(0, 0.06, 0.056);
+    kit.add("impDecal", new THREE.PlaneGeometry(0.17, 0.17), { pos: [ip.x, ip.y, ip.z], quat: capConsole.planeQuat, uv: "keep", uvRect: impDecalRect(4) });
     ctx.interactables.push({
       object: plate,
       material: mat,
@@ -423,7 +419,7 @@ function buildPit(kit, ctx, s, y, pitY, alertLights) {
   const pitch = (zB - zA) / n;
   for (let i = 0; i < n; i++) {
     const cz = zA + (i + 0.5) * pitch;
-    impConsole(kit, ctx, [s * 8.5, pitY, cz], (-s * Math.PI) / 2, { kind: "wide", width: pitch - 0.5, screens: 3, seed: 100 + i * 7 + (s > 0 ? 50 : 0), light: false });
+    bridgeConsole(kit, [s * 8.5, pitY, cz], (-s * Math.PI) / 2, { width: pitch - 0.5, screens: 3, seed: 100 + i * 7 + (s > 0 ? 50 : 0) });
     if (i % 4 !== 2) chair(kit, [s * 7.82, pitY, cz + (i % 2 ? 0.18 : -0.12)], (-s * Math.PI) / 2 + (rand() - 0.5) * 0.5, { collide: i % 2 === 0 });
   }
   // inner wall (under the walkway): continuous low desks with wall screens, chairs facing the wall
@@ -457,11 +453,12 @@ function buildPit(kit, ctx, s, y, pitY, alertLights) {
   if (s > 0) {
     const cz = zA + 5.5 * pitch;
     const mat = new THREE.MeshStandardMaterial({ color: 0x11151b, emissive: IMP.blue, emissiveIntensity: 0.35, roughness: 0.35, metalness: 0.1 });
+    const riserTop = pitY + 0.78 + 0.67; // bridgeConsole riser top
     const hood = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.62), mat);
-    hood.position.set(s * 9.27, pitY + 0.78 + 0.67 + 0.15, cz);
+    hood.position.set(s * 9.2, riserTop + 0.06 + 0.15, cz);
     ctx.add(hood);
-    kit.box("impPaintedMetal", s * 9.24, pitY + 0.78 + 0.67 + 0.15, cz, 0.44, 0.06, 0.66, { color: IMP.trim, texel: 1 });
-    kit.box("emitBlue", s * 9.05, pitY + 0.78 + 0.67 + 0.15, cz, 0.02, 0.16, 0.42);
+    kit.box("impPaintedMetal", s * 9.19, riserTop + 0.03, cz, 0.46, 0.06, 0.68, { color: IMP.trim, texel: 1 });
+    kit.box("emitBlue", s * 8.99, riserTop + 0.06 + 0.15, cz, 0.02, 0.16, 0.42);
     ctx.interactables.push({
       object: hood,
       material: mat,
@@ -546,6 +543,74 @@ function slopedSlab(frame, cu, cv, cn, w, d, a, items, tone = IMP.consoleDark) {
   return { ca, sa };
 }
 
+// Bridge duty console: pedestal, body, a slab tilted TOWARD the operator (screens along the far edge,
+// indicator grid and a key row nearest the operator), rear riser with a vertical screen. pos = floor
+// point at the operator's side centre, yaw 0 faces -Z (operator looks over the console toward -Z).
+// Returns helpers to place extra parts on the slab surface: slab(x, dd, lift) -> world point, slabQuat.
+function bridgeConsole(kit, pos, yaw, opts = {}) {
+  const { width = 1.4, depth = 0.85, h = 0.78, screens = 2, seed = 3, riser = true, color = IMP.console, keys = true, keyPitch = 0.18 } = opts;
+  const rand = rng(seed);
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const o = new THREE.Vector3(pos[0], pos[1], pos[2]);
+  const L = (x, y, z) => o.clone().add(new THREE.Vector3(x, y, z).applyQuaternion(q));
+  const box = (mat, x, y, z, sx, sy, sz, extra = {}) => {
+    const p = L(x, y, z);
+    return kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: [p.x, p.y, p.z], quat: q, ...extra });
+  };
+  box("impPaintedMetal", 0, 0.06, -depth / 2, width - 0.2, 0.12, depth - 0.2, { color: IMP.trim, texel: 1 });
+  box("impPaintedMetal", 0, h / 2, -depth / 2, width, h, depth, { color, texel: 1 });
+  box("impPaintedMetal", 0, h * 0.4, 0.005, width - 0.16, h * 0.5, 0.01, { color: IMP.consoleDark, texel: 1 });
+  box("emitBlue", 0, 0.16, 0.005, width - 0.3, 0.02, 0.01);
+  // slab: centre above the body, tilted by a about local X so the operator's edge (+z) is lower
+  const a = 0.4;
+  const slabLen = 0.62;
+  const c = new THREE.Vector3(0, h + 0.1, -depth / 2 + 0.02);
+  const dir = new THREE.Vector3(0, -Math.sin(a), Math.cos(a)); // along the slab toward the operator
+  const up = new THREE.Vector3(0, Math.cos(a), Math.sin(a));
+  const slabQuat = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, a));
+  const planeQuat = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, a - Math.PI / 2));
+  const slab = (x, dd, lift = 0) => {
+    const p = c.clone().addScaledVector(dir, dd).addScaledVector(up, 0.03 + lift);
+    p.x += x;
+    return L(p.x, p.y, p.z);
+  };
+  {
+    const p = L(c.x, c.y, c.z);
+    kit.add("impPaintedMetal", new THREE.BoxGeometry(width, 0.06, slabLen), { pos: [p.x, p.y, p.z], quat: slabQuat, color: IMP.consoleDark, texel: 1 });
+  }
+  const n = Math.max(1, Math.min(screens, Math.floor(width / 0.55)));
+  for (let i = 0; i < n; i++) {
+    const x = -width / 2 + (width / n) * (i + 0.5);
+    const sw = width / n - 0.16;
+    const p = slab(x, -0.14, 0.006);
+    kit.add("darkGloss", new THREE.BoxGeometry(sw + 0.04, 0.012, 0.27), { pos: [p.x, p.y, p.z], quat: slabQuat });
+    const p2 = slab(x, -0.14, 0.013);
+    kit.add("screen" + Math.floor(rand() * 3), new THREE.PlaneGeometry(sw, 0.23), { pos: [p2.x, p2.y, p2.z], quat: planeQuat, uv: "keep" });
+  }
+  {
+    const g = slab(0, 0.06, 0.002);
+    kit.add(rand() < 0.5 ? "blink" : "blinkDense", new THREE.PlaneGeometry(width - 0.24, 0.1), { pos: [g.x, g.y, g.z], quat: planeQuat, uv: "keep" });
+  }
+  if (keys) {
+    const nb = Math.floor((width - 0.36) / keyPitch);
+    for (let b = 0; b < nb; b++) {
+      const p = slab(-((nb - 1) * keyPitch) / 2 + b * keyPitch, 0.19, 0.012);
+      const em = rand() < 0.28;
+      kit.add(em ? ["emitRed", "emitBlue", "emitAmber", "emitWhite"][Math.floor(rand() * 4)] : "impRubber", new THREE.BoxGeometry(keyPitch * 0.62, 0.025, 0.06), { pos: [p.x, p.y, p.z], quat: slabQuat, color: IMP.rubber });
+    }
+  }
+  if (riser) {
+    box("impPaintedMetal", 0, h + 0.36, -depth + 0.06, width - 0.2, 0.62, 0.1, { color: IMP.consoleDark, texel: 1 });
+    box("darkGloss", 0, h + 0.38, -depth + 0.116, width - 0.4, 0.42, 0.01);
+    box("screen" + Math.floor(rand() * 3), 0, h + 0.38, -depth + 0.123, width - 0.5, 0.34, 0.004, { uv: "keep" });
+    box("blinkSparse", 0, h + 0.615, -depth + 0.116, width - 0.4, 0.05, 0.01, { uv: "keep" });
+  }
+  const c0 = L(-width / 2, 0, 0.05);
+  const c1 = L(width / 2, 0, -depth - 0.05);
+  kit.collider([Math.min(c0.x, c1.x), pos[1], Math.min(c0.z, c1.z)], [Math.max(c0.x, c1.x), pos[1] + h + 0.7, Math.max(c0.z, c1.z)], "console");
+  return { slab, slabQuat, planeQuat };
+}
+
 // Row of physical keys along a sloped slab (tilt a, centre cv/cn) at slab depth offset dd.
 function keyRow(frame, rand, cu, cv, cn, a, dd, w, pitchU) {
   const ca = Math.cos(a);
@@ -572,7 +637,7 @@ function deskSegment(frame, cu, w, seed) {
     { mat: rand() < 0.5 ? "blink" : "blinkDense", du: w * 0.2, dd: -0.06, w: w * 0.36, h: 0.22 },
     { mat: "blinkSparse", du: 0, dd: 0.17, w: w - 0.4, h: 0.07 },
   ]);
-  keyRow(frame, rand, cu, 0.78, 0.38, a, 0.09, w - 0.5, 0.16);
+  keyRow(frame, rand, cu, 0.78, 0.38, a, 0.09, w - 0.5, 0.2);
   // riser screen + indicator block on the wall above the desk
   wallScreen(frame, cu - w * 0.16, 1.32, w * 0.5, 0.42, Math.floor(rand() * 3), { leds: false });
   frame.box("impPaintedMetal", cu + w * 0.3, 1.32, 0.05, w * 0.26, 0.5, 0.04, { color: IMP.consoleDark, texel: 1 });
@@ -775,7 +840,7 @@ function sillBench(kit, y, xi0, xi1, [xa, xb]) {
 // -----------------------------------------------------------------------------------------------
 function buildCeiling(kit, ctx, { xi0, xi1, zi1, ceilY }) {
   const cf = ceilingFrame(kit, xi0, SILL_Z, ceilY);
-  impCeiling(cf, xi1 - xi0, zi1 - SILL_Z, { lights: false, tone: IMP.wallDark, panelW: 3, seed: 77 });
+  impCeiling(cf, xi1 - xi0, zi1 - SILL_Z, { lights: false, tone: IMP.wallDark, panelW: 4, seed: 77 });
   const trim = { color: IMP.trim, texel: 0.5 };
   // central beam over the walkway
   mm(kit, "impPaintedMetal", [-1.7, ceilY - 0.8, SILL_Z + 0.75], [1.7, ceilY - 0.02, zi1 - 0.2], trim);
