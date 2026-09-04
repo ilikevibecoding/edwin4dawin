@@ -242,9 +242,10 @@ function buildPits(ctx) {
 // ---------------------------------------------------------------------------------------------------
 // Forward glazing. The exterior tower carries the outer pane 2.5 m outside our wall plane, at the far end of a
 // dark slot whose sill/lintel boxes poke 15 cm into the room. We build the inner band: a deep steel sill deck
-// running out to the exterior pane, tall panes that lean 12° outward from a lip at the room side of the sill
+// running out to the exterior pane, tall panes that lean ~11° outward from a lip at the room side of the sill
 // up to the wall plane at the head (nothing we build passes the tower's front face), tapered black mullions,
-// a sloped readout desk under the lip, jamb returns and a head beam that swallow the exterior intrusions.
+// a black plinth under the lip, jamb returns and a head beam that swallow the exterior intrusions.
+// The sill height follows the layout's window opening (v0, currently 0.5 m so a standing officer sees the hull).
 // ---------------------------------------------------------------------------------------------------
 function buildGlazing(ctx) {
   const { kit } = ctx;
@@ -266,42 +267,39 @@ function buildGlazing(ctx) {
   const wc = (wx0 + wx1) / 2;
   const ww = wx1 - wx0;
 
-  // --- sill deck (behind the glass): steel plate out to the exterior pane, recessed sensor channel with LEDs
-  kit.boxMM("metal", [X0, ySill - 0.06, zOut], [X1, ySill, zFoot + 0.02], { color: IMP.steelDark });
+  // --- sill deck (behind the glass): plated deck out to the exterior pane, recessed sensor channel with LEDs
+  kit.boxMM("plate", [X0, ySill - 0.06, zOut], [X1, ySill, zFoot + 0.02], { color: IMP.plate, uv: "world", texel: 1 });
   kit.boxMM("darkGloss", [wx0 + 0.3, ySill, zOut + 0.9], [wx1 - 0.3, ySill + 0.03, zOut + 1.3]);
   for (let x = wx0 + 1.3; x < wx1 - 1.0; x += 4.4) kit.box("leds", x, ySill + 0.033, zOut + 1.1, 2.2, 0.004, 0.09, { uv: "keep", uvRect: ledRect(Math.floor(ctx.rand() * 16)) });
 
-  // --- plinth on the room side: wall below the sill, sloped readout desk, steel lip under the glass foot
+  // --- plinth on the room side: black wall under the sill deck with a recessed kick, a steel cap that carries
+  //     the glass foot and overhangs the face, and a channel under the cap with one blue light bar per pane bay
+  const zFace = zLip + 0.25; // room-side face of the plinth
+  // mullion x positions match the exterior tower mullions (x = -32 + 2.2k)
+  const mull = [];
+  for (let x = -32; x < 40; x += 2.2) if (x > wx0 + 0.3 && x < wx1 - 0.3) mull.push(+x.toFixed(2));
+  const edges = [wx0, ...mull, wx1];
   const pl = prism(
     [
       [zf - 0.45, FLOOR],
       [zf - 0.45, ySill - 0.02],
-      [zLip, ySill - 0.02],
-      [zLip + 0.4, FLOOR + 0.62],
-      [zLip + 0.4, FLOOR + 0.3],
-      [zLip + 0.25, FLOOR + 0.3],
-      [zLip + 0.25, FLOOR],
+      [zFace, ySill - 0.02],
+      [zFace, FLOOR + 0.12],
+      [zFace - 0.06, FLOOR + 0.12],
+      [zFace - 0.06, FLOOR],
     ],
     W,
   );
   kit.add("paintedMetal", pl, { rot: [0, -Math.PI / 2, 0], color: IMP.black, uv: "world", texel: 1 });
-  kit.boxMM("metal", [X0, ySill - 0.04, zFoot + 0.02], [X1, ySill + 0.04, zLip + 0.02], { color: IMP.steelDark }); // lip
-  kit.boxMM("plate", [X0, FLOOR + 0.3, zLip + 0.36], [X1, FLOOR + 0.62, zLip + 0.42], { color: IMP.plateDark, uv: "world", texel: 1 });
-  kit.boxMM("metal", [X0, FLOOR + 0.6, zLip + 0.38], [X1, FLOOR + 0.64, zLip + 0.44], { color: IMP.steelDark });
-  kit.collider([ctx.box.x0, FLOOR, ctx.box.z0 - 0.5], [ctx.box.x1, y1, zLip + 0.44], "sill");
-  {
-    // sloped readout desk: dark gloss with LED matrices and small screens, one group per pane
-    const v = new THREE.Vector3(0, ySill - 0.02 - (FLOOR + 0.62), -0.4).normalize(); // up the slope
-    const sf = new Frame(kit, new THREE.Vector3(X0, FLOOR + 0.62, zLip + 0.4), XAXIS, v);
-    const L = Math.hypot(ySill - 0.02 - (FLOOR + 0.62), 0.4);
-    sf.box("darkGloss", W / 2, L / 2, 0.025, W - 0.3, L - 0.08, 0.04);
-    let i = 0;
-    for (let x = wx0 + 1.1; x < wx1 - 0.8; x += 2.2, i++) {
-      sf.box("leds", x - X0, L * 0.3, 0.048, 1.5, 0.1, 0.006, { uv: "keep", uvRect: ledRect((i * 5 + 3) % 16) });
-      if (i % 2 === 0) sf.box("screen", x - X0, L * 0.68, 0.048, 0.62, 0.28, 0.006, { uv: "keep", uvRect: screenRect([10, 8, 2, 4, 0, 14][(i / 2) % 6]) });
-      else sf.box("leds", x - X0, L * 0.7, 0.048, 1.2, 0.08, 0.006, { uv: "keep", uvRect: ledRect((i * 7 + 1) % 16) });
-    }
+  kit.boxMM("metal", [X0, ySill - 0.04, zFoot + 0.02], [X1, ySill + 0.04, zFace + 0.02], { color: IMP.steelDark }); // cap
+  kit.boxMM("paintedMetal", [wx0 - 0.05, ySill - 0.16, zFace - 0.02], [wx1 + 0.05, ySill - 0.06, zFace + 0.01], { color: IMP.black, texel: 1 });
+  for (let i = 0; i < edges.length - 1; i++) {
+    const cx = (edges[i] + edges[i + 1]) / 2;
+    const bw = edges[i + 1] - edges[i] - 0.7;
+    if (bw < 0.5) continue; // the narrow end bays beside the jambs stay dark
+    kit.boxMM("emitBlue", [cx - bw / 2, ySill - 0.12, zFace + 0.01], [cx + bw / 2, ySill - 0.1, zFace + 0.018]);
   }
+  kit.collider([ctx.box.x0, FLOOR, ctx.box.z0 - 0.5], [ctx.box.x1, y1, zFace + 0.02], "sill");
 
   // --- jamb returns (x 13..13.75) reaching out along the slot, plated on the room face, lit slot on the return
   for (const s of [-1, 1]) {
@@ -326,10 +324,6 @@ function buildGlazing(ctx) {
   const V = new THREE.Vector3(0, Math.cos(lean), -Math.sin(lean));
   const gf = new Frame(kit, new THREE.Vector3(0, ySill, zFoot), XAXIS, V);
   gf.box("paintedMetal", wc, 0.03, 0, ww + 0.1, 0.12, 0.14, { color: IMP.black, texel: 1 }); // foot bead
-  // mullion x positions match the exterior tower mullions (x = -32 + 2.2k)
-  const mull = [];
-  for (let x = -32; x < 40; x += 2.2) if (x > wx0 + 0.3 && x < wx1 - 0.3) mull.push(+x.toFixed(2));
-  const edges = [wx0, ...mull, wx1];
   // panes: one merged mesh on a darker, rougher clone of the glass so the room lights do not paint milky
   // highlights over the view (the exterior pane already adds its own layer of reflection)
   const panes = [];
@@ -699,20 +693,33 @@ function wedgeGeometry() {
   return mergeGeometries([hull, terrace, tower, planet, ring], false);
 }
 
+/**
+ * Opacity setter that works for both hologram material flavours: the plain additive MeshBasicMaterial and the
+ * atmosphere system's ShaderMaterial (which reads `uniforms.opacity`, synced from `.opacity` only on the shared
+ * instance, never on clones).
+ */
+function setHoloOpacity(m, v) {
+  m.opacity = v;
+  if (m.uniforms && m.uniforms.opacity) m.uniforms.opacity.value = v;
+}
+
 function buildAnimated(ctx) {
   const M = ctx.materials;
   const anim = animState(ctx);
   // --- hologram over the dais projector
   const wire = M.holo.clone();
+  const shaderHolo = !!wire.uniforms; // the shader flavour modulates alpha itself (scanlines, rim), so it runs hotter
+  const wireBase = shaderHolo ? 0.78 : 0.4;
+  const beamBase = shaderHolo ? 0.12 : 0.03;
   wire.wireframe = true;
-  wire.opacity = 0.5;
+  setHoloOpacity(wire, wireBase + 0.1);
   const holo = new THREE.Mesh(wedgeGeometry(), wire);
   const baseY = FLOOR + DAIS.h + 0.95 + 0.8;
   holo.position.set(-2.25, baseY, 178.0);
   holo.scale.setScalar(0.9);
   ctx.add(holo);
   const beamMat = M.holo.clone();
-  beamMat.opacity = 0.035;
+  setHoloOpacity(beamMat, beamBase);
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 0.14, 1.6, 28, 1, true), beamMat);
   beam.position.set(-2.25, FLOOR + DAIS.h + 0.95 + 0.8, 178.0);
   ctx.add(beam);
@@ -753,8 +760,9 @@ function buildAnimated(ctx) {
   ctx.animate((dt, t) => {
     holo.rotation.y = t * 0.35;
     holo.position.y = baseY + Math.sin(t * 1.1) * 0.03;
-    wire.opacity = 0.4 + 0.08 * Math.sin(t * 17.0) + 0.06 * Math.sin(t * 3.1);
-    beamMat.opacity = 0.03 + 0.01 * Math.sin(t * 5.3);
+    setHoloOpacity(wire, wireBase + 0.08 * Math.sin(t * 17.0) + 0.06 * Math.sin(t * 3.1));
+    setHoloOpacity(beamMat, beamBase * (1 + 0.3 * Math.sin(t * 5.3)));
+    for (const m of [wire, beamMat]) if (m.uniforms && m.uniforms.time) m.uniforms.time.value = t;
     red.emissiveIntensity = redBase * (0.12 + 0.88 * Math.pow(0.5 + 0.5 * Math.sin(t * 2.6), 3));
     amber.emissiveIntensity = amberBase * (Math.sin(t * 7.0) > 0.2 ? 1 : 0.08);
     for (const s of screens) {
