@@ -206,14 +206,14 @@ export function buildShell(ctx, spec) {
         const n = WALL_T - PANEL_T / 2;
         if (v0 < 0.01) {
           // kick plate: dark, slightly proud, with a scuff line
-          box("paintedMetal", cu, cv, n + 0.01, cw - SEAM, ch - SEAM, PANEL_T + 0.02, { color: kickColor, texel: 1 });
+          box("paintedMetal", cu, cv, n + 0.01, cw - SEAM, ch - SEAM, PANEL_T + 0.02, { color: kickColor, texel: 2.5 });
         } else if (hasStrip && Math.abs(v0 - stripY) < 0.02) {
           // light strip band: recessed housing + emitter
           box("paintedMetal", cu, cv, n - 0.02, cw - SEAM, ch - SEAM, PANEL_T - 0.04, { color: P("impBlack") });
-          box(spec.stripMat || "emitWhite", cu, cv, n + 0.005, cw - SEAM - 0.08, 0.07, 0.02);
+          box(spec.stripMat || "emitWhite", cu, cv, n + 0.005, cw - SEAM - 0.08, 0.05, 0.02);
         } else if (v1 > H - 0.01) {
           // cornice band
-          box("paintedMetal", cu, cv, n - 0.01, cw - SEAM, ch - SEAM, PANEL_T - 0.02, { color: corniceColor, texel: 1 });
+          box("paintedMetal", cu, cv, n - 0.01, cw - SEAM, ch - SEAM, PANEL_T - 0.02, { color: corniceColor, texel: 2.5 });
         } else {
           const c = rand() < (spec.altChance ?? 0.14) ? wallAlt : wallColor;
           const g = box(panelMat, cu, cv, n, cw - SEAM, ch - SEAM, PANEL_T, { color: c, uv: "keep" });
@@ -238,12 +238,75 @@ export function buildShell(ctx, spec) {
       if (o.glass) box("glass", (o.u0 + o.u1) / 2, (o.v0 + o.v1) / 2, WALL_T / 2, o.u1 - o.u0 - 0.1, o.v1 - o.v0 - 0.1, 0.02, { uv: "keep" });
     }
 
+    // door dressing (opt-in `doorDressing: { accent, hazard }`): keypad/status panel right of the
+    // hole at 1.4 m, sign plate left at 2.2 m, lintel indicator, alternating amber/black floor strip
+    // 0.3 m clear of the wall (D's threshold). Uses only keys the shell already needs (+ accent).
+    if (spec.doorDressing) {
+      const dd = spec.doorDressing === true ? {} : spec.doorDressing;
+      const accent = dd.accent || "emitBlue";
+      const dark = P("impBlack");
+      for (const o of ops) {
+        if (!o.isDoor || o.kind === "lift") continue;
+        const w = o.u1 - o.u0;
+        const pu = o.u1 + 0.45 + 0.17;
+        if (pu + 0.2 < L) {
+          box("paintedMetal", pu, 1.4, WALL_T + 0.02, 0.34, 0.44, 0.04, { color: dark, texel: 2.5 });
+          box(accent, pu, 1.56, WALL_T + 0.045, 0.2, 0.05, 0.01);
+          box("paintedMetal", pu, 1.34, WALL_T + 0.045, 0.24, 0.2, 0.01, { color: P("impDark"), texel: 2.5 });
+          for (let k = 0; k < 6; k++) box("paintedMetal", pu - 0.07 + (k % 3) * 0.07, 1.29 + Math.floor(k / 3) * 0.07, WALL_T + 0.052, 0.045, 0.045, 0.006, { color: P("impGrey") });
+        }
+        const su = o.u0 - 0.45 - 0.3;
+        if (su - 0.32 > 0) {
+          box("paintedMetal", su, 2.2, WALL_T + 0.02, 0.6, 0.28, 0.04, { color: dark, texel: 2.5 });
+          box(accent, su - 0.17, 2.2, WALL_T + 0.045, 0.14, 0.14, 0.01);
+          for (let k = 0; k < 3; k++) box("paintedMetal", su + 0.1, 2.28 - k * 0.07, WALL_T + 0.045, 0.28, 0.03, 0.01, { color: P("impGrey") });
+        }
+        if (o.v1 + 0.5 < H) {
+          box("paintedMetal", (o.u0 + o.u1) / 2, o.v1 + 0.35, WALL_T + 0.03, w - 0.4, 0.14, 0.06, { color: dark, texel: 2.5 });
+          box(accent, (o.u0 + o.u1) / 2, o.v1 + 0.35, WALL_T + 0.065, w - 0.6, 0.05, 0.01);
+        }
+        if (dd.hazard !== false) {
+          const segs = Math.max(2, Math.round(w / 0.3));
+          for (let k = 0; k < segs; k++) {
+            const cu = o.u0 + ((k + 0.5) * w) / segs;
+            box("paintedMetal", cu, 0.004, WALL_T + 0.5, w / segs, 0.008, 0.4, { color: k % 2 ? P("impBlack") : P("impAmber") });
+          }
+        }
+      }
+    }
+
+    // service band (opt-in `serviceBand: { y, faces }`): cable tray with cables + two pipe runs with
+    // brackets along the wall, broken around openings that reach the band. Fills the bare band
+    // between the waist strip and the ceiling the way d3-cor does.
+    if (spec.serviceBand && (!spec.serviceBand.faces || spec.serviceBand.faces.includes(fk))) {
+      const sb = spec.serviceBand === true ? {} : spec.serviceBand;
+      const y = sb.y ?? Math.min(H - 0.9, 3.0);
+      const tall = ops.filter((o) => o.v1 > y - 0.3 && o.v0 < y + 0.7);
+      const alongX = Math.abs(f.U[0]) > 0.5;
+      for (const [a, b] of subtract(L, tall.map((o) => [o.u0 - 0.3, o.u1 + 0.3]))) {
+        if (b - a < 0.8) continue;
+        const cu = (a + b) / 2;
+        const len = b - a - 0.1;
+        box("paintedMetal", cu, y, WALL_T + 0.22, len, 0.03, 0.36, { color: P("impDark"), texel: 2.5 });
+        box("paintedMetal", cu, y + 0.06, WALL_T + 0.05, len, 0.12, 0.02, { color: P("impDark"), texel: 2.5 });
+        box("paintedMetal", cu, y + 0.06, WALL_T + 0.39, len, 0.12, 0.02, { color: P("impDark"), texel: 2.5 });
+        for (let k = 0; k < 3; k++) box("paintedMetal", cu, y + 0.035, WALL_T + 0.12 + k * 0.1, len - 0.2, 0.04, 0.04, { color: [P("impBlack"), P("impMid"), P("impAmber")][k] });
+        for (const [dy, r, c] of [[0.42, 0.05, P("steel")], [0.58, 0.035, P("impMid")]]) {
+          const pc = f.world(cu, y + dy, WALL_T + 0.14);
+          kit.cyl("metal", pc[0], pc[1], pc[2], r, len, alongX ? "x" : "z", { color: c, segments: 10 });
+        }
+        for (let u = a + 1.0; u < b - 0.5; u += 3) {
+          box("paintedMetal", u, y + 0.5, WALL_T + 0.09, 0.08, 0.3, 0.18, { color: P("impDark") });
+        }
+      }
+    }
+
     // ribs: vertical structural members clear of openings
     if (ribs > 0) {
       for (let u = ribs / 2; u < L - 0.3; u += ribs) {
         if (ops.some((o) => u > o.u0 - 0.5 && u < o.u1 + 0.5)) continue;
-        box("paintedMetal", u, H / 2, WALL_T + 0.1, 0.36, H, 0.2, { color: P("impDark"), texel: 1 });
-        box("paintedMetal", u, H / 2, WALL_T + 0.22, 0.24, H - 0.8, 0.04, { color: P("impMid"), texel: 1 });
+        box("paintedMetal", u, H / 2, WALL_T + 0.1, 0.36, H, 0.2, { color: P("impDark"), texel: 2.5 });
+        box("paintedMetal", u, H / 2, WALL_T + 0.22, 0.24, H - 0.8, 0.04, { color: P("impMid"), texel: 2.5 });
       }
     }
 
@@ -321,7 +384,7 @@ export function buildShell(ctx, spec) {
       r(c - chanW / 2, c + chanW / 2, ceilY - 0.12, ceilY - 0.02, "paintedMetal", { color: P("impBlack") });
       r(c - chanW / 2 - 0.05, c - chanW / 2, ceilY - 0.1, ceilY, "paintedMetal", { color: P("impMid") });
       r(c + chanW / 2, c + chanW / 2 + 0.05, ceilY - 0.1, ceilY, "paintedMetal", { color: P("impMid") });
-      const sw = ce.stripWidth ?? 0.18;
+      const sw = ce.stripWidth ?? 0.14;
       const len = axis === "x" ? ix1 - ix0 : iz1 - iz0;
       const seg = ce.segment ?? 2.0;
       const nSeg = Math.max(1, Math.round(len / seg));

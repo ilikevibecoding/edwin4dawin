@@ -4,6 +4,7 @@
 // Usage in a manifest:  materials: (shared) => imperialExtras(shared)
 import * as THREE from "three";
 import { IMP } from "./palette.js";
+import { makeImperialScreen } from "./screens.js";
 
 const emissive = (color, intensity, extra = {}) =>
   new THREE.MeshStandardMaterial({
@@ -44,15 +45,28 @@ export function imperialExtras(shared) {
       envMapIntensity: 0.5,
     });
   }
-  if (need("emitWhite")) extras.emitWhite = emissive("#dfe9ff", 2.2);
-  if (need("emitBlue")) extras.emitBlue = emissive(IMP.impBlue, 2.4);
-  if (need("emitRedImp")) extras.emitRedImp = emissive(IMP.impRed, 2.0);
-  if (need("emitAmber")) extras.emitAmber = emissive(IMP.impAmber, 2.0);
-  if (need("emitGreen")) extras.emitGreen = emissive(IMP.impGreen, 1.8);
-  // Imperial UI screens: until A's red/blue wireframe screens exist, reuse the Kestrel screens.
-  const screens = shared.screens || [];
+  // Emitter intensities sit just above the bloom threshold (1.15): the critic pass found every bare
+  // strip at 2.0–2.4 blown to a white bar. Fixtures with a shape come from housings, not intensity.
+  if (need("emitWhite")) extras.emitWhite = emissive("#dfe9ff", 1.3);
+  if (need("emitBlue")) extras.emitBlue = emissive(IMP.impBlue, 1.6);
+  if (need("emitRedImp")) extras.emitRedImp = emissive(IMP.impRed, 1.5);
+  if (need("emitAmber")) extras.emitAmber = emissive(IMP.impAmber, 1.5);
+  if (need("emitGreen")) extras.emitGreen = emissive(IMP.impGreen, 1.3);
+  // Imperial UI screens: four procedural layouts (schematic, tactical grid, text columns, gauges).
+  // Roughness 0.35 (Kestrel screens use 0.15) so a screen facing down a corridor does not mirror the
+  // nearest ceiling fill into the eye.
   for (let i = 0; i < 4; i++) {
-    if (need("screenImp" + i) && screens.length) extras["screenImp" + i] = screens[i % screens.length];
+    if (need("screenImp" + i)) {
+      extras["screenImp" + i] = new THREE.MeshStandardMaterial({
+        color: 0x000000,
+        emissive: 0xffffff,
+        emissiveMap: makeImperialScreen(i, 31 + i * 7),
+        emissiveIntensity: 1.1,
+        roughness: 0.35,
+        metalness: 0,
+        envMapIntensity: 0.6,
+      });
+    }
   }
   if (need("holo")) {
     extras.holo = new THREE.MeshBasicMaterial({

@@ -263,13 +263,21 @@ export function tank(kit, PALETTE, pos, yaw, { r = 1.2, h = 4, color, bands = 3,
 }
 
 // Structural pillar (square) with a recessed light strip on each face.
-export function pillar(kit, PALETTE, pos, size, h, { strip = true } = {}) {
-  kit.box("paintedMetal", pos[0], pos[1] + h / 2, pos[2], size, h, size, { color: col(PALETTE, "impDark"), texel: 1 });
+export function pillar(kit, PALETTE, pos, size, h, { strip = true, faceColor } = {}) {
+  kit.box("paintedMetal", pos[0], pos[1] + h / 2, pos[2], size, h, size, { color: col(PALETTE, "impDark"), texel: 2.5 });
+  // clean painted faces over the dark core (the worn-metal map at pillar scale reads as blotchy concrete)
+  const fc = faceColor || col(PALETTE, "impMid");
+  const fh = h - 1.0;
+  const fy = pos[1] + 0.35 + fh / 2;
+  kit.box("impPanel", pos[0], fy, pos[2] + size / 2 + 0.006, size - 0.16, fh, 0.012, { color: fc, uv: "keep" });
+  kit.box("impPanel", pos[0], fy, pos[2] - size / 2 - 0.006, size - 0.16, fh, 0.012, { color: fc, uv: "keep" });
+  kit.box("impPanel", pos[0] + size / 2 + 0.006, fy, pos[2], 0.012, fh, size - 0.16, { color: fc, uv: "keep" });
+  kit.box("impPanel", pos[0] - size / 2 - 0.006, fy, pos[2], 0.012, fh, size - 0.16, { color: fc, uv: "keep" });
   kit.box("paintedMetal", pos[0], pos[1] + 0.15, pos[2], size + 0.1, 0.3, size + 0.1, { color: col(PALETTE, "impBlack") });
   kit.box("paintedMetal", pos[0], pos[1] + h - 0.2, pos[2], size + 0.1, 0.4, size + 0.1, { color: col(PALETTE, "impBlack") });
   if (strip) {
-    kit.box("emitWhite", pos[0], pos[1] + h / 2, pos[2] + size / 2 + 0.003, 0.05, h - 1.2, 0.006);
-    kit.box("emitWhite", pos[0], pos[1] + h / 2, pos[2] - size / 2 - 0.003, 0.05, h - 1.2, 0.006);
+    kit.box("emitWhite", pos[0], pos[1] + h / 2, pos[2] + size / 2 + 0.016, 0.05, h - 1.2, 0.006);
+    kit.box("emitWhite", pos[0], pos[1] + h / 2, pos[2] - size / 2 - 0.016, 0.05, h - 1.2, 0.006);
   }
   kit.collider([pos[0] - size / 2 - 0.05, pos[1], pos[2] - size / 2 - 0.05], [pos[0] + size / 2 + 0.05, pos[1] + h, pos[2] + size / 2 + 0.05], "pillar");
 }
