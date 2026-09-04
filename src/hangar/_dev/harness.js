@@ -36,9 +36,10 @@ scene.add(camera);
 
 const hud = createHUD();
 
-// far starfield so the hangar aperture and exterior views read as space
+// far starfield so the hangar aperture and exterior views read as space: sparse, most stars faint, a
+// few bright (an even dense scatter read as "milky haze" through the containment field)
 {
-  const n = 6000;
+  const n = 2600;
   const pos = new Float32Array(n * 3);
   const col = new Float32Array(n * 3);
   let s = 12345;
@@ -51,7 +52,8 @@ const hud = createHUD();
     pos[i * 3] = rr * Math.cos(th) * R;
     pos[i * 3 + 1] = u * R;
     pos[i * 3 + 2] = rr * Math.sin(th) * R;
-    const b = 0.4 + r() * 0.6;
+    const m = r();
+    const b = 0.12 + m * m * m * 0.88; // magnitude spread: mostly dim, ~1 in 10 bright
     const tint = r();
     col[i * 3] = b * (tint < 0.2 ? 1.0 : 0.85);
     col[i * 3 + 1] = b * 0.9;
@@ -60,7 +62,7 @@ const hud = createHUD();
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   g.setAttribute("color", new THREE.BufferAttribute(col, 3));
-  const stars = new THREE.Points(g, new THREE.PointsMaterial({ size: 6, sizeAttenuation: true, vertexColors: true, fog: false }));
+  const stars = new THREE.Points(g, new THREE.PointsMaterial({ size: 5, sizeAttenuation: true, vertexColors: true, fog: false }));
   stars.name = "dev_stars";
   scene.add(stars);
 }
@@ -299,8 +301,9 @@ const debugAPI = {
     player.headBob = false;
     clock.t = v.time ?? 40;
     clock.frozen = true;
-    // no aiming reticle in exterior shots (a blind critic reads the centre dot as a debug marker)
-    document.getElementById("crosshair").style.display = v.mode === "exterior" ? "none" : "";
+    // no aiming reticle in any harness shot: two blind critics read the centre dot as a stray light /
+    // debug marker (it is back the moment the player unfreezes)
+    document.getElementById("crosshair").style.display = "none";
     if (v.mode === "exterior") applyExteriorView(v);
     else {
       cameraMode = "interior";
