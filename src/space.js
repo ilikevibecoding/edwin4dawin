@@ -265,8 +265,11 @@ export function buildSpace(scene, { camera = null } = {}) {
     }
   }
 
-  // --- planets
+  // --- planets (own group so presets can turn them independently of the sun bearing)
   const planets = [];
+  const planetGroup = new THREE.Group();
+  planetGroup.name = "planets";
+  root.add(planetGroup);
   function addPlanet({ tex, clouds = null, radius, dist, bearingDeg, elevation, atmo, atmoStrength = 1.2, brightness = 1.5, spin = 0.012, tilt = 0.2, ring = null }) {
     const g = new THREE.Group();
     const b = THREE.MathUtils.degToRad(bearingDeg);
@@ -337,7 +340,7 @@ export function buildSpace(scene, { camera = null } = {}) {
       ringMesh.rotation.set(Math.PI / 2 + ring.tiltX, ring.tiltY, 0);
       g.add(ringMesh);
     }
-    root.add(g);
+    planetGroup.add(g);
     planets.push({ group: g, body, mat, atmoMat, ringMesh, spin, bearing: b });
     return g;
   }
@@ -483,6 +486,11 @@ export function buildSpace(scene, { camera = null } = {}) {
   function sunDirection(out = new THREE.Vector3()) {
     return out.copy(sunWorld);
   }
+  /** Turn the planets about the ship (radians) without moving the sun or the stars. */
+  function setPlanetYaw(rad) {
+    planetGroup.rotation.y = rad;
+    apply();
+  }
   /** Move the sun to a new elevation (degrees above the ship's plane), keeping its bearing. */
   function setSunElevation(deg) {
     const e = THREE.MathUtils.degToRad(deg);
@@ -493,5 +501,5 @@ export function buildSpace(scene, { camera = null } = {}) {
     sunHalo.position.copy(sun.position);
     apply();
   }
-  return { root, planets, layers, dust: dustLines, update, setTime, framePlanet, sunDirLocal, sunDirection, setSunElevation, state };
+  return { root, planets, layers, dust: dustLines, update, setTime, framePlanet, sunDirLocal, sunDirection, setSunElevation, setPlanetYaw, state };
 }

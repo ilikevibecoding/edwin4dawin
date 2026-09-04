@@ -455,6 +455,7 @@ const debugAPI = {
       // per-preset sun: `time` sets the bearing (1.3°/s), `sunElev` the elevation in degrees
       const v = EXTERIOR_VIEWS[name];
       space.setSunElevation(v.sunElev ?? 22);
+      space.setPlanetYaw(THREE.MathUtils.degToRad(v.planetYaw ?? 0));
       space.setTime(v.time ?? 195);
       return true;
     }
