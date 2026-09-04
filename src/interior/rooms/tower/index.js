@@ -4,6 +4,7 @@ import { buildHolo } from "./holo.js";
 import { buildComms } from "./comms.js";
 import { buildIntel } from "./intel.js";
 import { buildBriefing } from "./briefing.js";
+import { buildObservation } from "./observation.js";
 
 export function register(registerRoom) {
   // registerRoom("roomId", buildRoom);
@@ -11,4 +12,5 @@ export function register(registerRoom) {
   registerRoom("comms", buildComms);
   registerRoom("intel", buildIntel);
   registerRoom("briefing", buildBriefing);
+  registerRoom("observation", buildObservation);
 }

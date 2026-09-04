@@ -245,8 +245,9 @@ const PAL = {
   small: [[TINT.light, 0.25], [TINT.mid, 0.4], [TINT.dark, 0.25], [TINT.gun, 0.1]],
   trench: [[TINT.trench, 0.35], [TINT.dark, 0.35], [TINT.gun, 0.2], [TINT.mid, 0.1]],
   machinery: [[TINT.dark, 0.4], [TINT.gun, 0.3], [TINT.mid, 0.2], [TINT.steel, 0.1]],
-  // the keel plates are IMP.hullDark and lit only by the environment; keep its machinery as dark
-  keel: [[TINT.dark, 0.5], [TINT.gun, 0.25], [TINT.mid, 0.2], [TINT.light, 0.05]],
+  // the keel plates are IMP.hullDark and lit only by the environment: mostly dark machinery, with
+  // enough mid / light plates that the underside still reads as kit-bashed detail and not one tone
+  keel: [[TINT.dark, 0.38], [TINT.mid, 0.3], [TINT.gun, 0.17], [TINT.light, 0.15]],
   // big armour plates on the open slopes stay close to the hull tone (dark ones read as holes from afar)
   slope: [[TINT.light, 0.4], [TINT.mid, 0.48], [TINT.dark, 0.1], [TINT.gun, 0.02]],
 };

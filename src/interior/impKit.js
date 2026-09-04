@@ -63,12 +63,26 @@ export function impWall(frame, length, height, opts = {}) {
     tag = "wall",
     depth = 0.25,
     dark = false,
+    slabHoles = false, // cut the backing slab around the openings so windows / holes / doorways see through
   } = opts;
   const rand = rng(seed);
   const k = frame.kit;
   const ribMat = "impPaintedMetal";
   // backing slab (the wall proper)
-  frame.box(ribMat, length / 2, height / 2, -depth / 2 - 0.001, length, height, depth, { color: IMP.trim, texel: 0.5 });
+  const slabCuts = slabHoles
+    ? openings
+        .map((op) => {
+          // keep a hair of slab at the wall edges so no hole touches the outline (clean triangulation)
+          const u0 = Math.max(0.002, op.u0);
+          const u1 = Math.min(length - 0.002, op.u1);
+          const v0 = Math.max(0.002, op.v0);
+          const v1 = Math.min(height - 0.002, op.v1);
+          return { x: (u0 + u1) / 2 - length / 2, y: (v0 + v1) / 2 - height / 2, w: u1 - u0, h: v1 - v0 };
+        })
+        .filter((c) => c.w > 0.05 && c.h > 0.05)
+    : [];
+  if (slabCuts.length) frame.add(ribMat, panelWithHoles(length, height, depth, slabCuts), length / 2, height / 2, -depth / 2 - 0.001, { color: IMP.trim, uv: "world", texel: 0.5 });
+  else frame.box(ribMat, length / 2, height / 2, -depth / 2 - 0.001, length, height, depth, { color: IMP.trim, texel: 0.5 });
 
   // column cuts: regular pitch, snapped to opening edges
   let cuts = [0];
@@ -979,10 +993,10 @@ export function stairRisers(kit, from, dir, w, y0, n, stepH, tread, opts = {}) {
 
 // Stencil on a light placard plate with a dark surround, so ink glyphs read on dark wall panels.
 export function placard(frame, u, v, s, idx, opts = {}) {
-  const { tone = IMP.wallLight } = opts;
-  frame.box("impPaintedMetal", u, v, 0.02, s + 0.24, s + 0.24, 0.03, { color: IMP.trim, texel: 1 });
-  frame.box("impPanel", u, v, 0.03, s + 0.16, s + 0.16, 0.04, { color: tone, uv: "keep" });
-  frame.quad("impDecal", u, v, 0.056, s, s, { uvRect: impDecalRect(idx) });
+  const { tone = IMP.wallLight, n = 0 } = opts; // n: extra stand-off, e.g. when mounted on a plate
+  frame.box("impPaintedMetal", u, v, n + 0.02, s + 0.24, s + 0.24, 0.03, { color: IMP.trim, texel: 1 });
+  frame.box("impPanel", u, v, n + 0.03, s + 0.16, s + 0.16, 0.04, { color: tone, uv: "keep" });
+  frame.quad("impDecal", u, v, n + 0.056, s, s, { uvRect: impDecalRect(idx) });
 }
 
 // Floor stencil: decal cell `idx`, size s, at (x, z) on floor y, rotated by yaw about the vertical.

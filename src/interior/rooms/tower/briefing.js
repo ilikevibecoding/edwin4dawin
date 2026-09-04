@@ -112,7 +112,7 @@ export function buildBriefing(kit, ctx) {
     kit.collider([lx - 0.75, y, lz - 0.6], [lx + 0.75, y + 1.3, lz + 0.6], "lectern");
     // speaker's mark on the deck and the spot over the lectern
     floorDecal(kit, lx - 1.3, y, lz, 0.9, 13, Math.PI / 2);
-    spotLightDesc(ctx, 0xfff4e6, 7, 9, [lx + 0.6, yc - 0.25, lz], [lx, y, lz], { angle: 0.5, penumbra: 0.5, shadow: true, priority: 2 });
+    spotLightDesc(ctx, 0xfff4e6, 4.5, 9, [lx + 0.6, yc - 0.25, lz], [lx, y, lz], { angle: 0.5, penumbra: 0.5, shadow: true, priority: 2 });
     kit.cyl("impPaintedMetal", lx + 0.6, yc - 0.12, lz, 0.3, 0.24, "y", { color: IMP.trim, segments: 20, texel: 1 });
     kit.cyl("emitWhite", lx + 0.6, yc - 0.245, lz, 0.19, 0.01, "y", { segments: 20 });
   }
@@ -153,7 +153,7 @@ export function buildBriefing(kit, ctx) {
     screenArray(frame, w.u(75.5), 3.3, 3, 1, 1.3, 0.8, { seed: 305, variants: [2, 0, 1] });
     placard(frame, w.u(57.0), 3.1, 0.6, 15);
     frame.quad("impDecal", w.u(57.0), 1.5, 0.062, 0.7, 0.7, { uvRect: impDecalRect(6) });
-    alertBeacon(frame, ctx, w.u(70.5), 3.5, { intensity: 0.8, distance: 5 });
+    alertBeacon(frame, ctx, w.u(70.5), 3.5, { intensity: 0 }); // passive: keeps the room at 12 light descriptors
     lockers(frame, w.u(56.6), w.u(53.4), 2.3, { seed: 307, tone: IMP.wallMid, doorW: 0.8 });
     pointLightDesc(ctx, WHITE, 1.2, 6, [62.2, y + 3.0, z1 - 1.8], 0);
   }
@@ -176,8 +176,8 @@ export function buildBriefing(kit, ctx) {
     for (const tx of [60.0, X_T0 + TIER_D * 0.5, X_T0 + TIER_D * 2.5, X_T0 + TIER_D * 4.5]) {
       // two lights per long trough
       ceilingLight(kit, ctx, [tx, yc, cz], L, "z", { color: WHITE, intensity: 0, w: 0.34 });
-      pointLightDesc(ctx, WHITE, 2.0, 9, [tx, yc - 0.6, 610.5], 1);
-      pointLightDesc(ctx, WHITE, 2.0, 9, [tx, yc - 0.6, 621.5], 1);
+      pointLightDesc(ctx, WHITE, 2.7, 10, [tx, yc - 0.6, 610.5], 1);
+      pointLightDesc(ctx, WHITE, 2.7, 10, [tx, yc - 0.6, 621.5], 1);
     }
     for (const bz of [aisle[0] - 0.5, aisle[1] + 0.5]) {
       kit.box("impPaintedMetal", (x0 + x1) / 2, yc - 0.24, bz, x1 - x0 - 0.6, 0.48, 0.4, { color: IMP.trim, texel: 1 });
@@ -188,8 +188,8 @@ export function buildBriefing(kit, ctx) {
 
   // ---- camera views ---------------------------------------------------------------------------------------------
   const eye = y + STD.eye;
-  ctx.view("briefing", 67, eye, z0 + 2.2, 138, -4);
+  ctx.view("briefing", 64.5, eye, z0 + 2.4, 145, -4);
   ctx.view("briefing_tiers", x0 + 8.5, eye, cz - 0.6, -84, -2);
   ctx.view("briefing_screen", X_T0 + TIER_D * 2.5, eye, cz, 90, -4);
-  ctx.view("briefing_ready", 63.5, eye, 611.2, 52, -4);
+  ctx.view("briefing_ready", 58.5, eye, 611.8, 30, -4);
 }

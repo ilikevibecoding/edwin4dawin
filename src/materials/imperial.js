@@ -200,6 +200,8 @@ export function buildImperialMaterials() {
     impMetalRough: std(metal, { normalScale: new THREE.Vector2(0.6, 0.6), roughness: 1.7, envMapIntensity: 0.7 }),
     // --- floors
     impGloss: std(gloss, { normalScale: new THREE.Vector2(0.5, 0.5), envMapIntensity: 1.2 }),
+    // same gloss deck with broader highlights: point lights over a large gloss floor otherwise tone-map to white blobs
+    impGlossSoft: std(gloss, { normalScale: new THREE.Vector2(0.5, 0.5), roughness: 2.6, envMapIntensity: 1.0 }),
     impDeck: std(dark, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.9 }),
     impGrate: std(grate, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.8, transparent: true, depthWrite: true, alphaTest: 0, side: THREE.DoubleSide }),
     // --- exterior

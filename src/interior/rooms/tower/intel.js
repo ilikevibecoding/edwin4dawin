@@ -25,7 +25,7 @@ export function buildIntel(kit, ctx) {
   buildShell(kit, ctx, ctx.id, room, {
     wall: { pitch: 3.5, tone: IMP.wallLight, toneAlt: IMP.wallMid, bandMat: "lightBandRed", styles: { plain: 0.6, control: 0.12, vent: 0.08, hatch: 0.08, screen: 0.08, niche: 0.04 } },
     ceiling: { lights: false, tone: IMP.trim, panelW: 2.5 },
-    floor: { mat: "impGloss", tone: IMP.black, strip: false, texel: 0.35 },
+    floor: { mat: "impGlossSoft", tone: IMP.black, strip: false, texel: 0.35 },
   });
   const walls = roomWalls(room);
 
@@ -58,20 +58,19 @@ export function buildIntel(kit, ctx) {
     const ringB = new THREE.TorusGeometry(1.08, 0.006, 6, 72);
     ringB.rotateX(Math.PI / 2 + 0.2);
     ringB.rotateZ(0.4);
-    const wire = new THREE.Mesh(mergeGeometries([planet.toNonIndexed(), ringA.toNonIndexed(), ringB.toNonIndexed()], false), wireMat);
+    // target markers on the surface: three small tetrahedra riding the planet, merged into the wire mesh
+    const wireParts = [planet.toNonIndexed(), ringA.toNonIndexed(), ringB.toNonIndexed()];
+    for (let i = 0; i < 3; i++) {
+      const m = new THREE.TetrahedronGeometry(0.075);
+      const lat = -0.4 + i * 0.5;
+      const lon = i * 2.1;
+      m.translate(Math.cos(lat) * Math.cos(lon) * 0.66, Math.sin(lat) * 0.66, Math.cos(lat) * Math.sin(lon) * 0.66);
+      wireParts.push(m); // polyhedra are already non-indexed
+    }
+    const wire = new THREE.Mesh(mergeGeometries(wireParts, false), wireMat);
     holo.add(wire);
     const fill = new THREE.Mesh(new THREE.SphereGeometry(0.6, 22, 14), fillMat);
     holo.add(fill);
-    // target markers on the surface: three small tetrahedra riding the planet
-    const marks = [];
-    for (let i = 0; i < 3; i++) {
-      const m = new THREE.Mesh(new THREE.TetrahedronGeometry(0.06), fillMat);
-      const lat = -0.4 + i * 0.5;
-      const lon = i * 2.1;
-      m.position.set(Math.cos(lat) * Math.cos(lon) * 0.66, Math.sin(lat) * 0.66, Math.cos(lat) * Math.sin(lon) * 0.66);
-      wire.add(m);
-      marks.push(m);
-    }
     const scan = new THREE.Mesh(new THREE.CylinderGeometry(0.64, 0.64, 0.03, 32, 1, true), fillMat);
     holo.add(scan);
     const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.95, r - 0.2, 1.9, 32, 1, true), beamMat);
