@@ -562,9 +562,9 @@ export function buildGreebles(mats, opts = {}) {
           // put() returns the shared quaternion; anything that re-orients needs a copy
           if (wantSkirt && !NO_SKIRT.has(shape) && Math.max(w, dd) >= 2 && hh >= 0.5) skirt(region, f, q.clone(), w, dd, Math.min(2, hh / 3));
           if (pass.windows && (shape === "box" || shape === "step2" || shape === "taper" || shape === "tower" || shape === "step3")) faceWindows(region, f.p, q.clone(), [w, hh, dd], r);
-          if (cfg.streaks && pass.tier !== "S" && hh >= 0.35 && r() < cfg.streaks) streakReqs.push([f, q.clone(), w, dd, hh, spin, r() < 0.5]);
-          else if (cfg.streaks && pass.tier !== "S" && Math.max(w, dd) >= 3.5 && r() < 0.35) streakReqs.push([f, q.clone(), w, dd, hh, spin, "halo"]);
-          if (cfg.drips && pass.tier !== "S" && hh >= 0.3 && r() < cfg.drips) dripReqs.push([f, w, dd, hh, spin]);
+          if (cfg.streaks && pass.tier !== "S" && hh >= 0.35 && r() < cfg.streaks) streakReqs.push([f, q.clone(), w, dd, hh, spin, r() < 0.5, cfg.blocked]);
+          else if (cfg.streaks && pass.tier !== "S" && Math.max(w, dd) >= 3.5 && r() < 0.35) streakReqs.push([f, q.clone(), w, dd, hh, spin, "halo", cfg.blocked]);
+          if (cfg.drips && pass.tier !== "S" && hh >= 0.3 && r() < cfg.drips) dripReqs.push([f, w, dd, hh, spin, cfg.blocked]);
         }
       }
     }
@@ -679,8 +679,10 @@ export function buildGreebles(mats, opts = {}) {
   const nearBell = (x, y, m) => bells.some((b) => Math.hypot(x - b.x, y - b.y) < b.r * 1.3 + m);
 
   // ---- turbolaser batteries: positions first so scatter keeps clear ---------------------------
+  // (the forward pair sits at z 300, clear of the recreation lounge's viewports in the port T1 flank
+  // at z 346..384: a battery at 350 stood right outside them)
   const heavy = [];
-  for (const z of [350, 450, 550]) {
+  for (const z of [300, 430, 560]) {
     for (const side of [-1, 1]) {
       const x = side * (halfWidth(z) * 0.2 + 30);
       const y = dorsalY(z);
@@ -736,7 +738,9 @@ export function buildGreebles(mats, opts = {}) {
   const CITY_L = [["box", 0.34], ["step2", 0.14], ["step3", 0.08], ["taper", 0.1], ["tank", 0.08], ["tankH", 0.06], ["dome", 0.04], ["tower", 0.06], ["ridge", 0.05], ["vent", 0.05]];
   const CITY_M = [["box", 0.28], ["step2", 0.12], ["taper", 0.08], ["tank", 0.1], ["tankH", 0.05], ["dome", 0.05], ["wedge", 0.06], ["ridge", 0.06], ["hatch", 0.08], ["vent", 0.06], ["sensor", 0.06]];
   const CITY_S = [["box", 0.3], ["wedge", 0.1], ["hatch", 0.2], ["pipe", 0.12], ["mast", 0.05], ["tank", 0.08], ["dome", 0.04], ["step2", 0.05], ["sensor", 0.06]];
-  const t2Footprint = (x, z) => z > 298 && Math.abs(x) < tBase(T2, z) + 1.5;
+  // blocked() callbacks receive (x, y, z, size): the terrace-2 / tower-base / neck footprints on the
+  // surfaces they stand on, so nothing is planted under a sloped flank to poke out through it
+  const t2Footprint = (x, y, z, size = 0) => z > 298 - size * 0.5 && Math.abs(x) < tBase(T2, z) + 1.5 + size * 0.5;
   dress("city", SURF.t1Top, {
     seed: 11,
     blocked: t2Footprint,
@@ -747,7 +751,7 @@ export function buildGreebles(mats, opts = {}) {
       { tier: "S", cell: 2.6, fill: 0.42, shapes: CITY_S, palette: PAL.small },
     ],
   });
-  const towerFootprint = (x, z) => z > 497 && z < 703 && Math.abs(x) < TB.halfBot + 1;
+  const towerFootprint = (x, y, z, size = 0) => z > 497 - size * 0.5 && z < 703 + size * 0.5 && Math.abs(x) < TB.halfBot + 1 + size * 0.5;
   dress("city", SURF.t2Top, {
     seed: 12,
     blocked: towerFootprint,
@@ -816,7 +820,7 @@ export function buildGreebles(mats, opts = {}) {
   }
 
   // ---- tower base block ----------------------------------------------------------------------
-  const neckFootprint = (x, z) => Math.abs(x) < TOWER.neck.halfBase + 1.5 && z > TOWER.neck.z0 - 1.5 && z < TOWER.neck.z1 + 1.5;
+  const neckFootprint = (x, y, z, size = 0) => Math.abs(x) < TOWER.neck.halfBase + 1.5 + size * 0.5 && z > TOWER.neck.z0 - 1.5 - size * 0.5 && z < TOWER.neck.z1 + 1.5 + size * 0.5;
   dress("tower", SURF.tbTop, {
     seed: 71,
     blocked: neckFootprint,
@@ -1673,12 +1677,13 @@ export function buildGreebles(mats, opts = {}) {
     const decal = decalInto(decals); // atlas 1: 0 hairline soot plume, 1 scorch blot, 2 repaint, 3 fine grime
     const decal2 = decalInto(decals2); // atlas 2: 0 soot fan, 1 broad streak bundle, 2 grime halo, 3 drips
     const HULL_LIN = 0.185; // mean linear albedo of the lit hull plating
+    const SOOT = 0.6; // linear grey the soot marks are lit with (their atlas cells are ~0.05..0.1 on top)
     // soot around every engine bell on the recessed block face: a wide blot plus streaks radiating
     // from the collar, clipped to the block plate so nothing floats in front of the rim
     {
       const st = SURF.stern;
       for (const e of bells) {
-        decal([e.x, e.y, STERN_PLATE_Z], [0, 0, 1], e.r * 4.6, e.r * 4.6, 1, 0.7, [Math.cos(r() * 6.3), Math.sin(r() * 6.3), 0], 0.05, 0.95);
+        decal([e.x, e.y, STERN_PLATE_Z], [0, 0, 1], e.r * 4.6, e.r * 4.6, 1, SOOT, [Math.cos(r() * 6.3), Math.sin(r() * 6.3), 0], 0.05, 0.95);
         const n = e.r > 30 ? 9 : 5;
         for (let k = 0; k < n; k++) {
           const a = (k / n) * Math.PI * 2 + r() * 0.5;
@@ -1694,17 +1699,23 @@ export function buildGreebles(mats, opts = {}) {
             L *= 0.8;
           }
           if (L <= e.r * 0.4) continue;
-          decal([e.x + dx * (r0 + L / 2), e.y + dy * (r0 + L / 2), STERN_PLATE_Z], [0, 0, 1], e.r * rr(r, 0.35, 0.55), L, 0, 0.7, [dx, dy, 0], 0.06, 0.9);
+          decal([e.x + dx * (r0 + L / 2), e.y + dy * (r0 + L / 2), STERN_PLATE_Z], [0, 0, 1], e.r * rr(r, 0.35, 0.55), L, 0, SOOT, [dx, dy, 0], 0.06, 0.9);
         }
       }
     }
     // aft streaks trailing from hatches and block bases on the terraces, tower top and plateau: a
     // soot fan or a bundle of broad streaks as wide as the block, starting under its aft edge, plus a
     // grime halo around the foot of the bigger blocks (soft contact darkening outside the hard skirt)
+    // a mark may not run into a region its surface keeps clear (viewport cutouts, the casement)
+    const clearOf = (blocked, f, dir, c, L, wdt) => {
+      if (!blocked) return true;
+      for (const d of [c - L / 2, c, c + L / 2]) if (blocked(f.p[0] + dir.x * d, f.p[1] + dir.y * d, f.p[2] + dir.z * d, wdt)) return false;
+      return true;
+    };
     {
       const aft = new THREE.Vector3();
       const nrm = new THREE.Vector3();
-      for (const [f, , w, dd, hh, spin, kind] of streakReqs) {
+      for (const [f, , w, dd, hh, spin, kind, blocked] of streakReqs) {
         nrm.set(f.n[0], f.n[1], f.n[2]);
         aft.set(0, 0, 1).addScaledVector(nrm, -nrm.z);
         if (aft.lengthSq() < 0.05) continue;
@@ -1713,21 +1724,23 @@ export function buildGreebles(mats, opts = {}) {
         const across = Math.abs(Math.cos(spin)) * w + Math.abs(Math.sin(spin)) * dd;
         if (kind === "halo" || (Math.max(w, dd) >= 3.5 && r() < 0.5)) {
           const s = Math.max(w, dd) * rr(r, 1.8, 2.4);
-          decal2(f.p, f.n, s, s, 2, 0.7, [aft.x, aft.y, aft.z], 0.09, rr(r, 0.55, 0.85));
+          if (clearOf(blocked, f, aft, 0, 0, s)) decal2(f.p, f.n, s, s, 2, SOOT, [aft.x, aft.y, aft.z], 0.09, rr(r, 0.55, 0.85));
         }
         if (kind === "halo") continue;
         const fan = kind === true;
         const L = along * rr(r, 1.1, 2.0) + 3 + hh * 1.6;
         const c = along / 2 + L / 2 - 0.6;
+        const wdt = across * (fan ? rr(r, 1.3, 1.7) : rr(r, 0.9, 1.2));
+        if (!clearOf(blocked, f, aft, c, L, wdt)) continue;
         const p = [f.p[0] + aft.x * c, f.p[1] + aft.y * c, f.p[2] + aft.z * c];
-        decal2(p, f.n, across * (fan ? rr(r, 1.3, 1.7) : rr(r, 0.9, 1.2)), L, fan ? 0 : 1, 0.7, [aft.x, aft.y, aft.z], 0.1, rr(r, 0.7, 1.0));
+        decal2(p, f.n, wdt, L, fan ? 0 : 1, SOOT, [aft.x, aft.y, aft.z], 0.1, rr(r, 0.7, 1.0));
       }
     }
     // drip stains running down the walls from hatches and fittings on the vertical faces
     {
       const down = new THREE.Vector3();
       const nrm = new THREE.Vector3();
-      for (const [f, w, dd, hh, spin] of dripReqs) {
+      for (const [f, w, dd, hh, spin, blocked] of dripReqs) {
         nrm.set(f.n[0], f.n[1], f.n[2]);
         down.set(0, -1, 0).addScaledVector(nrm, nrm.y);
         if (down.lengthSq() < 0.3) continue;
@@ -1736,8 +1749,10 @@ export function buildGreebles(mats, opts = {}) {
         const across = Math.abs(Math.cos(spin)) * w + Math.abs(Math.sin(spin)) * dd;
         const L = rr(r, 3.5, 8) + hh * 2;
         const c = along / 2 + L / 2 - 0.4;
+        const wdt = across * rr(r, 1.0, 1.4);
+        if (!clearOf(blocked, f, down, c, L, wdt)) continue;
         const p = [f.p[0] + down.x * c, f.p[1] + down.y * c, f.p[2] + down.z * c];
-        decal2(p, f.n, across * rr(r, 1.0, 1.4), L, 3, 0.7, [down.x, down.y, down.z], 0.1, rr(r, 0.6, 0.9));
+        decal2(p, f.n, wdt, L, 3, SOOT, [down.x, down.y, down.z], 0.1, rr(r, 0.6, 0.9));
       }
     }
     // turbolaser muzzle scorch: a burn and a soot fan on the hull where the barrels point (the fan
@@ -1764,10 +1779,10 @@ export function buildGreebles(mats, opts = {}) {
       };
       const d1 = clear(20, 7);
       const f1 = dorsalAt(t.x + dx * d1, t.z + dz * d1);
-      decal(f1.p, f1.n, 13, 13, 1, 0.7, [dx, 0, dz], 0.12, 0.85);
+      decal(f1.p, f1.n, 13, 13, 1, SOOT, [dx, 0, dz], 0.12, 0.85);
       const d2 = clear(d1 + 22, 11);
       const f2 = dorsalAt(t.x + dx * d2, t.z + dz * d2);
-      decal(f2.p, f2.n, 9, 30, 0, 0.7, [dx, 0, dz], 0.12, 0.8);
+      decal(f2.p, f2.n, 9, 30, 0, SOOT, [dx, 0, dz], 0.12, 0.8);
     }
     // scorch patches: around the stern vents, on the terrace tops and the keel near the reactor
     for (let k = 0; k < 8; k++) {
@@ -1775,7 +1790,7 @@ export function buildGreebles(mats, opts = {}) {
       const y = st.a0 + 6 + r() * (st.a1 - st.a0 - 12);
       const x = (r() - 0.5) * 2 * (st.half(y) - 14);
       if (nearBell(x, y, 6)) continue;
-      decal([x, y, STERN_PLATE_Z], [0, 0, 1], 8 + r() * 8, 8 + r() * 8, 1, 0.75, [Math.cos(r() * 6.3), Math.sin(r() * 6.3), 0], 0.08, 0.85);
+      decal([x, y, STERN_PLATE_Z], [0, 0, 1], 8 + r() * 8, 8 + r() * 8, 1, SOOT + 0.05, [Math.cos(r() * 6.3), Math.sin(r() * 6.3), 0], 0.08, 0.85);
     }
     for (let k = 0; k < 10; k++) {
       const surf = k % 2 ? SURF.t1Top : SURF.t2Top;
@@ -1783,7 +1798,7 @@ export function buildGreebles(mats, opts = {}) {
       const f = frameAt(surf, z, (r() - 0.5) * 1.6);
       if (isBlocked(f.p[0], f.p[2], 8)) continue;
       const s = 5 + r() * 7;
-      decal(f.p, f.n, s, s, 1, 0.75, [Math.cos(r() * 6.3), 0, Math.sin(r() * 6.3)], 0.12, 0.8);
+      decal(f.p, f.n, s, s, 1, SOOT + 0.05, [Math.cos(r() * 6.3), 0, Math.sin(r() * 6.3)], 0.12, 0.8);
     }
     for (let k = 0; k < 7; k++) {
       const a = r() * Math.PI * 2;
@@ -1792,22 +1807,22 @@ export function buildGreebles(mats, opts = {}) {
       const z = REACTOR_BULB.z + Math.sin(a) * d;
       if (Math.abs(x) > wk(z) - 10) continue;
       const s = 7 + r() * 8;
-      decal([x, keelY(z), z], [0, -1, 0], s, s, 1, 0.75, [Math.cos(r() * 6.3), 0, Math.sin(r() * 6.3)], 0.12, 0.8);
+      decal([x, keelY(z), z], [0, -1, 0], s, s, 1, SOOT + 0.05, [Math.cos(r() * 6.3), 0, Math.sin(r() * 6.3)], 0.12, 0.8);
     }
     // heat streaks trailing forward from the stern edge on the dorsal and keel surfaces
     for (const side of [-1, 1]) {
       for (let k = 0; k < 6; k++) {
         const ds = SURF.dslope(side);
         const f = frameAt(ds, 800 - 42, 0.12 + r() * 0.75);
-        decal(f.p, f.n, 9 + r() * 8, 84, 0, 0.8, [0, 0, -1]);
+        decal(f.p, f.n, 9 + r() * 8, 84, 0, SOOT + 0.1, [0, 0, -1]);
         const ks = SURF.kslope(side);
         const fk = frameAt(ks, 800 - 40, 0.12 + r() * 0.7);
-        decal(fk.p, fk.n, 9 + r() * 8, 80, 0, 0.8, [0, 0, -1]);
+        decal(fk.p, fk.n, 9 + r() * 8, 80, 0, SOOT + 0.1, [0, 0, -1]);
       }
     }
     for (let k = 0; k < 5; k++) {
       const f = frameAt(SURF.plateau, 116, -0.9 + k * 0.45);
-      decal([f.p[0], dorsalY(760), 760], [0, 1, 0], 10 + r() * 6, 80, 0, 0.8, [0, 0, -1]);
+      decal([f.p[0], dorsalY(760), 760], [0, 1, 0], 10 + r() * 6, 80, 0, SOOT + 0.1, [0, 0, -1]);
     }
     // soot rising on the terrace stern faces above the main bells (two plumes per bell per face)
     for (const surf of [SURF.t1Stern, SURF.t2Stern]) {
@@ -1817,7 +1832,7 @@ export function buildGreebles(mats, opts = {}) {
         for (const ox of [-14, 12]) {
           const x = e.x * 0.9 + ox + (r() - 0.5) * 6;
           if (Math.abs(x) > len / 2 - 12) continue;
-          decal([x, y, HULL.sternZ + 0.05], [0, 0, 1], 22 + r() * 10, surf.a1 - surf.a0 + 2, 0, 0.7, [0, 1, 0], 0.1, 0.9);
+          decal([x, y, HULL.sternZ + 0.05], [0, 0, 1], 22 + r() * 10, surf.a1 - surf.a0 + 2, 0, SOOT, [0, 1, 0], 0.1, 0.9);
         }
       }
     }
@@ -1857,7 +1872,7 @@ export function buildGreebles(mats, opts = {}) {
       const f = frameAt(surf, z, surf.b0 + (surf.b1 - surf.b0) * (0.1 + r() * 0.7));
       const p1 = surf.P(z, surf.b1);
       const p0 = surf.P(z, surf.b0);
-      decal(f.p, f.n, 6 + r() * 10, 18 + r() * 26, 3, 0.75, [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]]);
+      decal(f.p, f.n, 6 + r() * 10, 18 + r() * 26, 3, SOOT + 0.05, [p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2]]);
     }
     const buildDecalMesh = (list, mat, name) => {
       const merged = mergeGeometries(list, false);
