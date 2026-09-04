@@ -22,11 +22,15 @@ import { PathPreview } from './tornado/preview.js';
 const ROPE_TICKS = 120;           // rope-out length (6 s)
 const TOUCHDOWN_TICKS = 60;       // funnel descends / spins up over the first 3 s
 const RIP_PICKS = 24;             // candidate cells tested per tick
-// Decided rips are applied in bursts every RIP_BATCH_TICKS (0.8 s). Each burst costs the manager one full chunk
-// relight plus a remesh of the chunk and its lit neighbours (~15 ms on this VM), so the burst rate, not the
-// block count, sets the price: 1.25 bursts/s keeps it ~2 ms/frame at 10 fps versus 20 relights/s unbatched.
+// Decided rips are applied in bursts every RIP_BATCH_TICKS (0.8 s). The manager answers every touched chunk
+// with a full relight plus a remesh of that chunk and its 8 neighbours (~20 ms on this VM), so the number of
+// distinct chunks touched per second, not the block count, sets the price. A burst therefore tears out the
+// cells of ONE chunk (the one that has waited longest); a second chunk is flushed in the same burst only when
+// more than RIP_OVERFLOW cells are still queued, so the cost stays at ~1.25 relights/s in normal destruction
+// and never exceeds 2.5/s. Cells the funnel has left behind (> 2 radii away) are dropped instead of ripped.
 const RIP_BATCH_TICKS = 16;
-const PENDING_MAX = 64;           // cells waiting for the next burst (x,y,z,id each)
+const PENDING_MAX = 64;           // cells waiting for a burst (x,y,z,id each); a full queue drops new picks
+const RIP_OVERFLOW = 32;          // queued cells that justify a second chunk in the same burst
 const MAX_DEBRIS_PER_BURST = 12;  // debris launched per burst tick (~15 per second on average)
 const MAX_FLING_PER_TICK = 3;
 const ALERT_INTERVAL = 40;        // ticks between NPC/animal alerts (2 s)
@@ -66,6 +70,7 @@ export class Tornado extends Disaster {
     this.gustX = 0; this.gustZ = 0; this.gustMag = 0;
     this.ripQueue = [];       // flattened [x,y,z,id,...] consumed by render()
     this.pending = [];        // flattened [x,y,z,id,...] rips decided but not yet applied (see RIP_BATCH_TICKS)
+    this.spawned = 0;         // debris launched in the current burst
     this.ripCount = 0;
     // visuals / audio state (render side)
     this.visual = null;
@@ -198,7 +203,7 @@ export class Tornado extends Disaster {
       if (this.game.animals) this.game.animals.eachNear(this.position.x, this.position.z, r, this._flingAnimal);
     }
     if (this.rope < 0.6) this.ripBlocks(touchdown * (1 - this.rope / 0.6));
-    else if (this.pending.length) this.applyRips();
+    else if (this.tick % RIP_BATCH_TICKS === 0) this.applyRips();       // drain what is left while roping out
   }
 
   alertEntities() {
@@ -209,8 +214,8 @@ export class Tornado extends Disaster {
 
   // Deterministic block ripping inside the core cylinder (surface .. surface + 10), fragility-weighted.
   // Every tick RIP_PICKS cells are drawn and rolled; the cells that fail their roll are queued and torn out
-  // together every RIP_BATCH_TICKS ticks (applyRips), which keeps the manager's relight/remesh work per
-  // second low without changing the rip rate.
+  // chunk by chunk every RIP_BATCH_TICKS ticks (applyRips), which bounds the manager's relight/remesh work
+  // per second while the rip rate stays the same.
   ripBlocks(mult) {
     const R = this.params.radius, I = this.params.intensity * mult;
     if (I <= 0) return;
@@ -230,27 +235,44 @@ export class Tornado extends Disaster {
       let pr = DisasterManager.fragility(id) * I * (1 - d / R);
       if (y <= g) pr *= 0.3;                            // scours the ground only occasionally
       if (pr <= rng.next()) continue;
-      if (pending.length < PENDING_MAX * 4) pending.push(x, y, z, id);
+      if (pending.length < PENDING_MAX * 4) pending.push(x, y, z, id);   // full queue = budget hit: drop the pick
     }
-    if (pending.length && (this.tick % RIP_BATCH_TICKS === 0 || pending.length >= PENDING_MAX * 4)) this.applyRips();
+    if (this.tick % RIP_BATCH_TICKS === 0) this.applyRips();
   }
 
-  // Tear out the queued cells: set AIR (journaled, budgeted) and launch debris tangentially so it orbits.
+  // Tear out queued cells: the chunk of the oldest queued cell is flushed (all of its cells), plus the next
+  // oldest chunk when the queue is still long. Cells of other chunks stay queued in order for the next burst.
   applyRips() {
+    const pending = this.pending;
+    if (!pending.length) return;
+    this.spawned = 0;
+    this.flushChunk(pending[0] >> 4, pending[2] >> 4);
+    if (pending.length > RIP_OVERFLOW * 4) this.flushChunk(pending[0] >> 4, pending[2] >> 4);
+  }
+
+  // Set every queued cell of chunk (kx, kz) to AIR (journaled, budgeted) and launch debris tangentially so it
+  // orbits the funnel; the remaining cells are compacted in place (no allocation).
+  flushChunk(kx, kz) {
     const pending = this.pending, world = this.world;
     const cx = this.position.x, cz = this.position.z;
-    let spawned = 0;
+    const stale2 = 4 * this.params.radius * this.params.radius;
+    let w = 0;
     for (let i = 0; i < pending.length; i += 4) {
       const x = pending[i], y = pending[i + 1], z = pending[i + 2], id = pending[i + 3];
+      if ((x >> 4) !== kx || (z >> 4) !== kz) {
+        pending[w] = x; pending[w + 1] = y; pending[w + 2] = z; pending[w + 3] = id; w += 4;
+        continue;
+      }
+      const dx = x + 0.5 - cx, dz = z + 0.5 - cz;
+      if (dx * dx + dz * dz > stale2) continue;         // the funnel has moved on
       if (world.getBlock(x, y, z) !== id) continue;     // already gone (duplicate pick)
       if (!this.m.setBlock(x, y, z, B.AIR)) continue;
       this.ripCount++;
       if (this.ripQueue.length < RIP_QUEUE_MAX * 4) this.ripQueue.push(x, y, z, id);
       const def = BLOCKS[id];
-      if (spawned < MAX_DEBRIS_PER_BURST && def.shape !== SHAPE.CROSS && def.shape !== SHAPE.TORCH && def.shape !== SHAPE.RAIL) {
-        spawned++;
+      if (this.spawned < MAX_DEBRIS_PER_BURST && def.shape !== SHAPE.CROSS && def.shape !== SHAPE.TORCH && def.shape !== SHAPE.RAIL) {
+        this.spawned++;
         const h = hash3(x, y, z, this.seed);
-        const dx = x + 0.5 - cx, dz = z + 0.5 - cz;
         const r = Math.max(0.5, Math.sqrt(dx * dx + dz * dz)), ux = dx / r, uz = dz / r;
         const vt = 12 + 8 * h, vy = 7 + 6 * (1 - h);
         const tx = SWIRL_SIGN * uz, tz = -SWIRL_SIGN * ux;
@@ -259,7 +281,7 @@ export class Tornado extends Disaster {
         this.m.stats.debrisSpawned++;
       }
     }
-    pending.length = 0;
+    pending.length = w;
   }
 
   // Player: follows the wind (pulled around and lifted inside the core), buffeted by gusts outside it.
