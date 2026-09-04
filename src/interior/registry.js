@@ -52,6 +52,7 @@ export function buildInterior({ scene, materials }) {
       deck: spec.deck,
       zone: zone.id,
       group,
+      dynamic: [],
       neighbors: new Set(),
       windows: spec.windows || [],
       floorY: kind === "room" ? roomFloorY(spec) : DECKS[spec.deck].floorY,
@@ -179,7 +180,7 @@ export function buildInterior({ scene, materials }) {
           continue;
         }
         const kit = new Kit(mats);
-        const ctx = { lights: { warm: [], cool: [], teal: [], spots: [] }, interactables: [], materials: mats, lib: LIB, doors, lifts };
+        const ctx = { lights: { warm: [], cool: [], teal: [], spots: [] }, interactables: [], materials: mats, lib: LIB, doors, lifts, group: g, dynamic: [] };
         const builder = ROOM_BUILDERS[room.id];
         if (builder) builder(kit, ctx, room, LIB);
         else roomShell(kit, ctx, room, {});
@@ -208,6 +209,10 @@ export function buildInterior({ scene, materials }) {
         for (const it of ctx.interactables) {
           it.space = room.id;
           interactables.push(it);
+        }
+        for (const dyn of ctx.dynamic) {
+          if (dyn.object && !dyn.object.parent) g.add(dyn.object);
+          sp.dynamic.push(dyn);
         }
         sp.ctx = ctx;
       }
@@ -335,6 +340,8 @@ export function buildInterior({ scene, materials }) {
     update(dt, player) {
       doors.update(dt, player.position, state.zone);
       lifts.update(dt);
+      const zone = zones[state.zone];
+      if (zone) for (const sp of zone.spaces) if (sp.group.visible) for (const dyn of sp.dynamic) dyn.update && dyn.update(dt);
       const sp = spaceAt(player.position);
       const id = sp ? sp.id : null;
       if (id !== state.space) {
