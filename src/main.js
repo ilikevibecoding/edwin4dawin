@@ -56,7 +56,7 @@ const space = buildSpace(scene, { camera });
 space.dust.visible = false;
 
 // Sun: a directional light that follows the far field's sun; its shadow frustum tracks the camera
-const sun = new THREE.DirectionalLight(0xfff1dc, 3.2);
+const sun = new THREE.DirectionalLight(0xfff1dc, 4.2);
 sun.castShadow = true;
 sun.shadow.mapSize.set(4096, 4096);
 sun.shadow.bias = -0.0006;
@@ -440,7 +440,8 @@ const debugAPI = {
     }
     if (EXTERIOR_VIEWS[name]) {
       rig.applyPreset(name);
-      space.setTime(40);
+      // sun forward-left-above at this sky time: hull front-lit from the hero angles, lit planets aft
+      space.setTime(EXTERIOR_VIEWS[name].time ?? 185);
       return true;
     }
     throw new Error("unknown view " + name);
