@@ -83,9 +83,10 @@ function glowFan(color, k, segs = 12) {
   return g;
 }
 
-// One InstancedMesh per entry (27). band = LOD tier; plain = no per-instance colour (emissive / lights).
+// One InstancedMesh per entry. band = LOD tier; plain = no per-instance colour (emissive / lights).
 // Machinery uses exta_greeble (a light painted equipment-panel set in the plate tone) so it reads by
-// its shadow; only the vents keep the dark worn-metal hullGreeble (throats / recesses may be dark).
+// its shadow; the small fittings (< 4 m) use the matte twins (roughness ≥ 0.8, metalness 0) so they
+// never sparkle into "salt"; the ventLarge keeps the dark worn-metal hullGreeble for its throat.
 const SET_DEFS = [
   { key: "bayPlate", geo: SHAPES.bayPlate, mat: "hullPlate1", band: "large" },
   { key: "hatchLarge", geo: SHAPES.hatchLarge, mat: "hullPlate1", band: "large" },
@@ -107,14 +108,21 @@ const SET_DEFS = [
   { key: "mast", geo: SHAPES.mast, mat: "exta_greeble", band: "medium" },
   { key: "sensorCluster", geo: SHAPES.sensorCluster, mat: "exta_greeble", band: "medium" },
   { key: "cityBlock", geo: SHAPES.cityBlock, mat: "hullPlate1", band: "medium" },
+  { key: "tankLong", geo: SHAPES.tankLong, mat: "exta_greeble", band: "medium" },
+  { key: "pipeRunL", geo: SHAPES.pipeRunL, mat: "exta_greeble", band: "medium" },
+  { key: "dishLow", geo: SHAPES.dishLow, mat: "exta_matte", band: "medium" },
+  { key: "ventLow", geo: SHAPES.ventLow, mat: "exta_matte", band: "medium" },
   { key: "doorFrame", geo: SHAPES.doorFrame, mat: "exta_greeble", band: "medium" },
   { key: "windows", geo: windowBand, mat: "cityLights", band: "medium", plain: true, shadow: false },
-  { key: "hatchSmall", geo: SHAPES.hatchSmall, mat: "hullPlate1", band: "small" },
-  { key: "vent", geo: SHAPES.vent, mat: "hullGreeble", band: "small" },
-  { key: "pipe", geo: pipeRun, mat: "exta_greeble", band: "small" },
-  { key: "cabinet", geo: SHAPES.cabinet, mat: "exta_greeble", band: "small" },
-  { key: "dome", geo: SHAPES.dome, mat: "hullPlate1", band: "small" },
+  { key: "ao", geo: SHAPES.contactAO, mat: "exta_ao", band: "medium", plain: true, shadow: false },
+  { key: "hatchSmall", geo: SHAPES.hatchSmall, mat: "exta_plateMatte", band: "small" },
+  { key: "vent", geo: SHAPES.vent, mat: "exta_matte", band: "small" },
+  { key: "pipe", geo: pipeRun, mat: "exta_matte", band: "small" },
+  { key: "cabinet", geo: SHAPES.cabinet, mat: "exta_matte", band: "small" },
+  { key: "dome", geo: SHAPES.dome, mat: "exta_plateMatte", band: "small" },
 ];
+/** Sets that never get a contact-shadow decal (flat, wall-mounted or themselves lights / decals). */
+const NO_AO = new Set(["seam", "ao", "windows", "lightW", "lightR", "glowW", "glowR", "doorFrame", "dockRecess", "cabinet", "pipeRunL"]);
 
 class SetAcc {
   constructor(def) {
@@ -275,14 +283,13 @@ function put(ctx, surf, key, u, v, opts = {}) {
   const sy = Array.isArray(sc) ? sc[1] : sc;
   const sz = Array.isArray(sc) ? sc[2] : sc;
   const yaw = opts.yaw || 0;
-  let du = acc.hx * sx;
-  let dv = acc.hz * sz;
+  const hx = acc.hx * sx;
+  const hz = acc.hz * sz;
+  // footprint = axis-aligned box of the yawed shape (exact for the ±5° hull-axis jitter and for 90°)
   const sn = Math.abs(Math.sin(yaw));
-  if (sn > 0.7) {
-    const t = du;
-    du = dv;
-    dv = t;
-  } else if (sn > 0.01) du = dv = Math.hypot(du, dv);
+  const cs = Math.abs(Math.cos(yaw));
+  const du = hx * cs + hz * sn;
+  const dv = hx * sn + hz * cs;
   const ur = surf.uRange(v);
   if (!ur) return false;
   if (u - du < ur[0] || u + du > ur[1]) return false;
@@ -304,6 +311,12 @@ function put(ctx, surf, key, u, v, opts = {}) {
   // flat-on reads brighter than the plating; the belly fittings are pulled down to match
   acc.push(_m, (opts.tint === undefined ? tintOf(ctx.rand) : opts.tint) * (acc.def.plain ? 1 : surf.tintScale || 1));
   if (opts.register !== false) surf.occ.add(u - du, v - dv, u + du, v + dv);
+  // contact-shadow decal under deck / belly fittings: the quad follows the fitting's own frame and
+  // covers 1.3 × its footprint plus 0.6 m so the falloff band shows all round the base
+  if (!surf.wall && !acc.def.plain && !NO_AO.has(key) && !opts.lift) {
+    _m.compose(_p, _q, _s.set(2 * hx * 1.3 + 0.6, 1, 2 * hz * 1.3 + 0.6));
+    ctx.sets.get("ao").push(_m, 1);
+  }
   return true;
 }
 
@@ -450,10 +463,10 @@ function edgeLights(ctx, surf, { uFn, step, redEvery = 3, scale = 1.25, lift = 0
  * the rail at each station, every `redEvery`-th station red, each lamp under a 2–3 m additive glow fan
  * so the belly reads as lit navigation rails instead of random white pinpoints.
  */
-function railLights(ctx, surf, { uFn, step, gap = 3.2, redEvery = 4, glowR = 2.6, v0 = surf.v0, v1 = surf.v1, prob = 0.85 }) {
+function railLights(ctx, surf, { uFn, step, gap = 3.2, redEvery = 4, glowR = 2.6, v0 = surf.v0, v1 = surf.v1, prob = 0.85, jitter = 0.28 }) {
   let k = 0;
   const rand = ctx.rand;
-  for (let v = v0 + step * rr(rand, 0.3, 0.7); v < v1; v += step * rr(rand, 0.75, 1.3)) {
+  for (let v = v0 + step * rr(rand, 0.3, 0.7); v < v1; v += step * rr(rand, 1 - jitter, 1 + jitter)) {
     if (rand() > prob) continue;
     const u = uFn(v);
     if (u === null) continue;
@@ -472,6 +485,8 @@ function railLights(ctx, surf, { uFn, step, gap = 3.2, redEvery = 4, glowR = 2.6
 // ---------------------------------------------------------------------------
 // Pick tables per surface class
 // ---------------------------------------------------------------------------
+/** Yaw about the surface normal: along the hull axis (or across it, probability pRot), jittered ±5°. */
+const yawOf = (rand, pRot = 0.3) => (rand() < pRot ? Math.PI / 2 : 0) + (rand() - 0.5) * 0.1745;
 function pickLargePlate(rand) {
   const k = pickWeighted(rand, [
     [26, "bayPlate"],
@@ -481,7 +496,7 @@ function pickLargePlate(rand) {
     [10, "landingPad"],
     [7, "gantry"],
   ]);
-  const yaw = rand() < 0.3 ? Math.PI / 2 : 0;
+  const yaw = yawOf(rand);
   switch (k) {
     case "bayPlate":
       return { key: k, scale: rr(rand, 0.8, 1.2), yaw };
@@ -501,16 +516,20 @@ function pickLargePlate(rand) {
 }
 function pickMediumPlate(rand) {
   const k = pickWeighted(rand, [
-    [26, "boxStack"],
-    [15, "tankH"],
-    [12, "tankV"],
-    [12, "ventLarge"],
-    [12, "radiator"],
-    [10, "mast"],
-    [8, "sensorCluster"],
-    [5, "cityBlock"],
+    [14, "boxStack"],
+    [10, "tankH"],
+    [9, "tankV"],
+    [9, "ventLarge"],
+    [9, "radiator"],
+    [7, "mast"],
+    [6, "sensorCluster"],
+    [4, "cityBlock"],
+    [12, "tankLong"],
+    [10, "pipeRunL"],
+    [7, "dishLow"],
+    [8, "ventLow"],
   ]);
-  const yaw = rand() < 0.3 ? Math.PI / 2 : 0;
+  const yaw = yawOf(rand);
   switch (k) {
     case "boxStack":
       return { key: k, scale: [rr(rand, 0.8, 2.0), rr(rand, 0.8, 1.8), rr(rand, 0.8, 2.0)], yaw };
@@ -524,6 +543,16 @@ function pickMediumPlate(rand) {
       return { key: k, scale: [rr(rand, 1.2, 2.6), rr(rand, 1.0, 2.4), rr(rand, 1.2, 2.6)], yaw };
     case "mast":
       return { key: k, scale: rr(rand, 0.8, 1.6) };
+    // tanks r 3–6 lying fore–aft (never across the hull)
+    case "tankLong":
+      return { key: k, scale: rr(rand, 3, 6), yaw: yawOf(rand, 0) };
+    // 1 m bore conduit bundles 30–80 m along the hull
+    case "pipeRunL":
+      return { key: k, scale: [1, 1, rr(rand, 30, 80)], yaw: yawOf(rand, 0.1) };
+    case "dishLow":
+      return { key: k, scale: rr(rand, 1.2, 2.4), yaw: rand() * Math.PI * 2 };
+    case "ventLow":
+      return { key: k, scale: rr(rand, 1.0, 2.2), yaw };
     default:
       return { key: k, scale: rr(rand, 0.9, 1.6), yaw };
   }
@@ -535,7 +564,7 @@ function pickSmallPlate(rand) {
     [10, "dome"],
     [20, "pipe"],
   ]);
-  const yaw = rand() < 0.3 ? Math.PI / 2 : 0;
+  const yaw = yawOf(rand);
   if (k === "pipe") {
     const b = rr(rand, 0.7, 1.5);
     return { key: k, scale: [b, b, rr(rand, 8, 26)], yaw };
@@ -601,18 +630,20 @@ function topPlate(ctx) {
       }
       return discsHit(discs, u, v, du, dv);
     },
-    // machinery gathers in a "street" along the terrace-0 base and along the trench lip; the open
-    // plating between them stays mostly clean
+    // machinery gathers in a "street" along the terrace-0 base, along the trench lip and beside the
+    // raised seam lanes; the open plating between them stays at half the old density
     density(u, v) {
-      let k = 1;
+      let k = 0.5;
       const t = TERRACES[0];
-      if (v > t.zFront - 3 && v < t.zBack) k += 2.4 * (1 - smooth01((Math.abs(u) - terraceBaseHalfWidth(t, v) - 4) / 30));
-      else if (v <= t.zFront - 3) k += 1.6 * (1 - smooth01(Math.hypot(Math.abs(u) - 30, v - t.zFront) / 60));
-      k += 1.0 * (1 - smooth01((0.72 * hullHalfWidth(v) - Math.abs(u)) / 20));
+      if (v > t.zFront - 3 && v < t.zBack) k += 2.8 * (1 - smooth01((Math.abs(u) - terraceBaseHalfWidth(t, v) - 4) / 26));
+      else if (v <= t.zFront - 3) k += 1.8 * (1 - smooth01(Math.hypot(Math.abs(u) - 30, v - t.zFront) / 60));
+      k += 1.2 * (1 - smooth01((0.72 * hullHalfWidth(v) - Math.abs(u)) / 18));
+      const lane = Math.abs((Math.abs(u) % 28) - 14);
+      k += 0.7 * (1 - smooth01(lane / 7));
       return k;
     },
   };
-  plateDetail(ctx, surf, { seamLane: 28, seamCross: 44, seamProb: 0.8, large: 0.12, medium: 0.2, small: 0.2, rows: 45 });
+  plateDetail(ctx, surf, { seamLane: 28, seamCross: 44, seamProb: 0.8, large: 0.12, medium: 0.2, small: 0.2, rows: 40 });
   // marker lights along the plate edges (white, every third red)
   edgeLights(ctx, surf, { uFn: (v) => 0.72 * hullHalfWidth(v) - 5, step: 42, v0: -880 });
   edgeLights(ctx, surf, { uFn: (v) => -(0.72 * hullHalfWidth(v) - 5), step: 42, v0: -880 });
@@ -624,6 +655,17 @@ function bottomPlate(ctx) {
   const o = HANGAR.opening;
   const rb = VENTRAL.reactorBulb;
   const dr = VENTRAL.dockingRecess;
+  // eight machinery districts (r 70–110 m) alternating sides, each just inboard of a navigation rail
+  const districts = [];
+  {
+    const r = rng(6161);
+    const stations = [-560, -400, -250, -90, 80, 260, 420, 540];
+    stations.forEach((v, i) => {
+      const s = i % 2 ? 1 : -1;
+      const vv = v + (r() - 0.5) * 60;
+      districts.push({ u: s * (0.62 * hullHalfWidth(vv) - 9) - s * rr(r, 30, 60), v: vv, r: rr(r, 70, 110) });
+    });
+  }
   const surf = {
     v0: -930,
     v1: 597,
@@ -647,21 +689,19 @@ function bottomPlate(ctx) {
       if (dx * dx + dz * dz < (rb.r + 8) * (rb.r + 8)) return true;
       return discsHit(discs, u, v, du, dv);
     },
-    // ventral machinery districts: around the hangar mouth / docking recess / reactor bulb and the plate edge
+    // ventral machinery lives in eight districts strung along the two navigation rails (plus a thin
+    // ring around the hangar mouth); the open plating between them is nearly bare
     density(u, v) {
-      let k = 1;
-      k += 1.6 * (1 - smooth01((Math.hypot(u, v - (o.z0 + o.z1) / 2) - 60) / 70));
-      k += 1.2 * (1 - smooth01((Math.hypot(u - rb.x, v - rb.z) - rb.r - 8) / 50));
-      k += 0.8 * (1 - smooth01((0.62 * hullHalfWidth(v) - Math.abs(u)) / 20));
+      let k = 0.06;
+      for (const d of districts) k += 1.9 * (1 - smooth01((Math.hypot(u - d.u, v - d.v) - d.r * 0.55) / (d.r * 0.5)));
+      k += 0.5 * (1 - smooth01((Math.hypot(u, v - (o.z0 + o.z1) / 2) - 70) / 40));
       return k;
     },
   };
-  plateDetail(ctx, surf, { seamLane: 40, seamCross: 56, seamProb: 0.7, large: 0.09, medium: 0.15, small: 0.14, rows: 25 });
-  // navigation rails: paired running lights with glow fans along the plate edges and two inboard lines
-  for (const s of [-1, 1]) {
-    railLights(ctx, surf, { uFn: (v) => s * (0.62 * hullHalfWidth(v) - 9), step: 70, v0: -840 });
-    railLights(ctx, surf, { uFn: (v) => s * 0.3 * hullHalfWidth(v), step: 95, v0: -700, prob: 0.75 });
-  }
+  // 70 % fewer fittings than the old uniform scatter, gathered into the districts
+  plateDetail(ctx, surf, { seamLane: 40, seamCross: 56, seamProb: 0.55, large: 0.05, medium: 0.07, small: 0.06, rows: 8 });
+  // navigation rails: running-light pairs every 90 m on the two rails only, each lamp under a 2 m glow
+  for (const s of [-1, 1]) railLights(ctx, surf, { uFn: (v) => s * (0.62 * hullHalfWidth(v) - 9), step: 90, glowR: 2.0, v0: -840, prob: 1, jitter: 0.08 });
   return surf;
 }
 
@@ -840,13 +880,15 @@ function terraceRoofs(ctx) {
       },
       // roofs: a machinery street along the next terrace's base and the roof edge, thinner in between
       density(u, v) {
-        let k = 0.75;
-        if (next && v > next.zFront - 3 && v < next.zBack) k += 2.2 * (1 - smooth01((Math.abs(u) - terraceHalfWidth(next, v) - next.draft * (next.yTop - t.yTop) - 4) / 22));
-        k += 0.9 * (1 - smooth01((terraceHalfWidth(t, v) - 3 - Math.abs(u)) / 14));
+        let k = 0.45;
+        if (next && v > next.zFront - 3 && v < next.zBack) k += 2.6 * (1 - smooth01((Math.abs(u) - terraceHalfWidth(next, v) - next.draft * (next.yTop - t.yTop) - 4) / 20));
+        k += 1.0 * (1 - smooth01((terraceHalfWidth(t, v) - 3 - Math.abs(u)) / 12));
+        const lane = Math.abs((Math.abs(u) % 24) - 12);
+        k += 0.6 * (1 - smooth01(lane / 6));
         return k;
       },
     };
-    plateDetail(ctx, surf, { seamLane: 24, seamCross: 40, seamProb: 0.75, large: 0.14, medium: 0.26, small: 0.25, rows: 22 });
+    plateDetail(ctx, surf, { seamLane: 24, seamCross: 40, seamProb: 0.75, large: 0.14, medium: 0.26, small: 0.25, rows: 20 });
     edgeLights(ctx, surf, { uFn: (v) => terraceHalfWidth(t, v) - 1.6, step: 44, redEvery: 2, scale: 1.25 });
     edgeLights(ctx, surf, { uFn: (v) => -(terraceHalfWidth(t, v) - 1.6), step: 44, redEvery: 2, scale: 1.25 });
     out.push(surf);
@@ -931,6 +973,12 @@ function bridgeRoof(ctx) {
     },
     exclude(u, v, du, dv) {
       return discsHit(discs, u, v, du, dv);
+    },
+    // fittings gather around the dome plinths and the mast base, thin out on the open roof
+    density(u, v) {
+      let k = 0.5;
+      for (const d of discs) k += 1.8 * (1 - smooth01((Math.hypot(u - d.u, v - d.v) - d.r) / 16));
+      return k;
     },
   };
   seamLanes(ctx, surf, { along: "v", spacing: 22, len: [20, 60], gap: [6, 18], prob: 0.7 });

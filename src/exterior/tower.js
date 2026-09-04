@@ -32,17 +32,21 @@ export function buildTower(ctx) {
   const hl = (y) => (n.z1 - n.z0) / 2 + n.draft * (n.yTop - y) * 0.5;
   const at = (lvl, key) => chunks.batch(zc, lvl, key);
 
-  // stepped plinth under the head: the neck storeys stop at PLINTH[0].y0 and two wider slabs carry
-  // the load up to the module underside (neck hw 60 → 80 → 97 → head 105)
+  // stepped plinth under the head: the neck storeys stop 12 m under the soffit and two 6 m slabs
+  // carry the load up to the module underside (neck hw ≈ 61 → 65 → 85 → head 105), so the head
+  // reads as a block set on a stack of steps rather than a slab on a post
   const PLINTH = [
-    { y0: 202, y1: 216, hw: 80, z0: 236, z1: 384 },
-    { y0: 216, y1: b.y0, hw: b.hw - 8, z0: b.z0 + 12, z1: b.z1 - 6 },
+    { y0: b.y0 - 12, y1: b.y0 - 6, hw: 65, z0: 246, z1: 376 },
+    { y0: b.y0 - 6, y1: b.y0, hw: 85, z0: b.z0 + 12, z1: b.z1 - 6 },
   ];
   const yNeckTop = PLINTH[0].y0;
+  // chin: a full-width block hanging under the forward edge of the head (depth 8 m proud of the face,
+  // 11 m tall) with three hatch clusters — the head gets a jaw below the gallery windows
+  const CHIN = { y0: b.y0 - 11, y1: b.y0, hx: b.hw - 6, z0: b.z0 - 8, z1: b.z0 + 12 };
 
   // ------------------------------------------------------------------ neck: storeys + pilasters
   {
-    const storeys = 7;
+    const storeys = 8;
     const sh = (yNeckTop - n.yBase) / storeys;
     const bandH = 2.6;
     const rec = 0.9;
@@ -141,15 +145,41 @@ export function buildTower(ctx) {
         dk.quad(V(-p.hw, yr0, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), V(p.hw, yr0, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), V(p.hw, yr1, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), V(-p.hw, yr1, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), T, TEXEL * 2, V(0, 0, s));
       }
       if (i === 0) {
-        const yw = (p.y0 + p.y1) / 2 + 1.5;
+        const yw = (p.y0 + p.y1) / 2 + 0.6;
         for (const s of [-1, 1]) {
-          const g = new THREE.PlaneGeometry(p.z1 - p.z0 - 24, 2.2);
+          const g = new THREE.PlaneGeometry(p.z1 - p.z0 - 24, 1.8);
           at("far", "cityLights").addGeometry(g, { pos: [s * (p.hw + 0.12), yw, zcP], quat: Q(Z, V(s, 0, 0)), uv: "scale", uvScale: [(p.z1 - p.z0 - 24) / 40, 0.34] });
-          const g2 = new THREE.PlaneGeometry(p.hw * 2 - 30, 2.2);
+          const g2 = new THREE.PlaneGeometry(p.hw * 2 - 30, 1.8);
           at("far", "cityLights").addGeometry(g2, { pos: [0, yw, zcP + s * ((p.z1 - p.z0) / 2 + 0.12)], quat: Q(Z, V(0, 0, s)), uv: "scale", uvScale: [(p.hw * 2 - 30) / 40, 0.34] });
         }
       }
     });
+    // chin block under the forward edge of the head: plated box, a dark reveal along its top edge
+    // (shadow line against the face above), three hatch clusters and a pair of lamps on its face
+    {
+      const c = CHIN;
+      const pf = at("far", "hullPlate1");
+      const zcC = (c.z0 + c.z1) / 2;
+      pf.box(0, (c.y0 + c.y1) / 2, zcC, c.hx * 2, c.y1 - c.y0, c.z1 - c.z0, tintFor(mixC(L, M, 0.35), 0, c.y0), TEXEL, { skip: new Set(["+y", "+z"]) });
+      const dk = at("far", "hullGreeble");
+      dk.quad(V(-c.hx, c.y1 - 1.3, c.z0 - 0.05), V(c.hx, c.y1 - 1.3, c.z0 - 0.05), V(c.hx, c.y1 + 0.05, c.z0 - 0.05), V(-c.hx, c.y1 + 0.05, c.z0 - 0.05), T, TEXEL * 2, V(0, 0, -1));
+      for (const s of [-1, 1]) dk.quad(V(s * (c.hx + 0.05), c.y1 - 1.3, c.z0), V(s * (c.hx + 0.05), c.y1 - 1.3, c.z1), V(s * (c.hx + 0.05), c.y1 + 0.05, c.z1), V(s * (c.hx + 0.05), c.y1 + 0.05, c.z0), T, TEXEL * 2, V(s, 0, 0));
+      // dark reveal at the foot (the chin's underside meets the plinth step behind it)
+      dk.quad(V(-c.hx, c.y0 - 0.05, c.z0 - 0.05), V(c.hx, c.y0 - 0.05, c.z0 - 0.05), V(c.hx, c.y0 + 0.9, c.z0 - 0.05), V(-c.hx, c.y0 + 0.9, c.z0 - 0.05), T, TEXEL * 2, V(0, 0, -1));
+      const hz = at("mid", "hullPlate1");
+      for (const xc of [-0.62, 0, 0.62]) {
+        const cnt = 3;
+        for (let hi = 0; hi < cnt; hi++) {
+          const x = xc * c.hx + (hi - 1) * 4.2;
+          hz.box(x, c.y0 + 5.2, c.z0 - 0.3, 3.0, 3.0, 0.6, mixC(plateTone(rand), M, 0.5), TEXEL, { skip: new Set(["+z"]) });
+          hz.box(x, c.y0 + 5.2, c.z0 - 0.75, 1.9, 1.9, 0.3, D, TEXEL * 2, { skip: new Set(["+z"]) });
+        }
+      }
+      // horizontal conduit along the chin with clamps
+      const pipe = at("mid", "hullGreeble");
+      pipe.tube(V(-c.hx * 0.92, c.y0 + 2.2, c.z0 - 0.9), V(c.hx * 0.92, c.y0 + 2.2, c.z0 - 0.9), 0.45, 0.45, 8, mixC(M, D, 0.3), TEXEL * 4);
+      for (let x = -c.hx * 0.88; x < c.hx * 0.9; x += 9) pipe.box(x, c.y0 + 2.2, c.z0 - 0.5, 1.2, 1.5, 1.0, D, TEXEL * 4, { skip: new Set(["+z"]) });
+    }
     // solid sloped fairings from the neck faces up to the head underside (they pass outside the
     // plinth steps): a hexahedron whose outer face slopes from the neck at y 160 to the module edge
     const fair = at("far", "hullPlate1");
@@ -239,16 +269,30 @@ export function buildTower(ctx) {
         const c = C(tone);
         pane.grid(V(x1, y0, glowZ), V(x0, y0, glowZ), V(x0, y1, glowZ), V(x1, y1, glowZ), 1, 2, (p) => c.clone().multiplyScalar(bottom + (top - bottom) * Math.pow(clamp01((p.y - y0) / (y1 - y0)), 1.6)), 1, fwd);
       };
+      // 2–3 console-orange points low in each window (the bridge crew pits' displays seen from outside)
+      const consoles = (x0, x1, y0) => {
+        const cnt = 2 + Math.floor(rand() * 2);
+        const c = C(0xff9a3c).multiplyScalar(1.6);
+        for (let i = 0; i < cnt; i++) {
+          const x = x0 + 0.6 + (x1 - x0 - 1.2) * ((i + 0.5 + (rand() - 0.5) * 0.5) / cnt);
+          const y = y0 + 0.5 + rand() * 0.5;
+          pane.quad(V(x + 0.3, y, glowZ - 0.02), V(x - 0.3, y, glowZ - 0.02), V(x - 0.3, y + 0.28, glowZ - 0.02), V(x + 0.3, y + 0.28, glowZ - 0.02), c, 1, fwd);
+        }
+      };
       for (let i = 0; i < vp.count; i++) {
         const x = -vp.hw + vw / 2 + i * (vw + vp.pillar);
         const k = 0.85 + 0.3 * rand();
-        litPane(x - vw / 2 - 0.15, x + vw / 2 + 0.15, vp.y0 - 0.15, vp.y1 + 0.15, 0xdce8ff, 1.15 * k, 0.5 * k);
+        litPane(x - vw / 2 - 0.15, x + vw / 2 + 0.15, vp.y0 - 0.15, vp.y1 + 0.15, 0xc8d8ff, 0.7 * k, 0.32 * k);
+        consoles(x - vw / 2, x + vw / 2, vp.y0);
       }
+      // observation gallery: the same cool interior tone, dimmer — these read as windows on the deck
+      // below the bridge, not as a second row of lit panels
       for (const s of [-1, 1]) {
         for (let i = 0; i < gv.count; i++) {
           const x = s * (gv.x0 + gw * (i + 0.5));
           const k = 0.8 + 0.35 * rand();
-          litPane(x - gw / 2 + 0.3, x + gw / 2 - 0.3, gv.y0 - 0.1, gv.y1 + 0.1, 0xffe6c4, 0.85 * k, 0.4 * k);
+          litPane(x - gw / 2 + 0.3, x + gw / 2 - 0.3, gv.y0 - 0.1, gv.y1 + 0.1, 0xc8d8ff, 0.5 * k, 0.24 * k);
+          consoles(x - gw / 2 + 0.6, x + gw / 2 - 0.6, gv.y0);
         }
       }
     }
@@ -299,10 +343,10 @@ export function buildTower(ctx) {
       const em = at("far", "exta_emit");
       const rec = at("mid", "hullGreeble");
       const wash = at("far", "exta_pool");
-      const lens = C(0xdce8ff).multiplyScalar(2.2);
-      const washC = C(0xdce8ff).multiplyScalar(0.09);
+      const lens = C(0xfff0d0).multiplyScalar(3.0);
+      const washC = C(0xfff0d0).multiplyScalar(0.34);
       const zWash = b.z0 - 0.12;
-      const fan = (x, yFrom, yTo, w0, w1) => {
+      const fan = (x, yFrom, yTo, w0, w1, zq = zWash) => {
         // soft pool on the band face from the flood (width w0) to yTo (width w1): the colour falls off
         // both along the throw and towards the sides, and is black on every edge, so it reads as
         // light on the plating rather than as a shape
@@ -316,21 +360,24 @@ export function buildTower(ctx) {
         };
         const ya = yFrom;
         const yb = yTo;
-        wash.grid(V(x - wAt(ya) / 2, ya, zWash), V(x + wAt(ya) / 2, ya, zWash), V(x + wAt(yb) / 2, yb, zWash), V(x - wAt(yb) / 2, yb, zWash), 6, 5, col, 1, V(0, 0, -1));
+        wash.grid(V(x - wAt(ya) / 2, ya, zq), V(x + wAt(ya) / 2, ya, zq), V(x + wAt(yb) / 2, yb, zq), V(x - wAt(yb) / 2, yb, zq), 6, 5, col, 1, V(0, 0, -1));
       };
+      // the wash never crosses the viewport band itself (that is glass, lit from inside): the brow row
+      // are uplights on the brow's top face washing the plates above it, the sill row are downlights
+      // under the sill washing the plated band down to the gallery windows; both wash quads ride just
+      // in front of the proud plates, which stand 1 m off the face
+      const yBrowTop = bandA[1] + 3.0;
       for (const fx of [-0.78, -0.26, 0.26, 0.78]) {
         const x = fx * vp.hw;
-        // brow row: housing hangs 0.5 m below the brow underside, lens on its lower face
-        rec.box(x, bandA[1] - 0.25, b.z0 - 2.3, 2.8, 0.5, 1.9, T, TEXEL * 2, { skip: new Set(["+y"]) });
-        em.box(x, bandA[1] - 0.5, b.z0 - 2.3, 1.7, 0.16, 0.9, lens, 1, { skip: new Set(["+y"]) });
-        fan(x, bandA[1] - 0.5, bandA[0] + 1.6, 2.4, 11);
-        // sill row: housing stands on the sill, lens on its upper face
-        rec.box(x, bandA[0] + 0.25, b.z0 - 1.05, 2.8, 0.5, 1.5, T, TEXEL * 2, { skip: new Set(["-y"]) });
-        em.box(x, bandA[0] + 0.5, b.z0 - 1.05, 1.7, 0.16, 0.8, lens, 1, { skip: new Set(["-y"]) });
-        fan(x, bandA[0] + 0.5, bandA[1] - 1.6, 2.4, 11);
+        // brow row: 1.2 m housing let 0.5 m into the brow top, warm lens on its upper face
+        rec.box(x, yBrowTop + 0.2, b.z0 - 2.3, 1.6, 0.5, 1.9, T, TEXEL * 2, { skip: new Set(["-y"]) });
+        em.box(x, yBrowTop + 0.5, b.z0 - 2.3, 1.2, 0.16, 1.2, lens, 1, { skip: new Set(["-y"]) });
+        fan(x, yBrowTop + 0.5, b.y1 - 0.8, 2.6, 18, b.z0 - 1.03);
+        // sill row: housing let into the sill underside, lens on its lower face
+        rec.box(x, bandA[0] - 1.05, b.z0 - 1.3, 1.6, 0.5, 1.5, T, TEXEL * 2, { skip: new Set(["+y"]) });
+        em.box(x, bandA[0] - 1.32, b.z0 - 1.3, 1.2, 0.16, 0.8, lens, 1, { skip: new Set(["+y"]) });
+        fan(x, bandA[0] - 1.35, bandB[1] + 0.6, 2.6, 20, b.z0 - 1.03);
       }
-      // gallery deck: a light at each end of the observation windows
-      for (const s of [-1, 1]) em.box(s * (gv.x1 + 3), (gv.y0 + gv.y1) / 2, b.z0 - 0.4, 0.8, 0.8, 0.8, EMIT.amber, 1, { skip: new Set(["+z"]) });
       // sensor blisters on the front flanks and on the roof corners
       for (const s of [-1, 1]) {
         const blister = at("mid", "hullPlate1");
@@ -381,6 +428,7 @@ export function buildTower(ctx) {
     {
       const domes = TOWER.domes;
       const m = TOWER.mast;
+      const STEP = { hx: Math.abs(domes[0].x) - 28.6 - 6, h: 5, z0: b.z0 + FACE_T + 6, z1: b.z1 - 6 };
       plateField(chunks, rand, {
         zStart: b.z0 + FACE_T,
         zEnd: b.z1,
@@ -396,20 +444,45 @@ export function buildTower(ctx) {
         slabKeys: ["hullPlate", "hullPlate1"],
         tint: (x, y, z) => tintFor(L, x, z),
         slabTint: (r, base) => mixC(plateTone(r), base, 0.4),
-        slabOK: (x, y, z) => domes.every((d) => Math.hypot(x - d.x, z - d.z) > 31) && !(Math.abs(x - m.x) < 9 && Math.abs(z - m.z) < 9),
+        slabOK: (x, y, z) => domes.every((d) => Math.hypot(x - d.x, z - d.z) > 31) && Math.abs(x) > STEP.hx + 1,
       });
+      // roof step between the domes: a 5 m raised deck set back 6 m from the roof edges, plated on
+      // top, with a dark reveal at its foot; the spine block and the mast stand on it
       const far = at("far", "hullPlate1");
-      far.box(0, b.y1 + 2, (b.z0 + 6 + m.z - 10) / 2, 26, 4, m.z - 10 - (b.z0 + 6), M, TEXEL, { skip: new Set(["-y"]) });
+      const zcS = (STEP.z0 + STEP.z1) / 2;
+      far.box(0, b.y1 + STEP.h / 2, zcS, STEP.hx * 2, STEP.h, STEP.z1 - STEP.z0, tintFor(mixC(L, M, 0.3), 0, 300), TEXEL, { skip: new Set(["-y", "+y"]) });
+      plateField(chunks, rand, {
+        zStart: STEP.z0,
+        zEnd: STEP.z1,
+        rowLen: [7, 11],
+        strips: () => [{ s0: -STEP.hx, s1: STEP.hx, kind: "plate" }],
+        point: (z, s) => V(s, b.y1 + STEP.h, z),
+        normal: V(0, 1, 0),
+        mirror: false,
+        cellW: 8,
+        slabP: 0.4,
+        slabH: [0.35, 0.8],
+        skinKey: "hullPlate",
+        slabKeys: ["hullPlate", "hullPlate1"],
+        tint: (x, y, z) => tintFor(L, x, z),
+        slabTint: (r, base) => mixC(plateTone(r), base, 0.4),
+        slabOK: (x, y, z) => !(Math.abs(x - m.x) < 9 && Math.abs(z - m.z) < 9) && Math.abs(x) > 14,
+      });
+      const dk = at("far", "hullGreeble");
+      for (const s of [-1, 1]) dk.quad(V(s * (STEP.hx + 0.05), b.y1, STEP.z0), V(s * (STEP.hx + 0.05), b.y1, STEP.z1), V(s * (STEP.hx + 0.05), b.y1 + 1.2, STEP.z1), V(s * (STEP.hx + 0.05), b.y1 + 1.2, STEP.z0), T, TEXEL * 2, V(s, 0, 0));
+      const yS = b.y1 + STEP.h;
+      far.box(0, yS + 2, (b.z0 + 6 + m.z - 10) / 2, 26, 4, m.z - 10 - (b.z0 + 6), M, TEXEL, { skip: new Set(["-y"]) });
       const nb = at("near", "hullGreeble");
-      for (let z = b.z0 + 14; z < m.z - 16; z += 9) nb.box(0, b.y1 + 4.5, z, 6, 1.0, 4, T, TEXEL * 3, { skip: new Set(["-y"]) });
+      for (let z = b.z0 + 14; z < m.z - 16; z += 9) nb.box(0, yS + 4.5, z, 6, 1.0, 4, T, TEXEL * 3, { skip: new Set(["-y"]) });
     }
     // visible strips of the module bottom around the upper plinth step
     {
       const far = at("far", "hullPlate1");
       const down = V(0, -1, 0);
-      far.quad(V(-b.hw, b.y0, b.z0 + FACE_T), V(b.hw, b.y0, b.z0 + FACE_T), V(b.hw, b.y0, b.z0 + 12), V(-b.hw, b.y0, b.z0 + 12), M, TEXEL, down);
-      far.quad(V(-b.hw, b.y0, b.z1 - 6), V(b.hw, b.y0, b.z1 - 6), V(b.hw, b.y0, b.z1), V(-b.hw, b.y0, b.z1), M, TEXEL, down);
-      for (const s of [-1, 1]) far.quad(V(s * (b.hw - 8), b.y0, b.z0 + 12), V(s * b.hw, b.y0, b.z0 + 12), V(s * b.hw, b.y0, b.z1 - 6), V(s * (b.hw - 8), b.y0, b.z1 - 6), M, TEXEL, down);
+      const pu = PLINTH[1];
+      for (const s of [-1, 1]) far.quad(V(s * CHIN.hx, b.y0, b.z0 + FACE_T), V(s * b.hw, b.y0, b.z0 + FACE_T), V(s * b.hw, b.y0, pu.z0), V(s * CHIN.hx, b.y0, pu.z0), M, TEXEL, down);
+      far.quad(V(-b.hw, b.y0, pu.z1), V(b.hw, b.y0, pu.z1), V(b.hw, b.y0, b.z1), V(-b.hw, b.y0, b.z1), M, TEXEL, down);
+      for (const s of [-1, 1]) far.quad(V(s * pu.hw, b.y0, pu.z0), V(s * b.hw, b.y0, pu.z0), V(s * b.hw, b.y0, pu.z1), V(s * pu.hw, b.y0, pu.z1), M, TEXEL, down);
     }
     // aft face: plated, a recessed deck-A window band and the docking port
     {

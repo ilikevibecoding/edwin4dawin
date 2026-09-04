@@ -81,14 +81,14 @@ const region = (x, z, seed) => {
   return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
 };
 /**
- * Skin tint: two low-frequency paint layers (150 m at ±14 % and 380 m at ±10 %) plus a hard-edged
- * patchwork of 110–260 m regions at ±7 % (studio-model style: whole sections of the hull in a slightly
- * different grey) so the plating has a slow tonal drift — repainted sections, weathering — rather than
- * a per-tile quilt; a few replaced plates one step darker; soot toward the stern (the engine wash
- * reaches ~100 m forward along the dorsal and ventral plates).
+ * Skin tint: a hard-edged patchwork of 110–260 m regions at ±12 % (studio-model style: whole sections
+ * of the hull painted in a slightly different grey) over two smooth low-frequency layers (150 m at
+ * ±10 % and 380 m at ±8 %) so the plating has a slow tonal drift — repainted sections, weathering —
+ * rather than a per-tile quilt; a few replaced plates one step darker; soot toward the stern (the
+ * engine wash reaches ~100 m forward along the dorsal and ventral plates).
  */
 const paint = (base, alt, seed) => (x, y, z) => {
-  let c = shade(base, (0.86 + fieldNoise(x, z, 150, seed) * 0.28) * (0.9 + fieldNoise(x + 3000, z, 380, seed + 1) * 0.2) * (0.93 + region(x, z, seed) * 0.14));
+  let c = shade(base, (0.9 + fieldNoise(x, z, 150, seed) * 0.2) * (0.92 + fieldNoise(x + 3000, z, 380, seed + 1) * 0.16) * (0.88 + region(x, z, seed) * 0.24));
   const h = hash2(x, z);
   if (h < 0.06) c = mixC(c, alt, 0.35);
   else if (h > 0.96) c = shade(c, 1.04);
@@ -474,21 +474,35 @@ function buildStern(ctx) {
     dark.box(X(H.hw + 40), 10, z - 0.8, 40, 14, 1.6, mixC(D, PALETTE.hullTrench, 0.5), MACH, { skip: new Set(["-z"]) });
     dark.box(X(H.hw + 40), -30, z - 0.8, 40, 14, 1.6, mixC(D, PALETTE.hullTrench, 0.5), MACH, { skip: new Set(["-z"]) });
   }
-  // terraces: stepped aft faces with a window band per tier
-  const lights = chunks.batch(z - 1, "far", "cityLights");
+  // terraces: one stepped cliff from the engine housing to the terrace-2 roof — each terrace's aft
+  // face stands at its own zBack (the upper two are set back 18 m each), with a window band per tier
+  // and horizontal pipe runs on standoffs across the face
   TERRACES.forEach((t, ti) => {
-    const lv = tierLevels(t, z);
+    const zA = t.zBack;
+    const lv = tierLevels(t, zA);
+    const faceB = chunks.batch(zA - 1, "far", "hullPlate1");
+    const lights = chunks.batch(zA - 1, "far", "cityLights");
+    const pipes = chunks.batch(zA - 1, "near", "hullGreeble");
     for (let k = 0; k < lv.length - 1; k++) {
       const yLo = lv[k];
       const yHi = lv[k + 1];
-      const xLo = tierWallX(t, z, yHi, yLo);
-      const xHi = tierWallX(t, z, yHi, yHi);
+      const xLo = tierWallX(t, zA, yHi, yLo);
+      const xHi = tierWallX(t, zA, yHi, yHi);
       const tint = shade(k % 2 ? M : mixC(M, L, 0.4), 0.92 + 0.08 * fieldNoise(ti * 50, k * 30, 40, 5));
-      far.quad(V(-xLo, yLo, z), V(xLo, yLo, z), V(xHi, yHi, z), V(-xHi, yHi, z), tint, TEXEL, Z);
+      faceB.quad(V(-xLo, yLo, zA), V(xLo, yLo, zA), V(xHi, yHi, zA), V(-xHi, yHi, zA), tint, TEXEL, Z);
       const yc = yLo + (yHi - yLo) * 0.5;
-      const xw = tierWallX(t, z, yHi, yc) * 0.86;
-      lights.addGeometry(new THREE.PlaneGeometry(xw * 2, 2.6), { pos: [0, yc, z + 0.35], uv: "scale", uvScale: [(xw * 2) / 40, 0.34] });
+      const xw = tierWallX(t, zA, yHi, yc) * 0.86;
+      lights.addGeometry(new THREE.PlaneGeometry(xw * 2, 2.6), { pos: [0, yc, zA + 0.35], uv: "scale", uvScale: [(xw * 2) / 40, 0.34] });
+      // two conduits per tier (above and below the window band) with clamps every ~9 m
+      for (const fy of [0.22, 0.78]) {
+        const y = yLo + (yHi - yLo) * fy;
+        const r = 0.4 + 0.3 * fieldNoise(ti * 30, k * 20 + fy * 100, 10, 7);
+        const xr = tierWallX(t, zA, yHi, y) * 0.9;
+        pipes.tube(V(-xr, y, zA + r + 0.6), V(xr, y, zA + r + 0.6), r, r, 8, mixC(M, D, 0.3), TEXEL * 4);
+        for (let x = -xr + 3; x < xr - 2; x += 9) pipes.box(x, y, zA + 0.45 + r / 2, 1.2, r * 2 + 0.8, 0.9 + r, D, TEXEL * 4, { skip: new Set(["-z"]) });
+      }
     }
+    // the setback ledge behind this face is the roof plating of the terrace below (superstructure.js)
   });
 }
 

@@ -5,7 +5,7 @@
 // instance colour multiplies on top for per-copy variation.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
-import { worldUVs, setVertexColor } from "../kit.js";
+import { worldUVs, setVertexColor, insideOut } from "../kit.js";
 import { PALETTE } from "../materials.js";
 
 const _m = new THREE.Matrix4();
@@ -253,6 +253,75 @@ export function gantry() {
 export function cityBlock() {
   return bash([box(3, 1.4, 3, 0, 0.7, 0, TINT.light), box(1.8, 1.2, 2.0, 0.3, 2.0, -0.2, TINT.light)]);
 }
+/**
+ * Long storage tank lying fore–aft (axis z): r 1, 6 m long with domed ends, two saddles, a walkway
+ * strip and an end valve block — scaled uniformly ×3–6 for r 3–6 m tanks.
+ */
+export function tankLong() {
+  return bash(
+    [
+      { geo: new THREE.CylinderGeometry(1, 1, 4.4, 14, 1, true), pos: [0, 1.25, 0], rot: [Math.PI / 2, 0, 0], color: TINT.light },
+      { geo: new THREE.SphereGeometry(1, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), pos: [0, 1.25, -2.2], rot: [-Math.PI / 2, 0, 0], color: TINT.light },
+      { geo: new THREE.SphereGeometry(1, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2), pos: [0, 1.25, 2.2], rot: [Math.PI / 2, 0, 0], color: TINT.light },
+      box(2.4, 0.5, 0.6, 0, 0.25, -1.5, TINT.dark),
+      box(2.4, 0.5, 0.6, 0, 0.25, 1.5, TINT.dark),
+      box(0.36, 0.14, 4.6, 0, 2.3, 0, TINT.dark),
+      box(0.5, 0.5, 0.5, 0, 1.25, 3.3, TINT.dark),
+      { geo: new THREE.CylinderGeometry(0.12, 0.12, 0.9, 6, 1, true), pos: [0, 1.25, 3.0], rot: [Math.PI / 2, 0, 0], color: TINT.dark },
+    ],
+    { texel: 1 / 6 },
+  );
+}
+/** Twin conduit bundle along z, 1 m bore, length 1 (scale z for 30–80 m runs) on a shared bed plate. */
+export function pipeRunL() {
+  const g = bash(
+    [
+      { geo: new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1, true), pos: [-0.65, 0.75, 0], rot: [Math.PI / 2, 0, 0], color: TINT.light },
+      { geo: new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1, true), pos: [0.65, 0.75, 0], rot: [Math.PI / 2, 0, 0], color: TINT.light },
+      box(2.6, 0.25, 1, 0, 0.125, 0, TINT.dark),
+    ],
+    { gradient: false },
+  );
+  const pos = g.attributes.position;
+  const col = g.attributes.color;
+  for (let i = 0; i < pos.count; i++) {
+    const k = 0.5 + 0.5 * Math.min(1, Math.max(0, (pos.getY(i) - 0.3) / 0.8));
+    col.setXYZ(i, col.getX(i) * k, col.getY(i) * k, col.getZ(i) * k);
+  }
+  return g;
+}
+/** Low sensor dish: shallow bowl r 1.6 tipped 20° on a squat pedestal, feed rod. ~1.3 m tall */
+export function dishLow() {
+  const bowl = new THREE.CylinderGeometry(1.6, 0.5, 0.5, 16, 1, true);
+  // the concave side must be visible from above: an inside-out copy of the shell
+  const inner = insideOut(bowl.clone());
+  const tilt = [0.35, 0, 0];
+  return bash(
+    [
+      cylY(0.55, 0.3, 0, 0.15, 0, TINT.dark, 10),
+      cylY(0.3, 0.5, 0, 0.5, 0, TINT.mid, 8),
+      { geo: bowl, pos: [0, 0.95, 0], rot: tilt, color: TINT.light },
+      { geo: inner, pos: [0, 0.95, -0.005], rot: tilt, color: TINT.mid },
+      { geo: new THREE.CylinderGeometry(0.06, 0.06, 1.0, 5, 1, true), pos: [0, 1.4, -0.2], rot: tilt, color: TINT.dark },
+      box(0.3, 0.3, 0.3, 0, 1.85, -0.35, TINT.dark),
+    ],
+    { texel: 1 / 4 },
+  );
+}
+/** Low louvred deck vent: dark tray with five angled light slats. 4 × 0.55 × 2 */
+export function ventLow() {
+  const parts = [box(4, 0.3, 2, 0, 0.15, 0, TINT.black)];
+  for (let i = 0; i < 5; i++) parts.push(box(3.6, 0.1, 0.5, 0, 0.42, -0.8 + i * 0.4, TINT.light, [0.5, 0, 0]));
+  parts.push(box(4.2, 0.12, 0.25, 0, 0.36, -1.05, TINT.dark), box(4.2, 0.12, 0.25, 0, 0.36, 1.05, TINT.dark));
+  return bash(parts, { texel: 1 / 4 });
+}
+/** Contact-shadow decal: unit quad facing +y just above the surface (alphaMap gives the falloff). */
+export function contactAO() {
+  const g = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2).translate(0, 0.03, 0);
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  return g;
+}
 
 // ---------------------------------------------------------------------------
 // Trench fittings: the wall's outward normal becomes local +y (the shape stands proud of the wall);
@@ -341,6 +410,11 @@ export const SHAPES = {
   sensorCluster,
   gantry,
   cityBlock,
+  tankLong,
+  pipeRunL,
+  dishLow,
+  ventLow,
+  contactAO,
   doorFrame,
   dockRecess,
   cabinet,

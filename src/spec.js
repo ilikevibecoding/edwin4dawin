@@ -72,10 +72,12 @@ export function trenchBand(z) {
 // ---------------------------------------------------------------------------
 // Each terrace is a tapered block sitting on the top plate: plan-view half-width grows linearly from
 // zFront to zBack; the sides lean in by `draft` (horizontal metres per vertical metre); flat top at yTop.
+// The upper two terraces stop short of the stern (18 m setbacks) so the aft end reads as one stepped
+// cliff above the engine housing instead of a flush wall.
 export const TERRACES = [
   { id: "t0", zFront: -420, zBack: 600, hwFront: 42, hwBack: 265, yTop: 84, draft: 0.45 },
-  { id: "t1", zFront: -180, zBack: 600, hwFront: 34, hwBack: 205, yTop: 112, draft: 0.45 },
-  { id: "t2", zFront: 60, zBack: 600, hwFront: 28, hwBack: 150, yTop: 138, draft: 0.4 },
+  { id: "t1", zFront: -180, zBack: 582, hwFront: 34, hwBack: 205, yTop: 112, draft: 0.45 },
+  { id: "t2", zFront: 60, zBack: 564, hwFront: 28, hwBack: 150, yTop: 138, draft: 0.4 },
 ];
 export function terraceHalfWidth(t, z) {
   const f = clamp((z - t.zFront) / (t.zBack - t.zFront), 0, 1);
@@ -84,8 +86,8 @@ export function terraceHalfWidth(t, z) {
 
 export const TOWER = {
   // the neck between terrace 2 and the bridge module: hw 60 with a 0.10 draft (69 at its foot, inside
-  // the 71 m terrace-2 roof at z = 250); tower.js stops its storeys at y ≈ 202 and stacks the two
-  // plinth steps (hw 80 / 97) under the head above that
+  // the 71 m terrace-2 roof at z = 250); tower.js stops its storeys at y = 218 and stacks two 6 m
+  // plinth steps (hw 65 / 85) under the head above that, with an 11 m chin block under its forward edge
   neck: { z0: 250, z1: 370, hw: 60, yBase: 138, yTop: 230, draft: 0.1 },
   // the wide "T" head that carries the bridge; the forward face holds the bridge viewports
   bridge: { z0: 215, z1: 395, hw: 105, y0: 230, y1: 268 },
@@ -99,7 +101,8 @@ export const TOWER = {
     { x: -62, z: 330, r: 30, yCenter: 282 },
     { x: 62, z: 330, r: 30, yCenter: 282 },
   ],
-  mast: { x: 0, z: 345, yBase: 268, yTop: 336, r: 3.2 },
+  // the mast stands on the 5 m roof step between the domes (tower.js)
+  mast: { x: 0, z: 345, yBase: 273, yTop: 341, r: 3.2 },
 };
 
 // ---------------------------------------------------------------------------
@@ -416,7 +419,7 @@ export const DECK_SPOTS = [
 // hull so the belly plane keys at ~0.55 and the reactor bulb carries a terminator.
 // ---------------------------------------------------------------------------
 export const EXTERIOR_VIEWS = {
-  ext_hero: { pos: [-1000, 620, -1150], look: [0, 90, -60], fov: 42, time: 122, sunElev: 30 },
+  ext_hero: { pos: [-1000, 620, -1150], look: [0, 90, -60], fov: 42, time: 136, sunElev: 30 },
   // from just under the bow plane the visible faces are ventral: key from port-aft-below so the
   // lower slope / belly / terrace flanks carry the light and the deck goes to fill
   ext_bow: { pos: [-240, -60, -1220], look: [0, 20, -620], fov: 48, time: 252, sunElev: -18 },
@@ -429,7 +432,7 @@ export const EXTERIOR_VIEWS = {
   // comes from 12° up dead ahead so it rakes along the inner wall (key ≈ 0.2 → 30–40 %)
   ext_trench: { pos: [-430, -12, -260], look: [-250, 36, 120], fov: 50, time: 158, sunElev: 12 },
   ext_far: { pos: [-2300, 500, -2000], look: [0, 60, -100], fov: 30, time: 166, sunElev: 30 },
-  ext_top: { pos: [0, 2600, -200], look: [0, 0, -200], fov: 45, time: 215.4, sunElev: 30 },
+  ext_top: { pos: [0, 2600, -200], look: [0, 0, -200], fov: 38, time: 215.4, sunElev: 30 },
 };
 
 export const SHIP_NAME = "VINDICATOR";

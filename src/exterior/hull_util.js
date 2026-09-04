@@ -12,6 +12,7 @@ import * as THREE from "three";
 import { PALETTE, setDomain } from "../materials.js";
 import { makeArmourPlating, makeMachineryPanel, makeHeatRamp } from "../textures_hull.js";
 import { makeGreeblePanel } from "../textures_greeble.js";
+import { makeCanvas, toTexture } from "../textures.js";
 
 export const TEXEL = 1 / 26; // one plating tile per 26 m (plates 3–8 m in the texture)
 // Depth precision at distance d with near = 1.2 m is ~d²·5e-8 m: 0.4 m plate steps stop being
@@ -838,6 +839,13 @@ export function ensureExtMaterials(materials) {
     if (!s) throw new Error(`exterior: missing shared material ${src}`);
     materials[dst] = addPlanetShine(setDomain(std(twinTex[src] || s, { normalScale: s.normalScale.clone(), envMapIntensity: s.envMapIntensity, roughness: s.roughness, metalness: s.metalness }), "exterior"));
   }
+  // matte twins for the small fittings (< 4 m): same colour / normal maps, no roughness / metalness
+  // maps, roughness ≥ 0.8 and metalness 0, so nothing small ever sparkles into "salt" under a low key
+  const matte = (set) => new THREE.MeshStandardMaterial({ map: set.map, normalMap: set.normalMap, normalScale: new THREE.Vector2(0.8, 0.8), roughness: 0.85, metalness: 0, vertexColors: true, color: 0xffffff, fog: false, envMapIntensity: 0.25 });
+  materials.exta_matte = addPlanetShine(setDomain(matte(greeblePanel), "exterior"));
+  materials.exta_plateMatte = addPlanetShine(setDomain(matte(plateB), "exterior"));
+  // contact-shadow decal under every deck / belly fitting: black × a rounded falloff (alphaMap)
+  materials.exta_ao = new THREE.MeshBasicMaterial({ color: 0x000000, alphaMap: makeContactAO(64), transparent: true, opacity: 0.7, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, fog: false });
   // engine bell outer skin: heat-tempering ramp along the axis (u), vertex colour modulates
   materials.exta_heat = setDomain(new THREE.MeshStandardMaterial({ map: makeHeatRamp(256, 16), roughness: 0.5, metalness: 0.55, vertexColors: true, color: 0xffffff, fog: false, envMapIntensity: 0.7 }), "exterior");
   // additive glow with per-vertex colour (gradient cones inside the nozzles)
@@ -849,5 +857,26 @@ export function ensureExtMaterials(materials) {
   // additive, front side only: lit-interior panes behind the bridge glass (they brighten the view into
   // the rooms from outside and are back-face culled from inside, so the view out stays open)
   materials.exta_pane = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.FrontSide });
-  for (const k of ["exta_plate2", "exta_machinery", "exta_greeble", "exta_heat", ...Object.values(SHINE_VARIANT)]) if (!materials.exteriorKeys.includes(k)) materials.exteriorKeys.push(k);
+  for (const k of ["exta_plate2", "exta_machinery", "exta_greeble", "exta_matte", "exta_plateMatte", "exta_heat", ...Object.values(SHINE_VARIANT)]) if (!materials.exteriorKeys.includes(k)) materials.exteriorKeys.push(k);
+}
+
+/** Alpha texture for the contact-shadow decals: 1 under the fitting, a rounded falloff to 0 at the quad edge. */
+function makeContactAO(size = 64) {
+  const c = makeCanvas(size, size);
+  const ctx = c.getContext("2d");
+  const img = ctx.createImageData(size, size);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const u = Math.abs(((x + 0.5) / size) * 2 - 1);
+      const v = Math.abs(((y + 0.5) / size) * 2 - 1);
+      // rounded-rectangle distance: the fitting's own footprint ends near d ≈ 0.75
+      const d = Math.max(u, v) * 0.75 + Math.hypot(u, v) * 0.25;
+      const a = Math.pow(Math.min(1, Math.max(0, (1 - d) / 0.42)), 1.4);
+      const i = (y * size + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.round(a * 255);
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTexture(c, { srgb: false, wrap: false });
 }

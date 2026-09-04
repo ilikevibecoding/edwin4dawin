@@ -19,7 +19,8 @@ const LEDGES = { t0: [0.42, 0.74], t1: [0.5], t2: [0.5] };
  * climbs in 2–3 long steps (t0: y ≈ 47 at z = -420, 67 at -350, 84 by -270) instead of one cliff.
  */
 const SETBACK = { t0: 70, t1: 40, t2: 40 };
-const FRONT_SLOPE = 0.25;
+// near-vertical front faces (a 6° lean) so the tier ends read as square-cut cliffs, not ramps
+const FRONT_SLOPE = 0.1;
 const BAND_H = 2.8;
 const RECESS = 0.9;
 
@@ -169,8 +170,16 @@ export function buildSuperstructure(ctx) {
         // and horizontal pipe runs (the studio-model "cliff face" detail)
         const plates = chunks.batch(zF + 5, "near", "hullPlate");
         const cols = Math.max(2, Math.round((xa * 2) / 22));
-        const rowsF = h > 16 ? [[0.06, 0.3], [0.7, 0.94]] : [[0.08, 0.36], [0.64, 0.92]];
-        for (const [f0, f1] of rowsF) {
+        // window rows across the face (one per ~9 m of height); the armour plates fill the bands
+        // between them so no plate ever crosses a window line
+        const nWin = Math.max(1, Math.min(3, Math.floor(h / 9)));
+        const wins = [];
+        for (let wi = 0; wi < nWin; wi++) wins.push((wi + 0.5) / nWin + (rand() - 0.5) * 0.08);
+        const bounds = [0.05, ...wins.flatMap((f) => [f - 1.9 / h, f + 1.9 / h]), 0.95];
+        for (let bi = 0; bi < bounds.length; bi += 2) {
+          const f0 = bounds[bi];
+          const f1 = bounds[bi + 1];
+          if ((f1 - f0) * h < 2.4) continue;
           for (let ci = 0; ci < cols; ci++) {
             if (rand() < 0.3) continue;
             const u0 = -1 + (2 * ci) / cols + 0.03;
@@ -178,50 +187,64 @@ export function buildSuperstructure(ctx) {
             plates.frustum([P(u0, f0), P(u1, f0), P(u1, f1), P(u0, f1)], n, 0.6 + rand() * 0.5, 0.8, mixC(plateTone(rand), faceTint, 0.5), TEXEL);
           }
         }
-        // window rows across the face (one per ~9 m of height)
-        const q = new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), n);
-        const nWin = Math.max(1, Math.min(3, Math.floor(h / 9)));
-        for (let wi = 0; wi < nWin; wi++) {
-          const f = (wi + 0.5) / nWin + (rand() - 0.5) * 0.08;
-          const span = (xa + (xb - xa) * f) * 2 - 6;
-          if (span < 12) continue;
-          const g = new THREE.PlaneGeometry(span, 2.2);
-          const c = P(0, f).addScaledVector(n, 0.4);
-          chunks.batch(zF + 5, "far", "cityLights").addGeometry(g, { pos: [c.x, c.y, c.z], quat: q, uv: "scale", uvScale: [span / 40, 0.34] });
-          // dark recess strip behind the window row
+        // each window row: a 0.6 m warm emissive line inside a 1.5 m dark recess over 60 % of the face
+        // width, so it reads as a row of lit windows at scale rather than as a glowing panel
+        const WIN = new THREE.Color(0xffd9a0).multiplyScalar(1.3);
+        for (const f of wins) {
+          const half = xa + (xb - xa) * f;
+          if (half * 2 < 12) continue;
+          const uw = 0.6 + (rand() - 0.5) * 0.08;
+          const uc = (rand() - 0.5) * (0.95 - uw) * 2;
           const rec = chunks.batch(zF + 5, "far", "hullGreeble");
-          const fr0 = f - 1.4 / h;
-          const fr1 = f + 1.4 / h;
-          rec.quad(P(-0.98, fr0).addScaledVector(n, 0.15), P(0.98, fr0).addScaledVector(n, 0.15), P(0.98, fr1).addScaledVector(n, 0.15), P(-0.98, fr1).addScaledVector(n, 0.15), T, TEXEL * 2, n);
+          const fr = 0.75 / h;
+          const fw = 0.3 / h;
+          const lip = 0.32 / h;
+          // dark recess back (on the face, between the raised armour plates) with a sill and a soffit
+          // lip standing 0.6 m proud so the strip reads as set back into the cliff
+          const on = n.clone().multiplyScalar(0.08);
+          rec.quad(P(uc - uw, f - fr).add(on), P(uc + uw, f - fr).add(on), P(uc + uw, f + fr).add(on), P(uc - uw, f + fr).add(on), T, TEXEL * 2, n);
+          const lips = chunks.batch(zF + 5, "near", "hullPlate1");
+          lips.frustum([P(uc - uw - 0.5 / half, f - fr - lip), P(uc + uw + 0.5 / half, f - fr - lip), P(uc + uw + 0.5 / half, f - fr), P(uc - uw - 0.5 / half, f - fr)], n, 0.6, 0.1, mixC(M, D, 0.3), TEXEL);
+          lips.frustum([P(uc - uw - 0.5 / half, f + fr), P(uc + uw + 0.5 / half, f + fr), P(uc + uw + 0.5 / half, f + fr + lip), P(uc - uw - 0.5 / half, f + fr + lip)], n, 0.6, 0.1, mixC(M, D, 0.3), TEXEL);
+          const em = chunks.batch(zF + 5, "far", "exta_emit");
+          const lit = n.clone().multiplyScalar(0.16);
+          // the lit line is broken into 3.5 m panes by 0.5 m mullions
+          const paneW = 3.5 / half;
+          for (let u = uc - uw + 0.4 / half; u + paneW < uc + uw; u += paneW + 0.5 / half) {
+            em.quad(P(u, f - fw).add(lit), P(u + paneW, f - fw).add(lit), P(u + paneW, f + fw).add(lit), P(u, f + fw).add(lit), WIN, 1, n);
+          }
         }
-        // pipe runs: two or three horizontal conduits between the rows, with clamps
+        // pipe runs: two or three horizontal conduits on standoffs riding over the armour plates
+        // (which stand up to 1.1 m proud), with clamps
         const pipes = chunks.batch(zF + 5, "near", "hullGreeble");
         const nPipe = h > 12 ? 3 : 2;
         for (let pi = 0; pi < nPipe; pi++) {
           const f = 0.12 + (0.76 * (pi + rand() * 0.6)) / nPipe;
           const r = 0.35 + rand() * 0.35;
           const uMax = 0.9 - rand() * 0.35;
-          const a = P(-uMax, f).addScaledVector(n, r + 0.2);
-          const b2 = P(uMax, f).addScaledVector(n, r + 0.2);
+          const a = P(-uMax, f).addScaledVector(n, r + 1.25);
+          const b2 = P(uMax, f).addScaledVector(n, r + 1.25);
           pipes.tube(a, b2, r, r, 8, mixC(M, D, 0.3), TEXEL * 4);
           const dfc = (r + 0.5) / h;
           for (let cu = -uMax + 0.1; cu < uMax; cu += 0.18 + rand() * 0.1) {
             const du = 0.6 / xa;
-            pipes.frustum([P(cu - du, f - dfc), P(cu + du, f - dfc), P(cu + du, f + dfc), P(cu - du, f + dfc)], n, r + 0.3, 0.1, D, TEXEL * 4);
+            pipes.frustum([P(cu - du, f - dfc), P(cu + du, f - dfc), P(cu + du, f + dfc), P(cu - du, f + dfc)], n, r + 1.35, 0.1, D, TEXEL * 4);
           }
         }
-        // hatch clusters: 2–4 small raised hatches in a group, a few groups per face
+        // hatch clusters: 2–3 groups of 3–4 raised hatches per face, standing on the plate bands
         const hatches = chunks.batch(zF + 5, "near", "hullPlate1");
-        const nGroups = Math.max(1, Math.round(xa / 18));
+        const nGroups = Math.max(2, Math.min(3, Math.round(xa / 18)));
         for (let gi = 0; gi < nGroups; gi++) {
-          const uc = -0.85 + rand() * 1.7;
-          const fc = 0.4 + rand() * 0.25;
-          const cnt = 2 + Math.floor(rand() * 3);
+          const uc = -0.8 + (1.6 * (gi + 0.2 + rand() * 0.6)) / nGroups;
+          const band = bounds.length >= 4 ? 2 * Math.floor(rand() * (bounds.length / 2)) : 0;
+          const fc = (bounds[band] + bounds[band + 1]) / 2 + (rand() - 0.5) * 0.02;
+          const cnt = 3 + Math.floor(rand() * 2);
           const du = 1.2 / xa;
           const df = 1.2 / h;
           for (let hi = 0; hi < cnt; hi++) {
             const u0 = uc + (hi - (cnt - 1) / 2) * (3.6 / xa);
-            hatches.frustum([P(u0 - du, fc - df), P(u0 + du, fc - df), P(u0 + du, fc + df), P(u0 - du, fc + df)], n, 0.5, 0.25, mixC(plateTone(rand), faceTint, 0.4), TEXEL);
+            hatches.frustum([P(u0 - du, fc - df), P(u0 + du, fc - df), P(u0 + du, fc + df), P(u0 - du, fc + df)], n, 1.5, 0.3, mixC(plateTone(rand), faceTint, 0.4), TEXEL);
+            hatches.frustum([P(u0 - du * 0.6, fc - df * 0.6), P(u0 + du * 0.6, fc - df * 0.6), P(u0 + du * 0.6, fc + df * 0.6), P(u0 - du * 0.6, fc + df * 0.6)], n, 1.85, 0.1, D, TEXEL * 2);
           }
         }
       }
@@ -259,7 +282,7 @@ export function buildSuperstructure(ctx) {
     {
       const yR = t.yTop;
       const zStart = terraceRoofZStart(t);
-      const zSplits = next ? [next.zFront] : [neckZc - neckHalfL, neckZc + neckHalfL];
+      const zSplits = next ? [next.zFront, next.zBack] : [neckZc - neckHalfL, neckZc + neckHalfL];
       plateField(chunks, rand, {
         zStart,
         zEnd: t.zBack,
@@ -268,7 +291,7 @@ export function buildSuperstructure(ctx) {
         strips: (z) => {
           const e = terraceHalfWidth(t, z);
           let x0 = 0;
-          if (next && z >= next.zFront) x0 = terraceBaseHalfWidth(next, z) - 0.4;
+          if (next && z >= next.zFront && z <= next.zBack) x0 = terraceBaseHalfWidth(next, z) - 0.4;
           else if (!next && z > neckZc - neckHalfL && z < neckZc + neckHalfL) x0 = Math.min(neckHw, e);
           return [
             { s0: 0, s1: x0, kind: "skip" },
@@ -312,7 +335,7 @@ export function buildSuperstructure(ctx) {
         const zc = z + len / 2;
         const e = terraceHalfWidth(t, zc);
         let inner = 0;
-        if (next && z + len + 2 > next.zFront) inner = terraceBaseHalfWidth(next, Math.max(z + len, next.zFront + 0.5));
+        if (next && z + len + 2 > next.zFront && z < next.zBack) inner = terraceBaseHalfWidth(next, Math.max(z + len, next.zFront + 0.5));
         else if (!next && zc > neckZc - neckHalfL - len && zc < neckZc + neckHalfL + len) inner = neckHw + 4;
         const w = 9 + rand() * 9;
         const h = 6 + rand() * 7;
