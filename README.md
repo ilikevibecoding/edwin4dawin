@@ -1,6 +1,6 @@
 # ISD Vigilance — playable build
 
-Built from source commit `1664fa04` on 2026-09-04T07:15:48.832Z.
+Built from source commit `64b75a89` on 2026-09-04T09:11:51.517Z.
 
 - Live (always the latest build on this branch): https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/star-destroyer-play-c80b/index.html
 - Source branch: cursor/star-destroyer-ship-c80b
