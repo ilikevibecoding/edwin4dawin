@@ -127,13 +127,16 @@ export class Game {
     this.csm.fade = true;
 
     this.sky = new Sky(this.atmos, this.renderer, { cloudSteps: q.cloudSteps, scale: q.skyScale });
+    this.sky.dome.name = 'sky';
     this.scene.add(this.sky.dome);
     this.wakes = new WakeMap(1024, 3200);
     this.terrain = new Terrain(this.textures);
     this.registerLit(this.terrain.material);
+    this.terrain.group.name = 'terrain';
     this.scene.add(this.terrain.group);
     this.water = new Water(this.textures, this.wakes.texture);
     this.registerLit(this.water.material);
+    this.water.mesh.name = 'water';
     this.scene.add(this.water.mesh);
 
     await this.tick(progress, 'Laying out streets', 0.4);
@@ -142,18 +145,20 @@ export class Game {
     const roadMat = createRoadMaterial();
     this.registerLit(roadMat);
     const roadRender: THREE.Material = this.params.debugRoads ? new THREE.MeshBasicMaterial({ color: 0xff2020 }) : roadMat;
-    for (const m of buildRoadMeshes(this.map, this.roads, roadRender)) this.scene.add(m);
+    for (const m of buildRoadMeshes(this.map, this.roads, roadRender)) { m.name = 'roads'; this.scene.add(m); }
 
     await this.tick(progress, 'Raising bridges', 0.46);
     const concrete = new THREE.MeshStandardMaterial({ color: 0xb8b4aa, roughness: 0.9 });
     const steel = new THREE.MeshStandardMaterial({ color: 0xd9dde2, roughness: 0.4, metalness: 0.6 });
     this.registerLit(concrete); this.registerLit(steel);
     this.bridges = buildBridges(this.map, roadRender, concrete, steel);
+    this.bridges.group.name = 'bridges';
     this.scene.add(this.bridges.group);
 
     await this.tick(progress, 'Building the city', 0.52);
     this.city = buildCity(this.map, network.blocksByDistrict, this.atmos.uniforms.uNight);
     this.registerLit(this.city.batches.material);
+    this.city.batches.group.name = 'city';
     this.scene.add(this.city.batches.group);
     // roads occupy ground so trees keep off them
     for (const s of this.roads) {
@@ -165,26 +170,30 @@ export class Game {
     await this.tick(progress, 'Dressing harbours and airports', 0.66);
     this.props = new Props(this.map, this.roads, this.bridges.lampPositions, this.city.markOccupied);
     for (const m of this.props.materials) this.registerLit(m);
+    this.props.group.name = 'props';
     this.scene.add(this.props.group);
     // lamp heads (emissive at night)
-    const lampGeo = new THREE.SphereGeometry(0.22, 8, 6);
+    const lampGeo = new THREE.SphereGeometry(0.22, 6, 4);
     const lampMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffd9a0, emissiveIntensity: 0 });
     this.lampMesh = new THREE.InstancedMesh(lampGeo, lampMat, this.props.lampPositions.length);
     const m4 = new THREE.Matrix4();
     this.props.lampPositions.forEach((p, i) => this.lampMesh.setMatrixAt(i, m4.makeTranslation(p.x, p.y + 9.05, p.z)));
     this.lampMesh.frustumCulled = false;
+    this.lampMesh.name = 'lamps';
     this.scene.add(this.lampMesh);
 
     await this.tick(progress, 'Planting palms and mangroves', 0.74);
     this.vegetation = new Vegetation(this.map, this.city.occupied);
     for (const m of this.vegetation.materials) this.registerLit(m);
+    this.vegetation.group.name = 'vegetation';
     this.scene.add(this.vegetation.group);
 
     await this.tick(progress, 'Launching boats and traffic', 0.86);
     this.traffic = new Traffic(this.map, this.roads, this.bridges.routes, this.wakes.scene, this.params.seed, this.props.mooredBoatPositions);
     for (const m of this.traffic.materials) this.registerLit(m);
+    this.traffic.group.name = 'traffic';
     this.scene.add(this.traffic.group);
-    for (const c of this.traffic.contrailMeshes) this.scene.add(c);
+    for (const c of this.traffic.contrailMeshes) { c.name = 'contrail'; this.scene.add(c); }
 
     await this.tick(progress, 'Pre-flighting the aircraft', 0.92);
     this.aircraft = new Aircraft((x, z) => this.map.heightAt(x, z), this.scene, this.wakes.scene);

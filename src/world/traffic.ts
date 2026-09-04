@@ -177,6 +177,64 @@ function routePoint(pts: Vec2[], s: number, out: { x: number; z: number; dx: num
   }
 }
 
+/** Shared material for baked (vertex-coloured) moving vehicles: one draw call per vehicle. */
+const BAKED_MATERIAL = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.12 });
+
+/**
+ * Collapse a group of small meshes into one vertex-coloured mesh in the group's local frame. The group
+ * itself is kept (position/rotation are still driven by the traffic update), only its children change.
+ * Sail/glass/steel materials become vertex colours; the small loss in material variety is invisible at the
+ * distances moving boats are seen from and saves 5-10 draw calls (x cascades) per vehicle.
+ */
+function bakeGroup(g: THREE.Group): void {
+  g.updateMatrixWorld(true);
+  const inv = g.matrixWorld.clone().invert();
+  const geos: THREE.BufferGeometry[] = [];
+  const cols: THREE.Color[] = [];
+  const doubleSided: boolean[] = [];
+  g.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const local = m.matrixWorld.clone().premultiply(inv);
+    const geo = (m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone()).applyMatrix4(local);
+    geos.push(geo);
+    const mat = m.material as THREE.MeshStandardMaterial;
+    cols.push(mat.color ?? new THREE.Color(0xffffff));
+    doubleSided.push(mat.side === THREE.DoubleSide);
+  });
+  let n = 0;
+  for (let i = 0; i < geos.length; i++) n += geos[i].getAttribute('position').count * (doubleSided[i] ? 2 : 1);
+  const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  let o = 0;
+  for (let i = 0; i < geos.length; i++) {
+    const gg = geos[i];
+    const p = gg.getAttribute('position'), nn = gg.getAttribute('normal');
+    const c = cols[i];
+    const put = (flip: boolean) => {
+      for (let k = 0; k < p.count; k++) {
+        const src = flip ? (k - (k % 3)) + (2 - (k % 3)) : k; // reverse winding for the back copy
+        pos[(o + k) * 3] = p.getX(src); pos[(o + k) * 3 + 1] = p.getY(src); pos[(o + k) * 3 + 2] = p.getZ(src);
+        const s = flip ? -1 : 1;
+        nrm[(o + k) * 3] = s * nn.getX(src); nrm[(o + k) * 3 + 1] = s * nn.getY(src); nrm[(o + k) * 3 + 2] = s * nn.getZ(src);
+        col[(o + k) * 3] = c.r; col[(o + k) * 3 + 1] = c.g; col[(o + k) * 3 + 2] = c.b;
+      }
+      o += p.count;
+    };
+    put(false);
+    if (doubleSided[i]) put(true);
+    gg.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  out.computeBoundingSphere();
+  for (const c of [...g.children]) g.remove(c);
+  const mesh = new THREE.Mesh(out, BAKED_MATERIAL);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  g.add(mesh);
+}
+
 function mergeStatic(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   let n = 0;
   for (const g of geos) n += g.getAttribute('position').count;
@@ -226,7 +284,7 @@ export class Traffic {
   constructor(private map: WorldMap, roads: RoadSegment[], bridges: BridgeRoute[], private wakeScene: THREE.Scene, seed: number, moored: { x: number; z: number; rot: number; len: number }[]) {
     const rng = new Rng(`traffic-${seed}`);
     const factory = new BoatFactory();
-    this.materials.push(...factory.materials);
+    this.materials.push(...factory.materials, BAKED_MATERIAL);
     // moving boats along channels
     for (const ch of map.channels) {
       const len = routeLength(ch.pts);
@@ -236,7 +294,7 @@ export class Traffic {
         const speed = kind === 'cargo' ? rng.range(4, 6) : kind === 'ferry' ? 7 : kind === 'sail' ? rng.range(2.5, 4) : kind === 'yacht' ? rng.range(5, 9) : rng.range(9, 16);
         const wake = new WakeTrail(kind === 'cargo' ? 90 : 80, b.wakeWidth, kind === 'cargo' ? 70 : kind === 'sail' ? 20 : 42, kind === 'sail' ? 0.45 : 1.5);
         wakeScene.add(wake.mesh);
-        b.group.traverse((o) => { if ((o as THREE.Mesh).isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+        bakeGroup(b.group);
         this.group.add(b.group);
         this.boats.push({ group: b.group, route: ch.pts, s: rng.range(0, len), dir: rng.chance(0.5) ? 1 : -1, speed, len: b.len, draft: b.draft, wake, phase: rng.range(0, 100) });
       }
@@ -322,7 +380,7 @@ export class Traffic {
       const hstab = new THREE.Mesh(new THREE.BoxGeometry(4, 0.3, 12), airMat); hstab.position.set(-17, 1, 0); g.add(hstab);
       for (const s of [-1, 1]) { const eng = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.0, 4.5, 10), airMat); eng.rotation.z = Math.PI / 2; eng.position.set(3, -2.4, s * 7); g.add(eng); }
       g.scale.setScalar(scale);
-      g.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = true; });
+      bakeGroup(g);
       return g;
     };
     const rwy = map.runways[0];
