@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DUSK, FOG, NIGHT, OVERCAST, PALETTE, SUN } from './palette.js';
+import { DUSK, NIGHT, OVERCAST, PALETTE, SUN } from './palette.js';
 import { motePattern } from './textures/nature.js';
 
 // ---------------------------------------------------------------------------
@@ -227,8 +227,15 @@ const DAY_SKY = {
   zenith: rad(0x1f5cbc, 0.7),
   horizon: rad(0x9cb8dc, 0.6),
   // Held under white: the band was clipping to paper at the ridge line, and a
-  // dust haze is a colour, not a highlight.
-  haze: rad(0xe6d2ae, 0.74),
+  // dust haze is a colour, not a highlight. Then held under *cream*: measured
+  // from the pride with everything past the water hole hidden, the dome's own
+  // band at the horizon was 0.75 luma at hue 37 against 0.62 blue-grey five
+  // degrees up — a stop brighter and a different colour, and every far plain
+  // fogging toward it (as it must) came out as a yellow strip under the hills
+  // wherever they stood low enough to let the horizon through. Greyer and a
+  // little darker, so the band is a pale desaturated blue-grey the plain can
+  // sink into, not a colour it stands out against.
+  haze: rad(0xd6d0c4, 0.7),
   anti: rad(0xc9c3bc, 0.6),
   antiGain: 0.0,
   warm: 0.12,
@@ -240,7 +247,11 @@ const DAY_SKY = {
   glow: 5.0,
   envGlow: 3.0,
   aureole: 0.42,
-  hazeFalloff: 14.0,
+  // Down from 14: the band was two degrees thick and the sky over a hill
+  // crest was already the blue above it, so the crest sat on a bright seam.
+  // At 9 the same haze is spread over the first eight degrees and the hills
+  // stand in it rather than on it.
+  hazeFalloff: 9.0,
   cloud: 0.5,
   zenithPow: 0.42,
   disc: [0.99955, 0.99988],
@@ -357,7 +368,11 @@ const MODES = {
     // irradiance of the bonnet and open ground does not fill it; the card is
     // the earth doing so, so it is earth-coloured now.
     fill: { color: 0xffd9b0, intensity: 13, angle: 0.55, throw: 14, az: 252, el: 21 },
-    fog: { color: horizonOf(DAY_SKY), density: FOG.density, sunGain: 0.35, sunPow: 5.0, height: 0.016, heightMix: 1.0 },
+    // Density up from the palette's 0.0017: at that the plain at 500 m was
+    // still half its own straw under a noon key and read as a lit band; at
+    // 0.0021 (dusk's figure) it is three quarters sky by 500 m and the near
+    // frames are unchanged (a tenth of a stop at 150 m).
+    fog: { color: horizonOf(DAY_SKY), density: 0.0021, sunGain: 0.35, sunPow: 5.0, height: 0.016, heightMix: 1.0 },
     // A multiplier on each material's authored value, so day is a no-op.
     envIntensity: 1.0,
     shadow: { radius: 1.2, bias: -0.00012, normalBias: 0.035, intensity: 1.0 },
@@ -943,7 +958,10 @@ export function horizonColor(mode = currentMode) {
 // ---------------------------------------------------------------------------
 
 const HAZE = {
-  // rgb: colour of sunlit dust; w: how far towards it the fog goes at the sun
+  // rgb: colour of sunlit dust; w: how far towards it the fog goes at the sun.
+  // Only read by a material that has the fog chunk but not the sky terms
+  // below (a ShaderMaterial merging UniformsLib.fog by hand); everything on
+  // ShaderLib converges on the dome instead.
   sun: new Float32Array([0, 0, 0, 0]),
   // xyz: sun direction in *view* space; w: the lobe's exponent
   dir: new Float32Array([0, 0, 1, 1]),
@@ -951,6 +969,17 @@ const HAZE = {
   // z: world y the layer is referenced to (the road under the truck);
   // w: the camera's far plane, where the ground has to have gone to sky
   params: new Float32Array([0, 0, 0, 0]),
+  // The sky dome's gradient, so the fog can evaluate the dome at the ray:
+  //   hor:  horizon.rgb, zenithPow      zen:  zenith.rgb, hazeFalloff
+  //   haze: haze.rgb, hazeAniso         anti: anti.rgb, antiGain
+  //   sun:  sunColor.rgb * aureole, warm
+  //   sdir: sun direction in *world* space, 1.0 when these are live
+  skyHor: new Float32Array([0, 0, 0, 1]),
+  skyZen: new Float32Array([0, 0, 0, 1]),
+  skyHaze: new Float32Array([0, 0, 0, 0]),
+  skyAnti: new Float32Array([0, 0, 0, 0]),
+  skySun: new Float32Array([0, 0, 0, 0]),
+  skyDir: new Float32Array([0, 1, 0, 0]),
 };
 
 let hazeInstalled = false;
@@ -965,6 +994,12 @@ function installHazeFog() {
     u.uHazeSun = { value: HAZE.sun };
     u.uHazeDir = { value: HAZE.dir };
     u.uHazeParams = { value: HAZE.params };
+    u.uSkyHor = { value: HAZE.skyHor };
+    u.uSkyZen = { value: HAZE.skyZen };
+    u.uSkyHaze = { value: HAZE.skyHaze };
+    u.uSkyAnti = { value: HAZE.skyAnti };
+    u.uSkySun = { value: HAZE.skySun };
+    u.uSkyDir = { value: HAZE.skyDir };
   }
 
   THREE.ShaderChunk.fog_pars_vertex = /* glsl */ `
@@ -983,6 +1018,7 @@ function installHazeFog() {
 	uniform vec4 uHazeSun;
 	uniform vec4 uHazeDir;
 	uniform vec4 uHazeParams;
+	uniform vec4 uSkyHor, uSkyZen, uSkyHaze, uSkyAnti, uSkySun, uSkyDir;
 	varying float vFogDepth;
 	varying vec3 vFogView;
 	#ifdef FOG_EXP2
@@ -1019,23 +1055,67 @@ function installHazeFog() {
 	// The far plane cuts the plain off at a hard line unless the air has taken
 	// it first. Whatever the density, the last stretch before the far plane goes
 	// to sky. (An unpatched material reads w = 0 and gets no wall at all.)
+	// The plain gets there first: a ray at or under the horizon is looking
+	// along the dust layer at the ground, and what it reaches at 400 m is the
+	// far plane's own cut a few hundred metres on, so it is taken to sky from
+	// 0.42 of the far plane; a ray two degrees up is over the layer, looking at
+	// a crest or a crown that stands clear of the plain, and keeps the wall at
+	// 0.55. Measured before this from the pride into the sun: the straw flat at
+	// 450-650 m was half its own lit colour and rendered as a yellow strip
+	// under hills that were already blue-grey.
 	float hzFar = uHazeParams.w > 1.0 ? uHazeParams.w : 1e9;
-	fogFactor = max( fogFactor, smoothstep( hzFar * 0.55, hzFar * 0.92, hzDist ) );
-	float hzSun = pow( max( dot( hzDir, uHazeDir.xyz ), 0.0 ), max( uHazeDir.w, 1.0 ) );
-	vec3 hzCol = mix( fogColor, uHazeSun.rgb, hzSun * uHazeSun.w );
+	float hzWall = mix( 0.42, 0.55, smoothstep( 0.0, 0.035, hzRayY ) );
+	fogFactor = max( fogFactor, smoothstep( hzFar * hzWall, hzFar * ( hzWall + 0.37 ), hzDist ) );
+	// The airlight is the sky in the ray's own direction — not a fog colour,
+	// and not a lit-dust colour lifted towards the sun. Both of those were one
+	// value along the whole horizon and both were brighter than the dome
+	// renders at one to seven degrees, so every view into the sun had the far
+	// plain fogging to a cream strip standing against a darker sky: a horizon
+	// band, the same defect as the ridge cards. This is the dome's own gradient
+	// (horizon, zenith, haze band with its anisotropy, warm side, earth shadow,
+	// aureole — everything but the disc, the clouds and the stars) evaluated at
+	// the ray, so the plain, the skirt and the treeline all fog to the pixel
+	// the sky would have put there. A ray to the ground is taken at the
+	// horizon: that is the sky it stands against. Reads the stock fog colour
+	// with the sun lobe when the sky terms are not on the material.
+	vec3 hzCol;
+	if ( uSkyDir.w > 0.5 ) {
+		vec3 hzW = vec3( dot( hzDir, viewMatrix[ 0 ].xyz ), max( hzRayY, 0.0 ), dot( hzDir, viewMatrix[ 2 ].xyz ) );
+		hzW /= max( length( hzW ), 1e-4 );
+		float skyH = hzW.y;
+		float skyC = clamp( dot( hzW, uSkyDir.xyz ), -1.0, 1.0 );
+		float skyHaze = exp( -skyH * uSkyZen.w );
+		float skySide = smoothstep( -1.0, 1.0, skyC );
+		vec3 sky = mix( uSkyHor.rgb, uSkyZen.rgb, pow( skyH, uSkyHor.w ) );
+		sky = mix( sky, uSkyHaze.rgb, skyHaze * 0.52 * mix( 1.0, 0.5 + 0.5 * skySide, uSkyHaze.w ) );
+		sky = mix( sky, uSkyHaze.rgb, skyHaze * skySide * uSkySun.w );
+		sky = mix( sky, uSkyAnti.rgb, pow( max( -skyC, 0.0 ), 2.5 ) * skyHaze * uSkyAnti.w );
+		sky += uSkySun.rgb * pow( max( skyC, 0.0 ), 6.0 ) * ( 0.35 + skyHaze * 0.9 );
+		// three applies fog after tone mapping and the output transfer, so the
+		// blend is in display space and the target has to be the *displayed*
+		// sky: the same tone curve and OETF the dome went through, or a linear
+		// radiance is read as a display value and the plain fogs a stop dark.
+		#if defined( TONE_MAPPING )
+			sky = toneMapping( sky );
+		#endif
+		hzCol = linearToOutputTexel( vec4( sky, 1.0 ) ).rgb;
+	} else {
+		float hzSun = pow( max( dot( hzDir, uHazeDir.xyz ), 0.0 ), max( uHazeDir.w, 1.0 ) );
+		hzCol = mix( fogColor, uHazeSun.rgb, hzSun * uHazeSun.w );
+	}
 	gl_FragColor.rgb = mix( gl_FragColor.rgb, hzCol, fogFactor );
 #endif`;
 }
 
 const _hzQ = new THREE.Quaternion();
 const _hzV = new THREE.Vector3();
+const _hzC = new THREE.Color();
 
-function applyHaze(cfg) {
+function applyHaze(cfg, sunDir) {
   const f = cfg.fog;
   const c = _hzV.set(0, 0, 0);
   if (f.sunGain > 0) {
-    // The lit dust is the sky's haze colour lifted, not a separate hue: the sun
-    // side of the horizon band is exactly what the far ground is sitting under.
+    // Fallback only (see HAZE.sun): the lit dust as the haze colour lifted.
     const s = cfg.sky.haze;
     c.set(s.r, s.g, s.b).multiplyScalar(1.35);
   }
@@ -1046,6 +1126,35 @@ function applyHaze(cfg) {
   HAZE.dir[3] = f.sunPow ?? 3;
   HAZE.params[0] = f.height ?? 0;
   HAZE.params[1] = f.heightMix ?? 0;
+
+  // The dome's gradient, exactly as `skyFragment` has it, for the fog to
+  // evaluate at the ray. Written once per hour; the dome reads the same
+  // config, so the two cannot drift apart.
+  const k = cfg.sky;
+  const put = (arr, col, w) => {
+    arr[0] = col.r;
+    arr[1] = col.g;
+    arr[2] = col.b;
+    arr[3] = w;
+  };
+  put(HAZE.skyHor, k.horizon, k.zenithPow);
+  put(HAZE.skyZen, k.zenith, k.hazeFalloff);
+  put(HAZE.skyHaze, k.haze, k.hazeAniso ?? 0);
+  put(HAZE.skyAnti, k.anti, k.antiGain);
+  put(HAZE.skySun, _hzC.copy(k.sunColor).multiplyScalar(k.aureole), k.warm);
+  HAZE.skyDir[0] = sunDir.x;
+  HAZE.skyDir[1] = sunDir.y;
+  HAZE.skyDir[2] = sunDir.z;
+  HAZE.skyDir[3] = skyFogOff() ? 0 : 1;
+}
+
+/** `?skyfog=off` fogs to the flat colour plus sun lobe instead, for the A/B. */
+function skyFogOff() {
+  try {
+    return new URLSearchParams(location.search).get('skyfog') === 'off';
+  } catch {
+    return false;
+  }
 }
 
 /** Per frame: the sun in view space, and the ground level the layer sits on. */
@@ -1257,6 +1366,67 @@ function shadowReach(el, extent, tallest = 26) {
   return { dist, far: dist * 2 };
 }
 
+// ---------------------------------------------------------------------------
+// What the far cascade draws.
+//
+// The far map is 12.7 cm a texel at fast and high. Nothing under about a texel
+// across registers in it as more than a flicker, and the pass was drawing all
+// of it: every scrub bucket, every stone cluster, the camp's rope and wire,
+// the tarp, the signs, and the truck as a hundred separate trim meshes — 307
+// draw calls and a million triangles on the frames that render the map, for
+// a map whose useful content is trees, rock, structures, vehicles and animals.
+//
+// The cut is made once per object, by size, and recorded as a layer. Three's
+// shadow pass tests `object.layers` against the *viewing* camera, not the
+// shadow camera (WebGLShadowMap.renderObject), and it renders every light's
+// map in the one pass, so a layer on the far light alone cannot cull anything
+// — measured: 305 far-pass draw calls with and without one. So the far map is
+// rendered in its own pass: `renderFarMap` renders the scene once more into a
+// 2x2 target through a camera that is on `FAR_LAYER` only and is parked a
+// hundred kilometres under the world, so the beauty half of that render
+// frustum-culls to nothing and the shadow half draws exactly the far light
+// (also on the layer) with exactly the tagged casters. Objects keep layer 0,
+// so the main camera and the near map are untouched, and the far light keeps
+// layer 0 so the main pass still lists it and uploads its map and matrix.
+// Size is the object's *own* geometry under its world scale, not its instance
+// spread — a field of two hundred pebbles has an eighty-metre bounding box
+// and a thirty-centimetre pebble. A skinned mesh is an animal and is always
+// in.
+// The truck's cut is by height alone: at 1.2 m it keeps the body shells and
+// the canvas, which is the silhouette a long dusk shadow up the road is made
+// of, and drops the trim, the tyres and the running gear, whose contact
+// shadows are the near map's whole job. The names are the ground cover and
+// the thin stuff that no size rule catches: a wire is fifty metres wide.
+// ---------------------------------------------------------------------------
+const FAR_LAYER = 21;
+const FAR_SKIP = /grass|scrub|forb|litter|wire|rope|decal|stone|wear|badge|ash|beacon/i;
+const _fbS = new THREE.Vector3();
+
+function farCasterOf(o) {
+  if (!o.isMesh || !o.castShadow) return false;
+  const m = Array.isArray(o.material) ? o.material[0] : o.material;
+  if (FAR_SKIP.test(o.name) || (m && FAR_SKIP.test(m.name || ''))) return false;
+  if (o.isSkinnedMesh) return true;
+  const g = o.geometry;
+  if (!g) return false;
+  if (!g.boundingBox) g.computeBoundingBox();
+  const bb = g.boundingBox;
+  if (!bb || !Number.isFinite(bb.min.x) || !Number.isFinite(bb.max.x)) return false;
+  o.getWorldScale(_fbS);
+  const h = (bb.max.y - bb.min.y) * Math.abs(_fbS.y);
+  const w = Math.max((bb.max.x - bb.min.x) * Math.abs(_fbS.x), (bb.max.z - bb.min.z) * Math.abs(_fbS.z));
+  return o.isInstancedMesh ? h >= 0.8 || w >= 2 : h >= 1.2;
+}
+
+/** `?farcull=off` lets the far map draw every caster again, for the A/B. */
+function farCullOff() {
+  try {
+    return new URLSearchParams(location.search).get('farcull') === 'off';
+  } catch {
+    return false;
+  }
+}
+
 /** `?shadowextent=60` widens the single near box instead, for the A/B. */
 function extentOverride(base) {
   try {
@@ -1284,7 +1454,7 @@ export function createSky(
   const softShadows = installPcss(renderer, tier.pcss, nearExtent);
   // Before any material compiles: this is the first thing boot builds.
   installHazeFog();
-  applyHaze(cfg);
+  applyHaze(cfg, sunDir);
 
   // PMREM resolution, not a blur radius.
   //
@@ -1438,8 +1608,82 @@ export function createSky(
     scene.add(sunFar);
     scene.add(sunFar.target);
   }
+  // The far map's own render (see FAR_LAYER). Null with `?farcull=off`, when
+  // the map is rendered by the main pass with every caster in it, as before.
+  const farPre =
+    sunFar && !farCullOff()
+      ? {
+          cam: new THREE.PerspectiveCamera(1, 1, 0.1, 0.2),
+          rt: new THREE.WebGLRenderTarget(2, 2, { depthBuffer: false, stencilBuffer: false }),
+        }
+      : null;
+  if (farPre) {
+    farPre.cam.layers.set(FAR_LAYER);
+    farPre.cam.position.set(0, -1e5, 0);
+    farPre.cam.lookAt(0, -1e5 - 1, 0);
+    farPre.cam.updateMatrixWorld();
+    sunFar.layers.enable(FAR_LAYER);
+  }
+  function renderFarMap() {
+    const prevTarget = renderer.getRenderTarget();
+    const prevAuto = renderer.shadowMap.autoUpdate;
+    renderer.shadowMap.autoUpdate = true;
+    renderer.setRenderTarget(farPre.rt);
+    renderer.render(scene, farPre.cam);
+    // `info` resets per render, so what it holds now is this pass alone; the
+    // frame's own counters will not include it, and the stats tools read
+    // these instead.
+    farState.passCalls = renderer.info.render.calls;
+    farState.passTris = renderer.info.render.triangles;
+    renderer.setRenderTarget(prevTarget);
+    renderer.shadowMap.autoUpdate = prevAuto;
+  }
+  // Tag what the far map may draw (see FAR_LAYER). Every object is classified
+  // once; the pass is repeated on a slow cadence for what arrives later — the
+  // pride spawns and re-tiers after boot, the fleet is parked after the camp.
+  const farList = [];
+  function tagFarCasters() {
+    if (!sunFar) return;
+    farList.length = 0;
+    scene.traverse((o) => {
+      if (!o.isMesh) return;
+      if (!o.userData.__farTag) {
+        o.userData.__farTag = true;
+        o.userData.__farCast = farCasterOf(o);
+      }
+      if (o.userData.__farCast) farList.push(o);
+    });
+  }
+  // A caster whose shadow cannot leave the near box has nothing to add to the
+  // far map: the near map already has it, at six times the resolution. At a
+  // noon sun that is the whole truck — seventeen shells and a quarter of a
+  // million triangles casting a shadow a metre and a half long, in a box that
+  // reaches twenty-two — and at dusk, when the same truck throws twenty metres
+  // up the road, it is back in. Instanced fields are always in: their bounds
+  // are the field's.
+  const _fbC = new THREE.Vector3();
+  function cullFarByReach(centre) {
+    const el = Math.max(Math.asin(THREE.MathUtils.clamp(sunDir.y, -1, 1)), 0.05);
+    const reachK = 2 / Math.tan(el);
+    const inner = nearExtent * 0.9;
+    for (const o of farList) {
+      if (o.isInstancedMesh || o.isSkinnedMesh || !o.geometry) {
+        o.layers.enable(FAR_LAYER);
+        continue;
+      }
+      const g = o.geometry;
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      const bs = g.boundingSphere;
+      o.getWorldScale(_fbS);
+      const r = bs.radius * Math.max(Math.abs(_fbS.x), Math.abs(_fbS.y), Math.abs(_fbS.z));
+      _fbC.copy(bs.center).applyMatrix4(o.matrixWorld);
+      const stays = _fbC.distanceTo(centre) + r + r * reachK < inner;
+      if (stays) o.layers.disable(FAR_LAYER);
+      else o.layers.enable(FAR_LAYER);
+    }
+  }
   const farCadence = farMode === 'static' ? 0 : farMode === 'every' ? 1 : tier.farCadence;
-  const farState = { centre: new THREE.Vector3(NaN, NaN, NaN), dist: 300, mode: '', frame: 0 };
+  const farState = { centre: new THREE.Vector3(NaN, NaN, NaN), dist: 300, mode: '', frame: 0, passCalls: 0, passTris: 0 };
   const _fr = new THREE.Vector3();
   const _fu = new THREE.Vector3();
   const _fc = new THREE.Vector3();
@@ -1571,6 +1815,14 @@ export function createSky(
     farState.centre.copy(_fc);
     sunFar.target.position.copy(_fc);
     sunFar.position.copy(_fc).addScaledVector(sunDir, farState.dist);
+    if (farPre) {
+      // what arrived since the last tag pass casts from this map on
+      tagFarCasters();
+      cullFarByReach(_fc);
+      sunFar.target.updateMatrixWorld();
+      sunFar.updateMatrixWorld();
+      renderFarMap();
+    }
   }
 
   // --- scene-wide retune ---------------------------------------------------
@@ -1616,7 +1868,15 @@ export function createSky(
       const rule = RETUNE[key];
       if (!rule) continue;
       const base = baseFor(slot, key);
-      const spec = rule[name];
+      let spec = rule[name];
+      // A foliage bag that carries `uHemiRef` measures the hemisphere and key
+      // luma itself and scales its own sky and ground terms by them, so the
+      // table's night multiplier on top of that dimmed the tufts twice. Those
+      // bags take the hour's hue and none of its magnitude; the bark shader,
+      // which has the same two names and no meter, keeps the table as is.
+      if (spec && spec.mul !== undefined && bag.uHemiRef && (key === 'uSky' || key === 'uGnd')) {
+        spec = { hue: spec.hue, sat: spec.sat, mul: 1.0 };
+      }
       if (base && base.isColor) {
         if (!spec) slot.value.copy(base);
         else shiftColor(slot.value, base, spec);
@@ -1781,6 +2041,8 @@ export function createSky(
     },
     /** The far cascade's light, or null when it was built without one. */
     sunFar,
+    /** Draw calls and triangles of the last far-map render (its own pass). */
+    farPass: () => ({ calls: farState.passCalls, tris: farState.passTris }),
     /**
      * Move the whole rig to another hour. Sky, key, fill, fog, environment and
      * every analytic lighting term in the scene, in that order — the
@@ -1822,7 +2084,7 @@ export function createSky(
         target.fog.color.set(cfg.fog.color);
         target.fog.density = cfg.fog.density;
       }
-      applyHaze(cfg);
+      applyHaze(cfg, sunDir);
       target.environmentIntensity = cfg.envIntensity;
 
       regenerateEnv();

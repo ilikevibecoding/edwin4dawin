@@ -84,6 +84,14 @@ const TIERS = {
  * that one only stops it running, which is the right lever for an A/B of the
  * same build but tells you nothing about what building it costs.
  */
+function ssrPaneOff() {
+  try {
+    return new URLSearchParams(location.search).get('ssrpane') === 'off';
+  } catch {
+    return false;
+  }
+}
+
 function ssrOverride() {
   try {
     const v = new URLSearchParams(location.search).get('ssr');
@@ -177,6 +185,7 @@ const REFLECTORS = {
 
   glass: { f0: 0.055, roughness: 0.05 },
   glassDark: { f0: 0.055, roughness: 0.1 },
+  glassSide: { f0: 0.055, roughness: 0.05 },
   cabinGlass: { f0: 0.05, roughness: 0.05 },
   lensClear: { f0: 0.05, roughness: 0.04 },
 
@@ -271,6 +280,8 @@ const ssrFragment = /* glsl */ `
 uniform sampler2D tDiffuse;
 uniform sampler2D tDepth;
 uniform sampler2D tReflect;
+uniform sampler2D tReflectDepth;
+uniform float uPaneDepth;
 uniform mat4 uProj;
 uniform mat4 uProjInv;
 uniform vec2 uResolution;
@@ -320,7 +331,9 @@ void main() {
 
   if ( f0 < 0.004 ) { gl_FragColor = src; return; }
 
-  float depth = texture2D( tDepth, vUv ).x;
+  // the reflector's own surface where it wrote one (a pane in front of the
+  // cabin), the scene's depth otherwise
+  float depth = min( texture2D( tDepth, vUv ).x, mix( 1.0, texture2D( tReflectDepth, vUv ).x, uPaneDepth ) );
   if ( depth >= 0.999999 ) { gl_FragColor = src; return; }
 
   vec3 p = viewPos( vUv, depth );
@@ -454,14 +467,23 @@ class SsrPass extends Pass {
     this.time = 0;
     this._scanned = false;
 
+    // The reflectors' own depth rides along. The resolve reconstructs the
+    // reflecting point from the G-buffer, and the G-buffer has no panes in it
+    // (they do not write depth, so `patchGBufferPass` hides them): a windscreen
+    // pixel came back as the seat a metre behind the glass, the march started
+    // there, and the bonnet in front of the screen was never on the ray. With
+    // the pane's depth recorded here the resolve takes the nearer of the two —
+    // the pane's own surface where there is one, the G-buffer everywhere else.
     this.reflectRT = new THREE.WebGLRenderTarget(1, 1, {
       minFilter: THREE.NearestFilter,
       magFilter: THREE.NearestFilter,
       type: THREE.HalfFloatType,
-      depthBuffer: false,
+      depthBuffer: true,
       stencilBuffer: false,
+      depthTexture: new THREE.DepthTexture(1, 1),
     });
     this.reflectRT.texture.name = 'SSR.reflectors';
+    this.reflectRT.depthTexture.name = 'SSR.reflectorDepth';
 
     this.reflectMaterial = new THREE.ShaderMaterial({
       name: 'SsrReflectors',
@@ -476,8 +498,12 @@ class SsrPass extends Pass {
       },
       vertexShader: reflectVertex,
       fragmentShader: reflectFragment,
-      depthTest: false,
-      depthWrite: false,
+      // the depth test proper is the manual one against the scene's depth in
+      // the shader; the hardware test is left always-on so the pass writes
+      // the reflector's own depth (a disabled test disables the write too)
+      depthTest: true,
+      depthFunc: THREE.AlwaysDepth,
+      depthWrite: true,
       side: THREE.DoubleSide,
       fog: false,
     });
@@ -504,6 +530,9 @@ class SsrPass extends Pass {
         tDiffuse: { value: null },
         tDepth: { value: null },
         tReflect: { value: this.reflectRT.texture },
+        tReflectDepth: { value: this.reflectRT.depthTexture },
+        // `?ssrpane=off` resolves from the G-buffer alone, for the A/B
+        uPaneDepth: { value: ssrPaneOff() ? 0 : 1 },
         uProj: { value: new THREE.Matrix4() },
         uProjInv: { value: new THREE.Matrix4() },
         uResolution: { value: new THREE.Vector2(1, 1) },
@@ -615,7 +644,7 @@ class SsrPass extends Pass {
     renderer.shadowMap.autoUpdate = false;
     renderer.setRenderTarget(this.reflectRT);
     renderer.setClearColor(0x000000, 0);
-    renderer.clear(true, false, false);
+    renderer.clear(true, true, false);
     renderer.autoClear = false;
     camera.layers.set(SSR_LAYER);
     scene.overrideMaterial = this.reflectMaterial;

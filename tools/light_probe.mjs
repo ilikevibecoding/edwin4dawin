@@ -9,6 +9,7 @@ import { Buffer } from 'node:buffer';
 //   node tools/light_probe.mjs frame.png --box x,y,w,h [--box ...]
 //   node tools/light_probe.mjs frame.png --crop x,y,w,h --scale 4 --out crop.png
 //   node tools/light_probe.mjs frame.png --rows            # luma per 10 % band
+//   node tools/light_probe.mjs frame.png --col x,w,y0,y1   # luma per row down a column
 //
 // Each --box reports mean luma, peak luma, HSV saturation and hue of a region,
 // which is how "the far hills clip to white" or "the ground keeps its day red
@@ -30,12 +31,13 @@ const crop = arg('crop', null)?.split(',').map(Number);
 const scale = Number(arg('scale', '4'));
 const out = arg('out', null);
 const rows = argv.includes('--rows');
+const col = all('col').map((v) => v.split(',').map(Number))[0] || null;
 
 const png = await readFile(file);
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
 const page = await browser.newPage();
 const res = await page.evaluate(
-  async ({ data, boxes, crop, scale, rows }) => {
+  async ({ data, boxes, crop, scale, rows, col }) => {
     const img = new Image();
     img.src = `data:image/png;base64,${data}`;
     await img.decode();
@@ -99,6 +101,13 @@ const res = await page.evaluate(
       const h = Math.floor(c.height / 10);
       for (let r = 0; r < 10; r++) result.rows.push({ y: r * h, ...stat(0, r * h, c.width, h) });
     }
+    if (col) {
+      // one line per row: a vertical profile through a horizon, so a band
+      // and the sky over it are read off the same column
+      const [x, w, y0, y1] = col;
+      result.col = [];
+      for (let y = y0; y < y1; y++) result.col.push({ y, ...stat(x, y, w, 1) });
+    }
     if (crop) {
       const [x, y, w, h] = crop;
       const o = document.createElement('canvas');
@@ -111,7 +120,7 @@ const res = await page.evaluate(
     }
     return result;
   },
-  { data: png.toString('base64'), boxes, crop, scale, rows },
+  { data: png.toString('base64'), boxes, crop, scale, rows, col },
 );
 await browser.close();
 if (res.crop && out) {
@@ -123,3 +132,4 @@ const line = (b) =>
   `mean ${b.mean.toFixed(3)} peak ${b.peak.toFixed(3)} sat ${b.sat.toFixed(3)} hue ${String(b.hue).padStart(3)} <0.02 ${b.under02.toFixed(3)} >0.95 ${b.over95.toFixed(3)}`;
 for (const b of res.boxes) console.log(`  box ${b.box.join(',').padEnd(18)} ${line(b)}`);
 for (const r of res.rows || []) console.log(`  row y=${String(r.y).padStart(4)} ${line(r)}`);
+for (const r of res.col || []) console.log(`  col y=${String(r.y).padStart(4)} ${line(r)}`);

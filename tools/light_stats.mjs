@@ -48,6 +48,25 @@ const out = await page.evaluate((v) => {
   api.setView(v);
   api.renderFrames(2);
   const { renderer, skyRig, scene } = api.objects;
+  // Per-frame series: the far cascade renders on a cadence, so the frames
+  // that carry its pass stand out from the held ones and the difference is
+  // the pass's own cost in calls and triangles.
+  const series = [];
+  const { vehicle } = api.objects;
+  for (let i = 0; i < 6; i++) {
+    // the frame loop's own step: `follow` is what decides whether the far map
+    // is re-rendered this frame, and `renderFrames` alone never calls it
+    skyRig.follow(vehicle.root.position);
+    api.renderFrames(1);
+    const st = api.stats();
+    series.push({ calls: st.calls, tris: st.triangles });
+  }
+  const farCasters = { meshes: 0, layerOn: 0 };
+  scene.traverse((o) => {
+    if (!o.isMesh || !o.castShadow) return;
+    farCasters.meshes++;
+    if (o.layers.mask & (1 << 21)) farCasters.layerOn++;
+  });
   const byName = {};
   for (const p of renderer.info.programs || []) {
     const n = p.name || '?';
@@ -77,6 +96,12 @@ const out = await page.evaluate((v) => {
     shadowLights,
     sunDir: skyRig.sunDir.toArray().map((x) => +x.toFixed(3)),
     programsByName: byName,
+    series,
+    // in the main pass (with `?farcull=off`) the far map shows as the gap
+    // between held and rendered frames; in its own pass the rig counts it
+    farPass: skyRig.farPass ? skyRig.farPass() : null,
+    farPassInFrame: { calls: Math.max(...series.map((s) => s.calls)) - Math.min(...series.map((s) => s.calls)), tris: Math.max(...series.map((s) => s.tris)) - Math.min(...series.map((s) => s.tris)) },
+    farCasters,
   };
 }, view);
 await browser.close();
