@@ -405,11 +405,11 @@ export function gratedTrench(kit, x0, z0, x1, z1, { depth = 0.55, emit = "emitAm
   // pipes and a light strip at the bottom
   const alongX = w >= d;
   if (alongX) {
-    kit.boxMM(emit, [x0 + 0.1, y - depth + 0.005, (z0 + z1) / 2 - 0.05], [x1 - 0.1, y - depth + 0.02, (z0 + z1) / 2 + 0.05], { uv: "keep" });
+    kit.boxMM(emit, [x0 + 0.1, y - depth + 0.005, (z0 + z1) / 2 - 0.16], [x1 - 0.1, y - depth + 0.02, (z0 + z1) / 2 + 0.16], { uv: "keep" });
     kit.cyl("metal", (x0 + x1) / 2, y - depth + 0.12, z0 + 0.18, 0.06, w - 0.2, "x", { color: PALETTE.steel });
     kit.cyl("rubber", (x0 + x1) / 2, y - depth + 0.09, z1 - 0.18, 0.04, w - 0.2, "x", { color: PALETTE.rubber });
   } else {
-    kit.boxMM(emit, [(x0 + x1) / 2 - 0.05, y - depth + 0.005, z0 + 0.1], [(x0 + x1) / 2 + 0.05, y - depth + 0.02, z1 - 0.1], { uv: "keep" });
+    kit.boxMM(emit, [(x0 + x1) / 2 - 0.16, y - depth + 0.005, z0 + 0.1], [(x0 + x1) / 2 + 0.16, y - depth + 0.02, z1 - 0.1], { uv: "keep" });
     kit.cyl("metal", x0 + 0.18, y - depth + 0.12, (z0 + z1) / 2, 0.06, d - 0.2, "z", { color: PALETTE.steel });
   }
   // grate quad (cut-out texture, tiled in metres)

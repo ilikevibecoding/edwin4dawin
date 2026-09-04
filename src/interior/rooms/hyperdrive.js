@@ -42,10 +42,11 @@ export function buildHyperdrive(kit, ctx) {
     kit.cyl("hyp_core", x + s * 1.44, CY, CZ, 0.95, 0.04, "x", { segments: 28 });
     kit.add("metal", new THREE.TorusGeometry(1.42, 0.09, 10, 40).rotateY(Math.PI / 2), { pos: [x + s * 1.2, CY, CZ], color: PALETTE.impDark });
     kit.add("hyp_coil", new THREE.TorusGeometry(1.42, 0.03, 8, 40).rotateY(Math.PI / 2), { pos: [x + s * 1.31, CY, CZ] });
-    // eight radial struts on the dome
+    // eight radial struts on the dome, each carrying a glowing feed channel from the injector out to the rim
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
       kit.add("paintedMetal", new THREE.BoxGeometry(0.5, 0.14, 1.2), { pos: [x + s * 0.35, CY + 1.7 * Math.cos(a), CZ + 1.7 * Math.sin(a)], rot: [a + Math.PI / 2, 0, 0], color: PALETTE.impDark, texel: 2 });
+      kit.add("hyp_coil", new THREE.BoxGeometry(0.06, 0.05, 1.05), { pos: [x + s * 0.62, CY + 1.7 * Math.cos(a), CZ + 1.7 * Math.sin(a)], rot: [a + Math.PI / 2, 0, 0] });
     }
   }
   // ring collars

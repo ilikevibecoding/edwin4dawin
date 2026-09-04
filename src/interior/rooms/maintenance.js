@@ -229,6 +229,15 @@ export function buildMaintenance(kit, ctx) {
   }
   wallScreen(kit, ctx, { side: "xmax", u: -50 - min[2], v: 3.3, w: 1.8, h: 1.0, screen: 4 });
   wallStencil(kit, ctx, "xmax", -50 - min[2], 4.4, 0.9, 6);
+  // lit bay sign on the far wall (an anchor for the 45 m view from the door) + cove strips over the racks
+  emitMat(ctx, "bay_sign", 0xffb347, 1.6, "emitAmber");
+  kit.box("paintedMetal", max[0] - 0.12, 5.4, -50, 0.12, 1.1, 7.0, { color: PALETTE.impBlack, texel: 2 });
+  kit.box("bay_sign", max[0] - 0.19, 5.4, -50, 0.02, 0.8, 6.6, { uv: "keep" });
+  kit.box("paintedMetal", max[0] - 0.22, 5.4, -50, 0.02, 0.5, 6.2, { color: PALETTE.impBlack, texel: 2 });
+  for (const [z0, z1] of [[-62.4, -54.2], [-45.8, -37.6]]) {
+    kit.boxMM("paintedMetal", [max[0] - 1.7, 4.75, z0], [max[0] - 0.1, 4.95, z1], { color: PALETTE.impDark, texel: 2 });
+    kit.boxMM("emitWhiteSoft", [max[0] - 1.5, 4.72, z0 + 0.2], [max[0] - 0.3, 4.75, z1 - 0.2], { uv: "keep" });
+  }
   wallVent(kit, ctx, "xmax", 8, 6.0, 2.6, 1.0);
   wallVent(kit, ctx, "xmax", 20, 6.0, 2.6, 1.0);
   equipmentRack(kit, ctx, { side: "xmax", u: -63.2 - min[2], w: 1.4, h: 3.0, seed: ctx.seed + 33, lit: "emitAmber" });
