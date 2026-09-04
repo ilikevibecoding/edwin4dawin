@@ -64,6 +64,18 @@ export function pendant(kit, ctx, x, yTop, z, opts = {}) {
   ctx.lights[family].push(pointLight(color, intensity, distance, [x, yShade - 0.3, z]));
 }
 
+// Free-standing column lamp: cast base, slim stem, a tall drum diffuser and the practical inside it.
+export function floorLamp(kit, ctx, x, y, z, opts = {}) {
+  const { h = 1.7, color = 0xffb070, intensity = 6, distance = 9, mat = "emitWarmSoft", family = "warm" } = opts;
+  kit.cyl("metal", x, y + 0.025, z, 0.22, 0.05, "y", { color: PALETTE.darkMetal, segments: 16 });
+  kit.cyl("metal", x, y + (h - 0.45) / 2 + 0.05, z, 0.025, h - 0.45, "y", { color: PALETTE.gunmetal, segments: 8 });
+  kit.cyl("satinBlack", x, y + h - 0.42, z, 0.13, 0.04, "y", { segments: 16 });
+  kit.cyl(mat, x, y + h - 0.2, z, 0.11, 0.4, "y", { segments: 16, uv: "keep" });
+  kit.cyl("satinBlack", x, y + h + 0.02, z, 0.13, 0.04, "y", { segments: 16 });
+  kit.collider([x - 0.22, y, z - 0.22], [x + 0.22, y + h, z + 0.22], "lamp");
+  ctx.lights[family].push(pointLight(color, intensity, distance, [x, y + h - 0.2, z]));
+}
+
 // Box whose long side runs along `axis`: cAlong / cAcross are the centre along / across that axis.
 export function alongBox(kit, mat, axis, cAlong, cAcross, cy, len, across, h, opts = {}) {
   if (axis === "x") return kit.box(mat, cAlong, cy, cAcross, len, h, across, opts);

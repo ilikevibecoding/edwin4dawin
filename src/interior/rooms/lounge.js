@@ -8,7 +8,7 @@ import { roomShell, wallLightBar, wallConsole } from "../shell.js";
 import { PALETTE } from "../../materials.js";
 import { pointLight } from "../lib.js";
 import { rng } from "../../kit.js";
-import { ceilingPlate, stencil, downlight, pendant, sofa, armchair, table, stool, cup, bench, locker, holoMaterial, decalRect } from "./aftProps.js";
+import { ceilingPlate, stencil, downlight, pendant, floorLamp, sofa, armchair, table, stool, cup, bench, locker, holoMaterial, decalRect } from "./aftProps.js";
 
 export function build(kit, ctx, room, lib) {
   const shell = roomShell(kit, ctx, room, { style: "light", lights: false, ceiling: false, seed: 31 });
@@ -32,10 +32,10 @@ export function build(kit, ctx, room, lib) {
   kit.boxMM("emitWarmSoft", [x0 + 0.6, yTop - sof, z0 + 0.7], [x0 + 0.7, yTop - sof + 0.05, z1 - 0.7], { uv: "keep" });
   kit.boxMM("emitWarmSoft", [x1 - 0.7, yTop - sof, z0 + 0.7], [x1 - 0.6, yTop - sof + 0.05, z1 - 0.7], { uv: "keep" });
   for (const x of [5, 9, 13, 17]) for (const z of [514.5, 519.5]) downlight(kit, x, yTop, z, "emitWarmSoft");
-  ctx.lights.warm.push(pointLight(0xffc48c, 10, 14, [6.5, yTop - 0.35, 517]));
-  ctx.lights.warm.push(pointLight(0xffc48c, 10, 14, [12.5, yTop - 0.35, 520.5]));
-  ctx.lights.warm.push(pointLight(0xffc48c, 10, 14, [14.5, yTop - 0.35, 514]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 4.0, 10, [3.6, yTop - 0.4, 518]));
+  ctx.lights.warm.push(pointLight(0xffc48c, 14, 14, [6.5, yTop - 0.35, 517]));
+  ctx.lights.warm.push(pointLight(0xffc48c, 14, 14, [12.5, yTop - 0.35, 520.5]));
+  ctx.lights.warm.push(pointLight(0xffc48c, 14, 14, [14.5, yTop - 0.35, 514]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 6.0, 10, [3.6, yTop - 0.4, 518]));
 
   // ------------------------------------------------------------ viewscreen wall (starboard, x = 20)
   {
@@ -74,6 +74,9 @@ export function build(kit, ctx, room, lib) {
   kit.box("satinBlack", 17.95, y0 + 0.43, 517.75, 0.22, 0.02, 0.15);
   kit.box("emitTeal", 17.95, y0 + 0.443, 517.75, 0.16, 0.006, 0.1);
   pendant(kit, ctx, 16.9, yTop, 518, { drop: 0.9, r: 0.42, intensity: 14, distance: 16, color: 0xffb070 });
+  // column lamps at both ends of the sofa light its back so the group reads from the door
+  floorLamp(kit, ctx, 16.0, y0, 515.35, { intensity: 7, distance: 9 });
+  floorLamp(kit, ctx, 16.0, y0, 520.65, { intensity: 7, distance: 9 });
 
   // ------------------------------------------------------------ holo-game table with stools
   const tx = 10.5;
