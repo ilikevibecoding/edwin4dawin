@@ -31,6 +31,7 @@ export class Aircraft {
     this.inputs.throttle = throttle;
     this.flight.step(this.inputs, 0);
     this.syncModel();
+    this.effects.reset();
   }
 
   syncModel(): void {

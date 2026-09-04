@@ -3,6 +3,7 @@ import { CONTRAIL_MATERIAL, HullStamp, WakeTrail } from '../render/wakes';
 import type { FlightModel } from './physics';
 import type { PlaneModel } from './model';
 import { clamp, smoothstep } from '../core/noise';
+import { Rng } from '../core/seed';
 
 function spriteTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
@@ -57,6 +58,11 @@ class ParticleCloud {
     this.particles.push(p);
   }
 
+  clear(): void {
+    this.particles.length = 0;
+    this.geo.setDrawRange(0, 0);
+  }
+
   update(dt: number, gravity: number, drag: number, scale: number): void {
     (this.points.material as THREE.ShaderMaterial).uniforms.uScale.value = scale;
     let n = 0;
@@ -95,6 +101,8 @@ export class PlaneEffects {
   readonly stampR: HullStamp;
   private readonly tmp = new THREE.Vector3();
   private readonly tmp3 = new THREE.Vector3();
+  /** seeded so spray/exhaust are reproducible frame-for-frame in the benchmark clips */
+  private rng = new Rng('plane-effects');
   private readonly tmp2 = new THREE.Vector3();
   private sprayAcc = 0;
   private exhaustAcc = 0;
@@ -113,6 +121,15 @@ export class PlaneEffects {
     this.vortexL = new WakeTrail(90, 0.5, 2.2, 0.6, CONTRAIL_MATERIAL);
     this.vortexR = new WakeTrail(90, 0.5, 2.2, 0.6, CONTRAIL_MATERIAL);
     scene.add(this.vortexL.mesh, this.vortexR.mesh);
+  }
+
+  /** Drop every trail, particle and decal (used when the aircraft is re-placed). */
+  reset(): void {
+    this.wakeL.reset(); this.wakeR.reset(); this.vortexL.reset(); this.vortexR.reset();
+    this.spray.clear(); this.exhaust.clear();
+    this.stampL.mesh.visible = false; this.stampR.mesh.visible = false;
+    this.sprayAcc = 0; this.exhaustAcc = 0;
+    this.rng = new Rng('plane-effects');
   }
 
   update(flight: FlightModel, model: PlaneModel, dt: number, time: number, pixelHeight: number): void {
@@ -144,7 +161,7 @@ export class PlaneEffects {
           const p = this.tmp.copy(bow).applyQuaternion(q).add(flight.position);
           const side = bow.z > 0 ? 1 : -1;
           const right = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
-          this.spray.emit({ x: p.x, y: 0.1, z: p.z, vx: fwd.x * speed * 0.35 + right.x * side * (2 + Math.random() * 3) + (Math.random() - 0.5) * 2, vy: 2.5 + Math.random() * 3.5 + speed * 0.08, vz: fwd.z * speed * 0.35 + right.z * side * (2 + Math.random() * 3) + (Math.random() - 0.5) * 2, life: 0.7 + Math.random() * 0.6, age: 0, size: 0.6 + Math.random() * 0.8 });
+          this.spray.emit({ x: p.x, y: 0.1, z: p.z, vx: fwd.x * speed * 0.35 + right.x * side * (2 + this.rng.next() * 3) + (this.rng.next() - 0.5) * 2, vy: 2.5 + this.rng.next() * 3.5 + speed * 0.08, vz: fwd.z * speed * 0.35 + right.z * side * (2 + this.rng.next() * 3) + (this.rng.next() - 0.5) * 2, life: 0.7 + this.rng.next() * 0.6, age: 0, size: 0.6 + this.rng.next() * 0.8 });
         }
       }
     }
@@ -156,7 +173,7 @@ export class PlaneEffects {
       while (this.exhaustAcc >= 1) {
         this.exhaustAcc -= 1;
         const p = this.tmp.copy(model.exhaustPos).applyQuaternion(q).add(flight.position);
-        this.exhaust.emit({ x: p.x, y: p.y, z: p.z, vx: flight.velocity.x - fwd.x * 6 + (Math.random() - 0.5), vy: flight.velocity.y - 1.5 + Math.random() * 1.5, vz: flight.velocity.z - fwd.z * 6 + (Math.random() - 0.5), life: 0.35 + Math.random() * 0.3, age: 0, size: 0.35 + Math.random() * 0.3 });
+        this.exhaust.emit({ x: p.x, y: p.y, z: p.z, vx: flight.velocity.x - fwd.x * 6 + (this.rng.next() - 0.5), vy: flight.velocity.y - 1.5 + this.rng.next() * 1.5, vz: flight.velocity.z - fwd.z * 6 + (this.rng.next() - 0.5), life: 0.35 + this.rng.next() * 0.3, age: 0, size: 0.35 + this.rng.next() * 0.3 });
       }
     }
     this.exhaust.update(dt, -0.3, 2.5, pixelHeight * 0.9);

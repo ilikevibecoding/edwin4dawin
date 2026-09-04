@@ -66,6 +66,7 @@ export class Game {
   time = 0;
   private envTimer = 0;
   private lastEnvHour = -1;
+  private lastEnvWeather = '';
   private readonly litMaterials = new Set<THREE.Material>();
   readonly windVec = new THREE.Vector3();
 
@@ -208,7 +209,44 @@ export class Game {
     if (dbg.has('nocloudshadow')) this.post.cloudShadowStrength = 0;
     this.atmos.update(0);
     this.refreshEnvironment();
+    await this.tick(progress, 'Compiling shaders', 0.97);
+    this.warmShaders();
     progress('Ready', 1);
+  }
+
+  /**
+   * Compile every material up front. Effects that only appear later (spray, exhaust, contrails, hull foam,
+   * propeller blur disc, night lights) otherwise compile their programs on first use, which showed up as a
+   * multi-second stall on the first frame of flight in the benchmark clips.
+   */
+  private warmShaders(): void {
+    // 1. a real flying frame: spray, exhaust, float wakes, hull foam, propeller disc and their shadow-pass
+    //    depth variants only get programs when they are actually drawn
+    const f = this.aircraft.flight;
+    const saved = { p: f.position.clone(), q: f.quaternion.clone(), v: f.velocity.clone(), w: f.omega.clone(), rpm: f.rpm, thr: this.aircraft.inputs.throttle };
+    const spawnY = f.position.y;
+    // on the water at planing speed (spray + wakes), then airborne (prop disc, contrails), both rendered
+    this.aircraft.place(f.position.x, spawnY, f.position.z, Math.PI * 0.5, 0, 0, 14, 1.0);
+    this.aircraft.inputs.throttle = 1.0;
+    const camPos = this.camera.position.clone(), camQ = this.camera.quaternion.clone();
+    this.flightCamera.snap();
+    for (let i = 0; i < 3; i++) { this.update(1 / 30, true); this.flightCamera.update(f, this.aircraft.model, 1 / 30); }
+    this.render();
+    this.aircraft.place(f.position.x, 60, f.position.z, Math.PI * 0.5, 0.05, 0.1, 50, 1.0);
+    this.aircraft.inputs.throttle = 1.0;
+    for (let i = 0; i < 3; i++) { this.update(1 / 30, true); this.flightCamera.update(f, this.aircraft.model, 1 / 30); }
+    this.render();
+    // 2. whatever is still hidden (night lights, lamps) compiles through the renderer
+    const hidden: THREE.Object3D[] = [];
+    this.scene.traverse((o) => { if (!o.visible) { o.visible = true; hidden.push(o); } });
+    try { this.renderer.compile(this.scene, this.camera); } finally { for (const o of hidden) o.visible = false; }
+    // restore the spawn state exactly (place() also resets the effects)
+    this.aircraft.place(saved.p.x, saved.p.y, saved.p.z, Math.PI * 0.5, 0, 0, 0, saved.thr);
+    f.quaternion.copy(saved.q); f.velocity.copy(saved.v); f.omega.copy(saved.w); f.rpm = saved.rpm;
+    this.aircraft.syncModel();
+    this.camera.position.copy(camPos); this.camera.quaternion.copy(camQ);
+    this.flightCamera.snap();
+    this.time = 0;
   }
 
   refreshEnvironment(): void {
@@ -216,6 +254,7 @@ export class Game {
     this.scene.environment = env;
     this.scene.environmentIntensity = this.atmos.state.ambientIntensity;
     this.lastEnvHour = this.atmos.hour;
+    this.lastEnvWeather = this.atmos.weather;
   }
 
   setSize(w: number, h: number, pixelRatio = 1): void {
@@ -236,7 +275,10 @@ export class Game {
     this.csm.lightDirection.copy(s.sunDir).negate();
     for (const l of this.csm.lights) { l.intensity = s.sunIntensity; l.color.copy(s.sunColor); }
     this.envTimer += dt;
-    if (Math.abs(this.atmos.hour - this.lastEnvHour) > 0.02 || this.envTimer > 5) { this.envTimer = 0; this.refreshEnvironment(); }
+    // the IBL probe only depends on the sun position and weather (no clouds in the probe), so refresh it on
+    // a time-of-day change; the old 5 s timer re-ran the PMREM (a multi-pass cubemap convolution) as a
+    // periodic hitch even when nothing had changed
+    if (Math.abs(this.atmos.hour - this.lastEnvHour) > 0.02 || this.atmos.weather !== this.lastEnvWeather || this.envTimer > 120) { this.envTimer = 0; this.refreshEnvironment(); }
     this.scene.environmentIntensity = s.ambientIntensity;
     const p = this.atmos.preset;
     this.windVec.set(this.atmos.windDir.x, 0, this.atmos.windDir.y).multiplyScalar(p.windSpeed);
