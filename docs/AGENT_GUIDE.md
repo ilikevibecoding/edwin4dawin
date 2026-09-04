@@ -58,7 +58,7 @@ export function build(kit, ctx, room, lib) { ... }   // signature of every room 
 - Materials (keys for `kit`): `painted painted1 painted2 metal metalRough paintedMetal deck grate rubber
   fabric hazard satinBlack darkGloss glass decal leds emitTeal(blue-white) emitWarm(amber) emitOrange
   emitRed emitCool(white) emitBlue emitAmber emitWhite emitWarmSoft emitCoolSoft emitBlueSoft emitRedSoft
-  emitWhiteSoft screen0..screen3 (blue-white UI) screen4 (blue tactical) screen5 (red alert) screen6
+  emitWhiteSoft emitAmberSoft screen0..screen3 (blue-white UI) screen4 (blue tactical) screen5 (red alert) screen6
   (amber engineering)`. Tint painted/metal/fabric/deck with `color: lib.PALETTE.x`.
 - `PALETTE`: `cream` (light grey-white panel), `creamDark`, `orange` (dark red accent), `tealPaint`
   (blue-slate), `slate`, `gunmetal`, `darkMetal`, `steel`, `impWhite`, `impGrey`, `impGreyDark`,
