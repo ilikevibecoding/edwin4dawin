@@ -152,31 +152,48 @@ if (!QUICK) {
     results.dynamic.lift = { ...r, ...r2 };
     console.log("lift:", JSON.stringify({ started: r.started, midState: r.state, arrived: r2.current && r2.current.id }));
   }
-  // --- TIE launch: open the bay, advance until a fighter is in the throat, capture from below and inside
+  // --- TIE launch: open the bay and step the traffic until a fighter is mid-descent inside the bay
+  // (interior capture from the entry), then until it has cleared the hull (exterior capture)
   {
     const r = await page.evaluate(async () => {
       const api = window.debugAPI;
+      const youngest = () => api.trafficSnapshot().fighters.filter((f) => f.s === "launching").sort((x, y) => x.st - y.st)[0] || null;
       api.requestLaunch(3);
-      // bay opens at 0.25/s → ~4 s; the launch path then spends 14 s descending through the bay
-      api.advanceTraffic(8.5, 0.05);
-      const snap = api.trafficSnapshot();
-      await api.setView("hangar_racks");
-      return { counts: api.trafficCounts(), bay: snap.bay, first: snap.fighters.filter((f) => f.s === "launching").sort((x, y) => x.st - y.st)[0] || null };
+      let f = null;
+      let steps = 0;
+      // deck is at world y -30; the flight is visible between the racks (y ≈ -8) and the well (y ≈ -34)
+      for (; steps < 600; steps++) {
+        api.advanceTraffic(0.1, 0.05);
+        f = youngest();
+        if (f && f.p[1] < -20 && f.p[1] > -33 && f.st > 0.5) break;
+      }
+      await api.setView("d5_hangar@0,-40,0,6");
+      return { counts: api.trafficCounts(), bay: api.trafficSnapshot().bay, first: f, stepped: steps * 0.1 };
     });
     await settle(3, 800);
     await page.screenshot({ path: resolve(outDir, "tie_launch_interior.png") });
     const r2 = await page.evaluate(async () => {
       const api = window.debugAPI;
-      api.advanceTraffic(7.5, 0.05); // ~16 s after launch: the flight is just clearing the hull
-      const snap = api.trafficSnapshot();
-      await api.setView("exterior_hangar");
-      return { outside: snap.fighters.filter((f) => f.s === "launching").sort((x, y) => x.st - y.st)[0] || null };
+      const youngest = () => api.trafficSnapshot().fighters.filter((f) => f.s === "launching").sort((x, y) => x.st - y.st)[0] || null;
+      let f = null;
+      let steps = 0;
+      // below the hangar module (bottom at y -46) but still close under the hull
+      for (; steps < 600; steps++) {
+        api.advanceTraffic(0.1, 0.05);
+        f = youngest();
+        if (f && f.p[1] < -62 && f.p[1] > -160) break;
+      }
+      // frame the craft from ~70 m below and beside it, looking back up at the bay
+      if (f) await api.setView(`ext@${f.p[0] - 45},${f.p[1] - 45},${f.p[2] + 35},${f.p[0]},${f.p[1]},${f.p[2]}`);
+      else await api.setView("exterior_hangar");
+      return { outside: f, stepped: steps * 0.1 };
     });
     r.outside = r2.outside;
+    r.steppedOutside = r2.stepped;
     await settle(3, 800);
     await page.screenshot({ path: resolve(outDir, "tie_launch_exterior.png") });
     results.dynamic.traffic = r;
-    console.log("traffic:", JSON.stringify(r.counts), "bay", r.bay);
+    console.log("traffic:", JSON.stringify(r.counts), "bay", r.bay, "inside", JSON.stringify(r.first && r.first.p), "outside", JSON.stringify(r.outside && r.outside.p));
   }
   // --- exterior ↔ interior transition round trip
   {

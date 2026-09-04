@@ -136,6 +136,7 @@ export class CameraDirector {
       Object.assign(this.sph, this.goal);
       this.applyOrbit();
     }
+    if (this.mode === "exterior") this.hud.setLocation("Exterior", name.replace("exterior_", "").replace("__adhoc", "free camera"));
     return true;
   }
 
