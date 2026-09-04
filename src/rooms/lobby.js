@@ -4,7 +4,7 @@
 // alcove with a parked mouse droid on charge. One warm key over the inlay plus the accent at the
 // lifts — not an evenly lit box.
 import * as THREE from "three";
-import { PALETTE } from "../materials.js";
+import { PALETTE, setDomain } from "../materials.js";
 import { impRoomShell, impWallGear, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { DECK_ORDER } from "../spec.js";
@@ -19,6 +19,18 @@ export function buildLobby(kit, ctx, room) {
   const accentHex = new THREE.Color(room.accent || "#4f8dff");
   const { inlayKey, indKey } = ensureLobbyMaterials(kit.materials, room.deck, "#" + accentHex.getHexString());
   kit.noShadowKeys.add(inlayKey);
+  // the pendant's ring and lens run at half the kit emissive: a fixture, not the brightest surface
+  const ringKey = `lobby_ring_${room.deck}`;
+  if (!kit.materials[ringKey]) {
+    const m = kit.materials[accentKey].clone();
+    m.emissiveIntensity *= 0.5;
+    kit.materials[ringKey] = setDomain(m, "interior");
+  }
+  if (!kit.materials.lobby_lensHalf) {
+    const m = kit.materials.emitWhiteDim.clone();
+    m.emissiveIntensity *= 0.5;
+    kit.materials.lobby_lensHalf = setDomain(m, "interior");
+  }
   const walls = impRoomShell(kit, room, ctx.doors, {
     accentKey,
     seed: 500 + room.deck.charCodeAt(0),
@@ -75,15 +87,15 @@ export function buildLobby(kit, ctx, room) {
   // hangs well below the ceiling so the slab above it stays dark instead of blooming
   kit.cyl("impMetal", 0, h - 0.4, iz, 0.03, 0.8, "y", { color: PALETTE.impGreyDark, segments: 8 });
   kit.cyl("impTrim", 0, h - 0.86, iz, 0.62, 0.12, "y", { color: PALETTE.impBlack, segments: 24, texel: 1 });
-  kit.cyl(accentKey, 0, h - 0.925, iz, 0.66, 0.012, "y", { segments: 24, uv: "keep" });
+  kit.cyl(ringKey, 0, h - 0.925, iz, 0.66, 0.012, "y", { segments: 24, uv: "keep" });
   kit.cyl("impMetal", 0, h - 0.935, iz, 0.5, 0.012, "y", { color: PALETTE.impCharcoal, segments: 24 });
-  kit.cyl("emitWhiteDim", 0, h - 0.947, iz, 0.4, 0.012, "y", { segments: 24, uv: "keep" });
-  kit.light({ type: "point", pos: [0, h - 1.8, iz], color: 0xffdcb4, intensity: lux(h - 1.8, 3.0), distance: 15, priority: 0.5 });
+  kit.cyl("lobby_lensHalf", 0, h - 0.947, iz, 0.4, 0.012, "y", { segments: 24, uv: "keep" });
+  kit.light({ type: "point", pos: [0, h - 1.8, iz], color: 0xffdcb4, intensity: lux(h - 1.8, 4.2), distance: 16, priority: 0.5 });
   // deck accent at each lift so the framed doors read from across the lobby
-  for (const lf of lifts) kit.light({ type: "point", pos: [lf.lx, 2.9, hz - 1.3], color: accentHex.getHex(), intensity: 7.0, distance: 9, priority: 0.44 - (lf.lx > 0 ? 0.005 : 0) });
+  for (const lf of lifts) kit.light({ type: "point", pos: [lf.lx, 2.9, hz - 1.3], color: accentHex.getHex(), intensity: 8.0, distance: 10, priority: 0.44 - (lf.lx > 0 ? 0.005 : 0) });
   // small warm wash on the crest plate
   kit.light({ type: "point", pos: [4.4, 3.3, hz - 1.1], color: 0xffe2c0, intensity: 3.6, distance: 6, priority: 0.38 });
-  kit.light({ type: "point", pos: [0, h - 0.6, -4.4], color: 0xdfe8ff, intensity: lux(h - 0.6, 1.1), distance: 10, priority: 0.36 });
+  kit.light({ type: "point", pos: [0, h - 0.6, -4.4], color: 0xdfe8ff, intensity: lux(h - 0.6, 2.2), distance: 12, priority: 0.36 });
 }
 
 /** Accent surround around a lift door (frame ring drawn by the door system), header with the lit deck indicator, call panel. */
@@ -91,11 +103,14 @@ function liftSurround(kit, F, u, dw, dh, accentKey, indKey) {
   const fw = dw / 2 + 0.3; // door frame ring outer half-width (t = 0.3)
   const ringTop = dh + 0.3;
   const sideW = 0.42;
-  // outer black surround (proud 0.06) with the accent band just outside the frame ring
+  // outer black surround (proud 0.06) with the accent band just outside the frame ring, and a thin
+  // white strip hugging the ring itself (jambs and head) so the door frame reads lit
   for (const s of [-1, 1]) {
     F.box("impTrim", u + s * (fw + 0.06 + sideW / 2), (ringTop + 0.72) / 2, 0.03, sideW, ringTop + 0.72, 0.06, { color: PALETTE.impBlack, texel: 1 });
     F.box(accentKey, u + s * (fw + 0.13), (ringTop + 0.14) / 2, 0.062, 0.08, ringTop + 0.14, 0.012, { uv: "keep" });
+    F.box("emitWhiteDim", u + s * (fw + 0.045), ringTop / 2, 0.062, 0.025, ringTop, 0.012, { uv: "keep" });
   }
+  F.box("emitWhiteDim", u, ringTop + 0.015, 0.062, 2 * fw + 0.115, 0.025, 0.012, { uv: "keep" });
   // header: black box over the ring, indicator screen, accent line under it, turbolift glyph
   F.box("impTrim", u, ringTop + 0.37, 0.05, 2 * (fw + 0.06 + sideW), 0.72, 0.1, { color: PALETTE.impBlack, texel: 1 });
   F.box(accentKey, u, ringTop + 0.07, 0.062, 2 * (fw + 0.13) + 0.08, 0.08, 0.012, { uv: "keep" });
