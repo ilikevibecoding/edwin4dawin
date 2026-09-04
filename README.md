@@ -1,6 +1,6 @@
 # ISD Redoubt — playable build
 
-Auto-published production bundle of branch `cursor/star-destroyer-ship-a618` (source commit `98da5f15`, built 2026-09-04T08:20:30Z).
+Auto-published production bundle of branch `cursor/star-destroyer-ship-a618` (source commit `98da5f15`, built 2026-09-04T08:27:56Z).
 
 Live: https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/star-destroyer-play-a618/index.html
 
