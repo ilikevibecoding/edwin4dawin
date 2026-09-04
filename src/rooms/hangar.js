@@ -97,7 +97,9 @@ export function buildHangar(kit, ctx, room) {
 
   // stair towers (1.5 m off the wall faces so the wall ribs stay clear)
   const towerW = { x0: -63.5, x1: -59.5, z0: -20, z1: -9.5 };
-  const towerE = { x0: 59.5, x1: 63.5, z0: 2.5, z1: 13 };
+  // E tower sits aft of the flight-control window strips (lz 1.8..6.6) so it never fronts the glass; its
+  // y = 16 landing joins a catwalk that runs along the wall under the windows to the raised door
+  const towerE = { x0: 59.5, x1: 63.5, z0: 7.5, z1: 18 };
   const GANTRY_Y = 30;
   const FC_Y = 16; // flight-control door / catwalk level
 
@@ -116,7 +118,7 @@ export function buildHangar(kit, ctx, room) {
     { x0: 50, z0: -46, x1: hx, z1: -14 }, // shuttle-bay blast door approach
     { x0: -13, z0: 94, x1: 13, z1: hz }, // cargo door lane
     { x0: 56, z0: 100, x1: hx, z1: hz }, // lobby door
-    { x0: 58, z0: -4, x1: hx, z1: 4 }, // under the flight-control catwalk struts
+    { x0: 58, z0: -4, x1: hx, z1: towerE.z0 + 1 }, // under the flight-control catwalk struts
     { x0: CX0 - 3.5, z0: CZ0 - 3.5, x1: CX1 + 3.5, z1: CZ1 + 3.5 }, // opening + chevron band
     { x0: -47, z0: 28, x1: -32, z1: 42 },
     { x0: 32, z0: 28, x1: 47, z1: 42 },
@@ -174,7 +176,10 @@ export function buildHangar(kit, ctx, room) {
     for (const [a, b, c, d] of sides) {
       kit.boxMM("impMetalRough", [a, -0.14, b], [c, cH - 0.08, d], { color: PALETTE.impCharcoal, texel: 0.5 });
       kit.boxMM("impMetal", [a, cH - 0.08, b], [c, cH, d], { color: PALETTE.impGreyDark, texel: 0.5 });
+      // walkable: the player steps up onto the rim (the spec spawn is on it); the field collider below is
+      // what keeps them off the well. A non-walkable rim would shove a player spawned inside it sideways.
       kit.collider([a, 0, b], [c, cH, d], "coaming");
+      kit.colliders[kit.colliders.length - 1].walkable = true;
       kit.floor(a, b, c, d, cH, "coaming");
     }
     // blue-white light channel along the inner top edge, and a second strip on the well-facing face
@@ -211,8 +216,12 @@ export function buildHangar(kit, ctx, room) {
     // steppable, so a player standing on the coaming (the room spawn is on it) can get back to the deck
     hgRailing(kit, [CX0 + 0.3, op.z1 + 0.7], [CX1 - 0.3, op.z1 + 0.7], cH, { h: 0.45, midRail: false, kick: false, postStep: 3, light: "emitAmber", tag: "barrier", walkable: true });
     // the field itself is impassable to personnel: one collider over the whole opening (the default room
-    // floor still spans it, so this is what keeps the player off the well from the coaming top)
-    kit.collider([op.x0, -0.6, op.z0], [op.x1, 2.6, op.z1], "field");
+    // floor still spans it, so this is what keeps the player off the well from the coaming top). Pulled
+    // 0.5 m in from the opening edge so its face never coincides with the spawn point on the rim (a player
+    // centre exactly on a collider face is treated as "inside" and ejected along x); the player's radius
+    // still holds them over the coaming (inner edge at 0.4 m).
+    const fIn = 0.5;
+    kit.collider([op.x0 + fIn, -0.6, op.z0 + fIn], [op.x1 - fIn, 2.6, op.z1 - fIn], "field");
     for (let x = CX0 + 1.5; x < CX1 - 1; x += 5) hgDeckLamp(kit, x, op.z1 + 0.25, "emitRedImp", cH);
     for (const x of [CX0 + 0.6, CX1 - 0.6]) redBlink.push([x, cH + 1.7, op.z1 + 0.7, 0.35, 0.35, 0.35]);
     for (const x of [CX0 + 0.6, CX1 - 0.6]) kit.box("impTrim", x, cH + 1.05, op.z1 + 0.7, 0.14, 0.9, 0.14, { color: PALETTE.impBlack });
@@ -462,11 +471,12 @@ export function buildHangar(kit, ctx, room) {
       amberBlink.push([cx, GANTRY_Y + 1.6, (t.z0 + t.z1) / 2, 0.4, 0.3, 0.4]);
       kit.box("impTrim", cx, GANTRY_Y + 1.3, (t.z0 + t.z1) / 2, 0.16, 0.5, 0.16, { color: PALETTE.impBlack });
     }
-    // catwalk from the E tower's y = 16 landing to the flight-control door, braced off the wall
-    hgCatwalk(kit, towerE.x0, -2.5, hx, 2.5, FC_Y, { rails: { N: true, S: true, E: false, W: true }, gaps: { S: [[towerE.x0, towerE.x1]] }, tag: "fc-catwalk" });
-    for (const z of [-1.9, 1.9]) tiltedBox(kit, "impTrim", new THREE.Vector3(hx - 0.1, FC_Y - 4.6, z), new THREE.Vector3(towerE.x0 + 0.6, FC_Y - 0.55, z), 0.26, 0.3, { color: PALETTE.impBlack, texel: 1 });
-    kit.boxMM("impTrim", [hx - 0.5, FC_Y - 0.62, -2.5], [hx, FC_Y - 0.42, 2.5], { color: PALETTE.impBlack, texel: 1 });
-    kit.boxMM("impMetal", [hx - 0.35, FC_Y - 0.9, -2.5], [hx - 0.05, FC_Y - 0.62, 2.5], { color: PALETTE.impGreyDark });
+    // catwalk at y = 16 along the E wall: from the tower's level-5 landing (open N face) it runs under the
+    // booth's window strip to the raised flight-control door, braced off the wall
+    hgCatwalk(kit, towerE.x0, -2.5, hx, towerE.z0, FC_Y, { rails: { N: true, S: true, E: false, W: true }, gaps: { S: [[towerE.x0, towerE.x1]] }, tag: "fc-catwalk" });
+    for (const z of [-1.9, 2.3, towerE.z0 - 1.0]) tiltedBox(kit, "impTrim", new THREE.Vector3(hx - 0.1, FC_Y - 4.6, z), new THREE.Vector3(towerE.x0 + 0.6, FC_Y - 0.55, z), 0.26, 0.3, { color: PALETTE.impBlack, texel: 1 });
+    kit.boxMM("impTrim", [hx - 0.5, FC_Y - 0.62, -2.5], [hx, FC_Y - 0.42, towerE.z0], { color: PALETTE.impBlack, texel: 1 });
+    kit.boxMM("impMetal", [hx - 0.35, FC_Y - 0.9, -2.5], [hx - 0.05, FC_Y - 0.62, towerE.z0], { color: PALETTE.impGreyDark });
     // door approach marking on the catwalk grate
     kit.boxMM("chevronY", [hx - 2.6, FC_Y + 0.004, -1.5], [hx - 0.2, FC_Y + 0.012, 1.5], { texel: 1 });
   }
