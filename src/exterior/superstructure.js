@@ -111,6 +111,26 @@ export function buildSuperstructure(ctx) {
             const q = new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), V(side, 0, 0));
             chunks.batch(zm, "far", "cityLights").addGeometry(g, { pos: [xc, yc, zm], quat: q, uv: "scale", uvScale: [(z1 - z0) / 40, 0.34] });
           }
+          // raised armour panels on the wall above and below the band (close-range relief)
+          {
+            const panels = chunks.batch(zm, "near", "hullPlate1");
+            const cols = Math.max(1, Math.round((z1 - z0) / 9));
+            for (const [yA, yB] of [
+              [(z) => yLo(z) + 0.7, (z) => yb0(z) - 0.7],
+              [(z) => yb1(z) + 0.7, (z) => yHi(z) - 0.7],
+            ]) {
+              if (yB(zm) - yA(zm) < 2.2) continue;
+              for (let ci = 0; ci < cols; ci++) {
+                if (rand() < 0.5) continue;
+                const za = z0 + ((z1 - z0) * ci) / cols + 0.8;
+                const zb = z0 + ((z1 - z0) * (ci + 1)) / cols - 0.8;
+                const c = [V(X(za, yA(za)), yA(za), za), V(X(zb, yA(zb)), yA(zb), zb), V(X(zb, yB(zb)), yB(zb), zb), V(X(za, yB(za)), yB(za), za)];
+                const n = new THREE.Vector3().subVectors(c[1], c[0]).cross(new THREE.Vector3().subVectors(c[3], c[0])).normalize();
+                if (n.dot(hint) < 0) n.negate();
+                panels.frustum(c, n, 0.35 + rand() * 0.35, 0.6, mixC(plateTone(rand), bandTint, 0.55), TEXEL);
+              }
+            }
+          }
           if (finZ !== null) {
             const th = 1.4;
             const yb = yLo(finZ);

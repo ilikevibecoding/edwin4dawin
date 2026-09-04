@@ -93,8 +93,9 @@ export function buildEngines(ctx) {
     // inner bell from the throat to the lip: dark metal, glow-tinted toward the throat
     const inner = prof.filter((p) => p.t >= 0.24 * L - 1e-6).map((p) => ({ r: p.r - (b.main ? 0.7 : 0.4), t: p.t }));
     at("far", "hullGreeble").lathe(inner, o, IDENT, segs, { inside: true, colorAt: (i, f) => mixC(T, blue, 0.6 * (1 - f) * (1 - f)), texel: TEXEL * 3 });
-    // throat: bright core disc and a blue disc filling the rest of the throat
-    at("far", "engineCore").disc(V(b.x, b.y, e.z + 0.24 * L + 0.5), Z, r * 0.71 - (b.main ? 1.2 : 0.7), segs, 0xffffff);
+    // throat: a white core disc (under half the lip radius, so the dark throat ring around it and
+    // the bell walls stay visible from any angle) and a blue disc filling the rest of the throat
+    at("far", "engineCore").disc(V(b.x, b.y, e.z + 0.24 * L + 0.5), Z, r * 0.44, segs, 0xffffff);
     at("far", "engineGlow").disc(V(b.x, b.y, e.z + 0.24 * L + 0.3), Z, r * 0.71 - 0.2, segs, 0xffffff);
     // additive glow: sheet lining the bell, a hot core cone, a faint plume past the lip
     const glow = at("far", "exta_glow");
@@ -106,14 +107,15 @@ export function buildEngines(ctx) {
       }
       glow.lathe(p, o, IDENT, segs, { colorAt: (i, f) => C(c0).clone().multiplyScalar(Math.pow(1 - f, pow)) });
     };
-    // the sheet fades out well before the lip so the dark inner bell and its rings stay readable
-    cone(0.25, 0.88, 0.68, 0.9, blue.clone().multiplyScalar(1.1), 2.6);
-    cone(0.25, 0.6, 0.4, 0.5, C(0xffffff).multiplyScalar(1.1), 1.6);
-    cone(1.0, 1.4, 1.0, 0.55, blue.clone().multiplyScalar(0.26), 2.0);
-    // soft additive disc deep in the bell (clipped by the bell walls from oblique angles, so the
-    // inner bell stays legible) + a dim vertex-gradient halo just behind the lip
-    at("far", "glowDisc").addGeometry(new THREE.PlaneGeometry(r * 1.9, r * 1.9), { pos: [b.x, b.y, e.z + 0.42 * L], uv: "keep" });
-    glow.disc(V(b.x, b.y, e.z + L + 1.5), Z, r * 1.25, segs, blue.clone().multiplyScalar(0.28), 1, { colorOut: 0x000000 });
+    // the sheets stay in the throat third of the bell: seen obliquely, additive layers stack up, so
+    // anything lining the whole bell turns the opening into a flat haze and hides the walls / rings
+    cone(0.25, 0.55, 0.7, 0.8, blue.clone().multiplyScalar(0.22), 2.0);
+    cone(0.25, 0.5, 0.42, 0.28, C(0xffffff).multiplyScalar(0.55), 2.0);
+    cone(1.0, 1.4, 1.0, 0.55, blue.clone().multiplyScalar(0.2), 2.0);
+    // soft additive disc around the core (its bright centre is inside the core disc, only the soft
+    // rim shows) + a dim vertex-gradient halo just behind the lip
+    at("far", "glowDisc").addGeometry(new THREE.PlaneGeometry(r * 1.0, r * 1.0), { pos: [b.x, b.y, e.z + 0.27 * L], uv: "keep" });
+    glow.disc(V(b.x, b.y, e.z + L + 1.5), Z, r * 1.25, segs, blue.clone().multiplyScalar(0.2), 1, { colorOut: 0x000000 });
     // lip ring, gimbal collar at the housing face, stiffener rings
     const trim = at("far", "hullTrim");
     trim.addGeometry(new THREE.TorusGeometry(r * 1.035 + 0.15, b.main ? 1.0 : 0.6, 10, segs), { pos: [b.x, b.y, e.z + L], color: T, texel: TEXEL * 3 });

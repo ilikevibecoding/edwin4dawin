@@ -19,7 +19,7 @@ export const TEXEL = 1 / 26; // one plating tile per 26 m (plates 3–8 m in the
 export const LOD_NEAR = 1000;
 export const LOD_MID = 3000;
 
-const NO_SHADOW = new Set(["engineGlow", "engineCore", "glowDisc", "cityLights", "viewGlass", "exta_glow", "exta_emit"]);
+const NO_SHADOW = new Set(["engineGlow", "engineCore", "glowDisc", "cityLights", "viewGlass", "exta_glow", "exta_emit", "exta_pool"]);
 const isEmitKey = (k) => k.startsWith("extEmit") || k.startsWith("emit");
 /** Vertex colours for the exta_emit material (unlit, HDR: same output as the extEmit* emissives). */
 export const EMIT = {
@@ -556,7 +556,7 @@ export class ChunkSet {
       };
       for (const b of m.values()) {
         if (b.tris === 0) continue;
-        const material = materials[b.key];
+        const material = materials[resolveKey(b.key)];
         if (!material) throw new Error(`exterior: unknown material ${b.key}`);
         const geo = b.build();
         geo.translate(-centre.x, -centre.y, -centre.z);
@@ -716,6 +716,42 @@ export function channel(chunks, rand, { zA, zB, xc, halfW, depth, yAt, up = true
 // ---------------------------------------------------------------------------
 // exta_* materials
 // ---------------------------------------------------------------------------
+/**
+ * Planet-shine. The sun's elevation over the hull is fixed (+22°) and the hemisphere fill's ground
+ * colour is near black, so every down-facing surface — the whole ventral half of the ship — would
+ * render as a silhouette. These materials carry a faint cool ambient term that fades in as the world
+ * normal turns downward: emissive × albedo × vertex tint, so plating seams and paint variation stay
+ * readable on the belly without touching the sunlit side.
+ */
+const SHINE = new THREE.Color(0x585d66);
+const SHINE_CHUNK = /* glsl */ `
+#include <emissivemap_fragment>
+{
+	vec3 shineN = inverseTransformDirection( normal, viewMatrix );
+	float shineK = smoothstep( 0.3, -0.5, shineN.y );
+	#if defined( USE_COLOR ) || defined( USE_COLOR_ALPHA )
+		totalEmissiveRadiance *= vColor.rgb;
+	#endif
+	totalEmissiveRadiance *= shineK;
+}
+`;
+function addPlanetShine(m) {
+  const domainPatch = m.onBeforeCompile;
+  m.emissive = SHINE.clone();
+  m.emissiveMap = m.map;
+  m.emissiveIntensity = 1;
+  m.onBeforeCompile = (shader, renderer) => {
+    domainPatch(shader, renderer);
+    shader.fragmentShader = shader.fragmentShader.replace("#include <emissivemap_fragment>", SHINE_CHUNK);
+  };
+  m.customProgramCacheKey = () => "exterior|shine";
+  m.needsUpdate = true;
+  return m;
+}
+/** Shared hull materials → their planet-shine twins (same textures; resolved at ChunkSet.build). */
+const SHINE_VARIANT = { hullPlate: "exta_hullPlate", hullPlate1: "exta_hullPlate1", hullGreeble: "exta_hullGreeble", hullTrim: "exta_hullTrim" };
+export const resolveKey = (key) => SHINE_VARIANT[key] || key;
+
 export function ensureExtMaterials(materials) {
   if (materials.exta_plate2) return;
   const std = (set, extra = {}) =>
@@ -733,13 +769,21 @@ export function ensureExtMaterials(materials) {
     });
   const plate2 = makeHullPlating2(1024, 173);
   const machinery = makeMachineryPanel(512, 57);
-  materials.exta_plate2 = setDomain(std(plate2, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.5 }), "exterior");
-  materials.exta_machinery = setDomain(std(machinery, { normalScale: new THREE.Vector2(0.9, 0.9), envMapIntensity: 0.6 }), "exterior");
+  materials.exta_plate2 = addPlanetShine(setDomain(std(plate2, { normalScale: new THREE.Vector2(1.0, 1.0), envMapIntensity: 0.5 }), "exterior"));
+  materials.exta_machinery = addPlanetShine(setDomain(std(machinery, { normalScale: new THREE.Vector2(0.9, 0.9), envMapIntensity: 0.6 }), "exterior"));
+  // twins of the shared hull materials (textures reused, only the shader differs)
+  for (const [src, dst] of Object.entries(SHINE_VARIANT)) {
+    const s = materials[src];
+    if (!s) throw new Error(`exterior: missing shared material ${src}`);
+    materials[dst] = addPlanetShine(setDomain(std(s, { normalScale: s.normalScale.clone(), envMapIntensity: s.envMapIntensity, roughness: s.roughness, metalness: s.metalness }), "exterior"));
+  }
   // engine bell outer skin: heat-tempering ramp along the axis (u), vertex colour modulates
   materials.exta_heat = setDomain(new THREE.MeshStandardMaterial({ map: makeHeatRamp(256, 16), roughness: 0.5, metalness: 0.55, vertexColors: true, color: 0xffffff, fog: false, envMapIntensity: 0.7 }), "exterior");
   // additive glow with per-vertex colour (gradient cones inside the nozzles)
   materials.exta_glow = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
   // unlit HDR vertex colours: every running / guide / window light of the hull in one material
   materials.exta_emit = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
-  for (const k of ["exta_plate2", "exta_machinery", "exta_heat"]) if (!materials.exteriorKeys.includes(k)) materials.exteriorKeys.push(k);
+  // additive, steady (no engine flicker): floodlight pools washing the belly plating
+  materials.exta_pool = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
+  for (const k of ["exta_plate2", "exta_machinery", "exta_heat", ...Object.values(SHINE_VARIANT)]) if (!materials.exteriorKeys.includes(k)) materials.exteriorKeys.push(k);
 }

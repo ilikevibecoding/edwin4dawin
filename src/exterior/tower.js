@@ -325,17 +325,25 @@ export function buildTower(ctx) {
     const trim = at("far", "hullTrim");
     trim.addGeometry(new THREE.TorusGeometry(d.r + 0.25, 1.1, 10, 64), { pos: [d.x, d.yCenter, d.z], rot: [Math.PI / 2, 0, 0], color: D, texel: TEXEL * 3 });
     const mid = at("mid", "hullTrim");
-    for (const lat of [0.5, 0.95]) {
+    // latitude rings: two structural bands plus thinner panel lines between them
+    for (const [lat, rad] of [
+      [0.5, 0.32],
+      [0.95, 0.32],
+      [0.25, 0.16],
+      [0.72, 0.16],
+      [1.18, 0.16],
+    ]) {
       const rr = d.r * Math.cos(lat) + 0.2;
-      mid.addGeometry(new THREE.TorusGeometry(rr, 0.32, 8, 56), { pos: [d.x, d.yCenter + d.r * Math.sin(lat), d.z], rot: [Math.PI / 2, 0, 0], color: D, texel: TEXEL * 3 });
+      mid.addGeometry(new THREE.TorusGeometry(rr, rad, 6, 56), { pos: [d.x, d.yCenter + d.r * Math.sin(lat), d.z], rot: [Math.PI / 2, 0, 0], color: D, texel: TEXEL * 3 });
     }
-    // meridian ribs from the plinth to the pole
+    // meridian ribs from the plinth to the pole: 8 heavy ribs, 8 thin panel lines between them
     const a0 = Math.asin((yPlinth - d.yCenter) / d.r);
-    for (let i = 0; i < 8; i++) {
-      const g = new THREE.TorusGeometry(d.r + 0.35, 0.5, 8, 28, Math.PI / 2 - a0);
+    for (let i = 0; i < 16; i++) {
+      const heavy = i % 2 === 0;
+      const g = new THREE.TorusGeometry(d.r + (heavy ? 0.35 : 0.2), heavy ? 0.5 : 0.22, heavy ? 8 : 5, 28, Math.PI / 2 - a0 - (heavy ? 0 : 0.12));
       g.rotateZ(a0);
-      g.rotateY((i / 8) * Math.PI * 2);
-      mid.addGeometry(g, { pos: [d.x, d.yCenter, d.z], color: mixC(M, D, 0.5), texel: TEXEL * 3 });
+      g.rotateY((i / 16) * Math.PI * 2);
+      mid.addGeometry(g, { pos: [d.x, d.yCenter, d.z], color: heavy ? mixC(M, D, 0.5) : D, texel: TEXEL * 3 });
     }
     mid.tube(V(d.x, d.yCenter + d.r - 0.4, d.z), V(d.x, d.yCenter + d.r + 1.8, d.z), 2.6, 2.2, 16, D, TEXEL * 3, { cap1: true });
     at("far", "exta_emit").box(d.x, d.yCenter + d.r + 2.3, d.z, 0.9, 1.0, 0.9, EMIT.red, 1);

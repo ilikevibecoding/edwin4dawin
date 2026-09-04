@@ -120,14 +120,14 @@ export function makeMachineryPanel(size = 512, seed = 57) {
     const seam = clamp01(1 - ed / 0.03);
     const n1 = fbm(u, v, { octaves: 4, freq: 7, seed });
     const speck = fbm(u, v, { octaves: 3, freq: 50, seed: seed + 3 });
-    let lum = 0.3 + (n1 - 0.5) * 0.12 + (speck - 0.5) * 0.05;
+    let lum = 0.42 + (n1 - 0.5) * 0.14 + (speck - 0.5) * 0.05;
     let rough = 0.58 + (n1 - 0.5) * 0.2;
     let metal = 0.7;
     let hgt = 0.5 - seam * 0.25;
     lum *= 1 - seam * 0.4;
     // oxidised patches
     const ox = clamp01((fbm(u, v, { octaves: 3, freq: 4, seed: seed + 9 }) - 0.58) * 5);
-    lum = lerp(lum, 0.24, ox * 0.6);
+    lum = lerp(lum, 0.3, ox * 0.6);
     rough += ox * 0.3;
     metal -= ox * 0.4;
     // pipe ridges: half-round profile in the height map, brighter crown
@@ -136,7 +136,7 @@ export function makeMachineryPanel(size = 512, seed = 57) {
       if (d < pr) {
         const k = Math.sqrt(1 - (d / pr) * (d / pr));
         hgt = 0.5 + k * 0.42;
-        lum = 0.34 + k * 0.12 + (speck - 0.5) * 0.04;
+        lum = 0.42 + k * 0.14 + (speck - 0.5) * 0.04;
         rough = 0.42 + (1 - k) * 0.2;
         metal = 0.85;
         // clamps every 1/6 tile
