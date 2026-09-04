@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "build:single": "vite build --config vite.config.single.js",
+    "deploy": "node tools/deploy.mjs",
+    "deploy:check": "node tools/deploy.mjs --check",
+    "perf": "node tools/perfrun.mjs",
     "preview": "vite preview",
     "shots": "node tools/shots.mjs"
   },
