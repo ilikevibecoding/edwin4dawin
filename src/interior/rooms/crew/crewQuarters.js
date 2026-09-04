@@ -137,7 +137,7 @@ export function buildCrewQuarters(kit, ctx) {
   );
   // fill for the berthing bays: cool from the passage strips, a warm pool mid-way at bunk height
   for (const side of sides) {
-    for (const lx of [xStart(1) + 1.7, xStart(5) + 1.7]) pointLightDesc(ctx, 0xdfe8ff, 11, 20, [lx, y + 3.1, side.zc], 0);
+    for (const lx of [xStart(1) + 1.7, xStart(5) + 1.7]) pointLightDesc(ctx, 0xdfe8ff, 14, 20, [lx, y + 3.1, side.zc], 0);
     pointLightDesc(ctx, 0xffc890, 4, 12, [xStart(3) + 1.7, y + 2.2, side.zc], 0);
   }
 
