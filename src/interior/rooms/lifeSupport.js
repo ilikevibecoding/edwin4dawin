@@ -22,16 +22,9 @@ export function build(kit, ctx, room, lib) {
   const yP = y0 + 0.36; // scrubber plinth level
   const deckOpts = { color: PALETTE.impGreyDark, uv: "world", texel: 1 };
 
-  // ------------------------------------------------------------ lights: cold white mains, cyan accents
-  // The dark shell swallows light, so the mains are strong and low work lamps hang over the machinery
-  // (added further down with the ducts they hang from).
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 18, 16, [4.6, yTop - 0.5, 546.0]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 18, 16, [4.6, yTop - 0.5, 552.5]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 18, 16, [9.5, yTop - 0.5, 549.0]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 18, 16, [14.5, yTop - 0.5, 549.0]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 18, 16, [19.5, yTop - 0.5, 549.0]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 14, 14, [22.4, yTop - 0.5, 545.0]));
-  ctx.lights.cool.push(pointLight(0xd8e4ff, 14, 14, [22.4, yTop - 0.5, 553.0]));
+  // ------------------------------------------------------------ lights: cage work lamps on the ducts, cyan accents
+  // No bare mains under the ceiling plate (they blew out a strip of it): all the white light comes from
+  // cage lamps hung off the two supply ducts, added further down with the ducts themselves.
   ctx.lights.teal.push(pointLight(0x5fe0ff, 4, 8, [7.0, y0 + 2.2, 551.6]));
   ctx.lights.teal.push(pointLight(0x5fe0ff, 4, 8, [13.0, y0 + 1.4, 546.0]));
   ctx.lights.teal.push(pointLight(0x5fe0ff, 4, 8, [18.2, y0 + 1.2, 552.0]));
@@ -81,7 +74,7 @@ export function build(kit, ctx, room, lib) {
   plinth(15.2, 22.0, 18.0, 19.2);
 
   // ------------------------------------------------------------ scrubber tanks with manifolds, gauges and ladders
-  const tank = (tx, tz, ladder) => {
+  const tank = (tx, tz, ladder, screen = "screen6") => {
     const r = 1.1;
     kit.cyl("metal", tx, yP + 0.06, tz, r + 0.08, 0.12, "y", { color: PALETTE.darkMetal, segments: 28 });
     kit.cyl("painted", tx, yP + 1.27, tz, r, 2.3, "y", { color: PALETTE.slate, segments: 28, uv: "world", texel: 0.7 });
@@ -101,7 +94,7 @@ export function build(kit, ctx, room, lib) {
     const fg = new Frame(kit, f.pos(0, 0, 0.06), f.U, f.V);
     f.box("satinBlack", 0, 1.35, -0.03, 0.9, 0.7, 0.18);
     f.box("darkGloss", -0.18, 1.2, 0.065, 0.42, 0.26, 0.01);
-    f.box("screen6", -0.18, 1.2, 0.072, 0.36, 0.2, 0.004, { uv: "keep" });
+    f.box(screen, -0.18, 1.2, 0.072, 0.36, 0.2, 0.004, { uv: "keep" });
     gauge(fg, 0.26, 1.5, 0.11, "emitTeal");
     gauge(fg, 0.26, 1.2, 0.08, "emitAmber");
     f.box("leds", -0.18, 1.5, 0.065, 0.4, 0.04, 0.008, { uv: "keep" });
@@ -123,8 +116,8 @@ export function build(kit, ctx, room, lib) {
     }
     kit.collider([tx - r - 0.25, yP, tz - r - 0.05], [tx + r + 0.05, yP + 3.0, tz + r + 0.75], "tank");
   };
-  const tanks = [[5.9, 544.4, true], [8.9, 544.4, false], [17.0, 544.4, true], [20.1, 544.4, false]];
-  for (const [tx, tz, l] of tanks) tank(tx, tz, l);
+  const tanks = [[5.9, 544.4, true, "screen6"], [8.9, 544.4, false, "screen2"], [17.0, 544.4, true, "screen9"], [20.1, 544.4, false, "screen6"]];
+  for (const [tx, tz, l, s] of tanks) tank(tx, tz, l, s);
   // ceiling headers above the tanks, risers and cross-overs to the aft wall
   pipeRun(kit, "x", 4.2, 22.0, 544.4, y0 + 3.35, 0.14, { color: PALETTE.steel, step: 2.4 });
   pipeRun(kit, "x", 4.2, 22.0, 543.6, y0 + 3.2, 0.1, { color: PALETTE.orange, step: 3.0 });
@@ -152,11 +145,10 @@ export function build(kit, ctx, room, lib) {
     grateQuad(kit, g, [tx, y0 + 2.374, 546.6], 0.6, 0.6);
     kit.add("emitTeal", new THREE.TorusGeometry(0.32, 0.01, 4, 20), { pos: [tx, y0 + 2.38, 546.6], rot: [Math.PI / 2, 0, 0], uv: "keep" });
   }
-  // cage work lamps hung from the ducts and the ceiling over the machinery
-  workLamp(kit, ctx, 13.4, yTop, 545.0, { drop: 0.95, intensity: 12, distance: 10 });
-  workLamp(kit, ctx, 8.2, y0 + 2.8, 551.4, { drop: 0.4, intensity: 12, distance: 10 });
-  workLamp(kit, ctx, 13.6, y0 + 2.8, 551.4, { drop: 0.4, intensity: 12, distance: 10 });
-  workLamp(kit, ctx, 20.6, yTop, 553.2, { drop: 0.95, intensity: 12, distance: 10 });
+  // cage work lamps hung from the duct undersides, staggered between the two ducts so the aisle, the tank
+  // walkway and the rack side all get a lamp (distance 13: every one stays pooled from the door view)
+  for (const x of [5.0, 10.5, 15.0, 20.5]) workLamp(kit, ctx, x, y0 + 2.8, 546.6, { drop: 0.4, intensity: 13, distance: 13 });
+  for (const x of [8.0, 13.6, 18.0, 21.3]) workLamp(kit, ctx, x, y0 + 2.8, 551.4, { drop: 0.4, intensity: 13, distance: 13 });
   pipeRun(kit, "z", 542.2, 555.8, 12.6, y0 + 2.5, 0.28, { color: PALETTE.gunmetal, step: 2.4 });
   for (const z of [545.0, 553.0]) {
     kit.cyl("metal", 12.6, y0 + 2.5, z, 0.34, 0.5, "z", { color: PALETTE.darkMetal, segments: 12 });
@@ -240,17 +232,41 @@ export function build(kit, ctx, room, lib) {
     const c = standFrame(kit, 9.4, y0, 552.2, "-z");
     c.box("satinBlack", 0, 0.5, 0, 0.7, 1.0, 0.4);
     c.box("satinBlack", 0, 1.08, 0.05, 0.74, 0.22, 0.5, { tilt: -0.5 });
-    c.box("screen6", 0, 1.1, 0.16, 0.6, 0.16, 0.01, { tilt: -0.5, uv: "keep" });
+    c.box("screen9", 0, 1.1, 0.16, 0.6, 0.16, 0.01, { tilt: -0.5, uv: "keep" });
     c.box("leds", 0, 0.9, 0.205, 0.5, 0.04, 0.01, { uv: "keep" });
     kit.collider([9.0, y0, 551.9], [9.8, y0 + 1.2, 552.5], "console");
+    kit.marker("station", [9.4, y0, 551.5], Math.PI, { id: "lifeSupport-vat-console" });
   }
 
   // ------------------------------------------------------------ filter racks: free-standing double-sided + wall rack, spent-filter crates
+  // Cartridges in a row along x at (y = shelf top, z), caps toward `dir` (the aisle side). Slot states come
+  // from a hash of the position so the banks do not repeat: most are seated white units, some are spent
+  // (greyed, amber service tag), a few are pulled half out on their rails and a few sockets are empty.
   const filterRow = (xa, xb, y, z, dir) => {
     for (let x = xa + 0.2; x < xb - 0.1; x += 0.36) {
-      kit.cyl("painted", x, y + 0.13, z, 0.11, 0.46, "z", { color: PALETTE.impWhite, segments: 12, uv: "world", texel: 2 });
-      kit.cyl("metal", x, y + 0.13, z + dir * 0.2, 0.115, 0.04, "z", { color: PALETTE.steel, segments: 12 });
-      kit.cyl("metal", x, y + 0.13, z - dir * 0.2, 0.115, 0.04, "z", { color: PALETTE.gunmetal, segments: 12 });
+      const h = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+      const t = h - Math.floor(h);
+      if (t < 0.1) {
+        // empty socket: ring at the back, dark bore, amber vacant lamp on the shelf lip
+        kit.cyl("metal", x, y + 0.13, z - dir * 0.16, 0.12, 0.05, "z", { color: PALETTE.darkMetal, segments: 12 });
+        kit.cyl("satinBlack", x, y + 0.13, z - dir * 0.05, 0.09, 0.26, "z", { segments: 12 });
+        kit.box("emitAmber", x, y - 0.02, z + dir * 0.245, 0.06, 0.03, 0.006);
+        continue;
+      }
+      const pull = t < 0.2 ? 0.22 : 0;
+      const spent = t >= 0.2 && t < 0.34;
+      const zc = z + dir * pull;
+      kit.cyl("painted", x, y + 0.13, zc, 0.11, 0.46, "z", { color: spent ? PALETTE.fabricCream : PALETTE.impWhite, segments: 12, uv: "world", texel: 2 });
+      kit.cyl("metal", x, y + 0.13, zc + dir * 0.2, 0.115, 0.04, "z", { color: PALETTE.steel, segments: 12 });
+      kit.cyl("metal", x, y + 0.13, zc - dir * 0.2, 0.115, 0.04, "z", { color: PALETTE.gunmetal, segments: 12 });
+      if (pull) {
+        for (const dy of [-0.09, 0.09]) kit.box("metal", x, y + 0.13 + dy, z - dir * 0.05, 0.02, 0.02, 0.3, { color: PALETTE.steel });
+        kit.box("satinBlack", x, y + 0.02, zc + dir * 0.24, 0.08, 0.14, 0.02);
+      }
+      if (spent) {
+        kit.box("painted", x, y + 0.2, zc + dir * 0.225, 0.07, 0.07, 0.008, { color: PALETTE.impAmber, uv: "keep" });
+        kit.box("emitAmber", x, y + 0.06, zc + dir * 0.225, 0.03, 0.03, 0.006);
+      } else if (t > 0.8) kit.box("emitTeal", x, y + 0.06, zc + dir * 0.225, 0.03, 0.03, 0.006);
     }
   };
   {
@@ -308,7 +324,7 @@ export function build(kit, ctx, room, lib) {
     kit.box("hazard", wx, y0 + 0.3, wz, 2.42, 0.1, 1.82, { texel: 3 });
     const f = standFrame(kit, wx, y0 + 0.16, wz - 0.9, "-z");
     f.box("satinBlack", 0.6, 1.0, 0.03, 0.9, 0.6, 0.06);
-    f.box("screen6", 0.6, 1.05, 0.065, 0.7, 0.36, 0.006, { uv: "keep" });
+    f.box("screen10", 0.6, 1.05, 0.065, 0.7, 0.36, 0.006, { uv: "keep" });
     f.box("leds", 0.6, 0.78, 0.065, 0.7, 0.04, 0.006, { uv: "keep" });
     gauge(f, -0.5, 1.1, 0.14, "emitAmber");
     f.box("emitAmber", -0.9, 1.3, 0.035, 0.08, 0.08, 0.02);
@@ -325,10 +341,12 @@ export function build(kit, ctx, room, lib) {
 
   // ------------------------------------------------------------ manifold wall (east) around the master status board
   {
+    // master status board: amber power/flow bars beside a data-column log, engineering console below
     wallConsole(fE, 7.0, 2.6, "screen6", { height: 1.05, depth: 0.55 });
+    kit.marker("station", [x1 - 0.9, y0, z0 + 7.0], -Math.PI / 2, { id: "lifeSupport-master-board" });
     fE.box("satinBlack", 7.0, 2.2, 0.05, 3.2, 1.3, 0.1);
-    fE.box("screen6", 6.25, 2.3, 0.102, 1.3, 0.8, 0.006, { uv: "keep" });
-    fE.box("screen6", 7.75, 2.3, 0.102, 1.3, 0.8, 0.006, { uv: "keep" });
+    fE.box("screen10", 6.25, 2.3, 0.102, 1.3, 0.8, 0.006, { uv: "keep" });
+    fE.box("screen9", 7.75, 2.3, 0.102, 1.3, 0.8, 0.006, { uv: "keep" });
     fE.box("leds", 7.0, 1.7, 0.102, 2.8, 0.04, 0.006, { uv: "keep" });
     for (let k = 0; k < 10; k++) fE.box(k % 3 === 0 ? "emitAmber" : "emitTeal", 5.7 + k * 0.29, 2.78, 0.102, 0.16, 0.04, 0.006);
     fE.collider(5.3, 8.7, 1.4, 2.9, 0, 0.12, "board");
@@ -372,9 +390,10 @@ export function build(kit, ctx, room, lib) {
 
   // ------------------------------------------------------------ door wall: control bank north of the door, chemical tank and tool board south
   {
-    wallConsole(fW, 10.4, 2.6, "screen6");
+    wallConsole(fW, 10.4, 2.6, "screen3");
+    kit.marker("station", [x0 + 0.9, y0, z1 - 10.4], Math.PI / 2, { id: "lifeSupport-control-bank" });
     fW.box("satinBlack", 10.4, 1.95, 0.04, 2.6, 0.9, 0.08);
-    fW.box("screen6", 9.75, 1.95, 0.082, 1.1, 0.7, 0.006, { uv: "keep" });
+    fW.box("screen7", 9.75, 1.95, 0.082, 1.1, 0.7, 0.006, { uv: "keep" });
     fW.box("screen6", 11.05, 1.95, 0.082, 1.1, 0.7, 0.006, { uv: "keep" });
     fW.box("leds", 10.4, 1.42, 0.05, 2.2, 0.04, 0.02, { uv: "keep" });
     fW.collider(9.0, 11.8, 1.4, 2.5, 0, 0.1, "bank");
@@ -414,14 +433,15 @@ export function build(kit, ctx, room, lib) {
 
   // ------------------------------------------------------------ forward wall behind the scrubbers, aft wall fill, ceiling ribs' pipe run
   {
-    wallConsole(fN, 11.0, 1.8, "screen6");
+    wallConsole(fN, 11.0, 1.8, "screen2");
+    kit.marker("station", [x0 + 11.0, y0, z0 + 0.9], 0, { id: "lifeSupport-scrubber-console" });
     stencil(fN, 11.0, 1.7, 0.42, 12, { color: PALETTE.creamDark });
     fN.cylU("metal", 11.0, 2.6, 0.12, 0.1, 21.6, { color: PALETTE.steel, segments: 12 });
     fN.cylU("metal", 11.0, 2.85, 0.1, 0.06, 21.6, { color: PALETTE.orange, segments: 10 });
     for (let u = 1.0; u < 22; u += 2.75) fN.box("metal", u, 2.72, 0.08, 0.1, 0.5, 0.2, { color: PALETTE.darkMetal, texel: 2 });
     for (const u of [2.2, 9.4, 13.2, 20.4]) fN.box("satinBlack", u, 1.5, 0.04, 0.8, 1.2, 0.08);
     for (const u of [2.2, 20.4]) {
-      fN.box("screen6", u, 1.7, 0.082, 0.66, 0.5, 0.006, { uv: "keep" });
+      fN.box(u < 10 ? "screen8" : "screen6", u, 1.7, 0.082, 0.66, 0.5, 0.006, { uv: "keep" });
       fN.box("leds", u, 1.15, 0.05, 0.6, 0.04, 0.02, { uv: "keep" });
     }
     for (const u of [9.4, 13.2]) {
