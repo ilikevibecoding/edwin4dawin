@@ -179,6 +179,30 @@ export class ScriptedPilot {
   }
 }
 
+// The shared exhaust material uses the light-panel diffuser, whose edges never go fully dark; a flare
+// quad scaled up for distance would show as an orange square. Give the flares a round radial
+// gradient instead (falls back to the shared material where there is no canvas, e.g. tests).
+function flareMaterial(base) {
+  if (typeof document === "undefined" || !base || !base.isMaterial) return base;
+  const size = 64;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, "#ffffff");
+  g.addColorStop(0.3, "#d0d0d0");
+  g.addColorStop(0.7, "#404040");
+  g.addColorStop(1, "#000000");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const m = base.clone();
+  m.map = tex;
+  m.name = "exhaustFlare";
+  return m;
+}
+
 // ---------------------------------------------------------------------------
 // Traffic system
 // ---------------------------------------------------------------------------
@@ -618,7 +642,7 @@ export function createTraffic({ mats, audio, zone } = {}) {
   // exhaust flares: one camera-facing additive quad per engine, scaled by throttle
   const flare = (() => {
     const g = new THREE.PlaneGeometry(1.5, 1.5);
-    const im = new THREE.InstancedMesh(g, mats.exhaustGlow, N * 2);
+    const im = new THREE.InstancedMesh(g, flareMaterial(mats.exhaustGlow), N * 2);
     im.name = "tie_exhaust";
     im.castShadow = false;
     im.receiveShadow = false;
@@ -643,7 +667,7 @@ export function createTraffic({ mats, audio, zone } = {}) {
       // Exhaust flares grow with distance beyond 200 m and slide from the emitters toward the hull
       // centre, so a patrolling fighter still reads as a glowing speck from the exterior presets
       // (a 9 m craft is a few pixels at 1.7 km, and its own body would hide the engines from the front).
-      const far = Math.min(8, Math.max(1, d / 200));
+      const far = Math.min(6, Math.max(1, d / 200));
       const throttle = (f.s === "docked" || f.s === "lowering" || f.s === "raising" ? 0.35 : THREE.MathUtils.clamp(0.9 + f.speed / 60, 0.9, 2.2)) * far;
       const pull = 1 / far;
       for (let k = 0; k < 2; k++) {
