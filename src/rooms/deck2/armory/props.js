@@ -44,18 +44,59 @@ function leanBox(kit, Q, mat, lx, ly, lz, sx, sy, sz, tilt, opts = {}) {
 }
 
 // Stylised long-arm silhouette standing muzzle-up, leaning back by `tilt` (radians) onto the rack.
-// Pure blocks: barrel, receiver, stock block, grip, sight rail. Deliberately generic.
-function rifle(kit, PALETTE, Q, lx, baseY, lz, tilt) {
+// Pure blocks: barrel, receiver, stock block, grip, sight rail. Deliberately generic. `kind`:
+//  0 standard rifle · 1 heavy repeater (thick barrel, side power cell, top scope, muzzle brake)
+//  2 short carbine (stubby barrel, folded-stock bar, pistol grip).
+function rifle(kit, PALETTE, Q, lx, baseY, lz, tilt, kind = 0) {
   const black = C(PALETTE, "impBlack");
   const dark = C(PALETTE, "impDark");
+  const steel = C(PALETTE, "steel");
   const s = Math.sin(tilt);
   const c = Math.cos(tilt);
   // a point at height h along the leaning axis
   const at = (h) => [baseY + h * c, lz + h * s];
-  let [y, z] = at(0.55);
+  let y, z;
+  if (kind === 1) {
+    [y, z] = at(0.6);
+    leanBox(kit, Q, "paintedMetal", lx, y, z, 0.07, 1.1, 0.07, tilt, { color: black, texel: 2.5 }); // heavy barrel
+    [y, z] = at(0.2);
+    leanBox(kit, Q, "paintedMetal", lx, y, z, 0.09, 0.36, 0.2, tilt, { color: black, texel: 2.5 }); // stock block
+    [y, z] = at(0.45);
+    leanBox(kit, Q, "paintedMetal", lx, y, z, 0.08, 0.22, 0.14, tilt, { color: dark, texel: 2.5 }); // receiver
+    [y, z] = at(0.5);
+    leanBox(kit, Q, "paintedMetal", lx + 0.075, y, z, 0.05, 0.16, 0.1, tilt, { color: dark }); // side power cell
+    leanBox(kit, Q, "emitBlue", lx + 0.103, y, z, 0.006, 0.08, 0.03, tilt);
+    [y, z] = at(0.44);
+    leanBox(kit, Q, "paintedMetal", lx, y, z + 0.12, 0.04, 0.13, 0.05, tilt, { color: dark }); // grip
+    [y, z] = at(0.82);
+    leanBox(kit, Q, "paintedMetal", lx, y, z - 0.06, 0.04, 0.3, 0.04, tilt, { color: black }); // scope
+    leanBox(kit, Q, "darkGloss", lx, y + 0.155 * c, z - 0.06 + 0.155 * s, 0.03, 0.01, 0.03, tilt);
+    [y, z] = at(1.13);
+    leanBox(kit, Q, "metal", lx, y, z, 0.09, 0.1, 0.09, tilt, { color: steel }); // muzzle brake
+    return;
+  }
+  if (kind === 2) {
+    [y, z] = at(0.5);
+    leanBox(kit, Q, "paintedMetal", lx, y, z, 0.045, 0.6, 0.05, tilt, { color: black }); // short barrel
+    [y, z] = at(0.34);
+    leanBox(kit, Q, "paintedMetal", lx, y, z, 0.06, 0.2, 0.12, tilt, { color: black, texel: 2.5 }); // receiver
+    [y, z] = at(0.16);
+    leanBox(kit, Q, "paintedMetal", lx - 0.04, y, z, 0.025, 0.3, 0.03, tilt, { color: dark }); // folded stock bar
+    leanBox(kit, Q, "paintedMetal", lx + 0.04, y, z, 0.025, 0.3, 0.03, tilt, { color: dark });
+    [y, z] = at(0.03);
+    leanBox(kit, Q, "paintedMetal", lx, y, z, 0.1, 0.05, 0.06, tilt, { color: dark }); // stock plate
+    [y, z] = at(0.34);
+    leanBox(kit, Q, "paintedMetal", lx, y, z + 0.1, 0.035, 0.14, 0.05, tilt, { color: dark }); // pistol grip
+    [y, z] = at(0.55);
+    leanBox(kit, Q, "paintedMetal", lx, y, z - 0.045, 0.03, 0.16, 0.03, tilt, { color: dark }); // sight rail
+    [y, z] = at(0.82);
+    leanBox(kit, Q, "metal", lx, y, z, 0.05, 0.05, 0.06, tilt, { color: steel }); // muzzle
+    return;
+  }
+  [y, z] = at(0.55);
   leanBox(kit, Q, "paintedMetal", lx, y, z, 0.045, 1.0, 0.05, tilt, { color: black }); // barrel
   [y, z] = at(0.2);
-  leanBox(kit, Q, "paintedMetal", lx, y, z, 0.07, 0.34, 0.16, tilt, { color: black, texel: 1 }); // stock block
+  leanBox(kit, Q, "paintedMetal", lx, y, z, 0.07, 0.34, 0.16, tilt, { color: black, texel: 2.5 }); // stock block
   [y, z] = at(0.42);
   leanBox(kit, Q, "paintedMetal", lx, y, z, 0.06, 0.18, 0.11, tilt, { color: black }); // receiver
   [y, z] = at(0.44);
@@ -63,21 +104,33 @@ function rifle(kit, PALETTE, Q, lx, baseY, lz, tilt) {
   [y, z] = at(0.75);
   leanBox(kit, Q, "paintedMetal", lx, y, z - 0.045, 0.03, 0.22, 0.03, tilt, { color: dark }); // sight rail
   [y, z] = at(1.02);
-  leanBox(kit, Q, "metal", lx, y, z, 0.05, 0.06, 0.06, tilt, { color: C(PALETTE, "steel") }); // muzzle
+  leanBox(kit, Q, "metal", lx, y, z, 0.05, 0.06, 0.06, tilt, { color: steel }); // muzzle
 }
 
-// Wall rack of 8 rifles in angled slots with a red lock bar (front +Z, back panel at -Z).
-export function rifleRack(kit, PALETTE, pos, yaw, { count = 8, pitch = 0.4, seed = 1, locked = true } = {}) {
+// Wall rack of `count` angled slots with a red lock bar (front +Z, back panel at -Z). Per rack (from the
+// seed) two slots are issued-out (empty, with the slot plate and the empty-slot amber LED) and one slot
+// holds a different weapon silhouette, so racks do not read as copies.
+export function rifleRack(kit, PALETTE, pos, yaw, { count = 8, pitch = 0.4, seed = 1, locked = true, empties = 2 } = {}) {
   const Q = placer(kit, pos, yaw);
+  const rand = rng(seed);
   const w = count * pitch + 0.2;
   const dark = C(PALETTE, "impDark");
   const black = C(PALETTE, "impBlack");
   const mid = C(PALETTE, "impMid");
   const steel = C(PALETTE, "steel");
-  Q.box("paintedMetal", 0, 1.1, -0.03, w, 2.0, 0.06, { color: C(PALETTE, "impGrey"), texel: 1 }); // back panel (light, so the black silhouettes read)
-  Q.box("paintedMetal", 0, 1.1, 0.0, w - 0.16, 1.7, 0.01, { color: mid, texel: 1 });
-  Q.box("paintedMetal", 0, 2.14, 0.08, w, 0.08, 0.28, { color: black }); // top cap
-  Q.box("paintedMetal", 0, 0.14, 0.13, w, 0.1, 0.38, { color: black, texel: 1 }); // base shelf
+  // back board: dark slab carrying light clean panel plates (the worn-metal grain on a 3.4 m light-grey
+  // slab read as dirty concrete); light, so the black silhouettes read against it
+  Q.box("paintedMetal", 0, 1.1, -0.03, w, 2.0, 0.06, { color: dark, texel: 2.5 });
+  {
+    const n = Math.max(1, Math.round(w / 1.15));
+    for (let i = 0; i < n; i++) {
+      const u0 = -w / 2 + 0.05 + (i * (w - 0.1)) / n + 0.02;
+      const u1 = -w / 2 + 0.05 + ((i + 1) * (w - 0.1)) / n - 0.02;
+      Q.box("impPanel", (u0 + u1) / 2, 1.17, 0.006, u1 - u0, 1.74, 0.012, { color: C(PALETTE, "impGrey"), uv: "keep" });
+    }
+  }
+  Q.box("paintedMetal", 0, 2.14, 0.08, w, 0.08, 0.28, { color: black, texel: 2.5 }); // top cap
+  Q.box("paintedMetal", 0, 0.14, 0.13, w, 0.1, 0.38, { color: black, texel: 2.5 }); // base shelf
   Q.box("paintedMetal", 0, 0.04, 0.13, w - 0.1, 0.08, 0.34, { color: dark });
   // slot rail at 1.5 m, notched where the barrels pass
   const edges = [-w / 2];
@@ -87,18 +140,30 @@ export function rifleRack(kit, PALETTE, pos, yaw, { count = 8, pitch = 0.4, seed
   }
   edges.push(w / 2);
   for (let i = 0; i < edges.length; i += 2) Q.box("paintedMetal", (edges[i] + edges[i + 1]) / 2, 1.5, 0.12, edges[i + 1] - edges[i], 0.06, 0.2, { color: dark });
+  // slot states
+  const empty = new Set();
+  while (empty.size < Math.min(empties, count - 1)) empty.add(Math.floor(rand() * count));
+  let variant = Math.floor(rand() * count);
+  while (empty.has(variant)) variant = (variant + 1) % count;
+  const variantKind = 1 + Math.floor(rand() * 2);
   const tilt = -0.1;
   for (let i = 0; i < count; i++) {
     const lx = -w / 2 + 0.1 + (i + 0.5) * pitch;
-    rifle(kit, PALETTE, Q, lx, 0.19, 0.15, tilt);
     Q.box("darkGloss", lx, 0.2, 0.33, 0.12, 0.05, 0.01); // slot ID plate
+    if (empty.has(i)) {
+      // empty slot: visible slot cradle on the shelf + amber "issued" LED
+      Q.box("paintedMetal", lx, 0.22, 0.15, 0.14, 0.06, 0.2, { color: dark });
+      Q.box("emitAmber", lx, 0.2, 0.34, 0.06, 0.02, 0.006);
+      continue;
+    }
+    rifle(kit, PALETTE, Q, lx, 0.19, 0.15, tilt, i === variant ? variantKind : 0);
   }
-  // lock bar across the fronts + lock box
-  Q.cyl(locked ? "emitRedImp" : "emitGreen", 0, 1.12, 0.3, 0.018, w - 0.3, "x", { segments: 8 });
+  // lock bar across the fronts + lock box (blue = released)
+  Q.cyl(locked ? "emitRedImp" : "emitBlue", 0, 1.12, 0.3, 0.018, w - 0.3, "x", { segments: 8 });
   Q.box("paintedMetal", -w / 2 + 0.16, 1.12, 0.26, 0.12, 0.16, 0.14, { color: black });
   Q.box("paintedMetal", w / 2 - 0.16, 1.12, 0.26, 0.12, 0.16, 0.14, { color: black });
-  Q.box(locked ? "emitRedImp" : "emitGreen", w / 2 - 0.16, 1.15, 0.335, 0.05, 0.03, 0.006);
-  indicatorField(Q, w / 2 - 0.45, 1.85, 0.005, 0.5, 0.16, seed, { weights: [0.6, 0.25, 0.1, 0.05] });
+  Q.box(locked ? "emitRedImp" : "emitBlue", w / 2 - 0.16, 1.15, 0.335, 0.05, 0.03, 0.006);
+  indicatorField(Q, w / 2 - 0.45, 1.85, 0.024, 0.5, 0.16, seed, { weights: [0.6, 0.25, 0.1, 0.05] });
   Q.box("metal", 0, 1.98, 0.02, w - 0.4, 0.04, 0.04, { color: steel });
   Q.collider([-w / 2, 0, -0.06], [w / 2, 2.2, 0.36], "rifle-rack");
   return w;
@@ -192,7 +257,8 @@ export function maintenanceBench(kit, PALETTE, pos, yaw, { len = 2.4, d = 0.8, h
   const dark = C(PALETTE, "impDark");
   const black = C(PALETTE, "impBlack");
   const mid = C(PALETTE, "impMid");
-  Q.box("metal", 0, h - 0.03, 0, len, 0.06, d, { color: steel, texel: 1 });
+  // matte plated top (the bare `metal` top mirrored the bench fill into a white hotspot)
+  Q.box("impPanel", 0, h - 0.03, 0, len, 0.06, d, { color: steel, uv: "scale", uvScale: [Math.max(1, Math.round(len / 1.2)), 1] });
   Q.box("paintedMetal", 0, h - 0.09, 0, len - 0.08, 0.06, d - 0.08, { color: black });
   Q.box("paintedMetal", -len / 2 + 0.45, (h - 0.12) / 2, 0, 0.8, h - 0.12, d - 0.1, { color: dark, texel: 1 }); // drawer unit
   for (let i = 0; i < 3; i++) {
@@ -234,18 +300,62 @@ export function issueCounter(kit, PALETTE, { x0, x1, z0, z1, y, h = 0.9 }) {
   const black = C(PALETTE, "impBlack");
   const dark = C(PALETTE, "impDark");
   const steel = C(PALETTE, "steel");
-  kit.box("paintedMetal", cx, y + h / 2, cz, len, h, d, { color: dark, texel: 1 });
+  kit.box("paintedMetal", cx, y + h / 2, cz, len, h, d, { color: dark, texel: 2.5 });
   kit.box("paintedMetal", cx, y + 0.06, cz, len - 0.04, 0.12, d + 0.02, { color: black });
   const n = Math.round(len / 1.25);
-  for (let i = 0; i < n; i++) kit.box("paintedMetal", x0 + (i + 0.5) * (len / n), y + 0.52, z0 - 0.012, len / n - 0.12, 0.6, 0.024, { color: black, texel: 1 });
-  kit.box("metal", cx, y + h + 0.02, cz, len + 0.06, 0.04, d + 0.1, { color: steel, texel: 1 });
+  for (let i = 0; i < n; i++) kit.box("paintedMetal", x0 + (i + 0.5) * (len / n), y + 0.52, z0 - 0.012, len / n - 0.12, 0.6, 0.024, { color: black, texel: 2.5 });
+  // matte plated top: painted-panel material in 1.25 m plates (smooth roughness, no worn-metal speckle;
+  // the bare `metal` top mirrored the fills into a hotspot, paintedMetal read as grime)
+  kit.box("impPanel", cx, y + h + 0.02, cz, len + 0.06, 0.04, d + 0.1, { color: steel, uv: "scale", uvScale: [Math.round(len / 1.25), 1] });
   kit.box("emitRedImp", cx, y + h - 0.12, z0 - 0.02, len - 0.4, 0.02, 0.01);
+  // issue side: drawer units either end (clean panel plates, steel pulls), a double-door cupboard under
+  // the hatch, and a kick rail, so the counter is not a bare slab from behind
+  const mid = C(PALETTE, "impMid");
+  const fz = z1 + 0.012;
+  for (const ux of [x0 + 0.85, x1 - 0.85]) {
+    for (let i = 0; i < 3; i++) {
+      const dy = y + 0.2 + i * 0.235;
+      kit.box("impPanel", ux, dy, fz, 1.3, 0.2, 0.024, { color: mid, uv: "keep" });
+      kit.box("metal", ux, dy + 0.05, fz + 0.03, 0.36, 0.025, 0.03, { color: steel });
+    }
+  }
+  for (const sx of [-1, 1]) {
+    kit.box("impPanel", cx + sx * 0.42, y + 0.45, fz, 0.78, 0.7, 0.024, { color: mid, uv: "keep" });
+    kit.box("metal", cx + sx * 0.08, y + 0.5, fz + 0.03, 0.025, 0.2, 0.03, { color: steel });
+  }
+  kit.box("emitBlue", cx - 0.32, y + 0.76, fz + 0.014, 0.05, 0.02, 0.006);
   // hatch tray + frame (centre)
-  kit.box("metal", cx, y + h + 0.06, cz, 1.0, 0.04, d - 0.1, { color: steel });
+  kit.box("paintedMetal", cx, y + h + 0.06, cz, 1.0, 0.04, d - 0.1, { color: black, texel: 2.5 });
   kit.box("paintedMetal", cx, y + h + 0.12, cz, 1.24, 0.08, 0.14, { color: black });
   kit.box("paintedMetal", cx, y + h + 0.78, cz, 1.24, 0.08, 0.14, { color: black });
   for (const sx of [-1, 1]) kit.box("paintedMetal", cx + sx * 0.58, y + h + 0.45, cz, 0.08, 0.7, 0.14, { color: black });
   kit.box("emitRedImp", cx, y + h + 0.83, z0 + 0.02, 0.6, 0.02, 0.01);
+  // counter-top kit on the issue side of the hatch: datapad, tag rack, hand scanner in its cradle, a
+  // stack of charge tins, and a signature slate + stylus by the hatch
+  const t = y + h + 0.04;
+  const Q = placer(kit, [cx, t, cz], 0);
+  // datapad (west of the hatch, angled)
+  Q.box("darkGloss", -1.15, 0.015, 0.05, 0.28, 0.03, 0.2, { rot: [0, 0.35, 0] });
+  Q.box("screenImp3", -1.15, 0.032, 0.05, 0.22, 0.004, 0.14, { rot: [0, 0.35, 0], uv: "keep" });
+  // tag rack: two posts, a steel rail, six hanging ID tags
+  for (const sx of [-1.95, -1.55]) Q.box("paintedMetal", sx, 0.14, -0.15, 0.03, 0.28, 0.03, { color: black });
+  Q.cyl("metal", -1.75, 0.27, -0.15, 0.008, 0.44, "x", { color: steel, segments: 8 });
+  for (let i = 0; i < 6; i++) {
+    const tx = -1.92 + i * 0.068;
+    Q.box("darkGloss", tx, 0.19, -0.15, 0.04, 0.12, 0.006);
+    Q.box(i % 3 === 0 ? "emitRedImp" : "emitBlue", tx, 0.23, -0.146, 0.02, 0.012, 0.004);
+  }
+  // hand scanner in a cradle (east of the hatch)
+  Q.box("paintedMetal", 1.2, 0.03, 0.02, 0.22, 0.06, 0.16, { color: black });
+  Q.box("paintedMetal", 1.2, 0.11, -0.02, 0.1, 0.16, 0.07, { color: dark, rot: [0.5, 0, 0] });
+  Q.box("emitBlue", 1.2, 0.19, -0.06, 0.06, 0.02, 0.01, { rot: [0.5, 0, 0] });
+  Q.box("emitRedImp", 1.27, 0.005, 0.1, 0.03, 0.06, 0.004);
+  // three charge tins stacked
+  for (let i = 0; i < 3; i++) Q.cyl("paintedMetal", 1.75 + (i === 2 ? 0.09 : 0), 0.05 + (i === 2 ? 0.1 : 0), -0.1 + (i === 1 ? 0.2 : 0), 0.06, 0.1, "y", { color: i ? dark : C(PALETTE, "impMid"), segments: 12 });
+  // signature slate + stylus on the hatch tray edge
+  Q.box("darkGloss", -0.42, 0.05, 0.2, 0.2, 0.01, 0.14);
+  Q.box("emitAmber", -0.42, 0.056, 0.2, 0.14, 0.002, 0.02);
+  Q.cyl("metal", -0.3, 0.052, 0.12, 0.006, 0.16, "x", { color: steel, segments: 6 });
   kit.collider([x0, y, z0], [x1, y + h + 0.2, z1], "counter");
 }
 
@@ -288,6 +398,125 @@ export function waitBench(kit, PALETTE, pos, yaw, { len = 2.4 } = {}) {
   Q.cyl("metal", 0, 1.02, 0.06, 0.025, len, "x", { color: steel, segments: 10 });
   for (const sx of [-len / 2 + 0.2, 0, len / 2 - 0.2]) Q.box("paintedMetal", sx, 1.02, 0.02, 0.06, 0.06, 0.1, { color: dark });
   Q.collider([-len / 2, 0, -0.15], [len / 2, 0.5, 0.35], "bench");
+}
+
+// Swung-open cage gate leaf standing along world Z from its hinge post at `a` to `b`: heavy frame, a
+// solid kick panel to 0.9 m, bars above, a lock box with LED and a top rail. One collider.
+export function gateLeaf(kit, PALETTE, a, b, yTop = 2.3) {
+  const black = C(PALETTE, "impBlack");
+  const dark = C(PALETTE, "impDark");
+  const steel = C(PALETTE, "steel");
+  const x = a[0];
+  const y = a[1];
+  const z0 = Math.min(a[2], b[2]);
+  const z1 = Math.max(a[2], b[2]);
+  const cz = (z0 + z1) / 2;
+  const len = z1 - z0;
+  for (const z of [z0 + 0.04, z1 - 0.04]) kit.box("paintedMetal", x, y + yTop / 2, z, 0.08, yTop, 0.08, { color: black, texel: 2.5 });
+  kit.box("paintedMetal", x, y + yTop - 0.04, cz, 0.08, 0.08, len, { color: black });
+  kit.box("paintedMetal", x, y + 0.45, cz, 0.06, 0.9, len - 0.08, { color: dark, texel: 2.5 }); // kick panel
+  kit.box("paintedMetal", x, y + 0.45, cz, 0.07, 0.6, len - 0.3, { color: black, texel: 2.5 }); // recessed centre
+  kit.box("paintedMetal", x, y + 0.94, cz, 0.08, 0.08, len, { color: black }); // mid rail
+  const n = Math.max(2, Math.floor((len - 0.16) / 0.14));
+  for (let i = 0; i <= n; i++) kit.cyl("metal", x, y + 0.9 + (yTop - 0.98) / 2, z0 + 0.08 + ((len - 0.16) * i) / n, 0.02, yTop - 0.98, "y", { color: steel, segments: 6 });
+  // lock box on the free end
+  kit.box("paintedMetal", x, y + 1.1, z1 - 0.16, 0.14, 0.24, 0.16, { color: black });
+  kit.box("emitRedImp", x + 0.072, y + 1.16, z1 - 0.16, 0.006, 0.03, 0.06);
+  kit.box("emitRedImp", x - 0.072, y + 1.16, z1 - 0.16, 0.006, 0.03, 0.06);
+  kit.collider([x - 0.08, y, z0], [x + 0.08, y + yTop, z1], "gate-leaf");
+}
+
+// Housed recessed ceiling fixture: hollow black housing let into the ceiling, steel-grey lips, the
+// emitter set 8 cm up inside so the housing walls shade it (no bare quad on the ceiling).
+export function ceilingFixture(kit, PALETTE, x, ceilY, z, { w = 0.9, d = 0.9, mat = "emitWhite" } = {}) {
+  const black = C(PALETTE, "impBlack");
+  const mid = C(PALETTE, "impMid");
+  const depth = 0.16;
+  const yb = ceilY - depth; // bottom edge of the housing
+  kit.box("paintedMetal", x, ceilY - 0.03, z, w, 0.02, d, { color: black });
+  for (const sz of [-1, 1]) kit.box("paintedMetal", x, yb + depth / 2, z + sz * (d / 2 - 0.025), w, depth, 0.05, { color: black, texel: 2.5 });
+  for (const sx of [-1, 1]) kit.box("paintedMetal", x + sx * (w / 2 - 0.025), yb + depth / 2, z, 0.05, depth, d - 0.1, { color: black, texel: 2.5 });
+  for (const sz of [-1, 1]) kit.box("paintedMetal", x, yb - 0.01, z + sz * (d / 2), w + 0.12, 0.02, 0.12, { color: mid });
+  for (const sx of [-1, 1]) kit.box("paintedMetal", x + sx * (w / 2), yb - 0.01, z, 0.12, 0.02, d - 0.12, { color: mid });
+  kit.box(mat, x, yb + 0.08, z, w - 0.3, 0.01, d - 0.3);
+}
+
+// Hanging bench light: stem from the ceiling, dark hood with steel-grey lips, the emitter set 7 cm up
+// inside the hood so the lips shade it (the shared dropLight's bare diffuser read as a white bar).
+export function benchLight(kit, PALETTE, pos, { w = 1.8, d = 0.36, stem = 1.2, mat = "emitWhite" } = {}) {
+  const black = C(PALETTE, "impBlack");
+  const dark = C(PALETTE, "impDark");
+  const mid = C(PALETTE, "impMid");
+  const [x, yTop, z] = pos;
+  const depth = 0.22; // hood depth: from 5 m away the emitter tubes are hidden behind the side walls
+  const yTopHood = yTop - stem; // underside of the hood's top plate
+  const yb = yTopHood - depth; // bottom edge of the hood
+  kit.box("paintedMetal", x, yTop - stem / 2, z, 0.06, stem, 0.06, { color: black });
+  kit.box("paintedMetal", x, yTopHood + 0.03, z, w, 0.06, d, { color: dark, texel: 1 }); // hood top
+  for (const sz of [-1, 1]) kit.box("paintedMetal", x, yb + depth / 2, z + sz * (d / 2 - 0.02), w, depth, 0.04, { color: dark, texel: 1 });
+  for (const sx of [-1, 1]) kit.box("paintedMetal", x + sx * (w / 2 - 0.02), yb + depth / 2, z, 0.04, depth, d - 0.08, { color: dark, texel: 1 });
+  for (const sz of [-1, 1]) kit.box("paintedMetal", x, yb - 0.01, z + sz * (d / 2), w + 0.06, 0.02, 0.08, { color: mid });
+  for (const sx of [-1, 1]) kit.box("paintedMetal", x + sx * (w / 2), yb - 0.01, z, 0.08, 0.02, d - 0.08, { color: mid });
+  // twin tubes 14 cm up inside the hood + a reflector plate behind them
+  kit.box("paintedMetal", x, yTopHood - 0.005, z, w - 0.1, 0.01, d - 0.1, { color: mid });
+  for (const sz of [-1, 1]) kit.box(mat, x, yb + 0.14, z + sz * 0.07, w - 0.3, 0.02, 0.05);
+  kit.box("emitRedImp", x + w / 2 - 0.12, yTopHood + 0.03, z + d / 2 + 0.004, 0.06, 0.02, 0.006); // "on" lamp on the hood edge
+}
+
+// Housed light channel along world X under the ceiling (over the cage line): black trough with steel-grey
+// lips, emitter segments 0.14 m wide set 6 cm up inside the trough.
+export function channelFixture(kit, PALETTE, x0, x1, z, ceilY, { w = 0.5, mat = "emitWhite", segment = 2.0 } = {}) {
+  const black = C(PALETTE, "impBlack");
+  const mid = C(PALETTE, "impMid");
+  const len = x1 - x0;
+  const cx = (x0 + x1) / 2;
+  const drop = 0.16;
+  kit.box("paintedMetal", cx, ceilY - 0.03, z, len, 0.02, w, { color: black });
+  for (const sz of [-1, 1]) kit.box("paintedMetal", cx, ceilY - drop / 2, z + sz * (w / 2 - 0.025), len, drop, 0.05, { color: black, texel: 2.5 });
+  for (const sx of [-1, 1]) kit.box("paintedMetal", cx + sx * (len / 2 - 0.025), ceilY - drop / 2, z, 0.05, drop, w - 0.1, { color: black, texel: 2.5 });
+  for (const sz of [-1, 1]) kit.box("paintedMetal", cx, ceilY - drop - 0.01, z + sz * (w / 2), len + 0.1, 0.02, 0.1, { color: mid });
+  const nSeg = Math.max(1, Math.round(len / segment));
+  for (let i = 0; i < nSeg; i++) {
+    const s0 = x0 + (len * i) / nSeg + 0.12;
+    const s1 = x0 + (len * (i + 1)) / nSeg - 0.12;
+    kit.boxMM(mat, [s0, ceilY - drop + 0.06, z - 0.07], [s1, ceilY - drop + 0.07, z + 0.07]);
+  }
+}
+
+// Range header sign over the alcove walkway (front +Z): dark plate, red header bar, three white text
+// lines, hazard band along the bottom, amber "range active" lamp at the right.
+export function rangeSign(kit, PALETTE, pos, yaw, { w = 2.0, h = 0.5 } = {}) {
+  const Q = placer(kit, pos, yaw);
+  Q.box("paintedMetal", 0, 0, 0.03, w, h, 0.06, { color: C(PALETTE, "impBlack"), texel: 2.5 });
+  Q.box("darkGloss", 0, 0.02, 0.062, w - 0.1, h - 0.14, 0.006);
+  Q.box("emitRedImp", 0, h / 2 - 0.09, 0.066, w - 0.3, 0.04, 0.004);
+  for (let i = 0; i < 3; i++) Q.box("emitWhite", -0.15, h / 2 - 0.2 - i * 0.08, 0.066, (w - 0.9) * (1 - i * 0.2), 0.022, 0.004);
+  Q.box("hazard", 0, -h / 2 + 0.04, 0.065, w - 0.1, 0.06, 0.004, { texel: 2 });
+  Q.box("paintedMetal", w / 2 - 0.3, -0.02, 0.07, 0.24, 0.24, 0.02, { color: C(PALETTE, "impDark") });
+  Q.box("emitAmber", w / 2 - 0.3, -0.02, 0.082, 0.16, 0.16, 0.004);
+}
+
+// Caged red warning beacon on a base plate (used on top of the alcove partition): the room's red fill
+// sits inside it, so the light source is explained.
+export function beacon(kit, PALETTE, pos) {
+  const [x, y, z] = pos;
+  const black = C(PALETTE, "impBlack");
+  const steel = C(PALETTE, "steel");
+  kit.box("paintedMetal", x, y + 0.04, z, 0.34, 0.08, 0.34, { color: black });
+  kit.cyl("paintedMetal", x, y + 0.11, z, 0.11, 0.06, "y", { color: C(PALETTE, "impDark"), segments: 16 });
+  kit.cyl("emitRedImp", x, y + 0.24, z, 0.085, 0.2, "y", { segments: 16 });
+  kit.cyl("paintedMetal", x, y + 0.36, z, 0.1, 0.04, "y", { color: black, segments: 16 });
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) kit.cyl("metal", x + sx * 0.12, y + 0.22, z + sz * 0.12, 0.008, 0.28, "y", { color: steel, segments: 6 });
+  kit.cyl("metal", x, y + 0.3, z, 0.15, 0.012, "y", { color: steel, segments: 16, open: true });
+}
+
+// Cargo tag panel on a crate face (front +Z): gloss plate, indicator field, red seal strip.
+export function crateTag(kit, PALETTE, pos, yaw, seed = 5) {
+  const Q = placer(kit, pos, yaw);
+  Q.box("darkGloss", 0, 0, 0.005, 0.5, 0.34, 0.01);
+  indicatorField(Q, 0, 0.06, 0.012, 0.4, 0.14, seed, { weights: [0.5, 0.35, 0.1, 0.05] });
+  Q.box("emitRedImp", 0, -0.11, 0.012, 0.36, 0.03, 0.004);
+  Q.box("emitWhite", -0.1, -0.05, 0.012, 0.2, 0.012, 0.004);
 }
 
 // Rules / notice board: dark plate with red text-line hints (front +Z).
