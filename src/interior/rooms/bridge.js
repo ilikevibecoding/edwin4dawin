@@ -69,6 +69,11 @@ function ensureMaterials(ctx) {
     m.brg_sweep.color = new THREE.Color("#8ec5ff");
     m.brg_cone = m.holo.clone();
     m.brg_cone.opacity = 0.13;
+    // brighter, untextured additive blue for the ship projection so it reads from the aft door
+    m.brg_holoBright = m.holo.clone();
+    m.brg_holoBright.map = null;
+    m.brg_holoBright.color = new THREE.Color("#78bcff");
+    m.brg_holoBright.opacity = 0.7;
     // unlit near-black for the window reveal (see buildWindowWall)
     m.brg_void = new THREE.MeshBasicMaterial({ color: 0x05060a });
     // bridgeGlass with the diffuse tint taken out: the shared material's light body colour picks up the
@@ -77,7 +82,7 @@ function ensureMaterials(ctx) {
     m.brg_glass.name = "brg_glass";
     m.brg_glass.color.set(0x0c0f13);
   }
-  return { pulse: m.brg_pulse, alert: m.brg_alert, sweep: m.brg_sweep, cone: m.brg_cone };
+  return { pulse: m.brg_pulse, alert: m.brg_alert, sweep: m.brg_sweep, cone: m.brg_cone, bright: m.brg_holoBright };
 }
 
 // ---------------------------------------------------------------------------
@@ -170,15 +175,16 @@ function buildWindowWall(kit, ctx) {
   const rand = rng(ctx.seed + 77);
   for (let k = 0; k < PANES; k++) {
     const xc = paneX(k);
-    kit.box("impPanel1", xc, 0.85, zFoot + 0.008, 2.6, 1.14, 0.016, { color: PALETTE.impGrey, uv: "keep" });
-    // angled readout slab, tilted up toward whoever stands at the glass
+    // black instrument console under each pane: dark panel, bezelled readout slab tilted up toward
+    // whoever stands at the glass, button block, leds, stencil, status lamp
+    kit.box("impPanel1", xc, 0.85, zFoot + 0.008, 2.6, 1.14, 0.016, { color: PALETTE.impDark, uv: "keep" });
+    kit.box("paintedMetal", xc, 0.85, zFoot + 0.012, 2.4, 1.0, 0.012, BLACK);
     const scr = k % 3 === 1 ? "brg_pulse" : "impScreen" + [2, 2, 0, 1][k % 4];
     kit.add("darkGloss", new THREE.BoxGeometry(1.5, 0.4, 0.04), { pos: [xc, 1.14, zFoot + 0.06], rot: [-0.55, 0, 0] });
     const sg = new THREE.PlaneGeometry(1.4, 0.32);
     sg.rotateX(-0.55);
     kit.add(scr, sg, { pos: [xc, 1.14 + 0.022 * Math.sin(0.55), zFoot + 0.06 + 0.022 * Math.cos(0.55)], uv: "keep" });
-    // button block, leds, a stencil and a status lamp
-    kit.box("paintedMetal", xc, 0.62, zFoot + 0.03, 1.6, 0.16, 0.05, BLACK);
+    kit.box("paintedMetal", xc, 0.62, zFoot + 0.03, 1.6, 0.16, 0.05, { color: PALETTE.impDark, texel: 2 });
     for (let b = 0; b < 12; b++) {
       const lit = rand() < 0.45;
       kit.box(lit ? (rand() < 0.6 ? "emitBlue" : rand() < 0.5 ? "emitAmber" : "emitRed") : "rubber", xc - 0.7 + b * 0.125, 0.62, zFoot + 0.06, 0.07, 0.05, 0.02, { color: PALETTE.rubber });
@@ -509,8 +515,9 @@ function holoDais(kit, ctx, mats, x, yBase, z) {
   ctx.anim((dt, t) => {
     wedge.rotation.z = -t * 1.3;
   });
-  // the ship itself above the tactical plot, pitched nose-up so it reads from eye level
-  const ship = hologram(kit, ctx, { x, y: hy + 0.42, z, kind: "ship", scale: 0.4 });
+  // the ship itself above the tactical plot, pitched nose-up so it reads from eye level, in the
+  // brighter untextured holo material with a wire outline of the wedge
+  const ship = hologram(kit, ctx, { x, y: hy + 0.42, z, kind: "ship", scale: 0.45 });
   const sub = new THREE.Group();
   sub.rotation.x = 0.42;
   for (const c of [...ship.children]) {
@@ -518,6 +525,9 @@ function holoDais(kit, ctx, mats, x, yBase, z) {
     sub.add(c);
   }
   mergeGroupMeshes(sub);
+  sub.children[0].material = mats.bright;
+  const outline = new THREE.LineSegments(new THREE.EdgesGeometry(sub.children[0].geometry, 20), new THREE.LineBasicMaterial({ color: 0xbfe0ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  sub.add(outline);
   ship.add(sub);
   // faint projector cone from the dais up to the plot
   const cone = new THREE.Mesh(new THREE.CylinderGeometry(1.4 * scale, 0.45, hy - top - 0.02, 32, 1, true), mats.cone);
@@ -831,6 +841,7 @@ function buildLights(ctx) {
   for (const s of [-1, 1]) for (const z of [-36, -25]) ctx.light(pointLight(0x4a9dff, 7, 9, [s * 7, -0.2, z]));
   for (const z of [-41, -29]) ctx.light(pointLight(0xdde8ff, 10, 15, [0, H - 1.1, z]));
   ctx.light(pointLight(0xffb347, 5, 7, [0, 3.0, CMD.hz]));
-  ctx.light(pointLight(0xa9c6ff, 8, 14, [0, 3.4, -46.5]));
+  // kept well back from the glass: anything closer lights the black mullions and sill up to grey
+  ctx.light(pointLight(0xa9c6ff, 3.5, 12, [0, 5.2, -44]));
   for (const s of [-1, 1]) ctx.light(pointLight(0xdde8ff, 7, 14, [s * 18, 5.6, -33]));
 }

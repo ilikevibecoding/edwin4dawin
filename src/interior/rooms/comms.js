@@ -78,8 +78,14 @@ function ensureMaterials(ctx) {
     m.cms_sweep.color = new THREE.Color("#7fe0c8");
     m.cms_faint = m.holo.clone();
     m.cms_faint.opacity = 0.16;
+    // untextured additive teal for the plot's wire structure (rings, spindle, contacts): stays
+    // legible from the door where the flat grid disc is seen edge-on
+    m.cms_bright = m.holo.clone();
+    m.cms_bright.map = null;
+    m.cms_bright.color = new THREE.Color("#7fe0c8");
+    m.cms_bright.opacity = 0.75;
   }
-  return { pulse: m.cms_pulse, green: m.cms_green, sweep: m.cms_sweep, faint: m.cms_faint };
+  return { pulse: m.cms_pulse, green: m.cms_green, sweep: m.cms_sweep, faint: m.cms_faint, bright: m.cms_bright };
 }
 
 // ---------------------------------------------------------------------------
@@ -288,60 +294,69 @@ function sensorHolo(kit, ctx, mats, x, z) {
   const holo = ctx.materials.holo;
   const g = new THREE.Group();
   g.position.set(x, top + 0.02, z);
-  const statics = [];
+  // grid disc (textured holo) under everything
   const disc = new THREE.CircleGeometry(0.72, 48);
   disc.rotateX(-Math.PI / 2);
-  statics.push(disc);
-  for (const [r0, r1] of [[0.24, 0.255], [0.48, 0.495], [0.7, 0.74]]) {
-    const rg = new THREE.RingGeometry(r0, r1, 48);
-    rg.rotateX(-Math.PI / 2);
-    rg.translate(0, 0.003, 0);
-    statics.push(rg);
-  }
+  const dm = new THREE.Mesh(disc, holo);
+  g.add(dm);
+  // wire structure in the bright material: range rings and a coverage dome of altitude rings (tori
+  // read as lines from any angle), a centre spindle, cross-hairs, contacts on pins
+  const wire = [];
+  const ring = (r, y, tube = 0.008) => {
+    const t = new THREE.TorusGeometry(r, tube, 5, 56);
+    t.rotateX(Math.PI / 2);
+    t.translate(0, y, 0);
+    wire.push(t);
+  };
+  for (const r of [0.24, 0.48, 0.71]) ring(r, 0.004);
+  for (const [r, y] of [[0.68, 0.14], [0.6, 0.28], [0.46, 0.42], [0.26, 0.52]]) ring(r, y, 0.006);
   for (const a of [0, Math.PI / 2]) {
-    const bar = new THREE.BoxGeometry(1.44, 0.004, 0.012);
+    const bar = new THREE.BoxGeometry(1.44, 0.006, 0.012);
     bar.rotateY(a);
-    bar.translate(0, 0.003, 0);
-    statics.push(bar);
+    bar.translate(0, 0.004, 0);
+    wire.push(bar);
   }
+  const spindle = new THREE.CylinderGeometry(0.012, 0.012, 0.56, 8);
+  spindle.translate(0, 0.28, 0);
+  wire.push(spindle);
+  const cap = new THREE.OctahedronGeometry(0.05);
+  cap.translate(0, 0.58, 0);
+  wire.push(cap);
   const rand = rng(ctx.seed + 80);
   for (let i = 0; i < 8; i++) {
     const a = rand() * Math.PI * 2;
-    const r = 0.12 + rand() * 0.56;
-    const cy = 0.08 + rand() * 0.38;
+    const r = 0.14 + rand() * 0.54;
+    const cy = 0.08 + rand() * 0.36;
     const cx = Math.cos(a) * r;
     const cz = Math.sin(a) * r;
-    const c = new THREE.OctahedronGeometry(0.035);
+    const c = new THREE.OctahedronGeometry(0.045);
     c.translate(cx, cy, cz);
-    statics.push(c);
-    const pin = new THREE.BoxGeometry(0.01, cy, 0.01);
+    wire.push(c);
+    const pin = new THREE.BoxGeometry(0.012, cy, 0.012);
     pin.translate(cx, cy / 2, cz);
-    statics.push(pin);
+    wire.push(pin);
   }
-  for (const s of statics) if (!s.attributes.normal) s.computeVertexNormals();
-  const sm = new THREE.Mesh(mergeGeometries(statics.map((s) => (s.index ? s.toNonIndexed() : s)), false), holo);
-  sm.castShadow = false;
-  sm.receiveShadow = false;
+  for (const s of wire) if (!s.attributes.normal) s.computeVertexNormals();
+  const sm = new THREE.Mesh(mergeGeometries(wire.map((s) => (s.index ? s.toNonIndexed() : s)), false), mats.bright);
   g.add(sm);
   const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.5, 40, 1, true), mats.faint);
   drum.position.y = 0.25;
-  drum.castShadow = false;
-  drum.receiveShadow = false;
   g.add(drum);
   // sweep: flat wedge on the disc + a vertical blade from the axis to the rim
   const sweep = new THREE.Group();
   const wedge = new THREE.Mesh(new THREE.CircleGeometry(0.72, 14, 0, Math.PI / 6), mats.sweep);
   wedge.rotation.x = -Math.PI / 2;
   wedge.position.y = 0.006;
-  const blade = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.48), mats.sweep);
-  blade.position.set(0.36, 0.24, 0);
-  blade.rotation.y = 0;
-  for (const m of [wedge, blade]) {
-    m.castShadow = false;
-    m.receiveShadow = false;
-  }
+  const blade = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.5), mats.sweep);
+  blade.position.set(0.36, 0.25, 0);
   sweep.add(wedge, blade);
   g.add(sweep);
+  g.traverse((o) => {
+    if (o.isMesh) {
+      o.castShadow = false;
+      o.receiveShadow = false;
+    }
+  });
   ctx.mesh(g);
   ctx.anim((dt, t) => {
     sweep.rotation.y = -t * 1.2;
