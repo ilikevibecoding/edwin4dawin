@@ -20,7 +20,12 @@ const DESCENT_MIN_S = 3, DESCENT_MAX_S = 5;
 const FADE_TICKS = 30;            // beam fade-out after firing (1.5 s)
 const LINGER_TICKS = 200;         // smoke lingers after the beam is gone (10 s)
 const STOP_TICKS = 120;           // cancel: retract, power down, drift off (6 s)
-const MAX_DEBRIS_PER_TICK = 10;
+// The crater is carved in bursts (every CARVE_EVERY ticks) rather than every tick: every carving tick touches all
+// chunks under the current radius and each touched chunk costs a full relight + 3x3 remesh, so 5 Hz bursts cut
+// the engine's relight/remesh work ~4x while still reading as continuous "eating". The edit budget is per tick,
+// so a burst may leave work for the next one (the plan is resumable).
+const CARVE_EVERY = 4;
+const MAX_DEBRIS_PER_BURST = 24;  // ~6 blocks per tick on average
 const SMOKE_CAP = 2400;           // never push the shared particle pool above this
 const SPARK_CAP = 1300;
 
@@ -68,6 +73,7 @@ export class OrbitalBeam extends Disaster {
     this.prevCenterFloor = this.impactY;
     this.currentRadius = 0;
     this.debrisThisTick = 0;
+    this.burstTick = this.T2;
     this.stopTick = -1;
     this.stopBottom = this.focusY; this.stopIntensity = 0; this.stopPower = 0; this.stopSphere = 0;
     // visuals
@@ -193,12 +199,16 @@ export class OrbitalBeam extends Disaster {
   }
 
   fireTick(t) {
-    const f = clamp01((t - this.T2) / this.carveTicks);
-    this.currentRadius = this.R * Math.pow(f, 0.7);
-    this.debrisThisTick = 0;
-    this.crater.step(f);
-    this.prevCenterFloor = this.centerFloor;
-    this.centerFloor = this.crater.top[0] + 1;
+    const u = t - this.T2;
+    if (u % CARVE_EVERY === 0) {
+      const f = clamp01(u / this.carveTicks);
+      this.currentRadius = this.R * Math.pow(f, 0.7);
+      this.debrisThisTick = 0;
+      this.crater.step(f);
+      this.burstTick = t;
+      this.prevCenterFloor = this.centerFloor;
+      this.centerFloor = this.crater.top[0] + 1;
+    }
     // people and animals caught in the column are hurled out; the player burns and is thrown
     const pl = this.game.player;
     const dx = pl.pos.x - this.cx, dz = pl.pos.z - this.cz;
@@ -224,7 +234,7 @@ export class OrbitalBeam extends Disaster {
 
   // Cosmetic debris for blocks removed near the current crater edge (rng use is deterministic, capped per tick).
   spawnDebris(x, y, z, id, d, rNow) {
-    if (this.debrisThisTick >= MAX_DEBRIS_PER_TICK) return;
+    if (this.debrisThisTick >= MAX_DEBRIS_PER_BURST) return;
     const edge = rNow - d;
     if (edge > 3.5 && y <= this.groundY) return; // deep interior: vaporised silently
     // first contact throws almost everything it touches; later only the crater edge sheds blocks
@@ -290,7 +300,8 @@ export class OrbitalBeam extends Disaster {
       moteRate = 120 * (1 - f); sparkRate = 0;
     } else if (t < t3) {
       power = 1; heat = 1;
-      bottom = lerp(this.prevCenterFloor, this.centerFloor, paused ? 0 : alpha);
+      // the tip follows the centre floor, easing down over the burst interval
+      bottom = lerp(this.prevCenterFloor, this.centerFloor, clamp01((this.tick - this.burstTick + (paused ? 0 : alpha)) / CARVE_EVERY));
       intensity = 0.95 + 0.08 * Math.sin(this.visTime * 23) + 0.04 * Math.sin(this.visTime * 7.3);
       tipHot = 1.3;
       sphereR = maxSphere * (1 + 0.08 * pulse); sphereAlpha = 1;
@@ -351,6 +362,9 @@ export class OrbitalBeam extends Disaster {
       if (uu >= 0 && uu < dur && !this.stopping) { const k = smooth(uu / dur); rings.setColor(3 + i, 0.92, 0.96, 1, 0.4); rings.set(3 + i, br * 2 + (38 + i * 14) * k, 5 + 6 * k, 0.6 * (1 - k), CLOUD_HEIGHT + 1.5 + i * 1.2); }
       else rings.hide(3 + i);
     }
+    // warm-up: the ring program's first use stalls on synchronous GL queries (link status, uniforms), so draw the
+    // set once, fully invisible (black additive), during the first charge frames instead of at the cloud crossing
+    if (this.tick < 40 && t < t1) { rings.setColor(5, 0, 0, 0, 0); rings.set(5, 1, 1, 0.004, this.stationY + 40); } else rings.hide(5);
     rings.commit();
   }
 
