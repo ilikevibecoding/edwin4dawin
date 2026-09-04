@@ -1,4 +1,7 @@
-# Kestrel — playable build
+# ISD Redoubt — playable build
 
-Production build of the spaceship interior demo (source: branch `cursor/spaceship-interior-demo-ad4e`, commit ad511782).
-Built with `vite build --base=./` so it can be served from any static path.
+Auto-published production bundle of branch `cursor/star-destroyer-ship-a618` (source commit `025a9969`, built 2026-09-04T06:26:44Z).
+
+Live: https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/star-destroyer-play-a618/index.html
+
+Serve this folder over HTTP (e.g. `npx serve .`) or open the link above. ES modules do not run from file://.
