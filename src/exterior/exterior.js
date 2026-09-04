@@ -81,6 +81,7 @@ export function buildExterior(scene, materials) {
     { group: eng.lod0, center: new THREE.Vector3(0, 10, 780) },
   ].filter((f) => f.group);
   const tmp = new THREE.Vector3();
+  const lastCam = new THREE.Vector3(0, 0, -1e4);
   const api = {
     group,
     hull,
@@ -96,6 +97,7 @@ export function buildExterior(scene, materials) {
      * while the hull is only seen through a room's windows, where the room itself is the priority.
      */
     updateLOD(cameraPos, scale = 1) {
+      lastCam.copy(cameraPos);
       let changed = false;
       const set = (o, v) => {
         if (o.visible !== v) {
@@ -115,7 +117,7 @@ export function buildExterior(scene, materials) {
       if (changed) sun.shadow.needsUpdate = true;
     },
     update(dt, t) {
-      eng.update(t);
+      eng.update(t, lastCam);
     },
     setVisible(v) {
       group.visible = v;
