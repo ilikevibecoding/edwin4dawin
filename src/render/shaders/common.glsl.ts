@@ -63,11 +63,11 @@ float worley2(vec2 p) {
 vec2 cloudFieldCS(vec2 cs) {
   vec2 p = cs * 0.00015 + uCloudSeed;
   vec2 warp = (vec2(fbm3(p * 1.3), fbm3(p * 1.3 + 4.2)) - 0.5) * 0.35;
-  float macro = fbm3(p * 0.22 + 1.7);
+  float macro = fbm3(p * 0.4 + 9.0);
   float cellsA = 1.0 - worley2(cs * (1.0 / 6000.0) + warp + uCloudSeed * 0.37);
   float cellsB = 1.0 - worley2(cs * (1.0 / 3000.0) + warp * 1.5 + uCloudSeed * 0.61 + 2.3);
-  float f = (cellsA * 0.65 + cellsB * 0.35) * 0.5 + macro * 0.5;
-  float thr = 0.72 - uCloudCoverage * 0.36;
+  float f = (cellsA * 0.65 + cellsB * 0.35) * 0.55 + macro * 0.45;
+  float thr = 0.72 - uCloudCoverage * 0.40;
   // narrow ramp: the edge detail comes from the 3D noise erosion, a wide ramp only made thin veils
   float cov = smoothstep(thr, thr + 0.09, f);
   float interior = smoothstep(thr + 0.03, thr + 0.25, f);
