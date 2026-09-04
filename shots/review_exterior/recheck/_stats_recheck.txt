@@ -1,2 +1,6 @@
 ready in 13538 ms
 boot {"materials":{"imperialPanel":167,"wornMetal":469,"deckBlack":443,"deckGrey":314,"hullPlate":2058,"rubber":21,"fabric":30,"hazard":32,"hazardRed":14,"grate":252,"diffuser":12,"decals":57,"screens":8,"leds":2},"space":1107,"exterior":196,"boot":5432,"totalMs":5432}
+ext_0_214_120_0_214_172: 509 calls, 1202k tris, 15 lights, 431 objs, 3401.19 ms/frame (software GL), rooms bridge|tactical|nav_station|observation -> /workspace/shots/review_exterior/recheck/ext_0_214_120_0_214_172.png
+ext_close: 515 calls, 1207k tris, 15 lights, 431 objs, 3252.72 ms/frame (software GL), rooms bridge|tactical|nav_station|observation -> /workspace/shots/review_exterior/recheck/ext_close.png
+ext_0_235_-250_0_215_175: 217 calls, 605k tris, 2 lights, 262 objs, 2181.37 ms/frame (software GL), rooms  -> /workspace/shots/review_exterior/recheck/ext_0_235_-250_0_215_175.png
+no page errors

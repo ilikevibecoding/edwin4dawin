@@ -22,6 +22,7 @@ function boxMM(kit, mat, min, max, opts) {
 
 export function buildTower(kit, tiers, rand) {
   const walls = [];
+  const extras = []; // standalone meshes for the caller to add to the exterior group
   // ---- neck blocks
   TOWER.neck.forEach((n, i) => {
     const c = _c.copy(IMP.hullMid).lerp(IMP.hullLight, 0.1 + i * 0.04).clone();
@@ -102,8 +103,15 @@ export function buildTower(kit, tiers, rand) {
       const x = w.x0 + pitch * k;
       kit.boxMM("hullDark", [x - 0.13, sillTop, FACE], [x + 0.13, yTopBand, FACE + 0.55], { color: IMP.hullShadow });
     }
-    // no backdrop behind the panes: the lit bridge / tower rooms render behind the glazing when the camera is
-    // within peek range (RoomManager.setExteriorPeek); beyond that range the slot reads as dark glass
+    // no opaque backdrop behind the panes: the lit bridge / tower rooms render behind the glazing when the camera
+    // is within peek range (RoomManager.setExteriorPeek). A faint additive wash makes the slot read as an
+    // occupied, lit bridge from any distance without hiding the interior when close.
+    const wash = new THREE.PlaneGeometry(w.x1 - w.x0, yTopBand - sillTop);
+    wash.rotateY(Math.PI);
+    const washMesh = new THREE.Mesh(wash, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.16, 0.22, 0.34), transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    washMesh.position.set((w.x0 + w.x1) / 2, (sillTop + yTopBand) / 2, WALL_IN - 0.25);
+    washMesh.renderOrder = 2;
+    extras.push(washMesh);
   }
   // shuttered starboard slot (mirrors the observation gallery on the port side)
   {
@@ -184,7 +192,7 @@ export function buildTower(kit, tiers, rand) {
   for (const side of [-1, 1]) {
     const g = TOWER.globes;
     const cx = side * g.x;
-    kit.add("hull", new THREE.SphereGeometry(g.r, 40, 26), { pos: [cx, g.y, g.z], color: IMP.hullLight, uv: "scale", uvScale: [12, 6] });
+    kit.add("hull", new THREE.SphereGeometry(g.r, 40, 26), { pos: [cx, g.y, g.z], color: IMP.hullLight, uv: "scale", uvScale: [3, 1.5] });
     // collar where the globe meets the roof
     const rc = Math.sqrt(Math.max(1, g.r * g.r - (g.y - B.y1) * (g.y - B.y1)));
     kit.add("hullDark", new THREE.TorusGeometry(rc + 0.6, 1.4, 8, 40), { pos: [cx, B.y1 + 0.6, g.z], rot: [Math.PI / 2, 0, 0], color: IMP.hullDark, uv: "scale", uvScale: [20, 1] });
@@ -263,5 +271,5 @@ export function buildTower(kit, tiers, rand) {
       else tiers.near.place("radiator", { pos: [x, B.y1, z], scale: [3 + rand() * 3, 2, 3], color: IMP.hullShadow });
     }
   }
-  return { walls };
+  return { walls, extras };
 }

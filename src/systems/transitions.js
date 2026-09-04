@@ -34,6 +34,7 @@ export class Modes {
       this.rig.mode = "off";
       this.camera.near = 0.05;
       this.camera.far = 6000;
+      this.camera.fov = 70;
       this.scene.fog = this.fogInterior;
       this.rooms.group.visible = true;
       this.rooms.setExteriorPeek(false);
@@ -44,6 +45,7 @@ export class Modes {
       this.rig.enabled = true;
       this.camera.near = 1;
       this.camera.far = 40000;
+      this.camera.fov = 58; // a longer lens outside conveys the ship's size
       this.scene.fog = null;
       // nobody is inside now: drop the current room so no interior cluster renders inside the closed hull;
       // the glazed tower rooms alone stay renderable (peek) so the bridge glows behind its windows

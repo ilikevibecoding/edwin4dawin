@@ -159,15 +159,16 @@ export function createFighters({ scene, materials, audio = null }) {
     obj.visible = false;
     const glows = [];
     for (const s of [-1, 1]) {
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: new THREE.Color(2.6, 0.75, 0.35), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: new THREE.Color(1.4, 1.1, 0.7), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
       sp.position.set(s * 0.48, -0.32, 3.05);
-      sp.scale.set(1.5, 1.5, 1);
+      sp.scale.set(1.1, 1.1, 1);
       obj.add(sp);
       glows.push(sp);
     }
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: new THREE.Color(1.6, 0.5, 0.25), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.55 }));
+    // faint engine halo, never larger than the fighter itself
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: new THREE.Color(0.9, 0.7, 0.45), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.3 }));
     halo.position.set(0, -0.3, 3.6);
-    halo.scale.set(5, 5, 1);
+    halo.scale.set(2.2, 2.2, 1);
     obj.add(halo);
     glows.push(halo);
     group.add(obj);
@@ -277,7 +278,7 @@ export function createFighters({ scene, materials, audio = null }) {
             p.glows[1].scale.set(0.9 + 1.1 * k, 0.9 + 1.1 * k, 1);
             p.glows[0].material.opacity = Math.min(1, 0.15 + k);
             p.glows[1].material.opacity = Math.min(1, 0.15 + k);
-            p.glows[2].scale.set(2 + 7 * k, 2 + 7 * k, 1);
+            p.glows[2].scale.set(1.4 + 1.6 * k, 1.4 + 1.6 * k, 1);
             p.glows[2].material.opacity = 0.6 * k;
           }
         }

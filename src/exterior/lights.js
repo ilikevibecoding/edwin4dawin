@@ -14,7 +14,7 @@ const _p = new THREE.Vector3();
 export function buildRunLights(group, M, rand) {
   const items = [];
   const add = (x, y, z, color, rate, size = 1.6, phase = rand() * Math.PI * 2) => items.push({ x, y, z, color, rate, phase, size });
-  const RED = 0xff2a1e;
+  const RED = 0xff0a08; // deep red so it never reads as amber after bloom + tone mapping
   const GREEN = 0x27ff6a;
   const WHITE = 0xffffff;
   const AMBER = 0xffb040;

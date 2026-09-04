@@ -95,7 +95,7 @@ export function syncSharedMaterials(M) {
 /** Engine throat: radial/longitudinal gradient (uv.y = 0 deep core, 1 at the lip) with a soft flicker. */
 export function makeEngineGlowMaterial() {
   return new THREE.ShaderMaterial({
-    uniforms: { time: { value: 0 }, core: { value: new THREE.Color("#eaf4ff") }, rim: { value: new THREE.Color("#2c6cff") }, power: { value: 1.0 } },
+    uniforms: { time: { value: 0 }, core: { value: new THREE.Color("#c9dcff") }, rim: { value: new THREE.Color("#2c6cff") }, power: { value: 0.55 } },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
       void main() {
@@ -445,7 +445,8 @@ export class Tier {
   build(parent, lod, reach) {
     let tris = 0;
     for (let i = 0; i < this.chunks; i++) {
-      const meshes = this.kits[i].build(this.groups[i], { castShadow: false, receiveShadow: true });
+      // the base tier casts (tower and terraces throw real shadows across the hull); detail tiers only receive
+      const meshes = this.kits[i].build(this.groups[i], { castShadow: i === 0, receiveShadow: true });
       if (!meshes.length) continue;
       parent.add(this.groups[i]);
       lod.add(this.groups[i], reach, this.name);

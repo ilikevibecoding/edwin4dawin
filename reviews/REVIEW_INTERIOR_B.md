@@ -153,7 +153,119 @@ panel (`int_-3_-10_250.5_0_0.png`); it is recognisably a lift car but very dim a
 
 | Screenshot | What is wrong | Why it matters | Severity | Suggested fix |
 |---|---|---|---|---|
-| `int_-3_-10_250.5_0_0.png` | Cab back wall is three flat panels and a dark rail; no ceiling light, no floor grate, no door-side indicator | Riders spend 2–3 s per ride staring at this wall | **minor** | Add a recessed ceiling light box, a floor grate, a deck-position display over the door and a thin emissive kick strip at the base |
+| `int_-3_-10_250.5_0_0.png` | Cab back wall is flat panels and a dark band; the only fixtures are one indicator matrix, one stencil block, one hazard decal and one control panel — and it is pixel-for-pixel the same wall as the crew cab (`int_-3_6_-110.5_180_0.png`) | Riders spend the whole ride staring at this wall, and every cab on the ship is the same cab | **minor** | Add a deck-position display, a floor grate, a thin emissive kick strip, and seed the stencil/panel placement per lobby so cabs differ |
 | `room_eng_lobby.png`, `int_0_-10_254.5_0_0.png` | Dust particles are large white dots that read as snowfall; the waist light band blooms into a 25 px soft bar | Undermines the crisp lobby detail | **polish** | Halve the particle size/alpha in small rooms; reduce band emissive |
 | `room_eng_lobby.png` | A blue planet-like decal floats on the left wall with no frame | Reads as a placeholder | **polish** | Frame it as a screen or replace with a deck plan plate |
+
+### 2.7 Crew Corridors (`crew_corridor` −62..62 × −130..−122 and `crew_corridor_fwd` −62..62 × −178..−170, floor 6)
+
+Views: `crew_corridor.png` (381 calls, 928k tris, 12 lights), `room_crew_corridor_fwd.png` (348 / 920k / 12),
+`int_-18.5_6_-125.5_0_0.png` (368 / 912k / 12, facing the mess door), `int_-12.5_6_-173.5_0_0.png`
+(294 / 869k / 12, facing the detention door).
+
+The two 124 m crew corridors are the same module as the engineering spine but denser: waist light bands,
+indicator-matrix cabinets, waveform screens, Aurebesh plates, door numerals, hazard-striped door thresholds,
+angled door headers with a status lamp, and the forward corridor is deliberately dimmer with a hazard-striped
+door and a bank of computer cabinets (`room_crew_corridor_fwd.png`). Door fronts are the best moments: the mess
+door (`int_-18.5_6_-125.5_0_0.png`) has an angled lintel, blue status lamp, keypad, hazard threshold and side
+plates; the detention door (`int_-12.5_6_-173.5_0_0.png`) is correctly menacing with red hazard-framed
+stencils, an orange lamp and a red keypad. Two things hold the corridors back. First, monotony and exposure:
+in every axial view the strips converge into a pure-white vanishing point and the black floor mirrors it as a
+white streak (`crew_corridor.png`, `room_crew_corridor_fwd.png`); no bulkhead, ceiling drop or width change
+marks the four room doors or the connector mouth. Second, the deck texture's scuff lines catch the strips and
+draw a sharp white "cracked glass" web on the floor that repeats with the tile (foreground of
+`crew_corridor.png` and `room_crew_corridor_fwd.png`). Both corridor views are also well over the 250-call
+interior budget of `PLAN.md` §9 because all three corridor rooms render together.
+
+| Screenshot | What is wrong | Why it matters | Severity | Suggested fix |
+|---|---|---|---|---|
+| `crew_corridor.png`, `room_crew_corridor_fwd.png` | 60 m of identical wall modules in each direction ending in a blown-white vanishing point; nothing marks where quarters / mess / lounge / medbay are | The brief singles out corridor monotony; from the connector you cannot tell which door is which room | **major** | Insert a portal frame with a 0.4 m ceiling drop every ~20 m and give each room door a distinct surround: name plate, a coloured accent strip per room (amber mess, green medbay, red detention), a wider hazard threshold |
+| `crew_corridor.png`, `room_crew_connector.png` | Deck scuff lines (14 random bright streaks baked into `deckBlack`) render as sharp white web lines under the strips and repeat every tile | Reads as cracked glass or a z-fighting artefact rather than scuffed durasteel | **major** | Lower the scuff albedo lift (0.24 → ~0.18) and count, or randomise scuffs per plate so the pattern does not tile; raise strip-reflection roughness |
+| `crew_corridor.png`, `int_-18.5_6_-125.5_0_0.png` | Ceiling strips bloom into 30–60 px bars and the top of every frontal view is a solid white smear | Kills the thin-white-line Imperial look and hides the ceiling | **major** | Reduce strip emissive (or bloom threshold) by ~40 %; break the continuous centre strip into segments |
+| `int_-18.5_6_-125.5_0_0.png` | The deck stencil beside the mess door reads "07" — the same number the engineering and tower lobbies show; it is the hard-coded `DECAL.DECK_A` | Deck numbering is a wayfinding cue and is wrong on two of three decks | **minor** | Generate the deck decal from `deckIndex` (one canvas per deck) |
+| `int_-12.5_6_-173.5_0_0.png` | Left of the detention door one wall panel is a cream/beige tint among grey plates; the right waist band stops dead at a panel edge (x ≈ 890 px) with no end cap | Colour outlier and an unfinished band edge in an otherwise well-composed door front | **minor** | Clamp the panel tint palette to greys; add an end cap or continue the band to the frame |
+| `int_-18.5_6_-125.5_0_0.png` | A blue triangle logo screen sits next to the mess door | Triangle-on-blue reads as a Rebel-style insignia, off-language for an Imperial deck | **polish** | Replace with the cog emblem or a deck plan |
+| `crew_corridor.png` | 381 draw calls (fwd: 348) in a corridor view | Over the 250-call interior budget of `PLAN.md` §9 by 50 % | **minor** | Merge the per-module cabinets/screens into one geometry per side, or cull the far corridor when the connector doors are closed |
+
+### 2.8 Crew Connector (`crew_connector`, −3..3 × −170..−130, floor 6)
+
+Views: `room_crew_connector.png` (344 calls, 909k tris, 12 lights), `int_0_6_-131.5_0_0.png` (357 / 911k / 12).
+
+The 40 m connector is the best-dressed corridor of the review: a bank of computer cabinets with blue schematic
+screens and indicator matrices on one side, an overhead pipe run at the mouth, grated floor strips both sides,
+a floor direction arrow with an Aurebesh label, a light-strip portal frame, a stack of cargo crates and a
+hazard placard leaning against the wall (`room_crew_connector.png`, `int_0_6_-131.5_0_0.png`). It has purpose
+(a service link) and identity. The right-hand wall, however, is two 6 m blank plates for the first 10 m, the
+upper walls are bare, and the far end is once again a white void.
+
+| Screenshot | What is wrong | Why it matters | Severity | Suggested fix |
+|---|---|---|---|---|
+| `room_crew_connector.png`, `int_0_6_-131.5_0_0.png` | Far end (z −170) is a blown-white rectangle; the corridor appears to open into nothing | Same exposure problem as the corridors; here it is framed by the portal so it is the focal point | **major** | Put a closed door or a bulkhead with a hazard band at the corridor_fwd junction, and dim the strips over the last 8 m |
+| `int_0_6_-131.5_0_0.png` | Right wall x 3, z −132..−142 is two large flat plates with one stencil and a lamp | The left side has cabinets and detail; the right is empty for 10 m | **minor** | Mirror a shorter cabinet run or add a pipe manifold and a wall-mounted fire-suppression cabinet |
+| `room_crew_connector.png` | Upper third of both walls (above the cabinets, y 8.5–10.5) is bare plate for the whole 40 m | The eye is pulled up by the bright ceiling strips onto empty panels | **polish** | Run the pipe bundle from the mouth along the full length, or add a cable tray |
+
+### 2.9 Crew Turbolift Lobby & cab (`crew_lobby`, −6..6 × −122..−112, floor 6; cabs z −112..−109)
+
+Views: `room_crew_lobby.png` (193 calls, 434k tris, 5 lights — the named view faces the corridor exit door, not
+the lifts), `int_0_6_-114_180_0.png` (222 / 459k / 5, the pier between the cabs), `int_-3_6_-114.5_180_0.png`
+(217 / 459k / 5, west cab doors open), `int_-3_6_-110.5_180_0.png` (281 / 635k / 5, cab back wall),
+`int_-3_6_-110.5_0_40.png` (320 / 626k / 5, cab ceiling and door head from inside), `int_-3_6_-109.8_0_0.png`
+(323 / 606k / 5, lobby seen from the back of the cab).
+
+The lobby itself is good: framed cog emblem, waveform screen, Aurebesh plates, a hazard-edged double exit door
+with amber lamps and a status lamp, hazard thresholds, a cog floor stencil and a computer bank
+(`room_crew_lobby.png`, `int_-3_6_-109.8_0_0.png`); the lift pier carries call bars (white/amber), a matrix and a
+warning triangle (`int_0_6_-114_180_0.png`). The cabs are where the turbolift illusion fails. With the doors open
+the car is a black cave with a lit back wall floating in it — the side walls, floor and ceiling receive no light
+(`int_-3_6_-114.5_180_0.png`). From inside, the wall above the door is a featureless black void and the ceiling
+is one blown-white slab (`int_-3_6_-110.5_0_40.png`); the back wall is the same flat panel set as the engineering
+cab (`int_-3_6_-110.5_180_0.png`). There is no deck display, no hand rail with depth, no floor grate.
+
+| Screenshot | What is wrong | Why it matters | Severity | Suggested fix |
+|---|---|---|---|---|
+| `int_-3_6_-114.5_180_0.png` | Open cab reads as a black cavity: side walls, floor and ceiling are unlit; only the back wall is visible | "Cab interiors must read as turbolifts" — this reads as a hole in the wall | **major** | Give the cab its own light (a PointLight or emissive ceiling diffuser with real intensity plus emissive kick/rail strips on the side walls); light the floor with a grate over a dim emissive plane |
+| `int_-3_6_-110.5_0_40.png` | From inside, everything above the door head is black; the cab ceiling is a single clipped white rectangle | The rider looks up into a void during the ride | **major** | Add a front wall panel above the door with a deck-position display and a cove; replace the slab with a framed diffuser at lower intensity |
+| `int_-3_6_-110.5_180_0.png`, `int_-3_-10_250.5_0_0.png` | Cab back walls of the crew and engineering lobbies are identical (same stencil block, matrix, hazard decal, panel) | Copy-paste between decks that should feel like different parts of the ship | **minor** | Seed the cab dressing per lobby; vary the stencil text and control-panel side |
+| `room_crew_lobby.png`, `int_0_6_-114_180_0.png` | Waist band and ceiling strip are blown to solid white bars; particles read as snow | Same exposure problem as the engineering lobby | **polish** | Reduce band emissive and particle size in rooms under 12 m |
+| `room_crew_lobby.png` | The named view for the lobby faces the exit door; the lifts are behind the camera | The room's identity (turbolifts) is not in its own reference shot | **polish** | Turn the spawn/named view to yaw 180 so the two cab doors and the pier are the first thing seen |
+
+### 2.10 Crew Quarters (`crew_quarters`, −62..−36 × −170..−130, floor 6)
+
+Views: `crew_quarters.png` (182 calls, 682k tris, 10 lights), `int_-46_6_-142_90_0.png` (165 / 689k / 10).
+
+The barracks has a clear identity: two ranks of triple bunk stacks with ladders, locker piers with vertical
+amber light strips, bay-number stencils on the posts, white floor lane lines with bay numbers, a warm-grey deck
+and a chevron of diagonal ceiling strips that gives the room a different ceiling from everything else
+(`crew_quarters.png`). Scale is right (three bunks in ~2.8 m, ladders, 2.5 m lockers). What it lacks is life and
+variation: every stack is the same stack with the same pale mattress and the same green blanket end, there is
+not a single personal item, kit bag, open locker or towel in 40 m of bunks (`int_-46_6_-142_90_0.png`), the
+ceiling over the bays is unlit black, and a pale untextured block sits at the aisle edge.
+
+| Screenshot | What is wrong | Why it matters | Severity | Suggested fix |
+|---|---|---|---|---|
+| `crew_quarters.png`, `int_-46_6_-142_90_0.png` | ~20 identical bunk stacks, identical bedding, ladders always on the same side, no kit anywhere | Copy-paste repetition is the whole room; it reads as a furniture catalogue, not a place 200 people sleep | **major** | Seed per stack: blanket colour (grey/green/black), pillow present or not, ladder side, one in four bunks with a kit bag or folded uniform, a few lockers ajar with an amber interior |
+| `int_-46_6_-142_90_0.png` | Pale flat block at the right edge (aisle side, ~1.2 m tall) with no texture, seams or edge detail | Reads as a placeholder primitive against textured bunks | **minor** | Give it a footlocker model (panel texture, hazard corner, latch) or remove it |
+| `int_-46_6_-142_90_0.png` | Ceiling above the bunk bays is unlit black; only the strips exist | The room reads as open to a void above 3 m | **minor** | Add a low-intensity ambient/hemisphere fill or dim emissive ceiling panels between the strips |
+| `crew_quarters.png` | Diagonal strips converge into a blown patch at the aisle centre | Same exposure problem | **polish** | Lower strip emissive |
+
+### 2.11 Mess Hall (`mess`, −32..−4 × −170..−130, floor 6)
+
+Views: `mess.png` (172 calls, 515k tris, 10 lights), `int_-20_6_-136_0_-12.png` (171 / 515k / 10),
+`int_-18_6_-156_0_0.png` (169 / 513k / 10, galley counter).
+
+Purpose and circulation are immediate: four table rows with benches lead to a serving counter with an amber kick
+strip, two numbered dispensers with screens, a hot line behind and a hanging Aurebesh menu board with coloured
+bars — the best single prop group on the crew deck (`int_-18_6_-156_0_0.png`). Trays and cups on the tables,
+wall screens and upper cabinets fill the walls (`mess.png`). The intended warm-amber mood is only half there:
+the pendant lamps glow amber but the light that actually falls on the room is the white ceiling strips, so the
+table tops are burnt to flat white and the room reads as a bright canteen rather than a warm one
+(`mess.png`, `int_-20_6_-136_0_-12.png`). The table tops also carry the floor-tile texture, so they look like
+tiled counters.
+
+| Screenshot | What is wrong | Why it matters | Severity | Suggested fix |
+|---|---|---|---|---|
+| `mess.png`, `int_-20_6_-136_0_-12.png` | Table tops are over-exposed near-white slabs with a visible tile grid; the foreground tables are pure white | The brief says warm amber; the room is dominated by clipped white | **major** | Drop the white strip intensity in this room by half and let the amber pendants carry the light (give them a real warm PointLight each, low range); use a matte grey table material without the deck tile texture |
+| `mess.png` | Ceiling strips converge and bloom into a fat white bar down the centre | Same exposure problem, worst here because the ceiling is warm-tinted and the bar is white | **minor** | Segment the strips or tint them warm in this room |
+| `int_-18_6_-156_0_0.png` | The galley behind the counter is one grey cabinet wall; the counter front is the same black indicator panel repeated four times | The focal wall of the room is flat and repetitive | **minor** | Add a hood, steam/vapour emitter over the hot line, hanging utensils or dispensers on the back wall; vary two of the four counter panels (hatch, drawer) |
+| `mess.png`, `int_-20_6_-136_0_-12.png` | The same red circular screen graphic and the same waveform screen appear on both side walls | Copy-paste at eye level | **polish** | Rotate through more screen indices per wall |
 

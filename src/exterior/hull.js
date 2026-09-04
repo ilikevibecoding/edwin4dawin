@@ -49,7 +49,8 @@ export function buildExterior(scene, materials) {
   buildTrenchWalls(kit);
   buildSternFace(kit);
   buildCity(kit, tiers, rand);
-  buildTower(kit, tiers, rand);
+  const tower = buildTower(kit, tiers, rand);
+  for (const m of tower.extras || []) group.add(m);
   buildEngines(kit, tiers, rand);
   buildWeapons(kit, tiers, rand);
   const { fields } = buildBelly(kit, tiers, rand, M);

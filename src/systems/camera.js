@@ -2,7 +2,7 @@
 // smooth damping and a scripted flight helper used by the boarding transition.
 import * as THREE from "three";
 
-let MIN_DIST = 120;
+let MIN_DIST = 45;
 const MAX_DIST = 6000;
 
 export class CameraRig {
