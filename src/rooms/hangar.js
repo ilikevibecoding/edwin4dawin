@@ -597,6 +597,11 @@ export function buildHangar(kit, ctx, room) {
       at(-6.2, rl - 1.8, (px, pz) => hgHoseReel(kit, px, pz, yawK + Math.PI / 2));
       at(3.4, rl - 1.4, (px, pz) => hgLadder(kit, px, pz, yawK + Math.PI / 2, 3.0));
       hgDeckCable(kit, [kz(-5.6, rl - 1.0), kz(-3.2, rl - 0.4), kz(-1.4, rl + 0.3)]);
+      // taxi guidance ahead of the bow: a dashed lane from the exclusion outline to the coaming with amber
+      // deck lamps in pairs (the cockpit looks straight down it — the nearest lit hangar detail its
+      // windshield sees; everything else in that view is 120–170 m off through the Kestrel cell's fog)
+      dashedLine(kit, [-22, -46], [-22, CZ0 - 2.2], { dash: 1.6, gap: 1.2, w: 0.2 });
+      for (const z of [-44, -38, -32, -26, -20, -14]) for (const s of [-1, 1]) hgDeckLamp(kit, -22 + s * 4.5, z, "emitAmber");
       // work-light mast just outside the exclusion outline on the E (port) side, its two heads aimed at
       // the port engine pod and the gear: the deck camera stands beside it, and that flank plus the pod's
       // underside were otherwise reached only by the environment fill (the overhead spot cannot light an
