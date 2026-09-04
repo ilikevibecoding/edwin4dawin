@@ -1,8 +1,9 @@
 // Deck 5 — Shuttle & Secondary Docking Bay. A 53.6 × 70 × 18 m bay off the main hangar's port
-// portal: a raised landing pad with painted markings, an Imperial-style shuttle parked on it with its
-// wings folded up and the boarding ramp down, docking clamps and fuel lines, floodlight masts, cargo
-// pallets by the portal, a glassed control booth and a huge closed blast door in the far wall with a
-// red-lit frame.
+// portal: a raised landing pad with painted markings and a blue ring light, an Imperial-style shuttle
+// parked on it with its wings folded up and the boarding ramp down, docking clamps and fuel lines,
+// floodlight masts, ground-crew carts and a bowser by the portal, cargo pallets, a glassed control
+// booth and a huge closed space door in the far wall: dark plated leaves with horizontal seams in a
+// red-lit frame. Lit by one cool key over the shuttle, a warm flood over the apron and the red door glow.
 //
 // Deck-local metres, floor y = 0. Room bounds x -90..-36.4, y 0..18, z -140..-70.
 import * as THREE from "three";
@@ -11,14 +12,17 @@ import { impWall, impFloor, impCeiling, impConsole, wallScreen, equipmentRack, c
 import { pointLight, wallFrame } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
+import { bowser, toolCart } from "./hangar.js";
 
 const PAD = { x: -64, z: -105, hw: 15, hd: 12, y: 0.12 }; // landing pad centre, half extents, height
 const SHUTTLE_YAW = -0.85; // parked in 3/4 view: nose toward the portal (+x) and forward (-z)
 const YELLOW = new THREE.Color("#d9b23c");
+const KEY = [PAD.x + 5, 15.6, PAD.z - 3]; // cool key light over the shuttle's nose quarter
 
 export function buildShuttleBay(kit, ctx) {
   const [min, max] = ctx.bounds;
   const rand = rng(ctx.seed + 21);
+  ensureMaterials(ctx);
   shell(kit, ctx);
   landingPad(kit, ctx);
   const hookup = shuttle(kit, ctx, PAD.x, PAD.z, SHUTTLE_YAW);
@@ -26,8 +30,25 @@ export function buildShuttleBay(kit, ctx) {
   blastDoor(kit, ctx, min, max);
   controlBooth(kit, ctx, -46, -75.5);
   cargo(kit, ctx, min, max, rand);
+  groundCrew(kit, ctx);
   floodMasts(kit, ctx);
   lighting(kit, ctx, min, max);
+}
+
+function ensureMaterials(ctx) {
+  const m = ctx.materials;
+  if (!m.sb_ring) {
+    m.sb_ring = m.emitBlue.clone();
+    m.sb_ring.emissiveIntensity = 1.1;
+  }
+  if (!m.sb_padStrip) {
+    m.sb_padStrip = m.emitWhite.clone();
+    m.sb_padStrip.emissiveIntensity = 0.8;
+  }
+  if (!m.sb_doorRed) {
+    m.sb_doorRed = m.emitRed.clone();
+    m.sb_doorRed.emissiveIntensity = 3.2;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -76,7 +97,7 @@ function shell(kit, ctx) {
   const portal = ctx.doors.find((d) => d.wall === "z");
   if (portal) {
     kit.boxMM("paintedMetal", [max[0] - 0.5, portal.h + 0.3, portal.pos[1] - portal.w / 2 - 1.4], [max[0] + 0.3, portal.h + 1.8, portal.pos[1] + portal.w / 2 + 1.4], { color: PALETTE.impDark, texel: 1.5 });
-    kit.boxMM("hazard", [max[0] - 0.52, portal.h + 0.35, portal.pos[1] - portal.w / 2 - 1.2], [max[0] - 0.5, portal.h + 1.05, portal.pos[1] + portal.w / 2 + 1.2], { texel: 2 });
+    kit.boxMM("hazard", [max[0] - 0.52, portal.h + 0.35, portal.pos[1] - portal.w / 2 - 1.2], [max[0] - 0.5, portal.h + 1.05, portal.pos[1] + portal.w / 2 + 1.2], { texel: 0.7 });
     kit.boxMM("emitAmber", [max[0] - 0.51, portal.h + 1.3, portal.pos[1] - portal.w / 2], [max[0] - 0.5, portal.h + 1.5, portal.pos[1] + portal.w / 2], {});
   }
 }
@@ -87,7 +108,7 @@ function shell(kit, ctx) {
 function landingPad(kit, ctx) {
   const { x, z, hw, hd, y } = PAD;
   kit.boxMM("floorGloss", [x - hw, 0, z - hd], [x + hw, y, z + hd], { texel: 0.33 });
-  kit.boxMM("hazard", [x - hw - 0.02, 0, z - hd - 0.02], [x + hw + 0.02, y - 0.01, z + hd + 0.02], { texel: 2 });
+  kit.boxMM("hazard", [x - hw - 0.02, 0, z - hd - 0.02], [x + hw + 0.02, y - 0.01, z + hd + 0.02], { texel: 0.5 });
   kit.collider([x - hw, 0, z - hd], [x + hw, y, z + hd], "pad");
   const paint = (x0, z0, x1, z1) => kit.boxMM("impPanel", [x0, y, z0], [x1, y + 0.008, z1], { color: YELLOW, uv: "keep" });
   const t = 0.3;
@@ -96,12 +117,18 @@ function landingPad(kit, ctx) {
   paint(x - hw + m, z + hd - m - t, x + hw - m, z + hd - m);
   paint(x - hw + m, z - hd + m, x - hw + m + t, z + hd - m);
   paint(x + hw - m - t, z - hd + m, x + hw - m, z + hd - m);
-  // touchdown ring and cross
+  // touchdown ring and cross, and the blue pad ring light recessed just outside the painted ring
   const ring = new THREE.RingGeometry(6.2, 6.7, 56);
   ring.rotateX(-Math.PI / 2);
   kit.add("impPanel", ring, { pos: [x, y + 0.008, z], color: YELLOW, uv: "keep" });
   paint(x - 4.5, z - t / 2, x + 4.5, z + t / 2);
   paint(x - t / 2, z - 4.5, x + t / 2, z + 4.5);
+  const ringHousing = new THREE.RingGeometry(7.0, 7.5, 64);
+  ringHousing.rotateX(-Math.PI / 2);
+  kit.add("paintedMetal", ringHousing, { pos: [x, y + 0.006, z], color: PALETTE.impBlack, uv: "keep" });
+  const ringLight = new THREE.RingGeometry(7.1, 7.4, 64);
+  ringLight.rotateX(-Math.PI / 2);
+  kit.add("sb_ring", ringLight, { pos: [x, y + 0.012, z], uv: "keep" });
   // corner brackets in white and recessed white light strips along the long edges
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
@@ -111,7 +138,7 @@ function landingPad(kit, ctx) {
       kit.boxMM("impPanel", [cx - 0.15, y, Math.min(cz, cz + sz * 2.4)], [cx + 0.15, y + 0.008, Math.max(cz, cz + sz * 2.4)], { color: PALETTE.impWhite, uv: "keep" });
     }
     kit.boxMM("paintedMetal", [x - hw + 0.4, y, z + sx * (hd - 0.6) - 0.16], [x + hw - 0.4, y + 0.01, z + sx * (hd - 0.6) + 0.16], { color: PALETTE.impBlack, texel: 2 });
-    kit.boxMM("emitWhite", [x - hw + 0.6, y + 0.01, z + sx * (hd - 0.6) - 0.06], [x + hw - 0.6, y + 0.022, z + sx * (hd - 0.6) + 0.06], {});
+    kit.boxMM("sb_padStrip", [x - hw + 0.6, y + 0.01, z + sx * (hd - 0.6) - 0.06], [x + hw - 0.6, y + 0.022, z + sx * (hd - 0.6) + 0.06], {});
   }
   // approach lane from the portal: amber lane lights in the floor
   for (let lx = PAD.x + PAD.hw + 2; lx < -38; lx += 2.6) {
@@ -235,7 +262,7 @@ function shuttle(kit, ctx, X, Z, yaw = 0) {
   add("tiePanel", rg, 1.7 + rampLen / 2, 0.85 + 0.07, 2.4);
   for (let i = 0; i < 8; i++) {
     const u = 0.4 + i * 0.5;
-    box("hazard", 1.7 + u, 1.7 - (1.7 / rampLen) * u + 0.085, 2.4, 0.08, 0.02, 1.6, { texel: 4 });
+    box("metal", 1.7 + u, 1.7 - (1.7 / rampLen) * u + 0.085, 2.4, 0.08, 0.02, 1.6, { color: PALETTE.steel });
   }
   for (const s of [-1, 1]) {
     const hg = new THREE.CylinderGeometry(0.03, 0.03, Math.hypot(1.7, rampLen), 8);
@@ -274,7 +301,7 @@ function clampsAndFuel(kit, ctx, min, max, hookup) {
       const cx = x + sx * (hw + 1.6);
       const cz = z + sz * (hd - 4);
       kit.box("paintedMetal", cx, 0.6, cz, 2.0, 1.2, 1.6, { color: PALETTE.impDark, texel: 1.5 });
-      kit.box("hazard", cx, 0.25, cz, 2.04, 0.3, 1.64, { texel: 3 });
+      kit.box("hazard", cx, 0.25, cz, 2.04, 0.3, 1.64, { texel: 1 });
       // arm folded over the pad edge, hydraulic ram, indicator lamp
       kit.box("metal", cx - sx * 0.5, 1.5, cz, 2.4, 0.4, 0.5, { color: PALETTE.gunmetal });
       kit.box("metal", cx - sx * 1.75, 1.15, cz, 0.5, 0.9, 0.6, { color: PALETTE.gunmetal });
@@ -310,50 +337,61 @@ function clampsAndFuel(kit, ctx, min, max, hookup) {
 }
 
 // ---------------------------------------------------------------------------
-// Closed space door in the far wall (xmin): two armoured leaves in a deep frame, red-lit edges
+// Closed space door in the far wall (xmin): two dark armoured leaves with deep horizontal seams and a
+// hazard centre join, standing proud of the wall in a heavy black frame with wide red-lit edges
 // ---------------------------------------------------------------------------
 function blastDoor(kit, ctx, min, max) {
   const x = min[0];
   const zc = PAD.z;
   const hw = 14; // half width along z
   const h = 14.5;
-  const d = 0.9;
-  // frame
-  kit.boxMM("paintedMetal", [x, 0, zc - hw - 1.3], [x + d + 0.3, h + 1.3, zc - hw], { color: PALETTE.impDark, texel: 1.5 });
-  kit.boxMM("paintedMetal", [x, 0, zc + hw], [x + d + 0.3, h + 1.3, zc + hw + 1.3], { color: PALETTE.impDark, texel: 1.5 });
-  kit.boxMM("paintedMetal", [x, h, zc - hw - 1.3], [x + d + 0.3, h + 1.3, zc + hw + 1.3], { color: PALETTE.impDark, texel: 1.5 });
-  kit.boxMM("hazard", [x + d + 0.3, 0.6, zc - hw - 1.1], [x + d + 0.32, h + 1.1, zc - hw - 0.2], { texel: 2 });
-  kit.boxMM("hazard", [x + d + 0.3, 0.6, zc + hw + 0.2], [x + d + 0.32, h + 1.1, zc + hw + 1.1], { texel: 2 });
-  // red-lit inner edge of the frame
-  kit.boxMM("emitRed", [x + d + 0.1, 0.4, zc - hw - 0.08], [x + d + 0.25, h + 0.2, zc - hw + 0.02], {});
-  kit.boxMM("emitRed", [x + d + 0.1, 0.4, zc + hw - 0.02], [x + d + 0.25, h + 0.2, zc + hw + 0.08], {});
-  kit.boxMM("emitRed", [x + d + 0.1, h - 0.08, zc - hw], [x + d + 0.25, h + 0.02, zc + hw], {});
-  // leaves: slab + raised armour plates + centre hazard seam
+  const d = 1.4; // frame depth: the door stands well proud of the plate wall
+  // frame: jambs, head, sill, black with a light-grey chamfer band and coarse hazard strips
+  kit.boxMM("paintedMetal", [x, 0, zc - hw - 1.6], [x + d + 0.3, h + 1.6, zc - hw], { color: PALETTE.impBlack, texel: 1.5 });
+  kit.boxMM("paintedMetal", [x, 0, zc + hw], [x + d + 0.3, h + 1.6, zc + hw + 1.6], { color: PALETTE.impBlack, texel: 1.5 });
+  kit.boxMM("paintedMetal", [x, h, zc - hw - 1.6], [x + d + 0.3, h + 1.6, zc + hw + 1.6], { color: PALETTE.impBlack, texel: 1.5 });
+  kit.boxMM("paintedMetal", [x, 0, zc - hw], [x + d + 0.3, 0.35, zc + hw], { color: PALETTE.impBlack, texel: 1.5 });
   for (const s of [-1, 1]) {
-    const z0 = s < 0 ? zc - hw : zc + 0.12;
-    const z1 = s < 0 ? zc - 0.12 : zc + hw;
-    kit.boxMM("paintedMetal", [x, 0, z0], [x + d - 0.2, h, z1], { color: PALETTE.impMid, texel: 0.8 });
-    for (let i = 0; i < 3; i++) {
-      for (let j = 0; j < 4; j++) {
-        const pz0 = z0 + 0.5 + (i / 3) * (z1 - z0 - 1.0);
-        const pz1 = z0 + 0.5 + ((i + 1) / 3) * (z1 - z0 - 1.0) - 0.3;
-        const py0 = 0.6 + (j / 4) * (h - 1.2);
-        const py1 = 0.6 + ((j + 1) / 4) * (h - 1.2) - 0.3;
-        kit.boxMM("impPanel1", [x + d - 0.2, py0, pz0], [x + d - 0.08, py1, pz1], { color: (i + j) % 2 ? PALETTE.impGrey : PALETTE.impLight, uv: "keep" });
-      }
-    }
-    kit.boxMM("hazard", [x + d - 0.1, 0.3, s < 0 ? zc - 1.4 : zc + 0.12], [x + d - 0.06, h - 0.3, s < 0 ? zc - 0.12 : zc + 1.4], { texel: 1 });
-    kit.boxMM("emitAmber", [x + d - 0.07, 0.6, s < 0 ? zc - 0.45 : zc + 0.15], [x + d - 0.05, h - 0.6, s < 0 ? zc - 0.15 : zc + 0.45], {});
+    const zj = zc + s * (hw + 0.8);
+    kit.boxMM("impPanel", [x + d + 0.3, 0.4, zj - 0.5], [x + d + 0.32, h + 1.5, zj + 0.5], { color: PALETTE.impLight, uv: "keep" });
+    kit.boxMM("hazard", [x + d + 0.3, 0.4, zj - 0.5 + (s < 0 ? 0 : 0.6)], [x + d + 0.33, h + 1.5, zj + 0.5 - (s < 0 ? 0.6 : 0)], { texel: 0.5 });
   }
-  kit.collider([x, 0, zc - hw - 1.3], [x + d + 0.35, h + 1.3, zc + hw + 1.3], "blastdoor");
+  // wide red-lit inner edges of the frame (jambs + head), the room's red key
+  for (const s of [-1, 1]) kit.boxMM("sb_doorRed", [x + d - 0.1, 0.4, zc + s * hw + (s < 0 ? -0.34 : 0.02)], [x + d + 0.28, h + 0.3, zc + s * hw + (s < 0 ? -0.02 : 0.34)], {});
+  kit.boxMM("sb_doorRed", [x + d - 0.1, h + 0.02, zc - hw], [x + d + 0.28, h + 0.34, zc + hw], {});
+  // leaves: dark slab, five rows of long armour plates in 0.2 m relief separated by deep seams, a
+  // black centre join with hazard bands and an amber seam lamp
+  for (const s of [-1, 1]) {
+    const z0 = s < 0 ? zc - hw : zc + 0.14;
+    const z1 = s < 0 ? zc - 0.14 : zc + hw;
+    kit.boxMM("paintedMetal", [x, 0.35, z0], [x + d - 0.5, h, z1], { color: PALETTE.impBlack, texel: 0.8 });
+    const rows = 5;
+    for (let j = 0; j < rows; j++) {
+      const py0 = 0.7 + (j / rows) * (h - 1.4);
+      const py1 = 0.7 + ((j + 1) / rows) * (h - 1.4) - 0.36;
+      const pz0 = z0 + 0.45;
+      const pz1 = z1 - 0.45;
+      kit.boxMM("impPanel1", [x + d - 0.5, py0, pz0], [x + d - 0.3, py1, pz1], { color: j % 2 ? PALETTE.impDark : PALETTE.impMid, uv: "keep" });
+      // recessed lifting-eye plates and a bolt strip along the plate's lower edge
+      kit.boxMM("paintedMetal", [x + d - 0.3, py0 + 0.1, pz0 + 0.3], [x + d - 0.28, py0 + 0.35, pz1 - 0.3], { color: PALETTE.impBlack, texel: 2 });
+      for (const zz of [pz0 + 2.5, (pz0 + pz1) / 2, pz1 - 2.5]) kit.boxMM("paintedMetal", [x + d - 0.3, (py0 + py1) / 2 - 0.5, zz - 0.5], [x + d - 0.29, (py0 + py1) / 2 + 0.5, zz + 0.5], { color: PALETTE.impBlack, texel: 2 });
+    }
+    // meeting edge: hazard band on the leaf's inner edge + amber seam lamp
+    kit.boxMM("hazard", [x + d - 0.34, 0.5, s < 0 ? zc - 1.6 : zc + 0.14], [x + d - 0.3, h - 0.3, s < 0 ? zc - 0.14 : zc + 1.6], { texel: 0.5 });
+    kit.boxMM("emitAmber", [x + d - 0.31, 0.8, s < 0 ? zc - 0.5 : zc + 0.18], [x + d - 0.29, h - 0.6, s < 0 ? zc - 0.18 : zc + 0.5], {});
+    // track shoes at the sill
+    for (const zz of [z0 + 1.5, (z0 + z1) / 2, z1 - 1.5]) kit.boxMM("metal", [x + d - 0.6, 0.35, zz - 0.5], [x + d - 0.2, 0.7, zz + 0.5], { color: PALETTE.gunmetal });
+  }
+  kit.collider([x, 0, zc - hw - 1.6], [x + d + 0.35, h + 1.6, zc + hw + 1.6], "blastdoor");
   // door number and warning stencil over the frame, floor hazard band in front
-  kit.boxMM("paintedMetal", [x + d + 0.3, h + 1.6, zc - 3.2], [x + d + 0.42, h + 2.6, zc + 3.2], { color: PALETTE.impBlack, texel: 2 });
-  kit.boxMM("emitWhite", [x + d + 0.42, h + 1.8, zc - 2.8], [x + d + 0.44, h + 2.4, zc + 2.8], {});
-  kit.boxMM("hazard", [x + d + 0.35, 0, zc - hw - 1.3], [x + d + 2.4, 0.012, zc + hw + 1.3], { texel: 1.5 });
+  kit.boxMM("paintedMetal", [x + d + 0.3, h + 1.9, zc - 4.2], [x + d + 0.42, h + 3.0, zc + 4.2], { color: PALETTE.impBlack, texel: 2 });
+  kit.boxMM("emitWhite", [x + d + 0.42, h + 2.15, zc - 3.8], [x + d + 0.44, h + 2.75, zc + 3.8], {});
+  kit.boxMM("emitRed", [x + d + 0.42, h + 3.05, zc - 4.2], [x + d + 0.44, h + 3.2, zc + 4.2], {});
+  kit.boxMM("hazard", [x + d + 0.35, 0, zc - hw - 1.6], [x + d + 2.4, 0.012, zc + hw + 1.6], { texel: 0.5 });
   const seg = wallSegment(ctx.bounds, "xmin");
   const { frame } = wallFrame(kit, seg.from, seg.to, 0);
-  frame.add("decal", new THREE.PlaneGeometry(2.4, 2.4), seg.from[1] - (zc - hw - 4), 4.0, d + 0.42, { uv: "keep", uvRect: decalRect(10) });
-  frame.add("decal", new THREE.PlaneGeometry(2.4, 2.4), seg.from[1] - (zc + hw + 4), 4.0, d + 0.42, { uv: "keep", uvRect: decalRect(10) });
+  frame.add("decal", new THREE.PlaneGeometry(2.4, 2.4), seg.from[1] - (zc - hw - 4), 4.0, 0.012, { uv: "keep", uvRect: decalRect(10) });
+  frame.add("decal", new THREE.PlaneGeometry(2.4, 2.4), seg.from[1] - (zc + hw + 4), 4.0, 0.012, { uv: "keep", uvRect: decalRect(10) });
   void max;
 }
 
@@ -369,7 +407,7 @@ function controlBooth(kit, ctx, x, z) {
   const z1 = z + d / 2;
   const plinth = 0.4;
   kit.boxMM("floorGloss", [x0 - 0.6, 0, z0 - 0.6], [x1 + 0.6, plinth, z1 + 0.6], { texel: 0.5 });
-  kit.boxMM("hazard", [x0 - 0.62, 0, z0 - 0.62], [x1 + 0.62, plinth - 0.01, z1 + 0.62], { texel: 2 });
+  kit.boxMM("hazard", [x0 - 0.62, 0, z0 - 0.62], [x1 + 0.62, plinth - 0.01, z1 + 0.62], { texel: 1 });
   kit.collider([x0 - 0.6, 0, z0 - 0.6], [x1 + 0.6, plinth, z1 + 0.6], "plinth");
   const sill = plinth + 1.1;
   const top = plinth + 2.9;
@@ -408,7 +446,7 @@ function cargo(kit, ctx, min, max, rand) {
   // pallets with strapped crate stacks near the portal, a loader tug, drums by the wall
   const pallet = (x, z, n, seed) => {
     kit.box("paintedMetal", x, 0.08, z, 2.6, 0.16, 2.0, { color: PALETTE.impDark, texel: 2 });
-    kit.box("hazard", x, 0.08, z + 1.01, 2.6, 0.12, 0.02, { texel: 3 });
+    kit.box("hazard", x, 0.08, z + 1.01, 2.6, 0.12, 0.02, { texel: 1 });
     for (let i = 0; i < n; i++) {
       const sx = 1.0 + rand() * 0.6;
       crate(kit, ctx, { x: x + (i % 2 ? 0.65 : -0.65), y: 0.16 + Math.floor(i / 2) * 0.95, z, sx, sy: 0.95, sz: 1.2 + rand() * 0.5, yaw: (rand() - 0.5) * 0.15, seed: seed + i });
@@ -424,7 +462,7 @@ function cargo(kit, ctx, min, max, rand) {
   kit.box("paintedMetal", tx, 0.5, tz, 1.6, 0.6, 3.0, { color: PALETTE.impMid, texel: 1.5 });
   kit.box("paintedMetal", tx, 1.35, tz + 0.9, 1.4, 1.1, 1.2, { color: PALETTE.impDark, texel: 1.5 });
   kit.box("tieGlass", tx, 1.5, tz + 0.29, 1.2, 0.6, 0.04);
-  kit.box("hazard", tx, 0.2, tz, 1.64, 0.2, 3.04, { texel: 3 });
+  kit.box("hazard", tx, 0.2, tz, 1.64, 0.2, 3.04, { texel: 1 });
   for (const sx of [-0.7, 0.7]) kit.box("metal", tx + sx, 0.25, tz - 2.2, 0.12, 0.1, 1.6, { color: PALETTE.steel });
   for (const [sx, sz] of [
     [-0.85, -1.0],
@@ -441,7 +479,7 @@ function cargo(kit, ctx, min, max, rand) {
     const x = -50 + i * 1.1 + (rand() - 0.5) * 0.3;
     const z = min[2] + 1.6 + (rand() - 0.5) * 0.4;
     kit.cyl("paintedMetal", x, 0.6, z, 0.42, 1.2, "y", { color: i % 2 ? PALETTE.impMid : PALETTE.impGrey, segments: 14, texel: 1 });
-    kit.cyl("hazard", x, 0.6, z, 0.43, 0.2, "y", { segments: 14, texel: 2 });
+    kit.cyl("hazard", x, 0.6, z, 0.43, 0.2, "y", { segments: 14, texel: 1 });
     kit.collider([x - 0.45, 0, z - 0.45], [x + 0.45, 1.25, z + 0.45], "drum");
   }
   // wall dressing: racks and screens on the aft wall away from the booth, warning decals by the portal
@@ -459,7 +497,27 @@ function cargo(kit, ctx, min, max, rand) {
 }
 
 // ---------------------------------------------------------------------------
-// Floodlight masts at the pad corners (the point lights sit in their heads)
+// Ground crew on the apron between the portal and the pad: a bowser with fuel lines run to the pad's
+// near clamp, tool carts, a couple of containers — the foreground of the view from the portal
+// ---------------------------------------------------------------------------
+function groundCrew(kit, ctx) {
+  bowser(kit, ctx, -42.8, -116.5, 0.25);
+  toolCart(kit, ctx, -41.5, -112.8, 0.4);
+  toolCart(kit, ctx, -44.6, -97.3, -0.9);
+  toolCart(kit, ctx, -52.5, -93.5, 0.3);
+  crate(kit, ctx, { x: -40.8, z: -97.9, sx: 1.4, sy: 1.1, sz: 1.2, yaw: 0.25, seed: ctx.seed + 71 });
+  crate(kit, ctx, { x: -40.9, y: 1.1, z: -97.8, sx: 1.1, sy: 0.8, sz: 1.0, yaw: -0.1, seed: ctx.seed + 72 });
+  // fuel lines from the bowser's pump to the pad edge by the near clamp, with a floor coupling block
+  pipeRun(kit, [[-42.2, 0.15, -113.8], [-45.2, 0.1, -112.4], [-48.6, 0.1, -111.6], [-49.2, PAD.y + 0.08, -110.9], [-51.5, PAD.y + 0.08, -110.2]], 0.06, PALETTE.impBlack, "rubber");
+  pipeRun(kit, [[-42.6, 0.12, -113.9], [-45.6, 0.08, -112.8], [-48.6, 0.08, -112.1], [-49.2, PAD.y + 0.06, -111.5]], 0.045, PALETTE.impMid, "rubber");
+  kit.box("paintedMetal", -48.6, 0.18, -111.8, 0.9, 0.36, 1.0, { color: PALETTE.impDark, texel: 2 });
+  kit.box("emitAmber", -48.6, 0.37, -111.8, 0.3, 0.02, 0.3);
+  kit.collider([-49.05, 0, -112.3], [-48.15, 0.4, -111.3], "coupling");
+}
+
+// ---------------------------------------------------------------------------
+// Floodlight masts at the pad corners (emissive heads; the room's real lights are the key, the apron
+// flood and the door glow)
 // ---------------------------------------------------------------------------
 const MASTS = [
   [PAD.x - PAD.hw - 4, PAD.z - PAD.hd - 3],
@@ -470,12 +528,12 @@ const MASTS = [
 function floodMasts(kit, ctx) {
   for (const [x, z] of MASTS) {
     kit.box("paintedMetal", x, 0.3, z, 1.2, 0.6, 1.2, { color: PALETTE.impBlack, texel: 2 });
-    kit.box("hazard", x, 0.3, z, 1.22, 0.2, 1.22, { texel: 3 });
+    kit.box("hazard", x, 0.3, z, 1.22, 0.2, 1.22, { texel: 1 });
     kit.box("paintedMetal", x, 5.0, z, 0.4, 9.0, 0.4, { color: PALETTE.impMid, texel: 1.5 });
     const dx = Math.sign(PAD.x - x);
     const dz = Math.sign(PAD.z - z);
     kit.box("paintedMetal", x + dx * 0.5, 9.2, z + dz * 0.5, 1.6, 0.8, 1.6, { color: PALETTE.impDark, texel: 2 });
-    kit.box("emitWhite", x + dx * 0.5, 8.78, z + dz * 0.5, 1.3, 0.04, 1.3);
+    kit.box("emitWhiteDim", x + dx * 0.5, 8.78, z + dz * 0.5, 1.3, 0.04, 1.3);
     kit.box("emitRed", x, 9.75, z, 0.2, 0.15, 0.2);
     kit.collider([x - 0.6, 0, z - 0.6], [x + 0.6, 9.6, z + 0.6], "mast");
   }
@@ -483,14 +541,22 @@ function floodMasts(kit, ctx) {
 }
 
 // ---------------------------------------------------------------------------
+// Lighting: three real lights — a cool key hung over the shuttle's nose quarter, a warm flood over
+// the apron by the portal, the red glow of the space door — plus their fixtures
+// ---------------------------------------------------------------------------
 function lighting(kit, ctx, min, max) {
-  for (const [x, z] of MASTS) {
-    const dx = Math.sign(PAD.x - x);
-    const dz = Math.sign(PAD.z - z);
-    ctx.light(pointLight(0xeef3ff, 30, 40, [x + dx * 1.2, 8.4, z + dz * 1.2]));
-  }
-  ctx.light(pointLight(0xffb060, 14, 24, [-46, 9, -122]));
-  ctx.light(pointLight(0xff3020, 12, 26, [min[0] + 4, 7, PAD.z]));
+  const H = max[1];
+  ctx.light(pointLight(0xcfe0ff, 260, 50, KEY));
+  ctx.light(pointLight(0xffb060, 70, 34, [-44, 10.5, -105]));
+  ctx.light(pointLight(0xff3020, 40, 34, [min[0] + 5, 7.5, PAD.z]));
+  // key: four-lamp head on a stem from the ceiling
+  kit.cyl("paintedMetal", KEY[0], (H + KEY[1] + 1.1) / 2, KEY[2], 0.14, H - KEY[1] - 1.1, "y", { color: PALETTE.impDark, segments: 8, texel: 0.5 });
+  kit.box("paintedMetal", KEY[0], KEY[1] + 0.7, KEY[2], 2.4, 0.8, 2.4, { color: PALETTE.impDark, texel: 1.5 });
+  for (const dx of [-0.6, 0.6]) for (const dz of [-0.6, 0.6]) kit.box("emitWhite", KEY[0] + dx, KEY[1] + 0.29, KEY[2] + dz, 1.0, 0.04, 1.0);
+  kit.box("emitRed", KEY[0], KEY[1] + 1.2, KEY[2], 0.24, 0.2, 0.24);
+  // warm apron pendant: amber lens under a shallow housing
+  kit.cyl("paintedMetal", -44, (H + 11.2) / 2, -105, 0.1, H - 11.2, "y", { color: PALETTE.impDark, segments: 8, texel: 0.5 });
+  kit.box("paintedMetal", -44, 11.0, -105, 1.8, 0.5, 1.8, { color: PALETTE.impBlack, texel: 2 });
+  kit.box("emitAmber", -44, 10.74, -105, 1.5, 0.03, 1.5);
   void kit;
-  void max;
 }

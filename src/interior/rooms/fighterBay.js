@@ -1,7 +1,9 @@
 // Deck 5 — Fighter Maintenance & Refuelling. A 33.6 × 50 × 14 m workshop off the main bay's starboard
-// portal: two TIE-sized maintenance cradles (one holding a wing panel pulled off its pylon), an engine
-// pod on stands, diagnostic consoles, fuel tanks with gauges and hoses, tool walls, parts shelving, an
-// overhead hoist on ceiling rails and a grated service lane down the middle, all under amber work lights.
+// portal: two TIE-sized maintenance cradles — one holding a complete TIE/ln nose-on to the portal, the
+// other receiving a wing panel slung from the overhead hoist — an engine pod on stands, diagnostic
+// consoles, fuel tanks with gauges and hoses, tool walls, parts shelving and free-standing parts racks,
+// a fuel bowser and tool carts on the work floor, and a grated service lane down the middle, under
+// three floods: amber over the cradles, white over the lane.
 //
 // Deck-local metres, floor y = 0. Room bounds x 36.4..70, y 0..14, z -125..-75.
 import * as THREE from "three";
@@ -10,12 +12,16 @@ import { impWall, impFloor, impCeiling, impConsole, wallScreen, equipmentRack, c
 import { pointLight, wallFrame } from "../builders.js";
 import { Kit, rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
+import { tieGeometries } from "../../traffic/fighters.js";
+import { bowser, toolCart } from "./hangar.js";
 
 const WING_H = 7.2;
 const WING_W = 3.9;
+const WING_Z = 1.9 + 1.75; // wing planes sit at ±3.65 along z from the cradle centre (TIE yawed 90°)
+const TIE_Y = WING_H / 2 + 0.5; // centre height of a fighter / wing held in the clamps
 const CRADLES = [
-  { x: 56, z: -110, wing: true },
-  { x: 56, z: -90, wing: false },
+  { x: 56, z: -110, tie: true },
+  { x: 56, z: -90, tie: false },
 ];
 const LANE = { z0: -101.6, z1: -98.4, x1: 59.6 }; // grated service lane from the portal to the diagnostics row
 
@@ -75,7 +81,7 @@ function shell(kit, ctx) {
   const portal = ctx.doors.find((d) => d.wall === "z");
   if (portal) {
     kit.boxMM("paintedMetal", [min[0] - 0.3, portal.h + 0.3, portal.pos[1] - portal.w / 2 - 1.2], [min[0] + 0.5, portal.h + 1.5, portal.pos[1] + portal.w / 2 + 1.2], { color: PALETTE.impDark, texel: 1.5 });
-    kit.boxMM("hazard", [min[0] + 0.5, portal.h + 0.35, portal.pos[1] - portal.w / 2 - 1.0], [min[0] + 0.52, portal.h + 0.95, portal.pos[1] + portal.w / 2 + 1.0], { texel: 2 });
+    kit.boxMM("hazard", [min[0] + 0.5, portal.h + 0.35, portal.pos[1] - portal.w / 2 - 1.0], [min[0] + 0.52, portal.h + 0.95, portal.pos[1] + portal.w / 2 + 1.0], { texel: 1 });
     kit.boxMM("emitAmber", [min[0] + 0.5, portal.h + 1.1, portal.pos[1] - portal.w / 2], [min[0] + 0.51, portal.h + 1.26, portal.pos[1] + portal.w / 2], {});
   }
 }
@@ -98,11 +104,11 @@ function serviceLane(kit, ctx, min, max) {
   kit.add("grate", g, { pos: [(x0 + x1) / 2, 0.005, (LANE.z0 + LANE.z1) / 2], uv: "world", texel: 2 });
   for (const z of [LANE.z0, LANE.z1]) {
     kit.boxMM("metal", [x0, 0, z - 0.06], [x1, 0.03, z + 0.06], { color: PALETTE.steel });
-    kit.boxMM("hazard", [x0, 0.0, z + (z === LANE.z0 ? -0.3 : 0.06)], [x1, 0.012, z + (z === LANE.z0 ? -0.06 : 0.3)], { texel: 2 });
+    kit.boxMM("hazard", [x0, 0.0, z + (z === LANE.z0 ? -0.3 : 0.06)], [x1, 0.012, z + (z === LANE.z0 ? -0.06 : 0.3)], { texel: 1 });
   }
   // end rail and hazard band where the lane meets the diagnostics row
   kit.boxMM("metal", [x1 - 0.06, 0, LANE.z0], [x1 + 0.06, 0.03, LANE.z1], { color: PALETTE.steel });
-  kit.boxMM("hazard", [x1 + 0.06, 0, LANE.z0 - 0.3], [x1 + 0.3, 0.012, LANE.z1 + 0.3], { texel: 2 });
+  kit.boxMM("hazard", [x1 + 0.06, 0, LANE.z0 - 0.3], [x1 + 0.3, 0.012, LANE.z1 + 0.3], { texel: 1 });
   // cross bearers under the grate
   for (let x = x0 + 1.5; x < x1; x += 3) kit.boxMM("metal", [x - 0.06, -0.1, LANE.z0], [x + 0.06, 0, LANE.z1], { color: PALETTE.gunmetal });
   void ctx;
@@ -111,19 +117,18 @@ function serviceLane(kit, ctx, min, max) {
 
 // ---------------------------------------------------------------------------
 // Maintenance cradle: floor rails, two A-frame uprights either side of the wing planes, a top beam
-// with clamp arms; the first one holds a wing panel lifted off its pylon
+// with clamp arms; the first one holds a complete TIE, the second is receiving a wing from the hoist
 // ---------------------------------------------------------------------------
-function cradle(kit, ctx, { x, z, wing }, rand) {
-  const halfZ = WING_W / 2 + 0.5; // the wing planes sit at ±(1.9 + 1.75) = ±3.65 along z
-  const wingZ = 1.9 + 1.75;
+function cradle(kit, ctx, { x, z, tie }, rand) {
+  const wingZ = WING_Z;
   const top = WING_H + 1.6;
   // base frame: two heavy rails along z plus cross ties, hazard border on the floor
   for (const dx of [-2.4, 2.4]) kit.boxMM("paintedMetal", [x + dx - 0.25, 0, z - wingZ - 1.4], [x + dx + 0.25, 0.45, z + wingZ + 1.4], { color: PALETTE.impDark, texel: 1.5 });
   for (const dz of [-wingZ - 1.2, -wingZ + 1.2, wingZ - 1.2, wingZ + 1.2]) kit.boxMM("paintedMetal", [x - 2.4, 0.1, z + dz - 0.15], [x + 2.4, 0.4, z + dz + 0.15], { color: PALETTE.impDark, texel: 1.5 });
-  kit.boxMM("hazard", [x - 3.2, 0, z - wingZ - 2.2], [x + 3.2, 0.012, z - wingZ - 1.9], { texel: 2 });
-  kit.boxMM("hazard", [x - 3.2, 0, z + wingZ + 1.9], [x + 3.2, 0.012, z + wingZ + 2.2], { texel: 2 });
-  kit.boxMM("hazard", [x - 3.2, 0, z - wingZ - 2.2], [x - 2.9, 0.012, z + wingZ + 2.2], { texel: 2 });
-  kit.boxMM("hazard", [x + 2.9, 0, z - wingZ - 2.2], [x + 3.2, 0.012, z + wingZ + 2.2], { texel: 2 });
+  kit.boxMM("hazard", [x - 3.2, 0, z - wingZ - 2.2], [x + 3.2, 0.012, z - wingZ - 1.9], { texel: 1 });
+  kit.boxMM("hazard", [x - 3.2, 0, z + wingZ + 1.9], [x + 3.2, 0.012, z + wingZ + 2.2], { texel: 1 });
+  kit.boxMM("hazard", [x - 3.2, 0, z - wingZ - 2.2], [x - 2.9, 0.012, z + wingZ + 2.2], { texel: 1 });
+  kit.boxMM("hazard", [x + 2.9, 0, z - wingZ - 2.2], [x + 3.2, 0.012, z + wingZ + 2.2], { texel: 1 });
   // uprights (A-frames) outside each wing plane, braced, with the top beam over both
   for (const s of [-1, 1]) {
     const uz = z + s * (wingZ + 1.1);
@@ -138,7 +143,7 @@ function cradle(kit, ctx, { x, z, wing }, rand) {
     // wing clamps: pads on arms reaching in from the upright toward the wing plane
     for (const dy of [WING_H / 2 - 1.2, WING_H / 2 + 2.6]) {
       kit.box("metal", x, dy + 0.3, uz - s * 0.7, 0.9, 0.5, 1.0, { color: PALETTE.gunmetal });
-      kit.box("hazard", x, dy + 0.3, uz - s * 1.21, 0.9, 0.3, 0.02, { texel: 3 });
+      kit.box("hazard", x, dy + 0.3, uz - s * 1.21, 0.9, 0.3, 0.02, { texel: 1 });
       kit.box(rand() < 0.5 ? "emitGreen" : "emitAmber", x + 0.3, dy + 0.55, uz - s * 1.2, 0.2, 0.05, 0.01);
     }
     kit.collider([x - 2.7, 0, uz - 0.3], [x + 2.7, top, uz + 0.3], "cradle");
@@ -149,26 +154,49 @@ function cradle(kit, ctx, { x, z, wing }, rand) {
   kit.boxMM("emitAmber", [x - 0.25, top - 0.62, z - wingZ - 0.6], [x + 0.25, top - 0.6, z + wingZ + 0.6], {});
   // service trolley-steps on the open side
   kit.box("paintedMetal", x - 3.6, 0.55, z, 0.9, 1.1, 1.6, { color: PALETTE.impDark, texel: 2 });
-  kit.box("hazard", x - 3.6, 1.105, z, 0.9, 0.01, 1.6, { texel: 3 });
+  kit.box("hazard", x - 3.6, 1.105, z, 0.9, 0.01, 1.6, { texel: 1 });
   kit.box("paintedMetal", x - 4.3, 0.28, z, 0.5, 0.56, 1.6, { color: PALETTE.impDark, texel: 2 });
-  kit.box("hazard", x - 4.3, 0.565, z, 0.5, 0.01, 1.6, { texel: 3 });
+  kit.box("hazard", x - 4.3, 0.565, z, 0.5, 0.01, 1.6, { texel: 1 });
   kit.collider([x - 4.55, 0, z - 0.8], [x - 3.15, 1.1, z + 0.8], "steps");
-  if (wing) {
-    // one wing panel standing in the cradle (its pylon side toward the centre), second one missing
-    wingPanel(kit, x, WING_H / 2 + 0.5, z - wingZ, 0);
-    // the removed pylon collar lying on a pallet beside the cradle
+  if (tie) {
+    // a complete TIE/ln held by both wings in the clamps, viewport toward the portal (-x): the traffic
+    // system's own geometry, yawed 90° so the wing planes are normal to z
+    const geo = tieGeometries();
+    const rot = [0, Math.PI / 2, 0];
+    kit.add("tieHull", geo.hull, { pos: [x, TIE_Y, z], rot, uv: "keep" });
+    kit.add("tiePanel", geo.panel, { pos: [x, TIE_Y, z], rot, uv: "keep" });
+    kit.add("tieGlass", geo.glass, { pos: [x, TIE_Y, z], rot, uv: "keep" });
+    geo.glow.dispose(); // engines cold: no glow discs on a parked fighter
+    // rubber-faced saddle blocks under the wing roots (the wings' lower vertices rest on them)
+    for (const s of [-1, 1]) {
+      kit.box("paintedMetal", x, 0.25, z + s * wingZ, 1.6, 0.5, 0.7, { color: PALETTE.impDark, texel: 2 });
+      kit.box("rubber", x, 0.52, z + s * wingZ, 1.4, 0.06, 0.5, { color: PALETTE.impBlack });
+    }
+    kit.collider([x - 2.0, 0, z - wingZ - 0.3], [x + 2.0, WING_H + 0.5, z + wingZ + 0.3], "tie");
+    // fuel hose from the trench to a coupling under the port pylon, power lead to the rear hatch
+    pipeRun(kit, [[x - 1.4, -0.1, LANE.z1 - 0.5], [x - 1.4, 0.3, z - 1.0], [x - 0.7, 0.5, z - wingZ + 0.9], [x - 0.2, TIE_Y - 1.1, z - wingZ + 0.9]], 0.05, PALETTE.impMid, "rubber");
+    kit.box("metal", x - 0.2, TIE_Y - 1.1, z - wingZ + 1.0, 0.3, 0.3, 0.3, { color: PALETTE.gunmetal });
+    pipeRun(kit, [[x + 2.6, 0.0, LANE.z0 + 0.5], [x + 2.6, 0.25, z + 4.4], [x + 2.4, TIE_Y - 0.9, z + 0.9], [x + 2.05, TIE_Y - 0.25, z + 0.3]], 0.04, PALETTE.impBlack, "rubber");
+    // status lamps on the clamp uprights read green: fighter secured
+    for (const s of [-1, 1]) kit.box("emitGreen", x - 2.4, 1.4, z + s * (wingZ + 1.1) - s * 0.21, 0.3, 0.08, 0.01);
+  } else {
+    // receiving cradle: the wing is on the hoist above; the pylon collar it will bolt onto sits on a
+    // pallet beside the cradle, a rolling stair waits at the wing plane
     kit.box("paintedMetal", x + 4.4, 0.08, z + 1.5, 1.6, 0.16, 1.6, { color: PALETTE.impDark, texel: 2 });
     kit.cyl("tieHull", x + 4.4, 0.9, z + 1.5, 0.9, 0.35, "y", { segments: 12 });
     kit.cyl("tieHull", x + 4.4, 0.45, z + 1.5, 0.62, 0.55, "y", { segments: 12 });
     kit.collider([x + 3.6, 0, z + 0.7], [x + 5.2, 1.1, z + 2.3], "pylon");
-    // hose from the trench to the wing's power coupling
-    pipeRun(kit, [[x - 1.4, -0.1, LANE.z1 - 0.5], [x - 1.4, 0.3, z - 1.0], [x - 0.2, 0.6, z - wingZ + 0.6], [x, 1.3, z - wingZ + 0.25]], 0.05, PALETTE.impMid, "rubber");
-    kit.box("metal", x, 1.3, z - wingZ + 0.2, 0.3, 0.3, 0.3, { color: PALETTE.gunmetal });
-  } else {
-    // empty cradle: chains from the top beam and a lit status light
-    for (const dz of [-1.2, 1.2]) kit.cyl("metal", x, top - 2.2, z + dz, 0.03, 3.2, "y", { color: PALETTE.steel, segments: 6 });
-    kit.box("metal", x, top - 3.9, z, 0.6, 0.3, 3.0, { color: PALETTE.gunmetal });
-    kit.box("emitRed", x, top - 4.1, z, 0.3, 0.1, 0.3);
+    kit.box("emitAmber", x - 2.4, 1.4, z - wingZ - 1.1 + 0.21, 0.3, 0.08, 0.01);
+    // rolling stair outside the A-frame, climbing toward the wing plane, top step at clamp height
+    const sx = x + 0.9;
+    const sz = z - wingZ - 2.6;
+    for (let i = 0; i < 6; i++) kit.box("paintedMetal", sx, 0.22 + i * 0.44, sz - 0.6 + i * 0.26, 1.2, 0.08, 0.3, { color: PALETTE.impDark, texel: 2 });
+    for (const dx of [-0.58, 0.58]) {
+      kit.add("paintedMetal", new THREE.BoxGeometry(0.06, 3.0, 0.06), { pos: [sx + dx, 1.4, sz + 0.05], rot: [-0.53, 0, 0], color: PALETTE.impDark, texel: 2 });
+      kit.box("paintedMetal", sx + dx, 1.4, sz + 0.75, 0.06, 2.8, 0.06, { color: PALETTE.impDark, texel: 2 });
+    }
+    kit.box("paintedMetal", sx, 2.8, sz + 0.75, 1.2, 0.06, 0.6, { color: PALETTE.impDark, texel: 2 });
+    kit.collider([sx - 0.65, 0, sz - 0.8], [sx + 0.65, 2.9, sz + 1.1], "rollstair");
   }
 }
 
@@ -217,7 +245,7 @@ function enginePod(kit, ctx, x, z, yaw) {
     add("paintedMetal", new THREE.BoxGeometry(1.8, 0.16, 0.5), 0, 0.08, lz, { color: PALETTE.impDark, texel: 2 });
     add("paintedMetal", new THREE.BoxGeometry(0.3, 1.0, 0.3), -0.6, 0.6, lz, { color: PALETTE.impMid, texel: 2 });
     add("paintedMetal", new THREE.BoxGeometry(0.3, 1.0, 0.3), 0.6, 0.6, lz, { color: PALETTE.impMid, texel: 2 });
-    add("hazard", new THREE.BoxGeometry(1.5, 0.12, 0.3), 0, 1.16, lz, { texel: 3 });
+    add("hazard", new THREE.BoxGeometry(1.5, 0.12, 0.3), 0, 1.16, lz, { texel: 1 });
   }
   // body along z at y = 1.9: dark housing with light structural bands, exposed ribs between them
   const body = new THREE.CylinderGeometry(0.66, 0.66, 3.2, 18).rotateX(Math.PI / 2);
@@ -320,7 +348,7 @@ function toolWalls(kit, ctx, min, max, rand) {
     frame.box("impPanel1", u, 1.0, 0.806, 1.7, 1.9, 0.012, { color: PALETTE.impGrey, uv: "keep" });
     for (let r = 0; r < 5; r++) frame.box("metal", u, 0.3 + r * 0.36, 0.82, 1.5, 0.03, 0.02, { color: PALETTE.steel });
     frame.box("emitBlue", u - 0.6, 1.95, 0.815, 0.3, 0.03, 0.01);
-    frame.box("hazard", u, 0.03, 0.4, 1.8, 0.06, 0.8, { texel: 3 });
+    frame.box("hazard", u, 0.03, 0.4, 1.8, 0.06, 0.8, { texel: 1 });
     frame.collider(u - 0.9, u + 0.9, 0, 2.0, 0, 0.82, "cabinet");
   }
   equipmentRack(kit, ctx, { side: "zmin", u: u0 + 22, w: 1.4, h: 2.6, seed: ctx.seed + 3, lit: "emitAmber" });
@@ -351,7 +379,7 @@ function shelving(kit, ctx, min, max, rand) {
         z += w + 0.15;
       }
     }
-    kit.boxMM("hazard", [x - 0.6, 0, z0 - 0.1], [x + 0.45, 0.012, z1 + 0.1], { texel: 2 });
+    kit.boxMM("hazard", [x - 0.6, 0, z0 - 0.1], [x + 0.45, 0.012, z1 + 0.1], { texel: 1 });
     kit.collider([x - 0.5, 0, z0 - 0.1], [max[0], 4.0, z1 + 0.1], "shelves");
   }
   // spare wing pylons stacked in a rack near the aft shelves
@@ -360,8 +388,9 @@ function shelving(kit, ctx, min, max, rand) {
 }
 
 // ---------------------------------------------------------------------------
-// Overhead hoist: two ceiling rails along x over the cradles, a bridge trolley with a hook over the
-// empty cradle (slow travel along x)
+// Overhead hoist: two ceiling rails along x over the cradles and a bridge over the receiving cradle;
+// its trolley hangs a wing panel on a spreader bar right over the cradle's outer wing plane, swaying
+// gently as it is lowered onto the clamps
 // ---------------------------------------------------------------------------
 function hoist(kit, ctx, min, max) {
   const y = max[1] - 1.2;
@@ -369,8 +398,9 @@ function hoist(kit, ctx, min, max) {
     kit.boxMM("paintedMetal", [min[0] + 3, y, z - 0.25], [max[0] - 2, y + 0.5, z + 0.25], { color: PALETTE.impDark, texel: 1.5 });
     for (let x = min[0] + 5; x < max[0] - 2; x += 8) kit.box("paintedMetal", x, (y + 0.5 + max[1]) / 2, z, 0.25, max[1] - y - 0.5, 0.25, { color: PALETTE.impMid, texel: 2 });
   }
-  // moving bridge over the empty cradle: spans the two rails, carries a trolley + chain + hook
   const c = CRADLES[1];
+  const wz = -WING_Z; // the wing goes into the cradle's -z clamps
+  const hookY = 9.3; // ring centre: the load clears the cradle's centre lamp bar (top 8.4)
   const g = new THREE.Group();
   const k = new Kit(ctx.materials);
   k.box("paintedMetal", 0, y - 0.35, 0, 1.2, 0.6, 10.4, { color: PALETTE.impMid, texel: 1.5 });
@@ -380,16 +410,35 @@ function hoist(kit, ctx, min, max) {
     k.box("paintedMetal", 0, y + 0.2, dz, 1.4, 0.5, 1.0, { color: PALETTE.impDark, texel: 2 });
     k.box("emitAmber", 0.71, y + 0.2, dz, 0.01, 0.1, 0.5);
   }
-  k.box("paintedMetal", 0, y - 1.0, 0, 1.0, 0.7, 1.2, { color: PALETTE.impDark, texel: 2 });
-  k.box("emitRed", 0, y - 1.0, 0.61, 0.2, 0.15, 0.01);
-  k.cyl("metal", 0, y - 3.4, 0, 0.035, 4.2, "y", { color: PALETTE.steel, segments: 6 });
-  k.box("paintedMetal", 0, y - 5.7, 0, 0.6, 0.7, 0.4, { color: PALETTE.impDark, texel: 2 });
-  k.add("metal", new THREE.TorusGeometry(0.28, 0.06, 8, 16), { pos: [0, y - 6.3, 0], color: PALETTE.steel });
+  // trolley over the wing plane, short chain to the hook block
+  k.box("paintedMetal", 0, y - 1.0, wz, 1.0, 0.7, 1.2, { color: PALETTE.impDark, texel: 2 });
+  k.box("emitRed", 0, y - 1.0, wz + 0.61, 0.2, 0.15, 0.01);
+  k.cyl("metal", 0, (y - 1.35 + hookY + 0.7) / 2, wz, 0.035, y - 1.35 - (hookY + 0.7), "y", { color: PALETTE.steel, segments: 6 });
+  k.box("paintedMetal", 0, hookY + 0.35, wz, 0.6, 0.7, 0.4, { color: PALETTE.impDark, texel: 2 });
   k.build(g);
+  // the load pivots at the ring: spreader bar on two slings, two more down to lugs on the wing's top edges
+  const load = new THREE.Group();
+  const lk = new Kit(ctx.materials);
+  lk.add("metal", new THREE.TorusGeometry(0.28, 0.06, 8, 16), { pos: [0, 0, 0], color: PALETTE.steel });
+  const barY = -0.7;
+  const wingY = -4.8; // wing centre: apex at -1.2 (8.1 abs), bottom at -8.4 (0.9 abs, above the base rails)
+  const lugY = wingY + 2.49; // where the hex's slanted top edge passes x = ±1.5
+  lk.box("paintedMetal", 0, barY, 0, 3.2, 0.12, 0.12, { color: PALETTE.impDark, texel: 2 });
+  lk.box("hazard", 0, barY, 0.061, 3.0, 0.1, 0.002, { texel: 1 });
+  for (const s of [-1, 1]) {
+    pipeRun(lk, [[0, -0.28, 0], [s * 1.5, barY + 0.06, 0]], 0.025, PALETTE.steel, "metal");
+    pipeRun(lk, [[s * 1.5, barY - 0.06, 0], [s * 1.5, lugY + 0.12, 0.05]], 0.025, PALETTE.steel, "metal");
+    lk.box("metal", s * 1.5, lugY + 0.05, 0.05, 0.16, 0.2, 0.08, { color: PALETTE.gunmetal });
+  }
+  wingPanel(lk, 0, wingY, -0.04, 0);
+  lk.build(load);
+  load.position.set(0, hookY, wz);
+  g.add(load);
   g.position.set(c.x, 0, c.z);
   ctx.mesh(g);
   ctx.anim((dt, t) => {
-    g.position.x = c.x + Math.sin(t * 0.09) * 5.5;
+    load.rotation.z = 0.014 * Math.sin(t * 0.9);
+    load.rotation.x = 0.008 * Math.sin(t * 0.7 + 1.3);
   });
 }
 
@@ -404,10 +453,21 @@ function props(kit, ctx, min, max, rand) {
     [60.8, -79.7],
   ]) {
     kit.cyl("paintedMetal", x, 0.6, z, 0.42, 1.2, "y", { color: PALETTE.impMid, segments: 14, texel: 1 });
-    kit.cyl("hazard", x, 0.6, z, 0.43, 0.2, "y", { segments: 14, texel: 2 });
+    kit.cyl("hazard", x, 0.6, z, 0.43, 0.2, "y", { segments: 14, texel: 1 });
     kit.cyl("metal", x, 1.21, z, 0.4, 0.03, "y", { color: PALETTE.gunmetal, segments: 14 });
     kit.collider([x - 0.45, 0, z - 0.45], [x + 0.45, 1.25, z + 0.45], "drum");
   }
+  // work floor either side of the lane: fuel bowser, tool carts and free-standing parts racks so the
+  // foreground reads as a busy shop rather than empty deck
+  bowser(kit, ctx, 46.5, -92.6, 1.25);
+  toolCart(kit, ctx, 43.2, -104.8, 0.35);
+  toolCart(kit, ctx, 46.8, -103.6, -1.1);
+  toolCart(kit, ctx, 43.4, -97.0, 0.8);
+  toolCart(kit, ctx, 52.6, -84.4, 0.2);
+  toolCart(kit, ctx, 60.6, -115.8, -0.5);
+  partsRack(kit, ctx, 43.4, -109.6, 0.0, rand);
+  partsRack(kit, ctx, 50.9, -95.9, 0.0, rand);
+  partsRack(kit, ctx, 46.2, -116.6, 1.1, rand);
   // hazard lane markings around the work area + wall decals
   for (const c of CRADLES) {
     kit.boxMM("emitAmber", [c.x - 3.4, 0.006, c.z - 6.1], [c.x + 3.4, 0.016, c.z - 5.98], {});
@@ -435,26 +495,59 @@ function props(kit, ctx, min, max, rand) {
   void max;
 }
 
+/** Free-standing parts rack: two steel uprights, three shelves of boxes and TIE spares, a lit label strip. */
+function partsRack(kit, ctx, x, z, yaw, rand) {
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+    const v = new THREE.Vector3(lx, ly, lz).applyQuaternion(q);
+    return kit.add(mat, geo, { pos: [v.x + x, ly, v.z + z], quat: q, ...extra });
+  };
+  const W = 2.4;
+  const D = 0.9;
+  const H = 2.2;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) add("metal", new THREE.BoxGeometry(0.07, H, 0.07), sx * (W / 2 - 0.04), H / 2, sz * (D / 2 - 0.04), { color: PALETTE.gunmetal });
+  for (const y of [0.15, 0.85, 1.55]) {
+    add("metal", new THREE.BoxGeometry(W, 0.05, D), 0, y, 0, { color: PALETTE.steel });
+    let u = -W / 2 + 0.15;
+    while (u < W / 2 - 0.4) {
+      const w = 0.35 + rand() * 0.55;
+      const h = 0.25 + rand() * 0.4;
+      if (rand() < 0.7) add("impPanel1", new THREE.BoxGeometry(w - 0.06, h, D - 0.25), u + w / 2, y + 0.025 + h / 2, 0, { color: rand() < 0.5 ? PALETTE.impMid : PALETTE.impDark, uv: "keep" });
+      else add("tieHull", new THREE.CylinderGeometry(0.2, 0.2, Math.min(w, D) - 0.1, 10), u + w / 2, y + 0.025 + 0.2, 0);
+      u += w + 0.1;
+    }
+  }
+  add("paintedMetal", new THREE.BoxGeometry(W, 0.16, 0.04), 0, H - 0.08, D / 2 + 0.02, { color: PALETTE.impBlack, texel: 2 });
+  add("emitAmber", new THREE.BoxGeometry(0.6, 0.06, 0.01), -0.6, H - 0.08, D / 2 + 0.045);
+  add("leds", new THREE.BoxGeometry(0.5, 0.04, 0.01), 0.6, H - 0.08, D / 2 + 0.045, { uv: "keep" });
+  const c = Math.abs(Math.cos(yaw));
+  const s = Math.abs(Math.sin(yaw));
+  const ex = (W * c + D * s) / 2 + 0.05;
+  const ez = (W * s + D * c) / 2 + 0.05;
+  kit.collider([x - ex, 0, z - ez], [x + ex, H, z + ez], "partsrack");
+  void ctx;
+}
+
 // ---------------------------------------------------------------------------
-// Lighting: amber work lights over the cradles and the tanks, cool white over the lane / consoles
+// Lighting: three floods only (the pool is shared with the main bay): amber over each cradle, cool
+// white over the lane; the other ceiling fixtures are emissive-only fill
 // ---------------------------------------------------------------------------
 function lighting(kit, ctx, min, max) {
   const y = max[1] - 2.2;
-  for (const c of CRADLES) ctx.light(pointLight(0xffb060, 44, 40, [c.x, y, c.z]));
-  ctx.light(pointLight(0xffb060, 22, 28, [46, y, -80]));
-  ctx.light(pointLight(0xe8f0ff, 40, 44, [46, y, -100]));
-  ctx.light(pointLight(0xe8f0ff, 34, 40, [64, y, -100]));
-  ctx.light(pointLight(0xffb060, 14, 20, [49, 6, -107.5]));
-  // fixtures: amber-lensed floods under the ceiling above each light
-  for (const [x, z, amber] of [
-    [CRADLES[0].x, CRADLES[0].z, true],
-    [CRADLES[1].x, CRADLES[1].z, true],
-    [46, -80, true],
-    [46, -100, false],
-    [64, -100, false],
+  ctx.light(pointLight(0xffb060, 120, 46, [CRADLES[0].x, y, CRADLES[0].z]));
+  ctx.light(pointLight(0xffb060, 90, 40, [CRADLES[1].x, y, CRADLES[1].z]));
+  ctx.light(pointLight(0xe8f0ff, 75, 40, [47, y, -100]));
+  // fixtures: amber-lensed floods under the ceiling above each light, dimmer lenses elsewhere
+  for (const [x, z, mat] of [
+    [CRADLES[0].x, CRADLES[0].z, "emitAmber"],
+    [CRADLES[1].x, CRADLES[1].z, "emitAmber"],
+    [47, -100, "emitWhite"],
+    [46, -80, "emitAmberDim"],
+    [64, -100, "emitWhiteDim"],
+    [46, -118, "emitAmberDim"],
   ]) {
     kit.box("paintedMetal", x, max[1] - 0.5, z, 1.6, 0.6, 1.6, { color: PALETTE.impDark, texel: 2 });
-    kit.box(amber ? "emitAmber" : "emitWhite", x, max[1] - 0.81, z, 1.3, 0.03, 1.3);
+    kit.box(mat, x, max[1] - 0.81, z, 1.3, 0.03, 1.3);
   }
   void min;
 }
