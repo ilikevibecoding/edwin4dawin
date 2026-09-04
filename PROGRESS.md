@@ -622,3 +622,101 @@ Measured in a browser, so V8's JIT against V8's wasm engine: **0 mismatches,
   wants a uniform so SSR can turn it down.
 - TAA and per-object motion blur were rejected, not attempted: both need a
   velocity buffer, and neither could have been scored from stills.
+
+---
+
+# Part two: the safari
+
+## Iteration 16 — the biome change
+
+**Build `34d3fc8`, live.** The forest offroad demo becomes a safari driving game.
+One route: hero truck on the spur → junction → graded mainline → a tented camp
+beside it → open grassland → the pride. Eight specialists in parallel with
+disjoint file ownership; the master owns the route (`src/world.js`), the
+cameras, the ride, the integration, the harness and the deploy.
+
+### Infrastructure first
+
+- The build stamps its git revision into the bundle and the HUD shows it. The
+  deploy tool builds from a clean worktree of HEAD — never the working tree, which
+  with eight agents editing is routinely half-finished — pushes, opens the public
+  link in a browser and reads the revision back out of the running page.
+- Performance sampling from the live loop. Its first run found "Compiling
+  shaders" reporting 6 ms and the worst in-game frame at 13.9 s: the browser
+  compiles lazily on the first frame, behind a loading screen that has gone.
+  Compiling during the load took the worst frame to 774 ms.
+- Seven camera modes, 33 automated checks.
+
+### What the specialists found
+
+Every one of these was a diagnosis, not a tuning decision.
+
+- **The glass was never there.** Round zero of the glass gauntlet measured nearly
+  every pane at zero coverage. `Kit.emit` recentred each sorted pane by holding a
+  *reference* to `boundingSphere.center` and then recomputing the sphere — so the
+  reference read back as zero and every pane rendered at the truck's origin,
+  inside the chassis. The windscreen the game shipped with since iteration 14 was
+  the interior dust film. The gauntlet's hide-and-show A/B per pane is what
+  caught it.
+- **Any road with real grade was a staircase.** `fillNear` returned the nearest
+  centreline sample's grade height: a 4–5 cm riser every 0.37 m, 20 Hz at speed,
+  worst analytic acceleration 17.8 m/s². The chassis springs had been hiding most
+  of it, but the terrain mesh and the scatter sat on the same stairs. Central
+  differences along the tangent: 1.9 m/s², and the mainline now measures smoother
+  than the trail on both cameras.
+- **Mid-distance trunks were black because of a helper.** `linear()` in the
+  vegetation shaders double-converted sRGB — `Color(hex)` already does it — so
+  every haze target was about ten times darker than its hex. Fixing that exposed
+  a second bug: fixed daytime haze colours glow once night makes them visible.
+  Both shaders now fade toward the hour's fog colour without knowing the hour.
+- **Stubbing the Vite client breaks `define`.** Three agents independently
+  patched the capture tools because blocking `/@vite/client` with an empty body
+  strips the dev server's defines and the build stamp throws. The stub keeps the
+  env module now.
+- **The overhead white blob was a roof.** A galvanised cabin roof at roughness
+  0.42, traced by raycast. Matte oxide now.
+- **`ultra` was quietly a different biome.** The finer site grid and the density
+  multiplier compounded, so 1.5 meant 2.5× the plants and ground cover closed
+  over the trail. The multiplier is grid-compensated and means plants per m².
+
+### Measured
+
+| | before (`fast`) | after (`fast`) |
+|---|---|---|
+| draw calls | 429 | 395 (hero) · 483 (camp arrival) |
+| triangles | 3.64 M | 2.16 M |
+| ride, chase / cockpit vertical RMS | 1.24 / 1.35 m/s² | 1.12 / 1.06 m/s² (now including the mainline) |
+| worst in-game frame (software raster) | 13,870 ms | 774 ms |
+| JS heap over 3 reset loops | — | +0.2 MB |
+| console / page errors | 0 | 0 |
+
+Budgets at `high`: fleet 78 calls / ~0.5 M tris for 12 vehicles; camp 50 calls /
+186 k tris / 7 real lights; savanna 309 meshes / 37 k instances / 582 k tris.
+Audio: one noise buffer, 17 oscillators, ~30 biquads, under 1% of a core; a 30 s
+scripted drive peaks at 0.73 with the compressor never pulling more than 3.9 dB.
+
+### Frames
+
+`shots/iter_16/` (day: hero, mainroad, forest, front, interior), `shots/iter_16d/`
+(dusk), `shots/iter_16n/` (night), `shots/camp_16/` and `shots/camp_16n/`.
+
+### Still open, carried into round one of the gauntlets
+
+- The pride is still in flight (lion agent). Wildlife camera and cue hooks are
+  wired and waiting.
+- A pale band and a thin dark line at the far skyline: the vegetation's
+  `forestSkirt` at 420 m fogged to airlight, plus the sky's `ridge_*` cards that
+  were authored for the forest ridge. Three agents saw it from three sides.
+- Puddle and water-hole reflections return a saturated forest blue that no
+  longer matches the warm sky.
+- Dusk crown undersides read a touch blue: the `uSky` dusk hue was tuned for a
+  closed canopy.
+- Brake caliper barely reads through the rim; interior vinyl a touch pale in
+  full sun; the door mirror reflects an analytic sky, not the scene.
+- Fleet: dents are shade only; cracked lenses read clean at three-quarter angles;
+  tread is a lug ring.
+- Camp: thin poles flat-shade at close range (merged non-indexed geometry
+  recomputes face normals); slot-turn ruts read as a lattice from low angles;
+  sub-pixel lanterns vanish at 512 px.
+- Crown foliage shows flat cards inside 5 m; termite mounds too smooth; plume
+  tufts read near-white in low sun.

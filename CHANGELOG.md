@@ -17,50 +17,66 @@ numbers the targets are about.
 
 ---
 
-## Safari, iteration 16 — foundation (in progress)
+## Safari, iteration 16 — the biome change
 
-**Build:** see PROGRESS.md iteration 16 for the revision when it lands.
+**Build `34d3fc8`** — live, smoke-tested (page boots, HUD reads `build 34d3fc8 · 2026-09-04 11:28Z`, zero page errors).
 
 ### What changed
 
-- The route is now written down once, in `src/world.js`, as road parameters:
-  hero truck on the spur → junction → graded mainline → campground → open
-  savanna → the pride. Auto-drive turns toward the camp at the junction.
-- Skeleton modules with contracts for the campground, the vehicle fleet, the
-  wildlife and the audio, wired into boot and the frame. Eight specialists are
-  filling them in in parallel.
-- The build stamps its git revision into the bundle and the HUD shows it.
-- Seven camera modes: chase, bonnet, cockpit, cinematic director (six shots,
-  two of them planted beside the road so the truck drives through frame),
-  wildlife long lens from the roof hatch, inspection orbit, and photo mode (`P`).
-- Performance sampling from the live loop (`debugAPI.perf`, `tools/perfrun.mjs`).
-- Shaders compiled during the loading screen instead of on the first frame.
+- **The world is East-African savanna.** Laterite roads, straw grassland, umbrella
+  and flat acacias, marula, thorn scrub, dead trees, three granite kopjes,
+  termite mounds, a dry riverbed under a culvert, a water hole with a mud margin,
+  far hills. Trees thin toward the open plain.
+- **Two roads and a route.** The spur crosses a graded gravel mainline; auto-drive
+  turns toward the camp. A graded pad, an access apron, an overlook with a
+  signboard, park signs, kilometre posts, a ranger boom gate.
+- **A tented camp**: 118 objects, twelve parking slots, a lookout, radio mast,
+  solar, water, fuel stored away from fire, thorn boma, fire pits with GPU
+  particles and lanterns that light at night.
+- **A fleet of twelve** (sixteen at `ultra`) across ten kinds, none clones.
+- **Four hours**: day, dusk (golden hour), night, overcast; kilometre haze,
+  crepuscular rays through dust, heat shimmer.
+- **The hero truck** gains a roof tent, spotlight, swing-out spare, fridge slide,
+  reverse lamps, laterite dust with bush scoring — and its glass, which round zero
+  of the glass gauntlet found had never been rendering (see PROGRESS.md).
+- **Sound**, all synthesised: engine with audible upshifts, tyres that change
+  with the surface, wind, a savanna ambience bed, horn on `H`.
+- Seven camera modes, a revision stamp in the HUD, a deploy tool that proves the
+  live page serves HEAD, and a performance harness.
 
-### Measured
+### Measured (`fast`, software raster — structural numbers are real, fps is not)
 
 | | before | after |
 |---|---|---|
-| worst in-game frame (software raster, `fast`) | 13,870 ms | 774 ms |
-| "Compiling shaders" boot stage | 6 ms (lazy, hidden in first frame) | 10,635 ms (real) |
-| draw calls / triangles (`fast`) | 424 / 3.64 M | unchanged |
-| JS heap after 3 reset loops | — | 224.1 → 224.3 MB (+0.2) |
-| console/page errors | 0 | 0 |
+| draw calls | 429 | 395 (hero) · 483 (camp arrival) |
+| triangles | 3.64 M | 2.16 M |
+| ride, chase / cockpit vertical RMS | 1.24 / 1.35 m/s² | 1.12 / 1.06 m/s² |
+| worst in-game frame | 13,870 ms | 774 ms |
+| heap over 3 reset loops | — | +0.2 MB |
+| camera checks | 21 | 33, all passing |
+| console / page errors | 0 | 0 |
 
 ### Frames
 
-`shots/interact5/` — camera-mode checks, all 21 passing.
+`shots/iter_16/`, `shots/iter_16d/`, `shots/iter_16n/`, `shots/camp_16/`, `shots/camp_16n/`.
 
 ### Known limitations
 
-- The world is still the forest until the wave-one specialists land.
-- GPU time reports n/a under the software rasteriser even though the timer
-  extension is present; queries never resolve inside the sampling window.
+- The lions are still in flight; the wildlife camera points at where they will be.
+- A pale band and a thin dark line at the far skyline (vegetation skirt at
+  420 m plus forest-era ridge cards).
+- Water reflections still forest-blue.
+- GPU time reports n/a under the software rasteriser.
 
 ### Failed experiments
 
-None yet this iteration.
+- Building the deploy bundle from the working tree while agents were editing:
+  failed twice on half-finished terrain imports. Deploys now build from HEAD.
+- Stubbing the Vite client with an empty body to survive HMR reloads: strips
+  `define` and breaks the build stamp. Three agents hit it; the stub keeps the
+  env module now.
 
 ### Next weakest area
 
-Everything downstream of the biome change: vegetation, ground colour, lighting,
-the campground, the fleet, the lions.
+The lions, then the far skyline band, then gauntlet round one across every
+family with three critics.
