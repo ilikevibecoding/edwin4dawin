@@ -1,4 +1,4 @@
-# Kestrel — playable build
+# ISD Vigilant — playable build
 
-Production build of the spaceship interior demo (source: branch `cursor/spaceship-interior-demo-ad4e`, commit ad511782).
-Built with `vite build --base=./` so it can be served from any static path.
+Production build of the Star Destroyer demo (source: branch `cursor/star-destroyer-ad4e`, commit dc634901).
+Open index.html over HTTP. Desktop: drag to orbit, B to board, WASD/mouse inside, V to exit. Touch: on-screen buttons, left joystick / right look.
