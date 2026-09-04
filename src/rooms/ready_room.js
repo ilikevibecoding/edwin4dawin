@@ -3,6 +3,7 @@
 // a briefing podium, a service alcove (beverage dispenser, cups), honour boards and plaques, a
 // padded bench, a datapad rack. Softer grey panels, dark carpet instead of the deck lane. Accent gold.
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { PALETTE } from "../materials.js";
 import { impRoomShell, impConsole, impChair, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL, impDecalRect } from "../textures_imperial.js";
@@ -10,6 +11,58 @@ import { deckASetup, wallScreen, wireSphereGeometry, lineSegments, mergedMesh, d
 
 const BRASS = new THREE.Color("#b08a52");
 const GOLD = "deckA_emitGold";
+const CLOTH = new THREE.Color("#1e1f25");
+
+/** Hanging wall banner: brass rod, dark cloth with the cog emblem and a glyph line, gold hem bar. */
+function banner(f, u, vTop) {
+  const bw = 0.9;
+  const bh = 2.65;
+  f.cylU("impMetal", u, vTop, 0.16, 0.02, bw + 0.3, { color: BRASS, segments: 10 });
+  for (const s of [-1, 1]) f.box("impMetal", u + s * (bw / 2 + 0.1), vTop, 0.08, 0.04, 0.05, 0.16, { color: PALETTE.impGreyDark });
+  f.box("fabric", u, vTop - 0.04 - bh / 2, 0.14, bw, bh, 0.03, { color: CLOTH, texel: 2 });
+  f.decal(IMP_DECAL.cog, u, vTop - 1.0, 0.16, 0.62);
+  f.decal(IMP_DECAL.glyphs1, u, vTop - 1.75, 0.16, 0.34);
+  f.box(GOLD, u, vTop - 0.04 - bh + 0.08, 0.16, bw * 0.8, 0.015, 0.006);
+  f.box("impMetal", u, vTop - 0.04 - bh - 0.02, 0.14, bw + 0.04, 0.04, 0.05, { color: BRASS });
+  f.collider(u - bw / 2 - 0.1, u + bw / 2 + 0.1, 0, vTop + 0.05, 0.08, 0.22, "banner");
+}
+
+/** Presentation model of the Star Destroyer on a brass stand (light grey solid wedge, terraces, tower). */
+function shipModel(f, cu, cv, cn, L) {
+  f.box("impMetal", cu, cv + 0.01, cn, L + 0.1, 0.02, 0.36, { color: BRASS, texel: 2 });
+  const y0 = cv + 0.12; // hull underside at the stern
+  const W = 0.3 * L;
+  const yT = 0.033 * L;
+  const yB = -0.049 * L;
+  // stand posts reach the sloping underside (bow end sits higher than the stern end)
+  for (const s of [-1, 1]) {
+    const top = y0 - yB * (0.5 - 0.22 * s);
+    f.cylV("impMetal", cu + s * L * 0.22, (cv + 0.02 + top) / 2, cn, 0.012, top - cv - 0.02 + 0.006, { color: BRASS, segments: 8 });
+  }
+  // hull: wedge as six outward-facing triangles (bow at -z, stern at +z), then rotated to lie along u
+  const bow = [0, 0, -L / 2];
+  const sTL = [-W, yT, L / 2];
+  const sTR = [W, yT, L / 2];
+  const sBL = [-W, yB, L / 2];
+  const sBR = [W, yB, L / 2];
+  const hull = new THREE.BufferGeometry();
+  hull.setAttribute("position", new THREE.Float32BufferAttribute([...bow, ...sTL, ...sTR, ...bow, ...sBR, ...sBL, ...sBL, ...sBR, ...sTR, ...sBL, ...sTR, ...sTL, ...bow, ...sBL, ...sTL, ...bow, ...sTR, ...sBR], 3));
+  hull.setAttribute("uv", new THREE.Float32BufferAttribute(new Float32Array(18 * 2), 2)); // same attribute set as the boxes (kit re-projects UVs)
+  hull.computeVertexNormals();
+  const parts = [hull];
+  const block = (zc, len, hw, y, hgt) => parts.push(new THREE.BoxGeometry(hw * 2, hgt, len).translate(0, y + hgt / 2, zc));
+  block(0.12 * L, 0.56 * L, 0.14 * L, yT, 0.02 * L);
+  block(0.2 * L, 0.42 * L, 0.1 * L, yT + 0.02 * L, 0.018 * L);
+  block(0.27 * L, 0.3 * L, 0.07 * L, yT + 0.038 * L, 0.016 * L);
+  block(0.32 * L, 0.06 * L, 0.024 * L, yT + 0.054 * L, 0.055 * L);
+  block(0.32 * L, 0.11 * L, 0.065 * L, yT + 0.109 * L, 0.024 * L);
+  for (const s of [-1, 1]) parts.push(new THREE.SphereGeometry(0.018 * L, 10, 8).translate(s * 0.04 * L, yT + 0.133 * L, 0.29 * L));
+  const model = mergeGeometries(parts.map((g) => (g.index ? g.toNonIndexed() : g)), false);
+  model.rotateY(Math.PI / 2).translate(0, y0 - yB - cv, 0); // +90 deg about V: bow to -u, stern to +u
+  f.add("impMetal", model, cu, cv, cn, { color: PALETTE.impGrey, texel: 2 });
+  // engine glow on the stern face
+  for (const ex of [-0.12, 0, 0.12]) f.box("emitBlue", cu + L / 2 + 0.004, y0 + 0.035 * L, cn + ex * L, 0.006, 0.04 * L, 0.05 * L);
+}
 
 export function buildReadyRoom(kit, ctx, room) {
   const [w, h, d] = room.size;
@@ -30,9 +83,12 @@ export function buildReadyRoom(kit, ctx, room) {
     floor: { lane: false },
     ceiling: { troughs: 2, troughW: 0.6, beamStep: 4.0 },
   });
-  // carpet strip with a brass edge trim replaces the deck lane
+  // carpet strip with a brass edge trim replaces the deck lane; a large cog emblem woven in between
+  // the door and the table (upright as seen from the door)
   kit.boxMM("fabric", [-6.6, 0, -4.3], [8.2, 0.014, 4.3], { color: new THREE.Color("#3a3c42"), texel: 2 });
   for (const [a, b] of [[[-6.66, -4.36], [8.26, -4.3]], [[-6.66, 4.3], [8.26, 4.36]], [[-6.66, -4.36], [-6.6, 4.36]], [[8.2, -4.36], [8.26, 4.36]]]) kit.boxMM("impMetal", [a[0], 0, a[1]], [b[0], 0.02, b[1]], { color: BRASS, texel: 2 });
+  kit.add("decalImp", new THREE.PlaneGeometry(2.6, 2.6), { pos: [-4.6, 0.02, 0], rot: [-Math.PI / 2, 0, Math.PI / 2], uv: "keep", uvRect: impDecalRect(IMP_DECAL.cog) });
+  kit.add("impMetal", new THREE.RingGeometry(1.45, 1.5, 64).rotateX(-Math.PI / 2), { pos: [-4.6, 0.017, 0], color: BRASS });
 
   // ---- conference table ---------------------------------------------------------------------------
   const tx = 1.0;
@@ -112,6 +168,8 @@ export function buildReadyRoom(kit, ctx, room) {
     // podium facing the table
     const pyaw = yawToward(8.3, 2.4, tx, 0);
     impConsole(kit, 8.3, 0, 2.4, 1.0, 0.6, { yaw: pyaw, seed: 41, screens: ["scrAmber1"], accentKey, height: 1.02 });
+    // hanging banners flanking the display: brass rod, dark cloth with the cog, gold hem bar
+    for (const s of [-1, 1]) banner(f, hz + s * 5.2, 3.45);
   }
 
   // ---- N wall: service alcove (counter, dispenser, cups, shelf) + a smaller display -----------
@@ -160,6 +218,38 @@ export function buildReadyRoom(kit, ctx, room) {
     f.decal(IMP_DECAL.glyphs3, cu + 1.1, 2.2, 0.09, 0.5);
     wallScreen(f, 5.5, 2.0, 1.6, 0.9, "scrWhite1", { accentKey: GOLD, n0: 0.08 });
     impWallLight(f, 1.6, 2.6, { key: "emitWhiteSoft", w: 0.7 });
+    // sideboard under the display with a presentation model of the ship on a brass stand
+    {
+      const su = 5.5;
+      const sw = 2.4;
+      f.box("impTrim", su, 0.45, 0.33, sw, 0.9, 0.5, { color: PALETTE.impBlack, texel: 1 });
+      f.box("impMetal", su, 0.06, 0.33, sw + 0.04, 0.12, 0.54, { color: PALETTE.impCharcoal, texel: 1 });
+      for (const s of [-1, 1]) {
+        f.box("impPanel1", su + s * (sw / 4 + 0.01), 0.5, 0.585, sw / 2 - 0.08, 0.62, 0.02, { color: panelColor, uv: "world", texel: 1 });
+        f.box("impMetal", su + s * 0.12, 0.5, 0.605, 0.03, 0.2, 0.02, { color: BRASS });
+      }
+      f.box("impMetal", su, 0.905, 0.34, sw + 0.06, 0.03, 0.56, { color: BRASS, texel: 2 });
+      f.box("impGloss", su, 0.935, 0.33, sw + 0.02, 0.04, 0.52);
+      f.collider(su - sw / 2, su + sw / 2, 0, 0.96, 0.08, 0.6, "sideboard");
+      shipModel(f, su, 0.955, 0.33, 1.1);
+      cup(kit, ...f.pos(su + 1.0, 0.955, 0.42).toArray(), { color: PALETTE.impGrey });
+    }
+  }
+
+  // ---- lounge corner (S side, near the door): round table with two chairs ---------------------
+  {
+    const lx = -3.6;
+    const lz = 5.0;
+    kit.cyl("impMetal", lx, 0.03, lz, 0.36, 0.06, "y", { color: PALETTE.impCharcoal, segments: 20, texel: 1 });
+    kit.cyl("impTrim", lx, 0.37, lz, 0.1, 0.68, "y", { color: PALETTE.impBlack, segments: 16, texel: 1 });
+    kit.cyl("impMetal", lx, 0.705, lz, 0.47, 0.03, "y", { color: BRASS, segments: 32, texel: 2 });
+    kit.cyl("impGloss", lx, 0.74, lz, 0.45, 0.04, "y", { segments: 32 });
+    kit.add(GOLD, new THREE.TorusGeometry(0.2, 0.006, 6, 32).rotateX(Math.PI / 2), { pos: [lx, 0.765, lz] });
+    datapad(kit, lx + 0.12, 0.76, lz - 0.14, 2.6, { screen: "scrWhite0", accentKey });
+    cup(kit, lx - 0.2, 0.76, lz + 0.16);
+    cup(kit, lx + 0.22, 0.76, lz + 0.2, { color: PALETTE.impGrey });
+    kit.collider([lx - 0.47, 0, lz - 0.47], [lx + 0.47, 0.78, lz + 0.47], "loungetable");
+    for (const s of [-1, 1]) impChair(kit, lx + s * 0.95, 0, lz + 0.15 * s, yawToward(lx + s * 0.95, lz + 0.15 * s, lx, lz));
   }
 
   // ---- S wall: plaques + honour board ---------------------------------------------------------
@@ -213,11 +303,15 @@ export function buildReadyRoom(kit, ctx, room) {
   walls.W.frame.decal(IMP_DECAL.cog, hz + 1.6, 2.2, 0.09, 0.45);
 
   // ---- lights: warm key over the table, warm fills, gold under-table glow ----------------------
-  kit.light({ type: "spot", pos: [tx, h - 0.2, 0], target: [tx, th, 0], color: warm, intensity: lux(h - 0.2 - th, 2.8), distance: 10, angle: 0.75, penumbra: 0.6, shadow: true, priority: 0.95 });
-  kit.light({ type: "point", pos: [tx - 3.0, h - 0.6, 0], color: 0xffd6a6, intensity: lux(h - 0.6, 1.5), distance: 12, priority: 0.55 });
-  kit.light({ type: "point", pos: [tx + 3.0, h - 0.6, 0], color: 0xffd6a6, intensity: lux(h - 0.6, 1.5), distance: 12, priority: 0.54 });
-  kit.light({ type: "point", pos: [6.0, h - 0.8, -6.4], color: 0xffd9b0, intensity: lux(h - 0.8, 1.0), distance: 9, priority: 0.45 });
-  kit.light({ type: "point", pos: [8.6, 2.6, 0], color: 0xdfe8ff, intensity: lux(2.6, 0.9), distance: 8, priority: 0.42 });
-  kit.light({ type: "point", pos: [-8.2, h - 0.7, 2.0], color: warm, intensity: lux(h - 0.7, 1.0), distance: 9, priority: 0.44 });
-  kit.light({ type: "point", pos: [tx, 0.35, 0], color: 0xe8c98c, intensity: 3.0, distance: 6, priority: 0.3 });
+  kit.light({ type: "spot", pos: [tx, h - 0.2, 0], target: [tx, th, 0], color: warm, intensity: lux(h - 0.2 - th, 3.4), distance: 10, angle: 0.85, penumbra: 0.6, shadow: true, priority: 0.95 });
+  kit.light({ type: "point", pos: [tx - 3.0, h - 0.6, 0], color: 0xffcf9a, intensity: lux(h - 0.6, 2.0), distance: 12, priority: 0.55 });
+  kit.light({ type: "point", pos: [tx + 3.0, h - 0.6, 0], color: 0xffcf9a, intensity: lux(h - 0.6, 2.0), distance: 12, priority: 0.54 });
+  kit.light({ type: "point", pos: [6.0, h - 0.8, -6.4], color: 0xffd9b0, intensity: lux(h - 0.8, 1.4), distance: 9, priority: 0.45 });
+  // display-wall fill kept high so its mirror image on the glossy display falls above the screen
+  // for anyone standing between the door and the podium
+  kit.light({ type: "point", pos: [8.6, 3.6, 0], color: 0xdfe8ff, intensity: lux(3.6, 1.0), distance: 9, priority: 0.42 });
+  kit.light({ type: "point", pos: [-7.0, h - 0.6, 0], color: 0xffcf9a, intensity: lux(h - 0.6, 1.8), distance: 10, priority: 0.5 });
+  kit.light({ type: "point", pos: [tx, 0.35, 0], color: 0xe8c98c, intensity: 4.0, distance: 6, priority: 0.3 });
+  // small display light over the ship model on the sideboard
+  kit.light({ type: "point", pos: [-4.5, 2.2, -6.9], color: warm, intensity: 3.5, distance: 5, priority: 0.28 });
 }

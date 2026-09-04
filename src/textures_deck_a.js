@@ -332,7 +332,9 @@ export function ensureDeckAMaterials(materials) {
   materials.deckA_waveform.userData.scroll = wave; // the comms room advances scroll.offset.x per frame
 
   materials.deckA_holoLine = holoLine(0x7fb8ff, 0.85);
+  materials.deckA_holoLineBright = holoLine(0xcfe6ff, 1.0);
   materials.deckA_holoLineDim = holoLine(0x4f8dff, 0.4);
+  materials.deckA_holoDim = holo(0x5fa8ff, 0.14);
   materials.deckA_holoLineAmber = holoLine(0xffc060, 0.85);
   materials.deckA_holoLineCyan = holoLine(0x8fe8ff, 0.85);
   materials.deckA_holoAmber = holo(0xffb347, 0.3);
@@ -343,6 +345,6 @@ export function ensureDeckAMaterials(materials) {
   // animated emissives (intensity driven per frame by the owning room while it is visible)
   materials.deckA_emitRedPulse = emit("#ff3b2e", 2.4);
   materials.deckA_emitGold = emit("#e8c98c", 2.0);
-  for (const k of ["deckA_holoLine", "deckA_holoLineDim", "deckA_holoLineAmber", "deckA_holoLineCyan", "deckA_holoAmber", "deckA_holoAmberBright", "deckA_holoCyan", "deckA_holoCyanBright"]) materials[k].name = k;
+  for (const k of ["deckA_holoLine", "deckA_holoLineBright", "deckA_holoLineDim", "deckA_holoLineAmber", "deckA_holoLineCyan", "deckA_holoDim", "deckA_holoAmber", "deckA_holoAmberBright", "deckA_holoCyan", "deckA_holoCyanBright"]) materials[k].name = k;
   return materials;
 }

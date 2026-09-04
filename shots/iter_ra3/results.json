@@ -1,0 +1,360 @@
+{
+  "iter": "ra3",
+  "views": {
+    "room:intel": {
+      "frameMs": 3602.87,
+      "fps": 0.3,
+      "p95Ms": 3708.3,
+      "jsMs": 1.95,
+      "calls": 230,
+      "triangles": 231022,
+      "points": 0,
+      "lines": 483,
+      "geometries": 293,
+      "textures": 117,
+      "textureMB": 0,
+      "programs": 50,
+      "shaderCompiles": 50,
+      "longTasks": 26,
+      "longTaskMs": 99198,
+      "loadMs": 18428,
+      "pixelRatio": 1,
+      "jsHeapMB": 204.5,
+      "visibleCells": 7,
+      "activeLights": 19,
+      "current": "intel",
+      "cells": 46,
+      "colliders": 777,
+      "floors": 65,
+      "mode": "interior",
+      "exteriorTriangles": 16360,
+      "poolLights": 19,
+      "qualityLevel": 3
+    },
+    "room:ready_room": {
+      "frameMs": 3536.44,
+      "fps": 0.3,
+      "p95Ms": 3299.5,
+      "jsMs": 0.86,
+      "calls": 233,
+      "triangles": 217982,
+      "points": 0,
+      "lines": 192,
+      "geometries": 375,
+      "textures": 118,
+      "textureMB": 0,
+      "programs": 50,
+      "shaderCompiles": 50,
+      "longTasks": 37,
+      "longTaskMs": 138251,
+      "loadMs": 18428,
+      "pixelRatio": 1,
+      "jsHeapMB": 204.9,
+      "visibleCells": 7,
+      "activeLights": 19,
+      "current": "ready_room",
+      "cells": 46,
+      "colliders": 777,
+      "floors": 65,
+      "mode": "interior",
+      "exteriorTriangles": 16360,
+      "poolLights": 19,
+      "qualityLevel": 3
+    },
+    "room:comms": {
+      "frameMs": 3443.42,
+      "fps": 0.3,
+      "p95Ms": 3587.5,
+      "jsMs": 0.93,
+      "calls": 214,
+      "triangles": 210772,
+      "points": 0,
+      "lines": 720,
+      "geometries": 390,
+      "textures": 118,
+      "textureMB": 0,
+      "programs": 50,
+      "shaderCompiles": 50,
+      "longTasks": 49,
+      "longTaskMs": 179585,
+      "loadMs": 18428,
+      "pixelRatio": 1,
+      "jsHeapMB": 204.8,
+      "visibleCells": 7,
+      "activeLights": 19,
+      "current": "comms",
+      "cells": 46,
+      "colliders": 777,
+      "floors": 65,
+      "mode": "interior",
+      "exteriorTriangles": 16360,
+      "poolLights": 19,
+      "qualityLevel": 3
+    }
+  },
+  "checks": {},
+  "stats": {
+    "frameMs": 3487.5,
+    "fps": 0.3,
+    "p95Ms": 3884.2,
+    "jsMs": 1.02,
+    "calls": 212,
+    "triangles": 209260,
+    "points": 0,
+    "lines": 720,
+    "geometries": 390,
+    "textures": 118,
+    "textureMB": 0,
+    "programs": 50,
+    "shaderCompiles": 50,
+    "longTasks": 49,
+    "longTaskMs": 179585,
+    "loadMs": 18428,
+    "pixelRatio": 1,
+    "jsHeapMB": 205,
+    "visibleCells": 7,
+    "activeLights": 19,
+    "current": "comms",
+    "cells": 46,
+    "colliders": 777,
+    "floors": 65,
+    "mode": "interior",
+    "exteriorTriangles": 16360,
+    "poolLights": 19,
+    "qualityLevel": 3
+  },
+  "logs": [
+    "[debug] [vite] connecting...",
+    "[debug] [vite] connected."
+  ],
+  "buildLog": [
+    {
+      "room": "bridge",
+      "ms": 109.6,
+      "builder": "buildBridge"
+    },
+    {
+      "room": "lobby_a",
+      "ms": 24.1,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_a",
+      "ms": 20.8,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "intel",
+      "ms": 46.2,
+      "builder": "buildIntel"
+    },
+    {
+      "room": "ready_room",
+      "ms": 22.1,
+      "builder": "buildReadyRoom"
+    },
+    {
+      "room": "comms",
+      "ms": 42,
+      "builder": "buildComms"
+    },
+    {
+      "room": "tactical",
+      "ms": 35.5,
+      "builder": "buildTactical"
+    },
+    {
+      "room": "navigation",
+      "ms": 27.3,
+      "builder": "buildNavigation"
+    },
+    {
+      "room": "lobby_b",
+      "ms": 9.8,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "observation",
+      "ms": 32.7,
+      "builder": "buildObservation"
+    },
+    {
+      "room": "corridor_b",
+      "ms": 14.5,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "officers_quarters",
+      "ms": 17.8,
+      "builder": "buildOfficersQuarters"
+    },
+    {
+      "room": "briefing",
+      "ms": 17.3,
+      "builder": "buildBriefing"
+    },
+    {
+      "room": "lounge",
+      "ms": 16.1,
+      "builder": "buildLounge"
+    },
+    {
+      "room": "escape_pods",
+      "ms": 14,
+      "builder": "buildEscapePods"
+    },
+    {
+      "room": "lobby_c",
+      "ms": 7.6,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_c",
+      "ms": 15.6,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "crew_quarters",
+      "ms": 17.8,
+      "builder": "buildCrewQuarters"
+    },
+    {
+      "room": "mess_hall",
+      "ms": 30.7,
+      "builder": "buildMessHall"
+    },
+    {
+      "room": "medbay",
+      "ms": 35.6,
+      "builder": "buildMedbay"
+    },
+    {
+      "room": "armory",
+      "ms": 14.8,
+      "builder": "buildArmory"
+    },
+    {
+      "room": "detention",
+      "ms": 20.6,
+      "builder": "buildDetention"
+    },
+    {
+      "room": "lobby_d",
+      "ms": 9.1,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "corridor_d",
+      "ms": 18.9,
+      "builder": "buildCorridor"
+    },
+    {
+      "room": "engineering",
+      "ms": 31.1,
+      "builder": "buildEngineering"
+    },
+    {
+      "room": "hyperdrive",
+      "ms": 30.3,
+      "builder": "buildHyperdrive"
+    },
+    {
+      "room": "life_support",
+      "ms": 16.6,
+      "builder": "buildLifeSupport"
+    },
+    {
+      "room": "maintenance",
+      "ms": 30.9,
+      "builder": "buildMaintenance"
+    },
+    {
+      "room": "reactor",
+      "ms": 94.9,
+      "builder": "buildReactor"
+    },
+    {
+      "room": "hangar",
+      "ms": 503.7,
+      "builder": "buildHangar"
+    },
+    {
+      "room": "fighter_bay",
+      "ms": 84.5,
+      "builder": "buildFighterBay"
+    },
+    {
+      "room": "shuttle_bay",
+      "ms": 80.2,
+      "builder": "buildShuttleBay"
+    },
+    {
+      "room": "cargo",
+      "ms": 76.5,
+      "builder": "buildCargo"
+    },
+    {
+      "room": "lobby_e",
+      "ms": 8.3,
+      "builder": "buildLobby"
+    },
+    {
+      "room": "flight_control",
+      "ms": 17,
+      "builder": "buildFlightControl"
+    },
+    {
+      "room": "lift_L1_A",
+      "ms": 2.7,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_A",
+      "ms": 2.4,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_B",
+      "ms": 3.1,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_B",
+      "ms": 4.7,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_C",
+      "ms": 2.3,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_C",
+      "ms": 2.2,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_D",
+      "ms": 2.4,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_D",
+      "ms": 2.3,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L1_E",
+      "ms": 2.3,
+      "builder": "buildLift"
+    },
+    {
+      "room": "lift_L2_E",
+      "ms": 2.4,
+      "builder": "buildLift"
+    },
+    {
+      "total": 5297
+    }
+  ]
+}

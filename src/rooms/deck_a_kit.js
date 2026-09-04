@@ -17,7 +17,7 @@ const ONE = new THREE.Vector3(1, 1, 1);
 /** Register the deckA_* materials and keep hologram keys out of the shadow pass. */
 export function deckASetup(kit) {
   ensureDeckAMaterials(kit.materials);
-  for (const k of ["deckA_holoAmber", "deckA_holoAmberBright", "deckA_holoCyan", "deckA_holoCyanBright", "holo", "holoBright", "viewGlass"]) kit.noShadowKeys.add(k);
+  for (const k of ["deckA_holoDim", "deckA_holoAmber", "deckA_holoAmberBright", "deckA_holoCyan", "deckA_holoCyanBright", "holo", "holoBright", "viewGlass"]) kit.noShadowKeys.add(k);
 }
 
 /** Yaw for an object whose local -Z (its "front") should point from (x, z) toward (tx, tz). */
@@ -51,6 +51,10 @@ export function lineSegments(geo, material) {
   l.castShadow = false;
   l.receiveShadow = false;
   return l;
+}
+/** Several position-only line geometries as one LineSegments (one draw call). */
+export function mergedLines(geos, material) {
+  return lineSegments(mergeGeometries(geos, false), material);
 }
 
 // ---------------------------------------------------------------------------
@@ -409,6 +413,36 @@ export function stepBlock(kit, axis, from, to, a0, a1, y0, y1, n, opts = {}) {
   }
   if (axis === "x") kit.stairs(Math.min(from, to), a0, Math.max(from, to), a1, "x", from, to, y0, y1, n);
   else kit.stairs(a0, Math.min(from, to), a1, Math.max(from, to), "z", from, to, y0, y1, n);
+}
+
+/**
+ * Railing with the impRailing look (two rails, posts, optional light strip) but a collider chain of
+ * short boxes instead of one AABB, so diagonal runs (octagon flats) do not fence off the whole
+ * bounding square around them.
+ */
+export function segRailing(kit, from, to, y = 0, opts = {}) {
+  const { h = 1.05, postStep = 1.6, color = PALETTE.impGreyDark, light = null, segLen = 0.45 } = opts;
+  const a = new THREE.Vector3(from[0], y, from[1]);
+  const b = new THREE.Vector3(to[0], y, to[1]);
+  const dir = b.clone().sub(a);
+  const L = dir.length();
+  dir.normalize();
+  const mid = a.clone().add(b).multiplyScalar(0.5);
+  const q = new THREE.Quaternion().setFromAxisAngle(UP, Math.atan2(dir.x, dir.z));
+  for (const [yy, r] of [[y + h, 0.03], [y + h * 0.55, 0.02]]) kit.add("impMetal", new THREE.CylinderGeometry(r, r, L, 10).rotateX(Math.PI / 2), { pos: [mid.x, yy, mid.z], quat: q, color, uv: "scale", uvScale: [0.3, L] });
+  const n = Math.max(2, Math.round(L / postStep) + 1);
+  for (let i = 0; i < n; i++) {
+    const p = a.clone().addScaledVector(dir, (L * i) / (n - 1));
+    kit.box("impTrim", p.x, y + h / 2, p.z, 0.06, h, 0.06, { color: PALETTE.impBlack });
+    kit.box("impTrim", p.x, y + 0.03, p.z, 0.16, 0.06, 0.16, { color: PALETTE.impBlack });
+  }
+  if (light) kit.add(light, new THREE.BoxGeometry(0.03, 0.03, L - 0.2), { pos: [mid.x, y + h - 0.06, mid.z], quat: q });
+  const m = Math.max(1, Math.ceil(L / segLen));
+  for (let i = 0; i < m; i++) {
+    const p0 = a.clone().addScaledVector(dir, (L * i) / m);
+    const p1 = a.clone().addScaledVector(dir, (L * (i + 1)) / m);
+    kit.collider([Math.min(p0.x, p1.x) - 0.06, y, Math.min(p0.z, p1.z) - 0.06], [Math.max(p0.x, p1.x) + 0.06, y + h, Math.max(p0.z, p1.z) + 0.06], "rail");
+  }
 }
 
 /**

@@ -214,10 +214,13 @@ export function buildComms(kit, ctx, room) {
 
   // ---- lights -----------------------------------------------------------------------------------
   kit.light({ type: "spot", pos: [cx, h - 0.25, cz], target: [cx, P.y, cz], color: 0xdfe8ff, intensity: lux(h - 0.25 - P.y, 1.7), distance: 12, angle: 0.62, penumbra: 0.5, shadow: true, priority: 0.95 });
-  kit.light({ type: "point", pos: [cx, h - 0.6, -5.6], color: 0xe4ecff, intensity: lux(h - 0.6, 1.2), distance: 14, priority: 0.55 });
-  kit.light({ type: "point", pos: [cx, h - 0.6, 5.6], color: 0xe4ecff, intensity: lux(h - 0.6, 1.2), distance: 14, priority: 0.54 });
-  kit.light({ type: "point", pos: [7.5, h - 0.6, 0], color: 0xe4ecff, intensity: lux(h - 0.6, 1.1), distance: 13, priority: 0.5 });
-  kit.light({ type: "point", pos: [-11.0, h - 1.2, 0], color: 0xe4ecff, intensity: lux(h - 1.2, 0.9), distance: 12, priority: 0.46 });
+  // white fills sit over the middle of each arc (x -6.8) rather than beside the platform: from the
+  // doorway the gloss tops of the two nearest consoles mirror anything at (-3, 4.4, +-5.6) as two
+  // hard white highlights
+  kit.light({ type: "point", pos: [-6.8, h - 0.6, -6.0], color: 0xe4ecff, intensity: lux(h - 0.6, 1.5), distance: 14, priority: 0.55 });
+  kit.light({ type: "point", pos: [-6.8, h - 0.6, 6.0], color: 0xe4ecff, intensity: lux(h - 0.6, 1.5), distance: 14, priority: 0.54 });
+  kit.light({ type: "point", pos: [10.5, h - 0.6, 0], color: 0xe4ecff, intensity: lux(h - 0.6, 1.3), distance: 13, priority: 0.5 });
+  kit.light({ type: "point", pos: [-11.0, h - 1.2, 0], color: 0xe4ecff, intensity: lux(h - 1.2, 1.1), distance: 12, priority: 0.46 });
   kit.light({ type: "point", pos: [cx, P.y + 2.5, cz], color: cyan, intensity: 7.0, distance: 10, priority: 0.62 });
   kit.light({ type: "point", pos: [cx, 0.45, -5.6], color: cyan, intensity: 5.5, distance: 10, priority: 0.36 });
   kit.light({ type: "point", pos: [cx, 0.45, 5.6], color: cyan, intensity: 5.5, distance: 10, priority: 0.35 });

@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRoomShell, impConsole, impRailing, impPillar, impWallGear, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
-import { deckASetup, yawToward, behind, dataBank, wallScreen, indicatorRow, conduitRun, projectorCone, wireDestroyerGeometry, wireGridGeometry, wireRingGeometry, lineSegments, mergedMesh, stepBlock, alertLamp, ceilingRingLight, datapad, cup } from "./deck_a_kit.js";
+import { deckASetup, yawToward, behind, dataBank, wallScreen, indicatorRow, conduitRun, projectorCone, wireDestroyerGeometry, wireGridGeometry, wireRingGeometry, lineSegments, mergedMesh, stepBlock, alertLamp, ceilingRingLight, segRailing, datapad, cup } from "./deck_a_kit.js";
 
 export function buildTactical(kit, ctx, room) {
   const [w, h, d] = room.size;
@@ -64,14 +64,15 @@ export function buildTactical(kit, ctx, room) {
   kit.floor(-2.2, -3.5, 2.2, 3.5, daisY, "dais");
   stepBlock(kit, "x", -A - 0.95, -A, -1.5, 1.5, 0, daisY, 2, { accentKey });
   stepBlock(kit, "x", A + 0.95, A, -1.5, 1.5, 0, daisY, 2, { accentKey });
-  // briefing rail around the dais edge (six flats; the E/W flats are the step openings)
+  // briefing rail around the dais edge (six flats; the E/W flats are the step openings). Segmented
+  // colliders: a single AABB per diagonal flat would fence off the dais corners.
   for (let k = 0; k < 8; k++) {
     if (k === 0 || k === 4) continue; // E and W flats
     const a0 = -Math.PI / 8 + (k * Math.PI) / 4;
     const a1 = a0 + Math.PI / 4;
     const p0 = [Math.cos(a0) * (R - 0.12), Math.sin(a0) * (R - 0.12)];
     const p1 = [Math.cos(a1) * (R - 0.12), Math.sin(a1) * (R - 0.12)];
-    impRailing(kit, p0, p1, daisY, { light: accentKey, postStep: 1.7 });
+    segRailing(kit, p0, p1, daisY, { light: accentKey, postStep: 1.7 });
   }
 
   // ---- holo tank ----------------------------------------------------------------------------------
@@ -103,7 +104,7 @@ export function buildTactical(kit, ctx, room) {
   // ---- hologram: the ship, a plotting grid, orbiting contacts -------------------------------------
   {
     const baseY = tTop + 0.55;
-    projectorCone(kit, 0, tTop + 0.12, 0, baseY, 0.11, 1.12, "holo");
+    projectorCone(kit, 0, tTop + 0.12, 0, baseY, 0.11, 1.12, "deckA_holoDim");
     const grid = new THREE.Group();
     grid.position.set(0, baseY, 0);
     grid.add(lineSegments(wireGridGeometry(2.3, 8, 0), M.deckA_holoLineDim));
@@ -111,7 +112,7 @@ export function buildTactical(kit, ctx, room) {
     kit.attach(grid);
     const ship = new THREE.Group();
     ship.position.set(0, baseY + 0.42, 0);
-    ship.add(lineSegments(wireDestroyerGeometry(1.5), M.deckA_holoLine));
+    ship.add(lineSegments(wireDestroyerGeometry(1.5), M.deckA_holoLineBright));
     // faint hull fill so the wedge reads as a solid from a distance
     const wedge = new THREE.BufferGeometry();
     const L = 1.5;
@@ -126,7 +127,7 @@ export function buildTactical(kit, ctx, room) {
     kit.attach(ship);
     // contacts: three orbit groups at different radii, tilts and speeds (hostile red, friendly blue)
     const orbits = [];
-    const mk = (r, tilt, n, mat, size) => {
+    const mk = (r, tilt, n, mat, size, ring) => {
       const geos = [];
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + r;
@@ -136,13 +137,13 @@ export function buildTactical(kit, ctx, room) {
       g.position.set(0, baseY + 0.42, 0);
       g.rotation.x = tilt;
       g.add(mergedMesh(geos, mat));
-      g.add(lineSegments(wireRingGeometry(r, 64, 0), M.deckA_holoLineDim));
+      if (ring) g.add(lineSegments(wireRingGeometry(r, 64, 0), M.deckA_holoLineDim));
       kit.attach(g);
       orbits.push(g);
     };
-    mk(1.05, 0.12, 3, M.emitRedImp, 0.055);
-    mk(0.82, -0.2, 2, M.holoBright, 0.05);
-    mk(1.25, 0.32, 4, M.holoBright, 0.045);
+    mk(1.05, 0.12, 3, M.emitRedImp, 0.055, true);
+    mk(0.82, -0.2, 2, M.holoBright, 0.05, false);
+    mk(1.25, 0.32, 4, M.holoBright, 0.045, true);
     const sweep = new THREE.Mesh(new THREE.CircleGeometry(1.15, 40, 0, Math.PI * 0.5).rotateX(-Math.PI / 2), M.holo);
     sweep.position.set(0, baseY + 0.004, 0);
     sweep.castShadow = sweep.receiveShadow = false;

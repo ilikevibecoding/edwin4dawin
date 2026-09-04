@@ -180,7 +180,8 @@ export function buildIntel(kit, ctx, room) {
   kit.light({ type: "spot", pos: [tx, h - 0.25, tz], target: [tx, th, tz], color: 0xdfe6ff, intensity: lux(h - 0.25 - th, 2.6), distance: 10, angle: 0.5, penumbra: 0.45, shadow: true, priority: 0.95 });
   kit.light({ type: "point", pos: [4.0, h - 0.5, 0], color: 0xc8d0e0, intensity: lux(h - 0.5, 1.3), distance: 12, priority: 0.5 });
   kit.light({ type: "point", pos: [-7.5, h - 0.5, 0], color: 0xc8d0e0, intensity: lux(h - 0.5, 1.2), distance: 12, priority: 0.48 });
-  kit.light({ type: "point", pos: [10.2, h - 0.5, 0], color: 0xc8d0e0, intensity: lux(h - 0.5, 1.0), distance: 9, priority: 0.46 });
+  // vestibule fill, off the door axis so the scanner lintel does not mirror it into the doorway view
+  kit.light({ type: "point", pos: [10.2, h - 0.5, -3.6], color: 0xc8d0e0, intensity: lux(h - 0.5, 1.0), distance: 9, priority: 0.46 });
   kit.light({ type: "point", pos: [-10.6, 1.6, 0], color: red, intensity: 9.0, distance: 10, priority: 0.42 });
   kit.light({ type: "point", pos: [-4.5, 0.5, -6.6], color: red, intensity: 8.0, distance: 10, priority: 0.36 });
   kit.light({ type: "point", pos: [-4.5, 0.5, 6.6], color: red, intensity: 8.0, distance: 10, priority: 0.35 });

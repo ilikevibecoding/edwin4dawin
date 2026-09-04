@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRoomShell, impConsole, impChair, impPillar, impWallGear, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
-import { deckASetup, yawToward, behind, yawFrame, dataBank, sealedCabinet, wallScreen, indicatorRow, conduitRun, holoTable, projectorCone, wireSphereGeometry, wireGridGeometry, wireGraphGeometry, wireDestroyerGeometry, lineSegments, mergedMesh, datapad, cup, helmet, datapadRack } from "./deck_a_kit.js";
+import { deckASetup, yawToward, behind, yawFrame, dataBank, sealedCabinet, wallScreen, indicatorRow, conduitRun, holoTable, projectorCone, wireSphereGeometry, wireGridGeometry, wireGraphGeometry, wireDestroyerGeometry, mergedLines, mergedMesh, datapad, cup, helmet, datapadRack } from "./deck_a_kit.js";
 
 export function buildNavigation(kit, ctx, room) {
   const [w, h, d] = room.size;
@@ -163,7 +163,7 @@ export function buildNavigation(kit, ctx, room) {
     projectorCone(kit, tx, th + 0.07, tz, baseY, 0.1, 0.62, "deckA_holoAmber");
     const holo = new THREE.Group();
     holo.position.set(tx, baseY, tz);
-    holo.add(lineSegments(wireGridGeometry(1.5, 5, 0), M.deckA_holoLineAmber));
+    const staticLines = [wireGridGeometry(1.5, 5, 0)];
     // the active lane: quadratic bezier A -> B; a secondary lane behind it
     const A = new THREE.Vector3(-0.62, 0.12, 0.28);
     const B = new THREE.Vector3(0.66, 0.2, -0.3);
@@ -176,23 +176,20 @@ export function buildNavigation(kit, ctx, room) {
     }
     const laneEdges = [];
     for (let i = 0; i < 48; i++) laneEdges.push([i, i + 1]);
-    holo.add(lineSegments(wireGraphGeometry(pts.map((p) => [p.x, p.y, p.z]), laneEdges), M.deckA_holoLineAmber));
+    staticLines.push(wireGraphGeometry(pts.map((p) => [p.x, p.y, p.z]), laneEdges));
     const alt = [];
     for (let i = 0; i <= 16; i++) {
       const t = i / 16;
       alt.push([-0.5 + t * 1.1, 0.1 + 0.25 * Math.sin(t * Math.PI), -0.45 + t * 0.2]);
     }
-    holo.add(lineSegments(wireGraphGeometry(alt, alt.slice(0, -1).map((_, i) => [i, i + 1])), M.deckA_holoLineAmber));
+    staticLines.push(wireGraphGeometry(alt, alt.slice(0, -1).map((_, i) => [i, i + 1])));
     // star nodes at both ends, waypoint markers, a tiny ship at the origin star
-    const sA = wireSphereGeometry(0.09, 4, 8, 16).translate(A.x, A.y, A.z);
-    const sB = wireSphereGeometry(0.07, 4, 8, 16).translate(B.x, B.y, B.z);
-    holo.add(lineSegments(sA, M.deckA_holoLineAmber));
-    holo.add(lineSegments(sB, M.deckA_holoLineAmber));
+    staticLines.push(wireSphereGeometry(0.09, 4, 8, 16).translate(A.x, A.y, A.z));
+    staticLines.push(wireSphereGeometry(0.07, 4, 8, 16).translate(B.x, B.y, B.z));
+    const shipYaw = Math.atan2(B.x - A.x, B.z - A.z) + Math.PI;
+    staticLines.push(wireDestroyerGeometry(0.26).rotateY(shipYaw).translate(A.x, A.y + 0.14, A.z));
+    holo.add(mergedLines(staticLines, M.deckA_holoLineAmber));
     holo.add(mergedMesh([12, 24, 36].map((i) => new THREE.OctahedronGeometry(0.03).translate(pts[i].x, pts[i].y, pts[i].z)), M.deckA_holoAmberBright));
-    const mini = lineSegments(wireDestroyerGeometry(0.26), M.deckA_holoLineAmber);
-    mini.position.set(A.x, A.y + 0.14, A.z);
-    mini.rotation.y = Math.atan2(B.x - A.x, B.z - A.z) + Math.PI;
-    holo.add(mini);
     const blip = new THREE.Mesh(new THREE.OctahedronGeometry(0.035), M.deckA_holoAmberBright);
     blip.castShadow = blip.receiveShadow = false;
     holo.add(blip);
