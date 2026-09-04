@@ -111,8 +111,8 @@ export function containerPrefab(mats, size = [2.4, 2.4, 2.4], opts = {}) {
     k.add("impDecal", new THREE.PlaneGeometry(0.4, 0.4), { pos: [-w * 0.34, h * 0.55, d / 2 + 0.012], uv: "keep", uvRect: impDecalRect(label) });
     k.add("impDecal", new THREE.PlaneGeometry(0.9, 0.9), { pos: [w * 0.2, h * 0.55, -d / 2 - 0.012], rot: [0, Math.PI, 0], uv: "keep", uvRect: impDecalRect(label2) });
     k.add("impDecal", new THREE.PlaneGeometry(0.5, 0.5), { pos: [-w * 0.28, h * 0.55, -d / 2 - 0.012], rot: [0, Math.PI, 0], uv: "keep", uvRect: impDecalRect(label) });
-    // status light + data plate by the door
-    k.box(light, w * 0.33, h * 0.86, d / 2 + 0.012, 0.1, 0.04, 0.01);
+    // status light (optional: it is a whole instanced batch of its own) + data plate by the door
+    if (light) k.box(light, w * 0.33, h * 0.86, d / 2 + 0.012, 0.1, 0.04, 0.01);
     k.box("impMetal", w * 0.33, h * 0.76, d / 2 + 0.01, 0.4, 0.12, 0.01, { color: IMP.black });
   });
 }
@@ -304,7 +304,9 @@ export function valve(kit, pos, r = 0.22, axis = "y", opts = {}) {
   // dir: which way the stem leaves the wheel along the axis (+1 = toward -axis, the default)
   const { color = IMP.red, stem = 0.25, dir = 1 } = opts;
   const rot = axis === "y" ? [Math.PI / 2, 0, 0] : axis === "x" ? [0, Math.PI / 2, 0] : [0, 0, 0];
-  kit.add("impPaintedMetal", new THREE.TorusGeometry(r, 0.03, 8, 20), { pos, rot, color, uv: "scale", uvScale: [4, 1] });
+  // 6 x 18: a hexagonal cross-section on a 3 cm tube is invisible past arm's length, and the eng deck
+  // has ~90 of these wheels
+  kit.add("impPaintedMetal", new THREE.TorusGeometry(r, 0.03, 6, 18), { pos, rot, color, uv: "scale", uvScale: [4, 1] });
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rot[0], rot[1], rot[2]));
   for (let i = 0; i < 3; i++) {
     const sq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), (i / 3) * Math.PI));
@@ -567,23 +569,27 @@ export function craneBridge(k, span, y, z, opts = {}) {
   // mat: girder material; the painted yellow reads cleanest on the map-less impMatte (the worn-metal
   // albedo of impPaintedMetal shows through bright paint as a mottle)
   const { tx = 0, drop = 3, girder = 0.9, color = IMP.hazardYellow, cx = 0, lamp = true, bands = true, mat = "impPaintedMetal" } = opts;
+  // with a map-less girder material the trucks, trolley and hoist gear take it too, so an animated
+  // bridge in its own mini kit is a single batch (they hang 6+ m up, where the maps never read)
+  const dark = mat === "impPaintedMetal" ? "impPaintedMetal" : mat;
+  const metal = mat === "impPaintedMetal" ? "impMetal" : mat;
   const X = (x) => cx + x;
   ibeam(k, [X(-span / 2), y, z - 0.6], [X(span / 2), y, z - 0.6], { h: girder, w: 0.4, color, mat });
   ibeam(k, [X(-span / 2), y, z + 0.6], [X(span / 2), y, z + 0.6], { h: girder, w: 0.4, color, mat });
   for (const s of [-1, 1]) {
-    k.box("impPaintedMetal", X((s * span) / 2), y - 0.15, z, 0.6, girder + 0.3, 1.9, { color: IMP.trim, texel: 1 });
-    k.cyl("impMetal", X((s * span) / 2 + (s > 0 ? 0.35 : -0.35)), y - girder / 2 - 0.35, z - 0.6, 0.25, 0.3, "x", { color: IMP.gunmetal, segments: 12 });
-    k.cyl("impMetal", X((s * span) / 2 + (s > 0 ? 0.35 : -0.35)), y - girder / 2 - 0.35, z + 0.6, 0.25, 0.3, "x", { color: IMP.gunmetal, segments: 12 });
+    k.box(dark, X((s * span) / 2), y - 0.15, z, 0.6, girder + 0.3, 1.9, { color: IMP.trim, texel: 1 });
+    k.cyl(metal, X((s * span) / 2 + (s > 0 ? 0.35 : -0.35)), y - girder / 2 - 0.35, z - 0.6, 0.25, 0.3, "x", { color: IMP.gunmetal, segments: 12 });
+    k.cyl(metal, X((s * span) / 2 + (s > 0 ? 0.35 : -0.35)), y - girder / 2 - 0.35, z + 0.6, 0.25, 0.3, "x", { color: IMP.gunmetal, segments: 12 });
     if (bands) hazardBand(k, [X((s * span) / 2), y - 0.15, z + 0.96], 0, 0.5, girder * 0.6);
   }
-  for (let x = -span / 2 + 2; x < span / 2 - 1; x += 3) k.box("impPaintedMetal", X(x), y, z, 0.12, girder - 0.12, 1.2, { color: IMP.trim, texel: 1 });
+  for (let x = -span / 2 + 2; x < span / 2 - 1; x += 3) k.box(dark, X(x), y, z, 0.12, girder - 0.12, 1.2, { color: IMP.trim, texel: 1 });
   // trolley + hoist drum + cable + hook block
-  k.box("impPaintedMetal", X(tx), y + girder / 2 + 0.35, z, 1.8, 0.7, 1.6, { color: IMP.trim, texel: 1 });
-  k.cyl("impMetal", X(tx), y + girder / 2 + 0.4, z, 0.3, 1.0, "z", { color: IMP.gunmetal, segments: 14 });
+  k.box(dark, X(tx), y + girder / 2 + 0.35, z, 1.8, 0.7, 1.6, { color: IMP.trim, texel: 1 });
+  k.cyl(metal, X(tx), y + girder / 2 + 0.4, z, 0.3, 1.0, "z", { color: IMP.gunmetal, segments: 14 });
   if (lamp) k.box("emitAmber", X(tx + 0.7), y + girder / 2 + 0.45, z + 0.81, 0.3, 0.06, 0.01);
-  k.cyl("impMetal", X(tx), y - drop / 2, z, 0.03, drop, "y", { color: IMP.steel, segments: 6 });
-  k.box("impPaintedMetal", X(tx), y - drop - 0.25, z, 0.5, 0.5, 0.3, { color, texel: 1 });
-  k.add("impMetal", new THREE.TorusGeometry(0.28, 0.06, 8, 14, Math.PI * 1.4), { pos: [X(tx), y - drop - 0.75, z], rot: [0, 0, Math.PI * 0.8], color: IMP.steel, uv: "scale", uvScale: [2, 1] });
+  k.cyl(metal, X(tx), y - drop / 2, z, 0.03, drop, "y", { color: IMP.steel, segments: 6 });
+  k.box(dark, X(tx), y - drop - 0.25, z, 0.5, 0.5, 0.3, { color, texel: 1 });
+  k.add(metal, new THREE.TorusGeometry(0.28, 0.06, 8, 14, Math.PI * 1.4), { pos: [X(tx), y - drop - 0.75, z], rot: [0, 0, Math.PI * 0.8], color: IMP.steel, uv: "scale", uvScale: [2, 1] });
 }
 
 // Glowing energy conduit: translucent blue housing around an emissive rod between two points.
@@ -602,7 +608,8 @@ export function conduit(kit, a, b, r = 0.35, opts = {}) {
     const n = Math.max(2, Math.round(len / 1.6));
     for (let i = 0; i <= n; i++) {
       const p = A.clone().addScaledVector(d, i / n);
-      kit.add("impPaintedMetal", new THREE.CylinderGeometry(r + 0.06, r + 0.06, 0.16, 14), { pos: p.toArray(), quat: q, color: IMP.trim, uv: "scale", uvScale: [4, 0.2] });
+      // (matte: the ring caps show through the glass housing, and polar UVs smear the metal maps on them)
+      kit.add("impMatte", new THREE.CylinderGeometry(r + 0.06, r + 0.06, 0.16, 14), { pos: p.toArray(), quat: q, color: IMP.trim, uv: "scale", uvScale: [4, 0.2] });
     }
   }
 }
@@ -769,7 +776,10 @@ export function screenBank(frame, u, v, cols, rows, sw, sh, seed = 1, opts = {})
       const cv = v - H / 2 + gap + sh / 2 + j * (sh + gap);
       frame.box("darkGloss", cu, cv, 0.093, cw, sh, 0.01);
       if (rand() < dark) continue;
-      frame.box("screen" + variants[Math.floor(rand() * variants.length)], cu, cv, 0.1, cw - 0.04, sh - 0.04, 0.004, { uv: "keep" });
+      // variants: screen indices or full material keys (e.g. "screenBars"), so a bank can mix the
+      // authored displays a room already draws instead of adding screen3/4 batches
+      const pick = variants[Math.floor(rand() * variants.length)];
+      frame.box(typeof pick === "number" ? "screen" + pick : pick, cu, cv, 0.1, cw - 0.04, sh - 0.04, 0.004, { uv: "keep" });
     }
   }
   frame.box("leds", u, v - H / 2 - 0.1, 0.07, Math.min(W * 0.6, 2.4), 0.05, 0.01, { uv: "keep" });
@@ -880,14 +890,18 @@ export function saddle(kit, pos, r, cy, axis = "z", opts = {}) {
 export function collar(kit, pos, r, axis = "z", opts = {}) {
   const { color = IMP.trim, ring = 0.1, flange: fl = 0.08 } = opts;
   const rot = axis === "y" ? [Math.PI / 2, 0, 0] : axis === "x" ? [0, Math.PI / 2, 0] : [0, 0, 0];
-  kit.add("impPaintedMetal", new THREE.TorusGeometry(r + ring, ring, 8, 24), { pos, rot, color, uv: "scale", uvScale: [6, 1] });
-  if (fl > 0) kit.cyl("impMetal", pos[0], pos[1], pos[2], r + ring * 2.2, fl, axis, { color: IMP.steel, segments: 24 });
+  // map-less ring: the worn-metal maps wrapped round a 0.1 m tube read as wood grain at arm's length
+  kit.add("impMatte", new THREE.TorusGeometry(r + ring, ring, 8, 24), { pos, rot, color, uv: "scale", uvScale: [6, 1] });
+  // planar UVs on the flange: its flat faces are what the eye sees, and polar UVs smear the metal maps
+  if (fl > 0) kit.cyl("impMetal", pos[0], pos[1], pos[2], r + ring * 2.2, fl, axis, { color: IMP.steel, segments: 24, uv: "world", texel: 1 });
 }
 
 // Floor-standing junction / distribution box: plinth, housing with a hinged louvred door, handle, a
 // small instrument display and indicator strip, conduit stubs out of the top. yaw 0 => door faces +z.
 export function junctionBox(kit, pos, yaw = 0, opts = {}) {
-  const { w = 0.9, h = 1.5, d = 0.5, tone = IMP.consoleDark, seed = 1, stubs = 2, display = "screenBars" } = opts;
+  // ok: material of the "healthy" indicator (rooms without another green emitter pass an amber/blue key
+  // so the box does not cost them a draw call)
+  const { w = 0.9, h = 1.5, d = 0.5, tone = IMP.consoleDark, seed = 1, stubs = 2, display = "screenBars", ok = "emitGreen" } = opts;
   const rand = rng(seed);
   const { box, cyl, collider, L } = local(kit, pos, yaw);
   box("impPaintedMetal", 0, 0.06, 0, w - 0.06, 0.12, d - 0.06, { color: IMP.trim, texel: 1 });
@@ -900,7 +914,7 @@ export function junctionBox(kit, pos, yaw = 0, opts = {}) {
   box("darkGloss", 0, h - 0.32, d / 2 + 0.02, w - 0.3, 0.26, 0.01);
   box(display, 0, h - 0.32, d / 2 + 0.027, w - 0.34, 0.22, 0.004, { uv: "keep" });
   box("leds", -w * 0.1, h - 0.52, d / 2 + 0.022, w * 0.5, 0.04, 0.004, { uv: "keep" });
-  box(rand() < 0.6 ? "emitGreen" : "emitAmber", w * 0.3, h - 0.52, d / 2 + 0.022, 0.06, 0.04, 0.004);
+  box(rand() < 0.6 ? ok : "emitAmber", w * 0.3, h - 0.52, d / 2 + 0.022, 0.06, 0.04, 0.004);
   const lp = L(w * 0.25, 0.75, d / 2 + 0.025);
   kit.add("impDecal", new THREE.PlaneGeometry(0.3, 0.3), { pos: [lp.x, lp.y, lp.z], quat: yawQ(yaw), uv: "keep", uvRect: impDecalRect([1, 10, 13, 5][Math.floor(rand() * 4)]) });
   for (let i = 0; i < stubs; i++) {
@@ -913,28 +927,33 @@ export function junctionBox(kit, pos, yaw = 0, opts = {}) {
 
 // Wall-mounted gauge cluster: a backing plate with a row of round dials (steel bezel, dark face, white
 // scale ticks, red band, amber needle) fed by a small pipe manifold underneath, plus a stencil.
+// lite: dials for high walls (5 m+ over the deck): no ticks or hub and coarser bezels, since a dial is
+// 4 pieces instead of 10 and the reactor's upper walls carry 60 of them.
 export function gaugeCluster(frame, u, v, opts = {}) {
-  const { n = 3, r = 0.22, seed = 1, manifold = true } = opts;
+  const { n = 3, r = 0.22, seed = 1, manifold = true, lite = false } = opts;
   const rand = rng(seed);
   const pitch = r * 2 + 0.16;
   const W = n * pitch + 0.2;
   const H = r * 2 + 0.36;
+  const seg = lite ? 14 : 20;
   frame.box("impPaintedMetal", u, v, 0.04, W, H, 0.08, { color: IMP.consoleDark, texel: 1 });
   frame.box("impMetal", u, v + H / 2 - 0.02, 0.085, W, 0.03, 0.01, { color: IMP.steel });
   for (let i = 0; i < n; i++) {
     const cu = u - W / 2 + 0.1 + pitch * (i + 0.5);
     const cv = v + 0.06;
-    frame.cylN("impMetal", cu, cv, 0.1, r, 0.06, { color: IMP.steel, segments: 20 });
-    frame.cylN("darkGloss", cu, cv, 0.135, r - 0.03, 0.01, { segments: 20 });
-    for (let k = 0; k < 5; k++) {
-      const a = Math.PI * 1.25 - (k / 4) * Math.PI * 1.5;
-      frame.box("impMetal", cu + Math.cos(a) * (r - 0.07), cv + Math.sin(a) * (r - 0.07), 0.142, 0.025, 0.05, 0.004, { color: IMP.white, spin: a - Math.PI / 2 });
+    frame.cylN("impMetal", cu, cv, 0.1, r, 0.06, { color: IMP.steel, segments: seg });
+    frame.cylN("darkGloss", cu, cv, 0.135, r - 0.03, 0.01, { segments: seg });
+    if (!lite) {
+      for (let k = 0; k < 5; k++) {
+        const a = Math.PI * 1.25 - (k / 4) * Math.PI * 1.5;
+        frame.box("impMetal", cu + Math.cos(a) * (r - 0.07), cv + Math.sin(a) * (r - 0.07), 0.142, 0.025, 0.05, 0.004, { color: IMP.white, spin: a - Math.PI / 2 });
+      }
     }
     const ra = -Math.PI * 0.2;
     frame.box("emitRed", cu + Math.cos(ra) * (r - 0.07), cv + Math.sin(ra) * (r - 0.07), 0.142, 0.03, 0.07, 0.004, { spin: ra - Math.PI / 2 });
     const na = Math.PI * 1.25 - rand() * Math.PI * 1.3;
     frame.box("emitAmber", cu + Math.cos(na) * (r - 0.1) * 0.5, cv + Math.sin(na) * (r - 0.1) * 0.5, 0.145, r - 0.1, 0.02, 0.004, { spin: na });
-    frame.cylN("impMetal", cu, cv, 0.146, 0.025, 0.02, { color: IMP.steel, segments: 8 });
+    if (!lite) frame.cylN("impMetal", cu, cv, 0.146, 0.025, 0.02, { color: IMP.steel, segments: 8 });
   }
   if (manifold) {
     const mv = v - H / 2 - 0.12;
@@ -1016,13 +1035,15 @@ export function pipeTrunk(frame, u0, u1, v, opts = {}) {
 // Upper-wall status board: header strip with a stencil and light band, authored displays, a lamp row
 // and a short indicator strip. Sized w x h, centred at u, v.
 export function statusBoard(frame, u, v, w, h, seed = 1, opts = {}) {
-  const { displays = ["screenBars", "screen1"], header = true } = opts;
+  // strip: the header light's material (rooms lit by lightBandCool / lightBandWarm pass their own key);
+  // ok: the "healthy" indicator emitter (rooms with no other green emitter pass one they already draw)
+  const { displays = ["screenBars", "screen1"], header = true, strip = "lightBand", ok = "emitGreen" } = opts;
   const rand = rng(seed);
   frame.box("impPaintedMetal", u, v, 0.05, w, h, 0.1, { color: IMP.consoleDark, texel: 1 });
   frame.box("impMetal", u, v, 0.1, w - 0.1, h - 0.1, 0.01, { color: IMP.gunmetal });
   if (header) {
     frame.box("impPaintedMetal", u, v + h / 2 - 0.15, 0.09, w, 0.26, 0.08, { color: IMP.trim, texel: 1 });
-    frame.box("lightBand", u + 0.3, v + h / 2 - 0.15, 0.135, w - 1.2, 0.06, 0.01, { uv: "keep" });
+    frame.box(strip, u + 0.3, v + h / 2 - 0.15, 0.135, w - 1.2, 0.06, 0.01, { uv: "keep" });
     frame.quad("impDecal", u - w / 2 + 0.35, v + h / 2 - 0.15, 0.14, 0.3, 0.3, { uvRect: impDecalRect(Math.floor(rand() * 16)) });
   }
   const dh = h - 0.7;
@@ -1036,7 +1057,7 @@ export function statusBoard(frame, u, v, w, h, seed = 1, opts = {}) {
   for (let i = 0; i < 6; i++) {
     const cu = u - w / 2 + 0.4 + i * 0.3;
     const on = rand();
-    frame.box(on < 0.5 ? "emitGreen" : on < 0.8 ? "emitAmber" : "darkGloss", cu, lv, 0.115, 0.14, 0.1, 0.01);
+    frame.box(on < 0.5 ? ok : on < 0.8 ? "emitAmber" : "darkGloss", cu, lv, 0.115, 0.14, 0.1, 0.01);
   }
   frame.box("leds", u + w * 0.22, lv, 0.115, w * 0.4, 0.05, 0.004, { uv: "keep" });
 }
@@ -1136,16 +1157,35 @@ export function holoReactor(kit, ctx, pos, opts = {}) {
   group.position.set(x, y + lift, z);
   group.scale.setScalar(scale);
   group.add(new THREE.Mesh(mergeGeometries(wire.map(nonIdx), false), mats.holoWire));
-  const fill = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 2.0, 16, 1, true), mats.holo);
-  group.add(fill);
-  const cone = new THREE.Mesh(new THREE.CylinderGeometry(1.0 * scale, 0.5, lift + 0.9 * scale, 32, 1, true), mats.beam);
-  cone.position.set(x, y + (lift + 0.9 * scale) / 2, z);
-  kit.object(cone);
+  // projection cone (solid at the lens, fading to a trace where it meets the schematic) and the
+  // plasma core inside the wireframe share one additive mesh, faded by RGBA vertex colour: the cone
+  // runs 1/3 -> 1/20 of the material opacity, the core the full value
+  const coneH = lift + 0.9 * scale;
+  const coneGeo = new THREE.CylinderGeometry(1.0 * scale, 0.5, coneH, 32, 1, true);
+  coneGeo.translate(0, coneH / 2, 0);
+  const fade = (geo, a0, a1) => {
+    const p = geo.attributes.position;
+    const box = geo.boundingBox || (geo.computeBoundingBox(), geo.boundingBox);
+    const rgba = new Float32Array(p.count * 4);
+    for (let i = 0; i < p.count; i++) {
+      const t = (p.getY(i) - box.min.y) / Math.max(1e-6, box.max.y - box.min.y);
+      rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = 1;
+      rgba[i * 4 + 3] = a0 + (a1 - a0) * t;
+    }
+    geo.setAttribute("color", new THREE.BufferAttribute(rgba, 4));
+    return geo;
+  };
+  fade(coneGeo, 1 / 3, 0.05);
+  const coreGeo = new THREE.CylinderGeometry(0.26 * scale, 0.26 * scale, 2.0 * scale, 16, 1, true);
+  coreGeo.translate(0, lift, 0);
+  fade(coreGeo, 1, 1);
+  const glow = new THREE.Mesh(mergeGeometries([coneGeo, coreGeo].map(nonIdx), false), mats.holoCone);
+  glow.position.set(x, y, z);
+  kit.object(glow);
   kit.object(group);
   ctx.animate((dt, t) => {
     group.rotation.y += dt * 0.22;
     group.position.y = y + lift + Math.sin(t * 0.7) * 0.04;
-    fill.material.opacity = 0.28 + 0.06 * Math.sin(t * 4.0);
   });
   if (light) pointLightDesc(ctx, IMP.holo, 3.0, 7, [x, y + lift + 0.4, z], 2);
   return group;

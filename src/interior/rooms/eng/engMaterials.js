@@ -260,6 +260,10 @@ export function addEngMaterials(mats) {
   mats.engGlassBlue = new THREE.MeshPhysicalMaterial({ color: 0x3f7fd0, roughness: 0.15, metalness: 0, transparent: true, opacity: 0.28, depthWrite: false, envMapIntensity: 0.8, side: THREE.DoubleSide });
   mats.stain = new THREE.MeshStandardMaterial({ map: makeStainTexture(), transparent: true, depthWrite: false, roughness: 0.95, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.1 });
   mats.hazardRed = new THREE.MeshStandardMaterial({ map: makeHazardRedTexture(), roughness: 0.75, metalness: 0.1, envMapIntensity: 0.3, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  // projector cone + plasma core for the holo schematics: additive, single-sided and faded by RGBA
+  // vertex colour (the shared double-sided beam material stacked into a solid lampshade); the cone's
+  // vertex alpha runs 1/3 -> 1/20 of this opacity, the core uses it in full
+  mats.holoCone = new THREE.MeshBasicMaterial({ color: 0x6fa6ff, vertexColors: true, transparent: true, opacity: 0.33, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.FrontSide });
   // matte deck for the reactor galleries: the shared impDeck maps with a much rougher finish, so the
   // core's point lights do not mirror into white pools on the dark plates
   const deck = mats.impDeck;
@@ -275,6 +279,6 @@ export function addEngMaterials(mats) {
     color: 0xffffff,
     envMapIntensity: 0.35,
   });
-  for (const k of ["stain", "engGlassBlue", "lightBandCool"]) NO_SHADOW_KEYS.add(k);
+  for (const k of ["stain", "engGlassBlue", "lightBandCool", "holoCone"]) NO_SHADOW_KEYS.add(k);
   return mats;
 }
