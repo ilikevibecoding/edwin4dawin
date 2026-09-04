@@ -1,16 +1,32 @@
 // Exterior hull: the wedge (dorsal / ventral plateaus, bevels, trench, stern face), thousands of
-// instanced armour plates and greebles chunked along z for LOD + culling, the ventral hangar module
-// with its bay opening, and the reactor bulb.
+// instanced armour plates laid out hierarchically (radiating column seams that branch as the hull
+// widens, staggered rows, irregular sub-plates, recessed groove lines) chunked along z for LOD +
+// culling, the ventral hangar module with its bay opening, and the reactor bulb.
+// Greebles / hatches / trench machinery live in details.js and are placed on the plate anchors
+// this module exports.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { rng, setVertexColor } from "../kit.js";
-import { HULL, halfWidth, dorsalH, ventralH, skinPoint, CHUNKS, chunkIndex, chunkCenterZ, HANGAR, REACTOR, CITY } from "./dims.js";
+import { vnoise } from "../textures.js";
+import { HULL, halfWidth, dorsalH, ventralH, CHUNKS, chunkIndex, chunkCenterZ, HANGAR, REACTOR, CITY } from "./dims.js";
+import { instancedMesh, frameItem, grey } from "./batch.js";
+import { ensureExtMaterials } from "./exttex.js";
 
-const _v = new THREE.Vector3();
-const _q = new THREE.Quaternion();
+const _a = new THREE.Vector3();
+const _b = new THREE.Vector3();
+const _ex = new THREE.Vector3();
+const _ez = new THREE.Vector3();
+const _n = new THREE.Vector3();
+const _c = new THREE.Vector3();
 const _m = new THREE.Matrix4();
+const _q = new THREE.Quaternion();
+const _v = new THREE.Vector3();
 const _s = new THREE.Vector3();
-const _c = new THREE.Color();
+
+const smoothstep = (a, b, x) => {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+  return t * t * (3 - 2 * t);
+};
 
 /** Non-indexed flat-shaded geometry from a list of triangles (arrays of [x,y,z]). */
 function trisToGeometry(tris, uvScale = 0.02) {
@@ -145,7 +161,7 @@ function buildTrenchAndStern(rows = 52) {
   const shape = new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y)));
   const stern = new THREE.ShapeGeometry(shape);
   stern.translate(0, 0, z);
-  const nonIdx = stern.toNonIndexed();
+  const nonIdx = stern.index ? stern.toNonIndexed() : stern;
   const p = nonIdx.attributes.position;
   nonIdx.computeVertexNormals();
   // world UVs for the stern
@@ -154,134 +170,226 @@ function buildTrenchAndStern(rows = 52) {
   return { trench: trisToGeometry(tris, 0.05), stern: nonIdx };
 }
 
-/**
- * Instanced armour plates over a skin side. Plates follow the local surface frame; sizes and heights
- * are jittered; colours vary per plate. Returns per-chunk arrays of { matrix, color }.
- */
-function platePlacements(side, rand, { plateSize = 11, thickness = 2.2, greebleDensity = 0.35 } = {}) {
+// ---------------------------------------------------------------------------
+// Parametric skin surfaces used by the plating: u ∈ [0,1] across, z along.
+// part: "plateau" (u = 0 port edge → 1 starboard edge), "bevelL" / "bevelR" (u = 0 plateau crease →
+// 1 trench lip). `width(z)` is the physical extent across at z; `at(u, z)` the surface point.
+// ---------------------------------------------------------------------------
+export function makeSurface(side, part) {
   const sp = side > 0 ? HULL.plateauDorsal : HULL.plateauVentral;
   const T = HULL.trenchHalf;
-  const chunks = Array.from({ length: CHUNKS }, () => ({ plates: [], greebles: [] }));
-  const zStep = plateSize;
-  // subtle manufacturing variation: ±3 % per plate, the odd darker replacement plate
-  const tone = (base) => {
-    const k = 1 + (rand() - 0.5) * 0.06 - (rand() < 0.05 ? 0.07 : 0);
-    return [base * k, base * k, base * k * 1.02];
-  };
-  for (let z = HULL.bowZ + zStep / 2; z < HULL.sternZ - 2; z += zStep) {
-    const w = halfWidth(z);
-    const H = side > 0 ? dorsalH(z) : ventralH(z);
-    const ci = chunkIndex(z);
-    // plateau plates: metric spacing across
-    const pw = sp * w;
-    const nAcross = Math.max(1, Math.round((2 * pw) / plateSize));
-    for (let i = 0; i < nAcross; i++) {
-      const x = -pw + ((i + 0.5) / nAcross) * 2 * pw;
-      const sx = (2 * pw) / nAcross;
-      // skip the hangar module footprint on the ventral side and the city footprint on the dorsal side
-      if (side < 0 && Math.abs(x) < HANGAR.module.x + 2 && z > HANGAR.module.z0 - 2 && z < HANGAR.module.z1 + 2) continue;
-      if (side > 0 && z > CITY.z0 && z < CITY.z1) {
+  const Hf = side > 0 ? dorsalH : ventralH;
+  const s = part === "bevelL" ? -1 : 1;
+  const isPlateau = part === "plateau";
+  return {
+    side,
+    part,
+    isPlateau,
+    s,
+    sp,
+    /** Plates whose centre falls in the hangar module, reactor bulb or city footprint are skipped. */
+    skip(x, z) {
+      if (isPlateau && side < 0) {
+        if (Math.abs(x) < HANGAR.module.x + 1 && z > HANGAR.module.z0 - 2 && z < HANGAR.module.z1 + 2) return true;
+        if (Math.hypot(x, z - REACTOR.z) < REACTOR.r * 0.8) return true;
+      }
+      if (isPlateau && side > 0 && z > CITY.z0 && z < CITY.z1) {
         const t0 = CITY.tiers[0];
         const hw = t0.hw0 + ((t0.hw1 - t0.hw0) * (z - t0.zs)) / (t0.ze - t0.zs);
-        if (Math.abs(x) < hw + 3) continue;
+        if (Math.abs(x) < hw + 1) return true;
       }
-      // mostly flush plates with a few raised ones; narrow seams so the field reads as armour, not tiles
-      const th = thickness * (rand() < 0.12 ? 1.7 : 0.85 + rand() * 0.3);
-      _v.set(x, side * (H + th / 2 - 0.4), z);
-      _q.identity();
-      _s.set(sx - 0.35, th, zStep - 0.35);
-      _m.compose(_v, _q, _s);
-      chunks[ci].plates.push({ m: _m.clone(), c: tone(0.86 + (rand() < 0.08 ? -0.1 : 0)) });
-      // greebles on some plates: small boxes / raised strips
-      if (rand() < greebleDensity) {
-        const gw = 1 + rand() * 3.5;
-        const gh = 0.8 + rand() * 2.2;
-        const gd = 1 + rand() * 4;
-        _v.set(x + (rand() - 0.5) * (sx - gw - 1), side * (H + th - 0.4 + gh / 2), z + (rand() - 0.5) * (zStep - gd - 1));
-        _s.set(gw, gh, gd);
-        _m.compose(_v, _q, _s);
-        chunks[ci].greebles.push({ m: _m.clone(), c: tone(0.55 + rand() * 0.25) });
-      }
-    }
-    // bevel plates both sides, laid along the slope
-    for (const s of [-1, 1]) {
-      const ins = HULL.trenchInset;
+      return false;
+    },
+    at(u, z, out) {
+      const w = halfWidth(z);
+      const H = Hf(z);
+      if (isPlateau) return out.set((2 * u - 1) * sp * w, side * H, z);
       const x0 = s * sp * w;
-      const x1 = s * (w - ins);
-      const y0 = side * H;
-      const y1 = side * T;
-      const run = Math.hypot(x1 - x0, y1 - y0);
-      const nAlong = Math.max(1, Math.round(run / plateSize));
-      const dir = new THREE.Vector3(x1 - x0, y1 - y0, 0).normalize();
-      const nrm = new THREE.Vector3(-dir.y * s * side, dir.x * s * side, 0);
-      // make the normal point outward (away from the hull centre line)
-      if (nrm.y * side < 0) nrm.negate();
-      const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(dir, nrm, new THREE.Vector3(0, 0, 1)));
-      for (let i = 0; i < nAlong; i++) {
-        const t = (i + 0.5) / nAlong;
-        const th = thickness * (rand() < 0.12 ? 1.7 : 0.85 + rand() * 0.3);
-        _v.set(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, z).addScaledVector(nrm, th / 2 - 0.4);
-        _s.set(run / nAlong - 0.35, th, zStep - 0.35);
-        _m.compose(_v, q, _s);
-        chunks[ci].plates.push({ m: _m.clone(), c: tone(0.82) });
-        if (rand() < greebleDensity * 0.6) {
-          const gw = 1 + rand() * 2.5;
-          const gh = 0.8 + rand() * 1.6;
-          const gd = 1 + rand() * 3;
-          _v.set(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, z + (rand() - 0.5) * (zStep - gd - 1)).addScaledVector(nrm, th - 0.4 + gh / 2);
-          _s.set(gw, gh, gd);
-          _m.compose(_v, q, _s);
-          chunks[ci].greebles.push({ m: _m.clone(), c: tone(0.6) });
-        }
-      }
-    }
-  }
-  return chunks;
+      const x1 = s * (w - HULL.trenchInset);
+      return out.set(x0 + (x1 - x0) * u, side * (H - (H - T) * u), z);
+    },
+    width(z) {
+      const w = halfWidth(z);
+      if (isPlateau) return 2 * sp * w;
+      return Math.hypot((1 - sp) * w - HULL.trenchInset, Hf(z) - T);
+    },
+    hint: isPlateau ? new THREE.Vector3(0, side, 0) : new THREE.Vector3(s * 0.7, side, 0),
+  };
 }
 
-/** Trench greebles: dense blocks, pipes and lit strips inside the equator band. */
-function trenchPlacements(rand) {
-  const T = HULL.trenchHalf;
-  const ins = HULL.trenchInset;
-  const chunks = Array.from({ length: CHUNKS }, () => ({ blocks: [], lights: [] }));
-  for (let z = HULL.bowZ + 40; z < HULL.sternZ - 6; z += 6 + rand() * 6) {
-    const w = halfWidth(z) - ins;
-    const ci = chunkIndex(z);
-    for (const s of [-1, 1]) {
-      const n = 1 + Math.floor(rand() * 3);
-      for (let k = 0; k < n; k++) {
-        const h = 1.5 + rand() * 5;
-        const d = 1.5 + rand() * 4;
-        const y = -T + 1 + rand() * (2 * T - h - 2);
-        _v.set(s * (w + d / 2 - 0.5), y + h / 2, z + (rand() - 0.5) * 5);
-        _s.set(d, h, 1.5 + rand() * 5);
-        _q.identity();
-        _m.compose(_v, _q, _s);
-        chunks[ci].blocks.push({ m: _m.clone(), c: [0.5 + rand() * 0.3, 0.5 + rand() * 0.3, 0.55 + rand() * 0.3] });
-      }
-      if (rand() < 0.6) {
-        _v.set(s * (w + 0.3), -T + 1 + rand() * (2 * T - 2), z);
-        _s.set(0.5, 0.35, 2 + rand() * 4);
-        _m.compose(_v, _q.identity(), _s);
-        chunks[ci].lights.push({ m: _m.clone() });
-      }
-    }
-  }
-  return chunks;
+/** Region-based paint tone: bow slightly lighter, stern / engine zone darker, soot toward the trench. */
+export function regionTone(x, z, side, isPlateau, u) {
+  const t = (z - HULL.bowZ) / HULL.length;
+  let k = 0.83 + 0.05 * (1 - t) * (1 - t) - 0.075 * smoothstep(0.7, 1, t);
+  if (!isPlateau) k -= 0.05 * u * u;
+  // large weather patches (hundreds of metres), a few percent
+  k *= 1 + (vnoise((z - HULL.bowZ) / 1600, (x + 500) / 1000, 7, 31) - 0.5) * 0.06;
+  if (side < 0) k *= 0.97;
+  return k;
 }
 
-function instanced(geo, material, items, castShadow = true) {
-  const mesh = new THREE.InstancedMesh(geo, material, items.length);
-  for (let i = 0; i < items.length; i++) {
-    mesh.setMatrixAt(i, items[i].m);
-    if (items[i].c) mesh.setColorAt(i, _c.setRGB(items[i].c[0], items[i].c[1], items[i].c[2]));
-  }
-  mesh.instanceMatrix.needsUpdate = true;
-  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  mesh.castShadow = castShadow;
-  mesh.receiveShadow = true;
-  mesh.computeBoundingSphere();
-  return mesh;
+/**
+ * Hierarchical plating over one parametric surface. Columns form a binary tree in u: a column splits
+ * (with a jittered ratio) at the z where its physical width exceeds `maxW`, so the seams radiate from
+ * the bow and branch as the hull widens. Rows along z are staggered per column, each panel is cut
+ * into 1-4 sub-plates with thin seams, a few plates are raised or replaced. Emits per-chunk plate
+ * instances, groove (major seam) instances and plate anchors for the detail pass.
+ */
+export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed = 0.5, zStart = HULL.bowZ + 1, zEnd = HULL.sternZ - 0.5, bucket = chunkIndex, grooveDepth = 2, toneScale = 1 } = {}) {
+  const zSplitFor = (du) => {
+    if (du * surf.width(zEnd) <= maxW) return Infinity;
+    let a = zStart;
+    let b = zEnd;
+    for (let i = 0; i < 28; i++) {
+      const mid = (a + b) / 2;
+      if (du * surf.width(mid) > maxW) b = mid;
+      else a = mid;
+    }
+    return (a + b) / 2;
+  };
+  // seam half-widths (metres) by boundary depth: surface edges, major grooves, secondary, minor
+  const seamHalf = (depth, isEdge) => (isEdge ? 0.7 : depth <= grooveDepth ? 1.2 : depth <= grooveDepth + 2 ? 0.5 : 0.35);
+
+  const skip = (x, z, halfW) => halfW < 1.2 || (surf.skip ? surf.skip(x, z) : false);
+
+  // one sub-plate → instance + anchor
+  const emitPlate = (ua, ub, za, zb, insetL, insetR, insetA, insetB, panel) => {
+    const uc = (ua + ub) / 2;
+    const zc = (za + zb) / 2;
+    surf.at(ua, zc, _a);
+    surf.at(ub, zc, _b);
+    _ex.subVectors(_b, _a);
+    const fullW = _ex.length();
+    const w = fullW - insetL - insetR;
+    if (w < 1.5) return;
+    _ex.divideScalar(fullW);
+    surf.at(uc, zb, _b);
+    surf.at(uc, za, _a);
+    _ez.subVectors(_b, _a);
+    const fullL = _ez.length();
+    const l = fullL - insetA - insetB;
+    if (l < 1.5) return;
+    _ez.divideScalar(fullL);
+    _n.crossVectors(_ez, _ex).normalize();
+    if (_n.dot(surf.hint) < 0) _n.negate();
+    surf.at(uc, zc, _c);
+    // shift the centre for asymmetric insets
+    _c.addScaledVector(_ex, (insetL - insetR) / 2).addScaledVector(_ez, (insetA - insetB) / 2);
+    if (skip(_c.x, _c.z, w / 2)) return;
+    const r = rand();
+    const raised = r < 0.045;
+    const missing = r > 0.995;
+    if (missing) return;
+    const th = raised ? thickness * 1.7 : thickness * (0.88 + rand() * 0.24);
+    const top = _c.clone().addScaledVector(_n, th - embed);
+    _c.addScaledVector(_n, th / 2 - embed);
+    // tone: region × panel batch × sub-plate × replacement
+    let k = panel.tone * (1 + (rand() - 0.5) * 0.03);
+    const rr = rand();
+    if (rr < 0.025) k *= 1.09; // fresh replacement plate
+    else if (rr < 0.045) k *= 0.86; // primered / darker plate
+    if (raised) k *= 0.97;
+    const c = grey(k, 1.02);
+    // texture variety: flip half the plates 180° about the normal
+    const flip = rand() < 0.5 ? -1 : 1;
+    const ax = flip < 0 ? _ex.clone().negate() : _ex.clone();
+    const az = flip < 0 ? _ez.clone().negate() : _ez.clone();
+    const ci = bucket(_c.z);
+    // worn (scratched / sooted) plates concentrate toward the stern and the trench edge
+    const tz = (_c.z - HULL.bowZ) / HULL.length;
+    const pWorn = 0.14 + 0.3 * smoothstep(0.45, 1, tz) + (surf.isPlateau ? 0 : 0.25 * uc);
+    const list = out[ci].worn && rand() < pWorn ? out[ci].worn : out[ci].plates;
+    list.push(frameItem(_c, ax, _n, az, w, th, l, c));
+    out[ci].anchors.push({ p: top, X: _ex.clone(), Y: _n.clone(), Z: _ez.clone(), w, l, side: surf.side, part: surf.part, isPlateau: surf.isPlateau, u: uc, z: zc, tone: k, raised, depth: panel.depth });
+  };
+
+  const emitPanel = (panel) => {
+    const { u0, u1, z0, z1, dL, dR } = panel;
+    const zc = (z0 + z1) / 2;
+    const W = (u1 - u0) * surf.width(zc);
+    const L = z1 - z0;
+    if (W < 2 || L < 2) return;
+    surf.at((u0 + u1) / 2, zc, _c);
+    panel.tone = toneScale * regionTone(_c.x, _c.z, surf.side, surf.isPlateau, (u0 + u1) / 2) * (1 + (rand() - 0.5) * 0.05);
+    const isEdgeL = u0 <= 0;
+    const isEdgeR = u1 >= 1;
+    const sL = seamHalf(dL, isEdgeL);
+    const sR = seamHalf(dR, isEdgeR);
+    const rowSeam = 0.35;
+    const subSeam = 0.12;
+    // sub-plate pattern
+    let nu = W > 15 && rand() < 0.75 ? 2 : 1;
+    let nz = L > 24 ? (rand() < 0.5 ? 3 : 2) : L > 13 ? (rand() < 0.7 ? 2 : 1) : 1;
+    if (nu * nz === 1 && W > 9 && L > 9) {
+      if (rand() < 0.5 && W > 9) nu = 2;
+      else nz = 2;
+    }
+    const uCuts = [u0];
+    for (let i = 1; i < nu; i++) uCuts.push(u0 + (u1 - u0) * (i / nu + (rand() - 0.5) * 0.24));
+    uCuts.push(u1);
+    const zCuts = [z0];
+    for (let i = 1; i < nz; i++) zCuts.push(z0 + L * (i / nz + (rand() - 0.5) * 0.2));
+    zCuts.push(z1);
+    for (let i = 0; i < nu; i++) {
+      for (let j = 0; j < nz; j++) {
+        const insetL = i === 0 ? sL : subSeam;
+        const insetR = i === nu - 1 ? sR : subSeam;
+        const insetA = j === 0 ? rowSeam : subSeam;
+        const insetB = j === nz - 1 ? rowSeam : subSeam;
+        emitPlate(uCuts[i], uCuts[i + 1], zCuts[j], zCuts[j + 1], insetL, insetR, insetA, insetB, panel);
+      }
+    }
+  };
+
+  const emitRows = (u0, u1, dL, dR, depth, z0, z1) => {
+    const rowLen = 18 + rand() * 12;
+    const cuts = [z0];
+    let z = z0 + 7 + rand() * (rowLen - 7);
+    while (z < z1 - 7) {
+      cuts.push(z);
+      z += rowLen * (0.85 + rand() * 0.3);
+    }
+    cuts.push(z1);
+    for (let i = 0; i < cuts.length - 1; i++) emitPanel({ u0, u1, z0: cuts[i], z1: cuts[i + 1], dL, dR, depth });
+  };
+
+  // recessed groove along a major seam (boundary u) over z0..z1, split at chunk boundaries
+  const emitGroove = (u, z0, z1) => {
+    const step = (HULL.sternZ - HULL.bowZ) / CHUNKS;
+    let za = z0;
+    while (za < z1 - 1) {
+      const ci = bucket(za + 0.5);
+      const zb = bucket === chunkIndex ? Math.min(z1, HULL.bowZ + (chunkIndex(za + 0.5) + 1) * step) : z1;
+      const zm = (za + zb) / 2;
+      surf.at(u, zb, _b);
+      surf.at(u, za, _a);
+      _ez.subVectors(_b, _a);
+      const len = _ez.length();
+      _ez.divideScalar(len);
+      surf.at(Math.min(1, u + 0.01), zm, _b);
+      surf.at(Math.max(0, u - 0.01), zm, _a);
+      _ex.subVectors(_b, _a).normalize();
+      _n.crossVectors(_ez, _ex).normalize();
+      if (_n.dot(surf.hint) < 0) _n.negate();
+      surf.at(u, zm, _c).addScaledVector(_n, 0.12 - 0.25);
+      out[ci].grooves.push(frameItem(_c, _ex.clone(), _n.clone(), _ez.clone(), 1.7, 0.5, len, grey(0.16, 1.05)));
+      za = zb;
+    }
+  };
+
+  const rec = (u0, u1, dL, dR, depth, z0) => {
+    const du = u1 - u0;
+    const zs = zSplitFor(du);
+    const zLeafEnd = Math.min(zs, zEnd);
+    if (zLeafEnd > z0 + 3) emitRows(u0, u1, dL, dR, depth, z0, zLeafEnd);
+    if (zs < zEnd) {
+      const um = u0 + du * (0.44 + rand() * 0.12);
+      rec(u0, um, dL, depth + 1, depth + 1, zs);
+      rec(um, u1, depth + 1, dR, depth + 1, zs);
+      if (depth + 1 <= grooveDepth) emitGroove(um, zs, zEnd);
+    }
+  };
+  rec(0, 1, 0, 0, 0, zStart);
 }
 
 /** Ventral hangar module: a box hanging under the ventral plateau with the bay opening in its floor. */
@@ -348,17 +456,59 @@ function buildHangarModule(materials) {
   return g;
 }
 
+/** Reactor bulb under the ventral plateau with its equatorial band, ribs and vent ports. */
+function buildReactor(materials, group) {
+  const yTop = -ventralH(REACTOR.z);
+  const geo = new THREE.SphereGeometry(REACTOR.r, 48, 32);
+  setVertexColor(geo, PALETTE.hullGrey.clone().multiplyScalar(0.92));
+  const bulb = new THREE.Mesh(geo, materials.hull);
+  bulb.position.set(REACTOR.x, yTop - REACTOR.r * 0.45, REACTOR.z);
+  bulb.castShadow = true;
+  bulb.receiveShadow = true;
+  bulb.name = "reactorBulb";
+  group.add(bulb);
+  const band = new THREE.CylinderGeometry(REACTOR.r * 0.985, REACTOR.r * 0.985, 6, 48, 1, true);
+  setVertexColor(band, PALETTE.hullBlack);
+  const bandMesh = new THREE.Mesh(band, materials.cityDense);
+  bandMesh.position.copy(bulb.position);
+  bandMesh.position.y -= REACTOR.r * 0.1;
+  group.add(bandMesh);
+  // meridian ribs + ring of vent ports (instanced boxes in the bulb's local frame)
+  const items = [];
+  const cy = bulb.position.y;
+  for (let k = 0; k < 12; k++) {
+    const a = (k / 12) * Math.PI * 2;
+    // rib: a thin box tangent to the sphere at the equator-ish latitude, leaning outward
+    const lat = -0.55;
+    const rr = REACTOR.r * Math.cos(lat);
+    const yy = cy + REACTOR.r * Math.sin(lat);
+    _v.set(REACTOR.x + Math.cos(a) * rr, yy, REACTOR.z + Math.sin(a) * rr);
+    _q.setFromEuler(new THREE.Euler(0, -a, 0));
+    _s.set(2.2, 26, 1.6);
+    items.push({ m: _m.compose(_v, _q, _s).clone(), c: grey(0.5) });
+    const lat2 = -0.2;
+    const r2 = REACTOR.r * Math.cos(lat2) + 0.4;
+    _v.set(REACTOR.x + Math.cos(a + 0.26) * r2, cy + REACTOR.r * Math.sin(lat2), REACTOR.z + Math.sin(a + 0.26) * r2);
+    _q.setFromEuler(new THREE.Euler(0, -a - 0.26, 0));
+    _s.set(1.4, 5, 7);
+    items.push({ m: _m.compose(_v, _q, _s).clone(), c: grey(0.22) });
+  }
+  const rm = instancedMesh(new THREE.BoxGeometry(1, 1, 1), materials.hullDark, items, { name: "reactorDetail" });
+  group.add(rm);
+}
+
 export function buildHull(materials) {
   const group = new THREE.Group();
   group.name = "hull";
   const rand = rng(4242);
 
-  // --- base skins
+  // --- base skins (dark recessed surface that shows through the seams)
+  const baseTone = PALETTE.hullGrey.clone().multiplyScalar(0.68);
   for (const side of [1, -1]) {
     const { plateau, bevel, lip } = buildSkin(side);
     for (const [geo, mat, col] of [
-      [plateau, materials.hullDark, PALETTE.hullGrey.clone().multiplyScalar(0.75)],
-      [bevel, materials.hullDark, PALETTE.hullGrey.clone().multiplyScalar(0.75)],
+      [plateau, materials.hullDark, baseTone],
+      [bevel, materials.hullDark, baseTone],
       [lip, materials.hullDark, PALETTE.hullBlack],
     ]) {
       setVertexColor(geo, col);
@@ -375,70 +525,44 @@ export function buildHull(materials) {
   trenchMesh.name = "trench";
   trenchMesh.receiveShadow = true;
   group.add(trenchMesh);
-  setVertexColor(stern, PALETTE.hullDark);
+  setVertexColor(stern, PALETTE.hullDark.clone().multiplyScalar(0.8));
   const sternMesh = new THREE.Mesh(stern, materials.hullDark);
   sternMesh.name = "stern";
   sternMesh.castShadow = true;
   sternMesh.receiveShadow = true;
   group.add(sternMesh);
 
-  // --- plating + greebles per chunk
+  // --- hierarchical plating per chunk (clean plates on the shared hull sets, worn plates on ext_hullWorn)
+  ensureExtMaterials(materials);
+  const chunks = Array.from({ length: CHUNKS }, () => ({ plates: [], worn: [], grooves: [], anchors: [] }));
+  const surfaces = [];
+  for (const side of [1, -1]) {
+    for (const part of ["plateau", "bevelL", "bevelR"]) {
+      const surf = makeSurface(side, part);
+      surfaces.push(surf);
+      platingFor(surf, rand, chunks, { maxW: part === "plateau" ? 32 : 28, thickness: side > 0 ? 2.0 : 1.8 });
+    }
+  }
   const plateGeo = new THREE.BoxGeometry(1, 1, 1);
   setVertexColor(plateGeo, 0xffffff);
-  const greebleGeo = new THREE.BoxGeometry(1, 1, 1);
-  setVertexColor(greebleGeo, 0xffffff);
   const chunkGroups = [];
-  const dorsal = platePlacements(1, rand, { plateSize: 11, thickness: 2.2, greebleDensity: 0.4 });
-  const ventral = platePlacements(-1, rand, { plateSize: 13, thickness: 2.0, greebleDensity: 0.25 });
-  const trenchP = trenchPlacements(rand);
   let plateCount = 0;
-  let greebleCount = 0;
   for (let i = 0; i < CHUNKS; i++) {
     const cg = new THREE.Group();
     cg.name = "chunk_" + i;
     cg.userData.centerZ = chunkCenterZ(i);
-    const plates = [...dorsal[i].plates, ...ventral[i].plates];
-    const greebles = [...dorsal[i].greebles, ...ventral[i].greebles, ...trenchP[i].blocks];
-    const pm = instanced(plateGeo, i % 2 ? materials.hull2 : materials.hull, plates);
-    pm.name = "plates";
-    pm.userData.lod = 1;
+    const pm = instancedMesh(plateGeo, i % 2 ? materials.hull2 : materials.hull, chunks[i].plates, { castShadow: true, name: "plates", lod: 1 });
     cg.add(pm);
-    const gm = instanced(greebleGeo, materials.hullDark, greebles, false);
-    gm.name = "greebles";
-    gm.userData.lod = 0;
-    cg.add(gm);
-    if (trenchP[i].lights.length) {
-      const lm = instanced(greebleGeo, materials.exteriorLight, trenchP[i].lights, false);
-      lm.name = "trenchLights";
-      lm.userData.lod = 0;
-      cg.add(lm);
-    }
-    plateCount += plates.length;
-    greebleCount += greebles.length;
+    if (chunks[i].worn.length) cg.add(instancedMesh(plateGeo, materials.ext_hullWorn, chunks[i].worn, { name: "platesWorn", lod: 1 }));
+    if (chunks[i].grooves.length) cg.add(instancedMesh(plateGeo, materials.hullDark, chunks[i].grooves, { name: "grooves", lod: 1 }));
+    plateCount += chunks[i].plates.length + chunks[i].worn.length;
     group.add(cg);
     chunkGroups.push(cg);
   }
 
   // --- hangar module + reactor bulb
   group.add(buildHangarModule(materials));
-  {
-    const yTop = -ventralH(REACTOR.z);
-    const geo = new THREE.SphereGeometry(REACTOR.r, 48, 32);
-    setVertexColor(geo, PALETTE.hullGrey);
-    const bulb = new THREE.Mesh(geo, materials.hull);
-    bulb.position.set(REACTOR.x, yTop - REACTOR.r * 0.45, REACTOR.z);
-    bulb.castShadow = true;
-    bulb.receiveShadow = true;
-    bulb.name = "reactorBulb";
-    group.add(bulb);
-    // equatorial band + vents on the bulb
-    const band = new THREE.CylinderGeometry(REACTOR.r * 0.98, REACTOR.r * 0.98, 6, 48, 1, true);
-    setVertexColor(band, PALETTE.hullBlack);
-    const bandMesh = new THREE.Mesh(band, materials.cityDense);
-    bandMesh.position.copy(bulb.position);
-    bandMesh.position.y -= REACTOR.r * 0.1;
-    group.add(bandMesh);
-  }
+  buildReactor(materials, group);
 
-  return { group, chunkGroups, stats: { plates: plateCount, greebles: greebleCount } };
+  return { group, chunkGroups, surfaces, anchors: chunks.map((c) => c.anchors), stats: { plates: plateCount, greebles: 0 } };
 }
