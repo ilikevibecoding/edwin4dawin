@@ -28,10 +28,10 @@ export function build(kit, ctx, room, lib) {
   const downs = [[-15, 532.6], [-7, 532.6], [-15, 536.2], [-7, 536.2], [-15, 539.0], [-7, 539.0]];
   for (const [x, z] of downs) {
     downlight(kit, x, yTop, z, "emitCoolSoft", 0.11);
-    ctx.lights.cool.push(pointLight(0xc4d6ff, 6.5, 13, [x, yTop - 0.35, z]));
+    ctx.lights.cool.push(pointLight(0xc4d6ff, 9, 14, [x, yTop - 0.35, z]));
   }
-  ctx.lights.cool.push(pointLight(0x7fb0ff, 7, 12, [-11, y0 + 2.1, 527.8]));
-  ctx.lights.cool.push(pointLight(0xdfe8ff, 4, 9, [-16.6, yTop - 0.4, 528.8]));
+  ctx.lights.cool.push(pointLight(0x7fb0ff, 8, 12, [-11, y0 + 2.1, 527.8]));
+  ctx.lights.cool.push(pointLight(0xdfe8ff, 5, 9, [-16.6, yTop - 0.4, 528.8]));
 
   // ------------------------------------------------------------ holo-screen wall (forward)
   {
