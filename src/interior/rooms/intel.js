@@ -16,7 +16,7 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const BLACK = { color: PALETTE.impBlack, texel: 2 };
 const DARK = { color: PALETTE.impDark, texel: 1.5 };
 const CEIL = 3.1; // dropped ceiling under the 3.6 m bounds
-const TABLE = { x: -9.4, z: -8.5 };
+const TABLE = { x: -10.6, z: -8.5 }; // the table's 1 m collider stays clear of the sector spawn at x -9
 
 export function buildIntel(kit, ctx) {
   const B = ctx.bounds;
@@ -45,9 +45,11 @@ export function buildIntel(kit, ctx) {
   holoTable(kit, ctx, mats, TABLE.x, TABLE.z);
   commandChair(kit, TABLE.x - 2.7, TABLE.z, -Math.PI / 2);
   buildFloorDetail(kit, ctx, B);
-  // the single cold light over the table and a dim red accent along the vault wall
+  // the single cold light over the table, a dim red accent along the vault wall, a faint cool fill
+  // over the command chair so it reads against the briefing wall
   ctx.light(pointLight(0xc8dcff, 7, 10, [TABLE.x, CEIL - 0.3, TABLE.z]));
   ctx.light(pointLight(0xff3a2a, 2.2, 6, [-9.2, 2.2, -12.0]));
+  ctx.light(pointLight(0xc8dcff, 2.2, 6, [TABLE.x - 3.2, 2.5, TABLE.z]));
   ctx.anim((dt, t) => {
     mats.pulse.emissiveIntensity = 1.1 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.4));
     mats.lamp.emissiveIntensity = 1.8 + 0.8 * (0.5 + 0.5 * Math.sin(t * 2.2));
@@ -434,6 +436,9 @@ function commandChair(kit, x, z, yaw) {
     return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: q, ...extra });
   };
   kit.cyl("paintedMetal", x, 0.04, z, 0.55, 0.08, "y", { color: PALETTE.impBlack, segments: 8 });
+  const glow = new THREE.RingGeometry(0.4, 0.5, 8);
+  glow.rotateX(-Math.PI / 2);
+  kit.add("emitRedSoft", glow, { pos: [x, 0.082, z], uv: "keep" });
   kit.cyl("metal", x, 0.3, z, 0.12, 0.44, "y", { color: PALETTE.impMid });
   add("rubber", new THREE.BoxGeometry(0.7, 0.14, 0.7), 0, 0.55, 0, { color: PALETTE.rubber });
   add("fabric", new THREE.BoxGeometry(0.58, 0.06, 0.58), 0, 0.65, 0, { color: PALETTE.impBlack, uv: "world", texel: 2 });

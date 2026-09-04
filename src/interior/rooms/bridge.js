@@ -73,9 +73,12 @@ function ensureMaterials(ctx) {
     m.brg_holoBright = m.holo.clone();
     m.brg_holoBright.map = null;
     m.brg_holoBright.color = new THREE.Color("#78bcff");
-    m.brg_holoBright.opacity = 0.7;
+    m.brg_holoBright.opacity = 0.3;
     // unlit near-black for the window reveal (see buildWindowWall)
     m.brg_void = new THREE.MeshBasicMaterial({ color: 0x05060a });
+    // window frame steel: matte near-black with almost no environment response, so the mullions stay
+    // black against space instead of picking up the room environment as a blue-grey sheen
+    m.brg_frame = new THREE.MeshStandardMaterial({ color: 0x0c0d10, roughness: 0.82, metalness: 0.1, envMapIntensity: 0.15 });
     // bridgeGlass with the diffuse tint taken out: the shared material's light body colour picks up the
     // (leaked) sun and the room lights and lays a grey veil over everything seen through the panes
     m.brg_glass = m.bridgeGlass.clone();
@@ -209,12 +212,12 @@ function buildWindowWall(kit, ctx) {
     const x = -GLASS_X + PANE_W * k;
     const c = new THREE.Vector3(x, yMid, zMid);
     const pin = c.clone().addScaledVector(nIn, 0.19);
-    kit.add("paintedMetal", new THREE.BoxGeometry(0.3, paneLen + 0.25, 0.36), { pos: [c.x, c.y, c.z], quat: tilt, color: PALETTE.impBlack, texel: 1.5 });
-    kit.add("metal", new THREE.BoxGeometry(0.14, paneLen + 0.1, 0.03), { pos: [pin.x, pin.y, pin.z], quat: tilt, color: PALETTE.impMid });
+    kit.add("brg_frame", new THREE.BoxGeometry(0.3, paneLen + 0.25, 0.36), { pos: [c.x, c.y, c.z], quat: tilt });
+    kit.add("metal", new THREE.BoxGeometry(0.1, paneLen + 0.1, 0.03), { pos: [pin.x, pin.y, pin.z], quat: tilt, color: PALETTE.impDark });
   }
-  const rail = (y, z, sy, sz, color) => kit.boxMM("paintedMetal", [-GLASS_X - 0.15, y - sy / 2, z - sz / 2], [GLASS_X + 0.15, y + sy / 2, z + sz / 2], { color, texel: 1.5 });
-  rail(WIN_Y0 + 0.05, zFoot - 0.02, 0.22, 0.4, PALETTE.impBlack);
-  rail(WIN_Y1 - 0.02, Z0 + 0.1, 0.2, 0.5, PALETTE.impBlack);
+  const rail = (y, z, sy, sz) => kit.boxMM("brg_frame", [-GLASS_X - 0.15, y - sy / 2, z - sz / 2], [GLASS_X + 0.15, y + sy / 2, z + sz / 2], {});
+  rail(WIN_Y0 + 0.05, zFoot - 0.02, 0.22, 0.4);
+  rail(WIN_Y1 - 0.02, Z0 + 0.1, 0.2, 0.5);
 
   // --- corner towers at x ±(22.5..24): dark, with an inset panel, a vertical light slot and an alert lamp
   for (const s of [-1, 1]) {
@@ -442,45 +445,46 @@ function buildWalkway(kit) {
 // ---------------------------------------------------------------------------
 function buildCommand(kit, ctx, mats) {
   const { y, hz } = CMD;
-  platform(kit, ctx, { x0: -2.7, z0: CMD.z0, x1: 2.7, z1: CMD.z1, y });
+  platform(kit, ctx, { x0: -2.8, z0: CMD.z0, x1: 2.8, z1: CMD.z1, y });
   // amber edge channels along both long sides of the platform
   for (const s of [-1, 1]) {
-    kit.boxMM("paintedMetal", [s * 2.5 - 0.07, y, CMD.z0 + 0.25], [s * 2.5 + 0.07, y + 0.014, CMD.z1 - 0.25], BLACK);
-    kit.boxMM("emitAmber", [s * 2.5 - 0.02, y + 0.014, CMD.z0 + 0.35], [s * 2.5 + 0.02, y + 0.022, CMD.z1 - 0.35], {});
+    kit.boxMM("paintedMetal", [s * 2.6 - 0.07, y, CMD.z0 + 0.25], [s * 2.6 + 0.07, y + 0.014, CMD.z1 - 0.25], BLACK);
+    kit.boxMM("emitAmber", [s * 2.6 - 0.02, y + 0.014, CMD.z0 + 0.35], [s * 2.6 + 0.02, y + 0.022, CMD.z1 - 0.35], {});
   }
   holoDais(kit, ctx, mats, 0, y, hz);
-  // lectern consoles at the forward corners, screens toward the commander (operator side = aft)
+  // lectern consoles at the forward corners, screens toward the commander (operator side = aft);
+  // 1.1 m stays free between each lectern and the dais so the walkway can be crossed either side
   for (const s of [-1, 1]) {
-    slabConsole(kit, { x: s * 2.3, y, z: CMD.z0 + 0.42, yaw: 0, w: 0.76, d: 0.5, h: 1.15, screens: [s > 0 ? "impScreen1" : "impScreen0"], pulse: "brg_pulse", seed: ctx.seed + 300 + s });
+    slabConsole(kit, { x: s * 2.4, y, z: CMD.z0 + 0.42, yaw: 0, w: 0.76, d: 0.5, h: 1.15, screens: [s > 0 ? "impScreen1" : "impScreen0"], pulse: "brg_pulse", seed: ctx.seed + 300 + s });
   }
 }
 
 /** Low octagonal holo dais: lit rings, two rim consoles on the aft side, tactical + ship holograms. */
 function holoDais(kit, ctx, mats, x, yBase, z) {
   const top = yBase + 0.28;
-  kit.cyl("paintedMetal", x, yBase + 0.03, z, 1.1, 0.06, "y", { color: PALETTE.impBlack, segments: 8 });
-  kit.cyl("paintedMetal", x, yBase + 0.16, z, 1.04, 0.2, "y", { color: PALETTE.impDark, segments: 8 });
-  kit.cyl("darkGloss", x, top - 0.01, z, 1.06, 0.03, "y", { segments: 8 });
+  kit.cyl("paintedMetal", x, yBase + 0.03, z, 0.95, 0.06, "y", { color: PALETTE.impBlack, segments: 8 });
+  kit.cyl("paintedMetal", x, yBase + 0.16, z, 0.9, 0.2, "y", { color: PALETTE.impDark, segments: 8 });
+  kit.cyl("darkGloss", x, top - 0.01, z, 0.92, 0.03, "y", { segments: 8 });
   const flat = (geo, yy, mat, opts = {}) => {
     geo.rotateX(-Math.PI / 2);
     kit.add(mat, geo, { pos: [x, yy, z], ...opts });
   };
-  flat(new THREE.RingGeometry(0.8, 0.88, 40), top + 0.006, "emitBlue");
-  flat(new THREE.RingGeometry(0.93, 0.97, 40), top + 0.006, "metal", { color: PALETTE.impMid });
+  flat(new THREE.RingGeometry(0.66, 0.73, 40), top + 0.006, "emitBlue");
+  flat(new THREE.RingGeometry(0.79, 0.83, 40), top + 0.006, "metal", { color: PALETTE.impMid });
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
-    kit.box(i % 2 ? "emitAmber" : "emitBlue", x + Math.cos(a) * 1.0, yBase + 0.2, z + Math.sin(a) * 1.0, 0.1, 0.03, 0.1, {});
+    kit.box(i % 2 ? "emitAmber" : "emitBlue", x + Math.cos(a) * 0.86, yBase + 0.2, z + Math.sin(a) * 0.86, 0.1, 0.03, 0.1, {});
   }
   // rim consoles: two angled control slabs on the aft rim (the commander stands between them)
   for (const s of [-1, 1]) {
-    const a = s * 0.62;
-    slabConsole(kit, { x: x + Math.sin(a) * 0.98, y: top, z: z + Math.cos(a) * 0.98, yaw: a, w: 0.8, d: 0.4, h: 0.36, screens: [s > 0 ? "impScreen0" : "brg_pulse"], seed: ctx.seed + 40 + s, collide: false });
+    const a = s * 0.66;
+    slabConsole(kit, { x: x + Math.sin(a) * 0.8, y: top, z: z + Math.cos(a) * 0.8, yaw: a, w: 0.7, d: 0.38, h: 0.36, screens: [s > 0 ? "impScreen0" : "brg_pulse"], seed: ctx.seed + 40 + s, collide: false });
   }
-  kit.collider([x - 1.1, yBase, z - 1.1], [x + 1.1, top + 0.5, z + 1.1], "holotable"); // taller than a step: nobody climbs onto the table
+  kit.collider([x - 0.95, yBase, z - 0.95], [x + 0.95, top + 0.5, z + 0.95], "holotable"); // taller than a step: nobody climbs onto the table
 
   // tactical hologram: the helper's disc + contacts, plus pins under each contact, range rings and a rim ring
   const hy = top + 0.36;
-  const scale = 0.62;
+  const scale = 0.55;
   const tac = hologram(kit, ctx, { x, y: hy, z, kind: "tactical", scale });
   const holo = ctx.materials.holo;
   const rand = rng(11); // same stream as the helper: reproduces its contact positions
@@ -517,16 +521,16 @@ function holoDais(kit, ctx, mats, x, yBase, z) {
   });
   // the ship itself above the tactical plot, pitched nose-up so it reads from eye level, in the
   // brighter untextured holo material with a wire outline of the wedge
-  const ship = hologram(kit, ctx, { x, y: hy + 0.42, z, kind: "ship", scale: 0.45 });
+  const ship = hologram(kit, ctx, { x, y: hy + 0.4, z, kind: "ship", scale: 0.36 });
   const sub = new THREE.Group();
-  sub.rotation.x = 0.42;
+  sub.rotation.x = 0.22;
   for (const c of [...ship.children]) {
     ship.remove(c);
     sub.add(c);
   }
   mergeGroupMeshes(sub);
   sub.children[0].material = mats.bright;
-  const outline = new THREE.LineSegments(new THREE.EdgesGeometry(sub.children[0].geometry, 20), new THREE.LineBasicMaterial({ color: 0xbfe0ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const outline = new THREE.LineSegments(new THREE.EdgesGeometry(sub.children[0].geometry, 20), new THREE.LineBasicMaterial({ color: 0xbfe0ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
   sub.add(outline);
   ship.add(sub);
   // faint projector cone from the dais up to the plot

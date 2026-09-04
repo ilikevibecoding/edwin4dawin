@@ -14,6 +14,7 @@ import { decalRect } from "../../textures.js";
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const BLACK = { color: PALETTE.impBlack, texel: 2 };
 const DARK = { color: PALETTE.impDark, texel: 1.5 };
+const HOLO_X = 10.6; // sensor pedestal centre (its 0.95 m collider stays clear of the spawn at x 9)
 
 export function buildComms(kit, ctx) {
   const B = ctx.bounds;
@@ -55,9 +56,9 @@ export function buildComms(kit, ctx) {
   buildFeedWall(kit, ctx, B, H);
   buildDoorWall(kit, ctx, B);
   buildStations(kit, ctx);
-  sensorHolo(kit, ctx, mats, 10.2, -8.5);
+  sensorHolo(kit, ctx, mats, HOLO_X, -8.5);
   buildFloorDetail(kit, ctx, B);
-  ctx.light(pointLight(0x4a9dff, 4, 6, [10.2, 2.4, -8.5]));
+  ctx.light(pointLight(0x4a9dff, 4, 6, [HOLO_X, 2.4, -8.5]));
   ctx.light(pointLight(0x4cff88, 2.5, 5, [9.5, 2.6, -12.2]));
   ctx.anim((dt, t) => {
     mats.pulse.emissiveIntensity = 1.2 + 0.35 * Math.sin(t * 2.3) + 0.1 * Math.sin(t * 9.1);
@@ -83,7 +84,7 @@ function ensureMaterials(ctx) {
     m.cms_bright = m.holo.clone();
     m.cms_bright.map = null;
     m.cms_bright.color = new THREE.Color("#7fe0c8");
-    m.cms_bright.opacity = 0.75;
+    m.cms_bright.opacity = 0.85;
   }
   return { pulse: m.cms_pulse, green: m.cms_green, sweep: m.cms_sweep, faint: m.cms_faint, bright: m.cms_bright };
 }
@@ -309,18 +310,18 @@ function sensorHolo(kit, ctx, mats, x, z) {
     wire.push(t);
   };
   for (const r of [0.24, 0.48, 0.71]) ring(r, 0.004);
-  for (const [r, y] of [[0.68, 0.14], [0.6, 0.28], [0.46, 0.42], [0.26, 0.52]]) ring(r, y, 0.006);
+  for (const [r, y] of [[0.68, 0.16], [0.6, 0.32], [0.46, 0.48], [0.26, 0.6]]) ring(r, y, 0.006);
   for (const a of [0, Math.PI / 2]) {
     const bar = new THREE.BoxGeometry(1.44, 0.006, 0.012);
     bar.rotateY(a);
     bar.translate(0, 0.004, 0);
     wire.push(bar);
   }
-  const spindle = new THREE.CylinderGeometry(0.012, 0.012, 0.56, 8);
-  spindle.translate(0, 0.28, 0);
+  const spindle = new THREE.CylinderGeometry(0.012, 0.012, 0.66, 8);
+  spindle.translate(0, 0.33, 0);
   wire.push(spindle);
   const cap = new THREE.OctahedronGeometry(0.05);
-  cap.translate(0, 0.58, 0);
+  cap.translate(0, 0.68, 0);
   wire.push(cap);
   const rand = rng(ctx.seed + 80);
   for (let i = 0; i < 8; i++) {
@@ -339,16 +340,16 @@ function sensorHolo(kit, ctx, mats, x, z) {
   for (const s of wire) if (!s.attributes.normal) s.computeVertexNormals();
   const sm = new THREE.Mesh(mergeGeometries(wire.map((s) => (s.index ? s.toNonIndexed() : s)), false), mats.bright);
   g.add(sm);
-  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.5, 40, 1, true), mats.faint);
-  drum.position.y = 0.25;
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.72, 0.6, 40, 1, true), mats.faint);
+  drum.position.y = 0.3;
   g.add(drum);
   // sweep: flat wedge on the disc + a vertical blade from the axis to the rim
   const sweep = new THREE.Group();
   const wedge = new THREE.Mesh(new THREE.CircleGeometry(0.72, 14, 0, Math.PI / 6), mats.sweep);
   wedge.rotation.x = -Math.PI / 2;
   wedge.position.y = 0.006;
-  const blade = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.5), mats.sweep);
-  blade.position.set(0.36, 0.25, 0);
+  const blade = new THREE.Mesh(new THREE.PlaneGeometry(0.72, 0.6), mats.sweep);
+  blade.position.set(0.36, 0.3, 0);
   sweep.add(wedge, blade);
   g.add(sweep);
   g.traverse((o) => {
@@ -374,8 +375,8 @@ function buildFloorDetail(kit, ctx, B) {
     kit.boxMM("paintedMetal", [14.1, 0, z - 0.12], [max[0] - 0.2, 0.05, z + 0.12], BLACK);
     kit.collider([14.1, 0, z - 0.12], [max[0] - 0.2, 0.05, z + 0.12], "trunk");
   }
-  kit.boxMM("paintedMetal", [10.2 - 0.12, 0, -12.6], [10.2 + 0.12, 0.05, -9.5], BLACK);
-  kit.collider([10.2 - 0.12, 0, -12.6], [10.2 + 0.12, 0.05, -9.5], "trunk");
+  kit.boxMM("paintedMetal", [HOLO_X - 0.12, 0, -12.6], [HOLO_X + 0.12, 0.05, -9.5], BLACK);
+  kit.collider([HOLO_X - 0.12, 0, -12.6], [HOLO_X + 0.12, 0.05, -9.5], "trunk");
   // hatch plate
   kit.box("paintedMetal", 7.6, 0.005, -11.2, 1.2, 0.01, 1.2, BLACK);
   kit.box("metal", 7.6, 0.01, -11.2, 1.0, 0.012, 1.0, { color: PALETTE.impMid, texel: 2 });
