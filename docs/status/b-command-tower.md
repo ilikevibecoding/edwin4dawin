@@ -173,6 +173,11 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   (6d27326a): recessed 4 cm strip emitters between lips, 8 cm channel emitters, gloss centre strip, stand-in
   emissive 1.6–1.9, clean floor stand-in, fog halved. Room-specific fix lists dispatched to all six owners (running).
   The critics' full reports are in this run's transcript; the ranked cross-room lists were forwarded verbatim.
+- Critic fix rounds verified so far (fresh harness run each, 0 shim warnings): comms (3da1af20), corridors + lobby
+  (3ebc2455), nav + tactical (072a96b1: `navtac-c-verify` — blown-pixel scan ≥ 236 lum finds 4 px in `d1-nav-dais`,
+  ≤ 348 px in 28 tiny bezel highlights in `d1-tactical-overview`; the run-2 mottled ceiling is gone with the matte
+  tinted ceiling; mean luminance 19 (nav-dais) / 25 (nav-holo) / 28–30 (tactical) — nav-dais stays the darkest view
+  on Deck 1 by design of its wall-wash key, see the exposure ladder under Requests). Bridge and intel still running.
 
 ## Remaining
 1. Critic findings (two blind critics on 22 shots) → fixes per room → re-shoot → push.
