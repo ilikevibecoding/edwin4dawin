@@ -1,13 +1,14 @@
-// Navigation & Flight Control (deck A): a wide curved navigator's console (five segments on an arc)
-// facing a forward star-chart wall of three big framed screens, a plotting grid on the deck in front
-// of it, an astrogation computer column ringed with amber lamps, a hyperspace jump-lever pedestal, a
-// plotting table with a hyperlane hologram (a blip travels the lane), racks with helmets and datapads.
-// Accent amber; white key light over the arc, amber instrument light everywhere else.
+// Navigation & Flight Control (deck A): a wide curved navigator's bank (five stations on an arc, lit
+// grey control surfaces under amber hood practicals, a chair at every seat) facing a forward star-chart
+// wall of three big framed screens, a second row of plotting stations and two astrogation racks by the
+// entry, a plotting grid on the deck, an astrogation computer column ringed with amber lamps, a
+// hyperspace jump-lever pedestal, a plotting table with a hyperlane hologram (a blip travels the lane).
+// Accent amber; white key light over the arc, amber instrument light everywhere else; dark inlay lane.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
-import { impRoomShell, impConsole, impChair, impPillar, impWallGear, impWallLight, lux } from "./imperial_kit.js";
+import { impRoomShell, impChair, impPillar, impWallGear, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
-import { deckASetup, yawToward, behind, yawFrame, dataBank, sealedCabinet, wallScreen, indicatorRow, conduitRun, holoTable, projectorCone, wireSphereGeometry, wireGridGeometry, wireGraphGeometry, wireDestroyerGeometry, mergedLines, mergedMesh, datapad, cup, helmet, datapadRack } from "./deck_a_kit.js";
+import { deckASetup, yawToward, behind, yawFrame, station, dataBank, sealedCabinet, wallScreen, indicatorRow, conduitRun, holoTable, projectorCone, wireSphereGeometry, wireGridGeometry, wireGraphGeometry, wireDestroyerGeometry, mergedLines, mergedMesh, datapad, cup, helmet, datapadRack } from "./deck_a_kit.js";
 
 export function buildNavigation(kit, ctx, room) {
   const [w, h, d] = room.size;
@@ -16,23 +17,27 @@ export function buildNavigation(kit, ctx, room) {
   const M = ctx.materials;
   deckASetup(kit);
   const accentKey = "emitAmber";
+  const dimKey = "emitAmberDim";
   const amber = new THREE.Color(room.accent || "#ffb347").getHex();
 
-  // ---- shell --------------------------------------------------------------------------------------
+  // ---- shell: narrow panel columns, no light slots (the chart wall and instruments carry the light) --
   const walls = impRoomShell(kit, room, ctx.doors, {
     accentKey,
     seed: 5150,
-    wall: { panelW: 1.7, features: { vent: 0.07, equipment: 0.12, conduit: 0.03, light: 0.07, screen: 0.08 }, altChance: 0.2 },
-    walls: { S: { features: { vent: 0.05, equipment: 0.0, conduit: 0.0, light: 0.06, screen: 0.0 }, corniceLight: false } },
+    wall: { panelW: 1.35, features: { vent: 0.07, equipment: 0.1, conduit: 0.04, light: 0.0, screen: 0.1 }, altChance: 0.2 },
+    walls: { S: { features: { vent: 0.05, equipment: 0.0, conduit: 0.0, light: 0.0, screen: 0.0 }, corniceLight: false } },
     floor: { lane: false },
     ceiling: { troughs: 2, troughW: 0.5, beamStep: 3.4 },
   });
-  // entry lane from the N door to the console arc, amber edge lines, chevron at the arc
-  kit.boxMM("impMetalRough", [-1.3, 0, -hz + 0.4], [1.3, 0.012, 0.9], { color: PALETTE.impGreyDark, texel: 0.7 });
-  for (const s of [-1, 1]) kit.boxMM(accentKey, [s * 1.34 - 0.02, 0.002, -hz + 0.4], [s * 1.34 + 0.02, 0.014, 0.9]);
+  // entry lane from the N door to the console arc: dark deck inlay with a faint amber hairline edge
+  kit.boxMM("impDeck", [-1.3, 0, -hz + 0.4], [1.3, 0.012, 0.9], { color: PALETTE.impGreyDark, texel: 0.7 });
+  for (const s of [-1, 1]) {
+    kit.boxMM("impTrim", [s * 1.34 - 0.04, 0.002, -hz + 0.4], [s * 1.34 + 0.04, 0.014, 0.9], { color: PALETTE.impBlack });
+    kit.boxMM(dimKey, [s * 1.34 - 0.01, 0.004, -hz + 0.4], [s * 1.34 + 0.01, 0.016, 0.9]);
+  }
   kit.box("chevronY", 0, 0.005, 1.05, 2.6, 0.01, 0.3, { texel: 1.5 });
-  // amber floor-edge light along the chart wall
-  kit.boxMM(accentKey, [-7.0, 0.002, hz - 0.72], [7.0, 0.014, hz - 0.66]);
+  // faint amber floor line along the chart wall
+  kit.boxMM(dimKey, [-7.0, 0.002, hz - 0.72], [7.0, 0.014, hz - 0.68]);
 
   // ---- star-chart wall (S): one black surround, centre chart + two stacked flanking screens ------
   {
@@ -92,35 +97,46 @@ export function buildNavigation(kit, ctx, room) {
     for (const [x, z] of [[-3.6, 6.4], [1.2, 7.6], [3.6, 5.2]]) kit.add(accentKey, new THREE.RingGeometry(0.16, 0.2, 24).rotateX(-Math.PI / 2), { pos: [x, 0.02, z], uv: "keep" });
   }
 
-  // ---- navigator's console arc (five segments) facing the chart wall --------------------------
+  // ---- navigator's bank (five stations on an arc) facing the chart wall, a chair at every seat ----
   const cz0 = -4.2;
   const Ra = 7.2;
   {
     let k = 0;
+    const screenSets = [["scrAmber0", "scrBlue2", "scrAmber1"], ["scrAmber2", "scrWhite0", "scrAmber3"], ["scrAmber1", "scrBlue0", "scrWhite2"], ["scrAmber3", "scrWhite1", "scrAmber0"], ["scrAmber2", "scrBlue3", "scrAmber1"]];
     for (const deg of [-34, -17, 0, 17, 34]) {
       const th = THREE.MathUtils.degToRad(deg);
       const x = Math.sin(th) * Ra;
       const z = cz0 + Math.cos(th) * Ra;
       const yaw = yawToward(x, z, 2 * x, 2 * z - cz0);
-      const screens = k % 2 ? ["scrAmber1", "scrWhite0", "scrAmber0"] : ["scrAmber0", "scrBlue0", "scrAmber1"];
-      impConsole(kit, x, 0, z, 2.0, 0.9, { yaw, seed: 20 + k, screens, accentKey, height: 0.85 });
-      if (Math.abs(deg) === 17) {
-        const [ox, oz] = behind(x, z, yaw, 1.0);
-        impChair(kit, ox, 0, oz, yaw);
-      }
+      station(kit, x, 0, z, 2.0, 0.9, { yaw, seed: 20 + k, screens: screenSets[k], accentKey, hoodKey: dimKey, height: 0.85, conduits: 2 });
+      const [ox, oz] = behind(x, z, yaw, 1.05);
+      impChair(kit, ox, 0, oz, yaw);
       if (deg === 0 || deg === 34) {
-        const [dx, dz] = behind(x + Math.cos(yaw) * 0.62, z - Math.sin(yaw) * 0.62, yaw, 0.38);
-        datapad(kit, dx, 0.854, dz, yaw + (deg === 0 ? 0.25 : -0.2), { screen: "scrAmber0", accentKey });
+        const [dx, dz] = behind(x + Math.cos(yaw) * 0.66, z - Math.sin(yaw) * 0.66, yaw, 0.42);
+        datapad(kit, dx, 0.854, dz, yaw + (deg === 0 ? 0.25 : -0.2), { screen: deg === 0 ? "scrAmber2" : "scrAmber0", accentKey });
       }
       if (deg === -34) {
-        const [ux, uz] = behind(x - Math.cos(yaw) * 0.6, z + Math.sin(yaw) * 0.6, yaw, 0.38);
+        const [ux, uz] = behind(x - Math.cos(yaw) * 0.64, z + Math.sin(yaw) * 0.64, yaw, 0.42);
         cup(kit, ux, 0.854, uz);
       }
       k++;
     }
-    // amber instrument line on the deck along the operators' side of the arc, black trim outside
-    kit.add(accentKey, new THREE.RingGeometry(Ra - 0.6, Ra - 0.55, 64, 1, -2.443, 1.745).rotateX(-Math.PI / 2), { pos: [0, 0.006, cz0], uv: "keep" });
+    // faint amber instrument line on the deck along the operators' side of the arc, black trim outside
+    kit.add(dimKey, new THREE.RingGeometry(Ra - 0.6, Ra - 0.56, 64, 1, -2.443, 1.745).rotateX(-Math.PI / 2), { pos: [0, 0.006, cz0], uv: "keep" });
     kit.add("impTrim", new THREE.RingGeometry(Ra + 0.5, Ra + 0.7, 64, 1, -2.443, 1.745).rotateX(-Math.PI / 2), { pos: [0, 0.005, cz0], color: PALETTE.impBlack });
+  }
+
+  // ---- second row by the entry: two plotting stations facing the chart wall, astrogation racks ----
+  for (const s of [-1, 1]) {
+    const x = s * 3.2;
+    const z = -4.7;
+    const yaw = yawToward(x, z, x, z + 1);
+    station(kit, x, 0, z, 2.2, 0.9, { yaw, seed: 26 + (s > 0 ? 1 : 0), screens: s < 0 ? ["scrAmber1", "scrWhite3", "scrAmber2"] : ["scrAmber3", "scrBlue1", "scrAmber0"], accentKey, hoodKey: dimKey, height: 0.85, tall: s < 0, conduits: 2 });
+    const [ox, oz] = behind(x, z, yaw, 1.05);
+    impChair(kit, ox, 0, oz, yaw);
+    // free-standing astrogation rack, face toward the entry
+    const f = yawFrame(kit, s * 5.3, 0, -1.55, Math.PI);
+    dataBank(f, 0, { w: 1.2, h: 2.3, accentKey, screen: s < 0 ? "scrAmber2" : "scrWhite3", seed: 28 + (s > 0 ? 1 : 0), decal: s < 0 ? IMP_DECAL.glyphs3 : IMP_DECAL.cog, cables: "floor", practical: dimKey });
   }
 
   // ---- hyperspace jump-lever pedestal (E of the arc, operator faces the chart wall) -------------
@@ -274,11 +290,11 @@ export function buildNavigation(kit, ctx, room) {
   {
     const f = walls.E.frame;
     wallScreen(f, hz - 6.0, 2.5, 2.0, 1.0, "scrAmber1", { accentKey, n0: 0.08 });
-    wallScreen(f, hz - 1.5, 2.5, 2.0, 1.0, "scrBlue0", { accentKey, n0: 0.08 });
+    wallScreen(f, hz - 1.5, 2.5, 2.0, 1.0, "scrBlue2", { accentKey, n0: 0.08 });
     indicatorRow(f, hz - 6.0, 1.7, 0.1, 10, { accentKey, seed: 51, step: 0.12, size: 0.05 });
     indicatorRow(f, hz - 1.5, 1.7, 0.1, 10, { accentKey, seed: 52, step: 0.12, size: 0.05 });
-    dataBank(f, hz + 3.0, { w: 1.2, h: 2.3, accentKey, screen: "scrAmber0", seed: 53, rows: 4 });
-    dataBank(f, hz + 4.3, { w: 1.2, h: 2.3, accentKey, screen: "scrWhite0", seed: 54, rows: 3, decal: IMP_DECAL.glyphs3 });
+    dataBank(f, hz + 3.0, { w: 1.2, h: 2.3, accentKey, screen: "scrAmber0", seed: 53, practical: dimKey });
+    dataBank(f, hz + 4.3, { w: 1.2, h: 2.3, accentKey, screen: "scrWhite0", seed: 54, decal: IMP_DECAL.glyphs3, practical: dimKey });
     impWallGear(f, hz + 7.4, 1.5, { seed: 55, accentKey });
     conduitRun(f, 1.0, 2 * hz - 1.0, h - 0.8, { n: 0.16, pipes: 2, seed: 56, clampStep: 2.2 });
     f.decal(IMP_DECAL.cog, hz - 3.8, 3.6, 0.09, 0.45);
@@ -290,7 +306,7 @@ export function buildNavigation(kit, ctx, room) {
   // ---- W wall: status readout, chart locker, datapad rack, gear -----------------------------
   {
     const f = walls.W.frame;
-    wallScreen(f, hz + 0.5, 2.5, 1.6, 0.9, "scrWhite1", { accentKey, n0: 0.08 });
+    wallScreen(f, hz + 0.5, 2.5, 1.6, 0.9, "scrWhite3", { accentKey, n0: 0.08 });
     indicatorRow(f, hz + 0.5, 1.75, 0.1, 8, { accentKey, seed: 61, step: 0.12, size: 0.05 });
     sealedCabinet(f, hz + 4.6, { w: 1.4, h: 2.3, accentKey, decal: IMP_DECAL.glyphs3 });
     datapadRack(f, hz + 7.6, 1.5, { n: 5, accentKey });
@@ -312,5 +328,6 @@ export function buildNavigation(kit, ctx, room) {
   kit.light({ type: "point", pos: [0, 2.6, hz - 2.2], color: amber, intensity: 14.0, distance: 14, priority: 0.6 });
   kit.light({ type: "point", pos: [-7.6, 2.4, 3.6], color: amber, intensity: 8.0, distance: 9, priority: 0.42 });
   kit.light({ type: "point", pos: [-6.4, 1.9, -3.4], color: amber, intensity: 6.0, distance: 7, priority: 0.4 });
-  kit.light({ type: "point", pos: [6.4, 1.3, 0.8], color: amber, intensity: 4.0, distance: 6, priority: 0.36 });
+  // amber console practical low over the bank's centre so the grey control surfaces read
+  kit.light({ type: "point", pos: [0, 1.8, 1.6], color: amber, intensity: 6.0, distance: 8, priority: 0.44 });
 }

@@ -1,13 +1,14 @@
 // Tactical Operations / Holographic Planning (deck A): an octagonal dais with a large circular holo
 // tank projecting a wireframe of the Star Destroyer itself with orbiting contact markers, a briefing
-// rail around the dais edge, standing consoles on the main floor and on two raised side galleries
-// (all facing the tank), a huge situation-map wall with a lean rail, pulsing red alert lamps, dark
-// ceiling with a ring light trough, blue key light from the tank. Accent blue.
+// rail around the dais edge, standing stations with stools on the main floor and on two raised side
+// galleries (all facing the tank), a huge situation-map wall with a lean rail, pulsing red alert lamps,
+// dark ceiling with a thin recessed ring cove and a downlight over the dais, blue key light from the
+// tank (the brightest object). Accent blue; the door-to-dais runway is the one kept on this deck.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
-import { impRoomShell, impConsole, impRailing, impPillar, impWallGear, impWallLight, lux } from "./imperial_kit.js";
+import { impRoomShell, impRailing, impPillar, impWallGear, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
-import { deckASetup, yawToward, behind, dataBank, wallScreen, indicatorRow, conduitRun, projectorCone, wireDestroyerGeometry, wireGridGeometry, wireRingGeometry, lineSegments, mergedMesh, stepBlock, alertLamp, ceilingRingLight, segRailing, datapad, cup } from "./deck_a_kit.js";
+import { deckASetup, yawToward, behind, station, dataBank, wallScreen, indicatorRow, conduitRun, projectorCone, wireDestroyerGeometry, wireGridGeometry, wireRingGeometry, lineSegments, mergedMesh, stepBlock, alertLamp, ceilingRingLight, downlight, segRailing, datapad, cup } from "./deck_a_kit.js";
 
 export function buildTactical(kit, ctx, room) {
   const [w, h, d] = room.size;
@@ -16,26 +17,30 @@ export function buildTactical(kit, ctx, room) {
   const M = ctx.materials;
   deckASetup(kit);
   const accentKey = "emitBlue";
+  const dimKey = "emitBlueDim";
   const blue = new THREE.Color(room.accent || "#3fb0ff").getHex();
 
-  // ---- shell: dark ceiling without troughs (a ring light over the dais replaces them) --------------
+  // ---- shell: wide panels over a low dado band; dark ceiling without troughs (ring cove + downlight) --
   const walls = impRoomShell(kit, room, ctx.doors, {
     accentKey,
     seed: 7703,
-    wall: { panelW: 1.8, features: { vent: 0.06, equipment: 0.1, conduit: 0.04, light: 0.08, screen: 0.06 }, altChance: 0.22 },
-    walls: { E: { features: { vent: 0.04, equipment: 0.0, conduit: 0.0, light: 0.1, screen: 0.0 } } },
+    wall: { panelW: 1.95, bands: [1.25], features: { vent: 0.06, equipment: 0.1, conduit: 0.04, light: 0.02, screen: 0.08 }, altChance: 0.22 },
+    walls: { E: { features: { vent: 0.04, equipment: 0.0, conduit: 0.0, light: 0.0, screen: 0.0 } } },
     floor: { lane: false },
     ceiling: { troughs: 0, withLights: false, dark: PALETTE.impBlack, beamStep: 3.7 },
   });
-  ceilingRingLight(kit, 0, 0, 5.4, h, 16, { key: "emitWhiteSoft", w: 0.5, accentKey });
+  // thin dim cove line (0.1 m emitter in a 0.3 m channel) instead of the glowing ring; one downlight over the dais
+  ceilingRingLight(kit, 0, 0, 5.4, h, 16, { key: "emitWhiteDim", w: 0.3, emitW: 0.1, drop: 0.2 });
+  downlight(kit, 0, h, 0, { r: 0.28, key: "emitWhiteSoft" });
   // small blue ceiling markers on a wider ring
   for (let i = 0; i < 8; i++) {
     const a = (i + 0.5) * (Math.PI / 4);
     kit.box("impTrim", Math.cos(a) * 8.2, h - 0.04, Math.sin(a) * 8.2, 0.5, 0.08, 0.5, { color: PALETTE.impBlack });
-    kit.box(accentKey, Math.cos(a) * 8.2, h - 0.085, Math.sin(a) * 8.2, 0.3, 0.02, 0.3);
+    kit.box(dimKey, Math.cos(a) * 8.2, h - 0.085, Math.sin(a) * 8.2, 0.3, 0.02, 0.3);
   }
 
-  // ---- floor markings: entry lanes to both step runs, ring around the dais ------------------------
+  // ---- floor markings: the door-to-dais runway (kept), a dark inlay from the dais to the map wall,
+  // a dim ring around the dais
   const R = 4.4; // dais circumradius (octagon)
   const A = R * Math.cos(Math.PI / 8); // apothem
   const S = R * Math.sin(Math.PI / 8); // half flat
@@ -43,11 +48,17 @@ export function buildTactical(kit, ctx, room) {
   for (const s of [-1, 1]) {
     const x0 = s < 0 ? -hx + 0.5 : A + 1.05;
     const x1 = s < 0 ? -A - 1.05 : hx - 1.9;
-    kit.boxMM("impMetalRough", [x0, 0, -1.3], [x1, 0.012, 1.3], { color: PALETTE.impGreyDark, texel: 0.7 });
-    for (const e of [-1, 1]) kit.boxMM(accentKey, [x0, 0.002, e * 1.34 - 0.02], [x1, 0.014, e * 1.34 + 0.02]);
+    kit.boxMM(s < 0 ? "impMetalRough" : "impDeck", [x0, 0, -1.3], [x1, 0.012, 1.3], { color: PALETTE.impGreyDark, texel: 0.7 });
+    for (const e of [-1, 1]) {
+      if (s < 0) kit.boxMM(accentKey, [x0, 0.002, e * 1.34 - 0.02], [x1, 0.014, e * 1.34 + 0.02]);
+      else {
+        kit.boxMM("impTrim", [x0, 0.002, e * 1.34 - 0.04], [x1, 0.014, e * 1.34 + 0.04], { color: PALETTE.impBlack });
+        kit.boxMM(dimKey, [x0, 0.004, e * 1.34 - 0.01], [x1, 0.016, e * 1.34 + 0.01]);
+      }
+    }
     kit.box("chevronY", s < 0 ? x1 + 0.2 : x0 - 0.2, 0.005, 0, 0.3, 0.01, 2.6, { texel: 1.5 });
   }
-  kit.add(accentKey, new THREE.RingGeometry(5.3, 5.36, 96).rotateX(-Math.PI / 2), { pos: [0, 0.006, 0], uv: "keep" });
+  kit.add(dimKey, new THREE.RingGeometry(5.3, 5.35, 96).rotateX(-Math.PI / 2), { pos: [0, 0.006, 0], uv: "keep" });
   kit.add("impTrim", new THREE.RingGeometry(5.36, 5.6, 96).rotateX(-Math.PI / 2), { pos: [0, 0.005, 0], color: PALETTE.impBlack });
 
   // ---- dais: octagon, two steps up on the W (door) and E (map) sides, rail on the other six flats --
@@ -157,17 +168,18 @@ export function buildTactical(kit, ctx, room) {
     });
   }
 
-  // ---- main-floor standing consoles on the diagonals, facing the tank ---------------------------
+  // ---- main-floor standing stations on the diagonals, facing the tank (kick recess, conduits, stools) --
   {
     let k = 0;
+    const sets = [["scrBlue0", "scrBlue2", "scrWhite1"], ["scrBlue1", "scrWhite0", "scrBlue3"], ["scrBlue2", "scrWhite3", "scrBlue0"], ["scrBlue3", "scrBlue1", "scrWhite2"]];
     for (const a of [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4]) {
       const x = Math.cos(a) * 7.0;
       const z = Math.sin(a) * 7.0;
       const yaw = yawToward(x, z, 0, 0);
-      impConsole(kit, x, 0, z, 2.4, 0.9, { yaw, seed: 40 + k, screens: k % 2 ? ["scrBlue1", "scrWhite0", "scrBlue0"] : ["scrBlue0", "scrBlue1", "scrWhite1"], accentKey, height: 1.0 });
+      station(kit, x, 0, z, 2.4, 0.9, { yaw, seed: 40 + k, screens: sets[k], accentKey, hoodKey: dimKey, height: 1.0, stool: true, stoolH: 0.7, conduits: 2 });
       if (k === 1) {
-        const [dx, dz] = behind(x + Math.cos(yaw) * 0.8, z - Math.sin(yaw) * 0.8, yaw, 0.38);
-        datapad(kit, dx, 1.004, dz, yaw - 0.3, { screen: "scrBlue0", accentKey });
+        const [dx, dz] = behind(x + Math.cos(yaw) * 0.85, z - Math.sin(yaw) * 0.85, yaw, 0.42);
+        datapad(kit, dx, 1.004, dz, yaw - 0.3, { screen: "scrBlue2", accentKey });
       }
       k++;
     }
@@ -184,22 +196,24 @@ export function buildTactical(kit, ctx, room) {
     kit.boxMM(accentKey, [-10.56, gY - 0.1, Math.min(z0, z0 - s * 0.07)], [10.56, gY - 0.075, Math.max(z0, z0 - s * 0.07)]);
     kit.boxMM("impTrim", [-10.55, gY + 0.002, Math.min(z0 + s * 0.29, z0 + s * 0.35)], [10.55, gY + 0.008, Math.max(z0 + s * 0.29, z0 + s * 0.35)], { color: PALETTE.impBlack });
     kit.floor(-10.5, Math.min(z0, z1), 10.5, Math.max(z0, z1), gY, "gallery");
-    stepBlock(kit, "z", s * (gIn - 0.95), z0, -1.3, 1.3, 0, gY, 2, { accentKey });
-    impRailing(kit, [-10.5, z0], [-1.45, z0], gY, { light: accentKey });
-    impRailing(kit, [1.45, z0], [10.5, z0], gY, { light: accentKey });
+    stepBlock(kit, "z", s * (gIn - 0.95), z0, -1.3, 1.3, 0, gY, 2, { accentKey: dimKey });
+    impRailing(kit, [-10.5, z0], [-1.45, z0], gY);
+    impRailing(kit, [1.45, z0], [10.5, z0], gY);
     impRailing(kit, [-10.5, z0], [-10.5, z1], gY);
     impRailing(kit, [10.5, z0], [10.5, z1], gY);
+    let gk = 0;
     for (const x of [-7.9, -3.7, 3.7, 7.9]) {
       const z = s * (gIn + 1.25);
       const yaw = yawToward(x, z, 0, 0);
-      impConsole(kit, x, gY, z, 2.5, 0.9, { yaw, seed: 60 + Math.round(x) + (s > 0 ? 20 : 0), screens: ["scrBlue0", "scrWhite0", "scrBlue1"], accentKey, height: 1.0 });
+      station(kit, x, gY, z, 2.5, 0.9, { yaw, seed: 60 + Math.round(x) + (s > 0 ? 20 : 0), screens: [["scrBlue0", "scrWhite2", "scrBlue1"], ["scrBlue3", "scrWhite0", "scrBlue2"], ["scrBlue1", "scrWhite3", "scrBlue0"], ["scrBlue2", "scrWhite1", "scrBlue3"]][(gk + (s > 0 ? 2 : 0)) % 4], accentKey, hoodKey: dimKey, height: 1.0, stool: true, stoolH: 0.7, conduits: 2 });
+      gk++;
     }
     // gallery wall: readouts above the consoles, indicator rows, conduits along the cornice
     const f = walls[s < 0 ? "N" : "S"].frame;
     const toU = (x) => (s < 0 ? x + hx : hx - x);
     let i = 0;
     for (const x of [-6.8, 0, 6.8]) {
-      wallScreen(f, toU(x), 3.5, 2.2, 1.0, i === 1 ? (s < 0 ? "scrBlue1" : "scrWhite1") : "scrBlue0", { accentKey, n0: 0.08 });
+      wallScreen(f, toU(x), 3.5, 2.2, 1.0, i === 1 ? (s < 0 ? "scrBlue1" : "scrWhite1") : s < 0 ? (i ? "scrBlue2" : "scrBlue0") : i ? "scrBlue3" : "scrWhite2", { accentKey, n0: 0.08 });
       indicatorRow(f, toU(x), 2.7, 0.1, 12, { accentKey, seed: 70 + i + (s > 0 ? 5 : 0), step: 0.12, size: 0.05 });
       i++;
     }
@@ -219,7 +233,7 @@ export function buildTactical(kit, ctx, room) {
     for (const s of [-1, 1]) {
       wallScreen(f, hz + s * 3.7, 3.1, 1.8, 1.0, s < 0 ? "scrBlue1" : "scrBlue0", { accentKey, n0: 0.08 });
       indicatorRow(f, hz + s * 3.7, 2.3, 0.1, 10, { accentKey, seed: 80 + s, step: 0.12, size: 0.05 });
-      dataBank(f, hz + s * 6.4, { w: 1.2, h: 2.4, accentKey, screen: "scrBlue0", seed: 90 + s, rows: 4, decal: IMP_DECAL.glyphs1 });
+      dataBank(f, hz + s * 6.4, { w: 1.2, h: 2.4, accentKey, screen: s < 0 ? "scrBlue0" : "scrBlue3", seed: 90 + s, decal: IMP_DECAL.glyphs1 });
     }
     // header strip over the map + stencils
     f.box("impTrim", hz, 4.62, 0.08, 4.6, 0.16, 0.08, { color: PALETTE.impBlack });
@@ -229,10 +243,10 @@ export function buildTactical(kit, ctx, room) {
     f.decal(IMP_DECAL.cog, hz + 5.2, 1.4, 0.09, 0.4);
     impWallLight(f, hz - 8.2, 4.6, { key: accentKey, w: 0.8 });
     impWallLight(f, hz + 8.2, 4.6, { key: accentKey, w: 0.8 });
-    // lean rail 1.6 m in front of the map, accent floor strip beneath it
-    impRailing(kit, [hx - 1.6, -3.3], [hx - 1.6, 3.3], 0, { light: accentKey, postStep: 1.65 });
+    // lean rail 1.6 m in front of the map, dim floor line beneath it
+    impRailing(kit, [hx - 1.6, -3.3], [hx - 1.6, 3.3], 0, { postStep: 1.65 });
     kit.boxMM("impTrim", [hx - 1.7, 0.002, -3.4], [hx - 1.5, 0.01, 3.4], { color: PALETTE.impBlack });
-    kit.boxMM(accentKey, [hx - 1.62, 0.004, -3.3], [hx - 1.58, 0.012, 3.3]);
+    kit.boxMM(dimKey, [hx - 1.62, 0.004, -3.3], [hx - 1.58, 0.012, 3.3]);
   }
 
   // ---- W wall (door): status board, gear cluster, stencils, tactical computers ------------------
@@ -244,8 +258,8 @@ export function buildTactical(kit, ctx, room) {
     f.decal(IMP_DECAL.glyphs1, hz - 2.4, 2.2, 0.09, 0.5);
     f.decal(IMP_DECAL.arrowRight, hz + 2.4, 2.2, 0.09, 0.5);
     f.decal(IMP_DECAL.keepClear, hz, 3.5, 0.09, 0.7);
-    dataBank(f, hz - 8.6, { w: 1.2, h: 2.4, accentKey, screen: "scrWhite0", seed: 93, rows: 3 });
-    dataBank(f, hz + 8.6, { w: 1.2, h: 2.4, accentKey, screen: "scrBlue1", seed: 94, rows: 4 });
+    dataBank(f, hz - 8.6, { w: 1.2, h: 2.4, accentKey, screen: "scrWhite0", seed: 93 });
+    dataBank(f, hz + 8.6, { w: 1.2, h: 2.4, accentKey, screen: "scrBlue1", seed: 94 });
     impWallLight(f, hz - 7.0, 4.4, { key: accentKey, w: 0.8 });
     impWallLight(f, hz + 7.0, 4.4, { key: accentKey, w: 0.8 });
   }
@@ -263,12 +277,14 @@ export function buildTactical(kit, ctx, room) {
   }
 
   // ---- lights -----------------------------------------------------------------------------------
-  kit.light({ type: "spot", pos: [0, h - 0.3, 0], target: [0, tTop, 0], color: 0xdfe8ff, intensity: lux(h - 0.3 - tTop, 2.4), distance: 13, angle: 0.8, penumbra: 0.5, shadow: true, priority: 0.95 });
-  kit.light({ type: "point", pos: [0, tTop + 0.95, 0], color: blue, intensity: 10.0, distance: 14, priority: 0.7 });
+  // downlight over the dais (the fixture is drawn at the ceiling) + the tank's own blue glow: brightest object
+  kit.light({ type: "spot", pos: [0, h - 0.3, 0], target: [0, tTop, 0], color: 0xdfe8ff, intensity: lux(h - 0.3 - tTop, 2.6), distance: 13, angle: 0.62, penumbra: 0.5, shadow: true, priority: 0.95 });
+  kit.light({ type: "point", pos: [0, tTop + 0.95, 0], color: blue, intensity: 12.0, distance: 14, priority: 0.7 });
   kit.light({ type: "point", pos: [0, h - 0.6, -8.8], color: 0xe4ecff, intensity: lux(h - 0.6 - gY, 1.1), distance: 14, priority: 0.5 });
   kit.light({ type: "point", pos: [0, h - 0.6, 8.8], color: 0xe4ecff, intensity: lux(h - 0.6 - gY, 1.1), distance: 14, priority: 0.49 });
   kit.light({ type: "point", pos: [10.2, h - 0.8, 0], color: 0xe4ecff, intensity: lux(h - 0.8, 1.0), distance: 13, priority: 0.52 });
-  kit.light({ type: "point", pos: [-10.2, h - 0.8, 0], color: 0xe4ecff, intensity: lux(h - 0.8, 1.0), distance: 13, priority: 0.51 });
-  kit.light({ type: "point", pos: [-6.4, 0.5, 0], color: blue, intensity: 5.0, distance: 8, priority: 0.36 });
-  kit.light({ type: "point", pos: [6.4, 0.5, 0], color: blue, intensity: 5.0, distance: 8, priority: 0.35 });
+  kit.light({ type: "point", pos: [-10.2, h - 0.8, 0], color: 0xe4ecff, intensity: lux(h - 0.8, 1.1), distance: 13, priority: 0.51 });
+  // blue practicals low over the two door-side floor stations so their control surfaces read
+  kit.light({ type: "point", pos: [-5.4, 1.9, -5.4], color: blue, intensity: 5.0, distance: 7, priority: 0.36 });
+  kit.light({ type: "point", pos: [-5.4, 1.9, 5.4], color: blue, intensity: 5.0, distance: 7, priority: 0.35 });
 }

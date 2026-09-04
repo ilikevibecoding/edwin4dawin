@@ -316,6 +316,36 @@ export function makeWaveform(w = 512, h = 256, seed = 45) {
 }
 
 // ---------------------------------------------------------------------------
+// Data-core scroll: columns of glyph lines on a transparent ground, tiling vertically so a cylinder
+// wrapped in it can scroll (intel room data core). Red / white, occasional flagged lines.
+// ---------------------------------------------------------------------------
+export function makeDataScroll(w = 256, h = 1024, seed = 57, color = "#ff5a4a", alt = "#ffd8d0") {
+  const c = makeCanvas(w, h);
+  const ctx = c.getContext("2d");
+  const rand = mulberry32(seed);
+  ctx.clearRect(0, 0, w, h);
+  const rowH = 14;
+  const cols = [8, w * 0.5 + 6];
+  for (let y = 4; y < h - rowH; y += rowH) {
+    for (const x of cols) {
+      if (rand() < 0.12) continue; // blank line
+      const flagged = rand() < 0.08;
+      const n = 4 + Math.floor(rand() * 8);
+      glyphRow(ctx, rand, x, y, n, rgba(flagged ? alt : color, flagged ? 0.95 : 0.7), 6);
+      // value bar after the glyphs
+      ctx.fillStyle = rgba(color, 0.35);
+      ctx.fillRect(x + n * 9 + 6, y + 2, Math.max(4, (w * 0.5 - 20 - n * 9) * rand()), 3);
+    }
+  }
+  // sector dividers every 8 rows
+  for (let y = 4; y < h; y += rowH * 8) {
+    ctx.fillStyle = rgba(alt, 0.5);
+    ctx.fillRect(4, y - 3, w - 8, 1);
+  }
+  return toTexture(c, { srgb: true, wrap: true });
+}
+
+// ---------------------------------------------------------------------------
 // Materials
 // ---------------------------------------------------------------------------
 export function ensureDeckAMaterials(materials) {
@@ -324,6 +354,21 @@ export function ensureDeckAMaterials(materials) {
   const emit = (color, intensity) => setDomain(new THREE.MeshStandardMaterial({ color: new THREE.Color(color).multiplyScalar(0.08), emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 0.45, metalness: 0 }), "interior");
   const holo = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
   const holoLine = (color, opacity) => new THREE.LineBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false });
+
+  // dim practicals for console hoods / lane hairlines (the shared kit has no cyan-dim key)
+  materials.deckA_emitCyanDim = emit("#7fd8ff", 0.8);
+  materials.deckA_emitWhiteCool = emit("#cfe0ff", 1.2);
+  // intel data core: scrolling glyph columns (additive, transparent ground), red hologram tints
+  const scroll = makeDataScroll(256, 1024, 57);
+  materials.deckA_dataScroll = new THREE.MeshBasicMaterial({ map: scroll, color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  materials.deckA_dataScroll.userData.scroll = scroll;
+  const scroll2 = makeDataScroll(256, 1024, 91, "#ffb0a0", "#ffffff");
+  materials.deckA_dataScroll2 = new THREE.MeshBasicMaterial({ map: scroll2, color: 0xffffff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  materials.deckA_dataScroll2.userData.scroll = scroll2;
+  materials.deckA_holoRed = holo(0xff5a4a, 0.22);
+  materials.deckA_holoRedBright = holo(0xffb0a0, 0.6);
+  materials.deckA_holoLineRed = holoLine(0xff8a7a, 0.8);
+  materials.deckA_holoCyanDim = holo(0x5fd0ff, 0.1);
 
   materials.deckA_starChart = screen(makeStarChart(1024, 512, 21), 1.4);
   materials.deckA_tacMap = screen(makeTacticalMap(1024, 512, 33), 1.4);

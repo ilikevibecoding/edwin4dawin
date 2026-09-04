@@ -189,7 +189,9 @@ export function projector(kit, x, y, z, target, opts = {}) {
   kit.cyl("impGloss", x, y - 0.47, z, 0.22, 0.06, "y", { segments: 20 });
   kit.cyl(accentKey, x, y - 0.46, z, 0.25, 0.02, "y", { segments: 20 });
   for (let i = 0; i < 4; i++) kit.box(i % 2 ? "emitRedImp" : accentKey, x - 0.3 + i * 0.2, y - 0.455, z + 0.32, 0.05, 0.02, 0.012);
-  // cone from the lens to the target
+  // faint cone from the lens to the target (dim holo: a beam you notice, not a blue wedge)
+  ensureDeckBMaterials(kit.materials);
+  kit.noShadowKeys.add("deckB_holoDim");
   const a = new THREE.Vector3(x, y - 0.5, z);
   const b = new THREE.Vector3(target[0], target[1], target[2]);
   const dir = b.clone().sub(a);
@@ -197,7 +199,7 @@ export function projector(kit, x, y, z, target, opts = {}) {
   const q = new THREE.Quaternion().setFromUnitVectors(UP, dir.clone().normalize().negate());
   const g = new THREE.CylinderGeometry(0.06, spread, len, 24, 1, true);
   const mid = a.clone().add(b).multiplyScalar(0.5);
-  kit.add("holo", g, { pos: [mid.x, mid.y, mid.z], quat: q, uv: "keep" });
+  kit.add("deckB_holoDim", g, { pos: [mid.x, mid.y, mid.z], quat: q, uv: "keep" });
 }
 
 // ---------------------------------------------------------------------------
@@ -330,4 +332,193 @@ export function holoFigureStatic(kit, x, y, z, h = 0.22, bright = false) {
   const key = bright ? "holoBright" : "holo";
   kit.cyl(key, x, y + h * 0.35, z, h * 0.28, h * 0.7, "y", { r2: h * 0.12, segments: 10, uv: "keep" });
   kit.add(key, new THREE.SphereGeometry(h * 0.16, 10, 8), { pos: [x, y + h * 0.86, z], uv: "keep" });
+}
+
+// ---------------------------------------------------------------------------
+// Deck B extra materials (dim holograms for the gallery table, warm sconce emitter, red-team holo)
+// ---------------------------------------------------------------------------
+export function ensureDeckBMaterials(materials) {
+  if (materials.deckB_holoDim) return materials;
+  const holo = (color, opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  materials.deckB_holoDim = holo(0x6fa4ff, 0.11);
+  materials.deckB_holoMid = holo(0x9fc6ff, 0.32);
+  materials.deckB_holoRed = holo(0xff9a70, 0.42);
+  materials.deckB_holoRedBright = holo(0xffc8a8, 0.8);
+  materials.deckB_holoLine = new THREE.LineBasicMaterial({ color: 0x9fc6ff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false });
+  materials.deckB_emitAmberWarm = new THREE.MeshStandardMaterial({ color: new THREE.Color("#ffb56b").multiplyScalar(0.08), emissive: new THREE.Color("#ffb56b"), emissiveIntensity: 1.3, roughness: 0.45, metalness: 0 });
+  for (const k of ["deckB_holoDim", "deckB_holoMid", "deckB_holoRed", "deckB_holoRedBright", "deckB_holoLine", "deckB_emitAmberWarm"]) materials[k].name = k;
+  return materials;
+}
+
+/** Register the deckB_* materials on a kit and keep the hologram keys out of the shadow pass. */
+export function deckBSetup(kit) {
+  ensureDeckBMaterials(kit.materials);
+  for (const k of ["deckB_holoDim", "deckB_holoMid", "deckB_holoRed", "deckB_holoRedBright", "holo", "holoBright"]) kit.noShadowKeys.add(k);
+}
+
+// ---------------------------------------------------------------------------
+// Holo-game creatures (original silhouettes: stacked spheres / cones with limbs) — four kinds
+// ---------------------------------------------------------------------------
+const Y = new THREE.Vector3(0, 1, 0);
+function limb(parts, a, b, r, segs = 6) {
+  const A = new THREE.Vector3(...a);
+  const B = new THREE.Vector3(...b);
+  const dir = B.clone().sub(A);
+  const L = dir.length();
+  const g = new THREE.CylinderGeometry(r, r * 0.8, L, segs);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y, dir.normalize()));
+  g.translate((A.x + B.x) / 2, (A.y + B.y) / 2, (A.z + B.z) / 2);
+  parts.push(g);
+}
+function blob(parts, x, y, z, r, sx = 1, sy = 1, sz = 1) {
+  const g = new THREE.SphereGeometry(r, 10, 8);
+  g.scale(sx, sy, sz);
+  g.translate(x, y, z);
+  parts.push(g);
+}
+function spike(parts, x, y, z, r, len, dir) {
+  const g = new THREE.ConeGeometry(r, len, 6);
+  const d = new THREE.Vector3(...dir).normalize();
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y, d));
+  g.translate(x + (d.x * len) / 2, y + (d.y * len) / 2, z + (d.z * len) / 2);
+  parts.push(g);
+}
+/**
+ * Geometry parts (already placed, facing +x) for one creature of total height h:
+ *  0 strider (long-necked quadruped), 1 brute (hunched tusked biped), 2 coil (rearing serpent),
+ *  3 stalker (tripod insectoid with antennae).
+ */
+export function creatureParts(kind, h = 0.28) {
+  const p = [];
+  switch (kind % 4) {
+    case 0: {
+      blob(p, 0, 0.5 * h, 0, 0.13 * h, 1.7, 0.9, 1.0);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) limb(p, [sx * 0.14 * h, 0.44 * h, sz * 0.07 * h], [sx * 0.19 * h, 0, sz * 0.1 * h], 0.022 * h);
+      limb(p, [0.18 * h, 0.55 * h, 0], [0.3 * h, 0.9 * h, 0], 0.035 * h);
+      blob(p, 0.34 * h, 0.92 * h, 0, 0.07 * h, 1.7, 0.9, 1.0);
+      spike(p, 0.3 * h, 0.97 * h, 0.03 * h, 0.018 * h, 0.14 * h, [-0.5, 1, 0.2]);
+      spike(p, 0.3 * h, 0.97 * h, -0.03 * h, 0.018 * h, 0.14 * h, [-0.5, 1, -0.2]);
+      limb(p, [-0.2 * h, 0.5 * h, 0], [-0.42 * h, 0.3 * h, 0], 0.02 * h);
+      break;
+    }
+    case 1: {
+      blob(p, 0, 0.56 * h, 0, 0.2 * h, 1.05, 1.25, 0.8);
+      blob(p, 0.08 * h, 0.86 * h, 0, 0.1 * h, 1.1, 0.85, 1.0);
+      for (const s of [-1, 1]) {
+        blob(p, 0, 0.72 * h, s * 0.24 * h, 0.085 * h);
+        limb(p, [0, 0.7 * h, s * 0.26 * h], [0.08 * h, 0.22 * h, s * 0.3 * h], 0.045 * h);
+        blob(p, 0.1 * h, 0.18 * h, s * 0.3 * h, 0.06 * h);
+        limb(p, [0, 0.34 * h, s * 0.1 * h], [0, 0, s * 0.12 * h], 0.06 * h);
+        spike(p, 0.16 * h, 0.82 * h, s * 0.05 * h, 0.02 * h, 0.12 * h, [1, 0.6, s * 0.3]);
+      }
+      break;
+    }
+    case 2: {
+      let x = -0.12 * h;
+      let y = 0.06 * h;
+      for (let i = 0; i < 7; i++) {
+        const r = h * (0.085 - i * 0.006);
+        const a = i * 0.85;
+        const R = 0.16 * h * (1 - i * 0.09);
+        blob(p, Math.cos(a) * R, y, Math.sin(a) * R, r);
+        x = Math.cos(a) * R;
+        y += 0.135 * h;
+      }
+      blob(p, x + 0.08 * h, y - 0.02 * h, 0, 0.06 * h, 1.8, 0.8, 1.0);
+      spike(p, x + 0.18 * h, y - 0.05 * h, 0.02 * h, 0.012 * h, 0.08 * h, [1, -0.8, 0.3]);
+      spike(p, x + 0.18 * h, y - 0.05 * h, -0.02 * h, 0.012 * h, 0.08 * h, [1, -0.8, -0.3]);
+      break;
+    }
+    default: {
+      blob(p, 0, 0.62 * h, 0, 0.1 * h, 1.2, 0.8, 1.0);
+      blob(p, 0.14 * h, 0.7 * h, 0, 0.06 * h);
+      spike(p, -0.08 * h, 0.6 * h, 0, 0.09 * h, 0.3 * h, [-1, -0.25, 0]);
+      for (let k = 0; k < 3; k++) {
+        const a = (k / 3) * Math.PI * 2 + Math.PI / 6;
+        const kx = Math.cos(a) * 0.2 * h;
+        const kz = Math.sin(a) * 0.2 * h;
+        limb(p, [Math.cos(a) * 0.08 * h, 0.6 * h, Math.sin(a) * 0.08 * h], [kx, 0.72 * h, kz], 0.018 * h);
+        limb(p, [kx, 0.72 * h, kz], [kx * 1.5, 0, kz * 1.5], 0.016 * h);
+      }
+      limb(p, [0.18 * h, 0.74 * h, 0.02 * h], [0.42 * h, 1.0 * h, 0.12 * h], 0.01 * h, 4);
+      limb(p, [0.18 * h, 0.74 * h, -0.02 * h], [0.42 * h, 1.0 * h, -0.12 * h], 0.01 * h, 4);
+    }
+  }
+  return p;
+}
+
+/** Static holographic creature merged into the kit (facing +x, rotated by yaw about y). */
+export function holoCreatureStatic(kit, x, y, z, kind, h = 0.28, key = "holo", yaw = 0) {
+  const q = new THREE.Quaternion().setFromAxisAngle(Y, yaw);
+  for (const g of creatureParts(kind, h)) kit.add(key, g, { pos: [x, y, z], quat: q, uv: "keep" });
+}
+
+/** Holographic creature as a THREE.Group (for kit.attach and animation). */
+export function holoCreature(materials, kind, h = 0.28, key = "holoBright") {
+  const g = new THREE.Group();
+  for (const part of creatureParts(kind, h)) g.add(new THREE.Mesh(part, materials[key]));
+  return g;
+}
+
+// ---------------------------------------------------------------------------
+// Gallery hologram: cut-away of the command tower (stacked deck plates, bridge head, a "you are
+// here" blip on this deck). Dim by design (~0.6 of the old table): the view outside is the point.
+// ---------------------------------------------------------------------------
+export function holoTowerMap(materials, h = 1.1) {
+  const g = new THREE.Group();
+  const dim = materials.deckB_holoDim;
+  const mid = materials.deckB_holoMid;
+  const line = materials.deckB_holoLine;
+  const decks = 5;
+  for (let i = 0; i < decks; i++) {
+    const t = i / (decks - 1);
+    const w = 1.15 - t * 0.55;
+    const dd = 0.62 - t * 0.28;
+    const y = 0.08 + t * (h - 0.36);
+    const box = new THREE.BoxGeometry(w, 0.035, dd);
+    const plate = new THREE.Mesh(box, i === 1 ? mid : dim);
+    plate.position.y = y;
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box), line);
+    edges.position.y = y;
+    g.add(plate, edges);
+    // interior detail: a few compartment walls per deck
+    for (let k = -1; k <= 1; k++) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.11, dd * 0.8), dim);
+      wall.position.set(k * w * 0.28, y + 0.075, 0);
+      g.add(wall);
+    }
+    const spine = new THREE.Mesh(new THREE.BoxGeometry(w * 0.85, 0.11, 0.008), dim);
+    spine.position.set(0, y + 0.075, 0);
+    g.add(spine);
+  }
+  // neck columns and the bridge head with two domes
+  for (const s of [-1, 1]) {
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, h - 0.3, 8), dim);
+    col.position.set(s * 0.32, (h - 0.3) / 2 + 0.05, 0.02);
+    g.add(col);
+  }
+  const head = new THREE.BoxGeometry(0.9, 0.09, 0.42);
+  const headM = new THREE.Mesh(head, mid);
+  headM.position.y = h - 0.18;
+  g.add(headM);
+  const headE = new THREE.LineSegments(new THREE.EdgesGeometry(head), line);
+  headE.position.y = h - 0.18;
+  g.add(headE);
+  for (const s of [-1, 1]) {
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), dim);
+    dome.position.set(s * 0.3, h - 0.1, -0.06);
+    g.add(dome);
+  }
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.3, 6), mid);
+  mast.position.set(0, h + 0.02, -0.1);
+  g.add(mast);
+  // this deck: a brighter forward gallery strip and the blinking position blip
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.012, 0.03), materials.holoBright);
+  const yB = 0.08 + 0.25 * (h - 0.36);
+  strip.position.set(0, yB + 0.03, -0.24);
+  g.add(strip);
+  const blip = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6), materials.holoBright);
+  blip.position.set(0, yB + 0.05, -0.2);
+  g.add(blip);
+  return { group: g, blip };
 }
