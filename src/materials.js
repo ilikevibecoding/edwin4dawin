@@ -91,6 +91,8 @@ export function buildMaterials({ mobile = false } = {}) {
     holo: new THREE.MeshBasicMaterial({ color: 0x5fb8ff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
     field: makeFieldMaterial(),
   };
+  // the hull lives in vacuum: never let the interior haze fog it (it is seen through the bridge glazing)
+  for (const k of ["hull", "hullDark", "engineGlow"]) mats[k].fog = false;
   mats.timings = timings;
   // back-compat aliases used by shared helpers
   mats.emitTeal = mats.emitCyan;

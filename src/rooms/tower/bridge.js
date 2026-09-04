@@ -531,7 +531,8 @@ function buildDais(ctx) {
   }
   for (const s of [-1, 1]) kit.boxMM("metal", [Math.min(s * WALK_X - s * 0.05, s * WALK_X + s * 0.07), y - 0.06, DAIS.z0], [Math.max(s * WALK_X - s * 0.05, s * WALK_X + s * 0.07), y + 0.02, DAIS.z1], { color: IMP.steelDark });
   // inlaid emblem on the dais deck
-  kit.add("decal", new THREE.PlaneGeometry(1.8, 1.8), { pos: [0, y + 0.003, 178.8], rot: [-Math.PI / 2, 0, 0], uv: "keep", uvRect: decalRect(DECAL.EMBLEM) });
+  // toned-down inlay (vertex tint): a white stencil under the dais spot bloomed
+  kit.add("decal", new THREE.PlaneGeometry(1.8, 1.8), { pos: [0, y + 0.003, 178.8], rot: [-Math.PI / 2, 0, 0], uv: "keep", uvRect: decalRect(DECAL.EMBLEM), color: 0x5c6068 });
   // commander's station (starboard, facing the glazing) with its seat
   props.consoleStation(kit, { pos: [2.45, y, 177.05], yaw: 0, w: 2.1, d: 0.85, h: 1.0, screens: 3, accent: "emitBlue", seed: 41, screenSet: [1, 0, 4] });
   props.chair(kit, { pos: [2.45, y, 177.75], yaw: 0 });
