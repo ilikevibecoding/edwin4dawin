@@ -245,7 +245,8 @@ const PAL = {
   small: [[TINT.light, 0.25], [TINT.mid, 0.4], [TINT.dark, 0.25], [TINT.gun, 0.1]],
   trench: [[TINT.trench, 0.35], [TINT.dark, 0.35], [TINT.gun, 0.2], [TINT.mid, 0.1]],
   machinery: [[TINT.dark, 0.4], [TINT.gun, 0.3], [TINT.mid, 0.2], [TINT.steel, 0.1]],
-  keel: [[TINT.dark, 0.35], [TINT.mid, 0.35], [TINT.gun, 0.2], [TINT.light, 0.1]],
+  // the keel plates are IMP.hullDark and lit only by the environment; keep its machinery as dark
+  keel: [[TINT.dark, 0.5], [TINT.gun, 0.25], [TINT.mid, 0.2], [TINT.light, 0.05]],
   // big armour plates on the open slopes stay close to the hull tone (dark ones read as holes from afar)
   slope: [[TINT.light, 0.4], [TINT.mid, 0.48], [TINT.dark, 0.1], [TINT.gun, 0.02]],
 };
@@ -302,16 +303,23 @@ class Collector {
     this.counts[region] = (this.counts[region] || 0) + 1;
   }
 }
-// Draw-call bookkeeping: onBeforeRender runs once per main-pass render of a mesh (the shadow pass
-// arrives via onBeforeShadow with scene === null), so counting there gives visible draws per frame.
-const COUNTER = { calls: 0 };
+// Draw-call bookkeeping: onBeforeRender runs once per main-pass render of a mesh that survived frustum
+// culling (the shadow pass arrives via onBeforeShadow), so counting there gives the visible draws and
+// the triangles actually submitted per frame. `userData.tris` is kept current by the LOD toggles.
+const COUNTER = { calls: 0, tris: 0 };
 class CountedBatchedMesh extends THREE.BatchedMesh {
   onBeforeRender(renderer, scene, camera, geometry, material, group) {
-    if (scene !== null) COUNTER.calls++;
+    if (scene !== null) {
+      COUNTER.calls++;
+      COUNTER.tris += this.userData.tris || 0;
+    }
     super.onBeforeRender(renderer, scene, camera, geometry, material, group);
   }
 }
-const countDraw = () => COUNTER.calls++;
+function countDraw() {
+  COUNTER.calls++;
+  COUNTER.tris += this.userData.tris || 0;
+}
 
 function makeBatch(items, material, shapes, { castShadow = true } = {}, onInstance = null) {
   if (!items.length) return null;
@@ -419,7 +427,7 @@ export function buildGreebles(mats, opts = {}) {
   group.name = "greebles";
   const shapes = buildShapes();
   const col = new Collector(shapes);
-  const stats = { instances: 0, drawCalls: 0, batches: 0, trianglesVisibleEst: 0, regions: {} };
+  const stats = { instances: 0, drawCalls: 0, batches: 0, trianglesVisible: 0, trianglesLOD: 0, regions: {} };
 
   const blockers = []; // { x, z, r } footprints (turrets, pads) kept clear of scattered detail
   const isBlocked = (x, z, size = 0) => {
@@ -1065,8 +1073,8 @@ export function buildGreebles(mats, opts = {}) {
       const y = keelY(cz);
       const W = w.x1 - w.x0 + 9;
       const D = w.z1 - w.z0 + 9;
-      put("keel", "L", "frame", { p: [cx, y, cz], n: [0, -1, 0] }, [W, 2.2, D], 0, TINT.mid);
-      put("keel", "L", "frame", { p: [cx, y, cz], n: [0, -1, 0] }, [W + 5, 1.2, D + 5], 0, TINT.dark);
+      put("keel", "L", "frame", { p: [cx, y, cz], n: [0, -1, 0] }, [W, 2.2, D], 0, TINT.dark);
+      put("keel", "L", "frame", { p: [cx, y, cz], n: [0, -1, 0] }, [W + 5, 1.2, D + 5], 0, TINT.gun);
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
         const px = cx + sx * (W / 2 + 4);
         const pz = cz + sz * (D / 2 + 4);
@@ -1169,9 +1177,10 @@ export function buildGreebles(mats, opts = {}) {
 
   // ---- build the batches --------------------------------------------------------------------
   const chunks = [];
+  const emisByRegion = new Map();
   for (const ch of col.chunks.values()) {
     const items = ch.items;
-    const out = { key: ch.key, box: new THREE.Box3(), ml: null, small: null, emis: null, mediumIds: [], showM: true, trisL: 0, trisM: 0, trisS: 0, trisE: 0 };
+    const out = { key: ch.key, box: new THREE.Box3(), ml: null, small: null, mediumIds: [], showM: true, trisL: 0, trisM: 0, trisS: 0 };
     out.ml = makeBatch(
       items.filter((it) => it.tier === "M" || it.tier === "L"),
       mats.hullGreeble,
@@ -1192,21 +1201,26 @@ export function buildGreebles(mats, opts = {}) {
       { castShadow: false },
       (id, it) => (out.trisS += shapes[it.shape].attributes.position.count / 3),
     );
-    out.emis = makeBatch(
-      items.filter((it) => it.tier === "E"),
-      mats.emitTint,
-      shapes,
-      { castShadow: false },
-      (id, it) => (out.trisE += shapes[it.shape].attributes.position.count / 3),
-    );
-    for (const m of [out.ml, out.small, out.emis]) {
+    for (const m of [out.ml, out.small]) {
       if (!m) continue;
       m.name = "greebles_" + ch.key;
       group.add(m);
       out.box.union(m.boundingBox);
       stats.batches++;
     }
+    const e = items.filter((it) => it.tier === "E");
+    if (e.length) emisByRegion.set(ch.region, (emisByRegion.get(ch.region) || []).concat(e));
     chunks.push(out);
+  }
+  // lights and windows: one batch per region (two triangles each, no LOD), so they cost a handful of
+  // draws instead of one per chunk
+  let trisE = 0;
+  for (const [region, items] of emisByRegion) {
+    const bm = makeBatch(items, mats.emitTint, shapes, { castShadow: false });
+    bm.name = "greebles_lights_" + region;
+    group.add(bm);
+    trisE += bm.userData.tris;
+    stats.batches++;
   }
 
   // ---- turbolaser batteries (InstancedMesh, slewed in update) --------------------------------
@@ -1262,6 +1276,7 @@ export function buildGreebles(mats, opts = {}) {
       m.castShadow = true;
       m.receiveShadow = true;
       m.computeBoundingSphere();
+      m.userData.tris = (m.geometry.attributes.position.count / 3) * m.count;
       m.onBeforeRender = countDraw;
       m.name = "turrets";
       group.add(m);
@@ -1288,11 +1303,13 @@ export function buildGreebles(mats, opts = {}) {
   strobeMesh.instanceMatrix.needsUpdate = true;
   strobeMesh.castShadow = false;
   strobeMesh.computeBoundingSphere();
+  strobeMesh.userData.tris = 12 * strobePos.length;
   strobeMesh.onBeforeRender = countDraw;
   strobeMesh.name = "strobes";
   group.add(strobeMesh);
 
   // ---- weathering decals --------------------------------------------------------------------
+  let weatherMesh = null;
   {
     const r = rng(341);
     const decals = [];
@@ -1388,9 +1405,12 @@ export function buildGreebles(mats, opts = {}) {
     mesh.name = "weathering";
     mesh.castShadow = false;
     mesh.receiveShadow = true;
+    mesh.userData.tris = merged.attributes.position.count / 3;
     mesh.onBeforeRender = countDraw;
     mesh.geometry.computeBoundingSphere();
     group.add(mesh);
+    stats.decals = decals.length;
+    weatherMesh = mesh;
   }
 
   // ---- stats ---------------------------------------------------------------------------------
@@ -1399,13 +1419,16 @@ export function buildGreebles(mats, opts = {}) {
   stats.turrets = { heavy: heavy.length, pointDefence: pd.length };
   stats.chunks = chunks.length;
   stats.batches += 4; // turrets x2, strobes, weathering
+  const fixedTris = trisE + heavyMesh.userData.tris + pdMesh.userData.tris + strobeMesh.userData.tris + weatherMesh.userData.tris;
+  // triangles inside LOD range (before frustum culling); trianglesVisible below is what was drawn
   const recomputeTris = () => {
-    let t = 0;
-    for (const ch of chunks) t += ch.trisL + (ch.showM ? ch.trisM : 0) + (ch.small && ch.small.visible ? ch.trisS : 0) + ch.trisE;
-    stats.trianglesVisibleEst = Math.round(t);
+    let t = fixedTris;
+    for (const ch of chunks) t += ch.trisL + (ch.showM ? ch.trisM : 0) + (ch.small && ch.small.visible ? ch.trisS : 0);
+    stats.trianglesLOD = Math.round(t);
   };
   recomputeTris();
-  stats.trianglesAll = Math.round(chunks.reduce((s, ch) => s + ch.trisL + ch.trisM + ch.trisS + ch.trisE, 0));
+  stats.trianglesAll = Math.round(fixedTris + chunks.reduce((s, ch) => s + ch.trisL + ch.trisM + ch.trisS, 0));
+  stats.trianglesVisible = 0;
   console.log(`[greebles] ${stats.instances} instances in ${stats.batches} batches (${stats.chunks} chunks); ${(stats.trianglesAll / 1000).toFixed(0)}k tris total, tiers small<${LOD.small}m medium<${LOD.medium}m`, stats.regions);
 
   // ---- per-frame update: LOD, turret slew, strobes, draw-call bookkeeping --------------------
@@ -1413,7 +1436,9 @@ export function buildGreebles(mats, opts = {}) {
   let lastTierChange = false;
   function update(cameraPos) {
     stats.drawCalls = COUNTER.calls;
+    stats.trianglesVisible = COUNTER.tris;
     COUNTER.calls = 0;
+    COUNTER.tris = 0;
     let changed = false;
     for (const ch of chunks) {
       const d = ch.box.distanceToPoint(cameraPos);
@@ -1423,9 +1448,10 @@ export function buildGreebles(mats, opts = {}) {
         ch.small.visible = showS;
         changed = true;
       }
-      if (ch.showM !== showM) {
+      if (ch.ml && ch.showM !== showM) {
         ch.showM = showM;
         for (const id of ch.mediumIds) ch.ml.setVisibleAt(id, showM);
+        ch.ml.userData.tris = ch.trisL + (showM ? ch.trisM : 0);
         changed = true;
       }
     }
