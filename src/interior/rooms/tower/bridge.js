@@ -263,8 +263,9 @@ export function buildBridge(kit, ctx) {
   // Lights (descriptors)
   // ---------------------------------------------------------------------------------------------
   // cool "space light" from outside the windows; its axis passes just under the glass head so the
-  // fan reaches the aft wall while the frame slab shadows everything around the banks
-  spotLightDesc(ctx, 0xc4d6ff, 150, 90, [5, ceilY + 1.4, 539], [0, y + 0.6, 580], { angle: 0.5, penumbra: 0.55, shadow: true, priority: 2 });
+  // fan reaches the aft wall while the frame slab shadows everything around the banks. It sits 20 m
+  // out from the glass so the near/far irradiance gradient stays under 10:1 (no hot spot at the sill)
+  spotLightDesc(ctx, 0xc4d6ff, 190, 95, [5, ceilY + 3.0, 528], [0, y + 0.6, 585], { angle: 0.5, penumbra: 0.55, shadow: true, priority: 2 });
   for (const z of [562, 578, 594]) {
     const d = pointLightDesc(ctx, 0xffe0c0, 5.5, 12, [0, ceilY - 1.0, z], 1);
     d.baseColor = d.color.clone();
