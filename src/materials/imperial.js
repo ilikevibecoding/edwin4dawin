@@ -481,6 +481,60 @@ function makeWeatheringAtlas(size = 1024, seed = 4021) {
   return tex;
 }
 
+// Sun direction (world) shared by the exterior detail shaders. Initialised to the far field's sun at
+// t = 0 (space.js sunDirLocal); greebles.js keeps it current from the scene's directional light.
+export const EXT_SUN = { value: new THREE.Vector3(-0.78, 0.42, -0.46).normalize() };
+
+// Space has no sky: a face turned away from the sun gets planet-shine and hull bounce at best, yet the
+// room environment map lights it almost as brightly as the sun-facing one, which is what made every
+// block look pasted on. This darkens the albedo of faces by how far their (unperturbed, per-face)
+// normal turns from the sun, so the shadow side of a stepped block reads as a shadow side.
+function sunShadePatch(material, floor = 0.55) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uSunDir = EXT_SUN;
+    shader.uniforms.uShadeFloor = { value: floor };
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", `#include <common>\nuniform vec3 uSunDir; uniform float uShadeFloor;`)
+      .replace(
+        "#include <normal_fragment_maps>",
+        `#include <normal_fragment_maps>
+        {
+          vec3 sunV = normalize( ( viewMatrix * vec4( uSunDir, 0.0 ) ).xyz );
+          float k = dot( nonPerturbedNormal, sunV );
+          diffuseColor.rgb *= mix( uShadeFloor, 1.0, smoothstep( -0.35, 0.3, k ) );
+        }`,
+      );
+  };
+  material.customProgramCacheKey = () => "impSunShade";
+  return material;
+}
+
+// Engine bore: the whole inside of a thruster bell glows, brightest at the throat (uv.x = 0) and
+// falling to a deep blue at the lip (uv.x = 1); uv.y is the angle around the bore for faint streaks.
+// The peak is `emissive` (white x intensity), so the core stays a pale blue-white, never clipped white.
+function engineBorePatch(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = IMP_TIME;
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", `#include <common>\nuniform float uTime;`)
+      .replace(
+        "#include <emissivemap_fragment>",
+        `#include <emissivemap_fragment>
+        {
+          float t = clamp( vEmissiveMapUv.x, 0.0, 1.0 );
+          float ang = vEmissiveMapUv.y * 6.2831853;
+          float pulse = 0.94 + 0.06 * sin( uTime * 2.1 + t * 5.0 );
+          float streaks = 0.9 + 0.1 * sin( ang * 22.0 + uTime * 0.6 + t * 3.0 );
+          float fall = mix( 1.0, 0.14, smoothstep( 0.0, 0.9, t ) );
+          vec3 col = mix( vec3( 0.86, 0.92, 1.0 ), vec3( 0.2, 0.42, 1.0 ), smoothstep( 0.05, 0.75, t ) );
+          totalEmissiveRadiance = emissive * col * fall * pulse * streaks;
+        }`,
+      );
+  };
+  material.customProgramCacheKey = () => "impEngineBore";
+  return material;
+}
+
 // Adds the exterior-detail keys to a material set built by buildImperialMaterials(). Idempotent.
 export function addExteriorDetailMaterials(mats) {
   if (mats.hullGreeble) return mats;
@@ -490,18 +544,27 @@ export function addExteriorDetailMaterials(mats) {
   // the sun as diffuse shading and sits in shadow as dark as the armour it stands on (a half-metal
   // finish mirrored the neutral environment and floated bright over the shadowed keel). The worn-metal
   // roughness map averages ~0.36, so the factor lifts it to ~0.6 like the hull texture.
-  mats.hullGreeble = new THREE.MeshStandardMaterial({
-    map: metal.map,
-    roughnessMap: metal.roughnessMap,
-    metalnessMap: metal.metalnessMap,
-    normalMap: metal.normalMap,
-    normalScale: new THREE.Vector2(0.45, 0.45),
-    roughness: 1.7,
-    metalness: 0.14,
-    vertexColors: true,
-    color: 0xffffff,
-    envMapIntensity: 0.6,
-  });
+  mats.hullGreeble = sunShadePatch(
+    new THREE.MeshStandardMaterial({
+      map: metal.map,
+      roughnessMap: metal.roughnessMap,
+      metalnessMap: metal.metalnessMap,
+      normalMap: metal.normalMap,
+      normalScale: new THREE.Vector2(0.45, 0.45),
+      roughness: 1.7,
+      metalness: 0.14,
+      vertexColors: true,
+      color: 0xffffff,
+      envMapIntensity: 0.6,
+    }),
+    0.55,
+  );
+  // thruster bore lining (hull.js): the map only exists so the shader has an emissive UV varying
+  {
+    const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+    white.needsUpdate = true;
+    mats.emitEngineBore = engineBorePatch(new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveIntensity: 1.15, emissiveMap: white, roughness: 0.6, metalness: 0 }));
+  }
   mats.emitTint = makeEmitTint(2.4);
   // anti-collision strobes: greebles.js toggles emissiveIntensity between 0 and this every flash
   mats.emitStrobe = makeEmitTint(6.0);
@@ -523,5 +586,5 @@ export function addExteriorDetailMaterials(mats) {
 }
 
 // Keys whose meshes should not cast shadows (emitters, glass, decals, grates)
-export const NO_SHADOW_KEYS = new Set(["glass", "glassDark", "holo", "holoWire", "beam", "impDecal", "deckMarks", "impGrate", "lightBand", "lightBandWarm", "lightBandRed", "lightSoft", "leds", "blink", "blinkSparse", "blinkDense", "emitTint", "emitStrobe", "weathering", "tieGlass", "exhaustGlow", "beaconGlow"]);
+export const NO_SHADOW_KEYS = new Set(["glass", "glassDark", "holo", "holoWire", "beam", "impDecal", "deckMarks", "impGrate", "lightBand", "lightBandWarm", "lightBandRed", "lightSoft", "leds", "blink", "blinkSparse", "blinkDense", "emitTint", "emitStrobe", "emitEngineBore", "weathering", "tieGlass", "exhaustGlow", "beaconGlow"]);
 export const isEmissiveKey = (k) => k.startsWith("emit") || k.startsWith("screen") || k.startsWith("blink") || k.startsWith("lightBand") || k === "lightSoft" || k === "leds";
