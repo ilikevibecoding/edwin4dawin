@@ -693,11 +693,17 @@ export class WorldMap implements WorldMapData {
     let depth = 3.0 + 2.6 * (0.5 + 0.5 * fbm2(x / 1100, z / 1100, 3)) + 1.2 * fbm2(x / 350 + 4.0, z / 350, 2);
     // broad seagrass/sand flats (1-2 m) that read as pale turquoise patches from the air
     depth -= 2.4 * smoothstep(0.12, 0.42, fbm2(x / 650 + 9.0, z / 650 + 2.0, 3));
+    // patch reefs and sand holes mottle the shelf at 150-300 m scales (only readable while it is shallow)
+    depth += 0.8 * fbm2(x / 190 + 8.8, z / 190 - 4.4, 3);
+    // outer-shelf reef banks: knolls of coral and seagrass that rise to 1.5-3 m out of the 4-7 m shelf in
+    // 200-500 m patches, so the blue outside the beach terraces is mottled with turquoise and olive
+    depth -= 2.3 * smoothstep(0.22, 0.58, fbm2(x / 330 + 2.0, z / 330 - 7.0, 3) + 0.25 * perlin2(x / 120 - 5.0, z / 120 + 2.0)) * smoothstep(2.6, 4.2, depth);
     depth = Math.max(depth, 0.7);
-    // ocean beyond the barrier island / south key: continental shelf ramp
-    const oceanEdge = 3050 + 320 * fbm2(z / 4000, 0.5, 2) + 110 * fbm2(z / 800 + 3.1, 2.2, 3);
-    const east = x - oceanEdge;
-    if (east > 0) depth += east * 0.006 + 5 * smoothstep(200, 1500, east) + 15 * smoothstep(1500, 4500, east) + 1.5 * ridged2(x / 600 + 1.0, z / 260, 3) * smoothstep(0, 900, east);
+    // ocean beyond the barrier island / south key: continental shelf ramp. The shelf break wanders in
+    // two dimensions and the ramp is long, so deep water arrives as tongues and lobes, not along a line.
+    const oceanEdge = 3380 + 380 * fbm2(z / 3000, 0.5, 2) + 170 * fbm2(z / 1100 + 3.1, 2.2, 3);
+    const east = x - oceanEdge + 420 * fbm2(x / 1300 + 4.4, z / 1000 - 6.6, 3) + 130 * perlin2(x / 330 + 1.1, z / 330 - 3.3);
+    if (east > 0) depth += east * 0.004 + 2.5 * smoothstep(0, 1300, east) + 3.0 * smoothstep(500, 2300, east) + 15 * smoothstep(1400, 4500, east) + 1.5 * ridged2(x / 600 + 1.0, z / 260, 3) * smoothstep(0, 900, east);
     // bay mouth (between barrier tip and south key) is deeper
     const mouth = smoothstep(-400, 1400, x + 300 * fbm2(z / 1200, 3.3, 2)) * (1 - smoothstep(0.4, 1.4, Math.hypot((x - 2600) / 2600, (z - 1900) / 2400)));
     depth += 4.5 * mouth;
@@ -830,6 +836,15 @@ export class WorldMap implements WorldMapData {
       if (cSd[i11] < m) { m = cSd[i11]; id = cId[i11]; }
       return [sd, id];
     };
+    // unit gradient of the coarse coast distance at the last sampled cell: points offshore
+    let sNx = 0, sNz = 1;
+    const shoreNormal = (): void => {
+      const i00 = sZ0 * coarseN + sX0, i10 = i00 + 1, i01 = i00 + coarseN, i11 = i01 + 1;
+      const gx = lerp(cSd[i10] - cSd[i00], cSd[i11] - cSd[i01], sTz);
+      const gz = lerp(cSd[i01] - cSd[i00], cSd[i11] - cSd[i10], sTx);
+      const len = Math.hypot(gx, gz);
+      if (len > 1e-6) { sNx = gx / len; sNz = gz / len; } else { sNx = 0; sNz = 1; }
+    };
 
     const channels = this.channels;
     const runways = this.runways;
@@ -898,11 +913,17 @@ export class WorldMap implements WorldMapData {
             veg = 10;
           } else {
             // beach width follows wave exposure: wide sandy beaches face open water, sheltered
-            // sides are narrow or fringed with mangroves
-            const widthNoise = 0.75 + 0.5 * (0.5 + 0.5 * perlin2(x / 240 + 1.7, z / 240 - 4.1));
+            // sides are narrow or fringed with mangroves. A slow along-shore swell in the width (600 m)
+            // lets the canopy reach almost to the water in places and opens broad sand aprons in others,
+            // so no island wears its beach as a ring of constant width
+            const widthNoise = Math.max(0.25 + 0.4 * expo, 0.45 + 0.9 * (0.5 + 0.5 * perlin2(x / 600 + 5.2, z / 600 - 1.3)) + 0.35 * perlin2(x / 240 + 1.7, z / 240 - 4.1) + 0.15 * perlin2(x / 90 + 6.3, z / 90 + 2.4));
             const beachW = seawall ? 5 : lm.beach * (0.45 + 1.4 * expo) * widthNoise * (lakeShore > 0 ? 1.6 : 1.0);
-            const ramp = smoothstep(0, beachW, inland);
+            // beach cusps wobble the profile a few metres so the wet band, tide lines and dune toe do not
+            // run as concentric contour rings; a low berm crests the upper beach of exposed shores
+            const cusp = inland + 5 * perlin2(x / 42 + 7.7, z / 42 - 3.3) * smoothstep(3, 12, inland);
+            const ramp = smoothstep(0, beachW, cusp);
             h = 0.25 + (lm.height - 0.25) * ramp + 0.6 * landNoise * ramp + 0.12 * perlin2(x / 18, z / 18);
+            h += 0.18 * expo * smoothstep(0.3, 0.55, ramp) * (1 - smoothstep(0.6, 0.85, ramp)) * (0.5 + 0.5 * perlin2(x / 60 + 3.0, z / 60 - 5.0));
             // dunes on ocean-facing beaches of the barrier island / south key
             if (lm.id === 'barrier' || lm.id === 'southkey') {
               const dune = smoothstep(30, 70, inland) * (1 - smoothstep(90, 160, inland)) * (0.4 + 0.6 * expo);
@@ -1024,34 +1045,43 @@ export class WorldMap implements WorldMapData {
           if (lm.wet) depth = Math.min(regional, 0.05 + sd * seabed);
           else if (lm.beach === 0) depth = Math.min(regional, shelf + sd * seabed);
           else {
-            // sheltered shores keep broad shallow sand flats; exposed beaches shelve more steeply
+            // Beach-fringed shores: a nearshore slope (steeper on exposed beaches, broad sand flats on
+            // sheltered ones) runs down onto a shallow turquoise terrace that reaches 200-600 m offshore,
+            // then drops off softly to the regional depth. The terrace is mottled by patch reefs and sand
+            // holes, and sand channels cut across its edge, so the shelf break is ragged, not a band.
             const slopeK = 0.45 + 0.95 * expo;
-            depth = Math.min(regional, 0.05 + sd * seabed * slopeK);
-            // longshore bars off exposed beaches read as pale streaks in the shallows
-            if (expo > 0.35 && sd < 320) {
-              const bar = Math.max(0, Math.sin(sd / 42 + 2.0 * perlin2(x / 160, z / 160)));
-              depth -= 0.35 * bar * bar * smoothstep(0.35, 0.7, expo) * smoothstep(20, 60, sd) * (1 - smoothstep(180, 320, sd));
-              depth = Math.max(depth, 0.12);
+            const nearshore = 0.05 + sd * seabed * slopeK;
+            shoreNormal();
+            const plateau = 1.9 + 0.5 * perlin2(x / 330 + 2.0, z / 330 - 7.0) + sd * 0.0012;
+            const base = smin(nearshore, plateau, 0.7);
+            let terrace = base;
+            const offshoreF = smoothstep(50, 160, sd);
+            const mottle = 0.6 * fbm2(x / 150 + 5.5, z / 150 + 1.5, 3) + 0.4 * perlin2(x / 70 - 3.3, z / 70 + 8.8);
+            terrace += (0.7 * mottle + 1.1 * smoothstep(-0.45, -0.8, mottle) - 0.5 * smoothstep(0.45, 0.8, mottle)) * offshoreF;
+            // shelf edge: distance and width wander along the coast; a noise field sampled at the point's
+            // projection onto the edge is constant along shore normals, which gives cross-shelf spurs and
+            // grooves rather than blobs
+            const edgeDist = clamp(400 + 130 * fbm2(x / 520 + 3.7, z / 520 - 2.1, 3) + 210 * fbm2(x / 1700 + 1.0, z / 1700 + 8.0, 2), 200, 620);
+            const edgeW = 170 + 110 * (0.5 + 0.5 * perlin2(x / 300 - 1.0, z / 300 + 6.0));
+            const ex = x - sNx * (sd - edgeDist), ez = z - sNz * (sd - edgeDist);
+            const groove = 0.6 * perlin2(ex / 150 + 2.2, ez / 150 - 9.9) + 0.4 * perlin2(ex / 60 - 4.4, ez / 60 + 1.7);
+            const edgeT = smoothstep(edgeDist - edgeW, edgeDist + edgeW, sd + 220 * groove);
+            terrace += 1.4 * smoothstep(0.3, 0.7, -groove) * smoothstep(edgeDist - 320, edgeDist - 60, sd);
+            // crescentic longshore bars off exposed beaches: pale streaks that come and go along the shore
+            if (expo > 0.35 && sd < 300) {
+              const shoreX = x - sNx * sd, shoreZ = z - sNz * sd;
+              const bar = Math.max(0, Math.sin(sd / 38 + 1.6 * perlin2(shoreX / 120 + 4.0, shoreZ / 120 - 1.0)));
+              const present = smoothstep(-0.25, 0.3, perlin2(shoreX / 260 + 5.5, shoreZ / 260 + 2.5));
+              terrace -= 0.35 * bar * bar * present * smoothstep(0.35, 0.7, expo) * smoothstep(20, 60, sd) * (1 - smoothstep(160, 300, sd));
             }
+            // the mottling and bars never shoal the terrace into an awash flat; the waterline keeps its own profile
+            terrace = Math.max(terrace, Math.min(base, 0.45));
+            depth = lerp(Math.min(terrace, regional), regional, edgeT);
           }
           // Garza's interior lagoon is a proper turquoise pond, not an awash flat
           if (Math.abs(x - 190) < 260 && Math.abs(z - 2380) < 220) {
             const lag = garzaLagoon(x, z);
             if (lag < 0) depth = Math.max(depth, 0.5 + 1.7 * smoothstep(0, -45, lag));
-          }
-          // dredged channels
-          for (const c of channels) {
-            if (Math.abs(x - c.bx) > c.br || Math.abs(z - c.bz) > c.br) continue;
-            const d = sdPolyline(x, z, c.pts) - c.width * 0.5;
-            if (d < 60) depth = Math.max(depth, c.depth * (1 - smoothstep(-c.width * 0.1, 60, d)) + depth * smoothstep(-c.width * 0.1, 60, d));
-          }
-          // dredged marina basins so the piers stand in navigable water
-          for (const ma of marinas) {
-            if (Math.abs(x - ma.x) > 420 || Math.abs(z - ma.z) > 420) continue;
-            const dirX = Math.sin(ma.rot), dirZ = -Math.cos(ma.rot);
-            const reach = ma.pierLen * 0.5 + 40;
-            const db = sdBox(x, z, ma.x + dirX * reach, ma.z + dirZ * reach, ma.piers * 14 + 40, reach + 10, ma.rot);
-            if (db < 40) depth = Math.max(depth, 2.6 * (1 - smoothstep(-5, 40, db)));
           }
           // sandbars / tidal flats south-west of Garza (reference lower-left) and near the mouth
           const flat = Math.max(
@@ -1060,8 +1090,32 @@ export class WorldMap implements WorldMapData {
             1 - Math.hypot((x - 1200) / 600, (z - 1500) / 260),
           );
           if (flat > 0) {
-            const bar = smoothstep(0, 0.5, flat) * (0.55 + 0.45 * fbm2(x / 130 + 7, z / 130 - 3, 3));
-            depth = lerp(depth, -0.15 + 0.5 * (1 - bar), bar * 0.9);
+            const bar = smoothstep(0, 0.45, flat) * (0.6 + 0.4 * fbm2(x / 130 + 7, z / 130 - 3, 3));
+            depth = lerp(depth, -0.12 + 0.6 * (1 - bar), bar * 0.94);
+          }
+          // dredged channels (cut through the flats, so the marked routes stay navigable). The wide
+          // offshore sea lane is a natural deep-water passage, not a dredged cut: its flanks slope over a
+          // few hundred metres and wander, so it does not draw a straight edge along the ocean beaches.
+          for (const c of channels) {
+            if (Math.abs(x - c.bx) > c.br || Math.abs(z - c.bz) > c.br) continue;
+            const wide = c.width >= 200;
+            let d = sdPolyline(x, z, c.pts) - c.width * 0.5;
+            if (wide) d += 90 * fbm2(x / 380 + 1.5, z / 380 - 2.5, 2);
+            const blend = wide ? 220 : 60;
+            if (d < blend) {
+              let t = smoothstep(-c.width * 0.1, blend, d);
+              // the lane's flanks are steep near the lip and level out: the deep colour stays with the lane
+              if (wide) t = 1 - (1 - t) * (1 - t);
+              depth = Math.max(depth, c.depth * (1 - t) + depth * t);
+            }
+          }
+          // dredged marina basins so the piers stand in navigable water
+          for (const ma of marinas) {
+            if (Math.abs(x - ma.x) > 420 || Math.abs(z - ma.z) > 420) continue;
+            const dirX = Math.sin(ma.rot), dirZ = -Math.cos(ma.rot);
+            const reach = ma.pierLen * 0.5 + 40;
+            const db = sdBox(x, z, ma.x + dirX * reach, ma.z + dirZ * reach, ma.piers * 14 + 40, reach + 10, ma.rot);
+            if (db < 40) depth = Math.max(depth, 2.6 * (1 - smoothstep(-5, 40, db)));
           }
           // canal mouths keep their dredged depth where they meet shallow shore water
           for (let ci = 0; ci < canals.length; ci++) {
