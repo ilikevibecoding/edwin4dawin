@@ -365,15 +365,16 @@ export function buildCrewQuarters(kit, ctx, room) {
     });
   }
 
-  // ---------------------------------------------------------------- lights (8 total: one per bunk bay + refresher (above) + east key)
-  // A bay light sits just inside each bay front under the header beam: the bunks are lit head-on instead of
-  // at a grazing angle from the room keys, and their overlap carries the common area between the rows.
+  // ---------------------------------------------------------------- lights (8 total: 4 bay keys + 2 common-area keys + refresher (above) + east key)
+  // Outer bays get a light just inside the bay front under the header beam (bunks lit head-on, not at a grazing
+  // angle); the middle bays are carried by the two keys over the long tables, which also light the common area.
   const keyCol = 0xdfe6f5;
   let li = 0;
   for (const side of [-1, 1]) {
-    for (let b = 0; b < 3; b++, li++) {
-      keyLight(kit, bayX0 + (b + 0.5) * bayW, 2.3, side * (hz - bayDepth + 0.3), { color: keyCol, k: 4.0, distance: 12, priority: 0.5 - li * 0.01 });
+    for (const b of [0, 2]) {
+      keyLight(kit, bayX0 + (b + 0.5) * bayW, 2.3, side * (hz - bayDepth + 0.3), { color: keyCol, k: 5.0, distance: 12, priority: 0.5 - li++ * 0.01 });
     }
+    keyLight(kit, bayX0 + 1.5 * bayW, h - 1.0, side * 4.4, { color: keyCol, k: 4.5, distance: 14, priority: 0.5 - li++ * 0.01 });
   }
-  keyLight(kit, 7, h - 0.6, 0, { color: keyCol, k: 3.6, distance: 20, priority: 0.46 });
+  keyLight(kit, 7, h - 0.6, 0, { color: keyCol, k: 4.0, distance: 20, priority: 0.46 });
 }

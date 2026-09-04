@@ -366,7 +366,7 @@ export function buildMessHall(kit, ctx, room) {
     keyLight(kit, -8.75, 3.1, z, { color: warm, k: 3.0, distance: 14, priority: 0.5 - i * 0.01 });
     keyLight(kit, 6.25, 3.1, z, { color: warm, k: 3.0, distance: 14, priority: 0.49 - i * 0.01 });
   }
-  keyLight(kit, -5.5, 3.3, -9.6, { color: 0xf0f6ff, k: 3.2, distance: 12, priority: 0.45 });
-  keyLight(kit, 2.5, 3.3, -9.6, { color: 0xf0f6ff, k: 3.2, distance: 12, priority: 0.44 });
+  keyLight(kit, -5.5, 3.3, -9.6, { color: 0xf0f6ff, k: 4.0, distance: 12, priority: 0.45 });
+  keyLight(kit, 2.5, 3.3, -9.6, { color: 0xf0f6ff, k: 4.0, distance: 12, priority: 0.44 });
   keyLight(kit, 3, h - 0.6, 9.0, { color: accent, k: 1.3, distance: 13, priority: 0.4 });
 }
