@@ -21,6 +21,8 @@ const CABIN_FRONT = 2.30, CABIN_REAR = -1.60;
 const FLOOR = -0.25;
 /** instrument panel: top edge station (under the glare shield's rear edge) and its lean toward the pilot */
 const PANEL_X = 2.05, PANEL_TILT = 0.3;
+/** yoke hub (neutral): ~0.66 m ahead of and 0.48 m below the eye (chest height), so the horns show at the bottom of the view */
+const YOKE_HUB_X = 1.66, YOKE_HUB_Y = 0.52;
 const WING_POS = new THREE.Vector3(0.55, 1.285, 0);
 /** live instrument channels (index into the needle shader's angle/shift arrays) */
 const CH = { fixed: 0, asi: 1, adi: 2, alt100: 3, alt1000: 4, tc: 5, tcBall: 6, hdg: 7, vsi: 8, rpm: 9, map: 10, oilp: 11, oilt: 12, egt: 13, fuell: 14, fuelr: 15, adiBank: 16 } as const;
@@ -813,8 +815,7 @@ export class PlaneModel {
     // seats: cushion top ~0.46 m over the floor so a seated pilot's eye lands at cockpitEye
     const SEAT_Y = FLOOR + 0.40;
     // yokes: shaft entering the panel below the switch row, hub with a placard, ram's-horn wheel with grips
-    // hub ~0.66 m ahead of and 0.48 m below the eye (chest height), so the horns show at the bottom of the view
-    const YOKE_HUB = new THREE.Vector3(1.66, 0.52, 0);
+    const YOKE_HUB = new THREE.Vector3(YOKE_HUB_X, YOKE_HUB_Y, 0);
     const shaftIn = inPanel(0, -0.175, 0.0).setZ(0);
     const mkYoke = (z: number, hands: boolean): THREE.Group => {
       const g = new THREE.Group();
@@ -971,9 +972,10 @@ export class PlaneModel {
     this.wheels.position.y = gearDown ? 0 : 0.3;
     // controls: the yoke turns with roll (right roll = clockwise seen by the pilot) and slides fore/aft with pitch
     // (pull = toward the pilot), pedals swing with the rudder, the throttle and flap levers follow their inputs
-    for (const y of [this.yokeL, this.yokeR]) { y.rotation.x = roll * 0.9; y.position.x = 1.50 - pitch * 0.08; }
-    this.pedalsL.rotation.z = yaw * 0.32;
-    this.pedalsR.rotation.z = -yaw * 0.32;
+    for (const y of [this.yokeL, this.yokeR]) { y.rotation.x = roll * 0.9; y.position.x = YOKE_HUB_X - pitch * 0.08; }
+    // yaw + = nose left = left pedal pushed forward (its top swings to +X, a negative rotation about Z)
+    this.pedalsL.rotation.z = -yaw * 0.32;
+    this.pedalsR.rotation.z = yaw * 0.32;
     this.throttleLever.rotation.z = (0.5 - THREE.MathUtils.clamp(throttle, 0, 1)) * 0.9;
     this.flapLever.rotation.z = -(1.75 + THREE.MathUtils.clamp(flaps, 0, 1) * 1.05) + Math.PI / 2;
     // instrument lighting: the dials, the screen and the panel legends glow after dusk
