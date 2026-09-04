@@ -6,9 +6,9 @@ import { BOUNDS, CEIL, FLOOR, doorsFor } from "../shared/plan.js";
 import { roomShell, doorReveal } from "../shared/imperial.js";
 import { LIGHT } from "../shared/palette.js";
 import { windowBand } from "./window.js";
-import { lounge, holoAnchors, GROUPS } from "./lounge.js";
+import { lounge, holoAnchors, GROUPS, EAST_GROUP } from "./lounge.js";
 import { eastPart } from "./east.js";
-import { dressing } from "./dressing.js";
+import { dressing, pendant } from "./dressing.js";
 import { holoShips } from "./holo.js";
 
 const ID = "d1-observation";
@@ -27,11 +27,12 @@ const manifest = {
   spawn: { pos: [-22, FLOOR, 462], yaw: 90 },
   apertures: ["observation"],
   views: {
-    "d1-observation-window": { pos: [-64, FLOOR, 464.5], yaw: 0, pitch: -1 },
+    "d1-observation-window": { pos: [-64, FLOOR, 465.3], yaw: 0, pitch: -7 },
     "d1-observation-along": { pos: [-24, FLOOR, 462], yaw: 90, pitch: -2 },
     "d1-observation-lounge": { pos: [-44, FLOOR, 460.5], yaw: -120, pitch: -4 },
     "d1-observation-counter": { pos: [-30.5, FLOOR, 464.2], yaw: -18, pitch: -3 },
     "d1-observation-viewer": { pos: [-62.4, FLOOR, 461.9], yaw: 36, pitch: -5 },
+    "d1-observation-gallery": { pos: [-47.5, FLOOR, 460.9], yaw: 72, pitch: -3 },
   },
   build(ctx) {
     const { kit } = ctx;
@@ -44,34 +45,44 @@ const manifest = {
       panelW: 2.4,
       strip: "emitWhite",
       extra: { n: [win] },
-      ceiling: { axis: "x", inset: 0.25, channels: [{ at: 460.2, w: 0.5, emit: "emitWhite", emitW: 0.14 }, { at: 463.8, w: 0.5, emit: "emitWhite", emitW: 0.14 }] },
+      // the window band is the north wall's feature: no waist strip under it (fewer parallel light lines)
+      walls: { n: { strip: null } },
+      ceiling: { axis: "x", inset: 0.25, channels: [{ at: 460.2, w: 0.5, emit: "emitWhite", emitW: 0.08 }, { at: 463.8, w: 0.5, emit: "emitWhite", emitW: 0.08 }] },
     });
     for (const d of manifest.doors) doorReveal(kit, manifest, d, FLOOR);
 
     windowBand(kit, A, FLOOR);
     lounge(kit, FLOOR);
     eastPart(kit, FLOOR);
-    dressing(kit, FLOOR, ceilY);
+    dressing(kit, FLOOR, ceilY, A);
     const holoUpdate = holoShips(ctx, holoAnchors(FLOOR));
 
-    // --- lights (12 descriptors)
-    // Cold star-light: two spots hidden inside the mullions at x -70/-58, high in the reveal, cones pitched down
-    // so the reveal head/jambs sit outside the cone. The floor is near-black gloss, so E ≈ 2 at 6.5 m (≈ 85) is
-    // needed for the wash to read; nothing the cone touches is close to the source.
+    // --- lights (11 descriptors): warm pools carry the room, the window contributes a cold rim only
+    // Cold key: two narrow spots hidden inside the mullions at x -70/-58, high in the reveal, cones pitched down
+    // so the reveal head/jambs sit outside the cone (E ≈ 1.6 on the near-black floor).
     for (const x of [-70, -58]) {
       const tx = x + (x < -64 ? 1.6 : -1.6); // lean both cones toward the band's centre so the pools merge
-      ctx.lights.push({ type: "spot", pos: [x, A.y1 - 0.2, A.zIn - 0.4], target: [tx, FLOOR, 462.6], color: LIGHT.coolWhite, intensity: 85, distance: 30, angle: 0.6, penumbra: 0.5, priority: 0.9 });
+      ctx.lights.push({ type: "spot", pos: [x, A.y1 - 0.2, A.zIn - 0.4], target: [tx, FLOOR, 462.6], color: LIGHT.coolWhite, intensity: 70, distance: 30, angle: 0.6, penumbra: 0.5, priority: 0.9 });
     }
-    // Cool fill under the north ceiling channel (z 460.2), between beams: lights the mullion caps, rail and viewers
-    for (const x of [-68, -60]) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.6, 460.2], color: LIGHT.coolWhite, intensity: 22, distance: 11, priority: 0.6 });
-    // Warm-white pools over each seating group (h ≈ 5 m → 30) and over the counter stools
-    for (const x of GROUPS) ctx.lights.push({ type: "point", pos: [x, ceilY - 0.35, 462.6], color: LIGHT.warm, intensity: 30, distance: 11, priority: 0.5 });
-    ctx.lights.push({ type: "point", pos: [-29, ceilY - 0.35, 461.4], color: LIGHT.warm, intensity: 30, distance: 10, priority: 0.5 });
-    // Cool fills: star-map wall (blue), briefing niche, west end, door end
-    ctx.lights.push({ type: "point", pos: [-38, FLOOR + 3.2, 464.3], color: LIGHT.blue, intensity: 9, distance: 9, priority: 0.3 });
-    ctx.lights.push({ type: "point", pos: [-44.5, ceilY - 0.4, 461.0], color: LIGHT.coolWhite, intensity: 16, distance: 9, priority: 0.35 });
-    ctx.lights.push({ type: "point", pos: [-81.5, ceilY - 0.4, 462.0], color: LIGHT.coolWhite, intensity: 16, distance: 9, priority: 0.3 });
-    ctx.lights.push({ type: "point", pos: [-23, ceilY - 0.4, 463.0], color: LIGHT.coolWhite, intensity: 16, distance: 9, priority: 0.3 });
+    // Wide low blue-white fill from the window plane (inside the mullion at x -66) so sill and floor pick up a
+    // cold rim; cone edge stays ~1.5° above horizontal, i.e. below the head frame.
+    ctx.lights.push({ type: "spot", pos: [-66, A.y1 - 0.2, A.zIn - 0.4], target: [-64, FLOOR, 461.5], color: LIGHT.coolWhite, intensity: 16, distance: 24, angle: 0.8, penumbra: 0.6, priority: 0.85 });
+    // Warm-white pendant downlights (LIGHT.warm) over the three window-facing groups, the east group, the counter
+    // stools and the briefing niche. The point sits inside the pendant can 1.2 m below the ceiling: h ≈ 4.2 m to
+    // the floor → E ≈ 1.6, ≈ 2.2 on the table tops, and the ceiling around it no longer blooms.
+    const pendants = [
+      ...GROUPS.map((x) => [x, 462.1, 28]),
+      [EAST_GROUP.cx, 464.0, 28],
+      [-29, 461.4, 26],
+      [-44.5, 460.4, 18],
+    ];
+    for (const [x, z, intensity] of pendants) {
+      pendant(kit, x, ceilY, z);
+      ctx.lights.push({ type: "point", pos: [x, ceilY - 1.2, z], color: LIGHT.warm, intensity, distance: 10, priority: 0.6 });
+    }
+    // Cool fills at the two ends
+    ctx.lights.push({ type: "point", pos: [-81.5, ceilY - 0.4, 462.0], color: LIGHT.coolWhite, intensity: 14, distance: 9, priority: 0.3 });
+    ctx.lights.push({ type: "point", pos: [-23, ceilY - 0.4, 463.0], color: LIGHT.coolWhite, intensity: 14, distance: 9, priority: 0.3 });
 
     return {
       update(dt, t) {
