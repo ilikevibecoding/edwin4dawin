@@ -298,10 +298,15 @@ export class NPCManager {
     if (p && Math.hypot(npc.pos.x - p.x, npc.pos.z - p.z) > 28) return;
     // town-wide throttle so a crowd does not flood the chat log
     const now = performance.now();
-    if (now - (this.lastShoutAt || 0) < 1800) return;
+    if (now - (this.lastShoutAt || 0) < 3000) return;
+    // avoid repeating a line the town has heard in the last 20 s
+    if (!this.recentShouts) this.recentShouts = new Map();
+    let line = npc.say(kind);
+    if ((this.recentShouts.get(line) || -1e9) > now - 20000) { line = npc.say(kind); if ((this.recentShouts.get(line) || -1e9) > now - 20000) return; }
+    this.recentShouts.set(line, now);
     this.lastShoutAt = now;
     npc.shoutCooldown = npc.rng.range(6, 14);
-    this.hud.addMessage(`<${npc.name}> ${npc.say(kind)}`);
+    this.hud.addMessage(`<${npc.name}> ${line}`);
     this.audio.npcGrunt(npc.pos, npc.female ? 1.6 : 1.1);
   }
 
@@ -483,9 +488,10 @@ export class NPCManager {
     if (npc.panic && this.tickCount > npc.panicUntil) { npc.panic = false; npc.trapped = 0; }
     // water: float at the surface and wade slowly; shout for help when stuck
     const feet = this.world.getBlock(Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.2), Math.floor(npc.pos.z));
-    npc.swimming = feet === B.WATER;
+    const body = this.world.getBlock(Math.floor(npc.pos.x), Math.floor(npc.pos.y + 1.0), Math.floor(npc.pos.z));
+    npc.swimming = feet === B.WATER || body === B.WATER;
     if (npc.swimming) {
-      let top = Math.floor(npc.pos.y + 0.2);
+      let top = feet === B.WATER ? Math.floor(npc.pos.y + 0.2) : Math.floor(npc.pos.y + 1.0);
       while (this.world.getBlock(Math.floor(npc.pos.x), top + 1, Math.floor(npc.pos.z)) === B.WATER && top < npc.pos.y + 6) top++;
       const surface = top + 0.9 - 1.3; // eyes above the surface
       npc.pos.y += (surface - npc.pos.y) * Math.min(1, dt * 4);

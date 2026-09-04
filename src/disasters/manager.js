@@ -252,12 +252,15 @@ export class DisasterManager {
     if (!this.pendingRelight) this.pendingRelight = new Map();
     for (const k of this.touched) this.pendingRelight.set(k, this.frameNo);
     this.touched.clear();
-    const slow = this.game.perf && this.game.perf.frameMs[(this.game.perf.idx + this.game.perf.frameMs.length - 1) % this.game.perf.frameMs.length] > 30;
-    const budget = slow ? 1 : BUDGET.relightPerFrame;
+    // time-based budget: while the disaster runs keep relighting cheap; afterwards catch up faster so no stale
+    // water/light lingers on slow machines. At least one chunk per frame always makes progress.
+    const running = this.state === 'running';
+    const maxMs = running ? 5 : 9, maxN = running ? BUDGET.relightPerFrame : BUDGET.relightPerFrame * 2;
     const urgent = this.pendingRelight.size > 12;
+    const t0 = performance.now();
     let n = 0;
     for (const [key, lastTouch] of this.pendingRelight) {
-      if (n >= budget) break;
+      if (n >= maxN || (n >= 1 && performance.now() - t0 > maxMs)) break;
       if (!urgent && this.frameNo - lastTouch < 2) continue; // still being edited: coalesce
       this.pendingRelight.delete(key);
       const c = this.world.chunks.get(key);

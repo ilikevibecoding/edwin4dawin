@@ -225,5 +225,22 @@ export class Sky {
     this.clouds.position.set(cx, CLOUD_HEIGHT, cz);
     const cloudCol = new THREE.Color(0.08, 0.09, 0.14).lerp(new THREE.Color(1, 1, 1), day).lerp(SUNSET, sunset * 0.5);
     this.cloudMat.color.copy(cloudCol);
+    this.cloudMat.opacity = 0.85;
+  }
+
+  // Disaster override (call right after update): blend the dome, fog colour, celestials and clouds toward a
+  // storm colour, and thin the vanilla cloud layer so a storm deck can replace it.
+  applyOverride(ov, underwater = false) {
+    if (!ov) return;
+    const mix = ov.skyMix || 0;
+    if (mix > 0.005) {
+      const u = this.domeMat.uniforms, c = ov.skyColor;
+      u.uTop.value.lerp(c, mix); u.uHorizon.value.lerp(c, mix); u.uVoid.value.lerp(c, mix);
+      u.uSunsetStrength.value *= 1 - mix;
+      if (!underwater) this.fogColor.lerp(c, mix);
+      this.sun.material.opacity *= 1 - mix; this.moon.material.opacity *= 1 - mix; this.starMat.opacity *= 1 - mix;
+      this.cloudMat.color.lerp(c, mix * 0.85);
+    }
+    if (ov.cloudAlpha !== undefined) this.cloudMat.opacity = 0.85 * ov.cloudAlpha;
   }
 }

@@ -97,7 +97,7 @@ export class DebrisSystem {
     const [tu, tv, ts] = tileUV(def.tex[0]);
     this.uvAttr.setXYZ(i, tu, tv, ts);
     const l = opts.light || this.world.sampleLight(x, y, z);
-    this.lightAttr.setXY(i, l[0], l[1]);
+    this.lightAttr.setXY(i, Math.max(l[0], 0.3), l[1]);
     this.lightTimer[i] = i % 12;
     this.spawned++;
     return i;
@@ -158,7 +158,8 @@ export class DebrisSystem {
       const spin = res.hitY && Math.abs(vy) < 0.1 ? 0.2 : 1;
       this.rx[i] += this.wx[i] * dt * spin; this.ry[i] += this.wy[i] * dt * spin; this.rz[i] += this.wz[i] * dt * spin;
       if (this.py[i] < -5) { this.remove(i); i--; continue; }
-      if (++this.lightTimer[i] >= 12) { this.lightTimer[i] = 0; const l = world.sampleLight(this.px[i], this.py[i] + half, this.pz[i]); this.lightAttr.setXY(i, l[0], l[1]); }
+      this.lightTimer[i] += dt;
+      if (this.lightTimer[i] >= 0.2) { this.lightTimer[i] = 0; const l = world.sampleLight(this.px[i], this.py[i] + half, this.pz[i]); this.lightAttr.setXY(i, Math.max(l[0], 0.3), l[1]); }
     }
     // upload matrices
     for (let i = 0; i < this.count; i++) {

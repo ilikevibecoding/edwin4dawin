@@ -326,6 +326,7 @@ export class Game {
 
     // sky & lighting (+ disaster overrides: darkening, dust tint, flashes, denser fog)
     this.sky.update(dt, this.camera.position, this.terrain.renderDistance, this.player.eyeUnderwater);
+    if (this.disasters) this.sky.applyOverride(this.disasters.effects.override, this.player.eyeUnderwater);
     let skyLight = this.sky.skyLight, fogNear = this.sky.fogNear, fogFar = this.sky.fogFar, flash = 0;
     const skyTint = new THREE.Vector3().copy(this.sky.skyTint);
     const fogColor = this.sky.fogColor.clone();
