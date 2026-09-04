@@ -629,14 +629,16 @@ export function buildHangar(kit, ctx) {
   // =========================================================================================
   // Lights
   // =========================================================================================
-  // big cool floodlights: spot descriptors with shadow (two are live at any time — the nearest)
+  // big cool floodlights: spot descriptors with shadow (two are live at any time — the nearest). The
+  // cones are wide enough (60°) that neighbouring arches overlap on the long walls; narrower cones
+  // leave dark up-pointing wedges between them from the deck to the galleries.
   const spotI = 2600;
-  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [-40, yC - 1, 116], [-40, y, 118], { angle: 0.85, penumbra: 0.5, shadow: true, priority: 2 });
-  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [40, yC - 1, 116], [40, y, 118], { angle: 0.85, penumbra: 0.5, shadow: true, priority: 2 });
-  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [-40, yC - 1, 274], [-40, y, 272], { angle: 0.85, penumbra: 0.5, shadow: true, priority: 2 });
-  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [40, yC - 1, 274], [40, y, 272], { angle: 0.85, penumbra: 0.5, shadow: true, priority: 2 });
-  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [-42, yC - 1, 190], [-42, y, 190], { angle: 0.85, penumbra: 0.5, shadow: true, priority: 2 });
-  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [42, yC - 1, 190], [42, y, 190], { angle: 0.85, penumbra: 0.5, shadow: true, priority: 2 });
+  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [-40, yC - 1, 116], [-40, y, 118], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
+  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [40, yC - 1, 116], [40, y, 118], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
+  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [-40, yC - 1, 274], [-40, y, 272], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
+  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [40, yC - 1, 274], [40, y, 272], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
+  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [-42, yC - 1, 190], [-42, y, 190], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
+  spotLightDesc(ctx, 0xdfe8ff, spotI, 70, [42, yC - 1, 190], [42, y, 190], { angle: 1.05, penumbra: 0.6, shadow: true, priority: 2 });
   // planet light coming up through the open well (no shadow; only bound while the doors are open)
   const planetLight = spotLightDesc(ctx, 0xa9c4ff, 1800, 120, [wellCX, W.yKeel - 30, wellCZ], [wellCX, yC, wellCZ], { angle: 0.75, penumbra: 0.6, shadow: false, priority: 0 });
   planetLight.dim = 0;
@@ -673,6 +675,9 @@ export function buildHangar(kit, ctx) {
   hangarBus.on("wellClose", () => {
     blastDoors.close();
     anim.wellActive = false;
+    // nothing can be in the shaft once the doors close: drop any hold that piled up while the room
+    // was hidden (its animator was not ticking, so the hold never decayed)
+    anim.tractorHold = 0;
   });
   hangarBus.on("passing", ({ duration }) => {
     anim.tractorHold = Math.max(anim.tractorHold, duration || 5);
