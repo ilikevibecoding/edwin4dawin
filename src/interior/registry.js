@@ -265,7 +265,8 @@ export function buildInterior({ scene, materials }) {
     for (const sp of zone.spaces) {
       const b = sp.spec;
       if (pos.x < b.x0 - 0.3 || pos.x > b.x1 + 0.3 || pos.z < b.z0 - 0.3 || pos.z > b.z1 + 0.3) continue;
-      if (pos.y < sp.floorY - 1.5 || pos.y > sp.floorY + sp.height + 1) continue;
+      // pits and lower galleries sit up to ~2.5 m under the nominal floor; lift shafts are excluded by x/z
+      if (pos.y < sp.floorY - 2.6 || pos.y > sp.floorY + sp.height + 1) continue;
       if (!best || sp.kind === "room") best = sp; // rooms win over corridors on the overlap strip
     }
     return best;

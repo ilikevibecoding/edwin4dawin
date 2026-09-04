@@ -48,6 +48,7 @@ const SEGMENTS = [
 const executablePath = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].find((p) => existsSync(p));
 const browser = await chromium.launch({ headless: true, executablePath, args: ["--no-sandbox", "--disable-dev-shm-usage", "--use-gl=angle", "--use-angle=swiftshader-webgl", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl", "--disable-gpu-vsync", "--disable-frame-rate-limit"] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
+page.setDefaultTimeout(240000); // the build machine is often loaded by parallel workstreams
 page.on("pageerror", (e) => !e.message.includes("WebSocket") && console.log("PAGE ERROR", e.message));
 await page.goto(base, { waitUntil: "load" });
 await page.waitForFunction(() => window.debugAPI && window.debugAPI.ready, null, { timeout: 240000 });

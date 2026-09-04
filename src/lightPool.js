@@ -92,8 +92,10 @@ export class LightPool {
         l.penumbra = f.penumbra;
         if (f.target) f.target.getWorldPosition ? f.target.getWorldPosition(l.target.position) : l.target.position.copy(f.target.position);
         if (f.shadow && slot.fixture !== slot.shadowFor) {
+          // the fixture's own shadow camera range decides how far the shadow pass reaches (a long-range
+          // key light can keep a short shadow frustum so neighbouring rooms stay out of the pass)
           l.shadow.camera.near = f.shadow.camera.near;
-          l.shadow.camera.far = Math.max(f.shadow.camera.far, f.distance || 10);
+          l.shadow.camera.far = f.shadow.camera.far;
           l.shadow.bias = f.shadow.bias;
           l.shadow.normalBias = f.shadow.normalBias;
           l.shadow.camera.updateProjectionMatrix();

@@ -56,6 +56,7 @@ const browser = await chromium.launch({
 });
 
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
+page.setDefaultTimeout(240000); // the build machine is often loaded by parallel workstreams
 const logs = [];
 page.on("console", (m) => {
   const text = `[${m.type()}] ${m.text()}`;

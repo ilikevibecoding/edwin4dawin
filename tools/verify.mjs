@@ -17,6 +17,7 @@ const BUDGET = { calls: 320, triangles: 1_600_000, lights: 20 };
 const executablePath = ["/usr/bin/google-chrome-stable", "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].find((p) => existsSync(p));
 const browser = await chromium.launch({ headless: true, executablePath, args: ["--no-sandbox", "--disable-dev-shm-usage", "--use-gl=angle", "--use-angle=swiftshader-webgl", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "--enable-webgl", "--disable-gpu-vsync", "--disable-frame-rate-limit"] });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 }, deviceScaleFactor: 1 });
+page.setDefaultTimeout(240000); // the build machine is often loaded by parallel workstreams
 const errors = [];
 page.on("pageerror", (e) => !e.message.includes("WebSocket") && errors.push(e.message));
 page.on("console", (m) => m.type() === "error" && !m.text().includes("WebSocket") && !m.text().includes("[vite]") && errors.push(m.text().slice(0, 200)));
