@@ -400,8 +400,10 @@ export function buildWeapons({ group, materials }) {
     if (hasCam) camera.getWorldPosition(camPos);
     for (const a of animated) {
       const k = a.k;
+      let nNear = 0;
       for (const tr of a.list) {
         const near = !hasCam || camPos.distanceToSquared(tr.pos) < lodSq;
+        if (near) nNear++;
         if (!near) {
           a.housingIM.setMatrixAt(tr.index, ZERO);
           a.barrelsIM.setMatrixAt(tr.index, ZERO);
@@ -421,10 +423,15 @@ export function buildWeapons({ group, materials }) {
       a.housingIM.instanceMatrix.needsUpdate = true;
       a.barrelsIM.instanceMatrix.needsUpdate = true;
       a.proxyIM.instanceMatrix.needsUpdate = true;
+      // skip the draw call entirely for a set with no active instance
+      a.housingIM.visible = a.barrelsIM.visible = nNear > 0;
+      a.proxyIM.visible = nNear < a.list.length;
     }
     for (const d of dishSets) {
+      let nNear = 0;
       for (const dh of d.list) {
         const near = !hasCam || camPos.distanceToSquared(dh.pos) < lodSq;
+        if (near) nNear++;
         if (!near) {
           d.headIM.setMatrixAt(dh.index, ZERO);
           d.proxyIM.setMatrixAt(dh.index, dh.siteFrame);
@@ -438,6 +445,8 @@ export function buildWeapons({ group, materials }) {
       }
       d.headIM.instanceMatrix.needsUpdate = true;
       d.proxyIM.instanceMatrix.needsUpdate = true;
+      d.headIM.visible = nNear > 0;
+      d.proxyIM.visible = nNear < d.list.length;
     }
   }
   update(null, 0, 0);

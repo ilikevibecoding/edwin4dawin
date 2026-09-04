@@ -633,7 +633,7 @@ function trench(ctx, s) {
       const h = H(z);
       const k = rr(rand, 0.6, 1.4);
       const L = 20 * k;
-      if (h > 7.5 && (f > 0.4 || h > 12) && (f < 0.7 || h > 10) && rand() < 0.75) {
+      if (h > 7.5 && (f > 0.4 || h > 10) && (f < 0.7 || h > 9) && rand() < 0.85) {
         const yc = trenchBand(z).yBottom + h * f;
         put(ctx, wall, "windows", yc, z + L / 2, { scale: [1.2, 1, L], lift: 0.08, pad: 0.4, tint: 1 });
       }
