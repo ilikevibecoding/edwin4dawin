@@ -71,7 +71,8 @@ const hud = createHUD();
 const materials = extendMaterials(buildMaterials());
 extendPalette(PALETTE);
 
-const hemi = new THREE.HemisphereLight(0x5a6f86, 0x2a2c30, 0.12);
+// ground term lifted so ceilings and soffits (which only see the dark deck) do not read as black voids
+const hemi = new THREE.HemisphereLight(0x5a6f86, 0x4a4f58, 0.16);
 scene.add(hemi);
 const pmrem = new THREE.PMREMGenerator(renderer);
 // Bootstrap environment: a dark hall with two ceiling light channels rather than RoomEnvironment's bright

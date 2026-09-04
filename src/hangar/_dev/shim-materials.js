@@ -67,6 +67,34 @@ export function extendMaterials(mats) {
         envMapIntensity: 0.9,
       }),
   );
+  // Painted structural steel without Kestrel's worn-metal albedo (it reads as pitting/grime on Imperial
+  // frames, ribs and door surrounds): keep the relief and roughness variation, tint from vertex colour.
+  const cleanPainted = (extra) =>
+    new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      vertexColors: true,
+      normalMap: mats.metal.normalMap,
+      normalScale: new THREE.Vector2(0.6, 0.6),
+      roughnessMap: mats.metal.roughnessMap,
+      roughness: 1.1,
+      metalness: 0.15,
+      envMapIntensity: 0.6,
+      ...extra,
+    });
+  mats.paintedMetal = cleanPainted({});
+  mats.metalRough = cleanPainted({ metalness: 0.5, roughness: 1.4 });
+  // brushed steel: same treatment, real metal (metalness map kept), no worn albedo speckle
+  mats.metal = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    normalMap: mats.metal.normalMap,
+    normalScale: new THREE.Vector2(0.6, 0.6),
+    roughnessMap: mats.metal.roughnessMap,
+    metalnessMap: mats.metal.metalnessMap,
+    roughness: 1,
+    metalness: 1,
+    envMapIntensity: 0.85,
+  });
   // Imperial hazard: black/yellow chevrons (the shared `hazard` is Kestrel orange/black). Deck 4 rooms use
   // `hazard`; until the integrator lands an Imperial one, both keys resolve to the chevron material.
   const chevron = new THREE.MeshStandardMaterial({ map: makeChevronTexture(512, 7), roughness: 0.75, metalness: 0, envMapIntensity: 0.5 });
