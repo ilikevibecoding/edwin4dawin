@@ -17,6 +17,9 @@ import { Interactions } from "./interact.js";
 import { createPost } from "./post.js";
 import { createLightingController } from "./lighting.js";
 import { createHUD } from "./hud.js";
+import { SYSTEMS } from "./core/systems.js";
+import { createFighters } from "./fighters/index.js";
+import { createAtmosphere } from "./systems/atmosphere.js";
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 const bootT0 = performance.now();
@@ -82,6 +85,7 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.25;
 
 const audio = new AudioSystem();
+const fighters = createFighters({ scene, materials, audio });
 const doors = new DoorSystem({ scene, materials, audio, onStatus: (s) => hud.setStatus(s) });
 const rooms = new RoomManager({
   scene,
@@ -101,7 +105,9 @@ const rig = new CameraRig(camera, canvas);
 const lighting = createLightingController({ materials, rooms, hemi, audio });
 const modes = new Modes({ camera, player, rig, rooms, hud, scene, sun, space, exterior, onMode: onModeChange });
 const interactions = new Interactions({ camera, rooms, lighting, space, player, hud, audio });
-const sync = new SyncState({ doors, lifts, lighting });
+const sync = new SyncState({ doors, lifts, lighting, traffic: fighters.traffic });
+const atmosphere = createAtmosphere({ scene, camera, materials, rooms });
+Object.assign(SYSTEMS, { fighters, audio, hud, rooms, doors, lifts, lighting, exterior, space, camera, player });
 
 player.onFall = () => {
   const def = rooms.current || ROOM_BY_ID.bridge;
@@ -353,10 +359,15 @@ const debugAPI = {
   },
   /** Advance the simulation (doors, lifts, animators) by dt without rendering. */
   simulate(dt) {
-    doors.update(dt, player.position);
-    lifts.update(dt, player.position);
-    rooms.update(dt, 0, player.position);
-    exterior.update(dt, space.state.time);
+    const steps = Math.max(1, Math.ceil(dt / 0.05));
+    for (let i = 0; i < steps; i++) {
+      const h = dt / steps;
+      doors.update(h, player.position);
+      lifts.update(h, player.position);
+      rooms.update(h, 0, player.position);
+      exterior.update(h, space.state.time);
+      fighters.update(h, space.state.time, { mode: modes.mode, cameraPos: camera.position, playerPos: player.position, hangarVisible: rooms.visibleIds.has("hangar") });
+    }
   },
   capturePixels(x, y, w, h) {
     return new Promise((resolve) => {
@@ -422,6 +433,7 @@ const debugAPI = {
       colliders: rooms.activeColliders.length,
       rooms: rooms.stats(),
       exteriorTriangles: exterior.triangles,
+      fighters: fighters.stats(),
       qualityLevel: quality.level,
       pixelRatio: renderer.getPixelRatio(),
       boot: { ...timings, materials: materials.timings, totalMs: +(bootReady - bootT0).toFixed(0) },
@@ -449,6 +461,9 @@ const debugAPI = {
   sync,
   materials,
   exterior,
+  fighters,
+  traffic: fighters.traffic,
+  atmosphere,
   layout: { ROOMS, ROOM_BY_ID, CLUSTERS, BOARDING },
 };
 window.debugAPI = debugAPI;
@@ -520,6 +535,8 @@ function frame() {
   sunDir.copy(space.sunWorld).normalize();
   sun.position.copy(sunDir).multiplyScalar(modes.isInterior ? 500 : 2500).add(sun.target.position);
   exterior.update(dt, t);
+  fighters.update(dt, t, { mode: modes.mode, cameraPos: camera.position, playerPos: player.position, hangarVisible: rooms.visibleIds.has("hangar") });
+  atmosphere.update(dt, t, { mode: modes.mode, playerPos: player.position, currentRoom: rooms.current });
   lighting.update(dt);
   interactions.update();
   sync.tick(dt);

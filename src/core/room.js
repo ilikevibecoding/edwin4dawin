@@ -490,9 +490,12 @@ export function greybox(ctx) {
   if (n <= 12) {
     for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) ctx.light(0xdfe8ff, big ? 60 : 16, big ? 60 : 18, [x0 + ((i + 0.5) / nx) * (x1 - x0), ctx.ceil - (big ? 2 : 0.6), z0 + ((j + 0.5) / nz) * (z1 - z0)]);
   } else {
-    ctx.light(0xdfe8ff, 160, 90, [cx, ctx.ceil - 3, cz]);
-    ctx.light(0xdfe8ff, 90, 70, [x0 + 6, ctx.ceil * 0.5 + ctx.floor * 0.5, z0 + 6]);
-    ctx.light(0xdfe8ff, 90, 70, [x1 - 6, ctx.ceil * 0.5 + ctx.floor * 0.5, z1 - 6]);
+    // large hall: a coarse grid of strong work lights hung mid-height so walls and floor both read
+    const gx = Math.max(2, Math.round((x1 - x0) / 26));
+    const gz = Math.max(2, Math.round((z1 - z0) / 26));
+    for (let i = 0; i < gx; i++) for (let j = 0; j < gz; j++) ctx.light(0xdfe8ff, 140, 70, [x0 + ((i + 0.5) / gx) * (x1 - x0), ctx.floor + Math.min(ctx.h - 1, 12), z0 + ((j + 0.5) / gz) * (z1 - z0)]);
+    void cx;
+    void cz;
   }
 }
 
