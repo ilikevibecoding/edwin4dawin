@@ -1,14 +1,16 @@
-// Observation gallery: a tall, quiet viewing room beside the bridge. The whole forward wall is glass in
-// slim black mullions over a low sill, with a raised viewing terrace and a leaning rail along it. Rows of
-// benches face the view, pilasters with lit slots and low floor light line the side walls, star-chart
-// displays flank the aft door and a slowly turning astrogation globe stands in the centre aisle. Dim cool
-// light so the view dominates, with cool space-light keys coming in through the glass.
+// Observation gallery: a tall, quiet viewing room beside the bridge. The whole forward wall is flat glass
+// in slim black mullions over a low sill, with a raised viewing terrace and a leaning rail along it. Four
+// rows of theatre benches (legs, open backs with cream rear panels and steel rails) face the view,
+// pilasters with lit slots and low floor light line the side walls, star-chart displays flank the aft
+// door and a slowly turning astrogation globe with two chart lecterns stands on the port side of the
+// third row, well off the entry axis. Dim cool light so the view dominates, with cool space-light keys
+// coming in through the glass.
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { roomShell, wallLightBar, wallConsole } from "../shell.js";
 import { pointLight, windowSpot, wallFrame } from "../lib.js";
 import { PALETTE as P } from "../../materials.js";
-import { wallScreen, bench, handrail, floorStrip, pilaster, podium, downlight, stencil, commPanel, cabinet, effects } from "./commandKit.js";
+import { wallScreen, theatreBench, handrail, floorStrip, pilaster, podium, downlight, stencil, commPanel, cabinet, effects } from "./commandKit.js";
 
 export function build(kit, ctx, room) {
   const shell = roomShell(kit, ctx, room, { style: "light", skipWalls: ["-z"], ceiling: false, lights: false, seed: 71 });
@@ -43,7 +45,8 @@ export function build(kit, ctx, room) {
   }
   kit.boxMM("satinBlack", [gx0, gy0, z0 - 0.06], [gx1, gy0 + 0.08, z0 + 0.16]);
   kit.boxMM("satinBlack", [gx0, y0 + 2.6, z0 - 0.04], [gx1, y0 + 2.66, z0 + 0.1]);
-  kit.add("glass", new THREE.PlaneGeometry(gx1 - gx0, gy1 - gy0), { pos: [cx, (gy0 + gy1) / 2, z0 + 0.03] });
+  // one flat pane: a thin plain glass box in the wall plane, world-mapped so nothing stretches
+  kit.boxMM("glass", [gx0, gy0, z0 + 0.02], [gx1, gy1, z0 + 0.04], { uv: "world" });
   kit.collider([x0 - 0.16, y0, z0 - 0.3], [x1 + 0.16, yTop, z0 + 0.1], "glass");
   // leaning rail standing on the sill, posts on the mullion lines
   handrail(kit, [gx0, z0 + sillD - 0.3], [gx1, z0 + sillD - 0.3], gy0, { h: 0.7, postEvery: bayW });
@@ -60,18 +63,23 @@ export function build(kit, ctx, room) {
   const Et = wallFrame(kit, [x1, z0], [x1, z1], y0 + stepH).frame;
   const uW = (z) => z1 - z;
   const uE = (z) => z - z0;
-  wallConsole(Wt, uW(z0 + 3.3), 1.4, "screen4");
-  wallConsole(Et, uE(z0 + 3.3), 1.4, "screen4");
-  wallScreen(Wt, uW(z0 + 3.3), 2.15, 1.5, 0.9, "screen1", { leds: false });
+  wallConsole(Wt, uW(z0 + 3.3), 1.4, "screen8");
+  wallConsole(Et, uE(z0 + 3.3), 1.4, "screen9");
+  wallScreen(Wt, uW(z0 + 3.3), 2.15, 1.5, 0.9, "screen7", { leds: false });
   wallScreen(Et, uE(z0 + 3.3), 2.15, 1.5, 0.9, "screen1", { leds: false });
 
   // ------------------------------------------------------------ seating facing the view
-  // three full rows, then a fourth on the starboard side only: the port half of that row is the
-  // astrogation globe, kept off the door's sightline so the glass owns the view from the entrance
-  const rows = [z0 + 7.8, z0 + 12.0, z0 + 16.2];
-  for (const rz of rows) for (const bx of [x0 + 5.3, x0 + 8.6, x1 - 8.6, x1 - 5.3]) bench(kit, bx, y0, rz, "-z", { len: 3.0, color: P.fabricTeal });
-  const gz = z0 + 20.4;
-  for (const bx of [x1 - 8.6, x1 - 5.3]) bench(kit, bx, y0, gz, "-z", { len: 3.0, color: P.fabricTeal });
+  // four rows of theatre benches; the port half of the third row is the astrogation globe and its two
+  // lecterns, well forward of the door and off its sightline so the glass owns the view from the entrance
+  const rows = [z0 + 7.8, z0 + 12.0, z0 + 16.2, z0 + 20.4];
+  const gz = z0 + 16.2;
+  const rearTone = [P.creamDark, P.cream, P.creamDark, P.cream];
+  rows.forEach((rz, i) => {
+    for (const bx of [x0 + 5.3, x0 + 8.6, x1 - 8.6, x1 - 5.3]) {
+      if (rz === gz && bx < cx) continue;
+      theatreBench(kit, bx, y0, rz, "-z", { len: 3.0, color: P.fabricTeal, rear: rearTone[i] });
+    }
+  });
   // low guide lights along the centre aisle and the side aisles
   for (const gx of [cx - 1.7, cx + 1.7]) floorStrip(kit, [gx, tz1 + 0.6], [gx, z1 - 2.2], y0, "emitCoolSoft", { w: 0.05 });
   for (const gx of [x0 + 0.75, x1 - 0.75]) floorStrip(kit, [gx, tz1 + 0.6], [gx, z1 - 2.4], y0, "emitCoolSoft", { w: 0.05 });
@@ -87,8 +95,8 @@ export function build(kit, ctx, room) {
   const sideZ = [z0 + 8.5, z0 + 13.5, z0 + 18.5];
   const sideDecals = [[9, 4], [0, 9], [12, 0]];
   sideZ.forEach((z, i) => {
-    bench(kit, x0 + 0.3, y0, z, "+x", { len: 2.4, back: false, color: P.fabricTeal });
-    bench(kit, x1 - 0.3, y0, z, "-x", { len: 2.4, back: false, color: P.fabricTeal });
+    theatreBench(kit, x0 + 0.46, y0, z, "+x", { len: 2.4, color: P.fabricTeal, rear: P.gunmetal });
+    theatreBench(kit, x1 - 0.46, y0, z, "-x", { len: 2.4, color: P.fabricTeal, rear: P.gunmetal });
     wallLightBar(Wf, uW(z) - 1.3, uW(z) + 1.3, 2.6, "emitCoolSoft");
     wallLightBar(Ef, uE(z) - 1.3, uE(z) + 1.3, 2.6, "emitCoolSoft");
     stencil(Wf, uW(z), 1.75, 0.42, sideDecals[i][0]);
@@ -115,8 +123,9 @@ export function build(kit, ctx, room) {
   const A = shell.frames["+z"].frame; // u = x1 - x, door at u 11.1..12.9
   const uA = (x) => x1 - x;
   const chartX = [x1 - 3.3, x1 - 6.5, x1 - 9.7, x0 + 9.7, x0 + 6.5, x0 + 3.3];
+  const chartMats = ["screen8", "screen7", "screen9", "screen4", "screen8", "screen1"];
   chartX.forEach((x, i) => {
-    wallScreen(A, uA(x), 2.15, 2.5, 1.45, i % 2 ? "screen1" : "screen4", { leds: false });
+    wallScreen(A, uA(x), 2.15, 2.5, 1.45, chartMats[i], { leds: false });
     A.box("emitBlue", uA(x) - 1.34, 2.95, 0.05, 0.05, 0.05, 0.02);
     A.box("emitBlue", uA(x) + 1.34, 2.95, 0.05, 0.05, 0.05, 0.02);
   });
@@ -140,8 +149,8 @@ export function build(kit, ctx, room) {
   cabinet(A, 0.9, 1.2, 2.0, 0.5, { color: P.cream, label: 13, lamp: "emitRed", band: P.orange });
   cabinet(A, 23.1, 1.2, 2.0, 0.5, { color: P.cream, label: 4, lamp: "emitBlue", band: P.tealPaint });
 
-  // ------------------------------------------------------------ astrogation globe and chart lecterns (port side of the last row)
-  const gx = x0 + 7.0;
+  // ------------------------------------------------------------ astrogation globe and chart lecterns (port side of the third row)
+  const gx = x0 + 6.4;
   kit.cyl("metal", gx, y0 + 0.05, gz, 0.72, 0.1, "y", { color: P.darkMetal, segments: 24 });
   kit.cyl("satinBlack", gx, y0 + 0.5, gz, 0.55, 0.8, "y", { segments: 24 });
   kit.cyl("metal", gx, y0 + 0.915, gz, 0.58, 0.03, "y", { color: P.steel, segments: 24 });
@@ -149,8 +158,9 @@ export function build(kit, ctx, room) {
   kit.add("leds", new THREE.CylinderGeometry(0.56, 0.56, 0.04, 24, 1, true), { pos: [gx, y0 + 0.6, gz], uv: "keep" });
   kit.collider([gx - 0.72, y0, gz - 0.72], [gx + 0.72, y0 + 0.95, gz + 0.72], "globe");
   buildGlobe(ctx, gx, y0 + 1.75, gz);
-  podium(kit, gx - 3.4, y0, gz, "+z", { screen: "screen4" });
-  podium(kit, gx + 2.4, y0, gz, "+z", { screen: "screen1" });
+  podium(kit, gx - 2.9, y0, gz, "+z", { screen: "screen8", rear: "screen7", w: 1.1 });
+  podium(kit, gx + 2.7, y0, gz, "+z", { screen: "screen9", rear: "screen8", w: 1.1 });
+  kit.boxMM("fabric", [gx - 3.6, y0, gz - 1.2], [gx + 3.4, y0 + 0.012, gz + 1.2], { color: P.fabricTeal, uv: "world", texel: 1.5 });
 
   // ------------------------------------------------------------ ceiling: dark plate, beams on the pilaster lines, downlights
   kit.boxMM("paintedMetal", [x0 - 0.16, yTop, z0 - 0.16], [x1 + 0.16, yTop + 0.12, z1 + 0.16], { color: P.gunmetal, uv: "world", texel: 0.7 });
