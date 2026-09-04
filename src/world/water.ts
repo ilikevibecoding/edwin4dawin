@@ -323,6 +323,10 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
     vec2 off = gd / max(slope, 1e-4);
     vec2 alongShore = vec2(-off.y, off.x);
     float shoreDist = min(depth / max(slope, 0.003), 300.0); // metres to the waterline along the bed
+    // only a real waterline breaks waves: the bed must actually reach land where the slope says it does,
+    // otherwise shallow humps (sandbars, patch reefs) drew concentric foam rings around themselves
+    float landAhead = smoothstep(-0.15, 0.12, terrainHeightW(wp - off * (shoreDist + 6.0)));
+    coastGate *= landAhead;
     // wave exposure of this shore: the map's fetch-based exposure (zone alpha) times the wind-facing factor
     float exposure = zs.a * (0.3 + 0.7 * (0.5 + 0.5 * dot(off, wd))) * mix(0.5, 1.0, open);
     float fineFade = 1.0 - smoothstep(2.0, 6.0, foot);
