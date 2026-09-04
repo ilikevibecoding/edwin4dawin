@@ -298,12 +298,12 @@ export function build(kit, ctx, room, lib) {
   {
     const period = 10.5;
     const origin = y0 + PLINTH_TOP;
-    const beamMat = beamMaterial(ctx, "#dbe9ff", 1.55, bandTexture(7, 0.3, 1.0, 0.15), period, 0.9);
+    const beamMat = beamMaterial(ctx, "#dbe9ff", 1.45, bandTexture(7, 0.22, 1.0, 0.15), period, 0.9);
     const beam = new THREE.Mesh(beamGeometry(cx, origin, cz, BEAM_R, TOP_Y - PLINTH_TOP, period, 40), beamMat);
     beam.name = "reactorBeam";
     beam.castShadow = false;
     beam.receiveShadow = false;
-    const sleeveMat = beamMaterial(ctx, "#78b4ff", 0.7, bandTexture(2, 0.7, 1.0, 0.5), period * 2, 0.35, { opacity: 0.36 });
+    const sleeveMat = beamMaterial(ctx, "#78b4ff", 0.55, bandTexture(2, 0.7, 1.0, 0.5), period * 2, 0.35, { opacity: 0.34 });
     const sleeve = new THREE.Mesh(mergeGeometries(GAPS.map(([a, b]) => beamGeometry(cx, y0 + a - 0.2, cz, CORE_R, b - a + 0.4, period * 2, 48, origin)), false), sleeveMat);
     sleeve.name = "reactorSleeve";
     sleeve.renderOrder = 1;
