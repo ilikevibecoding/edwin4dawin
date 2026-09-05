@@ -66,8 +66,9 @@ the integration branch and in the committed `dist/` build; landmark builders sti
   3.75 -> 3.35 ms JS, 146 draw calls both; Cinematic 408 draw calls (shadow pass 144 chunk + 59 object draws of 374
   loaded chunks), +58.6 MB GPU memory at 1280x713; noon mean luminance Cinematic/Light 1.024 with real maps; bloom
   source mask 0.166% of pixels. Real-GPU 60 fps at 1080p is unmeasured in this VM.
-- Known gaps: landmarks Galaxies Opera House, 500 Republica, Chancellery, Medcenter, Detention Center and HoloNet are
-  still being built; NPCs for Coruscant are planned (`docs/STARWARS_PLAN.md`, population plan) but not spawned;
+- All twelve signature landmarks are in (the six above plus the Detention Center, HoloNet tower, Medical Facility,
+  Opera House, 500 Republica and the Chancellery; `docs/rubrics/06_landmarks.md` has the per-landmark harness table).
+- Known gaps: NPCs for Coruscant are planned (`docs/STARWARS_PLAN.md`, population plan) but not spawned;
   clouds cast no shadows; the Coruscant daytime haze is deliberately bright (city smog) and steel-glass roofs still
   read bright at noon; the "leave the planet by spaceship" journey is the next big project.
 
