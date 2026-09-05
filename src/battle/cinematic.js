@@ -336,13 +336,16 @@ export class Cinematic {
       roll: -0.05 * side,
       at: (t, p, l) => {
         // offsets follow the ship's heading only (not its roll), so the horizon stays where planned:
-        // the camera rides the side away from the battle ~27 degrees above the hull, so the planet's
-        // limb sits two fifths down the frame and the hull hangs against the city grid below it
+        // the camera slides stern to bow on the side away from the battle, 30 degrees above the hull,
+        // pitched 11.8 degrees down from wherever it is, so the horizon (22 degrees below level at
+        // this altitude) sits a third of the way up the frame, the hull hangs silhouetted against the
+        // city grid in that bottom third and the rest of the battle stands above it against the stars
         const e = glide(t);
-        this._yawFrame(s, side * 1150, 660, L * 0.7, _a);
-        this._yawFrame(s, side * 760, 700, -L * 0.45, _b);
+        this._yawFrame(s, side * 900, 520, L * 0.55, _a);
+        this._yawFrame(s, side * 700, 540, -L * 0.35, _b);
         p.lerpVectors(_a, _b, e);
-        this._yawFrame(s, -side * 100, -40, -L * 0.1 + 60 * e, l);
+        const dist = Math.hypot(s.position.x - p.x, s.position.z - p.z);
+        l.set(s.position.x, p.y - dist * 0.209, s.position.z); // tan(11.8 deg)
       },
     };
   }
