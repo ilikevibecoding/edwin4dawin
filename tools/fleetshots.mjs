@@ -162,6 +162,15 @@ async function main() {
     await page.evaluate((t) => {
       window.debugAPI.setTimeOfDay(t);
       window.debugAPI.objects.fleet.setTimeOfDay?.(t);
+      // The page is paused, so nothing that follows the hour in its update()
+      // ever moves: rounds 3 and 4 shot every night frame with the camp's lamps
+      // at their boot level, and a lantern retune measured as no change. Step
+      // the hour-following systems by hand, as campshots does for the camp.
+      const { camp, fleet } = window.debugAPI.objects;
+      for (let i = 0; i < 90; i++) {
+        camp?.update?.(1 / 60, i / 60, {});
+        fleet?.update?.(1 / 60, i / 60);
+      }
     }, time);
     for (const v of list) {
       const t1 = Date.now();
