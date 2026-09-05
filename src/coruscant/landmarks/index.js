@@ -8,11 +8,13 @@
 import { LANDMARK as market } from './market.js';
 import { LANDMARK as senate } from './senate.js';
 import { LANDMARK as temple } from './temple.js';
+import { LANDMARK as underworld } from './underworld.js';
 
 const MODULE_LIST = [
   market,
   senate,
   temple,
+  underworld,
 ];
 
 const MODULES = new Map();

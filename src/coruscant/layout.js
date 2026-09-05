@@ -56,7 +56,7 @@ export const LANDMARKS = [
   { family: 'senate', name: 'Galactic Senate', near: [PLATEAU.cx, PLATEAU.cz], height: 90, span: [3, 3] },
   { family: 'temple', name: 'Jedi Temple', near: [3180, -240], height: 190, span: [3, 3] },
   { family: 'plaza_monument', name: 'Monument Plaza', near: [3200, 0], height: 30, span: [3, 3] },
-  { family: 'underworld', name: 'Uscru undercity strip', near: [2760, 330], height: 35, span: [3, 3] },
+  { family: 'underworld', name: 'Uscru undercity strip', near: [2760, 330], height: 35, span: [3, 3], midDoor: true },   // its roof deck meets the boulevard
   { family: 'works', name: 'The Works foundry', near: [2620, -420], height: 60, span: [3, 2] },
   { family: 'market', name: 'CoCo Town market halls', near: [2780, -100], height: 25, span: [3, 2] },
   { family: 'opera', name: 'Galaxies Opera House', near: [2668, 240], height: 60, span: [2, 2] },
@@ -160,7 +160,7 @@ function buildLayout(seed) {
     for (let i = 0; i < sx - 1; i++) cutsX[li + i].push([zs[lj - 1] + DECK_HALF, zs[lj + sz - 1] - DECK_HALF]);
     for (let j = 0; j < sz - 1; j++) cutsZ[lj + j].push([xs[li - 1] + DECK_HALF, xs[li + sx - 1] - DECK_HALF]);
     const lot = { id: lots.length, x0, z0, w: x1 - x0, d: z1 - z0, x1, z1, district: group[0].district, kind: 'landmark', family: lm.family, name: lm.name,
-      height: lm.height, span: [sx, sz], seed: mix(seed + 5, x0, z0), block: group[0].id, sides: { W: true, E: true, N: true, S: true }, front: 'S', midDoor: lm.height >= 40, bridges: [] };
+      height: lm.height, span: [sx, sz], seed: mix(seed + 5, x0, z0), block: group[0].id, sides: { W: true, E: true, N: true, S: true }, front: 'S', midDoor: lm.midDoor ?? lm.height >= 40, bridges: [] };
     lot.door = doorFor(lot);
     lots.push(lot);
     landmarkGroups.push({ family: lm.family, name: lm.name, lot: lot.id, x: Math.round((x0 + x1) / 2), z: Math.round((z0 + z1) / 2), w: lot.w, d: lot.d, height: lm.height });
