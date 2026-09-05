@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-05T11:42:13.997Z",
+  "updated": "2026-09-05T11:54:55.641Z",
   "phase": "Star Wars expansion: 7 builders running (gameplay 1:1, space train, towers+rooms, spaceport+ships, Death Star interior, HD textures, shaders/shadows/bloom); landmark wave next",
   "summary": "User round 2 feedback: references received (Coruscant skyline/platform/senate/plaza + Monument Plaza). New rubrics: 05 render quality (64x HD tiles, normal/material maps, cascaded sun shadows, HDR bloom + filmic tone mapping, atmospheric sky, water reflections, presets) and 06 landmarks (one builder per signature building). Layout now reserves 12 landmark lots (Senate 3x3, Jedi Temple 3x3, Monument Plaza 3x3, Uscru undercity 3x3, Works, CoCo market, Opera, 500 Republica, Chancellery, Medcenter, Detention, HoloNet); 421 towers + 12 landmarks + 8 plazas.",
   "links": [
@@ -162,6 +162,11 @@
       "name": "Coruscant tower families + 53-room library",
       "status": "merged",
       "detail": "8 tower families + civic/hall + senate/temple/opera fallbacks, 53 furnished room templates, 1664-blueprint sweep with every room reachable and lit; landmark lots now dispatch to dedicated modules."
+    },
+    {
+      "name": "Admin panel: Travel",
+      "status": "merged",
+      "detail": "Travel section: frontier town, frontier station, spaceport, Senate, Monument Plaza, Coruscant skyline, Death Star exterior and hangar; destination chunks generated before the teleport; aerial spots start in flight."
     }
   ],
   "metrics": [
@@ -339,6 +344,10 @@
     {
       "time": "2026-09-05 11:42 UTC",
       "text": "Junction fix merged; landmark wave throttled to <= 5 live agents after relaunched builders starved for model turns and timed out."
+    },
+    {
+      "time": "2026-09-05 11:54 UTC",
+      "text": "Killed four orphaned headless Chromes (~2.5 cores) left by finished test harnesses; machine load dropping."
     }
   ],
   "issues": [
