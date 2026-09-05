@@ -32,6 +32,7 @@ import { Tornado } from './disasters/tornado.js';
 import { OrbitalBeam } from './disasters/orbitalBeam.js';
 import { AdminPanel } from './ui/adminPanel.js';
 import { NetClient } from './net/client.js';
+import { RenderPipeline } from './render/pipeline.js';
 
 const WORLD_SEED = 1337;
 
@@ -130,6 +131,7 @@ export class Game {
     this.setLoading('Waking up the town...', 0.96);
     await this.nextFrame();
     await this.setupEntities();
+    this.pipeline = new RenderPipeline(this.renderer, this); // shadows, HDR post, sun uniforms (Light preset = direct path)
     // pre-compile shader programs that would otherwise stall on first use (name tags, debris)
     if (this.npcs && this.npcs.list.length) {
       const tag = this.npcs.list[0].tag; tag.visible = true;
@@ -183,7 +185,7 @@ export class Game {
     this.disasters = new DisasterManager(this);
     {
       const qp = new URLSearchParams(location.search);
-      applyQuality(this, loadQualityName(qp), { persist: false, renderDistance: !qp.has('rd') });
+      applyQuality(this, loadQualityName(qp, this.renderer), { persist: false, renderDistance: !qp.has('rd') });
       if (!qp.has('rd')) { try { const rd = parseInt(localStorage.getItem('frontier-craft:rd'), 10); if (rd >= 2) this.terrain.setRenderDistance(rd); } catch (e) { /* ignore */ } }
     }
     this.disasters.register(Tsunami);
@@ -214,6 +216,7 @@ export class Game {
       this.hand.resize(window.innerWidth, window.innerHeight);
       this.hud.resize();
       this.particles.setCamera(this.camera, window.innerHeight * this.renderer.getPixelRatio());
+      if (this.pipeline) this.pipeline.setSize(window.innerWidth, window.innerHeight);
     });
     this.input.onMouseDown = (e) => {
       if (this.loading) return;
@@ -394,11 +397,8 @@ export class Game {
     const held = this.inventory.held;
     this.hand.update(dt, held ? held.id : 0, handLight, bob, this.viewBobbing);
 
-    // render
-    this.renderer.clear();
-    this.renderer.render(this.scene, this.camera);
-    this.renderer.clearDepth();
-    this.renderer.render(this.hand.scene, this.hand.camera);
+    // render (shadow pass + HDR post on Balanced/Cinematic; the Light preset renders directly like before)
+    this.pipeline.render(this.scene, this.camera, this.hand.scene, this.hand.camera);
     this.perf.endRender();
     this.hud.fps = this.fps;
     this.hud.render(this);
