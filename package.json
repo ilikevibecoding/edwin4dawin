@@ -1,0 +1,24 @@
+{
+  "name": "frontier-craft",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A playable Minecraft-style voxel sandbox with a living Red Dead Redemption-inspired frontier town built inside it.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "server": "node server/index.mjs",
+    "bench": "node scripts/bench.mjs",
+    "test": "node scripts/test-unit.mjs && node scripts/test-textures.mjs && node scripts/test-coruscant-towers.mjs && node scripts/test-spaceport.mjs && node scripts/test-deathstar.mjs && node scripts/test-disasters.mjs",
+    "material-table": "node scripts/material-table.mjs",
+    "mp-test": "node scripts/mp-test.mjs"
+  },
+  "dependencies": {
+    "three": "^0.185.1",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "vite": "^8.2.2"
+  }
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Frontier Craft</title>
+    <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #000; width: 100%; height: 100%; }
+      canvas { display: block; position: absolute; top: 0; left: 0; }
+      #game { z-index: 0; }
+      #hud { z-index: 1; image-rendering: pixelated; cursor: default; }
+      #loading { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background-color: #3b2a1f; background-image: url(''); image-rendering: pixelated; color: #fff; font-family: monospace; }
+      #loading h1 { font-size: 34px; letter-spacing: 2px; text-shadow: 3px 3px 0 #3f3f3f; margin: 0 0 30px 0; font-family: monospace; }
+      #loading .sub { color: #ddd; text-shadow: 2px 2px 0 #3f3f3f; margin-bottom: 14px; font-size: 16px; }
+      #bar { width: 400px; height: 14px; border: 2px solid #000; background: #808080; box-shadow: inset 2px 2px 0 #373737; }
+      #bar div { height: 100%; width: 0%; background: #80ff20; }
+      #error { position: absolute; left: 0; right: 0; bottom: 0; z-index: 10; background: rgba(120,0,0,0.9); color: #fff; font: 13px monospace; padding: 8px; white-space: pre-wrap; display: none; max-height: 40%; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <canvas id="hud"></canvas>
+    <div id="loading">
+      <h1>FRONTIER CRAFT</h1>
+      <div class="sub" id="loading-text">Building terrain...</div>
+      <div id="bar"><div id="bar-fill"></div></div>
+    </div>
+    <div id="error"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
