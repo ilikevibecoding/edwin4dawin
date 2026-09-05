@@ -198,19 +198,19 @@ export class SpaceTrain extends Vehicle {
     const maxLead = terrain.renderDistance + 3; // stay inside the unload radius (renderDistance + 4)
     const t0 = performance.now();
     let done = 0;
-    for (let k = 0; k <= 9 && done < 3; k++) {
+    outer: for (let k = 0; k <= 9 && done < 3; k++) {
       const cx = cxFront + dir * k;
       if (Math.abs(cx - pcx) > maxLead) break;
       for (const cz of [-1, 0, -2, 1]) {
         const c = world.getChunk(cx, cz);
         if (c && c.generated && c.lit) continue;
-        if (done > 0 && performance.now() - t0 > 3) return;
+        if (done > 0 && performance.now() - t0 > 3) break outer; // budget: at most ~3 ms per tick
         terrain.ensureChunk(cx, cz);
         done++;
         this.preloadStats.chunks++;
       }
     }
-    this.preloadStats.ms += performance.now() - t0;
+    if (done) this.preloadStats.ms += performance.now() - t0;
   }
 
   update(dt, alpha, camera) {
