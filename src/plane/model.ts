@@ -1350,7 +1350,7 @@ export class PlaneModel {
     const glow = Math.pow(night, 0.6);
     const strobePhase = time % 1.5;
     const strobeOn = strobePhase < 0.05 || (strobePhase > 0.15 && strobePhase < 0.20);
-    const beaconFlash = Math.pow(Math.max(0, Math.sin(time * Math.PI * 2)), 6);
+    const beaconFlash = Math.pow(Math.max(0, Math.cos(time * Math.PI * 2)), 6);
     const P = this.lightPower.value;
     P[LIGHT.red] = P[LIGHT.green] = 7 * glow;
     P[LIGHT.tail] = 6 * glow;
