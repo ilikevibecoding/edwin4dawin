@@ -86,8 +86,13 @@ export const BENCH_VIEWS: BenchView[] = [
     id: 'water-landing', name: 'Seaplane water approach', description: 'Final approach a few metres above the Garza channel, floats about to touch: foam, wake and spray.',
     time: 13.0, weather: 'clear',
     camera: { mode: 'chase', fov: 48 },
-    plane: { pos: [-500, 5.5, 3330], headingDeg: 86, pitchDeg: 4, bankDeg: 0, speed: 29, throttle: 0.25, flaps: 1 },
-    presim: 30, clipInputs: { pitch: 0.12, roll: 0, yaw: 0 },
+    // floats ~0.7 m above the water, flaring downwind (5 m/s tailwind on 086): the aircraft balloons a few
+    // decimetres, sinks and touches down about 0.7 s into the clip (frame 7), then runs on the step at ~27 m/s
+    // with spray and float wakes; the old 5.5 m start floated in ground effect through the whole 3 s clip.
+    // The landing line runs 110 m north of the channel's boat lane (z 3300) so the clip does not open on a
+    // boat wake stretching ahead of the aircraft with its boat already behind the camera
+    plane: { pos: [-500, 2.7, 3410], headingDeg: 86, pitchDeg: 3, bankDeg: 0, speed: 28, throttle: 0.12, flaps: 1 },
+    presim: 30, clipInputs: { pitch: 0.15, roll: 0, yaw: 0 },
   },
   {
     id: 'sunset', name: 'Sunset flight', description: 'Low sun in the west over the bay, downtown silhouetted, warm haze and long water reflections.',
@@ -112,20 +117,22 @@ export const BENCH_VIEWS: BenchView[] = [
   },
 ];
 
-/** Aircraft inspection views (used by the aircraft / glass / cockpit gauntlet loops). */
+/** Aircraft inspection views (used by the aircraft / glass / cockpit gauntlet loops). The aircraft taxis at 3.5 m/s
+ *  (the HUD read 7 kt IAS from the breeze while it was moored, and the critics scored the missing wake): the still
+ *  keeps the same pose, the flight frames add the bow waves and float wakes, and the fixed cameras dolly along. */
 BENCH_VIEWS.push(
   {
-    id: 'plane-rear-quarter', name: 'Aircraft rear three-quarter', description: 'Fixed camera 14 m from the aircraft, rear-left-above, aircraft moored at the Garza marina in sunlight.',
+    id: 'plane-rear-quarter', name: 'Aircraft rear three-quarter', description: 'Fixed camera 14 m from the aircraft, rear-left-above, aircraft taxiing slowly off the Garza marina in sunlight.',
     time: 14.0, weather: 'clear',
-    camera: { mode: 'fixed', pos: [425.9, 4.25, 1892.3], headingDeg: 205, pitchDeg: -9, fov: 40 },
-    plane: { pos: [420, 1.96, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 0, throttle: 0.0 },
+    camera: { mode: 'fixed', pos: [425.9, 4.25, 1892.3], headingDeg: 205, pitchDeg: -9, fov: 40, follow: true },
+    plane: { pos: [420, 1.96, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 3.5, throttle: 0.12 },
     presim: 10, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
   {
-    id: 'plane-front-quarter', name: 'Aircraft front three-quarter', description: 'Fixed camera 13 m ahead-right of the moored aircraft, low, showing cowl, propeller, windshield and floats.',
+    id: 'plane-front-quarter', name: 'Aircraft front three-quarter', description: 'Fixed camera 13 m ahead-right of the slowly taxiing aircraft, low, showing cowl, propeller, windshield and floats.',
     time: 10.0, weather: 'clear',
-    camera: { mode: 'fixed', pos: [415.6, 2.65, 1917.2], headingDeg: 20, pitchDeg: -3, fov: 40 },
-    plane: { pos: [420, 1.96, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 0, throttle: 0.0 },
+    camera: { mode: 'fixed', pos: [415.6, 2.65, 1917.2], headingDeg: 20, pitchDeg: -3, fov: 40, follow: true },
+    plane: { pos: [420, 1.96, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 3.5, throttle: 0.12 },
     presim: 10, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
   {
