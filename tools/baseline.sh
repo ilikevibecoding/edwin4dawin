@@ -28,6 +28,16 @@ node tools/lions.mjs --url "$U" --views close,face,far,medium,pride,seat,side --
 node tools/lions.mjs --url "$U" --time dusk --views close,medium,pride --out "$OUT/lions_dusk"
 node tools/lions.mjs --url "$U" --walk 8 --views close,medium,far,seat --out "$OUT/lions_walk"
 node tools/glassgauntlet.mjs --url "$U" --width $W --height $H --round "$(basename "$OUT")" --out "$OUT/glass"
+# Native resolution at the ultra tier. The 640x360 fast set is what the critics
+# score like against like, and it hid a road that read as dark mud at 1640x920
+# on a real GPU (user screenshot after round 4): texture scale, the ultra-only
+# reflection path and anything tier-gated never reach a 640-wide fast frame.
+# A minute or more a frame under the software rasteriser, so a handful of views.
+UU=${U/quality=fast/quality=ultra}
+node tools/shots.mjs --width 1280 --height 720 --url "$UU" --views hero,road,mainroad,forest,interior --out "$OUT/ultra_day"
+node tools/shots.mjs --width 1280 --height 720 --url "$UU&time=night" --views hero,road --out "$OUT/ultra_night"
+node tools/campshots.mjs --width 1280 --height 720 --url "$UU" --views mess,gate --out "$OUT/ultra_camp"
+node tools/lions.mjs --width 1280 --height 720 --url "$UU" --views close,face --out "$OUT/ultra_lions"
 # the HUD stamp in the frames is the revision of the tree that was served; after a
 # deploy that is the bundle commit, one ahead of the source commit it was built from
 echo "$U" > "$OUT/SOURCE"
