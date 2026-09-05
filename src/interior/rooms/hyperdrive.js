@@ -32,9 +32,12 @@ export function buildHyperdrive(kit, ctx) {
   const R = 2.5;
   const L = X1 - X0;
   const CX = (X0 + X1) / 2;
-  emitMat(ctx, "hyp_core", 0x8fc4ff, 3.0);
-  emitMat(ctx, "hyp_coil", 0x3d8bff, 2.5);
-  emitMat(ctx, "hyp_flood", 0x9fc8ff, 2.2, "emitWhiteSoft");
+  // reactor blue throughout (the paler 0x8fc4ff / 0x3d8bff emitters clipped to ice-white through
+  // bloom); the flood faces are the same blue at a low level rather than a near-white soft
+  // emitter, which bloomed pure white where the nearest fixture sat on the door camera's top edge
+  emitMat(ctx, "hyp_core", 0x4a90ff, 2.4);
+  emitMat(ctx, "hyp_coil", 0x2a7dff, 2.0);
+  emitMat(ctx, "hyp_flood", 0x2a7dff, 1.15);
   // dark shell so the blue channels and collars carry the silhouette (a mid-grey drum read as plain)
   kit.cyl("metal", CX, CY, CZ, R, L, "x", { color: PALETTE.impDark, segments: 40, texel: 0.5 });
   // end domes (shallow) with a glowing injector disc, its ring and eight radial feed channels
@@ -78,7 +81,7 @@ export function buildHyperdrive(kit, ctx) {
     }
   }
   // energy channels: eight 0.5 m wide strips, segmented along the length, driven by a travelling pulse
-  const pulse = pulseSet(ctx, "hyp_p", 0x7fc0ff, 6, { min: 0.9, max: 3.2, speed: 2.4 });
+  const pulse = pulseSet(ctx, "hyp_p", 0x2a7dff, 6, { min: 0.7, max: 2.4, speed: 2.4 });
   const segs = 11;
   const segLen = (L - 1.0) / segs;
   for (let k = 0; k < 8; k++) {
@@ -271,30 +274,41 @@ export function buildHyperdrive(kit, ctx) {
   wallVent(kit, ctx, "zmin", 24.0, 5.8, 2.4, 0.9);
 
   // floor markings (stencils only where they read as paint, never as light blocks on the deck) and
-  // the blue light channels along the machine's near flank: the reactor-blue spill on the deck
-  emitMat(ctx, "hyp_floor", 0x3d8bff, 1.1, "emitBlue");
-  floorLine(kit, X0 - 0.5, zn1 + 0.25, X1 + 0.5, zn1 + 0.25, { w: 0.14, mat: "hyp_floor", y: 0.006 });
-  floorLine(kit, X0 - 0.5, zn1 + 0.6, X1 + 0.5, zn1 + 0.6, { w: 0.06, mat: "emitBlueDim", y: 0.006 });
-  for (let x = X0; x <= X1; x += 4.4) kit.box("paintedMetal", x, 0.004, zn1 + 0.42, 0.5, 0.008, 0.6, { color: PALETTE.impBlack, texel: 2 });
+  // the blue light channels along the machine's near flank: the reactor-blue spill on the deck. The
+  // channels run from the door approach to the foot of stairs A and end in black terminal plates —
+  // at 0x3d8bff@1.1, stopping square in open floor 4 m ahead of the door camera, they read as two
+  // unfinished white strips
+  emitMat(ctx, "hyp_floor", 0x2a6fe0, 0.7, "emitBlue");
+  const ch0 = min[0] + 1.4;
+  const ch1 = saTop - 0.8;
+  floorLine(kit, ch0, zn1 + 0.25, ch1, zn1 + 0.25, { w: 0.14, mat: "hyp_floor", y: 0.006 });
+  floorLine(kit, ch0, zn1 + 0.6, ch1, zn1 + 0.6, { w: 0.06, mat: "hyp_floor", y: 0.006 });
+  for (const x of [ch0, ch1]) kit.box("paintedMetal", x, 0.0075, zn1 + 0.42, 0.3, 0.007, 0.6, { color: PALETTE.impBlack, texel: 2 });
+  for (let x = X0; x <= ch1 - 1; x += 4.4) kit.box("paintedMetal", x, 0.006, zn1 + 0.42, 0.5, 0.008, 0.6, { color: PALETTE.impBlack, texel: 2 });
   floorStencil(kit, 6.2, -22.2, 1.0, 5, Math.PI / 2);
-  floorStencil(kit, 7.4, -16.2, 1.0, 14, 0);
-  for (let i = 0; i < 6; i++) floorStencil(kit, 11 + i * 4.2, -18.2, 0.5, 2, Math.PI / 2, 0.006);
+  // bay code between the door and the console row, sized and turned to read from the door (the
+  // 1 m plate at 0 yaw and the 0.5 m station numerals along the walkway were illegible smudges)
+  floorStencil(kit, 7.6, -16.4, 1.8, 14, -Math.PI / 2);
 
   // ---------------------------------------------------------------- overhead
   cableTray(kit, [min[0] + 1.0, -12.5], [max[0] - 1.0, -12.5], H - 0.9, { w: 0.6, ceil: H, cables: 5, seed: 3 });
   cableTray(kit, [min[0] + 1.0, -19.5], [max[0] - 1.0, -19.5], H - 0.9, { w: 0.6, ceil: H, cables: 4, seed: 4 });
   cableTray(kit, [8.0, -31.2], [8.0, -7.0], H - 1.1, { w: 0.45, ceil: H, cables: 3, seed: 5 });
   cableTray(kit, [30.0, -31.2], [30.0, -7.0], H - 1.1, { w: 0.45, ceil: H, cables: 3, seed: 6 });
-  // hanging blue flood fixtures over the near flank of the machine
+  // hanging blue flood fixtures over the near flank of the machine, each under a dark mounting
+  // canopy. The flood light itself hangs 1.5 m below the housing: at 0.4 m the fixture's black
+  // underside and the pale ceiling panel above it both blew out to a white block on the door
+  // camera's top edge (the emissive face never did)
   const FZ = CZ + 2.6;
   for (const x of [13, 20.5, 28]) {
+    kit.box("paintedMetal", x, H - 0.1, FZ, 4.6, 0.08, 2.8, { color: PALETTE.impBlack, texel: 2 });
     kit.box("rubber", x, H - 0.55, FZ, 0.04, 1.1, 0.04, { color: PALETTE.rubber });
     kit.box("paintedMetal", x, H - 1.2, FZ, 2.2, 0.3, 0.9, { color: PALETTE.impBlack, texel: 2 });
     kit.box("hyp_flood", x, H - 1.36, FZ, 2.0, 0.02, 0.7, { uv: "keep" });
   }
   // lights (8): two blue floods, blue under-machine and under-gantry, amber consoles / tanks, cool door and far fill
-  ctx.light(pointLight(0x9fc4ff, 18, 22, [14, H - 1.6, FZ]));
-  ctx.light(pointLight(0x9fc4ff, 18, 22, [27, H - 1.6, FZ]));
+  ctx.light(pointLight(0x9fc4ff, 12, 22, [14, H - 2.9, FZ]));
+  ctx.light(pointLight(0x9fc4ff, 12, 22, [27, H - 2.9, FZ]));
   // (both blue fills sit low on the near flank so the deck between the machine and the consoles
   // carries the blue, not the underside of the drum — but at 1.6 m, midway between columns and just
   // behind the column line: at 0.45 m the floor under the light blew out to a white blob)
