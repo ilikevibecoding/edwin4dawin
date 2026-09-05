@@ -295,9 +295,9 @@ function buildPavilion(bp, o) {
     if (column) { set(x, 1, z, B.DURASTEEL_DARK); set(x, 2, z, B.DURASTEEL_DARK); set(x, 3, z, B.DURASTEEL_DARK); return; }
     set(x, 1, z, B.PANEL_STRIPE); set(x, 2, z, B.STEEL_GLASS); set(x, 3, z, B.WINDOW_LIT);
   });
-  // fascia ring (visible from above) + ceiling
+  // fascia ring (visible from above; holo signs over the four entrances) + ceiling
   disc(cx, cz, R0 + 1, (x, z, dx, dz, q) => {
-    if (!inR(q, R0)) set(x, 4, z, ((x + z) & 1) ? B.CITY_LAMP : B.WINDOW_LIT);
+    if (!inR(q, R0)) set(x, 4, z, (dx === 0 || dz === 0) ? B.HOLO_SIGN : ((x + z) & 1) ? B.CITY_LAMP : B.WINDOW_LIT);
     else set(x, 4, z, ((dx + 30) % 3 === 0 && (dz + 30) % 3 === 0) ? B.GLOW_PANEL : B.PANEL_BLACK);
   });
   // dark cone with eight seam ribs, one or two lit bands and a lamp tip
@@ -417,9 +417,9 @@ function buildRotunda(bp, o) {
       if (rIn >= 0 && inR(q, rIn)) return;
       const s = sector(dx, dz);
       let id;
-      if (k === R || q === 0) id = B.GLOW_PANEL;
+      if (k >= R - 1 || q === 0) id = (k === R || q <= 1) ? B.GLOW_PANEL : B.WINDOW_LIT;   // lit lantern cap
       else if (s % 2 === 0) id = B.DURASTEEL_DARK;
-      else id = k <= R * 0.75 ? ((k & 1) ? B.WINDOW_LIT : B.PANEL_BLACK) : B.PANEL_BLACK;
+      else id = k <= R * 0.75 ? B.WINDOW_LIT : B.PANEL_BLACK;
       set(x, yD + k, z, id);
     });
   }
