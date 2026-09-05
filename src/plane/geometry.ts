@@ -731,7 +731,8 @@ export function bladeGeometry(length: number, rootChord: number, tipChord: numbe
   for (let i = 0; i <= segs; i++) {
     // denser rings toward the tip where the planform curves
     const t = i / segs;
-    const tt = t < 0.7 ? t : 0.7 + 0.3 * (1 - Math.pow(1 - (t - 0.7) / 0.3, 1.6));
+    // clamp: at t = 1 the ratio rounds to 1 + 2e-16 and pow(negative, 1.6) is NaN (whole tip ring)
+    const tt = t < 0.7 ? t : 0.7 + 0.3 * (1 - Math.pow(Math.max(0, 1 - (t - 0.7) / 0.3), 1.6));
     const y = tt * length;
     const chord = chordAt(tt);
     // thick, nearly round shank at the root blending into a thin airfoil outboard
