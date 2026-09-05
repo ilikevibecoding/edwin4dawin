@@ -1,7 +1,7 @@
 {
-  "updated": "2026-09-05T07:26:44.517Z",
-  "phase": "Star Wars expansion, Phase F/C/T/D: foundation done, six builders running",
-  "summary": "Plan + four rubrics committed (docs/STARWARS_PLAN.md, docs/rubrics). Foundation landed: world height 256, regions (frontier coast, Coruscant plateau at (3000,0), space void at (0,-4000)), lazy structure registry, per-region sky, 18 Star Wars blocks, voxel mesh + vehicle hooks, auto-jump fix. Builders: Minecraft 1:1 gameplay (doors/chests/food/items/drops/save), vehicles + space train + hyperlane, Coruscant layout/streets, tower families + 40 room templates, spaceport + ships + traffic, Death Star shell + interior.",
+  "updated": "2026-09-05T09:21:12.431Z",
+  "phase": "Star Wars expansion: 7 builders running (gameplay 1:1, space train, towers+rooms, spaceport+ships, Death Star interior, HD textures, shaders/shadows/bloom); landmark wave next",
+  "summary": "User round 2 feedback: references received (Coruscant skyline/platform/senate/plaza + Monument Plaza). New rubrics: 05 render quality (64x HD tiles, normal/material maps, cascaded sun shadows, HDR bloom + filmic tone mapping, atmospheric sky, water reflections, presets) and 06 landmarks (one builder per signature building). Layout now reserves 12 landmark lots (Senate 3x3, Jedi Temple 3x3, Monument Plaza 3x3, Uscru undercity 3x3, Works, CoCo market, Opera, 500 Republica, Chancellery, Medcenter, Detention, HoloNet); 421 towers + 12 landmarks + 8 plazas.",
   "links": [
     {
       "label": "Pull request #17",
@@ -122,6 +122,21 @@
       "name": "Death Star shell + interior",
       "status": "builder running",
       "detail": "Rubric 1"
+    },
+    {
+      "name": "Render quality: shaders, cascaded shadows, HDR bloom, sky, water (R1)",
+      "status": "building",
+      "detail": "Builder R1 on cursor/render-shaders-54d6: face-direction attribute + tangent frames, PBR-lite lighting from material maps, 2-cascade sun shadows with PCF, half-float HDR + bloom + ACES, atmospheric sky, water reflections, live presets, bench before/after."
+    },
+    {
+      "name": "Render quality: 64x HD tiles + normal/material atlases (R2)",
+      "status": "building",
+      "detail": "Builder R2 on cursor/render-hd-textures-54d6: material classes per tile, class-specific detail at 64x keeping the 16x layout, height->normal maps, roughness/metalness/emissive atlas, contact sheets, tests."
+    },
+    {
+      "name": "Coruscant signature landmarks (12 buildings, one builder each)",
+      "status": "layout reserved; wave starts after the tower builder merges",
+      "detail": "Senate, Jedi Temple, Monument Plaza (user reference), Uscru undercity strip, the Works, CoCo Town market, Opera, 500 Republica, Chancellery, Medcenter, Detention Center, HoloNet tower. Shared harness scripts/landmark-stats.mjs checks determinism, block variety, room reachability on foot, lighting, detail density."
     }
   ],
   "metrics": [
@@ -275,6 +290,10 @@
     {
       "time": "2026-09-05 07:26 UTC",
       "text": "Star Wars expansion started: plan/rubrics, foundation (256 height, regions, structures, palette, vehicles scaffold), jump fix; 6 builders launched."
+    },
+    {
+      "time": "2026-09-05 09:21 UTC",
+      "text": "Render-quality rubric + landmark rubric committed; R1/R2 builders launched; 12 landmark lots placed in the layout; Death Star interior film stills collected for the critic round."
     }
   ],
   "issues": [
