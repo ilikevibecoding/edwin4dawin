@@ -233,9 +233,10 @@ export class Game {
     this.scene.add(this.vegetation.group);
     // mirror only the card impostors, and only within 1.5 km: the 3D near-tile meshes are far too heavy for
     // a blurred mirror image and farther tiles blur into the environment sky anyway. The cards come from the
-    // vegetation's mirror batch (its camera batch holds every card tile in view, so it stays out)
+    // vegetation's mirror batch (its camera batch holds every card tile in view, so it stays out); likewise the
+    // near palms come from the vegetation's mirror palm batch (the cells in the mirror frustum of the tiles within range)
     const veg = this.vegetation;
-    this.reflection.excludeChildrenWhen(veg.group, (tile, cam) => tile === veg.cameraCards || (tile !== veg.mirrorCards && (trianglesOf(tile) > 64 || distanceToBounds(tile, cam) > MIRROR_DISTANCE)));
+    this.reflection.excludeChildrenWhen(veg.group, (tile, cam) => tile === veg.cameraCards || tile === veg.cameraPalms || (tile !== veg.mirrorCards && tile !== veg.mirrorPalms && (trianglesOf(tile) > 64 || distanceToBounds(tile, cam) > MIRROR_DISTANCE)));
 
     await this.tick(progress, 'Launching boats and traffic', 0.86);
     this.traffic = new Traffic(this.map, this.roads, this.bridges.routes, this.wakes.batch, this.params.seed, this.props.mooredBoatPositions);
