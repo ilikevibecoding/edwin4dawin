@@ -10,7 +10,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { PALETTE } from "../materials.js";
 import { HANGAR, rackSlot, DECK_SPOTS, KESTREL, hullBottomY } from "../spec.js";
-import { lux, roomWalls } from "./imperial_kit.js";
+import { lux, roomWalls, wallFrame } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { HG_DECAL, hgDecalRect, hgNumber } from "../textures_hangar.js";
 import { rng } from "../kit.js";
@@ -51,6 +51,13 @@ import {
   hgDeckCable,
   hgFloodBank,
   deckLine,
+  hgGratedPit,
+  hgHoist,
+  hgToolWall,
+  hgShelfRack,
+  hgPallet,
+  hgToolChest,
+  hgFloorDrain,
   HG_PALETTE,
 } from "./hangar_kit.js";
 
@@ -111,6 +118,9 @@ export function buildHangar(kit, ctx, room) {
   const LP = { x0: -44, x1: -32, z0: 95, z1: 107 };
   const chan = 0.5;
   const LC = { x0: LP.x0 - chan, x1: LP.x1 + chan, z0: LP.z0 - chan, z1: LP.z1 + chan };
+  // grated maintenance pit in the N apron behind the parked Kestrel (the deck slab is split around it)
+  const PIT = { x0: -30.8, x1: -27.2, z0: -100.5, z1: -94.5, edge: 0.3 };
+  const PH = { x0: PIT.x0 - PIT.edge, x1: PIT.x1 + PIT.edge, z0: PIT.z0 - PIT.edge, z1: PIT.z1 + PIT.edge };
 
   // stair towers (1.5 m off the wall faces so the wall ribs stay clear)
   const towerW = { x0: -63.5, x1: -59.5, z0: -20, z1: -9.5 };
@@ -137,6 +147,7 @@ export function buildHangar(kit, ctx, room) {
     { x0: 56, z0: 100, x1: hx, z1: hz }, // lobby door
     { x0: 58, z0: -4, x1: hx, z1: towerE.z0 + 1 }, // under the flight-control catwalk struts
     { x0: CX0 - 3.5, z0: CZ0 - 3.5, x1: CX1 + 3.5, z1: CZ1 + 3.5 }, // opening + chevron band
+    { x0: PH.x0 - 0.7, z0: PH.z0 - 0.7, x1: PH.x1 + 0.7, z1: PH.z1 + 0.7 }, // maintenance pit + hazard border
     { x0: -47, z0: 28, x1: -32, z1: 42 },
     { x0: 32, z0: 28, x1: 47, z1: 42 },
     { x0: LC.x0 - 1.6, z0: LC.z0 - 1.6, x1: LC.x1 + 1.6, z1: LC.z1 + 1.6 },
@@ -159,7 +170,10 @@ export function buildHangar(kit, ctx, room) {
   // under them; the painted markings carry it
   const DECK_TINT = HG_PALETTE.deck;
   const deck = (x0, z0, x1, z1) => kit.boxMM("impDeck", [x0, -0.14, z0], [x1, 0, z1], { color: DECK_TINT, texel: 0.35 });
-  deck(-hx, -hz, hx, CZ0); // forward deck
+  deck(-hx, -hz, hx, PH.z0); // forward deck, split around the N-apron maintenance pit
+  deck(-hx, PH.z0, PH.x0, PH.z1);
+  deck(PH.x1, PH.z0, hx, PH.z1);
+  deck(-hx, PH.z1, hx, CZ0);
   deck(-hx, CZ0, CX0, CZ1); // W flank of the opening
   deck(CX1, CZ0, hx, CZ1); // E flank
   deck(-hx, CZ1, LC.x0, hz); // aft deck, split around the cargo lift channel
@@ -171,6 +185,7 @@ export function buildHangar(kit, ctx, room) {
     const holes = [
       { x0: CX0 - 1.7, x1: CX1 + 1.7, z0: CZ0 - 1.7, z1: CZ1 + 1.7 },
       { x0: LC.x0 - 0.8, x1: LC.x1 + 0.8, z0: LC.z0 - 0.8, z1: LC.z1 + 0.8 },
+      { x0: PH.x0 - 0.8, x1: PH.x1 + 0.8, z0: PH.z0 - 0.8, z1: PH.z1 + 0.8 },
     ];
     const seam = (x0, z0, x1, z1) => kit.boxMM("impTrim", [x0, 0.0005, z0], [x1, 0.006, z1], { color: PALETTE.impBlack, texel: 1 });
     for (let x = -50; x <= 50; x += 12.5) {
@@ -619,6 +634,54 @@ export function buildHangar(kit, ctx, room) {
         kestrelWorkLight = [mx, 3.9, mz];
       }
     }
+    // N apron behind the parked Kestrel: the ramp view looks straight across it at the N wall 20–30 m
+    // off, where the bare deck grid and the plate band read as an empty box. Dress it as the ship's
+    // maintenance stand — on the deck a grated pit with a floor-mounted jib hoist over it, a painted GSE
+    // stand holding pallets and a tool chest, a drain and cable runs; along the wall two workshop
+    // stations (pegboard, bench, strip lamp — on a plinth that closes the gap to the wall so the wall's
+    // own fixtures stay behind it) and steel shelving. The N-wall manifold is built with the walls.
+    // Everything sits N of the exclusion outline (lz < -90); the ramp approach and taxi lane stay clear.
+    {
+      const NZ = -hz;
+      hgGratedPit(kit, PIT.x0, PIT.z0, PIT.x1, PIT.z1, 1.7, { edge: PIT.edge });
+      // jib hoist: column W of the pit, runway over it, trolley and hook above the grate
+      const jx = -34.4;
+      const jz = (PIT.z0 + PIT.z1) / 2;
+      kit.box("impTrim", jx, 0.15, jz, 1.4, 0.3, 1.4, { color: PALETTE.impBlack, texel: 1 });
+      kit.cyl("impMetal", jx, 3.95, jz, 0.28, 7.6, "y", { color: PALETTE.impCharcoal, segments: 14 });
+      kit.cyl("chevronY", jx, 1.0, jz, 0.295, 0.9, "y", { segments: 14, texel: 1.5 });
+      kit.box("impTrim", jx, 7.85, jz, 0.7, 0.2, 0.7, { color: PALETTE.impBlack });
+      hgHoist(kit, "x", jx + 0.4, PIT.x1 + 1.6, jz, 6.4, (PIT.x0 + PIT.x1) / 2, 3.4, { accentKey, beacons: amberBlink });
+      tiltedBox(kit, "impTrim", new THREE.Vector3(jx, 7.7, jz), new THREE.Vector3(PIT.x1 + 0.4, 6.95, jz), 0.14, 0.14, { color: PALETTE.impBlack });
+      kit.collider([jx - 0.7, 0, jz - 0.7], [jx + 0.7, 2.4, jz + 0.7], "jib-column");
+      clear.push({ x0: jx - 0.9, z0: jz - 0.9, x1: jx + 0.9, z1: jz + 0.9 });
+      // painted GSE stand E of the pit with its bay number, drums and a wrapped pallet, a tool chest
+      const G = { x0: -16.4, x1: -8.6, z0: -101.6, z1: -93.4 };
+      deckLine(kit, [G.x0, G.z0], [G.x1, G.z0]);
+      deckLine(kit, [G.x0, G.z1], [G.x1, G.z1]);
+      deckLine(kit, [G.x0, G.z0], [G.x0, G.z1]);
+      deckLine(kit, [G.x1, G.z0], [G.x1, G.z1]);
+      deckDecal(kit, hgNumber(7), (G.x0 + G.x1) / 2, G.z1 + 1.3, 1.8, 0, 0.0068);
+      hgPallet(kit, -13.9, -99.3, 0.12, { seed: 71, kind: 1 });
+      hgPallet(kit, -10.9, -95.7, -0.18, { seed: 72, kind: 2 });
+      hgToolChest(kit, -14.7, -95.1, 0.35, { seed: 73, color: PALETTE.impRed });
+      clear.push({ x0: G.x0 - 0.5, z0: G.z0 - 0.5, x1: G.x1 + 0.5, z1: G.z1 + 2.4 });
+      hgFloorDrain(kit, -22, -96.6);
+      hgDeckCable(kit, [[-35.6, -103.9], [-34.3, -102.2], [-33.4, -101.4], [-31.9, -100.9]]);
+      hgDeckCable(kit, [[-15.4, -94.2], [-13.9, -93.0], [-11.6, -92.7]]);
+      // workshop stations and shelving against the N wall, between the staging crates and clear of the
+      // ribs (lx -39, -26, -13, 0) and the manifold's valve drops (lx -30.75, -18.25, -5.75, 6.75)
+      const bench = wallFrame(kit, [-hx, NZ + 0.6], [hx, NZ + 0.6]).frame;
+      for (const [lx, seed] of [[-33.5, 41], [-8, 42]]) {
+        bench.box("impTrim", lx + hx, 1.75, -0.3, 3.4, 3.5, 0.6, { color: PALETTE.impBlack, texel: 1 }); // plinth back to the wall face
+        hgToolWall(bench, lx + hx, 3.2, { seed, accentKey, tag: "bench", lampKey: "emitWhiteDim" });
+        clear.push({ x0: lx - 1.9, z0: NZ, x1: lx + 1.9, z1: NZ + 1.9 });
+      }
+      for (const [lx, seed] of [[-46.5, 5], [3, 8]]) {
+        hgShelfRack(kit, lx, NZ + 0.7, 0, 3.0, 3.6, { seed, levels: 3 });
+        clear.push({ x0: lx - 1.7, z0: NZ, x1: lx + 1.7, z1: NZ + 1.4 });
+      }
+    }
     // rim clutter along the W / E deck flanks between the coaming and the rack rows, plus a few
     // cable runs from the reels / droids toward the coaming so the rim reads as a working deck
     const rim = [
@@ -784,6 +847,8 @@ export function buildHangar(kit, ctx, room) {
     hgManifold(kit, [-63.9, -44], [-63.9, -105], 4.6, mo);
     hgManifold(kit, [63.9, -105], [63.9, -46], 4.6, mo);
     hgManifold(kit, [63.9, -10], [63.9, 105], 4.6, mo);
+    // N wall (no doors): a full run behind the Kestrel's maintenance stand, W -> E so the valves face the room
+    hgManifold(kit, [-62, -hz + 1.1], [62, -hz + 1.1], 4.6, mo);
   }
 
   // =====================================================================================
