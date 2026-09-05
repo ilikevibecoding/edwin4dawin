@@ -132,9 +132,10 @@ function frondTexture(rng: Rng): THREE.CanvasTexture {
     ctx.fillStyle = grey(shade);
     for (const side of [-1, 1]) {
       ctx.beginPath();
+      // thin leaflets with a sliver of gap between neighbours, so the strip is a comb, not a solid ribbon
       ctx.moveTo(fw / 2, y);
-      ctx.quadraticCurveTo(fw / 2 + side * len * 0.5, y - 16, fw / 2 + side * len, y - 30 + 6 * Math.sin(i));
-      ctx.quadraticCurveTo(fw / 2 + side * len * 0.55, y - 4, fw / 2, y + 5);
+      ctx.quadraticCurveTo(fw / 2 + side * len * 0.5, y - 10, fw / 2 + side * len, y - 26 + 6 * Math.sin(i));
+      ctx.quadraticCurveTo(fw / 2 + side * len * 0.55, y - 3, fw / 2, y + 3);
       ctx.fill();
     }
   }
@@ -421,14 +422,18 @@ function palmGeometry(): THREE.BufferGeometry {
     const a = (k / n) * Math.PI * 2;
     // alternate fronds sit a little lower and shorter: a two-tier crown instead of a flat star
     const tier = k % 2;
-    const len = 0.6 - 0.08 * tier, width = 0.17;
+    const len = 0.6 - 0.08 * tier;
     const pts: [number, number, number][] = [];
     for (let i = 0; i <= segs2; i++) {
       const t = i / segs2;
       const rr = len * t;
-      const yv = 1.0 - 0.04 * tier + 0.16 * Math.sin(t * Math.PI * 0.8) - (0.42 + 0.1 * tier) * t * t;
+      // leaves the crown climbing (+0.16 at mid length), tips at -0.21 (upper tier) / -0.38 (lower): an open
+      // star with sky between the fronds, not the dome of wide overlapping strips the iter09 palms were
+      const yv = 1.0 - 0.05 * tier + 0.24 * Math.sin(t * Math.PI * 0.9) - (0.28 + 0.12 * tier) * t * t;
       const px = Math.cos(a) * rr, pz = Math.sin(a) * rr;
-      const wx = -Math.sin(a) * width * (1 - t * 0.25), wz = Math.cos(a) * width * (1 - t * 0.25);
+      // narrow petiole, widest past mid length, tapering to the tip (the card's frond profile)
+      const width = 0.11 * (0.35 + 0.65 * Math.sin(Math.min(1, t * 1.6) * Math.PI * 0.5)) * (1 - 0.3 * t);
+      const wx = -Math.sin(a) * width, wz = Math.cos(a) * width;
       pts.push([px - wx, yv, pz - wz], [px + wx, yv, pz + wz]);
     }
     const tri = (i0: number, i1: number, i2: number) => {
@@ -721,7 +726,7 @@ ${VEG_SHADOW_PROBE_VARS}
     // old 0.6-1.4 x squash hung the tips a trunk length down: "weeping willow" palms); some fronds hang dead
     float t = 1.0 - uv.y;
     float dead = step(0.86, hash11(seed * 2.9 + aPart * 1.3));
-    rel.y -= aVar.z * t * t * (0.05 + 0.2 * hash11(seed * 2.9 + aPart)) + dead * t * 0.7;
+    rel.y -= aVar.z * t * t * (0.03 + 0.12 * hash11(seed * 2.9 + aPart)) + dead * t * 0.5;
     rel.xz *= 1.0 - dead * 0.35 * t;
     transformed = vec3(0.0, 1.0, 0.0) + rel;
   }
@@ -928,7 +933,7 @@ function palmMaterial(tex: THREE.Texture, time: THREE.IUniform<number>, wind: TH
       .replace('#include <normal_fragment_begin>', PALM_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-palm-v9';
+  mat.customProgramCacheKey = () => 'veg-palm-v10';
   return mat;
 }
 
@@ -1005,7 +1010,8 @@ const MIRROR_PALMS = 8192;
 const COARSE_SHADOW_TILES = 8;
 const _casting = new Array<number>(MAX_CASCADES).fill(0);
 // 3D distances to the planted footprint: at 420 m a 12 m crown is ~18 px tall (720p), where the card
-// is the better representation; the subdivided crown mesh is only worth its triangles closer than 200 m
+// is the better representation; every 3D crown inside that carries the fringe, and the twice-subdivided
+// mesh is only worth its triangles closer than ULTRA_DISTANCE
 const NEAR_DISTANCE = 420;
 /** palms hand over to their cards further out: fronds are thin, and a frond-star card reads as a sprite
  *  long before a crown card does (iter09 "sprite palms" at 100-400 m) */
