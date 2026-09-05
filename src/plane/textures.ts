@@ -1237,7 +1237,7 @@ export function propDiscTexture(discR = 1.5, root = 0.16, length = 1.32, rootCho
       for (let b = 0; b < 3; b++) {
         let back = (Math.PI / 2 + (b * 2 * Math.PI) / 3) - phi;
         back = ((back % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-        if (back < SMEAR) ghost = Math.max(ghost, Math.pow(1 - back / SMEAR, 1.6) * Math.min(cover * 9, 0.7));
+        if (back < SMEAR) ghost = Math.max(ghost, Math.pow(1 - back / SMEAR, 1.6) * Math.min(cover * 5, 0.4));
       }
       let alpha = 1 - (1 - uniform) * (1 - ghost);
       alpha *= streakAt(phi + r * 0.4);
@@ -1248,11 +1248,11 @@ export function propDiscTexture(discR = 1.5, root = 0.16, length = 1.32, rootCho
       const inTip = THREE.MathUtils.smoothstep(r, tipR - tipBand - 0.015, tipR - tipBand + 0.015);
       if (inTip > 0) {
         cr = cr + (222 - cr) * inTip; cg = cg + (176 - cg) * inTip; cb = cb + (48 - cb) * inTip;
-        alpha *= 1 + 0.6 * inTip;
+        alpha *= 1 + 0.2 * inTip;
       }
       const glint = Math.exp(-Math.pow((r - (tipR - 0.03)) / 0.012, 2));
-      cr += (255 - cr) * glint * 0.6; cg += (250 - cg) * glint * 0.6; cb += (230 - cb) * glint * 0.6;
-      alpha = Math.min(alpha + glint * 0.18, 1);
+      cr += (255 - cr) * glint * 0.35; cg += (250 - cg) * glint * 0.35; cb += (230 - cb) * glint * 0.35;
+      alpha = Math.min(alpha + glint * 0.05, 1);
       d[k] = cr; d[k + 1] = cg; d[k + 2] = cb; d[k + 3] = Math.round(alpha * 255);
     }
   }

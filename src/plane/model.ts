@@ -55,6 +55,11 @@ const SURF = {
   shirt: { color: 0x2f4f6f, roughness: 0.85, metalness: 0.0 },
   skin: { color: 0xc8956c, roughness: 0.7, metalness: 0.0 },
   headset: { color: 0x1a1a1c, roughness: 0.5, metalness: 0.0 },
+  /** baggage in the aft bay: canvas duffels, a cooler and a hard case */
+  duffelRed: { color: 0x8c2f2a, roughness: 0.9, metalness: 0.0 },
+  duffelOlive: { color: 0x5d6640, roughness: 0.9, metalness: 0.0 },
+  cooler: { color: 0xd8dde0, roughness: 0.5, metalness: 0.0 },
+  hardCase: { color: 0x1f2226, roughness: 0.55, metalness: 0.1 },
   throttle: { color: 0x151618, roughness: 0.5, metalness: 0.0 },
   propKnob: { color: 0x2a5fb0, roughness: 0.5, metalness: 0.0 },
   mixture: { color: 0xc0392b, roughness: 0.6, metalness: 0.0 },
@@ -1015,6 +1020,18 @@ export class PlaneModel {
       for (const e of [-1, 1]) cabinKit.add(postGeo, at([topX - 0.01, topY + 0.04, z + e * 0.07], [0, 0, 0.15]), SURF.metal);
       cabinKit.add(headrestGeo, at([topX - 0.03, topY + 0.13, z], [0, 0, 0.15]), SURF.leather);
     }
+    // baggage in the aft cabin, stacked up into the aft window band (sill 0.40, top 0.78): from outside that window
+    // otherwise looked straight across at the far wall's dark vinyl and read as an opaque grey panel. Hard case and
+    // cooler on the floor in the bench's legroom, duffels on top and on the bench cushion beside the passenger
+    cabinKit.add(new THREE.BoxGeometry(0.40, 0.30, 0.34), at([-0.66, FLOOR + 0.15, 0.34], [0, 0.10, 0]), SURF.hardCase);
+    cabinKit.add(new THREE.BoxGeometry(0.34, 0.26, 0.30), at([-0.66, FLOOR + 0.43, 0.33], [0.06, -0.25, 0.04]), SURF.duffelRed);
+    cabinKit.add(new THREE.BoxGeometry(0.30, 0.18, 0.26), at([-0.64, FLOOR + 0.65, 0.31], [0.0, 0.5, 0.08]), SURF.duffelOlive);
+    cabinKit.add(new THREE.BoxGeometry(0.36, 0.34, 0.30), at([-0.66, FLOOR + 0.17, -0.34], [0, -0.12, 0]), SURF.cooler);
+    cabinKit.add(new THREE.BoxGeometry(0.42, 0.26, 0.30), at([-0.68, FLOOR + 0.47, -0.34], [0.04, 0.3, -0.05]), SURF.duffelOlive);
+    cabinKit.add(new THREE.BoxGeometry(0.30, 0.24, 0.24), at([-1.02, SEAT_Y + 0.18, 0.36], [0.1, 0.35, 0]), SURF.duffelRed);
+    cabinKit.add(new THREE.BoxGeometry(0.26, 0.20, 0.22), at([-1.00, SEAT_Y + 0.40, 0.34], [0.0, -0.4, 0.06]), SURF.duffelOlive);
+    cabinKit.add(new THREE.BoxGeometry(0.34, 0.22, 0.24), at([-1.02, SEAT_Y + 0.17, -0.36], [0, 0.2, 0]), SURF.hardCase);
+    cabinKit.add(new THREE.BoxGeometry(0.28, 0.24, 0.22), at([-1.00, SEAT_Y + 0.40, -0.35], [0.05, -0.15, 0.03]), SURF.duffelRed);
     const cushionTop = SEAT_Y + 0.06;
     const strap = (a: [number, number, number], b: [number, number, number], n: [number, number, number] = [0, 1, 0]) => cabinKit.add(strapGeometry(V3(...a), V3(...b), 0.045, 0.005, V3(...n)), undefined, SURF.belt);
     const buckle = (p: [number, number, number], rot: [number, number, number] = [0, 0, 0]) => cabinKit.add(new THREE.BoxGeometry(0.055, 0.016, 0.06), at(p, rot), SURF.metal);
@@ -1123,7 +1140,9 @@ export class PlaneModel {
     // third of the way to a smear: 10 turns a second); above that only the disc and the spinner remain
     const blend = Math.pow(THREE.MathUtils.clamp((rpmVal - 500) / 700, 0, 1), 0.6);
     const disc = this.propDisc.material as THREE.MeshBasicMaterial;
-    disc.opacity = 0.6 * blend;
+    // a spinning prop is mostly see-through: the disc only tints, the tip arc is a faint ring (from the seat the
+    // old 0.6 read as a bright double ring with spokes over the windshield)
+    disc.opacity = 0.42 * blend;
     const bladeMat = this.propBlades.material as THREE.MeshStandardMaterial;
     bladeMat.opacity = 1 - blend;
     this.propBlades.visible = blend < 0.999;
