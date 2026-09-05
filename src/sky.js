@@ -228,6 +228,30 @@ export class Sky {
     this.cloudMat.opacity = 0.85;
   }
 
+  // Region look (call right after update, before disaster overrides). mix: { space: 0..1, coruscant: 0..1 }.
+  // Space: black sky, full stars, no clouds, no haze. Coruscant: no low clouds, a warm smoggy horizon, longer fog.
+  applyRegion(mix) {
+    if (!mix) return;
+    const sp = mix.space || 0, co = mix.coruscant || 0;
+    if (sp > 0.001) {
+      const u = this.domeMat.uniforms, black = new THREE.Color(0.005, 0.005, 0.01);
+      u.uTop.value.lerp(black, sp); u.uHorizon.value.lerp(new THREE.Color(0.02, 0.02, 0.05), sp); u.uVoid.value.lerp(black, sp);
+      u.uSunsetStrength.value *= 1 - sp;
+      this.fogColor.lerp(black, sp);
+      this.fogNear = lerp(this.fogNear, this.fogFar * 0.9, sp); this.fogFar = lerp(this.fogFar, this.fogFar * 3, sp); // no atmosphere
+      this.starMat.opacity = Math.max(this.starMat.opacity, sp); this.stars.visible = this.stars.visible || sp > 0.01;
+      this.moon.material.opacity = lerp(this.moon.material.opacity, 1, sp);
+      this.cloudMat.opacity *= 1 - sp;
+      this.skyLight = lerp(this.skyLight, 0.9, sp); // hard, shadowless "sunlight" in space
+    }
+    if (co > 0.001) {
+      const u = this.domeMat.uniforms, haze = new THREE.Color(0.78, 0.66, 0.52);
+      u.uHorizon.value.lerp(haze, co * 0.55); u.uVoid.value.lerp(haze, co * 0.4);
+      this.fogColor.lerp(haze, co * 0.45);
+      this.cloudMat.opacity *= 1 - co;      // the city sits above its cloud deck; towers punch through nothing
+    }
+  }
+
   // Disaster override (call right after update): blend the dome, fog colour, celestials and clouds toward a
   // storm colour, and thin the vanilla cloud layer so a storm deck can replace it.
   applyOverride(ov, underwater = false) {
@@ -241,6 +265,7 @@ export class Sky {
       this.sun.material.opacity *= 1 - mix; this.moon.material.opacity *= 1 - mix; this.starMat.opacity *= 1 - mix;
       this.cloudMat.color.lerp(c, mix * 0.85);
     }
-    if (ov.cloudAlpha !== undefined) this.cloudMat.opacity = 0.85 * ov.cloudAlpha;
+    if (ov.cloudAlpha !== undefined) this.cloudMat.opacity *= ov.cloudAlpha; // relative: update() resets to 0.85, regions may have thinned it already
+    this.clouds.visible = this.cloudMat.opacity > 0.01;
   }
 }

@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { buildAtlas, atlasTexture, tileUV, TILES, addSignTiles, finalizeAtlas } from './textures.js';
 import { initBlocks, B, BLOCKS, SHAPE } from './blocks.js';
-import { WorldGen, SPAWN } from './worldgen.js';
+import { WorldGen, SPAWN, REGIONS } from './worldgen.js';
 import { World } from './world.js';
 import { buildTown } from './town/town.js';
 import { NPCManager } from './npc/npc.js';
@@ -258,6 +258,13 @@ export class Game {
     this.hud.cursorItem = null;
     this.input.requestLock();
   }
+  // How much of each far region's look applies at this position (soft bands so the sky never snaps).
+  regionMix(x, z) {
+    const sp = REGIONS.space, co = REGIONS.coruscant;
+    const dS = Math.max(Math.abs(x - sp.cx), Math.abs(z - sp.cz)) - sp.half;        // <0 inside the void box
+    const dC = Math.max(Math.abs(x - co.cx), Math.abs(z - co.cz)) - co.half;
+    return { space: Math.max(0, Math.min(1, (200 - dS) / 400)), coruscant: Math.max(0, Math.min(1, (160 - dC) / 320)) };
+  }
   cycleRenderDistance() {
     const opts = [4, 6, 8, 10, 12, 16, 24];
     const i = opts.indexOf(this.terrain.renderDistance);
@@ -339,6 +346,7 @@ export class Game {
 
     // sky & lighting (+ disaster overrides: darkening, dust tint, flashes, denser fog)
     this.sky.update(dt, this.camera.position, this.terrain.renderDistance, this.player.eyeUnderwater);
+    this.sky.applyRegion(this.regionMix(this.player.pos.x, this.player.pos.z));
     if (this.disasters) this.sky.applyOverride(this.disasters.effects.override, this.player.eyeUnderwater);
     let skyLight = this.sky.skyLight, fogNear = this.sky.fogNear, fogFar = this.sky.fogFar, flash = 0;
     const skyTint = new THREE.Vector3().copy(this.sky.skyTint);

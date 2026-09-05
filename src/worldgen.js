@@ -7,6 +7,28 @@ import { CHUNK_SIZE, CHUNK_HEIGHT, SEA_LEVEL, TOWN_GROUND } from './constants.js
 const CS = CHUNK_SIZE, CH = CHUNK_HEIGHT;
 
 export const TOWN_BOUNDS = { x0: -104, x1: 104, z0: -78, z1: 92 }; // flattened area (inclusive-ish)
+
+// ---------------------------------------------------------------------------------------------------- regions
+// One world, several regions decided by position. The frontier continent (the western town) sits at the origin and
+// ends in an ocean; Coruscant is an artificial plateau rising from that ocean far to the east; the Death Star hangs
+// in a void region to the north where nothing is generated but structures.
+export const REGIONS = {
+  frontier: { kind: 'frontier', coastRadius: 800, coastWidth: 220 },
+  coruscant: { kind: 'coruscant', cx: 3000, cz: 0, half: 512, edge: 40, ground: 60 },   // 1024 x 1024 plateau, top at y 60
+  space: { kind: 'space', cx: 0, cz: -4000, half: 800 },                                   // void
+};
+export const CORUSCANT_GROUND = REGIONS.coruscant.ground;
+
+// Returns { kind, t } where t is the 0..1 blend of the region's own terrain (1 = fully inside).
+export function regionAt(x, z) {
+  const c = REGIONS.coruscant;
+  const dcx = Math.abs(x - c.cx) - c.half, dcz = Math.abs(z - c.cz) - c.half;
+  const dc = Math.max(dcx, dcz);                       // signed distance to the plateau edge (square)
+  if (dc <= c.edge) return { kind: 'coruscant', t: dc <= 0 ? 1 : 1 - dc / c.edge };
+  const sp = REGIONS.space;
+  if (Math.abs(x - sp.cx) <= sp.half && Math.abs(z - sp.cz) <= sp.half) return { kind: 'space', t: 1 };
+  return { kind: 'frontier', t: 1 };
+}
 export const RAIL_Z = -62;
 export const SPAWN = { x: -128.5, z: 0.5 };
 const SPAWN_HILL = { x: -130, z: 0, r: 20, h: 9 };
@@ -24,11 +46,43 @@ export class WorldGen {
     this.nCave2 = new SimplexNoise(seed + 8);
     this.nCavern = new SimplexNoise(seed + 9);
     this.nPatch = new SimplexNoise(seed + 10);
-    this.overlays = []; // structure overlays (town)
+    this.structures = []; // lazy structures: { x0, z0, x1, z1, fill(chunk) } (world AABB, x1/z1 exclusive)
     this.heightCache = new Map();
   }
 
-  addOverlay(ov) { this.overlays.push(ov); }
+  // Structures write their blocks into a chunk after the terrain (town, Coruscant, Death Star, hyperlane...).
+  // `fill(chunk)` must be deterministic and touch only that chunk; it is called for every chunk intersecting the AABB.
+  addStructure(st) { this.structures.push(st); }
+  // Dense overlay compatibility (the western town): registers a structure that copies the intersecting slice.
+  addOverlay(ov) {
+    this.addStructure({
+      name: ov.name || 'overlay', x0: ov.x0, z0: ov.z0, x1: ov.x0 + ov.w, z1: ov.z0 + ov.d,
+      fill: (chunk) => {
+        const cx = chunk.cx * CS, cz = chunk.cz * CS;
+        const lx0 = Math.max(0, ov.x0 - cx), lx1 = Math.min(CS, ov.x0 + ov.w - cx);
+        const lz0 = Math.max(0, ov.z0 - cz), lz1 = Math.min(CS, ov.z0 + ov.d - cz);
+        for (let lx = lx0; lx < lx1; lx++) for (let lz = lz0; lz < lz1; lz++) {
+          const ox = cx + lx - ov.x0, oz = cz + lz - ov.z0;
+          const obase = (ox * ov.d + oz) * ov.h;
+          const cbase = (lx * CS + lz) * CH;
+          for (let oy = 0; oy < ov.h; oy++) {
+            const v = ov.blocks[obase + oy];
+            if (v === 0) continue;
+            const y = ov.y0 + oy;
+            if (y < 0 || y >= CH) continue;
+            chunk.blocks[cbase + y] = v === 255 ? B.AIR : v;
+          }
+        }
+      },
+    });
+  }
+
+  // 0 on the frontier continent, 1 on the open ocean floor between the regions
+  oceanMask(x, z) {
+    const f = REGIONS.frontier;
+    const d = Math.sqrt(x * x + z * z) - f.coastRadius;
+    return smoothstep(0, f.coastWidth, d);
+  }
 
   // 0 outside town, 1 fully flattened town ground
   townMask(x, z) {
@@ -71,18 +125,28 @@ export class WorldGen {
     const key = x * 100003 + z;
     let v = this.heightCache.get(key);
     if (v) return v;
+    const region = regionAt(x, z);
+    if (region.kind === 'space') {
+      v = { h: 0, mMask: 0, riverT: 0, town: 0, rail: 0, moisture: 0, region: 'space', regionT: 1, ocean: 0 };
+      this.heightCache.set(key, v); return v;
+    }
     const raw = this.rawHeight(x, z);
     let h = raw.h;
+    // open ocean between the continent and the far regions
+    const om = this.oceanMask(x, z);
+    if (om > 0) { const floor = SEA_LEVEL - 9 + this.nDetail.noise2(x * 0.01, z * 0.01) * 3; h = lerp(h, floor, om); }
+    // Coruscant: a flat artificial plateau rising from the ocean
+    if (region.kind === 'coruscant') h = lerp(h, REGIONS.coruscant.ground, smoothstep(0, 1, region.t));
     const tm = this.townMask(x, z);
     if (tm > 0) h = lerp(h, TOWN_GROUND, tm);
-    const rm = this.railMask(x, z);
+    const rm = this.railMask(x, z) * (1 - om) * (region.kind === 'frontier' ? 1 : 0); // the frontier railway ends at the coast
     if (rm > 0) h = lerp(h, TOWN_GROUND, rm);
     // spawn overlook hill
     const dx = x - SPAWN_HILL.x, dz = z - SPAWN_HILL.z;
     const dd = (dx * dx + dz * dz) / (SPAWN_HILL.r * SPAWN_HILL.r);
     if (dd < 4) h += SPAWN_HILL.h * Math.exp(-dd * 1.6) * (1 - tm);
     const moisture = this.nMoisture.fbm2(x * 0.004 + 50, z * 0.004 - 50, 2);
-    v = { h: Math.floor(h), mMask: raw.mMask, riverT: raw.riverT * (1 - tm) * (1 - rm), town: tm, rail: rm, moisture };
+    v = { h: Math.floor(h), mMask: raw.mMask * (1 - om), riverT: raw.riverT * (1 - tm) * (1 - rm) * (1 - om), town: tm, rail: rm, moisture, region: region.kind, regionT: region.t, ocean: om };
     if (this.heightCache.size > 200000) this.heightCache.clear();
     this.heightCache.set(key, v);
     return v;
@@ -101,12 +165,16 @@ export class WorldGen {
     const cx = chunk.cx * CS, cz = chunk.cz * CS;
     const heights = new Int16Array(CS * CS);
     const infos = new Array(CS * CS);
+    let anyTerrain = false;
     for (let lx = 0; lx < CS; lx++) for (let lz = 0; lz < CS; lz++) {
       const x = cx + lx, z = cz + lz;
       const info = this.heightInfo(x, z);
       infos[lx * CS + lz] = info;
       heights[lx * CS + lz] = info.h;
+      if (info.region !== 'space') anyTerrain = true;
     }
+    chunk.region = infos[0].region;
+    if (!anyTerrain) { this.applyStructures(chunk); return; } // void: nothing but structures
 
     for (let lx = 0; lx < CS; lx++) for (let lz = 0; lz < CS; lz++) {
       const x = cx + lx, z = cz + lz;
@@ -118,7 +186,11 @@ export class WorldGen {
       const patch = this.nPatch.noise2(x * 0.06, z * 0.06);
 
       let surface = B.GRASS, filler = B.DIRT, fillerDepth = 3 + Math.floor(hash2(x, z, 9) * 2);
-      if (biome === 'mountain') {
+      const plateau = info.region === 'coruscant' && info.regionT >= 0.999;
+      if (plateau) {
+        // the city's artificial foundation: plating over stone; the city structure paints the real streets on top
+        surface = B.SMOOTH_STONE; filler = B.STONE; fillerDepth = 6;
+      } else if (biome === 'mountain') {
         if (h > 96) { surface = B.SNOW; filler = B.STONE; }
         else { surface = patch > 0.45 ? B.GRAVEL : B.STONE; filler = B.STONE; }
         if (h < 84 && patch < -0.3) { surface = B.GRASS; filler = B.DIRT; }
@@ -167,9 +239,9 @@ export class WorldGen {
         }
         blocks[base + y] = id;
       }
-      // caves (none under the town or the spawn hill)
+      // caves (none under the town, the spawn hill or the Coruscant plateau)
       const spawnD2 = (x - SPAWN.x) * (x - SPAWN.x) + (z - SPAWN.z) * (z - SPAWN.z);
-      if (info.town < 0.6 && h > SEA_LEVEL + 1 && spawnD2 > 45 * 45) {
+      if (info.town < 0.6 && h > SEA_LEVEL + 1 && spawnD2 > 45 * 45 && info.region !== 'coruscant') {
         const top = Math.min(h, CH - 2);
         const cx1 = x * 0.042, cz1 = z * 0.042, cx2 = x * 0.042 + 77, cz2 = z * 0.042 - 77, cx3 = x * 0.021, cz3 = z * 0.021;
         const nCave1 = this.nCave1, nCave2 = this.nCave2, nCavern = this.nCavern;
@@ -190,6 +262,7 @@ export class WorldGen {
       if (railHere) { blocks[base + h + 1] = B.RAIL; if (x % 3 === 0) blocks[base + h] = B.SPRUCE_PLANKS; }
 
       // plants
+      if (plateau) continue;
       if (h >= SEA_LEVEL + 1 && blocks[base + h] === B.GRASS && blocks[base + h + 1] === B.AIR) {
         const r = hash2(x, z, 77);
         const density = biome === 'forest' ? 0.16 : 0.12;
@@ -203,8 +276,8 @@ export class WorldGen {
       }
     }
 
-    this.placeTrees(chunk, heights);
-    this.applyOverlays(chunk);
+    if (chunk.region !== 'coruscant') this.placeTrees(chunk, heights);
+    this.applyStructures(chunk);
   }
 
   // Deterministic trees; considers neighbours' trees so canopies cross chunk borders.
@@ -305,24 +378,13 @@ export class WorldGen {
     }
   }
 
-  applyOverlays(chunk) {
+  applyStructures(chunk) {
     const cx = chunk.cx * CS, cz = chunk.cz * CS;
-    for (const ov of this.overlays) {
-      if (cx + CS <= ov.x0 || cx >= ov.x0 + ov.w || cz + CS <= ov.z0 || cz >= ov.z0 + ov.d) continue;
-      const lx0 = Math.max(0, ov.x0 - cx), lx1 = Math.min(CS, ov.x0 + ov.w - cx);
-      const lz0 = Math.max(0, ov.z0 - cz), lz1 = Math.min(CS, ov.z0 + ov.d - cz);
-      for (let lx = lx0; lx < lx1; lx++) for (let lz = lz0; lz < lz1; lz++) {
-        const ox = cx + lx - ov.x0, oz = cz + lz - ov.z0;
-        const obase = (ox * ov.d + oz) * ov.h;
-        const cbase = (lx * CS + lz) * CH;
-        for (let oy = 0; oy < ov.h; oy++) {
-          const v = ov.blocks[obase + oy];
-          if (v === 0) continue;
-          const y = ov.y0 + oy;
-          if (y < 0 || y >= CH) continue;
-          chunk.blocks[cbase + y] = v === 255 ? B.AIR : v;
-        }
-      }
+    for (const st of this.structures) {
+      if (cx + CS <= st.x0 || cx >= st.x1 || cz + CS <= st.z0 || cz >= st.z1) continue;
+      const t0 = performance.now();
+      st.fill(chunk, this);
+      st.msTotal = (st.msTotal || 0) + (performance.now() - t0); st.chunks = (st.chunks || 0) + 1;
     }
   }
 
