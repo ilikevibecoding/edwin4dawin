@@ -5,11 +5,17 @@
 // pointer lock and disables the HUD canvas pointer events while the panel is open.
 //
 // Everything the panel does goes through the DisasterManager command API (game.disasters.command({...})), so
-// the console command shown in the panel reproduces exactly what the buttons do. Status is read from
+// the console command shown in the Developer section reproduces exactly what the buttons do. Status is read from
 // game.disasters.status() (refreshed at ~5 Hz from update() and immediately on manager change events).
+//
+// Layout: sticky header (title, badges, close) - scrollable body (disaster cards, parameters with a collapsible
+// "Advanced" group, quality presets, collapsible "Developer" footer) - sticky dock (status strip, big primary
+// Start/Pause/Resume button, Preview / Stop / Reset / Replay, live intensity while running).
 import './adminPanel.css';
 import * as THREE from 'three';
 import { raycastBlocks } from '../interaction.js';
+import { QUALITY, applyQuality } from '../quality.js';
+import { pixelIcon, disasterIcon } from './adminIcons.js';
 
 const STORAGE_KEY = 'frontier-craft:admin';
 const STATUS_REFRESH_MS = 200;   // 5 Hz DOM refresh of status while open
@@ -17,9 +23,25 @@ const PERF_REFRESH_MS = 500;     // 2 Hz perf readout
 const LIVE_DEBOUNCE_MS = 150;    // live intensity slider -> {type:'set'}
 const PREVIEW_DEBOUNCE_MS = 400; // re-issue preview while editing params during a preview
 const SAVE_DEBOUNCE_MS = 250;    // localStorage writes
+const NOTE_MS = 4000;            // transient notes in the dock
 const CROSSHAIR_REACH = 160;     // fallback raycast length for "Use crosshair target"
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-const START_NOTICE = 'This modifies the world; damage is journaled and can be restored with Reset; it is NOT written to your save unless you commit it.';
+const START_NOTICE = 'This changes the world. Every damaged block is journaled, so Reset can put it back. Nothing is written to your save unless you commit it from the Developer section.';
+const STATE_LABEL = { idle: 'Idle', preview: 'Previewing', running: 'Running', paused: 'Paused', finished: 'Finished', restoring: 'Restoring' };
+
+// Parameters shown up front (in this order); everything else goes under "Advanced". Disasters without an entry
+// get a heuristic pick: location, size, duration, intensity.
+const PRIMARY_KEYS = {
+  tornado: ['start', 'radius', 'duration', 'intensity'],
+  tsunami: ['center', 'waterHeight', 'duration', 'intensity'],
+  beam: ['target', 'destructionRadius', 'duration', 'intensity'],
+};
+// One-line blurbs for the disaster cards (the full schema description is shown under the cards).
+const CARD_BLURB = {
+  tsunami: 'A wall of water floods the town',
+  tornado: 'A funnel tears along a path',
+  beam: 'A sky beam carves a crater',
+};
 
 // ---------------------------------------------------------------- small DOM helpers
 function h(tag, attrs, ...children) {
@@ -38,6 +60,9 @@ function h(tag, attrs, ...children) {
   return e;
 }
 function setText(el, text) { if (el.textContent !== text) el.textContent = text; }
+function setHidden(el, hidden) { if (el.hidden !== hidden) el.hidden = hidden; }
+function setAttr(el, name, value) { if (el.getAttribute(name) !== value) el.setAttribute(name, value); }
+function srText(text) { return h('span', { class: 'ap-sr', text }); }
 function clampNum(v, min, max) { if (Number.isFinite(min) && v < min) v = min; if (Number.isFinite(max) && v > max) v = max; return v; }
 function decimalsFor(step) {
   if (!Number.isFinite(step) || step <= 0) return 0;
@@ -47,8 +72,32 @@ function decimalsFor(step) {
   return i < 0 ? 0 : Math.min(6, s.length - i - 1);
 }
 function fmtNum(v, step) { return Number.isFinite(v) ? Number(v).toFixed(decimalsFor(step)) : '?'; }
+function fmtInt(n) { return Number(n || 0).toLocaleString('en-US'); }
 function compassLabel(deg) { const d = ((Number(deg) % 360) + 360) % 360; return COMPASS[Math.round(d / 45) % 8]; }
 function isTextTarget(t) { return !!t && ((t.tagName === 'INPUT' && !['range', 'checkbox', 'button'].includes(t.type)) || t.tagName === 'TEXTAREA' || t.isContentEditable); }
+// "Flood height (blocks above ground)" -> ['Flood height', 'blocks above ground']
+function splitLabel(label) {
+  const m = /^(.*?)\s*\((.*)\)\s*$/.exec(label || '');
+  return m ? [m[1], m[2]] : [label || '', ''];
+}
+function primaryKeys(type, schema) {
+  if (PRIMARY_KEYS[type]) return PRIMARY_KEYS[type].filter((k) => schema.some((s) => s.key === k));
+  const pick = [];
+  const pos = schema.find((s) => s.type === 'position');
+  if (pos) pick.push(pos.key);
+  const size = schema.find((s) => s.type === 'number' && /radius|height|size/i.test(s.key));
+  if (size) pick.push(size.key);
+  for (const k of ['duration', 'intensity']) if (schema.some((s) => s.key === k)) pick.push(k);
+  return pick.slice(0, 4);
+}
+// Human readable phase of the active disaster (tsunami exposes a phase string, the beam a getter; the tornado only
+// has its rope-out ramp).
+function phaseOf(active) {
+  if (!active) return '';
+  if (typeof active.phase === 'string') return active.phase;
+  if (Number.isFinite(active.ropeStart) && active.ropeStart >= 0) return 'rope-out';
+  return '';
+}
 // JS object literal in the compact style used in the docs: {type:'start',disaster:'tornado',seed:7,params:{...}}
 function jsLiteral(v) {
   if (Array.isArray(v)) return '[' + v.map(jsLiteral).join(',') + ']';
@@ -64,7 +113,7 @@ export class AdminPanel {
     this.selectedType = null;   // disaster type shown in the form
     this.builtType = null;      // type the parameter form is currently built for
     this.fields = [];           // field controllers of the built form: {key, schema, el, get(), set(v)}
-    this.store = { selected: null, byType: {} }; // persisted (localStorage) last-used params/seed per type
+    this.store = { selected: null, byType: {}, ui: { advanced: false, developer: false } }; // persisted (localStorage)
     this.status = null;
     this.dialogOpen = false;
     this.lastStatusAt = 0;
@@ -92,6 +141,7 @@ export class AdminPanel {
     if (this.saveTimer) this._flushSave();
     this._load();
     this._refreshPermission();
+    this._refreshQuality();
     this.lastStatusAt = 0;
     this.lastPerfAt = 0;
     this._refreshStatus();
@@ -122,103 +172,123 @@ export class AdminPanel {
   _build() {
     const root = this.root = h('div', { id: 'admin-panel', role: 'dialog', 'aria-label': 'Disaster control panel', tabindex: '-1', hidden: true });
 
-    // header: title, close, badges
-    this.badgeOnline = h('span', { class: 'ap-badge', id: 'ap-badge-online', text: 'offline' });
-    this.badgeAdmin = h('span', { class: 'ap-badge', id: 'ap-badge-admin', text: 'admin' });
-    this.badgeState = h('span', { class: 'ap-badge ap-state', id: 'ap-badge-state', text: 'idle' });
-    this.badges = h('div', { class: 'ap-badges' }, this.badgeOnline, this.badgeAdmin, this.badgeState);
-    const header = h('div', { class: 'ap-header' },
-      h('div', { class: 'ap-title-row' },
-        h('div', { class: 'ap-title' }, 'DISASTER CONTROL', h('small', { text: 'Administrator panel  -  F4 / ` / Esc to close' })),
-        h('button', { class: 'ap-btn ap-close', id: 'ap-close', type: 'button', title: 'Close (Esc / F4)', 'aria-label': 'Close panel', text: '\u00d7', onclick: () => this._requestClose() })),
-      this.badges);
+    // header: title, badges, close
+    this.badgeOnline = h('span', { class: 'ap-badge', id: 'ap-badge-online', text: 'Offline' });
+    this.badgeAdmin = h('span', { class: 'ap-badge', id: 'ap-badge-admin', text: 'Admin' });
+    this.badges = h('div', { class: 'ap-badges' }, this.badgeOnline, this.badgeAdmin);
+    const header = h('header', { class: 'ap-header' },
+      h('div', { class: 'ap-title' }, h('h2', { text: 'Disaster Control' }), h('small', { text: 'Administrator \u00b7 Esc closes' })),
+      this.badges,
+      h('button', { class: 'ap-close', id: 'ap-close', type: 'button', title: 'Close (Esc / F4)', 'aria-label': 'Close panel', text: '\u00d7', onclick: () => this._requestClose() }));
 
-    // status section
-    this.stType = h('dd', { text: '\u2014' });
-    this.stElapsed = h('dd', { text: '0.0 s' });
-    this.stSeed = h('dd', { text: '\u2014' });
-    this.stJournal = h('dd', { id: 'ap-st-journal', text: '0' });
-    this.stDebris = h('dd', { id: 'ap-st-debris', text: '0' });
-    this.stEdits = h('dd', { text: '0 / 0' });
-    this.progressFill = h('div');
-    this.progressLabel = h('span', { text: '0%' });
-    this.restoreFill = h('div');
-    this.restoreLabel = h('span', { text: '0%' });
-    this.restoreBox = h('div', { class: 'ap-restore', id: 'ap-restore', hidden: true }, 'Restoring the world\u2026', h('div', { class: 'ap-bar ap-bar-restore' }, this.restoreFill, this.restoreLabel));
-    this.logEl = h('div', { class: 'ap-log', id: 'ap-log', 'aria-live': 'polite' }, h('div', { class: 'ap-empty', text: 'No messages yet.' }));
-    const statusSection = h('section', { class: 'ap-section', id: 'ap-status' },
-      h('h3', {}, 'Status'),
-      h('dl', { class: 'ap-kv' },
-        h('dt', { text: 'Disaster' }), this.stType,
-        h('dt', { text: 'Elapsed' }), this.stElapsed,
-        h('dt', { text: 'Seed' }), this.stSeed,
-        h('dt', { text: 'Journal' }), this.stJournal,
-        h('dt', { text: 'Debris' }), this.stDebris,
-        h('dt', { text: 'Edits / restored' }), this.stEdits),
-      h('div', { class: 'ap-bar', id: 'ap-progress', title: 'Disaster progress' }, this.progressFill, this.progressLabel),
-      this.restoreBox,
-      this.logEl);
+    // disaster cards
+    this.tabsEl = h('div', { class: 'ap-cards', id: 'ap-tabs', role: 'tablist', 'aria-label': 'Disaster type' });
+    this.tabsEl.addEventListener('keydown', (e) => this._onTabsKey(e));
+    this.descEl = h('p', { class: 'ap-desc', id: 'ap-desc' });
+    const disasterSection = h('section', { class: 'ap-section', id: 'ap-disaster', 'aria-label': 'Disaster' }, this.tabsEl, this.descEl);
 
-    // disaster selector
-    this.tabsEl = h('div', { class: 'ap-tabs', id: 'ap-tabs', role: 'tablist', 'aria-label': 'Disaster type' });
-    this.descEl = h('div', { class: 'ap-desc', id: 'ap-desc' });
-    const disasterSection = h('section', { class: 'ap-section', id: 'ap-disaster' }, h('h3', {}, 'Disaster'), this.tabsEl, this.descEl);
-
-    // parameter form
-    this.formEl = h('div', { class: 'ap-form', id: 'ap-form' });
-    this.seedInput = h('input', { type: 'number', id: 'ap-seed', min: '0', step: '1', value: '1', 'aria-label': 'Seed' });
+    // parameters: primary fields, seed, collapsible advanced group
+    this.primaryEl = h('div', { class: 'ap-fields', id: 'ap-form' });
+    this.advancedEl = h('div', { class: 'ap-fields ap-disclosure-body', id: 'ap-form-advanced' });
+    this.advancedAside = h('span', { class: 'ap-summary-aside' });
+    this.advanced = h('details', { class: 'ap-disclosure', id: 'ap-advanced' },
+      h('summary', {}, h('span', { text: 'Advanced' }), this.advancedAside),
+      this.advancedEl);
+    this.advanced.addEventListener('toggle', () => { if (this.store.ui.advanced !== this.advanced.open) { this.store.ui.advanced = this.advanced.open; this._scheduleSave(); } });
+    this.seedInput = h('input', { type: 'number', id: 'ap-seed', min: '0', step: '1', value: '1', inputmode: 'numeric' });
     this.seedInput.addEventListener('input', () => this._onFieldInput());
     this.seedInput.addEventListener('change', () => { this.seedInput.value = String(this._readSeed()); this._onFieldInput(); });
+    const seedRow = h('div', { class: 'ap-seed' },
+      h('label', { for: 'ap-seed', text: 'Seed' }), this.seedInput,
+      h('button', { class: 'ap-btn ap-icon-btn', id: 'ap-seed-random', type: 'button', title: 'Randomize seed', 'aria-label': 'Randomize seed', onclick: () => this._randomizeSeed() }, pixelIcon('dice', 16), srText('Randomize')),
+      h('span', { class: 'ap-help', text: 'Same seed, same run' }));
     const paramsSection = h('section', { class: 'ap-section', id: 'ap-params' },
-      h('h3', {}, 'Parameters', h('span', { class: 'ap-h-actions' }, h('button', { class: 'ap-btn ap-mini', id: 'ap-defaults', type: 'button', text: 'Defaults', title: 'Reset parameters to the schema defaults', onclick: () => this._resetDefaults() }))),
-      this.formEl,
-      h('div', { class: 'ap-seed-row' },
-        h('label', { for: 'ap-seed', text: 'Seed' }), this.seedInput,
-        h('button', { class: 'ap-btn ap-mini', id: 'ap-seed-random', type: 'button', text: 'Randomize', onclick: () => this._randomizeSeed() }),
-        h('span', { class: 'ap-hint', text: 'same seed = same run' })));
+      h('h3', {}, h('span', { text: 'Parameters' }), h('button', { class: 'ap-btn ap-mini', id: 'ap-defaults', type: 'button', text: 'Defaults', title: 'Put every parameter back to its default value', onclick: () => this._resetDefaults() })),
+      this.primaryEl, seedRow, this.advanced);
 
-    // controls
-    this.btnPreview = h('button', { class: 'ap-btn', id: 'ap-btn-preview', type: 'button', text: 'Preview', onclick: () => this._onPreview() });
-    this.btnStart = h('button', { class: 'ap-btn ap-danger', id: 'ap-btn-start', type: 'button', text: 'Start\u2026', onclick: () => this._onStart() });
-    this.btnPause = h('button', { class: 'ap-btn', id: 'ap-btn-pause', type: 'button', text: 'Pause', onclick: () => this._onPauseResume() });
-    this.btnStop = h('button', { class: 'ap-btn', id: 'ap-btn-stop', type: 'button', text: 'Stop', onclick: () => this._cmd({ type: 'stop' }) });
-    this.btnReset = h('button', { class: 'ap-btn', id: 'ap-btn-reset', type: 'button', text: 'Reset / Restore\u2026', onclick: () => this._onReset() });
-    this.btnReplay = h('button', { class: 'ap-btn', id: 'ap-btn-replay', type: 'button', text: 'Replay\u2026', onclick: () => this._onReplay() });
-    this.liveSlider = h('input', { type: 'range', id: 'ap-live-intensity', min: '0', max: '1', step: '0.05', value: '0.7', 'aria-label': 'Live intensity' });
-    this.liveVal = h('span', { class: 'ap-val', id: 'ap-live-value', text: '\u2014' });
-    this.liveSlider.addEventListener('input', () => this._onLiveIntensity());
-    this.liveBox = h('div', { class: 'ap-live', id: 'ap-live', 'data-enabled': 'false' },
-      h('label', { class: 'ap-label', for: 'ap-live-intensity' }, h('span', {}, 'Live intensity ', h('span', { class: 'ap-unit', text: '(running disaster, 0\u20131)' })), this.liveVal),
-      h('div', { class: 'ap-row' }, this.liveSlider));
-    this.noteEl = h('div', { class: 'ap-hint', id: 'ap-note', 'aria-live': 'polite' });
-    const controlsSection = h('section', { class: 'ap-section', id: 'ap-controls' },
-      h('h3', {}, 'Controls'),
-      h('div', { class: 'ap-btn-grid' }, this.btnPreview, this.btnStart, this.btnPause, this.btnStop, this.btnReset, this.btnReplay),
-      this.liveBox, this.noteEl);
+    // quality presets
+    this.qualityBtns = {};
+    const qualityGroup = h('div', { class: 'ap-seg', id: 'ap-quality', role: 'radiogroup', 'aria-label': 'Quality preset' });
+    for (const [name, q] of Object.entries(QUALITY)) {
+      const b = h('button', { class: 'ap-seg-btn', id: 'ap-quality-' + name, type: 'button', role: 'radio', 'aria-checked': 'false', text: q.label, title: q.description, onclick: () => this._setQuality(name) });
+      this.qualityBtns[name] = b;
+      qualityGroup.append(b);
+    }
+    this.qualityDesc = h('p', { class: 'ap-help', id: 'ap-quality-desc' });
+    const qualitySection = h('section', { class: 'ap-section', id: 'ap-quality-section' }, h('h3', {}, h('span', { text: 'Quality' })), qualityGroup, this.qualityDesc);
 
-    // save section
-    this.saveHint = h('div', { class: 'ap-hint', id: 'ap-save-hint', text: 'Journal: 0 cells' });
-    this.btnCommit = h('button', { class: 'ap-btn', id: 'ap-btn-commit', type: 'button', text: 'Commit damage to save\u2026', onclick: () => this._onCommit() });
-    this.btnDiscard = h('button', { class: 'ap-btn', id: 'ap-btn-discard', type: 'button', text: 'Discard (reset)\u2026', onclick: () => this._onDiscard() });
-    const saveSection = h('section', { class: 'ap-section', id: 'ap-save' },
-      h('h3', {}, 'Save'), this.saveHint, h('div', { class: 'ap-btn-grid' }, this.btnCommit, this.btnDiscard));
-
-    // console command
-    this.copiedEl = h('span', { class: 'ap-copied', id: 'ap-copied' });
-    this.cmdArea = h('textarea', { id: 'ap-command', readOnly: true, spellcheck: 'false', 'aria-label': 'Console command for the current configuration', wrap: 'soft' });
+    // developer footer: console command, save, counters, perf
+    this.perfEl = h('span', { class: 'ap-summary-aside', id: 'ap-perf', text: 'perf: n/a' });
+    this.copiedEl = h('span', { class: 'ap-copied', id: 'ap-copied', 'aria-live': 'polite' });
+    this.cmdArea = h('textarea', { id: 'ap-command', readOnly: true, spellcheck: 'false', 'aria-label': 'Console command for the current configuration', wrap: 'soft', rows: '3' });
     this.cmdArea.addEventListener('focus', () => this.cmdArea.select());
-    const cmdSection = h('section', { class: 'ap-section', id: 'ap-cmd' },
-      h('h3', {}, 'Console command', h('span', { class: 'ap-h-actions' }, this.copiedEl, h('button', { class: 'ap-btn ap-mini', id: 'ap-copy', type: 'button', text: 'Copy', onclick: () => this._copyCommand() }))),
-      h('div', { class: 'ap-hint', text: 'Paste in the devtools console to reproduce this exact configuration.' }),
-      this.cmdArea);
+    this.saveHint = h('p', { class: 'ap-help', id: 'ap-save-hint', text: 'Journal: 0 cells' });
+    this.btnCommit = h('button', { class: 'ap-btn', id: 'ap-btn-commit', type: 'button', text: 'Commit damage to save', onclick: () => this._onCommit() });
+    this.btnDiscard = h('button', { class: 'ap-btn', id: 'ap-btn-discard', type: 'button', text: 'Discard damage', onclick: () => this._onDiscard() });
+    this.statsEl = h('p', { class: 'ap-help', id: 'ap-stats', text: '' });
+    this.developer = h('details', { class: 'ap-disclosure', id: 'ap-developer' },
+      h('summary', {}, h('span', { text: 'Developer' }), this.perfEl),
+      h('div', { class: 'ap-disclosure-body' },
+        h('div', { class: 'ap-dev-block' },
+          h('div', { class: 'ap-dev-head' }, h('label', { for: 'ap-command', text: 'Console command' }), this.copiedEl,
+            h('button', { class: 'ap-btn ap-mini', id: 'ap-copy', type: 'button', title: 'Copy the command to the clipboard', onclick: () => this._copyCommand() }, pixelIcon('copy', 12), 'Copy')),
+          this.cmdArea,
+          h('p', { class: 'ap-help', text: 'Paste it in the devtools console to reproduce this exact configuration.' })),
+        h('div', { class: 'ap-dev-block' },
+          h('div', { class: 'ap-dev-head' }, h('span', { class: 'ap-dev-title', text: 'Save' })),
+          this.saveHint,
+          h('div', { class: 'ap-btn-row' }, this.btnCommit, this.btnDiscard)),
+        this.statsEl));
+    this.developer.addEventListener('toggle', () => { if (this.store.ui.developer !== this.developer.open) { this.store.ui.developer = this.developer.open; this._scheduleSave(); } });
 
-    this.denied = h('div', { class: 'ap-denied', id: 'ap-denied', hidden: true }, 'Administrator permission required', h('small', { text: 'Single player: remove ?admin=0 from the URL. Multiplayer: join with the admin token (?admin=<token>).' }));
-    this.main = h('div', { class: 'ap-main', id: 'ap-main' }, statusSection, disasterSection, paramsSection, controlsSection, saveSection, cmdSection);
+    this.denied = h('div', { class: 'ap-denied', id: 'ap-denied', hidden: true },
+      pixelIcon('lock', 48),
+      h('h3', { text: 'Administrator permission required' }),
+      h('p', { text: 'Single player: remove ?admin=0 from the URL. Multiplayer: join with the admin token (?admin=<token>).' }));
+    this.main = h('div', { class: 'ap-main', id: 'ap-main' }, disasterSection, paramsSection, qualitySection, this.developer);
     this.body = h('div', { class: 'ap-body' }, this.denied, this.main);
-    this.perfEl = h('div', { class: 'ap-footer', id: 'ap-perf', text: 'perf: n/a' });
+
+    // dock: status strip + actions (always visible, never scrolls away)
+    this.badgeState = h('span', { class: 'ap-state', id: 'ap-badge-state', text: 'Idle', 'data-state': 'idle' });
+    this.stPhase = h('span', { class: 'ap-phase' });
+    this.stWho = h('span', { class: 'ap-who' });
+    this.progressFill = h('div', { class: 'ap-bar-fill' });
+    this.progressLabel = h('span', { class: 'ap-bar-label' });
+    this.progressBar = h('div', { class: 'ap-bar', id: 'ap-progress', role: 'progressbar', 'aria-label': 'Disaster progress', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, this.progressFill, this.progressLabel);
+    this.stElapsed = h('span', { class: 'ap-elapsed', title: 'Simulation time since the start' });
+    this.stSeed = h('b', { text: '\u2014' });
+    this.stJournal = h('b', { id: 'ap-st-journal', text: '0' });
+    this.stDebris = h('b', { id: 'ap-st-debris', text: '0' });
+    this.logEl = h('div', { class: 'ap-log', id: 'ap-log', 'aria-live': 'polite', hidden: true });
+    this.noteEl = h('div', { class: 'ap-note', id: 'ap-note', 'aria-live': 'polite', hidden: true });
+    this.countsEl = h('div', { class: 'ap-counts' },
+      h('span', { title: 'Seed of the running disaster' }, 'Seed ', this.stSeed),
+      h('span', { title: 'Journaled cells (restorable damage)' }, 'Journal ', this.stJournal),
+      h('span', { title: 'Debris pieces in flight' }, 'Debris ', this.stDebris));
+    const statusStrip = h('section', { class: 'ap-status', id: 'ap-status', 'aria-label': 'Status' },
+      h('div', { class: 'ap-status-row' }, h('span', { class: 'ap-status-left' }, this.badgeState, this.stPhase), h('span', { class: 'ap-status-right' }, this.stWho, this.stElapsed)),
+      this.progressBar,
+      this.countsEl,
+      this.logEl);
+
+    this.btnStart = h('button', { class: 'ap-btn ap-big', id: 'ap-btn-start', type: 'button', text: 'Start', 'data-mode': 'start', 'data-sub': '', onclick: () => this._onPrimary() });
+    this.btnPreview = h('button', { class: 'ap-btn', id: 'ap-btn-preview', type: 'button', text: 'Preview', 'aria-pressed': 'false', title: 'Show where the disaster will hit, without changing the world', onclick: () => this._onPreview() });
+    this.btnStop = h('button', { class: 'ap-btn', id: 'ap-btn-stop', type: 'button', text: 'Stop', title: 'End the running disaster or preview (damage stays until you Reset)', onclick: () => this._cmd({ type: 'stop' }) });
+    this.btnReset = h('button', { class: 'ap-btn', id: 'ap-btn-reset', type: 'button', text: 'Reset', title: 'Restore the world to the state before the disaster', onclick: () => this._onReset() });
+    this.btnReplay = h('button', { class: 'ap-btn', id: 'ap-btn-replay', type: 'button', text: 'Replay', title: 'Nothing to replay yet', onclick: () => this._onReplay() });
+    this.liveSlider = h('input', { type: 'range', id: 'ap-live-intensity', min: '0', max: '1', step: '0.05', value: '0.7' });
+    this.liveVal = h('output', { class: 'ap-val', id: 'ap-live-value', for: 'ap-live-intensity', text: '\u2014' });
+    this.liveSlider.addEventListener('input', () => this._onLiveIntensity());
+    this.liveBox = h('div', { class: 'ap-live', id: 'ap-live', 'data-enabled': 'false', hidden: true },
+      h('label', { for: 'ap-live-intensity', text: 'Live intensity' }), this.liveSlider, this.liveVal);
+    this.dock = h('div', { class: 'ap-dock', id: 'ap-controls' },
+      statusStrip, this.noteEl, this.liveBox,
+      this.btnStart,
+      h('div', { class: 'ap-secondary' }, this.btnPreview, this.btnStop, this.btnReset, this.btnReplay));
+
     this.overlay = h('div', { class: 'ap-overlay', id: 'ap-overlay', hidden: true, onclick: (e) => { if (e.target === this.overlay) this._closeDialog(); } });
 
-    root.append(header, this.body, this.perfEl, this.overlay);
+    root.append(header, this.body, this.dock, this.overlay);
     // Keyboard focus inside the panel must never reach the game's document-level key handlers (WASD in a
     // field must not move the player). Esc / F4 still propagate so game.js can close the panel.
     root.addEventListener('keydown', (e) => this._onKeyDown(e));
@@ -232,6 +302,19 @@ export class AdminPanel {
     if (e.code === 'Escape' && this.dialogOpen) { e.stopPropagation(); e.preventDefault(); this._closeDialog(); return; }
     if (this._keyPropagates(e)) return;
     e.stopPropagation();
+  }
+  // Arrow keys move between the disaster cards (WAI-ARIA tabs pattern).
+  _onTabsKey(e) {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.code)) return;
+    const tabs = [...this.tabsEl.children];
+    if (!tabs.length) return;
+    let i = tabs.findIndex((t) => t.dataset.type === this.selectedType);
+    if (e.code === 'ArrowLeft') i = (i - 1 + tabs.length) % tabs.length;
+    else if (e.code === 'ArrowRight') i = (i + 1) % tabs.length;
+    else i = e.code === 'Home' ? 0 : tabs.length - 1;
+    e.preventDefault();
+    this.selectType(tabs[i].dataset.type);
+    tabs[i].focus();
   }
   _requestClose() { if (this.game.closeScreen && this.game.hud && this.game.hud.screen === 'admin') this.game.closeScreen(); else this.close(); }
 
@@ -249,10 +332,10 @@ export class AdminPanel {
   // ---------------------------------------------------------------- permission / selector
   _refreshPermission() {
     const admin = this.game.permissions ? this.game.permissions.isAdmin() : true;
-    this.denied.hidden = admin;
-    this.main.hidden = !admin;
-    this.badges.hidden = !admin;
-    this.perfEl.hidden = !admin;
+    setHidden(this.denied, admin);
+    setHidden(this.main, !admin);
+    setHidden(this.badges, !admin);
+    setHidden(this.dock, !admin);
     if (!admin) { if (this.game.hud) this.game.hud.addMessage('Administrator permission required.'); return; }
     this._syncTabs();
   }
@@ -268,7 +351,10 @@ export class AdminPanel {
       this.tabsSignature = sig;
       this.tabsEl.replaceChildren(...types.map((type) => {
         const cls = m.registry.get(type);
-        return h('button', { class: 'ap-btn ap-tab', type: 'button', role: 'tab', 'data-type': type, id: 'ap-tab-' + type, title: cls.description || '', text: cls.label || type, onclick: () => this.selectType(type) });
+        return h('button', { class: 'ap-card', type: 'button', role: 'tab', 'data-type': type, id: 'ap-tab-' + type, 'aria-selected': 'false', 'aria-controls': 'ap-params', title: cls.description || '', onclick: () => this.selectType(type) },
+          disasterIcon(type, 40),
+          h('span', { class: 'ap-card-name', text: cls.label || type }),
+          h('span', { class: 'ap-card-desc', text: CARD_BLURB[type] || (cls.description || '').split(/[,.;]/)[0] }));
       }));
     }
     this._applySelection();
@@ -289,7 +375,11 @@ export class AdminPanel {
 
   _applySelection() {
     const m = this.manager, type = this.selectedType;
-    for (const b of this.tabsEl.children) b.setAttribute('aria-selected', String(b.dataset.type === type));
+    for (const b of this.tabsEl.children) {
+      const sel = b.dataset.type === type;
+      setAttr(b, 'aria-selected', String(sel));
+      setAttr(b, 'tabindex', sel ? '0' : '-1');
+    }
     const cls = m.registry.get(type);
     setText(this.descEl, cls ? (cls.description || '') : '');
     if (this.builtType !== type) this._buildForm(type);
@@ -302,14 +392,23 @@ export class AdminPanel {
     const cls = m.registry.get(type);
     const stored = this.store.byType[type];
     const params = cls.clampParams(stored && stored.params ? stored.params : {});
+    const schema = m.schema(type);
+    const primary = primaryKeys(type, schema);
     this.fields = [];
-    this.formEl.replaceChildren();
-    for (const s of m.schema(type)) {
+    this.primaryEl.replaceChildren();
+    this.advancedEl.replaceChildren();
+    // primary fields first, in the configured order, then the rest in schema order
+    const ordered = [...primary.map((k) => schema.find((s) => s.key === k)), ...schema.filter((s) => !primary.includes(s.key))];
+    let advancedCount = 0;
+    for (const s of ordered) {
       const f = this._makeField(s, params[s.key]);
       this.fields.push(f);
-      this.formEl.append(f.el);
+      if (primary.includes(s.key)) this.primaryEl.append(f.el);
+      else { this.advancedEl.append(f.el); advancedCount++; }
     }
-    if (!this.fields.length) this.formEl.append(h('div', { class: 'ap-hint', text: 'This disaster has no parameters.' }));
+    if (!this.fields.length) this.primaryEl.append(h('p', { class: 'ap-help', text: 'This disaster has no parameters.' }));
+    setHidden(this.advanced, advancedCount === 0);
+    setText(this.advancedAside, advancedCount ? `${advancedCount} more setting${advancedCount === 1 ? '' : 's'}` : '');
     this.seedInput.value = String(stored && Number.isFinite(Number(stored.seed)) ? Math.max(0, Math.floor(Number(stored.seed))) : 1);
     this.builtType = type;
   }
@@ -325,21 +424,27 @@ export class AdminPanel {
     }
   }
 
+  _fieldHead(s, forId) {
+    const [name, hint] = splitLabel(s.label);
+    const label = h(forId ? 'label' : 'span', { class: 'ap-field-name', for: forId || undefined, id: forId ? undefined : 'ap-l-' + s.key },
+      name, hint ? h('small', { text: hint }) : null);
+    return { name, hint, label };
+  }
+
   _fieldNumber(s, value, angle) {
     const id = 'ap-f-' + s.key;
     const min = Number.isFinite(s.min) ? s.min : (angle ? 0 : undefined), max = Number.isFinite(s.max) ? s.max : (angle ? 360 : undefined);
-    const unit = angle ? '\u00b0' : (s.unit ? ' ' + s.unit : '');
+    const unit = angle ? '\u00b0' : (s.unit || '');
     const step = Number.isFinite(s.step) && s.step > 0 ? s.step : (angle ? 1 : 'any');
-    const val = h('span', { class: 'ap-val' });
-    const compass = angle ? h('span', { class: 'ap-compass', id: 'ap-c-' + s.key, title: 'Compass heading (0 = north, 90 = east)' }) : null;
-    const range = h('input', { type: 'range', id: 'ap-s-' + s.key, min: String(min ?? 0), max: String(max ?? 100), step: String(step), 'aria-label': s.label + ' slider' });
-    const num = h('input', { type: 'number', id, min: min !== undefined ? String(min) : undefined, max: max !== undefined ? String(max) : undefined, step: String(step) });
-    const el = h('div', { class: 'ap-field', 'data-key': s.key },
-      h('label', { for: id }, h('span', {}, s.label, s.unit ? h('span', { class: 'ap-unit', text: ` (${s.unit})` }) : null), val),
-      h('div', { class: 'ap-row' }, range, compass, num),
-      h('div', { class: 'ap-minmax' }, h('span', { text: `min ${min ?? '\u2212\u221e'}${unit}` }), h('span', { text: `max ${max ?? '\u221e'}${unit}` })));
+    const { name, label } = this._fieldHead(s, id);
+    const unitEl = h('span', { class: 'ap-unit', text: unit });
+    const range = h('input', { type: 'range', id: 'ap-s-' + s.key, min: String(min ?? 0), max: String(max ?? 100), step: String(step), 'aria-label': name + ' slider' });
+    const num = h('input', { type: 'number', id, min: min !== undefined ? String(min) : undefined, max: max !== undefined ? String(max) : undefined, step: String(step), inputmode: 'decimal' });
+    const el = h('div', { class: 'ap-field', 'data-key': s.key, title: `${name}: ${min ?? '\u2212\u221e'} to ${max ?? '\u221e'}${unit ? ' ' + unit : ''}` },
+      h('div', { class: 'ap-field-head' }, label),
+      h('div', { class: 'ap-field-row' }, range, num, unitEl));
     let cur = Number(value);
-    const show = () => { setText(val, fmtNum(cur, s.step) + unit); if (compass) setText(compass, compassLabel(cur)); };
+    const show = () => { setText(unitEl, angle ? `\u00b0 ${compassLabel(cur)}` : unit); };
     // snap committed values to the schema step grid so the slider, the number input and the sent params agree
     const snap = (v) => { if (typeof step !== 'number') return v; const base = Number.isFinite(min) ? min : 0; return Number((Math.round((v - base) / step) * step + base).toFixed(decimalsFor(step))); };
     const set = (v) => {
@@ -360,8 +465,9 @@ export class AdminPanel {
   _fieldSelect(s, value) {
     const id = 'ap-f-' + s.key;
     const options = Array.isArray(s.options) ? s.options : [];
-    const sel = h('select', { id, 'aria-label': s.label }, options.map((o) => h('option', { value: String(o), text: String(o) })));
-    const el = h('div', { class: 'ap-field', 'data-key': s.key }, h('label', { for: id }, h('span', { text: s.label })), h('div', { class: 'ap-row' }, sel));
+    const { label } = this._fieldHead(s, id);
+    const sel = h('select', { id }, options.map((o) => h('option', { value: String(o), text: String(o) })));
+    const el = h('div', { class: 'ap-field', 'data-key': s.key }, h('div', { class: 'ap-field-head' }, label), h('div', { class: 'ap-field-row' }, sel));
     const set = (v) => { sel.value = options.includes(v) ? String(v) : String(s.default); };
     sel.addEventListener('change', () => this._onFieldInput());
     set(value);
@@ -371,7 +477,8 @@ export class AdminPanel {
   _fieldBoolean(s, value) {
     const id = 'ap-f-' + s.key;
     const cb = h('input', { type: 'checkbox', id });
-    const el = h('div', { class: 'ap-field', 'data-key': s.key }, h('label', { class: 'ap-check', for: id }, cb, h('span', { text: s.label })));
+    const [name, hint] = splitLabel(s.label);
+    const el = h('div', { class: 'ap-field', 'data-key': s.key }, h('label', { class: 'ap-check', for: id }, cb, h('span', { class: 'ap-field-name' }, name, hint ? h('small', { text: hint }) : null)));
     cb.addEventListener('change', () => this._onFieldInput());
     const set = (v) => { cb.checked = !!v; };
     set(value);
@@ -380,14 +487,17 @@ export class AdminPanel {
 
   _fieldPosition(s, value) {
     const idX = `ap-f-${s.key}-x`, idZ = `ap-f-${s.key}-z`;
-    const x = h('input', { type: 'number', id: idX, step: '1', 'aria-label': s.label + ' x' });
-    const z = h('input', { type: 'number', id: idZ, step: '1', 'aria-label': s.label + ' z' });
-    const useMe = h('button', { class: 'ap-btn ap-mini ap-use-me', type: 'button', text: 'Use my position', title: 'Player position (game.player.pos)' });
-    const useHit = h('button', { class: 'ap-btn ap-mini ap-use-hit', type: 'button', text: 'Use crosshair target', title: 'Block under the crosshair (game.lastHit)' });
-    const el = h('div', { class: 'ap-field', 'data-key': s.key },
-      h('div', { class: 'ap-label' }, h('span', { text: s.label }), h('span', { class: 'ap-unit', text: '(blocks, \u00b14000)' })),
-      h('div', { class: 'ap-pos' }, h('label', { class: 'ap-axis', for: idX, text: 'x' }), x, h('label', { class: 'ap-axis', for: idZ, text: 'z' }), z),
-      h('div', { class: 'ap-pos' }, useMe, useHit));
+    const [name] = splitLabel(s.label);
+    const x = h('input', { type: 'number', id: idX, step: '1', min: '-4000', max: '4000', 'aria-label': name + ' x', inputmode: 'numeric' });
+    const z = h('input', { type: 'number', id: idZ, step: '1', min: '-4000', max: '4000', 'aria-label': name + ' z', inputmode: 'numeric' });
+    const useMe = h('button', { class: 'ap-btn ap-icon-btn ap-use-me', type: 'button', title: 'Use my position', 'aria-label': 'Use my position' }, pixelIcon('me', 16), srText('Use my position'));
+    const useHit = h('button', { class: 'ap-btn ap-icon-btn ap-use-hit', type: 'button', title: 'Use crosshair target (block under the crosshair)', 'aria-label': 'Use crosshair target' }, pixelIcon('target', 16), srText('Use crosshair target'));
+    const el = h('div', { class: 'ap-field ap-field-pos', 'data-key': s.key },
+      h('div', { class: 'ap-field-head' }, h('span', { class: 'ap-field-name' }, name, h('small', { text: 'blocks, \u00b14000' }))),
+      h('div', { class: 'ap-field-row ap-pos' },
+        h('label', { class: 'ap-axis', for: idX, text: 'x' }), x,
+        h('label', { class: 'ap-axis', for: idZ, text: 'z' }), z,
+        h('span', { class: 'ap-pos-tools' }, useMe, useHit)));
     const num = (inp, fallback) => { const v = Number(inp.value); return inp.value !== '' && Number.isFinite(v) ? clampNum(v, -4000, 4000) : fallback; };
     const def = Array.isArray(s.default) ? s.default : [0, 0];
     const set = (v) => { const p = Array.isArray(v) && v.length >= 2 ? v : def; x.value = String(Number(p[0]) || 0); z.value = String(Number(p[1]) || 0); };
@@ -397,14 +507,14 @@ export class AdminPanel {
       if (!p) { this._note('Player position unavailable.'); return; }
       set([Math.round(p.x), Math.round(p.z)]);
       this._onFieldInput();
-      this._note(`${s.label}: set to your position (${Math.round(p.x)}, ${Math.round(p.z)}).`);
+      this._note(`${name} set to your position (${Math.round(p.x)}, ${Math.round(p.z)}).`);
     });
     useHit.addEventListener('click', () => {
       const hit = this._crosshairTarget();
       if (!hit) { this._note('No block under the crosshair.'); return; }
       set([hit.x, hit.z]);
       this._onFieldInput();
-      this._note(`${s.label}: set to crosshair target (${hit.x}, ${hit.y}, ${hit.z}).`);
+      this._note(`${name} set to the crosshair target (${hit.x}, ${hit.y}, ${hit.z}).`);
     });
     set(value);
     return { key: s.key, schema: s, el, get: () => [num(x, def[0]), num(z, def[1])], set };
@@ -412,8 +522,9 @@ export class AdminPanel {
 
   _fieldText(s, value) {
     const id = 'ap-f-' + s.key;
+    const { label } = this._fieldHead(s, id);
     const inp = h('input', { type: 'text', id, class: 'ap-input' });
-    const el = h('div', { class: 'ap-field', 'data-key': s.key }, h('label', { for: id }, h('span', { text: s.label }), h('span', { class: 'ap-unit', text: s.type })), h('div', { class: 'ap-row' }, inp));
+    const el = h('div', { class: 'ap-field', 'data-key': s.key }, h('div', { class: 'ap-field-head' }, label, h('span', { class: 'ap-unit', text: s.type })), h('div', { class: 'ap-field-row' }, inp));
     const set = (v) => { inp.value = v === undefined || v === null ? '' : (typeof v === 'string' ? v : JSON.stringify(v)); };
     inp.addEventListener('input', () => this._onFieldInput());
     set(value);
@@ -449,7 +560,7 @@ export class AdminPanel {
   _resetDefaults() {
     for (const f of this.fields) f.set(f.schema.default);
     this._onFieldInput();
-    this._note('Parameters reset to defaults.');
+    this._note('Parameters reset to their defaults.');
   }
   _randomizeSeed() {
     this.seedInput.value = String(Math.floor(Math.random() * 1e6));
@@ -464,6 +575,24 @@ export class AdminPanel {
     }, PREVIEW_DEBOUNCE_MS);
   }
 
+  // ---------------------------------------------------------------- quality presets
+  _setQuality(name) {
+    if (!QUALITY[name]) return;
+    try { applyQuality(this.game, name); }
+    catch (e) { console.error('quality preset failed', e); this._note('Could not apply the quality preset.'); return; }
+    this._refreshQuality();
+    this._note(`${QUALITY[name].label} quality applied.`);
+  }
+  _refreshQuality() {
+    const cur = QUALITY[this.game.quality] ? this.game.quality : 'cinematic';
+    for (const [name, b] of Object.entries(this.qualityBtns)) {
+      setAttr(b, 'aria-checked', String(name === cur));
+      setAttr(b, 'tabindex', name === cur ? '0' : '-1');
+    }
+    const q = QUALITY[cur];
+    setText(this.qualityDesc, `${q.description}. View distance ${q.renderDistance} chunks, up to ${fmtInt(q.maxDebris)} debris pieces.`);
+  }
+
   // ---------------------------------------------------------------- persistence (localStorage)
   _load() {
     let data = null;
@@ -471,7 +600,10 @@ export class AdminPanel {
     if (data && typeof data === 'object') {
       if (data.byType && typeof data.byType === 'object') this.store.byType = data.byType;
       if (typeof data.selected === 'string') this.store.selected = data.selected;
+      if (data.ui && typeof data.ui === 'object') this.store.ui = { advanced: !!data.ui.advanced, developer: !!data.ui.developer };
     }
+    if (this.advanced.open !== this.store.ui.advanced) this.advanced.open = this.store.ui.advanced;
+    if (this.developer.open !== this.store.ui.developer) this.developer.open = this.store.ui.developer;
     const m = this.manager;
     if (m && m.registry.has(this.store.selected)) this.selectedType = this.store.selected;
     // restore the stored values into an already built form (rebuild when the stored type differs)
@@ -501,7 +633,7 @@ export class AdminPanel {
   }
   _flushSave() {
     if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 1, selected: this.store.selected, byType: this.store.byType })); } catch (e) { /* storage unavailable */ }
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 1, selected: this.store.selected, byType: this.store.byType, ui: this.store.ui })); } catch (e) { /* storage unavailable */ }
   }
 
   // ---------------------------------------------------------------- commands
@@ -516,6 +648,32 @@ export class AdminPanel {
     return r;
   }
   _currentCommand(type = 'start') { return { type, disaster: this.selectedType, seed: this._readSeed(), params: this._readParams() }; }
+
+  // Friendly "label: value" pairs for a parameter set (confirmation dialogs).
+  _paramDetails(cls, params) {
+    if (!cls || !params) return [];
+    return cls.schema.map((s) => {
+      const v = params[s.key];
+      if (v === undefined) return null;
+      const [name] = splitLabel(s.label);
+      let value;
+      switch (s.type) {
+        case 'position': value = Array.isArray(v) ? `${v[0]}, ${v[1]}` : String(v); break;
+        case 'angle': value = `${fmtNum(Number(v), s.step)}\u00b0 ${compassLabel(v)}`; break;
+        case 'number': value = fmtNum(Number(v), s.step) + (s.unit ? ' ' + s.unit : ''); break;
+        case 'boolean': value = v ? 'yes' : 'no'; break;
+        default: value = Array.isArray(v) ? v.join(', ') : String(v);
+      }
+      return { label: name, value };
+    }).filter(Boolean);
+  }
+
+  _onPrimary() {
+    const m = this.manager;
+    if (!m) return;
+    if (m.state === 'running' || m.state === 'paused') this._onPauseResume();
+    else this._onStart();
+  }
 
   _onPreview() {
     const m = this.manager;
@@ -535,10 +693,10 @@ export class AdminPanel {
     let warnings = [];
     try { const probe = new cls(m, cmd.params, cmd.seed); warnings = (probe.warnings() || []).map(String); }
     catch (e) { warnings = ['Could not compute warnings: ' + (e && e.message ? e.message : e)]; }
-    const paramSummary = Object.entries(cmd.params).map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(',') : v}`).join('   ');
     this._confirm({
       title: `Start ${cls.label}?`,
-      text: `Seed ${cmd.seed}.  ${paramSummary}`,
+      text: `Seed ${cmd.seed} - the same seed always gives the same run.`,
+      details: this._paramDetails(cls, cmd.params),
       warnings: warnings.length ? warnings : ['No specific warnings for this configuration.'],
       notice: START_NOTICE,
       confirmLabel: 'I understand, start',
@@ -559,8 +717,8 @@ export class AdminPanel {
     if (!m) return;
     const n = m.journal.size;
     this._confirm({
-      title: 'Reset / restore the world?',
-      text: n ? `Restores ${n} journaled block${n === 1 ? '' : 's'} to their original state (newest damage first), clears debris and ends the current disaster.` : 'Ends the current disaster and clears debris (the journal is empty, nothing to restore).',
+      title: 'Restore the world?',
+      text: n ? `Puts ${fmtInt(n)} journaled block${n === 1 ? '' : 's'} back the way ${n === 1 ? 'it was' : 'they were'} (newest damage first), clears the debris and ends the current disaster.` : 'Ends the current disaster and clears the debris. The journal is empty, so there is nothing to restore.',
       confirmLabel: 'Restore world',
       onConfirm: () => this._cmd({ type: 'reset' }),
     });
@@ -571,8 +729,9 @@ export class AdminPanel {
     if (!m || !m.lastCommand) { this._note('Nothing to replay yet - start a disaster first.'); return; }
     const last = m.lastCommand, cls = m.registry.get(last.disaster);
     this._confirm({
-      title: 'Replay last disaster?',
-      text: `Restores the world (${m.journal.size} journaled blocks), then re-runs ${cls ? cls.label : last.disaster} with the same seed (${last.seed}) and parameters: ${Object.entries(last.params || {}).map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(',') : v}`).join('   ')}`,
+      title: 'Replay the last disaster?',
+      text: `Restores the world first (${fmtInt(m.journal.size)} journaled blocks), then runs ${cls ? cls.label : last.disaster} again with seed ${last.seed} and the same parameters.`,
+      details: this._paramDetails(cls, last.params),
       notice: START_NOTICE,
       confirmLabel: 'Replay',
       danger: true,
@@ -586,8 +745,8 @@ export class AdminPanel {
     if (!(m.state === 'finished' || m.state === 'idle') || m.journal.size === 0) { this._note('Commit is only possible after a disaster has finished, with a non-empty journal.'); return; }
     const changes = m.journal.changes(this.game.world);
     this._confirm({
-      title: 'Commit damage to save?',
-      text: `Bakes ${changes.length} changed block${changes.length === 1 ? '' : 's'} (${m.journal.size} journaled cells) into your persistent save. After this the damage can no longer be restored with Reset.`,
+      title: 'Commit the damage to your save?',
+      text: `Bakes ${fmtInt(changes.length)} changed block${changes.length === 1 ? '' : 's'} (${fmtInt(m.journal.size)} journaled cells) into your persistent save. Afterwards Reset can no longer undo them.`,
       confirmLabel: 'Commit to save',
       danger: true,
       onConfirm: () => {
@@ -605,8 +764,8 @@ export class AdminPanel {
     const m = this.manager;
     if (!m) return;
     this._confirm({
-      title: 'Discard disaster damage?',
-      text: `Restores ${m.journal.size} journaled blocks to their pre-disaster state and clears debris. Nothing is written to the save.`,
+      title: 'Discard the damage?',
+      text: `Restores ${fmtInt(m.journal.size)} journaled blocks to their pre-disaster state and clears the debris. Nothing is written to your save.`,
       confirmLabel: 'Discard & restore',
       onConfirm: () => this._cmd({ type: 'reset' }),
     });
@@ -624,14 +783,15 @@ export class AdminPanel {
   }
 
   // ---------------------------------------------------------------- confirmation dialog (inside the panel)
-  _confirm({ title, text, warnings = [], notice, confirmLabel = 'Confirm', danger = false, onConfirm }) {
-    const box = h('div', { class: 'ap-dialog', role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'ap-dialog-title' },
+  _confirm({ title, text, details = [], warnings = [], notice, confirmLabel = 'Confirm', danger = false, onConfirm }) {
+    const box = h('div', { class: 'ap-dialog', role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'ap-dialog-title', 'data-danger': String(!!danger) },
       h('h4', { id: 'ap-dialog-title', text: title }),
       text ? h('p', { text }) : null,
+      details.length ? h('div', { class: 'ap-chips', id: 'ap-dialog-details' }, details.map((d) => h('span', { class: 'ap-chip' }, h('b', { text: d.label }), d.value))) : null,
       warnings.length ? h('div', { class: 'ap-warnings', id: 'ap-dialog-warnings' }, warnings.map((w) => h('div', { text: w }))) : null,
       notice ? h('div', { class: 'ap-notice', text: notice }) : null,
       h('div', { class: 'ap-dialog-buttons' },
-        h('button', { class: 'ap-btn', type: 'button', id: 'ap-dialog-cancel', text: 'Cancel', onclick: () => this._closeDialog() }),
+        h('button', { class: 'ap-btn ap-cancel', type: 'button', id: 'ap-dialog-cancel', text: 'Cancel', onclick: () => this._closeDialog() }),
         h('button', { class: 'ap-btn ' + (danger ? 'ap-danger' : 'ap-primary'), type: 'button', id: 'ap-dialog-confirm', text: confirmLabel, onclick: () => { this._closeDialog(); onConfirm(); } })));
     this.overlay.replaceChildren(box);
     this.overlay.hidden = false;
@@ -648,8 +808,9 @@ export class AdminPanel {
 
   _note(text) {
     setText(this.noteEl, text);
+    setHidden(this.noteEl, !text);
     if (this.noteTimer) clearTimeout(this.noteTimer);
-    this.noteTimer = setTimeout(() => { this.noteTimer = null; setText(this.noteEl, ''); }, 4000);
+    this.noteTimer = setTimeout(() => { this.noteTimer = null; setText(this.noteEl, ''); setHidden(this.noteEl, true); }, NOTE_MS);
   }
 
   // ---------------------------------------------------------------- console command
@@ -675,56 +836,66 @@ export class AdminPanel {
     if (!s) s = m.status();
     this.status = s;
     const cls = s.type ? m.registry.get(s.type) : null;
-    setText(this.badgeState, s.state);
-    this.badgeState.dataset.state = s.state;
-    setText(this.badgeOnline, s.online ? 'online' : 'offline');
-    this.badgeOnline.dataset.on = String(!!s.online);
-    setText(this.badgeAdmin, s.admin ? 'admin' : 'no admin');
-    this.badgeAdmin.dataset.admin = String(!!s.admin);
+    const selected = this.selectedType ? m.registry.get(this.selectedType) : null;
+    const running = s.state === 'running', paused = s.state === 'paused', preview = s.state === 'preview', finished = s.state === 'finished', restoring = s.state === 'restoring';
+    const admin = !!s.admin;
 
-    setText(this.stType, cls ? `${cls.label} (${s.type})` : '\u2014');
-    setText(this.stElapsed, `${s.elapsed.toFixed(1)} s` + (s.tick ? `  (tick ${s.tick})` : ''));
-    setText(this.stSeed, s.seed === null || s.seed === undefined ? '\u2014' : String(s.seed));
-    setText(this.stJournal, `${s.journal} cell${s.journal === 1 ? '' : 's'}`);
-    setText(this.stDebris, String(s.debris));
-    setText(this.stEdits, `${s.edits} / ${s.restored}`);
-    const pct = Math.round(Math.max(0, Math.min(1, s.progress || 0)) * 100);
+    // header badges
+    setText(this.badgeOnline, s.online ? 'Online' : 'Offline');
+    this.badgeOnline.dataset.on = String(!!s.online);
+    setText(this.badgeAdmin, admin ? 'Admin' : 'No admin');
+    this.badgeAdmin.dataset.admin = String(admin);
+
+    // status strip
+    setText(this.badgeState, STATE_LABEL[s.state] || s.state);
+    this.badgeState.dataset.state = s.state;
+    const phase = (running || paused || finished) ? phaseOf(m.active) : '';
+    setText(this.stPhase, phase ? `\u00b7 ${phase}` : '');
+    const who = cls && s.state !== 'idle' ? cls.label : '';
+    setText(this.stWho, restoring ? `${Math.round((s.restoreProgress || 0) * 100)}% restored` : who);
+    setText(this.stElapsed, (running || paused || finished) ? `${s.elapsed.toFixed(1)} s` : '');
+    this.stElapsed.title = s.tick ? `Simulation time since the start (tick ${s.tick})` : 'Simulation time since the start';
+    const pct = Math.round(Math.max(0, Math.min(1, (restoring ? s.restoreProgress : s.progress) || 0)) * 100);
     const w = pct + '%';
     if (this.progressFill.style.width !== w) this.progressFill.style.width = w;
-    setText(this.progressLabel, s.state === 'idle' ? '' : w);
-    const restoring = s.state === 'restoring';
-    if (this.restoreBox.hidden === restoring) this.restoreBox.hidden = !restoring;
-    if (restoring) {
-      const rw = Math.round((s.restoreProgress || 0) * 100) + '%';
-      if (this.restoreFill.style.width !== rw) this.restoreFill.style.width = rw;
-      setText(this.restoreLabel, rw);
-    }
-    const lines = (s.messages || []).slice(-4);
-    const joined = lines.join('\n');
-    if (joined !== this.lastLog) {
-      this.lastLog = joined;
-      this.logEl.replaceChildren(...(lines.length ? lines.map((t) => h('div', { text: t })) : [h('div', { class: 'ap-empty', text: 'No messages yet.' })]));
-    }
+    setAttr(this.progressBar, 'aria-valuenow', String(pct));
+    setAttr(this.progressBar, 'data-mode', restoring ? 'restore' : (preview || s.state === 'idle') ? 'off' : 'run');
+    setText(this.progressLabel, (s.state === 'idle' || preview) ? '' : w);
+    setText(this.stSeed, s.seed === null || s.seed === undefined ? '\u2014' : String(s.seed));
+    setText(this.stJournal, `${fmtInt(s.journal)} cell${s.journal === 1 ? '' : 's'}`);
+    setText(this.stDebris, fmtInt(s.debris));
+    setHidden(this.countsEl, s.state === 'idle' && s.journal === 0 && !s.debris); // nothing to count yet
+    const last = (s.messages || []).slice(-1)[0] || '';
+    if (last !== this.lastLog) { this.lastLog = last; setText(this.logEl, last); setHidden(this.logEl, !last); }
 
-    // button validity per state
-    const running = s.state === 'running', paused = s.state === 'paused', preview = s.state === 'preview', finished = s.state === 'finished';
-    const admin = !!s.admin;
+    // primary button: Start (idle / preview / finished) -> Pause (running) -> Resume (paused)
+    const mode = running ? 'pause' : paused ? 'resume' : 'start';
+    if (this.btnStart.dataset.mode !== mode) {
+      this.btnStart.dataset.mode = mode;
+      setText(this.btnStart, mode === 'pause' ? 'Pause' : mode === 'resume' ? 'Resume' : 'Start');
+    }
+    const sub = mode === 'start' ? (selected ? selected.label : '') : who;
+    if (this.btnStart.dataset.sub !== sub) this.btnStart.dataset.sub = sub;
     const setDisabled = (b, d) => { if (b.disabled !== d) b.disabled = d; };
+    setDisabled(this.btnStart, !admin || restoring || (mode === 'start' && !this.selectedType));
+    const startTitle = mode === 'pause' ? 'Pause the simulation (the world keeps its damage)' : mode === 'resume' ? 'Continue the paused disaster' : selected ? `Start ${selected.label} with these parameters (asks for confirmation)` : 'Select a disaster first';
+    if (this.btnStart.title !== startTitle) this.btnStart.title = startTitle;
+
+    // secondary buttons
     setDisabled(this.btnPreview, !admin || restoring || running || paused || !this.selectedType);
-    setText(this.btnPreview, preview ? 'Stop preview' : 'Preview');
-    this.btnPreview.classList.toggle('ap-active', preview);
-    setDisabled(this.btnStart, !admin || restoring || running || paused || !this.selectedType);
-    setDisabled(this.btnPause, !admin || !(running || paused));
-    setText(this.btnPause, paused ? 'Resume' : 'Pause');
+    setAttr(this.btnPreview, 'aria-pressed', String(preview));
+    const previewTitle = preview ? 'Stop the preview' : 'Show where the disaster will hit, without changing the world';
+    if (this.btnPreview.title !== previewTitle) this.btnPreview.title = previewTitle;
     setDisabled(this.btnStop, !admin || !(running || paused || preview));
     setDisabled(this.btnReset, !admin || restoring || (s.state === 'idle' && s.journal === 0));
     setDisabled(this.btnReplay, !admin || restoring || !m.lastCommand);
-    const replayTitle = m.lastCommand ? `Restore, then re-run ${(m.registry.get(m.lastCommand.disaster) || {}).label || m.lastCommand.disaster} with seed ${m.lastCommand.seed}` : 'Nothing to replay yet';
+    const replayTitle = m.lastCommand ? `Restore the world, then run ${(m.registry.get(m.lastCommand.disaster) || {}).label || m.lastCommand.disaster} again with seed ${m.lastCommand.seed}` : 'Nothing to replay yet';
     if (this.btnReplay.title !== replayTitle) this.btnReplay.title = replayTitle;
-    setDisabled(this.btnCommit, !admin || !((finished || s.state === 'idle') && s.journal > 0));
-    setDisabled(this.btnDiscard, !admin || restoring || s.journal === 0);
+
+    // live intensity (only while a disaster with an intensity parameter runs)
     const liveOk = admin && (running || paused) && !!s.params && typeof s.params.intensity === 'number';
     setDisabled(this.liveSlider, !liveOk);
+    setHidden(this.liveBox, !liveOk);
     if (this.liveBox.dataset.enabled !== String(liveOk)) this.liveBox.dataset.enabled = String(liveOk);
     if (liveOk && document.activeElement !== this.liveSlider && !this.liveTimer) {
       const v = String(s.params.intensity);
@@ -732,8 +903,12 @@ export class AdminPanel {
       setText(this.liveVal, fmtNum(s.params.intensity, 0.05));
     } else if (!liveOk) setText(this.liveVal, s.params && typeof s.params.intensity === 'number' ? fmtNum(s.params.intensity, 0.05) : '\u2014');
 
+    // developer section
+    setDisabled(this.btnCommit, !admin || !((finished || s.state === 'idle') && s.journal > 0));
+    setDisabled(this.btnDiscard, !admin || restoring || s.journal === 0);
     const save = this.game.save;
-    setText(this.saveHint, `Journal: ${s.journal} cell${s.journal === 1 ? '' : 's'}` + (save ? `  \u00b7  saved edits: ${save.count}${save.dirty ? ' (writing\u2026)' : ''}` : '') + (s.journal > 0 && !(finished || s.state === 'idle') ? '  \u00b7  stop the disaster to commit' : ''));
+    setText(this.saveHint, `Journal: ${fmtInt(s.journal)} cell${s.journal === 1 ? '' : 's'}` + (save ? `  \u00b7  saved edits: ${save.count}${save.dirty ? ' (writing\u2026)' : ''}` : '') + (s.journal > 0 && !(finished || s.state === 'idle') ? '  \u00b7  stop the disaster to commit' : ''));
+    setText(this.statsEl, `Edits ${fmtInt(s.edits)} \u00b7 restored ${fmtInt(s.restored)} \u00b7 tick ${fmtInt(s.tick)}` + (s.type ? ` \u00b7 ${s.type}` : ''));
   }
 
   _refreshPerf() {
