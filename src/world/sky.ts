@@ -58,7 +58,7 @@ void main() {
   // ~1 km turret field: modulates the column height inside a cell so a mass breaks into several towers
   // of different heights instead of one smooth mound; it also warps the 3D noise domain so the 64^3
   // tile never repeats visibly across the sky
-  float turret = fbm3(p * 7.0 + 21.0);
+  float turret = clamp((fbm3(p * 7.0 + 21.0) - 0.25) / 0.4, 0.0, 1.0);
   gl_FragColor = vec4(f, tower, baseVar, turret);
 }
 `;
@@ -109,20 +109,25 @@ float envelope(vec3 p, vec4 f, out float hf, out float hn, out float H) {
   float d = f.x - cloudThreshold();
   // base footprint (identical to cloudCoverage2D, so the ground shadows match)
   float cov = smoothstep(0.0, 0.09, d);
-  // own height of this column: already a quarter of the slab at the footprint edge (steep walls), rising
-  // quickly with the depth inside the cell (the sqrt rounds a conical cell into a dome), faster over
-  // towering masses; the turret field then breaks the mound into several towers of different heights
+  // own height of this column: low at the footprint edge, rising steeply with the depth inside the cell
+  // (steep walls, a narrow skirt of low tufts instead of a wide thin shelf around each tower; the sqrt
+  // rounds a conical cell into a dome), faster over towering masses; the turret field then breaks the
+  // mound into several towers of different heights
   float g = mix(0.55, 0.16, f.y);
   float dg = max(d, 0.0) / g;
-  H = 0.22 + 0.78 * sqrt(clamp(dg * 1.4, 0.0, 1.0));
-  H = clamp(H * mix(0.55, 1.1, f.w), 0.05, 1.0);
+  H = 0.1 + 0.9 * sqrt(clamp(dg * 2.2, 0.0, 1.0));
+  // a closed deck saturates the field, so its thickness (and the light coming through it) varies with
+  // the turret field alone: give it a wider range so the underside shows thick dark cells and thin bright gaps
+  float deck = smoothstep(0.45, 0.7, uCloudCoverage);
+  H = clamp(H * mix(mix(0.55, 0.28, deck), 1.1, f.w), 0.05, 1.0);
   hn = hf / H;
   // cumulus keep a fairly sharp flat base (the shape noise still nibbles it into shallow lumps); a closed
   // deck gets a soft one carved into hanging cells. The upper two thirds of the column are a soft ramp
   // the shape noise cuts into cauliflower lobes several hundred metres tall.
   float baseRamp = mix(0.09, 0.18, smoothstep(0.45, 0.7, uCloudCoverage));
   float v = smoothstep(0.0, baseRamp, hf) * (1.0 - smoothstep(0.25, 1.0, hn)) * (1.0 - smoothstep(0.9, 1.0, hf));
-  return cov * v;
+  // cov^2: the soft footprint fringe thins out for the noise to shred instead of forming a plate
+  return cov * cov * v;
 }
 
 vec3 noiseCoord(vec3 p, vec4 f) {
@@ -253,7 +258,7 @@ void main() {
     vec3 skyAmb = mix(uZenithColor, uHazeColor, 0.5) * 0.95;
     // bounce light on the bases: the sunlit sea and land (warm and dim at sunset, when the glowing
     // horizon haze takes over), and at night the city's glow on the undersides
-    vec3 gndAmb = uGroundColor * 0.18 + uSunHazeColor * 0.2 * lowSun + vec3(1.0, 0.85, 0.7) * 0.035 * uNight;
+    vec3 gndAmb = uGroundColor * 0.18 + uSunHazeColor * 0.32 * lowSun + vec3(1.0, 0.9, 0.8) * 0.035 * uNight;
 
     int level = 0;          // 0 coarse, 1 fine, 2 surface
     int empty = 0;
@@ -295,8 +300,9 @@ void main() {
         continue;
       }
       float dt = level == 2 ? dtS : dtF;
-      // the light march varies slowly along the ray: reuse it for the next surface sample
-      if (level == 1 || sinceLight >= 1) {
+      // the light march varies slowly along the ray: reuse it for the next 1-2 samples (the far light
+      // steps sample the smooth envelope, so the reuse does not skip lobe shadows the eye would notice)
+      if (sinceLight >= (level == 2 ? 2 : 1)) {
         lt = dot(scatter(lightOD(p, L, H, hf), cosSun), ONE3);
         sinceLight = 0;
       } else sinceLight++;
