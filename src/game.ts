@@ -357,8 +357,10 @@ export class Game {
     this.city.batches.updateLod(cx, cz, this.cull);
     this.props.updateLod(cx, cz, this.cull);
     this.traffic.updateCulling(this.cull);
-    // the airframe casts only into the cascades its shadow can reach (one in most views, not all three)
-    const airMask = layerMask('all', true, this.cull.casterCascades(planePos, 9, 5));
+    // the airframe casts only into the cascades its shadow can reach: swept down to the ground under it, so
+    // from altitude that is the cascade holding its ground shadow, not all three
+    const airHeight = planePos.y - Math.max(0, this.map.heightAt(planePos.x, planePos.z)) + 5;
+    const airMask = layerMask('all', true, this.cull.casterCascades(planePos, 9, airHeight));
     for (const o of this.airframeCasters) o.layers.mask = airMask;
     this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size);
     this.wakes.render(this.renderer, cx, cz);
