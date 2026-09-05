@@ -35,6 +35,10 @@ export function resolveFamily(lot, rng) {
   if (name === 'twin' && across < TWIN_MIN) name = 'slab';
   if (name === 'habitat' && Math.min(lot.w, lot.d) < 26) name = 'setback';
   if (name === 'pad' && depth < 22) name = 'setback';
+  // landmarks need room for their signature volume (rotunda + dome, ziggurat steps, stage + amphitheatre + plaza)
+  if (name === 'senate' && Math.min(lot.w, lot.d) < 64) name = 'civic';
+  if (name === 'temple' && Math.min(lot.w, lot.d) < 40) name = 'setback';
+  if (name === 'opera' && (across < 30 || depth < 44)) name = 'hall';
   return { name, variant };
 }
 

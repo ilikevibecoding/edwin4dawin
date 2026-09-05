@@ -14,7 +14,7 @@ export function hall(bp, lot, ctx) {
       const alongX = w >= d;                       // vault axis along the longer side
       const half = (alongX ? d : w) / 2;
       const rise = Math.max(3, Math.min(6, Math.round(half * 0.5)));
-      const hgt = (c) => Math.round(rise * Math.sqrt(Math.max(0, 1 - ((c + 0.5 - half) / half) ** 2)));
+      const hgt = (c) => Math.max(1, Math.round(rise * Math.sqrt(Math.max(0, 1 - ((c + 0.5 - half) / half) ** 2))));
       for (let x = e.x0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++) {
         const c = alongX ? z - e.z0 : x - e.x0, n = alongX ? d : w;
         const h = hgt(c);

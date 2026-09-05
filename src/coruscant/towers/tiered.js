@@ -21,10 +21,22 @@ export function buildTiered(bp, spec) {
   const tiers = spec.tiers.map((t, i) => {
     const ins = t.inset || {};
     const l = clamp(ins.l | 0, 0, lim.l), r = clamp(ins.r | 0, 0, lim.r), fr = clamp(ins.f | 0, 0, lim.f), b = clamp(ins.b | 0, 0, lim.b);
-    const clip = { u0: l, u1: frame.Iu - 1 - r, v0: fr, v1: frame.Iv - 1 - b };
+    let v1 = frame.Iv - 1 - b;
+    // a back inset must not keep a strip whose corridor (on its +v side) it removes: snap to the strip's back wall
+    for (const s of layout.strips) if (s.wallAtBack && s.kind !== 'front' && v1 >= s.roomV0 - 1 && v1 < s.roomV1 + 2) v1 = s.roomV0 - 2;
+    const clip = { u0: l, u1: frame.Iu - 1 - r, v0: fr, v1 };
     const text = frame.rect(clip.u0 - 1, clip.v0 - 1, clip.u1 + 1, clip.v1 + 1);
     const inside = spec.mask ? (x, z) => x >= text.x0 && x <= text.x1 && z >= text.z0 && z <= text.z1 && spec.mask(x, z, i, text) : null;
-    return { f0: t.f0, f1: t.f1, clip, ext: text, inside, ring: inside ? maskRing(text, inside) : rectRing(text), index: i };
+    let interior = null;
+    if (inside || spec.exclude) {
+      // interior = inside cells that are not exterior wall (ring) cells and not excluded (e.g. a rotunda the
+      // landmark carves afterwards), as a lookup table for the planner
+      const m = new Uint8Array(bp.w * bp.d);
+      const ok = inside ? (x, z) => inside(x, z) && inside(x - 1, z) && inside(x + 1, z) && inside(x, z - 1) && inside(x, z + 1) : () => true;
+      for (let x = text.x0; x <= text.x1; x++) for (let z = text.z0; z <= text.z1; z++) if (ok(x, z) && !(spec.exclude && spec.exclude(x, z))) m[x * bp.d + z] = 1;
+      interior = (x, z) => x >= 0 && z >= 0 && x < bp.w && z < bp.d && m[x * bp.d + z] === 1;
+    }
+    return { f0: t.f0, f1: t.f1, clip, ext: text, inside, interior, ring: inside ? maskRing(text, inside) : rectRing(text), index: i };
   });
   const nF = tiers[tiers.length - 1].f1 + 1;
   const doorU = spec.door ? frame.U(spec.door.x, spec.door.z) : Math.floor(frame.Iu / 2) - 1;
@@ -54,7 +66,7 @@ export function buildTiered(bp, spec) {
   for (const t of tiers) for (let f = t.f0; f <= t.f1; f++) {
     const mode = f === 0 ? 'lobby' : f === 1 ? 'gallery' : f === spec.midDoorF ? 'skylobby' : 'normal';
     const pool = hooks.poolFor ? hooks.poolFor(f, t) : (f <= 1 ? pools.ground : f >= nF - 2 ? pools.top : pools.typical);
-    planFloor(bp, { frame, layout, clip: t.clip, lvl: 5 * f + 1, style, pools, pool, ctx: { isTop: f === nF - 1, floor: f, family: spec.family }, mode, used, doorU });
+    planFloor(bp, { frame, layout, clip: t.clip, lvl: 5 * f + 1, style, pools, pool, ctx: { isTop: f === nF - 1, floor: f, family: spec.family }, mode, used, doorU, interior: t.interior });
     if (t.inside) {
       // masked footprint: drop what the planner wrote outside the mask, then paint the ring over it
       const y0 = f === t.f0 ? 5 * f + 1 : 5 * f, y1 = 5 * f + 4;

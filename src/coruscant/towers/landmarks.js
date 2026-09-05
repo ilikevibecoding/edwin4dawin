@@ -5,6 +5,7 @@ import { B } from '../../blocks.js';
 import { FORCE_AIR } from '../blueprint.js';
 import { buildTiered } from './tiered.js';
 import { hall } from './hall.js';
+import { PlanFrame, computeLayout } from '../plan.js';
 
 const TAU = Math.PI * 2;
 
@@ -16,30 +17,50 @@ export function senate(bp, lot, ctx) {
   const cx = w / 2, cz = d / 2;
   const style = spec.style;
   style.wall = B.SMOOTH_STONE; style.corner = B.CHROME; style.band = B.DURASTEEL; style.rhythm = 'slit'; style.roof = B.DURASTEEL;
-  const res = buildTiered(bp, { ...spec, tiers: [{ f0: 0, f1: nF - 1 }], family: 'senate', midDoorF: ctx.midDoorF < nF ? ctx.midDoorF : -1, hooks: { crown: false } });
-  const yRoof = 5 * nF;
   const R = Math.min(w, d) / 2 - 5;          // dome radius
-  const Rr = Math.max(8, Math.round(R * 0.45)); // rotunda radius
   const dist = (x, z) => Math.hypot(x + 0.5 - cx, z + 0.5 - cz);
-  const doorAt = (x, z) => (Math.abs(x + 0.5 - cx) <= 1.5 && Math.abs(z + 0.5 - cz) >= Rr - 1) || (Math.abs(z + 0.5 - cz) <= 1.5 && Math.abs(x + 0.5 - cx) >= Rr - 1);
+  // rotunda radius: ~45% of the dome, but never reaching the lift/stair core the planner will place
+  const pf = new PlanFrame(spec.ext, spec.front), pl = computeLayout(pf.Iu, pf.Iv);
+  const coreRect = pf.rect(pl.core.u0, pl.core.v0, pl.core.u1, pl.core.v1);
+  const coreDist = Math.hypot(Math.max(0, coreRect.x0 - cx, cx - coreRect.x1 - 1), Math.max(0, coreRect.z0 - cz, cz - coreRect.z1 - 1));
+  const Rr = Math.max(6, Math.min(Math.round(R * 0.45), Math.floor(coreDist) - 2));
+  // the planner keeps rooms out of the rotunda; corridors still run into it and get doors through the ring wall
+  const res = buildTiered(bp, { ...spec, tiers: [{ f0: 0, f1: nF - 1 }], family: 'senate', midDoorF: ctx.midDoorF < nF ? ctx.midDoorF : -1, exclude: (x, z) => dist(x, z) <= Rr + 1, hooks: { crown: false } });
+  const yRoof = 5 * nF;
+  const { frame, layout } = res;
+  const corridorAt = (x, z) => {
+    const u = frame.U(x, z), v = frame.V(x, z);
+    if (u >= layout.connector.u0 && u <= layout.connector.u1 && v >= layout.s0) return true;
+    for (const sp of layout.spines) if (v >= sp.v0 && v <= sp.v1) return true;
+    return false;
+  };
+  const doorAt = (x, z) => corridorAt(x, z) || (Math.abs(x + 0.5 - cx) <= 1.5 && Math.abs(z + 0.5 - cz) >= Rr - 1) || (Math.abs(z + 0.5 - cz) <= 1.5 && Math.abs(x + 0.5 - cx) >= Rr - 1);
 
-  // rotunda: a cylinder through every podium floor, ring wall with four doors per level, gallery railings
+  // rotunda: a void through every podium floor ringed by galleries (railing on the inner edge) behind a two-cell
+  // ring wall with four doors per level; the ground floor is the open rotunda floor
   for (let x = 0; x < w; x++) for (let z = 0; z < d; z++) {
     const r = dist(x, z);
     if (r > Rr + 1) continue;
+    if (r <= Rr - 3.5) { bp.fill(x, 1, z, x, yRoof, z, FORCE_AIR); continue; }
     if (r <= Rr - 1) {
-      bp.fill(x, 1, z, x, yRoof, z, FORCE_AIR);
+      bp.fill(x, 1, z, x, 4, z, FORCE_AIR);
+      for (let f = 1; f < nF; f++) {
+        bp.set(x, 5 * f, z, (x + z) % 5 === 0 ? B.GLOW_PANEL : B.DURASTEEL);
+        bp.fill(x, 5 * f + 1, z, x, 5 * f + 4, z, FORCE_AIR);
+        if (r <= Rr - 2.5) bp.set(x, 5 * f + 1, z, B.IRON_BARS);
+      }
+      bp.set(x, yRoof, z, B.DURASTEEL); if (r <= Rr - 2.5) bp.set(x, yRoof + 1, z, B.IRON_BARS);
+      if (r > Rr - 2.5 && (x + z) % 7 === 0) for (let f = 1; f < nF; f++) bp.set(x, 5 * f + 1, z, B.STONE_BRICK_SLAB), bp.spot(x, 5 * f + 1, z, 'seat');
       continue;
     }
-    // ring cells: wall, except gallery openings on the upper floors (railing) and doors
     for (let f = 0; f < nF; f++) {
       const y = 5 * f;
       if (f > 0) bp.set(x, y, z, B.DURASTEEL);
       if (doorAt(x, z)) { bp.fill(x, y + 1, z, x, y + 3, z, FORCE_AIR); bp.set(x, y + 4, z, B.GLOW_PANEL); continue; }
-      if (f > 0 && r <= Rr) { bp.set(x, y + 1, z, B.IRON_BARS); bp.fill(x, y + 2, z, x, y + 4, z, FORCE_AIR); continue; }
-      bp.fill(x, y + 1, z, x, y + 4, z, f === 0 ? B.SMOOTH_STONE : (r <= Rr ? B.IRON_BARS : B.CHROME));
+      bp.fill(x, y + 1, z, x, y + 4, z, f === 0 ? B.SMOOTH_STONE : B.CHROME);
+      if (f > 0 && r > Rr && (x + z) % 3 === 0) bp.set(x, y + 3, z, B.GLOW_PANEL);
     }
-    if (r <= Rr) bp.set(x, yRoof, z, B.CHROME); else bp.fill(x, yRoof, z, x, yRoof + 1, z, B.DURASTEEL);
+    bp.fill(x, yRoof, z, x, yRoof + 1, z, B.DURASTEEL);
   }
   // rotunda floor: dais + tiered rings of seats facing it
   for (let x = 0; x < w; x++) for (let z = 0; z < d; z++) {
@@ -48,7 +69,7 @@ export function senate(bp, lot, ctx) {
     bp.set(x, 0, z, r <= 3 ? B.CHROME : (Math.floor(r) % 4 === 0 ? B.GLOW_PANEL : B.PANEL_BLACK));
     if (r <= 2.5) { bp.set(x, 1, z, B.SMOOTH_STONE); if (r < 0.8) { bp.set(x, 2, z, B.CHROME); bp.set(x, 3, z, B.GOLD_BLOCK); } continue; }
     const ring = Math.floor((r - 4) / 3);
-    if (r >= 4 && ring >= 0 && ring < 5 && Math.floor(r - 4) % 3 === 0) {
+    if (r >= 4 && r <= Rr - 4 && ring >= 0 && ring < 5 && Math.floor(r - 4) % 3 === 0) { // flat floor near the ring wall doors
       const ang = Math.atan2(z + 0.5 - cz, x + 0.5 - cx);
       if (Math.abs(Math.sin(ang * 2)) < 0.12) continue;      // radial aisles
       for (let k = 0; k < ring; k++) bp.set(x, 1 + k, z, B.PANEL_BLACK);
@@ -78,7 +99,7 @@ export function senate(bp, lot, ctx) {
     const mat = meridian ? B.CHROME : (yo % 6 === 0 ? B.PANEL_STRIPE : B.DURASTEEL);
     bp.fill(x, yRoof + Math.max(1, yi + 1), z, x, yRoof + Math.max(1, yo), z, mat);
     if (yi >= 1 && Math.floor(r) % 5 === 0 && (x + z) % 3 === 0) bp.set(x, yRoof + yi, z, B.GLOW_PANEL);   // inner ceiling lights
-    if (r > Rr + 1 && yi >= 1) bp.set(x, yRoof, z, B.DURASTEEL);                                                // the dome floor annulus
+    if (r > Rr + 1 && yi >= 1 && bp.get(x, yRoof, z) !== B.GLOW_PANEL) bp.set(x, yRoof, z, B.DURASTEEL);          // the dome floor annulus (keeps the top-floor ceiling lights)
   }
   const sx = Math.floor(cx), sz = Math.floor(cz);
   bp.fill(sx, yRoof + H + 1, sz, sx, yRoof + H + 8, sz, B.CHROME); bp.set(sx, yRoof + H + 9, sz, B.GLOW_PANEL);
@@ -94,9 +115,10 @@ export function temple(bp, lot, ctx) {
   const style = spec.style;
   style.wall = B.SMOOTH_STONE; style.corner = B.DURASTEEL_DARK; style.band = B.PANEL_STRIPE; style.rhythm = 'slit'; style.railing = B.IRON_BARS; style.roof = B.SMOOTH_STONE;
   const step = Math.max(4, Math.floor(Math.min(w, d) / 8));
-  const tiers = [{ f0: 0, f1: 3 }, { f0: 4, f1: 7, inset: { l: step, r: step, b: step } }, { f0: 8, f1: 11, inset: { l: 2 * step, r: 2 * step, b: 2 * step } }];
+  const per = Math.max(1, Math.min(4, Math.floor(ctx.nF / 3)));   // floors per ziggurat step (3 steps)
+  const tiers = [{ f0: 0, f1: per - 1 }, { f0: per, f1: 2 * per - 1, inset: { l: step, r: step, b: step } }, { f0: 2 * per, f1: 3 * per - 1, inset: { l: 2 * step, r: 2 * step, b: 2 * step } }];
   const res = buildTiered(bp, { ...spec, tiers, family: 'temple', midDoorF: ctx.midDoorF, hooks: { crown: false, afterTier: (t, yRoof) => terrace(bp, t.ext, yRoof, rng) } });
-  const top = res.tiers[2].ext, yTop = 5 * 12;
+  const top = res.tiers[2].ext, yTop = 5 * 3 * per;
   const budget = Math.max(60, ctx.height - yTop - 4);
   const tw = top.x1 - top.x0 + 1, td = top.z1 - top.z0 + 1;
   const cxs = Math.floor((top.x0 + top.x1) / 2), czs = Math.floor((top.z0 + top.z1) / 2);
@@ -152,8 +174,8 @@ export function opera(bp, lot, ctx) {
   const plazaStart = T - houseDepth - Math.max(6, Math.round((T - houseDepth) * 0.3));
   const Rs = Math.min(Math.floor(W / 2) - 2, Math.round((plazaStart - 2) * 0.8));
   const Hs = Math.min(5 * nF - 2, Math.round(Rs * 0.9));
-  const seatStart = 7;
-  for (let a = 0; a < W; a++) for (let t = 1; t < T - houseDepth; t++) {
+  const seatStart = 8;
+  for (let a = 0; a < W; a++) for (let t = 1; t <= T - houseDepth; t++) {
     const da = a + 0.5 - W / 2, r = Math.hypot(da, t);
     const inPlaza = t >= plazaStart;
     if (inPlaza) {
@@ -163,16 +185,22 @@ export function opera(bp, lot, ctx) {
       continue;
     }
     set(a, 0, t, B.SMOOTH_STONE);
-    if (t <= 5 && Math.abs(da) <= Rs - 2) { // stage: raised two blocks with a lit lip
-      set(a, 1, t, B.DURASTEEL); set(a, 2, t, t === 5 ? B.GLOW_PANEL : B.PANEL_BLACK);
-      if (t === 2 && a % 6 === 0) bp.work(alongZ ? a : A(t), 3, alongZ ? A(t) : a, 'performer');
+    if (t <= 5 && Math.abs(da) <= Rs - 2) { // stage: raised one block with a lit lip, the house doors open onto it
+      set(a, 1, t, t === 5 ? B.GLOW_PANEL : B.PANEL_BLACK);
+      if (t === 2 && a % 6 === 0) bp.work(alongZ ? a : A(t), 2, alongZ ? A(t) : a, 'performer');
       continue;
     }
+    if (t === 6 && Math.abs(da) <= Rs - 2) { set(a, 1, t, B.STONE_BRICK_SLAB); continue; } // step up to the stage
     if (t >= seatStart && t < plazaStart && Math.abs(da) <= (t + 6)) { // amphitheatre rows, one step up every 3 rows
       const row = Math.floor((t - seatStart) / 3), h = Math.min(row, 5);
-      if (Math.abs(da) < 1.5) { for (let k = 1; k <= h; k++) set(a, k, t, B.PANEL_BLACK); continue; } // central aisle
+      if (Math.abs(da) < 1.5) { // central aisle: climbs with the rows, then steps back down into the plaza
+        const ha = Math.min(h, plazaStart - 1 - t);
+        for (let k = 1; k <= ha; k++) set(a, k, t, B.PANEL_BLACK);
+        continue;
+      }
       for (let k = 1; k <= h; k++) set(a, k, t, B.PANEL_BLACK);
-      if ((t - seatStart) % 3 === 1) { set(a, h + 1, t, B.STONE_BRICK_SLAB); if (a % 2 === 0) bp.spot(alongZ ? a : A(t), h + 1, alongZ ? A(t) : a, 'seat'); }
+      if (t === plazaStart - 1) set(a, h + 1, t, B.IRON_BARS); // railing along the back of the top terrace
+      else if ((t - seatStart) % 3 === 1) { set(a, h + 1, t, B.STONE_BRICK_SLAB); if (a % 2 === 0) bp.spot(alongZ ? a : A(t), h + 1, alongZ ? A(t) : a, 'seat'); }
     }
     // the shell: quarter-sphere in front of the house wall over the stage
     if (r <= Rs && r >= Rs - 1.2) {
@@ -186,12 +214,13 @@ export function opera(bp, lot, ctx) {
       if (yo === yn && t % 3 === 0 && a % 3 === 0) set(a, 3 + yo - 1, t, B.GLOW_PANEL);
     }
   }
-  // house facade above the stage: a lit proscenium band
-  for (let a = Math.floor(W / 2) - Rs + 2; a <= Math.floor(W / 2) + Rs - 2; a++) for (let y = 3; y <= 5; y++) set(a, y, 0, a % 2 ? B.HOLO_SIGN : B.GLOW_PANEL_BLUE);
+  // house facade above the stage: a lit proscenium band (above the 3-high house door)
+  for (let a = Math.floor(W / 2) - Rs + 2; a <= Math.floor(W / 2) + Rs - 2; a++) for (let y = 4; y <= 6; y++) set(a, y, 0, a % 2 ? B.HOLO_SIGN : B.GLOW_PANEL_BLUE);
   // plaza gate on the lot edge at the door column
   const gc = alongZ ? lot.w >> 1 : lot.d >> 1;
-  for (const k of [-3, 3]) { set(gc + k, 1, T - houseDepth - 1, B.CHROME); set(gc + k, 2, T - houseDepth - 1, B.CHROME); set(gc + k, 3, T - houseDepth - 1, B.CHROME); set(gc + k, 4, T - houseDepth - 1, B.CITY_LAMP); }
-  for (let k = -3; k <= 3; k++) set(gc + k, 5, T - houseDepth - 1, k === 0 ? B.HOLO_SIGN : B.DURASTEEL);
+  const tg = T - houseDepth;
+  for (const k of [-3, 3]) { set(gc + k, 1, tg, B.CHROME); set(gc + k, 2, tg, B.CHROME); set(gc + k, 3, tg, B.CHROME); set(gc + k, 4, tg, B.CITY_LAMP); }
+  for (let k = -3; k <= 3; k++) set(gc + k, 5, tg, k === 0 ? B.HOLO_SIGN : B.DURASTEEL);
   return { ...res, extra: 0, houseDoor: hdoor, inside: alongZ ? { x: gc, z: A(T - houseDepth - 3) } : { x: A(T - houseDepth - 3), z: gc } };
 }
 

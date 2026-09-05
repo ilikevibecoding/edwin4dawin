@@ -130,27 +130,56 @@ export function planFloor(bp, P) {
     return segs;
   };
 
-  // one room from a uv rect; wallAtBack = the door wall is on the +v side (front strip) else on the -v side
-  const makeRoom = (u0, u1, v0, v1, doorSideV, doorUplan, pool, kind0 = null) => {
+  // Non-rectangular tiers pass P.interior(x, z): rooms then only count / furnish cells inside the footprint and
+  // their doors are moved to a column where the door, the corridor cell and the room cell are all inside.
+  const interior = P.interior || null;
+  const inMask = (u, v) => !interior || interior(frame.X(u, v), frame.Z(u, v));
+  const doorFits = (u, wallV, corrV, roomV) => u >= clip.u0 && u + 1 <= clip.u1 && inMask(u, wallV) && inMask(u + 1, wallV) && inMask(u, corrV) && inMask(u + 1, corrV) && inMask(u, roomV) && inMask(u + 1, roomV);
+  const fitDoor = (u, u0, u1, wallV, corrV, roomV) => {
+    if (!interior) return u;
+    for (let k = 0; k <= u1 - u0; k++) {
+      if (u + k <= u1 - 1 && doorFits(u + k, wallV, corrV, roomV)) return u + k;
+      if (u - k >= u0 && doorFits(u - k, wallV, corrV, roomV)) return u - k;
+    }
+    return -1;
+  };
+  const solidRect = (u0, u1, v0, v1) => { for (let v = v0; v <= v1; v++) wallRow(v, u0, u1); };
+  // the u of the room-frame door column for plan door cells (u, u+1) on row v
+  const roomDoorU = (rc, alongX, uPlan, vPlan) => {
+    const xa = frame.X(uPlan, vPlan), za = frame.Z(uPlan, vPlan), xb = frame.X(uPlan + 1, vPlan), zb = frame.Z(uPlan + 1, vPlan);
+    return alongX ? Math.min(xa, xb) - rc.x0 : Math.min(za, zb) - rc.z0;
+  };
+
+  // one room from a uv rect; the door wall is doorSideV (either v0 - 1 or v1 + 1); backDoorUplan = an inner door
+  // on the opposite wall (deep strips) whose approach the template must keep clear
+  const makeRoom = (u0, u1, v0, v1, doorSideV, doorUplan, pool, kind0 = null, backDoorUplan = -100) => {
     if (u1 - u0 + 1 < 3 || v1 - v0 + 1 < 2) return null;
+    const doorAtBack = doorSideV > v1;
+    if (interior) {
+      let inN = 0;
+      for (let u = u0; u <= u1; u++) for (let v = v0; v <= v1; v++) if (inMask(u, v)) inN++;
+      if (inN < Math.max(6, 0.5 * (u1 - u0 + 1) * (v1 - v0 + 1))) { solidRect(u0, u1, v0, v1); return null; }
+      doorUplan = fitDoor(doorUplan, u0, u1, doorSideV, doorAtBack ? doorSideV + 1 : doorSideV - 1, doorAtBack ? v1 : v0);
+      if (doorUplan < 0) { solidRect(u0, u1, v0, v1); return null; }
+    }
     const rc = frame.rect(u0, v0, u1, v1);
-    const side = doorSideV > v1 ? frame.sideTowardBack() : frame.sideTowardFront();
+    const side = doorAtBack ? frame.sideTowardBack() : frame.sideTowardFront();
     const alongX = side === 'N' || side === 'S';
-    const dxa = frame.X(doorUplan, doorSideV), dza = frame.Z(doorUplan, doorSideV);
-    const dxb = frame.X(doorUplan + 1, doorSideV), dzb = frame.Z(doorUplan + 1, doorSideV);
-    const doorU = alongX ? Math.min(dxa, dxb) - rc.x0 : Math.min(dza, dzb) - rc.z0;
+    const doorU = roomDoorU(rc, alongX, doorUplan, doorSideV);
+    const backDoorU = backDoorUplan > -100 ? roomDoorU(rc, alongX, backDoorUplan, doorAtBack ? v0 - 1 : v1 + 1) : -100;
     const w = alongX ? rc.x1 - rc.x0 + 1 : rc.z1 - rc.z0 + 1, d = alongX ? rc.z1 - rc.z0 + 1 : rc.x1 - rc.x0 + 1;
     const tpl = kind0 ? ROOMS[kind0] : pickRoom(pool, w, d, rng, used);
     used.set(tpl.name, (used.get(tpl.name) || 0) + 1);
-    const room = new Room(bp, { ...rc, y: lvl, h: 4, side, doorU, doorW: 2 }, tpl.name, ctx);
+    const room = new Room(bp, { ...rc, y: lvl, h: 4, side, doorU, doorW: 2, backDoorU, mask: interior }, tpl.name, ctx);
     // door opening (2 wide, 2 high) with an accent lintel
     for (let k = 0; k < 2; k++) { put(doorUplan + k, lvl, doorSideV, FORCE_AIR); put(doorUplan + k, lvl + 1, doorSideV, FORCE_AIR); put(doorUplan + k, lvl + 2, doorSideV, trim); }
     tpl.fn(room, rng, ctx);
     room.finalize();
+    room.putRaw(doorU, 4, 0, B.GLOW_PANEL);   // every room keeps at least one light, over the cell inside its door
     bp.room(tpl.name, rc.x0, lvl, rc.z0, rc.x1, rc.z1);
     if (tpl.tags.includes('glass')) glazeRoom(bp, rc, lvl, style);
     rooms.push(room);
-    return room;
+    return doorUplan;
   };
 
   // rooms along a segment of a strip
@@ -176,15 +205,17 @@ export function planFloor(bp, P) {
         const depth = rv1 - rv0 + 1;
         const pool = P.pool || pools.typical;
         if (depth >= 10) {
-          // deep strip: a front room (5 deep) and a back room through an inner door
-          const frontIsNearWall = strip.wallAtBack ? false : true;
+          // deep strip: a front room (5 deep) and a back room through an inner door in the front room's back wall
+          const frontIsNearWall = !strip.wallAtBack;
           const innerV = frontIsNearWall ? rv0 + 5 : rv1 - 5;
           const fr = frontIsNearWall ? [rv0, rv0 + 4] : [rv1 - 4, rv1];
           const br = frontIsNearWall ? [rv0 + 6, rv1] : [rv0, rv1 - 6];
           wallRow(innerV, u0, u1);
-          makeRoom(u0, u1, fr[0], fr[1], strip.wallV, doorU, pool);
-          const innerDoorU = u0 + rng.int(0, Math.max(0, w - 2));
-          makeRoom(u0, u1, br[0], br[1], innerV, innerDoorU, pools.back || pool);
+          let innerDoorU = u0 + rng.int(0, Math.max(0, w - 2));
+          if (interior) innerDoorU = fitDoor(innerDoorU, u0, u1, innerV, innerV - 1, innerV + 1);
+          const made = makeRoom(u0, u1, fr[0], fr[1], strip.wallV, doorU, pool, null, innerDoorU);
+          if (made === null || innerDoorU < 0) solidRect(u0, u1, br[0], br[1]);
+          else makeRoom(u0, u1, br[0], br[1], innerV, innerDoorU, pools.back || pool);
         } else {
           makeRoom(u0, u1, rv0, rv1, strip.wallV, doorU, pool);
         }
@@ -214,7 +245,7 @@ export function planFloor(bp, P) {
   const core = layout.core;
   if (core.pocketV1 >= core.pocketV0) {
     const rc = frame.rect(core.u0, core.pocketV0, core.u1, core.pocketV1);
-    const room = new Room(bp, { ...rc, y: lvl, h: 4, side: frame.sideTowardBack(), doorU: -100, doorW: 0 }, 'lift_landing', ctx);
+    const room = new Room(bp, { ...rc, y: lvl, h: 4, side: frame.sideTowardBack(), doorU: -100, doorW: 0, mask: interior }, 'lift_landing', ctx);
     ROOMS.lift_landing.fn(room, rng, ctx);
     bp.room('lift_landing', rc.x0, lvl, rc.z0, rc.x1, rc.z1);
   }
@@ -228,7 +259,7 @@ export function planFloor(bp, P) {
     const dxa = frame.X(c - 1, -1), dza = frame.Z(c - 1, -1);
     const doorU = alongX ? Math.min(dxa, frame.X(c + 2, -1)) - rc.x0 : Math.min(dza, frame.Z(c + 2, -1)) - rc.z0;
     const h = P.mode === 'lobby' ? 9 : 4;
-    const room = new Room(bp, { ...rc, y: lvl, h, side, doorU, doorW: 4 }, 'lobby_atrium', { ...ctx, style });
+    const room = new Room(bp, { ...rc, y: lvl, h, side, doorU, doorW: 4, mask: interior }, 'lobby_atrium', { ...ctx, style });
     ROOMS.lobby_atrium.fn(room, rng, { ...ctx, style });
     room.finalize();
     bp.room('lobby_atrium', rc.x0, lvl, rc.z0, rc.x1, rc.z1);

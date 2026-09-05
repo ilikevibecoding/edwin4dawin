@@ -18,13 +18,13 @@ export const POOLS = {
   setback: {
     ground: ['shop', 'cantina', 'restaurant', 'medbay', 'security_post', 'laundry', 'arcade', 'market_stalls'],
     typical: ['studio', 'studio', 'family_apartment', 'family_apartment', 'hotel_room', 'laundry', 'restroom', 'kitchen', 'storage', 'gym', 'lounge', 'school_room'],
-    top: ['penthouse', 'penthouse', 'garden_terrace', 'observation_deck', 'greenhouse', 'gym'],
+    top: ['penthouse', 'penthouse', 'garden_terrace', 'observation_deck', 'greenhouse', 'gym', 'roof_garden'],
     back: ['storage', 'restroom', 'laundry', 'kitchen', 'studio', 'hotel_room'],
   },
   habitat: {
     ground: ['shop', 'cantina', 'medbay', 'security_post', 'restaurant', 'school_room', 'clinic_ward'],
     typical: ['studio', 'family_apartment', 'family_apartment', 'hotel_room', 'barracks', 'kitchen', 'laundry', 'restroom', 'gym', 'lounge', 'greenhouse', 'school_room', 'library'],
-    top: ['garden_terrace', 'greenhouse', 'observation_deck', 'penthouse', 'meditation_chamber'],
+    top: ['garden_terrace', 'greenhouse', 'observation_deck', 'penthouse', 'meditation_chamber', 'roof_garden'],
     back: ['storage', 'restroom', 'laundry', 'kitchen', 'studio'],
   },
   stack: {

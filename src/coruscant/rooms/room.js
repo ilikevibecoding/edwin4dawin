@@ -19,6 +19,8 @@ export class Room {
     this.w = alongX ? rect.x1 - rect.x0 + 1 : rect.z1 - rect.z0 + 1;
     this.d = alongX ? rect.z1 - rect.z0 + 1 : rect.x1 - rect.x0 + 1;
     this.doorU = rect.doorU ?? -100; this.doorW = rect.doorW ?? 2;
+    this.backDoorU = rect.backDoorU ?? -100;   // optional second door in the back wall (deep strips)
+    this.mask = rect.mask || null;             // optional footprint mask (x, z) -> bool for non-rectangular tiers
     this.cu = Math.floor((this.w - 1) / 2);   // centre column (left-centre for even widths)
     this.back = this.d - 1;                    // row against the back wall
     this.spots = 0;
@@ -37,8 +39,11 @@ export class Room {
       default: return this.rect.z0 + u;
     }
   }
-  inside(u, v) { return u >= 0 && v >= 0 && u < this.w && v < this.d; }
-  inDoorZone(u, v) { return v <= 1 && u >= this.doorU - 1 && u <= this.doorU + this.doorW; }
+  inside(u, v) { return u >= 0 && v >= 0 && u < this.w && v < this.d && (!this.mask || this.mask(this.X(u, v), this.Z(u, v))); }
+  inDoorZone(u, v) {
+    return (v <= 1 && u >= this.doorU - 1 && u <= this.doorU + this.doorW)
+      || (v >= this.d - 2 && u >= this.backDoorU - 1 && u <= this.backDoorU + this.doorW);
+  }
   free(u, v) { return this.inside(u, v) && !this.inDoorZone(u, v); }
   // Furniture write (ly = height above the walk level). The door zone is protected up to head height.
   put(u, ly, v, id) {

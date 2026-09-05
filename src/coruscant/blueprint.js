@@ -72,7 +72,10 @@ export class Blueprint {
   bed(x, y, z) { this.meta.beds.push({ x: this.wx(x), y: this.wy(y), z: this.wz(z) }); }
   door(x, y, z, side = null) { const p = { x: this.wx(x), y: this.wy(y), z: this.wz(z) }; if (side) p.side = side; this.meta.doors.push(p); }
   lift(x, z, y0, y1) { this.meta.lifts.push({ x: this.wx(x), z: this.wz(z), y0: this.wy(y0), y1: this.wy(y1) }); }
-  room(kind, x0, y, z0, x1, z1) { this.meta.rooms.push({ kind, x: this.wx(x0), y: this.wy(y), z: this.wz(z0), w: x1 - x0 + 1, d: z1 - z0 + 1 }); }
+  room(kind, x0, y, z0, x1, z1) {
+    const xa = Math.min(x0, x1), xb = Math.max(x0, x1), za = Math.min(z0, z1), zb = Math.max(z0, z1);
+    this.meta.rooms.push({ kind, x: this.wx(xa), y: this.wy(y), z: this.wz(za), w: xb - xa + 1, d: zb - za + 1 });
+  }
 
   // Export shape used by the layout builder (blocks are shared, not copied).
   export() {
