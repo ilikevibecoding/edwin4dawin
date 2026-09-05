@@ -276,18 +276,19 @@ function concourse(bp, rng) {
           else doorway(bp, rx1 + 1, rz0 + 3, rx1 + 1, rz0 + 4, y);
         }
       });
-      // diagonal lounges: open bays between the bands with benches, planters, holo pylons and windows
+      // diagonal lounges: open bays between the bands with benches, planters, holo pylons and windows; carved on
+      // the cell grid (polar sampling left a lattice of stone columns and unlit pockets)
       for (let k = 0; k < 4; k++) {
         const a = Math.PI / 4 + k * Math.PI / 2;
-        for (let t = -0.28; t <= 0.28; t += 0.035) {
-          const ang = a + t;
-          for (let r = R_ROOM0; r <= rOut - 1; r++) {
-            const x = Math.round(CX + Math.cos(ang) * r), z = Math.round(CZ + Math.sin(ang) * r);
-            if (dist(x, z) > rOut - 0.5) continue;
-            bp.set(x, y - 1, z, (r % 3 === 0) ? B.PANEL_BLACK : PLATE);
-            bp.fill(x, y, z, x, y + 3, z, AIR);
-            bp.set(x, y + 4, z, ((x + z) % 4 === 0) ? GLOW : STONE);
-          }
+        for (let x = CX - rOut; x <= CX + rOut; x++) for (let z = CZ - rOut; z <= CZ + rOut; z++) {
+          const r = dist(x, z);
+          if (r < R_ROOM0 || r > rOut - 0.5) continue;
+          let da = Math.atan2(z + 0.5 - (CZ + 0.5), x + 0.5 - (CX + 0.5)) - a;
+          da = Math.atan2(Math.sin(da), Math.cos(da));
+          if (Math.abs(da) > 0.28) continue;
+          bp.set(x, y - 1, z, (Math.floor(r) % 3 === 0) ? B.PANEL_BLACK : PLATE);
+          bp.fill(x, y, z, x, y + 3, z, AIR);
+          bp.set(x, y + 4, z, ((x + z) % 4 === 0) ? GLOW : STONE);
         }
         // furnishing along the bay
         for (let j = -2; j <= 2; j++) {
@@ -401,7 +402,9 @@ function approaches(bp, lot) {
     if (r > 9.5) continue;
     bp.set(x, 35, z, r > 8.5 ? TRIM : ((Math.round(r) % 3 === 0) ? GLOW : PLATE));
     if (r > 8.5) bp.set(x, 36, z, B.IRON_BARS);
-    if (r <= 2.5) bp.fill(x, 1, z, x, 34, z, r <= 1.5 ? DARK : TRIM);         // stalk
+    // twin stalks either side of the avenue axis so the approach to the south arch stays open
+    const rs = Math.min(Math.hypot(x - (px - 6), z - pz), Math.hypot(x - (px + 6), z - pz));
+    if (rs <= 1.8) bp.fill(x, 1, z, x, 34, z, rs <= 0.8 ? DARK : TRIM);
     if (r > 8.5 && Math.round(r * 4) % 5 === 0) { bp.set(x, 37, z, B.IRON_BARS); bp.set(x, 38, z, B.CITY_LAMP); }
     if (r <= 7.5 && r > 6.5) bp.set(x, 40, z, TRIM);                          // canopy ring
     if (r <= 6.5) bp.set(x, 41, z, r <= 1.5 ? GLOW : GLASS);

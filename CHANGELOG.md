@@ -107,9 +107,16 @@ the integration branch and in the committed `dist/` build; landmark builders sti
     with a second headless Chrome running alongside): 141 draw calls (was 144), 928k tris (was 1.08M, the capped
     neighbours), JS 2.7 ms, 467 MB heap (was 506), 0 exceptions; impostor boxes inside the streamed radius are culled
     in the vertex shader so the 4.7k landmark boxes cost no fill.
-  - Not addressed this round: room rectangles that overhang rakes/facades (Republica apartments, Opera tiers; metadata
-    only, no NPCs spawn yet), the Chancellery disc pavilion's stalk, Works yards and Market arcade filler, and 500
-    Republica's slender massing (its lot is 2 x 2 blocks).
+  - Re-check by the same critic: 0 REJECT, 12 ACCEPT WITH NITS (all five rejects moved up); 72/72 doors pass, Temple
+    hangar 0% below light 6, bacta hall 0%, the floorless Senate rooms gone. Its remaining top items were fixed in a
+    second pass: the Senate pavilion now stands on twin stalks either side of the avenue (the single stalk sat on the
+    arch axis), the diagonal lounges are carved on the cell grid (polar sampling had left stone lattices and 109
+    unlit pockets on the y66 ring; now 0 cells below light 3), landmark impostors carry a per-landmark tint (the
+    Senate no longer changes colour when its chunks stream in) and low landmarks (plaza, market, undercity deck) no
+    longer produce rubble-stub impostors, and the neighbour cap gives low landmarks a mid-rise ring of 60 instead of
+    flattening thirty lots to 20-25 blocks. Every room carries a `floor` box (cells with a real floor and headroom).
+  - Not addressed: the Chancellery disc pavilion's stalk-and-halo look and 500 Republica's slender massing (its lot is
+    2 x 2 blocks); the Opera tier rooms' rectangles still span the rake (the floor box marks the real cells).
 - Known gaps: NPCs for Coruscant are planned (`docs/STARWARS_PLAN.md`, population plan) but not spawned;
   clouds cast no shadows; the Coruscant daytime haze is deliberately bright (city smog) and steel-glass roofs still
   read bright at noon; the "leave the planet by spaceship" journey is the next big project.

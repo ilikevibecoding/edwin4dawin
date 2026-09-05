@@ -13,16 +13,18 @@ const INSET = 0.35;
 const VERT = /* glsl */ `
 attribute float aSeed;
 attribute vec2 aCenter;
+attribute vec3 aTint;
 uniform vec3 uCamPos; uniform float uChunkFar;
 varying vec3 vWorld;
 varying float vSeed;
 varying float vDist;
+varying vec3 vTint;
 void main() {
   // boxes inside the streamed radius are hidden by their real building: push them out of clip space so they cost no
   // fill (the fragment fade alone would still shade every covered pixel)
-  if (distance(aCenter, uCamPos.xz) < uChunkFar * 0.8) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vWorld = vec3(0.0); vSeed = 0.0; vDist = 0.0; return; }
+  if (distance(aCenter, uCamPos.xz) < uChunkFar * 0.8) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vWorld = vec3(0.0); vSeed = 0.0; vDist = 0.0; vTint = vec3(0.0); return; }
   vec4 wp = modelMatrix * vec4(position, 1.0);
-  vWorld = wp.xyz; vSeed = aSeed;
+  vWorld = wp.xyz; vSeed = aSeed; vTint = aTint;
   vec4 mv = viewMatrix * wp;
   vDist = length(mv.xyz);
   gl_Position = projectionMatrix * mv;
@@ -30,7 +32,7 @@ void main() {
 const FRAG = /* glsl */ `
 uniform vec3 uFogColor; uniform float uSkyLight; uniform float uNear; uniform float uFar; uniform float uChunkFar;
 uniform vec3 uCamPos; uniform float uGroundY;
-varying vec3 vWorld; varying float vSeed; varying float vDist;
+varying vec3 vWorld; varying float vSeed; varying float vDist; varying vec3 vTint;
 float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
 void main() {
   // face orientation from derivatives: tops are lighter, sides darker; a window lattice every 3 x 5 blocks
@@ -41,7 +43,7 @@ void main() {
   // as a distinct building from across the city
   float lm = step(1.5, vSeed);
   vec3 base = mix(vec3(0.16, 0.17, 0.20), vec3(0.30, 0.31, 0.34), roof) * (0.7 + 0.6 * uSkyLight);
-  base = mix(base, mix(vec3(0.42, 0.40, 0.36), vec3(0.55, 0.53, 0.48), roof) * (0.25 + 0.9 * uSkyLight), lm);
+  base = mix(base, vTint * (roof > 0.5 ? 1.1 : 0.8) * (0.2 + 0.7 * uSkyLight), lm);
   float u = abs(N.x) > 0.5 ? vWorld.z : vWorld.x;
   float fu = fract(u / 3.0), fy = fract(vWorld.y / 5.0);
   float win = (1.0 - top) * (1.0 - lm) * step(0.34, fu) * step(fu, 0.66) * step(0.25, fy) * step(fy, 0.65);
@@ -64,10 +66,18 @@ void main() {
 // blueprint - column tops sampled on a 3-block grid and merged into row runs - so a dome, a stepped tower or a spire
 // keeps its outline from across the city.
 const LM_CELL = 3;
+// approximate exterior colour per landmark, so the impostor matches the real building when its chunks stream in
+const LM_TINT = {
+  senate: [0.50, 0.52, 0.53], temple: [0.72, 0.66, 0.55], republica: [0.78, 0.75, 0.68], chancellery: [0.62, 0.59, 0.52],
+  medcenter: [0.85, 0.86, 0.86], holonet: [0.36, 0.38, 0.44], detention: [0.13, 0.13, 0.14], opera: [0.55, 0.57, 0.60],
+  works: [0.30, 0.30, 0.32], market: [0.50, 0.50, 0.50], plaza_monument: [0.45, 0.45, 0.44], underworld: [0.25, 0.25, 0.27],
+};
+const LM_MIN_HEIGHT = 40;   // low landmarks (plaza, market halls, the undercity deck) read as rubble stubs from afar; skip them
 export function landmarkBoxes(layout) {
   const out = [];
   for (const lot of layout.lots) {
-    if (lot.kind !== 'landmark') continue;
+    if (lot.kind !== 'landmark' || (lot.height || 0) < LM_MIN_HEIGHT) continue;
+    const tint = LM_TINT[lot.family] || [0.55, 0.53, 0.48];
     let bp = null;
     try { bp = blueprintFor(lot, layout); } catch (e) { console.warn('skyline: landmark blueprint failed', lot.family, e); }
     if (!bp || !bp.blocks) continue;
@@ -88,7 +98,7 @@ export function landmarkBoxes(layout) {
         if (t < 2) { cz++; continue; }
         let cz1 = cz;
         while (cz1 + 1 < rows && Math.abs(top[cx * rows + cz1 + 1] - t) <= 1) cz1++;
-        out.push({ x0: lot.x0 + cx * LM_CELL, x1: lot.x0 + Math.min(w, (cx + 1) * LM_CELL), z0: lot.z0 + cz * LM_CELL, z1: lot.z0 + Math.min(d, (cz1 + 1) * LM_CELL), y1: bp.y0 + t + 1, id: lot.id, landmark: true });
+        out.push({ x0: lot.x0 + cx * LM_CELL, x1: lot.x0 + Math.min(w, (cx + 1) * LM_CELL), z0: lot.z0 + cz * LM_CELL, z1: lot.z0 + Math.min(d, (cz1 + 1) * LM_CELL), y1: bp.y0 + t + 1, id: lot.id, landmark: true, tint });
         cz = cz1 + 1;
       }
     }
@@ -102,8 +112,8 @@ export function buildSkyline(layout) {
   const boxes = lots.map((l) => ({ x0: l.x0 + INSET, x1: l.x1 - INSET, z0: l.z0 + INSET, z1: l.z1 - INSET, y1: g0 + l.height - 0.5, id: l.id }));
   for (const b of landmarkBoxes(layout)) boxes.push(b);
   const n = boxes.length;
-  const pos = new Float32Array(n * 24 * 3), seed = new Float32Array(n * 24), ctr = new Float32Array(n * 24 * 2), idx = new Uint32Array(n * 36);
-  let pi = 0, si = 0, ci = 0, ii = 0, vbase = 0;
+  const pos = new Float32Array(n * 24 * 3), seed = new Float32Array(n * 24), ctr = new Float32Array(n * 24 * 2), tnt = new Float32Array(n * 24 * 3), idx = new Uint32Array(n * 36);
+  let pi = 0, si = 0, ci = 0, ti = 0, ii = 0, vbase = 0;
   for (const l of boxes) {
     const x0 = l.x0, x1 = l.x1, z0 = l.z0, z1 = l.z1, y0 = g0, y1 = l.y1;
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
@@ -111,7 +121,7 @@ export function buildSkyline(layout) {
     // 6 faces x 4 verts (separate verts so derivatives give flat normals)
     const faces = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]];
     for (const f of faces) {
-      for (const k of f) { pos[pi++] = c[k][0]; pos[pi++] = c[k][1]; pos[pi++] = c[k][2]; seed[si++] = (l.id % 97) / 97 + (l.landmark ? 2 : 0); ctr[ci++] = cx; ctr[ci++] = cz; }
+      for (const k of f) { pos[pi++] = c[k][0]; pos[pi++] = c[k][1]; pos[pi++] = c[k][2]; seed[si++] = (l.id % 97) / 97 + (l.landmark ? 2 : 0); ctr[ci++] = cx; ctr[ci++] = cz; const t = l.tint || [0, 0, 0]; tnt[ti++] = t[0]; tnt[ti++] = t[1]; tnt[ti++] = t[2]; }
       idx[ii++] = vbase; idx[ii++] = vbase + 1; idx[ii++] = vbase + 2; idx[ii++] = vbase; idx[ii++] = vbase + 2; idx[ii++] = vbase + 3;
       vbase += 4;
     }
@@ -127,11 +137,13 @@ export function buildSkyline(layout) {
   const allSeed = new Float32Array(seed.length + 4); allSeed.set(seed); allSeed.set(gseed, seed.length);
   // the ground sheet is never culled: its centre is parked far away from any camera
   const allCtr = new Float32Array(ctr.length + 8); allCtr.set(ctr); for (let i = 0; i < 4; i++) { allCtr[ctr.length + i * 2] = 1e6; allCtr[ctr.length + i * 2 + 1] = 1e6; }
+  const allTnt = new Float32Array(tnt.length + 12); allTnt.set(tnt);
   const allIdx = new Uint32Array(idx.length + 6); allIdx.set(idx); for (let i = 0; i < 6; i++) allIdx[idx.length + i] = gidx[i] + vbase;
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(allPos, 3));
   geo.setAttribute('aSeed', new THREE.BufferAttribute(allSeed, 1));
   geo.setAttribute('aCenter', new THREE.BufferAttribute(allCtr, 2));
+  geo.setAttribute('aTint', new THREE.BufferAttribute(allTnt, 3));
   geo.setIndex(new THREE.BufferAttribute(allIdx, 1));
   geo.computeBoundingSphere();
   const mat = new THREE.ShaderMaterial({

@@ -83,5 +83,9 @@ image, Uscru neon canyon and Outlander Club. Re-measured: Temple hangar 0% below
 with a real floor and headroom), so overhanging rectangles (Republica apartments, Opera tiers) are no longer a
 planning hazard.
 
+Re-check (`critic2_coruscant_report.md`): 0 REJECT, 12 ACCEPT WITH NITS; its top items (Senate stalk on the arch axis,
+unlit lounge pockets, one-tint impostors, low-landmark stubs, the cap flattening the Plaza's neighbours) were fixed in a
+second pass.
+
 Open nits: Chancellery
 disc pavilion stalk and blue-cube halo, Works yards and Market arcade filler, Republica's slender massing.
