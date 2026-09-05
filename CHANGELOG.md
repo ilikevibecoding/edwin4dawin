@@ -4,6 +4,15 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 `BUILD_ID.txt` next to the deployed `index.html`.
 
 ## Unreleased
+- Performance loop 2 (deployed as 6b3d3214497a-20260905T063622Z): wake ribbons in one instanced draw
+  (52 -> 1 calls), roads in frustum-culled 3 km index chunks, one instanced camera batch per unit shape /
+  building kind / prop kind fed per cell (plus a mirror batch against the reflected frustum), near crowns
+  per 150 m cell, prop shadow proxies per cascade, terrain rings as 4x4 culled sectors, reflection mip
+  chain blitted instead of drawn, permanent per-pass counters (`passes` in bench metrics). All 13 views
+  now <= 289 draw calls and <= 1.42 M triangles (cockpit-city 516 -> 242 calls, 2.96 -> 1.39 M; cloudy
+  553 -> 289, 1.72 -> 1.42 M); stills pixel-identical except <= 1 LSB in reflection pixels and two
+  depth-tie pixels in skyline-high; flight harness all pass; heap 237 -> 283 MB.
+- Vegetation tints pulled toward luminance (aerial-a canopy dE vs reference 28.3 -> 13.1).
 
 ## iter08 — wave 4 builders and lead fixes (deployed as 45d3ba89fc54-20260905T040053Z)
 - Aircraft loop 3: welded airfoil tail (t/c 0.09 -> 0.12, open trailing edge, hinge lines, swept dorsal
@@ -124,5 +133,6 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 | 03aacefc4377-20260904T101257Z | 7557979bb140b196590ad9bb5f77ca49ef23e291 | https://raw.githack.com/ilikevibecoding/edwin4dawin/gh-pages/play.html | verified: build id matched, loaded in 9 s, flew |
 | 32aab3d85421-20260904T180514Z | c3a351f8276056fc04dd89dc766a8c5550d032a6 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/c3a351f8276056fc04dd89dc766a8c5550d032a6/play.html | verified: build id matched, loaded in 12.4 s, water takeoff to 67 m in 30 s (deterministic, identical to local), no console errors; 177 draw calls / 0.79 M tris in the water-landing view |
 | a73e7fb62028-20260904T202825Z | e05ebaf37fcf09e9154c1746c85c7d9f6ea2f30c | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/e05ebaf37fcf09e9154c1746c85c7d9f6ea2f30c/play.html | verified: build id matched, loaded in 15.3 s, water takeoff to 81 m in 30 s (new flight model), no console errors; 174 draw calls / 0.79 M tris in the water-landing view |
+| 6b3d3214497a-20260905T063622Z | d4e414a3391693e4779def304942f3d29904666d | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/d4e414a3391693e4779def304942f3d29904666d/play.html | verified: build id matched, loaded in 17.8 s, water takeoff to 86 m in 30 s, no console errors; 144 draw calls / 0.18 M tris in the water-landing view. Performance loop 2 + vegetation tint |
 | 45d3ba89fc54-20260905T040053Z | a94d74e3d96a3d8d54f274bf1dc6b9c42865909f | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a94d74e3d96a3d8d54f274bf1dc6b9c42865909f/play.html | verified: build id matched, loaded in 16.9 s, water takeoff to 86 m in 30 s, no console errors; 171 draw calls / 0.59 M tris in the water-landing view. Wave 4 (aircraft 3, shadows, clouds 3) + planar reflections + wake foam fix. A first deploy of this round (1b11b7f0e45c) was replaced after the verifier caught a NaN propeller tip ring |
 | 4642d4630c87-20260904T235001Z | a3c7ba5670942411bf607043d4a14a60dbb8ef81 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a3c7ba5670942411bf607043d4a14a60dbb8ef81/play.html | verified: build id matched, loaded in 15.5 s, water takeoff to 86 m in 30 s, no console errors; 164 draw calls / 0.49 M tris in the water-landing view. Includes bridges/skyline loop 2, cockpit with live instruments, vegetation loop 2, IBL-hitch and shader warm-up fixes, night exposure, play-feel changes |
