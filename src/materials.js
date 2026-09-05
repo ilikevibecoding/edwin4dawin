@@ -280,8 +280,10 @@ function addImperialMaterials(mats, std) {
   mats.impPanel = std(panelTex, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.7 });
   mats.impPanel1 = std(panelTex2, { normalScale: new THREE.Vector2(0.8, 0.8), envMapIntensity: 0.7 });
   // emitters
+  // emitters are purely emissive: black albedo and full roughness so a fixture's own point light
+  // hung within a metre of its face cannot add a specular lobe that clips the face white
   const emit = (hex, intensity, extra = {}) =>
-    new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: new THREE.Color(hex), emissiveIntensity: intensity, roughness: 0.5, metalness: 0, ...extra });
+    new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(hex), emissiveIntensity: intensity, roughness: 1, metalness: 0, ...extra });
   mats.emitWhite = emit("#f2f6ff", 2.6);
   mats.emitWhiteDim = emit("#dfe6f2", 1.15);
   mats.emitWhiteFaint = emit("#cfd8e6", 0.55); // lit fixture housings: reads as glowing, never clips
