@@ -270,8 +270,9 @@ void main() {
     float forward = smoothstep(0.3, 0.95, cosSun);
     // low sun: the whole lower sky glows warm, so the bounce light on the undersides turns warm too
     float lowSun = (1.0 - smoothstep(0.04, 0.3, L.y)) * (1.0 - nightMix);
-    // sky light on the tops: hemisphere average of the dome (deep blue) whitened by aerosol scatter
-    vec3 skyAmb = mix(uZenithColor, uHazeColor, 0.5) * 0.95;
+    // sky light on the tops: hemisphere average of the dome (deep blue) whitened by aerosol scatter; at a low
+    // sun the dome is dim apart from the glow around the sun, so the shaded bodies drop below the lit rims
+    vec3 skyAmb = mix(uZenithColor, uHazeColor, 0.5) * (0.95 - 0.25 * lowSun);
     // bounce light on the bases: the sunlit sea and land (warm and dim at sunset, when the glowing
     // horizon haze takes over); at night the city's light pollution lights the undersides over the lit
     // area (added per sample below: it falls off with the distance from the city)

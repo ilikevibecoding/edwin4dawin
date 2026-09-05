@@ -184,10 +184,11 @@ vec3 sunDisc(vec3 dir) {
  *  glare (it clips to white either way). */
 vec3 sunComposite(vec3 sky, vec3 dir) {
   float cosSun = dot(dir, uSunDir);
-  float hi = smoothstep(0.03, 0.35, uSunDir.y);
+  // the additive glare only takes over well above the horizon: even a tenth of it lifted the low limb to cream
+  float hi = smoothstep(0.12, 0.4, uSunDir.y);
   float vis = smoothstep(-0.05, 0.02, uSunDir.y);
   float disc = smoothstep(0.99985, 0.99995, cosSun);
-  vec3 limb = uSunColor * SUN_LIMB_TINT * 9.0 + sky * 0.3;
+  vec3 limb = uSunColor * vec3(1.0, 0.13, 0.08) * 9.0 + sky * 0.45;
   sky = mix(sky, limb, disc * (1.0 - hi) * vis);
   float glow = pow(max(cosSun, 0.0), 1400.0) * 0.6 + pow(max(cosSun, 0.0), 160.0) * 0.08;
   return sky + uSunColor * (disc * 40.0 * hi + glow) * vis;
