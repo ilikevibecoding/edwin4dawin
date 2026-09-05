@@ -167,6 +167,9 @@ const ICONS = {
 };
 
 // Builds an <svg> for the named icon. Horizontal runs of one colour are merged into a single <rect>.
+// `size` is the rendered width; pass an integer multiple of the icon's pixel width (16 for the disaster icons,
+// 8 / 9 for the small glyphs) so every art pixel maps to a whole number of screen pixels and edges stay crisp.
+// The height follows the icon's aspect ratio (the lock is 16 x 12), so non-square icons scale by the same factor.
 export function pixelIcon(name, size = 16) {
   const icon = ICONS[name] || ICONS.hazard;
   const rows = icon.rows;
@@ -174,7 +177,7 @@ export function pixelIcon(name, size = 16) {
   const svg = document.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('viewBox', `0 0 ${w} ${hgt}`);
   svg.setAttribute('width', String(size));
-  svg.setAttribute('height', String(size));
+  svg.setAttribute('height', String(Math.round((size * hgt) / w)));
   svg.setAttribute('shape-rendering', 'crispEdges');
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('focusable', 'false');
@@ -200,4 +203,5 @@ export function pixelIcon(name, size = 16) {
 }
 
 export function hasDisasterIcon(type) { return type === 'tsunami' || type === 'tornado' || type === 'beam'; }
-export function disasterIcon(type, size = 40) { return pixelIcon(hasDisasterIcon(type) ? type : 'hazard', size); }
+// Disaster icons are 16 x 16: render them at 32 or 48 px (the panel CSS drops to 32 px on short viewports).
+export function disasterIcon(type, size = 48) { return pixelIcon(hasDisasterIcon(type) ? type : 'hazard', size); }
