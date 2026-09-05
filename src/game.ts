@@ -68,6 +68,9 @@ export class Game {
   aircraft!: Aircraft;
   /** airframe meshes that cast shadows, routed to the cascades their shadow can reach each frame */
   private readonly airframeCasters: THREE.Object3D[] = [];
+  /** cabin furniture that casts: its shadows fall inside the cabin, which only the nearest cascade (the one
+   *  fit around the aircraft) resolves; the ground cascades see the closed skin */
+  private readonly cabinCasters: THREE.Object3D[] = [];
   flightCamera!: FlightCamera;
   readonly cull = new ViewCull();
   /** draw calls / triangles of the last shadow pass per cascade (diagnostics) */
@@ -242,7 +245,8 @@ export class Game {
     await this.tick(progress, 'Pre-flighting the aircraft', 0.92);
     this.aircraft = new Aircraft((x, z) => this.map.heightAt(x, z), this.scene, this.wakes.batch);
     this.registerTree(this.aircraft.model.root);
-    this.aircraft.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.castShadow) this.airframeCasters.push(o); });
+    const interior = new Set<THREE.Object3D>(this.aircraft.model.interiorMeshes);
+    this.aircraft.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.castShadow) (interior.has(o) ? this.cabinCasters : this.airframeCasters).push(o); });
     // surface decals, point sprites and trails are not mirrored (the sprites are sized for the main frame),
     // nor is the cabin interior (only visible through the glass)
     const fx = this.aircraft.effects;
@@ -362,6 +366,9 @@ export class Game {
     this.cascades.fit(planePos.y + 5);
     // view / shadow-caster culling shared by the chunked world systems
     this.cull.update(cam, this.csm.maxFar, this.atmos.state.sunDir);
+    // the fitted shadow cameras: casters outside one are culled by the shadow pass, so cells / tiles outside it
+    // need not be submitted to that cascade's batches
+    this.cull.setCascadeLights(this.csm.lights);
     this.terrain.update(cx, cz, this.cull);
     // casters reach as far as the cascades do; the canopy stops at half the range (a crown's shadow is a
     // couple of texels there and every tile is a draw call per cascade)
@@ -374,8 +381,11 @@ export class Game {
     // the airframe casts only into the cascades its shadow can reach: swept down to the ground under it, so
     // from altitude that is the cascade holding its ground shadow, not all three
     const airHeight = planePos.y - Math.max(0, this.map.heightAt(planePos.x, planePos.z)) + 5;
-    const airMask = layerMask('all', true, this.cull.casterCascades(planePos, 9, airHeight));
+    const airBits = this.cull.casterCascades(planePos, 9, airHeight);
+    const airMask = layerMask('all', true, airBits);
     for (const o of this.airframeCasters) o.layers.mask = airMask;
+    const cabinMask = layerMask('all', true, airBits & 1);
+    for (const o of this.cabinCasters) o.layers.mask = cabinMask;
     this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size);
     const info = this.renderer.info.render;
     const ps = this.passStats;

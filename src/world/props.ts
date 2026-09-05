@@ -22,19 +22,24 @@ interface ChunkMesh extends BatchSource {
   batches: [PropBatches, PropBatches | null];
   /** PROP_CELL-metre cells over the large prefix and over all instances (built on first use): the batches
    *  draw only the cells in the camera's / mirror camera's frustum */
-  cellsLarge: CellSource[] | null; cellsAll: CellSource[] | null;
+  cellsLarge: PropCell[] | null; cellsAll: PropCell[] | null;
   /** batches the mesh is currently in, and the cells it is in them with */
   inCamera: InstanceBatch | null; cameraCells: CellSource[] | null; inMirror: InstanceBatch | null; mirrorCells: CellSource[] | null;
+  /** per cascade: the shadow batch the mesh's cells are in and those cells (see `placeShadow`) */
+  inShadow: (InstanceBatch<PropCell> | null)[]; shadowCells: (PropCell[] | null)[];
 }
-/** the camera and mirror batches of one unit shape */
-interface PropBatches { camera: InstanceBatch; mirror: InstanceBatch }
+/** A cell with its caster-routing result cached for the frame it was computed in. */
+interface PropCell extends CellSource { castBits: number; castFrame: number }
+/** the camera and mirror batches of one unit shape, plus its shadow batch per cascade (the cells of every
+ *  casting chunk mesh that can shade that cascade's slice, in one draw) */
+interface PropBatches { camera: InstanceBatch; mirror: InstanceBatch; shadow: InstanceBatch<PropCell>[] }
 const PROP_CELL = 250;
 
 /** Spatial chunk of props: boxes, large cylinders, small cylinders and lamps, one instanced mesh each. */
-interface PropChunk { meshes: ChunkMesh[]; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; /** cascade-index bitmask this frame */ bits: number; /** the chunk's shadow-proxy instances (boxes / cylinders at least PROXY_SIZE thick) */ proxies: [ProxySource | null, ProxySource | null] }
+interface PropChunk { meshes: ChunkMesh[]; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; /** cascade-index bitmask this frame */ bits: number; /** the chunk's shadow-proxy instances (boxes / cylinders at least PROXY_SIZE thick) */ proxies: [ProxySource | null, ProxySource | null]; /** the same split into PROP_CELL cells (built on first use) */ proxyCells: [PropCell[] | null, PropCell[] | null] }
 interface ProxySource extends BatchSource { count: number }
 /** shadow proxies of one coarse cascade: one instanced batch of boxes and one of cylinders */
-interface ProxyBatches { shapes: [InstanceBatch<ProxySource>, InstanceBatch<ProxySource>]; active: boolean }
+interface ProxyBatches { shapes: [InstanceBatch<PropCell>, InstanceBatch<PropCell>]; active: boolean }
 
 const CHUNK = 2500;
 /** objects thinner than this (pilings, poles, railings) cast into the nearest cascade only: their
@@ -199,7 +204,17 @@ export class Props {
       mirror.mesh.layers.set(LAYER_MIRROR); mirror.mesh.name = `props-${name}-mirror`;
       this.cameraMeshes.add(camera.mesh); this.mirrorMeshes.add(mirror.mesh);
       this.group.add(camera.mesh, mirror.mesh);
-      return { camera, mirror };
+      // shadow batches, one per cascade (the depth pass reads matrices only: no colours or parameters)
+      const shadow: InstanceBatch<PropCell>[] = [];
+      for (let i = 0; i < MAX_CASCADES; i++) {
+        const b = new InstanceBatch<PropCell>(capacity, unit, this.material, [], false);
+        b.mesh.castShadow = true; b.mesh.receiveShadow = false;
+        b.mesh.layers.set(LAYER_CASCADE0 + i);
+        b.mesh.name = `props-${name}-shadow-${i}`;
+        this.group.add(b.mesh);
+        shadow.push(b);
+      }
+      return { camera, mirror, shadow };
     };
     const boxBatches = batchesOf(unitBox, nBoxes, PARAMS, 'boxes');
     const cylHiBatches = batchesOf(cylHi, nCyls, PARAMS, 'cylinders');
@@ -223,7 +238,7 @@ export class Props {
     this.counts.boxes = this.boxes.length; this.counts.cylinders = this.cyls.length; this.counts.lamps = this.lamps.length;
     const sphere = new THREE.Sphere(), corner = new THREE.Vector3(), white = new THREE.Color(0xffffff);
     for (const b of buckets.values()) {
-      const chunk: PropChunk = { meshes: [], box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, height: 0, bits: 0, proxies: [proxySource(b.boxes), proxySource([...b.cylLarge, ...b.cylSmall])] };
+      const chunk: PropChunk = { meshes: [], box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, height: 0, bits: 0, proxies: [proxySource(b.boxes), proxySource([...b.cylLarge, ...b.cylSmall])], proxyCells: [null, null] };
       // large instances first, so the first `large` instances are exactly the objects thicker than SMALL
       b.boxes.sort((u, v) => Number(isLarge(v)) - Number(isLarge(u)));
       /** `perVertex`: the unit carries colour / parameters per vertex (lamp) instead of per instance */
@@ -252,7 +267,7 @@ export class Props {
           loGeo = lo.clone();
           if (params) loGeo.setAttribute('aMatParams', params);
         }
-        const entry: ChunkMesh = { mesh, large, total: list.length, mainCount: list.length, hi: geo, lo: loGeo, batches, cellsLarge: null, cellsAll: null, inCamera: null, cameraCells: null, inMirror: null, mirrorCells: null, matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: params ? [params.array as Float32Array] : [] };
+        const entry: ChunkMesh = { mesh, large, total: list.length, mainCount: list.length, hi: geo, lo: loGeo, batches, cellsLarge: null, cellsAll: null, inCamera: null, cameraCells: null, inMirror: null, mirrorCells: null, inShadow: new Array(MAX_CASCADES).fill(null), shadowCells: new Array(MAX_CASCADES).fill(null), matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: params ? [params.array as Float32Array] : [] };
         // the coarse cascades only see the large prefix; the fine ones (and any non-CSM light) see all
         mesh.onBeforeShadow = () => { mesh.count = activeShadowPassIsFine() ? entry.total : entry.large; };
         mesh.onAfterShadow = () => { mesh.count = entry.mainCount; };
@@ -274,9 +289,9 @@ export class Props {
     // cover most of it)
     const nBoxProxies = this.boxes.filter((p) => p.size >= PROXY_SIZE).length, nCylProxies = this.cyls.filter((p) => p.size >= PROXY_SIZE).length;
     for (let i = 0; i < MAX_CASCADES; i++) {
-      const shapes: [InstanceBatch<ProxySource>, InstanceBatch<ProxySource>] = [
-        new InstanceBatch<ProxySource>(Math.max(1, nBoxProxies), unitBox, this.material, [], false),
-        new InstanceBatch<ProxySource>(Math.max(1, nCylProxies), cylLo, this.material, [], false),
+      const shapes: [InstanceBatch<PropCell>, InstanceBatch<PropCell>] = [
+        new InstanceBatch<PropCell>(Math.max(1, nBoxProxies), unitBox, this.material, [], false),
+        new InstanceBatch<PropCell>(Math.max(1, nCylProxies), cylLo, this.material, [], false),
       ];
       shapes[0].mesh.name = `shadow-proxy-boxes-${i}`; shapes[1].mesh.name = `shadow-proxy-cylinders-${i}`;
       for (const b of shapes) {
@@ -287,23 +302,63 @@ export class Props {
       this.proxyBatches.push({ shapes, active: false });
     }
     this.boxes.length = 0; this.cyls.length = 0; this.lamps.length = 0;
+    this.proxyUnits = [unitBox.boundingSphere!, cylLo.boundingSphere!];
   }
 
+  /** unit bounding spheres of the proxy shapes (boxes, cylinders) */
+  private proxyUnits: [THREE.Sphere, THREE.Sphere] = [new THREE.Sphere(), new THREE.Sphere()];
+
   /** The cells of the first `n` instances of `e` (its large prefix or all of it), built on first use. */
-  private cellsOf(e: ChunkMesh, n: number): CellSource[] {
+  private cellsOf(e: ChunkMesh, n: number): PropCell[] {
     if (n === e.total) return e.cellsAll ??= this.splitMesh(e, n);
     return e.cellsLarge ??= this.splitMesh(e, n);
   }
 
-  private splitMesh(e: ChunkMesh, n: number): CellSource[] {
-    const unit = e.hi.boundingSphere!, sphere = new THREE.Sphere(), corner = new THREE.Vector3();
-    return splitCells(e, n, PROP_CELL, (i, box) => {
-      this.m.fromArray(e.matrices, i * 16);
+  private splitMesh(e: ChunkMesh, n: number): PropCell[] {
+    return this.splitSource(e, n, e.hi.boundingSphere!);
+  }
+
+  /** `src` regrouped into PROP_CELL cells, each bounded by its instances' transformed unit spheres. */
+  private splitSource(src: BatchSource, n: number, unit: THREE.Sphere): PropCell[] {
+    const sphere = new THREE.Sphere(), corner = new THREE.Vector3();
+    const cells = splitCells(src, n, PROP_CELL, (i, box) => {
+      this.m.fromArray(src.matrices, i * 16);
       sphere.copy(unit).applyMatrix4(this.m);
       box.expandByPoint(corner.copy(sphere.center).addScalar(-sphere.radius));
       box.expandByPoint(corner.copy(sphere.center).addScalar(sphere.radius));
-    });
+    }) as PropCell[];
+    for (const c of cells) { c.castBits = 0; c.castFrame = -1; }
+    return cells;
   }
+
+  /** Cascades a cell's casters can shade this frame (its box swept along the sun and the shadow cameras' own
+   *  frustums), computed once per cell and frame. */
+  private cellCast(c: PropCell, cull: ViewCull): number {
+    if (c.castFrame !== this.frame) {
+      c.castFrame = this.frame;
+      c.castBits = cull.boxCasterCascades(c.box, c.box.max.y - c.box.min.y);
+    }
+    return c.castBits;
+  }
+
+  /** Put the cells of `e` that can shade cascade `i` into that cascade's shadow batch (`cells` null removes it).
+   *  False when the batch is full (the mesh then casts into the cascade on its own). */
+  private placeShadow(e: ChunkMesh, i: number, cells: PropCell[] | null, batch: InstanceBatch<PropCell>, cull: ViewCull): boolean {
+    const prev = e.inShadow[i], prevCells = e.shadowCells[i];
+    if (prev && (prev !== batch || prevCells !== cells)) {
+      for (const c of prevCells!) prev.set(c, 0);
+      e.inShadow[i] = null; e.shadowCells[i] = null;
+    }
+    if (cells === null) return true;
+    const bit = 1 << i;
+    let ok = true;
+    for (const c of cells) if (!batch.set(c, this.cellCast(c, cull) & bit ? c.count : 0)) ok = false;
+    if (!ok) { for (const c of cells) batch.set(c, 0); e.inShadow[i] = null; e.shadowCells[i] = null; return false; }
+    e.inShadow[i] = batch; e.shadowCells[i] = cells;
+    return true;
+  }
+
+  private frame = 0;
 
   /** Put the cells of `e` that pass `inView` into `batch` (moving it out of the batch and cells it was in);
    *  `cells` null removes it. False when it does not fit. */
@@ -331,6 +386,7 @@ export class Props {
    *  the view; meshes that only cast leave the camera layer. Beyond SMALL_DISTANCE the main pass draws
    *  the large prefix only; thin cylinders and lamps swap to the coarse prism beyond LOD_DISTANCE. */
   updateLod(camX: number, camZ: number, cull: ViewCull, camPos: THREE.Vector3, mirrorRange: number): void {
+    this.frame++;
     // coarse cascades that would draw more chunk meshes than the proxies cost take the proxies instead
     const perCascade = _perCascade;
     perCascade.fill(0);
@@ -360,7 +416,16 @@ export class Props {
         const pb = e.batches[lo ? 1 : 0] ?? e.batches[0];
         const cells = drawn ? this.cellsOf(e, n) : null;
         const batched = this.place(e, cells, pb.camera, 'inCamera', inViewBox);
-        let mask = layerMask(e.large > 0 ? 'all' : 'near', drawn && !batched, bits);
+        // shadows: the cascades the chunk can shade take the mesh's cells that can shade them from the shape's
+        // shadow batches (the fine cascades every instance, the coarse ones the large prefix, as the mesh itself
+        // would draw them); the mesh casts on its own only into a cascade whose batch is full
+        let own = 0;
+        for (let i = 0; i < MAX_CASCADES; i++) {
+          let cast: PropCell[] | null = null;
+          if (bits & (1 << i)) { const nc = cascadeIsFine(i) ? e.total : e.large; if (nc > 0) cast = this.cellsOf(e, nc); }
+          if (!this.placeShadow(e, i, cast, pb.shadow[i], cull)) own |= 1 << i;
+        }
+        let mask = layerMask(e.large > 0 ? 'all' : 'near', drawn && !batched, own);
         const cast = maskCasts(mask);
         // the water mirrors the chunk meshes within the reflection range (distance to the mesh's bounding sphere)
         const sphere = e.mesh.boundingSphere!;
@@ -371,15 +436,22 @@ export class Props {
         e.mesh.layers.mask = mask;
       }
     }
-    for (const b of this.allBatches) { b.camera.commit(); b.mirror.commit(); }
-    // each proxy cascade draws the proxies of the chunks that can cast into it
+    for (const b of this.allBatches) { b.camera.commit(); b.mirror.commit(); for (const s of b.shadow) s.commit(); }
+    // each proxy cascade draws the proxies of the chunks that can cast into it, cell by cell
     for (let i = 0; i < MAX_CASCADES; i++) {
       const on = (proxyBits & (1 << i)) !== 0;
       const pb = this.proxyBatches[i];
       if (!on && !pb.active) continue;
+      const bit = 1 << i;
       for (const c of this.chunks) {
-        const cast = on && (c.bits & (1 << i)) !== 0;
-        for (let k = 0; k < 2; k++) { const src = c.proxies[k]; if (src) pb.shapes[k].set(src, cast ? src.count : 0); }
+        const cast = on && (c.bits & bit) !== 0;
+        for (let k = 0; k < 2; k++) {
+          const src = c.proxies[k];
+          if (!src) continue;
+          const cells = c.proxyCells[k] ??= cast ? this.splitSource(src, src.count, this.proxyUnits[k]) : null;
+          if (!cells) continue;
+          for (const cell of cells) pb.shapes[k].set(cell, cast && this.cellCast(cell, cull) & bit ? cell.count : 0);
+        }
       }
       for (const b of pb.shapes) b.commit();
       pb.active = on;
