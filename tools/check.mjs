@@ -55,6 +55,7 @@ if (view) {
 if (views) {
   const { mkdirSync } = await import("node:fs");
   mkdirSync(outDir, { recursive: true });
+  const perView = {};
   for (const v of views) {
     const t1 = Date.now();
     try {
@@ -66,8 +67,13 @@ if (views) {
     await settle(4);
     await page.screenshot({ path: `${outDir}/${v}.png` });
     const st = await page.evaluate(() => window.debugAPI.getStats());
-    console.log(`${v}: ${st.calls} calls ${(st.triangles / 1000).toFixed(0)}k tris ${st.lights} lights ${st.visibleObjects} objs ${st.frameMs} ms  (${Date.now() - t1} ms)`);
+    perView[v] = st;
+    const pool = st.poolLights ? ` pool ${st.poolLights.used}/${st.poolLights.overflow}` : "";
+    console.log(`${v}: ${st.calls} calls ${(st.triangles / 1000).toFixed(0)}k tris ${st.lights} lights${pool} ${st.visibleObjects} objs ${st.frameMs} ms  (${Date.now() - t1} ms)`);
   }
+  // per-view stats (draw calls, triangles, light pool used/overflow, texture MB) for the record
+  const { writeFileSync } = await import("node:fs");
+  writeFileSync(`${outDir}/results.json`, JSON.stringify(perView, null, 1));
 }
 if (evalJs) {
   const r = await page.evaluate(evalJs);

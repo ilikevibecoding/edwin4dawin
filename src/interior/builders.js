@@ -249,10 +249,11 @@ export function panelGrid(frame, length, height, opts = {}) {
         }
         case "vent": {
           frame.box("metal", cu, cv, -0.05, cw - gap * 2, ch - gap * 2, 0.04, { color: PALETTE.gunmetal });
-          const slats = Math.max(3, Math.floor((ch - 0.2) / 0.09));
+          // 0.14 m pitch: 0.09 m slats aliased into a checkerboard at long grazing views of a ceiling
+          const slats = Math.max(3, Math.floor((ch - 0.2) / 0.14));
           for (let s = 0; s < slats; s++) {
             const sv = v0 + 0.12 + (s / (slats - 1)) * (ch - 0.24);
-            frame.box("metal", cu, sv, -0.02, cw - 0.16, 0.025, 0.08, { color: PALETTE.steel, tilt: 0.55 });
+            frame.box("metal", cu, sv, -0.02, cw - 0.16, 0.035, 0.08, { color: PALETTE.steel, tilt: 0.55 });
           }
           frame.box(paintMats[0], cu, cv, -0.04, cw - gap * 2, 0.06, 0.05, { color: pipeCol, uv: "keep" });
           break;
