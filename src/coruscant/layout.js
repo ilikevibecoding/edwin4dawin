@@ -206,6 +206,15 @@ function buildLayout(seed) {
         if (b.district === 'financial' && lrng.next() < 0.08) t = 1;             // a few supertalls
         let h = Math.round((prof.hmin + t * (prof.hmax - prof.hmin)) / 5) * 5;
         if (lw <= 18 && ld <= 18) h = Math.min(h, prof.hmax - 20);                  // slender lots stay a bit lower
+        // towers next to a signature landmark step down so the landmark keeps its silhouette: across the street
+        // they stay under 60% of its height, within 40 blocks under 85% (tall landmarks are unaffected)
+        for (const lm of lots) {
+          if (lm.kind !== 'landmark') continue;
+          const gap = Math.max(lm.x0 - x1, x0 - lm.x1, lm.z0 - z1, z0 - lm.z1);
+          if (gap > 40) continue;
+          const cap = Math.round((lm.height * (gap <= 12 ? 0.6 : 0.85)) / 5) * 5;
+          h = Math.min(h, Math.max(20, cap));
+        }
         lot.height = clamp(h, 20, 190);
         // the front faces a boulevard when possible (door + gangway there), otherwise an alley
         const bl = ['W', 'E', 'N', 'S'].filter((s) => sides[s]);

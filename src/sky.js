@@ -287,11 +287,16 @@ export class Sky {
       const glow = new THREE.Color(0.55, 0.30, 0.14);   // sodium/neon city glow on the night horizon
       // the haze itself stays the grey-brown smog of the old look (ACES already warms it a little); the glow is a
       // band hugging the horizon through the sunset machinery (exp(-7|y|): gone ~15 degrees up), all around at night
-      u.uSkyHorizon.value.lerp(haze, co * 0.55).lerp(glow, co * night * 0.22);
-      u.uSkyVoid.value.lerp(haze, co * 0.4).lerp(glow, co * night * 0.12);
+      // the smog haze is a daytime thing: at night the sky goes deep violet with only the glow band left near the
+      // horizon, so the city reads as lit towers against a dark sky instead of a brown murk
+      const day = 0.3 + 0.7 * this.dayFactor;
+      const violet = new THREE.Color(0.035, 0.025, 0.07);
+      u.uSkyTop.value.lerp(violet, co * night * 0.6);
+      u.uSkyHorizon.value.lerp(haze, co * 0.55 * day).lerp(glow, co * night * 0.18);
+      u.uSkyVoid.value.lerp(haze, co * 0.4 * day).lerp(glow, co * night * 0.1);
       u.uSunsetColor.value.lerp(glow, co * night);
-      u.uSunsetStrength.value = Math.max(u.uSunsetStrength.value, co * night * 0.45);
-      this.fogColor.lerp(haze, co * 0.3).lerp(glow, co * night * 0.2);
+      u.uSunsetStrength.value = Math.max(u.uSunsetStrength.value, co * night * 0.4);
+      this.fogColor.lerp(haze, co * 0.3 * day).lerp(glow, co * night * 0.15);
       // the far-skyline impostors (coruscant/skyline.js) carry the view past the streamed chunks, so the near fog
       // can start later and the real towers keep their contrast
       const far0 = this.fogFar;

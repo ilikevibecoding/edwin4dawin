@@ -103,12 +103,15 @@ function drumAndDome(bp) {
     if (r <= R_DRUM) {
       const yo = Math.round(h), yi = Math.round(domeH(r + 2.2));
       const a = Math.atan2(z + 0.5 - (CZ + 0.5), x + 0.5 - (CX + 0.5));
-      const rib = Math.abs((((a / (Math.PI * 2)) * 16 + 16.5) % 1) - 0.5) < 0.03 && r > 10;
+      const rib = Math.abs((((a / (Math.PI * 2)) * 16 + 16.5) % 1) - 0.5) < (r > 40 ? 0.04 : 0.07) && r > 10;
       const ring = Math.abs(h - Math.round(h)) < 0.02 && Math.round(h) % 8 === 0;
       for (let y = Math.max(DRUM_TOP + 1, Math.min(yi, yo)); y <= Math.max(yo, yMax > yo ? yo : yMax); y++) {
-        let id = STONE2;
-        if (rib) id = (y % 5 === 0) ? GLOW : TRIM; else if (ring) id = BAND;
-        if (r > R_DRUM - 6 && (y - DRUM_TOP) % 3 === 1) id = (Math.round(a * 30) & 1) ? B.WINDOW_LIT : STONE2;
+        // outer surface: grey cap with dark ribs and stone rings; inner surface (the chamber ceiling): dark with
+        // the ribs carried through as radiating glow lines
+        const outer = y === yo;
+        let id = outer ? B.DURASTEEL : B.PANEL_BLACK;
+        if (rib) id = (y % 4 === 0) ? GLOW : (outer ? DARK : TRIM); else if (ring && outer) id = BAND;
+        if (outer && r > R_DRUM - 6 && (y - DRUM_TOP) % 3 === 1) id = (Math.round(a * 30) & 1) ? B.WINDOW_LIT : STONE2;
         bp.set(x, y, z, id);
       }
       // the oculus: a lit chrome disc on the crown
@@ -132,7 +135,7 @@ function chamber(bp, rng) {
     bp.fill(x, 1, z, x, top, z, AIR);
     bp.set(x, 0, z, (Math.floor(r) % 4 === 0) ? B.PANEL_BLACK : (r < PODIUM_R + 2 ? GLOW : STONE));
     // dome ceiling lights above the hall (every 6th cell on the inner surface)
-    if ((x + z) % 6 === 0 && r > 6) bp.set(x, top + 1, z, GLOW);
+    if (x % 6 === 0 && z % 6 === 0 && r > 6) bp.set(x, top + 1, z, GLOW);
   }
   // tiers: each ring is a stepped platform with a pod every 6 blocks (console + two seats), railing at the inner edge
   for (let i = 0; i < RINGS.length; i++) {
@@ -151,6 +154,24 @@ function chamber(bp, rng) {
       if (r < r0 + 2 && frac > 0.3 && frac < 0.7) { bp.set(x, y, z, B.CONSOLE); continue; }          // pod console
       if (r > r0 + 2 && r < r0 + 3.5 && (frac > 0.25 && frac < 0.4 || frac > 0.6 && frac < 0.75)) { bp.set(x, y, z, B.STONE_BRICK_SLAB); bp.spot(x, y, z, 'seat'); }
       if (r > r1 - 1 && frac > 0.45 && frac < 0.55) { bp.set(x, y, z, B.IRON_BARS); bp.set(x, y + 1, z, B.LANTERN); }
+    }
+  }
+  // repulsorpod balconies stacked up the hall wall above the tiers: four rings of pods hanging off the wall (base slab,
+  // console at the inner lip, two seats, chrome rail, a glow strip underneath) so the chamber reads as a wall of pods
+  for (const yy of [15, 19, 23, 27]) {
+    const n = 40 - (yy - 15) / 4 * 4, ra = R_HALL - 3.5, rb = R_HALL - 0.5;
+    for (let x = CX - R_HALL - 1; x <= CX + R_HALL + 1; x++) for (let z = CZ - R_HALL - 1; z <= CZ + R_HALL + 1; z++) {
+      const r = dist(x, z);
+      if (r < ra || r > rb) continue;
+      const top = Math.round(domeH(r + 2.2)) - 1;
+      if (top < yy + 3) continue;
+      const a = Math.atan2(z + 0.5 - (CZ + 0.5), x + 0.5 - (CX + 0.5));
+      const pod = ((a + Math.PI) / (Math.PI * 2)) * n, frac = pod % 1;
+      if (frac < 0.18 || frac > 0.82) continue;                        // gaps between pods
+      bp.set(x, yy - 1, z, (frac > 0.3 && frac < 0.7) ? B.PANEL_BLACK : TRIM);
+      bp.set(x, yy - 2, z, (frac > 0.4 && frac < 0.6 && r > rb - 1.5) ? GLOW : DARK);
+      if (r < ra + 1) { bp.set(x, yy, z, (frac > 0.35 && frac < 0.65) ? B.CONSOLE : TRIM); continue; }
+      if (r < ra + 2.2 && (frac > 0.25 && frac < 0.4 || frac > 0.6 && frac < 0.75)) { bp.set(x, yy, z, B.STONE_BRICK_SLAB); bp.spot(x, yy, z, 'seat'); }
     }
   }
   // radial stairs at eight angles, cutting through the ring steps (2 wide, from y 1 in the pit up to ring 4)
@@ -241,8 +262,11 @@ function concourse(bp, rng) {
         for (let s = 0; s < 3; s++) {
           const u0 = (alongX ? b.x0 : b.z0) + s * 11, u1 = u0 + 9;
           const rx0 = alongX ? u0 : b.x0 + 1, rx1 = alongX ? u1 : b.x1 - 1, rz0 = alongX ? b.z0 + 1 : u0, rz1 = alongX ? b.z1 - 1 : u1;
-          // the middle slot of every band on the ground floor is the entrance vestibule
+          // the middle slot of every band on the ground floor is the entrance vestibule (double height: the slot
+          // above it stays open); the north band at y 11 is the Chancellor's suite
           if (y === 1 && s === 1) { vestibule(bp, rng, b, rx0, rz0, rx1, rz1); continue; }
+          if (y === 6 && s === 1) continue;
+          if (y === 11 && b.side === 'S') continue;
           hollow(bp, rx0 - 1, y, rz0 - 1, rx1 + 1, y + 3, rz1 + 1, STONE, y === 1 ? STONE : PLATE, STONE);
           const kind = kinds[s % kinds.length];
           template(bp, rng, kind, kind, rx0, rz0, rx1, rz1, y, b.side, 3, 2);
@@ -328,28 +352,30 @@ function vestibule(bp, rng, b, rx0, rz0, rx1, rz1) {
   bp.door(alongX ? Math.round((rx0 + rx1) / 2) : (b.side === 'W' ? rx1 + 1 : rx0 - 1), y, alongX ? (b.side === 'N' ? rz1 + 1 : rz0 - 1) : Math.round((rz0 + rz1) / 2), b.side === 'N' ? 'S' : b.side === 'S' ? 'N' : b.side === 'W' ? 'E' : 'W');
 }
 function chancellorSuite(bp, rng) {
-  // north band at the gallery level (y 16): office (curved window wall in the dome), antechamber, guard room
-  const y = 16, x0 = CX - 14, x1 = CX + 14, z0 = CZ - 64, z1 = CZ - R_CORR1 - 1;
+  // the north band of the top concourse floor (walk 11): the office runs from the ring corridor to the drum skin,
+  // whose slits become a red-and-glass window wall; red carpet, holo desk, statues, guard kiosks at the door
+  const y = 11, x0 = CX - 14, x1 = CX + 14, z0 = CZ - R_DRUM + 2, z1 = CZ - R_CORR1 - 1;
   for (let x = x0 - 1; x <= x1 + 1; x++) for (let z = z0 - 3; z <= z1 + 1; z++) {
     const r = dist(x, z);
-    if (r > 70) continue;
-    const top = Math.round(domeH(r + 2.2)) - 1;
-    if (top < y + 3) continue;
-    const wall = x === x0 - 1 || x === x1 + 1 || z === z1 + 1 || r > 67;
-    bp.fill(x, y - 1, z, x, y - 1, z, wall ? RED : ((x + z) % 3 ? B.RED_WOOL : B.PANEL_BLACK));
-    if (wall && r > 67) { bp.fill(x, y, z, x, Math.min(top, y + 6), z, (z - z0) % 2 ? GLASS : RED); continue; }   // window wall toward the dome
-    if (wall) { bp.fill(x, y, z, x, y + 4, z, RED); continue; }
-    bp.fill(x, y, z, x, Math.min(top, y + 6), z, AIR);
-    if ((x + z) % 4 === 0) bp.set(x, Math.min(top + 1, y + 7), z, GLOW);
+    if (r > R_DRUM + 0.5) continue;
+    const skin = r > R_DRUM - 1.5;
+    if (skin) { for (let yy = y; yy <= y + 2; yy++) bp.set(x, yy, z, (x - x0) % 3 ? GLASS : RED); bp.set(x, y - 1, z, RED); continue; }   // window wall in the drum skin
+    const wall = x === x0 - 1 || x === x1 + 1 || z === z1 + 1;
+    bp.set(x, y - 1, z, wall ? RED : ((x + z) % 3 ? B.RED_WOOL : B.PANEL_BLACK));
+    if (wall) { bp.fill(x, y, z, x, y + 3, z, RED); continue; }
+    bp.fill(x, y, z, x, y + 3, z, AIR);
+    bp.set(x, y + 4, z, ((x + z) % 4 === 0) ? GLOW : ((x + z) % 4 === 2 ? GOLD : RED));
   }
   // desk, holo table, statues, guards, seating; door from the gallery
-  const dx = CX, dz = CZ - 60;
+  const dx = CX, dz = CZ - 66;
   bp.set(dx - 1, y, dz, B.PANEL_BLACK); bp.set(dx, y, dz, B.PANEL_BLACK); bp.set(dx - 1, y + 1, dz, B.CONSOLE); bp.set(dx, y + 1, dz, B.HOLO_SIGN);
   bp.set(dx, y, dz - 2, B.STONE_BRICK_SLAB); bp.work(dx, y, dz - 2, 'chancellor');
   for (const sx of [dx - 3, dx + 2]) { bp.set(sx, y, dz + 2, B.STONE_BRICK_SLAB); bp.spot(sx, y, dz + 2, 'seat'); }
   for (const sx of [x0 + 2, x1 - 2]) { statue(bp, sx, y, dz - 1); statue(bp, sx, y, dz + 3); }
-  for (const sx of [x0 + 5, x1 - 5]) lamp(bp, sx, y, z1 - 2, 2, B.LANTERN);
-  doorway(bp, CX - 1, z1 + 1, CX, z1 + 1, y, 4, GLOW);
+  for (const sx of [x0 + 5, x1 - 5]) { bp.set(sx, y, z1 - 1, B.RED_WOOL); bp.set(sx + 1, y, z1 - 1, B.RED_WOOL); bp.spot(sx, y, z1 - 1, 'seat'); bp.set(sx, y, dz + 4, B.TABLE); }
+  for (let x = x0 + 1; x <= x1 - 1; x += 4) bp.set(x, y + 2, z1 + 1, (x % 8) ? B.HOLO_SIGN : GOLD);
+  for (const sx of [x0 + 3, x1 - 3]) { bp.set(sx, y, dz + 1, B.BOOKSHELF); bp.set(sx, y + 1, dz + 1, B.BOOKSHELF); bp.set(sx, y, dz + 2, B.CHEST); }
+  doorway(bp, CX - 1, z1 + 1, CX, z1 + 1, y, 3, GOLD);
   bp.set(CX - 3, y, z1, B.PANEL_BLACK); bp.set(CX - 3, y + 1, z1, B.CONSOLE); bp.work(CX - 4, y, z1, 'guard');
   bp.set(CX + 2, y, z1, B.PANEL_BLACK); bp.set(CX + 2, y + 1, z1, B.CONSOLE); bp.work(CX + 3, y, z1, 'guard');
   bp.room('chancellor_office', x0 - 1, y, z0, x1 + 1, z1 + 1);
@@ -369,7 +395,7 @@ function approaches(bp, lot) {
   bp.door(dx, 1, bp.d - 1, 'S');
   // landing pavilion: a round disc (r 9) on a stalk at y 35 by the south edge, receiving the boulevard bridge at
   // (dx, 36, d-1); stairs and a lift down to the forecourt
-  const px = dx, pz = bp.d - 16;
+  const px = dx, pz = bp.d - 11;                 // the stalk (r 2.5) stands clear of the south arch, which reaches z d-15
   for (let x = px - 10; x <= px + 10; x++) for (let z = pz - 10; z <= pz + 10; z++) {
     const r = Math.hypot(x + 0.5 - (px + 0.5), z + 0.5 - (pz + 0.5));
     if (r > 9.5) continue;
@@ -388,9 +414,9 @@ function approaches(bp, lot) {
   bp.fill(px - 2, 36, pz + 9, px + 2, 39, bp.d - 1, AIR);
   bp.door(dx, 36, bp.d - 1, 'S');
   // lift from the pavilion to the forecourt, and a helix-like switchback stair tower beside it
-  liftShaft(bp, px + 3, pz - 4, 1, 36);
-  liftDoor(bp, px + 3, pz - 4, 1, 'N'); liftDoor(bp, px + 3, pz - 4, 36, 'S');
-  bp.fill(px + 3, 35, pz - 2, px + 4, 35, pz - 1, PLATE);
+  liftShaft(bp, px + 9, pz - 4, 1, 36);
+  liftDoor(bp, px + 9, pz - 4, 1, 'N'); liftDoor(bp, px + 9, pz - 4, 36, 'S');
+  bp.fill(px + 8, 35, pz - 2, px + 10, 35, pz - 1, PLATE); bp.fill(px + 8, 35, pz - 1, px + 10, 35, pz - 1, PLATE);
   const tx0 = px - 20, tz0 = pz - 4;   // stair tower 8 x 12 west of the pavilion, joined by a bridge at y 35
   bp.fill(tx0, 1, tz0, tx0 + 7, 36, tz0 + 11, STONE);
   bp.fill(tx0 + 1, 1, tz0 + 1, tx0 + 6, 35, tz0 + 10, AIR);

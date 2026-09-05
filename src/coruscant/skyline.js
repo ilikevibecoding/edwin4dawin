@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { SHARED } from '../entityMaterial.js';
 import { LEVELS, PLATEAU } from './layout.js';
+import { blueprintFor } from './buildings.js';
 
 const INSET = 0.35;
 
@@ -31,10 +32,15 @@ void main() {
   vec3 N = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
   float top = step(0.5, abs(N.y));
   float roof = top * step(uGroundY + 1.0, vWorld.y);
+  // landmark silhouettes (seed >= 2) are lighter stone without the office-window lattice, so a dome or a spire reads
+  // as a distinct building from across the city
+  float lm = step(1.5, vSeed);
   vec3 base = mix(vec3(0.16, 0.17, 0.20), vec3(0.30, 0.31, 0.34), roof) * (0.7 + 0.6 * uSkyLight);
+  base = mix(base, mix(vec3(0.42, 0.40, 0.36), vec3(0.55, 0.53, 0.48), roof) * (0.25 + 0.9 * uSkyLight), lm);
   float u = abs(N.x) > 0.5 ? vWorld.z : vWorld.x;
   float fu = fract(u / 3.0), fy = fract(vWorld.y / 5.0);
-  float win = (1.0 - top) * step(0.34, fu) * step(fu, 0.66) * step(0.25, fy) * step(fy, 0.65);
+  float win = (1.0 - top) * (1.0 - lm) * step(0.34, fu) * step(fu, 0.66) * step(0.25, fy) * step(fy, 0.65);
+  win += (1.0 - top) * lm * 0.35 * step(0.4, fu) * step(fu, 0.6) * step(0.3, fy) * step(fy, 0.5);   // sparse lit slits on landmarks
   float lit = step(0.35, hash(vec3(floor(u / 3.0), floor(vWorld.y / 5.0), vSeed)));
   vec3 night = vec3(1.0, 0.85, 0.55) * (1.2 - uSkyLight) * lit;
   vec3 day = vec3(0.55, 0.62, 0.72) * uSkyLight;
@@ -47,19 +53,57 @@ void main() {
   if (gl_FragColor.a < 0.02) discard;
 }`;
 
+// Landmark silhouettes: the signature buildings are not plain boxes, so their impostors are built from the real
+// blueprint - column tops sampled on a 3-block grid and merged into row runs - so a dome, a stepped tower or a spire
+// keeps its outline from across the city.
+const LM_CELL = 3;
+export function landmarkBoxes(layout) {
+  const out = [];
+  for (const lot of layout.lots) {
+    if (lot.kind !== 'landmark') continue;
+    let bp = null;
+    try { bp = blueprintFor(lot, layout); } catch (e) { console.warn('skyline: landmark blueprint failed', lot.family, e); }
+    if (!bp || !bp.blocks) continue;
+    const { w, h, d, blocks } = bp;
+    const cols = Math.ceil(w / LM_CELL), rows = Math.ceil(d / LM_CELL);
+    const top = new Int16Array(cols * rows).fill(-1);
+    for (let x = 0; x < w; x++) for (let z = 0; z < d; z++) {
+      const base = (x * d + z) * h;
+      let t = -1;
+      for (let y = h - 1; y >= 1; y--) { const v = blocks[base + y]; if (v !== 0 && v !== 255) { t = y; break; } }
+      const i = Math.floor(x / LM_CELL) * rows + Math.floor(z / LM_CELL);
+      if (t > top[i]) top[i] = t;
+    }
+    for (let cx = 0; cx < cols; cx++) {
+      let cz = 0;
+      while (cz < rows) {
+        const t = top[cx * rows + cz];
+        if (t < 2) { cz++; continue; }
+        let cz1 = cz;
+        while (cz1 + 1 < rows && Math.abs(top[cx * rows + cz1 + 1] - t) <= 1) cz1++;
+        out.push({ x0: lot.x0 + cx * LM_CELL, x1: lot.x0 + Math.min(w, (cx + 1) * LM_CELL), z0: lot.z0 + cz * LM_CELL, z1: lot.z0 + Math.min(d, (cz1 + 1) * LM_CELL), y1: bp.y0 + t + 1, id: lot.id, landmark: true });
+        cz = cz1 + 1;
+      }
+    }
+  }
+  return out;
+}
+
 export function buildSkyline(layout) {
   const lots = layout.lots.filter((l) => l.kind === 'tower');
-  const n = lots.length;
+  const g0 = LEVELS.ground + 1;
+  const boxes = lots.map((l) => ({ x0: l.x0 + INSET, x1: l.x1 - INSET, z0: l.z0 + INSET, z1: l.z1 - INSET, y1: g0 + l.height - 0.5, id: l.id }));
+  for (const b of landmarkBoxes(layout)) boxes.push(b);
+  const n = boxes.length;
   const pos = new Float32Array(n * 24 * 3), seed = new Float32Array(n * 24), idx = new Uint32Array(n * 36);
   let pi = 0, si = 0, ii = 0, vbase = 0;
-  const g0 = LEVELS.ground + 1;
-  for (const l of lots) {
-    const x0 = l.x0 + INSET, x1 = l.x1 - INSET, z0 = l.z0 + INSET, z1 = l.z1 - INSET, y0 = g0, y1 = g0 + l.height - 0.5;
+  for (const l of boxes) {
+    const x0 = l.x0, x1 = l.x1, z0 = l.z0, z1 = l.z1, y0 = g0, y1 = l.y1;
     const c = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
     // 6 faces x 4 verts (separate verts so derivatives give flat normals)
     const faces = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]];
     for (const f of faces) {
-      for (const k of f) { pos[pi++] = c[k][0]; pos[pi++] = c[k][1]; pos[pi++] = c[k][2]; seed[si++] = (l.id % 97) / 97; }
+      for (const k of f) { pos[pi++] = c[k][0]; pos[pi++] = c[k][1]; pos[pi++] = c[k][2]; seed[si++] = (l.id % 97) / 97 + (l.landmark ? 2 : 0); }
       idx[ii++] = vbase; idx[ii++] = vbase + 1; idx[ii++] = vbase + 2; idx[ii++] = vbase; idx[ii++] = vbase + 2; idx[ii++] = vbase + 3;
       vbase += 4;
     }
