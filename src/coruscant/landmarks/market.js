@@ -691,16 +691,19 @@ function arcade(bp, rng) {
     bp.set(x, 0, z, (z === 4 || z === 5 || z === 10 || z === 11) && ((x + z) & 1) ? B.GLOW_PANEL_BLUE : B.PANEL_BLACK);
     bp.set(x, GAL, z, (x % 6 === 3 && z % 6 === 2) ? B.GLOW_PANEL_BLUE : B.PANEL_BLACK);
   }
-  for (let x = x0; x <= x1; x++) for (let y = 1; y <= 4; y++) { bp.set(x, y, z0 - 1, y === 3 && (x & 3) === 1 ? B.HOLO_SIGN : B.PANEL_BLACK); }
-  for (let z = z0; z <= z1; z++) for (let y = 1; y <= 4; y++) { bp.set(x0 - 1, y, z, y === 3 && (z & 3) === 1 ? B.HOLO_SIGN : B.PANEL_BLACK); bp.set(x1 + 1, y, z, y === 3 && (z & 3) === 1 ? B.HOLO_SIGN : B.PANEL_BLACK); }
-  for (let x = x0; x <= x1; x++) for (let y = 1; y <= 4; y++) if (!(x >= 64 && x <= 69)) bp.set(x, y, z1 + 1, y === 3 && (x & 3) === 1 ? B.HOLO_SIGN : B.PANEL_BLACK);
-  // machine rows: wall row (z 2, stools z 3), double island (consoles z 7/8, stools z 6/9), wall row (z 13, stools z 12)
-  const machine = (x, z, up) => { bp.set(x, 1, z, B.CONSOLE); if (up) bp.set(x, 2, z, (x & 3) === 0 ? B.HOLO_SIGN : B.PANEL_BLACK); };
+  // wall lining: holo posters alternate with pink and green neon tubes so the arcade glows in colour
+  const poster = (u) => ((u & 3) === 1 ? ((u & 4) ? B.NEON_PINK : B.HOLO_SIGN) : (u & 3) === 3 ? B.NEON_GREEN : B.PANEL_BLACK);
+  for (let x = x0; x <= x1; x++) for (let y = 1; y <= 4; y++) { bp.set(x, y, z0 - 1, y === 3 ? poster(x) : B.PANEL_BLACK); }
+  for (let z = z0; z <= z1; z++) for (let y = 1; y <= 4; y++) { bp.set(x0 - 1, y, z, y === 3 ? poster(z) : B.PANEL_BLACK); bp.set(x1 + 1, y, z, y === 3 ? poster(z) : B.PANEL_BLACK); }
+  for (let x = x0; x <= x1; x++) for (let y = 1; y <= 4; y++) if (!(x >= 64 && x <= 69)) bp.set(x, y, z1 + 1, y === 3 ? poster(x) : B.PANEL_BLACK);
+  // machine rows: wall row (z 2, stools z 3), double island (consoles z 7/8, stools z 6/9), wall row (z 13, stools z 12);
+  // every machine has a lit marquee (holo, pink or green) and the stools are black
+  const machine = (x, z, up) => { bp.set(x, 1, z, B.CONSOLE); if (up) bp.set(x, 2, z, (x & 3) === 0 ? B.HOLO_SIGN : (x & 3) === 2 ? ((x & 4) ? B.NEON_PINK : B.NEON_GREEN) : B.PANEL_BLACK); };
   for (let x = x0 + 1; x <= x1 - 1; x++) {
     const gap = x % 6 === 0;
-    if (!gap) { machine(x, z0, true); if (x & 1) { bp.set(x, 1, z0 + 1, B.RED_WOOL); bp.spot(x, 1, z0 + 1, 'seat'); } }
-    if (!gap) { machine(x, 7, (x & 1) === 0); machine(x, 8, (x & 1) === 1); if (x & 1) { bp.set(x, 1, 6, B.RED_WOOL); bp.spot(x, 1, 6, 'seat'); } else { bp.set(x, 1, 9, B.RED_WOOL); bp.spot(x, 1, 9, 'seat'); } }
-    if (!gap && !(x >= 63 && x <= 70)) { machine(x, z1, true); if (x & 1) { bp.set(x, 1, z1 - 1, B.RED_WOOL); bp.spot(x, 1, z1 - 1, 'seat'); } }
+    if (!gap) { machine(x, z0, true); if (x & 1) { bp.set(x, 1, z0 + 1, B.PANEL_BLACK); bp.spot(x, 1, z0 + 1, 'seat'); } }
+    if (!gap) { machine(x, 7, (x & 1) === 0); machine(x, 8, (x & 1) === 1); if (x & 1) { bp.set(x, 1, 6, B.PANEL_BLACK); bp.spot(x, 1, 6, 'seat'); } else { bp.set(x, 1, 9, B.PANEL_BLACK); bp.spot(x, 1, 9, 'seat'); } }
+    if (!gap && !(x >= 63 && x <= 70)) { machine(x, z1, true); if (x & 1) { bp.set(x, 1, z1 - 1, B.PANEL_BLACK); bp.spot(x, 1, z1 - 1, 'seat'); } }
   }
   // prize counter (west) and snack bar (east), attendant, dividers with blue light
   bp.fill(x0, 1, 4, x0, 1, 11, B.PANEL_BLACK); bp.fill(x0, 2, 4, x0, 2, 11, B.STONE_BRICK_SLAB); bp.set(x0, 2, 6, B.GOLD_BLOCK); bp.set(x0, 2, 9, B.CHEST); bp.set(x0, 3, 7, B.HOLO_SIGN);
