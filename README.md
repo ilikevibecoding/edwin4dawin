@@ -8,7 +8,7 @@ Everything is generated at runtime from code: pixel-art textures, character skin
 
 The production build is committed in `dist/`, so it can be served straight from a GitHub-backed CDN:
 
-**https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/14cccc0d5354ed55cfb0ae0497934eb1986940aa/dist/index.html**
+**https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/554e4c7f/dist/index.html**
 
 That link is pinned to a commit so it never goes stale. To play the latest build on this branch use
 `https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/cursor/minecraft-western-town-54d6/dist/index.html`
@@ -45,6 +45,26 @@ Requires a WebGL-capable browser. Click the game once to grab the mouse.
 `Ctrl` is intentionally not used for sprinting because `Ctrl+W` closes the browser tab.
 
 URL parameters for demos and screenshots: `?x=&y=&z=&yaw=&pitch=&time=&fly=1` (e.g. `?x=-8&z=2&y=88&yaw=90&pitch=-35&fly=1` starts you hovering above the main street).
+
+## Star Wars expansion: Coruscant, the space train, the Death Star
+
+The frontier world now continues east along an elevated **hyperlane**: a five-car space train runs on a fixed
+timetable (a pure function of the game tick, so every client sees the same train) between the frontier station
+(x 262, walk onto the platform from the roof-deck mini spaceport) and the **Coruscant Spaceport**; you can walk around
+inside while it moves, step off and climb on. **Coruscant** is a 1024 x 1024 plateau of 421 towers with lit, furnished,
+reachable rooms on every floor, plus twelve signature landmarks (Senate, Jedi Temple, 500 Republica, Chancellery,
+Galaxies Opera House, Monument Plaza, CoCo Town market halls, Uscru undercity, the Works foundry, Detention Center,
+HoloNet tower, Medical Facility), ships flying lanes along the boulevards into the spaceport, and a far-skyline layer
+to the horizon. The **Death Star** is a real place 3900 blocks out: fly into the hangar mouth
+(`?x=0&y=130&z=-3880&fly=1`) for hangar 327, corridors, detention block, throne room and reactor shaft.
+
+Fast travel: open the control panel (`F4`) and use the **Travel** buttons (frontier town, stations, spaceport, Senate,
+Monument Plaza, skyline, Death Star exterior / hangar). Coruscant landmarks by URL, for example the Opera House
+`?x=2700&z=330&y=150&yaw=45&pitch=-28&fly=1`, the Medical Facility `?x=3410&z=290&y=185&yaw=45&pitch=-26&fly=1`,
+the Detention Center `?x=2858&z=-228&y=160&yaw=45&pitch=-30&fly=1`.
+
+Gameplay is Minecraft 1:1: hunger and food (eat with right-click), chests (right-click to open, shift-click to
+quick-move), doors, crops, item drops, furnace cooking; one-block steps are climbed automatically.
 
 ## Disasters (administrator controls)
 
