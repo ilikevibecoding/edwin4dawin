@@ -114,12 +114,6 @@ void main() {
 }
 `;
 
-const COPY_FRAG = /* glsl */ `
-uniform sampler2D tSrc;
-varying vec2 vUv;
-void main() { gl_FragColor = texture2D(tSrc, vUv); }
-`;
-
 /** Diagnostic view of the resolved mirror image: gamma-encoded colour, uncovered texels tinted magenta. */
 const DEBUG_FRAG = /* glsl */ `
 uniform sampler2D tColor;
@@ -187,7 +181,6 @@ export class PlanarReflection {
   private levels = 1;
   private readonly resolveMat: THREE.ShaderMaterial;
   private readonly downMat: THREE.ShaderMaterial;
-  private readonly copyMat: THREE.ShaderMaterial;
   private readonly quad: THREE.Mesh;
   private readonly quadScene = new THREE.Scene();
   private readonly quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -234,7 +227,6 @@ export class PlanarReflection {
       depthWrite: false,
     });
     this.downMat = new THREE.ShaderMaterial({ vertexShader: FULLSCREEN_VERT, fragmentShader: DOWN_FRAG, uniforms: { tSrc: { value: this.outRT.texture }, uLod: { value: 0 }, uTexel: { value: new THREE.Vector2() } }, depthTest: false, depthWrite: false });
-    this.copyMat = new THREE.ShaderMaterial({ vertexShader: FULLSCREEN_VERT, fragmentShader: COPY_FRAG, uniforms: { tSrc: { value: null } }, depthTest: false, depthWrite: false });
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.resolveMat);
     this.quad.frustumCulled = false;
     this.quadScene.add(this.quad);
@@ -357,21 +349,17 @@ export class PlanarReflection {
     this.outRT.viewport.set(0, 0, this.width, this.height);
     r.setRenderTarget(this.outRT);
     r.render(this.quadScene, this.quadCam);
-    // Gaussian pyramid into the mip levels
+    // Gaussian pyramid into the mip levels: each level is rendered into its own target (a texture cannot be
+    // sampled while one of its levels is the draw target) and blitted from there into the mip level with
+    // copyTexSubImage2D (no draw call; the formats match, so the copy is exact)
+    this.quad.material = this.downMat;
     for (let i = 1; i < this.levels; i++) {
-      const lw = this.width >> i, lh = this.height >> i;
-      this.quad.material = this.downMat;
       this.downMat.uniforms.uLod.value = i - 1;
       this.downMat.uniforms.uTexel.value.set(1 / (this.width >> (i - 1)), 1 / (this.height >> (i - 1)));
       r.setRenderTarget(this.levelRTs[i]);
       r.render(this.quadScene, this.quadCam);
-      this.quad.material = this.copyMat;
-      this.copyMat.uniforms.tSrc.value = this.levelRTs[i].texture;
-      this.outRT.viewport.set(0, 0, lw, lh);
-      r.setRenderTarget(this.outRT, 0, i);
-      r.render(this.quadScene, this.quadCam);
+      r.copyFramebufferToTexture(this.outRT.texture, null, i);
     }
-    this.outRT.viewport.set(0, 0, this.width, this.height);
     this.quad.material = this.resolveMat;
     r.setRenderTarget(prevTarget);
     this.stats.calls = info.calls - c0 - this.stats.shadowCalls;
