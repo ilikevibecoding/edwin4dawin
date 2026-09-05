@@ -122,7 +122,29 @@ function buildCeiling(kit, ctx, B, H) {
       kit.box("emitWhiteDim", x, H - 0.105, z, (w - 1.0) / 3 - 0.9, 0.025, 0.12, { uv: "keep" });
     }
   }
-  for (const x of [5.6, 9.2, 12.8]) ctx.light(pointLight(0xdfe9ff, 6, 9, [x, H - 0.5, -8.5]));
+  // spine fixture down the room's centre line (z -8.5, under the three cool lights): a dark housing
+  // with a faint wide diffuser and a narrow bright core, broken where the feeder pipes cross it so
+  // the strip never runs into the beams
+  const zs = -8.5;
+  const pipes = [7.0, 9.9, 12.5];
+  const runs = [];
+  let x0 = min[0] + 0.6;
+  for (const px of pipes) {
+    runs.push([x0, px - 0.3]);
+    x0 = px + 0.3;
+  }
+  runs.push([x0, max[0] - 0.6]);
+  for (const [a, b] of runs) {
+    const xc = (a + b) / 2;
+    const len = b - a;
+    kit.box("paintedMetal", xc, H - 0.05, zs, len, 0.08, 0.3, DARK);
+    kit.box("paintedMetal", xc, H - 0.09, zs, len - 0.06, 0.02, 0.18, BLACK);
+    kit.box("emitWhiteFaint", xc, H - 0.1, zs, len - 0.12, 0.012, 0.14, { uv: "keep" });
+    kit.box("emitWhiteDim", xc, H - 0.108, zs, len - 0.16, 0.01, 0.035, { uv: "keep" });
+  }
+  // the lights hang a metre under the panels: right under them they blew the glossy ceiling plates
+  // out to a white streak along the spine
+  for (const x of [5.6, 9.2, 12.8]) ctx.light(pointLight(0xdfe9ff, 4.5, 8, [x, H - 1.15, zs]));
 }
 
 // ---------------------------------------------------------------------------
@@ -369,9 +391,9 @@ function buildStations(kit, ctx) {
   const yaw = -Math.PI / 2; // desk faces +X (the screen wall); operator sits at -X
   operatorDesk(kit, ctx, { x: 13.5, z: -6.7, yaw, screens: ["impScreen0", "cms_pulse", "impScreen2"], seed: ctx.seed + 60, lampMat: "emitBlue" });
   operatorDesk(kit, ctx, { x: 13.5, z: -10.3, yaw, screens: ["impScreen2", "impScreen1", "impScreen0"], seed: ctx.seed + 61, lampMat: "emitAmber" });
-  // duty station by the zmax wall: a third desk turned to face +X like the others (its screen bank
-  // and keypad face the door), operator seated at -X
-  operatorDesk(kit, ctx, { x: 6.7, z: -5.6, yaw, screens: ["impScreen1", "impScreen0", "cms_pulse"], seed: ctx.seed + 70, lampMat: "emitBlue" });
+  // duty station by the zmax wall: a third desk turned to face that wall (screen bank at +Z), so its
+  // operator chair sits on the room side where the view from the door sees it beside the desk
+  operatorDesk(kit, ctx, { x: 6.2, z: -5.85, yaw: Math.PI, screens: ["impScreen1", "impScreen0", "cms_pulse"], seed: ctx.seed + 70, lampMat: "emitBlue" });
 }
 
 /**
