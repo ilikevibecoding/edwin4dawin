@@ -37,14 +37,21 @@ export class Bench {
     g.aircraft.inputs.pitch = v.clipInputs.pitch;
     g.aircraft.inputs.roll = v.clipInputs.roll;
     g.aircraft.inputs.yaw = v.clipInputs.yaw;
-    // settle: one environment update with the plane static, camera follows
+    // settle: one environment update with the plane static; the camera is then posed once more at its steady
+    // flight state (not integrated: a spring step with the plane frozen would leave it a frame ahead)
     g.update(this.fixedDt, false);
-    this.updateCamera(this.fixedDt);
+    if (v.camera.mode !== 'fixed') g.flightCamera.settle(g.aircraft.flight, g.aircraft.model);
+    this.followOrigin.copy(g.aircraft.flight.position);
     this.flying = false;
     this.frame = 0;
     g.metrics.reset();
     return true;
   }
+
+  /** aircraft position at the end of setup and the fixed camera's authored position: a `follow` fixed camera is
+   *  translated by the aircraft's displacement from here so the composition of the still holds through the clip */
+  private readonly followOrigin = new THREE.Vector3();
+  private readonly fixedPos = new THREE.Vector3();
 
   private placePlane(v: BenchView): void {
     const g = this.game;
@@ -86,20 +93,28 @@ export class Bench {
     if (v.camera.mode === 'fixed') {
       fc.mode = 'fixed';
       const c = this.fixedCamera(v);
+      this.fixedPos.copy(c.position);
       g.camera.position.copy(c.position);
       g.camera.quaternion.copy(c.quaternion);
       g.camera.fov = v.camera.fov;
       g.camera.updateProjectionMatrix();
     } else {
       fc.mode = v.camera.mode;
-      fc.snap();
-      // run the camera to rest at a fixed timestep
-      for (let i = 0; i < 120; i++) fc.update(g.aircraft.flight, g.aircraft.model, this.fixedDt);
+      // the pose the camera holds in steady flight at the view's speed (the still and the clip share it)
+      fc.settle(g.aircraft.flight, g.aircraft.model);
     }
   }
 
   private updateCamera(dt: number): void {
-    this.game.flightCamera.update(this.game.aircraft.flight, this.game.aircraft.model, dt);
+    const g = this.game;
+    const v = this.view;
+    if (v && v.camera.mode === 'fixed') {
+      // a following fixed camera dollies with the aircraft, keeping its heading: the frame the still was composed
+      // for holds while the world slides past (a plane placed 50 m from a static camera left the frame in ~1 s)
+      if (v.camera.follow) g.camera.position.copy(this.fixedPos).add(g.aircraft.flight.position).sub(this.followOrigin);
+      return;
+    }
+    g.flightCamera.update(g.aircraft.flight, g.aircraft.model, dt);
   }
 
   /** Advance the simulation by n fixed frames (flight enabled) and render the last one. */

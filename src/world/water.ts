@@ -399,10 +399,14 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
     float thr = 0.72 - 0.42 * exposure;
     float soft = mix(0.2, 0.6, smoothstep(1.0, 4.0, foot));
     float shore = wash * coastGate * smoothstep(thr - soft * 0.5, thr + soft * 0.5, 0.55 * patches + 0.45 * streaks) * smoothstep(0.08, 0.3, exposure);
-    // surf: wind waves break in knee-deep water on exposed shores as broken lines running shoreward
+    // surf: wind waves break in knee-deep water on exposed shores as broken lines running shoreward. Only within
+    // the last tens of metres of a beach: over wide flats the knee-deep band lies hundreds of metres out and the
+    // crest phase (distance to the waterline along the bed) drew the bathymetry's contours as crisp concentric
+    // swirls around every hump
     float crest = sin(shoreDist * 0.3 - t * 1.2 + patches * 3.0);
-    float surf = smoothstep(0.55, 1.0, crest) * smoothstep(0.45, 0.85, exposure) * smoothstep(0.4, 0.7, patches) * coastGate
-               * smoothstep(0.3, 0.5, depth) * (1.0 - smoothstep(0.9, 1.5, depth)) * smoothstep(2.5, 6.0, uWindSpeed);
+    float surf = smoothstep(0.45, 1.0, crest) * smoothstep(0.45, 0.85, exposure) * smoothstep(0.4, 0.7, patches) * coastGate
+               * smoothstep(0.3, 0.5, depth) * (1.0 - smoothstep(0.9, 1.5, depth)) * smoothstep(2.5, 6.0, uWindSpeed)
+               * (1.0 - smoothstep(40.0, 90.0, shoreDist));
     foam = shore + surf * 0.6;
     // silt stirred up over very gentle muddy bottoms (mangrove shores)
     float mud = (1.0 - smoothstep(0.004, 0.012, slope)) * (1.0 - smoothstep(0.3, 2.0, depth)) * coastGate;

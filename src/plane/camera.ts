@@ -36,6 +36,33 @@ export class FlightCamera {
 
   snap(): void { this.initialised = false; }
 
+  /** Rest pose of the chase spring for a target moving at the aircraft's velocity: the offset behind and above the
+   *  aircraft in a yaw-only frame (without the velocity feed-forward added in update). */
+  private chaseDesired(flight: FlightModel, out: THREE.Vector3): THREE.Vector3 {
+    const fwd = flight.forward(this.fwd);
+    const yaw = Math.atan2(fwd.x, fwd.z);
+    const speed = flight.telemetry.airspeed;
+    const dist = this.chaseDistance + speed * 0.08;
+    const heightOff = this.chaseHeight + speed * 0.012;
+    const orbitQ = this.orbitQ.setFromEuler(this.euler.set(this.orbitPitch, yaw + this.orbitYaw, 0, 'YXZ'));
+    return out.set(0, heightOff, -dist).applyQuaternion(orbitQ).add(flight.position);
+  }
+
+  /** Puts the camera where it sits in steady flight at the aircraft's current velocity and poses it, without
+   *  integrating. A chase camera settled behind a frozen aircraft would otherwise rest 12-13 m ahead of that pose
+   *  (the velocity feed-forward with nothing moving) and lurch back over the first half second once the
+   *  simulation runs — the bench still and the clip that continues from it now share one camera path. */
+  settle(flight: FlightModel, model: PlaneModel): void {
+    if (this.mode === 'chase') {
+      this.pos.copy(this.chaseDesired(flight, this.tmp2));
+      this.vel.copy(flight.velocity);
+      this.initialised = true;
+    } else {
+      this.snap();
+    }
+    this.update(flight, model, 0);
+  }
+
   update(flight: FlightModel, model: PlaneModel, dt: number): void {
     this.time += dt;
     const cam = this.camera;
@@ -75,13 +102,9 @@ export class FlightCamera {
     // chase: spring-damper toward an offset behind and above the aircraft, in a yaw-only frame
     // `fwd` must not alias `tmp`: the spring acceleration below reuses `tmp`, and the look target needs the
     // real forward vector (aliasing made the camera look at position + 6 x acceleration and lose the aircraft)
-    const fwd = flight.forward(this.fwd);
-    const yaw = Math.atan2(fwd.x, fwd.z);
+    const desired = this.chaseDesired(flight, this.tmp2);
+    const fwd = this.fwd; // set by chaseDesired
     const speed = t.airspeed;
-    const dist = this.chaseDistance + speed * 0.08;
-    const heightOff = this.chaseHeight + speed * 0.012;
-    const orbitQ = this.orbitQ.setFromEuler(this.euler.set(this.orbitPitch, yaw + this.orbitYaw, 0, 'YXZ'));
-    const desired = this.tmp2.set(0, heightOff, -dist).applyQuaternion(orbitQ).add(flight.position);
     // bank the camera slightly with the aircraft so turns feel dynamic
     if (!this.initialised) { this.pos.copy(desired); this.vel.set(0, 0, 0); this.initialised = true; }
     const k = 60, c = 2 * 0.9 * Math.sqrt(60);

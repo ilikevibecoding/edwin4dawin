@@ -78,7 +78,10 @@ const STEP = 10;
 // ------------------------------------------------------------------ materials
 
 /** Pavement shading for the carriageway (vertices with `aRoadInfo.x` = lanes > 0); everything else in the same mesh
- *  is plain concrete tinted by its vertex colour with a little run-off weathering. */
+ *  is plain concrete tinted by its vertex colour with a little run-off weathering.
+ *  Every line, joint and dash is box-filtered over the pixel footprint (`aaLine`) and every periodic pattern
+ *  fades to its mean once its period drops to a few pixels, so the deck reads the same from 45 m and 2 km and
+ *  does not shimmer when the camera moves (the old hard steps aliased into crawling dots at grazing angles). */
 const CONCRETE_FRAG = /* glsl */ `
 {
   if (vRoadInfo.x > 0.5) {
@@ -87,10 +90,15 @@ const CONCRETE_FRAG = /* glsl */ `
     float median = vRoadInfo.z;
     float xm = vRoadUv.x * width * 0.5;
     float along = vRoadUv.y;
+    // pixel footprint across / along the deck (metres per pixel) and on the ground plane
+    float fwX = max(fwidth(xm), 1e-4);
+    float fwA = max(fwidth(along), 1e-4);
+    float fp = length(fwidth(vWorldPosR.xz));
     float n = fbm3(vWorldPosR.xz * 0.11);
-    float n2 = vnoise(vWorldPosR.xz * 2.3);
+    // 43 cm grain: band-limited (fades to its mean once a pixel spans a good part of its wavelength)
+    float n2 = mix(vnoise(vWorldPosR.xz * 2.3), 0.5, smoothstep(0.12, 0.4, fp));
     // sun-bleached concrete pavement, a shade darker than the shoulders so the white lines and the kerbs read
-    float onShoulder = step(width * 0.5 + 0.005, abs(xm));
+    float onShoulder = clamp((abs(xm) - width * 0.5 - 0.005) / fwX + 0.5, 0.0, 1.0);
     vec3 conc = mix(vec3(0.46, 0.46, 0.44), vec3(0.58, 0.57, 0.54), n) * (0.94 + 0.12 * n2);
     vec3 shoulder = mix(vec3(0.66, 0.66, 0.63), vec3(0.78, 0.77, 0.74), n) * (0.96 + 0.08 * n2);
     // transverse pavement joints every 6 m, faint longitudinal joints at the lane edges
@@ -99,23 +107,25 @@ const CONCRETE_FRAG = /* glsl */ `
     float k = floor(u / laneW);
     float lp = u - k * laneW;
     float edgeDist = min(lp, laneW - lp);
-    float joint = smoothstep(0.10, 0.03, abs(fract(along / 6.0) - 0.5) * 6.0);
-    conc *= 1.0 - 0.20 * joint - 0.08 * smoothstep(0.08, 0.02, edgeDist);
+    float joint = mix(aaLine((fract(along / 6.0) - 0.5) * 6.0, 0.065, fwA), 0.022, smoothstep(1.5, 4.0, fwA));
+    float laneJoint = mix(aaLine(edgeDist, 0.05, fwX), 0.1 / laneW, smoothstep(0.8, 2.5, fwX));
+    conc *= 1.0 - 0.20 * joint - 0.08 * laneJoint;
     // tyre paths and weathering patches
-    float wheel = exp(-pow((abs(lp - laneW * 0.5) - laneW * 0.28) * 3.0, 2.0));
+    float wheel = mix(exp(-pow((abs(lp - laneW * 0.5) - laneW * 0.28) * 3.0, 2.0)), 0.18, smoothstep(0.5, 2.0, fwX));
     conc *= 1.0 - 0.10 * wheel;
     conc *= 1.0 - 0.12 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.03 + 8.0));
     shoulder *= 1.0 - 0.15 * joint - 0.1 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.03 + 8.0));
     conc = mix(conc, shoulder, onShoulder);
     // markings sized to read from a 45 m chase camera: 30 cm white edge lines, 30 cm lane dashes (3 m on / 6 m off),
     // yellow centre: dashed on two-lane decks, a double line on four lanes, lines beside the barrier on six
-    float laneEdge = smoothstep(0.30, 0.14, edgeDist) * step(0.5, k) * step(k, lanes - 1.5) * step(0.6, abs(xm));
-    float dashes = laneEdge * step(fract(along / 9.0), 0.34);
-    float edgeLine = smoothstep(0.32, 0.16, abs(abs(xm) - (width * 0.5 - 0.45)));
+    float laneEdge = aaLine(edgeDist, 0.15, fwX) * step(0.5, k) * step(k, lanes - 1.5) * step(0.6, abs(xm));
+    float dashPulse = mix(aaLine((fract(along / 9.0) - 0.17) * 9.0, 1.53, fwA), 0.34, smoothstep(2.0, 6.0, fwA));
+    float dashes = laneEdge * dashPulse;
+    float edgeLine = aaLine(abs(xm) - (width * 0.5 - 0.45), 0.15, fwX);
     float centre = 0.0;
-    if (lanes < 3.5) centre = smoothstep(0.2, 0.08, abs(xm)) * step(fract(along / 9.0), 0.45);
-    else if (median > 0.0) centre = smoothstep(0.22, 0.09, abs(abs(xm) - (median + 0.45)));
-    else centre = smoothstep(0.2, 0.08, abs(abs(xm) - 0.26));
+    if (lanes < 3.5) centre = aaLine(xm, 0.075, fwX) * mix(aaLine((fract(along / 9.0) - 0.225) * 9.0, 2.025, fwA), 0.45, smoothstep(2.0, 6.0, fwA));
+    else if (median > 0.0) centre = aaLine(abs(xm) - (median + 0.45), 0.075, fwX);
+    else centre = aaLine(abs(xm) - 0.26, 0.075, fwX);
     diffuseColor.rgb = mix(conc, vec3(0.92), max(edgeLine, dashes) * 0.92);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.66, 0.14), centre * 0.94);
     roughnessFactor = 0.82;
@@ -140,30 +150,65 @@ function createConcreteMaterial(concrete: THREE.Material): THREE.MeshStandardMat
       .replace('#include <common>', '#include <common>\nattribute vec2 aRoadUv; attribute vec3 aRoadInfo; varying vec2 vRoadUv; varying vec3 vRoadInfo; varying vec3 vWorldPosR;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRoadUv = aRoadUv; vRoadInfo = aRoadInfo; vWorldPosR = (modelMatrix * vec4(position, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec2 vRoadUv; varying vec3 vRoadInfo; varying vec3 vWorldPosR;\n${GLSL_NOISE}`)
+      .replace('#include <common>', `#include <common>\nvarying vec2 vRoadUv; varying vec3 vRoadInfo; varying vec3 vWorldPosR;\n${GLSL_NOISE}\n${GLSL_AA_LINE}`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${CONCRETE_FRAG}`);
   };
-  mat.customProgramCacheKey = () => 'bridge-concrete-v2';
+  mat.customProgramCacheKey = () => 'bridge-concrete-v3';
   return mat;
 }
 
+/** Box-filtered coverage of a line of half-width `h` at signed distance `d`, for a pixel footprint `fw` (same
+ *  units): exact area of the pixel's interval inside the line, so a line thinner than a pixel dims instead of
+ *  breaking into dots. */
+const GLSL_AA_LINE = /* glsl */ `
+float aaLine(float d, float h, float fw) { return clamp((min(h, d + 0.5 * fw) - max(-h, d - 0.5 * fw)) / fw, 0.0, 1.0); }
+`;
+
+/** Screen-space minimum thickness of the thin steel. Members carry the point of their own axis nearest to every
+ *  vertex (`aAxis.xyz`, w = 1 for thin members); when the member's projected width would fall under this many
+ *  pixels its cross-section is inflated around the axis to that width, and the missing coverage is written to
+ *  the alpha instead: a 22 cm cable at 2 km is a continuous faint line, not a chain of dots (with or without
+ *  MSAA — the clips are captured without). The width the geometry projects to is ~1.7 x the vertex radius
+ *  (six-sided prisms, boxes seen across their diagonal). */
+const STEEL_MIN_PX = 1.25;
+const STEEL_VERT = /* glsl */ `
+vGlow = aGlow; vCover = 1.0;
+if (aAxis.w > 0.5) {
+  vec3 offR = transformed - aAxis.xyz;
+  float rr = length(offR);
+  float depth = max(-(modelViewMatrix * vec4(aAxis.xyz, 1.0)).z, 1.0);
+  float widthPx = rr * 1.7 * uPixelScale / depth;
+  if (rr > 1e-5 && widthPx < ${STEEL_MIN_PX.toFixed(2)}) {
+    transformed = aAxis.xyz + offR * (${STEEL_MIN_PX.toFixed(2)} / widthPx);
+    vCover = widthPx / ${STEEL_MIN_PX.toFixed(2)};
+  }
+}
+`;
+
 /** Bridge steel (railings, cables, lamp posts, arches): vertex-coloured, with a per-vertex `aGlow` mask that turns the
- *  lamp heads into emitters; `emissiveIntensity` follows the key light (dusk and night) in BridgeCuller.update. */
-function createSteelMaterial(steel: THREE.Material): THREE.MeshStandardMaterial {
+ *  lamp heads into emitters; `emissiveIntensity` follows the key light (dusk and night) in BridgeCuller.update.
+ *  `pixelScale` (pixels per metre at 1 m of view depth = P[1][1] * viewport height / 2) must be set by the
+ *  meshes' onBeforeRender so the minimum-width inflation knows the size of a pixel in every pass. */
+function createSteelMaterial(steel: THREE.Material): { mat: THREE.MeshStandardMaterial; pixelScale: THREE.IUniform<number> } {
   const src = steel as THREE.MeshStandardMaterial;
-  const mat = new THREE.MeshStandardMaterial({ color: src.color.clone(), roughness: src.roughness, metalness: src.metalness, vertexColors: true, emissive: new THREE.Color(1.0, 0.8, 0.52), emissiveIntensity: 0 });
+  const pixelScale: THREE.IUniform<number> = { value: 1000 };
+  // alpha carries the sub-pixel coverage of the thin members; everything else stays at 1. Depth is still
+  // written so the members occlude each other and the deck like opaque steel.
+  const mat = new THREE.MeshStandardMaterial({ color: src.color.clone(), roughness: src.roughness, metalness: src.metalness, vertexColors: true, emissive: new THREE.Color(1.0, 0.8, 0.52), emissiveIntensity: 0, transparent: true, depthWrite: true });
   if (src.defines) mat.defines = { ...src.defines };
   mat.onBeforeCompile = (shader, renderer) => {
     src.onBeforeCompile.call(src, shader, renderer);
+    shader.uniforms.uPixelScale = pixelScale;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aGlow; varying float vGlow;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;');
+      .replace('#include <common>', '#include <common>\nattribute float aGlow; attribute vec4 aAxis; varying float vGlow; varying float vCover; uniform float uPixelScale;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\n${STEEL_VERT}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vGlow;')
+      .replace('#include <common>', '#include <common>\nvarying float vGlow; varying float vCover;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= vCover;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vGlow;');
   };
-  mat.customProgramCacheKey = () => 'bridge-steel-v1';
-  return mat;
+  mat.customProgramCacheKey = () => 'bridge-steel-v2';
+  return { mat, pixelScale };
 }
 
 // ------------------------------------------------------------------ geometry accumulation
@@ -175,7 +220,9 @@ type Rgb = readonly [number, number, number];
 const WHITE: Rgb = [1, 1, 1];
 
 /** World-space indexed triangle soup with flat normals, a vertex colour and `extraSize` extra floats per vertex
- *  (aRoadUv + aRoadInfo for the concrete, aGlow for the steel). Baked once; one mesh per chunk. */
+ *  (aRoadUv + aRoadInfo for the concrete, aGlow for the steel). Steel soups (`hasAxis`) also carry `aAxis`: the
+ *  point of the member's axis nearest to the vertex and a flag marking members thin enough for the screen-space
+ *  minimum width (see STEEL_VERT). Baked once; one mesh per chunk. */
 class Soup {
   readonly pos: number[] = [];
   readonly nrm: number[] = [];
@@ -183,16 +230,19 @@ class Soup {
   readonly extra: number[] = [];
   readonly idx: number[] = [];
   readonly bounds = new THREE.Box3();
-  constructor(readonly extraSize: number) {}
+  constructor(readonly extraSize: number, readonly hasAxis = false) {}
 
   get vertexCount(): number { return this.pos.length / 3; }
   get triangleCount(): number { return this.idx.length / 3; }
+  /** floats per vertex in `extra` */
+  get stride(): number { return this.extraSize + (this.hasAxis ? 4 : 0); }
 
-  vertex(x: number, y: number, z: number, nx: number, ny: number, nz: number, c: Rgb, extra?: readonly number[]): number {
+  vertex(x: number, y: number, z: number, nx: number, ny: number, nz: number, c: Rgb, extra?: readonly number[], axis?: THREE.Vector3 | null): number {
     this.pos.push(x, y, z);
     this.nrm.push(nx, ny, nz);
     this.col.push(c[0], c[1], c[2]);
     if (this.extraSize) { if (extra) for (let i = 0; i < this.extraSize; i++) this.extra.push(extra[i]); else for (let i = 0; i < this.extraSize; i++) this.extra.push(0); }
+    if (this.hasAxis) { if (axis) this.extra.push(axis.x, axis.y, axis.z, 1); else this.extra.push(x, y, z, 0); }
     const bb = this.bounds;
     if (x < bb.min.x) bb.min.x = x; if (x > bb.max.x) bb.max.x = x;
     if (y < bb.min.y) bb.min.y = y; if (y > bb.max.y) bb.max.y = y;
@@ -222,33 +272,43 @@ class Soup {
   }
 
   /** Box: x across, z along, y from `yBottom` up `h`, yawed about Y (then pitched about its own X). `sidesOnly`
-   *  drops the top and bottom faces (posts, rails and cables never show them). */
-  box(x: number, yBottom: number, z: number, w: number, h: number, d: number, yaw: number, pitch: number, c: Rgb, sidesOnly = false, extra?: readonly number[]): void {
+   *  drops the top and bottom faces (posts, rails and cables never show them). `thin` members (rails, posts, lamp
+   *  arms) record the box's long axis for the screen-space minimum width. */
+  box(x: number, yBottom: number, z: number, w: number, h: number, d: number, yaw: number, pitch: number, c: Rgb, sidesOnly = false, extra?: readonly number[], thin = false): void {
     if (h <= 0.005) return;
     _q.setFromEuler(_e.set(pitch, yaw, 0, 'YXZ'));
     _m.compose(_p.set(x, yBottom + h / 2, z), _q, _s.set(w, h, d));
+    const longAxis = w >= h && w >= d ? 0 : h >= d ? 1 : 2;
     for (const f of BOX_FACES) {
       if (sidesOnly && f.n[1] !== 0) continue;
       _n.set(f.n[0], f.n[1], f.n[2]).applyQuaternion(_q);
       const base = this.vertexCount;
       for (const v of f.v) {
+        let axis: THREE.Vector3 | null = null;
+        if (thin && this.hasAxis) {
+          _ax.set(longAxis === 0 ? v[0] : 0, longAxis === 1 ? v[1] : 0, longAxis === 2 ? v[2] : 0).applyMatrix4(_m);
+          axis = _ax;
+        }
         _p.set(v[0], v[1], v[2]).applyMatrix4(_m);
-        this.vertex(_p.x, _p.y, _p.z, _n.x, _n.y, _n.z, c, extra);
+        this.vertex(_p.x, _p.y, _p.z, _n.x, _n.y, _n.z, c, extra, axis);
       }
       this.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
   }
 
-  /** Vertical cylinder (smooth sides, optional top cap). */
-  cylinder(x: number, yBottom: number, z: number, dia: number, h: number, segments: number, c: Rgb, cap = true, extra?: readonly number[]): void {
+  /** Vertical cylinder (smooth sides, optional top cap); `thin` poles record their axis for the minimum width. */
+  cylinder(x: number, yBottom: number, z: number, dia: number, h: number, segments: number, c: Rgb, cap = true, extra?: readonly number[], thin = false): void {
     if (h <= 0.005) return;
     const r = dia / 2;
     const base = this.vertexCount;
     for (let i = 0; i <= segments; i++) {
       const a = (i / segments) * Math.PI * 2;
       const nx = Math.cos(a), nz = Math.sin(a);
-      this.vertex(x + nx * r, yBottom, z + nz * r, nx, 0, nz, c, extra);
-      this.vertex(x + nx * r, yBottom + h, z + nz * r, nx, 0, nz, c, extra);
+      const axis = thin && this.hasAxis ? _ax : null;
+      if (axis) axis.set(x, yBottom, z);
+      this.vertex(x + nx * r, yBottom, z + nz * r, nx, 0, nz, c, extra, axis);
+      if (axis) axis.set(x, yBottom + h, z);
+      this.vertex(x + nx * r, yBottom + h, z + nz * r, nx, 0, nz, c, extra, axis);
     }
     for (let i = 0; i < segments; i++) {
       const v0 = base + i * 2, v1 = v0 + 1, v2 = v0 + 2, v3 = v0 + 3;
@@ -309,7 +369,7 @@ class Soup {
     }
   }
 
-  /** Cable / hanger between two points: a 6-sided prism without caps. */
+  /** Cable / hanger between two points: a 6-sided prism without caps, always a thin member. */
   strut(a: THREE.Vector3, b: THREE.Vector3, r: number, c: Rgb, extra?: readonly number[]): void {
     _d.subVectors(b, a);
     const len = _d.length();
@@ -320,8 +380,8 @@ class Soup {
     for (let i = 0; i <= 6; i++) {
       const ang = (i / 6) * Math.PI * 2;
       _n.set(Math.cos(ang), 0, Math.sin(ang)).applyQuaternion(_q);
-      this.vertex(a.x + _n.x * r, a.y + _n.y * r, a.z + _n.z * r, _n.x, _n.y, _n.z, c, extra);
-      this.vertex(b.x + _n.x * r, b.y + _n.y * r, b.z + _n.z * r, _n.x, _n.y, _n.z, c, extra);
+      this.vertex(a.x + _n.x * r, a.y + _n.y * r, a.z + _n.z * r, _n.x, _n.y, _n.z, c, extra, a);
+      this.vertex(b.x + _n.x * r, b.y + _n.y * r, b.z + _n.z * r, _n.x, _n.y, _n.z, c, extra, b);
     }
     for (let i = 0; i < 6; i++) {
       const v0 = base + i * 2, v1 = v0 + 1, v2 = v0 + 2, v3 = v0 + 3;
@@ -336,9 +396,11 @@ class Soup {
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(this.vertexCount * 2), 2));
     let off = 0;
-    for (const [name, size] of extraNames) {
+    const stride = this.stride;
+    const names = this.hasAxis ? [...extraNames, ['aAxis', 4] as const] : extraNames;
+    for (const [name, size] of names) {
       const arr = new Float32Array(this.vertexCount * size);
-      for (let v = 0; v < this.vertexCount; v++) for (let k = 0; k < size; k++) arr[v * size + k] = this.extra[v * this.extraSize + off + k];
+      for (let v = 0; v < this.vertexCount; v++) for (let k = 0; k < size; k++) arr[v * size + k] = this.extra[v * stride + off + k];
       g.setAttribute(name, new THREE.BufferAttribute(arr, size));
       off += size;
     }
@@ -359,7 +421,7 @@ const BOX_FACES: { n: [number, number, number]; v: [number, number, number][] }[
 ];
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
 const _p = new THREE.Vector3(), _s = new THREE.Vector3(), _n = new THREE.Vector3(), _d = new THREE.Vector3();
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _ax = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 
 // ------------------------------------------------------------------ per-frame culling
@@ -475,8 +537,16 @@ const S_HEAD: Rgb = [0.92, 0.9, 0.84];       // lamp luminaires
  *  causeways read as light concrete against the water instead of asphalt. */
 export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concrete: THREE.Material, steel: THREE.Material): BridgeBuild {
   const concreteMat = createConcreteMaterial(concrete);
-  const steelMat = createSteelMaterial(steel);
+  const { mat: steelMat, pixelScale } = createSteelMaterial(steel);
   const culler = new BridgeCuller(steelMat);
+  const _size = new THREE.Vector2();
+  /** pixels per metre at 1 m of view depth for the pass about to draw (main frame, mirror or any other target) */
+  const observeSteel = (renderer: THREE.WebGLRenderer, camera: THREE.Camera) => {
+    culler.observe(camera);
+    const rt = renderer.getRenderTarget();
+    const h = rt ? rt.height : renderer.getDrawingBufferSize(_size).y;
+    pixelScale.value = 0.5 * h * camera.projectionMatrix.elements[5];
+  };
   const group = new BridgeGroup(culler);
   const routes: BridgeRoute[] = [];
   const allDecks = new Soup(5);
@@ -508,7 +578,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     const chunkOf = (s: number) => Math.min(nChunks - 1, Math.max(0, Math.floor(s / chunkLen)));
     // struct + deck: concrete; steel + heads: thin steel (railings, lamps); tall: pylons (concrete); arch: arch ribs
     // or stay cables (steel). Tall structure gets its own meshes so the low chunks keep low bounding boxes.
-    const parts = Array.from({ length: nChunks }, () => ({ struct: new Soup(5), deck: new Soup(5), steel: new Soup(1), heads: new Soup(1), tall: new Soup(5), arch: new Soup(1) }));
+    const parts = Array.from({ length: nChunks }, () => ({ struct: new Soup(5), deck: new Soup(5), steel: new Soup(1, true), heads: new Soup(1, true), tall: new Soup(5), arch: new Soup(1, true) }));
 
     // traffic centreline (deck top) at 20 m spacing
     const n = Math.ceil(total / STEP);
@@ -588,14 +658,14 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         for (const side of [-1, 1]) {
           const mx = (a.x + b.x) / 2 + ((a.rx + b.rx) / 2) * (hw + 0.33) * side;
           const mz = (a.z + b.z) / 2 + ((a.rz + b.rz) / 2) * (hw + 0.33) * side;
-          P.steel.box(mx, (a.y + b.y) / 2 + ph + 0.86, mz, 0.08, 0.08, len + 0.1, yaw, pitch, S_PLAIN, true);
-          P.steel.box(mx, (a.y + b.y) / 2 + ph + 0.44, mz, 0.06, 0.06, len + 0.1, yaw, pitch, S_PLAIN, true);
+          P.steel.box(mx, (a.y + b.y) / 2 + ph + 0.86, mz, 0.08, 0.08, len + 0.1, yaw, pitch, S_PLAIN, true, undefined, true);
+          P.steel.box(mx, (a.y + b.y) / 2 + ph + 0.44, mz, 0.06, 0.06, len + 0.1, yaw, pitch, S_PLAIN, true, undefined, true);
         }
       }
       for (let s = Math.ceil(s0 / 4) * 4; s < s1; s += 4) {
         const f = frameAt(s);
         const yaw = yawAt(f);
-        for (const side of [-1, 1]) P.steel.box(f.x + f.rx * (hw + 0.33) * side, f.y + ph, f.z + f.rz * (hw + 0.33) * side, 0.12, 0.9, 0.12, yaw, 0, S_PLAIN, true);
+        for (const side of [-1, 1]) P.steel.box(f.x + f.rx * (hw + 0.33) * side, f.y + ph, f.z + f.rz * (hw + 0.33) * side, 0.12, 0.9, 0.12, yaw, 0, S_PLAIN, true, undefined, true);
       }
       // lamp posts on the parapet caps, alternating sides every 45 m: pole, arm over the shoulder, glowing luminaire
       for (let ls = 22, j = 0; ls < total - 20; ls += 45, j++) {
@@ -604,9 +674,9 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         const side = j % 2 === 0 ? -1 : 1;
         const yaw = yawAt(f);
         const bx = f.x + f.rx * (hw + 0.33) * side, bz = f.z + f.rz * (hw + 0.33) * side;
-        P.steel.cylinder(bx, f.y + ph, bz, 0.2, 9.0, 6, S_PLAIN, false);
+        P.steel.cylinder(bx, f.y + ph, bz, 0.2, 9.0, 6, S_PLAIN, false, undefined, true);
         const ax = f.x + f.rx * (hw + 0.33 - 1.25) * side, az = f.z + f.rz * (hw + 0.33 - 1.25) * side;
-        P.steel.box(ax, f.y + ph + 8.85, az, 2.5, 0.16, 0.16, yaw, 0, S_PLAIN, true);
+        P.steel.box(ax, f.y + ph + 8.85, az, 2.5, 0.16, 0.16, yaw, 0, S_PLAIN, true, undefined, true);
         const hx = f.x + f.rx * (hw + 0.33 - 2.35) * side, hz = f.z + f.rz * (hw + 0.33 - 2.35) * side;
         P.heads.box(hx, f.y + ph + 8.62, hz, 0.8, 0.26, 0.5, yaw, 0, S_HEAD, false, [1]);
       }
@@ -731,7 +801,8 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         mesh.name = `${spec.id}#${k}`;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        mesh.onBeforeRender = (_r, _s, camera) => { culler.observe(camera); };
+        if (mesh.material === steelMat) mesh.onBeforeRender = (r, _s, camera) => { observeSteel(r, camera); };
+        else mesh.onBeforeRender = (_r, _s, camera) => { culler.observe(camera); };
         const box = mesh.geometry.boundingBox!;
         chunk.meshes.push({ mesh, cls, box, height: box.max.y - box.min.y, inView: true, cast: ALL_CASCADES });
         chunkBox.union(box);
