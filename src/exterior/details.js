@@ -7,8 +7,8 @@
 import * as THREE from "three";
 import { rng } from "../kit.js";
 import { HULL, halfWidth, dorsalH, ventralH, skinPoint, CHUNKS, chunkIndex, CITY, TOWER, HANGAR, REACTOR, PLATE_LIFT } from "./dims.js";
-import { instancedMesh, frameItem, boxItem, mergeParts, unitPipeGeometry, grey } from "./batch.js";
-import { makeSurface, trenchWallX } from "./hull.js";
+import { instancedMesh, frameItem, boxItem, decalItem, decalGeometry, mergeParts, unitPipeGeometry, grey } from "./batch.js";
+import { makeSurface, trenchWallX, plateauStreak } from "./hull.js";
 
 const _p = new THREE.Vector3();
 const _a = new THREE.Vector3();
@@ -58,6 +58,45 @@ const smoothstep = (a, b, x) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
+
+/** Decals lie this far above a plate anchor's top (over the ±3 % thickness spread of its neighbours). */
+const DECAL_ABOVE_PLATE = 0.15;
+
+/**
+ * Private stream for a streak's segment split, seeded by one draw `r` of the detail stream (the one
+ * the old single-strip code made), so the greebles laid out after the streak keep their places.
+ */
+const subRng = (r) => rng(Math.floor(r * 4294967296));
+
+/**
+ * Soot streak trailing aft (+Z) from (ox, oz0) in a plate anchor's frame: 1–3 offset segments of the
+ * soft streak-mask decal, each with its own width, strength (0.15–0.35 multiply) and mask variant.
+ */
+function anchorStreak(rand, a, ox, oz0, w, len, list) {
+  const parts = len > 9 ? 2 + (rand() < 0.4 ? 1 : 0) : 1 + (rand() < 0.5 ? 1 : 0);
+  let z = oz0;
+  for (let p = 0; p < parts; p++) {
+    const l = (len / parts) * (1.1 + rand() * 0.5);
+    _p.copy(a.p)
+      .addScaledVector(a.X, ox + (rand() - 0.5) * w * 0.6)
+      .addScaledVector(a.Y, DECAL_ABOVE_PLATE)
+      .addScaledVector(a.Z, z + l / 2);
+    list.push(decalItem(_p, a.X, a.Z, w * (0.7 + rand() * 0.6), l, [0.15 + rand() * 0.2, Math.floor(rand() * 4) / 4, 0]));
+    z += l * (0.75 + rand() * 0.2);
+  }
+}
+
+/**
+ * Soot fan behind a landmark on a plateau: three narrow streaks side by side (staggered lengths and
+ * strengths) instead of one flat dark slab, so the fan has soft lanes and tapered ends.
+ */
+function plateauFan(rand, side, x, z0, w, len, list) {
+  for (const t of [-0.3, 0.02, 0.3]) {
+    const l = len * (0.6 + rand() * 0.55);
+    const item = plateauStreak(side, x + t * w + (rand() - 0.5) * w * 0.12, z0 + rand() * 2, w * (0.36 + rand() * 0.14), l, 0.15 + rand() * 0.2, Math.floor(rand() * 4));
+    if (item) list.push(item);
+  }
+}
 
 /**
  * True when every corner of the yaw-rotated sx × sz footprint centred at (x, z) lies on the plateau of
@@ -227,7 +266,7 @@ export function buildDetails(materials, hull, sup) {
 
   // `big` holds the coarse landmarks (cluster blocks, galleries, soot fans, bevel intakes, crease rail)
   // that stay visible past the fine-greeble LOD so the clusters still read as knots at medium range
-  const per = Array.from({ length: CHUNKS }, () => ({ boxes: [], big: [], lights: [], windows: [], pipes: [], reds: [], docks: [], dishes: [] }));
+  const per = Array.from({ length: CHUNKS }, () => ({ boxes: [], big: [], lights: [], windows: [], pipes: [], reds: [], docks: [], dishes: [], streaks: [] }));
   const city = { boxes: [], lights: [], pipes: [], reds: [] };
   const global = { radiators: [], sensors: [], antennas: [], wedges: [], dim: [] };
   let greebles = 0;
@@ -417,8 +456,11 @@ export function buildDetails(materials, hull, sup) {
           if (rand() < 0.3) continue;
           windowCluster(rand, tw * 0.6, (t) => out.windows.push(plateauItem(side, tx + t, tz + td / 2 + 0.1, WINDOW_W, 1.0, 0.2, windowTint(rand), 0, y)));
         }
-        // soot fan trailing aft of the tower base
-        if (footprintOnPlateau(side, tx, tz + td / 2 + 7, tw * 1.1, 20, 0)) out.big.push(plateauItem(side, tx, tz + td / 2 + 7, tw * 1.1, 0.06, 12 + rand() * 8, grey(0.42, 0.98), 0, PLATE_LIFT + 0.01));
+        // soot fan trailing aft of the tower base (soft multiply decals, not a flat slab)
+        if (footprintOnPlateau(side, tx, tz + td / 2 + 7, tw * 1.1, 20, 0)) {
+          const r = rand();
+          plateauFan(subRng(r), side, tx, tz + td / 2 + 0.5, tw * 1.1, 12 + r * 8, out.streaks);
+        }
         greebles += 5;
       }
       // a pair of big low housings and a pipe manifold across the complex
@@ -456,7 +498,8 @@ export function buildDetails(materials, hull, sup) {
       // end blocks and a couple of vents on the roof
       for (const e of [-1, 1]) out.big.push(plateauItem(side, c.x + Math.sin(c.yaw) * e * (gl / 2 + 2), c.z + Math.cos(c.yaw) * e * (gl / 2 + 2), gw + 2, gh * 0.7, 3.5, grey(0.3, 1.04), c.yaw));
       for (let k = 0; k < 3; k++) out.big.push(plateauItem(side, c.x + (rand() - 0.5) * gw * 0.5, c.z + (rand() - 0.5) * (gl - 6), 1.6, 1.2, 1.6, grey(0.2, 1.1), 0, LIFT + gh));
-      if (footprintOnPlateau(side, c.x, c.z + gl / 2 + 8, gw, 14, 0)) out.big.push(plateauItem(side, c.x, c.z + gl / 2 + 8, gw * 0.9, 0.06, 14, grey(0.42, 0.98), 0, PLATE_LIFT + 0.01));
+      // (the old slab made no draw here, so the fan's stream is seeded from the gallery's position)
+      if (footprintOnPlateau(side, c.x, c.z + gl / 2 + 8, gw, 14, 0)) plateauFan(rng((Math.abs(c.x) * 977 + Math.abs(c.z) * 131 + (side > 0 ? 0 : 50000)) >>> 0), side, c.x, c.z + gl / 2 + 2.5, gw * 0.9, 14, out.streaks);
       greebles += 8;
     }
   }
@@ -571,9 +614,10 @@ export function buildDetails(materials, hull, sup) {
           greebles++;
         }
         if ((gh > 3 || tower) && rand() < 0.55) {
-          const sl = 6 + rand() * 12;
-          // streaks trail aft (+z); the anchor's Z axis points +z on both skins
-          out.boxes.push(onPlate(a, ox, 0.03, oz + gd / 2 + sl / 2 + 0.2, gw * 0.8, 0.06, sl, grey(tone * 0.6, 0.98)));
+          // soot streak trailing aft (+z; the anchor's Z axis points +z on both skins): soft multiply
+          // decal segments over the plates, not a flat dark strip
+          const r = rand();
+          anchorStreak(subRng(r), a, ox, oz + gd / 2 + 0.2, gw * 0.8, 6 + r * 12, out.streaks);
           greebles++;
         }
         if (tower && rand() < 0.7) {
@@ -884,9 +928,14 @@ export function buildDetails(materials, hull, sup) {
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
   const pipeGeo = unitPipeGeometry(8);
   const dishGeo = dishGeometry();
+  const streakGeo = decalGeometry();
   for (let ci = 0; ci < CHUNKS; ci++) {
     const cg = hull.chunkGroups[ci];
     const p = per[ci];
+    // soot-streak decals (the hull's plateau streaks + the detail streaks and fans) in one multiply
+    // mesh per chunk, LOD'd with the plates they lie on
+    const streaks = hull.streaks[ci].concat(p.streaks);
+    if (streaks.length) cg.add(instancedMesh(streakGeo, materials.ext_streak, streaks, { name: "streakDecals", lod: 1, receiveShadow: false }));
     if (p.boxes.length) cg.add(instancedMesh(boxGeo, materials.hullDark, p.boxes, { name: "detailBoxes", lod: 0 }));
     if (p.big.length) cg.add(instancedMesh(boxGeo, materials.hullDark, p.big, { name: "detailBig", lod: 3, castShadow: true }));
     if (p.lights.length) cg.add(instancedMesh(boxGeo, materials.exteriorLight, p.lights, { name: "detailLights", lod: 0 }));

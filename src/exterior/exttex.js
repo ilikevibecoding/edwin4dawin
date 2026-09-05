@@ -9,6 +9,50 @@ const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (t) => t * t * (3 - 2 * t);
 
+/**
+ * Soft soot streaks for the plate textures: `n` streaks trailing aft (+v), each split into 1–3
+ * segments offset sideways a little, with a smoothstep profile across the width, tapered ends and a
+ * per-segment strength of 0.15–0.35 (as a multiply on the albedo). Returns the segment list;
+ * streakFactor() evaluates it at a texel. Replaces the old hard-edged uniform strips.
+ *
+ * The streaks draw from a private stream seeded by the texture's first draw, and the rest of the old
+ * generator's `legacyDraws` are burnt, so the scratches, rivets and scorch panels laid down after the
+ * streaks keep their places in the tile.
+ */
+function softStreaks(rand, n, legacyDraws) {
+  const sub = mulberry32(Math.floor(rand() * 4294967296));
+  for (let i = 1; i < legacyDraws; i++) rand();
+  const segs = [];
+  for (let i = 0; i < n; i++) {
+    const x = sub();
+    const y0 = sub() * 0.5;
+    const len = 0.2 + sub() * 0.5;
+    const hw = 0.008 + sub() * 0.018;
+    const parts = 1 + Math.floor(sub() * 3);
+    let y = y0;
+    for (let p = 0; p < parts; p++) {
+      const l = (len / parts) * (0.8 + sub() * 0.5);
+      segs.push({ x: x + (sub() - 0.5) * hw * 1.2, y0: y, len: l, hw: hw * (0.75 + sub() * 0.5), k: 0.15 + sub() * 0.2 });
+      y += l * (0.85 + sub() * 0.2);
+    }
+  }
+  return segs;
+}
+function streakFactor(u, v, segs) {
+  let f = 1;
+  for (const s of segs) {
+    const dv = v - s.y0;
+    if (dv < 0 || dv > s.len) continue;
+    const du = Math.abs(u - s.x);
+    if (du >= s.hw) continue;
+    const across = smooth(1 - du / s.hw);
+    const t = dv / s.len;
+    const along = smooth(clamp01(t / 0.12)) * (1 - smooth(clamp01((t - 0.45) / 0.55)));
+    f *= 1 - across * along * s.k;
+  }
+  return f;
+}
+
 /** Metres covered by one trench-wall tile (16 panels of 3 m). */
 export const TRENCH_TILE = 48;
 
@@ -121,8 +165,7 @@ export function makeExtHullPlate(size = 512, seed = 241) {
   });
   const lines = [];
   for (let i = 0, n = 1 + Math.floor(rand() * 2); i < n; i++) lines.push(0.15 + rand() * 0.7);
-  const streaks = [];
-  for (let i = 0; i < 8; i++) streaks.push([rand(), rand() * 0.5, 0.2 + rand() * 0.5, 0.004 + rand() * 0.012]);
+  const streaks = softStreaks(rand, 6, 32);
   t.each((u, v, i) => {
     let col = 0;
     while (u > cuts[col + 1]) col++;
@@ -185,14 +228,9 @@ export function makeExtHullPlate(size = 512, seed = 241) {
     const soot = smooth(clamp01((v - 0.45) / 0.55)) * (0.4 + 0.6 * vnoise2(u, v, 20, 3, seed + 5));
     lum *= 1 - soot * 0.09;
     rough += soot * 0.08;
-    for (const [sx, sy, sl, sw] of streaks) {
-      const dx = Math.abs(u - sx);
-      if (dx < sw && v > sy && v < sy + sl) {
-        const k = (1 - dx / sw) * (1 - (v - sy) / sl) * 0.4;
-        lum *= 1 - k * 0.3;
-        rough += k * 0.1;
-      }
-    }
+    const sf = streakFactor(u, v, streaks);
+    lum *= 1 - (1 - sf) * 0.7;
+    rough += (1 - sf) * 0.25;
     t.setColor(i, lum * 0.985, lum, lum * 1.02);
     t.rough[i] = clamp01(rough);
     t.metal[i] = clamp01(metal);
@@ -217,6 +255,37 @@ export function makeExtNavGlow(size = 64) {
   return toTexture(c, { srgb: true, wrap: false });
 }
 
+/**
+ * Soot-streak decal mask, four variants side by side (u = variant/4 … (variant+1)/4, v along the
+ * streak from its source at v = 0 to the tail at v = 1). Mask in the red channel: smoothstep across
+ * the width, a quick fade-in at the source and a long taper to the tail, two or three denser lanes
+ * and mottling along the length — no hard edge anywhere.
+ */
+export function makeExtStreakMask(size = 256, variants = 4, seed = 271) {
+  const c = makeCanvas(size, size);
+  const ctx = c.getContext("2d");
+  const img = ctx.createImageData(size, size);
+  const colW = size / variants;
+  for (let y = 0; y < size; y++) {
+    const v = (y + 0.5) / size;
+    for (let x = 0; x < size; x++) {
+      const k = Math.floor(x / colW);
+      const u = ((x % colW) + 0.5) / colW;
+      const across = smooth(clamp01((1 - Math.abs(2 * u - 1)) / 0.85));
+      const tail = 0.4 + 0.12 * k;
+      const along = smooth(clamp01(v / 0.14)) * (1 - smooth(clamp01((v - tail) / (1 - tail))));
+      const lanes = 0.5 + 0.5 * vnoise2(u + k * 0.37, v, 3, 12, seed + k * 7);
+      const mott = 0.7 + 0.3 * fbm(u * 0.25 + k * 0.25, v, { octaves: 3, freq: 6, seed: seed + 3 + k });
+      const a = Math.round(clamp01(across * along * lanes * mott) * 255);
+      const i = (y * size + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = a;
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTexture(c, { srgb: false, wrap: false, anisotropy: 4 });
+}
+
 /** Worn armour plate: finer irregular sub-plates, scratches, soot streaks trailing aft (+v), rivets. */
 export function makeExtHullWorn(size = 512, seed = 211) {
   const t = new TexGen(size, size);
@@ -237,8 +306,7 @@ export function makeExtHullWorn(size = 512, seed = 211) {
     const a = rand() < 0.6 ? Math.PI / 2 + (rand() - 0.5) * 0.5 : rand() * Math.PI;
     scratches.push({ x: rand(), y: rand(), dx: Math.cos(a), dy: Math.sin(a), len: 0.08 + rand() * 0.35, w: 0.0015 + rand() * 0.0025, bright: rand() < 0.65 });
   }
-  const streaks = [];
-  for (let i = 0; i < 10; i++) streaks.push([rand(), rand() * 0.5, 0.2 + rand() * 0.5, 0.006 + rand() * 0.016]);
+  const streaks = softStreaks(rand, 8, 40);
   // rectangular scorch patches aligned to the sub-panel grid (instead of round ports)
   const scorch = [];
   for (let i = 0; i < 3; i++) scorch.push([Math.floor(rand() * cols), Math.floor(rand() * 3), 0.5 + rand() * 0.4]);
@@ -287,14 +355,9 @@ export function makeExtHullWorn(size = 512, seed = 211) {
     const soot = smooth(clamp01((v - 0.35) / 0.65)) * (0.5 + 0.5 * vnoise2(u, v, 24, 3, seed + 5));
     lum *= 1 - soot * 0.16;
     rough += soot * 0.1;
-    for (const [sx, sy, sl, sw] of streaks) {
-      const dx = Math.abs(u - sx);
-      if (dx < sw && v > sy && v < sy + sl) {
-        const k = (1 - dx / sw) * (1 - (v - sy) / sl) * 0.55;
-        lum *= 1 - k * 0.32;
-        rough += k * 0.1;
-      }
-    }
+    const sf = streakFactor(u, v, streaks);
+    lum *= sf;
+    rough += (1 - sf) * 0.3;
     // scratches: bare-metal bright hairlines (or dark gouges)
     for (const s of scratches) {
       const rx = u - s.x;
@@ -412,5 +475,15 @@ export function ensureExtMaterials(materials) {
   // glow point per lamp (PointsMaterial: size in metres, one draw call for the whole set)
   materials.ext_navLamp = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, fog: false });
   materials.ext_navGlow = new THREE.PointsMaterial({ map: makeExtNavGlow(64), size: 3.6, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true, fog: false });
+  // soot-streak decals over the plating: instanced planes with the streak mask, multiplied onto the
+  // plates (dst × (1 − mask × k)); k = instance colour .r (0.15–0.35), mask variant = .g (0, ¼, ½, ¾).
+  // three ≥ r17x only multiplies with premultipliedAlpha (DST_COLOR, ONE_MINUS_SRC_ALPHA); alpha is
+  // written as 1 so that is a pure multiply
+  materials.ext_streak = new THREE.MeshBasicMaterial({ map: makeExtStreakMask(256, 4, 271), color: 0xffffff, transparent: true, premultipliedAlpha: true, depthWrite: false, blending: THREE.MultiplyBlending, side: THREE.DoubleSide, vertexColors: true, fog: false });
+  materials.ext_streak.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader.replace("#include <uv_vertex>", "#include <uv_vertex>\n#ifdef USE_INSTANCING_COLOR\n\tvMapUv.x = vMapUv.x * 0.25 + instanceColor.g;\n#endif\n");
+    shader.fragmentShader = shader.fragmentShader.replace("#include <color_fragment>", "\tdiffuseColor.rgb = vec3( 1.0 - diffuseColor.r * vColor.r );\n\tdiffuseColor.a = 1.0;\n");
+  };
+  materials.ext_streak.customProgramCacheKey = () => "ext_streak_multiply";
   return materials;
 }

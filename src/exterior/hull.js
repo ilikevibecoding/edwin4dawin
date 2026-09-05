@@ -9,7 +9,7 @@ import { PALETTE } from "../materials.js";
 import { rng, setVertexColor } from "../kit.js";
 import { vnoise, vnoise2 } from "../textures.js";
 import { HULL, halfWidth, dorsalH, ventralH, CHUNKS, chunkIndex, chunkCenterZ, HANGAR, REACTOR, CITY, PLATE_LIFT } from "./dims.js";
-import { Batcher, instancedMesh, frameItem, grey, planarUVs } from "./batch.js";
+import { Batcher, instancedMesh, frameItem, decalItem, grey, planarUVs } from "./batch.js";
 import { ensureExtMaterials, TRENCH_TILE } from "./exttex.js";
 
 /**
@@ -640,30 +640,52 @@ function buildFarSkin(side, z0, z1, lift) {
   return geos;
 }
 
+/** Decals sit this far above the plate tops (over the ±3 % thickness spread, under the raised plates). */
+export const DECAL_LIFT = PLATE_LIFT + 0.12;
+
 /**
- * Soot streaks over the plating: thin dark strips trailing aft from a seam, 2–3 per 100 m per side on
- * each plateau (denser toward the stern), into the chunk groove lists (LOD with the plates).
+ * One soot-streak decal on a plateau (side ±1), trailing aft from (x, z): the decal plane follows the
+ * plateau's slope, `k` is the multiply strength (0.15–0.35) and `variant` picks one of the four mask
+ * columns. Returns the instance item, or null when the streak would run into a skipped footprint.
+ */
+export function plateauStreak(side, x, z, w, len, k, variant, skip = null) {
+  if (skip && (skip(x, z) || skip(x, z + len))) return null;
+  const H = side > 0 ? dorsalH : ventralH;
+  const y0 = side * (H(z) + DECAL_LIFT);
+  const y1 = side * (H(z + len) + DECAL_LIFT);
+  _ez.set(0, y1 - y0, len).normalize();
+  _ex.set(1, 0, 0);
+  _c.set(x, (y0 + y1) / 2, z + len / 2);
+  return decalItem(_c, _ex, _ez, w, len, [k, variant / 4, 0]);
+}
+
+/**
+ * Soot streaks over the plating: 2–3 per 100 m per side on each plateau, trailing aft from a seam.
+ * Each streak is 2–3 offset segments of the soft decal mask (smoothstep across, tapered ends) with a
+ * per-segment strength of 0.15–0.35, multiplied onto the plates — not one flat darker strip.
  */
 function buildStreaks(rand, chunks) {
   for (const side of [1, -1]) {
     const sp = side > 0 ? HULL.plateauDorsal : HULL.plateauVentral;
+    const skipC = makeSurface(side, "plateau").skip;
     for (let z = HULL.bowZ + 60; z < HULL.sternZ - 40; z += 26 + rand() * 30) {
       const hw = halfWidth(z) * sp - 8;
       if (hw < 8) continue;
       const x = (rand() * 2 - 1) * hw;
-      const skipC = makeSurface(side, "plateau").skip;
       if (skipC(x, z) || skipC(x, z + 30)) continue;
       const len = 22 + rand() * 40;
       const w = 2.5 + rand() * 4;
-      const tone = regionTone(x, z, side, true, 0.5) * (0.5 + rand() * 0.12);
-      const H = side > 0 ? dorsalH : ventralH;
-      const y0 = side * (H(z) + PLATE_LIFT + 0.05);
-      const y1 = side * (H(z + len) + PLATE_LIFT + 0.05);
-      const dir = new THREE.Vector3(0, y1 - y0, len).normalize();
-      const up = new THREE.Vector3(0, side, 0);
-      const across = new THREE.Vector3(1, 0, 0);
-      _c.set(x, (y0 + y1) / 2, z + len / 2);
-      chunks[chunkIndex(z + len / 2)].grooves.push(frameItem(_c, across, up, dir, w, 0.08, len, grey(tone, 0.98)));
+      // the segment split draws from a private stream seeded by this streak's fifth draw (the old
+      // tone draw), so the hangar module and reactor built after the streaks keep their layout
+      const sub = rng(Math.floor(rand() * 4294967296));
+      const parts = 2 + (sub() < 0.5 ? 1 : 0);
+      let zs = z;
+      for (let p = 0; p < parts; p++) {
+        const l = (len / parts) * (1.1 + sub() * 0.5);
+        const item = plateauStreak(side, x + (sub() - 0.5) * w * 0.9, zs, w * (0.7 + sub() * 0.6), l, 0.15 + sub() * 0.2, Math.floor(sub() * 4), skipC);
+        if (item) chunks[chunkIndex(zs + l / 2)].streaks.push(item);
+        zs += l * (0.75 + sub() * 0.2);
+      }
     }
   }
 }
@@ -960,7 +982,7 @@ export function buildHull(materials) {
   chamfers.build(group, { name: "sternChamfers" });
 
   // --- hierarchical plating per chunk (clean plates on the shared hull sets, worn plates on ext_hullWorn)
-  const chunks = Array.from({ length: CHUNKS }, () => ({ plates: [], worn: [], grooves: [], anchors: [] }));
+  const chunks = Array.from({ length: CHUNKS }, () => ({ plates: [], worn: [], grooves: [], anchors: [], streaks: [] }));
   const surfaces = [];
   for (const side of [1, -1]) {
     for (const part of ["plateau", "bevelL", "bevelR"]) {
@@ -1004,5 +1026,7 @@ export function buildHull(materials) {
   group.add(buildHangarModule(materials, rand));
   plateCount += buildReactor(materials, group, rand);
 
-  return { group, chunkGroups, surfaces, anchors: chunks.map((c) => c.anchors), stats: { plates: plateCount, greebles: 0 } };
+  // the plateau streak decals are handed to details.js, which merges them with its own streaks into one
+  // decal mesh per chunk
+  return { group, chunkGroups, surfaces, anchors: chunks.map((c) => c.anchors), streaks: chunks.map((c) => c.streaks), stats: { plates: plateCount, greebles: 0 } };
 }
