@@ -625,7 +625,10 @@ export function workLight(kit, ctx, x, y, z, { ceil, color = COOL, intensity = 6
   kit.box("metal", x, y + 0.22, z, w * 0.5, 0.06, d * 0.5, { color: PALETTE.gunmetal });
   kit.box(emit, x, y - 0.005, z, w - 0.1, 0.02, d - 0.1, { uv: "keep" });
   kit.box("emitAmber", x + w / 2 - 0.06, y + 0.12, z + d / 2 + 0.006, 0.05, 0.03, 0.01);
-  if (light) ctx.light(pointLight(color, intensity, distance, [x, y - 0.3, z]));
+  // the real light hangs 0.9 m under the diffuser: at 0.3 m its own inverse-square falloff lit the
+  // dim face to a clipped white block from any camera below it (probe: 569 px >= 240 at 0.3 m,
+  // 0 px at 0.9 m, where the face renders at the emitter's own 230)
+  if (light) ctx.light(pointLight(color, intensity, distance, [x, y - 0.9, z]));
 }
 
 /** Wall-mounted red rotating-beacon style warning lamp (dome + cage). */
