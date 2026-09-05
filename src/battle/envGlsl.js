@@ -25,6 +25,26 @@ float hashf(vec3 p) {
 }
 `;
 
+// 2D value noise on the integer lattice (quintic-smoothed, wraps in x every N cells so it tiles
+// around a longitude axis). Smooth at any magnification, unlike a bilinear texture tap, so it is
+// used for the large-scale warps of the planet's district boundaries.
+export const GLSL_NOISE2 = /* glsl */ `
+float vnoise2(vec2 p, int N, uint seed) {
+  ivec2 i = ivec2(floor(p));
+  vec2 f = fract(p);
+  f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  int x0 = i.x % N;
+  if (x0 < 0) x0 += N;
+  int x1 = (x0 + 1) % N;
+  int y0 = i.y + 64;
+  float a = hash1(ivec2(x0, y0), seed);
+  float b = hash1(ivec2(x1, y0), seed);
+  float c = hash1(ivec2(x0, y0 + 1), seed);
+  float d = hash1(ivec2(x1, y0 + 1), seed);
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+`;
+
 // 3D value noise + fbm on directions (sky band, moon surfaces). Cheap, smooth, no lattice artefacts at
 // the scales used here.
 export const GLSL_NOISE3 = /* glsl */ `
@@ -109,11 +129,11 @@ Cell voronoi(vec2 c, int N, uint seed) {
 // Anti-aliased line of half-width hw around dist = 0; px is the pixel footprint in the same units.
 // Lines thinner than a pixel widen to one pixel and dim by (hw/w)^k: k = 1 conserves energy (bright
 // arteries stay visible far away, as HDR lights do), k > 1 makes a dense net of sub-pixel streets fade
-// toward the ground instead of averaging into a flat wash. Fully resolved wide bands run cooler than
-// thin lines: a 40-pixel band at the radiance a 1-pixel line needs would be a white slab.
+// toward the ground instead of averaging into a flat wash. Fully resolved wide bands run a little
+// cooler than thin lines: a 40-pixel band at the radiance a 1-pixel line needs would be a white slab.
 float lineAA(float dist, float hw, float px, float k) {
   float w = max(hw, px * 0.7);
-  float a = pow(hw / w, k) * mix(1.0, 0.5, smoothstep(1.5, 5.0, hw / px));
+  float a = pow(hw / w, k) * mix(1.0, 0.7, smoothstep(1.5, 5.0, hw / px));
   return a * (1.0 - smoothstep(w - px * 0.75, w + px * 0.75, dist));
 }
 // pixel footprint of coordinate c along unit direction n, from its screen-space Jacobian

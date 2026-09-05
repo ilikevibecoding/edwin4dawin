@@ -3,15 +3,20 @@
 // on up-facing normals and a warm Lambert "city glow" from Coruscant below (planetDir), so bellies read
 // as warm mid-grey instead of black and the fleet looks lit by the planet it is fighting over.
 //
-// Balance (hull albedo is ~0.2 linear: plating 0.44 x republic tint 0.48, ACES at exposure 1): a deck
-// facing the sun lands near sRGB 170, a flank in the sun's shadow near 75 (planet glow only), a belly
-// near 115. Measured on the venator_close view with debugAPI.capturePixels.
+// Balance (film-like key/fill ratio; ACES at exposure 1, bloom threshold 0.85 linear). With the hull
+// albedos the ship models aim for (plating 0.62 x cream deck tint 0.95 -> ~0.55 luminance; x dark
+// belly tint 0.34 -> ~0.21), measured on the Venator: a deck facing the sun lands at sRGB 198-208 with
+// the brightest plates at 215-223 (no clipping), a cream vertical face in the sun's shadow at 67
+// (planet glow only, bloom off; a mid-grey plate ~50) and a belly at 82-88, hue 30 degrees. The planet
+// fill is shaped like the real thing: the city disc spans ~68 degrees from nadir at 120 km, so a
+// vertical face receives 31 % of a belly's irradiance and a deck none.
 import * as THREE from "three";
 
 export const BATTLE_SUN_COLOR = new THREE.Color(1.0, 0.96, 0.9);
-export const BATTLE_SUN_INTENSITY = 5.4;
-// key light: high (48 degrees) and from the fleet's starboard bow (Republic ships head -Z), so the
-// standard views from the port quarter show a sunlit deck over a flank lit only by the warm planet fill
+export const BATTLE_SUN_INTENSITY = 4.8;
+// key light: high (48 degrees) and off the fleet's bow, so the standard views from the quarter show a
+// sunlit deck over a flank lit only by the warm planet fill. Shared with the cinematic camera (imported
+// there to pick a hull's sunlit side): keep this export stable.
 export const BATTLE_SUN_DIR = new THREE.Vector3(-0.5, 0.74, -0.45).normalize();
 
 let activeSun = null;
@@ -22,10 +27,11 @@ export function makeBattleSun() {
     color: {
       value: BATTLE_SUN_COLOR.clone().multiplyScalar(BATTLE_SUN_INTENSITY),
     },
-    // cool, dim starlight / space fill on up-facing normals
-    fillUp: { value: new THREE.Color(0.2, 0.24, 0.34) },
-    // Coruscant's city light: warm and broad, strongest on down-facing normals
-    fillDown: { value: new THREE.Color(0.95, 0.72, 0.48) },
+    // faint cool starlight / space fill on up-facing normals
+    fillUp: { value: new THREE.Color(0.17, 0.2, 0.28) },
+    // Coruscant's city light: warm gold, strongest on down-facing normals. Saturated enough that a
+    // belly still measures hue ~33 degrees after the cool shadow lift of the final pass
+    fillDown: { value: new THREE.Color(1.3, 0.9, 0.44) },
     planetDir: { value: new THREE.Vector3(0, -1, 0) },
   };
   return activeSun;
@@ -66,10 +72,13 @@ export function battlePatch(mat, sun, opts = {}) {
     vec3 nW = inverseTransformDirection( geometryNormal, viewMatrix );
     float up = clamp( nW.y, 0.0, 1.0 );
     float toPlanet = dot( nW, uPlanetDir );
-    // the glowing city disc spans ~68 degrees from nadir at this altitude: bellies get the full glow,
-    // vertical faces about 45% of it, decks only a trace from the limb
-    float planetLambert = 0.45 * ( 1.0 + toPlanet ) + 0.1 * max( toPlanet, 0.0 );
+    // irradiance from the glowing city disc (68 degrees from nadir at this altitude): a belly gets
+    // the full glow, a vertical face 31 % of it (the integral of the half disc it sees), a deck none
+    float planetLambert = 0.38 * max( toPlanet, 0.0 ) + 0.31 * ( 1.0 + toPlanet );
     vec3 fill = uFillUp * ( 0.35 + 0.65 * up ) + uFillDown * planetLambert;
+    // soft cavity term: vertical faces sit between the two fills and read flat without it; a little
+    // darkening there gives the shadow side a key/fill edge against the deck and the belly
+    fill *= 1.0 - 0.15 * ( 1.0 - abs( nW.y ) );
     reflectedLight.indirectDiffuse += fill * BRDF_Lambert( diffuseColor.rgb );
   }`,
       );

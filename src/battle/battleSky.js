@@ -1,19 +1,18 @@
 // Sky for the battle scene, four draw calls: one Points cloud of ~12k stars (crisp integer-pixel
-// points, many faint / few bright, slight colour-temperature variety), one procedural galactic band
-// on an inverted sphere (smooth milky glow with dust lanes, not sprite blobs), two moons merged into
-// one mesh (mostly unlit discs, lit by the battle sun), and a Points layer of distant traffic near the
-// limb. Stars, band and moons ignore the camera's translation (rotation-only view transform), so they
-// sit at infinity and never parallax or jitter as the camera flies.
+// points, many faint / few bright, slight colour-temperature variety), one galactic band on an
+// inverted sphere (smooth milky glow with dust lanes, baked once to an equirect map and sampled with
+// one tap; see envBand.js), two moons merged into one mesh (mostly unlit discs, lit by the battle
+// sun), and a Points layer of distant traffic near the limb. Stars, band and moons ignore the camera's
+// translation (rotation-only view transform), so they sit at infinity and never parallax or jitter as
+// the camera flies.
 import * as THREE from "three";
 import { mulberry32 } from "../textures.js";
-import { GLSL_HASH, GLSL_NOISE3 } from "./envGlsl.js";
 import { getBattleSun } from "./battleShader.js";
 import { buildMoons } from "./envMoons.js";
 import { buildTraffic } from "./envTraffic.js";
+import { buildBand, BAND_NORMAL, BAND_CORE } from "./envBand.js";
 
-// direction of the galactic plane's normal and of its bright core, shared by stars and band
-export const BAND_NORMAL = new THREE.Vector3(0.3, 0.75, -0.6).normalize();
-export const BAND_CORE = new THREE.Vector3(-0.85, 0.05, -0.5).normalize();
+export { BAND_NORMAL, BAND_CORE };
 
 const starVert = /* glsl */ `
 attribute float aSize;
@@ -39,39 +38,6 @@ void main() {
   // soft discs
   float a = vSize <= 2.0 ? 1.0 : smoothstep(1.0, 0.25, r);
   gl_FragColor = vec4(vColor * a, 1.0);
-}`;
-
-const bandVert = /* glsl */ `
-varying vec3 vDir;
-void main() {
-  vDir = position;
-  gl_Position = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0);
-}`;
-
-const bandFrag = /* glsl */ `
-uniform vec3 uBandN;
-uniform vec3 uCore;
-uniform float uIntensity;
-varying vec3 vDir;
-${GLSL_HASH}
-${GLSL_NOISE3}
-void main() {
-  vec3 d = normalize(vDir);
-  float lat = dot(d, uBandN);
-  // band profile ~ +-10 degrees, brightening toward the core, broken by patchiness, dust lanes and a
-  // fine grain (unresolved stars) so it never reads as smooth fog
-  float band = exp(-lat * lat / (2.0 * 0.09 * 0.09));
-  float n1 = fbm3(d * 6.0, 4);
-  float n2 = fbm3(d * 21.0 + 3.1, 3);
-  float grain = fbm3(d * 90.0 + 7.7, 2);
-  float lane = smoothstep(0.48, 0.66, fbm3(d * 4.5 + 9.0, 3)) * exp(-lat * lat / (2.0 * 0.04 * 0.04));
-  float ang = acos(clamp(dot(d, uCore), -1.0, 1.0));
-  float core = exp(-ang * ang / (2.0 * 0.45 * 0.45));
-  // low-contrast patchiness: high contrast here reads as smoke rather than unresolved starlight
-  float I = band * (0.45 + 0.55 * smoothstep(0.2, 0.8, n1)) * (0.7 + 0.3 * n2) * (0.6 + 0.8 * grain)
-          * (1.0 - 0.55 * lane) * (0.45 + 1.5 * core);
-  vec3 col = mix(vec3(0.88, 0.92, 1.0), vec3(1.0, 0.93, 0.85), core) * I * uIntensity;
-  gl_FragColor = vec4(col, 1.0);
 }`;
 
 function buildStars(group, radius) {
@@ -147,32 +113,6 @@ function buildStars(group, radius) {
   };
   group.add(pts);
   return pts;
-}
-
-function buildBand(group, radius) {
-  const m = new THREE.ShaderMaterial({
-    uniforms: {
-      uBandN: { value: BAND_NORMAL },
-      uCore: { value: BAND_CORE },
-      uIntensity: { value: 0.027 },
-    },
-    vertexShader: bandVert,
-    fragmentShader: bandFrag,
-    side: THREE.BackSide,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    fog: false,
-  });
-  const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(radius * 0.95, 48, 32),
-    m,
-  );
-  mesh.name = "galacticBand";
-  mesh.frustumCulled = false;
-  mesh.renderOrder = -11;
-  group.add(mesh);
-  return mesh;
 }
 
 export function buildBattleSky(scene, radius = 3.2e6) {
