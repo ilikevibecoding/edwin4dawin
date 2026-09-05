@@ -103,9 +103,12 @@ void main() {
   vec2 q = vUv - 0.5;
   float vig = 1.0 - uVignette * smoothstep(0.35, 0.95, length(q) * 1.35);
   c *= vig;
-  // fine film grain hides banding in the sky gradients
-  c += (hash(gl_FragCoord.xy + fract(uTime) * 100.0) - 0.5) * uGrain;
   c = pow(max(c, 0.0), vec3(1.0 / 2.2));
+  // dither against 8-bit banding in the sky gradients: one display level of triangular noise, applied after
+  // the gamma so it is the same size in the darks as in the highlights (in linear light it was a ten-level
+  // grain over the night sea), and a fixed pattern (a re-rolled one read as film grain in the dark frames)
+  float dn = hash(gl_FragCoord.xy) + hash(gl_FragCoord.yx + 17.3) - 1.0;
+  c += dn * uGrain;
   gl_FragColor = vec4(c, 1.0);
 }
 `;
@@ -163,7 +166,7 @@ export class PostPipeline {
         tColor: { value: null }, tBloom0: { value: null }, tBloom1: { value: null }, tBloom2: { value: null },
         uBloom: { value: 0.2 }, uExposure: { value: 0.92 }, uSaturation: { value: 1.16 }, uVignette: { value: 0.25 },
         uLift: { value: new THREE.Vector3(0.0, 0.002, 0.004) }, uGain: { value: new THREE.Vector3(1.03, 1.0, 0.97) },
-        uResolution: { value: new THREE.Vector2(1, 1) }, uGrain: { value: 0.004 }, uTime: { value: 0 },
+        uResolution: { value: new THREE.Vector2(1, 1) }, uGrain: { value: 1 / 255 }, uTime: { value: 0 },
       },
       depthTest: false,
       depthWrite: false,
@@ -204,6 +207,9 @@ export class PostPipeline {
     a.uCamPos.value.copy(camera.position);
     a.uLogDepthFC.value = 2.0 / (Math.log(camera.far + 1.0) / Math.LN2);
     a.uCloudShadowStrength.value = this.cloudShadowStrength;
+    // shared atmosphere uniform: the sea and far terrain dissolve into the sky over the last 45 % of the view
+    // distance, so the far-plane cut never shows against the dome's horizon
+    (a.uFarDissolve.value as THREE.Vector2).set(camera.far * 0.55, 1 / (camera.far * 0.4));
     this.blit(this.aerialMat, this.fogRT);
 
     if (this.opts.bloom) {

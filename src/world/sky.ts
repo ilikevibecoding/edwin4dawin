@@ -163,8 +163,10 @@ float densityBase(vec3 p, vec4 f) {
 }
 
 /** Full density with detail erosion of the edges; mott returns the low-frequency shape noise so the
- *  lighting can mottle the undersides without another fetch. */
-float densityFull(vec3 p, vec4 f, float e, float hn, out float mott) {
+ *  lighting can mottle the undersides without another fetch. detFade (0..1) relaxes the erosion toward its
+ *  mean where the march step is far longer than the detail noise's ~10-30 m features: sampled that
+ *  coarsely the detail only adds grain that re-rolls as the camera moves, not shape. */
+float densityFull(vec3 p, vec4 f, float e, float hn, float detFade, out float mott) {
   vec3 q = noiseCoord(p, f);
   vec4 n = texture(uNoise3D, q);
   mott = n.a;
@@ -173,7 +175,7 @@ float densityFull(vec3 p, vec4 f, float e, float hn, out float mott) {
   // worley erosion, billowy lobes at the base and sides, wispier toward the top
   float det = texture(uNoise3D, q * 3.0 + vec3(0.37, 0.11, 0.73)).g;
   float wisp = texture(uNoise3D, q * 5.0 + vec3(0.61, 0.29, 0.17)).b;
-  float er = mix(det, wisp, smoothstep(0.45, 1.0, hn));
+  float er = mix(mix(det, wisp, smoothstep(0.45, 1.0, hn)), 0.5, detFade);
   // remap (rather than subtract) so eroded edges keep a steep density gradient: crisp cauliflower lobes
   float k = 0.5 * (1.0 - er);
   d = (d - k) / (1.0 - k);
@@ -237,6 +239,9 @@ void main() {
   // blue-black zenith, the shaded faces (which is what the camera sees from below) stay darker than the sky,
   // so the clouds read as silhouettes against the stars with lit rims, not as daylight cumulus
   vec3 lightCol = mix(uSunColor * 2.9, vec3(0.7, 0.78, 0.95) * 0.028, nightMix);
+  // uSunColor is the sun above the deck (the weather's sunDim only applies to what reaches the ground); the
+  // closed deck's scattering tail was tuned against a 0.6 key, keep its underside at that grey
+  lightCol *= mix(1.0, 0.6, smoothstep(0.45, 0.7, uCloudCoverage));
 
   float T = 1.0;
   vec3 col = vec3(0.0);
@@ -259,6 +264,8 @@ void main() {
     float dtC = dtF * 3.0;
     float dtS = dtF * (1.0 / 3.0);
     float t = t0 + ign(gl_FragCoord.xy) * dtF;
+    // long steps (grazing rays through a wide slab, low step budgets) cannot resolve the detail erosion
+    float detFade = smoothstep(70.0, 220.0, dtF);
 
     float cosSun = dot(dir, L);
     float forward = smoothstep(0.3, 0.95, cosSun);
@@ -306,7 +313,7 @@ void main() {
         continue;
       }
       float mott;
-      float dens = densityFull(p, f, e, hn, mott);
+      float dens = densityFull(p, f, e, hn, detFade, mott);
       if (dens <= 0.003) {
         empty++;
         if (level == 2 && empty > 1) level = 1;
@@ -402,8 +409,9 @@ void main() {
   vec4 vpos = uInvProj * vec4(ndc, 1.0, 1.0);
   vpos /= vpos.w;
   vec3 dir = normalize((uInvView * vec4(vpos.xyz, 0.0)).xyz);
-  // tent-filtered upsample of the reduced-resolution cloud layer (4 bilinear taps = 3x3 tent)
-  vec2 o = uCloudTexel * 0.35;
+  // tent-filtered upsample of the reduced-resolution cloud layer (4 bilinear taps half a texel out = a full
+  // 3x3 tent; a tighter offset left the layer's texel blocks visible at the edges of the blue gaps)
+  vec2 o = uCloudTexel * 0.5;
   vec4 c = texture(uCloudTex, uv + vec2(-o.x, -o.y)) + texture(uCloudTex, uv + vec2(o.x, -o.y))
          + texture(uCloudTex, uv + vec2(-o.x, o.y)) + texture(uCloudTex, uv + vec2(o.x, o.y));
   c *= 0.25;
@@ -435,9 +443,11 @@ void main() {
   vec3 fill = mix(uHazeColor, uGroundColor, 0.25);
   col = mix(col, fill, 0.65 * pow(1.0 - up, 0.3));
   // clouds as a soft neutral brightening band so reflections and the IBL pick up overcast (grey, not blue)
-  // light; a closed deck is most of the sky, so the diffuse light under it is its grey underside
-  float cov = smoothstep(0.2, 0.95, uCloudCoverage) * 0.7;
-  vec3 cloudCol = vec3(dot(uHorizonColor, vec3(0.2126, 0.7152, 0.0722))) * 1.15;
+  // light; a closed deck is most of the sky, so the diffuse light under it is its grey underside, which is
+  // brighter than the dimmed horizon under it (the whole sheet scatters the sun down) and covers the dome
+  float deck = smoothstep(0.45, 0.75, uCloudCoverage);
+  float cov = smoothstep(0.2, 0.95, uCloudCoverage) * 0.7 + deck * 0.25;
+  vec3 cloudCol = vec3(dot(uHorizonColor, vec3(0.2126, 0.7152, 0.0722))) * mix(1.15, 1.9, deck);
   col = mix(col, cloudCol, cov * smoothstep(0.0, 0.3, dir.y));
   vec3 sun = sunDisc(dir);
   col += min(sun, vec3(12.0));

@@ -42,6 +42,7 @@ uniform float uNight;        // 0 day .. 1 night
 uniform float uTime;
 uniform vec4 uCityGlow;      // light pollution footprint: xy world xz of the lit city's centre, z its radius (m), w strength (0 by day)
 uniform vec4 uCityGlowView;  // the same glow seen from the camera: xy horizontal unit direction to the centre, z angular width, w horizon radiance scale
+uniform vec2 uFarDissolve;   // aerial perspective reaches full extinction before the far plane: x start distance (m), y 1 / ramp length
 `;
 
 /** 2D cloud coverage field used for both the raymarched clouds' macro shape and the ground shadows.
@@ -119,44 +120,63 @@ vec3 cityGlowSky(vec3 dir) {
   return CITY_GLOW_COLOR * (uCityGlowView.w * azw * elev);
 }
 /** Sky gradient. uZenithColor is the deep blue of the upper sky, uHorizonColor the saturated blue-cyan a
- *  few degrees above the horizon; the blend has a short tail (most of it happens below 20 deg) so the sky
- *  stays saturated down to ~5 deg. Only the last ~2 deg whiten toward the haze colour (the band the
- *  aerial perspective fades distant terrain and clouds into), so there is no pale zone above the horizon. */
+ *  few degrees above the horizon; the blend has a short tail (most of it happens below 15 deg) so the sky
+ *  stays saturated well down. The lowest ~5 deg whiten toward the pale cyan haze colour (the band the
+ *  aerial perspective fades distant terrain and clouds into) with an exponential-like tail, the way a humid
+ *  tropical horizon brightens over the last few degrees rather than in a thin ribbon.
+ *  Below the horizon the function continues as the radiance of an infinitely long haze path over the dark
+ *  sea (what a downward ray scatters in); applyAerial uses the very same function, so a surface that has
+ *  fully dissolved into haze is indistinguishable from the dome behind it. */
 vec3 skyRadiance(vec3 dir) {
   float y = clamp(dir.y, -1.0, 1.0);
   float up = max(y, 0.0);
+  float sunUp = uSunDir.y;
   // the horizon glow reaches higher when the sun is low (long paths through lit air all around)
-  float kLow = mix(3.5, 5.0, smoothstep(0.05, 0.35, uSunDir.y));
+  float kLow = mix(3.5, 7.0, smoothstep(0.05, 0.35, sunUp));
   float lowMix = pow(1.0 - up, kLow);
-  vec3 col = mix(uZenithColor, uHorizonColor, lowMix);
-  // narrow warm-white haze band; never darker than the low sky so a warm sunset horizon keeps its glow
-  float hband = pow(1.0 - up, 55.0);
-  vec3 hazeWhite = max(mix(uHazeColor, uSunHazeColor, 0.3), uHorizonColor * 1.05);
-  col = mix(col, hazeWhite, hband * 0.85 * smoothstep(-0.05, 0.12, uSunDir.y));
-  // slight brightening of the sky toward the sun (mie forward scatter), strongest near horizon
   float cosSun = dot(dir, uSunDir);
+  float lowSun = (1.0 - smoothstep(0.05, 0.3, sunUp)) * smoothstep(-0.1, 0.0, sunUp);
+  // low sun: the horizon opposite the sun cools toward violet (earth shadow, no forward scatter), the sun
+  // side keeps the warm key colour; blended by the azimuth from the sun
+  float hl = length(dir.xz);
+  float az = hl > 1e-4 ? dot(dir.xz / hl, normalize(uSunDir.xz + vec2(1e-5, 0.0))) : 0.0;
+  vec3 horAway = uHorizonColor * vec3(0.72, 0.80, 1.45);
+  vec3 hor = mix(uHorizonColor, horAway, lowSun * (0.5 - 0.5 * az));
+  vec3 col = mix(uZenithColor, hor, lowMix);
+  // haze band over the last degrees; never darker than the low sky so a warm sunset horizon keeps its glow
+  float hband = pow(1.0 - up, 14.0);
+  vec3 hazeWhite = max(mix(uHazeColor, uSunHazeColor, 0.12), hor * 1.05);
+  col = mix(col, hazeWhite, hband * 0.85 * smoothstep(-0.05, 0.12, sunUp));
+  // slight brightening of the sky toward the sun (mie forward scatter), strongest near horizon
   float horizonMix = pow(1.0 - up, 14.0);
   float mie = pow(max(cosSun, 0.0), 8.0) * (0.08 + 0.5 * horizonMix);
-  col += uSunHazeColor * mie * smoothstep(-0.1, 0.15, uSunDir.y);
-  // low sun: a wide warm aureole around the disc (aerosol forward scatter through the long path), so the
-  // sun reads as the source of the sunset haze instead of a small disc in a flat peach sky
-  float lowSun = (1.0 - smoothstep(0.05, 0.3, uSunDir.y)) * smoothstep(-0.1, 0.0, uSunDir.y);
-  col += uSunHazeColor * pow(max(cosSun, 0.0), 45.0) * 0.4 * lowSun;
+  col += uSunHazeColor * mie * smoothstep(-0.1, 0.15, sunUp);
+  // low sun: a wide warm aureole around the disc (aerosol forward scatter through the long path) plus a
+  // tighter bright core a few degrees across, so the sun reads as the source of the sunset haze instead of
+  // a small disc in a flat peach sky
+  float cs = max(cosSun, 0.0);
+  col += uSunHazeColor * (pow(cs, 45.0) * 0.4 + pow(cs, 400.0) * 0.9) * lowSun;
   // sunset band
-  float band = exp(-abs(y) * 9.0) * pow(max(cosSun, 0.0), 2.0);
-  col += uSunHazeColor * band * 0.35 * (1.0 - smoothstep(0.15, 0.5, uSunDir.y)) * smoothstep(-0.12, 0.05, uSunDir.y);
+  float band = exp(-abs(y) * 9.0) * pow(cs, 2.0);
+  col += uSunHazeColor * band * 0.35 * (1.0 - smoothstep(0.15, 0.5, sunUp)) * smoothstep(-0.12, 0.05, sunUp);
   // night: the city's light pollution over the horizon
   vec3 glow = cityGlowSky(dir);
   col += glow;
-  // below the horizon: dark sea haze
-  col = mix(col, uHazeColor * 0.75 + glow * 0.5, smoothstep(0.0, -0.08, y));
+  // below the horizon: the haze over the dark sea (see applyAerial: the same colour a downward ray dissolves into)
+  col = mix(col, uHazeColor * 0.8 + glow * 0.5, smoothstep(0.0, -0.35, y));
   return col;
 }
+/** The disc and its glare. At a low sun the airmass has taken the direct beam down by an order of magnitude
+ *  and reddened it far more than the key light (which is what lit surfaces see): the disc's radiance and
+ *  colour follow the elevation so the tonemapper keeps it an orange-red limb instead of clipping it to a
+ *  white ball. */
 vec3 sunDisc(vec3 dir) {
   float cosSun = dot(dir, uSunDir);
+  float hi = smoothstep(0.03, 0.35, uSunDir.y);
   float disc = smoothstep(0.99985, 0.99995, cosSun);
+  vec3 col = uSunColor * mix(vec3(1.0, 0.13, 0.02), vec3(1.0), hi);
   float glow = pow(max(cosSun, 0.0), 1400.0) * 0.6 + pow(max(cosSun, 0.0), 160.0) * 0.08;
-  return uSunColor * (disc * 40.0 + glow) * smoothstep(-0.05, 0.02, uSunDir.y);
+  return col * (disc * mix(9.0, 40.0, hi) + glow) * smoothstep(-0.05, 0.02, uSunDir.y);
 }
 `;
 
@@ -176,10 +196,12 @@ vec3 applyAerial(vec3 col, vec3 camPos, vec3 wp) {
   vec3 dir = dv / max(d, 1e-3);
   float od = opticalDepth(camPos.y, wp.y, d);
   float ext = exp(-od);
-  // in-scattered light: the sky colour in this direction (seamless horizon), darker for downward rays
-  vec3 skyHaze = skyRadiance(vec3(dir.x, max(dir.y, 0.0), dir.z));
-  float down = smoothstep(0.0, -0.35, dir.y);
-  vec3 haze = mix(skyHaze, uHazeColor * 0.8, down);
-  return col * ext + haze * (1.0 - ext);
+  // The far plane cuts the sea and the far terrain tens of kilometres short of the geometric horizon; the
+  // last stretch before it dissolves completely so the cut edge meets the dome's horizon with no step at
+  // any altitude (a near-horizontal path that long is opaque with haze in any real atmosphere).
+  ext *= 1.0 - smoothstep(0.0, 1.0, (d - uFarDissolve.x) * uFarDissolve.y);
+  // in-scattered light: the sky colour in this direction (the same function the dome draws, so a fully
+  // hazed surface is continuous with the sky behind it; darker for downward rays over the sea)
+  return col * ext + skyRadiance(dir) * (1.0 - ext);
 }
 `;
