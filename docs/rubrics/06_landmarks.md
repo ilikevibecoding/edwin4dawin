@@ -49,3 +49,16 @@ domed rotundas, radial light strips, the Umate rock outcrop in a ring pool at th
   attachments the city carves 3 wide x 2 high into the lot edge.
 - No imports outside `src/coruscant/**`, `src/blocks.js`, `src/rng.js`, `src/noise.js`. No DOM, no Math.random.
 - The registry `src/coruscant/landmarks/index.js` maps ids to modules; `layout.js` places them (owner: integration).
+
+## Status (integration)
+
+| id | module | harness (`scripts/landmark-stats.mjs`) | notes |
+| --- | --- | --- | --- |
+| market | `market.js` | OK: 43 rooms, 61 block types | four glass-vaulted halls + food court, galleries, service block |
+| temple | `temple.js` | OK: all rooms reachable + lit | five spires, archives, council chamber, gardens |
+| senate | `senate.js` | OK | flattened dome with lit ribs, rotunda, chancellor suite, podium |
+| underworld | `underworld.js` | OK | 16 buildings under a roof deck, catwalks, junk markets, stair tower + lift |
+| plaza_monument | `plaza_monument.js` | OK: 19 rooms, 55 block types | Umate rock in its ring pool, radial light strips, pavilions, rotundas |
+| works | `works.js` | OK: 103 rooms, 54 block types, 17 walk tests | smelter hall, magma trench, cooling towers, six chimneys |
+| detention | `detention.js` | OK: 682 rooms (512 cells), 41 block types, 17 ms | stepped black fortress; intake hall with scanner arches, two cell-block floors in the Death Star idiom (red ceilings, blue force-field doorways, holo cell numbers), interrogation floor, guard floor, control room with a steel-glass floor over the spine, visitor level at the boulevard door, warden's suite, tactical ops keep, gunship landing deck, four watchtowers with spiral stairs and searchlight masts, two spine turbolifts + three stair cores |
+| opera, republica, chancellery, medcenter, holonet | building / queued | | one dedicated builder each; merged as they pass the harness |

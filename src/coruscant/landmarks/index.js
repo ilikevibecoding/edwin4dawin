@@ -11,6 +11,7 @@ import { LANDMARK as temple } from './temple.js';
 import { LANDMARK as underworld } from './underworld.js';
 import { LANDMARK as plaza_monument } from './plaza_monument.js';
 import { LANDMARK as works } from './works.js';
+import { LANDMARK as detention } from './detention.js';
 
 const MODULE_LIST = [
   market,
@@ -19,6 +20,7 @@ const MODULE_LIST = [
   temple,
   underworld,
   works,
+  detention,
 ];
 
 const MODULES = new Map();
