@@ -518,7 +518,7 @@ export function bomaLine(rnd, pts, ground = () => 0, { height = 1.1, gaps = [] }
 function logCyl(o, rTop, rBottom, L, radial, xform) {
   const g = new THREE.CylinderGeometry(rTop, rBottom, L, radial, 1);
   g.translate(0, L * 0.5, 0);
-  poleUV(g, L);
+  poleUV(g, L, { ends: 'polar', span: L });
   return o.add('post', g, xform, { uv: false });
 }
 
@@ -542,7 +542,9 @@ export function gate(rnd, width = 5.2) {
       p.setXYZ(i, x * k, y, z * k);
     }
     g.computeVertexNormals();
-    poleUV(g, 2.4);
+    // the whole post onto the shaft's share of the tile, the sawn top onto the
+    // end strip (kit.js poleUV): rings, pith and checks on the cut
+    poleUV(g, 2.4, { ends: 'polar', span: 2.2 });
     o.add('post', g, { pos: [s * width * 0.5, -0.1, 0], rot: [(rnd() - 0.5) * 0.03, s * 0.7, (rnd() - 0.5) * 0.03] }, { uv: false });
     // end checks: the top of a seasoned post splits along the grain
     for (let i = 0; i < 3; i++) {
@@ -550,7 +552,7 @@ export function gate(rnd, width = 5.2) {
       o.box('steelBlack', 0.004, 0.06, 0.05 + rnd() * 0.06, { pos: [s * width * 0.5 + Math.cos(a) * 0.04, 2.08, Math.sin(a) * 0.04], rot: [0, a, 0] });
     }
     // and a mud line at the foot where the rain splashes off the track
-    o.cyl('post', 0.145, 0.15, 0.25, 11, { pos: [s * width * 0.5, -0.05, 0] }, { uv: false });
+    o.cyl('post', 0.145, 0.15, 0.25, 11, { pos: [s * width * 0.5, -0.05, 0] }, { open: true });
   }
   logCyl(o, 0.075, 0.075, width + 0.3, 10, { pos: [-(width + 0.3) * 0.5, 2.15, 0], rot: [0, 0, -Math.PI / 2] });
   // the beam is lashed to the posts, not nailed

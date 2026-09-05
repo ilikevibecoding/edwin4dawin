@@ -68,6 +68,19 @@ export function createCampLights(mats, lamps, anchors, { quality = 'high' } = {}
     l.userData.base = a.intensity ?? 18;
     l.userData.flicker = a.flicker ?? 0.08;
     l.userData.phase = Math.random() * 100;
+    // An anchor with a `day` block is also a daytime fill: the same light,
+    // re-aimed by the hour — a short, weak, warm term where the sky cannot
+    // reach (under the mess fly, in the pockets beneath the tables), fading
+    // out as the lamp itself comes up. Costs nothing: the light is in the
+    // loop already.
+    if (a.day) {
+      l.userData.day = a.day;
+      l.userData.nightColor = new THREE.Color(a.color ?? 0xffb35c);
+      l.userData.dayColor = new THREE.Color(a.day.color ?? 0xd9a070);
+      l.userData.nightDistance = a.distance ?? 12;
+      l.userData.nightDecay = a.decay ?? 1.9;
+      l.userData.nightY = a.y;
+    }
     group.add(l);
     lights.push(l);
   }
@@ -81,7 +94,17 @@ export function createCampLights(mats, lamps, anchors, { quality = 'high' } = {}
     mats.lampGlass.emissiveIntensity = 5.0 * lvl;
     mats.lampGlass.opacity = 0.85 + 0.15 * lvl;
     mats.bulb.emissiveIntensity = 3.6 * lvl;
-    for (const l of lights) l.intensity = l.userData.base * lvl;
+    for (const l of lights) {
+      l.intensity = l.userData.base * lvl;
+      const d = l.userData.day;
+      if (d) {
+        l.intensity += d.intensity * (1 - lvl);
+        l.color.copy(l.userData.dayColor).lerp(l.userData.nightColor, lvl);
+        l.distance = THREE.MathUtils.lerp(d.distance ?? 6, l.userData.nightDistance, lvl);
+        l.decay = THREE.MathUtils.lerp(d.decay ?? 2, l.userData.nightDecay, lvl);
+        l.position.y = l.userData.nightY + (d.dy ?? 0) * (1 - lvl);
+      }
+    }
     // the grass's fake translucency is a daylight effect
     if (mats.grass) mats.grass.emissiveIntensity = 0.4 * (1 - lvl);
   }
@@ -97,10 +120,14 @@ export function createCampLights(mats, lamps, anchors, { quality = 'high' } = {}
     get level() {
       return level;
     },
-    setMode(name) {
+    setMode(name, { snap = false } = {}) {
       if (MODE_LEVEL[name] === undefined) return;
       mode = name;
       target = MODE_LEVEL[name];
+      if (snap) {
+        level = target;
+        apply(level);
+      }
     },
     update(dt, t, ctx = {}) {
       checkT -= dt;
@@ -122,7 +149,8 @@ export function createCampLights(mats, lamps, anchors, { quality = 'high' } = {}
         for (const l of lights) {
           const p = l.userData.phase + t;
           const f = 1 + l.userData.flicker * (Math.sin(p * 9.1) * 0.5 + Math.sin(p * 23.7) * 0.3 + Math.sin(p * 3.3) * 0.2);
-          l.intensity = l.userData.base * level * f;
+          // the flame flickers; a daylight fill does not
+          l.intensity = l.userData.base * level * f + (l.userData.day ? l.userData.day.intensity * (1 - level) : 0);
         }
       }
     },

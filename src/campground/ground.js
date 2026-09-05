@@ -501,8 +501,15 @@ export function buildGroundWear(frame, plan, { quality = 'high', footprints = []
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
-    // skylight on the dirt in shade, as on the props (see materials.js ENV_MATT)
-    envMapIntensity: 0.6,
+    // Skylight on the dirt in shade. Round 3 had 0.6 against ENV_MATT 0.8 on
+    // the props, so under the mess the ground beneath a chair sat darker than
+    // the chair's own legs (round 4, A and C: pockets 2.7–3.7 stops). The
+    // critics asked for 1.0–1.2; measured, the decal's env term lands on the
+    // sunlit pad as much as on the shade (+0.9 % of the pad's Y per 0.1, and
+    // +5 % in the pockets for the whole 0.6 → 1.1), so most of the pocket fill
+    // is the day light under the fly (index.js messLamp.day) and this takes
+    // what the 3 % pad budget leaves (0.7 with the fill at 13 measured +3.1 %).
+    envMapIntensity: 0.65,
     name: 'campWear',
   });
   const mesh = new THREE.Mesh(geo, mat);

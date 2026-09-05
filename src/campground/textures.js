@@ -102,38 +102,98 @@ export function canvasMaps(kind = 'khaki') {
 }
 
 /**
+ * UV layout of the timber tile (`timberMaps`, used by `timber`, `timberWarm`
+ * and `pole`): boards run along u over v in [0, END_V), and the band above
+ * END_V is end grain — growth rings about (END_CX, END_CY), so a cut end
+ * mapped over the centre reads as a round pole's rings and a plank end mapped
+ * off-centre reads as the arcs across a sawn section. kit.js maps cut faces
+ * there and keeps the long faces under END_V.
+ */
+export const TIMBER_END = { v0: 0.75, cx: 0.5, cy: 0.875, r: 0.125 };
+/**
+ * UV layout of the whole-log tile (`postMaps`): the shaft runs along u in
+ * [0, POST_END.u0) and the strip above it is the cut end in polar form — u is
+ * the radius from the pith to the bark, v the angle round it — so a cap whose
+ * vertices are mapped (u0 + r·(1−u0), θ/2π) shows concentric rings whatever
+ * the post's radius.
+ */
+export const POST_END = { u0: 0.86 };
+
+/**
+ * Growth rings about a centre, in tile units, with the wobble of real wood and
+ * two or three radial checks from the pith. Returns ring (0 latewood … 1
+ * earlywood), check (0..1) and the pith (0..1) so a map can colour them.
+ */
+function endGrain(dx, dy, seed, { spacing = 0.021, checks = 3 } = {}) {
+  const r = Math.hypot(dx, dy);
+  const th = Math.atan2(dy, dx);
+  // the rings drift in and out with a low noise so they are not a compass rose
+  const wob = fbm(dx * 6 + 4.5, dy * 6 + 4.5, { octaves: 3, period: 6, seed }) - 0.5;
+  const rr = r + wob * 0.03;
+  let ring = 0.5 + 0.5 * Math.sin((rr / spacing) * Math.PI * 2);
+  // latewood is narrower than earlywood, so sharpen the dark half
+  ring = smoothstep(0.15, 0.75, ring);
+  // radial checks: a seasoned end splits from the pith toward the bark
+  let check = 0;
+  for (let k = 0; k < checks; k++) {
+    const a = ((k + 0.31 * seed) * Math.PI * 2) / checks + 0.6 * Math.sin(seed + k * 2.3);
+    const da = Math.abs(th - a - Math.round((th - a) / (Math.PI * 2)) * Math.PI * 2);
+    const w = 0.012 / Math.max(0.02, r) + 0.02;
+    check = Math.max(check, smoothstep(w, 0, da) * smoothstep(0.01, 0.04, r) * smoothstep(0.16, 0.08, r));
+  }
+  const pith = smoothstep(0.014, 0.0, r);
+  return { ring, check, pith, r };
+}
+
+/**
  * Sawn timber, weathered grey. Boards run along u, 150 mm each, with the
- * grain ridged along the board, knots where the worley cells fall, and the
- * gaps between boards dark. Left out in the sun the surface silvers and the
- * grain opens, so the colour is a grey-brown with the original ochre only in
- * the hollows.
+ * grain ridged along the board, fine shrinkage checks along it, knots where
+ * the worley cells fall, and the gaps between boards dark. Left out in the
+ * sun the surface silvers and the grain opens, so the colour is a grey-brown
+ * with the original ochre only in the hollows. The top quarter of the tile is
+ * end grain (see TIMBER_END). Roughness follows the grain: the rubbed ridges
+ * near 0.6, the open hollows and checks near 0.95.
  */
 export function timberMaps(kind = 'grey') {
   return cached('camp.timber.' + kind, () => {
     const n = 256;
-    const boards = 4;
+    const boards = 3;
+    const endV = TIMBER_END.v0;
     const seed = kind === 'grey' ? 61 : 67;
+    const inEnd = (v) => v >= endV;
+    const end = (u, v) => endGrain(u - TIMBER_END.cx, v - TIMBER_END.cy, seed, { spacing: 0.021, checks: 3 });
     const hf = heightField(n, n, (x, y) => {
       const u = x / n;
       const v = y / n;
-      const bv = (v * boards) % 1;
-      const board = Math.floor(v * boards);
+      if (inEnd(v)) {
+        const e = end(u, v);
+        const saw = fbm(u * 40, v * 40, { octaves: 2, period: 40, seed: seed + 5 });
+        return clamp(0.45 + e.ring * 0.18 + saw * 0.1 - e.check * 0.5 - e.pith * 0.2);
+      }
+      const bv = ((v / endV) * boards) % 1;
+      const board = Math.floor((v / endV) * boards);
       const grain = ridged(u * 3 + board * 7.3, v * 36, { octaves: 4, period: 3, seed: seed + board });
       const knot = worley(u * 5 + board * 3.1, v * 5, 5, seed + 11);
       const knotRing = smoothstep(0.02, 0.16, knot.f1) * (knot.id > 0.7 ? 1 : 0);
       const gap = smoothstep(0.0, 0.035, bv) * smoothstep(1.0, 0.965, bv);
       const check = fbm(u * 40, v * 6, { octaves: 3, period: 40, seed: seed + 3 });
-      return clamp((grain * 0.55 + check * 0.25 + 0.2 - knotRing * 0.25) * gap);
+      // shrinkage checks: thin cracks along the grain, a few per board
+      const fine = fbm(u * 2 + board * 3.7, v * 60, { octaves: 3, period: 2, seed: seed + 41 });
+      const crack = smoothstep(0.72, 0.8, fine);
+      return clamp((grain * 0.55 + check * 0.25 + 0.2 - knotRing * 0.25 - crack * 0.35) * gap);
     });
     const normal = normalFromHeight(hf, n, n, 1.6, { repeat: 1 });
     const pal =
       kind === 'grey'
-        ? { light: 0x9a9284, mid: 0x6e665a, dark: 0x3b3630, warm: 0x7d6446 }
-        : { light: 0xb08a5c, mid: 0x7f5f3c, dark: 0x3f2d1d, warm: 0x8f6a42 };
+        ? { light: 0x9a9284, mid: 0x6e665a, dark: 0x3b3630, warm: 0x7d6446, endLight: 0xa39a8a, endDark: 0x5c5147, endHeart: 0x86694a }
+        : { light: 0xb08a5c, mid: 0x7f5f3c, dark: 0x3f2d1d, warm: 0x8f6a42, endLight: 0xc4a47a, endDark: 0x6a4a2e, endHeart: 0x8a5e38 };
     const light = rgb(pal.light);
     const mid = rgb(pal.mid);
     const dark = rgb(pal.dark);
     const warm = rgb(pal.warm);
+    const endLight = rgb(pal.endLight);
+    const endDark = rgb(pal.endDark);
+    const endHeart = rgb(pal.endHeart);
     const map = pixelTexture(
       n,
       n,
@@ -141,25 +201,50 @@ export function timberMaps(kind = 'grey') {
         const u = x / n;
         const v = y / n;
         const h = hf[y * n + x];
-        const board = Math.floor(v * boards);
+        if (inEnd(v)) {
+          // a sawn end: pale, with the latewood rings dark and the heart a
+          // little warmer than the sapwood; the checks black
+          const e = end(u, v);
+          let c = mixRgb(endDark, endLight, e.ring * 0.8 + 0.1);
+          c = mixRgb(c, endHeart, smoothstep(0.1, 0.0, e.r) * 0.5);
+          const stain = fbm(u * 5, v * 5, { octaves: 3, period: 5, seed: seed + 8 });
+          c = mixRgb(c, dark, smoothstep(0.6, 0.9, stain) * 0.3);
+          c = mixRgb(c, dark, e.check * 0.85 + e.pith * 0.5);
+          put(out, c);
+          return;
+        }
+        const board = Math.floor((v / endV) * boards);
         const tone = fbm(u * 2 + board * 13, v * 2, { octaves: 3, period: 2, seed: seed + 20 + board });
         let c = mixRgb(dark, mid, smoothstep(0.1, 0.6, h));
         c = mixRgb(c, light, smoothstep(0.55, 0.95, h) * 0.8);
         c = mixRgb(c, warm, (1 - smoothstep(0.2, 0.7, h)) * 0.4 * tone);
         // each board a slightly different grey
         c = mixRgb(c, tone > 0.5 ? light : dark, Math.abs(tone - 0.5) * 0.35);
-        const bv = (v * boards) % 1;
+        const bv = ((v / endV) * boards) % 1;
         const gap = smoothstep(0.0, 0.03, bv) * smoothstep(1.0, 0.97, bv);
         // the arrises are rounded and rubbed pale where hands and crates go over them
         const edge = (1 - smoothstep(0.03, 0.1, bv) * smoothstep(0.97, 0.9, bv)) * gap;
         const rub = fbm(u * 9 + board * 5, v * 3, { octaves: 2, period: 9, seed: seed + 31 + board });
         c = mixRgb(c, light, edge * (0.25 + 0.45 * rub));
+        // the checks show the unweathered wood at their lips and black inside
+        const fine = fbm(u * 2 + board * 3.7, v * 60, { octaves: 3, period: 2, seed: seed + 41 });
+        c = mixRgb(c, dark, smoothstep(0.72, 0.8, fine) * 0.7);
         c = mixRgb(dark, c, 0.3 + 0.7 * gap);
         put(out, c);
       },
       { srgb: true, repeat: 1 },
     );
-    const rough = roughnessTexture(n, n, (x, y) => clamp(0.7 + (1 - hf[y * n + x]) * 0.28), { repeat: 1 });
+    const rough = roughnessTexture(
+      n,
+      n,
+      (x, y) => {
+        const v = y / n;
+        const h = hf[y * n + x];
+        if (inEnd(v)) return clamp(0.86 + (1 - h) * 0.12);
+        return lerp(0.95, 0.6, smoothstep(0.3, 0.85, h));
+      },
+      { repeat: 1 },
+    );
     return { map, normal, rough };
   });
 }
@@ -175,31 +260,64 @@ export function postMaps() {
   return cached('camp.post', () => {
     const n = 256;
     const seed = 71;
+    const u0 = POST_END.u0;
+    const shaftU = (u) => u / u0; // 0..1 along the log
+    // the cut end, in polar form: u across the strip is the radius, v the angle
+    const end = (u, v) => {
+      const r = clamp((u - u0) / (1 - u0));
+      const th = v * Math.PI * 2;
+      // rings wobble with a noise that is periodic round the log (period 1 in v)
+      const wob = fbm(r * 2 + 1.3, v * 2, { octaves: 3, period: 2, seed: seed + 50 }) - 0.5;
+      const rr = r + wob * 0.06;
+      let ring = 0.5 + 0.5 * Math.sin(rr * 11 * Math.PI * 2);
+      ring = smoothstep(0.15, 0.75, ring);
+      let check = 0;
+      for (let k = 0; k < 3; k++) {
+        const a = (k / 3) * Math.PI * 2 + 0.9 + Math.sin(k * 2.7) * 0.5;
+        const da = Math.abs(th - a - Math.round((th - a) / (Math.PI * 2)) * Math.PI * 2);
+        const w = 0.02 / Math.max(0.05, r) + 0.03;
+        check = Math.max(check, smoothstep(w, 0, da) * smoothstep(0.03, 0.15, r) * smoothstep(1.0, 0.55, r));
+      }
+      return { r, ring, check, pith: smoothstep(0.06, 0.0, r) };
+    };
     const hf = heightField(n, n, (x, y) => {
       const u = x / n; // along
       const v = y / n; // round
+      if (u >= u0) {
+        const e = end(u, v);
+        const saw = fbm(u * 40, v * 40, { octaves: 2, period: 40, seed: seed + 5 });
+        return clamp(0.45 + e.ring * 0.18 + saw * 0.1 - e.check * 0.5 - e.pith * 0.2);
+      }
+      const s = shaftU(u);
       // grain runs along u: ridged noise stretched 30:1
-      const grain = ridged(u * 2.2, v * 28, { octaves: 4, period: 2, seed });
+      const grain = ridged(s * 2.2, v * 28, { octaves: 4, period: 2, seed });
       // shrinkage checks: a handful of deep, narrow cracks along the axis that
       // wander a little and die out
       let check = 0;
       for (let k = 0; k < 4; k++) {
-        const cv = 0.12 + k * 0.24 + Math.sin(u * 6.3 + k * 2.1) * 0.02;
-        const width = 0.006 + 0.004 * Math.sin(u * 14 + k);
-        const run = smoothstep(0.05 + k * 0.1, 0.25 + k * 0.1, u) * smoothstep(0.98, 0.7 + k * 0.05, u);
+        const cv = 0.12 + k * 0.24 + Math.sin(s * 6.3 + k * 2.1) * 0.02;
+        const width = 0.006 + 0.004 * Math.sin(s * 14 + k);
+        const run = smoothstep(0.05 + k * 0.1, 0.25 + k * 0.1, s) * smoothstep(0.98, 0.7 + k * 0.05, s);
         const dv = Math.min(Math.abs(v - cv), Math.abs(v - cv - 1), Math.abs(v - cv + 1));
         check = Math.max(check, smoothstep(width, 0, dv) * run);
       }
-      const knot = worley(u * 6, v * 3, 6, seed + 11);
+      // and a finer layer of them: hairline checks the length of the log
+      const fine = fbm(s * 2, v * 60, { octaves: 3, period: 2, seed: seed + 41 });
+      const crack = smoothstep(0.72, 0.8, fine);
+      const knot = worley(s * 6, v * 3, 6, seed + 11);
       const knotRing = smoothstep(0.04, 0.2, knot.f1) * (knot.id > 0.75 ? 1 : 0);
-      return clamp(0.25 + grain * 0.55 - check * 0.6 - knotRing * 0.2);
+      return clamp(0.25 + grain * 0.55 - check * 0.6 - crack * 0.4 - knotRing * 0.2);
     });
     const normal = normalFromHeight(hf, n, n, 1.8, { repeat: 1 });
-    const silver = rgb(0x9b958a);
+    // a step down from round 3's 0x9b958a: at that value the sunlit face of the
+    // second gate post read chalky against the sign board above it
+    const silver = rgb(0x8f897d);
     const grey = rgb(0x746c60);
     const heart = rgb(0x8a6a48);
     const dark = rgb(0x3a3129);
     const mud = rgb(0x5e4a36);
+    const endLight = rgb(0x9f9689);
+    const endDark = rgb(0x574c42);
     const map = pixelTexture(
       n,
       n,
@@ -207,25 +325,55 @@ export function postMaps() {
         const u = x / n;
         const v = y / n;
         const h = hf[y * n + x];
-        const tone = fbm(u * 3, v * 3, { octaves: 3, period: 3, seed: seed + 20 });
+        if (u >= u0) {
+          // the sawn end: bleached sapwood rings out to the bark, the heart
+          // still ochre, the checks black
+          const e = end(u, v);
+          let c = mixRgb(endDark, endLight, e.ring * 0.8 + 0.1);
+          c = mixRgb(c, heart, smoothstep(0.45, 0.0, e.r) * 0.45);
+          const stain = fbm(u * 6, v * 6, { octaves: 3, period: 6, seed: seed + 8 });
+          c = mixRgb(c, dark, smoothstep(0.6, 0.9, stain) * 0.3);
+          // a ring of bark left at the rim
+          c = mixRgb(c, mud, smoothstep(0.9, 1.0, e.r) * 0.6);
+          c = mixRgb(c, dark, e.check * 0.85 + e.pith * 0.5);
+          put(out, c);
+          return;
+        }
+        const s = shaftU(u);
+        const tone = fbm(s * 3, v * 3, { octaves: 3, period: 3, seed: seed + 20 });
         // silvered where the sun and rain reach, ochre heartwood in the hollows
         let c = mixRgb(heart, grey, smoothstep(0.15, 0.5, h));
-        c = mixRgb(c, silver, smoothstep(0.5, 0.9, h) * (0.5 + 0.5 * tone));
+        c = mixRgb(c, silver, smoothstep(0.5, 0.9, h) * (0.4 + 0.5 * tone));
         // the checks are dark, with the fresh wood showing at their lips
         c = mixRgb(c, dark, smoothstep(0.3, 0.05, h) * 0.8);
+        const fine = fbm(s * 2, v * 60, { octaves: 3, period: 2, seed: seed + 41 });
+        c = mixRgb(c, heart, smoothstep(0.66, 0.72, fine) * (1 - smoothstep(0.72, 0.8, fine)) * 0.3);
+        c = mixRgb(c, dark, smoothstep(0.72, 0.8, fine) * 0.7);
         // weathering runs in streaks down the post
-        const streak = fbm(u * 2, v * 16, { octaves: 3, period: 2, seed: seed + 6 });
+        const streak = fbm(s * 2, v * 16, { octaves: 3, period: 2, seed: seed + 6 });
         c = mixRgb(c, dark, smoothstep(0.6, 0.9, streak) * 0.25);
         // the foot: rain-splashed mud up the first half metre, irregular
-        const foot = smoothstep(0.22 + tone * 0.08, 0.02, u);
+        const foot = smoothstep(0.22 + tone * 0.08, 0.02, s);
         c = mixRgb(c, mud, foot * 0.55);
         // the bleached, checked top
-        c = mixRgb(c, rgb(0x6c675f), smoothstep(0.9, 0.99, u) * 0.5);
+        c = mixRgb(c, rgb(0x6c675f), smoothstep(0.9, 0.99, s) * 0.5);
         put(out, c);
       },
       { srgb: true, repeat: 1 },
     );
-    const rough = roughnessTexture(n, n, (x, y) => clamp(0.72 + (1 - hf[y * n + x]) * 0.26), { repeat: 1 });
+    // roughness follows the grain: the silvered ridges are rubbed smooth by
+    // weather and hands, the hollows and the checks are open fibre
+    const rough = roughnessTexture(
+      n,
+      n,
+      (x, y) => {
+        const u = x / n;
+        const h = hf[y * n + x];
+        if (u >= u0) return clamp(0.86 + (1 - h) * 0.12);
+        return lerp(0.95, 0.6, smoothstep(0.3, 0.85, h));
+      },
+      { repeat: 1 },
+    );
     return { map, normal, rough };
   });
 }

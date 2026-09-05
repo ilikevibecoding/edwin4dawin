@@ -14,8 +14,9 @@ import { flameAtlas, puffSprite } from './textures.js';
 // rising tongues that break off the top and fade to soot. Both sample a 2 x 2
 // atlas of shaped flames; the atlas carries heat in RGB so colour ramps from
 // white in the core to red at the edge, not from the quad's centre outward.
-// Additive, but with the base kept narrow and the gain modest so the stack of
-// quads does not sum to a saturated disc.
+// The flames blend premultiplied "over" rather than adding, so a tongue in
+// front occludes the one behind and the body reads as tongues, not as a sum;
+// the embers and the ground glow stay additive.
 // ---------------------------------------------------------------------------
 
 const billboardVertex = /* glsl */ `
@@ -92,9 +93,10 @@ const FLAME_MOTION = /* glsl */ `
       // the sprite fills 85 % of its quad with the base 0.425 quads below centre
       vec3 p = vec3(cos(ang) * r + lean * h * 0.5, h * 0.5 + 0.04, sin(ang) * r + lean * h * 0.2);
       size = h * 1.0;
-      // half-weight each: six of these stack additively, and at full weight the
-      // stack summed to a white disc
-      fade = 0.32 + 0.28 * n;
+      // near-opaque: the flame material blends "over", so the core quads do
+      // not sum (round 3 ran them at half weight to keep the additive stack
+      // off white)
+      fade = 0.72 + 0.24 * n;
       return p;
     }
     float speed = 0.55 + s.y * 0.55;
@@ -165,11 +167,14 @@ const flameFragment = /* glsl */ `
     // colour by heat: white-yellow core, orange body, dark red edge; a rising
     // tongue cools with life, so its ramp slides toward the red end
     float h = heat * (1.0 - vLife * 0.75);
-    // the hottest core is yellow, not white: with additive quads stacked the
-    // blue channel is what tips a bright yellow into white
+    // the hottest core is yellow, not white; blue is what tips it to white
     vec3 c = mix(vec3(0.55, 0.06, 0.005), vec3(1.0, 0.42, 0.06), smoothstep(0.08, 0.45, h));
     c = mix(c, vec3(1.0, 0.74, 0.2), smoothstep(0.6, 0.98, h));
-    float alpha = s.a * vFade;
+    // Premultiplied "over", not additive (round 3's core summed six quads to
+    // one yellow mass with tongues only at the top). A tongue's cool edge is
+    // thin and its hot centre near-opaque, so the tongues behind show through
+    // the edges of the ones in front and the body has tongues inside it.
+    float alpha = s.a * vFade * (0.5 + 0.5 * smoothstep(0.05, 0.45, heat));
     gl_FragColor = vec4(c * uGain * alpha, alpha);
   }
 `;
@@ -220,6 +225,7 @@ const glowFragment = /* glsl */ `
   uniform float uGlow;
   uniform float uTime;
   uniform float uR;
+  uniform vec3 uTint;
   varying vec2 vP;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float vnoise(vec2 x) {
@@ -236,7 +242,7 @@ const glowFragment = /* glsl */ `
     float k = pow(clamp(1.0 - edge, 0.0, 1.0), 2.2);
     // nothing right under the flames: that is the coals' own light
     k *= smoothstep(0.0, 0.18, r);
-    vec3 c = vec3(1.0, 0.5, 0.16) * k * uGlow;
+    vec3 c = uTint * k * uGlow;
     gl_FragColor = vec4(c, k * uGlow);
   }
 `;
@@ -311,7 +317,15 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
   };
   // six standing tongues at every tier, plus rising ones by tier
   const coreN = 6;
-  const flames = makeSystem(coreN + Math.round(16 * tier), FLAME_MOTION, flameFragment, { ...shared }, { blending: THREE.AdditiveBlending, core: coreN });
+  const flames = makeSystem(coreN + Math.round(16 * tier), FLAME_MOTION, flameFragment, { ...shared }, { blending: THREE.CustomBlending, core: coreN });
+  // premultiplied alpha: src + dst * (1 - srcAlpha); the fragment writes colour
+  // already multiplied by alpha
+  flames.material.blendEquation = THREE.AddEquation;
+  flames.material.blendSrc = THREE.OneFactor;
+  flames.material.blendDst = THREE.OneMinusSrcAlphaFactor;
+  flames.material.blendSrcAlpha = THREE.OneFactor;
+  flames.material.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
+  flames.material.premultipliedAlpha = true;
   flames.name = 'fireFlames';
   const embers = makeSystem(Math.round(30 * tier), EMBER_MOTION, emberFragment, { ...shared, uTex: { value: emberTex }, uGain: { value: 3.0 } }, { blending: THREE.AdditiveBlending });
   embers.name = 'fireEmbers';
@@ -340,7 +354,9 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
   const glowGeo = new THREE.CircleGeometry(glowR, 28);
   glowGeo.rotateX(-Math.PI / 2);
   const glowMat = new THREE.ShaderMaterial({
-    uniforms: { uGlow: { value: 0 }, uTime: { value: 0 }, uR: { value: glowR } },
+    // a paler amber than the round-3 (1.0, 0.5, 0.16): the disc is additive,
+    // so its own saturation lands on the ground as it is
+    uniforms: { uGlow: { value: 0 }, uTime: { value: 0 }, uR: { value: glowR }, uTint: { value: new THREE.Color(1.0, 0.68, 0.4) } },
     vertexShader: glowVertex,
     fragmentShader: glowFragment,
     transparent: true,
@@ -360,12 +376,16 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
 
   let pointLight = null;
   if (light) {
-    // decay 1 rather than the physical 2: a fire's light in a dark camp is read
-    // against a near-black ambient, and the steeper curves left the ground at
-    // the ring blown while the chairs three metres off and the mess-tent front
-    // at six sat in the moonlight (rounds 1–2 at decay 2 and 1.5). At decay 1
-    // with the same peak the pool at 3 m is a third brighter and at 6 m double.
-    pointLight = new THREE.PointLight(0xff9448, 0, 20, 1.0);
+    // Round 3 opened this to decay 1 / 20 m for reach, and round 4 measured
+    // the cost: the light's orange was the only thing on the far corners of the
+    // pad (sat 0.55 at Y 0.02, twenty metres from the pit) and the ground at
+    // the ring sat at sat 0.72 over a laterite that is already 0.6. So the
+    // reach across the frame is carried by the glow disc and the embers, and
+    // the light itself is shorter (14 m), steeper (decay 1.6) and a paler
+    // amber (1.0, 0.72, 0.45) — firelight on red earth is warm enough without
+    // the light being orange too. The peak is raised (update) so the chairs at
+    // 2.7 m hold the round-3 value.
+    pointLight = new THREE.PointLight(new THREE.Color(1.0, 0.72, 0.45), 0, 14, 1.6);
     pointLight.position.set(0, 1.15, 0);
     pointLight.name = 'fireLight';
     pointLight.castShadow = false;
@@ -389,18 +409,21 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
       flicker = flickerAt(phase, phaseSeed);
       for (const m of mats) m.uniforms.uTime.value = phase;
       glowMat.uniforms.uTime.value = phase;
-      glowMat.uniforms.uGlow.value = (0.1 + 0.4 * night) * flicker;
+      glowMat.uniforms.uGlow.value = (0.1 + 0.48 * night) * flicker;
       if (pointLight) {
-        pointLight.intensity = (6 + 20 * night) * flicker * radius * 2;
+        // ×1.4 on round 3's (6 + 20·night): what decay 1.6 and the paler
+        // colour take off the ground at 8 m, so the reach across camp_fire_night
+        // holds while the ring itself goes paler rather than brighter
+        pointLight.intensity = (8.4 + 28 * night) * flicker * radius * 2;
         pointLight.position.x = Math.sin(phase * 3.1) * 0.06;
         pointLight.position.z = Math.cos(phase * 2.3) * 0.06;
       }
     },
     setNight(night) {
       // flames read against daylight only if they are hot; at night they are
-      // the brightest thing there is — but the gain stays under what stacks the
-      // six core quads to white (round 2's core was a pale disc)
-      flames.material.uniforms.uGain.value = 0.9 - night * 0.2;
+      // the brightest thing there is. The core blends over rather than adding,
+      // so the gain is the tongue's own brightness, not a stack's
+      flames.material.uniforms.uGain.value = 1.0 - night * 0.15;
       embers.material.uniforms.uGain.value = 2.4 + night * 1.4;
       // the column is lit amber at its root and, after dark, a grey a little
       // paler than the sky it stands against so it reads as a column at all

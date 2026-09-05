@@ -114,9 +114,14 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   // pole lanterns over the parking row, between the lane and the vehicles'
   // tails: the side the arrival and gate views see. Priority sits above the
   // kitchen and gate so both survive the fast tier's cap.
+  // Round 4 (A and C): the fleet's night frames had the row's bodies at
+  // Y 0.009 against a sky of 0.011. Not reach — the lamps were never on in
+  // those frames (see setTimeOfDay below). With them on, 12 / 14 m put the
+  // dark jeeps at 0.016–0.018 from 5 m: 26 / 20 m, and the poles moved over
+  // the vehicles (layout.js) rather than the row's centre.
   plan.rowLamps.forEach((l, i) => {
     put(poleLantern(rnd, l.height), { u: l.u, v: l.v, facing: l.facing, conform: 0.2, half: 0.3 });
-    lightAt(l.u + l.facing[0] * 0.62, l.v + l.facing[1] * 0.62, l.height - 0.52, { name: 'rowLamp' + i, intensity: 12, distance: 14, priority: 7 - i * 0.5, color: 0xffb35c, decay: 1.6 });
+    lightAt(l.u + l.facing[0] * 0.62, l.v + l.facing[1] * 0.62, l.height - 0.52, { name: 'rowLamp' + i, intensity: 26, distance: 20, priority: 7 - i * 0.5, color: 0xffb35c, decay: 1.6 });
   });
   put(signPost('signSpeed', 0.9, 0.5, 1.5), { u: plan.gate.u - 6, v: plan.gate.v - 2.5, facing: [-0.6, -1] });
   for (const line of plan.fence) {
@@ -134,7 +139,24 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
 
   // --- canvas ---------------------------------------------------------------------
   put(messTent(rnd, plan.mess), { u: plan.mess.u, v: plan.mess.v, facing: plan.mess.facing, conform: 0.3, half: 4 });
-  lightAt(plan.mess.u, plan.mess.v, 2.6, { name: 'messLamp', intensity: 26, distance: 14, priority: 9, color: 0xffb860 });
+  // The mess lamp doubles as the daytime fill under the fly (lights.js): the
+  // sky's hemisphere fills the open floor but nothing warm gets in under the
+  // tables, so the pockets there sat 2.7–3.7 stops under the sunlit pad
+  // (round 4). Short and weak — the sunlit pad past the eaves is out of reach.
+  lightAt(plan.mess.u, plan.mess.v, 2.6, {
+    name: 'messLamp',
+    intensity: 26,
+    distance: 14,
+    priority: 9,
+    color: 0xffb860,
+    // Measured on camp_mess at 640 (HEAD, fast): pockets under the tables
+    // 2.9 → 1.5 st, under the chairs 3.9 → 2.0, the open floor at the left
+    // eave 3.0 → 1.5, the sunlit pad beside the eave +2.9 %. Lower than the
+    // lamp (1.9 m) so the falloff across the floor is flatter for the same
+    // spill past the eaves; near-neutral so the shade does not go redder than
+    // the sunlit laterite (the light multiplies the albedo's own saturation).
+    day: { intensity: 12, distance: 6.0, decay: 1.2, color: 0xeadfcf, dy: -0.7 },
+  });
   put(kitchenShelter(rnd, plan.kitchen, P), { u: plan.kitchen.u, v: plan.kitchen.v, facing: plan.kitchen.facing, conform: 0.3, half: 2.5 });
   lightAt(plan.kitchen.u + 1.5, plan.kitchen.v, 2.0, { name: 'kitchenLamp', intensity: 12, distance: 9, priority: 6 });
   plan.tents.forEach((t, i) => {
@@ -368,7 +390,15 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
      */
     setTimeOfDay(name) {
       hour = name;
-      camp.setMode(name);
+      // main.js snaps the sky on an hour change, so the lamps snap with it; the
+      // fade in lights.js is for the mode it detects on its own. The refresh
+      // matters for the capture tools: fleetshots pauses the sim and then sets
+      // the hour, and with nothing stepping the camp the lamps stayed at their
+      // boot state — every fleet night frame of rounds 3 and 4 was shot with
+      // the camp's lights off (bodies at Y 0.009 under two lanterns that were
+      // never on).
+      camp.setMode(name, { snap: true });
+      this.update(0, time);
     },
     update(dt, t, ctx = {}) {
       const step = THREE.MathUtils.clamp(dt || 0, 1e-4, 0.1);

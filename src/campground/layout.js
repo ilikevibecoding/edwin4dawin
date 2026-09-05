@@ -91,9 +91,13 @@ export function buildPlan() {
   // Pole lanterns over the parking row, between the lane and the vehicles'
   // tails, so the camp's light reaches the cars at night (the fleet measured
   // none did). The arm and the lamp hang out toward the vehicles (+v).
+  // Round 4: a pole between the two jeeps and one between the third jeep and
+  // the utility — over the dark vehicles, off every slot's ruts — rather than
+  // at the row's centre; the supply truck, camper and trailer at the ends are
+  // past both and stay dark.
   const rowLamps = [
-    { u: -4.5, v: -14.5, height: 3.0, facing: [0, 1] },
-    { u: 14.5, v: -13.5, height: 3.0, facing: [0.3, 1] },
+    { u: -8.6, v: -14.5, height: 3.0, facing: [0, 1] },
+    { u: 10.0, v: -13.5, height: 3.0, facing: [0.3, 1] },
   ];
 
   // Ground wear, as polylines the overlay paints. Tyre tracks run from the
