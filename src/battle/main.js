@@ -609,7 +609,10 @@ function step(fixedDt = null) {
     cinematic.update(dt);
     if (cinematic.shotName !== lastShotShown) {
       lastShotShown = cinematic.shotName;
-      hud.setStatus("Cinematic camera · " + lastShotShown);
+      // shot names carry the subject's ship id for the tooling; the HUD shows the shot alone
+      hud.setStatus(
+        "Cinematic camera · " + lastShotShown.replace(/\s+\d+$/, ""),
+      );
     }
   } else {
     orbit.update(dt);
