@@ -320,8 +320,10 @@ export function buildCargo(kit, ctx) {
     }
   }
   // ... and the six real lights: hanging work lights along the main lane, amber in the aisles, cool at the dock
-  workLight(kit, ctx, -15, 6.2, -50, { ceil: H, color: 0xfff1dc, intensity: 12, distance: 16, w: 1.8, d: 0.55 });
-  workLight(kit, ctx, -30, 6.2, -50, { ceil: H, color: 0xfff1dc, intensity: 12, distance: 16, w: 1.8, d: 0.55 });
+  // lane work lights on the dim white face: the 1.8 m soft-white face of the nearest one, 10 m
+  // from the door camera, bloomed to a white block at the top of the frame
+  workLight(kit, ctx, -15, 6.2, -50, { ceil: H, color: 0xfff1dc, intensity: 12, distance: 16, w: 1.8, d: 0.55, emit: "emitWhiteDim" });
+  workLight(kit, ctx, -30, 6.2, -50, { ceil: H, color: 0xfff1dc, intensity: 12, distance: 16, w: 1.8, d: 0.55, emit: "emitWhiteDim" });
   workLight(kit, ctx, -24, 6.0, -55, { ceil: H, color: AMBER, intensity: 9, distance: 14, w: 1.4, d: 0.5 });
   workLight(kit, ctx, -30, 6.0, -45, { ceil: H, color: AMBER, intensity: 9, distance: 14, w: 1.4, d: 0.5 });
   ctx.light(pointLight(COOL, 8, 13, [-44, 6.5, -50]));
