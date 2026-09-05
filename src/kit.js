@@ -13,6 +13,8 @@ export class Kit {
     this.materials = materials;
     this.groups = new Map();
     this.colliders = [];
+    this.floors = [];
+    this.markers = [];
     this.meshes = [];
   }
 
@@ -67,7 +69,42 @@ export class Kit {
   }
 
   collider(min, max, tag = "") {
-    this.colliders.push({ min: new THREE.Vector3(...min), max: new THREE.Vector3(...max), tag });
+    const c = { min: new THREE.Vector3(...min), max: new THREE.Vector3(...max), tag };
+    this.colliders.push(c);
+    return c;
+  }
+
+  // Semantic marker for future crew / NPC systems: kind = "seat" | "station" | "idle" | "spawn" | "waypoint".
+  // pos = [x, y, z], yaw in radians (facing), extra = free-form (station id, seat owner ...).
+  marker(kind, pos, yaw = 0, extra = {}) {
+    const m = { kind, x: pos[0], y: pos[1], z: pos[2], yaw, ...extra };
+    this.markers.push(m);
+    return m;
+  }
+
+  // Walkable surface (see Player.groundAt). Ramps: pass y0/y1 + axis instead of y.
+  floor(x0, z0, x1, z1, y, extra = {}) {
+    const f = { x0: Math.min(x0, x1), z0: Math.min(z0, z1), x1: Math.max(x0, x1), z1: Math.max(z0, z1), y, ...extra };
+    this.floors.push(f);
+    return f;
+  }
+
+  // Straight stair run: `steps` risers climbing from y0 to y1 along `axis` (+/-), walkable and solid.
+  stairs(mat, x0, z0, x1, z1, y0, y1, axis = "z", opts = {}) {
+    const steps = opts.steps || Math.max(2, Math.round(Math.abs(y1 - y0) / 0.18));
+    const rise = (y1 - y0) / steps;
+    const along = axis === "x" ? x1 - x0 : z1 - z0;
+    const run = along / steps;
+    for (let i = 0; i < steps; i++) {
+      const a0 = i * run;
+      const a1 = (i + 1) * run;
+      const top = y0 + rise * (i + 1);
+      const bottom = Math.min(y0, y1) - 0.05;
+      const min = axis === "x" ? [x0 + Math.min(a0, a1), bottom, z0] : [x0, bottom, z0 + Math.min(a0, a1)];
+      const max = axis === "x" ? [x0 + Math.max(a0, a1), top, z1] : [x1, top, z0 + Math.max(a0, a1)];
+      this.boxMM(mat, min, max, { uv: "world", texel: 1.5, ...opts });
+      this.floor(min[0], min[2], max[0], max[2], top);
+    }
   }
 
   build(parent, { castShadow = true, receiveShadow = true } = {}) {

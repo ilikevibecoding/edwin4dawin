@@ -1,7 +1,7 @@
 :root {
-  --teal: #4fd8cc;
-  --orange: #f08a3c;
-  --cream: #e8e0d0;
+  --teal: #6fb4ff;
+  --orange: #c0392b;
+  --cream: #dfe3ea;
   --hud-font: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --mono: "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
 }
@@ -105,6 +105,30 @@ body {
   transition: opacity 200ms ease;
 }
 
+#location {
+  position: absolute;
+  left: 24px;
+  bottom: 50px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(111, 180, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+#modehint {
+  position: absolute;
+  right: 24px;
+  bottom: 22px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: rgba(223, 227, 234, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  text-align: right;
+  white-space: pre;
+}
+
 #stats {
   position: absolute;
   right: 16px;
@@ -186,4 +210,79 @@ body {
   font-family: var(--mono);
   font-size: 12px;
   color: rgba(232, 224, 208, 0.6);
+}
+
+/* touch controls */
+#touch {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+#stick {
+  display: none;
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: 2px solid rgba(111, 180, 255, 0.55);
+  background: rgba(8, 14, 24, 0.35);
+  pointer-events: none;
+}
+#stick-nub {
+  position: absolute;
+  left: 40px;
+  top: 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(111, 180, 255, 0.8);
+  box-shadow: 0 0 12px rgba(111, 180, 255, 0.6);
+}
+#touch-buttons {
+  position: absolute;
+  right: 16px;
+  bottom: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+#touch-buttons button {
+  pointer-events: auto;
+  min-width: 120px;
+  padding: 12px 16px;
+  border: 1px solid rgba(111, 180, 255, 0.7);
+  border-radius: 4px;
+  background: rgba(8, 14, 24, 0.7);
+  color: var(--teal);
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+#touch-buttons button.on {
+  background: rgba(111, 180, 255, 0.85);
+  color: #061012;
+}
+#touch-buttons button.hidden {
+  display: none;
+}
+body.touch #modehint {
+  right: 16px;
+  bottom: 22px;
+  font-size: 11px;
+}
+body.touch #status {
+  bottom: 22px;
+  font-size: 11px;
+}
+body.touch #crosshair {
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+}
+body.touch #start .keys {
+  font-size: 12px;
 }

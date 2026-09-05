@@ -10,11 +10,27 @@ export function createHUD() {
   const fadeText = $("fade-text");
   const start = $("start");
   const stats = $("stats");
+  const location = $("location");
+  const modehint = $("modehint");
+  const HINTS = {
+    interior: "WASD move · Shift run · E interact · V exterior view",
+    exterior: "drag orbit · right-drag pan · wheel zoom · WASD/QE fly · B board",
+    transition: "",
+  };
+  const TOUCH_HINTS = {
+    interior: "left: move · right: look",
+    exterior: "drag: orbit · pinch: zoom · two fingers: pan",
+    transition: "",
+  };
+  let touch = false;
 
   return {
     showPrompt(key, label) {
       prompt.innerHTML = `<b>${key}</b>${label}`;
       prompt.classList.remove("hidden");
+    },
+    promptVisible() {
+      return !prompt.classList.contains("hidden");
     },
     hidePrompt() {
       prompt.classList.add("hidden");
@@ -60,6 +76,26 @@ export function createHUD() {
     },
     setStats(text) {
       stats.textContent = text;
+    },
+    setFade(alpha) {
+      fade.style.transition = "none";
+      fade.style.opacity = String(alpha);
+    },
+    setLocation(text) {
+      location.textContent = text || "";
+    },
+    setMode(mode) {
+      modehint.textContent = (touch ? TOUCH_HINTS : HINTS)[mode] || "";
+      if (mode !== "interior") start.classList.add("hidden");
+      crosshair.style.display = mode === "interior" ? "" : "none";
+    },
+    setTouch(on) {
+      touch = on;
+      document.body.classList.toggle("touch", on);
+      const keys = start.querySelector(".keys");
+      const hint = start.querySelector(".hint");
+      if (on && keys) keys.textContent = "left half: move · right half: look · buttons: interact / exterior view";
+      if (on && hint) hint.textContent = "Tap to take the deck";
     },
     toggleStats(force) {
       stats.classList.toggle("hidden", force === undefined ? undefined : !force);

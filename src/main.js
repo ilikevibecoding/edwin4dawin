@@ -1,45 +1,67 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { buildMaterials } from "./materials.js";
-import { buildShip } from "./ship.js";
 import { buildSpace } from "./space.js";
+import { buildExterior } from "./exterior/hull.js";
+import { buildInterior } from "./interior/registry.js";
+import { createTraffic } from "./hangar/traffic.js";
+import { LightPool } from "./lightPool.js";
 import { Player } from "./player.js";
 import { Interactions } from "./interact.js";
 import { createPost } from "./post.js";
 import { createLightingController } from "./lighting.js";
 import { createHUD } from "./hud.js";
+import { OrbitCamera } from "./camera/orbit.js";
+import { ModeManager, BOARD_POSE } from "./camera/modes.js";
+import { createReservedSystems } from "./systems/reserved.js";
+import { createAudio } from "./audio/ambience.js";
+import { PerfMonitor } from "./perf.js";
+import { createTouchControls, isTouchDevice } from "./touch.js";
+import { LEGACY_WING, ROOMS, HULL, HANGAR } from "./config/shipSpec.js";
 
 // ---------------------------------------------------------------------------
 // Renderer / scene
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById("view");
+const TOUCH = isTouchDevice();
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance", stencil: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, TOUCH ? 1.0 : 1.5));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = true; // only the pooled interior spots cast; the exterior sun is a material term
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.info.autoReset = false;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
-scene.fog = new THREE.FogExp2(0x0a0c10, 0.03);
+// interior haze; exterior materials opt out (fog: false)
+scene.fog = new THREE.FogExp2(0x0a0c10, 0.012);
 
-const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 7000);
+const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.05, 60000);
 scene.add(camera);
 
 const hud = createHUD();
+const perf = new PerfMonitor(renderer, scene);
 
 // ---------------------------------------------------------------------------
 // World
 // ---------------------------------------------------------------------------
 const materials = buildMaterials();
-const ship = buildShip(scene, materials);
 const space = buildSpace(scene);
+// the far field was authored around a 16 m ship; the Star Destroyer is 1.6 km, so push it out 12x
+const SPACE_SCALE = 12;
+space.root.scale.setScalar(SPACE_SCALE);
+const exterior = buildExterior(scene);
+const interior = buildInterior({ scene, materials });
+const audio = createAudio();
+interior.doors.audio = audio;
+interior.lifts.audio = audio;
+const traffic = createTraffic({ scene, count: 6, audio, sun: exterior.sun });
+const pool = new LightPool(scene, { points: 14, spots: 3 });
 
-const hemi = new THREE.HemisphereLight(0x5a6f86, 0x3a2f26, 0.16);
+const hemi = new THREE.HemisphereLight(0x5a6f86, 0x3a2f26, 0.26);
 scene.add(hemi);
 
 // Bootstrap environment (neutral room), replaced by a capture of the actual interior below.
@@ -47,37 +69,93 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 scene.environmentIntensity = 0.2;
 
-const lighting = createLightingController({ lights: ship.lights, materials, hemi });
+const lighting = createLightingController({ lights: () => interior.fixturesByFamily(), materials, hemi });
 
-const player = new Player(camera, canvas, ship.colliders);
-player.setPose(0, -1.6, 0, 0);
+const player = new Player(camera, canvas, interior.colliders(), interior.floors());
 player.onLockChange = (locked) => {
-  if (locked) hud.hideStart();
-  else if (!debugMode) hud.showStart();
+  if (locked) {
+    hud.hideStart();
+    audio.resume();
+  } else if (!debugMode && modes.mode === "interior" && !TOUCH) hud.showStart();
 };
-hud.startEl.addEventListener("click", () => player.requestLock());
+hud.startEl.addEventListener("click", () => {
+  audio.resume();
+  if (TOUCH) hud.hideStart();
+  else player.requestLock();
+});
+canvas.addEventListener("click", () => {
+  audio.resume();
+  if (modes.mode === "interior" && !player.locked && !TOUCH) player.requestLock();
+});
 
-const interactions = new Interactions({ camera, interactables: ship.interactables, lighting, space, player, hud });
+const interactions = new Interactions({ camera, interactables: interior.interactables, lighting, space, player, hud });
+// E anywhere inside a turbolift car rides to the next deck (the wall panel still works as a target)
+interactions.fallback = () => interior.lifts.rideAt(player.position);
+interactions.fallbackAvailable = () => !!interior.lifts.carAt(player.position) && interior.lifts.carAt(player.position).state === "idle";
+const orbit = new OrbitCamera(camera, canvas);
+const modes = new ModeManager({ camera, player, orbit, interior, exterior, hud, space, traffic });
+const touch = TOUCH ? createTouchControls({ canvas, player, orbit, modes, interactions, hud }) : null;
+if (TOUCH) hud.setTouch(true);
+const reserved = createReservedSystems();
+reserved.attach({ scene, interior, exterior, traffic, camera, player });
 
-// Capture the finished interior into the environment map so metals reflect the real corridor.
+function refreshZone(zoneId) {
+  player.colliders = interior.colliders();
+  player.floors = interior.floors();
+  pool.setFixtures(interior.fixtures(), interior.spotFixtures());
+  audio.setZone(zoneId);
+}
+interior.onZoneChange = refreshZone;
+interior.onSpaceChange = (sp) => {
+  hud.setLocation(sp ? `${sp.spec.name || sp.id} · ${sp.deck ? "Deck " + sp.deck : ""}` : "");
+  pool.setContext(sp ? sp.id : null, interior.state.visible);
+  if (modes.mode === "interior") exterior.setInteriorView(interior.exteriorWindows());
+};
+modes.onModeChange = (mode) => {
+  audio.setZone(mode === "exterior" ? "exterior" : interior.state.zone);
+  if (mode === "exterior") exterior.group.visible = true;
+  else {
+    exterior.setInteriorView(interior.exteriorWindows());
+    if (!player.locked && !debugMode && !TOUCH) hud.showStart();
+  }
+};
+refreshZone(interior.state.zone);
+
+// Capture the finished interior into the environment map so metals reflect a real Imperial corridor.
 function captureEnvironment() {
   const cubeRT = new THREE.WebGLCubeRenderTarget(256, { type: THREE.HalfFloatType, generateMipmaps: false });
-  const cubeCam = new THREE.CubeCamera(0.1, 60, cubeRT);
-  cubeCam.position.set(0, 1.5, -8);
+  const cubeCam = new THREE.CubeCamera(0.1, 80, cubeRT);
+  cubeCam.position.set(0, 266.5, 520); // command-deck spine corridor
   const savedFog = scene.fog;
+  const savedInterior = interior.root.visible;
+  const savedExterior = exterior.group.visible;
+  const savedVis = new Map();
   scene.fog = null;
   space.root.visible = false;
-  // keep the light fixtures from turning every metal into a blown-out mirror of them
-  const emissives = [materials.emitTeal, materials.emitWarm, materials.emitOrange, materials.emitRed, materials.emitCool, materials.emitWarmSoft, materials.emitCoolSoft, materials.leds, ...materials.screens];
+  exterior.group.visible = false;
+  traffic.group.visible = false;
+  interior.root.visible = true;
+  for (const sp of interior.activeZone.spaces) {
+    savedVis.set(sp, sp.group.visible);
+    sp.group.visible = true;
+  }
+  const emissives = Object.entries(materials)
+    .filter(([k, m]) => k.startsWith("emit") && m.isMaterial)
+    .map(([, m]) => m)
+    .concat([materials.leds, ...materials.screens]);
   const saved = emissives.map((m) => m.emissiveIntensity);
   emissives.forEach((m) => (m.emissiveIntensity *= 0.25));
+  pool.settle(cubeCam.position);
   cubeCam.update(renderer, scene);
   emissives.forEach((m, i) => (m.emissiveIntensity = saved[i]));
+  for (const [sp, v] of savedVis) sp.group.visible = v;
   space.root.visible = true;
+  exterior.group.visible = savedExterior;
+  traffic.group.visible = true;
+  interior.root.visible = savedInterior;
   scene.fog = savedFog;
   const env = pmrem.fromCubemap(cubeRT.texture).texture;
   scene.environment = env;
-  // metals have no diffuse term: this is the only thing that keeps gunmetal from reading as black
   scene.environmentIntensity = 0.45;
   cubeRT.dispose();
 }
@@ -102,9 +180,10 @@ const QUALITY_LEVELS = [
   { ratio: 0.66, ao: "Low" },
   { ratio: 0.8, ao: "Low" },
   { ratio: 1.0, ao: "Medium" },
-  { ratio: Math.min(window.devicePixelRatio, 1.5), ao: "Medium" },
+  { ratio: Math.min(window.devicePixelRatio, TOUCH ? 1.0 : 1.5), ao: "Medium" },
 ];
-const quality = { level: QUALITY_LEVELS.length - 1, slow: 0, fast: 0, enabled: true };
+// phones start low and climb only if they keep up
+const quality = { level: TOUCH ? 0 : QUALITY_LEVELS.length - 1, slow: 0, fast: 0, enabled: true };
 function applyQuality() {
   const q = QUALITY_LEVELS[quality.level];
   renderer.setPixelRatio(q.ratio);
@@ -112,6 +191,7 @@ function applyQuality() {
   post.setSize(window.innerWidth, window.innerHeight);
   post.ao.setQualityMode(q.ao);
 }
+if (TOUCH) applyQuality();
 function updateQuality(dt) {
   if (!quality.enabled) return;
   if (dt > 1 / 52) {
@@ -133,27 +213,46 @@ function updateQuality(dt) {
 }
 
 // ---------------------------------------------------------------------------
-// Debug API (deterministic camera placement for screenshots)
+// Debug API (deterministic camera placement for screenshots and checks)
 // ---------------------------------------------------------------------------
 let debugMode = false;
-const VIEWS = {
-  // just inside the cockpit doorway looking over the seats and consoles at the windshield
+const W = LEGACY_WING;
+// legacy views (wing-local coordinates from the freighter phase, offset into the command deck)
+const LEGACY_VIEWS = {
   cockpit: { x: 0.0, z: -17.1, yaw: 0, pitch: -4, planet: 0, planetOffset: -12, time: 40 },
-  // aft end of the corridor looking forward; the ocean world's limb sits in the near port porthole
   corridor: { x: 0.4, z: -1.3, yaw: 12, pitch: -2, planet: 1, planetOffset: 51, time: 40 },
-  // inside the crew quarters looking at the bunk; ocean world limb in the porthole above the bed
   quarters: { x: -2.3, z: -6.3, yaw: 52, pitch: -8, planet: 1, planetOffset: 26, time: 40 },
-  // nose to the port corridor porthole
   window: { x: -0.55, z: -12.55, yaw: 90, pitch: 2, planet: 0, planetOffset: -12, time: 40 },
-  // extra QA views
   windshield: { x: 0.0, z: -18.3, yaw: 0, pitch: 2, planet: 0, planetOffset: -10, time: 40 },
   galley: { x: 2.3, z: -10.4, yaw: -70, pitch: -6, planet: 0, planetOffset: 0, time: 40 },
   bathroom: { x: 2.1, z: -3.9, yaw: -100, pitch: -4, planet: 0, planetOffset: 0, time: 40 },
   aft: { x: 0.2, z: -6.5, yaw: 180, pitch: -3, planet: 0, planetOffset: 0, time: 40 },
 };
+const VIEWS = {};
+for (const [k, v] of Object.entries(LEGACY_VIEWS)) VIEWS[k] = { ...v, x: v.x + W.x, z: v.z + W.z, y: W.y, zone: "tower", kind: "interior" };
+// one view per room / corridor from the registry
+for (const id of [...interior.roomIds, ...interior.corridorIds]) {
+  const v = interior.viewFor(id);
+  if (v) VIEWS["room:" + id] = { ...v, kind: "interior", planet: 0, planetOffset: 0, time: 40 };
+}
+// hand-placed interior views (the reactor door view looks up the 30 m column)
+if (VIEWS["room:reactor"]) VIEWS["room:reactor"].pitch = 14;
+VIEWS.bridge = { x: 0, z: 490.5, y: 265, yaw: 0, pitch: -3, zone: "tower", kind: "interior", planet: 0, planetOffset: -10, time: 40 };
+VIEWS.bridgeAft = { x: 0, z: 474, y: 265, yaw: 180, pitch: -4, zone: "tower", kind: "interior", planet: 0, planetOffset: 0, time: 40 };
+VIEWS.hangarDeck = { x: -26, z: 465, y: -80, yaw: -70, pitch: 4, zone: "hangar", kind: "interior", planet: 0, planetOffset: 0, time: 40 };
+VIEWS.hangarWell = { x: -21.5, z: 500, y: -80, yaw: -35, pitch: -18, zone: "hangar", kind: "interior", planet: 1, planetOffset: 0, time: 40 };
+// exterior views (yaw: camera bearing around +Y measured from +Z, so ~2.2 is a forward-starboard quarter)
+VIEWS.ext_far = { kind: "exterior", target: [0, 40, 0], distance: 3600, yaw: 2.3, pitch: 0.22, planet: 0, planetOffset: 40, time: 40 };
+VIEWS.ext_mid = { kind: "exterior", target: [0, 60, 200], distance: 1700, yaw: 1.75, pitch: 0.3, planet: 1, planetOffset: 60, time: 40 };
+VIEWS.ext_close = { kind: "exterior", target: [-200, 80, 300], distance: 320, yaw: 2.0, pitch: 0.35, planet: 0, planetOffset: 0, time: 40 };
+VIEWS.ext_tower = { kind: "exterior", target: [0, 260, 530], distance: 600, yaw: 2.6, pitch: 0.15, planet: 0, planetOffset: 0, time: 40 };
+VIEWS.ext_bridgeFace = { kind: "exterior", target: [0, 268, 470], distance: 140, yaw: Math.PI, pitch: 0.05, planet: 0, planetOffset: 0, time: 40 };
+VIEWS.ext_belly = { kind: "exterior", target: [0, -82, 465], distance: 600, yaw: 2.4, pitch: -0.75, planet: 1, planetOffset: 0, time: 40 };
+VIEWS.ext_stern = { kind: "exterior", target: [0, 20, 700], distance: 1000, yaw: 0.35, pitch: 0.15, planet: 0, planetOffset: 0, time: 40 };
+VIEWS.ext_bow = { kind: "exterior", target: [0, 10, -450], distance: 700, yaw: 2.75, pitch: 0.12, planet: 0, planetOffset: 0, time: 40 };
+VIEWS.ext_well = { kind: "exterior", target: [0, -95, 465], distance: 160, yaw: 2.2, pitch: -0.9, planet: 1, planetOffset: 0, time: 40 };
 
 let framesRendered = 0;
-let frameMs = 16;
 let pendingCapture = null;
 const debugAPI = {
   ready: false,
@@ -165,20 +264,139 @@ const debugAPI = {
     quality.enabled = false; // deterministic resolution for screenshots
     hud.hideStart();
     player.headBob = false;
-    player.frozen = true;
-    player.setPose(v.x, v.z, v.yaw, v.pitch);
-    const yaw = THREE.MathUtils.degToRad(v.yaw + (v.planetOffset || 0));
+    if (v.kind === "exterior") {
+      modes.setExterior({ target: v.target, distance: v.distance, yaw: v.yaw, pitch: v.pitch });
+      orbit.update(0);
+    } else {
+      modes.setInterior({ x: v.x, z: v.z, y: v.y, yaw: v.yaw, pitch: v.pitch, zone: v.zone });
+      player.frozen = true;
+    }
+    camera.updateMatrixWorld(true);
+    // frame the requested planet relative to where the camera looks (XZ bearing + offset)
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    dir.y = 0;
+    if (dir.lengthSq() < 1e-6) dir.set(0, 0, -1);
+    dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(v.planetOffset || 0));
     space.setTime(v.time ?? 40);
-    space.framePlanet(v.planet ?? 0, new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)));
+    space.framePlanet(v.planet ?? 0, dir);
+    exterior.update(camera.position, space.sunWorld);
+    pool.settle(camera.position);
     post.finalPass.uniforms.seed.value = 0.37;
     debugAPI.freezeGrain = true;
     framesRendered = 0;
     return true;
   },
+  setMode(mode) {
+    debugMode = true;
+    if (mode === "exterior") modes.setExterior();
+    else modes.setInterior();
+    framesRendered = 0;
+  },
+  board() {
+    modes.boardShip();
+  },
+  exitShip() {
+    modes.exitToExterior();
+  },
+  mode() {
+    return modes.mode;
+  },
+  transitionProgress() {
+    return modes.transition ? modes.transition.t : null;
+  },
+  // Teleport inside the active zone (x, z; y from the highest floor unless given) and settle lights
+  teleport(x, z, yaw = 0, pitch = 0, y = null) {
+    player.setPose(x, z, yaw, pitch, y);
+    interior.update(0, player);
+    pool.settle(camera.position);
+    framesRendered = 0;
+  },
+  // Place the player inside the named lift car and start the ride to the next deck
+  ride(liftId) {
+    const lift = interior.lifts.lifts.find((l) => l.id === liftId);
+    if (!lift) throw new Error("unknown lift " + liftId);
+    const s = lift.spec;
+    player.frozen = false;
+    player.locked = true;
+    player.setPose((s.x0 + s.x1) / 2, (s.z0 + s.z1) / 2, 0, 0, lift.decks[lift.deckIndex].y);
+    interior.update(0, player);
+    return interior.lifts.travelNext(lift);
+  },
+  // Physically walk the player toward (x, z) with the movement controller and collisions, in fixed
+  // 1/60 s steps (doors/lifts/dynamics tick too). Returns whether the point was reached.
+  walkTo(x, z, maxSeconds = 20) {
+    player.frozen = false;
+    player.locked = true;
+    player.touchMode = false;
+    const step = 1 / 60;
+    let t = 0;
+    let reached = false;
+    player.keys.clear();
+    player.keys.add("KeyW");
+    player.keys.add("ShiftLeft");
+    for (; t < maxSeconds; t += step) {
+      const dx = x - player.position.x;
+      const dz = z - player.position.z;
+      if (Math.hypot(dx, dz) < 0.45) {
+        reached = true;
+        break;
+      }
+      player.yaw = Math.atan2(-dx, -dz);
+      player.update(step);
+      interior.update(step, player);
+    }
+    player.keys.clear();
+    player.velocity.set(0, 0, 0);
+    framesRendered = 0;
+    return { reached, x: +player.position.x.toFixed(2), y: +player.position.y.toFixed(2), z: +player.position.z.toFixed(2), seconds: +t.toFixed(1), space: interior.state.space };
+  },
+  liftState(liftId) {
+    return interior.lifts.serialize().find((l) => l.id === liftId);
+  },
+  spaceId() {
+    return interior.state.space;
+  },
+  zone() {
+    return interior.state.zone;
+  },
+  setZone(z) {
+    interior.setActiveZone(z);
+    refreshZone(z);
+  },
+  doors() {
+    return interior.doors.serialize();
+  },
+  trafficState() {
+    return { counts: traffic.counts(), states: traffic.serialize() };
+  },
+  reserved() {
+    return reserved.describe();
+  },
+  rooms() {
+    return ROOMS.map((r) => ({ id: r.id, name: r.name, deck: r.deck, built: !!interior.spaces[r.id] }));
+  },
+  connectivity() {
+    return interior.connectivity("bridge");
+  },
+  audioLog() {
+    return audio.log.slice(-20);
+  },
   // Advance only the sky (stars / planets / dust) by dt seconds; interior stays put. For drift measurement.
   advanceSky(dt) {
     space.setTime(space.state.time + dt);
-    space.update(0);
+    space.update(0, camera.position);
+    framesRendered = 0;
+  },
+  // Advance simulation systems (lifts, doors, traffic, machinery) by dt seconds without moving the camera
+  advanceSim(dt) {
+    const step = 1 / 30;
+    for (let t = 0; t < dt; t += step) {
+      if (modes.mode === "interior") player.update(step);
+      interior.update(step, player);
+      traffic.update(step);
+      modes.update(step);
+    }
     framesRendered = 0;
   },
   // Resolve with RGBA bytes of a screen region (CSS px) from the next rendered frame.
@@ -197,9 +415,9 @@ const debugAPI = {
   // Place the player in front of an interactable, looking at it (for prompt / interaction tests)
   lookAt(id) {
     const poses = {
-      bed: { x: -3.0, z: -7.6, yaw: 76, pitch: -40 },
-      galley: { x: 3.4, z: -10.6, yaw: -78, pitch: -22 },
-      bathroom: { x: 2.5, z: -3.7, yaw: -90, pitch: -43 },
+      bed: { x: -3.0 + W.x, z: -7.6 + W.z, yaw: 76, pitch: -40 },
+      galley: { x: 3.4 + W.x, z: -10.6 + W.z, yaw: -78, pitch: -22 },
+      bathroom: { x: 2.5 + W.x, z: -3.7 + W.z, yaw: -90, pitch: -43 },
     };
     const p = poses[id];
     if (!p) throw new Error("unknown interactable " + id);
@@ -207,10 +425,11 @@ const debugAPI = {
     quality.enabled = false;
     hud.hideStart();
     player.headBob = false;
+    modes.setInterior({ x: p.x, z: p.z, y: W.y, yaw: p.yaw, pitch: p.pitch, zone: "tower" });
     player.frozen = false;
     player.locked = true; // simulate pointer lock for the interaction gate
-    player.setPose(p.x, p.z, p.yaw, p.pitch);
     interactions.update();
+    pool.settle(camera.position);
     framesRendered = 0;
     return !!interactions.hovered;
   },
@@ -238,18 +457,26 @@ const debugAPI = {
   frames() {
     return framesRendered;
   },
+  setPaused(v) {
+    paused = !!v;
+  },
+  renderFrame() {
+    step();
+    return framesRendered;
+  },
   getStats() {
-    const info = renderer.info;
     return {
-      frameMs: +frameMs.toFixed(2),
-      fps: +(1000 / frameMs).toFixed(1),
-      calls: info.render.calls,
-      triangles: info.render.triangles,
-      geometries: info.memory.geometries,
-      textures: info.memory.textures,
-      programs: info.programs ? info.programs.length : 0,
-      colliders: ship.colliders.length,
-      lights: ship.lights.warm.length + ship.lights.cool.length + ship.lights.teal.length + ship.lights.spots.length,
+      ...perf.stats(),
+      colliders: player.colliders.length,
+      floors: player.floors.length,
+      lights: pool.activeCount,
+      fixtures: interior.fixtures().length,
+      zone: interior.state.zone,
+      space: interior.state.space,
+      mode: modes.mode,
+      exteriorDetail: exterior.stats.visibleDetail,
+      zoneBuildMs: interior.stats.buildMs,
+      traffic: traffic.counts(),
       qualityLevel: quality.level,
       pixelRatio: renderer.getPixelRatio(),
     };
@@ -265,6 +492,11 @@ const debugAPI = {
   post,
   scene,
   renderer,
+  interior,
+  exterior,
+  traffic,
+  modes,
+  pool,
 };
 window.debugAPI = debugAPI;
 
@@ -279,30 +511,63 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// From below the keel and within ~900 m of the well, the lit hangar is shown through the opening so the
+// exterior and the interior read as one ship (fighters drop out of a real bay).
+const wellCentre = new THREE.Vector3((HANGAR.well.x0 + HANGAR.well.x1) / 2, HANGAR.deckY, (HANGAR.well.z0 + HANGAR.well.z1) / 2);
+function updateWellPeek() {
+  const want = modes.mode === "exterior" && camera.position.y < HULL.keelPlate.y + 4 && camera.position.distanceTo(wellCentre) < 900;
+  if (want && interior.peeking !== "hangar") {
+    interior.peek("hangar", ["hangar"]);
+    pool.setFixtures(interior.fixtures(), interior.spotFixtures());
+  } else if (!want && interior.peeking) {
+    // in a transition the transition owns root visibility; interior mode always shows it
+    interior.unpeek(modes.mode === "interior" ? true : modes.mode === "exterior" ? false : interior.root.visible);
+    pool.setFixtures(interior.fixtures(), interior.spotFixtures());
+  }
+}
+
 const timer = new THREE.Timer();
 let envCaptured = false;
-let last = performance.now();
 
+// Offline capture (tools/flythrough.mjs): pause the loop and render single frames on demand so the
+// page's main thread is free between captures.
+let paused = false;
 function frame() {
   requestAnimationFrame(frame);
+  if (paused) return;
+  step();
+}
+function step() {
   const now = performance.now();
-  frameMs += (now - last - frameMs) * 0.1;
-  last = now;
+  perf.beginFrame(now);
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.1);
   const t = timer.getElapsed();
   renderer.info.reset();
 
   if (!envCaptured && framesRendered >= 2) {
-    captureEnvironment();
+    perf.timeCompile(() => captureEnvironment());
     envCaptured = true;
   }
 
-  player.update(dt);
-  space.update(dt);
+  modes.update(dt);
+  updateWellPeek();
+  if (modes.mode === "interior") {
+    player.update(dt);
+    interior.update(dt, player);
+    interactions.update();
+  } else if (modes.mode === "transition" || interior.peeking) {
+    interior.update(dt, player); // keeps doors, lifts and hangar machinery moving while seen from outside
+  }
+  traffic.update(dt);
+  space.update(dt, camera.position, modes.mode === "interior");
+  exterior.update(camera.position, space.sunWorld);
   lighting.update(dt);
-  interactions.update();
+  pool.update(camera.position, dt);
+  reserved.update(dt);
+  audio.setListener(camera.position);
   if (framesRendered > 60) updateQuality(dt);
+  if (touch) touch.update();
 
   if (debugAPI.directRender) renderer.render(scene, camera);
   else post.render(debugAPI.freezeGrain ? 0.37 : t);
@@ -321,9 +586,23 @@ function frame() {
   }
   if (showStats) {
     const s = debugAPI.getStats();
-    hud.setStats(`${s.fps} fps  ${s.frameMs} ms\n${s.calls} calls  ${(s.triangles / 1000).toFixed(1)}k tris\n${s.lights} lights`);
+    hud.setStats(`${s.fps} fps  ${s.frameMs} ms (p95 ${s.p95Ms})  js ${s.jsMs} ms\n${s.calls} calls  ${(s.triangles / 1000).toFixed(1)}k tris  ${s.visibleObjects} objects\n${s.lights} lights / ${s.fixtures} fixtures  tex ${s.textureMemMB} MB${s.heapMB ? "  heap " + s.heapMB + " MB" : ""}\n${s.mode} · ${s.zone} · ${s.space || "-"}`);
   }
+  perf.endFrame(performance.now());
 }
 
+// start outside, looking at the ship; B / V boards
+modes.setExterior();
+perf.markReady();
 debugAPI.ready = true;
 frame();
+
+// stream the other zones in while the player looks at the exterior, so lift rides never build on arrival
+const prebuild = ["engineering", "hangar"];
+function prebuildNext() {
+  const z = prebuild.shift();
+  if (!z) return;
+  interior.buildZone(z);
+  setTimeout(prebuildNext, 1500);
+}
+setTimeout(prebuildNext, 2500);

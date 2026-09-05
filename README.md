@@ -1,12 +1,25 @@
-# Kestrel — first-person spaceship interior demo
+# ISD Vigilant — Star Destroyer demo
 
-A small first-person walkthrough of a Star Wars-style ship interior in flight, built with Vite and
-Three.js. Everything is procedural: geometry is kit-bashed from primitives, every texture (albedo,
-roughness/metalness, normal, emissive, decals, planets, nebulae) is generated on a canvas at load.
-No downloaded models or textures.
+A Star Wars-inspired Imperial Star Destroyer you can orbit from outside and explore on foot inside,
+built with Vite and Three.js. Everything is procedural and original: geometry is kit-bashed from
+primitives, every texture (hull plating, panels, decals, console UI, planets, nebulae) is generated on a
+canvas at load. No downloaded models, textures, fonts or sounds.
 
-Rooms: main corridor with two portholes, cockpit with a slanted viewport, crew quarters with a bunk,
-galley, bathroom. Three interactions (bed, galley dispenser, sink) via raycast from screen centre.
+- **Exterior**: 1.6 km wedge hull with layered armour plates, equatorial trench machinery, terraced
+  superstructure city, command tower with shield domes and spire, seven ion engines, turbolaser turrets,
+  running lights, a ventral hangar well and reactor bulb. Sun + planet-shine shading, cast shadows in
+  orbit view, three LOD layers, instanced detail.
+- **Interior**: four decks, 27 spaces, all connected: bridge, auxiliary flight control, tactical holo
+  room, comms/sensor control, restricted intel room, officers' quarters, observation gallery, lift
+  lobbies, escape pod bay, crew quarters, refresher, mess hall and galley, medbay, rec lounge, briefing
+  room, armoury, detention block, life support, engineering control, main reactor chamber, hyperdrive
+  room, maintenance bay, main hangar, fighter maintenance, shuttle dock, cargo bay. Corridors,
+  auto-opening doors, two turbolifts that physically carry you between decks.
+- **Hangar traffic**: TIE-style fighters release from ceiling racks, drop through the well, patrol the
+  hull and return under tractor capture, on deterministic tracks with a `Pilot` interface for future
+  NPC or networked pilots.
+- **Reserved for later phases**: flight control, atmospheric entry, landing supports, docking, surface
+  contact, hangar deployment, descent camera, landing zones (`src/systems/reserved.js`).
 
 ## Run
 
@@ -16,26 +29,44 @@ npm run dev        # http://127.0.0.1:5173
 npm run build      # production bundle in dist/
 ```
 
-Click to lock the pointer. `WASD` to move, mouse to look, `E` to interact, `F3` for the stats overlay.
+Starts in orbit. Drag to orbit, wheel to zoom, right-drag to pan, `WASD`/`QE` to fly the focus point,
+`B` (or `V`) to board through the bridge windows. Inside: click to lock the pointer, `WASD` move,
+`Shift` run, mouse look, `E` interact (bunks, dispensers, turbolift panels), `V` to fly back out, `F3`
+stats overlay. On phones the same page shows touch controls (left half joystick, right half look,
+on-screen Board / Interact / Run / Exterior buttons).
 
-## Screenshot harness
+## Tooling
 
 ```sh
-npm run shots -- <iteration>          # shots/iter_<N>/*.png + results.json
-SHOT_QUICK=1 SHOT_VIEWS=cockpit,window npm run shots -- <iteration>   # partial re-check
+node tools/check.mjs [--base URL] [--out DIR] [--all] view...   # JPEG frames + per-view stats
+node tools/check.mjs --list                                      # every debug view name
+node tools/verify.mjs [--base URL]        # navigation / systems checks (rooms, walk, doors, lifts,
+                                          # transitions, traffic, budgets); exit 1 on failure
+SHOT_BUILD=1 node tools/shots.mjs <name>  # full review set on a static build snapshot
+node tools/flythrough.mjs --scale 0.5     # offline flythrough video (orbit, boarding, bridge,
+                                          # lift ride, hangar, exit) via ffmpeg
+tools/live.sh                             # dev server + Cloudflare quick tunnel for a live link
 ```
 
-`tools/shots.mjs` drives headless Chromium through `window.debugAPI` (`setView`, `advanceSky`,
-`capturePixels`, `lookAt`, `interact`), captures the four rubric views plus QA views, measures sky
-drift against an interior control region, and exercises all three interactions.
+All tools drive headless Chromium through `window.debugAPI` (`setView`, `teleport`, `walkTo`, `ride`,
+`board`, `exitShip`, `advanceSim`, `advanceSky`, `getStats`, `connectivity`, ...).
+
+## Documentation
+
+- `docs/STAR_DESTROYER_PLAN.md` — scale spec, scene hierarchy, deck plan, camera modes, budgets
+- `docs/STAR_DESTROYER_PROGRESS.md` — milestone log with measurements and review results
+- `docs/BASELINE.md` — the freighter demo this grew from
+- `docs/AGENT_GUIDE.md` — the contract the parallel workstreams built against (kit, shell, materials,
+  budgets, testing)
+- `PROGRESS.md` — the earlier freighter-phase iteration log
 
 ## Layout
 
-- `src/main.js` — renderer, scene, environment capture, adaptive quality, debug API, loop
-- `src/player.js` — pointer-lock first-person controller, capsule-vs-box collision, head bob
-- `src/ship.js` — the ship interior (corridor, cockpit, quarters, galley, bathroom, lights)
-- `src/space.js` — starfield layers, planets with atmosphere halos, rings, nebulae, dust, drift
-- `src/interact.js` — hover highlight, prompts, the three scripted events
-- `src/post.js` — N8AO → bloom → ACES/sRGB → SMAA → vignette/grain/shadow-lift
-- `src/kit.js`, `textures.js`, `materials.js`, `lighting.js`, `hud.js` — helpers
-- `PROGRESS.md` — iteration log with rubric scoring
+- `src/main.js` — renderer, world assembly, modes, debug API, loop
+- `src/config/shipSpec.js` — single source of truth for hull, decks, rooms, lifts, hangar
+- `src/exterior/` — hull, plating shader, greebles, turrets, engines, ventral detail, lights
+- `src/interior/` — registry (streaming, portal culling), shell, corridors, doors, lifts, `rooms/*`
+- `src/hangar/` — fighter traffic, TIE model, hangar machinery
+- `src/camera/` — orbit camera, mode manager and transitions
+- `src/player.js`, `touch.js`, `interact.js`, `lightPool.js`, `lighting.js`, `post.js`, `perf.js`,
+  `audio/ambience.js`, `systems/reserved.js`, `space.js`, `kit.js`, `textures.js`, `materials.js`

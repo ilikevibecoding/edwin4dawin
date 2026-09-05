@@ -3,3 +3,6 @@ dist/
 .vite/
 *.log
 .DS_Store
+
+# Star Destroyer phase: harness output is regenerated, only curated JPEGs under docs/evidence are committed
+shots/iter_sd*

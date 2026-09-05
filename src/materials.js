@@ -8,28 +8,41 @@ import {
   makeFabric,
   makeHazard,
   makeScreen,
+  makeScreenLayout,
   makeLedStrip,
   makeDecalSheet,
   makeGrate,
   makeDiffuser,
 } from "./textures.js";
 
+// Imperial palette. The key names date from the freighter phase (cream / orange / teal) and are kept so
+// the legacy rooms re-theme without edits: "cream" is now the light grey-white of Imperial corridor
+// panels, "orange" the sparse dark-red accent, "tealPaint" the blue-slate trim, "teal" the blue-white
+// instrument glow and "warm" the amber one.
 export const PALETTE = {
-  cream: new THREE.Color("#e2d9c6"),
-  creamDark: new THREE.Color("#b9b0a0"),
-  orange: new THREE.Color("#e9782f"),
-  tealPaint: new THREE.Color("#5d8a86"),
-  slate: new THREE.Color("#6b7079"),
-  gunmetal: new THREE.Color("#4a4e55"),
-  darkMetal: new THREE.Color("#2b2e33"),
+  cream: new THREE.Color("#c6c9ce"),
+  creamDark: new THREE.Color("#8f939a"),
+  orange: new THREE.Color("#9c3530"),
+  tealPaint: new THREE.Color("#3f4b5e"),
+  slate: new THREE.Color("#5c6169"),
+  gunmetal: new THREE.Color("#3c4046"),
+  darkMetal: new THREE.Color("#22252a"),
   steel: new THREE.Color("#9ea3aa"),
-  brass: new THREE.Color("#b58a4a"),
+  brass: new THREE.Color("#8a8d93"),
   rubber: new THREE.Color("#ffffff"),
-  fabricCream: new THREE.Color("#d9cfbd"),
-  fabricTeal: new THREE.Color("#3f8c86"),
-  fabricOrange: new THREE.Color("#d8722f"),
-  teal: new THREE.Color("#4fd8cc"),
-  warm: new THREE.Color("#ffc78a"),
+  fabricCream: new THREE.Color("#9da0a6"),
+  fabricTeal: new THREE.Color("#2f3c55"),
+  fabricOrange: new THREE.Color("#5c2b28"),
+  teal: new THREE.Color("#6fb4ff"),
+  warm: new THREE.Color("#ffb866"),
+  // Imperial-specific additions
+  impWhite: new THREE.Color("#d8dbe0"),
+  impGrey: new THREE.Color("#a6aab1"),
+  impGreyDark: new THREE.Color("#5d6168"),
+  impBlack: new THREE.Color("#171a1e"),
+  impRed: new THREE.Color("#c0392b"),
+  impBlue: new THREE.Color("#4a8dff"),
+  impAmber: new THREE.Color("#ffb347"),
 };
 
 export function buildMaterials() {
@@ -105,11 +118,21 @@ export function buildMaterials() {
     }),
     emitOrange: new THREE.MeshStandardMaterial({
       color: 0x1a0a04,
-      emissive: PALETTE.orange,
+      emissive: new THREE.Color("#ff8a3a"),
       emissiveIntensity: 2.0,
       roughness: 0.5,
       metalness: 0,
     }),
+    // Imperial instrument colours: blue, amber, white (hard) + soft diffuser variants
+    emitBlue: new THREE.MeshStandardMaterial({ color: 0x06101e, emissive: PALETTE.impBlue, emissiveIntensity: 1.8, roughness: 0.4, metalness: 0 }),
+    emitAmber: new THREE.MeshStandardMaterial({ color: 0x1a1004, emissive: PALETTE.impAmber, emissiveIntensity: 1.6, roughness: 0.4, metalness: 0 }),
+    emitWhite: new THREE.MeshStandardMaterial({ color: 0x101214, emissive: new THREE.Color("#e8f0ff"), emissiveIntensity: 1.5, roughness: 0.4, metalness: 0 }),
+    emitBlueSoft: new THREE.MeshStandardMaterial({ color: 0x06101e, emissive: PALETTE.impBlue, emissiveMap: diffuser, emissiveIntensity: 1.8, roughness: 0.5, metalness: 0 }),
+    emitRedSoft: new THREE.MeshStandardMaterial({ color: 0x100404, emissive: new THREE.Color("#ff3a2a"), emissiveMap: diffuser, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0 }),
+    emitWhiteSoft: new THREE.MeshStandardMaterial({ color: 0x101214, emissive: new THREE.Color("#e8f0ff"), emissiveMap: diffuser, emissiveIntensity: 1.7, roughness: 0.5, metalness: 0 }),
+    emitAmberSoft: new THREE.MeshStandardMaterial({ color: 0x1a1004, emissive: PALETTE.impAmber, emissiveMap: diffuser, emissiveIntensity: 1.6, roughness: 0.5, metalness: 0 }),
+    // Satin black Imperial console / trim panel (dielectric so it still shades under dim light)
+    satinBlack: new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.42, metalness: 0.25, envMapIntensity: 0.9 }),
     emitRed: new THREE.MeshStandardMaterial({
       color: 0x100404,
       emissive: new THREE.Color("#ff3a2a"),
@@ -129,7 +152,7 @@ export function buildMaterials() {
       color: 0x1a1410,
       emissive: PALETTE.warm,
       emissiveMap: diffuser,
-      emissiveIntensity: 1.9,
+      emissiveIntensity: 1.45,
       roughness: 0.5,
       metalness: 0,
     }),
@@ -137,7 +160,7 @@ export function buildMaterials() {
       color: 0x0a0e14,
       emissive: new THREE.Color("#cfe4ff"),
       emissiveMap: diffuser,
-      emissiveIntensity: 2.4,
+      emissiveIntensity: 1.7,
       roughness: 0.5,
       metalness: 0,
     }),
@@ -172,7 +195,22 @@ export function buildMaterials() {
   };
 
   // Console screens: black diffuse, emissive UI
-  const screenTex = [makeScreen(512, 256, 5), makeScreen(512, 256, 17), makeScreen(512, 256, 29, "#f08a3c", "#4fd8cc"), makeScreen(512, 256, 41)];
+  // 0..3 legacy layouts (now blue-white), 4 blue tactical, 5 red alert / restricted, 6 amber engineering
+  const screenTex = [
+    makeScreen(512, 256, 5),
+    makeScreen(512, 256, 17),
+    makeScreen(512, 256, 29, "#ff9a3c", "#6fb4ff"),
+    makeScreen(512, 256, 41),
+    makeScreen(512, 256, 57, "#4a8dff", "#b4d2ff"),
+    makeScreen(512, 256, 73, "#ff3b30", "#ff9a90"),
+    makeScreen(512, 256, 89, "#ffb347", "#ffe2b0"),
+    // 7..10 alternative layouts: ship schematic (blue), sensor radar (blue), data columns (blue),
+    // power bars (amber) — rooms mix these so no deck repeats one texture
+    makeScreenLayout("schematic", 512, 256, 101, "#4a8dff", "#ffb347"),
+    makeScreenLayout("radar", 512, 256, 113, "#4a8dff", "#ff3b30"),
+    makeScreenLayout("columns", 512, 256, 127, "#6fb4ff", "#ffb347"),
+    makeScreenLayout("bars", 512, 256, 131, "#ffb347", "#ff3b30"),
+  ];
   mats.screens = screenTex.map(
     (tex) =>
       new THREE.MeshStandardMaterial({

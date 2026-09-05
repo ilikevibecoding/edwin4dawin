@@ -5,15 +5,28 @@ import * as THREE from "three";
 const EYE_HEIGHT = 1.7;
 const RADIUS = 0.32;
 const SPEED = 2.6;
+const RUN_SPEED = 5.2;
 const ACCEL = 14;
 const MOUSE_SENS = 0.0022;
 const PITCH_LIMIT = Math.PI / 2 - 0.05;
+const STEP_UP = 0.45; // tallest ledge / stair riser the player walks up
+const FALL_SPEED = 6; // m/s when stepping down onto a lower floor
+const MAX_MOVE = RADIUS * 0.5; // sub-step so one hitch frame can never carry the capsule through a wall
+const _wish = new THREE.Vector3();
+const _step = new THREE.Vector3();
 
 export class Player {
-  constructor(camera, domElement, colliders) {
+  /**
+   * @param colliders wall AABBs [{min,max}] that block horizontal movement
+   * @param floors walkable surfaces [{x0,z0,x1,z1,y}] (y may be a getter for moving platforms;
+   *        `carry: true` makes the player ride the surface without the step-up limit)
+   */
+  constructor(camera, domElement, colliders, floors = []) {
     this.camera = camera;
     this.dom = domElement;
     this.colliders = colliders;
+    this.floors = floors;
+    this.groundFloor = null;
     this.position = new THREE.Vector3(0, 0, -1.6); // feet
     this.velocity = new THREE.Vector3();
     this.yaw = 0; // yaw 0 looks down -Z (toward the cockpit); +90deg looks toward -X
@@ -26,6 +39,10 @@ export class Player {
     this.headBob = true;
     this.frozen = false;
     this.onLockChange = null;
+    // touch devices: no pointer lock; a virtual joystick feeds touchMove and touchMode gates input
+    this.touchMode = false;
+    this.touchMove = null;
+    this.touchRun = false;
 
     this._onMouseMove = (e) => {
       if (!this.locked || this.frozen) return;
@@ -56,8 +73,9 @@ export class Player {
     if (p && p.catch) p.catch(() => this.dom.requestPointerLock());
   }
 
-  setPose(x, z, yawDeg, pitchDeg) {
-    this.position.set(x, 0, z);
+  setPose(x, z, yawDeg, pitchDeg, y = null) {
+    this.position.set(x, y ?? this.groundAt(x, z, Infinity) ?? 0, z);
+    this.groundFloor = null;
     this.yaw = THREE.MathUtils.degToRad(yawDeg);
     this.pitch = THREE.MathUtils.degToRad(pitchDeg);
     this.velocity.set(0, 0, 0);
@@ -77,28 +95,45 @@ export class Player {
       return;
     }
     const k = this.keys;
-    const fwd = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
-    const strafe = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
-    const wish = new THREE.Vector3();
-    if (this.locked && (fwd || strafe)) {
+    let fwd = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
+    let strafe = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
+    let run = k.has("ShiftLeft") || k.has("ShiftRight");
+    if (this.touchMove && this.touchMove.lengthSq() > 0.01) {
+      fwd += this.touchMove.y;
+      strafe += this.touchMove.x;
+      run = run || this.touchRun;
+    }
+    const wish = _wish.set(0, 0, 0);
+    if ((this.locked || this.touchMode) && (fwd || strafe)) {
       // camera forward / right on the XZ plane for the current yaw
       const fx = -Math.sin(this.yaw);
       const fz = -Math.cos(this.yaw);
       const rx = Math.cos(this.yaw);
       const rz = -Math.sin(this.yaw);
-      wish.set(fx * fwd + rx * strafe, 0, fz * fwd + rz * strafe).normalize().multiplyScalar(SPEED);
+      const mag = Math.min(1, Math.hypot(fwd, strafe));
+      const speed = (run ? RUN_SPEED : SPEED) * mag;
+      wish.set(fx * fwd + rx * strafe, 0, fz * fwd + rz * strafe).normalize().multiplyScalar(speed);
     }
     // smooth acceleration
     const t = 1 - Math.exp(-ACCEL * dt);
     this.velocity.lerp(wish, t);
     if (this.velocity.lengthSq() < 1e-6) this.velocity.set(0, 0, 0);
 
-    // integrate with collision, axis by axis
-    const step = this.velocity.clone().multiplyScalar(dt);
-    this.position.x += step.x;
-    this.resolveCollisions("x");
-    this.position.z += step.z;
-    this.resolveCollisions("z");
+    // ride a moving platform before integrating our own motion
+    if (this.groundFloor && this.groundFloor.carry) this.position.y = this.groundFloor.y;
+
+    // integrate with collision, axis by axis, in sub-steps short enough that a long frame cannot
+    // push the capsule centre past a thin wall's mid-plane
+    const step = _step.copy(this.velocity).multiplyScalar(dt);
+    const n = Math.max(1, Math.ceil(step.length() / MAX_MOVE));
+    step.divideScalar(n);
+    for (let i = 0; i < n; i++) {
+      this.position.x += step.x;
+      this.resolveCollisions("x");
+      this.position.z += step.z;
+      this.resolveCollisions("z");
+    }
+    this.resolveGround(dt);
 
     // head bob
     const speed = this.velocity.length();
@@ -120,12 +155,38 @@ export class Player {
     this.camera.rotation.set(this.pitch, this.yaw, roll);
   }
 
+  // Highest walkable surface under (x, z) that is no more than `reach` above the current feet.
+  // Returns null when nothing is below (the player then keeps its height instead of falling forever).
+  groundAt(x, z, reach = STEP_UP) {
+    let best = null;
+    let bestY = -Infinity;
+    const limit = this.position.y + reach;
+    for (const f of this.floors) {
+      if (x < f.x0 || x > f.x1 || z < f.z0 || z > f.z1) continue;
+      const y = floorHeight(f, x, z);
+      if (y > limit || y <= bestY) continue;
+      bestY = y;
+      best = f;
+    }
+    this._groundCandidate = best;
+    return best ? bestY : null;
+  }
+
+  resolveGround(dt) {
+    const p = this.position;
+    const y = this.groundAt(p.x, p.z);
+    if (y === null) return;
+    this.groundFloor = this._groundCandidate;
+    if (y >= p.y) p.y = y; // step up (bounded by STEP_UP in groundAt)
+    else p.y = Math.max(y, p.y - FALL_SPEED * dt); // ease down stairs / ledges
+  }
+
   resolveCollisions(axis) {
     const p = this.position;
     const feet = p.y + 0.05;
     const head = p.y + EYE_HEIGHT + 0.1;
     for (const c of this.colliders) {
-      if (c.max.y < feet || c.min.y > head) continue;
+      if (c.disabled || c.max.y < feet || c.min.y > head) continue;
       // closest point on the AABB footprint to the player circle centre
       const cx = THREE.MathUtils.clamp(p.x, c.min.x, c.max.x);
       const cz = THREE.MathUtils.clamp(p.z, c.min.z, c.max.z);
@@ -154,4 +215,11 @@ export class Player {
   }
 }
 
-export { EYE_HEIGHT };
+// Floor height at (x, z): flat floors have a single y; ramps interpolate y0..y1 along `axis`.
+function floorHeight(f, x, z) {
+  if (f.y0 === undefined) return f.y;
+  const t = f.axis === "x" ? (x - f.x0) / (f.x1 - f.x0) : (z - f.z0) / (f.z1 - f.z0);
+  return f.y0 + (f.y1 - f.y0) * THREE.MathUtils.clamp(t, 0, 1);
+}
+
+export { EYE_HEIGHT, STEP_UP };
