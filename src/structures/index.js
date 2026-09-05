@@ -4,10 +4,12 @@
 // Builders: add ONE import + ONE line to REGISTRARS for your module; keep everything else in your own files.
 import { register as registerCoruscant } from '../coruscant/city.js';
 import { register as registerSpaceport } from '../coruscant/spaceport.js';
+import { register as registerDeathStar } from '../deathstar/index.js';
 
 const REGISTRARS = [
   registerCoruscant,
   registerSpaceport,                                                          // Coruscant + frontier spaceports, ship traffic
+  registerDeathStar,                                                          // the walkable Death Star in the space region
   async (gen, game) => (await import('./hyperlane.js')).register(gen, game), // hyperlane track, stations, space train
 ];
 
