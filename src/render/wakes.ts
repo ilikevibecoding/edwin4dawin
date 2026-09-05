@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { smoothstep } from '../core/noise';
 
 /** Top-down render target holding foam (R) and normal perturbation (GB) for boat and float wakes.
  *  Anything that disturbs the water adds a ribbon mesh to `scene`. */
@@ -372,9 +373,16 @@ export class WakeTrail {
     // drop expired
     while (this.points.length && time - this.points[0].t > this.lifetime) this.points.shift();
     const n = this.points.length;
+    // a fast emitter fills the point buffer long before its oldest point expires (a planing boat at 13 m/s
+    // reaches 80 points in 20 s of a 42 s lifetime), and the ribbon then ended in a hard cut at half strength:
+    // the oldest third of the buffer ages out by position as well once the buffer is (nearly) full, so every
+    // trail tail fades; a young trail keeps its start (the touchdown point of a landing seaplane)
+    const tailSpan = Math.max(1, Math.floor(this.capacity * 0.35));
+    const full = smoothstep(0.6, 1.0, n / this.capacity);
     for (let i = 0; i < n; i++) {
       const p = this.points[i];
-      const age = Math.min(1, (time - p.t) / this.lifetime);
+      const tailAge = full * (1 - Math.min(1, (i + 0.5) / tailSpan));
+      const age = Math.min(1, Math.max((time - p.t) / this.lifetime, tailAge));
       // the foamy wake spreads slowly with age (the Kelvin wave pattern itself is not foam)
       const w = this.width * (0.6 + 1.8 * age);
       const nx = -p.dz * w, nz = p.dx * w;
