@@ -140,19 +140,21 @@ const TRADES = [
 ];
 
 // A 3-wide stall in the slot whose post cell is z0: counter at x = xc facing the aisle at xc + dx, vendor behind,
-// wool awning over counter + vendor (+ aisle overhang), holo price board over the aisle edge, fence posts.
+// wool awning at y 4 over the counter and vendor rows (and the rack row of wall stalls), a holo price board
+// hanging over the aisle edge at y 3, 3-high fence posts with lanterns on top.
 function stall(bp, rng, xc, z0, dx, colour, opts = {}) {
   const t = rng.pick(TRADES);
   bp.fill(xc, 1, z0, xc, 3, z0, B.OAK_FENCE); bp.fill(xc, 1, z0 + 4, xc, 3, z0 + 4, B.OAK_FENCE);
+  const back = opts.rackX !== undefined ? opts.rackX : xc - dx;
   for (let z = z0 + 1; z <= z0 + 3; z++) {
     bp.set(xc, 1, z, t.counter);
     const g = t.goods[rng.int(0, t.goods.length - 1)];
     if (g && !(z === z0 + 2 && rng.chance(0.25))) bp.set(xc, 2, z, g);
-    bp.set(xc, 3, z, colour); bp.set(xc + dx, 3, z, colour); bp.set(xc - dx, 3, z, colour);
+    for (let x = Math.min(xc, back); x <= Math.max(xc, back); x++) bp.set(x, 4, z, colour);
   }
-  bp.set(xc + dx, 4, z0 + 2, B.HOLO_SIGN);
+  bp.set(xc + dx, 3, z0 + 2, B.HOLO_SIGN);
   if (opts.rackX !== undefined) {
-    // wall stall: shelving against the wall behind the vendor, a barrel in the post column, ad over the rack
+    // wall stall: shelving against the wall behind the vendor, a barrel in the post column, ad or lamp over the rack
     bp.fill(opts.rackX, 1, z0 + 1, opts.rackX, 2, z0 + 3, t.rack);
     bp.set(opts.rackX, 1, z0, B.BARREL);
     if (rng.chance(0.4)) bp.set(opts.rackX, 3, z0 + 2, rng.chance(0.5) ? B.HOLO_SIGN : B.LANTERN);
@@ -637,7 +639,7 @@ function serviceBlock(bp, rng) {
   // upper storey
   template(bp, rng, 'meeting_room', 'vendors_association', 39, z0, 47, z1, GAL + 1, 'S', 1);
   template(bp, rng, 'cafeteria', 'staff_canteen', 51, z0, 66, z1, GAL + 1, 'S', 7);
-  template(bp, rng, 'lounge', 'gamers_lounge', 68, z0, 83, z1, GAL + 1, 'S', 7);
+  template(bp, rng, 'holo_theatre', 'holo_theatre', 68, z0, 83, z1, GAL + 1, 'S', 7);
   template(bp, rng, 'storage', 'dry_store', 95, z0, 103, z1, GAL + 1, 'S', 5);
   template(bp, rng, 'control_room', 'market_control', 105, z0, 115, z1, GAL + 1, 'S', 1);
   template(bp, rng, 'barracks', 'vendors_dormitory', 117, z0, W - 3, z1, GAL + 1, 'S', 3);
