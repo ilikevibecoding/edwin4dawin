@@ -2,11 +2,14 @@
 // N wall tied together by header and collector pipes, three air scrubber units with big spoked fan
 // grilles on the S wall (the middle fan turns), filter banks with instanced removable cartridges on
 // the W wall, a waste processing hopper with hazard marking in the SE corner, a pump manifold rack
-// through the middle of the room, a monitoring console by the door, a grated service trench with
-// lit pipes below, condensation streaks low on the walls; in the E half a run of engineering-style
+// along the N half, a monitoring console by the door, a grated service trench with lit pipes below,
+// condensation streaks low on the walls; in the middle of the room the central manifold / scrubber
+// stack: an octagonal plinth ringed by four grated trenches carrying a 3 m drum with bolted band
+// flanges, sight glass and gauges toward the door, four satellite scrubber cylinders tied to it by a
+// ring header and valved cross-pipes, and five risers into the ceiling; in the E half a run of engineering-style
 // equipment cabinets and a chemical dosing skid under the N-wall gauges, and a CO2 processor column
 // with its air-quality screen bank on the S wall.
-// Light: the ship's cool white — three hooded spots (pump rack, door approach) and low pendants over
+// Light: the ship's cool white — four hooded spots (pump rack, door approach, central stack) and low pendants over
 // the tanks, the scrubbers, the filter banks and the waste unit; green is reserved for the one status
 // light / level gauge on each tank; wall and equipment accents are the ship's blue; the ceiling slots
 // are dim recessed lines, never the key. The deck is plain tile (nothing drives through here).
@@ -35,12 +38,88 @@ export function buildLifeSupport(kit, ctx, room) {
     wall: { panelW: 1.8, features: { vent: 0.16, equipment: 0.1, conduit: 0.16, light: 0.0, screen: 0.04 }, altChance: 0.35 },
     ceiling: { troughs: 2, troughW: 0.36, beamStep: 3.4, accentKey: DIM, lightKey: "roomsd_slot" },
   });
-  const trench = { x0: -14.0, z0: 2.6, x1: 11.0, z1: 4.0 };
-  deckFloor(kit, -hx, -hz, hx, hz, [trench]);
+  const trench = { x0: -14.0, z0: 3.9, x1: 11.0, z1: 5.3 };
+  // the central stack stands on an octagonal plinth ringed by four grated service trenches
+  const SX = 4.0;
+  const SZ = 0.0;
+  const G0 = 2.4; // grate ring inner half-size
+  const G1 = 3.4; // grate ring outer half-size
+  const ring = [
+    { x0: SX - G1, z0: SZ - G1, x1: SX + G1, z1: SZ - G0 },
+    { x0: SX - G1, z0: SZ + G0, x1: SX + G1, z1: SZ + G1 },
+    { x0: SX - G1, z0: SZ - G0, x1: SX - G0, z1: SZ + G0 },
+    { x0: SX + G0, z0: SZ - G0, x1: SX + G1, z1: SZ + G0 },
+  ];
+  deckFloor(kit, -hx, -hz, hx, hz, [trench, ...ring]);
   grateTrench(kit, trench.x0, trench.z0, trench.x1, trench.z1, { depth: 0.7, seed: 44, cables: 4, accentKey });
+  ring.forEach((r, i) => grateTrench(kit, r.x0, r.z0, r.x1, r.z1, { depth: 0.45, seed: 60 + i, cables: 2, accentKey: DIM }));
   // plain tile from the door (no lane, no mat); section stencils in dark deck paint
-  decalImp(kit, IMP_DECAL.vacuum, [-8.0, 0.016, -6.6], "up", 1.2, { mat: "roomsd_stencil" });
+  decalImp(kit, IMP_DECAL.vacuum, [-8.0, 0.016, -7.45], "up", 1.2, { mat: "roomsd_stencil" });
   decalImp(kit, IMP_DECAL.cog, [11.0, 0.016, 0], "up", 1.6, { mat: "roomsd_stencil" });
+
+  // --- central manifold / scrubber stack: octagonal plinth (blue hairline), a 3 m drum with bolted band
+  // flanges, sight glass, gauge pair and LED row toward the door, four satellite scrubber cylinders on the
+  // diagonals tied to the drum by a ring header below and valved cross-pipes above, and five risers into
+  // the ceiling; hazard border around the grate ring
+  {
+    const R = 2.3; // plinth circumradius (vertices on the axes and diagonals)
+    const PT = 0.3; // plinth height
+    kit.cyl("impTrim", SX, PT / 2, SZ, R, PT, "y", { color: PALETTE.impBlack, segments: 8, texel: 1 });
+    kit.cyl("impMetal", SX, PT + 0.02, SZ, R - 0.12, 0.04, "y", { color: PALETTE.impCharcoal, segments: 8, texel: 1 });
+    kit.cyl(DIM, SX, PT - 0.08, SZ, R + 0.012, 0.03, "y", { segments: 8, uv: "keep" });
+    kit.collider([SX - R, 0, SZ - R], [SX + R, 4.2, SZ + R], "stack");
+    const top = PT + 0.04;
+    const DR = 0.85;
+    const DH = 3.0;
+    kit.cyl("impMetal", SX, top + DH / 2, SZ, DR, DH, "y", { color: PALETTE.impGrey, segments: 28, texel: 0.8 });
+    for (const yy of [top + 0.5, top + 1.5, top + 2.5]) {
+      kit.cyl("impTrim", SX, yy, SZ, DR + 0.04, 0.12, "y", { color: PALETTE.impBlack, segments: 28 });
+      for (let b = 0; b < 5; b++) {
+        const a = -0.6 + (b / 4) * 1.2;
+        hexBolt(kit, [SX + Math.cos(a) * (DR + 0.04), yy, SZ + Math.sin(a) * (DR + 0.04)], "+x", 0.035);
+      }
+    }
+    kit.cyl("impMetal", SX, top + DH + 0.15, SZ, DR, 0.3, "y", { r2: DR * 0.42, color: PALETTE.impCharcoal, segments: 28 });
+    pipe(kit, [SX, top + DH + 0.25, SZ], [SX, h - 0.3, SZ], 0.32, { color: PALETTE.impGreyDark, flanges: true, clampStep: 0.7 });
+    // sight glass, gauges, LEDs and stencil on the drum's door-facing (+x) side
+    kit.box("impTrim", SX + DR - 0.02, top + 1.35, SZ, 0.1, 1.0, 0.3, { color: PALETTE.impBlack });
+    kit.box(DIM, SX + DR + 0.032, top + 1.35, SZ, 0.01, 0.84, 0.16, { uv: "keep" });
+    gauge(kit, [SX + DR + 0.01, top + 2.15, SZ - 0.36], "+x", 0.11, { seed: 850 });
+    gauge(kit, [SX + DR + 0.01, top + 2.15, SZ + 0.36], "+x", 0.11, { seed: 851, warn: true });
+    for (let k = 0; k < 6; k++) kit.box(k === 4 ? "emitRedImp" : accentKey, SX + DR + 0.006, top + 0.62, SZ - 0.3 + k * 0.12, 0.012, 0.05, 0.05);
+    decalImp(kit, IMP_DECAL.glyphs2, [SX + DR + 0.006, top + 2.72, SZ], "+x", 0.4);
+    // ring header around the drum base with four radial stubs
+    kit.add("impMetal", new THREE.TorusGeometry(1.3, 0.08, 8, 48).rotateX(Math.PI / 2), { pos: [SX, top + 0.55, SZ], color: PALETTE.impGreyDark, uv: "scale", uvScale: [16, 1] });
+    for (let k = 0; k < 4; k++) {
+      const a = (k * Math.PI) / 2;
+      pipe(kit, [SX + Math.cos(a) * (DR - 0.05), top + 0.55, SZ + Math.sin(a) * (DR - 0.05)], [SX + Math.cos(a) * 1.3, top + 0.55, SZ + Math.sin(a) * 1.3], 0.07, { color: PALETTE.impGreyDark, flanges: true });
+    }
+    // four satellite scrubbers on the diagonals
+    const SD = 1.77;
+    const SR = 0.45;
+    const SH = 2.3;
+    for (let k = 0; k < 4; k++) {
+      const a = Math.PI / 4 + (k * Math.PI) / 2;
+      const ux = Math.cos(a);
+      const uz = Math.sin(a);
+      const sx = SX + ux * SD;
+      const sz = SZ + uz * SD;
+      kit.cyl("impMetal", sx, top + 0.08, sz, SR + 0.05, 0.16, "y", { color: PALETTE.impCharcoal, segments: 20 });
+      kit.cyl("impPanel1", sx, top + 0.16 + SH / 2, sz, SR, SH, "y", { color: k % 2 ? PALETTE.impGreyDark : PALETTE.impGrey, segments: 20, uv: "world", texel: 0.8 });
+      for (const yy of [top + 0.9, top + 1.9]) kit.cyl("impTrim", sx, yy, sz, SR + 0.03, 0.1, "y", { color: PALETTE.impBlack, segments: 20 });
+      kit.cyl("impMetal", sx, top + 0.16 + SH + 0.1, sz, SR, 0.2, "y", { r2: 0.16, color: PALETTE.impGreyDark, segments: 20 });
+      pipe(kit, [sx, top + 0.16 + SH + 0.2, sz], [sx, h - 0.3, sz], 0.13, { color: PALETTE.impGreyDark, flanges: true, clampStep: 0.9 });
+      // valved cross-pipe to the drum at chest height
+      pipe(kit, [SX + ux * (DR - 0.05), top + 1.75, SZ + uz * (DR - 0.05)], [SX + ux * (SD - SR + 0.05), top + 1.75, SZ + uz * (SD - SR + 0.05)], 0.09, { color: PALETTE.impGreyDark, flanges: true });
+      valveWheel(kit, [SX + ux * 1.1, top + 1.75 + 0.09 + 0.16, SZ + uz * 1.1], "y", 0.14, { color: k === 2 ? PALETTE.impAmber : PALETTE.impRed, stem: 0.16 });
+      // status lamp and a stencil on the outward face
+      kit.add(k === 1 ? "emitRedImp" : accentKey, new THREE.BoxGeometry(0.07, 0.07, 0.012), { pos: [sx + ux * SR, top + 0.55, sz + uz * SR], rot: [0, Math.PI / 2 - a, 0] });
+      kit.add("impTrim", new THREE.BoxGeometry(0.3, 0.16, 0.02), { pos: [sx + ux * (SR - 0.005), top + 0.36, sz + uz * (SR - 0.005)], rot: [0, Math.PI / 2 - a, 0], color: PALETTE.impBlack });
+    }
+    kit.box("impTrim", SX + 0.5, top + DH + 0.26, SZ, 0.16, 0.14, 0.16, { color: PALETTE.impBlack });
+    warningLamp(kit, [SX + 0.5, top + DH + 0.38, SZ], accentKey);
+    hazardBorder(kit, SX - G1 - 0.32, SZ - G1 - 0.32, SX + G1 + 0.32, SZ + G1 + 0.32, 0, 0.26);
+  }
 
   // --- water tanks along the N wall + header / collector pipes + hazard border
   const tankXs = [-13.4, -9.6, -5.8, -2.0, 1.8];
@@ -217,7 +296,7 @@ export function buildLifeSupport(kit, ctx, room) {
   {
     const x0 = -14.2;
     const x1 = 6.6;
-    const zr = -3.4;
+    const zr = -5.2; // pulled toward the tank row to leave a 2 m walk around the central stack's grates
     const lines = [
       [zr - 0.55, 0.85, 0.1, PALETTE.impGreyDark],
       [zr - 0.55, 1.25, 0.09, PALETTE.impGrey],
@@ -357,17 +436,19 @@ export function buildLifeSupport(kit, ctx, room) {
   const work = 0xe4ecff;
   // (the E pump-rack spot is tilted 27° toward the N wall so its cone also carries the cabinet run and the
   // dosing skid; its upper edge stays 6° below the horizontal, so it puts nothing on the ceiling)
-  for (const [i, [x, z, tx, tz]] of [[-8.0, -3.4, -8.0, -3.4], [4.0, -5.5, 4.5, -7.5], [10.0, 0.6, 10.0, 0.6]].entries()) {
-    const mouth = shroudLamp(kit, [x, h - 0.08, z], [x, 3.95, z], [tx, 0, tz], { key: LENS, size: 0.55 });
-    kit.light({ type: "spot", pos: [mouth[0], mouth[1] - 0.1, mouth[2]], target: [tx, 0, tz], color: work, intensity: lux(3.8, 5.8), distance: 15, angle: 1.2, penumbra: 0.5, priority: 0.6 - i * 0.01 });
+  // (a fourth spot hangs E of the central stack and rakes its door-facing side)
+  for (const [i, [x, z, tx, tz, k]] of [[-8.0, -5.2, -8.0, -5.2, 6.2], [4.0, -7.0, 4.5, -8.5, 6.2], [10.0, 0.6, 10.0, 0.6, 7.2], [SX + 3.9, SZ, SX, SZ, 4.2]].entries()) {
+    const mouth = shroudLamp(kit, [x, h - 0.08, z], [x, 3.95, z], [tx, i === 3 ? 1.2 : 0, tz], { key: LENS, size: 0.55 });
+    kit.light({ type: "spot", pos: [mouth[0], mouth[1] - 0.1, mouth[2]], target: [tx, i === 3 ? 1.2 : 0, tz], color: work, intensity: lux(3.8, k), distance: 15, angle: i === 3 ? 1.0 : 1.2, penumbra: 0.5, priority: 0.62 - i * 0.01 });
   }
   const pendant = (x, z, y, target, k, priority) => {
     const mouth = shroudLamp(kit, [x, h - 0.08, z], [x, y, z], target, { key: LENS, size: 0.5 });
     kit.light({ type: "point", pos: [mouth[0], mouth[1] - 0.3, mouth[2]], color: work, intensity: k * (y - 0.4), decay: 1, distance: 14, priority });
   };
-  pendant(-6.0, -8.6, 3.5, [-6.0, 1.5, -8.6], 4.6, 0.5);
-  pendant(-7.4, 9.2, 3.5, [-7.4, 1.5, 9.4], 4.6, 0.49);
-  pendant(11.5, 6.0, 3.4, [11.5, 1.2, 7.0], 3.5, 0.42);
-  pendant(-14.2, -3.6, 3.6, [-15.5, 1.5, -3.6], 3.7, 0.45);
-  kit.light({ type: "point", pos: [-2.0, -0.35, 3.3], color: 0x8fb8ff, intensity: 6, distance: 9, priority: 0.35 });
+  pendant(-6.0, -8.6, 3.5, [-6.0, 1.5, -8.6], 5.2, 0.5);
+  pendant(-7.4, 9.2, 3.5, [-7.4, 1.5, 9.4], 5.2, 0.49);
+  pendant(11.5, 6.0, 3.4, [11.5, 1.2, 7.0], 4.0, 0.42);
+  pendant(-14.2, -3.6, 3.6, [-15.5, 1.5, -3.6], 4.2, 0.45);
+  // cool blue under the stack's E grate strip (the one the door sees)
+  kit.light({ type: "point", pos: [SX + G0 + 0.5, -0.25, SZ], color: 0x8fb8ff, intensity: 5, distance: 7, priority: 0.35 });
 }
