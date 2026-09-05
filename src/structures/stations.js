@@ -7,7 +7,8 @@
 //     a glass-walled concourse at the bridge floor level (walk on 91) fills x 2549..2560 between the tower and the
 //     spaceport's covered bridge (x 2561..2575) and joins the two levels with a half-slab step;
 //   - frontier: the mini spaceport is a roof deck at the canopy level (walk on 99); a fenced 13-step stair at the
-//     platform's west end (x 242..254, z 8..9) climbs from the platform through the canopy onto the deck.
+//     platform's west end (x 243..255, z 8..9, a 2-wide landing at its foot) climbs from the platform through the
+//     canopy onto the deck.
 import { B } from '../blocks.js';
 import { CHUNK_SIZE as CS } from '../constants.js';
 import { addSignTiles } from '../textures.js';
@@ -35,9 +36,10 @@ export function stationLayout(S) {
   }
   if (S === ROUTE.frontier) {
     // stair from the platform's west end up to the spaceport roof deck: half-block steps at x0 .. x0 + steps - 1 on
-    // z 8..9 (the deck floor itself is the last step), fenced with glass balustrades on both sides
+    // z 8..9 (the deck floor itself is the last step), fenced with glass balustrades on both sides; its foot leaves a
+    // 2-wide landing (x px0 + 1 .. px0 + 2) between the platform's end railing and the balustrades
     const steps = (FRONTIER_DECK_Y - ROUTE.floorY) * 2 - 1;    // 13: 92.5 .. 98.5
-    L.roofStair = { x0: px0 + 2, x1: px0 + 1 + steps, steps, z0: 8, z1: 9, deckX0: FRONTIER.deck.x0 };
+    L.roofStair = { x0: px0 + 3, x1: px0 + 2 + steps, steps, z0: 8, z1: 9, deckX0: FRONTIER.deck.x0 };
   }
   // structure AABB (x1/z1 exclusive)
   L.x0 = px0 - 1; L.x1 = L.concourse ? L.concourse.x1 + 1 : tx1 + 2;

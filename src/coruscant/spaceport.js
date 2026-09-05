@@ -544,7 +544,7 @@ function paintPlaza(p) {
 // station canopy level, two blocks above the train corridor which ends at y 96), inside the reserved x 240..300,
 // z -40..40. The north half stands on pillars over the forest, the rest rests on the station's canopy columns and
 // waiting hall. A small balcony (x 248..251, |z| <= 4) overlooks the track at the deck's west edge; the station
-// builder's stair from the platform arrives on the deck at x 255, z 8..9 (through the opening it cuts at x 252..254).
+// builder's stair from the platform arrives on the deck at x 256, z 8..9 (through the opening it cuts at x 252..255).
 export const FRONTIER = {
   x0: 246, z0: -26, x1: 298, z1: 27,                         // structure AABB (x1, z1 exclusive)
   deck: { x0: 252, z0: -24, x1: 297, z1: 23 },              // x1 297 keeps the pad's service strip (x 295..296) on the deck
