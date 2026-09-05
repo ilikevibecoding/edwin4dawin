@@ -291,7 +291,12 @@ export class Sky {
       u.uSkyVoid.value.lerp(haze, co * 0.4).lerp(glow, co * night * 0.12);
       u.uSunsetColor.value.lerp(glow, co * night);
       u.uSunsetStrength.value = Math.max(u.uSunsetStrength.value, co * night * 0.45);
-      this.fogColor.lerp(haze, co * 0.45).lerp(glow, co * night * 0.2);
+      this.fogColor.lerp(haze, co * 0.3).lerp(glow, co * night * 0.2);
+      // the far-skyline impostors (coruscant/skyline.js) carry the view past the streamed chunks, so the near fog
+      // can start later and the real towers keep their contrast
+      const far0 = this.fogFar;
+      this.fogNear = lerp(this.fogNear, far0 * 0.85, co);
+      this.fogFar = lerp(this.fogFar, far0 * 1.7, co);
       this.cloudMat.opacity *= 1 - co;      // the city sits above its cloud deck; towers punch through nothing
     }
   }
