@@ -442,13 +442,20 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   vec3 Ediff = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse;
   float shadow = 1.0;
   vec3 sunCol = vec3(0.0);
+  vec3 unsh = vec3(0.0);
   #if NUM_DIR_LIGHTS > 0
     sunCol = directionalLights[0].color;
     float nl = saturate(dot(normal, directionalLights[0].direction));
-    vec3 unsh = sunCol * nl * RECIPROCAL_PI;
+    unsh = sunCol * nl * RECIPROCAL_PI;
     float ul = max(max(unsh.r, unsh.g), unsh.b);
     if (ul > 1e-5) shadow = clamp(max(max(reflectedLight.directDiffuse.r, reflectedLight.directDiffuse.g), reflectedLight.directDiffuse.b) / ul, 0.0, 1.0);
   #endif
+  // Shadow on the body colour: the light that comes back out of the water was scattered metres away from where it
+  // entered, so the sun-lit water around an aircraft-sized shadow keeps lighting the shadowed column from the side
+  // and the shadow is a soft mid-tone, not the surface's own shadow. Only the bed of shallow water (which the
+  // sunlight reaches straight down) goes properly dark; the sky irradiance is never shadowed by the aircraft.
+  float volumeLeak = 0.45 * (1.0 - exp(-wDbg.x / 2.5));
+  vec3 Ebody = reflectedLight.indirectDiffuse + mix(reflectedLight.directDiffuse, unsh, volumeLeak);
   float rSky = clamp(pow(wMss, 0.25), 0.05, 1.0);
   vec3 Rdir = reflect(-wV, wN);
   // rays reflected toward the sea are caught by the next wave and end up showing the sky just above the horizon
@@ -475,7 +482,7 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   // ensemble Fresnel of the rough surface: the unresolved facets take the grazing reflectance well below a mirror's
   float Fg = max(1.0 - 1.6 * rSky * rSky, 0.45);
   float F = 0.02 + (Fg - 0.02) * pow(1.0 - cosV, 5.0);
-  vec3 body = wBodyR * Ediff;
+  vec3 body = wBodyR * Ebody;
   // the CSM sun now carries physical irradiance (x6); the glitter BRDF was tuned for the old scale
   vec3 glitter = sunCol * 0.25 * shadow * sunGlitter(wN, wV, uSunDirW, wMss, vWorldPos.xz, wDx, wDy, uWaveTime);
   vec3 col = mix(body, sky, F) + glitter * (1.0 - wFoam);
