@@ -17,7 +17,8 @@
 // simulation's RNG is never consumed by cosmetics.
 // Entities: every tick the band of townsfolk and animals the front has just passed over (previous front position ..
 // current one, across the whole width, below the flood surface) is knocked off its feet by npcs/animals.sweep(): they
-// tumble along the flow, then bob helplessly in the water before they can swim. The player gets a strong impulse,
+// tumble up and along the flow (launched a little slower than the front so they come down inside the crest), then bob
+// helplessly in the water before they can swim. The player gets a strong impulse,
 // a camera tumble and a muffled "under the wave" moment. All of this is client-side and never touches block edits.
 import { Disaster } from './base.js';
 import { BLOCKS, B, SHAPE } from '../blocks.js';
@@ -43,6 +44,11 @@ const WHITE = [1, 1, 1];
 // entity sweep: how far behind the foot an entity that has not been taken yet is still swept (covers townsfolk
 // running into the wave between two ticks), and the length of the player's tumble / muffled moment (s)
 const SWEEP_BEHIND = 1.5, SWEEP_AHEAD = 0.3, TUMBLE_TIME = 1.6;
+// the sweep hook flies an entity for ~2*(5 + 0.35*strength)/22 s (0.75-0.85 s) with little drag and adds +-3 blocks/s
+// of scatter; its along-flow launch speed is scaled to ~3/4 of the front's speed so the body comes down inside the
+// crest (splash -> helpless, bobbing) instead of on dry street ahead of the wave, where npc.js would stun it on the
+// ground until the water arrives (measured: vx 7.5 lands 0.5-1.6 blocks ahead of a 6 blocks/s front, vx 5 lands behind)
+const SWEEP_CARRY = 0.75, SWEEP_CARRY_MIN = 0.25;
 // overcast storm: slate haze that the sky dome, horizon and fog share (skyMix keeps it daylight, not night)
 const ENV_STORM = { tint: [0.86, 0.9, 0.98], fogColor: [0.52, 0.6, 0.7], fogNearMul: 1, fogFarMul: 0.85, skyColor: [0.5, 0.55, 0.63], skyMix: 0.45, cloudAlpha: 0.7 };
 const ENV_RECEDE = { tint: [0.93, 0.95, 1], fogColor: [0.6, 0.68, 0.78], fogNearMul: 1, fogFarMul: 0.95, skyColor: [0.55, 0.6, 0.68], skyMix: 0.2, cloudAlpha: 0.9 };
@@ -564,6 +570,7 @@ export class Tsunami extends Disaster {
     const halfLen = Math.sqrt(Math.max(0, g.r * g.r - k * k)) + 3;
     const fx = g.cx + g.dx * k, fz = g.cz + g.dz * k;
     const strength = clamp(9 + 6 * this.params.intensity + 0.5 * (this.params.waveHeight - 4), 8, 16);
+    const carry = clamp((this.params.speed * SWEEP_CARRY) / strength, SWEEP_CARRY_MIN, 1);   // along-flow fraction of the launch
     const back = (s - this.prevS) + SWEEP_BEHIND;
     const yMax = Math.max(g.floodTop, g.baseY + this.params.waveHeight) - 0.5;
     const take = (mgr, ids) => {
@@ -574,7 +581,7 @@ export class Tsunami extends Disaster {
         const ahead = this._aheadOf(e.pos.x, e.pos.z);
         if (ahead > SWEEP_AHEAD || ahead < -back) return;
         ids.add(e.id);
-        mgr.sweep(e.pos.x, e.pos.z, 0.35, g.dx, g.dz, strength);
+        mgr.sweep(e.pos.x, e.pos.z, 0.35, g.dx * carry, g.dz * carry, strength);
         n++;
       });
       if (!n) return;
