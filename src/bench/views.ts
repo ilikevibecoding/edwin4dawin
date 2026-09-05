@@ -115,27 +115,29 @@ export const BENCH_VIEWS: BenchView[] = [
   },
 ];
 
-/** Aircraft inspection views (used by the aircraft / glass / cockpit gauntlet loops). */
+/** Aircraft inspection views (used by the aircraft / glass / cockpit gauntlet loops). The aircraft taxis at 3.5 m/s
+ *  (the HUD read 7 kt IAS from the breeze while it was moored, and the critics scored the missing wake): the still
+ *  keeps the same pose, the flight frames add the bow waves and float wakes, and the fixed cameras dolly along. */
 BENCH_VIEWS.push(
   {
-    id: 'plane-rear-quarter', name: 'Aircraft rear three-quarter', description: 'Fixed camera 14 m from the aircraft, rear-left-above, aircraft moored at the Garza marina in sunlight.',
+    id: 'plane-rear-quarter', name: 'Aircraft rear three-quarter', description: 'Fixed camera 14 m from the aircraft, rear-left-above, aircraft taxiing slowly off the Garza marina in sunlight.',
     time: 14.0, weather: 'clear',
-    camera: { mode: 'fixed', pos: [425.9, 4.25, 1892.3], headingDeg: 205, pitchDeg: -9, fov: 40 },
-    plane: { pos: [420, 1.96, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 0, throttle: 0.0 },
+    camera: { mode: 'fixed', pos: [425.9, 4.25, 1892.3], headingDeg: 205, pitchDeg: -9, fov: 40, follow: true },
+    plane: { pos: [420, 1.96, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 3.5, throttle: 0.12 },
     presim: 10, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
   {
-    id: 'plane-front-quarter', name: 'Aircraft front three-quarter', description: 'Fixed camera 13 m ahead-right of the moored aircraft, low, showing cowl, propeller, windshield and floats.',
+    id: 'plane-front-quarter', name: 'Aircraft front three-quarter', description: 'Fixed camera 13 m ahead-right of the slowly taxiing aircraft, low, showing cowl, propeller, windshield and floats.',
     time: 10.0, weather: 'clear',
-    camera: { mode: 'fixed', pos: [415.6, 2.65, 1917.2], headingDeg: 20, pitchDeg: -3, fov: 40 },
-    plane: { pos: [420, 1.96, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 0, throttle: 0.0 },
+    camera: { mode: 'fixed', pos: [415.6, 2.65, 1917.2], headingDeg: 20, pitchDeg: -3, fov: 40, follow: true },
+    plane: { pos: [420, 1.96, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 3.5, throttle: 0.12 },
     presim: 10, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
   {
     id: 'glass-sun', name: 'Cockpit glass in direct sun', description: 'Close on the windshield and left side windows with the sun behind the camera; interior visible through the glass.',
     time: 15.5, weather: 'clear',
-    camera: { mode: 'fixed', pos: [418.3, 3.05, 1911.3], headingDeg: 15, pitchDeg: -8, fov: 32 },
-    plane: { pos: [420, 1.96, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 0, throttle: 0.0 },
+    camera: { mode: 'fixed', pos: [418.3, 3.05, 1911.3], headingDeg: 15, pitchDeg: -8, fov: 32, follow: true },
+    plane: { pos: [420, 1.96, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 3.5, throttle: 0.12 },
     presim: 10, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
 );

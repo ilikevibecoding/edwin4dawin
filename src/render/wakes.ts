@@ -141,14 +141,17 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // ---- Kelvin arms: crest lines at 19.5 deg from the track, thickening and fading with distance
         float armLen = laneLen * 2.5;
         float armY = w0 * 0.8 + (d + lead) * TANK;
-        float armW = 0.45 + 0.3 * w0 + 0.012 * d;
+        // never thinner than a texel of the map being rendered (a sub-texel line samples into dots); the foam
+        // is spread over the wider line so its total stays the same seen from altitude
+        float armW0 = 0.45 + 0.3 * w0 + 0.012 * d;
+        float armW = max(armW0, 0.8 * uTexel);
         float dy = ay - armY;
         float armEnv = 1.0 - smoothstep(armLen * 0.45, armLen, d);
         float armBump = exp(-dy * dy / (armW * armW));
         // broken foam streaks along the arm, only where the bow wave actually breaks (speed) and not on the
         // first metres where the arm is still inside the hull's own bow wave
         float streak = 0.35 + 0.65 * vn(vec2(dot(vWp, fwd) * 0.5, dot(vWp, right) * 1.5) + 7.0);
-        float arm = armBump * armEnv * streak * smoothstep(1.5, 7.0, speed) * (0.55 + 0.45 * n2) * smoothstep(-lead * 0.5, lead * 0.5, d);
+        float arm = armBump * armEnv * streak * smoothstep(1.5, 7.0, speed) * (0.55 + 0.45 * n2) * smoothstep(-lead * 0.5, lead * 0.5, d) * (armW0 / armW);
         foam = lane * 1.0 + arm * 0.6;
         // arm crest slope: a raised crest, outward normal of the arm line
         vec2 armOut = s * right * COSK + fwd * SINK;
@@ -168,8 +171,9 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         float inside = insideX * max(hb - ay, 0.0);
         // meniscus: a soft bright line hugging the waterline, fed by the bow wave and thinning aft
         float bowT = 1.0 - smoothstep(0.0, lead * 0.6, ax);
-        float lw = (0.06 + 0.08 * spd) * (0.5 + 0.5 * bowT) + 0.02 * w0;
-        float meniscus = exp(-outside * outside / (lw * lw)) * (0.35 + 0.4 * bowT) * (0.5 + 0.7 * n3) * (0.3 + 0.7 * spd);
+        float lw0 = (0.06 + 0.08 * spd) * (0.5 + 0.5 * bowT) + 0.02 * w0;
+        float lw = max(lw0, 0.6 * uTexel);
+        float meniscus = exp(-outside * outside / (lw * lw)) * (0.35 + 0.4 * bowT) * (0.5 + 0.7 * n3) * (0.3 + 0.7 * spd) * (lw0 / lw);
         // bow wave: a crest line wrapping the stem and diverging aft along the forward hull at ~27 deg; it stops
         // growing at hull speed and the whole hull zone dies away as a planing hull lifts its bow clear
         float sp = min(speed, 9.0);
@@ -178,10 +182,11 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         float c = bowLift + max(ax, 0.0) * 0.5 + hb;
         float cx = ax < 0.0 ? sqrt(ax * ax + ay * ay) : ay;     // ahead of the stem the crest is round
         float dc = ax < 0.0 ? cx - bowLift : ay - c;
-        float bowW = 0.18 + 0.05 * sp + 0.04 * w0;
+        float bowW0 = 0.18 + 0.05 * sp + 0.04 * w0;
+        float bowW = max(bowW0, 0.7 * uTexel);
         float bowReach = 1.0 - smoothstep(lead * 0.35, lead * 0.75, ax);
         float bowBump = exp(-dc * dc / (bowW * bowW)) * bowReach * smoothstep(0.8, 3.5, speed);
-        float lip = bowBump * (0.5 + 0.8 * n3) * (0.35 + 0.65 * smoothstep(1.5, 5.0, speed));
+        float lip = bowBump * (0.5 + 0.8 * n3) * (0.35 + 0.65 * smoothstep(1.5, 5.0, speed)) * (bowW0 / bowW);
         // the hull covers the inside: fade there so nothing shows through a gap at bow or stern
         float coverage = (1.0 - smoothstep(0.0, 0.08, inside)) * (1.0 - 0.85 * planing);
         foam = (meniscus + lip * 0.9) * coverage;
@@ -434,6 +439,14 @@ export class WakeTrail {
         if (last) { this.points.push({ ...last, fade: 0 }); this.points.push({ ...last, x, z, dx: pdx, dz: pdz, t: time, fade: 0 }); }
       }
       if (fresh || gap) this.ramp = RAMP;
+      if (fresh && this.wake && speed > 1) {
+        // an emitter placed already under way (a boat spawned on its route, the aircraft set up taxiing) has
+        // been moving for a while: seed the trail it would have left along its track behind it
+        const step = Math.max(this.spacing, speed * 0.25);
+        const nBack = Math.min(this.capacity - 1, Math.floor(Math.min(this.lifetime * 0.6, 60) * speed / step));
+        for (let i = nBack; i >= 1; i--) this.points.push({ x: x - dx * step * i, z: z - dz * step * i, dx, dz, t: time - (step * i) / speed, fade: 1, speed });
+        this.ramp = 0;
+      }
       const fade = this.ramp > 0 ? 1 - this.ramp-- / (RAMP + 1) : 1;
       // the first point of a ribbon had no motion to take its direction from: align it with the second
       const prev = this.points[this.points.length - 1];
