@@ -96,6 +96,15 @@ vec2 swellSlope(vec2 p, vec2 dir, float L, float A, float t, float phase, float 
   float s = sin(ph), c = cos(ph);
   return (A * 0.7 * c * (1.0 + s)) * (k * dir + dwarp);
 }
+// the same, also returning the crest phase sin(ph) (1 on the crest line)
+vec2 swellSlopeC(vec2 p, vec2 dir, float L, float A, float t, float phase, float warp, vec2 dwarp, out float s) {
+  float k = 6.2831853 / L;
+  float w = sqrt(9.81 * k);
+  float ph = k * dot(p, dir) + w * t + phase + warp;
+  s = sin(ph);
+  float c = cos(ph);
+  return (A * 0.7 * c * (1.0 + s)) * (k * dir + dwarp);
+}
 // Footprint fade of a wave set of wavelength L: full below 3.5 px per wavelength is not enough to draw it, so it
 // leaves (its slope variance going into the roughness) between 8 and 3.3 px per wavelength.
 float setFade(float L, float foot) { return 1.0 - smoothstep(0.125 * L, 0.3 * L, foot); }
@@ -233,7 +242,7 @@ vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist) {
   float k = dist / wp; // metres along the ray per unit of depth
   // where the flat mirror sees sky, the tilted ray can still meet something near by: search a bounded way
   // along it (a distant-object assumption sent the lookup metres away from the edge of every near object)
-  float skyW = wp + min(wp * 7.0, 25.0 + wp);
+  float skyW = wp + clamp(wp * 0.5, 3.0, 25.0);
   float wq = reflObjectDepth(uv0, skyW);
   float L = max(wq - wp, 0.0) * k;
   vec4 rc1 = rc * (wq / wp) + dclip * L;
@@ -268,9 +277,23 @@ vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist) {
 }
 `;
 
+/** After shadowmap_pars_fragment: the shadow lookup of the CSM chunk, moved along the refracted view path (see the
+ *  shadow offsets in WATER_FRAG_SURFACE). The near cascade averages the surface tap and the in-volume tap. */
+const WATER_SHADOW_FN = /* glsl */ `
+#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+float waterShadow(sampler2D map, DirectionalLightShadow s, vec4 coord, mat4 m, vec3 off, vec3 offBed, bool near) {
+  if (near) {
+    return 0.5 * (getShadow(map, s.shadowMapSize, s.shadowIntensity, s.shadowBias, s.shadowRadius, coord)
+                + getShadow(map, s.shadowMapSize, s.shadowIntensity, s.shadowBias, s.shadowRadius, coord + m * vec4(offBed, 0.0)));
+  }
+  return getShadow(map, s.shadowMapSize, s.shadowIntensity, s.shadowBias, s.shadowRadius, coord + m * vec4(off, 0.0));
+}
+#endif
+`;
+
 /** Runs after normal_fragment_begin: wave normal, body reflectance, foam. Leaves w* variables in main scope. */
 const WATER_FRAG_SURFACE = /* glsl */ `
-vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3 wDbg; float wDist; vec3 wShadowOff;
+vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3 wDbg; float wDist; vec3 wShadowOff; vec3 wShadowOffBed;
 {
   vec2 wp = vWorldPos.xz;
   vec2 dxw = dFdx(wp), dyw = dFdy(wp);
@@ -323,17 +346,17 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   float fS0 = setFade(83.0, foot), fS1 = setFade(51.3, foot), fS2 = setFade(33.7, foot), fSL = setFade(340.0, foot);
   if (swellF > 0.001 && fS0 > 0.001) {
     vec3 warp = noised(wp * 0.0045 + 2.3);
-    float wv = (warp.x - 0.5) * 2.6;
-    vec2 dwv = warp.yz * (0.0045 * 2.6);
+    float wv = (warp.x - 0.5) * 3.2;
+    vec2 dwv = warp.yz * (0.0045 * 3.2);
     float grpN = vnoise(vec2(dot(wp, wd) + 4.5 * t, dot(wp, wc)) * 0.0055 + 7.7);
-    float grp = 0.5 + 1.0 * grpN;
-    vec2 gs = swellSlope(wp, rot2(wd, -0.31), 83.0, 0.5, t, 0.0, wv, dwv) * (grp * fS0)
-            + swellSlope(wp, rot2(wd, 0.07), 51.3, 0.36, t, 2.1, wv * 0.8, dwv * 0.8) * (grp * fS1)
-            + swellSlope(wp, rot2(wd, 0.53), 33.7, 0.2, t, 4.4, wv * 0.6, dwv * 0.6) * ((1.4 - grp * 0.6) * fS2)
+    float grp = 0.35 + 1.3 * grpN;
+    vec2 gs = swellSlope(wp, rot2(wd, -0.31), 83.0, 0.4, t, 0.0, wv, dwv) * (grp * fS0)
+            + swellSlope(wp, rot2(wd, 0.07), 51.3, 0.3, t, 2.1, wv * 0.8, dwv * 0.8) * (grp * fS1)
+            + swellSlope(wp, rot2(wd, 0.53), 33.7, 0.18, t, 4.4, wv * 0.6, dwv * 0.6) * ((1.5 - grp * 0.7) * fS2)
             + swellSlope(wp, rot2(wd, 0.95), 340.0, 0.55, t, 1.3, wv * 0.5, dwv * 0.5) * fSL;
     g += gs * swellF;
   }
-  mss += swellF * (setVar(83.0, 0.5) * (1.0 - fS0 * fS0) + setVar(51.3, 0.36) * (1.0 - fS1 * fS1) + setVar(33.7, 0.2) * (1.0 - fS2 * fS2));
+  mss += swellF * (setVar(83.0, 0.4) * (1.0 - fS0 * fS0) + setVar(51.3, 0.3) * (1.0 - fS1 * fS1) + setVar(33.7, 0.18) * (1.0 - fS2 * fS2));
   float w0 = 1.0 - smoothstep(2.8, 6.0, foot);
   float a0 = 0.035 * windG * chopF;
   if (w0 > 0.001) g += chopSlope(wp, rot2(wd, 0.15), 14.0, 2.0, 4.5, t, 1.3, a0, val0, dval0) * w0;
@@ -364,14 +387,18 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   float w2 = 1.0 - smoothstep(0.35, 0.75, foot);
   float a2 = 0.10 * windG * rippleF * laneA;
   float fC0 = setFade(3.4, foot), fC1 = setFade(2.15, foot), fC2 = setFade(1.3, foot);
+  float crestNet = 0.0; // caustic filaments: the crests of the short sets focus the sun on the bed (zero mean)
   if (w2 > 0.001 || fC0 > 0.001) {
     g += chopSlope(wp, rot2(wd, 0.3), 1.7, 1.4, 1.6, t, 7.1, a2, val2, dvalT) * w2;
     float grp2 = (0.45 + 1.1 * val1) * rippleF * windG * laneA;
     float wv = (val1 - 0.5) * 2.4;
     vec2 dwv = dval1 * 2.4;
-    g += (swellSlope(wp, rot2(wd, -0.35), 3.4, 0.030, t, 2.7, wv, dwv) * fC0
-        + swellSlope(wp, rot2(wd, 0.25), 2.15, 0.020, t, 8.1, wv * 0.7, dwv * 0.7) * fC1
-        + swellSlope(wp, rot2(wd, 0.05), 1.3, 0.011, t, 12.3, wv * 0.5, dwv * 0.5) * fC2) * grp2;
+    float s0, s1, s2;
+    g += (swellSlopeC(wp, rot2(wd, -0.35), 3.4, 0.030, t, 2.7, wv, dwv, s0) * fC0
+        + swellSlopeC(wp, rot2(wd, 0.25), 2.15, 0.020, t, 8.1, wv * 0.7, dwv * 0.7, s1) * fC1
+        + swellSlopeC(wp, rot2(wd, 0.05), 1.3, 0.011, t, 12.3, wv * 0.5, dwv * 0.5, s2) * fC2) * grp2;
+    // sin^6 lines (mean 0.156) of each resolved set, weighted by the group height
+    crestNet = ((pow(max(s0, 0.0), 6.0) - 0.156) * fC0 + (pow(max(s1, 0.0), 6.0) - 0.156) * (0.8 * fC1) + (pow(max(s2, 0.0), 6.0) - 0.156) * (0.6 * fC2)) * min(grp2, 1.5);
   }
   mss += a2 * a2 * (1.0 - w2 * w2) + rippleF * windG * laneA * (setVar(3.4, 0.030) * (1.0 - fC0 * fC0) + setVar(2.15, 0.020) * (1.0 - fC1 * fC1) + setVar(1.3, 0.011) * (1.0 - fC2 * fC2)) * 1.2;
   // capillary-scale ripples: resolved only within a hundred metres or so; laid in wind lanes
@@ -408,8 +435,15 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   // then wobbles with the surface instead of printing the caster's planform with a ruler. Only the wave-induced
   // part of the refraction is used (the mean shift would detach the contact shadow from a floating hull).
   vec3 refr0 = refract(-V, vec3(0.0, 1.0, 0.0), 0.75);
-  vec2 shOff = (refr.xz / max(-refr.y, 0.3) - refr0.xz / max(-refr0.y, 0.3)) * (1.8 * clamp(depth, 0.4, 3.0));
+  float dSh = clamp(depth, 0.4, 3.0);
+  vec2 shOff = (refr.xz / max(-refr.y, 0.3) - refr0.xz / max(-refr0.y, 0.3)) * dSh;
+  shOff *= min(1.0, 0.5 / max(length(shOff), 1e-3));
   wShadowOff = vec3(shOff.x, 0.0, shOff.y);
+  // the near cascade takes a second tap at the point the refracted ray reaches two thirds of the way down to the
+  // bed (mean shift included): averaged with the surface tap it gives the shadow the soft, depth-wide edge of a
+  // volume seen obliquely while the surface tap keeps the contact shadow on a hull
+  vec2 bedOff = refr0.xz / max(-refr0.y, 0.3) * (0.66 * min(depth, 2.5)) + shOff;
+  wShadowOffBed = vec3(bedOff.x, 0.0, bedOff.y);
   float grainFade = 1.0 - smoothstep(3.0, 10.0, foot);
   float grain = mix(0.5, fbm2o(bedP * 0.045), grainFade);
   // sand ripples and burrow mounds resolve in the near field (landing, taxiing)
@@ -423,7 +457,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   // wet sand at the waterline (mirrors the terrain's wet band above it)
   bed *= mix(0.72, 1.0, smoothstep(0.0, 0.45, depth));
   // wave focusing: shallow bed brightness follows the crests of the short waves (cheap caustics)
-  float caustic = ((val1 - 0.5) * w1 * 0.5 + (val2 - 0.5) * w2 * 0.45 + (val3 - 0.5) * w3 * 0.35) * rippleF;
+  float caustic = ((val1 - 0.5) * w1 * 0.4 + (val2 - 0.5) * w2 * 0.3 + (val3 - 0.5) * w3 * 0.3 + crestNet * 0.9) * rippleF;
   bed *= 1.0 + caustic * (1.0 - smoothstep(1.5, 5.0, depth)) * smoothstep(0.05, 0.3, depth);
   // deep-water reflectance under neutral irradiance: blue-teal bay water carrying some suspended matter,
   // clearer and bluer ocean beyond the shelf (a few percent, peaking in the blue)
@@ -613,9 +647,12 @@ export class Water {
         .replace('#include <begin_vertex>', `${WATER_VERT_MAIN}\nvec3 transformed = wp;`);
       // the CSM patches ShaderChunk.lights_fragment_begin (where the shadow lookups are) and three expands the
       // include after this hook, so the chunk is inlined here with the lookup moved to the wave-refracted point
-      const lights = THREE.ShaderChunk.lights_fragment_begin.replace(/vDirectionalShadowCoord\[ i \] \)/g, 'vDirectionalShadowCoord[ i ] + directionalShadowMatrix[ i ] * vec4( wShadowOff, 0.0 ) )');
+      const lights = THREE.ShaderChunk.lights_fragment_begin.replace(
+        /getShadow\( directionalShadowMap\[ i \], directionalLightShadow\.shadowMapSize, directionalLightShadow\.shadowIntensity, directionalLightShadow\.shadowBias, directionalLightShadow\.shadowRadius, vDirectionalShadowCoord\[ i \] \)/g,
+        'waterShadow( directionalShadowMap[ i ], directionalLightShadow, vDirectionalShadowCoord[ i ], directionalShadowMatrix[ i ], wShadowOff, wShadowOffBed, UNROLLED_LOOP_INDEX == 0 )');
       shader.fragmentShader = (WATER_DEBUG ? `#define WATER_DEBUG ${WATER_DEBUG}\n` : '') + shader.fragmentShader
         .replace('#include <common>', `#include <common>\n${WATER_FRAG_PARS}`)
+        .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${WATER_SHADOW_FN}`)
         .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>\n${WATER_FRAG_SURFACE}`)
         .replace('#include <lights_fragment_begin>', lights)
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
