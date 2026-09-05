@@ -19,8 +19,11 @@ import { RingSet } from './beam/rings.js';
 import { CraterPlan, WavePlan, CRATER_RIM_WIDTH } from './beam/crater.js';
 import { PreviewGuide } from './beam/guide.js';
 
-const ARRIVE_DIST = 330, ARRIVE_Y = 400;   // where the station is first seen: horizontal distance from the target, altitude
-const FIRE_DIST = 170, FIRE_Y = 215;       // firing position (the station's underside stays well above the cloud layer)
+const ARRIVE_DIST = 380, ARRIVE_Y = 380;   // where the station is first seen: horizontal distance from the target, altitude
+// Firing position: far out and low in the sky rather than overhead (~34 degrees above the street horizon, apparent
+// diameter ~26 degrees), with the underside kept clear of the blocky cloud slab (CLOUD_HEIGHT .. +4).
+const FIRE_DIST = 225;
+const FIRE_Y = Math.max(200, CLOUD_HEIGHT + 4 + STATION_RADIUS + 2);
 const FADE_IN_S = 3;                       // station fades in over the first seconds of the approach
 const DESCENT_MIN_S = 1.2, DESCENT_MAX_S = 2.5; // fire stroke duration (by intensity)
 const FADE_TICKS = 30;            // beam fade-out after firing (1.5 s)
@@ -42,6 +45,9 @@ const TRIB_START = 0.2;           // tributaries start igniting at this fraction
 const TRIB_GAP_S = 0.5;           // ...one after another
 const TRIB_ZAP_S = 0.35;          // time for a tributary to shoot from the rim into the focus
 const ALERT_AT = 0.7;             // fraction of the charge at which the villagers panic
+const DRY_BLAST = { water: false, lines: 'blast' }; // sweep() options: blown off their feet by a blast, not tossed by water
+const WAVE_HIT_GUARD = 20;        // ticks: at most one wave hit per pass for the player and for each entity
+const WAVE_MAX_HP = 6;            // the most a wave pass can take from the player
 
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const smooth = (x) => { x = clamp01(x); return x * x * (3 - 2 * x); };
@@ -103,6 +109,7 @@ export class OrbitalBeam extends Disaster {
     this.burstTick = this.T2;
     this.prevFront = 0; this.frontTick = this.T2; this.waveDoneTick = -1;
     this.bandLo = 0; this.bandHi = 0;
+    this.playerWaveTick = -99;
     this.lastRumbleTick = -1;
     this.stopTick = -1;
     this.stopHead = 0; this.stopIntensity = 0; this.stopPower = 0; this.stopSphere = 0; this.stopTrib = 0; this.stopCharge = 0;
@@ -327,37 +334,45 @@ export class OrbitalBeam extends Disaster {
     if (t % 45 === 0) this.game.audio.rumble(this._pos, 0.5);
   }
 
-  // Everyone the front passed this tick (distance in (lo, hi]) is knocked over; the player is shoved and hurt.
+  // Everyone the front passed this tick (distance in (lo, hi]) is knocked over; the player is knocked down and hurt.
   waveBand(lo, hi) {
     if (hi <= lo) return;
     this.bandLo = lo; this.bandHi = hi;
     if (this.game.npcs) this.game.npcs.eachNear(this.cx, this.cz, hi + 1.5, this._waveNpc);
     if (this.game.animals) this.game.animals.eachNear(this.cx, this.cz, hi + 1.5, this._waveAnimal);
+    // the player: one hit per pass (the band overlaps from tick to tick and a shoved player would otherwise ride
+    // the front and be hit again and again), capped damage, and a knock-down (up and out, then they land) rather
+    // than a push that keeps pace with the front. Someone flying above the dust wall is not touched.
     const pl = this.game.player;
+    if (this.tick - this.playerWaveTick < WAVE_HIT_GUARD) return;
     const dx = pl.pos.x - this.cx, dz = pl.pos.z - this.cz;
     const d = Math.sqrt(dx * dx + dz * dz);
-    if (d > lo && d <= hi + 1.5 && d >= this.R * 0.8) {
+    if (d > lo && d <= hi + 1.5 && d >= this.R * 0.8 && pl.pos.y < this.impactY + 22) {
+      this.playerWaveTick = this.tick;
       const k = 1 - clamp01((d - this.R) / (this.waveR - this.R));
       const nx = d > 0.01 ? dx / d : 1, nz = d > 0.01 ? dz / d : 0;
-      pl.damage(Math.round(1 + 4 * k));
-      pl.impulse(nx * (8 + 12 * k), 5 + 6 * k, nz * (8 + 12 * k));
+      pl.damage(Math.min(WAVE_MAX_HP, Math.round(2 + 4 * k)));
+      pl.impulse(nx * (5 + 4 * k), 7 + 3 * k, nz * (5 + 4 * k));
       this.m.effects.shake(0.5 + 0.5 * k, 2);
     }
   }
   waveHit(mgr, e, d, scale) {
     if (d <= this.bandLo || d < this.R * 0.8) return;
+    if (this.tick - (e.beamWaveTick ?? -99) < WAVE_HIT_GUARD) return; // one hit per pass, whichever band
+    e.beamWaveTick = this.tick;
     const k = 1 - clamp01((d - this.R) / (this.waveR - this.R));
     const dx = e.pos.x - this.cx, dz = e.pos.z - this.cz;
     const dd = Math.max(0.5, Math.sqrt(dx * dx + dz * dz));
-    if (k > 0.45) mgr.sweep(e.pos.x, e.pos.z, 0.6, dx / dd, dz / dd, (8 + 12 * k) * scale); // near ring: tumble through the air
+    if (k > 0.45) mgr.sweep(e.pos.x, e.pos.z, 0.6, dx / dd, dz / dd, (8 + 12 * k) * scale, DRY_BLAST); // near ring: blown off their feet
     else mgr.applyImpulse(e, (dx / dd) * (5 + 10 * k) * scale, (3 + 5 * k) * scale, (dz / dd) * (5 + 10 * k) * scale); // farther: shoved
   }
 
+  // Hurled out of the beam column / the impact zone: the dry blast sweep (its own one-hit-per-pass guard).
   fling(mgr, e, d, radius, speed) {
     const dx = e.pos.x - this.cx, dz = e.pos.z - this.cz;
     const dd = Math.max(0.5, Math.sqrt(dx * dx + dz * dz));
     const k = Math.max(0.25, 1 - d / radius);
-    mgr.applyImpulse(e, (dx / dd) * speed * k, 8 + 10 * k, (dz / dd) * speed * k);
+    mgr.sweep(e.pos.x, e.pos.z, 0.6, dx / dd, dz / dd, speed * k, DRY_BLAST);
   }
 
   // Cosmetic debris for blocks removed near the current crater edge (rng use is deterministic, capped per tick).
