@@ -705,7 +705,8 @@ export function buildRecusant(mats) {
         { color, texel: 1 / 4, lod },
       );
     if (lod === 2) {
-      ring(collarZ - 8, collarZ + 8, 1.12, "hull", GREY.getHex());
+      // over the 1.3x LOD 2 pod
+      ring(collarZ - 8, collarZ + 8, 1.3 * 1.12, "hull", GREY.getHex());
       continue;
     }
     ring(collarZ - 8.5, collarZ - 2.5, 1.09, "hull", GREY.getHex());
