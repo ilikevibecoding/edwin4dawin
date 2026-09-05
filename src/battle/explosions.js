@@ -457,6 +457,14 @@ export class Explosions {
   }
 
   /**
+   * World-space outward hull normal at a ship-local point (bounding-ellipsoid estimate), for shieldHit()
+   * and hit() callers that have no surface normal. Writes into `out` and returns it.
+   */
+  hullNormal(ship, local, out) {
+    return this._outwardLocal(ship, local, out).transformDirection(ship.matrix);
+  }
+
+  /**
    * A hull hit: white flash, orange fireball with a noisy edge, sparks flying outward, a dark smoke puff
    * that lingers and drifts; heavy hits may throw a fragment or two. Sizes: fighter ~14, light ~28,
    * heavy ~55 m. `normal` (world, optional) is the hull normal at the impact (e.g. -bolt.dir); without it
