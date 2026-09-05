@@ -111,60 +111,17 @@ export function buildMaterials() {
     // Hazard stripes
     hazard: std(hazard, { normalScale: new THREE.Vector2(0.4, 0.4), envMapIntensity: 0.6 }),
 
-    // Emissives — intensity animated by the lighting controller (rest cycle)
-    emitTeal: new THREE.MeshStandardMaterial({
-      color: 0x0a1a1a,
-      emissive: PALETTE.teal,
-      emissiveIntensity: 2.4,
-      roughness: 0.4,
-      metalness: 0,
-    }),
-    emitWarm: new THREE.MeshStandardMaterial({
-      color: 0x1a1410,
-      emissive: PALETTE.warm,
-      emissiveIntensity: 1.7,
-      roughness: 0.5,
-      metalness: 0,
-    }),
-    emitOrange: new THREE.MeshStandardMaterial({
-      color: 0x1a0a04,
-      emissive: PALETTE.orange,
-      emissiveIntensity: 2.0,
-      roughness: 0.5,
-      metalness: 0,
-    }),
+    // Emissives — intensity animated by the lighting controller (rest cycle). Purely emissive (black
+    // albedo, full roughness): a fixture's own point light must not add a specular lobe to its face.
+    emitTeal: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: PALETTE.teal, emissiveIntensity: 2.4, roughness: 1, metalness: 0 }),
+    emitWarm: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: PALETTE.warm, emissiveIntensity: 1.7, roughness: 1, metalness: 0 }),
+    emitOrange: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: PALETTE.orange, emissiveIntensity: 2.0, roughness: 1, metalness: 0 }),
     // deep red at moderate intensity: a saturated #ff3a2a at 1.8 clipped to salmon after ACES
-    emitRed: new THREE.MeshStandardMaterial({
-      color: 0x000000,
-      emissive: new THREE.Color("#d8281c"),
-      emissiveIntensity: 1.3,
-      roughness: 1,
-      metalness: 0,
-    }),
-    emitCool: new THREE.MeshStandardMaterial({
-      color: 0x0a0e14,
-      emissive: new THREE.Color("#cfe4ff"),
-      emissiveIntensity: 2.2,
-      roughness: 0.5,
-      metalness: 0,
-    }),
+    emitRed: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#d8281c"), emissiveIntensity: 1.3, roughness: 1, metalness: 0 }),
+    emitCool: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#cfe4ff"), emissiveIntensity: 2.2, roughness: 1, metalness: 0 }),
     // Fixture diffusers: same emitters with a centre-bright falloff map (uv "keep" per emitter face)
-    emitWarmSoft: new THREE.MeshStandardMaterial({
-      color: 0x1a1410,
-      emissive: PALETTE.warm,
-      emissiveMap: diffuser,
-      emissiveIntensity: 1.9,
-      roughness: 0.5,
-      metalness: 0,
-    }),
-    emitCoolSoft: new THREE.MeshStandardMaterial({
-      color: 0x0a0e14,
-      emissive: new THREE.Color("#cfe4ff"),
-      emissiveMap: diffuser,
-      emissiveIntensity: 2.4,
-      roughness: 0.5,
-      metalness: 0,
-    }),
+    emitWarmSoft: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: PALETTE.warm, emissiveMap: diffuser, emissiveIntensity: 1.9, roughness: 1, metalness: 0 }),
+    emitCoolSoft: new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#cfe4ff"), emissiveMap: diffuser, emissiveIntensity: 2.4, roughness: 1, metalness: 0 }),
 
     // Dark glass / plastic for screens frame etc.
     darkGloss: new THREE.MeshStandardMaterial({ color: 0x0b0d10, roughness: 0.25, metalness: 0.2, envMapIntensity: 1.0 }),

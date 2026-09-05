@@ -157,14 +157,16 @@ if (!QUICK) {
   {
     const r = await page.evaluate(async () => {
       const api = window.debugAPI;
-      const youngest = () => api.trafficSnapshot().fighters.filter((f) => f.s === "launching").sort((x, y) => x.st - y.st)[0] || null;
+      // break on the OLDEST launcher entering the throat: the two behind it (3 s and 6 s later) are
+      // then still taxiing over the lane, so the frame holds three craft instead of one
+      const oldest = () => api.trafficSnapshot().fighters.filter((f) => f.s === "launching").sort((x, y) => y.st - x.st)[0] || null;
       api.requestLaunch(3);
       let f = null;
       let steps = 0;
       // deck is at world y -30; the flight is visible between the racks (y ≈ -8) and the well (y ≈ -34)
       for (; steps < 600; steps++) {
         api.advanceTraffic(0.1, 0.05);
-        f = youngest();
+        f = oldest();
         if (f && f.p[1] < -20 && f.p[1] > -33 && f.st > 0.5) break;
       }
       await api.setView("d5_hangar@0,-40,0,6");
