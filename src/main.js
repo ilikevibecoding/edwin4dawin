@@ -395,7 +395,7 @@ player.onStep = () => audio.play("footstep");
 let debugMode = false;
 // legacy Kestrel views (local Kestrel frame) mapped through its docked transform
 const KESTREL_VIEWS = {
-  cockpit: { x: 0.0, z: -17.1, yaw: 0, pitch: -4 },
+  cockpit: { x: 0.0, z: -19.2, yaw: 0, pitch: -9 },
   corridor: { x: 0.4, z: -1.3, yaw: 12, pitch: -2 },
   quarters: { x: -2.3, z: -6.3, yaw: 52, pitch: -8 },
   window: { x: -0.55, z: -12.55, yaw: 90, pitch: 2 },

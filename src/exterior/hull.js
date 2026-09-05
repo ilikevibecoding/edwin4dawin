@@ -568,7 +568,7 @@ function buildHangarMouth(ctx) {
   // faint blue shimmer over the lit hangar, from inside it no longer pools into an opaque blue slab
   {
     const yF = (z) => yB(z) - 0.3;
-    const sheet = chunks.batch(zm, "far", "exta_pool");
+    const sheet = chunks.batch(zm, "far", "exta_pane"); // FrontSide: read from space only, not from the hangar deck
     const fc = C(0x4f8fff);
     const cx = (o.x0 + o.x1) / 2;
     const dome = (p) => clamp01(1 - Math.pow((2 * (p.x - cx)) / (o.x1 - o.x0), 2)) * clamp01(1 - Math.pow((2 * (p.z - zm)) / (o.z1 - o.z0), 2));
