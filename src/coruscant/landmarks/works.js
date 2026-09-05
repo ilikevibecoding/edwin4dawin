@@ -215,6 +215,8 @@ function build(bp, lot, ctx) {
     }
     set(x0, y, z0, B.CHEST); set(x1, y, z0, B.BARREL); set(x0, y + 1, z0 + 1, B.HOLO_SIGN);
     for (let x = x0 + 1; x <= x1; x += 4) { set(x, y + 4, z0 + 1, B.GLOW_PANEL); set(x, y + 4, z1 - 1, B.GLOW_PANEL); }
+    for (let x = x0 + 3; x <= x1; x += 4) set(x, y + 4, (z0 + z1) >> 1, B.GLOW_PANEL);
+    for (let x = x0 + 2; x <= x1 - 1; x += 3) set(x, y + 3, z1, B.GLOW_PANEL);   // strip light over the locker bank
     bp.work(x0 + 1, y, z0 + 1, 'attendant'); bp.spot(doorAt, y, z0 + 2);
     recRoom('locker_room', x0, y, z0, x1, z1);
     doorway(doorAt, y, z0 - 1, true);
@@ -229,7 +231,7 @@ function build(bp, lot, ctx) {
     for (let x = x0; x <= x1; x += 2) { set(x, y, z0, B.TROUGH); set(x, y + 1, z0, B.CHROME); }   // sinks + mirrors on the door wall side
     for (let x = x0 + 1; x <= x1; x += 2) { set(x, y, z0 + 2, SLAB); set(x, y, z0 + 3, B.WHITE_WOOL); }  // benches and towel stacks
     set(x1, y, z0 + 1, B.BARREL); set(x0, y, z0 + 1, B.CHEST);
-    for (let x = x0 + 2; x <= x1; x += 4) set(x, y + 4, z0 + 3, B.GLOW_PANEL);
+    for (let x = x0 + 2; x <= x1; x += 4) { set(x, y + 4, z0 + 3, B.GLOW_PANEL); set(x, y + 4, z0, B.GLOW_PANEL); }
     recRoom('showers', x0, y, z0, x1, z1);
     doorway(doorAt, y, z0 - 1, true);
   };
@@ -316,6 +318,12 @@ function build(bp, lot, ctx) {
   fill(HX0, 3, TRZ0, TX1, 3, TRZ1, B.MAGMA); col(HX0 + 1, 4, TRZ0 + 1, 9, B.MAGMA); fill(HX0 + 1, 4, TRZ0, HX0 + 1, 4, TRZ1, B.MAGMA);   // the pour
   for (const z of [TRZ0 - 1, TRZ1 + 1]) { col(TX1, 4, z, 5, B.HULL_TRENCH); set(TX1 + 1, 6, z, B.IRON_BARS); }
   for (let y = 6; y <= 12; y++) { set(TX1 + 1, y, TRZ0 - 6, y % 2 ? B.IRON_BARS : B.PANEL_RED); set(TX1 + 1, y, TRZ1 + 6, y % 2 ? B.IRON_BARS : B.PANEL_RED); }   // marker posts
+  // work lights hung from the hood on both sides of the mouth, a lit hazard frame around the pour, glowing tuyeres
+  for (const z of [TRZ0 - 2, TRZ1 + 2]) { set(TX1 + 1, 16, z, B.DURASTEEL_DARK); set(TX1 + 1, 15, z, B.GLOW_PANEL); set(TX1 + 3, 14, z, B.IRON_BARS); set(TX1 + 3, 13, z, B.GLOW_PANEL); set(TX1 + 3, 15, z, B.DURASTEEL_DARK); }
+  fill(TX1 + 2, 15, TRZ0 - 2, TX1 + 3, 15, TRZ0 - 2, B.DURASTEEL_DARK); fill(TX1 + 2, 15, TRZ1 + 2, TX1 + 3, 15, TRZ1 + 2, B.DURASTEEL_DARK);
+  for (const z of [TRZ0 - 1, TRZ1 + 1]) { set(TX1, 7, z, B.PANEL_RED); set(TX1, 8, z, B.GLOW_PANEL); set(TX1, 9, z, B.PANEL_RED); }
+  fill(TX1, 10, TRZ0, TX1, 10, TRZ1, B.PANEL_RED); set(TX1, 10, TRZ0 + 1, B.GLOW_PANEL);
+  for (const z of [TRZ0 - 3, TRZ1 + 3]) { set(TX1, 7, z, B.MAGMA); set(TX1, 12, z, B.MAGMA); }
   set(TX1 + 2, 6, TRZ0 - 4, B.CONSOLE); set(TX1 + 2, 6, TRZ1 + 4, B.CONSOLE); bp.work(TX1 + 3, 6, TRZ0 - 4, 'tapper'); bp.work(TX1 + 3, 6, TRZ1 + 4, 'tapper');
   // casting pit at the east end (magma basin) with a quench tank and mould rows beside it
   const px0 = trX1 + 1, px1 = 110, pz0 = 52, pz1 = 60;
@@ -366,7 +374,7 @@ function build(bp, lot, ctx) {
       const base = z >= NVZ0 && cx >= NX0 && cx <= NX1 ? Y.nave + 1 : Y.roof + 1;   // trestles down to whichever roof is below
       if (base <= Y.nave) { col(cx - 1, base, z, Y.nave, B.IRON_BARS); col(cx + 1, base, z, Y.nave, B.IRON_BARS); }
     }
-    fill(cx - 2, Y.nave + 1, 10, cx + 2, Y.nave + 2, 10, B.CHROME);   // collar where the pipe meets the chimney
+    fill(cx - 2, Y.nave + 1, 12, cx + 2, Y.nave + 2, 12, B.CHROME);   // collar where the pipe meets the chimney
   };
 
   // ------------------------------------------------------------------------------------------------ conveyors, racks, lamps
@@ -680,9 +688,42 @@ function build(bp, lot, ctx) {
   ring(SX0, Y.roof, SZ0, SX1, Y.roof, SZ1, B.PANEL_STRIPE);
   fill(SX0, Y.roof + 1, SZ0, SX1, Y.roof + 1, SZ0, B.IRON_BARS); fill(SX0, Y.roof + 1, SZ0, SX0, Y.roof + 1, SZ1, B.IRON_BARS); fill(SX1, Y.roof + 1, SZ0, SX1, Y.roof + 1, SZ1, B.IRON_BARS);
   for (let x = 30; x <= 124; x += 16) { for (const z of [18, 96]) { fill(x, Y.roof + 1, z, x + 2, Y.roof + 2, z + 2, B.VENT); fill(x, Y.roof + 3, z, x + 2, Y.roof + 3, z + 2, B.CHROME); set(x + 1, Y.roof + 3, z + 1, B.GLOW_PANEL); } }
-  for (const [x, z] of [[122, 92], [30, 90]]) { bp.disc(x + 0.5, z + 0.5, 3.2, Y.roof + 1, Y.roof + 6, B.CHROME); bp.disc(x + 0.5, z + 0.5, 2.4, Y.roof + 7, Y.roof + 7, B.CHROME); set(x, Y.roof + 8, z, B.GLOW_PANEL_BLUE); }
   for (let x = 34; x <= 120; x += 10) { col(x, Y.roof + 1, 26, Y.roof + 4, B.IRON_BARS); set(x, Y.roof + 5, 26, B.GLOW_PANEL_BLUE); }
   SMELT.forEach(flue);
+
+  // ------------------------------------------------------------------------------------------------ roofscape
+  // ridge monitor: a long lantern along the nave roof over the trench, louvres and glass lit by the strip below it
+  const MZ0 = TRZ0 - 2, MZ1 = TRZ1 + 2, MX0 = NX0 + 3, MX1 = NX1 - 3;
+  for (let x = MX0; x <= MX1; x++) {
+    const end = x === MX0 || x === MX1, k = (x - MX0) % 4;
+    for (const z of [MZ0, MZ1]) fill(x, Y.nave + 1, z, x, Y.nave + 3, z, end || k === 0 ? B.DURASTEEL_DARK : (k === 2 ? B.VENT : B.STEEL_GLASS));
+    fill(x, Y.nave + 4, MZ0, x, Y.nave + 4, MZ1, end || k === 0 ? B.PANEL_STRIPE : B.DURASTEEL_DARK);
+    if (k === 2 && !end) { set(x, Y.nave + 2, MZ0, B.WINDOW_LIT); set(x, Y.nave + 2, MZ1, B.WINDOW_LIT); }
+  }
+  for (const x of [MX0, MX1]) { fill(x, Y.nave + 1, MZ0 + 1, x, Y.nave + 3, MZ1 - 1, B.DURASTEEL_DARK); set(x, Y.nave + 2, TRZ0 + 1, B.PANEL_RED); set(x, Y.nave + 3, TRZ0 + 1, B.GLOW_PANEL); }
+  for (let x = MX0 + 4; x < MX1; x += 8) { set(x, Y.nave + 5, TRZ0 + 1, B.VENT); set(x, Y.nave + 6, TRZ0 + 1, B.CHROME); }   // cowls on the ridge
+  // hyperboloid cooling towers on the south corners of the aisle roof, a water basin inside, lit rim
+  const coolingTower = (cx, cz) => {
+    const prof = [4.6, 4.3, 4.0, 3.7, 3.4, 3.2, 3.1, 3.1, 3.2, 3.4, 3.6, 3.8];
+    prof.forEach((r, i) => bp.disc(cx + 0.5, cz + 0.5, r, Y.roof + 1 + i, Y.roof + 1 + i, i === 0 ? B.PANEL_STRIPE : (i === 4 || i === prof.length - 1 ? B.DURASTEEL_DARK : B.HULL_PLATE), true));
+    bp.disc(cx + 0.5, cz + 0.5, 3.6, Y.roof + 1, Y.roof + 1, B.WATER);
+    bp.disc(cx + 0.5, cz + 0.5, 3.8, Y.roof + 1 + prof.length, Y.roof + 1 + prof.length, B.GLOW_PANEL, true);
+    for (const [dx, dz] of [[-5, 0], [5, 0], [0, -5], [0, 5]]) { col(cx + dx, Y.roof + 1, cz + dz, Y.roof + 3, B.IRON_BARS); set(cx + dx, Y.roof + 4, cz + dz, B.PANEL_RED); }   // stays
+  };
+  coolingTower(30, 90); coolingTower(124, 90);
+  // pipe racks along both aisle roofs feeding the cooling towers: twin pipes on brackets, valves, a chrome elbow at the head
+  for (const [xa, xb] of [[26, 28], [126, 128]]) {
+    fill(xa, Y.roof + 2, 30, xa, Y.roof + 2, 85, B.DURASTEEL_DARK); fill(xb, Y.roof + 2, 30, xb, Y.roof + 2, 85, B.DURASTEEL_DARK);
+    for (let z = 32; z <= 84; z += 8) fill(xa, Y.roof + 1, z, xb, Y.roof + 1, z, B.DURASTEEL_DARK);
+    for (let z = 36; z <= 84; z += 16) { set(xa, Y.roof + 3, z, B.CHROME); set(xb, Y.roof + 3, z + 8, B.PANEL_RED); }
+    for (const x of [xa, xb]) { set(x, Y.roof + 2, 30, B.CHROME); set(x, Y.roof + 1, 30, B.CHROME); }
+  }
+  // skylight monitors over the north and south strips: glass-sided boxes with a lit core
+  for (const z of [14, 86]) for (const x0 of [42, 48, 54, 96, 102, 108]) {
+    fill(x0, Y.roof + 1, z, x0 + 4, Y.roof + 1, z + 2, B.STEEL_GLASS); fill(x0 + 1, Y.roof + 1, z + 1, x0 + 3, Y.roof + 1, z + 1, B.GLOW_PANEL);
+    fill(x0, Y.roof + 2, z, x0 + 4, Y.roof + 2, z + 2, B.DURASTEEL_DARK); fill(x0, Y.roof + 2, z + 1, x0 + 4, Y.roof + 2, z + 1, B.PANEL_STRIPE);
+    set(x0, Y.roof + 1, z, B.DURASTEEL_DARK); set(x0 + 4, Y.roof + 1, z, B.DURASTEEL_DARK); set(x0, Y.roof + 1, z + 2, B.DURASTEEL_DARK); set(x0 + 4, Y.roof + 1, z + 2, B.DURASTEEL_DARK);
+  }
 
   // ------------------------------------------------------------------------------------------------ stack yard: chimneys, spheres, pipe bridges
   const chimney = (cx, cz, r, top) => {
@@ -691,12 +732,14 @@ function build(bp, lot, ctx) {
     bp.disc(cx + 0.5, cz + 0.5, r + 0.5, 4, top, B.DURASTEEL_DARK);
     bp.disc(cx + 0.5, cz + 0.5, r + 0.5, 18, 19, B.VENT, true);
     bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 12, top - 11, B.PANEL_RED, true);
-    bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 5, top - 4, B.PANEL_RED, true);
-    bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 2, top - 2, B.GLOW_PANEL, true);   // lit collar
-    bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 1, top - 1, B.CHROME, true);
+    bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 7, top - 6, B.PANEL_RED, true);
+    // the crown: the shaft flares out into a wider cap with a lit collar and a chrome rim; molten throat inside
+    bp.disc(cx + 0.5, cz + 0.5, r + 1.5, top - 4, top - 3, B.DURASTEEL_DARK, true);
+    bp.disc(cx + 0.5, cz + 0.5, r + 1.5, top - 2, top - 2, B.GLOW_PANEL, true); bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 2, top - 2, B.CHROME, true);
+    bp.disc(cx + 0.5, cz + 0.5, r + 1.5, top - 1, top - 1, B.CHROME, true); bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 1, top - 1, B.VENT, true);
     bp.disc(cx + 0.5, cz + 0.5, r - 0.5, top - 1, top, B.MAGMA);                    // molten throat, flush with the rim
     for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]]) set(cx + dx, top, cz + dz, B.PANEL_RED);
-    col(cx, 4, cz + r, top - 3, B.IRON_BARS);
+    col(cx, 4, cz + r, top - 5, B.IRON_BARS);
   };
   for (const cx of SMELT) chimney(cx, 6, 5, Y.stack);
   chimney(108, 6, 3, 52); chimney(124, 6, 3, 52);
