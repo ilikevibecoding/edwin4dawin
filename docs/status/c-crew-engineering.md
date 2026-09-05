@@ -276,6 +276,16 @@ Whole-frame per view (active set ≤ 6 rooms): 29–51 draw calls, 4k–56k tris
   critic's findings (running).
 
 ## Remaining
+0. **Stopped by the user on 2026-09-05 09:02 UTC** mid round 4 (exposure polish from critic pass 3:
+   49 PASS / 27 FIX). Committed and verified on this branch: rounds 1–3, the lighting round, and the
+   round-4 fixes for medbay, quarters, briefing, rec, life support and escape. The round-4 edits still
+   in progress for the hubs/corridors, mess/armory/security and engctl/reactor/hyperdrive are parked
+   **unverified** on `cursor/sd-crew-engineering-wip-f9bd` (syntax-checked only) — re-run the harness
+   before merging any of it. Open items from pass 3 for those rooms: reactor entry/core/bridge are
+   80–85 % black with clipping core cells (make the core the key), clipped hanging panels in engctl and
+   hyperdrive-side, lobby keys straight overhead (no pillar shadows), d3-lobby sphere beacons need
+   cages, security interrogation pendant does not light the table, armory cage speculars, floors under
+   20 % in ~12 views.
 1. Re-test on the real registry once `src/core/registry.js` lands (drop the shim); switch corridors to
    D's `corridorSegment` once `src/systems/corridor/corridor.js` exists (my corridor generator keeps
    its dressing either way); re-shoot once D's doors fill the holes.
