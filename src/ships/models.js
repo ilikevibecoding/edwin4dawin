@@ -16,7 +16,7 @@ import { SHARED } from '../entityMaterial.js';
 import { VoxelGrid } from '../vehicles/voxelMesh.js';
 
 const D = B.DURASTEEL, DD = B.DURASTEEL_DARK, CH = B.CHROME, RED = B.PANEL_RED, GL = B.STEEL_GLASS, ENG = B.GLOW_PANEL_BLUE;
-const BLK = B.PANEL_BLACK, STR = B.PANEL_STRIPE, HP = B.HULL_PLATE, VENT = B.VENT, LAMP = B.GLOW_PANEL;
+const BLK = B.PANEL_BLACK, HP = B.HULL_PLATE, VENT = B.VENT, LAMP = B.GLOW_PANEL;
 
 // ------------------------------------------------------------------------------------------------ designs
 // A boxy light freighter: slab hull, offset-forward cockpit, two cargo pods slung on the flanks, triple nozzles.
@@ -50,29 +50,28 @@ function freighter() {
   return { name: 'freighter', grid: g, speed: 22, engineHz: 52, gain: 1.0 };
 }
 
-// A passenger shuttle: slim fuselage, tall dorsal fin, wings folded up for landing (stepped vertical plates).
+// A passenger shuttle: tall narrow fuselage with a wrap-around canopy, a swept dorsal fin and wings folded up for
+// landing (three plates per side stepping up and outward, tapering to a chrome tip).
 function shuttle() {
-  const g = new VoxelGrid(13, 11, 18);
-  g.fill(5, 2, 2, 7, 4, 14, D);                       // fuselage
-  g.fill(5, 5, 4, 7, 5, 12, D);                       // cabin roof
-  g.fill(5, 3, 1, 7, 3, 1, DD); g.set(6, 3, 0, DD); g.fill(5, 2, 1, 7, 2, 1, DD); // nose
-  g.fill(5, 5, 2, 7, 5, 3, GL);                       // cockpit canopy
-  for (const z of [5, 7, 9, 11]) { g.set(5, 4, z, GL); g.set(7, 4, z, GL); } // cabin windows
-  g.fill(6, 1, 3, 6, 1, 13, DD);                      // keel
-  for (const x of [4, 8]) {                           // folded wings
-    const out = x === 4 ? 3 : 9;
-    g.fill(x, 3, 5, x, 6, 13, D);
-    g.fill(out, 6, 6, out, 9, 12, D);
-    g.fill(out, 10, 8, out, 10, 10, CH);
-    g.set(x, 3, 5, CH); g.set(out, 7, 6, CH); g.set(out, 8, 6, CH);
-    g.set(out, 7, 12, STR); g.set(out, 8, 12, STR);
-    g.set(out, 6, 9, RED);
+  const g = new VoxelGrid(9, 12, 18);
+  g.fill(3, 2, 2, 5, 5, 14, D);                       // fuselage
+  g.fill(4, 6, 4, 4, 6, 13, DD);                      // dorsal ridge
+  g.fill(3, 3, 1, 5, 4, 1, DD); g.set(4, 3, 0, DD);   // nose
+  g.fill(3, 5, 2, 5, 5, 3, GL); g.set(4, 6, 3, GL); g.set(4, 4, 1, GL);   // wrap-around canopy
+  for (const z of [5, 7, 9, 11]) { g.set(3, 4, z, GL); g.set(5, 4, z, GL); } // cabin windows
+  g.fill(4, 1, 3, 4, 1, 13, DD);                      // keel
+  for (const side of [0, 1]) {                        // folded wings
+    const xs = side ? [6, 7, 8] : [2, 1, 0];
+    g.fill(xs[0], 1, 4, xs[0], 3, 14, D); g.fill(xs[0], 1, 4, xs[0], 2, 4, DD); g.set(xs[0], 3, 14, DD);
+    g.fill(xs[1], 3, 5, xs[1], 6, 13, D); g.fill(xs[1], 4, 5, xs[1], 5, 5, DD); g.set(xs[1], 4, 9, RED); g.set(xs[1], 5, 9, RED);
+    g.fill(xs[2], 6, 6, xs[2], 9, 12, D); g.fill(xs[2], 7, 6, xs[2], 8, 6, DD); g.set(xs[2], 9, 12, DD);
+    g.fill(xs[2], 10, 7, xs[2], 10, 11, CH);          // wing tip
   }
-  g.fill(6, 5, 7, 6, 6, 13, D); g.fill(6, 7, 9, 6, 8, 13, D); g.fill(6, 9, 11, 6, 9, 13, D); // dorsal fin
-  g.set(6, 6, 7, CH); g.set(6, 8, 9, CH); g.set(6, 9, 11, CH); g.set(6, 9, 13, LAMP);
-  g.fill(5, 2, 15, 7, 4, 16, DD);                     // engines
-  g.fill(5, 2, 17, 7, 4, 17, CH); g.set(5, 3, 17, ENG); g.set(7, 3, 17, ENG); g.set(6, 3, 17, ENG);
-  g.set(6, 0, 3, DD); g.set(4, 0, 11, DD); g.set(8, 0, 11, DD); g.set(4, 1, 11, DD); g.set(8, 1, 11, DD); // tripod gear
+  g.fill(4, 7, 8, 4, 8, 13, D); g.fill(4, 9, 10, 4, 10, 13, D); g.set(4, 11, 12, D); // swept dorsal fin
+  g.set(4, 7, 8, CH); g.set(4, 9, 10, CH); g.set(4, 11, 13, LAMP);
+  g.fill(3, 2, 15, 5, 4, 16, DD);                     // engines
+  g.fill(3, 2, 17, 5, 4, 17, CH); g.set(3, 3, 17, ENG); g.set(4, 3, 17, ENG); g.set(5, 3, 17, ENG);
+  g.set(4, 0, 3, DD); g.set(3, 0, 12, DD); g.set(5, 0, 12, DD); // tripod gear
   return { name: 'shuttle', grid: g, speed: 30, engineHz: 88, gain: 0.8 };
 }
 
@@ -222,8 +221,10 @@ void main() {
   float thrust = vInst.z;
   float glow = vEmit * (0.45 + 0.55 * thrust) * (0.92 + 0.08 * sin(uTime * 11.0 + vDist * 0.3));
   vec3 hot = tex.rgb * (1.0 + 0.7 * thrust) + vec3(0.15, 0.25, 0.4) * thrust * vEmit;
-  col = mix(col, hot, clamp(glow, 0.0, 1.0));
-  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vDist));
+  glow = clamp(glow, 0.0, 1.0);
+  col = mix(col, hot, glow);
+  // lights punch through the haze: distant ships fade to their engine glow before vanishing
+  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vDist) * (1.0 - 0.7 * glow));
   gl_FragColor = vec4(col, 1.0);
 }`;
 

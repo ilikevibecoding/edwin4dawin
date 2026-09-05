@@ -49,7 +49,19 @@ const D = B.DURASTEEL, DD = B.DURASTEEL_DARK, PLATE = B.DECK_PLATE, STR = B.PANE
 const GLOW = B.GLOW_PANEL, BLUE = B.GLOW_PANEL_BLUE, LAMP = B.CITY_LAMP, HOLO = B.HOLO_SIGN, CON = B.CONSOLE;
 const CHR = B.CHROME, RED = B.PANEL_RED, BLK = B.PANEL_BLACK, VENT = B.VENT, SLAB = B.STONE_BRICK_SLAB, HP = B.HULL_PLATE;
 const AIR = B.AIR;
+// Floor markings on the dark deck plate: PANEL_STRIPE only shows its stripes on side faces (its top is dark
+// durasteel), so flush markings use light durasteel lines and red hazard cells; PANEL_STRIPE is used for kerbs.
+const LINE = D;
 const abs = Math.abs, max = Math.max, min = Math.min;
+
+// 3x5 pixel digits 0..8 (row-major, top row first) for the painted pad numbers.
+const DIGITS = ['111101101101111', '010110010010111', '111001111100111', '111001111001111', '101101111001001', '111100111001111', '111100111101111', '111001001001001', '111101111101111'];
+function paintDigit(p, n, x0, y, z0, id, flip = false) {
+  const d = DIGITS[n];
+  for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) if (d[r * 3 + c] === '1') {
+    if (flip) p.set(x0 + 2 - c, y, z0 + 4 - r, id); else p.set(x0 + c, y, z0 + r, id);
+  }
+}
 
 // Clipped writer for one chunk.
 class Painter {
@@ -121,7 +133,7 @@ function paintDeck(p) {
     else if (px === 8 && pz === 8 && !(x <= R.x1 && abs(z) <= R.hw + 1)) p.set(x, 93, z, BLUE);
   }
   // perimeter parapet: dark kerb + glass, lamp posts every 16
-  const kerb = (x, z) => { p.set(x, 97, z, DD); p.set(x, 98, z, GL); };
+  const kerb = (x, z) => { p.set(x, 97, z, STR); p.set(x, 98, z, GL); };
   for (let z = z0; z <= z1; z++) {
     if (abs(z) > R.hw + 1) kerb(d.x0, z);
     kerb(d.x1, z);
@@ -267,8 +279,8 @@ function paintSpines(p) {
     const [z0, z1] = p.zRange(za, zb);
     if (z0 > z1) continue;
     for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
-      if (x === sp.x0 || x === sp.x1) p.set(x, 96, z, (z % 6 === 0) ? GLOW : STR);               // lit edge lines
-      else if ((x === T.cx || x === T.cx + 1) && ((z & 7) < 4)) p.set(x, 96, z, STR);              // dashed centre line
+      if (x === sp.x0 || x === sp.x1) p.set(x, 96, z, (z % 6 === 0) ? GLOW : LINE);              // lit edge lines
+      else if ((x === T.cx || x === T.cx + 1) && ((z & 7) < 4)) p.set(x, 96, z, LINE);             // dashed centre line
       if (x === sp.x0 - 1 || x === sp.x1 + 1) {
         if (((z + 168) & 15) === 8) { p.col(x, z, 97, 101, DD); p.set(x, 99, z, LAMP); }           // lamp posts carry the canopy
         p.set(x, 102, z, D);
@@ -279,8 +291,8 @@ function paintSpines(p) {
   for (const pad of S.pads) {
     const west = pad.x < T.cx;
     const gx0 = west ? pad.x + S.padHalf : sp.x1 + 1, gx1 = west ? sp.x0 - 1 : pad.x - S.padHalf - 1;
-    for (const dz of [-3, 3]) for (let x = gx0; x <= gx1; x++) p.set(x, 96, pad.z + dz, STR);
-    if (!west) for (const dz of [-3, 3]) for (let x = pad.x + S.padHalf; x <= 2671; x++) p.set(x, 96, pad.z + dz, STR);
+    for (const dz of [-3, 3]) for (let x = gx0; x <= gx1; x++) p.set(x, 96, pad.z + dz, LINE);
+    if (!west) for (const dz of [-3, 3]) for (let x = pad.x + S.padHalf; x <= 2671; x++) p.set(x, 96, pad.z + dz, LINE);
   }
 }
 
@@ -296,15 +308,18 @@ function paintPads(p) {
       const dx = x + 0.5 - pad.x, dz = z + 0.5 - pad.z, r2 = dx * dx + dz * dz;
       const edge = x === px0 || x === px1 || z === pz0 || z === pz1;
       let id = PLATE;
-      if (edge) id = ((x - px0 + z - pz0) & 3) === 0 ? BLUE : STR;                        // edge lights every 4th cell
-      else if (r2 >= 64 && r2 < 81) id = STR;                                          // landing circle
-      else if ((abs(dx) < 1 && abs(dz) < 6) || (abs(dz) < 1 && abs(dx) < 6)) id = abs(dx) < 1 && abs(dz) < 1 ? GLOW : STR; // centre cross
+      if (edge) {                                                                       // hazard border with flush edge lights
+        const k = x === px0 ? z - pz0 : x === px1 ? pz1 - z : z === pz0 ? px1 - x : x - px0;
+        id = k % 6 === 3 ? LAMP : ((k >> 1) & 1) ? RED : LINE;
+      } else if (r2 >= 64 && r2 < 81) id = LINE;                                         // landing circle
+      else if ((abs(dx) < 1 && abs(dz) < 6) || (abs(dz) < 1 && abs(dx) < 6)) id = abs(dx) < 1 && abs(dz) < 1 ? GLOW : RED; // centre cross
       p.set(x, 96, z, id);
     }
+    paintDigit(p, i + 1, px0 + 3, 96, pz0 + 3, LINE); paintDigit(p, i + 1, px1 - 5, 96, pz1 - 7, LINE, true);   // pad number, both corners
     // corner lamps inside the pad, fuel bowser and cargo crates in the service strip beside it
     for (const [cx, cz] of [[px0 + 1, pz0 + 1], [px1 - 1, pz0 + 1], [px0 + 1, pz1 - 1], [px1 - 1, pz1 - 1]]) lampPost(p, cx, cz, 2);
     const sx = px1 + 2;
-    p.box(sx, 97, pz0 + 2, sx + 1, 98, pz0 + 3, CHR); p.set(sx, 99, pz0 + 2, DD); p.set(sx + 1, 99, pz0 + 3, RED); p.set(sx, 97, pz0 + 4, DD);
+    p.box(sx, 97, pz0 + 2, sx + 1, 97, pz0 + 3, STR); p.box(sx, 98, pz0 + 2, sx + 1, 98, pz0 + 3, CHR); p.set(sx, 99, pz0 + 2, DD); p.set(sx + 1, 99, pz0 + 3, RED); p.set(sx, 97, pz0 + 4, DD);
     for (let k = 0; k < 4; k++) {
       const cx = sx + (k & 1), cz = pz1 - 4 + (k >> 1);
       const h = Math.floor(hash3(cx, i, cz, 31) * 3);
@@ -330,6 +345,10 @@ function paintTower(p) {
       p.set(x, y, z, (z === -1 || z === 0) && y >= 100 ? BLUE : (y === 120 || y === 140) ? STR : D);
     }
   }
+  // flare below the cab (solid rings), then the shaft interior is carved back through it
+  p.box(T.x0 - 1, cabY - 3, T.z0 - 1, T.x1 + 1, cabY - 3, T.z1 + 1, DD);
+  p.box(T.x0 - 2, cabY - 2, T.z0 - 2, T.x1 + 2, cabY - 1, T.z1 + 2, DD);
+  p.box(T.x0 + 1, 97, T.z0 + 1, T.x1 - 1, cabY - 1, T.z1 - 1, AIR);
   p.box(T.x0, 97, -1, T.x0, 98, 0, AIR); p.box(T.x0, 99, -1, T.x0, 99, 0, HOLO);      // door + sign
   // core column with stairwell lights
   p.box(2691, 97, -1, 2692, cabY - 1, 0, DD);
@@ -346,11 +365,10 @@ function paintTower(p) {
     if (half) { p.set(x, top, z, SLAB); p.set(x, top - 1, z, DD); }
     else { p.set(x, top - 1, z, DD); p.set(x, top - 2, z, DD); }
   }
-  // flare + cab (16 x 16)
-  p.box(T.x0 - 1, cabY - 3, T.z0 - 1, T.x1 + 1, cabY - 3, T.z1 + 1, DD);
-  p.box(T.x0 - 2, cabY - 2, T.z0 - 2, T.x1 + 2, cabY - 1, T.z1 + 2, DD);
+  // cab (16 x 16)
   p.box(T.x0 - 4, cabY, T.z0 - 4, T.x1 + 4, cabY, T.z1 + 4, D);
   p.box(T.x0 + 1, cabY, T.z0 + 1, T.x1 - 1, cabY, T.z1 - 1, AIR);                     // stairwell opening
+  p.box(2691, cabY, -1, 2692, cabY, 0, DD);                                             // core column reaches the cab floor
   p.set(2694, cabY, 2, DD); p.set(2694, cabY, 1, SLAB);                                 // last steps
   p.walls(T.x0 - 4, cabY + 1, T.z0 - 4, T.x1 + 4, cabY + 1, T.z1 + 4, DD);              // sill ring
   p.walls(T.x0 - 4, cabY + 2, T.z0 - 4, T.x1 + 4, cabY + 4, T.z1 + 4, GL);
@@ -379,7 +397,7 @@ function paintHangar(p) {
   const [x0, x1] = p.xRange(H.x0, H.x1), [z0, z1] = p.zRange(H.z0, H.z1);
   for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
     // floor: centre line and bay markings, vent grates
-    if (x > H.x0 && (abs(z - zc) === 12 || (z === zc && (x & 7) < 4))) p.set(x, 96, z, STR);
+    if (x > H.x0 && (abs(z - zc) === 12 || (z === zc && (x & 7) < 4))) p.set(x, 96, z, LINE);
     else if (((x - H.x0) % 9) === 4 && ((z - H.z0) % 9) === 4) p.set(x, 96, z, VENT);
     // walls
     const back = x === H.x1, side = z === H.z0 || z === H.z1, front = x === H.x0;
@@ -389,7 +407,7 @@ function paintHangar(p) {
         let id = DD;
         if (column) id = D;
         else if (y >= 104 && y <= 105 && ((back ? (z - H.z0) : (x - H.x0)) & 7) >= 3) id = GL;
-        else if (y === 99 && ((back ? (z - H.z0) : (x - H.x0)) % 6) === 3) id = GLOW;
+        else if ((y === 99 || y === 108) && ((back ? (z - H.z0) : (x - H.x0)) % 3) === 1) id = GLOW;   // work-light strips
         else if (y === roof - 1) id = D;
         p.set(x, y, z, id);
       }
@@ -400,7 +418,7 @@ function paintHangar(p) {
     }
     // roof with vents and a lit skylight grid
     p.set(x, roof, z, (front || back || side) ? D : ((x - H.x0) % 6 === 3 && (z - H.z0) % 6 === 3) ? VENT : DD);
-    if (!front && !back && !side && ((x - H.x0) & 7) === 4 && ((z - H.z0) & 7) === 4) p.set(x, roof - 1, z, GLOW);
+    if (!front && !back && !side && ((x - H.x0) & 3) === 2 && ((z - H.z0) & 3) === 2) p.set(x, roof - 1, z, GLOW);   // dense ceiling lights
   }
   // gantry: beam along the bay with a trolley and hook, rails on the side walls
   p.box(H.x0 + 1, 108, zc, H.x1 - 1, 108, zc, D);
@@ -423,7 +441,7 @@ function paintFuel(p) {
   const F = S.fuel;
   if (!p.overlaps(F.x0, F.z0, F.x1, F.z1)) return;
   for (const [cx, cz] of F.tanks) {
-    p.cyl(cx, cz, 6.5, 96, 96, DD); p.cyl(cx, cz, 5.6, 96, 96, STR); p.cyl(cx, cz, 4.8, 96, 96, DD);
+    p.cyl(cx, cz, 6.5, 96, 96, DD); p.cyl(cx, cz, 5.6, 96, 96, RED); p.cyl(cx, cz, 4.8, 96, 96, DD);
     p.cyl(cx, cz, 5.5, 97, 111, CHR);
     p.cyl(cx, cz, 5.5, 104, 104, STR); p.cyl(cx, cz, 4.7, 104, 104, CHR);
     p.cyl(cx, cz, 4.5, 112, 112, CHR); p.cyl(cx, cz, 3, 113, 113, CHR); p.cyl(cx, cz, 1.5, 114, 114, DD); p.set(cx, 115, cz, LAMP);
@@ -441,7 +459,7 @@ function paintFuel(p) {
   for (let x = F.x0; x <= F.x1; x++) for (const z of [F.z0, F.z1]) { p.set(x, 97, z, DD); p.set(x, 98, z, GL); }
   for (let z = F.z0; z <= F.z1; z++) for (const x of [F.x0, F.x1]) if (abs(z + 71) > 2) { p.set(x, 97, z, DD); p.set(x, 98, z, GL); }
   for (const x of [F.x0, F.x1]) for (const z of [F.z0, F.z1]) lampPost(p, x, z, 3);
-  p.box(F.x0, 96, -73, F.x0 + 10, 96, -69, STR);                                             // entrance marking
+  p.box(F.x0, 96, -73, F.x0 + 10, 96, -69, LINE);                                            // entrance marking
 }
 
 // ------------------------------------------------------------------------------------------------ cargo yards
@@ -495,14 +513,14 @@ function paintYards(p) {
     for (let z = W.z0 + 3; z <= W.z1 - 3; z += 3) p.set(W.x1 - 1, 97, z, [CON, B.ANVIL, B.TABLE, B.FURNACE, DD][((z - W.z0) / 3) % 5 | 0]);
     for (let x = W.x0 + 3; x <= W.x1 - 3; x += 3) { p.set(x, 97, W.z0 + 1, (x & 1) ? B.CRATE : B.BARREL); }
     // speeder lift: marked square with a speeder parked on it
-    p.box(2697, 96, 66, 2703, 96, 74, STR); p.box(2698, 96, 67, 2702, 96, 73, PLATE);
+    p.box(2697, 96, 66, 2703, 96, 74, LINE); p.box(2698, 96, 67, 2702, 96, 73, PLATE);
     stampShip(shipModels()[2], (x, y, z, id) => p.set(x, y, z, id), 2700, DECK_Y, 70, 1);
   }
   // speeder park beside the workshop
   if (p.overlaps(2668, 92, 2679, 140)) {
     for (let k = 0; k < 4; k++) {
       const z = 100 + k * 12;
-      p.box(2670, 96, z - 3, 2678, 96, z + 3, STR); p.box(2671, 96, z - 2, 2677, 96, z + 2, PLATE);
+      p.box(2670, 96, z - 3, 2678, 96, z + 3, LINE); p.box(2671, 96, z - 2, 2677, 96, z + 2, PLATE);
       if (hash2(k, 7, 61) < 0.7) stampShip(shipModels()[2], (x, y, zz, id) => p.set(x, y, zz, id), 2674, DECK_Y, z, 1);
     }
   }
@@ -511,7 +529,7 @@ function paintYards(p) {
 // ------------------------------------------------------------------------------------------------ plaza
 function paintPlaza(p) {
   if (!p.overlaps(2651, -40, 2716, 40)) return;
-  for (let x = 2651; x <= 2715; x++) { p.set(x, 96, -5, STR); p.set(x, 96, 5, STR); if ((x & 3) === 0) { p.set(x, 96, -4, GLOW); p.set(x, 96, 4, GLOW); } }
+  for (let x = 2651; x <= 2715; x++) { p.set(x, 96, -5, LINE); p.set(x, 96, 5, LINE); if ((x & 3) === 0) { p.set(x, 96, -4, GLOW); p.set(x, 96, 4, GLOW); } }
   for (let x = 2656; x <= 2712; x += 14) { lampPost(p, x, -8, 3); lampPost(p, x, 8, 3); }
   // ring around the tower base
   p.cyl(2692, 0, 10.5, 96, 96, D); p.cyl(2692, 0, 9.5, 96, 96, STR); p.cyl(2692, 0, 8.5, 96, 96, D);
