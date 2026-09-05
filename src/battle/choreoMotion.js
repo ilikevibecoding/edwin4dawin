@@ -144,7 +144,8 @@ export function updateShipMotion(st, dt, time) {
 }
 
 // Hull avoidance on the tick: for every pair, test the oriented boxes now and 18 s ahead; overlapping or
-// converging pairs get a gentle push apart (line ships nudge their slot as well so they do not fight it).
+// converging pairs get a gentle push apart (line ships nudge their slot as well so they do not fight it;
+// wrecks, which nothing steers, take half the push so two of them never drift through each other).
 export function avoidPass(states, boxes) {
   const n = states.length;
   for (let i = 0; i < n; i++) {
@@ -153,7 +154,6 @@ export function avoidPass(states, boxes) {
     for (let j = i + 1; j < n; j++) {
       const b = states[j];
       const sb = b.ship;
-      if (a.dead && b.dead) continue;
       const ra = sa.model.bounds.radius;
       const rb = sb.model.bounds.radius;
       _v.subVectors(sb.position, sa.position);
@@ -178,14 +178,10 @@ export function avoidPass(states, boxes) {
       if (d < 1) _v.set(0, 1, 0);
       else _v.divideScalar(d);
       const push = now ? 4.5 : 2.0; // m/s along the centre line, split between the two hulls
-      if (!a.dead) {
-        sa.velocity.addScaledVector(_v, -push);
-        if (a.slot) a.slot.addScaledVector(_v, -60);
-      }
-      if (!b.dead) {
-        sb.velocity.addScaledVector(_v, push);
-        if (b.slot) b.slot.addScaledVector(_v, 60);
-      }
+      sa.velocity.addScaledVector(_v, a.dead ? -push * 0.5 : -push);
+      if (!a.dead && a.slot) a.slot.addScaledVector(_v, -60);
+      sb.velocity.addScaledVector(_v, b.dead ? push * 0.5 : push);
+      if (!b.dead && b.slot) b.slot.addScaledVector(_v, 60);
     }
   }
 }
