@@ -42,10 +42,22 @@ export class Interactions {
       this.setHovered(null);
       return;
     }
+    // the player controller has just moved the camera; use this frame's pose, not last frame's matrix
+    this.camera.updateMatrixWorld();
     this.ray.setFromCamera({ x: 0, y: 0 }, this.camera);
     const hits = this.ray.intersectObjects(this.targets, false);
     const hit = hits.length ? hits[0].object.userData.interactable : null;
     this.setHovered(hit);
+    // contextual prompt when nothing is targeted but E would still do something
+    if (!this.hovered && this.fallbackAvailable && this.fallbackAvailable()) {
+      if (!this._fallbackPrompt) {
+        this.hud.showPrompt("E", "Ride turbolift");
+        this._fallbackPrompt = true;
+      }
+    } else if (this._fallbackPrompt) {
+      this._fallbackPrompt = false;
+      if (!this.hovered) this.hud.hidePrompt();
+    }
     if (this.hovered) {
       // slow pulse, kept low so the object's own shading still reads under the tint
       const k = 0.1 + 0.05 * (0.5 + 0.5 * Math.sin(performance.now() * 0.004));
@@ -72,10 +84,19 @@ export class Interactions {
 
   activate(id = null) {
     const item = id ? this.items.find((i) => i.id === id) : this.hovered;
-    if (!item || this.busy) return false;
+    if (this.busy) return false;
     if (!id && !this.player.locked && !this.player.touchMode) return false;
+    if (!item) {
+      // nothing under the crosshair: contextual fallback (e.g. standing inside a turbolift car)
+      return !!(this.fallback && this.fallback());
+    }
     this.run(item.id);
     return true;
+  }
+
+  // Is there something E would do right now (hovered item or a contextual fallback)?
+  canAct() {
+    return !!this.hovered || !!(this.fallbackAvailable && this.fallbackAvailable());
   }
 
   // Register an interactable at runtime (doors, lift panels, hangar controls). Items may carry their

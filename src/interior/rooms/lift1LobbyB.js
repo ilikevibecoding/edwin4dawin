@@ -61,7 +61,9 @@ export function build(kit, ctx, room) {
   for (let i = 0; i < 6; i++) A.box(i === 2 ? "emitWhite" : "emitAmber", 3.35 + i * 0.26, 2.9, 0.266, 0.14, 0.06, 0.006);
   A.box("leds", 5.35, 2.9, 0.266, 0.6, 0.04, 0.006, { uv: "keep" });
   stencil(A, 2.95, 2.9, 0.18, 14, { n: 0.266 });
-  A.collider(1.7, 6.3, 0, 2.75, 0, 0.12, "surround");
+  // surround colliders on the two jamb pillars only; the 2 m portal (u 3..5) must stay open
+  A.collider(1.7, 2.7, 0, 2.75, 0, 0.12, "surround");
+  A.collider(5.3, 6.3, 0, 2.75, 0, 0.12, "surround");
   // deck plate + directory (raised so the rail passes under it)
   const du = 6.85;
   A.box("satinBlack", du, 1.95, 0.04, 1.4, 1.5, 0.08);

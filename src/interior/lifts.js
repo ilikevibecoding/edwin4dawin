@@ -244,6 +244,21 @@ export class LiftSystem {
     return true;
   }
 
+  // The lift car the point is standing in (x/z inside the car floor, within a metre of its deck), or null.
+  carAt(pos) {
+    for (const lift of this.lifts) {
+      const f = lift.floor;
+      if (pos.x >= f.x0 && pos.x <= f.x1 && pos.z >= f.z0 && pos.z <= f.z1 && Math.abs(pos.y - lift.car.position.y) < 1.2) return lift;
+    }
+    return null;
+  }
+
+  // Convenience for "press E anywhere inside the car": starts the ride to the next deck.
+  rideAt(pos) {
+    const lift = this.carAt(pos);
+    return lift ? this.travelNext(lift) : false;
+  }
+
   travelNext(lift) {
     if (lift.state !== "idle") return false;
     return this._start(lift, (lift.deckIndex + 1) % lift.decks.length);

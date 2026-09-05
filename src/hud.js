@@ -29,6 +29,9 @@ export function createHUD() {
       prompt.innerHTML = `<b>${key}</b>${label}`;
       prompt.classList.remove("hidden");
     },
+    promptVisible() {
+      return !prompt.classList.contains("hidden");
+    },
     hidePrompt() {
       prompt.classList.add("hidden");
     },

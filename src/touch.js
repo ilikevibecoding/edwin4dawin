@@ -131,8 +131,10 @@ export function createTouchControls({ canvas, player, orbit, modes, interactions
     btnMode.textContent = m === "exterior" ? "Board ship" : "Exterior view";
     btnMode.classList.toggle("hidden", m === "transition");
     btnRun.classList.toggle("hidden", m !== "interior");
-    btnAct.classList.toggle("hidden", m !== "interior" || !interactions.hovered);
+    const can = interactions.canAct();
+    btnAct.classList.toggle("hidden", m !== "interior" || !can);
     if (interactions.hovered) btnAct.textContent = interactions.hovered.label || "Interact";
+    else if (can) btnAct.textContent = "Ride lift";
   }
 
   return {

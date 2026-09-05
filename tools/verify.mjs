@@ -81,6 +81,25 @@ const walk = await page.evaluate(() => {
 });
 for (const [name, r] of walk) check(`walk: ${name}`, r.reached, `${r.reached ? "reached" : "blocked"} at (${r.x}, ${r.y}, ${r.z}) in ${r.seconds}s, space ${r.space}`);
 
+// ---- on foot into a lift car and E to ride (the way a player does it; no teleport)
+const foot = await page.evaluate(() => {
+  const d = window.debugAPI;
+  d.setView("bridge");
+  const toLobby = d.walkTo(0, 559, 25);
+  const intoCar = d.walkTo(0, 563.5, 12);
+  const before = d.liftState("lift1");
+  d.player.locked = true;
+  d.pressE();
+  const started = d.liftState("lift1");
+  d.advanceSim(20);
+  const after = d.liftState("lift1");
+  const out = d.walkTo(0, 558, 12);
+  return { toLobby, intoCar, before, started, after, out, y: +d.player.position.y.toFixed(2) };
+});
+check("walk into lift 1 car on foot", foot.intoCar.reached, `${foot.intoCar.reached ? "inside" : "blocked"} at z ${foot.intoCar.z}`);
+check("E inside the car starts the ride", foot.started.state === "closing", JSON.stringify(foot.started));
+check("ride arrives and player steps out on deck B", foot.after.deck === "B" && foot.out.reached && Math.abs(foot.y - 252) < 0.1, `deck ${foot.after.deck}, player y ${foot.y}, out ${foot.out.reached}`);
+
 // ---- doors: approach a room door from the corridor side and confirm it opens, then leaves
 const doorTest = await page.evaluate(() => {
   const d = window.debugAPI;

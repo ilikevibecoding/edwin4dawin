@@ -89,6 +89,9 @@ canvas.addEventListener("click", () => {
 });
 
 const interactions = new Interactions({ camera, interactables: interior.interactables, lighting, space, player, hud });
+// E anywhere inside a turbolift car rides to the next deck (the wall panel still works as a target)
+interactions.fallback = () => interior.lifts.rideAt(player.position);
+interactions.fallbackAvailable = () => !!interior.lifts.carAt(player.position) && interior.lifts.carAt(player.position).state === "idle";
 const orbit = new OrbitCamera(camera, canvas);
 const modes = new ModeManager({ camera, player, orbit, interior, exterior, hud, space, traffic });
 const touch = TOUCH ? createTouchControls({ canvas, player, orbit, modes, interactions, hud }) : null;
