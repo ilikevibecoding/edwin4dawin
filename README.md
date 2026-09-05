@@ -1,7 +1,7 @@
 # ISD Vindicator — playable build
 
-Production bundle of the Star Destroyer demo (source branch `cursor/star-destroyer-ship-9880`, commit `55c5336e66b342e03b069033f45e19492e9cc166`).
-Built 2026-09-05 03:37 UTC.
+Production bundle of the Star Destroyer demo (source branch `cursor/star-destroyer-ship-9880`, commit `e7ea188ac587fa903fce4ba4b45588ea78bee482`).
+Built 2026-09-05 04:06 UTC.
 
 Play it: https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/star-destroyer-play-9880/index.html
 
