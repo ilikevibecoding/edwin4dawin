@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { STAND } from './pose.js';
+import { WALK_SPEED } from './feet.js';
 import { mulberry32 } from '../../textures/core.js';
 
 // ---------------------------------------------------------------------------
@@ -21,8 +22,9 @@ export const POSES = {
   stand: { ...STAND },
   alert: { ...STAND, neckPitch: 0.3, headPitch: -0.08, earAlert: 1.0, tailLift: 0.12 },
   // walking, the trunk comes down a little on bent legs and the head is
-  // carried level with the back, face forward
-  walk: { ...STAND, hipH: 1.03, chestH: 1.08, neckPitch: -0.26, headPitch: 0.14, tailLift: -0.1, earAlert: 0.55 },
+  // carried level with the back, face forward; the tail hangs in a J with
+  // the tuft turned up
+  walk: { ...STAND, hipH: 1.02, chestH: 1.06, neckPitch: -0.26, headPitch: 0.14, tailLift: -0.1, tailHook: 0.4, earAlert: 0.55 },
   sit: {
     ...STAND,
     hipH: 0.5,
@@ -84,12 +86,16 @@ const STATES = {
   rest: { dwell: [25, 70], next: ['lie', 'lie', 'sit'] },
   lie: { dwell: [18, 55], next: ['rest', 'rest', 'sit', 'stand'] },
   sit: { dwell: [8, 22], next: ['lie', 'lie', 'stand', 'rest'] },
-  stand: { dwell: [4, 10], next: ['walk', 'walk', 'stretch', 'sit'] },
-  stretch: { dwell: [2.2, 3.2], next: ['stand', 'walk'] },
+  stand: { dwell: [4, 10], next: ['walk', 'walk', 'amble', 'stretch', 'sit'] },
+  stretch: { dwell: [2.2, 3.2], next: ['stand', 'walk', 'amble'] },
   walk: { dwell: [4, 12], next: ['stand', 'lie', 'sit'] },
+  // the same walk at half speed: shorter, slower steps to a spot nearby
+  amble: { dwell: [4, 12], next: ['stand', 'lie', 'lie', 'sit'] },
   alert: { dwell: [6, 14], next: ['sit', 'stand', 'lie'] },
   pace: { dwell: [5, 9], next: ['alert'] },
 };
+// the walking states, and how fast each goes relative to walkSpeed
+const GAIT_SPEED = { walk: 1, amble: 0.5, pace: 1.3 };
 
 const BLEND = { toLie: 1.9, toStand: 1.6, default: 1.2 };
 
@@ -109,8 +115,9 @@ export class Brain {
     this.speed = 0;
     this.yawRate = 0;
     this.dest = null;
-    // a lion's walk is 1.0–1.3 m/s; a cub hurries to keep up
-    this.walkSpeed = 1.15 * scale * (kind === 'cub' ? 1.15 : 1);
+    // a lion's walk is 1.0–1.3 m/s (a lioness 1.0 m/s here, a male 1.2); a cub
+    // hurries to keep up. The feet take their stride from the same constant.
+    this.walkSpeed = WALK_SPEED * scale * (kind === 'cub' ? 1.15 : 1);
     // the gait period, written back by the feet each frame, so the tail and
     // the head can move in time with the legs
     this.gaitT = 1;
@@ -146,14 +153,14 @@ export class Brain {
   }
 
   enter(state) {
-    if (state === 'walk' || state === 'pace') {
+    if (GAIT_SPEED[state]) {
       const d = this.chooseDestination(state === 'pace');
       if (!d) state = 'alert';
       else this.dest = d;
     }
     const prevLying = this.pose.hipH < 0.7;
     this.from = { ...this.pose };
-    this.to = POSES[state === 'pace' ? 'walk' : state === 'alert' ? 'alert' : state];
+    this.to = POSES[GAIT_SPEED[state] ? 'walk' : state];
     const lying = this.to.hipH < 0.7;
     this.blendDur = lying && !prevLying ? BLEND.toLie : !lying && prevLying ? BLEND.toStand : BLEND.default;
     this.blend = 0;
@@ -259,7 +266,7 @@ export class Brain {
     // --- state machine --------------------------------------------------------
     this.timer += dt;
     const S = STATES[this.state];
-    if (this.alarm > 0.62 && !['alert', 'pace', 'walk'].includes(this.state)) {
+    if (this.alarm > 0.62 && !['alert', 'pace', 'walk', 'amble'].includes(this.state)) {
       this.enter('alert');
     } else if (this.alarm > 1.05 && dist < 12 && this.state === 'alert' && this.timer > 1.5 && this.kind !== 'male') {
       this.enter('pace');
@@ -268,7 +275,7 @@ export class Brain {
       if (this.alarm < 0.3) this.settleT += dt;
       else this.settleT = 0;
       if (this.settleT > 6 && this.blend >= 1) this.enter(this.pick(['sit', 'sit', 'lie']));
-    } else if (this.state === 'walk' || this.state === 'pace') {
+    } else if (GAIT_SPEED[this.state]) {
       if (this.dest) {
         const ddx = this.dest.x - this.pos.x;
         const ddz = this.dest.z - this.pos.z;
@@ -289,7 +296,7 @@ export class Brain {
 
     // --- movement ---------------------------------------------------------------
     let targetSpeed = 0;
-    if ((this.state === 'walk' || this.state === 'pace') && this.dest && this.blend > 0.4) {
+    if (GAIT_SPEED[this.state] && this.dest && this.blend > 0.4) {
       const ddx = this.dest.x - this.pos.x;
       const ddz = this.dest.z - this.pos.z;
       const d = Math.hypot(ddx, ddz);
@@ -317,7 +324,7 @@ export class Brain {
       // slow down for the turn, for the arrival, and for whoever is in the way
       targetSpeed =
         this.walkSpeed *
-        (this.state === 'pace' ? 1.3 : 1) *
+        GAIT_SPEED[this.state] *
         THREE.MathUtils.clamp(1.2 - Math.abs(e) * 0.9, 0.25, 1) *
         THREE.MathUtils.clamp(d / (1.2 * s), 0.3, 1) *
         THREE.MathUtils.clamp(1 - block * 1.2, 0.15, 1);
@@ -390,18 +397,21 @@ export class Brain {
     for (let i = 0; i < 2; i++) if (this.ear[i] > 0) this.ear[i] -= dt;
     const earFlick = this.ear.map((e) => (e > 0 ? Math.sin((e / 0.35) * Math.PI) : 0));
 
-    // walking, the tail swings once per stride, in time with the legs; at
-    // rest it moves on its own slow beat
+    // Walking, the tail swings once per stride, in time with the legs (the
+    // poser turns the sway into ±7° at the root and ±20° at the tip for a
+    // sway of 0.83, which is the walk). At rest it barely moves on a slow
+    // beat and every few seconds gives one sweep — lying, that sweep is
+    // along the ground and comes less often.
     const walkAmt = THREE.MathUtils.clamp(this.speed / (0.4 * s), 0, 1);
-    this.tailPhase += dt * THREE.MathUtils.lerp(restful ? 1.2 : 2.0, (Math.PI * 2) / Math.max(0.5, this.gaitT), walkAmt);
+    this.tailPhase += dt * THREE.MathUtils.lerp(restful ? 1.2 : 1.6, (Math.PI * 2) / Math.max(0.5, this.gaitT), walkAmt);
     this.flickT -= dt;
     if (this.flickT <= 0) {
       this.flick = 0.9;
-      this.flickT = 3 + this.rnd() * 7;
+      this.flickT = (restful ? 5 : 3) + this.rnd() * (restful ? 9 : 7);
     }
     if (this.flick > 0) this.flick -= dt;
     const flick = this.flick > 0 ? Math.sin((this.flick / 0.9) * Math.PI) : 0;
-    const tailSway = (restful ? 0.25 : 0.45 + this.speed * 0.4) + flick * 1.1 + this.alarm * 0.4;
+    const tailSway = THREE.MathUtils.lerp(restful ? 0.12 : 0.3, 0.5 + this.speed * 0.35, walkAmt) + flick * (restful ? 0.8 : 1.1 - 0.6 * walkAmt) + this.alarm * 0.4;
 
     return {
       pose: this.pose,
