@@ -25,11 +25,14 @@ export default defineRoom({
   shell: {
     panelW: 2.0,
     ribs: 0,
-    floor: { color: IMP.impMid, strip: { axis: "x", width: 1.0, mat: "impFloor", color: IMP.impBlack } },
+    floor: { color: IMP.impGrey, strip: { axis: "x", width: 1.0, mat: "impFloor", color: IMP.impBlack } }, // impGrey deck as the lobbies: the plate map is dark and the rig's environment capture took the studio sheen away
     ceiling: { channels: 0 },
-    lights: false, // the corridor generator pushes its own fills (under every second housed fixture)
+    lights: false, // the corridor generator pushes its own: key spot in the first fixture, fills under every second fixture (two mid bays add a downlight spot), long-throw lamp by the lobby door onto the far bulkhead
   },
   detail(ctx, shell, room) {
-    return corridorDetail(ctx, shell, room, { axis: "x", lobbyEnd: "max", accent: "emitBlue", seed: 21, screens: ["screenImp0", "screenImp1"], deadEnd: { screen: "screenImp1", kit: "cabinet" } });
+    // lights: downlight spots in bays 6 and 8 (x −34 / −42, either side of the mid view's camera);
+    // motion: faulty fixture at bay 4 (x −26: in shot from the lobby door, and the one fill whose
+    // dropout carries no view's foreground deck), red beacon on the dead-end bulkhead
+    return corridorDetail(ctx, shell, room, { axis: "x", lobbyEnd: "max", accent: "emitBlue", seed: 21, screens: ["screenImp0", "screenImp1"], deadEnd: { screen: "screenImp1", kit: "cabinet", beacon: "red" }, farSpot: {}, midSpot: { bays: [6, 8] }, flickerBay: 4 });
   },
 });

@@ -9,11 +9,16 @@
 // in the forward corners, fire point, comms pedestal + tilted screen aft, engineering pipe mains
 // along the port/starboard walls and hand-built service runs on the aft wall outside the lift zone.
 // Door surrounds come from the shell's doorDressing; the lift hole stays bare.
+// Lighting: warm shadow key under a high-bay lamp at the coffer centre (pillars, tanks and the work
+// station throw shadows), coffer fills under it, the breathing lift-approach downlight, the two
+// directory boards refreshing row by row and an amber hazard beacon turning above the corridor blast
+// door (light on a small circle + rotating drum) — one animated mesh plus the drum.
 import { defineRoom } from "../../deck2/_shared/room.js";
 import { IMP } from "../../deck2/_shared/palette.js";
 import { WALL_T } from "../../deck2/_shared/shell.js";
 import { pillar, wallScreen, duct, console as consoleProp, floorLine } from "../../deck2/_shared/props.js";
-import { coffer, lightChannel, floorLane, hubRing, directoryBoard, bench, firePoint, junctionBox, wallVent, wallConduits, kickStrips, commsPedestal, serviceRun, workbench, toolBoard, wallCabinet, dressedCrate, dressedCabinet, statusPanel, engTank } from "../../deck2/lobby/props.js";
+import { coffer, lightChannel, floorLane, hubRing, directoryBoard, bench, firePoint, junctionBox, wallVent, wallConduits, kickStrips, commsPedestal, serviceRun, workbench, toolBoard, wallCabinet, dressedCrate, dressedCabinet, statusPanel, engTank, keyLamp, approachLamp } from "../../deck2/lobby/props.js";
+import { Emitters, boardChase, breath, beacon } from "../../deck2/lobby/motion.js";
 
 const Y = 12;
 const CEIL = 17;
@@ -42,7 +47,9 @@ export default defineRoom({
     wallColor: IMP.impGrey,
     wallAlt: IMP.impMid,
     stripMat: "emitAmber",
-    floor: { color: IMP.impMid }, // one step up from impDark: at impDark the deck fell to ~12 % grey under the strips
+    // impGrey deck (was impMid, before that impDark): the worn-plate map is itself dark (lum 0.42),
+    // and with the rig's environment capture the deck reflects the real room, not the studio map
+    floor: { color: IMP.impGrey },
     ceiling: { channels: 0 },
     lights: false,
     doorDressing: { accent: "emitAmber" },
@@ -58,6 +65,9 @@ export default defineRoom({
     const z0 = 549 + WALL_T;
     const z1 = 565 - WALL_T;
     const crateOpts = { bumperMat: "paintedMetal" }; // saves the rubber draw call in this 15-key room
+    const E = new Emitters(ctx.materials); // every animated emitter in the room, one mesh
+    const motion = []; // update(t) closures
+    const boards = [];
 
     // ---- crossing: pillars + coffer + perimeter channels -------------------------------------------
     const PX = 5.2;
@@ -66,6 +76,7 @@ export default defineRoom({
     // narrower coffer emitters than Deck 2 (0.10 m): under this lower ceiling the nearest strip sat
     // at the clipping limit from the forward view
     coffer(kit, PALETTE, [-PX - 0.4, PZ[0] - 0.4], [PX + 0.4, PZ[1] + 0.4], CEIL, { drop: 0.7, beam: 0.5, strips: 4, axis: "x", emitW: 0.1 });
+    const keyAt = keyLamp(kit, PALETTE, [0, 0, 556], CEIL - 0.34, { emit: 0.42 }); // high-bay at the coffer centre
     lightChannel(kit, PALETTE, [x0 + 0.3, 0, 562.6], [x1 - 0.3, 0, 562.6], CEIL);
     for (const sx of [-1, 1]) lightChannel(kit, PALETTE, [sx * 7.8, 0, z0 + 1.2], [sx * 7.8, 0, 561.4], CEIL);
 
@@ -92,7 +103,7 @@ export default defineRoom({
     // ---- forward wall: big directory board, tactical + list screens under the band, junctions whose
     //      conduits rise into the tray, coolant tanks in the corners
     const yawN = 0;
-    directoryBoard(kit, PALETTE, [0, Y + 2.35, z0], yawN, { w: 2.4, h: 1.4, rows: 7, accent, seed: 31 });
+    boards.push(directoryBoard(kit, PALETTE, [0, Y + 2.35, z0], yawN, { w: 2.4, h: 1.4, rows: 7, accent, seed: 31, anim: E }));
     for (const sx of [-1, 1]) {
       wallScreen(kit, [sx * 3.8, Y + 2.6, z0 + 0.08], yawN, 1.6, 0.9, sx < 0 ? "screenImp1" : "screenImp2", { accent });
       junctionBox(kit, PALETTE, [sx * 6.3, Y + 1.4, z0], yawN, { w: 0.6, h: 0.8, seed: 32 + sx, accent, conduitUp: BAND - 1.8 });
@@ -124,7 +135,7 @@ export default defineRoom({
     wallScreen(kit, [x1 - 0.08, Y + 2.85, 555.0], yawE, 1.6, 0.9, "screenImp2", { accent });
     wallCabinet(kit, PALETTE, [x1, Y + 1.55, 558.6], yawE, { w: 0.9, h: 0.9, d: 0.3, color: IMP.impGrey, accent, seed: 41 });
     statusPanel(kit, PALETTE, [x1, Y + 2.55, 558.6], yawE, { accent });
-    directoryBoard(kit, PALETTE, [x1, Y + 2.2, 561.8], yawE, { w: 1.4, h: 1.2, rows: 5, accent, seed: 42 });
+    boards.push(directoryBoard(kit, PALETTE, [x1, Y + 2.2, 561.8], yawE, { w: 1.4, h: 1.2, rows: 5, accent, seed: 42, anim: E }));
 
     // ---- aft wall (port of the lift): comms pedestal + tilted gauge screen, cabinet, vent over the band
     const yawS = Math.PI;
@@ -133,20 +144,50 @@ export default defineRoom({
     dressedCabinet(kit, PALETTE, [-7.4, Y, z1 - 0.26], yawS, { w: 1.2, h: 1.8, d: 0.5, color: IMP.impMid, emit: accent, seed: 44 });
     wallVent(kit, PALETTE, [-7.4, Y + 4.3, z1], yawS, { w: 1.0, h: 0.45 });
 
-    // ---- lights: warm coffer fills 1.7 m under the ceiling (1.4 m under the coffer field), lift
-    //      approach, door glow, forward wall, work station, two low deck fills (10 descriptors)
+    // ---- lights (13): warm shadow key spot 0.3 m under the high-bay lamp, straight down over the hub
+    //      (angle 1.1 so the cone reaches the tanks, bench and work station by the walls); coffer
+    //      fills 1.7 m under the ceiling (1.4 m under the coffer field) at ~40 % of the key's floor
+    //      irradiance; breathing lift-approach downlight; door glow, forward wall, work station, two
+    //      low deck fills, a starboard-channel fill; the beacon's orbiting light. Levels: with the
+    //      rig's environment capture the deck stopped borrowing the studio map's sheen (key 50 cd →
+    //      deck 6 % grey by the corridor door); key 150 / fills 40 put the hub at ~26 %.
     const warm = 0xffd8b0;
-    for (const sx of [-1, 1]) for (const z of [554.4, 557.6]) ctx.lights.push({ type: "point", pos: [sx * 2.8, CEIL - 1.7, z], color: warm, intensity: 19, distance: 11, priority: 0.6 });
-    ctx.lights.push({ type: "point", pos: [0, CEIL - 1.5, 562.4], color: warm, intensity: 16, distance: 10, priority: 0.5 });
-    ctx.lights.push({ type: "point", pos: [6.5, Y + 3.6, 563.2], color: 0xffc890, intensity: 10, distance: 7, priority: 0.4 });
-    ctx.lights.push({ type: "point", pos: [0, Y + 3.4, 551.8], color: warm, intensity: 10, distance: 8, priority: 0.4 }); // 2.5 m off the forward wall: closer it drew a specular disc on the panel
-    ctx.lights.push({ type: "point", pos: [x0 + 1.6, Y + 2.9, 555.0], color: 0xffc890, intensity: 8, distance: 6, priority: 0.4 });
+    ctx.lights.push({ type: "spot", pos: keyAt, target: [0, Y, 556], color: warm, intensity: 150, distance: 18, angle: 1.1, penumbra: 0.45, priority: 1, shadow: true });
+    for (const sx of [-1, 1]) for (const z of [554.4, 557.6]) ctx.lights.push({ type: "point", pos: [sx * 2.8, CEIL - 1.7, z], color: warm, intensity: 40, distance: 11, priority: 0.6 });
+    ctx.lights.push({ type: "point", pos: [6.5, Y + 3.6, 563.2], color: 0xffc890, intensity: 36, distance: 8, priority: 0.4 });
+    ctx.lights.push({ type: "point", pos: [0, Y + 3.4, 551.8], color: warm, intensity: 26, distance: 8, priority: 0.4 }); // 2.5 m off the forward wall: closer it drew a specular disc on the panel
+    ctx.lights.push({ type: "point", pos: [x0 + 1.6, Y + 2.9, 555.0], color: 0xffc890, intensity: 18, distance: 6, priority: 0.4 });
     // low deck fills over the port half of the deck (the strips and screens carried the exposure
     // there and the deck fell off to ~12 % grey; one 7-cd fill lifted it to 16 %): one inside the
     // amber work-area border, one under the port light channel over the open deck the west view
     // looks across, both low enough to miss the screens' mirror direction
-    ctx.lights.push({ type: "point", pos: [x0 + 2.0, Y + 1.6, 554.8], color: 0xffd8b0, intensity: 10, distance: 8, priority: 0.4 });
-    ctx.lights.push({ type: "point", pos: [-6.2, Y + 2.0, 559.2], color: 0xffd8b0, intensity: 10, distance: 7, priority: 0.4 });
-    return {};
+    ctx.lights.push({ type: "point", pos: [x0 + 2.0, Y + 1.6, 554.8], color: 0xffd8b0, intensity: 24, distance: 8, priority: 0.4 });
+    ctx.lights.push({ type: "point", pos: [-6.2, Y + 2.0, 559.2], color: 0xffd8b0, intensity: 24, distance: 7, priority: 0.4 });
+    // starboard channel fill over the deck between the bench and the corridor door: outside the key's
+    // cone and 6 m from the nearest coffer fill, that deck sat at 10 % grey in the corridor-door view
+    ctx.lights.push({ type: "point", pos: [7.8, CEIL - 1.5, 559.6], color: warm, intensity: 40, distance: 9, priority: 0.5 });
+
+    // ---- motion: lift-approach downlight over the lane 1.5 m before the lift wall (its light 1.65 m
+    //      off the wall: at 1.25 m / 30 cd the panel above the lift hole went near-white), breathing
+    //      on a 4 s cycle (emitter + light together); the boards refresh row by row, phased apart;
+    //      amber hazard beacon on a bracket above the corridor blast door's lintel indicator, turning
+    //      at 38 rpm
+    const lamp = approachLamp(kit, PALETTE, E, [0, 0, 563.3], CEIL, { accent });
+    const lampDesc = { type: "point", pos: [0, CEIL - 1.5, 563.2], color: warm, intensity: 20, distance: 9, priority: 0.5 };
+    ctx.lights.push(lampDesc);
+    motion.push((t) => {
+      const b = breath(t, 4);
+      for (let i = 0; i < lamp.length; i++) E.level(lamp[i], 0.55 + 0.6 * b);
+      lampDesc.intensity = 8 + 12 * b;
+    });
+    boards.forEach((rows, i) => motion.push(boardChase(E, rows, { phase: 0.6 + 1.1 * i })));
+    motion.push(beacon(ctx, kit, PALETTE, [6.5, Y + 4.7, z1 - 0.35], { mat: "emitAmber", color: 0xffa028, facing: Math.PI, mount: "wall", back: 0.35, distance: 8 }).update);
+    E.build(ctx.group, `${room.id}-emitters`);
+    return {
+      update(dt, t) {
+        for (let i = 0; i < motion.length; i++) motion[i](t);
+        E.flush();
+      },
+    };
   },
 });

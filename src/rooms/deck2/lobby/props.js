@@ -69,8 +69,10 @@ export function wallVent(kit, PALETTE, pos, yaw, { w = 0.9, h = 0.45 } = {}) {
 }
 
 // Deck-directory board: black frame, gloss face, accent header, rows of [colour code | label bar |
-// 1–3 white cells] and an indicator footer. No text textures exist, so signage is abstract.
-export function directoryBoard(kit, PALETTE, pos, yaw, { w = 1.6, h = 1.2, rows = 6, accent = "emitBlue", seed = 3 } = {}) {
+// 1–3 white cells] and an indicator footer. No text textures exist, so signage is abstract. With
+// `anim` (an Emitters instance) the row cells go into the animated mesh instead of the kit, plus a
+// thin cursor bar per row, and the function returns [{ leds, cursor }] for motion.boardChase.
+export function directoryBoard(kit, PALETTE, pos, yaw, { w = 1.6, h = 1.2, rows = 6, accent = "emitBlue", seed = 3, anim = null } = {}) {
   const P = placer(kit, pos, yaw);
   const rand = rng(seed);
   P.box("paintedMetal", 0, 0, 0.05, w + 0.16, h + 0.16, 0.1, { color: col(PALETTE, "impBlack"), texel: 2.5 });
@@ -78,16 +80,25 @@ export function directoryBoard(kit, PALETTE, pos, yaw, { w = 1.6, h = 1.2, rows 
   P.box(accent, 0, h / 2 - 0.09, 0.125, w - 0.24, 0.05, 0.01);
   const rowH = (h - 0.46) / rows;
   const top = h / 2 - 0.2;
+  const out = [];
+  const cell = (mat, lx, ly, sx, sy, row) => {
+    if (!anim) return P.box(mat, lx, ly, 0.125, sx, sy, 0.01);
+    row.leds.push(anim.add(new THREE.BoxGeometry(sx, sy, 0.01), { pos: P.world(lx, ly, 0.125), rot: [0, yaw, 0], mat }));
+  };
   for (let i = 0; i < rows; i++) {
     const y = top - (i + 0.5) * rowH;
-    P.box(LED[Math.floor(rand() * LED.length)], -w / 2 + 0.18, y, 0.125, 0.14, rowH * 0.45, 0.01);
+    const row = { leds: [], cursor: null };
+    cell(LED[Math.floor(rand() * LED.length)], -w / 2 + 0.18, y, 0.14, rowH * 0.45, row);
     const len = 0.3 + rand() * (w * 0.42);
     P.box("paintedMetal", -w / 2 + 0.34 + len / 2, y, 0.125, len, rowH * 0.28, 0.01, { color: col(PALETTE, "impWhite") });
     const nd = 1 + Math.floor(rand() * 3);
-    for (let k = 0; k < nd; k++) P.box("emitWhite", w / 2 - 0.16 - k * 0.09, y, 0.125, 0.05, rowH * 0.3, 0.01);
+    for (let k = 0; k < nd; k++) cell("emitWhite", w / 2 - 0.16 - k * 0.09, y, 0.05, rowH * 0.3, row);
+    if (anim) row.cursor = anim.add(new THREE.BoxGeometry(0.025, rowH * 0.6, 0.01), { pos: P.world(-w / 2 + 0.07, y, 0.125), rot: [0, yaw, 0], mat: "emitWhite", level: 0 });
+    out.push(row);
   }
   indicatorField(P, 0, -h / 2 + 0.13, 0.125, w - 0.3, 0.12, seed + 5);
   P.box(accent, 0, -h / 2 - 0.1, 0.06, w * 0.5, 0.012, 0.01);
+  return out;
 }
 
 // Wall bench: dark back plate on the wall, grey seat slab on two black pedestals, accent underline.
@@ -352,8 +363,10 @@ export function serviceBay(kit, PALETTE, pos, yaw, { w = 2.4, h = 2.9, depth = 0
 // black side rails and end caps form an open recess, a dark back plate closes it, the emitter strip
 // (narrower than the housing) sits 5 cm up inside so grazing views see rails and louvres rather than
 // a bare quad, grey reflectors flank it and dark louvre bars cross the opening every `louvre` m.
-// `seg` > 0 breaks the emitter into segments with dark gaps.
-export function housedStrip(kit, PALETTE, a, b, top, { w = 0.6, depth = 0.16, emitW = 0.14, mat = "emitWhite", louvre = 0.4, seg = 0, rail = 0.04 } = {}) {
+// `seg` > 0 breaks the emitter into segments with dark gaps. `emitTo` (an Emitters instance) routes
+// the emitter pieces into the animated mesh instead of the kit (a faulty, flickering fixture) and the
+// function returns their piece indices.
+export function housedStrip(kit, PALETTE, a, b, top, { w = 0.6, depth = 0.16, emitW = 0.14, mat = "emitWhite", louvre = 0.4, seg = 0, rail = 0.04, emitTo = null } = {}) {
   const alongX = Math.abs(b[0] - a[0]) >= Math.abs(b[2] - a[2]);
   const lo = alongX ? Math.min(a[0], b[0]) : Math.min(a[2], b[2]);
   const hi = alongX ? Math.max(a[0], b[0]) : Math.max(a[2], b[2]);
@@ -361,8 +374,17 @@ export function housedStrip(kit, PALETTE, a, b, top, { w = 0.6, depth = 0.16, em
   const black = col(PALETTE, "impBlack");
   const dark = col(PALETTE, "impDark");
   const mid = col(PALETTE, "impMid");
+  const pieces = [];
   // r(along0, along1, across0, across1, y0, y1)
-  const r = (l0, l1, c0, c1, y0, y1, m, opts = {}) => (alongX ? kit.boxMM(m, [l0, y0, c0], [l1, y1, c1], opts) : kit.boxMM(m, [c0, y0, l0], [c1, y1, l1], opts));
+  const r = (l0, l1, c0, c1, y0, y1, m, opts = {}) => {
+    if (emitTo && m === mat) {
+      const mn = alongX ? [l0, y0, c0] : [c0, y0, l0];
+      const mx = alongX ? [l1, y1, c1] : [c1, y1, l1];
+      pieces.push(emitTo.box(m, (mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2, mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]));
+      return null;
+    }
+    return alongX ? kit.boxMM(m, [l0, y0, c0], [l1, y1, c1], opts) : kit.boxMM(m, [c0, y0, l0], [c1, y1, l1], opts);
+  };
   const yb = top - depth;
   const iw = w - 2 * rail;
   r(lo, hi, c - w / 2, c - w / 2 + rail, yb, top - 0.02, "paintedMetal", { color: black, texel: 2.5 });
@@ -383,6 +405,50 @@ export function housedStrip(kit, PALETTE, a, b, top, { w = 0.6, depth = 0.16, em
     r(s0, s1, c - emitW / 2, c + emitW / 2, top - 0.11, top - 0.09, mat);
   }
   if (louvre > 0) for (let u = lo + louvre / 2 + 0.06; u < hi - 0.1; u += louvre) r(u - 0.015, u + 0.015, c - iw / 2, c + iw / 2, yb, yb + 0.02, "paintedMetal", { color: dark });
+  return pieces;
+}
+
+// Square recessed high-bay fixture hanging from the plane y = top (the lobby coffer's centre): black
+// rim box, grey reflector, dark cross louvres and a shielded square emitter 0.1 m up inside. The
+// room's shadow key spot sits 0.3 m under its emitter, so the dominant light has a visible source.
+export function keyLamp(kit, PALETTE, pos, top, { size = 0.9, depth = 0.22, emit = 0.5, mat = "emitWhite" } = {}) {
+  const [x, , z] = pos;
+  const black = col(PALETTE, "impBlack");
+  const dark = col(PALETTE, "impDark");
+  const mid = col(PALETTE, "impMid");
+  const s = size / 2;
+  const rail = 0.05;
+  const yb = top - depth;
+  kit.boxMM("paintedMetal", [x - s, yb, z - s], [x - s + rail, top - 0.02, z + s], { color: black, texel: 2.5 });
+  kit.boxMM("paintedMetal", [x + s - rail, yb, z - s], [x + s, top - 0.02, z + s], { color: black, texel: 2.5 });
+  kit.boxMM("paintedMetal", [x - s + rail, yb, z - s], [x + s - rail, top - 0.02, z - s + rail], { color: black, texel: 2.5 });
+  kit.boxMM("paintedMetal", [x - s + rail, yb, z + s - rail], [x + s - rail, top - 0.02, z + s], { color: black, texel: 2.5 });
+  kit.boxMM("paintedMetal", [x - s + rail, top - 0.06, z - s + rail], [x + s - rail, top - 0.02, z + s - rail], { color: mid });
+  kit.boxMM(mat, [x - emit / 2, top - 0.11, z - emit / 2], [x + emit / 2, top - 0.09, z + emit / 2]);
+  kit.boxMM("paintedMetal", [x - s + rail, yb, z - 0.015], [x + s - rail, yb + 0.03, z + 0.015], { color: dark });
+  kit.boxMM("paintedMetal", [x - 0.015, yb, z - s + rail], [x + 0.015, yb + 0.03, z + s - rail], { color: dark });
+  return [x, top - 0.1 - 0.3, z]; // where the key spot goes
+}
+
+// Lift-approach downlight: a smaller housed square on the ceiling over the approach lane whose emitter
+// (with a thin accent frame) lives in the animated mesh and breathes with its light. Returns the
+// emitter piece indices.
+export function approachLamp(kit, PALETTE, E, pos, top, { size = 0.7, depth = 0.14, accent = "emitBlue" } = {}) {
+  const [x, , z] = pos;
+  const black = col(PALETTE, "impBlack");
+  const s = size / 2;
+  const rail = 0.04;
+  const yb = top - depth;
+  kit.boxMM("paintedMetal", [x - s, yb, z - s], [x - s + rail, top - 0.02, z + s], { color: black, texel: 2.5 });
+  kit.boxMM("paintedMetal", [x + s - rail, yb, z - s], [x + s, top - 0.02, z + s], { color: black, texel: 2.5 });
+  kit.boxMM("paintedMetal", [x - s + rail, yb, z - s], [x + s - rail, top - 0.02, z - s + rail], { color: black, texel: 2.5 });
+  kit.boxMM("paintedMetal", [x - s + rail, yb, z + s - rail], [x + s - rail, top - 0.02, z + s], { color: black, texel: 2.5 });
+  kit.boxMM("paintedMetal", [x - s + rail, top - 0.05, z - s + rail], [x + s - rail, top - 0.02, z + s - rail], { color: col(PALETTE, "impDark") });
+  const e = size - 2 * rail - 0.16;
+  const pieces = [E.box("emitWhite", x, top - 0.09, z, e, 0.02, e)];
+  const f = e + 0.08;
+  for (const [sx, sz, wx, wz] of [[-f / 2, 0, 0.02, f], [f / 2, 0, 0.02, f], [0, -f / 2, f, 0.02], [0, f / 2, f, 0.02]]) pieces.push(E.box(accent, x + sx, top - 0.085, z + sz, wx, 0.015, wz));
+  return pieces;
 }
 
 // Recessed ceiling coffer over a hub crossing: four dark beams (outer rectangle min..max in [x, z]),

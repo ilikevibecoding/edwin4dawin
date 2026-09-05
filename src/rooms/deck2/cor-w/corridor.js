@@ -8,15 +8,27 @@
 // bays draw from junction box, screen, tool board, wall cabinet or vent sets — so no two corridors
 // read as the same kit in the same order. The centre 3 m stays clear; nothing goes inside or within
 // 1 m of a hole.
+// Lighting: the shadow key is a spot inside the first housed fixture from the lobby door, aimed down
+// the deck so the ribs and bay props throw their shadows away from the door; fills sit under every
+// second fixture, and the two fill bays either side of the corridor's midpoint also carry a downlight
+// spot (live and shadow-casting from the middle of the corridor, where the key and the far flood
+// lose the spot pool to the neighbours' keys); a far-end flood keeps the last bays readable from the
+// far half. Levels are set for the rig's environment capture (the deck no longer borrows a studio
+// map's sheen): key 200 cd, fills 36, mid spots 110, far flood 140; the impGrey deck reads 20–30 %
+// grey in the views. Motion: one faulty fixture per corridor flickers
+// (seeded bay, seeded pattern — descriptor + emitter together), and a rotating beacon (red on
+// dead-end bulkheads, amber over the reactor blast door) sweeps the far end.
 import * as THREE from "three";
 import { rng } from "../../../kit.js";
 import { col } from "../_shared/palette.js";
 import { WALL_T } from "../_shared/shell.js";
 import { pipe, wallScreen, hazardStrip } from "../_shared/props.js";
 import { faceYaw, statusPanel, bulkheadMarker, junctionBox, wallVent, serviceBay, tiltedScreen, housedStrip, toolBoard, wallCabinet, dressedCrate, dressedCabinet, bench, cableTray, lockerRow, drumPair, workbench } from "../lobby/props.js";
+import { Emitters, flicker, beacon } from "../lobby/motion.js";
 
 const FRAME = 4;
 const TRAY_Y = 3.0; // wall cable tray height (junction conduits rise into it)
+const BEACON = { red: { mat: "emitRedImp", color: 0xff3a2a }, amber: { mat: "emitAmber", color: 0xffa028 } };
 
 // Bulkhead frame positions along the corridor axis, counted from the lobby door end.
 function frameLine(a0, a1, lobbyEnd) {
@@ -38,14 +50,26 @@ function fixtureSpan(p, q, i, last, clearMin, clearMax) {
  *   accent: emit key for status/floor accents, engineering: heavier pipes + amber kick strips,
  *   seed: shuffles bay kinds/sides, screens: screen keys cycled through the bay screens,
  *   bigKinds: explicit service-bay kit order (default: the seed shuffles cabinet / crates / lockers /
- *   bench; "workbench" and "drums" are the extra kinds), deadEnd: { screen, kit: "cabinet"|"lockers" },
- *   fill: { color, intensity, distance, drop }, farSpot: { intensity, distance } (flood at the far end) }
- * The corridor pushes its own fill descriptors (set `shell.lights: false` in the manifest).
+ *   bench; "workbench" and "drums" are the extra kinds),
+ *   deadEnd: { screen, kit: "cabinet"|"lockers", beacon: "red"|"amber"|false (rotating beacon on the bulkhead, default red) },
+ *   fill: { color, intensity, distance, drop }, farSpot: { intensity, distance, angle, aimY } (long-throw
+ *   lamp by the lobby door that lights a dead-end bulkhead; false/null = none), farFlood: { intensity,
+ *   distance, back, aim: "deck"|"end" } (wide flood `back` m before the far door, aimed back at the deck
+ *   or at the door — for corridors whose far end is a door),
+ *   key: { intensity, distance, angle, reach } (shadow key spot in the first fixture; false = none),
+ *   midSpot: { bays: [k...], intensity, distance, priority } (downlight spots added to the named fill
+ *   bays, whose point fills drop to 60 % — default the one bay nearest the midpoint; false = none),
+ *   flickerBay: bay index from the lobby door whose fixture is the faulty one (default: seeded pick
+ *   among the bays that carry a fill), farBeacon: "amber"|"red" (ceiling beacon before the far-end door) }
+ * The corridor pushes its own fill descriptors (set `shell.lights: false` in the manifest) and returns
+ * { update(dt, t) } for its motion lighting.
  */
 export function corridorDetail(ctx, shell, room, opts = {}) {
   const { kit, PALETTE } = ctx;
-  const { axis = "x", lobbyEnd = "max", accent = "emitBlue", engineering = false, seed = 1, screens = ["screenImp0"], deadEnd = {}, fill = {}, farSpot = null } = opts;
+  const { axis = "x", lobbyEnd = "max", accent = "emitBlue", engineering = false, seed = 1, screens = ["screenImp0"], deadEnd = {}, fill = {}, farSpot = null, farFlood = null, key = {}, midSpot = {}, farBeacon = null } = opts;
   const rand = rng(seed * 131 + 7);
+  const E = new Emitters(ctx.materials);
+  const motion = []; // update(t) closures
   const F = shell.faces;
   const H = shell.H;
   const Y = room.floorY;
@@ -57,6 +81,7 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
   const mid = P("impMid");
   const steel = P("steel");
   const kickMat = engineering ? "emitAmber" : "emitWhite";
+  const crateOpts = { bumperMat: "paintedMetal" }; // black painted bumpers: saves the rubber draw call for the motion meshes
   const shuffle = (arr) => {
     const a = arr.slice();
     for (let i = a.length - 1; i > 0; i--) {
@@ -123,49 +148,186 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
   const bounds = [a0 + WALL_T, ...frames, a1 - WALL_T];
   const nBays = bounds.length - 1;
   const fillY = C - (fill.drop ?? 1.5);
+  const dir = lobbyEnd === "min" ? 1 : -1; // along the axis, away from the lobby door
+  const kOf = (i) => (lobbyEnd === "min" ? i : nBays - 1 - i); // bays counted from the lobby door
+  // the faulty fixture: a seeded pick among the fill bays between the key bay and the far end (its
+  // own rng so the pick does not reshuffle the bay kit), or the bay the manifest names
+  const mrand = rng(seed * 977 + 3);
+  const flickerK = opts.flickerBay ?? 2 + 2 * Math.floor(mrand() * Math.max(1, Math.floor((nBays - 4) / 2)));
+  // the mid downlights: the fill bays the manifest names (`midSpot.bays`, normally the two either
+  // side of the mid view's camera) or, by default, the one nearest the corridor's midpoint carry a
+  // spot instead of a point (see below); never the key bay or the faulty one
+  const midKs = new Set();
+  if (midSpot !== false) {
+    if (midSpot.bays) for (const k of midSpot.bays) if (k > 0 && k !== flickerK) midKs.add(k);
+    else {
+      let best = Infinity;
+      let midK = -1;
+      for (let i = 0; i < nBays; i++) {
+        const k = kOf(i);
+        const d = Math.abs((bounds[i] + bounds[i + 1]) / 2 - (a0 + a1) / 2);
+        if (k > 0 && k % 2 === 0 && k !== flickerK && d < best) [best, midK] = [d, k];
+      }
+      if (midK > 0) midKs.add(midK);
+    }
+  }
   for (let i = 0; i < nBays; i++) {
     const span = fixtureSpan(bounds[i], bounds[i + 1], i, i === nBays - 1, clearMin, clearMax);
     if (!span) continue;
-    housedStrip(kit, PALETTE, pt(span[0], 0, cc), pt(span[1], 0, cc), C, { w: 0.64, depth: 0.16, emitW: 0.14, mat: "emitWhite", louvre: 0.4 });
-    const k = lobbyEnd === "min" ? i : nBays - 1 - i; // bays from the lobby door
-    if (k % 2 !== 0 && k !== nBays - 1) continue;
+    const k = kOf(i);
     const m = (span[0] + span[1]) / 2;
-    ctx.lights.push({
-      type: "point",
-      pos: pt(m, fillY, cc),
-      color: fill.color ?? 0xd6e2ff,
-      intensity: fill.intensity ?? 17,
-      distance: fill.distance ?? 12,
-      priority: Math.min(1, 0.5 + 0.125 * k),
-    });
+    const faulty = k === flickerK;
+    const pieces = housedStrip(kit, PALETTE, pt(span[0], 0, cc), pt(span[1], 0, cc), C, { w: 0.64, depth: 0.16, emitW: 0.14, mat: "emitWhite", louvre: 0.4, emitTo: faulty ? E : null });
+    if (k === 0 && key !== false) {
+      // shadow key: a spot 0.3 m under the first fixture's emitter, aimed `reach` m down the deck so
+      // the ribs and the bay props throw their shadows away from the door (angle 0.75 keeps the cone
+      // off the ceiling behind it); its distance spans the corridor so the shadow camera reaches the far
+      // bays; priority 1 so it stays in the spot pool against the neighbour rooms' keys
+      ctx.lights.push({
+        type: "spot",
+        pos: pt(m, C - 0.41, cc),
+        target: pt(m + dir * (key.reach ?? 9), Y, cc),
+        color: fill.color ?? 0xd6e2ff,
+        intensity: key.intensity ?? 200,
+        distance: key.distance ?? Math.max(20, a1 - a0),
+        angle: key.angle ?? 0.75,
+        penumbra: 0.5,
+        priority: 1,
+        shadow: true,
+      });
+    }
+    const lit = k % 2 === 0 || k === nBays - 1;
+    const midBay = midKs.has(k);
+    if (midBay) {
+      // Mid downlight: a spot inside the fixture aimed straight down (wide cone, soft edge — a pool
+      // under the fixture like the point fills, from the spot pool instead). Spots have their own
+      // 4-slot pool, so these are live from the middle of the corridor whatever the neighbour rooms'
+      // point lights do, and the nearer one casts the shadows there — the key and the long-throw by
+      // the lobby door are ~25 m from the mid views and lose the spot slots to the neighbours' keys.
+      // The bay keeps its point fill (below, at 60 %): a downlight leaves the ceiling and beam above
+      // it black, and the point 1.5 m under the ceiling is what draws them. Priority 0.2 (pool weight
+      // d / 0.7 against the key's and long-throw's d / 1.5): from the lobby door the mids at 15–24 m
+      // rank behind the two door-end spots (which light the whole deck from there); from the mid views
+      // they are 2–6 m away and take the first two slots whatever their priority.
+      ctx.lights.push({
+        type: "spot",
+        pos: pt(m, C - 0.41, cc),
+        target: pt(m, Y, cc),
+        color: fill.color ?? 0xd6e2ff,
+        intensity: midSpot.intensity ?? 110,
+        distance: midSpot.distance ?? 14,
+        angle: 1.1,
+        penumbra: 0.5,
+        priority: midSpot.priority ?? 0.2,
+      });
+    }
+    const desc = lit
+      ? {
+          type: "point",
+          pos: pt(m, fillY, cc),
+          color: fill.color ?? 0xd6e2ff,
+          // the fill under the key fixture only lifts what the key's cone misses behind it; under a
+          // mid downlight it is the ceiling wash, the spot carries the deck
+          intensity: (fill.intensity ?? 36) * (k === 0 && key !== false ? 0.5 : midBay ? 0.6 : 1),
+          distance: fill.distance ?? 12,
+          priority: Math.min(1, 0.5 + 0.125 * k),
+        }
+      : null;
+    if (desc) ctx.lights.push(desc);
+    if (faulty) {
+      // faulty fixture: descriptor and emitter flicker together off the corridor seed (the mapping
+      // is picked so all four corridors are caught mid-dropout at the harness's t = 40)
+      const nominal = desc ? desc.intensity : 0;
+      const fseed = seed * 35 + 122;
+      motion.push((t) => {
+        const l = flicker(t, fseed);
+        for (let p = 0; p < pieces.length; p++) E.level(pieces[p], l);
+        if (desc) desc.intensity = nominal * (0.08 + 0.92 * l);
+      });
+    }
   }
   if (farSpot) {
-    // Far-end flood. Seen from the lobby door the last bays still went black: with the lobby's own
-    // lights 5–15 m from the player, the far fills (40 m out) lose the point pool whatever their
-    // priority ≤ 1. Spots have their own 4-slot pool with almost no competition in the hub rooms, so
-    // one flood on the far bulkhead beam, aimed 8 m back down the corridor at the deck, keeps the
-    // far bays readable from either end without another point descriptor.
-    const dir = lobbyEnd === "min" ? -1 : 1;
-    const farA = lobbyEnd === "min" ? clearMax - 0.4 : clearMin + 0.4;
+    // Far-end long-throw (dead-end corridors). Seen from the lobby door the last bays went black: the
+    // far fills (35–50 m out) lose the 12-slot point pool to the lobby's own lights whatever their
+    // priority, and a flood mounted AT the far end loses the 4-slot spot pool the same way once the
+    // neighbour rooms carry keys of their own. The pool ranks by the light's position, not by what it
+    // lights — so the lamp that lights the far bulkhead sits at the lobby end, 2 m inside the door
+    // beside the first fixture (weight ~3 from the door: always live there), and throws a narrow beam
+    // the length of the deck: 0.052 rad with a wide penumbra is a soft 5 m pool on the bulkhead 53 m
+    // out (~1 W/m² at its centre from 4000 cd — one fill's worth), whose lower half lands on the last
+    // 15 m of deck at grazing incidence. Geometry matters: the bulkhead beams hang to C − 0.36 every
+    // 4 m and a beam that clips them paints a blown disc on each face (seen in a test run), so the can
+    // hangs below the beam line (C − 0.56) and the cone's half-angle does not exceed its descent to the
+    // aim point (1.2 m up the bulkhead: 0.0495 for a 54 m run) by more than the 0.2 m of clearance
+    // spread over the run — the top edge stays under every beam and housing, and the cone meets
+    // nothing but the far bays before the bulkhead. Not for a corridor whose far end is a door hole:
+    // the pool would go through it into the next room. From the far end the lamp is 40+ m behind the
+    // player and culled: there the fills and the beacon carry the bulkhead (measured: a flood there
+    // added 1 %). Range 1.5× the corridor so the cutoff curve still passes ~70 % at the bulkhead.
+    const lobbyA = lobbyEnd === "min" ? clearMin : clearMax;
+    const farA = lobbyEnd === "min" ? a1 - WALL_T : a0 + WALL_T;
+    const canA = lobbyA + dir * 0.85; // beside the first housed strip (which starts at the clear line)
+    const canC = cc + 0.8; // 0.8 m off the centreline: clear of the strip housing and the wall conduits
+    const canY = C - 0.56;
     ctx.lights.push({
       type: "spot",
-      pos: pt(farA, C - 0.5, cc),
-      target: pt(farA + dir * 8, Y, cc),
+      pos: pt(canA + dir * 0.18, canY, canC),
+      target: pt(farA, Y + (farSpot.aimY ?? 1.2), cc),
       color: fill.color ?? 0xd6e2ff,
-      intensity: farSpot.intensity ?? 55,
-      distance: farSpot.distance ?? 20,
+      intensity: farSpot.intensity ?? 4000,
+      distance: farSpot.distance ?? Math.round((a1 - a0) * 1.5),
+      angle: farSpot.angle ?? 0.052,
+      penumbra: 0.8,
+      priority: 1,
+    });
+    // its fixture (every light needs a visible source): a stemmed spot can under the beam line, dark
+    // rim toward the deck and a small emitter disc in the rim — a lit dot looking back from the far
+    // end, out of frame from the door itself (above and behind the lobby-end views' camera)
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.06, C - canY - 0.1, 0.06), { pos: pt(canA, (C + canY + 0.11) / 2, canC), color: black });
+    kit.cyl("paintedMetal", ...pt(canA, canY, canC), 0.11, 0.34, axis, { color: black, texel: 2.5 });
+    kit.cyl("impPanel", ...pt(canA + dir * 0.15, canY, canC), 0.125, 0.06, axis, { color: dark, uv: "keep" });
+    kit.cyl("emitWhite", ...pt(canA + dir * 0.185, canY, canC), 0.07, 0.02, axis, { segments: 16 });
+  }
+  if (farFlood) {
+    // Far-end flood (door-end corridors, where a long-throw would shine through the door). A wide spot
+    // `back` m before the far door: aim "deck" (default, on the far beam) points it 8 m back down the
+    // corridor at the deck — for a far end the player stands at (cor-n's pod end, where the escape
+    // bay's spots 5–15 m through the door take the rest of the spot pool, so this is the one corridor
+    // spot live there: it carries that deck and casts the shadows); aim "end" points it at the door
+    // and the bulkhead around it — mounted 9 m short of the door its pool weight from the lobby end
+    // beats the neighbour rooms' keys that culled a flood on the far beam (d3-cor: the far end read
+    // 17–21 % grey with the flood culled, 32 % in the round it was live).
+    const endA = lobbyEnd === "min" ? clearMax : clearMin;
+    const floodA = endA - dir * (farFlood.back ?? 0.4);
+    const toEnd = farFlood.aim === "end";
+    const floodC = farFlood.back > 1 ? cc + 0.8 : cc; // short of the end it hangs beside the strip housings
+    const face = toEnd ? dir : -dir; // the emitter faces what the flood lights
+    ctx.lights.push({
+      type: "spot",
+      pos: pt(floodA, C - 0.5, floodC),
+      target: toEnd ? pt(lobbyEnd === "min" ? a1 - WALL_T : a0 + WALL_T, Y + 1.2, cc) : pt(floodA - dir * 8, Y, cc),
+      color: fill.color ?? 0xd6e2ff,
+      intensity: farFlood.intensity ?? 140,
+      distance: farFlood.distance ?? 20,
       angle: 0.6,
       penumbra: 0.6,
       priority: 1,
     });
-    // its fixture (every light needs a visible source): a bracketed flood box under the far beam,
-    // dark rim and a small emitter on the face toward the lobby — a lit dot at 40 m, a floodlight
-    // up close (spots cast no shadow here, so the box does not occlude its own light)
+    // its fixture: a bracketed flood box under the ceiling, dark rim and a small emitter on the face
+    // toward what it lights — a lit dot from afar, a floodlight up close
     const sz = (sa, sy, sc) => (axis === "x" ? [sa, sy, sc] : [sc, sy, sa]);
-    kit.add("paintedMetal", new THREE.BoxGeometry(...sz(0.08, 0.26, 0.08)), { pos: pt(farA, C - 0.13, cc), color: black });
-    kit.add("impPanel", new THREE.BoxGeometry(...sz(0.5, 0.3, 0.44)), { pos: pt(farA, C - 0.41, cc), color: dark, uv: "keep" });
-    kit.add("paintedMetal", new THREE.BoxGeometry(...sz(0.04, 0.2, 0.34)), { pos: pt(farA + dir * 0.25, C - 0.43, cc), color: black });
-    kit.add("emitWhite", new THREE.BoxGeometry(...sz(0.02, 0.1, 0.26)), { pos: pt(farA + dir * 0.265, C - 0.43, cc) });
+    kit.add("paintedMetal", new THREE.BoxGeometry(...sz(0.08, 0.26, 0.08)), { pos: pt(floodA, C - 0.13, floodC), color: black });
+    kit.add("impPanel", new THREE.BoxGeometry(...sz(0.5, 0.3, 0.44)), { pos: pt(floodA, C - 0.41, floodC), color: dark, uv: "keep" });
+    kit.add("paintedMetal", new THREE.BoxGeometry(...sz(0.04, 0.2, 0.34)), { pos: pt(floodA + face * 0.25, C - 0.43, floodC), color: black });
+    kit.add("emitWhite", new THREE.BoxGeometry(...sz(0.02, 0.1, 0.26)), { pos: pt(floodA + face * 0.265, C - 0.43, floodC) });
+  }
+  if (farBeacon) {
+    // rotating beacon hanging from the ceiling 1.2 m before the far-end door, off the centreline on
+    // the plain-wall side (clear of the last strip and the heavy pipes), facing back down the corridor
+    const b = BEACON[farBeacon] || BEACON.amber;
+    const facing = axis === "x" ? Math.atan2(-dir, 0) : Math.atan2(0, -dir);
+    const bc = pt((lobbyEnd === "min" ? clearMax : clearMin) - dir * 0.2, C - 0.25 - 0.03 - 0.085, cc - 0.9);
+    motion.push(beacon(ctx, kit, PALETTE, bc, { ...b, facing, mount: "ceiling", stem: 0.25 }).update);
   }
 
   // ---- bay kinds, shuffled by the corridor seed (or in the order the manifest gives) ------------
@@ -279,11 +441,11 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
         if (kind === "cabinet") {
           const colr = rand() < 0.5 ? mid : P("impGrey");
           dressedCabinet(kit, PALETTE, f.world(uc - 0.28, 0, back + 0.25), yaw, { w: 1.2, h: 1.8, d: 0.5, color: colr, emit: accent, seed: seed + i * 3 });
-          dressedCrate(kit, PALETTE, f.world(uc + 0.6, 0, back + 0.25), yaw, { w: 0.55, h: 0.55, d: 0.5, seed: seed + i });
+          dressedCrate(kit, PALETTE, f.world(uc + 0.6, 0, back + 0.25), yaw, { w: 0.55, h: 0.55, d: 0.5, seed: seed + i, ...crateOpts });
         } else if (kind === "crates") {
-          dressedCrate(kit, PALETTE, f.world(uc - 0.43, 0, back + 0.3), yaw, { w: 0.8, h: 1.0, d: 0.6, seed: seed + i });
-          dressedCrate(kit, PALETTE, f.world(uc + 0.43, 0, back + 0.3), yaw, { w: 0.8, h: 1.0, d: 0.6, seed: seed + i + 1 });
-          if (rand() < 0.7) dressedCrate(kit, PALETTE, f.world(uc - 0.43, 1.0, back + 0.3), yaw, { w: 0.8, h: 0.6, d: 0.6, seed: seed + i + 2 });
+          dressedCrate(kit, PALETTE, f.world(uc - 0.43, 0, back + 0.3), yaw, { w: 0.8, h: 1.0, d: 0.6, seed: seed + i, ...crateOpts });
+          dressedCrate(kit, PALETTE, f.world(uc + 0.43, 0, back + 0.3), yaw, { w: 0.8, h: 1.0, d: 0.6, seed: seed + i + 1, ...crateOpts });
+          if (rand() < 0.7) dressedCrate(kit, PALETTE, f.world(uc - 0.43, 1.0, back + 0.3), yaw, { w: 0.8, h: 0.6, d: 0.6, seed: seed + i + 2, ...crateOpts });
         } else if (kind === "lockers") {
           // the open unit is the one farthest from the lobby door: every corridor camera but the
           // pod-end looks away from the lobby, so that unit is the one seen face-on rather than the
@@ -477,15 +639,26 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
       // seen head-on from the dead-end view: the door swings 72° so the lit interior shows past it
       // (at 35° the door hid the whole recess and the pair read as two identical closed lockers)
       lockerRow(kit, PALETTE, f.world(uc - 1.2, 0, WALL_T + 0.11 + 0.25), yaw, { count: 2, unit: 0.6, h: 2.0, d: 0.5, seed: seed + 45, accent, openAngle: 1.25 });
-      dressedCrate(kit, PALETTE, f.world(uc + 1.15, 0, WALL_T + 0.11 + 0.35), yaw, { w: 0.9, h: 0.9, d: 0.7, seed: seed + 42 });
+      dressedCrate(kit, PALETTE, f.world(uc + 1.15, 0, WALL_T + 0.11 + 0.35), yaw, { w: 0.9, h: 0.9, d: 0.7, seed: seed + 42, ...crateOpts });
       toolBoard(kit, PALETTE, f.world(uc + 1.2, 1.6, WALL_T + 0.12), yaw, { w: 0.9, h: 0.7, seed: seed + 44, accent });
     } else {
       dressedCabinet(kit, PALETTE, f.world(uc - 1.15, 0, WALL_T + 0.11 + 0.25), yaw, { w: 1.2, h: 1.8, d: 0.5, emit: accent, seed: seed + 41 });
-      dressedCrate(kit, PALETTE, f.world(uc + 1.15, 0, WALL_T + 0.11 + 0.35), yaw, { w: 1.2, h: 1.2, d: 0.7, seed: seed + 42 });
-      dressedCrate(kit, PALETTE, f.world(uc + 1.25, 1.2, WALL_T + 0.11 + 0.3), yaw, { w: 0.8, h: 0.7, d: 0.6, seed: seed + 43 });
+      dressedCrate(kit, PALETTE, f.world(uc + 1.15, 0, WALL_T + 0.11 + 0.35), yaw, { w: 1.2, h: 1.2, d: 0.7, seed: seed + 42, ...crateOpts });
+      dressedCrate(kit, PALETTE, f.world(uc + 1.25, 1.2, WALL_T + 0.11 + 0.3), yaw, { w: 0.8, h: 0.7, d: 0.6, seed: seed + 43, ...crateOpts });
     }
-    // no extra light here: the last bay's fixture fill (0.8 m out) washes the bulkhead
+    // no extra fill here: the last bay's fixture fill (0.8 m out) washes the bulkhead. The rotating
+    // beacon above the bulkhead panel (red by default) is the dead end's motion light.
+    if (deadEnd.beacon !== false) {
+      const b = BEACON[deadEnd.beacon || "red"];
+      motion.push(beacon(ctx, kit, PALETTE, f.world(uc, 4.0, WALL_T + 0.35), { ...b, facing: yaw, mount: "wall", back: 0.35 }).update);
+    }
   }
 
-  return {};
+  E.build(ctx.group, `${room.id}-emitters`);
+  return {
+    update(dt, t) {
+      for (let i = 0; i < motion.length; i++) motion[i](t);
+      E.flush();
+    },
+  };
 }

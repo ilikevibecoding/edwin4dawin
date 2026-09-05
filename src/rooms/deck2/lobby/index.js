@@ -7,11 +7,16 @@
 // runs on the three door walls and is continued by hand on the aft wall outside the lift zone;
 // perimeter conduits under the cornice continue the corridor ceiling runs. Door surrounds (keypad,
 // sign, lintel indicator, threshold strip) come from the shell's doorDressing; the lift stays bare.
+// Lighting: the shadow key is a spot under a high-bay lamp at the coffer centre (pillars and benches
+// throw their shadows outward on the deck), the coffer fills sit well under it, two narrow downlights
+// carry the aft work areas' deck, the lift-approach downlight breathes with its light, and the four
+// directory boards refresh row by row (one animated mesh carries every moving emitter in the room).
 import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
 import { WALL_T } from "../_shared/shell.js";
 import { pillar, wallScreen, console as consoleProp } from "../_shared/props.js";
-import { coffer, lightChannel, floorLane, hubRing, doorSign, directoryBoard, bench, firePoint, junctionBox, wallVent, wallConduits, cornerBlock, kickStrips, serviceRun, commsPedestal, dressedCabinet } from "./props.js";
+import { coffer, lightChannel, floorLane, hubRing, doorSign, directoryBoard, bench, firePoint, junctionBox, wallVent, wallConduits, cornerBlock, kickStrips, serviceRun, commsPedestal, dressedCabinet, keyLamp, approachLamp } from "./props.js";
+import { Emitters, boardChase, breath } from "./motion.js";
 
 const Y = 40;
 const CEIL = 46;
@@ -38,7 +43,9 @@ export default defineRoom({
   },
   shell: {
     panelW: 2.0,
-    floor: { color: IMP.impMid },
+    // impGrey deck: the worn-plate map is itself dark (lum 0.42), and with the rig's environment
+    // capture the deck reflects the real (dark) room instead of the studio map that used to carry it
+    floor: { color: IMP.impGrey },
     ceiling: { channels: 0 },
     lights: false,
     doorDressing: { accent: "emitBlue" },
@@ -53,12 +60,16 @@ export default defineRoom({
     const x1 = 8 - WALL_T;
     const z0 = 370 + WALL_T;
     const z1 = 385 - WALL_T;
+    const E = new Emitters(ctx.materials); // every animated emitter in the room, one mesh
+    const motion = []; // update(t) closures
+    const boards = [];
 
     // ---- crossing: pillars + coffer + perimeter channels -------------------------------------------
     const PX = 4.6;
     const PZ = [372.6, 379.4];
     for (const sx of [-1, 1]) for (const z of PZ) pillar(kit, PALETTE, [sx * PX, Y, z], 0.8, H);
     coffer(kit, PALETTE, [-PX - 0.4, PZ[0] - 0.4], [PX + 0.4, PZ[1] + 0.4], CEIL, { drop: 0.7, beam: 0.5, strips: 4, axis: "x" });
+    const keyAt = keyLamp(kit, PALETTE, [0, 0, 376], CEIL - 0.34); // high-bay at the coffer centre, between strips 2 and 3
     lightChannel(kit, PALETTE, [x0 + 0.3, 0, 382.5], [x1 - 0.3, 0, 382.5], CEIL);
     for (const sx of [-1, 1]) lightChannel(kit, PALETTE, [sx * 6.5, 0, z0 + 0.3], [sx * 6.5, 0, 381.4], CEIL);
 
@@ -88,7 +99,7 @@ export default defineRoom({
     const yawN = 0;
     wallScreen(kit, [-6.2, Y + 2.85, z0 + 0.08], yawN, 1.8, 1.0, "screenImp0", { accent });
     junctionBox(kit, PALETTE, [-6.2, Y + 1.3, z0], yawN, { w: 0.6, h: 0.7, seed: 11, accent, conduitUp: BAND - 1.65 });
-    directoryBoard(kit, PALETTE, [6.2, Y + 2.3, z0], yawN, { w: 1.6, h: 1.3, rows: 6, accent, seed: 12 });
+    boards.push(directoryBoard(kit, PALETTE, [6.2, Y + 2.3, z0], yawN, { w: 1.6, h: 1.3, rows: 6, accent, seed: 12, anim: E }));
     for (const x of [-6.2, 6.2]) wallVent(kit, PALETTE, [x, Y + 4.8, z0], yawN, { w: 1.2, h: 0.5 });
 
     // ---- port / starboard walls: board near the door, bench + screen (tactical port, list starboard),
@@ -98,7 +109,7 @@ export default defineRoom({
       const yaw = s < 0 ? Math.PI / 2 : -Math.PI / 2;
       junctionBox(kit, PALETTE, [x, Y + 1.35, 371.2], yaw, { w: 0.5, h: 0.7, seed: 13 + s, accent, conduitUp: BAND - 1.7 });
       wallVent(kit, PALETTE, [x, Y + 4.8, 371.4], yaw, { w: 0.9, h: 0.45 });
-      directoryBoard(kit, PALETTE, [x, Y + 2.2, 379.0], yaw, { w: 1.4, h: 1.2, rows: 5, accent, seed: 15 + s });
+      boards.push(directoryBoard(kit, PALETTE, [x, Y + 2.2, 379.0], yaw, { w: 1.4, h: 1.2, rows: 5, accent, seed: 15 + s, anim: E }));
       bench(kit, PALETTE, [x, Y, 381.4], yaw, { len: 2.2, accent, items: { seed: 26 + s, screenMat: "screenImp2" } });
       wallScreen(kit, [x - s * 0.08, Y + 2.85, 381.4], yaw, 1.6, 0.9, s < 0 ? "screenImp1" : "screenImp2", { accent });
       wallVent(kit, PALETTE, [x, Y + 4.8, 381.4], yaw, { w: 1.2, h: 0.5 });
@@ -112,20 +123,62 @@ export default defineRoom({
     firePoint(kit, PALETTE, [-5.6, Y, z1], yawS);
     dressedCabinet(kit, PALETTE, [-3.8, Y, z1 - 0.25], yawS, { w: 1.2, h: 1.8, d: 0.5, emit: accent, seed: 19 });
     consoleProp(kit, PALETTE, [4.6, Y, z1 - 0.45], yawS, { w: 1.6, d: 0.8, h: 1.15, screens: 1, screenMat: "screenImp1", seed: 20, stool: true });
-    directoryBoard(kit, PALETTE, [4.6, Y + 1.8, z1], yawS, { w: 1.4, h: 0.7, rows: 3, accent, seed: 23 });
+    boards.push(directoryBoard(kit, PALETTE, [4.6, Y + 1.8, z1], yawS, { w: 1.4, h: 0.7, rows: 3, accent, seed: 23, anim: E }));
     wallScreen(kit, [4.6, Y + 2.75, z1 - 0.08], yawS, 1.6, 0.9, "screenImp0", { tilt: 0.2, accent });
     commsPedestal(kit, PALETTE, [3.1, Y, z1 - 0.35], yawS, { screenMat: "screenImp2", accent, seed: 24 });
     dressedCabinet(kit, PALETTE, [6.6, Y, z1 - 0.25], yawS, { w: 1.2, h: 1.8, d: 0.5, emit: accent, seed: 21 });
     for (const x of [-5.0, 5.6]) wallVent(kit, PALETTE, [x, Y + 4.8, z1], yawS, { w: 1.2, h: 0.5 });
 
-    // ---- lights: coffer fills 1.9 m under the ceiling (1.5 m under the coffer field, so the field
-    //      shows no hot discs), lift approach, soft door glows under the lintel indicators
+    // ---- lights (13): shadow key spot 0.3 m under the high-bay lamp, straight down over the hub so
+    //      the pillars and benches throw shadows outward (angle 1.05 reaches the benches by the walls);
+    //      coffer fills 1.9 m under the ceiling (1.5 m under the coffer field, so the field shows no hot
+    //      discs) at ~40 % of the key's floor irradiance; the breathing lift-approach downlight;
+    //      aft-corner and door-glow fills; two aft work-area downlights. Levels: with the rig's
+    //      environment capture the deck no longer borrows the studio map's sheen — the key at 60 cd
+    //      left it at 13 % grey; 150 cd (5 W/m² at the hub) with the fills at 36 puts the deck at ~25 %
+    //      and nothing clips.
     const cool = 0xd6e2ff;
-    for (const sx of [-1, 1]) for (const z of [374.3, 377.7]) ctx.lights.push({ type: "point", pos: [sx * 2.5, CEIL - 1.9, z], color: cool, intensity: 18, distance: 11, priority: 0.6 });
-    ctx.lights.push({ type: "point", pos: [0, CEIL - 1.6, 382.4], color: cool, intensity: 15, distance: 10, priority: 0.5 });
-    for (const sx of [-1, 1]) ctx.lights.push({ type: "point", pos: [sx * 5.4, CEIL - 1.6, 382.5], color: cool, intensity: 9, distance: 7, priority: 0.4 }); // aft corners, under the perimeter channel
-    for (const sx of [-1, 1]) ctx.lights.push({ type: "point", pos: [sx * 6.4, Y + 3.8, 375], color: 0xa9c0ff, intensity: 10, distance: 7, priority: 0.4 });
-    ctx.lights.push({ type: "point", pos: [0, Y + 3.8, 371.3], color: 0xa9c0ff, intensity: 10, distance: 7, priority: 0.4 });
-    return {};
+    ctx.lights.push({ type: "spot", pos: keyAt, target: [0, Y, 376], color: cool, intensity: 150, distance: 18, angle: 1.05, penumbra: 0.45, priority: 1, shadow: true });
+    for (const sx of [-1, 1]) for (const z of [374.3, 377.7]) ctx.lights.push({ type: "point", pos: [sx * 2.5, CEIL - 1.9, z], color: cool, intensity: 36, distance: 11, priority: 0.6 });
+    // aft corners under the perimeter channel: wall pools for the comms station and the fire point /
+    // cabinet corner, which the key's cone barely reaches. They light the wall, not the deck — pushed
+    // to where the deck read 20 % the light-grey panels behind them were at 55 % and clipping — so the
+    // deck there gets its own downlights (below)
+    for (const sx of [-1, 1]) ctx.lights.push({ type: "point", pos: [sx * 5.4, CEIL - 1.6, 382.5], color: cool, intensity: 40, distance: 9, priority: 0.4 });
+    // aft work-area downlights: a smaller housed square on the flat ceiling either side of the approach
+    // lamp, in the gap between the coffer and the aft channel, over the comms station's deck and the
+    // fire-point corner. Narrow cones straight down (half-angle 0.6 — the wall panels 3 m out and the
+    // comms pedestal's tilted screen, 0.62 rad off-axis, stay outside it: at a 1.0 rad half-angle the
+    // screen reflected the spot and went white). Measured in the comms view: deck 12 % → 23 %, wall
+    // band unchanged, no clipping.
+    for (const sx of [-1, 1]) {
+      const at = keyLamp(kit, PALETTE, [sx * 4.6, 0, 381.6], CEIL, { size: 0.6, depth: 0.16, emit: 0.32 });
+      ctx.lights.push({ type: "spot", pos: at, target: [sx * 4.6, Y, 381.6], color: cool, intensity: 130, distance: 12, angle: 0.6, penumbra: 0.45, priority: 0.5 });
+    }
+    for (const sx of [-1, 1]) ctx.lights.push({ type: "point", pos: [sx * 6.4, Y + 3.8, 375], color: 0xa9c0ff, intensity: 17, distance: 7, priority: 0.4 });
+    ctx.lights.push({ type: "point", pos: [0, Y + 3.8, 371.3], color: 0xa9c0ff, intensity: 17, distance: 7, priority: 0.4 });
+
+    // ---- motion: lift-approach downlight over the lane 3 m before the lift wall, just inboard of the
+    //      aft perimeter channel (its light 3 m off the wall: at 1.25 m / 30 cd the light-grey panel
+    //      above the lift hole clipped white, at 1.65 m / 20 cd it still carried a 68 % hot patch; at
+    //      3 m the panel gets a quarter of that and reads as a wash), breathing on a 4 s cycle (emitter
+    //      + light together); the four directory boards refresh row by row, phased so no two are on
+    //      the same row
+    const lamp = approachLamp(kit, PALETTE, E, [0, 0, 381.85], CEIL, { accent });
+    const lampDesc = { type: "point", pos: [0, CEIL - 1.6, 381.85], color: cool, intensity: 20, distance: 9, priority: 0.5 };
+    ctx.lights.push(lampDesc);
+    motion.push((t) => {
+      const b = breath(t, 4);
+      for (let i = 0; i < lamp.length; i++) E.level(lamp[i], 0.55 + 0.6 * b);
+      lampDesc.intensity = 8 + 12 * b;
+    });
+    boards.forEach((rows, i) => motion.push(boardChase(E, rows, { phase: 0.35 + 0.83 * i })));
+    E.build(ctx.group, `${room.id}-emitters`);
+    return {
+      update(dt, t) {
+        for (let i = 0; i < motion.length; i++) motion[i](t);
+        E.flush();
+      },
+    };
   },
 });

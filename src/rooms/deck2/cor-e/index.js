@@ -25,11 +25,14 @@ export default defineRoom({
   shell: {
     panelW: 2.0,
     ribs: 0,
-    floor: { color: IMP.impMid, strip: { axis: "x", width: 1.0, mat: "impFloor", color: IMP.impBlack } },
+    floor: { color: IMP.impGrey, strip: { axis: "x", width: 1.0, mat: "impFloor", color: IMP.impBlack } }, // impGrey deck as the lobbies (see cor-w)
     ceiling: { channels: 0 },
-    lights: false, // the corridor generator pushes its own fills (under every second housed fixture)
+    lights: false, // the corridor generator pushes its own: key spot in the first fixture, fills under every second fixture (two mid bays add a downlight spot), long-throw lamp by the lobby door onto the far bulkhead
   },
   detail(ctx, shell, room) {
-    return corridorDetail(ctx, shell, room, { axis: "x", lobbyEnd: "min", accent: "emitBlue", seed: 22, screens: ["screenImp2", "screenImp3"], deadEnd: { screen: "screenImp2", kit: "lockers" } });
+    // lights: downlight spots in bays 6 and 8 (x 34 / 42, either side of the mid view's camera);
+    // motion: faulty fixture at bay 10 (x 50: the third fixture ahead of the mid view, and no view's
+    // foreground fill), red beacon on the dead-end bulkhead
+    return corridorDetail(ctx, shell, room, { axis: "x", lobbyEnd: "min", accent: "emitBlue", seed: 22, screens: ["screenImp2", "screenImp3"], deadEnd: { screen: "screenImp2", kit: "lockers", beacon: "red" }, farSpot: {}, midSpot: { bays: [6, 8] }, flickerBay: 10 });
   },
 });

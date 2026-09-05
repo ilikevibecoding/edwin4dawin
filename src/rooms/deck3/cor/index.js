@@ -28,11 +28,20 @@ export default defineRoom({
     panelW: 2.0,
     ribs: 0,
     stripMat: "emitAmber",
-    floor: { color: IMP.impMid, strip: { axis: "z", width: 1.0, mat: "impFloor", color: IMP.impBlack } },
+    floor: { color: IMP.impGrey, strip: { axis: "z", width: 1.0, mat: "impFloor", color: IMP.impBlack } }, // impGrey deck as the lobbies (see cor-w)
     ceiling: { channels: 0 },
-    lights: false, // the corridor generator pushes its own (warm) fills under every second fixture + a far-end flood
+    lights: false, // the corridor generator pushes its own: warm key spot in the first fixture, fills under every second fixture (two mid bays add a downlight spot), door flood 10.5 m short of the reactor blast door
   },
   detail(ctx, shell, room) {
-    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "min", accent: "emitAmber", engineering: true, seed: 31, screens: ["screenImp3", "screenImp0"], fill: { color: 0xffd9b8 }, farSpot: {} });
+    // lights (4 spots): key, downlight spots in bays 4 and 6 (z 583 / 591, either side of the mid
+    // view's camera — dropping bay 6 cost the mid and engctl-door decks 9 % grey in a test run), and a
+    // door flood 10.5 m short of the reactor blast door aimed at it. The far end is a door, so no
+    // long-throw (it would shine into the reactor hall); a flood on the far beam lost the spot pool
+    // to engctl's and the reactor's keys from both named views. Brought forward to z 600.7 it weighs
+    // 21 from the lobby door (the reactor key 27, the mids at priority 0.1 → 24 and 37, so it takes the
+    // fourth slot there) and 10.5 from the mid view (mid4 7.5, mid6 12.0, key 12.0: engctl's key at
+    // 12.4 is the one culled). Motion: faulty fixture at bay 8 (z 599: 14 m ahead of the mid view),
+    // amber beacon hanging before the reactor blast door
+    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "min", accent: "emitAmber", engineering: true, seed: 31, screens: ["screenImp3", "screenImp0"], fill: { color: 0xffd9b8 }, farFlood: { back: 10.5, aim: "end", intensity: 160 }, midSpot: { bays: [4, 6], priority: 0.1 }, flickerBay: 8, farBeacon: "amber" });
   },
 });
