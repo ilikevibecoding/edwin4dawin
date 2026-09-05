@@ -326,6 +326,8 @@ export class PlaneModel {
     const paint = new THREE.MeshPhysicalMaterial({
       map: fus.map, roughnessMap: fus.roughnessMap, normalMap: fus.normalMap, normalScale: new THREE.Vector2(0.55, 0.55),
       color: 0xffffff, roughness: 1.0, metalness: 0.0, clearcoat: 0.7, clearcoatRoughness: 1.0, clearcoatRoughnessMap: fus.clearcoatRoughnessMap, envMapIntensity: 1.0,
+      // orange peel: the sharp clear-coat lobe wobbles over a tiled dimple normal while the base coat stays smooth
+      clearcoatNormalMap: fus.clearcoatNormalMap, clearcoatNormalScale: new THREE.Vector2(0.45, 0.45),
     });
     // the shadow pass normally records back faces, which for a closed hull is the belly: the cabin inside it
     // would count as lit. Recording both sides puts the roof and window frames into the map so the cockpit
@@ -335,6 +337,7 @@ export class PlaneModel {
     const wingPaint = new THREE.MeshPhysicalMaterial({
       map: wing.map, roughnessMap: wing.roughnessMap, normalMap: wing.normalMap, normalScale: new THREE.Vector2(0.5, 0.5),
       color: 0xffffff, roughness: 1.0, metalness: 0.0, clearcoat: 0.65, clearcoatRoughness: 0.14, envMapIntensity: 1.0, vertexColors: true,
+      clearcoatNormalMap: wing.clearcoatNormalMap, clearcoatNormalScale: new THREE.Vector2(0.45, 0.45),
     });
     const floatPaint = new THREE.MeshPhysicalMaterial({
       map: flt.map, roughnessMap: flt.roughnessMap, normalMap: flt.normalMap, normalScale: new THREE.Vector2(0.6, 0.6),

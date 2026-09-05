@@ -7,6 +7,8 @@ export interface PbrMaps {
   normalMap: THREE.CanvasTexture;
   /** clearcoat roughness in the green channel (multiplies the material's `clearcoatRoughness`) */
   clearcoatRoughnessMap?: THREE.CanvasTexture;
+  /** tiled orange-peel normal for the clear coat (repeat set on the texture) */
+  clearcoatNormalMap?: THREE.CanvasTexture;
 }
 
 function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
@@ -210,6 +212,16 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     band((c) => c.cheatTop, (c) => c.cheatBot, LIVERY.cheat, side);
     band((c) => c.cheatBot, (c) => c.pinBot, LIVERY.pin, side);
   }
+  // the cheat band and pinstripe are vinyl decals: their edges stand a film's thickness proud of the paint (a
+  // hairline ridge in the height map, so the edge catches a highlight above and a shadow below the clear coat)
+  const edgeRidge = (v: (c: typeof cols[0]) => number, side: 1 | -1) => {
+    const V = (x: number) => (side > 0 ? x : 1 - x) * h;
+    hctx.strokeStyle = '#a8a8a8'; hctx.lineWidth = 2.0;
+    hctx.beginPath(); hctx.moveTo(cols[0].px, V(v(cols[0]))); for (const c of cols) hctx.lineTo(c.px, V(v(c))); hctx.stroke();
+    actx.strokeStyle = 'rgba(0,0,0,0.16)'; actx.lineWidth = 1.2;
+    actx.beginPath(); actx.moveTo(cols[0].px, V(v(cols[0])) + (side > 0 ? 1.5 : -1.5)); for (const c of cols) actx.lineTo(c.px, V(v(c)) + (side > 0 ? 1.5 : -1.5)); actx.stroke();
+  };
+  for (const side of [1, -1] as (1 | -1)[]) { edgeRidge((c) => c.cheatTop, side); edgeRidge((c) => c.cheatBot, side); edgeRidge((c) => c.pinBot, side); }
   // anti-glare panel on the cowl top ahead of the windshield (straddles the v = 0/1 seam: one strip per side)
   const glare: [number, number][] = [];
   for (let x = 2.32; x <= 3.7; x += 0.1) glare.push([lay.uOf(x) * w, lay.topV(x, x > 3.4 ? 0.45 - (x - 3.4) * 0.9 : 0.45) * h]);
@@ -233,6 +245,8 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   // and the operator script under the cabin windows (both sides, readable)
   bodyText(actx, lay, w, h, LIVERY.registration, -3.05, 0.47, 0.18, 'bold', '"Helvetica Neue", Arial, sans-serif', LIVERY.cheat);
   bodyText(actx, lay, w, h, 'BAHÍA VISTA AIR TAXI', -0.25, 0.10, 0.085, 'bold italic', 'Georgia, "Times New Roman", serif', LIVERY.cheat);
+  bodyText(hctx, lay, w, h, LIVERY.registration, -3.05, 0.47, 0.18, 'bold', '"Helvetica Neue", Arial, sans-serif', '#9a9a9a');
+  bodyText(hctx, lay, w, h, 'BAHÍA VISTA AIR TAXI', -0.25, 0.10, 0.085, 'bold italic', 'Georgia, "Times New Roman", serif', '#9a9a9a');
   // panel lines / rivets
   const stations = [3.9, 3.2, 2.32, 1.85, 0.0, -0.9, -1.6, -2.6, -3.7, -4.7].map((x) => lay.uOf(x));
   panels(hctx, actx, w, h, stations, [0.12, 0.2, 0.3, 0.42, 0.5, 0.58, 0.7, 0.8, 0.88], 26);
@@ -257,17 +271,24 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     soot.addColorStop(0, `rgba(${rgb},${a0})`); soot.addColorStop(0.3, `rgba(${rgb},${a0 * 0.5})`); soot.addColorStop(1, `rgba(${rgb},0)`);
     ctx.fillStyle = soot;
     ctx.beginPath();
-    ctx.moveTo(stubU * w, (stubV - 0.018) * h); ctx.lineTo(sootEndU * w, (stubV - 0.05) * h);
-    ctx.lineTo(sootEndU * w, (stubV + 0.05) * h); ctx.lineTo(stubU * w, (stubV + 0.018) * h);
+    ctx.moveTo(stubU * w, (stubV - 0.022) * h); ctx.lineTo(sootEndU * w, (stubV - 0.065) * h);
+    ctx.lineTo(sootEndU * w, (stubV + 0.065) * h); ctx.lineTo(stubU * w, (stubV + 0.022) * h);
     ctx.closePath(); ctx.fill();
   };
-  sootStreak(actx, '25,22,20', 0.5);
-  // oil streaks under the cowl (belly, v 0.5) trailing aft from the cowl seams
-  for (let i = 0; i < 16; i++) {
-    const x0 = lay.uOf(rng.range(3.0, 4.0)) * w, y0 = (0.5 + rng.range(-0.06, 0.06)) * h, len = rng.range(40, 150);
+  sootStreak(actx, '25,22,20', 0.72);
+  // soot has a ragged, streaky texture: darker filaments inside the plume
+  for (let i = 0; i < 40; i++) {
+    const x0 = (stubU + rng.range(0, 0.02)) * w, y0 = (stubV + rng.range(-0.02, 0.02)) * h, len = rng.range(60, 400);
+    const sg = actx.createLinearGradient(x0, 0, x0 + len, 0);
+    sg.addColorStop(0, `rgba(20,18,16,${rng.range(0.15, 0.4)})`); sg.addColorStop(1, 'rgba(20,18,16,0)');
+    actx.fillStyle = sg; actx.fillRect(x0, y0, len, rng.range(1, 3));
+  }
+  // oil streaks under the cowl (belly, v 0.5) trailing aft from the cowl seams and the cowl flap hinges
+  for (let i = 0; i < 30; i++) {
+    const x0 = lay.uOf(rng.range(2.9, 4.0)) * w, y0 = (0.5 + rng.range(-0.08, 0.08)) * h, len = rng.range(50, 220);
     const og = actx.createLinearGradient(x0, 0, x0 + len, 0);
-    og.addColorStop(0, `rgba(35,30,22,${rng.range(0.14, 0.32)})`); og.addColorStop(1, 'rgba(35,30,22,0)');
-    actx.fillStyle = og; actx.fillRect(x0, y0 - rng.range(1, 2), len, rng.range(2, 4));
+    og.addColorStop(0, `rgba(35,30,22,${rng.range(0.2, 0.45)})`); og.addColorStop(1, 'rgba(35,30,22,0)');
+    actx.fillStyle = og; actx.fillRect(x0, y0 - rng.range(1, 2), len, rng.range(2, 5));
   }
   // general grime and faint belly streaks along the airflow
   grime(actx, rng, w, h, 140, 0.08);
@@ -280,7 +301,7 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   // sun-faded top: slightly lighter/desaturated
   actx.fillStyle = 'rgba(255,255,255,0.05)'; actx.fillRect(0, 0, w, h * 0.12); actx.fillRect(0, h * 0.88, w, h * 0.12);
   // roughness: clearcoat paint ~0.35, cowl 0.5, soot/grime rougher, scratches
-  rctx.fillStyle = '#5a5a5a'; rctx.fillRect(0, 0, w, h);
+  rctx.fillStyle = '#6e6e6e'; rctx.fillRect(0, 0, w, h);
   rctx.fillStyle = '#7a7a7a'; rctx.fillRect(0, 0, ringU, h);
   sootStreak(rctx, '170,170,170', 0.7);
   grime(rctx, rng, w, h, 160, 0.25, '150,150,150');
@@ -307,7 +328,28 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     cctx.fill();
   }
   sootStreak(cctx, '0,110,0', 0.8);
-  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.4), false), clearcoatRoughnessMap: toTexture(cc, false) };
+  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.4), false), clearcoatRoughnessMap: toTexture(cc, false), clearcoatNormalMap: orangePeelNormal(rng, 64, 32) };
+}
+
+/**
+ * Tileable orange-peel normal for a sprayed clear coat: soft dimples a millimetre or two across that make the
+ * mirror image in the coat wobble slightly. Repeated `ru` x `rv` times over the surface it belongs to.
+ */
+function orangePeelNormal(rng: Rng, ru: number, rv: number): THREE.CanvasTexture {
+  const S = 256;
+  const [pc, pctx] = canvas(S, S);
+  pctx.fillStyle = '#808080'; pctx.fillRect(0, 0, S, S);
+  for (let i = 0; i < 1800; i++) {
+    const x = rng.range(0, S), y = rng.range(0, S), r = rng.range(3, 9);
+    const g = pctx.createRadialGradient(x, y, 0, x, y, r);
+    const up = rng.next() < 0.5;
+    g.addColorStop(0, up ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.16)'); g.addColorStop(1, up ? 'rgba(255,255,255,0)' : 'rgba(0,0,0,0)');
+    pctx.fillStyle = g;
+    for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) pctx.fillRect(x - r + ox, y - r + oy, r * 2, r * 2);
+  }
+  const t = toTexture(heightToNormal(pc, 1.2), false, 4);
+  t.repeat.set(ru, rv);
+  return t;
 }
 
 /** Where the cabin lining changes: everything in body metres, converted through the fuselage layout. */
@@ -518,6 +560,51 @@ export function wingMaps(): PbrMaps {
   // walkway by the root and a fuel cap on the upper surface
   actx.fillStyle = '#2a2d31'; actx.fillRect(w * 0.30, wy(0.12), w * 0.11, wy(0.20) - wy(0.12));
   actx.fillStyle = '#6d7277'; actx.beginPath(); actx.arc(w * 0.40, wy(0.27), 9, 0, 7); actx.fill();
+  // ---- underside (u > 0.5): the side the pilot and the dock see. Extra rivet rows along the ribs, screwed
+  // inspection panels, the fuel drains with their stain trails, the strut fittings' doubler plates, a fuel
+  // vent, and airflow-aligned grime streaks running from the leading edge aft
+  { const ux = (f: number) => w * (0.5 + 0.5 * f); // f: chord fraction from the leading edge (0) to the trailing edge (1)
+    // denser rivet rows along every rib on the underside (the stringersV rows above are shared with the top)
+    for (const rv of ribs) {
+      const y = rv * h;
+      for (let x = ux(0.03); x < ux(0.98); x += 11) {
+        hctx.fillStyle = '#b4b4b4'; hctx.beginPath(); hctx.arc(x, y - 5, 1.4, 0, 7); hctx.fill();
+        actx.fillStyle = 'rgba(0,0,0,0.09)'; actx.beginPath(); actx.arc(x, y - 4, 1.1, 0, 7); actx.fill();
+      }
+    }
+    // inspection panels: 9 cm rounded plates with four screws, staggered along the spar lines
+    const plate = (x: number, y: number, pw: number, ph: number) => {
+      actx.fillStyle = 'rgba(0,0,0,0.10)'; actx.beginPath(); actx.roundRect(x - pw / 2, y - ph / 2, pw, ph, 3); actx.fill();
+      actx.strokeStyle = 'rgba(30,30,35,0.4)'; actx.lineWidth = 1.2; actx.beginPath(); actx.roundRect(x - pw / 2, y - ph / 2, pw, ph, 3); actx.stroke();
+      hctx.strokeStyle = '#6a6a6a'; hctx.lineWidth = 1.6; hctx.beginPath(); hctx.roundRect(x - pw / 2, y - ph / 2, pw, ph, 3); hctx.stroke();
+      for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const px = x + sx * (pw / 2 - 4), py = y + sy * (ph / 2 - 4);
+        hctx.fillStyle = '#5a5a5a'; hctx.beginPath(); hctx.arc(px, py, 1.8, 0, 7); hctx.fill();
+        actx.fillStyle = 'rgba(0,0,0,0.35)'; actx.beginPath(); actx.arc(px, py, 1.5, 0, 7); actx.fill();
+      }
+    };
+    for (const [f, v, pw, ph] of [[0.42, 0.10, 20, 16], [0.75, 0.16, 16, 16], [0.42, 0.26, 20, 16], [0.75, 0.34, 16, 16], [0.42, 0.43, 20, 16], [0.75, 0.52, 16, 16], [0.42, 0.61, 20, 16], [0.75, 0.70, 16, 16], [0.42, 0.79, 20, 16]]) plate(ux(f), wy(v), pw, ph);
+    // strut fitting doublers at the spar / strut stations (model.ts strutZ 2.9 m of the 7.3 m span)
+    for (const f of [0.30, 0.66]) plate(ux(f), wy(2.9 / 7.3), 30, 22);
+    // fuel drains: a dark boss with a pale stain trail blown aft by the slipstream; fuel vent tube by the tank
+    for (const [f, v] of [[0.36, 0.14], [0.36, 0.30]]) {
+      const x = ux(f), y = wy(v);
+      const g = actx.createLinearGradient(x, 0, ux(f + 0.45), 0);
+      g.addColorStop(0, 'rgba(120,105,70,0.30)'); g.addColorStop(0.3, 'rgba(120,105,70,0.14)'); g.addColorStop(1, 'rgba(120,105,70,0)');
+      actx.fillStyle = g; actx.beginPath(); actx.moveTo(x, y - 3); actx.lineTo(ux(f + 0.45), y - 9); actx.lineTo(ux(f + 0.45), y + 9); actx.lineTo(x, y + 3); actx.closePath(); actx.fill();
+      actx.fillStyle = '#3b3d40'; actx.beginPath(); actx.arc(x, y, 3.2, 0, 7); actx.fill();
+      hctx.fillStyle = '#404040'; hctx.beginPath(); hctx.arc(x, y, 3.5, 0, 7); hctx.fill();
+    }
+    actx.fillStyle = '#4a4d50'; actx.fillRect(ux(0.55) - 2, wy(0.22) - 7, 4, 14);
+    // grime streaks along the airflow (from the leading edge aft), heavier toward the root and behind the fittings
+    for (let i = 0; i < 70; i++) {
+      const v = rng.range(0.02, 0.86), f0 = rng.range(0.05, 0.6), len = rng.range(0.1, 0.4);
+      const g = actx.createLinearGradient(ux(f0), 0, ux(f0 + len), 0);
+      const a = rng.range(0.04, 0.12) * (1.4 - v);
+      g.addColorStop(0, `rgba(70,65,60,${a})`); g.addColorStop(1, 'rgba(70,65,60,0)');
+      actx.fillStyle = g; actx.fillRect(ux(f0), wy(v), ux(f0 + len) - ux(f0), rng.range(1, 3));
+    }
+  }
   // ---- tail band: one colour both sides, yellow tip cap with the navy / red bands, ribs every 0.55 m at half the
   // wing's line strength (the fin is seen close up from the rear quarter: crisp tiles read as a grid)
   const tipM = WING_TEX.TAIL_SPAN - 0.26, cheatM = tipM - 0.05, pinM = cheatM - 0.025;
@@ -535,8 +622,10 @@ export function wingMaps(): PbrMaps {
   grime(actx, rng, w, h, 80, 0.06);
   rctx.fillStyle = '#5a5a5a'; rctx.fillRect(0, 0, w, h);
   rctx.fillStyle = '#909090'; rctx.fillRect(w * 0.30, wy(0.12), w * 0.11, wy(0.20) - wy(0.12));
+  // the underside is a touch duller than the top coat
+  rctx.fillStyle = 'rgba(255,255,255,0.10)'; rctx.fillRect(w * 0.5, 0, w * 0.5, wy(1));
   grime(rctx, rng, w, h, 90, 0.2, '150,150,150');
-  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.0), false) };
+  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.0), false), clearcoatNormalMap: orangePeelNormal(rng, 24, 48) };
 }
 
 /**
@@ -592,11 +681,21 @@ export function floatMaps(): PbrMaps {
   }
   grime(actx, rng, w, h, 90, 0.08, '60,60,55');
   // roughness: matte deck, dull wet band, otherwise semi-gloss aluminium
-  rctx.fillStyle = '#6a6a6a'; rctx.fillRect(0, 0, w, h);
-  band(rctx, 0, 0.118, '#8a8a8a');
-  band(rctx, 0, 0.066, '#c0c0c0');
-  band(rctx, 0.17, 0.30, '#9a9a9a');
+  rctx.fillStyle = '#7c7c7c'; rctx.fillRect(0, 0, w, h);
+  band(rctx, 0, 0.118, '#9a9a9a');
+  band(rctx, 0, 0.066, '#c8c8c8');
+  band(rctx, 0.17, 0.30, '#a4a4a4');
   grime(rctx, rng, w, h, 100, 0.25, '160,160,160');
+  // scuffs: dock rash along the sides at deck height and boot marks on the walkways (dull, slightly lighter metal)
+  for (let i = 0; i < 260; i++) {
+    const side = rng.next() < 0.5 ? 1 : -1, onDeck = rng.next() < 0.45;
+    const v = onDeck ? rng.range(0.005, 0.06) : rng.range(0.10, 0.19), y = (side > 0 ? v : 1 - v) * h;
+    const x = rng.range(0, w), len = rng.range(6, 40), a = rng.range(0.15, 0.45);
+    rctx.strokeStyle = `rgba(200,200,200,${a})`; rctx.lineWidth = rng.range(0.8, 2.5);
+    rctx.beginPath(); rctx.moveTo(x, y); rctx.lineTo(x + len, y + rng.range(-4, 4)); rctx.stroke();
+    actx.strokeStyle = `rgba(${onDeck ? '120,118,112' : '225,228,230'},${a * 0.5})`; actx.lineWidth = rng.range(0.6, 1.6);
+    actx.beginPath(); actx.moveTo(x, y); actx.lineTo(x + len, y + rng.range(-4, 4)); actx.stroke();
+  }
   return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.2), false) };
 }
 
