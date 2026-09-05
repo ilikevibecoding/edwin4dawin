@@ -11,8 +11,10 @@
 //   also gets a door at y 96..98 that city.js connects to the boulevard with a gangway.
 // - city.js carves a 3 wide x 2 high opening 1 block into the lot at every skybridge end (bridge.y + 1 .. + 2), so a
 //   tower must present a wall at the lot edge there (lot.bridges lists the bridge ids).
-// - meta (absolute coords) mirrors the western town's records: { name, kind, family, district, floorY, bounds, door,
-//   inside, midDoor, lobby, spots, work, beds, lifts, floors }. Results are memoised in an LRU of 256 entries.
+// - meta (absolute coords) follows the contract { doors, spots, lifts, lobby, beds, work } and mirrors the western
+//   town's records: { id, name, kind, family, district, floorY, bounds, doors: [{ x, y, z, side, level }], door
+//   (= doors[0], the undercity door), inside, midDoor, lobby, spots, work, beds, lifts: [{ x, z, y0, y1 }], floors }.
+//   Results are memoised in an LRU of 256 entries (landmarks pinned).
 import { B } from '../blocks.js';
 import { RNG, hash2, hash3 } from '../rng.js';
 import { LEVELS, DISTRICT_PROFILE } from './layout.js';
@@ -116,9 +118,11 @@ function tower(lot) {
     return lit ? B.WINDOW_LIT : B.WINDOW_DARK;
   };
 
+  const underDoor = { x: lot.door.out.x, y: LEVELS.underWalk, z: lot.door.out.z, side: lot.door.side, level: 'under' };
+  const midDoor = lot.midDoor ? { x: lot.door.out.x, y: LEVELS.midWalk, z: lot.door.out.z, side: lot.door.side, level: 'mid' } : null;
   const meta = { id: lot.id, name: `${cap(lot.district)} ${cap(family)} ${lot.id}`, kind: 'tower', family, district: lot.district, floorY: LEVELS.underWalk,
-    bounds: { x0: lot.x0, x1: lot.x1 - 1, z0: lot.z0, z1: lot.z1 - 1 }, door: { x: lot.door.out.x, y: LEVELS.underWalk, z: lot.door.out.z },
-    inside: { x: lot.door.in.x, y: LEVELS.underWalk, z: lot.door.in.z }, midDoor: lot.midDoor ? { x: lot.door.out.x, y: LEVELS.midWalk, z: lot.door.out.z } : null,
+    bounds: { x0: lot.x0, x1: lot.x1 - 1, z0: lot.z0, z1: lot.z1 - 1 }, doors: midDoor ? [underDoor, midDoor] : [underDoor], door: underDoor,
+    inside: { x: lot.door.in.x, y: LEVELS.underWalk, z: lot.door.in.z }, midDoor,
     lobby: null, spots: [], work: [], beds: [], lifts: [], floors: [] };
 
   // ground slab (repaves the plateau under the lot)
@@ -241,9 +245,10 @@ function landmark(lot) {
 
 function baseMeta(lot, name, kind) {
   const cx = lot.x0 + (lot.w >> 1), cz = lot.z0 + (lot.d >> 1);
+  const door = { x: lot.door.out.x, y: LEVELS.underWalk, z: lot.door.out.z, side: lot.door.side, level: 'under' };
   return { id: lot.id, name, kind, family: lot.family, district: lot.district, floorY: LEVELS.underWalk,
     bounds: { x0: lot.x0, x1: lot.x1 - 1, z0: lot.z0, z1: lot.z1 - 1 },
-    door: { x: cx, y: LEVELS.underWalk, z: lot.z1 }, inside: { x: cx, y: LEVELS.underWalk, z: lot.z1 - 3 }, midDoor: null,
+    doors: [door], door, inside: { x: lot.door.in.x, y: LEVELS.underWalk, z: lot.door.in.z }, midDoor: null,
     lobby: { x: cx, y: LEVELS.underWalk, z: cz }, spots: [], work: [], beds: [], lifts: [], floors: [LEVELS.underWalk] };
 }
 
