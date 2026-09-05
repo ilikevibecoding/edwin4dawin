@@ -10,13 +10,21 @@ import { LANDMARK as republica } from './republica.js';
 import { LANDMARK as senate } from './senate.js';
 import { LANDMARK as temple } from './temple.js';
 import { LANDMARK as underworld } from './underworld.js';
+import { LANDMARK as plaza_monument } from './plaza_monument.js';
+import { LANDMARK as works } from './works.js';
+import { LANDMARK as detention } from './detention.js';
+import { LANDMARK as holonet } from './holonet.js';
 
 const MODULE_LIST = [
   market,
+  plaza_monument,
   republica,
   senate,
   temple,
   underworld,
+  works,
+  detention,
+  holonet,
 ];
 
 const MODULES = new Map();

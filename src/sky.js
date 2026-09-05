@@ -1,8 +1,12 @@
-// Day/night cycle: sky dome, sun, moon, stars, blocky clouds, fog + light factors.
+// Day/night cycle: atmospheric sky dome (Rayleigh-ish gradient, Mie glow, HDR sun disc, moon with phase), twinkling
+// stars, blocky clouds, fog + light factors. The dome shares its gradient uniforms with the world/water/entity
+// shaders (render/shading.js) so fog, reflections and the sky always agree, including under region looks
+// (applyRegion: space, Coruscant) and disaster overrides (applyOverride).
 import * as THREE from 'three';
 import { SimplexNoise } from './noise.js';
 import { CLOUD_HEIGHT, DAY_LENGTH_SECONDS, START_TIME } from './constants.js';
 import { clamp, lerp, smoothstep } from './rng.js';
+import { SHADING_UNIFORMS, SKY_GLSL } from './render/shading.js';
 
 const DAY_TOP = new THREE.Color(0.47, 0.65, 1.0);
 const DAY_HORIZON = new THREE.Color(0.75, 0.85, 1.0);
@@ -10,26 +14,13 @@ const NIGHT_TOP = new THREE.Color(0.012, 0.014, 0.035);
 const NIGHT_HORIZON = new THREE.Color(0.04, 0.05, 0.10);
 const SUNSET = new THREE.Color(1.0, 0.45, 0.15);
 const VOID_DAY = new THREE.Color(0.28, 0.36, 0.55);
-
-function makeSunTexture() {
-  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillRect(0, 0, 32, 32);
-  ctx.fillStyle = 'rgba(255, 236, 170, 0.45)'; ctx.fillRect(3, 3, 26, 26);
-  ctx.fillStyle = 'rgba(255, 244, 200, 0.9)'; ctx.fillRect(6, 6, 20, 20);
-  ctx.fillStyle = '#fff9d8'; ctx.fillRect(8, 8, 16, 16);
-  const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.NoColorSpace;
-  return t;
-}
-function makeMoonTexture() {
-  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#d9dde6'; ctx.fillRect(8, 8, 16, 16);
-  ctx.fillStyle = '#b8bcc8'; ctx.fillRect(11, 10, 4, 4); ctx.fillRect(17, 15, 5, 4); ctx.fillRect(12, 18, 3, 3);
-  ctx.fillStyle = '#eef0f5'; ctx.fillRect(9, 9, 3, 2);
-  const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.NoColorSpace;
-  return t;
-}
+const MOON_PHASES = 8;   // days per lunar cycle
+// The sun's orbit is tilted toward +z (like a temperate latitude): rising/setting points stay on the x axis, but at
+// noon the sun is 22 degrees off the zenith so vertical faces still receive sun and shadows never collapse to points.
+export const ORBIT_TILT = 22 * Math.PI / 180;
+const TILT_Q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), ORBIT_TILT);
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+const Y_FLIP_Q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
 
 const SKY_VERT = /* glsl */ `
 varying vec3 vDir;
@@ -39,21 +30,55 @@ void main() {
   gl_Position = projectionMatrix * mv;
 }`;
 const SKY_FRAG = /* glsl */ `
-uniform vec3 uTop; uniform vec3 uHorizon; uniform vec3 uVoid; uniform vec3 uSunset; uniform float uSunsetStrength; uniform vec3 uSunDir;
+${SKY_GLSL}
+uniform vec3 uMoonDir; uniform float uMoonPhase; uniform float uSunAlpha; uniform float uMoonAlpha;
 varying vec3 vDir;
+float mhash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
 void main() {
   vec3 d = normalize(vDir);
-  float t = smoothstep(0.0, 0.42, d.y);
-  vec3 col = mix(uHorizon, uTop, t);
-  float below = smoothstep(0.0, -0.08, d.y);
-  col = mix(col, uVoid, below);
-  // sunset/sunrise glow around the sun's azimuth, hugging the horizon
-  vec3 sh = normalize(vec3(uSunDir.x, 0.0, uSunDir.z + 0.0001));
-  float az = max(dot(normalize(vec3(d.x, 0.0, d.z + 0.0001)), sh), 0.0);
-  float band = exp(-abs(d.y) * 7.0);
-  col = mix(col, uSunset, uSunsetStrength * band * (0.35 + 0.65 * pow(az, 3.0)));
+  vec3 col = skyGradient(d);
+  // sun: HDR disc (angular radius ~2 deg) with a soft glow; warm when low
+  float cs = dot(d, uSunDiscDir);
+  float above = smoothstep(-0.04, 0.02, d.y);
+  float disc = smoothstep(0.99915, 0.99945, cs);
+  float glow = pow(max(cs, 0.0), 300.0) * 1.4 + pow(max(cs, 0.0), 32.0) * 0.22;
+  vec3 sunCol = mix(vec3(1.0, 0.5, 0.22), vec3(1.0, 0.97, 0.9), clamp(uSunDiscDir.y * 3.5, 0.0, 1.0));
+  col += (disc * 3.0 + glow) * sunCol * uSunAlpha * above;
+  // moon: a lit sphere, phase from the light direction in its local frame (0 = full)
+  float cm = dot(d, uMoonDir);
+  if (cm > 0.9985) {
+    vec3 upv = abs(uMoonDir.y) < 0.98 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 Tm = normalize(cross(upv, uMoonDir));
+    vec3 Bm = cross(uMoonDir, Tm);
+    vec2 o = vec2(dot(d, Tm), dot(d, Bm)) / 0.030;
+    float r2 = dot(o, o);
+    if (r2 < 1.0) {
+      vec3 n = vec3(o, sqrt(1.0 - r2));
+      float ph = uMoonPhase * 6.2831853;
+      vec3 L = vec3(sin(ph), 0.0, cos(ph));
+      float lit = smoothstep(-0.04, 0.10, dot(n, L));
+      float craters = 0.82 + 0.18 * step(0.62, mhash(floor(o * 3.0)));
+      vec3 moonCol = mix(vec3(0.05, 0.06, 0.09), vec3(0.88, 0.9, 0.97) * craters, lit);
+      float edge = smoothstep(1.0, 0.86, r2);
+      col = mix(col, moonCol * 1.1, edge * uMoonAlpha * above);
+    }
+  }
   gl_FragColor = vec4(col, 1.0);
 }`;
+
+const STAR_VERT = /* glsl */ `
+attribute float aTw;
+uniform float uTimeS; uniform float uAlpha; uniform float uScale;
+varying float vA;
+void main() {
+  float tw = 0.6 + 0.4 * sin(uTimeS * (1.2 + aTw * 2.4) + aTw * 47.0);
+  vA = tw * uAlpha;
+  gl_PointSize = (1.6 + 1.4 * tw * step(0.7, aTw)) * uScale;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+const STAR_FRAG = /* glsl */ `
+varying float vA;
+void main() { gl_FragColor = vec4(vec3(1.0, 0.98, 0.94) * (0.9 + 0.3 * vA), vA); }`;
 
 export class Sky {
   constructor(scene, camera) {
@@ -62,6 +87,8 @@ export class Sky {
     this.time = START_TIME;
     this.dayLength = DAY_LENGTH_SECONDS;
     this.paused = false;
+    this.day = 0;          // completed day/night cycles (moon phase)
+    this.elapsed = 0;
 
     this.skyLight = 1;
     this.skyTint = new THREE.Vector3(1, 1, 1);
@@ -71,48 +98,49 @@ export class Sky {
     this.sunDir = new THREE.Vector3(0, 1, 0);
     this.dayFactor = 1;
 
-    // dome
+    // dome (gradient uniforms are the shared shading uniforms)
+    const su = SHADING_UNIFORMS;
     this.domeMat = new THREE.ShaderMaterial({
       uniforms: {
-        uTop: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() }, uVoid: { value: new THREE.Color() },
-        uSunset: { value: SUNSET.clone() }, uSunsetStrength: { value: 0 }, uSunDir: { value: new THREE.Vector3(1, 0, 0) },
+        uSkyTop: su.uSkyTop, uSkyHorizon: su.uSkyHorizon, uSkyVoid: su.uSkyVoid, uSunsetColor: su.uSunsetColor,
+        uSunsetStrength: su.uSunsetStrength, uSunDiscDir: su.uSunDiscDir, uSkyDay: su.uSkyDay, uSkyGain: su.uSkyGain, uMoonDir: su.uMoonDir, uMoonPhase: su.uMoonPhase,
+        uSunAlpha: { value: 1 }, uMoonAlpha: { value: 1 },
       },
       vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, side: THREE.BackSide, depthWrite: false, depthTest: false,
     });
+    // legacy aliases (uTop/uHorizon/uVoid/uSunsetStrength) so older callers keep working
+    const u = this.domeMat.uniforms;
+    u.uTop = u.uSkyTop; u.uHorizon = u.uSkyHorizon; u.uVoid = u.uSkyVoid; u.uSunset = u.uSunsetColor; u.uSunDir = u.uSunDiscDir;
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(480, 24, 12), this.domeMat);
     this.dome.renderOrder = -10;
     this.dome.frustumCulled = false;
     scene.add(this.dome);
 
-    // celestial group rotates with time
+    // celestial group rotates with time (stars; the sun and moon are drawn by the dome shader)
     this.celestial = new THREE.Group();
     this.celestial.renderOrder = -9;
     scene.add(this.celestial);
-    // Celestial bodies sit far away (inside the far plane) and depth-test so terrain occludes them.
-    const sunMat = new THREE.MeshBasicMaterial({ map: makeSunTexture(), transparent: true, depthWrite: false, depthTest: true, fog: false });
-    this.sun = new THREE.Mesh(new THREE.PlaneGeometry(105, 105), sunMat);
-    this.sun.position.set(0, 0, -440); // rotated into place by the group
-    this.sun.renderOrder = -9;
-    this.celestial.add(this.sun);
-    const moonMat = new THREE.MeshBasicMaterial({ map: makeMoonTexture(), transparent: true, depthWrite: false, depthTest: true, fog: false });
-    this.moon = new THREE.Mesh(new THREE.PlaneGeometry(70, 70), moonMat);
-    this.moon.position.set(0, 0, 440);
-    this.moon.rotation.y = Math.PI;
-    this.moon.renderOrder = -9;
-    this.celestial.add(this.moon);
-    // stars
-    const starCount = 900;
-    const sp = new Float32Array(starCount * 3);
+    const starCount = 1100;
+    const sp = new Float32Array(starCount * 3), tw = new Float32Array(starCount);
     for (let i = 0; i < starCount; i++) {
       const v = new THREE.Vector3(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize().multiplyScalar(450);
       sp[i * 3] = v.x; sp[i * 3 + 1] = v.y; sp[i * 3 + 2] = v.z;
+      tw[i] = Math.random();
     }
     const sg = new THREE.BufferGeometry();
     sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-    this.starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.8, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, depthTest: true, fog: false });
+    sg.setAttribute('aTw', new THREE.BufferAttribute(tw, 1));
+    this.starMat = new THREE.ShaderMaterial({
+      uniforms: { uTimeS: su.uTimeS, uAlpha: { value: 0 }, uScale: { value: Math.min(window.devicePixelRatio || 1, 1.5) } },
+      vertexShader: STAR_VERT, fragmentShader: STAR_FRAG, transparent: true, depthWrite: false, depthTest: true,
+    });
+    Object.defineProperty(this.starMat, 'opacity', { get: () => this.starMat.uniforms.uAlpha.value, set: (v) => { this.starMat.uniforms.uAlpha.value = v; } });
     this.stars = new THREE.Points(sg, this.starMat);
     this.stars.renderOrder = -9;
     this.celestial.add(this.stars);
+    // sun / moon visibility (the dome draws them); kept as {material:{opacity}} shaped objects for callers
+    this.sun = { material: { get opacity() { return u.uSunAlpha.value; }, set opacity(v) { u.uSunAlpha.value = v; } } };
+    this.moon = { material: { get opacity() { return u.uMoonAlpha.value; }, set opacity(v) { u.uMoonAlpha.value = v; } } };
 
     this.buildClouds();
     this.update(0, new THREE.Vector3(), 7);
@@ -172,7 +200,9 @@ export class Sky {
 
   advance(dt) {
     if (this.paused) return;
-    this.time = (this.time + dt / this.dayLength) % 1;
+    const t = this.time + dt / this.dayLength;
+    if (t >= 1) this.day++;
+    this.time = t % 1;
   }
 
   // time of day label (0.0 = midnight)
@@ -184,9 +214,10 @@ export class Sky {
   // Called each frame with camera position and render distance (chunks)
   update(dt, camPos, renderDistance, underwater = false) {
     this.advance(dt);
+    this.elapsed += dt;
     this.cloudOffset += dt * 0.6;
     const a = (this.time - 0.25) * Math.PI * 2;
-    this.sunDir.set(Math.cos(a), Math.sin(a), 0);
+    this.sunDir.set(Math.cos(a), Math.sin(a) * Math.cos(ORBIT_TILT), Math.sin(a) * Math.sin(ORBIT_TILT));
     const e = this.sunDir.y;
     const day = smoothstep(-0.12, 0.22, e);
     this.dayFactor = day;
@@ -198,11 +229,17 @@ export class Sky {
     const horizon = NIGHT_HORIZON.clone().lerp(DAY_HORIZON, day);
     horizon.lerp(SUNSET, sunset * 0.35);
     const voidC = NIGHT_TOP.clone().lerp(VOID_DAY, day);
-    this.domeMat.uniforms.uTop.value.copy(top);
-    this.domeMat.uniforms.uHorizon.value.copy(horizon);
-    this.domeMat.uniforms.uVoid.value.copy(voidC);
-    this.domeMat.uniforms.uSunsetStrength.value = sunset * 0.9;
-    this.domeMat.uniforms.uSunDir.value.copy(this.sunDir);
+    const su = SHADING_UNIFORMS;
+    su.uSkyTop.value.copy(top);
+    su.uSkyHorizon.value.copy(horizon);
+    su.uSkyVoid.value.copy(voidC);
+    su.uSunsetColor.value.copy(SUNSET);
+    su.uSunsetStrength.value = sunset * 0.9;
+    su.uSunDiscDir.value.copy(this.sunDir);
+    su.uMoonDir.value.copy(this.sunDir).multiplyScalar(-1);
+    su.uMoonPhase.value = (this.day % MOON_PHASES) / MOON_PHASES;
+    su.uSkyDay.value = day;
+    su.uTimeS.value = this.elapsed;
     this.fogColor.copy(horizon);
     const R = renderDistance * 16;
     this.fogNear = R * 0.6;
@@ -210,10 +247,8 @@ export class Sky {
     if (underwater) { this.fogColor.set(0.02, 0.06, 0.3); this.fogNear = 1; this.fogFar = 18; }
     this.dome.position.copy(camPos);
     this.celestial.position.copy(camPos);
-    // sun sits at -z inside the group: first map -z -> +x, then rotate about world z by the sun angle
-    this.celestial.quaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), a);
-    const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
-    this.celestial.quaternion.multiply(q2);
+    // stars rotate with the sun: map -z -> +x, rotate about world z by the sun angle, then tilt the orbit
+    this.celestial.quaternion.setFromAxisAngle(Z_AXIS, a).premultiply(TILT_Q).multiply(Y_FLIP_Q);
     this.starMat.opacity = (1 - day) * 0.9;
     this.stars.visible = day < 0.99;
     this.sun.material.opacity = 1;
@@ -229,13 +264,15 @@ export class Sky {
   }
 
   // Region look (call right after update, before disaster overrides). mix: { space: 0..1, coruscant: 0..1 }.
-  // Space: black sky, full stars, no clouds, no haze. Coruscant: no low clouds, a warm smoggy horizon, longer fog.
+  // Space: black sky, full stars, no clouds, no haze. Coruscant: no low clouds, a warm smoggy horizon, longer fog,
+  // and at night a warm city-glow band on the horizon.
   applyRegion(mix) {
     if (!mix) return;
     const sp = mix.space || 0, co = mix.coruscant || 0;
+    const u = this.domeMat.uniforms;
     if (sp > 0.001) {
-      const u = this.domeMat.uniforms, black = new THREE.Color(0.005, 0.005, 0.01);
-      u.uTop.value.lerp(black, sp); u.uHorizon.value.lerp(new THREE.Color(0.02, 0.02, 0.05), sp); u.uVoid.value.lerp(black, sp);
+      const black = new THREE.Color(0.005, 0.005, 0.01);
+      u.uSkyTop.value.lerp(black, sp); u.uSkyHorizon.value.lerp(new THREE.Color(0.02, 0.02, 0.05), sp); u.uSkyVoid.value.lerp(black, sp);
       u.uSunsetStrength.value *= 1 - sp;
       this.fogColor.lerp(black, sp);
       this.fogNear = lerp(this.fogNear, this.fogFar * 0.9, sp); this.fogFar = lerp(this.fogFar, this.fogFar * 3, sp); // no atmosphere
@@ -245,9 +282,21 @@ export class Sky {
       this.skyLight = lerp(this.skyLight, 0.9, sp); // hard, shadowless "sunlight" in space
     }
     if (co > 0.001) {
-      const u = this.domeMat.uniforms, haze = new THREE.Color(0.78, 0.66, 0.52);
-      u.uHorizon.value.lerp(haze, co * 0.55); u.uVoid.value.lerp(haze, co * 0.4);
-      this.fogColor.lerp(haze, co * 0.45);
+      const night = 1 - this.dayFactor;
+      const haze = new THREE.Color(0.78, 0.66, 0.52);
+      const glow = new THREE.Color(0.55, 0.30, 0.14);   // sodium/neon city glow on the night horizon
+      // the haze itself stays the grey-brown smog of the old look (ACES already warms it a little); the glow is a
+      // band hugging the horizon through the sunset machinery (exp(-7|y|): gone ~15 degrees up), all around at night
+      u.uSkyHorizon.value.lerp(haze, co * 0.55).lerp(glow, co * night * 0.22);
+      u.uSkyVoid.value.lerp(haze, co * 0.4).lerp(glow, co * night * 0.12);
+      u.uSunsetColor.value.lerp(glow, co * night);
+      u.uSunsetStrength.value = Math.max(u.uSunsetStrength.value, co * night * 0.45);
+      this.fogColor.lerp(haze, co * 0.3).lerp(glow, co * night * 0.2);
+      // the far-skyline impostors (coruscant/skyline.js) carry the view past the streamed chunks, so the near fog
+      // can start later and the real towers keep their contrast
+      const far0 = this.fogFar;
+      this.fogNear = lerp(this.fogNear, far0 * 0.85, co);
+      this.fogFar = lerp(this.fogFar, far0 * 1.7, co);
       this.cloudMat.opacity *= 1 - co;      // the city sits above its cloud deck; towers punch through nothing
     }
   }
@@ -259,7 +308,7 @@ export class Sky {
     const mix = ov.skyMix || 0;
     if (mix > 0.005) {
       const u = this.domeMat.uniforms, c = ov.skyColor;
-      u.uTop.value.lerp(c, mix); u.uHorizon.value.lerp(c, mix); u.uVoid.value.lerp(c, mix);
+      u.uSkyTop.value.lerp(c, mix); u.uSkyHorizon.value.lerp(c, mix); u.uSkyVoid.value.lerp(c, mix);
       u.uSunsetStrength.value *= 1 - mix;
       if (!underwater) this.fogColor.lerp(c, mix);
       this.sun.material.opacity *= 1 - mix; this.moon.material.opacity *= 1 - mix; this.starMat.opacity *= 1 - mix;

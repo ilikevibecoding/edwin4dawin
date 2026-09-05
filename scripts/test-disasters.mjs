@@ -18,7 +18,9 @@ console.log('disasters:', types.join(', '));
 
 const waitFor = async (expr, timeoutMs = 90000) => { const t0 = Date.now(); while (Date.now() - t0 < timeoutMs) { if (await page.evaluate(expr)) return true; await page.sleep(250); } return false; };
 const status = async () => JSON.parse(await page.evaluate('JSON.stringify(game.disasters.status())'));
-const worldHash = async () => page.evaluate(`(() => { let h = 0x811c9dc5; const w = game.world; for (let x = -40; x <= 40; x += 2) for (let z = -30; z <= 30; z += 2) for (let y = 50; y < 75; y++) { h ^= w.getBlock(x, y, z) + 1; h = Math.imul(h, 0x01000193) >>> 0; } return (h >>> 0).toString(16); })()`);
+// Doors (NPCs open and close them) and crops (they grow) change block ids on their own between the two samples, so
+// the hash folds each door set and each wheat stage onto one id; everything else must match exactly.
+const worldHash = async () => page.evaluate(`(() => { let h = 0x811c9dc5; const w = game.world, D = game.blockDefs || []; const norm = (id) => { const d = D[id]; if (!d) return id; if (d.door) return 1000 + (d.door === 'oak' ? 1 : 2); if (d.growth !== undefined && d.growth >= 0) return 1010; return id; }; for (let x = -40; x <= 40; x += 2) for (let z = -30; z <= 30; z += 2) for (let y = 50; y < 75; y++) { h ^= norm(w.getBlock(x, y, z)) + 1; h = Math.imul(h, 0x01000193) >>> 0; } return (h >>> 0).toString(16); })()`);
 const pristine = await worldHash();
 
 for (const type of types) {

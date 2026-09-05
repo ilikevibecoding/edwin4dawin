@@ -4,6 +4,7 @@
 // Full cubes get culled faces; partial shapes (slabs, beds, tables, chests, fences, ...) are emitted from their
 // collision boxes with cropped UVs like the chunk mesher does, rails as a flat quad and plants as crossed quads.
 import * as THREE from 'three';
+import { SHADING_PARS, bindShading } from '../render/shading.js';
 import { BLOCKS, SHAPE } from '../blocks.js';
 import { tileUV } from '../textures.js';
 import { SHARED } from '../entityMaterial.js';
@@ -36,10 +37,16 @@ function faceUV(dir, x, y, z, out) {
 const VERT = /* glsl */ `
 attribute float aShade;
 varying vec2 vUv; varying float vShade; varying float vDist;
+#if FANCY
+varying vec3 vWorldPos;
+#endif
 void main() {
   vUv = uv; vShade = aShade;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
+#if FANCY
+  vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+#endif
   gl_Position = projectionMatrix * mv;
 }`;
 const FRAG = /* glsl */ `
@@ -47,6 +54,10 @@ uniform sampler2D map;
 uniform vec2 uLight; uniform float uEmissive;
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
 varying vec2 vUv; varying float vShade; varying float vDist;
+#if FANCY
+varying vec3 vWorldPos;
+#endif
+${SHADING_PARS}
 float lightCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.4); }
 float blockCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.6); }
 void main() {
@@ -54,21 +65,37 @@ void main() {
   if (tex.a < 0.5) discard;
   float sky = lightCurve(uLight.x) * uSkyLight;
   float blk = blockCurve(max(uLight.y, uEmissive));
+#if FANCY
+  // flat cube faces: the normal comes from the position derivatives (no normal attribute in the vehicle geometry)
+  vec3 N = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+  vec3 V = normalize(uCamPos - vWorldPos);
+  vec3 light = shadingLight(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72), vWorldPos, N, lightCurve(uLight.x), vDist);
+  vec3 fogC = fogColorDir(uFogColor, -V);
+#else
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
+  vec3 fogC = uFogColor;
+#endif
   light = max(light, vec3(0.05)) + vec3(uFlash);
   vec3 col = tex.rgb * light * vShade;
-  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vDist));
+#if FANCY
+  col += sunSpecular(vWorldPos, N, N, V, 0.35, 0.8, tex.rgb, lightCurve(uLight.x), vDist) * vShade;   // hull metal
+#endif
+  col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vDist));
   gl_FragColor = vec4(col, 1.0);
 }`;
 
 export function voxelMaterial(atlas) {
-  return new THREE.ShaderMaterial({
+  const m = new THREE.ShaderMaterial({
     uniforms: {
       map: { value: atlas }, uLight: { value: new THREE.Vector2(1, 0) }, uEmissive: { value: 0 },
       uSkyLight: SHARED.uSkyLight, uSkyTint: SHARED.uSkyTint, uFogColor: SHARED.uFogColor, uFogNear: SHARED.uFogNear, uFogFar: SHARED.uFogFar, uFlash: SHARED.uFlash,
     },
     vertexShader: VERT, fragmentShader: FRAG, side: THREE.FrontSide,
+    defines: { FANCY: 0 },   // flipped to 1 by the render pipeline (sun, cascaded shadows, hull specular)
   });
+  bindShading(m);
+  m.userData.shadowCaster = true;   // trains and ships cast shadows on the world
+  return m;
 }
 
 class GeoBuffer {

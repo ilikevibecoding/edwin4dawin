@@ -6,6 +6,71 @@ long tasks, memory, draw calls, triangles, entity counts and load time). Reports
 
 ## Unreleased - natural disasters, administrator panel, multiplayer, eyes, optimization
 
+### Round 5 (user request): Star Wars expansion - Coruscant, Death Star interior, space train, spaceport, 1:1 gameplay, HD render pipeline
+Plan and per-rubric acceptance criteria: `docs/STARWARS_PLAN.md`, `docs/rubrics/01..06` (each rubric carries a
+"Status / decisions" section written by its builder with measurements and known gaps). Everything below is merged on
+the integration branch and in the committed `dist/` build; landmark builders still running are listed at the end.
+
+- **World foundation**: world height 256 (`WORLD_HEIGHT`, save/server/tests updated); `regionAt(x, z)` regions -
+  frontier coast + ocean, the Coruscant plateau (1024 x 1024, top at y 60, centred on (3000, 0)), the space void
+  around the Death Star - with per-region sky/fog (`sky.applyRegion`); a lazy `StructureRegistry`
+  (`structures/index.js`) that lets every large structure fill chunk blocks deterministically on demand instead of
+  keeping dense overlays in memory; 18 Star Wars blocks (durasteel, panels, glow panels, holo signs, consoles, deck
+  plates, steel glass, chrome, lit/dark windows, city lamps, hull plates and trench, ...).
+- **Minecraft 1:1 gameplay** (rubric 01; `items.js`, `doors.js`, `hud.js`, block entities in `world.js`, save v2):
+  hunger and saturation with Minecraft food values (bread, apples, raw/cooked meat; furnace cooking and baking),
+  chests with a 27-slot UI and shift-click quick-move, doors (two-block, NPCs open them ahead and close them behind),
+  wheat crops that grow, item drops with Minecraft's pickup rule; block entities are journaled by the disaster
+  manager so a reset restores a chest with its contents
+  and nothing duplicates. The one-block step: auto-jump now schedules a full-strength jump on the next grounded tick
+  (`autoJumpPending`), key taps are consumed on first read so they register at low frame rates, and double-tap flight
+  only triggers from the air so bunny-hopping cannot start flying.
+- **Space train** (rubric 03; `vehicles/`, `structures/hyperlane.js`, `structures/stations.js`): an elevated
+  hyperlane (y 90) between the frontier station at x 262 (with a roof-deck mini spaceport) and the Coruscant station
+  at x 2548 (glass concourse joined to the spaceport bridge by half-slab steps); a 3-car voxel train whose timetable
+  is a pure function of the game tick (identical on every client), doors that open at platforms, an interior you can
+  walk around in while it moves; the vehicle manager carries players and NPCs standing on any car, and you can step
+  off and climb on while it moves.
+- **Coruscant** (rubric 02 + 06; `coruscant/`): a 3-level street grid (boulevards, streets, skylanes) over the
+  plateau with 421 tower lots, 8 plazas and 12 signature-landmark lots; tower families (residential, office, spire,
+  slab, stepped, industrial) with a room library so every floor has lit, furnished, reachable rooms; blueprints are
+  cached in an LRU and filled per chunk. Signature landmarks (one dedicated builder each, verified by
+  `scripts/landmark-stats.mjs`: deterministic, every room lit + furnished + reachable on foot): CoCo Town market
+  halls, Jedi Temple (five spires, archives, council chamber), Galactic Senate (dome, rotunda, chancellor suite),
+  Uscru undercity strip (neon canyon, gangways, cantinas), Monument Plaza (Umate rock, radial light strips,
+  pavilions), the Works foundry (smelter hall, magma trench, cooling towers). Far-skyline impostors
+  (`coruscant/skyline.js`): one draw call of inset tower boxes + a ground sheet with a long fog and a lit-window
+  lattice at night, hidden inside the streamed radius, so the city reads to ~1000 blocks; Coruscant fog starts at
+  0.85x render distance.
+- **Spaceport and ships** (rubric 03; `coruscant/spaceport.js`, `ships/`): terminal, landing pads, control tower;
+  voxel freighters, shuttles and speeders on Catmull-Rom lanes routed along the boulevard corridors (validated
+  against every lot by `test-spaceport.mjs`), landing / take-off cycles with engine glow.
+- **Death Star** (rubric 04; `deathstar/`): the station used by the superlaser event is now also a real place 3900
+  blocks out in the space region: a full shell with the equatorial trench, and a walkable interior generated from
+  deck plans (hangar 327 with its control room, corridors with blast doors, detention block, throne room, reactor
+  shaft), reached through the hangar mouth (`?x=0&y=130&z=-3880` or the panel's Travel button).
+- **Render pipeline** (rubric 05; `render/`): 64 px refined tiles with procedural normal + material atlases
+  (`hdTiles.js`, `materials.js`, `materialMaps.js`; every tile classified, `test-textures.mjs`), per-pixel PBR-lite
+  lighting with a tangent frame from a new `aFace` mesher attribute, 2-cascade texel-snapped sun shadows with PCF,
+  half-float HDR target with a 5-level bloom capped at +0.35, ACES filmic tone mapping with time-of-day exposure,
+  vignette, depth-gated FXAA, Rayleigh/Mie sky shared with fog, water and metal reflections, animated water with
+  Fresnel. Presets: Cinematic (all on), Balanced, Light (the old direct path; software GL auto-selects it); the
+  shared shading chunk is bound by terrain, entities, debris, vehicles, ships and the tsunami crest.
+- **Admin panel**: a Travel section (frontier town, frontier station, spaceport, Senate, Monument Plaza, skyline,
+  Death Star exterior, Death Star hangar) that streams the target chunks and teleports (flying where needed).
+- Tests: `npm test` now runs unit (11), textures (11), Coruscant towers (6), spaceport (15), Death Star (8) and the
+  40 disaster lifecycle/replay/restore checks; `test-disasters.mjs` folds door states and crop stages into the world
+  hash (NPCs opening doors and crops growing were the cause of the intermittent "reset restores the sampled world
+  region" failure). Multiplayer 8/8.
+- Measured (R1, SwiftShader, `bench/r1_*.json`): Light preset A/B before/after the pipeline 105.3 -> 93.5 ms frame,
+  3.75 -> 3.35 ms JS, 146 draw calls both; Cinematic 408 draw calls (shadow pass 144 chunk + 59 object draws of 374
+  loaded chunks), +58.6 MB GPU memory at 1280x713; noon mean luminance Cinematic/Light 1.024 with real maps; bloom
+  source mask 0.166% of pixels. Real-GPU 60 fps at 1080p is unmeasured in this VM.
+- Known gaps: landmarks Galaxies Opera House, 500 Republica, Chancellery, Medcenter, Detention Center and HoloNet are
+  still being built; NPCs for Coruscant are planned (`docs/STARWARS_PLAN.md`, population plan) but not spawned;
+  clouds cast no shadows; the Coruscant daytime haze is deliberately bright (city smog) and steel-glass roofs still
+  read bright at noon; the "leave the planet by spaceship" journey is the next big project.
+
 ### Round 4 (user feedback): Death Star superlaser, friendlier panel, wave-swept villagers, flight, view distance
 - **Orbital beam rebuilt as a Death-Star-inspired superlaser event.** New battle station (`beam/station.js`,
   `stationGeometry.js`, `stationShaders.js`): a 138^3 voxel volume greedy-meshed into one geometry (37k quads), with an

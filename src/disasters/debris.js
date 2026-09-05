@@ -1,6 +1,7 @@
 // Pooled, instanced debris: block chunks thrown by disasters (one draw call for all debris).
 // Physics: gravity, simple voxel collision, buoyancy in water, optional external force field.
 import * as THREE from 'three';
+import { SHADING_PARS, bindShading } from '../render/shading.js';
 import { BLOCKS, B } from '../blocks.js';
 import { tileUV } from '../textures.js';
 import { SHARED } from '../entityMaterial.js';
@@ -13,10 +14,18 @@ varying vec2 vUv;
 varying vec2 vLight;
 varying float vShade;
 varying float vDist;
+#if FANCY
+varying vec3 vWorldPos;
+varying vec3 vNormal;
+#endif
 void main() {
   vUv = aUV.xy + vec2(uv.x, 1.0 - uv.y) * aUV.z;
   vLight = aLight;
   vec3 n = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal);
+#if FANCY
+  vWorldPos = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz;
+  vNormal = n;
+#endif
   vec3 l1 = normalize(vec3(0.2, 1.0, -0.7));
   vec3 l2 = normalize(vec3(-0.2, 1.0, 0.7));
   float d = max(dot(n, l1), 0.0) + max(dot(n, l2), 0.0);
@@ -29,6 +38,11 @@ const FRAG = /* glsl */ `
 uniform sampler2D map;
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
 varying vec2 vUv; varying vec2 vLight; varying float vShade; varying float vDist;
+#if FANCY
+varying vec3 vWorldPos;
+varying vec3 vNormal;
+#endif
+${SHADING_PARS}
 float lightCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.4); }
 float blockCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.6); }
 void main() {
@@ -36,10 +50,16 @@ void main() {
   if (tex.a < 0.5) discard;
   float sky = lightCurve(vLight.x) * uSkyLight;
   float blk = blockCurve(vLight.y);
+#if FANCY
+  vec3 light = shadingLight(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72), vWorldPos, normalize(vNormal), lightCurve(vLight.x), vDist);
+  vec3 fogC = fogColorDir(uFogColor, normalize(vWorldPos - uCamPos));
+#else
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
+  vec3 fogC = uFogColor;
+#endif
   light = max(light, vec3(0.035)) + vec3(uFlash);
   vec3 col = tex.rgb * light * vShade;
-  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vDist));
+  col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vDist));
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -66,7 +86,9 @@ export class DebrisSystem {
     this.material = new THREE.ShaderMaterial({
       uniforms: { map: { value: atlas }, uSkyLight: SHARED.uSkyLight, uSkyTint: SHARED.uSkyTint, uFogColor: SHARED.uFogColor, uFogNear: SHARED.uFogNear, uFogFar: SHARED.uFogFar, uFlash: SHARED.uFlash },
       vertexShader: VERT, fragmentShader: FRAG,
+      defines: { FANCY: 0 },   // flipped to 1 by the render pipeline for shaded materials (sun + cascaded shadows)
     });
+    bindShading(this.material);
     this.mesh = new THREE.InstancedMesh(geo, this.material, maxCount);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.count = 0;

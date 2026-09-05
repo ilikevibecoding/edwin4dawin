@@ -10,6 +10,7 @@
 // (blue glow panels = engines, glow panels = cabin lights) carry a per-vertex flag so they glow at night and
 // pulse with thrust.
 import * as THREE from 'three';
+import { SHADING_PARS, bindShading } from '../render/shading.js';
 import { B, BLOCKS } from '../blocks.js';
 import { tileUV } from '../textures.js';
 import { SHARED } from '../entityMaterial.js';
@@ -192,12 +193,18 @@ export function buildShipGeometry(model) {
 const VERT = /* glsl */ `
 attribute float aShade; attribute float aEmit; attribute vec3 aInst;
 varying vec2 vUv; varying float vShade; varying float vDist; varying float vEmit; varying vec3 vInst;
+#if FANCY
+varying vec3 vWorldPos;
+#endif
 void main() {
   vUv = uv; vShade = aShade; vEmit = aEmit; vInst = aInst;
 #ifdef USE_INSTANCING
   vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
 #else
   vec4 wp = modelMatrix * vec4(position, 1.0);
+#endif
+#if FANCY
+  vWorldPos = wp.xyz;
 #endif
   vec4 mv = viewMatrix * wp;
   vDist = length(mv.xyz);
@@ -207,6 +214,10 @@ const FRAG = /* glsl */ `
 uniform sampler2D map; uniform float uTime;
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
 varying vec2 vUv; varying float vShade; varying float vDist; varying float vEmit; varying vec3 vInst;
+#if FANCY
+varying vec3 vWorldPos;
+#endif
+${SHADING_PARS}
 float lightCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.4); }
 float blockCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.6); }
 void main() {
@@ -214,9 +225,20 @@ void main() {
   if (tex.a < 0.5) discard;
   float sky = lightCurve(vInst.x) * uSkyLight;
   float blk = blockCurve(vInst.y);
+#if FANCY
+  vec3 N = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
+  vec3 V = normalize(uCamPos - vWorldPos);
+  vec3 light = shadingLight(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72), vWorldPos, N, lightCurve(vInst.x), vDist);
+  vec3 fogC = fogColorDir(uFogColor, -V);
+#else
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
+  vec3 fogC = uFogColor;
+#endif
   light = max(light, vec3(0.05)) + vec3(uFlash);
   vec3 col = tex.rgb * light * vShade;
+#if FANCY
+  col += sunSpecular(vWorldPos, N, N, V, 0.3, 0.85, tex.rgb, lightCurve(vInst.x), vDist) * vShade;   // hull metal
+#endif
   // emissive faces (engines, cabin lights): self-lit, brighter and pulsing while thrusting
   float thrust = vInst.z;
   float glow = vEmit * (0.45 + 0.55 * thrust) * (0.92 + 0.08 * sin(uTime * 11.0 + vDist * 0.3));
@@ -224,18 +246,26 @@ void main() {
   glow = clamp(glow, 0.0, 1.0);
   col = mix(col, hot, glow);
   // lights punch through the haze: distant ships fade to their engine glow before vanishing
+#if FANCY
+  col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vDist) * (1.0 - 0.7 * glow));
+#else
   col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vDist) * (1.0 - 0.7 * glow));
+#endif
   gl_FragColor = vec4(col, 1.0);
 }`;
 
 export function shipMaterial(atlas) {
-  return new THREE.ShaderMaterial({
+  const m = new THREE.ShaderMaterial({
     uniforms: {
       map: { value: atlas }, uTime: { value: 0 },
       uSkyLight: SHARED.uSkyLight, uSkyTint: SHARED.uSkyTint, uFogColor: SHARED.uFogColor, uFogNear: SHARED.uFogNear, uFogFar: SHARED.uFogFar, uFlash: SHARED.uFlash,
     },
     vertexShader: VERT, fragmentShader: FRAG, side: THREE.FrontSide,
+    defines: { FANCY: 0 },   // flipped to 1 by the render pipeline (sun, cascaded shadows, hull specular)
   });
+  bindShading(m);
+  m.userData.shadowCaster = true;   // ships cast shadows on the decks and streets
+  return m;
 }
 
 // One InstancedMesh per model: `capacity` instances, dynamic matrices, per-instance (sky, block, thrust) attribute.

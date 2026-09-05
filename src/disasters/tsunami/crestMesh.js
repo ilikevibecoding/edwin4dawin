@@ -7,6 +7,7 @@
 // The faces are plain block faces (water tile; snow tile for the foam of the toe, the lip and the churn on the
 // stairs) lit by the world light, one draw call.
 import * as THREE from 'three';
+import { SHADING_PARS, bindShading } from '../../render/shading.js';
 import { BLOCKS, B } from '../../blocks.js';
 import { tileUV, TILES } from '../../textures.js';
 import { SHARED } from '../../entityMaterial.js';
@@ -39,10 +40,16 @@ attribute vec2 aLight;
 attribute float aShade;
 attribute float aFoam;
 varying vec2 vUv; varying vec2 vLight; varying float vShade; varying float vFoam; varying float vDist;
+#if FANCY
+varying vec3 vWorldPos;
+#endif
 void main() {
   vUv = uv; vLight = aLight; vShade = aShade; vFoam = aFoam;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
+#if FANCY
+  vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+#endif
   gl_Position = projectionMatrix * mv;
 }`;
 // Foam is the water tile blended toward the white tile (same atlas tile size, so the second sample is an offset),
@@ -52,6 +59,10 @@ uniform sampler2D map;
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
 uniform float uAlpha; uniform vec3 uTint; uniform vec2 uFoamOff;
 varying vec2 vUv; varying vec2 vLight; varying float vShade; varying float vFoam; varying float vDist;
+#if FANCY
+varying vec3 vWorldPos;
+#endif
+${SHADING_PARS}
 float lightCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.4); }
 float blockCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.6); }
 void main() {
@@ -59,11 +70,22 @@ void main() {
   vec3 foam = texture2D(map, vUv + uFoamOff).rgb * vec3(0.96, 0.98, 1.0);
   float sky = lightCurve(vLight.x) * uSkyLight;
   float blk = blockCurve(vLight.y);
+#if FANCY
+  vec3 N = vec3(0.0, 1.0, 0.0);
+  vec3 V = normalize(uCamPos - vWorldPos);
+  vec3 light = shadingLight(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72), vWorldPos, N, lightCurve(vLight.x), vDist);
+  vec3 fogC = fogColorDir(uFogColor, -V);
+#else
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
+  vec3 fogC = uFogColor;
+#endif
   light = max(light, vec3(0.035)) + vec3(uFlash);
   vec3 col = mix(water, foam, vFoam) * light * vShade;
+#if FANCY
+  col += sunSpecular(vWorldPos, N, N, V, 0.2, 0.0, vec3(1.0), lightCurve(vLight.x), vDist) * 0.6;   // sun glint on the crest
+#endif
   float a = mix(0.82, 0.95, vFoam) * uAlpha * smoothstep(0.9, 2.4, vDist);   // columns at the camera fade out
-  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vDist));
+  col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vDist));
   gl_FragColor = vec4(col, a);
 }`;
 
@@ -94,7 +116,9 @@ export class VoxelCrest {
         uSkyLight: SHARED.uSkyLight, uSkyTint: SHARED.uSkyTint, uFogColor: SHARED.uFogColor, uFogNear: SHARED.uFogNear, uFogFar: SHARED.uFogFar, uFlash: SHARED.uFlash,
       },
       vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, side: THREE.FrontSide,
+      defines: { FANCY: 0 },   // flipped to 1 by the render pipeline (sun, shadows, glint); the crest never casts
     });
+    bindShading(this.material);
     this.mesh = new THREE.Mesh(geo, this.material);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 11;
