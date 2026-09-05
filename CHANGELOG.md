@@ -4,6 +4,20 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 `BUILD_ID.txt` next to the deployed `index.html`.
 
 ## Unreleased
+- Iteration 07 scored (4 critics x 13 frames x 27 categories, bench/results/iter07/scores.md): category
+  median 5.5 (iter06: 5.0-5.5); +1.5 water reflections, +1.0 water colour / vegetation / bridges, but two
+  regressions — aircraft geometry 6.5 -> 5.5 (paper-thin tail read, wing-root gap, struts piercing floats,
+  floats resting on rather than in the water) and cloud volume 6.0 -> 5.0 (pancake clouds with straight
+  undersides after the loop-2 cell field, night clouds lit by the below-horizon sun). Wave 4 builders
+  target both plus shadow quality (4.5).
+- Planar water reflections merged (render/reflection.ts): mirrored scene at 0.25-0.5 scale blended into
+  the sky reflection along the wave-perturbed ray; aircraft, floats, piers, boats and bridges now mirror on
+  calm water (hard failure "no reflection of the aircraft" in the three fixed aircraft views). Cost at
+  quality=high: +15..34 % draw calls (plane-rear-quarter 341 -> 392, glass-sun 322 -> 402, bridge-low
+  308 -> 412), triangles +3..29 %; the 400-call budget is now exceeded on two views (perf pass pending).
+- Wake foam no longer saturates: the wake-map term is capped below 1 and modulated by a fine
+  world-anchored grain; fresh ribbons ramp in over their first points and a bounce/skip closes the old
+  ribbon instead of bridging the airborne gap (the water-landing clip showed two flat white bars).
 
 ## iter07 — wave 3 builders and lead fixes (deployed as a73e7fb62028-20260904T202825Z)
 - Water loop 2: physical absorption (red dies within a metre), bay/ocean reflectances re-derived, sediment
