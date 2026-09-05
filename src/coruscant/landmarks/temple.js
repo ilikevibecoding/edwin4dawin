@@ -273,7 +273,8 @@ function greatHall(bp, rng) {
   // floor: smooth stone with a glowing spine and sandstone bands
   for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) bp.set(x, 0, z, (x === CX - 1 || x === CX) ? (z % 3 ? STONE2 : GLOW) : (x >= CX - 3 && x <= CX + 2) ? B.PANEL_BLACK : (z % 8 === 0 ? STONE : STONE2));
   // coffered ceiling with lights
-  for (let x = x0 + 1; x <= x1 - 1; x++) for (let z = z0 + 1; z <= z1 - 1; z++) if (x % 6 === 3 && z % 6 === 3) bp.set(x, y1 + 1, z, GLOW); else if (x % 6 === 0 || z % 6 === 0) bp.set(x, y1 + 1, z, STONE2);
+  for (let x = x0 + 1; x <= x1 - 1; x++) for (let z = z0 + 1; z <= z1 - 1; z++) if (x % 6 === 3 && z % 3 === 0) bp.set(x, y1 + 1, z, GLOW); else if (x % 6 === 0 || z % 6 === 0) bp.set(x, y1 + 1, z, STONE2);
+  for (let z = z0 + 2; z <= z1 - 2; z += 4) for (const x of [x0, x1]) { bp.set(x, y0 + 7, z, GLOW); bp.set(x, y0 + 2, z, (z % 8) ? B.WINDOW_LIT : GLOW); }
   // columns and statues along both sides
   for (let z = z0 + 5; z <= z1 - 5; z += 8) {
     for (const x of [x0 + 2, x1 - 2]) { bp.fill(x, y0, z, x, y1, z, STONE2); bp.set(x, y0 + 8, z, TRIM); bp.set(x, y1, z, TRIM); bp.fill(x, y0 + 15, z, x, y0 + 15, z, GOLD); }
@@ -299,7 +300,7 @@ function rotunda(bp, rng) {
   for (let x = CX - ROT_R - 1; x <= CX + ROT_R + 1; x++) for (let z = CZ - ROT_R - 1; z <= CZ + ROT_R + 1; z++) {
     const d = dist(x, z);
     if (d > ROT_R + 1) continue;
-    if (d > ROT_R) { bp.fill(x, y0, z, x, y1 + 1, z, STONE2); if (Math.round(d * 2) % 3 === 0) for (let y = y0 + 3; y <= y1; y += FLOOR_H) bp.set(x, y, z, B.WINDOW_LIT); continue; }
+    if (d > ROT_R) { bp.fill(x, y0, z, x, y1 + 1, z, STONE2); if (Math.round(d * 2) % 3 === 0) for (let y = y0 + 3; y <= y1; y += FLOOR_H) bp.set(x, y, z, (y === y0 + 3 || y === gallY + 2) ? GLOW : B.WINDOW_LIT); continue; }
     bp.fill(x, y0, z, x, y1, z, AIR);
     bp.set(x, y1 + 1, z, d < 2 ? GLOW : (Math.round(d) % 4 === 0 ? GLOW : BAND));
     bp.set(x, 0, z, d < 4.5 ? (d < 3.5 ? B.WATER : TRIM) : ((Math.floor(d) % 3 === 0) ? STONE : STONE2));
@@ -324,8 +325,10 @@ function rotunda(bp, rng) {
       if (dx) { bp.fill(ax, y + 5, az - 2, ax, y + 5, az + 1, GLOW); } else bp.fill(ax - 2, y + 5, az, ax + 1, y + 5, az, GLOW);
     }
   }
-  // gallery statues of the great masters
+  // gallery statues of the great masters, lantern posts on the railing, chrome bands on the lift pier
   for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4 + Math.PI / 8, sx = Math.round(CX + Math.cos(a) * 14), sz = Math.round(CZ + Math.sin(a) * 14); statue(bp, sx, gallY, sz, [0, 0]); }
+  for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6, px = Math.round(CX + Math.cos(a) * 11.5), pz = Math.round(CZ + Math.sin(a) * 11.5); lamp(bp, px, gallY, pz, 2, B.LANTERN); }
+  for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6 + 0.26, px = Math.round(CX + Math.cos(a) * 12), pz = Math.round(CZ + Math.sin(a) * 12); lamp(bp, px, y0, pz, 3, B.LANTERN); }
   // passages: north to the fountain garden, west to the hangar, east to the east-wing corridor
   bp.fill(CX - 2, y0, 64, CX + 1, y0 + 4, CZ - ROT_R - 2, AIR); bp.fill(CX - 2, y0 + 5, 64, CX + 1, y0 + 5, CZ - ROT_R - 2, GLOW);
   bp.fill(49, y0, CZ - 2, CX - ROT_R - 2, y0 + 4, CZ + 1, AIR); for (let x = 50; x < CX - ROT_R - 2; x += 3) bp.set(x, y0 + 5, CZ, GLOW);
@@ -346,6 +349,7 @@ function rotunda(bp, rng) {
   bp.room('gallery', CX - ROT_R, gallY, CZ - ROT_R, CX + ROT_R, CZ + ROT_R);
   // the central spire's lift shaft descends into the rotunda: a chrome-clad pier from y 1 to the tier-3 roof
   bp.fill(CX - 2, y0, CZ - 2, CX + 1, T3.roof, CZ + 1, B.PANEL_BLACK);
+  for (let y = y0 + 4; y <= T2.y1; y += FLOOR_H) bp.walls(CX - 2, y, CZ - 2, CX + 1, y, CZ + 1, y % 2 ? TRIM : BLUE);
   bp.fill(CX - 1, y0, CZ - 1, CX, T3.roof, CZ, AIR);
   bp.fill(CX - 1, y0, CZ - 1, CX, y0 + 4, CZ, TRIM);   // fountain column occupies the shaft base; the lift starts at the gallery
   bp.fill(CX - 3, gallY, CZ - 1, CX + 2, gallY + 2, CZ, AIR);          // lift doors east and west at the sky-walk
@@ -381,7 +385,13 @@ function fountains(bp, rng) {
     bp.fill(x - 2, 0, z0 + 1, x + 2, 0, z0 + 3, STONE2); bp.fill(x - 1, 0, z0 + 2, x + 1, 0, z0 + 2, B.WATER);
     lamp(bp, x - 3, y0, z0 + 1, 3, B.LANTERN); lamp(bp, x + 3, y0, z0 + 1, 3, B.LANTERN);
   }
-  // hanging lanterns and flowers
+  // low light: lantern posts at every path crossing, lit pool rims, glow bands on the walls and the spire piers at
+  // y 4 and y 12 (the 22-block ceiling is too far for its lights to reach the ground), flowers on the lawns
+  for (let x = x0; x <= x1; x += 12) for (let z = z0; z <= z1; z += 14) { const px = x + 2, pz = z + 2; if (px < x1 && pz < z1 && !inCorner(px, pz)) lamp(bp, px, y0, pz, 3, B.LANTERN); }
+  for (let x = x0 + 4; x <= x1 - 8; x += 12) for (let z = z0 + 3; z <= z1 - 8; z += 14) { if (inCorner(x + 3, z + 3) || inCorner(x, z) || inCorner(x + 6, z + 6)) continue; for (const [gx, gz] of [[x, z], [x + 6, z], [x, z + 6], [x + 6, z + 6]]) bp.set(gx, 0, gz, GLOW); }
+  for (let x = x0; x <= x1; x += 4) for (const z of [z0, z1]) for (const y of [y0 + 3, y0 + 11]) if (bp.get(x, y, z) !== AIR && !inCorner(x, z)) bp.set(x, y, z, GLOW);
+  for (let z = z0; z <= z1; z += 4) for (const x of [x0, x1]) for (const y of [y0 + 3, y0 + 11]) if (bp.get(x, y, z) !== AIR) bp.set(x, y, z, GLOW);
+  for (const [cx, cz] of CORNERS) if (cz < CZ) for (let k = 1; k < SPIRE - 1; k += 3) for (const y of [y0 + 3, y0 + 11]) { bp.set(cx + k, y, cz - 1 + 0, GLOW); bp.set(cx + k, y, cz + SPIRE, GLOW); bp.set(cx - 1 + 0, y, cz + k, GLOW); bp.set(cx + SPIRE, y, cz + k, GLOW); }
   for (let x = x0 + 6; x <= x1 - 6; x += 10) for (let z = z0 + 7; z <= z1 - 7; z += 14) if (!inCorner(x, z) && bp.isAir(x, y0, z)) bp.set(x, y0, z, (x + z) % 2 ? B.POPPY : B.DANDELION);
   bp.room('fountain_garden', x0, y0, z0, x1, z1);
   bp.work(x0 + 3, y0, z1 - 3, 'gardener'); bp.work(x1 - 3, y0, z0 + 5, 'gardener');
@@ -516,9 +526,9 @@ function tier2(bp, rng) {
         if (inCorner(x, z) || inCorner(x + 1, z)) continue;
         if ((z - A.z0) % 9 === 0) continue;                              // cross aisles
         bp.fill(x, ay, z, x, ay + ah - 3, z, B.BOOKSHELF);
-        if ((z - A.z0) % 3 === 1) bp.set(x, ay + ah - 2, z, BLUE);
+        bp.set(x, ay + ah - 2, z, (z - A.z0) % 3 === 1 ? BLUE : GLOW);
       }
-      for (let z = A.z0 + 2; z <= A.z1 - 2; z += 9) { bp.set(x + 1, ay, z, B.TABLE); bp.set(x + 2, ay, z, B.STONE_BRICK_SLAB); bp.spot(x + 2, ay, z, 'seat'); }
+      for (let z = A.z0 + 2; z <= A.z1 - 2; z += 9) { bp.set(x + 1, ay, z, B.TABLE); bp.set(x + 2, ay, z, B.STONE_BRICK_SLAB); bp.spot(x + 2, ay, z, 'seat'); lamp(bp, x + 3, ay, z, 2, B.LANTERN); }
     }
     for (let x = A.x0 + 1; x <= A.x1 - 1; x += 6) for (let z = A.z0 + 1; z <= A.z1 - 1; z += 6) bp.set(x, ay + ah, z, BLUE);
     for (let x = A.x0 + 6; x <= A.x1 - 6; x += 24) { statue(bp, x, ay, A.z1 - 1, [0, -1]); }
