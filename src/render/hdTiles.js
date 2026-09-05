@@ -24,10 +24,25 @@ const BM = B - 1;
 const NM = N - 1;
 
 const FACE = 0, GROOVE = 1, DOT = 2, TRANSP = 3;
+const at = (x, y) => ((y & BM) * B + (x & BM)); // wrapped base texel index
+
+// Per-tile output arrays are carved out of large slabs: a dozen 4 MB buffers instead of ~1200 small typed arrays
+// keeps the young-generation collector quiet during the load-time build (it was ~60 ms of scavenges).
+const SLAB_BYTES = 4 << 20;
+let slab = null, slabOff = 0;
+function slabAlloc(bytes) {
+  bytes = (bytes + 15) & ~15;
+  if (!slab || slabOff + bytes > SLAB_BYTES) { slab = new ArrayBuffer(Math.max(SLAB_BYTES, bytes)); slabOff = 0; }
+  const off = slabOff; slabOff += bytes;
+  return [slab, off];
+}
+export function allocU8(n) { const [buf, off] = slabAlloc(n); return new Uint8ClampedArray(buf, off, n); }
+export function allocF32(n) { const [buf, off] = slabAlloc(n * 4); return new Float32Array(buf, off, n); }
 
 export function makeImageData(w, h) {
-  if (typeof ImageData !== 'undefined') return new ImageData(w, h);
-  return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) };
+  const data = allocU8(w * h * 4);
+  if (typeof ImageData !== 'undefined') return new ImageData(data, w, h);
+  return { width: w, height: h, data };
 }
 
 // FNV-1a on the tile name: the per-tile seed.
@@ -99,48 +114,78 @@ const SCR = {
   dl: new Float32Array(N), dh: new Float32Array(N), hbUp: new Float32Array(N), mark: new Uint8Array(N), acut: new Uint8Array(N),
   cr: new Float32Array(N), cg: new Float32Array(N), cb: new Float32Array(N), fr: new Float32Array(N), fg: new Float32Array(N), fb: new Float32Array(N),
   W: [new Float32Array(N), new Float32Array(N), new Float32Array(N), new Float32Array(N)],
+  sim: [new Float32Array(BB), new Float32Array(BB), new Float32Array(BB * 2)],
 };
 
 // ---------------------------------------------------------------------------
-// 16 -> 64 lattice tables: the four base texels around every HD texel (bilinear footprint, wrapping) and their
-// plain bilinear weights. The owner texel (x >> 2, y >> 2) is always one of the four.
+// 16 -> 64 lattice tables. Every HD texel is interpolated from four base texels: its owner (x >> 2, y >> 2), the
+// horizontal neighbour, the vertical neighbour and the diagonal one (bilinear footprint, wrapping).
+//   IH/IV/ID: base indices of the three neighbours; WO/WH/WV/WD: plain bilinear weights;
+//   SH/SV/SD: index of the (owner, neighbour) pair in the per-tile similarity maps (see pairSimilarity).
 // ---------------------------------------------------------------------------
-const Q0 = new Int32Array(N), Q1 = new Int32Array(N), Q2 = new Int32Array(N), Q3 = new Int32Array(N), OWN = new Int32Array(N);
-const QW0 = new Float32Array(N), QW1 = new Float32Array(N), QW2 = new Float32Array(N), QW3 = new Float32Array(N);
+const OWN = new Int32Array(N), IH = new Int32Array(N), IV = new Int32Array(N), ID = new Int32Array(N);
+const WO = new Float32Array(N), WH = new Float32Array(N), WV = new Float32Array(N), WD = new Float32Array(N);
+const SH = new Int32Array(N), SV = new Int32Array(N), SD = new Int32Array(N);
 for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-  const i = y * S + x;
-  const gx = (x + 0.5) / K - 0.5, gy = (y + 0.5) / K - 0.5;
-  const x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0;
-  Q0[i] = ((y0 & BM) * B + (x0 & BM)); Q1[i] = ((y0 & BM) * B + ((x0 + 1) & BM));
-  Q2[i] = (((y0 + 1) & BM) * B + (x0 & BM)); Q3[i] = (((y0 + 1) & BM) * B + ((x0 + 1) & BM));
-  OWN[i] = (y >> 2) * B + (x >> 2);
-  QW0[i] = (1 - fx) * (1 - fy); QW1[i] = fx * (1 - fy); QW2[i] = (1 - fx) * fy; QW3[i] = fx * fy;
+  const i = y * S + x, bx = x >> 2, by = y >> 2, kx = x & 3, ky = y & 3;
+  const dx = kx < 2 ? -1 : 1, dy = ky < 2 ? -1 : 1;                // side of the owner the texel leans to
+  const fx = kx < 2 ? (1.5 - kx) / 4 : (kx - 1.5) / 4, fy = ky < 2 ? (1.5 - ky) / 4 : (ky - 1.5) / 4; // 0.125 | 0.375
+  OWN[i] = by * B + bx;
+  IH[i] = at(bx + dx, by); IV[i] = at(bx, by + dy); ID[i] = at(bx + dx, by + dy);
+  WO[i] = (1 - fx) * (1 - fy); WH[i] = fx * (1 - fy); WV[i] = (1 - fx) * fy; WD[i] = fx * fy;
+  // pair maps: simH[b] = sim(b, right(b)), simV[b] = sim(b, down(b)), simD[b] = sim(b, down-right(b)),
+  // simD[256 + b] = sim(b, down-left(b))
+  SH[i] = dx > 0 ? OWN[i] : IH[i];
+  SV[i] = dy > 0 ? OWN[i] : IV[i];
+  SD[i] = dy > 0 ? (dx > 0 ? OWN[i] : 256 + OWN[i]) : (dx > 0 ? 256 + at(bx + 1, by - 1) : at(bx - 1, by - 1));
 }
+const PLAIN_W = [WO, WH, WV, WD]; // plain bilinear (smooth classes: rounded stones, fabric, foliage)
 
-// Edge-aware weights for this tile: a neighbouring base texel only contributes to an HD texel when it has the
-// owner's structure code and a similar colour (tolerance `tol`, mean abs RGB difference), so the smoothing
-// never crosses grooves, rivets, holes or material changes. tol 0 = pure nearest neighbour (crisp pixel art).
-function blendWeights(A, tol, W) {
+// Similarity of neighbouring base texel pairs: 1 when they share the structure code and their colours are within
+// tolerance `tol` (mean abs RGB difference), fading to 0 at 2x the half tolerance. The edge-aware upsample only
+// blends across similar pairs, so it never crosses grooves, rivets, holes or material changes.
+function pairSimilarity(A, tol, sim) {
   const st = A.st, nug = A.nug, br = A.br, bg = A.bg, bb = A.bb;
-  const W0 = W[0], W1 = W[1], W2 = W[2], W3 = W[3];
   const t0 = tol * 0.5, t1 = tol + 1e-6;
+  const simH = sim[0], simV = sim[1], simD = sim[2];
+  for (let by = 0; by < B; by++) for (let bx = 0; bx < B; bx++) {
+    const b = by * B + bx, r = br[b], g = bg[b], bl = bb[b], s = st[b], n = nug[b];
+    const jR = at(bx + 1, by), jD = at(bx, by + 1), jDR = at(bx + 1, by + 1), jDL = at(bx - 1, by + 1);
+    let j = jR, d = 0;
+    if (st[j] !== s || nug[j] !== n) simH[b] = 0; else { d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - bl)) / 3; simH[b] = d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); }
+    j = jD;
+    if (st[j] !== s || nug[j] !== n) simV[b] = 0; else { d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - bl)) / 3; simV[b] = d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); }
+    j = jDR;
+    if (st[j] !== s || nug[j] !== n) simD[b] = 0; else { d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - bl)) / 3; simD[b] = d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); }
+    j = jDL;
+    if (st[j] !== s || nug[j] !== n) simD[256 + b] = 0; else { d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - bl)) / 3; simD[256 + b] = d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); }
+  }
+}
+// Per-tile edge-aware weights (normalised) from the pair similarities.
+function blendWeights(sim, W) {
+  const simH = sim[0], simV = sim[1], simD = sim[2];
+  const W0 = W[0], W1 = W[1], W2 = W[2], W3 = W[3];
   for (let i = 0; i < N; i++) {
-    const o = OWN[i], so = st[o], no = nug[o], r = br[o], g = bg[o], b = bb[o];
-    let w0 = QW0[i], w1 = QW1[i], w2 = QW2[i], w3 = QW3[i], j;
-    j = Q0[i]; if (j !== o) { if (st[j] !== so || nug[j] !== no) w0 = 0; else { const d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - b)) / 3; w0 *= d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); } }
-    j = Q1[i]; if (j !== o) { if (st[j] !== so || nug[j] !== no) w1 = 0; else { const d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - b)) / 3; w1 *= d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); } }
-    j = Q2[i]; if (j !== o) { if (st[j] !== so || nug[j] !== no) w2 = 0; else { const d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - b)) / 3; w2 *= d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); } }
-    j = Q3[i]; if (j !== o) { if (st[j] !== so || nug[j] !== no) w3 = 0; else { const d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - b)) / 3; w3 *= d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); } }
-    const s = 1 / (w0 + w1 + w2 + w3);
-    W0[i] = w0 * s; W1[i] = w1 * s; W2[i] = w2 * s; W3[i] = w3 * s;
+    const wo = WO[i], wh = WH[i] * simH[SH[i]], wv = WV[i] * simV[SV[i]], wd = WD[i] * simD[SD[i]];
+    const s = 1 / (wo + wh + wv + wd);
+    W0[i] = wo * s; W1[i] = wh * s; W2[i] = wv * s; W3[i] = wd * s;
   }
 }
 // dst (64x64) = per-base-texel field `src` (16x16) interpolated with the weights W
 function upsample(src, W, dst) {
   const W0 = W[0], W1 = W[1], W2 = W[2], W3 = W[3];
-  for (let i = 0; i < N; i++) dst[i] = W0[i] * src[Q0[i]] + W1[i] * src[Q1[i]] + W2[i] * src[Q2[i]] + W3[i] * src[Q3[i]];
+  for (let i = 0; i < N; i++) dst[i] = W0[i] * src[OWN[i]] + W1[i] * src[IH[i]] + W2[i] * src[IV[i]] + W3[i] * src[ID[i]];
 }
-const QW = [QW0, QW1, QW2, QW3]; // plain bilinear (smooth classes: rounded stones, fabric, foliage)
+// three fields at once (colour channels)
+function upsample3(s0, s1, s2, W, d0, d1, d2) {
+  const W0 = W[0], W1 = W[1], W2 = W[2], W3 = W[3];
+  for (let i = 0; i < N; i++) {
+    const o = OWN[i], h = IH[i], v = IV[i], d = ID[i], w0 = W0[i], w1 = W1[i], w2 = W2[i], w3 = W3[i];
+    d0[i] = w0 * s0[o] + w1 * s0[h] + w2 * s0[v] + w3 * s0[d];
+    d1[i] = w0 * s1[o] + w1 * s1[h] + w2 * s1[v] + w3 * s1[d];
+    d2[i] = w0 * s2[o] + w1 * s2[h] + w2 * s2[v] + w3 * s2[d];
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Base (16x16) analysis: luminance, structure (face / groove / dot / transparent), base height.
@@ -152,7 +197,6 @@ function histMedian(hist, channel, count) {
   for (let v = 0; v < 256; v++) { acc += hist[channel * 256 + v]; if (acc > count >> 1) return v; }
   return 255;
 }
-const at = (x, y) => ((y & BM) * B + (x & BM));
 
 function analyze(base, M) {
   const d = base.data;
@@ -630,7 +674,7 @@ function compose(M, A, d, dl, dh, hbUp, o, material, height, seed) {
   const { cr, cg, cb, er, eg, eb, fr, fg, fb, W } = SCR;
   const mat = [0, 0, 0];
   const scale = M.detailScale ?? 1;
-  upsample(A.br, W, cr); upsample(A.bg, W, cg); upsample(A.bb, W, cb);
+  upsample3(A.br, A.bg, A.bb, W, cr, cg, cb);
   const acut = SCR.acut;
   acut.fill(0);
   roundCorners(M, A, dl, cr, cg, cb, hbUp, acut);
@@ -660,7 +704,7 @@ function compose(M, A, d, dl, dh, hbUp, o, material, height, seed) {
     er[bi] = r - sr / (K * K); eg[bi] = g - sg / (K * K); eb[bi] = b - sb / (K * K);
   }
   // smooth correction field (same edge-aware weights as the base) ...
-  upsample(er, W, fr); upsample(eg, W, fg); upsample(eb, W, fb);
+  upsample3(er, eg, eb, W, fr, fg, fb);
   for (let by = 0; by < B; by++) for (let bx = 0; bx < B; bx++) {
     const bi = by * B + bx, a = d[bi * 4 + 3];
     blockMaterial(M, A, bi, mat);
@@ -696,8 +740,8 @@ function upsamplePlain(base, color) {
 export function refineTile(base, name, rng = null, opts = null) {
   const M = (opts && opts.material) || classify(name);
   const color = makeImageData(S, S);
-  const height = new Float32Array(N);
-  const material = new Uint8ClampedArray(N * 4);
+  const height = allocF32(N);
+  const material = allocU8(N * 4);
   const d = base.data;
   if ((opts && opts.plain) || M.cls === 'plain') {
     upsamplePlain(base, color);
@@ -707,14 +751,15 @@ export function refineTile(base, name, rng = null, opts = null) {
   if (!rng) rng = new RNG(seedFromName(name));
   const nz = banks();
   const A = analyze(base, M);
-  blendWeights(A, M.blend, SCR.W);
+  pairSimilarity(A, M.blend, SCR.sim);
+  blendWeights(SCR.sim, SCR.W);
   const dl = SCR.dl, dh = SCR.dh;
   dl.fill(0); dh.fill(0);
   const C = { M, A, rng, nz, T: makeXf(rng), seed: rng.int(0, 1e9), dl, dh, baseData: d };
   (D[M.detail] || D[M.cls] || D.stone)(C);
   structurePass(M, A, dl, dh);
   // base relief: bilinear for rounded classes (stones, lumps), edge-aware elsewhere (crisp steps at grooves only)
-  upsample(A.hb, M.smooth ? QW : SCR.W, SCR.hbUp);
+  upsample(A.hb, M.smooth ? PLAIN_W : SCR.W, SCR.hbUp);
   if (M.bake > 0) bakeShading(SCR.hbUp, dl, M.bake);
   compose(M, A, d, dl, dh, SCR.hbUp, color.data, material, height, C.seed);
   return { color, height, material };
@@ -723,7 +768,7 @@ export function refineTile(base, name, rng = null, opts = null) {
 // Tangent-space normal map (OpenGL convention: R = +u right, G = toward the top of the tile, B = out) from a
 // wrapped height field via Sobel. `strength` scales the slope (class relief).
 export function normalFromHeight(height, strength = 1) {
-  const out = new Uint8ClampedArray(N * 4);
+  const out = allocU8(N * 4);
   const h = height;
   const k = 3 * strength;
   for (let y = 0; y < S; y++) {
@@ -745,7 +790,7 @@ export function normalFromHeight(height, strength = 1) {
 // Mip level downsamplers (one function per mode so each is compiled once for its own types).
 // colour: alpha-aware, the exact rule the old 16x16 atlas used, so the top levels match it.
 function downColor(cur, cs) {
-  const ns = cs >> 1, out = new Uint8ClampedArray(ns * ns * 4);
+  const ns = cs >> 1, out = allocU8(ns * ns * 4);
   for (let y = 0; y < ns; y++) for (let x = 0; x < ns; x++) {
     const o = (y * ns + x) * 4, i0 = ((y * 2) * cs + x * 2) * 4, i1 = i0 + 4, i2 = i0 + cs * 4, i3 = i2 + 4;
     let r = 0, g = 0, b = 0, n = 0;
@@ -761,7 +806,7 @@ function downColor(cur, cs) {
   return out;
 }
 function downLinear(cur, cs) {
-  const ns = cs >> 1, out = new Uint8ClampedArray(ns * ns * 4);
+  const ns = cs >> 1, out = allocU8(ns * ns * 4);
   for (let y = 0; y < ns; y++) for (let x = 0; x < ns; x++) {
     const o = (y * ns + x) * 4, i0 = ((y * 2) * cs + x * 2) * 4, i1 = i0 + 4, i2 = i0 + cs * 4, i3 = i2 + 4;
     out[o] = (cur[i0] + cur[i1] + cur[i2] + cur[i3]) / 4;
@@ -772,7 +817,7 @@ function downLinear(cur, cs) {
   return out;
 }
 function downNormal(cur, cs) {
-  const ns = cs >> 1, out = new Uint8ClampedArray(ns * ns * 4);
+  const ns = cs >> 1, out = allocU8(ns * ns * 4);
   for (let y = 0; y < ns; y++) for (let x = 0; x < ns; x++) {
     const o = (y * ns + x) * 4, i0 = ((y * 2) * cs + x * 2) * 4, i1 = i0 + 4, i2 = i0 + cs * 4, i3 = i2 + 4;
     const nx = (cur[i0] + cur[i1] + cur[i2] + cur[i3]) / 4 - 127.5;
