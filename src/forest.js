@@ -995,6 +995,43 @@ function foliageMaterial(map, {
   // almost directly behind the card. This is the aureole a thin leaf shows at
   // sunset and nothing else in the model produces it.
   transPeak = 0.0,
+  // Low-sun multiplier on the transmission and its cap (1 leaves them alone).
+  // A crown seen edge-on to a six-degree sun is a lens with light entering
+  // its whole sunward side; the noon term, sized so the underside of a
+  // high-sun crown stays the shaded side, left the dusk interior 3.2 stops
+  // under the sky. Gated by the same `lowSun` as the forward peak, so noon
+  // and the moon (43 degrees) are untouched.
+  transLow = 1.0,
+  // How far the outer shell's forward peak may pass over `transMax`, as a
+  // multiple of the cap (0 keeps the cap on everything). The cap is what a
+  // sun-facing leaf returns, and a rim spray with the sun behind it passes
+  // more than that — a thin leaf transmits more than it reflects. Held to
+  // the shell (aShade near 0) so the buried cards stay a dark mass and only
+  // the fringe lights: that is the whole of what an acacia does at dusk.
+  transRim = 0.0,
+  // Self-shadow down a tuft: 0 off; 1 takes the root to 0.45 of the tip and
+  // toward a dark olive (the blade at 0xc9b37a going to 0x8a7a48 at its foot),
+  // read off aCrown, which plantClump fills with height-in-plant. The atlas
+  // carries a per-blade ramp already; this is the whole plant's, so a clump
+  // is a mass with a dark heart and lit tips instead of a fan of bright edges.
+  tuftAO = 0.0,
+  // Sun-side bias on the crown's indirect light, 0 off. The crown weight
+  // (aCrown) says which way is up; nothing said which way the sun is, so a
+  // noon crown was lit top-and-underside whichever side the key stood, and the
+  // direct term could not say it either — from the road a crown is mostly
+  // underside and rim, and the underside is in the crown's own shadow on both
+  // halves. What a real crown has that a card cluster lacks is the light
+  // scattered into its sunward half by its own lit rim and the lit ground
+  // under it. In stops: at s the indirect on a card at the crown's sunward
+  // edge is 2^s of neutral and 2^-s at the far edge, read off where the card
+  // stands relative to the trunk (0.7) and its shell normal's horizontal part
+  // (0.3), so aCrown stays the up/down gradient and this is the left/right
+  // one. Measured on a perpendicular framing of the nearest umbrella crown at
+  // a 58-degree sun: 0 gave the two halves 0.00 st apart, and the split
+  // runs at about 0.33 st per unit of s — the halves average about a third
+  // of the edge value, and the direct term gives them nothing on a flat lens
+  // whose shell normals are up and down.
+  sunSide = 0.0,
   // Dirt collar under the plant (the flat card plantClump adds at the base):
   // 0 discards it, 1 draws it at full soil darkness.
   collar = 0.0,
@@ -1055,6 +1092,10 @@ function foliageMaterial(map, {
     uCrownGrad: { value: crownGrad },
     uTransMax: { value: transMax },
     uTransPeak: { value: transPeak },
+    uTransLow: { value: transLow },
+    uTransRim: { value: transRim },
+    uTuftAO: { value: tuftAO },
+    uSunSide: { value: sunSide },
     uCollar: { value: collar },
     // The day rig's hemisphere and key, as luma, so the shader can measure how
     // much light the hour has actually left in the scene. See the note at the
@@ -1080,7 +1121,8 @@ function foliageMaterial(map, {
         varying float vShade;
         varying float vRoot;
         varying float vCrown;
-        varying vec3 vWPos;`,
+        varying vec3 vWPos;
+        varying vec2 vRad;`,
       )
       .replace(
         '#include <project_vertex>',
@@ -1089,8 +1131,10 @@ function foliageMaterial(map, {
         vCrown = aCrown;
         #ifdef USE_INSTANCING
           vWPos = ( modelMatrix * instanceMatrix * vec4( transformed, 1.0 ) ).xyz;
+          vRad = vWPos.xz - ( modelMatrix * instanceMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xz;
         #else
           vWPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
+          vRad = vWPos.xz - ( modelMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xz;
         #endif
         #include <project_vertex>`,
       );
@@ -1127,11 +1171,16 @@ function foliageMaterial(map, {
         uniform float uCrownGrad;
         uniform float uTransMax;
         uniform float uTransPeak;
+        uniform float uTransLow;
+        uniform float uTransRim;
+        uniform float uTuftAO;
+        uniform float uSunSide;
         uniform float uCollar;
         varying float vShade;
         varying float vRoot;
         varying float vCrown;
         varying vec3 vWPos;
+        varying vec2 vRad;
         float folLuma( vec3 c ) { return dot( c, vec3( 0.2126, 0.7152, 0.0722 ) ); }`,
       )
       .replace('#include <lights_physical_pars_fragment>', WRAPPED_PHYSICAL)
@@ -1156,6 +1205,19 @@ function foliageMaterial(map, {
           // says "card" from any distance at all.
           vec3 soil = uSoil * ( folLuma( diffuseColor.rgb ) / max( folLuma( uSoil ), 1e-3 ) ) * 0.34;
           diffuseColor.rgb = mix( diffuseColor.rgb, soil, pow( vRoot, 1.5 ) * uRootDark );
+        }
+        if ( uTuftAO > 0.0 && vRoot <= 1.0 ) {
+          // The plant's own shadow on itself, root to tip. 0.45 of the tip's
+          // value at the foot, in linear, with blue down further than red and
+          // green so the foot goes olive rather than grey — 0xc9b37a at the tip
+          // is 0x8a7a48 at the root, linear in height (a first cut steeper at
+          // the foot, pow 0.7, moved the hero's straw p10 by 0.18 st and its
+          // median by 0.02 — the foot is under the collar and the other tufts,
+          // and the self-shadow has to show on the blades that are seen). The
+          // collar (vRoot > 1) is soil already and keeps out of it.
+          float tipK = saturate( vCrown );
+          vec3 ao = mix( vec3( 0.43, 0.45, 0.32 ), vec3( 1.0 ), tipK );
+          diffuseColor.rgb *= mix( vec3( 1.0 ), ao, uTuftAO );
         }
         if ( uCrownGrad > 0.0 ) {
           // The lit/shade split a card cluster cannot make for itself. The
@@ -1265,6 +1327,35 @@ function foliageMaterial(map, {
           // 0.1 albedo under the moon, a hole in the stars rather than a tree.
           // A tenth of the day term is still well under the ground's own fill.
           float hourK = max( ambK * mix( keyK, 1.0, 0.25 ), uNightFloor );
+          // the key low over the horizon (full below ~8 degrees, shut above ~28);
+          // uSunDir is retuned by the hour, and the moon stands at 43
+          float lowSun = 1.0 - smoothstep( 0.12, 0.48, uSunDir.y );
+          // Which half of the crown this card is on, against the key's azimuth
+          // (see uSunSide): where it stands relative to the trunk, and which
+          // way its shell normal leans. The position is the honest half of
+          // it — a lens's sunward half is the half toward the sun whichever
+          // way a card in it faces — the normal breaks the seam at the axis.
+          // Eased at low sun: a six-degree key lights the rim, not a half.
+          float sideK = 1.0;
+          if ( uSunSide > 0.0 ) {
+            vec2 sh = normalize( uSunDir.xz + vec2( 1e-5, 0.0 ) );
+            float rl = length( vRad );
+            float sidePos = dot( vRad, sh ) / max( rl, 1e-4 ) * smoothstep( 0.0, 2.5, rl );
+            vec2 nh = wN.xz;
+            float sideN = dot( nh, sh ) / max( length( nh ), 1e-4 ) * min( length( nh ) * 1.6, 1.0 );
+            // In stops. The far side goes down a quarter as far as the sunward
+            // side comes up: the underside is dark already, and a version that
+            // held the crown's mean with a divisor put the whole underside of
+            // the forest view's acacia 0.6 st down and half its upper box under
+            // Y 0.01 — the black cut-out the round asked to remove. At half
+            // the forest view's near crown, which is mostly far side from the
+            // road, still went 0.29 st down on that side and its box median
+            // 9 % under before. The crown's centre (side 0) is left exactly
+            // where it was.
+            float side = sidePos * 0.7 + sideN * 0.3;
+            float sideS = uSunSide * mix( 1.0, 0.4, lowSun );
+            sideK = exp2( sideS * side * ( side > 0.0 ? 1.0 : 0.25 ) );
+          }
           // Occlude what three has already accumulated, not just what is added
           // below. The baked crown weight used to gate only the analytic terms,
           // so the hemisphere light and the environment probe went on flooding
@@ -1273,10 +1364,10 @@ function foliageMaterial(map, {
           // evenly right through its depth is a shrub. Ablating the terms one at a
           // time put three's own ambient at about seventy per cent of the value
           // here, which is why nothing I could reach was moving it.
-          reflectedLight.indirectDiffuse *= open;
+          reflectedLight.indirectDiffuse *= open * sideK;
           // the probe sheen is a surface effect, so it is only partly occluded
           reflectedLight.indirectSpecular *= 0.34 + 0.66 * open;
-          reflectedLight.indirectDiffuse += diffuseColor.rgb * mix( uGnd, uSky, wN.y * 0.5 + 0.5 ) * open * hourK;
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * mix( uGnd, uSky, wN.y * 0.5 + 0.5 ) * open * hourK * sideK;
           // Thin-leaf transmission, gated on the light and not only on the view.
           //
           // The old form asked one question — is the camera looking toward the
@@ -1293,7 +1384,6 @@ function foliageMaterial(map, {
           // backlit crown transmits as hard as its edge, which is the one thing
           // that never happens in a photograph.
           vec3 fV = normalize( vWPos - cameraPosition );
-          float lowSun = 1.0 - smoothstep( 0.12, 0.48, uSunDir.y );
           // Under a low sun the crown is edge-on to the light and a metre or
           // two thick: light enters at the sunward side and scatters through
           // the whole lens, so every card in it transmits, not only the ones
@@ -1333,7 +1423,8 @@ function foliageMaterial(map, {
           // key against the day's, so this is shut by dusk (0.25) and open
           // under the moon (0.05).
           float nightK = 1.0 - smoothstep( 0.08, 0.3, keyK );
-          float backV = mix( 0.06 + pow( toSun, 2.2 ) * 0.6, 1.0, lowSun ) + pow( toSun, 14.0 ) * uTransPeak * lowSun + nightK * 0.5;
+          float broadV = mix( 0.06 + pow( toSun, 2.2 ) * 0.6, 1.0, lowSun ) + nightK * 0.5;
+          float peakV = pow( toSun, 14.0 ) * uTransPeak * lowSun;
           float thin = ( 1.0 - vShade * 0.6 ) * ( 1.0 - abs( dot( wN, fV ) ) * 0.34 );
           // Driven by the key's irradiance as the direct term is (keyL / pi is
           // what a face square to the key receives), so uTrans is the leaf's
@@ -1342,8 +1433,25 @@ function foliageMaterial(map, {
           // to *noon* — which at dusk left a fifth of the term standing at the
           // one hour the term is for. Bounded per material: straw at half of
           // what its lit face returns, because straw bleaches; a crown at par.
+          //
+          // The cap is against the key's irradiance on a sun-facing leaf, not
+          // this card's own lit term, so a card in shade still transmits. But
+          // one cap for the whole crown flattened it: at dusk the rim's broad
+          // term and its forward peak both ran into the cap while the buried
+          // cards sat under it, so rim and interior landed within a third of a
+          // stop and the crown read as a cut-out (round 4: 3.2 stops under the
+          // sky, no lit rim). Now the outer shell's peak passes over the cap
+          // on its own bound (uTransRim caps), and the low-sun term is scaled
+          // by uTransLow — both gated by lowSun, so noon and the moon (43
+          // degrees) are exactly as they were; ungated, the night term's share
+          // of raw ran over the cap on the shell and the night crown box
+          // went from 0.52 to 0.63 of the sky.
           float lit = keyL * RECIPROCAL_PI * uDirect;
-          float through = min( uTrans * keyL * RECIPROCAL_PI * backN * backV * thin, uTransMax * lit / max( folLuma( uSunTint ), 1e-3 ) );
+          float lowK = mix( 1.0, uTransLow, lowSun );
+          float cap = uTransMax * lit * lowK / max( folLuma( uSunTint ), 1e-3 );
+          float raw = uTrans * lowK * keyL * RECIPROCAL_PI * backN * thin * ( broadV + peakV );
+          float shell = ( 1.0 - smoothstep( 0.25, 0.75, vShade ) ) * lowSun;
+          float through = min( raw, cap ) + shell * min( max( raw - cap, 0.0 ), cap * uTransRim );
           reflectedLight.indirectDiffuse += diffuseColor.rgb * uSunTint * through;
         }`,
       )
@@ -2131,7 +2239,7 @@ function plantClump(
   w,
   h,
   tiles,
-  { seed = 1, planes = 3, bow = 0.3, segs = [1, 2], spread = 0.18, shell = 0.5, lean = 0.34, form = 'rosette', collar = 0 } = {},
+  { seed = 1, planes = 3, bow = 0.3, segs = [1, 2], spread = 0.18, shell = 0.5, lean = 0.34, form = 'rosette', collar = 0, reach = 1 } = {},
 ) {
   const rnd = mulberry32(seed);
   const parts = [];
@@ -2258,8 +2366,12 @@ function plantClump(
   // plant of its nominal height: at the full band the whole bush went to soil
   rootWeight(geo, form === 'sprawl' ? h * 0.3 : h);
   // a bush has a top and an underside the way a crown does, at a fraction of
-  // the crown's split (the material decides how much)
-  crownWeight(geo, (x, y) => y / h);
+  // the crown's split (the material decides how much). `reach` is how far up
+  // the card the painting's blades go (the tile's `tall`): the short khaki
+  // tuft stops at 0.6 of its tile, and with the weight running over the whole
+  // card its tips sat at 0.6 and the tuft self-shadow (uTuftAO) took the whole
+  // plant down a third instead of grading it root to tip.
+  crownWeight(geo, (x, y) => y / (h * reach));
   // steeper toward the base than it was: a clump lit evenly from root to tip has
   // no weight on the ground and the verge reads as a tray of cut parsley
   shadeWeight(geo, (x, y, z) => 1.0 - Math.pow(clamp(y / h), 0.62) * 0.82 - Math.hypot(x, z) / (w * 0.75) * 0.18);
@@ -2459,7 +2571,12 @@ export function createForest({
   setFoliageDetail(Q.atlas, Q.aniso);
   const group = new THREE.Group();
   group.name = 'forest';
-  const rnd = mulberry32(20260726);
+  // One stream for the whole forest, so every plant's place is a function of
+  // how many draws came before it. Rebindable (`let`) for scatter's make-up
+  // pass, which draws from a stream of its own: a count change at one site
+  // would otherwise re-lay every plant scattered after it, and the pride's
+  // lawn is scattered before the hero's verge.
+  let rnd = mulberry32(20260726);
   const density = clamp(treeCount / 210, 0.35, 1.6);
   const span = Math.max(area, terrain.size * 0.96) * 0.5;
 
@@ -2615,8 +2732,24 @@ export function createForest({
     trans: 1.1,
     transMax: 0.8,
     transPeak: 2.5,
+    // Round 5 (see the shader): the dusk crown was 3.2 stops under the sky
+    // with rim = interior, and ablation put the whole of the key's share of a
+    // dusk crown in this term — the leaf's own lit face at a 6 degree sun is
+    // a stop under what the sky asks. The low-sun transmission and its cap
+    // up by 2.2 for the mass (1.8 measured -2.49 st on the perpendicular
+    // probe, on the line); the outer shell allowed one more cap over the
+    // bound for the fringe.
+    transLow: 2.2,
+    transRim: 1.0,
     sunTint: [0.9, 1.0, 0.58],
     windAmp: 0.16,
+    // Round 5 tried the critics' fix first — the shell normals into the
+    // direct term at nearly full weight (wrap 0.2, direct 0.95) — and measured
+    // it on a perpendicular framing of the nearest crown: the two halves
+    // stayed 0.00 st apart, and the crown's median went down 9 % (the wrap
+    // was most of the underside's light). A flat lens has its shell normals
+    // up and down, not toward the sun. Kept as they were; `sunSide` below is
+    // what makes the split.
     wrap: 0.5,
     direct: 0.82,
     sky: 0.54,
@@ -2625,6 +2758,7 @@ export function createForest({
     haze: 0.94,
     hazeRange: [30, 75],
     crownGrad: 1.0,
+    sunSide: 1.8,
     // Measured against the current night rig: at 0.2 the cards under the
     // moon sat at a third of the sky's luma (Y 0.002 against 0.007), which
     // is a hole in the stars with a green tinge. At 0.45 they land near
@@ -2659,6 +2793,7 @@ export function createForest({
     haze: 0.82,
     hazeRange: [30, 85],
     collar: 1.0,
+    tuftAO: 1.0,
   });
   const swathMat = foliageMaterial(grassSwathAtlas(), {
     ...fx(0.3, 0.3),
@@ -3149,20 +3284,26 @@ export function createForest({
     plantClump(0.6, 1.25, [3, 3, 0, 3], { collar: 1.1, seed: 7139, planes: 3, spread: 0.2, bow: 0.14, form: 'spire' }),
     plantClump(1.1, 0.95, [0, 0, 0, 3], { collar: 1.1, seed: 7151, planes: 4, spread: 0.4, bow: 0.22, form: 'fan' }),
   ];
+  // `reach` is the tile's blade height (savannaGrassAtlas `tall`), so the
+  // tuft self-shadow grades over the painted blades and not over the card.
   const G_SHORT = [
-    plantClump(0.9, 0.5, [1, 1, 1, 1], { collar: 1.1, seed: 7201, planes: 4, spread: 0.44, bow: 0.2, form: 'patch' }),
-    plantClump(0.7, 0.55, [1, 1, 1, 1], { collar: 1.1, seed: 7213, planes: 4, spread: 0.36, bow: 0.22 }),
-    plantClump(1.1, 0.4, [1, 1, 1, 1], { collar: 1.1, seed: 7227, planes: 4, spread: 0.56, bow: 0.18, lean: 0.6, form: 'sprawl' }),
-    plantClump(0.8, 0.62, [1, 1, 1, 1], { collar: 1.1, seed: 7239, planes: 4, spread: 0.36, bow: 0.22, form: 'fan' }),
+    plantClump(0.9, 0.5, [1, 1, 1, 1], { collar: 1.1, seed: 7201, planes: 4, spread: 0.44, bow: 0.2, form: 'patch', reach: 0.62 }),
+    plantClump(0.7, 0.55, [1, 1, 1, 1], { collar: 1.1, seed: 7213, planes: 4, spread: 0.36, bow: 0.22, reach: 0.62 }),
+    plantClump(1.1, 0.4, [1, 1, 1, 1], { collar: 1.1, seed: 7227, planes: 4, spread: 0.56, bow: 0.18, lean: 0.6, form: 'sprawl', reach: 0.62 }),
+    plantClump(0.8, 0.62, [1, 1, 1, 1], { collar: 1.1, seed: 7239, planes: 4, spread: 0.36, bow: 0.22, form: 'fan', reach: 0.62 }),
   ];
   const G_GREEN = [
-    plantClump(0.9, 0.8, [2, 2, 2, 1], { collar: 1.1, seed: 7301, planes: 5, spread: 0.36, bow: 0.22 }),
-    plantClump(1.0, 0.7, [2, 2, 1, 2], { collar: 1.1, seed: 7313, planes: 4, spread: 0.44, bow: 0.2, form: 'patch' }),
-    plantClump(0.7, 0.95, [2, 2, 2, 2], { collar: 1.1, seed: 7327, planes: 4, spread: 0.28, bow: 0.22, form: 'arch' }),
+    plantClump(0.9, 0.8, [2, 2, 2, 1], { collar: 1.1, seed: 7301, planes: 5, spread: 0.36, bow: 0.22, reach: 0.74 }),
+    plantClump(1.0, 0.7, [2, 2, 1, 2], { collar: 1.1, seed: 7313, planes: 4, spread: 0.44, bow: 0.2, form: 'patch', reach: 0.74 }),
+    plantClump(0.7, 0.95, [2, 2, 2, 2], { collar: 1.1, seed: 7327, planes: 4, spread: 0.28, bow: 0.22, form: 'arch', reach: 0.74 }),
   ];
   const grassGeos = [...G_TALL, ...G_SHORT, ...G_GREEN];
   const GI_TALL = G_TALL.map((_, i) => i);
   const GI_SHORT = G_SHORT.map((_, i) => G_TALL.length + i);
+  // The lawn's own short set: the two upright forms (rosette, fan). The patch
+  // and the sprawl lie flat, and at the lawn's size a flat card is a green
+  // stain on the dirt — the pride's near ground in round 4 was made of them.
+  const GI_LAWN = [GI_SHORT[1], GI_SHORT[3]];
   const GI_GREEN = G_GREEN.map((_, i) => G_TALL.length + G_SHORT.length + i);
   // Eight banks, not five, and three of them with a third card: the swath is
   // what the plain is made of past twenty metres, and at five shapes on one
@@ -3254,10 +3395,14 @@ export function createForest({
       // pride framing was the whole of the near ground.
       lawn: 1 - smoothstep(7, 11, lionD),
       // and a grazed ring round it: the same count of tufts, knee-high rather
-      // than waist-high, out to twenty metres. The `far` pride framing is a
-      // 30-degree lens from the road twenty-two metres out, and a waist-high
-      // tuft eight metres in front of it is a lion's height on the sensor.
-      graze: 1 - smoothstep(9, 20, lionD),
+      // than waist-high. It ran to twenty metres, and with the tufts in it at
+      // 0.68 and thinned to 0.7 the whole near ground of the `pride` framing
+      // (camera eleven metres out) was short, sparse straw — 18.6 % cover
+      // against the open plain's 42.5 % (round 4, critics A and B). Fourteen
+      // metres now, at 0.8: the ring is grazed, not bald. The `far` framing is
+      // a 30-degree lens from the road twenty-two metres out, and the tufts
+      // between it and the ring are the plain's own.
+      graze: 1 - smoothstep(9, 14, lionD),
       // verge jitter, biased outward, so no pass ends on a clean offset curve of the road
       dj:
         (fbm(x * 0.085 + 33.1, z * 0.085 - 12.7, { octaves: 2, period: 8, seed: 7373 }) - 0.36) * 3.3 +
@@ -3319,21 +3464,41 @@ export function createForest({
   // or two. The grass and the litter, which carry the triangles, keep the
   // full grid. This is what pays for the grass the plain got back.
   const B_CHEAP = Math.min(B, 2);
-  function scatter(geos, mat, { count, select, minRoad, maxRoad = UG_REACH, scale, jitter = 1.0, lean = 0.45, yOff = -0.04, castShadow = false, tint = [0.62, 0.3], hueSwing = 0.1, hues = null, shrink = 0.55, shrinkOver = 4.0, ragged = 1.0, dust = 0, sizeAt = null, bucket = true, drift = 0, jitterS = [0.6, 1.4], hueJit = 8, valJit = 0.15, name = 'plants' }) {
+  // `extra` is a second count per site, drawn from a stream of its own
+  // (`seed`) and planted into the same meshes: plants added to one place
+  // without re-laying the rest of the world. `count` keeps the main stream
+  // exactly as it was, draw for draw.
+  function scatter(geos, mat, { count, extra = null, seed = 0, select, minRoad, maxRoad = UG_REACH, scale, jitter = 1.0, lean = 0.45, yOff = -0.04, castShadow = false, tint = [0.62, 0.3], hueSwing = 0.1, hues = null, shrink = 0.55, shrinkOver = 4.0, ragged = 1.0, dust = 0, sizeAt = null, bucket = true, drift = 0, jitterS = [0.6, 1.4], hueJit = 8, valJit = 0.15, name = 'plants' }) {
     const b = bucket ? (typeof bucket === 'number' ? Math.max(1, bucket | 0) : B) : 1;
     const perGeo = geos.map(() => bucketLists(b));
+    const mainRnd = rnd;
+    const sideRnd = extra ? mulberry32(seed || 20260805) : null;
     for (const s of ugSites) {
       const de = s.d + s.dj * ragged;
       if (de < minRoad || s.d > maxRoad) continue;
       // drifts and clearings: `drift` is how far the field is allowed to swing
       // the count either way, and it swings further up than down so the sweeps
       // read as sweeps rather than the clearings as holes
-      let p = count(s) * (drift > 0 ? lerp(1 - drift * 0.55, 1 + drift * 0.6, s.drift) : 1);
+      const swing = drift > 0 ? lerp(1 - drift * 0.55, 1 + drift * 0.6, s.drift) : 1;
+      let p = count(s) * swing;
       while (p > 0) {
         if (p < 1 && rnd() > p) break;
         const gi = select(s);
         if (gi >= 0) perGeo[gi][bucketOf(s.x, s.z, b)].push(s);
         p -= 1;
+      }
+      if (extra) {
+        let q = extra(s) * swing;
+        if (q > 0) {
+          rnd = sideRnd;
+          while (q > 0) {
+            if (q < 1 && rnd() > q) break;
+            const gi = select(s);
+            if (gi >= 0) perGeo[gi][bucketOf(s.x, s.z, b)].push({ ...s, mk: true });
+            q -= 1;
+          }
+          rnd = mainRnd;
+        }
       }
     }
     let total = 0;
@@ -3344,6 +3509,7 @@ export function createForest({
       mesh.castShadow = castShadow;
       mesh.receiveShadow = true;
       list.forEach((p, j) => {
+        rnd = p.mk ? sideRnd : mainRnd;
         // size in patches rather than per plant: knee-high beds next to
         // waist-high ones is the variation that survives to twenty metres
         const bulk = fbm(p.x * 0.11 - 18.4, p.z * 0.11 + 63.1, { octaves: 2, period: 5, seed: 5150 });
@@ -3403,6 +3569,7 @@ export function createForest({
         }
         mesh.setColorAt(j, _col);
       });
+      rnd = mainRnd;
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       finishBucket(mesh, buckets.length);
@@ -3426,24 +3593,39 @@ export function createForest({
 
   // Grass: the ground itself. Nearly every site gets something; what it gets
   // is decided by the ground.
+  const grassCount = (s) => {
+    const bare = bareField(s.x, s.z);
+    const gap = 1 - smoothstep(0.55, 1.0, s.camp);
+    // Hands over to the swath cards with distance, but no longer by two
+    // thirds at 38 m: the 20-45 m band is the mid-ground of every hero and
+    // pride framing, and at a third of the near count it was bare dirt to
+    // the treeline. The swath cards carry it further out.
+    const far = 1 - 0.4 * smoothstep(22, 48, s.d);
+    // A bare patch thins the grass to a third, not to a seventh — trodden
+    // and grazed ground still has its tufts, and a savanna that goes to
+    // zero over ten metres reads as a car park.
+    return (2.1 + s.open * 0.5) * ug * (1 - bare * 0.66) * gap * far;
+  };
   ugCounts.grass = scatter(grassGeos, grassMat, {
-    count: (s) => {
-      const bare = bareField(s.x, s.z);
-      const gap = 1 - smoothstep(0.55, 1.0, s.camp);
-      // Hands over to the swath cards with distance, but no longer by two
-      // thirds at 38 m: the 20-45 m band is the mid-ground of every hero and
-      // pride framing, and at a third of the near count it was bare dirt to
-      // the treeline. The swath cards carry it further out.
-      const far = 1 - 0.4 * smoothstep(22, 48, s.d);
-      // A bare patch thins the grass to a third, not to a seventh — trodden
-      // and grazed ground still has its tufts, and a savanna that goes to
-      // zero over ten metres reads as a car park.
-      // the trodden patch is grazed thin as well as short
-      return (2.1 + s.open * 0.5) * ug * (1 - bare * 0.66) * gap * far * lerp(1, 0.7, s.lawn);
-    },
+    // the trodden patch used to be grazed thin as well as short; the 0.7 stays
+    // in `count` so the main stream is unchanged, and `extra` puts it back
+    count: (s) => grassCount(s) * lerp(1, 0.7, s.lawn),
+    // The trodden patch is grazed short, not thin: grazing takes the height
+    // off a tuft and leaves the plant, and the 0.7 count cut inside the lawn
+    // was a third of why the pride's own ground read as bare dirt (round 4).
+    // Back to the plain's count and 1.2 over it: a grazed lawn is a dense
+    // turf of short tufts. Measured on the `pride` framing with the tufts
+    // hidden and shown (the exact tuft pixels, not a colour mask — the
+    // round-4 "18.6 % straw" there was 96 % soil fleck; the tufts were 3.5 %
+    // of the lower third): parity with the size at 0.8 left it at 3.5 %,
+    // 1.7x at 0.85 and the upright forms 22.6 %; 2.2x 26.4 %. Eased over the
+    // inner four metres, where the animals lie: the lie-up is the barest
+    // ground and the turf thickens from it outward.
+    extra: (s) => grassCount(s) * 1.6 * s.lawn * lerp(0.55, 1, smoothstep(2.5, 6, Math.hypot(s.x - lions.x, s.z - lions.z))),
+    seed: 20260805,
     select: (s) => {
       const sh = shortAt(s);
-      if (s.lawn > 0.5) return pickOf(GI_SHORT);
+      if (s.lawn > 0.5) return pickOf(GI_LAWN);
       if (s.shade > 0.3 && rnd() < s.shade * 0.8) return pickOf(GI_GREEN);
       if (wet(s.x, s.z) > 0.64 && rnd() < 0.5) return pickOf(GI_GREEN);
       if (rnd() < sh) return pickOf(GI_SHORT);
@@ -3477,7 +3659,12 @@ export function createForest({
     // Was 0.62 x 0.6 at the anchor — a tuft at a third of its size, which is
     // a tuft that is not there from twenty metres. Short species carry the
     // grazing now; the size only eases.
-    sizeAt: (s) => lerp(1.0, 0.85, s.lion) * lerp(1.0, 0.75, s.camp) * lerp(1.0, 0.72, s.lawn) * lerp(1.0, 0.68, s.graze),
+    // Graze ring at 0.8, not 0.68, and the lawn at 0.85, not 0.72: the three
+    // factors stack (lion 0.85 x lawn x graze), and at 0.85 x 0.72 x 0.68 the
+    // tufts round the pride were at half size — a tuft that is not there
+    // from eleven metres. 0.85 x 0.85 x 0.8 = 0.58: knee-high on the short
+    // geometry, which is what grazed means.
+    sizeAt: (s) => lerp(1.0, 0.85, s.lion) * lerp(1.0, 0.75, s.camp) * lerp(1.0, 0.85, s.lawn) * lerp(1.0, 0.8, s.graze),
     dust: 0.5,
     name: 'grass',
   });
@@ -3534,6 +3721,12 @@ export function createForest({
   const aloeAt = (s) => Math.hypot(s.x - aloeBed.x, s.z - aloeBed.z) - aloeBed.r < 5 && s.camp < 0.02;
   ugCounts.forb = scatter(forbGeos, forbMat, {
     count: (s) => (s.camp > 0.05 || s.lawn > 0.3 ? 0 : 0.42 * ug * (1 - s.lion * 0.7)),
+    // forbs stand through the graze ring and stop only where the animals
+    // actually lie (the lawn's inner half); at `lawn > 0.3` they were cut a
+    // metre outside the ring's edge and the near ground lost its stalks. In
+    // `extra` so the cut-off moves without re-laying every forb after it.
+    extra: (s) => (s.camp > 0.05 || s.lawn <= 0.3 || s.lawn > 0.6 ? 0 : 0.42 * ug * (1 - s.lion * 0.7)),
+    seed: 20260806,
     select: (s) => {
       const r = rnd();
       if (aloeAt(s) && r < 0.5) return 0;
