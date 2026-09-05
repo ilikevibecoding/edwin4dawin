@@ -451,6 +451,9 @@ export class Fighters {
 
   update(dt, t, fire) {
     if (!this.ships) return;
+    // the fleet grows at runtime (reinforcements): keep the per-ship hull cache in step with it
+    while (this.hulls.length < this.ships.length)
+      this.hulls.push(hullInfo(this.ships[this.hulls.length].model));
     this.time = t;
     this.frame++;
     const ctx = this.ctx;

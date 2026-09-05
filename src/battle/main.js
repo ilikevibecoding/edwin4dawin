@@ -223,6 +223,12 @@ const VIEWS = {
   towers_cine: { cinematic: 2, t: 4 },
   chase: { cinematic: 3, t: 3 },
   low_city: { cinematic: 4, t: 5 },
+  wide_cine: { cinematic: 5, t: 6 },
+  flank: { cinematic: 6, t: 5 },
+  melee_below: { cinematic: 7, t: 6 },
+  dying: { cinematic: 8, t: 5 },
+  fin_pass: { cinematic: 9, t: 5 },
+  high_line: { cinematic: 10, t: 6 },
 };
 
 function shipFor(spec) {

@@ -12,6 +12,7 @@ import { classInfo } from "./choreoLayout.js";
 import { setTarget } from "./choreoCombat.js";
 
 const _inv = new THREE.Matrix4();
+const _n = new THREE.Vector3();
 const _local = new THREE.Vector3();
 const _w = new THREE.Vector3();
 
@@ -72,8 +73,14 @@ export class Director {
       // and keeping them out of the hit points (and of the capital ships' random stream) keeps the
       // capital battle reproducible from the seed
       if (!s || !s.model) {
-        // at another fighter (or nothing): a small flash where the burst ends
-        if (!b.miss) explosions.flak(b.to, 9 + this.ctx.frand() * 6);
+        // at another fighter (or nothing): a small flash where the burst ends; a hit on a fighter
+        // quarry feeds its health counter (destroy -> onDestroyed -> respawn from its hangar)
+        if (!b.miss) {
+          explosions.flak(b.to, 9 + this.ctx.frand() * 6);
+          const q = b.fighterTarget;
+          if (q && q.alive && this.ctx.fighters && this.ctx.fighters.damage)
+            this.ctx.fighters.damage(q, 1);
+        }
       } else if (!s.alive) explosions.flak(b.to, 12);
       else if (b.miss) explosions.flak(b.to, 10);
       else if (explosions.alive > 1150) explosions.flak(b.to, 11);
@@ -104,6 +111,23 @@ export class Director {
       explosions.flak(b.to, size * 0.8);
     else explosions.hit(b.to, size, s, _local);
     const st = this.ctx.stateOf(s);
+    // shields still up on lightly hurt ships: a hex ripple spreads over the hull around the hit
+    if (
+      st &&
+      !st.dead &&
+      !st.dying &&
+      st.hits < st.hp * 0.35 &&
+      explosions.alive < 1150 &&
+      explosions.shieldHit
+    )
+      explosions.shieldHit(
+        b.to,
+        explosions.hullNormal(s, _local, _n),
+        size * 1.6,
+        null,
+        s,
+        _local,
+      );
     if (!st || st.dead || st.dying) return; // hulks and dying ships just flash
     // armour: only ships the director has marked take full (tripled) damage, so the pacing of deaths
     // is the director's and emergent losses stay rare
@@ -139,7 +163,9 @@ export class Director {
   finishDeath(st) {
     const { explosions, rand, stats, time } = this.ctx;
     const s = st.ship;
-    explosions.blast(s.position, s.model.length * 0.38);
+    explosions.blast(s.position, s.model.length * 0.38, {
+      velocity: s.velocity,
+    });
     for (let i = 0; i < 3 && s.fires.length < 10; i++) {
       s.randomSurfacePoint(_w, rand);
       _inv.copy(s.matrix).invert();

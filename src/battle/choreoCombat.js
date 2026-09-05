@@ -292,3 +292,80 @@ export function makeFighterFire(ctx) {
     if (b) b.miss = rand() < 0.4;
   };
 }
+
+// Point defence: every living capital ship sweeps the nearest enemy fighter inside 1.5 km with its
+// closest light emplacement (short teal/red bursts, ~28 % hits). Hits feed the fighter's health counter
+// through the fighter-vs-fighter path of the hit handler, so fighters die and relaunch from their
+// hangars. Uses the fighters' random stream, keeping the capital exchange reproducible.
+const _pd = new THREE.Vector3();
+const PD_RANGE2 = 1500 * 1500;
+export function pointDefence(ctx, dt) {
+  const { fleet, bolts, fighters, frand } = ctx;
+  if (!fighters || !fighters.all) return;
+  ctx.pdTimer = (ctx.pdTimer || 0) - dt;
+  if (ctx.pdTimer > 0) return;
+  ctx.pdTimer = 0.1;
+  if (bolts.alive > 1200) return;
+  const list = fighters.all;
+  for (const s of fleet.ships) {
+    if (s.health <= 0) continue;
+    s.pdCool = (s.pdCool || 0) - 0.1;
+    if (s.pdCool > 0) continue;
+    let best = null;
+    let bestD = PD_RANGE2;
+    for (const f of list) {
+      if (!f.alive || f.side === s.side) continue;
+      const d = f.pos.distanceToSquared(s.position);
+      if (d < bestD) {
+        bestD = d;
+        best = f;
+      }
+    }
+    if (!best) {
+      s.pdCool = 0.5;
+      continue;
+    }
+    const hps = s.model.hardpoints;
+    let hi = -1;
+    let hd = Infinity;
+    for (let i = 0; i < hps.length; i++) {
+      if (hps[i].kind !== "light") continue;
+      s.hardpointWorld(i, _pd);
+      const d = _pd.distanceToSquared(best.pos);
+      if (d < hd) {
+        hd = d;
+        hi = i;
+      }
+    }
+    if (hi < 0) {
+      s.pdCool = 1;
+      continue;
+    }
+    s.hardpointWorld(hi, _pd);
+    const spec = BOLT_SPECS.fighter[s.side] || BOLT_SPECS.fighter.republic;
+    const dist = Math.sqrt(hd);
+    _aim.copy(best.pos);
+    if (best.vel)
+      _aim.addScaledVector(best.vel, (best.speed || 250) * (dist / spec.speed));
+    _aim.x += frand.range(-10, 10);
+    _aim.y += frand.range(-10, 10);
+    _aim.z += frand.range(-10, 10);
+    for (let k = 0; k < 2; k++) {
+      const b = bolts.fire(_pd, _aim, {
+        ...spec,
+        length: 34,
+        radius: 1.1,
+        target: null,
+        side: s.side,
+        kind: "fighter",
+      });
+      if (b) {
+        b.miss = frand() < 0.72;
+        b.fighterTarget = best;
+      }
+      _aim.x += frand.range(-6, 6);
+      _aim.z += frand.range(-6, 6);
+    }
+    s.pdCool = 0.35 + frand() * 0.7;
+  }
+}

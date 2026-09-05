@@ -26,6 +26,7 @@ import {
   chooseTargets,
   updateGuns,
   makeFighterFire,
+  pointDefence,
 } from "./choreoCombat.js";
 import { Director } from "./choreoDamage.js";
 
@@ -207,6 +208,7 @@ export function createBattle({
     time: () => time,
     stateOf: (s) => stateByShip.get(s) || null,
     spawnReinforcement,
+    fighters,
   };
   const director = new Director(ctx);
   bolts.onHit = (b) => director.onBoltHit(b);
@@ -370,6 +372,7 @@ export function createBattle({
       // (drawn before the budget check so the stream does not depend on the particle load)
       if (explosions.alive < 1100) explosions.flak(_p, size);
     }
+    pointDefence(ctx, dt);
     const t1 = performance.now();
     fleet.update(dt, camPos);
     fighters.update(dt, time, fighterFire);
