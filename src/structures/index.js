@@ -2,8 +2,10 @@
 // overlay): Coruscant, the Death Star, the hyperlane and its stations, ... Each module exports
 // `register(gen, game)` and calls `gen.addStructure({ name, x0, z0, x1, z1, fill(chunk, gen) })` for its pieces.
 // Builders: add ONE import + ONE line to REGISTRARS for your module; keep everything else in your own files.
+import { register as registerSpaceport } from '../coruscant/spaceport.js';
 const REGISTRARS = [
   // (module) => module.register
+  registerSpaceport,
 ];
 
 export async function registerAllStructures(gen, game) {
