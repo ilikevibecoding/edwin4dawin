@@ -58,6 +58,8 @@ export class BattleStation {
         uSkyLight: SHARED.uSkyLight, uSkyTint: SHARED.uSkyTint, uFogColor: SHARED.uFogColor, uFlash: SHARED.uFlash,
         uRadius: { value: this.radius }, uTrenchR: { value: this.radius - lay.trenchDepth },
         uDish: { value: lay.D.clone() }, uDishU: { value: lay.U.clone() }, uDishV: { value: lay.V.clone() }, uDishC: { value: lay.C.clone() },
+        // model-space focus point (the default focusWorld() distance): the charge glow is bounced back from here at night
+        uFocus: { value: lay.D.clone().multiplyScalar(lay.emitterR + this.radius * 0.35) },
       },
       vertexShader: BODY_VERT, fragmentShader: BODY_FRAG, side: THREE.FrontSide, transparent: false, depthWrite: true,
     });
