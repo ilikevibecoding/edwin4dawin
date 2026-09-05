@@ -16,7 +16,9 @@ export const TICK_DT = 1 / TICK_RATE;
 // Rendering ------------------------------------------------------------------
 export const DEFAULT_RENDER_DISTANCE = 7;  // chunks
 export const CLOUD_HEIGHT = 140;
-export const TILE_PX = 16;                  // texture resolution per block face
+export const BASE_PX = 16;                  // resolution the tile painters work at (Minecraft-style 16x16 layout)
+export const HD_SCALE = 4;                  // HD refinement factor (src/render/hdTiles.js)
+export const TILE_PX = BASE_PX * HD_SCALE;  // texture resolution per block face in the atlas (64)
 export const ATLAS_TILES = 16;              // atlas is ATLAS_TILES x ATLAS_TILES tiles
 
 // Time ------------------------------------------------------------------------

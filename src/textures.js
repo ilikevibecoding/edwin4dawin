@@ -1,11 +1,14 @@
 // Procedurally painted 16x16 pixel-art tiles packed into one atlas texture.
-// Every texture is original artwork generated at runtime from code.
+// Every texture is original artwork generated at runtime from code. The painters work at BASE_PX (16); the
+// atlas stores each tile refined to TILE_PX (64) by src/render/hdTiles.js, plus normal and material atlases.
 import * as THREE from 'three';
 import { RNG } from './rng.js';
-import { TILE_PX, ATLAS_TILES } from './constants.js';
+import { BASE_PX, TILE_PX, ATLAS_TILES } from './constants.js';
 import { drawSmallText } from './font.js';
+import { buildTileMaps } from './render/hdTiles.js';
+import { setMaterialMaps } from './render/materialMaps.js';
 
-const S = TILE_PX;
+const S = BASE_PX;
 
 class Tile {
   constructor() {
@@ -667,11 +670,13 @@ export const ITEM_TILE_NAMES = TILE_NAMES.filter((n) => n.startsWith('item_'));
 export const TILES = {};
 let nextTile = 0;
 const tiles = []; // Tile objects by index
+const tileNames = []; // tile name by index (drives the material class of the HD refinement)
 
 function addTile(name, painter, seed) {
   const t = new Tile();
   painter(t, new RNG(seed));
   tiles.push(t);
+  tileNames.push(name);
   TILES[name] = nextTile;
   return nextTile++;
 }
@@ -681,6 +686,17 @@ export function buildAtlas() {
   for (let s = 0; s < 10; s++) addTile('destroy_' + s, (t, r) => destroyStage(t, r, s), 5000 + s);
   return finalizeAtlas();
 }
+
+// Paints one base (16x16) tile by name without registering it (tooling / tests). Returns ImageData-like data.
+export function paintBaseTile(name, seed = null) {
+  const i = TILE_NAMES.indexOf(name);
+  const t = new Tile();
+  if (name.startsWith('destroy_')) destroyStage(t, new RNG(5000 + parseInt(name.slice(8), 10)), parseInt(name.slice(8), 10));
+  else if (P[name]) P[name](t, new RNG(seed ?? (1000 + Math.max(i, 0) * 7919)));
+  else P.missing(t, new RNG(1));
+  return { width: S, height: S, data: t.d };
+}
+export { TILE_NAMES };
 
 // Adds a row of sign tiles containing `text` (uppercase) rendered across `count` tiles.
 // Returns array of tile indices.
@@ -707,71 +723,107 @@ export function addSignTiles(text, count) {
       t.px(x, y, [buf[i], buf[i + 1], buf[i + 2]], buf[i + 3]);
     }
     tiles.push(t);
+    tileNames.push(key);
     indices.push(nextTile++);
   }
   TILES[key] = indices;
   return indices;
 }
 
+// ---------------------------------------------------------------------------
+// HD atlases: colour, tangent-space normal and material (roughness / metalness / emissive), TILE_PX per tile,
+// each with a per-tile mip chain (tiles never bleed into each other). `?hd=0` keeps the plain 16x16 look.
+// ---------------------------------------------------------------------------
 export let atlasCanvas = null;
 export let atlasTexture = null;
+export let atlasNormalCanvas = null;
+export let atlasNormalTexture = null;
+export let atlasMaterialCanvas = null;
+export let atlasMaterialTexture = null;
+export const HD_ENABLED = !(typeof location !== 'undefined' && /[?&]hd=0(&|$)/.test(location.search));
+// Cumulative build cost (ms) of every finalizeAtlas() call at load: refinement, mip assembly, texture/canvas upload.
+export const atlasBuildStats = { totalMs: 0, refineMs: 0, assembleMs: 0, uploadMs: 0, tiles: 0, builds: 0, atlasPx: ATLAS_TILES * TILE_PX };
 
-// Builds/rebuilds the atlas canvas + texture from all registered tiles (with per-tile mipmaps).
-export function finalizeAtlas() {
-  const size = ATLAS_TILES * S;
-  const canvas = document.createElement('canvas');
-  canvas.width = size; canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const img = ctx.createImageData(size, size);
-  for (let i = 0; i < tiles.length; i++) {
-    const tx = (i % ATLAS_TILES) * S, ty = Math.floor(i / ATLAS_TILES) * S;
-    const t = tiles[i];
-    for (let y = 0; y < S; y++) {
-      const src = t.d.subarray(y * S * 4, (y + 1) * S * 4);
-      img.data.set(src, ((ty + y) * size + tx) * 4);
-    }
+const hdTiles = []; // refined maps by tile index (cached: a rebuild only refines new tiles)
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+function ensureHD(i) {
+  let hd = hdTiles[i];
+  if (!hd) {
+    hd = hdTiles[i] = buildTileMaps({ width: S, height: S, data: tiles[i].d }, tileNames[i], { plain: !HD_ENABLED });
+    atlasBuildStats.tiles++;
   }
-  ctx.putImageData(img, 0, 0);
-  atlasCanvas = canvas;
+  return hd;
+}
 
-  // Per-tile mipmaps: downsample every tile independently so tiles never bleed into each other.
-  const mips = [];
-  let cur = img.data, curSize = size;
-  mips.push({ data: new Uint8Array(cur.buffer.slice(0)), width: size, height: size });
-  while (curSize > ATLAS_TILES) {
-    const ns = curSize >> 1;
-    const out = new Uint8ClampedArray(ns * ns * 4);
-    for (let y = 0; y < ns; y++) for (let x = 0; x < ns; x++) {
-      let r = 0, g = 0, b = 0, n = 0, aSum = 0;
-      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-        const i = ((y * 2 + dy) * curSize + (x * 2 + dx)) * 4;
-        const a = cur[i + 3];
-        aSum += a;
-        if (a > 127) { r += cur[i]; g += cur[i + 1]; b += cur[i + 2]; n++; }
-      }
-      const o = (y * ns + x) * 4;
-      if (n > 0) { out[o] = r / n; out[o + 1] = g / n; out[o + 2] = b / n; out[o + 3] = n >= 2 ? 255 : 0; }
-      else { out[o + 3] = 0; }
-      // fully-transparent tiles keep 0 alpha; semi transparent (water) keep average alpha
-      if (n === 4 && aSum < 1020) out[o + 3] = aSum / 4;
-    }
-    mips.push({ data: new Uint8Array(out.buffer), width: ns, height: ns });
-    cur = out; curSize = ns;
-  }
-
-  const tex = new THREE.DataTexture(mips[0].data, size, size, THREE.RGBAFormat);
-  tex.mipmaps = mips;
+function makeAtlasTexture(levels, size, colorSpace) {
+  const tex = new THREE.DataTexture(levels[0].data, size, size, THREE.RGBAFormat);
+  tex.mipmaps = levels;
   tex.generateMipmaps = false;
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestMipmapLinearFilter;
   tex.wrapS = THREE.ClampToEdgeWrapping;
   tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.colorSpace = THREE.NoColorSpace;
+  tex.colorSpace = colorSpace;
   tex.flipY = false;
   tex.needsUpdate = true;
-  if (atlasTexture) atlasTexture.dispose();
-  atlasTexture = tex;
   return tex;
+}
+
+function canvasFrom(level0, size) {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  img.data.set(level0);
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+// Builds/rebuilds the three atlas textures (+ canvases) from all registered tiles.
+export function finalizeAtlas() {
+  const t0 = now();
+  for (let i = 0; i < tiles.length; i++) ensureHD(i);
+  const t1 = now();
+  const HS = TILE_PX, size = ATLAS_TILES * HS;
+  const levelCount = Math.log2(HS) + 1; // 64 .. 1 texel per tile
+  const maps = ['color', 'normal', 'material'];
+  const levels = {};
+  for (const m of maps) {
+    levels[m] = [];
+    for (let l = 0; l < levelCount; l++) { const ls = size >> l; levels[m].push({ data: new Uint8Array(ls * ls * 4), width: ls, height: ls }); }
+  }
+  for (let i = 0; i < tiles.length; i++) {
+    const hd = hdTiles[i];
+    const tx = i % ATLAS_TILES, ty = Math.floor(i / ATLAS_TILES);
+    for (const m of maps) {
+      const chain = hd.mips[m];
+      for (let l = 0; l < levelCount; l++) {
+        const ts = HS >> l, ls = size >> l, src = chain[l].data, dst = levels[m][l].data;
+        const ox = tx * ts, oy = ty * ts;
+        for (let y = 0; y < ts; y++) dst.set(src.subarray(y * ts * 4, (y + 1) * ts * 4), ((oy + y) * ls + ox) * 4);
+      }
+    }
+  }
+  const t2 = now();
+  atlasCanvas = canvasFrom(levels.color[0].data, size);
+  atlasNormalCanvas = canvasFrom(levels.normal[0].data, size);
+  atlasMaterialCanvas = canvasFrom(levels.material[0].data, size);
+  if (atlasTexture) atlasTexture.dispose();
+  if (atlasNormalTexture) atlasNormalTexture.dispose();
+  if (atlasMaterialTexture) atlasMaterialTexture.dispose();
+  atlasTexture = makeAtlasTexture(levels.color, size, THREE.NoColorSpace);
+  atlasNormalTexture = makeAtlasTexture(levels.normal, size, THREE.NoColorSpace);
+  atlasMaterialTexture = makeAtlasTexture(levels.material, size, THREE.NoColorSpace);
+  setMaterialMaps(atlasNormalTexture, atlasMaterialTexture);
+  const t3 = now();
+  atlasBuildStats.refineMs += t1 - t0; atlasBuildStats.assembleMs += t2 - t1; atlasBuildStats.uploadMs += t3 - t2; atlasBuildStats.totalMs += t3 - t0;
+  atlasBuildStats.builds++;
+  if (atlasBuildStats.builds === 1) {
+    console.info(`[textures] HD atlases (${size}x${size} colour + normal + material, ${levelCount} mip levels, ${tiles.length} tiles${HD_ENABLED ? '' : ', hd=0'}) built in ${(t3 - t0).toFixed(1)} ms (refine ${(t1 - t0).toFixed(1)}, assemble ${(t2 - t1).toFixed(1)}, upload ${(t3 - t2).toFixed(1)})`);
+  }
+  return atlasTexture;
 }
 
 export function tileUV(index) {
@@ -780,7 +832,25 @@ export function tileUV(index) {
   return [tx * s, ty * s, s];
 }
 
-// Returns the ImageData-like pixel array for one tile (used by particles/icons).
+// Returns the RGBA pixel array (TILE_PX x TILE_PX) of one refined tile (HUD icons, particles).
 export function tilePixels(index) {
+  const i = tiles[index] ? index : 0;
+  return ensureHD(i).color;
+}
+
+// Returns the painted BASE_PX x BASE_PX pixel array of one tile (the pre-refinement pixel art).
+export function tileBasePixels(index) {
   return tiles[index] ? tiles[index].d : tiles[0].d;
 }
+
+// Name of a registered tile by index (sign tiles report their 'sign:TEXT:n' key).
+export function tileName(index) {
+  return tileNames[index] || null;
+}
+
+// Refined maps of one registered tile: { color, normal, material, height, cls, mips }.
+export function tileMaps(index) {
+  return tiles[index] ? ensureHD(index) : null;
+}
+
+export function tileCount() { return tiles.length; }
