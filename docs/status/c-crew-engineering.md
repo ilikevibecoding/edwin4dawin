@@ -1,17 +1,18 @@
 # Status — C: crew-engineering
 
-Branch: `cursor/sd-crew-engineering-f9bd` · Last push: 624f7d92 · 2026-09-04 19:55 UTC
+Branch: `cursor/sd-crew-engineering-f9bd` · Last push: 5e50b7b2 · 2026-09-05 03:20 UTC
 Run: `bc-5c9df309-dc4c-491e-8f9c-0acd3054f9bd` · Phase: 3
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
 
 Agent C owns Deck 2 (crew + operations, floor y +40) and Deck 3 (engineering, floor y +12): 18 modules
-under `src/rooms/deck2/**` and `src/rooms/deck3/**` (13 + 5), all at **Phase 3, complete on my side**.
-Every room is fully detailed and went through two blind critic passes (15 → 72 PASS of 76 views) plus
-a final polish round. Final full run (`p4_all`, all 18 loaded): **0 registry warnings**, every module
-≤ 16 draw calls / ≤ 118k tris / ≤ 14 light descriptors / ≤ 192 colliders / build ≤ 118 ms; whole frame
-≤ 108 calls / 359k tris. Waiting on others: A's scaffold (`src/core/registry.js`) to retire my local
-shim, D's doors/lifts (holes are dark voids) and D's corridor kit; all three are drop-in for my rooms.
+under `src/rooms/deck2/**` and `src/rooms/deck3/**`, all at **Phase 3 + a lighting round**: every room
+has one shadow-casting key spot (`shadow: true`), 2–5 motion-lighting effects driven by live light
+descriptors + one merged animated-emitter mesh, and a composition pass (key / fills ≤ 40 % / coloured
+practicals). Two blind critic passes (15 → 72 PASS of 76) plus a third on the lit rooms (running).
+Final full run (`p5_all`): **0 registry warnings**, every module ≤ 16 draw calls (incl. FX meshes) /
+≤ 120k tris / ≤ 14 descriptors / build ≤ 150 ms; each room's own key is the shadow caster in all 76
+views. Waiting on others: A's scaffold, D's doors/lifts/corridor kit — all drop-in for my rooms.
 
 ## Plan
 
@@ -157,33 +158,52 @@ Ports: C = 5173, subagents 5101–5106. Harness runs are serialised through `flo
 - `d3-hyperdrive`: 9 m motivator with end caps, 6 field coils, 3 cradles, top gantry + stair tower, 14
   coil banks with power trunks, aft housing bulkhead with blue rings, consoles, coolant tanks, ducts.
 
-Final numbers (`p4_all`, all 18 modules loaded, 76 views, 0 warnings, after critic pass 2 + round 3):
+Final numbers (`p5_all`, all 18 modules loaded, 76 views, 0 warnings, after the lighting round;
+calls include the rooms' own animated FX meshes):
 
 | Module | calls | tris | lights | colliders | build ms |
 |---|---|---|---|---|---|
-| `d2-armory` | 16 | 29,876 | 13 | 48 | 79.9 |
-| `d2-briefing` | 15 | 42,752 | 10 | 75 | 59.7 |
-| `d2-cor-e` | 14 | 28,504 | 8 | 80 | 37.1 |
-| `d2-cor-n` | 14 | 21,348 | 6 | 57 | 23.5 |
-| `d2-cor-w` | 14 | 27,956 | 8 | 73 | 25.9 |
-| `d2-escape` | 16 | 83,736 | 14 | 89 | 67.8 |
-| `d2-lifesupport` | 16 | 66,858 | 13 | 58 | 53.6 |
-| `d2-lobby` | 14 | 17,232 | 10 | 21 | 28.3 |
-| `d2-medbay` | 16 | 69,792 | 13 | 116 | 80.9 |
-| `d2-mess` | 16 | 50,224 | 14 | 88 | 48.7 |
-| `d2-quarters` | 15 | 72,816 | 14 | 192 | 74.8 |
-| `d2-rec` | 16 | 39,144 | 13 | 71 | 32.9 |
-| `d2-security` | 16 | 43,800 | 14 | 101 | 51.7 |
-| `d3-cor` | 14 | 23,904 | 8 | 68 | 25.6 |
-| `d3-engctl` | 16 | 97,924 | 10 | 111 | 100.6 |
-| `d3-hyperdrive` | 16 | 109,980 | 14 | 121 | 116.6 |
-| `d3-lobby` | 14 | 19,416 | 10 | 26 | 21.4 |
-| `d3-reactor` | 16 | 117,844 | 14 | 135 | 117.5 |
+| `d2-armory` | 16 | 30,148 | 14 | 48 | 88.2 |
+| `d2-briefing` | 16 | 50,334 | 11 | 75 | 63.6 |
+| `d2-cor-e` | 15 | 29,020 | 13 | 80 | 46.4 |
+| `d2-cor-n` | 14 | 21,396 | 10 | 57 | 30.5 |
+| `d2-cor-w` | 15 | 28,472 | 13 | 73 | 30.3 |
+| `d2-escape` | 16 | 85,396 | 14 | 89 | 78.4 |
+| `d2-lifesupport` | 16 | 69,198 | 14 | 58 | 84.8 |
+| `d2-lobby` | 15 | 17,868 | 13 | 21 | 32.2 |
+| `d2-medbay` | 16 | 69,804 | 14 | 116 | 82.5 |
+| `d2-mess` | 16 | 50,380 | 14 | 88 | 50.6 |
+| `d2-quarters` | 16 | 72,840 | 14 | 192 | 79.8 |
+| `d2-rec` | 16 | 39,906 | 14 | 71 | 43.6 |
+| `d2-security` | 16 | 44,532 | 14 | 101 | 57.6 |
+| `d3-cor` | 15 | 24,256 | 12 | 68 | 24.5 |
+| `d3-engctl` | 16 | 102,728 | 13 | 111 | 149.1 |
+| `d3-hyperdrive` | 16 | 110,088 | 14 | 121 | 143.6 |
+| `d3-lobby` | 16 | 20,120 | 13 | 26 | 27.6 |
+| `d3-reactor` | 16 | 119,964 | 14 | 139 | 131.4 |
 
-Whole frame per view (active set = room + door neighbours, pool 12 point / 4 spot): 36–108 draw
-calls, 19k–359k tris. Sum of all 18 modules: 963k tris, 274 draw calls, 206 descriptors (never all
-live). Budget check: every module ≤ 16 / 120k / 14 / 400 / 250 ms — no exceptions. Frame times are
-SwiftShader numbers (1–3 s) and only comparative.
+Whole frame per view (active set = room + door neighbours, pool 12 point / 4 spot, one shadow map):
+51–157 draw calls, 56k–528k tris. Sum of all 18 modules: 986k tris, 282 calls, 238 descriptors.
+
+### Lighting round (all rooms)
+- **Shadows**: one `shadow: true` key spot per room, placed inside a real fixture and aimed at the
+  room's centre of interest (surgery pendant, bar fixture, issue-cage panel so the bars stripe the
+  counter, gantry flood across the reactor bridge, high-bay over the hyperdrive cradle, corridor first
+  fixture aimed down the deck …). `shadowLight` = the room's own key in all 76 views.
+- **Motion lighting** via live descriptors (rig mirrors `intensity/color/pos/target` per frame) paired
+  with one merged animated-emitter mesh per room (vertex-attribute or colour-buffer driven, net 0–1
+  calls): rotating beacons (armory range, escape FAULT pod, corridor dead ends, d3 blast doors, sump),
+  red alert sweep along the detention strips with a moving light, scanner-gate veil translating the
+  lane, hyperdrive fore→aft coil charge with a travelling blue light and housing burst, reactor core
+  breathe synced to gantry pools + sweeping energy bands + upward-chasing ledge markers, bacta pulses,
+  seeded faulty fixtures, heat-lamp flicker, screen jitter, breathing status lamps, directory-board
+  refresh chases, game-table charge sequences, gauge needles swinging.
+- **Environment**: per-room cube capture on room change (emissives ×0.3, 128², PMREM). Rooms retuned
+  fills (GAIN ~1.7, fills ≥ 1.6 m under emitters) and swapped gloss/metal keys where the captured
+  environment made them mirrors.
+- **Pool rules found necessary** (rig, proposed for A's pool): a neighbour room's spots are never live
+  (their cones pass through the shared wall without a shadow map → blown lobes on gloss); neighbour
+  points carry a 1.5× weight penalty so a room keeps its own fills.
 
 ### Critic loop (blind: images + §1/§11 brief only)
 Pass 1 on `p2_all`: 15 PASS / 61 FIX. Ten fleet-wide patterns; the four that lived in my shared layer
@@ -276,7 +296,7 @@ The user asked me directly for a playable link, so a production build of my rig 
 exterior, holes where D's doors/lifts go) is published on my own branch, separate from A's play
 branch: `cursor/sd-crew-engineering-play-f9bd` →
 https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/sd-crew-engineering-play-f9bd/index.html
-(githack shows a one-click "Open the page" interstitial). Keys: WASD, mouse, T/Y next/previous room,
+(githack shows a one-click "Open the page" interstitial; rebuilt after the lighting round). Keys: WASD, mouse, T/Y next/previous room,
 L switch deck in a lobby, F3 stats. A: ignore or delete it once the integrated build is up.
 
 ## Requests for integrator
