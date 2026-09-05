@@ -146,7 +146,7 @@ vec3 skyRadiance(vec3 dir) {
   // haze band over the last degrees; never darker than the low sky so a warm sunset horizon keeps its glow
   float hband = pow(1.0 - up, 14.0);
   vec3 hazeWhite = max(mix(uHazeColor, uSunHazeColor, 0.12), hor * 1.05);
-  col = mix(col, hazeWhite, hband * 0.85 * smoothstep(-0.05, 0.12, sunUp));
+  col = mix(col, hazeWhite, hband * 0.75 * smoothstep(-0.05, 0.12, sunUp));
   // slight brightening of the sky toward the sun (mie forward scatter), strongest near horizon
   float horizonMix = pow(1.0 - up, 14.0);
   float mie = pow(max(cosSun, 0.0), 8.0) * (0.08 + 0.5 * horizonMix);
@@ -170,13 +170,27 @@ vec3 skyRadiance(vec3 dir) {
  *  and reddened it far more than the key light (which is what lit surfaces see): the disc's radiance and
  *  colour follow the elevation so the tonemapper keeps it an orange-red limb instead of clipping it to a
  *  white ball. */
+const vec3 SUN_LIMB_TINT = vec3(1.0, 0.13, 0.02);
 vec3 sunDisc(vec3 dir) {
   float cosSun = dot(dir, uSunDir);
   float hi = smoothstep(0.03, 0.35, uSunDir.y);
   float disc = smoothstep(0.99985, 0.99995, cosSun);
-  vec3 col = uSunColor * mix(vec3(1.0, 0.13, 0.02), vec3(1.0), hi);
+  vec3 col = uSunColor * mix(SUN_LIMB_TINT, vec3(1.0), hi);
   float glow = pow(max(cosSun, 0.0), 1400.0) * 0.6 + pow(max(cosSun, 0.0), 160.0) * 0.08;
   return col * (disc * mix(9.0, 40.0, hi) + glow) * smoothstep(-0.05, 0.02, uSunDir.y);
+}
+/** The disc composited over the sky for the visible dome: the low disc occludes the bright aureole behind it
+ *  (only the haze in front of it adds), which is what keeps the limb orange-red; the high disc is additive
+ *  glare (it clips to white either way). */
+vec3 sunComposite(vec3 sky, vec3 dir) {
+  float cosSun = dot(dir, uSunDir);
+  float hi = smoothstep(0.03, 0.35, uSunDir.y);
+  float vis = smoothstep(-0.05, 0.02, uSunDir.y);
+  float disc = smoothstep(0.99985, 0.99995, cosSun);
+  vec3 limb = uSunColor * SUN_LIMB_TINT * 9.0 + sky * 0.3;
+  sky = mix(sky, limb, disc * (1.0 - hi) * vis);
+  float glow = pow(max(cosSun, 0.0), 1400.0) * 0.6 + pow(max(cosSun, 0.0), 160.0) * 0.08;
+  return sky + uSunColor * (disc * 40.0 * hi + glow) * vis;
 }
 `;
 

@@ -27,8 +27,7 @@ vec3 stars(vec3 dir) {
 /** starVis: 1 in clear sky, 0 behind cloud (stars vanish before the sky glow does: they are point
  *  sources, any haze or cloud veil kills them first). */
 vec3 skyBackground(vec3 dir, float starVis) {
-  vec3 sky = skyRadiance(dir);
-  sky += sunDisc(dir);
+  vec3 sky = sunComposite(skyRadiance(dir), dir);
   vec3 moonDir = moonDirection();
   float cm = dot(dir, moonDir);
   float moon = smoothstep(0.99975, 0.99992, cm) * 1.6 + pow(max(cm, 0.0), 700.0) * 0.08;

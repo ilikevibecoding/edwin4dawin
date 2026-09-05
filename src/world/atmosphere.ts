@@ -40,18 +40,19 @@ const KEYS: Key[] = [
   // moonlight (sunI) is kept low: with the night exposure a white hull under a x0.14 key read as a pale block
   { el: -18, sun: [0.5, 0.6, 0.85], sunI: 0.09, zen: [0.0012, 0.002, 0.005], hor: [0.004, 0.0055, 0.012], haze: [0.003, 0.004, 0.008], sunHaze: [0.004, 0.0045, 0.007], amb: 0.15 },
   { el: -8, sun: [0.5, 0.6, 0.85], sunI: 0.10, zen: [0.003, 0.006, 0.016], hor: [0.02, 0.022, 0.045], haze: [0.014, 0.016, 0.03], sunHaze: [0.05, 0.025, 0.025], amb: 0.16 },
-  { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.06, zen: [0.015, 0.035, 0.10], hor: [0.40, 0.20, 0.19], haze: [0.22, 0.15, 0.19], sunHaze: [0.9, 0.26, 0.08], amb: 0.4 },
+  { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.06, zen: [0.015, 0.035, 0.10], hor: [0.40, 0.20, 0.19], haze: [0.22, 0.15, 0.19], sunHaze: [0.6, 0.15, 0.04], amb: 0.4 },
   // low sun: airmass extinction takes the direct beam well below its midday strength and reddens it (keeps the
   // sunset glitter path golden-orange). Sunset colours are far more saturated in linear light than they look:
-  // the sun-side haze is ~1 : 0.25 : 0.06 (a photographed (255,160,60) sky), the horizon away from the sun a
-  // salmon that skyRadiance cools toward violet; `hor` sits low enough that the aureole and disc stand out of it
-  { el: 4, sun: [1.0, 0.42, 0.16], sunI: 0.25, zen: [0.03, 0.09, 0.28], hor: [0.55, 0.24, 0.16], haze: [0.60, 0.33, 0.21], sunHaze: [1.0, 0.24, 0.05], amb: 0.85 },
+  // the sun-side haze is ~1 : 0.18 : 0.04 (a photographed (255,170,80) sky once the tonemapper has compressed
+  // it), the horizon away from the sun a salmon that skyRadiance cools toward violet; `hor` and the aureole
+  // sit low enough in G that the sun side stays orange instead of clipping to cream
+  { el: 4, sun: [1.0, 0.42, 0.16], sunI: 0.25, zen: [0.03, 0.09, 0.28], hor: [0.52, 0.21, 0.15], haze: [0.58, 0.30, 0.19], sunHaze: [0.62, 0.11, 0.025], amb: 0.85 },
   { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.62, zen: [0.03, 0.11, 0.34], hor: [0.50, 0.43, 0.40], haze: [0.55, 0.50, 0.50], sunHaze: [1.0, 0.66, 0.36], amb: 1.0 },
   // day: `hor` is the saturated blue-cyan of the sky a few degrees above the horizon, `zen` the deep cerulean
   // of the upper sky, `haze` the pale cyan-white the horizon and distant objects fade into (the reference
   // frame's horizon is a cyan-blue (148,181,194), not a neutral grey: the haze keeps R well below B)
-  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.012, 0.125, 0.36], hor: [0.13, 0.31, 0.45], haze: [0.44, 0.58, 0.68], sunHaze: [1.0, 0.92, 0.80], amb: 1.0 },
-  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.010, 0.125, 0.36], hor: [0.12, 0.31, 0.45], haze: [0.43, 0.58, 0.69], sunHaze: [0.98, 0.93, 0.84], amb: 1.0 },
+  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.006, 0.125, 0.36], hor: [0.11, 0.30, 0.45], haze: [0.40, 0.55, 0.66], sunHaze: [1.0, 0.92, 0.80], amb: 1.0 },
+  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.005, 0.125, 0.36], hor: [0.10, 0.30, 0.45], haze: [0.39, 0.55, 0.67], sunHaze: [0.98, 0.93, 0.84], amb: 1.0 },
 ];
 
 function mixKey(el: number): Key {
