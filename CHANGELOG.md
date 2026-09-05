@@ -17,6 +17,71 @@ numbers the targets are about.
 
 ---
 
+## Round 4, wave B — the plain, the camp, the lions' head and walk, the car's materials
+
+**Build `80cb5e6`** — live, smoke-tested (HUD reads `build 80cb5e6 · 2026-09-05 02:52Z`, zero page errors). Five landings on top of `4bdaba9`, each gated alone against HEAD, then the combined tree gated at fast/high/ultra with the interaction checks before the deploy.
+
+- **Lion head, round 5** (`4de6628`): rebuilt to measured skull ratios instead of
+  adjectives — zygomatic width 0.59 → 0.63 of head length, muzzle depth 0.28 →
+  0.34 L, interpupillary 0.39 → 0.46 of cheek width, ears 0.41 → 0.25 L as
+  rounded triangles on the skull corners, nose leather 0.37 → 0.15 L. The
+  bear/hippo read was two structural faults rather than proportions: the nose
+  sat level with the eyes' lower rims (now 6 cm under the eye centre with a
+  real stop) and crown–brow–bridge was one ramp (now flat crown, brow ledge,
+  straight bridge). `tools/lionhead_measure.mjs` prints the ratio table from the
+  built mesh. Head triangles unchanged.
+- **Lion gait, round 4** (`b71aa5f`): stride scales with √speed and the cadence
+  is derived from it every frame (walk 1.0 m/s: 1.20 m cycle, per-foot
+  excursion 1.05 shoulder heights; a half-speed amble state); elbow and stifle
+  fold ~30° extra in swing with a 7.5 cm arc and the paw peeling from the heel;
+  counter-phase shoulder and pelvis roll, head bob 3.6 cm with pitch and yaw,
+  tail sway lagging bone by bone to ±33° at the tuft. The 20 cm chest drop at
+  the start of every walk was time-based swings overlapping as the cadence
+  tightened — three feet airborne; the phase now resets at set-off. Feet at
+  machine precision through 20 s of walk, lie and sit.
+- **Campground, round 3** (`52355df`): the black slab under the mess awning was
+  a literal 8 × 5 m dark ground sheet — removed, matt `envMapIntensity` 0.3 →
+  0.8, wear overlay 0.25 → 0.6: shade 2.7 → 1.5 stops under sunlit dirt, the
+  round-2 blocker closed. Fire: six standing core tongues at every tier, the
+  hottest colour pulled off white (17 clipped pixels → 0), glow disc 3.5 → 5 m,
+  light decay 1.5 → 1.0; far chairs 0.13 → 0.24. Two pole lanterns over the
+  parking row (the fleet hand-off; row mean 0.084 → 0.131). Five trunk paths
+  and three footpaths with scuffed margins, slot ruts that run past the
+  vehicles, packed patches under every seat, litter. Log gate posts with a
+  whole-log texture, rolled hems and ridge rolls on every canvas, a 9 m stain
+  map over the weave. 49 → 51 calls, +8.7 k tris, 5 → 7 point lights.
+- **Vegetation, round 4** (`135d432`): the plain had gone bald partly through a
+  tier bug — the grass count rode on `treeCount`, so `fast` shipped 70 % of the
+  grass; decoupled, density window widened, far falloff ×0.33 → ×0.6. Straw
+  tufts in the lower third of `lion_far` 5 → 149. Two card heights, root
+  darkening into soil hue, a soil collar under every clump. Crowns carry a
+  baked top/underside gradient (0.42 → 0.87 stops) with a lighter atlas and no
+  dark cluster rims; transmission is Lambertian and gated by sun elevation, so
+  dusk crowns read olive with lit sprays instead of brown-black while dusk
+  grass stays at 0.052 (round 2's bleach was 0.078). The "dead" night canopy
+  was the self-measured fill collapsing under a night hemisphere at 9 % of
+  day, not alpha — a per-material night floor holds crowns at 0.48× the sky.
+  The brown treeline wall in the pride views was the strip's scrub foot running
+  full width; gated, thinned to seven trees per strip, hazed. Scrub, forb and
+  swath on 2×2 buckets: draw calls −27 to −97 on every view but `mainroad`
+  (+14); triangles +10–16 % from the restored grass.
+- **Hero car, round 4** (`80cb5e6`): the dusk grille was A/B'd term by term
+  (lamps, bloom, glow, brightwork env, clearcoat each under 0.05; the key alone
+  −0.27) — lighting's key 4.0 takes it to clip 0 %, and lamp emissive and spot
+  levels are now hour-keyed. Side glass gets its own wind-streaked roughness and
+  a grazing term (door glass see-through held at 0.91). Screen dust reshaped to
+  a cowl with a wiper ridge; the laterite film stops at the cabin box. Cabin
+  soil per key with curvature-gated grime — the crackle net on column and dash
+  is gone, night dash glow intact. The live mirror pass measured 98 calls /
+  1.03 M tris per pane at high and zero passes from the seat (outboard face
+  culled), so `fast` keeps a painted mirror, now sky / horizon / plain with the
+  truck's own flank ray-tested in. Headlamp spot 13 → 40 at night aimed 6°
+  down: pool +2.1 → +3.8 stops over the ground beside it. Paint
+  `envMapIntensity` 0.3 → 0.75: the horizon band reads across door and wing.
+  540 calls / 1.93 M tris before and after.
+- Round-4 frame set shooting into `shots/round4/`; three blind critics score it
+  against round 2 next.
+
 ## Gauntlet round 2 verdict, and the round-4 fixes for what it found
 
 **Build `4bdaba9`** — live, smoke-tested (HUD reads `build 4bdaba9 · 2026-09-05 01:11Z`, zero page errors).

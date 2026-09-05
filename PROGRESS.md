@@ -962,3 +962,106 @@ Draw calls and triangles unchanged by lighting, horizon and fleet: day hero 540
 calls / 1.93 M tris, camp mess 566 / 2.12 M, lion close 535 / 1.78 M. Fleet at
 `high` 78 calls / 514 k tris (+0.3 %). Boot compile at fast 62 s under a
 saturated box (four builders' browsers running).
+
+## Round 4, wave B — five builders, five diagnoses
+
+**Build `80cb5e6`**, live: HUD reads `build 80cb5e6 · 2026-09-05 02:52Z`, zero
+page errors. Combined gate on HEAD: 174/175/177 programs linked at fast/high/
+ultra, 33 interaction checks passing.
+
+The pattern of this wave is that every builder found the cause of its brief
+somewhere other than where the critics pointed, and each time the measurement
+came first and the fix was small.
+
+### What the critics saw, and what it was
+
+- **"Black hole under the mess canopy."** Round-2 lighting had already brought
+  it from 3.4 to 2.25 stops by raising the hemisphere. The campground builder
+  found the remainder: the mess tent laid an 8 × 5 m dark ground sheet, which
+  was the slab, and the camp's matt materials sat at `envMapIntensity` 0.3 so
+  the raised sky never reached them. Sheet removed, env 0.8: 1.5 stops, inside
+  the 1.5–2 band the consensus asked for. Third and last round-2 blocker closed.
+- **"The fire is a candle."** Not the night gate (`camp.level` was already 1).
+  Four core tongues at `fast`, the tripod pot hanging on the flame axis in front
+  of the camera, and decay 1.5 concentrating the light at the ring. Six standing
+  tongues at every tier, tripod swung 0.5 m off axis, decay 1.0; the hottest
+  colour moved off white so the additive stack stops summing to a clipped disc.
+- **"The plain went bald."** Partly a tier bug: the grass count was a function
+  of `treeCount`, so `fast` was silently shipping 70 % of the grass the other
+  tiers had. The rest was the density field's window clearing whole cells and a
+  ×0.33 falloff at 22–48 m. Tufts in the lower third of `lion_far`: round 1
+  21, round 2 0, now 149.
+- **"Trees are black at night."** Not alpha. The crown fill self-measures the
+  hemisphere, and under the new night sky the hemisphere is 9 % of day and the
+  key 5 %, so the fill collapsed to 0.025 and the cards sat at 0.37× the sky.
+  A per-material night floor holds them at 0.48× — present, darker than the sky.
+  The floor is a stopgap and should come down if lighting brightens the night
+  hemisphere; noted for both builders.
+- **"Brown wall behind the pride."** Hide-by-name: `treeline_*`. Its "gated"
+  scrub foot ran the full strip width because the fbm sat above the gate. One
+  layer, gated, seven trees per strip bunched into two thirds of it, aerial
+  perspective toward the hour's fog. The yellow band beyond it persists with the
+  skirt hidden — that is terrain past 860 m, handed to terrain.
+- **"Lions lurch into a walk."** The feet probe said planted feet never moved,
+  and it was right; the 20 cm chest drop over the first second of every walk was
+  swings started as time-based durations at the slow ramp speed, which then
+  overlapped as the cadence tightened and put three feet in the air. The cycle
+  phase now resets at set-off and swings run on the phase. Never more than two
+  feet airborne from stand to walk.
+- **"Bear, hippo, plush."** The head builder measured the mesh against a lion
+  skull and found two structural faults, not proportions: the nose leather sat
+  level with the eyes' lower rims, and crown–brow–bridge was one ramp. Nose 6 cm
+  under the eye centre with a real stop, flat crown, brow ledge, straight bridge;
+  then the ratios (zygomatic 0.63 L, muzzle depth 0.34 L, interpupillary 0.46 of
+  cheek width, ears 0.25 L). `tools/lionhead_measure.mjs` prints the table from
+  the built mesh so the next round can be argued in numbers.
+- **"Dusk grille blown."** The car builder A/B'd every term it owned — lamps,
+  bloom, lamp glow, brightwork env, clearcoat — and none moved the clip more
+  than five points; the key alone took p95 from 0.85 to 0.58. Lighting's key
+  4.0 lands the grille at clip 0 %; to sit under the sky it reflects, the car
+  builder's number is a key of ≈3.0 at 6°, offered to lighting as optional.
+- **"Side glass is an open window."** Measured: the gauntlet's `side_sun`
+  camera is 1.3 m from the door at 0–20° incidence, where no Fresnel
+  brightening is physically due. A grazing term now shows in raked views, and
+  the metric's drop (0.72 → 0.67) is entirely the mirror pane the gauntlet
+  counts as glass — door glass alone is 0.91 both before and after.
+
+### Decisions
+
+- **Mirror at `fast` stays painted.** The live pass costs 98 calls / 1.03 M tris
+  per pane at high, and from the seat cameras the pass count is zero — the pane
+  faces outboard and is back-face culled. A live mirror at `fast` would have
+  bought nothing where the critics looked. The painted version now samples the
+  PMREM by reflected direction with the truck's flank ray-tested in.
+- **Bucket grids per family.** Profiling put scrub at 56 calls for 16 k tris and
+  swath at 44 for 5.5 k — a call per 300 triangles. Scrub, forb and swath go to
+  2×2; grass and litter, which carry the triangles, keep 4×4. Calls net down on
+  every view but `mainroad` (+14); triangles +10–16 %, which is the grass coming
+  back.
+
+### Measured (`fast`, software raster)
+
+Truck at hero 540 calls / 1.93 M tris, unchanged by its materials round. Camp
+49 → 51 calls, 169.5 → 178.2 k tris, 5 → 7 point lights. Vegetation: day forest
+622 → 544 calls, day hero 539 → 487, mainroad 604 → 618. Lion head triangles
+unchanged; feet probe pen 1.7e-14, slide 1.1e-13, float 2.7e-14 m. Boot at
+fast 33 s on a quiet box (62 s under four builders in the last entry).
+
+### Hand-offs carried
+
+Lighting: night hemisphere is what would carry the crowns further; dusk key
+≈3.0 optional. Terrain: the far-ground band past the skirt in the pride views;
+indirect response in shade. Car geometry: the door mirror is aimed ~13° back of
+outboard instead of toed in, so neither the live pass nor the flank paint shows
+from the driver's cameras — `body.js` plus the gauntlet's mirror camera. Lions:
+tail-root sway is ±10° against a 12–20° spec because more crossed the hind legs
+in the medium view; `anim.headBob`/`roll` in `index.js` are now dead and can go.
+Camp: a non-additive flame core (premultiplied with a heat LUT), the fire pool
+to 4 m if the night ground stays warm, the second gate post a step less silver.
+
+### Next
+
+`tools/baseline.sh` is shooting `shots/round4/` from a clean worktree of
+`80cb5e6`. Three blind critics score it against round 2; if the three blockers
+read as closed and no family drops two points, round 4 passes the gate the
+first time and rounds 5–10 begin on the consensus.
