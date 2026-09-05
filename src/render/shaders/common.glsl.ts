@@ -115,7 +115,7 @@ vec3 cityGlowSky(vec3 dir) {
   float az = hl > 1e-4 ? dot(dir.xz / hl, uCityGlowView.xy) : 1.0;
   float azw = exp(-(1.0 - az) / max(uCityGlowView.z, 0.02));
   // the dome fades within ~10 deg of the horizon (a few km of lit air seen edge-on)
-  float elev = exp(-max(dir.y, 0.0) * 14.0);
+  float elev = exp(-max(dir.y, 0.0) * 16.0);
   return CITY_GLOW_COLOR * (uCityGlowView.w * azw * elev);
 }
 /** Sky gradient. uZenithColor is the deep blue of the upper sky, uHorizonColor the saturated blue-cyan a

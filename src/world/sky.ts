@@ -215,8 +215,12 @@ float phase2(float c, float k) { return mix(hgN(c, 0.74 * k), hgN(c, -0.2 * k), 
 // with a flatter phase (light that has scattered several times has lost its direction, so the forward
 // peak toward a low sun lights the rims but not the shadowed cores). The slow tail keeps the shaded
 // walls at ~25 % of the lit crown while the base of a tall tower (~25 units of optical depth) drops to ~5 %.
+// Under a closed deck only the underside is ever seen, so the slow tail (what reaches it through the whole
+// sheet) is what sets its brightness: a smaller, faster-decaying tail gives an overcast a mid-grey ceiling
+// with dark thick cells and bright thin patches instead of a near-white sheet.
 vec3 scatter(float od, float c) {
-  return vec3(0.44 * exp(-od) * phase2(c, 1.0), 0.36 * exp(-0.25 * od) * phase2(c, 0.5), 0.20 * exp(-0.06 * od) * phase2(c, 0.2));
+  float deck = smoothstep(0.45, 0.7, uCloudCoverage);
+  return vec3(0.44 * exp(-od) * phase2(c, 1.0), 0.36 * exp(-0.25 * od) * phase2(c, 0.5), mix(0.20, 0.11, deck) * exp(-mix(0.06, 0.09, deck) * od) * phase2(c, 0.2));
 }
 
 void main() {

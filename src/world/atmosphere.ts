@@ -37,8 +37,9 @@ const GROUND_ALBEDO = new THREE.Color(0.26, 0.24, 0.20);
 const KEYS: Key[] = [
   // night: the dome is blue-black (the x3.5 night exposure lifts the zenith to ~sRGB 20, not 60); the glow over
   // the city is added separately (cityGlowSky), so the horizon away from it stays dark
-  { el: -18, sun: [0.5, 0.6, 0.85], sunI: 0.14, zen: [0.0012, 0.002, 0.005], hor: [0.004, 0.0055, 0.012], haze: [0.003, 0.004, 0.008], sunHaze: [0.004, 0.0045, 0.007], amb: 0.15 },
-  { el: -8, sun: [0.5, 0.6, 0.85], sunI: 0.13, zen: [0.003, 0.006, 0.016], hor: [0.02, 0.022, 0.045], haze: [0.014, 0.016, 0.03], sunHaze: [0.05, 0.025, 0.025], amb: 0.16 },
+  // moonlight (sunI) is kept low: with the night exposure a white hull under a x0.14 key read as a pale block
+  { el: -18, sun: [0.5, 0.6, 0.85], sunI: 0.09, zen: [0.0012, 0.002, 0.005], hor: [0.004, 0.0055, 0.012], haze: [0.003, 0.004, 0.008], sunHaze: [0.004, 0.0045, 0.007], amb: 0.15 },
+  { el: -8, sun: [0.5, 0.6, 0.85], sunI: 0.10, zen: [0.003, 0.006, 0.016], hor: [0.02, 0.022, 0.045], haze: [0.014, 0.016, 0.03], sunHaze: [0.05, 0.025, 0.025], amb: 0.16 },
   { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.06, zen: [0.015, 0.035, 0.10], hor: [0.42, 0.22, 0.2], haze: [0.22, 0.16, 0.2], sunHaze: [0.9, 0.35, 0.18], amb: 0.4 },
   // low sun: airmass extinction takes the direct beam well below its midday strength (keeps the sunset glitter path golden)
   { el: 4, sun: [1.0, 0.5, 0.22], sunI: 0.30, zen: [0.035, 0.10, 0.30], hor: [0.82, 0.48, 0.34], haze: [0.50, 0.40, 0.40], sunHaze: [1.0, 0.55, 0.3], amb: 0.85 },
@@ -70,7 +71,7 @@ export const WEATHER: Record<Weather, WeatherPreset> = {
   clear: { coverage: 0.27, hazeDensity: 1.5e-5, hazeHeight: 1400, windSpeed: 3.5, turbulence: 0.2, cloudBase: 1500, cloudTop: 3500, rain: 0, sunDim: 1 },
   scattered: { coverage: 0.37, hazeDensity: 1.9e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 3500, rain: 0, sunDim: 0.97 },
   // overcast: humid air under the deck (denser, taller haze) so the far end of the ceiling sinks into the horizon haze
-  cloudy: { coverage: 0.70, hazeDensity: 4.6e-5, hazeHeight: 1300, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 0.72 },
+  cloudy: { coverage: 0.70, hazeDensity: 4.6e-5, hazeHeight: 1300, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 0.6 },
   storm: { coverage: 0.92, hazeDensity: 5.5e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 3200, rain: 1, sunDim: 0.4 },
 };
 
