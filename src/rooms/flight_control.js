@@ -262,20 +262,29 @@ export function buildFlightControl(kit, ctx, room) {
     kit.collider([-11.4, 0, s > 0 ? hz - 0.8 : -hz], [-9.4, 0.95, s > 0 ? hz : -hz + 0.8], "cabinet");
   }
 
-  // ---- ceiling and lights: neutral white keys under the two trough fixtures (x = -6 / 6), which are
-  //      the motivated sources. The keys sit 0.4 m below the slab: at 5 cm any surface (even the black
-  //      trim) blew out into two white blobs over the window from the spawn; a matte black plate under
-  //      the slab around each trough keeps what little reaches it from mirroring the key
+  // ---- ceiling and lights: neutral white keys as hooded pendants under the two trough fixtures
+  //      (x = -6 / 6), which are the motivated sources. A key 0.4 m under the slab lit the slab 80x
+  //      harder than the floor, so even a matte black plate there blew out into two white blobs over the
+  //      window from the spawn. Hung at 3.1 m inside an opaque hood (an unshadowed point light cannot
+  //      light the outside of the box it sits in) the slab gets a sixth of that, the emitter is never
+  //      seen bare (the lit pane faces the floor) and the hood reads as a fixture at 12 m
   impCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 3.5, troughs: 2, seed: 71, accentKey });
   for (const tx of [-6, 6]) kit.boxMM("paintedMetal", [tx - 1.6, H - 0.03, -hz + 0.15], [tx + 1.6, H, hz - 0.15], { color: PALETTE.impBlack, texel: 1 });
+  const PY = 3.1; // pendant light height (hood 3.0–3.3, stem to the slab)
+  const pendant = (x, z) => {
+    kit.cyl("impTrim", x, (H + PY + 0.3) / 2, z, 0.04, H - PY - 0.3, "y", { color: PALETTE.impBlack, segments: 6 });
+    kit.box("impTrim", x, PY + 0.15, z, 1.2, 0.3, 0.7, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("impMetalRough", x, PY - 0.02, z, 1.26, 0.06, 0.76, { color: PALETTE.impGreyDark });
+    kit.box(accentKey, x, PY - 0.06, z, 1.0, 0.02, 0.5, { uv: "keep" });
+  };
   // (mid-segment between the 3.5 m beams: z = ±1.75)
   const white = HG_PALETTE.keyWhite;
   // (k 1.8: with the environment fill at 0.55 the aisle under the keys reached 200/255 and the frame mean
   // 75; the critic's target for a room is a 50–65 mean, screens and the window carrying the highlights)
-  kit.light({ type: "point", pos: [-6, 3.6, -1.75], color: white, intensity: lux(3.6, 1.8), distance: 20, priority: 0.6 });
-  kit.light({ type: "point", pos: [-6, 3.6, 1.75], color: white, intensity: lux(3.6, 1.8), distance: 20, priority: 0.59 });
-  kit.light({ type: "point", pos: [6, 3.6, -1.75], color: white, intensity: lux(3.15, 1.8), distance: 20, priority: 0.58 });
-  kit.light({ type: "point", pos: [6, 3.6, 1.75], color: white, intensity: lux(3.15, 1.8), distance: 20, priority: 0.57 });
+  for (const [x, z, drop, pr] of [[-6, -1.75, 0, 0.6], [-6, 1.75, 0, 0.59], [6, -1.75, T1, 0.58], [6, 1.75, T1, 0.57]]) {
+    pendant(x, z);
+    kit.light({ type: "point", pos: [x, PY, z], color: white, intensity: lux(PY - drop, 1.8), distance: 20, priority: pr });
+  }
   kit.light({ type: "point", pos: [10.6, T2 + 1.4, 0], color: 0x5fd0ff, intensity: lux(1.2, 0.9), distance: 6, priority: 0.35 }); // holo glow
 
   hgBeacons(kit, materials, "emitAmber", blink, { period: 1.2, duty: 0.5, min: 0.3, max: 3.0 });
