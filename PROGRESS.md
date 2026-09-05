@@ -713,4 +713,31 @@ one TIE mid-descent at y −20 and one 16 m below the hull, exterior ↔ interio
 spot). Navigation: 80 door / portal traversals + 5 lift rides, 0 failures, 0 page errors, no sector
 over its triangle or light budget — with the swept console colliders in place.
 
-Critique round 4 (the same four critics, on `shots/sd_iter_5/`) is in progress.
+### Critique round 4 (the same four critics, on `shots/sd_iter_5/`)
+
+All four areas signed off with no Must items open, and none of the critics found a regression in the
+iter 4 → 5 diff maps:
+
+- Exterior: 8 of 11 round-3 items Fixed, 3 Partly (streak edges hard, nav lamps sub-pixel, lit hatch
+  rims ring the bay). Pass at close / medium / far range; silhouette and scale language recognisable.
+- Bridge + command: 56 of 56 round-2 items and 20 round-3 items re-checked — 50 Fixed, 6 Partly
+  (composition or deliberate). Bridge PASS (0 clipped px, peaks ≤ 244; sill screens redraw 1 026 px
+  per 3 s); command deck PASS; connective tissue PASS.
+- Crew: all 10 rooms pass the purpose / identity / connection / scale / access / designed-not-filled
+  check; 0 blown white bars. Two Nice carries (blue identity thin in quarters, repeated mess ceiling).
+- Hangar + engineering: all 20 hangar-bay criteria pass (markings, lanes, racks, platforms, refuel,
+  cargo lifts, gantries, field + pulse, blast doors, beacons, tower, catwalks, carts, cranes, pods,
+  moving machinery); traffic staggered ≥ 3 s with glow ramps and the 30° clamp; every engineering
+  room distinct. Light pool 16 used / 0 overflow in every deck view.
+
+Open items are Should/Nice polish (14 Should, ~25 Nice across the four lists). Shared ones landed on
+the integration branch straight away: deep-red `emitRed` family + screen warn colour (no more salmon
+clipping), gridded "equipment" wall panels, rubber door sills, dim lintel lamps, faint blue corridor
+edge channels, purely emissive legacy emitters, lift bands peaking below clip, and the launch capture
+keyed on the oldest launcher. The room-level items went to four round-5 polish agents (exterior,
+bridge + command, crew, hangar + engineering) in isolated worktrees; SD iteration 6 will be the
+merged result with a full rubric run and navtest.
+
+Tour video re-rendered against iteration 5 (`tools/tour.mjs`, 797 frames at 15 fps): independent
+frame review confirmed both TIE launches read as moving craft, the lift sign shows IN TRANSIT with the
+passing deck stepping, and no black frames, pops or camera jumps.
