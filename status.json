@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-05T11:28:56.499Z",
+  "updated": "2026-09-05T11:42:13.997Z",
   "phase": "Star Wars expansion: 7 builders running (gameplay 1:1, space train, towers+rooms, spaceport+ships, Death Star interior, HD textures, shaders/shadows/bloom); landmark wave next",
   "summary": "User round 2 feedback: references received (Coruscant skyline/platform/senate/plaza + Monument Plaza). New rubrics: 05 render quality (64x HD tiles, normal/material maps, cascaded sun shadows, HDR bloom + filmic tone mapping, atmospheric sky, water reflections, presets) and 06 landmarks (one builder per signature building). Layout now reserves 12 landmark lots (Senate 3x3, Jedi Temple 3x3, Monument Plaza 3x3, Uscru undercity 3x3, Works, CoCo market, Opera, 500 Republica, Chancellery, Medcenter, Detention, HoloNet); 421 towers + 12 landmarks + 8 plazas.",
   "links": [
@@ -145,8 +145,8 @@
     },
     {
       "name": "Space train + hyperlane + stations",
-      "status": "merged; junction fix in progress",
-      "detail": "74-block walkable 5-car train at 30 blocks/s on the shared tick, zero carry drift over 60 s, boarding/alighting verified; stations at both ends. Fixing the overlap with the spaceport bridge/deck at both ends."
+      "status": "merged (junctions fixed)",
+      "detail": "Coruscant station moved west (platform 2473..2532, buffers 2547..2548) with a glass concourse joining the spaceport bridge to the platform by half-slab steps; frontier mini-spaceport is now a roof deck over the station with a fenced stair. Corridor map: 0 blocks in the train's path; strict walk checks from bridge/deck to every door; ride test 26/26."
     },
     {
       "name": "Coruscant spaceport + 4 ship models + traffic",
@@ -335,6 +335,10 @@
     {
       "time": "2026-09-05 11:28 UTC",
       "text": "HD textures merged; landmark builders relaunched without image attachments after three timed out with no output (Senate, Temple, Monument Plaza); 500 Republica launched."
+    },
+    {
+      "time": "2026-09-05 11:42 UTC",
+      "text": "Junction fix merged; landmark wave throttled to <= 5 live agents after relaunched builders starved for model turns and timed out."
     }
   ],
   "issues": [
