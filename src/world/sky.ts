@@ -284,7 +284,7 @@ void main() {
     // scattering across the whole sheet): its underside floor is higher and its cells contrast more
     float deck = smoothstep(0.45, 0.7, uCloudCoverage);
     float aoFloor = mix(0.12, 0.2, deck);
-    vec2 mottRange = mix(vec2(0.6, 1.3), vec2(0.45, 1.45), deck);
+    vec2 mottRange = mix(vec2(0.6, 1.3), vec2(0.38, 1.5), deck);
 
     int level = 0;          // 0 coarse, 1 fine, 2 surface
     int empty = 0;
