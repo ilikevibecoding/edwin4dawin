@@ -260,6 +260,8 @@ normal = normalize(normal + facadeTilt);`)
     vec3 blindCol = mix(vec3(0.58, 0.57, 0.53), vec3(0.62, 0.50, 0.40), step(0.8, fract(paneH * 5.3)));
     vec3 interior = vec3(0.045, 0.055, 0.065) + vec3(0.14, 0.13, 0.11) * smoothstep(0.78, 0.98, py) * vis;
     vec3 seen = mix(interior, blindCol, blind);
+    // the odd replaced pane in a different batch of glass
+    float replaced = step(0.985, fract(paneH * 31.7)) * vis;
     float reveal = 1.0 - (0.32 * smoothstep(0.72, 1.0, py) + 0.14 * smoothstep(0.86, 1.0, px)) * vis;
     // per-pane micro tilt so each pane catches the sky and the sun a little differently
     {
@@ -290,6 +292,7 @@ normal = normalize(normal + facadeTilt);`)
       float mullCol = 0.2 + 0.35 * step(0.6, hash11(seed * 8.8));
       vec3 frame = vec3(mullCol) * (0.95 + 0.1 * spandrelGlass);
       vec3 pane = mix(tint, mix(seen * 0.7, tint, 0.5), clear);
+      pane = mix(pane, pane * vec3(0.85, 1.05, 0.95) + 0.08, replaced);
       col = mix(frame, spandrelCol, spandrel);
       col = mix(col, pane * reveal, glass);
       // horizontal transom line at the head of the spandrel
