@@ -201,7 +201,7 @@ export class Player {
     // double-tap jump within 7 ticks toggles flight; while flying, jump/sneak mean rise/descend
     const jumpDown = !!ctrl.jump;
     if (jumpDown && !this.jumpWasDown) {
-      if (this.tickCount - this.lastJumpTap <= 7 && !this.inWater) {
+      if (this.tickCount - this.lastJumpTap <= 6 && !this.inWater && (!this.onGround || this.flying)) {
         this.flying = !this.flying; this.vel.y = 0; this.fallDistance = 0; this.lastJumpTap = -100;
         this.events.push({ type: 'fly', flying: this.flying });
       } else this.lastJumpTap = this.tickCount;
@@ -239,6 +239,9 @@ export class Player {
     if (this.flying) {
       if (ctrl.jump) this.vel.y += 0.15;
       if (ctrl.sneak) this.vel.y -= 0.15;
+    } else if (this.autoJumpPending) {
+      this.autoJumpPending = false;
+      if (this.onGround) this.jump(); // full-strength hop onto the ledge (like Minecraft's auto-jump)
     } else if (ctrl.jump) {
       if (this.inWater) this.vel.y += 0.04;
       else if (this.onGround && this.jumpCooldown === 0) this.jump();
@@ -286,7 +289,7 @@ export class Player {
       const probe = this.box.offset(dx * 4 + Math.sign(dx) * 0.05, 1.0 + 0.01, dz * 4 + Math.sign(dz) * 0.05);
       const region = probe.clone(); region.y0 -= 0.05;
       const blocked = collectBoxes(this.world, region, this.scratch).some((bb) => bb.intersects(probe));
-      if (!blocked) { this.jump(); this.jumpCooldown = 10; }
+      if (!blocked) { this.autoJumpPending = true; this.jumpCooldown = 10; }
     }
 
     // gravity & drag
