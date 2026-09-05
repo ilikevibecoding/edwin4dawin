@@ -75,7 +75,19 @@ export class TriBuf {
     this.tri(a, b, c, na, nb, nc, ua, ub, uc);
     this.tri(a, c, d, na, nc, nd, ua, uc, ud);
   }
-  flatQuad(a, b, c, d, n, uvs = [[0, 0], [1, 0], [1, 1], [0, 1]]) {
+  flatQuad(
+    a,
+    b,
+    c,
+    d,
+    n,
+    uvs = [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ],
+  ) {
     this.quad(a, b, c, d, n, n, n, n, uvs[0], uvs[1], uvs[2], uvs[3]);
   }
   get count() {
@@ -553,9 +565,9 @@ export function faceUV(g, texel) {
       const z = pos.getZ(t + k);
       let u;
       let v;
-      if (ny >= nx && ny >= nz) ((u = x), (v = z));
-      else if (nx >= nz) ((u = z), (v = y));
-      else ((u = x), (v = y));
+      if (ny >= nx && ny >= nz) (u = x), (v = z);
+      else if (nx >= nz) (u = z), (v = y);
+      else (u = x), (v = y);
       uv[(t + k) * 2] = u * texel;
       uv[(t + k) * 2 + 1] = v * texel;
     }

@@ -36,25 +36,56 @@ export function quadLaser(S, base, dark, opts = {}) {
   const tint = (k) => base.clone().multiplyScalar(k);
   const darkC = dark instanceof THREE.Color ? dark : new THREE.Color(dark);
   const parts = [];
-  parts.push(tinted(cylY(1.05 * S, 1.15 * S, 0.24 * S, 10, 0, 0.12 * S, 0), tint(0.8)));
-  parts.push(tinted(cylY(0.86 * S, 0.9 * S, 0.5 * S, 10, 0, 0.49 * S, 0), tint(1.0)));
-  parts.push(tinted(box(1.3 * S, 0.5 * S, 1.2 * S, 0, 0.95 * S, 0.05 * S), tint(0.96)));
-  parts.push(tinted(box(0.5 * S, 0.14 * S, 0.5 * S, 0.25 * S, 1.27 * S, 0.2 * S), tint(0.72)));
-  parts.push(tinted(box(0.86 * S, 0.44 * S, 0.34 * S, 0, 0.92 * S, -0.72 * S), tint(0.42)));
+  parts.push(
+    tinted(cylY(1.05 * S, 1.15 * S, 0.24 * S, 10, 0, 0.12 * S, 0), tint(0.8)),
+  );
+  parts.push(
+    tinted(cylY(0.86 * S, 0.9 * S, 0.5 * S, 10, 0, 0.49 * S, 0), tint(1.0)),
+  );
+  parts.push(
+    tinted(box(1.3 * S, 0.5 * S, 1.2 * S, 0, 0.95 * S, 0.05 * S), tint(0.96)),
+  );
+  parts.push(
+    tinted(
+      box(0.5 * S, 0.14 * S, 0.5 * S, 0.25 * S, 1.27 * S, 0.2 * S),
+      tint(0.72),
+    ),
+  );
+  parts.push(
+    tinted(
+      box(0.86 * S, 0.44 * S, 0.34 * S, 0, 0.92 * S, -0.72 * S),
+      tint(0.42),
+    ),
+  );
   for (const s of [-1, 1])
-    parts.push(tinted(box(0.14 * S, 0.3 * S, 0.7 * S, s * 0.72 * S, 0.8 * S, 0.1 * S), tint(0.6)));
+    parts.push(
+      tinted(
+        box(0.14 * S, 0.3 * S, 0.7 * S, s * 0.72 * S, 0.8 * S, 0.1 * S),
+        tint(0.6),
+      ),
+    );
   const body = mergeParts(parts);
   faceUV(body, opts.texel || 1 / 4);
 
   const bp = [];
-  bp.push(tinted(box(0.7 * S, 0.5 * S, 0.5 * S, 0, 0, 0.05 * S), darkC.clone().multiplyScalar(1.1)));
+  bp.push(
+    tinted(
+      box(0.7 * S, 0.5 * S, 0.5 * S, 0, 0, 0.05 * S),
+      darkC.clone().multiplyScalar(1.1),
+    ),
+  );
   const tubeLen = 1.9 * S;
   const z0 = -0.28 * S;
   for (const sx of [-1, 1])
     for (const sy of [-1, 1]) {
       const x = sx * 0.2 * S;
       const y = sy * 0.14 * S;
-      bp.push(tinted(tubeZ(0.07 * S, 0.085 * S, tubeLen, 6, x, y, z0 - tubeLen / 2), darkC));
+      bp.push(
+        tinted(
+          tubeZ(0.07 * S, 0.085 * S, tubeLen, 6, x, y, z0 - tubeLen / 2),
+          darkC,
+        ),
+      );
       bp.push(
         tinted(
           tubeZ(0.1 * S, 0.1 * S, 0.22 * S, 6, x, y, z0 - tubeLen + 0.14 * S),
@@ -86,15 +117,24 @@ export function twinTurbolaser(S, base, dark, opts = {}) {
   const tint = (k) => base.clone().multiplyScalar(k);
   const darkC = dark instanceof THREE.Color ? dark : new THREE.Color(dark);
   const parts = [];
-  parts.push(tinted(cylY(1.1 * S, 1.22 * S, 0.22 * S, 14, 0, 0.11 * S, 0), tint(0.8)));
+  parts.push(
+    tinted(cylY(1.1 * S, 1.22 * S, 0.22 * S, 14, 0, 0.11 * S, 0), tint(0.8)),
+  );
   {
     const g = new THREE.CylinderGeometry(0.78 * S, 0.98 * S, 0.8 * S, 8);
     g.rotateY(Math.PI / 8);
     g.translate(0, 0.62 * S, 0);
     parts.push(tinted(g, tint(1.0)));
   }
-  parts.push(tinted(box(0.9 * S, 0.12 * S, 0.9 * S, 0, 1.08 * S, 0.1 * S), tint(0.9)));
-  parts.push(tinted(box(0.34 * S, 0.14 * S, 0.34 * S, -0.26 * S, 1.2 * S, 0.22 * S), tint(0.7)));
+  parts.push(
+    tinted(box(0.9 * S, 0.12 * S, 0.9 * S, 0, 1.08 * S, 0.1 * S), tint(0.9)),
+  );
+  parts.push(
+    tinted(
+      box(0.34 * S, 0.14 * S, 0.34 * S, -0.26 * S, 1.2 * S, 0.22 * S),
+      tint(0.7),
+    ),
+  );
   {
     // sloped mantlet the tubes emerge from
     const g = new THREE.BoxGeometry(1.06 * S, 0.62 * S, 0.5 * S);
@@ -103,17 +143,32 @@ export function twinTurbolaser(S, base, dark, opts = {}) {
     parts.push(tinted(g, tint(0.44)));
   }
   for (const s of [-1, 1])
-    parts.push(tinted(box(0.18 * S, 0.36 * S, 0.56 * S, s * 0.94 * S, 0.62 * S, 0.12 * S), tint(0.62)));
+    parts.push(
+      tinted(
+        box(0.18 * S, 0.36 * S, 0.56 * S, s * 0.94 * S, 0.62 * S, 0.12 * S),
+        tint(0.62),
+      ),
+    );
   const body = mergeParts(parts);
   faceUV(body, opts.texel || 1 / 5);
 
   const bp = [];
-  bp.push(tinted(box(0.92 * S, 0.46 * S, 0.7 * S, 0, 0, 0.02 * S), darkC.clone().multiplyScalar(1.1)));
+  bp.push(
+    tinted(
+      box(0.92 * S, 0.46 * S, 0.7 * S, 0, 0, 0.02 * S),
+      darkC.clone().multiplyScalar(1.1),
+    ),
+  );
   const tubeLen = 3.2 * S;
   const z0 = -0.32 * S;
   for (const s of [-1, 1]) {
     const x = s * 0.27 * S;
-    bp.push(tinted(tubeZ(0.1 * S, 0.14 * S, tubeLen, 8, x, 0, z0 - tubeLen / 2), darkC));
+    bp.push(
+      tinted(
+        tubeZ(0.1 * S, 0.14 * S, tubeLen, 8, x, 0, z0 - tubeLen / 2),
+        darkC,
+      ),
+    );
     bp.push(
       tinted(
         tubeZ(0.19 * S, 0.19 * S, 0.6 * S, 8, x, 0, z0 - 0.5 * S),
