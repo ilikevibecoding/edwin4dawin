@@ -13,6 +13,7 @@ import { buildBattleSky } from "./battleSky.js";
 import { Fleet } from "./fleet.js";
 import { Bolts } from "./weapons.js";
 import { Explosions } from "./explosions.js";
+import { Debris } from "./effects/debris.js";
 import { Fighters } from "./fighters.js";
 import { shipMaterials } from "./ships/shipKit.js";
 import { createBattle } from "./choreography.js";
@@ -61,7 +62,10 @@ const planet = buildCoruscant(scene, sun);
 const mats = shipMaterials(sun);
 const fleet = new Fleet(scene);
 const bolts = new Bolts(scene, 1600);
-const explosions = new Explosions(scene, 1400);
+const explosions = new Explosions(scene, 1400, { sun });
+const debris = new Debris(scene, 400, { sun });
+explosions.attachDebris(debris); // stepped from explosions.update
+bolts.attachMuzzleFlash(explosions);
 const fighters = new Fighters(scene, sun, { scale: SCALE });
 const battle = createBattle({
   fleet,
@@ -554,6 +558,7 @@ const debugAPI = {
   fleet,
   bolts,
   explosions,
+  debris,
   fighters,
   battle,
   cinematic,
