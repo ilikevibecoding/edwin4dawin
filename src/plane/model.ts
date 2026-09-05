@@ -869,14 +869,14 @@ export class PlaneModel {
     }
     // overhead console on the centreline just behind the header (Beaver style: fuel selector, cabin switches, trim
     // indicator with its crank wheel on the port flank, the flap hand pump lever on the starboard flank)
-    const OC_X = 1.58, OC_LEN = 0.42, OC_Y = 1.068;
-    cabinKit.add(new THREE.BoxGeometry(OC_LEN, 0.032, 0.17), at([OC_X, OC_Y, 0]), SURF.plastic);
-    cabinKit.add(new THREE.BoxGeometry(OC_LEN + 0.02, 0.012, 0.19), at([OC_X, OC_Y + 0.012, 0]), SURF.trim);
-    decal(PANEL_UV.overhead, OVERHEAD.w, OVERHEAD.h, new THREE.Vector3(OC_X, OC_Y - 0.0165, 0), new THREE.Vector3(0, -1, 0), new THREE.Vector3(-1, 0, 0));
-    cabinKit.add(new THREE.CylinderGeometry(0.036, 0.036, 0.014, 20), at([OC_X - 0.06, OC_Y - 0.008, -0.092], [Math.PI / 2, 0, 0]), SURF.rubber);
-    cabinKit.add(new THREE.CylinderGeometry(0.010, 0.010, 0.02, 10), at([OC_X - 0.06, OC_Y - 0.008, -0.102], [Math.PI / 2, 0, 0]), SURF.metal);
+    const OC_X = 1.60, OC_LEN = 0.38, OC_Y = 1.074;
+    cabinKit.add(new THREE.BoxGeometry(OC_LEN, 0.024, 0.17), at([OC_X, OC_Y, 0]), SURF.plastic);
+    cabinKit.add(new THREE.BoxGeometry(OC_LEN + 0.02, 0.012, 0.19), at([OC_X, OC_Y + 0.010, 0]), SURF.trim);
+    decal(PANEL_UV.overhead, OVERHEAD.w, OVERHEAD.h, new THREE.Vector3(OC_X, OC_Y - 0.0125, 0), new THREE.Vector3(0, -1, 0), new THREE.Vector3(-1, 0, 0));
+    cabinKit.add(new THREE.CylinderGeometry(0.036, 0.036, 0.014, 20), at([OC_X - 0.06, OC_Y - 0.004, -0.092], [Math.PI / 2, 0, 0]), SURF.rubber);
+    cabinKit.add(new THREE.CylinderGeometry(0.010, 0.010, 0.02, 10), at([OC_X - 0.06, OC_Y - 0.004, -0.102], [Math.PI / 2, 0, 0]), SURF.metal);
     // flap pump handle stowed forward along the ceiling from its pivot on the starboard flank
-    { const pivot = new THREE.Vector3(OC_X - 0.08, OC_Y - 0.02, 0.095), dir = new THREE.Vector3(0.97, -0.24, 0.05).normalize();
+    { const pivot = new THREE.Vector3(OC_X - 0.08, OC_Y - 0.016, 0.095), dir = new THREE.Vector3(0.97, -0.24, 0.05).normalize();
       cabinKit.add(new THREE.CylinderGeometry(0.014, 0.014, 0.03, 10), at(pivot, [0, 0, 0]), SURF.darkMetal);
       cabinKit.add(strutGeometry(pivot, pivot.clone().addScaledVector(dir, 0.15), 0.008, 8), undefined, SURF.metal);
       cabinKit.add(new THREE.SphereGeometry(0.016, 10, 8), at(pivot.clone().addScaledVector(dir, 0.16)), SURF.throttle); }
