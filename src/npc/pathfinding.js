@@ -4,16 +4,18 @@ import { B, BLOCKS, SHAPE } from '../blocks.js';
 const SUPPORT_SHAPES = new Set([SHAPE.CUBE, SHAPE.SLAB_TOP, SHAPE.TABLE, SHAPE.FARMLAND, SHAPE.ANVIL, SHAPE.CACTUS]);
 const PARTIAL_SHAPES = new Set([SHAPE.SLAB, SHAPE.TROUGH, SHAPE.BED, SHAPE.CHEST]);
 
+// Closed doors are solid for the player but passable for NPCs: they open them on approach (see doors.js).
 export function isPassable(id) {
   if (id === B.WATER) return false;
-  return !BLOCKS[id].solid;
+  const def = BLOCKS[id];
+  return !def.solid || !!def.door;
 }
 
 // Returns foot height if an entity can stand with its feet in cell (x,y,z), else null.
 export function standHeight(world, x, y, z) {
   const id = world.getBlock(x, y, z);
   const def = BLOCKS[id];
-  if (def.solid) {
+  if (def.solid && !def.door) {
     if (!PARTIAL_SHAPES.has(def.shape)) return null;
     const top = def.boxes.length ? def.boxes[0][4] : 0.5;
     if (!isPassable(world.getBlock(x, y + 1, z)) || !isPassable(world.getBlock(x, y + 2, z))) return null;

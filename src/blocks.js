@@ -24,9 +24,34 @@ export const B = {
   DURASTEEL: 82, DURASTEEL_DARK: 83, PANEL_BLACK: 84, PANEL_RED: 85, GLOW_PANEL: 86, GLOW_PANEL_BLUE: 87,
   HOLO_SIGN: 88, CONSOLE: 89, VENT: 90, DECK_PLATE: 91, STEEL_GLASS: 92, CHROME: 93, WINDOW_LIT: 94, WINDOW_DARK: 95,
   CITY_LAMP: 96, PANEL_STRIPE: 97, HULL_PLATE: 98, HULL_TRENCH: 99,
+  // gameplay states (ids from 100 upward; existing ids are never renumbered)
+  OAK_DOOR_TOP: 100, OAK_DOOR_OPEN: 101, SPRUCE_DOOR_TOP: 102, SPRUCE_DOOR_OPEN: 103,
+  WHEAT_0: 104, WHEAT_1: 105,
 };
 
 export const BLOCKS = new Array(256);
+
+// Two-block doors: the closed state is a pair of ids (bottom / top half) so each half carries its own texture;
+// the open state uses one id for both halves. `doorSet(id)` returns the set an id belongs to.
+export const DOOR_SETS = {
+  oak: { bottom: B.OAK_DOOR, top: B.OAK_DOOR_TOP, open: B.OAK_DOOR_OPEN, item: B.OAK_DOOR },
+  spruce: { bottom: B.SPRUCE_DOOR, top: B.SPRUCE_DOOR_TOP, open: B.SPRUCE_DOOR_OPEN, item: B.OAK_DOOR },
+};
+export const doorSet = (id) => { const d = BLOCKS[id]; return d && d.door ? DOOR_SETS[d.door] : null; };
+export const isDoor = (id) => !!(BLOCKS[id] && BLOCKS[id].door);
+
+// Wheat growth: sprout -> half grown -> mature (B.WHEAT)
+export const WHEAT_STAGES = [B.WHEAT_0, B.WHEAT_1, B.WHEAT];
+
+// Closed doors collide as a thin panel across the doorway. The panel's axis follows the wall (same rule the
+// mesher uses for panes): solid neighbours along x => the panel spans x and is thin in z.
+const DOOR_PANEL_Z = [[0, 0, 0.4375, 1, 1, 0.5625]];
+const DOOR_PANEL_X = [[0.4375, 0, 0, 0.5625, 1, 1]];
+export function doorPanelBoxes(world, x, y, z) {
+  const solid = (bx, bz) => BLOCKS[world.getBlock(bx, y, bz)].solid;
+  const alongX = solid(x + 1, z) || solid(x - 1, z), alongZ = solid(x, z + 1) || solid(x, z - 1);
+  return alongX && !alongZ ? DOOR_PANEL_Z : DOOR_PANEL_X;
+}
 
 const T = (name) => TILES[name] ?? 0;
 const same = (n) => [T(n), T(n), T(n), T(n), T(n), T(n)];
@@ -52,6 +77,12 @@ function def(id, name, opts) {
     icon: opts.icon || 'cube',           // 'cube' | 'flat' | 'slab'
     drop: opts.drop ?? id,               // block id received when broken (0 = nothing)
     tint: opts.tint || null,
+    door: opts.door || null,             // door set name ('oak' | 'spruce') for two-block toggle doors
+    doorOpen: opts.doorOpen ?? false,    // open state of a door block (no collision, passage free)
+    doorTop: opts.doorTop ?? false,      // upper half of a closed door
+    boxesAt: opts.boxesAt || null,       // (world, x, y, z) => boxes: collision that depends on the neighbours
+    blockEntity: opts.blockEntity || null, // 'chest': the cell carries a block entity (world.blockEntities)
+    growth: opts.growth ?? -1,           // crop stage index (WHEAT_STAGES), -1 for non-crops
   };
   if (b.shape !== SHAPE.CUBE) b.opaque = false;
   BLOCKS[id] = b;
@@ -90,7 +121,12 @@ export function initBlocks() {
   def(B.DANDELION, 'dandelion', { shape: SHAPE.CROSS, tex: same('dandelion'), solid: false, cutout: true, icon: 'flat', hardness: 0.05, sound: 'grass', boxes: [] });
   def(B.POPPY, 'poppy', { shape: SHAPE.CROSS, tex: same('poppy'), solid: false, cutout: true, icon: 'flat', hardness: 0.05, sound: 'grass', boxes: [] });
   def(B.DEAD_BUSH, 'dead_bush', { shape: SHAPE.CROSS, tex: same('dead_bush'), solid: false, cutout: true, icon: 'flat', hardness: 0.05, sound: 'grass', boxes: [] });
-  def(B.WHEAT, 'wheat', { shape: SHAPE.CROSS, tex: same('wheat'), solid: false, cutout: true, icon: 'flat', hardness: 0.05, sound: 'grass', boxes: [], item: false, drop: 0 });
+  // wheat crop: drops are handled by the game (mature: wheat + seeds, young: a seed); growing crops carry a
+  // 'crop' block entity holding the growth timer
+  const crop = (tile, growth) => ({ displayName: 'Wheat Crops', shape: SHAPE.CROSS, tex: same(tile), solid: false, cutout: true, icon: 'flat', hardness: 0.05, sound: 'grass', boxes: [], item: false, drop: 0, growth, blockEntity: 'crop' });
+  def(B.WHEAT, 'wheat', crop('wheat', 2));
+  def(B.WHEAT_0, 'wheat_seedling', crop('wheat_stage0', 0));
+  def(B.WHEAT_1, 'wheat_young', crop('wheat_stage1', 1));
   def(B.DIRT_PATH, 'dirt_path', { tex: column('dirt_path_side', 'dirt_path_top', 'dirt'), sound: 'grass', hardness: 0.6 });
   def(B.MUD, 'mud', { tex: same('mud'), sound: 'gravel', hardness: 0.5 });
   def(B.FARMLAND, 'farmland', { tex: column('dirt', 'farmland', 'dirt'), sound: 'gravel', hardness: 0.6, drop: B.DIRT });
@@ -113,8 +149,16 @@ export function initBlocks() {
   def(B.SHELF, 'shelf', { displayName: 'Bottle Shelf', tex: [T('shelf'), T('shelf'), T('spruce_planks'), T('spruce_planks'), T('shelf'), T('shelf')], sound: 'wood', hardness: 1.0 });
   def(B.BOOKSHELF, 'bookshelf', { tex: [T('bookshelf'), T('bookshelf'), T('oak_planks'), T('oak_planks'), T('bookshelf'), T('bookshelf')], sound: 'wood', hardness: 1.0 });
   def(B.IRON_BARS, 'iron_bars', { shape: SHAPE.PANE, tex: same('iron_bars'), cutout: true, sound: 'metal', hardness: 1.5, icon: 'flat', boxes: [[0.4375, 0, 0, 0.5625, 1, 1]] });
-  def(B.OAK_DOOR, 'oak_door', { shape: SHAPE.DOOR, tex: same('oak_door_bottom'), solid: false, cutout: true, sound: 'wood', hardness: 1.0, icon: 'flat', boxes: [] });
-  def(B.SPRUCE_DOOR, 'spruce_door', { shape: SHAPE.DOOR, tex: same('oak_door_bottom'), solid: false, cutout: true, sound: 'wood', hardness: 1.0, icon: 'flat', boxes: [], item: false, drop: B.OAK_DOOR });
+  // Doors. Closed halves are rendered by the mesher's PANE case (a thin panel across the doorway, textured per
+  // half), the open state by its DOOR case (panel along the passage at the hinge edge). Closed doors are solid
+  // (selection = full cell; collision = the panel, see doorPanelBoxes); open doors have no collision.
+  const door = (kind, tile, extra = {}) => ({ tex: same(tile), cutout: true, sound: 'wood', hardness: 1.0, icon: 'flat', door: kind, drop: B.OAK_DOOR, ...extra });
+  def(B.OAK_DOOR, 'oak_door', door('oak', 'oak_door_bottom', { shape: SHAPE.PANE, boxes: CUBE_BOX, boxesAt: doorPanelBoxes }));
+  def(B.OAK_DOOR_TOP, 'oak_door_top', door('oak', 'oak_door_top', { displayName: 'Oak Door', shape: SHAPE.PANE, boxes: CUBE_BOX, boxesAt: doorPanelBoxes, doorTop: true, item: false }));
+  def(B.OAK_DOOR_OPEN, 'oak_door_open', door('oak', 'oak_door_bottom', { displayName: 'Oak Door', shape: SHAPE.DOOR, solid: false, boxes: [], doorOpen: true, item: false }));
+  def(B.SPRUCE_DOOR, 'spruce_door', door('spruce', 'oak_door_bottom', { shape: SHAPE.PANE, boxes: CUBE_BOX, boxesAt: doorPanelBoxes, item: false }));
+  def(B.SPRUCE_DOOR_TOP, 'spruce_door_top', door('spruce', 'oak_door_top', { displayName: 'Spruce Door', shape: SHAPE.PANE, boxes: CUBE_BOX, boxesAt: doorPanelBoxes, doorTop: true, item: false }));
+  def(B.SPRUCE_DOOR_OPEN, 'spruce_door_open', door('spruce', 'oak_door_bottom', { displayName: 'Spruce Door', shape: SHAPE.DOOR, solid: false, boxes: [], doorOpen: true, item: false }));
   def(B.SALOON_DOOR, 'saloon_door', { shape: SHAPE.SALOON_DOOR, tex: same('saloon_door'), solid: false, cutout: true, sound: 'wood', hardness: 0.8, icon: 'flat', boxes: [] });
   def(B.WALL_SIGN, 'sign', { shape: SHAPE.WALL_SIGN, tex: same('sign'), solid: false, sound: 'wood', hardness: 0.5, icon: 'flat', boxes: [] });
   def(B.BED_HEAD, 'bed', { shape: SHAPE.BED, tex: [T('bed_side'), T('bed_side'), T('bed_head_top'), T('oak_planks'), T('bed_end_head'), T('bed_end_head')], sound: 'wood', hardness: 0.6, icon: 'slab', boxes: [[0, 0, 0, 1, 0.5625, 1]] });
@@ -127,7 +171,7 @@ export function initBlocks() {
   def(B.PIANO, 'piano', { tex: [T('piano_side'), T('piano_side'), T('piano_top'), T('piano_side'), T('piano_front'), T('piano_side')], sound: 'wood', hardness: 1.2 });
   def(B.FURNACE, 'furnace', { tex: [T('furnace_side'), T('furnace_side'), T('furnace_side'), T('furnace_side'), T('furnace_front'), T('furnace_side')], emit: 13, hardness: 2.0 });
   def(B.ANVIL, 'anvil', { shape: SHAPE.ANVIL, tex: column('anvil', 'anvil_top'), sound: 'metal', hardness: 2.5, icon: 'slab', boxes: [[0.125, 0, 0.125, 0.875, 1, 0.875]] });
-  def(B.CHEST, 'chest', { shape: SHAPE.CHEST, tex: [T('chest_side'), T('chest_side'), T('chest_top'), T('chest_top'), T('chest_front'), T('chest_side')], sound: 'wood', hardness: 1.2, boxes: [[0.0625, 0, 0.0625, 0.9375, 0.875, 0.9375]] });
+  def(B.CHEST, 'chest', { shape: SHAPE.CHEST, tex: [T('chest_side'), T('chest_side'), T('chest_top'), T('chest_top'), T('chest_front'), T('chest_side')], sound: 'wood', hardness: 1.2, boxes: [[0.0625, 0, 0.0625, 0.9375, 0.875, 0.9375]], blockEntity: 'chest' });
   def(B.COAL_ORE, 'coal_ore', { tex: same('coal_ore'), hardness: 2.0 });
   def(B.IRON_ORE, 'iron_ore', { tex: same('iron_ore'), hardness: 2.0 });
   def(B.GOLD_ORE, 'gold_ore', { tex: same('gold_ore'), hardness: 2.0 });
@@ -163,6 +207,17 @@ export function initBlocks() {
   def(B.HULL_TRENCH, 'hull_trench', { tex: same('hull_trench'), sound: 'metal', hardness: 4.0 });
 
   for (let i = 0; i < 256; i++) if (!BLOCKS[i]) BLOCKS[i] = BLOCKS[B.AIR];
+}
+
+// Non-block items (ids >= 1000, see items.js) share the inventory id space with blocks. Each gets a block-like
+// entry in BLOCKS so the renderers that draw held/dropped stacks (hand, item drops, HUD icons) work unchanged:
+// a flat icon quad using the item's tile. Items never appear in the world (chunk data is 8-bit).
+export const ITEM_ID_BASE = 1000;
+export const isItemId = (id) => id >= ITEM_ID_BASE;
+export function registerItemDef(id, name, displayName, tile) {
+  const b = def(id, name, { displayName, shape: SHAPE.CROSS, tex: same(tile), solid: false, opaque: false, cutout: true, icon: 'flat', boxes: [], item: false, drop: 0, hardness: 0, sound: 'cloth' });
+  b.isItem = true;
+  return b;
 }
 
 export const isOpaque = (id) => BLOCKS[id].opaque;

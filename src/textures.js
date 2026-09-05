@@ -535,6 +535,91 @@ P.hull_plate = (t, r) => { t.noisy([122, 126, 134], 7, r); const g = [84, 88, 96
 P.hull_trench = (t, r) => { t.noisy([44, 46, 52], 5, r); t.hline(5, 0, 15, [28, 30, 34]); t.hline(10, 0, 15, [28, 30, 34]); for (let x = 1; x < 16; x += 4) t.px(x, 7, [255, 200, 90]); };
 P.missing = (t, r) => { for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) t.px(x, y, ((x >> 3) + (y >> 3)) & 1 ? [255, 0, 255] : [0, 0, 0]); };
 
+// ---- crops (growth stages) and item icons: hand-drawn 16x16 pixel maps ('.' = transparent)
+function pixmap(t, rows, pal) {
+  t.fill([0, 0, 0], 0);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const c = pal[rows[y][x]]; if (c) t.px(x, y, c); }
+}
+P.wheat_stage0 = (t, r) => {
+  t.fill([0, 0, 0], 0);
+  for (const x of [2, 5, 8, 11, 14]) { const h = 2 + r.int(0, 1); for (let y = 15; y > 15 - h; y--) t.px(x, y, vary([96, 176, 60], r, 10)); t.px(x, 15 - h, [150, 210, 90]); }
+};
+P.wheat_stage1 = (t, r) => {
+  t.fill([0, 0, 0], 0);
+  for (let i = 0; i < 7; i++) {
+    const x = 1 + i * 2 + r.int(0, 1), h = 6 + r.int(0, 3);
+    for (let y = 15; y > 15 - h; y--) t.px(x, y, vary([110, 172, 60], r, 12));
+    t.px(x, 15 - h, [176, 184, 74]); t.px(x, 14 - h, [190, 190, 80]);
+  }
+};
+P.item_apple = (t) => pixmap(t, [
+  '................', '.......s........', '......ss........', '....ggs.........', '...rrdrrrr......', '..rrrrrrrrrr....',
+  '.rwrrrrrrrrrr...', '.wwrrrrrrrrrr...', '.rwrrrrrrrrrrr..', '.rrrrrrrrrrrrr..', '.rrrrrrrrrrrrd..', '..rrrrrrrrrrdd..',
+  '..drrrrrrrrddd..', '...ddrrrrddd....', '.....dddd.......', '................',
+], { r: [214, 38, 38], d: [150, 22, 22], w: [250, 130, 120], s: [96, 64, 32], g: [92, 160, 52] });
+P.item_bread = (t) => pixmap(t, [
+  '................', '................', '..........ccc...', '.........cllcc..', '........clllDc..', '.......cllllDc..',
+  '......cllllDc...', '.....cllllDc....', '....cllllDc.....', '...cllllDc......', '..cllllDc.......', '.cllllDDc.......',
+  '.clllDDc........', '.ccDDDc.........', '..ccc...........', '................',
+], { c: [190, 128, 58], l: [226, 174, 100], D: [148, 94, 40] });
+P.item_wheat = (t, r) => {
+  t.fill([0, 0, 0], 0);
+  const stem = [150, 124, 52], grainA = [224, 192, 82], grainB = [192, 150, 48];
+  const line = (x0, y0, x1, y1, c) => { const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)); for (let k = 0; k <= n; k++) t.px(Math.round(x0 + (x1 - x0) * k / n), Math.round(y0 + (y1 - y0) * k / n), c); };
+  for (const [tx, ty] of [[4, 3], [8, 1], [12, 3]]) {
+    line(8, 15, tx, ty + 6, stem);
+    for (let k = 0; k < 6; k++) { const y = ty + k; t.px(tx, y, k % 2 ? grainA : grainB); if (k > 0) { t.px(tx - 1, y, k % 2 ? grainB : grainA); t.px(tx + 1, y, k % 2 ? grainB : grainA); } }
+    t.px(tx, ty - 1, [236, 210, 110]);
+  }
+  t.px(8, 15, [120, 96, 40]); t.px(7, 15, [120, 96, 40]);
+};
+P.item_seeds = (t) => {
+  t.fill([0, 0, 0], 0);
+  const g = [122, 172, 62], d = [78, 118, 38], l = [166, 206, 96];
+  for (const [x, y] of [[3, 4], [8, 3], [12, 6], [5, 9], [10, 10], [7, 13], [13, 12]]) { t.px(x, y, l); t.px(x + 1, y, g); t.px(x, y + 1, g); t.px(x + 1, y + 1, g); t.px(x, y + 2, d); t.px(x + 1, y + 2, d); }
+};
+const MEAT_ROWS = [
+  '................', '................', '....dddddd......', '...drrrrrrdd....', '..drrrrrrrrrd...', '.drrfrrrrrrrrd..',
+  '.drrffrrrrrrrd..', '.drrrfffrrrrrd..', '.drrrrrfffrrrd..', '.drrrrrrrffrrd..', '..drrrrrrrrrd...', '...drrrrrrrd....',
+  '....dddddd......', '................', '................', '................',
+];
+P.item_beef_raw = (t) => pixmap(t, MEAT_ROWS, { r: [196, 58, 58], d: [140, 28, 28], f: [244, 206, 196] });
+P.item_beef_cooked = (t) => pixmap(t, MEAT_ROWS, { r: [142, 84, 44], d: [92, 50, 24], f: [204, 160, 110] });
+const CHOP_ROWS = [
+  '................', '................', '......pppppp....', '....pppppppppf..', '...ppppppppppff.', '..ppppppppppppf.',
+  '..ppppppppppppf.', '..pppppppppppf..', '..dppppppppppf..', '..ddpppppppppf..', '..wddppppppff...', '..wwwdddddd.....',
+  '...www..........', '................', '................', '................',
+];
+P.item_porkchop_raw = (t) => pixmap(t, CHOP_ROWS, { p: [236, 150, 150], d: [204, 104, 104], f: [250, 232, 224], w: [240, 240, 232] });
+P.item_porkchop_cooked = (t) => pixmap(t, CHOP_ROWS, { p: [176, 112, 60], d: [124, 74, 36], f: [232, 204, 152], w: [236, 230, 214] });
+const DRUMSTICK_ROWS = [
+  '................', '............ww..', '...........wwww.', '...........wwww.', '..........dww...', '.........dcw....',
+  '........dcc.....', '......ccdcc.....', '....cccccc......', '...ccccccc......', '..cccccccc......', '..ccccccc.......',
+  '..dcccccd.......', '...ddddd........', '................', '................',
+];
+P.item_chicken_raw = (t) => pixmap(t, DRUMSTICK_ROWS, { c: [240, 206, 190], d: [206, 152, 138], w: [246, 246, 240] });
+P.item_chicken_cooked = (t) => pixmap(t, DRUMSTICK_ROWS, { c: [194, 124, 64], d: [142, 82, 40], w: [232, 222, 200] });
+P.item_bone = (t) => pixmap(t, [
+  '................', '..........ww.w..', '.........wwwww..', '.........wwwwww.', '........wwwgww..', '.......wwwg.....',
+  '......wwwg......', '.....wwwg.......', '....wwwg........', '..wwwwg.........', '.wwwwwg.........', '.wwwwww.........',
+  '..ww.ww.........', '................', '................', '................',
+], { w: [240, 238, 230], g: [190, 186, 176] });
+P.item_leather = (t) => pixmap(t, [
+  '................', '................', '....ddd..ddd....', '...dllldd.llld..', '..dllllllllllld.', '..dllhlllllllld.',
+  '.dllhhlllllllld.', '.dlllllllllllld.', '.dllllllllllld..', '..dllllllllllld.', '..dlllllllllld..', '...dlllllllld...',
+  '....ddlllldd....', '......dddd......', '................', '................',
+], { l: [164, 104, 52], d: [112, 66, 30], h: [196, 136, 72] });
+P.item_feather = (t) => pixmap(t, [
+  '................', '............ww..', '...........wwww.', '..........wwwww.', '.........wwwgw..', '........wwwwg...',
+  '.......wwwwg....', '......wwwwg.....', '.....wwwwg......', '....wwwwg.......', '...wwwgg........', '...wwg..........',
+  '..qq............', '.qq.............', 'q...............', '................',
+], { w: [246, 246, 246], g: [200, 200, 206], q: [184, 172, 150] });
+P.item_stick = (t) => pixmap(t, [
+  '................', '.............s..', '............ss..', '...........sd...', '..........sd....', '.........sd.....',
+  '........sd......', '.......sd.......', '......sd........', '.....sd.........', '....sd..........', '...sd...........',
+  '..sd............', '.sd.............', '.d..............', '................',
+], { s: [134, 98, 52], d: [96, 66, 30] });
+
 function destroyStage(t, r, stage) {
   t.fill([0, 0, 0], 0);
   const col = [30, 30, 30];
@@ -572,7 +657,12 @@ const TILE_NAMES = [
   'durasteel', 'durasteel_dark', 'panel_black', 'panel_red', 'panel_stripe', 'glow_panel', 'glow_panel_blue', 'holo_sign',
   'console_top', 'console_side', 'vent', 'deck_plate', 'steel_glass', 'chrome', 'window_lit', 'window_dark', 'city_lamp',
   'hull_plate', 'hull_trench',
+  // gameplay: crop stages + item icons (appended; existing indices are unchanged)
+  'wheat_stage0', 'wheat_stage1',
+  'item_apple', 'item_bread', 'item_wheat', 'item_seeds', 'item_beef_raw', 'item_beef_cooked', 'item_porkchop_raw', 'item_porkchop_cooked',
+  'item_chicken_raw', 'item_chicken_cooked', 'item_bone', 'item_leather', 'item_feather', 'item_stick',
 ];
+export const ITEM_TILE_NAMES = TILE_NAMES.filter((n) => n.startsWith('item_'));
 
 export const TILES = {};
 let nextTile = 0;
