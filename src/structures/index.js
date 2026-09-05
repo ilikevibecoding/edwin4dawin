@@ -4,6 +4,7 @@
 // Builders: add ONE import + ONE line to REGISTRARS for your module; keep everything else in your own files.
 const REGISTRARS = [
   // (module) => module.register
+  async (gen, game) => (await import('./hyperlane.js')).register(gen, game), // hyperlane track, stations, space train
 ];
 
 export async function registerAllStructures(gen, game) {
