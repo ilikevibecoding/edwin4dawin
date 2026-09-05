@@ -181,8 +181,14 @@ export function loftEdgeLength(sections, j, z) {
   const B = sections[i + 1];
   const f = clamp((z - A.z) / (B.z - A.z), 0, 1);
   const k = (j + 1) % A.pts.length;
-  const p0 = [lerp(A.pts[j][0], B.pts[j][0], f), lerp(A.pts[j][1], B.pts[j][1], f)];
-  const p1 = [lerp(A.pts[k][0], B.pts[k][0], f), lerp(A.pts[k][1], B.pts[k][1], f)];
+  const p0 = [
+    lerp(A.pts[j][0], B.pts[j][0], f),
+    lerp(A.pts[j][1], B.pts[j][1], f),
+  ];
+  const p1 = [
+    lerp(A.pts[k][0], B.pts[k][0], f),
+    lerp(A.pts[k][1], B.pts[k][1], f),
+  ];
   return Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
 }
 
@@ -241,7 +247,11 @@ export function quadFacing(center, dir, up, w, h) {
   const z = new THREE.Vector3(...dir).normalize();
   let y = new THREE.Vector3(...up);
   y.addScaledVector(z, -y.dot(z));
-  if (y.lengthSq() < 1e-8) y = Math.abs(z.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+  if (y.lengthSq() < 1e-8)
+    y =
+      Math.abs(z.y) < 0.9
+        ? new THREE.Vector3(0, 1, 0)
+        : new THREE.Vector3(1, 0, 0);
   y.addScaledVector(z, -y.dot(z)).normalize();
   const x = new THREE.Vector3().crossVectors(y, z).normalize();
   const m = new THREE.Matrix4().makeBasis(x, y, z);
@@ -301,7 +311,10 @@ export function tube(a, b, r, seg = 6) {
   const d = pb.clone().sub(pa);
   const len = d.length();
   const g = new THREE.CylinderGeometry(r, r, len, seg, 1, false);
-  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+  const q = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    d.normalize(),
+  );
   g.applyQuaternion(q);
   g.translate((pa.x + pb.x) / 2, (pa.y + pb.y) / 2, (pa.z + pb.z) / 2);
   return g;
@@ -463,7 +476,11 @@ export function fadeZ(geo, z0, z1, a, b) {
 
 // Recursive rectangle partition in metres: splits until both sides <= max, with random early stops so
 // the cells vary in size and aspect. rect = { u0, v0, u1, v1 }.
-export function partition(rand, rect, { max, min = max * 0.3, keep = 0.18 } = {}) {
+export function partition(
+  rand,
+  rect,
+  { max, min = max * 0.3, keep = 0.18 } = {},
+) {
   const out = [];
   const stack = [rect];
   while (stack.length) {
