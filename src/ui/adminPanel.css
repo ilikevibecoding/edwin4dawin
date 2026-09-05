@@ -337,3 +337,7 @@
 @media (prefers-reduced-motion: reduce) {
   #admin-panel *, #admin-panel *::before { transition: none !important; }
 }
+
+/* travel destinations */
+.ap-travel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; margin-top: 4px; }
+.ap-travel-btn { min-height: 34px; padding: 4px 6px; font-size: 12px; line-height: 1.15; white-space: normal; text-align: center; }

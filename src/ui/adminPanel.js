@@ -39,6 +39,20 @@ const FOCUSABLE = 'button, input, select, textarea, summary, a[href], [tabindex]
 // View distance presets (chunks). game.setRenderDistance(n) is preferred (it persists); older builds only have
 // terrain.setRenderDistance(n), so the panel persists the choice itself under the same localStorage key.
 const VIEW_DISTANCES = [8, 12, 16, 24];
+
+// Travel destinations (world is 4000+ blocks across: frontier town at the origin, Coruscant plateau at x 3000, the
+// Death Star in the space region at z -4000). `air` destinations start in creative flight at the given height;
+// ground ones land on the terrain surface. yaw/pitch in degrees (yaw 0 faces -z, 90 faces -x, -90 faces +x).
+const DESTINATIONS = [
+  { id: 'town', label: 'Frontier town', hint: 'Dustwater main street', x: -8, z: 2, yaw: -90, pitch: -5 },
+  { id: 'station', label: 'Frontier station', hint: 'Space train platform + mini spaceport roof deck', x: 262, y: 100, z: 8, yaw: 90, pitch: -12, air: true },
+  { id: 'spaceport', label: 'Spaceport', hint: 'Coruscant spaceport terminal + landing pads', x: 2621, y: 98, z: 44, yaw: 0, pitch: -6, air: true },
+  { id: 'senate', label: 'Senate', hint: 'Galactic Senate dome and plaza', x: 2975, y: 120, z: 120, yaw: 0, pitch: -18, air: true },
+  { id: 'monument', label: 'Monument Plaza', hint: 'Umate rock, pavilions and rotundas', x: 3227, y: 110, z: 90, yaw: 0, pitch: -25, air: true },
+  { id: 'skyline', label: 'Coruscant skyline (air)', hint: 'Aerial view over the city', x: 3000, y: 235, z: 330, yaw: 0, pitch: -16, air: true },
+  { id: 'deathstar', label: 'Death Star (exterior)', hint: 'Exterior, 260 blocks out', x: 60, y: 170, z: -3720, yaw: 10, pitch: -8, air: true },
+  { id: 'hangar', label: 'Death Star hangar', hint: 'Hangar mouth in the equatorial trench', x: 0, y: 130, z: -3880, yaw: 0, pitch: -4, air: true },
+];
 const VIEW_DISTANCE_HELP = '24 chunks loads ~2000 chunks (~550 MB) and needs a strong GPU.';
 const RD_KEY = 'frontier-craft:rd';
 
@@ -263,6 +277,19 @@ export class AdminPanel {
       h('div', { class: 'ap-section-head ap-subhead' }, h('span', { class: 'ap-sub-title', id: 'ap-view-title', text: 'View distance' }), this.viewGroup),
       this.viewHelp);
 
+    // travel: teleport to the world's regions (flight for aerial vantage points)
+    this.travelBtns = {};
+    const travelGrid = h('div', { class: 'ap-travel', id: 'ap-travel', role: 'group', 'aria-label': 'Travel destinations' });
+    for (const d of DESTINATIONS) {
+      const b = h('button', { class: 'ap-btn ap-travel-btn', id: 'ap-travel-' + d.id, type: 'button', text: d.label, title: d.hint, onclick: () => this._travel(d) });
+      this.travelBtns[d.id] = b;
+      travelGrid.append(b);
+    }
+    const travelSection = h('section', { class: 'ap-section', id: 'ap-travel-section', 'aria-labelledby': 'ap-travel-title' },
+      h('div', { class: 'ap-section-head' }, h('h3', { id: 'ap-travel-title', text: 'Travel' })),
+      h('p', { class: 'ap-help ap-one-line', text: 'Jump to a region; aerial spots start you flying (double-tap Space to land).' }),
+      travelGrid);
+
     // developer footer: console command, save, counters, perf
     this.perfEl = h('span', { class: 'ap-summary-aside', id: 'ap-perf', text: 'perf: n/a' });
     this.copiedEl = h('span', { class: 'ap-copied', id: 'ap-copied', 'aria-live': 'polite' });
@@ -291,7 +318,7 @@ export class AdminPanel {
       pixelIcon('lock', 48),
       h('h3', { text: 'Administrator permission required' }),
       h('p', { text: 'Single player: remove ?admin=0 from the URL. Multiplayer: join with the admin token (?admin=<token>).' }));
-    this.main = h('div', { class: 'ap-main', id: 'ap-main' }, disasterSection, paramsSection, qualitySection, this.developer);
+    this.main = h('div', { class: 'ap-main', id: 'ap-main' }, disasterSection, paramsSection, qualitySection, travelSection, this.developer);
     this.body = h('div', { class: 'ap-body' }, this.denied, this.main);
 
     // dock: status strip + actions (always visible, never scrolls away)
@@ -673,6 +700,27 @@ export class AdminPanel {
   }
 
   // ---------------------------------------------------------------- view distance
+  // Teleports the player to a destination: the target chunk column is generated first so the player never lands
+  // inside unloaded terrain; aerial spots switch to creative flight, ground spots land on the surface.
+  _travel(d) {
+    const g = this.game, p = g.player;
+    if (!p || !g.world || !g.terrain) { this._note('Travel is not available here.'); return; }
+    try {
+      const cx = Math.floor(d.x / 16), cz = Math.floor(d.z / 16);
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) g.terrain.ensureChunk(cx + dx, cz + dz);
+      let y = d.y;
+      if (!d.air) { const s = g.world.surfaceY(Math.floor(d.x), Math.floor(d.z)); y = (s > 0 ? s : 64) + 1; }
+      p.flying = !!d.air;
+      p.teleport(d.x + 0.5, y, d.z + 0.5);
+      p.yaw = (d.yaw || 0) * Math.PI / 180;
+      p.pitch = (d.pitch || 0) * Math.PI / 180;
+      if (g.terrain.lastCx !== undefined) g.terrain.lastCx = null;   // force the streamer to re-evaluate visibility
+      if (g.hud && typeof g.hud.addMessage === 'function') g.hud.addMessage(`Travelled to ${d.label}${d.air ? ' (flying)' : ''}.`);
+    } catch (e) { console.error('travel failed', e); this._note('Could not travel there.'); return; }
+    this._note(`Travelled to ${d.label}.`);
+    this.close();
+  }
+
   _setViewDistance(n) {
     const g = this.game;
     try {
