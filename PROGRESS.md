@@ -141,9 +141,46 @@ Findings ranked HIGH → LOW, all addressed in `ee2ddb22` unless noted:
   1.5 MB chunk (488 KB gzip) without a vendor split, `comms.js` calls `toNonIndexed()` on already
   non-indexed geometry (a console warning).
 
-## Review round 3 (`shots/review_3/`) — final build
+## Review round 3 (`shots/review_3/`, 134 views; `review_4nav/`, `review_5nav/` navigation) — final build
 
-(numbers below)
+| measure | round 2 | round 3 |
+|---|---|---|
+| views rendered / page errors / frames darker than mean luma 10 | 134 / 0 / — | 134 / 0 / 0 |
+| doors traversed | 33 / 33 | 33 / 33 (round 2 build) + 4 / 4 re-check after the caching change |
+| turbolift ride tower → hangar | FAIL | OK, destination lit on the first frame (`review_4nav/nav_lift_arrived.png`) |
+| board and leave | OK | OK |
+| **programs after every view** | 158 → 176 (compiling on first sight) | **94 → 95** (precompile matches the beauty pass) |
+| draw calls, interior (incl. shadow + post passes) | max 288, median 114 | **max 268 (hangar booth), median 75** |
+| triangles, interior | max 1.72 M, median 137 k | **max 1.51 M (bridge), median 86 k** |
+| draw calls / triangles, exterior | 412 / 2.07 M | 412 / 2.07 M (`close_turbolaser`, unchanged) |
+| heap | 194 MB | 193 MB |
+| lights | 16 | 16 |
+| load: materials / exterior / interior build; precompile | 3.1 / 0.4 / 1.8 s; — | 3.1 / 0.5 / 1.8 s; 8.9 s in parallel under software GL |
+
+The interior draw-call and triangle drops come from the frozen shadow passes (sun in enclosed rooms,
+unbound pool spots) — no content was removed. Frame times in the container are software GL
+(0.3–1.3 fps) and are not reported as performance; the budgets above are.
+
+### Acceptance criteria, as measured
+
+- Game launches, exterior orbit / interior FPS / transitions work (`review_3`, `review_4nav`).
+- Hull, tower, engines, trenches, greebles, turbolasers read as an Imperial wedge from far, medium and
+  close presets (16 exterior views).
+- 28 rooms + corridors + lobbies, all connected, all 33 doors walkable, turbolifts between decks.
+- Bridge and hangar carry the most geometry (1.5 M triangles through the bridge windows, 268 draw
+  calls in the hangar) and their own animators (screens, well cycle, cranes, tractor beam, fighters).
+- Fighter traffic: 12 TIEs, 4 airborne on average, launch/recall/patrol with pilot hooks and events.
+- Extensibility: `SyncRegistry`, `PilotController`, `hangarBus`, `systems/flight.js`, `docs/API.md`.
+
+### Remaining limitations
+
+- No GPU measurement: every frame time here came from SwiftShader. The budgets (≤ 412 draw calls
+  incl. passes, ≤ 2.1 M triangles, 16 lights, 95 programs, 193 MB heap) are the evidence; a real GPU
+  pass should confirm 60 fps at 1080p and, if not, the adaptive scaler drops the pixel ratio first.
+- Synchronous texture generation at load (~3 s), single 1.5 MB JS chunk.
+- Corridors between clusters are the plainest spaces; the exterior's fine plating is a texture
+  hierarchy plus instanced greebles, not modelled seams, so the very closest views (< 5 m) read soft.
+- Interior light spill through the hull when the exterior camera is inside a cluster's reach.
 
 ---
 ---
