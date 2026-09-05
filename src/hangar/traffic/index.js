@@ -619,10 +619,12 @@ export default {
         // engine glow: movers only, brighter with speed and acceleration
         if (moving) {
           const offs = c.type === "shuttle" ? SHUTTLE_ENGINE_OFFSETS : ENGINE_OFFSETS;
-          const thr = 1.4 + 0.8 * THREE.MathUtils.clamp(c.speed / 160, 0, 1) + 1.6 * THREE.MathUtils.clamp(c.accel / 12, 0, 1);
+          // idle 1.2, +0.8 with speed, +1.6 while accelerating; the fighter quad (2.6 m) is narrow enough that the
+          // two nozzles (1.44 m apart) stay two hot centres when seen head-on
+          const thr = 1.2 + 0.8 * THREE.MathUtils.clamp(c.speed / 160, 0, 1) + 1.6 * THREE.MathUtils.clamp(c.accel / 12, 0, 1);
           for (const o of offs) {
             _p.copy(o).applyQuaternion(c.quaternion).add(c.position);
-            glow.add(_p, c.type === "shuttle" ? 3.6 : 3.0, GLOW_COLOUR, thr);
+            glow.add(_p, c.type === "shuttle" ? 3.6 : 2.6, GLOW_COLOUR, thr);
           }
         }
         // hangar movers inside the hall and away from their slot: a soft hold glow under a level, slow craft
@@ -657,9 +659,11 @@ export default {
           _p.copy(NAV_STBD).applyQuaternion(c.quaternion).add(c.position);
           beacons.add(_p, 0.25 * nav, 2.4 * nav, 0.5 * nav, 0.42);
           if (c.state === "arriving" || c.state === "docking" || c.state === "launching") {
-            const f = flicker(t, c.phase, 21) * 2.6;
+            // landing lamp: warm hot centre over the chin lens, peak 1.3 (just past the bloom threshold, never a
+            // flat clipped disc), dropping to 30 % on the flicker's off beats
+            const f = flicker(t, c.phase, 21) === 1 ? 1.0 : 0.3;
             _p.copy(LANDING).applyQuaternion(c.quaternion).add(c.position);
-            beacons.add(_p, 2.2 * f, 2.3 * f, 2.6 * f, 0.6);
+            beacons.add(_p, 1.3 * f, 1.15 * f, 0.9 * f, 0.5);
           }
         }
       }

@@ -106,11 +106,17 @@ export function makeGlowMaterial() {
       void main() {
         vec2 d = vUv * 2.0 - 1.0;
         float r = length(d);
-        // gaussian falloff: a hot centre inside a wide soft halo, masked to zero before the quad's edge
+        // gaussian falloff: a hot centre (weight 1.5) inside a wide soft halo (0.4), masked to zero before
+        // the quad's edge
         float core = exp(-r * r * 11.0);
         float halo = exp(-r * r * 2.2);
         float edge = smoothstep(1.0, 0.7, r);
-        gl_FragColor = vec4(vCol * (core * 1.2 + halo * 0.6) * edge, 1.0);
+        vec3 c = vCol * (core * 1.5 + halo * 0.4) * edge;
+        // soft shoulder toward 1.4: a pair of nozzles seen head-on (both unoccluded, 1.44 m apart) stays two
+        // hot centres with a dimmer bridge instead of merging into a clipped white disc; values below ~0.5
+        // are barely changed
+        c = 1.4 * (1.0 - exp(-c / 1.4));
+        gl_FragColor = vec4(c, 1.0);
       }
     `,
     transparent: true,

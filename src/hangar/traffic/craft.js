@@ -198,7 +198,7 @@ export const FIGHTER_ENGINES = { offsets: [[-0.72, -0.1], [0.72, -0.1]], exitZ: 
  * lit rim), aft engine block with two recessed nozzles (dark throats, no idle emissive — the engine glow
  * quads light them only while flying), two 1.4 m pylons with hub plates and two hexagonal solar-panel wings
  * 7.0 tall x 5.6 long x 0.25 thick with a raised frame and six radial spars. Span 7.7 m (wing faces at
- * |x| 3.85). ~920 triangles. Colours come from tieColours() (dark blue-grey, near-black cells).
+ * |x| 3.85). 944 triangles. Colours come from tieColours() (dark blue-grey, near-black cells).
  */
 export function buildFighter(_PALETTE) {
   // the fighter uses the fixed dark tints of tieColours(); the palette still drives the shuttle and clamps
@@ -230,6 +230,9 @@ export function buildFighter(_PALETTE) {
   for (const sx of [-1, 1]) b.cyl(0.15, 0.11, 1.9, 6, "z", { pos: [sx * 0.55, -1.72, -1.55], color: C.dark, open: true });
   // belly access hatch + two upper sensor boxes
   b.box(1.2, 0.28, 1.5, { pos: [0, -2.1, 0.35], color: C.dark });
+  // landing-lamp lens set into the hatch's forward-bottom corner, facing forward-down: index.js LANDING /
+  // LANDING_DIR start the lamp sprite and its light cone 7 cm in front of this disc
+  b.add(new THREE.CircleGeometry(0.28, 8), { pos: [0, -2.31, -0.46], rot: [(3 * Math.PI) / 4, 0, 0], color: C.dark, emit: [0.3, 0.26, 0.19] });
   for (const sx of [-1, 1]) b.box(0.34, 0.3, 0.42, { pos: [sx * 0.95, 1.62, -1.2], color: C.dark });
   // pylons: collar at the sphere, 1.4 m tube (x 2.2..3.6), square boss, hex hub plate on the wing's inner face
   for (const sx of [-1, 1]) {

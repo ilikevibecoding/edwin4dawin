@@ -29,15 +29,16 @@ Materials: `trafficHull` (fighters + clamps), `trafficShuttle`, `trafficGlow`, `
 `trafficBeacon`. No canvas textures, no `THREE.Light`s. One pooled point-light *descriptor* rides with the
 craft in the shaft (tractor fill) and is removed from `ctx.lights` when the beam is idle.
 
-Geometry: fighter 936 tris (span 7.70 m, wing faces at |x| 3.85, nose −Z at yaw 0; spoked octagonal
+Geometry: fighter 944 tris (span 7.70 m, wing faces at |x| 3.85, nose −Z at yaw 0; spoked octagonal
 viewport with dark glass and a lit rim, dark aft engine block with two recessed nozzles that carry no idle
-emissive; colours from `tieColours()` — frame 0x3a3e4b, hull 0x454a58, cells 0x08090c, dark 0x202329, i.e.
+emissive, a warm landing-lamp lens (r 0.28, emissive 0.3/0.26/0.19) set into the belly hatch's forward corner
+where the lamp sprite and its light cone start; colours from `tieColours()` — frame 0x3a3e4b, hull 0x454a58, cells 0x08090c, dark 0x202329, i.e.
 the Imperial greys cut 50–60 % and cooled, so the fighters read as dark blue-grey machines under the rack
 floods; `trafficHull` is roughness 0.78 / metalness 0.15 / envMapIntensity 0.35 so the near-black cells do
 not pick up a grey specular sheen), shuttle 1492 tris (21 m; plated fuselage with baked seams, glazed cockpit band, port boarding
 hatch, four landing skids whose pads sit exactly `standHeight` = 2.85 m below the origin, three recessed
 nozzles with a dim radial glow), clamp 36 tris. The live triangle total is kept under 40 000 by capping
-fighter instances: `maxFighterInstances = floor((40000 − fixed) / 936)` where `fixed` is one parked
+fighter instances: `maxFighterInstances = floor((40000 − fixed) / 944)` where `fixed` is one parked
 shuttle + clamps + beam cones + glow quads (38 with the 28-slot rack); the scheduler refuses arrivals while
 the hangar holds `maxFighterInstances − maintenance − patrol` fighters. `api.stats()` reports the live
 figure.
@@ -98,9 +99,13 @@ approach; launches hold the slot yaw while backing out, level off at the hover, 
   (0.85 ± 0.15, 3.2 m period) travel toward the craft with a slow pulse. Strength fades over 6 m at both
   ends of the column and the pooled tractor point light follows.
 * **Landing light** — the craft in the shaft (else the first hangar mover) carries an 18 m warm flickering
-  cone from its chin, angled forward-down, and a flickering landing-light beacon.
+  cone from its chin, angled forward-down, and a warm lamp sprite over the chin lens (colour 1.3/1.15/0.9 at
+  peak — a hot centre just past the bloom threshold, never a clipped disc — dropping to 30 % on the
+  flicker's off beats; 0.5 m sprite).
 * **Engine glow** — every mover has two additive gaussian quads at its nozzle exits (`FIGHTER_ENGINES` /
   `SHUTTLE_ENGINES`), scaled by speed and acceleration; racked craft have none (nozzles are dark recesses).
+  The glow shader ends in a soft shoulder `c = 1.4·(1 − e^(−c/1.4))`, so a pair of nozzles seen head-on
+  (both unoccluded, 1.44 m apart) keeps a hot centre instead of merging into a clipped white disc.
 * **Hold glow** — a soft additive disc 4.6 m under a hangar mover that is level and slow (the hover and the
   final approach) so it reads as held in the air; gated by the flight phase, never on the shaft climb.
 * **Clamps** — closed (25° onto the hull) on occupied slots, folded flat under the beam otherwise; they
