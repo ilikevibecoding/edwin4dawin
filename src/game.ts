@@ -272,6 +272,8 @@ export class Game {
     if (dbg.has('noshadow')) this.renderer.shadowMap.enabled = false;
     if (dbg.has('noveg')) this.vegetation.group.visible = false;
     if (dbg.has('nocity')) this.city.batches.group.visible = false;
+    if (dbg.has('nobridges')) this.bridges.group.visible = false;
+    if (dbg.has('notraffic')) this.traffic.group.visible = false;
     if (dbg.has('nocloudshadow')) { this.post.cloudShadowStrength = 0; this.reflection.cloudShadowStrength = 0; }
     if (dbg.has('norefl')) this.reflection.enabled = false;
     this.atmos.update(0);
