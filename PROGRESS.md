@@ -500,15 +500,17 @@ docking recess and reactor bulb on the belly. TIE traffic: 4 fighters cycling la
 
 ### Technical validation (`tools/qa_walk.mjs`, dev server, SwiftShader)
 
-`{"doors":"31/31","spawns":"34/46","lifts":"40/40","stairs":"15/19","fighters":"pass","transitions":"3/3","pageErrorsTotal":0}`
+`{"doors":"31/31","spawns":"35/46","lifts":"40/40","stairs":"19/19","fighters":"pass","transitions":"3/3","pageErrorsTotal":0}`
+(after wave 4; the wave-3 run was 34/46 spawns and 15/19 stairs — see below)
 
 - doors: every door leaf collider disables when open and the walk-through leg passes on all 31.
 - lifts: all 40 (car, deck) pairs pass walk-in → ride → arrival → walk-out end-to-end.
-- spawns 34/46: the 12 "failures" are the 10 lift cars (the forward leg walks out of the car, as
-  intended) and comms/navigation, whose spawns now face a console pod 2.6 m ahead (furnished, not stuck).
-- stairs 15/19: the four failures are hardcoded QA waypoints that round-3 props now occupy (briefing
-  dais lectern, observation data column, comms console, tactical tank) — the platforms themselves are
-  reachable via their stairs (verified by the fix workstreams' walk logs).
+- spawns 35/46: the 11 "failures" are the 10 lift cars (the forward leg walks out of the car, as
+  intended) and comms, whose spawn faces a standing console pod 2.6 m ahead and whose backward leg steps
+  into the door passage (furnished, not stuck).
+- stairs 19/19 after re-pointing four QA legs to the round-3 layouts. Doing so exposed one real defect:
+  the comms supervisor platform had been sealed by the operator arc's inner stations plus a centreline
+  pod (0.56 m gaps); the pod moved 1.9 m toward the door and the platform is reachable again.
 - transitions 3/3: interior → orbit → fly → interior; `runTransition` restores the exact player pose.
 - harness checks (`tools/shots.mjs`): door approach opens in < 1 s of walking; walk lobby_a → corridor_a
   cell tracking correct; turbolift lobby_a → deck C rides and arrives; bed / galley / bathroom
@@ -519,26 +521,48 @@ frame times are meaningless in software GL and are not quoted)
 
 | View | Calls | Triangles | Visible cells | Active lights |
 |---|---|---|---|---|
-| room:bridge | 294 | 735k (hull visible through the viewports) | 2 | 13 |
-| room:corridor_a | 181 | 91k | 3 | 17 |
-| room:tactical / comms / navigation | 126–130 | 131–139k | 3 | 18 |
-| room:observation | 216 | 589k (exterior) | 1 | 12 |
+| room:bridge | 293 | 746k (hull visible through the viewports) | 2 | 14 |
+| room:corridor_a | 185 | 97k | 3 | 17 |
+| room:tactical / comms / navigation | 129–135 | 131–165k | 3 | 18 |
+| room:observation | 225 | 621k (exterior) | 1 | 12 |
+| room:lobby_b / corridor_d | 73 / 142 | 38k / 84k | 2 | 12–14 |
 | room:crew_quarters / mess_hall / medbay | 79–99 | 93–366k | 1 | 8 |
-| room:reactor / hyperdrive / maintenance | 94–181 | 247–395k | 1–3 | 8–19 |
-| room:hangar (field open to space) | 343 | 1.46M | 3 | 19 |
-| cockpit (Kestrel, sees the hangar) | 327 | 1.52M | 2 | 19 |
-| bathroom (Kestrel mirror re-render) | 548 | 2.49M | 2 | 19 |
-| ext_hero / ext_far | 313 / 324 | 1.37M / 1.33M | 2 | 16 |
-| ext_bridge_close / ext_hangar_mouth | 440 / 428 | 1.83M / 1.83M | 2 | 16 |
+| room:reactor / hyperdrive / maintenance | 94–185 | 264–395k | 1–3 | 8–19 |
+| room:hangar (field open to space) | 338 | 1.49M | 3 | 19 |
+| cockpit (Kestrel, sees the hangar) | 326 | 1.55M | 2 | 19 |
+| bathroom (Kestrel mirror re-render) | 549 | 2.55M | 2 | 19 |
+| ext_hero / ext_far | 311 / 321 | 1.37M / 1.33M | 2 | 16 |
+| ext_bridge_close / ext_hangar_mouth | 442 / 425 | 1.85M / 1.86M | 2 | 16 |
 
-Whole-ship: 1681 geometries, 171 textures (265 MB estimated, all procedural), 90 shader programs after a
-full tour (light pool: no recompiles while walking), 4402 colliders, 721 floors, JS heap 294 MB after 55
-views. Load to `ready` 18.9 s in SwiftShader (shader compilation dominates; a hardware GPU compiles the
-same 78 programs in about 1–2 s). Production bundle: 690 kB JS (200 kB gzip), no external assets.
+Whole-ship: 1678 geometries, 171 textures (265 MB estimated, all procedural), 91 shader programs after a
+full tour (light pool: no recompiles while walking), 4461 colliders, 798 floors, JS heap 307 MB after 55
+views. Load to `ready` 18.3 s in SwiftShader (shader compilation dominates; a hardware GPU compiles the
+same programs in about 1–2 s). Production bundle: 1.86 MB JS in 31 lazy chunks, 617 kB gzip total (one
+chunk per room builder, loaded when the deck is first built), no external assets.
 
 Budgets met: interior ≤ 350 calls; exterior ≤ 450 calls and ≤ 1.9M triangles with instancing + chunk LODs;
 ≤ 19 pool lights active; interior spot shadow suspended outside; exterior hidden (and not shadow-casting)
 inside except from view rooms (bridge, observation, hangar, flight control, Kestrel).
+
+### Wave 4 (final polish, after the acceptance critic's 39 PASS / 15 WEAK / 1 FAIL)
+
+- POLISH-1 `deck_signature.js` + `lobby.js` + `corridor.js`: every lift lobby and corridor has a deck
+  signature (A honour-guard alcoves and crest; B memorial walls, benches, gloss runner; C weapons-check
+  booth, helmet rack, roster board, hazard thresholds; D pipe manifold, lockers, vent stack, lit grating
+  trenches; E fuel lines, bay board, crates, deck lane, work lights; corridors A/B/C/D with ceiling channel
+  + inset screens / pilasters + framed panels / cable trays + numbered bulkheads / heavy ribs + trench
+  gratings). Lobbies ≤ 29 meshes / 21k tris / 6 lights, corridors ≤ 23 meshes / 22k tris / 8 lights.
+- POLISH-2: ready room pilot-seat rows + gear bay, maintenance turbolaser-barrel sled under a gantry
+  hoist with lit ceiling, briefing foreground consoles + standing displays, officers' quarters as a cabin
+  corridor with one furnished open cabin, life-support scrubber stack ringed by grates, navigation rebuilt
+  as a sunken star-map pit with a holographic planet (nothing shared with comms/tactical).
+- POLISH-3: tower face floodlight cones → small fixture halos, varied lit/dim/dark viewport panes with
+  mullions, relief plating with seam grooves and recess bands; hangar mouth gets a downward-facing false
+  interior (lit deck grid, troughs, rack silhouettes, ≈450 tris) so it reads as a lit bay from space;
+  Kestrel inter-hull voids dressed as service bays for the porthole views; north apron behind the Kestrel
+  (grated pit, jib hoist, GSE stand, manifold, workshop stations).
+- Orchestrator: hangar spawn looks along the west deck lane; containment field desaturated to a single
+  faint layer; comms platform unsealed; QA legs re-pointed (19/19 stairs).
 
 ### Known limitations (honest list)
 
@@ -551,7 +575,6 @@ inside except from view rooms (bridge, observation, hangar, flight control, Kest
   the hangar spawn looks along the west deck lane (parked TIEs, bowser, racks, bay numbers) with the
   opening at a grazing angle; from outside (`ext_hangar_mouth`) the mouth still reads as a flat lit pane
   rather than a deep lit interior.
-- QA waypoint list needs re-pointing after the round-3 furniture changes (4 stair legs).
 - Fighters follow scripted spline paths; no avoidance, no pilots (hooks in `TrafficHooks`).
 - Flight / landing / net / audio are stubs with interfaces only (`systems/flight.js`, `systems/landing.js`,
   `net.js`, `audio.js`).
