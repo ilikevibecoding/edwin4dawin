@@ -4,13 +4,15 @@ import * as THREE from "three";
 import { lerp, loftRings, ringCap } from "./providenceGeo.js";
 
 // palette (sRGB hex; converted to linear vertex tints where used). Hull tints are chosen so sunlit
-// plating measures ~sRGB 150-185 through the shared `hull` material (x1.4 plating map) while the
-// planet-lit belly stays in the 40-65 band; the belly is the palest tint, the dorsal the darkest.
+// plating measures ~sRGB 140-175 through the shared `hull` material (x1.4 plating map; a tower face
+// square to the sun tops out near 175, never the near-white of paler tints) while the planet-lit belly
+// stays in the 40-65 band; the belly is the palest tint, the dorsal the darkest. The same constants
+// tint every LOD (no per-LOD gain), so a ship keeps its grey when it drops to LOD 1/2.
 export const PAL = {
-  dorsal: 0x7d8798,
-  flank: 0x939fb1,
-  belly: 0x97a0ab,
-  finFace: 0x9aa7ba,
+  dorsal: 0x707a8b,
+  flank: 0x838fa1,
+  belly: 0x8a939f,
+  finFace: 0x8793a6,
   dark: 0x363a42,
   darkLit: 0x4a5059,
   rust: 0x6a4630,
@@ -24,6 +26,9 @@ export const PAL = {
   engineGlow: 0x8fc4ff,
   soot: 0x2a2320,
 };
+// one plating scale for the whole ship (hull faces, tower tiers, ledges, bridge heads): 36 m tiles with
+// ~9 m sub-panels, so no face changes plate size where it meets its neighbour
+export const PLATE_TEXEL = 1 / 36;
 
 // ---------------------------------------------------------------------------
 // Command tower and secondary fins: stepped slab tiers (y0 -> y1, set back at every tier) topped by a

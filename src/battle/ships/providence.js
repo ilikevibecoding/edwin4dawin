@@ -22,7 +22,7 @@ import {
   smoothstep,
   stationAt,
 } from "./providenceGeo.js";
-import { PAL, seamCell } from "./providenceSpec.js";
+import { PAL, PLATE_TEXEL, seamCell } from "./providenceSpec.js";
 import { buildTower } from "./providenceTower.js";
 import { buildBays, hullCuts, faceInCut } from "./providenceBays.js";
 import { buildTurrets } from "./providenceTurrets.js";
@@ -135,10 +135,12 @@ function plateColor(lodGain, i, j, c, n) {
   tone *= 1 + (hash(i, j, 9) - 0.5) * 0.06;
   if (m === 1 || m === 4 || m === 7) tone *= 0.9;
   if (m >= 11) tone *= 0.93;
+  // soot: darker, warmer bands 100-250 m forward of the nozzles, streaked per hull segment, heaviest
+  // at the stern wall (baked into every LOD's tint)
   const t = (z - HULL.zBow) / HULL.length;
-  const streak = 0.3 + 0.7 * hash(m + s, 77, 2);
+  const streak = 0.45 + 0.55 * hash(m + s, 77, 2);
   const soot =
-    smoothstep(0.78, 1.0, t) * streak * 0.6 + smoothstep(0.95, 1.0, t) * 0.25;
+    smoothstep(0.74, 0.98, t) * streak * 0.7 + smoothstep(0.93, 1.0, t) * 0.3;
   let col = [base[0] * tone, base[1] * tone, base[2] * tone];
   if (desat) {
     const l = (col[0] + col[1] + col[2]) / 3;
@@ -150,16 +152,15 @@ function plateColor(lodGain, i, j, c, n) {
     col[2] * (1 - soot * 0.66),
   ];
 }
-// tiles per metre of the plating map per hull face: 40 m tiles (10 m sub-panels) on the big faces,
-// tighter on the ridge and lips
-const texelFor = (m) =>
-  m === 0 || m === 1 || m === 4 || m === 7 || m === 11 ? 1 / 28 : 1 / 40;
+// one plating scale for the whole ship (hull faces, tower tiers, ledges, heads): see PLATE_TEXEL
+const texelFor = () => PLATE_TEXEL;
 
 function buildHull({ add, cuts, stationsByLod }) {
   for (const lod of [0, 1, 2]) {
     const stations = stationsByLod[lod];
     const rings = stations.map(ringFromStation);
-    const gain = lod === 0 ? 1 : lod === 1 ? 1.06 : 1.14;
+    // the same tint at every LOD: a ship must not change grey when it drops a LOD
+    const gain = 1;
     // each (plate cell, face) gets its own UV rotation and offset so the plating grid never lines up
     // across faces and the tile never reads as a repeating pattern along the hull
     const uv = (i, j, p, arc, fi, fj) => {
