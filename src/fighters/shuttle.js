@@ -16,7 +16,7 @@
 // Materials: interior-domain keys only (the shuttle lives inside the bay): impPanel1 tinted PALETTE.impWhite /
 // impGrey for the hull, paintedMetal (matte, seamless) for the solid wing and fin plates, impTrim for frames /
 // edges / seams, impMetal for machinery, impGloss for the windows, emitBlue for lights and the idling engines,
-// emitWarmSoft for the interior spill in the open hatch. hullPlate* would ignore the bay's lights.
+// emitWhiteDim for the lit pane in the open hatch (the warm spill is a light). hullPlate* would ignore the bay's lights.
 import * as THREE from "three";
 import { Kit, prism } from "../kit.js";
 import { PALETTE } from "../materials.js";
@@ -350,7 +350,7 @@ function ramp(F) {
   // the hull loft is solid, so the doorway is built proud of the belly rather than cut into it
   const hz = hinge[1] + 1.1;
   F.box("impTrim", 0, BELLY - 0.14, hz, 2.4, 0.28, 2.4, { color: BLACK, texel: 1 });
-  F.box("emitWarmSoft", 0, BELLY - 0.29, hz, 1.9, 0.02, 1.9, { uv: "keep" });
+  F.box("emitWhiteDim", 0, BELLY - 0.29, hz, 1.9, 0.02, 1.9, { uv: "keep" }); // shares the bay fixtures' key (the warm spill is the light below); mesh budget ≤ 50
   for (const s of [-1, 1]) F.box("impTrim", s * 0.62, BELLY - 0.3, hz, 0.06, 0.04, 1.9, { color: BLACK }); // door tracks
   // hydraulic rams
   for (const s of [-1, 1]) F.rod("impMetal", [s * 1.05, hinge[0] + 0.1, hinge[1] + 0.6], [s * 1.05, foot[0] + 0.45, foot[1] + 2.0], 0.06, { color: GREY });

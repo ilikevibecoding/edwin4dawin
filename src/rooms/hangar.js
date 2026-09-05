@@ -49,7 +49,9 @@ import {
   hgPowerDroid,
   hgBollard,
   hgDeckCable,
+  hgFloodBank,
   deckLine,
+  HG_PALETTE,
 } from "./hangar_kit.js";
 
 export function buildHangar(kit, ctx, room) {
@@ -86,6 +88,7 @@ export function buildHangar(kit, ctx, room) {
     return [vx * c + vz * s + KESTREL.position.x - OX, -vx * s + vz * c + KESTREL.position.z - OZ];
   };
   const ky = (vy) => vy + KESTREL.position.y - OY;
+  let kestrelWorkLight = null; // head position of the deck work-light mast at the Kestrel (set with its ground kit)
 
   // ---- opening rim geometry
   // coaming height: just under the player's STEP_UP (0.55) so the spec spawn (local -20, 90 = on the aft
@@ -152,9 +155,9 @@ export function buildHangar(kit, ctx, room) {
   // =====================================================================================
   // Deck
   // =====================================================================================
-  // dark deck: the grid texture's 0.62 sRGB base × this tint ≈ 0.04 linear albedo (sRGB ≈ #38393c), i.e.
-  // near-black away from the floods and a dark grey under them; the painted markings carry it
-  const DECK_TINT = new THREE.Color("#5e6168");
+  // mid-grey deck (shared HG_PALETTE.deck tint on the grid map): a dark grey away from the floods, mid-grey
+  // under them; the painted markings carry it
+  const DECK_TINT = HG_PALETTE.deck;
   const deck = (x0, z0, x1, z1) => kit.boxMM("impDeck", [x0, -0.14, z0], [x1, 0, z1], { color: DECK_TINT, texel: 0.35 });
   deck(-hx, -hz, hx, CZ0); // forward deck
   deck(-hx, CZ0, CX0, CZ1); // W flank of the opening
@@ -199,14 +202,15 @@ export function buildHangar(kit, ctx, room) {
       kit.colliders[kit.colliders.length - 1].walkable = true;
       kit.floor(a, b, c, d, cH, "coaming");
     }
-    // soft blue rim glow: one dim channel recessed in the coaming top along the inner edge (the old
-    // bright edge strips on the well face and the white inset lamps are gone — the rim reads by its
-    // coaming, chevron band and railings, not by light lines)
-    const s = 0.08;
-    kit.boxMM("emitBlueDim", [IX0 + 0.12, cH, IZ0 + 0.12], [IX0 + 0.12 + s, cH + 0.02, IZ1 - 0.12], { uv: "keep" });
-    kit.boxMM("emitBlueDim", [IX1 - 0.12 - s, cH, IZ0 + 0.12], [IX1 - 0.12, cH + 0.02, IZ1 - 0.12], { uv: "keep" });
-    kit.boxMM("emitBlueDim", [IX0 + 0.12, cH, IZ0 + 0.12], [IX1 - 0.12, cH + 0.02, IZ0 + 0.12 + s], { uv: "keep" });
-    kit.boxMM("emitBlueDim", [IX0 + 0.12, cH, IZ1 - 0.12 - s], [IX1 - 0.12, cH + 0.02, IZ1 - 0.12], { uv: "keep" });
+    // faint blue rim: one hairline (3 cm, emitBlueDim at 40 %) recessed in the coaming top along the inner
+    // edge. Round 2: the 8 cm full-strength channel, the shaft marker line and the blue rail bars all fed
+    // the "blue pool" read of the opening — the rim now reads by its coaming, chevron band and railings
+    const s = 0.03;
+    const rimKey = "hangar_blueDim";
+    kit.boxMM(rimKey, [IX0 + 0.12, cH, IZ0 + 0.12], [IX0 + 0.12 + s, cH + 0.01, IZ1 - 0.12], { uv: "keep" });
+    kit.boxMM(rimKey, [IX1 - 0.12 - s, cH, IZ0 + 0.12], [IX1 - 0.12, cH + 0.01, IZ1 - 0.12], { uv: "keep" });
+    kit.boxMM(rimKey, [IX0 + 0.12, cH, IZ0 + 0.12], [IX1 - 0.12, cH + 0.01, IZ0 + 0.12 + s], { uv: "keep" });
+    kit.boxMM(rimKey, [IX0 + 0.12, cH, IZ1 - 0.12 - s], [IX1 - 0.12, cH + 0.01, IZ1 - 0.12], { uv: "keep" });
     // small amber marker lamps on the deck-facing coaming faces every 12 m
     for (let z = CZ0 + 3; z < CZ1 - 1; z += 12) {
       kit.box("emitAmberDim", CX0 - 0.01, 0.3, z, 0.02, 0.1, 0.5);
@@ -223,7 +227,7 @@ export function buildHangar(kit, ctx, room) {
     kit.boxMM("chevronY", [CX0, 0.002, CZ0 - cb], [CX1, 0.012, CZ0], { texel: 0.6 });
     kit.boxMM("chevronY", [CX0, 0.002, CZ1], [CX1, 0.012, CZ1 + cb], { texel: 0.6 });
     // railings on the coaming top: W / E with launch-lane gaps, forward end closed, aft end open
-    const railOpts = { h: 1.1, light: "emitBlueDim", tag: "coaming-rail", postStep: 2.5 };
+    const railOpts = { h: 1.1, light: rimKey, tag: "coaming-rail", postStep: 2.5 };
     hgRailingGaps(kit, "z", op.x0 - 0.7, CZ0 + 0.3, CZ1 - 0.3, cH, [LANE_Z], railOpts);
     hgRailingGaps(kit, "z", op.x1 + 0.7, CZ0 + 0.3, CZ1 - 0.3, cH, [LANE_Z], railOpts);
     hgRailingGaps(kit, "x", op.z0 - 0.7, CX0 + 0.3, CX1 - 0.3, cH, [], railOpts);
@@ -274,19 +278,15 @@ export function buildHangar(kit, ctx, room) {
       const yEnd1 = wellY(op.z1);
       strip(op.x0 + 0.3, op.z0 + 0.3, op.x1 - 0.3, op.z0 + 0.3 + t, yEnd0);
       strip(op.x0 + 0.3, op.z1 - 0.3 - t, op.x1 - 0.3, op.z1 - 0.3, yEnd1);
-      // one dim blue marker line half-way down the shaft (the two bright rings are gone)
-      const ly = -2.6;
-      kit.boxMM("emitBlueDim", [op.x0 + 0.4, ly - 0.04, op.z0 + 0.4], [op.x0 + 0.46, ly + 0.04, op.z1 - 0.4], { uv: "keep" });
-      kit.boxMM("emitBlueDim", [op.x1 - 0.46, ly - 0.04, op.z0 + 0.4], [op.x1 - 0.4, ly + 0.04, op.z1 - 0.4], { uv: "keep" });
-      kit.boxMM("emitBlueDim", [op.x0 + 0.4, ly - 0.04, op.z0 + 0.4], [op.x1 - 0.4, ly + 0.04, op.z0 + 0.46], { uv: "keep" });
-      kit.boxMM("emitBlueDim", [op.x0 + 0.4, ly - 0.04, op.z1 - 0.46], [op.x1 - 0.4, ly + 0.04, op.z1 - 0.4], { uv: "keep" });
+      // no light in the shaft: the well is dark painted steel and space below it, so the stars read
     }
     // magnetic containment field (additive, animated via map offset by main.js) + faint corner glow
+    // (4 m, opacity 0.2: small enough to read as emitter spill at the corners, not as a lit sheet)
     const fg = new THREE.PlaneGeometry(op.x1 - op.x0, op.z1 - op.z0);
     fg.rotateX(-Math.PI / 2);
     kit.add("field", fg, { pos: [(op.x0 + op.x1) / 2, 0.12, (op.z0 + op.z1) / 2], uv: "scale", uvScale: [12, 20] });
     for (const [gx, gz] of [[op.x0, op.z0], [op.x1, op.z0], [op.x0, op.z1], [op.x1, op.z1]]) {
-      const g = new THREE.PlaneGeometry(8, 8);
+      const g = new THREE.PlaneGeometry(4, 4);
       g.rotateX(-Math.PI / 2);
       kit.add("hangar_glowBlue", g, { pos: [gx, 0.45, gz], uv: "keep" });
     }
@@ -469,7 +469,7 @@ export function buildHangar(kit, ctx, room) {
         gaps: wallSide === "W" ? { E: gapsZ, W: towerGap } : { W: gapsZ, E: towerGap },
         hangers: { yTop: H, step: 12.5, start: zr[0] + 2, end: zr[1] - 2, axis: "z" },
         tag: "gantry",
-        light: "hangar_amberDim",
+        light: "emitWhiteDim",
       });
       // cross platforms reaching in between the fighters
       for (const [g0, g1] of gapsZ) {
@@ -503,7 +503,7 @@ export function buildHangar(kit, ctx, room) {
     }
     // catwalk at y = 16 along the E wall: from the tower's level-5 landing (open N face) it runs under the
     // booth's window strip to the raised flight-control door, braced off the wall
-    hgCatwalk(kit, towerE.x0, -2.5, hx, towerE.z0, FC_Y, { rails: { N: true, S: true, E: false, W: true }, gaps: { S: [[towerE.x0, towerE.x1]] }, tag: "fc-catwalk", light: "emitAmber" });
+    hgCatwalk(kit, towerE.x0, -2.5, hx, towerE.z0, FC_Y, { rails: { N: true, S: true, E: false, W: true }, gaps: { S: [[towerE.x0, towerE.x1]] }, tag: "fc-catwalk", light: "emitWhiteDim" });
     for (const z of [-1.9, 2.3, towerE.z0 - 1.0]) tiltedBox(kit, "impTrim", new THREE.Vector3(hx - 0.1, FC_Y - 4.6, z), new THREE.Vector3(towerE.x0 + 0.6, FC_Y - 0.55, z), 0.26, 0.3, { color: PALETTE.impBlack, texel: 1 });
     kit.boxMM("impTrim", [hx - 0.5, FC_Y - 0.62, -2.5], [hx, FC_Y - 0.42, towerE.z0], { color: PALETTE.impBlack, texel: 1 });
     kit.boxMM("impMetal", [hx - 0.35, FC_Y - 0.9, -2.5], [hx - 0.05, FC_Y - 0.62, towerE.z0], { color: PALETTE.impGreyDark });
@@ -597,6 +597,27 @@ export function buildHangar(kit, ctx, room) {
       at(-6.2, rl - 1.8, (px, pz) => hgHoseReel(kit, px, pz, yawK + Math.PI / 2));
       at(3.4, rl - 1.4, (px, pz) => hgLadder(kit, px, pz, yawK + Math.PI / 2, 3.0));
       hgDeckCable(kit, [kz(-5.6, rl - 1.0), kz(-3.2, rl - 0.4), kz(-1.4, rl + 0.3)]);
+      // taxi guidance ahead of the bow: a dashed lane from the exclusion outline to the coaming with amber
+      // deck lamps in pairs (the cockpit looks straight down it — the nearest lit hangar detail its
+      // windshield sees; everything else in that view is 120–170 m off through the Kestrel cell's fog)
+      dashedLine(kit, [-22, -46], [-22, CZ0 - 2.2], { dash: 1.6, gap: 1.2, w: 0.2 });
+      for (const z of [-44, -38, -32, -26, -20, -14]) for (const s of [-1, 1]) hgDeckLamp(kit, -22 + s * 4.5, z, "emitAmber");
+      // work-light mast just outside the exclusion outline on the E (port) side, its two heads aimed at
+      // the port engine pod and the gear: the deck camera stands beside it, and that flank plus the pod's
+      // underside were otherwise reached only by the environment fill (the overhead spot cannot light an
+      // underside, and every other deck light is W of the ship). The white point light hangs at its heads.
+      {
+        const [mx, mz] = kz(-12.0, 4.0);
+        const [ax, az] = kz(-6.95, -5.0);
+        kit.box("impTrim", mx, 0.1, mz, 1.3, 0.2, 1.3, { color: PALETTE.impBlack, texel: 1 });
+        kit.box("hazard", mx, 0.205, mz, 1.1, 0.01, 1.1, { texel: 2 });
+        kit.cyl("impMetal", mx, 2.1, mz, 0.08, 3.8, "y", { color: PALETTE.impCharcoal, segments: 10 });
+        kit.box("impMetal", mx, 1.05, mz, 0.5, 0.5, 0.4, { color: PALETTE.impCharcoal, texel: 1 }); // generator / ballast box
+        kit.box("emitGreen", mx, 1.05, mz + 0.21, 0.06, 0.06, 0.02);
+        hgFloodBank(kit, [mx, 3.95, mz], [ax, ky(1.4), az], 2, { spread: 0.75, along: new THREE.Vector3(0, 0, 1), lamp: "emitWhite", size: 0.6 });
+        kit.collider([mx - 0.65, 0, mz - 0.65], [mx + 0.65, 1.3, mz + 0.65], "worklight-mast");
+        kestrelWorkLight = [mx, 3.9, mz];
+      }
     }
     // rim clutter along the W / E deck flanks between the coaming and the rack rows, plus a few
     // cable runs from the reels / droids toward the coaming so the rim reads as a working deck
@@ -665,10 +686,10 @@ export function buildHangar(kit, ctx, room) {
   // =====================================================================================
   const walls = roomWalls(kit, room);
   {
-    // dark structural bays: charcoal plates, black ribs, no backlit galleries — the only emissives are
-    // the amber lamp points at every gallery level, the sodium flood banks and dim cornice lines. The
-    // upper plates are painted steel (paintedMetal), not the pure-metal impMetalRough: a trench-grey pure
-    // metal is a black mirror, and the walls of the spawn view stayed at luma ~20 under any fill strength
+    // Imperial neutral (round 2): cool-grey plates on the clean impPanel maps (no stained paintedMetal in
+    // the upper band, i.e. the "wall dirt" is gone with it), black ribs and structure, white fixtures at a
+    // regular pitch (gallery lamp rows, flood banks, cornices, rib accents) — amber stays only on the
+    // deck-level berth floods, bollards and bay signage
     const wallOpts = {
       ribPitch: 12.5,
       plateH: 8,
@@ -680,25 +701,26 @@ export function buildHangar(kit, ctx, room) {
       corniceKey: "emitWhiteDim",
       lightBays: false,
       lampRows: true,
-      lampKey: "emitAmber",
+      lampKey: "emitWhiteDim",
       lampStep: 4.2,
-      floodLamp: "emitAmber",
-      plateColor: PALETTE.hullTrench,
-      plateAlt: PALETTE.impGreyDark,
-      upperColor: PALETTE.hullTrench,
-      plateKey: "paintedMetal",
-      ribAccentKey: "emitAmber",
+      floodLamp: "emitWhite",
+      plateColor: HG_PALETTE.plate,
+      plateAlt: HG_PALETTE.plateAlt,
+      upperColor: HG_PALETTE.upper,
+      plateKey: "impPanel1",
+      ribAccentKey: "emitWhiteDim",
       features: { gear: 0.22, light: 0.06, vent: 0.14, pipes: 0.14, cabinet: 0.08, stencil: 0.12 },
     };
     hgWall(walls.N.frame, W, H, { ...wallOpts, openings: hgWallOpenings(room, ctx.doors, "N"), seed: 101, tag: "hangarN", quiet: [[24, 41], [89, 106]] });
     hgWall(walls.S.frame, W, H, { ...wallOpts, openings: hgWallOpenings(room, ctx.doors, "S"), seed: 103, tag: "hangarS", quiet: [[24, 41], [89, 106]] });
     hgWall(walls.W.frame, D, H, { ...wallOpts, openings: hgWallOpenings(room, ctx.doors, "W"), seed: 107, tag: "hangarW" });
-    // flight-control booth glazing (E wall, u = lz + 110): a full-width strip (sill 16.9, head 19.2) in two
-    // panes flanking the raised door. The holes match flight_control.js's W wall (u_fc = 117 - u), which
-    // builds the outward-raked glass and mullions; this side builds the frame ring, sill and hood only.
+    // flight-control booth glazing (E wall, u = lz + 110): a full-height strip (sill 16.4, head 19.7 — the
+    // booth floor is at 16) in two panes flanking the raised door. The holes match flight_control.js's W
+    // wall (u_fc = 117 - u, v_fc = v - 16), which builds the outward-raked glass and mullions; this side
+    // builds the frame ring, sill and hood only.
     const fcWin = [
-      { u0: 103.3, u1: 108.45, v0: 16.9, v1: 19.2 },
-      { u0: 111.55, u1: 116.7, v0: 16.9, v1: 19.2 },
+      { u0: 103.3, u1: 108.45, v0: 16.4, v1: 19.7 },
+      { u0: 111.55, u1: 116.7, v0: 16.4, v1: 19.7 },
     ];
     const eOpen = hgWallOpenings(room, ctx.doors, "E");
     hgWall(walls.E.frame, D, H, { ...wallOpts, openings: [...eOpen, ...fcWin], seed: 109, tag: "hangarE", quiet: [[100, 120]] });
@@ -714,14 +736,14 @@ export function buildHangar(kit, ctx, room) {
       fe.box("impTrim", w.u0 - 0.12, cv, 0.3, 0.24, wh + 0.7, 0.6, { color: PALETTE.impBlack, texel: 1 });
       fe.box("impTrim", w.u1 + 0.12, cv, 0.3, 0.24, wh + 0.7, 0.6, { color: PALETTE.impBlack, texel: 1 });
       fe.box("impMetal", cu, w.v0 - 0.34, 0.45, ww + 0.7, 0.12, 0.9, { color: PALETTE.impGreyDark, texel: 1 });
-      fe.box("emitBlueDim", cu, w.v0 - 0.29, 0.9, ww * 0.9, 0.03, 0.03);
+      fe.box("emitWhiteDim", cu, w.v0 - 0.29, 0.9, ww * 0.9, 0.03, 0.03, { uv: "keep" });
     }
     // hood over the booth, ident glyphs, status lamps
-    fe.box("impTrim", 110, 19.95, 0.75, 15.4, 0.5, 1.5, { color: PALETTE.impBlack, texel: 1 });
-    fe.box("impMetal", 110, 19.62, 1.42, 15.0, 0.16, 0.16, { color: PALETTE.impCharcoal });
-    fe.box("emitWhiteDim", 110, 19.62, 1.51, 14.6, 0.06, 0.02, { uv: "keep" });
-    fe.decal(IMP_DECAL.glyphs3, 110, 21.2, 0.08, 3.2);
-    fe.box("emitBlue", 102.6, 18.3, 0.62, 0.3, 0.3, 0.05);
+    fe.box("impTrim", 110, 20.4, 0.75, 15.4, 0.5, 1.5, { color: PALETTE.impBlack, texel: 1 });
+    fe.box("impMetal", 110, 20.07, 1.42, 15.0, 0.16, 0.16, { color: PALETTE.impCharcoal });
+    fe.box("emitWhiteDim", 110, 20.07, 1.51, 14.6, 0.06, 0.02, { uv: "keep" });
+    fe.decal(IMP_DECAL.glyphs3, 110, 21.6, 0.08, 3.2);
+    fe.box("emitWhite", 102.6, 18.3, 0.62, 0.3, 0.3, 0.05);
     fe.box("emitRedImp", 117.4, 18.3, 0.62, 0.3, 0.3, 0.05);
     // blast-door beacon pairs (red, blinking) and door ident stencils on every big door
     const doorDeco = (frame, openings) => {
@@ -743,11 +765,18 @@ export function buildHangar(kit, ctx, room) {
     doorDeco(walls.S.frame, hgWallOpenings(room, ctx.doors, "S"));
     doorDeco(walls.W.frame, hgWallOpenings(room, ctx.doors, "W"));
     doorDeco(walls.E.frame, eOpen);
-    // giant bay numbers (8 m) in the quiet upper bays
-    frameHgDecal(walls.N.frame, hgNumber(1), 32.5, 20.5, 0.08, 8);
-    frameHgDecal(walls.N.frame, hgNumber(2), 97.5, 20.5, 0.08, 8);
-    frameHgDecal(walls.S.frame, hgNumber(3), 97.5, 20.5, 0.08, 8);
-    frameHgDecal(walls.S.frame, hgNumber(4), 32.5, 20.5, 0.08, 8);
+    // giant bay numbers (8 m) in the quiet upper bays: backlit amber numerals on a black sign plate. From
+    // the Kestrel's cockpit preset the dashboard hides everything below the horizon, so the S wall's
+    // upper half, 175 m off through the cell fog, is the only hangar surface its windshield shows; the
+    // unlit paint there read as a 10 % smudge (h3p), lit numerals carry through the fog
+    const bigNumber = (frame, n, cu) => {
+      frame.box("impTrim", cu, 20.5, 0.3, 8.8, 8.8, 0.6, { color: PALETTE.impBlack, texel: 1 });
+      frameHgDecal(frame, hgNumber(n), cu, 20.5, 0.62, 8, null, "hangar_decalLit");
+    };
+    bigNumber(walls.N.frame, 1, 32.5);
+    bigNumber(walls.N.frame, 2, 97.5);
+    bigNumber(walls.S.frame, 3, 97.5);
+    bigNumber(walls.S.frame, 4, 32.5);
     frameHgDecal(walls.E.frame, HG_DECAL.tie, 110, 30.5, 0.08, 6);
     // fuel / coolant manifolds along the long walls at deck level, valve stations between the ribs
     const mo = { r: 0.24, step: 12.5, accentKey, bracket: 1.15 };
@@ -761,27 +790,31 @@ export function buildHangar(kit, ctx, room) {
   // Ceiling and lights
   // =====================================================================================
   // ceiling troughs: warm white at ≈ 30 % of the old output, louvred every metre (hgCeiling fins)
-  // slab in trench-grey painted steel (diffuse), not the pure-metal impMetalRough: the amber fills 13 m
-  // below it are what light the far half of the spawn view, and a dark pure metal swallowed them
-  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 12.5, beamAxis: "x", troughsX: [-35, -20, 20, 35], ductsX: [-62.5, 62.5], lightKey: "hangar_ceilWarm", beamH: 1.4, slabColor: PALETTE.hullTrench, slabKey: "paintedMetal" });
+  // slab in cool-grey painted steel (diffuse), not the pure-metal impMetalRough: the fills 13 m below it
+  // are what light the far half of the spawn view, and a dark pure metal swallowed them
+  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 12.5, beamAxis: "x", troughsX: [-35, -20, 20, 35], ductsX: [-62.5, 62.5], lightKey: "hangar_ceilWarm", beamH: 1.4, slabColor: HG_PALETTE.ceiling, slabKey: "paintedMetal" });
   {
-    // Sodium-amber deck lighting (10 lights: the hangar's budget). Two spots hang under the gantries at
-    // rack height (y = 27) aimed at the W berths and the parked Kestrel: the pool has three spot slots, and
-    // with priority 0.9+ the hangar's own spots always win them while the player is in here (slot 0 casts
-    // shadows: the W berths' fighters and ground kit throw shadows on the deck). Seven amber fills at the
-    // same height along the rack service lanes cover the rims, berths, racks and ceiling along the full
-    // 220 m; two of them sit over the aft coaming, where the spawn stands looking forward along the well.
+    // Deck lighting (10 lights: the hangar's budget), neutral white with amber only at the berths. Two
+    // spots hang under the gantries at rack height (y = 27): a sodium-amber work flood aimed at the W
+    // berths and a white one at the parked Kestrel; the pool has three spot slots, and with priority 0.9+
+    // the hangar's own spots always win them while the player is in here (slot 0 casts shadows: the W
+    // berths' fighters and ground kit throw shadows on the deck). Seven white fills at the same height
+    // along the rack service lanes cover the rims, berths, racks and ceiling along the full 220 m; two of
+    // them sit over the aft coaming, where the spawn stands looking forward along the well.
     // The fills use a 1/d^1.5 falloff (decay 1.5): a 130 × 220 m bay lit by a handful of pooled lights
     // with inverse-square falloff is black beyond ~40 m of each one, and the pool cannot hold the thirty
     // lights the physical answer would need. `k` is the irradiance at the deck under each light.
     // Priorities are high because the pool score subtracts dist/40: in a 220 m bay a fill at the far end
     // is 4+ points down and would otherwise be evicted by any neighbour room's light.
     const amber = 0xffb45a;
+    const white = HG_PALETTE.keyWhite;
     const DECAY = 1.5;
     const I = (h, k) => k * Math.pow(h, DECAY);
-    const spot = (pos, target, k, extra = {}) => kit.light({ type: "spot", pos, target, color: amber, intensity: I(pos[1], k), distance: 120, decay: DECAY, angle: 0.8, penumbra: 0.5, ...extra });
-    spot([-40, 27, 58], [-43, 0, 71], 5.0, { priority: 3.06, shadow: true }); // W berths (deck spots 1–2) + W rim aft
-    spot([-42, 27, -56], [-22, 0, -70], 4.5, { priority: 3.02 }); // the parked Kestrel: hull, ramp and its ground kit
+    const spot = (pos, target, k, color, extra = {}) => kit.light({ type: "spot", pos, target, color, intensity: I(pos[1], k), distance: 120, decay: DECAY, angle: 0.8, penumbra: 0.5, ...extra });
+    spot([-40, 27, 58], [-43, 0, 71], 4.2, amber, { priority: 3.06, shadow: true }); // W berths (deck spots 1–2): sodium work flood
+    // the parked Kestrel: hull, ramp and its ground kit. Hung E of the ship (the deck / ramp cameras stand
+    // on that side; from the W the whole camera-facing flank fell into its own unlit side)
+    spot([12, 27, -60], [-18, 0, -70], 3.8, white, { priority: 3.02 });
     const fills = [
       [-30, 27, 92], // aft coaming, W (the spawn)
       [30, 27, 86], // aft coaming, E
@@ -791,11 +824,13 @@ export function buildHangar(kit, ctx, room) {
       [40, 27, -72], // E berth (deck spot 3)
       [-40, 27, -86],
     ];
-    fills.forEach(([x, y, z], i) => kit.light({ type: "point", pos: [x, y, z], color: amber, intensity: I(y, 5.2), distance: 170, decay: DECAY, priority: 3.0 - i * 0.01 }));
+    fills.forEach(([x, y, z], i) => kit.light({ type: "point", pos: [x, y, z], color: white, intensity: I(y, 4.6), distance: 170, decay: DECAY, priority: 3.0 - i * 0.01 }));
     // warm interior spill at the Kestrel's door: under the hood's soffit lamp (ship local (0, 2.85, 2.3) →
     // hangar local), physical falloff, reaching the ramp and the staged kit at its foot
     const [sx, sz] = kz(0, 2.3);
     kit.light({ type: "point", pos: [sx, ky(2.75), sz], color: 0xffc07a, intensity: lux(5.0, 1.8), distance: 18, decay: 2, priority: 2.9 });
+    // deck work-light mast beside the port engine pod (built with the ground kit): white, physical falloff
+    if (kestrelWorkLight) kit.light({ type: "point", pos: kestrelWorkLight, color: white, intensity: lux(3.9, 3.0), distance: 26, decay: 2, priority: 2.92 });
   }
 
   // =====================================================================================

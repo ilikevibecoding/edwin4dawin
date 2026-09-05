@@ -165,6 +165,126 @@ export function makeHangarDecals(size = 1024, seed = 23) {
   return toTexture(c, { srgb: true, wrap: false, anisotropy: 8 });
 }
 
+/**
+ * Flight-control bay status board (2:1): a dark display panel with a header, seven bay tiles (01..07,
+ * each with a fighter glyph, a status bar and data rows) and a schematic strip of the hangar deck
+ * underneath. Used as map + emissiveMap so it reads as a lit display without a light of its own.
+ */
+export function makeStatusBoard(w = 1024, seed = 41) {
+  const h = w / 2;
+  const c = makeCanvas(w, h);
+  const ctx = c.getContext("2d");
+  const rand = mulberry32(seed);
+  const ink = (a = 1) => `rgba(210,222,240,${a})`;
+  const green = (a = 1) => `rgba(90,220,120,${a})`;
+  const amber = (a = 1) => `rgba(255,170,60,${a})`;
+  const red = (a = 1) => `rgba(235,70,50,${a})`;
+  const blue = (a = 1) => `rgba(95,180,255,${a})`;
+  ctx.fillStyle = "#090b0f";
+  ctx.fillRect(0, 0, w, h);
+  // faint grid
+  ctx.strokeStyle = ink(0.06);
+  ctx.lineWidth = 1;
+  for (let x = 0; x < w; x += w / 32) ctx.strokeRect(x, 0, w / 32, h);
+  for (let y = 0; y < h; y += h / 16) ctx.strokeRect(0, y, w, h / 16);
+  // angular glyph text (Imperial signage strokes) in a row of `n` glyphs at (x, y), glyph size s
+  const glyphs = (x, y, s, n, color) => {
+    ctx.fillStyle = color;
+    for (let g = 0; g < n; g++) {
+      const gx = x + g * s * 1.3;
+      const k = Math.floor(rand() * 4);
+      const t = s * 0.18;
+      if (k === 0) ctx.fillRect(gx, y, s, t), ctx.fillRect(gx, y, t, s);
+      else if (k === 1) ctx.fillRect(gx, y + s / 2, s, t), ctx.fillRect(gx + s - t, y, t, s);
+      else if (k === 2) ctx.fillRect(gx, y, s, t), ctx.fillRect(gx, y + s - t, s, t), ctx.fillRect(gx + s / 2 - t / 2, y, t, s);
+      else ctx.fillRect(gx, y, t, s), ctx.fillRect(gx + s / 2, y + s / 2, s / 2, t);
+    }
+  };
+  // header band
+  ctx.fillStyle = ink(0.12);
+  ctx.fillRect(0, 0, w, h * 0.13);
+  glyphs(w * 0.03, h * 0.035, h * 0.06, 9, ink(0.9));
+  glyphs(w * 0.62, h * 0.035, h * 0.06, 6, blue(0.9));
+  ctx.fillStyle = ink(0.9);
+  ctx.fillRect(w * 0.03, h * 0.125, w * 0.94, h * 0.008);
+  // seven bay tiles
+  const states = [0, 0, 1, 0, 2, 1, 0]; // 0 ready, 1 servicing, 2 hold
+  const tileW = (w * 0.94) / 7;
+  for (let i = 0; i < 7; i++) {
+    const x0 = w * 0.03 + i * tileW;
+    const y0 = h * 0.17;
+    const tw = tileW - w * 0.01;
+    const th = h * 0.56;
+    const st = states[i];
+    const col = st === 0 ? green : st === 1 ? amber : red;
+    ctx.fillStyle = ink(0.07);
+    ctx.fillRect(x0, y0, tw, th);
+    ctx.strokeStyle = ink(0.35);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x0, y0, tw, th);
+    // number
+    ctx.fillStyle = ink(0.95);
+    ctx.font = `bold ${Math.floor(th * 0.26)}px "Arial Narrow", Arial, sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(String(i + 1).padStart(2, "0"), x0 + tw * 0.08, y0 + th * 0.05);
+    // fighter glyph: front view (two wing panels, ball, wing struts), in the status colour
+    const gx = x0 + tw / 2;
+    const gy = y0 + th * 0.55;
+    const gs = tw * 0.36;
+    ctx.strokeStyle = col(0.95);
+    ctx.lineWidth = Math.max(2, gs * 0.07);
+    ctx.strokeRect(gx - gs, gy - gs * 0.62, gs * 0.22, gs * 1.24);
+    ctx.strokeRect(gx + gs - gs * 0.22, gy - gs * 0.62, gs * 0.22, gs * 1.24);
+    ctx.beginPath();
+    ctx.arc(gx, gy, gs * 0.34, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(gx - gs + gs * 0.22, gy);
+    ctx.lineTo(gx - gs * 0.34, gy);
+    ctx.moveTo(gx + gs * 0.34, gy);
+    ctx.lineTo(gx + gs - gs * 0.22, gy);
+    ctx.stroke();
+    if (st === 2) {
+      // hold: crossed out
+      ctx.strokeStyle = red(0.8);
+      ctx.beginPath();
+      ctx.moveTo(gx - gs * 0.5, gy - gs * 0.5);
+      ctx.lineTo(gx + gs * 0.5, gy + gs * 0.5);
+      ctx.stroke();
+    }
+    // status bar and data rows
+    ctx.fillStyle = col(0.9);
+    ctx.fillRect(x0 + tw * 0.08, y0 + th * 0.86, tw * 0.84, th * 0.07);
+    glyphs(x0 + tw * 0.08, y0 + th * 0.3, th * 0.05, 5, ink(0.55));
+    for (let r = 0; r < 3; r++) {
+      ctx.fillStyle = ink(0.3 + rand() * 0.3);
+      ctx.fillRect(x0 + tw * 0.62, y0 + th * (0.08 + r * 0.06), tw * (0.1 + rand() * 0.25), th * 0.025);
+    }
+  }
+  // schematic strip: the hangar deck plan with the opening and the rack rows, a traffic tick
+  {
+    const y0 = h * 0.77;
+    const sh = h * 0.2;
+    ctx.fillStyle = ink(0.07);
+    ctx.fillRect(w * 0.03, y0, w * 0.94, sh);
+    ctx.strokeStyle = blue(0.7);
+    ctx.lineWidth = 2;
+    ctx.strokeRect(w * 0.08, y0 + sh * 0.15, w * 0.84, sh * 0.7);
+    ctx.fillStyle = blue(0.25);
+    ctx.fillRect(w * 0.3, y0 + sh * 0.35, w * 0.4, sh * 0.3);
+    ctx.fillStyle = ink(0.6);
+    for (let k = 0; k < 24; k++) {
+      const rx = w * (0.1 + (k % 12) * 0.068);
+      const ry = y0 + sh * (k < 12 ? 0.2 : 0.72);
+      ctx.fillRect(rx, ry, w * 0.012, sh * 0.08);
+    }
+    ctx.fillStyle = amber(0.9);
+    ctx.fillRect(w * 0.5 - 3, y0 + sh * 0.2, 6, sh * 0.6);
+  }
+  return toTexture(c, { srgb: true, wrap: false, anisotropy: 4 });
+}
+
 // Open steel grating for catwalk decks: alpha cut-out (alphaTest), reads from both sides.
 export function makeHangarGrate(size = 512, seed = 31) {
   const c = makeCanvas(size, size);
@@ -220,13 +340,27 @@ export function ensureHangarMaterials(materials) {
   if (registered && materials.hangar_decal) return registered;
   const decal = new THREE.MeshStandardMaterial({ map: makeHangarDecals(1024, 23), transparent: true, depthWrite: false, roughness: 0.75, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.3, vertexColors: true });
   setDomain(decal, "interior");
+  // backlit variant of the same atlas for the giant bay numerals (the canvas doubles as the emissive
+  // map, tinted sodium amber: signage is on the critic's short list of amber accents). From the Kestrel's
+  // cockpit the only hangar surface above the dashboard's sightline is the far wall's upper half, 175 m
+  // off through the cell fog: unlit paint there was a 10 % smudge, lit numerals read
+  const decalLit = decal.clone();
+  decalLit.emissiveMap = decal.map;
+  decalLit.emissive = new THREE.Color("#ffb45a");
+  decalLit.emissiveIntensity = 1.1;
+  setDomain(decalLit, "interior");
   const grateTex = makeHangarGrate(512, 31);
   const grate = new THREE.MeshStandardMaterial({ map: grateTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.55, metalness: 0.85, envMapIntensity: 0.7, vertexColors: true, color: 0xffffff });
   setDomain(grate, "interior");
-  // containment-field corner glow: the shared additive glow sprite, tinted to the field's blue
+  // containment-field corner glow: the shared additive glow sprite, tinted to the field's blue and kept
+  // faint (round-2 critic: the corner quads were adding to the "blue pool" read of the opening)
   const glow = materials.glowDisc.clone();
   glow.color = new THREE.Color(0x4f8fff);
-  glow.opacity = 0.55;
+  glow.opacity = 0.2;
+  // hairline blue for the coaming rim: emitBlueDim at 40 % (the rim reads by one faint line, not light bars)
+  const blueDim = materials.emitBlueDim.clone();
+  blueDim.emissiveIntensity = materials.emitBlueDim.emissiveIntensity * 0.4;
+  setDomain(blueDim, "interior");
   // low-level amber for long runs of catwalk rail lighting (the full emitAmber reads as a laser line)
   const amberDim = materials.emitAmber.clone();
   amberDim.emissiveIntensity = 0.75;
@@ -247,13 +381,20 @@ export function ensureHangarMaterials(materials) {
   const treadSet = makeTreadChevron(256, 7);
   const tread = new THREE.MeshStandardMaterial({ map: treadSet.map, roughnessMap: treadSet.roughnessMap, metalnessMap: treadSet.metalnessMap, normalMap: treadSet.normalMap, roughness: 1, metalness: 1, vertexColors: true, color: 0xffffff, envMapIntensity: 0.4 });
   setDomain(tread, "interior");
+  // flight-control bay status board: the canvas is both the albedo and the emissive map (a lit display)
+  const boardTex = makeStatusBoard(1024, 41);
+  const board = new THREE.MeshStandardMaterial({ map: boardTex, emissiveMap: boardTex, emissive: 0xffffff, emissiveIntensity: 0.9, roughness: 0.35, metalness: 0.1, envMapIntensity: 0.2 });
+  setDomain(board, "interior");
+  materials.hangar_board = board;
   materials.hangar_decal = decal;
+  materials.hangar_decalLit = decalLit;
   materials.hangar_grate = grate;
   materials.hangar_glowBlue = glow;
+  materials.hangar_blueDim = blueDim;
   materials.hangar_amberDim = amberDim;
   materials.hangar_ceilWarm = ceilWarm;
   materials.hangar_spillWarm = spillWarm;
   materials.hangar_tread = tread;
-  registered = { decal: "hangar_decal", grate: "hangar_grate", glow: "hangar_glowBlue", amberDim: "hangar_amberDim", ceilWarm: "hangar_ceilWarm", tread: "hangar_tread" };
+  registered = { decal: "hangar_decal", decalLit: "hangar_decalLit", grate: "hangar_grate", glow: "hangar_glowBlue", blueDim: "hangar_blueDim", amberDim: "hangar_amberDim", ceilWarm: "hangar_ceilWarm", tread: "hangar_tread", board: "hangar_board" };
   return registered;
 }

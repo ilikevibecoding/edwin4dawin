@@ -34,6 +34,7 @@ import {
   hgWallOpenings,
   hgCeiling,
   CRATE_SIZES,
+  HG_PALETTE,
 } from "./hangar_kit.js";
 
 /** Storage rack row along z: uprights, level beams, containers on the beams (instanced). */
@@ -47,10 +48,11 @@ function rackRow(kit, x, z0, z1, levels, opts = {}) {
     for (const ux of xs) kit.box("impTrim", ux, H / 2, z, 0.26, H, 0.26, { color: PALETTE.impBlack, texel: 1 });
     // cross ties between the front and back uprights at every level
     for (let l = 0; l <= levels; l++) kit.box("impMetal", x, l * levelH + 0.3, z, depth, 0.12, 0.12, { color: PALETTE.impGreyDark });
-    // diagonal brace in every other bay (back face)
+    // diagonal brace in every other bay (back face); rough steel — a polished impMetal rod mirrored the
+    // environment fill into a bright diagonal streak in the spawn view
     if (i < n && i % 2 === 0) {
       const g = new THREE.BoxGeometry(0.08, Math.hypot(bayLen, levelH) - 0.4, 0.08);
-      kit.add("impMetal", g, { pos: [x - face * (depth / 2 - 0.02), levelH / 2 + 0.3, z + bayLen / 2], rot: [Math.atan2(bayLen, levelH), 0, 0], color: PALETTE.impGrey, texel: 1 });
+      kit.add("impMetalRough", g, { pos: [x - face * (depth / 2 - 0.02), levelH / 2 + 0.3, z + bayLen / 2], rot: [Math.atan2(bayLen, levelH), 0, 0], color: PALETTE.impGrey, texel: 1 });
     }
   }
   for (let l = 0; l <= levels; l++) {
@@ -176,7 +178,7 @@ export function buildCargo(kit, ctx, room) {
   const LC = { x0: LP.x0 - chan, x1: LP.x1 + chan, z0: LP.z0 - chan, z1: LP.z1 + chan };
 
   // ---- deck (split around the lift channel), seams, aisle markings
-  const deck = (x0, z0, x1, z1) => kit.boxMM("impDeck", [x0, -0.14, z0], [x1, 0, z1], { color: PALETTE.impGreyDark, texel: 0.35 });
+  const deck = (x0, z0, x1, z1) => kit.boxMM("impDeck", [x0, -0.14, z0], [x1, 0, z1], { color: HG_PALETTE.deck, texel: 0.35 });
   deck(-hx, -hz, hx, LC.z0);
   deck(-hx, LC.z1, hx, hz);
   deck(-hx, LC.z0, LC.x0, LC.z1);
@@ -187,9 +189,10 @@ export function buildCargo(kit, ctx, room) {
   kit.boxMM("chevronY", [-6.3, 0.002, -hz + 0.6], [-5.7, 0.011, LC.z0 - 0.8], { texel: 0.8 });
   kit.boxMM("chevronY", [5.7, 0.002, -hz + 0.6], [6.3, 0.011, LC.z0 - 0.8], { texel: 0.8 });
   dashedLine(kit, [0, -hz + 1.5], [0, LC.z0 - 1.6], { dash: 2.4, gap: 1.8, w: 0.25 });
-  deckDecal(kit, HG_DECAL.launch, 0, -20, 4.0, Math.PI, 0.0065);
-  deckDecalImp(kit, IMP_DECAL.keepClear, 0, -8, 2.6, 0, 0.0068);
-  deckDecalImp(kit, IMP_DECAL.keepClear, 0, 8, 2.6, 0, 0.0068);
+  // aisle arrows at lane-marking scale (round 2: the 4 m arrow filled the spawn view's foreground)
+  deckDecal(kit, HG_DECAL.launch, 0, -20, 2.2, Math.PI, 0.0065);
+  deckDecalImp(kit, IMP_DECAL.keepClear, 0, -8, 1.8, 0, 0.0068);
+  deckDecalImp(kit, IMP_DECAL.keepClear, 0, 8, 1.8, 0, 0.0068);
   kit.boxMM("chevronY", [-9.5, 0.002, -hz + 0.2], [9.5, 0.012, -hz + 1.4], { texel: 0.6 });
   // cross aisles at z = -12 and z = 6
   for (const z of [-12, 6]) dashedLine(kit, [-37, z], [37, z], { dash: 2, gap: 2, w: 0.18 });
@@ -271,7 +274,8 @@ export function buildCargo(kit, ctx, room) {
 
   // ---- walls: 14 m industrial; blast door on the N wall (u = lx + 40)
   const walls = roomWalls(kit, room);
-  // dark structural bays (no backlit galleries): trench-grey plates, amber lamp points per level, dim cornice
+  // Imperial neutral (shared HG_PALETTE): cool-grey plates on the clean impPanel maps, black ribs, white
+  // lamp points per level, white cornice and flood banks (no backlit galleries)
   const wallOpts = {
     ribPitch: 10,
     plateH: 5,
@@ -282,15 +286,16 @@ export function buildCargo(kit, ctx, room) {
     bigDecals: false,
     ducts: false,
     lightKey: "emitWhiteDim",
-    corniceKey: "emitAmberDim",
+    corniceKey: "emitWhiteDim",
     lightBays: false,
     lampRows: true,
-    lampKey: "emitAmber",
+    lampKey: "emitWhiteDim",
     lampStep: 3.4,
-    floodLamp: "emitAmber",
-    plateColor: PALETTE.hullTrench,
-    plateAlt: PALETTE.impGreyDark,
-    upperColor: PALETTE.hullTrench,
+    floodLamp: "emitWhite",
+    plateColor: HG_PALETTE.plate,
+    plateAlt: HG_PALETTE.plateAlt,
+    upperColor: HG_PALETTE.upper,
+    plateKey: "impPanel1",
     ribAccentKey: null,
   };
   const nOpen = hgWallOpenings(room, ctx.doors, "N");
@@ -324,23 +329,21 @@ export function buildCargo(kit, ctx, room) {
 
   // ---- ceiling: beams across x every 10 m, three light troughs (dim, 0.85 emissive, louvred every metre —
   //      the old emitWhiteSoft central trough read as a near-white blob at the aisle's end), side ducts
-  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 10, beamAxis: "x", troughsX: [-19.5, 0, 19.5], ductsX: [-37.5, 37.5], lightKey: "emitWhiteDim", beamH: 0.9, slabColor: PALETTE.hullTrench });
+  hgCeiling(kit, -hx, -hz, hx, hz, H, { beamStep: 10, beamAxis: "x", troughsX: [-19.5, 0, 19.5], ductsX: [-37.5, 37.5], lightKey: "emitWhiteDim", beamH: 0.9, slabColor: HG_PALETTE.ceiling, slabKey: "paintedMetal" });
 
-  // ---- lights: amber over the aisle and the lift, warm white over the side aisles, red at the door
-  const amber = 0xffb45a;
-  // three aisle floods + two rack-face lights (≈2.5× the default per-fixture output) + red door beacon
-  // the floods sit inside the ceiling troughs (x = 0, ±19.5; between the emitter pane and its plate, 13.55 m):
+  // ---- lights: neutral white over the aisle, the lift and the side aisles (the grey containers read
+  //      grey only under white light — every warm key turned them into tan plywood), red at the door
+  // three aisle keys + two rack-face lights (≈2.5× the default per-fixture output) + red door beacon
+  // the keys sit inside the ceiling troughs (x = 0, ±19.5; between the emitter pane and its plate, 13.55 m):
   // a point light hanging under the slab lit it to a near-white blob, inside the fixture the pane and slab
   // are back-facing / hidden and the top shelves still catch the light
   const TY = H - 0.45;
-  // the aisle keys are warm-neutral white, not sodium amber: under pure amber the grey containers read as
-  // tan plywood again; the amber stays on the side aisles and the lamp rows
-  const keyWhite = 0xfff1de;
+  const keyWhite = HG_PALETTE.keyWhite;
   kit.light({ type: "point", pos: [0, TY, -16], color: keyWhite, intensity: lux(TY, 3.0), distance: 64, priority: 0.62 });
   kit.light({ type: "point", pos: [0, TY, 2], color: keyWhite, intensity: lux(TY, 3.0), distance: 64, priority: 0.61 });
   kit.light({ type: "point", pos: [0, TY, 21], color: keyWhite, intensity: lux(TY, 2.6), distance: 56, priority: 0.58 });
-  kit.light({ type: "point", pos: [-19.5, TY, -8], color: 0xffd7a0, intensity: lux(TY, 2.2), distance: 52, priority: 0.5 });
-  kit.light({ type: "point", pos: [19.5, TY, -8], color: 0xffd7a0, intensity: lux(TY, 2.2), distance: 52, priority: 0.49 });
+  kit.light({ type: "point", pos: [-19.5, TY, -8], color: keyWhite, intensity: lux(TY, 2.2), distance: 52, priority: 0.5 });
+  kit.light({ type: "point", pos: [19.5, TY, -8], color: keyWhite, intensity: lux(TY, 2.2), distance: 52, priority: 0.49 });
   kit.light({ type: "point", pos: [0, 8, -28], color: 0xff3b2e, intensity: lux(8, 0.6), distance: 20, priority: 0.3 });
 
   // ---- animated beacons
