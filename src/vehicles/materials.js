@@ -10,8 +10,7 @@ import {
   glassTintMap,
   meshAlpha,
   paintBaseMap,
-  paintFlakeNormal,
-  paintPeelNormal,
+  paintCoatNormal,
   paintRoughness,
   prismNormal,
   reflectedSky,
@@ -21,7 +20,7 @@ import {
   vinylMaps,
   wornMetalMaps,
 } from '../textures/vehicle.js';
-import { cached, canvasTexture, fbm, mulberry32, pixelTexture } from '../textures/core.js';
+import { cached, canvasTexture, clamp, fbm, heightField, makeCanvas, mulberry32, normalFromHeight, pixelTexture, smoothstep } from '../textures/core.js';
 
 // ---------------------------------------------------------------------------
 // The fleet's material library.
@@ -89,7 +88,7 @@ function neutral(tex, key, target = 0.82) {
  * the shared dirt atlas, the same film / spatter / cake layers and the same
  * substrate-relative ceiling, with the reach precomputed per vertex.
  */
-function applyFleetDirt(material, { tag, film = 1, spatter = 1, cake = 1, dust = 0x9b8e75, wet = 0x4a3826, dry = 0x7a6746, lift = 2.6 }) {
+function applyFleetDirt(material, { tag, film = 1, spatter = 1, cake = 1, dust = 0x9b8e75, wet = 0x4a3826, dry = 0x7a6746, lift = 2.6, night = 1 }) {
   const soil = (hex) => {
     const c = new THREE.Color(hex);
     return new THREE.Vector3(c.r, c.g, c.b);
@@ -107,6 +106,9 @@ function applyFleetDirt(material, { tag, film = 1, spatter = 1, cake = 1, dust =
     uFdNight: { value: 0 },
   };
   material.userData.fleetDirt = u;
+  // how much of the night floor this material takes (setFleetLights scales
+  // uFdNight by it): the paint runs above the tarps, which would grey out
+  material.userData.fleetDirtNight = night;
   const prev = material.onBeforeCompile;
   const prevKey = material.customProgramCacheKey;
   material.onBeforeCompile = function (shader, renderer) {
@@ -223,7 +225,18 @@ function applyFleetDirt(material, { tag, film = 1, spatter = 1, cake = 1, dust =
           // dry dust film, in patches rather than a veil
           float settle = 0.2 + 0.8 * up * up;
           float wipe = smoothstep( 0.30, 0.62, blotch ) * ( 0.32 + 0.68 * smoothstep( 0.24, 0.7, sF.a ) );
-          fdFilm = clamp( settle * ( 0.12 + 0.95 * wipe ) * ( 0.4 + 0.7 * reach ) * dustAmt * uFdFilm, 0.0, 0.85 );
+          // and in the moulded recesses of a map that marks them (the tyre
+          // sidewall packs roughness minus its cavities in red; g - r is zero
+          // on every other map), whichever way the surface faces. 3.5: a
+          // sidewall's reach is ~0.2 and its film 0.55, so at 0.8 the letters
+          // held 0.03 of film and the ring never read; a dusty tyre's lettering
+          // is where the pale dust sits, so the recesses run to ~0.35–0.7.
+          float recess = 0.0;
+          #ifdef USE_ROUGHNESSMAP
+            vec4 fdRt = texture2D( roughnessMap, vRoughnessMapUv );
+            recess = clamp( ( fdRt.g - fdRt.r ) * 1.6, 0.0, 1.0 );
+          #endif
+          fdFilm = clamp( ( settle * ( 0.12 + 0.95 * wipe ) + recess * 3.5 ) * ( 0.4 + 0.7 * reach ) * dustAmt * uFdFilm, 0.0, 0.85 );
 
           vec3 dc = diffuseColor.rgb;
           float lum = dot( dc, vec3( 0.2126, 0.7152, 0.0722 ) );
@@ -285,6 +298,70 @@ function applyFleetDirt(material, { tag, film = 1, spatter = 1, cake = 1, dust =
 }
 
 /**
+ * How much lacquer a vehicle has left, off `aAge` (the variant's 0..1 age, one
+ * value per vehicle, baked by the kit for the paint keys only). A fresh
+ * vehicle keeps the coat as authored; from a third of a life on, the coat
+ * thins and chalks — less of it, a broader lobe, so the skyline it returns
+ * goes from a line to a bloom and finally to a matt sheen — the basecoat
+ * under it roughens and its pigment oxidises towards a paler, greyer powder,
+ * and a chalked surface holds the road film and the cake more readily (the
+ * ×1.3 / ×1.2 the old vehicles' own material used to carry, now continuous).
+ * Applied after the dirt, so its declarations land between the colour include
+ * and the film block, and its coat correction runs before the film's own.
+ */
+function applyPaintAge(material) {
+  const prev = material.onBeforeCompile;
+  const prevKey = material.customProgramCacheKey;
+  material.onBeforeCompile = function (shader, renderer) {
+    if (prev) prev.call(this, shader, renderer);
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        attribute float aAge;
+        varying float vAge;`,
+      )
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+        vAge = aAge;`,
+      );
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying float vAge;`,
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        float fdAgeK = smoothstep( 0.3, 0.95, vAge );
+        {
+          float ageLum = dot( diffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
+          diffuseColor.rgb = mix( diffuseColor.rgb, vec3( ageLum ) * 0.92 + 0.05, fdAgeK * 0.22 );
+        }`,
+      )
+      .replace('dustAmt * uFdFilm', 'dustAmt * uFdFilm * ( 1.0 + 0.3 * fdAgeK )')
+      .replace('mudAmt * uFdCake', 'mudAmt * uFdCake * ( 1.0 + 0.2 * fdAgeK )')
+      .replace(
+        '#include <lights_physical_fragment>',
+        `#include <lights_physical_fragment>
+        {
+          material.roughness = clamp( mix( material.roughness, 0.7, fdAgeK * 0.6 ), 0.0, 1.0 );
+          #ifdef USE_CLEARCOAT
+            material.clearcoat *= 1.0 - 0.72 * fdAgeK;
+            material.clearcoatRoughness = clamp( mix( material.clearcoatRoughness, 0.52, fdAgeK ), 0.0, 1.0 );
+          #endif
+        }`,
+      );
+  };
+  material.customProgramCacheKey = function () {
+    return `${prevKey ? prevKey.call(this) : ''}|paintAge`;
+  };
+  return material;
+}
+
+/**
  * Whip aerials and canvas sway in the vertex shader off `aFlap` = (amplitude,
  * phase). Amplitude is metres at the free end; the bend is weighted by the
  * vertex's own height fraction carried in aWear.y so the root stays put.
@@ -321,6 +398,95 @@ function applySway(material, { tag, freq = 1.7 }) {
     return `${prevKey ? prevKey.call(this) : ''}|sway:${tag}`;
   };
   return material;
+}
+
+/**
+ * Tyre sidewall, one 256² pair shared by every fleet tyre and spare. u runs
+ * round the wheel (`SIDEWALL_WRAPS` times, see wheelProto), v from the bead
+ * (0) to the shoulder (1). Moulded relief only — the rubber's own albedo map
+ * stays under it: a bead lip, the rim-protector ridge, two mould rings, a
+ * band of raised lettering (a brand and a size marking), and the shoulder's
+ * sipes. The roughness map's red channel carries the roughness *minus* the
+ * recesses between and around the letters and in the ridge's gutters, which
+ * applyFleetDirt reads as "where the dust settles": (g - r) is zero on every
+ * other map in the fleet, so the term costs the other materials nothing.
+ */
+export const SIDEWALL_WRAPS = 4;
+function sidewallMaps() {
+  return cached('fleet.sidewall', () => {
+    const n = 256;
+    // the lettering, drawn once and read back as a mask
+    const c = makeCanvas(n, n);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, n, n);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // tops of the letters toward the shoulder: rows map to v directly (the
+    // texture is not flipped), so the canvas is drawn upside down and a mark
+    // wanted at v lands at n * (1 - v). Drawn at twice the height: u covers a
+    // quarter turn (~0.45 m at the lettering radius) and v the 0.12 m sidewall,
+    // so square texels are 3:1 on the tyre and unscaled type came out squat.
+    ctx.save();
+    ctx.translate(0, n);
+    ctx.scale(1, -2);
+    ctx.font = 'bold 26px sans-serif';
+    ctx.fillText('SAVANNA TRAK', n * 0.5, (n * (1 - 0.64)) / 2);
+    ctx.font = '600 16px sans-serif';
+    ctx.fillText('265/75 R16  M+S', n * 0.5, (n * (1 - 0.455)) / 2);
+    ctx.restore();
+    const px = ctx.getImageData(0, 0, n, n).data;
+    const letters = (x, y) => px[(y * n + x) * 4] / 255;
+    const bell = (v, c, w) => Math.exp(-(((v - c) / w) ** 2));
+
+    const hf = heightField(n, n, (x, y) => {
+      const u = x / n;
+      const v = (y + 0.5) / n;
+      let h = 0.5;
+      // bead lip
+      h += 0.18 * (smoothstep(0.015, 0.045, v) - smoothstep(0.06, 0.09, v));
+      // rim protector: a rounded ridge with a gutter either side
+      const ridge = bell(v, 0.19, 0.035);
+      h += 0.5 * ridge - 0.08 * (bell(v, 0.135, 0.02) + bell(v, 0.245, 0.02));
+      // mould rings
+      h += 0.14 * (bell(v, 0.32, 0.008) + bell(v, 0.815, 0.008));
+      // lettering: raised, on a very slightly recessed band
+      const band = smoothstep(0.37, 0.4, v) - smoothstep(0.75, 0.78, v);
+      h += band * (-0.04 + 0.34 * letters(x, y));
+      // shoulder sipes and the carcass texture under everything
+      const sipe = smoothstep(0.84, 0.9, v) * (0.5 + 0.5 * Math.sin(u * Math.PI * 2 * 36 + fbm(u * 3, v * 3, { octaves: 2, period: 3, seed: 5 }) * 2));
+      h += sipe * 0.16;
+      h += (fbm(u * 12, v * 12, { octaves: 3, period: 12, seed: 71 }) - 0.5) * 0.08;
+      return clamp(h);
+    });
+    const normal = normalFromHeight(hf, n, n, 2.4, { repeat: 1, flipY: false });
+    normal.wrapT = THREE.ClampToEdgeWrapping;
+    const rough = pixelTexture(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n;
+        const v = (y + 0.5) / n;
+        const band = smoothstep(0.37, 0.4, v) - smoothstep(0.75, 0.78, v);
+        const raised = letters(x, y);
+        // moulded crowns shine a little; the recesses hold their matt
+        const ridge = bell(v, 0.19, 0.035);
+        const worn = smoothstep(0.55, 0.95, fbm(u * 5, v * 5, { octaves: 4, period: 5, seed: 29 }));
+        let r = 0.9 - 0.1 * ridge - 0.1 * band * raised + 0.06 * worn;
+        r = clamp(r, 0.7, 1.0);
+        // where the fines settle: round the letters, in the ridge's gutters, along the bead
+        const gutters = bell(v, 0.135, 0.03) + bell(v, 0.245, 0.03);
+        const cavity = clamp(band * (1 - raised) * 0.75 + gutters * 0.6 + (1 - smoothstep(0.0, 0.04, v)) * 0.5);
+        out[0] = Math.round(255 * r * (1 - cavity));
+        out[1] = Math.round(255 * r);
+        out[2] = Math.round(255 * r);
+      },
+      { srgb: false, repeat: 1, flipY: false },
+    );
+    rough.wrapT = THREE.ClampToEdgeWrapping;
+    return { normal, rough };
+  });
 }
 
 /** Fine cracks radiating from an impact, drawn once as a pane's emissive film. */
@@ -518,43 +684,59 @@ export function fleetMaterials(env = null) {
   // Neutral basecoat map: the map carries only the sprayed-panel mottle and
   // the vertex colour supplies the actual colour, so one program covers every
   // livery in the camp.
+  //
+  // The hero's round-5 coat (src/textures/vehicle.js makePaintMaterial): a
+  // plain satin basecoat — the roughness map *is* the basecoat at 0.2–0.52,
+  // no flake normal under the coat, the base's own Fresnel cut to a fifth — and
+  // one lacquer over it at 0.15 that carries the peel and the flake on its own
+  // normal and the real environment at 0.75. Round 4 had the fleet at 0.3 with
+  // a 0.08 coat over a 0.36 base: the coat's lobe and the base's were a near
+  // match, so the "sky" on a bonnet was a sheen and critic C read it as satin
+  // enamel with no clearcoat. How much lacquer is left on a given vehicle is a
+  // function of its age, and that rides in per vertex (`aAge`, see
+  // applyPaintAge): both paint keys are the same program.
   const paintOpts = {
     map: paintBaseMap(0xdedede),
     roughnessMap: paintRoughness(),
-    normalMap: paintFlakeNormal(),
-    normalScale: new THREE.Vector2(0.1, 0.1),
     metalness: 0,
-    roughness: 0.36,
+    roughness: 1.0,
+    specularIntensity: 0.2,
     clearcoat: 1.0,
-    clearcoatRoughness: 0.08,
-    clearcoatNormalMap: paintPeelNormal(),
+    clearcoatRoughness: 0.15,
+    clearcoatNormalMap: paintCoatNormal(),
     clearcoatNormalScale: new THREE.Vector2(0.3, 0.3),
-    envMapIntensity: 0.3,
+    envMapIntensity: 0.75,
   };
+  // The hero's grade: the real environment carries the reflection now, so the
+  // analytic model is the break-up and the crease streak, not the sky itself
+  // (2.5 -> 1.8). Ground and wall are the savanna the hero's flanks mirror.
   const bwPaint = {
-    strength: 2.5,
+    strength: 1.8,
     band: 0.78,
     trees: 0.9,
-    line: 0.32,
+    line: 0.24,
     clearcoat: 'full',
     ccRough: true,
     base: 0.15,
     flat: 0.82,
-    ground: 0x3a3129,
-    wall: 0x1b2017,
+    ground: 0x4a3626,
+    wall: 0x353022,
     rim: 0xffeecd,
     ambient: 0.6,
   };
   m.paint = new THREE.MeshPhysicalMaterial(V(paintOpts));
   applyBrightwork(m.paint, { tag: 'fleetPaint', ...bwPaint });
-  applyFleetDirt(m.paint, { tag: 'paint' });
-  // Chalked paint on the old vehicles: the coat has weathered off, so the
-  // reflection is broad and weak and the surface takes dirt more readily.
-  m.paintOld = new THREE.MeshPhysicalMaterial(
-    V({ ...paintOpts, roughness: 0.62, clearcoat: 0.25, clearcoatRoughness: 0.35, envMapIntensity: 0.25 }),
-  );
-  applyBrightwork(m.paintOld, { tag: 'fleetPaintOld', ...bwPaint, strength: 1.4, band: 0.5, flat: 0.9 });
-  applyFleetDirt(m.paintOld, { tag: 'paintOld', film: 1.3, cake: 1.2 });
+  // night 1.35: the row's bodies are read against the sky, and the paint is
+  // the one surface that can take more of the floor without the tarps and
+  // the tyres greying with it (measured: shadow-side door skins at 0.9–1.0×
+  // the sky, the target is 1.3–2×)
+  applyFleetDirt(m.paint, { tag: 'paint', night: 1.35 });
+  applyPaintAge(m.paint);
+  // The old vehicles' paint is the same material: the chalked coat, the
+  // oxidised pigment and the heavier film all ride on the age attribute, so a
+  // 0.65 supply truck and a 0.9 jeep differ — and one bucket, one draw call,
+  // where two materials were two.
+  m.paintOld = m.paint;
 
   // --- metals --------------------------------------------------------------
   m.steel = new THREE.MeshStandardMaterial(
@@ -575,17 +757,27 @@ export function fleetMaterials(env = null) {
     V({ map: metal.map, normalMap: metal.normal, roughnessMap: metal.rough, metalness: 0.3, roughness: 0.7, envMapIntensity: 0.5 }),
   );
   applySway(m.whip, { tag: 'whip', freq: 2.3 });
+  // Brushed alloy: rack rails, wheel spokes and hubs, the bike's engine cases,
+  // boxes and ladders. Round 4 had it at 0.86 metalness under a 0.5–0.9 satin
+  // map with the environment at 0.3 — a matt grey that critic B read as
+  // "brushed alloy that does not receive the environment". It does; it was
+  // simply too rough and too dim to show it. A metal has no diffuse, so the
+  // environment *is* its value: full metalness, the brushed roughness map
+  // (0.26–0.5) at 0.85 so the polish lands at 0.22–0.43 and the skyline smears
+  // along the grain, and the real PMREM at 1.4. The analytic grade steps back
+  // to a break-up (0.62 -> 0.45) and keeps its flat-panel gate, because the
+  // camper's roof plate and the utility's boxes are metre-wide flats.
   m.alu = new THREE.MeshStandardMaterial(
     V({
-      metalness: 0.86,
-      roughness: 1.0,
+      metalness: 1.0,
+      roughness: 0.85,
       normalMap: brushed.normal,
-      roughnessMap: brushed.satin,
+      roughnessMap: brushed.rough,
       normalScale: new THREE.Vector2(0.6, 0.6),
-      envMapIntensity: 0.3,
+      envMapIntensity: 1.4,
     }),
   );
-  applyBrightwork(m.alu, { tag: 'fleetAlu', strength: 0.62, band: 0.3, trees: 0.7, line: 0.46, flat: 0.9 });
+  applyBrightwork(m.alu, { tag: 'fleetAlu', strength: 0.45, band: 0.3, trees: 0.7, line: 0.46, flat: 0.9 });
   applyFleetDirt(m.alu, { tag: 'alu', dry: 0x6f6552, film: 0.7, cake: 1.4 });
   m.plate = new THREE.MeshStandardMaterial(
     V({
@@ -600,10 +792,26 @@ export function fleetMaterials(env = null) {
   );
   applyBrightwork(m.plate, { tag: 'fleetPlate', strength: 0.55, band: 0.3, trees: 0.55, line: 0.46, flat: 0.85, sky: 0x99a099, ground: 0x3a2f22, ambient: 1.3 });
   applyFleetDirt(m.plate, { tag: 'plate', cake: 1.2 });
+  // Chrome: lamp bezels, hub caps, wheel nuts, the bike's fork legs, the SUV's
+  // bumper. The reflection is the environment (1.5, was 0.45: at 0.45 under a
+  // 0xb4b8bb tint a bezel returned a fifth of the sky and read as grey paint —
+  // B: "chrome still nothing"), polished to 0.08–0.15 through the brushed map
+  // so the skyline stays a line. The tints the parts are authored with sit at
+  // 0.46 linear; chrome's F0 is nearer 0.6, so the material's own colour makes
+  // up the difference rather than every tint in bodies.js moving. The graded
+  // model drops to the hero's 0.7: break-up and rim, over a real sky.
   m.chrome = new THREE.MeshStandardMaterial(
-    V({ metalness: 1.0, roughness: 0.26, roughnessMap: brushed.rough, normalMap: metalB.normal, normalScale: new THREE.Vector2(0.07, 0.07), envMapIntensity: 0.45 }),
+    V({
+      color: new THREE.Color(1.28, 1.28, 1.28),
+      metalness: 1.0,
+      roughness: 0.3,
+      roughnessMap: brushed.rough,
+      normalMap: metalB.normal,
+      normalScale: new THREE.Vector2(0.07, 0.07),
+      envMapIntensity: 1.5,
+    }),
   );
-  applyBrightwork(m.chrome, { tag: 'fleetChrome', strength: 1.0, band: 0.55, trees: 0.95, line: 0.46, flat: 0.6 });
+  applyBrightwork(m.chrome, { tag: 'fleetChrome', strength: 0.7, band: 0.55, trees: 0.95, line: 0.46, flat: 0.6 });
   // Bare rusted steel: drums, old hitch hardware, exhaust. Rough, dielectric
   // where the oxide is, so it takes colour from the vertex tint.
   m.rust = new THREE.MeshStandardMaterial(
@@ -658,6 +866,22 @@ export function fleetMaterials(env = null) {
     }),
   );
   applyFleetDirt(m.rubber, { tag: 'rubber', dry: 0x6a5837, film: 0.55, lift: 3.2 });
+  // The tyre carcass: the same rubber under the shared sidewall relief, on
+  // the wheel's own polar uvs (UV_KEEP). Same maps present and the same dirt
+  // tag as `rubber`, so it is the same program with its own samplers.
+  const sidewall = sidewallMaps();
+  m.tyre = new THREE.MeshStandardMaterial(
+    V({
+      map: rubber.map,
+      normalMap: sidewall.normal,
+      roughnessMap: sidewall.rough,
+      normalScale: new THREE.Vector2(1.4, 1.4),
+      metalness: 0,
+      roughness: 1.0,
+      envMapIntensity: 0.3,
+    }),
+  );
+  applyFleetDirt(m.tyre, { tag: 'rubber', dry: 0x6a5837, film: 0.55, lift: 3.2 });
   // Tread blocks: the rubber map multiplies a per-vertex albedo that already
   // carries the dust in the voids, so it stays near its mean.
   m.tread = new THREE.MeshStandardMaterial(
@@ -1010,10 +1234,13 @@ function groundDecalAtlas() {
 /** Materials whose geometry carries the sway attribute. */
 export const SWAY_KEYS = new Set(['whip', 'canvas']);
 
+/** Materials whose geometry carries the vehicle's age (the paint keys). */
+export const AGE_KEYS = new Set(['paint', 'paintOld']);
+
 /** Materials whose uvs are kept as authored rather than box-projected. */
 export const UV_KEEP = new Set([
   'glass', 'glassSide', 'glassDark', 'glassDusty', 'glassCracked', 'lensClear', 'reflector', 'headOff', 'headOn', 'tailOff', 'tailOn',
-  'amber', 'amberOn', 'lampBlue', 'lampBlueOn', 'lampWarmOn', 'decal', 'mesh', 'pool',
+  'amber', 'amberOn', 'lampBlue', 'lampBlueOn', 'lampWarmOn', 'decal', 'mesh', 'pool', 'tyre',
 ]);
 
 /** Texel density per material, wraps per metre. */
@@ -1029,6 +1256,7 @@ export const UV_SCALE = {
   trim: 2.6,
   trimGloss: 3.2,
   rubber: 2.0,
+  tyre: 1,
   tread: 3.0,
   gap: 1,
   canvas: 1.2,
@@ -1047,7 +1275,9 @@ export function setFleetLights(m, on, hour = on ? 'night' : 'day') {
   // The hemisphere floor on every merged surface: full at night, a little at
   // dusk (the sky is still lit then), none by day.
   const night = hour === 'night' ? 1 : hour === 'dusk' ? 0.3 : on ? 1 : 0;
-  for (const mat of Object.values(m)) if (mat?.userData?.fleetDirt) mat.userData.fleetDirt.uFdNight.value = night;
+  for (const mat of Object.values(m)) {
+    if (mat?.userData?.fleetDirt) mat.userData.fleetDirt.uFdNight.value = night * (mat.userData.fleetDirtNight ?? 1);
+  }
   m.headOn.emissive.set(on ? 0xfff3dc : 0x3a3833);
   m.headOn.emissiveIntensity = on ? 5.0 : 0.25;
   m.tailOn.emissive.set(on ? 0xff2a12 : 0x5c0b05);

@@ -1,5 +1,5 @@
-import { mulberry32 } from '../textures/core.js';
-import { aged, grime } from './kit.js';
+import { mulberry32, smoothstep } from '../textures/core.js';
+import { LIN, aged, grime, hash3, mix3 } from './kit.js';
 
 // ---------------------------------------------------------------------------
 // What makes two vehicles of the same kind two different vehicles: the paint
@@ -79,7 +79,9 @@ export function variant(kind, { slot, ordinal = 0, site = { low: 0.5, edge: 0.5 
     range,
     paintName,
     paint: PALETTE[paintName],
-    paintKey: old ? 'paintOld' : 'paint',
+    // one paint material for every age: how chalked it is rides on the `aAge`
+    // vertex attribute the kit bakes from `age` (materials.js applyPaintAge)
+    paintKey: 'paint',
     age,
     old,
     dust,
@@ -122,6 +124,35 @@ export function paintShade(v, { fixings = [], floorY = 0.5, tint = null, edge = 
   const edgeK = edge ?? 0.18 + v.age * 0.55;
   if (!v.old) return grime(base, { dust: 0x9a8b6b, up: 0.18 + v.age * 0.25, down: 0.28, jitter: 0.03 + v.age * 0.05, seed: v.seed, edge: edgeK, edgeTint: 0xa39e93 });
   return aged(base, { age: v.age, fixings, floorY, seed: v.seed, edge: edgeK });
+}
+
+/**
+ * A canvas tilt's weather. The sheet is laced over the cage rails and sags
+ * between the hoops, so the sun takes it at the ridge — the high line down the
+ * middle, and the crests over the hoops — where the dye bleaches towards a
+ * pale, greyer cloth; the dust settles where the sheet is low: in the sag
+ * pools between hoops and along the hem where it meets the rails. `ridgeY` is
+ * the sheet's unsagged height, `sag` the deepest sag, `halfWidth` the rail
+ * half-spacing. Old cloth fades further and holds more dust.
+ */
+export function canvasShade(tint, { age = 0.3, dust = 0.5, seed = 1, halfWidth = 0.8, ridgeY = 2.0, sag = 0.045 }) {
+  const base = LIN(tint);
+  const bleach = mix3(base, LIN(0xc9c2ae), 0.75);
+  const dst = LIN(0x9a8e70);
+  const fadeK = 0.22 + age * 0.5;
+  const dustK = 0.25 + dust * 0.55;
+  return (x, y, z) => {
+    const across = Math.min(1, Math.abs(x) / halfWidth);
+    const pool = Math.min(1, Math.max(0, (ridgeY - y) / sag));
+    const h = hash3(Math.round(x * 14), Math.round(y * 14), Math.round(z * 14), seed + 11);
+    // ridge: the centre line and the crests, not the pools
+    const ridge = (1 - across) ** 1.4 * (1 - pool * 0.7);
+    let c = mix3(base, bleach, Math.min(0.85, fadeK * (0.35 + ridge) * (0.75 + h * 0.5)));
+    // hem and pools
+    const hem = smoothstep(0.55, 1.0, across);
+    c = mix3(c, dst, Math.min(0.8, dustK * (hem * 0.7 + pool * pool * 0.55) * (0.7 + h * 0.6)));
+    return c;
+  };
 }
 
 /** Two-tone: a second colour below the swage line, on the older bush vehicles. */

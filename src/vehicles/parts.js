@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { bend, bolt, profile, rbox, transform, tube as geoTube } from '../lib/geo.js';
 import { clamp, mulberry32, smoothstep } from '../textures/core.js';
 import { LIN, grime, hash3, mix3 } from './kit.js';
-import { DECALS, GROUND_DECAL } from './materials.js';
+import { DECALS, GROUND_DECAL, SIDEWALL_WRAPS } from './materials.js';
 
 // ---------------------------------------------------------------------------
 // The part library, lower half: primitives, running gear, chassis and lamps.
@@ -182,7 +182,9 @@ function lugRing(rOut, rIn, n, phase, fill = 0.54, width = 0.1) {
 export function wheelProto({ r = 0.42, w = 0.28, rimR = 0.215, style = 'alloy', lugs = 22, seed = 1, tint = 0x8a8f94, dust = 0.5 } = {}) {
   const pieces = [];
   const hw = w * 0.5;
-  const lugH = 0.038 * (r / 0.42);
+  const moto = style === 'moto';
+  // a trail tyre's knobs are shallower than a mud-terrain's blocks
+  const lugH = 0.038 * (r / 0.42) * (moto ? 0.6 : 1);
   const crown = r - lugH;
   const rnd = mulberry32(seed);
   const dustK = 0.4 + dust * 0.8;
@@ -196,29 +198,37 @@ export function wheelProto({ r = 0.42, w = 0.28, rimR = 0.215, style = 'alloy', 
     const d = clamp((bead * 0.55 + side * 0.22 * (0.5 + h)) * dustK, 0, 0.6);
     return mix3(RUBBER, SIDE_DUST, d);
   };
-  pieces.push({
-    key: 'rubber',
-    shade: carcassShade,
-    geo: lathe(
-      [
-        [rimR + 0.002, -hw * 0.5],
-        [rimR + 0.025, -hw * 0.72],
-        [r * 0.66, -hw * 0.97],
-        [r * 0.8, -hw],
-        [crown - 0.012, -hw * 0.9],
-        [crown + 0.002, -hw * 0.66],
-        [crown + 0.002, hw * 0.66],
-        [crown - 0.012, hw * 0.9],
-        [r * 0.8, hw],
-        [r * 0.66, hw * 0.97],
-        [rimR + 0.025, hw * 0.72],
-        [rimR + 0.002, hw * 0.5],
-      ],
-      // a motorcycle's wheels are all rim: 28 segments on a 34 cm tyre read
-      // as a polygon at fleet distance
-      style === 'moto' ? 40 : 36,
-    ),
-  });
+  const carcass = lathe(
+    [
+      [rimR + 0.002, -hw * 0.5],
+      [rimR + 0.025, -hw * 0.72],
+      [r * 0.66, -hw * 0.97],
+      [r * 0.8, -hw],
+      [crown - 0.012, -hw * 0.9],
+      [crown + 0.002, -hw * 0.66],
+      [crown + 0.002, hw * 0.66],
+      [crown - 0.012, hw * 0.9],
+      [r * 0.8, hw],
+      [r * 0.66, hw * 0.97],
+      [rimR + 0.025, hw * 0.72],
+      [rimR + 0.002, hw * 0.5],
+    ],
+    // a motorcycle's wheels are all rim: 28 segments on a 34 cm tyre read
+    // as a polygon at fleet distance
+    moto ? 40 : 36,
+  );
+  // Sidewall uvs for the shared relief map: u round the wheel — the lathe's
+  // own segment fraction, so the seam stays where the geometry's is — v from
+  // the bead to the shoulder by radius, the same on both faces.
+  {
+    const p = carcass.attributes.position;
+    const uv = carcass.attributes.uv;
+    for (let i = 0; i < p.count; i++) {
+      const rr = Math.hypot(p.getY(i), p.getZ(i));
+      uv.setXY(i, uv.getX(i) * SIDEWALL_WRAPS, clamp((rr - rimR) / (r * 0.8 - rimR)));
+    }
+  }
+  pieces.push({ key: 'tyre', shade: carcassShade, geo: carcass });
 
   // Tread: three rows of lugs, the shoulders staggered against the centre so
   // the outline is notched from every angle. Each row is one extruded star.
@@ -230,13 +240,23 @@ export function wheelProto({ r = 0.42, w = 0.28, rimR = 0.215, style = 'alloy', 
     const wear = 0.85 + h * 0.3;
     return mix3(RUBBER, TREAD_DUST, d).map((c) => c * wear);
   };
-  const rows = style === 'moto' || DETAIL.lite ? [[0, w * (style === 'moto' ? 0.62 : 0.9), 0]] : [
-    [0, w * 0.34, 0],
-    [-(w * 0.17 + w * 0.15), w * 0.3, Math.PI / lugs],
-    [w * 0.17 + w * 0.15, w * 0.3, Math.PI / lugs],
-  ];
+  // A motorcycle's tyre is a narrow crown, so it gets two rows staggered by half
+  // a pitch rather than three: one row read as a single notched polygon from
+  // fleet distance (critics A and C, rounds 3 and 4).
+  const rows = DETAIL.lite && !moto
+    ? [[0, w * 0.9, 0]]
+    : moto
+      ? [
+          [-w * 0.2, w * 0.36, 0],
+          [w * 0.2, w * 0.36, Math.PI / lugs],
+        ]
+      : [
+          [0, w * 0.34, 0],
+          [-(w * 0.17 + w * 0.15), w * 0.3, Math.PI / lugs],
+          [w * 0.17 + w * 0.15, w * 0.3, Math.PI / lugs],
+        ];
   for (const [ox, rw, phase] of rows) {
-    const g = lugRing(r + (ox === 0 ? 0 : -0.004), crown - 0.008, lugs, phase + rnd() * 0.2, ox === 0 ? 0.5 : 0.56, rw);
+    const g = lugRing(moto || ox === 0 ? r : r - 0.004, crown - 0.008, lugs, phase + rnd() * 0.2, ox === 0 || moto ? 0.5 : 0.56, rw);
     g.translate(ox, 0, 0);
     pieces.push({ key: 'tread', geo: g, shade: treadShade });
   }
@@ -258,16 +278,24 @@ export function wheelProto({ r = 0.42, w = 0.28, rimR = 0.215, style = 'alloy', 
   const face = hw * 0.32;
   const rimShade = grime(tint, { dust: 0x6a6150, up: 0.15, down: 0.12, jitter: 0.12, seed });
   const dark = grime(0x2a2d31, { up: 0.1, down: 0.1, jitter: 0.1, seed });
-  if (style === 'moto') {
-    pieces.push({ key: 'alu', tint, geo: lathe([[rimR - 0.012, -hw * 0.6], [rimR + 0.004, -hw * 0.62], [rimR + 0.008, hw * 0.62], [rimR - 0.012, hw * 0.6], [rimR - 0.012, -hw * 0.6]], 40) });
-    pieces.push({ key: 'alu', shade: rimShade, geo: cylX(0.055, 0.055, hw * 1.1, 18) });
-    pieces.push({ key: 'alu', shade: rimShade, geo: cylX(0.075, 0.075, hw * 0.5, 18) });
-    const spoke = cyl(0.0028, 0.0028, 1, 4);
-    for (let i = 0; i < 18; i++) {
+  if (moto) {
+    // Wire wheel: a channel rim, a hub with two flanges, 32 crossed spokes and
+    // a brake disc on its carrier. The spokes are 9 mm — real ones are 4 — so
+    // they still resolve as a ring of lines at fleet distance rather than
+    // vanishing and leaving the disc behind them to read as the wheel.
+    pieces.push({ key: 'alu', tint, geo: lathe([[rimR - 0.016, -hw * 0.62], [rimR + 0.004, -hw * 0.66], [rimR + 0.008, hw * 0.66], [rimR - 0.016, hw * 0.62], [rimR - 0.016, -hw * 0.62]], 40) });
+    // the hub is a sand casting, satin, not the polished mirror the rim is: at
+    // full environment a 14 cm alloy flange face-on to the camera returned one
+    // tan value and read as a disc filling the wheel
+    const hubShade = grime(0x85888c, { dust: 0x6a6150, up: 0.2, down: 0.15, jitter: 0.1, seed });
+    pieces.push({ key: 'steel', shade: hubShade, geo: cylX(0.05, 0.05, hw * 1.2, 16) });
+    for (const s of [-1, 1]) pieces.push({ key: 'steel', shade: hubShade, geo: cylX(0.072, 0.072, 0.012, 16).translate(s * hw * 0.5, 0, 0) });
+    const spoke = cyl(0.0045, 0.0045, 1, 4);
+    for (let i = 0; i < 16; i++) {
       for (const s of [-1, 1]) {
-        const a = (i / 18) * Math.PI * 2 + (s > 0 ? 0.17 : 0);
-        const from = new THREE.Vector3(s * hw * 0.5, Math.cos(a + 0.5) * 0.06, Math.sin(a + 0.5) * 0.06);
-        const to = new THREE.Vector3(s * hw * 0.55, Math.cos(a) * (rimR - 0.012), Math.sin(a) * (rimR - 0.012));
+        const a = (i / 16) * Math.PI * 2 + (s > 0 ? 0.2 : 0);
+        const from = new THREE.Vector3(s * hw * 0.5, Math.cos(a + 0.55) * 0.062, Math.sin(a + 0.55) * 0.062);
+        const to = new THREE.Vector3(s * hw * 0.6, Math.cos(a) * (rimR - 0.014), Math.sin(a) * (rimR - 0.014));
         const d = to.clone().sub(from);
         const g = spoke.clone();
         g.scale(1, d.length(), 1);
@@ -276,9 +304,12 @@ export function wheelProto({ r = 0.42, w = 0.28, rimR = 0.215, style = 'alloy', 
         pieces.push({ key: 'chrome', tint: 0xb9bec2, geo: g });
       }
     }
-    // brake rotor outboard
-    pieces.push({ key: 'alu', tint: 0x9a9690, geo: cylX(0.11, 0.11, 0.006, 32) });
-    return { pieces, r, w, rimR, style };
+    // brake disc outboard of the hub on the -X side: a stainless ring (dull,
+    // scored — steel's satin, not alu's polish) on a dark carrier
+    const dx = -(hw * 0.6 + 0.014);
+    pieces.push({ key: 'steel', tint: 0x9a9c9e, geo: lathe([[0.066, -0.0025], [0.115, -0.0025], [0.115, 0.0025], [0.066, 0.0025], [0.066, -0.0025]], 32).translate(dx, 0, 0) });
+    pieces.push({ key: 'trim', tint: 0x2a2d31, geo: cylX(0.07, 0.07, 0.01, 16).translate(dx + 0.002, 0, 0) });
+    return { pieces, r, w, rimR, style, discX: dx };
   }
 
   if (style === 'alloy' || style === 'quad') {
@@ -358,7 +389,7 @@ export function addWheel(k, proto, { x, z, y = null, side = 1, steer = 0, spin =
   for (const piece of proto.pieces) {
     const g = piece.geo.clone();
     transform(g, { rot: [spin, 0, 0] });
-    if (squash > 0 && (piece.key === 'rubber' || piece.key === 'tread')) {
+    if (squash > 0 && (piece.key === 'tyre' || piece.key === 'tread')) {
       const p = g.attributes.position;
       const floor = -(proto.r - squash);
       for (let i = 0; i < p.count; i++) {
@@ -378,7 +409,7 @@ export function addWheel(k, proto, { x, z, y = null, side = 1, steer = 0, spin =
       contact: id,
       // the tyre and rim carry their own baked dust; full road film cakes them
       // into one dark disc
-      wear: piece.key === 'rubber' || piece.key === 'tread' ? 0.2 : 0.35,
+      wear: piece.key === 'tyre' || piece.key === 'tread' ? 0.2 : 0.35,
     });
   }
   return id;

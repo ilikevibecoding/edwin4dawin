@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BufferGeometryUtils, transform } from '../lib/geo.js';
 import { clamp, lerp, smoothstep } from '../textures/core.js';
-import { SWAY_KEYS, UV_KEEP, UV_SCALE } from './materials.js';
+import { AGE_KEYS, SWAY_KEYS, UV_KEEP, UV_SCALE } from './materials.js';
 
 // ---------------------------------------------------------------------------
 // The fleet kit-basher.
@@ -295,7 +295,7 @@ export class VehicleKit {
    * world transform; returns the vehicle's own group holding its panes.
    */
   finish(matrix, fleet, materials, { root }) {
-    const { dust = 0.6, mud = 0.5 } = this.spec;
+    const { dust = 0.6, mud = 0.5, age = 0.3 } = this.spec;
     _nm.getNormalMatrix(matrix);
     const dir = new THREE.Vector3();
     const pos = new THREE.Vector3();
@@ -322,6 +322,8 @@ export class VehicleKit {
       const base = piece.tint !== undefined ? LIN(piece.tint) : [1, 1, 1];
       const sway = SWAY_KEYS.has(key);
       const flap = sway ? new Float32Array(n * 2) : null;
+      // the paint's coat thins with the vehicle's age: one value per vehicle
+      const aged = AGE_KEYS.has(key) ? new Float32Array(n).fill(age) : null;
       for (let i = 0; i < n; i++) {
         const x = p.getX(i);
         const y = p.getY(i);
@@ -351,6 +353,7 @@ export class VehicleKit {
       g.setAttribute('color', new THREE.BufferAttribute(col, 3));
       g.setAttribute('aWear', new THREE.BufferAttribute(wear, 4));
       if (flap) g.setAttribute('aFlap', new THREE.BufferAttribute(flap, 2));
+      if (aged) g.setAttribute('aAge', new THREE.BufferAttribute(aged, 1));
       fleet.push(key, g);
     }
 

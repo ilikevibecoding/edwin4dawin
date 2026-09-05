@@ -285,7 +285,7 @@ export function createFleet({ env = null, quality: sceneQuality = 'high', placem
     const v = variants[i];
     v.lightsOn = i === arriving;
     const name = `${s.kind}_${v.ordinal}`;
-    const k = new VehicleKit(name, { wheels: [], track: 0.8, dust: v.dust, mud: v.mud });
+    const k = new VehicleKit(name, { wheels: [], track: 0.8, dust: v.dust, mud: v.mud, age: v.age });
     const o = {
       quality,
       lightsOn: i === arriving,

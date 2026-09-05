@@ -1,6 +1,8 @@
 import * as THREE from 'three';
+import { rbox } from '../lib/geo.js';
 import { archCut, bend, bolt, cyl, cylX, cylZ, decal, gbox, jit, paneGeo, pbox, rectLamp, roundLamp, sidePanel, tube } from './parts.js';
-import { grime } from './kit.js';
+import { LIN, grime, mix3 } from './kit.js';
+import { canvasShade } from './wear.js';
 
 // ---------------------------------------------------------------------------
 // Bodies: the bonneted 4x4 family (wagon, pickup, open jeep, medium truck), the
@@ -106,7 +108,7 @@ export function bonnetBody(k, o) {
     style = 'wagon', doors = 4, paintKey = 'paint', paint, glassKey = 'glass', brokenPane = false,
     lightsOn = false, markersOn = lightsOn, rhd = true, rake = 0.32, roundLamps = true, flareKey = 'trim', flareTint = 0x383c41,
     interior = true, seatTint = 0x4a4438, bedFloor = null, roofRailKey = null, bullbar = false, cabW = null,
-    missingPanel = false, crackedLens = false, edge = 0, dome = false,
+    missingPanel = false, crackedLens = false, edge = 0, dome = false, bumper = 'steel',
   } = o;
   const P = paint; // shade fn
   const ar = r + 0.11;
@@ -176,8 +178,19 @@ export function bonnetBody(k, o) {
     for (const s of [-1, 1]) rectLamp(k, { pos: [s * lampX, lampY, nose + 0.03], w: 0.3, h: 0.14, kind: 'head', on: lightsOn, segments: ['head', 'amber'] });
   }
   for (const s of [-1, 1]) roundLamp(k, { pos: [s * (hw - 0.14), lampY - 0.22, nose + 0.02], r: 0.035, kind: 'amber', on: markersOn, depth: 0.03 });
-  // bumper
-  k.add('steel', gbox(hw * 2 + 0.06, 0.15, 0.14, 0.02), { pos: [0, sill - 0.02, nose + 0.04], shade: grime(0x4a4e52, { up: 0.6, down: 0.45 }) });
+  // bumper: powder-coated steel, or a polished bar on a wagon that left the
+  // showroom with one — a rolled section rather than a box, so the chrome
+  // sweeps from sky to ground across it instead of holding one flat value.
+  // The environment the underside mirrors is the ground under the nose, which
+  // is in the vehicle's own shadow and which the probe, taken in the open,
+  // has in full sun: the down-facing faces give up 0.62 of their reflectance
+  // (1.4 stops) to stand in for that shadow, so the bar grades sky to dark.
+  if (bumper === 'chrome') {
+    k.add('chrome', rbox(hw * 2 + 0.06, 0.15, 0.14, 0.055, 2), { pos: [0, sill - 0.02, nose + 0.04], shade: grime(0xb4b8bb, { up: 0, down: 0.62, jitter: 0 }) });
+    k.addMirrored('trim', gbox(0.12, 0.17, 0.05, 0.006), { pos: [hw * 0.5, sill - 0.02, nose + 0.06], tint: 0x2a2d31 });
+  } else {
+    k.add('steel', gbox(hw * 2 + 0.06, 0.15, 0.14, 0.02), { pos: [0, sill - 0.02, nose + 0.04], shade: grime(0x4a4e52, { up: 0.6, down: 0.45 }) });
+  }
   k.add('steel', gbox(hw * 2 - 0.4, 0.04, 0.16, 0.008), { pos: [0, sill - 0.12, nose + 0.06], shade: grime(0x3d4144, { up: 0.6, down: 0.45 }) });
   if (bullbar) {
     const bz = nose + 0.22;
@@ -522,7 +535,7 @@ export function flatDeck(k, { hw, y, z0, z1, sides = 0.4, headboard = 0.8, key =
  * Roll cage over an open body: front hoop, main hoop, rear hoop, longitudinal
  * top rails, a diagonal, and optionally a canvas roof laced to the rails.
  */
-export function rollCage(k, { hw, y0, top, hoops, canvas = true, canvasTint = 0x8b8064, tubeR = 0.026, sway = 0.012, seed = 1 }) {
+export function rollCage(k, { hw, y0, top, hoops, canvas = true, canvasTint = 0x8b8064, tubeR = 0.026, sway = 0.012, seed = 1, age = 0.3, dust = 0.5 }) {
   const shade = grime(0x2f3336, { up: 0.5, down: 0.4, jitter: 0.08 });
   const x = hw - 0.08;
   const first = hoops[0];
@@ -560,13 +573,17 @@ export function rollCage(k, { hw, y0, top, hoops, canvas = true, canvasTint = 0x
     }
     g.translate(0, 0, (first + last) * 0.5);
     g.computeVertexNormals();
+    // sun-bleached along the ridge, dust in the sag pools and along the hem
+    const sheet = canvasShade(canvasTint, { age, dust, seed, halfWidth: x, ridgeY: top + tubeR + 0.01, sag: 0.045 });
     k.add('canvas', g, {
-      shade: grime(canvasTint, { up: 0.3, dust: 0x9a8e70, jitter: 0.06 }),
+      shade: sheet,
       flap: (px, py, pz) => [sway * (0.3 + 0.7 * (1 - Math.abs((pz - (first + last) * 0.5) / (len * 0.5)) ** 2)), pz * 2 + seed],
     });
-    // lacing along the rails and a rolled rear flap
-    k.addMirrored('canvas', gbox(0.05, 0.03, len - 0.1, 0.008), { pos: [x + 0.01, top + 0.03, (first + last) * 0.5], tint: canvasTint });
-    k.add('canvas', cylX(0.06, 0.06, x * 2, 12), { pos: [0, top - 0.06, last + 0.02], shade: grime(canvasTint, { up: 0.3, dust: 0x9a8e70 }) });
+    // lacing along the rails and a rolled rear flap: the hem, so the dust end of the same cloth
+    const hem = grime(canvasTint, { up: 0.3, dust: 0x9a8e70, jitter: 0.05, seed });
+    const hemDust = (px, py, pz, nx, ny, nz) => mix3(hem(px, py, pz, nx, ny, nz), LIN(0x9a8e70), 0.2 + dust * 0.35);
+    k.addMirrored('canvas', gbox(0.05, 0.03, len - 0.1, 0.008), { pos: [x + 0.01, top + 0.03, (first + last) * 0.5], shade: hemDust });
+    k.add('canvas', cylX(0.06, 0.06, x * 2, 12), { pos: [0, top - 0.06, last + 0.02], shade: hemDust });
   }
 }
 

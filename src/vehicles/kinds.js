@@ -121,7 +121,7 @@ export function safariJeep(k, v, o) {
   const seatTint = v.pick(SEATS);
   benchTiers(k, { hw, rows: [{ z: -0.95, y: b.floorY + 0.12 }, { z: -1.85, y: b.floorY + 0.3 }], tint: seatTint });
   const cageTop = 1.95;
-  rollCage(k, { hw, y0: b.floorY, top: cageTop, hoops: [0.55, -0.4, -1.35, -2.25], canvas: o.canvas ?? true, canvasTint: v.pick([0x8b8064, 0x6f6a55, 0x5c6a4a]), seed: v.seed });
+  rollCage(k, { hw, y0: b.floorY, top: cageTop, hoops: [0.55, -0.4, -1.35, -2.25], canvas: o.canvas ?? true, canvasTint: v.pick([0x8b8064, 0x6f6a55, 0x5c6a4a]), seed: v.seed, age: v.age, dust: v.dust });
   spots(k, { xs: [-0.45, 0.45], y: cageTop + 0.1, z: 0.5, r: 0.07, on: false });
   // spotter's seat out on the bull bar
   k.add('steel', gbox(0.5, 0.05, 0.4, 0.01), { pos: [0.2, sill + 0.28, nose + 0.32], shade: STEEL });
@@ -166,6 +166,8 @@ export function suv(k, v, o) {
     hw, sill, belt, roof, hood, nose, cabFront, cabRear, tail, front, rear, r,
     style: 'wagon', doors: 4, paintKey: v.paintKey, paint: P, glassKey: v.glassKey, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens,
     lightsOn: o.lightsOn, markersOn: mk(o), dome: o.dome, rake: 0.3, bullbar: v.chance(0.7), roundLamps: v.chance(0.5), seatTint: v.pick(SEATS),
+    // the wagon keeps its polished bumper until the paint has gone chalky
+    bumper: v.old ? 'steel' : 'chrome',
   });
   // roof: full-length rack and what rides on it
   const { deckY } = roofRack(k, { x: hw - 0.14, z0: cabFront - 0.5, z1: tail + 0.2, y: roof + 0.1, h: 0.13, legs: [cabFront - 0.7, -0.4, tail + 0.4], legH: 0.1 });
@@ -635,10 +637,24 @@ export function motorcycle(k, v, o) {
   const zR = -0.7;
   const protoF = wheelProto({ r: rF, w: 0.09, rimR: 0.265, style: 'moto', seed: v.seed, dust: v.dust });
   const protoR = wheelProto({ r: rR, w: 0.13, rimR: 0.225, style: 'moto', seed: v.seed + 1, dust: v.dust });
-  addWheel(k, protoF, { x: 0, z: zF, side: 1, steer: 0.28, spin: v.rnd() * 6, squash: 0.012 });
-  addWheel(k, protoR, { x: 0, z: zR, side: 1, spin: v.rnd() * 6, squash: 0.012 });
+  const steer = 0.28;
+  const cF = addWheel(k, protoF, { x: 0, z: zF, side: 1, steer, spin: v.rnd() * 6, squash: 0.012 });
+  const cR = addWheel(k, protoR, { x: 0, z: zR, side: 1, spin: v.rnd() * 6, squash: 0.012 });
   const P = paintShade(v);
   const dark = grime(0x3c4045, { up: 0.4, jitter: 0.06 });
+  // brake calipers over the discs (the disc sits at proto.discX in wheel space;
+  // the front one turns with the steering), placed here rather than in the
+  // proto because the proto is spun to randomise the lug phase
+  for (const [proto, z, hub, th, id] of [[protoF, zF, rF - 0.012 - 0.015, steer, cF], [protoR, zR, rR - 0.012 - 0.015, 0, cR]]) {
+    const ox = proto.discX;
+    const oz = -0.045;
+    k.add('steel', gbox(0.034, 0.085, 0.06, 0.008), {
+      pos: [ox * Math.cos(th) + oz * Math.sin(th), hub + 0.075, z - ox * Math.sin(th) + oz * Math.cos(th)],
+      rot: [0.35, th, 0],
+      tint: 0x8c8a80,
+      contact: id,
+    });
+  }
   // frame: headstock down to the engine cradle, back to the swingarm pivot, up to the seat rails
   const head = [0, 0.98, 0.42];
   k.add('steel', tube([head, [0, 0.62, 0.3], [0, 0.42, 0.12], [0, 0.42, -0.2]], 0.022, 8), { shade: dark });
