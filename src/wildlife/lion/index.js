@@ -80,6 +80,54 @@ function shellMaterial(base, { wind = 0.05, rootShade = 0.45, droop = 0 } = {}) 
   return base;
 }
 
+/**
+ * Fur backlight for the coat: hair forward-scatters a light behind the animal
+ * into a bright fringe along the outline. Round 6 measured the sheen lobe
+ * against this and it cannot do it — Charlie sheen is weighted by N.L, and at
+ * the outline against a low back sun N.L is nothing (dusk close, top 3 px of
+ * the dorsal outline over the flank 10-22 px in: +0.32 st at sheen 0.4, +0.19
+ * at 0.5, +0.18 at sheenRoughness 0.35 — noise). So the term is written out:
+ * (1 - N.V)^6 for the outline, times how far behind the animal the sun is
+ * (1 behind, 1/2 beside, 0 in front), times a wrapped N.L so the fringe sits
+ * on the sun's side of the outline, in the sun's colour and the coat's own,
+ * with the sun's shadow map honoured (an animal in a tree's shade gets none).
+ * The sixth power keeps it to the outline: at the third power and 0.45 the
+ * term lifted the whole upper flank +0.2-0.4 st at dusk and the outline no
+ * more than the flank — a fill, not a fringe. `uRim` is live on
+ * `material.userData.rim.value`.
+ */
+function furRim(m) {
+  m.userData.rim = { value: 1.0 };
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uRim = m.userData.rim;
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uRim;`,
+      )
+      .replace(
+        '#include <lights_fragment_begin>',
+        `#include <lights_fragment_begin>
+        #if NUM_DIR_LIGHTS > 0
+        {
+          IncidentLight rimLight;
+          getDirectionalLightInfo( directionalLights[ 0 ], rimLight );
+          #if defined( USE_SHADOWMAP ) && ( NUM_DIR_LIGHT_SHADOWS > 0 )
+          rimLight.color *= ( rimLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize, directionalLightShadows[ 0 ].shadowIntensity, directionalLightShadows[ 0 ].shadowBias, directionalLightShadows[ 0 ].shadowRadius, vDirectionalShadowCoord[ 0 ] ) : 1.0;
+          #endif
+          float rimEdge = pow( 1.0 - saturate( dot( geometryNormal, geometryViewDir ) ), 6.0 );
+          float rimBehind = saturate( 0.5 - 0.5 * dot( geometryViewDir, rimLight.direction ) );
+          float rimWrap = saturate( dot( geometryNormal, rimLight.direction ) * 0.5 + 0.5 );
+          reflectedLight.directDiffuse += rimLight.color * diffuseColor.rgb * ( uRim * rimEdge * rimBehind * rimWrap );
+        }
+        #endif`,
+      );
+  };
+  m.customProgramCacheKey = () => 'lionfurrim|' + m.type + '|' + (m.map ? 'm' : '');
+  return m;
+}
+
 export function lionMaterials({ env, quality }) {
   const size = quality === 'fast' ? 512 : 1024;
   // Physical at every quality (round 4): the sheen term is what lets a low
@@ -92,7 +140,9 @@ export function lionMaterials({ env, quality }) {
       map: coatAtlas({ size, spots }),
       normalMap: coatNormal(256),
       normalScale: new THREE.Vector2(0.35, 0.35),
-      roughness: 0.75,
+      // round 6: rougher, so the specular lobe is not what lifts the coat —
+      // the sheen is, and only at the rim
+      roughness: 0.84,
       metalness: 0,
       vertexColors: true,
       envMap: env,
@@ -100,15 +150,19 @@ export function lionMaterials({ env, quality }) {
       // flank away from the sun goes to black against a lit plain
       envMapIntensity: 0.6,
       // fur: a soft retro-reflective sheen that catches a back light along
-      // the outline, in the coat's own pale
-      // (0.4: at 0.7 the whole lit side of the trunk bleached to cream and
-      // the terminator into the flank hardened)
-      sheen: 0.4,
+      // the outline, in the coat's own tint lifted a third (round 6: 0.5 —
+      // the round-4 critics measured no rim response at 0.4; the sheen
+      // colour is the flank's own tawny x1.3, so the rim is the coat going
+      // pale, not cream laid over it)
+      // (0.7 was tried in round 4: the whole lit side of the trunk bleached
+      // to cream and the terminator into the flank hardened)
+      sheen: 0.5,
       sheenRoughness: 0.6,
-      sheenColor: new THREE.Color(0xdcb884),
-      specularIntensity: 0.35,
+      sheenColor: new THREE.Color(0xe0ae70),
+      specularIntensity: 0.3,
     });
     m.name = spots ? 'lion-coat-cub' : 'lion-coat';
+    furRim(m);
     return m;
   };
   const coat = make(false);

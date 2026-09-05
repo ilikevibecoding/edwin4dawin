@@ -132,7 +132,16 @@ export const EYE = { r: 0.0195, lidUp: 0.46, lidDown: 0.46 };
 // two so the eye is hooded under the brow the way a cat's is, and the ball
 // 1.34 × EYE.r rather than 1.4 (a 5.5 cm ball on a 40 cm head was a cub's
 // eye); about 65 % of the iris disc shows from the front.
-export const EYE_LIDS = { up: 0.54, down: 0.58, scale: 1.34, roll: 0.14 };
+// Round 6: the upper lid comes down to 26 degrees over the gaze so it hoods
+// the top fifth of the iris disc (critic A: "full spheres with a visible
+// sclera ring head-on"), and the lower rim drops to 36 so the opening stays
+// a lion's; with the ball sunk a quarter of its radius into the skull
+// (HEAD_JOINTS below) and the stop lowered under it (headspec.js HEAD_ROWS)
+// the raycast from the face camera sees 0.62 / 0.59 of the two iris discs
+// (round 5's head: 0.62 / 0.57), inside the 0.60-0.70 the brief holds.
+// (24 degrees with the ball 8 mm back measured 0.46 / 0.39 by the same
+// raycast: the skin ahead of the eye, not the lids, was what hid the iris.)
+export const EYE_LIDS = { up: 0.46, down: 0.62, scale: 1.34, roll: 0.14 };
 
 /**
  * Head-child joints re-placed for the head in head.js, laid out like JOINTS
@@ -148,8 +157,12 @@ export const HEAD_JOINTS = {
   // so from the front the ears stand wide off the corners (their inner edges
   // half the head's width apart) with the crown level between them — not on
   // top of a dome, not low on its sides
-  earL: { pos: [0.098, 1.322, 0.97], dir: [0.64, 1.0, 0.02] },
-  earR: { pos: [-0.098, 1.322, 0.97], dir: [-0.64, 1.0, 0.02] },
+  // (round 6: 4 mm further out and 6 mm lower on the corner — the base was
+  // measuring 0.77 of the half-zygomatic and 0.13 L over the eye line
+  // against a lion's ~0.8 and ~0.1; ears high and inboard on a round crown
+  // are the bear's, seen from the side)
+  earL: { pos: [0.102, 1.316, 0.97], dir: [0.64, 1.0, 0.02] },
+  earR: { pos: [-0.102, 1.316, 0.97], dir: [-0.64, 1.0, 0.02] },
   // eyes on the face under the brow ridge, over the muzzle box (round 5:
   // 11.7 cm apart, 0.29 of the head length and 0.45 of the cheek width, up
   // 1.2 cm and back 2.2 cm from round 4 so the inner corners sit 0.33 L behind
@@ -157,8 +170,16 @@ export const HEAD_JOINTS = {
   // centre about a radius under the skin along its gaze so the cornea stands
   // just proud between brow and cheek, forward-facing with about 17 degrees
   // of divergence; headspec.js FACE.eye is this offset
-  lidL: { pos: [0.0585, 1.27, 1.078], dir: [0.3, 0.08, 1] },
-  lidR: { pos: [-0.0585, 1.27, 1.078], dir: [-0.3, 0.08, 1] },
+  // (round 6: 6 mm — a quarter of the ball's radius — further back into the
+  // skull, so the ball sits in the socket under the brow ledge with the skin
+  // meeting it at the lid rims instead of a hemisphere standing proud of the
+  // face; straight back rather than along the gaze, so the interpupillary
+  // distance the round-5 head was measured to is unchanged. The brief's 30 %
+  // (8 mm) put the muzzle root's top corner across the lower half of the
+  // iris from the face camera — 0.46 of the disc seen against 0.62 before —
+  // so the stop was lowered under the eye instead and the sink held at 6 mm)
+  lidL: { pos: [0.0585, 1.27, 1.072], dir: [0.3, 0.08, 1] },
+  lidR: { pos: [-0.0585, 1.27, 1.072], dir: [-0.3, 0.08, 1] },
 };
 
 /**

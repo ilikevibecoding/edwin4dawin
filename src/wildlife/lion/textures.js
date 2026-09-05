@@ -179,21 +179,32 @@ function coatShade(u, v, seed, { spots, su = u, sv = v }) {
   const wander = (fbm(v * 7 + seed, u * 2, { octaves: 2, period: 8, seed: 389 + seed }) - 0.5) * 0.16;
   let c = mixRgb(COAT.belly, COAT.side, smoothstep(0.12 + wander, 0.5 + wander, e));
   c = mixRgb(c, COAT.back, smoothstep(0.5 + wander, 0.98, e) * 0.9);
-  // the dorsal line, and the shoulders and withers (v toward the head)
-  // darker still — the saddle a lion carries over its heaviest part
-  c = mixRgb(c, COAT.black, 0.14 * smoothstep(0.035, 0.0, Math.abs(u - 0.5)));
+  // the dorsal line — the darker guard-hair stripe a lion carries down its
+  // spine, 0.08 of the way around, soft edged (round 6: twice round 5's
+  // width and depth; at 0.035 it was under a pixel at the gauntlet's range) —
+  // and the shoulders and withers (v toward the head) darker still, the
+  // saddle over the heaviest part
+  c = mixRgb(c, COAT.black, 0.26 * smoothstep(0.04, 0.008, Math.abs(u - 0.5)));
   c = mixRgb(c, COAT.back, 0.35 * smoothstep(0.4, 0.85, e) * smoothstep(0.52, 0.7, v) * smoothstep(0.92, 0.8, v));
   // fur break-up: large soft clouds, a cell pattern of tufts where the coat
-  // parts (each cell its own value, the borders a shade darker), and a fine
-  // grain; none of it is directional, so the flank is mottled, not striped
+  // parts (each cell its own value, the borders a shade darker), a fine
+  // isotropic grain, and — round 6 — the grain of the hair itself: streaks
+  // six times longer along the animal (v) than across it, so the flank has a
+  // direction the way a coat does instead of a mottle (every round-4 critic
+  // read the isotropic grain as velvet). The same streak field goes into the
+  // normal map (coatNormal) so the light breaks along the hair too.
+  // (amplitude 0.11 and 6:1 — a first cut at 0.18 and 10:1 ran unbroken
+  // streaks the length of the flank and read as wood grain in the close
+  // frame; hair on a lion's side lies in short overlapping locks)
   // (noise in the part's own (su, sv): a leg passes its own u around, so the
   // break-up is cells around the limb and not rings up it)
   const m0 = fbm(su * 3 + seed, sv * 4, { octaves: 2, period: 8, seed: 397 + seed });
   const m1 = fbm(su * 6 + seed, sv * 9, { octaves: 3, period: 16, seed: 401 + seed });
   const m2 = fbm(su * 38, sv * 52 + seed, { octaves: 3, period: 64, seed: 409 + seed });
+  const streak = fbm(su * 60 + seed, sv * 10, { octaves: 3, period: 60, seed: 419 + seed });
   const tuft = worley(su * 26 + seed, sv * 34, 34, 131 + seed);
   const cell = (tuft.id - 0.5) * 0.14 - smoothstep(0.08, 0.0, tuft.f2 - tuft.f1) * 0.07;
-  const light = 1 + (m0 - 0.5) * 0.14 + (m1 - 0.5) * 0.2 + (m2 - 0.5) * 0.12 + cell;
+  const light = 1 + (m0 - 0.5) * 0.14 + (m1 - 0.5) * 0.2 + (m2 - 0.5) * 0.05 + (streak - 0.5) * 0.11 + cell;
   c = [c[0] * light, c[1] * light, c[2] * light];
   if (spots) {
     // cub rosettes: sparse cells, strongest on the belly and flanks, fading
@@ -356,12 +367,20 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   c = mixRgb(c, COAT.black, leather);
   // the lioness's ruff: a faint pale, streaky band along the jaw and cheek,
   // the hair there longer and lighter than the face
-  const ruffBand = smoothstep(-0.03, -0.06, hy) * smoothstep(0.16, 0.1, hz) * smoothstep(-0.02, 0.02, hz) * smoothstep(0.06, 0.09, hx);
+  // (round 6: the band starts higher, at the mouth corner's level, and is
+  // paler, so from the side the cheek ruff and the jaw line read against the
+  // tawny cheek — HEAD_BUMPS swells the same region)
+  const ruffBand = smoothstep(-0.02, -0.055, hy) * smoothstep(0.17, 0.11, hz) * smoothstep(-0.02, 0.02, hz) * smoothstep(0.055, 0.085, hx);
   const streak = fbm(nu * 3, nv * 40, { octaves: 2, period: 8, seed: 457 });
-  c = mixRgb(c, buff, ruffBand * (0.2 + 0.4 * smoothstep(0.45, 0.7, streak)));
-  // the body's mottle and a finer breakup
+  c = mixRgb(c, buff, ruffBand * (0.3 + 0.45 * smoothstep(0.45, 0.7, streak)));
+  // the jowl fold under the ruff: a shade darker along the crease
+  const fold = smoothstep(0.014, 0.004, Math.abs(hy + 0.088)) * smoothstep(0.0, 0.03, hz) * smoothstep(0.13, 0.09, hz) * smoothstep(0.05, 0.08, hx);
+  c = mixRgb(c, COAT.back, fold * 0.35);
+  // the body's mottle and a finer breakup, and (round 6) the short hair's
+  // grain running along the head (nu is along the head in both regions)
   const m = fbm(nu * 4, nv * 4, { octaves: 3, period: 16, seed: 451 });
-  const l = 1 + (m0 - 0.5) * 0.14 + (m1 - 0.5) * 0.2 + (m - 0.5) * 0.12 + cell;
+  const hairGrain = fbm(nu * 2.5, nv * 26, { octaves: 3, period: 64, seed: 461 });
+  const l = 1 + (m0 - 0.5) * 0.14 + (m1 - 0.5) * 0.2 + (m - 0.5) * 0.08 + (hairGrain - 0.5) * 0.1 + cell;
   o[0] = c[0] * l;
   o[1] = c[1] * l;
   o[2] = c[2] * l;
@@ -482,8 +501,15 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
         fillRegion(ctx, ATLAS.eye, S, (u, v, o) => {
           const th = (1 - v) * Math.PI; // polar angle from the gaze axis
           const deg = (th * 180) / Math.PI;
-          // what little sclera shows at the corners is brownish, not white
-          let c = mixRgb(COAT.sclera, COAT.irisOuter, 0.45);
+          // what little sclera shows at the corners is brownish, not white;
+          // round 6: out to 25 degrees past the limbus it is the dark brown
+          // of a lion's conjunctiva, so what shows between the lid rims and
+          // the iris is a dark surround and the amber disc sits in it — not
+          // a pale ring (critic A's "sclera ring head-on"; the first cut
+          // painted the iris's own amber there and the ring stayed, paler
+          // amber around amber)
+          let c = mixRgb(COAT.sclera, COAT.irisOuter, 0.6);
+          c = mixRgb(c, [72, 46, 26], smoothstep(84, 62, deg));
           // brown sclera vessels
           const vein = fbm(u * 8, v * 14, { octaves: 3, period: 8, seed: 491 });
           c = mixRgb(c, [120, 70, 40], smoothstep(0.58, 0.75, vein) * 0.5 * smoothstep(30, 60, deg));
@@ -675,21 +701,26 @@ export function coatNormal(size = 256) {
       for (let x = 0; x < size; x++) {
         const u = x / size;
         const v = y / size;
-        // a seamless tile of short strands whose direction wanders with a
+        // a seamless tile of hair strands whose direction wanders with a
         // low-frequency field, over tufts (cells) and a soft grain: the coat
-        // parts and lies in swirls, not in parallel rows. The strand term is
-        // kept mild — a strong straight-strand relief repeated over the
-        // flank was the "stripes" in the round-2 frames.
+        // parts and lies in swirls, not in parallel rows. Round 6: the
+        // strands are the anisotropic grain the round-4 critics asked for —
+        // six times as long along the animal (v) as across it, and the
+        // main term of the height — where round 5's 3:1 strands at 0.45 read
+        // as an isotropic velvet under the cells. The warp keeps them from
+        // lining up into the round-2 stripes. (8:1 at 0.62 with the height
+        // scaled 0.9 was wood grain in the close frame, together with the
+        // colour streaks; the relief is now the shorter of the two.)
         const wx = (fbm(u * 3, v * 3, { octaves: 2, period: 3, seed: 613 }) - 0.5) * 0.35;
         const wy = (fbm(u * 3 + 0.5, v * 3, { octaves: 2, period: 3, seed: 617 }) - 0.5) * 0.35;
-        const strand = fbm((u + wx) * 18, (v + wy) * 6, { octaves: 3, period: 6, seed: 601 });
+        const strand = fbm((u + wx) * 48, (v + wy) * 8, { octaves: 3, period: 8, seed: 601 });
         const tuft = worley(u * 14, v * 14, 14, 619);
         const cells = smoothstep(0.0, 0.5, tuft.f1) * 0.5 + tuft.id * 0.2;
         const grain = fbm(u * 12, v * 12, { octaves: 2, period: 12, seed: 607 });
-        h[y * size + x] = strand * 0.45 + cells * 0.3 + grain * 0.25;
+        h[y * size + x] = strand * 0.55 + cells * 0.25 + grain * 0.2;
       }
     }
-    const tex = normalFromHeight(h, size, size, 0.75);
+    const tex = normalFromHeight(h, size, size, 0.8);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.repeat.set(5, 5);
     return tex;

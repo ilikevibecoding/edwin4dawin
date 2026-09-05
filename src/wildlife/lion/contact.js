@@ -47,14 +47,18 @@ export function contactTexture(size = 64) {
 }
 
 /**
- * Shared material: the occlusion colour, alpha from the texture times the
- * vertex alpha. Not black — what reaches the dirt under an animal is bounce
- * off its own belly and the soil, warm and dim (the truck's pool uses the
- * same reasoning).
+ * Shared material. Round 6: a multiplier, not a paint. The round-4 decal was
+ * a fixed grey-brown (0.1, 0.085, 0.075) alpha-blended over the dirt, which
+ * at dusk pulled a saturated red ground toward grey (critic C: patch sat
+ * 0.61 against 0.75 beside it, blue +11, only -0.38 st) — a shadow that
+ * changed the ground's colour. The blend is now dst x (1 - srcAlpha): the
+ * fragment's colour never reaches the frame, and the ground under the paw is
+ * the ground beside it scaled down by the decal's alpha (texture falloff x
+ * vertex alpha) at every hour, so hue and saturation are the dirt's own.
  */
 export function contactMaterial() {
   const m = new THREE.MeshBasicMaterial({
-    color: new THREE.Color(0.1, 0.085, 0.075),
+    color: new THREE.Color(1, 1, 1),
     map: contactTexture(),
     transparent: true,
     depthWrite: false,
@@ -64,13 +68,26 @@ export function contactMaterial() {
     polygonOffsetUnits: -4,
     side: THREE.DoubleSide,
     toneMapped: false,
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.ZeroFactor,
+    blendDst: THREE.OneMinusSrcAlphaFactor,
+    blendSrcAlpha: THREE.ZeroFactor,
+    blendDstAlpha: THREE.OneFactor,
     name: 'lion-contact',
   });
   return m;
 }
 
-/** Where a blob's darkening peaks, as a fraction of unshadowed dirt (1 - alpha at the centre). */
-export const CONTACT = { paw: 0.62, body: 0.62, stand: 0.28, penumbra: 0.3 };
+/**
+ * Where a blob's darkening peaks: the ground under the centre is scaled by
+ * (1 - value). Round 6: with the multiply blend these are the real
+ * attenuation — 0.4 is -0.74 st at the paw's centre and about -0.5 st in
+ * the penumbra just outside the paw, the -0.5 to -0.8 st a contact shadow
+ * on a lit plain measures; the round-4 0.62 was an alpha toward a paint
+ * colour and meant less.
+ */
+export const CONTACT = { paw: 0.4, body: 0.38, stand: 0.2, penumbra: 0.3 };
 
 const QUADS = 5; // FL, FR, HL, HR, body
 

@@ -166,7 +166,15 @@ export function addHead(b, alpha, skel, K, D) {
           const open = almondOpen(dx, dy, dz, SOCKET.soft, SOCKET.start);
           const hug = almondOpen(dx, dy, dz, SOCKET.hug, SOCKET.start) * w;
           const r0 = lerp(Math.max(de, SOCKET.r), SOCKET.r, hug);
-          const k = lerp(r0, SOCKET.floorR, open * w) * id;
+          // round 6: inside the almond the dip does not fade with the
+          // distance — skin whose direction from the ball's centre lies
+          // within the lid rims goes to the floor however far out on the
+          // loft it started. With the dip weighted by `w`, loft between
+          // `floor` and `rim` ahead of the sunk ball (the muzzle root's top
+          // corner) was left hovering at 1.0-1.4 radii across the lower
+          // iris: a flap of skin in front of the eye rather than a socket.
+          const wd = Math.max(w, smoothstep(SOCKET.rim * 1.6, SOCKET.floor * 1.6, de));
+          const k = lerp(r0, SOCKET.floorR, open * wd) * id;
           hx = sx * (ex + dx * k);
           hy = ey + dy * k;
           hz = ez + dz * k;

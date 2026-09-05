@@ -56,13 +56,27 @@ export const HEAD_ROWS = [
   // corners)
   [0.165, 0.046, 0.106, 0.06, 0.114, 2.9, 0.08, 0.08], // brow
   [0.18, 0.04, 0.09, 0.052, 0.11, 2.9, 0.08, 0.08], // eye plane: boxy, so the skin stands out to the ball's front at the eye's height
+  // round 6: a row between the eye plane and the stop holding the cheek's
+  // width a little longer, and boxier sections through the stop and the
+  // muzzle root, so the muzzle is a box whose vertical sides meet the cheek
+  // plane at a fold (the crease in HEAD_BUMPS) rather than a loaf the cheeks
+  // taper into over five centimetres.
+  // The stop is also a real step now: the top of these three rows drops a
+  // centimetre and a half (0.052 → 0.038 / 0.036 / 0.042 over the centre line), so the
+  // forehead's fall ends at a plane level with the eye's centre and the
+  // eyes look out over the bridge. With the round-5 heights the muzzle
+  // box's top corner at the eye's x stood 1.2 cm above the eye's centre and
+  // 3 cm ahead of it — the ball was set behind the corner of the box, and
+  // once it was sunk into the socket that corner hid the lower half of the
+  // iris from the face camera (raycast 0.46 of the disc; 0.62 with this).
+  [0.19, 0.036, 0.087, 0.038, 0.108, 3.1, 0.07, 0.08],
   // the muzzle rows carry the lower jaw too: the mouth line is painted across
   // the lower half (FACE.lipY), so what hangs below it is jaw and chin — made
   // only a little narrower than the muzzle over it (a bottom taper under 0.1:
   // the round-5 draft's 0.2 tapered the jaw to a hippo's rounded chin), so
   // the lower jaw fills the muzzle box — and the jaw loft adds the broad chin
-  [0.2, 0.03, 0.08, 0.052, 0.104, 2.9, 0.06, 0.07], // the stop: a shallow step down to the bridge
-  [0.215, 0.022, 0.073, 0.05, 0.1, 2.8, 0.04, 0.05], // root of the muzzle
+  [0.2, 0.03, 0.079, 0.036, 0.104, 3.2, 0.06, 0.07], // the stop: the step down to the bridge
+  [0.215, 0.022, 0.073, 0.042, 0.1, 3.1, 0.04, 0.05], // root of the muzzle
   // the muzzle is a short deep box, not a snout: 0.33 L long, wide and deep;
   // the bridge broad, flat and high — the nose's top level with the eye's
   // lower rim, so the bridge falls only 2 cm from the stop to the nose — and
@@ -107,7 +121,8 @@ export const FACE = {
   // eye's lower rim was the hippo) — and the inner corners 0.32 L behind the
   // nose tip; the ball's centre 3.4 cm inside the cheek's
   // skin, so the eyes sit in the face rather than on its corners
-  eye: [0.0585, 0.07, 0.168],
+  // (round 6: sunk 6 mm back into the skull — HEAD_JOINTS.lidL less HEAD_REF)
+  eye: [0.0585, 0.07, 0.162],
   eyeR: 0.0261, // EYE.r × EYE_LIDS.scale (spec.js): the ball head.js builds
   eyeSkin: 0.0293, // radius of the sphere the skin around the eye is kept outside of (1.12 × the ball)
   // centre of the nose leather at the squared front of the muzzle, its top
@@ -249,12 +264,28 @@ export function topTaper(sa, taper, bot = 0) {
  * temple are hollows.
  */
 export const HEAD_BUMPS = [
-  [0.06, 0.095, 0.168, 0.045, 0.02, 0.034, 0.012], // brow ridge: a straight ledge over the socket
-  [0.0, 0.09, 0.17, 0.02, 0.022, 0.05, -0.006], // the groove between the brows: the forehead is a shallow trough between the two orbital ridges
+  // the brow: round 6 makes it one flat ledge across the forehead from
+  // temple to temple (a plateau, `flat` 0.5: full over the inner half of its
+  // footprint, off over the outer) instead of round 5's two Gaussian ridges
+  // with a trough between them — a lion's forehead between the eyes is a
+  // plane, and the two-mound version was the "brow of a plush" from the front
+  [0.0, 0.095, 0.166, 0.115, 0.02, 0.032, 0.009, 0.5],
   [0.0, 0.078, 0.205, 0.03, 0.02, 0.025, -0.01], // the stop
-  [0.122, 0.035, 0.13, 0.036, 0.045, 0.065, 0.008], // zygomatic arch (broad and soft, so it tapers into the muzzle root)
+  [0.122, 0.035, 0.13, 0.036, 0.045, 0.065, 0.009], // zygomatic arch (broad and soft, so it tapers into the muzzle root)
   [0.105, -0.04, 0.1, 0.04, 0.05, 0.06, 0.008], // masseter
   [0.08, -0.05, 0.19, 0.03, 0.03, 0.04, 0.008], // jowl: the cheek hangs out over the mouth corner, so the corner is under it from the front
+  // round 6: the fold where the muzzle box meets the cheek — a vertical
+  // crease from under the eye's outer corner down toward the mouth corner
+  // (critic B), so the muzzle is a volume set into the face and not a loaf
+  // tapering out of it
+  [0.079, 0.0, 0.19, 0.016, 0.05, 0.012, -0.007],
+  // round 6: the cheek ruff — the lower cheek behind the mouth corner and
+  // over the jaw angle swells, so from the side the jaw line reads as a
+  // square cheek under the eye instead of a bear's rounded cheek falling
+  // straight into the neck — with the jowl fold under it, a crease between
+  // the ruff and the throat
+  [0.1, -0.048, 0.075, 0.03, 0.045, 0.05, 0.011],
+  [0.085, -0.088, 0.06, 0.03, 0.018, 0.05, -0.007],
   [0.048, -0.022, 0.274, 0.026, 0.026, 0.04, 0.016], // whisker pad: a real swell, the follicle rows sit on it
   // the lower lip and chin fill in under the pads, so the pads do not
   // overhang a dark recess that reads as an open mouth from the front
@@ -263,15 +294,23 @@ export const HEAD_BUMPS = [
   [0.1, 0.09, 0.09, 0.03, 0.04, 0.045, -0.006], // temple: the hollow over the arch behind the eye
 ];
 
+/**
+ * Sum of the sculpt at a head-space point. A row's optional eighth value
+ * `flat` makes it a plateau — full inside `flat` of its radius and falling
+ * to nothing at the edge — where the default is a Gaussian mound.
+ */
 export function headBump(x, y, z) {
   let o = 0;
   const ax = Math.abs(x);
-  for (const [cx, cy, cz, rx, ry, rz, amt] of HEAD_BUMPS) {
+  for (const [cx, cy, cz, rx, ry, rz, amt, flat = 0] of HEAD_BUMPS) {
     const dx = (ax - cx) / rx;
     const dy = (y - cy) / ry;
     const dz = (z - cz) / rz;
     const d = dx * dx + dy * dy + dz * dz;
-    if (d < 9) o += amt * Math.exp(-d * 1.6);
+    if (flat > 0) {
+      const r = Math.sqrt(d);
+      if (r < 1) o += amt * (1 - sstep(flat, 1, r));
+    } else if (d < 9) o += amt * Math.exp(-d * 1.6);
   }
   return o;
 }
