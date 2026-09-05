@@ -267,7 +267,8 @@ function fillRoofStair(set, L, cx0, cx1, cz0, cz1) {
       if (z < cz0 || z > cz1) continue;
       if (half) { set(x, yTop, z, B.STONE_BRICK_SLAB); set(x, yTop - 1, z, B.DURASTEEL_DARK); }
       else { set(x, yTop - 1, z, B.DURASTEEL); set(x, yTop - 2, z, B.DURASTEEL_DARK); }
-      for (let y = Math.ceil(h); y <= Math.floor(h + 1.9); y++) set(x, y, z, 0);                    // head room (through the canopy / deck)
+      // head room through the canopy / deck layers: the 1.8 high body arrives from the next step up (h + 0.5)
+      for (let y = Math.ceil(h); y <= Math.floor(h + 2.3); y++) set(x, y, z, 0);
       if (x === d.x0) { set(x, W, z, 0); set(x, W + 1, z, 0); }                                     // opening in the deck's west kerb
     }
     // balustrades: glass up to two blocks above the step, dark posts every 4, kept out of the canopy / deck layers
