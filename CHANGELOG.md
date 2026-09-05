@@ -17,6 +17,34 @@ numbers the targets are about.
 
 ---
 
+## Fleet round 4, and a capture spot that had moved — build `8611235` live
+
+- **Fleet r4 (`8611235`).** Chrome and alloy had the environment all along and
+  wasted it (`alu` metalness 0.86 under a satin map at env 0.3; `chrome` env
+  0.45 under a tint a fifth of the sky). Alloy metalness 1, env 1.4; chrome
+  F0 ≈ 0.6, env 1.5; the SUV's powder-coated bar is a rolled chrome bumper:
+  top-of-curve to underside 1.9 st, sky-hued pixels 0 → 26 % of the bar
+  (`shots/r4_fleet/after/suv_0_day.png`); camper wheel face +2.3 st. Paint on
+  the hero's clearcoat model, aged per vertex from the kit (`aAge`: rougher,
+  duller coat and greyer pigment on the old vehicles), one program for old and
+  new paint (−1); frame hue held within 2°. Motorcycle: staggered lug rows,
+  channel rim, 32 spokes, brake disc, calipers (+850 tris). One shared 256²
+  sidewall map (bead, rim protector, mould rings, lettering band; dust settles
+  in its grooves): 2.2 st of relief across the band. Night paint gain 1.35 for
+  the row (bodies +0.3–0.7 st on the pale vehicles; the ranger's shadow-side
+  door stays at 0.22× the sky — a lantern's job). Jeep canvas bleached at the
+  ridge, dusted at the hem. Programs 176 → 175 at fast, calls unchanged.
+- **Capture spot (`16028cf`).** Every round-5 truck view had verge grass
+  across the truck, and no builder had touched anything visible there. The
+  beauty views pre-roll 170 steps of auto-drive from a fixed start, and the
+  curvature speed cap that landed with collision made the truck cover 6 m
+  less in those steps — so the whole truck family was shot from a spot 6 m
+  back along the spur (truck at (−36.5, −4.2) against (−36.5, 1.4) in round
+  4). The pre-roll speed is pinned at 12 m/s now: the end of it is a fixed
+  place on the road whatever the driver does, within half a metre of where
+  rounds 1–4 shot it. The truck, glass and native-resolution sets of
+  `shots/round5/` are re-shot from it.
+
 ## Round 5 landed — the road was a hole on real GPUs, collision, lighting, car, plain, hills, water
 
 **Build `0dc79bb` live** (bundle `d8a9ed9`), then `6ca9b3e`, `3428229`, `f93a567`
