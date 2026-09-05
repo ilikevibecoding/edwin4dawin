@@ -220,7 +220,7 @@ float phase2(float c, float k) { return mix(hgN(c, 0.74 * k), hgN(c, -0.2 * k), 
 // with dark thick cells and bright thin patches instead of a near-white sheet.
 vec3 scatter(float od, float c) {
   float deck = smoothstep(0.45, 0.7, uCloudCoverage);
-  return vec3(0.44 * exp(-od) * phase2(c, 1.0), 0.36 * exp(-0.25 * od) * phase2(c, 0.5), mix(0.20, 0.11, deck) * exp(-mix(0.06, 0.09, deck) * od) * phase2(c, 0.2));
+  return vec3(0.44 * exp(-od) * phase2(c, 1.0), 0.36 * exp(-0.25 * od) * phase2(c, 0.5), mix(0.20, 0.085, deck) * exp(-mix(0.06, 0.09, deck) * od) * phase2(c, 0.2));
 }
 
 void main() {
@@ -277,7 +277,7 @@ void main() {
     // a closed deck scatters far more light down through itself than a lone tower's base receives (multiple
     // scattering across the whole sheet): its underside floor is higher and its cells contrast more
     float deck = smoothstep(0.45, 0.7, uCloudCoverage);
-    float aoFloor = mix(0.12, 0.24, deck);
+    float aoFloor = mix(0.12, 0.2, deck);
     vec2 mottRange = mix(vec2(0.6, 1.3), vec2(0.45, 1.45), deck);
 
     int level = 0;          // 0 coarse, 1 fine, 2 surface
