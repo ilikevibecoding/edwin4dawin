@@ -688,6 +688,75 @@ export class Props {
     const ground = (u: number, v: number) => { const [x, z] = world(u, v); return this.map.heightAt(x, z); };
     const occupy = (u: number, v: number, r: number) => { const [x, z] = world(u, v); this.markOccupied(x, z, r); };
     const boxColours = ['red', 'blue', 'green', 'orange', 'steel', 'white', 'blue', 'red'];
+    // ---- apron furniture, all in the island frame. `paint` lays road markings as 5 cm slabs on the concrete.
+    const paint = (mat: string, u: number, v: number, alongU: number, alongV: number) => { const g = ground(u, v); if (g >= 1) pbox(mat, u, g + 0.02, v, alongU, 0.05, alongV); };
+    const jitter = (a: number) => rng.range(-a, a);
+    /** yawed box in the island frame: `yawJ` radians added to the quay-aligned yaw */
+    const jbox = (mat: string, u: number, y: number, v: number, alongU: number, h: number, alongV: number, yawJ: number) => { const [x, z] = world(u, v); this.box(mat, x, y, z, alongU, h, alongV, yaw + yawJ); };
+    const CONTAINERS = ['red', 'blue', 'green', 'orange', 'steel', 'white', 'blue', 'red', 'dark', 'yellow', 'tank', 'green'];
+    /** a container stack of `n` boxes, each nudged and yawed a little so the rows do not read as a lattice */
+    const stackAt = (u: number, v: number, g: number, n: number, yawJ = 0) => {
+      const mat = rng.pick(CONTAINERS);
+      for (let k = 0; k < n; k++) jbox(rng.chance(0.55) ? mat : rng.pick(CONTAINERS), u + jitter(0.25), g + k * 2.6, v + jitter(0.15), 12.2, 2.6, 2.44, yawJ + jitter(0.012));
+    };
+    /** reach stacker: yellow body, cab, raised boom with a container in the spreader, four wheels */
+    const reachStacker = (u: number, v: number, yawJ: number, loaded: boolean) => {
+      const g = ground(u, v);
+      if (g < 1) return;
+      const c = Math.cos(yawJ), s = Math.sin(yawJ);
+      const at = (du: number, dv: number): [number, number] => [u + du * c - dv * s, v + du * s + dv * c];
+      let p = at(0, 0);
+      jbox('yellow', p[0], g + 0.9, p[1], 7.5, 1.6, 2.9, yawJ);
+      p = at(-2.2, 0); jbox('yellow', p[0], g + 2.5, p[1], 2.2, 2.2, 2.4, yawJ);
+      p = at(-2.2, 0); jbox('glass', p[0], g + 3.6, p[1], 1.6, 1.1, 2.3, yawJ);
+      // boom rises forward from the body
+      const [bx, bz] = world(...at(2.5, 0));
+      this.box('yellow', bx, g + 2.6, bz, 9, 0.9, 0.9, yaw + yawJ, 0);
+      for (const [du, dv] of [[-2.6, -1.3], [-2.6, 1.3], [2.4, -1.3], [2.4, 1.3]]) { p = at(du, dv); const [wx, wz] = world(p[0], p[1]); this.cyl('dark', wx, g, wz, 0.75, 0.6, yaw + yawJ, Math.PI / 2); }
+      if (loaded) { p = at(5.2, 0); jbox(rng.pick(CONTAINERS), p[0], g + 1.2, p[1], 6.1, 2.6, 2.44, yawJ + Math.PI / 2); }
+    };
+    /** straddle carrier: four tall legs, a top frame and a cab, astride a container */
+    const straddle = (u: number, v: number, yawJ: number) => {
+      const g = ground(u, v);
+      if (g < 1) return;
+      const c = Math.cos(yawJ), s = Math.sin(yawJ);
+      const at = (du: number, dv: number): [number, number] => [u + du * c - dv * s, v + du * s + dv * c];
+      for (const [du, dv] of [[-5.5, -2.2], [-5.5, 2.2], [5.5, -2.2], [5.5, 2.2]]) { const p = at(du, dv); jbox('steel', p[0], g, p[1], 0.5, 11, 0.5, yawJ); }
+      let p = at(0, 0); jbox('steel', p[0], g + 11, p[1], 12.5, 1.2, 5.6, yawJ);
+      p = at(0, -2.2); jbox('yellow', p[0], g + 11, p[1], 12.8, 0.6, 0.6, yawJ);
+      p = at(0, 2.2); jbox('yellow', p[0], g + 11, p[1], 12.8, 0.6, 0.6, yawJ);
+      p = at(4, 3.1); jbox('glass', p[0], g + 8.4, p[1], 2.2, 2.2, 1.6, yawJ);
+      if (rng.chance(0.6)) { p = at(0, 0); jbox(rng.pick(CONTAINERS), p[0], g + rng.range(0.3, 5), p[1], 12.2, 2.6, 2.44, yawJ); }
+      for (const [du, dv] of [[-5.5, -2.2], [-5.5, 2.2], [5.5, -2.2], [5.5, 2.2]]) { p = at(du, dv); const [wx, wz] = world(p[0], p[1]); this.cyl('dark', wx, g, wz, 0.7, 0.5, yaw + yawJ, Math.PI / 2); }
+    };
+    /** tractor unit with a skeletal trailer, empty or carrying a box */
+    const truck = (u: number, v: number, yawJ: number, loaded: boolean) => {
+      const g = ground(u, v);
+      if (g < 1) return;
+      const c = Math.cos(yawJ), s = Math.sin(yawJ);
+      const at = (du: number, dv: number): [number, number] => [u + du * c - dv * s, v + du * s + dv * c];
+      let p = at(7.2, 0); jbox(rng.pick(['red', 'white', 'blue', 'dark', 'orange']), p[0], g + 0.9, p[1], 2.6, 2.6, 2.5, yawJ);
+      p = at(7.2, 0); jbox('glass', p[0], g + 2.2, p[1], 0.6, 1.0, 2.2, yawJ);
+      p = at(0, 0); jbox('dark', p[0], g + 1.0, p[1], 12.5, 0.35, 2.4, yawJ);
+      for (const du of [-4.5, -3.2, 6.5]) for (const dv of [-1.1, 1.1]) { p = at(du, dv); const [wx, wz] = world(p[0], p[1]); this.cyl('dark', wx, g, wz, 0.52, 0.4, yaw + yawJ, Math.PI / 2); }
+      if (loaded) { p = at(-0.5, 0); jbox(rng.pick(CONTAINERS), p[0], g + 1.35, p[1], 12.2, 2.6, 2.44, yawJ); }
+    };
+    const lightMast = (u: number, v: number) => {
+      const g = ground(u, v);
+      if (g < 1) return;
+      pcyl('steel', u, g, v, 0.32, 30);
+      pbox('dark', u, g + 30, v, 2.6, 0.9, 1.4);
+      pbox('white', u, g + 29.4, v, 2.2, 0.5, 1.0);
+    };
+    const palletStack = (u: number, v: number) => {
+      const g = ground(u, v);
+      if (g < 1) return;
+      const n = rng.int(3, 8);
+      for (let k = 0; k < n; k++) jbox(rng.chance(0.75) ? 'wood' : 'white', u + jitter(2.2), g, v + jitter(1.4), 1.2, rng.range(0.5, 1.8), 1.0, jitter(0.4));
+    };
+    const bollard = (u: number, v: number) => { const g = ground(u, v); if (g >= 1) pcyl('dark', u, g, v, 0.32, 0.9); };
+    const fender = (u: number, v: number) => pbox('dark', u, -0.4, v, 2.4, 1.6, 1.0);
+
     // container gantry cranes along the north quay, booms out over the ship channel
     const quayN = -P.hh;
     const craneU: number[] = [];
@@ -721,31 +790,190 @@ export class Props {
         if (g < 1) continue;
         const rows = 6, bays = 10;
         const tall = rng.range(1, 4);
-        for (let r = 0; r < rows; r++) for (let c = 0; c < bays; c++) {
-          if (rng.chance(0.28)) continue;
-          const stack = Math.min(4, Math.max(1, Math.round(tall + rng.range(-1.5, 1.5))));
-          const u = bu + c * 13.4, v = bv + r * 6.1;
-          for (let k = 0; k < stack; k++) pbox(rng.pick(boxColours), u, g + k * 2.6, v, 12.2, 2.6, 4.9);
+        // one row in six is an aisle; each block leans to one colour with odd boxes of others, stack heights
+        // wander bay to bay and the boxes are nudged so the yard does not read as a lattice
+        const blockMat = rng.pick(boxColours);
+        const aisle = rng.int(1, 5);
+        for (let r = 0; r < rows; r++) {
+          if (r === aisle && rng.chance(0.6)) continue;
+          const vJ = jitter(0.5);
+          for (let c = 0; c < bays; c++) {
+            if (rng.chance(0.28)) continue;
+            const stack = Math.min(5, Math.max(1, Math.round(tall + rng.range(-1.8, 1.8))));
+            const u = bu + c * 13.4 + jitter(0.3), v = bv + r * 6.1 + vJ;
+            for (let k = 0; k < stack; k++) jbox(rng.chance(0.5) ? blockMat : rng.pick(boxColours), u + jitter(0.2), g + k * 2.6, v, 12.2, 2.6, 4.9, jitter(0.01));
+          }
         }
         occupy(bu + 60, bv + 15, 80);
-        if (rng.chance(0.5)) pcyl('steel', bu - 8, g, bv - 6, 0.3, 30); // yard light mast
+        if (rng.chance(0.4)) lightMast(bu - 8 + jitter(3), bv - 6 + jitter(2)); // yard light mast
       }
     }
-    // transit sheds and a reefer plaza along the south side of the apron
+    // ---- transit sheds along the south side of the apron: ridge vents, jittered rooftop plant, loading docks
+    // with trailers backed onto some of them and canopies over the doors (no two sheds alike)
     let u = -P.hw + 140;
+    const shedSpans: [number, number][] = [];
     while (u < P.hw - 520) {
       const len = rng.range(120, 170), depth = rng.range(40, 55), v = 150 + rng.range(-10, 10);
       const g = ground(u + len / 2, v);
       if (g >= 1) {
-        pbox(rng.pick(['concrete', 'white', 'tank']), u + len / 2, g, v, len, 11 + rng.range(0, 3), depth);
-        pbox('dark', u + len / 2, g + 11 + 3, v, len + 2, 0.6, depth + 2); // parapet roof
-        for (let d = 0; d < 6; d++) pbox('steel', u + 12 + d * (len - 24) / 5, g, v + depth / 2 + 3, 4, 4.2, 6); // loading docks
+        const h = 11 + rng.range(0, 3);
+        const wall = rng.pick(['concrete', 'white', 'tank', 'steel']);
+        pbox(wall, u + len / 2, g, v, len, h, depth);
+        pbox(rng.pick(['dark', 'concrete', 'steel']), u + len / 2, g + h, v, len + 2, 0.6, depth + 2); // parapet roof
+        // ridge vent and a scatter of roof vents / units
+        if (rng.chance(0.7)) pbox('steel', u + len / 2, g + h + 0.6, v + jitter(depth * 0.2), len - rng.range(16, 40), 0.9, 1.1);
+        const nv = rng.int(3, 8);
+        for (let k = 0; k < nv; k++) {
+          const vu = u + rng.range(10, len - 10), vv = v + rng.range(-depth * 0.4, depth * 0.4);
+          if (rng.chance(0.55)) pcyl('steel', vu, g + h + 0.6, vv, rng.range(0.5, 0.9), rng.range(1.0, 1.8));
+          else jbox(rng.pick(['concrete', 'steel', 'white']), vu, g + h + 0.6, vv, rng.range(1.8, 3.4), rng.range(1.2, 2.0), rng.range(1.6, 2.8), jitter(0.15));
+        }
+        // loading docks on the south face: dock canopies over the doors, trailers at some, spaced unevenly
+        let du = u + rng.range(8, 20);
+        while (du < u + len - 10) {
+          const dockV = v + depth / 2;
+          if (rng.chance(0.7)) pbox('steel', du, g + 3.6, dockV + 2.2, 4.6, 0.4, 4.4); // canopy
+          if (rng.chance(0.45)) {
+            pbox('dark', du, g + 1.0, dockV + 8.2, 2.5, 0.35, 12.5);
+            pbox(rng.pick(['white', 'white', 'steel', 'red', 'blue']), du + jitter(0.2), g + 1.35, dockV + 8.6, 2.5, 2.7, 12.0);
+          } else if (rng.chance(0.3)) palletStack(du + jitter(2), dockV + 6);
+          du += rng.range(9, 22);
+        }
+        // office lean-to at one end, a few rooftop units
+        if (rng.chance(0.6)) pbox('white', u + (rng.chance(0.5) ? 6 : len - 6), g, v + depth / 2 + 6, 14, 4, 8);
+        shedSpans.push([u, u + len]);
         occupy(u + len / 2, v, Math.max(len, depth) * 0.6);
       }
       u += len + rng.range(30, 60);
     }
-    // cruise terminal on the south quay, ship berthed in the water alongside
+
+    // ---- the truck lane between the yard and the sheds: painted lanes, hatching and a rail spur
+    const laneV = 92;
+    for (let lu = -P.hw + 60; lu < P.hw - 120; lu += 12) {
+      if (rng.chance(0.06)) continue;
+      paint('white', lu, laneV - 7, 4.5, 0.18);
+      paint('white', lu, laneV + 7, 4.5, 0.18);
+    }
+    for (let lu = -P.hw + 60; lu < P.hw - 120; lu += 1) paint('yellow', lu + 0.5, laneV, 1.0, 0.16); // centre line
+    for (let k = 0; k < 14; k++) {
+      // hatched keep-clear boxes and pedestrian crossings at random spots along the lane
+      const hu = rng.range(-P.hw + 80, P.hw - 160), hv = laneV + rng.pick([-16, 16]);
+      for (let s = 0; s < 6; s++) paint('yellow', hu + s * 1.6 - 4, hv, 0.3, 8);
+    }
+    // rail spur: ballast strip, two rails and a rake of wagons, on the sheds' side of the lane
+    const railV = 116;
+    for (let ru = -P.hw + 60; ru < P.hw - 200; ru += 120) {
+      const seg = Math.min(120, P.hw - 200 - ru);
+      const g = ground(ru + seg / 2, railV);
+      if (g < 1) continue;
+      pbox('dark', ru + seg / 2, g + 0.02, railV, seg, 0.12, 3.4);
+      pbox('steel', ru + seg / 2, g + 0.14, railV - 0.72, seg, 0.14, 0.09);
+      pbox('steel', ru + seg / 2, g + 0.14, railV + 0.72, seg, 0.14, 0.09);
+    }
+    {
+      const rakeU0 = rng.range(-P.hw + 200, -200), n = rng.int(7, 12);
+      for (let k = 0; k < n; k++) {
+        const wu = rakeU0 + k * 16.4;
+        const g = ground(wu, railV);
+        if (g < 1) continue;
+        if (rng.chance(0.25)) {
+          const [wx, wz] = world(wu, railV);
+          pbox('dark', wu, g + 0.25, railV, 15.5, 0.5, 2.6);
+          this.cyl(rng.pick(['dark', 'white', 'steel']), wx, g + 2.1, wz, 1.45, 13.5, yaw + Math.PI / 2, Math.PI / 2);
+        } else {
+          pbox('dark', wu, g + 0.25, railV, 15.5, 0.6, 2.6);
+          if (rng.chance(0.8)) pbox(rng.pick(CONTAINERS), wu, g + 0.85, railV, 12.2, 2.6, 2.44);
+        }
+      }
+      const g = ground(rakeU0 - 18, railV);
+      if (g >= 1) { pbox('orange', rakeU0 - 18, g + 0.25, railV, 16, 3.6, 2.7); pbox('dark', rakeU0 - 12, g + 3.85, railV, 3, 1.1, 2.7); } // shunter
+    }
+
+    // ---- south apron: a second yard of stacks in ragged rows, reach stackers and trucks at work, light masts
     const quayS = P.hh;
+    const yardS0 = 182, yardS1 = quayS - 34;
+    for (let bu = -P.hw + 70; bu < P.hw - 120; bu += rng.range(110, 150)) {
+      if (bu > 60 && bu < 470) continue; // cruise terminal
+      const bw = rng.range(60, 95);
+      const mode = rng.next();
+      if (mode < 0.22) {
+        // open hardstand: painted bays and a few parked trailers / trucks
+        for (let k = 0; k < 8; k++) paint('white', bu + k * 4 + 4, yardS0 + 30, 0.15, 14);
+        const nt = rng.int(1, 4);
+        for (let k = 0; k < nt; k++) truck(bu + rng.range(8, bw - 8), rng.range(yardS0 + 18, yardS1 - 10), rng.pick([0, Math.PI]) + jitter(0.06), rng.chance(0.5));
+        continue;
+      }
+      const g = ground(bu + bw / 2, (yardS0 + yardS1) / 2);
+      if (g < 1) continue;
+      const tall = rng.range(1, 3.5);
+      const bays = Math.floor(bw / 13.2);
+      for (let r = 0; r < 4; r++) {
+        if (rng.chance(0.15)) continue; // aisle
+        const v = yardS0 + 6 + r * 6.4 + jitter(0.4);
+        for (let c = 0; c < bays; c++) {
+          if (rng.chance(0.3)) continue;
+          const n = Math.min(5, Math.max(1, Math.round(tall + rng.range(-1.6, 1.8))));
+          stackAt(bu + 7 + c * 13.2, v, g, n);
+        }
+      }
+      occupy(bu + bw / 2, (yardS0 + yardS1) / 2, bw * 0.6);
+      if (rng.chance(0.55)) reachStacker(bu + rng.range(5, bw - 5), yardS1 - 6 + jitter(3), rng.range(0, Math.PI * 2), rng.chance(0.6));
+      if (rng.chance(0.3)) straddle(bu + rng.range(10, bw - 10), yardS0 - 12 + jitter(2), rng.pick([0, Math.PI / 2]) + jitter(0.1));
+      if (rng.chance(0.4)) truck(bu + rng.range(8, bw - 8), yardS0 - 14 + jitter(3), rng.pick([0, Math.PI]) + jitter(0.05), rng.chance(0.6));
+    }
+    for (let mu = -P.hw + 90 + rng.range(0, 60); mu < P.hw - 160; mu += rng.range(95, 150)) {
+      if (mu > 90 && mu < 440) continue;
+      lightMast(mu + jitter(6), rng.pick([yardS0 - 4, yardS1 + 8]) + jitter(3));
+    }
+    for (let mu = -P.hw + 60 + rng.range(0, 60); mu < P.hw - 160; mu += rng.range(110, 170)) lightMast(mu + jitter(6), laneV + rng.pick([-13, 13]) + jitter(2));
+    // reach stackers and trucks on the main lane and the north yard aisles
+    for (let k = 0; k < 9; k++) truck(rng.range(-P.hw + 80, P.hw - 180), laneV + rng.pick([-7, 7]) + jitter(1), (rng.chance(0.5) ? 0 : Math.PI) + jitter(0.03), rng.chance(0.65));
+    for (let k = 0; k < 6; k++) reachStacker(rng.range(-P.hw + 90, P.hw - 300), rng.range(yardV0 + 20, yardV1 - 20) + jitter(4), rng.range(0, Math.PI * 2), rng.chance(0.5));
+    for (let k = 0; k < 4; k++) straddle(rng.range(-P.hw + 120, P.hw - 300), rng.range(yardV0 + 30, yardV1 - 30), rng.pick([0, Math.PI / 2]) + jitter(0.08));
+
+    // ---- west end: a fenced customs / chassis lot with a gatehouse, and the empties depot
+    {
+      const lu0 = -P.hw + 50, lu1 = -P.hw + 240, lv0 = 190, lv1 = quayS - 40;
+      const g = ground((lu0 + lu1) / 2, (lv0 + lv1) / 2);
+      if (g >= 1) {
+        const fenceRun = (a: number, b: number, fixed: number, alongU: boolean) => {
+          const len = b - a;
+          if (alongU) pbox('steel', (a + b) / 2, g + 2.2, fixed, len, 0.08, 0.08); else pbox('steel', fixed, g + 2.2, (a + b) / 2, 0.08, 0.08, len);
+          for (let t = a; t <= b; t += rng.range(7, 10)) { if (alongU) pcyl('steel', t, g, fixed, 0.06, 2.3); else pcyl('steel', fixed, g, t, 0.06, 2.3); }
+        };
+        fenceRun(lu0, lu1, lv0, true); fenceRun(lu0, lu1, lv1, true); fenceRun(lv0, lv1, lu0, false); fenceRun(lv0, lv1 - 24, lu1, false);
+        pbox('white', lu1 + 1, g, lv1 - 10, 5, 3.2, 4); pbox('dark', lu1 + 1, g + 3.2, lv1 - 10, 6, 0.3, 5); // gatehouse
+        pbox('red', lu1 + 1, g + 1.0, lv1 - 20, 0.2, 0.2, 9); // barrier arm
+        for (let k = 0; k < 9; k++) truck(rng.range(lu0 + 12, lu1 - 12), rng.range(lv0 + 8, lv1 - 8), rng.pick([0, Math.PI / 2]) + jitter(0.05), rng.chance(0.35));
+        for (let k = 0; k < 4; k++) palletStack(rng.range(lu0 + 6, lu1 - 6), rng.range(lv0 + 4, lv1 - 4));
+        occupy((lu0 + lu1) / 2, (lv0 + lv1) / 2, 120);
+      }
+      // empties depot at the far west tip: tall stacks of one colour, closer packed
+      for (let eu = -P.hw + 40; eu < -P.hw + 120; eu += 13.2) for (let ev = -60; ev < 60; ev += 2.9) {
+        if (rng.chance(0.2)) continue;
+        const ge = ground(eu, ev);
+        if (ge >= 1) stackAt(eu, ev, ge, rng.int(3, 6));
+      }
+      occupy(-P.hw + 80, 0, 80);
+    }
+
+    // ---- quays: bollards and fenders, and a scatter of pallets and skips by the sheds
+    for (let qu = -P.hw + 30; qu < P.hw - 30; qu += rng.range(22, 34)) {
+      bollard(qu + jitter(0.5), quayS - 1.6);
+      if (rng.chance(0.5)) fender(qu + rng.range(4, 10), quayS + 0.3);
+    }
+    for (let qu = -P.hw + 30; qu < P.hw - 30; qu += rng.range(22, 34)) {
+      bollard(qu + jitter(0.5), quayN + 1.6);
+      if (rng.chance(0.5)) fender(qu + rng.range(4, 10), quayN - 0.3);
+    }
+    for (const [a, b] of shedSpans) {
+      const n = rng.int(1, 4);
+      for (let k = 0; k < n; k++) palletStack(rng.range(a + 6, b - 6), 128 + jitter(4));
+      if (rng.chance(0.6)) jbox(rng.pick(['green', 'blue', 'dark']), rng.range(a + 6, b - 6), ground(a, 124) + 0.02, 124 + jitter(3), 4.2, 1.6, 2.2, jitter(0.3)); // skip
+    }
+    // the island is paved end to end: no tree grows on the apron
+    for (let ou = -P.hw; ou <= P.hw; ou += 20) for (let ov = -P.hh; ov <= P.hh; ov += 20) occupy(ou, ov, 14);
+    // cruise terminal on the south quay, ship berthed in the water alongside
     const cu = 260;
     const gz = ground(cu, quayS - 60);
     pbox('white', cu, gz, quayS - 60, 260, 12, 40);
@@ -758,14 +986,45 @@ export class Props {
     for (let d = 0; d < 6; d++) pbox('glass', cu, 13.5 + d * 3.5, sv, 276, 1.2, 33);
     pbox('white', cu - 30, 38, sv, 90, 8, 22);
     pcyl('dark', cu - 90, 38, sv, 4, 14);
-    // fuel tank farm by the river
+    // fuel tank farm by the river: tanks of mixed sizes in bunds, each with its stair, top rail and roof
+    // vent, pipe racks running between the rows and a pump house
     const tanks = this.map.pois.find((p) => p.kind === 'tanks')!;
+    const tankAt: { x: number; z: number; r: number; h: number }[] = [];
     for (let i = 0; i < 9; i++) {
-      const tx = tanks.x + (i % 3) * 52 - 52, tz = tanks.z + Math.floor(i / 3) * 52 - 52;
+      const tx = tanks.x + (i % 3) * 52 - 52 + rng.range(-4, 4), tz = tanks.z + Math.floor(i / 3) * 52 - 52 + rng.range(-4, 4);
       const g = this.map.heightAt(tx, tz);
       if (g < 1) continue;
-      this.cyl('tank', tx, g, tz, rng.range(14, 22), rng.range(10, 16));
-      this.markOccupied(tx, tz, 26);
+      const r = rng.range(12, 22), h = rng.range(9, 17);
+      this.cyl(rng.pick(['tank', 'tank', 'white', 'concrete']), tx, g, tz, r, h);
+      this.cyl('steel', tx, g + h, tz, r + 0.35, 0.25); // top rim / handrail band
+      this.cyl('steel', tx + r * 0.3, g + h + 0.25, tz - r * 0.2, 0.9, 1.2); // roof vent
+      // stair: a thin flight leaning against the shell, with a landing at the top
+      const a = rng.range(0, Math.PI * 2);
+      this.box('steel', tx + Math.cos(a) * (r + 0.9), g + h / 2 - 0.4, tz + Math.sin(a) * (r + 0.9), 1.1, Math.hypot(h, 6), 0.35, -a, Math.atan2(6, h));
+      this.box('steel', tx + Math.cos(a) * (r + 1.0), g + h - 0.3, tz + Math.sin(a) * (r + 1.0), 2.2, 0.3, 2.2, -a);
+      // bund wall around the tank
+      const bw = r + 8;
+      for (const [dx, dz, w, d] of [[0, -bw, bw * 2, 0.6], [0, bw, bw * 2, 0.6], [-bw, 0, 0.6, bw * 2], [bw, 0, 0.6, bw * 2]] as const) this.box('concrete', tx + dx, g, tz + dz, w, 1.3, d);
+      tankAt.push({ x: tx, z: tz, r, h });
+      this.markOccupied(tx, tz, 30);
+    }
+    // pipe racks between the rows, pump house and a loading gantry
+    for (const row of [tanks.z - 26, tanks.z + 26]) {
+      const g = this.map.heightAt(tanks.x, row);
+      if (g < 1) continue;
+      for (let k = 0; k < 3; k++) this.box('steel', tanks.x, g + 1.4 + k * 0.5, row + k * 0.5 - 0.5, 150, 0.32, 0.32);
+      for (let px = tanks.x - 70; px <= tanks.x + 70; px += rng.range(10, 16)) this.box('steel', px, g, row, 0.3, 1.5, 0.3);
+    }
+    {
+      const px = tanks.x + 100, pz = tanks.z + rng.range(-20, 20), g = this.map.heightAt(px, pz);
+      if (g >= 1) {
+        this.box('concrete', px, g, pz, 16, 5, 10);
+        this.box('dark', px, g + 5, pz, 17, 0.4, 11);
+        this.cyl('steel', px + 6, g + 5.4, pz - 3, 0.5, 4);
+        for (let k = 0; k < 3; k++) this.box('steel', px - 14 - k * 6, g, pz + 12, 0.4, 7, 0.4);
+        this.box('steel', px - 20, g + 7, pz + 12, 14, 0.5, 0.5);
+        this.markOccupied(px, pz, 20);
+      }
     }
   }
 
