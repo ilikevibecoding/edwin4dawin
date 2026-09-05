@@ -8,7 +8,7 @@ Everything is generated at runtime from code: pixel-art textures, character skin
 
 The production build is committed in `dist/`, so it can be served straight from a GitHub-backed CDN:
 
-**https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/07112786e18f92fce4f8ef15cbc77d4d578e44ca/dist/index.html**
+**https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/ba2cd05cb42da62f6c67114b2759fe3feccf9174/dist/index.html**
 
 That link is pinned to a commit so it never goes stale. To play the latest build on this branch use
 `https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/cursor/minecraft-western-town-54d6/dist/index.html`
