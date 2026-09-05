@@ -785,7 +785,7 @@ export class PlaneModel {
         patch.scale(1.6, 1, 1);
         lightKit.add(lit(patch, tint, channel, 0.22), at([tip.x - 0.05, tip.y + dy, sgn * 7.28], [-Math.PI / 2 + flipY, 0, 0]));
       }
-      glows.push({ p: V3(tip.x, tip.y, zOut), tint, channel, size: 0.7 }, { p: V3(tip.x - 0.12, tip.y, zOut), tint: 0xf2f4ff, channel: LIGHT.strobe, size: 0.95 });
+      glows.push({ p: V3(tip.x, tip.y, zOut), tint, channel, size: 0.7 }, { p: V3(tip.x - 0.12, tip.y, zOut), tint: 0xf2f4ff, channel: LIGHT.strobe, size: 0.6 });
     }
     lightKit.add(lens(0.04, 0xf2f4ff, LIGHT.tail), at([-5.51, 0.33, 0]));
     glows.push({ p: V3(-5.51, 0.33, 0), tint: 0xf2f4ff, channel: LIGHT.tail, size: 0.55 });
@@ -823,7 +823,11 @@ export class PlaneModel {
       geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.5, 0), 9.5);
       const glowMat = new THREE.ShaderMaterial({
         uniforms: { uLightPower: this.lightPower },
+        // the renderer uses a logarithmic depth buffer: a raw ShaderMaterial must write the same log depth or its
+        // fragments fail the depth test against every built-in material (the chunks are no-ops otherwise)
         vertexShader: /* glsl */ `
+          #include <common>
+          #include <logdepthbuf_pars_vertex>
           attribute vec2 aCorner; attribute vec3 color; attribute float aLight; attribute float aSize;
           uniform float uLightPower[${N_LIGHTS}];
           varying vec2 vCorner; varying vec3 vCol; varying float vPow;
@@ -834,15 +838,21 @@ export class PlaneModel {
             float s = vPow > 0.01 ? aSize : 0.0;
             mv.xy += aCorner * s; mv.z += 0.12;
             gl_Position = projectionMatrix * mv;
+            #include <logdepthbuf_vertex>
           }`,
         fragmentShader: /* glsl */ `
+          #include <common>
+          #include <logdepthbuf_pars_fragment>
           varying vec2 vCorner; varying vec3 vCol; varying float vPow;
           void main() {
+            #include <logdepthbuf_fragment>
             float r = length(vCorner);
             if (r > 1.0) discard;
             // a bright core with a long soft skirt: the scatter of a point source in a slightly hazy night
             float halo = pow(1.0 - r, 3.5) * 0.30 + pow(max(1.0 - r * 3.0, 0.0), 2.0) * 0.6;
-            gl_FragColor = vec4(vCol * halo * vPow * 0.07, 1.0);
+            // soft knee on the lamp power: the strobe's 40 must not bleach its whole sprite to a white disc
+            float pw = vPow * 20.0 / (vPow + 20.0);
+            gl_FragColor = vec4(vCol * halo * pw * 0.09, 1.0);
           }`,
         transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: true,
       });
