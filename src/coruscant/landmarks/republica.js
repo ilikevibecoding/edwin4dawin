@@ -648,7 +648,7 @@ function veranda(bp, rng, seed) {
   for (let x = t.bx0; x <= t.bx1; x++) if (isIn(x, 50)) bp.set(x, up, 50, B.IRON_BARS);
   bp.set(55, up, 50, B.IRON_BARS);
   // living room (double height): sofas around a low table on a rug, holo wall, grand window seat, planters
-  const wool = rng.pick([B.RED_WOOL, B.WHITE_WOOL]);
+  const wool = B.RED_WOOL;
   for (let x = 50; x <= 67; x++) for (let z = 50; z <= 52; z++) bp.set(x, y - 1, z, (x + z) % 2 ? wool : B.WHITE_WOOL);
   sofaGroup(bp, 52, y, 50, wool); sofaGroup(bp, 63, y, 50, wool); bp.fill(56, y, 51, 61, y, 51, wool); bp.set(58, y, 52, B.TABLE); bp.set(59, y, 52, B.TABLE);
   for (const x of [56, 61]) bp.spot(x, y, 51, 'seat');
