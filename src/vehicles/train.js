@@ -14,6 +14,7 @@ const W = ROUTE.trainWidth, H = TRAIN_HEIGHT;
 const SEAT = B.BED_FOOT;     // cushioned bench (9/16 high)
 const TABLE = B.CONSOLE;     // holo table between facing seats
 const DOOR_LOW = B.DURASTEEL_DARK, DOOR_HIGH = B.STEEL_GLASS;
+const CLOCK_SNAP_TICKS = 3;  // re-sync to the server clock when the local clock has drifted more than this
 
 export function buildTrainGrid() {
   const g = new VoxelGrid(TRAIN_LENGTH, H, W);
@@ -119,11 +120,23 @@ export class SpaceTrain extends Vehicle {
     this.humOn = false;
     this.listeners = []; // (event, train) => void   events: 'doors', 'arrive', 'depart'
     this.preloadStats = { chunks: 0, ms: 0 };
+    this.clockOffset = null; // schedule tick - local tick, once synced to a server clock
     this.setDoors(!this.state.doorsOpen);
   }
 
+  // The schedule runs on the shared clock: the server tick while connected (every client computes the same train),
+  // otherwise the local vehicle tick. Local ticks advance steadily at 20 Hz, so the offset to the server clock is only
+  // re-snapped when the drift exceeds a few ticks (jitter in the estimate must not make the train stutter), and a
+  // synced offset is kept through a disconnect so the train does not jump back to the local clock.
+  scheduleTick(localTick) {
+    const net = this.game && this.game.net;
+    const server = net && net.connected ? net.serverTick : null;
+    if (typeof server === 'number' && (this.clockOffset === null || Math.abs(localTick + this.clockOffset - server) > CLOCK_SNAP_TICKS)) this.clockOffset = server - localTick;
+    return this.clockOffset === null ? localTick : localTick + this.clockOffset;
+  }
+
   pose(tick) {
-    this.state = trainState(tick);
+    this.state = trainState(this.scheduleTick(tick));
     return { x: this.state.x0, y: ROUTE.railY, z: ROUTE.trainZ0, yaw: 0 };
   }
 
@@ -236,6 +249,6 @@ export class SpaceTrain extends Vehicle {
   get drawCalls() { return this.meshes.filter((m) => m.visible).length; }
   info() {
     const st = this.state;
-    return { x0: st.x0, v: st.v, phase: st.phase, at: st.at ? st.at.name : null, dest: st.dest.name, doorsOpen: st.doorsOpen, cycleT: st.cycleT, riding: this.isPlayerRiding(), draws: this.drawCalls, cells: this.grid.count(), faces: this.meshes.reduce((n, m) => n + (m.userData.faces || 0), 0), preload: this.preloadStats };
+    return { x0: st.x0, v: st.v, phase: st.phase, at: st.at ? st.at.name : null, dest: st.dest.name, doorsOpen: st.doorsOpen, cycleT: st.cycleT, riding: this.isPlayerRiding(), draws: this.drawCalls, cells: this.grid.count(), faces: this.meshes.reduce((n, m) => n + (m.userData.faces || 0), 0), preload: this.preloadStats, clockOffset: this.clockOffset };
   }
 }
