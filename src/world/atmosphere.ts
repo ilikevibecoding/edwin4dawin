@@ -40,14 +40,19 @@ const KEYS: Key[] = [
   // moonlight (sunI) is kept low: with the night exposure a white hull under a x0.14 key read as a pale block
   { el: -18, sun: [0.5, 0.6, 0.85], sunI: 0.09, zen: [0.0012, 0.002, 0.005], hor: [0.004, 0.0055, 0.012], haze: [0.003, 0.004, 0.008], sunHaze: [0.004, 0.0045, 0.007], amb: 0.15 },
   { el: -8, sun: [0.5, 0.6, 0.85], sunI: 0.10, zen: [0.003, 0.006, 0.016], hor: [0.02, 0.022, 0.045], haze: [0.014, 0.016, 0.03], sunHaze: [0.05, 0.025, 0.025], amb: 0.16 },
-  { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.06, zen: [0.015, 0.035, 0.10], hor: [0.42, 0.22, 0.2], haze: [0.22, 0.16, 0.2], sunHaze: [0.9, 0.35, 0.18], amb: 0.4 },
-  // low sun: airmass extinction takes the direct beam well below its midday strength (keeps the sunset glitter path golden)
-  { el: 4, sun: [1.0, 0.5, 0.22], sunI: 0.30, zen: [0.035, 0.10, 0.30], hor: [0.82, 0.48, 0.34], haze: [0.50, 0.40, 0.40], sunHaze: [1.0, 0.55, 0.3], amb: 0.85 },
-  { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.62, zen: [0.03, 0.11, 0.34], hor: [0.66, 0.58, 0.54], haze: [0.54, 0.52, 0.54], sunHaze: [1.0, 0.75, 0.5], amb: 1.0 },
-  // day: `hor` is the saturated blue-cyan of the sky a few degrees above the horizon (the whitening of the
-  // last degrees comes from the haze band in skyRadiance), `zen` the deep cerulean of the upper sky
-  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.022, 0.12, 0.32], hor: [0.17, 0.29, 0.40], haze: [0.48, 0.54, 0.64], sunHaze: [1.0, 0.92, 0.80], amb: 1.0 },
-  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.02, 0.12, 0.32], hor: [0.16, 0.29, 0.40], haze: [0.47, 0.54, 0.65], sunHaze: [0.98, 0.93, 0.84], amb: 1.0 },
+  { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.06, zen: [0.015, 0.035, 0.10], hor: [0.40, 0.20, 0.19], haze: [0.22, 0.15, 0.19], sunHaze: [0.6, 0.15, 0.04], amb: 0.4 },
+  // low sun: airmass extinction takes the direct beam well below its midday strength and reddens it (keeps the
+  // sunset glitter path golden-orange). Sunset colours are far more saturated in linear light than they look:
+  // the sun-side haze is ~1 : 0.18 : 0.04 (a photographed (255,170,80) sky once the tonemapper has compressed
+  // it), the horizon away from the sun a salmon that skyRadiance cools toward violet; `hor` and the aureole
+  // sit low enough in G that the sun side stays orange instead of clipping to cream
+  { el: 4, sun: [1.0, 0.42, 0.16], sunI: 0.25, zen: [0.03, 0.09, 0.28], hor: [0.52, 0.21, 0.15], haze: [0.58, 0.30, 0.19], sunHaze: [0.62, 0.11, 0.025], amb: 0.85 },
+  { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.62, zen: [0.03, 0.11, 0.34], hor: [0.50, 0.43, 0.40], haze: [0.55, 0.50, 0.50], sunHaze: [1.0, 0.66, 0.36], amb: 1.0 },
+  // day: `hor` is the saturated blue-cyan of the sky a few degrees above the horizon, `zen` the deep cerulean
+  // of the upper sky, `haze` the pale cyan-white the horizon and distant objects fade into (the reference
+  // frame's horizon is a cyan-blue (148,181,194), not a neutral grey: the haze keeps R well below B)
+  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.006, 0.125, 0.36], hor: [0.11, 0.30, 0.45], haze: [0.40, 0.55, 0.66], sunHaze: [1.0, 0.92, 0.80], amb: 1.0 },
+  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.005, 0.125, 0.36], hor: [0.10, 0.30, 0.45], haze: [0.39, 0.55, 0.67], sunHaze: [0.98, 0.93, 0.84], amb: 1.0 },
 ];
 
 function mixKey(el: number): Key {
@@ -68,11 +73,16 @@ export const WEATHER: Record<Weather, WeatherPreset> = {
   // (the raymarched cloud sheds the soft fringe of the footprint, so the visible cover is a little below these)
   // cloudTop is the ceiling of the tallest towers (cell height scales with how far the field exceeds the
   // threshold, most cells stay well below it); fair-weather cumulus here reach ~2 km of vertical development
-  clear: { coverage: 0.27, hazeDensity: 1.5e-5, hazeHeight: 1400, windSpeed: 3.5, turbulence: 0.2, cloudBase: 1500, cloudTop: 3500, rain: 0, sunDim: 1 },
-  scattered: { coverage: 0.37, hazeDensity: 1.9e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 3500, rain: 0, sunDim: 0.97 },
-  // overcast: humid air under the deck (denser, taller haze) so the far end of the ceiling sinks into the horizon haze
-  cloudy: { coverage: 0.70, hazeDensity: 4.6e-5, hazeHeight: 1300, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 0.6 },
-  storm: { coverage: 0.92, hazeDensity: 5.5e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 3200, rain: 1, sunDim: 0.4 },
+  // hazeDensity: humid subtropical air, ~30-40 km visibility (the reference frame lifts a skyline 9 km away
+  // most of the way to the sky colour); the last stretch before the far plane dissolves completely (applyAerial)
+  // sunDim: the direct beam that reaches the ground through the deck; the dome, disc and cloud march see the
+  // undimmed sun (it shines on the top of the clouds regardless)
+  clear: { coverage: 0.27, hazeDensity: 4.0e-5, hazeHeight: 1400, windSpeed: 3.5, turbulence: 0.2, cloudBase: 1500, cloudTop: 3500, rain: 0, sunDim: 1 },
+  scattered: { coverage: 0.37, hazeDensity: 4.6e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 3500, rain: 0, sunDim: 0.97 },
+  // overcast: humid air under the deck (denser, taller haze) so the far end of the ceiling sinks into the horizon
+  // haze; under a 65 % stratocumulus deck the direct sun is mostly scattered (soft, faint shadows in the gaps)
+  cloudy: { coverage: 0.70, hazeDensity: 6.0e-5, hazeHeight: 1300, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 0.3 },
+  storm: { coverage: 0.92, hazeDensity: 7.0e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 3200, rain: 1, sunDim: 0.18 },
 };
 
 /** Sun position for Bahía Vista (latitude 25.8N, declination +10). */
@@ -122,6 +132,9 @@ export class Atmosphere {
     /** The same glow as the camera sees it, set per frame by Sky.render: xy horizontal unit direction (world xz) to
      *  the centre, z angular width of the lit horizon (small far away, > 1 over the city), w horizon radiance scale. */
     uCityGlowView: { value: new THREE.Vector4(0, -1, 0.3, 0) },
+    /** Aerial perspective reaches full extinction over the last part of the view distance: x start (m), y 1 / ramp
+     *  length. Kept in step with the main camera's far plane by PostPipeline.finish. */
+    uFarDissolve: { value: new THREE.Vector2(0.55 * 60000, 1 / (0.4 * 60000)) },
   };
   cloudOffset = new THREE.Vector2();
   windDir = new THREE.Vector2(1, 0.35).normalize();
@@ -155,15 +168,17 @@ export class Atmosphere {
     s.horizon.setRGB(k.hor[0], k.hor[1], k.hor[2]);
     s.haze.setRGB(k.haze[0], k.haze[1], k.haze[2]);
     s.sunHaze.setRGB(k.sunHaze[0], k.sunHaze[1], k.sunHaze[2]);
-    // the environment map already darkens with the sky colours; the multiplier only mutes the IBL at night
-    // (the night exposure boost would otherwise turn the dark-blue sky into a strong ground fill)
-    s.ambientIntensity = k.amb;
     s.night = 1 - smoothstep(-12, -1, elevation);
     // overcast: the dome flattens toward a neutral grey of the horizon's brightness (no blue cast under the deck).
     // A 0.70 deck covers ~65 % of the sky, so it is already most of the way to a closed ceiling; the horizon
     // haze under it is lit by the deck's underside, dimmer than a clear sky's horizon, so the far end of the
     // ceiling meets a horizon of about its own brightness instead of a bright white band
     const grey = smoothstep(0.4, 0.8, p.coverage);
+    // the environment map already darkens with the sky colours; the multiplier only mutes the IBL at night
+    // (the night exposure boost would otherwise turn the dark-blue sky into a strong ground fill). Under a deck
+    // the light the sun loses to the clouds comes back as diffuse skylight from the whole grey ceiling
+    // (an overcast sky is a far brighter diffuse source than a clear one), so the IBL is lifted with the cover
+    s.ambientIntensity = k.amb * (1 + 0.6 * grey);
     const horLum = s.horizon.r * 0.2126 + s.horizon.g * 0.7152 + s.horizon.b * 0.0722;
     const overcast = new THREE.Color(horLum, horLum, horLum).lerp(s.horizon, 0.3);
     const zl = s.zenith.clone().lerp(overcast, grey * 0.85);
@@ -174,7 +189,8 @@ export class Atmosphere {
     s.ground.copy(s.sunColor).multiplyScalar(s.sunIntensity * Math.max(s.sunDir.y, 0) / Math.PI).add(skyIrr).multiply(GROUND_ALBEDO);
     const u = this.uniforms;
     u.uSunDir.value.copy(dir);
-    u.uSunColor.value.copy(s.sunColor).multiplyScalar(keyStrength);
+    // the dome's disc and the cloud march see the sun above the deck: undimmed by the weather
+    u.uSunColor.value.copy(s.sunColor).multiplyScalar(k.sunI);
     u.uZenithColor.value.copy(zl);
     u.uHorizonColor.value.copy(hl);
     u.uHazeColor.value.copy(hazeL);

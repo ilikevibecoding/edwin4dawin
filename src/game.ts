@@ -340,9 +340,10 @@ export class Game {
     this.atmos.update(dt);
     const s = this.atmos.state;
     this.csm.lightDirection.copy(s.sunDir).negate();
-    // under a broken / overcast deck the direct beam is partly scattered by the clouds: cast shadows lighten
-    // with the coverage (the key light itself is already dimmed by the weather preset)
-    const shadowStrength = 1 - 0.45 * smoothstep(0.45, 0.95, this.atmos.preset.coverage);
+    // under a broken / overcast deck most of the direct beam arrives scattered from the whole ceiling: cast
+    // shadows fade to a faint, low-contrast darkening with the coverage (the key light itself is already
+    // dimmed by the weather preset), leaving the sun's direction only just readable under a 0.7 deck
+    const shadowStrength = 1 - 0.65 * smoothstep(0.4, 0.75, this.atmos.preset.coverage);
     for (const l of this.csm.lights) { l.intensity = s.sunIntensity; l.color.copy(s.sunColor); l.shadow.intensity = shadowStrength; }
     this.envTimer += dt;
     // the IBL probe only depends on the sun position and weather (no clouds in the probe), so refresh it on
