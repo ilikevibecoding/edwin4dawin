@@ -897,11 +897,14 @@ function ceilingStructure(kit, ctx, cx, cz, H) {
   const ring = new THREE.ExtrudeGeometry(shape, { depth: beamH, bevelEnabled: false });
   ring.rotateX(Math.PI / 2);
   kit.add("paintedMetal", ring, { pos: [cx, yTop, cz], color: PALETTE.impDark, texel: 1.2 });
-  // recessed channel on the underside: a faint diffuser body carries the ring, a thin blue core is
-  // the only bright element (the old full-width blue + white rings clipped to one white halo)
+  // recessed channel on the underside: a faint blue-tinted diffuser body carries the ring, a thin
+  // dim-blue core is the only bright element. Both stay well under clipping so the ring reads blue
+  // (the shared emitBlue at 2.6 blew the core to white, and a full-width blue + white pair before it
+  // clipped to one white halo)
+  ctx.materials.tac_ringDiffuser ||= new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#a9c6ee"), emissiveIntensity: 0.55, roughness: 0.6, metalness: 0 });
   kit.add("paintedMetal", new THREE.RingGeometry(3.45, 3.98, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.001, cz], color: PALETTE.impBlack, texel: 2 });
-  kit.add("emitWhiteFaint", new THREE.RingGeometry(3.58, 3.80, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.004, cz], uv: "keep" });
-  kit.add("emitBlue", new THREE.RingGeometry(3.66, 3.72, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.007, cz] });
+  kit.add("tac_ringDiffuser", new THREE.RingGeometry(3.58, 3.8, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.004, cz], uv: "keep" });
+  kit.add("emitBlueDim", new THREE.RingGeometry(3.66, 3.72, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.007, cz] });
   // eight downlight fixtures at the octagon corners: faint pad with a small dim core
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;

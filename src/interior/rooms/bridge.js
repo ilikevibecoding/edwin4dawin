@@ -139,6 +139,10 @@ function ensureMaterials(ctx) {
     m.brg_step = m.impScreen0.clone();
     m.brg_step.emissiveMap = makeStatusList(ctx.seed + 909);
     m.brg_step.name = "brg_step";
+    // helm page for the dais' low rim console (its own small texture, not one of the atlases)
+    m.brg_helm = m.impScreen0.clone();
+    m.brg_helm.emissiveMap = makeHelmReadout(ctx.seed + 917);
+    m.brg_helm.name = "brg_helm";
     // unlit near-black for the window reveal (see buildWindowWall)
     m.brg_void = new THREE.MeshBasicMaterial({ color: 0x05060a });
     // window frame steel: matte near-black with almost no environment response, so the mullions stay
@@ -212,6 +216,101 @@ function makeStatusList(seed, accent = "#4a9dff", warn = "#ffb347", alert = "#ff
     g.fillRect(410, y + 5, 30 + rand() * 40, 6);
     g.fillStyle = rgba(accent, 0.35);
     g.fillRect(470, y + 5, 28, 6);
+  }
+  return toTexture(c, { srgb: true, anisotropy: 4 });
+}
+
+/**
+ * Helm readout for the dais' low rim console (256 x 128, ~170 KB with mips): four vertical thrust
+ * gauges on the left, a heading tape with an amber lubber line and a trim trace on the right — so
+ * the pair of rim consoles no longer shows the radar + list page twice.
+ */
+function makeHelmReadout(seed, accent = "#4a9dff", warn = "#e0a444") {
+  const w = 256;
+  const h = 128;
+  const c = makeCanvas(w, h);
+  const g = c.getContext("2d");
+  const rand = rng(seed);
+  const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a})`;
+  g.fillStyle = "#020408";
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = rgba(accent, 0.07);
+  for (let x = 0; x < w; x += 8) g.fillRect(x, 0, 1, h);
+  for (let y = 0; y < h; y += 8) g.fillRect(0, y, w, 1);
+  // header rule + title block
+  g.fillStyle = accent;
+  g.fillRect(6, 6, w - 12, 1);
+  g.fillRect(6, 10, 34, 4);
+  g.fillStyle = rgba(accent, 0.45);
+  for (let k = 0; k < 3; k++) g.fillRect(w - 6 - 42 + k * 14, 10, 10, 4);
+  // thrust gauges: track, fill from the bottom (one running hot in amber), ticks, label block
+  const y0 = 26;
+  const gh = 78;
+  for (let k = 0; k < 4; k++) {
+    const x = 12 + k * 28;
+    g.fillStyle = rgba(accent, 0.2);
+    g.fillRect(x, y0, 16, gh);
+    const f = k === 2 ? 0.9 : 0.35 + rand() * 0.45;
+    g.fillStyle = f > 0.85 ? rgba(warn, 0.85) : rgba(accent, 0.85);
+    g.fillRect(x, y0 + gh * (1 - f), 16, gh * f);
+    g.fillStyle = rgba(accent, 0.45);
+    for (let t = 0; t <= 8; t++) g.fillRect(x - 4, y0 + (t / 8) * gh, t % 2 ? 2 : 4, 1);
+    g.fillStyle = rgba(accent, 0.6);
+    g.fillRect(x + 2, y0 + gh + 6, 12, 4);
+    g.fillStyle = rgba(accent, 0.4);
+    g.fillRect(x, 17, 10 + rand() * 6, 4);
+  }
+  // heading tape: bordered band, minor ticks every 6 px, major every 30 px with a code block, amber lubber line
+  const tx = 132;
+  const tw = w - tx - 8;
+  const ty = 26;
+  const th = 24;
+  g.fillStyle = rgba(accent, 0.5);
+  g.fillRect(tx, ty, tw, 1);
+  g.fillRect(tx, ty + th, tw, 1);
+  const phase = Math.floor(rand() * 6);
+  for (let i = 0; i * 6 < tw; i++) {
+    const x = tx + i * 6;
+    const major = (i + phase) % 5 === 0;
+    g.fillStyle = rgba(accent, major ? 0.8 : 0.45);
+    g.fillRect(x, ty + th - (major ? 12 : 6), 1, major ? 12 : 6);
+    if (major && x + 12 < tx + tw) {
+      g.fillStyle = rgba(accent, 0.7);
+      g.fillRect(x - 5, ty + 4, 3, 4);
+      g.fillRect(x - 1, ty + 4, 3, 4);
+      g.fillRect(x + 3, ty + 4, 3, 4);
+    }
+  }
+  const lx = tx + Math.floor(tw / 2);
+  g.fillStyle = rgba(warn, 0.9);
+  g.fillRect(lx, ty - 6, 2, th + 8);
+  g.beginPath();
+  g.moveTo(lx + 1, ty - 1);
+  g.lineTo(lx - 5, ty - 9);
+  g.lineTo(lx + 7, ty - 9);
+  g.closePath();
+  g.fill();
+  // trim trace under the tape and three status cells along the bottom
+  g.strokeStyle = rgba(accent, 0.8);
+  g.lineWidth = 1.5;
+  g.beginPath();
+  for (let i = 0; i <= 28; i++) {
+    const px = tx + (i / 28) * tw;
+    const py = 78 + Math.sin(i * 0.6 + seed) * 6 + (rand() - 0.5) * 4;
+    if (i === 0) g.moveTo(px, py);
+    else g.lineTo(px, py);
+  }
+  g.stroke();
+  g.fillStyle = rgba(accent, 0.25);
+  g.fillRect(tx, 66, tw, 1);
+  g.fillRect(tx, 90, tw, 1);
+  for (let k = 0; k < 3; k++) {
+    const x = tx + k * Math.floor(tw / 3);
+    const cw = Math.floor(tw / 3) - 4;
+    g.fillStyle = rgba(accent, 0.2);
+    g.fillRect(x, 100, cw, 12);
+    g.fillStyle = k === 1 ? rgba(warn, 0.8) : rgba(accent, 0.8);
+    g.fillRect(x + 2, 102, cw * (0.3 + rand() * 0.6), 8);
   }
   return toTexture(c, { srgb: true, anisotropy: 4 });
 }
@@ -1006,12 +1105,12 @@ function holoDais(kit, ctx, mats, x, yBase, z) {
     kit.box("brg_ring", x + Math.cos(a) * (DAIS_R - 0.09), yBase + 0.2, z + Math.sin(a) * (DAIS_R - 0.09), 0.1, 0.03, 0.1, {});
   }
   // rim consoles: two angled control slabs on the aft rim (the commander stands between them). Not a
-  // mirrored pair: starboard is the flat slab with a tactical readout from the second atlas, port a
-  // taller slab whose breathing readout sits under a small hooded riser
+  // mirrored pair: starboard is the flat slab with the helm page (thrust gauges + heading tape), port
+  // a taller slab whose breathing tactical readout sits under a small hooded riser
   for (const s of [-1, 1]) {
     const a = s * 0.62;
     const p = { x: x + Math.sin(a) * (DAIS_R - 0.17), y: top, z: z + Math.cos(a) * (DAIS_R - 0.17), yaw: a, d: 0.38, seed: ctx.seed + 40 + s, collide: false };
-    if (s > 0) slabConsole(kit, { ...p, w: 0.7, h: 0.36, screens: ["brg_scrB0"] });
+    if (s > 0) slabConsole(kit, { ...p, w: 0.7, h: 0.36, screens: ["brg_helm"] });
     else slabConsole(kit, { ...p, w: 0.82, h: 0.42, screens: ["brg_pulse"], riser: 0.2, riserScreens: ["brg_scrB2"], hood: 0.08, lampMat: "emitAmber" });
   }
   kit.collider([x - DAIS_R, yBase, z - DAIS_R], [x + DAIS_R, top + 0.5, z + DAIS_R], "holotable"); // taller than a step: nobody climbs onto the table

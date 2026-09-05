@@ -239,22 +239,39 @@ export function buildObservation(kit, ctx) {
 // Pieces
 // ---------------------------------------------------------------------------
 /**
- * Imperial gallery bench facing the glass (-z): a low black plinth, dark box body, a padded seat and
- * a low padded back, grey end cheeks with a warm slit light under the seat lip, something left on it.
+ * Imperial gallery bench facing the glass (-z), built to read as seating from the door side too (the
+ * gallery camera looks at its back from a metre or two above the seat): a black plinth under a
+ * narrower dark pedestal, a mid-grey fabric seat cushion overhanging it on every side (warm slit under
+ * the front lip, warm kick strip behind), an open two-rail backrest on black posts — padded rails
+ * with gaps that show the cushion through them, top rail 0.39 m over the seat, and 0.56 m shorter
+ * than the cushion so the seat shows past both ends — and a short bollard lamp standing on each end
+ * of the plinth. Footprint and collider unchanged (2.4 x 0.66).
  */
 function bench(kit, x, z, len, rand) {
   // matte, near-black finishes: the exterior sun reaches in through the glass and lifts anything glossy
-  kit.box("paintedMetal", x, 0.05, z, len - 0.4, 0.1, 0.5, { color: PALETTE.impBlack, texel: 2 });
-  kit.box("rubber", x, 0.27, z, len - 0.2, 0.34, 0.6, { color: PALETTE.impDark, texel: 1.5 });
-  kit.add("fabric", new RoundedBoxGeometry(len - 0.24, 0.12, 0.6, 3, 0.04), { pos: [x, 0.5, z], color: PALETTE.impBlack, uv: "world", texel: 2 });
-  // low back along the aft edge (+z), leaning slightly
-  kit.box("rubber", x, 0.62, z + 0.3, len - 0.24, 0.32, 0.06, { color: PALETTE.impDark, texel: 2 });
-  kit.add("fabric", new RoundedBoxGeometry(len - 0.3, 0.3, 0.08, 3, 0.03), { pos: [x, 0.7, z + 0.26], rot: [-0.12, 0, 0], color: PALETTE.impBlack, uv: "world", texel: 2 });
+  const seatTop = 0.56;
+  kit.box("paintedMetal", x, 0.05, z, len - 0.06, 0.1, 0.5, { color: PALETTE.impBlack, texel: 2 });
+  kit.box("rubber", x, 0.26, z, len - 0.56, 0.32, 0.46, { color: PALETTE.impDark, texel: 1.5 });
+  kit.add("fabric", new RoundedBoxGeometry(len - 0.34, 0.14, 0.64, 3, 0.05), { pos: [x, seatTop - 0.07, z], color: PALETTE.impMid, uv: "world", texel: 2 });
+  kit.box("obs_floor", x, 0.405, z - 0.232, len - 0.8, 0.015, 0.01, { uv: "keep" });
+  kit.box("obs_floor", x, 0.13, z + 0.232, len - 0.8, 0.015, 0.01, { uv: "keep" });
+  // backrest: two black posts carrying two padded rails and a grey top rail, leaning aft
+  const bl = len - 0.9;
+  const bq = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.14);
+  const bp = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(bq).add(new THREE.Vector3(x, seatTop, z + 0.27)).toArray();
+  for (const s of [-1, 1]) kit.add("paintedMetal", new THREE.BoxGeometry(0.05, 0.42, 0.05), { pos: bp(s * (bl / 2 - 0.05), 0.19, 0.03), quat: bq, color: PALETTE.impBlack, texel: 3 });
+  kit.add("fabric", new RoundedBoxGeometry(bl - 0.16, 0.1, 0.07, 3, 0.03), { pos: bp(0, 0.16, -0.01), quat: bq, color: PALETTE.impDark, uv: "world", texel: 2 });
+  kit.add("fabric", new RoundedBoxGeometry(bl - 0.16, 0.12, 0.07, 3, 0.03), { pos: bp(0, 0.31, -0.01), quat: bq, color: PALETTE.impDark, uv: "world", texel: 2 });
+  kit.add("paintedMetal", new THREE.BoxGeometry(bl + 0.04, 0.02, 0.09), { pos: bp(0, 0.39, 0.02), quat: bq, color: PALETTE.impGrey, texel: 2 });
+  // bollard lamp on each end of the plinth: foot, post, warm band, black cap
   for (const s of [-1, 1]) {
-    kit.box("paintedMetal", x + s * (len / 2 - 0.06), 0.42, z + 0.02, 0.06, 0.84, 0.66, { color: PALETTE.impDark, texel: 2 });
-    kit.box("paintedMetal", x + s * (len / 2 - 0.06), 0.85, z + 0.02, 0.08, 0.02, 0.68, { color: PALETTE.impGrey, texel: 2 });
+    const ex = x + s * (len / 2 - 0.1);
+    const ez = z + 0.16;
+    kit.box("paintedMetal", ex, 0.12, ez, 0.14, 0.04, 0.14, { color: PALETTE.impBlack, texel: 3 });
+    kit.box("paintedMetal", ex, 0.52, ez, 0.08, 0.76, 0.08, { color: PALETTE.impDark, texel: 3 });
+    kit.box("obs_warm", ex, 0.925, ez, 0.07, 0.05, 0.07, { uv: "keep" });
+    kit.box("paintedMetal", ex, 0.965, ez, 0.11, 0.03, 0.11, { color: PALETTE.impBlack, texel: 3 });
   }
-  kit.box("obs_floor", x, 0.43, z - 0.302, len - 0.5, 0.015, 0.01, { uv: "keep" });
   kit.collider([x - len / 2, 0, z - 0.33], [x + len / 2, 0.86, z + 0.33], "bench");
   const r = rand();
   if (r < 0.5) datapad(kit, x + (rand() - 0.5) * 1.4, 0.56, z - 0.05 + (rand() - 0.5) * 0.2, rand() * Math.PI, Math.floor(rand() * 5));

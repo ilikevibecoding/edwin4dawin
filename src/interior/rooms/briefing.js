@@ -56,11 +56,13 @@ export function buildBriefing(kit, ctx) {
   }
   // seats face +x; the 0.94 m pitch leaves a 0.9 m aisle along each side wall. Row A: bench seats
   // with one swung toward the aisle; row B: a briefing desk with four seated stations; row C: bench
-  // seats with two turned toward each other and a tunic left over a backrest
+  // seats with two turned toward each other and a kit case left hanging on the aisle seat's backrest
   const seatZ = [-2, -1, 0, 1, 2].map((i) => cz + i * 0.94);
+  // dim printed stencil for the kit case (one short row, ~256 x 32 px)
+  const stencil = labelAtlas(ctx, "briefing_stencil", [{ text: "SQN 7  ·  FIELD KIT", accent: "#ffb347", color: "#cfd4dc" }], { rowH: 32, intensity: 0.45, bg: "#15171b" });
   benchRow(kit, rowsX[0], 0, seatZ, 0, { turns: { 3: -0.35 } });
   deskRow(kit, ctx, rowsX[1] - 0.15, tiers[0].y, seatZ);
-  benchRow(kit, rowsX[2], tiers[1].y, seatZ, 2, { turns: { 1: 0.45, 2: -0.4 }, jacket: 4 });
+  benchRow(kit, rowsX[2], tiers[1].y, seatZ, 2, { turns: { 1: 0.45, 2: -0.4 }, kitCase: 4, stencil });
 
   // --- forward wall (xmax): segmented mission display, lectern under the backlit emblem
   {
@@ -274,9 +276,10 @@ export function buildBriefing(kit, ctx) {
 // ---------------------------------------------------------------------------
 /**
  * Row of `zs.length` bench seats on a shared plinth at floor level `y`, facing +x. `turns` = { seatIndex:
- * yaw } swings individual seats on their pedestals; `jacket` = index of a seat with a tunic over its back.
+ * yaw } swings individual seats on their pedestals; `kitCase` = index of a seat with a hard kit case
+ * hanging from its backrest (`stencil` = one-row label atlas for the case's marking).
  */
-function benchRow(kit, x, y, zs, row, { turns = {}, jacket = -1 } = {}) {
+function benchRow(kit, x, y, zs, row, { turns = {}, kitCase = -1, stencil = null } = {}) {
   const pitch = zs[1] - zs[0];
   const z0 = zs[0] - 0.6;
   const z1 = zs[zs.length - 1] + 0.6;
@@ -302,10 +305,30 @@ function benchRow(kit, x, y, zs, row, { turns = {}, jacket = -1 } = {}) {
     part("paintedMetal", 0.08, 0.62, 0.52, -0.23, 0.78, 0, { color: PALETTE.impGrey, texel: 2 }, 0.16);
     part("fabric", 0.06, 0.52, 0.44, -0.17, 0.78, 0, { color: PALETTE.impBlack, uv: "world", texel: 2 }, 0.16);
     part("paintedMetal", 0.1, 0.05, 0.56, -0.28, 1.1, 0, { color: PALETTE.impBlack, texel: 2 });
-    if (i === jacket) {
-      // duty tunic thrown over the backrest: olive drape hanging down both sides
-      part("fabric", 0.34, 0.06, 0.42, -0.27, 1.145, 0, { color: 0x4b4f3f, uv: "world", texel: 2 });
-      part("fabric", 0.05, 0.4, 0.4, -0.42, 0.93, 0.02, { color: 0x4b4f3f, uv: "world", texel: 2 }, 0.16);
+    if (i === kitCase) {
+      // hard kit case hung from the backrest by its strap, resting against the back of the shell
+      // (the side the door camera sees): black body, dark-grey lid band, steel latches and handle,
+      // a small printed squadron stencil low on the face
+      const leanQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), 0.16);
+      const cq = q.clone().multiply(leanQ);
+      const cc = new THREE.Vector3(-0.335, 0.85, 0.02); // case centre, seat-local
+      const cp = (dx, dy, dz) => {
+        const v = new THREE.Vector3(dx, dy, dz).applyQuaternion(leanQ).add(cc);
+        return at(v.x, v.y, v.z);
+      };
+      const cbox = (mat, sx, sy, sz, dx, dy, dz, extra = {}) => kit.add(mat, new THREE.BoxGeometry(sx, sy, sz), { pos: cp(dx, dy, dz), quat: cq, ...extra });
+      cbox("paintedMetal", 0.09, 0.32, 0.38, 0, 0, 0, { color: PALETTE.impBlack, texel: 2 });
+      cbox("paintedMetal", 0.1, 0.09, 0.39, 0, 0.12, 0, { color: PALETTE.impDark, texel: 2 });
+      for (const s of [-1, 1]) cbox("metal", 0.02, 0.05, 0.04, -0.052, 0.055, s * 0.12, { color: PALETTE.steel });
+      cbox("metal", 0.02, 0.02, 0.14, 0, 0.18, 0, { color: PALETTE.steel });
+      if (stencil) {
+        const sh = 0.034;
+        kit.add(stencil.key, new THREE.PlaneGeometry(sh * stencil.aspect(0), sh).rotateY(-Math.PI / 2), { pos: cp(-0.047, -0.075, 0), quat: cq, uv: "keep", uvRect: stencil.rect(0) });
+      }
+      // strap: a short diagonal run from the handle up over the backrest's top cap
+      const sq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -0.5));
+      kit.add("fabric", new THREE.BoxGeometry(0.015, 0.13, 0.05), { pos: at(-0.337, 1.085, 0.02), quat: sq, color: PALETTE.impBlack, uv: "world", texel: 2 });
+      part("fabric", 0.14, 0.015, 0.05, -0.26, 1.133, 0.02, { color: PALETTE.impBlack, uv: "world", texel: 2 });
     }
     // a datapad left on a couple of seats
     if (rand() < 0.3) datapad(kit, x + 0.04, y + 0.505, z + (rand() - 0.5) * 0.2, (rand() - 0.5) * 0.8, Math.floor(rand() * 5));

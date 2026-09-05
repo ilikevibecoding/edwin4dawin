@@ -8,7 +8,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { PALETTE } from "../../materials.js";
-import { roomShell, impConsole, impChair, equipmentRack, wallScreen, pipeRun, wallSegment, IMP_STYLES_TECH, IMP_THEME } from "../imperial.js";
+import { roomShell, impConsole, impChair, equipmentRack, wallScreen, pipeRun, wallSegment, ceilingFixture, IMP_STYLES_TECH, IMP_THEME } from "../imperial.js";
 import { pointLight, wallFrame, ceilingFrame, panelGrid, X_AXIS } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect } from "../../textures.js";
@@ -82,6 +82,10 @@ function ensureMaterials(ctx) {
     m.cms_bright.map = null;
     m.cms_bright.color = new THREE.Color("#7fb8ff");
     m.cms_bright.opacity = 0.85;
+    // core of the two ceiling channel fixtures: the shared dim white a step lower (see buildCeiling)
+    m.cms_strip = m.emitWhiteDim.clone();
+    m.cms_strip.name = "cms_strip";
+    m.cms_strip.emissiveIntensity = 0.85;
   }
   return { pulse: m.cms_pulse, green: m.cms_green, sweep: m.cms_sweep, faint: m.cms_faint, bright: m.cms_bright };
 }
@@ -113,13 +117,20 @@ function buildCeiling(kit, ctx, B, H) {
     decals: false,
   });
   kit.boxMM("paintedMetal", [min[0] - 0.3, H + 0.16, min[2] - 0.3], [max[0] + 0.3, H + 0.3, max[2] + 0.3], BLACK);
-  // two channels along x, each with three short dim segments
+  // two channels along x, each a black tray carrying three ceilingFixture segments (dark housing +
+  // narrow core) with a wide faint diffuser plate under each housing — the same fixture language as
+  // the spine, so nothing on this ceiling is a bare emissive bar. The fixture's own diffuser is
+  // skipped: it sits inside the housing box and never shows, so the plate is added here at the
+  // spine's core-to-diffuser proportion (1:4), and the core runs a step under the shared dim white:
+  // the door camera sees these channels at a grazing angle where a full emitWhiteDim core still
+  // stacked into a solid bright bar
   for (const z of [min[2] + d * 0.25, min[2] + d * 0.75]) {
-    kit.box("paintedMetal", min[0] + w / 2, H - 0.06, z, w - 1.0, 0.1, 0.42, DARK);
-    kit.box("paintedMetal", min[0] + w / 2, H - 0.1, z, w - 1.2, 0.03, 0.2, BLACK);
+    kit.box("paintedMetal", min[0] + w / 2, H - 0.04, z, w - 1.0, 0.08, 0.5, BLACK);
     for (let i = 0; i < 3; i++) {
       const x = min[0] + 0.5 + ((i + 0.5) / 3) * (w - 1.0);
-      kit.box("emitWhiteDim", x, H - 0.105, z, (w - 1.0) / 3 - 0.9, 0.025, 0.12, { uv: "keep" });
+      const len = (w - 1.0) / 3 - 0.9;
+      ceilingFixture(kit, x - len / 2, z, x + len / 2, z, H, { stripMat: "cms_strip", diffuserMat: null });
+      kit.box("emitWhiteFaint", x, H - 0.1115, z, len - 0.04, 0.005, 0.28, { uv: "keep" });
     }
   }
   // spine fixture down the room's centre line (z -8.5, under the three cool lights): a dark housing

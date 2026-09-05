@@ -27,6 +27,8 @@ export function buildNavigation(kit, ctx) {
     { text: "SECTOR CHART  ·  PROJECTION FIELD", accent: "#4a9dff" },
     { text: "COURSE PLOT  ·  OPERATOR", accent: "#ffb347", color: "#ffe6c4" },
     { text: "CHART TAPES  ·  HYPERLANE 1 – 12", accent: "#ffb347", color: "#ffe6c4" },
+    { text: "PORT  ·  FLIGHT SYSTEMS  ·  TAPE BANK", accent: "#ffb347", color: "#ffe6c4" },
+    { text: "STBD  ·  FLIGHT SYSTEMS  ·  TAPE BANK", accent: "#ffb347", color: "#ffe6c4" },
   ]);
   const hm = holoMaterial(ctx, "cmd_holo");
   const swatch = (s) => [s[0], s[1], s[0], s[1]];
@@ -53,7 +55,7 @@ export function buildNavigation(kit, ctx) {
 
   // --- pilot row facing the forward arc, flight director's station behind them
   const pz = min[2] + 3.6; // console line
-  for (const [i, x] of [cx - 1.55, cx + 1.55].entries()) pilotStation(kit, ctx, x, pz, ctx.seed + i * 7, i === 0 ? -1 : 1);
+  for (const [i, x] of [cx - 1.55, cx + 1.55].entries()) pilotStation(kit, ctx, x, pz, ctx.seed + i * 7, i === 0 ? -1 : 1, labels);
   impConsole(kit, ctx, { x: cx, z: pz + 3.3, yaw: 0, w: 2.6, d: 0.85, h: 1.0, screens: [2, 0, 2], chair: true, seed: ctx.seed + 41, lampMat: "emitAmber" });
   signAt(kit, labels, 3, { x: cx, y: 0.55, z: pz + 3.3 - 0.43, yaw: Math.PI, h: 0.08 });
   // floor marking: sparse amber edge studs along the lane from the door to the director's station
@@ -209,7 +211,7 @@ export function buildNavigation(kit, ctx) {
  * (three readouts facing the seat, so the station reads as a cockpit from the door too), a yoke on
  * a column, throttle quadrant, side wing with switch rows on the outer side, seat.
  */
-function pilotStation(kit, ctx, x, z, seed, outer) {
+function pilotStation(kit, ctx, x, z, seed, outer, labels) {
   impConsole(kit, ctx, { x, z, yaw: 0, w: 2.2, d: 0.9, h: 0.95, screens: [2, 2, 2], seed, lampMat: "emitAmber" });
   // instrument panel: dark hood with three screens and a lamp row, facing +z over the slab's far edge
   {
@@ -225,10 +227,29 @@ function pilotStation(kit, ctx, x, z, seed, outer) {
     kit.box("emitAmber", x, 1.5, pz + 0.085, 1.8, 0.012, 0.006);
     kit.collider([x - 1.08, 0, pz - 0.08], [x + 1.08, 1.58, pz + 0.08], "ipanel");
   }
-  // side wing on the outer side: low sloped panel with switch rows and a small readout
+  // side wing on the outer side: low sloped panel with switch rows and a small readout. Its outer
+  // face is the biggest blank surface the door camera sees on the port station, so it is dressed as
+  // the station's tape bank in the desks' language: black plinth under a kick recess with a dim
+  // strip, a grey drawer front in a black seam with a pull, a label plate, and a row of four
+  // cartridge slots with status lamps (three loaded, one empty)
   {
     const wx = x + outer * 1.35;
-    kit.box("paintedMetal", wx, 0.42, z + 0.7, 0.4, 0.84, 0.9, { color: PALETTE.impDark, texel: 1.5 });
+    const wz = z + 0.7;
+    const fx = wx + outer * 0.2; // outer face plane
+    kit.box("paintedMetal", wx, 0.05, wz, 0.32, 0.1, 0.82, { color: PALETTE.impBlack, texel: 2 });
+    kit.box("paintedMetal", wx, 0.47, wz, 0.4, 0.74, 0.9, { color: PALETTE.impDark, texel: 1.5 });
+    kit.box("emitBlueDim", wx + outer * 0.161, 0.05, wz, 0.004, 0.016, 0.6, { uv: "keep" });
+    kit.box("paintedMetal", fx + outer * 0.003, 0.3, wz, 0.006, 0.3, 0.82, { color: PALETTE.impBlack, texel: 3 });
+    kit.box("impPanel1", fx + outer * 0.009, 0.3, wz, 0.012, 0.26, 0.78, { color: PALETTE.impGrey, uv: "keep" });
+    kit.box("metal", fx + outer * 0.022, 0.3, wz + 0.25, 0.02, 0.03, 0.16, { color: PALETTE.steel });
+    signAt(kit, labels, outer < 0 ? 9 : 10, { x: fx + outer * 0.012, y: 0.5, z: wz, yaw: outer < 0 ? -Math.PI / 2 : Math.PI / 2, h: 0.07 });
+    for (let k = 0; k < 4; k++) {
+      const sz = wz - 0.3 + k * 0.2;
+      const loaded = k !== 1;
+      kit.box("paintedMetal", fx + outer * 0.005, 0.66, sz, 0.01, 0.12, 0.16, { color: PALETTE.impBlack, texel: 3 });
+      if (loaded) kit.box("metal", fx + outer * 0.016, 0.675, sz, 0.032, 0.06, 0.11, { color: k === 2 ? PALETTE.impMid : PALETTE.impGrey, texel: 3 });
+      kit.box(loaded ? (k === 2 ? "emitAmberDim" : "emitBlueDim") : "rubber", fx + outer * 0.012, 0.62, sz, 0.004, 0.012, 0.05, { color: PALETTE.rubber });
+    }
     const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -outer * 0.3);
     kit.add("paintedMetal", new THREE.BoxGeometry(0.44, 0.05, 0.94), { pos: [wx, 0.88, z + 0.7], quat: q, color: PALETTE.impBlack, texel: 2 });
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
@@ -238,7 +259,6 @@ function pilotStation(kit, ctx, x, z, seed, outer) {
     }
     const sp = new THREE.Vector3(wx, 0.88, z + 1.02).addScaledVector(up, 0.03);
     kit.add("impScreen4", new THREE.PlaneGeometry(0.26, 0.14).rotateX(-Math.PI / 2), { pos: sp.toArray(), quat: q, uv: "keep" });
-    kit.box(outer < 0 ? "emitBlue" : "emitAmber", wx + outer * 0.201, 0.6, z + 0.7, 0.006, 0.03, 0.5);
     kit.collider([wx - 0.22, 0, z + 0.24], [wx + 0.22, 0.92, z + 1.16], "wing");
   }
   // yoke column rising from the console's operator edge
