@@ -447,17 +447,18 @@ function applyView(name) {
       const f = list[v.fighter % Math.max(1, list.length)] || fighters.all[0];
       target = f ? f.pos.toArray() : [0, 0, 0];
     }
+    let yaw = v.yaw;
     if (v.ship) {
       const s = shipFor(v.ship);
       const off = new THREE.Vector3(...(v.offset || [0, 0, 0])).applyQuaternion(
         s.quaternion,
       );
       target = s.position.clone().add(off).toArray();
+      // ship-relative yaw: 0 sits astern of the ship, PI ahead of its bow, whatever its heading
+      const back = new THREE.Vector3(0, 0, 1).applyQuaternion(s.quaternion);
+      yaw = Math.atan2(back.x, back.z) + v.yaw;
     }
-    orbit.setPose(
-      { target, distance: v.distance, yaw: v.yaw, pitch: v.pitch },
-      true,
-    );
+    orbit.setPose({ target, distance: v.distance, yaw, pitch: v.pitch }, true);
     orbit.update(0);
   }
   camera.updateMatrixWorld(true);
