@@ -807,7 +807,7 @@ export function buildHangar(kit, ctx, room) {
     spot([-40, 27, 58], [-43, 0, 71], 4.2, amber, { priority: 3.06, shadow: true }); // W berths (deck spots 1–2): sodium work flood
     // the parked Kestrel: hull, ramp and its ground kit. Hung E of the ship (the deck / ramp cameras stand
     // on that side; from the W the whole camera-facing flank fell into its own unlit side)
-    spot([12, 27, -60], [-18, 0, -70], 4.5, white, { priority: 3.02 });
+    spot([12, 27, -60], [-18, 0, -70], 3.8, white, { priority: 3.02 });
     const fills = [
       [-30, 27, 92], // aft coaming, W (the spawn)
       [30, 27, 86], // aft coaming, E

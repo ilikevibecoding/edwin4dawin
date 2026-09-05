@@ -118,7 +118,7 @@ function refuelBoom(kit, x, z, aim, beacons, accentKey = "emitBlue") {
   kit.cyl("chevronY", x, 0.62, z, 1.42, 0.06, "y", { segments: 20, texel: 1 });
   kit.box("impMetal", x, 1.3, z, 1.6, 1.4, 1.6, { color: PALETTE.impGreyDark, texel: 1 });
   kit.box("impTrim", x, 1.3, z + 0.81, 0.9, 0.7, 0.04, { color: PALETTE.impBlack });
-  kit.add("scrBlue1", new THREE.PlaneGeometry(0.6, 0.35), { pos: [x, 1.4, z + 0.835], uv: "keep" });
+  kit.add("scrBlue0", new THREE.PlaneGeometry(0.6, 0.35), { pos: [x, 1.4, z + 0.835], uv: "keep" });
   kit.cyl("impMetal", x, 5.5, z, 0.42, 7.2, "y", { color: PALETTE.impGrey, segments: 14, texel: 0.5 });
   for (const yy of [2.6, 5.0, 7.4]) kit.cyl("impTrim", x, yy, z, 0.48, 0.3, "y", { color: PALETTE.impBlack, segments: 14 });
   const top = new THREE.Vector3(x, 9.1, z);
@@ -182,7 +182,7 @@ export function buildShuttleBay(kit, ctx, room) {
   deckDecal(kit, hgNumber(7), PAD.x, PAD.z + PAD.r + 2.6, 3.2, Math.PI, 0.007);
   for (let i = 0; i < 20; i++) {
     const a = (i / 20) * Math.PI * 2;
-    hgDeckLamp(kit, PAD.x + Math.cos(a) * (PAD.r + 1.0), PAD.z + Math.sin(a) * (PAD.r + 1.0), i % 2 ? "emitAmberDim" : "emitAmber");
+    hgDeckLamp(kit, PAD.x + Math.cos(a) * (PAD.r + 1.0), PAD.z + Math.sin(a) * (PAD.r + 1.0), "emitAmber"); // one lamp key (mesh budget: ≤ 50)
   }
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
@@ -262,7 +262,7 @@ export function buildShuttleBay(kit, ctx, room) {
       kit.collider([ax - 0.4, 0, cz - 0.4], [ax + 0.4, 3.6, cz + 0.4], "arch");
     }
     kit.box("impTrim", -6, 3.55, cz, 6.5, 0.3, 0.5, { color: PALETTE.impBlack, texel: 1 });
-    kit.box("emitBlueDim", -6, 3.38, cz, 5.4, 0.04, 0.3, { uv: "keep" });
+    kit.box("emitWhiteDim", -6, 3.38, cz, 5.4, 0.04, 0.3, { uv: "keep" });
     kit.box("impMetal", -6, 3.9, cz, 1.0, 0.4, 0.6, { color: PALETTE.impGreyDark });
     for (let k = 0; k < 3; k++) kit.box([accentKey, "emitWhiteDim", "emitRedImp"][k], -6.3 + k * 0.3, 3.9, cz + 0.31, 0.1, 0.1, 0.01);
     kit.boxMM("chevronY", [-9.3, 0.002, cz - 3.5], [-8.7, 0.011, cz + 3.5], { texel: 0.8 });
@@ -296,8 +296,8 @@ export function buildShuttleBay(kit, ctx, room) {
     hgCrateStack(kit, 5.5, 35, -0.15, [["b", 0, 0, 0], ["c", 1.4, 0, 0.1, 0.5], ["a", 0.1, 1.2, 0.1, 0.3]], { seed: 73 });
     hgPowerBox(kit, -24, 37.6, Math.PI / 2, { on: true });
     for (const z of [26, 32]) {
-      hgDeckLamp(kit, -10.5, z, "emitWhiteDim");
-      hgDeckLamp(kit, -1.5, z, "emitWhiteDim");
+      hgDeckLamp(kit, -10.5, z, "emitAmber"); // queue markers share the pad lamps' key (mesh budget)
+      hgDeckLamp(kit, -1.5, z, "emitAmber");
     }
   }
 
@@ -346,7 +346,7 @@ export function buildShuttleBay(kit, ctx, room) {
     lampRows: true,
     lampKey: "emitWhiteDim",
     lampStep: 3.4,
-    floodLamp: "emitWarmSoft", // shares the shuttle hatch pane's key (mesh budget: ≤ 50)
+    floodLamp: "emitWarmSoft",
     plateColor: HG_PALETTE.plate,
     plateAlt: HG_PALETTE.plateAlt,
     upperColor: HG_PALETTE.upper,
