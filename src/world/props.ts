@@ -150,9 +150,9 @@ export class Props {
     if (this.map.heightAt(x, z) < -0.6) this.mooredBoatPositions.push({ x, z, rot, len });
   }
 
-  private box(mat: string, x: number, y: number, z: number, w: number, h: number, d: number, rot = 0, tilt = 0): void {
+  private box(mat: string, x: number, y: number, z: number, w: number, h: number, d: number, rot = 0, tilt = 0, roll = 0): void {
     this.p.set(x, y + h / 2, z);
-    this.q.setFromEuler(new THREE.Euler(tilt, rot, 0));
+    this.q.setFromEuler(new THREE.Euler(tilt, rot, roll));
     this.s.set(w, h, d);
     this.boxes.push({ m: this.m.compose(this.p, this.q, this.s).clone(), mat, size: thickness(w, h, d) });
   }
@@ -978,6 +978,67 @@ export class Props {
       const n = rng.int(1, 4);
       for (let k = 0; k < n; k++) palletStack(rng.range(a + 6, b - 6), 128 + jitter(4));
       if (rng.chance(0.6)) jbox(rng.pick(['green', 'blue', 'dark']), rng.range(a + 6, b - 6), ground(a, 124) + 0.02, 124 + jitter(3), 4.2, 1.6, 2.2, jitter(0.3)); // skip
+    }
+    // ---- south quay apron (the strip between the yards and the seawall, west and east of the cruise terminal):
+    // a yellow quay-edge line, a marked truck lane behind it, boxes set down singly for loading, hatch-cover
+    // piles, lashing cages and a mobile harbour crane on each stretch
+    {
+      const hatchPile = (u: number, v: number) => {
+        const g = ground(u, v);
+        if (g < 1) return;
+        const n = rng.int(3, 6);
+        for (let k = 0; k < n; k++) jbox(rng.chance(0.7) ? 'dark' : 'steel', u + jitter(0.4), g + k * 0.5, v + jitter(0.3), 12 + jitter(0.5), 0.5, 9 + jitter(0.4), jitter(0.03));
+      };
+      const lashingCage = (u: number, v: number) => { const g = ground(u, v); if (g >= 1) jbox(rng.pick(['orange', 'steel', 'yellow']), u, g, v, 2.4, 2.2, 1.6, jitter(0.5)); };
+      const car = (u: number, v: number, yawJ: number) => {
+        const g = ground(u, v);
+        if (g < 1) return;
+        jbox(rng.pick(['white', 'white', 'steel', 'dark', 'red', 'blue']), u, g + 0.35, v, 4.5, 0.9, 1.8, yawJ);
+        jbox('glass', u, g + 1.25, v, 2.4, 0.55, 1.6, yawJ);
+      };
+      /** mobile harbour crane: rubber-tyred chassis, slewing platform with a cab and tower, boom raised over the water */
+      const harbourCrane = (u: number, v: number) => {
+        const g = ground(u, v);
+        if (g < 1) return;
+        pbox('dark', u, g + 0.6, v, 15, 1.4, 11);
+        for (const du of [-5.5, -2.7, 2.7, 5.5]) for (const dv of [-4.8, 4.8]) { const [wx, wz] = world(u + du, v + dv); this.cyl('dark', wx, g, wz, 0.8, 0.9, yaw, Math.PI / 2); }
+        // the upper works are slewed so the boom crosses the quay diagonally rather than pointing straight out
+        const slew = rng.pick([-1, 1]) * rng.range(0.55, 1.1);
+        const a = -Math.PI / 2 + slew; // yaw offset that turns the box's local x toward the water, then around by `slew`
+        const dU = Math.sin(slew), dV = Math.cos(slew), pU = Math.cos(slew), pV = -Math.sin(slew);
+        jbox('white', u, g + 2.0, v, 9, 3.2, 9, a);
+        jbox('white', u - dU * 3, g + 5.2, v - dV * 3, 3.2, 9, 3.2, a); // A-frame tower
+        jbox('glass', u + dU * 1.5 + pU * 3.6, g + 5.2, v + dV * 1.5 + pV * 3.6, 2.6, 2.4, 2.2, a); // cab beside the boom foot
+        jbox('dark', u - dU * 6.5, g + 2.6, v - dV * 6.5, 4, 2.8, 6, a); // counterweight
+        // boom: a box along its local x, rolled up by `th` so the far end is lifted out over the seawall
+        const L = 42, th = rng.range(0.75, 1.0);
+        const reach = 1 + Math.cos(th) * L / 2;
+        const [bx, bz] = world(u + dU * reach, v + dV * reach);
+        this.box('white', bx, g + 6.4 + Math.sin(th) * L / 2 - 0.75, bz, L, 1.5, 1.5, yaw + a, 0, th);
+        occupy(u, v, 12);
+      };
+      for (const [u0, u1] of [[-P.hw + 30, 100], [520, P.hw - 40]] as const) {
+        for (let eu = u0; eu < u1; eu += 60) paint('yellow', eu + 30, quayS - 2.4, Math.min(60, u1 - eu) - rng.range(2, 8), 0.2);
+        for (let lu = u0; lu < u1; lu += 12) if (rng.chance(0.85)) paint('white', lu + 3, quayS - 33, 5, 0.16);
+        // boxes set down for loading, a broken single row with the odd pair
+        for (let bu = u0 + rng.range(8, 20); bu < u1 - 8; bu += 13.2) {
+          if (rng.chance(0.42)) continue;
+          const g = ground(bu, quayS - 16);
+          if (g < 1) continue;
+          const n = rng.chance(0.3) ? 2 : 1;
+          for (let k = 0; k < n; k++) jbox(rng.pick(CONTAINERS), bu + jitter(0.4), g + k * 2.6, quayS - 16 + jitter(1.2), 12.2, 2.6, 2.44, jitter(0.03));
+        }
+        for (let k = 0; k < 2; k++) hatchPile(rng.range(u0 + 15, u1 - 15), quayS - rng.range(21, 26));
+        for (let k = 0; k < rng.int(2, 5); k++) lashingCage(rng.range(u0 + 6, u1 - 6), quayS - rng.range(8, 12));
+        harbourCrane(rng.range(u0 + 40, u1 - 40), quayS - 12);
+        for (let k = 0; k < 2; k++) truck(rng.range(u0 + 10, u1 - 10), quayS - 30 + jitter(1), rng.pick([0, Math.PI]) + jitter(0.04), rng.chance(0.5));
+      }
+      // kerb barriers around the chassis lot (the mesh fence is subpixel from altitude), a gap at the gate
+      const lu0 = -P.hw + 50, lu1 = -P.hw + 240, lv0 = 190, lv1 = quayS - 40;
+      const kerb = (u: number, v: number, alongU: number, alongV: number) => { const g = ground(u, v); if (g >= 1) pbox('white', u, g + 0.02, v, alongU, 0.85, alongV); };
+      for (let t = lu0; t < lu1; t += 3.8) { kerb(t + 1.7, lv0, 3.4, 0.6); if (t < lu1 - 30) kerb(t + 1.7, lv1, 3.4, 0.6); }
+      for (let t = lv0; t < lv1; t += 3.8) { kerb(lu0, t + 1.7, 0.6, 3.4); if (t < lv1 - 26) kerb(lu1, t + 1.7, 0.6, 3.4); }
+      for (let k = 0; k < 7; k++) car(lu1 + rng.range(6, 14), lv1 - 26 + k * 2.8 + jitter(0.3), Math.PI / 2 + jitter(0.06)); // staff cars by the gatehouse
     }
     // the island is paved end to end: no tree grows on the apron
     for (let ou = -P.hw; ou <= P.hw; ou += 20) for (let ov = -P.hh; ov <= P.hh; ov += 20) occupy(ou, ov, 14);
