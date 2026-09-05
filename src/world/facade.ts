@@ -77,8 +77,10 @@ vec3 facadeTilt = vec3(0.0);
 float pulseInt(float x, float a, float b) { float f = floor(x); return f * (b - a) + clamp(x - f - a, 0.0, b - a); }
 // box-filtered pulse train: the fraction of the pixel footprint [x - w/2, x + w/2] covered by the pulse. Once the
 // footprint nears a whole period the residual ripple (moire) is faded to the exact mean b - a.
+// The footprint widens (up to 1.4x, a lens-like low-pass) as the period nears a few pixels: a 2-3 px floor
+// rhythm otherwise beats with the pixel grid into herringbone moire on receding faces.
 float fpulse(float x, float a, float b, float w) {
-  w = max(w, 1e-4);
+  w = max(w, 1e-4) * mix(1.0, 1.4, smoothstep(0.1, 0.45, w));
   float f = (pulseInt(x + 0.5 * w, a, b) - pulseInt(x - 0.5 * w, a, b)) / w;
   return mix(f, b - a, smoothstep(0.55, 1.0, w));
 }
@@ -205,7 +207,7 @@ normal = normalize(normal + facadeTilt);`)
   } else {
     // ---------------------------------------------------------------- walls
     // pixel footprint along the facade (metres): the box-filter width of every pattern
-    float wu = fwidth(u) * 1.2, wv = fwidth(v) * 1.2;
+    float wu = fwidth(u), wv = fwidth(v);
     // floor grid; the top partial storey becomes the parapet / plant band so windows never run off the roof
     float parapet = (style < 0.5 || style == 8.0 || style == 11.0) ? 0.45 : 0.9 + 0.6 * hash11(seed * 7.7);
     float nFloors = max(1.0, floor((H - parapet) / floorH + 0.02));
@@ -272,7 +274,7 @@ normal = normalize(normal + facadeTilt);`)
     // the sill's shadow and streaks of dirt washed down from it
     float sillY = y0 - 0.05, sillD = y0 - 0.3;
     float streakN = vnoise(vec2(u * 2.6 + seed, floorIdx * 3.1));
-    float streak = gx * smoothstep(sillY, sillD, fy) * step(fy, sillY) * (0.25 + 0.75 * streakN) * rowOn * useWin;
+    float streak = gx * smoothstep(sillY, sillD, fy) * step(fy, sillY) * (0.25 + 0.75 * streakN) * rowOn * useWin * vis;
     float sill = gx * fpulse(fl, sillY - 0.04, y0, pwv) * rowOn * useWin;
     if (mast) {
       // slender painted spires / masts: pale paint, a red beacon at the tip and a floodlit glow at night
