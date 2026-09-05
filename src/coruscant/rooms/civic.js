@@ -133,7 +133,12 @@ defRoom('lobby_atrium', { minW: 6, minD: 4, tags: ['lobby'], special: true }, (r
   for (let u = c - dw + 1; u <= c + dw; u++) if (!clear(u, dv) || (u >= c - 1 && u <= c + 2)) { r.putRaw(u, 0, dv, B.PANEL_BLACK); r.putRaw(u, 1, dv, u === c || u === c + 1 ? B.CONSOLE : B.STONE_BRICK_SLAB); }
   r.work(c, r.back, 'receptionist'); r.work(c + 1, r.back, 'receptionist');
   // pillars
-  for (let u = 1; u < r.w - 1; u += 4) { if (Math.abs(u - c) <= 2) continue; r.fill(u, 0, 2, u, r.h - 1, 2, B.CHROME); if (r.back >= 5) r.fill(u, 0, r.back - 1, u, r.h - 1, r.back - 1, B.CHROME); }
+  // pillars carry a lit sconce at head height so wide double-height lobbies stay bright at floor level
+  for (let u = 1; u < r.w - 1; u += 4) {
+    if (Math.abs(u - c) <= 2) continue;
+    r.fill(u, 0, 2, u, r.h - 1, 2, B.CHROME); r.put(u, 3, 2, B.GLOW_PANEL);
+    if (r.back >= 5) { r.fill(u, 0, r.back - 1, u, r.h - 1, r.back - 1, B.CHROME); r.put(u, 3, r.back - 1, B.GLOW_PANEL); }
+  }
   // seating clusters left and right
   const wool = style.accentWool || B.BLUE_WOOL;
   for (const side of [0, 1]) {
