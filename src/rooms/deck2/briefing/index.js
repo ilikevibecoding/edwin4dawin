@@ -9,8 +9,8 @@ import { rng } from "../../../kit.js";
 import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
 import { rail } from "../_shared/shell.js";
-import { placer, console as consoleProp, indicatorField, wallScreen, crate, holoTable, cabinet, floorLine } from "../_shared/props.js";
-import { fixedSeat, deskRow, statusBoard, statusStrip, cableTray, lightChannel, junctionBox, dutyDesk, podiumBack, podiumTop, lectern, ventGrille, duct, screenOverlay, stepHash, refreshCurve } from "./props.js";
+import { placer, console as consoleProp, indicatorField, wallScreen, crate, holoTable, cabinet, floorLine, dropLight } from "../_shared/props.js";
+import { fixedSeat, deskRow, statusBoard, statusStrip, cableTray, lightChannel, junctionBox, dutyDesk, podiumBack, podiumTop, lectern, ventGrille, duct, ductLamp, screenOverlay, aoBlob, stepHash, refreshCurve } from "./props.js";
 
 const Y = 40;
 const CEIL = 46;
@@ -27,7 +27,18 @@ const HOLO = [CX, Y, 354.6];
 const BLACK = IMP.impBlack;
 const DARK = IMP.impDark;
 const MID = IMP.impMid;
-const CARPET = 0x272b34;
+// aisle carpet: a step lighter than the round-3 0x272b34 (the aisle read at 10 % under the fills; the
+// pass-3 target for the bottom band of the door/seats views is 20-35 %)
+const CARPET = 0x343946;
+// tier and step treads: matte deck plating (the same impPanel recipe as the aft duty-station plates)
+// instead of black gloss, which mirrored the dark ceiling and read as 8 % whatever light hit it, and
+// gave the key's seat shadows nothing to land on; half a stop up on the round-4a 0x33373f (the bays
+// still read 15 % in the door view against the 20 % floor)
+const TREAD = 0x3a3e47;
+// tier bodies (risers and the aisle-side faces): the impDark of the shared palette rendered the two
+// aisle faces nearest the door camera at 6 % over a quarter of the frame — only grazing light ever
+// reaches a vertical face 1.2 m off the pendants' axis, so the lift has to come from the paint
+const TIER_BODY = 0x474a52;
 
 export default defineRoom({
   id: "d2-briefing",
@@ -61,7 +72,8 @@ export default defineRoom({
     const { kit, PALETTE } = ctx;
     const seatRand = rng(4242);
     // quads for the brightness overlay (screens that flicker, boards that breathe), in this order:
-    // 0-2 display wall, 3-4 duty monitors, 5-10 side-wall status boards (port 3, starboard 3)
+    // 0-2 display wall, 3-4 duty monitors, 5-10 side-wall status boards (port 3, starboard 3), then the
+    // static contact-shadow blobs (never set)
     const overlayQuads = [];
 
     // ---- seating tiers ---------------------------------------------------------------------------
@@ -77,8 +89,8 @@ export default defineRoom({
       const z1 = z0 + TIER_D;
       const top = Y + RISER * (k + 1);
       for (const b of blocks) {
-        kit.boxMM("paintedMetal", [b.x0, Y, z0], [b.x1, top - 0.02, z1], { color: DARK, texel: 2.5 });
-        kit.boxMM("blackGloss", [b.x0, top - 0.02, z0], [b.x1, top, z1], { color: DARK });
+        kit.boxMM("paintedMetal", [b.x0, Y, z0], [b.x1, top - 0.02, z1], { color: TIER_BODY, texel: 2.5 });
+        kit.boxMM("impPanel", [b.x0, top - 0.02, z0], [b.x1, top, z1], { color: TREAD });
         // riser nosing + aisle edge light
         kit.boxMM("emitWhite", [b.x0 + 0.1, top - 0.04, z0 - 0.015], [b.x1 - 0.1, top - 0.025, z0 + 0.005]);
         // aisle-side edge light: 0.01 proud into the aisle, 0.005 embedded in the platform
@@ -101,9 +113,13 @@ export default defineRoom({
     // back rails on the top tier (1.05 m drop to the entry floor) and block colliders
     const topY = Y + RISER * 3;
     const zBack = TIER_Z0 + 3 * TIER_D;
-    // back wall of the top tier: mid-grey trim band, recessed dark panel, amber edge dashes
+    // back wall of the top tier: mid-grey trim band, a wall-panel plate (impPanel a notch under the
+    // shell's impGrey) and amber edge dashes. These two 1 m x 9 m faces fill the lower corners of the
+    // door view at 2.6 m; in black paint they rendered at 6-8 % whatever the aft fills put on them
+    // (E ~0.3 at their distance cut-off), so the plate carries four times the albedo and the aft
+    // fills' cut-off moves out to 14 m (see lights); 0x6a6e76 still read 14 %, the target band is 20 %
     for (const [bx0, bx1] of [[IX0 + 0.04, AISLE[0]], [AISLE[1], IX1 - 0.04]]) {
-      kit.boxMM("paintedMetal", [bx0 + 0.05, Y + 0.12, zBack], [bx1 - 0.05, Y + 0.82, zBack + 0.012], { color: BLACK, texel: 2.5 });
+      kit.boxMM("impPanel", [bx0 + 0.05, Y + 0.12, zBack], [bx1 - 0.05, Y + 0.82, zBack + 0.012], { color: 0x80848c });
       kit.boxMM("paintedMetal", [bx0, Y + 0.5, zBack], [bx1, Y + 0.56, zBack + 0.03], { color: MID });
       for (let x = bx0 + 0.3; x < bx1 - 0.6; x += 1.5) kit.boxMM("emitAmber", [x, topY - 0.09, zBack], [x + 0.5, topY - 0.06, zBack + 0.012]);
     }
@@ -127,8 +143,8 @@ export default defineRoom({
       for (let i = 0; i < 6; i++) {
         const z0 = TIER_Z0 + i * 1.5;
         const t = Y + 0.175 * (i + 1);
-        kit.boxMM("paintedMetal", [sx0, Y, z0], [sx1, t - 0.02, z0 + 1.5], { color: DARK, texel: 2.5 });
-        kit.boxMM("blackGloss", [sx0, t - 0.02, z0], [sx1, t, z0 + 1.5], { color: DARK });
+        kit.boxMM("paintedMetal", [sx0, Y, z0], [sx1, t - 0.02, z0 + 1.5], { color: TIER_BODY, texel: 2.5 });
+        kit.boxMM("impPanel", [sx0, t - 0.02, z0], [sx1, t, z0 + 1.5], { color: TREAD });
         kit.boxMM("emitWhite", [sx0 + 0.08, t - 0.035, z0 - 0.015], [sx1 - 0.08, t - 0.022, z0 + 0.005]);
       }
       kit.collider([sx0, Y, TIER_Z0], [sx1, Y + 2.6, zBack], "steps");
@@ -144,7 +160,9 @@ export default defineRoom({
 
     // ---- front: holo table, dais, podium consoles with audience-facing top screens, lectern ----------
     kit.cyl("darkGloss", HOLO[0], Y + 0.01, HOLO[2], 2.7, 0.02, "y", { segments: 48 });
-    kit.add("emitBlue", new THREE.TorusGeometry(2.62, 0.02, 6, 72), { pos: [HOLO[0], Y + 0.03, HOLO[2]], rot: [Math.PI / 2, 0, 0] });
+    // dais ring: a 1.4 cm tube (was 2 cm) — the ring is the hard circle the pass-3 critic saw as the
+    // edge of the cyan pool, so it carries less weight against the spot's soft pool now
+    kit.add("emitBlue", new THREE.TorusGeometry(2.62, 0.014, 6, 72), { pos: [HOLO[0], Y + 0.03, HOLO[2]], rot: [Math.PI / 2, 0, 0] });
     const holo = holoTable(ctx, HOLO, { r: 1.8, h: 0.95, holoH: 2.3 });
     // presenter deck plates either side of the dais: mid-grey painted plates under the podium consoles
     // and the lectern (the gloss floor is a near-black mirror, so this is where the key light's shadows
@@ -234,22 +252,33 @@ export default defineRoom({
     // to the aisle runner (0.05 m under its edge): the 2.3 m of gloss between bay and runner is
     // where the corridor's 200 cd key spot — live through the aft wall while this room is active,
     // as neighbour spots carry no shadow map — mirrors into the aft view's camera at grazing
-    // incidence as a blown specular patch; on matte plating the same light is a faint sheen
+    // incidence as a blown specular patch; on matte plating the same light is a faint sheen. The
+    // plating also runs forward to the top tier's back wall (z 367): the 2.5 m gloss strip behind the
+    // tiers mirrored the aft low aisle fill (1 m over the runner) into the aft view as a 30 % cloud
     for (const [x0, x1, xa] of [[15.4, 18.4, AISLE[0] - 0.05], [25.6, 30.1, AISLE[1] + 0.05]]) {
-      kit.boxMM("impPanel", [Math.min(x0, xa), Y, 369.5], [Math.max(x1, xa), Y + 0.01, IZ1 - 0.12], { color: 0x363a42 });
+      kit.boxMM("impPanel", [Math.min(x0, xa), Y, zBack - 0.1], [Math.max(x1, xa), Y + 0.01, IZ1 - 0.12], { color: 0x363a42 });
       floorLine(kit, [x0, Y + 0.012, 369.5], [x1, Y + 0.012, 369.5], 0.06, "paintedMetal", IMP.impGrey);
       for (const x of [x0, x1]) floorLine(kit, [x, Y + 0.012, 369.5], [x, Y + 0.012, IZ1 - 0.12], 0.06, "paintedMetal", IMP.impGrey);
     }
     wallScreen(kit, [24.95, 42.0, IZ1 - 0.1], Math.PI, 1.2, 0.9, "screenImp1");
     wallScreen(kit, [30.6, 42.0, IZ1 - 0.1], Math.PI, 1.4, 0.9, "screenImp2");
     junctionBox(kit, [32.15, 41.6, IZ1], Math.PI, { w: 0.4, h: 0.5, conduitUp: 1.6 });
-    // equipment cases stacked beside the starboard duty station
+    // equipment cases stacked beside the starboard duty station. The upper case is the full 1.2 m wide
+    // and sits flush with the lower one's front edge (same yaw): the 1.2 m lid of the lower case is a
+    // horizontal painted-metal face at eye height minus 0.5 m, and the 0.2 m of it that showed past
+    // a centred 0.8 m case mirrored the ceiling into the aft view's camera at 9 degrees grazing as a
+    // white slab (the last of the pass-3 "wall lamp" glints). The lid is now only exposed at the back.
     crate(kit, PALETTE, [29.0, Y, 371.5], -0.06, { seed: 8, color: MID, bumperMat: "paintedMetal" });
-    crate(kit, PALETTE, [29.0, Y + 1.2, 371.5], 0.1, { w: 0.8, h: 0.6, d: 0.8, seed: 9, color: DARK, bumperMat: "paintedMetal" });
-    // aft wall 2.9-4.0 m: vents above the boards, junction boxes, a matte duct run at 3.85 m
+    crate(kit, PALETTE, [29.012, Y + 1.2, 371.3], -0.06, { w: 1.2, h: 0.6, d: 0.8, seed: 9, color: DARK, bumperMat: "paintedMetal" });
+    // aft wall 2.9-4.0 m: vents above the boards, junction boxes, a matte duct run at 3.85 m. The duct
+    // is impPanel: its painted-metal underside mirrored the corridor's fills (2.9 m up, 2.8 m behind
+    // the wall, live through it) into two white glints at 15 m in the seats view. Two hooded work
+    // lamps under the duct take over as the deliberate far-wall accents the critic read there, capped
+    // at 80 % by the overlay.
     for (const x of [13.5, 19.3, 24.95, 30.6]) ventGrille(kit, [x, 43.15, IZ1], Math.PI, 0.9, 0.45);
     for (const x of [14.9, 29.1]) junctionBox(kit, [x, 43.2, IZ1], Math.PI, { w: 0.34, h: 0.4, conduitUp: 0.3 });
-    duct(kit, [IX0 + 0.6, 43.85, IZ1 - 0.24], [IX1 - 0.6, 43.85, IZ1 - 0.24], { w: 0.44, h: 0.3, flange: 2.4 });
+    duct(kit, [IX0 + 0.6, 43.85, IZ1 - 0.24], [IX1 - 0.6, 43.85, IZ1 - 0.24], { w: 0.44, h: 0.3, flange: 2.4, mat: "impPanel" });
+    const lampQuads = [18.7, 25.3].map((x) => ductLamp(kit, [x, 43.7, IZ1 - 0.24]));
 
     // ---- ceiling: plated slab with a 2 m seam grid (texel 4 keeps the worn-metal map sub-pixel) ----------
     kit.boxMM("paintedMetal", [room.bounds.min[0], CEIL - 0.06, room.bounds.min[2]], [room.bounds.max[0], CEIL + 0.5, room.bounds.max[2]], { color: DARK, texel: 4 });
@@ -313,36 +342,91 @@ export default defineRoom({
     }
 
     // ---- lights --------------------------------------------------------------------------------------------
-    // KEY (shadow): a cool spot hung just under the projector lens in the coffer, aimed a little aft of
-    // the dais so the lectern, podium consoles, holo table and front-row seats throw shadows across the
-    // gloss floor and onto the tier risers. Everything else is a fill at <= 20 % of it or a practical.
-    const key = { type: "spot", pos: [HOLO[0], 45.1, HOLO[2]], target: [HOLO[0], Y, 355.6], color: 0xcfe0ff, intensity: 140, distance: 26, angle: 1.1, penumbra: 0.45, priority: 1.0, shadow: true };
+    // KEY (shadow): a cool follow spot on a yoke under the coffer's aft lip, raking aft and down across
+    // the three tiers at 25-45 degrees so every seat, desk edge and rail throws a shadow onto the matte
+    // treads behind it (the pass-3 critic counted 0 shadows under 12 seats with the key overhead at the
+    // dais). The wide cone (1.2 rad) is needed to reach the outer seats 8 m off-axis; a 0.4 penumbra
+    // keeps the near corners above 35 %.
+    const KEY_POS = [CX, 45.25, 357.9];
+    const KEY_AIM = new THREE.Vector3(0, Y - KEY_POS[1], 361.5 - KEY_POS[2]).normalize();
+    const keyQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), KEY_AIM);
+    kit.box("paintedMetal", CX, CEIL - 0.45 - 0.1, 357.85, 0.08, 0.2, 0.1, { color: BLACK });
+    kit.add("paintedMetal", new THREE.CylinderGeometry(0.1, 0.1, 0.26, 16), { pos: KEY_POS, quat: keyQuat, color: BLACK, texel: 2.5 });
+    kit.add("paintedMetal", new THREE.CylinderGeometry(0.11, 0.11, 0.04, 16, 1, true), { pos: KEY_AIM.clone().multiplyScalar(0.12).add(new THREE.Vector3(...KEY_POS)).toArray(), quat: keyQuat, color: MID });
+    kit.add("emitWhite", new THREE.CylinderGeometry(0.07, 0.07, 0.01, 16), { pos: KEY_AIM.clone().multiplyScalar(0.135).add(new THREE.Vector3(...KEY_POS)).toArray(), quat: keyQuat });
+    const key = { type: "spot", pos: KEY_AIM.clone().multiplyScalar(0.16).add(new THREE.Vector3(...KEY_POS)).toArray(), target: [CX, Y, 361.5], color: 0xcfe0ff, intensity: 220, distance: 26, angle: 1.2, penumbra: 0.4, priority: 1.0, shadow: true };
     ctx.lights.push(key);
+    // dais pool (no shadow): a second spot straight down from the projector drum, wide penumbra (0.55,
+    // +20 % on the round-3 key) so the pool on the presenter plates has a soft edge instead of the hard
+    // circle the critic flagged; the lectern and podium consoles get their contact shadows from the
+    // overlay's AO blobs below, since the shadow key's cone no longer reaches them
+    ctx.lights.push({ type: "spot", pos: [HOLO[0], 45.1, HOLO[2]], target: [HOLO[0], Y, 355.0], color: 0xcfe0ff, intensity: 100, distance: 14, angle: 0.8, penumbra: 0.55, priority: 0.9 });
     const L = (pos, color, intensity, distance, priority = 0.5) => {
       const d = { type: "point", pos, color, intensity, distance, priority };
       ctx.lights.push(d);
       return d;
     };
-    // priorities: the rig pools the nearest 12 points of the active rooms by distance / (0.5 + priority)
-    // and the corridor's fills 2.5 m behind the aft wall carry priority 1, so this room's fills carry
-    // 1 as well or they lose slots (seen from the aft view) to lights behind the wall
+    // Points: nine (the rig gives the current room 12 - 3 door-neighbour reserve = 9 point slots), all
+    // priority 1 (the corridor's fills 2.5 m behind the aft wall carry 1 too) except the practical.
     // cyan practical over the holo table: pulses with the projection (see update)
     const holoL = L([HOLO[0], Y + 3.4, HOLO[2]], 0x4fd8ff, 14, 9, 0.9);
-    L([CX, 43.0, 350.2], 0x7aa6ff, 18, 10, 0.8);
-    L([16.5, 44.7, 359.7], 0xd6e2ff, 30, 12, 1.0);
-    L([27.5, 44.7, 359.7], 0xd6e2ff, 30, 12, 1.0);
-    L([16.5, 44.7, 365.7], 0xd6e2ff, 30, 12, 1.0);
-    L([27.5, 44.7, 365.7], 0xd6e2ff, 30, 12, 1.0);
-    // aft fills over the two duty stations instead of one over the door approach (whose pool on the
-    // gloss floor read as a pale pad at the end of the runner); 36 = 26 % of the key, enough for the
-    // desk tops and the aft floor to read once the environment capture darkened the gloss
-    L([17.2, 44.7, 369.6], 0xd6e2ff, 36, 10, 1.0);
-    L([26.8, 44.7, 369.6], 0xd6e2ff, 36, 10, 1.0);
-    // amber practicals in the forward corners: breathe with the first status board on each side wall
-    const amberL = [L([12.2, 44.3, 353.0], 0xffa540, 10, 6, 0.5), L([31.8, 44.3, 353.0], 0xffa540, 10, 6, 0.5)];
+    // bay fills under the light channels, 1.85 m below the ceiling (were 1.16 in round 3: the point
+    // that close lit the channel housings into the four "pucks" the critic asked to drop 20 %; at
+    // 1.85 m the housings get 44 % of that) and 27 cd, 0.7 m nearer the tier treads than in round 4a
+    // so the seat bays come up the last half stop to the 20 % floor target
+    for (const z of [359.7, 365.7]) for (const x of [16.5, 27.5]) L([x, 44.15, z], 0xd6e2ff, 27, 12, 1.0);
+    // aft fills over the two duty stations: 0.4 m lower than the bay fills' old height and 32 cd (were
+    // 36) so the emitter hot spot on the nearest channel in the aft view drops ~50 %; cut-off 14 m (was
+    // 10) so the top tier's back wall 4.7 m away, which sat at 28 % of the inverse-square value, gets
+    // 44 % of it — the door view's two lower-corner slabs
+    L([17.2, 44.3, 369.6], 0xd6e2ff, 32, 14, 1.0);
+    L([26.8, 44.3, 369.6], 0xd6e2ff, 32, 14, 1.0);
+    // low aisle fills (the critic's "low fills into the seat bays"): two 2.5 cd points a metre over the
+    // runner, one per camera end of the tiers. The tiers' aisle faces are vertical and 1.2 m off the
+    // pendants' axis, so overhead light only ever grazes them (12 % in the door view at any paint); a
+    // point at their mid-height lights them square on, and its pool on the carpet under it stays inside
+    // the runner's 30-40 % band. Nine points = every own point slot (12 - 3 door-neighbour reserve).
+    L([CX, 41.0, 366.0], 0xd6e2ff, 2.5, 4.5, 1.0);
+    L([CX, 41.0, 360.5], 0xd6e2ff, 2.5, 4.5, 1.0);
+    // aisle downlights: two housed pendants over the runner ~6 m apart, between the channel rows. Each
+    // carries a downward SPOT (66 degree half-angle, soft edge), not a point: a point 1 m under the
+    // slab lit the ceiling and the channel housings around it into a 1 m white blob in the seats and
+    // door views (E = 38 cd / 1 m^2 on light-grey paint). A spot's cone never touches the slab, so the
+    // pendant reads as a hooded fixture with a pool on the carpet and the bays. 16 cd at the spot's
+    // 1.6 decay is ~80 % of the 38 cd point's irradiance 5 m down (the far pool read 46 % in the door
+    // view against the 20-35 % band). Spots: key + dais + 2 pendants = the rig's 4 spot slots, all the
+    // current room's (neighbour spots are never live).
+    const pendantQuads = [];
+    for (const z of [361.2, 367.6]) {
+      dropLight(kit, PALETTE, [CX, CEIL - 0.06, z], { w: 0.9, d: 0.5, stem: 0.9, mat: "emitWhite" });
+      ctx.lights.push({ type: "spot", pos: [CX, CEIL - 0.06 - 0.9 - 0.04, z], target: [CX, Y, z], color: 0xd6e2ff, intensity: 16, distance: 9, angle: 1.15, penumbra: 0.5, priority: 1.0 });
+      // the pendant face sits 4 m over the seats/door cameras and bloomed to a white slab at the
+      // emitter's 1.3; the overlay holds it at 75 % (just under the bloom threshold, ~85 % grey)
+      pendantQuads.push({ pos: [CX, CEIL - 0.06 - 0.9 - 0.141, z], quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)), w: 0.76, h: 0.36, corners: [0.75, 0.75, 0.75, 0.75] });
+    }
+    // the two channels nearest the aft view's camera (z 365.7 and 369.6) clipped at their emitters'
+    // 1.3 with a bloom halo on the slab; a full-length overlay quad 7 mm under each emitter face holds
+    // them at 70 % (the critic's -30 %), which also puts the aft fills' specular highlight on the
+    // 369.6 emitter under the bloom threshold
+    const DOWN = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
+    for (const z of [365.7, 369.6]) pendantQuads.push({ pos: [CX, CEIL - 0.14 - 0.015 - 0.007, z], quat: DOWN, w: 19.2, h: 0.14, corners: [0.7, 0.7, 0.7, 0.7] });
+    // the duct work lamps: 80 % (emitWhite 1.3 -> 1.04, under the bloom threshold)
+    for (const q of lampQuads) pendantQuads.push({ ...q, corners: [0.8, 0.8, 0.8, 0.8] });
 
-    // ---- brightness overlay: display wall refresh, duty monitor flicker, breathing status boards ---------
-    overlayQuads.push(...boardQuads);
+    // ---- brightness overlay: display wall refresh, duty monitor flicker, breathing status boards, and
+    //      static AO blobs under the duty desks, lectern and podium consoles (outside the shadow cone) ----
+    overlayQuads.push(...boardQuads, ...pendantQuads);
+    // duty stations: a wide soft halo under desk + chair, a tight 0.12 m-feathered footprint under the
+    // desk itself (the crisp edge along the desk front is the "contact" read the pass-3 critic asked
+    // for in the aft view: the key's cone ends 10 m short of the desks) and a pad under the chair base
+    for (const x of [16.9, 27.1]) {
+      aoBlob(overlayQuads, [x, Y + 0.02, 371.55], 2.6, 1.8, 0.6, 0.5);
+      aoBlob(overlayQuads, [x, Y + 0.02, 372.05], 1.9, 0.9, 0.5, 0.12);
+      aoBlob(overlayQuads, [x, Y + 0.02, 371.05], 0.8, 0.8, 0.55, 0.2);
+    }
+    aoBlob(overlayQuads, [15.55, Y + 0.03, 355.2], 1.3, 1.1, 0.55, 0.4);
+    aoBlob(overlayQuads, [17.3, Y + 0.03, 353.85], 2.3, 1.5, 0.55, 0.45);
+    aoBlob(overlayQuads, [26.7, Y + 0.03, 353.85], 1.9, 1.5, 0.55, 0.45);
     const overlay = screenOverlay(overlayQuads);
     ctx.group.add(overlay.mesh);
     const TAU = Math.PI * 2;
@@ -450,8 +534,6 @@ export default defineRoom({
         }
         // side-wall status boards breathe over 6 s (forward board first, then aft), both walls in step
         for (let i = 5; i < 11; i++) overlay.set(i, 0.78 + 0.27 * (0.5 + 0.5 * Math.sin(t * BREATH + BREATH_PH + 0.6 * ((i - 5) % 3))));
-        const breath = 0.5 + 0.5 * Math.sin(t * BREATH + BREATH_PH);
-        for (const l of amberL) l.intensity = 10 * (0.6 + 0.4 * breath);
       },
     };
   },

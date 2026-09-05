@@ -131,14 +131,6 @@ export function benchSeat(kit, pos, yaw, len, { back = true, color = MID, cushio
   P.collider([-len / 2 - 0.06, 0, -0.36], [len / 2 + 0.06, back ? 0.9 : 0.55, 0.31], "sofa");
 }
 
-// Uplight housing sitting on a canopy top: black box, mid-grey end caps, warm diffuser facing the
-// ceiling (the room's fill for the bar back sits just above it).
-export function uplight(kit, x, y, z, w = 0.6) {
-  kit.box("paintedMetal", x, y + 0.07, z, w, 0.14, 0.26, { color: BLACK, texel: 2.5 });
-  for (const sx of [-1, 1]) kit.box("paintedMetal", x + (sx * (w + 0.02)) / 2, y + 0.08, z, 0.03, 0.18, 0.3, { color: MID });
-  kit.box("emitWarmSoft", x, y + 0.145, z, w - 0.1, 0.012, 0.18, { uv: "keep" });
-}
-
 // Wall vent grille facing local +Z: dark frame, black recess, mid-grey horizontal slats.
 export function ventGrille(kit, pos, yaw, w = 0.9, h = 0.45) {
   const P = placer(kit, pos, yaw);
@@ -146,7 +138,8 @@ export function ventGrille(kit, pos, yaw, w = 0.9, h = 0.45) {
   P.box("paintedMetal", 0, 0, 0.061, w - 0.1, h - 0.1, 0.004, { color: BLACK });
   const n = Math.max(3, Math.round((h - 0.1) / 0.06));
   for (let i = 0; i < n; i++) P.box("paintedMetal", 0, -h / 2 + 0.05 + (i + 0.5) * ((h - 0.1) / n), 0.066, w - 0.14, 0.018, 0.006, { color: MID });
-  for (const sx of [-1, 1]) P.box("metal", (sx * (w - 0.06)) / 2, 0, 0.062, 0.025, 0.025, 0.008, { color: STEEL });
+  // matte fixing heads (polished ones mirror the fills into white glints that read as tiny lamps)
+  for (const sx of [-1, 1]) P.box("paintedMetal", (sx * (w - 0.06)) / 2, 0, 0.062, 0.025, 0.025, 0.008, { color: STEEL });
 }
 
 // Small wall junction box with a matte conduit rising from its top (to the shell's service tray).
@@ -320,7 +313,8 @@ export function scoreBoard(kit, pos, yaw, w, h, seed, { accent = "emitAmber", se
       x += bw + 0.08;
     }
   }
-  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box("metal", (sx * (w + 0.1)) / 2, (sy * (h + 0.1)) / 2, 0.062, 0.03, 0.03, 0.01, { color: STEEL });
+  // matte corner bolts (polished ones mirror the fills into white glints)
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box("paintedMetal", (sx * (w + 0.1)) / 2, (sy * (h + 0.1)) / 2, 0.062, 0.03, 0.03, 0.01, { color: STEEL });
 }
 
 // 1.2 m equipment crate without rubber bumpers (keeps the room's material count down): recessed side

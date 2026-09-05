@@ -3,10 +3,11 @@
 // media wall with tiered bench rows, an exercise corner with a rack, mats and lockers, a hydration
 // station, vending cabinets, an info kiosk, and housed drop-light fixtures over every zone. Neutral
 // grey with warm white/amber accents (§11 crew areas).
+import * as THREE from "three";
 import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
 import { console as consoleProp, wallScreen, lockerBank, tank, cabinet, dropLight, floorLine } from "../_shared/props.js";
-import { stool, gameTable, benchSeat, lowTable, bottleRow, dispenser, exerciseRack, mat, mediaWall, scoreBoard, gearCrate, zoneRect, infoColumn, standTable, lightObelisk, tapCluster, cup, tray, barTerminal, lightChannel, uplight, ventGrille, junctionBox, sconce } from "./props.js";
+import { stool, gameTable, benchSeat, lowTable, bottleRow, dispenser, exerciseRack, mat, mediaWall, scoreBoard, gearCrate, zoneRect, infoColumn, standTable, lightObelisk, tapCluster, cup, tray, barTerminal, lightChannel, ventGrille, junctionBox, sconce } from "./props.js";
 import { screenOverlay, stepHash, refreshCurve } from "../briefing/props.js";
 
 const Y = 40;
@@ -54,7 +55,7 @@ export default defineRoom({
     const { kit, PALETTE } = ctx;
     // quads for the brightness overlay (one multiply-blended mesh over every animated emitter), composed
     // at the end in this order: 0-3 media wall screens, 4 menu screen, 5-12 menu chase segments,
-    // 13 lounge sconce diffuser, 14.. game-table grid cells
+    // 13 lounge sconce diffuser, 14.. game-table grid cells, last the bar canopy diffuser (static)
     const mediaQuads = [];
     const menuQuads = [];
     const gridCells = [];
@@ -113,8 +114,9 @@ export default defineRoom({
         else dispenser(kit, x + bayW / 2, Y + 1.0, bz + 0.32, 900 + i);
       }
     }
-    // uplights on the canopy top throw the bar-back fill onto the ceiling and the sign band
-    for (const x of [46.0, 50.0]) uplight(kit, x, Y + 2.76, bz + 0.37, 0.7);
+    // canopy underside overlay: the 10 m diffuser strip clipped to white and fogged the top shelves in
+    // the bar view, so the overlay holds it at 60 % (set once below)
+    const canopyQuad = { pos: [(BX0 + BX1) / 2, Y + 2.379, bz + 0.4], quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)), w: BX1 - BX0 - 0.4, h: 0.4 };
     // bar sign band above the canopy
     kit.boxMM("darkGloss", [BX0 + 1.4, Y + 3.15, bz], [BX1 - 1.4, Y + 3.45, bz + 0.04]);
     kit.boxMM("emitAmber", [BX0 + 1.6, Y + 3.27, bz + 0.04], [BX1 - 1.6, Y + 3.33, bz + 0.052]);
@@ -130,7 +132,10 @@ export default defineRoom({
     kit.boxMM("paintedMetal", [BX0, Y + 0.16, CZ1], [BX1, Y + 0.8, CZ1 + 0.02], { color: MID, texel: 2.5 });
     for (let x = BX0 + 0.45; x < BX1; x += 0.9) kit.boxMM("paintedMetal", [x - 0.03, Y + 0.12, CZ1], [x + 0.03, Y + 0.84, CZ1 + 0.035], { color: DARK });
     kit.boxMM("emitAmber", [BX0 + 0.2, Y + 0.13, CZ1 - 0.02], [BX1 - 0.2, Y + 0.15, CZ1 + 0.01]);
-    kit.boxMM("emitAmber", [BX0 + 0.2, Y + 0.835, CZ1 + 0.05], [BX1 - 0.2, Y + 0.845, CZ1 + 0.1]);
+    // under-counter light: a 5 cm warm diffuser bar the full length of the counter, tucked under the
+    // top's overhang (the 1 cm amber line it replaces vanished at 20 m and the counter read as a black
+    // band from the door and tables views)
+    kit.boxMM("emitWarmSoft", [BX0 + 0.2, Y + 0.79, CZ1 + 0.04], [BX1 - 0.2, Y + 0.84, CZ1 + 0.11], { uv: "keep" });
     for (const x of [BX0, BX1 - 0.06]) kit.boxMM("paintedMetal", [x, Y, bz + 0.55], [x + 0.06, Y + 0.9, CZ0], { color: DARK, texel: 2.5 }); // end panels
     kit.collider([BX0 - 0.05, Y, bz + 0.55], [BX1 + 0.05, Y + 0.9, CZ1 + 0.12], "bar");
     // bar top: two tap clusters, trays with cups, loose cups, an order terminal
@@ -273,32 +278,51 @@ export default defineRoom({
     // hangs 0.4 m under its diffuser and points straight down, so the stools throw their shadows aft
     // and outward across the floor toward the room, the tap towers and trays onto the counter top, and
     // the customer face of the counter is lit rather than just the top. Everything else is a fill at
-    // <= 40 % of it, a coloured practical, or the bar-back uplight wash. The fixture mirrors dropLight's
-    // section (housing 1.2 m down on stems, diffusers 5 mm under it) with three diffuser segments so the
-    // centre-bright diffuser map reads as three lamps rather than one 7 m blob.
+    // <= 40 % of it or a coloured practical. The fixture mirrors dropLight's section (housing 1.2 m down
+    // on stems, diffusers 5 mm under it) with three diffuser segments so the centre-bright diffuser map
+    // reads as three lamps rather than one 7 m blob.
     for (const x of [45.4, 48.0, 50.6]) kit.box("paintedMetal", x, FIX - 0.6, 347.0, 0.06, 1.2, 0.06, { color: BLACK });
     kit.box("paintedMetal", 48.0, FIX - 1.26, 347.0, 7.4, 0.12, 0.45, { color: DARK, texel: 2.5 });
     for (const x of [45.6, 48.0, 50.4]) kit.box("emitWarmSoft", x, FIX - 1.325, 347.0, 2.28, 0.02, 0.33, { uv: "keep" });
     const key = { type: "spot", pos: [48.0, 43.2, 347.0], target: [48.0, Y, 347.0], color: 0xffd2a0, intensity: 110, distance: 28, angle: 1.1, penumbra: 0.45, priority: 1.0, shadow: true };
     ctx.lights.push(key);
-    // priorities: the rig pools the nearest 12 points of the active rooms by distance / (0.5 + priority)
-    // and the corridor's fills 2.5 m behind the aft wall carry priority 1; at less than 1 the far
-    // fixtures of this room (media wall, gym) lost their slots to lights the player cannot see
+    // Priorities: the rig pools the nearest 12 points of the active rooms by distance / (0.5 + priority),
+    // three of them reserved for the door neighbour, so nine of this room's thirteen points are live in
+    // any view and the corridor's fills 2.5 m behind the aft wall carry priority 1. The centre panel
+    // carries 2 so it stays live from the door (13 m away, behind the four table fills and the door
+    // fill) — it is the light that lifts the counter's customer face out of the shadow the counter top
+    // throws from the key overhead, and the floor between the games zone and the bar (the critic's
+    // "one more panel row at 12 m"). The media fill carries 1.3 so the lounge view keeps it.
+    // `intensity` null = fixture only: the starboard lounge pendant gave up its descriptor to the walkway
+    // panel below (out of every view; the door fill and centre panel spill reach its sofas).
     const fixtures = [
       ...tables.map(([x, z]) => [x, z, 1.2, 1.2, 0xffe0c0, 36, 9, 1.0]),
-      [39.8, 365.6, 1.4, 0.6, 0xffe0c0, 40, 10, 1.0],
-      [56.2, 365.6, 1.4, 0.6, 0xffe0c0, 40, 10, 1.0],
-      [39.6, 357.0, 2.6, 0.5, 0xe6e4f0, 38, 10, 1.0],
+      // port lounge fill: cut-off 12 m (was 10) so the open floor between the sofas and the games zone,
+      // 4.8 m from it in the lounge view's lower right, gets 36 % of its inverse-square value instead of 27
+      [39.8, 365.6, 1.4, 0.6, 0xffe0c0, 40, 12, 1.0],
+      [56.2, 365.6, 1.4, 0.6, 0xffe0c0, null, 10, 1.0],
+      [39.6, 357.0, 2.6, 0.5, 0xe6e4f0, 38, 10, 1.3],
       [56.6, 347.8, 1.6, 0.5, 0xf0eee8, 40, 10, 0.8],
       [48.0, 368.6, 2.4, 0.5, 0xffe0bd, 42, 11, 1.0],
+      // centre panel between the games zone and the bar zone (5.4 m from each neighbouring fixture)
+      [48.0, 352.4, 2.4, 0.5, 0xffe0bd, 40, 11, 2.0],
+      // walkway panel between the media platform and the games zone: the lounge view's far ceiling
+      // (right of the media pendant) had no fixture in frame; 40 cd / 12 m so its pool carries the
+      // walkway floor in that view's right half
+      [42.8, 361.6, 1.4, 0.6, 0xffe0c0, 40, 12, 1.0],
     ];
+    // Every drop-light diffuser is held at 50 % by an overlay quad 6 mm under its face: emitWarmSoft's
+    // 1.9 plus the fill's own specular highlight 0.4 m below it (~1.4 at the centre) rendered the three
+    // nearest panels in the tables view as flat white cores; at 50 % the centre sits at ~90 % and the
+    // diffuser map's gradient reads out to the bezel (round-4 policy A). The pools on the floor come
+    // from the points and are unchanged.
+    const fixtureQuads = [];
     for (const [x, z, w, d, color, intensity, distance, priority] of fixtures) {
       dropLight(kit, PALETTE, [x, FIX, z], { w, d, stem: 1.2, mat: "emitWarmSoft" });
+      fixtureQuads.push({ pos: [x, FIX - 1.2 - 0.135 - 0.006, z], quat: canopyQuad.quat, w: w - 0.12, h: d - 0.12 });
       // the fill sits 0.4 m under the diffuser, 1.8 m below the ceiling: a warm pool on the floor
-      ctx.lights.push({ type: "point", pos: [x, 43.2, z], color, intensity, distance, priority });
+      if (intensity) ctx.lights.push({ type: "point", pos: [x, 43.2, z], color, intensity, distance, priority });
     }
-    // bar-back uplights (housings on the canopy): one warm wash on the ceiling and sign band over the bar
-    ctx.lights.push({ type: "point", pos: [48.0, 43.9, bz + 0.5], color: 0xffd2a0, intensity: 24, distance: 7, priority: 0.6 });
     // blue practicals: one per table pair, 0.7 m over the table tops between the two tables, rising
     // and falling with the pair's grid charge (see update)
     const blueL = [357.8, 361.2].map((z) => {
@@ -311,10 +335,13 @@ export default defineRoom({
     const sconceL = { type: "point", pos: [IX0 + 0.45, 42.4, 368.0], color: 0xffc890, intensity: 5, distance: 5.5, priority: 0.8 };
     ctx.lights.push(sconceL);
 
-    // ---- brightness overlay: media wall flicker, menu refresh + chase, sconce dim, grid charge --------------
-    const overlay = screenOverlay([...mediaQuads, ...menuQuads, sconceQuad, ...gridCells]);
+    // ---- brightness overlay: media wall flicker, menu refresh + chase, sconce dim, grid charge, and the
+    //      static holds on the bar canopy's diffuser (60 %) and the drop-light diffusers (50 %, last quads) ------
+    const overlay = screenOverlay([...mediaQuads, ...menuQuads, sconceQuad, ...gridCells, canopyQuad, ...fixtureQuads]);
     ctx.group.add(overlay.mesh);
     const GRID0 = 4 + menuQuads.length + 1; // first grid cell quad
+    overlay.set(GRID0 + gridCells.length, 0.6);
+    for (let i = 1; i <= fixtureQuads.length; i++) overlay.set(GRID0 + gridCells.length + i, 0.5);
     const TAU = Math.PI * 2;
     const SC_W = TAU / 14; // 14 s sconce cycle
     const SC_PH = 0.64 - 40 * SC_W; // ~80 % bright at the harness's frozen t = 40

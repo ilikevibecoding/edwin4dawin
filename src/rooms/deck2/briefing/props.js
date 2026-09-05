@@ -19,13 +19,17 @@ const tiltQuat = (yaw, tilt) => new THREE.Quaternion().setFromEuler(new THREE.Eu
 // quads floated 6 mm in front of screens / lit plates, each quad's vertex colour scaling what is
 // behind it (0.7 = dip, 1.05 = flare). One draw call for every flickering screen and breathing board
 // in the room; `set(i, f)` writes quad i's factor in place (no allocation, 4 vertices).
-// quads: [{ pos, w, h, yaw } | { pos, w, h, quat }] — the quad faces local +Z like every prop.
+// quads: [{ pos, w, h, yaw } | { pos, w, h, quat }] — the quad faces local +Z like every prop. A quad
+// may carry `corners: [c0, c1, c2, c3]` (PlaneGeometry vertex order: -x+y, +x+y, -x-y, +x-y) for a
+// fixed per-vertex factor, which `aoBlob` uses for soft-edged contact shadows under props.
 export function screenOverlay(quads) {
   const geos = quads.map((q) => {
     const g = new THREE.PlaneGeometry(q.w, q.h);
     const quat = q.quat || new THREE.Quaternion().setFromEuler(new THREE.Euler(0, q.yaw || 0, 0));
     g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(...q.pos), quat, new THREE.Vector3(1, 1, 1)));
-    g.setAttribute("color", new THREE.BufferAttribute(new Float32Array(12).fill(1), 3));
+    const c = new Float32Array(12).fill(1);
+    if (q.corners) q.corners.forEach((f, i) => c.fill(f, i * 3, i * 3 + 3));
+    g.setAttribute("color", new THREE.BufferAttribute(c, 3));
     return g;
   });
   const geo = mergeGeometries(geos, false);
@@ -45,6 +49,32 @@ export function screenOverlay(quads) {
       color.needsUpdate = true;
     },
   };
+}
+
+// Overlay quad lying flat on the floor (local +Z up, local +Y toward world -Z).
+export const OVERLAY_UP = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+
+// Contact-shadow blob for the overlay: a 3x3 patch of floor quads centred on [cx, y, cz] covering
+// w x d, darkened to `k` inside and fading linearly to 1 over the `feather` band at the edges (the
+// vertex colours interpolate across each edge quad). The rig's single shadow spot cannot reach every
+// prop, so desks and consoles outside its cone get their ambient-occlusion read from this instead.
+// Pushes 9 quad specs onto `quads`; they are static (never `set`), so append them after animated ones.
+export function aoBlob(quads, [cx, y, cz], w, d, k = 0.55, feather = 0.35) {
+  const f = Math.min(feather, w / 2 - 0.01, d / 2 - 0.01);
+  const xs = [cx - w / 2, cx - w / 2 + f, cx + w / 2 - f, cx + w / 2];
+  const zs = [cz - d / 2, cz - d / 2 + f, cz + d / 2 - f, cz + d / 2];
+  const node = (a, b) => (a === 0 || a === 3 || b === 0 || b === 3 ? 1 : k);
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      quads.push({
+        pos: [(xs[i] + xs[i + 1]) / 2, y, (zs[j] + zs[j + 1]) / 2],
+        w: xs[i + 1] - xs[i],
+        h: zs[j + 1] - zs[j],
+        quat: OVERLAY_UP,
+        corners: [node(i, j), node(i + 1, j), node(i, j + 1), node(i + 1, j + 1)],
+      });
+    }
+  }
 }
 
 // Deterministic 0..1 hash of an integer step (flicker timing that replays for the same t).
@@ -159,19 +189,26 @@ export function ventGrille(kit, pos, yaw, w = 0.9, h = 0.45) {
   P.box("paintedMetal", 0, 0, 0.061, w - 0.1, h - 0.1, 0.004, { color: BLACK });
   const n = Math.max(3, Math.round((h - 0.1) / 0.06));
   for (let i = 0; i < n; i++) P.box("paintedMetal", 0, -h / 2 + 0.05 + (i + 0.5) * ((h - 0.1) / n), 0.066, w - 0.14, 0.018, 0.006, { color: MID });
-  for (const sx of [-1, 1]) P.box("metal", (sx * (w - 0.06)) / 2, 0, 0.062, 0.025, 0.025, 0.008, { color: STEEL });
+  // matte fixing heads: polished ones on the aft wall mirrored the aft fills into two white glints that
+  // the pass-3 critic read as a pair of wall lamps at 3 m in the seats view
+  for (const sx of [-1, 1]) P.box("paintedMetal", (sx * (w - 0.06)) / 2, 0, 0.062, 0.025, 0.025, 0.008, { color: STEEL });
 }
 
 // Rectangular duct run between axis-aligned points a and b (same y): matte dark body proud of the wall,
 // mid-grey flange bands every `flange` metres, black bracket straps at the flanges.
-export function duct(kit, a, b, { w = 0.42, h = 0.3, flange = 2.0 } = {}) {
+// `mat` defaults to paintedMetal; pass "impPanel" (roughness 0.62, near-dielectric) where the run's
+// underside faces a camera at grazing incidence with lights below it — the briefing's aft duct
+// mirrored the corridor's fills (2.9 m up, live through the shared wall) into two white glints that
+// the pass-3 critic read as far-wall lamps.
+export function duct(kit, a, b, { w = 0.42, h = 0.3, flange = 2.0, mat = "paintedMetal" } = {}) {
   const alongX = Math.abs(b[0] - a[0]) > Math.abs(b[2] - a[2]);
   const len = alongX ? Math.abs(b[0] - a[0]) : Math.abs(b[2] - a[2]);
   const cx = (a[0] + b[0]) / 2;
   const cz = (a[2] + b[2]) / 2;
   const y = a[1];
   const sz = (l, t, hh) => (alongX ? [l, hh, t] : [t, hh, l]);
-  kit.box("paintedMetal", cx, y, cz, ...sz(len, w, h), { color: DARK, texel: 2.5 });
+  const tex = mat === "paintedMetal" ? { texel: 2.5 } : {};
+  kit.box(mat, cx, y, cz, ...sz(len, w, h), { color: DARK, ...tex });
   const n = Math.max(1, Math.floor(len / flange));
   for (let i = 0; i < n; i++) {
     const t = (i + 0.5) / n;
@@ -179,9 +216,22 @@ export function duct(kit, a, b, { w = 0.42, h = 0.3, flange = 2.0 } = {}) {
     const pz = a[2] + (b[2] - a[2]) * t;
     const fx = alongX ? px : cx;
     const fz = alongX ? cz : pz;
-    kit.box("paintedMetal", fx, y, fz, ...sz(0.08, w + 0.04, h + 0.04), { color: MID });
-    kit.box("paintedMetal", fx, y - h / 2 - 0.015, fz, ...sz(0.06, w + 0.08, 0.03), { color: BLACK });
+    kit.box(mat, fx, y, fz, ...sz(0.08, w + 0.04, h + 0.04), { color: MID });
+    kit.box(mat, fx, y - h / 2 - 0.015, fz, ...sz(0.06, w + 0.08, 0.03), { color: BLACK });
   }
+}
+
+// Hooded work lamp hung under a duct or tray: a short stem, a matte hood open to the floor and a
+// white emitter face inside it. Emits only (no descriptor) — a capped accent; the caller dims the face
+// with an overlay quad (returned spec, 6 mm under the face) so it sits under the bloom threshold.
+export function ductLamp(kit, [x, yTop, z], { w = 0.32, d = 0.2, mat = "emitWhite" } = {}) {
+  const hoodY = yTop - 0.05 - 0.07; // hood centre (the hood spans yTop-0.05 .. yTop-0.19)
+  kit.box("paintedMetal", x, yTop - 0.025, z, 0.04, 0.05, 0.04, { color: BLACK });
+  kit.box("paintedMetal", x, hoodY, z, w, 0.14, d, { color: DARK, texel: 2.5 });
+  // lip frame under the hood, then the emitter face 2 mm into the lip so nothing floats
+  kit.box("paintedMetal", x, hoodY - 0.075, z, w + 0.03, 0.02, d + 0.03, { color: MID });
+  kit.box(mat, x, hoodY - 0.093, z, w - 0.08, 0.02, d - 0.08);
+  return { pos: [x, hoodY - 0.109, z], quat: new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0)), w: w - 0.08, h: d - 0.08 };
 }
 
 // Datapad lying on a desk: dark slab with a lit face and a side key.
@@ -257,8 +307,9 @@ export function statusBoard(kit, pos, yaw, w, h, seed, { accent = "emitAmber", s
       x += bw + 0.08;
     }
   }
-  // corner bolts
-  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box("metal", (sx * (w + 0.1)) / 2, (sy * (h + 0.1)) / 2, 0.062, 0.03, 0.03, 0.01, { color: STEEL });
+  // corner bolts, matte: the polished ones on the aft-wall boards mirrored the aft fills into the two
+  // white glints the pass-3 critic read as far-wall lamps in the seats view
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box("paintedMetal", (sx * (w + 0.1)) / 2, (sy * (h + 0.1)) / 2, 0.062, 0.03, 0.03, 0.01, { color: STEEL });
   // overlay quad spec (screenOverlay) covering the lit plate, 6 mm in front of the bars
   return { pos: P.world(0, 0, 0.086), yaw, w: w - 0.08, h: h - 0.08 };
 }
@@ -374,8 +425,10 @@ export function dutyDesk(kit, pos, yaw, { w = 1.8, d = 0.8, screenMat = "screenI
   P.box("darkGloss", 0.45, H + 0.005, -0.12, 0.5, 0.01, 0.1);
   for (let i = 0; i < 6; i++) P.box(i % 3 === 0 ? "emitAmber" : "emitBlue", 0.25 + i * 0.08, H + 0.012, -0.12, 0.05, 0.006, 0.03);
   datapad(kit, ...P.world(0.55, H, 0.16), yaw + 0.35, rand() < 0.5 ? "screenImp0" : "screenImp2");
-  P.cyl("metal", -0.7, H + 0.045, 0.2, 0.04, 0.09, "y", { color: STEEL, segments: 10 });
-  P.cyl("metal", -0.7, H + 0.085, 0.2, 0.034, 0.01, "y", { color: BLACK, segments: 10 });
+  // brushed (matte) cup: the polished one mirrored the aft fill straight into the aft view's camera as
+  // a clipped flare that the pass-3 critic read as a wall lamp over the desk
+  P.cyl("paintedMetal", -0.7, H + 0.045, 0.2, 0.04, 0.09, "y", { color: STEEL, segments: 10 });
+  P.cyl("paintedMetal", -0.7, H + 0.085, 0.2, 0.034, 0.01, "y", { color: BLACK, segments: 10 });
   P.collider([-w / 2, 0, -d / 2], [w / 2, H + 0.85, d / 2], "desk");
   // task chair: five-arm base, panel arms and a headrest so it reads as a chair from behind
   const seat = P.world(0, 0, d / 2 + 0.6);
