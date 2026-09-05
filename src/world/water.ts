@@ -105,9 +105,9 @@ vec2 swellSlopeC(vec2 p, vec2 dir, float L, float A, float t, float phase, float
   float c = cos(ph);
   return (A * 0.7 * c * (1.0 + s)) * (k * dir + dwarp);
 }
-// Footprint fade of a wave set of wavelength L: full below 3.5 px per wavelength is not enough to draw it, so it
-// leaves (its slope variance going into the roughness) between 8 and 3.3 px per wavelength.
-float setFade(float L, float foot) { return 1.0 - smoothstep(0.125 * L, 0.3 * L, foot); }
+// Footprint fade of a wave set of wavelength L: it leaves (its slope variance going into the roughness) between
+// 10 and 4.5 px per wavelength; fewer drew the set as moire rows.
+float setFade(float L, float foot) { return 1.0 - smoothstep(0.1 * L, 0.22 * L, foot); }
 // Slope variance of a sharpened set: E[c^2 (1 + s)^2] = 5/8 of the squared slope amplitude.
 float setVar(float L, float A) { float S = A * 0.7 * 6.2831853 / L; return 0.625 * S * S; }
 float smithBeckmann(float cosT, float alpha) {
@@ -326,7 +326,9 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   float rippleF = mix(0.3, 1.0, 0.6 * o1 + 0.4 * open) * smoothstep(0.0, 0.5, depth);
   float s4 = 1.0 - smoothstep(-6.0, 0.5, terrainHeightW(wp + wj * (1100.0 * reach)));
   float s5 = 1.0 - smoothstep(-6.0, 0.5, terrainHeightW(wp + wj * (2400.0 * reach)));
-  float swellF = open * s4 * (0.35 + 0.65 * s5) * smoothstep(4.0, 9.0, depth);
+  // swell shoals over a shelf but only dies in the shallows: the onset must not follow a bathymetric step (the
+  // shelf edge off the barrier island printed a straight roughness line where it switched on at 4-9 m)
+  float swellF = open * s4 * (0.35 + 0.65 * s5) * smoothstep(1.5, 6.5, depth);
 
   // ---- wave field: every layer fades out when its wavelength approaches the pixel footprint; the
   //      slope variance that is filtered away goes into the microfacet roughness instead
@@ -368,12 +370,12 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
     float grp = (0.55 + 0.9 * val0) * chopF * windG;
     float wv = (val0 - 0.5) * 3.0;
     vec2 dwv = dval0 * 3.0;
-    vec2 gw = swellSlope(wp, rot2(wd, -0.33), 11.6, 0.058, t, 1.0, wv, dwv) * fW0
+    vec2 gw = swellSlope(wp, rot2(wd, -0.33), 11.6, 0.046, t, 1.0, wv, dwv) * fW0
             + swellSlope(wp, rot2(wd, 0.21), 7.1, 0.050, t, 3.3, wv * 0.7, dwv * 0.7) * fW1
             + swellSlope(wp, rot2(wd, -0.08), 4.7, 0.030, t, 5.9, wv * 0.5, dwv * 0.5) * fW2;
     g += gw * grp;
   }
-  mss += chopF * windG * (setVar(11.6, 0.058) * (1.0 - fW0 * fW0) + setVar(7.1, 0.050) * (1.0 - fW1 * fW1) + setVar(4.7, 0.030) * (1.0 - fW2 * fW2)) * 1.1;
+  mss += chopF * windG * (setVar(11.6, 0.046) * (1.0 - fW0 * fW0) + setVar(7.1, 0.050) * (1.0 - fW1 * fW1) + setVar(4.7, 0.030) * (1.0 - fW2 * fW2)) * 1.1;
   float w1 = 1.0 - smoothstep(1.0, 2.2, foot);
   float a1 = 0.10 * windG * mix(chopF, rippleF, 0.4);
   if (w1 > 0.001) g += chopSlope(wp, rot2(wd, -0.2), 5.0, 1.8, 2.7, t, 3.7, a1, val1, dval1) * w1;
