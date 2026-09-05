@@ -6,7 +6,10 @@
 //
 // Modules do not import this file (no cycles): add one import line and one list entry per building below.
 
+import { LANDMARK as temple } from './temple.js';
+
 const MODULE_LIST = [
+  temple,
   // { LANDMARK } imports go here, e.g.  senate, temple, plaza_monument, ...
 ];
 
