@@ -75,9 +75,75 @@ findings and fixes:
 | deck scuffs read as cracked marble | scuffs fainter and non-metallic |
 | room-specific (floating screen, dish through a console, open interrogation cell, briefing column in the sightline, flat launch well, shuttle-bay hairlines, bare decks, conduit through hyperdrive spheres, engControl empty, …) | fixed by the five workstreams' round-1 passes (`shots/*_fix1/`) |
 
-## Review round 2 (`shots/review_2/`)
+## Review round 2 (`shots/review_2/`, 134 views + navigation, production build)
 
-(see the table appended below when the run completes)
+Run after the five workstreams' round-1 fix passes and the framework fixes (exposure/bloom split,
+planet placement, hull plating hierarchy, corridor bulkheads, lit door seams, per-deck lift lobbies,
+player substepping, exterior culling from enclosed rooms).
+
+| measure | round 1 | round 2 |
+|---|---|---|
+| views rendered / page errors | 134 / 0 | 134 / 0 |
+| doors traversed (walk through, arrive in the far room) | 33 / 33 | 33 / 33 |
+| board (exterior → bridge) and leave | OK | OK |
+| turbolift ride tower → hangar | FAIL (arrived outside every room's bounds) | FAIL in this build, **fixed after** (`e7b4f10e`, lobby bounds include the cabs; `shots/review_4nav/`, `review_5nav/` OK) |
+| max draw calls, exterior (incl. shadow + post passes) | 1037 | 412 (`close_turbolaser`) |
+| max triangles, exterior | 3.5 M | 2.07 M |
+| max draw calls, interior | — | 288 (`reactor_north`), median 114 |
+| max triangles, interior | — | 1.72 M (bridge, hull + greebles through the window band), median 137 k |
+| programs after all views | 116 → 139 after nav | 158 → 176 |
+| heap | 190 MB | 194 MB |
+| lights | 16 (12 point + 2 spot pool, sun, hemi) | 16 |
+| load (materials / exterior / interior build) | 3.2 s / 0.4 s / 1.5 s | 3.1 s / 0.4 s / 1.8 s |
+
+Visual critics (three independent agents, exterior / tower + hangar / crew + engineering, scored
+against `docs/REVIEW_RUBRIC.md`) — remaining notes after the fix passes: the exterior reads as an
+Imperial wedge at every distance with the plating hierarchy now visible at close range; the bridge
+window band frames the hull and the planet; hangar well cycles read; engineering has the strongest
+room identity (reactor pit, hyperdrive spheres); the weakest rooms remain the generic corridors
+between clusters (bulkheads and door signs, but repeated panels).
+
+## Technical review (independent read-only agent) and the fixes
+
+Findings ranked HIGH → LOW, all addressed in `ee2ddb22` unless noted:
+
+- **HIGH — precompile compiled the wrong program variants.** `compileAsync` ran with no render target
+  bound (ACES + sRGB in the key) while N8AO renders the beauty pass into its own target (no tone
+  mapping, linear). Fixed: the compile runs with the beauty target bound and also covers the
+  fighters. Programs at load went 53 → 94 and no longer climb on first sight of a room.
+- **HIGH — `castShadow` toggled on pool spots** whenever a `shadow: false` descriptor (the hangar's
+  planet light) bound, recompiling every program in view on each well cycle. Fixed: pool spots never
+  change `castShadow`.
+- **HIGH — `board()` could deadlock the camera mode manager** if a preset key or the harness replaced
+  a flight mid-way. Fixed: superseded flights resolve, presets are locked while busy.
+- **MEDIUM — turbolift arrival rendered one frame of the departure deck**, then faded lights from
+  black. Fixed: `onArrive` re-streams the destination and snaps the light pool.
+- **MEDIUM — shadow passes for lights that contribute nothing** (sun at intensity 0 in enclosed rooms,
+  unbound pool spots). Fixed: shadow `autoUpdate` follows the light's contribution — **but only once
+  the map exists**. The first attempt froze never-rendered maps; three then binds an empty RGBA
+  texture to a `sampler2DShadow`, `GL_INVALID_OPERATION` drops every lit draw and every interior went
+  black (caught by the nav run, fixed in `7dc6e840`; interiors are pixel-identical to before, 16 fewer
+  draw calls and −183 k triangles per frame in the bridge from the skipped spot passes).
+- **MEDIUM — per-frame rebuilds** of collider / walkable / light / interactable lists and the light
+  assignment sort. Fixed: cached per visibility key; assignment on visibility change, >1 m focus
+  move or 4 Hz (`3bc4efc2`).
+- **MEDIUM — exterior systems worked while hidden** (greeble LOD/turret slews, fighter instance
+  uploads). Fixed: skipped while the group is hidden, one upload on the hidden → visible edge.
+- **MEDIUM — interior point lights leak through the hull in exterior mode** near a cluster. Not
+  changed: the spill reads as window/bay light and only binds within the cluster's streaming reach.
+- **LOW** — `Door.applyState` now drives the status light and listeners; player `applyState`;
+  `SyncRegistry.size()` no longer advances `seq`; static kit meshes and hidden rooms leave the matrix
+  walk; exterior-view rooms are declared in the layout (`exterior: "all" | "traffic"`); HUD says 1–8
+  presets; `docs/API.md` documents the debug API, traffic/pilot contract, doors/lifts, sync and the
+  reserved flight systems.
+- **Not done (documented limitations):** textures are still generated synchronously before the first
+  frame (~3 s "materials" phase; a worker/`OffscreenCanvas` split is the next step), the bundle is one
+  1.5 MB chunk (488 KB gzip) without a vendor split, `comms.js` calls `toNonIndexed()` on already
+  non-indexed geometry (a console warning).
+
+## Review round 3 (`shots/review_3/`) — final build
+
+(numbers below)
 
 ---
 ---

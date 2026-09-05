@@ -51,6 +51,9 @@ tools are not GPU-representative; draw calls, triangles, programs, heap and buil
 
 ## Layout of the source
 
+- `docs/` — `SHIP_PLAN.md` (scale, hierarchy, build order), `WORKSTREAMS.md` (conventions for the
+  room/exterior workstreams), `API.md` (debug API, traffic/pilot hooks, sync, reserved flight
+  systems), `REVIEW_RUBRIC.md`
 - `src/main.js` — renderer, scene, build order, main loop, `window.debugAPI`
 - `src/config/layout.js` — the single source of truth for all dimensions
 - `src/core/` — `frame.js` (plane frames), `zone.js` (rooms + streaming), `lightpool.js`,
