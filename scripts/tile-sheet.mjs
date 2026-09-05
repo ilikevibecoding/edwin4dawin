@@ -25,8 +25,11 @@ const writePng = (path, dataUrl) => { writeFileSync(path, Buffer.from(dataUrl.sp
 export const VIEWS = {
   town_noon: '?x=-8&z=2&time=0.5&yaw=-90&pitch=-5',
   plank_wall: '?x=25&z=1.5&time=0.5&yaw=180&pitch=6',       // Boarding House (oak planks, stripped oak trim, glass)
-  street: '?x=-20&z=0&time=0.5&yaw=-90&pitch=-28',           // mud / dirt path street, spruce boardwalk, cobble curb
-  tower: '?x=2980&z=-70&y=100&fly=1&time=0.5&yaw=0&pitch=12', // Coruscant tower 221: durasteel walls, chrome piers
+  plank_close: '?x=25&z=5.3&time=0.5&yaw=180&pitch=2',      // same wall from 1.5 blocks: grain, knots, plank ends
+  street: '?x=-20&z=0&time=0.5&yaw=-90&pitch=-28',           // mud / dirt path street, spruce boardwalk
+  stone_wall: '?x=-25&z=-3.5&time=0.5&yaw=0&pitch=5',       // Sheriff's Office: stone bricks, oak log post, door
+  tower: '?x=2980&z=-70&y=100&fly=1&time=0.5&yaw=0&pitch=12', // Coruscant tower 221: durasteel walls, lit windows
+  tower_close: '?x=2980&z=-73.5&y=100&fly=1&time=0.5&yaw=0&pitch=4', // durasteel plates, rivets, window panels up close
 };
 
 // Runs in the page: draws contact sheets with the 2D canvas API and returns PNG data URLs.
