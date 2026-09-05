@@ -1606,6 +1606,8 @@ export function createTerrain({ env = null } = {}) {
   const grain = grainMaps();
   const macro = macroVariation();
   const relief = reliefMaps();
+  const tiles384 = packTiles([verge.normal, litter.normal, sand.normal, relief.height, relief.normal], 'terrainTiles384');
+  const tiles256 = packTiles([tracks.normal, tread.normal, detail, grain, macro], 'terrainTiles256');
   const sunV = sunVector();
 
   const material = new THREE.MeshStandardMaterial({
@@ -1635,25 +1637,32 @@ export function createTerrain({ env = null } = {}) {
 
   const uniforms = {
     uVergeMap: { value: verge.map },
-    uVergeNrm: { value: verge.normal },
+    // Round 5. Two array textures carry ten of the tiles: every normal map
+    // but the gravel's, the relief pair, the stamps, the grain and the macro
+    // field. This material had 21 samplers — these fifteen plus three's map,
+    // normalMap, envMap, DFG table and two shadow cascades — and the WebGL2
+    // floor, which is what nearly every desktop and phone browser reports
+    // for MAX_TEXTURE_IMAGE_UNITS (16; web3dsurvey has 16 on 100 % of
+    // Windows, Mac and iOS and 32 on 2–3 %), so on any machine but the
+    // capture box the program did not link and the near ground was never
+    // drawn: what a player saw under the truck was the far mesh's flat, 1.8 m
+    // down, dark chocolate at 0.13/0.06/0.04 sRGB, headwall footings and
+    // wheels in the air. Measured against the user's own frame: 0.138/0.073/
+    // 0.045, hue 18, saturation 0.67 — the far flat to the digit. Packed, the
+    // material binds 13. A layer is a texture of the same size and format,
+    // so the tiles are grouped by size; one anisotropy per array (16, the
+    // relief height was 2 and the macro 8).
+    uTile384: { value: tiles384 },
+    uTile256: { value: tiles256 },
     uGravelMap: { value: gravel.map },
     uGravelNrm: { value: gravel.normal },
     uLitterMap: { value: litter.map },
-    uLitterNrm: { value: litter.normal },
     uSandMap: { value: sand.map },
-    uSandNrm: { value: sand.normal },
-    uTracks: { value: tracks.normal },
     uTracksScale: { value: 1 / TRACKS_TILE },
     // The overlook turnout in the mainline's frame: arc length, half-width
     // gain, and which sign of lateral offset it is on.
     uLook: { value: new THREE.Vector4(LOOK_M, 3.4, LAND.look.side > 0 ? -1 : 1, 0) },
     uAccess: { value: new THREE.Vector2(ACCESS_M, WORLD.camp.side > 0 ? -1 : 1) },
-    uDetailNrm: { value: detail },
-    uGrain: { value: grain },
-    uMacro: { value: macro },
-    uTread: { value: tread.normal },
-    uReliefH: { value: relief.height },
-    uReliefN: { value: relief.normal },
     uReliefScale: { value: 1 / RELIEF_TILE },
     uReliefDepth: { value: RELIEF_DEPTH },
     // Lateral step per unit of relief height when marching toward the sun, so
@@ -1763,11 +1772,21 @@ export function createTerrain({ env = null } = {}) {
       .replace(
         '#include <common>',
         `#include <common>
-        uniform sampler2D uVergeMap, uVergeNrm, uLitterMap, uLitterNrm;
+        uniform sampler2D uVergeMap, uLitterMap, uSandMap;
         uniform sampler2D uGravelMap, uGravelNrm;
-        uniform sampler2D uSandMap, uSandNrm, uTracks;
-        uniform sampler2D uDetailNrm, uGrain, uMacro, uTread;
-        uniform sampler2D uReliefH, uReliefN;
+        // Round 5: ten of the tiles ride in two array textures (see
+        // packTiles) — one sampler each instead of ten. Layer order below.
+        uniform sampler2DArray uTile384, uTile256;
+        #define uVergeNrm_L 0.0
+        #define uLitterNrm_L 1.0
+        #define uSandNrm_L 2.0
+        #define uReliefH_L 3.0
+        #define uReliefN_L 4.0
+        #define uTracks_L 0.0
+        #define uTread_L 1.0
+        #define uDetailNrm_L 2.0
+        #define uGrain_L 3.0
+        #define uMacro_L 4.0
         uniform vec3 uScale;
         uniform vec2 uGrainScale;
         uniform vec2 uSunStep;
@@ -1809,10 +1828,10 @@ export function createTerrain({ env = null } = {}) {
         `vec2 uvT = vTile * uScale.x;
         vec2 uvV = vTile * uScale.y;
         vec2 uvL = vTile * uScale.z;
-        vec4 mac = texture2D( uMacro, vTile * uMacroScale + 0.37 );
+        vec4 mac = texture( uTile256, vec3( vTile * uMacroScale + 0.37, uMacro_L ) );
         // same texture at a five metre scale: mask jitter in r, mid-scale
         // value in g, damp patches in b
-        vec4 mid = texture2D( uMacro, vTile * uJitterScale );
+        vec4 mid = texture( uTile256, vec3( vTile * uJitterScale, uMacro_L ) );
 
         vec3 toCam = cameraPosition - vWorld;
         float camDist = length( toCam ) + 1e-4;
@@ -1830,7 +1849,7 @@ export function createTerrain({ env = null } = {}) {
         // tuned on it as it stands.
         float midFar = smoothstep( 8.0, 24.0, camDist ) * uMidBreak;
         vec2 midUv2 = mat2( 0.7986, 0.6018, -0.6018, 0.7986 ) * vTile * ( uJitterScale * 0.63 ) + vec2( 0.31, 0.77 );
-        vec4 mid2 = texture2D( uMacro, midUv2 );
+        vec4 mid2 = texture( uTile256, vec3( midUv2, uMacro_L ) );
         mid = mix( mid, clamp( ( mid + mid2 - 1.0 ) * 0.7071 + 0.5, 0.0, 1.0 ), midFar );
         float jit = mid.r - 0.5;
         vec3 viewN = toCam / camDist;
@@ -1884,7 +1903,7 @@ export function createTerrain({ env = null } = {}) {
         // Ragged in road space as well as in world space. The verge boundary is
         // what gives the trail its edge, and an edge that only wobbles with a
         // world-space noise field still reads as a ribbon laid over the ground.
-        vec4 rsEdge = texture2D( uMacro, vec2( vAlong * 0.33, vSide * 0.19 + 0.61 ) );
+        vec4 rsEdge = texture( uTile256, vec3( vec2( vAlong * 0.33, vSide * 0.19 + 0.61 ), uMacro_L ) );
         // jitter tapered the same way vEdge's wobble is: everything keyed off
         // axj has to stay clear of the rut band
         float axj = vEdge + ( jit * 0.24 + ( rsEdge.g - 0.5 ) * 0.44 ) *
@@ -1986,22 +2005,22 @@ export function createTerrain({ env = null } = {}) {
           // integrated foreground was covered in.
           float pl = length( pDir );
           pDir *= min( pl, 0.028 ) / max( pl, 1e-5 );
-          float rh = texture2D( uReliefH, uvR0 ).r;
+          float rh = texture( uTile384, vec3( uvR0, uReliefH_L ) ).r;
           // relaxed fixed point on h( uv + pDir * ( 1 - h ) ) = h
           for ( int i = 0; i < 4; i ++ ) {
-            rh = mix( rh, texture2D( uReliefH, uvR0 + pDir * ( 1.0 - rh ) ).r, 0.66 );
+            rh = mix( rh, texture( uTile384, vec3( uvR0 + pDir * ( 1.0 - rh ), uReliefH_L ) ).r, 0.66 );
           }
           uvR = uvR0 + pDir * ( 1.0 - rh );
         }
-        vec4 relH = texture2D( uReliefH, uvR );
-        vec4 relN = texture2D( uReliefN, uvR );
+        vec4 relH = texture( uTile384, vec3( uvR, uReliefH_L ) );
+        vec4 relN = texture( uTile384, vec3( uvR, uReliefN_L ) );
         if ( pFade > 0.02 ) {
           vec2 sDir = uSunStep * rDepth * uReliefScale;
           float occ = 0.0;
           for ( int i = 1; i <= 4; i ++ ) {
             float dh = float( i ) * 0.14;
             // ray height after climbing dh against the height field there
-            occ = max( occ, ( texture2D( uReliefH, uvR + sDir * dh ).r - ( relH.r + dh ) ) / ( 0.1 + dh ) );
+            occ = max( occ, ( texture( uTile384, vec3( uvR + sDir * dh, uReliefH_L ) ).r - ( relH.r + dh ) ) / ( 0.1 + dh ) );
           }
           rShadow = clamp( occ * 0.68, 0.0, 1.0 ) * pFade;
         }
@@ -2052,8 +2071,8 @@ export function createTerrain({ env = null } = {}) {
         vec4 tLit = texture2D( uLitterMap, uvL );
         vec4 tLit2 = texture2D( uLitterMap, uvL * 0.23 + 0.67 );
         vec4 nTrack = texture2D( normalMap, uvT );
-        vec4 nVerge = texture2D( uVergeNrm, uvV );
-        vec4 nLit = texture2D( uLitterNrm, uvL );
+        vec4 nVerge = texture( uTile384, vec3( uvV, uVergeNrm_L ) );
+        vec4 nLit = texture( uTile384, vec3( uvL, uLitterNrm_L ) );
         // The zones. Sand on the river floor, eroded bank above it, the graded
         // pad, the mud round the water hole and the churn where things drive or
         // walk in. Only fetched where a zone is live: most of the world is none
@@ -2073,27 +2092,27 @@ export function createTerrain({ env = null } = {}) {
           tSand = texture2D( uSandMap, uvS );
           vec4 tSand2 = texture2D( uSandMap, uvS * 0.31 + 0.19 );
           tSand.rgb = breakUp( tSand.rgb, tSand2.rgb, uMean.w );
-          nSand = texture2D( uSandNrm, uvS );
+          nSand = texture( uTile384, vec3( uvS, uSandNrm_L ) );
           vec2 uvK = vTile * uTracksScale + ( mid.gb - 0.5 ) * 0.2;
-          trk = texture2D( uTracks, uvK );
-          trkHi = texture2D( uTracks, uvK + uSunStep * 0.02 * uTracksScale ).w;
+          trk = texture( uTile256, vec3( uvK, uTracks_L ) );
+          trkHi = texture( uTile256, vec3( uvK + uSunStep * 0.02 * uTracksScale, uTracks_L ) ).w;
         }
-        vec4 nDetail4 = texture2D( uDetailNrm, ( vTile + pWorld ) * uDetailScale );
+        vec4 nDetail4 = texture( uTile256, vec3( ( vTile + pWorld ) * uDetailScale, uDetailNrm_L ) );
         // Second tier of the same grit at four times the frequency, faded in
         // over the last few metres. The wheel and contact framings sit 30 cm
         // off the dirt, where a 45 cm tile is already smooth.
-        vec4 nGrit = texture2D( uDetailNrm, ( vTile + pWorld ) * uDetailScale * 4.3 + 0.21 );
+        vec4 nGrit = texture( uTile256, vec3( ( vTile + pWorld ) * uDetailScale * 4.3 + 0.21, uDetailNrm_L ) );
         // Close-range aggregate as a multiplicative tint, at two scales. This
         // is what carries chroma detail in the bottom of the frame, where the
         // 2.6 m surface tile is magnified sevenfold and has nothing left.
-        vec3 grainA = texture2D( uGrain, ( vTile + pWorld ) * uGrainScale.x ).rgb * 2.0;
-        vec4 grainB4 = texture2D( uGrain, ( vTile + pWorld ) * uGrainScale.y + 0.53 );
+        vec3 grainA = texture( uTile256, vec3( ( vTile + pWorld ) * uGrainScale.x, uGrain_L ) ).rgb * 2.0;
+        vec4 grainB4 = texture( uTile256, vec3( ( vTile + pWorld ) * uGrainScale.y + 0.53, uGrain_L ) );
         // Clod tier, 1.3 m. Between the 2.6 m surface tile and the 40 cm
         // aggregate there was nothing at all, so a metre of trail in the bottom
         // of a low framing carried detail at two scales with a hole between
         // them — which is what "mushy" actually looks like. A graded surface
         // dries and breaks into plates about this size.
-        vec4 clod = texture2D( uMacro, vTile * 0.78 + vec2( 0.29, 0.83 ) );
+        vec4 clod = texture( uTile256, vec3( vTile * 0.78 + vec2( 0.29, 0.83 ), uMacro_L ) );
 
         vec3 cTrack = breakUp( tTrack.rgb, tTrack2.rgb, uMean.x );
         vec3 cLit = breakUp( tLit.rgb, tLit2.rgb, uMean.y );
@@ -2126,7 +2145,7 @@ export function createTerrain({ env = null } = {}) {
         // edge is wherever the last vehicle happened to put a wheel. Making
         // both roads equally ragged was the first thing tried and it read as
         // one road at two widths.
-        vec4 mrs = texture2D( uMacro, vec2( vMain.z * 0.026, vMain.y * 0.14 + 0.44 ) );
+        vec4 mrs = texture( uTile256, vec3( vec2( vMain.z * 0.026, vMain.y * 0.14 + 0.44 ), uMacro_L ) );
         float mAxj = mAx + ( mrs.g - 0.5 ) * 0.42 * smoothstep( uMain.x * 0.4, uMain.x * 1.3, mAx );
         // Junction influence, in both roads' frames. These have to be the same
         // numbers as apronMain / apronTrail in the mesh profile, and the
@@ -2196,7 +2215,7 @@ export function createTerrain({ env = null } = {}) {
         // Anything keyed off it varies down the road instead of with the world
         // grid, which is what stops the print and the crown strip from reading
         // as one continuous painted stripe.
-        vec4 rsp = texture2D( uMacro, vec2( vAlong * 0.021, vSide * 0.11 + 0.3 ) );
+        vec4 rsp = texture( uTile256, vec3( vec2( vAlong * 0.021, vSide * 0.11 + 0.3 ), uMacro_L ) );
 
         // The tyre print tile repeats, so it has to be masked to one tyre
         // width either side of each rut or it bands across the whole road as
@@ -2215,10 +2234,10 @@ export function createTerrain({ env = null } = {}) {
         // is what later passes landing slightly out of step actually do to a
         // print. Amplitude is held below the fold: 0.25 m over 3.6 m is a slope of
         // 0.44, so the coordinate stays monotonic and the tile never doubles back.
-        vec4 rsWarp = texture2D( uMacro, vec2( vAlong * 0.28 + 0.11, vSide * 0.05 + 0.6 ) );
+        vec4 rsWarp = texture( uTile256, vec3( vec2( vAlong * 0.28 + 0.11, vSide * 0.05 + 0.6 ), uMacro_L ) );
         float treadV = ( vAlong + ( rsWarp.r - 0.5 ) * 0.5 ) / uTreadPitch +
                        rsEdge.a * 1.7 + step( 0.0, vSide ) * 0.37;
-        vec4 tread = texture2D( uTread, vec2( treadU + 0.5, treadV ) );
+        vec4 tread = texture( uTile256, vec3( vec2( treadU + 0.5, treadV ), uTread_L ) );
         // Broken into runs of a metre or two. A tyre lays a print where the
         // surface is soft and scuffs it out again everywhere else; an unbroken
         // print down the whole trail is a rubber mat, which is exactly what the
@@ -2274,7 +2293,7 @@ export function createTerrain({ env = null } = {}) {
         vec2 perpN = vec2( -tanN.y, tanN.x );
         // 1.4 cm of lug depth, expressed in the print tile's own uv units
         vec2 sunRS = vec2( dot( uSunStep, perpN ) * 2.9, dot( uSunStep, tanN ) / uTreadPitch ) * 0.014;
-        float wallHi = texture2D( uTread, vec2( treadU + 0.5, treadV ) + sunRS ).w;
+        float wallHi = texture( uTile256, vec3( vec2( treadU + 0.5, treadV ) + sunRS, uTread_L ) ).w;
         float wall = clamp( ( wallHi - tread.w ) * 2.6, 0.0, 1.0 );
         float printShade = 1.0 - wall * mPrint * 0.22;
         albedo *= printShade;
@@ -2311,7 +2330,7 @@ export function createTerrain({ env = null } = {}) {
         // Fines dragged along the direction of travel. A dirt road streaks
         // lengthwise and the world-space tiles cannot know which way that is,
         // so the streak is sampled in road space and stretched 6:1.
-        vec4 streak = texture2D( uMacro, vec2( vAlong * 0.42, vSide * 2.6 + 0.7 ) );
+        vec4 streak = texture( uTile256, vec3( vec2( vAlong * 0.42, vSide * 2.6 + 0.7 ), uMacro_L ) );
         // 0.72 + 0.52 was a 1.7:1 swing along a 6:1 stretched tile, stacked on
         // top of the finer drag tap and the relief cavity. All three pull the
         // same way — lengthwise — and together they combed the whole trail into
@@ -2328,7 +2347,7 @@ export function createTerrain({ env = null } = {}) {
         // often at a 12:1 stretch is not grain, it is marbling — the whole trail
         // came back looking like varnished wood. 0.42 puts the repeat at 2.4 m
         // and the lateral jitter keeps the two axes from lining up.
-        vec4 drag = texture2D( uMacro, vec2( vAlong * 0.42 + 0.4, vSide * 7.5 + rsp.g * 1.4 ) );
+        vec4 drag = texture( uTile256, vec3( vec2( vAlong * 0.42 + 0.4, vSide * 7.5 + rsp.g * 1.4 ), uMacro_L ) );
         float dragAmt = mRut * detailFade;
         // Contrast halved and broken along the road. Stretched 18:1 this tile has
         // a correlation length of two and a half metres down the trail, so at a
@@ -2421,7 +2440,7 @@ export function createTerrain({ env = null } = {}) {
         // analytically at a 1.15 m radius in the far field — the landform, not
         // the ruts. Rotated back into world space through the view matrix's
         // transpose, which is its inverse for a rotation.
-        vec4 macFar = texture2D( uMacro, vTile / 420.0 + vec2( 0.71, 0.13 ) );
+        vec4 macFar = texture( uTile256, vec3( vTile / 420.0 + vec2( 0.71, 0.13 ), uMacro_L ) );
         vec3 formN = normalize( ( vec4( vNormal, 0.0 ) * viewMatrix ).xyz );
         vec2 sunXZ = normalize( uSunStep );
         float formSlope = smoothstep( 0.03, 0.22, 1.0 - formN.y );
@@ -2637,7 +2656,7 @@ export function createTerrain({ env = null } = {}) {
           // roughest thing in the world. Irregular in pitch as well as phase,
           // for the reason the trail's ripples are: an evenly spaced repeat
           // reads as machined however good its contrast is.
-          float wbWarp = texture2D( uMacro, vec2( vMain.z * 0.09, vMain.y * 0.04 + 0.2 ) ).r - 0.5;
+          float wbWarp = texture( uTile256, vec3( vec2( vMain.z * 0.09, vMain.y * 0.04 + 0.2 ), uMacro_L ) ).r - 0.5;
           float wbPhase = ( vMain.z + wbWarp * 0.9 ) * 8.6;
           // Only on the travelled way, only where a truck works — it forms on
           // grades, on the approach to the junction and through bends, not down
@@ -2657,7 +2676,7 @@ export function createTerrain({ env = null } = {}) {
           // it. Same argument as the trail's braking ripples: irregular *pitch*
           // and irregular *amplitude*, or an evenly spaced repeat reads as
           // machined however good its contrast is.
-          float wbVar = 0.25 + 0.75 * smoothstep( 0.3, 0.75, texture2D( uMacro, vec2( vMain.z * 0.42 + 0.7, 0.31 ) ).g );
+          float wbVar = 0.25 + 0.75 * smoothstep( 0.3, 0.75, texture( uTile256, vec3( vec2( vMain.z * 0.42 + 0.7, 0.31 ), uMacro_L ) ).g );
           float wb = sin( wbPhase ) * 0.5 + 0.5;
           wbAmt *= wbVar;
           gAlb *= mix( 1.0, 0.93 + wb * 0.15, wbAmt * 0.7 );
@@ -2998,7 +3017,23 @@ export function createTerrain({ env = null } = {}) {
         // a step toward mid roughness, not a mirror, for the reason the damp
         // term above is.
         roughnessFactor = mix( roughnessFactor, max( tSand.a, 0.86 ), zSand );
-        roughnessFactor = mix( roughnessFactor, 0.58, smoothstep( 0.3, 0.9, mudWet ) * 0.8 );`,
+        // Round 5: 0.92, from 0.58. From the pride camera the margin is seen
+        // at three degrees, where any finish under 0.8 returns a good part of
+        // the sky as sheen over an albedo of 0.05 — and the trampled ring
+        // rendered as a pale grey band (0.28 linear Y) *brighter* than the
+        // pool it surrounds (0.24); at 0.72 it still matched the plain
+        // (0.27) with the plain's hue washed to a pink-grey. Trampled mud a
+        // few metres from the water is damp, not wet: matte, its own dark
+        // colour showing, and the sheen belongs to the last half metre.
+        roughnessFactor = mix( roughnessFactor, 0.92, smoothstep( 0.3, 0.9, mudWet ) * 0.8 );
+        // Round 5: the wet annulus. The last 0.6 m before the waterline was
+        // under water this morning and has not dried: a broad sheen at 0.35,
+        // which is what tells the shore from the trampled margin behind it.
+        // zMud is 1 at the line and falls as the square of the distance out
+        // — 0.993 at 0.6 m, 0.985 at 0.9 m — so the band is 0.984–0.996.
+        // The albedo there is already the soaked margin's (0.45 of the plain,
+        // from the soak and the cooling above), so only the finish changes.
+        roughnessFactor = mix( roughnessFactor, 0.35, smoothstep( 0.984, 0.996, zMud ) );`,
       )
       .replace(
         '#include <normal_fragment_maps>',
@@ -3193,7 +3228,7 @@ export function createTerrain({ env = null } = {}) {
         // 27 cm tile this was a few pixels across at two metres, and a few-pixel
         // normal under a 0.1 roughness is not a sheen, it is a field of hard
         // white glints — the snow speckle this whole surface started out with.
-        vec4 rip = texture2D( uMacro, vTile * 0.9 + vec2( 0.13, 0.61 ) );
+        vec4 rip = texture( uTile256, vec3( vTile * 0.9 + vec2( 0.13, 0.61 ), uMacro_L ) );
         mapN = mix( mapN, vec3( ( rip.rg - 0.5 ) * 0.15, 1.0 ), smoothstep( 0.15, 0.6, water ) * 0.55 );
         normal = normalize( tbn * mapN );`,
       )
@@ -4643,6 +4678,58 @@ function buildScatter(curve, mainCurve, surfaceInfo, env, sunV) {
 
 const PUDDLE_RING = 32;
 
+/**
+ * The live dome parameter arrays sky.js installs on every stock material's fog
+ * uniforms (a Float32Array of four each, shared by reference and rewritten per
+ * frame). A ShaderMaterial does not get them, so the water reads them off one
+ * ShaderLib entry. Zeros with w = 0 when the sky has not installed its fog, in
+ * which case the shader falls back to the fog-colour gradient.
+ */
+function skyDomeUniform(name) {
+  const u = THREE.ShaderLib.lambert?.uniforms?.[name];
+  return u && u.value && u.value.length === 4 ? u.value : new Float32Array([0, 0, 0, 0]);
+}
+
+/** How many kopje boulders the water hole's reflection carries. */
+const WATER_ROCKS = 20;
+
+/**
+ * Round 5. Several same-size RGBA8 DataTextures as the layers of one
+ * DataArrayTexture, so the terrain material samples them through one unit
+ * (`texture( arr, vec3( uv, layer ) )`). The source tiles are built with
+ * flipY on, which for a DataTexture is a row flip at upload; a 3D upload does
+ * not get that flip on every backend, so it is baked into the layer here and
+ * the array is uploaded straight. Wrap, filters and mips as the tiles had.
+ */
+function packTiles(list, name) {
+  const w = list[0].image.width;
+  const h = list[0].image.height;
+  const row = w * 4;
+  const data = new Uint8Array(w * h * 4 * list.length);
+  list.forEach((t, i) => {
+    if (t.image.width !== w || t.image.height !== h || !t.image.data) throw new Error(`packTiles(${name}): layer ${i} is ${t.image.width}x${t.image.height}`);
+    const src = t.image.data;
+    const base = i * w * h * 4;
+    if (t.flipY) {
+      for (let y = 0; y < h; y++) data.set(src.subarray((h - 1 - y) * row, (h - y) * row), base + y * row);
+    } else {
+      data.set(src, base);
+    }
+  });
+  const arr = new THREE.DataArrayTexture(data, w, h, list.length);
+  arr.name = name;
+  arr.format = THREE.RGBAFormat;
+  arr.type = THREE.UnsignedByteType;
+  arr.wrapS = arr.wrapT = THREE.RepeatWrapping;
+  arr.magFilter = THREE.LinearFilter;
+  arr.minFilter = THREE.LinearMipmapLinearFilter;
+  arr.generateMipmaps = true;
+  arr.anisotropy = 16;
+  arr.flipY = false;
+  arr.needsUpdate = true;
+  return arr;
+}
+
 function buildWater(curve, surfaceInfo, heightAt, sunV) {
   const info = makeScatterInfo();
   const p = new THREE.Vector3();
@@ -4879,6 +4966,30 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
       uFog: { value: new THREE.Color(PALETTE.fogColor) },
       uFogDensity: { value: FOG.density },
       uTime: { value: 0 },
+      // Round 5: the dome itself, for the hole's reflection. sky.js writes
+      // the displayed dome's parameters into every stock material's fog
+      // uniforms each frame (horizon, zenith, haze band, anti-solar, aureole,
+      // key direction); the arrays are shared by reference, so reading them
+      // off one ShaderLib entry here is reading the live values. A
+      // ShaderMaterial gets none of them by itself.
+      uSkyHor: { value: skyDomeUniform('uSkyHor') },
+      uSkyZen: { value: skyDomeUniform('uSkyZen') },
+      uSkyHaze: { value: skyDomeUniform('uSkyHaze') },
+      uSkyAnti: { value: skyDomeUniform('uSkyAnti') },
+      uSkySun: { value: skyDomeUniform('uSkySun') },
+      uSkyDir: { value: skyDomeUniform('uSkyDir') },
+      // Round 5: the kopje in the water. The panorama card is a painted
+      // skyline and knows nothing about the outcrop twenty metres behind the
+      // hole, and there is no reflection pass at `fast`, so the pool never
+      // showed the one thing standing over it. The boulders are ellipsoids
+      // (forest.js builds them from a unit icosahedron under an instance
+      // matrix), so the reflected ray is intersected with the nearest of
+      // them analytically: each rock is a mat4 taking world space to its own
+      // unit sphere, read off the instanced meshes once the scene is up
+      // (below). Twenty rocks, hole pixels only, no draw call, no texture.
+      uRockInv: { value: Array.from({ length: WATER_ROCKS }, () => new THREE.Matrix4()) },
+      uRockCol: { value: Array.from({ length: WATER_ROCKS }, () => new THREE.Vector4()) },
+      uRockN: { value: 0 },
     },
     vertexShader: /* glsl */ `
       attribute float aAlpha;
@@ -4900,10 +5011,31 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
       uniform sampler2D uRipple, uCanopy;
       uniform vec3 uSunDir, uSunCol, uSkyTop, uSkyLow, uBody, uFog, uCardLow, uCardTop;
       uniform float uFogDensity, uTime;
+      uniform vec4 uSkyHor, uSkyZen, uSkyHaze, uSkyAnti, uSkySun, uSkyDir;
+      uniform mat4 uRockInv[ ${WATER_ROCKS} ];
+      uniform vec4 uRockCol[ ${WATER_ROCKS} ];
+      uniform int uRockN;
       varying vec3 vWorld;
       varying float vAlpha;
       varying float vDepth;
       varying float vHole;
+      // The dome in a world direction — the same gradient sky.js draws and
+      // fogs everything to (its fog chunk, minus the disc, clouds and stars),
+      // in scene-linear radiance, which is what this material writes.
+      vec3 skyDome( vec3 d ) {
+        vec3 w = vec3( d.x, max( d.y, 0.0 ), d.z );
+        w /= max( length( w ), 1e-4 );
+        float h = w.y;
+        float c = clamp( dot( w, uSkyDir.xyz ), -1.0, 1.0 );
+        float hz = exp( -h * uSkyZen.w );
+        float side = smoothstep( -1.0, 1.0, c );
+        vec3 s = mix( uSkyHor.rgb, uSkyZen.rgb, pow( h, uSkyHor.w ) );
+        s = mix( s, uSkyHaze.rgb, hz * 0.52 * mix( 1.0, 0.5 + 0.5 * side, uSkyHaze.w ) );
+        s = mix( s, uSkyHaze.rgb, hz * side * uSkySun.w );
+        s = mix( s, uSkyAnti.rgb, pow( max( -c, 0.0 ), 2.5 ) * hz * uSkyAnti.w );
+        s += uSkySun.rgb * pow( max( c, 0.0 ), 6.0 ) * ( 0.35 + hz * 0.9 );
+        return s;
+      }
       void main() {
         vec3 toCam = cameraPosition - vWorld;
         float dist = length( toCam ) + 1e-4;
@@ -4974,6 +5106,16 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
         vec3 cardSky = mix( uCardLow, uCardTop, smoothstep( 0.02, 0.85, upC ) );
         const vec3 LUMA = vec3( 0.2126, 0.7152, 0.0722 );
         float key = clamp( dot( card, LUMA ) / max( dot( cardSky, LUMA ), 1e-3 ), 0.0, 1.1 );
+        // Round 5: over the hole the card's skyline is a darkening of no more
+        // than a fifth. From the pride camera the reflected ray leaves at
+        // three to four degrees, which is the card's painted hill line and
+        // its acacias, and their key ran 0.4–0.6 — so the sheet reflected a
+        // range a stop darker than the one the far mesh now draws at 0.8 of
+        // the sky, and measured 0.74 of the sky over it against a target of
+        // ±0.3 st. Real hills in that much air are 0.8 of the sky; the trees
+        // and the grass line on a sheet ruffled by wind are a softening, not
+        // a silhouette.
+        key = mix( key, max( key, 0.78 ), hole );
         // The sky leaves the horizon band fast: measured against the camp
         // framing, four degrees up it is already half way to blue-grey and by
         // seven it is most of the way. A smoothstep to 0.7 kept the whole of
@@ -4983,7 +5125,47 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
         // zenith colour, which is the cool grey a pool has against dirt.
         float skyT = 1.0 - pow( 1.0 - clamp( up / 0.6, 0.0, 1.0 ), 3.0 );
         vec3 sky = mix( uSkyLow, uSkyTop, skyT );
+        // Round 5: over the hole the reflection is the dome itself, sampled
+        // along the reflected ray, not the fog colour pulled toward a guessed
+        // zenith. From the pride camera the ray leaves at 8–15 degrees, where
+        // the displayed sky is already well off the horizon band — a cooler,
+        // darker blue-grey than the fog colour, which is the band. Measured
+        // before this (\`lion_pride\`): pool 0.57 st under the sky it should
+        // mirror, 0.03 st from the mud beside it. The puddles keep the card.
+        if ( uSkyDir.w > 0.5 ) sky = mix( sky, skyDome( R ), hole );
         vec3 refl = mix( card, sky * key, hole );
+        // The kopje (round 5): nearest boulder the reflected ray meets. The
+        // ray is taken from the sheet at the unrippled surface's reflection
+        // plus the ripple's tilt, so the outcrop wobbles as the skyline does.
+        if ( hole > 0.5 && R.y > 0.0 ) {
+          float rockT = 1e9;
+          vec3 rockShade = vec3( 0.0 );
+          for ( int i = 0; i < ${WATER_ROCKS}; i ++ ) {
+            if ( i >= uRockN ) break;
+            vec3 o = ( uRockInv[ i ] * vec4( vWorld, 1.0 ) ).xyz;
+            vec3 d = ( uRockInv[ i ] * vec4( R, 0.0 ) ).xyz;
+            float a = dot( d, d );
+            float b = dot( o, d );
+            float c = dot( o, o ) - 1.0;
+            float disc = b * b - a * c;
+            if ( disc <= 0.0 ) continue;
+            float t = ( -b - sqrt( disc ) ) / a;
+            if ( t <= 0.0 || t >= rockT ) continue;
+            rockT = t;
+            // the ellipsoid's normal is the inverse-transpose of its local one
+            vec3 nl = o + d * t;
+            vec3 nw = normalize( ( transpose( uRockInv[ i ] ) * vec4( nl, 0.0 ) ).xyz );
+            // Lit granite: keyed the way the rock itself renders — a third of
+            // the horizon sky on every face, the key's colour at unit strength
+            // on the faces toward it. Matched to the outcrop on screen: its
+            // sunlit faces at 0.45 linear, its undersides at 0.03–0.05, and
+            // the reflection sees mostly undersides, so it is a dark shape on
+            // the sky's image, as a rock over water is.
+            float ndl = max( dot( nw, uSunDir ), 0.0 );
+            rockShade = uRockCol[ i ].rgb * ( uSkyHor.rgb * 0.35 + uSunCol * ndl );
+          }
+          if ( rockT < 1e8 ) refl = rockShade;
+        }
         // Only the last few degrees before the zenith are actually open.
         refl = mix( refl, sky, smoothstep( 0.86, 0.99, up ) );
         // The sun's own disc, and only that. At 1.6 the lobe bloomed across the
@@ -5043,7 +5225,13 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
         // the hole from thirty metres was 85 per cent of the horizon sky's
         // value — a pale sheet a shade under the sky, still a plate. At 0.62
         // it sits at about two thirds of the sky, with the murk showing.
-        fres = mix( fres, clamp( 0.08 + 0.62 * pow( 1.0 - f, 5.0 ), 0.0, 1.0 ), hole );
+        // Round 5: 0.25 + 0.75 (1 - f)^3, from 0.08 + 0.62 (1 - f)^5. At the
+        // pride camera's grazing angle (f ≈ 0.25) the fifth power gave 0.23
+        // — three quarters of every pixel was murk, and the pool measured
+        // 0.03 st from the mud beside it. A pool seen at 15 degrees reflects
+        // most of what it is looking at, turbid or not: 0.25 + 0.75 · 0.42 =
+        // 0.57 here, 0.25 straight down, where the murk is the picture.
+        fres = mix( fres, clamp( 0.25 + 0.75 * pow( 1.0 - f, 3.0 ), 0.0, 1.0 ), hole );
         vec3 col = mix( body, refl, fres );
         // Waterline. Where the sheet thins to nothing the reflection goes with
         // it and what is left is saturated mud, so the darkest ring of a puddle
@@ -5090,7 +5278,56 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
     mat.uniforms.uTime.value = performance.now() * 0.001;
     mat.uniforms.uSunDir.value.copy(sunDirection());
   });
+  // The kopje's boulders, read off the scene once it is up. forest.js builds
+  // each kopje as instanced meshes named `kopje_<k>` over a unit-diameter
+  // icosahedron flattened in y by the style (slab a third, boulder 0.82), so
+  // an instance matrix times that flattening, inverted and scaled by two, takes
+  // the world to the rock's unit sphere. The nearest twenty to the hole inside
+  // forty-five metres are kept; anything further is under the ripple.
+  let rockScans = 0;
+  const _rm = new THREE.Matrix4();
+  const _rs = new THREE.Matrix4();
+  const _rp = new THREE.Vector3();
+  const _rc = new THREE.Color();
+  const scanRocks = (scene) => {
+    const hx = LAND.hole.x;
+    const hz = LAND.hole.z;
+    const found = [];
+    scene.traverse((o) => {
+      if (!o.isInstancedMesh || !/^kopje_(\d)/.test(o.name)) return;
+      const k = Number(o.name.slice(6, 7));
+      const flat = k === 2 ? 0.34 : 0.82;
+      o.updateMatrixWorld(true);
+      for (let i = 0; i < o.count; i++) {
+        o.getMatrixAt(i, _rm);
+        _rm.premultiply(o.matrixWorld);
+        _rp.setFromMatrixPosition(_rm);
+        const d = Math.hypot(_rp.x - hx, _rp.z - hz);
+        if (d > 45) continue;
+        if (o.instanceColor) _rc.fromBufferAttribute(o.instanceColor, i);
+        else _rc.set(1, 1, 1);
+        found.push({ d, m: _rm.clone().multiply(_rs.makeScale(0.5, 0.5 * flat, 0.5)), c: _rc.clone() });
+      }
+    });
+    found.sort((a, b) => a.d - b.d);
+    const n = Math.min(found.length, WATER_ROCKS);
+    for (let i = 0; i < n; i++) {
+      mat.uniforms.uRockInv.value[i].copy(found[i].m).invert();
+      // granite under a dusting of the same laterite as everything else
+      mat.uniforms.uRockCol.value[i].set(0.5 * found[i].c.r, 0.45 * found[i].c.g, 0.4 * found[i].c.b, 1);
+    }
+    mat.uniforms.uRockN.value = n;
+    return n;
+  };
   mesh.onBeforeRender = ((prev) => (renderer, scene, camera, geometry, material) => {
+    // Until the kopje is in the scene — forest.js builds in chunks and the
+    // outcrop can land minutes after the water on a slow boot — look for it
+    // every ninety frames. Six tries was not enough: the pool booted without
+    // its reflection in one capture out of three.
+    if (mat.uniforms.uRockN.value === 0 && (rockScans === 0 || renderer.info.render.frame % 90 === 0)) {
+      rockScans++;
+      scanRocks(scene);
+    }
     if (scene.fog?.color) {
       // The scene fog colour *is* the hour's horizon band — sky.js builds it
       // as horizonOf(sky) for every rig — and it is what the far ground and
@@ -5213,7 +5450,11 @@ function buildFarHills(env) {
     // one is a value shift, the other a warmth shift, and the slopes stop
     // being one khaki.
     uHillMacro: { value: macroVariation() },
+    // 1 the sky over the ridge the chunk keys to, 2 the air, 3 the fog fraction, 4 hillK,
+    // 5 the shade side, 6 distance / 1000, 7 the lit value before the air
+    uHillDebug: { value: 0 },
   };
+  mat.userData.hillUniforms = hillUniforms;
   // The scene fog is authored for the plain — a sand-coloured airlight at a
   // density that has the ground three quarters gone by six hundred metres,
   // which is right for a flat horizon and wrong for anything standing above
@@ -5316,7 +5557,27 @@ function buildFarHills(env) {
       // the stock chunk's own far-plane wall (0.55–0.92 of the far plane for
       // a ray over the horizon) carries them the rest of the way to the air
       // by the fold radius, so the far range past it is all air.
-      float hillFog = smoothstep( 100.0, 650.0, hillDist ) * 0.76;
+      //
+      // Round 5. The ramp starts at 60 m and is at its floor by 380 m — which
+      // is where the first hill stands — and the floor is 0.90 on a lit
+      // flank, 0.94 on one that faces away from the key. (With the key at
+      // 58 degrees no slope under 60 degrees is on the far side of it, so the
+      // shade term is a dusk term; by day the hills are nine tenths air.) It was 0.82 by
+      // 560 m, from 100 m to 0.76 by 650 m. Read off the chunk's own debug
+      // output on \`lion_far\` into the sun: the near ridge stands at 370–430 m
+      // and was 0.44–0.52 air there, the middle ridge at 510–575 m was 0.65–
+      // 0.78 air, and the lit value under both is near black (0.003–0.02 of
+      // display, the dark side of a 0.05 albedo), so the ridges came out at
+      // 0.54–0.66 of the sky over them against a floor of 0.72. The air in
+      // front of a hill is the same air whichever way the hill faces, so the
+      // fraction that is air is what was wrong, not the tone: real hills in
+      // dusty air at four hundred metres are five sixths air. The shaded
+      // side takes a little more still, which is the forward scatter of a
+      // sun that is in front of the camera whenever the near face is in
+      // shadow — and the reason a backlit range is always the hazier one.
+      float hillNL = dot( normalize( normal ), normalize( ( viewMatrix * vec4( ${patched ? 'uSkyDir.xyz' : 'vec3( 0.0, 1.0, 0.0 )'}, 0.0 ) ).xyz ) );
+      float hillShade = 1.0 - smoothstep( -0.15, 0.35, hillNL );
+      float hillFog = smoothstep( 60.0, 380.0, hillDist ) * mix( 0.90, 0.94, hillShade );
       // A hill is a little darker and a little bluer than the sky in its own
       // direction, always — including at the fold, where the fog has taken
       // it entirely. The dome is brightest in the first degree over the
@@ -5354,8 +5615,89 @@ function buildFarHills(env) {
       float hillFar = smoothstep( 400.0, 620.0, hillDist );
       float hillSunY = ${patched ? 'uSkyDir.y' : '1.0'};
       float hillDusk = 1.0 - smoothstep( 0.08, 0.4, hillSunY );
-      vec3 hillTone = mix( vec3( 0.85, 0.87, 0.91 ), vec3( 0.76, 0.78, 0.83 ), hillDusk );
-      vec3 hillAir = ${air} * mix( vec3( 1.0 ), hillTone, hillFar );
+      // Round 5: 0.90 by day, 0.71 at dusk, from 0.87 and 0.78 — the air is
+      // now read over the ridge (below), which is already 0.93–1.05 of the
+      // sky a critic reads it against, and the two reductions multiplied;
+      // nine tenths air at 0.90 of that puts a hill at 0.81 of the sample
+      // before the guards, the middle of the 0.72–0.92 band with room for
+      // the sample to miss the critic's rows by a tenth either way (cirrus
+      // over the ridge, the frame's field of view). The day tone is neutral
+      // so the hill's saturation is the sky's: at (0.87, 0.88, 0.91) the
+      // hill sat 0.05–0.08 over the sky it fogged to and read 0.27–0.31
+      // against the 0.24 ceiling. Dusk keeps a hundredth of blue per step.
+      // Dusk sits lower because the round-4 contrast floor (sky over the
+      // ridge minus the crest, 0.06 in display luma) is a ratio of 0.81 at
+      // the dusk sky's level: the band there is 0.72–0.81. The dusk dome is
+      // steeper still over the ridge (haze falloff 10, the warm side), so the
+      // sample runs 6–12 per cent over the critic's rows and a tone of 0.82
+      // displayed at 0.84–0.92 (contrast 0.025–0.075); 0.71 with nine tenths
+      // air lands at 0.70 before the guards, which move to 0.66 and 0.73 with
+      // the hour, for 0.74–0.80 on screen.
+      //
+      // Then measured, the whole set: with the sample two thirds of a degree
+      // over the ray and the tone at 0.90 the crests came to 0.84–0.89 of the
+      // sky *at the skyline* (linear, on screen) and 0.99–1.03 of the sky the
+      // critics box, which is two to three degrees over the ridge — 8–28
+      // rows up at 640 wide — where the dome is a tenth darker. Both readings
+      // are of the same hill; the band is 0.72–0.92 on either, so the hill
+      // goes between them: 0.86 by day (a twentieth down on screen, read
+      // with the higher sample below), and dusk *up*, 0.71 → 0.76, since
+      // the dusk crests stood at 0.64–0.80 of the sky over them with a
+      // contrast of 0.10 in display luma — 0.04 of room over the 0.06 floor.
+      vec3 hillTone = mix( vec3( 0.86 ), vec3( 0.76, 0.765, 0.78 ), hillDusk );
+      // Round 5: the air a far hill fogs to is the sky *over its ridge*, not
+      // the sky at its own ray. The dome is steep in its first degrees — the
+      // haze band e-folds over six degrees of elevation and the zenith mix
+      // has come a quarter of the way in by two — so a crest that had gone
+      // entirely to 0.87 of the sky at its own half-degree still stood at
+      // 1.01–1.24 of the sky two to four degrees over it, which is where a
+      // critic (and an eye) reads the sky a ridge stands against. Measured
+      // on \`mainroad\`: crest rows 0.64 sRGB against 0.656 at the skyline and
+      // 0.60–0.62 fifteen rows up. The dome's own terms are in the fog
+      // uniforms, so the same gradient is evaluated here just over the ridge
+      // (0.012 in the vertical, two thirds of a degree — the critics average
+      // 0.3–2.5 degrees over the skyline; at 0.035 the sample was 0.73–0.92
+      // of that average and at 0.02 still 0.88 in the narrow pride framing,
+      // too dark to key to) and the hill takes 0.90 of that.
+      // Same rule for the flat past 620 m, so the hill foot and the plain
+      // under it stay one value; the flat under 400 m keeps the plain's own
+      // fog and the forest's skirt meets it at the band, as in round 4.
+      //
+      // And by day the sample is never under 0.025 of elevation (a degree
+      // and a half). A ray to a hill's lower flank runs a hair over the horizon
+      // and read the band there — the brightest sky in the frame — so a flank
+      // at 400 m, nine tenths air, came out *brighter* than the crest over it
+      // and level with the sky at the skyline (\`mainroad\` rows 84–99 rising
+      // 0.617 → 0.652 sRGB under a crest at 0.61). A hill stands against the
+      // sky over its ridge, all of it. (At 0.035 the ridges that stand a
+      // few rows over the horizon — \`lion_far\`, \`camp_beyond\` — read a
+      // sky a fifth darker than the band they are seen against and came out
+      // at 0.67 of it.) Dusk keeps the ray's own sample: the dusk dome falls
+      // a tenth over the same degrees and the dusk crests are tuned against
+      // the sky they had.
+      vec3 hillSkyUp = ${air};
+      ${
+        patched
+          ? `if ( uSkyDir.w > 0.5 ) {
+        vec3 upW = vec3( dot( hzDir, viewMatrix[ 0 ].xyz ), max( max( hzRayY, 0.0 ) + 0.012, 0.025 * ( 1.0 - hillDusk ) ), dot( hzDir, viewMatrix[ 2 ].xyz ) );
+        upW /= max( length( upW ), 1e-4 );
+        float upH = upW.y;
+        float upC = clamp( dot( upW, uSkyDir.xyz ), -1.0, 1.0 );
+        float upHaze = exp( -upH * uSkyZen.w );
+        float upSide = smoothstep( -1.0, 1.0, upC );
+        vec3 upSky = mix( uSkyHor.rgb, uSkyZen.rgb, pow( upH, uSkyHor.w ) );
+        upSky = mix( upSky, uSkyHaze.rgb, upHaze * 0.52 * mix( 1.0, 0.5 + 0.5 * upSide, uSkyHaze.w ) );
+        upSky = mix( upSky, uSkyHaze.rgb, upHaze * upSide * uSkySun.w );
+        upSky = mix( upSky, uSkyAnti.rgb, pow( max( -upC, 0.0 ), 2.5 ) * upHaze * uSkyAnti.w );
+        upSky += uSkySun.rgb * pow( max( upC, 0.0 ), 6.0 ) * ( 0.35 + upHaze * 0.9 );
+        #if defined( TONE_MAPPING )
+          upSky = toneMapping( upSky );
+        #endif
+        hillSkyUp = linearToOutputTexel( vec4( upSky, 1.0 ) ).rgb;
+      }`
+          : ''
+      }
+      vec3 hillAir = mix( ${air}, hillSkyUp * hillTone, hillFar );
       // the scrub domes fog to a shade under the air, so one standing past the
       // crest it grows on — hazier than the crest in front of it — is still a
       // dark speck in the haze and not a pale plate over a dark ridge. A
@@ -5371,11 +5713,53 @@ function buildFarHills(env) {
       // the sky's ambient rendered at 195 sRGB against a sky of 163 above
       // them, at a range where the slow haze had only reached a third.
       const vec3 HILL_LUMA = vec3( 0.2126, 0.7152, 0.0722 );
-      float hillAirL = max( dot( hillAir, HILL_LUMA ) * 0.92, 1e-3 );
+      // Round 5: the knee is under the sky over the ridge as well as under
+      // the air — a lit flank at 450 m is in the plain's air, which is the
+      // band, and the band is brighter than the sky the flank's crest stands
+      // against.
+      float hillUpL = dot( hillSkyUp, HILL_LUMA );
+      // Round 5, measured: 0.80 by day (was 0.84; the crests it held stood at
+      // 0.89 of the skyline sky on screen, 1.01 of the critics' sky; at 0.76
+      // they were 0.75 and 0.91), 0.78 at dusk (was 0.73; see the tone).
+      float hillCeil = mix( 0.80, 0.78, hillDusk );
+      float hillAirL = max( min( dot( hillAir, HILL_LUMA ), hillUpL * hillCeil ) * 0.92, 1e-3 );
       float hillLitL = max( dot( gl_FragColor.rgb, HILL_LUMA ), 1e-4 );
+      vec3 hillLitRGB = gl_FragColor.rgb;
       float hillCapL = hillAirL * ( 1.0 - exp( -hillLitL / hillAirL ) );
       gl_FragColor.rgb *= mix( 1.0, hillCapL / hillLitL, hillK );
-      gl_FragColor.rgb = mix( gl_FragColor.rgb, hillAir, hillF );`;
+      gl_FragColor.rgb = mix( gl_FragColor.rgb, hillAir, hillF );
+      // The guard (round 5, critic B's): whatever the mix came to, a hill is
+      // under 0.84 of the sky over its ridge (0.86–0.92 on screen, where the
+      // critic's rows are darker than the sample and ACES steepens the
+      // mids); 0.73 at dusk, for the contrast floor. A luminance scale, not a
+      // per-channel min, so the clamp cannot turn a warm crest grey; on the
+      // height key, so the flat — which meets the near terrain at 146 m with
+      // no guard on that side — is not touched. Everything above is tuned to
+      // land under this; it is here for the sunlit flank at 300 m that is
+      // still mostly its own colour.
+      //
+      // And a floor, for the other end of the same rule: past 380 m a hill is
+      // never under 0.76 of the sky over its ridge, whichever way it faces
+      // (0.78–0.82 on screen, for the same reasons in the other direction;
+      // it was 0.79 against the lower sample); 0.71 at dusk (was 0.66).
+      // The air fraction above is tuned to land over this (a flank comes
+      // out at 0.81), so it holds only the odd pixel — a scrub
+      // dome standing proud of a shaded crest, a fold between two ranges. On
+      // distance as well as the height key, so a hill flank at 200 m, which
+      // is in clear air and is its own colour, is not lifted.
+      float hillOutL = max( dot( gl_FragColor.rgb, HILL_LUMA ), 1e-4 );
+      float hillFloor = hillK * smoothstep( 300.0, 380.0, hillDist );
+      gl_FragColor.rgb *= mix( 1.0, min( 1.0, hillUpL * hillCeil / hillOutL ), hillK );
+      gl_FragColor.rgb *= mix( 1.0, max( 1.0, hillUpL * mix( 0.76, 0.71, hillDusk ) / hillOutL ), hillFloor );
+      if ( uHillDebug > 0.5 ) {
+        if ( uHillDebug < 1.5 ) gl_FragColor.rgb = hillSkyUp;
+        else if ( uHillDebug < 2.5 ) gl_FragColor.rgb = hillAir;
+        else if ( uHillDebug < 3.5 ) gl_FragColor.rgb = vec3( hillF );
+        else if ( uHillDebug < 4.5 ) gl_FragColor.rgb = vec3( hillK );
+        else if ( uHillDebug < 5.5 ) gl_FragColor.rgb = vec3( hillShade );
+        else if ( uHillDebug < 6.5 ) gl_FragColor.rgb = vec3( hillDist / 1000.0 );
+        else gl_FragColor.rgb = hillLitRGB;
+      }`;
     const out = stock.replace(/gl_FragColor\.rgb\s*=\s*mix\([^;]*;/, blend);
     return out === stock ? stock : out;
   };
@@ -5411,7 +5795,7 @@ function buildFarHills(env) {
       }`,
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vHillY;\nvarying vec2 vHillXZ;\nuniform sampler2D uHillMacro;')
+      .replace('#include <common>', '#include <common>\nvarying float vHillY;\nvarying vec2 vHillXZ;\nuniform sampler2D uHillMacro;\nuniform float uHillDebug;')
       .replace(
         '#include <map_fragment>',
         `#include <map_fragment>
@@ -5447,7 +5831,9 @@ function buildFarHills(env) {
       // skirt carries the identical curve, so the two meet at one value.
       float hillD = distance( vec3( vHillXZ.x, vHillY, vHillXZ.y ), cameraPosition );
       float hillFlatK = mix( 1.0, 0.55, smoothstep( 240.0, 520.0, hillD ) );
-      diffuseColor.rgb *= mix( hillFlatK * vec3( 0.285, 0.25, 0.24 ), vec3( 0.06, 0.062, 0.054 ), hillTint );
+      // Round 5: the scrub down from 0.06 to 0.05, so a lit flank starts under
+      // the sky over its ridge and the guard in the fog chunk is a guard.
+      diffuseColor.rgb *= mix( hillFlatK * vec3( 0.285, 0.25, 0.24 ), vec3( 0.05, 0.052, 0.045 ), hillTint );
       // two-tone: darker, cooler patches of denser bush against lighter dry
       // grass, strongest on the mid slopes where there is a hill to vary
       diffuseColor.rgb *= mix( 0.86, 1.14, hMac.r ) * mix( vec3( 0.92, 0.96, 1.03 ), vec3( 1.08, 1.03, 0.95 ), hMac.a );
@@ -5586,11 +5972,12 @@ function buildFarHills(env) {
     // low slope was in different air from the ground it stood on — cooler and
     // clearer — and rendered as a distinct grey pebble on a cream slope.
     sm.onBeforeCompile = (shader) => {
+      shader.uniforms.uHillDebug = hillUniforms.uHillDebug;
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nvarying float vHillY;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHillY = position.y;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying float vHillY;')
+        .replace('#include <common>', '#include <common>\nvarying float vHillY;\nuniform float uHillDebug;')
         // 0.93 of the hill's air, which is itself 0.87 of the sky: the domes
         // land at 0.81 of the sky, where the old 0.82 of an untoned air had them
         .replace('#include <fog_fragment>', hazeChunk('smoothstep( 2.5, 15.0, vHillY )', '0.93'));
