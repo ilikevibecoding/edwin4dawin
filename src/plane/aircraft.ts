@@ -28,7 +28,9 @@ export class Aircraft {
     const fwd = new THREE.Vector3(1, 0, 0).applyQuaternion(this.flight.quaternion);
     this.flight.velocity.copy(fwd).multiplyScalar(speed);
     this.flight.omega.set(0, 0, 0);
-    this.flight.rpm = throttle;
+    // seed the engine at its steady state for this throttle (idle floor 0.08 = 760 RPM on the tachometer); seeding
+    // with the raw throttle made the RPM creep 600 -> 760 over the first second of every moored bench clip
+    this.flight.rpm = throttle * 0.92 + 0.08;
     this.inputs.throttle = throttle;
     this.flight.step(this.inputs, 0);
     this.syncModel();
