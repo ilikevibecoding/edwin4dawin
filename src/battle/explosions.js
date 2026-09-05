@@ -40,10 +40,16 @@ const LAYER_OF = [2, 0, 2, 1, 2, 0, 0, 0, 0, 0, 1, 1];
 
 export const SHIELD_COLOR = new THREE.Color(0.5, 0.78, 1.0);
 export const FIRE_LIFE = [60, 120]; // s: a persistent fire burns this long unless re-ignited
-const MAX_FIRES_PER_SHIP = 8;
+const MAX_FIRES_PER_SHIP = 12; // the choreography ignites up to 12 on a wreck
 const FIRE_COOL = 2.5; // s: a fire that goes out fades over this long
-const FLAK_CULL_FAR = 8000; // m: beyond this flak draws only its flash (no sparks / smoke)
+// fireballs (transient) may fill the flame layer only this far: the rest is reserved for the licks of
+// persistent fires, so a wreck under a hail of hits never goes dark
+const FLAME_TRANSIENT_CAP = 0.85;
+const LICK_TILT = (25 * Math.PI) / 180; // rad: per-lick orientation jitter around the fire's drift
+const FLAK_CULL_FAR = 8000; // m: beyond this flak draws only its core (no sparks / puff)
 const FLAK_THIN_FROM = 5000; // m: beyond this only one flak burst in three is drawn
+const FLAK_THIN_NEAR = 2000; // m: between this and FLAK_THIN_FROM two bursts in three are drawn
+const SCORCH_MAX = 220; // m: widest hit scorch
 const SORT_MOVE = 500; // m: camera movement that triggers a depth re-sort of the smoke
 const EMPTY = Object.freeze({});
 
@@ -147,6 +153,7 @@ varying vec4 vParam;
 varying vec3 vColor;
 varying vec3 vSunV;
 varying float vExtra;
+varying float vNear;
 void main() {
   vUv = uv;
   vParam = iParam;
@@ -159,6 +166,10 @@ void main() {
   float size = iParam.y;
   vec4 centre = modelViewMatrix * vec4(iPos, 1.0);
   float dist = max(length(centre.xyz), 1e-3);
+  // billboards the camera is about to fly through fade out instead of drawing as blurred discs: gone
+  // inside 60 m, full from 150 m, and a big puff the camera is inside of (nearer than its own size) too
+  float dcam = distance(iPos, cameraPosition);
+  vNear = smoothstep(60.0, 150.0, dcam);
   // depth bias: draw the quad as if it sat a little nearer the eye (same screen footprint) so the hull a
   // fireball or flame sits on cannot clip it, while hulls further in front still occlude it
   float sc = 1.0 - min(size * 0.5, dist * 0.8) / dist;
@@ -176,16 +187,16 @@ void main() {
   // growth curves per kind
   float grow = 1.0;
   if (k == 0) grow = 0.3 + 1.1 * sqrt(age);
-  else if (k == 1) grow = 0.5 + 0.7 * pow(age, 0.4);
-  else if (k == 2) grow = 0.92 + 0.08 * sin(time * 11.0 + seed * 40.0) * sin(time * 6.3 + seed * 17.0);
+  else if (k == 1) grow = 0.55 + 0.65 * age;
   else if (k == 3) grow = mix(1.0, iAxis.w, 1.0 - (1.0 - age) * (1.0 - age));
   else if (k == 4) grow = 0.25 + 1.35 * sqrt(age);
   else if (k == 5) grow = 1.0 + 0.3 * age;
   else if (k == 6) grow = 1.0 - 0.4 * age;
   else if (k == 9) grow = 1.0 + 0.08 * sin(time * 9.0 + seed * 50.0);
   else if (k == 10) grow = 1.0 + 0.06 * sin(time * 0.7 + seed * 20.0);
-  else if (k == 11) grow = 0.6 + 0.9 * sqrt(age);
+  else if (k == 11) grow = 0.55 + 0.75 * sqrt(age);
   size *= grow;
+  vNear *= smoothstep(0.35, 0.9, dcam / max(size, 1.0));
   vec2 off;
   if (k == 2 || k == 6) {
     // flame lick / spark: align the quad's +y with the screen projection of the axis; flames are anchored at
@@ -194,7 +205,15 @@ void main() {
     float l = length(dv.xy);
     vec2 d2 = l > 1e-4 ? dv.xy / l : vec2(0.0, 1.0);
     float stretch = mix(1.0, iAxis.w, clamp(l, 0.0, 1.0));
-    vec2 q = k == 2 ? vec2(position.x, (position.y + 0.5) * stretch) : vec2(position.x, position.y * stretch);
+    vec2 q;
+    if (k == 2) {
+      // a lick breathes: its height and width swell and shrink on their own phase (the seed), so the
+      // licks of one fire never move together
+      float ph = seed * 6.2831;
+      float hgt = 1.0 + 0.28 * sin(time * 2.9 + ph) * sin(time * 1.7 + ph * 1.9) + 0.1 * sin(time * 7.3 + ph * 3.1);
+      float wid = 1.0 + 0.18 * sin(time * 3.7 + ph * 2.3) * sin(time * 1.1 + ph);
+      q = vec2(position.x * wid, (position.y + 0.5) * stretch * hgt);
+    } else q = vec2(position.x, position.y * stretch);
     off = vec2(q.x * d2.y + q.y * d2.x, -q.x * d2.x + q.y * d2.y) * size;
   } else {
     float ang = seed * 6.2831 + (k == 3 ? age * 0.5 * (seed > 0.5 ? 1.0 : -1.0) : 0.0);
@@ -213,13 +232,17 @@ varying vec4 vParam;
 varying vec3 vColor;
 varying vec3 vSunV;
 varying float vExtra;
+varying float vNear;
 // cheap value noise
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
   vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-float fbm(vec2 p) { float v = 0.0; float a = 0.5; for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; } return v; }
+// the octaves are rotated against each other so the lattice never shows as straight edges
+const mat2 ROT = mat2(0.8, 0.6, -0.6, 0.8);
+float fbm(vec2 p) { float v = 0.0; float a = 0.5; for (int i = 0; i < 4; i++) { v += a * noise(p); p = ROT * p * 2.03 + 1.7; a *= 0.5; } return v; }
+float fbm3(vec2 p) { float v = 0.0; float a = 0.5; for (int i = 0; i < 3; i++) { v += a * noise(p); p = ROT * p * 2.13 + 1.7; a *= 0.5; } return v; }
 // hex tiling: offset to the nearest cell centre and the hex distance from it (0 centre .. 0.5 border)
 vec2 hexCell(vec2 p) {
   const vec2 r = vec2(1.0, 1.7320508);
@@ -238,50 +261,68 @@ void main() {
   vec3 col = vec3(0.0);
   float alpha = 0.0;
   if (k == 0 || k == 4) {
-    // fireball: ragged boiling edge, white-hot core for the first moments cooling to deep orange, dark
-    // soot intrusions growing through it as it ages (it covers the hull rather than adding to it)
-    float n = fbm(c * 3.4 + seed * 17.0 + vec2(age * 0.7, -age * 1.2));
-    float edge = 0.42 + 0.58 * n;
-    float shape = smoothstep(edge, edge - 0.16, r);
-    float hot = smoothstep(0.4, 0.0, age);
-    float boil = fbm(c * 6.5 - seed * 9.0 + vec2(-age * 1.6, age * 2.4));
-    vec3 fire = mix(vec3(1.0, 0.28, 0.04), vec3(1.0, 0.62, 0.18), boil);
-    float coreMask = smoothstep(0.7, 0.0, r * (0.7 + age * 1.8));
-    fire = mix(fire, vec3(1.0, 0.92, 0.78), coreMask * hot);
-    float dark = smoothstep(0.3, 0.85, age) * smoothstep(0.38, 0.72, fbm(c * 4.5 + seed * 7.0 + age * 0.9));
-    fire = mix(fire, vec3(0.07, 0.035, 0.025), dark * 0.85);
-    float cool = smoothstep(0.35, 1.0, age);
-    fire *= mix(1.0, 0.45, cool);
-    col = fire * vColor * (1.0 + 0.35 * hot * coreMask);
-    alpha = shape * (1.0 - smoothstep(0.55, 1.0, age)) * (k == 4 ? 0.9 : 0.95);
+    // fireball: a ragged boiling silhouette (a low-frequency lobe term plus a seeded high-frequency one,
+    // so the rim tears into wisps instead of rounding into a polygon), a white-hot core for the first
+    // moments cooling fast through orange to deep red, rolling lobes inside and dark soot intrusions
+    // growing through it from early on (it covers the hull rather than adding to it)
+    vec2 dr = vec2(age * 0.7, -age * 1.2);
+    float n = fbm(c * 3.4 + seed * 17.0 + dr);
+    float n2 = fbm3(c * 9.5 + seed * 53.0 - dr * 1.6);
+    float edge = 0.36 + 0.5 * n + 0.26 * (n2 - 0.5);
+    float rr = r / max(edge, 0.05);
+    float shape = smoothstep(1.0, 0.66, rr);
+    shape *= mix(1.0, smoothstep(0.28, 0.62, n2), smoothstep(0.5, 1.0, rr));
+    float hot = smoothstep(0.22, 0.0, age);
+    // lobes: domain-warped noise, bright ridges over darker valleys, rolling outward
+    vec2 q = c + 0.12 * vec2(n - 0.5, n2 - 0.5);
+    float ridge = smoothstep(0.3, 0.75, fbm3(q * 6.0 - seed * 9.0 + vec2(-age * 1.6, age * 2.4)));
+    vec3 fire = mix(vec3(0.6, 0.1, 0.015), vec3(0.85, 0.3, 0.04), ridge);
+    float coreMask = smoothstep(0.75, 0.0, rr * (0.8 + age * 1.6));
+    fire = mix(fire, vec3(1.0, 0.85, 0.6), coreMask * hot);
+    float soot = smoothstep(0.42, 0.78, fbm3(c * 4.5 + seed * 7.0 + age * 0.9));
+    float dark = soot * smoothstep(0.1, 0.6, age) * (0.45 + 0.55 * smoothstep(0.2, 0.9, rr));
+    fire = mix(fire, vec3(0.05, 0.025, 0.018), min(1.0, dark * 1.1));
+    float cool = smoothstep(0.18, 0.8, age);
+    fire *= mix(1.0, 0.35, cool);
+    col = fire * vColor * (1.0 + 0.5 * hot * coreMask);
+    alpha = shape * (1.0 - smoothstep(0.55, 1.0, age)) * (k == 4 ? 0.92 : 0.95);
   } else if (k == 1) {
-    // flak: sparkly burst with short rays and a bright core
+    // flak core: a hard white-orange pop with a few short rays, gone in a tenth of a second (the dark
+    // puff it leaves is a separate smoke-layer particle)
     float a = atan(c.y, c.x);
-    float rays = 0.5 + 0.5 * noise(vec2(cos(a), sin(a)) * 2.0 + seed * 31.0 + age * 0.5);
-    float burst = smoothstep(1.0, 0.15, r / (0.55 + 0.45 * rays));
-    float core = smoothstep(0.36, 0.0, r);
-    float fade = (1.0 - age) * (1.0 - age);
-    float twinkle = 0.75 + 0.25 * sin(seed * 80.0 + age * 60.0);
-    vec3 fire = mix(vec3(1.0, 0.5, 0.18), vec3(1.0, 0.95, 0.8), core);
-    col = fire * vColor * (0.7 + 1.0 * fade);
-    alpha = (burst * 0.5 + core * 1.0) * fade * twinkle;
+    float nr = 5.0 + floor(seed * 3.0);
+    float rays = max(pow(0.5 + 0.5 * sin(a * nr + seed * 40.0), 4.0), 0.8 * pow(0.5 + 0.5 * sin(a * (nr + 3.0) - seed * 23.0), 6.0));
+    rays *= 0.45 + 0.55 * noise(vec2(a * 1.5 + seed * 31.0, seed * 9.0));
+    float rayLen = 0.25 + 0.55 * rays;
+    float spikes = smoothstep(rayLen, rayLen * 0.25, r) * 0.5;
+    float core = smoothstep(0.3, 0.05, r);
+    float fade = 1.0 - age * age;
+    vec3 fire = mix(vec3(1.0, 0.42, 0.1), vec3(1.0, 0.9, 0.75), core);
+    col = fire * vColor * 1.5 * fade;
+    alpha = max(core, spikes) * fade;
   } else if (k == 2) {
     // flame lick: base at v = 0, ragged tip; a small hot core at the root, orange body, dull red tip. The
-    // colour attribute carries the fire's intensity (white x intensity) so dying fires shrink and dim.
+    // width envelope pulses, the tip sways and the height noise scrolls, each on the lick's own phase.
+    // The colour attribute carries the fire's intensity (white x intensity) so dying fires shrink and dim.
     float fy = vUv.y;
     float n = fbm(vec2(c.x * 4.5 + seed * 13.0, fy * 2.6 - time * 2.2 + seed * 7.0));
-    float width = mix(0.5, 0.1, fy);
+    float sway = (noise(vec2(fy * 2.5 - time * 2.6 + seed * 5.0, seed * 40.0)) - 0.5) * 0.4 * fy * fy;
+    float x = c.x - sway;
+    float pulse = 0.85 + 0.3 * noise(vec2(time * 2.1 + seed * 30.0, fy * 1.5 + seed * 3.0));
+    // teardrop envelope: widest a quarter of the way up, tapering to the tip
+    float width = 0.5 * pow(1.0 - fy, 0.7) * (0.6 + 0.4 * smoothstep(0.0, 0.25, fy)) * pulse;
     float edgeNoise = (n - 0.5) * (0.25 + 0.5 * fy);
-    float body = smoothstep(width, width * 0.2, abs(c.x) + edgeNoise);
-    float tip = 1.0 - smoothstep(0.55 + 0.35 * n, 1.0, fy);
+    float body = smoothstep(width, width * 0.15, abs(x) + edgeNoise);
+    float tipH = 0.5 + 0.35 * n + 0.12 * sin(time * 4.1 + seed * 20.0);
+    float tip = 1.0 - smoothstep(tipH, 1.0, fy);
     float root = smoothstep(0.0, 0.06, fy);
     float lick = body * tip * root;
-    float coreW = smoothstep(0.22, 0.0, abs(c.x)) * (1.0 - smoothstep(0.0, 0.35, fy));
-    vec3 fire = mix(vec3(1.0, 0.36, 0.06), vec3(1.0, 0.72, 0.30), coreW);
-    fire = mix(fire, vec3(0.45, 0.08, 0.02), smoothstep(0.5, 1.0, fy + (n - 0.5) * 0.3));
+    float coreW = smoothstep(0.2, 0.0, abs(x)) * (1.0 - smoothstep(0.0, 0.4, fy));
+    vec3 fire = mix(vec3(0.9, 0.3, 0.04), vec3(0.95, 0.5, 0.14), coreW);
+    fire = mix(fire, vec3(0.45, 0.08, 0.02), smoothstep(0.45, 1.0, fy + (n - 0.5) * 0.3));
     float io = smoothstep(0.0, 0.12, age) * (1.0 - smoothstep(0.7, 1.0, age));
     float I = max(vColor.r, max(vColor.g, vColor.b));
-    col = fire * 1.15 * vColor;
+    col = fire * 0.95 * vColor;
     alpha = lick * io * 0.85 * I;
   } else if (k == 3) {
     // smoke: dark, sun-shaded puff with internal density, Coruscant's warm under-light and an ember glow
@@ -317,14 +358,15 @@ void main() {
     col = sc * vColor * 1.8;
     alpha = g * (1.0 - age * age) * (1.0 - smoothstep(0.85, 1.0, age));
   } else if (k == 7) {
-    // shock ring: thin expanding band (the quad itself grows), warm then bluish-white, thinning and
-    // fading as it runs out
-    float th = mix(0.1, 0.04, age);
-    float q = (r - 0.8) / th;
-    float band = exp(-q * q);
-    vec3 rc = mix(vec3(1.0, 0.75, 0.45), vec3(0.75, 0.85, 1.0), age);
-    col = rc * vColor * 1.35;
-    alpha = (band * 0.6 + smoothstep(0.8, 0.0, r) * 0.08) * (1.0 - age) * (1.0 - age);
+    // shock ring: a thin blue-white band on the growing quad, no inner fill; it never draws thinner than
+    // about a pixel and a half (its energy is spread when it has to be inflated) and fades as it runs out
+    float th0 = mix(0.045, 0.018, age);
+    float th = max(th0, 1.5 * fwidth(r));
+    float q = (r - 0.82) / th;
+    float band = exp(-q * q) * (th0 / th);
+    vec3 rc = mix(vec3(0.92, 0.96, 1.0), vec3(0.6, 0.78, 1.0), age);
+    col = rc * vColor * 1.3;
+    alpha = band * 0.75 * (1.0 - age) * (1.0 - age);
   } else if (k == 8) {
     // shield ripple: translucent hex-cell disc, a ring travelling outward from the impact, fading
     vec2 cell = hexCell(c * 2.0 * 5.5);
@@ -342,7 +384,7 @@ void main() {
     float g = pow(max(0.0, 1.0 - r), 3.0);
     float pulse = 0.85 + 0.15 * sin(time * 9.0 + seed * 50.0) * sin(time * 4.7 + seed * 21.0);
     col = vec3(1.0, 0.42, 0.08) * vColor * 0.8 * pulse;
-    alpha = g * 0.35;
+    alpha = g * 0.25;
   } else if (k == 10) {
     // soot: the dark, slowly churning cloud hugging the hull under a fire's licks (intensity in extra)
     float n = fbm(c * 2.6 + seed * 31.0 + vec2(time * 0.07, -time * 0.05));
@@ -352,28 +394,30 @@ void main() {
     col = vec3(0.028, 0.024, 0.02) * (0.5 + 0.8 * dens);
     float pulse = 0.8 + 0.2 * sin(time * 5.0 + seed * 40.0);
     col += vec3(0.7, 0.22, 0.05) * smoothstep(0.45, 0.0, r) * 0.22 * pulse * vExtra;
-    alpha = shape * 0.85 * vExtra * (0.7 + 0.3 * dens);
+    alpha = shape * 0.72 * vExtra * (0.7 + 0.3 * dens);
   } else {
-    // flak smoke: the ragged dark puff a burst leaves behind, sun-shaded, thinning in the middle as it
-    // ages and lit warm from inside for its first moments (a soft ember, never a crisp ring: from a few km
-    // a ring reads as a drawn circle)
-    float n = fbm(c * 3.2 + seed * 19.0 + vec2(age * 0.3, -age * 0.2));
-    float edge = 0.45 + 0.55 * n;
-    float shape = smoothstep(edge, edge - 0.45, r);
-    float hollow = 1.0 - smoothstep(0.5, 0.0, r) * age * 0.6;
-    float dens = 0.45 + 0.55 * fbm(c * 6.0 - seed * 7.0 + age * 0.5);
-    vec3 N = normalize(vec3(c * 2.0, sqrt(max(0.0, 1.0 - r * r)) * 0.9 + 0.25));
+    // flak puff: the small dark ragged cloud a burst leaves behind (the second stage of a flak burst),
+    // sun-shaded, torn at the rim by a seeded high-frequency term, lit warm from inside for its first
+    // moments (a soft ember, never a crisp ring: from a few km a ring reads as a drawn circle)
+    float n = fbm(c * 3.4 + seed * 19.0 + vec2(age * 0.3, -age * 0.2));
+    float n2 = fbm3(c * 9.0 - seed * 41.0 + age * 0.5);
+    float edge = 0.38 + 0.42 * n + 0.28 * (n2 - 0.5);
+    float rr = r / max(edge, 0.05);
+    float shape = smoothstep(1.0, 0.55, rr) * mix(1.0, smoothstep(0.3, 0.6, n2), smoothstep(0.5, 1.0, rr));
+    float dens = 0.45 + 0.55 * n2;
+    vec3 N = normalize(vec3(c * 2.0, sqrt(max(0.0, 1.0 - min(1.0, rr * rr))) * 0.9 + 0.25));
     float lit = clamp(dot(N, vSunV), 0.0, 1.0);
-    col = vec3(0.07, 0.065, 0.06) * (0.25 + 1.1 * lit * lit + 0.2 * lit) * (0.5 + 0.7 * dens);
-    float warm = (1.0 - smoothstep(0.0, 0.3, age)) * smoothstep(0.75, 0.0, r) * (0.6 + 0.4 * dens);
-    col += vec3(1.0, 0.4, 0.1) * warm * 0.35;
-    alpha = shape * hollow * smoothstep(0.0, 0.1, age) * (1.0 - smoothstep(0.4, 1.0, age)) * 0.7 * (0.6 + 0.4 * dens);
+    col = vec3(0.06, 0.055, 0.05) * (0.25 + 1.1 * lit * lit + 0.2 * lit) * (0.5 + 0.7 * dens);
+    float warm = (1.0 - smoothstep(0.0, 0.25, age)) * smoothstep(0.8, 0.0, rr) * (0.6 + 0.4 * dens);
+    col += vec3(1.0, 0.35, 0.08) * warm * 0.4;
+    alpha = shape * smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(0.35, 1.0, age)) * 0.75 * (0.6 + 0.4 * dens);
   }
+  alpha *= vNear;
   if (alpha < 0.006) discard;
   alpha = min(alpha, 1.0);
 #ifdef PREMUL
   // premultiplied "over": colour is added, the background is dimmed by alpha x how solid the kind is
-  float occ = (k == 0 || k == 4) ? 0.7 : (k == 2 ? 0.45 : 1.0);
+  float occ = (k == 0 || k == 4) ? 0.82 : (k == 2 ? 0.6 : 1.0);
   gl_FragColor = vec4(col * alpha, alpha * occ);
 #else
   gl_FragColor = vec4(col, alpha);
@@ -452,6 +496,7 @@ function newParticle() {
     pos: new THREE.Vector3(),
     vel: new THREE.Vector3(),
     axis: new THREE.Vector3(0, 1, 0),
+    dir: new THREE.Vector3(0, 1, 0), // ship-local axis of a persistent fire's lick (world axis each frame)
     local: new THREE.Vector3(),
     color: new THREE.Color(1, 1, 1),
     ship: null,
@@ -514,7 +559,8 @@ export class Explosions {
       this.uniforms,
     );
     this._layers = [this.add, this.smoke, this.flame];
-    this.scorch = new Scorch(scene, Math.round(capacity * 0.6), {
+    // every heavy hit stamps a scorch (the fleet takes tens a second), so the decal pool is the largest
+    this.scorch = new Scorch(scene, Math.round(capacity * 1.5), {
       renderOrder: 6,
     });
     this.spawned = 0;
@@ -607,10 +653,15 @@ export class Explosions {
     return p;
   }
 
-  // positional spawn: returns the particle (set vel / axis / extra / delay on it) or null when its layer is full
+  // positional spawn: returns the particle (set vel / axis / extra / delay on it) or null when its layer is
+  // full (fireballs stop short of the flame layer's cap: the rest is kept for flame licks)
   _spawn(kind, pos, size, life, color, ship, local) {
     const layer = this._layers[LAYER_OF[kind]];
-    if (layer.particles.length >= layer.capacity) return null;
+    const cap =
+      layer === this.flame && kind !== KIND.fire
+        ? layer.capacity * FLAME_TRANSIENT_CAP
+        : layer.capacity;
+    if (layer.particles.length >= cap) return null;
     const p = this._pool.pop() || newParticle();
     p.pos.copy(pos);
     p.ship = ship;
@@ -627,11 +678,28 @@ export class Explosions {
     p.loop = false;
     p.hasVel = false;
     p.axis.set(0, 1, 0);
+    p.dir.set(0, 1, 0);
     p.extra = kind === KIND.smoke ? 2.0 : 1.0;
     p.drag = 0;
     layer.particles.push(p);
     this.spawned++;
     return p;
+  }
+
+  // take a live particle out of its layer at once (no fade) and back into the pool
+  _release(layer, p) {
+    const P = layer.particles;
+    const i = P.indexOf(p);
+    if (i < 0) return;
+    P[i] = P[P.length - 1];
+    P.pop();
+    p.ship = null;
+    p.loop = false;
+    if (p.owner) {
+      p.owner.puffs--;
+      p.owner = null;
+    }
+    this._pool.push(p);
   }
 
   /** A bare flash (muzzle flashes): positional, no options object. */
@@ -644,13 +712,14 @@ export class Explosions {
   }
 
   // true when the named layer ("add", "smoke" or "flame") is below `frac` of its capacity; budget guards
-  // should use this rather than `alive`. "add" also requires room in the flame layer, since every glowing
-  // effect a caller gates with it (hits, fires) needs a fireball or lick there.
+  // should use this rather than `alive`. "add" also requires the flame layer not to be saturated, since
+  // every glowing effect a caller gates with it (hits, fires) needs a fireball or lick there; fireballs
+  // stop at FLAME_TRANSIENT_CAP on their own, so only the licks of many fires can fail this test.
   hasRoom(layer = "add", frac = 0.9) {
     if (layer === "smoke") return this._room(this.smoke, frac);
     if (layer === "flame" || layer === "fire")
       return this._room(this.flame, frac);
-    return this._room(this.add, frac) && this._room(this.flame, frac);
+    return this._room(this.add, frac) && this._room(this.flame, 0.96);
   }
 
   // ---------------------------------------------------------------------------------------------------
@@ -967,7 +1036,8 @@ export class Explosions {
     if (attached) _l.copy(local).addScaledVector(_nl, lift);
     const sh = attached ? ship : null;
     const lo = attached ? _l : null;
-    const fb = size * (level >= 2 ? 1.15 : 1.05);
+    // (the ragged silhouette fills ~60 % of the quad, hence the generous quad size)
+    const fb = size * (level >= 2 ? 1.3 : 1.2);
     // 1. the fireball is the one essential particle; everything else yields when its layer runs full
     const main = this._spawn(
       KIND.hit,
@@ -1028,7 +1098,7 @@ export class Explosions {
         const p = this._spawn(
           KIND.spark,
           pos,
-          Math.max(1.2, size * 0.07),
+          Math.max(1.2, size * (level >= 3 ? 0.045 : 0.07)),
           0.5 + Math.random() * 0.6,
           WHITE,
           null,
@@ -1067,13 +1137,13 @@ export class Explosions {
         p.age = -0.08 / p.life;
       }
     }
-    // 6. scorch (1x the hit size, fading over 60-120 s) under every secondary and about a third of the
-    // heavy hits: the fleet takes ~50 heavy hits a second, so marking each would carpet the hulls and
-    // cycle the decal pool in seconds
-    if (attached && (level >= 3 || (level === 2 && Math.random() < 0.35)))
-      this.scorch.stamp(ship, local, _nl, size * (level >= 3 ? 1.3 : 1.0), {
+    // 6. scorch (1.5x the hit size, fading over 40-80 s) under every heavy hit and secondary, so a hull
+    // under fire visibly blackens; repeated hits on one spot refresh and widen the mark instead of
+    // stacking, and the pool evicts the most faded mark when full
+    if (attached && level >= 2)
+      this.scorch.stamp(ship, local, _nl, Math.min(size * 1.5, SCORCH_MAX), {
         kind: 1,
-        life: 60 + Math.random() * 60,
+        life: 40 + Math.random() * 40,
       });
     // 7. debris: heavy hits knock a plate or two loose (half the pool stays free for detonations);
     // secondaries squirt a handful of hull-coloured chunks
@@ -1147,43 +1217,61 @@ export class Explosions {
   }
 
   /**
-   * Flak: a bright core flash and a sparkly burst, a few sparks and a dark smoke puff lit warm from inside
-   * that lingers 2-4 s. Culled by distance when the camera is known: beyond 5 km only one burst in three is
-   * drawn, beyond 8 km (and for the tiny fighter-laser bursts) only the flash + burst.
+   * Flak, two stages: a hard white-orange core with short rays for a tenth of a second, then a small dark
+   * ragged puff lit warm from inside for its first moments, lingering 1.5-3 s; a few sparks up close.
+   * Bursts vary 3x in size around `size`. Thinned by distance when the camera is known: beyond 2 km two
+   * bursts in three are drawn, beyond 5 km one in three, beyond 8 km (and for the tiny fighter-laser
+   * bursts) only the core.
    */
   flak(pos, size = 60) {
     let far = false;
     if (this._camKnown) {
       const d2 = pos.distanceToSquared(this._cam);
-      if (d2 > FLAK_THIN_FROM * FLAK_THIN_FROM) {
+      if (d2 > FLAK_THIN_NEAR * FLAK_THIN_NEAR) {
         this._flakSkip = (this._flakSkip + 1) % 3;
-        if (this._flakSkip !== 0) return;
+        const keep = d2 > FLAK_THIN_FROM * FLAK_THIN_FROM ? 1 : 2;
+        if (this._flakSkip >= keep) return;
       }
       far = d2 > FLAK_CULL_FAR * FLAK_CULL_FAR;
     }
+    const s = size * (0.55 + Math.random() * 1.1);
     this._spawn(
       KIND.flak,
       pos,
-      size,
-      0.38 + Math.random() * 0.25,
+      s,
+      0.1 + Math.random() * 0.06,
       WHITE,
       null,
       null,
     );
-    if (size < 20) return; // fighter-laser bursts: the sparkle alone
-    if (this._room(this.add, 0.95))
-      this._spawn(KIND.flash, pos, size * 0.38, 0.07, HOT, null, null);
-    if (far) return;
+    if (size < 20 || far) return; // fighter-laser bursts and distant flak: the core alone
+    if (this._room(this.smoke, 0.8)) {
+      const p = this._spawn(
+        KIND.flakSmoke,
+        pos,
+        s * 0.9,
+        1.5 + Math.random() * 1.5,
+        WHITE,
+        null,
+        null,
+      );
+      if (p) {
+        randDir(_v).multiplyScalar(s * 0.05);
+        p.hasVel = true;
+        p.vel.copy(_v);
+        p.age = -0.04 / p.life;
+      }
+    }
     if (this._room(this.add, 0.85)) {
-      const ns = 3 + Math.floor(Math.random() * 3);
+      const ns = 2 + Math.floor(Math.random() * 3);
       for (let i = 0; i < ns; i++) {
         randDir(_v);
-        _w2.copy(_v).multiplyScalar(size * 0.9 * (0.4 + Math.random() * 0.6));
+        _w2.copy(_v).multiplyScalar(s * 0.9 * (0.4 + Math.random() * 0.6));
         const p = this._spawn(
           KIND.spark,
           pos,
-          Math.max(1, size * 0.06),
-          0.35 + Math.random() * 0.35,
+          Math.max(1, s * 0.045),
+          0.3 + Math.random() * 0.3,
           WHITE,
           null,
           null,
@@ -1194,23 +1282,6 @@ export class Explosions {
         p.axis.copy(_v);
         p.extra = 3;
         p.drag = 0.8;
-      }
-    }
-    if (this._room(this.smoke, 0.8)) {
-      const p = this._spawn(
-        KIND.flakSmoke,
-        pos,
-        size * 1.4,
-        2 + Math.random() * 2,
-        WHITE,
-        null,
-        null,
-      );
-      if (p) {
-        randDir(_v).multiplyScalar(size * 0.06);
-        p.hasVel = true;
-        p.vel.copy(_v);
-        p.age = -0.1 / p.life;
       }
     }
   }
@@ -1250,12 +1321,47 @@ export class Explosions {
     return F;
   }
 
+  // the flame layer is full and a persistent fire needs a lick: put out the smallest live fire (fires on
+  // wrecks last: a hulk's fires are the scene) and free its licks at once. True when something was freed.
+  _evictLick(exclude) {
+    let victim = null;
+    let victimWreck = false;
+    for (const F of this.fires) {
+      if (F === exclude || F.dead) continue;
+      let hasLick = false;
+      for (const p of F.parts) if (p.kind === KIND.fire) hasLick = true;
+      if (!hasLick) continue;
+      const wreck = F.ship.health === 0;
+      if (
+        !victim ||
+        (victimWreck && !wreck) ||
+        (wreck === victimWreck && F.size < victim.size)
+      ) {
+        victim = F;
+        victimWreck = wreck;
+      }
+    }
+    if (!victim) return false;
+    const parts = victim.parts;
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      if (p.kind !== KIND.fire) continue;
+      parts[i] = parts[parts.length - 1];
+      parts.pop();
+      this._release(this.flame, p);
+    }
+    this._endFire(victim);
+    return true;
+  }
+
   /**
-   * Persistent burning wound on a ship (local point): layered flame licks and a glow anchored to the hull
-   * over a dark soot base, stretched along a per-fire drift direction (outward from the hull, leaning
-   * aft), a plume of smoke puffs streaming that way 200-400 m long, and a scorch decal 2.5x the fire. The
-   * fire burns 60-120 s unless re-ignited (fire() again near the same point, or reignite()); a ship holds
-   * at most 8 fires (the smallest goes out to make room). Returns the emitter.
+   * Persistent burning wound on a ship (local point): two or three flame licks and a glow anchored to the
+   * hull over a dark soot base. Each lick has its own size (30-65 m as a rule, now and then 80-120 m),
+   * phase and direction (up to 25 degrees off the fire's drift: outward from the hull, leaning aft), a
+   * plume of smoke puffs streams along the drift 200-400 m, and a scorch decal 3x the fire darkens the
+   * hull under it. The fire burns 60-120 s unless re-ignited (fire() again near the same point, or
+   * reignite()); on a wreck (health 0) it burns until extinguish(). A ship holds at most 12 fires (the
+   * smallest goes out to make room). Returns the emitter.
    */
   fire(ship, local, size = 60) {
     const near = this._fireNear(ship, local, Math.max(20, size * 0.6));
@@ -1300,44 +1406,58 @@ export class Explosions {
     F.drift.normalize();
     F.world.copy(F.local).applyMatrix4(ship.matrix);
     F.driftW.copy(F.drift).transformDirection(ship.matrix);
-    const lick = (scale, lift, life, stretch) => {
+    // lick sizes: 30-65 m as a rule whatever the fire's size (the fire's size sets the plume and the
+    // soot), with a big 80-120 m lick now and then, more often on the big fires of a wreck
+    const base = THREE.MathUtils.clamp(size * 0.5, 30, 65);
+    const bigAt = Math.floor(
+      Math.random() < (size >= 100 ? 0.4 : 0.2) ? Math.random() * 3 : -1,
+    );
+    const lick = (i, lift, life) => {
       _l.copy(F.local).addScaledVector(F.drift, size * lift);
       _w.copy(_l).applyMatrix4(ship.matrix);
-      const p = this._spawn(KIND.fire, _w, size * scale, life, WHITE, ship, _l);
-      if (p) {
-        p.loop = true;
-        p.axis.copy(F.driftW);
-        p.extra = stretch;
-        p.age = Math.random(); // desynchronise the licks
-        p.color.setRGB(0, 0, 0); // intensity ramps in
-        F.parts.push(p);
-      }
+      const s =
+        i === bigAt
+          ? 80 + Math.random() * 40
+          : base * (0.8 + Math.random() * 0.45);
+      let p = this._spawn(KIND.fire, _w, s, life, WHITE, ship, _l);
+      if (!p && this._evictLick(F))
+        p = this._spawn(KIND.fire, _w, s, life, WHITE, ship, _l);
+      if (!p) return;
+      p.loop = true;
+      // own direction: the drift tilted up to 25 degrees about a random perpendicular axis
+      randDir(_v).cross(F.drift);
+      if (_v.lengthSq() < 1e-6) _v.set(1, 0, 0).cross(F.drift);
+      _q.setFromAxisAngle(_v.normalize(), (Math.random() * 2 - 1) * LICK_TILT);
+      p.dir.copy(F.drift).applyQuaternion(_q);
+      p.axis.copy(p.dir).transformDirection(ship.matrix);
+      p.extra = 1.1 + Math.random() * 0.4; // height over width
+      p.age = Math.random(); // desynchronise the licks
+      p.color.setRGB(0, 0, 0); // intensity ramps in
+      F.parts.push(p);
     };
-    // three layered licks while the layer has room, one when many ships are burning; the licks stay
-    // compact (about a fire-size long) so the plume, not the flame, is the long part of the wound
-    lick(0.95, 0.08, 0.55 + Math.random() * 0.25, 1.45);
-    if (this._room(this.flame, 0.6)) {
-      lick(0.7, 0.05, 0.45 + Math.random() * 0.2, 1.25);
-      lick(0.5, 0.02, 0.35 + Math.random() * 0.2, 1.1);
-    }
+    // two licks always, a third while the layer is not crowded
+    lick(0, 0.08, 0.55 + Math.random() * 0.25);
+    lick(1, 0.04, 0.45 + Math.random() * 0.2);
+    if (this._room(this.flame, 0.75)) lick(2, 0.02, 0.35 + Math.random() * 0.2);
     _l.copy(F.local).addScaledVector(F.drift, size * 0.2);
     _w.copy(_l).applyMatrix4(ship.matrix);
     const glow = this._spawn(KIND.glow, _w, size * 1.1, 1, WHITE, ship, _l);
     if (glow) {
       glow.loop = true;
+      glow.dir.copy(F.drift);
       glow.color.setRGB(0, 0, 0);
       F.parts.push(glow);
     }
     // the dark base: a soot cloud hugging the hull under the licks so the flame reads against cream plating
     _l.copy(F.local).addScaledVector(F.normal, size * 0.1);
     _w.copy(_l).applyMatrix4(ship.matrix);
-    const soot = this._spawn(KIND.soot, _w, size * 2.2, 1, WHITE, ship, _l);
+    const soot = this._spawn(KIND.soot, _w, size * 1.6, 1, WHITE, ship, _l);
     if (soot) {
       soot.loop = true;
       soot.extra = 0;
       F.soot = soot;
     }
-    F.decal = this.scorch.stamp(ship, F.local, F.normal, size * 2.5, {
+    F.decal = this.scorch.stamp(ship, F.local, F.normal, size * 3.0, {
       kind: 0,
       hold: true,
     });
@@ -1423,14 +1543,14 @@ export class Explosions {
     const soft = this._spawn(
       KIND.flash,
       pos,
-      size * 1.2,
-      0.4,
+      size * 1.05,
+      0.35,
       WHITE,
       null,
       null,
     );
     if (soft) {
-      soft.color.setRGB(0.6, 0.5, 0.4);
+      soft.color.setRGB(0.5, 0.4, 0.3);
       soft.extra = 0;
     }
     if (opts.normal) _n.copy(opts.normal).normalize();
@@ -1462,10 +1582,10 @@ export class Explosions {
         _w,
         size *
           (i === 0
-            ? 0.62
+            ? 0.72
             : late
-              ? 0.3 + Math.random() * 0.18
-              : 0.4 + Math.random() * 0.1),
+              ? 0.35 + Math.random() * 0.2
+              : 0.46 + Math.random() * 0.12),
         i === 0
           ? 2.4
           : late
@@ -1554,9 +1674,12 @@ export class Explosions {
         this._dropFire(i, true);
         continue;
       }
+      // a wreck (health 0) burns until it is retired: its fires never age out, only extinguish() or
+      // eviction ends them
+      const wreck = s.health === 0;
       if (!F.dead) {
         F.age += dt;
-        if (F.age >= F.lifeTotal) this._endFire(F);
+        if (F.age >= F.lifeTotal && !wreck) this._endFire(F);
       }
       if (F.dead) {
         F.cool -= dt;
@@ -1568,14 +1691,14 @@ export class Explosions {
       // intensity: catches over 2 s, holds, dies down over the last 12 s (or the cool-down when put out)
       let I = Math.min(1, F.age / 2);
       const remain = F.lifeTotal - F.age;
-      if (remain < 12) I *= Math.max(0, remain / 12);
+      if (remain < 12 && !wreck) I *= Math.max(0, remain / 12);
       if (F.dead) I *= Math.max(0, F.cool / FIRE_COOL);
       F.intensity = I;
       F.world.copy(F.local).applyMatrix4(s.matrix);
       F.driftW.copy(F.drift).transformDirection(s.matrix);
       const k = 0.35 + 0.65 * I;
       for (const p of F.parts) {
-        p.axis.copy(F.driftW);
+        p.axis.copy(p.dir).transformDirection(s.matrix);
         p.size = p.size0 * k;
         p.color.setRGB(I, I, I);
       }
