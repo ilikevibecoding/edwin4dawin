@@ -133,11 +133,12 @@ export function buildMaterials() {
       roughness: 0.5,
       metalness: 0,
     }),
+    // deep red at moderate intensity: a saturated #ff3a2a at 1.8 clipped to salmon after ACES
     emitRed: new THREE.MeshStandardMaterial({
-      color: 0x100404,
-      emissive: new THREE.Color("#ff3a2a"),
-      emissiveIntensity: 1.8,
-      roughness: 0.5,
+      color: 0x000000,
+      emissive: new THREE.Color("#d8281c"),
+      emissiveIntensity: 1.3,
+      roughness: 1,
       metalness: 0,
     }),
     emitCool: new THREE.MeshStandardMaterial({
@@ -289,13 +290,13 @@ function addImperialMaterials(mats, std) {
   mats.emitWhiteFaint = emit("#cfd8e6", 0.55); // lit fixture housings: reads as glowing, never clips
   mats.emitStrip = emit("#eef3ff", 1.3, { emissiveMap: makeDiffuser(256, 25) });
   mats.emitBlueDim = emit("#4a9dff", 1.3);
-  mats.emitRedDim = emit("#ff3a2a", 1.2);
+  mats.emitRedDim = emit("#c8261a", 0.95);
   mats.emitAmberDim = emit("#ffb347", 1.2);
   mats.emitWhiteSoft = emit("#f2f6ff", 2.4, { emissiveMap: makeDiffuser(256, 21) });
   mats.emitBlue = emit("#4a9dff", 2.6);
   mats.emitAmber = emit("#ffb347", 2.2);
   mats.emitGreen = emit("#4cff88", 2.0);
-  mats.emitRedSoft = emit("#ff3a2a", 1.6, { emissiveMap: makeDiffuser(256, 23) });
+  mats.emitRedSoft = emit("#d8281c", 1.2, { emissiveMap: makeDiffuser(256, 23) });
   // hologram: additive, double-sided, grid texture
   mats.holo = new THREE.MeshBasicMaterial({
     color: new THREE.Color("#5aa8ff"),
@@ -318,11 +319,11 @@ function addImperialMaterials(mats, std) {
   });
   // Imperial console screens: blue tactical / engineering / navigation, plus a red alert variant
   const imp = [
-    makeImperialScreen(512, 256, 151, "#4a9dff", "#ff4136", 0),
+    makeImperialScreen(512, 256, 151, "#4a9dff", "#bf3329", 0),
     makeImperialScreen(512, 256, 152, "#4a9dff", "#ffb347", 1),
-    makeImperialScreen(512, 256, 153, "#6ab4ff", "#ff4136", 2),
+    makeImperialScreen(512, 256, 153, "#6ab4ff", "#bf3329", 2),
     makeImperialScreen(512, 256, 154, "#ff5040", "#ffb347", 0),
-    makeImperialScreen(512, 256, 155, "#ffb347", "#ff4136", 1),
+    makeImperialScreen(512, 256, 155, "#ffb347", "#bf3329", 1),
   ];
   mats.impScreens = imp.map(
     (tex) =>
