@@ -153,8 +153,10 @@ export function buildDetention(kit, ctx) {
   }
   // plated deck in the guard anteroom (the white zone) against the black rubber deck of the block: a
   // matte grey plate floor, so the anteroom whites actually lift it (the tinted gloss slab stayed at
-  // L 16-19 under three lights: the gloss deck only ever returns the lights' specular pools)
-  kit.boxMM("impPanel1", [min[0] + 0.18, 0, min[2] + 0.18], [guardX1 - 0.2, 0.008, max[2] - 0.18], { color: PALETTE.impMid, uv: "world", texel: 0.5 });
+  // L 16-19 under three lights: the gloss deck only ever returns the lights' specular pools). The
+  // plate paint is a neutral grey a quarter darker than impMid: under the blue-white anteroom lights
+  // the impMid plates read twice as bright as the corridor deck and distinctly blue.
+  kit.boxMM("impPanel1", [min[0] + 0.18, 0, min[2] + 0.18], [guardX1 - 0.2, 0.008, max[2] - 0.18], { color: new THREE.Color("#4c4e52"), uv: "world", texel: 0.5 });
   // black rubber deck in the corridor and the chamber, dim red light channels along the corridor edges.
   // The deck runs out through the scanner arch in the dark floor tone (the full-width natural-rubber
   // slab there caught the anteroom whites and read as a light rug across the gate); a 0.6 m threshold
@@ -175,15 +177,15 @@ export function buildDetention(kit, ctx) {
     kit.boxMM("emitRedDim", [guardX1 + 0.1, 0.016, z - 0.012], [chamberX0 - 0.1, 0.024, z + 0.012]);
   }
 
-  // ------------------------------------------------------------------ lights (7): three whites in the anteroom (one over the
-  // door approach so the white zone reads from the camera side) plus a low white pool light over the
-  // anteroom centre for the deck itself, red in the block, white in the chamber (the red hung 1.2 m
-  // below the ceiling: at 0.5 m it lit a hot red patch on the corridor ceiling that showed above the
-  // gate as a flare from the fixed view)
+  // ------------------------------------------------------------------ lights (6): three whites in the anteroom (one over the
+  // door approach so the white zone reads from the camera side), red in the block, white in the
+  // chamber (the red hung 1.2 m below the ceiling: at 0.5 m it lit a hot red patch on the corridor
+  // ceiling that showed above the gate as a flare from the fixed view). The low white pool light that
+  // used to hang over the anteroom centre is gone: with it the sector + corridor asked the pool for 17
+  // points (one dropped out on entry) and it doubled the anteroom deck plates against the block deck.
   ctx.light(pointLight(0xff3a2a, 12, 13, [52.2, H - 1.2, -36.0]));
   ctx.light(pointLight(0xe8eeff, 18, 14, [46.0, H - 0.5, -36.0]));
   ctx.light(pointLight(0xe8eeff, 15, 10, [44.8, H - 0.5, -36.2]));
-  ctx.light(pointLight(0xf0f4ff, 12, 9, [45.6, 2.8, -36.0]));
   ctx.light(pointLight(0xdfe8ff, 12, 9, [59.0, H - 0.6, -36.0]));
   ctx.light(pointLight(0xff3020, 6, 10, [55.0, H - 0.6, -43.8]));
   ctx.light(pointLight(0xe0e8ff, 13, 10, [45.4, H - 0.6, -29.6]));

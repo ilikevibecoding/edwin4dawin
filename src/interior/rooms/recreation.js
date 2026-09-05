@@ -7,7 +7,7 @@ import { PALETTE } from "../../materials.js";
 import { roomShell, wallScreen, wallSegment, impChair, hologram } from "../imperial.js";
 import { pointLight, wallFrame } from "../builders.js";
 import { Kit, rng } from "../../kit.js";
-import { decalRect } from "../../textures.js";
+import { decalRect, makeCanvas, toTexture } from "../../textures.js";
 import { signPlate } from "../corridor.js";
 import { ensureCrewMaterials, SIGN, wallSign, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, intercom, stool, propFrame } from "./crewProps.js";
 
@@ -231,11 +231,72 @@ function bar(kit, ctx, frame, u0, u1, seed) {
 }
 
 /**
+ * Holo-board emissive map: a 128 x 42 canvas (the board plane is 2.5 x 0.82 m) with an 8 x 8 board in
+ * the middle, amber and cyan piece markers on it, and a captured-pieces / turn panel either side, so
+ * the games unit reads as a board game in play rather than a status console.
+ */
+function holoBoardMaterial(ctx) {
+  const m = ctx.materials;
+  if (m.rec_holoBoard) return "rec_holoBoard";
+  const W = 128;
+  const Hc = 42;
+  const c = makeCanvas(W, Hc);
+  const g = c.getContext("2d");
+  g.fillStyle = "#05070a";
+  g.fillRect(0, 0, W, Hc);
+  const AMBER = "#ffb347";
+  const CYAN = "#4ad0ff";
+  // board: 8 x 8 cells of 4 px, faint checker shading and teal grid lines
+  const bx = 48;
+  const by = 5;
+  const cell = 4;
+  for (let r = 0; r < 8; r++) {
+    for (let q = 0; q < 8; q++) {
+      g.fillStyle = (r + q) % 2 ? "#0c1620" : "#101d2a";
+      g.fillRect(bx + q * cell, by + r * cell, cell, cell);
+    }
+  }
+  g.fillStyle = "#2a6a7e";
+  for (let k = 0; k <= 8; k++) {
+    g.fillRect(bx + k * cell, by, 1, 8 * cell + 1);
+    g.fillRect(bx, by + k * cell, 8 * cell + 1, 1);
+  }
+  const piece = (col, q, r) => {
+    g.fillStyle = col;
+    g.beginPath();
+    g.arc(bx + q * cell + cell / 2 + 0.5, by + r * cell + cell / 2 + 0.5, 1.6, 0, Math.PI * 2);
+    g.fill();
+  };
+  for (const [q, r] of [[0, 0], [2, 1], [3, 0], [5, 2], [6, 1], [1, 3], [4, 3]]) piece(AMBER, q, r);
+  for (const [q, r] of [[1, 7], [3, 6], [4, 7], [6, 6], [7, 7], [2, 4], [5, 5]]) piece(CYAN, q, r);
+  // side panels: player label bar, captured-piece markers, a move counter of ticks
+  const panel = (x0, col, captured, turn) => {
+    g.fillStyle = col;
+    g.fillRect(x0, 6, 30, 2);
+    for (let k = 0; k < captured; k++) {
+      g.beginPath();
+      g.arc(x0 + 3 + k * 5, 15, 1.6, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = "#1e3a48";
+    for (let k = 0; k < 6; k++) g.fillRect(x0 + k * 5, 24, 3, 6);
+    g.fillStyle = col;
+    for (let k = 0; k < turn; k++) g.fillRect(x0 + k * 5, 24, 3, 6);
+    g.fillStyle = turn ? col : "#1e3a48";
+    g.fillRect(x0, 34, 30, 3);
+  };
+  panel(8, AMBER, 3, 4);
+  panel(90, CYAN, 2, 0);
+  m.rec_holoBoard = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: toTexture(c, { srgb: true, wrap: false }), emissiveIntensity: 1.0, roughness: 0.15, metalness: 0 });
+  return "rec_holoBoard";
+}
+
+/**
  * Games unit on a wall frame: a mid-grey cabinet with two lit shelves of datapads and boxed games, a
  * control ledge and a dim holo-board screen in the upper half (the earlier full-height dark shelf unit
  * read as an unlit black rectangle under the GAMES board from the door).
  */
-function gameShelf(frame, u, seed) {
+function gameShelf(frame, u, seed, boardMat = "crew_holoDim") {
   const rand = rng(seed);
   const w = 3.0;
   // open-fronted case: mid-grey back, black sides, plinth and top
@@ -246,7 +307,7 @@ function gameShelf(frame, u, seed) {
   // holo-board in the closed upper half: dark housing, gloss bezel, dim amber tabular screen, lit header
   frame.box("impPanel1", u, 1.85, 0.19, w - 0.16, 1.0, 0.34, { color: PALETTE.impDark, uv: "keep" });
   frame.box("darkGloss", u, 1.85, 0.375, w - 0.3, 1.0, 0.03);
-  frame.add("crew_holoDim", new THREE.PlaneGeometry(w - 0.5, 0.82), u, 1.85, 0.392, { uv: "keep" });
+  frame.add(boardMat, new THREE.PlaneGeometry(w - 0.5, 0.82), u, 1.85, 0.392, { uv: "keep" });
   frame.box("emitAmberDim", u, 2.375, 0.37, w - 0.5, 0.025, 0.01);
   // control ledge between the board and the shelves: gloss deck, a row of amber keys, two dice cups
   frame.box("paintedMetal", u, 1.3, 0.3, w - 0.16, 0.08, 0.6, { color: PALETTE.impDark, texel: 2 });
@@ -484,7 +545,7 @@ export function buildRecreation(kit, ctx) {
   {
     const seg = wallSegment(ctx.bounds, "zmax");
     const { frame } = wallFrame(kit, seg.from, seg.to, 0); // u = max.x - x
-    gameShelf(frame, max[0] - -17.6, ctx.seed + 13);
+    gameShelf(frame, max[0] - -17.6, ctx.seed + 13, holoBoardMaterial(ctx));
     // lit header over the shelf and two lit notice posters beside it (this wall was a featureless
     // grille from the door)
     signPlate(kit, ctx, { side: "zmax", u: max[0] - -17.6, v: 2.78, w: 2.2, h: 0.36, text: "Games", sub: "Sign out at the bar", accent: "#ffb347" });

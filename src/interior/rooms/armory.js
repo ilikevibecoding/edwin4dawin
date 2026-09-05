@@ -63,7 +63,7 @@ function heavyBlaster(kit, x, y, z, quat) {
  * Weapon rack: back board with a base shelf and a clamp rail, `n` upright rifles (a few slots empty)
  * each with a slot lamp. Back at local z = 0, rifles facing +Z; rotated by yaw around (x, z).
  */
-function weaponRack(kit, ctx, { x, z, yaw = 0, n = 7, seed = 1, heavy = false }) {
+function weaponRack(kit, ctx, { x, z, yaw = 0, n = 7, seed = 1, heavy = false, ledger = false }) {
   const F = propFrame(kit, x, z, yaw);
   const rand = rng(seed);
   const pitch = heavy ? 0.42 : 0.21;
@@ -91,6 +91,17 @@ function weaponRack(kit, ctx, { x, z, yaw = 0, n = 7, seed = 1, heavy = false })
     else rifle(kit, p.x, 0.17 + 0.5, p.z, q, seed * 3 + i);
   }
   F.add("decal", new THREE.PlaneGeometry(0.26, 0.26), -w / 2 + 0.25, h - 0.42, 0.112, { uv: "keep", uvRect: decalRect(9 + (seed % 3)) });
+  if (ledger) {
+    // issue ledger: a stock-sheet screen in a dark bezel on the blank upper board, with a status line
+    // and two clipped stock sheets beside it (the bare light plate above the rifles was the one empty
+    // surface seen through the counter hatch)
+    F.box("darkGloss", 0.3, 1.8, 0.118, 0.9, 0.4, 0.012);
+    F.add("impScreen2", new THREE.PlaneGeometry(0.82, 0.32), 0.3, 1.8, 0.125, { uv: "keep" });
+    F.box("leds", 0.3, 1.56, 0.118, 0.7, 0.03, 0.008, { uv: "keep" });
+    F.box("paintedMetal", -0.38, 1.82, 0.115, 0.3, 0.38, 0.006, { color: PALETTE.impWhite, texel: 3 });
+    F.box("metal", -0.38, 2.02, 0.122, 0.08, 0.03, 0.01, { color: PALETTE.gunmetal });
+    F.add("decal", new THREE.PlaneGeometry(0.22, 0.22), -0.38, 1.8, 0.119, { uv: "keep", uvRect: decalRect(10) });
+  }
   F.collider(-w / 2, 0, w / 2, 0.42, h, "rack");
 }
 
@@ -285,8 +296,8 @@ export function buildArmory(kit, ctx) {
       if (i % 2 === 0) {
         ventGrille(frame, u, v, 0.86, 0.34, 0.06);
       } else {
-        frame.box("paintedMetal", u, v, 0.062, 1.0, 0.3, 0.012, { color: PALETTE.impLight, texel: 2 });
-        wallSign(kit, ctx, { side: "xmin", u, v, w: 0.9, cell: SIGN.RESTRICTED, lit: false, plate: false, bounds: [[cageX + 0.14, 0, min[2]], [max[0], H, max[2]]] });
+        // lit repeat plates (the eroded ink stencils on light plates read as red smears from the door)
+        signPlate(kit, ctx, { side: "xmin", u, v, w: 1.12, h: 0.21, text: "Restricted", accent: "#ff3a2a", bounds: hb });
       }
       // small status lamp under the tray, one per bay (steady red on the restricted bays)
       frame.box("paintedMetal", u, H - 0.47, 0.05, 0.14, 0.08, 0.06, { color: PALETTE.impBlack, texel: 2 });
@@ -318,7 +329,9 @@ export function buildArmory(kit, ctx) {
     kit.box("emitGreen", cageX - gw + 0.06, 1.0, gz + 0.045, 0.03, 0.03, 0.006);
     kit.collider([cageX - gw - 0.02, 0, gz - 0.05], [cageX + 0.02, 2.4, gz + 0.05], "gateleaf");
     kit.box("paintedMetal", cageX, 2.45, gz + gw / 2, 0.14, 0.2, gw + 0.1, { color: PALETTE.impDark, texel: 2 });
-    floorSign(kit, SIGN.AUTHORISED, cageX + 0.9, gz + gw / 2, 1.3, Math.PI / 2, false);
+    // AUTHORISED ONLY stencil centred between the posts of the gate-side queue rail (z -35.5 / -33.4)
+    // and 1.05 m behind the rail line: from the door the rail's mid bar used to cross the text
+    floorSign(kit, SIGN.AUTHORISED, cageX + 1.05, counterZ + 1.55, 1.3, Math.PI / 2, false);
   }
   // check-out counter set into the cage gap, screen swung to the visitor, keypad, ledger datapads
   {
@@ -345,8 +358,9 @@ export function buildArmory(kit, ctx) {
     impChair(kit, ctx, { x: cageX - 1.0, z: counterZ, yaw: -Math.PI / 2 });
     wallSign(kit, ctx, { side: "xmax", u: counterZ - min[2], v: 3.25, w: 1.6, cell: SIGN.ARMOURY, lit: true });
     // (between the counter and the queue rail: at cageX + 1.6 the stencil straddled the fixed view's
-    // bottom edge and read as a bisected line of text)
-    floorSign(kit, SIGN.RESTRICTED, cageX + 0.95, counterZ, 1.8, Math.PI / 2, false);
+    // bottom edge and read as a bisected line of text). Held to 1.1 m so it sits inside the hatch gap
+    // between the two rail end posts (z -36.5 / -35.5) and behind the rail's mid bar from the door
+    floorSign(kit, SIGN.RESTRICTED, cageX + 1.05, counterZ, 1.1, Math.PI / 2, false);
     // queue rail 1.2 m out from the counter face with a gap at the hatch, and a visitor-facing issue
     // status board on the cage beside the hatch
     const qx = cageX + 0.45 + 1.2;
@@ -399,7 +413,7 @@ export function buildArmory(kit, ctx) {
   weaponRack(kit, ctx, { x: -52.0, z: max[2] - 0.2, yaw: Math.PI, n: 7, seed: ctx.seed + 55 });
   chargeRack(kit, ctx, { x: -49.4, z: max[2] - 0.2, yaw: Math.PI, seed: ctx.seed + 56 });
   // central island: two racks back to back along z
-  weaponRack(kit, ctx, { x: -51.4, z: -36.0, yaw: Math.PI / 2, n: 8, seed: ctx.seed + 57 });
+  weaponRack(kit, ctx, { x: -51.4, z: -36.0, yaw: Math.PI / 2, n: 8, seed: ctx.seed + 57, ledger: true });
   weaponRack(kit, ctx, { x: -51.4, z: -36.0, yaw: -Math.PI / 2, n: 8, seed: ctx.seed + 58 });
   kit.box("paintedMetal", -51.4, 2.24, -36.0, 0.5, 0.1, 2.3, { color: PALETTE.impBlack, texel: 2 });
   kit.box("emitWhiteDim", -51.4, 2.3, -36.0, 0.3, 0.02, 2.0, { uv: "keep" });
