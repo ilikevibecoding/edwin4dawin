@@ -9,10 +9,22 @@ import { HANGAR } from "../exterior/dims.js";
 const _m = new THREE.Matrix4();
 const _p = new THREE.Vector3();
 const _q = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
 const _s = new THREE.Vector3(1, 1, 1);
 const _zero = new THREE.Vector3(0.001, 0.001, 0.001);
+const _gs = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
+const _xAxis = new THREE.Vector3(1, 0, 0);
 const _look = new THREE.Matrix4();
+const smoothstep = (a, b, x) => {
+  const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+// inside the bay the craft keeps its nose within this pitch of level (a fighter tipped 90° into the
+// drop read as a flat dish from the entry; the degenerate vertical look-at also rolled it at random);
+// below the throat the limit opens up to full tangent alignment by the time it clears the exit point
+const BAY_PITCH = THREE.MathUtils.degToRad(30);
+const LAUNCH_GAP = 3; // seconds between launches leaving the racks (two TIEs 18 m apart otherwise overlap)
 
 /** TIE/ln geometry split by material: hull (ball, pylons, frames), panels, glass, engine glow. */
 export function tieGeometries() {
@@ -134,6 +146,8 @@ class Fighter {
     this.phase = 0; // patrol loop parameter
     this.pilot = null;
     this.stateTime = 0;
+    this.yaw = rack.yaw || 0; // heading held through the vertical parts of the bay paths
+    this.glow = 0; // engine glow scale 0..1 (ramps up after unclamping, down before the rack)
   }
 }
 
@@ -174,8 +188,15 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
   const LOOP_SPEED = 260; // m/s along the loop
   const loopLength = loop.getLength();
 
-  // bay door: requested open while any launch / landing is pending or recent
-  const bay = { openness: 0, requested: false, idleTimer: 0, speed: 0.25 };
+  // bay door: the ship is at flight ops, so the bay starts open and stays open while anything is
+  // pending or recent; the leaves close only after IDLE_CLOSE s with nothing moving — longer than the
+  // scheduler's 18 s cycle, so with the patrol rotation running the doors never shut (and from space
+  // the lit bay is the mouth's normal state, not a closed hatch), while an NPC squadron running with
+  // the scheduler off still sees them close. `clock` is the traffic system's own running time (the
+  // update's `t` restarts in harness stepping); `nextLaunchAt` on that clock spaces the launches so
+  // pending TIEs leave their racks one at a time, LAUNCH_GAP apart
+  const IDLE_CLOSE = 30;
+  const bay = { openness: 1, requested: true, idleTimer: 0, speed: 0.25, clock: 0, nextLaunchAt: 0 };
   const events = [];
   const listeners = [];
   const emit = (name, f) => {
@@ -198,7 +219,7 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
     const taxi = new THREE.CatmullRomCurve3([r.clone(), new THREE.Vector3(r.x * 0.7, HANGAR.deckY + 14, r.z + 2), new THREE.Vector3(r.x * 0.35, HANGAR.deckY + 10, r.z + 1), hover], false, "centripetal");
     const drop = new THREE.CatmullRomCurve3([hover, new THREE.Vector3(t1.x, HANGAR.deckY + 1, t1.z), t1, exit], false, "centripetal");
     const outside = new THREE.CatmullRomCurve3([exit, new THREE.Vector3(t1.x * 3, HANGAR.module.bottomY - 120, t1.z + 160), new THREE.Vector3(t1.x * 6 - 200, -220, 450), loop.getPoint(0)], false, "centripetal");
-    return { legs: [{ curve: taxi, duration: 10, ease: "in" }, { curve: drop, duration: 8, ease: "in" }, { curve: outside, duration: 14, ease: "accel" }] };
+    return { legs: [{ curve: taxi, duration: 10, ease: "in" }, { curve: drop, duration: 8, ease: "in" }, { curve: outside, duration: 14, ease: "accel" }], total: 32 };
   }
   function returnPath(f) {
     const r = f.rack.pos;
@@ -208,7 +229,26 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
     const outside = new THREE.CatmullRomCurve3([f.position.clone(), new THREE.Vector3(f.position.x * 0.5, -260, 700), new THREE.Vector3(t1.x * 3, -140, 260), entry], false, "centripetal");
     const rise = new THREE.CatmullRomCurve3([entry, t1, new THREE.Vector3(t1.x, HANGAR.deckY + 1, t1.z), hover], false, "centripetal");
     const taxi = new THREE.CatmullRomCurve3([hover, new THREE.Vector3(r.x * 0.35, HANGAR.deckY + 10, r.z + 1), new THREE.Vector3(r.x * 0.7, HANGAR.deckY + 14, r.z + 2), r.clone()], false, "centripetal");
-    return { legs: [{ curve: outside, duration: 16, ease: "decel" }, { curve: rise, duration: 8, ease: "out" }, { curve: taxi, duration: 10, ease: "out" }] };
+    return { legs: [{ curve: outside, duration: 16, ease: "decel" }, { curve: rise, duration: 8, ease: "out" }, { curve: taxi, duration: 10, ease: "out" }], total: 34 };
+  }
+  /**
+   * Flight attitude from the path tangent (nose = -z). The heading comes from the tangent's horizontal
+   * part and is held when that part is negligible (vertical travel), so the craft never spins; the
+   * pitch is clamped to BAY_PITCH inside the bay and eases out to the full tangent below the throat.
+   */
+  function attitude(f, p, tan, out) {
+    const hx = tan.x;
+    const hz = tan.z;
+    const hlen = Math.hypot(hx, hz);
+    if (hlen > 0.12) f.yaw = Math.atan2(-hx, -hz);
+    const throatY = HANGAR.module.bottomY - 4;
+    const exitY = HANGAR.module.bottomY - 30;
+    const open = smoothstep(throatY, exitY, p.y); // 0 above the throat … 1 at the exit point
+    const maxPitch = BAY_PITCH + (Math.PI / 2 - BAY_PITCH) * open;
+    const pitch = THREE.MathUtils.clamp(Math.atan2(tan.y, hlen), -maxPitch, maxPitch);
+    out.setFromAxisAngle(_up, f.yaw);
+    _q2.setFromAxisAngle(_xAxis, pitch);
+    return out.multiply(_q2);
   }
   // evaluate a multi-leg path at time t → { p, tan, done }
   function evalPath(path, t) {
@@ -350,36 +390,44 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
         bay.idleTimer = 0;
       } else {
         bay.idleTimer += dt;
-        if (bay.idleTimer > 12) bay.requested = false;
+        if (bay.idleTimer > IDLE_CLOSE) bay.requested = false;
       }
       const prevOpen = bay.openness;
       bay.openness = THREE.MathUtils.clamp(bay.openness + (bay.requested ? 1 : -1) * dt * bay.speed, 0, 1);
       if ((prevOpen < 0.02 && bay.openness >= 0.02) || (prevOpen > 0.98 && bay.openness <= 0.98)) emit("blast_door", { position: new THREE.Vector3(0, HANGAR.deckY, 0) });
 
       // --- fighters
+      bay.clock += dt;
       if (!api.remote) {
         for (const f of fighters) {
           f.stateTime += dt;
           if (f.state === "parked") {
-            if (f.pendingLaunch && bay.openness > 0.9) {
+            // one release per LAUNCH_GAP: every pending TIE otherwise left on the frame the door
+            // passed 0.9 and two racks 18 m apart overlapped in the lane
+            if (f.pendingLaunch && bay.openness > 0.9 && bay.clock >= bay.nextLaunchAt) {
               f.pendingLaunch = false;
               f.path = launchPath(f);
               f.pathTime = 0;
+              f.yaw = f.rack.yaw || 0;
+              bay.nextLaunchAt = bay.clock + LAUNCH_GAP;
               setState(f, "launching");
               emit("tie_launch", f);
             }
             f.position.copy(f.rack.pos);
             f.quaternion.setFromAxisAngle(_up, f.rack.yaw || 0);
+            f.glow = 0;
           } else if (f.state === "launching" || f.state === "returning") {
             f.pathTime += dt;
             const { p, tan, done } = evalPath(f.path, f.pathTime);
             const u = done ? 1 : 0;
             f.velocity.copy(p).sub(f.position).divideScalar(Math.max(dt, 1e-3));
             f.position.copy(p);
-            // face along the tangent (nose = -z), banked slightly
-            _look.lookAt(new THREE.Vector3(), tan.clone().negate(), _up);
-            _q.setFromRotationMatrix(_look);
+            // heading from the tangent (nose = -z), pitch limited while inside the bay
+            attitude(f, p, tan, _q);
             f.quaternion.slerp(_q, Math.min(1, dt * 3));
+            // engines: light up over the first seconds off the rack (the discs snapped on inside
+            // the rack frame), fade out over the last seconds before the clamps take it back
+            f.glow = f.state === "launching" ? smoothstep(2, 6, f.pathTime) : 1 - smoothstep(f.path.total - 6, f.path.total - 2, f.pathTime);
             if (u >= 1) {
               if (f.state === "launching") {
                 f.phase = 0;
@@ -390,6 +438,7 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
               }
             }
           } else if (f.state === "patrol") {
+            f.glow = 1;
             const steered = f.pilot ? f.pilot.steer(f, dt, api) : null;
             if (steered) {
               f.velocity.copy(steered.position).sub(f.position).divideScalar(Math.max(dt, 1e-3));
@@ -415,6 +464,7 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
             f.position.copy(p);
             _look.lookAt(new THREE.Vector3(), tan.clone().negate(), _up);
             _q.setFromRotationMatrix(_look);
+            f.yaw = Math.atan2(-tan.x, -tan.z); // keeps the heading continuous into the return path
             // bank into turns
             _q.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.sin(t * 0.3 + f.id) * 0.2));
             f.quaternion.slerp(_q, Math.min(1, dt * 2));
@@ -428,14 +478,16 @@ export function createTraffic({ scene, materials, audio, count = 8, racks = null
           }
         }
       }
-      // --- instance matrices (engine glow discs collapse to nothing while parked)
+      // --- instance matrices (engine glow discs scale with f.glow: nothing while parked, ramping in
+      // off the rack and out before the clamps; remote snapshots carry no glow, so derive it there)
       for (const f of fighters) {
         _m.compose(f.position, f.quaternion, _s);
         meshes.hull.setMatrixAt(f.id, _m);
         meshes.panel.setMatrixAt(f.id, _m);
         meshes.glass.setMatrixAt(f.id, _m);
-        const flying = f.state !== "parked";
-        _m.compose(f.position, f.quaternion, flying ? _s : _zero);
+        let g = f.glow;
+        if (api.remote) g = f.state === "parked" ? 0 : f.state === "launching" ? smoothstep(2, 6, f.stateTime) : f.state === "returning" ? 1 - smoothstep(28, 32, f.stateTime) : 1;
+        _m.compose(f.position, f.quaternion, g > 0.002 ? _gs.setScalar(g) : _zero);
         meshes.glow.setMatrixAt(f.id, _m);
       }
       for (const m of Object.values(meshes)) m.instanceMatrix.needsUpdate = true;
