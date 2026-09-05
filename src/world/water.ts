@@ -457,7 +457,7 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   // entered, so the sun-lit water around an aircraft-sized shadow keeps lighting the shadowed column from the side
   // and the shadow is a soft mid-tone, not the surface's own shadow. Only the bed of shallow water (which the
   // sunlight reaches straight down) goes properly dark; the sky irradiance is never shadowed by the aircraft.
-  float volumeLeak = 0.55 * (1.0 - exp(-wDbg.x / 2.5));
+  float volumeLeak = 0.45 * (1.0 - exp(-wDbg.x / 2.5));
   vec3 Ebody = reflectedLight.indirectDiffuse + mix(reflectedLight.directDiffuse, unsh, volumeLeak);
   float rSky = clamp(pow(wMss, 0.25), 0.05, 1.0);
   vec3 Rdir = reflect(-wV, wN);

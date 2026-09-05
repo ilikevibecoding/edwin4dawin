@@ -409,6 +409,25 @@ export class PlaneModel {
     glass.customProgramCacheKey = () => 'cockpit-glass-v8';
     const plainPaint = new THREE.MeshPhysicalMaterial({ color: LIVERY.upper, roughness: 0.4, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.15 });
     const parts = partsMaterial();
+    // Upwelling light from the water: the environment probe's lower half is a neutral fill, so a surface facing
+    // the bay saw almost nothing from it and the belly, wing underside and float flanks in the aircraft's own
+    // shadow went navy. The sun-lit water returns ~10 % of the sun's irradiance, blue-green, over the half of the
+    // hemisphere below the horizon: (1 - n.y) / 2 of it reaches a surface with world normal n.
+    const withWaterBounce = <T extends THREE.Material>(mat: T): T => {
+      const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey();
+      mat.onBeforeCompile = (shader, renderer) => {
+        prev.call(mat, shader, renderer);
+        shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_end>', /* glsl */ `
+          #if NUM_DIR_LIGHTS > 0
+          { vec3 bounceN = inverseTransformDirection(geometryNormal, viewMatrix);
+            irradiance += directionalLights[0].color * vec3(0.055, 0.095, 0.105) * (0.5 - 0.5 * bounceN.y); }
+          #endif
+          #include <lights_fragment_end>`);
+      };
+      mat.customProgramCacheKey = () => prevKey + '|water-bounce-v1';
+      return mat;
+    };
+    for (const m of [paint, wingPaint, floatPaint, plainPaint, parts]) withWaterBounce(m);
     // cabin lining: albedo / roughness in the fuselage layout, a tiled vinyl grain for the normals; the cabin sees
     // less of the sky than the open air, so its ambient is turned down (the sun still comes in through the glass)
     const cab = cabinMaps(layout, { front: CABIN_FRONT, rear: CABIN_REAR, sill: SILL, winTop: WIN_TOP, floor: FLOOR, door: { x0: 1.77, x1: 0.95, yBot: -0.42 }, bows: [1.81, 0.90, -0.47] });
@@ -854,10 +873,13 @@ export class PlaneModel {
     cabinKit.add(new THREE.BoxGeometry(OC_LEN, 0.032, 0.17), at([OC_X, OC_Y, 0]), SURF.plastic);
     cabinKit.add(new THREE.BoxGeometry(OC_LEN + 0.02, 0.012, 0.19), at([OC_X, OC_Y + 0.012, 0]), SURF.trim);
     decal(PANEL_UV.overhead, OVERHEAD.w, OVERHEAD.h, new THREE.Vector3(OC_X, OC_Y - 0.0165, 0), new THREE.Vector3(0, -1, 0), new THREE.Vector3(-1, 0, 0));
-    cabinKit.add(new THREE.CylinderGeometry(0.045, 0.045, 0.014, 20), at([OC_X - 0.06, OC_Y - 0.012, -0.092], [Math.PI / 2, 0, 0]), SURF.rubber);
-    cabinKit.add(new THREE.CylinderGeometry(0.012, 0.012, 0.02, 10), at([OC_X - 0.06, OC_Y - 0.012, -0.102], [Math.PI / 2, 0, 0]), SURF.metal);
-    cabinKit.add(new THREE.CylinderGeometry(0.009, 0.009, 0.16, 8), at([OC_X - 0.02, OC_Y - 0.09, 0.09], [0, 0, 0.35]), SURF.metal);
-    cabinKit.add(new THREE.SphereGeometry(0.018, 10, 8), at([OC_X - 0.02 + 0.055, OC_Y - 0.165, 0.09]), SURF.throttle);
+    cabinKit.add(new THREE.CylinderGeometry(0.036, 0.036, 0.014, 20), at([OC_X - 0.06, OC_Y - 0.008, -0.092], [Math.PI / 2, 0, 0]), SURF.rubber);
+    cabinKit.add(new THREE.CylinderGeometry(0.010, 0.010, 0.02, 10), at([OC_X - 0.06, OC_Y - 0.008, -0.102], [Math.PI / 2, 0, 0]), SURF.metal);
+    // flap pump handle stowed forward along the ceiling from its pivot on the starboard flank
+    { const pivot = new THREE.Vector3(OC_X - 0.08, OC_Y - 0.02, 0.095), dir = new THREE.Vector3(0.97, -0.24, 0.05).normalize();
+      cabinKit.add(new THREE.CylinderGeometry(0.014, 0.014, 0.03, 10), at(pivot, [0, 0, 0]), SURF.darkMetal);
+      cabinKit.add(strutGeometry(pivot, pivot.clone().addScaledVector(dir, 0.15), 0.008, 8), undefined, SURF.metal);
+      cabinKit.add(new THREE.SphereGeometry(0.016, 10, 8), at(pivot.clone().addScaledVector(dir, 0.16)), SURF.throttle); }
     // grab handles on the B-pillars behind the doors
     for (const s of [-1, 1]) {
       const z = s * (innerHalfAt(0.90, 0.85) - 0.025);
@@ -1095,7 +1117,7 @@ export class PlaneModel {
     // third of the way to a smear: 10 turns a second); above that only the disc and the spinner remain
     const blend = Math.pow(THREE.MathUtils.clamp((rpmVal - 500) / 700, 0, 1), 0.6);
     const disc = this.propDisc.material as THREE.MeshBasicMaterial;
-    disc.opacity = 0.8 * blend;
+    disc.opacity = 0.6 * blend;
     const bladeMat = this.propBlades.material as THREE.MeshStandardMaterial;
     bladeMat.opacity = 1 - blend;
     this.propBlades.visible = blend < 0.999;

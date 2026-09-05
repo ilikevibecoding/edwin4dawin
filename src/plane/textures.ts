@@ -1218,7 +1218,7 @@ export function propDiscTexture(discR = 1.5, root = 0.16, length = 1.32, rootCho
   const streakAt = (phi: number) => {
     const f = ((phi / (Math.PI * 2)) % 1 + 1) % 1 * NB, i = Math.floor(f), a = f - i;
     const v = streak[i % NB] * (1 - a) + streak[(i + 1) % NB] * a;
-    return 0.72 + 0.56 * v;
+    return 0.82 + 0.36 * v;
   };
   const SMEAR = 1.25, tipR = root + length;
   for (let py = 0; py < s; py++) {
@@ -1248,7 +1248,7 @@ export function propDiscTexture(discR = 1.5, root = 0.16, length = 1.32, rootCho
       const inTip = THREE.MathUtils.smoothstep(r, tipR - tipBand - 0.015, tipR - tipBand + 0.015);
       if (inTip > 0) {
         cr = cr + (222 - cr) * inTip; cg = cg + (176 - cg) * inTip; cb = cb + (48 - cb) * inTip;
-        alpha *= 1 + 0.9 * inTip;
+        alpha *= 1 + 0.6 * inTip;
       }
       const glint = Math.exp(-Math.pow((r - (tipR - 0.03)) / 0.012, 2));
       cr += (255 - cr) * glint * 0.6; cg += (250 - cg) * glint * 0.6; cb += (230 - cb) * glint * 0.6;
