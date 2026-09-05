@@ -392,12 +392,63 @@ export function buildHull(ctx) {
       );
   }
 
+  // ---- open variant: the flight deck floor of the dorsal bay, lit with landing strips, hangar lamps
+  // along the bay walls and a scatter of dark equipment (the bay itself is the loft's recess)
+  if (open) {
+    const yFloor = (zr) => yTop(zr) + DOOR_H - BAY_DEPTH;
+    const lit = lod === 2 ? [0] : [-30, 0, 30];
+    for (const dx of lit)
+      add(
+        deckStrip(
+          [DOOR_Z0 + 12, DOOR_Z1 - 12],
+          () => dx - 1.6,
+          () => dx + 1.6,
+          yFloor,
+          Z,
+          { lift: 0.3 },
+        ),
+        "windows",
+        { color: dx === 0 ? HANGAR_WARM : HANGAR_BLUE, uv: "keep" },
+      );
+    if (mid) {
+      for (let zr = DOOR_Z0 + 30; zr < DOOR_Z1 - 20; zr += fine ? 40 : 80) {
+        for (const s of [-1, 1])
+          add(
+            quadFacing(
+              [s * (BAY_HALF - 0.3), yFloor(zr) + BAY_DEPTH * 0.7, Z(zr)],
+              [-s, 0, 0],
+              [0, 1, 0],
+              12,
+              2.4,
+            ),
+            "windows",
+            { color: HANGAR_WARM, uv: "keep" },
+          );
+        if (fine && rand() < 0.7) {
+          const x = (rand() - 0.5) * 2 * (BAY_HALF - 14);
+          const w = 4 + rand() * 8;
+          const d = 6 + rand() * 12;
+          add(
+            boxMM(
+              [x - w / 2, yFloor(zr) + 0.2, Z(zr) - d / 2],
+              [x + w / 2, yFloor(zr) + 2 + rand() * 5, Z(zr) + d / 2],
+            ),
+            "dark",
+            { color: DARK, texel: 1 / 3 },
+          );
+        }
+      }
+    }
+  }
+
   // ---- deck markings (paint material). The door top is at yTop + DOOR_H, the wedge on the bare deck.
   const zrsDoor = [];
   for (let zr = DOOR_Z0 + 1.5; zr < DOOR_Z1 - 1.5; zr += lod === 2 ? 180 : 45)
     zrsDoor.push(zr);
   zrsDoor.push(DOOR_Z1 - 1.5);
   const inner = redInner(DOOR_Z0 + 0.01, open);
+  // the far LOD is drawn from 9 km up: lift the paint further off the deck so it cannot z-fight
+  const paintLift = lod === 2 ? 1.2 : 0.15;
   for (const s of [-1, 1]) {
     // door red strip: inner edge a grey margin in from the centre strip, outer edge 3 m inside the door
     // edge (both converge toward the bow with the deck)
@@ -408,9 +459,7 @@ export function buildHull(ctx) {
         (zr) => s * (doorEdge(zr) - 3),
         (zr) => yTop(zr) + DOOR_H,
         Z,
-        {
-          minW: 4,
-        },
+        { minW: 4, lift: paintLift },
       ),
       "paint",
       { color: RED, texel: 1 / 12 },
@@ -425,7 +474,7 @@ export function buildHull(ctx) {
         (zr) => s * (halfW(zr) - WEDGE_BORDER),
         yTop,
         Z,
-        { minW: 4 },
+        { minW: 4, lift: paintLift },
       ),
       "paint",
       { color: RED, texel: 1 / 12 },
@@ -617,6 +666,5 @@ export function buildHull(ctx) {
       }
     }
   }
-  void rand;
   return { secs };
 }
