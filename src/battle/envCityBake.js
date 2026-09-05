@@ -1,12 +1,25 @@
-// CPU bakes for the Coruscant surface. Two RGBA8 maps, both plain typed arrays (no DOM) so the bake can
-// be timed and tuned in Node:
-//  - base (equirect, 2048x1024): smooth *fields*, not colours. R district density, G water field
-//    (0.5 = coastline), B mood (dark-district / tint variation), A thin cloud cover. Everything sharp
-//    (arterial networks, rings, hubs, capillaries, pin lights) is computed in the fragment shader so it
-//    stays crisp at every camera range; this map only says where the city is dense, dark or wet.
-//  - detail (tileable, 1024x1024): R capillary street network, G pin-point lights, B block texture,
-//    A second set of pin lights (sampled at another scale / rotation so the tiling never lines up).
-import { mulberry32 } from "../textures.js";
+// CPU bakes for the Coruscant surface. Two RGBA8 maps, both plain typed arrays (no DOM, no three.js
+// import) so the bake runs in a Web Worker (envBakeWorker.js) and can be timed and tuned in Node:
+//  - base (equirect, 2048x1024 / 1024x512 on phones): smooth *fields*, not colours. R district
+//    density, G water field (0.5 = coastline), B mood (dark-district / tint variation), A thin cloud
+//    cover. Everything sharp (arterial networks, rings, hubs, capillaries, pin lights) is computed in
+//    the fragment shader so it stays crisp at every camera range; this map only says where the city is
+//    dense, dark or wet.
+//  - detail (tileable, 1024x1024): R capillary street network, G dense fine pin lights, B block
+//    texture, A sparser large pin lights. The shader tiles it at four scales (384 m to 6 m texels) and
+//    cross-fades them by texel footprint, so the pin field is a resolved sparkle at every altitude and
+//    its mip average is the city's glow from far away.
+
+// same generator as textures.js (mulberry32), inlined so the worker bundle stays free of three.js
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const smooth = (t) => t * t * (3 - 2 * t);
@@ -216,43 +229,64 @@ export function bakeDetail(size = 1024, seed = 733) {
       out[i + 3] = 0;
     }
   }
-  // pin-point lights: two independent sets (G and A). Larger points read as single pixels from the
-  // battle altitude; the small ones mip into the lace.
-  const put = (ch, px, py, r, k) => {
+  // pin-point lights. G: a dense field of single-texel lights (one per ~10 texels) with a long-tailed
+  // brightness distribution (many dim, a few hot), clustered a little so blocks differ; A: sparser,
+  // larger lights (2x2 and soft 3x3) for the big installations. Both are meant to be mip-averaged:
+  // their mean is the city's glow, their resolved texels the sparkle.
+  const put = (ch, px, py, r, k, soft = false) => {
     for (let dy = 0; dy < r; dy++) {
       const yy = (py + dy) % size;
       for (let dx = 0; dx < r; dx++) {
         const xx = (px + dx) % size;
         const i = (yy * size + xx) * 4 + ch;
-        out[i] = Math.max(out[i], k * 255);
+        const edge =
+          soft && (dx === 0 || dx === r - 1 || dy === 0 || dy === r - 1);
+        out[i] = Math.max(out[i], (edge ? k * 0.45 : k) * 255);
       }
     }
   };
   const cluster = makeFbm(5, 2, 0.5, seed + 9);
-  for (const ch of [1, 3]) {
-    let n = 0;
-    while (n < 3200) {
-      const u = rand();
-      const v = rand();
-      if (rand() > cluster(u, v) * 1.6) continue; // cluster toward brighter districts
-      put(
-        ch,
-        Math.floor(u * size),
-        Math.floor(v * size),
-        2,
-        0.55 + rand() * 0.45,
-      );
-      n++;
-    }
-    for (let k = 0; k < 9000; k++) {
-      put(
-        ch,
-        Math.floor(rand() * size),
-        Math.floor(rand() * size),
-        1,
-        0.3 + rand() * 0.6,
-      );
-    }
+  let n = 0;
+  while (n < 96000) {
+    const u = rand();
+    const v = rand();
+    if (rand() > 0.45 + cluster(u, v) * 0.9) continue;
+    const k = 0.15 + 0.85 * Math.pow(rand(), 4.0);
+    put(1, Math.floor(u * size), Math.floor(v * size), 1, k);
+    n++;
   }
+  for (let k = 0; k < 7000; k++)
+    put(
+      1,
+      Math.floor(rand() * size),
+      Math.floor(rand() * size),
+      2,
+      0.45 + rand() * 0.55,
+    );
+  n = 0;
+  while (n < 5000) {
+    const u = rand();
+    const v = rand();
+    if (rand() > 0.3 + cluster(u, v)) continue;
+    put(3, Math.floor(u * size), Math.floor(v * size), 2, 0.5 + rand() * 0.5);
+    n++;
+  }
+  for (let k = 0; k < 2200; k++)
+    put(
+      3,
+      Math.floor(rand() * size),
+      Math.floor(rand() * size),
+      3,
+      0.7 + rand() * 0.3,
+      true,
+    );
   return out;
+}
+
+// mean of a channel (0..1): the shader normalises the pin layers by it so the baked density can change
+// without moving the planet's exposure
+export function channelMean(data, ch) {
+  let s = 0;
+  for (let i = ch; i < data.length; i += 4) s += data[i];
+  return s / (data.length / 4) / 255;
 }
