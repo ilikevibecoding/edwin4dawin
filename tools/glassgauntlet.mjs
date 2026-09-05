@@ -98,7 +98,10 @@ async function main() {
   page.on('console', (m) => {
     if (m.type() === 'error') log('console:', m.text());
   });
-  await page.route('**/@vite/client', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: '' }));
+  // Disarm HMR on the dev server, but keep the env module: with an empty body
+  // the config's `define`s never arrive and the HUD's build stamp throws
+  // (same stub as shots.mjs). Against a preview server the route never fires.
+  await page.route('**/@vite/client', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: "import '/@vite/env';" }));
 
   const t0 = Date.now();
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });

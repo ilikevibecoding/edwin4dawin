@@ -70,3 +70,14 @@ than the incumbent on the round's categories and no previously approved
 category of any family drops by more than one point. Build, `tools/interact.mjs`,
 the lion feet probe (`tools/lions.mjs --probe`) and `tools/perfrun.mjs` must
 pass on the accepted candidate before it is deployed.
+
+The live preview follows the latest build that passed `tools/gate.mjs` and the
+smoke test, which is usually ahead of the critics; "accepted" is a separate
+state that only a scored consensus confers. Round 2 showed the gap: `a8ca6eb`
+went live on its builders' before/after evidence and then failed the gate on
+three regressions the builders had no frame of (night sky, far hills, camp
+shade), and the live link carried a rejected build for a round. So when the
+critics reject a candidate, the preview is redeployed to the last accepted
+build the same day, and the rejection is recorded in `CHANGELOG.md` against the
+build that carried it. Builder evidence is necessary for a deploy; it is never
+sufficient for acceptance.
