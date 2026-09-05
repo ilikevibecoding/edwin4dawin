@@ -80,6 +80,16 @@ void faceFrame(float f, out vec3 N, out vec3 T, out vec3 B) {
   else if (f < 4.5) { N = vec3(0.0, 0.0, 1.0);  T = vec3(1.0, 0.0, 0.0);  B = vec3(0.0, 1.0, 0.0); }
   else              { N = vec3(0.0, 0.0, -1.0); T = vec3(-1.0, 0.0, 0.0); B = vec3(0.0, 1.0, 0.0); }
 }
+// The vanilla per-face shade (FACES[].shade in mesher.js: sides 0.6 / 0.8, bottom 0.5) stands in for directional
+// light; with the sun doing that job per pixel it is partly lifted (FACE_FLATTEN of the way to 1), keeping the AO part.
+const float FACE_FLATTEN = 0.4;
+float faceShade(float f) {
+  if (f < 1.5) return 0.6;
+  if (f < 2.5) return 1.0;
+  if (f < 3.5) return 0.5;
+  return 0.8;
+}
+float flatShade(float shade, float f) { return min(shade * mix(1.0, 1.0 / faceShade(f), FACE_FLATTEN), 1.0); }
 #endif`;
 
 const FRAG = /* glsl */ `
@@ -104,18 +114,19 @@ void main() {
   #endif
   vec3 V = normalize(uCamPos - vWorldPos);
   vec3 albedo = tex.rgb;
+  float shade = flatShade(vShade, vFace);
   // lightmap ambient + directional sun (shadowed, gated by the vertex sky light), against the warm block light
   vec3 light = shadingLight(vec3(sky) * uSkyTint, blkCol, vWorldPos, N, skyCurved, vDist);
   light = max(light, vec3(0.035)) + vec3(uFlash);
-  vec3 col = albedo * light * vShade * (1.0 - 0.45 * metal);
+  vec3 col = albedo * light * shade * (1.0 - 0.45 * metal);
   // sky reflection (metals: albedo-tinted, dielectrics: faint at grazing angles) + sun highlight
   float ndv = max(dot(N, V), 0.0);
   vec3 F0 = mix(vec3(0.04), albedo, metal);
   vec3 Fenv = F0 + (1.0 - F0) * pow(1.0 - ndv, 5.0);
   float gloss = 1.0 - rough;
   vec3 env = skyGradient(reflect(-V, N)) * skyCurved;
-  col += env * Fenv * gloss * gloss * vShade;
-  col += sunSpecular(vWorldPos, N, gN, V, rough, metal, albedo, skyCurved, vDist) * vShade;
+  col += env * Fenv * gloss * gloss * shade;
+  col += sunSpecular(vWorldPos, N, gN, V, rough, metal, albedo, skyCurved, vDist) * shade;
   // emissive: not shadowed, not sky lit, still fogged
   col += albedo * emis * 2.2;
   vec3 fogC = fogColorDir(uFogColor, -V);

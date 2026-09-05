@@ -59,17 +59,21 @@ void main() {
 const COMPOSITE_FRAG = /* glsl */ `
 uniform sampler2D tex; uniform sampler2D bloom;
 uniform float uExposure; uniform float uBloomStrength; uniform float uBloomCap; uniform float uVignette; uniform float uDebug;
+uniform float uThreshold;
 varying vec2 vUv;
 vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 void main() {
   vec3 c = texture2D(tex, vUv).rgb;
   vec3 b = min(texture2D(bloom, vUv).rgb * uBloomStrength, vec3(uBloomCap));
+  // debug views for the measurement scripts: 1 = capped bloom contribution, 2 = bloom source mask (HDR > threshold)
+  if (uDebug > 1.5) { gl_FragColor = vec4(vec3(step(uThreshold, max(c.r, max(c.g, c.b)))), 1.0); return; }
   if (uDebug > 0.5) { gl_FragColor = vec4(b, 1.0); return; }
   c = max(c, 0.0) + b;
   vec3 lin = pow(c, vec3(2.2)) * uExposure;
   vec3 outc = pow(aces(lin), vec3(1.0 / 2.2));
+  // subtle vignette: untouched inside ~70% of the frame height, -uVignette in the far corners
   vec2 q = vUv - 0.5;
-  float v = 1.0 - uVignette * smoothstep(0.35, 0.95, length(q) * 1.25);
+  float v = 1.0 - uVignette * smoothstep(0.45, 1.0, length(q) * 1.3);
   gl_FragColor = vec4(outc * v, 1.0);
 }`;
 
@@ -123,7 +127,7 @@ export class PostFX {
     this.bloomEnabled = true;
     this.fxaaEnabled = false;
     this.exposure = 1.0;
-    this.vignette = 0.22;
+    this.vignette = 0.14;
     this.bloomStrength = 0.7;
     this.bloomThreshold = 1.0;
     this.bloomKnee = 0.15;
@@ -137,7 +141,7 @@ export class PostFX {
     this.brightMat = mat(BRIGHT_FRAG, { tex: { value: null }, uTexel: { value: new THREE.Vector2() }, uThreshold: { value: 1 }, uKnee: { value: 0.15 } });
     this.downMat = mat(DOWN_FRAG, { tex: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.upMat = mat(UP_FRAG, { uLow: { value: null }, uSame: { value: null }, uTexel: { value: new THREE.Vector2() }, uSameWeight: { value: 1 } });
-    this.compositeMat = mat(COMPOSITE_FRAG, { tex: { value: null }, bloom: { value: null }, uExposure: { value: 1 }, uBloomStrength: { value: 0.7 }, uBloomCap: { value: 0.35 }, uVignette: { value: 0.22 }, uDebug: { value: 0 } });
+    this.compositeMat = mat(COMPOSITE_FRAG, { tex: { value: null }, bloom: { value: null }, uExposure: { value: 1 }, uBloomStrength: { value: 0.7 }, uBloomCap: { value: 0.35 }, uVignette: { value: 0.14 }, uDebug: { value: 0 }, uThreshold: { value: 1 } });
     this.fxaaMat = mat(FXAA_FRAG, { tex: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.quad = new THREE.Mesh(geo, this.compositeMat);
     this.quad.frustumCulled = false;
@@ -224,7 +228,8 @@ export class PostFX {
     cu.uBloomStrength.value = this.bloomEnabled ? this.bloomStrength / (BLOOM_LEVELS - 1) : 0;
     cu.uBloomCap.value = this.bloomCap;
     cu.uVignette.value = this.vignette;
-    cu.uDebug.value = this.debugView === 'bloom' ? 1 : 0;
+    cu.uThreshold.value = this.bloomThreshold;
+    cu.uDebug.value = this.debugView === 'bloom' ? 1 : (this.debugView === 'sources' ? 2 : 0);
     if (this.fxaaEnabled) {
       this._pass(this.compositeMat, this.ldr);
       this.fxaaMat.uniforms.tex.value = this.ldr.texture;

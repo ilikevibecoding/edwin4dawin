@@ -17,7 +17,7 @@ const VOID_DAY = new THREE.Color(0.28, 0.36, 0.55);
 const MOON_PHASES = 8;   // days per lunar cycle
 // The sun's orbit is tilted toward +z (like a temperate latitude): rising/setting points stay on the x axis, but at
 // noon the sun is 22 degrees off the zenith so vertical faces still receive sun and shadows never collapse to points.
-const ORBIT_TILT = 22 * Math.PI / 180;
+export const ORBIT_TILT = 22 * Math.PI / 180;
 const TILT_Q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), ORBIT_TILT);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const Y_FLIP_Q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);

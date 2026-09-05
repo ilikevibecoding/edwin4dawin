@@ -20,12 +20,14 @@ import * as THREE from 'three';
 export const SHADOW_LAYER = 1;
 export const SHADOW_LAYER_NEAR = 2;
 
-// Split of the lightmap sky light into an ambient share (AMBIENT_K, always present) and the directional sun term
-// (SUN_STRENGTH, times the wrapped N.L and the shadow). A flat top face at noon gets AMBIENT_K + SUN_STRENGTH * ~1,
-// so the pair is calibrated so the noon frame's mean luminance matches the pre-rubric look (see the rubric notes).
-export const AMBIENT_K = 0.70;
-export const SUN_STRENGTH = 0.34;
-export const SUN_WRAP = 0.55;      // wrapped diffuse ((N.L + w) / (1 + w)): side faces keep some sun at noon
+// Split of the lightmap sky light into an ambient share (uAmbientK, always present) and the directional sun term
+// (SUN_STRENGTH, times the wrapped N.L and the shadow). A flat top face at noon gets AMBIENT_K + SUN_STRENGTH * ~1;
+// the pair is calibrated so the noon frame's mean luminance matches the pre-rubric look (see the rubric notes).
+// The pipeline moves uAmbientK toward 1 as the directional light weakens (low sun, moon, storm deck) so the sky
+// light budget stays constant over the day.
+export const AMBIENT_K = 0.52;
+export const SUN_STRENGTH = 0.44;
+export const SUN_WRAP = 0.7;       // wrapped diffuse ((N.L + w) / (1 + w)): side faces keep some sun at noon
 
 // One instance of every uniform; materials reference these objects so a single write updates every surface.
 export const SHADING_UNIFORMS = {
@@ -45,6 +47,7 @@ export const SHADING_UNIFORMS = {
   uCamPos: { value: new THREE.Vector3() },
   uTimeS: { value: 0 },                                  // seconds, for water waves / twinkle
   uAmbientK: { value: AMBIENT_K },
+  uAmbientTint: { value: new THREE.Vector3(1, 1, 1) },   // shade colour: cool sky-lit shadows against the warm sun
   uShadowCascades: { value: 0 },                         // 0 (off), 1, 2
   uShadowMap0: { value: null },
   uShadowMap1: { value: null },
@@ -86,7 +89,7 @@ vec3 skyGradient(vec3 d) {
 export const SHADING_PARS = /* glsl */ `
 ${SKY_GLSL}
 uniform vec3 uSunDir; uniform vec3 uSunColor; uniform float uSunUp; uniform float uSunWrap; uniform vec3 uCamPos;
-uniform float uAmbientK; uniform float uShadowCascades;
+uniform float uAmbientK; uniform vec3 uAmbientTint; uniform float uShadowCascades;
 uniform sampler2D uShadowMap0; uniform sampler2D uShadowMap1;
 uniform mat4 uShadowMat0; uniform mat4 uShadowMat1;
 uniform vec4 uShadowParams0; uniform vec4 uShadowParams1;
@@ -139,7 +142,7 @@ vec3 sunLight(vec3 wp, vec3 N, vec3 gN, float skyVis, float dist) {
 // skyAmb = curved sky light * uSkyLight * uSkyTint (the legacy sky term), blk = curved block light * warm tint.
 vec3 shadingLight(vec3 skyAmb, vec3 blk, vec3 wp, vec3 N, float skyVis, float dist) {
   vec3 sun = sunLight(wp, N, N, skyVis, dist);
-  return max(skyAmb * uAmbientK + sun, blk);
+  return max(skyAmb * (uAmbientK * uAmbientTint) + sun, blk);
 }
 
 // GGX-lite specular from the sun with Schlick Fresnel; returns HDR radiance (clamped so bloom stays sane).

@@ -33,6 +33,15 @@ if (sets.includes('disasters')) {
     views.push({ name: `disaster_${d}`, q: `${TOWN}&time=0.5`, before: `game.disasters.command({type:'start', disaster:'${d}'})`, wait: parseInt(args.disasterMs || '10000', 10) });
   }
 }
+// ad-hoc views: --views "name:x=..&z=..&time=..;name2:..." (optionally "name:query|js to run before the shot")
+if (args.views) {
+  for (const spec of String(args.views).split(';')) {
+    const [name, rest] = spec.split(/:(.*)/s);
+    if (!name || !rest) continue;
+    const [q, before] = rest.split('|');
+    views.push({ name, q, before: before || null });
+  }
+}
 
 const consoleLog = [];
 for (const v of views) {
