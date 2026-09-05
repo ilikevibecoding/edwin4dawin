@@ -9,7 +9,7 @@
 // game.disasters.status() (refreshed at ~5 Hz from update() and immediately on manager change events).
 //
 // Layout: sticky header (title, badges, close) - scrollable body (disaster cards, parameters with a collapsible
-// "Advanced" group, quality presets, collapsible "Developer" footer) - sticky dock (status strip, big primary
+// "Advanced" group, quality presets + view distance, collapsible "Developer" footer) - sticky dock (status strip, big primary
 // Start/Pause/Resume button, Preview / Stop / Reset / Replay, live intensity while running).
 import './adminPanel.css';
 import * as THREE from 'three';
@@ -36,6 +36,11 @@ const PHASE_LABEL = {
   arrival: 'approaching', approach: 'approaching', charge: 'charging', descent: 'descending', fire: 'firing', impact: 'impact', aftermath: 'aftermath', cancel: 'winding down',
 };
 const FOCUSABLE = 'button, input, select, textarea, summary, a[href], [tabindex]';
+// View distance presets (chunks). game.setRenderDistance(n) is preferred (it persists); older builds only have
+// terrain.setRenderDistance(n), so the panel persists the choice itself under the same localStorage key.
+const VIEW_DISTANCES = [8, 12, 16, 24];
+const VIEW_DISTANCE_HELP = '24 chunks loads ~2000 chunks (~550 MB) and needs a strong GPU.';
+const RD_KEY = 'frontier-craft:rd';
 
 // Parameters shown up front (in this order); everything else goes under "Advanced". Disasters without an entry
 // get a heuristic pick: location, size, duration, intensity.
@@ -167,6 +172,7 @@ export class AdminPanel {
     this._load();
     this._refreshPermission();
     this._refreshQuality();
+    this._refreshViewDistance();
     this.lastStatusAt = 0;
     this.lastPerfAt = 0;
     this._refreshStatus();
@@ -242,9 +248,20 @@ export class AdminPanel {
       qualityGroup.append(b);
     }
     this.qualityDesc = h('p', { class: 'ap-help ap-one-line', id: 'ap-quality-desc' });
+    // view distance: second segmented row right under the quality presets
+    this.viewBtns = {};
+    this.viewGroup = h('div', { class: 'ap-seg ap-seg-4', id: 'ap-view-distance', role: 'radiogroup', 'aria-labelledby': 'ap-view-title' });
+    for (const n of VIEW_DISTANCES) {
+      const b = h('button', { class: 'ap-seg-btn', id: 'ap-view-' + n, type: 'button', role: 'radio', 'aria-checked': 'false', text: n === 24 ? '24 (strong PC)' : String(n), title: n === 24 ? VIEW_DISTANCE_HELP : `${n} chunks`, onclick: () => this._setViewDistance(n) });
+      this.viewBtns[n] = b;
+      this.viewGroup.append(b);
+    }
+    this.viewHelp = h('p', { class: 'ap-help ap-one-line', id: 'ap-view-help', text: VIEW_DISTANCE_HELP, title: VIEW_DISTANCE_HELP });
     const qualitySection = h('section', { class: 'ap-section', id: 'ap-quality-section', 'aria-labelledby': 'ap-quality-title' },
       h('div', { class: 'ap-section-head' }, h('h3', { id: 'ap-quality-title', text: 'Quality' }), qualityGroup),
-      this.qualityDesc);
+      this.qualityDesc,
+      h('div', { class: 'ap-section-head ap-subhead' }, h('span', { class: 'ap-sub-title', id: 'ap-view-title', text: 'View distance' }), this.viewGroup),
+      this.viewHelp);
 
     // developer footer: console command, save, counters, perf
     this.perfEl = h('span', { class: 'ap-summary-aside', id: 'ap-perf', text: 'perf: n/a' });
@@ -652,6 +669,34 @@ export class AdminPanel {
     const q = QUALITY[cur];
     setText(this.qualityDesc, `${q.description}.`);
     setTitle(this.qualityDesc, `${q.description}. View distance ${q.renderDistance} chunks, up to ${fmtInt(q.maxDebris)} debris pieces.`);
+    this._refreshViewDistance();
+  }
+
+  // ---------------------------------------------------------------- view distance
+  _setViewDistance(n) {
+    const g = this.game;
+    try {
+      if (typeof g.setRenderDistance === 'function') g.setRenderDistance(n);
+      else if (g.terrain && typeof g.terrain.setRenderDistance === 'function') {
+        g.terrain.setRenderDistance(n);
+        try { localStorage.setItem(RD_KEY, String(g.terrain.renderDistance)); } catch (e) { /* storage unavailable */ }
+      } else { this._note('View distance cannot be changed here.'); return; }
+    } catch (e) { console.error('view distance failed', e); this._note('Could not change the view distance.'); return; }
+    this._refreshViewDistance();
+    const actual = g.terrain ? Number(g.terrain.renderDistance) : n;
+    this._note(actual === n ? `View distance set to ${n} chunks.` : `View distance set to ${actual} chunks (this build caps it at ${actual}).`);
+  }
+  // Highlights the option nearest to the live value (the pause menu and quality presets change it too).
+  _refreshViewDistance() {
+    const cur = this.game.terrain ? Number(this.game.terrain.renderDistance) : NaN;
+    const nearest = Number.isFinite(cur) ? VIEW_DISTANCES.reduce((a, b) => (Math.abs(b - cur) < Math.abs(a - cur) ? b : a)) : null;
+    for (const [n, b] of Object.entries(this.viewBtns)) {
+      const on = Number(n) === nearest;
+      setAttr(b, 'aria-checked', String(on));
+      setAttr(b, 'tabindex', on ? '0' : '-1');
+    }
+    setAttr(this.viewGroup, 'data-exact', String(nearest !== null && nearest === cur));
+    setTitle(this.viewGroup, Number.isFinite(cur) ? `View distance: ${cur} chunks${nearest === cur ? '' : ` (nearest option highlighted)`}` : 'View distance in chunks');
   }
 
   // ---------------------------------------------------------------- persistence (localStorage)
@@ -987,6 +1032,7 @@ export class AdminPanel {
     if (last !== this.lastLog) { this.lastLog = last; setText(this.logEl, last); }
     setHidden(this.logEl, idle || !last);
     for (const f of this.fields) if (f.refresh) f.refresh();
+    this._refreshViewDistance();
 
     // primary button: Start (idle / preview / finished) -> Pause (running) -> Resume (paused)
     const mode = running ? 'pause' : paused ? 'resume' : 'start';

@@ -96,7 +96,10 @@
   display: flex; align-items: center; gap: 8px; margin: 0 0 8px; padding-bottom: 4px; min-height: 30px;
   border-bottom: 1px solid rgba(255, 208, 128, 0.22);
 }
-.ap-section-head h3 { flex: none; margin: 0; font-size: 12px; font-weight: bold; line-height: 1.2; letter-spacing: 2px; text-transform: uppercase; color: var(--ap-gold); }
+.ap-section-head h3, .ap-sub-title { flex: none; margin: 0; font-size: 12px; font-weight: bold; line-height: 1.2; letter-spacing: 2px; text-transform: uppercase; color: var(--ap-gold); }
+/* second control row inside a section (view distance under quality): no rule line, label may wrap to two lines */
+.ap-section-head.ap-subhead { margin: 6px 0 4px; padding-bottom: 0; border-bottom: 0; }
+.ap-sub-title { max-width: 84px; line-height: 1.15; }
 .ap-help { font-size: 12px; line-height: 1.4; color: var(--ap-dim); }
 .ap-desc { margin-top: 6px; font-size: 12px; line-height: 1.4; color: var(--ap-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -239,11 +242,15 @@
 /* ------------------------------------------------------------------ segmented control (quality, in the section header) */
 .ap-seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; padding: 2px; background: var(--ap-edge); border: 1px solid var(--ap-edge); }
 .ap-section-head .ap-seg { flex: 1 1 auto; min-width: 0; margin-left: auto; max-width: 300px; }
+/* view distance: three narrow numeric options, the "24 (strong PC)" one takes the remaining width */
+.ap-seg-4 { grid-template-columns: repeat(3, minmax(38px, auto)) minmax(0, 1fr); }
 .ap-seg-btn { min-height: 32px; padding: 4px 4px; cursor: pointer; color: var(--ap-dim); background: #2e2219; border: 0; text-shadow: 1px 1px 0 #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ap-seg-btn:hover { background: #3a2c21; color: var(--ap-text); }
 .ap-seg-btn[aria-checked='true'] { color: var(--ap-gold); font-weight: bold; background: linear-gradient(#6f4d2f, #543922); box-shadow: inset 0 0 0 1px rgba(255, 208, 128, 0.55); }
+/* live value between two options (e.g. 10 chunks from the pause menu): nearest option gets a dashed highlight */
+.ap-seg[data-exact='false'] .ap-seg-btn[aria-checked='true'] { font-weight: normal; box-shadow: none; outline: 1px dashed rgba(255, 208, 128, 0.7); outline-offset: -3px; }
 .ap-seg-btn:focus-visible { outline-offset: -3px; }
-#ap-quality-desc { margin-top: 0; }
+#ap-quality-desc, #ap-view-help { margin-top: 0; }
 
 /* ------------------------------------------------------------------ disclosures (Advanced / Developer) */
 .ap-disclosure { background: var(--ap-well); border: 1px solid var(--ap-edge); box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.05); }
@@ -304,15 +311,23 @@
 /* ------------------------------------------------------------------ compact scale for short viewports (<= 800 px, e.g. 1280x720) */
 @media (max-height: 800px) {
   #admin-panel { --ap-pad: 10px; --ap-gap: 8px; --ap-field-gap: 8px; --ap-control-h: 30px; --ap-icon-btn: 30px; --ap-card-icon: 32px; top: 8px; max-height: calc(100vh - 16px); }
-  .ap-header { padding-top: 6px; padding-bottom: 6px; }
-  .ap-card { gap: 4px; padding: 5px 4px; }
-  .ap-card-desc { display: none; } /* the description line under the cards carries it */
+  .ap-header { padding-top: 5px; padding-bottom: 5px; }
+  .ap-title small { line-height: 1.2; }
+  .ap-close { width: 32px; height: 32px; font-size: 20px; }
+  /* cards become icon + name rows (the blurb moves to the description line under them) */
+  .ap-card { flex-direction: row; justify-content: flex-start; gap: 6px; padding: 4px 6px; text-align: left; }
+  .ap-card-name { line-height: 1.15; }
+  .ap-card-desc { display: none; }
   .ap-desc { margin-top: 4px; }
-  .ap-section-head { margin-bottom: 4px; min-height: 30px; }
-  .ap-big { min-height: 42px; }
-  .ap-dock { gap: 6px; padding-top: 6px; padding-bottom: 8px; }
-  .ap-status { padding: 5px 10px; }
-  .ap-disclosure > summary { min-height: 34px; }
+  .ap-section-head { margin-bottom: 4px; padding-bottom: 3px; min-height: 30px; }
+  .ap-section-head.ap-subhead { margin: 3px 0; }
+  #ap-advanced { margin-top: 6px; }
+  .ap-seg-btn { min-height: 28px; }
+  .ap-big { min-height: 40px; }
+  .ap-secondary .ap-btn { min-height: 28px; }
+  .ap-dock { gap: 5px; padding-top: 6px; padding-bottom: 6px; }
+  .ap-status { padding: 4px 10px; }
+  .ap-disclosure > summary { min-height: 32px; }
 }
 @media (max-height: 640px) {
   .ap-title small { display: none; }
