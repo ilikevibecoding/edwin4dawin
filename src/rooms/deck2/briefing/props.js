@@ -1,6 +1,7 @@
 // Briefing-room-local props (tiered auditorium furniture, status boards, cable trays, duty desks).
 // Everything is kit-bashed; colliders are world AABBs. Shared props stay untouched (see _shared/props.js).
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { rng } from "../../../kit.js";
 import { IMP } from "../_shared/palette.js";
 import { placer } from "../_shared/props.js";
@@ -13,6 +14,47 @@ const SHELL = 0x767a83; // seat shells / desk tops: between impMid and impGrey
 
 // Quaternion for a prop part tilted about its own X axis after the prop's yaw: q = Ry(yaw) * Rx(tilt).
 const tiltQuat = (yaw, tilt) => new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, 0, 0)));
+
+// Brightness overlay for animated emitters that live in the static kit: one multiply-blended mesh of
+// quads floated 6 mm in front of screens / lit plates, each quad's vertex colour scaling what is
+// behind it (0.7 = dip, 1.05 = flare). One draw call for every flickering screen and breathing board
+// in the room; `set(i, f)` writes quad i's factor in place (no allocation, 4 vertices).
+// quads: [{ pos, w, h, yaw } | { pos, w, h, quat }] — the quad faces local +Z like every prop.
+export function screenOverlay(quads) {
+  const geos = quads.map((q) => {
+    const g = new THREE.PlaneGeometry(q.w, q.h);
+    const quat = q.quat || new THREE.Quaternion().setFromEuler(new THREE.Euler(0, q.yaw || 0, 0));
+    g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(...q.pos), quat, new THREE.Vector3(1, 1, 1)));
+    g.setAttribute("color", new THREE.BufferAttribute(new Float32Array(12).fill(1), 3));
+    return g;
+  });
+  const geo = mergeGeometries(geos, false);
+  const color = geo.attributes.color;
+  color.setUsage(THREE.DynamicDrawUsage);
+  geo.computeBoundingSphere();
+  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.MultiplyBlending, premultipliedAlpha: true, depthWrite: false, toneMapped: false, fog: false });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = "overlay";
+  mesh.renderOrder = -1; // before the additive holo so the product is taken on the screen, not the beam
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  return {
+    mesh,
+    set(i, f) {
+      for (let v = i * 4; v < i * 4 + 4; v++) color.setXYZ(v, f, f, f);
+      color.needsUpdate = true;
+    },
+  };
+}
+
+// Deterministic 0..1 hash of an integer step (flicker timing that replays for the same t).
+export const stepHash = (k) => {
+  const x = Math.sin(k * 12.9898 + 78.233) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+// Screen "content refresh": a short dip, a ramp back with a slight overshoot, then steady. p = phase 0..1.
+export const refreshCurve = (p) => (p < 0.015 ? 0.72 : p < 0.07 ? 0.72 + ((p - 0.015) / 0.055) * 0.36 : p < 0.2 ? 1.08 - ((p - 0.07) / 0.13) * 0.08 : 1.0);
 // Local point (lx, ly, lz) measured in a plane tilted by `tilt` about X through `c`, in placer coords.
 const onPlane = (c, tilt, lx, ly, lz) => [c[0] + lx, c[1] + ly * Math.cos(tilt) - lz * Math.sin(tilt), c[2] + ly * Math.sin(tilt) + lz * Math.cos(tilt)];
 
@@ -163,8 +205,9 @@ export function deskRow(kit, x0, x1, y, z0, seats, seed) {
   kit.box("paintedMetal", cx, y + 0.745, zf + 0.26, len, 0.05, 0.52, { color: BLACK, texel: 2.5 }); // top
   kit.box("paintedMetal", cx, y + 0.72, zf + 0.5, len - 0.1, 0.03, 0.04, { color: DARK }); // lip
   kit.box("emitBlue", cx, y + 0.7, zf + 0.53, len - 0.3, 0.012, 0.01); // edge glow toward the seats
-  // per-seat inset panel: darkGloss plate + a row of flat keys + a small readout
-  const screenMats = ["screenImp0", "screenImp1", "screenImp2", "screenImp3"];
+  // per-seat inset panel: darkGloss plate + a row of flat keys + a small readout (three layouts: the
+  // briefing room keeps screenImp3 out of its kit to stay at 16 draw calls)
+  const screenMats = ["screenImp0", "screenImp1", "screenImp2"];
   for (const sx of seats) {
     kit.box("darkGloss", sx, y + 0.772, zf + 0.22, 0.7, 0.008, 0.28);
     for (let i = 0; i < 9; i++) {
@@ -173,9 +216,9 @@ export function deskRow(kit, x0, x1, y, z0, seats, seed) {
       const m = r < 0.5 ? "emitBlue" : r < 0.8 ? "emitAmber" : "emitRedImp";
       kit.box(m, sx - 0.24 + i * 0.06, y + 0.78, zf + 0.32, 0.035, 0.006, 0.03);
     }
-    kit.box(screenMats[Math.floor(rand() * 4)], sx, y + 0.78, zf + 0.15, 0.46, 0.006, 0.12, { uv: "keep" });
+    kit.box(screenMats[Math.floor(rand() * 3)], sx, y + 0.78, zf + 0.15, 0.46, 0.006, 0.12, { uv: "keep" });
     const v = rand();
-    if (v < 0.3) datapad(kit, sx + 0.42, y + 0.77, zf + 0.36, (rand() - 0.5) * 0.9, screenMats[Math.floor(rand() * 4)]);
+    if (v < 0.3) datapad(kit, sx + 0.42, y + 0.77, zf + 0.36, (rand() - 0.5) * 0.9, screenMats[Math.floor(rand() * 3)]);
     else if (v < 0.42) {
       for (let k = 0; k < 3; k++) kit.box("paintedMetal", sx - 0.45 + k * 0.012, y + 0.78 + k * 0.008, zf + 0.4, 0.08, 0.008, 0.12, { color: k % 2 ? DARK : MID });
     }
@@ -216,6 +259,8 @@ export function statusBoard(kit, pos, yaw, w, h, seed, { accent = "emitAmber", s
   }
   // corner bolts
   for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) box("metal", (sx * (w + 0.1)) / 2, (sy * (h + 0.1)) / 2, 0.062, 0.03, 0.03, 0.01, { color: STEEL });
+  // overlay quad spec (screenOverlay) covering the lit plate, 6 mm in front of the bars
+  return { pos: P.world(0, 0, 0.086), yaw, w: w - 0.08, h: h - 0.08 };
 }
 
 // Amber status strip in a black housing, wall mounted, running along local X.
@@ -328,13 +373,15 @@ export function dutyDesk(kit, pos, yaw, { w = 1.8, d = 0.8, screenMat = "screenI
   }
   P.box("darkGloss", 0.45, H + 0.005, -0.12, 0.5, 0.01, 0.1);
   for (let i = 0; i < 6; i++) P.box(i % 3 === 0 ? "emitAmber" : "emitBlue", 0.25 + i * 0.08, H + 0.012, -0.12, 0.05, 0.006, 0.03);
-  datapad(kit, ...P.world(0.55, H, 0.16), yaw + 0.35, rand() < 0.5 ? "screenImp0" : "screenImp3");
+  datapad(kit, ...P.world(0.55, H, 0.16), yaw + 0.35, rand() < 0.5 ? "screenImp0" : "screenImp2");
   P.cyl("metal", -0.7, H + 0.045, 0.2, 0.04, 0.09, "y", { color: STEEL, segments: 10 });
   P.cyl("metal", -0.7, H + 0.085, 0.2, 0.034, 0.01, "y", { color: BLACK, segments: 10 });
   P.collider([-w / 2, 0, -d / 2], [w / 2, H + 0.85, d / 2], "desk");
   // task chair: five-arm base, panel arms and a headrest so it reads as a chair from behind
   const seat = P.world(0, 0, d / 2 + 0.6);
   fixedSeat(kit, seat[0], seat[1], seat[2], { yaw: yaw + (rand() - 0.5) * 0.4, headrest, cushion: 0x2a2e3a, arms: 1, base: "star" });
+  // overlay quad spec for the monitor (screenOverlay): 6 mm in front of the screen face, same tilt
+  return { screen: { pos: P.world(0, my + ny * 0.051, mz + nz * 0.051), quat: tq, w: 0.86, h: 0.46 } };
 }
 
 // Audience-facing dressing for the back of a podium console: framed text screen, key row, blue edge.

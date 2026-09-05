@@ -10,6 +10,8 @@ const DARK = IMP.impDark;
 const MID = IMP.impMid;
 const GREY = IMP.impGrey;
 const STEEL = IMP.steel;
+// orientation of an overlay quad lying flat, facing up (+Y)
+const UP = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
 
 // Fixed pedestal stool: disc base, column, padded seat. `variant` 0 plain, 1 with a foot ring,
 // 2 with a low back hoop on two posts (facing local -Z after `yaw`). `cushion` recolours the pad.
@@ -31,7 +33,9 @@ export function stool(kit, x, y, z, { h = 0.72, r = 0.2, cushion = DARK, variant
 }
 
 // Round holo-game table: heavy pedestal, black gloss top with a glowing grid of blue squares and a
-// rim light; four stools around it, jittered off the circle, two with back hoops.
+// rim light; four stools around it, jittered off the circle, two with back hoops. Returns the blue
+// grid cells as overlay quad specs (`{ pos, w, h, quat, row }`, row 0..5 along +Z) so the room can
+// roll a brightness pattern across them with one multiply-blended mesh.
 export function gameTable(kit, x, y, z, seed, { r = 0.75, h = 0.78 } = {}) {
   const rand = rng(seed);
   kit.cyl("paintedMetal", x, y + 0.04, z, r * 0.7, 0.08, "y", { color: BLACK, segments: 20 });
@@ -43,12 +47,18 @@ export function gameTable(kit, x, y, z, seed, { r = 0.75, h = 0.78 } = {}) {
   const n = 6;
   const cell = 0.14;
   const half = (n * cell) / 2;
+  const cells = [];
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
       const v = rand();
       if (v < 0.3) continue;
       const m = v < 0.85 ? "emitBlue" : v < 0.95 ? "emitAmber" : "emitRedImp";
-      kit.box(m, x - half + (i + 0.5) * cell, y + h + 0.016, z - half + (j + 0.5) * cell, cell - 0.04, 0.008, cell - 0.04);
+      const cx = x - half + (i + 0.5) * cell;
+      const cz = z - half + (j + 0.5) * cell;
+      kit.box(m, cx, y + h + 0.016, cz, cell - 0.04, 0.008, cell - 0.04);
+      // the quad sits 1 mm over the cell and 1 cm larger: seen at a 15 deg grazing angle the parallax
+      // is under 4 mm, so the whole cell stays covered and the spill lands on the dark gloss
+      if (m === "emitBlue") cells.push({ pos: [cx, y + h + 0.021, cz], w: cell - 0.03, h: cell - 0.03, quat: UP, row: j });
     }
   }
   // side control pads
@@ -67,6 +77,19 @@ export function gameTable(kit, x, y, z, seed, { r = 0.75, h = 0.78 } = {}) {
     // the hoop faces the table: local -Z toward the centre means yaw = aa + PI
     stool(kit, x + Math.sin(aa) * rr, y, z + Math.cos(aa) * rr, { h: 0.5, r: 0.21, cushion: cushions[(i + seed) % 4], variant: i % 2 === 0 ? 2 : 0, yaw: aa + Math.PI + (rand() - 0.5) * 0.6 });
   });
+  return { cells };
+}
+
+// Wall sconce facing local +Z: dark back plate, black housing with mid-grey side fins and a warm
+// diffuser. Returns the overlay quad spec for the diffuser so its glow can follow the light it houses.
+export function sconce(kit, pos, yaw, { w = 0.34, h = 0.5 } = {}) {
+  const P = placer(kit, pos, yaw);
+  P.box("paintedMetal", 0, 0, 0.03, w + 0.1, h + 0.1, 0.06, { color: DARK, texel: 2.5 });
+  P.box("paintedMetal", 0, 0, 0.11, w, h, 0.1, { color: BLACK, texel: 2.5 });
+  for (const sx of [-1, 1]) P.box("paintedMetal", sx * (w / 2 + 0.02), 0, 0.12, 0.03, h + 0.04, 0.14, { color: MID });
+  P.box("emitWarmSoft", 0, 0, 0.155, w - 0.1, h - 0.14, 0.012, { uv: "keep" });
+  P.box("emitAmber", 0, -h / 2 + 0.05, 0.162, 0.05, 0.015, 0.006);
+  return { pos: P.world(0, 0, 0.167), yaw, w: w - 0.12, h: h - 0.16 };
 }
 
 // Lounge sofa along local X, backrest on the local -Z side: black plinth with a toe recess, an

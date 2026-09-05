@@ -10,7 +10,7 @@ import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
 import { rail } from "../_shared/shell.js";
 import { placer, console as consoleProp, indicatorField, wallScreen, crate, holoTable, cabinet, floorLine } from "../_shared/props.js";
-import { fixedSeat, deskRow, statusBoard, statusStrip, cableTray, lightChannel, junctionBox, dutyDesk, podiumBack, podiumTop, lectern, ventGrille, duct } from "./props.js";
+import { fixedSeat, deskRow, statusBoard, statusStrip, cableTray, lightChannel, junctionBox, dutyDesk, podiumBack, podiumTop, lectern, ventGrille, duct, screenOverlay, stepHash, refreshCurve } from "./props.js";
 
 const Y = 40;
 const CEIL = 46;
@@ -39,7 +39,7 @@ export default defineRoom({
   spawn: { pos: [22, Y, 370], yaw: 0 },
   views: {
     "d2-briefing-door": { pos: [22, Y, 369.6], yaw: 0, pitch: -2 },
-    "d2-briefing-holo": { pos: [14.7, Y, 357.3], yaw: -52, pitch: 2 },
+    "d2-briefing-holo": { pos: [12.9, Y, 357.6], yaw: -68, pitch: -4 },
     "d2-briefing-seats": { pos: [22, Y, 357.0], yaw: 180, pitch: 1 },
     "d2-briefing-aft": { pos: [30.2, Y, 368.4], yaw: 122, pitch: -2 },
   },
@@ -60,6 +60,9 @@ export default defineRoom({
   detail(ctx, shell, room) {
     const { kit, PALETTE } = ctx;
     const seatRand = rng(4242);
+    // quads for the brightness overlay (screens that flicker, boards that breathe), in this order:
+    // 0-2 display wall, 3-4 duty monitors, 5-10 side-wall status boards (port 3, starboard 3)
+    const overlayQuads = [];
 
     // ---- seating tiers ---------------------------------------------------------------------------
     const blocks = [
@@ -143,11 +146,19 @@ export default defineRoom({
     kit.cyl("darkGloss", HOLO[0], Y + 0.01, HOLO[2], 2.7, 0.02, "y", { segments: 48 });
     kit.add("emitBlue", new THREE.TorusGeometry(2.62, 0.02, 6, 72), { pos: [HOLO[0], Y + 0.03, HOLO[2]], rot: [Math.PI / 2, 0, 0] });
     const holo = holoTable(ctx, HOLO, { r: 1.8, h: 0.95, holoH: 2.3 });
+    // presenter deck plates either side of the dais: mid-grey painted plates under the podium consoles
+    // and the lectern (the gloss floor is a near-black mirror, so this is where the key light's shadows
+    // of the lectern and consoles actually read), with a light edge stripe toward the seats
+    for (const [px0, px1] of [[13.6, 19.0], [25.0, 30.4]]) {
+      kit.boxMM("impPanel", [px0, Y, 352.55], [px1, Y + 0.02, 356.4], { color: 0x70747c });
+      kit.boxMM("paintedMetal", [px0 + 0.1, Y + 0.02, 356.22], [px1 - 0.1, Y + 0.024, 356.3], { color: IMP.impWhite });
+      kit.boxMM("paintedMetal", [px0, Y + 0.02, 352.55], [px1, Y + 0.024, 352.61], { color: BLACK });
+    }
     consoleProp(kit, PALETTE, [17.3, Y, 353.7], Math.PI, { w: 1.6, d: 0.8, h: 1.2, screens: 2, seed: 31, screenMat: "screenImp1" });
     podiumBack(kit, [17.3, Y, 354.105], 0, 1.6, { screenMat: "screenImp2" });
     podiumTop(kit, [17.3, Y, 353.7], Math.PI, 1.6, { h: 1.2, d: 0.8, screenMat: "screenImp0" });
     consoleProp(kit, PALETTE, [26.7, Y, 353.7], Math.PI, { w: 1.2, d: 0.8, h: 1.15, screens: 1, seed: 32, screenMat: "screenImp0" });
-    podiumBack(kit, [26.7, Y, 354.105], 0, 1.2, { screenMat: "screenImp3" });
+    podiumBack(kit, [26.7, Y, 354.105], 0, 1.2, { screenMat: "screenImp1" });
     podiumTop(kit, [26.7, Y, 353.7], Math.PI, 1.2, { h: 1.15, d: 0.8, screenMat: "screenImp2" });
     // the briefing officer's lectern beside the podium, facing the seats
     lectern(kit, [15.7, Y, 355.05], 0.12, { screenMat: "screenImp1" });
@@ -159,8 +170,13 @@ export default defineRoom({
     for (const x of [15.4, 28.44]) kit.boxMM("paintedMetal", [x, Y + 0.5, FZ + 0.1], [x + 0.16, 45.45, FZ + 0.14], { color: DARK, texel: 2.5 });
     for (const x of [15.6, 28.36]) kit.boxMM("emitBlue", [x, Y + 0.8, FZ + 0.1], [x + 0.04, 45.15, FZ + 0.115]);
     kit.collider([15.4, Y, IZ0], [28.6, Y + 5.5, FZ + 0.3], "display-wall");
-    const screenMats = ["screenImp0", "screenImp1", "screenImp3"];
-    [18, 22, 26].forEach((x, i) => wallScreen(kit, [x, 43.05, FZ + 0.1 + 0.08], 0, 3.6, 2.0, screenMats[i]));
+    // three layouts only in this room (schematic, tactical grid, text columns): with the merged holo
+    // mesh and the overlay each taking a draw call, a fourth screen material would be the 17th
+    const screenMats = ["screenImp0", "screenImp1", "screenImp2"];
+    [18, 22, 26].forEach((x, i) => {
+      wallScreen(kit, [x, 43.05, FZ + 0.1 + 0.08], 0, 3.6, 2.0, screenMats[i]);
+      overlayQuads.push({ pos: [x, 43.05, FZ + 0.18 + 0.023], yaw: 0, w: 3.56, h: 1.96 });
+    });
     kit.boxMM("emitBlue", [16.0, 44.5, FZ + 0.1], [28.0, 44.56, FZ + 0.112]);
     {
       const P = placer(kit, [CX, 0, FZ + 0.1], 0);
@@ -180,14 +196,15 @@ export default defineRoom({
     }
 
     // ---- side walls: amber status strips, boards and screens in the 1.5-2.8 m band, junction boxes ----
-    for (const side of [{ x: IX0, yaw: Math.PI / 2, d: 1, mats: ["screenImp2", "screenImp3"] }, { x: IX1, yaw: -Math.PI / 2, d: -1, mats: ["screenImp0", "screenImp1"] }]) {
+    const boardQuads = [];
+    for (const side of [{ x: IX0, yaw: Math.PI / 2, d: 1, mats: ["screenImp2", "screenImp0"] }, { x: IX1, yaw: -Math.PI / 2, d: -1, mats: ["screenImp0", "screenImp1"] }]) {
       statusStrip(kit, [side.x, 44.6, 360.4], side.yaw, 22.6);
-      statusBoard(kit, [side.x, 42.15, 352.8], side.yaw, 3.0, 1.3, 400 + side.x, { rows: 5 });
+      boardQuads.push(statusBoard(kit, [side.x, 42.15, 352.8], side.yaw, 3.0, 1.3, 400 + side.x, { rows: 5 }));
       wallScreen(kit, [side.x + side.d * 0.1, 42.0, 355.7], side.yaw, 1.6, 0.9, side.mats[0]);
       junctionBox(kit, [side.x, 42.9, 349.6], side.yaw, { conduitUp: 0.38 });
-      statusBoard(kit, [side.x, 42.15, 360.0], side.yaw, 2.6, 1.2, 410 + side.x, { rows: 4, accent: "emitBlue", secondary: "emitAmber" });
+      boardQuads.push(statusBoard(kit, [side.x, 42.15, 360.0], side.yaw, 2.6, 1.2, 410 + side.x, { rows: 4, accent: "emitBlue", secondary: "emitAmber" }));
       wallScreen(kit, [side.x + side.d * 0.1, 42.0, 362.4], side.yaw, 1.4, 0.9, side.mats[1]);
-      statusBoard(kit, [side.x, 42.15, 364.8], side.yaw, 2.6, 1.2, 420 + side.x, { rows: 4 });
+      boardQuads.push(statusBoard(kit, [side.x, 42.15, 364.8], side.yaw, 2.6, 1.2, 420 + side.x, { rows: 4 }));
       // 2.9-3.4 m band between the boards and the shell's service tray: vent grilles + junction boxes
       // with conduits up to the tray
       for (const z of [353.0, 358.2, 362.4, 367.4]) ventGrille(kit, [side.x, 43.15, z], side.yaw, 0.9, 0.45);
@@ -205,17 +222,25 @@ export default defineRoom({
     crate(kit, PALETTE, [12.35, Y + 1.2, 371.15], 0.12, { w: 0.8, h: 0.6, d: 0.8, seed: 7, color: IMP.impGrey, bumperMat: "paintedMetal" });
     // duty desks: backs to the aft wall under their status boards, officers facing the wall screens;
     // the shell's door dressing supplies keypad, sign, lintel indicator and threshold strip
-    dutyDesk(kit, [16.9, Y, IZ1 - 0.45], Math.PI, { screenMat: "screenImp2", seed: 61 });
+    overlayQuads.push(dutyDesk(kit, [16.9, Y, IZ1 - 0.45], Math.PI, { screenMat: "screenImp2", seed: 61 }).screen);
     statusBoard(kit, [16.9, 42.3, IZ1], Math.PI, 3.2, 1.2, 500, { rows: 4 });
-    dutyDesk(kit, [27.1, Y, IZ1 - 0.45], Math.PI, { screenMat: "screenImp1", seed: 62 });
+    overlayQuads.push(dutyDesk(kit, [27.1, Y, IZ1 - 0.45], Math.PI, { screenMat: "screenImp1", seed: 62 }).screen);
     statusBoard(kit, [27.1, 42.3, IZ1], Math.PI, 2.4, 1.2, 501, { rows: 4, accent: "emitBlue", secondary: "emitAmber" });
     // station bays marked on the deck (three-sided, open to the wall) so the aft floor in front of the
-    // camera carries a read instead of bare gloss
-    for (const [x0, x1] of [[15.4, 18.4], [25.6, 30.1]]) {
+    // camera carries a read instead of bare gloss; a dark-grey painted plate fills each bay (the gloss
+    // floor is a near-black mirror now that the environment is the captured room, so the aft fills'
+    // pools only show on a diffuse surface — the presenter plates' recipe, three stops darker so the
+    // bays read as a mid-grey deck rather than a pale pad). The plating runs on past the bay line
+    // to the aisle runner (0.05 m under its edge): the 2.3 m of gloss between bay and runner is
+    // where the corridor's 200 cd key spot — live through the aft wall while this room is active,
+    // as neighbour spots carry no shadow map — mirrors into the aft view's camera at grazing
+    // incidence as a blown specular patch; on matte plating the same light is a faint sheen
+    for (const [x0, x1, xa] of [[15.4, 18.4, AISLE[0] - 0.05], [25.6, 30.1, AISLE[1] + 0.05]]) {
+      kit.boxMM("impPanel", [Math.min(x0, xa), Y, 369.5], [Math.max(x1, xa), Y + 0.01, IZ1 - 0.12], { color: 0x363a42 });
       floorLine(kit, [x0, Y + 0.012, 369.5], [x1, Y + 0.012, 369.5], 0.06, "paintedMetal", IMP.impGrey);
       for (const x of [x0, x1]) floorLine(kit, [x, Y + 0.012, 369.5], [x, Y + 0.012, IZ1 - 0.12], 0.06, "paintedMetal", IMP.impGrey);
     }
-    wallScreen(kit, [24.95, 42.0, IZ1 - 0.1], Math.PI, 1.2, 0.9, "screenImp3");
+    wallScreen(kit, [24.95, 42.0, IZ1 - 0.1], Math.PI, 1.2, 0.9, "screenImp1");
     wallScreen(kit, [30.6, 42.0, IZ1 - 0.1], Math.PI, 1.4, 0.9, "screenImp2");
     junctionBox(kit, [32.15, 41.6, IZ1], Math.PI, { w: 0.4, h: 0.5, conduitUp: 1.6 });
     // equipment cases stacked beside the starboard duty station
@@ -287,84 +312,146 @@ export default defineRoom({
       });
     }
 
-    // ---- lights (fills 1.3 m below the ceiling, each under a light channel) -----------------------------
-    const L = (pos, color, intensity, distance, priority = 0.5) => ctx.lights.push({ type: "point", pos, color, intensity, distance, priority });
-    L([HOLO[0], Y + 3.4, HOLO[2]], 0x4fd8ff, 34, 9, 0.9);
-    L([CX, 43.0, 350.2], 0x7aa6ff, 26, 10, 0.7);
-    L([16.5, 44.7, 359.7], 0xd6e2ff, 26, 12);
-    L([27.5, 44.7, 359.7], 0xd6e2ff, 26, 12);
-    L([16.5, 44.7, 365.7], 0xd6e2ff, 26, 12);
-    L([27.5, 44.7, 365.7], 0xd6e2ff, 26, 12);
+    // ---- lights --------------------------------------------------------------------------------------------
+    // KEY (shadow): a cool spot hung just under the projector lens in the coffer, aimed a little aft of
+    // the dais so the lectern, podium consoles, holo table and front-row seats throw shadows across the
+    // gloss floor and onto the tier risers. Everything else is a fill at <= 20 % of it or a practical.
+    const key = { type: "spot", pos: [HOLO[0], 45.1, HOLO[2]], target: [HOLO[0], Y, 355.6], color: 0xcfe0ff, intensity: 140, distance: 26, angle: 1.1, penumbra: 0.45, priority: 1.0, shadow: true };
+    ctx.lights.push(key);
+    const L = (pos, color, intensity, distance, priority = 0.5) => {
+      const d = { type: "point", pos, color, intensity, distance, priority };
+      ctx.lights.push(d);
+      return d;
+    };
+    // priorities: the rig pools the nearest 12 points of the active rooms by distance / (0.5 + priority)
+    // and the corridor's fills 2.5 m behind the aft wall carry priority 1, so this room's fills carry
+    // 1 as well or they lose slots (seen from the aft view) to lights behind the wall
+    // cyan practical over the holo table: pulses with the projection (see update)
+    const holoL = L([HOLO[0], Y + 3.4, HOLO[2]], 0x4fd8ff, 14, 9, 0.9);
+    L([CX, 43.0, 350.2], 0x7aa6ff, 18, 10, 0.8);
+    L([16.5, 44.7, 359.7], 0xd6e2ff, 30, 12, 1.0);
+    L([27.5, 44.7, 359.7], 0xd6e2ff, 30, 12, 1.0);
+    L([16.5, 44.7, 365.7], 0xd6e2ff, 30, 12, 1.0);
+    L([27.5, 44.7, 365.7], 0xd6e2ff, 30, 12, 1.0);
     // aft fills over the two duty stations instead of one over the door approach (whose pool on the
-    // gloss floor read as a pale pad at the end of the runner)
-    L([17.2, 44.7, 369.6], 0xd6e2ff, 14, 9, 0.6);
-    L([26.8, 44.7, 369.6], 0xd6e2ff, 14, 9, 0.6);
-    L([12.2, 44.3, 353.0], 0xffa540, 10, 6, 0.3);
-    L([31.8, 44.3, 353.0], 0xffa540, 10, 6, 0.3);
+    // gloss floor read as a pale pad at the end of the runner); 36 = 26 % of the key, enough for the
+    // desk tops and the aft floor to read once the environment capture darkened the gloss
+    L([17.2, 44.7, 369.6], 0xd6e2ff, 36, 10, 1.0);
+    L([26.8, 44.7, 369.6], 0xd6e2ff, 36, 10, 1.0);
+    // amber practicals in the forward corners: breathe with the first status board on each side wall
+    const amberL = [L([12.2, 44.3, 353.0], 0xffa540, 10, 6, 0.5), L([31.8, 44.3, 353.0], 0xffa540, 10, 6, 0.5)];
 
-    // ---- hologram: tactical plot rings, a wire planet with an orbit ring and a wedge ship on it ---------
+    // ---- brightness overlay: display wall refresh, duty monitor flicker, breathing status boards ---------
+    overlayQuads.push(...boardQuads);
+    const overlay = screenOverlay(overlayQuads);
+    ctx.group.add(overlay.mesh);
+    const TAU = Math.PI * 2;
+    const BREATH = TAU / 6; // 6 s breathing cycle
+    const BREATH_PH = Math.PI / 2 - 40 * BREATH; // full bright at the harness's frozen t = 40
+    const fract = (x) => x - Math.floor(x);
+
+    // ---- hologram: ONE mesh (one draw call) holding the beam + base ring, the tactical plot rings with
+    //      the wire planet, and the orbit ring with the wedge ship riding it. The material is unlit and
+    //      additive, so the two moving parts are spun by rewriting their vertex ranges from a base copy
+    //      every frame (no allocation; ~4.5k vertices) instead of by separate meshes ------------------------
     const hm = holo.material;
     const canPulse = typeof hm.opacity === "number";
-    holo.cone.scale.set(0.62, 1, 0.62); // slimmer projection beam, the subject sits inside it
-    const wire = (geo) => new THREE.Mesh(geo, hm);
-    const ringGeo = mergeGeometries([
-      new THREE.TorusGeometry(0.72, 0.015, 6, 48).rotateX(Math.PI / 2),
-      new THREE.TorusGeometry(1.15, 0.012, 6, 64).rotateX(Math.PI / 2),
-      new THREE.BoxGeometry(2.3, 0.01, 0.02),
-      new THREE.BoxGeometry(0.02, 0.01, 2.3),
+    const HOLO_H = 2.3;
+    ctx.group.remove(holo.cone, holo.grid);
+    holo.cone.geometry.dispose();
+    holo.grid.geometry.dispose();
+    const SUBJECT_Y = 1.3; // subject centre above the table top; every part is stored relative to it
+    const beamGeo = mergeGeometries([
+      new THREE.CylinderGeometry(1.8 * 0.75, 1.8 * 0.2, HOLO_H, 24, 1, true).scale(0.62, 1, 0.62).translate(0, HOLO_H / 2 - SUBJECT_Y, 0),
+      new THREE.TorusGeometry(1.8 * 0.55, 0.02, 6, 48).rotateX(Math.PI / 2).translate(0, 0.5 - SUBJECT_Y, 0),
     ], false);
-    const rings = wire(ringGeo);
-    rings.position.set(HOLO[0], Y + 0.95 + 0.9, HOLO[2]);
-    const subject = new THREE.Group();
-    subject.position.set(HOLO[0], Y + 0.95 + 1.3, HOLO[2]);
     const R = 0.5;
-    const planet = new THREE.Group();
-    const eq = wire(new THREE.TorusGeometry(R, 0.012, 6, 64));
-    eq.rotation.x = Math.PI / 2;
-    planet.add(eq);
-    for (const a of [0, Math.PI / 3, (2 * Math.PI) / 3]) {
-      const m = wire(new THREE.TorusGeometry(R, 0.01, 6, 64));
-      m.rotation.y = a;
-      planet.add(m);
-    }
-    for (const phi of [0.75, -0.75]) {
-      const t = wire(new THREE.TorusGeometry(R * Math.cos(phi), 0.009, 6, 48));
-      t.rotation.x = Math.PI / 2;
-      t.position.y = R * Math.sin(phi);
-      planet.add(t);
-    }
-    planet.add(wire(new THREE.BoxGeometry(0.008, 2 * R + 0.5, 0.008)));
+    const plotGeos = [
+      // tactical plot rings + cross hairs 0.4 m under the planet
+      new THREE.TorusGeometry(0.72, 0.015, 6, 48).rotateX(Math.PI / 2).translate(0, -0.4, 0),
+      new THREE.TorusGeometry(1.15, 0.012, 6, 64).rotateX(Math.PI / 2).translate(0, -0.4, 0),
+      new THREE.BoxGeometry(2.3, 0.01, 0.02).translate(0, -0.4, 0),
+      new THREE.BoxGeometry(0.02, 0.01, 2.3).translate(0, -0.4, 0),
+      // wire planet: equator, three meridians, two latitude rings, polar axis
+      new THREE.TorusGeometry(R, 0.012, 6, 64).rotateX(Math.PI / 2),
+      ...[0, Math.PI / 3, (2 * Math.PI) / 3].map((a) => new THREE.TorusGeometry(R, 0.01, 6, 64).rotateY(a)),
+      ...[0.75, -0.75].map((phi) => new THREE.TorusGeometry(R * Math.cos(phi), 0.009, 6, 48).rotateX(Math.PI / 2).translate(0, R * Math.sin(phi), 0)),
+      new THREE.BoxGeometry(0.008, 2 * R + 0.5, 0.008),
+    ];
+    const plotGeo = mergeGeometries(plotGeos, false);
     // wedge ship (plan-view outline + spine + bridge tower) riding a tilted orbit ring
     const edge = (a, b) => {
       const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
-      const m = wire(new THREE.BoxGeometry(0.008, d.length(), 0.008));
-      m.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
-      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
-      return m;
+      const g = new THREE.BoxGeometry(0.008, d.length(), 0.008);
+      g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize()));
+      return g.translate(0.95 + (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
     };
-    const ship = new THREE.Group();
-    ship.add(edge([0.26, 0, 0], [-0.16, 0, 0.13]), edge([0.26, 0, 0], [-0.16, 0, -0.13]), edge([-0.16, 0, 0.13], [-0.16, 0, -0.13]));
-    ship.add(edge([-0.16, 0, 0], [0.22, 0, 0]), edge([-0.06, 0, 0], [-0.06, 0.08, 0]), edge([-0.16, 0.03, 0.06], [-0.16, 0.03, -0.06]));
-    const tower = wire(new THREE.BoxGeometry(0.06, 0.03, 0.05));
-    tower.position.set(-0.06, 0.085, 0);
-    ship.add(tower);
-    ship.position.set(0.95, 0, 0);
-    const orbitSpin = new THREE.Group();
-    const orbitRing = wire(new THREE.TorusGeometry(0.95, 0.007, 6, 96));
-    orbitRing.rotation.x = Math.PI / 2;
-    orbitSpin.add(orbitRing, ship);
-    const orbit = new THREE.Group();
-    orbit.rotation.set(0.38, 0, 0.12);
-    orbit.add(orbitSpin);
-    subject.add(planet, orbit);
-    ctx.group.add(rings, subject);
+    const orbitGeos = [
+      new THREE.TorusGeometry(0.95, 0.007, 6, 96).rotateX(Math.PI / 2),
+      edge([0.26, 0, 0], [-0.16, 0, 0.13]),
+      edge([0.26, 0, 0], [-0.16, 0, -0.13]),
+      edge([-0.16, 0, 0.13], [-0.16, 0, -0.13]),
+      edge([-0.16, 0, 0], [0.22, 0, 0]),
+      edge([-0.06, 0, 0], [-0.06, 0.08, 0]),
+      edge([-0.16, 0.03, 0.06], [-0.16, 0.03, -0.06]),
+      new THREE.BoxGeometry(0.06, 0.03, 0.05).translate(0.95 - 0.06, 0.085, 0),
+    ];
+    // the orbit part is stored in its own untilted frame; `orbitTilt` is applied each frame after the spin
+    const orbitGeo = mergeGeometries(orbitGeos, false);
+    const holoGeo = mergeGeometries([beamGeo, plotGeo, orbitGeo], false);
+    const nBeam = beamGeo.attributes.position.count;
+    const nPlot = plotGeo.attributes.position.count;
+    const nOrbit = orbitGeo.attributes.position.count;
+    const holoPos = holoGeo.attributes.position;
+    holoPos.setUsage(THREE.DynamicDrawUsage);
+    const holoBase = holoPos.array.slice();
+    holoGeo.computeBoundingSphere();
+    holoGeo.boundingSphere.radius += 0.3; // the tilted orbit swings outside the untilted extent
+    const holoMesh = new THREE.Mesh(holoGeo, hm);
+    holoMesh.position.set(HOLO[0], Y + 0.95 + SUBJECT_Y, HOLO[2]);
+    holoMesh.name = "holo";
+    ctx.group.add(holoMesh);
+    const orbitTilt = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0.38, 0, 0.12));
+    const mPlot = new THREE.Matrix4();
+    const mOrbit = new THREE.Matrix4();
+    // rewrite vertices [from, to) as m * base (rotation only: the parts are centred on the mesh origin)
+    const spin = (m, from, to) => {
+      const e = m.elements;
+      const a = holoPos.array;
+      for (let i = from; i < to; i++) {
+        const j = 3 * i;
+        const x = holoBase[j];
+        const y = holoBase[j + 1];
+        const z = holoBase[j + 2];
+        a[j] = e[0] * x + e[4] * y + e[8] * z;
+        a[j + 1] = e[1] * x + e[5] * y + e[9] * z;
+        a[j + 2] = e[2] * x + e[6] * y + e[10] * z;
+      }
+    };
+
     return {
       update(dt, t) {
-        holo.grid.rotation.z = t * 0.45;
-        rings.rotation.y = -t * 0.3;
-        planet.rotation.y = t * 0.25;
-        orbitSpin.rotation.y = -t * 0.5;
-        if (canPulse) hm.opacity = 0.3 + 0.08 * Math.sin(t * 2.1);
+        // hologram spin + projection pulse; the cyan practical over the table follows the same pulse
+        // (brighter and whiter as the beam thickens)
+        const s = Math.sin(t * 2.1);
+        spin(mPlot.makeRotationY(t * 0.25), nBeam, nBeam + nPlot);
+        spin(mOrbit.makeRotationY(-t * 0.5).premultiply(orbitTilt), nBeam + nPlot, nBeam + nPlot + nOrbit);
+        holoPos.needsUpdate = true;
+        if (canPulse) hm.opacity = 0.3 + 0.08 * s;
+        holoL.intensity = 14 + 6 * s;
+        holoL.color = ((Math.round(103 + 40 * s) & 255) << 16) | ((Math.round(220 + 20 * s) & 255) << 8) | 0xff;
+        // display wall: slow content refresh (dip + ramp) every 9 s, staggered 3 s per screen, plus a
+        // faint 24 Hz content jitter
+        for (let i = 0; i < 3; i++) overlay.set(i, refreshCurve(fract((t + 3 * i) / 9)) * (1 + 0.02 * (stepHash(Math.floor(t * 24) + i * 97) - 0.5)));
+        // duty-desk monitors: an irregular 0.25 s flicker burst every 5.5 s, offset between the two
+        for (let i = 3; i < 5; i++) {
+          const p = fract((t + 2.7 * (i - 3) + 1.9) / 5.5);
+          overlay.set(i, p < 0.045 ? 0.55 + 0.45 * stepHash(Math.floor(t * 30) + i * 31) : 1.0);
+        }
+        // side-wall status boards breathe over 6 s (forward board first, then aft), both walls in step
+        for (let i = 5; i < 11; i++) overlay.set(i, 0.78 + 0.27 * (0.5 + 0.5 * Math.sin(t * BREATH + BREATH_PH + 0.6 * ((i - 5) % 3))));
+        const breath = 0.5 + 0.5 * Math.sin(t * BREATH + BREATH_PH);
+        for (const l of amberL) l.intensity = 10 * (0.6 + 0.4 * breath);
       },
     };
   },

@@ -6,7 +6,8 @@
 import { defineRoom } from "../_shared/room.js";
 import { IMP } from "../_shared/palette.js";
 import { console as consoleProp, wallScreen, lockerBank, tank, cabinet, dropLight, floorLine } from "../_shared/props.js";
-import { stool, gameTable, benchSeat, lowTable, bottleRow, dispenser, exerciseRack, mat, mediaWall, scoreBoard, gearCrate, zoneRect, infoColumn, standTable, lightObelisk, tapCluster, cup, tray, barTerminal, lightChannel, uplight, ventGrille, junctionBox } from "./props.js";
+import { stool, gameTable, benchSeat, lowTable, bottleRow, dispenser, exerciseRack, mat, mediaWall, scoreBoard, gearCrate, zoneRect, infoColumn, standTable, lightObelisk, tapCluster, cup, tray, barTerminal, lightChannel, uplight, ventGrille, junctionBox, sconce } from "./props.js";
+import { screenOverlay, stepHash, refreshCurve } from "../briefing/props.js";
 
 const Y = 40;
 const CEIL = 45;
@@ -31,13 +32,16 @@ export default defineRoom({
     "d2-rec-door": { pos: [48, Y, 365.0], yaw: 0, pitch: -5 },
     "d2-rec-bar": { pos: [52.2, Y, 350.0], yaw: 30, pitch: -2 },
     "d2-rec-tables": { pos: [43.0, Y, 363.9], yaw: -40, pitch: -4 },
-    "d2-rec-lounge": { pos: [53.4, Y, 369.0], yaw: -48, pitch: -4 },
+    "d2-rec-lounge": { pos: [43.4, Y, 369.0], yaw: 48, pitch: -4 },
   },
   shell: {
     panelW: 1.6,
     wallColor: IMP.impGrey,
     wallAlt: IMP.impWhite,
     floor: { color: IMP.impMid },
+    // the wall strip band in the room's amber (the white emitter was a 17th material key once the
+    // animated overlay mesh took a draw call; amber matches the bar, sofa and obelisk strips)
+    stripMat: "emitAmber",
     // own ceiling below: the pendant fills light the ceiling from 1.8 m, and the shell's painted panel
     // map shows its smudges as dirt patches around every fixture
     ceiling: false,
@@ -48,6 +52,12 @@ export default defineRoom({
   },
   detail(ctx, shell, room) {
     const { kit, PALETTE } = ctx;
+    // quads for the brightness overlay (one multiply-blended mesh over every animated emitter), composed
+    // at the end in this order: 0-3 media wall screens, 4 menu screen, 5-12 menu chase segments,
+    // 13 lounge sconce diffuser, 14.. game-table grid cells
+    const mediaQuads = [];
+    const menuQuads = [];
+    const gridCells = [];
 
     // ---- dispenser bar along the forward wall (x 42.6..53.4) -------------------------------------------
     const BX0 = 42.6;
@@ -82,15 +92,22 @@ export default defineRoom({
         // back-lit panel behind each bay
         kit.boxMM("emitAmber", [x + 0.1, Y + 1.05, bz + 0.05], [x + bayW - 0.1, Y + 1.09, bz + 0.056]);
         if (!stock[i]) {
-          // menu board: framed text screen with an amber header, a label plate underneath with the
-          // day's list in amber/blue bars, a serving tray on the worktop
+          // menu board: framed text screen with an amber header, a label plate underneath carrying an
+          // eight-segment amber "order ready" chase (animated through the overlay), a serving tray on
+          // the worktop
           const mx = x + bayW / 2;
           kit.boxMM("paintedMetal", [x + 0.06, Y + 1.32, bz + 0.44], [x + bayW - 0.06, Y + 2.34, bz + 0.48], { color: MID, texel: 2.5 });
           kit.boxMM("darkGloss", [x + 0.1, Y + 1.36, bz + 0.48], [x + bayW - 0.1, Y + 2.3, bz + 0.488]);
           kit.boxMM("screenImp2", [x + 0.14, Y + 1.4, bz + 0.488], [x + bayW - 0.14, Y + 2.18, bz + 0.494], { uv: "keep" });
+          menuQuads.push({ pos: [mx, Y + 1.79, bz + 0.5], yaw: 0, w: bayW - 0.32, h: 0.74 });
           kit.boxMM("emitAmber", [x + 0.14, Y + 2.2, bz + 0.488], [x + bayW - 0.14, Y + 2.25, bz + 0.494]);
           kit.boxMM("paintedMetal", [x + 0.2, Y + 1.1, bz + 0.44], [x + bayW - 0.2, Y + 1.28, bz + 0.47], { color: BLACK });
-          for (let k = 0; k < 5; k++) kit.boxMM(k % 2 ? "emitBlue" : "emitAmber", [x + 0.28 + k * 0.28, Y + 1.17, bz + 0.47], [x + 0.46 + k * 0.28, Y + 1.21, bz + 0.476]);
+          const segW = (bayW - 0.52) / 8;
+          for (let k = 0; k < 8; k++) {
+            const sx = x + 0.26 + k * segW;
+            kit.boxMM("emitAmber", [sx + 0.02, Y + 1.165, bz + 0.47], [sx + segW - 0.02, Y + 1.215, bz + 0.476]);
+            menuQuads.push({ pos: [sx + segW / 2, Y + 1.19, bz + 0.48], yaw: 0, w: segW - 0.03, h: 0.06 });
+          }
           tray(kit, mx, Y + 1.0, bz + 0.25, 0.2, 14);
         } else if (i % 2 === 0) bottleRow(kit, x + bayW / 2, Y + 1.0, bz + 0.3, bayW - 0.4, 800 + i, i === 2 ? 3 : 8, { slots: 8 });
         else dispenser(kit, x + bayW / 2, Y + 1.0, bz + 0.32, 900 + i);
@@ -154,12 +171,16 @@ export default defineRoom({
     scoreBoard(kit, [55.4, 42.75, IZ0], 0, 2.4, 1.1, 603, { rows: 4 });
 
     // ---- media wall (port wall) with two bench rows, the rear one on a 0.2 m platform -----------------------
-    mediaWall(kit, [IX0 + 0.02, Y + 0.35, 357.0], Math.PI / 2, (pos, yaw, w, h, m) => wallScreen(kit, pos, yaw, w, h, m));
+    mediaWall(kit, [IX0 + 0.02, Y + 0.35, 357.0], Math.PI / 2, (pos, yaw, w, h, m) => {
+      wallScreen(kit, pos, yaw, w, h, m);
+      // overlay quad 6 mm in front of the screen face (wallScreen puts the face 17 mm ahead of pos)
+      mediaQuads.push({ pos: [pos[0] + Math.sin(yaw) * 0.023, pos[1], pos[2] + Math.cos(yaw) * 0.023], yaw, w: w - 0.04, h: h - 0.04 });
+    });
     kit.collider([IX0, Y, 354.1], [IX0 + 0.55, Y + 4.2, 359.9], "media-wall");
     benchSeat(kit, [38.7, Y, 357.0], -Math.PI / 2, 4.4, { color: MID });
     kit.boxMM("paintedMetal", [39.9, Y, 354.3], [41.5, Y + 0.18, 359.7], { color: DARK, texel: 2.5 });
-    kit.boxMM("impFloor", [39.9, Y + 0.18, 354.3], [41.5, Y + 0.2, 359.7], { color: MID, texel: 0.5 });
-    kit.boxMM("emitWhite", [39.885, Y + 0.16, 354.4], [39.9, Y + 0.18, 359.6]);
+    kit.boxMM("paintedMetal", [39.9, Y + 0.18, 354.3], [41.5, Y + 0.2, 359.7], { color: MID, texel: 2.5 });
+    kit.boxMM("emitAmber", [39.885, Y + 0.16, 354.4], [39.9, Y + 0.18, 359.6]);
     kit.collider([39.9, Y, 354.3], [41.5, Y + 0.2, 359.7], "platform");
     benchSeat(kit, [40.7, Y + 0.2, 357.0], -Math.PI / 2, 4.4, { color: MID });
     lowTable(kit, 38.7, Y, 354.0, 0.7, 0.7);
@@ -170,7 +191,10 @@ export default defineRoom({
     // ---- holo-game tables: a tight 2x2 cluster (3.4 m pitch) inside a painted zone, brought aft so the
     //      near pair and their stools stand 3-4 m in front of the door view ---------------------------------
     const tables = [[46.3, 357.8], [49.7, 357.8], [46.3, 361.2], [49.7, 361.2]];
-    tables.forEach(([x, z], i) => gameTable(kit, x, Y, z, 300 + i));
+    // tables 0+1 (forward row) and 2+3 (aft row) form the two pairs whose grids charge together
+    tables.forEach(([x, z], i) => {
+      for (const c of gameTable(kit, x, Y, z, 300 + i).cells) gridCells.push({ ...c, pair: i >> 1 });
+    });
     zoneRect(kit, 44.3, 355.8, 51.7, 363.2, Y, "paintedMetal", IMP.impWhite, 0.06);
     standTable(kit, 45.0, Y, 350.6);
     standTable(kit, 51.0, Y, 350.6);
@@ -199,6 +223,14 @@ export default defineRoom({
       // equipment cabinet between the lounge screen and the aft corner
       cabinet(kit, PALETTE, [screenX + yawOpen * 0.32, Y, 369.9], yaw, { w: 1.2, h: 1.8, d: 0.6, color: DARK, emit: yawOpen > 0 ? "emitAmber" : "emitBlue", seed: 29 + cx });
     }
+    // wall sconces between the lounge screens and the aft cabinets; the port one houses the slowly
+    // dimming lounge light (see update), the starboard one is a steady twin
+    const sconceQuad = sconce(kit, [IX0, 42.4, 368.0], Math.PI / 2);
+    sconce(kit, [IX1, 42.4, 368.0], -Math.PI / 2);
+    // port wall 2.9-3.4 m over the lounge (the shell's service band stops at the media wall): vents +
+    // junction boxes, like the starboard wall
+    for (const z of [364.4, 367.0]) ventGrille(kit, [IX0, 43.15, z], Math.PI / 2, 0.9, 0.45);
+    for (const z of [362.6, 369.9]) junctionBox(kit, [IX0, 43.1, z], Math.PI / 2, { w: 0.34, h: 0.4, conduitUp: 0.3 });
 
     // ---- starboard wall between gym and lounge: vending cabinets, leaderboard, screens ---------------------------
     cabinet(kit, PALETTE, [IX1 - 0.32, Y, 352.6], -Math.PI / 2, { w: 1.2, h: 2.0, d: 0.6, color: MID, emit: "emitAmber", seed: 23 });
@@ -237,24 +269,95 @@ export default defineRoom({
 
     // ---- housed fixtures: one suspended drop light per fill, diffusers 1.1 m below the ceiling -------------------
     const FIX = CEIL - 0.06;
+    // KEY (shadow): one 7.4 m bar fixture over the counter's front edge on three stems; the warm spot
+    // hangs 0.4 m under its diffuser and points straight down, so the stools throw their shadows aft
+    // and outward across the floor toward the room, the tap towers and trays onto the counter top, and
+    // the customer face of the counter is lit rather than just the top. Everything else is a fill at
+    // <= 40 % of it, a coloured practical, or the bar-back uplight wash. The fixture mirrors dropLight's
+    // section (housing 1.2 m down on stems, diffusers 5 mm under it) with three diffuser segments so the
+    // centre-bright diffuser map reads as three lamps rather than one 7 m blob.
+    for (const x of [45.4, 48.0, 50.6]) kit.box("paintedMetal", x, FIX - 0.6, 347.0, 0.06, 1.2, 0.06, { color: BLACK });
+    kit.box("paintedMetal", 48.0, FIX - 1.26, 347.0, 7.4, 0.12, 0.45, { color: DARK, texel: 2.5 });
+    for (const x of [45.6, 48.0, 50.4]) kit.box("emitWarmSoft", x, FIX - 1.325, 347.0, 2.28, 0.02, 0.33, { uv: "keep" });
+    const key = { type: "spot", pos: [48.0, 43.2, 347.0], target: [48.0, Y, 347.0], color: 0xffd2a0, intensity: 110, distance: 28, angle: 1.1, penumbra: 0.45, priority: 1.0, shadow: true };
+    ctx.lights.push(key);
+    // priorities: the rig pools the nearest 12 points of the active rooms by distance / (0.5 + priority)
+    // and the corridor's fills 2.5 m behind the aft wall carry priority 1; at less than 1 the far
+    // fixtures of this room (media wall, gym) lost their slots to lights the player cannot see
     const fixtures = [
-      // over the counter's front edge so the customer face and the stools are lit, not just the top
-      [45.4, 347.0, 3.2, 0.4, 0xffd2a0, 22, 9, 0.7],
-      [50.6, 347.0, 3.2, 0.4, 0xffd2a0, 22, 9, 0.7],
-      ...tables.map(([x, z]) => [x, z, 1.2, 1.2, 0xffe0c0, 14, 6.5, 0.5]),
-      [39.8, 365.6, 1.4, 0.6, 0xffe0c0, 16, 7, 0.5],
-      [56.2, 365.6, 1.4, 0.6, 0xffe0c0, 16, 7, 0.5],
-      [39.6, 357.0, 2.6, 0.5, 0xe6e4f0, 14, 7, 0.4],
-      [56.6, 347.8, 1.6, 0.5, 0xf0eee8, 16, 7, 0.4],
-      [48.0, 368.6, 2.4, 0.5, 0xffe0bd, 18, 8, 0.6],
+      ...tables.map(([x, z]) => [x, z, 1.2, 1.2, 0xffe0c0, 36, 9, 1.0]),
+      [39.8, 365.6, 1.4, 0.6, 0xffe0c0, 40, 10, 1.0],
+      [56.2, 365.6, 1.4, 0.6, 0xffe0c0, 40, 10, 1.0],
+      [39.6, 357.0, 2.6, 0.5, 0xe6e4f0, 38, 10, 1.0],
+      [56.6, 347.8, 1.6, 0.5, 0xf0eee8, 40, 10, 0.8],
+      [48.0, 368.6, 2.4, 0.5, 0xffe0bd, 42, 11, 1.0],
     ];
     for (const [x, z, w, d, color, intensity, distance, priority] of fixtures) {
       dropLight(kit, PALETTE, [x, FIX, z], { w, d, stem: 1.2, mat: "emitWarmSoft" });
-      // the fill sits 0.4 m under the diffuser, 1.8 m below the ceiling
+      // the fill sits 0.4 m under the diffuser, 1.8 m below the ceiling: a warm pool on the floor
       ctx.lights.push({ type: "point", pos: [x, 43.2, z], color, intensity, distance, priority });
     }
-    // bar-back uplights (housings on the canopy): a warm wash on the ceiling and sign band over the bar
-    for (const x of [46.0, 50.0]) ctx.lights.push({ type: "point", pos: [x, 43.9, bz + 0.5], color: 0xffd2a0, intensity: 9, distance: 5.5, priority: 0.4 });
-    return {};
+    // bar-back uplights (housings on the canopy): one warm wash on the ceiling and sign band over the bar
+    ctx.lights.push({ type: "point", pos: [48.0, 43.9, bz + 0.5], color: 0xffd2a0, intensity: 24, distance: 7, priority: 0.6 });
+    // blue practicals: one per table pair, 0.7 m over the table tops between the two tables, rising
+    // and falling with the pair's grid charge (see update)
+    const blueL = [357.8, 361.2].map((z) => {
+      const d = { type: "point", pos: [48.0, 41.5, z], color: 0x4fb0ff, intensity: 4, distance: 5.5, priority: 0.8 };
+      ctx.lights.push(d);
+      return d;
+    });
+    // the dimming lounge sconce's light, 0.45 m in front of its diffuser (closer or stronger and the
+    // wall behind it blows out to a white patch)
+    const sconceL = { type: "point", pos: [IX0 + 0.45, 42.4, 368.0], color: 0xffc890, intensity: 5, distance: 5.5, priority: 0.8 };
+    ctx.lights.push(sconceL);
+
+    // ---- brightness overlay: media wall flicker, menu refresh + chase, sconce dim, grid charge --------------
+    const overlay = screenOverlay([...mediaQuads, ...menuQuads, sconceQuad, ...gridCells]);
+    ctx.group.add(overlay.mesh);
+    const GRID0 = 4 + menuQuads.length + 1; // first grid cell quad
+    const TAU = Math.PI * 2;
+    const SC_W = TAU / 14; // 14 s sconce cycle
+    const SC_PH = 0.64 - 40 * SC_W; // ~80 % bright at the harness's frozen t = 40
+    const fract = (x) => x - Math.floor(x);
+    const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+    const CHARGE_T = 7; // s per grid charge cycle; the aft pair runs half a cycle behind
+    const pairFill = new Float32Array(2);
+    const pairFade = new Float32Array(2);
+
+    return {
+      update(dt, t) {
+        // media wall: staggered 11 s content refresh (dip + ramp) with a faint 12 Hz content jitter
+        for (let i = 0; i < 4; i++) overlay.set(i, refreshCurve(fract((t + 2.75 * i + 1.3) / 11)) * (1 + 0.04 * (stepHash(Math.floor(t * 12) + i * 53) - 0.5)));
+        // menu screen: a rarer refresh
+        overlay.set(4, refreshCurve(fract((t + 4.1) / 13)));
+        // menu chase: a bright head with a three-segment tail runs along the eight segments every 2 s
+        const head = fract(t / 2) * 8;
+        for (let k = 0; k < 8; k++) {
+          let d = head - k;
+          if (d < 0) d += 8;
+          overlay.set(5 + k, d < 1 ? 1.1 : d < 2 ? 0.7 : d < 3 ? 0.4 : 0.15);
+        }
+        // lounge sconce: dims to 40 % and back over 14 s; its diffuser follows the light
+        const dim = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t * SC_W + SC_PH));
+        sconceL.intensity = 5 * dim;
+        overlay.set(GRID0 - 1, 0.3 + 0.7 * dim);
+        // game grids: a charge sequence per table pair — rows light in order along +Z (7.5 rows/cycle,
+        // so the board is full at 80 %), hold with a shimmer, drop over the last 7 %, repeat; the pair's
+        // blue point rises with the number of lit rows and falls with the reset
+        for (let p = 0; p < 2; p++) {
+          const ph = fract((t + 3.5 * p) / CHARGE_T);
+          pairFill[p] = ph < 0.8 ? ph * 7.5 : 6;
+          pairFade[p] = ph > 0.93 ? 1 - (ph - 0.93) / 0.07 : 1;
+          blueL[p].intensity = 1.5 + 8.5 * (pairFill[p] / 6) * pairFade[p];
+        }
+        // uncharged cells sit at 12 % (a dark blue, well under the bloom threshold) so the lit rows pop
+        const shimmer = 1 + 0.04 * Math.sin(t * 18);
+        for (let i = 0; i < gridCells.length; i++) {
+          const c = gridCells[i];
+          const b = clamp01(pairFill[c.pair] - c.row) * pairFade[c.pair];
+          overlay.set(GRID0 + i, (0.12 + 1.0 * b) * (pairFill[c.pair] >= 6 ? shimmer : 1));
+        }
+      },
+    };
   },
 });
