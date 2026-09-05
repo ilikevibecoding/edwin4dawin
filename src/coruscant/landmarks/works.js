@@ -131,7 +131,7 @@ function build(bp, lot, ctx) {
   };
   const lampPost = (x, y, z, h = 2, id = B.CITY_LAMP) => { col(x, y, z, y + h - 1, B.IRON_BARS); set(x, y + h, z, id); };
   const sphere = (cx, cy, cz, r, id) => { for (let dy = -r; dy <= r; dy++) { const rr = Math.sqrt(Math.max(0, r * r - dy * dy)); bp.disc(cx + 0.5, cz + 0.5, rr + 0.4, cy + dy, cy + dy, id); } };
-  const pile = (cx, cz, r, id) => { for (let i = 0; i <= r; i++) fill(cx - r + i, 1 + i, cz - r + i, cx + r - i, 1 + i, cz + r - i, id); };
+  const pile = (cx, cz, r, id, y0 = 1) => { for (let i = 0; i <= r; i++) fill(cx - r + i, y0 + i, cz - r + i, cx + r - i, y0 + i, cz + r - i, id); };
 
   // ------------------------------------------------------------------------------------------------ geometry
   const DX = lot.door ? lot.door.x - lot.x0 : (W >> 1);          // front door column (2 wide: DX, DX + 1)
@@ -303,11 +303,18 @@ function build(bp, lot, ctx) {
     fill(bx, 6, TRZ0, bx, 6, TRZ1, B.IRON_BARS); fill(bx + 3, 6, TRZ0, bx + 3, 6, TRZ1, B.IRON_BARS);
     bp.spot(bx + 1, 6, TRZ0 + 1);
   }
-  // the tap: furnace mouth in the west wall pouring into the trench
-  fill(SX0, 6, TRZ0 - 2, SX0, 10, TRZ1 + 2, B.FURNACE); ring(SX0, 5, TRZ0 - 3, SX0, 11, TRZ1 + 3, B.CHROME);
-  col(SX0, 6, TRZ0 + 1, 8, B.MAGMA); col(HX0, 3, TRZ0 + 1, 7, B.MAGMA); carve(HX0, 8, TRZ0 + 1, HX0, 10, TRZ0 + 1);
-  fill(HX0, 3, TRZ0, HX0, 3, TRZ1, B.MAGMA); carve(HX0, 4, TRZ0, HX0, 5, TRZ0); carve(HX0, 4, TRZ1, HX0, 5, TRZ1);
-  fill(HX0, 6, TRZ0 - 1, HX0, 6, TRZ0 - 1, B.IRON_BARS); fill(HX0, 6, TRZ1 + 1, HX0, 6, TRZ1 + 1, B.IRON_BARS);
+  // the tap: a blast-furnace head against the west wall, its arched mouth pouring a fall of metal into the trench
+  const TX1 = HX0 + 2;
+  fill(HX0, 6, TRZ0 - 5, TX1, 14, TRZ1 + 5, B.DURASTEEL_DARK);
+  fill(TX1, 6, TRZ0 - 4, TX1, 12, TRZ1 + 4, B.FURNACE);
+  col(TX1, 5, TRZ0 - 5, 14, B.CHROME); col(TX1, 5, TRZ1 + 5, 14, B.CHROME); fill(TX1, 13, TRZ0 - 5, TX1, 13, TRZ1 + 5, B.PANEL_RED); fill(TX1, 14, TRZ0 - 5, TX1, 14, TRZ1 + 5, B.CHROME);
+  fill(HX0, 15, TRZ0 - 4, TX1, 15, TRZ1 + 4, B.VENT); fill(HX0, 16, TRZ0 - 2, TX1, 17, TRZ1 + 2, B.DURASTEEL_DARK); fill(HX0, 18, TRZ0, TX1, 19, TRZ1, B.PANEL_STRIPE);   // hood
+  for (const z of [TRZ0 - 3, TRZ1 + 3]) { set(TX1, 9, z, B.MAGMA); set(TX1, 10, z, B.MAGMA); }                                       // sight glasses
+  carve(HX0 + 1, 4, TRZ0, TX1, 8, TRZ1); carve(HX0 + 1, 9, TRZ0 + 1, TX1, 9, TRZ0 + 1);                                             // arched mouth
+  fill(HX0, 3, TRZ0, TX1, 3, TRZ1, B.MAGMA); col(HX0 + 1, 4, TRZ0 + 1, 9, B.MAGMA); fill(HX0 + 1, 4, TRZ0, HX0 + 1, 4, TRZ1, B.MAGMA);   // the pour
+  for (const z of [TRZ0 - 1, TRZ1 + 1]) { col(TX1, 4, z, 5, B.HULL_TRENCH); set(TX1 + 1, 6, z, B.IRON_BARS); }
+  for (let y = 6; y <= 12; y++) { set(TX1 + 1, y, TRZ0 - 6, y % 2 ? B.IRON_BARS : B.PANEL_RED); set(TX1 + 1, y, TRZ1 + 6, y % 2 ? B.IRON_BARS : B.PANEL_RED); }   // marker posts
+  set(TX1 + 2, 6, TRZ0 - 4, B.CONSOLE); set(TX1 + 2, 6, TRZ1 + 4, B.CONSOLE); bp.work(TX1 + 3, 6, TRZ0 - 4, 'tapper'); bp.work(TX1 + 3, 6, TRZ1 + 4, 'tapper');
   // casting pit at the east end (magma basin) with a quench tank and mould rows beside it
   const px0 = trX1 + 1, px1 = 110, pz0 = 52, pz1 = 60;
   carve(px0, 4, pz0, px1, 5, pz1); fill(px0, 3, pz0, px1, 3, pz1, B.MAGMA);
@@ -322,25 +329,43 @@ function build(bp, lot, ctx) {
   ring(95, 6, 62, 100, 6, 65, B.HULL_TRENCH); fill(96, 6, 63, 99, 6, 64, B.WATER); bp.work(94, 6, 63, 'quench');   // quench tank
 
   // ------------------------------------------------------------------------------------------------ smelters + flues
+  // Blast furnaces: a 9 x 7 hearth of furnace mouths, a banded body with glowing sight slots, a stepped hood with
+  // a charging hole under the ore gantry, and a 3 x 3 flue that climbs through the roof and runs north above it
+  // on trestles into the chimney of the stack yard.
   const smelter = (cx) => {
-    const x0 = cx - 3, x1 = cx + 3, z0 = 44, z1 = 50;
+    const x0 = cx - 4, x1 = cx + 4, z0 = 44, z1 = 50;
     ring(x0 - 1, 5, z0 - 1, x1 + 1, 5, z1 + 3, B.PANEL_STRIPE);
-    fill(x0, 6, z0, x1, 9, z1, B.FURNACE);
-    for (const [x, z] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) col(x, 6, z, 12, B.DURASTEEL_DARK);
-    for (let i = 1; i <= 5; i += 2) { set(x0 + i, 6, z0, B.PANEL_STRIPE); set(x0 + i, 6, z1, B.PANEL_STRIPE); set(x0, 6, z0 + i, B.PANEL_STRIPE); set(x1, 6, z0 + i, B.PANEL_STRIPE); }
-    ring(x0, 10, z0, x1, 10, z1, B.IRON_BARS);                     // grating walk on top of the furnace mass
-    fill(x0 + 1, 10, z0 + 1, x1 - 1, 12, z1 - 1, B.DURASTEEL_DARK); // hood
-    ring(x0 + 1, 11, z0 + 1, x1 - 1, 11, z1 - 1, B.VENT);
-    fill(cx - 1, 13, 47, cx, 41, 48, B.DURASTEEL_DARK);            // flue up to the ceiling
-    fill(cx - 1, 40, SZ0 - 4, cx, 41, 48, B.DURASTEEL_DARK);       // ... then north over the roof edge into the chimney
-    fill(cx - 1, 40, SZ0 - 4, cx, 41, SZ0 - 4, B.PANEL_RED);
-    set(cx + 2, 13, 45, B.DURASTEEL_DARK); set(cx + 2, 14, 45, B.DURASTEEL_DARK);   // ore chute from the gantry
-    fill(cx, 5, z1 + 1, cx, 5, TRZ0 - 2, B.MAGMA); set(cx, 5, TRZ0 - 1, B.MAGMA); set(cx, 4, TRZ0 - 1, B.MAGMA);   // tap runner into the trench
-    set(cx - 2, 6, z1 + 2, B.CONSOLE); set(cx + 2, 6, z1 + 2, B.CONSOLE);
-    bp.work(cx - 2, 6, z1 + 3, 'smelter'); bp.work(cx + 2, 6, z1 + 3, 'smelter');
-    set(cx - 3, 6, z0 - 2, B.BARREL); set(cx + 3, 6, z0 - 2, B.CRATE); set(cx + 3, 7, z0 - 2, B.CRATE);
+    fill(x0, 6, z0, x1, 8, z1, B.FURNACE);                          // hearth
+    fill(x0, 9, z0, x1, 14, z1, B.DURASTEEL_DARK);                  // body
+    ring(x0, 9, z0, x1, 9, z1, B.PANEL_STRIPE); ring(x0, 12, z0, x1, 12, z1, B.PANEL_STRIPE);
+    for (const [x, z] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) col(x, 6, z, 15, B.IRON_BLOCK);
+    for (const x of [cx - 2, cx, cx + 2]) { set(x, 10, z0, B.MAGMA); set(x, 11, z0, B.VENT); set(x, 10, z1, B.MAGMA); set(x, 11, z1, B.VENT); }   // sight slots
+    for (const z of [46, 48]) { set(x0, 10, z, B.MAGMA); set(x1, 10, z, B.MAGMA); set(x0, 13, z, B.VENT); set(x1, 13, z, B.VENT); }
+    fill(x0 + 1, 15, z0 + 1, x1 - 1, 15, z1 - 1, B.DURASTEEL_DARK); ring(x0 + 1, 15, z0 + 1, x1 - 1, 15, z1 - 1, B.VENT);   // hood, step 1
+    fill(x0 + 2, 16, z0 + 2, x1 - 2, 17, z1 - 2, B.DURASTEEL_DARK); ring(x0 + 2, 17, z0 + 2, x1 - 2, 17, z1 - 2, B.PANEL_RED);   // hood, step 2
+    carve(cx - 3, 15, 46, cx - 3, 17, 48); fill(cx - 3, 14, 46, cx - 3, 14, 48, B.MAGMA);   // charging hole, molten glow below
+    set(cx - 3, 15, 45, B.IRON_BLOCK); set(cx - 3, 16, 45, B.CHROME);                        // chute from the gantry
+    // tap runner into the trench: a molten channel under a steel-glass cover, pouring out through the trench wall
+    fill(cx, 4, z1 + 1, cx, 4, TRZ0 - 1, B.MAGMA); fill(cx, 5, z1 + 1, cx, 5, TRZ0 - 2, B.STEEL_GLASS);
+    set(cx - 3, 6, z1 + 2, B.CONSOLE); set(cx + 3, 6, z1 + 2, B.CONSOLE);
+    bp.work(cx - 3, 6, z1 + 3, 'smelter'); bp.work(cx + 3, 6, z1 + 3, 'smelter');
+    set(cx - 4, 6, z0 - 2, B.BARREL); set(cx + 4, 6, z0 - 2, B.CRATE); set(cx + 4, 7, z0 - 2, B.CRATE);
+    lampPost(cx - 6, 6, z1 + 2, 2); lampPost(cx + 6, 6, z1 + 2, 2);
   };
   SMELT.forEach(smelter);
+  // flues are placed after the roof section (the clerestory carve would cut them): 3 x 3 up through the roofs, then
+  // north above them on trestles into the chimney
+  const flue = (cx) => {
+    fill(cx - 1, 18, 46, cx + 1, Y.nave, 48, B.DURASTEEL_DARK);
+    for (let y = 22; y <= Y.nave; y += 8) ring(cx - 1, y, 46, cx + 1, y, 48, B.PANEL_RED);
+    fill(cx - 1, Y.nave + 1, 8, cx + 1, Y.nave + 2, 48, B.DURASTEEL_DARK);
+    for (let z = 12; z <= 44; z += 8) {
+      fill(cx - 1, Y.nave + 1, z, cx + 1, Y.nave + 2, z, B.PANEL_RED);
+      const base = z >= NVZ0 && cx >= NX0 && cx <= NX1 ? Y.nave + 1 : Y.roof + 1;   // trestles down to whichever roof is below
+      if (base <= Y.nave) { col(cx - 1, base, z, Y.nave, B.IRON_BARS); col(cx + 1, base, z, Y.nave, B.IRON_BARS); }
+    }
+    fill(cx - 2, Y.nave + 1, 10, cx + 2, Y.nave + 2, 10, B.CHROME);   // collar where the pipe meets the chimney
+  };
 
   // ------------------------------------------------------------------------------------------------ conveyors, racks, lamps
   const belt = (x0, z0, x1, z1) => {
@@ -369,9 +394,25 @@ function build(bp, lot, ctx) {
   for (const x of [107, 112, 117, 122, 127]) { rack(x, 66, 70); }
   for (const x of [110, 115, 120, 125]) { bp.work(x, 6, 38, 'loader'); bp.work(x, 6, 82, 'loader'); set(x, 5, 32, B.GLOW_PANEL); set(x, 5, 44, B.GLOW_PANEL); set(x, 5, 82, B.GLOW_PANEL); }
   // ore heaps and slag on the casting floor's west end, lamp posts along the floor
-  pile(27, 30, 2, B.IRON_ORE); pile(27, 36, 1, B.COAL_ORE); pile(26, 84, 2, B.SCORCHED_STONE); pile(31, 86, 1, B.ASH);
-  for (let x = 30; x <= 124; x += 24) { lampPost(x, 6, 40, 2); lampPost(x, 6, 78, 2); }
+  pile(27, 30, 2, B.IRON_ORE, 6); pile(27, 36, 1, B.COAL_ORE, 6); pile(26, 85, 2, B.SCORCHED_STONE, 6); pile(31, 87, 1, B.ASH, 6);
+  for (let x = 30; x <= 124; x += 24) { lampPost(x, 6, 40, 2); lampPost(x, 6, 75, 2); }
   for (const [x, z] of [[36, 60], [58, 60], [80, 60], [36, 76], [58, 76], [80, 76]]) { set(x, 6, z, B.CRATE); set(x + 1, 6, z, B.BARREL); if (rng.chance(0.5)) set(x, 7, z, B.CRATE); }
+  // rolling mill along the south of the west bay: roller table with glowing billets between mill stands
+  fill(28, 6, 79, 60, 6, 79, B.RAIL); fill(28, 5, 78, 60, 5, 80, B.HULL_TRENCH);
+  for (let x = 30; x <= 58; x += 7) {
+    fill(x, 6, 78, x + 2, 7, 80, B.IRON_BLOCK); fill(x, 8, 78, x + 2, 8, 80, B.CHROME); set(x + 1, 8, 79, B.PANEL_RED);
+    set(x, 7, 78, B.PANEL_RED); set(x + 2, 7, 80, B.PANEL_RED); set(x + 1, 9, 79, B.GLOW_PANEL_BLUE);
+    if (x + 5 < 61) { set(x + 4, 6, 79, B.MAGMA); set(x + 5, 6, 79, B.MAGMA); }
+    set(x + 1, 6, 82, B.CONSOLE); bp.work(x + 1, 6, 83, 'mill hand');
+  }
+  fill(27, 6, 78, 27, 7, 80, B.IRON_BLOCK); fill(61, 6, 78, 61, 7, 80, B.IRON_BLOCK); set(27, 8, 79, B.GLOW_PANEL); set(61, 8, 79, B.GLOW_PANEL);
+  // mould field under the control gallery: rows of ingot moulds filling with metal, a walkway between the rows
+  for (let x = 68; x <= 100; x += 4) for (const z of [82, 85, 88]) {
+    set(x, 6, z, B.IRON_BLOCK); set(x + 1, 6, z, rng.chance(0.7) ? B.MAGMA : B.IRON_BLOCK); set(x + 2, 6, z, B.IRON_BLOCK);
+    if (z === 85) { set(x + 1, 7, z, B.IRON_BARS); }
+  }
+  for (const x of [70, 86]) { bp.work(x, 6, 84, 'moulder'); bp.spot(x + 8, 6, 87); }
+  for (let x = 68; x <= 100; x += 8) { set(x, 5, 84, B.GLOW_PANEL); set(x + 4, 5, 87, B.GLOW_PANEL); }
   bp.room('smelter_hall', HX0, Y.hall, HZ0, 65, HZ1); bp.room('casting_floor', 66, Y.hall, HZ0, 105, HZ1); bp.room('cargo_bay', 106, Y.hall, HZ0, HX1, HZ1);
 
   // ------------------------------------------------------------------------------------------------ ore gantry (y 16) + posts
@@ -542,8 +583,14 @@ function build(bp, lot, ctx) {
   fill(BX0 - 1, 35, SW, BX1 + 1, 35, SZ1 - 1, B.DECK_PLATE);
   for (let x = BX0; x <= BX1; x += 2) fill(x, 35, SW + 1, x, 35, SZ1 - 1, B.PANEL_BLACK);
   fill(DX - 1, 35, SW + 1, DX + 2, 35, SZ1 - 1, B.PANEL_STRIPE); for (let z = SW + 2; z <= SZ1 - 1; z += 3) { set(DX - 2, 35, z, B.GLOW_PANEL_BLUE); set(DX + 3, 35, z, B.GLOW_PANEL_BLUE); }
-  fill(BX0 - 1, 40, SW, BX1 + 1, 40, SZ1 - 1, B.DURASTEEL_DARK);                 // lobby ceiling
+  fill(BX0 - 1, 40, SW, BX1 + 1, 40, SZ1 - 1, B.DURASTEEL_DARK);                 // lobby ceiling (aisles)
   for (let x = BX0 + 1; x <= BX1; x += 3) for (let z = SW + 1; z <= SZ1 - 1; z += 3) set(x, 40, z, B.GLOW_PANEL_BLUE);
+  // the centre bay rises to a 7-block nave: banded side walls, a glass clerestory toward the hall, lit ceiling at 43
+  carve(VX0, 40, SW + 1, VX1, 42, SZ1 - 1);
+  fill(VX0 - 1, 43, SW, VX1 + 1, 43, SZ1 - 1, B.DURASTEEL_DARK); for (let x = VX0 + 1; x <= VX1; x += 3) for (let z = SW + 2; z <= SZ1 - 1; z += 3) set(x, 43, z, B.GLOW_PANEL_BLUE);
+  for (const x of [VX0 - 1, VX1 + 1]) { fill(x, 40, SW + 1, x, 42, SZ1 - 1, B.DURASTEEL); fill(x, 41, SW + 1, x, 41, SZ1 - 1, B.PANEL_STRIPE); }
+  fill(VX0, 40, CZ0, VX1, 42, CZ0, B.STEEL_GLASS); col(VX0 - 1, 40, CZ0, 42, B.CHROME); col(VX1 + 1, 40, CZ0, 42, B.CHROME);
+  fill(VX0, 40, SZ1 - 1, VX1, 42, SZ1 - 1, B.HULL_PLATE); fill(VX0, 41, SZ1 - 1, VX1, 41, SZ1 - 1, B.PANEL_RED);
   fill(BX0 - 1, 36, SW, BX0 - 1, 39, PZ1, B.STEEL_GLASS); fill(BX1 + 1, 36, SW, BX1 + 1, 39, PZ1, B.STEEL_GLASS);   // side walls (glass) with doors
   col(BX0 - 1, 36, SW, 39, B.CHROME); col(BX1 + 1, 36, SW, 39, B.CHROME);
   fill(BX0 - 1, 36, CZ0, BX1 + 1, 39, CZ0, B.STEEL_GLASS); fill(BX0 - 1, 36, CZ0, BX1 + 1, 36, CZ0, B.DURASTEEL);   // north wall with the gallery opening
@@ -614,6 +661,7 @@ function build(bp, lot, ctx) {
   for (let x = 30; x <= 124; x += 16) { for (const z of [18, 96]) { fill(x, Y.roof + 1, z, x + 2, Y.roof + 2, z + 2, B.VENT); fill(x, Y.roof + 3, z, x + 2, Y.roof + 3, z + 2, B.CHROME); set(x + 1, Y.roof + 3, z + 1, B.GLOW_PANEL); } }
   for (const [x, z] of [[122, 92], [30, 90]]) { bp.disc(x + 0.5, z + 0.5, 3.2, Y.roof + 1, Y.roof + 6, B.CHROME); bp.disc(x + 0.5, z + 0.5, 2.4, Y.roof + 7, Y.roof + 7, B.CHROME); set(x, Y.roof + 8, z, B.GLOW_PANEL_BLUE); }
   for (let x = 34; x <= 120; x += 10) { col(x, Y.roof + 1, 26, Y.roof + 4, B.IRON_BARS); set(x, Y.roof + 5, 26, B.GLOW_PANEL_BLUE); }
+  SMELT.forEach(flue);
 
   // ------------------------------------------------------------------------------------------------ stack yard: chimneys, spheres, pipe bridges
   const chimney = (cx, cz, r, top) => {
@@ -623,10 +671,10 @@ function build(bp, lot, ctx) {
     bp.disc(cx + 0.5, cz + 0.5, r + 0.5, 18, 19, B.VENT, true);
     bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 12, top - 11, B.PANEL_RED, true);
     bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 5, top - 4, B.PANEL_RED, true);
-    bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 2, top - 2, B.CHROME, true);
-    bp.disc(cx + 0.5, cz + 0.5, r - 0.5, top - 1, top, FORCE_AIR);
-    bp.disc(cx + 0.5, cz + 0.5, r - 0.5, top - 1, top - 1, B.MAGMA);
-    for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]]) set(cx + dx, top, cz + dz, B.GLOW_PANEL);
+    bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 2, top - 2, B.GLOW_PANEL, true);   // lit collar
+    bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 1, top - 1, B.CHROME, true);
+    bp.disc(cx + 0.5, cz + 0.5, r - 0.5, top - 1, top, B.MAGMA);                    // molten throat, flush with the rim
+    for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]]) set(cx + dx, top, cz + dz, B.PANEL_RED);
     col(cx, 4, cz + r, top - 3, B.IRON_BARS);
   };
   for (const cx of SMELT) chimney(cx, 6, 5, Y.stack);
@@ -667,9 +715,9 @@ function build(bp, lot, ctx) {
   for (let z = 6; z <= 100; z += 20) lampPost(1, 1, z, 3);
   set(6, 1, 90, B.CHROME); set(7, 1, 90, B.PANEL_RED); set(8, 1, 90, B.CHROME); set(7, 2, 90, B.GLASS); set(7, 1, 91, B.DURASTEEL_DARK); bp.work(7, 1, 88, 'loader');   // parked loader
   // west door from the casting floor down into the yard
-  doorway(SX0, Y.hall, 60, false, 2, 3); fill(SX0 - 2, 5, 60, SX0 - 1, 5, 61, B.DECK_PLATE); fill(SX0 - 2, 1, 60, SX0 - 1, 4, 61, B.DURASTEEL_DARK);
-  for (let dx = 0; dx <= 1; dx++) stairRun(SX0 - 2 + dx, Y.under, 71, 0, -1, 10, 1);
-  bp.door(SX0, Y.hall, 60, 'W');
+  doorway(SX0, Y.hall, 66, false, 2, 3); fill(SX0 - 2, 5, 66, SX0 - 1, 5, 67, B.DECK_PLATE); fill(SX0 - 2, 1, 66, SX0 - 1, 4, 67, B.DURASTEEL_DARK);
+  for (let dx = 0; dx <= 1; dx++) stairRun(SX0 - 2 + dx, Y.under, 77, 0, -1, 10, 1);
+  bp.door(SX0, Y.hall, 66, 'W');
   bp.room('ore_yard', 0, Y.under, 0, SX0, SZ1);
 
   // ------------------------------------------------------------------------------------------------ loading yard (east): dock, ramp, truck, containers
@@ -732,10 +780,11 @@ function build(bp, lot, ctx) {
   fill(62, Y.roof, SZ1 - 1, 93, 50, SZ1, B.DURASTEEL_DARK); fill(62, 50, SZ1, 93, 50, SZ1, B.PANEL_STRIPE); fill(64, 51, SZ1 - 1, 91, 51, SZ1, B.DURASTEEL_DARK);
   for (const x of [62, 93]) col(x, Y.roof, SZ1, 53, B.DURASTEEL_DARK);
   for (const x of [63, 92]) { col(x, 51, SZ1, 55, B.IRON_BARS); set(x, 56, SZ1, B.GLOW_PANEL_BLUE); }
-  for (let y = 41; y <= 49; y++) for (let x = DX - 4; x <= DX + 5; x++) {
-    const dx = x + 0.5 - (DX + 1), dy = y + 0.5 - 45.5, q = dx * dx + dy * dy;
-    if (q > 4.6 * 4.6) continue;
-    set(x, y, SZ1, q > 3.4 * 3.4 ? B.VENT : (q > 1.6 * 1.6 ? B.GLOW_PANEL : B.PANEL_RED));
+  // the furnace eye: a round vent-rimmed emblem in the gable, red ring and a molten core that glows at night
+  for (let y = 41; y <= 51; y++) for (let x = DX - 5; x <= DX + 6; x++) {
+    const dx = x + 0.5 - (DX + 1), dy = y + 0.5 - 46.5, q = dx * dx + dy * dy;
+    if (q > 5.7 * 5.7) continue;
+    set(x, y, SZ1, q > 4.6 * 4.6 ? B.VENT : (q > 3.3 * 3.3 ? B.PANEL_RED : (q > 2.2 * 2.2 ? B.DURASTEEL_DARK : B.MAGMA)));
   }
   fill(DX - 6, 40, SZ1, DX + 7, 40, SZ1, B.HOLO_SIGN); fill(DX - 7, 40, SZ1, DX - 7, 40, SZ1, B.CHROME); fill(DX + 8, 40, SZ1, DX + 8, 40, SZ1, B.CHROME);
   carve(DX, Y.under, SZ1, DX + 1, Y.under + 2, SZ1); col(DX - 1, Y.under, SZ1, Y.under + 3, B.CHROME); col(DX + 2, Y.under, SZ1, Y.under + 3, B.CHROME); fill(DX, Y.under + 3, SZ1, DX + 1, Y.under + 3, SZ1, B.CHROME);
@@ -747,7 +796,10 @@ function build(bp, lot, ctx) {
   for (let z = SZ0 + 1; z < SZ1; z++) {
     const k = (z - SZ0) % 8;
     for (const [x, px] of [[SX0, SX0 - 1], [SX1, SX1 + 1]]) {
-      if (k < 2) { if (!(x === SX1 && z >= 38 && z <= 86)) col(px, 1, z, Y.roof - 2, B.DURASTEEL_DARK); set(x, 34, z, B.PANEL_STRIPE); set(x, 35, z, B.PANEL_STRIPE); continue; }
+      if (k < 2) {   // pilasters (lifted over the dock on the east side and over the yard stair on the west side)
+        if (!(x === SX1 && z >= 38 && z <= 86)) col(px, x === SX0 && z >= 64 && z <= 78 ? 9 : 1, z, Y.roof - 2, B.DURASTEEL_DARK);
+        set(x, 34, z, B.PANEL_STRIPE); set(x, 35, z, B.PANEL_STRIPE); continue;
+      }
       if (z >= SZ0 + 1 && z <= NZ1 - 1) { set(x, 7, z, lit()); set(x, 12, z, lit()); }
       if (k === 5) col(x, 24, z, 40, B.GLOW_PANEL); else if (k === 3 || k === 7) { for (const wy of [27, 33, 39]) set(x, wy, z, lit()); }
       set(x, 21, z, B.PANEL_STRIPE); set(x, 34, z, B.PANEL_STRIPE); set(x, 35, z, B.PANEL_STRIPE);
