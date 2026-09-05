@@ -381,7 +381,11 @@ export function buildKestrelShell(kit) {
     // the slab)
     const xi = s * (hw - 0.15);
     const inX = (a, b) => [Math.min(xi - s * a, xi - s * b), Math.max(xi - s * a, xi - s * b)];
-    plateField(kit, { axis: "x", sign: -s, at: xi, u0: zAft + 0.15, u1: hz1 - 0.35, v0: 2.32, v1: yT - 0.5, uStep: 1.0, vStep: 0.34, steps: [0.04, 0.07], skip: 0, layer2: 0.25, bolts: 0.3, color: (i, j, r) => jitter(CREAM, r), rand });
+    // dark base skin under the plates so the seam gaps read as lines (cream plates on the cream slab
+    // vanished at the camera's grazing angle), a recessed cell here and there, two stiffener ribs
+    kit.boxMM("paintedMetal", [inX(0, 0.02)[0], 2.3, zAft + 0.1], [inX(0, 0.02)[1], yT - 0.45, hz1 - 0.3], { color: PALETTE.gunmetal, uv: "world", texel: 0.5 });
+    plateField(kit, { axis: "x", sign: -s, at: xi - s * 0.02, u0: zAft + 0.15, u1: hz1 - 0.35, v0: 2.32, v1: yT - 0.5, uStep: 1.0, vStep: 0.34, seam: 0.05, steps: [0.04, 0.07], skip: 0.08, layer2: 0.25, bolts: 0.3, color: (i, j, r) => jitter(CREAM, r), rand });
+    for (const z of [zAft + 1.85, zAft + 2.6]) kit.boxMM("metal", [inX(0.02, 0.14)[0], 2.3, z - 0.05], [inX(0.02, 0.14)[1], yT - 0.45, z + 0.05], { color: PALETTE.darkMetal, uv: "world", texel: 0.5 });
     kit.boxMM("paintedMetal", [inX(0, 0.03)[0], 2.05, zAft + 0.05], [inX(0, 0.03)[1], 2.3, hz1 - 0.25], { color: new THREE.Color("#6a655a"), uv: "world", texel: 0.5 }); // grime band over the rail
     kit.boxMM("painted", [inX(0.02, 0.15)[0], 2.4, zAft + 1.03], [inX(0.02, 0.15)[1], 2.84, zAft + 1.47], { color: PALETTE.creamDark, uv: "keep" }); // stencil placard, proud of the plates
     {
@@ -389,8 +393,8 @@ export function buildKestrelShell(kit) {
       g.rotateY(s > 0 ? -Math.PI / 2 : Math.PI / 2);
       kit.add("decal", g, { pos: [xi - s * 0.16, 2.62, zAft + 1.25], uv: "keep", uvRect: decalRect(s < 0 ? 8 : 12) }); // H-2 PRESSURE DOOR / ATMO RECYC
     }
-    kit.boxMM("metal", [inX(0.02, 0.18)[0], 2.34, hz1 - 0.85], [inX(0.02, 0.18)[1], 2.5, hz1 - 0.35], { color: PALETTE.darkMetal }); // marker lamp housing
-    kit.box("emitAmber", xi - s * 0.19, 2.42, hz1 - 0.6, 0.02, 0.1, 0.4);
+    kit.boxMM("metal", [inX(0.02, 0.16)[0], 2.4, hz1 - 0.72], [inX(0.02, 0.16)[1], 2.52, hz1 - 0.42], { color: PALETTE.darkMetal }); // marker lamp housing
+    kit.box("emitAmber", xi - s * 0.17, 2.46, hz1 - 0.57, 0.02, 0.06, 0.22);
     kit.boxMM("hazard", [inX(0.02, 0.145)[0], 2.38, zAft + 0.3], [inX(0.02, 0.145)[1], 2.86, zAft + 0.7], { texel: 3 }); // hazard block
   }
   // hood soffit (the underside over the ramp head, in frame at the top of the ramp view): plated
