@@ -457,6 +457,11 @@ async function boot() {
       vehiclePos: vehicle.root.position,
       vehicleSpeed: driver.state.speed,
       throttle: driver.input.throttle,
+      // The truck's real footprint for the pride's push reaction: without
+      // these it is inferred from motion, which needs 0.5 m/s to fix the axis
+      // and is one circle until the truck moves.
+      vehicleHeading: driver.state.heading,
+      vehicleCircles: driver.circles,
       camera,
       // so a lion that reacts can be heard doing it
       cue: (name, opts) => audio.cue(name, opts),

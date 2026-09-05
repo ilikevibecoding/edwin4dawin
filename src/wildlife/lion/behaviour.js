@@ -19,12 +19,16 @@ import { mulberry32 } from '../../textures/core.js';
 // ---------------------------------------------------------------------------
 
 export const POSES = {
+  // standing, the tail hangs in a J (pose.js TAIL_HANG) with the tuft hooked
   stand: { ...STAND },
-  alert: { ...STAND, neckPitch: 0.3, headPitch: -0.08, earAlert: 1.0, tailLift: 0.12 },
+  alert: { ...STAND, neckPitch: 0.3, headPitch: -0.08, earAlert: 1.0, tailLift: 0.08, tailCarry: 0.25 },
   // walking, the trunk comes down a little on bent legs and the head is
-  // carried level with the back, face forward; the tail hangs in a J with
-  // the tuft turned up
-  walk: { ...STAND, hipH: 1.02, chestH: 1.06, neckPitch: -0.26, headPitch: 0.14, tailLift: -0.1, tailHook: 0.4, earAlert: 0.55 },
+  // carried level with the back, face forward; the tail root is carried out
+  // behind the rump (pose.js TAIL_CARRY: 17 degrees below the back line) and
+  // the last third hangs and swings with the hind steps, tuft turned up
+  walk: { ...STAND, hipH: 1.02, chestH: 1.06, neckPitch: -0.26, headPitch: 0.14, tailCarry: 1, tailHook: 0.5, earAlert: 0.55 },
+  // the amble carries the tail lower, between the walk and the standing J
+  amble: { ...STAND, hipH: 1.02, chestH: 1.06, neckPitch: -0.26, headPitch: 0.14, tailCarry: 0.55, tailHook: 0.5, earAlert: 0.55 },
   sit: {
     ...STAND,
     hipH: 0.5,
@@ -93,11 +97,23 @@ const STATES = {
   amble: { dwell: [4, 12], next: ['stand', 'lie', 'lie', 'sit'] },
   alert: { dwell: [6, 14], next: ['sit', 'stand', 'lie'] },
   pace: { dwell: [5, 9], next: ['alert'] },
+  // pushed by the truck (push()): up, turned away, and off at a quick amble
+  // to a spot six to eight metres clear before standing to watch it
+  retreat: { dwell: [4, 14], next: ['alert'] },
 };
 // the walking states, and how fast each goes relative to walkSpeed
-const GAIT_SPEED = { walk: 1, amble: 0.5, pace: 1.3 };
+const GAIT_SPEED = { walk: 1, amble: 0.5, pace: 1.3, retreat: 0.7 };
 
-const BLEND = { toLie: 1.9, toStand: 1.6, default: 1.2 };
+const BLEND = { toLie: 1.9, toStand: 1.6, default: 1.2, shoved: 0.9 };
+// A lion the truck's footprint has actually entered is moved out of it, at no
+// more than this (m/s, unit lion) so the feet — which are world-fixed while
+// they bear weight — keep up on the gait; the truck's own soft resolve gives
+// way at 60 % a frame, so the two meet in the middle rather than the lion
+// standing in the bonnet.
+const SHOVE_MAX = 1.6;
+const SHOVE_ASIDE = 0.35;
+const RETREAT_DIST = [6, 8];
+const RETREAT_TURN = 1.1;
 
 const _v = new THREE.Vector3();
 
@@ -146,6 +162,15 @@ export class Brain {
     this.flick = 0;
     this.flickT = 3 + this.rnd() * 5;
     this.settleT = 0;
+    // the last push from the truck: unit direction away from it, the side of
+    // its line this animal is on, how deep its footprint stands in this
+    // animal's circle, and how long ago (s)
+    this.pushDir = null;
+    this.pushSide = null;
+    this.pushDepth = 0;
+    this.pushT = 0;
+    this.shove = new THREE.Vector3();
+    this.outVel = new THREE.Vector3();
   }
 
   pick(list) {
@@ -153,21 +178,101 @@ export class Brain {
   }
 
   enter(state) {
-    if (GAIT_SPEED[state]) {
+    if (state === 'retreat') {
+      this.dest = this.retreatDestination();
+    } else if (GAIT_SPEED[state]) {
       const d = this.chooseDestination(state === 'pace');
       if (!d) state = 'alert';
       else this.dest = d;
     }
     const prevLying = this.pose.hipH < 0.7;
     this.from = { ...this.pose };
-    this.to = POSES[GAIT_SPEED[state] ? 'walk' : state];
+    this.to = POSES[state === 'amble' ? 'amble' : GAIT_SPEED[state] ? 'walk' : state];
     const lying = this.to.hipH < 0.7;
     this.blendDur = lying && !prevLying ? BLEND.toLie : !lying && prevLying ? BLEND.toStand : BLEND.default;
+    // shoved, a lying lion is up in under a second, not the leisurely 1.6
+    if (state === 'retreat') this.blendDur = Math.min(this.blendDur, BLEND.shoved);
     this.blend = 0;
     this.state = state;
     this.timer = 0;
     const [a, b] = STATES[state].dwell;
     this.dwell = a + this.rnd() * (b - a);
+  }
+
+  /**
+   * The truck's footprint has met this animal's circle (src/wildlife/index.js
+   * tests it every frame). `x, z` is the unit direction from the truck to the
+   * animal, `depth` how far the footprint stands inside the circle (0 when it
+   * is only closing on it), `side` the unit vector across the truck's line on
+   * this animal's side — the way off the line. The animal gets up, turns away
+   * and moves off; a footprint actually inside the circle also moves the
+   * animal out of it across the line, at SHOVE_MAX, once it is on its feet.
+   */
+  push({ x, z, depth = 0, side = null }) {
+    this.pushDir = { x, z };
+    this.pushSide = side || { x, z };
+    this.pushDepth = Math.max(this.pushDepth, depth);
+    this.pushT = 0.5;
+    this.alarm = Math.max(this.alarm, 1.1);
+    this.interest = 1;
+    if (this.state !== 'retreat') {
+      this.enter('retreat');
+      return;
+    }
+    // already going: the line is kept unless it now leads back toward the
+    // truck, or the truck has stayed in the circle for a while (it is
+    // following) — then a fresh line, without re-entering the state, which
+    // would restart the pose blend and with it the walk
+    const toward = this.dest && (this.dest.x - this.pos.x) * x + (this.dest.z - this.pos.z) * z < 0;
+    if (!this.dest || toward || (depth > 0 && this.timer > 2.5)) {
+      this.dest = this.retreatDestination();
+      this.timer = 0;
+    }
+  }
+
+  /**
+   * Where to go when pushed: RETREAT_DIST metres off, across the truck's line
+   * and away from the truck, clear of the others and on ground a lion would
+   * walk on. Hemmed in, it goes straight off, shorter, whatever the ground.
+   */
+  retreatDestination() {
+    let d = this.pushDir;
+    if (!d) {
+      // no push recorded (a forced state): away from the truck if there is one
+      const tx = this.truck ? this.pos.x - this.truck.x : -Math.sin(this.yaw);
+      const tz = this.truck ? this.pos.z - this.truck.z : -Math.cos(this.yaw);
+      const l = Math.hypot(tx, tz) || 1;
+      d = { x: tx / l, z: tz / l };
+    }
+    const sd = this.pushSide || d;
+    let px = sd.x + d.x * 0.5;
+    let pz = sd.z + d.z * 0.5;
+    const pl = Math.hypot(px, pz) || 1;
+    px /= pl;
+    pz /= pl;
+    const base = Math.atan2(px, pz);
+    const R = RETREAT_DIST[0] + this.rnd() * (RETREAT_DIST[1] - RETREAT_DIST[0]);
+    for (const da of [0, 0.5, -0.5, 1.0, -1.0, 1.4, -1.4]) {
+      const ang = base + da;
+      const ux = Math.sin(ang);
+      const uz = Math.cos(ang);
+      if (ux * d.x + uz * d.z < -0.1) continue;
+      const x = this.pos.x + ux * R;
+      const z = this.pos.z + uz * R;
+      if (Math.hypot(x - this.home.x, z - this.home.z) > this.spread * 2.2) continue;
+      if (this.terrainOk && !this.terrainOk(x, z)) continue;
+      let ok = true;
+      for (const o of this.pride) {
+        if (o === this) continue;
+        const p = o.dest || o.pos;
+        if (Math.hypot(p.x - x, p.z - z) < 1.9 * Math.max(this.s, o.s)) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) return { x, z };
+    }
+    return { x: this.pos.x + d.x * 4.5, z: this.pos.z + d.z * 4.5 };
   }
 
   /** A spot a few metres off, clear of the others, inside the pride's ground. */
@@ -266,7 +371,7 @@ export class Brain {
     // --- state machine --------------------------------------------------------
     this.timer += dt;
     const S = STATES[this.state];
-    if (this.alarm > 0.62 && !['alert', 'pace', 'walk', 'amble'].includes(this.state)) {
+    if (this.alarm > 0.62 && !['alert', 'pace', 'walk', 'amble', 'retreat'].includes(this.state)) {
       this.enter('alert');
     } else if (this.alarm > 1.05 && dist < 12 && this.state === 'alert' && this.timer > 1.5 && this.kind !== 'male') {
       this.enter('pace');
@@ -295,8 +400,11 @@ export class Brain {
     }
 
     // --- movement ---------------------------------------------------------------
+    // a pushed lion goes as soon as it is on its feet (the retreat is the one
+    // gait entered from the ground; the legs must be unfolded before they step)
+    const retreating = this.state === 'retreat';
     let targetSpeed = 0;
-    if (GAIT_SPEED[this.state] && this.dest && this.blend > 0.4) {
+    if (GAIT_SPEED[this.state] && this.dest && (retreating ? this.pose.hipH > 0.9 : this.blend > 0.4)) {
       const ddx = this.dest.x - this.pos.x;
       const ddz = this.dest.z - this.pos.z;
       const d = Math.hypot(ddx, ddz);
@@ -319,13 +427,15 @@ export class Brain {
       let e = wantYaw - this.yaw;
       while (e > Math.PI) e -= Math.PI * 2;
       while (e < -Math.PI) e += Math.PI * 2;
-      const maxTurn = 0.9;
+      // a pushed lion turns harder and keeps walking through the turn (it
+      // walks an arc away rather than pivoting in front of the bonnet)
+      const maxTurn = retreating ? RETREAT_TURN : 0.9;
       this.yawRate = THREE.MathUtils.clamp(e * 2.2, -maxTurn, maxTurn);
       // slow down for the turn, for the arrival, and for whoever is in the way
       targetSpeed =
         this.walkSpeed *
         GAIT_SPEED[this.state] *
-        THREE.MathUtils.clamp(1.2 - Math.abs(e) * 0.9, 0.25, 1) *
+        (retreating ? THREE.MathUtils.clamp(1.2 - Math.abs(e) * 0.45, 0.45, 1) : THREE.MathUtils.clamp(1.2 - Math.abs(e) * 0.9, 0.25, 1)) *
         THREE.MathUtils.clamp(d / (1.2 * s), 0.3, 1) *
         THREE.MathUtils.clamp(1 - block * 1.2, 0.15, 1);
     } else {
@@ -334,11 +444,39 @@ export class Brain {
     this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt * 2.6));
     if (targetSpeed === 0 && this.speed < 0.03) this.speed = 0;
     // a lion turns as it walks; standing, it turns slowly, a foot at a time
-    this.yawRate *= Math.min(1, this.speed / (0.3 * s) + 0.35);
+    // (a pushed one less slowly: the feet keep up with 0.7 rad/s on the spot)
+    this.yawRate *= Math.min(1, this.speed / (0.3 * s) + (retreating ? 0.6 : 0.35));
     this.yaw += this.yawRate * dt;
     this.vel.set(Math.sin(this.yaw) * this.speed, 0, Math.cos(this.yaw) * this.speed);
-    this.pos.x += this.vel.x * dt;
-    this.pos.z += this.vel.z * dt;
+    // the shove: a truck footprint standing inside the circle moves the
+    // animal out of it across the line, bounded, and the feet see that
+    // velocity too so the landings are planned for where the body is actually
+    // going. Not before the animal is on its feet: dragged while still
+    // lying, the body slid off its planted paws (the truck's own soft
+    // resolve holds it off in the meantime).
+    this.shove.set(0, 0, 0);
+    if (this.pushT > 0) {
+      this.pushT -= dt;
+      if (this.pushDepth > 0 && this.pushSide && this.pose.hipH > 0.9) {
+        const v = Math.min(this.pushDepth / dt, SHOVE_MAX * s);
+        // the gait walks forward: across the body or rearward the legs can
+        // follow only SHOVE_ASIDE, so the shove is bounded there and the
+        // turn (RETREAT_TURN, toward the destination across the line) brings
+        // the rest onto the forward axis within a second or so. Unbounded, a
+        // head-on truck slid the standing animal sideways 0.8 m per stance
+        // and the legs were left behind (trunk fitted down 25 cm).
+        const fx = Math.sin(this.yaw);
+        const fz = Math.cos(this.yaw);
+        const fwd = Math.max(-SHOVE_ASIDE * s, (this.pushSide.x * fx + this.pushSide.z * fz) * v);
+        const side = THREE.MathUtils.clamp((this.pushSide.x * fz - this.pushSide.z * fx) * v, -SHOVE_ASIDE * s, SHOVE_ASIDE * s);
+        this.shove.set(fx * fwd + fz * side, 0, fz * fwd - fx * side);
+      }
+    }
+    this.pushDepth = 0;
+    const outVel = this.outVel.copy(this.vel).add(this.shove);
+    this.pos.x += outVel.x * dt;
+    this.pos.z += outVel.z * dt;
+    const outSpeed = outVel.length();
 
     // --- pose blend -------------------------------------------------------------
     if (this.blend < 1) {
@@ -402,7 +540,7 @@ export class Brain {
     // sway of 0.83, which is the walk). At rest it barely moves on a slow
     // beat and every few seconds gives one sweep — lying, that sweep is
     // along the ground and comes less often.
-    const walkAmt = THREE.MathUtils.clamp(this.speed / (0.4 * s), 0, 1);
+    const walkAmt = THREE.MathUtils.clamp(outSpeed / (0.4 * s), 0, 1);
     this.tailPhase += dt * THREE.MathUtils.lerp(restful ? 1.2 : 1.6, (Math.PI * 2) / Math.max(0.5, this.gaitT), walkAmt);
     this.flickT -= dt;
     if (this.flickT <= 0) {
@@ -416,9 +554,9 @@ export class Brain {
     return {
       pose: this.pose,
       gaze: this.gaze,
-      moving: this.speed > 0.02,
-      speed: this.speed,
-      vel: this.vel,
+      moving: outSpeed > 0.02,
+      speed: outSpeed,
+      vel: outVel,
       yawRate: this.yawRate,
       anim: {
         breath,

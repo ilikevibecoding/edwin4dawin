@@ -47,7 +47,10 @@ export const STAND = {
   tailLift: 0,
   tailCurl: 0,
   // the tuft turns up: pitch added to the last bones (TAIL_HOOK profile)
-  tailHook: 0.15,
+  tailHook: 0.55,
+  // 0 hangs the tail in its standing J; 1 carries the root out behind the
+  // rump the way a walking lion does (TAIL_CARRY profile)
+  tailCarry: 0,
   earAlert: 0.3,
   jaw: 0,
   lean: 0,
@@ -56,18 +59,43 @@ export const STAND = {
 const SPINE = ['pelvis', 'spine1', 'spine2'];
 const NECK = ['chest', 'neck1', 'neck2'];
 const TAIL = ['tail1', 'tail2', 'tail3', 'tail4', 'tail5'];
-// absolute tail pitch per bone when lying: down to the ground quickly, then flat along it
+// absolute tail pitch per bone (radians below horizontal; -pi/2 hangs straight
+// down, past it the bone points forward under the belly)
+// lying: down to the ground quickly, then flat along it
 const TAIL_LYING = [-0.9, -0.5, -0.08, 0.02, 0.03];
-// how much of pose.tailHook each bone takes: the hook is in the last third
-const TAIL_HOOK = [0, 0.05, 0.25, 0.6, 1.0];
+// standing: off the rump at 45 degrees, vertical by the middle, the tip a
+// touch forward before the hook turns it back — a J. (The rig's rest chain
+// was read straight off the joints, -42..-93 degrees with the round-4 hook of
+// 0.15 rad on the tuft: a rod, in every critic's frame.)
+const TAIL_HANG = [-0.78, -1.1, -1.4, -1.6, -1.68];
+// walking: the root carried at 17 degrees below the line of the back, the
+// tail curving down through the middle third so only the last third hangs
+// and swings, the tuft turned back up by the hook
+const TAIL_CARRY = [-0.3, -0.7, -1.08, -1.35, -1.5];
+// how much of pose.tailHook each bone takes: the hook is the tuft
+const TAIL_HOOK = [0, 0, 0.05, 0.25, 1.0];
 // lateral sway: the fraction of anim.tailSway each bone swings through (radians
 // per unit sway, absolute in the pelvis frame, growing toward the tip) and the
-// phase the wave lags by per bone, so the tip follows the base
-const TAIL_SWAY = [0.16, 0.24, 0.31, 0.37, 0.42];
-const TAIL_LAG = 0.55;
+// phase the wave lags by per bone, so the tip follows the base. Weighted to
+// the last third: the root swings +-7 degrees at the walk, the tuft +-25.
+const TAIL_SWAY = [0.14, 0.2, 0.3, 0.42, 0.52];
+const TAIL_LAG = 0.35;
 // and a smaller fore-aft swing at twice the rate (each hind step nudges the
 // tail root), so the sway also reads in profile
 const TAIL_PITCH_SWAY = [0.03, 0.06, 0.09, 0.12, 0.15];
+// Walking, the lateral wave runs on the gait cycle rather than the brain's
+// free tail clock: the root swings toward the side of the hind foot in
+// stance, peaking at its mid-stance. HL (+X) is planted over cycle phase
+// 0..0.6, so its mid-stance is 0.3; sin(2 pi phase + TAIL_GAIT_PHASE) is 1 there
+// and -1 at HR's (phase 0.8).
+const TAIL_GAIT_PHASE = -0.1 * Math.PI;
+// how much of the trunk's terrain roll each tail bone hangs out of: the root
+// is carried in the pelvis frame, the hanging part hangs plumb in the world
+const TAIL_PLUMB = [0.2, 0.5, 0.8, 1.0, 1.0];
+// how much of the trunk's terrain roll the neck takes back out, bone by bone,
+// so the head stays nearer level on a side slope than the shoulders do
+const HEAD_LEVEL = [0, 0.3, 0.6];
+const HEAD_LEVEL_HEAD = 0.8;
 
 // Swing-phase shaping of the leg, in swing progress u (0 lift-off, 1 landing).
 // How far the wrist / hock folds ahead over the paw (the paw hangs back under
@@ -111,10 +139,6 @@ export class Poser {
     const fwd = rest.get('chest').pos.clone().sub(rest.get('pelvis').pos).normalize();
     this.restBody = basisQuat(fwd, X, new THREE.Quaternion());
     this.restBodyInv = this.restBody.clone().invert();
-    this.tailRestPitch = TAIL.map((n) => {
-      const d = rest.get(n).dir;
-      return Math.atan2(d.y, -d.z);
-    });
     this.world = new Map();
     for (const b of skel.bones) this.world.set(b.name, { p: new THREE.Vector3(), q: new THREE.Quaternion() });
     this.bodyQ = new THREE.Quaternion();
@@ -136,11 +160,12 @@ export class Poser {
    * `ground` { hip, chest } ground height in root space under the hind / front anchors
    * `feet`   per leg { contact: Vector3 root space, fwd: Vector3 (ground-tangent forward), up: Vector3,
    *          u: swing progress or -1, clear: pad height over the ground, stance: stance progress or -1 };
-   *          the array carries { phase, T, moving } for the gait cycle (see Feet.contacts)
+   *          the array carries { phase, T, moving } for the gait cycle and
+   *          { roll, liftHip, liftChest } for the stance plane (see Feet.contacts)
    * `anim`   { breath, blink: [l, r], earFlick: [l, r], tailSway, tailPhase, tailSide, sway, walkAmt }
-   *          (`headBob` and `roll` from the caller are superseded: both are
+   *          Nothing else is read: the head's bob and the trunk's roll are
    *          taken from the gait phase and the legs here, so they stay in
-   *          time with the footfalls)
+   *          time with the footfalls.
    */
   solve(pose, ground, feet, anim) {
     const s = this.s;
@@ -177,18 +202,28 @@ export class Poser {
     const rollMean = (rollHind + rollFront) * 0.5;
 
     // --- body frame ------------------------------------------------------------
+    // The ground under each end of the trunk is the plane its feet stand on:
+    // the centreline sample the caller took, corrected by the feet's plane fit
+    // (a fore end on a rock rises, one in a hollow drops, both rate-limited
+    // in feet.js), and the trunk rolls across that plane. Without the roll the
+    // body stood level on every side slope with the uphill legs folded and the
+    // downhill ones stretched to the limit of their reach.
     const sy = this.sy;
-    const pelvisP = new THREE.Vector3(0, ground.hip + Math.max(pose.hipH * sy, this.minHip), rest.get('pelvis').pos.z + pose.lean * s);
-    const chestTarget = _w.set(0, ground.chest + Math.max(pose.chestH * sy, this.minChest), rest.get('chest').pos.z + pose.lean * s);
+    const gHip = ground.hip + (feet.liftHip || 0);
+    const gChest = ground.chest + (feet.liftChest || 0);
+    const terrainRoll = feet.roll || 0;
+    const pelvisP = new THREE.Vector3(0, gHip + Math.max(pose.hipH * sy, this.minHip), rest.get('pelvis').pos.z + pose.lean * s);
+    const chestTarget = _w.set(0, gChest + Math.max(pose.chestH * sy, this.minChest), rest.get('chest').pos.z + pose.lean * s);
     const bodyDir = _d.copy(chestTarget).sub(pelvisP).normalize();
     basisQuat(bodyDir, X, this.bodyQ);
     // hips and shoulders yaw against each other a little when walking
     _q2.setFromAxisAngle(Y, (anim.sway || 0) * 0.05);
     this.bodyQ.premultiply(_q2);
-    // the trunk as a whole rolls by the mean of the two girdles; each end
-    // then gets its own share (below), so the spine twists between them
-    if (rollMean) {
-      _q2.setFromAxisAngle(bodyDir, rollMean);
+    // the trunk as a whole rolls with the ground plane and by the mean of the
+    // two girdles; each end then gets its own share (below), so the spine
+    // twists between them
+    if (rollMean + terrainRoll) {
+      _q2.setFromAxisAngle(bodyDir, rollMean + terrainRoll);
       this.bodyQ.premultiply(_q2);
     }
     // rotation that carries a rest-frame direction into the current body frame
@@ -225,7 +260,10 @@ export class Poser {
       yawSoFar += pose.neckYaw * spread[i] + headYawGait * 0.3;
       const dir = rest.get(n).dir.clone().applyQuaternion(turn(pitch, yawSoFar, _q)).applyQuaternion(delta);
       const r = _w.copy(X).applyQuaternion(_q2.setFromAxisAngle(Y, yawSoFar)).applyQuaternion(delta);
-      if (i === 0 && rollFront - rollMean) r.applyQuaternion(_q2.setFromAxisAngle(_v.copy(dir).normalize(), rollFront - rollMean));
+      // the chest carries its girdle's share of the gait roll; the neck bones
+      // wind the terrain roll back out toward a level head
+      const unroll = (i === 0 ? rollFront - rollMean : 0) - terrainRoll * HEAD_LEVEL[i];
+      if (unroll) r.applyQuaternion(_q2.setFromAxisAngle(_v.copy(dir).normalize(), unroll));
       set(n, p, fk(n, dir, r));
       p = p.clone().addScaledVector(dir, rest.get(n).len);
     }
@@ -234,6 +272,7 @@ export class Poser {
       const pitch = pose.neckPitch * 0.5 + pose.headPitch + nod * 0.07;
       const dir = rest.get('head').dir.clone().applyQuaternion(turn(pitch, yaw, _q)).applyQuaternion(delta);
       const r = _w.copy(X).applyQuaternion(_q2.setFromAxisAngle(Y, yaw)).applyQuaternion(delta);
+      if (terrainRoll) r.applyQuaternion(_q2.setFromAxisAngle(_v.copy(dir).normalize(), -terrainRoll * HEAD_LEVEL_HEAD));
       set('head', p, fk('head', dir, r));
     }
     const childOf = (name, parentName, extraQ) => {
@@ -264,26 +303,34 @@ export class Poser {
     const pelvisW = W.get('pelvis');
     p = rest.get('tail1').localPos.clone().applyQuaternion(pelvisW.q).add(pelvisW.p);
     const tailPhase = anim.tailPhase || 0;
+    const gaitTail = ph + TAIL_GAIT_PHASE;
     const sway = anim.tailSway || 0;
+    const carry = pose.tailCarry || 0;
     const tailRight = rolledRight(rest.get('tail1').dir.clone().applyQuaternion(delta), rollHind - rollMean, new THREE.Vector3());
     for (let i = 0; i < TAIL.length; i++) {
       const n = TAIL[i];
       const k = (i + 1) / TAIL.length;
-      let pitch = THREE.MathUtils.lerp(this.tailRestPitch[i], TAIL_LYING[i], pose.tailGround);
+      let pitch = THREE.MathUtils.lerp(THREE.MathUtils.lerp(TAIL_HANG[i], TAIL_CARRY[i], carry), TAIL_LYING[i], pose.tailGround);
       pitch += pose.tailLift * (1 - k * 0.4) + pose.tailCurl * k + (pose.tailHook || 0) * TAIL_HOOK[i] * (1 - pose.tailGround);
-      pitch += sway * TAIL_PITCH_SWAY[i] * Math.sin(2 * tailPhase - i * TAIL_LAG * 1.2 + 0.4) * (1 - pose.tailGround);
+      // the waves: on the brain's free clock at rest, on the gait cycle when
+      // walking, crossfaded by how much the animal is walking
+      const lagLat = i * TAIL_LAG;
+      const lagPitch = i * TAIL_LAG * 1.2 - 0.4;
+      const wLat = THREE.MathUtils.lerp(Math.sin(tailPhase - lagLat), Math.sin(gaitTail - lagLat), walk);
+      const wPitch = THREE.MathUtils.lerp(Math.sin(2 * tailPhase - lagPitch), Math.sin(2 * gaitTail - lagPitch), walk);
+      pitch += sway * TAIL_PITCH_SWAY[i] * wPitch * (1 - pose.tailGround);
       // Lateral sway is a wave travelling down the tail, the tip lagging the
       // base and swinging further. It deflects the bone sideways off its
       // sagittal direction — a yaw about the vertical would not move a tail
       // that hangs — so the hanging part swings like a pendulum and the part
       // lying on the ground sweeps along it. Lying, the tail also curls to one side.
-      const lat = sway * TAIL_SWAY[i] * Math.sin(tailPhase - i * TAIL_LAG) + pose.tailGround * 0.3 * k * (anim.tailSide || 1);
+      const lat = sway * TAIL_SWAY[i] * wLat + pose.tailGround * 0.3 * k * (anim.tailSide || 1) - terrainRoll * TAIL_PLUMB[i] * (1 - pose.tailGround);
       const cl = Math.cos(lat);
       const dir = _w.set(Math.sin(lat), Math.sin(pitch) * cl, -Math.cos(pitch) * cl).applyQuaternion(delta);
       // the tail lies on the ground, it does not go through it: a segment that
       // would end below the surface is levelled out onto it
       const len = rest.get(n).len;
-      const floor = ground.hip + this.tailR;
+      const floor = gHip + this.tailR;
       if (p.y + dir.y * len < floor) {
         const dy = THREE.MathUtils.clamp((floor - p.y) / len, -1, 1);
         const h = Math.sqrt(Math.max(0, 1 - dy * dy)) / Math.max(1e-6, Math.hypot(dir.x, dir.z));
@@ -342,7 +389,7 @@ export class Poser {
       if (!leg.front && pose.hindFold > 0) {
         // folded hind leg: the point of the hock rests on the ground beside the
         // belly, the joint itself a hock's depth above it
-        const hock = _w.set(leg.side * pose.hockX * s, ground.hip + this.hockRest, pose.hockZ * s).sub(pawP).normalize();
+        const hock = _w.set(leg.side * pose.hockX * s, gHip + this.hockRest, pose.hockZ * s).sub(pawP).normalize();
         lowDir.lerp(hock, pose.hindFold).normalize();
       } else if (leg.front && pose.frontFold > 0) {
         // sphinx: forearm flat on the ground, wrist a pastern's length behind the
@@ -350,7 +397,7 @@ export class Poser {
         // paw's placement (the pose's frontZ): the paws sit far enough back that
         // the humerus stands nearly upright and the elbow rests on the ground
         // beside the ribs instead of being driven through it.
-        const wrist = _w.set(pawP.x, ground.chest + this.wristRest, pawP.z - leg.L3 * 0.96).sub(pawP).normalize();
+        const wrist = _w.set(pawP.x, gChest + this.wristRest, pawP.z - leg.L3 * 0.96).sub(pawP).normalize();
         lowDir.lerp(wrist, pose.frontFold).normalize();
       }
       let lowP = pawP.clone().addScaledVector(lowDir, leg.L3);

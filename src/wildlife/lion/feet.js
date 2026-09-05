@@ -19,6 +19,13 @@ import { HIND_LATERAL_MIN } from './spec.js';
 // stride with the cadence doing all the work. At the nominal walk a unit male
 // covers 1.45 m a cycle — about 1.25 withers heights; a lioness 1.2 m — and
 // each foot travels 0.6 of that against the body while it is planted.
+//
+// The feet also carry the ground's attitude up to the trunk: a plane is fitted
+// through the four points the feet stand on (or are about to land on), and
+// its roll across the body and its height under the hips and the shoulders,
+// against the terrain sampled on the centreline, are handed to the poser,
+// rate-limited so a re-planted foot tilts the trunk over a few tenths of a
+// second rather than in the frame it lands.
 // ---------------------------------------------------------------------------
 
 const _a = new THREE.Vector3();
@@ -38,6 +45,33 @@ export const WALK_SPEED = 1.2;
 export const WALK_STRIDE = 1.45;
 /** How high the pad clears flat ground mid-swing, unit lion (7.5 cm on a lioness). */
 export const SWING_LIFT = 0.09;
+
+// Setting off. The body walks about a stride off a standing foot over the
+// first half cycle (the speed ramps while the cycle time falls from its cap),
+// so a foot that has most of a stance ahead of it when the walk begins ends it
+// far behind its anchor; how far a leg can stand behind before the trunk has
+// to come down after it, as a fraction of the scale, and the body's travel
+// per cycle through the set-off, are what the choice of the starting phase is
+// scored against (see update).
+const SETOFF_TRAVEL = 1.0;
+const REACH_BEHIND = { front: 0.6, hind: 0.5 };
+
+// Trunk-to-stance-plane fit: how fast the roll and the two heights may follow
+// a change of plane (per second, and a first-order lag), and how far.
+const PLANE_ROLL_RATE = 0.6;
+const PLANE_ROLL_MAX = 0.45;
+const PLANE_LIFT_RATE = 0.3;
+const PLANE_LIFT_MAX = 0.2;
+const PLANE_TAU = 0.3;
+// The heights are the plane against the terrain sampled under the hips and
+// the shoulders, two samples that are the whole cost of the fit (5 us of a
+// 21 us step); they are taken again only when a foot moves or the root has
+// walked or turned this far (unit scale, radians) since the last, and the lag
+// above turns the refresh into sub-millimetre steps.
+const PLANE_RESAMPLE = 0.08;
+const PLANE_RESAMPLE_YAW = 0.05;
+
+const _pts = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
 
 /** Stride for a unit lion at speed `v` (m/s, unit scale): shorter, quicker steps at an amble. */
 export function strideAt(v) {
@@ -69,6 +103,17 @@ export class Feet {
     }));
     this.root = { x: 0, y: 0, z: 0, yaw: 0 };
     this.contact = this.legs.map(() => ({ contact: new THREE.Vector3(), fwd: new THREE.Vector3(), up: new THREE.Vector3() }));
+    // where the trunk's ends sit over the ground in root space, for the plane fit
+    this.hipZ = skel.rest.get('pelvis').pos.z;
+    this.chestZ = skel.rest.get('chest').pos.z;
+    // the stance plane's roll across the body (radians, positive lifting +X)
+    // and its height under the hips and the shoulders relative to the terrain
+    // sampled on the centreline there (metres), rate-limited
+    this.roll = 0;
+    this.liftHip = 0;
+    this.liftChest = 0;
+    // the fit's two terrain samples, and where the root was when they were taken
+    this.lift = { hip: 0, chest: 0, x: 0, z: 0, yaw: 0, stale: true };
   }
 
   toWorld(local, out = new THREE.Vector3()) {
@@ -101,6 +146,88 @@ export class Feet {
       l.swing = null;
       l.planted = true;
     }
+    // placed, not walked here: the trunk takes the plane at once
+    this.fitPlane(Infinity);
+  }
+
+  /**
+   * Least-squares plane through the four ground points the feet stand on (a
+   * swinging foot counts where it will land — its lifted position would tilt
+   * the plane by the swing arc), read as the roll across the body and as the
+   * plane's height under the hips and the shoulders against the centreline
+   * terrain sample there, then followed at a bounded rate. Same fit as the
+   * truck's four contact patches in drive.js.
+   */
+  fitPlane(dt) {
+    let mx = 0;
+    let mz = 0;
+    let mh = 0;
+    for (let i = 0; i < 4; i++) {
+      const l = this.legs[i];
+      const p = _pts[i].copy(l.swing ? l.swing.to : l.pos);
+      mx += p.x;
+      mz += p.z;
+      mh += p.y;
+    }
+    mx *= 0.25;
+    mz *= 0.25;
+    mh *= 0.25;
+    let sxx = 0;
+    let szz = 0;
+    let sxz = 0;
+    let sxh = 0;
+    let szh = 0;
+    for (let i = 0; i < 4; i++) {
+      const dx = _pts[i].x - mx;
+      const dz = _pts[i].z - mz;
+      const dh = _pts[i].y - mh;
+      sxx += dx * dx;
+      szz += dz * dz;
+      sxz += dx * dz;
+      sxh += dx * dh;
+      szh += dz * dh;
+    }
+    const det = sxx * szz - sxz * sxz;
+    if (Math.abs(det) < 1e-6) return;
+    const gx = (sxh * szz - szh * sxz) / det;
+    const gz = (szh * sxx - sxh * sxz) / det;
+    const c = Math.cos(this.root.yaw);
+    const sn = Math.sin(this.root.yaw);
+    // root-space right is (c, -sn) in the world's xz, forward (sn, c)
+    const gRight = gx * c - gz * sn;
+    const rollT = THREE.MathUtils.clamp(Math.atan(gRight), -PLANE_ROLL_MAX, PLANE_ROLL_MAX);
+    // the plane's height under a root-space point on the centreline, less the
+    // terrain's own height there: what the trunk end should rise or drop by
+    const s = this.s;
+    const L = this.lift;
+    const forced = !(dt < Infinity);
+    if (L.stale || forced || Math.abs(this.root.x - L.x) + Math.abs(this.root.z - L.z) > PLANE_RESAMPLE * s || Math.abs(this.root.yaw - L.yaw) > PLANE_RESAMPLE_YAW) {
+      const liftAt = (lz) => {
+        const wx = this.root.x + lz * sn;
+        const wz = this.root.z + lz * c;
+        const plane = mh + gx * (wx - mx) + gz * (wz - mz);
+        return THREE.MathUtils.clamp(plane - this.height(wx, wz), -PLANE_LIFT_MAX * s, PLANE_LIFT_MAX * s);
+      };
+      L.hip = liftAt(this.hipZ);
+      L.chest = liftAt(this.chestZ);
+      L.x = this.root.x;
+      L.z = this.root.z;
+      L.yaw = this.root.yaw;
+      L.stale = false;
+    }
+    const hipT = L.hip;
+    const chestT = L.chest;
+    if (forced) {
+      this.roll = rollT;
+      this.liftHip = hipT;
+      this.liftChest = chestT;
+      return;
+    }
+    const k = 1 - Math.exp(-dt / PLANE_TAU);
+    const follow = (cur, target, rate) => cur + THREE.MathUtils.clamp((target - cur) * k, -rate * dt, rate * dt);
+    this.roll = follow(this.roll, rollT, PLANE_ROLL_RATE);
+    this.liftHip = follow(this.liftHip, hipT, PLANE_LIFT_RATE * s);
+    this.liftChest = follow(this.liftChest, chestT, PLANE_LIFT_RATE * s);
   }
 
   /** Fix a foot to the ground at (x, z) and read the slope under it. */
@@ -126,6 +253,7 @@ export class Feet {
     l.planted = true;
     l.swing = null;
     l.stance = 0;
+    this.lift.stale = true;
   }
 
   /**
@@ -146,34 +274,19 @@ export class Feet {
     this.vel = vel;
     this.yawRate = yawRate;
     if (moving && speed > 0.02) {
-      if (!this.moving) {
-        // Setting off. Standing feet all sit at the middle of their stance,
-        // so start the cycle where the foot furthest behind its anchor is
-        // about to lift; the rest then have at most half a cycle of stance
-        // left rather than a whole one, which from a centred start would end
-        // a full stride behind the hip with the leg locked straight.
-        let first = this.legs[0];
-        let fb = Infinity;
-        for (const l of this.legs) {
-          this.toWorld(l.anchor, _a);
-          const c = Math.cos(this.root.yaw);
-          const sn = Math.sin(this.root.yaw);
-          const behind = (l.pos.x - _a.x) * sn + (l.pos.z - _a.z) * c;
-          if (behind < fb) {
-            fb = behind;
-            first = l;
-          }
-          l.stepped = false;
-        }
-        this.phase = (first.phase + DUTY - 0.04 + 1) % 1;
-      }
+      if (!this.moving) this.setOff();
       this.moving = true;
       // the stride shortens as the animal slows, so an amble is short quick
       // steps rather than one two-second stride planned off a speed that is
       // still ramping up; the cycle time is still bounded. A turn moves the
-      // feet too, so it counts toward the tempo.
+      // feet too — the anchors swing about the root at ~0.55 m/rad — so it
+      // counts toward the tempo but not toward the stride: turning, the
+      // animal takes shorter, quicker steps (on the spot at 1.1 rad/s, a
+      // 0.8 s cycle whose stance sweeps an anchor 30 degrees rather than a
+      // 1.45 s one sweeping it 55, which was more than the legs could stand
+      // through)
       const vEff = speed + Math.abs(yawRate) * 0.55 * s;
-      this.stride = strideAt(vEff / s) * s;
+      this.stride = strideAt(speed / s) * s;
       const T = THREE.MathUtils.clamp(this.stride / Math.max(0.05, vEff), 0.6, 2.2);
       this.T = T;
       this.phase = (this.phase + dt / T) % 1;
@@ -210,6 +323,7 @@ export class Feet {
       }
       // a foot may step once per cycle
       for (const l of this.legs) if ((this.phase - l.phase + 1) % 1 < DUTY) l.stepped = false;
+      this.fitPlane(dt);
       return;
     }
 
@@ -223,31 +337,104 @@ export class Feet {
         inAir++;
       }
     }
-    if (inAir > 0) return;
-    let worst = null;
-    let wd = 0;
-    for (const l of this.legs) {
+    if (inAir === 0) {
+      let worst = null;
+      let wd = 0;
+      for (const l of this.legs) {
+        this.toWorld(l.anchor, _a);
+        const d = Math.hypot(_a.x - l.pos.x, _a.z - l.pos.z);
+        if (d > wd) {
+          wd = d;
+          worst = l;
+        }
+      }
+      if (worst && wd > 0.07 * s) this.beginSwing(worst, stepDur, false);
+    }
+    this.fitPlane(dt);
+  }
+
+  /**
+   * The walk begins: choose where in the cycle to start it.
+   *
+   * Every foot stands where the stand left it — usually at its anchor, after
+   * a lie well ahead of it, one of them perhaps still in the air on a
+   * catch-up step. Each of the four phases that has one foot about to lift
+   * is scored by how far behind its anchor every foot would be by the time
+   * its own swing window opens, given the body's travel through the set-off
+   * (SETOFF_TRAVEL per cycle), against the reach the leg has behind it;
+   * the phase with the least overreach wins, and among equals the foot
+   * furthest behind lifts first. From a settled stand this puts a forefoot
+   * first, the diagonal hind foot lifting with it and the other forefoot
+   * waiting the longest, which its reach and the shoulder's give absorb. A
+   * hind foot first would leave the other hind foot standing half a cycle
+   * while the body walked half a metre off it, out of its reach, and the
+   * trunk would be fitted down 20 cm at the hips (the rump-down first frame of
+   * the round-4 strip; that strip's lion set off with a catch-up step in the
+   * air, which landed on its stand-still target with no lead and then stood
+   * a whole stance through the acceleration).
+   *
+   * A catch-up step still in the air whose foot falls in its swing window
+   * joins the gait where it is: it re-aims at a landing with the stance's
+   * lead and comes down on its beat. One that falls in its stance window
+   * finishes on its own clock, which its wait accounts for.
+   */
+  setOff() {
+    const s = this.s;
+    const c = Math.cos(this.root.yaw);
+    const sn = Math.sin(this.root.yaw);
+    const behind = this.legs.map((l) => {
       this.toWorld(l.anchor, _a);
-      const d = Math.hypot(_a.x - l.pos.x, _a.z - l.pos.z);
-      if (d > wd) {
-        wd = d;
-        worst = l;
+      const p = l.swing ? l.swing.to : l.pos;
+      return (p.x - _a.x) * sn + (p.z - _a.z) * c;
+    });
+    let best = 0;
+    let bestCost = Infinity;
+    for (let f = 0; f < 4; f++) {
+      const ph = (this.legs[f].phase + DUTY - 0.04 + 1) % 1;
+      let cost = behind[f] * 1e-3;
+      for (let i = 0; i < 4; i++) {
+        const l = this.legs[i];
+        const p = (ph - l.phase + 1) % 1;
+        const wait = p < DUTY ? DUTY - p : 0;
+        const over = wait * SETOFF_TRAVEL * s - behind[i] - REACH_BEHIND[l.spec.front ? 'front' : 'hind'] * s;
+        if (over > 0) cost += over * over;
+      }
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = f;
       }
     }
-    if (worst && wd > 0.07 * s) this.beginSwing(worst, stepDur, false);
+    this.phase = (this.legs[best].phase + DUTY - 0.04 + 1) % 1;
+    for (const l of this.legs) {
+      l.stepped = false;
+      if (!l.swing || l.swing.retarget) continue;
+      const p = (this.phase - l.phase + 1) % 1;
+      const u = l.u || 0;
+      if (p < DUTY || u > 0.9) continue;
+      // p0 such that the gait's progress through the window, (p - p0) / (1 - p0),
+      // is the swing's own progress now, so the arc carries on unbroken
+      l.swing.retarget = true;
+      l.swing.p0 = (p - u) / (1 - u);
+      l.stepped = true;
+    }
   }
 
   /**
    * Where a foot should land: the anchor as it will be `ahead` seconds from
    * now, plus half the distance the body covers during the stance, so the
-   * foot spends its planted time centred under the leg.
+   * foot spends its planted time centred under the leg — in the turn as well
+   * as along the path: the anchor swings about the root while the foot stands,
+   * so it is placed where the anchor will be half a stance into the turn.
+   * Without that a lion turning on the spot (pushed, RETREAT_TURN) swept its
+   * planted feet 40 degrees off their anchors and the trunk came down 25 cm
+   * after them.
    */
   landing(l, ahead, out) {
     const vel = this.vel;
-    const aheadYaw = this.root.yaw + this.yawRate * ahead;
+    const travel = this.moving ? DUTY * (this.T || 1) * STANCE_AHEAD[l.spec.front ? 'front' : 'hind'] : 0;
+    const aheadYaw = this.root.yaw + this.yawRate * (ahead + travel);
     const c = Math.cos(aheadYaw);
     const sn = Math.sin(aheadYaw);
-    const travel = this.moving ? DUTY * (this.T || 1) * STANCE_AHEAD[l.spec.front ? 'front' : 'hind'] : 0;
     // a hind foot's lateral offset is kept on its own side of the body: the
     // stifle and hock follow the paw, so this is what stops the X under the hips
     let lx = l.anchor.x;
@@ -294,6 +481,7 @@ export class Feet {
     l.swing = { from, to, t: 0, dur, lift, retarget };
     l.u = 0;
     l.planted = false;
+    this.lift.stale = true;
   }
 
   stepSwing(l, dt, uPhase) {
@@ -330,7 +518,8 @@ export class Feet {
    * ground under it, `stance` progress through the planted phase (-1 when
    * standing); the array itself carries the cycle phase, period and whether
    * the gait is running, so the poser can keep the head and the trunk in time
-   * with the legs.
+   * with the legs, and the stance plane's roll and its lift under the hips
+   * and the shoulders (fitPlane) so the trunk stands on the plane of its feet.
    */
   contacts() {
     for (let i = 0; i < 4; i++) {
@@ -367,6 +556,9 @@ export class Feet {
     this.contact.phase = this.phase;
     this.contact.T = this.T || 1;
     this.contact.moving = this.moving;
+    this.contact.roll = this.roll;
+    this.contact.liftHip = this.liftHip;
+    this.contact.liftChest = this.liftChest;
     return this.contact;
   }
 
