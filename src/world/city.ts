@@ -113,13 +113,11 @@ interface CityProxy extends BatchSource { kind: Kind; n: number; cells: CityCell
  *  camera stands in that are outside the frustum are not submitted */
 const CITY_CELL = 250;
 const _perCascade = new Array<number>(MAX_CASCADES).fill(0);
-/** houses (the `house` kind: 4-10 m tall) are left out of the main pass beyond this: they are a pixel or two
- *  there and the terrain's baked suburb ground (roof cells, drives, car parks: fully in from 3.8 km) stands in */
-export const HOUSE_FAR = 6000;
-/** the mirror image leaves out the city beyond this (a reflected tower there is a few blurred texels of the
- *  half-resolution mirror, mostly faded to the environment sky by the roughness streak) and houses beyond
- *  MIRROR_HOUSE_FAR (a reflected house is under a mirror texel tall there) */
-export const MIRROR_CITY_FAR = 3500;
+/** houses (the `house` kind, ~10 m wide) leave the main pass where a 10 m footprint projects under this many
+ *  pixels: the terrain's baked suburb ground (roof cells, drives, car parks: fully in from 3.8 km) stands in */
+export const HOUSE_MIN_PX = 1.5;
+/** the mirror image leaves out houses beyond this (a reflected house is under a mirror texel tall there); towers
+ *  stay to the reflection range: a lit skyline reflects across the whole bay at night */
 export const MIRROR_HOUSE_FAR = 2500;
 const _bp = new THREE.Vector3();
 /** grow `box` by building `i` of `t` the way the tile box was built (footprint half-diagonal x 0.6, height) */
@@ -304,7 +302,8 @@ export class BuildingBatches {
   /** Per-tile visibility: a tile is drawn when its box is in view and casts shadows when it is within
    *  the shadow distance and its footprint, swept along the sun's shadow, can reach anything in view.
    *  Tiles that only cast leave the camera layer so the main pass skips them. */
-  updateLod(camX: number, camZ: number, cull: ViewCull, camPos: THREE.Vector3, mirrorRange: number): void {
+  /** `pxPerMetre`: screen pixels a metre covers at 1 m from the camera (focal length in pixels). */
+  updateLod(camX: number, camZ: number, cull: ViewCull, camPos: THREE.Vector3, mirrorRange: number, pxPerMetre: number): void {
     this.frame++;
     const perCascade = _perCascade;
     perCascade.fill(0);
@@ -324,8 +323,8 @@ export class BuildingBatches {
       for (const p of this.proxies) this.placeShadow(p, p.kind, i, on, cull);
     }
     this.proxyActive = proxyBits;
-    const houseFar = HOUSE_FAR;
-    const mirrorFar = Math.min(mirrorRange, MIRROR_CITY_FAR);
+    const houseFar = (10 * pxPerMetre) / HOUSE_MIN_PX;
+    const mirrorFar = mirrorRange;
     for (const t of this.tiles) {
       const inView = cull.boxInView(t.box);
       const house = t.kind === 'house';

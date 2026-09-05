@@ -50,6 +50,10 @@ const SMALL = 1.0;
 const LOD_DISTANCE = 350;
 /** objects thinner than SMALL are well under a pixel wide beyond this and leave the main pass */
 const SMALL_DISTANCE = 2500;
+/** props leave the main pass where a PROXY_SIZE-thick object (a container) projects under PROP_MIN_PX pixels wide,
+ *  unless the tallest object of their cell still stands PROP_TALL_PX pixels high there (a crane, a tank farm) */
+export const PROP_MIN_PX = 0.5;
+export const PROP_TALL_PX = 3;
 /** the mirror image (half resolution, blurred by the water's roughness) leaves out objects thinner than SMALL
  *  beyond MIRROR_SMALL_DISTANCE and everything beyond MIRROR_FAR (cell distances) */
 export const MIRROR_SMALL_DISTANCE = 800;
@@ -398,8 +402,10 @@ export class Props {
   /** Per-frame culling: a chunk is drawn when its box is in view and casts when its shadow can reach
    *  the view; meshes that only cast leave the camera layer. Beyond SMALL_DISTANCE the main pass draws
    *  the large prefix only; thin cylinders and lamps swap to the coarse prism beyond LOD_DISTANCE. */
-  updateLod(camX: number, camZ: number, cull: ViewCull, camPos: THREE.Vector3, mirrorRange: number): void {
+  /** `pxPerMetre`: screen pixels a metre covers at 1 m from the camera (focal length in pixels). */
+  updateLod(camX: number, camZ: number, cull: ViewCull, camPos: THREE.Vector3, mirrorRange: number, pxPerMetre: number): void {
     this.frame++;
+    const propFar = (PROXY_SIZE * pxPerMetre) / PROP_MIN_PX;
     // coarse cascades that would draw more chunk meshes than the proxies cost take the proxies instead
     const perCascade = _perCascade;
     perCascade.fill(0);
@@ -417,13 +423,16 @@ export class Props {
       const d = c.box.distanceToPoint(camPos);
       return d > MIRROR_FAR ? 0 : d > MIRROR_SMALL_DISTANCE ? c.nLarge : c.count;
     };
+    /** true where a group of props `height` metres tall at distance `d` is under both pixel thresholds */
+    const subpixel = (d: number, height: number): boolean => d > propFar && height * pxPerMetre < PROP_TALL_PX * d;
+    const cameraCountOf = (c: PropCell): number => (subpixel(c.box.distanceToPoint(camPos), c.box.max.y - c.box.min.y) ? 0 : c.count);
     for (const c of this.chunks) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
       const inView = cull.boxInView(c.box);
       const bits = c.bits & ~proxyBits;
       const far = d > SMALL_DISTANCE;
       for (const e of c.meshes) {
-        const n = far ? e.large : e.total;
+        const n = subpixel(d, c.height) ? 0 : far ? e.large : e.total;
         e.mainCount = n;
         e.mesh.count = n;
         const drawn = inView && n > 0;
@@ -433,7 +442,7 @@ export class Props {
         // left to the shadow passes (and to the camera only when the batch is full)
         const pb = e.batches[lo ? 1 : 0] ?? e.batches[0];
         const cells = drawn ? this.cellsOf(e, n) : null;
-        const batched = this.place(e, cells, pb.camera, 'inCamera', inViewBox);
+        const batched = this.place(e, cells, pb.camera, 'inCamera', inViewBox, cameraCountOf);
         // shadows: the cascades the chunk can shade take the mesh's cells that can shade them from the shape's
         // shadow batches (the fine cascades every instance, the coarse ones the large prefix, as the mesh itself
         // would draw them); the mesh casts on its own only into a cascade whose batch is full

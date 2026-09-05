@@ -22,6 +22,8 @@ import { FlightCamera } from './plane/camera';
 import { Metrics } from './core/metrics';
 import { LAYER_MAIN, ViewCull, configureMainCamera, installCascadeRouting, layerMask, shadowPassStats } from './world/culling';
 
+const _size = new THREE.Vector2();
+
 export interface QualitySettings {
   samples: number;
   shadowMapSize: number;
@@ -375,8 +377,10 @@ export class Game {
     this.city.batches.shadowDistance = this.csm.maxFar;
     this.vegetation.shadowDistance = Math.max(1800, Math.min(3000, this.csm.maxFar * 0.4));
     this.vegetation.updateLod(cx, cz, this.cull, cam.position);
-    this.city.batches.updateLod(cx, cz, this.cull, cam.position, this.reflection.range);
-    this.props.updateLod(cx, cz, this.cull, cam.position, this.reflection.range);
+    // focal length in pixels of the main frame: the sub-pixel cut-offs of houses and props scale with it
+    const pxPerMetre = 0.5 * this.renderer.getDrawingBufferSize(_size).y * cam.projectionMatrix.elements[5];
+    this.city.batches.updateLod(cx, cz, this.cull, cam.position, this.reflection.range, pxPerMetre);
+    this.props.updateLod(cx, cz, this.cull, cam.position, this.reflection.range, pxPerMetre);
     this.traffic.updateCulling(this.cull);
     // the airframe casts only into the cascades its shadow can reach: swept down to the ground under it, so
     // from altitude that is the cascade holding its ground shadow, not all three
