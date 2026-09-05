@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-05T09:46:17.493Z",
+  "updated": "2026-09-05T09:50:18.240Z",
   "phase": "Star Wars expansion: 7 builders running (gameplay 1:1, space train, towers+rooms, spaceport+ships, Death Star interior, HD textures, shaders/shadows/bloom); landmark wave next",
   "summary": "User round 2 feedback: references received (Coruscant skyline/platform/senate/plaza + Monument Plaza). New rubrics: 05 render quality (64x HD tiles, normal/material maps, cascaded sun shadows, HDR bloom + filmic tone mapping, atmospheric sky, water reflections, presets) and 06 landmarks (one builder per signature building). Layout now reserves 12 landmark lots (Senate 3x3, Jedi Temple 3x3, Monument Plaza 3x3, Uscru undercity 3x3, Works, CoCo market, Opera, 500 Republica, Chancellery, Medcenter, Detention, HoloNet); 421 towers + 12 landmarks + 8 plazas.",
   "links": [
@@ -152,6 +152,11 @@
       "name": "Coruscant spaceport + 4 ship models + traffic",
       "status": "merged",
       "detail": "Deck, terminal, 8 pads, tower, hangar, fuel farm, yards; 19 ships (4 draw calls). Lanes re-routed to follow the boulevard corridors so no ship ever crosses a tower; pad approaches swing out over the ocean; test asserts no route enters a lot below its roof."
+    },
+    {
+      "name": "Death Star: walkable station in the space region",
+      "status": "merged",
+      "detail": "R 100 sphere at (0,128,-4000): plated hull, trench with lamp rows, superlaser dish, hangar bay with ships, 25 decks of corridors/rooms (3275 rooms, 18 required types), reactor shaft with catwalks, detention block -> compactor chute, bridge + throne room superstructure; 8/8 generator tests, 3 ms/chunk, hangar->throne route min light 9, 0 sky leaks."
     }
   ],
   "metrics": [
@@ -313,6 +318,10 @@
     {
       "time": "2026-09-05 09:46 UTC",
       "text": "Merged gameplay, train and spaceport branches into the integration branch (unit 11/11, spaceport 15/15, tornado replay hash unchanged); ship lanes now follow boulevards; disaster journal carries chest contents."
+    },
+    {
+      "time": "2026-09-05 09:50 UTC",
+      "text": "Death Star interior merged (8/8 tests); npm test now runs unit + spaceport + Death Star + disasters."
     }
   ],
   "issues": [
