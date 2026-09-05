@@ -6,7 +6,8 @@ import { WorldGen } from '../src/worldgen.js';
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH, TICK_RATE } from '../src/constants.js';
 import { register, SPACEPORT, DECK_Y, STATION_Y, FRONTIER, FRONTIER_DECK_TOP, FRONTIER_DECK_Y } from '../src/coruscant/spaceport.js';
 import { shipModels, buildShipGeometry } from '../src/ships/models.js';
-import { buildShips, routePose, nextPhaseStart, ShipTraffic, HIDE_DIST } from '../src/ships/traffic.js';
+import { buildShips, routePose, nextPhaseStart, ShipTraffic, HIDE_DIST, lanePathClear } from '../src/ships/traffic.js';
+import { getLayout } from '../src/coruscant/layout.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -244,7 +245,23 @@ test('landing cycle: descend -> hover 2 s -> touch down -> dwell 15..40 s on the
     const nd = nextPhaseStart(sh, 'descend', 100);
     assert.ok(nd >= 100 && routePose(sh.route, nd + sh.offset + 1e-3, {}).phase === 'descend');
   }
-  for (const sh of ships.filter((s) => s.pad === null)) for (let t = 0; t < sh.route.period; t += 2) { const q = routePose(sh.route, t, {}); assert.ok(q.y >= 110 && q.y <= 225, `lane altitude ${q.y}`); }
+  // lane ships: street lanes at y 104..114 (under every skybridge), tall lanes at 212..230, the high cross at 262..276
+  for (const sh of ships.filter((s) => s.pad === null)) for (let t = 0; t < sh.route.period; t += 2) { const q = routePose(sh.route, t, {}); assert.ok(q.y >= 104 && q.y <= 276, `lane altitude ${q.y}`); }
+});
+
+test('no route (lane or pad approach) passes through a tower or landmark lot below its roof, and lanes follow the boulevard corridors', () => {
+  const layout = getLayout(1337);
+  const lots = layout.lots.filter((l) => l.kind !== 'plaza');
+  let samples = 0;
+  for (const sh of buildShips(S.pads, DECK_Y, null, layout)) {
+    const path = sh.route.segs[0].path, p = { x: 0, y: 0, z: 0 };
+    for (let d = 0; d < path.length; d += 2) {
+      path.at(d, p); samples++;
+      for (const l of lots) assert.ok(!(p.x >= l.x0 - 3 && p.x < l.x1 + 3 && p.z >= l.z0 - 3 && p.z < l.z1 + 3 && p.y < 60 + l.height + 3), `${sh.name} hits ${l.family || l.kind} lot ${l.id} at ${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)}`);
+    }
+    if (sh.pad === null && !sh.name.includes('high cross')) assert.ok(lanePathClear(sh.lanePts, layout), `${sh.name} leaves the boulevard corridors`);
+  }
+  assert.ok(samples > 5000);
 });
 
 test('ships bank into turns (roll from curvature, bounded) and pitch with climbs', () => {

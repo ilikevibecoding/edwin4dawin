@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { hash2 } from '../rng.js';
 import { TICK_RATE } from '../constants.js';
 import { shipModels, shipMaterial, makeShipInstances } from './models.js';
+import { getLayout } from '../coruscant/layout.js';
 
 export const HIDE_DIST = 300;          // ships beyond this are not drawn
 const AUDIO_DIST = 220, MAX_LOOPS = 3;
@@ -104,19 +105,23 @@ function makeRoute(segs) {
   return { segs, period: t0 };
 }
 
-// Loop over Coruscant starting/ending above a spaceport pad (side = which half of the city, k = lane variant).
+// Approach loop for a spaceport pad: the spaceport sits on the plateau's west edge, so arrivals and departures
+// swing out over the ocean (x < 2488) and come back to the pad heading east, at heights that clear the deck (y 96),
+// the terminal roof (y 111) and the control tower cab (y 156) while never crossing the skyline. side = which half
+// of the city the pad is on, k = lane variant so ships on neighbouring pads do not share a track.
 function coruscantLoop(P, side, k) {
   const s = side;
   return [
     [P.x, 130, P.z],
-    [P.x - 70, 140, P.z - s * 10],
-    [2430, 158 + 4 * k, s * (200 + 30 * k)],
-    [2560, 190 + 4 * k, s * (470 - 10 * k)],
-    [3050, 196 + 4 * k, s * (482 - 12 * k)],
-    [3400, 182 + 4 * k, s * (300 + 25 * k)],
-    [3050, 170 + 4 * k, s * (120 + 40 * k)],
-    [2790, 150 + 2 * k, s * (160 + 15 * k)],
-    [P.x + 70, 138, P.z + s * 10],
+    [P.x - 90, 142, P.z + s * 24],
+    [2440, 162 + 4 * k, s * (230 + 30 * k)],
+    [2300, 184 + 4 * k, s * (430 + 20 * k)],
+    [2110, 196 + 4 * k, s * (280 + 10 * k)],
+    [2020 - 30 * k, 202 + 4 * k, 0],
+    [2110, 196 + 4 * k, -s * (280 + 10 * k)],
+    [2300, 180 + 4 * k, -s * (430 + 20 * k)],
+    [2440, 158 + 4 * k, -s * (230 + 30 * k)],
+    [P.x - 90, 138, P.z - s * 24],
   ];
 }
 
@@ -159,28 +164,91 @@ function laneRoute(points, speed) {
   return makeRoute([{ kind: 'fly', path, prof, dur: prof.T, phase: 'fly' }]);
 }
 
-// The sky lanes over the plateau (city centre (3000, 0), half size 512).
-function laneLoops() {
-  const ring = (cx, cz, r, y, n, wobble, ywob) => {
-    const pts = [];
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const rr = r + wobble * Math.sin(3 * a);
-      pts.push([cx + Math.cos(a) * rr, y + ywob * Math.cos(2 * a), cz + Math.sin(a) * rr]);
+// The sky lanes over the plateau follow the boulevard corridors of the city layout: no tower ever stands on a
+// boulevard, so a lane that stays within CORRIDOR blocks of a boulevard centre line is clear of buildings at
+// every height. Landmarks cut the boulevards inside their lots, so a lane may only use lines where an unbroken
+// mid-level segment exists (lanes are validated against the layout's segments; see laneRectValid). Skybridges
+// cross the corridors between y 130 and y 193, gangway lamps reach y 99 and the lift shafts y 100, so the low
+// airspeeder lanes fly at y 106..112 and the tall lanes at y 214+ (above every skybridge).
+const CORRIDOR = 8;
+const CORNER_APPROACH = 18;
+
+// Points of a closed rectangle whose sides lie on boulevard lines X0/X1 (z-axis boulevards) and Z0/Z1 (x-axis
+// boulevards). Extra points before/after each corner keep the Catmull-Rom spline inside the corridor.
+function rectLanePts(X0, X1, Z0, Z1, y, ywob) {
+  const corners = [[X0, Z0], [X1, Z0], [X1, Z1], [X0, Z1]];
+  const out = [];
+  for (let c = 0; c < 4; c++) {
+    const [ax, az] = corners[c], [bx, bz] = corners[(c + 1) % 4];
+    const len = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / len, uz = (bz - az) / len;
+    const pts = [[ax, az]];
+    if (len > 2 * CORNER_APPROACH + 24) pts.push([ax + ux * CORNER_APPROACH, az + uz * CORNER_APPROACH], [(ax + bx) / 2, (az + bz) / 2], [bx - ux * CORNER_APPROACH, bz - uz * CORNER_APPROACH]);
+    else pts.push([(ax + bx) / 2, (az + bz) / 2]);
+    for (const [px, pz] of pts) out.push([px, y + ywob * Math.sin(out.length * 0.9), pz]);
+  }
+  return out;
+}
+
+// True when every sample of the closed spline through `pts` lies within CORRIDOR of an unbroken mid-level
+// boulevard segment (the intersections are covered by the segments meeting there).
+export function lanePathClear(pts, layout) {
+  const segs = layout._mids || (layout._mids = layout.boulevards.filter((s) => s.level === 'mid'));
+  const path = new Path(pts, true);
+  const p = { x: 0, y: 0, z: 0 };
+  for (let s = 0; s < path.length; s += 2) {
+    path.at(s, p);
+    let ok = false;
+    for (const sg of segs) {
+      if (sg.axis === 'z') { if (Math.abs(p.x - sg.coord) <= CORRIDOR && p.z >= sg.z0 - CORRIDOR && p.z < sg.z1 + CORRIDOR) { ok = true; break; } }
+      else if (Math.abs(p.z - sg.coord) <= CORRIDOR && p.x >= sg.x0 - CORRIDOR && p.x < sg.x1 + CORRIDOR) { ok = true; break; }
     }
-    return pts;
+    if (!ok) return false;
+  }
+  return true;
+}
+
+// Picks nested boulevard rectangles from the layout lines that pass lanePathClear: two tall loops (opposite
+// directions), one high cross-city loop and two low airspeeder loops hugging the streets.
+function laneLoops(layout) {
+  const { xs, zs } = layout.lines;
+  const mids = layout._mids || (layout._mids = layout.boulevards.filter((s) => s.level === 'mid'));
+  const n = xs.length, m = zs.length;
+  // a rectangle side is usable when one unbroken segment of that boulevard line covers it (plus the corridor)
+  const covers = (axis, li, from, to) => mids.some((s) => s.axis === axis && s.line === li && (axis === 'z' ? (s.z0 <= from - CORRIDOR && s.z1 >= to + CORRIDOR) : (s.x0 <= from - CORRIDOR && s.x1 >= to + CORRIDOR)));
+  const rectOk = (i0, i1, j0, j1) => covers('z', i0, zs[j0], zs[j1]) && covers('z', i1, zs[j0], zs[j1]) && covers('x', j0, xs[i0], xs[i1]) && covers('x', j1, xs[i0], xs[i1]);
+  const rects = [];
+  for (let i0 = 0; i0 < n; i0++) for (let i1 = i0 + 1; i1 < n; i1++) for (let j0 = 0; j0 < m; j0++) for (let j1 = j0 + 1; j1 < m; j1++) {
+    if (!rectOk(i0, i1, j0, j1)) continue;
+    rects.push({ i0, i1, j0, j1, w: xs[i1] - xs[i0], d: zs[j1] - zs[j0], area: (xs[i1] - xs[i0]) * (zs[j1] - zs[j0]) });
+  }
+  rects.sort((a, b) => b.area - a.area);
+  const lanes = [];
+  const add = (r, y, ywob, spec) => {
+    if (!r) return null;
+    const pts = rectLanePts(xs[r.i0], xs[r.i1], zs[r.j0], zs[r.j1], y, ywob);
+    if (!lanePathClear(pts, layout)) return null;
+    lanes.push({ ...spec, pts: spec.reverse ? pts.reverse() : pts });
+    return r;
   };
-  return [
-    { name: 'outer ring', pts: ring(3000, 0, 440, 160, 12, 25, 10), types: [0, 1, 3], speedMul: 1 },
-    { name: 'inner ring', pts: ring(3030, 30, 260, 132, 10, 18, 6).reverse(), types: [1, 3, 0], speedMul: 0.9 },
-    { name: 'high cross', pts: [[2560, 205, -430], [3000, 212, -470], [3440, 205, -430], [3480, 200, 0], [3440, 205, 430], [3000, 212, 470], [2560, 205, 430], [2520, 200, 0]], types: [0, 1], speedMul: 1.1 },
-    { name: 'spaceport low loop', pts: [[2540, 118, -240], [2700, 122, -250], [2790, 126, -60], [2790, 126, 60], [2700, 122, 250], [2540, 118, 240], [2480, 121, 0]], types: [2, 2, 2], speedMul: 1 },
-  ];
+  const inside = (a, b) => a.i0 >= b.i0 && a.i1 <= b.i1 && a.j0 >= b.j0 && a.j1 <= b.j1;
+  // tall loops: the largest clear rectangle, then the largest one strictly inside it with at most half its area
+  let outer = null;
+  for (const r of rects) { if (r.w >= 300 && r.d >= 300 && add(r, 216, 4, { name: 'tall outer', types: [0, 1, 3, 0], speedMul: 1 })) { outer = r; break; } }
+  if (outer) for (const r of rects) { if (r !== outer && inside(r, outer) && r.area <= outer.area * 0.5 && r.w >= 150 && r.d >= 150 && (r.i0 > outer.i0 || r.i1 < outer.i1) && add(r, 224, 3, { name: 'tall inner', types: [1, 3, 0], speedMul: 0.9, reverse: true })) break; }
+  // low airspeeder loops: narrow rectangles (two neighbouring boulevards, 2..4 blocks long) on each half of the city
+  const narrow = rects.filter((r) => r.i1 - r.i0 === 1 && r.j1 - r.j0 >= 2 && r.j1 - r.j0 <= 4);
+  const west = narrow.find((r) => xs[r.i1] < 2900), east = narrow.slice().reverse().find((r) => xs[r.i0] > 3100 && r.j1 - r.j0 >= 3) || narrow.find((r) => xs[r.i0] > 3100);
+  add(west, 108, 1, { name: 'street west', types: [2, 2], speedMul: 1 });
+  add(east, 110, 1, { name: 'street east', types: [2, 2, 2], speedMul: 1.1, reverse: true });
+  // high cross-city loop above everything (the tallest spire reaches y 260)
+  lanes.push({ name: 'high cross', pts: [[2560, 268, -430], [3000, 272, -470], [3440, 268, -430], [3480, 266, 0], [3440, 268, 430], [3000, 272, 470], [2560, 268, 430], [2520, 266, 0]], types: [0, 1], speedMul: 1.1 });
+  return lanes;
 }
 
 // Builds the deterministic ship list: { type, route, offset, name, pad, padPos } (pure data, no THREE).
 // `frontier` (optional) = { pad: {x, z}, deckY } adds one shuttle cycling on the frontier spaceport pad.
-export function buildShips(pads, deckY, frontier = null) {
+export function buildShips(pads, deckY, frontier = null, layout = null) {
+  layout = layout || getLayout(1337);
   const models = shipModels();
   const ships = [];
   const padTypes = [0, 1, 3, 1, 0, 2, 3, 0];
@@ -195,11 +263,11 @@ export function buildShips(pads, deckY, frontier = null) {
     const route = padRoute(frontier.pad, frontierLoop(frontier.pad), models[1].speed, frontier.deckY, 30);
     ships.push({ type: 1, route, offset: 40, name: 'shuttle frontier pad', pad: 'frontier', padPos: frontier.pad });
   }
-  laneLoops().forEach((lane, li) => {
+  laneLoops(layout).forEach((lane, li) => {
     lane.types.forEach((type, j) => {
       const route = laneRoute(lane.pts, models[type].speed * lane.speedMul);
       const offset = (j / lane.types.length) * route.period + hash2(li, j, 903) * 20;
-      ships.push({ type, route, offset, name: `${models[type].name} ${lane.name} #${j + 1}`, pad: null, padPos: null });
+      ships.push({ type, route, offset, name: `${models[type].name} ${lane.name} #${j + 1}`, pad: null, padPos: null, lanePts: lane.pts });
     });
   });
   return ships;
@@ -255,7 +323,8 @@ export class ShipTraffic {
     this.game = game;
     this.pads = spec.pads;
     this.deckY = spec.deckY;
-    this.ships = buildShips(this.pads, this.deckY, spec.frontier || null);
+    const seed = spec.layout ? spec.layout.seed : (game.world && game.world.gen ? game.world.gen.seed : 1337);
+    this.ships = buildShips(this.pads, this.deckY, spec.frontier || null, spec.layout || getLayout(seed));
     this.models = shipModels();
     this.tickCount = 0;
     this.group = new THREE.Group();
