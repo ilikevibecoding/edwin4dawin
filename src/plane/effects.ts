@@ -111,8 +111,9 @@ export class PlaneEffects {
     this.wakeL = new WakeTrail(70, 1.6, 14, 1.2);
     this.wakeR = new WakeTrail(70, 1.6, 14, 1.2);
     wakeScene.add(this.wakeL.mesh, this.wakeR.mesh);
-    this.stampL = new HullStamp(4.8, 0.9, 0.9);
-    this.stampR = new HullStamp(4.8, 0.9, 0.9);
+    // hull plan of the floats (5.7 m x 0.74 m at the chine), see model.ts floatSections
+    this.stampL = new HullStamp(5.6, 0.74, 0.9);
+    this.stampR = new HullStamp(5.6, 0.74, 0.9);
     scene.add(this.stampL.mesh, this.stampR.mesh);
     const tex = spriteTexture();
     this.spray = new ParticleCloud(400, new THREE.Color(0.95, 0.98, 1.0), tex, 0.75, THREE.NormalBlending);
@@ -147,7 +148,8 @@ export class PlaneEffects {
     const fl = Math.hypot(fwdXZ.x, fwdXZ.z) || 1;
     const stampStrength = 0.9 * (1 - smoothstep(6, 18, speed));
     for (const [stamp, bow, stern] of [[this.stampL, model.floatBowL, model.floatSternL], [this.stampR, model.floatBowR, model.floatSternR]] as const) {
-      const c = this.tmp.copy(bow).add(stern).multiplyScalar(0.5).applyQuaternion(q).add(flight.position);
+      // the hull's plan centre sits 0.1 m behind the midpoint of the bow / stern hardpoints
+      const c = this.tmp.copy(bow).add(stern).multiplyScalar(0.5).setX(0.5 * (bow.x + stern.x) - 0.1).applyQuaternion(q).add(flight.position);
       stamp.update(c.x, c.z, fwdXZ.x / fl, fwdXZ.z / fl, t.onWater && stampStrength > 0.02, stampStrength);
     }
     // bow spray: rate grows with speed while on the water, dies once planing cleanly

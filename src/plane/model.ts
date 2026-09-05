@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
-  Batch, bladeGeometry, deckGeometry, fairedStrutGeometry, glareShieldGeometry, gridGeometry, halfWidthAt, humpGeometry, inBlock, insetSections, keyedRing, loft, loftGrid,
-  paneGeometry, partsMaterial, placement, quadGeometry, revealGeometry, sectionAt, sectionPerimeter, strapGeometry, strutGeometry, tOfHeight, wingLowerY, wingPanel, wingUpperY, wingXLE, wingXTE, withStations,
-  type QuadBlock, type Section, type Surf, type WingSpec,
+  Batch, bladeGeometry, deckGeometry, fairedStrutGeometry, floatHull, glareShieldGeometry, gridGeometry, halfWidthAt, humpGeometry, inBlock, insetSections, keyedRing, loftGrid,
+  paneGeometry, partsMaterial, placement, quadGeometry, revealGeometry, sectionAt, sectionPerimeter, spinnerGeometry, strapGeometry, strutGeometry, tOfHeight, weldSmooth, wingLowerY, wingPanel, wingUpperY, wingXLE, wingXTE, withStations,
+  type FloatStation, type QuadBlock, type Section, type Surf, type WingSpec,
 } from './geometry';
 import {
-  CHEAT_LINE, DIAL, floatMaps, fuselageMaps, GAUGES, glassDirtTexture, GPS_SCREEN, GpsScreen, INSTRUMENT_ATLAS, instrumentAtlas, LIVERY, PANEL, PANEL_UV, panelTexture, propDiscTexture, wingMaps,
+  CHEAT_LINE, DIAL, floatMaps, fuselageMaps, GAUGES, glassDirtTexture, GPS_SCREEN, GpsScreen, INSTRUMENT_ATLAS, instrumentAtlas, LIVERY, PANEL, PANEL_UV, panelTexture, propDiscTexture, tailV, wingMaps, wingV,
   type FuselageLayout, type GaugeDef, type UvRect,
 } from './textures';
 import type { FlightTelemetry } from './physics';
@@ -23,7 +23,8 @@ const FLOOR = -0.25;
 const PANEL_X = 2.05, PANEL_TILT = 0.3;
 /** yoke hub (neutral): ~0.66 m ahead of and 0.48 m below the eye (chest height), so the horns show at the bottom of the view */
 const YOKE_HUB_X = 1.66, YOKE_HUB_Y = 0.52;
-const WING_POS = new THREE.Vector3(0.55, 1.285, 0);
+/** wing datum (root 30 % chord point): the root's lower surface touches the roof crest (1.18) at mid chord */
+const WING_POS = new THREE.Vector3(0.55, 1.25, 0);
 /** live instrument channels (index into the needle shader's angle/shift arrays) */
 const CH = { fixed: 0, asi: 1, adi: 2, alt100: 3, alt1000: 4, tc: 5, tcBall: 6, hdg: 7, vsi: 8, rpm: 9, map: 10, oilp: 11, oilt: 12, egt: 13, fuell: 14, fuelr: 15, adiBank: 16 } as const;
 const N_CHANNELS = 17;
@@ -223,8 +224,8 @@ export class PlaneModel {
   readonly floatSternR = new THREE.Vector3(-2.2, -2.15, 1.25);
   readonly floatBowL = new THREE.Vector3(2.6, -2.0, -1.25);
   readonly floatBowR = new THREE.Vector3(2.6, -2.0, 1.25);
-  readonly wingTipL = new THREE.Vector3(-0.04, 1.435, -7.5);
-  readonly wingTipR = new THREE.Vector3(-0.04, 1.435, 7.5);
+  readonly wingTipL = new THREE.Vector3(-0.04, 1.40, -7.5);
+  readonly wingTipR = new THREE.Vector3(-0.04, 1.40, 7.5);
   /** pilot's eye: left seat, 0.13 m under the headliner (inner crest 1.13), at the windshield's vertical centre (0.99) */
   readonly cockpitEye = new THREE.Vector3(1.0, 1.0, -0.30);
   readonly exteriorMeshes: THREE.Mesh[] = [];
@@ -233,8 +234,9 @@ export class PlaneModel {
 
   constructor() {
     // ------------------------------------------------------------ fuselage loft
-    // Upper exponent rises through the cabin so the roof is flat enough to carry the wing; the windshield runs
-    // from the cowl (x 2.30, y 0.81) up to the roof line (x 1.85, y 1.17).
+    // Upper exponent rises through the cabin so the roof is flat enough to carry the wing (the squarer cabin
+    // shoulder under the wing, n 6.5, keeps the roof above the window tops out to z 0.70 where the wing root
+    // fairing rolls down onto it); the windshield runs from the cowl (x 2.30, y 0.81) up to the roof line (x 1.85, y 1.17).
     const base: Section[] = [
       { x: 4.55, yc: 0.02, w: 0.30, top: 0.30, bot: 0.30, n: 2.0 },
       { x: 4.35, yc: 0.02, w: 0.55, top: 0.55, bot: 0.55, n: 2.0 },
@@ -242,14 +244,14 @@ export class PlaneModel {
       { x: 3.20, yc: 0.03, w: 0.75, top: 0.72, bot: 0.70, n: 2.3 },
       { x: 2.60, yc: 0.04, w: 0.77, top: 0.74, bot: 0.70, n: 3.0, nBot: 2.4 },
       { x: 2.30, yc: 0.05, w: 0.78, top: 0.76, bot: 0.70, n: 6.0, nBot: 2.4 },
-      { x: 2.15, yc: 0.05, w: 0.79, top: 0.88, bot: 0.70, n: 5.0, nBot: 2.4 },
-      { x: 2.00, yc: 0.05, w: 0.80, top: 1.01, bot: 0.70, n: 4.7, nBot: 2.4 },
-      { x: 1.85, yc: 0.05, w: 0.80, top: 1.12, bot: 0.70, n: 4.5, nBot: 2.4 },
-      { x: 1.73, yc: 0.05, w: 0.80, top: 1.13, bot: 0.70, n: 4.5, nBot: 2.4 },
-      { x: 0.95, yc: 0.05, w: 0.80, top: 1.13, bot: 0.70, n: 4.5, nBot: 2.4 },
-      { x: 0.00, yc: 0.05, w: 0.80, top: 1.13, bot: 0.68, n: 4.5, nBot: 2.4 },
-      { x: -0.40, yc: 0.05, w: 0.79, top: 1.12, bot: 0.66, n: 4.3, nBot: 2.4 },
-      { x: -0.90, yc: 0.05, w: 0.76, top: 1.08, bot: 0.62, n: 3.8, nBot: 2.4 },
+      { x: 2.15, yc: 0.05, w: 0.79, top: 0.88, bot: 0.70, n: 5.2, nBot: 2.4 },
+      { x: 2.00, yc: 0.05, w: 0.80, top: 1.01, bot: 0.70, n: 5.2, nBot: 2.4 },
+      { x: 1.85, yc: 0.05, w: 0.80, top: 1.12, bot: 0.70, n: 5.8, nBot: 2.4 },
+      { x: 1.73, yc: 0.05, w: 0.80, top: 1.13, bot: 0.70, n: 6.5, nBot: 2.4 },
+      { x: 0.95, yc: 0.05, w: 0.80, top: 1.13, bot: 0.70, n: 6.5, nBot: 2.4 },
+      { x: 0.00, yc: 0.05, w: 0.80, top: 1.13, bot: 0.68, n: 6.5, nBot: 2.4 },
+      { x: -0.40, yc: 0.05, w: 0.79, top: 1.12, bot: 0.66, n: 5.8, nBot: 2.4 },
+      { x: -0.90, yc: 0.05, w: 0.76, top: 1.08, bot: 0.62, n: 4.4, nBot: 2.4 },
       { x: -1.25, yc: 0.055, w: 0.70, top: 1.00, bot: 0.56, n: 3.3, nBot: 2.3 },
       { x: -1.60, yc: 0.06, w: 0.62, top: 0.90, bot: 0.50, n: 2.7, nBot: 2.2 },
       { x: -2.60, yc: 0.10, w: 0.44, top: 0.62, bot: 0.34, n: 2.3, nBot: 2.1 },
@@ -480,16 +482,20 @@ export class PlaneModel {
     // ------------------------------------------------------------ propeller: spinner + hub, 3 blades, blur disc
     this.propeller.position.set(4.62, 0.02, 0);
     this.root.add(this.propeller);
+    // ogival polished spinner over a dark hub barrel; the blade shanks emerge from the barrel's rim
     const hub = new Batch();
-    hub.add(new THREE.ConeGeometry(0.26, 0.55, 20), at([0.27, 0, 0], [0, 0, -Math.PI / 2]), SURF.spinner);
-    hub.add(new THREE.CylinderGeometry(0.27, 0.3, 0.16, 20), at([-0.02, 0, 0], [0, 0, Math.PI / 2]), SURF.darkMetal);
+    hub.add(spinnerGeometry(0.27, 0.58, 28), at([0.0, 0, 0]), SURF.spinner);
+    hub.add(new THREE.CylinderGeometry(0.27, 0.29, 0.18, 28), at([-0.09, 0, 0], [0, 0, Math.PI / 2]), SURF.darkMetal);
     this.propHub = mesh(hub.build(), parts, { parent: this.propeller, receive: false });
+    // three blades: round shank at the hub, widest chord around 40 % radius, elliptically rounded tips; the outer
+    // 0.17 m of each blade is painted yellow (per-vertex, so the tip band follows the rounded planform)
     const blades = new Batch();
-    const bladeGeo = bladeGeometry(1.32, 0.19, 0.11), tipGeo = new THREE.BoxGeometry(0.02, 0.14, 0.12);
+    const BLADE_L = 1.32, BLADE_ROOT = 0.16;
+    const bladeGeo = bladeGeometry(BLADE_L, 0.17, 0.10);
+    const bladeSurf = (_x: number, y: number, z: number): Surf => (Math.hypot(y, z) > BLADE_ROOT + BLADE_L - 0.17 ? SURF.propTip : SURF.prop);
     for (let i = 0; i < 3; i++) {
       const pivot = new THREE.Matrix4().makeRotationX((i / 3) * Math.PI * 2);
-      blades.add(bladeGeo, pivot.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0.16, 0)), SURF.prop);
-      blades.add(tipGeo, pivot.clone().multiply(new THREE.Matrix4().makeTranslation(0, 1.4, 0)), SURF.propTip);
+      blades.add(bladeGeo, pivot.clone().multiply(new THREE.Matrix4().makeTranslation(0, BLADE_ROOT, 0)), bladeSurf);
     }
     this.propBlades = mesh(blades.build(), parts, { parent: this.propeller, receive: false });
     const discMat = new THREE.MeshStandardMaterial({ map: propDiscTexture(), transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6, color: 0x888888 });
@@ -505,48 +511,58 @@ export class PlaneModel {
     const wingSpec: WingSpec = { span: 7.3, rootChord: 1.95, tipChord: 1.55, sweep: -0.28, dihedral: 0.02, thickness: 0.11, twist: -0.03, camber: 0.02 };
     const xte = wingXTE(wingSpec, 0);
     const flapHinge = xte + 0.52, ailHinge = xte + 0.46;
-    const wingGeo = mergeGeometries([
-      wingPanel(wingSpec, { z0: 0, z1: 0.85, segments: 2, part: 'full', hingeX: flapHinge, capEnd: 'rear' }),
-      wingPanel(wingSpec, { z0: 0.85, z1: 3.55, segments: 5, part: 'front', hingeX: flapHinge }),
-      wingPanel(wingSpec, { z0: 3.55, z1: 3.65, segments: 1, part: 'full', hingeX: flapHinge, capStart: 'rear', capEnd: 'rear' }),
-      wingPanel(wingSpec, { z0: 3.65, z1: 6.90, segments: 6, part: 'front', hingeX: ailHinge }),
-      wingPanel(wingSpec, { z0: 6.90, z1: 7.30, segments: 1, part: 'full', hingeX: ailHinge, capStart: 'rear', tipRound: 0.22 }),
-    ]);
+    const wingVOf = (z: number) => wingV(z, wingSpec.span);
+    const WN = 16;
+    // panels share their surface vertices along the chord grid: welded, the wing shades as one smooth skin
+    const wingGeo = weldSmooth(mergeGeometries([
+      wingPanel(wingSpec, { z0: 0, z1: 0.85, segments: 2, part: 'full', hingeX: flapHinge, capEnd: 'rear', n: WN, vOf: wingVOf }),
+      wingPanel(wingSpec, { z0: 0.85, z1: 3.55, segments: 5, part: 'front', hingeX: flapHinge, n: WN, vOf: wingVOf }),
+      wingPanel(wingSpec, { z0: 3.55, z1: 3.65, segments: 1, part: 'full', hingeX: flapHinge, capStart: 'rear', capEnd: 'rear', n: WN, vOf: wingVOf }),
+      wingPanel(wingSpec, { z0: 3.65, z1: 6.90, segments: 6, part: 'front', hingeX: ailHinge, n: WN, vOf: wingVOf }),
+      wingPanel(wingSpec, { z0: 6.90, z1: 7.30, segments: 1, part: 'full', hingeX: ailHinge, capStart: 'rear', tipRound: 0.22, n: WN, vOf: wingVOf }),
+    ]));
     // every fixed lifting surface (wings, stabiliser, fin) shares the wing paint: one mesh
     const airframe = new Batch();
     for (const side of [1, -1]) airframe.add(wingGeo, at(WING_POS, undefined, [1, 1, side]));
-    // centre-section fairing: a smooth hump on the roof. Between the leading and trailing edges its crest runs just
-    // inside the wing (on the camber line where the wing is thin, so it meets the edges exactly); ahead and behind it
-    // tapers tangentially into the roof. Its underside is sunk into the skin so nothing shows inside the cabin.
+    // Wing root fairing: the wing sits on the cabin roof. Between the leading and trailing edges the fairing's top
+    // IS the wing's lower surface (a few cm inside the wing so the two never z-fight) out to 68 % of its width,
+    // then rolls down tangentially onto the roof at z = FAIR_W, just above the window tops; ahead and behind the
+    // wing it tapers into the roof. Its underside is sunk into the skin so nothing shows inside the cabin.
     const roofY = (x: number, z: number) => {
       const s = sectionAt(sections, x), n = s.n ?? 2.2;
       return s.yc + s.top * Math.pow(Math.max(1 - Math.pow(Math.min(Math.abs(z) / s.w, 1), n), 0), 1 / n);
     };
-    const wl = (x: number) => WING_POS.y + wingLowerY(wingSpec, x - WING_POS.x, 0);
-    const wu = (x: number) => WING_POS.y + wingUpperY(wingSpec, x - WING_POS.x, 0);
-    const inWing = (x: number) => { const lo = wl(x), hi = wu(x); return lo + Math.min(0.05, 0.5 * (hi - lo)); };
+    const wl = (x: number, z = 0) => WING_POS.y + wingLowerY(wingSpec, x - WING_POS.x, z);
+    const wu = (x: number, z = 0) => WING_POS.y + wingUpperY(wingSpec, x - WING_POS.x, z);
+    const inWing = (x: number, z = 0) => { const lo = wl(x, z), hi = wu(x, z); return lo + Math.min(0.05, 0.5 * (hi - lo)); };
     const xLE = WING_POS.x + wingXLE(wingSpec, 0), xTE = WING_POS.x + xte;
-    const FAIR_FWD = 0.45, FAIR_AFT = 0.62;
-    const hLE = inWing(xLE - 0.01) - roofY(xLE, 0), hTE = inWing(xTE + 0.01) - roofY(xTE, 0);
+    const FAIR_FWD = 0.45, FAIR_AFT = 0.62, FAIR_W = 0.70;
     const fairF = (x: number) => {
       const d = x > xLE ? (x - xLE) / FAIR_FWD : x < xTE ? (xTE - x) / FAIR_AFT : 0;
       const f = 1 - Math.min(d, 1);
       return f * f * (3 - 2 * f);
     };
-    const fairW = (x: number) => 0.28 + 0.42 * Math.sqrt(fairF(x));
-    const crestH = (x: number) => (x > xLE ? hLE * fairF(x) : x < xTE ? hTE * fairF(x) : inWing(x) - roofY(x, 0));
-    const bump = (r: number) => Math.pow(Math.max(1 - Math.pow(Math.min(r, 1), 4), 0), 1.6);
+    const fairW = (x: number) => 0.30 + (FAIR_W - 0.30) * Math.sqrt(fairF(x));
+    // fairing crest height over the roof at (x, z): the wing underside inside the chord, tapering fore and aft
+    const crestH = (x: number, z: number) => {
+      const zz = Math.min(Math.abs(z), FAIR_W);
+      if (x <= xLE && x >= xTE) return inWing(x, zz) - roofY(x, z);
+      const xw = x > xLE ? xLE - 0.01 : xTE + 0.01;
+      return (inWing(xw, zz) - roofY(xw, z)) * fairF(x);
+    };
+    const bump = (r: number) => 1 - THREE.MathUtils.smoothstep(r, 0.68, 1);
     const fairXs = [0.45, 0.33, 0.22, 0.13, 0.06].map((d) => xLE + d)
       .concat([0, 0.03, 0.08, 0.15, 0.25, 0.4, 0.55, 0.7, 0.82, 0.91, 0.97, 1].map((f) => xLE - f * wingSpec.rootChord))
       .concat([0.07, 0.16, 0.27, 0.4, 0.52, 0.62].map((d) => xTE - d));
     white.add(humpGeometry(
       fairXs.map((x) => ({ x, w: fairW(x) })),
-      (x, z) => roofY(x, z) - 0.012 + crestH(x) * bump(Math.abs(z) / fairW(x)),
+      (x, z) => roofY(x, z) - 0.012 + Math.max(crestH(x, z) + 0.012, 0) * bump(Math.abs(z) / fairW(x)),
       (x, z) => roofY(x, z) - 0.03,
+      24, 6,
     ));
     // control surfaces: rear airfoil segments hinged in the notches, tilted with the dihedral so the hinge is straight
     const mkSurface = (z0: number, z1: number, hingeX: number, segments: number): [THREE.Group, THREE.Group] => {
-      const geo = wingPanel({ ...wingSpec, dihedral: 0 }, { z0, z1, segments, part: 'rear', hingeX, gap: 0.02, capStart: 'rear', capEnd: 'rear' });
+      const geo = wingPanel({ ...wingSpec, dihedral: 0 }, { z0, z1, segments, part: 'rear', hingeX, gap: 0.02, capStart: 'rear', capEnd: 'rear', n: WN, vOf: wingVOf });
       geo.translate(-hingeX, 0, 0);
       const out: THREE.Group[] = [];
       for (const side of [1, -1]) {
@@ -567,40 +583,49 @@ export class PlaneModel {
     fittings.add(new THREE.CylinderGeometry(0.015, 0.015, 0.45, 6), at([WING_POS.x + 0.45, wl(WING_POS.x + 0.25) - 0.06, -3.2], [0, 0, Math.PI / 2]), SURF.metal);
 
     // ------------------------------------------------------------ tail
-    const hstabSpec: WingSpec = { span: 2.55, rootChord: 1.05, tipChord: 0.80, sweep: -0.175, dihedral: 0, thickness: 0.09, twist: 0, camber: 0 };
+    // 12 % symmetric sections with a 4 mm/m open trailing edge and a dense chord grid: at 25 m the stabiliser's
+    // rounded leading edge and blunt TE still catch light instead of vanishing into a sheet
+    const TN = 14, TAIL_TE = 0.004;
+    const hstabSpec: WingSpec = { span: 2.55, rootChord: 1.05, tipChord: 0.80, sweep: -0.175, dihedral: 0, thickness: 0.12, twist: 0, camber: 0, te: TAIL_TE };
+    const hsV = (z: number) => tailV(z, hstabSpec.span);
     const elevHinge = wingXTE(hstabSpec, 0) + 0.34;
-    const hsGeo = mergeGeometries([
-      wingPanel(hstabSpec, { z0: 0, z1: 0.10, segments: 1, part: 'full', hingeX: elevHinge, capEnd: 'rear', n: 9 }),
-      wingPanel(hstabSpec, { z0: 0.10, z1: 2.40, segments: 4, part: 'front', hingeX: elevHinge, n: 9 }),
-      wingPanel(hstabSpec, { z0: 2.40, z1: 2.55, segments: 1, part: 'full', hingeX: elevHinge, capStart: 'rear', tipRound: 0.12, n: 9 }),
-    ]);
+    const hsGeo = weldSmooth(mergeGeometries([
+      wingPanel(hstabSpec, { z0: 0, z1: 0.10, segments: 1, part: 'full', hingeX: elevHinge, capEnd: 'rear', n: TN, vOf: hsV }),
+      wingPanel(hstabSpec, { z0: 0.10, z1: 2.40, segments: 4, part: 'front', hingeX: elevHinge, n: TN, vOf: hsV }),
+      wingPanel(hstabSpec, { z0: 2.40, z1: 2.55, segments: 1, part: 'full', hingeX: elevHinge, capStart: 'rear', tipRound: 0.12, n: TN, vOf: hsV }),
+    ]));
     const HSTAB = new THREE.Vector3(-4.25, 0.42, 0);
     for (const side of [-1, 1]) airframe.add(hsGeo, at(HSTAB, undefined, [1, 1, side]));
     this.elevator = new THREE.Group();
     this.elevator.position.set(HSTAB.x + elevHinge, HSTAB.y, 0);
     this.root.add(this.elevator);
-    const elGeo = wingPanel(hstabSpec, { z0: 0.12, z1: 2.38, segments: 4, part: 'rear', hingeX: elevHinge, gap: 0.015, capStart: 'rear', capEnd: 'rear', n: 9 });
+    const elGeo = wingPanel(hstabSpec, { z0: 0.12, z1: 2.38, segments: 4, part: 'rear', hingeX: elevHinge, gap: 0.015, capStart: 'rear', capEnd: 'rear', n: TN, vOf: hsV });
     elGeo.translate(-elevHinge, 0, 0);
     const elevBatch = new Batch();
     for (const side of [-1, 1]) elevBatch.add(elGeo, at(undefined, undefined, [1, 1, side]));
     mesh(elevBatch.build(), wingPaint, { parent: this.elevator });
     // vertical fin: a wing profile rotated upright, rudder hinged in its notch
-    const finSpec: WingSpec = { span: 1.55, rootChord: 1.5, tipChord: 0.75, sweep: -0.55, dihedral: 0, thickness: 0.09, twist: 0, camber: 0 };
+    const finSpec: WingSpec = { span: 1.55, rootChord: 1.5, tipChord: 0.75, sweep: -0.55, dihedral: 0, thickness: 0.12, twist: 0, camber: 0, te: TAIL_TE };
+    const finV = (z: number) => tailV(z, finSpec.span);
     const rudHinge = wingXTE(finSpec, 0) + 0.48;
-    const finGeo = mergeGeometries([
-      wingPanel(finSpec, { z0: 0, z1: 0.06, segments: 1, part: 'full', hingeX: rudHinge, capEnd: 'rear', n: 9 }),
-      wingPanel(finSpec, { z0: 0.06, z1: 1.45, segments: 3, part: 'front', hingeX: rudHinge, n: 9 }),
-      wingPanel(finSpec, { z0: 1.45, z1: 1.55, segments: 1, part: 'full', hingeX: rudHinge, capStart: 'rear', tipRound: 0.10, n: 9 }),
-    ]);
+    const finGeo = weldSmooth(mergeGeometries([
+      wingPanel(finSpec, { z0: 0, z1: 0.06, segments: 1, part: 'full', hingeX: rudHinge, capEnd: 'rear', n: TN, vOf: finV }),
+      wingPanel(finSpec, { z0: 0.06, z1: 1.45, segments: 3, part: 'front', hingeX: rudHinge, n: TN, vOf: finV }),
+      wingPanel(finSpec, { z0: 1.45, z1: 1.55, segments: 1, part: 'full', hingeX: rudHinge, capStart: 'rear', tipRound: 0.10, n: TN, vOf: finV }),
+    ]));
     const FIN = new THREE.Vector3(-4.35, 0.45, 0);
     airframe.add(finGeo, at(FIN, [-Math.PI / 2, 0, 0]));
+    // dorsal fillet ahead of the fin: a strongly tapered, swept upright airfoil whose root is buried in the spine
+    // and whose tip trailing edge sinks into the fin's leading edge (replaces the old slab)
+    const dorsalSpec: WingSpec = { span: 0.33, rootChord: 1.3, tipChord: 0.25, sweep: -0.885, dihedral: 0, thickness: 0.10, twist: 0, camber: 0, te: TAIL_TE };
+    const dorsalGeo = wingPanel(dorsalSpec, { z0: 0, z1: 0.33, segments: 3, part: 'full', n: 10, tipRound: 0.05, vOf: (z) => tailV(z, 2.0) });
+    airframe.add(dorsalGeo, at([-2.94, 0.50, 0], [-Math.PI / 2, 0, 0]));
     mesh(airframe.build(), wingPaint);
-    white.add(new THREE.BoxGeometry(1.4, 0.32, 0.08), at([-3.4, 0.55, 0], [0, 0, -0.25]));
     mesh(white.build(), plainPaint);
     this.rudder = new THREE.Group();
     this.rudder.position.set(FIN.x + rudHinge, FIN.y, 0);
     this.root.add(this.rudder);
-    const rudGeo = wingPanel(finSpec, { z0: 0.08, z1: 1.43, segments: 3, part: 'rear', hingeX: rudHinge, gap: 0.015, capStart: 'rear', capEnd: 'rear', n: 9 });
+    const rudGeo = wingPanel(finSpec, { z0: 0.08, z1: 1.43, segments: 3, part: 'rear', hingeX: rudHinge, gap: 0.015, capStart: 'rear', capEnd: 'rear', n: TN, vOf: finV });
     rudGeo.translate(-rudHinge, 0, 0);
     mesh(new Batch().add(rudGeo, at(undefined, [-Math.PI / 2, 0, 0])).build(), wingPaint, { parent: this.rudder });
     fittings.add(new THREE.CylinderGeometry(0.01, 0.01, 0.5, 5), at([-2.0, 0.9, 0], [0, 0, 0.5]), SURF.metal);
@@ -641,50 +666,86 @@ export class PlaneModel {
     this.lights = mesh(lightKit.build(), lightsMat, { cast: false, receive: false });
 
     // ------------------------------------------------------------ floats & struts
-    const floatSections: Section[] = [
-      { x: 2.95, yc: -1.85, w: 0.06, top: 0.08, bot: 0.06, n: 2.0 },
-      { x: 2.6, yc: -1.9, w: 0.2, top: 0.15, bot: 0.18, n: 2.2, nBot: 1.5 },
-      { x: 1.9, yc: -1.95, w: 0.33, top: 0.18, bot: 0.28, n: 2.6, nBot: 1.4 },
-      { x: 0.8, yc: -1.95, w: 0.37, top: 0.19, bot: 0.32, n: 2.8, nBot: 1.4 },
-      { x: -0.2, yc: -1.95, w: 0.37, top: 0.19, bot: 0.30, n: 2.8, nBot: 1.4 },
-      { x: -0.35, yc: -1.95, w: 0.36, top: 0.19, bot: 0.22, n: 2.8, nBot: 1.5 }, // step
-      { x: -1.3, yc: -1.92, w: 0.33, top: 0.18, bot: 0.2, n: 2.7, nBot: 1.6 },
-      { x: -2.3, yc: -1.86, w: 0.25, top: 0.15, bot: 0.12, n: 2.5, nBot: 1.8 },
-      { x: -2.75, yc: -1.8, w: 0.12, top: 0.1, bot: 0.05, n: 2.2 },
+    // EDO-style hull: hard chine at yc, V bottom (deadrise) to the keel, near-vertical sides, crowned deck; the
+    // forebody deepens to the step at x -0.35 (a real vertical step: two stations at one x), the afterbody keel
+    // sweeps up to the stern. Keel heights match the physics stations (bow -2.08 at x 2.6, -2.25 ahead of the
+    // step, -1.98 at x -2.3); at the rest datum (y 1.96) the waterline runs ~1-6 cm under the chine along the hull.
+    const floatSections: FloatStation[] = [
+      { x: 2.95, yc: -1.86, w: 0.05, top: 0.07, bot: 0.05, n: 2.4, vee: 1.5 },
+      { x: 2.6, yc: -1.90, w: 0.20, top: 0.15, bot: 0.18, n: 2.6, vee: 1.4 },
+      { x: 1.9, yc: -1.95, w: 0.33, top: 0.18, bot: 0.28, n: 3.0, vee: 1.25 },
+      { x: 0.8, yc: -1.95, w: 0.37, top: 0.19, bot: 0.32, n: 3.2, vee: 1.15 },
+      { x: -0.2, yc: -1.95, w: 0.37, top: 0.19, bot: 0.30, n: 3.2, vee: 1.12 },
+      { x: -0.35, yc: -1.95, w: 0.365, top: 0.19, bot: 0.295, n: 3.2, vee: 1.12, split: true }, // step: forebody keel
+      { x: -0.35, yc: -1.95, w: 0.365, top: 0.19, bot: 0.215, n: 3.2, vee: 1.15, split: true }, // step: afterbody keel
+      { x: -1.3, yc: -1.92, w: 0.33, top: 0.18, bot: 0.20, n: 3.0, vee: 1.2 },
+      { x: -2.3, yc: -1.86, w: 0.25, top: 0.15, bot: 0.12, n: 2.8, vee: 1.3 },
+      { x: -2.75, yc: -1.80, w: 0.11, top: 0.09, bot: 0.05, n: 2.4, vee: 1.5 },
     ];
-    const floatGeo = loft(floatSections, 20);
+    const floatGeo = floatHull(floatSections, 8, 5);
+    /** deck crown height at station x */
+    const deckAt = (x: number) => {
+      const s = sectionAt(floatSections.map((f) => ({ x: f.x, yc: f.yc, w: f.w, top: f.top, bot: f.bot, n: f.n })), x);
+      return s.yc + s.top;
+    };
     const floats = new Batch();
     // wing strut attachment points sit on the wing's lower surface
     const strutZ = 2.9;
     const strutTop = (xLocal: number) => new THREE.Vector3(WING_POS.x + xLocal, WING_POS.y + wingLowerY(wingSpec, xLocal, strutZ) + 0.03, 0);
     const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+    /** strut end fitting: a shoe on the deck (or a pad under the belly) with a bolt boss, so no tube pierces a skin bare */
+    const shoe = (p: THREE.Vector3, dir: THREE.Vector3, size: number) => {
+      fittings.add(new THREE.BoxGeometry(size, 0.035, size * 0.75), at(p.clone().addScaledVector(dir, 0.012)), SURF.darkMetal);
+      fittings.add(new THREE.CylinderGeometry(0.045, 0.05, 0.06, 10), at(p.clone().addScaledVector(dir, 0.045)), SURF.darkMetal);
+    };
+    const UPV = V3(0, 1, 0), DOWNV = V3(0, -1, 0);
+    const belly = -0.62;
+    const FX = 1.6, RX = -0.9;   // main strut stations on the float decks
     for (const side of [-1, 1]) {
       floats.add(floatGeo, at([0, 0, side * 1.25]));
       // rubber bumper at the bow
-      fittings.add(new THREE.SphereGeometry(0.09, 10, 8), at([2.98, -1.85, side * 1.25]), SURF.rubber);
-      // struts: front pair & rear pair from float deck to fuselage belly, plus diagonal braces
-      const deckY = -1.76;
-      const belly = -0.62;
-      fittings.add(fairedStrutGeometry(V3(1.6, deckY, side * 1.25), V3(1.4, belly, side * 0.55), 0.14, 0.05), undefined, SURF.metal);
-      fittings.add(fairedStrutGeometry(V3(-0.9, deckY, side * 1.25), V3(-0.7, belly, side * 0.5), 0.14, 0.05), undefined, SURF.metal);
-      fittings.add(strutGeometry(V3(1.6, deckY, side * 1.25), V3(-0.7, belly, side * 0.5), 0.025), undefined, SURF.metal);
-      fittings.add(strutGeometry(V3(-0.9, deckY, side * 1.25), V3(1.4, belly, side * 0.55), 0.025), undefined, SURF.metal);
-      // wing struts (V) from float deck to wing underside
+      fittings.add(new THREE.SphereGeometry(0.085, 10, 8), at([2.97, -1.85, side * 1.25]), SURF.rubber);
+      // main struts: front and rear pairs from the deck shoes to pads under the belly, plus diagonal braces
+      const fDeck = V3(FX, deckAt(FX), side * 1.25), rDeck = V3(RX, deckAt(RX), side * 1.25);
+      const fBelly = V3(1.4, belly, side * 0.55), rBelly = V3(-0.7, belly, side * 0.5);
+      fittings.add(fairedStrutGeometry(fDeck, fBelly, 0.14, 0.05), undefined, SURF.metal);
+      fittings.add(fairedStrutGeometry(rDeck, rBelly, 0.14, 0.05), undefined, SURF.metal);
+      fittings.add(strutGeometry(fDeck.clone().add(V3(0.05, 0.03, 0)), rBelly, 0.022), undefined, SURF.metal);
+      fittings.add(strutGeometry(rDeck.clone().add(V3(-0.05, 0.03, 0)), fBelly, 0.022), undefined, SURF.metal);
+      shoe(fDeck, UPV, 0.22); shoe(rDeck, UPV, 0.22);
+      shoe(fBelly, DOWNV, 0.16); shoe(rBelly, DOWNV, 0.16);
+      // wing struts (V) from shoes on the outboard deck edge to the wing underside, with a jury strut between them
+      const fWing = V3(1.25, deckAt(1.25), side * 1.36), rWing = V3(-0.3, deckAt(-0.3), side * 1.36);
       const frontTop = strutTop(0.25).setZ(side * strutZ), rearTop = strutTop(-0.85).setZ(side * strutZ);
-      fittings.add(fairedStrutGeometry(V3(1.3, deckY + 0.1, side * 1.3), frontTop, 0.12, 0.045), undefined, SURF.metal);
-      fittings.add(fairedStrutGeometry(V3(-0.2, deckY + 0.1, side * 1.3), rearTop, 0.12, 0.045), undefined, SURF.metal);
+      fittings.add(fairedStrutGeometry(fWing, frontTop, 0.12, 0.045), undefined, SURF.metal);
+      fittings.add(fairedStrutGeometry(rWing, rearTop, 0.12, 0.045), undefined, SURF.metal);
       fittings.add(strutGeometry(frontTop.clone().setY(frontTop.y - 0.05), rearTop.clone().setY(rearTop.y - 0.05), 0.03), undefined, SURF.metal);
-      // water rudder at the stern
+      shoe(fWing, UPV, 0.16); shoe(rWing, UPV, 0.16);
+      // wing strut root fittings under the wing
+      for (const top of [frontTop, rearTop]) fittings.add(new THREE.BoxGeometry(0.16, 0.03, 0.10), at(top.clone().setY(top.y - 0.02)), SURF.darkMetal);
+      // water rudder at the stern: blade on a hinge post with a tiller arm
       const wr = new THREE.Group();
-      wr.position.set(-2.7, -1.85, side * 1.25);
-      mesh(new Batch().add(new THREE.BoxGeometry(0.22, 0.32, 0.03), at([0, -0.18, 0]), SURF.darkMetal).build(), parts, { parent: wr, cast: false, receive: false });
+      wr.position.set(-2.72, -1.83, side * 1.25);
+      mesh(new Batch()
+        .add(new THREE.CylinderGeometry(0.014, 0.014, 0.16, 8), at([0, 0.02, 0]), SURF.metal)
+        .add(new THREE.BoxGeometry(0.20, 0.30, 0.022), at([-0.06, -0.19, 0]), SURF.darkMetal)
+        .add(new THREE.BoxGeometry(0.10, 0.02, 0.02), at([-0.05, 0.09, 0]), SURF.metal)
+        .build(), parts, { parent: wr, cast: false, receive: false });
       this.root.add(wr);
       this.waterRudders.push(wr);
-      // cleats & hand rails on the deck
-      for (const cx of [2.0, 0.4, -1.4]) fittings.add(new THREE.BoxGeometry(0.14, 0.05, 0.05), at([cx, deckY + 0.03, side * 1.25 + 0.2 * side]), SURF.metal);
+      // cleats & hand rails on the deck, a mooring cleat at the bow
+      for (const cx of [2.0, 0.4, -1.4]) fittings.add(new THREE.BoxGeometry(0.14, 0.05, 0.05), at([cx, deckAt(cx) + 0.025, side * 1.25 + 0.2 * side]), SURF.metal);
+      fittings.add(new THREE.BoxGeometry(0.05, 0.05, 0.12), at([2.55, deckAt(2.55) + 0.025, side * 1.25]), SURF.metal);
     }
-    fittings.add(fairedStrutGeometry(V3(1.6, -1.72, -1.25), V3(1.6, -1.72, 1.25), 0.1, 0.06), undefined, SURF.metal);
-    fittings.add(fairedStrutGeometry(V3(-0.9, -1.72, -1.25), V3(-0.9, -1.72, 1.25), 0.1, 0.06), undefined, SURF.metal);
+    // spreader bars between the floats (faired tubes) with saddle fittings on the deck edges
+    for (const x of [FX, RX]) {
+      const y = deckAt(x) + 0.05;
+      fittings.add(fairedStrutGeometry(V3(x, y, -1.25), V3(x, y, 1.25), 0.10, 0.06), undefined, SURF.metal);
+      for (const side of [-1, 1]) fittings.add(new THREE.BoxGeometry(0.18, 0.06, 0.16), at([x, deckAt(x) + 0.03, side * 1.16]), SURF.darkMetal);
+    }
+    // horizontal bracing wires crossing between the two spreader bars
+    fittings.add(strutGeometry(V3(FX, deckAt(FX) + 0.05, -1.1), V3(RX, deckAt(RX) + 0.05, 1.1), 0.008), undefined, SURF.darkMetal);
+    fittings.add(strutGeometry(V3(FX, deckAt(FX) + 0.05, 1.1), V3(RX, deckAt(RX) + 0.05, -1.1), 0.008), undefined, SURF.darkMetal);
     mesh(floats.build(), floatPaint);
     mesh(fittings.build(), parts);
 

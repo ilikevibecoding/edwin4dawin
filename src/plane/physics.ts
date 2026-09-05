@@ -98,7 +98,7 @@ export class FlightModel {
     { p: new THREE.Vector3(-0.9, -2.57, -1.25), kind: 'wheel' }, { p: new THREE.Vector3(-0.9, -2.57, 1.25), kind: 'wheel' },
     { p: new THREE.Vector3(2.3, -2.48, -1.25), kind: 'wheel' }, { p: new THREE.Vector3(2.3, -2.48, 1.25), kind: 'wheel' },
     { p: new THREE.Vector3(3.6, -0.5, 0), kind: 'structure' },
-    { p: new THREE.Vector3(-0.04, 1.43, -7.5), kind: 'structure' }, { p: new THREE.Vector3(-0.04, 1.43, 7.5), kind: 'structure' },
+    { p: new THREE.Vector3(-0.04, 1.40, -7.5), kind: 'structure' }, { p: new THREE.Vector3(-0.04, 1.40, 7.5), kind: 'structure' },
     { p: new THREE.Vector3(-4.9, 2.1, 0), kind: 'structure' }, { p: new THREE.Vector3(-5.4, -0.2, 0), kind: 'structure' },
     { p: new THREE.Vector3(0.6, 1.75, 0), kind: 'structure' },
   ];

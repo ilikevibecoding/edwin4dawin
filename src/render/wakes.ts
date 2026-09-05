@@ -134,17 +134,34 @@ const HULL_STAMP_MATERIAL = new THREE.ShaderMaterial({
     }
     void main() {
       #include <logdepthbuf_fragment>
-      vec2 p = (vUv - 0.5) * 2.0;
-      // signed distance to the rounded hull outline, in quad units
-      vec2 d = abs(p) / uHull;
-      float r = length(max(d - 0.6, 0.0)) + min(max(d.x - 0.6, d.y - 0.6), 0.0);
-      float outside = max(r - 0.4, 0.0);              // 0 at the hull edge, grows outward
-      float ring = exp(-outside * outside * 40.0);     // thin foam meniscus hugging the hull
-      float halo = exp(-outside * outside * 6.0) * 0.18; // faint disturbed-water patch
-      // break the ring up with two octaves of value noise so it reads as foam, not a glow
-      vec2 np = p * vec2(9.0, 4.0);
-      float nz = 0.5 * vnoise(np) + 0.5 * vnoise(np * 2.3 + 7.1);
-      float foam = (ring * (0.55 + 0.6 * nz) + halo * (0.6 + 0.4 * nz)) * uStrength * smoothstep(1.0, 0.85, max(abs(p.x), abs(p.y)));
+      vec2 p = (vUv - 0.5) * 2.0;              // x: -1 stern .. +1 bow, y across
+      // waterline plan of a float: fullest a little aft of midships, drawn to a fine bow and a narrower stern
+      float along = clamp(p.x / uHull.x, -1.0, 1.0);
+      float bowT = smoothstep(-0.2, 1.0, along), sternT = smoothstep(0.1, -1.0, along);
+      float halfBeam = uHull.y * (1.0 - 0.94 * pow(bowT, 2.2)) * (1.0 - 0.55 * pow(sternT, 1.8));
+      float side = abs(p.y) - halfBeam;
+      float ends = abs(p.x) - uHull.x;
+      float outside = max(max(side, ends), 0.0);      // 0 inside the hull outline, grows outward (quad units)
+      float inside = max(-max(side, ends), 0.0);
+      // streaky, world-scale foam grain stretched along the hull (the meniscus is fed by the tiny bow wave and
+      // trails aft along the waterline rather than forming an even ring)
+      vec2 np = vec2(p.x * 7.0, p.y * 26.0);
+      float grain = 0.55 * vnoise(np) + 0.45 * vnoise(np * 2.1 + vec2(3.7, 9.2));
+      float streak = vnoise(vec2(p.x * 3.0, p.y * 40.0) + 1.3);
+      // meniscus: a thin bright line on the hull side, strongest at the bow, thinning toward the stern
+      float lineW = 0.018 + 0.03 * bowT;
+      float meniscus = exp(-outside * outside / (lineW * lineW)) * (0.6 + 0.5 * bowT) * (0.55 + 0.7 * grain);
+      // bow ripple: two faint crescents ahead of the stem
+      vec2 stem = vec2(uHull.x, 0.0);
+      float rb = length((p - stem) * vec2(1.0, 1.6));
+      float ahead = smoothstep(-0.05, 0.15, p.x - uHull.x) * smoothstep(0.7, 0.2, rb);
+      float ripple = (0.5 + 0.5 * cos(rb * 44.0)) * ahead * 0.35 * smoothstep(0.02, 0.08, rb);
+      // disturbed water: a soft halo hugging the waterline, dragged aft into a faint streak behind the stern
+      float halo = exp(-outside * 14.0) * 0.16 * (0.6 + 0.6 * streak);
+      float wake = smoothstep(0.0, 0.6, -p.x - uHull.x) * exp(-abs(p.y) * abs(p.y) / (uHull.y * uHull.y * 0.5)) * 0.10 * (0.5 + streak);
+      // the hull itself covers the inside; fade the decal there so nothing shows through gaps at the bow/stern
+      float coverage = 1.0 - smoothstep(0.0, 0.06, inside);
+      float foam = (meniscus + ripple + halo + wake) * coverage * uStrength * smoothstep(1.0, 0.85, max(abs(p.x), abs(p.y)));
       // drawn as a decal in the main scene (the shared wake map is ~3 m/px, far too coarse for a hull ring):
       // sky-lit foam, slightly translucent so the water colour shows through the halo
       gl_FragColor = vec4(vec3(0.90, 0.94, 0.97), clamp(foam, 0.0, 0.85));

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 /** Cross-section of a lofted body at station x. Widths/heights are half-extents from (x, yc). */
 export interface Section {
@@ -512,10 +512,15 @@ export interface WingSpec {
   thickness: number; // t/c
   twist: number;     // tip incidence change (radians, negative = washout)
   camber?: number;   // max camber / chord
+  /** trailing-edge half thickness / chord (a real skin-and-rivet TE is a few mm thick, never a knife edge) */
+  te?: number;
 }
 
-function thicknessY(x: number, thickness: number): number {
-  return 5 * thickness * (0.2969 * Math.sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x ** 3 - 0.1036 * x ** 4);
+const DEFAULT_TE = 0.0035;
+
+function thicknessY(x: number, thickness: number, te = DEFAULT_TE): number {
+  // NACA 4-digit half thickness (closed TE) plus a linear ramp that opens the trailing edge to `te`
+  return 5 * thickness * (0.2969 * Math.sqrt(x) - 0.126 * x - 0.3516 * x * x + 0.2843 * x ** 3 - 0.1036 * x ** 4) + te * x;
 }
 function camberY(x: number, camber: number): number {
   return camber * Math.sin(Math.PI * x);
@@ -535,12 +540,12 @@ export function wingXTE(spec: WingSpec, z: number): number {
 export function wingLowerY(spec: WingSpec, x: number, z: number): number {
   const c = wingChord(spec, z);
   const p = THREE.MathUtils.clamp((wingXLE(spec, z) - x) / c, 0, 1);
-  return Math.tan(spec.dihedral) * z + (camberY(p, spec.camber ?? 0.02) - thicknessY(p, spec.thickness)) * c;
+  return Math.tan(spec.dihedral) * z + (camberY(p, spec.camber ?? 0.02) - thicknessY(p, spec.thickness, spec.te)) * c;
 }
 export function wingUpperY(spec: WingSpec, x: number, z: number): number {
   const c = wingChord(spec, z);
   const p = THREE.MathUtils.clamp((wingXLE(spec, z) - x) / c, 0, 1);
-  return Math.tan(spec.dihedral) * z + (camberY(p, spec.camber ?? 0.02) + thicknessY(p, spec.thickness)) * c;
+  return Math.tan(spec.dihedral) * z + (camberY(p, spec.camber ?? 0.02) + thicknessY(p, spec.thickness, spec.te)) * c;
 }
 
 export type WingPart = 'full' | 'front' | 'rear';
@@ -555,27 +560,32 @@ interface ProfilePt { x: number; y: number; u: number; /** endpoint of the flat 
  *  front : airfoil ahead of the hinge at chord fraction f, closed by the flat hinge face
  *  rear  : control surface behind chord fraction f, closed by a flat nose face
  */
-function profileLoop(part: WingPart, f: number, thickness: number, camber: number, n: number): ProfilePt[] {
-  const up = (x: number): ProfilePt => ({ x, y: camberY(x, camber) + thicknessY(x, thickness), u: 0.5 - 0.5 * x });
-  const lo = (x: number): ProfilePt => ({ x, y: camberY(x, camber) - thicknessY(x, thickness), u: 0.5 + 0.5 * x });
+function profileLoop(part: WingPart, f: number, thickness: number, camber: number, n: number, te = DEFAULT_TE): ProfilePt[] {
+  const up = (x: number): ProfilePt => ({ x, y: camberY(x, camber) + thicknessY(x, thickness, te), u: 0.5 - 0.5 * x });
+  const lo = (x: number): ProfilePt => ({ x, y: camberY(x, camber) - thicknessY(x, thickness, te), u: 0.5 + 0.5 * x });
   const pts: ProfilePt[] = [];
   if (part === 'rear') {
-    const te: ProfilePt = { x: 1, y: camberY(1, camber), u: 0 };
-    pts.push(te);
+    // blunt trailing edge: upper and lower skins end `te` apart and a tiny flat closes them
+    pts.push(up(1));
     for (let k = 1; k < n; k++) pts.push(up(f + (1 - f) * (1 - k / n)));
     pts.push(up(f), { ...up(f), flat: true });      // hard corner at the nose face
     pts.push({ ...lo(f), flat: true }, lo(f));
     for (let k = 1; k < n; k++) pts.push(lo(f + (1 - f) * (k / n)));
-    pts.push({ ...te, u: 1 });
+    pts.push(lo(1), { ...up(1), u: 1 });
     return pts;
   }
+  // One chord grid (quadratic: dense at the leading edge) shared by every part, so the surface vertices of a
+  // 'front' panel coincide with those of a neighbouring 'full' panel and the seams can be welded smooth. The
+  // grid points behind the hinge collapse onto it, so the loop length never depends on the hinge fraction
+  // (which varies along a tapered panel with a straight hinge) and rings stay in lockstep.
+  const grid = (k: number) => Math.pow(1 - k / n, 2);
   const xmax = part === 'front' ? f : 1;
-  // quadratic spacing: dense at the leading edge
-  const xs = (k: number) => xmax * Math.pow(1 - k / n, 2);
   pts.push(up(xmax));
   if (part === 'front') pts.push(up(xmax));
-  for (let k = 1; k <= n; k++) pts.push(up(xs(k)));
-  for (let k = n - 1; k >= 1; k--) pts.push(lo(xs(k)));
+  const inner: number[] = [];
+  for (let k = 1; k <= n; k++) inner.push(Math.min(grid(k), xmax));
+  for (const x of inner) pts.push(up(x));                          // upper surface to the leading edge (last item, x = 0)
+  for (let i = inner.length - 2; i >= 0; i--) pts.push(lo(inner[i])); // lower surface back from the leading edge
   pts.push(lo(xmax));
   if (part === 'front') pts.push({ ...lo(xmax), flat: true });
   pts.push({ ...up(xmax), u: part === 'front' ? 0.5 - 0.5 * xmax : 1, flat: part === 'front' });
@@ -598,6 +608,8 @@ export interface PanelOptions {
   tipRound?: number;
   /** points per surface */
   n?: number;
+  /** texture v of span station z (default z / span) */
+  vOf?: (z: number) => number;
 }
 
 /** vertex colour of the flat faces inside a hinge gap (multiplies the paint so the gap reads as a dark line) */
@@ -636,15 +648,16 @@ export function wingPanel(spec: WingSpec, o: PanelOptions): THREE.BufferGeometry
     const rx = lx * c + ly * s, ry = -lx * s + ly * c;
     out.push(-rx + (xle - 0.3 * chord), Math.tan(spec.dihedral) * z + ry, z);
   };
+  const vOf = o.vOf ?? ((z: number) => Math.min(1, z / spec.span));
   for (const r of rings) {
     const zPlan = Math.min(r.z, o.z1);
     const chord = wingChord(spec, zPlan);
     const f = hingeFraction(zPlan);
-    const loop = profileLoop(o.part, o.part === 'rear' ? f + (o.gap ?? 0.015) / chord : f, spec.thickness, camber, n);
+    const loop = profileLoop(o.part, o.part === 'rear' ? f + (o.gap ?? 0.015) / chord : f, spec.thickness, camber, n, spec.te);
     P = loop.length;
     for (const p of loop) {
       place(p, r.z, zPlan, r.scale, pos);
-      const v = Math.min(1, r.z / spec.span);
+      const v = vOf(Math.min(r.z, o.z1));
       // flat gap faces sample one plain spot of the paint (their u would otherwise sweep the whole chord)
       if (p.flat) { uv.push(0.02, v); col.push(HINGE_SHADE, HINGE_SHADE, HINGE_SHADE); }
       else { uv.push(p.u, v); col.push(1, 1, 1); }
@@ -659,15 +672,15 @@ export function wingPanel(spec: WingSpec, o: PanelOptions): THREE.BufferGeometry
   // caps: flat fans over a profile region at an end station
   const cap = (z: number, region: WingPart, facingPlusZ: boolean) => {
     const f = hingeFraction(z);
-    const loop = profileLoop(region, f, spec.thickness, camber, n);
+    const loop = profileLoop(region, f, spec.thickness, camber, n, spec.te);
     const base = pos.length / 3;
     const tmp: number[] = [];
     for (const p of loop) place(p, z, z, 1, tmp);
     let cx = 0, cy = 0;
     const m = loop.length - 1;
     for (let k = 0; k < m; k++) { cx += tmp[k * 3]; cy += tmp[k * 3 + 1]; }
-    pos.push(cx / m, cy / m, z); uv.push(0.5, Math.min(1, z / spec.span)); col.push(1, 1, 1);
-    for (let k = 0; k < m; k++) { pos.push(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]); uv.push(loop[k].u, Math.min(1, z / spec.span)); col.push(1, 1, 1); }
+    pos.push(cx / m, cy / m, z); uv.push(0.5, vOf(z)); col.push(1, 1, 1);
+    for (let k = 0; k < m; k++) { pos.push(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]); uv.push(loop[k].u, vOf(z)); col.push(1, 1, 1); }
     // the loop runs clockwise seen from +Z (trailing edge -> forward along the top -> back along the bottom)
     for (let k = 0; k < m; k++) {
       const a = base + 1 + k, b = base + 1 + ((k + 1) % m);
@@ -686,29 +699,56 @@ export function wingPanel(spec: WingSpec, o: PanelOptions): THREE.BufferGeometry
   return g;
 }
 
-/** Propeller blade: twisted, tapered, slightly cambered. Root at origin, extends +Y. */
+/**
+ * Weld coincident vertices (same position, uv and colour) and recompute smooth normals over the welded mesh.
+ * Merged panels that share their surface vertices shade continuously; deliberately duplicated corners (hinge
+ * faces, chines) keep their hard edge because their uv / colour differ.
+ */
+export function weldSmooth(geo: THREE.BufferGeometry, tolerance = 1e-4): THREE.BufferGeometry {
+  geo.deleteAttribute('normal');
+  const g = mergeVertices(geo, tolerance);
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * Propeller blade: round shank at the root widening to the widest chord around 40 % radius, then tapering to an
+ * elliptically rounded tip. Twisted (coarse pitch at the root), slightly cambered. Root at origin, extends +Y;
+ * the pitch axis sits at 35 % chord.
+ */
 export function bladeGeometry(length: number, rootChord: number, tipChord: number): THREE.BufferGeometry {
-  // closed thin airfoil section (upper + lower skins) so the blade keeps a silhouette edge-on; a single
-  // one-sided sheet vanished at some angles and left the yellow tips floating
-  const segs = 10, n = 8; // n points around the closed section
+  const segs = 16, n = 12; // n points around the closed section
   const pos: number[] = [], idx: number[] = [], uv: number[] = [];
+  const maxChord = rootChord * 1.35;
+  const chordAt = (t: number) => {
+    const grow = THREE.MathUtils.smoothstep(t, 0, 0.42);
+    let c = rootChord * 0.75 + (maxChord - rootChord * 0.75) * grow;
+    if (t > 0.42) c = maxChord + (tipChord - maxChord) * ((t - 0.42) / 0.58);
+    // elliptical tip over the last 18 % of the radius
+    if (t > 0.82) c *= Math.sqrt(Math.max(1 - Math.pow((t - 0.82) / 0.18, 2), 0));
+    return Math.max(c, 0.012);
+  };
   for (let i = 0; i <= segs; i++) {
+    // denser rings toward the tip where the planform curves
     const t = i / segs;
-    const y = t * length;
-    const chord = rootChord + (tipChord - rootChord) * Math.pow(t, 1.4);
-    const thick = chord * (0.16 - 0.08 * t);
-    const pitch = 0.95 - 0.7 * t; // strong twist near the root
+    const tt = t < 0.7 ? t : 0.7 + 0.3 * (1 - Math.pow(1 - (t - 0.7) / 0.3, 1.6));
+    const y = tt * length;
+    const chord = chordAt(tt);
+    // thick, nearly round shank at the root blending into a thin airfoil outboard
+    const tr = 0.075 + 0.55 * Math.pow(1 - tt, 3.2);
+    const thick = chord * tr;
+    const pitch = 0.95 - 0.7 * tt;
     const c = Math.cos(pitch), s = Math.sin(pitch);
     for (let j = 0; j < n; j++) {
       // walk around the section: leading edge -> upper surface -> trailing edge -> lower surface
       const a = (j / n) * Math.PI * 2;
-      const u = -0.5 * Math.cos(a);                 // chordwise -0.5 .. 0.5
+      const u = -0.5 * Math.cos(a);                 // chordwise -0.5 .. 0.5 about the mid chord
       const upper = Math.sin(a) >= 0;
-      const camber = 0.08 * chord * (1 - 4 * u * u);
+      const camber = 0.07 * chord * (1 - 4 * u * u) * (1 - Math.min(tr, 0.5) * 1.6);
       const half = 0.5 * thick * Math.sqrt(Math.max(0, 1 - 4 * u * u)) * Math.abs(Math.sin(a));
-      const lx = u * chord, lz = camber + (upper ? half : -half);
+      const lx = (u + 0.15) * chord, lz = camber + (upper ? half : -half);
       pos.push(lx * c - lz * s, y, lx * s + lz * c);
-      uv.push(j / n, t);
+      uv.push(j / n, tt);
     }
   }
   for (let i = 0; i < segs; i++) for (let j = 0; j < n; j++) {
@@ -716,11 +756,136 @@ export function bladeGeometry(length: number, rootChord: number, tipChord: numbe
     const a = i * n + j, b = a + n, a1 = i * n + j1, b1 = a1 + n;
     idx.push(a, b, a1, a1, b, b1);
   }
+  // tip cap (the last ring is small but not a point)
+  const tipBase = segs * n, centre = pos.length / 3;
+  let cx = 0, cz = 0;
+  for (let j = 0; j < n; j++) { cx += pos[(tipBase + j) * 3]; cz += pos[(tipBase + j) * 3 + 2]; }
+  pos.push(cx / n, length, cz / n); uv.push(0.5, 1);
+  for (let j = 0; j < n; j++) idx.push(centre, tipBase + j, tipBase + ((j + 1) % n));
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
+  return g;
+}
+
+/** Ogival spinner of base radius r and length len, base at the origin, pointing +X. */
+export function spinnerGeometry(r: number, len: number, segments = 24): THREE.BufferGeometry {
+  const pts: THREE.Vector2[] = [];
+  const N = 14;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    // tangent ogive: full radius at the base, gently rounding to the point
+    pts.push(new THREE.Vector2(r * Math.pow(Math.max(1 - Math.pow(t, 1.7), 0), 0.72), t * len));
+  }
+  const g = new THREE.LatheGeometry(pts, segments);
+  g.rotateZ(-Math.PI / 2); // lathe axis +Y -> +X
+  return g;
+}
+
+/** Float hull station: chine height `yc`, half beam `w` at the chine, deck `top` above it, keel `bot` below. */
+export interface FloatStation {
+  x: number;
+  yc: number;
+  w: number;
+  top: number;
+  bot: number;
+  /** deck / side roundness (superellipse exponent of the upper half; higher = squarer deck edge) */
+  n?: number;
+  /** bottom convexity exponent (1 = straight V from the chine to the keel) */
+  vee?: number;
+  /** emit this station twice with no quads between the copies: a hard edge across the hull (the step) */
+  split?: boolean;
+}
+
+/**
+ * Float hull loft with hard chine and keel lines: every station's ring runs deck centre -> rounded deck edge and
+ * side down to the chine (duplicated vertex) -> V bottom to the keel (duplicated) -> mirrored. Texture v is fixed
+ * per ring vertex (deck 0-0.12, side 0.12-0.22, chine 0.22, keel 0.5, port side mirrored) so the float paint
+ * can put its deck, waterline and keel bands exactly on those features. Stations run bow -> stern along -X.
+ */
+export function floatHull(stations: FloatStation[], deckSegs = 8, bottomSegs = 5): THREE.BufferGeometry {
+  const V_CHINE = 0.22;
+  const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  const ring: { y: number; z: number; v: number }[] = [];
+  const rows: { pos: number[]; x: number }[] = [];
+  const ringOf = (s: FloatStation) => {
+    ring.length = 0;
+    const n = s.n ?? 3.0, vee = s.vee ?? 1.15;
+    const half: { y: number; z: number; v: number }[] = [];
+    // deck + side: superellipse upper half from the crown (t = 0) to the chine (t = 0.25), by arc length
+    const sec: Section = { x: s.x, yc: s.yc, w: s.w, top: s.top, bot: s.bot, n };
+    const ts: number[] = [];
+    arcSpread(sec, 0, 0.25, deckSegs, ts);
+    const p: [number, number] = [0, 0];
+    half.push({ y: s.yc + s.top, z: 0, v: 0 });
+    for (let k = 0; k < ts.length; k++) {
+      sectionPoint(sec, ts[k], p);
+      half.push({ y: p[0], z: p[1], v: V_CHINE * ((k + 1) / deckSegs) });
+    }
+    // chine duplicate, then the V bottom to the keel
+    half.push({ y: s.yc, z: s.w, v: V_CHINE });
+    for (let k = 1; k <= bottomSegs; k++) {
+      const f = k / bottomSegs; // 0 at the chine .. 1 at the keel
+      const z = s.w * (1 - f);
+      half.push({ y: s.yc - s.bot * (1 - Math.pow(1 - f, vee)), z, v: V_CHINE + (0.5 - V_CHINE) * f });
+    }
+    for (const h of half) ring.push(h);
+    // keel duplicate and the port side mirrored (bottom first, then deck) back to the crown
+    for (let i = half.length - 1; i >= 0; i--) ring.push({ y: half[i].y, z: -half[i].z, v: 1 - half[i].v });
+    return ring;
+  };
+  let total = 0;
+  for (let i = 1; i < stations.length; i++) total += Math.abs(stations[i].x - stations[i - 1].x);
+  let dist = 0;
+  const emitRow = (s: FloatStation, u: number) => {
+    const r = ringOf(s);
+    const row: number[] = [];
+    for (const q of r) { row.push(pos.length / 3); pos.push(s.x, q.y, q.z); uv.push(u, q.v); }
+    rows.push({ pos: row, x: s.x });
+  };
+  const splitRows: number[] = [];
+  for (let i = 0; i < stations.length; i++) {
+    const s = stations[i];
+    if (i > 0) dist += Math.abs(s.x - stations[i - 1].x);
+    emitRow(s, dist / Math.max(total, 1e-6));
+    if (s.split) { splitRows.push(rows.length - 1); emitRow(s, dist / Math.max(total, 1e-6)); }
+  }
+  const R = rows[0].pos.length;
+  for (let i = 0; i < rows.length - 1; i++) {
+    if (splitRows.includes(i)) continue; // no quads between the two copies of a split station
+    const a = rows[i].pos, b = rows[i + 1].pos;
+    for (let j = 0; j < R - 1; j++) {
+      // stations run along -X and the ring is counter-clockwise seen from +X: (a[j], b[j], a[j+1]) winds outward
+      idx.push(a[j], b[j], a[j + 1], a[j + 1], b[j], b[j + 1]);
+    }
+  }
+  // end caps: fans facing away from the body (the ring is counter-clockwise seen from +X)
+  const cap = (row: number[], x: number, nx: number) => {
+    const c = pos.length / 3;
+    let cy = 0;
+    for (let j = 0; j < R - 1; j++) cy += pos[row[j] * 3 + 1];
+    pos.push(x, cy / (R - 1), 0); uv.push(nx > 0 ? 0 : 1, 0.5);
+    for (let j = 0; j < R - 1; j++) {
+      if (nx > 0) idx.push(c, row[j], row[j + 1]);
+      else idx.push(c, row[j + 1], row[j]);
+    }
+  };
+  cap(rows[0].pos, rows[0].x, 1);
+  cap(rows[rows.length - 1].pos, rows[rows.length - 1].x, -1);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  // the crown vertex opens and closes each ring: give both copies one normal
+  const nrm = g.getAttribute('normal') as THREE.BufferAttribute;
+  for (const r of rows) {
+    const a = r.pos[0], b = r.pos[R - 1];
+    const n = new THREE.Vector3(nrm.getX(a) + nrm.getX(b), nrm.getY(a) + nrm.getY(b), nrm.getZ(a) + nrm.getZ(b)).normalize();
+    nrm.setXYZ(a, n.x, n.y, n.z); nrm.setXYZ(b, n.x, n.y, n.z);
+  }
   return g;
 }
 
