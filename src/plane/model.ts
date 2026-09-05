@@ -703,20 +703,20 @@ export class PlaneModel {
     // 12 % symmetric sections with a 4 mm/m open trailing edge and a dense chord grid: at 25 m the stabiliser's
     // rounded leading edge and blunt TE still catch light instead of vanishing into a sheet
     const TN = 14, TAIL_TE = 0.004;
-    const hstabSpec: WingSpec = { span: 2.55, rootChord: 1.05, tipChord: 0.80, sweep: -0.175, dihedral: 0, thickness: 0.12, twist: 0, camber: 0, te: TAIL_TE };
+    const hstabSpec: WingSpec = { span: 2.45, rootChord: 1.05, tipChord: 0.80, sweep: -0.175, dihedral: 0, thickness: 0.12, twist: 0, camber: 0, te: TAIL_TE };
     const hsV = (z: number) => tailV(z, hstabSpec.span);
     const elevHinge = wingXTE(hstabSpec, 0) + 0.34;
     const hsGeo = weldSmooth(mergeGeometries([
       wingPanel(hstabSpec, { z0: 0, z1: 0.10, segments: 1, part: 'full', hingeX: elevHinge, capEnd: 'rear', n: TN, vOf: hsV }),
-      wingPanel(hstabSpec, { z0: 0.10, z1: 2.40, segments: 4, part: 'front', hingeX: elevHinge, n: TN, vOf: hsV }),
-      wingPanel(hstabSpec, { z0: 2.40, z1: 2.55, segments: 1, part: 'full', hingeX: elevHinge, capStart: 'rear', tipRound: 0.12, n: TN, vOf: hsV }),
+      wingPanel(hstabSpec, { z0: 0.10, z1: 2.30, segments: 4, part: 'front', hingeX: elevHinge, n: TN, vOf: hsV }),
+      wingPanel(hstabSpec, { z0: 2.30, z1: 2.45, segments: 1, part: 'full', hingeX: elevHinge, capStart: 'rear', tipRound: 0.12, n: TN, vOf: hsV }),
     ]));
     const HSTAB = new THREE.Vector3(-4.25, 0.42, 0);
     for (const side of [-1, 1]) airframe.add(hsGeo, at(HSTAB, undefined, [1, 1, side]));
     this.elevator = new THREE.Group();
     this.elevator.position.set(HSTAB.x + elevHinge, HSTAB.y, 0);
     this.root.add(this.elevator);
-    const elGeo = wingPanel(hstabSpec, { z0: 0.12, z1: 2.38, segments: 4, part: 'rear', hingeX: elevHinge, gap: 0.015, capStart: 'rear', capEnd: 'rear', n: TN, vOf: hsV });
+    const elGeo = wingPanel(hstabSpec, { z0: 0.12, z1: 2.28, segments: 4, part: 'rear', hingeX: elevHinge, gap: 0.015, capStart: 'rear', capEnd: 'rear', n: TN, vOf: hsV });
     elGeo.translate(-elevHinge, 0, 0);
     const elevBatch = new Batch();
     for (const side of [-1, 1]) elevBatch.add(elGeo, at(undefined, undefined, [1, 1, side]));
