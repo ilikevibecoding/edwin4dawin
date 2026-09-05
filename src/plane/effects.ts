@@ -31,10 +31,12 @@ function sprayTexture(): THREE.CanvasTexture {
   // tile 0: sheet - many soft elongated blobs along x, denser toward the root (left), frayed at the tip
   ctx.save();
   ctx.beginPath(); ctx.rect(0, 0, 128, 128); ctx.clip();
-  for (let i = 0; i < 90; i++) {
+  // the blobs stay inside the tile (a blob clipped by the tile edge gave the stretched sheet quad a hard
+  // straight end, and the fan read as stacked rectangles)
+  for (let i = 0; i < 140; i++) {
     const u = Math.pow(rng.next(), 0.7);
-    const x = 14 + u * 96, y = 64 + rng.gauss() * (8 + 22 * u);
-    const len = 10 + 26 * rng.next(), wid = 3 + 7 * rng.next() * (1 - 0.4 * u);
+    const x = 22 + u * 84, y = 64 + rng.gauss() * (7 + 20 * u);
+    const len = 8 + 12 * rng.next(), wid = 1.5 + 4.0 * rng.next() * (1 - 0.4 * u);
     const a = (0.55 - 0.35 * u) * (0.6 + 0.4 * rng.next());
     const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
     g.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`);
@@ -49,8 +51,9 @@ function sprayTexture(): THREE.CanvasTexture {
   // tile 1: droplets - a loose cluster of small round dots with a faint mist behind them
   ctx.save();
   ctx.beginPath(); ctx.rect(128, 0, 128, 128); ctx.clip();
-  const mist = ctx.createRadialGradient(192, 64, 0, 192, 64, 52);
-  mist.addColorStop(0, 'rgba(255,255,255,0.28)'); mist.addColorStop(1, 'rgba(255,255,255,0)');
+  // (faint: a strong mist disc made every droplet quad a round translucent puff)
+  const mist = ctx.createRadialGradient(192, 64, 0, 192, 64, 44);
+  mist.addColorStop(0, 'rgba(255,255,255,0.1)'); mist.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = mist; ctx.fillRect(128, 0, 128, 128);
   for (let i = 0; i < 70; i++) {
     const r = 1.5 + 4.5 * Math.pow(rng.next(), 2);
@@ -189,11 +192,17 @@ class SprayCloud {
         .replace('#include <map_fragment>', /* glsl */ `
           #include <map_fragment>
           float sprayA = texture2D(uSprayTex, vec2(vUv.x * 0.5 + 0.5 * vFx.y, vUv.y)).r * vFx.x;
+          // soft window over the quad: nothing drawn by a sheet or droplet cluster may end in a straight edge
+          vec2 win = smoothstep(vec2(0.0), vec2(0.1, 0.16), vUv) * smoothstep(vec2(1.0), vec2(0.86, 0.84), vUv);
+          // streaks along the motion axis with a ragged tip, so a sheet is a torn fan and not a round puff
+          float streak = mix(0.55 + 0.45 * sin(vUv.y * 31.0 + vUv.x * 6.0), 1.0, vFx.y);
+          float tip = mix(mix(1.0, 0.6 + 0.4 * sin(vUv.y * 23.0 + 1.7), smoothstep(0.55, 1.0, vUv.x)), 1.0, vFx.y);
+          sprayA *= win.x * win.y * streak * tip;
           if (sprayA < 0.01) discard;
           diffuseColor.a *= sprayA;
         `);
     };
-    mat.customProgramCacheKey = () => 'plane-spray-v1';
+    mat.customProgramCacheKey = () => 'plane-spray-v2';
     this.material = mat;
     this.mesh = new THREE.InstancedMesh(geo, mat, capacity);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -320,7 +329,7 @@ export class PlaneEffects {
           // emission station: at the bow in the hump phase, spread over the forebody chine when planing
           const ax = lerp(2.3, 0.4 + this.rng.next() * 1.6, planing);
           const p = this.tmp.copy(bow).setX(ax).setZ(bow.z + side * 0.3).applyQuaternion(q).add(flight.position);
-          const sheet = this.rng.next() < 0.45;
+          const sheet = this.rng.next() < 0.6;
           const lat = (1.4 + this.rng.next() * 2.4) * (0.6 + 0.6 * hump) + speed * 0.05;
           const up = 1.0 + this.rng.next() * 2.0 + speed * 0.06;
           // sheets leave the chine nearly still in the water's frame (the float runs on ahead of them)
@@ -334,8 +343,9 @@ export class PlaneEffects {
             vz: v.z * carry + right.z * side * lat + (this.rng.next() - 0.5) * 1.2,
             life: sheet ? 0.45 + this.rng.next() * 0.4 : 0.45 + this.rng.next() * 0.55, age: 0,
             size: 1, tile: sheet ? 0 : 1,
-            len: sheet ? 0.7 + this.rng.next() * 0.8 + speed * 0.015 : 0.5 + this.rng.next() * 0.7,
-            wid: sheet ? 0.55 + this.rng.next() * 0.5 : 0.5 + this.rng.next() * 0.7,
+            // droplet clusters are stretched along their flight too (a round cluster read as a puff)
+            len: sheet ? 0.7 + this.rng.next() * 0.8 + speed * 0.015 : 0.8 + this.rng.next() * 0.9,
+            wid: sheet ? 0.55 + this.rng.next() * 0.5 : 0.35 + this.rng.next() * 0.4,
             alpha: sheet ? 0.3 + 0.25 * this.rng.next() : 0.3 + 0.25 * this.rng.next(),
           });
         }
