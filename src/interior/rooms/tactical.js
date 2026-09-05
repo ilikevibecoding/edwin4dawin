@@ -900,7 +900,7 @@ function ceilingStructure(kit, ctx, cx, cz, H) {
   // recessed channel on the underside: a faint diffuser body carries the ring, a thin blue core is
   // the only bright element (the old full-width blue + white rings clipped to one white halo)
   kit.add("paintedMetal", new THREE.RingGeometry(3.45, 3.98, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.001, cz], color: PALETTE.impBlack, texel: 2 });
-  kit.add("emitWhiteFaint", new THREE.RingGeometry(3.52, 3.86, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.004, cz], uv: "keep" });
+  kit.add("emitWhiteFaint", new THREE.RingGeometry(3.58, 3.80, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.004, cz], uv: "keep" });
   kit.add("emitBlue", new THREE.RingGeometry(3.66, 3.72, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.007, cz] });
   // eight downlight fixtures at the octagon corners: faint pad with a small dim core
   for (let i = 0; i < 8; i++) {
