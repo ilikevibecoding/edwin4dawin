@@ -393,8 +393,11 @@ export function surgeryLight(kit, pos, topY, { mountDX = -1.6 } = {}) {
   kit.cyl("paintedMetal", x, (ky + hubY) / 2, z, 0.04, ky - hubY, "y", { color: BLACK, segments: 10 });
   kit.cyl("paintedMetal", x, hubY, z, 0.26, 0.22, "y", { color: DARK, segments: 20 });
   kit.cyl("paintedMetal", x, hubY - 0.16, z, 1.0, 0.12, "y", { color: BLACK, segments: 40, texel: 2.5 });
+  // The diffuser map is centre-bright (1.0 at the middle, 0.3 at the rim), so the ring's visible band
+  // is bezelled to the outer 23 % of the disc where the map sits at 0.7–0.85: brightest pixel ≈ 85–90 %
+  // instead of clipping (the same cap on the satellite lamps hides their bright centres).
   kit.cyl("emitCoolSoft", x, hubY - 0.23, z, 0.86, 0.02, "y", { segments: 40, uv: "keep" });
-  kit.cyl("paintedMetal", x, hubY - 0.245, z, 0.48, 0.03, "y", { color: BLACK, segments: 32 });
+  kit.cyl("paintedMetal", x, hubY - 0.245, z, 0.66, 0.03, "y", { color: BLACK, segments: 40 });
   kit.cyl("metal", x, hubY - 0.16, z, 1.02, 0.04, "y", { color: STEEL, segments: 40 });
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
@@ -403,6 +406,7 @@ export function surgeryLight(kit, pos, topY, { mountDX = -1.6 } = {}) {
     rod(kit, [x, hubY + 0.05, z], [hx, hubY - 0.05, hz], 0.02);
     kit.cyl("paintedMetal", hx, hubY - 0.12, hz, 0.17, 0.09, "y", { color: DARK, segments: 16 });
     kit.cyl("emitCoolSoft", hx, hubY - 0.17, hz, 0.14, 0.012, "y", { segments: 16, uv: "keep" });
+    kit.cyl("paintedMetal", hx, hubY - 0.185, hz, 0.1, 0.01, "y", { color: BLACK, segments: 16 });
   }
 }
 

@@ -172,14 +172,16 @@ export default defineRoom({
     cabinet(kit, PALETTE, [wx0 + 0.25, Y, 366.7], Math.PI / 2, { h: 1.8, color: IMP.impMid, seed: 51 });
     vent(kit, [wx0 + 0.02, Y + 4.1, 369.5], Math.PI / 2, 0.7, 0.4);
     // intake zone marked on the deck between the desk and the ward mouth (foreground of the door view):
-    // white outline, blue chevrons at the ends, medical roundel in the middle
+    // white outline, blue chevrons at the ends, medical roundel in the middle. Deck-paint white is the
+    // duller impWhite: the markings sit under the reception key's axis and medWhite ran to 94 %.
     {
       const [ix, iz, hw, hd] = [-48.3, 366.3, 1.0, 0.75];
-      for (const [a, b] of [[[-hw, -hd], [hw, -hd]], [[-hw, hd], [hw, hd]], [[-hw, -hd], [-hw, hd]], [[hw, -hd], [hw, hd]]]) floorLine(kit, [ix + a[0], Y, iz + a[1]], [ix + b[0], Y, iz + b[1]], 0.08, "paintedMetal", WHITE);
+      const MARK = IMP.impWhite;
+      for (const [a, b] of [[[-hw, -hd], [hw, -hd]], [[-hw, hd], [hw, hd]], [[-hw, -hd], [-hw, hd]], [[hw, -hd], [hw, hd]]]) floorLine(kit, [ix + a[0], Y, iz + a[1]], [ix + b[0], Y, iz + b[1]], 0.08, "paintedMetal", MARK);
       for (const sx of [-1, 1]) for (const k of [0, 1]) floorLine(kit, [ix + sx * (hw - 0.2 - k * 0.14), Y, iz - 0.4], [ix + sx * (hw - 0.2 - k * 0.14), Y, iz + 0.4], 0.05, "paintedMetal", BLUE);
-      kit.box("paintedMetal", ix, Y + 0.004, iz, 0.56, 0.006, 0.13, { color: WHITE });
-      kit.box("paintedMetal", ix, Y + 0.004, iz, 0.13, 0.006, 0.56, { color: WHITE });
-      kit.add("paintedMetal", new THREE.TorusGeometry(0.4, 0.035, 6, 32), { pos: [ix, Y + 0.004, iz], rot: [Math.PI / 2, 0, 0], color: WHITE });
+      kit.box("paintedMetal", ix, Y + 0.004, iz, 0.56, 0.006, 0.13, { color: MARK });
+      kit.box("paintedMetal", ix, Y + 0.004, iz, 0.13, 0.006, 0.56, { color: MARK });
+      kit.add("paintedMetal", new THREE.TorusGeometry(0.4, 0.035, 6, 32), { pos: [ix, Y + 0.004, iz], rot: [Math.PI / 2, 0, 0], color: MARK });
     }
 
     // ---------------------------------------------------------------- ward (z 352..366)
@@ -437,31 +439,45 @@ export default defineRoom({
     fixture(-46.8, 350.6, "x", 2.0);
 
     // ---------------------------------------------------------------- lights (cool blue-white)
-    // fills hang 2.2 m below the ceiling, centred between the paired bar rows (reception, corridor)
-    // or under single bars (tanks, surgery, pharmacy). GAIN re-tunes them for the rig's captured
-    // environment (the old studio env-map ambient is gone, so direct light carries the room).
-    // 10 fills + 1 key spot + 3 tank accents = 14 descriptors
+    // fills hang 2.2 m below the ceiling, centred between the paired bar rows (corridor) or under
+    // single bars (reception sides, tanks, surgery, pharmacy). GAIN re-tunes them for the rig's
+    // captured environment (the old studio env-map ambient is gone, so direct light carries the room).
+    // 9 fills + 2 key spots + 3 tank accents = 14 descriptors
     const GAIN = 1.7;
     const L = (x, z, intensity = 26, distance = 12, color = 0xdbe8ff, y = FILL_Y, priority = 0.5) => {
       const d = { type: "point", pos: [x, y, z], color, intensity: intensity * GAIN, distance, priority };
       ctx.lights.push(d);
       return d;
     };
-    L(-46.0, 368.15, 28, 12);
-    L(-52.6, 368.15, 16, 9);
-    L(-39.6, 368.15, 18, 9);
+    // KEY 1 (shadow, reception/ward): a spot inside the aft reception bar, 0.3 m under its diffuser,
+    // aimed down the room at 38° from vertical so the desk, the intake zone, the canister dolly and
+    // the near west beds throw shadows away from the door across the deck and onto the bay dividers
+    // (d2-medbay-door, -wards, -tanks). The rig casts from the nearest shadow spot, so this one keys
+    // the front of the room and the pendant below keys the theatre. Its cone's rear edge still
+    // reaches the door approach (z ≤ 371), so the doorway does not go dark seen from the corridor.
+    // The key carries ~70 % of the intake deck and the three fills around it sit 20 % under the ward
+    // fills, so its shadows keep ~2 stops of contrast against the (non-shadowing) fill light. Aimed
+    // any flatter, the cone's upper penumbra grazes the far corridor bars' diffusers and their
+    // Fresnel streak clips in d2-medbay-wards.
+    ctx.lights.push({ type: "spot", pos: [-46.0, CEIL - 0.93, 369.4], target: [-48.0, Y, 367.0], color: 0xdbe8ff, intensity: 230, distance: 34, angle: 1.1, penumbra: 0.5, priority: 0.9, shadow: true });
+    L(-52.2, 369.4, 14, 9);
+    L(-40.0, 369.4, 16, 9);
     L(-54.8, 355.5, 24, 11);
     const wardDip = L(-54.8, 362.5, 24, 11); // the sagging circuit: fill between the two COOL_DIP bars
     const wardDip0 = wardDip.intensity;
     L(-46.1, 355.3, 26, 12);
-    L(-46.1, 362.9, 26, 12);
+    L(-46.1, 362.9, 22, 12);
     L(-39.7, 359.0, 16, 9);
-    L(-53.6, 345.0, 14, 9, 0xf2f7ff); // surgery ceiling wash above the pendant (the key is below it)
+    // surgery ceiling wash under the east end of the theatre bar, 1.2 m below the ceiling: at its old
+    // spot (−53.6, 2.8 m) it sat 1 m from the pendant's starboard satellite lamps and lit their housings
+    // to a clipped "bulb"; from here every satellite is ≥ 1.9 m away
+    L(-52.6, 345.0, 14, 9, 0xf2f7ff, CEIL - 1.2);
     L(-42.1, 344.6, 26, 11);
-    // KEY (shadow): the operating light itself — a spot just under the pendant head's diffuser, aimed
-    // straight down at the table, so the table, arm boards, IV stand, carts and consoles throw radial
-    // shadows across the deck and up the walls (visible in d2-medbay-surgery). Angle 1.0 from 2.55 m
-    // covers the whole surgical bay floor; the pendant is the dominant source there by design.
+    // KEY 2 (shadow, theatre): the operating light itself — a spot just under the pendant head's
+    // diffuser, aimed straight down at the table, so the table, arm boards, IV stand, carts and
+    // consoles throw radial shadows across the deck and up the walls (visible in d2-medbay-surgery).
+    // Angle 1.0 from 2.55 m covers the whole surgical bay floor; the pendant is the dominant source
+    // there by design.
     ctx.lights.push({ type: "spot", pos: [-54.8, Y + 2.55, 345.0], target: [-54.8, Y + 0.85, 345.0], color: 0xf2f7ff, intensity: 55, distance: 34, angle: 1.0, penumbra: 0.5, priority: 0.9, shadow: true });
 
     // ---------------------------------------------------------------- motion lighting
