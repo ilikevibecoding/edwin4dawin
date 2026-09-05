@@ -20,7 +20,9 @@ import path from 'node:path';
 // a gate that booted `fast` alone passed a cascade that broke 107 programs at
 // `high`. A program that fails to compile is not always a page error — three
 // logs it and carries on with the program invalid — so link status is read
-// back from every program as well as the console.
+// back from every program as well as the console. And a program that links
+// here can still fail on a real GPU: this box offers 32 fragment texture
+// units where ANGLE offers 16, so every program's sampler count is held to 16.
 // ---------------------------------------------------------------------------
 
 const argv = process.argv.slice(2);
@@ -125,14 +127,42 @@ for (const tier of tiers) {
     const info = await page.evaluate(() => {
       const r = window.debugAPI.objects.renderer;
       const gl = r.getContext();
+      // The software rasteriser offers 32 fragment texture units; ANGLE over
+      // D3D11 and the Mac and Windows Chromes people actually run offer 16. A
+      // program that binds more links here and fails there, and three drops
+      // the mesh without a page error — the terrain did exactly that with 21
+      // samplers, and the road was a hole down to the far plain on the user's
+      // GPU for four rounds while every frame shot here was fine. Count the
+      // sampler uniforms of every program and hold them to the real limit.
+      const samplerTypes = new Set(
+        ['SAMPLER_2D', 'SAMPLER_CUBE', 'SAMPLER_3D', 'SAMPLER_2D_SHADOW', 'SAMPLER_2D_ARRAY', 'SAMPLER_2D_ARRAY_SHADOW', 'SAMPLER_CUBE_SHADOW', 'INT_SAMPLER_2D', 'UNSIGNED_INT_SAMPLER_2D']
+          .map((k) => gl[k])
+          .filter((v) => v !== undefined),
+      );
       let unlinked = 0;
-      for (const p of r.info.programs) if (!gl.getProgramParameter(p.program, gl.LINK_STATUS)) unlinked++;
-      return { programs: r.info.programs.length, unlinked, textures: r.info.memory.textures, error: window.__ERROR__ || null };
+      let maxSamplers = 0;
+      const over = [];
+      for (const p of r.info.programs) {
+        if (!gl.getProgramParameter(p.program, gl.LINK_STATUS)) {
+          unlinked++;
+          continue;
+        }
+        let n = 0;
+        const count = gl.getProgramParameter(p.program, gl.ACTIVE_UNIFORMS);
+        for (let i = 0; i < count; i++) {
+          const u = gl.getActiveUniform(p.program, i);
+          if (u && samplerTypes.has(u.type)) n += u.size;
+        }
+        maxSamplers = Math.max(maxSamplers, n);
+        if (n > 16) over.push(`${p.name || 'program'}#${p.id}:${n}`);
+      }
+      return { programs: r.info.programs.length, unlinked, maxSamplers, over, textures: r.info.memory.textures, error: window.__ERROR__ || null };
     });
     const secs = ((Date.now() - t0) / 1000).toFixed(0);
-    const summary = `${tier}: ${info.programs} programs, ${info.textures} textures, booted in ${secs}s`;
+    const summary = `${tier}: ${info.programs} programs (max ${info.maxSamplers} samplers), ${info.textures} textures, booted in ${secs}s`;
     if (info.error) fail(`${summary} — boot error ${info.error}`);
     else if (info.unlinked) fail(`${summary} — ${info.unlinked} programs failed to link`);
+    else if (info.over.length) fail(`${summary} — over 16 samplers (fails to link on a 16-unit GPU): ${info.over.join(', ')}`);
     else if (errors.length) fail(`${summary} — ${errors.length} console/page errors`);
     else pass(summary);
     const shown = [...new Set(errors)].slice(0, 4);
