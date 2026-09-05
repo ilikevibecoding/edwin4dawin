@@ -1,112 +1,186 @@
 // Recusant-class light destroyer (Separatist), 1187 m. Original procedural geometry after the film's
-// design language: an extremely thin skeletal ship — a long forward spine of armour plates over a dark
-// core ending in a spear-like spinal gun, an open cage of structural frames, stringers and braces around
-// the spine that light passes through, a small command pod mid-spine, a wide flat bevelled aft slab with a
-// raised two-tier centre block, a row of engines across the stern, turret emplacements on the aft block,
-// light grey hull with dark machinery, plating groups, seams and window strips. Three LODs.
+// design language: an extremely thin skeletal ship — a spear-like spinal gun tapering in three stepped
+// sections with ring collars and a dark sensor tip, a long forward spine of armour plates over a dark
+// core inside an open cage of frames, stringers and braces, a small command pod mid-spine, and a broad
+// flat aft slab (~490 m across, 1.6× the spine cage) with thin swept tips, a raised central ridge running
+// into a tiered superstructure (two set-back tiers, recessed window bands, comm dish and antenna
+// cluster), tracking heavy turrets on the slab shoulders and belly, light turrets on the tiers and at
+// the spine-to-slab junction, a row of seven deep engine bells across the stern, plating at three scales
+// (lipped plates on the slab, ribbed tip panels, hatches), ±8 % per-plate tone, paint fade toward the
+// tips, soot aft of the turrets and forward of the nozzles, seam grime, scorch rings and a dark blue
+// accent stripe with hex insignia so the grey hull is not monotone. Three LODs.
 import * as THREE from "three";
 import { assemble } from "./shipKit.js";
 import {
   bar,
   col,
-  discZ,
-  flipFaces,
+  jitter,
   loftZ,
   mix,
   mpart,
   octagon,
   plateZ,
+  quadAt,
   ringZ,
   rng,
   roundedRect,
-  slabProfile,
   smoothstep,
   superellipse,
   superellipseU,
   table,
   tubeZ,
+  wingProfile,
 } from "./munificentGeo.js";
+import { turretType } from "./munificentTurrets.js";
+import { nozzleBell, sootStreak, sternSpill } from "./munificentEngines.js";
+import {
+  antennaCluster,
+  dishMast,
+  hatch,
+  scorchRing,
+  slotRow,
+  slotWindow,
+} from "./munificentDetail.js";
 
-export const RECUSANT = { length: 1187, width: 304, height: 130 };
+export const RECUSANT = { length: 1187, width: 490, height: 150 };
 
-const GREY = col(0x9a9b9e);
-const GREY_LT = col(0xacadb0);
-const GREY_DK = col(0x84858a);
-const SOOT = col(0x3a3a3e);
+// palette: vertex tints over the shared plating (albedo ~0.62 before tint). Calibrated so sunlit grey
+// lands near sRGB 175 and shadow faces near 50; slightly cool so it reads grey beside the tan Munificent.
+const GREY = col(0xc0c2c6);
+const GREY_LT = GREY.clone().multiplyScalar(1.07);
+const GREY_DK = GREY.clone().multiplyScalar(0.86);
+const GREY_FADE = col(0xd4d3d0); // paint fade toward the slab tips: lighter, warmer, flatter
+const SOOT = col(0x2a2a2e);
 const MACH = 0x7a7c82; // machinery tint on the dark texture
 const MACH_DK = 0x50525a;
 const CORE = 0x3e4046;
 const WINDOW = 0xd6e6ff;
-const GLOW = 0xa8dcff;
-const PLUME = col(0x5aa8ff);
+const WINDOW_WARM = 0xffe6c4;
+const ACCENT = 0x34405c; // Separatist blue-grey stripe
+const EMBLEM = 0xd9c58c;
+const SHELL = col(0x6a6c72); // nozzle bells
+const SHELL_DK = col(0x3a3c42);
+const PLATE = col(0x484a50); // stern plate
 
 export function buildRecusant(mats) {
   const L = RECUSANT.length;
   const parts = [];
   const hardpoints = [];
   const engines = [];
+  const turrets = [];
   const add = (geo, mat, opts) => parts.push(mpart(geo, mat, opts));
   const rand = rng(4421);
   const zBow = -L / 2;
   const zStern = L / 2;
+  const TEX = 1 / 38; // large plating scale on the slab (plates 5-11 m)
 
   // ---------------------------------------------------------------------------
-  // spear tip / spinal gun: tapered spike with muzzle rings and a heavy collar at the spine root
+  // spear tip / spinal gun: dark sensor tip, three stepped sections, ring collars, root collar
   // ---------------------------------------------------------------------------
-  const SPIKE = [
-    { z: zBow, sx: 1.4, sy: 1.4 },
-    { z: zBow + 10, sx: 3.2, sy: 3.2 },
-    { z: zBow + 40, sx: 5.4, sy: 5.4 },
-    { z: zBow + 90, sx: 7.6, sy: 7.6 },
-    { z: zBow + 140, sx: 9.6, sy: 9.6 },
-    { z: zBow + 178, sx: 12, sy: 12 },
-  ];
+  const tipEnd = zBow + 16;
+  const stepA = zBow + 70;
+  const stepB = zBow + 130;
+  const rootZ = zBow + 186;
+  const spikeR = (z) =>
+    table(
+      [
+        [zBow, 1.5],
+        [tipEnd, 3.4],
+        [stepA, 5.4],
+        [stepA + 0.01, 6.6],
+        [stepB, 8.6],
+        [stepB + 0.01, 10.2],
+        [rootZ, 12.8],
+      ],
+      z,
+    );
   for (const lod of [0, 1, 2]) {
-    const prof = superellipse(lod === 0 ? 12 : 8, 2);
+    const seg = lod === 0 ? 12 : 8;
+    const prof = superellipse(seg, 2);
     add(
-      loftZ(prof, lod === 2 ? [SPIKE[0], SPIKE[2], SPIKE[5]] : SPIKE, {
-        capStart: true,
-      }),
-      "hull",
-      {
-        color: GREY,
-        texel: 1 / 8,
-        lod,
-      },
-    );
-    // barrel collar where the spike meets the spine
-    add(
-      tubeZ(15, 13.5, 16, lod === 0 ? 12 : 8, 0, 0, zBow + 184, false),
+      loftZ(
+        prof,
+        [
+          { z: zBow, sx: 1.5, sy: 1.5 },
+          { z: tipEnd, sx: 3.4, sy: 3.4 },
+        ],
+        { capStart: true, flat: true },
+      ),
       "dark",
-      {
-        color: MACH,
-        texel: 1 / 4,
-        lod,
-      },
+      { color: MACH_DK, texel: 1 / 3, lod },
     );
+    // each section's start cap is the visible step face
+    [
+      [tipEnd, stepA],
+      [stepA, stepB],
+      [stepB, rootZ],
+    ].forEach(([z0, z1], i) => {
+      const r0 = spikeR(z0 + 0.02);
+      const r1 = spikeR(z1 - 0.01);
+      add(
+        loftZ(
+          prof,
+          [
+            { z: z0, sx: r0, sy: r0 },
+            { z: z1, sx: r1, sy: r1 },
+          ],
+          { capStart: true, flat: true, texel: 1 / 10 },
+        ),
+        "hull",
+        {
+          uv: "keep",
+          lod,
+          tint: (x, y, z, o) =>
+            o
+              .copy(i === 1 ? GREY_DK : GREY)
+              .multiplyScalar(1 - 0.14 * smoothstep(z1 - 8, z1, z)),
+        },
+      );
+    });
+    // ring collars at the steps and the heavy root collar where the spike meets the spine
+    add(tubeZ(7.6, 7.6, 6, seg, 0, 0, stepA, false), "dark", {
+      color: MACH,
+      texel: 1 / 3,
+      lod,
+    });
+    add(tubeZ(11.2, 11.2, 7, seg, 0, 0, stepB, false), "dark", {
+      color: MACH,
+      texel: 1 / 3,
+      lod,
+    });
+    add(tubeZ(15.8, 14.6, 16, seg, 0, 0, rootZ + 6, false), "dark", {
+      color: MACH,
+      texel: 1 / 4,
+      lod,
+    });
     if (lod < 2) {
-      add(tubeZ(9.2, 9.2, 4, 10, 0, 0, zBow + 56, false), "dark", {
+      add(tubeZ(4.3, 4.3, 2.4, 8, 0, 0, zBow + 42, false), "dark", {
         color: MACH_DK,
         texel: 1 / 3,
         lod,
       });
-      add(tubeZ(10.8, 10.8, 5, 10, 0, 0, zBow + 118, false), "dark", {
+      add(tubeZ(9.4, 9.4, 3, 8, 0, 0, zBow + 102, false), "dark", {
         color: MACH_DK,
         texel: 1 / 3,
         lod,
       });
-      add(tubeZ(4.6, 4.6, 3, 8, 0, 0, zBow + 26, false), "dark", {
-        color: MACH_DK,
-        texel: 1 / 3,
-        lod,
-      });
+      // red sensor light in the tip
+      add(
+        new THREE.BoxGeometry(1.2, 1.2, 2.4).translate(0, 0, zBow + 1.6),
+        "windows",
+        {
+          color: 0xff6a4a,
+          lod,
+          uv: "keep",
+        },
+      );
     }
   }
-  // four longitudinal gun ribs (LOD 0)
+  // four longitudinal gun ribs on the root section (LOD 0)
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
     const at = (z, r) => [Math.cos(a) * r, Math.sin(a) * r, z];
-    add(bar(at(zBow + 60, 9.2), at(zBow + 176, 12.6), 2.4, 2.4), "hull", {
+    add(bar(at(stepB + 6, 10.4), at(rootZ - 3, 13.2), 2.2, 2.2), "hull", {
       color: GREY_LT,
       texel: 1 / 3,
       lod: 0,
@@ -122,7 +196,7 @@ export function buildRecusant(mats) {
   // ---------------------------------------------------------------------------
   // spine core and armour plates: Z0 .. Z1, section grows aft
   // ---------------------------------------------------------------------------
-  const Z0 = zBow + 176;
+  const Z0 = rootZ + 4;
   const Z1 = 262;
   const coreS = (z) => 12 + ((z - Z0) / (Z1 - Z0)) * 8;
   const coreProf = roundedRect(2, 0.3, 0.3);
@@ -133,7 +207,7 @@ export function buildRecusant(mats) {
         { z: Z1, sx: coreS(Z1) * 0.86, sy: coreS(Z1) * 0.86 },
       ]),
       lod === 2 ? "hull" : "dark",
-      { color: lod === 2 ? GREY_DK : CORE, texel: 1 / 5, lod },
+      { color: lod === 2 ? GREY_DK.getHex() : CORE, texel: 1 / 5, lod },
     );
   // frame (rib) stations along the spine; frames are skipped where the command pod sits
   const NF = 27;
@@ -146,13 +220,18 @@ export function buildRecusant(mats) {
   const podFrames = new Set();
   for (let i = 0; i < NF; i++)
     if (Math.abs(FZ[i] - podZ) < 58) podFrames.add(i);
-  // armour plates over the dark core: one per pair of bays, leaving exposed core gaps
+  // armour plates over the dark core: one per pair of bays, per-plate tone, grimy seams, lip rings
   for (const lod of [0, 1]) {
     for (let i = 0; i + 2 < NF; i += 2) {
       const za = FZ[i] + 3;
       const zb = FZ[i + 2] - 9;
+      const zc = (za + zb) / 2;
       const k = i % 4 ? 1 : 1.04;
-      const tone = i % 6 === 0 ? GREY_LT : i % 6 === 2 ? GREY : GREY_DK;
+      const tone = jitter(
+        i % 6 === 0 ? GREY_LT : i % 6 === 2 ? GREY : GREY_DK,
+        rand,
+        0.08,
+      );
       add(
         loftZ(
           coreProf,
@@ -160,34 +239,70 @@ export function buildRecusant(mats) {
             { z: za, sx: coreS(za) * k, sy: coreS(za) * k },
             { z: zb, sx: coreS(zb) * k, sy: coreS(zb) * k },
           ],
-          { capStart: true, capEnd: true },
+          { capStart: true, capEnd: true, texel: 1 / 12 },
         ),
         "hull",
-        { color: tone, texel: 1 / 8, lod },
+        {
+          uv: "keep",
+          lod,
+          tint: (x, y, z, o) =>
+            o
+              .copy(tone)
+              .multiplyScalar(
+                1 - 0.16 * (1 - smoothstep(0, 3, Math.min(z - za, zb - z))),
+              ),
+        },
       );
-      // lit slots and a dark hatch on alternate plates
+      if (lod === 0)
+        for (const ze of [za + 1.4, zb - 1.4])
+          add(
+            loftZ(
+              coreProf,
+              [
+                {
+                  z: ze - 0.9,
+                  sx: coreS(ze) * k * 1.035,
+                  sy: coreS(ze) * k * 1.035,
+                },
+                {
+                  z: ze + 0.9,
+                  sx: coreS(ze) * k * 1.035,
+                  sy: coreS(ze) * k * 1.035,
+                },
+              ],
+              { capStart: true, capEnd: true },
+            ),
+            "dark",
+            { color: MACH_DK, texel: 1 / 4, lod },
+          );
+      // recessed window slots on alternate plates, a hatch on top of the others
       if (i % 4 === 0)
         for (const side of [-1, 1])
-          for (let w = 0; w < 3; w++)
-            add(
-              new THREE.BoxGeometry(0.6, 0.9, 3.2).translate(
-                side * (coreS(za) * k + 0.3),
-                1.5,
-                za + 8 + w * 7,
-              ),
-              "windows",
-              { color: WINDOW, lod, uv: "keep" },
-            );
-      if (lod === 0)
-        add(
-          new THREE.BoxGeometry(6, 0.5, 8).translate(
-            0,
-            coreS((za + zb) / 2) * k + 0.2,
-            (za + zb) / 2,
-          ),
-          "dark",
-          { color: MACH, texel: 1 / 3, lod },
-        );
+          slotRow(add, {
+            c: [side * (coreS(zc) * k + 0.05), 1.5, zc],
+            n: [side, 0, 0],
+            along: [0, 0, 1],
+            count: 3,
+            len: 4.6,
+            gap: 2.2,
+            h: 1.5,
+            lod,
+            panes: 1,
+            glow: WINDOW,
+            rim: MACH_DK,
+          });
+      else
+        hatch(add, {
+          c: [0, coreS(zc) * k, zc],
+          n: [0, 1, 0],
+          along: [0, 0, 1],
+          w: 5,
+          h: 7,
+          lod,
+          color: GREY_DK,
+          rimColor: MACH_DK,
+          big: true,
+        });
     }
     // exposed conduits along the core in the gaps
     for (const [px, py] of [
@@ -217,9 +332,8 @@ export function buildRecusant(mats) {
   }
 
   // ---------------------------------------------------------------------------
-  // structural cage: rectangular frames, corner stringers, diagonal braces, struts to the core
+  // structural cage: octagonal ring frames, corner stringers, diagonal braces, struts to the core
   // ---------------------------------------------------------------------------
-  // a rib: deep flat octagonal ring frame, joint blocks at the chamfers, struts to the core
   const CH = 0.6; // chamfer fraction of the octagon frames
   const frame = (z, lod) => {
     const w = frameW(z);
@@ -230,9 +344,10 @@ export function buildRecusant(mats) {
       ringZ(octagon(w, h, CH), octagon(w - t, h - t, CH), z - d / 2, z + d / 2),
       "hull",
       {
-        color: lod === 2 ? GREY : GREY_LT,
         texel: 1 / 3,
         lod,
+        tint: (x, y, zz, o) =>
+          o.copy(lod === 2 ? GREY : GREY_LT).multiplyScalar(y < -4 ? 0.9 : 1),
       },
     );
     if (lod === 0) {
@@ -275,7 +390,7 @@ export function buildRecusant(mats) {
   for (const lod of [0, 1, 2])
     for (let i = 0; i < NF; i++) {
       if (podFrames.has(i)) continue;
-      if (lod === 2 && i % 3) continue;
+      if (lod === 2 && i % 4) continue;
       frame(FZ[i], lod);
     }
   // stringers along the octagon vertices: the four chamfer-side runs span the whole spine (and the pod
@@ -291,7 +406,11 @@ export function buildRecusant(mats) {
         w,
       ),
       "hull",
-      { color: GREY, texel: 1 / 3, lod },
+      {
+        color: GREY,
+        texel: 1 / 3,
+        lod,
+      },
     );
   for (const lod of [0, 1, 2]) {
     const zA = FZ[0];
@@ -364,7 +483,11 @@ export function buildRecusant(mats) {
             1.4,
           ),
           "dark",
-          { color: MACH, texel: 1 / 2, lod: 0 },
+          {
+            color: MACH,
+            texel: 1 / 2,
+            lod: 0,
+          },
         );
     }
   }
@@ -392,7 +515,7 @@ export function buildRecusant(mats) {
   }
 
   // ---------------------------------------------------------------------------
-  // command pod mid-spine: capsule on a short pylon, window band, sensor dishes, dark underside
+  // command pod mid-spine: capsule on a short pylon, recessed window slots, bridge slit, dishes, boom
   // ---------------------------------------------------------------------------
   const POD = [
     { z: podZ - 52, sx: 3, sy: 2.5 },
@@ -422,13 +545,15 @@ export function buildRecusant(mats) {
           ...p,
           y: podY,
         })),
-        {
-          capStart: true,
-          capEnd: true,
-        },
+        { capStart: true, capEnd: true, texel: 1 / 12 },
       ),
       "hull",
-      { color: GREY_LT, texel: 1 / 7, lod },
+      {
+        uv: "keep",
+        lod,
+        tint: (x, y, z, o) =>
+          o.copy(GREY_LT).multiplyScalar(y < podY - 4 ? 0.9 : 1),
+      },
     );
     // pylon and dark underside fairing
     add(
@@ -441,31 +566,39 @@ export function buildRecusant(mats) {
       },
     );
     if (lod < 2) {
-      // window band around the pod's front half
+      // recessed window slots around the pod's front half
       for (const side of [-1, 1])
-        for (let z = podZ - 40; z <= podZ + 20; z += 5.5) {
-          const v = 3.5 / podSY(z);
-          add(
-            new THREE.BoxGeometry(0.6, 1.0, 3.4).translate(
-              side * (podSX(z) * superellipseU(v, 2.4) + 0.3),
-              podY + 3.5,
+        for (let z = podZ - 38; z <= podZ + 22; z += 8) {
+          const v = 3.6 / podSY(z);
+          slotWindow(add, {
+            c: [
+              side * (podSX(z) * superellipseU(v, 2.4) + 0.05),
+              podY + 3.6,
               z,
-            ),
-            "windows",
-            { color: WINDOW, lod, uv: "keep" },
-          );
+            ],
+            n: [side * 0.95, 0.3, 0],
+            along: [0, 0, 1],
+            len: 5,
+            h: 1.6,
+            lod,
+            panes: 1,
+            glow: WINDOW,
+            rim: MACH_DK,
+          });
         }
-      // forward-facing bridge slit
-      add(
-        new THREE.BoxGeometry(12, 1.2, 0.6).translate(0, podY + 3, podZ - 45.5),
-        "windows",
-        {
-          color: WINDOW,
-          lod,
-          uv: "keep",
-        },
-      );
-      // dark ring seam and two dishes on top
+      // forward-facing bridge slit on the nose slope
+      slotWindow(add, {
+        c: [0, podY + 7.6, podZ - 43.5],
+        n: [0, 0.55, -0.83],
+        along: [1, 0, 0],
+        len: 12,
+        h: 1.7,
+        lod,
+        panes: 3,
+        glow: WINDOW,
+        rim: MACH_DK,
+      });
+      // dark ring seam, concave dishes on braced masts, antenna cluster
       add(
         loftZ(
           prof,
@@ -488,37 +621,36 @@ export function buildRecusant(mats) {
         "dark",
         { color: MACH, texel: 1 / 4, lod },
       );
-      for (const [dx, dz, r] of [
-        [-7, podZ - 6, 4.2],
-        [6, podZ + 16, 3.2],
-      ]) {
-        add(
-          new THREE.CylinderGeometry(0.7, 0.9, 9, 6).translate(
-            dx,
-            podY + podSY(dz) + 4,
-            dz,
-          ),
-          "dark",
-          {
-            color: MACH,
-            texel: 1 / 3,
-            lod,
-          },
-        );
-        add(
-          new THREE.CylinderGeometry(r, r * 0.4, 1.6, 10).translate(
-            dx,
-            podY + podSY(dz) + 8.5,
-            dz,
-          ),
-          "hull",
-          {
-            color: GREY_LT,
-            texel: 1 / 3,
-            lod,
-          },
-        );
-      }
+      dishMast(add, {
+        base: [-6, podY + podSY(podZ - 6) - 0.5, podZ - 6],
+        up: [0, 1, 0],
+        height: 8,
+        aim: [-0.35, 0.7, -0.62],
+        r: 4.6,
+        lod,
+        mast: MACH,
+        dish: GREY_LT,
+        braceSpan: 0.5,
+      });
+      dishMast(add, {
+        base: [6, podY + podSY(podZ + 16) - 0.5, podZ + 16],
+        up: [0, 1, 0],
+        height: 6,
+        aim: [0.5, 0.6, -0.62],
+        r: 3.4,
+        lod,
+        mast: MACH,
+        dish: GREY_LT,
+        braceSpan: 0.5,
+      });
+      antennaCluster(add, {
+        base: [-2, podY + podSY(podZ + 30) - 0.6, podZ + 30],
+        up: [0, 1, 0],
+        scale: 0.5,
+        lod,
+        mast: MACH,
+        plate: GREY_DK,
+      });
     }
   }
   // long sensor boom off the pod (LOD 0/1)
@@ -526,23 +658,22 @@ export function buildRecusant(mats) {
     add(
       bar([0, podY + 6, podZ + 44], [0, podY + 30, podZ + 86], 1.2, 1.2),
       "dark",
-      {
-        color: MACH,
-        texel: 1 / 3,
-        lod,
-      },
+      { color: MACH, texel: 1 / 3, lod },
     );
 
   // ---------------------------------------------------------------------------
-  // aft slab: wide flat bevelled body, plating seams, underside machinery, keel
+  // aft slab: broad flat wing section with thin swept tips, raised centre ridge, lipped plates, ribs
   // ---------------------------------------------------------------------------
+  // arrowhead plan: the leading edge sweeps from the spine out to the stern corners, so the class reads
+  // as a broad T from behind and above (widest just forward of the stern; thin swept rear tips)
   const SLAB = [
-    { z: 228, sx: 20, sy: 19 },
-    { z: 262, sx: 58, sy: 24 },
-    { z: 330, sx: 150, sy: 28 },
-    { z: 470, sx: 152, sy: 29 },
-    { z: 556, sx: 146, sy: 27 },
-    { z: zStern, sx: 128, sy: 23 },
+    { z: 228, sx: 22, sy: 20 },
+    { z: 262, sx: 64, sy: 26 },
+    { z: 330, sx: 128, sy: 29 },
+    { z: 400, sx: 182, sy: 30 },
+    { z: 470, sx: 222, sy: 30 },
+    { z: 540, sx: 245, sy: 29 },
+    { z: zStern, sx: 232, sy: 26 },
   ];
   const slabSX = (z) =>
     table(
@@ -554,114 +685,157 @@ export function buildRecusant(mats) {
       SLAB.map((s) => [s.z, s.sy]),
       z,
     );
-  const slabTint = (x, y, z, o) => {
-    mix(GREY, SOOT, 0.7 * smoothstep(535, zStern, z), o);
-    if (y < 0) o.multiplyScalar(0.93);
+  const WING_TIP = 0.12;
+  const WING_SH = 0.7;
+  const slabProf = wingProfile(WING_TIP, WING_SH);
+  // section height fraction at |u| (matches wingProfile) and the top-surface slope
+  const wingV = (u) => {
+    const a = Math.abs(u);
+    if (a <= 0.32) return 1;
+    if (a <= WING_SH) return 1 - ((a - 0.32) / (WING_SH - 0.32)) * 0.22;
+    return 0.78 - ((a - WING_SH) / (1 - WING_SH)) * (0.78 - WING_TIP);
   };
-  const slabProf = slabProfile(0.12, 0.5);
+  const wingDV = (u) => {
+    const a = Math.abs(u);
+    if (a <= 0.32) return 0;
+    if (a <= WING_SH) return -0.22 / (WING_SH - 0.32);
+    return -(0.78 - WING_TIP) / (1 - WING_SH);
+  };
+  // point on the slab's top (up = 1) or bottom (up = -1) surface at (x, z) plus its outward normal
+  const slabSurf = (x, z, up = 1, lift = 0) => {
+    const sx = slabSX(z);
+    const sy = slabSY(z);
+    const u = x / sx;
+    const slope = ((wingDV(u) * sy) / sx) * Math.sign(u);
+    const n = new THREE.Vector3(-slope, up, 0).normalize();
+    const p = new THREE.Vector3(x, up * wingV(u) * sy, z).addScaledVector(
+      n,
+      lift,
+    );
+    return { p: p.toArray(), n: n.toArray() };
+  };
+  // open strip of the wing section between uLo and uHi lifted dv (fraction of sy); counter-clockwise so
+  // it faces outward on the top (up = 1) or bottom (up = -1)
+  const wingStrip = (uLo, uHi, dv, up = 1) => {
+    const us = [uHi];
+    for (const b of [WING_SH, 0.32, -0.32, -WING_SH])
+      if (b < uHi - 1e-6 && b > uLo + 1e-6) us.push(b);
+    us.push(uLo);
+    const pts = us.map((u) => [u, up * (wingV(u) + dv)]);
+    return up > 0 ? pts : pts.reverse();
+  };
+  const slabStations = (z0, z1, n) => {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const z = z0 + ((z1 - z0) * i) / (n - 1);
+      out.push({ z, sx: slabSX(z), sy: slabSY(z) });
+    }
+    return out;
+  };
+  const tipFade = (x, z) => 0.5 * smoothstep(0.5, 1, Math.abs(x) / slabSX(z));
+  const sternSoot = (z) => 0.62 * smoothstep(546, zStern, z);
+  const slabTint = (x, y, z, o) => {
+    mix(GREY, GREY_FADE, tipFade(x, z), o);
+    o.lerp(SOOT, sternSoot(z));
+    // the base slab shows between the plates as darker seams
+    o.multiplyScalar(0.8 * (y < 0 ? 0.92 : 1));
+    return o;
+  };
   for (const lod of [0, 1, 2])
     add(loftZ(slabProf, SLAB, { capEnd: true, flat: true }), "hull", {
-      texel: 1 / 14,
+      texel: TEX,
       lod,
-      tint: slabTint,
+      tint:
+        lod === 2
+          ? (x, y, z, o) => slabTint(x, y, z, o).multiplyScalar(1.2)
+          : slabTint,
     });
-  // dark neck where the spine enters the slab
-  for (const lod of [0, 1])
+  // dark neck where the spine enters the slab, with two light emplacements and equipment boxes
+  for (const lod of [0, 1, 2])
     add(
-      loftZ(roundedRect(2, 0.3, 0.3), [
+      loftZ(roundedRect(lod === 2 ? 1 : 2, 0.3, 0.3), [
         { z: 232, sx: 21, sy: 20 },
         { z: 268, sx: 34, sy: 24 },
       ]),
       "dark",
       { color: MACH_DK, texel: 1 / 5, lod },
     );
-  // top plating: raised plate groups, cross seams, longitudinal grooves
-  for (const lod of [0, 1]) {
-    const top = (z) => slabSY(z) + 0.01;
-    const groups = [
-      [-136, -70, 342, 420],
-      [-136, -70, 428, 520],
-      [70, 136, 342, 420],
-      [70, 136, 428, 520],
-      [-62, -28, 300, 380],
-      [28, 62, 300, 380],
-      [-62, 62, 528, 566],
-    ];
-    groups.forEach(([x0, x1, z0, z1], gi) => {
-      const zc = (z0 + z1) / 2;
-      add(
-        new THREE.BoxGeometry(x1 - x0, 1.4, z1 - z0).translate(
-          (x0 + x1) / 2,
-          top(zc) + 0.6,
-          zc,
-        ),
-        "hull",
-        { color: gi % 2 ? GREY_LT : GREY_DK, texel: 1 / 12, lod },
-      );
-    });
-    // raised armour lips along the slab's outer edges
-    for (const side of [-1, 1]) {
-      add(
-        new THREE.BoxGeometry(7, 1.8, 216).translate(
-          side * (slabSX(450) - 5),
-          top(450) + 0.7,
-          450,
-        ),
-        "hull",
-        {
-          color: GREY_LT,
-          texel: 1 / 6,
-          lod,
-        },
-      );
-      // sloped forward edge lip following the flare
-      add(
-        bar(
-          [side * 26, top(268) + 0.8, 268],
-          [side * (slabSX(330) - 5), top(330) + 0.8, 332],
-          7,
-          1.8,
-        ),
-        "hull",
-        {
-          color: GREY_LT,
-          texel: 1 / 6,
-          lod,
-        },
-      );
-    }
-    for (const z of [336, 424, 524])
-      add(
-        new THREE.BoxGeometry(2 * slabSX(z) * 0.94, 0.5, 1.6).translate(
-          0,
-          top(z) + 0.2,
-          z,
-        ),
-        "dark",
-        {
-          color: MACH_DK,
-          texel: 1 / 3,
-          lod,
-        },
-      );
-    for (const x of [-66, 66])
-      add(
-        new THREE.BoxGeometry(1.6, 0.5, 250).translate(x, top(440) + 0.2, 440),
-        "dark",
-        {
-          color: MACH_DK,
-          texel: 1 / 3,
-          lod,
-        },
-      );
-    // underside: machinery bays, pipe runs, keel ridge
-    for (const [x, z, w, l] of [
-      [-95, 400, 70, 120],
-      [95, 400, 70, 120],
-      [0, 470, 60, 150],
+  // raised central ridge along the slab top and a keel ridge below (both run into the centre block)
+  const ridgeProf = roundedRect(2, 0.5, 0.5);
+  for (const lod of [0, 1, 2]) {
+    for (const [z0, z1] of [
+      [262, 302],
+      [518, zStern - 4],
     ])
       add(
-        new THREE.BoxGeometry(w, 1.6, l).translate(x, -slabSY(z) - 0.5, z),
+        loftZ(
+          ridgeProf,
+          slabStations(z0, z1, 3).map((s) => ({
+            z: s.z,
+            sx: 11,
+            sy: 5.5,
+            y: s.sy + 3.2,
+          })),
+          { capStart: true, capEnd: true, texel: 1 / 8 },
+        ),
+        "hull",
+        {
+          uv: "keep",
+          lod,
+          tint: (x, y, z, o) => o.copy(GREY_LT).lerp(SOOT, sternSoot(z)),
+        },
+      );
+    add(
+      loftZ(
+        ridgeProf,
+        slabStations(262, zStern - 4, 4).map((s) => ({
+          z: s.z,
+          sx: 8,
+          sy: 4.5,
+          y: -s.sy - 2.4,
+        })),
+        { capStart: true, capEnd: true, texel: 1 / 8 },
+      ),
+      "hull",
+      {
+        uv: "keep",
+        lod,
+        tint: (x, y, z, o) => o.copy(GREY_DK).lerp(SOOT, sternSoot(z)),
+      },
+    );
+  }
+  // lipped plates over the top flat and shoulder facets: rows along z, bands in u, staggered edges,
+  // ±8 % tone per plate; a few bands are left as dark inset machinery bays
+  const plateTint = (base) => (x, y, z, o) => {
+    o.copy(base);
+    o.lerp(GREY_FADE, tipFade(x, z));
+    o.lerp(SOOT, sternSoot(z));
+    if (y < 0) o.multiplyScalar(0.92);
+    return o;
+  };
+  const ROWS = [
+    [266, 296],
+    [300, 340],
+    [346, 392],
+    [398, 446],
+    [452, 500],
+    [506, 548],
+    [554, 588],
+  ];
+  const BANDS = [
+    [0.245, 0.31],
+    [0.34, 0.455],
+    [0.475, 0.59],
+    [0.61, 0.69],
+  ];
+  const plateStrip = (uLo, uHi, z0, z1, up, lod, base, dark = false) => {
+    const nSt = z1 - z0 > 60 ? 4 : 3;
+    const st = slabStations(z0, z1, nSt);
+    if (!dark) {
+      add(
+        loftZ(wingStrip(uLo - 0.006, uHi + 0.006, 0.011, up), st, {
+          closed: false,
+        }),
         "dark",
         {
           color: MACH_DK,
@@ -669,217 +843,446 @@ export function buildRecusant(mats) {
           lod,
         },
       );
-    add(
-      new THREE.BoxGeometry(14, 6, 290).translate(0, -slabSY(430) - 2.5, 430),
-      "hull",
-      {
-        color: GREY_DK,
-        texel: 1 / 6,
-        lod,
-      },
-    );
-    if (lod === 0)
-      for (const x of [-40, -24, 24, 40])
-        add(
-          tubeZ(1.6, 1.6, 240, 6, x, -slabSY(430) - 1.6, 430, false),
-          "dark",
-          {
-            color: MACH,
-            texel: 1 / 2,
-            lod,
-          },
-        );
-  }
-  // greebles across the slab top (LOD 0): hatches, vents, small boxes
-  for (let i = 0; i < 40; i++) {
-    const z = 300 + rand() * 260;
-    const x = (rand() - 0.5) * 2 * (slabSX(z) - 20);
-    if (Math.abs(x) < 56 && z > 296 && z < 526) continue; // centre block footprint
-    const w = 3 + rand() * 7;
-    const d = 3 + rand() * 7;
-    const dark = rand() < 0.55;
-    add(
-      new THREE.BoxGeometry(w, 1 + rand() * 2.5, d).translate(
-        x,
-        slabSY(z) + 1.4 + 0.8,
-        z,
-      ),
-      dark ? "dark" : "hull",
-      {
-        color: dark ? MACH : rand() < 0.5 ? GREY_LT : GREY_DK,
-        texel: 1 / 3,
-        lod: 0,
-      },
-    );
-  }
-  // flank recess bands and window strips along the slab sides
-  for (const lod of [0, 1])
-    for (const side of [-1, 1]) {
       add(
-        new THREE.BoxGeometry(0.6, 5, 200).translate(
-          side * (slabSX(440) + 0.2),
-          4,
-          440,
-        ),
+        loftZ(wingStrip(uLo, uHi, 0.022, up), st, { closed: false }),
+        "hull",
+        {
+          texel: TEX,
+          lod,
+          tint: plateTint(base),
+        },
+      );
+    } else
+      add(
+        loftZ(wingStrip(uLo, uHi, 0.006, up), st, { closed: false }),
         "dark",
         {
           color: MACH_DK,
-          texel: 1 / 4,
+          texel: 1 / 5,
           lod,
         },
       );
-      for (let z = 350; z <= 540; z += 12)
+  };
+  // plates whose inner edge would run into the centre block (|x| < 49 over z 296..524) are skipped
+  const clearOfBlock = (uLo, z0, z1) => {
+    for (const z of [z0, (z0 + z1) / 2, z1]) {
+      if (z < 296 || z > 524) continue;
+      if (uLo * slabSX(z) < 49.5) return false;
+    }
+    return true;
+  };
+  for (const lod of [0, 1])
+    ROWS.forEach(([z0, z1], ri) => {
+      BANDS.forEach(([b0, b1], bi) => {
+        const stag = ri % 2 ? 0.008 : -0.008;
+        const uLo = b0 + (bi ? stag : 0);
+        const uHi = b1 + (bi < BANDS.length - 1 ? stag : 0);
+        if (!clearOfBlock(uLo - 0.006, z0, z1)) return;
+        if (z1 < 298 && bi < 2) return; // the forward row sits outboard of the neck fairing
+        for (const side of [-1, 1]) {
+          const lo = side > 0 ? uLo : -uHi;
+          const hi = side > 0 ? uHi : -uLo;
+          // dark inset bays: one shoulder band on two rows
+          const inset =
+            (ri === 2 && bi === 2 && side > 0) ||
+            (ri === 3 && bi === 1 && side < 0);
+          const base = jitter((ri + bi) % 3 === 1 ? GREY_LT : GREY, rand, 0.08);
+          plateStrip(lo, hi, z0, z1, 1, lod, base, inset);
+          // underside: shoulder bands only, alternating plates and dark bays
+          if (bi === 1 || bi === 2)
+            plateStrip(
+              lo,
+              hi,
+              z0,
+              z1,
+              -1,
+              lod,
+              jitter(GREY_DK, rand, 0.08),
+              (ri + bi) % 3 === 0,
+            );
+        }
+      });
+    });
+  // ribbed tip panels: narrow raised strips following the thin swept tips
+  for (const lod of [0, 1])
+    for (const side of [-1, 1])
+      for (let i = 0; i < (lod === 0 ? 6 : 3); i++) {
+        const u = lod === 0 ? 0.735 + i * 0.04 : 0.75 + i * 0.08;
+        const lo = side > 0 ? u - 0.009 : -u - 0.009;
+        const hi = lo + 0.018;
         add(
-          new THREE.BoxGeometry(0.6, 1.0, 5).translate(
-            side * (slabSX(z) + 0.35),
-            -6,
-            z,
-          ),
-          "windows",
+          loftZ(wingStrip(lo, hi, 0.03, 1), slabStations(342, 552, 5), {
+            closed: false,
+          }),
+          "hull",
           {
-            color: WINDOW,
+            texel: 1 / 6,
+            lod,
+            tint: plateTint(i % 2 ? GREY_DK : GREY_LT),
+          },
+        );
+        if (lod === 0)
+          add(
+            loftZ(wingStrip(lo, hi, 0.03, -1), slabStations(350, 540, 4), {
+              closed: false,
+            }),
+            "hull",
+            {
+              texel: 1 / 6,
+              lod,
+              tint: plateTint(GREY_DK),
+            },
+          );
+      }
+  // accent stripes: dark blue lines along the flat/shoulder break and the tip break
+  for (const lod of [0, 1])
+    for (const side of [-1, 1])
+      for (const [u0, u1, z0, z1] of [
+        [0.318, 0.33, 372, 552],
+        [0.698, 0.706, 350, 540],
+      ]) {
+        const lo = side > 0 ? u0 : -u1;
+        const hi = side > 0 ? u1 : -u0;
+        add(
+          loftZ(wingStrip(lo, hi, 0.026, 1), slabStations(z0, z1, 4), {
+            closed: false,
+          }),
+          "paint",
+          {
+            color: ACCENT,
             lod,
             uv: "keep",
           },
         );
+      }
+  // hatches at two scales on the flat and shoulder plates (big ones also at LOD 1)
+  for (const side of [-1, 1]) {
+    for (const [u, z, w, h] of [
+      [0.28, 420, 8, 10],
+      [0.28, 476, 8, 10],
+      [0.4, 370, 9, 11],
+      [0.53, 424, 9, 11],
+      [0.4, 526, 8, 10],
+    ])
+      for (const lod of [0, 1]) {
+        const q = slabSurf(side * u * slabSX(z), z, 1, 0.66);
+        hatch(add, {
+          c: q.p,
+          n: q.n,
+          along: [0, 0, 1],
+          w,
+          h,
+          lod,
+          color: GREY_LT,
+          rimColor: MACH_DK,
+          big: true,
+        });
+      }
+    for (let i = 0; i < 16; i++) {
+      const z = 350 + rand() * 195;
+      const u = 0.25 + rand() * 0.42;
+      if (z < 524 && u * slabSX(z) < 54) continue; // block footprint
+      const q = slabSurf(side * u * slabSX(z), z, 1, 0.66);
+      hatch(add, {
+        c: q.p,
+        n: q.n,
+        along: [0, 0, 1],
+        w: 3 + rand() * 1.5,
+        h: 3.5 + rand() * 1.5,
+        lod: 0,
+        color: rand() < 0.5 ? GREY_LT : GREY_DK,
+        rimColor: MACH_DK,
+      });
+    }
+    // vents along the shoulder (LOD 0)
+    for (let z = 356; z < 540; z += 22 + rand() * 12) {
+      const q = slabSurf(side * 0.465 * slabSX(z), z, 1, 0.5);
+      add(quadAt(q.p, q.n, [0, 0, 1], 5 + rand() * 4, 1.8, 0.2), "dark", {
+        color: rand() < 0.5 ? MACH : MACH_DK,
+        texel: 1 / 3,
+        lod: 0,
+      });
+    }
+  }
+  // underside: machinery bays, pipe runs (LOD 0/1)
+  for (const lod of [0, 1]) {
+    for (const x of [-40, -24, 24, 40])
+      add(
+        tubeZ(
+          1.6,
+          1.6,
+          236,
+          lod === 0 ? 6 : 4,
+          x,
+          -slabSY(430) - 1.7,
+          430,
+          false,
+        ),
+        "dark",
+        {
+          color: MACH,
+          texel: 1 / 2,
+          lod,
+        },
+      );
+    for (const z of [330, 400, 470, 540])
+      add(
+        new THREE.BoxGeometry(70, 2.2, 3).translate(0, -slabSY(z) - 1.2, z),
+        "dark",
+        { color: MACH_DK, texel: 1 / 3, lod },
+      );
+  }
+  // hex insignia on both slab tips (paint)
+  for (const side of [-1, 1])
+    for (const lod of [0, 1]) {
+      const q = slabSurf(side * 0.86 * slabSX(470), 470, 1, 0.3);
+      const n = new THREE.Vector3(...q.n);
+      const qq = new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 0, 1),
+        n,
+      );
+      const outer = new THREE.CircleGeometry(16, 6)
+        .applyQuaternion(qq)
+        .translate(...q.p);
+      add(outer, "paint", { color: EMBLEM, lod, uv: "keep" });
+      const inner = new THREE.CircleGeometry(11, 6)
+        .applyQuaternion(qq)
+        .translate(...slabSurf(side * 0.86 * slabSX(470), 470, 1, 0.42).p);
+      add(inner, "paint", { lod, uv: "keep", tint: plateTint(GREY) });
     }
 
   // ---------------------------------------------------------------------------
-  // raised centre block: two tiers with a sloped bridge face, window rows, greebles
+  // centre block: two set-back tiers plus a bridge cap, recessed window bands, dish and antennas
   // ---------------------------------------------------------------------------
   const T1 = [
-    { z: 298, sx: 30, y: 27 + 11, sy: 11 },
-    { z: 328, sx: 46, y: 27 + 22, sy: 22 },
-    { z: 480, sx: 48, y: 27 + 23, sy: 23 },
-    { z: 522, sx: 40, y: 27 + 17, sy: 17 },
+    { z: 298, sx: 30, y: 27 + 10, sy: 10 },
+    { z: 326, sx: 47, y: 27 + 22, sy: 22 },
+    { z: 484, sx: 47, y: 27 + 23, sy: 23 },
+    { z: 522, sx: 40, y: 27 + 16, sy: 16 },
   ];
   const T2 = [
-    { z: 348, sx: 20, y: 72 + 4, sy: 4 },
-    { z: 370, sx: 28, y: 72 + 14, sy: 14 },
-    { z: 462, sx: 28, y: 72 + 15, sy: 15 },
-    { z: 492, sx: 22, y: 72 + 7, sy: 7 },
+    { z: 352, sx: 20, y: 72 + 4, sy: 4 },
+    { z: 372, sx: 28, y: 72 + 15, sy: 15 },
+    { z: 482, sx: 28, y: 72 + 15, sy: 15 },
+    { z: 504, sx: 22, y: 72 + 7, sy: 7 },
   ];
+  const T3 = [
+    { z: 392, sx: 12, y: 101 + 3, sy: 3 },
+    { z: 404, sx: 15, y: 101 + 6, sy: 6 },
+    { z: 452, sx: 15, y: 101 + 6, sy: 6 },
+    { z: 464, sx: 12, y: 101 + 3, sy: 3 },
+  ];
+  const t1SX = (z) =>
+    table(
+      T1.map((t) => [t.z, t.sx]),
+      z,
+    );
+  const t1Top = (z) =>
+    table(
+      T1.map((t) => [t.z, t.y + t.sy]),
+      z,
+    );
+  const tierTint = (base) => (x, y, z, o) =>
+    o.copy(base).multiplyScalar(1 - 0.06 * smoothstep(80, 120, y));
   for (const lod of [0, 1, 2]) {
     const prof = roundedRect(lod === 0 ? 2 : 1, 0.18, 0.18);
-    add(loftZ(prof, T1, { capStart: true, capEnd: true }), "hull", {
-      color: GREY,
-      texel: 1 / 10,
-      lod,
-    });
-    add(loftZ(prof, T2, { capStart: true, capEnd: true }), "hull", {
-      color: GREY_LT,
-      texel: 1 / 8,
-      lod,
-    });
+    add(
+      loftZ(prof, T1, { capStart: true, capEnd: true, texel: 1 / 20 }),
+      "hull",
+      { uv: "keep", lod, tint: tierTint(GREY) },
+    );
+    add(
+      loftZ(prof, T2, { capStart: true, capEnd: true, texel: 1 / 16 }),
+      "hull",
+      { uv: "keep", lod, tint: tierTint(GREY_LT) },
+    );
+    if (lod < 2)
+      add(
+        loftZ(prof, T3, { capStart: true, capEnd: true, texel: 1 / 10 }),
+        "hull",
+        { color: GREY, uv: "keep", lod },
+      );
   }
   for (const lod of [0, 1]) {
     for (const side of [-1, 1]) {
-      // window rows on both tiers' flanks
-      for (let z = 340; z <= 470; z += 9)
-        add(
-          new THREE.BoxGeometry(0.6, 1.1, 5).translate(side * 48.4, 56, z),
-          "windows",
-          {
-            color: WINDOW,
-            lod,
-            uv: "keep",
-          },
-        );
-      if (lod === 0)
-        for (let z = 344; z <= 466; z += 9)
-          add(
-            new THREE.BoxGeometry(0.6, 0.9, 4).translate(side * 48.4, 66, z),
-            "windows",
-            {
-              color: WINDOW,
-              lod,
-              uv: "keep",
-            },
-          );
-      for (let z = 380; z <= 450; z += 8)
-        add(
-          new THREE.BoxGeometry(0.6, 1.1, 4.5).translate(side * 28.4, 84, z),
-          "windows",
-          {
-            color: WINDOW,
-            lod,
-            uv: "keep",
-          },
-        );
-      // dark recess bands on tier 1
+      // recessed window bands on both tiers: dark band with slot rows inside (tier flanks are at x = 47 / 28)
       add(
-        new THREE.BoxGeometry(0.6, 4, 120).translate(side * 48.3, 40, 410),
+        new THREE.BoxGeometry(0.5, 4.2, 132).translate(side * 47.25, 56, 410),
         "dark",
-        {
-          color: MACH_DK,
-          texel: 1 / 4,
+        { color: MACH_DK, texel: 1 / 4, lod },
+      );
+      slotRow(add, {
+        c: [side * 47.55, 56, 410],
+        n: [side, 0, 0],
+        along: [0, 0, 1],
+        count: 8,
+        len: 8,
+        gap: 6.5,
+        h: 1.8,
+        lod,
+        panes: 2,
+        glow: WINDOW,
+        rim: MACH_DK,
+      });
+      if (lod === 0)
+        slotRow(add, {
+          c: [side * 47.1, 44, 420],
+          n: [side, 0, 0],
+          along: [0, 0, 1],
+          count: 5,
+          len: 8,
+          gap: 10,
+          h: 1.6,
           lod,
-        },
+          panes: 2,
+          glow: WINDOW_WARM,
+          rim: MACH_DK,
+        });
+      add(
+        new THREE.BoxGeometry(0.5, 3.6, 92).translate(side * 28.25, 86, 425),
+        "dark",
+        { color: MACH_DK, texel: 1 / 4, lod },
+      );
+      slotRow(add, {
+        c: [side * 28.55, 86, 425],
+        n: [side, 0, 0],
+        along: [0, 0, 1],
+        count: 6,
+        len: 7,
+        gap: 7.5,
+        h: 1.6,
+        lod,
+        panes: 2,
+        glow: WINDOW,
+        rim: MACH_DK,
+      });
+      // accent stripe on tier 1 and the hex insignia
+      add(
+        new THREE.BoxGeometry(0.3, 2.2, 150).translate(side * 47.1, 63, 405),
+        "paint",
+        { color: ACCENT, lod, uv: "keep" },
+      );
+      const qq = new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 0, 1),
+        new THREE.Vector3(side, 0, 0),
+      );
+      add(
+        new THREE.CircleGeometry(6, 6)
+          .applyQuaternion(qq)
+          .translate(side * 47.2, 37, 468),
+        "paint",
+        { color: EMBLEM, lod, uv: "keep" },
+      );
+      add(
+        new THREE.CircleGeometry(4, 6)
+          .applyQuaternion(qq)
+          .translate(side * 47.3, 37, 468),
+        "paint",
+        { color: GREY.getHex(), lod, uv: "keep" },
+      );
+      // ribs on the tier 1 flank aft of the window band, a dark inset panel forward
+      if (lod === 0)
+        for (const z of [486, 494, 502, 510])
+          add(
+            new THREE.BoxGeometry(0.6, 22, 1.6).translate(
+              side * (t1SX(z) + 0.2),
+              44,
+              z,
+            ),
+            "hull",
+            { color: GREY_DK, texel: 1 / 4, lod },
+          );
+      add(
+        new THREE.BoxGeometry(0.5, 14, 22).translate(side * 47.2, 42, 340),
+        "dark",
+        { color: MACH_DK, texel: 1 / 4, lod },
       );
     }
-    // front bridge slit on tier 2 and a dark sensor panel on the tier 1 ramp
-    add(
-      new THREE.BoxGeometry(34, 1.4, 0.6).translate(0, 84, 369.6),
-      "windows",
-      {
-        color: WINDOW,
-        lod,
-        uv: "keep",
-      },
-    );
-    add(bar([0, 44, 306], [0, 66, 326], 26, 0.6), "dark", {
+    // bridge slit on the tier 2 nose slope (80 m at z 352 -> 102 m at z 372) and sensor slots on the
+    // tier 1 ramp (47 m at z 298 -> 71 m at z 326)
+    slotWindow(add, {
+      c: [0, 89.9, 361],
+      n: [0, 0.67, -0.74],
+      along: [1, 0, 0],
+      len: 30,
+      h: 1.8,
+      lod,
+      panes: 5,
+      glow: WINDOW,
+      rim: MACH_DK,
+    });
+    add(bar([0, 53.9, 305.3], [0, 69.6, 323.8], 24, 0.6), "dark", {
       color: MACH_DK,
       texel: 1 / 4,
       lod,
     });
-    // roof greebles: domes, masts, boxes
-    for (const [x, z, r] of [
-      [-16, 400, 5],
-      [14, 440, 4],
-    ])
-      add(new THREE.SphereGeometry(r, 10, 6).translate(x, 87, z), "hull", {
-        color: GREY_LT,
-        texel: 1 / 3,
+    for (const dx of [-7, 7])
+      slotWindow(add, {
+        c: [dx, 62.4, 316],
+        n: [0, 0.76, -0.65],
+        along: [1, 0, 0],
+        len: 8,
+        h: 1.6,
         lod,
+        panes: 2,
+        glow: WINDOW,
+        rim: MACH_DK,
       });
+    // comm dish, antenna cluster and masts on top
+    dishMast(add, {
+      base: [0, 113, 446],
+      up: [0, 1, 0],
+      height: 10,
+      aim: [0, 0.62, -0.78],
+      r: 9,
+      lod,
+      mast: MACH,
+      dish: GREY_LT,
+      braceSpan: 0.5,
+    });
+    antennaCluster(add, {
+      base: [-8, 113, 412],
+      up: [0, 1, 0],
+      scale: 0.9,
+      lod,
+      mast: MACH,
+      plate: GREY_DK,
+    });
     add(
-      new THREE.CylinderGeometry(0.9, 1.3, 40, 6).translate(0, 87 + 20, 476),
+      new THREE.CylinderGeometry(0.8, 1.2, 38, 6).translate(9, 113 + 19, 424),
       "dark",
-      {
-        color: MACH,
-        texel: 1 / 3,
-        lod,
-      },
-    );
-    add(
-      new THREE.CylinderGeometry(6, 6, 0.9, 10).translate(0, 127, 476),
-      "hull",
-      { color: GREY_LT, texel: 1 / 3, lod },
+      { color: MACH, texel: 1 / 3, lod },
     );
     for (const side of [-1, 1])
       add(
         new THREE.CylinderGeometry(0.6, 0.8, 22, 6).translate(
           side * 36,
-          50 + 11,
-          500,
+          t1Top(504) + 11,
+          504,
         ),
         "dark",
-        {
-          color: MACH,
-          texel: 1 / 3,
-          lod,
-        },
+        { color: MACH, texel: 1 / 3, lod },
       );
+    // domes on the tier 2 roof
+    for (const [x, z, r] of [
+      [-18, 386, 4.5],
+      [0, 478, 3.8],
+    ])
+      add(new THREE.SphereGeometry(r, 10, 6).translate(x, 102, z), "hull", {
+        color: GREY_LT,
+        texel: 1 / 3,
+        lod,
+      });
   }
   for (let i = 0; i < 14; i++) {
-    const z = 380 + rand() * 90;
-    const x = (rand() - 0.5) * 40;
+    const z = 396 + rand() * 66;
+    const x = (rand() < 0.5 ? -1 : 1) * (16.5 + rand() * 8);
     add(
       new THREE.BoxGeometry(
+        3 + rand() * 3,
+        1.5 + rand() * 2.5,
         3 + rand() * 5,
-        1.5 + rand() * 3,
-        3 + rand() * 6,
-      ).translate(x, 87.5, z),
+      ).translate(x, 102.5, z),
       "dark",
       {
         color: rand() < 0.6 ? MACH : MACH_DK,
@@ -890,190 +1293,215 @@ export function buildRecusant(mats) {
   }
 
   // ---------------------------------------------------------------------------
-  // turrets: heavy on the slab shoulders and belly, light on the block roofs
+  // tracking turrets: heavy on the slab shoulders (top and belly), light on the tiers and the neck
   // ---------------------------------------------------------------------------
-  const turret = (x, y, z, size, up, lod, tint = GREY) => {
-    const seg = lod === 0 ? 12 : 8;
-    const base = new THREE.CylinderGeometry(
-      size * 1.1,
-      size * 1.2,
-      size * 0.8,
-      seg,
+  const heavy = turretType(9, GREY, MACH_DK, 1, { rate: 0.5 });
+  const light = turretType(4.4, GREY, MACH_DK, 0, { rate: 0.9, yawLimit: 2.8 });
+  const pad = (p, n, r, lod) => {
+    const g = new THREE.CylinderGeometry(r, r * 1.08, 1.2, lod === 0 ? 14 : 10);
+    g.applyQuaternion(
+      new THREE.Quaternion().setFromUnitVectors(
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(...n),
+      ),
     );
-    base.translate(x, y + up * size * 0.2, z);
-    add(base, "hull", { color: tint, texel: 1 / 5, lod });
-    const h = new THREE.BoxGeometry(size * 1.7, size * 0.8, size * 1.9);
-    h.translate(x, y + up * size * 0.95, z + size * 0.15);
-    add(h, "dark", { color: MACH, texel: 1 / 4, lod });
-    if (lod === 0) {
-      const dome = new THREE.SphereGeometry(size * 0.6, 10, 6);
-      dome.scale(1, 0.6, 1.1);
-      dome.translate(x, y + up * size * 1.35, z + size * 0.1);
-      add(dome, "hull", { color: tint, texel: 1 / 4, lod });
-    }
-    const len = size * 4.4;
-    const nb = lod === 0 ? 2 : 1;
-    for (let b = 0; b < nb; b++) {
-      const bx = x + (nb === 2 ? (b ? 0.34 : -0.34) * size : 0);
-      add(
-        tubeZ(
-          size * 0.15,
-          size * 0.19,
-          len,
-          lod === 0 ? 7 : 5,
-          bx,
-          y + up * size * 1.0,
-          z - size * 0.8 - len / 2,
-          false,
-        ),
-        "dark",
-        { color: MACH_DK, texel: 1 / 3, lod },
-      );
-    }
-    return [x, y + up * size, z - size * 0.8 - len];
+    g.translate(...p);
+    add(g, "hull", { color: GREY_DK, texel: 1 / 5, lod });
+  };
+  const place = (type, p, n, r, hpKind, range) => {
+    const nn = new THREE.Vector3(...n).normalize();
+    const base = new THREE.Vector3(...p).addScaledVector(nn, 0.4);
+    for (const lod of [0, 1]) pad(base.toArray(), n, r, lod);
+    const k = turrets.length;
+    turrets.push({
+      type,
+      pos: base.clone().addScaledVector(nn, 0.6).toArray(),
+      up: nn.toArray(),
+      forward: [0, 0, -1],
+    });
+    hardpoints.push({
+      pos: base
+        .clone()
+        .addScaledVector(nn, r)
+        .add(new THREE.Vector3(0, 0, -2 * r))
+        .toArray(),
+      dir: [Math.sign(p[0]) * 0.4, nn.y * 0.5, -0.75],
+      kind: hpKind,
+      range,
+      turret: k,
+    });
+    return base.toArray();
   };
   for (const side of [-1, 1]) {
+    // top heavies: one on the flat beside the block, one on the shoulder slope
     for (const [x, z] of [
-      [104, 314],
-      [122, 468],
+      [side * 66, 338],
+      [side * 126, 472],
     ]) {
-      let m;
-      for (const lod of [0, 1]) m = turret(side * x, slabSY(z), z, 8, 1, lod);
-      hardpoints.push({
-        pos: m,
-        dir: [side * 0.45, 0.4, -0.8],
-        kind: "heavy",
-        range: 13000,
+      const q = slabSurf(x, z, 1, 0);
+      place("heavy", q.p, q.n, 12, "heavy", 13000);
+      // soot streak aft of the turret
+      const pts = [];
+      const nrm = [];
+      for (let zz = z + 16; zz <= z + 58; zz += 7) {
+        const s = slabSurf(x, zz, 1, 0);
+        pts.push(s.p);
+        nrm.push(s.n);
+      }
+      sootStreak(add, {
+        points: pts,
+        normals: nrm,
+        halfW: (i) => 6 + i * 1.1,
+        base: plateTint(GREY),
+        soot: SOOT,
+        strength: (i) => 0.72 * (1 - i / pts.length) ** 1.1,
+        lod: 0,
+        texel: TEX,
+        lift: 1.1,
       });
     }
+    // belly heavy
     {
-      let m;
-      for (const lod of [0, 1])
-        m = turret(side * 92, -slabSY(400), 400, 7.5, -1, lod, GREY_DK);
-      hardpoints.push({
-        pos: m,
-        dir: [side * 0.4, -0.6, -0.7],
-        kind: "heavy",
-        range: 13000,
-      });
+      const q = slabSurf(side * 96, 410, -1, 0);
+      place("heavy", q.p, q.n, 12, "heavy", 13000);
     }
+    // lights on the tier 1 roof beside tier 2, on the tier 2 roof fore and aft of the bridge cap, and
+    // the emplacements at the spine-to-slab junction (neck top is at y = 22.7 there)
     for (const [x, y, z] of [
-      [20, 87, 392],
-      [20, 87, 456],
-      [40, 72, 502],
-    ]) {
-      let m;
-      for (const lod of [0, 1]) m = turret(side * x, y, z, 4.5, 1, lod);
-      hardpoints.push({
-        pos: m,
-        dir: [side * 0.5, 0.5, -0.7],
-        kind: "light",
-        range: 7000,
-      });
+      [side * 39, t1Top(400), 400],
+      [side * 39, t1Top(456), 456],
+      [side * 20, 102, 380],
+      [side * 20, 102, 474],
+    ])
+      place("light", [x, y, z], [0, 1, 0], 6, "light", 7000);
+    place("light", [side * 13, 22.7, 256], [0, 1, 0], 6, "light", 7000);
+    // neck equipment boxes and a dark vent
+    for (const lod of [0, 1]) {
+      add(
+        new THREE.BoxGeometry(4, 6, 14).translate(side * 30, -4, 250),
+        "dark",
+        { color: MACH, texel: 1 / 3, lod },
+      );
+      add(
+        new THREE.BoxGeometry(6, 3, 10).translate(side * 22, 22.5, 240),
+        "hull",
+        { color: GREY_DK, texel: 1 / 3, lod },
+      );
     }
   }
+  // scorch rings at fixed points: slab top (two), tier 1 flank, belly
+  for (const [x, z, up, r] of [
+    [-150, 380, 1, 10],
+    [118, 524, 1, 8],
+    [70, 456, -1, 9],
+  ]) {
+    const q = slabSurf(x, z, up, 0.2);
+    scorchRing(add, {
+      c: q.p,
+      n: q.n,
+      r,
+      base: plateTint(GREY),
+      soot: SOOT,
+      strength: 0.82,
+      lod: 0,
+    });
+  }
+  scorchRing(add, {
+    c: [47.3, 34, 372],
+    n: [1, 0, 0],
+    r: 6,
+    base: tierTint(GREY),
+    soot: SOOT,
+    strength: 0.8,
+    lod: 0,
+    seg: 12,
+  });
 
   // ---------------------------------------------------------------------------
-  // engines: a row of seven across the stern face, depth, glow discs and additive plumes
+  // engines: dark stern plate (the slab section at 0.88) inside the sooty stern face, seven deep nozzle
+  // bells, glow spill on the plate, soot forward of every mouth
   // ---------------------------------------------------------------------------
   const zS = zStern;
   for (const lod of [0, 1, 2])
-    add(plateZ(slabProf, 128 * 0.96, 23 * 0.9, zS - 0.4, zS + 1.2), "dark", {
-      color: 0x5e6066,
+    add(plateZ(slabProf, 176, 22, zS - 0.2, zS + 1.2), "dark", {
+      color: PLATE.getHex(),
       texel: 1 / 5,
       lod,
     });
-  // soft engine glow spill across the stern plate behind the nozzle row, fading toward the slab edges
-  for (const lod of [0, 1])
-    add(
-      new THREE.PlaneGeometry(292, 40, 1, 4).translate(0, -1, zS + 1.9),
-      "plumeAdd",
-      {
-        lod,
-        uv: "keep",
-        tint: (px, py, pz, o) =>
-          o
-            .copy(PLUME)
-            .multiplyScalar(
-              0.24 * (1 - Math.min(1, Math.abs(py + 1) / 20)) ** 1.5,
-            ),
-      },
-    );
-  for (let i = 0; i < 7; i++) {
-    const x = -132 + i * 44;
-    const y = -1;
-    const r = i === 3 ? 15.5 : 14;
+  const NOZ = [];
+  for (let i = 0; i < 7; i++)
+    NOZ.push({ x: -132 + i * 44, y: -1, r: i === 3 ? 15 : 13 });
+  for (const { x, y, r } of NOZ) {
+    let entry;
     for (const lod of [0, 1, 2]) {
-      const seg = lod === 0 ? 16 : lod === 1 ? 10 : 7;
-      if (lod < 2) {
-        add(tubeZ(r + 1.8, r + 0.4, 24, seg, x, y, zS + 13), "dark", {
-          texel: 1 / 4,
-          lod,
-          tint: (px, py, pz, o) =>
-            o
-              .setHex(0x6a6c72)
-              .multiplyScalar(1 - 0.45 * smoothstep(zS + 4, zS + 25, pz)),
-        });
-        add(
-          flipFaces(tubeZ(r + 0.4, r * 0.42, 22, seg, x, y, zS + 14)),
-          "dark",
-          {
-            color: 0x34363a,
-            texel: 1 / 4,
-            lod,
-          },
-        );
-        if (lod === 0)
-          add(
-            tubeZ(r + 2.4, r + 2.4, 1.6, seg, x, y, zS + 24.4, false),
-            "dark",
-            {
-              color: 0x8a8c92,
-              texel: 1 / 3,
-              lod,
-            },
-          );
-      } else {
-        add(tubeZ(r + 1.8, r + 0.4, 12, seg, x, y, zS + 7), "dark", {
-          color: 0x5a5c62,
-          texel: 1 / 4,
-          lod,
-        });
-      }
-      add(discZ(r * 0.48, seg, x, y, zS + 4), "engineGlow", {
-        color: GLOW,
+      entry = nozzleBell(add, {
+        x,
+        y,
+        zMouth: zS + 2.4,
+        r,
+        depth: 26,
+        protrude: 8,
         lod,
-        uv: "keep",
+        shell: SHELL,
+        shellDark: SHELL_DK,
       });
       if (lod < 2)
-        add(discZ(r * 0.24, 8, x, y, zS + 4.6), "engineGlow", {
-          lod,
-          uv: "keep",
-          tint: (px, py, pz, o) => o.setRGB(1.6, 1.7, 1.8),
-        });
-      const len = r * 8;
-      add(
-        tubeZ(
-          r * 0.12,
-          r * 0.9,
-          len,
-          lod === 0 ? 12 : 8,
+        sternSpill(add, {
           x,
           y,
-          zS + 25 + len / 2,
-        ),
-        "plumeAdd",
-        {
+          zPlate: zS + 1.2,
+          r: r + 5.5,
+          plate: PLATE,
           lod,
-          uv: "keep",
-          tint: (px, py, pz, o) => {
-            const k = Math.min(1, Math.max(0, (pz - (zS + 25)) / len));
-            o.copy(PLUME).multiplyScalar(1.5 * (1 - k) ** 1.7);
-          },
-        },
-      );
+        });
     }
-    engines.push({ pos: [x, y, zS + 4], r });
+    engines.push(entry);
+    // soot streaks on the slab top and bottom forward of the nozzle
+    for (const lod of [0, 1])
+      for (const up of [1, -1]) {
+        const pts = [];
+        const nrm = [];
+        for (let z = 544; z <= 590; z += 7.7) {
+          const s = slabSurf(x, z, up, 0);
+          pts.push(s.p);
+          nrm.push(s.n);
+        }
+        sootStreak(add, {
+          points: pts,
+          normals: nrm,
+          halfW: (i) => 6 + i * 0.9,
+          base: (px, py, pz, o) => slabTint(px, py, pz, o).multiplyScalar(1.25),
+          soot: SOOT,
+          strength: (i) => 0.85 * smoothstep(0, pts.length - 1, i) ** 0.6,
+          lod,
+          texel: TEX,
+          lift: 1.0,
+        });
+      }
+  }
+  // pipework and clamps between the nozzles on the stern plate (LOD 0)
+  for (let i = 0; i + 1 < NOZ.length; i++) {
+    const a = NOZ[i];
+    const b = NOZ[i + 1];
+    add(
+      bar(
+        [a.x + a.r + 2.5, a.y + 8, zS + 1.8],
+        [b.x - b.r - 2.5, b.y + 8, zS + 1.8],
+        1.6,
+        1.6,
+      ),
+      "dark",
+      { color: MACH, texel: 1 / 2, lod: 0 },
+    );
+    add(
+      new THREE.BoxGeometry(6, 5, 2.4).translate(
+        (a.x + b.x) / 2,
+        a.y - 8,
+        zS + 2.2,
+      ),
+      "dark",
+      { color: MACH_DK, texel: 1 / 3, lod: 0 },
+    );
   }
 
   return assemble(
@@ -1084,7 +1512,9 @@ export function buildRecusant(mats) {
       parts,
       hardpoints,
       engines,
-      bounds: { radius: 610 },
+      bounds: { radius: 640 },
+      turretTypes: { heavy, light },
+      turrets,
     },
     mats,
   );
