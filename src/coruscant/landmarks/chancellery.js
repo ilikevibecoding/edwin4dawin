@@ -730,7 +730,7 @@ function approachDeck(bp) {
   const y = DECK_Y, z0 = 59, z1 = 79;
   for (let z = z0; z <= z1; z++) for (let x = 35; x <= 46; x++) {
     const edge = x === 35 || x === 46;
-    bp.set(x, y, z, edge ? ((z % 2) ? GLOW : CHR) : ((x === 40 || x === 41) ? B.RED_WOOL : ((z % 4 === 0) ? DARK : PLATE)));
+    bp.set(x, y, z, edge ? ((z % 3 === 0) ? GLOW : CHR) : ((x === 40 || x === 41) ? B.RED_WOOL : ((z % 4 === 0) ? DARK : PLATE)));
     if (edge) bp.set(x, y + 1, z, BARS);
     if (x >= 36 && x <= 45) bp.set(x, y - 1, z, DARK);
     if (x >= 38 && x <= 43) bp.set(x, y - 2, z, (z % 3) ? STEEL : BLUE);
@@ -757,7 +757,7 @@ function discPavilion(bp) {
     const d = dist(x, z);
     if (d > R) continue;
     const join = (z <= 81 && x >= 36 && x <= 45) || (z >= 100 && x >= 38 && x <= 43);   // approach deck / gangway joins
-    if (d > R - 1 && !join) { bp.set(x, y, z, ((x + z) % 2) ? GLOW : CHR); bp.set(x, y + 1, z, BARS); }
+    if (d > R - 1 && !join) { bp.set(x, y, z, ((x + z) % 3 === 0) ? GLOW : CHR); bp.set(x, y + 1, z, BARS); }
     else if (d > 8.5) bp.set(x, y, z, (d > 9.5 && d <= 10.5 && (x + z) % 2 === 0) ? BLUE : ((x % 4 === 0 || z % 4 === 0) ? DARK : PLATE));
     else bp.set(x, y, z, (d > 7.5) ? GLOW : ((x === 40 || x === 41 || z === 90 || z === 91) && (x + z) % 2 === 0 ? GLOW : ((x + z) % 2 ? BLACK : DARK)));
     // underside: dark plate with blue light rows, radial ribs and a ring
@@ -766,11 +766,11 @@ function discPavilion(bp) {
     if ((rib && d > 2) || (d > 10.5 && d <= 11.5)) bp.set(x, y - 2, z, STEEL);
   }
   // railing lamps
-  for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6 + Math.PI / 12; const x = Math.round(cx - 0.5 + Math.cos(a) * (R - 0.6)), z = Math.round(cz - 0.5 + Math.sin(a) * (R - 0.6)); bp.set(x, y + 2, z, BARS); bp.set(x, y + 3, z, LAMP); }
+  for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4 + Math.PI / 8; const x = Math.round(cx - 0.5 + Math.cos(a) * (R - 0.6)), z = Math.round(cz - 0.5 + Math.sin(a) * (R - 0.6)); bp.set(x, y + 2, z, BARS); bp.set(x, y + 3, z, (k % 2) ? LAMP : BLUE); }
   // stalk: 4x4 housing from the ground to the pad with the lift inside; doors south at the ground, north at the pad
   bp.fill(39, 1, 89, 42, y + 4, 92, DARK);
-  for (let yy = 1; yy <= y + 3; yy++) for (const [sx, sz] of [[39, 89], [42, 89], [39, 92], [42, 92]]) bp.set(sx, yy, sz, (yy % 5 === 0) ? BLUE : CHR);
-  bp.fill(39, y + 5, 89, 42, y + 5, 92, CHR); bp.set(40, y + 5, 90, BLUE); bp.set(41, y + 5, 91, BLUE);
+  for (let yy = 1; yy <= y + 3; yy++) for (const [sx, sz] of [[39, 89], [42, 89], [39, 92], [42, 92]]) bp.set(sx, yy, sz, (yy % 5 === 0) ? BLUE : BLACK);
+  bp.fill(39, y + 5, 89, 42, y + 5, 92, STEEL); bp.set(40, y + 5, 90, BLUE); bp.set(41, y + 5, 91, BLUE);
   bp.fill(40, 1, 90, 41, y + 3, 91, AIR);
   bp.lift(40, 90, 1, y + 1);
   bp.fill(40, 1, 92, 41, 3, 92, AIR); bp.set(39, 3, 92, BLUE); bp.set(42, 3, 92, BLUE);
@@ -812,25 +812,25 @@ function discPavilion(bp) {
   for (let k = 0; k < 8; k++) {
     const a = Math.PI / 8 + k * Math.PI / 4;
     const px = Math.round(cx - 0.5 + Math.cos(a) * 6.8), pz = Math.round(cz - 0.5 + Math.sin(a) * 6.8);
-    bp.fill(px, y + 1, pz, px, y + 6, pz, CHR); bp.set(px, y + 4, pz, BLUE);
+    bp.fill(px, y + 1, pz, px, y + 6, pz, DARK); bp.set(px, y + 4, pz, BLUE);
   }
   for (let x = 32; x <= 49; x++) for (let z = 82; z <= 99; z++) {
     const d = dist(x, z);
     if (d > 8) continue;
-    if (d > 4.5) { bp.set(x, y + 7, z, d > 7 ? ((x + z) % 3 === 0 ? GLOW : CHR) : ((x + z) % 2 ? DARK : STEEL)); if (d > 6 && (x + z) % 4 === 2) bp.set(x, y + 6, z, GLOW); continue; }
+    if (d > 4.5) { bp.set(x, y + 7, z, d > 7 ? ((x + z) % 3 === 0 ? BLUE : DARK) : ((x + z) % 2 ? DARK : BLACK)); if (d > 6 && (x + z) % 6 === 2) bp.set(x, y + 6, z, BLUE); continue; }
     const h = Math.max(1, Math.round(Math.sqrt(20.25 - d * d)) - 1);
     bp.set(x, y + 7 + h, z, d < 1.2 ? BLUE : GLASS);
-    if (d > 3.4) for (let yy = y + 7; yy < y + 7 + h; yy++) bp.set(x, yy, z, ((x + z) % 3) ? GLASS : CHR);
-    else bp.set(x, y + 7, z, (x + z) % 2 ? DARK : STEEL);
+    if (d > 3.4) for (let yy = y + 7; yy < y + 7 + h; yy++) bp.set(x, yy, z, ((x + z) % 3) ? GLASS : DARK);
+    else bp.set(x, y + 7, z, (x + z) % 2 ? DARK : BLACK);
   }
-  bp.fill(40, y + 8, 90, 41, y + 9, 91, GLOW);
+  bp.fill(40, y + 8, 90, 41, y + 9, 91, BLUE);
   // the Senate shuttle docked at the east rim, nose over the pad, boarding ramp down onto the deck
   bp.fill(49, y + 2, 89, 58, y + 4, 92, STEEL); bp.fill(50, y + 3, 90, 57, y + 3, 91, AIR);
   bp.fill(49, y + 2, 89, 49, y + 2, 92, DARK); bp.fill(49, y + 3, 90, 49, y + 3, 91, GLASS);          // nose and cockpit
   bp.fill(59, y + 3, 90, 59, y + 3, 91, BLUE); bp.fill(59, y + 2, 89, 59, y + 4, 89, DARK); bp.fill(59, y + 2, 92, 59, y + 4, 92, DARK);   // engines
   bp.fill(52, y + 3, 88, 56, y + 3, 88, STEEL); bp.fill(52, y + 3, 93, 56, y + 3, 93, STEEL); bp.set(56, y + 3, 88, BLUE); bp.set(56, y + 3, 93, BLUE);   // wings
   bp.fill(54, y + 5, 90, 57, y + 5, 91, DARK); bp.fill(56, y + 6, 90, 57, y + 6, 91, DARK); bp.set(57, y + 7, 90, BLUE);   // swept fin
-  for (const gz of [88, 93]) { bp.set(50, y + 1, gz, BARS); bp.set(50, y + 2, gz, CHR); bp.set(50, y + 3, gz, BLUE); }   // mooring beacons
+  for (const gz of [88, 93]) { bp.set(50, y + 1, gz, BARS); bp.set(50, y + 2, gz, STEEL); bp.set(50, y + 3, gz, BLUE); }   // mooring beacons
   bp.set(47, y + 1, 90, SLAB); bp.set(47, y + 1, 91, SLAB); bp.set(48, y + 1, 90, PLATE); bp.set(48, y + 1, 91, PLATE);
   bp.spot(46, y + 1, 90, 'stand'); bp.work(36, y + 1, 96, 'deck officer');
   // benches and holo totems on the pad's west half
@@ -839,8 +839,8 @@ function discPavilion(bp) {
   bp.room('landing_pavilion', 27, y + 1, 77, 54, 104);
   // link to the boulevard gangway on the front door column
   for (let z = 103; z <= bp.d - 1; z++) for (let x = 37; x <= 44; x++) { if (dist(x, z) <= R) continue; bp.set(x, y, z, (x === 37 || x === 44) ? CHR : PLATE); if (x === 37 || x === 44) bp.set(x, y + 1, z, BARS); }
-  for (const x of [39, 42]) bp.fill(x, y + 1, bp.d - 1, x, y + 4, bp.d - 1, CHR);
-  bp.fill(40, y + 4, bp.d - 1, 41, y + 4, bp.d - 1, GLOW); bp.set(37, y + 3, 104, LAMP); bp.set(44, y + 3, 104, LAMP); bp.set(37, y + 2, 104, BARS); bp.set(44, y + 2, 104, BARS);
+  for (const x of [39, 42]) { bp.fill(x, y + 1, bp.d - 1, x, y + 3, bp.d - 1, DARK); bp.set(x, y + 4, bp.d - 1, BLUE); }
+  bp.fill(40, y + 4, bp.d - 1, 41, y + 4, bp.d - 1, GLOW); bp.set(37, y + 3, 104, LANTERN); bp.set(44, y + 3, 104, LANTERN); bp.set(37, y + 2, 104, BARS); bp.set(44, y + 2, 104, BARS);
   bp.fill(40, y + 1, bp.d - 1, 41, y + 3, bp.d - 1, AIR);
   bp.door(DOOR_X, y + 1, bp.d - 1, 'S');
 }
