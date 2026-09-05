@@ -475,3 +475,81 @@ viewports look into the interior); far-field planets sat next to the 1.6 km hull
 
 Workstreams launched (isolated worktrees): EXT-A hull/superstructure/engines, EXT-B greebles/weapons,
 BRIDGE, HANGAR complex, FIGHTERS (TIE model + traffic), ROOMS-A/B/C/D (20 rooms).
+
+## Steps 3–12: build, gauntlet, fixes — final set `shots/iter_m2_final/`
+
+Three waves of isolated-worktree agents (13 build workstreams, 8 critics/validators, 8 fix workstreams),
+each merged only after `npm run build`, `tools/smoke.mjs` (0 page errors) and a harness render. The
+intermediate iteration sets (`iter_m2a…g`, `iter_ra*`, `iter_rb/rc/rd*`, `iter_ext*`, `iter_fab*`,
+`iter_fcd*`, `iter_h3*`) are in the git history only; the tree keeps the baseline and the final set.
+
+### What is aboard (46 cells: 36 spaces + 10 lift cars, 41 doors, 2 lift shafts × 5 decks)
+
+Deck A (tower, +246 m): command bridge, lobby, corridor, navigation, tactical, comms, intel, ready room.
+Deck B (+232): observation gallery, officers' quarters, briefing, lounge, escape pods.
+Deck C (+100): crew quarters, mess hall, medbay, armory, detention.
+Deck D (+48): engineering control, reactor, hyperdrive, life support, maintenance bay.
+Deck E (−40, ventral): hangar (containment field open to space), fighter bay, shuttle bay, cargo, flight
+control, plus the *Kestrel* freighter docked on the hangar deck (the original demo's interior, now with an
+exterior shell, landing gear, nacelles and a boarding ramp with a working aft door).
+Exterior: lofted wedge hull with plating/seams/weathering, terraced superstructure, tower with bridge
+module (viewports look into the real bridge), shield domes, comms mast, three-tier engine bells, hangar
+mouth with approach lights, ~5k instanced greebles, 60+ turbolaser/ion emplacements, sensor dishes,
+docking recess and reactor bulb on the belly. TIE traffic: 4 fighters cycling launch → patrol → recovery
+→ rack, one shuttle, all driven by `fighters/traffic.js` with `TrafficHooks` for future pilots.
+
+### Technical validation (`tools/qa_walk.mjs`, dev server, SwiftShader)
+
+`{"doors":"31/31","spawns":"34/46","lifts":"40/40","stairs":"15/19","fighters":"pass","transitions":"3/3","pageErrorsTotal":0}`
+
+- doors: every door leaf collider disables when open and the walk-through leg passes on all 31.
+- lifts: all 40 (car, deck) pairs pass walk-in → ride → arrival → walk-out end-to-end.
+- spawns 34/46: the 12 "failures" are the 10 lift cars (the forward leg walks out of the car, as
+  intended) and comms/navigation, whose spawns now face a console pod 2.6 m ahead (furnished, not stuck).
+- stairs 15/19: the four failures are hardcoded QA waypoints that round-3 props now occupy (briefing
+  dais lectern, observation data column, comms console, tactical tank) — the platforms themselves are
+  reachable via their stairs (verified by the fix workstreams' walk logs).
+- transitions 3/3: interior → orbit → fly → interior; `runTransition` restores the exact player pose.
+- harness checks (`tools/shots.mjs`): door approach opens in < 1 s of walking; walk lobby_a → corridor_a
+  cell tracking correct; turbolift lobby_a → deck C rides and arrives; bed / galley / bathroom
+  interactions still work; 0 page errors across 55 views.
+
+### Performance (final set, 1280×720, SwiftShader — draw calls / triangles / lights are GPU-independent;
+frame times are meaningless in software GL and are not quoted)
+
+| View | Calls | Triangles | Visible cells | Active lights |
+|---|---|---|---|---|
+| room:bridge | 294 | 735k (hull visible through the viewports) | 2 | 13 |
+| room:corridor_a | 181 | 91k | 3 | 17 |
+| room:tactical / comms / navigation | 126–130 | 131–139k | 3 | 18 |
+| room:observation | 216 | 589k (exterior) | 1 | 12 |
+| room:crew_quarters / mess_hall / medbay | 79–99 | 93–366k | 1 | 8 |
+| room:reactor / hyperdrive / maintenance | 94–181 | 247–395k | 1–3 | 8–19 |
+| room:hangar (field open to space) | 343 | 1.46M | 3 | 19 |
+| cockpit (Kestrel, sees the hangar) | 327 | 1.52M | 2 | 19 |
+| bathroom (Kestrel mirror re-render) | 548 | 2.49M | 2 | 19 |
+| ext_hero / ext_far | 313 / 324 | 1.37M / 1.33M | 2 | 16 |
+| ext_bridge_close / ext_hangar_mouth | 440 / 428 | 1.83M / 1.83M | 2 | 16 |
+
+Whole-ship: 1681 geometries, 171 textures (265 MB estimated, all procedural), 90 shader programs after a
+full tour (light pool: no recompiles while walking), 4402 colliders, 721 floors, JS heap 294 MB after 55
+views. Load to `ready` 18.9 s in SwiftShader (shader compilation dominates; a hardware GPU compiles the
+same 78 programs in about 1–2 s). Production bundle: 690 kB JS (200 kB gzip), no external assets.
+
+Budgets met: interior ≤ 350 calls; exterior ≤ 450 calls and ≤ 1.9M triangles with instancing + chunk LODs;
+≤ 19 pool lights active; interior spot shadow suspended outside; exterior hidden (and not shadow-casting)
+inside except from view rooms (bridge, observation, hangar, flight control, Kestrel).
+
+### Known limitations (honest list)
+
+- Frame rate has only been measured in software GL; the adaptive quality scaler (`qualityLevel`) drops
+  AO / bloom / shadow resolution if a real GPU cannot hold 60 fps, but no hardware number is on record.
+- The Kestrel bathroom mirror re-renders the scene (2.5M triangles in that one view).
+- Rooms are furnished by code; a few repeated fixtures (ceiling slot strips, wall gear pods) are
+  recognisably modular at close range.
+- Hangar containment field from outside (`ext_hangar_mouth`) reads as a blue-lit opening; from inside
+  the opening's centre measures luma 14 (dark, stars visible).
+- QA waypoint list needs re-pointing after the round-3 furniture changes (4 stair legs).
+- Fighters follow scripted spline paths; no avoidance, no pilots (hooks in `TrafficHooks`).
+- Flight / landing / net / audio are stubs with interfaces only (`systems/flight.js`, `systems/landing.js`,
+  `net.js`, `audio.js`).

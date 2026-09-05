@@ -41,8 +41,14 @@ node tools/shots.mjs <tag>                     # every room + exterior preset ->
 SHOT_QUICK=1 SHOT_SET=exterior node tools/shots.mjs <tag>
 SHOT_QUICK=1 SHOT_VIEWS="room:bridge,cam:label:x/y/z:lx/ly/lz:fov:i" node tools/shots.mjs <tag>
 node tools/smoke.mjs                           # load test: page errors, build log, stats
+node tools/qa_walk.mjs                         # doors / spawns / lifts / stairs / fighters / transitions -> tools/qa_results.json
+node tools/luma.mjs shots/iter_x/*.png         # exposure audit (mean / p5 / p95 / hot pixels per image)
 tools/publish.sh [--force]                     # build + smoke test + push the playable branch
 ```
+
+Final evidence for the Star Destroyer milestone (screenshots of every room and exterior preset, the
+per-view draw call / triangle / light table, the QA run and the known limitations) is in
+`PROGRESS.md` → "Milestone 2" and `shots/iter_m2_final/`.
 
 `tools/shots.mjs` also exercises doors (approach opens them), walking between rooms, a turbolift
 ride, the interior↔exterior camera transition and the Kestrel's interactions, and records draw calls,
