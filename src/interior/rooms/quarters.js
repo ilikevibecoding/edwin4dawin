@@ -75,6 +75,12 @@ function bunkStack(kit, ctx, { x0, z0, open, aisleEnd, seed, roster = false, pri
       }
     }
   }
+  // blue kick light under the bottom bunk on the open side: a dark kick board set back under the lip
+  // with a navy strip low on its face, so the night colour falls on the alcove mat and shows through
+  // the bay openings from the aisle
+  const kx = open > 0 ? x1 - 0.1 : x0 + 0.1;
+  kit.box("paintedMetal", kx, 0.12, zc, 0.04, 0.24, BUNK_L - 0.12, { color: PALETTE.impBlack, texel: 2 });
+  kit.box("emitBlueDim", kx + open * 0.025, 0.05, zc, 0.01, 0.025, BUNK_L - 0.4, { uv: "keep" });
   // ladder on the open side at the aisle end
   const lz = aisleEnd === "zmax" ? z1 - 0.12 : z0 + 0.12;
   const lx = open > 0 ? x1 + 0.05 : x0 - 0.05;
@@ -191,13 +197,17 @@ export function buildQuarters(kit, ctx) {
   }
 
   // ------------------------------------------------------------------ lights (6): 2 blue night + 3 amber bays + 1 wash
-  // the night blue is a greyed, low-intensity pair (the earlier three saturated lights turned the
-  // aisle into a cyan runway); the amber bay lamps carry the warmth out to the aisle edge
-  for (const x of [-9.5, -22.0]) ctx.light(pointLight(0x5a78d2, 8, 17, [x, H - 0.5, aisleZ]));
+  // the night blue is a greyed pair (the earlier three saturated lights turned the aisle into a cyan
+  // runway), hung 0.7 m under the spine and over the aisle-end panels of the first and fourth bays:
+  // at 0.5 m under the ceiling and 8 cd the pair only lit the spine and the deck, and the big grey
+  // end panels the fixed view is made of stayed hemisphere-grey. The amber bay lamps carry the warmth
+  // out to the aisle edge; the far wash is a cool blue so the end wall the aisle runs to closes on the
+  // night colour rather than a near-white plate
+  for (const x of [-8.5, -21.0]) ctx.light(pointLight(0x5a78d2, 13, 17, [x, H - 0.7, aisleZ]));
   ctx.light(pointLight(0xffb060, 4.5, 7.5, [-7.85, 2.2, -21.8]));
   ctx.light(pointLight(0xffb060, 4.5, 7.5, [-15.05, 2.2, -16.2]));
   ctx.light(pointLight(0xffb060, 4.5, 7.5, [-22.25, 2.2, -21.8]));
-  ctx.light(pointLight(0xd8e2ff, 7, 7.5, [-32.7, 2.5, aisleZ]));
+  ctx.light(pointLight(0x8fb0ff, 7, 7.5, [-32.7, 2.5, aisleZ]));
 
   // navy floor kick channels along both aisle edges (a quiet edge line, not a runway)
   for (const z of [aisleZ - 1.3, aisleZ + 1.3]) {
@@ -347,6 +357,10 @@ export function buildQuarters(kit, ctx) {
     frame.box("paintedMetal", u, 2.26, 0.1, 3.2, 0.12, 0.2, { color: PALETTE.impDark, texel: 2 });
     frame.box("emitWhiteFaint", u, 2.19, 0.1, 3.0, 0.02, 0.14, { uv: "keep" });
     frame.box("emitWhiteDim", u, 2.175, 0.11, 2.9, 0.02, 0.04, { uv: "keep" });
+    // night cove across the top of the alcove: a navy strip standing below a dark channel the full
+    // width of the alcove opening, the cool wash the aisle runs toward (the blue far light hangs under it)
+    frame.box("paintedMetal", u, 3.45, 0.12, 5.6, 0.14, 0.24, { color: PALETTE.impDark, texel: 2 });
+    frame.box("emitBlueDim", u, 3.36, 0.14, 5.4, 0.05, 0.16, { uv: "keep" });
     frame.collider(u - 1.65, u + 1.65, 0, 1.0, 0, 0.66, "sink");
     // towel hooks with towels
     for (let k = 0; k < 3; k++) {
@@ -376,9 +390,9 @@ export function buildQuarters(kit, ctx) {
         kit.collider([min[0], 0, zc - 0.75], [dx + 0.05, 2.35, zc + 0.75], "refresher");
       }
     }
-    // pipes above the sink to the ceiling
+    // pipes above the sink up into the cove channel
     frame.cylU("metal", u, 2.45, 0.08, 0.04, 3.4, { color: PALETTE.steel, segments: 10 });
-    for (const du of [-1.4, 1.4]) frame.cylV("metal", u + du, 2.9, 0.08, 0.04, 0.9, { color: PALETTE.steel, segments: 10 });
+    for (const du of [-1.4, 1.4]) frame.cylV("metal", u + du, 2.88, 0.08, 0.04, 0.86, { color: PALETTE.steel, segments: 10 });
     wallGrime(kit, ctx, "xmin", u, 0.5, 3.0, 0.7);
   }
 
