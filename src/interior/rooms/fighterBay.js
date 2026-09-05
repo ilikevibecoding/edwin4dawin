@@ -30,6 +30,7 @@ const LANE = { z0: -101.6, z1: -98.4, x1: 59.6 }; // grated service lane from th
 export function buildFighterBay(kit, ctx) {
   const [min, max] = ctx.bounds;
   const rand = rng(ctx.seed + 9);
+  ensureMaterials(ctx);
   shell(kit, ctx);
   serviceLane(kit, ctx, min, max);
   for (const c of CRADLES) cradle(kit, ctx, c, rand);
@@ -155,7 +156,8 @@ function cradle(kit, ctx, { x, z, tie }, rand) {
   for (const dx of [-2.4, 2.4]) kit.boxMM("paintedMetal", [x + dx - 0.2, top - 0.45, z - wingZ - 1.1], [x + dx + 0.2, top - 0.05, z + wingZ + 1.1], { color: PALETTE.impMid, texel: 1.5 });
   if (tie) {
     kit.boxMM("paintedMetal", [x - 0.4, top - 0.6, z - wingZ - 1.1], [x + 0.4, top - 0.4, z + wingZ + 1.1], { color: PALETTE.impBlack, texel: 2 });
-    kit.boxMM("emitAmber", [x - 0.25, top - 0.62, z - wingZ - 0.6], [x + 0.25, top - 0.6, z + wingZ + 0.6], {});
+    // dim lens: 7 m of strip seen end-on from the portal blew out on emitAmber
+    kit.boxMM("emitAmberDim", [x - 0.25, top - 0.62, z - wingZ - 0.6], [x + 0.25, top - 0.6, z + wingZ + 0.6], {});
   }
   // service trolley-steps on the open side
   kit.box("paintedMetal", x - 3.6, 0.55, z, 0.9, 1.1, 1.6, { color: PALETTE.impDark, texel: 2 });
@@ -252,10 +254,11 @@ function enginePod(kit, ctx, x, z, yaw) {
     add("paintedMetal", new THREE.BoxGeometry(0.3, 1.0, 0.3), 0.6, 0.6, lz, { color: PALETTE.impMid, texel: 2 });
     add("hazard", new THREE.BoxGeometry(1.5, 0.12, 0.3), 0, 1.16, lz, { texel: 1 });
   }
-  // body along z at y = 1.9: dark housing with light structural bands, exposed ribs between them
+  // body along z at y = 1.9: dark painted housing with two mid-grey structural bands and exposed ribs
+  // between them (hull-grey bands on a black barrel read as candy stripes and out-shouted the TIE)
   const body = new THREE.CylinderGeometry(0.66, 0.66, 3.2, 18).rotateX(Math.PI / 2);
-  add("tiePanel", body, 0, 1.9, 0);
-  for (const bz of [-1.1, -0.2, 0.7]) add("tieHull", new THREE.CylinderGeometry(0.74, 0.74, 0.34, 18).rotateX(Math.PI / 2), 0, 1.9, bz);
+  add("paintedMetal", body, 0, 1.9, 0, { color: PALETTE.impDark, texel: 1.5 });
+  for (const bz of [-0.95, 0.75]) add("paintedMetal", new THREE.CylinderGeometry(0.74, 0.74, 0.34, 18).rotateX(Math.PI / 2), 0, 1.9, bz, { color: PALETTE.impMid, texel: 1.5 });
   for (let k = 0; k < 6; k++) {
     const a = (k / 6) * Math.PI * 2;
     add("metal", new THREE.BoxGeometry(0.1, 0.1, 2.6), 0.68 * Math.cos(a), 1.9 + 0.68 * Math.sin(a), -0.1, { color: PALETTE.gunmetal });
@@ -419,24 +422,30 @@ function hoist(kit, ctx, min, max) {
   }
   // shallow trolley carriage under the girder over the wing plane; twin heavy chains set apart along
   // the girder (so both read as separate chains from the portal, which looks along the bar) down to a
-  // hazard-banded hook block, and an open hook hanging face-on to the portal
-  k.box("paintedMetal", 0, y - 0.9, wz, 1.0, 0.5, 1.2, { color: PALETTE.impDark, texel: 2 });
-  k.box("emitRed", 0, y - 0.9, wz + 0.61, 0.2, 0.15, 0.01);
-  const chainTop = y - 1.15;
-  const blockTop = hookY + 0.75;
-  for (const dz of [-0.3, 0.3]) {
-    k.cyl("metal", 0, (chainTop + blockTop) / 2, wz + dz, 0.08, chainTop - blockTop, "y", { color: PALETTE.steel, segments: 8 });
-    for (let cy = blockTop + 0.14; cy < chainTop - 0.1; cy += 0.3) k.box("metal", 0, cy, wz + dz, 0.24, 0.08, 0.3, { color: PALETTE.gunmetal });
+  // hazard-banded hook block, and an open hook hanging face-on to the portal. The chains are built
+  // from alternating link plates on a steel core (the bare rods read as hairlines at 20 m) and the
+  // block / hook are 1.5× so they read past the cradle's A-frame
+  k.box("paintedMetal", 0, y - 0.75, wz, 1.0, 0.3, 1.2, { color: PALETTE.impDark, texel: 2 });
+  k.box("emitRed", 0, y - 0.75, wz + 0.61, 0.2, 0.12, 0.01);
+  const chainTop = y - 0.9;
+  const blockTop = hookY + 1.0;
+  for (const dz of [-0.36, 0.36]) {
+    k.cyl("metal", 0, (chainTop + blockTop) / 2, wz + dz, 0.06, chainTop - blockTop, "y", { color: PALETTE.gunmetal, segments: 8 });
+    let i = 0;
+    for (let cy = blockTop + 0.15; cy < chainTop - 0.1; cy += 0.3, i++) {
+      if (i % 2 === 0) k.box("metal", 0, cy, wz + dz, 0.26, 0.4, 0.1, { color: PALETTE.steel });
+      else k.box("metal", 0, cy, wz + dz, 0.1, 0.4, 0.26, { color: PALETTE.steel });
+    }
   }
-  k.box("paintedMetal", 0, hookY + 0.4, wz, 0.8, 0.7, 0.6, { color: PALETTE.impDark, texel: 2 });
-  k.box("hazard", 0, hookY + 0.4, wz, 0.82, 0.22, 0.62, { texel: 1 });
-  k.add("metal", new THREE.TorusGeometry(0.26, 0.08, 8, 16, Math.PI * 1.55).rotateZ(Math.PI * 0.72).rotateY(Math.PI / 2), { pos: [0, hookY + 0.02, wz], color: PALETTE.steel });
+  k.box("paintedMetal", 0, hookY + 0.6, wz, 1.1, 0.8, 0.9, { color: PALETTE.impDark, texel: 2 });
+  k.box("hazard", 0, hookY + 0.6, wz, 1.12, 0.3, 0.92, { texel: 1 });
+  k.add("metal", new THREE.TorusGeometry(0.39, 0.11, 8, 16, Math.PI * 1.55).rotateZ(Math.PI * 0.72).rotateY(Math.PI / 2), { pos: [0, hookY + 0.02, wz], color: PALETTE.steel });
   k.build(g);
   // the load pivots at the ring: a heavy square-section spreader bar with hazard-banded end plates on
   // two slings, two more slings down to lugs on the wing's top edges
   const load = new THREE.Group();
   const lk = new Kit(ctx.materials);
-  lk.add("metal", new THREE.TorusGeometry(0.28, 0.06, 8, 16), { pos: [0, -0.15, 0], color: PALETTE.steel });
+  lk.add("metal", new THREE.TorusGeometry(0.32, 0.07, 8, 16), { pos: [0, -0.2, 0], color: PALETTE.steel });
   const barY = -0.8;
   const wingY = -4.8; // wing centre 5.2 abs: apex at 8.8, bottom at 1.6 (above the base rails), 0.7 above its clamps
   const lugY = wingY + 2.49; // where the hex's slanted top edge passes x = ±1.5
@@ -445,7 +454,7 @@ function hoist(kit, ctx, min, max) {
     lk.box("hazard", 0, barY, s * 0.181, 3.4, 0.28, 0.004, { texel: 1 });
     lk.box("paintedMetal", s * 1.8, barY, 0, 0.08, 0.72, 0.72, { color: PALETTE.impBlack, texel: 2 });
     lk.box("hazard", s * 1.845, barY, 0, 0.01, 0.6, 0.6, { texel: 1 });
-    pipeRun(lk, [[0, -0.4, 0], [s * 1.5, barY + 0.18, 0]], 0.06, PALETTE.steel, "metal");
+    pipeRun(lk, [[0, -0.5, 0], [s * 1.5, barY + 0.18, 0]], 0.06, PALETTE.steel, "metal");
     pipeRun(lk, [[s * 1.5, barY - 0.18, 0], [s * 1.5, lugY + 0.12, 0.05]], 0.06, PALETTE.steel, "metal");
     lk.box("metal", s * 1.5, lugY + 0.05, 0.05, 0.2, 0.24, 0.1, { color: PALETTE.gunmetal });
   }
@@ -558,20 +567,42 @@ function partsRack(kit, ctx, x, z, yaw, rand) {
 // ---------------------------------------------------------------------------
 function lighting(kit, ctx, min, max) {
   const y = max[1] - 2.2;
+  // the receiving cradle's flood hangs 2.8 m past the hoist bridge: directly over the cradle it sat
+  // 0.35 m under the girder, whose underside it lit to a white-out that bloomed over the hoist rigging
+  // from the portal (the "rig head")
+  const x1 = CRADLES[1].x + 2.8;
   ctx.light(pointLight(0xffb060, 120, 46, [CRADLES[0].x, y, CRADLES[0].z]));
-  ctx.light(pointLight(0xffb060, 90, 40, [CRADLES[1].x, y, CRADLES[1].z]));
+  ctx.light(pointLight(0xffb060, 90, 40, [x1, y, CRADLES[1].z]));
   ctx.light(pointLight(0xe8f0ff, 75, 40, [47, y, -100]));
-  // fixtures: amber-lensed floods under the ceiling above each light, dimmer lenses elsewhere
-  for (const [x, z, mat] of [
-    [CRADLES[0].x, CRADLES[0].z, "emitAmber"],
-    [CRADLES[1].x, CRADLES[1].z, "emitAmber"],
-    [47, -100, "emitWhite"],
-    [46, -80, "emitAmberDim"],
-    [64, -100, "emitWhiteDim"],
-    [46, -118, "emitAmberDim"],
+  // fixtures: amber-lensed floods under the ceiling above each light, dimmer lenses elsewhere. The
+  // cradle floods sit ~20 m from the portal camera, which looks up at their lenses: those two run 30 %
+  // dimmer and hang inside a 0.8 m hood, deep enough to hide the lens from that angle
+  for (const [x, z, mat, hood] of [
+    [CRADLES[0].x, CRADLES[0].z, "fb_emitAmberRig", true],
+    [x1, CRADLES[1].z, "fb_emitAmberRig", true],
+    [47, -100, "emitWhite", false],
+    [46, -80, "emitAmberDim", false],
+    [64, -100, "emitWhiteDim", false],
+    [46, -118, "emitAmberDim", false],
   ]) {
     kit.box("paintedMetal", x, max[1] - 0.5, z, 1.6, 0.6, 1.6, { color: PALETTE.impDark, texel: 2 });
     kit.box(mat, x, max[1] - 0.81, z, 1.3, 0.03, 1.3);
+    if (!hood) continue;
+    const y0 = max[1] - 1.6;
+    const y1 = max[1] - 0.8;
+    kit.boxMM("paintedMetal", [x - 0.8, y0, z - 0.8], [x - 0.74, y1, z + 0.8], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("paintedMetal", [x + 0.74, y0, z - 0.8], [x + 0.8, y1, z + 0.8], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("paintedMetal", [x - 0.74, y0, z - 0.8], [x + 0.74, y1, z - 0.74], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("paintedMetal", [x - 0.74, y0, z + 0.74], [x + 0.74, y1, z + 0.8], { color: PALETTE.impBlack, texel: 2 });
   }
   void min;
+}
+
+/** Materials owned by this room, registered once on the shared dictionary. */
+function ensureMaterials(ctx) {
+  const m = ctx.materials;
+  if (!m.fb_emitAmberRig) {
+    m.fb_emitAmberRig = m.emitAmber.clone();
+    m.fb_emitAmberRig.emissiveIntensity = m.emitAmber.emissiveIntensity * 0.7;
+  }
 }
