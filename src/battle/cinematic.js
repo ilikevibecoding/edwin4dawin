@@ -295,6 +295,15 @@ export class Cinematic {
         p.copy(f.pos)
           .addScaledVector(_a, -(80 + t * 10))
           .addScaledVector(UP, 36 + t * 4);
+        // a wingman (or anything else) about to fly through the lens: cut rather than clip
+        for (const o of this.fighters.all) {
+          if (
+            o !== f &&
+            o.alive !== false &&
+            o.pos.distanceToSquared(p) < 30 * 30
+          )
+            return false;
+        }
         _c.copy(f.pos).addScaledVector(_a, 300).addScaledVector(UP, -32);
         // bias the look a fifth of the way toward the frigate the fighter is running at, but never
         // more than 60 m (~9 degrees), so the fighter stays in its third of the frame
