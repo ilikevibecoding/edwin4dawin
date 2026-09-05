@@ -6,6 +6,38 @@ long tasks, memory, draw calls, triangles, entity counts and load time). Reports
 
 ## Unreleased - natural disasters, administrator panel, multiplayer, eyes, optimization
 
+### Round 4 (user feedback): Death Star superlaser, friendlier panel, wave-swept villagers, flight, view distance
+- **Orbital beam rebuilt as a Death-Star-inspired superlaser event.** New battle station (`beam/station.js`,
+  `stationGeometry.js`, `stationShaders.js`): a 138^3 voxel volume greedy-meshed into one geometry (37k quads), with an
+  equatorial trench, a concave superlaser dish with 8 rim emitters and a centre emitter, panel plating, hundreds of
+  window lights, quantised sun shading, a fog term capped at ~28% so it stays visible 300 blocks out, charge-driven
+  green bounce light at night; 2 draw calls. New sequence (`orbitalBeam.js`): arrival from 380 blocks out / y 380 to
+  225 blocks out / y 210 in the chosen bearing while NPCs stop and crane their heads (`npcs.watch`, "What's that in the
+  sky?" lines), charge with 4 green tributary beams igniting 0.5 s apart into a pulsing focus, a 1.6 s diagonal green
+  main beam, impact with a destruction wave (dust wall + shock ring racing out to `waveRadius` 62 blocks, debris
+  fountains, people and animals knocked down, scorched ground, roofs torn open toward the blast, streets left intact),
+  crater with a wide magma lake, aftermath with the station departing. New params `approachTime`, `tributaries`,
+  `stationBearing`, `waveRadius`; `destructionRadius` default 28.
+- **Villagers react**: `npcs.watch()` curiosity behaviour; `npcs/animals.sweep()` knocks entities into a tumbling
+  flight (water sweep: helpless flailing, bobbing and drifting for 4-6 s with "The water took me!" lines, never below
+  the flooded floor; dry blast: knock-down with a proper stun and "Get down!" lines); the flood front sweeps everyone it
+  passes (77 of 82 in a default run) and the player (knock-down, murky tumble, buoyant for a few seconds, one-time
+  "Hold Space to swim up" hint); tornado +50-60% block damage with occasional masonry near the core; flood damage 0.65.
+- **Panel redesign**: disaster cards with pixel icons, primary sliders + Advanced, bearing lines, Start & watch,
+  status strip with phase names, quality and view-distance selectors, keyboard focus trap, 720p fit.
+- **Quality presets** (`quality.js`): Cinematic (default: 10-chunk view distance, 1800 debris, 3000 particles, doubled
+  relight/remesh budgets), Balanced, Light; the simulation edit budget stays fixed (400/tick) for deterministic
+  multiplayer. **View distance** up to 24 chunks (pause menu and panel; the explicit choice is remembered).
+- **Creative flight**: double-tap `Space`; `?fly=1`.
+- Fixes: a Start issued during a restore is queued instead of refused; wave-thrown bodies only stagger on landing.
+- Critics (round 4, integrated build): Death Star sequence ACCEPT WITH NITS (all must-fix items landed: player
+  no longer re-hit by the wave, dry blast, intact streets, lower placement, bigger magma pool, night hull), flood
+  ACCEPT WITH NITS (burial regression fixed), panel ACCEPT WITH NITS (all five fixes landed). Tests: unit 4/4,
+  lifecycle 39/39 (beam run to tick 700), multiplayer 8/8.
+- Measured (SwiftShader VM, load 6-8, Cinematic defaults): town view 192 draw calls / 287k tris / 132 MB at 10 chunks
+  (144 / 192k / 96 MB at 7 chunks, js 4.3 ms); tornado js 28.7 ms avg, tsunami 40.8 ms (debris 856), beam 17.5 ms
+  (debris 915), 0 exceptions. 24 chunks: 2053 chunks, 818 draw calls, 1.78M tris, ~550 MB heap.
+
 ### How to reproduce each disaster
 Open the game, press `F4` (or `` ` ``), pick a tab, set a seed, press **Preview** then **Start** and confirm.
 Equivalent console commands (same seed => identical destruction, verified by `node scripts/test-disasters.mjs`):
@@ -13,7 +45,7 @@ Equivalent console commands (same seed => identical destruction, verified by `no
 ```js
 game.disasters.command({type:'start', disaster:'tsunami', seed:7, params:{waterHeight:5, waveHeight:4, direction:'west', speed:6, duration:60, damage:0.5, intensity:0.7, center:[0,0], radius:110}})
 game.disasters.command({type:'start', disaster:'tornado', seed:7, params:{start:[-70,20], heading:75, speed:4, wander:0.35, radius:9, duration:75, intensity:0.8}})
-game.disasters.command({type:'start', disaster:'beam',    seed:7, params:{target:[0,0], beamRadius:5, chargeTime:10, strength:0.7, destructionRadius:18, duration:18, intensity:0.7}})
+game.disasters.command({type:'start', disaster:'beam',    seed:7, params:{target:[0,0], stationBearing:225, approachTime:14, chargeTime:10, tributaries:4, strength:0.7, destructionRadius:28, waveRadius:62, duration:22, intensity:0.7}})
 game.disasters.command({type:'pause'}); ({type:'resume'}); ({type:'set', params:{intensity:1}}); ({type:'stop'}); ({type:'reset'}); ({type:'replay'})
 ```
 
