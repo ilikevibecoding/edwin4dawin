@@ -174,7 +174,15 @@ export class DisasterManager {
     if (old === B.BEDROCK) return false;
     if (!this.journal.has(x, y, z)) {
       if (this.journal.size >= BUDGET.maxJournal) return false;
-      this.journal.record(x, y, z, old);
+      // a block entity (chest contents, crop age) travels with the journal entry instead of spilling as drops, so
+      // reset/restore brings the chest back full and nothing is duplicated
+      const ent = this.world.getBlockEntity(x, y, z);
+      if (ent) {
+        this.world.removeBlockEntity(x, y, z);
+        const hud = this.game.hud;
+        if (hud && hud.screen === 'chest' && hud.chest && hud.chest.x === x && hud.chest.y === y && hud.chest.z === z && this.game.closeScreen) this.game.closeScreen();
+      }
+      this.journal.record(x, y, z, old, ent);
       if (this.game.save) this.game.save.onDisasterEdit(x, y, z);
     }
     this.world.setBlockRaw(x, y, z, id);
@@ -203,6 +211,7 @@ export class DisasterManager {
     for (const e of r.value) {
       if (!this.world.isLoaded(e.x, e.z)) continue;
       if (this.world.getBlock(e.x, e.y, e.z) !== e.orig) { this.world.setBlockRaw(e.x, e.y, e.z, e.orig); this.touched.add(this.world.chunkKeyAt(e.x, e.z)); this.stats.restored++; }
+      if (e.ent && !this.world.getBlockEntity(e.x, e.y, e.z)) this.world.setBlockEntity(e.x, e.y, e.z, e.ent);
       this.restoreDone++;
     }
   }

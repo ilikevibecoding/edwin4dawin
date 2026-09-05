@@ -58,6 +58,16 @@ test('BlockJournal records first-touch originals, restores newest-first in batch
   assert.notEqual(j.hash(fakeWorld2), h1);
   assert.equal(World.posKey(1, 2, 3), World.posKey(1, 2, 3));
   assert.notEqual(World.posKey(1, 2, 3), World.posKey(1, 3, 2));
+  // a block entity recorded with the cell (chest contents) rides along to the restore batch; hash ignores it
+  const j3 = new BlockJournal();
+  const chest = { type: 'chest', slots: [{ id: 9, count: 3 }] };
+  assert.equal(j3.record(1, 2, 3, 60, chest), true);
+  j3.record(4, 5, 6, 0);
+  const b3 = [...j3.restoreBatches(10)][0];
+  assert.equal(b3.find((e) => e.x === 1).ent, chest);
+  assert.equal(b3.find((e) => e.x === 4).ent, undefined);
+  const j4 = new BlockJournal(); j4.record(1, 2, 3, 60); j4.record(4, 5, 6, 0);
+  assert.equal(j3.hash(fakeWorld), j4.hash(fakeWorld), 'entities do not change the replay hash');
   j.clear(); assert.equal(j.size, 0);
 });
 

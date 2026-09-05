@@ -9,11 +9,12 @@ export class BlockJournal {
   }
   get size() { return this.entries.size; }
 
-  // Record the original block id for a cell the first time it is modified.
-  record(x, y, z, orig) {
+  // Record the original block id (and the block entity it carried, e.g. chest contents) for a cell the first
+  // time it is modified; restore() puts both back.
+  record(x, y, z, orig, ent = null) {
     const k = World.posKey(x, y, z);
     if (this.entries.has(k)) return false;
-    this.entries.set(k, { x, y, z, orig });
+    this.entries.set(k, ent ? { x, y, z, orig, ent } : { x, y, z, orig });
     this.order.push(k);
     return true;
   }
