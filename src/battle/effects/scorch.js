@@ -56,15 +56,20 @@ void main() {
   // ragged outer edge with radial streaks (soot blown outward from the burn)
   float streak = fbm(vec2(ang * 2.2 + seed * 31.0, r * 3.0 + seed * 7.0));
   float grain = fbm(c * 7.0 + seed * 13.0);
-  float edge = 0.5 + 0.5 * streak;
-  float shape = smoothstep(edge, edge * 0.3, r);
-  // hits: a tighter dark core with spatter; fires: a wide burn with the darkest centre
-  float core = kind > 0.5 ? smoothstep(0.55, 0.05, r) : smoothstep(0.85, 0.1, r);
-  float spatter = kind > 0.5 ? smoothstep(0.62, 0.8, grain) * smoothstep(1.0, 0.35, r) * 0.7 : 0.0;
-  float a = clamp(shape * (0.55 + 0.45 * grain) + core * 0.6 + spatter, 0.0, 1.0);
+  float edge = 0.55 + 0.45 * streak;
+  float shape = smoothstep(edge, edge * 0.35, r);
+  // hits: a tight black core with spatter; fires: a wide burn with the darkest centre
+  float core = kind > 0.5 ? smoothstep(0.6, 0.08, r) : smoothstep(0.9, 0.12, r);
+  float spatter = kind > 0.5 ? smoothstep(0.6, 0.78, grain) * smoothstep(1.0, 0.4, r) * 0.8 : 0.0;
+  float a = clamp(shape * (0.7 + 0.3 * grain) + core * 0.6 + spatter, 0.0, 1.0);
   a *= vParam.y * smoothstep(0.03, 0.25, vFacing);
-  // brown-grey soot at the rim, near-black at the centre (multiplied onto the lit hull)
-  vec3 dark = mix(vec3(0.42, 0.36, 0.3), vec3(0.05, 0.04, 0.035), core);
+  // multiplied onto the lit hull: a soot core at about a quarter of the plating's brightness, dark brown
+  // around it, and a heat-discoloured rim (faint orange-grey) where the paint only baked
+  vec3 rim = vec3(0.86, 0.72, 0.58);
+  vec3 brown = vec3(0.36, 0.24, 0.16);
+  vec3 sootCol = vec3(0.2, 0.18, 0.16);
+  float inner = smoothstep(0.15, 0.7, core);
+  vec3 dark = mix(mix(rim, brown, smoothstep(0.0, 0.5, core + spatter * 0.5)), sootCol, inner);
   gl_FragColor = vec4(mix(vec3(1.0), dark, a), 1.0);
 }`;
 
@@ -152,16 +157,41 @@ export class Scorch {
     return best;
   }
 
+  // a released hit decal on the ship whose centre lies within a fraction of the sizes of the point (the
+  // mark a repeated hit on the same spot should deepen rather than double)
+  _overlapping(ship, local, size) {
+    for (const d of this.list) {
+      if (d.ship !== ship || d.hold || d.kind !== 1) continue;
+      const reach = 0.4 * Math.max(size, d.size);
+      if (d.local.distanceToSquared(local) < reach * reach) return d;
+    }
+    return null;
+  }
+
   /**
    * Stamp a decal on a ship at a local point.
    * @param ship Ship (matrix, alive), local Vector3 (ship space), normal Vector3 (ship space, outward)
    * @param size decal width (m)
    * @param opts { kind: 0 fire | 1 hit, life: seconds until fully faded (default 90), hold: keep at
    *   full strength until release() is called (persistent fires) }
+   * A hit decal landing on an existing hit mark refreshes and widens that mark instead of adding one.
    * Returns the record or null when the pool is full of held decals.
    */
   stamp(ship, local, normal, size, opts = {}) {
     let d;
+    if ((opts.kind ?? 1) === 1 && !opts.hold) {
+      d = this._overlapping(ship, local, size);
+      if (d) {
+        // each repeat widens the mark by 12 %, up to twice the hit size
+        const grown = Math.max(d.size, size) * 1.12;
+        d.size = Math.max(d.size, Math.min(grown, size * 2));
+        d.age = 0;
+        d.life = Math.max(d.life, opts.life || 90);
+        d.fade = 1;
+        this.stamped++;
+        return d;
+      }
+    }
     if (this.list.length < this.capacity) {
       d = this._alloc();
       this.list.push(d);
