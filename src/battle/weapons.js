@@ -6,8 +6,11 @@
 // to the *projected* axis so bolts seen head-on still read as a round glow instead of an edge-on sliver.
 // Distant bolts are held to a minimum projected width AND length (a thin streak, never a round pill), and
 // the more a bolt had to be inflated the dimmer and more saturated it draws, so a 10 km exchange reads as
-// fine red and teal streaks between the lines. The fragment shader draws a tapered capsule in that ribbon
-// space: a saturated coloured halo, a thin tail, and a small hot core that whitens only at the head tip.
+// fine red and teal streaks between the lines. The fragment shader draws a capsule in that ribbon space: a
+// bright body of near-constant width inside a coloured halo, a slightly thinner tail, the head no wider
+// than the body and only a touch lighter at its tip. Peak intensity is capped near 1.3 x the bolt colour:
+// the ACES output at 1/0.6 exposure lifts the weak channels of anything brighter, which is what turned the
+// red bolts salmon. The colours themselves are deep (tiny green / blue) for the same reason.
 import * as THREE from "three";
 
 const _p = new THREE.Vector3();
@@ -21,10 +24,10 @@ const MIN_HALF_WIDTH_PX = 0.9;
 const MIN_LENGTH_PX = 34;
 
 export const BOLT_COLORS = {
-  republic: new THREE.Color(1.0, 0.22, 0.12), // red turbolasers
-  separatist: new THREE.Color(0.25, 1.0, 0.75), // teal-green
-  fighterRepublic: new THREE.Color(1.0, 0.3, 0.2),
-  fighterSeparatist: new THREE.Color(0.9, 0.35, 0.2),
+  republic: new THREE.Color(1.0, 0.085, 0.04), // red turbolasers
+  separatist: new THREE.Color(0.16, 1.0, 0.62), // teal-green
+  fighterRepublic: new THREE.Color(1.0, 0.16, 0.08),
+  fighterSeparatist: new THREE.Color(0.95, 0.24, 0.1),
   jedi: new THREE.Color(0.3, 1.0, 0.35),
   ion: new THREE.Color(0.45, 0.7, 1.0),
 };
@@ -127,20 +130,23 @@ void main() {
   float s = rib.y * total;                 // screen units along the quad
   float t = lenN > 1e-6 ? clamp((s - wa) / lenN, 0.0, 1.0) : 1.0; // 0 tail .. 1 head along the body
   float wHere = mix(wa, wb, rib.y);
-  // tapered profile: thin tail, full width from ~3/4 of the length, rounded head
-  float taper = 0.22 + 0.78 * smoothstep(0.0, 0.75, t);
+  // capsule: a gentle taper into the tail, full width from the first third, rounded head no wider than
+  // the body
+  float taper = mix(0.6, 1.0, smoothstep(0.0, 0.35, t));
   float dx = rib.x * wHere;
   float dy = max(0.0, max(wa - s, s - (wa + lenN)));
   float d = length(vec2(dx, dy)) / (wHere * taper);
   if (d >= 1.0) discard;
   float halo = (1.0 - d) * (1.0 - d);
-  // hot core: narrow, and it only whitens toward the head tip so red bolts stay red along their length
-  float core = smoothstep(0.24, 0.0, d) * vGain.y;
-  float tip = smoothstep(0.55, 1.0, t);
-  vec3 coreCol = mix(vColor * 1.6, mix(vColor, vec3(1.0), 0.5), tip);
-  float g = mix(0.4, 1.0, smoothstep(0.0, 0.85, t)) * vGain.x;
-  vec3 col = (vColor * (halo * 1.15 + 0.35 * (1.0 - vGain.y) * (1.0 - d)) + coreCol * core) * g;
-  gl_FragColor = vec4(col, 1.0);
+  // the body: a solid capsule about 40 % of the halo width; distant streaks (little white-core weight)
+  // spread their light across the halo instead so they stay legible at a pixel wide
+  float body = smoothstep(0.45, 0.05, d);
+  float along = mix(0.4, 1.0, smoothstep(0.0, 0.7, t));
+  vec3 col = vColor * (halo * mix(0.85, 0.42, vGain.y) + body * 0.55 * vGain.y) * along;
+  // the tip: the brightest point of the bolt, still the bolt's own colour (never whitened)
+  float tip = smoothstep(0.78, 1.0, t) * smoothstep(0.4, 0.0, d) * vGain.y;
+  col = mix(col, vColor * 1.25, tip * 0.6);
+  gl_FragColor = vec4(col * vGain.x, 1.0);
 }`;
 
 export class Bolts {
