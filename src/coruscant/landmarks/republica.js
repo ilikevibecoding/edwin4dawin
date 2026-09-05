@@ -141,8 +141,10 @@ function facade(bp, m, x, fy, z, seed, rows = 4, glassy = false) {
   const ox = !M(m, x - 1, z) || !M(m, x + 1, z), oz = !M(m, x, z - 1) || !M(m, x, z + 1);
   const s = ox && !oz ? z : x;
   if ((ox && oz) || s % 4 === 0) { bp.fill(x, fy, z, x, fy + rows - 1, z, CHROME); return; }
+  // lit dark spine down the middle of each face
+  if (!glassy && (ox && !oz ? Math.abs(z + 0.5 - CZ) : Math.abs(x + 0.5 - CX)) < 1.1) { bp.fill(x, fy, z, x, fy + rows - 1, z, DARK); bp.set(x, fy + 1, z, BLUE); return; }
   const h = hash3(s >> 2, fy, ox ? 1 : 0, seed);
-  const win = glassy ? GLASS : (h < 0.5 ? LIT : h < 0.85 ? GLASS : DIM);
+  const win = glassy ? GLASS : (h < 0.42 ? LIT : h < 0.85 ? GLASS : DIM);
   for (let r = 0; r < rows; r++) {
     const y = fy + r, last = r === rows - 1;
     if (glassy) bp.set(x, y, z, (r === 0 || last) ? CHROME : GLASS);
@@ -154,7 +156,12 @@ function shell(bp, t, fy, seed, rows = 4, glassy = false, floorFn = null) {
   const m = t.mask;
   for (let x = t.bx0; x <= t.bx1; x++) for (let z = t.bz0; z <= t.bz1; z++) {
     const v = m[x * D + z]; if (!v) continue;
-    if (v === 1) { bp.set(x, fy - 1, z, CHROME); facade(bp, m, x, fy, z, seed, rows, glassy); }
+    if (v === 1) {
+      // slab edge: chrome with a blue marker light every eighth cell of the face
+      const ox = !M(m, x - 1, z) || !M(m, x + 1, z), oz = !M(m, x, z - 1) || !M(m, x, z + 1);
+      bp.set(x, fy - 1, z, ((ox && !oz ? z : x) % 8 === 2 && !(ox && oz)) ? BLUE : CHROME);
+      facade(bp, m, x, fy, z, seed, rows, glassy);
+    }
     else bp.set(x, fy - 1, z, floorFn ? floorFn(x, z) : ((x + z) % 2 ? WHITE : SMOOTH));
   }
 }
@@ -494,6 +501,12 @@ function spa(bp, rng, seed) {
   basin(bp, 45, 68, 50, 73, y); bp.fill(46, y - 1, 69, 49, y - 1, 72, BLUE);
   bp.room('pool_terrace', WING.x0, y, 61, WING.x1, D - 1);
   corridorEnds(bp, t, y, false);
+  // false ceiling under the garden lawn above: stone slabs at y + 3 with the light fixtures brought down
+  for (let x = t.bx0; x <= t.bx1; x++) for (let z = t.bz0; z <= t.bz1; z++) {
+    if (!isIn(x, z) || (x >= CORE.x0 && x <= CORE.x1 && z >= CORE.z0 && z <= CORE.z1) || !bp.isAir(x, y + 3, z)) continue;
+    const above = bp.get(x, y + 4, z);
+    bp.set(x, y + 3, z, (above === GLOW || above === BLUE) ? above : B.STONE_BRICK_SLAB_TOP);
+  }
 }
 
 // garden atrium: a double-height conservatory with lawns, trees, flower beds, a pond and a pergola in the south
@@ -758,6 +771,10 @@ function observatory(bp, rng, seed) {
     else if (k % 5 === 4) { bp.set(x, y, z, CHROME); bp.set(x, y + 1, z, B.HOLO_SIGN); }
   }
   bp.fill(47, y, 38, 47, y, 45, BLACK); bp.fill(47, y + 1, 38, 47, y + 1, 45, SLAB); bp.set(47, y + 1, 41, B.CONSOLE); bp.fill(46, y, 39, 46, y + 1, 44, B.SHELF); bp.work(47, y, 46, 'bartender');
+  // star charts and lit bands on the core walls, glass exhibit cases along the west and east faces
+  for (let z = CORE.z0 + 1; z < CORE.z1; z++) for (const x of [CORE.x0, CORE.x1]) { if (z % 3 === 1) bp.fill(x, y + 1, z, x, y + 2, z, B.HOLO_SIGN); else bp.set(x, y + 3, z, BLUE); }
+  for (let x = CORE.x0 + 1; x < CORE.x1; x++) if (x % 3 === 0 && (x < 56 || x > 61)) { bp.fill(x, y + 1, CORE.z0, x, y + 2, CORE.z0, B.HOLO_SIGN); bp.fill(x, y + 1, CORE.z1, x, y + 2, CORE.z1, B.HOLO_SIGN); }
+  for (const [x, z] of [[49, 39], [49, 44], [68, 39], [68, 44]]) { bp.set(x, y, z, CHROME); bp.set(x, y + 1, z, CLEAR); bp.set(x, y + 2, z, GLOW); }
   for (const [x, z] of [[49, 35], [68, 35], [49, 48], [68, 48]]) planter(bp, x, y, z, B.SPRUCE_LEAVES);
   for (const [x, z] of [[50, 41], [69, 41], [58, 33], [59, 50]]) bp.set(x, y + 3, z, B.LANTERN);
   for (let x = t.bx0; x <= t.bx1; x += 4) for (const z of [31, 52]) if (isIn(x, z)) bp.set(x, y + 4, z, GLOW);
@@ -984,7 +1001,7 @@ function plaza(bp, rng) {
   for (const x of [38, 79]) for (let z = 63; z <= 75; z += 3) { bp.fill(x, y, z, x, y + 4, z, CHROME); bp.set(x, y + 5, z, GLOW); planter(bp, x + (x < CX ? 2 : -2), y, z + 1, B.OAK_LEAVES); }
   for (const x of [40, 77]) { statue(bp, x, y, 62, 3); }
   for (let x = 30; x <= 87; x++) for (const z of [9, 18]) if (open(x, z) && (x % 7) !== 3) bp.set(x, y, z, (x % 2) ? B.OAK_LEAVES : B.SPRUCE_LEAVES);
-  for (let x = 32; x <= 86; x += 2) for (const z of [12, 15]) if (open(x, z) && (x < 52 || x > 65)) { bp.set(x, y - 1, z, B.GRASS); bp.set(x, y, z, (x % 3) ? B.POPPY : B.DANDELION); }
+  for (let x = 32; x <= 86; x += 2) for (const z of [12, 15]) if (open(x, z) && (x < 52 || x > 65)) { bp.set(x, y, z, DARK); bp.set(x, y + 1, z, (x % 3) ? B.POPPY : B.DANDELION); }
   basin(bp, 53, 10, 64, 16, y); bp.fill(54, y - 1, 11, 63, y - 1, 15, BLUE); bp.set(58, y + 1, 13, CLEAR); bp.set(59, y + 1, 13, CLEAR); bp.set(58, y + 2, 13, GLOW); bp.set(59, y + 2, 13, GLOW);
   for (const x of [46, 71]) statue(bp, x, y, 13, 3);
   for (const [x, z] of [[24, 62], [93, 62], [24, 22], [93, 22]]) if (open(x, z)) lamp(bp, x, y, z, 3, B.CITY_LAMP);
