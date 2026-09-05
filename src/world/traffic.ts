@@ -285,6 +285,8 @@ export class Traffic {
   private cars: Car[] = [];
   private readonly carChunks: CarChunk[] = [];
   private readonly carCells = new Map<number, CarChunk>();
+  /** the culled car cell meshes: their bounding spheres are refit to the cars in the cell every update */
+  readonly carCellMeshes = new Set<THREE.Object3D>();
   /** catches cars whose lane offset pushed them out of every registered cell (never culled) */
   private readonly carOverflow: CarChunk;
   private readonly carMat: THREE.MeshStandardMaterial;
@@ -402,6 +404,7 @@ export class Traffic {
       const chunk = makeChunk(cap, true);
       this.carCells.set(key, chunk);
       this.carChunks.push(chunk);
+      this.carCellMeshes.add(chunk.mesh);
     }
     this.carOverflow = makeChunk(Math.max(1, this.cars.length), false);
     this.carChunks.push(this.carOverflow);

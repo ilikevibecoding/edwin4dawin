@@ -5,7 +5,7 @@ import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { CELL, HALF, Zone, type WorldMap } from './map';
 import { balanceGroundIbl } from './terrain';
 import { InstanceBatch, splitCells, type CellSource } from './batching';
-import { LAYER_CAMERA, LAYER_MIRROR, MAX_CASCADES, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
+import { LAYER_CAMERA, LAYER_DEFAULT, LAYER_MIRROR, MAX_CASCADES, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
 
 /**
  * Procedural planting. Two instanced geometry families cover eight archetypes:
@@ -809,7 +809,7 @@ interface Plant { x: number; y: number; z: number; s: number; rot: number; lean:
  *  and `height` bound the drawn plants and cards and are only used for culling. */
 /** `hi` (crown family only) is the subdivided mesh drawn instead of `near` when the camera is within
  *  HI_DISTANCE of the tile's plants; it shares the instance buffers of `near`. */
-interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; cells: VegCells | null; batched3d: boolean; cardCells: boolean; mirrorCells: boolean; maxS: number; }
+interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; cells: VegCells | null; batched3d: boolean; cardCells: boolean; mirrorCells: boolean; /** palm tiles: cells in the camera / mirror palm batches */ palmCells: boolean; palmMirrorCells: boolean; maxS: number; }
 
 /** The VEG_CELL-metre cells of a tile (built the first time the tile is drawn near or in full): the same
  *  cells once with the 3D mesh's per-instance attribute and once with the card's, so the batches draw
@@ -822,6 +822,9 @@ const VEG_CELL = 150;
 /** instances the near crown batches hold each (the tile's own mesh draws the tiles that do not fit) */
 const NEAR_CROWNS = 32768;
 const ULTRA_CROWNS = 8192;
+/** instances the palm batches hold (camera / mirror); a palm tile that does not fit draws its own mesh */
+const NEAR_PALMS = 16384;
+const MIRROR_PALMS = 8192;
 /** casting tiles a coarse cascade (texel over NEAR_TEXEL) draws at most, nearest first */
 const COARSE_SHADOW_TILES = 8;
 const _casting = new Array<number>(MAX_CASCADES).fill(0);
@@ -891,6 +894,12 @@ export class Vegetation {
   readonly mirrorCards: THREE.InstancedMesh;
   private readonly cameraBatch: InstanceBatch;
   private readonly mirrorBatch: InstanceBatch;
+  /** the 3D palms of the near palm tiles' cells in the camera's frustum, and those in the mirror camera's (the
+   *  tile meshes drew every palm of the tile in both passes) */
+  readonly cameraPalms: THREE.InstancedMesh;
+  readonly mirrorPalms: THREE.InstancedMesh;
+  private readonly palmBatch: InstanceBatch<CellSource>;
+  private readonly palmMirrorBatch: InstanceBatch<CellSource>;
   /** the crowns of the near tiles' cells in view, one draw per tessellation level (chosen per cell by distance) */
   private readonly nearBatch: InstanceBatch<CellSource>;
   private readonly hiBatch: InstanceBatch<CellSource>;
@@ -929,6 +938,15 @@ export class Vegetation {
     this.ultraBatch.mesh.name = 'crowns-ultra';
     this.crownBatches = [this.nearBatch, this.hiBatch, this.ultraBatch];
     this.group.add(this.nearBatch.mesh, this.hiBatch.mesh, this.ultraBatch.mesh);
+    this.palmBatch = new InstanceBatch<CellSource>(NEAR_PALMS, palmGeo, palmMat, CARD_EXTRAS, true);
+    this.cameraPalms = this.palmBatch.mesh;
+    this.cameraPalms.layers.set(LAYER_CAMERA);
+    this.cameraPalms.name = 'palms';
+    this.palmMirrorBatch = new InstanceBatch<CellSource>(MIRROR_PALMS, palmGeo, palmMat, CARD_EXTRAS, true);
+    this.mirrorPalms = this.palmMirrorBatch.mesh;
+    this.mirrorPalms.layers.set(LAYER_MIRROR);
+    this.mirrorPalms.name = 'palms-mirror';
+    this.group.add(this.cameraPalms, this.mirrorPalms);
 
     const plants: Plant[] = [];
     const tints = {} as Record<Archetype, THREE.Color[]>;
@@ -1209,7 +1227,7 @@ export class Vegetation {
       far.visible = false;
       this.group.add(near, far);
       if (hi) { hi.boundingSphere = sphere.clone(); this.group.add(hi); }
-      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], cells: null, batched3d: false, cardCells: false, mirrorCells: false, maxS });
+      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], cells: null, batched3d: false, cardCells: false, mirrorCells: false, palmCells: false, palmMirrorCells: false, maxS });
     };
     for (const t of byTile.values()) {
       if (t.crown.length) build(t.crown, crownGeo, crownMat, crownGeoHi);
@@ -1295,9 +1313,33 @@ export class Vegetation {
         if (!batched3d) for (const c of cells) for (const b of batches) b.set(c, 0);
         t.batched3d = batched3d;
       }
-      // palm tiles (no subdivided mesh) draw their own instanced mesh
-      t.near.visible = t.hi === null && near3d;
-      if (t.hi) t.hi.visible = near3d && !batched3d;
+      // palm tiles (no subdivided mesh): the camera and the mirror draw the cells in their frustums from the
+      // palm batches; the tile's own mesh (every palm, both passes) is the fallback when a batch is full
+      if (t.hi === null) {
+        let batchedPalms = false, mirrorPalms = false;
+        // the mirror shows the near palm tiles within MIRROR_DISTANCE of the camera (the test the reflection
+        // pass applied to the tile mesh)
+        const mirrored = near3d && Math.max(0, t.center.distanceTo(cam) - t.r) <= MIRROR_DISTANCE;
+        if (near3d || t.palmCells || t.palmMirrorCells) {
+          const cells = (t.cells ??= Vegetation.cells(t)).near;
+          if (near3d) {
+            batchedPalms = true;
+            for (const c of cells) if (!this.palmBatch.set(c, cull.boxInView(c.box) ? c.count : 0)) batchedPalms = false;
+          }
+          if (batchedPalms && mirrored) {
+            mirrorPalms = true;
+            for (const c of cells) if (!this.palmMirrorBatch.set(c, cull.boxInMirror(c.box) ? c.count : 0)) mirrorPalms = false;
+          }
+          if (!batchedPalms) for (const c of cells) this.palmBatch.set(c, 0);
+          if (!mirrorPalms) for (const c of cells) this.palmMirrorBatch.set(c, 0);
+          t.palmCells = batchedPalms;
+          t.palmMirrorCells = mirrorPalms;
+        }
+        // the tile mesh stands in for whichever pass the batches could not take: both (default layer, the
+        // reflection pass applies its distance test) or the mirror alone
+        t.near.visible = near3d && (!batchedPalms || (mirrored && !mirrorPalms));
+        t.near.layers.set(batchedPalms ? LAYER_MIRROR : LAYER_DEFAULT);
+      } else { t.near.visible = false; t.hi.visible = near3d && !batched3d; }
       const drawCards = !near && inView && t.d < this.viewDistance;
       // far cards: full density to 3 km, half at 5.5 km, a quarter beyond (a crown is ~1 px there)
       const frac = near ? 1 : t.d < 3000 ? 1 : t.d < 5500 ? 0.5 : 0.25;
@@ -1342,6 +1384,8 @@ export class Vegetation {
     }
     this.cameraBatch.commit();
     this.mirrorBatch.commit();
+    this.palmBatch.commit();
+    this.palmMirrorBatch.commit();
     for (const b of this.crownBatches) b.commit();
   }
 }

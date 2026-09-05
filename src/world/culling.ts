@@ -165,6 +165,11 @@ export class ViewCull {
   readonly cascadeFrustums: THREE.Frustum[] = [];
   /** number of cascade frustums valid this frame */
   cascadeCount = 0;
+  /** the shadow cameras' own frustums (light-space orthographic boxes fit to each cascade's receiver slab), as
+   *  the renderer will test whole meshes against them: a caster outside one never reaches that shadow map */
+  readonly lightFrustums: THREE.Frustum[] = [];
+  /** number of light frustums valid this frame (0: not tested) */
+  lightCount = 0;
   /** horizontal unit vector from a caster toward its shadow */
   readonly shadowDir = new THREE.Vector3(1, 0, 0);
   /** shadow length per metre of caster height (1 / tan elevation, capped for a grazing sun) */
@@ -195,6 +200,33 @@ export class ViewCull {
     const h = Math.hypot(sunDir.x, sunDir.z);
     if (h > 1e-5) this.shadowDir.set(-sunDir.x / h, 0, -sunDir.z / h);
     this.spread = Math.min(20, h / Math.max(sunDir.y, 1e-3));
+    this.lightCount = 0;
+  }
+
+  /** Record the cascade lights' shadow-camera frustums for this frame, exactly as the shadow pass will build
+   *  them (`LightShadow.updateMatrices`: the camera at the light looking at its target), so per-cell caster
+   *  routing can apply the same test the renderer applies to whole meshes. Call after the cascades are fit. */
+  setCascadeLights(lights: THREE.DirectionalLight[]): void {
+    this.lightCount = Math.min(lights.length, MAX_CASCADES);
+    for (let i = 0; i < this.lightCount; i++) {
+      const l = lights[i];
+      const f = this.lightFrustums[i] ??= new THREE.Frustum();
+      _lightM.lookAt(l.position, l.target.position, _yUp).setPosition(l.position);
+      _lightV.copy(_lightM).invert();
+      _mvp.multiplyMatrices(l.shadow.camera.projectionMatrix, _lightV);
+      f.setFromProjectionMatrix(_mvp, l.shadow.camera.coordinateSystem);
+    }
+  }
+
+  /** Cascades (as a bitmask over `bits`) whose shadow camera can see the sphere at all. */
+  private lightBitsSphere(bits: number): number {
+    for (let i = 0; i < this.lightCount && bits >> i; i++) if ((bits & (1 << i)) && !this.lightFrustums[i].intersectsSphere(_sphere)) bits &= ~(1 << i);
+    return bits;
+  }
+
+  private lightBitsBox(box: THREE.Box3, bits: number): number {
+    for (let i = 0; i < this.lightCount && bits >> i; i++) if ((bits & (1 << i)) && !this.lightFrustums[i].intersectsBox(box)) bits &= ~(1 << i);
+    return bits;
   }
 
   boxInView(box: THREE.Box3): boolean {
@@ -225,6 +257,7 @@ export class ViewCull {
     this.sweep(center, radius, height);
     let bits = 0;
     for (let i = 0; i < this.cascadeCount; i++) if (this.cascadeFrustums[i].intersectsSphere(_sphere)) bits |= 1 << i;
+    if (bits && this.lightCount) { _sphere.set(center, radius); bits = this.lightBitsSphere(bits); }
     return bits;
   }
 
@@ -238,6 +271,7 @@ export class ViewCull {
     if (this.cascadeCount === 0) return this.shadowFrustum.intersectsBox(_swept) ? ALL_CASCADES : 0;
     let bits = 0;
     for (let i = 0; i < this.cascadeCount; i++) if (this.cascadeFrustums[i].intersectsBox(_swept)) bits |= 1 << i;
+    if (bits && this.lightCount) bits = this.lightBitsBox(box, bits);
     return bits;
   }
 
@@ -249,3 +283,6 @@ export class ViewCull {
 }
 
 const _swept = new THREE.Box3();
+const _lightM = new THREE.Matrix4();
+const _lightV = new THREE.Matrix4();
+const _yUp = new THREE.Vector3(0, 1, 0);

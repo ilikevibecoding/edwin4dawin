@@ -22,6 +22,10 @@ import { FlightCamera } from './plane/camera';
 import { Metrics } from './core/metrics';
 import { LAYER_MAIN, ViewCull, configureMainCamera, installCascadeRouting, layerMask, shadowPassStats } from './world/culling';
 
+const _size = new THREE.Vector2();
+/** the water does not mirror car cells whose nearest car is beyond this (m): a car is under a mirror texel there */
+const MIRROR_TRAFFIC_FAR = 3500;
+
 export interface QualitySettings {
   samples: number;
   shadowMapSize: number;
@@ -68,6 +72,9 @@ export class Game {
   aircraft!: Aircraft;
   /** airframe meshes that cast shadows, routed to the cascades their shadow can reach each frame */
   private readonly airframeCasters: THREE.Object3D[] = [];
+  /** cabin furniture that casts: its shadows fall inside the cabin, which only the nearest cascade (the one
+   *  fit around the aircraft) resolves; the ground cascades see the closed skin */
+  private readonly cabinCasters: THREE.Object3D[] = [];
   flightCamera!: FlightCamera;
   readonly cull = new ViewCull();
   /** draw calls / triangles of the last shadow pass per cascade (diagnostics) */
@@ -228,21 +235,26 @@ export class Game {
     this.scene.add(this.vegetation.group);
     // mirror only the card impostors, and only within 1.5 km: the 3D near-tile meshes are far too heavy for
     // a blurred mirror image and farther tiles blur into the environment sky anyway. The cards come from the
-    // vegetation's mirror batch (its camera batch holds every card tile in view, so it stays out)
+    // vegetation's mirror batch (its camera batch holds every card tile in view, so it stays out); likewise the
+    // near palms come from the vegetation's mirror palm batch (the cells in the mirror frustum of the tiles within range)
     const veg = this.vegetation;
-    this.reflection.excludeChildrenWhen(veg.group, (tile, cam) => tile === veg.cameraCards || (tile !== veg.mirrorCards && (trianglesOf(tile) > 64 || distanceToBounds(tile, cam) > MIRROR_DISTANCE)));
+    this.reflection.excludeChildrenWhen(veg.group, (tile, cam) => tile === veg.cameraCards || tile === veg.cameraPalms || (tile !== veg.mirrorCards && tile !== veg.mirrorPalms && (trianglesOf(tile) > 64 || distanceToBounds(tile, cam) > MIRROR_DISTANCE)));
 
     await this.tick(progress, 'Launching boats and traffic', 0.86);
     this.traffic = new Traffic(this.map, this.roads, this.bridges.routes, this.wakes.batch, this.params.seed, this.props.mooredBoatPositions);
     for (const m of this.traffic.materials) this.registerLit(m);
     this.traffic.group.name = 'traffic';
     this.scene.add(this.traffic.group);
+    // a car is under a texel of the mirror image beyond MIRROR_TRAFFIC_FAR: cells with no car nearer stay out
+    const traffic = this.traffic;
+    this.reflection.excludeChildrenWhen(traffic.group, (o, cam) => traffic.carCellMeshes.has(o) && distanceToBounds(o, cam) > MIRROR_TRAFFIC_FAR);
     for (const c of this.traffic.contrailMeshes) { c.name = 'contrail'; this.scene.add(c); }
 
     await this.tick(progress, 'Pre-flighting the aircraft', 0.92);
     this.aircraft = new Aircraft((x, z) => this.map.heightAt(x, z), this.scene, this.wakes.batch);
     this.registerTree(this.aircraft.model.root);
-    this.aircraft.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.castShadow) this.airframeCasters.push(o); });
+    const interior = new Set<THREE.Object3D>(this.aircraft.model.interiorMeshes);
+    this.aircraft.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.castShadow) (interior.has(o) ? this.cabinCasters : this.airframeCasters).push(o); });
     // surface decals, point sprites and trails are not mirrored (the sprites are sized for the main frame),
     // nor is the cabin interior (only visible through the glass)
     const fx = this.aircraft.effects;
@@ -362,20 +374,28 @@ export class Game {
     this.cascades.fit(planePos.y + 5);
     // view / shadow-caster culling shared by the chunked world systems
     this.cull.update(cam, this.csm.maxFar, this.atmos.state.sunDir);
+    // the fitted shadow cameras: casters outside one are culled by the shadow pass, so cells / tiles outside it
+    // need not be submitted to that cascade's batches
+    this.cull.setCascadeLights(this.csm.lights);
     this.terrain.update(cx, cz, this.cull);
     // casters reach as far as the cascades do; the canopy stops at half the range (a crown's shadow is a
     // couple of texels there and every tile is a draw call per cascade)
     this.city.batches.shadowDistance = this.csm.maxFar;
     this.vegetation.shadowDistance = Math.max(1800, Math.min(3000, this.csm.maxFar * 0.4));
     this.vegetation.updateLod(cx, cz, this.cull, cam.position);
-    this.city.batches.updateLod(cx, cz, this.cull, cam.position, this.reflection.range);
-    this.props.updateLod(cx, cz, this.cull, cam.position, this.reflection.range);
+    // focal length in pixels of the main frame: the sub-pixel cut-offs of houses and props scale with it
+    const pxPerMetre = 0.5 * this.renderer.getDrawingBufferSize(_size).y * cam.projectionMatrix.elements[5];
+    this.city.batches.updateLod(cx, cz, this.cull, cam.position, this.reflection.range, pxPerMetre);
+    this.props.updateLod(cx, cz, this.cull, cam.position, this.reflection.range, pxPerMetre);
     this.traffic.updateCulling(this.cull);
     // the airframe casts only into the cascades its shadow can reach: swept down to the ground under it, so
     // from altitude that is the cascade holding its ground shadow, not all three
     const airHeight = planePos.y - Math.max(0, this.map.heightAt(planePos.x, planePos.z)) + 5;
-    const airMask = layerMask('all', true, this.cull.casterCascades(planePos, 9, airHeight));
+    const airBits = this.cull.casterCascades(planePos, 9, airHeight);
+    const airMask = layerMask('all', true, airBits);
     for (const o of this.airframeCasters) o.layers.mask = airMask;
+    const cabinMask = layerMask('all', true, airBits & 1);
+    for (const o of this.cabinCasters) o.layers.mask = cabinMask;
     this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size);
     const info = this.renderer.info.render;
     const ps = this.passStats;
