@@ -129,7 +129,10 @@ files, both checked with a read-only `git merge-tree` of the two heads and a smo
 On the resolved tree `test-unit`, `test-textures`, `test-coruscant-towers`, `test-spaceport` and `test-deathstar`
 pass, and the town at four times, Coruscant noon/night and the coast render with 0 exceptions and no shader warnings;
 R2's normal convention (`normalFromHeight`: R = +u, G = toward the tile top) is the one the tangent frame expects,
-and all three atlases are sampled with the colour atlas's `vUv`, so the 1024 px maps line up texel for texel.
+and all three atlases are sampled with the colour atlas's `vUv`, so the 1024 px maps line up texel for texel. With
+the real maps the noon town frame measures Cinematic / Light = 1.024 in the mean (sky 1.028, sunlit ground patch
+1.115 from the bump and specular response; the +-5 % bound is on the mean) and the bloom guard reads 0.166 % (more
+emissive sources than the placeholders; bound 2 %).
 
 All three materials already share `SHARED.uSkyLight / uSkyTint / uFogColor / uFogNear / uFogFar / uFlash` from
 `src/entityMaterial.js`; the recipe adds the sun, its shadows and (optionally) specular through the shared chunk.
