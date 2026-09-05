@@ -78,7 +78,8 @@ player.onLockChange = (locked) => {
     audio.resume();
   } else if (!debugMode && modes.mode === "interior" && !TOUCH) hud.showStart();
 };
-hud.startEl.addEventListener("click", () => {
+hud.startEl.addEventListener("click", (e) => {
+  if (e.target.closest(".scene-link")) return; // navigating to the other scene
   audio.resume();
   if (TOUCH) hud.hideStart();
   else player.requestLock();

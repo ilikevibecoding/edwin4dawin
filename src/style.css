@@ -85,6 +85,7 @@ body {
   position: absolute;
   left: 24px;
   bottom: 22px;
+  max-width: 50vw;
   display: flex;
   gap: 12px;
   align-items: baseline;
@@ -103,6 +104,9 @@ body {
 }
 #status-text {
   transition: opacity 200ms ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #location {
@@ -120,13 +124,14 @@ body {
   position: absolute;
   right: 24px;
   bottom: 22px;
+  max-width: 46vw;
   font-family: var(--mono);
   font-size: 12px;
   letter-spacing: 0.06em;
   color: rgba(223, 227, 234, 0.7);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
   text-align: right;
-  white-space: pre;
+  white-space: pre-wrap;
 }
 
 #stats {
@@ -210,6 +215,22 @@ body {
   font-family: var(--mono);
   font-size: 12px;
   color: rgba(232, 224, 208, 0.6);
+}
+#start .scene-link {
+  display: inline-block;
+  margin-top: 18px;
+  padding: 8px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  color: var(--teal);
+  border: 1px solid rgba(79, 216, 204, 0.35);
+  border-radius: 3px;
+  text-decoration: none;
+  cursor: pointer;
+}
+#start .scene-link:hover {
+  background: rgba(79, 216, 204, 0.12);
 }
 
 /* touch controls */

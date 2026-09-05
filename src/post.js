@@ -1,5 +1,6 @@
 // Post-processing stack: N8AO (renders the beauty pass) -> bloom -> ACES/sRGB output -> SMAA -> vignette + grain.
 import * as THREE from "three";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
@@ -57,7 +58,7 @@ const FinalShader = {
   `,
 };
 
-export function createPost(renderer, scene, camera) {
+export function createPost(renderer, scene, camera, opts = {}) {
   const size = renderer.getSize(new THREE.Vector2());
   const pr = renderer.getPixelRatio();
   const w = Math.floor(size.x * pr);
@@ -65,23 +66,32 @@ export function createPost(renderer, scene, camera) {
 
   const composer = new EffectComposer(renderer);
 
-  const ao = new N8AOPass(scene, camera, w, h);
-  ao.configuration.aoRadius = 0.9;
-  ao.configuration.distanceFalloff = 0.9;
-  ao.configuration.intensity = 2.6;
-  // occluded corners tint toward a dark blue-grey rather than dropping to black
-  ao.configuration.color = new THREE.Color(0x0a0e16);
-  ao.configuration.halfRes = true;
-  ao.configuration.depthAwareUpsampling = true;
-  ao.configuration.screenSpaceRadius = false;
-  ao.configuration.transparencyAware = false;
-  // We stay linear until OutputPass; N8AO would otherwise sRGB-encode its output (double gamma).
-  ao.configuration.gammaCorrection = false;
-  ao.setQualityMode("Medium");
-  composer.addPass(ao);
+  const ao = opts.ao === false ? null : new N8AOPass(scene, camera, w, h);
+  if (!ao) composer.addPass(new RenderPass(scene, camera));
+  if (ao) {
+    ao.configuration.aoRadius = 0.9;
+    ao.configuration.distanceFalloff = 0.9;
+    ao.configuration.intensity = 2.6;
+    // occluded corners tint toward a dark blue-grey rather than dropping to black
+    ao.configuration.color = new THREE.Color(0x0a0e16);
+    ao.configuration.halfRes = true;
+    ao.configuration.depthAwareUpsampling = true;
+    ao.configuration.screenSpaceRadius = false;
+    ao.configuration.transparencyAware = false;
+    // We stay linear until OutputPass; N8AO would otherwise sRGB-encode its output (double gamma).
+    ao.configuration.gammaCorrection = false;
+    ao.setQualityMode("Medium");
+    composer.addPass(ao);
+  }
 
   // threshold sits above white so only genuine emitters bloom; modest radius keeps fixtures as shapes
-  const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.3, 0.38, 1.15);
+  const b = opts.bloom || {};
+  const bloom = new UnrealBloomPass(
+    new THREE.Vector2(size.x, size.y),
+    b.strength ?? 0.3,
+    b.radius ?? 0.38,
+    b.threshold ?? 1.15,
+  );
   composer.addPass(bloom);
 
   const output = new OutputPass();
