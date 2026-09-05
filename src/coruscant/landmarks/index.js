@@ -5,6 +5,7 @@
 // `landmarkFor(lot.family)` first and falls back to its generic landmark builders for ids without a module.
 //
 // Modules do not import this file (no cycles): add one import line and one list entry per building below.
+import { LANDMARK as chancellery } from './chancellery.js';
 import { LANDMARK as market } from './market.js';
 import { LANDMARK as senate } from './senate.js';
 import { LANDMARK as temple } from './temple.js';
@@ -13,6 +14,7 @@ import { LANDMARK as plaza_monument } from './plaza_monument.js';
 import { LANDMARK as works } from './works.js';
 
 const MODULE_LIST = [
+  chancellery,
   market,
   plaza_monument,
   senate,
