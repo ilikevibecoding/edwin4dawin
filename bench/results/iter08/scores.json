@@ -1,0 +1,4550 @@
+{
+ "tag": "iter08",
+ "critics": [
+  "technical",
+  "visual-1",
+  "visual-2",
+  "visual-3"
+ ],
+ "frames": {
+  "aerial-a": {
+   "median": {
+    "1": 7.0,
+    "2": 7.0,
+    "3": 7.0,
+    "4": 7.0,
+    "5": 6.0,
+    "6": 6.0,
+    "7": 6.0,
+    "8": 7.0,
+    "9": 7.0,
+    "10": 5.5,
+    "11": 6.0,
+    "12": 4.5,
+    "13": 5.5,
+    "14": 6.0,
+    "15": 6.5,
+    "16": 7.0,
+    "17": 5.5,
+    "18": 5.5,
+    "19": 7.0,
+    "20": 6.5,
+    "21": 4.5,
+    "22": 6.0,
+    "23": 6.0,
+    "24": 4.5,
+    "25": 5.5,
+    "26": 7.0,
+    "27": 6.0
+   },
+   "spread": {
+    "1": 2.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 2.0,
+    "5": 2.0,
+    "6": 2.0,
+    "7": 0.0,
+    "8": 2.0,
+    "9": 3.0,
+    "10": 3.0,
+    "11": 3.0,
+    "12": 1.0,
+    "13": 3.0,
+    "14": 1.0,
+    "15": 1.0,
+    "16": 1.0,
+    "17": 1.0,
+    "18": 2.0,
+    "19": 1.0,
+    "20": 2.0,
+    "21": 4.0,
+    "22": 1.0,
+    "23": 1.0,
+    "24": 2.0,
+    "25": 2.0,
+    "26": 0.0,
+    "27": 3.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "bridge-low": {
+   "median": {
+    "1": 7.0,
+    "2": 7.5,
+    "3": 7.0,
+    "4": 8.0,
+    "5": 6.0,
+    "6": 6.0,
+    "7": 6.0,
+    "8": 6.5,
+    "9": 7.0,
+    "10": 6.0,
+    "11": 5.5,
+    "12": 4.5,
+    "13": 6.0,
+    "14": 6.0,
+    "15": 6.5,
+    "16": 7.0,
+    "17": 6.0,
+    "18": 6.0,
+    "19": 7.0,
+    "20": 5.5,
+    "21": 7.0,
+    "22": 6.5,
+    "23": 6.0,
+    "24": 5.0,
+    "25": 5.5,
+    "26": 7.5,
+    "27": 7.0
+   },
+   "spread": {
+    "1": 2.0,
+    "2": 5.0,
+    "3": 3.0,
+    "4": 2.0,
+    "5": 2.0,
+    "6": 1.0,
+    "7": 1.0,
+    "8": 2.0,
+    "9": 2.0,
+    "10": 2.0,
+    "11": 2.0,
+    "12": 2.0,
+    "13": 4.0,
+    "14": 1.0,
+    "15": 1.0,
+    "16": 0.0,
+    "17": 0.0,
+    "18": 3.0,
+    "19": 0.0,
+    "20": 2.0,
+    "21": 2.0,
+    "22": 2.0,
+    "23": 1.0,
+    "24": 2.0,
+    "25": 4.0,
+    "26": 1.0,
+    "27": 2.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "cloudy": {
+   "median": {
+    "1": 7.0,
+    "2": 7.5,
+    "3": 7.0,
+    "4": 7.5,
+    "5": 6.0,
+    "6": 6.0,
+    "7": 6.0,
+    "8": 6.5,
+    "9": 7.0,
+    "10": 5.5,
+    "11": 5.5,
+    "12": 4.5,
+    "13": 6.0,
+    "14": 5.5,
+    "15": 6.5,
+    "16": 6.5,
+    "17": 6.5,
+    "18": 5.5,
+    "19": 6.5,
+    "20": 5.5,
+    "21": 6.0,
+    "22": 6.5,
+    "23": 6.0,
+    "24": 5.0,
+    "25": 5.5,
+    "26": 7.5,
+    "27": 5.0
+   },
+   "spread": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 0.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 2.0,
+    "7": 1.0,
+    "8": 1.0,
+    "9": 0.0,
+    "10": 1.0,
+    "11": 2.0,
+    "12": 2.0,
+    "13": 1.0,
+    "14": 2.0,
+    "15": 1.0,
+    "16": 2.0,
+    "17": 2.0,
+    "18": 2.0,
+    "19": 1.0,
+    "20": 1.0,
+    "21": 3.0,
+    "22": 1.0,
+    "23": 1.0,
+    "24": 1.0,
+    "25": 1.0,
+    "26": 1.0,
+    "27": 5.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "cockpit-city": {
+   "median": {
+    "1": 5.5,
+    "2": 5.0,
+    "3": 4.5,
+    "4": 7.0,
+    "5": 4.0,
+    "6": 6.0,
+    "7": 5.5,
+    "8": 5.5,
+    "9": 6.5,
+    "10": 5.0,
+    "11": 5.5,
+    "12": 5.0,
+    "13": 5.5,
+    "14": 6.0,
+    "15": 6.5,
+    "16": 6.0,
+    "17": 4.0,
+    "18": 4.5,
+    "19": 6.5,
+    "20": 6.5,
+    "21": 5.5,
+    "22": 5.0,
+    "23": 5.5,
+    "24": 5.5,
+    "25": 5.0,
+    "26": 7.0,
+    "27": 6.5
+   },
+   "spread": {
+    "1": 2.0,
+    "2": 2.0,
+    "3": 3.0,
+    "4": 1.0,
+    "5": 2.0,
+    "6": 2.0,
+    "7": 1.0,
+    "8": 2.0,
+    "9": 1.0,
+    "10": 2.0,
+    "11": 2.0,
+    "12": 2.0,
+    "13": 2.0,
+    "14": 2.0,
+    "15": 1.0,
+    "16": 2.0,
+    "17": 1.0,
+    "18": 3.0,
+    "19": 1.0,
+    "20": 1.0,
+    "21": 3.0,
+    "22": 1.0,
+    "23": 3.0,
+    "24": 1.0,
+    "25": 4.0,
+    "26": 2.0,
+    "27": 5.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "glass-sun": {
+   "median": {
+    "1": 7.0,
+    "2": 7.5,
+    "3": 6.5,
+    "4": 8.0,
+    "5": 5.5,
+    "6": 5.0,
+    "7": 6.0,
+    "8": 7.0,
+    "9": 7.5,
+    "10": 6.0,
+    "11": 6.0,
+    "12": 6.0,
+    "13": 6.5,
+    "14": 6.5,
+    "15": 7.0,
+    "16": 7.0,
+    "17": 7.0,
+    "18": 6.0,
+    "19": 7.0,
+    "20": 7.5,
+    "21": 6.5,
+    "22": 6.0,
+    "23": 7.0,
+    "24": 7.0,
+    "25": 4.5,
+    "26": 7.5,
+    "27": 7.0
+   },
+   "spread": {
+    "1": 2.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 0.0,
+    "5": 3.0,
+    "6": 2.0,
+    "7": 0.0,
+    "8": 2.0,
+    "9": 1.0,
+    "10": 1.0,
+    "11": 1.0,
+    "12": 2.0,
+    "13": 2.0,
+    "14": 1.0,
+    "15": 2.0,
+    "16": 2.0,
+    "17": 2.0,
+    "18": 3.0,
+    "19": 1.0,
+    "20": 1.0,
+    "21": 2.0,
+    "22": 1.0,
+    "23": 2.0,
+    "24": 2.0,
+    "25": 2.0,
+    "26": 2.0,
+    "27": 0.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "harbor": {
+   "median": {
+    "1": 6.0,
+    "2": 7.5,
+    "3": 7.0,
+    "4": 7.5,
+    "5": 6.0,
+    "6": 6.0,
+    "7": 5.5,
+    "8": 6.0,
+    "9": 7.0,
+    "10": 5.0,
+    "11": 5.5,
+    "12": 5.0,
+    "13": 5.0,
+    "14": 6.0,
+    "15": 6.5,
+    "16": 7.0,
+    "17": 5.5,
+    "18": 5.5,
+    "19": 7.0,
+    "20": 5.0,
+    "21": 7.0,
+    "22": 5.5,
+    "23": 6.0,
+    "24": 4.0,
+    "25": 5.0,
+    "26": 7.5,
+    "27": 6.5
+   },
+   "spread": {
+    "1": 2.0,
+    "2": 1.0,
+    "3": 0.0,
+    "4": 1.0,
+    "5": 2.0,
+    "6": 2.0,
+    "7": 1.0,
+    "8": 2.0,
+    "9": 2.0,
+    "10": 3.0,
+    "11": 2.0,
+    "12": 2.0,
+    "13": 3.0,
+    "14": 2.0,
+    "15": 3.0,
+    "16": 1.0,
+    "17": 3.0,
+    "18": 2.0,
+    "19": 1.0,
+    "20": 1.0,
+    "21": 2.0,
+    "22": 4.0,
+    "23": 1.0,
+    "24": 1.0,
+    "25": 3.0,
+    "26": 1.0,
+    "27": 4.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "island-pass": {
+   "median": {
+    "1": 7.0,
+    "2": 7.5,
+    "3": 7.0,
+    "4": 7.5,
+    "5": 6.0,
+    "6": 6.0,
+    "7": 4.5,
+    "8": 6.5,
+    "9": 6.5,
+    "10": 5.0,
+    "11": 5.5,
+    "12": 4.0,
+    "13": 5.5,
+    "14": 6.0,
+    "15": 5.5,
+    "16": 7.0,
+    "17": 5.5,
+    "18": 5.5,
+    "19": 7.0,
+    "20": 6.5,
+    "21": 7.0,
+    "22": 5.5,
+    "23": 6.0,
+    "24": 4.0,
+    "25": 6.0,
+    "26": 7.5,
+    "27": 7.0
+   },
+   "spread": {
+    "1": 2.0,
+    "2": 2.0,
+    "3": 1.0,
+    "4": 2.0,
+    "5": 2.0,
+    "6": 2.0,
+    "7": 2.0,
+    "8": 3.0,
+    "9": 3.0,
+    "10": 3.0,
+    "11": 2.0,
+    "12": 2.0,
+    "13": 2.0,
+    "14": 2.0,
+    "15": 3.0,
+    "16": 0.0,
+    "17": 1.0,
+    "18": 2.0,
+    "19": 0.0,
+    "20": 2.0,
+    "21": 4.0,
+    "22": 2.0,
+    "23": 2.0,
+    "24": 1.0,
+    "25": 2.0,
+    "26": 1.0,
+    "27": 1.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "night": {
+   "median": {
+    "1": 6.5,
+    "2": 7.0,
+    "3": 7.0,
+    "4": 7.5,
+    "5": 5.5,
+    "6": 5.5,
+    "7": 7.0,
+    "8": 6.5,
+    "9": 6.0,
+    "10": 5.5,
+    "11": 6.0,
+    "12": 5.5,
+    "13": 6.0,
+    "14": 3.0,
+    "15": 6.0,
+    "16": 5.0,
+    "17": 5.0,
+    "18": 5.5,
+    "19": 6.0,
+    "20": 7.0,
+    "21": 6.5,
+    "22": 6.0,
+    "23": 6.0,
+    "24": 5.5,
+    "25": 6.0,
+    "26": 8.0,
+    "27": 7.0
+   },
+   "spread": {
+    "1": 1.0,
+    "2": 0.0,
+    "3": 0.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 2.0,
+    "7": 2.0,
+    "8": 3.0,
+    "9": 1.0,
+    "10": 3.0,
+    "11": 1.0,
+    "12": 2.0,
+    "13": 2.0,
+    "14": 2.0,
+    "15": 3.0,
+    "16": 1.0,
+    "17": 1.0,
+    "18": 3.0,
+    "19": 1.0,
+    "20": 1.0,
+    "21": 4.0,
+    "22": 1.0,
+    "23": 2.0,
+    "24": 1.0,
+    "25": 1.0,
+    "26": 1.0,
+    "27": 4.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "plane-front-quarter": {
+   "median": {
+    "1": 7.5,
+    "2": 8.0,
+    "3": 7.0,
+    "4": 8.0,
+    "5": 6.0,
+    "6": 5.0,
+    "7": 6.0,
+    "8": 7.0,
+    "9": 7.5,
+    "10": 6.0,
+    "11": 6.0,
+    "12": 6.0,
+    "13": 5.5,
+    "14": 5.5,
+    "15": 7.0,
+    "16": 7.0,
+    "17": 5.5,
+    "18": 6.5,
+    "19": 7.0,
+    "20": 7.5,
+    "21": 6.5,
+    "22": 6.0,
+    "23": 7.0,
+    "24": 6.5,
+    "25": 5.0,
+    "26": 8.0,
+    "27": 7.0
+   },
+   "spread": {
+    "1": 1.0,
+    "2": 0.0,
+    "3": 1.0,
+    "4": 0.0,
+    "5": 3.0,
+    "6": 2.0,
+    "7": 0.0,
+    "8": 2.0,
+    "9": 1.0,
+    "10": 1.0,
+    "11": 1.0,
+    "12": 2.0,
+    "13": 2.0,
+    "14": 2.0,
+    "15": 2.0,
+    "16": 1.0,
+    "17": 3.0,
+    "18": 2.0,
+    "19": 1.0,
+    "20": 2.0,
+    "21": 2.0,
+    "22": 1.0,
+    "23": 1.0,
+    "24": 1.0,
+    "25": 1.0,
+    "26": 1.0,
+    "27": 1.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "plane-rear-quarter": {
+   "median": {
+    "1": 7.5,
+    "2": 8.0,
+    "3": 7.0,
+    "4": 8.0,
+    "5": 6.5,
+    "6": 5.5,
+    "7": 6.0,
+    "8": 7.0,
+    "9": 7.5,
+    "10": 6.0,
+    "11": 5.5,
+    "12": 4.0,
+    "13": 6.5,
+    "14": 6.5,
+    "15": 7.0,
+    "16": 7.0,
+    "17": 5.5,
+    "18": 6.5,
+    "19": 7.0,
+    "20": 7.5,
+    "21": 6.5,
+    "22": 6.5,
+    "23": 7.0,
+    "24": 4.5,
+    "25": 5.5,
+    "26": 8.0,
+    "27": 7.0
+   },
+   "spread": {
+    "1": 1.0,
+    "2": 0.0,
+    "3": 2.0,
+    "4": 0.0,
+    "5": 1.0,
+    "6": 3.0,
+    "7": 1.0,
+    "8": 1.0,
+    "9": 1.0,
+    "10": 1.0,
+    "11": 1.0,
+    "12": 1.0,
+    "13": 1.0,
+    "14": 2.0,
+    "15": 1.0,
+    "16": 1.0,
+    "17": 3.0,
+    "18": 1.0,
+    "19": 1.0,
+    "20": 2.0,
+    "21": 2.0,
+    "22": 1.0,
+    "23": 1.0,
+    "24": 2.0,
+    "25": 2.0,
+    "26": 1.0,
+    "27": 1.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "skyline-high": {
+   "median": {
+    "1": 6.0,
+    "2": 6.5,
+    "3": 7.0,
+    "4": 7.0,
+    "5": 6.0,
+    "6": 6.0,
+    "7": 6.0,
+    "8": 4.0,
+    "9": 7.0,
+    "10": 5.5,
+    "11": 5.5,
+    "12": 5.0,
+    "13": 6.0,
+    "14": 6.5,
+    "15": 5.5,
+    "16": 6.5,
+    "17": 5.5,
+    "18": 5.5,
+    "19": 7.0,
+    "20": 7.5,
+    "21": 5.0,
+    "22": 6.0,
+    "23": 5.0,
+    "24": 4.5,
+    "25": 5.5,
+    "26": 7.5,
+    "27": 5.5
+   },
+   "spread": {
+    "1": 3.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 2.0,
+    "5": 2.0,
+    "6": 2.0,
+    "7": 0.0,
+    "8": 3.0,
+    "9": 3.0,
+    "10": 3.0,
+    "11": 2.0,
+    "12": 2.0,
+    "13": 2.0,
+    "14": 2.0,
+    "15": 2.0,
+    "16": 1.0,
+    "17": 1.0,
+    "18": 2.0,
+    "19": 1.0,
+    "20": 3.0,
+    "21": 4.0,
+    "22": 2.0,
+    "23": 2.0,
+    "24": 1.0,
+    "25": 3.0,
+    "26": 1.0,
+    "27": 4.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "sunset": {
+   "median": {
+    "1": 7.0,
+    "2": 7.5,
+    "3": 7.0,
+    "4": 7.5,
+    "5": 6.0,
+    "6": 6.0,
+    "7": 5.5,
+    "8": 5.5,
+    "9": 6.5,
+    "10": 6.0,
+    "11": 5.5,
+    "12": 5.0,
+    "13": 5.5,
+    "14": 6.0,
+    "15": 6.5,
+    "16": 6.5,
+    "17": 5.5,
+    "18": 4.0,
+    "19": 7.0,
+    "20": 6.0,
+    "21": 5.5,
+    "22": 6.0,
+    "23": 5.5,
+    "24": 5.0,
+    "25": 4.5,
+    "26": 7.5,
+    "27": 5.5
+   },
+   "spread": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 0.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 2.0,
+    "7": 1.0,
+    "8": 4.0,
+    "9": 1.0,
+    "10": 3.0,
+    "11": 2.0,
+    "12": 2.0,
+    "13": 3.0,
+    "14": 1.0,
+    "15": 3.0,
+    "16": 3.0,
+    "17": 1.0,
+    "18": 3.0,
+    "19": 1.0,
+    "20": 1.0,
+    "21": 3.0,
+    "22": 1.0,
+    "23": 1.0,
+    "24": 1.0,
+    "25": 2.0,
+    "26": 1.0,
+    "27": 3.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  },
+  "water-landing": {
+   "median": {
+    "1": 7.0,
+    "2": 7.5,
+    "3": 7.0,
+    "4": 7.5,
+    "5": 6.0,
+    "6": 6.0,
+    "7": 5.5,
+    "8": 6.5,
+    "9": 7.0,
+    "10": 4.5,
+    "11": 5.5,
+    "12": 4.5,
+    "13": 6.5,
+    "14": 6.0,
+    "15": 7.0,
+    "16": 7.0,
+    "17": 5.0,
+    "18": 5.5,
+    "19": 7.0,
+    "20": 5.5,
+    "21": 7.5,
+    "22": 6.0,
+    "23": 6.5,
+    "24": 5.0,
+    "25": 5.5,
+    "26": 7.5,
+    "27": 7.0
+   },
+   "spread": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 0.0,
+    "4": 1.0,
+    "5": 2.0,
+    "6": 3.0,
+    "7": 2.0,
+    "8": 2.0,
+    "9": 1.0,
+    "10": 2.0,
+    "11": 4.0,
+    "12": 2.0,
+    "13": 2.0,
+    "14": 2.0,
+    "15": 3.0,
+    "16": 0.0,
+    "17": 4.0,
+    "18": 2.0,
+    "19": 0.0,
+    "20": 1.0,
+    "21": 1.0,
+    "22": 1.0,
+    "23": 2.0,
+    "24": 1.0,
+    "25": 3.0,
+    "26": 1.0,
+    "27": 1.0
+   },
+   "n": {
+    "1": 4,
+    "2": 4,
+    "3": 4,
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4,
+    "9": 4,
+    "10": 4,
+    "11": 4,
+    "12": 4,
+    "13": 4,
+    "14": 4,
+    "15": 4,
+    "16": 4,
+    "17": 4,
+    "18": 4,
+    "19": 4,
+    "20": 4,
+    "21": 4,
+    "22": 4,
+    "23": 4,
+    "24": 4,
+    "25": 4,
+    "26": 4,
+    "27": 4
+   }
+  }
+ },
+ "categories": {
+  "1": {
+   "name": "Overall composition",
+   "median": 7.0,
+   "min": 5.5,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "2": {
+   "name": "Aircraft silhouette",
+   "median": 7.5,
+   "min": 5.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "3": {
+   "name": "Aircraft geometry",
+   "median": 7.0,
+   "min": 4.5,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "4": {
+   "name": "Aircraft scale",
+   "median": 7.5,
+   "min": 7.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "5": {
+   "name": "Aircraft materials",
+   "median": 6.0,
+   "min": 4.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "6": {
+   "name": "Cockpit and glass",
+   "median": 6.0,
+   "min": 5.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "7": {
+   "name": "Buildings and skyline",
+   "median": 6.0,
+   "min": 4.5,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "8": {
+   "name": "Terrain and coastlines",
+   "median": 6.5,
+   "min": 4.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "9": {
+   "name": "Water color and depth",
+   "median": 7.0,
+   "min": 6.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "10": {
+   "name": "Water reflections",
+   "median": 5.5,
+   "min": 4.5,
+   "target": 8.5,
+   "pass": false,
+   "critical": false
+  },
+  "11": {
+   "name": "Boat wakes and water interaction",
+   "median": 5.5,
+   "min": 5.5,
+   "target": 8.5,
+   "pass": false,
+   "critical": false
+  },
+  "12": {
+   "name": "Vegetation",
+   "median": 5.0,
+   "min": 4.0,
+   "target": 8.5,
+   "pass": false,
+   "critical": false
+  },
+  "13": {
+   "name": "Bridge and infrastructure accuracy",
+   "median": 6.0,
+   "min": 5.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "14": {
+   "name": "Cloud volume",
+   "median": 6.0,
+   "min": 3.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "15": {
+   "name": "Atmospheric perspective",
+   "median": 6.5,
+   "min": 5.5,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "16": {
+   "name": "Sunlight and exposure",
+   "median": 7.0,
+   "min": 5.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "17": {
+   "name": "Shadow quality",
+   "median": 5.5,
+   "min": 4.0,
+   "target": 8.5,
+   "pass": false,
+   "critical": false
+  },
+  "18": {
+   "name": "Reflections and specular response",
+   "median": 5.5,
+   "min": 4.0,
+   "target": 8.5,
+   "pass": false,
+   "critical": false
+  },
+  "19": {
+   "name": "Color grading",
+   "median": 7.0,
+   "min": 6.0,
+   "target": 8.5,
+   "pass": false,
+   "critical": false
+  },
+  "20": {
+   "name": "Motion and temporal stability",
+   "median": 6.5,
+   "min": 5.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "21": {
+   "name": "Flight physics and camera behavior",
+   "median": 6.5,
+   "min": 4.5,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "22": {
+   "name": "Object density and world believability",
+   "median": 6.0,
+   "min": 5.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "23": {
+   "name": "Detail consistency across distance",
+   "median": 6.0,
+   "min": 5.0,
+   "target": 8.5,
+   "pass": false,
+   "critical": false
+  },
+  "24": {
+   "name": "Lack of repetition",
+   "median": 5.0,
+   "min": 4.0,
+   "target": 8.5,
+   "pass": false,
+   "critical": false
+  },
+  "25": {
+   "name": "Lack of visual artifacts",
+   "median": 5.5,
+   "min": 4.5,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  },
+  "26": {
+   "name": "UI readability",
+   "median": 7.5,
+   "min": 7.0,
+   "target": 8.5,
+   "pass": false,
+   "critical": false
+  },
+  "27": {
+   "name": "FPS and frame-time stability",
+   "median": 7.0,
+   "min": 5.0,
+   "target": 9.0,
+   "pass": false,
+   "critical": true
+  }
+ },
+ "disagreements": [
+  {
+   "view": "aerial-a",
+   "category": "9",
+   "name": "Water color and depth",
+   "values": [
+    7.0,
+    5.0,
+    8.0,
+    7.0
+   ]
+  },
+  {
+   "view": "aerial-a",
+   "category": "10",
+   "name": "Water reflections",
+   "values": [
+    6.0,
+    3.0,
+    6.0,
+    5.0
+   ]
+  },
+  {
+   "view": "aerial-a",
+   "category": "11",
+   "name": "Boat wakes and water interaction",
+   "values": [
+    6.0,
+    3.0,
+    6.0,
+    6.0
+   ]
+  },
+  {
+   "view": "aerial-a",
+   "category": "13",
+   "name": "Bridge and infrastructure accuracy",
+   "values": [
+    6.0,
+    5.0,
+    7.0,
+    4.0
+   ]
+  },
+  {
+   "view": "aerial-a",
+   "category": "21",
+   "name": "Flight physics and camera behavior",
+   "values": [
+    4.0,
+    4.0,
+    8.0,
+    5.0
+   ]
+  },
+  {
+   "view": "aerial-a",
+   "category": "27",
+   "name": "FPS and frame-time stability",
+   "values": [
+    4.0,
+    5.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "bridge-low",
+   "category": "2",
+   "name": "Aircraft silhouette",
+   "values": [
+    7.0,
+    3.0,
+    8.0,
+    8.0
+   ]
+  },
+  {
+   "view": "bridge-low",
+   "category": "3",
+   "name": "Aircraft geometry",
+   "values": [
+    7.0,
+    4.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "bridge-low",
+   "category": "13",
+   "name": "Bridge and infrastructure accuracy",
+   "values": [
+    5.0,
+    3.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "bridge-low",
+   "category": "18",
+   "name": "Reflections and specular response",
+   "values": [
+    7.0,
+    4.0,
+    6.0,
+    6.0
+   ]
+  },
+  {
+   "view": "bridge-low",
+   "category": "25",
+   "name": "Lack of visual artifacts",
+   "values": [
+    6.0,
+    3.0,
+    7.0,
+    5.0
+   ]
+  },
+  {
+   "view": "cloudy",
+   "category": "21",
+   "name": "Flight physics and camera behavior",
+   "values": [
+    6.0,
+    5.0,
+    8.0,
+    6.0
+   ]
+  },
+  {
+   "view": "cloudy",
+   "category": "27",
+   "name": "FPS and frame-time stability",
+   "values": [
+    2.0,
+    4.0,
+    7.0,
+    6.0
+   ]
+  },
+  {
+   "view": "cockpit-city",
+   "category": "3",
+   "name": "Aircraft geometry",
+   "values": [
+    5.0,
+    4.0,
+    7.0,
+    4.0
+   ]
+  },
+  {
+   "view": "cockpit-city",
+   "category": "18",
+   "name": "Reflections and specular response",
+   "values": [
+    4.0,
+    3.0,
+    6.0,
+    5.0
+   ]
+  },
+  {
+   "view": "cockpit-city",
+   "category": "21",
+   "name": "Flight physics and camera behavior",
+   "values": [
+    6.0,
+    5.0,
+    8.0,
+    5.0
+   ]
+  },
+  {
+   "view": "cockpit-city",
+   "category": "23",
+   "name": "Detail consistency across distance",
+   "values": [
+    6.0,
+    4.0,
+    7.0,
+    5.0
+   ]
+  },
+  {
+   "view": "cockpit-city",
+   "category": "25",
+   "name": "Lack of visual artifacts",
+   "values": [
+    5.0,
+    3.0,
+    7.0,
+    5.0
+   ]
+  },
+  {
+   "view": "cockpit-city",
+   "category": "27",
+   "name": "FPS and frame-time stability",
+   "values": [
+    2.0,
+    7.0,
+    7.0,
+    6.0
+   ]
+  },
+  {
+   "view": "glass-sun",
+   "category": "5",
+   "name": "Aircraft materials",
+   "values": [
+    7.0,
+    4.0,
+    5.0,
+    6.0
+   ]
+  },
+  {
+   "view": "glass-sun",
+   "category": "18",
+   "name": "Reflections and specular response",
+   "values": [
+    6.0,
+    4.0,
+    7.0,
+    6.0
+   ]
+  },
+  {
+   "view": "harbor",
+   "category": "10",
+   "name": "Water reflections",
+   "values": [
+    5.0,
+    3.0,
+    6.0,
+    5.0
+   ]
+  },
+  {
+   "view": "harbor",
+   "category": "13",
+   "name": "Bridge and infrastructure accuracy",
+   "values": [
+    5.0,
+    4.0,
+    7.0,
+    5.0
+   ]
+  },
+  {
+   "view": "harbor",
+   "category": "15",
+   "name": "Atmospheric perspective",
+   "values": [
+    6.0,
+    4.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "harbor",
+   "category": "17",
+   "name": "Shadow quality",
+   "values": [
+    3.0,
+    5.0,
+    6.0,
+    6.0
+   ]
+  },
+  {
+   "view": "harbor",
+   "category": "22",
+   "name": "Object density and world believability",
+   "values": [
+    6.0,
+    3.0,
+    7.0,
+    5.0
+   ]
+  },
+  {
+   "view": "harbor",
+   "category": "25",
+   "name": "Lack of visual artifacts",
+   "values": [
+    5.0,
+    3.0,
+    6.0,
+    5.0
+   ]
+  },
+  {
+   "view": "harbor",
+   "category": "27",
+   "name": "FPS and frame-time stability",
+   "values": [
+    3.0,
+    7.0,
+    7.0,
+    6.0
+   ]
+  },
+  {
+   "view": "island-pass",
+   "category": "8",
+   "name": "Terrain and coastlines",
+   "values": [
+    6.0,
+    4.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "island-pass",
+   "category": "9",
+   "name": "Water color and depth",
+   "values": [
+    6.0,
+    5.0,
+    8.0,
+    7.0
+   ]
+  },
+  {
+   "view": "island-pass",
+   "category": "10",
+   "name": "Water reflections",
+   "values": [
+    5.0,
+    3.0,
+    6.0,
+    5.0
+   ]
+  },
+  {
+   "view": "island-pass",
+   "category": "15",
+   "name": "Atmospheric perspective",
+   "values": [
+    4.0,
+    4.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "island-pass",
+   "category": "21",
+   "name": "Flight physics and camera behavior",
+   "values": [
+    7.0,
+    4.0,
+    8.0,
+    7.0
+   ]
+  },
+  {
+   "view": "night",
+   "category": "8",
+   "name": "Terrain and coastlines",
+   "values": [
+    6.0,
+    4.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "night",
+   "category": "10",
+   "name": "Water reflections",
+   "values": [
+    6.0,
+    4.0,
+    5.0,
+    7.0
+   ]
+  },
+  {
+   "view": "night",
+   "category": "15",
+   "name": "Atmospheric perspective",
+   "values": [
+    6.0,
+    4.0,
+    6.0,
+    7.0
+   ]
+  },
+  {
+   "view": "night",
+   "category": "18",
+   "name": "Reflections and specular response",
+   "values": [
+    6.0,
+    4.0,
+    5.0,
+    7.0
+   ]
+  },
+  {
+   "view": "night",
+   "category": "21",
+   "name": "Flight physics and camera behavior",
+   "values": [
+    7.0,
+    4.0,
+    8.0,
+    6.0
+   ]
+  },
+  {
+   "view": "night",
+   "category": "27",
+   "name": "FPS and frame-time stability",
+   "values": [
+    3.0,
+    7.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "plane-front-quarter",
+   "category": "5",
+   "name": "Aircraft materials",
+   "values": [
+    8.0,
+    5.0,
+    5.0,
+    7.0
+   ]
+  },
+  {
+   "view": "plane-front-quarter",
+   "category": "17",
+   "name": "Shadow quality",
+   "values": [
+    7.0,
+    4.0,
+    6.0,
+    5.0
+   ]
+  },
+  {
+   "view": "plane-rear-quarter",
+   "category": "6",
+   "name": "Cockpit and glass",
+   "values": [
+    8.0,
+    5.0,
+    5.0,
+    6.0
+   ]
+  },
+  {
+   "view": "plane-rear-quarter",
+   "category": "17",
+   "name": "Shadow quality",
+   "values": [
+    7.0,
+    4.0,
+    6.0,
+    5.0
+   ]
+  },
+  {
+   "view": "skyline-high",
+   "category": "1",
+   "name": "Overall composition",
+   "values": [
+    6.0,
+    4.0,
+    7.0,
+    6.0
+   ]
+  },
+  {
+   "view": "skyline-high",
+   "category": "8",
+   "name": "Terrain and coastlines",
+   "values": [
+    4.0,
+    3.0,
+    6.0,
+    4.0
+   ]
+  },
+  {
+   "view": "skyline-high",
+   "category": "9",
+   "name": "Water color and depth",
+   "values": [
+    7.0,
+    5.0,
+    8.0,
+    7.0
+   ]
+  },
+  {
+   "view": "skyline-high",
+   "category": "10",
+   "name": "Water reflections",
+   "values": [
+    6.0,
+    3.0,
+    6.0,
+    5.0
+   ]
+  },
+  {
+   "view": "skyline-high",
+   "category": "20",
+   "name": "Motion and temporal stability",
+   "values": [
+    8.0,
+    5.0,
+    8.0,
+    7.0
+   ]
+  },
+  {
+   "view": "skyline-high",
+   "category": "21",
+   "name": "Flight physics and camera behavior",
+   "values": [
+    5.0,
+    4.0,
+    8.0,
+    5.0
+   ]
+  },
+  {
+   "view": "skyline-high",
+   "category": "25",
+   "name": "Lack of visual artifacts",
+   "values": [
+    5.0,
+    4.0,
+    7.0,
+    6.0
+   ]
+  },
+  {
+   "view": "skyline-high",
+   "category": "27",
+   "name": "FPS and frame-time stability",
+   "values": [
+    3.0,
+    4.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "sunset",
+   "category": "8",
+   "name": "Terrain and coastlines",
+   "values": [
+    5.0,
+    3.0,
+    7.0,
+    6.0
+   ]
+  },
+  {
+   "view": "sunset",
+   "category": "10",
+   "name": "Water reflections",
+   "values": [
+    6.0,
+    3.0,
+    6.0,
+    6.0
+   ]
+  },
+  {
+   "view": "sunset",
+   "category": "13",
+   "name": "Bridge and infrastructure accuracy",
+   "values": [
+    6.0,
+    4.0,
+    7.0,
+    5.0
+   ]
+  },
+  {
+   "view": "sunset",
+   "category": "15",
+   "name": "Atmospheric perspective",
+   "values": [
+    6.0,
+    5.0,
+    7.0,
+    8.0
+   ]
+  },
+  {
+   "view": "sunset",
+   "category": "16",
+   "name": "Sunlight and exposure",
+   "values": [
+    6.0,
+    4.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "sunset",
+   "category": "18",
+   "name": "Reflections and specular response",
+   "values": [
+    4.0,
+    3.0,
+    6.0,
+    4.0
+   ]
+  },
+  {
+   "view": "sunset",
+   "category": "21",
+   "name": "Flight physics and camera behavior",
+   "values": [
+    6.0,
+    5.0,
+    8.0,
+    5.0
+   ]
+  },
+  {
+   "view": "sunset",
+   "category": "27",
+   "name": "FPS and frame-time stability",
+   "values": [
+    4.0,
+    4.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "water-landing",
+   "category": "6",
+   "name": "Cockpit and glass",
+   "values": [
+    6.0,
+    3.0,
+    6.0,
+    6.0
+   ]
+  },
+  {
+   "view": "water-landing",
+   "category": "11",
+   "name": "Boat wakes and water interaction",
+   "values": [
+    5.0,
+    3.0,
+    6.0,
+    7.0
+   ]
+  },
+  {
+   "view": "water-landing",
+   "category": "15",
+   "name": "Atmospheric perspective",
+   "values": [
+    7.0,
+    4.0,
+    7.0,
+    7.0
+   ]
+  },
+  {
+   "view": "water-landing",
+   "category": "17",
+   "name": "Shadow quality",
+   "values": [
+    7.0,
+    3.0,
+    6.0,
+    4.0
+   ]
+  },
+  {
+   "view": "water-landing",
+   "category": "25",
+   "name": "Lack of visual artifacts",
+   "values": [
+    6.0,
+    4.0,
+    7.0,
+    5.0
+   ]
+  }
+ ],
+ "defects": {
+  "aerial-a": [
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 3,
+    "cells": "C5-F7",
+    "defect": "Water reflects only the sky colour; no object reflections exist.",
+    "fix": "Add a planar/SSR reflection pass with wave-normal distortion for near water.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 11,
+    "score": 3,
+    "cells": "B6-C7",
+    "defect": "Wake has no V-spread, no foam breakup and no fade with distance.",
+    "fix": "Replace the line with a V-wake mesh using foam texture that widens and fades along the path.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 24,
+    "score": 3,
+    "cells": "A5-H8, A3-B4",
+    "defect": "Tiling water and clone trees are both visible in ordinary play.",
+    "fix": "Break the water tile period and instance trees with per-instance scale/rotation/hue.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 21,
+    "score": 4,
+    "cells": "flight.png, clip",
+    "defect": "views.ts aerial-a places the plane 50 m from a fixed camera heading toward it, so every flight/clip frame lacks the aircraft.",
+    "fix": "Use a chase camera or start the plane ~400 m out so it stays in frame for the 180 stepped frames.",
+    "hardFailure": false,
+    "kind": "architectural"
+   },
+   {
+    "critic": "technical",
+    "category": 27,
+    "score": 4,
+    "cells": "renderer.info",
+    "defect": "Draw-call budget exceeded by 26% in the still.",
+    "fix": "Merge prop/tree instances per chunk and batch marina/boat draws.",
+    "hardFailure": false,
+    "kind": "performance"
+   },
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 4,
+    "cells": "D4",
+    "defect": "Glass is opaque from this angle; no cabin interior or reflection is visible.",
+    "fix": "Use a transmissive glass material with a tinted interior and a fresnel-weighted environment reflection.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 4,
+    "cells": "A3-B4, G3-H4",
+    "defect": "Trees are uniform dark-green blobs of identical size and shade with no visible canopy structure or palms.",
+    "fix": "Add 3-4 species with distinct silhouettes (palm, sea grape, ficus) and vary scale/hue per instance.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 18,
+    "score": 4,
+    "cells": "D4-E5, A5-H8",
+    "defect": "Specular response is missing on both the water and the gloss paint.",
+    "fix": "Enable specular highlights for the sun on the water BRDF and a clearcoat on the paint.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 21,
+    "score": 4,
+    "cells": "D4-E5 -> out of frame",
+    "defect": "Fixed camera loses the subject; aircraft climbs uncommanded with 70% throttle and no trim.",
+    "fix": "Trim the aircraft to level flight at the bench throttle and use a follow camera for the aerial view.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "visual-3",
+    "category": 12,
+    "score": 4,
+    "cells": "C6-E8",
+    "defect": "Trees are clone spheres without trunks or species variation.",
+    "fix": "Instance 6-8 distinct tree meshes with trunk geometry and random scale/rotation.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-3",
+    "category": 13,
+    "score": 4,
+    "cells": "D4-E4,A6-B6",
+    "defect": "Sub-pixel cables break into dots and the causeway deck appears to lie on the water.",
+    "fix": "Draw cables as screen-space lines with a minimum 1.5-px width and keep pier columns in the far LOD.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-3",
+    "category": 24,
+    "score": 4,
+    "cells": "C6-E8,B3-D3",
+    "defect": "Clone trees and clone building boxes are visible at once.",
+    "fix": "Randomise tree meshes and building footprints.",
+    "hardFailure": true,
+    "kind": "visual"
+   }
+  ],
+  "bridge-low": [
+   {
+    "critic": "visual-1",
+    "category": 2,
+    "score": 3,
+    "cells": "D4-F5",
+    "defect": "Paper-thin tail surfaces and a zero-width tail cone.",
+    "fix": "Model closed tail surfaces with airfoil thickness and a rounded tail cone.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 13,
+    "score": 3,
+    "cells": "C6, E8, B3-F3",
+    "defect": "Bridge supports miss the water (floating pier caps) and cables alias.",
+    "fix": "Extend piers into the water with footings; render cables as thin tubes with MSAA.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 25,
+    "score": 3,
+    "cells": "C6, E8, D5-F5",
+    "defect": "Floating geometry and paper-thin geometry.",
+    "fix": "Fix piers and tail surfaces.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 12,
+    "score": 4,
+    "cells": "C3-D3",
+    "defect": "Crowns are identical spheres of equal size in a row.",
+    "fix": "Instance 4+ crown meshes with random scale and yaw.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 24,
+    "score": 4,
+    "cells": "C3-D3, F3-H3",
+    "defect": "Cloned identical tree spheres in a row.",
+    "fix": "Crown variants.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 3,
+    "score": 4,
+    "cells": "D4-F5",
+    "defect": "Stabilizer plane intersects the fuselage with no fairing and the fin root shows a gap in f015.",
+    "fix": "Add root fairings and close the fin-fuselage join.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 4,
+    "cells": "A6-H8",
+    "defect": "Object reflections absent.",
+    "fix": "Enable planar reflections near the bridge.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 11,
+    "score": 4,
+    "cells": "E7-F8",
+    "defect": "No spray or wake interaction with floats near the surface.",
+    "fix": "Add float spray/wake particles below 3 m altitude.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 4,
+    "cells": "A4-B4, G4-H4",
+    "defect": "Uniform blob trees.",
+    "fix": "Add species variation.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 18,
+    "score": 4,
+    "cells": "D4-F5, A5-H8",
+    "defect": "Specular absent.",
+    "fix": "Enable sun specular.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 20,
+    "score": 4,
+    "cells": "A1-H8",
+    "defect": "Cable and railing shimmer.",
+    "fix": "Thicken cables and add TAA.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 24,
+    "score": 4,
+    "cells": "B5-F5, A4-H4",
+    "defect": "Clone cars and trees.",
+    "fix": "Per-instance variation.",
+    "hardFailure": false,
+    "kind": "visual"
+   }
+  ],
+  "cloudy": [
+   {
+    "critic": "technical",
+    "category": 27,
+    "score": 2,
+    "cells": "renderer.info",
+    "defect": "Worst call count of the round; both budgets exceeded by 30-38%.",
+    "fix": "Batch vegetation and marina props; reduce tree LOD0 tris.",
+    "hardFailure": false,
+    "kind": "performance"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 3,
+    "cells": "A4-H4",
+    "defect": "Black blobs.",
+    "fix": "Fix tree albedo/AO and add species.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 4,
+    "cells": "D5",
+    "defect": "Opaque.",
+    "fix": "Transmissive.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 11,
+    "score": 4,
+    "cells": "B4-C4",
+    "defect": "Uniform foam rings.",
+    "fix": "Breaking-wave foam.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 27,
+    "score": 4,
+    "cells": "n/a",
+    "defect": "Start stall.",
+    "fix": "Precompile.",
+    "hardFailure": false,
+    "kind": "performance"
+   },
+   {
+    "critic": "visual-3",
+    "category": 12,
+    "score": 4,
+    "cells": "A6-C8",
+    "defect": "Clone canopies.",
+    "fix": "Vary.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-3",
+    "category": 24,
+    "score": 4,
+    "cells": "A6-C8",
+    "defect": "Repetition.",
+    "fix": "Vary.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 10,
+    "score": 5,
+    "cells": "D4-H8",
+    "defect": "Reflects a blue sky that is not there; overcast grey missing from the water.",
+    "fix": "Reflect the actual cloud layer.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "technical",
+    "category": 12,
+    "score": 5,
+    "cells": "A6-D8",
+    "defect": "Cabbage-like identical crowns; several near-black.",
+    "fix": "Crown variants; shading fix.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "technical",
+    "category": 14,
+    "score": 5,
+    "cells": "A1-H2",
+    "defect": "Layer is a flat textured plane with a sharp cutout edge at H2 and no vertical structure.",
+    "fix": "Add multi-layer stratocumulus with bottom undulation.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 16,
+    "score": 5,
+    "cells": "A6-D8, G6-H8",
+    "defect": "Hard cloud shadows on water and sharp tree shading under a full overcast.",
+    "fix": "Scale direct light by (1-coverage).",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "technical",
+    "category": 17,
+    "score": 5,
+    "cells": "G6-H8",
+    "defect": "Shadows are as hard as under clear sky; no aircraft shadow.",
+    "fix": "Soften shadows with coverage.",
+    "hardFailure": false,
+    "kind": "technical"
+   }
+  ],
+  "cockpit-city": [
+   {
+    "critic": "technical",
+    "category": 27,
+    "score": 2,
+    "cells": "renderer.info",
+    "defect": "Still frame at 197% of the triangle budget and 129% of the call budget; slowest view.",
+    "fix": "Cut cockpit gauge tessellation and cull the exterior aircraft LOD when in cockpit mode.",
+    "hardFailure": false,
+    "kind": "performance"
+   },
+   {
+    "critic": "visual-1",
+    "category": 18,
+    "score": 3,
+    "cells": "A5-H8",
+    "defect": "Specular response is absent on all interior surfaces.",
+    "fix": "Add specular/roughness maps and an interior environment probe.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 25,
+    "score": 3,
+    "cells": "A6-B7, A3-C4",
+    "defect": "Placeholder primitive and zero-thickness wing.",
+    "fix": "Remove the box and close the wing mesh.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 5,
+    "score": 4,
+    "cells": "A2-H3, D7-H8",
+    "defect": "Wing underside and cabin walls are one uniform-roughness lambert colour with no texture.",
+    "fix": "Add a fabric/aluminium roughness map and AO to the wing underside and interior.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 17,
+    "score": 4,
+    "cells": "A2-H3, D6-H8",
+    "defect": "Cockpit receives no shadow cascade contribution at all.",
+    "fix": "Include the cockpit meshes in cascade 0 with a tight near-cascade fit.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "technical",
+    "category": 18,
+    "score": 4,
+    "cells": "D7-H8, B4-H6",
+    "defect": "Interior has zero specular response.",
+    "fix": "Add clearcoat to gauge faces and a fresnel term to the windscreen.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 3,
+    "score": 4,
+    "cells": "A3-C4, D1-E2",
+    "defect": "Overhead cylinder is a bare primitive and wing-strut intersection has no fillet or bracket.",
+    "fix": "Model a magnetic compass housing and strut brackets.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 5,
+    "score": 4,
+    "cells": "A5-H8",
+    "defect": "Uniform roughness across panel, coaming, headliner and yoke.",
+    "fix": "Author distinct materials: textured vinyl headliner, brushed panel, rubber yoke grip.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 4,
+    "cells": "B2-G4",
+    "defect": "No fresnel reflection, dirt or refraction on the glass; the glass plane is invisible rather than rendered.",
+    "fix": "Add a fresnel-weighted reflection and subtle smudge texture to the windshield.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 4,
+    "cells": "A4-C4",
+    "defect": "Object reflections are absent.",
+    "fix": "Enable planar reflections for the bay.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 11,
+    "score": 4,
+    "cells": "A4-C4",
+    "defect": "Wake is a single straight streak with no V or fade.",
+    "fix": "Use a V-wake mesh with foam falloff.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 4,
+    "cells": "A4-H4",
+    "defect": "Trees are identical dark-green spheres in a row.",
+    "fix": "Vary species, scale and hue per tree.",
+    "hardFailure": false,
+    "kind": "visual"
+   }
+  ],
+  "glass-sun": [
+   {
+    "critic": "visual-1",
+    "category": 5,
+    "score": 4,
+    "cells": "A5-C6, D5-F5",
+    "defect": "Stretched/streaked texture.",
+    "fix": "Fix UV aspect, anisotropic filtering.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 4,
+    "cells": "B3-F4",
+    "defect": "No fresnel or sun highlight on glass facing the 15:30 sun; reflection smeared.",
+    "fix": "Fresnel + environment reflection with correct filtering.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 18,
+    "score": 4,
+    "cells": "B3-F4",
+    "defect": "Absent.",
+    "fix": "Specular.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 25,
+    "score": 4,
+    "cells": "D5-F5, D5",
+    "defect": "Stretched texture + intersecting geometry.",
+    "fix": "As above.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-3",
+    "category": 25,
+    "score": 4,
+    "cells": "E5-F5,G4,F4-G5",
+    "defect": "Decal artifacts.",
+    "fix": "Fix UVs and remove quad.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 21,
+    "score": 5,
+    "cells": "telemetry",
+    "defect": "Zero throttle aircraft drifts at 3.5 m/s.",
+    "fix": "Increase water drag at idle in physics.ts.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "visual-1",
+    "category": 8,
+    "score": 5,
+    "cells": "A3-H3",
+    "defect": "Seam.",
+    "fix": "Blend.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 5,
+    "cells": "F6-H8",
+    "defect": "No skyline reflections.",
+    "fix": "Planar.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 5,
+    "cells": "G3",
+    "defect": "Blobs.",
+    "fix": "Variation.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 13,
+    "score": 5,
+    "cells": "C1-D2",
+    "defect": "Aliasing.",
+    "fix": "Tubes.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 15,
+    "score": 5,
+    "cells": "A3-H3",
+    "defect": "Seam.",
+    "fix": "Blend.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 17,
+    "score": 5,
+    "cells": "F6-H8",
+    "defect": "Hard.",
+    "fix": "PCSS.",
+    "hardFailure": false,
+    "kind": "visual"
+   }
+  ],
+  "harbor": [
+   {
+    "critic": "technical",
+    "category": 17,
+    "score": 3,
+    "cells": "A5-E8",
+    "defect": "No ground shadows from warehouses, containers or the aircraft on the apron.",
+    "fix": "Extend cascade coverage and mark props as shadow casters.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "technical",
+    "category": 27,
+    "score": 3,
+    "cells": "renderer.info",
+    "defect": "Triangle budget exceeded by 37%.",
+    "fix": "Instance containers with a lower-poly mesh.",
+    "hardFailure": false,
+    "kind": "performance"
+   },
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 3,
+    "cells": "A5-H8",
+    "defect": "Absent.",
+    "fix": "Planar reflections.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 22,
+    "score": 3,
+    "cells": "F4-H4, F5",
+    "defect": "Evenly spaced objects and floating geometry.",
+    "fix": "Jitter placement and remove the sphere.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 25,
+    "score": 3,
+    "cells": "F5",
+    "defect": "Floating geometry.",
+    "fix": "Remove.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 24,
+    "score": 4,
+    "cells": "B6-E6, A5-E5",
+    "defect": "Identical warehouses and evenly spaced identical cubes along them.",
+    "fix": "Jitter.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 4,
+    "cells": "D5",
+    "defect": "Opaque glass.",
+    "fix": "Transmissive glass.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 11,
+    "score": 4,
+    "cells": "C6-D7",
+    "defect": "No V-wake.",
+    "fix": "V-wake.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 4,
+    "cells": "G3-H3",
+    "defect": "Clone blobs.",
+    "fix": "Species variation.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 13,
+    "score": 4,
+    "cells": "F4-H4",
+    "defect": "Simplified port infrastructure.",
+    "fix": "Add crane booms/trolleys, container corrugation, ship bridge.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 15,
+    "score": 4,
+    "cells": "A3-H3",
+    "defect": "Hard horizon seam.",
+    "fix": "Blend.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 18,
+    "score": 4,
+    "cells": "A5-H8",
+    "defect": "Absent.",
+    "fix": "Specular.",
+    "hardFailure": false,
+    "kind": "visual"
+   }
+  ],
+  "island-pass": [
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 3,
+    "cells": "A5-H8",
+    "defect": "Absent.",
+    "fix": "Planar reflections.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 3,
+    "cells": "A4-H4",
+    "defect": "Placeholder palm sprites.",
+    "fix": "Palm meshes with fronds and trunk.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 7,
+    "score": 4,
+    "cells": "A3-D4",
+    "defect": "Buildings are flat untextured boxes with no windows, balconies or roof detail at close range.",
+    "fix": "Add facade window textures and parapets for LOD0.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 12,
+    "score": 4,
+    "cells": "A4-E3",
+    "defect": "Palms are identical dark sprites at even spacing along the shore (f050).",
+    "fix": "Randomise spacing, scale and species.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 15,
+    "score": 4,
+    "cells": "F3-H3",
+    "defect": "Sea meets sky in a crisp dark-blue line with no haze band.",
+    "fix": "Add horizon fog blending sea into sky over 2 deg.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 24,
+    "score": 4,
+    "cells": "A3-D4, A4-E3",
+    "defect": "Evenly spaced identical palms; repeated box towers.",
+    "fix": "Variants.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 4,
+    "cells": "D5",
+    "defect": "Opaque glass.",
+    "fix": "Transmissive glass.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 7,
+    "score": 4,
+    "cells": "B4-F4",
+    "defect": "Flat box buildings.",
+    "fix": "Add balcony rails and window insets.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 8,
+    "score": 4,
+    "cells": "A4-H4",
+    "defect": "No roads, lawns or pavement variation.",
+    "fix": "Add road/lawn/pavement texture set.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 11,
+    "score": 4,
+    "cells": "F6-G7",
+    "defect": "No V-wake.",
+    "fix": "V-wake.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 15,
+    "score": 4,
+    "cells": "A3-H3",
+    "defect": "Hard straight horizon seam.",
+    "fix": "Gradient blend.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 18,
+    "score": 4,
+    "cells": "A5-H8",
+    "defect": "Absent.",
+    "fix": "Specular.",
+    "hardFailure": false,
+    "kind": "visual"
+   }
+  ],
+  "night": [
+   {
+    "critic": "technical",
+    "category": 14,
+    "score": 3,
+    "cells": "E1-F1, B2, H2",
+    "defect": "Clouds render daylight white against a dark sky; sky.ts cloud shader uses uSunColor*2.9*0.3 at night, still far above sky luminance.",
+    "fix": "Tint night clouds with the moon colour and clamp lightCol to ~2x the sky radiance when nightMix>0.5.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "technical",
+    "category": 27,
+    "score": 3,
+    "cells": "renderer.info",
+    "defect": "Both budgets exceeded: draw calls +23% and triangles +5% in still and flight.",
+    "fix": "Cull city facade instances behind the camera in culling.ts and lower LOD for the far suburb at night.",
+    "hardFailure": true,
+    "kind": "performance"
+   },
+   {
+    "critic": "visual-1",
+    "category": 14,
+    "score": 3,
+    "cells": "D1-F1",
+    "defect": "Wrong cloud exposure at night.",
+    "fix": "Night cloud lighting.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-3",
+    "category": 14,
+    "score": 3,
+    "cells": "E1-F1,H1-H2,B1",
+    "defect": "Clouds lit by a daytime sun.",
+    "fix": "Tint clouds to night sky.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 4,
+    "cells": "E5",
+    "defect": "No cabin/instrument light visible.",
+    "fix": "Add cockpit interior light.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 8,
+    "score": 4,
+    "cells": "A3-H3",
+    "defect": "Flat plane with hard seam.",
+    "fix": "Inland detail + blend.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 4,
+    "cells": "D4-E4",
+    "defect": "Reflection is low-res and aliased.",
+    "fix": "Higher-res planar reflection with wave distortion.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 4,
+    "cells": "B4-D5",
+    "defect": "Black blobs.",
+    "fix": "Add night ambient to foliage.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 15,
+    "score": 4,
+    "cells": "A3-H3",
+    "defect": "Hard light-blue horizon band at A3-H3.",
+    "fix": "Blend.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 18,
+    "score": 4,
+    "cells": "D5-E7",
+    "defect": "Absent.",
+    "fix": "Clearcoat + probe.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 21,
+    "score": 4,
+    "cells": "D5-E7",
+    "defect": "Phugoid oscillation.",
+    "fix": "Trim + pitch damping.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "visual-2",
+    "category": 16,
+    "score": 4,
+    "cells": "whole frame",
+    "defect": "Night exposure is a dimmed daytime scene, not night.",
+    "fix": "Implement a night lighting state: dark sky, moonlight 0.05x, emissive city, no daylight clouds.",
+    "hardFailure": false,
+    "kind": "visual"
+   }
+  ],
+  "plane-front-quarter": [
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 4,
+    "cells": "C4-F4",
+    "defect": "Glass shows texture bleed and no fresnel.",
+    "fix": "Separate glass UV and add fresnel.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 17,
+    "score": 4,
+    "cells": "B7-H8",
+    "defect": "Opaque hard.",
+    "fix": "PCSS.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 25,
+    "score": 4,
+    "cells": "D4-F5, D5",
+    "defect": "Stretched texture + intersecting geometry.",
+    "fix": "As above.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 6,
+    "score": 5,
+    "cells": "D4-F4, aircraft crop",
+    "defect": "Glass is milky grey with a hard horizontal bottom edge and a uniform frost; windshield shows no sky reflection.",
+    "fix": "Reduce glass opacity to ~0.15 with an environment reflection and fresnel in model.ts.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 21,
+    "score": 5,
+    "cells": "telemetry",
+    "defect": "Zero throttle aircraft accelerates to 3.5 m/s; static prop at idle RPM.",
+    "fix": "Increase water drag at idle in physics.ts and animate the prop.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "technical",
+    "category": 25,
+    "score": 5,
+    "cells": "D5, C3-D4",
+    "defect": "Ghost strut through the fuselage and segmented bridge deck.",
+    "fix": "See 3 and 13.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "visual-1",
+    "category": 5,
+    "score": 5,
+    "cells": "D4-F5",
+    "defect": "Stretched texture.",
+    "fix": "Fix UV aspect and mip filtering.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 8,
+    "score": 5,
+    "cells": "A4-H4",
+    "defect": "Hard line at row 4.",
+    "fix": "Blend.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 5,
+    "cells": "D6-F7",
+    "defect": "No skyline reflections.",
+    "fix": "Planar.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 5,
+    "cells": "F4",
+    "defect": "Blobs.",
+    "fix": "Variation.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 13,
+    "score": 5,
+    "cells": "C3-D3",
+    "defect": "Aliasing.",
+    "fix": "Tubes.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 14,
+    "score": 5,
+    "cells": "A2-H3",
+    "defect": "Flat bases and stringy fragments in crops/distant.png.",
+    "fix": "Base lobes.",
+    "hardFailure": false,
+    "kind": "visual"
+   }
+  ],
+  "plane-rear-quarter": [
+   {
+    "critic": "technical",
+    "category": 12,
+    "score": 4,
+    "cells": "A2-H3",
+    "defect": "Crowns are faceted polyhedra with near-black navy faces (B2, F2-G2): back-facing normals or missing ambient make half of every tree black.",
+    "fix": "Fix crown normals/ambient in vegetation.ts so shaded faces stay dark green, not navy.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 4,
+    "cells": "A2-H3",
+    "defect": "Sphere clusters.",
+    "fix": "Species meshes.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 17,
+    "score": 4,
+    "cells": "A6-H8",
+    "defect": "Opaque hard shadows.",
+    "fix": "PCSS + reduce opacity.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-2",
+    "category": 24,
+    "score": 4,
+    "cells": "C3-G3",
+    "defect": "Evenly spaced clones.",
+    "fix": "Randomize hull, sail state and spacing.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-3",
+    "category": 12,
+    "score": 4,
+    "cells": "B2-H3",
+    "defect": "Clone trees.",
+    "fix": "Vary.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-3",
+    "category": 24,
+    "score": 4,
+    "cells": "B2-H3,C3-F3",
+    "defect": "Repetition.",
+    "fix": "Vary.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-3",
+    "category": 25,
+    "score": 4,
+    "cells": "E5,E4",
+    "defect": "Mirrored decal.",
+    "fix": "Flip UVs on port side.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 21,
+    "score": 5,
+    "cells": "telemetry still/flight/clip",
+    "defect": "A moored aircraft with zero throttle accelerates to 3.5 m/s: physics.ts water drag/wind model pushes it.",
+    "fix": "Apply mooring or higher water drag at throttle 0 in physics.ts.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 5,
+    "cells": "D4-E4",
+    "defect": "Rear side window is an opaque dark brown rectangle.",
+    "fix": "Make the rear window transmissive.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 5,
+    "cells": "D6-E7",
+    "defect": "No tree/boat reflections.",
+    "fix": "Planar.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 24,
+    "score": 5,
+    "cells": "A2-H3",
+    "defect": "Clones.",
+    "fix": "Variation.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 25,
+    "score": 5,
+    "cells": "C4, D4-E4",
+    "defect": "Artifacts.",
+    "fix": "As above.",
+    "hardFailure": false,
+    "kind": "visual"
+   }
+  ],
+  "skyline-high": [
+   {
+    "critic": "technical",
+    "category": 27,
+    "score": 3,
+    "cells": "renderer.info",
+    "defect": "Both budgets exceeded in still and flight.",
+    "fix": "Merge district building instances; cull hinterland props.",
+    "hardFailure": false,
+    "kind": "performance"
+   },
+   {
+    "critic": "visual-1",
+    "category": 8,
+    "score": 3,
+    "cells": "A3-H3",
+    "defect": "Flat terrain plane with visible noise tile and hard horizon seam.",
+    "fix": "Add inland suburb geometry and blend terrain into haze.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 3,
+    "cells": "A6-H8",
+    "defect": "Object reflections absent.",
+    "fix": "Planar reflections.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 8,
+    "score": 4,
+    "cells": "A3-H4",
+    "defect": "Hinterland is a uniform pale speckled plane with a repeating lattice to a hard straight land/sky edge at row 3.",
+    "fix": "Add terrain elevation noise, lakes and distance haze; break the lattice with a large-scale mask.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 24,
+    "score": 4,
+    "cells": "A3-H4, A6-C7",
+    "defect": "Hinterland is a regular lattice of identical blocks; suburb boxes repeat.",
+    "fix": "Break the lattice with noise and district variation.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 1,
+    "score": 4,
+    "cells": "A1-H8",
+    "defect": "Aircraft exits the frame by flight.png; inland fill at A3-H3 is a flat speckled plane.",
+    "fix": "Follow camera; add inland terrain detail.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 4,
+    "cells": "E4",
+    "defect": "Opaque glass.",
+    "fix": "Transmissive glass.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 11,
+    "score": 4,
+    "cells": "C6-D7",
+    "defect": "No V-wake.",
+    "fix": "V-wake mesh.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 4,
+    "cells": "A4-B5",
+    "defect": "Uniform clone trees.",
+    "fix": "Species variation.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 15,
+    "score": 4,
+    "cells": "A3-H3",
+    "defect": "Hard horizon seam between the terrain plane and sky across the full width.",
+    "fix": "Gradient haze blend.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 18,
+    "score": 4,
+    "cells": "A6-H8",
+    "defect": "Specular absent.",
+    "fix": "Sun specular.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 21,
+    "score": 4,
+    "cells": "E4 -> out of frame",
+    "defect": "Fixed camera loses subject.",
+    "fix": "Follow camera.",
+    "hardFailure": false,
+    "kind": "technical"
+   }
+  ],
+  "sunset": [
+   {
+    "critic": "visual-1",
+    "category": 8,
+    "score": 3,
+    "cells": "A3-H3",
+    "defect": "Flat plane + seam.",
+    "fix": "Terrain detail + blend.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 3,
+    "cells": "C5-F7",
+    "defect": "Wrong reflections.",
+    "fix": "Planar reflection pass.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 18,
+    "score": 3,
+    "cells": "C5-G7",
+    "defect": "Wrong specular.",
+    "fix": "Physically based sun specular.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 18,
+    "score": 4,
+    "cells": "E3-G8",
+    "defect": "Glints are large discrete white blobs (confetti) and 9% of glitter pixels toggle per clip frame.",
+    "fix": "Use a filtered GGX specular with LEAN/Toksvig roughness for distant water.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "technical",
+    "category": 27,
+    "score": 4,
+    "cells": "renderer.info",
+    "defect": "Draw calls 24-27% over budget.",
+    "fix": "Batch.",
+    "hardFailure": false,
+    "kind": "performance"
+   },
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 4,
+    "cells": "D5",
+    "defect": "Opaque.",
+    "fix": "Transmissive.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 11,
+    "score": 4,
+    "cells": "C6-D7",
+    "defect": "No V.",
+    "fix": "V-wake.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 4,
+    "cells": "A4-B4",
+    "defect": "Clones.",
+    "fix": "Variation.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 13,
+    "score": 4,
+    "cells": "F3-H3",
+    "defect": "Aliasing.",
+    "fix": "Tube cables + MSAA.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 16,
+    "score": 4,
+    "cells": "E2, C5-G7",
+    "defect": "Sun and specular inconsistent.",
+    "fix": "Add sun bloom/halo, tie glitter to wave normal and sun vector.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 25,
+    "score": 4,
+    "cells": "A3-H3, C5-G7",
+    "defect": "Artifacts.",
+    "fix": "As above.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 27,
+    "score": 4,
+    "cells": "n/a",
+    "defect": "Start stall.",
+    "fix": "Precompile.",
+    "hardFailure": false,
+    "kind": "performance"
+   }
+  ],
+  "water-landing": [
+   {
+    "critic": "visual-1",
+    "category": 6,
+    "score": 3,
+    "cells": "D5",
+    "defect": "Opaque glass.",
+    "fix": "Transmissive glass.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 10,
+    "score": 3,
+    "cells": "A5-H8",
+    "defect": "Absent.",
+    "fix": "Planar.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 11,
+    "score": 3,
+    "cells": "D6-E8, A4-B5",
+    "defect": "Straight uniform wake, abrupt onset.",
+    "fix": "V-wake with foam and gradual spawn.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 17,
+    "score": 3,
+    "cells": "C8-F8",
+    "defect": "Hard, fully opaque shadow on water.",
+    "fix": "PCSS and reduce water shadow opacity.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 10,
+    "score": 4,
+    "cells": "C7-F8",
+    "defect": "No mirrored aircraft on calm water 2 m below it in still, flight or clip.",
+    "fix": "Add the aircraft layer to the reflection camera and raise fresnel at near-vertical view.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "technical",
+    "category": 12,
+    "score": 4,
+    "cells": "A3-C3, G3-H3",
+    "defect": "Many crowns near-black (A3, G3): foliage shaded as fully unlit at 13:00.",
+    "fix": "Fix impostor normals/shadow term.",
+    "hardFailure": false,
+    "kind": "technical"
+   },
+   {
+    "critic": "visual-1",
+    "category": 12,
+    "score": 4,
+    "cells": "A4-C4",
+    "defect": "Clone blobs.",
+    "fix": "Species variation.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 15,
+    "score": 4,
+    "cells": "A3-H3",
+    "defect": "Hard horizon seam with light band.",
+    "fix": "Blend.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 18,
+    "score": 4,
+    "cells": "A5-H8",
+    "defect": "Absent.",
+    "fix": "Specular.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-1",
+    "category": 25,
+    "score": 4,
+    "cells": "D5, C8-F8",
+    "defect": "Opaque glass.",
+    "fix": "Fix glass.",
+    "hardFailure": true,
+    "kind": "visual"
+   },
+   {
+    "critic": "visual-3",
+    "category": 17,
+    "score": 4,
+    "cells": "C8-F8",
+    "defect": "Shadow is 100% opaque.",
+    "fix": "Reduce shadow strength to 50-60% and soften edges.",
+    "hardFailure": false,
+    "kind": "visual"
+   },
+   {
+    "critic": "technical",
+    "category": 7,
+    "score": 5,
+    "cells": "A3-H3",
+    "defect": "Populated bay shows no structures on the shore.",
+    "fix": "Add shore huts and a marina.",
+    "hardFailure": false,
+    "kind": "visual"
+   }
+  ]
+ },
+ "hardFailures": [
+  {
+   "critic": "technical",
+   "view": "cockpit-city",
+   "category": 5,
+   "cells": "A2-H3, D7-H8",
+   "defect": "Wing underside and cabin walls are one uniform-roughness lambert colour with no texture."
+  },
+  {
+   "critic": "technical",
+   "view": "bridge-low",
+   "category": 12,
+   "cells": "C3-D3",
+   "defect": "Crowns are identical spheres of equal size in a row."
+  },
+  {
+   "critic": "technical",
+   "view": "bridge-low",
+   "category": 13,
+   "cells": "C5-E8, flight.png left",
+   "defect": "Approach deck spans hundreds of metres of open water with no pier beneath it (flight.png x100-330)."
+  },
+  {
+   "critic": "technical",
+   "view": "bridge-low",
+   "category": 24,
+   "cells": "C3-D3, F3-H3",
+   "defect": "Cloned identical tree spheres in a row."
+  },
+  {
+   "critic": "technical",
+   "view": "skyline-high",
+   "category": 24,
+   "cells": "A3-H4, A6-C7",
+   "defect": "Hinterland is a regular lattice of identical blocks; suburb boxes repeat."
+  },
+  {
+   "critic": "technical",
+   "view": "skyline-high",
+   "category": 25,
+   "cells": "E6-F6, A3-H3",
+   "defect": "Dotted cable aliasing and a hard land/sky seam at row 3."
+  },
+  {
+   "critic": "technical",
+   "view": "island-pass",
+   "category": 12,
+   "cells": "A4-E3",
+   "defect": "Palms are identical dark sprites at even spacing along the shore (f050)."
+  },
+  {
+   "critic": "technical",
+   "view": "island-pass",
+   "category": 15,
+   "cells": "F3-H3",
+   "defect": "Sea meets sky in a crisp dark-blue line with no haze band."
+  },
+  {
+   "critic": "technical",
+   "view": "island-pass",
+   "category": 24,
+   "cells": "A3-D4, A4-E3",
+   "defect": "Evenly spaced identical palms; repeated box towers."
+  },
+  {
+   "critic": "technical",
+   "view": "harbor",
+   "category": 24,
+   "cells": "B6-E6, A5-E5",
+   "defect": "Identical warehouses and evenly spaced identical cubes along them."
+  },
+  {
+   "critic": "technical",
+   "view": "night",
+   "category": 27,
+   "cells": "renderer.info",
+   "defect": "Both budgets exceeded: draw calls +23% and triangles +5% in still and flight."
+  },
+  {
+   "critic": "visual-1",
+   "view": "aerial-a",
+   "category": 9,
+   "cells": "A5-H8",
+   "defect": "Ripple normal pattern repeats visibly every ~120 px along row 7 in still.png (tiled water)."
+  },
+  {
+   "critic": "visual-1",
+   "view": "aerial-a",
+   "category": 13,
+   "cells": "F3-H3",
+   "defect": "Road in /tmp/crit/aa_road.png ends abruptly at the shoreline without a ramp, junction or continuation (random termination)."
+  },
+  {
+   "critic": "visual-1",
+   "view": "aerial-a",
+   "category": 24,
+   "cells": "A5-H8, A3-B4",
+   "defect": "Tiling water and clone trees are both visible in ordinary play."
+  },
+  {
+   "critic": "visual-1",
+   "view": "cockpit-city",
+   "category": 1,
+   "cells": "A1-H8",
+   "defect": "A plain white box sits in the lower-left cabin (A6-B7) with no texture or function, breaking the composition."
+  },
+  {
+   "critic": "visual-1",
+   "view": "cockpit-city",
+   "category": 2,
+   "cells": "A3-C4, F3-H4",
+   "defect": "Wing underside is a zero-thickness plane: its leading edge disappears when viewed edge-on in f030."
+  },
+  {
+   "critic": "visual-1",
+   "view": "cockpit-city",
+   "category": 5,
+   "cells": "A5-H8",
+   "defect": "Uniform roughness across panel, coaming, headliner and yoke."
+  },
+  {
+   "critic": "visual-1",
+   "view": "cockpit-city",
+   "category": 25,
+   "cells": "A6-B7, A3-C4",
+   "defect": "Placeholder primitive and zero-thickness wing."
+  },
+  {
+   "critic": "visual-1",
+   "view": "bridge-low",
+   "category": 1,
+   "cells": "A1-H8",
+   "defect": "White cube pier caps float above the water at C6 and E8, drawing the eye."
+  },
+  {
+   "critic": "visual-1",
+   "view": "bridge-low",
+   "category": 2,
+   "cells": "D4-F5",
+   "defect": "Paper-thin tail surfaces and a zero-width tail cone."
+  },
+  {
+   "critic": "visual-1",
+   "view": "bridge-low",
+   "category": 5,
+   "cells": "D4-F5",
+   "defect": "Uniform roughness on paint, floats and struts."
+  },
+  {
+   "critic": "visual-1",
+   "view": "bridge-low",
+   "category": 13,
+   "cells": "C6, E8, B3-F3",
+   "defect": "Bridge supports miss the water (floating pier caps) and cables alias."
+  },
+  {
+   "critic": "visual-1",
+   "view": "bridge-low",
+   "category": 20,
+   "cells": "A1-H8",
+   "defect": "Cable and railing shimmer."
+  },
+  {
+   "critic": "visual-1",
+   "view": "bridge-low",
+   "category": 25,
+   "cells": "C6, E8, D5-F5",
+   "defect": "Floating geometry and paper-thin geometry."
+  },
+  {
+   "critic": "visual-1",
+   "view": "skyline-high",
+   "category": 5,
+   "cells": "E4",
+   "defect": "Uniform roughness."
+  },
+  {
+   "critic": "visual-1",
+   "view": "skyline-high",
+   "category": 8,
+   "cells": "A3-H3",
+   "defect": "Flat terrain plane with visible noise tile and hard horizon seam."
+  },
+  {
+   "critic": "visual-1",
+   "view": "skyline-high",
+   "category": 9,
+   "cells": "A6-H8",
+   "defect": "Ripple tiles visibly along row 7."
+  },
+  {
+   "critic": "visual-1",
+   "view": "skyline-high",
+   "category": 15,
+   "cells": "A3-H3",
+   "defect": "Hard horizon seam between the terrain plane and sky across the full width."
+  },
+  {
+   "critic": "visual-1",
+   "view": "skyline-high",
+   "category": 24,
+   "cells": "A3-H3, A6-H8",
+   "defect": "Visible tiling."
+  },
+  {
+   "critic": "visual-1",
+   "view": "island-pass",
+   "category": 5,
+   "cells": "D5-E6",
+   "defect": "Uniform roughness."
+  },
+  {
+   "critic": "visual-1",
+   "view": "island-pass",
+   "category": 9,
+   "cells": "A5-H8",
+   "defect": "Streaky ripple pattern repeats along row 6-7."
+  },
+  {
+   "critic": "visual-1",
+   "view": "island-pass",
+   "category": 15,
+   "cells": "A3-H3",
+   "defect": "Hard straight horizon seam."
+  },
+  {
+   "critic": "visual-1",
+   "view": "harbor",
+   "category": 1,
+   "cells": "A1-H8",
+   "defect": "A stray yellow-green sphere floats above the quay at F5 with no support."
+  },
+  {
+   "critic": "visual-1",
+   "view": "harbor",
+   "category": 5,
+   "cells": "D5-E6",
+   "defect": "Uniform roughness."
+  },
+  {
+   "critic": "visual-1",
+   "view": "harbor",
+   "category": 9,
+   "cells": "A5-H8",
+   "defect": "Ripple tile along row 7."
+  },
+  {
+   "critic": "visual-1",
+   "view": "harbor",
+   "category": 15,
+   "cells": "A3-H3",
+   "defect": "Hard horizon seam."
+  },
+  {
+   "critic": "visual-1",
+   "view": "harbor",
+   "category": 22,
+   "cells": "F4-H4, F5",
+   "defect": "Evenly spaced objects and floating geometry."
+  },
+  {
+   "critic": "visual-1",
+   "view": "harbor",
+   "category": 25,
+   "cells": "F5",
+   "defect": "Floating geometry."
+  },
+  {
+   "critic": "visual-1",
+   "view": "water-landing",
+   "category": 5,
+   "cells": "D5-E6",
+   "defect": "Uniform roughness."
+  },
+  {
+   "critic": "visual-1",
+   "view": "water-landing",
+   "category": 6,
+   "cells": "D5",
+   "defect": "Opaque glass."
+  },
+  {
+   "critic": "visual-1",
+   "view": "water-landing",
+   "category": 15,
+   "cells": "A3-H3",
+   "defect": "Hard horizon seam with light band."
+  },
+  {
+   "critic": "visual-1",
+   "view": "water-landing",
+   "category": 25,
+   "cells": "D5, C8-F8",
+   "defect": "Opaque glass."
+  },
+  {
+   "critic": "visual-1",
+   "view": "sunset",
+   "category": 5,
+   "cells": "D5-E6",
+   "defect": "Uniform roughness."
+  },
+  {
+   "critic": "visual-1",
+   "view": "sunset",
+   "category": 8,
+   "cells": "A3-H3",
+   "defect": "Flat plane + seam."
+  },
+  {
+   "critic": "visual-1",
+   "view": "sunset",
+   "category": 10,
+   "cells": "C5-F7",
+   "defect": "Wrong reflections."
+  },
+  {
+   "critic": "visual-1",
+   "view": "sunset",
+   "category": 15,
+   "cells": "A3-H3",
+   "defect": "Hard seam."
+  },
+  {
+   "critic": "visual-1",
+   "view": "cloudy",
+   "category": 5,
+   "cells": "D5-E6",
+   "defect": "Uniform roughness."
+  },
+  {
+   "critic": "visual-1",
+   "view": "cloudy",
+   "category": 8,
+   "cells": "A4-H4",
+   "defect": "Foam near the beach draws contour-map lines at B4-C4."
+  },
+  {
+   "critic": "visual-1",
+   "view": "cloudy",
+   "category": 11,
+   "cells": "B4-C4",
+   "defect": "Uniform foam rings."
+  },
+  {
+   "critic": "visual-1",
+   "view": "cloudy",
+   "category": 15,
+   "cells": "A3-H3",
+   "defect": "Hard inland seam."
+  },
+  {
+   "critic": "visual-1",
+   "view": "night",
+   "category": 5,
+   "cells": "D5-E7",
+   "defect": "Uniform roughness."
+  },
+  {
+   "critic": "visual-1",
+   "view": "night",
+   "category": 8,
+   "cells": "A3-H3",
+   "defect": "Flat plane with hard seam."
+  },
+  {
+   "critic": "visual-1",
+   "view": "night",
+   "category": 15,
+   "cells": "A3-H3",
+   "defect": "Hard light-blue horizon band at A3-H3."
+  },
+  {
+   "critic": "visual-1",
+   "view": "plane-rear-quarter",
+   "category": 6,
+   "cells": "D4-E4",
+   "defect": "Rear side window is an opaque dark brown rectangle."
+  },
+  {
+   "critic": "visual-1",
+   "view": "plane-front-quarter",
+   "category": 5,
+   "cells": "D4-F5",
+   "defect": "Stretched texture."
+  },
+  {
+   "critic": "visual-1",
+   "view": "plane-front-quarter",
+   "category": 8,
+   "cells": "A4-H4",
+   "defect": "Hard line at row 4."
+  },
+  {
+   "critic": "visual-1",
+   "view": "plane-front-quarter",
+   "category": 15,
+   "cells": "A4-H4",
+   "defect": "Hard seam."
+  },
+  {
+   "critic": "visual-1",
+   "view": "plane-front-quarter",
+   "category": 25,
+   "cells": "D4-F5, D5",
+   "defect": "Stretched texture + intersecting geometry."
+  },
+  {
+   "critic": "visual-1",
+   "view": "glass-sun",
+   "category": 5,
+   "cells": "A5-C6, D5-F5",
+   "defect": "Stretched/streaked texture."
+  },
+  {
+   "critic": "visual-1",
+   "view": "glass-sun",
+   "category": 6,
+   "cells": "B3-F4",
+   "defect": "No fresnel or sun highlight on glass facing the 15:30 sun; reflection smeared."
+  },
+  {
+   "critic": "visual-1",
+   "view": "glass-sun",
+   "category": 8,
+   "cells": "A3-H3",
+   "defect": "Seam."
+  },
+  {
+   "critic": "visual-1",
+   "view": "glass-sun",
+   "category": 15,
+   "cells": "A3-H3",
+   "defect": "Seam."
+  },
+  {
+   "critic": "visual-1",
+   "view": "glass-sun",
+   "category": 25,
+   "cells": "D5-F5, D5",
+   "defect": "Stretched texture + intersecting geometry."
+  },
+  {
+   "critic": "visual-2",
+   "view": "aerial-a",
+   "category": 12,
+   "cells": "C5-E8",
+   "defect": "Trees are clone spheres with a repeated three-colour palette and no trunks or palms distinguishable."
+  },
+  {
+   "critic": "visual-2",
+   "view": "aerial-a",
+   "category": 24,
+   "cells": "C5-E8, H3",
+   "defect": "Clone trees and clone buildings are visible in ordinary play."
+  },
+  {
+   "critic": "visual-2",
+   "view": "cockpit-city",
+   "category": 5,
+   "cells": "B2-H3, D6-H8",
+   "defect": "Uniform roughness across the entire wing underside and glareshield."
+  },
+  {
+   "critic": "visual-2",
+   "view": "bridge-low",
+   "category": 5,
+   "cells": "C5-F7",
+   "defect": "Uniform roughness across the aircraft skin."
+  },
+  {
+   "critic": "visual-2",
+   "view": "bridge-low",
+   "category": 20,
+   "cells": "clip f000-f059",
+   "defect": "Cable shimmer visible in motion."
+  },
+  {
+   "critic": "visual-2",
+   "view": "skyline-high",
+   "category": 12,
+   "cells": "A8-C8, G7-H7",
+   "defect": "Clone trees."
+  },
+  {
+   "critic": "visual-2",
+   "view": "skyline-high",
+   "category": 24,
+   "cells": "E7-H8, A6-C7",
+   "defect": "Clones visible."
+  },
+  {
+   "critic": "visual-2",
+   "view": "island-pass",
+   "category": 5,
+   "cells": "C5-F7",
+   "defect": "Uniform roughness."
+  },
+  {
+   "critic": "visual-2",
+   "view": "island-pass",
+   "category": 12,
+   "cells": "C3-E3, A4-B4",
+   "defect": "Evenly spaced clone palms."
+  },
+  {
+   "critic": "visual-2",
+   "view": "island-pass",
+   "category": 24,
+   "cells": "C3-E3, A3-C4",
+   "defect": "Repetition visible."
+  },
+  {
+   "critic": "visual-2",
+   "view": "harbor",
+   "category": 5,
+   "cells": "C5-F7",
+   "defect": "Uniform roughness."
+  },
+  {
+   "critic": "visual-2",
+   "view": "harbor",
+   "category": 20,
+   "cells": "clip f000-f059",
+   "defect": "Shimmer."
+  },
+  {
+   "critic": "visual-2",
+   "view": "harbor",
+   "category": 24,
+   "cells": "A5-G5",
+   "defect": "Clone containers evenly spaced."
+  },
+  {
+   "critic": "visual-2",
+   "view": "water-landing",
+   "category": 5,
+   "cells": "C5-F7",
+   "defect": "Uniform roughness."
+  },
+  {
+   "critic": "visual-2",
+   "view": "water-landing",
+   "category": 20,
+   "cells": "clip f000-f059",
+   "defect": "Shimmer."
+  },
+  {
+   "critic": "visual-2",
+   "view": "sunset",
+   "category": 5,
+   "cells": "C5-F7",
+   "defect": "Uniform roughness, no rim."
+  },
+  {
+   "critic": "visual-2",
+   "view": "sunset",
+   "category": 20,
+   "cells": "clip f000-f059",
+   "defect": "Glitter flicker."
+  },
+  {
+   "critic": "visual-2",
+   "view": "cloudy",
+   "category": 11,
+   "cells": "D7-E8, F5-F6",
+   "defect": "Uniform foam rings."
+  },
+  {
+   "critic": "visual-2",
+   "view": "cloudy",
+   "category": 12,
+   "cells": "A5-D8",
+   "defect": "Clone blob trees."
+  },
+  {
+   "critic": "visual-2",
+   "view": "cloudy",
+   "category": 20,
+   "cells": "clip f000-f059",
+   "defect": "Shimmer."
+  },
+  {
+   "critic": "visual-2",
+   "view": "cloudy",
+   "category": 24,
+   "cells": "A5-D8",
+   "defect": "Clones."
+  },
+  {
+   "critic": "visual-2",
+   "view": "cloudy",
+   "category": 25,
+   "cells": "D7-E8, A4-H8",
+   "defect": "Artifacts."
+  },
+  {
+   "critic": "visual-2",
+   "view": "plane-rear-quarter",
+   "category": 6,
+   "cells": "D4-E4",
+   "defect": "Opaque glass on the side windows."
+  },
+  {
+   "critic": "visual-2",
+   "view": "plane-rear-quarter",
+   "category": 12,
+   "cells": "A2-H3",
+   "defect": "Clone blob trees."
+  },
+  {
+   "critic": "visual-2",
+   "view": "plane-rear-quarter",
+   "category": 24,
+   "cells": "C3-G3",
+   "defect": "Evenly spaced clones."
+  },
+  {
+   "critic": "visual-2",
+   "view": "plane-front-quarter",
+   "category": 5,
+   "cells": "D4-E5",
+   "defect": "Texture stretched along U on the fuselage side; decal illegible."
+  },
+  {
+   "critic": "visual-2",
+   "view": "plane-front-quarter",
+   "category": 6,
+   "cells": "C4-F4",
+   "defect": "Glass reads as frosted with a stretched texture."
+  },
+  {
+   "critic": "visual-2",
+   "view": "plane-front-quarter",
+   "category": 25,
+   "cells": "D4-E5",
+   "defect": "Texture stretch."
+  },
+  {
+   "critic": "visual-2",
+   "view": "glass-sun",
+   "category": 5,
+   "cells": "D5-F5",
+   "defect": "Texture stretched along V."
+  },
+  {
+   "critic": "visual-2",
+   "view": "glass-sun",
+   "category": 6,
+   "cells": "C3-F4",
+   "defect": "Opaque glass on side windows; frosted streaks on the windshield."
+  },
+  {
+   "critic": "visual-2",
+   "view": "glass-sun",
+   "category": 25,
+   "cells": "C5-D5, D5-F5",
+   "defect": "Texture artifacts."
+  },
+  {
+   "critic": "visual-3",
+   "view": "aerial-a",
+   "category": 12,
+   "cells": "C6-E8",
+   "defect": "Trees are clone spheres without trunks or species variation."
+  },
+  {
+   "critic": "visual-3",
+   "view": "aerial-a",
+   "category": 13,
+   "cells": "D4-E4,A6-B6",
+   "defect": "Sub-pixel cables break into dots and the causeway deck appears to lie on the water."
+  },
+  {
+   "critic": "visual-3",
+   "view": "aerial-a",
+   "category": 24,
+   "cells": "C6-E8,B3-D3",
+   "defect": "Clone trees and clone building boxes are visible at once."
+  },
+  {
+   "critic": "visual-3",
+   "view": "cockpit-city",
+   "category": 2,
+   "cells": "B2-H4",
+   "defect": "Wing floats above the cabin roof with sky visible between them."
+  },
+  {
+   "critic": "visual-3",
+   "view": "cockpit-city",
+   "category": 3,
+   "cells": "B2-H4,C4",
+   "defect": "Floating wing and an unattached hanging object."
+  },
+  {
+   "critic": "visual-3",
+   "view": "cockpit-city",
+   "category": 25,
+   "cells": "B2-H4",
+   "defect": "Floating geometry."
+  },
+  {
+   "critic": "visual-3",
+   "view": "bridge-low",
+   "category": 12,
+   "cells": "C3-D3",
+   "defect": "Clone canopies."
+  },
+  {
+   "critic": "visual-3",
+   "view": "bridge-low",
+   "category": 20,
+   "cells": "clip",
+   "defect": "Shimmer on deck lines and hangers."
+  },
+  {
+   "critic": "visual-3",
+   "view": "skyline-high",
+   "category": 12,
+   "cells": "A8-B8,G6-H7,A4-D4",
+   "defect": "Clone canopies."
+  },
+  {
+   "critic": "visual-3",
+   "view": "island-pass",
+   "category": 12,
+   "cells": "A4-D4",
+   "defect": "Clone palms evenly spaced."
+  },
+  {
+   "critic": "visual-3",
+   "view": "island-pass",
+   "category": 24,
+   "cells": "A4-D4",
+   "defect": "Repetition."
+  },
+  {
+   "critic": "visual-3",
+   "view": "harbor",
+   "category": 12,
+   "cells": "D3-E3,B6",
+   "defect": "Floating canopy sphere on the apron with no trunk."
+  },
+  {
+   "critic": "visual-3",
+   "view": "harbor",
+   "category": 13,
+   "cells": "A4-C3,B6-C6",
+   "defect": "Evenly spaced identical props."
+  },
+  {
+   "critic": "visual-3",
+   "view": "harbor",
+   "category": 20,
+   "cells": "clip",
+   "defect": "Shimmer on container edges."
+  },
+  {
+   "critic": "visual-3",
+   "view": "harbor",
+   "category": 24,
+   "cells": "D4-F4,B6-C6",
+   "defect": "Repetition."
+  },
+  {
+   "critic": "visual-3",
+   "view": "water-landing",
+   "category": 12,
+   "cells": "A3-C3,G3-H3",
+   "defect": "Repetition."
+  },
+  {
+   "critic": "visual-3",
+   "view": "water-landing",
+   "category": 20,
+   "cells": "clip",
+   "defect": "Water shimmer."
+  },
+  {
+   "critic": "visual-3",
+   "view": "water-landing",
+   "category": 24,
+   "cells": "A3-C3",
+   "defect": "Repetition."
+  },
+  {
+   "critic": "visual-3",
+   "view": "sunset",
+   "category": 12,
+   "cells": "B3-D4",
+   "defect": "Repetition."
+  },
+  {
+   "critic": "visual-3",
+   "view": "sunset",
+   "category": 13,
+   "cells": "A4-D5,D4-E5",
+   "defect": "Deck floats on the water and cables break into dots."
+  },
+  {
+   "critic": "visual-3",
+   "view": "sunset",
+   "category": 24,
+   "cells": "B3-D4",
+   "defect": "Repetition."
+  },
+  {
+   "critic": "visual-3",
+   "view": "cloudy",
+   "category": 12,
+   "cells": "A6-C8",
+   "defect": "Clone canopies."
+  },
+  {
+   "critic": "visual-3",
+   "view": "cloudy",
+   "category": 20,
+   "cells": "clip",
+   "defect": "Shimmer."
+  },
+  {
+   "critic": "visual-3",
+   "view": "cloudy",
+   "category": 24,
+   "cells": "A6-C8",
+   "defect": "Repetition."
+  },
+  {
+   "critic": "visual-3",
+   "view": "night",
+   "category": 12,
+   "cells": "C4-D4",
+   "defect": "Repetition."
+  },
+  {
+   "critic": "visual-3",
+   "view": "night",
+   "category": 24,
+   "cells": "C4-D4",
+   "defect": "Repetition."
+  },
+  {
+   "critic": "visual-3",
+   "view": "plane-rear-quarter",
+   "category": 12,
+   "cells": "B2-H3",
+   "defect": "Clone trees."
+  },
+  {
+   "critic": "visual-3",
+   "view": "plane-rear-quarter",
+   "category": 24,
+   "cells": "B2-H3,C3-F3",
+   "defect": "Repetition."
+  },
+  {
+   "critic": "visual-3",
+   "view": "glass-sun",
+   "category": 3,
+   "cells": "D7-F8,F4-G5",
+   "defect": "Floating translucent rectangle."
+  },
+  {
+   "critic": "visual-3",
+   "view": "glass-sun",
+   "category": 25,
+   "cells": "E5-F5,G4,F4-G5",
+   "defect": "Decal artifacts."
+  }
+ ]
+}
