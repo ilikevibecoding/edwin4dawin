@@ -768,6 +768,28 @@ function fridgeSlide(k) {
   lashing(k, { x: fx, z: fz + 0.1, y0: floorY + 0.06, y1: cy + H, halfW: W * 0.5 + 0.006, buckle: 1 });
 }
 
+/**
+ * `lampHot` for a cover over a row of optics: the sum of a Gaussian lobe at
+ * each pod's x (width `w` is the 1/e half-width), clamped to 1, so the lit-lamp
+ * shaping in `applyLampGlow` fires over each pod and not over the plastic
+ * between them. Same attribute `hotSpot` writes; only the shape differs.
+ */
+function barLobes(geo, xs, w) {
+  const pos = geo.attributes.position;
+  const hot = new Float32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    let s = 0;
+    for (const xi of xs) {
+      const t = (x - xi) / w;
+      s += Math.exp(-t * t);
+    }
+    hot[i] = Math.min(1, s);
+  }
+  geo.setAttribute('lampHot', new THREE.BufferAttribute(hot, 1));
+  return geo;
+}
+
 function lightBar(k) {
   const y = S.roofY + 0.2;
   const z = S.cabFrontZ + 0.02;
@@ -783,13 +805,34 @@ function lightBar(k) {
       pos: [x, y, z + 0.045],
       rot: [Math.PI / 2, 0, 0],
     });
-    k.add('headlight', new THREE.CylinderGeometry(0.024, 0.024, 0.01, 12), {
+    // The LED itself, on the headlamp key so it follows the headlamp level.
+    // With a flat hot-spot weight rather than the radial one `lampReady` gives
+    // a headlamp disc: at night `head` 9.0 on 0x6f6653 is 1.4 of radiance,
+    // and the radial core (x3.5 at the centre) took each pod to 5 — over the
+    // night bloom threshold of 2.0 by the same margin as a headlamp, and nine
+    // of those 147 mm apart merged into one slab. Measured on the after
+    // frame with the pods hidden, the box over Y 0.5 fell from 1161 px to
+    // 154, so the pods were the slab, not the cover. At 0.25 the pod peaks
+    // at 2.3: lit, just over the threshold, with a tenth of a headlamp's
+    // bloom energy.
+    k.add('headlight', hotSpot(new THREE.CylinderGeometry(0.024, 0.024, 0.01, 12), 0.25), {
       pos: [x, y, z + 0.072],
       rot: [Math.PI / 2, 0, 0],
     });
   }
-  // one cover over nine LEDs: lit along its whole length, not from one centre
-  k.add('lensClear', hotSpot(gbox(len - 0.02, 0.075, 0.012, 0.006), 0.55), { pos: [0, y, z + 0.078] });
+  // One cover over nine LEDs, on its own material key (`barCover`) so its level
+  // is set apart from the headlamp lenses. Round 4 had it on `lensClear` with a
+  // uniform hot-spot weight of 0.55: at night that put `lens 2.2 x (1 + 0.55^2
+  // x core 7)` = 6.8 of emissive across the whole 1.3 m cover, and at the
+  // lens's 0.1 alpha that is 0.68 of flat radiance laid over every pixel of the
+  // bar — the 60 px plateau at Y 0.7 critic B measured, with the nine optics
+  // buried under it. The cover now carries a nine-lobe mask in the same
+  // `lampHot` attribute: a Gaussian at each pod's x, 30 mm wide, so the cover
+  // scatters light *at the pods* and stays clear between them. The box is
+  // subdivided along its length so the lobes have vertices to live on.
+  const cover = new THREE.BoxGeometry(len - 0.02, 0.075, 0.012, 88, 1, 1);
+  barLobes(cover, Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * (len / n)), 0.03);
+  k.add('barCover', cover, { pos: [0, y, z + 0.078] });
   // mounts
   for (const side of [-1, 1]) {
     k.add('steelDark', gbox(0.04, 0.14, 0.05, 0.01), { pos: [side * (len * 0.42), y - 0.1, z + 0.01] });

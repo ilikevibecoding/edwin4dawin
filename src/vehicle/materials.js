@@ -96,8 +96,7 @@ export function vehicleMaterials(env = null) {
   // band, so the coat is a shade rougher — a mirror-flat metre of lacquer
   // pointing straight up is the classic way to blow a highlight out.
   m.paintRoof = makePaintMaterial(PALETTE.bodyPaint, {
-    roughness: 0.38,
-    clearcoatRoughness: 0.13,
+    clearcoatRoughness: 0.18,
     dirt: 1.2,
     dirtArch: 0,
     dirtTag: 'roof',
@@ -122,15 +121,14 @@ export function vehicleMaterials(env = null) {
     // These panels gain the most from it: 0.331 saturation to 0.374.
     bw: { strength: 1.8, band: 0.5, flat: 0.5, ambient: 1.6 },
   });
+  // Basecoat roughness on every paint key is the map's now (see
+  // makePaintMaterial); the coats are one lacquer at 0.15, the roof a shade
+  // rougher because a flat metre pointing at the sky is where a coat blows.
   m.paintDark = makePaintMaterial(PALETTE.bodyPaintDark, {
-    roughness: 0.42,
-    clearcoatRoughness: 0.11,
     dirtTag: 'dark',
   });
   m.paintAccent = makePaintMaterial(PALETTE.accent, {
-    roughness: 0.44,
     clearcoat: 0.78,
-    clearcoatRoughness: 0.13,
     dirtTag: 'accent',
     bw: { strength: 1.5, band: 0.55 },
   });
@@ -604,7 +602,13 @@ export function vehicleMaterials(env = null) {
       band: 0.5,
       trees: 1.15,
       line: 0.3,
-      pane: 1.0,
+      // The Fresnel close on the alpha, 1.0 -> 0.7 (round 5). Critic B: "the
+      // cowl through the glass is milkier than it should be at that angle —
+      // the Fresnel term is not angle-gated enough"; with `see` down on nine
+      // of twelve conditions this is the one term every pane shares. The
+      // reflection itself is untouched; what comes down is how far it closes
+      // the pane over what is behind it.
+      pane: 0.7,
       ground: 0x3a2618,
       wall: 0x2a2a1c,
       rim: 0xfff0d2,
@@ -656,7 +660,9 @@ export function vehicleMaterials(env = null) {
     // `interior` shot paid veil 0.048 -> 0.075, see 0.81 -> 0.77 for 0.3
     // (measured by toggling the uniform alone). At 0.2 the pane still closes
     // at the top edge; Fresnel alone would give 0.09 at 60 and 0.2 at 75.
-    bw: { graze: 0.2 },
+    // Then 0.14 (round 5, the ~30 per cent all three critics asked for), with
+    // the gate in the shader moved from 39 to 50 degrees.
+    bw: { graze: 0.14 },
   });
   // Rear cab glass: sits in the plume the truck drags behind it.
   pane('glassDark', {
@@ -780,6 +786,27 @@ export function vehicleMaterials(env = null) {
     clearcoatRoughness: 0.02,
     depthWrite: false,
   });
+  // The roof bar's polycarbonate cover, split off `lensClear` (round 5). Same
+  // glass, its own emissive level: `index.js` drives it from `BEAM.*.cover`
+  // (0.5 at night against the headlamp lenses' 2.2), and the lit-lamp core is
+  // held to 3 rather than 7 because the geometry's nine-lobe `lampHot` mask now
+  // does the shaping — at core 7 a lobe peak still summed to 0.4 of radiance
+  // at the cover's alpha, which is a second row of pods stacked on the LEDs
+  // rather than the scatter round them. The bloom belongs to the nine
+  // `headlight` discs behind it.
+  m.barCover = new THREE.MeshPhysicalMaterial({
+    color: 0xc3d4de,
+    metalness: 0,
+    roughness: 0.05,
+    normalMap: lensNormal(),
+    normalScale: new THREE.Vector2(0.25, 0.25),
+    transparent: true,
+    opacity: 0.1,
+    envMapIntensity: 1.2,
+    clearcoat: 1,
+    clearcoatRoughness: 0.03,
+    depthWrite: false,
+  });
   // Cover glass over a whole lamp unit: nearly clear, so the reflector and the
   // projector behind it are what you actually see. A prism map at this size
   // tiles into a visible waffle across the aperture, so the flutes are fine and
@@ -858,8 +885,11 @@ export function vehicleMaterials(env = null) {
   // the emissive is zero and the lens is what it was in daylight.
   m.lensClear.emissive = new THREE.Color(0xffeccb);
   m.lensRibbed.emissive = new THREE.Color(0xffeccb);
+  // the bar is an LED unit: its scatter is cool where the halogen covers are warm
+  m.barCover.emissive = new THREE.Color(0xeef4ff);
   m.lensClear.emissiveIntensity = 0;
   m.lensRibbed.emissiveIntensity = 0;
+  m.barCover.emissiveIntensity = 0;
   // Lit-lamp shaping (see `applyLampGlow`): gated by `uLampOn`, which index.js
   // drives with the lamp state, so none of it touches the daytime lens. The
   // colour keys bleach less than the clear ones — a red lens stays red to the
@@ -875,6 +905,7 @@ export function vehicleMaterials(env = null) {
   // white centre, which is the reading of a lit lamp.
   applyLampGlow(m.lensClear, { tag: 'lensClear', core: 7.0, bleach: 0.55, coreExp: 2.0 });
   applyLampGlow(m.lensRibbed, { tag: 'lensRibbed', core: 7.0, bleach: 0.55, coreExp: 2.0 });
+  applyLampGlow(m.barCover, { tag: 'barCover', core: 3.0, bleach: 0.4, coreExp: 1.5 });
   // The dish behind every clear lens throws the bulb's light straight back at the
   // camera when it is on: the whole aperture glows, graded by how squarely each
   // stamped step faces the eye, which is what separates a lit headlamp from a

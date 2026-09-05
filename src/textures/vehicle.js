@@ -81,6 +81,41 @@ export function paintPeelNormal() {
 }
 
 /**
+ * The clearcoat's normal: orange peel with the flake glint folded into it
+ * (round 5). The flake used to sit on the *base* normal, where it broke the
+ * satin lobe into a sparkle that three read as a brightened satin material —
+ * critic C measured the brightest one per cent of the paint just reaching sky
+ * luminance and called it "satin enamel, no clearcoat". Under a real lacquer
+ * the flake shows *through* the coat as a glint in the coat's own reflection,
+ * so it goes on the coat's normal at a fraction of the peel's amplitude, and
+ * the basecoat is left smooth under it.
+ */
+export function paintCoatNormal() {
+  return cached('veh.coatNormal', () => {
+    const n = 256;
+    const rnd = mulberry32(31);
+    const flake = heightField(n, n, () => rnd() * 0.5);
+    const hf = heightField(n, n, (x, y) => {
+      const u = x / n;
+      const v = y / n;
+      const peel =
+        fbm(u * 7, v * 7, { octaves: 3, period: 7, seed: 313 }) * 0.52 +
+        fbm(u * 19, v * 19, { octaves: 2, period: 19, seed: 77 }) * 0.31 +
+        fbm(u * 54, v * 54, { octaves: 2, period: 54, seed: 641 }) * 0.17;
+      // the flake at twice the peel's texel rate, clumped a little so the
+      // glints group under a light the way real flake does
+      const fx = (x * 2) % n;
+      const fy = (y * 2) % n;
+      let s = 0;
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) s += flake[(((fy + oy) % n) + n) % n * n + ((((fx + ox) % n) + n) % n)];
+      const fl = flake[fy * n + fx] * 0.75 + (s / 9) * 0.25;
+      return peel + (fl - 0.25) * 0.22;
+    });
+    return normalFromHeight(hf, n, n, 1.0, { repeat: 3 });
+  });
+}
+
+/**
  * Basecoat roughness. This is the lobe the metallic flake sparkles in, so it
  * sits well above the clearcoat's — a smooth basecoat under a smooth coat gives
  * two coincident mirror highlights and reads as vacuum-formed plastic.
@@ -139,7 +174,24 @@ export function paintRoughness() {
  */
 export function paintBaseMap(color = PALETTE.bodyPaint) {
   return cached('veh.base.' + color, () => {
-    const base = rgb(color);
+    // Pigment pulled a few degrees toward yellow (round 5). With the basecoat
+    // now a true satin under the lacquer, the warm ground the old glossy base
+    // used to reflect into its mid-tones is gone and the coat reflects blue
+    // sky instead: measured on the day hero frame the paint's mid-tone hue
+    // moved 128 -> 135 degrees. The brief holds the hue to +-3 of round 4, so
+    // the pigment gives back what the reflection model took. Red up 8 per
+    // cent and blue down 9 overshot (frame hue 123.2, the pigment moves the
+    // frame nearly one for one through the clearcoat), so it is red up 4.5,
+    // blue down 5: about -5 degrees of pigment hue on a 0x1d5344 pine green.
+    // That landed the frame at 128.6. Then the basecoat's specularIntensity
+    // went to 0.35 (makePaintMaterial), which takes a neutral sky term out of
+    // the mid-tones and read +3.9 degrees cooler in a live A/B, so the pigment
+    // gives another 2.5 red / 3 blue back to hold the frame at round 4's 128.
+    // Shot: 129.8 at 0.35; then 131.2 with the base at 0.2 (the last of the
+    // neutral sky term gone from the mid-tones). One more 2.5 / 3 lands it at
+    // 128.3 by the same rate — the pigment is now 9.5 % redder and 11 % less
+    // blue than PALETTE.bodyPaint, and the *frame* is the colour round 4 had.
+    const base = rgb(color).map((c, i) => Math.min(255, c * [1.095, 1.0, 0.89][i]));
     // The swing either side of the nominal colour, and it has to stay small and
     // stay centred. Two things had it neither: `hi` lifted red by 20% + 13 on a
     // green, which desaturates hard because red is the channel furthest from the
@@ -631,8 +683,11 @@ export function applyBrightwork(
           gzF *= mix( 0.2, 1.0, bwPaneOut ) * uBwPane;
           // grazing sky (see graze above): the reflected radiance the BRDF already
           // sampled, added on the outside face only, and closing the alpha by
-          // the same amount so it reads as reflection rather than as a veil
-          float gzG = uBwGraze * smoothstep( 0.22, 0.85, gzE ) * bwPaneOut;
+          // the same amount so it reads as reflection rather than as a veil.
+          // Gated from 50 degrees rather than 39 (round 5): at the old gate the
+          // term was already a third on over the middle of a door pane seen
+          // from beside the truck, which is the region the eye looks through.
+          float gzG = uBwGraze * smoothstep( 0.36, 0.9, gzE ) * bwPaneOut;
           float gzA = clamp( diffuseColor.a + ( gzF + gzG ) * ( 1.0 - diffuseColor.a ), 0.02, 1.0 );
           vec3 gzD = totalDiffuse + totalEmissiveRadiance * mix( 0.32, 1.0, bwPaneOut );
           vec3 gzS = max( outgoingLight - totalDiffuse - totalEmissiveRadiance, vec3( 0.0 ) ) + radiance * gzG;
@@ -1895,6 +1950,18 @@ export function glassLayerMap(kind = 'screen') {
         const u = x / S;
         const v = y / S;
         const cx = u - 0.5;
+        // Where dust settles (round 5). Every pane's film had a floor that ran
+        // the full height of the glass — 0.14 plus a blotch on the screen,
+        // 0.16 plus blotch and streak on the doors, 0.55 on the rear — and all
+        // three critics measured the result as an even veil (`see` down
+        // 0.03–0.09 on nine of twelve conditions, veil up ~0.02, "the same
+        // density at the top rail as at the sill"). Dust on glass is thrown
+        // up from below and slides down; it collects on the sill and along
+        // the lower edge and the upper pane stays comparatively clear. So the
+        // floor terms are weighted to the bottom 15–20 per cent of each pane
+        // and fall to a fraction above it; the edge and corner build-up and
+        // the wiper ridges keep their own weights.
+        const settle = (floor, top = 0.22) => floor + (1 - floor) * (1 - smoothstep(0.02, top, v));
         let dust;
         let band = 0;
         let frit;
@@ -1943,10 +2010,17 @@ export function glassLayerMap(kind = 'screen') {
           // floor and the top band both pulled down; the corners the arcs never
           // reach keep theirs.
           const low = (1 - smoothstep(0.02, 0.34, v)) * (0.7 + 0.3 * blotch);
-          const corner = smoothstep(0.3, 0.5, Math.abs(cx)) * 0.55 + smoothstep(0.82, 1.0, v) * 0.3;
+          // the corners the arcs never reach keep their film; the header band
+          // is down to a trace now the floor no longer runs up to it
+          const corner = smoothstep(0.3, 0.5, Math.abs(cx)) * 0.45 + smoothstep(0.82, 1.0, v) * 0.12;
           const ledge = (1 - smoothstep(0.0, 0.1, v)) * 0.45;
+          // floor and blotch settled: full weight at the cowl, a quarter of it
+          // over the part of the screen the driver looks through
+          const s = settle(0.25);
           dust = clamp(
-            (0.14 + blotch * 0.24 + corner + ledge + low * 0.5) * (1 - swept * 0.9) + ridge * 0.5 + grit * 0.14 * (1 - swept * 0.6),
+            ((0.14 + blotch * 0.24) * s + corner + ledge + low * 0.5) * (1 - swept * 0.9) +
+              ridge * 0.5 +
+              grit * 0.14 * s * (1 - swept * 0.6),
           );
           // Factory shade band: about 120 mm of the 810 mm pane, graded out.
           // The first cut ran from 70 per cent height, a 270 mm band, which is
@@ -1969,7 +2043,10 @@ export function glassLayerMap(kind = 'screen') {
           const rearLow = smoothstep(0.3, 1.0, u) * (1 - smoothstep(0.0, 0.6, v));
           const wipe = 1 - smoothstep(0.18, 0.32, Math.hypot((u - 0.42) * 0.8, v - 0.55));
           const drips = smoothstep(0.55, 0.9, streak) * (1 - smoothstep(0.0, 0.7, v));
-          dust = clamp((0.16 + blotch * 0.3 + streak * 0.2 + rearLow * 0.45 + drips * 0.18) * (1 - wipe * 0.65));
+          // the even floor, blotch and wind streaks settle to the sill; the
+          // caked rear corner and the drips already live low on the pane
+          const s = settle(0.22);
+          dust = clamp(((0.16 + blotch * 0.3 + streak * 0.2) * s + rearLow * 0.45 + drips * 0.18) * (1 - wipe * 0.65));
           // Door glass is not bonded, so it has no frit; what it has is the edge
           // of the sheet disappearing into the channel, a centimetre of dark.
           frit = Math.max(smoothstep(0.478, 0.495, Math.abs(cx)), smoothstep(0.472, 0.492, Math.abs(v - 0.5)));
@@ -1979,7 +2056,20 @@ export function glassLayerMap(kind = 'screen') {
           // stripe where somebody checked the load.
           const blotch = fbm(u * 7, v * 7, { octaves: 5, period: 7, seed: 209 });
           const finger = 1 - smoothstep(0.03, 0.05, Math.abs(v - 0.5 - (u - 0.5) * 0.12)) * smoothstep(0.2, 0.3, u);
-          dust = clamp(0.55 + blotch * 0.45 - finger * 0.5 * smoothstep(0.55, 0.9, u));
+          // A rear wiper (round 5, critic C): one blade pivoting below the
+          // pane's bottom edge, sweeping an arc of radius 0.42 about (0.5,
+          // 0.35) with a 0.06 feather, so the middle of the glass is wiped
+          // back to near-clear and the plume's dust is what lies outside the
+          // sweep — with the blade's ridge of pushed dust along the arc's rim.
+          // The film itself settles: half weight at the header, full at the
+          // sill, since even in the plume the fines slide down the pane.
+          const ar = Math.hypot((u - 0.5) * 1.05, v - 0.35);
+          // the half-annulus above the pivot line, between the blade's heel
+          // and its tip
+          const arc = (1 - smoothstep(0.36, 0.42, ar)) * smoothstep(0.06, 0.12, ar) * smoothstep(0.3, 0.38, v);
+          const ridge = smoothstep(0.38, 0.44, ar) * (1 - smoothstep(0.44, 0.5, ar)) * smoothstep(0.3, 0.38, v);
+          const s = settle(0.5, 0.3);
+          dust = clamp((0.55 + blotch * 0.45) * s * (1 - arc * 0.82) + ridge * 0.22 - finger * 0.5 * smoothstep(0.55, 0.9, u));
           // bonded rear glass: a 40 mm frit on a 1.26 x 0.44 m pane
           frit = fritBand(u, v, 0.032, 0.09, 0.008, 0.02, x, y);
         }
@@ -2157,7 +2247,12 @@ export function glassTintMap() {
         const r = Math.hypot(cx * 1.15, cy);
         const unswept = smoothstep(0.46, 0.62, r);
         let c = mixRgb(tint, shade, band * 0.7 + border * 0.5);
-        c = mixRgb(c, grime, clamp(unswept * (0.25 + dust * 0.6)) * 0.55);
+        // Grime in the *tint* is dust in the diffuse channel — lit, and laid
+        // across the whole unswept area as a wash. Down to a trace (round 5):
+        // the dust lives in the layer map's alpha and roughness now, settled
+        // to the sill, and this only has to keep the unswept corners from
+        // being the same clear green as the swept glass.
+        c = mixRgb(c, grime, clamp(unswept * (0.25 + dust * 0.6)) * 0.2);
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
@@ -2372,6 +2467,65 @@ export function vinylMaps(kind = 'dark') {
       },
       { repeat: 8 },
     );
+    return { map, normal, rough };
+  });
+}
+
+/**
+ * Coarse woven door card (round 5). The cards used to share the dark vinyl's
+ * grain with the fascia and the column, and with the pad's faded set differing
+ * only in value the whole cab read as one moulding at one roughness. A trim
+ * panel on a working truck is a board wrapped in a coarse cloth — hessian
+ * weight, 8 mm yarns — so this is a plain weave at that pitch with the tone
+ * drifting over an fbm of period 4 (about 60 mm patches on the card), and a
+ * roughness that sits at 0.9 and only moves a little across the yarn crowns.
+ * No worley cells, no grit net: the read is fibre, not grain.
+ */
+export function wovenCardMaps() {
+  return cached('veh.cardWoven', () => {
+    const n = 256;
+    const yarns = 32;
+    const yarn = (t, seed) => 0.5 + 0.5 * Math.sin(t * Math.PI * 2 + (fbm(t * 3, seed * 0.5, { octaves: 2, period: 3, seed }) - 0.5) * 1.6);
+    const hf = heightField(n, n, (x, y) => {
+      const u = x / n;
+      const v = y / n;
+      const warp = yarn(u * yarns, 41);
+      const weft = yarn(v * yarns, 83);
+      // plain weave: alternate crossings put the warp or the weft on top
+      const cu = Math.floor(u * yarns);
+      const cv = Math.floor(v * yarns);
+      const over = (cu + cv) & 1 ? warp : weft;
+      const under = (cu + cv) & 1 ? weft : warp;
+      const weave = over * 0.7 + under * 0.3;
+      const fuzz = fbm(u * 90, v * 90, { octaves: 2, period: 90, seed: 19 });
+      return clamp(weave * 0.82 + fuzz * 0.18);
+    });
+    const normal = normalFromHeight(hf, n, n, 1.1, { repeat: 4 });
+    // A shade darker and browner than the dark vinyl (0x3e3c37), so the card
+    // separates from the fascia below it by hue as well as by texture.
+    const base = rgb(0x3a352c);
+    const high = rgb(0x5a5245);
+    const bleach = rgb(0x6e6858);
+    const map = pixelTexture(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n;
+        const v = y / n;
+        const h = hf[y * n + x];
+        // the coarse drift the brief asks for: period 4, so the card is not
+        // one flat value but is not mottled at the yarn scale either
+        const drift = fbm(u * 4, v * 4, { octaves: 3, period: 4, seed: 907 });
+        let c = mixRgb(base, high, clamp(0.2 + h * 0.8));
+        c = mixRgb(c, bleach, smoothstep(0.55, 0.9, drift) * 0.45);
+        c = mixRgb(c, [c[0] * 0.8, c[1] * 0.8, c[2] * 0.82], (1 - smoothstep(0.3, 0.55, drift)) * 0.4);
+        out[0] = c[0];
+        out[1] = c[1];
+        out[2] = c[2];
+      },
+      { srgb: true, repeat: 4 },
+    );
+    const rough = roughnessTexture(n, n, (x, y) => clamp(0.94 - hf[y * n + x] * 0.08), { repeat: 4 });
     return { map, normal, rough };
   });
 }
@@ -3674,16 +3828,45 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
   const m = new THREE.MeshPhysicalMaterial({
     map: paintBaseMap(color),
     roughnessMap: paintRoughness(),
-    normalMap: paintFlakeNormal(),
-    normalScale: new THREE.Vector2(0.1, 0.1),
     // Automotive paint is a dielectric basecoat under clear lacquer. Pushing
     // metalness up kills the hue and turns the truck into bare aluminium; the
     // clearcoat layer is what supplies the wet highlight.
+    //
+    // Round 5: the coat made unambiguous. Two of three critics read the
+    // round-4 paint as a clearcoated dielectric and the third as a satin
+    // enamel with a brightened lobe, and the numbers were on the third's
+    // side: the brightest one per cent of the green only just reached sky
+    // luminance, so the "sky reflection" was a sheen, not a mirror. The
+    // basecoat is now a plain satin — no normal map on it, roughness up to
+    // 0.42 so its lobe cannot pass for the coat's — and the coat carries the
+    // peel *and* the flake on its own normal at 0.15 roughness: rough enough
+    // that a 3 m panel does not hand back a hard-edged sky, smooth enough that
+    // the horizon lands on the door as a line.
+    // `roughnessMap` multiplies this, and the map runs 0.2–0.52: at the old
+    // 0.34 the basecoat's effective roughness was 0.07–0.18, a second
+    // near-mirror under the coat. At 1.0 the map *is* the basecoat.
     metalness: 0.0,
-    roughness: 0.34,
+    roughness: 1.0,
+    // The basecoat sits *under* the lacquer, so its interface is pigment-binder
+    // to clear resin, not resin to air: the Fresnel there is a fraction of the
+    // 4% three gives every dielectric. Left at 1.0 the satin base carried the
+    // sun's own GGX lobe, and at dusk — sun low and behind the truck, bonnet at
+    // grazing — that lobe at roughness 0.2–0.5 covered the whole bonnet as a
+    // sheet at Y 0.6 and bloomed over the grille (dusk hero grille box p95
+    // 0.520 -> 0.614, the round-4 must-not-regress). Measured live on that
+    // frame, one uniform at a time: envMapIntensity 0.4 changed nothing
+    // (0.610 -> 0.602), the coat off 0.560, base roughness back to the old
+    // 0.34 0.526, specularIntensity 0.35 0.529 and 0.2 0.523. So it is the
+    // base's direct specular, and this is the physically right knob for it —
+    // the coat keeps the whole 4%, the base keeps its satin lobe at a fifth.
+    // Built and shot at 0.35 the box came back 0.541 against round 4's 0.520,
+    // the last 0.02 being the coat's rim on the bonnet lip plus what the base
+    // still adds under it; a second live A/B on that build had 0.2 take the
+    // box from 0.529 to 0.506 with the day hero's hue moving 0.8 degrees.
+    specularIntensity: 0.2,
     clearcoat: 1.0,
-    clearcoatRoughness: 0.07,
-    clearcoatNormalMap: paintPeelNormal(),
+    clearcoatRoughness: 0.15,
+    clearcoatNormalMap: paintCoatNormal(),
     clearcoatNormalScale: new THREE.Vector2(0.3, 0.3),
     // Up from 0.3. All three round-2 critics scored the paint's reflection
     // "a sky gradient only, no environment shapes", and that is what 0.3

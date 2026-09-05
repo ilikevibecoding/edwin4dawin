@@ -116,10 +116,23 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
   // gets 40 x 0.4 x 0.10 x 2 lamps = 3.2, plus the bar, against the moon's
   // 1.4. The sky module's beam sprites read these intensities and scale their
   // scatter as intensity / 13, so the value is held as low as the pool allows.
+  //
+  // `cover` is the roof bar's own cover (`barCover`), split off the headlamp
+  // lenses in round 5: at `lens` 2.2 with the uniform hot-spot the whole 1.3 m
+  // cover sat over the night bloom threshold and read as one white slab with
+  // the nine optics invisible (critic B: 1 435 px over Y 0.5 in the hero's bar
+  // box against 53 in round 2). At 0.5 with the nine-lobe mask the cover
+  // scatters a little at each pod and the `headlight` discs behind it are what
+  // bloom.
+  //
+  // Dusk `lens` 0.8 -> 0.3 and `head` 3.6 -> 2.4 (round 5, critic B): the
+  // dusk grille box measured p95 Y 0.56 against a sky p95 of 0.45, a lit lamp
+  // still a third of a stop over the sky it is seen against. A and C hold the
+  // grille to p95 <= sky p95 + 0.1 with 0 % clip.
   const BEAM = {
-    off: { beam: 0, bar: 0, head: 1.6, amber: 1.1, tail: 1.6, lens: 0 },
-    dusk: { beam: 22, bar: 26, head: 3.6, amber: 1.9, tail: 2.6, lens: 0.8 },
-    night: { beam: 40, bar: 46, head: 9.0, amber: 3.2, tail: 4.0, lens: 2.2 },
+    off: { beam: 0, bar: 0, head: 1.6, amber: 1.1, tail: 1.6, lens: 0, cover: 0 },
+    dusk: { beam: 22, bar: 26, head: 2.4, amber: 1.9, tail: 2.6, lens: 0.3, cover: 0.15 },
+    night: { beam: 40, bar: 46, head: 9.0, amber: 3.2, tail: 4.0, lens: 2.2, cover: 0.5 },
   };
   // a lit lamp in daylight or under cloud is a lamp lit against a bright frame
   BEAM.day = BEAM.dusk;
@@ -137,7 +150,7 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
 
   // Every lamp material carries the lit-lamp shaping from `applyLampGlow`
   // (hot core, bleached centre, glowing dish); `uLampOn` is the switch for it.
-  const lampKeys = ['headlight', 'taillight', 'amber', 'reverseLamp', 'lensClear', 'lensRibbed', 'reflector'];
+  const lampKeys = ['headlight', 'taillight', 'amber', 'reverseLamp', 'lensClear', 'lensRibbed', 'barCover', 'reflector'];
   function setLampGlow(on) {
     for (const key of lampKeys) {
       const u = materials[key]?.userData?.lamp;
@@ -160,6 +173,7 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
     for (const key of ['lensClear', 'lensRibbed']) {
       if (materials[key]) materials[key].emissiveIntensity = lv.lens;
     }
+    if (materials.barCover) materials.barCover.emissiveIntensity = lv.cover;
     // the lit-lamp shaping saturates at dusk's exposure as readily as the
     // emissive does, so its core follows the hour too
     const coreScale = state.hour === 'dusk' ? 0.55 : 1;

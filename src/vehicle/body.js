@@ -2231,29 +2231,62 @@ function wipers(k) {
  *    disappearing into the beltline moulding, which is where it used to
  *    intersect the trim it was supposed to be bolted beside.
  *
- * The head is toed in 13 degrees, so the shell and the glass are never both
- * facing the camera: from ahead you read the back, from behind you read the
- * mirror.
+ * The head faces the driver. Through round 4 the glass was aimed 13 degrees
+ * aft of straight outboard — a head whose face pointed at the verge — so from
+ * every seat camera the pane was culled and the reflection, painted or live,
+ * never faced the eye (critic A: "a fixed horizon card and no flank"; critic
+ * B: "shows nothing at fast"). A door mirror is aimed at the driver: its
+ * normal points aft and about twenty degrees inboard, so the reflected ray
+ * from the seat runs back down the flank with the rear door and the bed side
+ * filling the inboard fifth of the glass, and it is pitched a degree or so
+ * down so the horizon sits in the upper half of the pane rather than along
+ * the sill. From ahead you read the back shell, from the seat the mirror.
  */
 function doorMirror(k, sd, beltY) {
   // Fore-aft datum. The clear band on the door skin runs from the top of the
   // upper swage (1.177) to the underside of the beltline moulding (1.350), and
   // z is picked to clear the snorkel, which passes 130 mm forward of it.
   const mz = 0.8;
-  const A = 0.23; // toe-in of the glass, off straight outboard
+  // Yaw of the glass normal off straight outboard, toward aft: 112 degrees
+  // puts the normal 22 degrees inboard of straight aft. Solved for the
+  // driver's eye at (0.3, 1.6, -0.16): at 110 the pane's centre reflected
+  // straight down the truck's axis and the live pass at `high` showed plain
+  // to the inboard edge with no flank in it (the eye is 0.25 m inboard of
+  // the glass, so a ray parallel to the flank never meets it). Two more
+  // degrees of toe turn the reflected ray four degrees inboard — the centre
+  // ray meets the body side 3.6 m back, past the rear corner, and the
+  // inboard-edge ray meets it 1.4 m back — so the flank fills roughly the
+  // inboard third of the glass, which is what a mirror set for driving shows.
+  // The pane's own convexity widens the view either side of that.
+  const A = 1.955;
+  // Pitch of the whole head about the glass plane's horizontal, downward. The
+  // eye sits 40 mm under the pane's centre, so with a level pane the horizon
+  // reflects at 73 % of the way down the glass; 1.5 degrees of pitch lifts it
+  // to 40 %.
+  const P = 0.026;
   const ca = Math.cos(A);
   const sa = Math.sin(A);
-  // Head frame: `out` is the glass normal, `fwd` lies in the glass plane.
+  // Head frame: `out` is the glass normal, `across` lies in the glass plane
+  // (outboard-ish), `up` is the pane's vertical — all three pitched by P.
   const hx = sd * (HW + 0.25);
   const hy = beltY + 0.285;
   const hz = mz + 0.005;
-  const put = (du, dv, dw) => [hx + sd * ca * du + sd * sa * dv, hy + dw, hz - sa * du + ca * dv];
+  const qPitch = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(sd * sa, 0, ca), -sd * P);
+  const _o = new THREE.Vector3();
+  const put = (du, dv, dw) => {
+    _o.set(sd * ca * du + sd * sa * dv, dw, -sa * du + ca * dv).applyQuaternion(qPitch);
+    return [hx + _o.x, hy + _o.y, hz + _o.z];
+  };
+  const pitched = (euler) => new THREE.Quaternion().setFromEuler(new THREE.Euler(...euler)).premultiply(qPitch);
   // maps a box's local X onto `out`, its local Z onto the glass plane
   const RY = sd > 0 ? A : Math.PI - A;
-  const BOX = [0, RY, 0];
+  const BOX = pitched([0, RY, 0]);
   // maps a plane's or a torus's local Z onto `out`
-  const FACE = [0, sd * (Math.PI / 2 + A), 0];
-  const OUTB = [0, RY, -Math.PI / 2]; // a bolt driven inboard-to-outboard
+  const FACE = pitched([0, sd * (Math.PI / 2 + A), 0]);
+  const OUTB = pitched([0, RY, -Math.PI / 2]); // a bolt driven along `out`
+  // a bolt driven inboard-to-outboard, into the door skin: fixed to the body,
+  // not to the head's yaw
+  const OUTX = [0, sd > 0 ? 0 : Math.PI, -Math.PI / 2];
 
   // --- foot: gasket, cast bracket, three bolts ----------------------------
   k.add('gap', gbox(0.01, 0.196, 0.166, 0.003), { pos: [sd * (HW - 0.004), beltY - 0.065, mz] });
@@ -2263,11 +2296,11 @@ function doorMirror(k, sd, beltY) {
   for (const [dy, dz] of [[0.058, 0.0], [-0.052, 0.036], [-0.052, -0.036]]) {
     k.add('alu', rivet(0.014, 0.004), {
       pos: [sd * (HW + 0.035), beltY - 0.065 + dy, mz + dz],
-      rot: OUTB,
+      rot: OUTX,
     });
     k.add('steel', bolt(0.0095, 0.008), {
       pos: [sd * (HW + 0.038), beltY - 0.065 + dy, mz + dz],
-      rot: OUTB,
+      rot: OUTX,
     });
   }
   // wiring for the repeater, tucked into the foot behind a grommet
@@ -2277,15 +2310,18 @@ function doorMirror(k, sd, beltY) {
   });
 
   // --- arms: upper stalk, lower stay, and the tie between them ------------
+  // Both stays end inside the back shell, inboard of the knuckle: with the head
+  // facing aft the shell's depth runs fore-aft, so the ends are given in the
+  // head's own frame rather than in body space.
   const armTop = [
     [sd * (HW + 0.062), beltY - 0.028, mz + 0.008],
-    [sd * (HW + 0.136), beltY + 0.096, mz + 0.012],
-    [sd * (HW + 0.206), beltY + 0.246, mz + 0.01],
+    [sd * (HW + 0.136), beltY + 0.096, mz + 0.03],
+    put(-0.05, -0.05, -0.04),
   ];
   const armLow = [
     [sd * (HW + 0.056), beltY - 0.115, mz - 0.03],
-    [sd * (HW + 0.132), beltY + 0.005, mz - 0.02],
-    [sd * (HW + 0.2), beltY + 0.15, mz - 0.006],
+    [sd * (HW + 0.132), beltY + 0.005, mz + 0.0],
+    put(-0.05, -0.055, -0.125),
   ];
   k.add('steelDark', tube(armTop, 0.019, 9));
   k.add('steelDark', tube(armLow, 0.0145, 8));
@@ -2310,33 +2346,33 @@ function doorMirror(k, sd, beltY) {
   });
   k.add('steel', bolt(0.008, 0.007), {
     pos: [sd * (HW + 0.172), beltY + 0.082, mz - 0.014],
-    rot: OUTB,
+    rot: OUTX,
   });
 
   // --- head ---------------------------------------------------------------
   // back shell in two drafted steps, so the object has an outline that changes
   // depth rather than one slab silhouette
-  k.add('trim', rbox(0.05, 0.302, 0.186, 0.03), { pos: put(-0.03, 0, 0), rot: BOX });
-  k.add('trim', gbox(0.03, 0.244, 0.142, 0.034), { pos: put(-0.062, 0, 0), rot: BOX });
+  k.add('trim', rbox(0.05, 0.302, 0.186, 0.03), { pos: put(-0.03, 0, 0), quat: BOX });
+  k.add('trim', gbox(0.03, 0.244, 0.142, 0.034), { pos: put(-0.062, 0, 0), quat: BOX });
   // moulding ribs down the back, and the drain notch at the bottom of the shell
   for (const dv of [-0.042, 0.042]) {
-    k.add('trim', gbox(0.014, 0.19, 0.016, 0.005), { pos: put(-0.072, dv, 0.004), rot: BOX });
+    k.add('trim', gbox(0.014, 0.19, 0.016, 0.005), { pos: put(-0.072, dv, 0.004), quat: BOX });
   }
-  k.add('gap', gbox(0.026, 0.005, 0.048, 0.001), { pos: put(-0.036, -0.01, -0.149), rot: BOX });
+  k.add('gap', gbox(0.026, 0.005, 0.048, 0.001), { pos: put(-0.036, -0.01, -0.149), quat: BOX });
   // the parting seam between the shell and the bezel: two mouldings clipped
   // together always show one, and it is the line that says this is a housing
-  k.add('gap', gbox(0.008, 0.306, 0.19, 0.002), { pos: put(-0.006, 0, 0), rot: BOX });
+  k.add('gap', gbox(0.008, 0.306, 0.19, 0.002), { pos: put(-0.006, 0, 0), quat: BOX });
   // knuckle: the head pivots on the arm, so there is a boss and a pinch bolt
   k.add('trimGloss', new THREE.SphereGeometry(0.031, 12, 8), { pos: put(-0.07, -0.014, -0.032) });
   k.add('trimGloss', new THREE.CylinderGeometry(0.021, 0.024, 0.032, 12), {
     pos: put(-0.084, -0.014, -0.032),
-    rot: OUTB,
+    quat: OUTB,
   });
   k.add('alu', new THREE.CylinderGeometry(0.026, 0.026, 0.009, 12), {
     pos: put(-0.077, -0.014, -0.032),
-    rot: OUTB,
+    quat: OUTB,
   });
-  k.add('steel', bolt(0.0085, 0.008), { pos: put(-0.05, -0.05, -0.052), rot: OUTB });
+  k.add('steel', bolt(0.0085, 0.008), { pos: put(-0.05, -0.05, -0.052), quat: OUTB });
 
   // Bezel round the aperture, in `steel` over a `trim` shell. Every part of this
   // object was a black plastic key and the whole head resolved to one value; a
@@ -2350,23 +2386,23 @@ function doorMirror(k, sd, beltY) {
   // middle, which clipped a rectangular mirror down to an ellipse and buried the
   // rest in a cavity. Measured, the aperture read 0.065 luma flat across.
   for (const dw of [-0.137, 0.137]) {
-    k.add('steel', gbox(0.026, 0.026, 0.184, 0.007), { pos: put(0.008, 0, dw), rot: BOX });
+    k.add('steel', gbox(0.026, 0.026, 0.184, 0.007), { pos: put(0.008, 0, dw), quat: BOX });
   }
   for (const dv of [-0.081, 0.081]) {
-    k.add('steel', gbox(0.026, 0.302, 0.022, 0.007), { pos: put(0.008, dv, 0), rot: BOX });
+    k.add('steel', gbox(0.026, 0.302, 0.022, 0.007), { pos: put(0.008, dv, 0), quat: BOX });
   }
   // dark well behind the glass, so the aperture has a shadow line all round
-  k.add('gap', gbox(0.02, 0.254, 0.146, 0.004), { pos: put(-0.015, 0, 0), rot: BOX });
+  k.add('gap', gbox(0.02, 0.254, 0.146, 0.004), { pos: put(-0.015, 0, 0), quat: BOX });
   // Bright retaining lip, between the frame and the glass. This is the 1 cm tier
   // on the one part of the mirror that is read from three metres, and it is what
   // keeps the aperture legible while the glass is dark: a thin lit line all the
   // way round says recessed pane, where a dark frame against dark glass says
   // hole.
   for (const dw of [-0.1235, 0.1235]) {
-    k.add('alu', gbox(0.008, 0.009, 0.152, 0.002), { pos: put(0.004, 0, dw), rot: BOX });
+    k.add('alu', gbox(0.008, 0.009, 0.152, 0.002), { pos: put(0.004, 0, dw), quat: BOX });
   }
   for (const dv of [-0.0715, 0.0715]) {
-    k.add('alu', gbox(0.008, 0.256, 0.009, 0.002), { pos: put(0.004, dv, 0), rot: BOX });
+    k.add('alu', gbox(0.008, 0.256, 0.009, 0.002), { pos: put(0.004, dv, 0), quat: BOX });
   }
   // The bezel lip proper: 4 mm of dark rubber between the bright retaining lip
   // and the glass, lapping the pane's edge. A pane set straight into bright
@@ -2375,10 +2411,10 @@ function doorMirror(k, sd, beltY) {
   // over the main pane and the spot pane together, with a run each side of the
   // divider bar so both apertures are lipped.
   for (const dw of [-0.1185, -0.0565, -0.0395, 0.1185]) {
-    k.add('gasket', gbox(0.006, 0.004, 0.142, 0.0015), { pos: put(0.006, 0, dw), rot: BOX });
+    k.add('gasket', gbox(0.006, 0.004, 0.142, 0.0015), { pos: put(0.006, 0, dw), quat: BOX });
   }
   for (const dv of [-0.0665, 0.0665]) {
-    k.add('gasket', gbox(0.006, 0.246, 0.004, 0.0015), { pos: put(0.006, dv, 0), rot: BOX });
+    k.add('gasket', gbox(0.006, 0.246, 0.004, 0.0015), { pos: put(0.006, dv, 0), quat: BOX });
   }
   // The aperture is split, which is both what a truck mirror looks like and the
   // only way this object gets a value range across its front: the main pane is
@@ -2389,25 +2425,26 @@ function doorMirror(k, sd, beltY) {
   // for a pane, but it carries a stamped albedo and a normal map meant for a
   // headlamp bowl and at this size they resolve to speckle. Chrome stood in for
   // a while and its 0.26 roughness smears the graded skyline flat.
-  k.add('mirrorGlass', convexPane(0.136, 0.163, 0.32), { pos: put(-0.003, 0, 0.042), rot: FACE });
-  k.add('steel', gbox(0.024, 0.014, 0.134, 0.004), { pos: put(0.004, 0, -0.048), rot: BOX });
-  k.add('gap', gbox(0.016, 0.006, 0.136, 0.001), { pos: put(-0.004, 0, -0.048), rot: BOX });
+  k.add('mirrorGlass', convexPane(0.136, 0.163, 0.32), { pos: put(-0.003, 0, 0.042), quat: FACE });
+  k.add('steel', gbox(0.024, 0.014, 0.134, 0.004), { pos: put(0.004, 0, -0.048), quat: BOX });
+  k.add('gap', gbox(0.016, 0.006, 0.136, 0.001), { pos: put(-0.004, 0, -0.048), quat: BOX });
   // pitch is about the glass plane's own horizontal, which no Euler order gives
   const spotQ = new THREE.Quaternion()
     .setFromAxisAngle(new THREE.Vector3(sd * sa, 0, ca), -sd * 0.19)
-    .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sd * (Math.PI / 2 + A + 0.1), 0)));
+    .multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sd * (Math.PI / 2 + A + 0.1), 0)))
+    .premultiply(qPitch);
   k.add('mirrorGlass', convexPane(0.136, 0.067, 0.3), { pos: put(-0.004, 0, -0.0895), quat: spotQ });
 
   // --- convex spotter, hung under the head in its own housing -------------
-  k.add('trim', gbox(0.046, 0.062, 0.086, 0.016), { pos: put(-0.018, -0.002, -0.186), rot: BOX });
+  k.add('trim', gbox(0.046, 0.062, 0.086, 0.016), { pos: put(-0.018, -0.002, -0.186), quat: BOX });
   k.add('gap', new THREE.CylinderGeometry(0.028, 0.028, 0.018, 12), {
     pos: put(-0.001, -0.002, -0.186),
-    rot: OUTB,
+    quat: OUTB,
   });
-  k.add('chrome', sphericalCap(0.028, 0.009), { pos: put(0.003, -0.002, -0.186), rot: FACE });
+  k.add('chrome', sphericalCap(0.028, 0.009), { pos: put(0.003, -0.002, -0.186), quat: FACE });
   k.add('alu', new THREE.TorusGeometry(0.031, 0.0055, 5, 14), {
     pos: put(0.007, -0.002, -0.186),
-    rot: FACE,
+    quat: FACE,
   });
 
   // --- side repeater on the leading edge ----------------------------------
@@ -2417,11 +2454,13 @@ function doorMirror(k, sd, beltY) {
   // off the glass. A repeater is a small part sunk into a moulding, so it is
   // sunk: the housing stands proud, the lens does not, and the shadow round it
   // is what stops a flat emissive rectangle reading as a sticker.
-  k.add('trim', gbox(0.05, 0.062, 0.03, 0.01), { pos: put(-0.03, 0.09, 0.03), rot: BOX });
-  k.add('gap', gbox(0.038, 0.048, 0.012, 0.002), { pos: put(-0.03, 0.1, 0.03), rot: BOX });
-  k.add('amber', gbox(0.028, 0.038, 0.01, 0.003), { pos: put(-0.03, 0.1015, 0.03), rot: BOX });
+  // On the forward face of the shell now that the head faces aft: the lens
+  // points up the road, outboard of the knuckle boss.
+  k.add('trim', gbox(0.03, 0.062, 0.05, 0.01), { pos: put(-0.084, 0.03, 0.03), quat: BOX });
+  k.add('gap', gbox(0.012, 0.048, 0.038, 0.002), { pos: put(-0.094, 0.03, 0.03), quat: BOX });
+  k.add('amber', gbox(0.01, 0.038, 0.028, 0.003), { pos: put(-0.0955, 0.03, 0.03), quat: BOX });
   for (const dw of [-0.026, 0.026]) {
-    k.add('chrome', gbox(0.034, 0.006, 0.012, 0.002), { pos: put(-0.03, 0.1, 0.03 + dw), rot: BOX });
+    k.add('chrome', gbox(0.012, 0.006, 0.034, 0.002), { pos: put(-0.094, 0.03, 0.03 + dw), quat: BOX });
   }
 }
 

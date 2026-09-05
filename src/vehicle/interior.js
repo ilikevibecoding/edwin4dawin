@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Kit, bend, bolt, profile, rbox, rivet, transform, tube } from '../lib/geo.js';
 import { SUN } from '../palette.js';
-import { CABIN_ATLAS, CABIN_CELLS, CABIN_DIALS, rubberMaps, vinylMaps } from '../textures/vehicle.js';
+import { CABIN_ATLAS, CABIN_CELLS, CABIN_DIALS, paintPeelNormal, rubberMaps, vinylMaps, wovenCardMaps } from '../textures/vehicle.js';
 import { emitPieces } from './body.js';
 import { SPEC as S } from './spec.js';
 
@@ -82,7 +82,8 @@ const screenZ = (y) =>
 const UV_SCALE = {
   interiorPlastic: 1,
   interiorFaded: 1,
-  cardVinyl: 1.15,
+  cardWoven: 1.15,
+  consoleAbs: 1.6,
   rubber: 2.2,
   fabric: 1,
   headliner: 1,
@@ -286,19 +287,50 @@ const CABIN_LIGHT = {
   // The cards, the waist roll, the armrests and the A-pillar trim. Held to
   // roughly half the pad's rendered value: this is the surface the driver's own
   // shoulder is in front of and the one facing away from the screen.
-  cardVinyl: {
+  // Woven cloth over board (round 5), not vinyl: the texture comes off its own
+  // maps, so the moulded-grain crease net and the sun crazing are both off —
+  // cloth neither has cells nor splits. Dust is held lower than the vinyl's
+  // because a fibre surface does not take a film the way a smooth one does; it
+  // darkens instead, which the soil term already does.
+  cardWoven: {
     gain: 3.6,
     side: 0.78,
     up: 0.2,
     occ: 0.26,
     sun: 3.4,
     fill: 2.5,
-    dust: 0.35,
-    craze: 0.25,
-    grain: 0.2,
+    dust: 0.2,
+    craze: 0,
+    grain: 0,
+    soil: 0.6,
+    sat: 0.7,
+    tint: [0.98, 0.96, 0.92],
+  },
+  // Black ABS: the binnacle, the centre stack, the column and the console
+  // (round 5). The albedo is near zero, so the diffuse terms here do almost
+  // nothing on purpose and the material's whole read is the sheen — `spec` is
+  // the one term that lifts it. It is not scaled by F0, so it has to be set as
+  // the plastic's own reflectance: at 0.09 the first cut came back as a
+  // mid-grey moulding (the hood measured p95 0.17 against the pad's 0.35),
+  // the same order as the metals' term. A black plastic reflects 4 per cent of
+  // what falls on it, so the term sits at 0.03 and the rest of the read is the
+  // sun patch and the environment on the 0.35 lobe. No grain, no craze:
+  // injection-moulded plastic is smooth under its peel, and the peel is on the
+  // normal map.
+  consoleAbs: {
+    gain: 2.4,
+    side: 0.4,
+    up: 0.3,
+    occ: 0.2,
+    spec: 0.03,
+    sun: 2.2,
+    fill: 0.9,
+    dust: 0.15,
+    craze: 0,
+    grain: 0,
     soil: 0.5,
-    sat: 0.5,
-    tint: [0.96, 0.96, 0.95],
+    sat: 1,
+    tint: [1, 1, 1],
   },
   // The only true black in the cabin, and the thing every dark brown in here
   // needed to be dark against: channels, pedal pads, the gaiter, the loom and
@@ -1246,7 +1278,7 @@ let cachedExtras = null;
 function cabinExtras() {
   if (cachedExtras) return cachedExtras;
   const grain = vinylMaps('faded');
-  const dark = vinylMaps('dark');
+  const woven = wovenCardMaps();
   const rub = rubberMaps();
   cachedExtras = {
     // Windscreen film. Unlit on purpose: it is a thin scattering layer, not a
@@ -1282,14 +1314,37 @@ function cabinExtras() {
     // the shot with no ramp between it and everything else. The pad is supposed
     // to be the brightest thing in a cab and the cards are supposed to be dim,
     // and they cannot be both while they share a key.
-    cardVinyl: new THREE.MeshStandardMaterial({
-      map: dark.map,
-      normalMap: dark.normal,
-      roughnessMap: dark.rough,
-      normalScale: new THREE.Vector2(1.25, 1.25),
+    //
+    // Round 5: woven, not vinyl. With the pad in faded vinyl, the fascia in
+    // dark vinyl and the cards in the same dark vinyl a shade down, every large
+    // surface in the cab was one grain at one roughness (critics A, B, C on the
+    // interior frames). The cards take a coarse cloth over board instead —
+    // hessian weight, roughness 0.9 — which is what a trim panel on a working
+    // truck is anyway.
+    cardWoven: new THREE.MeshStandardMaterial({
+      map: woven.map,
+      normalMap: woven.normal,
+      roughnessMap: woven.rough,
+      normalScale: new THREE.Vector2(1.0, 1.0),
       metalness: 0,
       roughness: 1.0,
-      envMapIntensity: 0.34,
+      envMapIntensity: 0.3,
+    }),
+    // Black ABS (round 5): the binnacle carrier, cheeks, bezels and hood, the
+    // centre stack, the column shroud and wheel spokes, the console box and the
+    // overhead console. A dark plastic at roughness 0.35 with the sprayed-panel
+    // peel on its normal at a third of the paint's amplitude — the highlight off
+    // the screen lands on it as a soft, slightly wobbling band, which is the
+    // one look nothing else in the cab has. It is also the only true dark
+    // surface of any size in here, so the pad and the cards have something to
+    // be lighter than.
+    consoleAbs: new THREE.MeshStandardMaterial({
+      color: 0x1c1d1f,
+      normalMap: paintPeelNormal(),
+      normalScale: new THREE.Vector2(0.3, 0.3),
+      metalness: 0,
+      roughness: 0.35,
+      envMapIntensity: 0.55,
     }),
     // Instrument pointers. Deliberately not on the cabin light: every term in
     // that model is gated on an object-space box, and a needle has its own
@@ -2146,7 +2201,7 @@ function buildDash(k) {
   // which is presumably why every truck has one.
   const cpx = 0.115;
   const cpz = 0.665;
-  k.add('interiorPlastic', new THREE.CylinderGeometry(0.023, 0.026, 0.026, 14), { pos: [cpx, PAD_TOP + 0.012, cpz] });
+  k.add('consoleAbs', new THREE.CylinderGeometry(0.023, 0.026, 0.026, 14), { pos: [cpx, PAD_TOP + 0.012, cpz] });
   k.add('chrome', new THREE.TorusGeometry(0.0225, 0.0035, 5, 14), { pos: [cpx, PAD_TOP + 0.024, cpz], rot: [Math.PI * 0.5, 0, 0] });
   k.add('gap', new THREE.CylinderGeometry(0.019, 0.019, 0.004, 12), { pos: [cpx, PAD_TOP + 0.026, cpz] });
   k.add('cabinPanel', atlasUV(new THREE.PlaneGeometry(0.03, 0.03), 'dome'), {
@@ -2209,7 +2264,7 @@ function buildDash(k) {
   const mgx = -0.37;
   const mgz = 0.635;
   k.add('gap', new THREE.CylinderGeometry(0.049, 0.045, 0.04, 14), { pos: [mgx, PAD_TOP - 0.008, mgz] });
-  k.add('interiorPlastic', new THREE.CylinderGeometry(0.052, 0.056, 0.03, 14), { pos: [mgx, PAD_TOP - 0.004, mgz] });
+  k.add('consoleAbs', new THREE.CylinderGeometry(0.052, 0.056, 0.03, 14), { pos: [mgx, PAD_TOP - 0.004, mgz] });
   // Powder-coated body with an alloy collar and lid, not the bare alloy tube it
   // was. Measured against the ID pass a plain alloy cylinder came back at 0.86
   // luma against a frame mean of 0.24 — a hundred-pixel white shape in the
@@ -2318,13 +2373,13 @@ function buildDash(k) {
     gz + dy * up[2] + out * outN[2],
   ];
   // carrier behind the dials, and the shelf that ties the pod to the fascia
-  k.add('interiorPlastic', rbox(0.48, 0.22, 0.09, 0.02), { pos: [DRIVER_X, gy - 0.01, gz + 0.08] });
-  k.add('interiorPlastic', rbox(0.5, 0.08, 0.16, 0.02), { pos: [DRIVER_X, 1.33, gz + 0.01] });
+  k.add('consoleAbs', rbox(0.48, 0.22, 0.09, 0.02), { pos: [DRIVER_X, gy - 0.01, gz + 0.08] });
+  k.add('consoleAbs', rbox(0.5, 0.08, 0.16, 0.02), { pos: [DRIVER_X, 1.33, gz + 0.01] });
   // Cheeks either side of the binnacle. Faded vinyl on a face this upright reads
   // as a pale post rather than a sun-bleached top, so they take the dark grain
   // and a fastener each.
   for (const sx of [-1, 1]) {
-    k.add('interiorPlastic', rbox(0.035, 0.2, 0.12, 0.014), { pos: [DRIVER_X + sx * 0.235, gy + 0.02, gz + 0.03] });
+    k.add('consoleAbs', rbox(0.035, 0.2, 0.12, 0.014), { pos: [DRIVER_X + sx * 0.235, gy + 0.02, gz + 0.03] });
     k.add('steelDark', rivet(0.0065, 0.0035), {
       pos: [DRIVER_X + sx * 0.252, gy - 0.03, gz - 0.01],
       rot: [0, 0, sx * Math.PI * 0.5],
@@ -2343,7 +2398,7 @@ function buildDash(k) {
     [-0.227, 0, 0.026, 0.234],
   ]) {
     const p = onDial(dy, 0.013);
-    k.add('interiorFaded', rbox(bw, bh, 0.045, 0.007), { pos: [p[0] + dx, p[1], p[2]], rot: [tilt, 0, 0] });
+    k.add('consoleAbs', rbox(bw, bh, 0.045, 0.007), { pos: [p[0] + dx, p[1], p[2]], rot: [tilt, 0, 0] });
   }
   // Hood over the top bezel. Seen from 250 mm above it, an 85 mm deep hood
   // presents its whole top surface across the frame and covered the upper third
@@ -2362,7 +2417,7 @@ function buildDash(k) {
   // own. Half the captures have no band at all; on those, a brow raised to cover
   // it eats the same 13 pixels of trail instead. It is a body and camera problem,
   // not one the dash can win.
-  k.add('interiorFaded', rbox(0.52, 0.024, 0.05, 0.009), { pos: [DRIVER_X, 1.544, 0.6], rot: [-0.24, 0, 0] });
+  k.add('consoleAbs', rbox(0.52, 0.024, 0.05, 0.009), { pos: [DRIVER_X, 1.544, 0.6], rot: [-0.24, 0, 0] });
   weltX(k, { len: 0.48, pos: [DRIVER_X, 1.537, 0.578], rot: [0.5, 0, 0], pitch: 0.028 });
   for (const dx of [-0.235, 0.235]) {
     k.add('steelDark', rivet(0.007, 0.004), { pos: [DRIVER_X + dx, 1.552, 0.6], rot: [-0.24, 0, 0] });
@@ -2407,7 +2462,7 @@ function buildDash(k) {
   // reclined this far pokes its top edge out in front of the face's lower half,
   // which is what was cutting the heater panel in two; the visible body of the
   // pod is the tilted plate and its two cheeks instead.
-  k.add('interiorPlastic', rbox(0.3, 0.34, 0.22, 0.025), { pos: [px, 1.21, 0.68], rot: [0, podYaw, 0] });
+  k.add('consoleAbs', rbox(0.3, 0.34, 0.22, 0.025), { pos: [px, 1.21, 0.68], rot: [0, podYaw, 0] });
   // Backing plate, in the plane of the face. It went in on `podTilt - PI/2`,
   // which is the face's *normal* rather than its plane, so a 280 x 260 slab
   // stood out of the pod like a shelf pointing at the driver and drew a pale
@@ -2415,9 +2470,9 @@ function buildDash(k) {
   // surface in the lower half of the frame and the one covering the best work
   // in it. The cheeks beside it were already on `podTilt` and had been right
   // all along.
-  k.add('interiorPlastic', rbox(0.28, 0.26, 0.02, 0.008), { pos: onPod(-0.015, -0.014), rot: [podTilt, podYaw, 0] });
+  k.add('consoleAbs', rbox(0.28, 0.26, 0.02, 0.008), { pos: onPod(-0.015, -0.014), rot: [podTilt, podYaw, 0] });
   for (const sv of [-0.135, 0.135]) {
-    k.add('interiorFaded', rbox(0.026, 0.26, 0.05, 0.008), {
+    k.add('consoleAbs', rbox(0.026, 0.26, 0.05, 0.008), {
       pos: podAcross(sv, -0.015, -0.022),
       rot: [podTilt, podYaw, 0],
     });
@@ -2426,7 +2481,7 @@ function buildDash(k) {
   // edge of the screen aperture, so its silhouette is read against daylight: a
   // turned-over lip reads as a moulding, and the slab-topped version before it
   // read as a hole punched in the forest.
-  k.add('interiorFaded', new THREE.CylinderGeometry(0.026, 0.026, 0.28, 12, 1, false, 0, Math.PI), {
+  k.add('consoleAbs', new THREE.CylinderGeometry(0.026, 0.026, 0.28, 12, 1, false, 0, Math.PI), {
     pos: onPod(0.1, -0.012),
     rot: [Math.PI * 0.5 + podTilt, 0, -Math.PI * 0.5 - podYaw],
   });
@@ -2456,7 +2511,7 @@ function buildDash(k) {
   // CB handset in its clip on the outboard cheek, where it is clear of both
   // panels — hung on the driver's side it was a dark blob over the radio.
   const cbP = podAcross(-0.16, -0.03, 0.012);
-  k.add('interiorPlastic', rbox(0.03, 0.095, 0.024, 0.008), { pos: cbP, rot: [0.2, podYaw, -0.16] });
+  k.add('consoleAbs', rbox(0.03, 0.095, 0.024, 0.008), { pos: cbP, rot: [0.2, podYaw, -0.16] });
   k.add('gap', rbox(0.018, 0.026, 0.006, 0.002), { pos: [cbP[0] + 0.004, cbP[1] + 0.028, cbP[2] - 0.014], rot: [0.2, podYaw, -0.16] });
   k.add('steelDark', rbox(0.036, 0.014, 0.02, 0.004), { pos: [cbP[0] + 0.002, cbP[1] + 0.048, cbP[2] + 0.004], rot: [0.2, podYaw, -0.16] });
   for (const [dy, dz] of [
@@ -2492,7 +2547,7 @@ function buildDash(k) {
   // where a hand finds them without looking, and it is one of the few flat areas
   // on a dash actually pointed back at the driver's eye.
   const swTilt = 0.86;
-  k.add('interiorPlastic', rbox(0.27, 0.08, 0.11, 0.012), { pos: [0.7, PAD_TOP + 0.012, 0.665], rot: [-0.7, 0, 0] });
+  k.add('consoleAbs', rbox(0.27, 0.08, 0.11, 0.012), { pos: [0.7, PAD_TOP + 0.012, 0.665], rot: [-0.7, 0, 0] });
   panel(k, 'switches', { w: 0.24, h: 0.058, pos: [0.7, PAD_TOP + 0.042, 0.636], tilt: swTilt });
   weltX(k, { len: 0.25, pos: [0.7, PAD_TOP - 0.004, 0.615], rot: [-0.7, 0, 0], pitch: 0.028 });
 
@@ -2573,14 +2628,14 @@ function buildDash(k) {
     [-1, 2.53],
   ]) {
     const dir = [-Math.sin(spin), Math.cos(spin)];
-    k.add('interiorPlastic', rbox(0.038, 0.15, 0.026, 0.01), {
+    k.add('consoleAbs', rbox(0.038, 0.15, 0.026, 0.01), {
       pos: wp(dir[0] * 0.128, dir[1] * 0.128, -0.004),
       rot: [rake, 0, spin],
     });
   }
-  k.add('interiorPlastic', rbox(R * 1.45, 0.032, 0.028, 0.012), { pos: wp(0, 0.055, -0.006), rot: [rake, 0, 0] });
+  k.add('consoleAbs', rbox(R * 1.45, 0.032, 0.028, 0.012), { pos: wp(0, 0.055, -0.006), rot: [rake, 0, 0] });
   // hub and horn pad, both on the column axis
-  k.add('interiorPlastic', new THREE.CylinderGeometry(0.056, 0.062, 0.05, 18), {
+  k.add('consoleAbs', new THREE.CylinderGeometry(0.056, 0.062, 0.05, 18), {
     pos: wp(0, 0, 0.008),
     rot: [Math.PI * 0.5 + rake, 0, 0],
   });
@@ -2588,7 +2643,7 @@ function buildDash(k) {
   // straight at it, a 100 mm gloss disc caught the whole sky and came back as a
   // white ellipse in the bottom centre of the frame — the single brightest thing
   // in the shot, on the least interesting object in it.
-  k.add('interiorPlastic', new THREE.CylinderGeometry(0.05, 0.05, 0.014, 18), {
+  k.add('consoleAbs', new THREE.CylinderGeometry(0.05, 0.05, 0.014, 18), {
     pos: wp(0, 0, -0.026),
     rot: [Math.PI * 0.5 + rake, 0, 0],
   });
@@ -2599,7 +2654,7 @@ function buildDash(k) {
   // object in the frame that should be reading as matte plastic.
   k.add('trimGloss', new THREE.TorusGeometry(0.05, 0.005, 6, 18), { pos: wp(0, 0, -0.03), rot: [rake, 0, 0] });
   // column shroud, forward and down into the fascia
-  k.add('interiorPlastic', new THREE.CylinderGeometry(0.05, 0.062, 0.2, 14), {
+  k.add('consoleAbs', new THREE.CylinderGeometry(0.05, 0.062, 0.2, 14), {
     pos: wp(0, 0, 0.12),
     rot: [Math.PI * 0.5 + rake, 0, 0],
   });
@@ -2613,7 +2668,7 @@ function buildConsole(k) {
   // Pushed well forward of the eye: at the old z the shift knobs sat 100 mm off
   // the lens and filled a third of the frame with two featureless spheres.
   const cz = 0.28;
-  k.add('interiorPlastic', rbox(0.34, 0.26, 0.66, 0.035), { pos: [0.0, FLOOR + 0.15, cz - 0.14] });
+  k.add('consoleAbs', rbox(0.34, 0.26, 0.66, 0.035), { pos: [0.0, FLOOR + 0.15, cz - 0.14] });
   k.add('interiorFaded', rbox(0.35, 0.035, 0.62, 0.014), { pos: [0.0, FLOOR + 0.29, cz - 0.16] });
   weltZ(k, { len: 0.58, pos: [0.16, FLOOR + 0.285, cz - 0.16], rot: [0, 0, 0.5] });
   weltZ(k, { len: 0.58, pos: [-0.16, FLOOR + 0.285, cz - 0.16], rot: [0, 0, -0.5] });
@@ -2669,7 +2724,7 @@ function buildConsole(k) {
     k.add('trimGloss', new THREE.TorusGeometry(0.043, 0.005, 6, 14), { pos: [dx, FLOOR + 0.302, cz - 0.34], rot: [Math.PI / 2, 0, 0] });
   }
   k.add('gap', rbox(0.24, 0.03, 0.16, 0.008), { pos: [0, FLOOR + 0.295, cz - 0.56] });
-  k.add('interiorPlastic', rbox(0.23, 0.035, 0.15, 0.01), { pos: [0, FLOOR + 0.3, cz - 0.57], rot: [-0.1, 0, 0] });
+  k.add('consoleAbs', rbox(0.23, 0.035, 0.15, 0.01), { pos: [0, FLOOR + 0.3, cz - 0.57], rot: [-0.1, 0, 0] });
 }
 
 function buildFloor(k) {
@@ -2956,13 +3011,13 @@ function buildSeat(k, sx) {
     backZ - 0.095 - dy * Math.sin(0.16) - dz * Math.cos(0.16),
   ];
   const shellRot = [-0.16, 0, 0];
-  // Measured off the id pass from behind the seat: `cardVinyl` renders here at
+  // Measured off the id pass from behind the seat: `cardWoven` renders here at
   // 0.185 against cloth at 0.149, `interiorPlastic` at 0.187 and `rubber` — the
   // key whose whole job is to be the true black in the cab — at 0.289, because
   // it is the one cabin key with no `applyCabinBounce` entry and so keeps a
   // full hemisphere term in a volume where nothing else has one. On a 420 by
   // 580 panel that read as a white picture frame round the seat back.
-  k.add('cardVinyl', rbox(0.42, 0.58, 0.03, 0.024), { pos: shellAt(0, 0, 0), rot: shellRot });
+  k.add('cardWoven', rbox(0.42, 0.58, 0.03, 0.024), { pos: shellAt(0, 0, 0), rot: shellRot });
   k.add('gap', rbox(0.35, 0.44, 0.028, 0.005), { pos: shellAt(0, 0.03, 0.006), rot: shellRot });
   // Cloth-backed centre, which is what the moulding is actually filled with and
   // also the one filling that is *darker* than its frame. Run in vinyl it was a
@@ -2974,7 +3029,7 @@ function buildSeat(k, sx) {
     return d;
   }), { pos: shellAt(0, 0.03, 0.01), rot: shellRot });
   for (const dy of [0.145, -0.085]) {
-    k.add('cardVinyl', rbox(0.33, 0.022, 0.016, 0.006), { pos: shellAt(0, 0.03 + dy, 0.012), rot: shellRot });
+    k.add('cardWoven', rbox(0.33, 0.022, 0.016, 0.006), { pos: shellAt(0, 0.03 + dy, 0.012), rot: shellRot });
   }
   // Map pocket, its elastic top edge sagging away from the panel. The binding
   // was on `trim` — gain 4.6, sun 4.6, fill 2.7, the highest key in the table —
@@ -3092,22 +3147,22 @@ function buildDoors(k) {
     const px = sx * (CARD_X + 0.025);
     // card: three stacked sections with a shadow gap between them, so it is not
     // one flat panel seen edge-on
-    k.add('cardVinyl', rbox(0.05, 0.2, len, 0.02), { pos: [px, BELT - 0.09, dzc] });
+    k.add('cardWoven', rbox(0.05, 0.2, len, 0.02), { pos: [px, BELT - 0.09, dzc] });
     k.add('gap', rbox(0.035, 0.02, len - 0.02, 0.005), { pos: [px - sx * 0.012, BELT - 0.2, dzc] });
     k.add('fabric', rbox(0.035, 0.24, len - 0.06, 0.012), { pos: [px - sx * 0.012, BELT - 0.33, dzc] });
-    k.add('cardVinyl', rbox(0.05, 0.26, len, 0.02), { pos: [px, BELT - 0.6, dzc] });
+    k.add('cardWoven', rbox(0.05, 0.26, len, 0.02), { pos: [px, BELT - 0.6, dzc] });
     weltZ(k, { len: len - 0.05, pos: [px - sx * 0.03, BELT - 0.2, dzc], rot: [0, 0, sx * Math.PI * 0.5] });
 
     // Relief on the upper card. Only y = 1.13-1.44 of the door is above the
     // bottom edge of the interior frame, and that band was one moulding 200 mm
     // by 900 mm carrying a single value — the largest flat left in the shot once
     // the card came out from behind the body's shut-line backing.
-    k.add('cardVinyl', rbox(0.034, 0.032, len - 0.04, 0.01), { pos: [px - sx * 0.024, BELT - 0.062, dzc], rot: [0, 0, sx * 0.5] });
+    k.add('cardWoven', rbox(0.034, 0.032, len - 0.04, 0.01), { pos: [px - sx * 0.024, BELT - 0.062, dzc], rot: [0, 0, sx * 0.5] });
     k.add('gap', rbox(0.028, 0.014, len - 0.05, 0.004), { pos: [px - sx * 0.026, BELT - 0.086, dzc] });
     // vertical moulding breaks, so the card is three panels rather than one
     for (const bz of [dz0 + 0.55, dz0 + 0.82]) {
       k.add('gap', rbox(0.03, 0.19, 0.014, 0.004), { pos: [px - sx * 0.019, BELT - 0.1, bz] });
-      k.add('cardVinyl', rbox(0.03, 0.185, 0.03, 0.008), { pos: [px - sx * 0.028, BELT - 0.1, bz - 0.02] });
+      k.add('cardWoven', rbox(0.03, 0.185, 0.03, 0.008), { pos: [px - sx * 0.028, BELT - 0.1, bz - 0.02] });
       k.add('steelDark', rivet(0.007, 0.004), {
         pos: [px - sx * 0.044, BELT - 0.16, bz - 0.02],
         rot: [0, 0, sx * Math.PI * 0.5],
@@ -3170,12 +3225,12 @@ function buildDoors(k) {
 
     // Waist shelf out to the glass. The card is 145 mm inboard of the outer
     // skin, so without this there is a slot straight through to the door cavity.
-    k.add('cardVinyl', rbox(0.16, 0.03, len, 0.008), {
+    k.add('interiorPlastic', rbox(0.16, 0.03, len, 0.008), {
       pos: [sx * (CARD_X + 0.085), BELT - 0.012, dzc],
       rot: [0, 0, sx * 0.14],
     });
     // top roll and the window sill / weather strip
-    k.add('cardVinyl', new THREE.CylinderGeometry(0.03, 0.03, len, 12), {
+    k.add('interiorPlastic', new THREE.CylinderGeometry(0.03, 0.03, len, 12), {
       pos: [sx * (CARD_X + 0.012), BELT + 0.006, dzc],
       rot: [Math.PI * 0.5, 0, 0],
     });
@@ -3202,7 +3257,7 @@ function buildDoors(k) {
       [-0.024, 0.03],
       [0.024, 0.03],
     ]) {
-      k.add('cardVinyl', rbox(0.052, 0.012, rw, 0.004), {
+      k.add('consoleAbs', rbox(0.052, 0.012, rw, 0.004), {
         pos: [sx * (CARD_X + 0.085), BELT + 0.021, swz + rz],
         rot: [sx * 0.22, 0, sx * 0.14],
       });
@@ -3218,7 +3273,7 @@ function buildDoors(k) {
 
     // Mirror adjuster in the front top corner of the card, where the glass
     // channel turns down into the quarter light.
-    k.add('cardVinyl', rbox(0.05, 0.07, 0.075, 0.014), { pos: [px - sx * 0.006, BELT - 0.04, dz0 + 0.855] });
+    k.add('consoleAbs', rbox(0.05, 0.07, 0.075, 0.014), { pos: [px - sx * 0.006, BELT - 0.04, dz0 + 0.855] });
     k.add('trimGloss', new THREE.SphereGeometry(0.016, 10, 8), { pos: [px - sx * 0.03, BELT - 0.022, dz0 + 0.855] });
     k.add('rubber', new THREE.CylinderGeometry(0.008, 0.011, 0.03, 8), {
       pos: [px - sx * 0.042, BELT - 0.022, dz0 + 0.855],
@@ -3226,7 +3281,7 @@ function buildDoors(k) {
     });
 
     // armrest with the pull cup let into it
-    k.add('cardVinyl', rbox(0.09, 0.06, 0.34, 0.022), { pos: [px - sx * 0.03, BELT - 0.19, dz0 + 0.24] });
+    k.add('interiorPlastic', rbox(0.09, 0.06, 0.34, 0.022), { pos: [px - sx * 0.03, BELT - 0.19, dz0 + 0.24] });
     k.add('gap', rbox(0.06, 0.05, 0.16, 0.008), { pos: [px - sx * 0.05, BELT - 0.2, dz0 + 0.19] });
     k.add('trimGloss', new THREE.TorusGeometry(0.055, 0.011, 6, 12, Math.PI), {
       pos: [px - sx * 0.056, BELT - 0.155, dz0 + 0.19],
@@ -3267,7 +3322,7 @@ function buildDoors(k) {
     const spk = atlasUV(new THREE.PlaneGeometry(0.135, 0.135), 'speaker');
     k.add('cabinPanel', spk, { pos: [px - sx * 0.026, BELT - 0.6, dz0 + 0.24], rot: [0, sx * Math.PI * 0.5, 0] });
     k.add('gap', rbox(0.05, 0.16, 0.3, 0.01), { pos: [px - sx * 0.012, BELT - 0.72, dz0 + 0.6] });
-    k.add('cardVinyl', rbox(0.035, 0.16, 0.3, 0.012), { pos: [px - sx * 0.05, BELT - 0.7, dz0 + 0.6], rot: [0, 0, sx * 0.12] });
+    k.add('cardWoven', rbox(0.035, 0.16, 0.3, 0.012), { pos: [px - sx * 0.05, BELT - 0.7, dz0 + 0.6], rot: [0, 0, sx * 0.12] });
     k.add('paper', new THREE.CylinderGeometry(0.019, 0.019, 0.16, 8), {
       pos: [px - sx * 0.06, BELT - 0.62, dz0 + 0.56],
       rot: [0.1, 0, sx * 0.12],
@@ -3348,7 +3403,7 @@ function buildDoors(k) {
     // featureless black column down the left of it. Both facets are inboard of
     // the ramp now. The gate itself has to stay where it is — these keys dress
     // the outside of the truck too.
-    k.add('cardVinyl', rbox(0.1, 0.52, 0.026, 0.009), {
+    k.add('cardWoven', rbox(0.1, 0.52, 0.026, 0.009), {
       pos: [sx * (CARD_X + 0.045), BELT + 0.33, paZ - 0.245],
       rot: [-0.646, 0, 0],
     });
@@ -3356,7 +3411,7 @@ function buildDoors(k) {
       pos: [sx * (CARD_X + 0.004), BELT + 0.33, paZ - 0.238],
       rot: [-0.646, 0, 0],
     });
-    k.add('cardVinyl', rbox(0.05, 0.5, 0.045, 0.012), {
+    k.add('cardWoven', rbox(0.05, 0.5, 0.045, 0.012), {
       pos: [sx * (CARD_X + 0.1), BELT + 0.32, paZ - 0.235],
       rot: [-0.646, 0, sx * -0.5],
     });
@@ -3402,7 +3457,7 @@ function buildDoors(k) {
       pos: [sx * (CARD_X - 0.031), BELT + 0.27, paZ - 0.186],
       rot: [-0.646, 0, 0],
     });
-    k.add('cardVinyl', rbox(0.03, 0.28, 0.066, 0.005), {
+    k.add('cardWoven', rbox(0.03, 0.28, 0.066, 0.005), {
       pos: [sx * (CARD_X - 0.048), BELT + 0.27, paZ - 0.192],
       rot: [-0.646, 0, sx * 0.16],
     });
@@ -3732,7 +3787,7 @@ function buildRoof(k) {
   const ocx = -0.05;
   const ocz = S.windshieldTopZ - 0.14;
   const ocy = HL_FACE - 0.028;
-  k.add('interiorPlastic', rbox(0.3, 0.058, 0.2, 0.016), { pos: [ocx, ocy, ocz], rot: [-0.1, 0, 0] });
+  k.add('consoleAbs', rbox(0.3, 0.058, 0.2, 0.016), { pos: [ocx, ocy, ocz], rot: [-0.1, 0, 0] });
   k.add('gap', rbox(0.27, 0.03, 0.17, 0.006), { pos: [ocx, ocy + 0.02, ocz] });
   panel(k, 'switches', { w: 0.2, h: 0.05, pos: [ocx + 0.03, ocy - 0.032, ocz - 0.02], tilt: -1.42 });
   for (const dx of [-0.105, 0.105]) {

@@ -64,9 +64,14 @@ const SHOTS = [
   // through the slot between the bed gear (fridge lid 1.59) and the rack (2.07),
   // past the spare on the swing-out
   { name: 'rear_dust', pos: [-0.55, 1.95, -3.2], target: [0.05, 1.7, -0.79], fov: 26 },
-  // the head is toed in 13 degrees off straight outboard, so its face is read
-  // from outboard and a little aft
-  { name: 'mirror', pos: [2.25, 1.68, 0.2], target: [1.13, 1.615, 0.8], fov: 16 },
+  // From the driver's eye through the door glass into the head, which faces
+  // aft-inboard at the driver since round 5. The eye is the `interior` view's
+  // (0.3, 1.6, -0.16): 80 mm outboard of it, at the seat centreline, a
+  // raycast to the head hit a cabin trim piece 73 mm from the lens and the
+  // frame was that piece. The target is the main pane's centre. A real mirror
+  // from here shows sky over horizon over plain, with the truck's own rear
+  // flank filling the inboard fifth of the glass.
+  { name: 'mirror', pos: [0.3, 1.6, -0.16], target: [1.13, 1.657, 0.805], fov: 18 },
   { name: 'dusk_ws', time: 'dusk', pos: [2.7, 1.75, 5.6], target: [0.0, 1.6, 0.6], fov: 22 },
   { name: 'night_int', time: 'night', lights: true, pos: [0.3, 1.6, -0.16], target: [0.2, 1.24, 9.0], fov: 62 },
   { name: 'night_ext', time: 'night', lights: true, pos: [3.6, 1.7, 4.2], target: [0.1, 1.45, 0.5], fov: 30 },
