@@ -62,6 +62,39 @@ stale dep cache had produced two three.js instances).
 ≤ 0.53 ms per 1/60 step; texture memory 36 MB; production build 229 kB (gzip 81 kB) for the battle
 entry plus the shared 906 kB three.js chunk.
 
-## Review wave
+## Review wave 1 (independent critics + technical review on the integrated scene)
 
-_critics (Venator rubric, Separatist rubric, battle composition/effects) and a technical review in progress_
+Scores on the 18-point rubric (1–5 each), before the fix wave:
+
+| class | total | strongest | weakest |
+| --- | --- | --- | --- |
+| Venator | 47/90 (mean 2.6) | silhouette 4, towers 4, LOD 4 | weathering 1, damage variety 1, plating 2, engines 2, lighting 2, belly 2, scale 2, motion 2 |
+| Providence | 52/90 | silhouette 4, colour 4, LOD 4 | weathering 1, hangar strip 2, plating 2, engines 2, rear detail 2, belly 2, damage 2 |
+| Munificent | 49/90 | silhouette 4, colour 4, LOD 4 | engines 1 (opaque cones), weathering 1, plating 2, rear detail 2, belly 2, damage 2 |
+| Recusant | 51/90 | silhouette 4, scale cues 4, orientation 4 | weathering 1, damage 1, bow 2, plating 2, rear detail 2 |
+
+Battle composition critic: 2.4/5 overall — orientation variety 4, sky 3.5, density 3; lighting 2 (khaki,
+no key/fill edge), impacts 2, fighters-in-frame 2, planet 2 (stained-glass Voronoi), detonations 1.5,
+far bolts 2.5 (confetti), pacing 2.5, HUD overlap 2.
+
+Technical review: no stability blockers (heap flat over 40 simulated minutes, 27 programs constant,
+pools bounded, depth precision fine to 30 km); one design blocker — particle-budget guards compared
+against the two-layer `alive` sum and suppressed fires/ripples/venting ~92 % of the time; should-fix:
+death director denominator (kills stop at ~19), fires never end / hulks never retire, quality scaler
+never climbs on 60 Hz, galactic band shader cost, 2.5 s planet bake on the main thread, effects not
+scaled on phones, fighter attrition 502/min, flak = half the particle pool, cinematic sun constant,
+fighter lead, `Ship.target` never set (turrets), smoke render order.
+
+### Integrator fixes already landed
+
+HUD overlap + shot name on cuts; `Ship.target` mirrored (turret tracking works); `explosions.hasRoom`
+per-layer test; quality scaler recovers (`dt <= 1/58`), phones run DPR 1.0 with a 0.66 floor; effect
+pools scale with `SCALE`; instanced **tracking turrets** in `fleet.js` (bodies + barrels per type,
+rate-limited yaw/pitch toward `Ship.target`, hardpoints fire from the barrel tips); shared **engine
+plume system** (`enginePlumes.js`, one additive draw call, flicker, dark on dead ships, `engineLevel`
+override); lighting baseline (fills cut ~3×, plating map normalised so tints map to albedo); start
+card restored.
+
+## Fix wave (parallel worktrees)
+
+_Venator, Providence, Munificent/Recusant, effects, planet/lighting, choreography/cinematic — in progress_
