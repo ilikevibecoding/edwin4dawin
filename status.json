@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-05T09:21:12.431Z",
+  "updated": "2026-09-05T09:46:17.493Z",
   "phase": "Star Wars expansion: 7 builders running (gameplay 1:1, space train, towers+rooms, spaceport+ships, Death Star interior, HD textures, shaders/shadows/bloom); landmark wave next",
   "summary": "User round 2 feedback: references received (Coruscant skyline/platform/senate/plaza + Monument Plaza). New rubrics: 05 render quality (64x HD tiles, normal/material maps, cascaded sun shadows, HDR bloom + filmic tone mapping, atmospheric sky, water reflections, presets) and 06 landmarks (one builder per signature building). Layout now reserves 12 landmark lots (Senate 3x3, Jedi Temple 3x3, Monument Plaza 3x3, Uscru undercity 3x3, Works, CoCo market, Opera, 500 Republica, Chancellery, Medcenter, Detention, HoloNet); 421 towers + 12 landmarks + 8 plazas.",
   "links": [
@@ -137,6 +137,21 @@
       "name": "Coruscant signature landmarks (12 buildings, one builder each)",
       "status": "layout reserved; wave starts after the tower builder merges",
       "detail": "Senate, Jedi Temple, Monument Plaza (user reference), Uscru undercity strip, the Works, CoCo Town market, Opera, 500 Republica, Chancellery, Medcenter, Detention Center, HoloNet tower. Shared harness scripts/landmark-stats.mjs checks determinism, block variety, room reachability on foot, lighting, detail density."
+    },
+    {
+      "name": "Minecraft 1:1 gameplay (doors, chests, items, food, drops, farming, cooking, save v2)",
+      "status": "merged",
+      "detail": "47/47 gameplay checks + 11 unit tests; chest contents now ride the disaster journal (restored full on reset, never spilled)."
+    },
+    {
+      "name": "Space train + hyperlane + stations",
+      "status": "merged; junction fix in progress",
+      "detail": "74-block walkable 5-car train at 30 blocks/s on the shared tick, zero carry drift over 60 s, boarding/alighting verified; stations at both ends. Fixing the overlap with the spaceport bridge/deck at both ends."
+    },
+    {
+      "name": "Coruscant spaceport + 4 ship models + traffic",
+      "status": "merged",
+      "detail": "Deck, terminal, 8 pads, tower, hangar, fuel farm, yards; 19 ships (4 draw calls). Lanes re-routed to follow the boulevard corridors so no ship ever crosses a tower; pad approaches swing out over the ocean; test asserts no route enters a lot below its roof."
     }
   ],
   "metrics": [
@@ -294,6 +309,10 @@
     {
       "time": "2026-09-05 09:21 UTC",
       "text": "Render-quality rubric + landmark rubric committed; R1/R2 builders launched; 12 landmark lots placed in the layout; Death Star interior film stills collected for the critic round."
+    },
+    {
+      "time": "2026-09-05 09:46 UTC",
+      "text": "Merged gameplay, train and spaceport branches into the integration branch (unit 11/11, spaceport 15/15, tornado replay hash unchanged); ship lanes now follow boulevards; disaster journal carries chest contents."
     }
   ],
   "issues": [
