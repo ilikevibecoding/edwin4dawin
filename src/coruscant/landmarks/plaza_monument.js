@@ -420,7 +420,7 @@ function buildRotunda(bp, o) {
       let id;
       if (k >= R - 1 || q === 0) id = (k === R || q <= 1) ? B.GLOW_PANEL : B.WINDOW_LIT;   // lit lantern cap
       else if (s % 2 === 0) id = B.DURASTEEL_DARK;
-      else id = k <= R * 0.75 ? B.WINDOW_LIT : B.PANEL_BLACK;
+      else id = B.WINDOW_LIT;                                                        // lit meridians up to the cap
       set(x, yD + k, z, id);
     });
   }
