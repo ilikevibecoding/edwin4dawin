@@ -169,6 +169,26 @@ export function frameItem(center, ax, ay, az, sx, sy, sz, c) {
   return { m, c };
 }
 
+/**
+ * Instance item for a flat decal (decalGeometry) lying in the plane spanned by `ax` (across, width
+ * sx) and `az` (along, length sz), centred at `center`. Unlike frameItem the along axis is never
+ * flipped for handedness — the decal masks are direction-dependent (source → tail) and a two-sided
+ * plane cannot render inside out.
+ */
+export function decalItem(center, ax, az, sx, sz, c) {
+  const ny = _v.crossVectors(az, ax).normalize();
+  const m = new THREE.Matrix4();
+  m.set(ax.x * sx, ny.x, az.x * sz, center.x, ax.y * sx, ny.y, az.y * sz, center.y, ax.z * sx, ny.z, az.z * sz, center.z, 0, 0, 0, 1);
+  return { m, c };
+}
+
+/** Unit decal plane in local XZ (x = across, z = along; v = 0 at the −z end), for instanced streak decals. */
+export function decalGeometry() {
+  const g = new THREE.PlaneGeometry(1, 1);
+  g.rotateX(Math.PI / 2);
+  return g;
+}
+
 /** Merge a list of (possibly indexed) geometries into one non-indexed geometry with white colours. */
 export function mergeParts(parts, uvScale = 0.1) {
   const list = parts.map((g) => (g.index ? g.toNonIndexed() : g));
