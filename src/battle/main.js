@@ -61,9 +61,16 @@ const sky = buildBattleSky(scene);
 const planet = buildCoruscant(scene, sun);
 const mats = shipMaterials(sun);
 const fleet = new Fleet(scene);
-const bolts = new Bolts(scene, 1600);
-const explosions = new Explosions(scene, 1400, { sun });
-const debris = new Debris(scene, 400, { sun });
+// pools scale with the fleet (phones run SCALE 0.6)
+const bolts = new Bolts(scene, Math.round(1600 * Math.max(0.5, SCALE)));
+const explosions = new Explosions(
+  scene,
+  Math.round(1400 * Math.max(0.5, SCALE)),
+  { sun },
+);
+const debris = new Debris(scene, Math.round(400 * Math.max(0.5, SCALE)), {
+  sun,
+});
 explosions.attachDebris(debris); // stepped from explosions.update
 bolts.attachMuzzleFlash(explosions);
 const fighters = new Fighters(scene, sun, { scale: SCALE });
@@ -250,8 +257,8 @@ hud.startEl.addEventListener("click", (e) => {
   if (e.target.closest(".scene-link")) return; // navigating to the other scene
   begin();
 });
+hud.setMode("exterior"); // hides the crosshair (and the card, which showStart brings back)
 hud.showStart();
-hud.setMode("exterior");
 hud.setHint(
   TOUCH
     ? "drag: orbit · pinch: zoom · button: cinematic camera"
@@ -387,15 +394,12 @@ window.addEventListener("resize", () => {
 });
 
 // adaptive quality: drop the pixel ratio when frames run long, climb back when they are fast
-const QUALITY = [
-  0.5,
-  0.66,
-  0.8,
-  1.0,
-  Math.min(window.devicePixelRatio, TOUCH ? 1.0 : 1.5),
-];
+// phones: cap the drawing buffer at DPR 1.0 with a floor of 0.66; desktops climb to 1.5
+const QUALITY = TOUCH
+  ? [0.66, 0.8, 1.0]
+  : [0.5, 0.66, 0.8, 1.0, Math.min(window.devicePixelRatio, 1.5)];
 const quality = {
-  level: TOUCH ? 1 : QUALITY.length - 1,
+  level: QUALITY.length - 1,
   slow: 0,
   fast: 0,
   enabled: true,
@@ -408,10 +412,11 @@ function applyQuality() {
 if (TOUCH) applyQuality();
 function updateQuality(dt) {
   if (!quality.enabled) return;
+  // a vsynced 60 Hz frame is ~16.7 ms: anything at or under 1/58 s counts as keeping up
   if (dt > 1 / 45) {
     quality.slow++;
     quality.fast = 0;
-  } else if (dt < 1 / 70) {
+  } else if (dt <= 1 / 58) {
     quality.fast++;
     quality.slow = 0;
   } else quality.slow = quality.fast = 0;

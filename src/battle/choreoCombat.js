@@ -143,6 +143,7 @@ export function setTarget(st, tgt) {
   if (st.target === tgt) return;
   if (st.target) st.target.targetedBy = Math.max(0, st.target.targetedBy - 1);
   st.target = tgt;
+  st.ship.target = tgt ? tgt.ship : null; // the fleet's tracking turrets follow Ship.target
   if (tgt) tgt.targetedBy++;
 }
 

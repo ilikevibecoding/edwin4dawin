@@ -29,6 +29,7 @@ const _one = new THREE.Vector3(1, 1, 1);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 const TURRET_REST_PITCH = 0.12;
+const _euler = new THREE.Euler();
 
 export class Ship {
   constructor(model, opts) {
@@ -197,6 +198,7 @@ export class Fleet {
         };
       }
     }
+    entry.turretList = entry.turrets ? Object.values(entry.turrets) : [];
     this.classes.set(model.id, entry);
     return entry;
   }
@@ -207,7 +209,7 @@ export class Fleet {
   _updateTurrets(entry, s, dt, draw) {
     const model = s.model;
     const target = s.target && s.target.alive ? s.target.position : null;
-    for (const [type, T] of Object.entries(entry.turrets)) {
+    for (const T of entry.turretList) {
       const def = T.def;
       const rate = def.rate || 0.6;
       const yawLimit = def.yawLimit ?? Math.PI;
@@ -263,6 +265,12 @@ export class Fleet {
 
   add(model, opts) {
     const entry = this.classes.get(model.id) || this.registerModel(model, 64);
+    if (entry.ships.length >= entry.capacity && !entry.warnedCapacity) {
+      entry.warnedCapacity = true;
+      console.warn(
+        `fleet: ${model.id} is over its instance capacity (${entry.capacity}); extra ships are not drawn`,
+      );
+    }
     const ship = new Ship(model, opts);
     entry.ships.push(ship);
     this.ships.push(ship);
@@ -276,7 +284,7 @@ export class Fleet {
       s.position.addScaledVector(s.velocity, dt);
       if (s.angular.lengthSq() > 0) {
         _q.setFromEuler(
-          new THREE.Euler(s.angular.x * dt, s.angular.y * dt, s.angular.z * dt),
+          _euler.set(s.angular.x * dt, s.angular.y * dt, s.angular.z * dt),
         );
         s.quaternion.multiply(_q);
       }
@@ -288,7 +296,7 @@ export class Fleet {
     this.stats.drawn = [0, 0, 0];
     for (const entry of this.classes.values()) {
       const counts = [0, 0, 0];
-      if (entry.turrets) for (const T of Object.values(entry.turrets)) T.n = 0;
+      if (entry.turrets) for (const T of entry.turretList) T.n = 0;
       for (const s of entry.ships) {
         if (!s.alive) continue;
         const L = s.lod;
@@ -312,7 +320,7 @@ export class Fleet {
         this.stats.drawn[L] += counts[L];
       }
       if (entry.turrets)
-        for (const T of Object.values(entry.turrets)) {
+        for (const T of entry.turretList) {
           for (const im of [T.body, T.barrels]) {
             if (!im) continue;
             im.count = T.n;

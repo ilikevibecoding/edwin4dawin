@@ -899,6 +899,13 @@ export class Explosions {
     return this.add.particles.length + this.smoke.particles.length;
   }
 
+  // true when the named layer ("add" or "smoke") is below `frac` of its capacity; budget guards should
+  // use this rather than `alive`, which sums both layers
+  hasRoom(layer = "add", frac = 0.9) {
+    const L = layer === "smoke" ? this.smoke : this.add;
+    return L.particles.length < L.capacity * frac;
+  }
+
   get counts() {
     return {
       additive: this.add.particles.length,
