@@ -140,8 +140,8 @@ function build(bp, lot, ctx) {
   pavAngles.forEach((deg, i) => {
     const a = deg * TAU / 360, rad = 44 + rng.int(-2, 2);
     const cx = Math.round(CX + rad * Math.cos(a)), cz = Math.round(CZ + rad * Math.sin(a));
-    const R0 = rng.pick([6, 7, 7, 8]), Hc = rng.pick([15, 16, 17, 18, 19]);
-    buildPavilion(bp, { cx, cz, R0, Hc, kind: kinds[i], twoBands: rng.chance(0.5), rng, set, get, isFree, disc, seatAt, H2 });
+    const R0 = kinds[i] === 'kiosk' ? rng.pick([6, 7]) : rng.pick([7, 8]), Hc = rng.pick([15, 16, 17, 18, 19]);
+    buildPavilion(bp, { cx, cz, R0, Hc, kind: kinds[i], twoBands: rng.chance(0.6), rng, set, get, isFree, disc, seatAt, H2 });
   });
 
   // ============================================================ 7. domed rotundas at the corners
@@ -213,8 +213,10 @@ function buildArcade(bp, lot, o) {
           if (m === 1 && (p === 2 || p === 3)) seatAt(x, 1, z, B.SPRUCE_SLAB);
           if (m === 1 && p === 10) { set(x, 1, z, B.DURASTEEL_DARK); set(x, 2, z, B.OAK_LEAVES); }
           if (m === 2 && p === 6) { set(x, 1, z, B.BARREL); }
-          if (m === 1 && p === 12) { seatAt(x, 9, z, B.SPRUCE_SLAB); }
-          if (m === 2 && p === 4) { set(x, 9, z, B.DURASTEEL_DARK); set(x, 10, z, B.SPRUCE_LEAVES); }
+          if (m === 1 && (p === 12 || p === 13 || p === 4 || p === 5)) { seatAt(x, 9, z, B.SPRUCE_SLAB); }
+          if (m === 2 && (p === 0 || p === 8)) { set(x, 9, z, B.DURASTEEL_DARK); set(x, 10, z, p === 0 ? B.SPRUCE_LEAVES : B.OAK_LEAVES); }
+          if (m === 2 && p === 9) { set(x, 9, z, B.TABLE); }
+          if (m === 1 && p === 8) { set(x, 9, z, B.IRON_BARS); set(x, 10, z, B.LANTERN); }
         }
       }
       if (gate !== null && t === gate) {
@@ -222,6 +224,30 @@ function buildArcade(bp, lot, o) {
         bp.door(x, 1, z, edge);
       }
     }
+  }
+  // wide terrace stairs up to the arcade roof (one per side): 16 half-steps on a solid stone mass, parapet on the
+  // plaza side, railing opened where the flight lands on the roof
+  const CZ = o.CZ;
+  for (const [edge, t0] of [['W', CZ - 8], ['E', CZ - 8], ['N', CX - 8], ['S', CX + 10]]) {
+    for (let k = 0; k < 16; k++) {
+      const t = t0 + k, yk = 1 + (k >> 1), full = (k & 1) === 1;
+      for (let m = RIM_D; m <= RIM_D + 2; m++) {
+        const [x, z] = cellOf(edge, m, t);
+        fill(x, 1, z, x, 10, z, FORCE_AIR);
+        if (m === RIM_D + 2) { fill(x, 1, z, x, yk, z, B.STONE_BRICKS); set(x, yk + 1, z, B.IRON_BARS); continue; }   // parapet
+        if (yk > 1) fill(x, 1, z, x, yk - 1, z, B.STONE_BRICKS);
+        set(x, yk, z, full ? B.DURASTEEL : B.STONE_BRICK_SLAB);
+      }
+      if (k >= 14) { const [x, z] = cellOf(edge, RIM_D - 1, t); set(x, 9, z, FORCE_AIR); }
+    }
+    for (let m = RIM_D; m <= RIM_D + 2; m++) {    // end wall of the flight with a lamp on the corner
+      const [lx, lz] = cellOf(edge, m, t0 + 16); fill(lx, 1, lz, lx, 8, lz, B.STONE_BRICKS); set(lx, 9, lz, m === RIM_D + 2 ? B.CITY_LAMP : B.IRON_BARS);
+    }
+    const [bx, bz] = cellOf(edge, RIM_D + 2, t0 - 1); set(bx, 1, bz, B.STONE_BRICKS); set(bx, 2, bz, B.IRON_BARS); set(bx, 3, bz, B.CITY_LAMP);
+    // the terrace segment the flight lands on, recorded so NPCs (and the harness) know the roof is a walkable room
+    const [ax, az] = cellOf(edge, 0, t0 + 12), [bx2, bz2] = cellOf(edge, RIM_D - 1, t0 + 36);
+    bp.room('roof_terrace', ax, 9, az, bx2, bz2);
+    const [sx, sz] = cellOf(edge, 1, t0 + 20); bp.spot(sx, 9, sz, 'stand');
   }
   // corner pylons
   for (const [x0, z0] of [[0, 0], [W - RIM_D, 0], [0, D - RIM_D], [W - RIM_D, D - RIM_D]]) {
@@ -307,16 +333,19 @@ function buildPavilion(bp, o) {
     for (let dx = -2; dx <= 2; dx++) for (let dz = -2; dz <= 2; dz++) {
       if (Math.max(Math.abs(dx), Math.abs(dz)) !== 2) continue;
       if (dx === 2 && dz === 0) continue;                        // staff gap
-      put(dx, dz, 1, B.PANEL_BLACK); put(dx, dz, 2, B.STONE_BRICK_SLAB);
+      const corner = Math.abs(dx) === 2 && Math.abs(dz) === 2;
+      put(dx, dz, 1, B.PANEL_BLACK); put(dx, dz, 2, corner ? B.GLASS : B.STONE_BRICK_SLAB);   // glass pastry cases on the corners
     }
     put(-1, -1, 1, B.FURNACE); put(1, -1, 1, B.BARREL); put(-1, 1, 1, B.SHELF); put(-1, 1, 2, B.SHELF); put(1, 1, 1, B.CHEST);
     work(0, 1, 'barista'); work(0, -1, 'barista');
     for (const [dx, dz] of [[-3, -1], [-3, 1], [3, -2], [3, 2], [-1, 3], [1, 3], [-1, -3], [1, -3]]) stool(dx, dz);
-    for (const [tx, tz] of [[-5, -4], [5, -4], [-5, 4], [5, 4], [-4, -6], [4, 6]]) {
-      if (!inR(tx * tx + tz * tz, R0 - 2)) continue;
-      if (put(tx, tz, 1, B.TABLE)) { stool(tx + 1, tz); stool(tx - 1, tz); if (rng.chance(0.5)) stool(tx, tz + (tz > 0 ? 1 : -1)); }
+    // tables on the diagonals between the openings, three stools each
+    const tr = Math.round((R0 - 2.5) * 0.7071);
+    for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      const tx = sx * tr, tz = sz * tr;
+      if (put(tx, tz, 1, B.TABLE)) { stool(tx + sx, tz); stool(tx, tz + sz); if (Math.abs(tx - sx) > 2 || Math.abs(tz) > 2) stool(tx - sx, tz); }
     }
-    for (const [px, pz] of [[R0 - 3, 0], [-(R0 - 3), 0]]) { put(px, pz, 1, B.DURASTEEL_DARK); put(px, pz, 2, B.OAK_LEAVES); }
+    for (const [px, pz] of [[R0 - 2, 2], [-(R0 - 2), -2], [2, R0 - 2], [-2, -(R0 - 2)]]) { put(px, pz, 1, B.DURASTEEL_DARK); put(px, pz, 2, B.OAK_LEAVES); }
   } else if (kind === 'market') {
     // holo totem at the mast, four stalls on the diagonals with awnings and goods, crates and barrels behind
     set(cx, 1, cz, B.DURASTEEL_DARK); set(cx, 2, cz, B.HOLO_SIGN); set(cx, 3, cz, B.HOLO_SIGN);
@@ -389,8 +418,8 @@ function buildRotunda(bp, o) {
       const s = sector(dx, dz);
       let id;
       if (k === R || q === 0) id = B.GLOW_PANEL;
-      else if (s % 2 === 0) id = (k & 1) ? B.DURASTEEL_DARK : B.DURASTEEL;
-      else id = k <= R * 0.55 ? B.WINDOW_LIT : B.PANEL_BLACK;
+      else if (s % 2 === 0) id = B.DURASTEEL_DARK;
+      else id = k <= R * 0.75 ? ((k & 1) ? B.WINDOW_LIT : B.PANEL_BLACK) : B.PANEL_BLACK;
       set(x, yD + k, z, id);
     });
   }
