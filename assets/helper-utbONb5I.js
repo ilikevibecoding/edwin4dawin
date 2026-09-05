@@ -1,0 +1,1 @@
+var e={w:2.4,h:3},t={across:4,deep:4,high:3.6};export{t as n,e as t};
