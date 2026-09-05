@@ -244,12 +244,14 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   // whole side of the face a dark mask against the pale muzzle, with a
   // boundary at the muzzle root; only the crown, brow and occiput darken)
   let c = mixRgb(COAT.side, COAT.back, 0.2);
-  const crown = smoothstep(0.0, 0.06, hy) * smoothstep(0.22, 0.12, hz);
-  const mask = smoothstep(0.03, 0.08, hy) * smoothstep(0.23, 0.15, hz) * smoothstep(0.075, 0.03, hx);
+  // (round 5: the crown is 0.16 and the eye line 0.07 — so the darkening
+  // starts over the brow, and the cheeks up to the eye stay the flank's tawny)
+  const crown = smoothstep(0.06, 0.115, hy) * smoothstep(0.22, 0.12, hz);
+  const mask = smoothstep(0.055, 0.1, hy) * smoothstep(0.24, 0.16, hz) * smoothstep(0.08, 0.04, hx);
   const occiput = smoothstep(0.02, -0.06, hz);
   c = mixRgb(c, COAT.back, Math.min(1, crown * 0.45 + mask * 0.45 + occiput * 0.35));
   // the bridge a shade darker than the muzzle sides, warm
-  const bridge = smoothstep(0.048, 0.02, hx) * smoothstep(0.17, 0.22, hz) * smoothstep(0.31, 0.29, hz) * smoothstep(0.015, 0.035, hy);
+  const bridge = smoothstep(0.048, 0.02, hx) * smoothstep(0.17, 0.22, hz) * smoothstep(0.31, 0.29, hz) * smoothstep(0.0, 0.02, hy);
   c = mixRgb(c, mixRgb(COAT.back, COAT.noseBridge, 0.45), bridge * 0.65);
   // the same cells of parted fur the body has, so the head is not a smoother
   // colour than the neck
@@ -259,10 +261,13 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   // the tear line down to the lip, and the spot over each eye
   const buff = mixRgb(COAT.side, COAT.cream, 0.45);
   // (a gradual lightening from the cheek over four centimetres, not a mask edge)
-  const muzzleSide = smoothstep(0.17, 0.255, hz) * smoothstep(0.035, 0.0, hy) * smoothstep(0.015, 0.035, hx);
-  c = mixRgb(c, buff, muzzleSide * 0.55);
+  // (round 5: the pale runs up the side of the muzzle box to the tear line
+  // and back under the eye, so the muzzle reads as its own pale block under
+  // the tawny cheeks the way a lioness's does)
+  const muzzleSide = smoothstep(0.16, 0.24, hz) * smoothstep(0.055, 0.02, hy) * smoothstep(0.015, 0.035, hx);
+  c = mixRgb(c, buff, muzzleSide * 0.6);
   const bu = Math.hypot((hx - ex + 0.002) * 1.1, (hy - ey - 0.044) * 1.5, hz - ez + 0.01);
-  c = mixRgb(c, buff, smoothstep(0.022, 0.009, bu) * 0.45);
+  c = mixRgb(c, buff, smoothstep(0.022, 0.009, bu) * 0.3);
   // the pale "tear line" stroke under the lower lid, the mark that frames a
   // cat's eye from below
   const stroke = segDist(hx, hy, hz, [ex - 0.018, ey - 0.03, ez + 0.012], [ex + 0.024, ey - 0.027, ez - 0.004]);
@@ -278,10 +283,17 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   if (de < R * 1.7) {
     const near = smoothstep(R * 1.7, R * 1.2, de);
     const line = almondOpen(hx - ex, hy - ey, hz - ez, 0.07, 0.02);
-    const ring = almondOpen(hx - ex, hy - ey, hz - ez, 0.22, 0.14);
+    // round 5: the lid margins are black on a lion, and at two metres the
+    // caps' own 2.5 mm band is under a pixel — so the skin carries a 4 mm
+    // dark margin around the almond (0.05 to 0.2 rad outside the rims), and
+    // a fainter ring beyond it, heaviest at the inner corner and under the
+    // eye where the dark runs into the tear line
+    const margin = almondOpen(hx - ex, hy - ey, hz - ez, 0.12, 0.13);
+    const ring = almondOpen(hx - ex, hy - ey, hz - ez, 0.22, 0.2);
     // (below and inside the eye only: the brow over it carries the pale spot)
     const inner = smoothstep(0.06, 0.03, hx) * smoothstep(ey + 0.01, ey - 0.01, hy);
-    c = mixRgb(c, COAT.lip, ring * near * (0.08 + 0.3 * inner));
+    c = mixRgb(c, COAT.lip, ring * near * (0.12 + 0.3 * inner));
+    c = mixRgb(c, COAT.black, margin * near * 0.75);
     c = mixRgb(c, COAT.black, line * near * 0.9);
   }
   // the dark line at the outer corner, back toward the temple
@@ -296,10 +308,11 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   if (hx > 0.03 && hz > 0.226) {
     for (let row = 0; row < 5; row++) {
       for (let col = 0; col < 7; col++) {
-        const sy = 0.016 - row * 0.008;
+        // five rows over the pad, from under the nose's level to just over the lip
+        const sy = FACE.whiskerPad[1] + 0.018 - row * 0.0085;
         const sz = 0.236 + col * 0.0105 + (row % 2) * 0.005;
         const d = Math.hypot(hy - sy, hz - sz);
-        c = mixRgb(c, COAT.lip, smoothstep(0.0024, 0.001, d) * 0.7);
+        c = mixRgb(c, COAT.lip, smoothstep(0.003, 0.0012, d) * 0.85);
         // the stroke: a hair's width, from the follicle back along the pad
         const hair = segDist(hx, hy, hz, [hx, sy, sz], [hx, sy + 0.004 - row * 0.002, sz - 0.02]);
         c = mixRgb(c, COAT.cream, smoothstep(0.0007, 0.0002, hair) * smoothstep(sz - 0.019, sz - 0.004, hz) * 0.35);
@@ -315,7 +328,10 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   const [nx, ny, nz] = FACE.nose;
   const lipY = lerp(FACE.lipY[0], FACE.lipY[1], clamp((hz - cz) / (nz - cz)));
   const onLip = smoothstep(cz - 0.002, cz + 0.008, hz);
-  const lip = smoothstep(0.0038, 0.0012, Math.abs(hy - lipY + 0.001)) * onLip;
+  // (round 5: the seam is dark only along the pads at the front — back toward
+  // the corner it is tucked under the jowl and fades, so from a high camera
+  // the mouth is a short line under the nose and not a smile drawn to the cheek)
+  const lip = smoothstep(0.0038, 0.0012, Math.abs(hy - lipY + 0.001)) * onLip * (0.35 + 0.65 * smoothstep(cz + 0.02, cz + 0.06, hz));
   // the lower lip itself a shade darker than the coat for half a centimetre
   const lowerLip = smoothstep(0.009, 0.004, Math.abs(hy - lipY + 0.006)) * onLip;
   const jaw = smoothstep(lipY - 0.004, lipY - 0.014, hy) * onLip;
@@ -329,7 +345,7 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   // the corner: the seam follows the hanging jowl down and back a centimetre, thinning out
   const corner = segDist(hx, hy, hz, [cx - 0.002, cy + 0.001, cz + 0.004], [cx + 0.004, cy - 0.011, cz - 0.008]);
   const cornerT = clamp((cz + 0.004 - hz) / 0.012);
-  c = mixRgb(c, COAT.black, smoothstep(0.0032 - 0.0012 * cornerT, 0.0008, corner) * 0.85 * (1 - 0.5 * cornerT));
+  c = mixRgb(c, COAT.black, smoothstep(0.0032 - 0.0012 * cornerT, 0.0008, corner) * 0.45 * (1 - 0.5 * cornerT));
   // philtrum: the split of the upper lip from under the nose down to the line
   const phil = smoothstep(0.005, 0.0015, hx) * smoothstep(nz - 0.035, nz - 0.012, hz) * smoothstep(ny - 0.016, ny - 0.028, hy) * smoothstep(lipY - 0.004, lipY + 0.004, hy);
   c = mixRgb(c, COAT.black, phil * 0.8);
@@ -629,9 +645,11 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           // cap — where round 3's 4 mm plus the painted skin line made the eye
           // a dark ring; the lower lid's pale stroke starts right at the rim)
           const upper = u < 0.5;
-          let c = mixRgb(COAT.side, COAT.back, upper ? 0.45 : 0.2);
-          if (!upper) c = mixRgb(c, COAT.cream, smoothstep(0.04, 0.09, v) * smoothstep(0.34, 0.22, v) * 0.9);
-          c = mixRgb(c, COAT.black, smoothstep(0.058, 0.032, v) * 0.95);
+          // (round 5: the upper lid darker and the black band 3.5 mm, so the
+          // margin reads as a lion's black lid margin at two metres)
+          let c = mixRgb(COAT.side, COAT.back, upper ? 0.7 : 0.2);
+          if (!upper) c = mixRgb(c, COAT.cream, smoothstep(0.06, 0.11, v) * smoothstep(0.34, 0.22, v) * 0.9);
+          c = mixRgb(c, COAT.black, smoothstep(0.08, 0.045, v) * 0.95);
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];

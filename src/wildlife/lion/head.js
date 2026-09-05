@@ -292,11 +292,17 @@ export function addHead(b, alpha, skel, K, D) {
         // lower one LID_DOWN below; what shows between two such rims is an
         // almond that pinches to the corners, which is the shape of a cat's
         // eye. Away from the eye the skull surface is further out than the
-        // caps, so they sink under the skin. Up is -Z in lid space.
+        // caps, so they sink under the skin. Up is -Z in lid space. The rims'
+        // axis is rolled about the gaze (EYE_LIDS.roll, the same roll as the
+        // skin's almond in headspec.js EYE_FRAME) so the outer corner sits a
+        // little higher than the inner: the lid bone's +X is the animal's
+        // right, so the roll mirrors between the two eyes.
+        const sgn = side === 'lidL' ? 1 : -1;
         const cap = (pitch, bones, rimSign, half) => {
           const g = new THREE.SphereGeometry(eyeR * LID_R, ws, Math.max(6, hs * 0.6 | 0), 0, Math.PI * 2, 0, Math.PI * 0.5);
           g.rotateX(rimSign * -Math.PI / 2);
           g.rotateX(pitch);
+          g.rotateY(-sgn * (EYE_LIDS.roll ?? 0));
           // a partial sphere's v runs over its own rings: 0 at the rim, 1 at
           // the pole, which is the lid tile's layout (eyeline at v = 0); the
           // upper lid reads the left half of the tile, the lower the right
@@ -321,8 +327,9 @@ export function addHead(b, alpha, skel, K, D) {
       for (let i = 0; i < 12; i++) {
         const row = i % 4;
         const col = (i / 4) | 0;
-        // rooted in four rows across the whisker pad, well above the lip
-        const baseP = new THREE.Vector3(sd * (wx + 0.004 + row * 0.002) * s, (wy + 0.03 - row * 0.01) * s, zOf(wz - 0.016 + col * 0.018) * s);
+        // rooted in four rows across the whisker pad, from under the nose's
+        // level down to just over the lip
+        const baseP = new THREE.Vector3(sd * (wx + 0.004 + row * 0.002) * s, (wy + 0.018 - row * 0.008) * s, zOf(wz - 0.016 + col * 0.018) * s);
         const len = (0.1 + (i % 2) * 0.03 + row * 0.01 + col * 0.01) * s;
         // whiskers sweep out and back from the pad, the upper rows a little
         // up, the lower ones level and drooping toward the tip
@@ -330,9 +337,9 @@ export function addHead(b, alpha, skel, K, D) {
         const sag = new THREE.Vector3(0, -0.05, 0);
         strandQuad(alpha, headFrame, baseP, dir, len, 0.0009 * s, sag, headBones, 3);
       }
-      // superciliary whiskers: three long hairs over each eye
+      // superciliary whiskers: three long hairs over each eye, rooted on the brow ledge
       for (let i = 0; i < 3; i++) {
-        const baseP = new THREE.Vector3(sd * (0.048 + i * 0.006) * s, (0.098 - i * 0.003) * s, (0.14 - i * 0.012) * s);
+        const baseP = new THREE.Vector3(sd * (0.058 + i * 0.006) * s, (0.106 - i * 0.003) * s, (0.166 - i * 0.012) * s);
         const dir = new THREE.Vector3(sd * 0.55, 0.55, 0.45 - i * 0.2).normalize();
         strandQuad(alpha, headFrame, baseP, dir, (0.09 + i * 0.015) * s, 0.0018 * s, new THREE.Vector3(0, -0.05, 0), headBones, 2);
       }
@@ -372,17 +379,18 @@ export function addHead(b, alpha, skel, K, D) {
 function addEar(b, frame, bones, s, D, sgn) {
   const around = Math.max(8, Math.round(D.around * 0.45));
   const rings = D.head >= 2 ? 5 : 3;
-  // base to tip and across: round 4 took a fifth off each (critics measured the
-  // round-3 ear at 1.4 times a lion's relative to the skull)
-  const H = 0.09 * s;
-  const W = 0.074 * s;
-  // the bone already leans well out; a touch more so the tip stands clear
+  // base to tip and across: 0.25 L by 0.2 L on a 0.404 head (round 4 took a
+  // fifth off round 3's, which the critics measured at 1.4 times a lion's;
+  // round 5's are measured against the head length instead of eyeballed)
+  const H = 0.105 * s;
+  const W = 0.084 * s;
+  // the bone leans out 30 degrees; a touch more so the tip stands clear
   const lean = -sgn * 0.05;
   const cl = Math.cos(lean);
   const sl = Math.sin(lean);
-  // and the cup faces out as much as forward, so from the front the lining
-  // shows obliquely with the dark back along the outer rim
-  const yaw = sgn * 0.7;
+  // and the cup faces forward-out at about 35 degrees, so from the front the
+  // lining shows with the dark back along the outer rim
+  const yaw = sgn * 0.6;
   const cyw = Math.cos(yaw);
   const syw = Math.sin(yaw);
   const depth = 0.026 * s;
@@ -396,11 +404,11 @@ function addEar(b, frame, bones, s, D, sgn) {
         const a = (k / around) * Math.PI * 2;
         const ca = Math.cos(a);
         const sa = Math.sin(a);
-        // rim: an ovoid, a little narrower toward the tip and fuller at the
-        // base, so the outline is a rounded egg standing on its wide end and
-        // not a disc
+        // rim: a rounded triangle, broad at the base and two thirds as wide
+        // at the tip (round 5: the ovoid of round 4 was a teddy bear's round
+        // ear from the front; a lion's is a cupped triangle with a soft tip)
         const tipward = Math.max(0, sa);
-        const w = W * 0.5 * (1 - 0.14 * tipward * tipward) * (1 + 0.06 * Math.max(0, -sa));
+        const w = W * 0.5 * (1 - 0.36 * tipward * tipward) * (1 + 0.08 * Math.max(0, -sa));
         const h = sa >= 0 ? H * 0.5 : H * 0.46;
         // the outer edge of the ear is the straighter one: flatten the lateral side
         const lateral = ca * sgn > 0;
@@ -538,7 +546,9 @@ function addMane(alpha, skel, K, D, sHead, headFrame, rnd) {
   // down under the jaw, leaning a little back — the way a mane frames a
   // male's face from the front; it also screens the open ends of the shell
   // layers behind it
-  ring(headC(0.1, 0.03), headAxes, 0.1 * sHead, 0.08 * sHead, 0.105 * sHead, 22, {
+  // (round 5: the roots follow the taller skull — the crown is at 0.17, the
+  // cheeks 0.12 out — so the ruff leaves the skin and is not buried in it)
+  ring(headC(0.1, 0.05), headAxes, 0.115 * sHead, 0.1 * sHead, 0.125 * sHead, 22, {
     len: 0.2 * s,
     width: 0.024 * s,
     back: 0.7,
@@ -549,7 +559,7 @@ function addMane(alpha, skel, K, D, sHead, headFrame, rnd) {
     lenFn: (u, sa) => (0.16 + 0.1 * Math.max(0, -sa) - 0.05 * Math.max(0, sa)) * s, // longest under the jaw, shortest over the brow
   });
   // a second, deeper ruff behind the first, swept further back, for depth
-  ring(headC(0.04, 0.03), headAxes, 0.105 * sHead, 0.09 * sHead, 0.11 * sHead, 18, {
+  ring(headC(0.04, 0.05), headAxes, 0.115 * sHead, 0.105 * sHead, 0.125 * sHead, 18, {
     len: 0.22 * s,
     width: 0.024 * s,
     back: 1.0,
@@ -560,7 +570,7 @@ function addMane(alpha, skel, K, D, sHead, headFrame, rnd) {
     lenFn: (u, sa) => (0.18 + 0.08 * Math.max(0, -sa)) * s,
   });
   // the crown and the back of the skull: shorter, swept back between the ears
-  ring(headC(-0.01, 0.04), headAxes, 0.1 * sHead, 0.085 * sHead, 0.1 * sHead, 22, {
+  ring(headC(-0.01, 0.05), headAxes, 0.108 * sHead, 0.1 * sHead, 0.11 * sHead, 22, {
     len: 0.17 * s,
     width: 0.02 * s,
     back: 1.2,

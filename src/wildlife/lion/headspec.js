@@ -8,8 +8,18 @@
 // The upper head — braincase, brow, cheeks, muzzle and upper lip — is one loft
 // along z, each section a superellipse (exponent n: 2 is an ellipse, higher is
 // boxier) with its own centre height and separate half-heights above and
-// below the centre. Lengthwise it runs from the occiput to the nose; the
-// muzzle from the eye to the nose tip is about 0.2, some 45 % of the head.
+// below the centre. Lengthwise it runs from the occiput to the nose.
+//
+// Round 5 is proportions by number (tools/lionhead_measure.mjs reads them off
+// the built mesh). With L the head length, nose tip to occiput (0.404 here):
+// zygomatic width 0.65 L; muzzle length (nose tip to the eyes' inner corners)
+// 0.33 L, width across the whisker pads 0.33 L, depth (bridge to chin) 0.33 L;
+// interpupillary 0.29 L (0.45 of the cheek width); face height chin to crown
+// about 0.6 L with the eye line at 63 % of it; ears 0.25 L by 0.2 L on the
+// upper corners of the skull; nose leather 0.15 L. The round-4 head measured
+// 0.59 / 0.30 / 0.35 / 0.28 / 0.23 / 0.41 / 0.37: a wide, low oval of a head
+// with a huge nose and close-set eyes, which is a bear from the side and a
+// hippo from the front.
 // ---------------------------------------------------------------------------
 
 import { EYE_LIDS, HEAD_JOINTS } from './spec.js';
@@ -22,42 +32,46 @@ import { EYE_LIDS, HEAD_JOINTS } from './spec.js';
  * and the cheeks (see topTaper).
  */
 export const HEAD_ROWS = [
-  [-0.085, 0.035, 0.03, 0.03, 0.03, 2.0, 0, 0],
+  // the occiput: a rounded skull back, its pole a little above the head joint
+  [-0.085, 0.045, 0.04, 0.045, 0.06, 2.0, 0, 0],
   // (the lower halves of the rear rows reach down into the neck loft: shallower
   // and the ground shows between throat and chest from the front)
-  [-0.06, 0.038, 0.08, 0.064, 0.08, 2.3, 0.05, 0],
-  [-0.02, 0.04, 0.1, 0.074, 0.1, 2.6, 0.08, 0],
-  // the crown runs level from the occiput to the brow (a lion's skull is flat
-  // on top; a dome over the braincase is the bear), its highest point the brow
-  [0.03, 0.042, 0.106, 0.074, 0.11, 2.7, 0.07, 0.05], // braincase: a broad, low, flat forehead
-  [0.08, 0.04, 0.116, 0.074, 0.114, 2.7, 0.09, 0.1], // zygomatic arches: the widest point of the head, a wide low oval from the front
-  [0.125, 0.036, 0.114, 0.077, 0.104, 2.6, 0.12, 0.12], // the temples fall in toward the brow
-  [0.165, 0.03, 0.1, 0.08, 0.074, 2.6, 0.1, 0.15], // eye plane: the orbit rims stand wide, the eyes tucked inside them
+  [-0.06, 0.05, 0.088, 0.075, 0.1, 2.4, 0.06, 0.05],
+  // the crown: broad and flat between the ears, 0.16 over the head joint — the
+  // cranium above the eye line is 0.22 L, which is what a lion skull gives
+  // with its fur (the brief's 0.33 L was built twice, at 0.17 and 0.185, and
+  // read as a bear's dome both times; the rest of the face is to the brief). The section is a tall box — flat
+  // cheeks, a flat top, the corners square where the ears root (a crown that
+  // narrows to a dome is the bear) — with its widest point just under the eye
+  // line and the lower half drawing in toward the jaw, so from the front the
+  // face is a wedge that narrows to the chin, not an oval widest at the jowls.
+  [-0.02, 0.06, 0.112, 0.095, 0.125, 3.4, 0.08, 0.06],
+  [0.03, 0.065, 0.118, 0.093, 0.135, 3.7, 0.08, 0.06], // braincase
+  [0.08, 0.065, 0.122, 0.093, 0.14, 3.7, 0.08, 0.07], // zygomatic arches: the widest point of the head, 0.63 L across with the cheek sculpt
+  [0.125, 0.06, 0.12, 0.085, 0.13, 3.4, 0.08, 0.08], // the forehead starts down toward the brow
+  // the forehead falls in a straight line from the crown through the brow to
+  // the stop, about 35 degrees: the eyes sit in that fall, under the brow
+  // ledge and over the muzzle box, well inside the cheeks' outline (the eye
+  // centre 3 cm in from the skin; round 4 had the balls on the skull's top
+  // corners)
+  [0.165, 0.046, 0.106, 0.06, 0.114, 2.9, 0.08, 0.08], // brow
+  [0.18, 0.04, 0.09, 0.052, 0.11, 2.9, 0.08, 0.08], // eye plane: boxy, so the skin stands out to the ball's front at the eye's height
   // the muzzle rows carry the lower jaw too: the mouth line is painted across
   // the lower half (FACE.lipY), so what hangs below it is jaw and chin — made
-  // narrower than the muzzle over it by the bottom taper — and the jaw loft
-  // only adds the chin's point
-  // (round 4: the cheek narrows into the muzzle root over four rows with the
-  // exponent held, not a 2.6/2.7 step at the stop — the step read as a
-  // boundary between pasted-on cheek pads and the muzzle)
-  [0.18, 0.029, 0.09, 0.074, 0.072, 2.62, 0.1, 0.18], // the brow's front edge
-  // the muzzle is a block, not a snout: boxy sections, the lower jaw nearly as
-  // wide as the upper lip (the jowls hang over it; only the chin narrows), the
-  // bridge sloping gently from a stop of two to three centimetres, and the
-  // underside deep to the front so the muzzle ends in a blunt face under the
-  // nose with the lip and chin dropping nearly vertical
-  [0.2, 0.025, 0.078, 0.056, 0.072, 2.65, 0.07, 0.13], // the stop
-  [0.215, 0.023, 0.07, 0.05, 0.07, 2.68, 0.06, 0.12], // root of the muzzle, a smaller rounded block hung under the eyes
-  [0.255, 0.02, 0.063, 0.045, 0.064, 2.7, 0.04, 0.16], // muzzle: 55 % of the cheek width, 62 % with the whisker pads; bridge to chin about half the skull's depth; the bridge broad and flat
-  // (round 4: the lower jaw tucks under the whisker pads toward the front —
-  // the bottom taper grows to the nose end — so from the front the chin is a
-  // small knob under the pads and not a second slab as wide as the lip, which
-  // with the pale chin read as a grin)
-  [0.285, 0.018, 0.062, 0.04, 0.06, 2.45, 0.03, 0.2], // whisker pads (rounder sections here: a boxy one folds into a shelf under the lip)
-  [0.305, 0.016, 0.055, 0.034, 0.05, 2.3, 0.02, 0.22], // the lip recedes a little under the nose
-  // the bridge falls about 17 degrees from the stop to the nose, so from the
-  // front the nose sits well under the eyes, the mouth close under the nose
-  [0.318, 0.012, 0.04, 0.028, 0.042, 2.2, 0, 0.24], // blunt nose end: the front is a face, not a point
+  // only a little narrower than the muzzle over it (a bottom taper under 0.1:
+  // the round-5 draft's 0.2 tapered the jaw to a hippo's rounded chin), so
+  // the lower jaw fills the muzzle box — and the jaw loft adds the broad chin
+  [0.2, 0.03, 0.08, 0.052, 0.104, 2.9, 0.06, 0.07], // the stop: a shallow step down to the bridge
+  [0.215, 0.022, 0.073, 0.05, 0.1, 2.8, 0.04, 0.05], // root of the muzzle
+  // the muzzle is a short deep box, not a snout: 0.33 L long, wide and deep;
+  // the bridge broad, flat and high — the nose's top level with the eye's
+  // lower rim, so the bridge falls only 2 cm from the stop to the nose — and
+  // the underside as deep as the top is high, so the muzzle ends in a squared
+  // face under the nose with the lip and chin dropping vertical
+  [0.255, 0.0, 0.062, 0.056, 0.078, 2.7, 0.02, 0.03], // muzzle: 0.34 L across with the whisker pads, half the cheek width
+  [0.285, -0.008, 0.058, 0.052, 0.07, 2.6, 0.01, 0.04], // whisker pads (rounder sections here: a boxy one folds into a shelf under the lip)
+  [0.303, -0.008, 0.05, 0.046, 0.064, 2.4, 0, 0.06], // the lip recedes a little under the nose
+  [0.315, -0.004, 0.036, 0.036, 0.054, 2.3, 0, 0.08], // blunt nose end: the front is a face, not a point; the leather stands 4 mm proud of it
 ];
 
 export const HEAD_Z0 = HEAD_ROWS[0][0];
@@ -69,34 +83,46 @@ export const HEAD_SPLIT = 0.2;
 export const JAW_ROWS = [
   // behind the mouth corner the jaw sits inside the head (the cheek and jowl
   // are the upper loft's), so nothing of it bulges under the cheek
-  [0.04, -0.03, 0.05, 0.026, 0.016],
-  [0.12, -0.028, 0.05, 0.024, 0.016],
+  [0.04, -0.05, 0.05, 0.026, 0.02],
+  [0.12, -0.052, 0.05, 0.024, 0.02],
   // ahead of the corner it is hidden under the upper lip (well inside the
   // tapered underside of the muzzle loft, so no edge of it shows under the
-  // cheek as a tusk) but for the small chin at the front, under the nose
-  [0.2, -0.034, 0.038, 0.016, 0.012],
-  [0.26, -0.036, 0.03, 0.012, 0.012],
-  [0.29, -0.032, 0.024, 0.01, 0.014], // the chin's point, half a centimetre under the loft's bottom
-  [0.305, -0.03, 0.014, 0.008, 0.012],
+  // cheek as a tusk) but for the chin at the front, under the nose
+  [0.2, -0.066, 0.04, 0.016, 0.014],
+  [0.26, -0.066, 0.042, 0.012, 0.014],
+  [0.29, -0.066, 0.038, 0.011, 0.014], // the chin: broad and squared, half a centimetre under the loft's bottom
+  [0.305, -0.06, 0.026, 0.008, 0.01],
 ];
 
 /** Where the features are, in head metres (mirrored in x). */
 export const FACE = {
-  // the lid joints (spec.js HEAD_JOINTS): the ball's centre sits 14 mm under
-  // the unsculpted skin along its gaze, so the cornea stands just proud of the
-  // face between the brow and the cheek once the socket is carved
-  eye: [0.047, 0.058, 0.19], // a lion's eyes are close set: 9.4 cm apart on a 23 cm skull, under the brow ridge at the root of the muzzle, the ball's centre 0.97 radii under the unsculpted skin along its gaze (traced through rowsAt + headBump; 70 % of the iris disc is unoccluded from straight ahead)
-  eyeR: 0.0273, // EYE.r × EYE_LIDS.scale (spec.js): the ball head.js builds
-  eyeSkin: 0.0306, // radius of the sphere the skin around the eye is kept outside of (1.12 × the ball)
-  nose: [0, 0.02, 0.306], // centre of the nose leather, its top level with the bridge
-  noseW: 0.09,
-  noseH: 0.05,
+  // the lid joints (spec.js HEAD_JOINTS): the ball's centre sits about a
+  // radius under the unsculpted skin along its gaze, so the cornea stands
+  // just proud of the face between the brow and the cheek once the socket is
+  // carved
+  // round 5: 11.7 cm apart on a 40 cm head (0.29 L, 0.45 of the cheek width),
+  // the eye line at 63 % of the face height from the chin — the ball's
+  // bottom level with the top of the muzzle box at the stop, the nose leather
+  // 6 cm under the eye's centre (the draft that had the bridge level with the
+  // eye's lower rim was the hippo) — and the inner corners 0.32 L behind the
+  // nose tip; the ball's centre 3.4 cm inside the cheek's
+  // skin, so the eyes sit in the face rather than on its corners
+  eye: [0.0585, 0.07, 0.168],
+  eyeR: 0.0261, // EYE.r × EYE_LIDS.scale (spec.js): the ball head.js builds
+  eyeSkin: 0.0293, // radius of the sphere the skin around the eye is kept outside of (1.12 × the ball)
+  // centre of the nose leather at the squared front of the muzzle, its top
+  // level with the bridge; 0.15 L wide (round 4's 0.09 was 0.37 L: a hippo's)
+  nose: [0, 0.012, 0.308],
+  noseW: 0.066,
+  noseH: 0.04,
   // the mouth ends in the jowl under the front corner of the eye, no further back
-  mouthCorner: [0.06, -0.03, 0.205],
+  mouthCorner: [0.062, -0.064, 0.2],
   // height of the mouth line along the muzzle: the corner, and at the nose
-  // end — the line slopes down from under the nose to the corner
-  lipY: [-0.03, -0.014],
-  whiskerPad: [0.054, 0.0, 0.275],
+  // end — the line runs nearly level from under the nose to the corner (a
+  // slope of more than a centimetre read as a smile) and only the corner
+  // itself turns down into the jowl; the chin hangs 4 cm under it
+  lipY: [-0.064, -0.044],
+  whiskerPad: [0.05, -0.02, 0.275],
 };
 
 /**
@@ -104,7 +130,10 @@ export const FACE = {
  * spec.js: gaze `g`, the up vector `u` square to it, the lateral axis `l`, and
  * the outward normals of the two lid-rim planes (each holds the lateral axis;
  * a direction's angle off `up` is positive under the upper lid, off `down`
- * positive above the lower). The left eye is the mirror.
+ * positive above the lower). `u` is rolled EYE_LIDS.roll about the gaze
+ * toward the outside of the face, so the almond's outer corner sits a little
+ * higher than the inner one (a cat's eye slants up and out); head.js rolls
+ * the lid caps the same way. The left eye is the mirror.
  */
 export const EYE_FRAME = (() => {
   const norm = (v) => {
@@ -113,7 +142,12 @@ export const EYE_FRAME = (() => {
   };
   const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const g = norm(HEAD_JOINTS.lidL.dir);
-  const u = norm([-g[0] * g[1], 1 - g[1] * g[1], -g[2] * g[1]]);
+  const u0 = norm([-g[0] * g[1], 1 - g[1] * g[1], -g[2] * g[1]]);
+  const l0 = norm(cross(g, u0));
+  // the lateral direction is the one with positive x (the right eye's frame)
+  const lat = l0[0] >= 0 ? l0 : [-l0[0], -l0[1], -l0[2]];
+  const roll = EYE_LIDS.roll ?? 0;
+  const u = norm([u0[0] * Math.cos(roll) + lat[0] * Math.sin(roll), u0[1] * Math.cos(roll) + lat[1] * Math.sin(roll), u0[2] * Math.cos(roll) + lat[2] * Math.sin(roll)]);
   const l = norm(cross(g, u));
   const rim = (pitch) => {
     const c = Math.cos(pitch);
@@ -134,7 +168,9 @@ export const EYE_FRAME = (() => {
  * radians (positive `start` grows the almond past the lid rims, for the
  * eyeline the painter draws on the skin around it). The almond pinches to its
  * corners short of the lateral axis: the skin keeps the ball covered
- * beyond about 55 degrees to the side (so the eye shows from the side too). Used by the head loft to carve the
+ * beyond about 60 degrees to the side (so the eye shows from the side too);
+ * with the lids at 34 / 30 degrees the opening is 1.6 times as wide as it is
+ * tall, a cat's almond and not a round button. Used by the head loft to carve the
  * socket and by the face painter to line the edge.
  */
 export function almondOpen(dx, dy, dz, soft = 0.14, start = 0.02) {
@@ -145,7 +181,7 @@ export function almondOpen(dx, dy, dz, soft = 0.14, start = 0.02) {
   const aUp = Math.asin(Math.max(-1, Math.min(1, (dx * F.up[0] + dy * F.up[1] + dz * F.up[2]) * id)));
   const aDn = Math.asin(Math.max(-1, Math.min(1, (dx * F.down[0] + dy * F.down[1] + dz * F.down[2]) * id)));
   const aL = Math.abs(Math.asin(Math.max(-1, Math.min(1, (dx * F.l[0] + dy * F.l[1] + dz * F.l[2]) * id))));
-  return sstep(start + soft, start, aUp) * sstep(start + soft, start, aDn) * sstep(1.15 + start, 0.85 + start, aL);
+  return sstep(start + soft, start, aUp) * sstep(start + soft, start, aDn) * sstep(1.25 + start, 0.95 + start, aL);
 }
 
 function sstep(a, b, x) {
@@ -213,18 +249,18 @@ export function topTaper(sa, taper, bot = 0) {
  * temple are hollows.
  */
 export const HEAD_BUMPS = [
-  [0.044, 0.09, 0.165, 0.04, 0.018, 0.032, 0.007], // brow ridge: a ledge on the top edge over the socket
-  [0.0, 0.09, 0.15, 0.012, 0.015, 0.05, -0.005], // the groove between the brows
-  [0.0, 0.1, 0.14, 0.05, 0.03, 0.04, 0.004], // frontal boss: the forehead a little domed just over the brows
-  [0.0, 0.066, 0.21, 0.03, 0.02, 0.02, -0.005], // the stop
-  [0.104, 0.0, 0.125, 0.036, 0.04, 0.065, 0.009], // zygomatic arch (broad and soft, so it tapers into the muzzle root)
-  [0.086, -0.05, 0.1, 0.04, 0.045, 0.06, 0.009], // masseter / jowl
-  [0.054, 0.006, 0.272, 0.03, 0.026, 0.04, 0.009], // whisker pad: a real swell, the follicle rows sit on it
+  [0.06, 0.095, 0.168, 0.045, 0.02, 0.034, 0.012], // brow ridge: a straight ledge over the socket
+  [0.0, 0.09, 0.17, 0.02, 0.022, 0.05, -0.006], // the groove between the brows: the forehead is a shallow trough between the two orbital ridges
+  [0.0, 0.078, 0.205, 0.03, 0.02, 0.025, -0.01], // the stop
+  [0.122, 0.035, 0.13, 0.036, 0.045, 0.065, 0.008], // zygomatic arch (broad and soft, so it tapers into the muzzle root)
+  [0.105, -0.04, 0.1, 0.04, 0.05, 0.06, 0.008], // masseter
+  [0.08, -0.05, 0.19, 0.03, 0.03, 0.04, 0.008], // jowl: the cheek hangs out over the mouth corner, so the corner is under it from the front
+  [0.048, -0.022, 0.274, 0.026, 0.026, 0.04, 0.016], // whisker pad: a real swell, the follicle rows sit on it
   // the lower lip and chin fill in under the pads, so the pads do not
   // overhang a dark recess that reads as an open mouth from the front
-  [0.02, -0.032, 0.285, 0.035, 0.018, 0.03, 0.006],
-  [0.0, 0.06, 0.25, 0.036, 0.02, 0.05, 0.003], // the flat nose bridge
-  [0.1, 0.07, 0.06, 0.03, 0.035, 0.04, -0.006], // temple
+  [0.02, -0.068, 0.285, 0.035, 0.02, 0.03, 0.005],
+  [0.0, 0.045, 0.25, 0.036, 0.02, 0.05, 0.003], // the flat nose bridge
+  [0.1, 0.09, 0.09, 0.03, 0.04, 0.045, -0.006], // temple: the hollow over the arch behind the eye
 ];
 
 export function headBump(x, y, z) {

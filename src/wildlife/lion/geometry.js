@@ -406,11 +406,16 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
     [arcAt(3), 0.215, 0.16, BELLY.spine2 - (0.115 - D0), 0.115], // spine2: the barrel
     [arcAt(3, 0.6), 0.23, 0.175, BELLY.chest + 0.01 - (0.115 - D0), 0.115], // behind the shoulder blades: the withers rise
     [arcAt(4), 0.235, 0.18, BELLY.chest - (0.11 - D0), 0.11], // chest / shoulders: the widest point, the brisket down at the elbow
-    [arcAt(4, 0.5), 0.215, 0.16, 0.44, 0.09], // point of the shoulder: broad, the upper arm buried in it
-    [arcAt(5), 0.175, 0.13, 0.33, 0.06], // neck1: the neck proper starts, as wide as the skull and deeper than it
-    [arcAt(6), 0.135, 0.1, 0.21, 0.03], // neck2: throat rising to the jaw, as wide as the skull
-    [arcAt(7), 0.1, 0.075, 0.145, 0.01], // head: inside the skull; the throat runs on under the jaw
-    [arcAt(8), 0.075, 0.05, 0.115, 0.0],
+    [arcAt(4, 0.5), 0.22, 0.17, 0.44, 0.09], // point of the shoulder: broad, the upper arm buried in it
+    // the neck (round 5): thick and smoothly continuous with the chest — a
+    // lioness's neck is nearly as deep as her skull — and its crest rising
+    // toward the head so the nape meets the back of the skull (the crown 0.16
+    // head metres over the head joint, the occiput's pole 0.09) instead of the
+    // skull sitting on the neck like a ball on a post
+    [arcAt(5), 0.19, 0.17, 0.34, 0.06], // neck1: the neck proper starts, a little wider than the skull and deeper than it
+    [arcAt(6), 0.155, 0.16, 0.23, 0.03], // neck2: throat rising to the jaw; the crest a hand under the crown
+    [arcAt(7), 0.115, 0.14, 0.15, 0.01], // head: inside the skull; the throat runs on under the jaw
+    [arcAt(8), 0.08, 0.1, 0.115, 0.0],
   ];
   const torsoProfile = (d) => {
     const [rx, ryTop, ryBot, drop] = table(torsoRows, d);
@@ -437,10 +442,13 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
     // the shoulder: triceps and the point of the shoulder low down, and the
     // scapula with its muscle riding up over the forelegs to the withers, the
     // heavy-shouldered read a lion has and a dog does not
-    let o = bulge(p, 0.22 * s, 0.88 * s, 0.4 * s, 0.24 * s, 0.06 * s) * lateral;
-    // the shoulder blade: a broad plate riding high on the side of the
-    // ribcage behind the withers, +8 % on the section there (round 4)
-    o += bulge(p, 0.19 * s, 1.04 * s, 0.32 * s, 0.22 * s, 0.05 * s) * lateral;
+    let o = bulge(p, 0.22 * s, 0.88 * s, 0.4 * s, 0.24 * s, 0.05 * s) * lateral;
+    // the shoulder blade: a broad shallow plane on the side of the ribcage
+    // behind the withers (round 5: half round 4's 5 cm mound over a wider
+    // footprint — it read as a hump behind the neck in lion_close; a
+    // lioness's shoulders are broad and smooth, the scapula a plane, not a
+    // mound)
+    o += bulge(p, 0.19 * s, 1.0 * s, 0.34 * s, 0.28 * s, 0.024 * s) * lateral;
     // the haunch: gluteals over the hip and the thigh mass below and behind it,
     // swelling the trunk around the hip so the leg grows out of it, and the
     // hip bone itself, a knuckle high on the pelvis over the joint (round 4)
@@ -584,10 +592,12 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
           [mArcAt(0, 0.5), 0.27, 0.115, 0.44, 0.06], // withers: the base breaks the surface of the back here
           [mArcAt(1), 0.3, 0.13, 0.47, 0.05], // chest: the widest, the throat ruff deepest
           [mArcAt(1, 0.5), 0.26, 0.12, 0.44, 0.04],
-          [mArcAt(2), 0.21, 0.11, 0.41, 0.03], // neck1
-          [mArcAt(2, 0.5), 0.175, 0.098, 0.33, 0.02],
-          [mArcAt(3), 0.14, 0.085, 0.24, 0.012], // neck2: on the neck, just outside the coat
-          [mArcAt(4), 0.09, 0.06, 0.12, 0.0], // inside the back of the skull
+          // (round 5: the neck's crest rises to the taller skull, so the base
+          // rides a centimetre or two outside the new neck rows)
+          [mArcAt(2), 0.21, 0.155, 0.41, 0.03], // neck1
+          [mArcAt(2, 0.5), 0.185, 0.15, 0.33, 0.02],
+          [mArcAt(3), 0.165, 0.155, 0.25, 0.012], // neck2: on the neck, just outside the coat
+          [mArcAt(4), 0.11, 0.12, 0.13, 0.0], // inside the back of the skull
         ],
         d,
       );

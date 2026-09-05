@@ -124,7 +124,15 @@ export const EYE = { r: 0.0195, lidUp: 0.46, lidDown: 0.46 };
 // Round 4: opened from 0.6/0.6 (34 degrees, which with the dark lid rims and
 // the painted eyeline read as a slit in every gauntlet frame) to 39/34
 // degrees, so the almond shows about 80 % of the iris disc from the front.
-export const EYE_LIDS = { up: 0.68, down: 0.6, scale: 1.4 };
+// `roll` (round 5) turns the lid rims' axis about the gaze so the almond's
+// outer corner sits 8 degrees higher than the inner (headspec.js EYE_FRAME and
+// the lid caps in head.js; the blink axis in pose.js is unchanged).
+// Round 5: 31 / 33 degrees (the round-4 39 / 34 with the wider round-5
+// almond showed the ball as a round button), the upper rim the lower of the
+// two so the eye is hooded under the brow the way a cat's is, and the ball
+// 1.34 × EYE.r rather than 1.4 (a 5.5 cm ball on a 40 cm head was a cub's
+// eye); about 65 % of the iris disc shows from the front.
+export const EYE_LIDS = { up: 0.54, down: 0.58, scale: 1.34, roll: 0.14 };
 
 /**
  * Head-child joints re-placed for the head in head.js, laid out like JOINTS
@@ -133,19 +141,24 @@ export const EYE_LIDS = { up: 0.68, down: 0.6, scale: 1.4 };
  * more forward.
  */
 export const HEAD_JOINTS = {
-  // ears on the sides of the skull at brow level, over the zygomatic arch (a
-  // hand behind the eye, not on the occiput), leaning well out, so from the
-  // front they stand beyond the skull's outline
-  earL: { pos: [0.09, 1.28, 0.975], dir: [0.7, 1.0, -0.3] },
-  earR: { pos: [-0.09, 1.28, 0.975], dir: [-0.7, 1.0, -0.3] },
-  // eyes close set on the face, under the brow ridge and at the root of the
-  // muzzle (round 4: down 1 cm, in 6 mm and forward 5 mm from round 3, where
-  // they sat on the top corners of the skull), the ball's centre about a
-  // radius under the skin along its gaze so the cornea stands just proud
-  // between brow and cheek, forward-facing with about 17 degrees of
-  // divergence; headspec.js FACE.eye is this offset
-  lidL: { pos: [0.047, 1.258, 1.1], dir: [0.3, 0.08, 1] },
-  lidR: { pos: [-0.047, 1.258, 1.1], dir: [-0.3, 0.08, 1] },
+  // ears on the upper corners of the skull (round 5: the crown is 0.16 over
+  // the head joint and the corner where the flat top meets the flat cheek is
+  // at about x 0.098, y 0.125), a hand behind the eye, the base on the
+  // corner itself, the axis leaning out about 33 degrees and back a touch,
+  // so from the front the ears stand wide off the corners (their inner edges
+  // half the head's width apart) with the crown level between them — not on
+  // top of a dome, not low on its sides
+  earL: { pos: [0.098, 1.322, 0.97], dir: [0.64, 1.0, 0.02] },
+  earR: { pos: [-0.098, 1.322, 0.97], dir: [-0.64, 1.0, 0.02] },
+  // eyes on the face under the brow ridge, over the muzzle box (round 5:
+  // 11.7 cm apart, 0.29 of the head length and 0.45 of the cheek width, up
+  // 1.2 cm and back 2.2 cm from round 4 so the inner corners sit 0.33 L behind
+  // the nose tip and the ball's bottom is level with the bridge), the ball's
+  // centre about a radius under the skin along its gaze so the cornea stands
+  // just proud between brow and cheek, forward-facing with about 17 degrees
+  // of divergence; headspec.js FACE.eye is this offset
+  lidL: { pos: [0.0585, 1.27, 1.078], dir: [0.3, 0.08, 1] },
+  lidR: { pos: [-0.0585, 1.27, 1.078], dir: [-0.3, 0.08, 1] },
 };
 
 /**
