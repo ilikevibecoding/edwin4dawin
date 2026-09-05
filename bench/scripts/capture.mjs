@@ -3,7 +3,7 @@
  * Deterministic benchmark capture.
  *
  *   node bench/scripts/capture.mjs --tag iter01 [--views aerial-a,bridge-low] [--url http://127.0.0.1:4173/]
- *                                  [--no-clip] [--clip-frames 60] [--still-quality high] [--clip-quality low]
+ *                                  [--no-clip] [--clip-frames 60] [--still-quality high] [--clip-quality medium]
  *
  * For every view: stationary still (1920x1080, HUD on), in-flight still (after 3 s of fixed-step flight),
  * a clip (PNG sequence -> mp4 at 10 fps, 6 s), metrics JSON (renderer counters, frame times, memory,
@@ -23,7 +23,9 @@ const baseUrl = opt('url', 'http://127.0.0.1:4173/');
 const views = opt('views', 'aerial-a,cockpit-city,bridge-low,skyline-high,island-pass,harbor,water-landing,sunset,cloudy,night').split(',');
 const clipFrames = Number(opt('clip-frames', '60'));
 const stillQuality = opt('still-quality', 'high');
-const clipQuality = opt('clip-quality', 'low');
+// clips at 'low' had no MSAA (QUALITY.low.samples = 0) while stills had 4x, so every clip carried edge crawl the
+// game does not show at the default quality; 'medium' (2x MSAA, 3 cascades) is the lowest level with AA
+const clipQuality = opt('clip-quality', 'medium');
 const seed = opt('seed', '20260904');
 const doClip = !flag('no-clip');
 const doFlight = !flag('no-flight');

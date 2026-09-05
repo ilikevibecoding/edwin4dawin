@@ -50,8 +50,10 @@ const TARGETS = {
   maxInvertedS: { range: [0, 3], unit: 's', label: 'longest inverted-on-surface spell' },
   cameraMinX: { range: [0.45, 0.55], unit: '', label: 'chase camera centroid x (min)' },
   cameraMaxX: { range: [0.45, 0.55], unit: '', label: 'chase camera centroid x (max)' },
-  cameraMinY: { range: [0.5, 0.7], unit: '', label: 'chase camera centroid y (min)' },
-  cameraMaxY: { range: [0.5, 0.7], unit: '', label: 'chase camera centroid y (max)' },
+  // the chase camera looks 6 m ahead of the datum, so the aircraft sits in the lower third; the settled spring pose
+  // (camera.ts settle/chaseDesired) puts the datum at 0.67-0.70 through a 45-degree bank, climb and push-over
+  cameraMinY: { range: [0.5, 0.72], unit: '', label: 'chase camera centroid y (min)' },
+  cameraMaxY: { range: [0.5, 0.72], unit: '', label: 'chase camera centroid y (max)' },
   nanCount: { range: [0, 0], unit: '', label: 'non-finite telemetry samples' },
 };
 
@@ -375,8 +377,11 @@ function suite() {
   {
     f.turbulence = ambientTurbulence;
     place(1800, 300, 1200, 290, 0, 0, 55, 0.72, 0);
-    fc.mode = 'chase'; fc.orbitYaw = 0; fc.orbitPitch = 0; fc.baseFov = 50; fc.snap();
-    for (let i = 0; i < 120; i++) fc.update(f, model, 1 / 30);
+    // settle at the spring's steady pose for the aircraft's velocity: integrating the spring against a frozen
+    // aircraft parks the camera a feed-forward lead (v * C/K ~ 13 m) ahead of that pose, and the first simulated
+    // frame then projects the aircraft off the bottom of the frame (centroid y 1.06) before the spring recovers
+    fc.mode = 'chase'; fc.orbitYaw = 0; fc.orbitPitch = 0; fc.baseFov = 50;
+    fc.settle(f, model, DT);
     const vsHold = makeVsHold();
     let minX = 1, maxX = 0, minY = 1, maxY = 0, offscreen = 0;
     const xs = [];
