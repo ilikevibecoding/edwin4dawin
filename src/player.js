@@ -25,7 +25,8 @@ export function collectBoxes(world, region, out = []) {
     if (id === 0) continue;
     const def = BLOCKS[id];
     if (!def.solid) continue;
-    for (const b of def.boxes) out.push(new AABB(x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]));
+    const boxes = def.boxesAt ? def.boxesAt(world, x, y, z) : def.boxes; // doors: thin panel across the doorway
+    for (const b of boxes) out.push(new AABB(x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]));
   }
   if (world.vehicles) world.vehicles.collectBoxes(region, out); // moving voxel structures (train, ships)
   return out;
@@ -112,8 +113,10 @@ export class Player {
     this.eyeUnderwater = false;
     this.health = 20;
     this.food = 20;
+    this.saturation = 5;   // Minecraft spawn value; drained before food (see tick)
     this.exhaustion = 0;
     this.foodTimer = 0;
+    this.eating = null;    // {id, ticks} while the use key is held with food (32 ticks = 1.6 s)
     this.fallDistance = 0;
     this.walkDist = 0;
     this.prevWalkDist = 0;
@@ -335,12 +338,15 @@ export class Player {
     const targetEye = this.sneaking ? SNEAK_EYE : PLAYER_EYE;
     this.eyeHeight += (targetEye - this.eyeHeight) * 0.5;
 
-    // hunger / regen
+    // hunger / regen (Minecraft rules): every 4 exhaustion drains one saturation point first, then one food point;
+    // natural regen needs food >= 18 (1 HP / 4 s, or 1 HP / 0.5 s while food is full and saturation remains) and
+    // costs 6 exhaustion per heart healed; starvation stops at 1 HP.
     this.exhaustion += hd * (this.sprinting ? 0.1 : 0.01);
-    if (this.exhaustion > 4) { this.exhaustion -= 4; if (this.food > 0) this.food--; }
+    if (this.exhaustion > 4) { this.exhaustion -= 4; if (this.saturation > 0) this.saturation = Math.max(0, this.saturation - 1); else if (this.food > 0) this.food--; }
     if (this.food >= 18 && this.health < 20) {
       this.foodTimer++;
-      if (this.foodTimer >= 80) { this.foodTimer = 0; this.health = Math.min(20, this.health + 1); this.exhaustion += 3; }
+      const saturated = this.food >= 20 && this.saturation > 0;
+      if (this.foodTimer >= (saturated ? 10 : 80)) { this.foodTimer = 0; this.health = Math.min(20, this.health + 1); this.exhaustion += 6; }
     } else if (this.food <= 0) {
       this.foodTimer++;
       if (this.foodTimer >= 80) { this.foodTimer = 0; if (this.health > 1) this.damage(1); }
@@ -388,8 +394,31 @@ export class Player {
     this.dead = false;
     this.health = 20;
     this.food = 20;
+    this.saturation = 5;
     this.exhaustion = 0;
+    this.eating = null;
     this.teleport(x, y, z);
+  }
+
+  // --- eating -----------------------------------------------------------------------------------------------
+  // Called by the game once per tick while the use key is held with a food item selected. Eating takes 32 ticks
+  // (1.6 s) and is impossible at full hunger; letting go resets the progress (Minecraft behaviour).
+  // Returns 'done' on the tick the item is consumed, true while eating, false when not eating.
+  eatTick(id, food) {
+    if (!food || this.food >= 20 || this.dead) { this.eating = null; return false; }
+    if (!this.eating || this.eating.id !== id) this.eating = { id, ticks: 0 };
+    const e = this.eating;
+    e.ticks++;
+    if (e.ticks % 6 === 1) this.events.push({ type: 'chew' }); // chewing sound every 0.3 s
+    if (e.ticks >= 32) { this.eat(food); this.eating = null; this.events.push({ type: 'eat', id }); return 'done'; }
+    return true;
+  }
+  stopEating() { this.eating = null; }
+  // Applies a food's hunger / saturation values (saturation never exceeds the food level, like Minecraft).
+  eat(food) {
+    this.food = Math.min(20, this.food + food.hunger);
+    this.saturation = Math.min(this.food, this.saturation + food.saturation);
+    this.foodTimer = 0;
   }
 
   // View bobbing transforms for the camera (Minecraft formula). Returns {tx, ty, roll, pitch}

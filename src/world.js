@@ -1,6 +1,6 @@
 // Chunk storage, block access, and Minecraft-style voxel lighting (sky + block light flood fill).
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH, DIRS } from './constants.js';
-import { B, BLOCKS } from './blocks.js';
+import { B, BLOCKS, DOOR_SETS } from './blocks.js';
 
 export const idx = (lx, y, lz) => (lx * CS + lz) * CH + y;
 
@@ -67,6 +67,10 @@ export class World {
     this.addQueue = new Queue();
     this.removeQueue = new Queue();
     this.signTiles = new Map(); // packed pos -> atlas tile index for sign text
+    // Block entities: posKey -> {type: 'chest', slots: [{id,count}|null x27]} | {type: 'crop', age}. Global (not per
+    // chunk) so they survive chunk unloading; persisted by save.js, dropped by the game when the block breaks.
+    this.blockEntities = new Map();
+    this.onBlockEntityLost = null; // (x, y, z, entity, newId) when a block carrying an entity is replaced
     this.onChunkDirty = null;
     // lightChunk scratch: per-column top of the non-daylight part, and emitter cell indices
     this._colTop = new Int16Array(CS * CS);
@@ -94,6 +98,47 @@ export class World {
   }
 
   getBlockDef(x, y, z) { return BLOCKS[this.getBlock(x, y, z)]; }
+
+  // ---------------------------------------------------------------------------
+  // Block entities
+  // ---------------------------------------------------------------------------
+  getBlockEntity(x, y, z) { return this.blockEntities.get(World.posKey(x, y, z)) || null; }
+  setBlockEntity(x, y, z, data) {
+    const k = World.posKey(x, y, z);
+    if (data) { data.x = x; data.y = y; data.z = z; this.blockEntities.set(k, data); } else this.blockEntities.delete(k);
+    return data;
+  }
+  removeBlockEntity(x, y, z) { return this.blockEntities.delete(World.posKey(x, y, z)); }
+  // A block with an entity was replaced by something else: hand the entity to the game (drops) and forget it.
+  _blockEntityReplaced(x, y, z, oldId, newId) {
+    const oldDef = BLOCKS[oldId];
+    if (!oldDef || !oldDef.blockEntity) return;
+    if (BLOCKS[newId] && BLOCKS[newId].blockEntity === oldDef.blockEntity) return;
+    const k = World.posKey(x, y, z);
+    const ent = this.blockEntities.get(k);
+    if (!ent) return;
+    if (this.onBlockEntityLost) this.onBlockEntityLost(x, y, z, ent, newId);
+    else this.blockEntities.delete(k);
+  }
+
+  // Town/structure generators place two-block doors as two copies of the bottom id; the top half gets its own id so
+  // it renders with the upper texture and toggles as one door. Runs on freshly generated chunks (before saved edits).
+  normalizeDoors(chunk) {
+    const blocks = chunk.blocks;
+    let n = 0;
+    for (let col = 0; col < CS * CS; col++) {
+      const base = col * CH;
+      for (let y = 0; y < CH - 1; y++) {
+        const id = blocks[base + y];
+        if (id === B.AIR) continue;
+        const d = BLOCKS[id];
+        if (!d.door || d.doorTop || d.doorOpen) continue;
+        if (blocks[base + y + 1] === id) { blocks[base + y + 1] = DOOR_SETS[d.door].top; n++; }
+        y++; // the cell above belongs to this door either way
+      }
+    }
+    return n;
+  }
 
   isLoaded(x, z) {
     const c = this.chunkAt(x, z);
@@ -153,6 +198,7 @@ export class World {
     if (old === id) return false;
     c.blocks[i] = id;
     if (id !== B.WALL_SIGN) this.signTiles.delete(World.posKey(x, y, z));
+    if (this.blockEntities.size) this._blockEntityReplaced(x, y, z, old, id);
     this.markDirty(x, y, z);
     if (c.lit) this.updateLight(x, y, z, old, id);
     if (!silent && this.onChunkDirty) this.onChunkDirty(x, y, z);
@@ -171,6 +217,7 @@ export class World {
     if (old === id) return false;
     c.blocks[i] = id;
     if (old === B.WALL_SIGN) this.signTiles.delete(World.posKey(x, y, z));
+    if (this.blockEntities.size) this._blockEntityReplaced(x, y, z, old, id);
     c.needsRelight = true;
     this.markDirty(x, y, z);
     return true;

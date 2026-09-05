@@ -142,6 +142,16 @@ export class GameAudio {
   click() { this.tone('square', 1000, 900, 0.03, 0.08, null); }
   splash(pos = null) { this.noise(0.35, 'lowpass', 1200, 0.5, 0.6, pos, 24, 0.01, 300); }
 
+  // --- gameplay: doors, chests, eating, cooking, animal hits ------------------------------------------------
+  doorOpen(pos = null) { this.noise(0.14, 'bandpass', 700, 1.4, 0.5, pos); this.tone('triangle', 260, 190, 0.16, 0.22, pos, 24, 0.01, 1200); }
+  doorClose(pos = null) { this.noise(0.1, 'lowpass', 650, 0.8, 0.6, pos); this.tone('sine', 170, 105, 0.12, 0.35, pos); this.tone('triangle', 230, 200, 0.05, 0.12, pos); }
+  chestOpen(pos = null) { this.noise(0.22, 'bandpass', 520, 1.3, 0.45, pos); this.tone('triangle', 180, 320, 0.3, 0.16, pos, 24, 0.02, 1000); }
+  chestClose(pos = null) { this.noise(0.12, 'lowpass', 500, 0.8, 0.6, pos); this.tone('sine', 150, 95, 0.12, 0.3, pos); }
+  chew() { this.noise(0.07, 'bandpass', 900 + Math.random() * 600, 1.2, 0.4, null, 24, 0.004); this.tone('triangle', 240 + Math.random() * 80, 160, 0.05, 0.08, null); }
+  burp() { this.tone('sawtooth', 150, 85, 0.28, 0.25, null, 24, 0.02, 700); this.noise(0.18, 'lowpass', 400, 0.6, 0.15, null); }
+  sizzle(pos = null) { this.noise(0.45, 'highpass', 2600, 0.6, 0.18, pos, 16, 0.05); this.noise(0.2, 'bandpass', 4200, 2, 0.08, pos, 16, 0.01); }
+  animalHurt(pos = null, pitch = 1) { this.noise(0.08, 'lowpass', 900, 0.7, 0.5, pos); this.tone('sawtooth', 320 * pitch, 180 * pitch, 0.16, 0.16, pos, 24, 0.01, 1200); }
+
   // --- creatures --------------------------------------------------------------
   npcGrunt(pos, pitch = 1) {
     this.tone('sine', 190 * pitch, 130 * pitch, 0.25, 0.35, pos, 12, 0.02, 700);

@@ -1,9 +1,17 @@
 // 2D HUD drawn on an overlay canvas with Minecraft-like layout and proportions.
 import { BLOCKS, PALETTE } from './blocks.js';
+import { ITEM_PALETTE, MAX_STACK, mergeInto } from './items.js';
 import { tilePixels } from './textures.js';
 import { drawText, measureText } from './font.js';
 import { TILE_PX } from './constants.js';
 import { clamp } from './rng.js';
+
+const PALETTE_ROWS = 5; // visible palette rows per page in the inventory screen
+// Minecraft quick-move orders (shift-click): into the player inventory the hotbar fills first, from the far end.
+const ORDER_PLAYER = [...Array.from({ length: 9 }, (_, i) => 8 - i), ...Array.from({ length: 27 }, (_, i) => 35 - i)];
+const ORDER_MAIN = Array.from({ length: 27 }, (_, i) => 9 + i);
+const ORDER_HOTBAR = Array.from({ length: 9 }, (_, i) => i);
+const ORDER_CHEST = Array.from({ length: 27 }, (_, i) => i);
 
 const HEART = [
   '.##...##.',
@@ -103,19 +111,29 @@ export class HUD {
     this.lastSelected = -1;
     this.selectorX = 0;
     this.selectorPop = 0;
-    this.screen = null; // null | 'inventory' | 'pause' | 'death'
-    this.mouse = { x: 0, y: 0, down: false, clicked: false };
-    this.cursorItem = null;
+    this.screen = null; // null | 'inventory' | 'chest' | 'pause' | 'death' | 'admin'
+    this.mouse = { x: 0, y: 0, down: false, clicked: false, rdown: false, rclicked: false, wheel: 0 };
+    this.cursorItem = null; // {id, count} carried between slots in the inventory / chest screens
     this.hover = null;
+    this.chest = null;      // {x, y, z, entity} while the chest screen is open
+    this.invTab = 'blocks'; // palette tab of the inventory screen: 'blocks' | 'items'
+    this.invPage = 0;
     this.buttons = [];
     this.debug = false;
     this.fps = 0;
     this.xp = 0.15;
     canvas.addEventListener('mousemove', (e) => { this.mouse.x = e.clientX; this.mouse.y = e.clientY; });
-    canvas.addEventListener('mousedown', (e) => { if (e.button === 0) { this.mouse.down = true; this.mouse.clicked = true; } });
-    canvas.addEventListener('mouseup', () => { this.mouse.down = false; });
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 0) { this.mouse.down = true; this.mouse.clicked = true; }
+      else if (e.button === 2) { this.mouse.rdown = true; this.mouse.rclicked = true; }
+    });
+    canvas.addEventListener('mouseup', (e) => { if (e.button === 0) this.mouse.down = false; else if (e.button === 2) this.mouse.rdown = false; });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    canvas.addEventListener('wheel', (e) => { this.mouse.wheel += Math.sign(e.deltaY); }, { passive: true });
     this.resize();
   }
+
+  get shiftDown() { const inp = this.game && this.game.input; return !!(inp && (inp.isDown('ShiftLeft') || inp.isDown('ShiftRight'))); }
 
   resize() {
     const w = window.innerWidth, h = window.innerHeight;
@@ -297,68 +315,184 @@ export class HUD {
     if (hover && this.mouse.clicked) { this.mouse.clicked = false; onClick(); }
   }
 
+  // --- slot grids shared by the inventory and chest screens ---------------------------------------------------
+  // Draws n slots of `arr` starting at `lo` in a grid of `cols`; registers the hovered one as this.hover.
+  drawSlotGrid(arr, lo, n, cols, x0, y0, kind) {
+    const s = this.scale;
+    for (let i = 0; i < n; i++) {
+      const x = x0 + (i % cols) * 18 * s, y = y0 + Math.floor(i / cols) * 18 * s;
+      this.drawSlotBg(x, y);
+      const slot = arr[lo + i];
+      if (slot) this.drawItem(slot, x + s, y + s);
+      if (this.mouse.x >= x && this.mouse.x < x + 18 * s && this.mouse.y >= y && this.mouse.y < y + 18 * s) this.hover = { type: 'slot', kind, arr, index: lo + i, x, y };
+    }
+  }
+  drawPlayerSlots(inv, gx, mainY, hotbarY) {
+    this.drawSlotGrid(inv.slots, 9, 27, 9, gx, mainY, 'main');
+    this.drawSlotGrid(inv.slots, 0, 9, 9, gx, hotbarY, 'hotbar');
+  }
+  drawHoverHighlight() {
+    if (!this.hover) return;
+    const s = this.scale;
+    this.ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    this.ctx.fillRect(this.hover.x + s, this.hover.y + s, 16 * s, 16 * s);
+  }
+  drawTooltip(name) {
+    const ctx = this.ctx, s = this.scale;
+    const w = measureText(name, s);
+    const tx = this.mouse.x + 8 * s, ty = this.mouse.y - 12 * s;
+    ctx.fillStyle = 'rgba(16,0,16,0.94)'; ctx.fillRect(tx - 3 * s, ty - 3 * s, w + 6 * s, 14 * s);
+    ctx.fillStyle = '#5000ff'; ctx.fillRect(tx - 3 * s, ty - 3 * s, w + 6 * s, s); ctx.fillRect(tx - 3 * s, ty + 10 * s, w + 6 * s, s); ctx.fillRect(tx - 3 * s, ty - 3 * s, s, 14 * s); ctx.fillRect(tx + w + 2 * s, ty - 3 * s, s, 14 * s);
+    this.text(name, tx, ty);
+  }
+  hoveredName(inv) {
+    const h = this.hover;
+    if (!h || this.cursorItem) return null;
+    const id = h.type === 'palette' ? h.id : h.arr[h.index] && h.arr[h.index].id;
+    return id ? BLOCKS[id].displayName : null;
+  }
+
+  // Minecraft slot rules. button 0: pick up / place / merge / swap (shift: quick move); button 2: split half / place one.
+  // `quickDest(h)` returns {arr, order} for shift-clicks. Returns true when something changed.
+  slotClick(h, button, shift, quickDest) {
+    const arr = h.arr, i = h.index, cur = this.cursorItem, st = arr[i];
+    if (button === 0 && shift) {
+      if (!st) return false;
+      const dest = quickDest(h);
+      if (!dest) return false;
+      mergeInto(dest.arr, st, dest.order);
+      if (st.count <= 0) arr[i] = null;
+      return true;
+    }
+    if (button === 0) {
+      if (!cur) { if (!st) return false; this.cursorItem = st; arr[i] = null; return true; }
+      if (!st) { arr[i] = cur; this.cursorItem = null; return true; }
+      if (st.id === cur.id) {
+        const n = Math.min(MAX_STACK - st.count, cur.count);
+        if (n <= 0) return false;
+        st.count += n; cur.count -= n; if (cur.count <= 0) this.cursorItem = null;
+        return true;
+      }
+      arr[i] = cur; this.cursorItem = st; return true;
+    }
+    // right button
+    if (!cur) {
+      if (!st) return false;
+      const take = Math.ceil(st.count / 2);
+      this.cursorItem = { id: st.id, count: take }; st.count -= take; if (st.count <= 0) arr[i] = null;
+      return true;
+    }
+    if (!st) { arr[i] = { id: cur.id, count: 1 }; cur.count--; if (cur.count <= 0) this.cursorItem = null; return true; }
+    if (st.id === cur.id) { if (st.count >= MAX_STACK) return false; st.count++; cur.count--; if (cur.count <= 0) this.cursorItem = null; return true; }
+    arr[i] = cur; this.cursorItem = st; return true;
+  }
+
+  // Click outside a panel with a stack on the cursor: the stack is thrown in front of the player (Minecraft).
+  dropCursorOutside(px, py, pw, ph) {
+    if (!this.cursorItem) return;
+    if (this.mouse.x < px || this.mouse.x > px + pw || this.mouse.y < py || this.mouse.y > py + ph) {
+      if (this.game && this.game.dropInFront) this.game.dropInFront(this.cursorItem.id, this.cursorItem.count);
+      this.cursorItem = null;
+    }
+  }
+
+  // Inventory screen: creative palette (Blocks / Items tabs, paged) above the player's inventory and hotbar.
   drawInventory(inv) {
     const ctx = this.ctx, s = this.scale;
     const W = this.canvas.width, H = this.canvas.height;
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
-    const cols = 9, rows = Math.ceil(PALETTE.length / cols);
-    const pw = 176 * s, ph = (18 * rows + 18 + 42) * s;
+    const palette = this.invTab === 'items' ? ITEM_PALETTE : PALETTE;
+    const perPage = PALETTE_ROWS * 9, pages = Math.max(1, Math.ceil(palette.length / perPage));
+    if (this.mouse.wheel) { this.invPage = clamp(this.invPage + Math.sign(this.mouse.wheel), 0, pages - 1); this.mouse.wheel = 0; }
+    this.invPage = clamp(this.invPage, 0, pages - 1);
+    const pw = 176 * s, ph = 214 * s;
     const px = Math.floor(W / 2 - pw / 2), py = Math.floor(H / 2 - ph / 2);
     this.drawPanel(px, py, pw, ph);
-    this.text('Blocks', px + 8 * s, py + 6 * s, '#404040', false);
-    this.text('Click a block to add a stack, drag onto the hotbar', px + 8 * s, py + ph - 10 * s, '#606060', false, Math.max(1, s - 1));
     this.hover = null;
-    const gx = px + 7 * s, gy = py + 17 * s;
-    // palette grid
-    for (let i = 0; i < PALETTE.length; i++) {
-      const c = i % cols, r = Math.floor(i / cols);
-      const x = gx + c * 18 * s, y = gy + r * 18 * s;
+    const gx = px + 7 * s;
+    // tabs
+    const tab = (label, key, x) => {
+      const active = this.invTab === key;
+      const w = 40 * s, h = 12 * s, y = py + 4 * s;
+      const hov = this.mouse.x >= x && this.mouse.x < x + w && this.mouse.y >= y && this.mouse.y < y + h;
+      ctx.fillStyle = active ? '#ffffff' : hov ? '#9a9a9a' : '#8b8b8b'; ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#373737'; ctx.fillRect(x, y + h - s, w, s);
+      if (active) { ctx.fillStyle = '#c6c6c6'; ctx.fillRect(x, y + h - s, w, s); }
+      this.textCentered(label, x + w / 2, y + 2 * s, active ? '#404040' : '#2a2a2a', s);
+      if (hov && this.mouse.clicked) { this.mouse.clicked = false; this.invTab = key; this.invPage = 0; }
+    };
+    tab('Blocks', 'blocks', gx);
+    tab('Items', 'items', gx + 42 * s);
+    // page controls
+    if (pages > 1) {
+      const by = py + 4 * s, bw = 12 * s;
+      this.button('pgPrev', '<', px + pw - 47 * s, by, bw, 12 * s, () => { this.invPage = Math.max(0, this.invPage - 1); }, this.invPage > 0);
+      this.button('pgNext', '>', px + pw - 19 * s, by, bw, 12 * s, () => { this.invPage = Math.min(pages - 1, this.invPage + 1); }, this.invPage < pages - 1);
+      this.textCentered(`${this.invPage + 1}/${pages}`, px + pw - 27 * s, by + 2 * s, '#404040', s);
+    }
+    // palette page
+    const gy = py + 18 * s;
+    const start = this.invPage * perPage;
+    for (let i = 0; i < perPage; i++) {
+      const x = gx + (i % 9) * 18 * s, y = gy + Math.floor(i / 9) * 18 * s;
       this.drawSlotBg(x, y);
-      this.ctx.drawImage(blockIcon(PALETTE[i], 16 * s), x + s, y + s);
-      if (this.mouse.x >= x && this.mouse.x < x + 18 * s && this.mouse.y >= y && this.mouse.y < y + 18 * s) {
-        this.hover = { type: 'palette', id: PALETTE[i], x, y };
-      }
+      const id = palette[start + i];
+      if (id === undefined) continue;
+      ctx.drawImage(blockIcon(id, 16 * s), x + s, y + s);
+      if (this.mouse.x >= x && this.mouse.x < x + 18 * s && this.mouse.y >= y && this.mouse.y < y + 18 * s) this.hover = { type: 'palette', id, x, y };
     }
-    // hotbar row
-    const hy = gy + rows * 18 * s + 14 * s;
-    this.text('Hotbar', gx, hy - 9 * s, '#404040', false, Math.max(1, s - 1));
-    for (let i = 0; i < 9; i++) {
-      const x = gx + i * 18 * s;
-      this.drawSlotBg(x, hy);
-      const slot = inv.slots[i];
-      if (slot) this.drawItem(slot, x + s, hy + s);
-      if (this.mouse.x >= x && this.mouse.x < x + 18 * s && this.mouse.y >= hy && this.mouse.y < hy + 18 * s) this.hover = { type: 'hotbar', index: i, x, y: hy };
-    }
-    if (this.hover) {
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.fillRect(this.hover.x + s, this.hover.y + s, 16 * s, 16 * s);
-    }
+    // player inventory + hotbar
+    const mainY = gy + PALETTE_ROWS * 18 * s + 12 * s, hotbarY = mainY + 3 * 18 * s + 4 * s;
+    this.text('Inventory', gx, mainY - 9 * s, '#404040', false, Math.max(1, s - 1));
+    this.drawPlayerSlots(inv, gx, mainY, hotbarY);
+    this.drawHoverHighlight();
+    this.text('LMB move   RMB split   Shift quick-move', gx, py + ph - 9 * s, '#606060', false, Math.max(1, s - 1));
     // interactions
-    if (this.mouse.clicked) {
-      this.mouse.clicked = false;
-      if (this.hover && this.hover.type === 'palette') {
-        if (this.cursorItem && this.cursorItem.id === this.hover.id) this.cursorItem = null;
-        else this.cursorItem = { id: this.hover.id, count: 64 };
-      } else if (this.hover && this.hover.type === 'hotbar') {
-        const i = this.hover.index;
-        if (this.cursorItem) { const prev = inv.slots[i]; inv.slots[i] = this.cursorItem; this.cursorItem = prev; }
-        else if (inv.slots[i]) { this.cursorItem = inv.slots[i]; inv.slots[i] = null; }
-      } else if (this.cursorItem && (this.mouse.x < px || this.mouse.x > px + pw || this.mouse.y < py || this.mouse.y > py + ph)) {
-        this.cursorItem = null; // drop outside = discard
-      }
+    const button = this.mouse.clicked ? 0 : this.mouse.rclicked ? 2 : -1;
+    if (button >= 0) {
+      this.mouse.clicked = false; this.mouse.rclicked = false;
+      const h = this.hover;
+      if (h && h.type === 'palette') {
+        if (this.shiftDown) inv.addStack(h.id, MAX_STACK);                 // creative: shift-click gives a stack directly
+        else if (this.cursorItem) this.cursorItem = null;                    // creative: clicking the palette destroys the carried stack
+        else this.cursorItem = { id: h.id, count: button === 2 ? 1 : MAX_STACK };
+      } else if (h && h.type === 'slot') {
+        this.slotClick(h, button, this.shiftDown, (hh) => ({ arr: inv.slots, order: hh.kind === 'hotbar' ? ORDER_MAIN : ORDER_HOTBAR }));
+      } else this.dropCursorOutside(px, py, pw, ph);
     }
-    // tooltip
-    if (this.hover && !this.cursorItem) {
-      const id = this.hover.type === 'palette' ? this.hover.id : inv.slots[this.hover.index]?.id;
-      if (id) {
-        const name = BLOCKS[id].displayName;
-        const w = measureText(name, s);
-        const tx = this.mouse.x + 8 * s, ty = this.mouse.y - 12 * s;
-        ctx.fillStyle = 'rgba(16,0,16,0.94)'; ctx.fillRect(tx - 3 * s, ty - 3 * s, w + 6 * s, 14 * s);
-        ctx.fillStyle = '#5000ff'; ctx.fillRect(tx - 3 * s, ty - 3 * s, w + 6 * s, s); ctx.fillRect(tx - 3 * s, ty + 10 * s, w + 6 * s, s); ctx.fillRect(tx - 3 * s, ty - 3 * s, s, 14 * s); ctx.fillRect(tx + w + 2 * s, ty - 3 * s, s, 14 * s);
-        this.text(name, tx, ty);
-      }
+    const name = this.hoveredName(inv);
+    if (name) this.drawTooltip(name);
+    if (this.cursorItem) this.drawItem(this.cursorItem, this.mouse.x - 8 * s, this.mouse.y - 8 * s);
+  }
+
+  // Chest screen (Minecraft single-chest layout): 27 chest slots above the player inventory and hotbar.
+  drawChest(game) {
+    const ctx = this.ctx, s = this.scale;
+    const W = this.canvas.width, H = this.canvas.height;
+    const inv = game.inventory, chest = this.chest;
+    if (!chest) { game.closeScreen(); return; }
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, W, H);
+    const pw = 176 * s, ph = 168 * s;
+    const px = Math.floor(W / 2 - pw / 2), py = Math.floor(H / 2 - ph / 2);
+    this.drawPanel(px, py, pw, ph);
+    this.hover = null;
+    const gx = px + 7 * s;
+    this.text('Chest', px + 8 * s, py + 6 * s, '#404040', false);
+    this.drawSlotGrid(chest.entity.slots, 0, 27, 9, gx, py + 17 * s, 'chest');
+    this.text('Inventory', px + 8 * s, py + 73 * s, '#404040', false);
+    this.drawPlayerSlots(inv, gx, py + 83 * s, py + 141 * s);
+    this.drawHoverHighlight();
+    const button = this.mouse.clicked ? 0 : this.mouse.rclicked ? 2 : -1;
+    if (button >= 0) {
+      this.mouse.clicked = false; this.mouse.rclicked = false;
+      const h = this.hover;
+      if (h && h.type === 'slot') {
+        const changed = this.slotClick(h, button, this.shiftDown, (hh) => (hh.kind === 'chest' ? { arr: inv.slots, order: ORDER_PLAYER } : { arr: chest.entity.slots, order: ORDER_CHEST }));
+        if (changed && game.onChestChanged) game.onChestChanged();
+      } else this.dropCursorOutside(px, py, pw, ph);
     }
+    const name = this.hoveredName(inv);
+    if (name) this.drawTooltip(name);
     if (this.cursorItem) this.drawItem(this.cursorItem, this.mouse.x - 8 * s, this.mouse.y - 8 * s);
   }
 
@@ -399,9 +533,10 @@ export class HUD {
     if (player.eyeUnderwater) { ctx.fillStyle = 'rgba(10,30,140,0.35)'; ctx.fillRect(0, 0, W, H); }
     if (player.hurtTime > 0) { ctx.fillStyle = `rgba(255,0,0,${player.hurtTime / 10 * 0.35})`; ctx.fillRect(0, 0, W, H); }
 
-    if (this.screen === 'inventory') { this.drawInventory(game.inventory); this.mouse.clicked = false; return; }
-    if (this.screen === 'pause') { this.drawPause(game); this.mouse.clicked = false; return; }
-    if (this.screen === 'death') { this.drawDeath(game); this.mouse.clicked = false; return; }
+    if (this.screen === 'inventory') { this.drawInventory(game.inventory); this.mouse.clicked = false; this.mouse.rclicked = false; return; }
+    if (this.screen === 'chest') { this.drawChest(game); this.mouse.clicked = false; this.mouse.rclicked = false; return; }
+    if (this.screen === 'pause') { this.drawPause(game); this.mouse.clicked = false; this.mouse.rclicked = false; return; }
+    if (this.screen === 'death') { this.drawDeath(game); this.mouse.clicked = false; this.mouse.rclicked = false; return; }
     if (this.screen === 'admin') { // DOM panel is on top; keep the world visible and show a hint
       this.drawChat();
       this.text('Disaster controls open  (F4 / Esc to close)', 6 * s, 6 * s, '#ffd080');
@@ -423,6 +558,6 @@ export class HUD {
       this.textCentered('Click to play', W / 2, H / 2 - 30 * s, '#ffffff', s);
       this.textCentered('WASD move - Space jump - Double-tap W sprint - Double-tap Space fly - Left/Right click break/place', W / 2, H / 2 - 14 * s, '#c0c0c0', Math.max(1, s - 1));
     }
-    this.mouse.clicked = false;
+    this.mouse.clicked = false; this.mouse.rclicked = false; this.mouse.wheel = 0;
   }
 }

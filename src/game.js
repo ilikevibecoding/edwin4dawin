@@ -1,7 +1,7 @@
 // Game orchestration: rendering, fixed-step simulation, interaction, HUD, audio.
 import * as THREE from 'three';
 import { buildAtlas, atlasTexture, tileUV, TILES, addSignTiles, finalizeAtlas } from './textures.js';
-import { initBlocks, B, BLOCKS, SHAPE } from './blocks.js';
+import { initBlocks, B, BLOCKS, SHAPE, DOOR_SETS, WHEAT_STAGES } from './blocks.js';
 import { WorldGen, SPAWN, REGIONS } from './worldgen.js';
 import { World } from './world.js';
 import { buildTown } from './town/town.js';
@@ -14,7 +14,9 @@ import { Input } from './input.js';
 import { HUD } from './hud.js';
 import { Sky } from './sky.js';
 import { raycastBlocks, BlockHighlight, CrackOverlay, FACE_NORMALS, placementVariant, placementBlocked, canReplace } from './interaction.js';
-import { Inventory, ItemDrops } from './items.js';
+import { Inventory, ItemDrops, initItems, I, foodOf, cookedOf, isItem, displayName } from './items.js';
+import { DoorController } from './doors.js';
+import { RNG, hash3 } from './rng.js';
 import { Particles } from './particles.js';
 import { GameAudio } from './audio.js';
 import { Hand } from './hand.js';
@@ -36,6 +38,18 @@ import { NetClient } from './net/client.js';
 const WORLD_SEED = 1337;
 
 const MOUSE_SENS = 0.15 * Math.PI / 180; // radians per pixel (Minecraft default sensitivity)
+
+const CHEST_SLOTS = 27;
+const CROP_STAGE_TICKS = 400;   // 20 s per wheat growth stage (3 stages), deterministic per crop
+const COOK_TICKS = 60;          // 3 s of sizzling on a furnace
+const ATTACK_COOLDOWN = 0.3;    // s between melee hits
+const AUTOSAVE_TICKS = 20;      // player state / inventory snapshot cadence (writes are debounced in SaveManager)
+// Deterministic loot of never-opened town chests: [item, min, max, chance]
+const CHEST_LOOT = [
+  [I.BREAD, 1, 3, 0.65], [I.APPLE, 1, 4, 0.5], [I.SEEDS, 2, 6, 0.5], [I.WHEAT, 1, 4, 0.4], [I.STICK, 2, 8, 0.5],
+  [I.LEATHER, 1, 2, 0.3], [I.BONE, 1, 3, 0.3], [I.FEATHER, 1, 3, 0.25], [I.BEEF_COOKED, 1, 2, 0.15],
+  [B.TORCH, 2, 6, 0.4], [B.OAK_PLANKS, 4, 12, 0.3],
+];
 
 export class Game {
   constructor() {
@@ -62,6 +76,10 @@ export class Game {
     this.animals = null;
     this.train = null;
     this.town = null;
+    this.tickCount = 0;
+    this.cooking = null;       // {x, y, z, out, n, ticks} while a furnace is busy
+    this.attackCooldown = 0;
+    this.cropStageTicks = CROP_STAGE_TICKS;
   }
 
   async start() {
@@ -80,8 +98,10 @@ export class Game {
 
     const atlas = buildAtlas();
     initBlocks();
+    initItems(); // non-block items (ids >= 1000) get block-like entries so icons / hand / drops render them
     this.permissions = new Permissions();
     this.save = new SaveManager(WORLD_SEED);
+    if (new URLSearchParams(location.search).has('fresh')) this.save.clear(); // ?fresh=1: start from an empty save
     this.setLoading('Planning the frontier town...', 0.02);
     await this.nextFrame();
 
@@ -89,9 +109,12 @@ export class Game {
     await this.setupTown();
     this.world = new World(this.gen);
     for (const [x, y, z, tile] of this.signAssignments) this.world.signTiles.set(World.posKey(x, y, z), tile);
+    this.save.restoreEntities(this.world); // chest contents / crop timers (global, independent of chunk loading)
+    this.world.onBlockEntityLost = (x, y, z, ent, newId) => this.onBlockEntityLost(x, y, z, ent, newId);
     this.atlas = atlasTexture;
     this.terrain = new Terrain(this.world, this.scene, atlasTexture);
-    this.terrain.onChunkGenerated = (c) => this.save.applyToChunk(c);
+    // generated doors are two copies of the bottom id: give the upper half its own id, then overlay saved edits
+    this.terrain.onChunkGenerated = (c) => { this.world.normalizeDoors(c); this.save.applyToChunk(c); };
     this.terrain.pinRegion(this.town.bounds.x0, this.town.bounds.z0, this.town.bounds.x1, this.town.bounds.z1);
     this.sky = new Sky(this.scene, this.camera);
     this.player = new Player(this.world);
@@ -106,21 +129,27 @@ export class Game {
     this.hand = new Hand(atlasTexture);
     this.entityMaterial = makeEntityMaterial(atlasTexture);
     this.drops = new ItemDrops(this.scene, this.world, this.entityMaterial);
+    this.drops.canPickup = (id, count) => this.inventory.canAdd(id, count); // full inventory: items stay on the ground
+    this.doors = new DoorController(this.world, this.audio);
+    this.doors.onChange = () => this.terrain.remeshDirtyNear(this.player.pos.x, this.player.pos.z);
     this.hand.resize(window.innerWidth, window.innerHeight);
     this.particles.setCamera(this.camera, window.innerHeight * renderer.getPixelRatio());
 
-    // starting kit
-    const kit = [[B.OAK_PLANKS, 64], [B.COBBLESTONE, 64], [B.SPRUCE_PLANKS, 64], [B.GLASS, 32], [B.OAK_LOG, 32], [B.BRICKS, 64], [B.LANTERN, 16], [B.OAK_FENCE, 32], [B.TORCH, 32]];
-    kit.forEach(([id, n], i) => this.inventory.set(i, id, n));
-
     // spawn (URL params ?x=&z=&time=&yaw= allow starting elsewhere, handy for demos)
     const params = new URLSearchParams(location.search);
-    const sx = params.has('x') ? parseFloat(params.get('x')) : SPAWN.x;
-    const sz = params.has('z') ? parseFloat(params.get('z')) : SPAWN.z;
+    // a saved player state is resumed unless the URL pins the position (demos / tests)
+    const savedPlayer = !params.has('x') && !params.has('z') && !params.has('y') ? this.save.player : null;
+    // inventory: saved stacks, otherwise the starting kit
+    if (!this.inventory.deserialize(this.save.inventory)) {
+      const kit = [[B.OAK_PLANKS, 64], [B.COBBLESTONE, 64], [B.SPRUCE_PLANKS, 64], [B.GLASS, 32], [B.OAK_LOG, 32], [B.BRICKS, 64], [B.LANTERN, 16], [B.OAK_FENCE, 32], [B.TORCH, 32]];
+      kit.forEach(([id, n], i) => this.inventory.set(i, id, n));
+    }
+    const sx = params.has('x') ? parseFloat(params.get('x')) : savedPlayer ? savedPlayer.x : SPAWN.x;
+    const sz = params.has('z') ? parseFloat(params.get('z')) : savedPlayer ? savedPlayer.z : SPAWN.z;
     if (params.has('time')) this.sky.time = parseFloat(params.get('time'));
     if (params.has('rd')) this.terrain.setRenderDistance(parseInt(params.get('rd'), 10));
     this.debugLog = params.has('debuglog');
-    this.startYaw = params.has('yaw') ? parseFloat(params.get('yaw')) * Math.PI / 180 : -Math.PI / 2;
+    this.startYaw = params.has('yaw') ? parseFloat(params.get('yaw')) * Math.PI / 180 : savedPlayer ? savedPlayer.yaw : -Math.PI / 2;
     this.setLoading('Building terrain...', 0.05);
     const pre = this.terrain.preload(sx, sz);
     let last = performance.now();
@@ -136,12 +165,18 @@ export class Game {
       try { this.renderer.compile(this.scene, this.camera); } catch (e) { /* ignore */ }
       tag.visible = false;
     }
-    const sy = params.has('y') ? parseFloat(params.get('y')) : this.world.surfaceY(Math.floor(sx), Math.floor(sz)) + 1;
+    const sy = params.has('y') ? parseFloat(params.get('y')) : savedPlayer ? savedPlayer.y : this.world.surfaceY(Math.floor(sx), Math.floor(sz)) + 1;
     this.player.teleport(sx, sy, sz);
     this.player.yaw = this.startYaw; // default: face east toward town
-    this.player.pitch = params.has('pitch') ? parseFloat(params.get('pitch')) * Math.PI / 180 : -0.08;
+    this.player.pitch = params.has('pitch') ? parseFloat(params.get('pitch')) * Math.PI / 180 : savedPlayer ? savedPlayer.pitch : -0.08;
+    if (savedPlayer) {
+      this.player.health = Math.max(1, Math.min(20, savedPlayer.health | 0));
+      this.player.food = Math.max(0, Math.min(20, savedPlayer.food | 0));
+      this.player.saturation = Math.max(0, Math.min(this.player.food, +savedPlayer.saturation || 0));
+    }
     if (params.get('fly') === '1') this.player.flying = true; // start airborne (observer / demo vantage)
-    this.spawnPoint = { x: sx, y: sy, z: sz };
+    // respawn point: the world spawn when resuming a saved game, otherwise where this session started
+    this.spawnPoint = savedPlayer ? { x: SPAWN.x, y: sy, z: SPAWN.z } : { x: sx, y: sy, z: sz };
 
     this.bindEvents();
     this.loading = false;
@@ -176,6 +211,7 @@ export class Game {
     await this.nextFrame();
     this.animals = new AnimalManager(this.scene, this.world, this.town, this.audio);
     this.animals.particles = this.particles;
+    this.animals.onDeath = (a) => this.onAnimalDeath(a);
     this.train = new Train(this.scene, this.world, this.audio, this.particles);
     // disasters: deterministic, journaled, admin-controlled
     this.vehicles = new VehicleManager(this);
@@ -223,11 +259,14 @@ export class Game {
     this.input.onLockChange = (locked) => {
       if (!locked && !this.hud.screen) this.openScreen('pause');
     };
+    // the save is flushed when the tab is hidden / closed (writes are otherwise debounced)
+    window.addEventListener('beforeunload', () => this.persistNow());
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') this.persistNow(); });
     this.input.onKeyDown = (e) => {
       if (this.loading) return;
       if (e.code === 'Escape') {
         if (this.hud.screen === 'admin') { this.closeScreen(); return; }
-        if (this.hud.screen === 'pause' || this.hud.screen === 'inventory') this.closeScreen();
+        if (this.hud.screen === 'pause' || this.hud.screen === 'inventory' || this.hud.screen === 'chest') this.closeScreen();
         return;
       }
       if (e.code === 'F4' || e.code === 'Backquote') {
@@ -238,7 +277,7 @@ export class Game {
       }
       if (this.hud.screen === 'admin') return;
       if (this.hud.screen === 'death') return;
-      if (e.code === 'KeyE') { if (this.hud.screen === 'inventory') this.closeScreen(); else if (!this.hud.screen) this.openScreen('inventory'); }
+      if (e.code === 'KeyE') { if (this.hud.screen === 'inventory' || this.hud.screen === 'chest') this.closeScreen(); else if (!this.hud.screen) this.openScreen('inventory'); }
       if (this.hud.screen) return;
       if (e.code === 'KeyW') {
         const now = performance.now();
@@ -259,6 +298,13 @@ export class Game {
   }
   closeScreen() {
     if (this.hud.screen === 'admin' && this.adminPanel) { this.adminPanel.close(); this.hudCanvas.style.pointerEvents = ''; }
+    if (this.hud.screen === 'chest') this.closeChest();
+    // a stack still on the cursor goes back into the inventory (or onto the ground when that is full), like Minecraft
+    const cur = this.hud.cursorItem;
+    if (cur && cur.count > 0 && (this.hud.screen === 'chest' || this.hud.screen === 'inventory')) {
+      const left = this.inventory.addStack(cur.id, cur.count);
+      if (left > 0) this.dropInFront(cur.id, left);
+    }
     this.hud.screen = null;
     this.hud.cursorItem = null;
     this.input.requestLock();
@@ -282,8 +328,8 @@ export class Game {
   }
   respawn() {
     const s = this.spawnPoint;
-    const y = this.world.surfaceY(Math.floor(s.x), Math.floor(s.z)) + 1;
-    this.player.respawn(s.x, y, s.z);
+    const surface = this.world.surfaceY(Math.floor(s.x), Math.floor(s.z));
+    this.player.respawn(s.x, surface >= 0 ? surface + 1 : s.y, s.z);
   }
 
   // ---------------------------------------------------------------------------
@@ -393,6 +439,8 @@ export class Game {
     const handLight = this.world.sampleLight(eye.x, eye.y, eye.z);
     const held = this.inventory.held;
     this.hand.update(dt, held ? held.id : 0, handLight, bob, this.viewBobbing);
+    this.poseHeldItem(held);
+    this.animateEating();
 
     // render
     this.renderer.clear();
@@ -477,6 +525,8 @@ export class Game {
       ctrl.sprint = inp.isDown('KeyR') || this.doubleTapSprint;
     }
     this.player.tick(ctrl);
+    this.tickCount++;
+    this.updateEating(playing);
     for (const ev of this.player.events) this.handlePlayerEvent(ev);
     // first time the player is held under water for a while: one hint (Minecraft sinks you unless you hold jump)
     if (this.player.eyeUnderwater && !this.player.flying) { this.underwaterTicks = (this.underwaterTicks || 0) + 1; if (this.underwaterTicks === 50 && !this.swimHintShown) { this.swimHintShown = true; this.hud.addMessage('Hold Space to swim up.'); } } else this.underwaterTicks = 0;
@@ -490,11 +540,188 @@ export class Game {
     if (this.npcs) this.npcs.tick(this.player, this.sky);
     if (this.animals) this.animals.tick(this.player, this.sky);
     if (this.train) this.train.tick(this.player);
+    if (this.doors && this.npcs) this.doors.update(this.npcs.list, this.player); // NPCs open doors ahead, close behind
+    this.tickCrops();
+    this.tickCooking();
     // online, the network client steps the disaster clock against the server tick instead
     if (this.disasters && !(this.net && this.net.connected && this.net.drivesDisasterClock)) this.disasters.simTick();
     if (this.net) this.net.tick();
     if (this.breakCooldown > 0) this.breakCooldown -= TICK_DT;
     if (this.placeCooldown > 0) this.placeCooldown -= TICK_DT;
+    if (this.attackCooldown > 0) this.attackCooldown -= TICK_DT;
+    if (this.tickCount % AUTOSAVE_TICKS === 0) this.persistState();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Gameplay systems: eating, crops, cooking, chests, animal drops, persistence
+  // ---------------------------------------------------------------------------
+  // Holding the use key with food selected eats it (1.6 s, chewing every 0.3 s); blocks with their own use action
+  // (doors, chests, a furnace that can cook the held item) take priority, and eating is impossible at full hunger.
+  updateEating(playing) {
+    const p = this.player, held = this.inventory.held;
+    const food = held ? foodOf(held.id) : null;
+    const blockHasUse = this.lastHit && this.blockUseAction(this.lastHit, held);
+    if (playing && !p.dead && food && this.input.mouseDown[2] && !blockHasUse) {
+      if (p.food >= 20) {
+        if (this.input.mouseClicked[2] && this.time - (this.notHungryAt || -9) > 3) { this.notHungryAt = this.time; this.hud.addMessage('You are not hungry.'); }
+        p.stopEating();
+        return;
+      }
+      const r = p.eatTick(held.id, food);
+      if (r === 'done') { this.inventory.consume(this.inventory.selected, 1); this.hud.xp = Math.min(1, this.hud.xp + 0.005); }
+    } else p.stopEating();
+  }
+  // Non-block items are flat quads without the pixel thickness Minecraft extrudes, so the oblique flat-block pose of
+  // hand.js shows them edge-on; turn them towards the camera at a slight angle so the icon reads in first person.
+  poseHeldItem(held) {
+    const m = this.hand.blockMesh;
+    if (!m || !held || !isItem(held.id)) return;
+    m.rotation.set(-0.2, -0.35, 0.12);
+    m.position.x -= 0.06; m.position.y += 0.06;
+  }
+  // Eating animation: the held item is pulled towards the mouth and bobs with each bite (applied on top of hand.js).
+  animateEating() {
+    const e = this.player.eating, m = this.hand.blockMesh;
+    if (!e || !m) return;
+    const k = Math.min(1, e.ticks / 4);
+    const bite = Math.abs(Math.cos(this.time * Math.PI / 0.2)); // one bob every 4 ticks, like Minecraft's eat transform
+    m.position.x -= 0.38 * k; m.position.y += (0.26 + bite * 0.08) * k; m.position.z += 0.1 * k;
+    m.rotation.x += 0.45 * k; m.rotation.z += 0.3 * k;
+  }
+
+  // Crops advance one stage every cropStageTicks (age is kept in the crop's block entity so growth survives reloads).
+  tickCrops() {
+    const world = this.world;
+    if (!world.blockEntities.size || this.tickCount % 10 !== 0) return;
+    for (const ent of world.blockEntities.values()) {
+      if (ent.type !== 'crop') continue;
+      ent.age = (ent.age || 0) + 10;
+      if (ent.age < this.cropStageTicks) continue;
+      const def = BLOCKS[world.getBlock(ent.x, ent.y, ent.z)];
+      const next = def.growth >= 0 ? WHEAT_STAGES[def.growth + 1] : undefined;
+      if (next === undefined) { // mature (or the crop is gone): nothing left to grow
+        if (world.isLoaded(ent.x, ent.z)) { world.removeBlockEntity(ent.x, ent.y, ent.z); this.save.setEntity(ent.x, ent.y, ent.z, null); }
+        continue;
+      }
+      if (!world.setBlock(ent.x, ent.y, ent.z, next)) continue; // chunk not loaded: retry later
+      ent.age = 0;
+      this.save.recordEdit(ent.x, ent.y, ent.z, next);
+      if (BLOCKS[next].growth === WHEAT_STAGES.length - 1) { world.removeBlockEntity(ent.x, ent.y, ent.z); this.save.setEntity(ent.x, ent.y, ent.z, null); }
+      else this.save.setEntity(ent.x, ent.y, ent.z, ent);
+      this.terrain.remeshDirtyNear(this.player.pos.x, this.player.pos.z);
+    }
+  }
+
+  // Furnace: right-click with raw meat cooks one piece, with wheat bakes bread from 3 wheat (3 s each; see report)
+  startCooking(x, y, z, held) {
+    const cooked = cookedOf(held.id);
+    const bakes = held.id === I.WHEAT;
+    if (!cooked && !bakes) return false;
+    if (this.cooking) { this.hud.addMessage('The furnace is busy.'); return true; }
+    if (bakes && this.inventory.count(I.WHEAT) < 3) { this.hud.addMessage('Baking bread takes 3 wheat.'); return true; }
+    if (bakes) this.inventory.remove(I.WHEAT, 3); else this.inventory.consume(this.inventory.selected, 1);
+    this.cooking = { x, y, z, out: bakes ? I.BREAD : cooked, n: 1, ticks: COOK_TICKS };
+    this.audio.sizzle({ x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+    this.hud.addMessage(bakes ? 'Baking bread...' : `Cooking ${displayName(held.id)}...`);
+    return true;
+  }
+  tickCooking() {
+    const c = this.cooking;
+    if (!c) return;
+    c.ticks--;
+    if (c.ticks % 20 === 10) this.audio.sizzle({ x: c.x + 0.5, y: c.y + 0.5, z: c.z + 0.5 });
+    if (c.ticks % 5 === 0) this.particles.smoke(c.x + 0.5, c.y + 1.05, c.z + 0.5);
+    if (c.ticks > 0) return;
+    this.cooking = null;
+    const left = this.inventory.addStack(c.out, c.n);
+    if (left > 0) this.drops.spawn(c.out, c.x + 0.5, c.y + 1.2, c.z + 0.5, left);
+    this.audio.pop();
+    this.hud.addMessage(`${displayName(c.out)} is ready.`);
+  }
+
+  // Chests: contents live in world.blockEntities and the save; town chests get deterministic loot on first use.
+  chestEntity(x, y, z) {
+    let ent = this.world.getBlockEntity(x, y, z);
+    if (ent && ent.type === 'chest' && Array.isArray(ent.slots)) return ent;
+    ent = this.world.setBlockEntity(x, y, z, { type: 'chest', slots: this.chestLoot(x, y, z) });
+    this.save.setEntity(x, y, z, ent);
+    return ent;
+  }
+  chestLoot(x, y, z) {
+    const rng = new RNG(Math.floor(hash3(x, y, z, WORLD_SEED) * 0xffffffff));
+    const slots = new Array(CHEST_SLOTS).fill(null);
+    for (const [id, lo, hi, p] of CHEST_LOOT) {
+      if (!rng.chance(p)) continue;
+      let s = rng.int(0, CHEST_SLOTS - 1);
+      while (slots[s]) s = (s + 1) % CHEST_SLOTS;
+      slots[s] = { id, count: rng.int(lo, hi) };
+    }
+    return slots;
+  }
+  openChest(x, y, z) {
+    const ent = this.chestEntity(x, y, z);
+    this.hud.chest = { x, y, z, entity: ent };
+    this.openScreen('chest');
+    this.audio.chestOpen({ x: x + 0.5, y: y + 0.5, z: z + 0.5 });
+  }
+  closeChest() {
+    const c = this.hud.chest;
+    if (!c) return;
+    this.hud.chest = null;
+    if (this.world.getBlockEntity(c.x, c.y, c.z) === c.entity) this.save.setEntity(c.x, c.y, c.z, c.entity);
+    this.audio.chestClose({ x: c.x + 0.5, y: c.y + 0.5, z: c.z + 0.5 });
+  }
+  onChestChanged() { const c = this.hud.chest; if (c) this.save.setEntity(c.x, c.y, c.z, c.entity); }
+  // A block carrying an entity was replaced (player, NPC or disaster): chest contents spill out as item entities.
+  onBlockEntityLost(x, y, z, ent) {
+    this.world.removeBlockEntity(x, y, z);
+    this.save.setEntity(x, y, z, null);
+    if (ent.type === 'chest' && Array.isArray(ent.slots)) {
+      for (const s of ent.slots) if (s && s.count > 0) this.drops.spawn(s.id, x + 0.5, y + 0.5, z + 0.5, s.count, { x: (Math.random() - 0.5) * 0.15, y: 0.2, z: (Math.random() - 0.5) * 0.15 });
+      if (this.hud.chest && this.hud.chest.x === x && this.hud.chest.y === y && this.hud.chest.z === z && this.hud.screen === 'chest') this.closeScreen();
+    }
+  }
+
+  // Animal drops (Minecraft loot): cow 1-3 beef + 0-2 leather, pig 1-3 porkchop, chicken 1 chicken + 0-2 feathers,
+  // horse 0-2 leather.
+  onAnimalDeath(a) {
+    const rng = a.rng;
+    const loot = a.type === 'cow' ? [[I.BEEF_RAW, rng.int(1, 3)], [I.LEATHER, rng.int(0, 2)]]
+      : a.type === 'pig' ? [[I.PORKCHOP_RAW, rng.int(1, 3)]]
+      : a.type === 'chicken' ? [[I.CHICKEN_RAW, 1], [I.FEATHER, rng.int(0, 2)]]
+      : a.type === 'horse' ? [[I.LEATHER, rng.int(0, 2)]] : [];
+    for (const [id, n] of loot) {
+      if (n <= 0) continue;
+      this.drops.spawn(id, a.pos.x, a.pos.y + 0.4, a.pos.z, n, { x: rng.range(-0.08, 0.08), y: 0.18, z: rng.range(-0.08, 0.08) });
+    }
+    this.hud.xp = Math.min(1, this.hud.xp + 0.02);
+  }
+  attackAnimal(ah) {
+    if (this.attackCooldown > 0) return;
+    this.attackCooldown = ATTACK_COOLDOWN;
+    this.animals.hit(ah.animal, this.player.pos, 1);
+  }
+
+  // Drops a stack in front of the player (inventory overflow when closing a screen)
+  dropInFront(id, count) {
+    const d = this.player.forwardDir(new THREE.Vector3());
+    const p = this.player.pos;
+    this.drops.spawn(id, p.x + d.x * 0.6, p.y + 1.2, p.z + d.z * 0.6, count, { x: d.x * 0.15, y: 0.1, z: d.z * 0.15 });
+  }
+
+  // Player state + inventory snapshots (debounced writes); flushed immediately when the page hides / unloads.
+  persistState() {
+    if (!this.save || !this.player || this.player.dead) return;
+    const p = this.player;
+    this.save.setPlayer({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, food: p.food, saturation: p.saturation });
+    this.save.setInventory(this.inventory.serialize());
+  }
+  persistNow() {
+    if (!this.save) return;
+    this.persistState();
+    const c = this.hud && this.hud.chest;
+    if (c) this.save.setEntity(c.x, c.y, c.z, c.entity);
+    this.save.flush();
   }
 
   handlePlayerEvent(ev) {
@@ -506,6 +733,8 @@ export class Game {
       case 'fly': this.hud.addMessage(ev.flying ? 'Flying: Space rises, Shift descends, double-tap Space or land to stop.' : 'Flight off.'); break;
       case 'hurt': this.audio.hurt(); break;
       case 'death': this.hud.addMessage('You died!'); break;
+      case 'chew': this.audio.chew(); break;
+      case 'eat': this.audio.burp(); break;
       default: break;
     }
   }
@@ -523,9 +752,10 @@ export class Game {
       entityHit = this.npcs.raycast(eye, dir, hit ? hit.dist : REACH + 1.5);
       if (entityHit) { this.lookingAtName = entityHit.npc.name; if (hit && entityHit.dist < hit.dist) hit = null; else if (!hit) { /* keep entity */ } }
     }
+    let animalHit = null;
     if (!entityHit && this.animals && playing) {
       const ah = this.animals.raycast(eye, dir, hit ? hit.dist : REACH + 1.5);
-      if (ah) { this.lookingAtName = ah.name; }
+      if (ah) { this.lookingAtName = ah.name; animalHit = ah; if (hit && ah.dist < hit.dist) hit = null; }
     }
     this.highlight.update(this.world, hit);
     this.lastHit = hit; // exposed for admin tools ("use crosshair target")
@@ -551,6 +781,7 @@ export class Game {
         if (this.input.mouseClicked[0]) {
           this.hand.startSwing();
           if (entityHit) this.npcs.poke(entityHit.npc, this);
+          else if (animalHit) this.attackAnimal(animalHit); // melee: 1 damage, knockback, flee
         }
       }
     } else {
@@ -558,12 +789,70 @@ export class Game {
     }
     this.crack.show(this.breakTarget ? hit : null, this.breakProgress);
 
-    // placing / interacting
-    if (playing && !p.dead && (this.input.mouseClicked[2] || (this.input.mouseDown[2] && this.placeCooldown <= 0))) {
+    // placing / interacting (doors, chests, furnace and planting are "use" actions that come before placement)
+    const useClick = this.input.mouseClicked[2];
+    if (playing && !p.dead && (useClick || (this.input.mouseDown[2] && this.placeCooldown <= 0))) {
       if (entityHit && !hit) { this.npcs.talk(entityHit.npc, this); this.hand.startSwing(); this.placeCooldown = 0.5; }
-      else if (hit) this.placeBlock(hit);
-      this.placeCooldown = this.input.mouseClicked[2] ? 0.25 : 0.2;
+      else if (hit && this.useBlock(hit, useClick)) { this.hand.startSwing(); }
+      else if (hit && !p.eating) this.placeBlock(hit);
+      this.placeCooldown = useClick ? 0.25 : 0.2;
     }
+  }
+
+  // What right-clicking `hit` with `held` would do (besides placing): 'door' | 'chest' | 'cook' | 'plant' | null
+  blockUseAction(hit, held) {
+    const def = BLOCKS[hit.id];
+    if (def.door) return 'door';
+    if (def.blockEntity === 'chest') return 'chest';
+    if (hit.id === B.FURNACE && held && (cookedOf(held.id) || held.id === I.WHEAT)) return 'cook';
+    if (hit.id === B.FARMLAND && hit.face === 2 && held && held.id === I.SEEDS) return 'plant';
+    return null;
+  }
+  // Performs the use action; returns true when the click was consumed (nothing gets placed then).
+  useBlock(hit, click) {
+    const held = this.inventory.held;
+    const action = this.blockUseAction(hit, held);
+    if (!action) return false;
+    if (action === 'plant') return this.plantSeeds(hit.x, hit.y + 1, hit.z);
+    if (!click) return true; // doors / chests / cooking react to clicks, not to a held button
+    if (action === 'door') {
+      const r = this.doors.toggle(hit.x, hit.y, hit.z);
+      if (r) {
+        this.onPlayerEdit(r.x, r.y, r.z, this.world.getBlock(r.x, r.y, r.z));
+        this.onPlayerEdit(r.x, r.y + 1, r.z, this.world.getBlock(r.x, r.y + 1, r.z));
+        this.terrain.remeshDirtyNear(this.player.pos.x, this.player.pos.z);
+      }
+      return true;
+    }
+    if (action === 'chest') { this.openChest(hit.x, hit.y, hit.z); return true; }
+    if (action === 'cook') return this.startCooking(hit.x, hit.y, hit.z, held);
+    return false;
+  }
+  plantSeeds(x, y, z) {
+    const world = this.world;
+    if (world.getBlock(x, y, z) !== B.AIR || !world.isLoaded(x, z)) return false;
+    world.setBlock(x, y, z, WHEAT_STAGES[0]);
+    const ent = world.setBlockEntity(x, y, z, { type: 'crop', age: 0 });
+    this.save.setEntity(x, y, z, ent);
+    this.inventory.consume(this.inventory.selected, 1);
+    this.audio.placeBlock('grass', new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
+    this.hand.startSwing();
+    this.terrain.remeshDirtyNear(this.player.pos.x, this.player.pos.z);
+    this.onPlayerEdit(x, y, z, WHEAT_STAGES[0]);
+    return true;
+  }
+  // Drops for a broken block: crops give wheat + seeds when mature (a seed otherwise), oak leaves an apple 1/200,
+  // everything else its `drop` id.
+  spawnBlockDrops(id, x, y, z) {
+    const def = BLOCKS[id];
+    const at = (item, n = 1) => this.drops.spawn(item, x + 0.5, y + 0.3, z + 0.5, n);
+    if (def.growth >= 0) {
+      if (def.growth === WHEAT_STAGES.length - 1) { at(I.WHEAT, 1); at(I.SEEDS, 1 + Math.floor(Math.random() * 3)); }
+      else at(I.SEEDS, 1);
+      return;
+    }
+    if (def.drop) at(def.drop);
+    if (id === B.OAK_LEAVES && Math.random() < 1 / 200) at(I.APPLE);
   }
 
   breakBlock(hit) {
@@ -571,11 +860,15 @@ export class Game {
     const world = this.world;
     this.particles.blockBreak(hit.x, hit.y, hit.z, hit.id);
     this.audio.breakBlock(def.sound, hit.point);
-    world.setBlock(hit.x, hit.y, hit.z, B.AIR);
+    if (def.blockEntity === 'chest') this.chestEntity(hit.x, hit.y, hit.z); // never-opened town chest: roll its loot so it spills
+    world.setBlock(hit.x, hit.y, hit.z, B.AIR); // block entities (chest contents) spill via onBlockEntityLost
     // multi-block structures
-    if (def.shape === SHAPE.DOOR) {
-      if (BLOCKS[world.getBlock(hit.x, hit.y + 1, hit.z)].shape === SHAPE.DOOR) world.setBlock(hit.x, hit.y + 1, hit.z, B.AIR);
-      if (BLOCKS[world.getBlock(hit.x, hit.y - 1, hit.z)].shape === SHAPE.DOOR) world.setBlock(hit.x, hit.y - 1, hit.z, B.AIR);
+    if (def.door) { // the other half: closed doors know which half they are, open halves share one id
+      let other;
+      if (def.doorTop) other = hit.y - 1;
+      else if (!def.doorOpen) other = hit.y + 1;
+      else other = BLOCKS[world.getBlock(hit.x, hit.y - 1, hit.z)].doorOpen ? hit.y - 1 : hit.y + 1;
+      if (BLOCKS[world.getBlock(hit.x, other, hit.z)].door === def.door) { world.setBlock(hit.x, other, hit.z, B.AIR); this.onPlayerEdit(hit.x, other, hit.z, B.AIR); }
     }
     if (def.shape === SHAPE.BED) {
       const other = hit.id === B.BED_HEAD ? B.BED_FOOT : B.BED_HEAD;
@@ -586,9 +879,10 @@ export class Game {
     const ad = BLOCKS[above];
     if (ad.shape === SHAPE.CROSS || ad.shape === SHAPE.TORCH || (ad.shape === SHAPE.LANTERN && !BLOCKS[world.getBlock(hit.x, hit.y + 2, hit.z)].solid)) {
       world.setBlock(hit.x, hit.y + 1, hit.z, B.AIR);
-      if (ad.drop) this.drops.spawn(ad.drop, hit.x + 0.5, hit.y + 1.2, hit.z + 0.5);
+      this.spawnBlockDrops(above, hit.x, hit.y + 1, hit.z);
+      this.onPlayerEdit(hit.x, hit.y + 1, hit.z, B.AIR);
     }
-    if (def.drop) this.drops.spawn(def.drop, hit.x + 0.5, hit.y + 0.3, hit.z + 0.5);
+    this.spawnBlockDrops(hit.id, hit.x, hit.y, hit.z);
     this.terrain.remeshDirtyNear(this.player.pos.x, this.player.pos.z);
     this.breakProgress = 0;
     this.breakTarget = null;
@@ -606,7 +900,7 @@ export class Game {
 
   placeBlock(hit) {
     const held = this.inventory.held;
-    if (!held) return;
+    if (!held || isItem(held.id)) return; // items (food, wheat, ...) are never placed as blocks
     const world = this.world;
     const targetDef = BLOCKS[hit.id];
     let x = hit.x, y = hit.y, z = hit.z;
@@ -620,10 +914,11 @@ export class Game {
     if (this.animals) this.animals.collectBoxes(boxes, x, z);
     if (placementBlocked(id, x, y, z, boxes)) return;
     // shape-specific placement rules
-    if (def.shape === SHAPE.DOOR) {
+    if (def.door) {
       if (!canReplace(world, x, y + 1, z)) return;
-      world.setBlock(x, y, z, id);
-      world.setBlock(x, y + 1, z, id);
+      const set = DOOR_SETS[def.door];
+      world.setBlock(x, y, z, set.bottom);   // doors are placed closed
+      world.setBlock(x, y + 1, z, set.top);
     } else if (def.shape === SHAPE.BED) {
       const fwd = this.player.forwardDir(new THREE.Vector3());
       const dx = Math.abs(fwd.x) > Math.abs(fwd.z) ? Math.sign(fwd.x) : 0, dz = dx === 0 ? Math.sign(fwd.z) || 1 : 0;
@@ -644,13 +939,14 @@ export class Game {
     } else {
       world.setBlock(x, y, z, id);
     }
+    if (def.blockEntity === 'chest') { const ent = world.setBlockEntity(x, y, z, { type: 'chest', slots: new Array(CHEST_SLOTS).fill(null) }); this.save.setEntity(x, y, z, ent); }
     this.inventory.consume(this.inventory.selected, 1);
     this.audio.placeBlock(def.sound, new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5));
     this.hand.startSwing();
     this.terrain.remeshDirtyNear(this.player.pos.x, this.player.pos.z);
     if (this.npcs) this.npcs.onWorldChanged(x, y, z);
     this.onPlayerEdit(x, y, z, this.world.getBlock(x, y, z));
-    if (def.shape === SHAPE.DOOR) this.onPlayerEdit(x, y + 1, z, this.world.getBlock(x, y + 1, z));
+    if (def.door) this.onPlayerEdit(x, y + 1, z, this.world.getBlock(x, y + 1, z));
   }
 
   debugLines() {

@@ -158,12 +158,17 @@ function chickenParts() {
   ];
 }
 
+// health: Minecraft values (cow 10, pig 10, chicken 4, horse 15). hurtPitch: pitch of the generic hurt sound.
 const SPECS = {
-  horse: { parts: horseParts, scale: 0.72, speed: 1.6, height: 1.6, width: 0.7, sound: 'horseNeigh', soundGap: [40, 110] },
-  cow: { parts: cowParts, scale: 1.0, speed: 0.9, height: 1.4, width: 0.9, sound: 'cowMoo', soundGap: [30, 90] },
-  pig: { parts: pigParts, scale: 1.0, speed: 1.0, height: 0.9, width: 0.8, sound: 'pigOink', soundGap: [20, 60] },
-  chicken: { parts: chickenParts, scale: 0.8, speed: 1.1, height: 0.7, width: 0.4, sound: 'chickenCluck', soundGap: [8, 30] },
+  horse: { parts: horseParts, scale: 0.72, speed: 1.6, height: 1.6, width: 0.7, sound: 'horseNeigh', soundGap: [40, 110], health: 15, hurtPitch: 0.9 },
+  cow: { parts: cowParts, scale: 1.0, speed: 0.9, height: 1.4, width: 0.9, sound: 'cowMoo', soundGap: [30, 90], health: 10, hurtPitch: 0.75 },
+  pig: { parts: pigParts, scale: 1.0, speed: 1.0, height: 0.9, width: 0.8, sound: 'pigOink', soundGap: [20, 60], health: 10, hurtPitch: 1.3 },
+  chicken: { parts: chickenParts, scale: 0.8, speed: 1.1, height: 0.7, width: 0.4, sound: 'chickenCluck', soundGap: [8, 30], health: 4, hurtPitch: 2.2 },
 };
+
+const DEATH_TIME = 1.0;      // seconds the body tumbles before it disappears
+const KNOCKBACK = 5.5;       // blocks/s horizontal impulse of an unarmed hit
+const FLEE_MS = 5000;        // how long a hit animal keeps bolting
 
 export class AnimalManager {
   constructor(scene, world, town, audio) {
@@ -173,6 +178,8 @@ export class AnimalManager {
     this.group = new THREE.Group();
     scene.add(this.group);
     this.rng = new RNG(777);
+    this.onDeath = null;     // (animal) => void: the game spawns the drops
+    this.killed = 0;
     for (const sp of town.animalSpawns) this.spawn(sp);
   }
 
@@ -194,6 +201,7 @@ export class AnimalManager {
       tie: !!sp.tie, pen: sp.pen || null, state: 'idle', timer: rng.range(2, 10), target: null, walkTime: 0, grazeT: 0, graze: false,
       soundTimer: rng.range(spec.soundGap[0], spec.soundGap[1]), lightTimer: 0, name: sp.type === 'horse' ? 'Horse' : sp.type === 'cow' ? 'Cow' : sp.type === 'pig' ? 'Pig' : 'Chicken',
       panic: false, panicUntil: 0, air: null, stunned: 0, swimming: false, airSpin: 0, swept: 0, id: this.list.length,
+      health: spec.health, hurt: 0, dead: false, deathTime: 0, knock: null, fleeFrom: null,
     };
     a.targetYaw = a.yaw;
     a.lod = buildStaticLOD(model.root); // distant stand-in (1 draw call)
@@ -259,6 +267,55 @@ export class AnimalManager {
   }
   eachNear(x, z, r, fn) { const r2 = r * r; for (const a of this.list) { const dx = a.pos.x - x, dz = a.pos.z - z; if (dx * dx + dz * dz <= r2) fn(a, Math.sqrt(dx * dx + dz * dz)); } }
 
+  // ---------------------------------------------------------------- combat (public API)
+  // A melee hit from `from` (attacker position): damage, red flash, knockback away from the attacker and a short
+  // flight. Returns true when the animal died from this hit.
+  hit(a, from, damage = 1) {
+    if (a.dead) return false;
+    a.health -= damage;
+    a.hurt = 0.5;
+    const dx = a.pos.x - from.x, dz = a.pos.z - from.z, d = Math.hypot(dx, dz) || 1;
+    a.knock = { vx: (dx / d) * KNOCKBACK, vz: (dz / d) * KNOCKBACK, t: 0.3 };
+    a.fleeFrom = { x: from.x, z: from.z };
+    a.panic = true; a.panicUntil = performance.now() + FLEE_MS;
+    a.state = 'idle'; a.timer = 0; a.graze = false;
+    a.targetYaw = Math.atan2(-dx, -dz); // face the attacker for the hit frame
+    this.audio.animalHurt(a.pos, a.spec.hurtPitch);
+    if (a.health <= 0) { this.kill(a); return true; }
+    if (a.rng.chance(0.5) && a.spec.sound) this.audio[a.spec.sound](a.pos);
+    return false;
+  }
+  kill(a) {
+    if (a.dead) return;
+    a.dead = true; a.deathTime = 0; a.health = 0; a.knock = null; a.state = 'idle'; a.tie = false;
+    a.lod.visible = false; a.root.visible = true;
+    this.killed++;
+    if (a.spec.sound) this.audio[a.spec.sound](a.pos);
+    if (this.onDeath) this.onDeath(a);
+  }
+  remove(a) {
+    const i = this.list.indexOf(a);
+    if (i >= 0) this.list.splice(i, 1);
+    this.group.remove(a.root); this.group.remove(a.lod);
+    a.root.traverse((o) => { if (o.isMesh && o.geometry) o.geometry.dispose(); });
+    a.lod.traverse((o) => { if (o.isMesh && o.geometry) o.geometry.dispose(); });
+    if (a.model.material.uniforms.map.value) a.model.material.uniforms.map.value.dispose();
+    a.model.material.dispose();
+  }
+  // Knockback slide along the ground (validated against standable cells so animals never end up inside walls).
+  updateKnockback(a, dt) {
+    const k = a.knock;
+    const nx = a.pos.x + k.vx * dt, nz = a.pos.z + k.vz * dt;
+    const fy = Math.floor(a.pos.y + 0.01);
+    let h = standHeight(this.world, Math.floor(nx), fy, Math.floor(nz));
+    if (h === null) h = standHeight(this.world, Math.floor(nx), fy + 1, Math.floor(nz));
+    if (h === null) h = standHeight(this.world, Math.floor(nx), fy - 1, Math.floor(nz));
+    if (h !== null && Math.abs(h - a.pos.y) <= 1.05) { a.pos.x = nx; a.pos.z = nz; a.pos.y += (h - a.pos.y) * 0.6; }
+    else { k.vx = 0; k.vz = 0; }
+    k.vx *= 0.8; k.vz *= 0.8; k.t -= dt;
+    if (k.t <= 0) a.knock = null;
+  }
+
   updateAirborne(a, dt) {
     const air = a.air;
     air.vy -= 22 * dt;
@@ -287,17 +344,21 @@ export class AnimalManager {
 
   tick(player, sky) {
     const pp = player.pos;
+    let removals = null;
     for (const a of this.list) {
       a.prevPos.copy(a.pos);
       const dx = a.pos.x - pp.x, dz = a.pos.z - pp.z;
       const d2 = dx * dx + dz * dz;
+      const dt = 0.05;
+      if (a.dead) { a.deathTime += dt; if (a.deathTime >= DEATH_TIME) (removals || (removals = [])).push(a); continue; }
+      if (a.hurt > 0) a.hurt -= dt;
+      if (a.knock && !a.air) this.updateKnockback(a, dt);
       // far animals are frozen for performance, except that during a disaster they still float in flood water
       const far = d2 > 90 * 90 && !a.air;
       if (far && !this.alertInfo) continue;
-      const dt = 0.05;
       if (a.air) { this.updateAirborne(a, dt); continue; }
       if (a.stunned > 0) { a.stunned -= dt; if (this.world.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y + 0.2), Math.floor(a.pos.z)) !== B.WATER) continue; }
-      if (a.panic && performance.now() > a.panicUntil) a.panic = false;
+      if (a.panic && performance.now() > a.panicUntil) { a.panic = false; a.fleeFrom = null; }
       // float in water (checked at body height too, so animals standing in pens on fence blocks still surface)
       const feet = this.world.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y + 0.2), Math.floor(a.pos.z));
       const body = this.world.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y + a.spec.height * 0.6), Math.floor(a.pos.z));
@@ -342,6 +403,7 @@ export class AnimalManager {
             const info = this.alertInfo;
             let ang = a.rng.range(0, Math.PI * 2);
             if (info) { const ax = a.pos.x - info.x, az = a.pos.z - info.z; const base = Math.atan2(ax, az); ang = base + a.rng.range(-0.9, 0.9); }
+            else if (a.fleeFrom) { const ax = a.pos.x - a.fleeFrom.x, az = a.pos.z - a.fleeFrom.z; ang = Math.atan2(ax, az) + a.rng.range(-0.6, 0.6); }
             const dist = a.rng.range(4, 10);
             let tx = a.pos.x + Math.sin(ang) * dist, tz = a.pos.z + Math.cos(ang) * dist;
             if (a.pen) { tx = Math.min(a.pen.x1 + 0.4, Math.max(a.pen.x0 + 0.6, tx)); tz = Math.min(a.pen.z1 + 0.4, Math.max(a.pen.z0 + 0.6, tz)); }
@@ -366,6 +428,7 @@ export class AnimalManager {
         a.walkTime += step;
       }
     }
+    if (removals) for (const a of removals) this.remove(a);
   }
 
   render(alpha, dt, camera) {
@@ -378,9 +441,10 @@ export class AnimalManager {
       if (d2 > 100 * 100) { a.root.visible = false; a.lod.visible = false; continue; }
       let dy = a.targetYaw - a.yaw; while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2;
       a.yaw += dy * Math.min(1, dt * 6);
-      const useLod = d2 > 30 * 30 && !a.air && a.stunned <= 0;
+      const useLod = d2 > 30 * 30 && !a.air && a.stunned <= 0 && !a.dead && a.hurt <= 0;
       a.lod.visible = useLod;
       a.root.visible = !useLod;
+      a.model.material.uniforms.uHurt.value = a.hurt > 0 || a.dead ? 1 : 0; // red flash while hurt / dying
       if (useLod) {
         a.lod.position.set(px, py, pz); a.lod.rotation.y = a.yaw;
         if (++a.lightTimer >= 8) { a.lightTimer = 0; const l = this.world.sampleLight(a.pos.x, a.pos.y + 0.8, a.pos.z); a.model.material.uniforms.uLight.value.set(l[0], l[1]); }
@@ -388,6 +452,14 @@ export class AnimalManager {
       }
       a.root.position.set(px, py, pz);
       a.root.rotation.y = a.yaw;
+      if (a.dead) {
+        // death animation: keel over onto the side within half a second, sink a little, then vanish (see tick)
+        const t = Math.min(1, a.deathTime / 0.5);
+        a.root.rotation.z = -1.5 * t * t; a.root.rotation.x = 0;
+        a.root.position.y = py - 0.15 * Math.max(0, a.deathTime - 0.6);
+        for (const k of ['legFL', 'legFR', 'legBL', 'legBR', 'legL', 'legR']) if (a.model.parts[k]) a.model.parts[k].rotation.x *= 0.8;
+        continue;
+      }
       if (a.air) { a.root.rotation.x = (a.airSpin || 0) * 0.8; a.root.rotation.z = (a.airSpin || 0) * 0.5; }
       else if (a.stunned > 0) { a.root.rotation.z += (1.3 - a.root.rotation.z) * Math.min(1, dt * 5); a.root.rotation.x *= 0.9; }
       else { a.root.rotation.x *= 0.85; a.root.rotation.z *= 0.85; }
@@ -414,6 +486,7 @@ export class AnimalManager {
   raycast(origin, dir, maxDist) {
     let best = null;
     for (const a of this.list) {
+      if (a.dead) continue;
       const hw = a.spec.width / 2;
       const b = new AABB(a.pos.x - hw, a.pos.y, a.pos.z - hw, a.pos.x + hw, a.pos.y + a.spec.height, a.pos.z + hw);
       const t = rayAABB(origin, dir, b);
