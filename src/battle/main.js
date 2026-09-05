@@ -430,6 +430,7 @@ function updateQuality(dt) {
 // Debug API (same shape as the ISD demo so the tooling works unchanged)
 // ---------------------------------------------------------------------------
 let framesRendered = 0;
+let lastShotShown = null; // shot name currently in the status line (updated on every cut)
 let paused = false;
 let debugMode = false;
 let showStats = false;
@@ -595,9 +596,17 @@ function step(fixedDt = null) {
   else fleet.update(0, camera.position);
   if (cinematic.enabled) {
     cinematic.update(dt);
-    if (framesRendered % 30 === 0)
-      hud.setStatus("Cinematic camera · " + cinematic.shotName);
-  } else orbit.update(dt);
+    if (cinematic.shotName !== lastShotShown) {
+      lastShotShown = cinematic.shotName;
+      hud.setStatus("Cinematic camera · " + lastShotShown);
+    }
+  } else {
+    orbit.update(dt);
+    if (lastShotShown !== null) {
+      lastShotShown = null;
+      hud.setStatus("Free camera.");
+    }
+  }
   planet.update(sun.dir.value, dt);
   if (framesRendered > 60 && !debugMode) updateQuality(dt);
 
