@@ -116,7 +116,8 @@ export class Tsunami extends Disaster {
     this.passedCount = 0;       // columns the front has passed (prefix of the sorted list)
     this.hitPtr = 0;            // next column the crest has not dealt with yet (destruction)
     this.toePtr = 0;            // next passed column without its first block of water
-    this.fillPtr = 0;           // oldest passed column that is not yet at full depth
+    this.fillPtr = 0;           // oldest passed column that is not yet at full depth (where the body pass resumes)
+    this.lagPtr = 0;            // oldest passed column that is BEHIND SCHEDULE (below its due depth): paces the front
     this.sweepPtr = 0;          // slow re-check of all passed columns (chunks loaded after the front passed)
     this.minBase = floodTop - 1;
     this.waveEndTick = -1;
@@ -299,8 +300,10 @@ export class Tsunami extends Disaster {
       case 'wave': {
         this.prevS = this.s;
         let next = this.s + this.params.speed / TPS;
-        // the crest never outruns the water body: at most LEAD blocks ahead of the oldest unfilled column
-        if (this.fillPtr < this.passedCount) next = Math.min(next, Math.max(this.s, this.c.colP[this.fillPtr] + LEAD));
+        // the crest never outruns the water body: at most LEAD blocks ahead of the oldest column that is behind
+        // schedule (columns merely waiting on the staircase for the front to move on must not hold it back, or a
+        // flood deeper than the staircase length would deadlock)
+        if (this.lagPtr < this.passedCount) next = Math.min(next, Math.max(this.s, this.c.colP[this.lagPtr] + LEAD));
         this.s = next;
         this._advanceFront();
         this._fill();
@@ -377,22 +380,24 @@ export class Tsunami extends Disaster {
       c.top[k] = b + 1;
     }
     this.toePtr = k;
-    let ptr = -1, i = this.fillPtr;
+    let ptr = -1, lag = -1, i = this.fillPtr;
     for (; i < this.passedCount; i++) {
       const t = c.top[i];
       if (t >= full) continue;
       const x = c.colX[i], z = c.colZ[i];
       if (!world.isLoaded(x, z)) continue;                      // cannot be filled now: never holds the front back
       const due = Math.max(c.base[i], this._dueTop(this.s - c.colP[i]));
-      if (t >= due) { if (ptr < 0) ptr = i; continue; }         // staircase band: waiting for the front to move on
-      if (this.m.budgetLeft <= 0) { if (ptr < 0) ptr = i; break; }
+      if (t >= due) { if (ptr < 0) ptr = i; continue; }         // staircase band: on schedule, waiting for the front
+      if (this.m.budgetLeft <= 0) { if (ptr < 0) ptr = i; if (lag < 0) lag = i; break; }
       let y = t;
       while (y < due && this.m.budgetLeft > 0) { y++; if (fillable(world.getBlock(x, y, z))) this.m.setBlock(x, y, z, B.WATER); }
       c.top[i] = y;
       if (y < full && ptr < 0) ptr = i;
+      if (y < due && lag < 0) lag = i;                          // the budget ran out before this column caught up
       if (this.m.budgetLeft <= 0) break;
     }
     this.fillPtr = ptr >= 0 ? ptr : i;
+    this.lagPtr = lag >= 0 ? lag : this.passedCount;             // nobody behind schedule: the front is free to move
   }
 
   // Hold phase: slowly re-check every column so chunks that were loaded after the front passed still flood.

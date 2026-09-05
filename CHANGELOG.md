@@ -29,7 +29,10 @@ long tasks, memory, draw calls, triangles, entity counts and load time). Reports
   relight/remesh budgets), Balanced, Light; the simulation edit budget stays fixed (400/tick) for deterministic
   multiplayer. **View distance** up to 24 chunks (pause menu and panel; the explicit choice is remembered).
 - **Creative flight**: double-tap `Space`; `?fly=1`.
-- Fixes: a Start issued during a restore is queued instead of refused; wave-thrown bodies only stagger on landing.
+- Fixes: a Start issued during a restore is queued instead of refused; wave-thrown bodies only stagger on landing;
+  a flood deeper than 7 blocks no longer deadlocks the front at ~5 blocks (the crest pacing now waits only for columns
+  that are behind schedule, not for columns waiting on the staircase), and the journal cap is 800k cells so a 14-block
+  flood of the whole town (~530k water blocks) fills completely; regression check in `test-disasters.mjs`.
 - Critics (round 4, integrated build): Death Star sequence ACCEPT WITH NITS (all must-fix items landed: player
   no longer re-hit by the wave, dry blast, intact streets, lower placement, bigger magma pool, night hull), flood
   ACCEPT WITH NITS (burial regression fixed), panel ACCEPT WITH NITS (all five fixes landed). Tests: unit 4/4,

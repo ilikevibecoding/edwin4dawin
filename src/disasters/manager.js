@@ -16,7 +16,7 @@ export const BUDGET = {
   remeshPerFrame: 3,        // chunk meshes rebuilt per frame (disaster-dirty chunks)
   maxDebris: 600,
   restorePerTick: 320,      // blocks restored per tick during reset
-  maxJournal: 250000,       // hard cap on journaled cells
+  maxJournal: 800000,       // hard cap on journaled cells (a 14-block flood of the whole town is ~530k; ~90 MB worst case)
 };
 
 let commandCounter = 1;

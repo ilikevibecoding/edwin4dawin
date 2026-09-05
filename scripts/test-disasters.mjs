@@ -73,6 +73,16 @@ for (const type of types) {
   await page.evaluate(`game.disasters.command({type:'reset'})`);
   await waitFor(`game.disasters.state === 'idle'`, 120000);
   check(`${type} no exceptions`, page.exceptions.length === exc1 && exc1 === 0, page.exceptions.slice(0, 2).join(' | '));
+  if (type === 'tsunami') {
+    // regression: a flood deeper than the crest staircase used to deadlock the front at ~5 blocks
+    await page.evaluate(`game.disasters.command({type:'start', disaster:'tsunami', seed: 7, params: {waterHeight: 14}})`);
+    await waitFor(`game.disasters.tick >= 200 || game.disasters.state !== 'running'`, 60000);
+    const deep = JSON.parse(await page.evaluate(`JSON.stringify({s: game.disasters.active ? game.disasters.active.s : -1, journal: game.disasters.journal.size, tick: game.disasters.tick})`));
+    check(`${type} deep flood (14 blocks) front keeps moving`, deep.s > 15 && deep.journal > 20000, `s=${deep.s.toFixed ? deep.s.toFixed(1) : deep.s} journal=${deep.journal} tick=${deep.tick}`);
+    await page.evaluate(`game.disasters.command({type:'stop'})`);
+    await page.evaluate(`game.disasters.command({type:'reset'})`);
+    await waitFor(`game.disasters.state === 'idle'`, 180000);
+  }
 }
 console.log(`\n${failed === 0 ? 'ALL PASS' : failed + ' FAILED'}`);
 page.close();
