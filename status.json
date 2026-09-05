@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-05T09:50:18.240Z",
+  "updated": "2026-09-05T10:39:28.891Z",
   "phase": "Star Wars expansion: 7 builders running (gameplay 1:1, space train, towers+rooms, spaceport+ships, Death Star interior, HD textures, shaders/shadows/bloom); landmark wave next",
   "summary": "User round 2 feedback: references received (Coruscant skyline/platform/senate/plaza + Monument Plaza). New rubrics: 05 render quality (64x HD tiles, normal/material maps, cascaded sun shadows, HDR bloom + filmic tone mapping, atmospheric sky, water reflections, presets) and 06 landmarks (one builder per signature building). Layout now reserves 12 landmark lots (Senate 3x3, Jedi Temple 3x3, Monument Plaza 3x3, Uscru undercity 3x3, Works, CoCo market, Opera, 500 Republica, Chancellery, Medcenter, Detention, HoloNet); 421 towers + 12 landmarks + 8 plazas.",
   "links": [
@@ -135,8 +135,8 @@
     },
     {
       "name": "Coruscant signature landmarks (12 buildings, one builder each)",
-      "status": "layout reserved; wave starts after the tower builder merges",
-      "detail": "Senate, Jedi Temple, Monument Plaza (user reference), Uscru undercity strip, the Works, CoCo Town market, Opera, 500 Republica, Chancellery, Medcenter, Detention Center, HoloNet tower. Shared harness scripts/landmark-stats.mjs checks determinism, block variety, room reachability on foot, lighting, detail density."
+      "status": "7 builders running, 5 queued",
+      "detail": "Running: Senate, Jedi Temple, Monument Plaza, Uscru undercity, the Works, CoCo market, Opera. Queued (subagent slot limit): 500 Republica, Chancellery, Medcenter, Detention, HoloNet."
     },
     {
       "name": "Minecraft 1:1 gameplay (doors, chests, items, food, drops, farming, cooking, save v2)",
@@ -157,6 +157,11 @@
       "name": "Death Star: walkable station in the space region",
       "status": "merged",
       "detail": "R 100 sphere at (0,128,-4000): plated hull, trench with lamp rows, superlaser dish, hangar bay with ships, 25 decks of corridors/rooms (3275 rooms, 18 required types), reactor shaft with catwalks, detention block -> compactor chute, bridge + throne room superstructure; 8/8 generator tests, 3 ms/chunk, hangar->throne route min light 9, 0 sky leaks."
+    },
+    {
+      "name": "Coruscant tower families + 53-room library",
+      "status": "merged",
+      "detail": "8 tower families + civic/hall + senate/temple/opera fallbacks, 53 furnished room templates, 1664-blueprint sweep with every room reachable and lit; landmark lots now dispatch to dedicated modules."
     }
   ],
   "metrics": [
@@ -322,6 +327,10 @@
     {
       "time": "2026-09-05 09:50 UTC",
       "text": "Death Star interior merged (8/8 tests); npm test now runs unit + spaceport + Death Star + disasters."
+    },
+    {
+      "time": "2026-09-05 10:39 UTC",
+      "text": "Tower/room library merged; landmark wave launched (7 of 12 builders, rest queued behind the 10-agent limit)."
     }
   ],
   "issues": [
