@@ -23,6 +23,8 @@ import { Metrics } from './core/metrics';
 import { LAYER_MAIN, ViewCull, configureMainCamera, installCascadeRouting, layerMask, shadowPassStats } from './world/culling';
 
 const _size = new THREE.Vector2();
+/** the water does not mirror car cells whose nearest car is beyond this (m): a car is under a mirror texel there */
+const MIRROR_TRAFFIC_FAR = 3500;
 
 export interface QualitySettings {
   samples: number;
@@ -243,6 +245,9 @@ export class Game {
     for (const m of this.traffic.materials) this.registerLit(m);
     this.traffic.group.name = 'traffic';
     this.scene.add(this.traffic.group);
+    // a car is under a texel of the mirror image beyond MIRROR_TRAFFIC_FAR: cells with no car nearer stay out
+    const traffic = this.traffic;
+    this.reflection.excludeChildrenWhen(traffic.group, (o, cam) => traffic.carCellMeshes.has(o) && distanceToBounds(o, cam) > MIRROR_TRAFFIC_FAR);
     for (const c of this.traffic.contrailMeshes) { c.name = 'contrail'; this.scene.add(c); }
 
     await this.tick(progress, 'Pre-flighting the aircraft', 0.92);
