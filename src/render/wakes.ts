@@ -156,7 +156,20 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         float ls = 1.0 / max(laneHalf, 0.3);
         float nl = vn(vec2(dot(vWp, fwd) * min(ls * 0.3, 0.35 / uTexel), dot(vWp, right) * min(ls * 1.4, 0.35 / uTexel)) + 3.0);
         float streaks = mix(0.3 + 0.7 * nl, smoothstep(0.3, 0.85, nl), fine);
-        float grain = mix(breakup * (0.25 + 1.2 * streaks), 0.6 + 0.6 * streaks * (0.8 + 0.2 * n3), fresh);
+        float grainCoarse = mix(breakup * (0.25 + 1.2 * streaks), 0.6 + 0.6 * streaks * (0.8 + 0.2 * n3), fresh);
+        // up close the lane is froth patches over dark slick water, not a white band: threshold a streaky
+        // patch noise so the froth covers three quarters of the lane at the transom and thins to a quarter
+        // downstream (a band of foam at 70-100 % everywhere averaged into a smooth haze seen from a low camera)
+        // (the patch octaves are rotated off the world axes and a finer one is mixed in: a thresholded
+        // axis-aligned lattice showed as a checkerboard of squares)
+        vec2 rp = vec2(vWp.x * 0.866 - vWp.y * 0.5, vWp.x * 0.5 + vWp.y * 0.866);
+        float n3r = vn(rp * min(3.1, 0.35 / uTexel) + 17.0);
+        float n4 = vn(vec2(rp.x * 0.7071 - rp.y * 0.7071, rp.x * 0.7071 + rp.y * 0.7071) * min(7.0, 0.35 / uTexel) + 23.0);
+        float pn = 0.45 * nl + 0.25 * n3r + 0.15 * n2 + 0.15 * n4;
+        float covr = mix(0.25, 0.8, fresh) * (0.6 + 0.4 * laneFade);
+        float thr = 0.5 + (0.5 - covr) * 0.45;   // the summed noise sits around 0.5 with a spread of ~0.15
+        float grainFine = smoothstep(thr - 0.14, thr + 0.14, pn) * (0.7 + 0.3 * n3r) * (0.8 + 0.4 * n4);
+        float grain = mix(grainCoarse, grainFine, fine);
         float lane = laneMask * laneFade * grain * (0.85 + 0.9 * fresh) * (0.15 + 0.85 * spd) * pow(laneHalf0 / laneHalf, 0.2) * (laneHalf / laneHalfR);
         // ---- Kelvin arms: crest lines at 19.5 deg from the track, thickening and fading with distance
         float armLen = laneLen * 2.5;
@@ -197,27 +210,37 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         float bowT = 1.0 - smoothstep(0.0, lead * 0.6, ax);
         float lw0 = (0.06 + 0.08 * spd) * (0.5 + 0.5 * bowT) + 0.02 * w0;
         float lw = max(lw0, 0.6 * uTexel);
-        float meniscus = exp(-outside * outside / (lw * lw)) * (0.35 + 0.4 * bowT) * (0.5 + 0.7 * n3) * (0.3 + 0.7 * spd) * (lw0 / lw);
+        float meniscus = exp(-outside * outside / (lw * lw)) * (0.45 + 0.45 * bowT) * (0.5 + 0.7 * n3) * (0.3 + 0.7 * spd) * (lw0 / lw);
         // bow wave: a crest line wrapping the stem and diverging aft along the forward hull at ~20 deg plus the
         // hull's flare; it stops growing at hull speed and the whole hull zone dies away as a planing hull lifts
         // its bow clear
         float sp = min(speed, 9.0);
         float planing = smoothstep(11.0, 19.0, speed);
-        float bowLift = 0.12 + 0.09 * sp;
+        // the crest stands off the stem by a fraction of the beam (a float's by 20 cm at taxi speed, a ship's
+        // by most of a metre); drawn at hull scale, not at a fixed half metre that wrapped a float's bow in
+        // a two-metre white cloud
+        float hullScale = 0.6 + 0.4 * min(w0, 2.0);
+        float bowLift = (0.08 + 0.05 * sp) * hullScale;
         float c = bowLift + max(ax, 0.0) * 0.27 + hb;
         float cx = ax < 0.0 ? sqrt(ax * ax + ay * ay) : ay;     // ahead of the stem the crest is round
         float dc = ax < 0.0 ? cx - bowLift : ay - c;
-        float bowW0 = 0.18 + 0.05 * sp + 0.04 * w0;
+        float bowW0 = (0.1 + 0.03 * sp) * hullScale + 0.03 * w0;
         float bowW = max(bowW0, 0.7 * uTexel);
         float bowReach = 1.0 - smoothstep(lead * 0.25, lead * 0.65, ax);
         float bowBump = exp(-dc * dc / (bowW * bowW)) * bowReach * smoothstep(0.8, 3.5, speed);
-        float lip = bowBump * (0.5 + 0.8 * n3) * (0.35 + 0.65 * smoothstep(1.5, 5.0, speed)) * (bowW0 / bowW);
+        // the foam is a thin broken lip riding the crest (half its width, on the hull side of it), whole only
+        // once the bow wave really breaks at several metres per second
+        float lipW = max(bowW0 * 0.7, 0.6 * uTexel);
+        float lipD = dc + bowW0 * 0.3;
+        float lipBump = exp(-lipD * lipD / (lipW * lipW)) * bowReach * smoothstep(0.8, 3.0, speed);
+        float lipBreak = mix(0.6 + 0.4 * n3, smoothstep(0.25, 0.7, 0.6 * n3 + 0.4 * vn(vWp * min(6.0, 0.35 / uTexel) + 29.0)), fine);
+        float lip = lipBump * lipBreak * (0.6 + 0.4 * smoothstep(2.0, 7.0, speed)) * (bowW0 * 0.7 / lipW);
         // the hull covers the inside: fade there so nothing shows through a gap at bow or stern
         float coverage = (1.0 - smoothstep(0.0, 0.08, inside)) * (1.0 - 0.85 * planing);
-        foam = (meniscus + lip * 0.75) * coverage;
+        foam = (meniscus + lip * 0.8) * coverage;
         // crest slope of the bow wave (raised toward the hull side of the crest)
         vec2 outDir = ax < 0.0 ? normalize(vec2(-fwd * ax + s * right * ay)) : s * right;
-        float slope = -2.0 * dc / (bowW * bowW) * bowBump * (0.1 + 0.05 * spd) * bowW;
+        float slope = -2.0 * dc / (bowW * bowW) * bowBump * (0.3 + 0.1 * spd) * bowW;
         g += outDir * slope * coverage;
         cover = coverage * max(exp(-outside * 3.0), bowBump);
       }

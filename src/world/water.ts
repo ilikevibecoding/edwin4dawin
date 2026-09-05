@@ -341,7 +341,9 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   g += (wake.gb / wa - 0.5) * min(wake.a * 4.0, 1.0);
   // the churned lane is slick: turbulence has wiped the capillary ripples off it, so it glitters less and
   // reads as the smooth dark road behind a hull rather than as foam alone
-  mss *= 1.0 - 0.55 * smoothstep(0.35, 0.9, wake.a);
+  // (kept moderate: from a low camera a fully glassy lane mirrored the horizon sky as a bright haze band that
+  // swallowed the foam)
+  mss *= 1.0 - 0.35 * smoothstep(0.35, 0.9, wake.a);
   vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
 
   // ---- body colour: two-flow shallow-water reflectance, the bed seen through the column plus the
