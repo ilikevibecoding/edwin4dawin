@@ -163,12 +163,12 @@ export class Game {
     this.sky = new Sky(this.atmos, this.renderer, { cloudSteps: q.cloudSteps, scale: q.skyScale });
     this.sky.dome.name = 'sky';
     this.scene.add(this.sky.dome);
-    this.wakes = new WakeMap(2048, 3200); // 1.56 m/px: boat wakes are 3-10 m wide
+    this.wakes = new WakeMap(2048, 3200, 1024, 64); // far 1.56 m/px (boat wakes), near 6 cm/px around the aircraft
     this.terrain = new Terrain(this.textures);
     this.registerLit(this.terrain.material);
     this.terrain.group.name = 'terrain';
     this.scene.add(this.terrain.group);
-    this.water = new Water(this.textures, this.wakes.texture);
+    this.water = new Water(this.textures, this.wakes.texture, this.wakes.nearTexture);
     this.registerLit(this.water.material);
     this.water.mesh.name = 'water';
     this.scene.add(this.water.mesh);
@@ -258,7 +258,8 @@ export class Game {
     // surface decals, point sprites and trails are not mirrored (the sprites are sized for the main frame),
     // nor is the cabin interior (only visible through the glass)
     const fx = this.aircraft.effects;
-    this.reflection.exclude(fx.stampL.mesh, fx.stampR.mesh, fx.spray.points, fx.exhaust.points, fx.vortexL.mesh!, fx.vortexR.mesh!, ...this.traffic.contrailMeshes, ...this.aircraft.model.interiorMeshes);
+    this.reflection.exclude(...fx.unmirrored, ...this.traffic.contrailMeshes, ...this.aircraft.model.interiorMeshes);
+    for (const m of fx.litMaterials) this.registerLit(m);
     this.flightCamera = new FlightCamera(this.camera);
     this.flightCamera.groundHeight = (x, z) => Math.max(0, this.map.heightAt(x, z));
     // default spawn: on the water at the downtown seaplane base facing east
@@ -396,13 +397,14 @@ export class Game {
     for (const o of this.airframeCasters) o.layers.mask = airMask;
     const cabinMask = layerMask('all', true, airBits & 1);
     for (const o of this.cabinCasters) o.layers.mask = cabinMask;
-    this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size);
     const info = this.renderer.info.render;
     const ps = this.passStats;
     const mark = this.markPass;
     this.passCalls0 = info.calls; this.passTriangles0 = info.triangles;
-    this.wakes.render(this.renderer, cx, cz);
+    this.wakes.render(this.renderer, cx, cz, planePos.x, planePos.z);
     mark('wake');
+    // after the wake maps are placed: the water samples them at this frame's centres
+    this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size, this.wakes.nearCenter, this.wakes.nearSize);
     this.sky.render(this.renderer, cam, this.post.width, this.post.height);
     mark('sky');
     // the shadow cascades are rendered by the first of the two scene renders below (the mirror pass when it

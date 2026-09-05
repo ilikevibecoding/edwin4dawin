@@ -160,6 +160,15 @@ interface MovingBoat {
   draft: number;
   wake: WakeTrail;
   phase: number;
+  /** U-turn at a route end: the boat swings round a semicircle instead of reversing on the spot (which left
+   *  its wake running ahead of the bow); afterwards `lateral` (its offset from the route) decays as it steers back */
+  turn: { cx: number; cz: number; r: number; a0: number; sweep: number; t: number; dur: number } | null;
+  lateral: number;
+  /** last world position / heading, for the heading of the wake and hull while turning */
+  px: number;
+  pz: number;
+  hx: number;
+  hz: number;
 }
 
 function routeLength(pts: Vec2[]): number {
@@ -318,9 +327,12 @@ export class Traffic {
         const kind: HullKind = ch.id === 'ocean-route' || ch.id === 'ship-channel' ? (rng.chance(0.6) ? 'cargo' : 'ferry') : rng.pick(['speed', 'speed', 'console', 'yacht', 'sail', 'speed']);
         const b = factory.build(kind, rng);
         const speed = kind === 'cargo' ? rng.range(4, 6) : kind === 'ferry' ? 7 : kind === 'sail' ? rng.range(2.5, 4) : kind === 'yacht' ? rng.range(5, 9) : rng.range(9, 16);
-        const wake = new WakeTrail(kind === 'cargo' ? 90 : 80, b.wakeWidth, kind === 'cargo' ? 70 : kind === 'sail' ? 20 : 42, kind === 'sail' ? 0.45 : 1.5, wakes);
+        // the ribbon carries the hull's half-beam and transom-to-bow length (bow wave, waterline, Kelvin arms);
+        // points are spaced by hull size so a ship's wake reaches a kilometre and a runabout's a few hundred metres
+        const big = kind === 'cargo' || kind === 'ferry';
+        const wake = new WakeTrail(100, b.beam * 0.5, big ? 150 : kind === 'sail' ? 30 : 60, kind === 'sail' ? 0.5 : 1.3, wakes, b.len * 0.95, clamp(b.len * 0.5, 3, 12));
         moverGeos.push(bakeLocal(b.group));
-        this.boats.push({ id: moverGeos.length - 1, route: ch.pts, routeLen: len, s: rng.range(0, len), dir: rng.chance(0.5) ? 1 : -1, speed, len: b.len, draft: b.draft, wake, phase: rng.range(0, 100) });
+        this.boats.push({ id: moverGeos.length - 1, route: ch.pts, routeLen: len, s: rng.range(0, len), dir: rng.chance(0.5) ? 1 : -1, speed, len: b.len, draft: b.draft, wake, phase: rng.range(0, 100), turn: null, lateral: 0, px: NaN, pz: NaN, hx: 1, hz: 0 });
       }
     }
     // moored boats (static, no wake) join the same batch with a fixed matrix
@@ -495,16 +507,53 @@ export class Traffic {
     // boats
     for (const b of this.boats) {
       const len = b.routeLen;
-      b.s += b.speed * dt * b.dir;
-      if (b.s > len - 5) { b.s = len - 5; b.dir = -1; }
-      if (b.s < 5) { b.s = 5; b.dir = 1; }
-      routePoint(b.route, b.s, this.tmp);
-      const yaw = Math.atan2(this.tmp.dx * b.dir, this.tmp.dz * b.dir);
-      tmpP.set(this.tmp.x, -b.draft * 0.15 + 0.12 * Math.sin(time * 1.3 + b.phase) * (b.len < 20 ? 1 : 0.2), this.tmp.z);
+      let x: number, z: number, hx: number, hz: number;
+      if (b.turn) {
+        const T = b.turn;
+        T.t += dt;
+        const k = Math.min(T.t / T.dur, 1);
+        const a = T.a0 + T.sweep * k;
+        x = T.cx + T.r * Math.cos(a); z = T.cz + T.r * Math.sin(a);
+        const sg = Math.sign(T.sweep);
+        hx = -Math.sin(a) * sg; hz = Math.cos(a) * sg;
+        if (k >= 1) {
+          // back on the reversed route, 2 r to one side of it; the offset decays as the boat steers back
+          b.turn = null;
+          b.dir = b.dir === 1 ? -1 : 1;
+          routePoint(b.route, b.s, this.tmp);
+          const fdx = this.tmp.dx * b.dir, fdz = this.tmp.dz * b.dir;
+          b.lateral = (x - this.tmp.x) * -fdz + (z - this.tmp.z) * fdx;
+        }
+      } else {
+        b.s += b.speed * dt * b.dir;
+        b.s = clamp(b.s, 5, len - 5);
+        routePoint(b.route, b.s, this.tmp);
+        const fdx = this.tmp.dx * b.dir, fdz = this.tmp.dz * b.dir;
+        const rx = -fdz, rz = fdx; // right of travel
+        if (b.lateral !== 0) {
+          b.lateral *= Math.exp(-dt * b.speed / (b.len * 6));
+          if (Math.abs(b.lateral) < 0.05) b.lateral = 0;
+        }
+        x = this.tmp.x + rx * b.lateral; z = this.tmp.z + rz * b.lateral;
+        const mx = x - b.px, mz = z - b.pz, ml = Math.hypot(mx, mz);
+        if (Number.isFinite(ml) && ml > 1e-4) { hx = mx / ml; hz = mz / ml; } else { hx = fdx; hz = fdz; }
+        if ((b.dir === 1 && b.s >= len - 5) || (b.dir === -1 && b.s <= 5)) {
+          // route end: swing round a semicircle (turning circle ~1.6 hull lengths, capped for ships)
+          const r = clamp(b.len * 1.6, 10, 120);
+          const side = b.phase > 50 ? 1 : -1;
+          const cx = x + rx * side * r, cz = z + rz * side * r;
+          const px = x - cx, pz = z - cz;
+          b.turn = { cx, cz, r, a0: Math.atan2(pz, px), sweep: Math.PI * Math.sign(px * hz - pz * hx || 1), t: 0, dur: (Math.PI * r) / b.speed };
+        }
+      }
+      const yaw = Math.atan2(hx, hz);
+      tmpP.set(x, -b.draft * 0.15 + 0.12 * Math.sin(time * 1.3 + b.phase) * (b.len < 20 ? 1 : 0.2), z);
       // hull axis is +x, rotate so +x points along travel direction; a little roll and pitch with the swell
       tmpE.set(0.02 * Math.sin(time * 1.7 + b.phase), yaw - Math.PI / 2, 0.03 * Math.sin(time * 1.1 + b.phase) + (b.speed > 8 ? -0.03 : 0), 'XYZ');
       movers.setMatrixAt(b.id, tmpM.compose(tmpP, tmpQ.setFromEuler(tmpE), tmpS));
-      b.wake.update(this.tmp.x - this.tmp.dx * b.dir * b.len * 0.4, this.tmp.z - this.tmp.dz * b.dir * b.len * 0.4, time, true, b.speed);
+      // the wake ribbon starts at the transom and runs forward over the hull to the bow (bow wave, waterline)
+      b.wake.update(x - hx * b.len * 0.5, z - hz * b.len * 0.5, hx, hz, time, true, b.speed);
+      b.px = x; b.pz = z; b.hx = hx; b.hz = hz;
     }
     // cars: advance, then refill the chunk of the cell each car is in
     const { pos, dir, side, up } = this;
@@ -555,7 +604,7 @@ export class Traffic {
       tmpE.set(0, yaw, pitch * 0.6, 'YXZ');
       movers.setMatrixAt(a.id, tmpM.compose(p, tmpQ.setFromEuler(tmpE), tmpS));
       if (a.contrail) {
-        a.contrail.update(p.x, p.z, time, true, 250);
+        a.contrail.update(p.x, p.z, d.x, d.z, time, true, 250);
         a.contrail.mesh!.position.y = p.y - 2;
         a.contrail.mesh!.updateMatrix();
       }

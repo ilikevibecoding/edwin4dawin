@@ -86,8 +86,11 @@ export const BENCH_VIEWS: BenchView[] = [
     id: 'water-landing', name: 'Seaplane water approach', description: 'Final approach a few metres above the Garza channel, floats about to touch: foam, wake and spray.',
     time: 13.0, weather: 'clear',
     camera: { mode: 'chase', fov: 48 },
-    plane: { pos: [-500, 5.5, 3330], headingDeg: 86, pitchDeg: 4, bankDeg: 0, speed: 29, throttle: 0.25, flaps: 1 },
-    presim: 30, clipInputs: { pitch: 0.12, roll: 0, yaw: 0 },
+    // floats ~0.7 m above the water, flaring downwind (5 m/s tailwind on 086): the aircraft balloons a few
+    // decimetres, sinks and touches down about 0.7 s into the clip (frame 7), then runs on the step at ~27 m/s
+    // with spray and float wakes; the old 5.5 m start floated in ground effect through the whole 3 s clip
+    plane: { pos: [-500, 2.7, 3330], headingDeg: 86, pitchDeg: 3, bankDeg: 0, speed: 28, throttle: 0.12, flaps: 1 },
+    presim: 30, clipInputs: { pitch: 0.15, roll: 0, yaw: 0 },
   },
   {
     id: 'sunset', name: 'Sunset flight', description: 'Low sun in the west over the bay, downtown silhouetted, warm haze and long water reflections.',
