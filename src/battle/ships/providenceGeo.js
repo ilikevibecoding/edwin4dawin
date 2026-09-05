@@ -271,10 +271,9 @@ export const HULL = {
   top: 62, // ridge height at the widest station
   bottom: -92, // keel depth at the widest station
   tPeak: 0.72,
-  hangar: { z0: -150, z1: 240, depth: 15 },
 };
 
-export function stationAt(z, { hangar = true } = {}) {
+export function stationAt(z) {
   const t = clamp01((z - HULL.zBow) / HULL.length);
   const k = HULL.tPeak;
   const shape = (pow, fall) =>
@@ -283,7 +282,7 @@ export function stationAt(z, { hangar = true } = {}) {
   const yTop = HULL.top * shape(0.82, 0.16) + 0.2;
   const yBot = HULL.bottom * shape(0.86, 0.22) - 0.2;
   const yWide = yBot + 0.45 * (yTop - yBot);
-  const st = {
+  return {
     z,
     w,
     yTop,
@@ -291,42 +290,43 @@ export function stationAt(z, { hangar = true } = {}) {
     yWide,
     wTop: Math.max(0.3, w * 0.24),
     wKeel: Math.max(0.2, w * 0.14),
-    hangar: null,
   };
-  if (hangar && z >= HULL.hangar.z0 && z <= HULL.hangar.z1)
-    st.hangar = { depth: HULL.hangar.depth };
-  return st;
 }
 
 // Half profile (starboard, x >= 0) from the ridge centre (index 0) to the keel centre (index 12).
-// Points 4..7 are the hangar lips/recess: on the surface when the station has no slot.
+// Points 5..6 bound the flank band: a near-vertical face at max beam (up to 22 m tall) that the hangar
+// bays are cut into; 4 and 7 are the lips above and below it.
 export const PROFILE_N = 13;
 export const SHARP_POINTS = new Set([1, 4, 5, 6, 7]);
+export const BAND_SEG = 5; // ring segment index of the flank band (starboard)
 export function halfProfile(st) {
   const { w, yTop, yBot, yWide, wTop } = st;
   const hu = yTop - yWide;
   const hl = yWide - yBot;
+  const bu = Math.min(hu * 0.24, 12);
+  const bl = Math.min(hl * 0.3, 10.5);
+  const lipU = Math.min(hu * 0.03, 2.2);
+  const lipL = Math.min(hl * 0.03, 2.2);
   const pts = [];
   pts.push([0, yTop]); // 0 ridge centre
   pts.push([wTop, yTop - hu * 0.02]); // 1 ridge edge (crease)
   pts.push([wTop + (w - wTop) * 0.4, yTop - hu * 0.36]); // 2 upper flank
-  pts.push([wTop + (w - wTop) * 0.78, yTop - hu * 0.7]); // 3 upper flank, lower
-  pts.push([w * 0.985, yWide + hu * 0.14]); // 4 shoulder / upper hangar lip
-  if (st.hangar) {
-    const d = st.hangar.depth;
-    pts.push([w - d, yWide + hu * 0.12]); // 5 recess top inner
-    pts.push([w - d, yWide - hl * 0.12]); // 6 recess bottom inner
-  } else {
-    pts.push([w, yWide + hu * 0.05]); // 5 max beam upper
-    pts.push([w, yWide - hl * 0.05]); // 6 max beam lower
-  }
-  pts.push([w * 0.985, yWide - hl * 0.16]); // 7 lower lip
-  pts.push([w * 0.93, yWide - hl * 0.34]); // 8 belly a
-  pts.push([w * 0.79, yWide - hl * 0.57]); // 9 belly b
-  pts.push([w * 0.57, yWide - hl * 0.78]); // 10 belly c
+  pts.push([wTop + (w - wTop) * 0.8, yTop - hu * 0.72]); // 3 upper flank, lower
+  pts.push([w * 0.982, yWide + bu + lipU]); // 4 upper lip
+  pts.push([w, yWide + bu]); // 5 band top
+  pts.push([w, yWide - bl]); // 6 band bottom
+  pts.push([w * 0.982, yWide - bl - lipL]); // 7 lower lip
+  pts.push([w * 0.93, yWide - hl * 0.4]); // 8 belly a
+  pts.push([w * 0.79, yWide - hl * 0.6]); // 9 belly b
+  pts.push([w * 0.57, yWide - hl * 0.79]); // 10 belly c
   pts.push([w * 0.3, yWide - hl * 0.93]); // 11 belly d
   pts.push([0, yBot]); // 12 keel centre
   return pts;
+}
+// profile point m (starboard) at longitudinal z as [x, y, z], mirrored for side -1
+export function profilePoint(z, m, side = 1) {
+  const p = halfProfile(stationAt(z))[m];
+  return [side * p[0], p[1], z];
 }
 
 // Full ring (24 points): starboard 0..12 then port mirrors of 11..1.
@@ -346,14 +346,14 @@ export const RING_SHARP = (() => {
   }
   return s;
 })();
-// starboard segment index (0..11) for any ring segment j (0..23)
+// starboard segment index (0..11) for any ring segment j (0..23), and the side (+1 starboard) of segment j
 export const segMirror = (j) => (j < PROFILE_N - 1 ? j : RING_N - 1 - j);
-export const HANGAR_SEGS = new Set([4, 5, 6]);
+export const segSide = (j) => (j < PROFILE_N - 1 ? 1 : -1);
 
 // Surface frame on the hull at longitudinal z, starboard segment m, fraction t along it, side ±1:
 // returns { p: Vector3, n: Vector3 (outward), tz: Vector3 (along +z on the surface) }.
-export function hullFrame(z, m, t, side = 1, opts = {}) {
-  const ring = (zz) => halfProfile(stationAt(zz, opts));
+export function hullFrame(z, m, t, side = 1) {
+  const ring = (zz) => halfProfile(stationAt(zz));
   const r0 = ring(z);
   const a = r0[m];
   const b = r0[Math.min(PROFILE_N - 1, m + 1)];
@@ -416,6 +416,172 @@ export function bladeRings({
   return rings;
 }
 export const BLADE_SHARP = (chordN = 4) => new Set([0, chordN + 1]);
+
+// ---------------------------------------------------------------------------
+// Slabs (tower tiers): horizontal sections from y0 to y1 whose plan outline is a slab with a parabolic
+// nose, flat sides and a tapered but blunt tail (`tail` = tail thickness as a fraction of halfT).
+// Returns { rings, sharp } (sharp = the two tail corners).
+// ---------------------------------------------------------------------------
+const SLAB_CHORD = [0.02, 0.06, 0.13, 0.24, 0.5, 0.68, 0.82, 0.92];
+export function slabRings({
+  y0,
+  y1,
+  n = 3,
+  zLead,
+  zTrail,
+  halfT,
+  tail = 0.32,
+  ease = (k) => k,
+}) {
+  const thick = (f) =>
+    f < 0.13
+      ? Math.sqrt(f / 0.13)
+      : f < 0.5
+        ? 1
+        : 1 - (1 - tail) * smoothstep(0, 1, (f - 0.5) / 0.5);
+  const rings = [];
+  for (let k = 0; k < n; k++) {
+    const u = ease(k / (n - 1));
+    const y = lerp(y0, y1, u);
+    const zl = zLead(y);
+    const zt = zTrail(y);
+    const c = zt - zl;
+    const t = halfT(y);
+    const ring = [[0, y, zl]];
+    for (const f of SLAB_CHORD) ring.push([t * thick(f), y, zl + c * f]);
+    ring.push([t * tail, y, zt]);
+    ring.push([-t * tail, y, zt]);
+    for (let q = SLAB_CHORD.length - 1; q >= 0; q--)
+      ring.push([-t * thick(SLAB_CHORD[q]), y, zl + c * SLAB_CHORD[q]]);
+    rings.push(ring);
+  }
+  const nc = SLAB_CHORD.length;
+  return { rings, sharp: new Set([nc + 1, nc + 2]) };
+}
+// half thickness of a slab ring at chord fraction f (for placing things on its faces)
+export function slabThick(f, tail = 0.32) {
+  return f < 0.13
+    ? Math.sqrt(f / 0.13)
+    : f < 0.5
+      ? 1
+      : 1 - (1 - tail) * smoothstep(0, 1, (f - 0.5) / 0.5);
+}
+
+// ---------------------------------------------------------------------------
+// Bridge head: rounded-rectangle sections (halfW x halfH, corner radius r) along z from z0 to z1,
+// scaled down toward the nose and tail, with an optional recessed band (y range [b0, b1] relative to cy,
+// inset by `inset`) that a window row sits in. Returns { rings, sharp }.
+// ---------------------------------------------------------------------------
+export function headRings({
+  cy = 0,
+  z0,
+  z1,
+  halfW,
+  halfH,
+  r = 6,
+  band = null,
+  inset = 2.2,
+  nZ = 8,
+  nose = 0.3,
+  tail = 0.4,
+  noseK = 0.6,
+  tailK = 0.65,
+}) {
+  // right half of the section from the top centre to the bottom centre
+  const right = [];
+  right.push([0, halfH]);
+  right.push([halfW - r, halfH]);
+  for (const a of [30, 60])
+    right.push([
+      halfW - r + r * Math.sin((a * Math.PI) / 180),
+      halfH - r + r * Math.cos((a * Math.PI) / 180),
+    ]);
+  right.push([halfW, halfH - r]);
+  const sharpLocal = [];
+  if (band) {
+    const [b0, b1] = band; // b1 > b0
+    sharpLocal.push(right.length);
+    right.push([halfW, b1]);
+    sharpLocal.push(right.length);
+    right.push([halfW - inset, b1]);
+    sharpLocal.push(right.length);
+    right.push([halfW - inset, b0]);
+    sharpLocal.push(right.length);
+    right.push([halfW, b0]);
+  }
+  right.push([halfW, -(halfH - r)]);
+  for (const a of [30, 60])
+    right.push([
+      halfW - r + r * Math.cos((a * Math.PI) / 180),
+      -(halfH - r) - r * Math.sin((a * Math.PI) / 180),
+    ]);
+  right.push([halfW - r, -halfH]);
+  right.push([0, -halfH]);
+  const outline = right.slice();
+  for (let i = right.length - 2; i >= 1; i--)
+    outline.push([-right[i][0], right[i][1]]);
+  const sharp = new Set();
+  for (const s of sharpLocal) {
+    sharp.add(s);
+    sharp.add(outline.length - s);
+  }
+  // ring segments that form the recessed vertical face of the band (both sides)
+  const bandSegs = new Set();
+  if (band) {
+    const b = sharpLocal[0];
+    bandSegs.add(b + 1);
+    bandSegs.add(outline.length - b - 2);
+  }
+  const rings = [];
+  for (let k = 0; k <= nZ; k++) {
+    const u = k / nZ;
+    let s = 1;
+    if (u < nose) s = noseK + (1 - noseK) * smoothstep(0, 1, u / nose);
+    else if (u > 1 - tail)
+      s = 1 - (1 - tailK) * smoothstep(0, 1, (u - (1 - tail)) / tail);
+    const z = lerp(z0, z1, u);
+    rings.push(outline.map(([x, y]) => [x * s, cy + y * s, z]));
+  }
+  return { rings, sharp, bandSegs, outline };
+}
+// section scale of a headRings head at longitudinal z (same taper as the rings)
+export function headScale(spec, z) {
+  const u = clamp01((z - spec.z0) / (spec.z1 - spec.z0));
+  const nose = spec.nose ?? 0.3;
+  const tail = spec.tail ?? 0.4;
+  const noseK = spec.noseK ?? 0.6;
+  const tailK = spec.tailK ?? 0.65;
+  if (u < nose) return noseK + (1 - noseK) * smoothstep(0, 1, u / nose);
+  if (u > 1 - tail)
+    return 1 - (1 - tailK) * smoothstep(0, 1, (u - (1 - tail)) / tail);
+  return 1;
+}
+
+// Polygonal annulus with thickness (local space: axis +Y, base at y = 0): outer skirt, top face, inner
+// skirt. rOut/rIn radii, n sides, h height; `phase` rotates the polygon.
+export function ringSlab(
+  rOut,
+  rIn,
+  n,
+  h,
+  phase = 0,
+  { color = [1, 1, 1] } = {},
+) {
+  const poly = (r, y) => {
+    const ring = [];
+    for (let k = 0; k < n; k++) {
+      const a = phase + (k / n) * Math.PI * 2;
+      ring.push([Math.cos(a) * r, y, Math.sin(a) * r]);
+    }
+    return ring;
+  };
+  return loftRings([poly(rOut, 0), poly(rOut, h), poly(rIn, h), poly(rIn, 0)], {
+    sharpRings: new Set([1, 2]),
+    sharp: n <= 8 ? new Set(Array.from({ length: n }, (_, k) => k)) : null,
+    faceColor: () => color,
+    texel: 1 / 4,
+  });
+}
 
 // Ellipsoid-like pod: rings along z between z0..z1, elliptical section (rx, ry) scaled by a bulb
 // profile with separate front/back exponents; centre (cx, cy).
