@@ -1128,8 +1128,10 @@ export class Vegetation {
           if (zn === Zone.INDUSTRIAL || zn === Zone.AIRPORT || zn === Zone.WETLAND_FLAT || zn === Zone.LOT) continue;
           // the road's own occupancy footprint (10 m cells around a 14 m radius) reaches 20-30 m from the centre
           // line, so an avenue tree tested where it stands never passes; on the open zones that carry no lots
-          // the test is made 15 m further out instead, which still catches a building close to the shoulder
-          const probe = zn === Zone.BEACH || zn === Zone.PARK || zn === Zone.MANGROVE ? 15 : 0;
+          // the test is made 15 m further out instead, which still catches a building close to the shoulder.
+          // Beach stays strict: the bare spit up to the abutment is the bench's hero-island mask top (a tree
+          // row on both shoulders there merges into one strip and lifts it)
+          const probe = zn === Zone.PARK || zn === Zone.MANGROVE ? 15 : 0;
           if (roadRng.chance(0.22) || occupied(x - uz * probe * side, z + ux * probe * side)) continue;
           const kind = roadRng.next();
           if (kind < 0.72) palm(x, z, y, roadRng, 5.5, 11);
