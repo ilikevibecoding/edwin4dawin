@@ -616,6 +616,10 @@ async function boot() {
       return renderer.toneMappingExposure;
     },
     objects: { scene, camera, renderer, terrain, forest, vehicle, skyRig, post, driver, rig, camp, fleet, wildlife, audio },
+    // The bundle's own three, for the capture tools: a second copy imported
+    // from /node_modules only exists on the dev server, and the fleet tool's
+    // occluder raycast silently went without one on every preview build.
+    THREE,
     build: { rev: __BUILD_REV__, stamp: __BUILD_STAMP__ },
     /**
      * Performance sampling from the live frame loop. `start`, drive for a

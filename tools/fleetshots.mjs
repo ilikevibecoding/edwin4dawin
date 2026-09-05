@@ -170,14 +170,18 @@ async function main() {
           const { camera, skyRig, fleet, camp, terrain } = window.debugAPI.objects;
           const V3 = camera.position.constructor;
           const M4 = camera.matrixWorld.constructor;
-          // THREE is not a global; a second copy of the module gives us a
-          // Raycaster the camp's meshes are happy to be tested with
+          // The bundle exposes its three as debugAPI.THREE; older builds only
+          // offered a second copy from /node_modules, which a preview server
+          // does not serve — so on every baseline the camp raycast was silently
+          // off and the trailer was shot through a tent roof, three rounds
+          // running.
           if (!window.__fleetRay && orbit > 0) {
             try {
-              const T = await import('/node_modules/three/build/three.module.js');
+              const T = window.debugAPI.THREE || (await import('/node_modules/three/build/three.module.js'));
               window.__fleetRay = new T.Raycaster();
             } catch (e) {
               window.__fleetRay = false;
+              console.warn('fleetshots: no Raycaster available; camp occluders ignored');
             }
           }
           const rc = window.__fleetRay || null;
