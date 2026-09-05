@@ -488,7 +488,12 @@ export function tintGeometry(geo, color) {
   const g = geo;
   const n = g.attributes.position.count;
   const arr = new Float32Array(n * 3);
-  const c = color instanceof THREE.Color ? color : new THREE.Color(color);
+  const c =
+    color instanceof THREE.Color
+      ? color
+      : Array.isArray(color)
+        ? new THREE.Color().setRGB(color[0], color[1], color[2]) // [r, g, b] triples (three ignores arrays)
+        : new THREE.Color(color);
   for (let i = 0; i < n; i++) {
     arr[i * 3] = c.r;
     arr[i * 3 + 1] = c.g;
