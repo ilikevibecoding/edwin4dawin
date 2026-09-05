@@ -95,6 +95,24 @@ plume system** (`enginePlumes.js`, one additive draw call, flicker, dark on dead
 override); lighting baseline (fills cut ~3×, plating map normalised so tints map to albedo); start
 card restored.
 
-## Fix wave (parallel worktrees)
+## Fix wave (parallel worktrees, all merged)
 
-_Venator, Providence, Munificent/Recusant, effects, planet/lighting, choreography/cinematic — in progress_
+| workstream | result |
+| --- | --- |
+| Venator | three-scale plating with per-face UVs, film-calibrated cream/flank/dark-belly palette (deck 182–203, shadow 46–60, belly 59–68 sRGB), soot/fade/scorch weathering, nozzle bells on framework plumes, 8 heavy + 20 light **tracking turrets** (bolts leave the muzzles), 9 m deck seam, 64 m open bay, trench machinery, keel bays, denser block, flared tower heads; 32.8k / 9.1k / 1.1k tris |
+| Providence | 4-tier stepped command tower with bridge head, 7 discrete hangar bays per flank (open / blast door), three-scale plating, no stern halo, 10 tracking heavy turrets, weathering, ventral hangar mouth, keel strake; 45.3k / 9.1k / 1.7k tris |
+| Munificent / Recusant | deep lit nozzle bells (opaque cones gone), three-scale plating, tracking turrets (0° aim error), recessed slot windows, deeper pincer + thick fins + dishes + docking bay; Recusant slab 1.6× with swept tips, stepped spike, two-tier block; 23.8k / 8.8k / 1.5k and 20.7k / 8.8k / 1.7k tris |
+| Effects | min projected bolt length (far bolts are streaks), red stays red, staged impacts (flash → boiling fireball → sparks → lingering dark puff), **scorch decal layer** under fires/heavy hits, fires with 60–120 s life + re-ignition + extinguish, staged detonations with shock ring, hull-coloured debris and drifting black cloud, flak culled by camera distance, smoke drawn first and depth-sorted; 6 draw calls |
+| Planet / lighting | light-fabric Coruscant (4 pin-light layers cross-faded by texel footprint, beaded arteries, rings/spokes, hubs, near-black warm ground, crisp halo-free limb), galactic band baked once (~50 ms/frame of shader work removed), planet bake in a Web Worker (main-thread stall 1.1–1.8 s → ~20 ms), touch profile (1024×512, 3 Voronoi levels), key 4.8 + shaped city fill (deck ~200, shadow 45–70, belly 60–90) |
+| Choreography / cinematic | per-layer particle budgets (fires actually light), death director fixed (4 deaths per 3-minute window sustained over 20 min, wrecks retire, reinforcements), staged 3.5–5 s deaths with dimming engines, fighter mean life 44 s → 2.2–2.7 min, fighter lead fix, ±25° line variety with banked turns, 11 shots at 5–8 s + 2.5 s inserts, chase keeps the fighter in the lower third, Coruscant in the bottom third of low shots, OBB camera clearance, mobile scaling of fire density |
+
+### Fixed-scene measurements (software GL, 1280×720)
+
+`tools/battle-verify.mjs`: **14/14** — max 107 calls / 0.85 M tris over 33 views; 54.6 k bolts in 191 s,
+peak 387 in flight, peak 1 701 particles; 45/50 alive with 5 staged deaths; 0 fighters inside hulls;
+13 cinematic cuts in 80 s, camera never inside a hull; `battle.update` ≤ 0.69 ms per 1/60 step;
+texture memory 38 MB; page ready 6.6 s here (planet bake now off the main thread).
+
+## Review wave 2
+
+_re-scoring in progress_
