@@ -17,6 +17,82 @@ numbers the targets are about.
 
 ---
 
+## Round 5 landed — the road was a hole on real GPUs, collision, lighting, car, plain, hills, water
+
+**Build `0dc79bb` live** (bundle `d8a9ed9`), then `6ca9b3e`, `3428229`, `f93a567`
+on top; gate `CLEAR` at fast, high and ultra with all 57 interaction checks.
+
+- **The dark road in the user's screenshot was the terrain mesh missing.** The
+  terrain program bound 21 samplers. The software rasteriser every frame here
+  is shot on offers 32 fragment texture units; ANGLE over D3D11 and the Mac and
+  Windows Chromes people run offer 16. The program failed to link on the user's
+  GPU, three dropped the mesh without a page error, and what showed was the
+  far-plain mesh underneath — hiding the terrain here reproduces the screenshot
+  pixel for pixel (`shots/r5_terrain/before/culvert_fast/culvert_hide_terrain.png`).
+  That has been the state of the road on real hardware for four rounds while
+  103 frames a round passed three critics. Terrain r5 (`0dc79bb`) packs ten
+  tile maps into two `DataArrayTexture`s: 21 → 13 samplers, same bytes, no
+  new textures. The gate now counts every program's sampler uniforms and
+  fails past 16 (`3428229`; it fires on the pre-fix terrain, two programs at
+  21). Not yet confirmed on the user's machine.
+- **Collision (`f6b370b`).** ≈500 2-D colliders (circles and oriented boxes on
+  an 8 m grid hash) from the forest instances, the roadside kit, the camp
+  plan, the fleet and the lions; three circles for the truck. Head-on into a
+  headwall from 6 m: contact, under 1 m/s in 0.28 s, penetration 0.0000 m,
+  one impact event; a 15° glance off the boma slides at 97 %. Impact thud
+  and a jolt into the heave/pitch springs and camera. Auto-drive had been
+  cutting the spur into the kopje and guest tent 0 (pure-pursuit odometer
+  falling behind on corner cuts); it re-projects and slows for curvature now,
+  0 contacts over the whole route at fast and high. Resolve 0.001–0.005 ms a
+  frame; static build 8 ms at boot. Roadside exports its kit (`6ca9b3e`) so
+  every part gets one exact collider (6.2 → 2.6 ms).
+- **Lighting r5 (`cef8466`).** The beam-slice discs are gone: a second
+  representation of each cone, twelve axial sheet quads turned to the camera,
+  cross-faded with the slice stack by view angle (broadside peak/trough 4.05 →
+  1.26, bar 55.9 → 1.30). Night ground: `groundIndirect` had never been in
+  effect — inserted after `outgoingLight` was summed — so the night dial of
+  0.1 was a no-op; wired before `totalDiffuse`, night 1.4, mainroad ground
+  median 0.011 → 0.023 with the pad still 0.58 of the horizon band. Moon:
+  glow 2.0 → 0.035, `sunDisc` 26 → 4.5, a 0.5° disc with a tight corona
+  (30 486 → 1 738 px over 0.35 within 60 px). Dusk sand brighter than the sky
+  is the headlamp pool, not SSR (pass off: no pixel changed; lamps off: 30 %
+  → 0 % over the sky) — `BEAM.dusk` is the car's knob.
+- **Hero car r5 (`c8ccad2`).** The bar slab was the nine pod cores at 2.5× the
+  bloom threshold; cover on its own key with a nine-lobe mask, pods at 0.25:
+  hero box over 0.5 1449 → 417 px (target 300), front view shows nine peaks.
+  Door mirror glass turned 22° inboard and 1.5° down — the seat sees horizon
+  and flank instead of a culled back face. Day panes: side_shade see 0.68 →
+  0.93, ws_mid 0.79 → 0.89, dust settled to the sills, wiper arcs. Clearcoat
+  1.0 / 0.15 over a satin base with flake normals (grille bloom regression
+  found and fixed at basecoat `specularIntensity` 0.2). Chamfered, siped
+  lugs; woven door cards; black ABS console. +2 programs at fast (176).
+- **Vegetation r5 (`f1689c7`).** The bald pride plain was 96 % soil fleck
+  under a straw colour mask: lion × lawn × graze size factors stacked to 0.42
+  and the lawn species were the two flat forms. Short upright turf at full
+  count via an `extra` scatter pass (tuft cover 3.3 → 39.9 % of the lower
+  third; the mask barely moves because the turf is khaki). Dusk crowns: one
+  cap for shell and interior flattened them; the cap scales with `transLow`
+  at low sun and the outer shell may pass over it (−3.33 → −2.13 st vs sky).
+  Crown indirect scaled by sun side (+0.58 st sun half). Tuft self-shadow
+  root → tip (+1.2 st per tuft; plain median −0.5 st).
+- **Terrain r5 (`0dc79bb`).** Hills fog to the sky over their own ridge
+  (dome uniforms), ramp 60–380 m to 0.90–0.94, a luminance ceiling 0.80 and a
+  floor 0.76 pre-ACES: ridge rows vs the sky above, mainroad 0.67 → 0.80,
+  lion_far 0.55 → 0.71, pickup 0.63 → 0.75; camp_beyond slipped 0.80 → 0.72.
+  Water hole: Fresnel 0.25 + 0.75(1−f)³, reflection is the dome sample for
+  the reflected ray, kopje boulders as analytic ellipsoids in the reflection,
+  0.6 m wet annulus; pool −0.44 → −0.26 st under the sky, +0.97 st over the
+  mud ring, grey → blue-grey. Two of the five round-4 hill boxes measure sky
+  against sky in the frames as shot (`pickup_0_day`, `lion_far` far R).
+- **Also.** Lions r6 (`358f2be`) and campground r4 (`fd28044`) as in the
+  previous entry; `fleetshots` steps the camp 90 frames before a night frame
+  (`b1c09e1`); native-resolution ultra frames in the baseline (`fb8239a`).
+- **Not met / carried:** bar box 417 vs 300 (cover specular over the reflector
+  bowls), dusk grille +0.121 vs +0.1, mess shade pockets 3.2 st (the
+  hemisphere's, not the far cascade's — 3.6/0.92 moved nothing there),
+  `lion_far` into-sun crest rows 0.55–0.65 under a floor that should hold
+  0.76, moon bloom halo, rear-view residual slice cores at 32°.
+
 ## Gauntlet round 4 verdict — pass, first time
 
 **Build `80cb5e6` stays live.** Three blind critics scored it against round 2

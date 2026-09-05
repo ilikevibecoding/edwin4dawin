@@ -1131,3 +1131,113 @@ Round 5 is the rubric's lighting, shadows and reflections round, which is where
 the open items sit. Five builders are on the consensus briefs (lighting, hero
 car, lions, campground, vegetation) with terrain still out on its round 4; the
 HUD items are mine. Then `shots/round5/`, three critics against round 4.
+
+## Round 5 — six builders, and the finding that outranks the round
+
+Landed in order: lighting `cef8466`, collision `f6b370b`, hero car `c8ccad2`,
+vegetation `f1689c7`, terrain `0dc79bb` (live, bundle `d8a9ed9`), roadside
+`6ca9b3e`, gate `3428229`, terrain cap `f93a567`. One gate on the whole tree,
+three tiers, 57 interaction checks, `CLEAR`.
+
+### The road on real hardware
+
+The user sent a screenshot: the truck through a culvert headwall, the road
+around it near-black with lit stones on it. Two defects, and the second is the
+one that matters. The first is that there was no collision — that is the
+collision entry below. The second is that the road was not dark: it was
+*absent*. The terrain program bound 21 sampler uniforms. SwiftShader, which
+every frame in every gauntlet round is shot on, offers 32 fragment texture
+units; ANGLE over D3D11, and the Chrome on a Mac or a Windows machine, offers
+16. On the user's GPU the program failed to link, three logged it and dropped
+the mesh, and the far-plain mesh underneath rendered as the road. Hiding the
+terrain here reproduces the screenshot pixel for pixel (crops of the user's
+frame beside it under `shots/r5_terrain/crops/`). Stones lit, ground dark: the
+stones were real, the ground was a different object.
+
+So for four rounds — 103 frames a round, three critics, a pass in round 4 —
+the road every real player saw was a hole, and nothing in the process could
+have caught it, because the process shot on a device with twice the limit.
+That is the lesson of round 5, and it is a process lesson: the gate read
+link status back from every program (a round-2 fix) and it was true here and
+false there. The terrain builder found it while chasing the user's screenshot
+and could not reproduce it; the sampler count in the program's link log was
+the tell. Fix: ten of the terrain's tile maps ride in two `DataArrayTexture`s,
+21 → 13 samplers, same bytes. The gate now counts every program's sampler
+uniforms and fails past 16; run against the pre-fix terrain it fires on two
+programs at 21, and on the landed tree the maximum at any tier is 13. What it
+still cannot see: varying-vector and uniform-vector limits, which differ by
+less between the two, and anything a driver does differently at equal limits.
+Confirmation on the user's own machine is the only real test; the preview is
+that test.
+
+### What else landed, and what each found
+
+- **Collision.** The truck had no colliders at all. ≈500 2-D colliders now
+  (trees from the instance matrices, roadside parts from the kit, camp from the
+  plan's own segments, fleet OBBs, lions as soft circles), three circles for
+  the truck, MTV push-out with a velocity split into scrape/bounce, a yaw kick
+  from the lever arm, impact and jolt for audio and camera. The builder's own
+  finding: auto-drive was clipping the camp side of the spur — kopje boulders
+  and a guest tent — because the pure-pursuit odometer fell behind on corner
+  cuts and the layout scattered rocks onto the road. The headwall the user hit
+  is 70 m from the junction; that was manual driving, and it stops at the face
+  now. 0.001–0.005 ms a frame.
+- **Lighting.** The beam discs are two representations of one cone,
+  cross-faded by view angle; broadside peak/trough 4.05 → 1.26. And a latent
+  bug: `groundIndirect` had been multiplied in after `outgoingLight` was
+  summed, so the night dial had never done anything since it was written.
+  The dusk sand over the sky that round 4 pinned on SSR is the lamp pool —
+  the pass off changes no pixel, the lamps off take it to zero. Two of the
+  round-4 diagnoses were wrong in the same way: a plausible mechanism named
+  from the frame, not the ablation. The critics' hypotheses are leads, not
+  causes; every builder ablates first now.
+- **Hero car.** The bar slab was the nine pods themselves, each a hot core at
+  2.5× the bloom threshold; the cover was innocent. Nine pods read now, the
+  box is 417 px over 0.5 against a 300 target, and what remains is the cover's
+  specular over the reflector bowls. The mirror was culled from every seat
+  camera (normal 13° aft); turned 22° inboard it shows horizon and flank. The
+  clearcoat change regressed the dusk grille by a fifth of a stop before the
+  builder found the satin base's direct lobe and index-matched it.
+- **Vegetation.** The pride plain's "18.6 % straw" was 96 % soil fleck; the
+  grass under the lions was 3 % of the pixels. Three size factors stacked to
+  0.42 and the lawn species were the flat ones. Turf at full count now — but
+  khaki, so a straw colour mask reads it as unchanged. The round-5 critics are
+  told.
+- **Terrain.** Hills fog to the sky over their own ridge, with a ceiling and a
+  floor as luminance scales pre-ACES. Three of four frames in band; the
+  into-sun crest rows of `lion_far` are not lifted by a floor that should hold
+  them and the builder ran out of session on it. The water hole reflects the
+  dome and the kopje. Two of the five round-4 hill boxes were sky against sky.
+
+### Measured (`fast`, software raster)
+
+| | round 4 (`80cb5e6`) | round 5 (`0dc79bb`) |
+|---|---|---|
+| programs / textures at fast | 174 / 293 | 176 / 290 |
+| max samplers in any program | 21 | 13 |
+| hero view, whole frame: calls / tris | 560 / 2.37 M | 560 / 2.37 M |
+| collision resolve, mean / batched pushing | — | 0.001 / 0.005 ms |
+| interaction checks | 30 | 57 |
+| night mainroad ground median (linear Y) | 0.011 | 0.023 |
+| beam broadside peak/trough | 4.05 (bar 55.9) | 1.26 (bar 1.30) |
+| pride tuft cover, lower third | 3.3 % | 39.9 % |
+
+### Process
+
+The terrain builder timed out after finishing its edits and its after set but
+before its report and gate; the tree was complete (the after frames were shot
+from it), so it was gated and landed as-is and the report asked for
+afterwards, read-only. Three builders' gates failed on the collision builder's
+uncommitted `interact.mjs`, which asserted a collision world no HEAD build had:
+a check landed in the tool before the feature it tests. Order of landing now
+follows that dependency (collision first), and a builder adding checks says so
+in its report's first line.
+
+### Next
+
+`shots/round5/` is being shot from `0dc79bb` (with the native-resolution ultra
+frames for the first time); three critics against round 4, with the hill
+boxes moved onto the ridge rows and the note about the khaki lawn. Fleet r4 is
+running. Round 6 briefs come from the consensus; the standing hand-offs are the
+bar cover's specular, the hemisphere for the shade pockets, `BEAM.dusk`, the
+into-sun crest floor, and the lion's day rim.
