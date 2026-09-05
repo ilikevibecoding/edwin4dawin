@@ -128,8 +128,8 @@ function template(bp, rng, name, kind, x0, z0, x1, z1, y, side, doorU, doorW = 2
   return r;
 }
 // plaster wall ring around an interior rect, only on interior mask cells (the facade is already the outer wall)
-function wallRing(bp, m, x0, z0, x1, z1, y, id = WHITE, h = 4, trim = null) {
-  const put = (x, z) => { if (M(m, x, z) === 2) bp.fill(x, y, z, x, y + h - 1, z, (trim && (x + z) % 4 === 0) ? trim : id); };
+function wallRing(bp, m, x0, z0, x1, z1, y, id = WHITE, h = 4, trim = null, base = null) {
+  const put = (x, z) => { if (M(m, x, z) === 2) { bp.fill(x, y, z, x, y + h - 1, z, (trim && (x + z) % 4 === 0) ? trim : id); if (base) bp.set(x, y, z, base); } };
   for (let x = x0 - 1; x <= x1 + 1; x++) { put(x, z0 - 1); put(x, z1 + 1); }
   for (let z = z0; z <= z1; z++) { put(x0 - 1, z); put(x1 + 1, z); }
 }
@@ -162,7 +162,11 @@ function shell(bp, t, fy, seed, rows = 4, glassy = false, floorFn = null) {
       bp.set(x, fy - 1, z, ((ox && !oz ? z : x) % 8 === 2 && !(ox && oz)) ? BLUE : CHROME);
       facade(bp, m, x, fy, z, seed, rows, glassy);
     }
-    else bp.set(x, fy - 1, z, floorFn ? floorFn(x, z) : ((x + z) % 2 ? WHITE : SMOOTH));
+    else {
+      // the ceiling lights of the floor below stay as lit inlays in this floor's slab
+      const cur = bp.get(x, fy - 1, z);
+      if (cur !== GLOW && cur !== BLUE) bp.set(x, fy - 1, z, floorFn ? floorFn(x, z) : ((x + z) % 2 ? WHITE : SMOOTH));
+    }
   }
 }
 // setback terrace: the ring of the tier below that the tier above does not cover, at slab level y (walk y + 1)
@@ -297,7 +301,7 @@ function unitDoor(u, isIn) {
 // walls, door and a Room frame for one unit; `fill(room)` furnishes it
 function unitRoom(bp, m, u, y, kind, fill) {
   const isIn = (x, z) => M(m, x, z) === 2;
-  wallRing(bp, m, u.x0, u.z0, u.x1, u.z1, y);
+  wallRing(bp, m, u.x0, u.z0, u.x1, u.z1, y, WHITE, 4, CHROME, SMOOTH);
   const dr = unitDoor(u, isIn);
   doorway(bp, dr.x0, dr.z0, dr.x1, dr.z1, y, 3, GLOW, CHROME);
   const r = new Room(bp, { x0: u.x0, z0: u.z0, x1: u.x1, z1: u.z1, y, h: 4, side: u.side, doorU: dr.doorU, doorW: 2, mask: isIn }, kind, {});
@@ -311,7 +315,8 @@ function corridors(bp, t, y, plan) {
   const m = t.mask, isIn = (x, z) => M(m, x, z) === 2, [xi0, xi1] = plan.xi;
   const corr = (x0, z0, x1, z1) => {
     for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (isIn(x, z)) {
-      bp.set(x, y - 1, z, ((x + z) % 4 === 0) ? BLACK : ((x + z) % 2 ? PLATE : SMOOTH));
+      const cur = bp.get(x, y - 1, z);
+      if (cur !== GLOW && cur !== BLUE) bp.set(x, y - 1, z, ((x + z) % 4 === 0) ? BLACK : ((x + z) % 2 ? PLATE : SMOOTH));
       if ((x % 3 === 0) && (z % 2 === 0)) bp.set(x, y + 4, z, GLOW);
     }
   };
@@ -865,7 +870,8 @@ function podiumCorridors(bp, m, y, lvl, perimeter) {
   const isIn = (x, z) => M(m, x, z) === 2;
   const cell = (x, z, along) => {
     if (!isIn(x, z)) return;
-    bp.set(x, y - 1, z, ((x + z) % 4 === 0) ? lvl.trim : ((x + z) % 2 ? lvl.floor[0] : lvl.floor[1]));
+    const cur = bp.get(x, y - 1, z);
+    if (cur !== GLOW && cur !== BLUE) bp.set(x, y - 1, z, ((x + z) % 4 === 0) ? lvl.trim : ((x + z) % 2 ? lvl.floor[0] : lvl.floor[1]));
     if (along % 3 === 0) bp.set(x, y + 4, z, GLOW);
   };
   PCX.forEach(([a, b], i) => { const outer = i === 0 || i === 3, z1 = perimeter ? (outer ? 77 : 17) : (outer ? 77 : 82); for (let x = a; x <= b; x++) for (let z = 6; z <= z1; z++) cell(x, z, z + (x - a)); });
@@ -916,8 +922,8 @@ function arrivalHall(bp, rng, seed) {
   }
   for (let z = 21; z <= 77; z++) { if (isIn(32, z)) bp.set(32, my, z, B.IRON_BARS); if (isIn(85, z)) bp.set(85, my, z, B.IRON_BARS); }
   for (let x = 32; x <= 85; x++) if (!(x >= 47 && x <= 48) && !(x >= 69 && x <= 70)) bp.set(x, my, 20, B.IRON_BARS);
-  podiumFloor(bp, rng, y, PODIUM_PLAN[1], true);
   podiumFloor(bp, rng, my, PODIUM_PLAN[6], true);
+  podiumFloor(bp, rng, y, PODIUM_PLAN[1], true);
   // hall floor: lanes around the core and up the middle, parking bays west and east, lit ceiling grid
   for (let x = 33; x <= 84; x++) for (let z = 21; z <= 82; z++) {
     if (!inHall(x, z)) continue;
@@ -1023,9 +1029,10 @@ export const LANDMARK = {
     const noLanding = new Set([6, 41, 56, 176]);
     coreShaft(bp, 1, 181);
     for (let y = 1; y <= 181; y += 5) coreLevel(bp, y, { up: y < 181, door: !noLanding.has(y), lifts: !noLanding.has(y) });
-    // podium: arrival hall with its mezzanine, then plant, staff, services, amenities and management levels; plaza
+    // podium, top down so every level's ceiling lights survive as lit inlays in the floor above: management,
+    // amenities, services, staff and plant levels, then the arrival hall with its mezzanine; the plaza on the roof
+    for (const y of [31, 26, 21, 16, 11]) podiumFloor(bp, rng, y, PODIUM_PLAN[y], false);
     arrivalHall(bp, rng, seed);
-    for (const y of [11, 16, 21, 26, 31]) podiumFloor(bp, rng, y, PODIUM_PLAN[y], false);
     plaza(bp, rng);
     // tower levels
     const club = { n1: 'library', n2: 'holo_theatre', n3: 'gallery', s1: 'cantina', s2: 'restaurant', s3: 'lounge', w: 'meditation_chamber', e: 'garden_terrace' };
