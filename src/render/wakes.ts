@@ -32,13 +32,15 @@ export class WakeMap {
     this.nearSize = nearSize;
     this.texel = size / resolution;
     this.nearTexel = nearSize / nearResolution;
-    const make = (res: number) => {
-      const rt = new THREE.WebGLRenderTarget(res, res, { type: THREE.UnsignedByteType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    const make = (res: number, mips: boolean) => {
+      const rt = new THREE.WebGLRenderTarget(res, res, { type: THREE.UnsignedByteType, depthBuffer: false, minFilter: mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: mips });
       rt.texture.wrapS = rt.texture.wrapT = THREE.ClampToEdgeWrapping;
       return rt;
     };
-    this.rt = make(resolution);
-    this.nearRt = make(nearResolution);
+    // the far map is minified from altitude (a texel-wide arm falls between pixel centres and reads as a dashed
+    // line without mipmaps); the near map is only ever magnified
+    this.rt = make(resolution, true);
+    this.nearRt = make(nearResolution, false);
     this.camera = new THREE.OrthographicCamera(-size / 2, size / 2, size / 2, -size / 2, 1, 400);
     this.camera.up.set(0, 0, -1);
     this.nearCamera = new THREE.OrthographicCamera(-nearSize / 2, nearSize / 2, nearSize / 2, -nearSize / 2, 1, 400);
@@ -103,7 +105,9 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
     uniform float uTexel;   // metres per texel of the map being rendered
     const float TANK = ${TAN_KELVIN};
     const float COSK = 0.9428, SINK = 0.3333;
-    float h21(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+    // lattice hash without sin(): the sin-based hash loses its precision on world coordinates in the
+    // thousands and turned into per-texel static in the centimetre map (a 1 km period keeps the input small)
+    float h21(vec2 q) { q = mod(q, 1024.0); vec3 p3 = fract(vec3(q.xyx) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
     float vn(vec2 q) { vec2 i = floor(q), f = fract(q); f = f * f * (3.0 - 2.0 * f);
       return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
     // waterline half-beam of a hull at 'ax' metres behind its bow (fullest a little aft of midships)
@@ -118,26 +122,42 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
       float d = vGeom.x, hw = max(vGeom.y, 1e-3);
       vec2 fwd = normalize(vGeom.zw);
       vec2 right = vec2(-fwd.y, fwd.x);           // side +1 of the ribbon
-      float strength = vTrail.x, w0 = vTrail.y, lead = vTrail.z, laneLen = vTrail.w;
+      float strength = vTrail.x, w0 = vTrail.y, lead = vTrail.z;
+      // the churned lane lasts a few tens of seconds of foam, so its length scales with the speed it was laid at
+      float laneLen = vTrail.w * clamp(speed / 8.0, 0.5, 1.6);
       float y = side * hw;                         // signed metres across the track
       float ay = abs(y);
       float s = sign(side);
       float life = 1.0 - age;
       float spd = smoothstep(0.6, 5.0, speed);     // how hard the hull is pushing water
+      float fine = 1.0 - smoothstep(0.25, 1.2, uTexel);   // 1 in the centimetre map, 0 in the metre map
       // world-anchored breakup so foam reads as churned patches, never a chalk line
-      float n1 = vn(vWp * 0.35), n2 = vn(vWp * 1.3 + 4.0), n3 = vn(vWp * 3.1 + 11.0);
+      // the finer octaves never go below ~3 texels of the map being rendered (sub-texel noise samples into
+      // dashes and dots along the arms in the coarse map)
+      float n1 = vn(vWp * 0.35), n2 = vn(vWp * min(1.3, 0.35 / uTexel) + 4.0), n3 = vn(vWp * min(3.1, 0.35 / uTexel) + 11.0);
       float breakup = 0.35 + 0.65 * n1 * (0.6 + 0.8 * n2);
       float foam = 0.0;
       vec2 g = vec2(0.0);
       float cover = 0.0;
       if (d >= 0.0) {
-        // ---- turbulent lane behind the transom
-        float laneHalf = w0 * (1.05 + 0.9 * min(d / laneLen, 1.0));
-        float laneMask = 1.0 - smoothstep(laneHalf * 0.55, laneHalf, ay);
-        float laneFade = pow(1.0 - smoothstep(0.0, laneLen, d), 1.4);
-        float fresh = exp(-d / (4.0 * w0 + 2.0));
-        float grain = mix(breakup, 0.25 + 1.1 * n3 * breakup, fresh);
-        float lane = laneMask * laneFade * grain * (0.45 + 0.9 * fresh) * (0.15 + 0.85 * spd);
+        // ---- turbulent lane behind the transom: a beam wide at the transom, spreading like a turbulent wake
+        //      (with the square root of the distance) while its foam thins as it spreads
+        float laneHalf0 = w0 * 1.05;
+        float laneHalf = laneHalf0 + 0.45 * sqrt(d * max(w0, 0.15));
+        // drawn at least a texel wide (a speedboat's lane is narrower than a far-map texel) with the foam spread
+        // over the wider band so the streak keeps its brightness seen from altitude
+        float laneHalfR = max(laneHalf, 0.9 * uTexel);
+        float laneMask = 1.0 - smoothstep(laneHalfR * 0.45, laneHalfR, ay);
+        float laneFade = 1.0 - smoothstep(0.0, laneLen, d);
+        float fresh = exp(-d / (10.0 * w0 + 6.0));
+        // churned patches scaled to the lane (a float's lane is patchy at 30 cm, a ship's at metres), streaked
+        // along the track, on top of the coarse world breakup; the hard-edged streaks only where the map
+        // resolves them (in the coarse map they would sample into a dotted line)
+        float ls = 1.0 / max(laneHalf, 0.3);
+        float nl = vn(vec2(dot(vWp, fwd) * min(ls * 0.3, 0.35 / uTexel), dot(vWp, right) * min(ls * 1.4, 0.35 / uTexel)) + 3.0);
+        float streaks = mix(0.3 + 0.7 * nl, smoothstep(0.3, 0.85, nl), fine);
+        float grain = mix(breakup * (0.25 + 1.2 * streaks), 0.6 + 0.6 * streaks * (0.8 + 0.2 * n3), fresh);
+        float lane = laneMask * laneFade * grain * (0.85 + 0.9 * fresh) * (0.15 + 0.85 * spd) * pow(laneHalf0 / laneHalf, 0.2) * (laneHalf / laneHalfR);
         // ---- Kelvin arms: crest lines at 19.5 deg from the track, thickening and fading with distance
         float armLen = laneLen * 2.5;
         float armY = w0 * 0.8 + (d + lead) * TANK;
@@ -148,20 +168,24 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         float dy = ay - armY;
         float armEnv = 1.0 - smoothstep(armLen * 0.45, armLen, d);
         float armBump = exp(-dy * dy / (armW * armW));
-        // broken foam streaks along the arm, only where the bow wave actually breaks (speed) and not on the
-        // first metres where the arm is still inside the hull's own bow wave
-        float streak = 0.35 + 0.65 * vn(vec2(dot(vWp, fwd) * 0.5, dot(vWp, right) * 1.5) + 7.0);
-        float arm = armBump * armEnv * streak * smoothstep(1.5, 7.0, speed) * (0.55 + 0.45 * n2) * smoothstep(-lead * 0.5, lead * 0.5, d) * (armW0 / armW);
-        foam = lane * 1.0 + arm * 0.6;
+        // the arms are glassy crests at taxi speed and only carry broken foam streaks once the bow wave breaks
+        // (a few metres per second); none on the first metres where the arm is still inside the hull's bow wave
+        float sn = vn(vec2(dot(vWp, fwd) * min(0.5, 0.35 / uTexel), dot(vWp, right) * min(1.5, 0.35 / uTexel)) + 7.0);
+        // in the coarse map the modulation stays shallow: a texel-wide line modulated by half its depth is a
+        // dashed line from altitude
+        float streak = mix(0.85 + 0.15 * sn * n2, (0.3 + 0.7 * smoothstep(0.3, 0.8, sn)) * (0.5 + 0.5 * n2), fine);
+        float arm = armBump * armEnv * streak * smoothstep(0.8, 2.0, speed) * (0.5 + 0.5 * smoothstep(2.5, 8.5, speed)) * smoothstep(-lead * 0.5, lead * 0.5, d) * (armW0 / armW);
+        // from altitude the arms are mostly glassy lines beside a white lane, so they carry less foam there
+        foam = lane * 1.0 + arm * mix(0.35, 0.8, fine);
         // arm crest slope: a raised crest, outward normal of the arm line
         vec2 armOut = s * right * COSK + fwd * SINK;
         float crestSlope = -2.0 * dy / (armW * armW) * armBump * (0.12 + 0.1 * spd) * armEnv * min(armW / uTexel, 1.0);
         g += armOut * crestSlope;
         // transverse stern waves: crests across the track, wavelength 2 pi v^2 / g, decaying down the lane
         float lam = max(6.2832 * speed * speed / 9.81, 0.5);
-        float tw = smoothstep(2.0 * uTexel, 4.0 * uTexel, lam) * exp(-d / (laneLen * 0.8)) * (1.0 - smoothstep(laneHalf * 1.5, laneHalf * 4.0, ay)) * spd;
-        g += -fwd * (0.09 * tw * sin(6.2832 * d / lam));
-        cover = max(laneMask * laneFade, armBump * armEnv) * 0.9 + 0.1;
+        float tw = smoothstep(2.0 * uTexel, 4.0 * uTexel, lam) * exp(-d / (laneLen * 0.6)) * (1.0 - smoothstep(laneHalf * 1.2, laneHalf * 3.0, ay)) * spd;
+        g += -fwd * (0.07 * tw * sin(6.2832 * d / lam));
+        cover = max(max(laneMask * laneFade, armBump * armEnv), min(foam * 3.0, 1.0)) * 0.9 + 0.1;
       } else {
         // ---- hull zone: ax metres behind the bow (negative ahead of the stem)
         float ax = lead + d;
@@ -174,22 +198,23 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         float lw0 = (0.06 + 0.08 * spd) * (0.5 + 0.5 * bowT) + 0.02 * w0;
         float lw = max(lw0, 0.6 * uTexel);
         float meniscus = exp(-outside * outside / (lw * lw)) * (0.35 + 0.4 * bowT) * (0.5 + 0.7 * n3) * (0.3 + 0.7 * spd) * (lw0 / lw);
-        // bow wave: a crest line wrapping the stem and diverging aft along the forward hull at ~27 deg; it stops
-        // growing at hull speed and the whole hull zone dies away as a planing hull lifts its bow clear
+        // bow wave: a crest line wrapping the stem and diverging aft along the forward hull at ~20 deg plus the
+        // hull's flare; it stops growing at hull speed and the whole hull zone dies away as a planing hull lifts
+        // its bow clear
         float sp = min(speed, 9.0);
         float planing = smoothstep(11.0, 19.0, speed);
         float bowLift = 0.12 + 0.09 * sp;
-        float c = bowLift + max(ax, 0.0) * 0.5 + hb;
+        float c = bowLift + max(ax, 0.0) * 0.27 + hb;
         float cx = ax < 0.0 ? sqrt(ax * ax + ay * ay) : ay;     // ahead of the stem the crest is round
         float dc = ax < 0.0 ? cx - bowLift : ay - c;
         float bowW0 = 0.18 + 0.05 * sp + 0.04 * w0;
         float bowW = max(bowW0, 0.7 * uTexel);
-        float bowReach = 1.0 - smoothstep(lead * 0.35, lead * 0.75, ax);
+        float bowReach = 1.0 - smoothstep(lead * 0.25, lead * 0.65, ax);
         float bowBump = exp(-dc * dc / (bowW * bowW)) * bowReach * smoothstep(0.8, 3.5, speed);
         float lip = bowBump * (0.5 + 0.8 * n3) * (0.35 + 0.65 * smoothstep(1.5, 5.0, speed)) * (bowW0 / bowW);
         // the hull covers the inside: fade there so nothing shows through a gap at bow or stern
         float coverage = (1.0 - smoothstep(0.0, 0.08, inside)) * (1.0 - 0.85 * planing);
-        foam = (meniscus + lip * 0.9) * coverage;
+        foam = (meniscus + lip * 0.75) * coverage;
         // crest slope of the bow wave (raised toward the hull side of the crest)
         vec2 outDir = ax < 0.0 ? normalize(vec2(-fwd * ax + s * right * ay)) : s * right;
         float slope = -2.0 * dc / (bowW * bowW) * bowBump * (0.35 + 0.1 * spd) * bowW;
@@ -369,7 +394,7 @@ export class WakeTrail {
     this.halfWidth = halfWidth;
     this.lead = lead;
     this.spacing = spacing;
-    this.laneLen = clamp(40 + halfWidth * 40, 50, 300);
+    this.laneLen = clamp(60 + halfWidth * 50, 80, 300);
     this.wake = target instanceof WakeBatch;
     // extra vertex pairs for the live head of a wake ribbon (gap markers, transom, bow)
     const slots = capacity + 4;
@@ -398,11 +423,33 @@ export class WakeTrail {
    *  the arms show, narrowing to the turbulent lane once the shader has faded them out. */
   private wakeHalf(d: number): number {
     const w0 = this.halfWidth;
-    const lane = w0 * (1.05 + 0.9 * Math.min(d / this.laneLen, 1)) * 1.3;
-    const armLen = this.laneLen * 2.5;
+    const lane = (w0 * 1.05 + 0.45 * Math.sqrt(Math.max(d, 0) * Math.max(w0, 0.15))) * 1.15;
+    const armLen = this.laneLen * 2.5 * 1.6;   // the shader's arm length at the fastest speed factor
     const armY = w0 * 0.8 + (d + this.lead) * TAN_KELVIN + (0.45 + 0.3 * w0 + 0.012 * d) * 3.0;
     const env = 1 - smoothstep(armLen, armLen * 1.15, d);
-    return Math.max(lane, armY * env);
+    // never narrower than the far map's texel-wide minimum lane
+    return Math.max(lane, armY * env, 2.0);
+  }
+
+  /** A jump longer than this between samples is the emitter leaving the water and coming back, not motion
+   *  along it; it must stay well above the emission spacing (a ship samples every 12 m) or every sample of a
+   *  large hull would read as a gap and chop its ribbon into invisible pieces. */
+  private gapDist(speed: number): number {
+    return Math.max(12, speed * 1.5, this.spacing * 3);
+  }
+
+  /** Pull point i toward the midpoint of its neighbours: the emitter (a float on a rolling, yawing hull, a boat
+   *  in waves) wanders a few centimetres between samples and, drawn at centimetre texels, that made the lane
+   *  centreline a zigzag with the sample period instead of the smooth track water actually keeps. */
+  private relax(i: number): void {
+    const pts = this.points;
+    if (i < 1 || i >= pts.length - 1) return;
+    const a = pts[i - 1], p = pts[i], b = pts[i + 1];
+    if (a.fade === 0 || p.fade === 0 || b.fade === 0) return;
+    p.x = 0.5 * p.x + 0.25 * (a.x + b.x);
+    p.z = 0.5 * p.z + 0.25 * (a.z + b.z);
+    const dx = b.x - a.x, dz = b.z - a.z, l = Math.hypot(dx, dz);
+    if (l > 1e-6) { p.dx = dx / l; p.dz = dz / l; }
   }
 
   private writeVertexPair(i: number, x: number, z: number, dx: number, dz: number, w: number, age: number, fade: number, speed: number, dist: number): void {
@@ -432,7 +479,7 @@ export class WakeTrail {
       if (!fresh) { const l = dist || 1; pdx = (x - this.lastX) / l; pdz = (z - this.lastZ) / l; }
       // the emitter left the surface (bounce, skip, take-off) and came back: close the old ribbon with a
       // zero-length invisible quad and start a new one here instead of bridging the gap with foam
-      const gap = !fresh && dist > Math.max(12, speed * 1.5);
+      const gap = !fresh && dist > this.gapDist(speed);
       if (gap) {
         // two invisible markers (at the old end and at the new start) so the bridging quad carries no foam
         const last = this.points[this.points.length - 1];
@@ -455,6 +502,7 @@ export class WakeTrail {
         if (!before || before.fade === 0) { prev.dx = pdx; prev.dz = pdz; }
       }
       this.points.push({ x, z, dx: pdx, dz: pdz, t: time, fade, speed });
+      if (this.wake) this.relax(this.points.length - 2);
       while (this.points.length > this.capacity) this.points.shift();
       this.lastX = x; this.lastZ = z;
     }
@@ -495,7 +543,7 @@ export class WakeTrail {
       // the head (emitter back on the water this frame) keeps the head from bridging to the old ribbon
       const last = n ? this.points[n - 1] : null;
       const w = this.wakeHalf(0);
-      const bridge = last && (last.fade === 0 || Math.hypot(x - last.x, z - last.z) > Math.max(12, speed * 1.5));
+      const bridge = last && (last.fade === 0 || Math.hypot(x - last.x, z - last.z) > this.gapDist(speed));
       if (bridge && last) {
         // invisible markers at both ends of the bridging quad
         this.writeVertexPair(count++, last.x, last.z, last.dx, last.dz, w, 0, 0, speed, 0);

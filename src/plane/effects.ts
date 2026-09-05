@@ -305,10 +305,10 @@ export class PlaneEffects {
       const p = this.tmp.copy(stern).setX(emitX).applyQuaternion(q).add(flight.position);
       trail.update(p.x, p.z, fdx, fdz, time, t.onWater, speed);
     }
-    // spray: the bow wave tears into sheets from about 3 m/s (the hump), then the chines throw a fan of sheets
+    // spray: the bow wave tears into sheets from about 5 m/s (the hump), then the chines throw a fan of sheets
     // and droplets sideways and aft from the forebody while planing; dies away once the floats are unloaded
-    if (t.onWater && speed > 2.5) {
-      const hump = smoothstep(2.5, 9, speed);
+    if (t.onWater && speed > 4.5) {
+      const hump = smoothstep(4.5, 11, speed);
       const rate = (28 * hump + 80 * smoothstep(9, 18, speed)) * (1 - 0.55 * smoothstep(28, 40, speed));
       this.sprayAcc += rate * dt;
       const right = this.right.set(0, 0, 1).applyQuaternion(q);

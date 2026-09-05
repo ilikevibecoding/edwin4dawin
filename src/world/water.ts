@@ -332,8 +332,16 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
     float nearW = smoothstep(0.0, 0.08, min(ed.x, ed.y));
     wake = mix(wake, texture2D(uWakeNearTex, nuv), nearW);
   }
-  // gb: surface gradient of bow waves, Kelvin arms and stern waves (already scaled by the map's coverage)
-  g += (wake.gb - 0.5) * 2.0 * 0.5 * min(wake.a * 4.0, 1.0);
+  // the ribbons are alpha-blended over a cleared (black) map, so the stored colour is premultiplied by the
+  // coverage: undo that before decoding (a ribbon's flat interior must decode to a flat surface, not to a
+  // tilt toward the map's origin that lit the whole ribbon polygon as a pale slab)
+  float wa = max(wake.a, 1e-3);
+  float wakeFoam = min(wake.r / wa, 1.0) * min(wake.a * 2.5, 1.0);
+  // gb: surface gradient of bow waves, Kelvin arms and stern waves
+  g += (wake.gb / wa - 0.5) * min(wake.a * 4.0, 1.0);
+  // the churned lane is slick: turbulence has wiped the capillary ripples off it, so it glitters less and
+  // reads as the smooth dark road behind a hull rather than as foam alone
+  mss *= 1.0 - 0.55 * smoothstep(0.35, 0.9, wake.a);
   vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
 
   // ---- body colour: two-flow shallow-water reflectance, the bed seen through the column plus the
@@ -427,8 +435,11 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   float whitecap = caps * smoothstep(0.6, 0.9, val0) * smoothstep(7.0, 14.0, uWindSpeed) * smoothstep(2.0, 6.0, depth) * open * w0;
   // wake foam is churned water, never a flat sheet: a fine world-anchored grain modulates it (and keeps
   // it below saturation) so a fresh float/hull wake reads as turbulent froth instead of a white bar
-  float wakeGrain = 0.55 + 0.45 * vnoise(wp * 1.7 + vec2(t * 0.6, 0.0)) * (0.6 + 0.8 * vnoise(wp * 4.3 - t * 0.9));
-  foam = clamp(foam + wake.r * 0.85 * wakeGrain + whitecap, 0.0, 0.92);
+  // the grain's cells are 0.25-0.6 m: once a pixel covers that much water it is filtered out (from altitude
+  // it sampled into dashes and dots along every boat wake)
+  float wakeGrainFade = 1.0 - smoothstep(0.15, 0.6, foot);
+  float wakeGrain = mix(0.85, 0.7 + 0.3 * vnoise(wp * 1.7 + vec2(t * 0.6, 0.0)) * (0.6 + 0.8 * vnoise(wp * 4.3 - t * 0.9)), wakeGrainFade);
+  foam = clamp(foam + wakeFoam * 0.85 * wakeGrain + whitecap, 0.0, 0.92);
 
   wN = N; wV = V; wFoam = foam; wMss = mss; wDx = dxw; wDy = dyw; wDist = dist;
   wBodyR = R;
@@ -553,7 +564,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v4-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v5-${WATER_DEBUG}`;
     this.material = mat;
 
     // A flat grid reaching past the far clip plane so the horizon is always water; shading is per pixel
