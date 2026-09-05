@@ -6,6 +6,7 @@ import { register as registerCoruscant } from '../coruscant/city.js';
 
 const REGISTRARS = [
   registerCoruscant,
+  async (gen, game) => (await import('./hyperlane.js')).register(gen, game), // hyperlane track, stations, space train
 ];
 
 export async function registerAllStructures(gen, game) {
