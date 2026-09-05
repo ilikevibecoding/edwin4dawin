@@ -156,9 +156,9 @@ export const HG = {
 // under the bloom threshold (1.15) so it glows as a lit surface instead of clipping to white
 export const EM = {
   lens: new THREE.Color(0.98, 1.0, 1.08), // housed ceiling / wall flood lenses
-  ceil: new THREE.Color(0.84, 0.86, 0.94), // ceiling light runs (a full bay)
-  ceilWarm: new THREE.Color(0.86, 0.7, 0.46), // ceiling light runs in the bays relamped with warm tubes (a sixth of them)
-  ceilDim: new THREE.Color(0.5, 0.52, 0.58), // ceiling light runs in the 40 % dimmer bays
+  ceil: new THREE.Color(0.4, 0.415, 0.47), // ceiling light runs (a full bay)
+  ceilWarm: new THREE.Color(0.42, 0.34, 0.21), // ceiling light runs in the bays relamped with warm tubes (a sixth of them)
+  ceilDim: new THREE.Color(0.18, 0.19, 0.22), // ceiling light runs in the 40 % dimmer bays
   off: new THREE.Color(0.012, 0.012, 0.014), // a dead segment: the dark lens is still in its housing
   strip: new THREE.Color(0.88, 0.9, 0.98), // balcony rail strip, hatch slits
   // the aperture rails' strips and post caps: 72 m of them face the spawn 66 m out and the glossy lane
@@ -166,7 +166,7 @@ export const EM = {
   rail: new THREE.Color(0.4, 0.42, 0.48),
   channel: new THREE.Color(0.72, 0.74, 0.82), // segmented lit channels (tier fascias, waist strips, gallery edges)
   jamb: new THREE.Color(0.5, 0.52, 0.6), // bay-door jamb light channels
-  crane: new THREE.Color(0.9, 0.92, 1.0), // crane under-girder and rail strips
+  crane: new THREE.Color(0.42, 0.44, 0.5), // crane under-girder and rail strips
   lining: new THREE.Color(0.38, 0.4, 0.46), // shaft lip-beam lining strips (two stops under emitWhite)
   amberGlow: new THREE.Color(0.34, 0.16, 0.03), // behind the vent louvres (a warm glow through the slats, not a lamp)
   amberGrille: new THREE.Color(0.5, 0.24, 0.05), // the amber grilles of the top slot row
@@ -182,8 +182,8 @@ export const EM = {
   // environment lights it from above only, so a hull-grey girder seen from below reads black): the
   // crane's hull grey and its steel flanges, and the roof channels' housings and caps, at the sRGB
   // values the lit base storey of the walls has (so they read as the same grey, lit)
-  hull: new THREE.Color(0.14, 0.145, 0.16),
-  hullLight: new THREE.Color(0.24, 0.245, 0.26),
+  hull: new THREE.Color(0.1, 0.104, 0.115),
+  hullLight: new THREE.Color(0.17, 0.174, 0.185),
   housing: new THREE.Color(0.045, 0.047, 0.052),
   housingCap: new THREE.Color(0.09, 0.093, 0.1),
   // the hook block's yellow bands: hazard paint at the value it has under the two work lights right over
