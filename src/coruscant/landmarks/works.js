@@ -63,8 +63,9 @@ function build(bp, lot, ctx) {
         for (const u of [uA, uB]) { for (let dy = 0; dy <= 2; dy++) put(u, lvl + dy, v0, FORCE_AIR); put(u, lvl + 3, v0, trim); }
         put(uA, lvl + 4, v0, B.GLOW_PANEL);
       }
-      // sub-floor under the next flight doubles as the ceiling of the flight below: a glow panel lights the well
-      if (lvl > y0) for (let k = 0; k <= 3; k++) put(uA, lvl - 1, v0 + 1 + k, k === 0 ? B.GLOW_PANEL : B.DECK_PLATE);
+      // sub-floor under the next flight doubles as the ceiling of the flight below: a glow panel lights the well.
+      // It stops at row v0 + 3: over row v0 + 4 the climber below stands 2 blocks under it and needs 2.4 to step up.
+      if (lvl > y0) for (let k = 0; k <= 2; k++) put(uA, lvl - 1, v0 + 1 + k, k === 0 ? B.GLOW_PANEL : B.DECK_PLATE);
       else put(uA, lvl - 1, v0 + 1, B.GLOW_PANEL);
       put(uB + (uB > uA ? 1 : -1), lvl + 3, v0 + 3, B.GLOW_PANEL);
       if (lvl === y1) {   // top landing: guard rail over the well, a status console and a tool crate
@@ -454,10 +455,11 @@ function build(bp, lot, ctx) {
     else { for (let z = z0 + 2; z <= z1; z += lightEvery) set((x0 + x1) >> 1, y - 1, z, B.GLOW_PANEL); }
   };
   const rail = (x0, z0, x1, z1, y) => fill(x0, y, z0, x1, y, z1, B.IRON_BARS);
-  const clutter = (x0, z0, x1, z1, y) => {                       // posts, crates and vents along a catwalk's middle row
-    const alongX = x1 - x0 >= z1 - z0, mid = alongX ? (z0 + z1) >> 1 : (x0 + x1) >> 1;
+  // posts, crates and vents along one row of a catwalk (the middle row unless `row` is given), every 8 cells from `phase`
+  const clutter = (x0, z0, x1, z1, y, row = null, phase = 4) => {
+    const alongX = x1 - x0 >= z1 - z0, mid = row !== null ? row : (alongX ? (z0 + z1) >> 1 : (x0 + x1) >> 1);
     const n = alongX ? x1 - x0 : z1 - z0;
-    for (let i = 4; i < n - 2; i += 8) {
+    for (let i = phase; i < n - 2; i += 8) {
       const x = alongX ? x0 + i : mid, z = alongX ? mid : z0 + i;
       const kind = (i >> 3) % 4;
       if (kind === 0) lampPost(x, y, z, 2);
@@ -467,11 +469,14 @@ function build(bp, lot, ctx) {
     }
   };
   // north balcony (11): strip doors open onto it
-  deck(30, 23, 124, 25, Y.s2); rail(31, 25, 124, 25, Y.s2); clutter(30, 23, 124, 25, Y.s2);
+  // the tower doors (x 29 / 125, z 24..25) open onto the deck corner: the rail stops one cell short of the door and a
+  // railed deck cell at z 26 closes the corner
+  const towerExit = (y) => { for (const x of [30, 124]) { set(x, y - 1, 26, B.DECK_PLATE); set(x, y, 26, B.IRON_BARS); } };
+  deck(30, 23, 124, 25, Y.s2); rail(31, 25, 123, 25, Y.s2); clutter(30, 23, 124, 25, Y.s2); towerExit(Y.s2);
   for (let x = 30; x <= 124; x += 6) set(x, 9, 25, B.DURASTEEL_DARK);
   bp.room('north_balcony', 30, Y.s2, 23, 124, 25);
   // north deck (16): equipment on the strip roof, railing along its south edge
-  rail(HX0, 25, HX1, 25, Y.s3); carve(30, Y.s3, 25, 33, Y.s3, 25); carve(121, Y.s3, 25, 124, Y.s3, 25);
+  rail(31, 25, 123, 25, Y.s3); towerExit(Y.s3);
   carve(59, Y.s3, 25, 62, Y.s3, 25);
   for (let x = 34; x <= 120; x += 16) {                            // transformer units, coolant tanks, lamps
     fill(x, Y.s3, 15, x + 2, Y.s3 + 1, 17, B.IRON_BLOCK); ring(x - 1, Y.s3, 14, x + 3, Y.s3, 18, B.IRON_BARS); set(x + 1, Y.s3 + 2, 16, B.PANEL_RED); set(x + 1, Y.s3 + 3, 16, B.IRON_BARS);
@@ -487,16 +492,17 @@ function build(bp, lot, ctx) {
     deck(30, 23, 124, 25, y); rail(33, 25, 121, 25, y); clutter(30, 23, 124, 25, y); bp.room('catwalk_north', 30, y, 23, 124, 25);
     deck(HX0, 30, 25, 100, y); rail(25, 30, 25, 100, y); clutter(HX0, 30, 25, 100, y); bp.room('catwalk_west', HX0, y, 27, 25, 100);
     deck(129, 30, HX1, 100, y); rail(129, 30, 129, 100, y); clutter(129, 30, HX1, 100, y); bp.room('catwalk_east', 129, y, 27, HX1, 100);
-    rail(26, 29, 32, 29, y); rail(122, 29, 128, 29, y);
-    deck(HX0, 101, 62, 103, y); rail(HX0, 101, 62, 101, y); clutter(HX0, 101, 62, 103, y); bp.room('catwalk_south', HX0, y, 101, 62, 103);
-    deck(93, 101, HX1, 103, y); rail(93, 101, HX1, 101, y); clutter(93, 101, HX1, 103, y); bp.room('catwalk_south', 93, y, 101, HX1, 103);
-    carve(HX0, y, 101, 25, y, 101); carve(129, y, 101, HX1, y, 101);   // the rings join the south catwalk
+    rail(26, 29, 32, 29, y); rail(122, 29, 128, 29, y); rail(32, 26, 32, 28, y); rail(122, 26, 122, 28, y);   // corner decks: south and hall-side edges
+    // south catwalks: z 100..102 against the inner skin (z 103), rail on the hall side, clutter against the wall, lane z 101
+    deck(HX0, 100, 62, 102, y); rail(HX0, 100, 62, 100, y); clutter(HX0, 100, 62, 102, y, 102); bp.room('catwalk_south', HX0, y, 99, 62, 103);
+    deck(93, 100, HX1, 102, y); rail(93, 100, HX1, 100, y); clutter(93, 100, HX1, 102, y, 102, 8); bp.room('catwalk_south', 93, y, 99, HX1, 103);
+    carve(HX0, y, 100, HX0 + 1, y, 100); carve(HX1 - 1, y, 100, HX1, y, 100);   // the ring lanes join the south catwalk (corner posts stay)
     // brackets under the rings
     for (let z = 31; z <= 100; z += 6) { set(HX0, y - 2, z, B.DURASTEEL_DARK); set(HX1, y - 2, z, B.DURASTEEL_DARK); }
-    for (let x = 31; x <= 123; x += 6) { set(x, y - 2, 23, B.DURASTEEL_DARK); set(x, y - 2, 103, B.DURASTEEL_DARK); }
+    for (let x = 31; x <= 123; x += 6) { set(x, y - 2, 23, B.DURASTEEL_DARK); set(x, y - 2, 102, B.DURASTEEL_DARK); }
   }
   deck(30, 23, 124, 25, Y.crane); rail(33, 25, 121, 25, Y.crane); clutter(30, 23, 124, 25, Y.crane); bp.room('crane_catwalk', 30, Y.crane, 23, 124, 25);
-  deck(30, 23, 32, 26, Y.crane); deck(122, 23, 124, 26, Y.crane);
+  deck(30, 23, 32, 26, Y.crane); deck(122, 23, 124, 26, Y.crane); rail(30, 26, 32, 26, Y.crane); rail(122, 26, 124, 26, Y.crane);
   // crane runway beams and two gantry cranes with walkable bridges
   fill(30, 34, 25, 124, 34, 25, B.CHROME); fill(HX0, 34, 88, HX1, 34, 88, B.CHROME);   // runways stop short of the towers
   for (let x = 35; x <= 123; x += 8) { set(x, 33, 25, B.DURASTEEL_DARK); set(x, 33, 88, B.DURASTEEL_DARK); }
@@ -504,7 +510,7 @@ function build(bp, lot, ctx) {
     fill(x0, 34, 26, x0 + 3, 34, 100, B.DURASTEEL_DARK);
     fill(x0, 35, 26, x0 + 3, 35, 100, B.DECK_PLATE); for (let z = 30; z <= 100; z += 8) { set(x0 + 1, 35, z, B.GLOW_PANEL); }
     fill(x0, 36, 26, x0, 36, 100, B.IRON_BARS); fill(x0 + 3, 36, 26, x0 + 3, 36, 100, B.IRON_BARS);
-    carve(x0 + 1, 36, 25, x0 + 2, 36, 25); carve(x0 + 1, 36, 101, x0 + 2, 36, 101);   // gaps in the ring rails at both ends
+    carve(x0 + 1, 36, 25, x0 + 2, 36, 25); carve(x0 + 1, 36, 100, x0 + 2, 36, 100);   // gaps in the ring rails at both ends
     // trolley under the deck, winch housing + operator console on it, hook cable and the load
     fill(x0, 32, tz - 1, x0 + 3, 33, tz + 1, B.IRON_BLOCK); set(x0 + 1, 33, tz - 1, B.PANEL_RED); set(x0 + 2, 33, tz + 1, B.PANEL_RED);
     fill(x0 + 1, 36, tz - 1, x0 + 1, 37, tz + 1, B.IRON_BLOCK); set(x0 + 1, 37, tz, B.PANEL_RED); set(x0 + 1, 38, tz, B.GLOW_PANEL);
@@ -563,11 +569,25 @@ function build(bp, lot, ctx) {
   bp.meta.lobby = { x: bp.wx(DX), y: bp.wy(Y.under), z: bp.wz(SZ1 - 4) };
   // railings around the void on the corridor / terrace levels
   for (const y of [Y.s2, Y.s3, Y.terrace]) { rail(VX0, CZ1, VX1, CZ1, y); rail(VX0 - 1, PZ0, VX0 - 1, PZ1, y); rail(VX1 + 1, PZ0, VX1 + 1, PZ1, y); }
+  // hall level: the grand stair lands at z 93, so railed ledges flank its top on the void edge (z 94) and rails close
+  // the core pockets toward the drop
+  for (const [a, b] of [[VX0, DX - 3], [DX + 4, VX1]]) { fill(a, Y.hall - 1, PZ0, b, Y.hall - 1, PZ0, B.DECK_PLATE); rail(a, PZ0, b, PZ0, Y.hall); }
+  rail(VX0 - 1, PZ0, VX0 - 1, PZ1, Y.hall); rail(VX1 + 1, PZ0, VX1 + 1, PZ1, Y.hall);
   // terrace (y 21): railing on the hall edge, stairs up to the y 26 catwalk, vents and crates
   rail(HX0, SW + 1, HX1, SW + 1, Y.terrace); carve(VX0, Y.terrace, SW + 1, VX1, Y.terrace, SW + 1);
-  for (const sx of [40, 113]) { carve(sx, Y.terrace, SW + 1, sx + 1, Y.terrace, SW + 1); for (let dx = 0; dx <= 1; dx++) stairRun(sx + dx, Y.terrace, CZ0, 0, 1, 10, -1); carve(sx, Y.cat, 101, sx + 1, Y.cat, 101); }
-  for (let x = 28; x <= 124; x += 12) { if (x >= 60 && x <= 96) continue; fill(x, Y.terrace, 97, x + 1, Y.terrace + 1, 98, B.VENT); set(x, Y.terrace + 2, 97, B.CHROME); set(x + 3, Y.terrace, 100, B.CRATE); set(x + 3, Y.terrace, 101, B.BARREL); lampPost(x + 6, Y.terrace, 96, 2); }
+  // the stairs start one cell in from the railed hall edge (their foot is stepped onto from the side) and land on the
+  // catwalk deck at z 102; the cell in front of the foot stays clear
+  for (const sx of [40, 113]) for (let dx = 0; dx <= 1; dx++) stairRun(sx + dx, Y.terrace, CZ0 + 1, 0, 1, 10, -1);
+  for (let x = 32; x <= 124; x += 12) { if (x >= 60 && x <= 96) continue; fill(x, Y.terrace, 97, x + 1, Y.terrace + 1, 98, B.VENT); set(x, Y.terrace + 2, 97, B.CHROME); set(x + 3, Y.terrace, 100, B.CRATE); set(x + 3, Y.terrace, 101, B.BARREL); lampPost(x + 6, Y.terrace, 96, 2); }
   for (const x of [50, 104]) { set(x, Y.terrace, 95, B.CONSOLE); bp.work(x, Y.terrace, 94, 'inspector'); set(x + 2, Y.terrace, 95, SLAB); bp.spot(x + 2, Y.terrace, 95, 'seat'); }
+  // tool racks, coolant drums and valve stands in the alcove under the catwalk overhang (z 101), clear of the stairs
+  for (let x = 26, i = 0; x <= HX1 - 2; x += 4, i++) {
+    if ((x >= 38 && x <= 42) || (x >= 111 && x <= 115) || (x >= 60 && x <= 96) || solid(x, Y.terrace, 101) || solid(x + 1, Y.terrace, 101)) continue;
+    const kind = i % 3;
+    if (kind === 0) { set(x, Y.terrace, 101, B.SHELF); set(x, Y.terrace + 1, 101, B.SHELF); set(x + 1, Y.terrace, 101, B.CRATE); }
+    else if (kind === 1) { set(x, Y.terrace, 101, B.BARREL); set(x + 1, Y.terrace, 101, B.BARREL); set(x, Y.terrace + 1, 101, B.IRON_BARS); set(x + 1, Y.terrace + 1, 101, B.PANEL_RED); }
+    else { set(x, Y.terrace, 101, B.IRON_BLOCK); set(x, Y.terrace + 1, 101, B.CHROME); set(x, Y.terrace + 2, 101, B.PANEL_RED); set(x + 1, Y.terrace, 101, SLAB); bp.spot(x + 1, Y.terrace, 101, 'seat'); }
+  }
   bp.room('terrace', HX0, Y.terrace, CZ0, BX0 - 2, RZ1); bp.room('terrace', BX1 + 2, Y.terrace, CZ0, HX1, RZ1);
   // 26: core landing pockets, connectors along the core sides, and the bridge along the void's north edge
   deck(BX0, PZ0, VX0 - 2, PZ1, Y.cat); deck(VX1 + 2, PZ0, BX1, PZ1, Y.cat);
@@ -598,7 +618,7 @@ function build(bp, lot, ctx) {
   carve(DX - 3, 36, CZ0, DX + 4, 38, CZ0); fill(DX - 4, 36, CZ0, DX - 4, 39, CZ0, B.CHROME); fill(DX + 5, 36, CZ0, DX + 5, 39, CZ0, B.CHROME); fill(DX - 3, 39, CZ0, DX + 4, 39, CZ0, B.GLOW_PANEL);
   carve(BX0 - 1, 36, PZ0, BX0 - 1, 37, PZ0 + 1); carve(BX1 + 1, 36, PZ0, BX1 + 1, 37, PZ0 + 1);
   fill(BX0 - 1, 38, PZ0, BX0 - 1, 38, PZ0 + 1, B.CHROME); fill(BX1 + 1, 38, PZ0, BX1 + 1, 38, PZ0 + 1, B.CHROME);
-  deck(62, CZ0, BX0 - 2, SZ1 - 1, Y.gal); deck(BX1 + 2, CZ0, 93, SZ1 - 1, Y.gal); rail(62, SW, 62, 100, Y.gal); rail(93, SW, 93, 100, Y.gal);
+  deck(62, SW, BX0 - 2, SZ1 - 1, Y.gal); deck(BX1 + 2, SW, 93, SZ1 - 1, Y.gal); rail(62, SW, 62, 100, Y.gal); rail(93, SW, 93, 100, Y.gal);
   // lobby furniture: reception desk, holo wall, benches, planters, foundry model, lifts' call panels
   for (let x = VX0 + 1; x <= VX0 + 4; x++) { set(x, 36, SZ1 - 5, B.PANEL_BLACK); set(x, 37, SZ1 - 5, SLAB); }
   set(VX0 + 2, 36, SZ1 - 6, B.CONSOLE); bp.work(VX0 + 3, 36, SZ1 - 6, 'receptionist');
@@ -606,7 +626,7 @@ function build(bp, lot, ctx) {
   fill(VX0, 36, SZ1 - 1, VX1, 38, SZ1 - 1, B.HULL_PLATE); fill(VX0, 39, SZ1 - 1, VX1, 39, SZ1 - 1, B.PANEL_STRIPE);
   carve(DX, 36, SZ1 - 1, DX + 1, 38, SZ1 - 1); col(DX - 1, 36, SZ1 - 1, 39, B.CHROME); col(DX + 2, 36, SZ1 - 1, 39, B.CHROME); fill(DX, 39, SZ1 - 1, DX + 1, 39, SZ1 - 1, B.CHROME);
   fill(VX0, 37, SZ1 - 1, DX - 2, 38, SZ1 - 1, B.HOLO_SIGN); fill(DX + 3, 37, SZ1 - 1, VX1, 38, SZ1 - 1, B.HOLO_SIGN);
-  for (const x of [BX0, BX0 + 2, BX1 - 2, BX1]) { set(x, 36, SW + 1, SLAB); bp.spot(x, 36, SW + 1, 'seat'); }
+  for (const x of [BX0, BX0 + 2, BX1 - 2, BX1]) { set(x, 36, CZ0 + 1, SLAB); bp.spot(x, 36, CZ0 + 1, 'seat'); }
   for (const [x, z] of [[VX1 - 1, SZ1 - 2], [VX1, SZ1 - 5], [VX0, SZ1 - 2]]) { set(x, 36, z, B.DURASTEEL_DARK); set(x, 37, z, B.OAK_LEAVES); }
   fill(VX1 - 3, 36, SZ1 - 6, VX1 - 2, 36, SZ1 - 5, B.PANEL_BLACK); set(VX1 - 3, 37, SZ1 - 6, B.FURNACE); set(VX1 - 2, 37, SZ1 - 5, B.MAGMA); set(VX1 - 2, 37, SZ1 - 6, B.CHROME);
   for (const x of [VX0 - 2, VX1 + 2]) { set(x, 36, PZ0 + 1, B.TABLE); set(x, 36, PZ0 + 2, SLAB); bp.spot(x, 36, PZ0 + 2, 'seat'); }
@@ -716,7 +736,10 @@ function build(bp, lot, ctx) {
   for (let z = 6; z <= 100; z += 20) lampPost(1, 1, z, 3);
   set(6, 1, 90, B.CHROME); set(7, 1, 90, B.PANEL_RED); set(8, 1, 90, B.CHROME); set(7, 2, 90, B.GLASS); set(7, 1, 91, B.DURASTEEL_DARK); bp.work(7, 1, 88, 'loader');   // parked loader
   // west door from the casting floor down into the yard
-  doorway(SX0, Y.hall, 66, false, 2, 3); fill(SX0 - 2, 5, 66, SX0 - 1, 5, 67, B.DECK_PLATE); fill(SX0 - 2, 1, 66, SX0 - 1, 4, 67, B.DURASTEEL_DARK);
+  // (3 x 3 landing on posts in front of the door, railed on its open north and west sides)
+  doorway(SX0, Y.hall, 66, false, 2, 3); fill(SX0 - 3, 5, 65, SX0 - 1, 5, 67, B.DECK_PLATE); fill(SX0 - 2, 1, 66, SX0 - 1, 4, 67, B.DURASTEEL_DARK);
+  col(SX0 - 3, 1, 65, 4, B.IRON_BLOCK); set(SX0 - 3, 4, 66, B.GLOW_PANEL); set(SX0 - 3, 4, 67, B.DURASTEEL_DARK); set(SX0 - 2, 4, 65, B.DURASTEEL_DARK); set(SX0 - 1, 4, 65, B.DURASTEEL_DARK);
+  rail(SX0 - 3, 65, SX0 - 1, 65, Y.hall); rail(SX0 - 3, 66, SX0 - 3, 67, Y.hall);
   for (let dx = 0; dx <= 1; dx++) stairRun(SX0 - 2 + dx, Y.under, 77, 0, -1, 10, 1);
   bp.door(SX0, Y.hall, 66, 'W');
   bp.room('ore_yard', 0, Y.under, 0, SX0, SZ1);
@@ -730,9 +753,9 @@ function build(bp, lot, ctx) {
   for (const z of [49, 59, 69]) { fill(SX1 + 1, Y.hall, z, SX1 + 2, Y.hall, z + 2, B.CRATE); fill(SX1 + 1, Y.hall + 1, z, SX1 + 1, Y.hall + 1, z + 1, cargo()); set(SX1 + 2, Y.hall + 1, z + 2, B.BARREL); }
   for (const z of [42, 52, 62, 72]) { lampPost(SX1 + 4, Y.hall, z, 3); set(SX1 + 3, Y.hall - 1, z, B.GLOW_PANEL); }
   set(SX1 + 1, Y.hall, 41, B.CONSOLE); set(SX1 + 1, Y.hall + 1, 41, B.HOLO_SIGN); bp.work(SX1 + 2, Y.hall, 41, 'dispatcher');
-  set(SX1 + 3, Y.hall, 74, B.IRON_BLOCK); set(SX1 + 3, Y.hall + 1, 74, B.PANEL_RED); set(SX1 + 2, Y.hall, 74, B.CHROME);    // parked pallet jack
+  set(SX1 + 3, Y.hall, 47, B.IRON_BLOCK); set(SX1 + 3, Y.hall + 1, 47, B.PANEL_RED); set(SX1 + 4, Y.hall, 47, B.CHROME);    // parked pallet jack
   for (let dx = 0; dx <= 3; dx++) stairRun(SX1 + 1 + dx, Y.under, 85, 0, -1, 10, 1);                    // vehicle ramp (south end)
-  for (let dx = 0; dx <= 1; dx++) stairRun(SX1 + 1 + dx, Y.under, 30, 0, 1, 10, 1);                     // stairs (north end)
+  for (let dx = 0; dx <= 1; dx++) stairRun(SX1 + 2 + dx, Y.under, 30, 0, 1, 10, 1);                     // stairs (north end, clear of the pilaster)
   bp.room('loading_dock', SX1, Y.hall, 39, SX1 + 6, 76);
   // speeder truck backed up to the dock
   const tx = SX1 + 7, tz = 56;
