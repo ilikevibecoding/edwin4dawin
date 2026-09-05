@@ -57,44 +57,50 @@ function grime(ctx: CanvasRenderingContext2D, rng: Rng, w: number, h: number, co
   }
 }
 
-/** Panel lines and rivets drawn into both the height canvas and (faintly) the albedo. */
-function panels(hctx: CanvasRenderingContext2D, actx: CanvasRenderingContext2D, w: number, h: number, stationsU: number[], stringersV: number[], rivetSpacing: number): void {
-  hctx.strokeStyle = '#5a5a5a';
+/**
+ * Panel lines and rivets drawn into both the height canvas and (faintly) the albedo, inside the row band
+ * [y0, y1] (pixels; default the whole canvas). `strength` scales the line depth / darkness (1 = fuselage).
+ */
+function panels(hctx: CanvasRenderingContext2D, actx: CanvasRenderingContext2D, w: number, h: number, stationsU: number[], stringersV: number[], rivetSpacing: number, o: { y0?: number; y1?: number; strength?: number } = {}): void {
+  const y0 = o.y0 ?? 0, y1 = o.y1 ?? h, k = o.strength ?? 1;
+  const grey = (base: number, delta: number) => { const v = Math.round(base + delta * k); return `rgb(${v},${v},${v})`; };
+  hctx.strokeStyle = grey(128, -38);
   hctx.lineWidth = 2.2;
-  actx.strokeStyle = 'rgba(30,30,35,0.22)';
+  actx.strokeStyle = `rgba(30,30,35,${0.22 * k})`;
   actx.lineWidth = 1.5;
   for (const u of stationsU) {
     const x = u * w;
-    hctx.beginPath(); hctx.moveTo(x, 0); hctx.lineTo(x, h); hctx.stroke();
+    hctx.beginPath(); hctx.moveTo(x, y0); hctx.lineTo(x, y1); hctx.stroke();
     // faint grime settled along the seam, then the crisp line itself
     actx.save();
-    actx.strokeStyle = 'rgba(40,38,34,0.07)'; actx.lineWidth = 9;
-    actx.beginPath(); actx.moveTo(x, 0); actx.lineTo(x, h); actx.stroke();
+    actx.strokeStyle = `rgba(40,38,34,${0.07 * k})`; actx.lineWidth = 9;
+    actx.beginPath(); actx.moveTo(x, y0); actx.lineTo(x, y1); actx.stroke();
     actx.restore();
-    actx.beginPath(); actx.moveTo(x, 0); actx.lineTo(x, h); actx.stroke();
+    actx.beginPath(); actx.moveTo(x, y0); actx.lineTo(x, y1); actx.stroke();
     // rivet rows either side of the seam
     for (const off of [-7, 7]) {
-      for (let y = rivetSpacing / 2; y < h; y += rivetSpacing) {
-        hctx.fillStyle = '#b8b8b8';
+      for (let y = y0 + rivetSpacing / 2; y < y1; y += rivetSpacing) {
+        hctx.fillStyle = grey(128, 56);
         hctx.beginPath(); hctx.arc(x + off, y, 1.6, 0, Math.PI * 2); hctx.fill();
-        actx.fillStyle = 'rgba(255,255,255,0.10)';
+        actx.fillStyle = `rgba(255,255,255,${0.10 * k})`;
         actx.beginPath(); actx.arc(x + off, y, 1.4, 0, Math.PI * 2); actx.fill();
-        actx.fillStyle = 'rgba(0,0,0,0.10)';
+        actx.fillStyle = `rgba(0,0,0,${0.10 * k})`;
         actx.beginPath(); actx.arc(x + off, y + 1.2, 1.2, 0, Math.PI * 2); actx.fill();
       }
     }
   }
   for (const v of stringersV) {
     const y = v * h;
-    hctx.strokeStyle = '#6a6a6a';
+    if (y < y0 || y > y1) continue;
+    hctx.strokeStyle = grey(128, -22);
     hctx.lineWidth = 1.4;
     hctx.beginPath(); hctx.moveTo(0, y); hctx.lineTo(w, y); hctx.stroke();
-    actx.strokeStyle = 'rgba(30,30,35,0.12)';
+    actx.strokeStyle = `rgba(30,30,35,${0.12 * k})`;
     actx.beginPath(); actx.moveTo(0, y); actx.lineTo(w, y); actx.stroke();
     for (let x = rivetSpacing / 2; x < w; x += rivetSpacing) {
-      hctx.fillStyle = '#b0b0b0';
+      hctx.fillStyle = grey(128, 48);
       hctx.beginPath(); hctx.arc(x, y + 5, 1.5, 0, Math.PI * 2); hctx.fill();
-      actx.fillStyle = 'rgba(0,0,0,0.08)';
+      actx.fillStyle = `rgba(0,0,0,${0.08 * k})`;
       actx.beginPath(); actx.arc(x, y + 6, 1.2, 0, Math.PI * 2); actx.fill();
     }
   }
@@ -284,31 +290,55 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.4), false), clearcoatRoughnessMap: toTexture(cc, false) };
 }
 
-/** Wing (both halves and tail share): u chordwise (0 trailing edge -> 0.5 leading edge -> 1 trailing), v spanwise. */
+/**
+ * Layout of the shared wing / tail paint: the wing occupies texture rows v 0 .. WING_V1 (root .. tip), the tail
+ * surfaces the band TAIL_V0 .. 1 at the same metres-per-texel spanwise scale as the wing (TAIL_SPAN metres of
+ * span in the band, the tip at v = 1) so their rib lines and rivets come out at the wing's density instead of
+ * being squeezed into a tile grid.
+ */
+export const WING_TEX = { WING_V1: 0.78, TAIL_V0: 0.80, TAIL_SPAN: 2.55 } as const;
+/** texture v of span station z on the wing (root 0 .. tip = span) */
+export const wingV = (z: number, span: number): number => Math.min(1, Math.max(0, z / span)) * WING_TEX.WING_V1;
+/** texture v of span station z on a tail surface whose tip (z = span) lands at the band's tip end */
+export const tailV = (z: number, span: number): number => 0.997 - (0.997 - WING_TEX.TAIL_V0) * Math.min(1, Math.max(0, (span - z) / WING_TEX.TAIL_SPAN));
+
+/** Wing (both halves) and tail: u chordwise (0 trailing edge -> 0.5 leading edge -> 1 trailing), v spanwise. */
 export function wingMaps(): PbrMaps {
   const w = 1024, h = 1024;
   const rng = new Rng('wing-paint');
   const [ac, actx] = canvas(w, h);
   const [hc, hctx] = canvas(w, h);
   const [rc, rctx] = canvas(w, h);
+  const W1 = WING_TEX.WING_V1, T0 = WING_TEX.TAIL_V0;
+  const wy = (v: number) => v * W1 * h;      // wing-relative v (0 root .. 1 tip) -> canvas row
+  const ty = (m: number) => (1 - (1 - T0) * (1 - m / WING_TEX.TAIL_SPAN)) * h; // tail: metres from the root end of the band
   hctx.fillStyle = '#808080'; hctx.fillRect(0, 0, w, h);
   // white upper surface (u < 0.5), cream underside (u > 0.5) so the wing reads as a thin flat panel from below
   actx.fillStyle = LIVERY.upper; actx.fillRect(0, 0, w, h);
-  actx.fillStyle = LIVERY.under; actx.fillRect(w * 0.5, 0, w * 0.5, h);
+  actx.fillStyle = LIVERY.under; actx.fillRect(w * 0.5, 0, w * 0.5, wy(1));
   // yellow wingtip with a navy band and red pinstripe, yellow leading-edge stripe
-  actx.fillStyle = LIVERY.lower; actx.fillRect(0, h * 0.905, w, h * 0.095);
-  actx.fillStyle = LIVERY.cheat; actx.fillRect(0, h * 0.885, w, h * 0.02);
-  actx.fillStyle = LIVERY.pin; actx.fillRect(0, h * 0.876, w, h * 0.009);
+  actx.fillStyle = LIVERY.lower; actx.fillRect(0, wy(0.905), w, wy(1) - wy(0.905));
+  actx.fillStyle = LIVERY.cheat; actx.fillRect(0, wy(0.885), w, wy(0.905) - wy(0.885));
+  actx.fillStyle = LIVERY.pin; actx.fillRect(0, wy(0.876), w, wy(0.885) - wy(0.876));
   // leading-edge stripe: 5% chord over the top, 1.5% under (u 0.5 is the leading edge), so the wing keeps a thin
   // yellow edge instead of a yellow nose when seen from below
   actx.fillStyle = LIVERY.lower; actx.fillRect(w * 0.475, 0, w * 0.0325, h);
   // rib lines spanwise every ~0.55 m, spar and hinge lines chordwise
   const ribs: number[] = [];
-  for (let v = 0.04; v < 0.87; v += 0.075) ribs.push(v);
-  panels(hctx, actx, w, h, [0.14, 0.33, 0.5, 0.67, 0.86], ribs, 22);
+  for (let v = 0.04; v < 0.87; v += 0.075) ribs.push(v * W1);
+  panels(hctx, actx, w, h, [0.14, 0.33, 0.5, 0.67, 0.86], ribs, 22, { y1: wy(1) });
   // walkway by the root and a fuel cap on the upper surface
-  actx.fillStyle = '#2a2d31'; actx.fillRect(w * 0.30, h * 0.12, w * 0.11, h * 0.08);
-  actx.fillStyle = '#6d7277'; actx.beginPath(); actx.arc(w * 0.40, h * 0.27, 9, 0, 7); actx.fill();
+  actx.fillStyle = '#2a2d31'; actx.fillRect(w * 0.30, wy(0.12), w * 0.11, wy(0.20) - wy(0.12));
+  actx.fillStyle = '#6d7277'; actx.beginPath(); actx.arc(w * 0.40, wy(0.27), 9, 0, 7); actx.fill();
+  // ---- tail band: one colour both sides, yellow tip cap with the navy / red bands, ribs every 0.55 m at half the
+  // wing's line strength (the fin is seen close up from the rear quarter: crisp tiles read as a grid)
+  const tipM = WING_TEX.TAIL_SPAN - 0.26, cheatM = tipM - 0.05, pinM = cheatM - 0.025;
+  actx.fillStyle = LIVERY.lower; actx.fillRect(0, ty(tipM), w, h - ty(tipM));
+  actx.fillStyle = LIVERY.cheat; actx.fillRect(0, ty(cheatM), w, ty(tipM) - ty(cheatM));
+  actx.fillStyle = LIVERY.pin; actx.fillRect(0, ty(pinM), w, ty(cheatM) - ty(pinM));
+  const tailRibs: number[] = [];
+  for (let m = 0.12; m < pinM - 0.1; m += 0.55) tailRibs.push(ty(m) / h);
+  panels(hctx, actx, w, h, [0.3, 0.7], tailRibs, 36, { y0: T0 * h, strength: 0.5 });
   // leading-edge chipping and general grime
   for (let i = 0; i < 90; i++) {
     actx.fillStyle = `rgba(90,90,95,${rng.range(0.3, 0.7)})`;
@@ -316,12 +346,16 @@ export function wingMaps(): PbrMaps {
   }
   grime(actx, rng, w, h, 80, 0.06);
   rctx.fillStyle = '#5a5a5a'; rctx.fillRect(0, 0, w, h);
-  rctx.fillStyle = '#909090'; rctx.fillRect(w * 0.30, h * 0.12, w * 0.11, h * 0.08);
+  rctx.fillStyle = '#909090'; rctx.fillRect(w * 0.30, wy(0.12), w * 0.11, wy(0.20) - wy(0.12));
   grime(rctx, rng, w, h, 90, 0.2, '150,150,150');
   return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.0), false) };
 }
 
-/** Floats: u bow..stern, v around. Aluminium with a dark anti-slip deck and water staining. */
+/**
+ * Floats: u bow..stern, v around the hull as laid out by `floatHull` (deck 0-0.12, side 0.12-0.22, chine 0.22,
+ * keel 0.5, port mirrored). Aluminium with a dark anti-slip deck, a navy boot-top along the chine (the resting
+ * waterline runs just under it), a darker wet / stained band either side of the waterline and a yellow keel.
+ */
 export function floatMaps(): PbrMaps {
   const w = 1024, h = 512;
   const rng = new Rng('float-paint');
@@ -330,22 +364,50 @@ export function floatMaps(): PbrMaps {
   const [rc, rctx] = canvas(w, h);
   hctx.fillStyle = '#808080'; hctx.fillRect(0, 0, w, h);
   actx.fillStyle = '#cfd3d6'; actx.fillRect(0, 0, w, h);
-  // deck (top, v around 0 and 1)
-  actx.fillStyle = '#2b2e31'; actx.fillRect(0, 0, w, h * 0.09); actx.fillRect(0, h * 0.91, w, h * 0.09);
-  // waterline stripe & yellow keel band
-  actx.fillStyle = LIVERY.cheat; actx.fillRect(0, h * 0.30, w, h * 0.03); actx.fillRect(0, h * 0.67, w, h * 0.03);
-  actx.fillStyle = LIVERY.lower; actx.fillRect(0, h * 0.42, w, h * 0.16);
-  panels(hctx, actx, w, h, [0.12, 0.25, 0.38, 0.5, 0.55, 0.68, 0.82, 0.93], [0.09, 0.3, 0.5, 0.7, 0.91], 20);
-  // water stains & algae line near the waterline, scuffs on the deck
-  for (let i = 0; i < 120; i++) {
-    actx.strokeStyle = `rgba(70,85,75,${rng.range(0.08, 0.28)})`;
-    actx.lineWidth = rng.range(1, 4);
-    const x = rng.range(0, w), y = rng.range(h * 0.28, h * 0.72);
-    actx.beginPath(); actx.moveTo(x, y); actx.lineTo(x + rng.range(-10, 10), y + rng.range(10, 60) * (y < h / 2 ? 1 : -1)); actx.stroke();
+  const CHINE = 0.22;
+  /** fill a v band on both sides of the hull */
+  const band = (ctx: CanvasRenderingContext2D, v0: number, v1: number, style: string | CanvasGradient) => {
+    ctx.fillStyle = style;
+    ctx.fillRect(0, v0 * h, w, (v1 - v0) * h);
+    ctx.fillRect(0, (1 - v1) * h, w, (v1 - v0) * h);
+  };
+  // bottom: slightly darker grey than the sides, yellow keel band
+  band(actx, CHINE, 0.5, '#b9bec2');
+  band(actx, 0.445, 0.5, LIVERY.lower);
+  // deck: a dark anti-slip walkway down the middle on bare aluminium, lighter rolled edge
+  band(actx, 0, 0.105, '#c3c7ca');
+  band(actx, 0, 0.066, '#2b2e31');
+  band(actx, 0.105, 0.118, '#9aa0a5');
+  // wet band: dull stained aluminium from the scum line (~4 cm above the chine) down over the chine, with a
+  // sharp dark upper edge so the hull reads as sitting in the water rather than on it
+  for (const side of [1, -1]) {
+    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+    const g = actx.createLinearGradient(0, V(0.165), 0, V(0.31));
+    g.addColorStop(0, 'rgba(60,72,70,0)'); g.addColorStop(0.08, 'rgba(60,72,70,0.55)'); g.addColorStop(0.35, 'rgba(70,84,80,0.42)'); g.addColorStop(1, 'rgba(70,84,80,0)');
+    actx.fillStyle = g;
+    actx.fillRect(0, Math.min(V(0.165), V(0.31)), w, Math.abs(V(0.31) - V(0.165)));
   }
-  grime(actx, rng, w, h, 100, 0.1, '60,60,55');
+  // navy boot-top along the chine
+  band(actx, CHINE - 0.012, CHINE + 0.012, LIVERY.cheat);
+  // frames every ~0.6 m along the hull, deck-edge and chine seams, keel strip; rivets at ~6 cm pitch
+  panels(hctx, actx, w, h, [0.1, 0.2, 0.3, 0.4, 0.5, 0.58, 0.66, 0.76, 0.86, 0.94], [0.118, 0.5], 24, { strength: 0.8 });
+  hctx.strokeStyle = '#4a4a4a'; hctx.lineWidth = 2.5;
+  for (const v of [CHINE, 1 - CHINE]) { hctx.beginPath(); hctx.moveTo(0, v * h); hctx.lineTo(w, v * h); hctx.stroke(); }
+  // algae streaks and drips hanging from the scum line, scuffs on the deck
+  for (let i = 0; i < 140; i++) {
+    const side = rng.next() < 0.5 ? 1 : -1;
+    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+    actx.strokeStyle = `rgba(62,80,72,${rng.range(0.08, 0.3)})`;
+    actx.lineWidth = rng.range(1, 3);
+    const x = rng.range(0, w), y0 = V(rng.range(0.17, 0.2)), len = rng.range(8, 40) * side;
+    actx.beginPath(); actx.moveTo(x, y0); actx.lineTo(x + rng.range(-4, 4), y0 + len); actx.stroke();
+  }
+  grime(actx, rng, w, h, 90, 0.08, '60,60,55');
+  // roughness: matte deck, dull wet band, otherwise semi-gloss aluminium
   rctx.fillStyle = '#6a6a6a'; rctx.fillRect(0, 0, w, h);
-  rctx.fillStyle = '#c0c0c0'; rctx.fillRect(0, 0, w, h * 0.09); rctx.fillRect(0, h * 0.91, w, h * 0.09);
+  band(rctx, 0, 0.118, '#8a8a8a');
+  band(rctx, 0, 0.066, '#c0c0c0');
+  band(rctx, 0.17, 0.30, '#9a9a9a');
   grime(rctx, rng, w, h, 100, 0.25, '160,160,160');
   return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.2), false) };
 }
