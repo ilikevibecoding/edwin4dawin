@@ -268,8 +268,15 @@ void main() {
     // them is roughness rather than amount.
     float w = clamp( vWet, 0.0, 1.0 );
     float m = smoothstep( 0.28, 0.8, w );
-    if ( m < 0.02 ) discard;
-    f0 = mix( 0.012, 0.03, m );
+    // Damp dirt is not a reflector. Below a tenth of the way to standing
+    // water the sheen this pass drew was a glossy lobe on what is, to the
+    // eye, dry ground. The gate runs on the wetness itself and the F0 is
+    // ramped in with it, so the reflection arrives where the rut fills.
+    // (Round 4's dusk sand-over-sky was blamed on this lobe; measured with
+    // the pass off it was not — see GRADES.dusk.ssr. This is a correction to
+    // where the sheen starts, not that fix.)
+    if ( m < 0.1 ) discard;
+    f0 = mix( 0.012, 0.03, m ) * smoothstep( 0.1, 0.5, m );
     rough = mix( 0.42, 0.1, m );
   }
 
@@ -1099,6 +1106,15 @@ const GRADES = {
     bloom: { strength: 0.34, radius: 0.7, threshold: 0.86 },
     clamp: 12.0,
     ao: { intensity: 0.95, radius: 0.68, scale: 1.15, distanceExponent: 1.5, thickness: 1.0 },
+    // Held at 1.0. Critic B (round 4) put the dry sand over the sky in
+    // `truck_dusk/front` down to this pass's wetness lobe; measured live in
+    // round 5 with the pass toggled off, the frame does not change by a
+    // pixel (ground bottom-right p50 0.6508 either way, 47 % over the sky's
+    // p95) — and with the headlamp and bar SpotLights at 0 the same box
+    // falls to 0.168 with 0 % over the sky. The sand is the lamp pool
+    // (BEAM.dusk, car builder), not a reflection, so the dusk puddles keep
+    // their weight; the reflector's own gate (`reflectorFragment`) is what
+    // keeps damp dirt out.
     ssr: 1.0,
     heat: 0.3,
     grade: {
@@ -1187,7 +1203,13 @@ const GRADES = {
     // from 0.085 to 0.064 — a quarter of the sky's value was lamp veil, and
     // it was grey, which is critic A's grey-blue night. At 0.35 the halo is
     // a halo (sky 0.112 with the lamps on) and the lenses still bloom.
-    bloom: { strength: 0.55, radius: 0.35, threshold: 2.0 },
+    //
+    // Radius 0.35 -> 0.25 (round 5, critic A). Measured on the night hero
+    // with the lamps at their round-5 levels: the sky rows 0–90 over 0.35
+    // luma went from 13.9 % to 7.7 % of the band, the headlamp halos held
+    // (598 px over 0.5 either way) and the bar's own footprint did not move
+    // — that is the cover's emissive, which is the car builder's.
+    bloom: { strength: 0.55, radius: 0.25, threshold: 2.0 },
     clamp: 6.5,
     // A wider, weaker AO. At night almost everything is already dark and a
     // tight hard AO just adds black to black; what is worth having is the
