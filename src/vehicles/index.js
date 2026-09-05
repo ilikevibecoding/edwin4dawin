@@ -251,8 +251,11 @@ export function createFleet({ env = null, quality: sceneQuality = 'high', placem
     return variant(s.kind, { slot: i, ordinal, site: { low, edge }, seed: 3 });
   });
   // Lamps at night, for a camp where everyone has gone to bed: one vehicle
-  // still arriving with its headlamps on, one left with its parking lamps on,
-  // and a light in the camper somebody is living in. Everything else dark.
+  // still arriving with its headlamps on; parking lamps left on across about a
+  // third of the row (the working trucks first — the ones whose drivers were
+  // last in); a light in the camper somebody is living in; a cab dome light in
+  // one wagon where a door was left ajar. Everything else dark, and visible by
+  // the camp's lanterns and the sky.
   const firstOf = (...kinds) => {
     for (const kind of kinds) {
       const i = variants.findIndex((v) => v.kind === kind);
@@ -261,9 +264,18 @@ export function createFleet({ env = null, quality: sceneQuality = 'high', placem
     return -1;
   };
   const arriving = firstOf('pickup', 'suv', 'safari-jeep');
-  const markers = firstOf('supply-truck', 'utility', 'expedition-truck');
+  const markerOrder = ['supply-truck', 'expedition-truck', 'utility', 'ranger', 'suv', 'camper', 'safari-jeep', 'pickup'];
+  const markers = new Set();
+  const wantMarkers = Math.ceil(variants.length / 3);
+  for (const kind of markerOrder) {
+    for (const [i, v] of variants.entries()) {
+      if (markers.size >= wantMarkers) break;
+      if (v.kind === kind && i !== arriving) markers.add(i);
+    }
+  }
   const cabin = firstOf('camper', 'expedition-truck');
-  const lit = new Set([arriving, markers, cabin].filter((i) => i >= 0));
+  const dome = variants.findIndex((v, i) => i !== arriving && (v.kind === 'suv' || v.kind === 'ranger' || v.kind === 'pickup'));
+  const lit = new Set([arriving, cabin, dome, ...markers].filter((i) => i >= 0));
   // exactly one pane in the camp is cracked, on something old
   const oldest = variants.filter((v) => v.kind !== 'trailer' && v.kind !== 'quad').sort((a, b) => b.age - a.age)[0];
   if (oldest) oldest.brokenPane = true;
@@ -277,8 +289,9 @@ export function createFleet({ env = null, quality: sceneQuality = 'high', placem
     const o = {
       quality,
       lightsOn: i === arriving,
-      markers: i === markers,
+      markers: markers.has(i),
       cabin: i === cabin,
+      dome: i === dome,
       tentOpen: tier.tentOpen && v.chance(0.7),
       popUp: tier.popUp,
       slideOut: tier.slideOut,
@@ -398,8 +411,11 @@ export function createFleet({ env = null, quality: sceneQuality = 'high', placem
       name,
       variant: v,
       lit: lit.has(i),
-      lamps: { head: i === arriving, markers: i === markers, cabin: i === cabin },
+      lamps: { head: i === arriving, markers: markers.has(i), cabin: i === cabin, dome: i === dome },
       length: built.length,
+      // the body box along z, for anything that frames the vehicle (a
+      // trailer's drawbar is in `length` but not in its picture)
+      body: built.body ?? built.length,
       height: built.height,
       heading,
       wheels: built.wheels,
@@ -416,11 +432,14 @@ export function createFleet({ env = null, quality: sceneQuality = 'high', placem
 
   // --- lights --------------------------------------------------------------
   let lightsOn = false;
-  const setLights = (on) => {
+  let hour = 'day';
+  const setLights = (on, name = on ? 'night' : 'day') => {
     lightsOn = !!on;
-    setFleetLights(materials, lightsOn);
+    hour = name;
+    setFleetLights(materials, lightsOn, name);
   };
-  setLights(params && params.get('time') && params.get('time') !== 'day');
+  const startHour = params?.get('time');
+  setLights(!!startHour && startHour !== 'day', startHour || 'day');
 
   const sway = Object.values(materials).filter((m) => m?.userData?.sway).map((m) => m.userData.sway.uFleetTime);
 
@@ -435,14 +454,13 @@ export function createFleet({ env = null, quality: sceneQuality = 'high', placem
       for (const u of sway) u.value = t;
       // Follow the hero's day/night switch until main.js routes it to us directly.
       const api = typeof window !== 'undefined' ? window.debugAPI : null;
-      if (api && typeof api.timeOfDay === 'string') {
-        const on = api.timeOfDay !== 'day';
-        if (on !== lightsOn) setLights(on);
+      if (api && typeof api.timeOfDay === 'string' && api.timeOfDay !== hour) {
+        setLights(api.timeOfDay !== 'day', api.timeOfDay);
       }
     },
     setLights,
     setTimeOfDay(name) {
-      setLights(name !== 'day');
+      setLights(name !== 'day', name);
     },
     stats: { vehicles: vehicles.length, calls: calls + panes, merged: calls, panes, tris: Math.round(buckets.tris), lit: lit.size },
   };

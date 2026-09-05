@@ -106,7 +106,7 @@ export function bonnetBody(k, o) {
     style = 'wagon', doors = 4, paintKey = 'paint', paint, glassKey = 'glass', brokenPane = false,
     lightsOn = false, markersOn = lightsOn, rhd = true, rake = 0.32, roundLamps = true, flareKey = 'trim', flareTint = 0x383c41,
     interior = true, seatTint = 0x4a4438, bedFloor = null, roofRailKey = null, bullbar = false, cabW = null,
-    missingPanel = false, crackedLens = false, edge = 0,
+    missingPanel = false, crackedLens = false, edge = 0, dome = false,
   } = o;
   const P = paint; // shade fn
   const ar = r + 0.11;
@@ -225,6 +225,13 @@ export function bonnetBody(k, o) {
     if (roofLen > 0.6) k.add(paintKey, gbox(cw * 2 - 0.5, 0.03, roofLen - 0.3, 0.012), { pos: [0, roof + 0.005, (roofFront + roofRear) * 0.5], shade: P });
     // drip rails
     k.addMirrored('trim', pbox(0.02, 0.02, roofLen - 0.1), { pos: [cw - 0.04, roof - 0.04, (roofFront + roofRear) * 0.5], tint: 0x32363b });
+    if (dome) {
+      // a door left ajar: the dome lamp in the headliner, and the headliner it
+      // lights at a tenth of the lamp, seen through every pane of the glasshouse
+      const dz = Math.min(roofFront - 0.5, (roofFront + roofRear) * 0.5 + 0.2);
+      k.add('lampWarmOn', pbox(cw * 2 - 0.4, 0.008, Math.min(roofLen - 0.3, 1.6)), { pos: [0, roof - 0.085, dz], tint: 0x2a2624 });
+      k.add('lampWarmOn', pbox(0.16, 0.024, 0.1), { pos: [0, roof - 0.104, dz], tint: 0xffffff });
+    }
     // side glass: door panes divided by the B pillar, quarter glass on a wagon
     const doorSplit = doors === 4 ? cabFront - 0.05 - (cabFront - cabRear) * 0.5 : cabRear + 0.05;
     const glassBottom = belt + 0.03;
@@ -442,11 +449,15 @@ export function boxBody(k, { hw, y0, h, z0, z1, key = 'paint', paint: P, windows
     for (const s of [-1, 1]) k.add('gap', pbox(0.006, h - 0.2, 0.012), { pos: [s * (hw + 0.002), yc, z], tint: 0x0c0d0e });
     k.add('gap', pbox(hw * 2 - 0.2, 0.006, 0.012), { pos: [0, y0 + h + 0.002, z], tint: 0x0c0d0e });
   }
-  // windows with a raised frame
+  // windows with a raised frame. The frame is a solid block whose face is what
+  // the pane has behind it; a `lit` window lays a curtain lit from inside (a
+  // warm slab at half the bulb) on that face, under the glass — the only way
+  // light gets through a box wall that is one solid piece.
   for (const w of windows) {
     for (const s of w.sides ?? [-1, 1]) {
       k.add('trim', gbox(0.03, w.h + 0.06, w.w + 0.06, 0.012), { pos: [s * (hw + 0.008), w.y, w.z], tint: 0x32363b });
       k.add('gap', pbox(0.02, w.h + 0.01, w.w + 0.01), { pos: [s * (hw + 0.01), w.y, w.z], tint: 0x0a0b0c });
+      if (w.lit) k.add('lampWarmOn', pbox(0.002, w.h - 0.01, w.w - 0.01), { pos: [s * (hw + 0.0242), w.y, w.z], tint: 0x9c8c78 });
       k.pane(w.glass ?? glassKey, paneGeo(w.w, w.h), { pos: [s * (hw + 0.026), w.y, w.z], rot: [0, s * Math.PI / 2, 0] });
     }
   }

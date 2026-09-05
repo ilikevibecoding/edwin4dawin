@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { addWheel, addWheels, archCut, bend, chassis, coil, cyl, cylX, cylZ, decal, gbox, insideOut, jit, lampPool, paneGeo, pbox, rectLamp, roundLamp, sidePanel, tube, wheelProto } from './parts.js';
+import { addWheel, addWheels, archCut, bend, chassis, coil, cyl, cylX, cylZ, decal, gbox, insideOut, jit, lampPool, lathe, paneGeo, pbox, rectLamp, roundLamp, sidePanel, transform, tube, wheelProto } from './parts.js';
 import { benchTiers, bonnetBody, boxBody, cabOverCab, edgeBolts, flatDeck, rollCage } from './bodies.js';
 import { aerial, awning, beaconBar, canRack, cargoNet, crate, drawbar, drum, hitch, jerryCan, ladder, lashing, lightBar, mudFlap, pannier, roofRack, roofTent, sandPlate, snorkel, spare, spots, stowedRope, tank } from './gear.js';
 import { grime } from './kit.js';
@@ -22,11 +22,6 @@ function tyres(v, { r, w, rimR, style = null, lugs = 22 }) {
   const st = style ?? v.tyres;
   const tint = st === 'steel' ? (v.old ? shade(v.paint, 0.8) : 0x8a8f94) : v.old ? 0x7a7c78 : 0x9a9ea2;
   return wheelProto({ r, w, rimR, style: st, lugs, seed: v.seed, tint, dust: v.dust });
-}
-
-/** A warm glow in a window at night: an emissive slab just inside the pane. */
-function windowGlow(k, { x, y, z, w, h, side }) {
-  k.add('lampWarmOn', pbox(0.02, h - 0.04, w - 0.04), { pos: [x - side * 0.05, y, z], tint: 0xffffff });
 }
 
 // --- 1. expedition truck ---------------------------------------------------
@@ -62,7 +57,7 @@ export function expeditionTruck(k, v, o) {
   const { top } = boxBody(k, {
     hw: bx, y0: by0, h: bh, z0, z1, key: v.paintKey, paint: PB, glassKey: 'glassDark',
     windows: [
-      { y: by0 + 1.45, z: -0.4, w: 0.8, h: 0.5 },
+      { y: by0 + 1.45, z: -0.4, w: 0.8, h: 0.5, lit: o.cabin },
       { y: by0 + 1.45, z: -2.3, w: 0.5, h: 0.5, sides: [1] },
     ],
     doorZ: z1,
@@ -73,10 +68,6 @@ export function expeditionTruck(k, v, o) {
     roofRail: false,
     seams: 4,
   });
-  if (o.cabin) {
-    windowGlow(k, { x: bx, y: by0 + 1.45, z: -0.4, w: 0.8, h: 0.5, side: 1 });
-    windowGlow(k, { x: -bx, y: by0 + 1.45, z: -0.4, w: 0.8, h: 0.5, side: -1 });
-  }
   decal(k, 'camp', { w: 1.9, h: 0.48, pos: [-bx - 0.012, by0 + 0.98, -1.2], rot: [0, -Math.PI / 2, 0] });
   decal(k, 'camp', { w: 1.9, h: 0.48, pos: [bx + 0.012, by0 + 0.98, -0.5], rot: [0, Math.PI / 2, 0] });
   // living-box roof: rack, tent, spare, solar
@@ -174,7 +165,7 @@ export function suv(k, v, o) {
   bonnetBody(k, {
     hw, sill, belt, roof, hood, nose, cabFront, cabRear, tail, front, rear, r,
     style: 'wagon', doors: 4, paintKey: v.paintKey, paint: P, glassKey: v.glassKey, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens,
-    lightsOn: o.lightsOn, markersOn: mk(o), rake: 0.3, bullbar: v.chance(0.7), roundLamps: v.chance(0.5), seatTint: v.pick(SEATS),
+    lightsOn: o.lightsOn, markersOn: mk(o), dome: o.dome, rake: 0.3, bullbar: v.chance(0.7), roundLamps: v.chance(0.5), seatTint: v.pick(SEATS),
   });
   // roof: full-length rack and what rides on it
   const { deckY } = roofRack(k, { x: hw - 0.14, z0: cabFront - 0.5, z1: tail + 0.2, y: roof + 0.1, h: 0.13, legs: [cabFront - 0.7, -0.4, tail + 0.4], legH: 0.1 });
@@ -219,7 +210,7 @@ export function pickup(k, v, o) {
   const b = bonnetBody(k, {
     hw, sill, belt, roof, hood, nose, cabFront, cabRear, tail, front, rear, r,
     style: 'pickup', doors: doubleCab ? 4 : 2, paintKey: v.paintKey, paint: P, glassKey: v.glassKey, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens,
-    lightsOn: o.lightsOn, markersOn: mk(o), rake: 0.32, bullbar: v.chance(0.5), roundLamps: v.chance(0.4), seatTint: v.pick(SEATS),
+    lightsOn: o.lightsOn, markersOn: mk(o), dome: o.dome, rake: 0.32, bullbar: v.chance(0.5), roundLamps: v.chance(0.4), seatTint: v.pick(SEATS),
   });
   // the load: crates, a drum, cans, a rolled tent, all under a net
   const bf = b.bedFloor;
@@ -282,7 +273,7 @@ export function ranger(k, v, o) {
   bonnetBody(k, {
     hw, sill, belt, roof, hood, nose, cabFront, cabRear, tail, front, rear, r,
     style: 'wagon', doors: 2, paintKey: 'paint', paint: P, glassKey: v.glassKey, brokenPane: v.brokenPane, missingPanel: v.missingPanel, crackedLens: v.crackedLens,
-    lightsOn: o.lightsOn, markersOn: mk(o), rake: 0.28, bullbar: true, roundLamps: true, seatTint: 0x3a3f36,
+    lightsOn: o.lightsOn, markersOn: mk(o), dome: o.dome, rake: 0.28, bullbar: true, roundLamps: true, seatTint: 0x3a3f36,
   });
   for (const s of [-1, 1]) {
     decal(k, 'rangerStripe', { w: cabFront - tail - 0.3, h: 0.14, pos: [s * (hw + 0.012), sill + (belt - sill) * 0.66, (cabFront + tail) * 0.5 - 0.05], rot: [0, s * Math.PI / 2, 0] });
@@ -492,18 +483,14 @@ export function camper(k, v, o) {
   const { top } = boxBody(k, {
     hw: bx, y0: by0, h: bh, z0, z1, key: 'paint', paint: PB, glassKey: 'glassDark',
     windows: [
-      { y: by0 + 0.95, z: -1.25, w: 0.8, h: 0.45 },
-      { y: by0 + 0.95, z: -2.35, w: 0.55, h: 0.45, sides: [1] },
+      { y: by0 + 0.95, z: -1.25, w: 0.8, h: 0.45, lit: o.cabin },
+      { y: by0 + 0.95, z: -2.35, w: 0.55, h: 0.45, sides: [1], lit: o.cabin },
     ],
     doorZ: z1,
     hatches: [{ y: by0 + 0.3, z: -2.3, w: 0.7, h: 0.4, sides: [-1] }],
     roofRail: false,
     seams: 3,
   });
-  if (o.cabin) {
-    windowGlow(k, { x: bx, y: by0 + 0.95, z: -1.25, w: 0.8, h: 0.45, side: 1 });
-    windowGlow(k, { x: -bx, y: by0 + 0.95, z: -1.25, w: 0.8, h: 0.45, side: -1 });
-  }
   // skirt down over the rear wheels between box and frame
   const ar = r + 0.11;
   const skirtPts = [[z0, sill - 0.02], ...archCut(rear, ar, sill - 0.02), [z1, sill - 0.02], [z1, by0 + 0.02], [z0, by0 + 0.02]];
@@ -627,7 +614,16 @@ export function trailer(k, v, o) {
   // three contacts: the wheels and the jockey wheel. The stand winds up and
   // down, so the body never pitches more than 5° whatever the ground does.
   const jz = tip[2] - 0.5;
-  return { wheels: [{ x: track, z: 0, r }, { x: -track, z: 0, r }, { x: 0.12, z: jz, r: 0.1 }], track, length: [z1 - 0.5, tip[2] + 0.1], height: deckY + 0.5, maxPitch: 0.087 };
+  return {
+    wheels: [{ x: track, z: 0, r }, { x: -track, z: 0, r }, { x: 0.12, z: jz, r: 0.1 }],
+    track,
+    length: [z1 - 0.5, tip[2] + 0.1],
+    // the drawbar is a pole: framing the trailer from its full length puts the
+    // camera on the hitch, so the body box is what a picture of it is sized from
+    body: [z1 - 0.4, z0 + 0.7],
+    height: deckY + 0.5,
+    maxPitch: 0.087,
+  };
 }
 
 // --- 10. dual-sport motorcycle ---------------------------------------------------
@@ -670,11 +666,19 @@ export function motorcycle(k, v, o) {
   // high front fender, tank, seat, side panels, rear fender and rack
   // high front fender: a curved sheet a hand above the tyre, both faces
   const fenderR = rF + 0.075;
-  const fender = new THREE.CylinderGeometry(fenderR, fenderR, 0.14, 12, 1, true, 0.6, 1.9);
+  // 48 round the full circle is 15 over this arc: a curve, not a crank
+  const fender = new THREE.CylinderGeometry(fenderR, fenderR, 0.14, 48, 1, true, 0.6, 1.9);
   fender.rotateZ(Math.PI / 2);
   k.add(v.paintKey, fender, { pos: [0, rF + 0.03, zF], shade: P });
   k.add(v.paintKey, insideOut(fender), { pos: [0, rF + 0.03, zF], shade: P });
-  k.add(v.paintKey, gbox(0.34, 0.28, 0.52, 0.07), { pos: [0, 0.93, 0.14], rot: [0.08, 0, 0], shade: P });
+  // the tank: a revolved teardrop, fat over the engine and tapering to the
+  // headstock, flattened a fifth so it sits between the knees
+  const tank = transform(
+    lathe([[0.0, -0.26], [0.05, -0.26], [0.13, -0.18], [0.165, -0.06], [0.175, 0.04], [0.16, 0.14], [0.12, 0.22], [0.06, 0.27], [0.0, 0.28]], 32),
+    { rot: [0, -Math.PI / 2, 0], scale: [1, 0.78, 1] },
+  );
+  k.add(v.paintKey, tank, { pos: [0, 0.96, 0.14], rot: [0.08, 0, 0], shade: P });
+  k.add(v.paintKey, gbox(0.3, 0.06, 0.2, 0.02), { pos: [0, 0.86, -0.06], shade: P });
   k.add('trim', cyl(0.03, 0.035, 0.03, 10), { pos: [0, 1.08, 0.05], tint: 0x32363b });
   k.add('vinyl', gbox(0.28, 0.1, 0.72, 0.04), { pos: [0, 0.9, -0.38], rot: [-0.04, 0, 0], shade: grime(0x2b2926, { up: 0.5, dust: 0x8d7f63 }) });
   k.addMirrored(v.paintKey, gbox(0.03, 0.22, 0.34, 0.02), { pos: [0.15, 0.7, -0.3], rot: [0.2, 0, 0], shade: P });

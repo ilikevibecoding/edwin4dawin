@@ -95,10 +95,14 @@ async function main() {
         name: v.name,
         kind: v.kind,
         pos: v.root.position.toArray(),
+        footprint: v.footprint,
+        slot: v.slot,
         heading: v.heading,
         length: v.length,
+        body: v.body || v.length,
         height: v.height,
         lit: v.lit,
+        lamps: v.lamps,
         wheels: v.wheels,
         paint: v.variant?.paintName,
         age: v.variant?.age,
@@ -109,7 +113,48 @@ async function main() {
     };
   });
   log('stats', JSON.stringify(info.stats));
-  for (const v of info.vehicles) log(`  ${v.name.padEnd(20)} ${v.paint?.padEnd(12)} age=${v.age?.toFixed(2)} glass=${v.glass}${v.broken ? ' CRACKED' : ''}${v.lit ? ' LIT' : ''}`);
+  for (const v of info.vehicles) {
+    const lamps = Object.entries(v.lamps || {}).filter(([, on]) => on).map(([k]) => k).join('+');
+    log(`  ${v.name.padEnd(20)} ${v.paint?.padEnd(12)} age=${v.age?.toFixed(2)} glass=${v.glass}${v.broken ? ' CRACKED' : ''}${lamps ? ` LIT:${lamps}` : ''}`);
+  }
+
+  // Parking check: every pair of plan footprints (oriented boxes, the same
+  // separating-axis test the placer uses) must clear by at least 0.3 m.
+  {
+    const corners = (v) => {
+      const fp = v.footprint || { hw: 1.2, z0: v.length[0], z1: v.length[1] };
+      const sh = Math.sin(v.heading);
+      const ch = Math.cos(v.heading);
+      return [[-fp.hw, fp.z0], [fp.hw, fp.z0], [fp.hw, fp.z1], [-fp.hw, fp.z1]].map(([lx, lz]) => [v.pos[0] + lx * ch + lz * sh, v.pos[2] - lx * sh + lz * ch]);
+    };
+    const gap = (a, b) => {
+      const ca = corners(a);
+      const cb = corners(b);
+      let best = -Infinity;
+      for (const p of [a, b]) {
+        for (const [ax, az] of [[Math.cos(p.heading), -Math.sin(p.heading)], [Math.sin(p.heading), Math.cos(p.heading)]]) {
+          const proj = (cs) => cs.reduce(([lo, hi], [x, z]) => [Math.min(lo, x * ax + z * az), Math.max(hi, x * ax + z * az)], [Infinity, -Infinity]);
+          const [a0, a1] = proj(ca);
+          const [b0, b1] = proj(cb);
+          best = Math.max(best, b0 - a1, a0 - b1);
+        }
+      }
+      return best;
+    };
+    let worst = Infinity;
+    let bad = 0;
+    for (let i = 0; i < info.vehicles.length; i++) {
+      for (let j = i + 1; j < info.vehicles.length; j++) {
+        const g = gap(info.vehicles[i], info.vehicles[j]);
+        if (g < worst) worst = g;
+        if (g < 0.3) {
+          bad++;
+          log(`  OVERLAP ${info.vehicles[i].name} / ${info.vehicles[j].name}: clearance ${g.toFixed(2)} m`);
+        }
+      }
+    }
+    log(`parking: ${info.vehicles.length} vehicles, ${bad} pairs under 0.3 m, closest ${worst.toFixed(2)} m`);
+  }
 
   const list = info.vehicles.filter((v) => (!kinds.length || kinds.includes(v.kind)) && (!only || v.name === only));
 
@@ -122,7 +167,7 @@ async function main() {
       const t1 = Date.now();
       const shot = await page.evaluate(
         async ({ v, angle, distK, lift, fov, focus, orbit }) => {
-          const { camera, skyRig, fleet, camp } = window.debugAPI.objects;
+          const { camera, skyRig, fleet, camp, terrain } = window.debugAPI.objects;
           const V3 = camera.position.constructor;
           const M4 = camera.matrixWorld.constructor;
           // THREE is not a global; a second copy of the module gives us a
@@ -137,8 +182,11 @@ async function main() {
           }
           const rc = window.__fleetRay || null;
           const [x, y, z] = v.pos;
-          const len = v.length[1] - v.length[0];
-          const cz = (v.length[0] + v.length[1]) * 0.5;
+          // framed from the body box, not the full length: a trailer's drawbar
+          // doubles its length and put the camera on the hitch
+          const box = v.body || v.length;
+          const len = box[1] - box[0];
+          const cz = (box[0] + box[1]) * 0.5;
           const h = v.heading;
           const fx = Math.sin(h);
           const fz = Math.cos(h);
@@ -246,7 +294,13 @@ async function main() {
 
           const place = (off, up) => {
             const a = h + angle + off;
-            return [centre[0] + Math.sin(a) * d, camY + up, centre[2] + Math.cos(a) * d];
+            const ex = centre[0] + Math.sin(a) * d;
+            const ez = centre[2] + Math.cos(a) * d;
+            // the pad is not flat (the east end drops 1.7 m over four metres):
+            // a camera sized from the vehicle's own ground can end up under the
+            // bank it is standing on, looking up at a wheel
+            const ground = terrain?.heightAt ? terrain.heightAt(ex, ez) : -Infinity;
+            return [ex, Math.max(camY + up, ground + 0.75), ez];
           };
           const step = Math.PI / 18;
           const offsets = [0];

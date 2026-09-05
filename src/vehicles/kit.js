@@ -195,7 +195,18 @@ export class FleetBuckets {
       mesh.name = `fleet_${key}`;
       mesh.castShadow = !unshadowed.has(key);
       mesh.receiveShadow = !unshadowed.has(key);
-      if (key === 'pool') mesh.renderOrder = 2;
+      if (key === 'pool') {
+        mesh.renderOrder = 2;
+        // The AO prepass swaps every material for a MeshNormalMaterial, which
+        // would draw the ground decals as solid quads over the dirt and hand
+        // GTAO a hard rectangle to shade (the hero's contact mesh does the same).
+        mesh.onBeforeRender = (renderer, scene, camera, geometry, material) => {
+          if (material.isMeshNormalMaterial) geometry.setDrawRange(0, 0);
+        };
+        mesh.onAfterRender = (renderer, scene, camera, geometry, material) => {
+          if (material.isMeshNormalMaterial) geometry.setDrawRange(0, Infinity);
+        };
+      }
       group.add(mesh);
       calls++;
     }

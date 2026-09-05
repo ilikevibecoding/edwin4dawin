@@ -21,7 +21,7 @@ import {
   vinylMaps,
   wornMetalMaps,
 } from '../textures/vehicle.js';
-import { cached, canvasTexture, mulberry32 } from '../textures/core.js';
+import { cached, canvasTexture, fbm, mulberry32, pixelTexture } from '../textures/core.js';
 
 // ---------------------------------------------------------------------------
 // The fleet's material library.
@@ -103,6 +103,8 @@ function applyFleetDirt(material, { tag, film = 1, spatter = 1, cake = 1, dust =
     uFdSpat: { value: spatter },
     uFdCake: { value: cake },
     uFdLift: { value: lift },
+    // 0 by day, 1 at night: the hemisphere floor below
+    uFdNight: { value: 0 },
   };
   material.userData.fleetDirt = u;
   const prev = material.onBeforeCompile;
@@ -138,6 +140,7 @@ function applyFleetDirt(material, { tag, film = 1, spatter = 1, cake = 1, dust =
         uniform float uFdSpat;
         uniform float uFdCake;
         uniform float uFdLift;
+        uniform float uFdNight;
         varying vec4 vWear;
         varying vec3 vFdPos;
         varying vec3 vFdNrm;
@@ -145,6 +148,29 @@ function applyFleetDirt(material, { tag, film = 1, spatter = 1, cake = 1, dust =
         float fdDrop = 0.0;
         float fdCake = 0.0;
         float fdRelief = 0.0;`,
+      )
+      // The night hemisphere. The rig's moon is a hard key from one side and
+      // its hemisphere light is authored for a truck standing in the open; a
+      // parked row on the camp pad has half its flanks turned from the moon and
+      // its neighbours' shadows across the rest, and those surfaces came back
+      // near black — an unlit white camper is a silhouette. What a moonlit
+      // sky actually puts on a vertical surface is a cool, even floor, so one
+      // is added here in the same units as the brightwork ambient (plain
+      // reflectance): sky-coloured from above, nothing from the ground, so an
+      // up-facing white panel reads and a wheel arch stays dark.
+      .replace(
+        '#include <lights_fragment_maps>',
+        `#include <lights_fragment_maps>
+        #if defined( RE_IndirectDiffuse )
+        if ( uFdNight > 0.0 ) {
+          vec3 fdWN = inverseTransformDirection( geometryNormal, viewMatrix );
+          vec3 fdSky = vec3( 0.34, 0.42, 0.60 );
+          vec3 fdAmb = fdSky * ( 0.42 + 0.58 * clamp( fdWN.y * 0.5 + 0.5, 0.0, 1.0 ) );
+          // 0.22: at 0.13 a white box wall on the shadow side measured 0.02
+          // display luma, half of what a white panel needs to read at all
+          iblIrradiance += fdAmb * ( PI * 0.22 * uFdNight );
+        }
+        #endif`,
       )
       // after color_fragment, so the vertex colour tints the paint and not the mud
       .replace(
@@ -744,8 +770,20 @@ export function fleetMaterials(env = null) {
   m.amberOn = lamp(0xcf6b06, 0x5e330a, 0.12, lens);
   m.lampBlue = lamp(0x2c4ed8, 0x142a8a, 0.2, lens);
   m.lampBlueOn = lamp(0x2c4ed8, 0x142a8a, 0.2, lens);
-  // camp lantern / interior glow, warm
+  // camp lantern / interior glow, warm. The vertex tint scales the glow as
+  // well as the albedo, so one material gives a bulb at full and the headliner
+  // it lights at a tenth.
   m.lampWarmOn = lamp(0xffe3b8, 0xffb060, 0.0, { roughness: 0.4 });
+  m.lampWarmOn.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      `#include <emissivemap_fragment>
+      #ifdef USE_COLOR
+        totalEmissiveRadiance *= vColor.rgb;
+      #endif`,
+    );
+  };
+  m.lampWarmOn.customProgramCacheKey = () => 'fleetWarmTint';
   m.lensClear = new THREE.MeshPhysicalMaterial({
     color: 0xc3d4de,
     metalness: 0,
@@ -757,15 +795,67 @@ export function fleetMaterials(env = null) {
     clearcoatRoughness: 0.03,
     depthWrite: false,
   });
-  // warm pool under the headlamps of a lit vehicle, additive so it only shows
-  // once the ground under it is dark
-  m.pool = new THREE.MeshBasicMaterial({
-    color: 0xffd9a0,
+  // Ground decals, one bucket: the headlamp cone a lit vehicle throws on the
+  // dirt, and the contact-occlusion blob under every tyre. Both are quads on
+  // the ground reading one atlas (cone in the red channel, blob in the green),
+  // told apart by the vertex colour: a pool carries the lamp's warm tint, a
+  // blob is black. Blended `src + dst * src.a`, so the cone adds light and the
+  // blob scales the dirt down under the tread, whatever the hour and whatever
+  // the ground already is; the cone alone is switched by `uPoolOn`, which the
+  // hour switch drives, so it can only show under lamps that are lit.
+  m.pool = new THREE.ShaderMaterial({
+    name: 'fleet_pool',
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        uMap: { value: groundDecalAtlas() },
+        uPoolOn: { value: 0 },
+        // occlusion is not black: bounce off the underbody and the soil
+        uShade: { value: 0.3 },
+      },
+    ]),
+    vertexShader: /* glsl */ `
+      attribute vec3 color;
+      varying vec2 vUv;
+      varying vec3 vTint;
+      varying float vFogDepth;
+      void main() {
+        vUv = uv;
+        vTint = color;
+        vec4 mv = modelViewMatrix * vec4( position, 1.0 );
+        vFogDepth = -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform sampler2D uMap;
+      uniform float uPoolOn;
+      uniform float uShade;
+      uniform vec3 fogColor;
+      uniform float fogDensity;
+      varying vec2 vUv;
+      varying vec3 vTint;
+      varying float vFogDepth;
+      void main() {
+        vec4 t = texture2D( uMap, vUv );
+        float isBlob = 1.0 - step( 0.002, max( vTint.r, max( vTint.g, vTint.b ) ) );
+        float fogFactor = 1.0 - exp( -fogDensity * fogDensity * vFogDepth * vFogDepth );
+        float occ = t.g * isBlob * ( 1.0 - fogFactor );
+        vec3 add = vTint * ( t.r * uPoolOn * ( 1.0 - isBlob ) * ( 1.0 - fogFactor ) );
+        gl_FragColor = vec4( add, mix( 1.0, uShade, occ ) );
+      }`,
     transparent: true,
-    opacity: 0,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.SrcAlphaFactor,
+    blendSrcAlpha: THREE.ZeroFactor,
+    blendDstAlpha: THREE.OneFactor,
     depthWrite: false,
-    map: poolDecal(),
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -4,
+    side: THREE.DoubleSide,
+    fog: true,
   });
 
   // --- glass ---------------------------------------------------------------
@@ -814,19 +904,27 @@ export function fleetMaterials(env = null) {
     m[key] = mat;
     return mat;
   };
+  // The film's own colour. `applyGlassFilm` defaults to a laterite 0xa47a55,
+  // which the hero overrides to 0x9c8468; the fleet took the default, and a
+  // rust-orange film lit by a blue sky reflection is magenta — the ranger and
+  // utility screens measured sRGB 172/148/128 against a sky of 155/166/182.
+  // Dried fines on glass are a grey-tan, not the soil they came from: the
+  // pane keeps a neutral film of its own and a lighter hand on how far it
+  // closes the glass.
+  const FILM = 0x938a7c;
   // Windscreens and door glass: the hero's `glass`, wiped
-  pane('glass', { kind: 'screen', color: 0x33474f, opacity: 0.26, roughness: 0.07, film: { dustAmount: 0.9, dustAlpha: 0.5, band: 0.5 } });
+  pane('glass', { kind: 'screen', color: 0x33474f, opacity: 0.26, roughness: 0.07, film: { dust: FILM, dustAmount: 0.9, dustAlpha: 0.34, band: 0.5 } });
   // Door and rear glass on a wagon: nothing ever wipes it
-  pane('glassSide', { kind: 'side', color: 0x33474f, opacity: 0.26, roughness: 0.08, film: { dustAmount: 1.0, dustAlpha: 0.42, band: 0 } });
+  pane('glassSide', { kind: 'side', color: 0x33474f, opacity: 0.26, roughness: 0.08, film: { dust: FILM, dustAmount: 1.0, dustAlpha: 0.3, band: 0 } });
   // Dusty: the same program as `glass` with the film turned up
-  pane('glassDusty', { kind: 'screen', tag: 'glass', color: 0x33474f, opacity: 0.26, roughness: 0.07, film: { dustAmount: 1.5, dustAlpha: 0.62, band: 0.5, dustRough: 0.7 } });
+  pane('glassDusty', { kind: 'screen', tag: 'glass', color: 0x33474f, opacity: 0.26, roughness: 0.07, film: { dust: FILM, dustAmount: 1.4, dustAlpha: 0.44, band: 0.5, dustRough: 0.7 } });
   // Privacy tint on a living-box window: the hero's rear-glass recipe
   pane('glassDark', {
     kind: 'rear',
     color: 0x2c3d44,
     opacity: 0.3,
     roughness: 0.1,
-    film: { dustAmount: 1.0, dustAlpha: 0.7, band: 0, dustAmbient: 0.42 },
+    film: { dust: FILM, dustAmount: 1.0, dustAlpha: 0.5, band: 0, dustAmbient: 0.42 },
     bw: { strength: 1.1, band: 0.45, trees: 1.0, pane: 1.1, wall: 0x1b2016, rim: 0xfbecce, sky: reflectedSky(1.2) },
   });
   // Cracked: a shatter web carried on the emissive channel over the wiped screen
@@ -835,7 +933,7 @@ export function fleetMaterials(env = null) {
     color: 0x33474f,
     opacity: 0.3,
     roughness: 0.1,
-    film: { dustAmount: 0.9, dustAlpha: 0.5, band: 0.5 },
+    film: { dust: FILM, dustAmount: 0.9, dustAlpha: 0.34, band: 0.5 },
     emissiveMap: crackMap(),
     emissiveIntensity: 0.55,
   });
@@ -846,17 +944,67 @@ export function fleetMaterials(env = null) {
   return m;
 }
 
-function poolDecal() {
-  return cached('fleet.pool', () =>
-    canvasTexture(128, (ctx, w, h) => {
-      const g = ctx.createRadialGradient(w / 2, h / 2, 2, w / 2, h / 2, w / 2);
-      g.addColorStop(0, 'rgba(255,255,255,0.9)');
-      g.addColorStop(0.4, 'rgba(255,255,255,0.35)');
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, w, h);
-    }, { srgb: true, repeat: 1 }),
-  );
+/** Atlas cells for the ground decals, as uv rectangles [u0, v0, u1, v1]. */
+export const GROUND_DECAL = {
+  cone: [0.0, 0.0, 0.5, 1.0],
+  blob: [0.5, 0.0, 1.0, 1.0],
+};
+
+/**
+ * Two ground decals in one 256 x 128 sheet. Left: the headlamp cone, drawn
+ * from the bumper (v = 0) out along the quad — two lobes off the lamp centres
+ * that merge and widen, brightest a metre or two out, gone by the far end,
+ * soft everywhere so nothing about it reads as a rectangle. Right: the
+ * occlusion under a tyre, a rounded patch tight at the tread and gone within
+ * the quad, the hero's `contact.js` blob as a texture. Linear data, no mips:
+ * a smooth gradient minifies cleanly and a mip chain would bleed the cells.
+ */
+function groundDecalAtlas() {
+  return cached('fleet.groundDecals', () => {
+    const W = 256;
+    const H = 128;
+    const ss = (e0, e1, x) => {
+      const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+      return t * t * (3 - 2 * t);
+    };
+    return pixelTexture(
+      W,
+      H,
+      (x, y, out) => {
+        const u = (x + 0.5) / W;
+        const v = (y + 0.5) / H;
+        if (u < 0.5) {
+          const ux = u * 2;
+          // two lamps either side of the centreline, beams spreading with distance
+          const half = 0.1 + 0.36 * v;
+          let lobe = 0;
+          for (const c of [0.5 - 0.17, 0.5 + 0.17]) {
+            const d = (ux - c) / half;
+            lobe += Math.exp(-d * d * 1.8);
+          }
+          lobe = Math.min(1, lobe);
+          // dark right under the bumper (the lamps are aimed forward, not down),
+          // brightest where the beam first lands, fading out along the ground
+          const along = ss(0.0, 0.14, v) * Math.exp(-2.4 * Math.max(0, v - 0.14)) * (1 - ss(0.72, 1.0, v));
+          const edge = 1 - ss(0.4, 0.5, Math.abs(ux - 0.5));
+          const mottle = 0.9 + 0.1 * fbm(ux * 6, v * 12, { octaves: 3, period: 4, seed: 77 });
+          out[0] = Math.round(255 * Math.min(1, lobe * along * edge * mottle));
+        } else {
+          const px = Math.abs((u - 0.5) * 2 - 0.5) * 2; // 0 centre .. 1 edge
+          const py = Math.abs(v - 0.5) * 2;
+          // the tread leaves the ground slowly along the roll: longer that way
+          const qx = Math.max(0, px - 0.36);
+          const qy = Math.max(0, py * 0.8 - 0.22);
+          const d = Math.hypot(qx, qy);
+          const crease = 1 - ss(0.0, 0.1, d);
+          const pen = Math.exp(-d * 5.5);
+          const box = 1 - ss(0.7, 1.0, Math.max(px, py));
+          out[1] = Math.round(255 * Math.min(1, (crease * 0.45 + pen * 0.6) * box));
+        }
+      },
+      { srgb: false, repeat: 1, flipY: false, mips: false },
+    );
+  });
 }
 
 /** Materials whose geometry carries the sway attribute. */
@@ -895,7 +1043,11 @@ export const UV_SCALE = {
  * two left with parking lamps (amber markers, tail), and the interior glow of
  * whoever is living in the camper. Everything else is off at every hour.
  */
-export function setFleetLights(m, on) {
+export function setFleetLights(m, on, hour = on ? 'night' : 'day') {
+  // The hemisphere floor on every merged surface: full at night, a little at
+  // dusk (the sky is still lit then), none by day.
+  const night = hour === 'night' ? 1 : hour === 'dusk' ? 0.3 : on ? 1 : 0;
+  for (const mat of Object.values(m)) if (mat?.userData?.fleetDirt) mat.userData.fleetDirt.uFdNight.value = night;
   m.headOn.emissive.set(on ? 0xfff3dc : 0x3a3833);
   m.headOn.emissiveIntensity = on ? 5.0 : 0.25;
   m.tailOn.emissive.set(on ? 0xff2a12 : 0x5c0b05);
@@ -906,7 +1058,7 @@ export function setFleetLights(m, on) {
   m.lampBlueOn.emissiveIntensity = on ? 2.0 : 0.2;
   // a lantern or a reading light behind a curtain, not a floodlit box
   m.lampWarmOn.emissiveIntensity = on ? 1.6 : 0.0;
-  m.pool.opacity = on ? 0.4 : 0;
+  m.pool.uniforms.uPoolOn.value = on ? 0.55 : 0;
   // the shatter web is a film catching daylight; at night it has nothing to catch
   if (m.glassCracked) {
     m.glassCracked.userData.dayFilm ??= m.glassCracked.emissiveIntensity;

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { bend, bolt, profile, rbox, transform, tube as geoTube } from '../lib/geo.js';
 import { clamp, mulberry32, smoothstep } from '../textures/core.js';
 import { LIN, grime, hash3, mix3 } from './kit.js';
-import { DECALS } from './materials.js';
+import { DECALS, GROUND_DECAL } from './materials.js';
 
 // ---------------------------------------------------------------------------
 // The part library, lower half: primitives, running gear, chassis and lamps.
@@ -33,7 +33,7 @@ export const cyl = (rt, rb, h, seg = 16, open = false) => new THREE.CylinderGeom
 export const cylZ = (rt, rb, h, seg = 16, open = false) => transform(cyl(rt, rb, h, seg, open), { rot: [Math.PI / 2, 0, 0] });
 /** Cylinder with its axis along X (an axle, a roller). */
 export const cylX = (rt, rb, h, seg = 16, open = false) => transform(cyl(rt, rb, h, seg, open), { rot: [0, 0, Math.PI / 2] });
-export { bend, bolt, profile };
+export { bend, bolt, profile, transform };
 /** Pipe through points; the low tier gets a hexagonal section. */
 export const tube = (points, radius = 0.03, radial = 10, tension = 0.4) => geoTube(points, radius, DETAIL.lite ? Math.min(radial, 6) : radial, tension);
 
@@ -214,7 +214,9 @@ export function wheelProto({ r = 0.42, w = 0.28, rimR = 0.215, style = 'alloy', 
         [rimR + 0.025, hw * 0.72],
         [rimR + 0.002, hw * 0.5],
       ],
-      style === 'moto' ? 28 : 36,
+      // a motorcycle's wheels are all rim: 28 segments on a 34 cm tyre read
+      // as a polygon at fleet distance
+      style === 'moto' ? 40 : 36,
     ),
   });
 
@@ -257,9 +259,9 @@ export function wheelProto({ r = 0.42, w = 0.28, rimR = 0.215, style = 'alloy', 
   const rimShade = grime(tint, { dust: 0x6a6150, up: 0.15, down: 0.12, jitter: 0.12, seed });
   const dark = grime(0x2a2d31, { up: 0.1, down: 0.1, jitter: 0.1, seed });
   if (style === 'moto') {
-    pieces.push({ key: 'alu', tint, geo: lathe([[rimR - 0.012, -hw * 0.6], [rimR + 0.004, -hw * 0.62], [rimR + 0.008, hw * 0.62], [rimR - 0.012, hw * 0.6], [rimR - 0.012, -hw * 0.6]], 28) });
-    pieces.push({ key: 'alu', shade: rimShade, geo: cylX(0.055, 0.055, hw * 1.1, 14) });
-    pieces.push({ key: 'alu', shade: rimShade, geo: cylX(0.075, 0.075, hw * 0.5, 14) });
+    pieces.push({ key: 'alu', tint, geo: lathe([[rimR - 0.012, -hw * 0.6], [rimR + 0.004, -hw * 0.62], [rimR + 0.008, hw * 0.62], [rimR - 0.012, hw * 0.6], [rimR - 0.012, -hw * 0.6]], 40) });
+    pieces.push({ key: 'alu', shade: rimShade, geo: cylX(0.055, 0.055, hw * 1.1, 18) });
+    pieces.push({ key: 'alu', shade: rimShade, geo: cylX(0.075, 0.075, hw * 0.5, 18) });
     const spoke = cyl(0.0028, 0.0028, 1, 4);
     for (let i = 0; i < 18; i++) {
       for (const s of [-1, 1]) {
@@ -275,7 +277,7 @@ export function wheelProto({ r = 0.42, w = 0.28, rimR = 0.215, style = 'alloy', 
       }
     }
     // brake rotor outboard
-    pieces.push({ key: 'alu', tint: 0x9a9690, geo: cylX(0.11, 0.11, 0.006, 24) });
+    pieces.push({ key: 'alu', tint: 0x9a9690, geo: cylX(0.11, 0.11, 0.006, 32) });
     return { pieces, r, w, rimR, style };
   }
 
@@ -345,12 +347,14 @@ export function wheelProto({ r = 0.42, w = 0.28, rimR = 0.215, style = 'alloy', 
  * for the left so the dish faces out. `spin` randomises the lug phase, and the
  * bottom of the tread is squashed onto the ground.
  */
-export function addWheel(k, proto, { x, z, y = null, side = 1, steer = 0, spin = 0, camber = 0, squash = 0.02, travel = 0.12, contact = null }) {
+export function addWheel(k, proto, { x, z, y = null, side = 1, steer = 0, spin = 0, camber = 0, squash = 0.02, sink = 0.015, travel = 0.12, contact = null, blob = true }) {
   // A loaded tyre squashes: the carcass below the flat is folded up to it and
   // the hub comes down by the same amount, so the flat is *on* the ground
-  // rather than hovering a squash above it.
-  const hubY = y ?? proto.r - squash;
+  // rather than hovering a squash above it — and a centimetre and a half into
+  // it, the way the hero's tyres bed into loose dirt.
+  const hubY = y ?? proto.r - squash - sink;
   const id = contact ?? (k.contact ? k.contact({ x, z, r: proto.r, travel }) : undefined);
+  if (blob) contactBlob(k, { x, z, r: proto.r, w: proto.w, contact: id });
   for (const piece of proto.pieces) {
     const g = piece.geo.clone();
     transform(g, { rot: [spin, 0, 0] });
@@ -523,8 +527,30 @@ export function rectLamp(k, { pos, w = 0.14, h = 0.09, dir = 1, kind = 'tail', o
   }
 }
 
-/** Light pool on the ground ahead of a lit vehicle's headlamps. */
-export function lampPool(k, { z, dir = 1, w = 2.6, len = 4.5, y = 0.03 }) {
+/** A ground quad reading one cell of the decal atlas: `w` across (x), `len` along (z), facing up, v = 0 at -z. */
+function groundQuad(cell, w, len) {
   const g = new THREE.PlaneGeometry(w, len);
-  k.add('pool', g, { pos: [0, y, z + dir * len * 0.45], rot: [-Math.PI / 2, 0, 0], tint: 0xffffff });
+  // +90 about X puts the plane's v = 0 edge at -z (the material is unlit and double-sided, so the facing is moot)
+  g.rotateX(Math.PI / 2);
+  const uv = g.attributes.uv;
+  const [u0, v0, u1, v1] = GROUND_DECAL[cell];
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + (u1 - u0) * uv.getX(i), v0 + (v1 - v0) * uv.getY(i));
+  return g;
+}
+
+/**
+ * Light pool on the ground ahead of a lit vehicle's headlamps: a cone from the
+ * bumper, 7 m long, soft-edged, only ever built for lamps that are on (the
+ * material's `uPoolOn` gates it by hour on top of that).
+ */
+export function lampPool(k, { z, dir = 1, w = 3.4, len = 7.0, y = 0.02, on = true, tint = 0xffd9a0 }) {
+  if (!on) return;
+  const g = groundQuad('cone', w, len);
+  if (dir < 0) g.rotateY(Math.PI);
+  k.add('pool', g, { pos: [0, y, z + dir * len * 0.5], tint });
+}
+
+/** Contact occlusion under a tyre: a dark soft patch tied to the wheel's contact so it drops with it. */
+export function contactBlob(k, { x, z, r, w, contact, y = 0.006 }) {
+  k.add('pool', groundQuad('blob', w * 2.4, r * 1.7), { pos: [x, y, z], tint: 0x000000, contact });
 }
