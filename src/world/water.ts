@@ -122,7 +122,7 @@ float slopePdfPeaked(vec2 sh, vec2 va, float st, float mss) {
 // dx, dy: world-space extent of the pixel (screen derivatives of the surface position). The result is
 // capped so no pixel outshines the sun path by more than a few times (bloom stays a soft halo on the path
 // and never bleeds over geometry next to it).
-const float SPARK_SHARE = 0.38;
+const float SPARK_SHARE = 0.42;
 const float GLITTER_CAP = 6.0;
 float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, float t) {
   float NdotL = dot(N, L);

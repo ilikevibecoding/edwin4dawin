@@ -182,7 +182,7 @@ export class Atmosphere {
     // humid night air: distant city lights soften into the (city-lit) haze rather than staying pin sharp
     u.uHazeDensity.value = p.hazeDensity * (1 + 0.8 * s.night);
     // light pollution scale of the lit city; Sky.render derives the camera-relative glow from it every frame
-    u.uCityGlow.value.w = 0.045 * s.night;
+    u.uCityGlow.value.w = 0.016 * s.night;
     u.uHazeHeight.value = p.hazeHeight;
     u.uCloudCoverage.value = p.coverage;
     u.uCloudBase.value = p.cloudBase;

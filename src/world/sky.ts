@@ -126,7 +126,9 @@ float envelope(vec3 p, vec4 f, out float hf, out float hn, out float H) {
   // cumulus keep a fairly flat base, but a soft enough one for the shape noise to hang lumps and rags from
   // it (a hard ramp read as bases sliced by a plane); a closed deck gets a softer one carved into hanging
   // cells. The upper two thirds of the column are a soft ramp the shape noise cuts into cauliflower lobes.
-  float baseRamp = mix(0.13, 0.22, deck);
+  // The ramp is capped at a fraction of the column's own height: a low tuft is otherwise all ramp and the
+  // noise shreds it into drifting fragments.
+  float baseRamp = min(mix(0.13, 0.22, deck), 0.35 * H);
   float v = smoothstep(0.0, baseRamp, hf) * (1.0 - smoothstep(0.25, 1.0, hn)) * (1.0 - smoothstep(0.9, 1.0, hf));
   // cov^2: the soft footprint fringe thins out for the noise to shred instead of forming a plate
   return cov * cov * v;
@@ -143,13 +145,13 @@ float shapeDensity(float e, float hn, vec4 n) {
   float shape = clamp((n.r * 0.6 + n.g * 0.25 + n.a * 0.15 - 0.3) / 0.7, 0.0, 1.0);
   // bases are mottled and ragged (hanging fragments, holes where the column is thin); the erosion grows
   // toward the top where it carves the lobes
-  float erosion = mix(0.85, 1.3, clamp(hn, 0.0, 1.0));
+  float erosion = mix(0.8, 1.3, clamp(hn, 0.0, 1.0));
   return e * 1.2 - (1.0 - shape) * erosion;
 }
 
 /** Expected noised density for an envelope value (what shapeDensity averages to over the noise): the
  *  envelope alone would count the soft fringe outside the visible surface as cloud. */
-float meanDensity(float e, float hn) { return clamp(e * 1.2 - 0.5 * mix(0.85, 1.3, clamp(hn, 0.0, 1.0)), 0.0, 1.0); }
+float meanDensity(float e, float hn) { return clamp(e * 1.2 - 0.5 * mix(0.8, 1.3, clamp(hn, 0.0, 1.0)), 0.0, 1.0); }
 
 /** Density without edge detail (used by the light march). */
 float densityBase(vec3 p, vec4 f) {
@@ -264,10 +266,15 @@ void main() {
     // horizon haze takes over); at night the city's light pollution lights the undersides over the lit
     // area (added per sample below: it falls off with the distance from the city)
     vec3 gndAmb = uGroundColor * 0.18 + uSunHazeColor * 0.32 * lowSun;
-    float cityK = uCityGlow.w > 0.0 ? 1.6 : 0.0;
+    float cityK = uCityGlow.w > 0.0 ? 1.4 : 0.0;
     // the ceiling thins out over the last part of the march so its far end dissolves column by column (the
     // thick cores last longest) instead of ending on one iso-distance line above the horizon
-    float farFade0 = 0.5 * uMaxDist, farFadeK = 1.0 / (0.5 * uMaxDist);
+    float farFade0 = 0.6 * uMaxDist, farFadeK = 1.0 / (0.4 * uMaxDist);
+    // a closed deck scatters far more light down through itself than a lone tower's base receives (multiple
+    // scattering across the whole sheet): its underside floor is higher and its cells contrast more
+    float deck = smoothstep(0.45, 0.7, uCloudCoverage);
+    float aoFloor = mix(0.12, 0.24, deck);
+    vec2 mottRange = mix(vec2(0.6, 1.3), vec2(0.45, 1.45), deck);
 
     int level = 0;          // 0 coarse, 1 fine, 2 surface
     int empty = 0;
@@ -327,11 +334,11 @@ void main() {
       float below = max(hf, 0.0) * thick * mix(1.3, 0.6, mott);
       // walls: a sample near the outer surface (envelope well below 1) sees half the sky sideways
       float side = (1.0 - 0.7 * e) * smoothstep(0.0, 0.3, hn) * 0.6;
-      float aoSky = max(mix(0.12, 1.0, exp(-above * 0.0022)), side);
+      float aoSky = max(mix(aoFloor, 1.0, exp(-above * 0.0022)), side);
       float aoGnd = max(mix(0.15, 1.0, exp(-below * 0.003)), side);
       vec3 gnd = gndAmb;
       if (cityK > 0.0) gnd += CITY_GLOW_COLOR * (cityK * cityGlowAt(p.xz));
-      vec3 amb = (skyAmb * aoSky + gnd * aoGnd) * mix(0.6, 1.3, mott);
+      vec3 amb = (skyAmb * aoSky + gnd * aoGnd) * mix(mottRange.x, mottRange.y, mott);
       vec3 S = lightCol * sunTerm + amb;
       float a = 1.0 - exp(-dens * SIGMA * dt);
       col += T * a * S;
@@ -550,7 +557,7 @@ export class Sky {
     const d = Math.hypot(dx, dz);
     if (d > 1) v.set(dx / d, dz / d, 0, 0); else v.set(0, -1, 0, 0);
     const r = g.z / Math.max(d, 1);
-    v.z = Math.min(1.6, Math.max(0.12, r));
+    v.z = Math.min(1.4, Math.max(0.1, r * 0.6));
     v.w = g.w * Math.min(1, Math.pow(r, 0.8) * 1.2);
   }
 
