@@ -166,7 +166,7 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         float armW0 = 0.45 + 0.3 * w0 + 0.012 * d;
         float armW = max(armW0, 0.8 * uTexel);
         float dy = ay - armY;
-        float armEnv = 1.0 - smoothstep(armLen * 0.45, armLen, d);
+        float armEnv = 1.0 - smoothstep(armLen * 0.25, armLen * 0.7, d);
         float armBump = exp(-dy * dy / (armW * armW));
         // the arms are glassy crests at taxi speed and only carry broken foam streaks once the bow wave breaks
         // (a few metres per second); none on the first metres where the arm is still inside the hull's bow wave
