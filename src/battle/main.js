@@ -144,6 +144,46 @@ const VIEWS = {
     yaw: 0.7,
     pitch: 0.25,
   },
+  providence_far: {
+    ship: { side: "separatist", cls: "providence", i: 2 },
+    distance: 10000,
+    yaw: -1.2,
+    pitch: 0.2,
+  },
+  providence_tower: {
+    ship: { side: "separatist", cls: "providence", i: 0 },
+    distance: 420,
+    yaw: -1.1,
+    pitch: 0.28,
+    offset: [0, 220, 250],
+  },
+  providence_hangar: {
+    ship: { side: "separatist", cls: "providence", i: 0 },
+    distance: 380,
+    yaw: -1.8,
+    pitch: 0.16,
+    offset: [-90, -20, 40],
+  },
+  providence_stern: {
+    ship: { side: "separatist", cls: "providence", i: 0 },
+    distance: 700,
+    yaw: 0.55,
+    pitch: 0.22,
+    offset: [0, -10, 480],
+  },
+  munificent_far: {
+    ship: { side: "separatist", cls: "munificent", i: 2 },
+    distance: 10000,
+    yaw: 2.0,
+    pitch: 0.18,
+  },
+  recusant_far: {
+    ship: { side: "separatist", cls: "recusant", i: 2 },
+    distance: 10000,
+    yaw: 1.1,
+    pitch: 0.18,
+  },
+  fighters_close: { fighter: 0, distance: 70, yaw: 2.4, pitch: 0.2 },
   providence_medium: {
     ship: { side: "separatist", cls: "providence", i: 1 },
     distance: 2200,
@@ -402,6 +442,11 @@ function applyView(name) {
     cinematic.stop();
     orbit.enabled = true;
     let target = v.target;
+    if (v.fighter !== undefined) {
+      const list = fighters.all.filter((f) => f.alive && f.side === "republic");
+      const f = list[v.fighter % Math.max(1, list.length)] || fighters.all[0];
+      target = f ? f.pos.toArray() : [0, 0, 0];
+    }
     if (v.ship) {
       const s = shipFor(v.ship);
       const off = new THREE.Vector3(...(v.offset || [0, 0, 0])).applyQuaternion(
@@ -419,6 +464,7 @@ function applyView(name) {
   post.finalPass.uniforms.seed.value = 0.37;
   debugAPI.freezeGrain = true;
   framesRendered = 0;
+  perf.resetTiming();
 }
 
 const debugAPI = {

@@ -178,7 +178,9 @@ export function part(
   let g = geo.index ? geo.toNonIndexed() : geo;
   if (!g.attributes.normal) g.computeVertexNormals();
   if (uv === "planar") g = planarUV(g, texel);
-  tintGeometry(g, color);
+  // color: null keeps a colour attribute the builder already painted (per-vertex tints, gradients)
+  if (color !== null || !g.attributes.color)
+    tintGeometry(g, color === null ? 0xffffff : color);
   return { geo: g, mat, lod, name };
 }
 

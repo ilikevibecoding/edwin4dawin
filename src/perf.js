@@ -35,6 +35,15 @@ export class PerfMonitor {
     }
   }
 
+  // forget the frame-time history (after a camera cut the EMA would otherwise report the old view)
+  resetTiming() {
+    this.frameMs = 16;
+    this.jsMs = 0;
+    this.sampleIdx = 0;
+    this.sampleCount = 0;
+    this._frameStart = 0;
+  }
+
   markReady() {
     this.readyMs = Math.round(performance.now());
   }

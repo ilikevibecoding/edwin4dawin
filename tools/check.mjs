@@ -34,6 +34,7 @@ const errors = [];
 page.on("console", (m) => {
   const text = m.text();
   if (text.includes("WebSocket") || text.includes("[vite]")) return;
+  if (text.includes("GPU stall due to ReadPixels")) return; // SwiftShader screenshot path, not the app
   if (m.type() === "error" || m.type() === "warning") {
     errors.push(`[${m.type()}] ${text.slice(0, 300)}`);
     console.log(`[${m.type()}] ${text.slice(0, 300)}`);
