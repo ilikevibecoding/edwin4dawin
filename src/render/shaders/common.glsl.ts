@@ -40,6 +40,8 @@ uniform vec2 uCloudWind;     // world offset of the cloud field (m)
 uniform float uCloudSeed;
 uniform float uNight;        // 0 day .. 1 night
 uniform float uTime;
+uniform vec4 uCityGlow;      // light pollution footprint: xy world xz of the lit city's centre, z its radius (m), w strength (0 by day)
+uniform vec4 uCityGlowView;  // the same glow seen from the camera: xy horizontal unit direction to the centre, z angular width, w horizon radiance scale
 `;
 
 /** 2D cloud coverage field used for both the raymarched clouds' macro shape and the ground shadows.
@@ -97,6 +99,24 @@ float cloudShadow(vec3 wp) {
 
 /** Analytic sky radiance (no clouds) for a direction. Shared by the dome, water reflections and haze. */
 export const GLSL_SKY = /* glsl */ `
+/** Warm colour of the city's light pollution (sodium / warm-white street lighting scattered by the air). */
+const vec3 CITY_GLOW_COLOR = vec3(1.0, 0.58, 0.28);
+/** Light pollution on the underside of the air / clouds above a world position: the lit core plus a wider,
+ *  weaker halo for the suburbs. Radiance scale, 0 by day. */
+float cityGlowAt(vec2 wp) {
+  float d2 = dot(wp - uCityGlow.xy, wp - uCityGlow.xy) / (uCityGlow.z * uCityGlow.z);
+  return uCityGlow.w * (exp(-d2) + 0.35 * exp(-d2 * 0.15));
+}
+/** Light pollution seen from the camera: a warm dome low over the horizon in the city's direction (the whole
+ *  horizon when the camera is over the city), fading with elevation; the zenith stays dark. */
+vec3 cityGlowSky(vec3 dir) {
+  if (uCityGlowView.w <= 0.0) return vec3(0.0);
+  float hl = length(dir.xz);
+  float az = hl > 1e-4 ? dot(dir.xz / hl, uCityGlowView.xy) : 1.0;
+  float azw = exp(-(1.0 - az) / max(uCityGlowView.z, 0.02));
+  float elev = exp(-max(dir.y, 0.0) * 9.0);
+  return CITY_GLOW_COLOR * (uCityGlowView.w * azw * elev);
+}
 /** Sky gradient. uZenithColor is the deep blue of the upper sky, uHorizonColor the saturated blue-cyan a
  *  few degrees above the horizon; the blend has a short tail (most of it happens below 20 deg) so the sky
  *  stays saturated down to ~5 deg. Only the last ~2 deg whiten toward the haze colour (the band the
@@ -117,11 +137,18 @@ vec3 skyRadiance(vec3 dir) {
   float horizonMix = pow(1.0 - up, 14.0);
   float mie = pow(max(cosSun, 0.0), 8.0) * (0.08 + 0.5 * horizonMix);
   col += uSunHazeColor * mie * smoothstep(-0.1, 0.15, uSunDir.y);
+  // low sun: a wide warm aureole around the disc (aerosol forward scatter through the long path), so the
+  // sun reads as the source of the sunset haze instead of a small disc in a flat peach sky
+  float lowSun = (1.0 - smoothstep(0.05, 0.3, uSunDir.y)) * smoothstep(-0.1, 0.0, uSunDir.y);
+  col += uSunHazeColor * pow(max(cosSun, 0.0), 45.0) * 0.4 * lowSun;
   // sunset band
   float band = exp(-abs(y) * 9.0) * pow(max(cosSun, 0.0), 2.0);
   col += uSunHazeColor * band * 0.35 * (1.0 - smoothstep(0.15, 0.5, uSunDir.y)) * smoothstep(-0.12, 0.05, uSunDir.y);
+  // night: the city's light pollution over the horizon
+  vec3 glow = cityGlowSky(dir);
+  col += glow;
   // below the horizon: dark sea haze
-  col = mix(col, uHazeColor * 0.75, smoothstep(0.0, -0.08, y));
+  col = mix(col, uHazeColor * 0.75 + glow * 0.5, smoothstep(0.0, -0.08, y));
   return col;
 }
 vec3 sunDisc(vec3 dir) {

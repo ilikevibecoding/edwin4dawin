@@ -106,20 +106,24 @@ float slopePdf(vec2 sh, vec2 va, float st, float mss) {
 float slopePdfPeaked(vec2 sh, vec2 va, float st, float mss) {
   return 0.75 * slopePdf(sh, va, st, mss * 0.7) + 0.25 * slopePdf(sh, va, st, mss * 1.9);
 }
-// Sun glitter as a resolvable sparkle field. The unresolved slope variance is carried by a world-anchored
-// random slope field of nine octaves (0.7 m to 180 m cells, of which a pixel evaluates the five starting
-// at the finest whose cell spans a few pixels; the variance of the octaves too fine for the current
-// footprint is handed to the finest resolvable one), plus a residual lobe (13 %) for the facets no octave
-// resolves. Wherever
-// the field's slope hits the specular slope a glint lights up: dense in the centre of the path, sparse at
-// its edges, of a few pixels at any distance. The expectation over the field equals the analytic
-// distribution with the full variance, so the glitter energy does not depend on the distance; the field
-// evolves as a slow Gaussian process in time and drifts with the wind, so glints wax and wane rather than
-// flicker, and camera motion only moves them with the water they sit on.
+// Sun glitter: the analytic anisotropic slope distribution of the unresolved facets (a smooth streak of
+// highlights toward the sun whose width follows the filtered slope variance) with a sparkle riding on it.
+// The sparkle is a world-anchored random slope field that carries a fixed share (SPARK_SHARE) of the slope
+// variance; the rest stays in the analytic lobe, which is therefore always wide enough that the field only
+// modulates the path (glints a few times brighter than the path around them, never a blown speck) instead
+// of thresholding it into contour worms. Only the two finest octaves the pixel footprint resolves are
+// evaluated (cells of 3-12 px: dots and short dashes that follow the water, a fine grain from altitude), the
+// coarsest fading out as the finer fades in so the texture slides with the distance without popping. The
+// field evolves as a slow Gaussian process in time and drifts with the wind, so glints wax and wane rather
+// than flicker, and camera motion only moves them with the water they sit on.
 // Glitter is seen looking toward the light at a grazing angle close to its elevation, which foreshortens
 // the water along the light's azimuth; the cells are stretched along that (world-fixed) azimuth by the
 // same factor so a glint stays a few pixels in both screen directions instead of a wide horizontal blob.
-// dx, dy: world-space extent of the pixel (screen derivatives of the surface position).
+// dx, dy: world-space extent of the pixel (screen derivatives of the surface position). The result is
+// capped so no pixel outshines the sun path by more than a few times (bloom stays a soft halo on the path
+// and never bleeds over geometry next to it).
+const float SPARK_SHARE = 0.38;
+const float GLITTER_CAP = 6.0;
 float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, float t) {
   float NdotL = dot(N, L);
   float NdotV = dot(N, V);
@@ -134,7 +138,7 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
   float st = 1.0 + 0.3 * (1.0 - clamp(V.y, 0.0, 1.0));
   float P;
   // the field is only evaluated where the highlight (widened to catch the field's tails) is visible
-  if (slopePdf(sh, va, st, mss * 4.0) * mss > 1e-4) {
+  if (slopePdf(sh, va, st, mss * 3.0) * mss > 1e-4) {
     vec2 sa = L.xz;
     float sl = length(sa);
     sa = sl > 1e-3 ? sa / sl : va;
@@ -147,27 +151,20 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
     float resolved = 0.0; // fraction of the variance they carry
     vec2 gp = wp + uWindDir * (0.9 * t);
     vec2 gq = vec2(dot(gp, sa) / stretch, dot(gp, sc));
-    // nine octaves of 0.7 m * 2^o with variance shares 0.272 * 0.7^o (87 % in all); a pixel evaluates the five
-    // starting at the finest octave whose cell spans more than 3 px. That one fades in until its cell spans
-    // 6 px ('u'), the coarsest of the five fades out over the same stretch, so the window slides seamlessly;
-    // the shares of the octaves finer than the window ride on its finest member, those coarser on its
-    // fourth, so the field's variance (and the 13 % residual lobe) never depends on the distance.
+    // octaves of 0.7 m * 2^o (o <= 8): the finest whose cell spans more than 3 px fades in until it spans
+    // 6 px ('u'), the next carries the other half of the share, the third fades out as the first fades in
     float oF = log2(max(footEff / 0.7, 1e-4)) + 1.585;
     int o0 = int(floor(oF)) + 1;
     float u = float(o0) - oF;
     if (o0 < 0) { o0 = 0; u = 1.0; }
-    float w0 = smoothstep(0.0, 1.0, u), w4 = 1.0 - w0;
-    float sh0 = 0.272 * pow(0.7, float(o0));
-    float carry = 0.272 * (1.0 - pow(0.7, float(o0))) / 0.3;
-    float extra3 = max(0.272 * (pow(0.7, float(o0 + 5)) - pow(0.7, 9.0)) / 0.3, 0.0) + (o0 + 4 <= 8 ? sh0 * 0.2401 * (1.0 - w4 * w4) : 0.0);
-    for (int i = 0; i < 5; i++) {
+    float w0 = smoothstep(0.0, 1.0, u);
+    for (int i = 0; i < 3; i++) {
       int o = o0 + i;
       if (o > 8) break;
       float fo = float(o);
       float cell = 0.7 * exp2(fo);
-      float f = sh0 * pow(0.7, float(i)) + carry + (i == 3 ? extra3 : 0.0);
-      float w = i == 0 ? w0 : (i == 4 ? w4 : 1.0);
-      carry = i == 0 ? f * (1.0 - w * w) : 0.0;
+      float f = SPARK_SHARE * 0.5;
+      float w = i == 0 ? w0 : (i == 2 ? 1.0 - w0 : 1.0);
       if (w < 0.003) continue;
       vec2 q = gq / cell;
       // two independent value-noise vectors (0.214 rms per component) rotated by a slow phase: a unit-variance
@@ -190,7 +187,7 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
   float G = smithBeckmann(NdotV, alpha) * smithBeckmann(NdotL, alpha);
   float LdotH = clamp(dot(L, H), 0.0, 1.0);
   float F = 0.02 + 0.98 * pow(1.0 - LdotH, 5.0);
-  return D * F * G / (4.0 * NdotV);
+  return min(D * F * G / (4.0 * NdotV), GLITTER_CAP);
 }
 // Mirror image of the scene along the reflected ray (render/reflection.ts). P: surface point, V: view
 // vector, N: wave normal, mss: unresolved slope variance, dist: camera distance. Returns premultiplied
