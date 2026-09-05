@@ -1,7 +1,7 @@
 # Status — D: hangar + ship systems (Deck 4 + infrastructure)
 
-Branch: `cursor/sd-hangar-systems-c071` · Last push: 6bc2f206 · 2026-09-05 04:40 UTC
-Run: `bc-27044d48-9403-4636-af76-59d715aec071` · Phase: 3 (two critic loops done; final hangar round landed; waiting on A's scaffold to merge)
+Branch: `cursor/sd-hangar-systems-c071` · Last push: 9f4f8287 · 2026-09-05 05:05 UTC
+Run: `bc-27044d48-9403-4636-af76-59d715aec071` · Phase: 3 (hangar critic loop closed at 6.6 after five passes; all modules within budget; waiting on A's scaffold to merge)
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
 
@@ -284,12 +284,35 @@ What each delivers:
   landing lamp peak 6.8 → 1.3 with a recessed lens; 22/22. Full deck `full-r4`: 13 modules, 61 views,
   0 warnings, 0 page errors, load 11.1 s, hangar 188 ms.
 
+- Fifth blind critic (round-4 frames): **mean 6.6/10** (deck 6.5, aperture 6.5, racks 7, aft wall 7,
+  balcony 6.5, bay door 7, exterior 5.5). Hangar trajectory over the loop: 4–5 → 5.6 → 6.2 → 6.6; the
+  three close frames (racks, aft wall, bay door) are at the corridors' 7. Of the previous pass's 18
+  points it marked 5 fixed, 10 partly, 3 not. Its two "BUG" flags were checked and are not bugs: (1)
+  "HANGAR CONTROL sits 1/3 of the way up the wall, so the ceiling is ~40 m or the balcony ~20 m" — it
+  measured the sign against the top of the frame, not the ceiling: the aft-wall camera (eye 1.7 m,
+  70 m from the wall, ~46° vertical FOV) cuts the wall at ~31 m; the ceiling is at 60 m and the balcony
+  at 12 m (`CEIL −12`, `BALCONY.y −60`, `FLOOR −72`), and the sign's 100 px above the floor line is
+  exactly where 12 m projects; (2) "P1-03 shows on both rails" — the same slot id is on the tier beam
+  and on the wall behind it by design (2× crop: beams P1-04/03/02, upper rail P2-05…01, wall P1-03/02/01).
+  Its top item for the third pass running is the ceiling grid, plus the crane girder now reading as a
+  "blown-out white bar" (round 4 had lifted it from invisible): an emissive-only trim followed —
+  ceiling runs 0.84/0.5/0.86 → 0.4/0.18/0.42 (strip peaks 207 → 169 sRGB, the per-bay hierarchy reads
+  at 640×360), crane strips 0.9 → 0.42 and girder grey 0.14 → 0.10 (bar region mean 98 → 81); hall
+  lighting unchanged. The exterior frame (5.5) stays blocked on A's hull: "the aperture should be the
+  brightest thing in frame and the hangar interior visible through it" needs the surrounding hull for
+  the eye to read it as an opening.
+
 ## Remaining
-1. Fifth blind critic pass on the round-4 frames (in flight). The hangar critic loop closes there unless
-   it reports a geometry bug: four passes have taken it from 4–5 to 6.2 with every item mapped to a
-   change, the hangar is at its descriptor limit and within ~15 % of its tri/build budgets, and the
-   remaining spread to the corridors' 7 is the lighting model (see Requests: shadow-casting key light),
-   which no dressing pass can supply.
+1. The hangar critic loop is closed at 6.6 (five blind passes, every item mapped to a change or an
+   evidence-backed dismissal). What remains on the critics' lists cannot be dressed away: the top two
+   items on the last three passes — "every large surface is one material under one uniform light" and
+   "props read as placed, not present" — are the lighting model (see Requests: shadow-casting key
+   light). The hangar is at 28/28 descriptors and within ~15 % of its tri/build budgets; the next round
+   should run on the real registry with a shadowed key spot, where a single pass will do more than
+   another dressing round. The remaining dressing items from pass 5 (prop fidelity: one crate model
+   reused everywhere, panel lines/edge wear on crates and container; door-leaf scuffs/kick plates; wing
+   panel grid on the fighters; lane routing at the aperture rail — hinges/actuators to show the rail
+   retracts) are listed here for that round.
 2. Load time 12.1 s with all 13 modules is at the §12 limit: the hangar builds in ~200 ms (limit 250) and
    the text/hazard/decal canvas atlases cost ~1 s; candidates are lazy per-room building (A's streaming
    plan already builds in chunks) and sharing one text atlas across modules.
