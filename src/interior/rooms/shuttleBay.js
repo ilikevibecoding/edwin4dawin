@@ -270,8 +270,9 @@ function shuttle(kit, ctx, X, Z, yaw = 0) {
       onWing("tiePanel", new THREE.BoxGeometry(0.7, 0.5, 0.05), 1.6, 6.6, depth);
       onWing("emitRed", new THREE.BoxGeometry(0.5, 0.09, 0.04), 0.9, 4.9, depth);
     }
-    // white edge lights along the leading edge and an amber one on the trailing edge
-    for (const sy of [2.6, 5.2, 7.8]) onWing("emitWhite", new THREE.BoxGeometry(0.16, 0.4, 0.34), lead(sy) + 0.06, sy, atX(0));
+    // dim formation lights along the leading edge and one amber lamp on the trailing edge; the only
+    // bright white per wing is the tip light (six bright leading-edge lamps read as fairy lights)
+    for (const sy of [2.6, 5.2, 7.8]) onWing("emitWhiteDim", new THREE.BoxGeometry(0.16, 0.4, 0.34), lead(sy) + 0.06, sy, atX(0));
     onWing("emitAmber", new THREE.BoxGeometry(0.16, 0.4, 0.34), trail(4.8) - 0.06, 4.8, atX(0));
     // wing-tip cannon pod: fairing through the slab, twin barrels reaching forward past the leading edge
     onWing("tiePanel", new THREE.BoxGeometry(2.0, 0.7, 0.6), 0.9, 8.9, atX(0));
@@ -279,10 +280,10 @@ function shuttle(kit, ctx, X, Z, yaw = 0) {
       onWing("tieHull", new THREE.CylinderGeometry(0.11, 0.13, 3.4, 10).rotateZ(Math.PI / 2), -0.6, 8.95, atX(xf));
       onWing("tiePanel", new THREE.CylinderGeometry(0.15, 0.15, 0.5, 10).rotateZ(Math.PI / 2), -2.2, 8.95, atX(xf));
     }
-    // hinge fairing and a red tip light (the wings stay well above head height: no collider needed)
+    // hinge fairing and a white tip light (the wings stay well above head height: no collider needed)
     cylZ("tiePanel", s * 1.9, 4.0, 1.4, 0.45, 5.6);
     const tip = new THREE.Vector3(0, 9.7, 1.4).applyAxisAngle(new THREE.Vector3(0, 0, 1), lean);
-    box("emitRed", s * 1.9 + tip.x, 4.0 + tip.y, tip.z, 0.3, 0.2, 0.6);
+    box("emitWhite", s * 1.9 + tip.x, 4.0 + tip.y, tip.z, 0.3, 0.2, 0.6);
   }
   // engines: rear block with three blue thrusters
   box("tiePanel", 0, 3.0, 6.7, 3.0, 1.8, 0.9);
@@ -556,19 +557,30 @@ function groundCrew(kit, ctx) {
   kit.box("paintedMetal", -48.6, 0.18, -111.0, 0.9, 0.36, 1.0, { color: PALETTE.impDark, texel: 2 });
   kit.box("emitAmber", -48.6, 0.37, -111.0, 0.3, 0.02, 0.3);
   kit.collider([-49.05, 0, -111.5], [-48.15, 0.4, -110.5], "coupling");
-  // deck crew: one crouched at the coupling, one standing by the tug with a hose over the shoulder
+  // deck crew: one crouched at the coupling, one standing by the tug walking a hose: he holds a bight
+  // of it at chest height, the run passing through both hands, one end loose on the deck beside him,
+  // the other trailing back to the bowser's pump end
   crewFigure(kit, ctx, { x: -47.9, z: -110.0, yaw: -2.3, crouch: true });
-  crewFigure(kit, ctx, { x: -45.2, z: -103.6, yaw: 2.4 });
-  pipeRun(kit, [[-45.0, 1.35, -103.4], [-44.4, 0.9, -102.9], [-44.2, 0.1, -102.6], [-45.6, 0.1, -102.8]], 0.05, PALETTE.impBlack, "rubber");
+  // the standing figure faces the bowser (-z), near profile to the bay camera at (-38, -105), so the
+  // arms bent forward to the hose silhouette clear of the torso instead of hiding behind it
+  const walker = crewFigure(kit, ctx, { x: -45.2, z: -103.6, yaw: 2.8 });
+  const [hl, hr] = walker.hands; // hose height / depth through the hands, in the figure's frame
+  pipeRun(kit, [walker.local(-1.3, 0.1, 1.8), walker.local(-0.75, 0.45, 0.85), walker.local(-0.45, hl, hr + 0.02), walker.local(0.45, hl, hr + 0.02), walker.local(0.85, 0.5, 0.95), walker.local(1.3, 0.1, 1.9), [-44.3, 0.1, -109.0]], 0.05, PALETTE.impBlack, "rubber");
 }
 
-/** Deck crew figure: capsule torso, cylinder legs and arms, black helmet with a dark visor, in Imperial grey. */
+/**
+ * Deck crew figure: capsule torso with a chest pack, cylinder legs and two-segment arms, black helmet
+ * with a dark visor, in Imperial grey. Standing, both arms are bent forward to hold a hose at chest
+ * height; crouched, they reach forward-down to the coupling. Returns the hands' height / depth in the
+ * figure's frame and a local→world helper so a prop can be threaded through them.
+ */
 function crewFigure(kit, ctx, { x, z, yaw = 0, crouch = false }) {
   const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-  const add = (mat, geo, lx, ly, lz, extra = {}) => {
+  const local = (lx, ly, lz) => {
     const v = new THREE.Vector3(lx, ly, lz).applyQuaternion(q);
-    return kit.add(mat, geo, { pos: [v.x + x, ly, v.z + z], quat: q, ...extra });
+    return [v.x + x, ly, v.z + z];
   };
+  const add = (mat, geo, lx, ly, lz, extra = {}) => kit.add(mat, geo, { pos: local(lx, ly, lz), quat: q, ...extra });
   const grey = { color: PALETTE.impGrey, texel: 3 };
   const legH = crouch ? 0.5 : 0.85;
   for (const s of [-1, 1]) {
@@ -576,14 +588,29 @@ function crewFigure(kit, ctx, { x, z, yaw = 0, crouch = false }) {
     add("rubber", new THREE.BoxGeometry(0.16, 0.1, 0.3), s * 0.13, 0.05, 0.04, { color: PALETTE.impBlack });
   }
   const torsoY = legH + 0.05 + 0.42;
-  add("paintedMetal", new THREE.CapsuleGeometry(0.2, 0.5, 4, 10), 0, torsoY, 0, grey);
-  add("rubber", new THREE.BoxGeometry(0.42, 0.08, 0.28), 0, legH + 0.12, 0, { color: PALETTE.impBlack });
-  add("emitBlue", new THREE.BoxGeometry(0.06, 0.03, 0.01), 0.1, torsoY + 0.14, 0.2);
-  // arms: down at the sides, or forward when crouched at the coupling
+  add("paintedMetal", new THREE.CapsuleGeometry(0.16, 0.5, 4, 10), 0, torsoY, 0, grey);
+  add("rubber", new THREE.BoxGeometry(0.36, 0.08, 0.26), 0, legH + 0.12, 0, { color: PALETTE.impBlack });
+  // chest pack with a status lamp
+  add("paintedMetal", new THREE.BoxGeometry(0.26, 0.22, 0.12), 0, torsoY + 0.1, 0.16, { color: PALETTE.impDark, texel: 3 });
+  add("emitBlue", new THREE.BoxGeometry(0.08, 0.03, 0.01), 0.05, torsoY + 0.15, 0.225);
+  // arms: upper arm shoulder → elbow, forearm elbow → hand (pipeRun puts a sphere at the elbow)
+  const shoulderY = torsoY + 0.2;
+  const handY = torsoY - 0.02;
+  const handZ = 0.34;
   for (const s of [-1, 1]) {
-    const arm = new THREE.CylinderGeometry(0.055, 0.06, 0.62, 8);
-    if (crouch) arm.rotateX(-1.1);
-    add("paintedMetal", arm, s * 0.27, crouch ? torsoY - 0.05 : torsoY - 0.1, crouch ? 0.28 : 0.02, grey);
+    const shoulder = local(s * 0.21, shoulderY, 0.02);
+    if (crouch) {
+      const elbow = local(s * 0.26, torsoY - 0.16, 0.22);
+      const hand = local(s * 0.16, torsoY - 0.3, 0.46);
+      pipeRun(kit, [shoulder, elbow, hand], 0.055, PALETTE.impGrey, "paintedMetal");
+      add("rubber", new THREE.BoxGeometry(0.1, 0.12, 0.1), s * 0.16, torsoY - 0.32, 0.5, { color: PALETTE.impBlack });
+    } else {
+      // elbows out past the torso (0.16) and forearms forward to the hose
+      const elbow = local(s * 0.31, torsoY - 0.14, 0.12);
+      const hand = local(s * 0.14, handY, handZ);
+      pipeRun(kit, [shoulder, elbow, hand], 0.062, PALETTE.impGrey, "paintedMetal");
+      add("rubber", new THREE.BoxGeometry(0.11, 0.15, 0.13), s * 0.14, handY, handZ + 0.02, { color: PALETTE.impBlack });
+    }
   }
   // helmet: black dome with a dark visor band and a chin guard
   const headY = torsoY + 0.5;
@@ -592,6 +619,7 @@ function crewFigure(kit, ctx, { x, z, yaw = 0, crouch = false }) {
   add("paintedMetal", new THREE.BoxGeometry(0.22, 0.08, 0.1), 0, headY - 0.12, 0.08, { color: PALETTE.impDark, texel: 3 });
   kit.collider([x - 0.3, 0, z - 0.3], [x + 0.3, headY + 0.15, z + 0.3], "crew");
   void ctx;
+  return { hands: [handY, handZ], local };
 }
 
 /** Tug cart: low four-wheel tractor with a drawbar, a seat, a roll bar with a beacon and a rear hitch. */
@@ -604,13 +632,18 @@ function tugCart(kit, ctx, x, z, yaw) {
   const box = (mat, lx, ly, lz, w, h, d, extra = {}) => add(mat, new THREE.BoxGeometry(w, h, d), lx, ly, lz, extra);
   box("paintedMetal", 0, 0.45, 0, 1.4, 0.5, 2.6, { color: PALETTE.impMid, texel: 1.5 });
   box("hazard", 0, 0.24, 0, 1.42, 0.14, 2.62, { texel: 1 });
-  box("paintedMetal", 0, 0.95, -0.7, 1.2, 0.5, 1.0, { color: PALETTE.impDark, texel: 2 }); // engine cowl
+  // mid-grey engine cowl with a lighter hood panel and a mid-grey seat back: the all-black upper works
+  // read as one silhouette against the dark apron
+  box("paintedMetal", 0, 0.95, -0.7, 1.2, 0.5, 1.0, { color: PALETTE.impMid, texel: 2 });
+  box("paintedMetal", 0, 1.22, -0.7, 1.1, 0.06, 0.9, { color: PALETTE.impGrey, texel: 1.5 }); // hood panel
+  box("paintedMetal", 0, 0.95, -1.21, 1.0, 0.36, 0.02, { color: PALETTE.impBlack, texel: 1.5 }); // grille plate
   box("rubber", 0, 0.85, 0.5, 0.7, 0.16, 0.6, { color: PALETTE.impBlack }); // seat
-  box("rubber", 0, 1.15, 0.85, 0.7, 0.5, 0.1, { color: PALETTE.impBlack });
+  box("paintedMetal", 0, 1.15, 0.87, 0.74, 0.54, 0.06, { color: PALETTE.impMid, texel: 1.5 }); // seat back
+  box("rubber", 0, 1.13, 0.83, 0.6, 0.4, 0.04, { color: PALETTE.impBlack });
   add("metal", new THREE.CylinderGeometry(0.02, 0.02, 0.5, 6), 0, 1.0, -0.15, { color: PALETTE.steel });
   add("metal", new THREE.TorusGeometry(0.16, 0.02, 6, 14).rotateX(Math.PI / 2 - 0.5), 0, 1.22, -0.2, { color: PALETTE.impBlack });
-  for (const s of [-1, 1]) box("paintedMetal", s * 0.6, 1.4, 0.4, 0.08, 1.2, 0.08, { color: PALETTE.impDark, texel: 2 }); // roll bar
-  box("paintedMetal", 0, 2.0, 0.4, 1.28, 0.08, 0.08, { color: PALETTE.impDark, texel: 2 });
+  for (const s of [-1, 1]) box("paintedMetal", s * 0.6, 1.4, 0.4, 0.08, 1.2, 0.08, { color: PALETTE.impMid, texel: 2 }); // roll bar
+  box("paintedMetal", 0, 2.0, 0.4, 1.28, 0.08, 0.08, { color: PALETTE.impMid, texel: 2 });
   add("emitAmber", new THREE.CylinderGeometry(0.08, 0.08, 0.14, 10), 0, 2.11, 0.4);
   for (const sx of [-0.75, 0.75]) for (const sz of [-0.95, 0.95]) add("rubber", new THREE.CylinderGeometry(0.28, 0.28, 0.24, 12).rotateZ(Math.PI / 2), sx, 0.28, sz, { color: PALETTE.impBlack });
   box("metal", 0, 0.3, 1.6, 0.1, 0.1, 0.7, { color: PALETTE.steel }); // drawbar
