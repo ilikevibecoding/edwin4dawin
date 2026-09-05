@@ -62,10 +62,11 @@ export function buildLucrehulk(mats) {
   const grooves = [1010, 1200];
   const STRIP = K.strip; // half height of the recessed docking band on the outer wall
   // blue-violet Separatist panels per arm (degrees from the bow, starboard arm; mirrored to port): a
-  // long chevron band along the inner half of the deck, a wide trapezoid behind the tip roof, an
-  // outer-band patch, a short chevron toward the stern
+  // long slanted band with a thin companion stripe along the inner half of the deck, a wide trapezoid
+  // behind the tip roof, an outer-band patch, a slanted panel and a short chevron toward the stern
   const panelDefs = [
-    { r: [1020, 1110], inner: [64, 118], outer: [68, 112], color: PAL.indigo },
+    { r: [1020, 1100], inner: [62, 114], outer: [66, 118], color: PAL.indigo },
+    { r: [1118, 1146], inner: [78, 112], outer: [80, 114], color: PAL.indigo },
     { r: [1230, 1340], inner: [54, 66], outer: [52, 70], color: PAL.indigoDk },
     {
       r: [K.bandR + 4, K.bevelR - 6],
@@ -76,8 +77,8 @@ export function buildLucrehulk(mats) {
     },
     {
       r: [1180, 1290],
-      inner: [128, 146],
-      outer: [132, 142],
+      inner: [128, 144],
+      outer: [132, 148],
       color: PAL.indigo,
     },
     {
