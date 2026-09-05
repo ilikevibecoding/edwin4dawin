@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { initBlocks, BLOCKS, B } from '../src/blocks.js';
 import { WorldGen } from '../src/worldgen.js';
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH, TICK_RATE } from '../src/constants.js';
-import { register, SPACEPORT, DECK_Y, STATION_Y } from '../src/coruscant/spaceport.js';
+import { register, SPACEPORT, DECK_Y, STATION_Y, FRONTIER, FRONTIER_DECK_TOP, FRONTIER_DECK_Y } from '../src/coruscant/spaceport.js';
 import { shipModels, buildShipGeometry } from '../src/ships/models.js';
 import { buildShips, routePose, nextPhaseStart, ShipTraffic, HIDE_DIST } from '../src/ships/traffic.js';
 
@@ -32,6 +32,13 @@ let mismatches = 0, genMs = 0, n = 0;
     for (let i = 0; i < c.blocks.length; i++) if (c.blocks[i] !== c2.blocks[i]) { mismatches++; break; }
     chunks.set(key(cx, cz), c);
   }
+  // the frontier mini spaceport too
+  for (let cx = Math.floor(FRONTIER.x0 / CS); cx <= Math.floor((FRONTIER.x1 - 1) / CS); cx++) for (let cz = Math.floor(FRONTIER.z0 / CS); cz <= Math.floor((FRONTIER.z1 - 1) / CS); cz++) {
+    const c = { cx, cz, blocks: new Uint8Array(CS * CS * CH) }; gen.generateChunk(c);
+    const c2 = { cx, cz, blocks: new Uint8Array(CS * CS * CH) }; gen.generateChunk(c2);
+    for (let i = 0; i < c.blocks.length; i++) if (c.blocks[i] !== c2.blocks[i]) { mismatches++; break; }
+    chunks.set(key(cx, cz), c);
+  }
 }
 const get = (x, y, z) => {
   if (y < 0 || y >= CH) return 0;
@@ -51,7 +58,7 @@ function standHeights(x, z) {
   return out;
 }
 // strict walk (auto-step <= 0.6, drops <= 3, no jumping) from a start to a set of targets; returns the unreached ones
-function walkFrom(start, targets) {
+function walkFrom(start, targets, box = { x0: S.x0 - 80, x1: S.x1, z0: S.z0, z1: S.z1 }) {
   const seen = new Set(), q = [start];
   const sk = (x, z, h) => `${x},${z},${h}`;
   seen.add(sk(...start));
@@ -61,7 +68,7 @@ function walkFrom(start, targets) {
     left.delete(sk(x, z, h));
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = x + dx, nz = z + dz;
-      if (nx < S.x0 - 80 || nx >= S.x1 || nz < S.z0 || nz >= S.z1) continue;
+      if (nx < box.x0 || nx >= box.x1 || nz < box.z0 || nz >= box.z1) continue;
       for (const nh of standHeights(nx, nz)) {
         if (nh - h > 0.6 || h - nh > 3) continue;
         const k = sk(nx, nz, nh);
@@ -155,6 +162,24 @@ test('strictly walkable (no jumps) from the train platform to every pad, the tow
   assert.deepEqual(unreached, [], 'unreached targets');
 });
 
+test('frontier mini spaceport: deck at the station level, marked pad clear above, roofed terminal, walkable from the west stub', () => {
+  const F = FRONTIER, W = FRONTIER_DECK_Y;
+  assert.ok(F.x0 >= 240 && F.x1 <= 300 && F.z0 >= -40 && F.z1 <= 40, 'inside the reserved area');
+  assert.ok(standHeights(F.deck.x0, 0).includes(W) && standHeights(F.pad.x, F.pad.z).includes(W));
+  assert.equal(get(F.pad.x, FRONTIER_DECK_TOP, F.pad.z), B.GLOW_PANEL);
+  let lamps = 0;
+  for (let x = F.pad.x - 12; x < F.pad.x + 12; x++) for (let z = F.pad.z - 12; z < F.pad.z + 12; z++) {
+    if (get(x, FRONTIER_DECK_TOP, z) === B.CITY_LAMP) lamps++;
+    if (Math.abs(x + 0.5 - F.pad.x) < 10 && Math.abs(z + 0.5 - F.pad.z) < 10) for (let y = W; y <= 135; y++) assert.equal(get(x, y, z), 0, `airspace over the frontier pad at ${x},${y},${z}`);
+  }
+  assert.ok(lamps >= 12);
+  const T = F.terminal;
+  let glass = 0, holo = 0; for (let x = T.x0; x <= T.x1; x++) for (let z = T.z0; z <= T.z1; z++) for (let y = W; y <= W + 5; y++) { const id = get(x, y, z); if (id === B.STEEL_GLASS) glass++; if (id === B.HOLO_SIGN) holo++; }
+  assert.ok(glass > 100 && holo > 10, `glass ${glass} holo ${holo}`);
+  const unreached = walkFrom([F.deck.x0, 0, W], [[F.pad.x, F.pad.z, W], [T.x0 + 6, 0, W]], F);
+  assert.deepEqual(unreached, []);
+});
+
 // --- ship models --------------------------------------------------------------------------------------------------
 test('four ship designs 8..24 blocks long, one culled geometry each with emissive engine faces', () => {
   const models = shipModels();
@@ -178,6 +203,12 @@ const ships = buildShips(S.pads, DECK_Y);
 test('at least 12 ships: one landing cycle per pad plus lane loops; poses are a pure function of time', () => {
   assert.ok(ships.length >= 12, `${ships.length} ships`);
   assert.equal(ships.filter((s) => s.pad !== null).length, S.pads.length);
+  const withFrontier = buildShips(S.pads, DECK_Y, { pad: FRONTIER.pad, deckY: FRONTIER_DECK_Y });
+  assert.equal(withFrontier.length, ships.length + 1);
+  const fs = withFrontier.find((s) => s.pad === 'frontier'), dwell = fs.route.segs.find((s) => s.phase === 'dwell');
+  const fp = routePose(fs.route, dwell.t0 + 1, {});
+  assert.deepEqual([fs.type, fp.x, fp.y, fp.z, fp.phase], [1, FRONTIER.pad.x, FRONTIER_DECK_Y, FRONTIER.pad.z, 'dwell']);
+  for (let t = 0; t < fs.route.period; t += 0.5) { const q = routePose(fs.route, t, {}); assert.ok(q.y >= FRONTIER_DECK_Y - 1e-9 && q.y <= 165 && Math.hypot(q.x, q.z) < 420, 'frontier shuttle stays over the frontier'); }
   const again = buildShips(S.pads, DECK_Y);
   const a = {}, b = {};
   for (let i = 0; i < ships.length; i++) for (let t = 0; t < ships[i].route.period; t += 0.37) {

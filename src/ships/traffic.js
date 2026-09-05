@@ -1,5 +1,5 @@
-// Ship traffic over Coruscant: deterministic lanes above the city plus landing / take-off cycles on the spaceport
-// pads. Every ship's pose is a pure function of the shared 20 TPS clock (tick + render alpha), so all clients agree
+// Ship traffic over Coruscant (and one shuttle at the frontier pad): deterministic lanes above the city plus landing /
+// take-off cycles on the spaceport pads. Every ship's pose is a pure function of the shared 20 TPS clock (tick + render alpha), so all clients agree
 // and the same landing happens at the same tick on every load. Rendering is one InstancedMesh per ship model
 // (<= 1 draw call per model type); ships farther than HIDE_DIST from the camera are not submitted.
 //
@@ -104,10 +104,10 @@ function makeRoute(segs) {
   return { segs, period: t0 };
 }
 
-// Pad ship: loop over the city starting/ending above the pad, then the landing cycle.
-function padRoute(pad, side, k, speed, deckY, dwell) {
-  const s = side, P = pad;
-  const loop = [
+// Loop over Coruscant starting/ending above a spaceport pad (side = which half of the city, k = lane variant).
+function coruscantLoop(P, side, k) {
+  const s = side;
+  return [
     [P.x, 130, P.z],
     [P.x - 70, 140, P.z - s * 10],
     [2430, 158 + 4 * k, s * (200 + 30 * k)],
@@ -118,6 +118,25 @@ function padRoute(pad, side, k, speed, deckY, dwell) {
     [2790, 150 + 2 * k, s * (160 + 15 * k)],
     [P.x + 70, 138, P.z + s * 10],
   ];
+}
+
+// Loop over the frontier town (at the origin) starting/ending above the frontier pad.
+function frontierLoop(P) {
+  return [
+    [P.x, 130, P.z],
+    [P.x - 60, 138, P.z - 30],
+    [120, 150, -200],
+    [-120, 158, -220],
+    [-260, 150, -40],
+    [-200, 148, 200],
+    [40, 140, 260],
+    [220, 134, 120],
+    [P.x + 60, 130, P.z + 30],
+  ];
+}
+
+// Pad ship: the loop, then the landing cycle over pad P (loop[0] must be above the pad at y 130).
+function padRoute(P, loop, speed, deckY, dwell) {
   const path = new Path(loop, true);
   const prof = makeProfile(path.length, speed, 120);
   const yaw = path.heading(0);
@@ -159,8 +178,9 @@ function laneLoops() {
   ];
 }
 
-// Builds the deterministic ship list: { type, route, offset, name, pad } (pure data, no THREE).
-export function buildShips(pads, deckY) {
+// Builds the deterministic ship list: { type, route, offset, name, pad, padPos } (pure data, no THREE).
+// `frontier` (optional) = { pad: {x, z}, deckY } adds one shuttle cycling on the frontier spaceport pad.
+export function buildShips(pads, deckY, frontier = null) {
   const models = shipModels();
   const ships = [];
   const padTypes = [0, 1, 3, 1, 0, 2, 3, 0];
@@ -168,14 +188,18 @@ export function buildShips(pads, deckY) {
     const pad = pads[i], type = padTypes[i % padTypes.length], side = pad.z < 0 ? -1 : 1;
     const k = i % 4;
     const dwell = Math.round(15 + hash2(i, 3, 901) * 25);
-    const route = padRoute(pad, side, k, models[type].speed, deckY, dwell);
-    ships.push({ type, route, offset: Math.floor(hash2(i, 5, 902) * route.period), name: `${models[type].name} pad ${i + 1}`, pad: i });
+    const route = padRoute(pad, coruscantLoop(pad, side, k), models[type].speed, deckY, dwell);
+    ships.push({ type, route, offset: Math.floor(hash2(i, 5, 902) * route.period), name: `${models[type].name} pad ${i + 1}`, pad: i, padPos: pad });
+  }
+  if (frontier) {
+    const route = padRoute(frontier.pad, frontierLoop(frontier.pad), models[1].speed, frontier.deckY, 30);
+    ships.push({ type: 1, route, offset: 40, name: 'shuttle frontier pad', pad: 'frontier', padPos: frontier.pad });
   }
   laneLoops().forEach((lane, li) => {
     lane.types.forEach((type, j) => {
       const route = laneRoute(lane.pts, models[type].speed * lane.speedMul);
       const offset = (j / lane.types.length) * route.period + hash2(li, j, 903) * 20;
-      ships.push({ type, route, offset, name: `${models[type].name} ${lane.name} #${j + 1}`, pad: null });
+      ships.push({ type, route, offset, name: `${models[type].name} ${lane.name} #${j + 1}`, pad: null, padPos: null });
     });
   });
   return ships;
@@ -231,7 +255,7 @@ export class ShipTraffic {
     this.game = game;
     this.pads = spec.pads;
     this.deckY = spec.deckY;
-    this.ships = buildShips(this.pads, this.deckY);
+    this.ships = buildShips(this.pads, this.deckY, spec.frontier || null);
     this.models = shipModels();
     this.tickCount = 0;
     this.group = new THREE.Group();

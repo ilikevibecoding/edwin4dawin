@@ -297,38 +297,38 @@ function paintSpines(p) {
 }
 
 // ------------------------------------------------------------------------------------------------ landing pads
-function paintPads(p) {
-  const H = S.padHalf;
-  for (let i = 0; i < S.pads.length; i++) {
-    const pad = S.pads[i];
-    const px0 = pad.x - H, px1 = pad.x + H - 1, pz0 = pad.z - H, pz1 = pad.z + H - 1;
-    if (!p.overlaps(px0 - 3, pz0 - 3, px1 + 3, pz1 + 3)) continue;
-    const [x0, x1] = p.xRange(px0, px1), [z0, z1] = p.zRange(pz0, pz1);
-    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
-      const dx = x + 0.5 - pad.x, dz = z + 0.5 - pad.z, r2 = dx * dx + dz * dz;
-      const edge = x === px0 || x === px1 || z === pz0 || z === pz1;
-      let id = PLATE;
-      if (edge) {                                                                       // hazard border with flush edge lights
-        const k = x === px0 ? z - pz0 : x === px1 ? pz1 - z : z === pz0 ? px1 - x : x - px0;
-        id = k % 6 === 3 ? LAMP : ((k >> 1) & 1) ? RED : LINE;
-      } else if (r2 >= 64 && r2 < 81) id = LINE;                                         // landing circle
-      else if ((abs(dx) < 1 && abs(dz) < 6) || (abs(dz) < 1 && abs(dx) < 6)) id = abs(dx) < 1 && abs(dz) < 1 ? GLOW : RED; // centre cross
-      p.set(x, 96, z, id);
-    }
-    paintDigit(p, i + 1, px0 + 3, 96, pz0 + 3, LINE); paintDigit(p, i + 1, px1 - 5, 96, pz1 - 7, LINE, true);   // pad number, both corners
-    // corner lamps inside the pad, fuel bowser and cargo crates in the service strip beside it
-    for (const [cx, cz] of [[px0 + 1, pz0 + 1], [px1 - 1, pz0 + 1], [px0 + 1, pz1 - 1], [px1 - 1, pz1 - 1]]) lampPost(p, cx, cz, 2);
-    const sx = px1 + 2;
-    p.box(sx, 97, pz0 + 2, sx + 1, 97, pz0 + 3, STR); p.box(sx, 98, pz0 + 2, sx + 1, 98, pz0 + 3, CHR); p.set(sx, 99, pz0 + 2, DD); p.set(sx + 1, 99, pz0 + 3, RED); p.set(sx, 97, pz0 + 4, DD);
-    for (let k = 0; k < 4; k++) {
-      const cx = sx + (k & 1), cz = pz1 - 4 + (k >> 1);
-      const h = Math.floor(hash3(cx, i, cz, 31) * 3);
-      if (h > 0) p.box(cx, 97, cz, cx, 96 + h, cz, hash3(cx, i, cz, 32) < 0.7 ? B.CRATE : B.BARREL);
-    }
-    p.box(sx, 97, pz0 + 6, sx + 1, 97, pz0 + 7, DD); p.set(sx, 98, pz0 + 6, CON);            // pad control console
-    p.box(sx, 97, pz0 + 8, sx, 100, pz0 + 8, DD); p.set(sx, 101, pz0 + 8, HOLO);              // pad marker mast
+// One 24x24 pad (floor layer `fy`, players and gear at fy + 1) numbered `i + 1`, with its service strip to the east.
+function paintPad(p, pad, i, fy) {
+  const H = S.padHalf, W = fy + 1;
+  const px0 = pad.x - H, px1 = pad.x + H - 1, pz0 = pad.z - H, pz1 = pad.z + H - 1;
+  if (!p.overlaps(px0 - 3, pz0 - 3, px1 + 3, pz1 + 3)) return;
+  const [x0, x1] = p.xRange(px0, px1), [z0, z1] = p.zRange(pz0, pz1);
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+    const dx = x + 0.5 - pad.x, dz = z + 0.5 - pad.z, r2 = dx * dx + dz * dz;
+    const edge = x === px0 || x === px1 || z === pz0 || z === pz1;
+    let id = PLATE;
+    if (edge) {                                                                       // hazard border with flush edge lights
+      const k = x === px0 ? z - pz0 : x === px1 ? pz1 - z : z === pz0 ? px1 - x : x - px0;
+      id = k % 6 === 3 ? LAMP : ((k >> 1) & 1) ? RED : LINE;
+    } else if (r2 >= 64 && r2 < 81) id = LINE;                                         // landing circle
+    else if ((abs(dx) < 1 && abs(dz) < 6) || (abs(dz) < 1 && abs(dx) < 6)) id = abs(dx) < 1 && abs(dz) < 1 ? GLOW : RED; // centre cross
+    p.set(x, fy, z, id);
   }
+  paintDigit(p, i + 1, px0 + 3, fy, pz0 + 3, LINE); paintDigit(p, i + 1, px1 - 5, fy, pz1 - 7, LINE, true);   // pad number, both corners
+  // corner lamps inside the pad, fuel bowser and cargo crates in the service strip beside it
+  for (const [cx, cz] of [[px0 + 1, pz0 + 1], [px1 - 1, pz0 + 1], [px0 + 1, pz1 - 1], [px1 - 1, pz1 - 1]]) { p.col(cx, cz, W, W + 1, DD); p.set(cx, W + 2, cz, LAMP); }
+  const sx = px1 + 2;
+  p.box(sx, W, pz0 + 2, sx + 1, W, pz0 + 3, STR); p.box(sx, W + 1, pz0 + 2, sx + 1, W + 1, pz0 + 3, CHR); p.set(sx, W + 2, pz0 + 2, DD); p.set(sx + 1, W + 2, pz0 + 3, RED); p.set(sx, W, pz0 + 4, DD);
+  for (let k = 0; k < 4; k++) {
+    const cx = sx + (k & 1), cz = pz1 - 4 + (k >> 1);
+    const h = Math.floor(hash3(cx, i, cz, 31) * 3);
+    if (h > 0) p.box(cx, W, cz, cx, W - 1 + h, cz, hash3(cx, i, cz, 32) < 0.7 ? B.CRATE : B.BARREL);
+  }
+  p.box(sx, W, pz0 + 6, sx + 1, W, pz0 + 7, DD); p.set(sx, W + 1, pz0 + 6, CON);            // pad control console
+  p.box(sx, W, pz0 + 8, sx, W + 3, pz0 + 8, DD); p.set(sx, W + 4, pz0 + 8, HOLO);           // pad marker mast
 }
+
+function paintPads(p) { for (let i = 0; i < S.pads.length; i++) paintPad(p, S.pads[i], i, DECK_TOP); }
 
 // ------------------------------------------------------------------------------------------------ tower
 function paintTower(p) {
@@ -539,6 +539,61 @@ function paintPlaza(p) {
   for (const z of [-20, 20]) for (let x = 2660; x <= 2676; x++) if (x % 5 !== 4) p.set(x, 97, z, SLAB);
 }
 
+// ------------------------------------------------------------------------------------------------ frontier mini spaceport
+// A single pad and a tiny terminal on a deck at the hyperlane-station level (floor y 90, walking at 91) carried on
+// pillars over the forest east of the frontier town, inside the reserved x 240..300, z -40..40. The terminal's west
+// door opens onto a stub at the deck edge (x 252, z -3..3) for the station builder to bridge to.
+export const FRONTIER = {
+  x0: 250, z0: -26, x1: 298, z1: 27,                         // structure AABB (x1, z1 exclusive)
+  deck: { x0: 252, z0: -24, x1: 295, z1: 23 },
+  terminal: { x0: 254, x1: 266, z0: -8, z1: 8 },
+  pad: { x: 282, z: 0 },
+};
+export const FRONTIER_DECK_TOP = 90, FRONTIER_DECK_Y = 91;
+
+function paintFrontier(p) {
+  const F = FRONTIER, d = F.deck, Y = FRONTIER_DECK_TOP, W = FRONTIER_DECK_Y;
+  if (!p.overlaps(F.x0, F.z0, F.x1, F.z1)) return;
+  const [x0, x1] = p.xRange(d.x0, d.x1), [z0, z1] = p.zRange(d.z0, d.z1);
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+    p.set(x, Y - 1, z, DD); p.set(x, Y, z, PLATE);
+    const px = (x - d.x0) % 12, pz = (z - d.z0) % 12;
+    if (px <= 1 && pz <= 1) p.col(x, z, 40, Y - 2, DD);                                  // 2x2 pillars on a 12 grid
+    else if (px === 0 || pz === 0) p.set(x, Y - 2, z, DD);                                // girders
+  }
+  // parapet (striped kerb + glass) with lamp posts, open at the station stub on the west edge
+  const kerb = (x, z) => { p.set(x, W, z, STR); p.set(x, W + 1, z, GL); };
+  for (let z = d.z0; z <= d.z1; z++) { if (abs(z) > 3) kerb(d.x0, z); kerb(d.x1, z); }
+  for (let x = d.x0; x <= d.x1; x++) { kerb(x, d.z0); kerb(x, d.z1); }
+  for (const x of [d.x0, d.x1]) for (const z of [d.z0, d.z1]) { p.col(x, z, W, W + 2, DD); p.set(x, W + 3, z, LAMP); }
+  for (const z of [-4, 4]) { p.col(d.x0, z, W, W + 2, DD); p.set(d.x0, W + 3, z, LAMP); }
+  for (let x = d.x0; x <= d.x0 + 1; x++) for (const z of [-3, 3]) p.set(x, Y, z, LINE);   // stub markings
+  p.col(d.x0 + 1, 5, W, W + 2, DD); p.set(d.x0 + 1, W + 3, 5, HOLO);                     // "hyperlane station" sign post
+  // tiny terminal: dark base, glass band, glass roof with a durasteel frame, doors west (stub) and east (pad)
+  const T = F.terminal, roof = W + 5;
+  for (let x = T.x0; x <= T.x1; x++) for (let z = T.z0; z <= T.z1; z++) {
+    if (!p.overlaps(x, z, x, z)) continue;
+    const onX = x === T.x0 || x === T.x1, onZ = z === T.z0 || z === T.z1;
+    p.set(x, Y, z, onX || onZ ? DD : abs(z) <= 1 ? D : ((x + z) & 1) ? D : DD);
+    if (onX || onZ) {
+      const corner = onX && onZ, mullion = onX ? (z % 4 === 0) : ((x - T.x0) % 4 === 0);
+      for (let y = W; y < roof; y++) p.set(x, y, z, y === W ? DD : y === W + 1 ? ((!corner && (onX ? z % 4 === 2 : (x - T.x0) % 4 === 2)) ? GLOW : DD) : (corner || mullion) ? D : GL);
+    }
+    p.set(x, roof, z, (onX || onZ || (x - T.x0) % 4 === 0 || z % 4 === 0) ? D : GL);
+  }
+  for (const x of [T.x0, T.x1]) { p.box(x, W, -1, x, W + 2, 1, AIR); p.box(x, W + 3, -1, x, W + 3, 1, HOLO); }
+  p.box(T.x0 + 3, W + 2, T.z0 + 1, T.x1 - 3, W + 3, T.z0 + 1, HOLO);                     // departure board
+  for (const z of [-4, 4]) for (let x = T.x0 + 3; x <= T.x1 - 3; x++) if (x !== T.x0 + 6) p.set(x, W, z, SLAB);   // benches
+  p.box(T.x1 - 3, W, T.z1 - 3, T.x1 - 1, W, T.z1 - 3, DD); p.set(T.x1 - 2, W, T.z1 - 3, CON);              // check-in counter
+  p.box(T.x0 + 1, W, T.z1 - 2, T.x0 + 1, W + 1, T.z1 - 1, B.SHELF); p.set(T.x0 + 1, W + 2, T.z1 - 1, BLUE); // kiosk shelf
+  for (const [x, z] of [[T.x0 + 3, -6], [T.x1 - 3, -6], [T.x0 + 3, 6], [T.x1 - 3, 6]]) p.set(x, roof - 1, z, GLOW);
+  for (let x = T.x1 + 1; x < F.pad.x - S.padHalf; x++) for (const z of [-3, 3]) p.set(x, Y, z, LINE);        // walkway to the pad
+  paintPad(p, F.pad, 0, Y);
+  for (const x of [d.x0 + 22, d.x0 + 34]) for (const z of [d.z0, d.z1]) { p.col(x, z, W, W + 2, DD); p.set(x, W + 3, z, LAMP); }
+}
+
+export function fillFrontierChunk(chunk) { paintFrontier(new Painter(chunk)); }
+
 // ------------------------------------------------------------------------------------------------ registry
 export function fillSpaceportChunk(chunk) {
   const p = new Painter(chunk);
@@ -556,5 +611,6 @@ export function fillSpaceportChunk(chunk) {
 
 export function register(gen, game) {
   gen.addStructure({ name: 'spaceport', x0: S.x0, z0: S.z0, x1: S.x1, z1: S.z1, fill: fillSpaceportChunk });
-  if (game) installShipTraffic(game, { pads: S.pads, deckY: DECK_Y });
+  gen.addStructure({ name: 'frontier-spaceport', x0: FRONTIER.x0, z0: FRONTIER.z0, x1: FRONTIER.x1, z1: FRONTIER.z1, fill: fillFrontierChunk });
+  if (game) installShipTraffic(game, { pads: S.pads, deckY: DECK_Y, frontier: { pad: FRONTIER.pad, deckY: FRONTIER_DECK_Y } });
 }
