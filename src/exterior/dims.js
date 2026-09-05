@@ -78,7 +78,7 @@ export const TOWER = {
   bridge: { x: 112, z0: 590, z1: 652, y0: 166, y1: 200 },
   windows: { x: 24, y0: 180.7, y1: 186.5, z: 590 }, // bridge windows on the front face (interior deck 1 floor at 180; foot 0.7 m above it so the hull ahead is visible)
   domes: { r: 22, x: 72, y: 203, z: 621 },
-  mast: { r: 2.2, y0: 200, y1: 262, z: 621 },
+  mast: { r: 2.2, y0: 200, y1: 262, z: 621, rodTop: 11.5 }, // rodTop: the beacon rod rises this far above y1, inside the spike ring (tips at +15)
 };
 
 // Engines (stern face)

@@ -894,34 +894,61 @@ export function buildDetails(materials, hull, sup) {
     }
   }
 
-  // --- navigation lights: red port / green starboard abeam, warm white bow (dorsal + ventral) and
-  // stern-corner markers, red beacon on the mast. Each is a 0.8 m unshaded lamp (ext_navLamp, HDR
-  // instance colour) with an additive glow point on it (ext_navGlow), so they read as lights.
-  const red = [3.0, 0.3, 0.2];
-  const green = [0.4, 3.0, 0.9];
-  const white = [3.0, 2.5, 1.9];
-  const navs = [
-    { p: [-halfWidth(700) + 2, 10, 700], c: red },
-    { p: [halfWidth(700) - 2, 10, 700], c: green },
-    { p: [-halfWidth(-200) + 2, 9, -200], c: red },
-    { p: [halfWidth(-200) - 2, 9, -200], c: green },
-    { p: [0, dorsalH(-790) + PLATE_LIFT + 0.4, -790], c: white },
-    { p: [0, -ventralH(-790) - PLATE_LIFT - 0.4, -790], c: white },
-    { p: [-270, dorsalH(HULL.sternZ - 4) + PLATE_LIFT + 0.8, HULL.sternZ - 4], c: white },
-    { p: [270, dorsalH(HULL.sternZ - 4) + PLATE_LIFT + 0.8, HULL.sternZ - 4], c: white },
-    { p: [0, TOWER.mast.y1 + 4, TOWER.mast.z], c: red },
-  ];
+  // --- navigation lights: red port / green starboard running lights along the trench lip, warm white
+  // bow (dorsal + ventral) and stern-corner markers, red anti-collision beacon on the mast tip. Each is
+  // an unshaded lamp block (ext_navLamp, HDR instance colour ×3 so the lamp itself blooms) with a glow
+  // point on it (ext_navGlow: 3 m, clamped to ≥ 6 px on screen) in a saturated lamp colour, so the
+  // lamps read as coloured lights from every station instead of vanishing below a pixel.
+  const red = [3.0, 0.15, 0.1];
+  const green = [0.2, 3.0, 0.5];
+  const white = [3.0, 2.6, 2.0];
+  const glowRed = [1.0, 0.03, 0.02];
+  const glowGreen = [0.04, 0.8, 0.06];
+  const glowWhite = [1.0, 0.9, 0.75];
+  // lamp on the dorsal trench lip (2 m inboard of the hull edge), glow offset outboard-up so the lamp
+  // block never hides its own glow point
+  const lip = (s, z, c, g) => {
+    const x = s * (halfWidth(z) - 2);
+    const sk = skinPoint(x, z, 1);
+    return { p: [x, sk.y + 1.2, z], c, g, o: [s * 0.6, 0.6, 0] };
+  };
+  const navs = [];
+  for (const z of [-500, -200, 150, 400, 700]) {
+    navs.push(lip(-1, z, red, glowRed));
+    navs.push(lip(1, z, green, glowGreen));
+  }
+  navs.push(
+    { p: [0, dorsalH(-790) + PLATE_LIFT + 0.4, -790], c: white, g: glowWhite, o: [0, 0.6, -0.5] },
+    { p: [0, -ventralH(-790) - PLATE_LIFT - 0.4, -790], c: white, g: glowWhite, o: [0, -0.6, -0.5] },
+    { p: [-270, dorsalH(HULL.sternZ - 4) + PLATE_LIFT + 0.8, HULL.sternZ - 4], c: white, g: glowWhite, o: [0, 0.6, 0.5] },
+    { p: [270, dorsalH(HULL.sternZ - 4) + PLATE_LIFT + 0.8, HULL.sternZ - 4], c: white, g: glowWhite, o: [0, 0.6, 0.5] },
+  );
+  // mast-tip beacon lamp: a 1.4 m block on the rod above the spikes (superstructure.js), its glow is
+  // the separate blinking beacon point below
+  const beaconY = TOWER.mast.y1 + TOWER.mast.rodTop + 0.7;
+  navs.push({ p: [0, beaconY, TOWER.mast.z], c: red, g: null, scale: 1.75 });
   const navGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
-  group.add(instancedMesh(navGeo, materials.ext_navLamp, navs.map((n) => boxItem(n.p[0], n.p[1], n.p[2], 1, 1, 1, n.c)), { name: "navLights" }));
+  group.add(instancedMesh(navGeo, materials.ext_navLamp, navs.map((n) => boxItem(n.p[0], n.p[1], n.p[2], n.scale || 1, n.scale || 1, n.scale || 1, n.c)), { name: "navLights" }));
   {
+    const lit = navs.filter((n) => n.g);
     const pg = new THREE.BufferGeometry();
-    pg.setAttribute("position", new THREE.Float32BufferAttribute(navs.flatMap((n) => n.p), 3));
-    pg.setAttribute("color", new THREE.Float32BufferAttribute(navs.flatMap((n) => n.c.map((v) => Math.min(1, v / 3) * 0.85 + 0.15)), 3));
+    pg.setAttribute("position", new THREE.Float32BufferAttribute(lit.flatMap((n) => [n.p[0] + n.o[0], n.p[1] + n.o[1], n.p[2] + n.o[2]]), 3));
+    pg.setAttribute("color", new THREE.Float32BufferAttribute(lit.flatMap((n) => n.g), 3));
     const glows = new THREE.Points(pg, materials.ext_navGlow);
     glows.name = "navGlows";
     glows.frustumCulled = false;
     glows.renderOrder = 7;
     group.add(glows);
+    // anti-collision beacon: one 2.6 m point (≥ 9 px) just above the beacon lamp; exterior.js blinks
+    // its material's opacity with a ~2 s period
+    const bg = new THREE.BufferGeometry();
+    bg.setAttribute("position", new THREE.Float32BufferAttribute([0, beaconY + 0.95, TOWER.mast.z], 3));
+    bg.setAttribute("color", new THREE.Float32BufferAttribute([1.0, 0.04, 0.03], 3));
+    const beacon = new THREE.Points(bg, materials.ext_navBeacon);
+    beacon.name = "mastBeacon";
+    beacon.frustumCulled = false;
+    beacon.renderOrder = 7;
+    group.add(beacon);
   }
 
   // --- build meshes: per chunk (LOD 0) into the hull chunk groups

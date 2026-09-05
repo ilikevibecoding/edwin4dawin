@@ -130,6 +130,9 @@ export function buildExterior(scene, materials) {
     },
     update(dt, t) {
       eng.update(t, lastCam);
+      // mast-tip anti-collision beacon: slow blink, ~2 s period. A raised-cosine pulse between 0.35
+      // and 1.0 rather than on/off, so the beacon is never dark in a still frame
+      if (materials.ext_navBeacon) materials.ext_navBeacon.opacity = 0.35 + 0.65 * (0.5 + 0.5 * Math.cos((t * Math.PI * 2) / 2.1));
     },
     setVisible(v) {
       group.visible = v;

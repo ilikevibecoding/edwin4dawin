@@ -241,14 +241,18 @@ export function makeExtHullPlate(size = 512, seed = 241) {
   return set;
 }
 
-/** Soft radial dot for the navigation-light glow points. */
+/**
+ * Navigation-lamp glow sprite: a solid core out to a third of the radius (so a 6 px point still
+ * carries 2–3 px of full lamp colour) with a soft halo to the edge.
+ */
 export function makeExtNavGlow(size = 64) {
   const c = makeCanvas(size, size);
   const ctx = c.getContext("2d");
   const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
   g.addColorStop(0, "rgba(255,255,255,1)");
-  g.addColorStop(0.18, "rgba(255,255,255,0.7)");
-  g.addColorStop(0.5, "rgba(255,255,255,0.16)");
+  g.addColorStop(0.34, "rgba(255,255,255,0.96)");
+  g.addColorStop(0.55, "rgba(255,255,255,0.45)");
+  g.addColorStop(0.8, "rgba(255,255,255,0.1)");
   g.addColorStop(1, "rgba(255,255,255,0)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
@@ -284,6 +288,27 @@ export function makeExtStreakMask(size = 256, variants = 4, seed = 271) {
   }
   ctx.putImageData(img, 0, 0);
   return toTexture(c, { srgb: false, wrap: false, anisotropy: 4 });
+}
+
+/** World size (m) of the nav-lamp glow points and the mast beacon; the shader clamps their screen size. */
+export const NAV_GLOW_M = 3.0;
+export const BEACON_GLOW_M = 2.6;
+
+/**
+ * PointsMaterial whose point size is clamped in device pixels: `size` in metres with attenuation, but
+ * never smaller than minPx (a lamp 500 m away still reads as a coloured dot) nor larger than maxPx.
+ * The renderer uploads `size` pre-multiplied by the pixel ratio, so size / sizeM recovers the ratio.
+ */
+function pixelClampedPoints(map, sizeM, minPx, maxPx, extra = {}) {
+  const mat = new THREE.PointsMaterial({ map, size: sizeM, sizeAttenuation: true, transparent: true, opacity: 1, depthWrite: false, vertexColors: true, fog: false, ...extra });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.glowPx = { value: new THREE.Vector3(minPx, maxPx, sizeM) };
+    shader.vertexShader = shader.vertexShader
+      .replace("uniform float scale;", "uniform float scale;\nuniform vec3 glowPx;")
+      .replace("#include <logdepthbuf_vertex>", "\tgl_PointSize = clamp( gl_PointSize, glowPx.x * size / glowPx.z, glowPx.y * size / glowPx.z );\n\t#include <logdepthbuf_vertex>");
+  };
+  mat.customProgramCacheKey = () => "ext_points_pxclamp";
+  return mat;
 }
 
 /** Worn armour plate: finer irregular sub-plates, scratches, soot streaks trailing aft (+v), rivets. */
@@ -471,10 +496,17 @@ export function ensureExtMaterials(materials) {
   };
   materials.ext_engineBloom.customProgramCacheKey = () => "ext_engineBloom_fade";
   // navigation lights: an unshaded lamp block coloured per instance (HDR instance colours, so the
-  // lamp itself tone-maps to a bright core instead of a sun-shaded coloured cube) plus one additive
-  // glow point per lamp (PointsMaterial: size in metres, one draw call for the whole set)
+  // lamp itself tone-maps to a bright core instead of a sun-shaded coloured cube) plus one glow point
+  // per lamp (one draw call for the whole set). The glow is a 3 m sprite clamped to ≥ 6 px on screen,
+  // so the lamps stay legible from every station instead of vanishing below a pixel. It blends over
+  // the hull (not additively): red added to the sunlit mid-grey plates tone-maps to pink, whereas a
+  // saturated core laid over them stays red / green.
   materials.ext_navLamp = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, fog: false });
-  materials.ext_navGlow = new THREE.PointsMaterial({ map: makeExtNavGlow(64), size: 3.6, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true, fog: false });
+  const glowTexture = makeExtNavGlow(64);
+  materials.ext_navGlow = pixelClampedPoints(glowTexture, NAV_GLOW_M, 6, 40);
+  // mast-tip anti-collision beacon: its own material so exterior.js can blink it (opacity), a step
+  // larger than the nav lamps
+  materials.ext_navBeacon = pixelClampedPoints(glowTexture, BEACON_GLOW_M, 9, 48);
   // soot-streak decals over the plating: instanced planes with the streak mask, multiplied onto the
   // plates (dst × (1 − mask × k)); k = instance colour .r (0.15–0.35), mask variant = .g (0, ¼, ½, ¾).
   // three ≥ r17x only multiplies with premultipliedAlpha (DST_COLOR, ONE_MINUS_SRC_ALPHA); alpha is

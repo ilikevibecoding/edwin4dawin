@@ -624,7 +624,12 @@ export function buildSuperstructure(materials) {
       spike.translate(Math.cos((k / 4) * Math.PI * 2) * 3, ms.y1 + 8, ms.z + Math.sin((k / 4) * Math.PI * 2) * 3);
       batch.add("hullDark", spike, PALETTE.hullDark, 0.1);
     }
-    batch.box("exteriorRed", 0, ms.y1 + 3.6, ms.z, 1.2, 1.2, 1.2, PALETTE.impRed);
+    // beacon rod up the middle of the spike ring with a small platform for the anti-collision beacon
+    // lamp (details.js puts the lamp and the blinking glow on top of it, just under the spike tips)
+    const rod = new THREE.CylinderGeometry(0.28, 0.42, ms.rodTop - 3, 8);
+    rod.translate(0, ms.y1 + 3 + (ms.rodTop - 3) / 2, ms.z);
+    batch.add("hullDark", rod, PALETTE.hullDark, 0.1);
+    batch.box("hullDark", 0, ms.y1 + ms.rodTop - 0.3, ms.z, 1.8, 0.6, 1.8, PALETTE.hullDark);
   }
 
   batch.build(group, { name: "superstructure" });
