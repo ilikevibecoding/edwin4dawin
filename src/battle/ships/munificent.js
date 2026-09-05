@@ -50,10 +50,12 @@ export const MUNIFICENT = { length: 825, width: 430, height: 290 };
 
 // palette: vertex tints over the shared plating (albedo ~0.62 before tint) / machinery textures.
 // Calibrated so sunlit tan lands near sRGB 175 and shadow faces near 50.
-const TAN = col(0xdcc296);
+// a cooler, darker khaki-tan than the Venator's cream-white so the two "tan" classes stay apart at
+// 2-10 km (sunlit plating lands near sRGB 150-165 against the Venator's 200+)
+const TAN = col(0xc6b494);
 const TAN_LT = TAN.clone().multiplyScalar(1.08);
 const TAN_DK = TAN.clone().multiplyScalar(0.84);
-const TAN_FADE = col(0xe2d2b8); // paint fade: lighter, less saturated
+const TAN_FADE = col(0xd2c6b0); // paint fade: lighter, less saturated
 const SOOT = col(0x2e2824);
 const RECESS = 0x9a8c7a; // grey-brown machinery
 const RECESS_DK = 0x6a5e54;
@@ -94,15 +96,17 @@ export function buildMunificent(mats) {
     [0.9, 23],
     [1, 16],
   ]; // half chord
+  // half thickness: the arms thin much faster than they narrow, so the outer half reads as a flat
+  // blade (tip section 32 x 7 m against the 92 x 46 m root)
   const HT = [
     [0, 23],
-    [0.2, 21.5],
-    [0.4, 18.5],
-    [0.6, 14.5],
-    [0.8, 10.5],
-    [0.9, 8.2],
-    [1, 6.5],
-  ]; // half thickness
+    [0.2, 20.5],
+    [0.4, 16],
+    [0.6, 11],
+    [0.8, 7],
+    [0.9, 5],
+    [1, 3.6],
+  ];
   const tipScale = (s) =>
     s > 0.93
       ? 0.3 + 0.7 * Math.sqrt(Math.max(0, 1 - ((s - 0.93) / 0.07) ** 2))
@@ -1259,8 +1263,9 @@ export function buildMunificent(mats) {
       if (d < near) near = d;
     }
     const streak = Math.exp(-(near * near) / (2 * 0.16 * 0.16));
+    // darker warm bands from ~150 m forward of the nozzles, the streaks starting first
     return (
-      0.55 * smoothstep(330, 412, z) + 0.35 * streak * smoothstep(300, 405, z)
+      0.5 * smoothstep(268, 412, z) + 0.38 * streak * smoothstep(255, 405, z)
     );
   };
   const bulbTint = (x, y, z, o) => {
@@ -1398,7 +1403,7 @@ export function buildMunificent(mats) {
     for (const a of nozzleAngles) {
       const pts = [];
       const nrm = [];
-      for (let z = 326; z <= 411; z += 8.5) {
+      for (let z = 266; z <= 411; z += 8.5) {
         const q = bulbSurf(a, z, z > 361 || z < 300 ? 1 : 1.025);
         pts.push(q.p);
         nrm.push(q.n);
@@ -1406,13 +1411,13 @@ export function buildMunificent(mats) {
       sootStreak(add, {
         points: pts,
         normals: nrm,
-        halfW: (i) => 5 + i * 0.7,
+        halfW: (i) => 3.5 + i * 0.55,
         base: (x, y, z, o) =>
-          mix(TAN, SOOT, 0.55 * smoothstep(330, 412, z), o).multiplyScalar(
+          mix(TAN, SOOT, 0.5 * smoothstep(268, 412, z), o).multiplyScalar(
             y < 0 ? 0.94 : 1,
           ),
         soot: SOOT,
-        strength: (i) => 0.85 * smoothstep(0, pts.length - 1, i) ** 0.7,
+        strength: (i) => 0.85 * smoothstep(0, pts.length - 1, i) ** 0.8,
         lod,
         texel: TEX,
       });
